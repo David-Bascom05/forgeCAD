@@ -170,7 +170,8 @@ Constraints (bare statements): `tangent(a, b)` (lines, arcs, circles, a spline's
 `coincident(p, q|line|circle)`, `horizontal(l)`, `vertical(l)`, `parallel(l, m)`,
 `perpendicular(l, m)`, `equal(a, b)`, `midpoint(p, l)`, `distance(p, q|l, d)`, `distance(l, d)`,
 `radius(c, r)`, `angle(l, m, A)`, `fix(p)`, `concentric(c, d)` (circles, arcs), `collinear(l, m)`,
-`symmetric(a, b, l)` (two points, lines end for end, circles or arcs, mirrored about line l). A conflict is `SketchConflict` naming the rows;
+`symmetric(a, b, l)` (two points, lines end for end, circles or arcs, mirrored about line l),
+`hdistance(p, q, d)`, `vdistance(p, q, d)` (q's x, or y, less p's is d, in the sketch's axes). A conflict is `SketchConflict` naming the rows;
 freedom left is the warning `UnderConstrained` with the count.
 
 `project(EDGES | FACES | POINT | AXIS, approx: TOL)` lays 3D geometry of the part as it stands on
@@ -191,11 +192,15 @@ whole quotient) and `mod(k, n)` (the remainder), so `xs[mod(k, 3)], ys[div(k, 3)
 ## Features
 
 ```
-extrude(PROFILE, d | sym(d) | two(f, b) | thru | thru_all | next | upto(FACES | WORKPLANE, offset),
-        taper: A, new: false)       adds (a new body for the first solid, or with new: true)
+extrude(PROFILE, d | sym(d) | two(f, b) | thru | thru_all | next | upto(FACES | WORKPLANE | SKETCH, offset),
+        taper: A, along: DIR, flip: false, new: false, bodies: BODIES)
+                                    adds (a new body for the first solid, or with new: true)
 cut(PROFILE, d | ...)               into the material: against the sketch normal
 intersect(PROFILE, extent)          keeps what lies inside
-revolve(PROFILE, axis: LINE, angle: A, cut: false, new: false)   LINE: a line of the same sketch
+revolve(PROFILE, axis: LINE, angle: A | sym(A) | two(A, B) | upto(FACES | WORKPLANE | SKETCH, offset: A),
+        cut|keep|new: true, bodies: BODIES)   LINE: a line of the same sketch (construction
+                                    or not; a plain line that is no side of the profile is
+                                    left out of it)
 hole(..), thread(..)                see Holes and threads
 fillet(EDGES, R, from: POINT, setbacks: [(POINT, d) | (POINT, EDGES, d)], only: false)
 fillet(groups: [(EDGES, R) | (EDGES, R, POINT), ..], setbacks: .., only: false)
@@ -205,14 +210,25 @@ fillet(groups: [(EDGES, R) | (EDGES, R, POINT), ..], setbacks: .., only: false)
                                     POINT each edge's law starts from; setbacks: how far along
                                     the edges from the corner at POINT (one edge, or all) the
                                     blends stop; only: the edges named, not their tangent chains
-chamfer(EDGES, d)
+chamfer(EDGES, d, d2: D | angle: A, face: FACE, corner: "patch"|"point")
+                                    d back along both faces; with d2, d along FACE and d2
+                                    along the other face of each edge; with angle, d along
+                                    FACE and the cut leaving it at A. FACE: one face bounding
+                                    every edge (`OneFace`). corner: three chamfers meeting at a
+                                    corner get a flat triangle (patch) or run on to a point
 shell(t, open: FACES, out: false) hollow to walls t thick (out: outside the skin), FACES open
 ```
 
 PROFILE: a sketch with one region, or one of its loops or closed entities (`S.outline`, `S.c`).
-A negative depth runs the other way. `taper:` takes a depth only: with `sym`, `two`, `thru`,
+A negative depth runs the other way. `upto(SKETCH)` ends on the sketch's plane (an edit
+moving the sketch moves the end); `offset` runs on past it (negative: short of it). `taper:` takes a depth only: with `sym`, `two`, `thru`,
 `thru_all`, `next` or `upto` it is `NotWith`; on an outline with a spline side it is
 `TaperOnCurve` (the kernel's draft has no exact leaning form for a free curve).
+`along: DIR` slants the walls that way (a depth, `sym`, `two`, `thru`, `thru_all`: each end
+square to the sketch's normal, the depths measured along it); with `next` or `upto` it is
+`NotWith`. `flip: true` runs `thru` or `next` the other way (an extrude backwards, a cut out
+along the normal); on other extents it is `NotApplicable`. `bodies:` (as on holes) makes the
+extrude, cut or revolve act on those bodies, not the last made.
 
 ### Swept, wound and lofted shapes
 
@@ -315,7 +331,7 @@ hole(at: POINT | [POINTS], d: D, depth: DEPTH, cbore: (D, depth), csink: (D, A),
      thread: "M36x2" | (size, pitch), flip: false, on: PLANE, bodies: BODIES)
 hole(at: .., screw: SIZE, convention: "iso"|"ansi", fit: "close"|"normal"|"loose"|"tap",
      seat: "cbore"|"csink", depth: DEPTH, point: A, ..)
-DEPTH: d | thru | next | upto(FACES | WORKPLANE, offset)
+DEPTH: d | thru | next | upto(FACES | WORKPLANE | SKETCH, offset)
 ```
 
 Drilled against the plane's normal (`flip: true`: with it), the mouth at each point, x along the
@@ -334,7 +350,7 @@ thread(hole: HOLE, length: L)                   the hole's recorded thread, at e
 thread(face: FACES, spec: SPEC, length: L, flip: false)   round a cylinder face (outside or in)
 thread(on: PLANE, at: POINT, spec: SPEC, internal: false, length: L, flip: false)   about an axis
        square to the plane through POINT (default its origin), into the material
-length: d | "full" | upto(FACES | WORKPLANE, offset);  left: false, chamfer: false, runout: false
+length: d | "full" | upto(FACES | WORKPLANE | SKETCH, offset);  left: false, chamfer: false, runout: false
 SPEC: "M6" | "M6x0.75" | "1/4-20" | (major, pitch)
 ```
 
@@ -406,8 +422,12 @@ bp = workpoint(meet: (bax, l.side(lsk.outline[5])))
 ## Bodies
 
 `new: true` on an extrude or revolve makes a body; a body is named by the feature that made it.
-`bodies: F | [F..] | "all"` on a hole, thread, pattern, text, import or split makes it
-act on those bodies, not the last made.
+`bodies: F | [F..] | "all"` on an extrude, cut, intersect, revolve, sweep, coil, loft, ball, rib,
+thicken, hole, thread, pattern, text, import or split makes it act on those bodies, not the last
+made. Features that name faces or edges (fillet, chamfer, shell, draft, the face edits) act on
+the bodies holding them; draft and the face edits (offset_faces, move_faces, delete_faces,
+replace_face) take `bodies:` too, and a body named that holds none of their faces is the
+kernel's MissingEdge.
 
 ```
 union(TARGET, tools: BODIES, keep: false)   subtract(..)   intersect(TARGET, tools: BODIES, ..)
@@ -479,10 +499,15 @@ EDGES.center            of one edge: a circle's or arc's axis through its centre
 
 ```
 edges(of: F | [F..] | FACES, between: (A, B), crease: "concave"|"convex"|"smooth",
-      shape: "line"|"circle"|"curve", along: DIR, r: R, longer: L, shorter: L)
-faces(of: F | [F..], shape: "plane"|"cyl"|"cone"|"sphere"|"torus"|"blend", normal: DIR, r: R)
+      shape: "line"|"circle"|"curve", along: DIR, r: R, longer: L, shorter: L, ..)
+faces(of: F | [F..], shape: "plane"|"cyl"|"cone"|"sphere"|"torus"|"blend"|"spline",
+      normal: DIR, r: R, ..)
+      both also: r_below: R, r_above: R (radius under, over R), touching: FACES | EDGES (sharing
+      an edge or a vertex with them), body: F | [F..] (in the bodies those features made)
 EDGES + EDGES
 FACES + FACES                       one face set (a slab, an offset over several features' faces)
+FACES - FACES   EDGES - EDGES       the first set less the second's (one piece of a split face: its
+                                    face less the pieces touching what split it off)
 ```
 
 An empty face set on a part built without an earlier failure is an empty selection
@@ -916,6 +941,12 @@ finished part), `expect section_area(V) = A` (the material cut by the plane z = 
 `ExpectFailed` with the measured value and the limit. An expect whose limit is the measured value
 to the last digit is the lint `ExpectCopied`.
 
+The built part's measure (`fg run --json`: `part`) is its volume, area, centroid, faces, edges,
+bodies, validity and `bbox` (`[xlo, ylo, zlo, xhi, yhi, zhi]`). The box is tight, not a hull of
+the faces' bounds: the edges' own extremes (an arc's, not its circle's), widened by a face that
+bulges past them (a dome's top, a swept tube's crown), met to within 0.05 by meshing that face
+alone; it is worked out beside the mass properties, so a build waits for neither.
+
 ## Assemblies
 
 Any document may hold bodies, components and joints: a big multibody part with joints, an
@@ -1179,7 +1210,9 @@ Dimension mixing, unknown names, wrong types, arity and index errors are type er
 Every error and lint is a typed record: `kind`, `span` (byte offsets, line, column), its data (the
 param, the measured value, the limit, ..), a `text` rendered from the data, and `fixes`: typed
 edit ops that would remove it. Warnings that are not lints: `UnderConstrained`, `UnusedParam`,
-`NoEffect` (a feature that changed nothing).
+`NoEffect` (a feature that changed nothing). A fillet, chamfer, shell or face fillet the kernel
+refused (`Build`) whose size one param drives gets a SetParam fix to the largest value that builds
+(`fg run`, `fg edit`; `Options::fit_sizes`: a few rebuilds from that feature on, only when refused).
 
 ## Edit ops
 
@@ -1202,6 +1235,14 @@ SetArg {id, arg, text}              keyword argument arg of the call making id b
                                     (`#K`: its K-th positional argument)
 SetProperty {key, text}             an argument of properties(..) set (null: taken out)
 Rename {from, to}                   a top-level name and every use of it renamed
+Suppress {id}                       the statement making id, its params, and every statement
+                                    reading what they bind out of the build, each line kept
+                                    as a comment `#~ID LINE`
+Unsuppress {id}                     those lines put back as they were
+Respell {span, to}                  the name at span written `to` (UnknownName's fix: the
+                                    nearest name in reach, two edits or fewer away)
+Undo | Redo                         (`fg edit F`) the file's last edit taken back, or put back
+                                    (its log `F.fg.log` beside it)
 ```
 
 Inside a component: an id or param whose first name is a component (`peg.shank`, `peg.shank.d`)

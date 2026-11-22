@@ -711,10 +711,11 @@ fn nary_fillet_after_circular_pattern() {
     assert_eq!(part.regenerate().map(names), part.regenerate_nary(1).map(names));
 }
 
-/// `nary_fillet_after_circular_pattern` named by the Forge part's ids: seq and n-ary name one
-/// face apart.
+/// `nary_fillet_after_circular_pattern` named by the Forge part's ids. Seq and n-ary named the
+/// spindle's bottom (joined across the arms' flush feet) apart: the pattern's pass split it
+/// again and named a region as the first pass had named a piece, recorded as its own whole, and
+/// the join took that, the lesser, for the original. A piece is no whole of its own now.
 #[test]
-#[ignore = "with the Forge part's feature ids, n-ary names one face of the spider fillet apart from seq (by position they agree)"]
 fn nary_fillet_after_circular_pattern_by_ids() {
     common::holds_alike(SPIDER);
 }
@@ -1473,4 +1474,68 @@ rim = fillet(edges(between: (h.wall, blk.end)), 1.22)
         .regenerate_nary_solids_ids(1, Some(&ids))
         .expect("n-ary solids");
     assert_eq!(nary[0].body.compact().faces.len(), seq.faces.len());
+}
+
+/// A chamfer naming an edge as only the sequential regen names it (a long n-ary run with text):
+/// the n-ary regen rebuilds feature by feature, the same solid, and the fallback is counted
+/// (the naming gap of docs/naming.md, history seed 27). The `.fc` lines it was found as, and the
+/// Forge part built to the same solid.
+#[test]
+fn nary_takes_the_sequential_regen_for_a_name_and_counts_it() {
+    let fc = "\
+L0: extrude 32.31 rrect 0 0 99.32 87.16 13.8
+L1: revolve cut sym 82.88 xz at 49.66 20.05 35 axis 0 0 0 -1 circle 26.29 -8.46 9.57
+L7: text add \"DO\" font \"block.ttf\" 25.81 3.44 z -1 0 0 at 0 63.47 16.16
+L8: movebody rot 47.94 49.8 9.69 0 0 1 -23.29
+L18: chamfer 3.22 ang 49.43 face (faces near 47.06 43.41 32.31) (edges near 16.16 9.26 32.31)
+";
+    let fg = r#"
+XZ = plane(at: xy.origin, normal: xz.normal, x: yz.normal)
+sketch plan(on: xy) {
+  outline = hull(disc((13.8, 13.8), 13.8), disc((85.52, 13.8), 13.8), disc((85.52, 73.36), 13.8), disc((13.8, 73.36), 13.8))
+}
+base = extrude(plan, 32.31)
+sketch groove(on: offset(XZ, -20.05)) {
+  c = circle((75.95, 26.54), 9.57)
+  ax = line((49.66, 35), (49.66, 34), construction: true)
+}
+ring = revolve(groove.c, axis: groove.ax, angle: sym(82.88deg), cut: true)
+sketch at_text(on: offset(plan.plane, 16.16)) {
+  p = pt(0, 63.47)
+}
+sketch pivot(on: plan) {
+  p = pt(47.94, 49.8)
+}
+sketch pivot_up(on: offset(plan.plane, 9.69)) {
+  p = pt(47.94, 49.8)
+}
+mark = text("DO", font: "block.ttf", size: 25.81, depth: 3.44, on: plane(at: at_text.p, normal: -yz.normal), at: at_text.p)
+turned = movebody(of: base, moves: [spin(about: axis(pivot.p, pivot_up.p), by: -23.29deg)])
+edge = chamfer(edges(between: (base.end, base.side(plan.outline[1])), longer: 20), 3.22, angle: 49.43deg, face: base.end)
+"#;
+    // the same solid as the .fc lines
+    let m = common::holds(fg);
+    let fcm = forge_agent::bench::model(fc);
+    assert!(fcm.error.is_none(), "fc: {:?}", fcm.error.map(|e| e.msg));
+    let fcb = fcm.body().expect("fc part");
+    let mp = forge_topo::mass::mass(fcb).expect("fc mass");
+    assert!(
+        (m.volume - mp.volume).abs() <= 1e-7 * mp.volume,
+        "{} {}",
+        m.volume,
+        mp.volume
+    );
+    assert_eq!(m.faces, fcb.face_ids().count());
+    let (part, ids) = history(fg);
+    let before = forge_model::nary_name_fallbacks();
+    let nary = part
+        .regenerate_nary_solids_ids(1, Some(&ids))
+        .expect("n-ary")
+        .remove(0)
+        .body;
+    // counted, once (the count is this thread's)
+    assert_eq!(forge_model::nary_name_fallbacks(), before + 1);
+    let seq = part.regenerate_ids(Some(&ids)).expect("seq");
+    assert_eq!(nary.face_ids().count(), seq.face_ids().count());
+    assert!(forge_topo::check::check(&nary).is_empty());
 }

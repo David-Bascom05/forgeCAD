@@ -486,6 +486,9 @@ pub fn op_label(op: &Op) -> String {
         Op::Rename { from, to } => format!("Rename {from} to {to}"),
         Op::SetProperty { key, text: Some(t) } => format!("Set {key}: {t}"),
         Op::SetProperty { key, text: None } => format!("Clear {key}"),
+        Op::Respell { to, .. } => format!("Write {to}"),
+        Op::Suppress { id } => format!("Suppress {id}"),
+        Op::Unsuppress { id } => format!("Unsuppress {id}"),
     }
 }
 

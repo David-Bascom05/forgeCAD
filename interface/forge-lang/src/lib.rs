@@ -43,6 +43,8 @@ pub mod store;
 pub mod syntax;
 pub mod thermo;
 pub mod thermo_kept;
+pub mod tightbox;
+pub mod undo;
 pub mod uses;
 pub mod validity;
 pub mod values;
@@ -166,6 +168,9 @@ pub struct Options {
     /// An assembly: each in-file component call's anchors too (`Run::comp_anchors`), for a UI
     /// naming a face of an occurrence as its component names it.
     pub comp_anchors: bool,
+    /// A refused fillet, chamfer, shell or face fillet whose size a param drives: search for the
+    /// largest value that builds, the error's fix (a few rebuilds from that feature on).
+    pub fit_sizes: bool,
 }
 
 impl Default for Options {
@@ -187,6 +192,7 @@ impl Default for Options {
             meshes: true,
             asks: vec![],
             comp_anchors: false,
+            fit_sizes: false,
         }
     }
 }
@@ -214,6 +220,8 @@ pub struct Measure {
     pub problems: usize,
     /// The check problems, typed, each on its body and the faces and edges it names.
     pub invalid: Vec<validity::Invalid>,
+    /// The part's box, tight (`tightbox`): its edges', and the meshed points of a face that
+    /// bulges past them.
     pub bbox: [f64; 6],
     /// The finished body's exact mass properties (unit density), when it was measured whole.
     pub mass: Option<forge_topo::mass::MassProps>,
@@ -280,8 +288,100 @@ impl Run {
 }
 
 /// Parses, checks, evaluates and (with `opts.build`) builds `src`, reusing `cache`'s stages
-/// where the history is unchanged. Returns the run and the cache for the next.
+/// where the history is unchanged. Returns the run and the cache for the next. With
+/// `opts.fit_sizes`, a fillet, chamfer, shell or face fillet the kernel refused, its size driven
+/// by a param, gets the largest value of that param that builds as its fix (.fc's `try:`).
 pub fn run(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
+    let fit = opts.fit_sizes;
+    let (mut run, mut cache) = run_once(src, opts.clone(), cache);
+    if fit && opts.build {
+        cache = fit_sizes(src, &opts, &mut run, cache);
+    }
+    (run, cache)
+}
+
+/// Halvings, then bisection steps, in the search for a size that builds (as .fc's).
+const FIT_HALVINGS: i32 = 8;
+const FIT_STEPS: usize = 12;
+
+/// `Options::fit_sizes`: each refused size's largest value that builds, put on its error.
+fn fit_sizes(src: &str, opts: &Options, run: &mut Run, mut cache: Cache) -> Cache {
+    let inner = Options {
+        fit_sizes: false,
+        checks: false,
+        ..opts.clone()
+    };
+    for k in 0..run.errors.len() {
+        let Error::Build { id, .. } = &run.errors[k] else {
+            continue;
+        };
+        let Some(f) = run.feats.iter().find(|f| &f.id == id) else {
+            continue;
+        };
+        if !matches!(f.kind, "fillet" | "chamfer" | "shell" | "facefillet") {
+            continue;
+        }
+        let Some(d) = f.dims.first() else { continue };
+        let values::Src::Driving(key) = &d.num.src else {
+            continue;
+        };
+        let (id, key, top, dim) = (id.clone(), key.clone(), d.num.v, d.num.dim);
+        let builds = |v: f64, cache: Cache| -> (bool, Cache) {
+            let op = error::Op::SetParam {
+                param: key.clone(),
+                value: error::Literal { value: v, dim },
+            };
+            let Ok(text) = edit::apply(src, &op) else {
+                return (false, cache);
+            };
+            let (r, c) = run_once(&text, inner.clone(), cache);
+            let ok = !r
+                .errors
+                .iter()
+                .any(|e| matches!(e, Error::Build { id: i, .. } if *i == id));
+            (ok && r.feats.iter().any(|f| f.id == id), c)
+        };
+        let mut bad = top;
+        let mut good = None;
+        for h in 1..=FIT_HALVINGS {
+            let v = top * 0.5f64.powi(h);
+            let (ok, c) = builds(v, cache);
+            cache = c;
+            if ok {
+                good = Some(v);
+                break;
+            }
+            bad = v;
+        }
+        let Some(mut lo) = good else { continue };
+        for _ in 0..FIT_STEPS {
+            let mid = (lo + bad) * 0.5;
+            let (ok, c) = builds(mid, cache);
+            cache = c;
+            if ok {
+                lo = mid;
+            } else {
+                bad = mid;
+            }
+        }
+        // three figures, rounded down so it still builds
+        let p = 10f64.powi(2 - lo.abs().log10().floor() as i32);
+        let shown = (lo * p).floor() / p;
+        let value = if shown > 0.0 && shown < lo {
+            let (ok, c) = builds(shown, cache);
+            cache = c;
+            if ok { shown } else { lo }
+        } else {
+            lo
+        };
+        if let Error::Build { fit, .. } = &mut run.errors[k] {
+            *fit = Some(Box::new((key, error::Literal { value, dim })));
+        }
+    }
+    cache
+}
+
+fn run_once(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
     let t0 = Instant::now();
     let mut timings = Timings::default();
     let prog = syntax::parse(src);
@@ -366,8 +466,8 @@ pub fn run(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
     let t3 = Instant::now();
     let built_all = opts.build && ev.errors.is_empty() && ev.b.built() == ev.b.features.len();
     // the whole part's mass (its measure) and each solid's (its physical properties) worked out
-    // side by side, each as it is alone
-    let (whole_mass, solid_masses) = {
+    // side by side, each as it is alone, and the part's tight box beside them
+    let ((whole_mass, whole_box), solid_masses) = {
         let checks = built_all && opts.checks;
         let whole = (checks && ev.b.measured().is_none())
             .then(|| ev.b.body())
@@ -385,14 +485,16 @@ pub fn run(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
         let (w, e, o) = if forge_geom::budget::left() == u64::MAX {
             std::thread::scope(|s| {
                 let w = whole.map(|b| s.spawn(move || mass(b)));
+                let bx = whole.map(|b| s.spawn(move || tightbox::tight_box(b)));
                 let o: Vec<_> = owed.iter().map(|x| s.spawn(move || mass(&x.2).ok())).collect();
                 let e = each_mass();
-                (w.map(joined), e, o.into_iter().map(joined).collect::<Vec<_>>())
+                let w = (w.map(joined), bx.map(joined));
+                (w, e, o.into_iter().map(joined).collect::<Vec<_>>())
             })
         } else {
             // in the order they were asked for: the modelled parts' in the run, then the rest
             let o: Vec<_> = owed.iter().map(|x| mass(&x.2).ok()).collect();
-            let w = whole.map(mass);
+            let w = (whole.map(mass), whole.map(tightbox::tight_box));
             (w, each_mass(), o)
         };
         for ((i, key, _), m) in owed.into_iter().zip(o) {
@@ -407,7 +509,7 @@ pub fn run(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
         (false, _) => None,
         (true, Some(m)) => Some(m),
         (true, None) => {
-            let m = measure(&mut ev, whole_mass);
+            let m = measure(&mut ev, whole_mass, whole_box);
             if let Some(m) = &m {
                 ev.b.keep_measure(m.clone());
             }
@@ -589,10 +691,11 @@ fn joined<T>(h: std::thread::ScopedJoinHandle<'_, T>) -> T {
     h.join().unwrap_or_else(|p| std::panic::resume_unwind(p))
 }
 
-/// The finished part's measure; `mass`, its mass if worked out already.
+/// The finished part's measure; `mass` and `bbox`, its mass and box if worked out already.
 fn measure(
     ev: &mut Eval,
     mass: Option<Result<forge_topo::mass::MassProps, forge_topo::mass::MassError>>,
+    bbox: Option<forge_math::Box3>,
 ) -> Option<Measure> {
     let invalid = validity::problems(ev);
     let body = ev.b.body()?;
@@ -602,9 +705,7 @@ fn measure(
         None => forge_topo::mass::mass(body),
     }
     .ok()?;
-    let bb = body
-        .face_ids()
-        .fold(forge_math::Box3::EMPTY, |b, f| b.hull(&body.face_box(f)));
+    let bb = bbox.unwrap_or_else(|| tightbox::tight_box(body));
     Some(Measure {
         volume: m.volume,
         area: m.area,

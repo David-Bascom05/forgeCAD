@@ -151,6 +151,7 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
         _ => Err(crate::error::Error::UnknownName {
             span,
             name: name.into(),
+            near: None,
         }),
     }
 }

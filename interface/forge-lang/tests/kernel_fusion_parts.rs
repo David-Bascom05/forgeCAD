@@ -975,20 +975,94 @@ extrude2 = extrude(s3, 60)
 // and tools: a plate 40 x 40 x 10 less `extrude cut 10 along 0.5 0 1 circle 0 0 3` (16000 - 90 pi),
 // plus `extrude add 8 along 0.5 0 1 at 0 0 10 rect -5 -5 10 10` (16800), less `extrude cut thru
 // along 0.5 0 1 circle 0 0 3`; and `extrude 10 along 1 0 0 rect 0 0 8 5` refused (in the plane).
-// The closest Forge: the same extrudes with an `along:` direction, which `extrude` does not take.
+// In Forge: the same extrudes with `along:` a work axis through the origin and (X, Y, Z).
 #[test]
-#[ignore = "gap: Forge's extrude has no oblique direction (.fc `extrude .. along X Y Z`)"]
 fn oblique_extrude_keeps_area_times_height() {
-    let src = "sketch s(on: xy) {
-  r = rect(corner: (0, 0), size: (8, 5))
-}
-sketch d(on: offset(xy, 1)) {
-  p = pt(0.3, 0.1)
-}
-sketch o(on: xy) {
-  p = pt(0, 0)
-}
-sheared = extrude(s, 10, along: axis(o.p, d.p))
-";
-    near(builds(src), 400.0);
+    use dmath::PI;
+    // the direction X Y Z as an axis from the origin; then the part's own lines
+    let dir = |x: f64, y: f64, z: f64| {
+        format!(
+            "sketch o(on: xy) {{\n  p = pt(0, 0)\n}}\nsketch d(on: offset(xy, {z})) {{\n  p = pt({x}, {y})\n}}\nslant = axis(o.p, d.p)\n"
+        )
+    };
+    let rect = "sketch s(on: xy) {\n  r = rect(corner: (0, 0), size: (8, 5))\n}\n";
+    let circle = |r: f64| format!("sketch s(on: xy) {{\n  c = circle((0, 0), {r})\n}}\n");
+    near(
+        builds(&format!(
+            "{}{rect}sheared = extrude(s, 10, along: slant)\n",
+            dir(0.3, 0.1, 1.0)
+        )),
+        400.0,
+    );
+    near(
+        builds(&format!(
+            "{}{}sheared = extrude(s, 10, along: slant)\n",
+            dir(-2.0, 0.0, 1.0),
+            circle(3.0)
+        )),
+        90.0 * PI,
+    );
+    near(
+        builds(&format!(
+            "{}sketch s(on: xy) {{\n  c = circle((0, 0), 4)\n  h = circle((0, 0), 1)\n}}\nsheared = extrude(s, 10, along: slant)\n",
+            dir(0.0, 1.0, 1.0)
+        )),
+        150.0 * PI,
+    );
+    near(
+        builds(&format!(
+            "{}{rect}sheared = extrude(s, -10, along: slant)\n",
+            dir(0.5, 0.0, 1.0)
+        )),
+        400.0,
+    );
+    near(
+        builds(&format!(
+            "{}{rect}sheared = extrude(s, 10, along: slant)\n",
+            dir(-0.5, 0.0, -1.0)
+        )),
+        400.0,
+    );
+    near(
+        builds(&format!(
+            "{}{}sheared = extrude(s, sym(10), along: slant)\n",
+            dir(0.5, 0.0, 1.0),
+            circle(3.0)
+        )),
+        90.0 * PI,
+    );
+    near(
+        builds(&format!(
+            "{}{rect}sheared = extrude(s, two(6, 4), along: slant)\n",
+            dir(0.5, 0.0, 1.0)
+        )),
+        400.0,
+    );
+    // with tools: a plate less a slanted bore, plus a slanted boss, less a slanted cut through
+    let plate = "sketch pl(on: xy) {\n  r = rect(corner: (-20, -20), size: (40, 40))\n}\nplate = extrude(pl.r, 10)\nsketch bs(on: pl) {\n  c = circle((0, 0), 3)\n}\n";
+    near(
+        builds(&format!(
+            "{}{plate}bore = cut(bs.c, -10, along: slant)\n",
+            dir(0.5, 0.0, 1.0)
+        )),
+        16000.0 - 90.0 * PI,
+    );
+    near(
+        builds(&format!(
+            "{}{plate}sketch top(on: plate.end) {{\n  r = rect(corner: (-5, -5), size: (10, 10))\n}}\nboss = extrude(top, 8, along: slant)\n",
+            dir(0.5, 0.0, 1.0)
+        )),
+        16800.0,
+    );
+    let through = builds(&format!(
+        "{}{plate}bore = cut(bs.c, thru, flip: true, along: slant)\n",
+        dir(0.5, 0.0, 1.0)
+    ));
+    near(through, 16000.0 - 90.0 * PI);
+    // along the sketch's plane: refused
+    let r = refusal(&format!(
+        "{}{rect}flat = extrude(s, 10, along: slant)\n",
+        dir(1.0, 0.0, 0.0)
+    ));
+    assert!(r.contains("AlongSketch"), "{r}");
 }

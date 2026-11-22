@@ -284,6 +284,7 @@ fn run_src(file: &str, src: &str, args: &[String], build: bool, o: &mut Output) 
         dir: dir_of(file),
         render: opt(args, "--render").is_some(),
         step: opt(args, "--step").map(|_| stem(file)),
+        fit_sizes: true,
         ..Options::default()
     };
     let (run, _) = forge_lang::run(src, opts, Cache::default());
@@ -713,13 +714,36 @@ fn main() -> ExitCode {
                     }
                 };
             }
+            // the file's last edit taken back, or put back (its log beside it)
+            let step = Json::parse(&args[2])
+                .ok()
+                .and_then(|j| match j.get("op").and_then(Json::str) {
+                    Some("Undo") => Some(forge_lang::undo::Step::Undo),
+                    Some("Redo") => Some(forge_lang::undo::Step::Redo),
+                    _ => None,
+                });
+            if let Some(s) = step {
+                return match forge_lang::undo::step(std::path::Path::new(file), s) {
+                    Ok(_) => {
+                        print_json(&Json::obj(vec![
+                            ("ok", true.into()),
+                            ("op", format!("{s:?}").into()),
+                        ]));
+                        run_file(file, &args[3..], false)
+                    }
+                    Err(e) => {
+                        print_json(&Json::obj(vec![("ok", false.into()), ("error", e.into())]));
+                        ExitCode::from(1)
+                    }
+                };
+            }
             let Some(op) = Json::parse(&args[2]).ok().and_then(|j| Op::from_json(&j)) else {
                 eprintln!("not an op: {}", args[2]);
                 return ExitCode::from(2);
             };
             match edit::apply_checked_in(&src, &op, dir_of(file)) {
                 Ok((new, reach)) => {
-                    if let Err(e) = std::fs::write(file, &new) {
+                    if let Err(e) = forge_lang::undo::write(std::path::Path::new(file), &src, &new) {
                         eprintln!("{file}: {e}");
                         return ExitCode::from(2);
                     }
