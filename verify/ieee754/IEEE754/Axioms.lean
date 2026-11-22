@@ -5,6 +5,7 @@ import Lean
 import IEEE754.Binary64
 import IEEE754.Compare
 import IEEE754.Computed
+import IEEE754.Nearest
 
 /-!
 # Only the standard axioms
@@ -54,3 +55,5 @@ elab "#standard_axioms " ids:ident* : command => do
   -- error relative to the result
   IEEE754.round_rel_err_res IEEE754.add_err_res IEEE754.sub_err_res IEEE754.mul_err_res
   IEEE754.round_err_abs IEEE754.mul_err_abs
+  -- nearest
+  IEEE754.rne_nearest IEEE754.round_nearest

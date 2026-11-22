@@ -10,4 +10,5 @@ import IEEE754.BitsThm
 import IEEE754.Compare
 import IEEE754.Binary64
 import IEEE754.Computed
+import IEEE754.Nearest
 import IEEE754.Axioms
