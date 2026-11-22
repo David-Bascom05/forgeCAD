@@ -1,0 +1,46 @@
+# The exact reference boolean (verify/forge-exact): its Lean proofs and its compiled executable,
+# one `lake build` on the pinned toolchain. A theorem that no longer checks, a `sorry` or any axiom
+# past propext, Classical.choice and Quot.sound fails the build itself (ForgeExact/Axioms.lean).
+# Kept apart from lean.yml so the two jobs never edit one file. Core Lean only: no Mathlib.
+name: forge-exact
+
+on:
+  push:
+    branches: [main]
+    paths: ["verify/forge-exact/**", ".github/workflows/forge-exact.yml"]
+  pull_request:
+    paths: ["verify/forge-exact/**", ".github/workflows/forge-exact.yml"]
+  workflow_dispatch:
+
+jobs:
+  proofs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: toolchain cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.elan
+          key: elan-${{ runner.os }}-${{ hashFiles('verify/forge-exact/lean-toolchain') }}
+      - name: elan and the pinned toolchain
+        run: |
+          if [ ! -x "$HOME/.elan/bin/elan" ]; then
+            curl -sSfL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -o elan-init.sh
+            sh elan-init.sh -y --default-toolchain none
+          fi
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+          "$HOME/.elan/bin/elan" toolchain install "$(cat verify/forge-exact/lean-toolchain)"
+      - name: the proofs and the reference
+        working-directory: verify/forge-exact
+        run: |
+          lake build
+          lake build forge-exact
+      - name: the reference answers a known case
+        working-directory: verify/forge-exact
+        run: |
+          # two unit cubes sharing an edge: non-manifold; a 2-cube with a corner cube cut: volume 7
+          out=$(.lake/build/bin/forge-exact < fuzz/tests/smoke.jsonl)
+          echo "$out"
+          echo "$out" | sed -n 1p | grep -q '"verdict":"nonmanifold"'
+          echo "$out" | sed -n 2p | grep -q '"verdict":"solid".*"volume":"7"'
