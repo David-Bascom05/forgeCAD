@@ -16,6 +16,11 @@ forge-gpu = { path = "../forge-gpu" }
 forge-sketch = { path = "../forge-sketch" }
 forge-font = { path = "../forge-font" }
 
+[features]
+# the boolean's decision log (forge-bool's `decisions`), with the n-ary regen's fallbacks to the
+# sequential one counted as rungs of its retry ladder
+decisions = ["forge-bool/decisions"]
+
 [dev-dependencies]
 forge-lang = { path = "../../interface/forge-lang" }
 forge-mesh = { path = "../forge-mesh" }

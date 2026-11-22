@@ -559,7 +559,12 @@ pub fn nary_with(
     root: Name,
 ) -> R<Body> {
     crate::boolean::UNDECIDED.with(|u| u.set(None));
-    let mut out = nary_body(tools, ops, shapes, batch, threads, root)?;
+    #[cfg(feature = "decisions")]
+    let scope = crate::decisions::scope("n-ary", String::from("plain"));
+    let body = nary_body(tools, ops, shapes, batch, threads, root);
+    #[cfg(feature = "decisions")]
+    scope.outcome(crate::decisions::Outcome::of(&body));
+    let mut out = body?;
     crate::boolean::undecided_touch(&out)?;
     crate::boolean::refuse_strays(&out, 0)?;
     // pieces left touching at a point keep a vertex each: where walking round a vertex from one
@@ -884,6 +889,14 @@ fn nary_body(
                     SurfaceSurface::NotAnalytic => ssi::searched(sa, sb, region),
                     r => r,
                 };
+                decided!(crate::boolean::log::coincident(
+                    a,
+                    fa,
+                    b,
+                    fb,
+                    matches!(found, SurfaceSurface::Coincident),
+                    "n-ary pair: closed_or_flush"
+                ));
                 if planes && !matches!(found, SurfaceSurface::Coincident) && (inert(i, fa) || inert(j, fb)) {
                     out.loose.push(((i, fa), (j, fb)));
                     continue;
