@@ -644,6 +644,66 @@ fn a_part_cut_of_a_box_by_a_cylinder_is_bodies_combined() {
     near(m.volume, 1000.0 - PI * 4.0 * 5.0 + 32.0, "volume", &fg);
 }
 
+/// A square sketch on z, (x, y) to (x + 4, y + 4).
+fn square(name: &str, z: f64, x: f64, y: f64) -> Obj {
+    sketch(
+        name,
+        place(z),
+        geo(&[
+            line((x, y), (x + 4.0, y), 0),
+            line((x + 4.0, y), (x + 4.0, y + 4.0), 0),
+            line((x + 4.0, y + 4.0), (x, y + 4.0), 0),
+            line((x, y + 4.0), (x, y), 0),
+        ]),
+    )
+}
+
+#[test]
+fn a_chain_two_shapes_of_a_part_tree_share_is_written_twice_with_ids_of_its_own() {
+    // Base and Tool of the fuse both stand on Plate: each chain steps it, and the second time
+    // its statements (and the next feature's) need ids no statement before them has
+    let d = doc(&[
+        pad("Plate", "", "SkPlate", 10.0, &[]),
+        sketch("SkPlate", place(0.0), rect()),
+        pad("Left", "Plate", "SkLeft", 2.0, &[]),
+        square("SkLeft", 10.0, 0.0, 0.0),
+        pad("Right", "Plate", "SkRight", 3.0, &[]),
+        square("SkRight", 10.0, 10.0, 0.0),
+        (
+            "Fuse",
+            "Part::Fuse",
+            vec![
+                ("Placement", place(0.0)),
+                ("Base", "<Link value=\"Left\"/>".into()),
+                ("Tool", "<Link value=\"Right\"/>".into()),
+                ("Shape", "<Part file=\"PadShape.brp\"/>".into()),
+            ],
+        ),
+        pad("Top", "Fuse", "SkTop", 1.0, &[]),
+        square("SkTop", 10.0, 20.0, 0.0),
+        body("Top", &["Top", "SkTop"]),
+    ]);
+    let bodies = translate(&file(d)).expect("reads");
+    let b = bodies
+        .iter()
+        .find(|b| b.fg.as_deref().is_some_and(|f| f.contains("combine(")))
+        .unwrap_or_else(|| panic!("{bodies:?}"));
+    assert_eq!(b.status(), "translated", "{:?}", b.fail);
+    let fg = b.fg.clone().unwrap();
+    // the tool's chain first (Plate t0, Right t1), then the base's: Plate again, a body of its
+    // own, then Left on it, whose t2 the second Plate already holds
+    assert!(fg.contains("t2 = extrude(t2_sk, d, new: true)"), "{fg}");
+    assert!(fg.contains("t2r1 = extrude(t2r1_sk, d)"), "{fg}");
+    assert!(fg.contains("combine(t2, tools: t0, op: \"add\")"), "{fg}");
+    let m = built(&fg);
+    near(
+        m.volume,
+        60.0 * 40.0 * 10.0 + 16.0 * (2.0 + 3.0 + 1.0),
+        "volume",
+        &fg,
+    );
+}
+
 #[test]
 fn not_a_zip_is_refused() {
     assert!(translate(b"PK nothing").is_err());
