@@ -12,6 +12,8 @@ use forge_topo::{Body, CoedgeId, EdgeId, FaceId, LoopId};
 /// edges on one line or circle that meet at a vertex nothing else ends at. Removed entities stay
 /// as tombstones (counted in `Body::dead`) until `Body::compact`.
 pub fn unify(body: &mut Body) {
+    #[cfg(feature = "decisions")]
+    let _scope = crate::decisions::scope("unify", String::from("plain"));
     // each face's kind and a number one surface gives all its faces (a plane's distance from the
     // origin, a cylinder's radius), so most edges are passed over without reading their faces
     let keys: Vec<(u8, f64)> = body
@@ -300,12 +302,46 @@ fn between_same(body: &Body, keys: &[(u8, f64)], e: EdgeId) -> bool {
         }
         _ => false,
     };
+    decided!(log_same(body, a, b, same));
     // unless a feature split the face there on purpose
     same && !body
         .joins
         .kept
         .iter()
         .any(|&k| x.name == k || x.name.is_piece_of(k))
+}
+
+/// unify's answer for faces `a` and `b` of `body` (planes or cylinders near one surface), beside
+/// the boolean's own test of the same two surfaces (`ssi::coincident`).
+#[cfg(feature = "decisions")]
+fn log_same(body: &Body, a: FaceId, b: FaceId, same: bool) {
+    use crate::decisions::{self as d, BAND, Ent, Kind, Site};
+    let (fa, fb) = (body.face(a), body.face(b));
+    // (facing the same way is unify's own condition: the boolean's test is of the surfaces alone,
+    // so faces facing apart are left out)
+    let (gap, facing) = match (&fa.surface, &fb.surface) {
+        (Surface::Plane(p), Surface::Plane(q)) => (
+            p.frame.z().dot(q.frame.origin - p.frame.origin).abs(),
+            (p.frame.z().dot(q.frame.z()) > 0.0) == (fa.same_sense == fb.same_sense),
+        ),
+        (Surface::Cylinder(p), Surface::Cylinder(q)) => {
+            let off = q.frame.origin - p.frame.origin;
+            (
+                (p.radius - q.radius).abs().max(p.frame.z().cross(off).length()),
+                fa.same_sense == fb.same_sense,
+            )
+        }
+        _ => return,
+    };
+    if gap > BAND || !facing {
+        return;
+    }
+    let key = d::pair(Ent::f(body, a), Ent::f(body, b));
+    let site = Site::Named("unify: SAME (half LINEAR)");
+    d::decide(Kind::Coincident, key, None, None, same as u8, site, gap, SAME);
+    let yes = crate::ssi::coincident(&fa.surface, &fb.surface);
+    let site = Site::Named("unify: ssi::coincident (the boolean's test)");
+    d::decide(Kind::Coincident, key, None, None, yes as u8, site, gap, f64::NAN);
 }
 
 /// Whether the closed chain of edge uses `chain` goes round face `f`'s periodic surface.

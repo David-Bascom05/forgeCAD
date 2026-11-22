@@ -9,5 +9,10 @@ repository.workspace = true
 [dependencies]
 forge-math = { path = "../forge-math" }
 
+[features]
+# the boolean's decision log (forge-bool's `decisions`): the hair-root choice recorded where a
+# collector asks (`intersect::hair_log`)
+decisions = []
+
 [lints]
 workspace = true

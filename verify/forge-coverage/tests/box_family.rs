@@ -56,7 +56,9 @@ fn corner_touch(names: [&str; 3]) {
 }
 
 // Two boxes meeting only at a corner, united: the union is not a manifold at the corner, so the
-// boolean must refuse with ZeroThickness there. No flat-face site decides a corner touch: the
+// boolean must refuse with ZeroThickness there. Fixed by the vertex fan rule (more than one fan of
+// kept faces at a vertex is ZeroThickness, as more than two kept faces at an edge). Before it, no
+// flat-face site decided a corner touch: the
 // four-use test (boolean.rs:1724-1737) sees edges only, and the touch test (1061-1094) is fed only by
 // `touches` (2048-2101), which finds nothing between two planes. The corner's two vertices merge in
 // `place_cuts` (4561-4644, an alias), `split_old_pinches` (631-653, from `general` 571) gives each fan
@@ -65,10 +67,6 @@ fn corner_touch(names: [&str; 3]) {
 macro_rules! gap {
     ($name:ident, $x:literal, $y:literal, $z:literal) => {
         #[test]
-        #[ignore = concat!(
-            "coverage gap: ", $x, "/", $y, "/", $z,
-            " union (corner touch) at kernel/forge-bool/src/boolean.rs:1724 (no corner test beside the four-use edge test; touches 2048 empty for planes)"
-        )]
         fn $name() {
             corner_touch([$x, $y, $z]);
         }
@@ -83,12 +81,3 @@ gap!(corner_touch_metby_meets_meets, "metBy", "meets", "meets");
 gap!(corner_touch_metby_meets_metby, "metBy", "meets", "metBy");
 gap!(corner_touch_metby_metby_meets, "metBy", "metBy", "meets");
 gap!(corner_touch_metby_metby_metby, "metBy", "metBy", "metBy");
-
-/// The gaps are what they are today: a body, not a refusal (so a fix shows up here first).
-#[test]
-fn corner_touch_today_makes_a_pinched_body() {
-    for g in GAPS {
-        let p = pattern(g, Op::Union);
-        assert!(matches!(kernel(&p, UNIT), Outcome::Ok(_)), "{}", p.label());
-    }
-}

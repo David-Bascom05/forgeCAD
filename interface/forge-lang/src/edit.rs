@@ -58,60 +58,76 @@ pub(crate) fn block(prog: &[Stmt], id: &str) -> R<(usize, usize)> {
     Ok((j, k))
 }
 
-/// Every name an expression or statement mentions.
-fn mentions_expr(e: &Expr, out: &mut BTreeSet<String>) {
+/// Every read of a name in an expression, as the `Name` node.
+fn names_expr<'e>(e: &'e Expr, f: &mut dyn FnMut(&'e Expr)) {
     match &e.kind {
-        ExprKind::Name(n) => {
-            out.insert(n.clone());
-        }
-        ExprKind::List(xs) | ExprKind::Tuple(xs) => xs.iter().for_each(|x| mentions_expr(x, out)),
-        ExprKind::Map(xs) => xs.iter().for_each(|x| mentions_expr(&x.1, out)),
+        ExprKind::Name(_) => f(e),
+        ExprKind::List(xs) | ExprKind::Tuple(xs) => xs.iter().for_each(|x| names_expr(x, f)),
+        ExprKind::Map(xs) => xs.iter().for_each(|x| names_expr(&x.1, f)),
         ExprKind::Comp { item, iter, cond, .. } => {
-            mentions_expr(item, out);
-            mentions_expr(iter, out);
+            names_expr(item, f);
+            names_expr(iter, f);
             if let Some(c) = cond {
-                mentions_expr(c, out);
+                names_expr(c, f);
             }
         }
         ExprKind::Range { lo, hi, .. } | ExprKind::Bin(_, lo, hi) | ExprKind::Index(lo, hi) => {
-            mentions_expr(lo, out);
-            mentions_expr(hi, out);
+            names_expr(lo, f);
+            names_expr(hi, f);
         }
-        ExprKind::Neg(a) | ExprKind::Not(a) | ExprKind::Attr(a, _) => mentions_expr(a, out),
-        ExprKind::Call(f, args) => {
-            mentions_expr(f, out);
-            args.iter().for_each(|a| mentions_expr(&a.value, out));
+        ExprKind::Neg(a) | ExprKind::Not(a) | ExprKind::Attr(a, _) => names_expr(a, f),
+        ExprKind::Call(g, args) => {
+            names_expr(g, f);
+            args.iter().for_each(|a| names_expr(&a.value, f));
         }
         ExprKind::If { cond, then, other } => {
-            mentions_expr(cond, out);
-            mentions_expr(then, out);
-            mentions_expr(other, out);
+            names_expr(cond, f);
+            names_expr(then, f);
+            names_expr(other, f);
         }
         _ => {}
     }
 }
 
-pub fn mentions(s: &Stmt) -> BTreeSet<String> {
-    let mut out = BTreeSet::new();
-    syntax::walk(std::slice::from_ref(s), &mut |st| match &st.kind {
+/// Every read of a name in statements and the blocks inside them.
+fn names_stmts<'e>(stmts: &'e [Stmt], f: &mut dyn FnMut(&'e Expr)) {
+    syntax::walk(stmts, &mut |st| match &st.kind {
         StmtKind::Shared { value, .. }
         | StmtKind::Param { value, .. }
         | StmtKind::Assign { value, .. }
         | StmtKind::Expr(value)
-        | StmtKind::Return(value) => mentions_expr(value, &mut out),
-        StmtKind::For { iter, .. } => mentions_expr(iter, &mut out),
-        StmtKind::If { cond, .. } => mentions_expr(cond, &mut out),
-        StmtKind::Block { args, .. } => args.iter().for_each(|a| mentions_expr(&a.value, &mut out)),
+        | StmtKind::Return(value) => names_expr(value, f),
+        StmtKind::For { iter, .. } => names_expr(iter, f),
+        StmtKind::If { cond, .. } => names_expr(cond, f),
+        StmtKind::Block { args, .. } => args.iter().for_each(|a| names_expr(&a.value, f)),
         StmtKind::Expect { args, cmp, at, .. } => {
-            args.iter().for_each(|a| mentions_expr(a, &mut out));
+            args.iter().for_each(|a| names_expr(a, f));
             if let Some((_, v, _)) = cmp {
-                mentions_expr(v, &mut out);
+                names_expr(v, f);
             }
-            at.iter().for_each(|(_, v)| mentions_expr(v, &mut out));
+            at.iter().for_each(|(_, v)| names_expr(v, f));
         }
         StmtKind::Fn { .. } => {}
     });
+}
+
+/// Every name a statement mentions.
+pub fn mentions(s: &Stmt) -> BTreeSet<String> {
+    let mut out = BTreeSet::new();
+    names_stmts(std::slice::from_ref(s), &mut |e| {
+        if let ExprKind::Name(n) = &e.kind {
+            out.insert(n.clone());
+        }
+    });
     out
+}
+
+/// Whether `span` is exactly a read of a name: one identifier token, not a binder, a member, a
+/// keyword argument's name or a part of a token (Respell's span).
+pub fn reads_at(prog: &[Stmt], span: Span) -> bool {
+    let mut found = false;
+    names_stmts(prog, &mut |e| found |= e.span == span);
+    found
 }
 
 /// The top-level names statements bind (a loop's body binds its names at top level too).

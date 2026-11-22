@@ -280,12 +280,22 @@ const RIM: f64 = 10.0 * tol::LINEAR;
 
 /// Where point `p` lies on edge `e`: its parameter and the cut's tolerance, if it is within
 /// LINEAR of the edge, or past an end but within that end vertex's tolerance.
+#[cfg_attr(feature = "decisions", track_caller)]
 pub(crate) fn on_edge(body: &Body, e: EdgeId, p: Point3) -> Option<(f64, f64)> {
     let edge = body.edge(e);
     let s = edge.curve.closest(p, edge.range);
     let d = edge.curve.eval(s).distance(p);
     // (an edge read from a file lies within its measured deviation of its faces)
     if d <= edge.tol {
+        decided!(log::on_edge(
+            body,
+            e,
+            p,
+            d,
+            edge.tol,
+            None,
+            std::panic::Location::caller()
+        ));
         return Some((s, edge.tol));
     }
     let end = if s <= edge.range.lo {
@@ -293,8 +303,26 @@ pub(crate) fn on_edge(body: &Body, e: EdgeId, p: Point3) -> Option<(f64, f64)> {
     } else if s >= edge.range.hi {
         edge.end
     } else {
+        decided!(log::on_edge(
+            body,
+            e,
+            p,
+            d,
+            edge.tol,
+            None,
+            std::panic::Location::caller()
+        ));
         return None;
     };
+    decided!(log::on_edge(
+        body,
+        e,
+        p,
+        d,
+        edge.tol,
+        Some(end),
+        std::panic::Location::caller()
+    ));
     (d <= body.vertex(end).tol).then_some((s, d))
 }
 
@@ -437,11 +465,32 @@ pub fn boolean_into(target: &mut Body, b: &Body, op: Op, _feature: u64) -> R<()>
     Ok(())
 }
 
+/// `$call`; under the decision log, with forge-geom's hair-root choices made in it handed to `$log`
+/// as `$h`. Off, it is `$call` alone, token for token (a `let` around it cost trim 0.2%).
+#[cfg(not(feature = "decisions"))]
+macro_rules! with_hairs {
+    ($call:expr, |$h:ident| $log:expr) => {
+        $call
+    };
+}
+#[cfg(feature = "decisions")]
+macro_rules! with_hairs {
+    ($call:expr, |$h:ident| $log:expr) => {{
+        let (r, $h) = forge_geom::intersect::hair_log::collect(|| $call);
+        $log;
+        r
+    }};
+}
+
 /// A result with an edge that leaves its face or crosses its face's boundary, seen only by looking
 /// closely at a traced curve that strays from its chain, is refused: it would not mesh.
 pub(crate) fn refuse_strays(body: &Body, first: usize) -> R<()> {
     use forge_topo::check::Problem;
-    for p in forge_topo::check::stray_edges_from(body, first) {
+    #[cfg(feature = "decisions")]
+    let strays = crate::decisions::checked(|| forge_topo::check::stray_edges_from(body, first));
+    #[cfg(not(feature = "decisions"))]
+    let strays = forge_topo::check::stray_edges_from(body, first);
+    for p in strays {
         if let Problem::EdgeOffFace { face, .. } | Problem::LoopsCross { face } = p {
             return Err(BoolError::lost(Lost::SplitCrossed {
                 face: FaceRef::of(body, face),
@@ -525,7 +574,11 @@ fn imprinted<'b, S: crate::imprint::Src>(
 ) -> bool {
     match crate::imprint::mode() {
         crate::imprint::Mode::Off => false,
-        crate::imprint::Mode::On => crate::imprint::column(target, src, op),
+        crate::imprint::Mode::On => {
+            #[cfg(feature = "decisions")]
+            let _scope = crate::decisions::scope("imprint column", String::from("plain"));
+            crate::imprint::column(target, src, op)
+        }
         crate::imprint::Mode::Check => {
             // the general boolean on a copy; the part goes on from this path's result, so the
             // check follows what `on` would make
@@ -566,8 +619,7 @@ fn general(target: &mut Body, b: &Body, op: Op) -> R<()> {
     let (loops, verts) = (target.loops.len(), target.vertices.len());
     let touched = touched_old(&plan);
     apply(target, b, &plan);
-    split_new_pinches(target, loops, verts);
-    split_old_pinches(target, &touched);
+    let pinch = pinched_new(target, loops, verts).or_else(|| pinched_old(target, &touched));
     target.joins.extend(&b.joins);
     target.joins.pieces.extend_from_slice(&plan.wholes);
     for &w in b.split.iter().chain(&plan.split) {
@@ -579,11 +631,25 @@ fn general(target: &mut Body, b: &Body, op: Op) -> R<()> {
     lap(&mut clock, 6);
     scratch.keep(plan);
     SCRATCH.with(|s| s.replace(scratch));
+    if let Some(at) = pinch {
+        return Err(BoolError::ZeroThickness { at });
+    }
     undecided_touch(target)?;
     // what such a way made is not taken on trust: it is the case most likely to have gone wrong
-    if RETRIED.with(|r| r.get()) && !forge_topo::check(&target.compact()).is_empty() {
+    #[cfg(feature = "decisions")]
+    let valid = |b: &Body| crate::decisions::checked(|| forge_topo::check(b).is_empty());
+    #[cfg(not(feature = "decisions"))]
+    let valid = |b: &Body| forge_topo::check(b).is_empty();
+    if RETRIED.with(|r| r.get()) && !valid(&target.compact()) {
+        decided!(crate::decisions::rung(
+            "RETRIED result check",
+            crate::decisions::Outcome::Internal
+        ));
         return Err(BoolError::lost(Lost::RetryInvalid));
     }
+    decided!(if RETRIED.with(|r| r.get()) {
+        crate::decisions::rung("RETRIED result check", crate::decisions::Outcome::Ok);
+    });
     Ok(())
 }
 
@@ -626,11 +692,11 @@ fn touched_old(plan: &Plan) -> Vec<VertexId> {
     out
 }
 
-/// `split_new_pinches` at the target's own vertices `at`: the faces the boolean left alone may
-/// make a fan of their own there, so every use leaving the vertex is gathered.
-fn split_old_pinches(target: &mut Body, at: &[VertexId]) {
+/// `pinched_new` at the target's own vertices `at`: the faces the boolean left alone may make a
+/// fan of their own there, so every use leaving the vertex is gathered.
+fn pinched_old(target: &Body, at: &[VertexId]) -> Option<Point3> {
     if at.is_empty() {
-        return;
+        return None;
     }
     // (each use of each loop is dear on a big part: only faces about those vertices)
     let reach = forge_math::Box3::from_points(at.iter().map(|&v| target.vertex(v).point)).grow(tol::LINEAR);
@@ -644,17 +710,26 @@ fn split_old_pinches(target: &mut Body, at: &[VertexId]) {
         .collect();
     runs.sort_unstable();
     let mut prev = Vec::new();
-    for run in runs.chunk_by(|x, y| x.0 == y.0).filter(|run| run.len() > 1) {
-        let cs: Vec<_> = run.iter().map(|x| x.1).collect();
-        target.split_pinched(run[0].0, &cs, &mut prev);
-    }
+    runs.chunk_by(|x, y| x.0 == y.0)
+        .filter(|run| run.len() > 1)
+        .find(|run| pinched(target, run, &mut prev))
+        .map(|run| target.vertex(run[0].0).point)
 }
 
-/// Pieces left touching at a point keep a vertex each: looked for at the vertices a boolean
-/// made (from `verts` on, where its curves meet), from its new loops (from `loops` on).
-fn split_new_pinches(target: &mut Body, loops: usize, verts: usize) {
+/// Whether the faces round a vertex, met by the coedges of `run` leaving it, make more than one
+/// fan. A kept side is counted at a vertex as at an edge: material meets itself at an edge used by
+/// more than two kept faces, and at a vertex whose kept faces close up into more than one disk
+/// (blocks touching at a corner). Either is not a manifold, and refused with ZeroThickness.
+fn pinched(t: &Body, run: &[(VertexId, forge_topo::CoedgeId)], prev: &mut Vec<forge_topo::CoedgeId>) -> bool {
+    let cs: Vec<_> = run.iter().map(|x| x.1).collect();
+    t.fans(&cs, prev).len() > 1
+}
+
+/// Where pieces a boolean left touching at a point pinch: looked for at the vertices it made
+/// (from `verts` on, where its curves meet), from its new loops (from `loops` on).
+fn pinched_new(target: &Body, loops: usize, verts: usize) -> Option<Point3> {
     if target.vertices.len() == verts {
-        return;
+        return None;
     }
     let t: &Body = target;
     let mut from: Vec<(VertexId, forge_topo::CoedgeId)> = (loops..t.loops.len())
@@ -687,13 +762,10 @@ fn split_new_pinches(target: &mut Body, loops: usize, verts: usize) {
         false
     };
     let mut prev = Vec::new();
-    for run in from.chunk_by(|x, y| x.0 == y.0).filter(|run| run.len() > 1) {
-        if one_fan(target, run) {
-            continue;
-        }
-        let cs: Vec<_> = run.iter().map(|x| x.1).collect();
-        target.split_pinched(run[0].0, &cs, &mut prev);
-    }
+    from.chunk_by(|x, y| x.0 == y.0)
+        .filter(|run| run.len() > 1)
+        .find(|run| !one_fan(t, run) && pinched(t, run, &mut prev))
+        .map(|run| t.vertex(run[0].0).point)
 }
 
 /// Lists a boolean fills, kept per thread so the next boolean reuses their room.
@@ -897,6 +969,7 @@ fn plan(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
             let careful = Held::set(&CAREFUL, true);
             let r = plan_retried(a, b, op, scratch);
             drop(careful);
+            decided!(log::rung("CAREFUL", &r));
             r.map_err(|e| match e {
                 BoolError::Internal(_) => BoolError::Internal(w),
                 e => e,
@@ -927,6 +1000,7 @@ fn plan_retried(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
                 );
                 let r = plan_fenced(a, b, op, scratch);
                 drop(held);
+                decided!(log::rung(if absorb { "ABSORB_HAIR_ROOTS" } else { "CHORDS" }, &r));
                 if !matches!(r, Err(BoolError::Internal(_))) {
                     return r;
                 }
@@ -937,6 +1011,7 @@ fn plan_retried(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
             let held = Held::set(&NO_RUN_ON, true);
             let r = plan_fenced(a, b, op, scratch);
             drop(held);
+            decided!(log::rung("NO_RUN_ON", &r));
             r.map_err(|e| match e {
                 BoolError::Internal(_) => BoolError::Internal(w),
                 e => e,
@@ -953,6 +1028,7 @@ fn plan_fenced(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
             let held = Held::set(&FENCES, true);
             let r = plan_once(a, b, op, scratch);
             drop(held);
+            decided!(log::rung("FENCES", &r));
             r.map_err(|e| match e {
                 BoolError::Internal(_) => BoolError::Internal(w),
                 e => e,
@@ -962,7 +1038,19 @@ fn plan_fenced(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
     }
 }
 
+/// `plan_once_in` under the decision log: one try's decisions checked when it ends.
+#[cfg(feature = "decisions")]
 fn plan_once(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
+    let scope = crate::decisions::scope("sequential", log::mode());
+    let r = plan_once_in(a, b, op, scratch);
+    scope.outcome(crate::decisions::Outcome::of(&r));
+    r
+}
+
+#[cfg(not(feature = "decisions"))]
+use self::plan_once_in as plan_once;
+
+fn plan_once_in(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
     let mut clock = phases_on().then(std::time::Instant::now);
     let bodies = [a, b];
     let index = [Index::new(a), Index::new(b)];
@@ -999,6 +1087,14 @@ fn plan_once(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
             }
             let region = overlap(&ba, &b_boxes[fb.index()]).grow(tol::LINEAR);
             let found = ssi::surfaces_in(sa, sb, meet_region(&ba, &b_boxes[fb.index()], sa, sb));
+            decided!(log::coincident(
+                a,
+                fa,
+                b,
+                fb,
+                matches!(found, SurfaceSurface::Coincident),
+                "pair: surfaces_in"
+            ));
             if debug_on() {
                 let what = match &found {
                     SurfaceSurface::Curves(cs) => format!("{} curves", cs.len()),
@@ -2329,6 +2425,17 @@ pub(crate) fn trim(
                 let e = body.coedge(c).edge;
                 let edge = body.edge(e);
                 if !body.edge_box(e).overlaps(&reach) {
+                    decided!({
+                        let gap = log::box_gap(&body.edge_box(e), &reach);
+                        if gap <= crate::decisions::BAND {
+                            let (ob, of) = (bodies[1 - k], faces[1 - k]);
+                            for v in [edge.start, edge.end] {
+                                let dist = ob.face(of).surface.distance(body.vertex(v).point);
+                                let site = "trim: edge box misses the curve's";
+                                log::on_surface(body, v, ob, of, false, dist, tol::LINEAR, site);
+                            }
+                        }
+                    });
                     continue;
                 }
                 if cuts[first..].iter().any(|x| x.on == CutOn::Edge(side, e)) {
@@ -2437,10 +2544,57 @@ pub(crate) fn trim(
                     }
                 } else if bends {
                     RETRIED.with(|r| r.set(true));
+                    decided!(crate::decisions::rung(
+                        "bends: an edge no surface holds (RETRIED, no retry)",
+                        crate::decisions::Outcome::Unknown
+                    ));
                     CurveSurface::Hits(crossing_on_face(&curve, range, body, f, edge))
                 } else {
-                    curve_surface_in(&curve, range, &across, near)
+                    with_hairs!(
+                        curve_surface_in(&curve, range, &across, near),
+                        |hairs| log::hairs(
+                            [(bodies[0], faces[0]), (bodies[1], faces[1])],
+                            body,
+                            e,
+                            (&curve, range, &across),
+                            &hairs,
+                        )
+                    )
                 };
+                decided!({
+                    let sine = match (&curve, &edge.curve) {
+                        (Curve::Line(a), Curve::Line(b)) => a.dir.get().cross(b.dir.get()).length(),
+                        _ => f64::INFINITY,
+                    };
+                    let hit = matches!(found, CurveSurface::Hits(_));
+                    if !hit || sine <= 1e-3 {
+                        let (ob, of) = (bodies[1 - k], faces[1 - k]);
+                        let mut ends = true;
+                        for v in [edge.start, edge.end] {
+                            let vx = body.vertex(v);
+                            let dist = curve.eval(curve.closest(vx.point, range)).distance(vx.point);
+                            ends &= dist <= vx.tol;
+                            if dist <= crate::decisions::BAND {
+                                let site = "trim run-on: the edge's end on the curve";
+                                log::on_surface(body, v, ob, of, dist <= vx.tol, dist, vx.tol, site);
+                            }
+                        }
+                        let runs = !hit || (!NO_RUN_ON.with(|c| c.get()) && sine <= 1e-6 && ends);
+                        let site = if hit {
+                            "trim run-on: line along a straight edge"
+                        } else {
+                            "trim run-on: the curve on the surface across"
+                        };
+                        log::runs_along(
+                            [(bodies[0], faces[0]), (bodies[1], faces[1])],
+                            body,
+                            e,
+                            runs,
+                            sine,
+                            site,
+                        );
+                    }
+                });
                 // a line and a straight edge with both its ends on it run together, however their
                 // surfaces round off: a hair of tilt puts the crossing anywhere along them
                 let hits = match found {
@@ -2465,6 +2619,13 @@ pub(crate) fn trim(
                         let other = &bodies[1 - k].face(faces[1 - k]).surface;
                         let coplanar =
                             g.is_some_and(|g| g != f && ssi::coincident(&body.face(g).surface, other));
+                        decided!(if let Some(g) = g
+                            && g != f
+                        {
+                            let yes = ssi::coincident(&body.face(g).surface, other);
+                            let site = "trim run-on: the face across the edge";
+                            log::coincident(body, g, bodies[1 - k], faces[1 - k], yes, site);
+                        });
                         // (on the surface across a seam the curve may only pass an end: a cone's
                         // seam and another of its lines in one plane through its axis)
                         let runs = !seam || runs_along(body, e, &curve, range);
@@ -2566,9 +2727,23 @@ pub(crate) fn trim(
                 for (h, grazing) in hits.into_iter().flat_map(|h| {
                     let grazing = h.contact != Contact::Crossing;
                     let near = crossings_near(&curve, range, &across, h);
+                    decided!(if grazing {
+                        let pair = [(bodies[0], faces[0]), (bodies[1], faces[1])];
+                        log::contact(pair, body, e, h.point, 0, "curve_surface: a touching root");
+                        let n = match near.len() {
+                            0 => 0,
+                            n if n % 2 == 1 => 1,
+                            _ => 2,
+                        };
+                        log::contact(pair, body, e, h.point, n, "crossings_near");
+                    });
                     let h = if grazing && near.is_empty() { slid(h) } else { h };
                     // (at the edge's end the curve meets the face's corner, whichever way it goes on)
                     let corner = || {
+                        decided!(for v in [edge.start, edge.end] {
+                            let lim = body.vertex(v).tol.max(tol::LINEAR);
+                            log::at_vertex(body, v, h.point, lim, "trim: a touch at the edge's corner");
+                        });
                         [edge.start, edge.end].iter().any(|&v| {
                             body.vertex(v).point.distance(h.point) <= body.vertex(v).tol.max(tol::LINEAR)
                         })
@@ -2843,6 +3018,17 @@ pub(crate) fn trim(
         let gap = cuts[i].point.distance(cuts[j].point);
         // (a curve radius R stays within t of a tangent for sqrt(8 R t): under a third of a mm unless
         // R is over a metre)
+        decided!(if gap <= 1.2 * cuts[i].tol.max(cuts[j].tol) {
+            let of = |sd: Side| bodies[(sides[0] != sd) as usize];
+            let (x, y) = (&cuts[i], &cuts[j]);
+            let (ex, ey) = (log::cut_ent(&of, x.on), log::cut_ent(&of, y.on));
+            log::same_place(
+                (x, ex),
+                (y, ey),
+                true,
+                "trim shallow: within 1.2 tolerances, left",
+            );
+        });
         if gap <= 1.2 * cuts[i].tol.max(cuts[j].tol) || gap > 0.3 {
             continue;
         }
@@ -2880,7 +3066,14 @@ pub(crate) fn trim(
     ts.dedup_by(|x, y| {
         let (a, b) = (&cuts[x.1], &cuts[y.1]);
         let reach = a.tol.max(b.tol);
-        a.point.distance(b.point) <= reach && curve.eval(0.5 * (x.0 + y.0)).distance(a.point) <= reach
+        let one =
+            a.point.distance(b.point) <= reach && curve.eval(0.5 * (x.0 + y.0)).distance(a.point) <= reach;
+        decided!(if a.point.distance(b.point) <= 4.0 * reach {
+            let of = |sd: Side| bodies[(sides[0] != sd) as usize];
+            let (ea, eb) = (log::cut_ent(&of, a.on), log::cut_ent(&of, b.on));
+            log::same_place((a, ea), (b, eb), one, "trim: a curve's cuts deduplicated");
+        });
+        one
     });
     // and round the end of a closed curve's period
     if closed && ts.len() > 1 {
@@ -4167,6 +4360,10 @@ pub(crate) fn imprint(
                     );
                     for v in [edge.start, edge.end].into_iter().filter(|_| !straight) {
                         let p = sb.vertex(v).point;
+                        decided!(for w in [db.edge(e2).start, db.edge(e2).end] {
+                            let lim = db.vertex(w).tol.max(tol::LINEAR);
+                            log::at_vertex(db, w, p, lim, "imprint: an edge's end at the other's");
+                        });
                         let end =
                             |w: VertexId| db.vertex(w).point.distance(p) <= db.vertex(w).tol.max(tol::LINEAR);
                         let e2_ends = db.edge(e2);
@@ -4467,6 +4664,17 @@ fn coincide(sb: &Body, src: Side, e: EdgeId, db: &Body, dst: Side, e2: EdgeId, c
         for v in [f.start, f.end] {
             let vx = from.vertex(v);
             let s = t.curve.closest(vx.point, t.range);
+            decided!({
+                let dist = t.curve.eval(s).distance(vx.point);
+                log::on_edge_at(
+                    to,
+                    te,
+                    vx.point,
+                    dist,
+                    vx.tol,
+                    "coincide: an edge's end on the other",
+                );
+            });
             if t.curve.eval(s).distance(vx.point) <= vx.tol {
                 cuts.push(Cut {
                     pair: Name::NONE,
@@ -4511,6 +4719,10 @@ fn share_cuts(bodies: &[&Body; 2], along: &mut Vec<Along>, cuts: &mut Vec<Cut>) 
             // at an end of either there is nothing to split: `coincide` has that cut already
             let at_end = |b: &Body, e: EdgeId| {
                 let edge = b.edge(e);
+                decided!(for v in [edge.start, edge.end] {
+                    let lim = b.vertex(v).tol.max(c.tol);
+                    log::at_vertex(b, v, c.point, lim, "share_cuts: a cut at an end");
+                });
                 [edge.start, edge.end].into_iter().any(|v| {
                     let vx = b.vertex(v);
                     vx.point.distance(c.point) <= vx.tol.max(c.tol)
@@ -4638,6 +4850,7 @@ fn place_cuts(bodies: &[&Body; 2], cuts: &[Cut]) -> R<Placed> {
         }
         key_of.push(key);
     }
+    decided!(log::placed(bodies, cuts, &cluster, &key_of, &alias));
     Ok((cluster.iter().map(|&k| key_of[k]).collect(), points, alias))
 }
 
@@ -5885,9 +6098,10 @@ fn classify_specs(
         }
         let body = bodies[s.side];
         let other = 1 - s.side;
-        let Some(p) = interior_point(body, s, pieces) else {
+        let Some(inner) = interior_point(body, s, pieces) else {
             continue;
         };
+        let p = inner.point();
         if specs_on() {
             let w: Vec<_> = partners
                 .iter()
@@ -5895,9 +6109,26 @@ fn classify_specs(
                 .collect();
             eprintln!("  COPLANAR spec {i} face {:?} probe {p:?} partners {w:?}", s.from);
         }
+        // a narrow region beside a partner, off it: in or out by the partner's neighbour
+        let mut off: Option<Class> = None;
         for pf in partners {
             // a hair of the face, every point of it on the partner's boundary, lies on it too
-            let w = index[other].point_in_face(pf, p);
+            let mut w = index[other].point_in_face(pf, p);
+            // a region wider than a tolerance whose point is still within one of the partner's
+            // boundary: the region lies on one side of the partner's edge that bounds it
+            if w == Where::On
+                && let Inner::Narrow(_, c) = inner
+                && 2.0 * c > tol::LINEAR
+                && let Some(b) = beside_partner(body, bodies[other], s, pieces, other, pf)
+            {
+                w = match b {
+                    Beside::On => Where::Inside,
+                    Beside::Off(c) => {
+                        off = off.or(c);
+                        Where::Outside
+                    }
+                };
+            }
             let on = w == Where::Inside
                 || (w == Where::On
                     && spare_probes(body, s, pieces).all(|q| index[other].classify(q) == Where::On));
@@ -5916,6 +6147,9 @@ fn classify_specs(
                 fixed[i] = true;
                 break;
             }
+        }
+        if !fixed[i] && off.is_some() {
+            class[i] = off;
         }
     }
     // direct: lean of the piece at a new edge
@@ -6021,11 +6255,13 @@ fn classify_specs(
             continue;
         }
         let s = &specs[i];
-        let probe = interior_point(bodies[s.side], s, pieces).ok_or_else(|| {
-            BoolError::lost(Lost::NoInteriorPoint {
-                face: FaceRef::of(bodies[s.side], s.from),
-            })
-        })?;
+        let probe = interior_point(bodies[s.side], s, pieces)
+            .ok_or_else(|| {
+                BoolError::lost(Lost::NoInteriorPoint {
+                    face: FaceRef::of(bodies[s.side], s.from),
+                })
+            })?
+            .point();
         if specs_on() {
             eprintln!(
                 "  RAY spec {i} probe {probe:?} -> {:?}",
@@ -6146,8 +6382,30 @@ fn debug_conflict(
     }
 }
 
-/// A point inside a spec's face: a small step inward from its first edge's midpoint.
-fn interior_point(body: &Body, s: &Spec, pieces: &[Piece]) -> Option<Point3> {
+/// A point inside a spec's region, and how it was found.
+#[derive(Clone, Copy, Debug)]
+enum Inner {
+    /// A step off an edge no other piece of the region comes nearer than: clear of the boundary.
+    Clear(Point3),
+    /// On a plane, where no step clears: the point a scanline of the region's own boundary finds
+    /// farthest from it, and that clearance (the region is about twice it wide there).
+    Narrow(Point3, f64),
+    /// Off a plane, where no step clears: the default step off an edge.
+    Stepped(Point3),
+}
+
+impl Inner {
+    fn point(self) -> Point3 {
+        match self {
+            Inner::Clear(p) | Inner::Narrow(p, _) | Inner::Stepped(p) => p,
+        }
+    }
+}
+
+/// A point inside a spec's face: a small step inward from its first edge's midpoint, clear of the
+/// region's other pieces; where no step is clear, on a plane, a point decided from the region's
+/// boundary (a sliver narrower than a step is never stepped across).
+fn interior_point(body: &Body, s: &Spec, pieces: &[Piece]) -> Option<Inner> {
     // (off a hair of an edge a step is too small to leave the boundary: its longest piece then)
     let first = s.loops.first()?;
     let mut h = *first.first()?;
@@ -6161,17 +6419,169 @@ fn interior_point(body: &Body, s: &Spec, pieces: &[Piece]) -> Option<Point3> {
         (h, chord) = (o, c);
     }
     if let Some(q) = clear_step(body, s, pieces, h, chord)? {
-        return Some(q);
+        return Some(Inner::Clear(q));
     }
     // (a hole a hair inside that piece, along all of it: off another)
     for &o in s.loops.iter().flatten() {
         if o != h
             && let Some(q) = clear_step(body, s, pieces, o, half_chord(&pieces[o.0]))?
         {
-            return Some(q);
+            return Some(Inner::Clear(q));
         }
     }
-    probe(body, s.from, h, pieces)
+    match &body.face(s.from).surface {
+        Surface::Plane(plane) => planar_inner(plane, s, pieces).map(|(q, c)| Inner::Narrow(q, c)),
+        _ => probe(body, s.from, h, pieces).map(Inner::Stepped),
+    }
+}
+
+/// Where a region lies against its coplanar partner face, from an edge of the partner bounding it.
+#[derive(Clone, Copy, Debug)]
+enum Beside {
+    /// Inside the partner.
+    On,
+    /// Outside it, in the partner's plane past its edge: in or out of the other body by the face
+    /// beyond that edge (None where it has none, or meets the plane too flat to say).
+    Off(Option<Class>),
+}
+
+/// Where a region of face `s.from` lies against its coplanar partner `pf` of body `other`, by an
+/// edge of `pf` imprinted on the region's boundary: the region is on one side of it, inside `pf`
+/// where the two faces' inward directions across it agree, and otherwise past the edge, inside the
+/// other body where it runs behind the edge's other face (a concave edge), outside where it runs in
+/// front of it. None if no edge of `pf` bounds the region.
+fn beside_partner(
+    body: &Body,
+    ob: &Body,
+    s: &Spec,
+    pieces: &[Piece],
+    other: Side,
+    pf: FaceId,
+) -> Option<Beside> {
+    s.loops.iter().flatten().find_map(|&(o, fwd)| {
+        if !s.foreign.contains(&o) {
+            return None;
+        }
+        let pc = &pieces[o];
+        let e = match pc.whole {
+            Some((side, e)) if side == other => e,
+            _ if pc.side == Some(other) => pc.of?,
+            _ => return None,
+        };
+        let edge = ob.edge(e);
+        let c = edge.coedges.iter().copied().find(|&c| ob.coedge_face(c) == pf)?;
+        let d = pc.curve.deriv(pc.range.mid());
+        let along = if fwd { d.d1 } else { -d.d1 };
+        let here = body
+            .face_normal(s.from, body.face(s.from).surface.project(d.p))?
+            .cross(along)
+            .normalize()?;
+        let t = edge.curve.closest(d.p, edge.range);
+        let de = edge.curve.deriv(t).d1;
+        let along_pf = if ob.coedge(c).forward { de } else { -de };
+        let there = ob
+            .face_normal(pf, ob.face(pf).surface.project(d.p))?
+            .cross(along_pf)
+            .normalize()?;
+        let cos = here.dot(there.get());
+        if cos.abs() <= 0.5 {
+            return None;
+        }
+        if cos > 0.0 {
+            return Some(Beside::On);
+        }
+        let past = ob.partner(c).and_then(|g| {
+            let g = ob.coedge_face(g);
+            let n = ob.face_normal(g, ob.face(g).surface.project(d.p))?;
+            let lean = here.dot(n.get());
+            (lean.abs() > 1e-9).then_some(if lean < 0.0 { Class::In } else { Class::Out })
+        });
+        Some(Beside::Off(past))
+    })
+}
+
+/// The distance from `q` to the nearest piece of a region's boundary.
+fn clearance(s: &Spec, pieces: &[Piece], q: Point3) -> f64 {
+    s.loops
+        .iter()
+        .flatten()
+        .map(|&(o, _)| {
+            let pc = &pieces[o];
+            pc.curve.eval(pc.curve.closest(q, pc.range)).distance(q)
+        })
+        .fold(f64::INFINITY, f64::min)
+}
+
+/// A point inside a planar region decided from its boundary alone: the region's loops as polygons
+/// in the plane (a curved piece finely enough that its chords stray under a quarter tolerance), cut
+/// by scanlines midway between successive vertex heights, where every crossing pairs off into
+/// spans inside; the middle of the span farthest from the boundary, and that clearance.
+fn planar_inner(plane: &Plane, s: &Spec, pieces: &[Piece]) -> Option<(Point3, f64)> {
+    let f = &plane.frame;
+    let flat = |p: Point3| {
+        let d = p - f.origin;
+        Point2::new(d.dot(f.x().get()), d.dot(f.y().get()))
+    };
+    let mut rings: Vec<Vec<Point2>> = Vec::with_capacity(s.loops.len());
+    for lp in &s.loops {
+        let mut ring = Vec::new();
+        for &(o, fwd) in lp {
+            let pc = &pieces[o];
+            let n = match &pc.curve {
+                Curve::Line(_) => 1,
+                Curve::Circle(c) => {
+                    // a chord of angle a sags r (1 - cos a/2) <= r a^2 / 8
+                    let a = (8.0 * 0.25 * tol::LINEAR / c.radius.max(tol::LINEAR)).sqrt();
+                    ((pc.range.width() / a).ceil() as usize).clamp(4, 4096)
+                }
+                _ => 256,
+            };
+            for k in 0..n {
+                let u = k as f64 / n as f64;
+                let t = if fwd {
+                    pc.range.lo + u * pc.range.width()
+                } else {
+                    pc.range.hi - u * pc.range.width()
+                };
+                ring.push(flat(pc.curve.eval(t)));
+            }
+        }
+        if ring.len() >= 2 {
+            rings.push(ring);
+        }
+    }
+    let mut heights: Vec<f64> = rings.iter().flatten().map(|p| p.y).collect();
+    heights.sort_by(f64::total_cmp);
+    heights.dedup();
+    // the tallest slabs first: a narrow region's widest span is in one of them
+    let mut slabs: Vec<(f64, f64)> = heights
+        .windows(2)
+        .map(|w| (w[1] - w[0], 0.5 * (w[0] + w[1])))
+        .collect();
+    slabs.sort_by(|a, b| b.0.total_cmp(&a.0));
+    let mut best: Option<(Point3, f64)> = None;
+    let mut xs = Vec::new();
+    for &(_, y) in slabs.iter().take(32) {
+        xs.clear();
+        for ring in &rings {
+            for (k, a) in ring.iter().enumerate() {
+                let b = ring[(k + 1) % ring.len()];
+                if (a.y < y) != (b.y < y) {
+                    xs.push(a.x + (y - a.y) * (b.x - a.x) / (b.y - a.y));
+                }
+            }
+        }
+        xs.sort_by(f64::total_cmp);
+        for &[x0, x1] in xs.as_chunks::<2>().0 {
+            let x = 0.5 * (x0 + x1);
+            let q = f.origin + f.x().get() * x + f.y().get() * y;
+            let c = clearance(s, pieces, q);
+            if best.is_none_or(|b| c > b.1) {
+                best = Some((q, c));
+            }
+        }
+    }
+    best
 }
 
 /// A step off half-edge `h` no other piece of the region comes nearer than: the way there crosses none
@@ -6463,5 +6873,386 @@ mod held_tests {
             assert!(r.is_err());
             assert!(!k.with(|c| c.get()));
         }
+    }
+}
+
+/// The decision log's sites in the boolean (feature `decisions`, `crate::decisions`): each records
+/// the decision its caller has just made, under the fact's entities.
+#[cfg(feature = "decisions")]
+pub(crate) mod log {
+    use super::*;
+    use crate::decisions::{self as d, BAND, Ent, Kind, Outcome, Site};
+    use std::panic::Location;
+
+    /// The retry flags a plan runs under.
+    pub(crate) fn mode() -> String {
+        let flags = [
+            ("CAREFUL", CAREFUL.with(|c| c.get())),
+            ("CHORDS", CHORDS.with(|c| c.get())),
+            ("NO_RUN_ON", NO_RUN_ON.with(|c| c.get())),
+            ("FENCES", FENCES.with(|c| c.get())),
+            (
+                "ABSORB_HAIR_ROOTS",
+                forge_geom::intersect::ABSORB_HAIR_ROOTS.with(|c| c.get()),
+            ),
+        ];
+        let on: Vec<&str> = flags.iter().filter(|f| f.1).map(|f| f.0).collect();
+        if on.is_empty() {
+            "plain".into()
+        } else {
+            on.join("+")
+        }
+    }
+
+    pub(crate) fn rung(name: &'static str, r: &R<Plan>) {
+        d::rung(name, Outcome::of(r));
+    }
+
+    /// `on_edge`'s answer: on the edge, and past an end, at that end's vertex.
+    pub(crate) fn on_edge(
+        body: &Body,
+        e: EdgeId,
+        p: Point3,
+        dist: f64,
+        etol: f64,
+        end: Option<VertexId>,
+        at: &'static Location<'static>,
+    ) {
+        if dist > BAND {
+            return;
+        }
+        let site = Site::Via("on_edge", at);
+        let edge = d::key1(Ent::e(body, e));
+        match end {
+            None => d::decide(
+                Kind::OnEdge,
+                edge,
+                Some(p),
+                None,
+                (dist <= etol) as u8,
+                site,
+                dist,
+                etol,
+            ),
+            Some(v) => {
+                let vt = body.vertex(v).tol;
+                let yes = (dist <= vt) as u8;
+                d::decide(Kind::OnEdge, edge, Some(p), None, yes, site, dist, vt);
+                let dv = body.vertex(v).point.distance(p);
+                d::decide(
+                    Kind::AtVertex,
+                    d::key1(Ent::v(body, v)),
+                    Some(p),
+                    None,
+                    yes,
+                    site,
+                    dv,
+                    vt,
+                );
+            }
+        }
+    }
+
+    /// A point on edge `e` as `site` decides it: `dist` from it against `limit`.
+    pub(crate) fn on_edge_at(body: &Body, e: EdgeId, p: Point3, dist: f64, limit: f64, site: &'static str) {
+        if dist <= BAND {
+            let yes = (dist <= limit) as u8;
+            d::decide(
+                Kind::OnEdge,
+                d::key1(Ent::e(body, e)),
+                Some(p),
+                None,
+                yes,
+                Site::Named(site),
+                dist,
+                limit,
+            );
+        }
+    }
+
+    /// A point at vertex `v` as `site` decides it: within `limit` of it.
+    pub(crate) fn at_vertex(body: &Body, v: VertexId, p: Point3, limit: f64, site: &'static str) {
+        let dist = body.vertex(v).point.distance(p);
+        if dist <= BAND {
+            let yes = (dist <= limit) as u8;
+            d::decide(
+                Kind::AtVertex,
+                d::key1(Ent::v(body, v)),
+                Some(p),
+                None,
+                yes,
+                Site::Named(site),
+                dist,
+                limit,
+            );
+        }
+    }
+
+    /// Vertex `v` of `body` on face `f` of `other` as `site` decides it: `dist` against `limit`.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn on_surface(
+        body: &Body,
+        v: VertexId,
+        other: &Body,
+        f: FaceId,
+        yes: bool,
+        dist: f64,
+        limit: f64,
+        site: &'static str,
+    ) {
+        let key = d::key2(Ent::v(body, v), Ent::f(other, f));
+        let at = Some(body.vertex(v).point);
+        d::decide(
+            Kind::OnSurface,
+            key,
+            at,
+            None,
+            yes as u8,
+            Site::Named(site),
+            dist,
+            limit,
+        );
+    }
+
+    /// Two planes' tilt (sine) and offset, if both are planes.
+    fn plane_gap(a: &Surface, b: &Surface) -> Option<(f64, f64)> {
+        match (a, b) {
+            (Surface::Plane(p), Surface::Plane(q)) => Some((
+                p.normal_vec().cross(q.normal_vec()).length(),
+                p.signed_distance(q.frame.origin).abs(),
+            )),
+            _ => None,
+        }
+    }
+
+    fn face_vertices(body: &Body, f: FaceId) -> Vec<VertexId> {
+        let mut vs: Vec<VertexId> = body
+            .face(f)
+            .loops
+            .iter()
+            .flat_map(|&l| body.lp(l).coedges())
+            .map(|c| body.coedge_start(c))
+            .collect();
+        vs.sort_unstable();
+        vs.dedup();
+        vs
+    }
+
+    /// Faces `fa` of `a` and `fb` of `b` decided coincident or not by `site`. Coincident, every
+    /// vertex of each lies on the other's surface: those follow from it (recorded as derived). Not
+    /// coincident is recorded only for planes nearly flush (within the band).
+    pub(crate) fn coincident(a: &Body, fa: FaceId, b: &Body, fb: FaceId, yes: bool, site: &'static str) {
+        let (sa, sb) = (&a.face(fa).surface, &b.face(fb).surface);
+        let gap = plane_gap(sa, sb);
+        if !yes && !gap.is_some_and(|(sine, off)| sine <= 1e-3 && off <= BAND) {
+            return;
+        }
+        let (sine, off) = gap.unwrap_or((f64::NAN, f64::NAN));
+        let key = d::pair(Ent::f(a, fa), Ent::f(b, fb));
+        d::decide(
+            Kind::Coincident,
+            key,
+            None,
+            None,
+            yes as u8,
+            Site::Named(site),
+            off,
+            sine,
+        );
+        if yes {
+            for (x, f, y, g) in [(a, fa, b, fb), (b, fb, a, fa)] {
+                let s = &y.face(g).surface;
+                for v in face_vertices(x, f) {
+                    let dist = s.distance(x.vertex(v).point);
+                    on_surface(
+                        x,
+                        v,
+                        y,
+                        g,
+                        true,
+                        dist,
+                        f64::NAN,
+                        "coincident faces => their vertices (derived)",
+                    );
+                }
+            }
+        }
+    }
+
+    /// A face pair's curve along edge `e` of `body`, or crossing it, as `site` decides.
+    pub(crate) fn runs_along(
+        faces: [(&Body, FaceId); 2],
+        body: &Body,
+        e: EdgeId,
+        yes: bool,
+        sine: f64,
+        site: &'static str,
+    ) {
+        let key = d::pair_and(
+            Ent::f(faces[0].0, faces[0].1),
+            Ent::f(faces[1].0, faces[1].1),
+            Ent::e(body, e),
+        );
+        d::decide(
+            Kind::RunsAlong,
+            key,
+            None,
+            None,
+            yes as u8,
+            Site::Named(site),
+            sine,
+            1e-6,
+        );
+    }
+
+    /// How a face pair's curve meets edge `e` of `body` near `p`: 0 touch, 1 crossing, 2 two.
+    pub(crate) fn contact(
+        faces: [(&Body, FaceId); 2],
+        body: &Body,
+        e: EdgeId,
+        p: Point3,
+        answer: u8,
+        site: &'static str,
+    ) {
+        let key = d::pair_and(
+            Ent::f(faces[0].0, faces[0].1),
+            Ent::f(faces[1].0, faces[1].1),
+            Ent::e(body, e),
+        );
+        d::decide(
+            Kind::Contact,
+            key,
+            Some(p),
+            None,
+            answer,
+            Site::Named(site),
+            f64::NAN,
+            f64::NAN,
+        );
+    }
+
+    /// forge-geom's hair-root choices on the curve of a face pair against edge `e`'s surface
+    /// across: each turn one touch (ABSORB_HAIR_ROOTS) or the crossings beside it, beside what
+    /// `crossings_near` counts there.
+    pub(crate) fn hairs(
+        faces: [(&Body, FaceId); 2],
+        body: &Body,
+        e: EdgeId,
+        (curve, range, across): (&Curve, Interval, &Surface),
+        hairs: &[forge_geom::intersect::hair_log::Hair],
+    ) {
+        for h in hairs {
+            let key = d::pair_and(
+                Ent::f(faces[0].0, faces[0].1),
+                Ent::f(faces[1].0, faces[1].1),
+                Ent::e(body, e),
+            );
+            let site = Site::Named("curve_surface: hair roots (forge-geom)");
+            d::decide(
+                Kind::Contact,
+                key,
+                Some(h.point),
+                None,
+                h.answer,
+                site,
+                h.beside,
+                h.measure,
+            );
+            let hit = CurveHit {
+                t: curve.closest(h.point, range),
+                point: h.point,
+                contact: Contact::Touching,
+            };
+            let n = match crossings_near(curve, range, across, hit).len() {
+                0 => 0,
+                n if n % 2 == 1 => 1,
+                _ => 2,
+            };
+            contact(faces, body, e, h.point, n, "crossings_near");
+        }
+    }
+
+    /// How far apart two boxes are (0 when they overlap).
+    pub(crate) fn box_gap(a: &Box3, b: &Box3) -> f64 {
+        let g = |x: Interval, y: Interval| (x.lo - y.hi).max(y.lo - x.hi).max(0.0);
+        let (x, y, z) = (g(a.x, b.x), g(a.y, b.y), g(a.z, b.z));
+        (x * x + y * y + z * z).sqrt()
+    }
+
+    /// `place_cuts`' answers: each cut at its edge's ends or not, and every two cuts within four
+    /// tolerances one vertex or two.
+    pub(crate) fn placed(
+        bodies: &[&Body; 2],
+        cuts: &[Cut],
+        cluster: &[usize],
+        key_of: &[VKey],
+        alias: &[(VKey, VKey)],
+    ) {
+        let of = |sd: Side| bodies[sd];
+        for c in cuts {
+            let Some((sd, e)) = c.on.edge() else { continue };
+            let edge = bodies[sd].edge(e);
+            for v in [edge.start, edge.end] {
+                let lim = bodies[sd].vertex(v).tol.max(c.tol);
+                at_vertex(bodies[sd], v, c.point, lim, "place_cuts: a cut at its edge's end");
+            }
+        }
+        let resolve = |k: VKey| alias.iter().find(|a| a.0 == k).map_or(k, |a| a.1);
+        let key = |i: usize| resolve(key_of[cluster[i]]);
+        let widest = cuts.iter().map(|c| c.tol).fold(0.0, f64::max);
+        let mut by_x: Vec<usize> = (0..cuts.len()).collect();
+        by_x.sort_by(|&i, &j| cuts[i].point.x.total_cmp(&cuts[j].point.x));
+        for (n, &i) in by_x.iter().enumerate() {
+            for &j in &by_x[n + 1..] {
+                if cuts[j].point.x - cuts[i].point.x > 4.0 * widest {
+                    break;
+                }
+                let (x, y) = (&cuts[i], &cuts[j]);
+                if x.point.distance(y.point) <= 4.0 * x.tol.max(y.tol) {
+                    let (ex, ey) = (cut_ent(&of, x.on), cut_ent(&of, y.on));
+                    same_place(
+                        (x, ex),
+                        (y, ey),
+                        key(i) == key(j),
+                        "place_cuts: clusters and chains",
+                    );
+                }
+            }
+        }
+    }
+
+    /// What a cut lies on, as an entity: `body_of` the body a side names.
+    pub(crate) fn cut_ent<'b>(body_of: &dyn Fn(Side) -> &'b Body, on: CutOn) -> Ent {
+        match on {
+            CutOn::Edge(sd, e) => Ent::e(body_of(sd), e),
+            CutOn::Free => Ent::NONE,
+        }
+    }
+
+    /// Cuts `x` (on `ex`) and `y` (on `ey`) one vertex or two, as `site` decides.
+    pub(crate) fn same_place(x: (&Cut, Ent), y: (&Cut, Ent), yes: bool, site: &'static str) {
+        same_place_at((x.1, x.0.point, x.0.tol), (y.1, y.0.point, y.0.tol), yes, site);
+    }
+
+    /// Two cut points (on what each lies on, with its tolerance) one vertex or two, as `site` decides.
+    pub(crate) fn same_place_at(x: (Ent, Point3, f64), y: (Ent, Point3, f64), yes: bool, site: &'static str) {
+        let (a, b) = ((y.0, y.1), (x.0, x.1));
+        let (lo, hi) = if (a.0, a.1.x, a.1.y, a.1.z) <= (b.0, b.1.x, b.1.y, b.1.z) {
+            (a, b)
+        } else {
+            (b, a)
+        };
+        let dist = x.1.distance(y.1);
+        let reach = x.2.max(y.2);
+        d::decide(
+            Kind::SamePlace,
+            d::key2(lo.0, hi.0),
+            Some(lo.1),
+            Some(hi.1),
+            yes as u8,
+            Site::Named(site),
+            dist,
+            reach,
+        );
     }
 }

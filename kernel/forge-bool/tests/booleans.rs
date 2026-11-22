@@ -331,7 +331,10 @@ fn overlapping_shells_are_invalid() {
 }
 
 /// Equal cylinders whose axes cross meet in two ellipses crossing where the cylinders touch.
-/// Their common part is the Steinmetz solid, 16 r^3 / (3 sin a) for axes at angle a.
+/// Their common part is the Steinmetz solid, 16 r^3 / (3 sin a) for axes at angle a. One less
+/// the other is two pieces of rod meeting only at those two points, the two wedges between the
+/// tangent surfaces where the one rod's wall lies above the other's: not a manifold there, so
+/// refused as a corner touch is.
 #[test]
 fn equal_cylinders_crossing() {
     let (r, len) = (3.0, 40.0);
@@ -370,8 +373,21 @@ fn equal_cylinders_crossing() {
                     forge_bool::nary(&[&first, &second], &[op], 1)
                 } else {
                     boolean(&first, &second, op, 3)
+                };
+                if op == Op::Subtract {
+                    // at one of the two points the rods touch, o ± r (axis × axis)
+                    let n = Vec3::new(1.0, 0.0, 0.0).cross(Vec3::new(c, s * 0.6, s * 0.8));
+                    let n = n * (r / n.length());
+                    match b {
+                        Err(forge_bool::BoolError::ZeroThickness { at }) => assert!(
+                            [o + n, o - n].iter().any(|p| p.distance(at) < 1e-6),
+                            "{deg} nary {nary}: refused at {at:?}"
+                        ),
+                        other => panic!("{deg} nary {nary}: {:?}", other.map(|b| volume(&b))),
+                    }
+                    continue;
                 }
-                .unwrap_or_else(|e| panic!("{deg} {op:?} nary {nary}: {e:?}"));
+                let b = b.unwrap_or_else(|e| panic!("{deg} {op:?} nary {nary}: {e:?}"));
                 valid(&b);
                 let got = volume(&b);
                 assert!(
@@ -383,8 +399,9 @@ fn equal_cylinders_crossing() {
     }
 }
 
-/// Blocks touching at a corner: the touch point keeps a vertex per fan of faces, feature by
-/// feature (where the corner is one the target already had, its faces left alone) and n-ary.
+/// Blocks touching at a corner: the union is not a manifold at the corner (two fans of faces
+/// round one point), refused there with ZeroThickness, feature by feature (where the corner is one
+/// the target already had, its faces left alone) and n-ary, as a touch along an edge is.
 #[test]
 fn blocks_touching_at_a_corner() {
     let a = block(Point3::ORIGIN, 10.0, 10.0, 10.0, 1);
@@ -394,10 +411,13 @@ fn blocks_touching_at_a_corner() {
             forge_bool::nary(&[&a, &b], &[Op::Union], 1)
         } else {
             boolean(&a, &b, Op::Union, 3)
+        };
+        match u {
+            Err(forge_bool::BoolError::ZeroThickness { at }) => {
+                assert!(at.distance(Point3::new(10.0, 10.0, 10.0)) < 1e-9, "{at:?}")
+            }
+            other => panic!("nary {nary}: {:?}", other.map(|b| volume(&b))),
         }
-        .unwrap();
-        valid(&u);
-        assert!((volume(&u) - 2000.0).abs() < 1e-6, "{}", volume(&u));
     }
 }
 
