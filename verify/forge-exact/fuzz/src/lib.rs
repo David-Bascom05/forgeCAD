@@ -115,6 +115,11 @@ fn inert(f: &Feature) -> bool {
 /// The part as the reference reads it: every tool solid of its history, or why it is out of
 /// the flat-face reference's scope.
 pub fn reference_input(part: &Part) -> Result<String, String> {
+    reference_input_rule(part, &rule())
+}
+
+/// `reference_input` under the named rule (`strict` or `snap`), whatever FORGE_EXACT_RULE says.
+pub fn reference_input_rule(part: &Part, rule: &str) -> Result<String, String> {
     if forge_model::bodies::multi(&part.features) {
         return Err("several bodies".into());
     }
@@ -142,7 +147,7 @@ pub fn reference_input(part: &Part) -> Result<String, String> {
     Ok(format!(
         "{{\"linear\":{},\"rule\":\"{}\",\"solids\":[{}]}}",
         exact(forge_math::tol::LINEAR),
-        rule(),
+        rule,
         solids.join(",")
     ))
 }
@@ -196,11 +201,13 @@ pub struct Answer {
     pub error: Option<String>,
 }
 
-/// The reference executable, kept running.
+/// The reference executable, kept running; its answers read on a thread so a question can time
+/// out (FORGE_EXACT_TIMEOUT seconds, default 120: the executable is then restarted and the
+/// answer is an error, so out of scope).
 pub struct Reference {
     child: Child,
     input: ChildStdin,
-    output: BufReader<ChildStdout>,
+    output: std::sync::mpsc::Receiver<String>,
 }
 
 impl Reference {
@@ -215,15 +222,43 @@ impl Reference {
             .spawn()
             .unwrap_or_else(|e| panic!("{exe}: {e} (run `lake build` in verify/forge-exact)"));
         let input = child.stdin.take().expect("stdin");
-        let output = BufReader::new(child.stdout.take().expect("stdout"));
+        let mut out: BufReader<ChildStdout> = BufReader::new(child.stdout.take().expect("stdout"));
+        let (tx, output) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            loop {
+                let mut line = String::new();
+                match out.read_line(&mut line) {
+                    Ok(0) | Err(_) => break,
+                    Ok(_) => {
+                        if tx.send(line).is_err() {
+                            break;
+                        }
+                    }
+                }
+            }
+        });
         Reference { child, input, output }
     }
 
     pub fn ask(&mut self, line: &str) -> Answer {
+        let secs = std::env::var("FORGE_EXACT_TIMEOUT")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(120u64);
         writeln!(self.input, "{line}").expect("the reference's stdin");
         self.input.flush().expect("flush");
-        let mut out = String::new();
-        self.output.read_line(&mut out).expect("the reference's answer");
+        let out = match self.output.recv_timeout(std::time::Duration::from_secs(secs)) {
+            Ok(out) => out,
+            Err(_) => {
+                let _ = self.child.kill();
+                let _ = self.child.wait();
+                *self = Reference::start();
+                return Answer {
+                    error: Some(format!("the reference took over {secs} s")),
+                    ..Answer::default()
+                };
+            }
+        };
         if std::env::var_os("FORGE_EXACT_TRACE").is_some() {
             eprintln!("> {line}\n< {out}");
         }
@@ -310,7 +345,11 @@ fn json_string(s: &str) -> (String, &str) {
 pub enum Kernel {
     Built {
         volume: f64,
+        /// Its surface area.
+        area: f64,
         sig: forge_proof::props::Sig,
+        /// V E F S with adjacent tolerance-coplanar faces merged (`merged_sig`).
+        merged: [usize; 4],
         invalid: Option<String>,
     },
     Refused(String),
@@ -339,14 +378,131 @@ pub fn judge_body(r: Result<Body, String>) -> Kernel {
         Err(e) => Kernel::Refused(short(&e)),
         Ok(b) => {
             let invalid = forge_topo::check(&b).first().map(|p| short(&format!("{p:?}")));
-            let volume = forge_topo::mass::mass(&b).map(|m| m.volume).unwrap_or(f64::NAN);
+            let (volume, area) = forge_topo::mass::mass(&b)
+                .map(|m| (m.volume, m.area))
+                .unwrap_or((f64::NAN, f64::NAN));
             Kernel::Built {
                 volume,
+                area,
                 sig: forge_proof::props::sig(&b),
+                merged: merged_sig(&b),
                 invalid,
             }
         }
     }
+}
+
+/// V E F S of the body with every two faces that share an edge merged where their planes are
+/// one to within LINEAR (same sense, within LINEAR of each other at both ends of the edge and at
+/// every vertex of either face): the topology the reference counts, where the kernel leaves an
+/// imprint splitting one surface into faces. An edge with one face on both sides (a slit) is not
+/// merged away. Then vertices left between two edges of the same two face groups (redundant) are
+/// dropped, as `forge_proof::props::sig` drops them.
+pub fn merged_sig(b: &Body) -> [usize; 4] {
+    let b = b.compact();
+    let faces: Vec<_> = b.face_ids().collect();
+    let idx = |f: forge_topo::FaceId| faces.iter().position(|&g| g == f).unwrap_or(0);
+    let mut parent: Vec<usize> = (0..faces.len()).collect();
+    fn find(p: &mut [usize], mut x: usize) -> usize {
+        while p[x] != x {
+            p[x] = p[p[x]];
+            x = p[x];
+        }
+        x
+    }
+    let plane = |f: forge_topo::FaceId| match &b.face(f).surface {
+        Surface::Plane(pl) => Some((pl.frame.origin, pl.frame.z().get())),
+        _ => None,
+    };
+    let verts_of = |f: forge_topo::FaceId| -> Vec<forge_math::Point3> {
+        b.face(f)
+            .loops
+            .iter()
+            .flat_map(|&l| {
+                b.lp(l)
+                    .coedges()
+                    .map(|c| {
+                        let ed = b.edge(b.coedge(c).edge);
+                        b.vertex(ed.start).point
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect()
+    };
+    let l = forge_math::tol::LINEAR;
+    let one = |f: forge_topo::FaceId, g: forge_topo::FaceId| -> bool {
+        let (Some((o1, n1)), Some((o2, n2))) = (plane(f), plane(g)) else {
+            return false;
+        };
+        if n1.x * n2.x + n1.y * n2.y + n1.z * n2.z <= 0.0 {
+            return false;
+        }
+        let d = |o: forge_math::Point3, n: forge_math::Vec3, p: forge_math::Point3| {
+            ((p.x - o.x) * n.x + (p.y - o.y) * n.y + (p.z - o.z) * n.z).abs()
+        };
+        verts_of(g).iter().all(|&p| d(o1, n1, p) <= l) && verts_of(f).iter().all(|&p| d(o2, n2, p) <= l)
+    };
+    for e in b.edge_ids() {
+        let fs: Vec<_> = b.edge(e).coedges.iter().map(|&c| b.coedge_face(c)).collect();
+        if fs.len() == 2 && fs[0] != fs[1] && one(fs[0], fs[1]) {
+            let (x, y) = (find(&mut parent, idx(fs[0])), find(&mut parent, idx(fs[1])));
+            parent[x] = y;
+        }
+    }
+    let group = |p: &mut Vec<usize>, f: forge_topo::FaceId| find(p, idx(f));
+    let mut kept = Vec::new();
+    for e in b.edge_ids() {
+        let mut gs: Vec<usize> = b
+            .edge(e)
+            .coedges
+            .iter()
+            .map(|&c| group(&mut parent, b.coedge_face(c)))
+            .collect();
+        let slit = {
+            let fs: Vec<_> = b.edge(e).coedges.iter().map(|&c| b.coedge_face(c)).collect();
+            fs.len() == 2 && fs[0] == fs[1]
+        };
+        if gs.len() == 2 && gs[0] == gs[1] && !slit {
+            continue;
+        }
+        gs.sort_unstable();
+        kept.push((e, gs));
+    }
+    let mut at: Vec<Vec<usize>> = vec![Vec::new(); b.vertices.len()];
+    for (k, (e, _)) in kept.iter().enumerate() {
+        let ed = b.edge(*e);
+        at[ed.start.index()].push(k);
+        if ed.end != ed.start {
+            at[ed.end.index()].push(k);
+        }
+    }
+    let used = at.iter().filter(|es| !es.is_empty()).count();
+    let redundant = at
+        .iter()
+        .filter(|es| es.len() == 2 && kept[es[0]].1 == kept[es[1]].1)
+        .count();
+    let mut roots: Vec<usize> = (0..faces.len()).map(|i| find(&mut parent, i)).collect();
+    roots.sort_unstable();
+    roots.dedup();
+    [
+        used - redundant,
+        kept.len() - redundant,
+        roots.len(),
+        forge_proof::props::sig(&b).shells,
+    ]
+}
+
+/// The near-coincident part (research/kernel-audit/near-coincident.md): adversarial
+/// near_tolerance 2, its first three features.
+pub fn notched() -> Part {
+    let g = forge_model::adversarial::families()
+        .into_iter()
+        .find(|(f, _)| *f == "near_tolerance")
+        .expect("the near_tolerance family")
+        .1;
+    let mut part = forge_model::adversarial::canonical(&g(2));
+    part.features.truncate(3);
+    part
 }
 
 /// The sequential regen.
@@ -384,6 +540,9 @@ pub enum Class {
     Wrong(String),
     /// The kernel refused where the reference gives a solid (or refused for another reason).
     Refused(String),
+    /// The kernel's body is right but for an imprint: one surface left as several faces
+    /// (`merged_sig` agrees with the reference where the plain topology does not).
+    Unmerged(String),
     /// The reference found a decision within LINEAR: no judgement.
     Ambiguous,
     /// Not a flat-face boolean.
@@ -396,19 +555,32 @@ impl Class {
             Class::Agree => "agree",
             Class::Wrong(_) => "kernel wrong",
             Class::Refused(_) => "kernel refused",
+            Class::Unmerged(_) => "kernel unmerged",
             Class::Ambiguous => "reference ambiguous",
             Class::Scope(_) => "out of scope",
         }
     }
     pub fn detail(&self) -> String {
         match self {
-            Class::Wrong(s) | Class::Refused(s) | Class::Scope(s) => s.clone(),
+            Class::Wrong(s) | Class::Refused(s) | Class::Unmerged(s) | Class::Scope(s) => s.clone(),
             _ => String::new(),
         }
     }
-    /// The kind of disagreement, without numbers: what groups repros.
+    /// The kind of disagreement, without numbers: what groups repros. A refusal or an invalid
+    /// body by its error's variant (the first CamelCase word past the wrappers), else the
+    /// detail's first words.
     pub fn kind(&self) -> String {
         let d = self.detail();
+        const WRAP: [&str; 6] = ["Boolean", "Internal", "FaceRef", "Point3", "EdgeId", "Some"];
+        let variant = d
+            .split(|c: char| !c.is_alphanumeric())
+            .find(|w| w.chars().next().is_some_and(|c| c.is_ascii_uppercase()) && !WRAP.contains(w));
+        if let (Class::Refused(_) | Class::Wrong(_), Some(v)) = (self, variant)
+            && !d.starts_with("topology")
+            && !d.starts_with("volume")
+        {
+            return format!("{}: {v}", self.key());
+        }
         let words: Vec<&str> = d
             .split([' ', '{', '(', ':'])
             .filter(|w| !w.is_empty())
@@ -420,6 +592,19 @@ impl Class {
 
 /// Volumes agree to this relative slack (both are exact up to the kernel's ulps).
 pub const VOLUME_SLACK: f64 = 1e-7;
+
+/// The §6.1 spread cap, in LINEARs (ForgeExact/Ref/Input.lean's `spreadCap`): no surface is
+/// moved further by the snap, so volumes may also differ by up to this times LINEAR times the
+/// body's area (the kernel keeping a surface where the reference decides it in its
+/// representative's plane, up to that far away).
+pub const SNAP_CAP: f64 = 2.0;
+
+/// Whether the kernel's volume is the reference's: within the relative slack, or within the
+/// snap's reach over the body's area.
+pub fn same_volume(volume: f64, area: f64, reference: f64) -> bool {
+    let d = (volume - reference).abs();
+    d <= VOLUME_SLACK * reference.abs().max(1.0) || d <= SNAP_CAP * forge_math::tol::LINEAR * area
+}
 
 pub fn classify(r: &Answer, k: &Kernel) -> Class {
     if let Some(e) = &r.error {
@@ -437,10 +622,19 @@ pub fn classify(r: &Answer, k: &Kernel) -> Class {
         "solid" => match k {
             Kernel::Refused(e) => Class::Refused(format!("refused {e} where the reference gives a solid")),
             Kernel::Built { invalid: Some(p), .. } => Class::Wrong(format!("invalid body {p}")),
-            Kernel::Built { volume, sig, .. } => {
+            Kernel::Built {
+                volume, sig, merged, ..
+            } => {
                 let (v, e, f) = (sig.verts - sig.redundant, sig.edges - sig.redundant, sig.faces);
                 if (volume - r.volume).abs() > VOLUME_SLACK * r.volume.abs().max(1.0) {
                     Class::Wrong(format!("volume {volume} where the reference gives {}", r.volume))
+                } else if (v, e, f, sig.shells) != (r.vertices, r.edges, r.faces, r.shells)
+                    && *merged == [r.vertices, r.edges, r.faces, r.shells]
+                {
+                    Class::Unmerged(format!(
+                        "topology V{v} E{e} F{f} S{}, V{} E{} F{} once tolerance-coplanar neighbours are merged, as the reference gives",
+                        sig.shells, merged[0], merged[1], merged[2]
+                    ))
                 } else if (v, e, f, sig.shells) != (r.vertices, r.edges, r.faces, r.shells) {
                     Class::Wrong(format!(
                         "topology V{v} E{e} F{f} S{} where the reference gives V{} E{} F{} S{}",
@@ -504,6 +698,17 @@ pub struct Judged {
 /// `classify`, and where the kernel says a feature empties the part (a refusal with a stated
 /// reason), the reference asked about the history up to that feature.
 pub fn judge_kernel(reference: &mut Reference, part: &Part, ans: &Answer, k: &Kernel) -> Class {
+    judge_kernel_rule(reference, part, ans, k, &rule())
+}
+
+/// `judge_kernel` under the named rule.
+pub fn judge_kernel_rule(
+    reference: &mut Reference,
+    part: &Part,
+    ans: &Answer,
+    k: &Kernel,
+    rule: &str,
+) -> Class {
     if let Kernel::Refused(e) = k
         && let Some(rest) = e.strip_prefix("Empty { feature: ")
         && let Some(n) = rest.split(' ').next().and_then(|n| n.parse::<usize>().ok())
@@ -511,7 +716,7 @@ pub fn judge_kernel(reference: &mut Reference, part: &Part, ans: &Answer, k: &Ke
     {
         let mut prefix = part.clone();
         prefix.features.truncate(n + 1);
-        return match reference_input(&prefix) {
+        return match reference_input_rule(&prefix, rule) {
             Err(e) => Class::Scope(e),
             Ok(input) => {
                 let a = reference.ask(&input);
@@ -563,4 +768,5 @@ pub fn judge(reference: &mut Reference, case: &Case, ulp_seeds: &[u64]) -> Vec<J
     out
 }
 
+pub mod pairs;
 pub mod shrink;

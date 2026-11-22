@@ -16,6 +16,8 @@ forge-math = { path = "../../../kernel/forge-math" }
 forge-geom = { path = "../../../kernel/forge-geom" }
 forge-topo = { path = "../../../kernel/forge-topo" }
 forge-model = { path = "../../../kernel/forge-model" }
+forge-ops = { path = "../../../kernel/forge-ops" }
+forge-bool = { path = "../../../kernel/forge-bool" }
 forge-proof = { path = "../../forge-proof" }
 forge-lang = { path = "../../../interface/forge-lang" }
 
