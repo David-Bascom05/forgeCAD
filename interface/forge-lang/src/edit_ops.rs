@@ -291,7 +291,9 @@ pub fn ast_rename(prog: &mut [Stmt], from: &str, to: &str) {
                         ex(d, from, to);
                     }
                 }
-                body.iter_mut().for_each(|b| st(b, from, to));
+                std::rc::Rc::make_mut(body)
+                    .iter_mut()
+                    .for_each(|b| st(b, from, to));
             }
             StmtKind::For { vars, iter, body } => {
                 vars.iter_mut().for_each(|v| name(v, from, to));

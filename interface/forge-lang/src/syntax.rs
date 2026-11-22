@@ -541,7 +541,8 @@ pub enum StmtKind {
     Fn {
         name: String,
         params: Vec<FnParam>,
-        body: Vec<Stmt>,
+        /// (shared, not copied, by the function a definition makes)
+        body: std::rc::Rc<Vec<Stmt>>,
     },
     For {
         vars: Vec<String>,
@@ -1040,7 +1041,7 @@ impl Parser {
                 stmt!(StmtKind::Fn {
                     name: self.text(b + 1),
                     params,
-                    body: list!(self, b + 5, V::Stmts),
+                    body: std::rc::Rc::new(list!(self, b + 5, V::Stmts)),
                 })
             }
             P::StmtFor => {
@@ -1881,9 +1882,8 @@ pub fn walk<'s>(stmts: &'s [Stmt], f: &mut dyn FnMut(&'s Stmt)) {
     for s in stmts {
         f(s);
         match &s.kind {
-            StmtKind::Fn { body, .. } | StmtKind::For { body, .. } | StmtKind::Block { body, .. } => {
-                walk(body, f)
-            }
+            StmtKind::Fn { body, .. } => walk(body, f),
+            StmtKind::For { body, .. } | StmtKind::Block { body, .. } => walk(body, f),
             StmtKind::If { then, other, .. } => {
                 walk(then, f);
                 if let Some(o) = other {

@@ -17,8 +17,6 @@ pub struct Stage {
     /// Each solid finished (faces on one surface joined), when there are several.
     finished: OnceCell<Vec<Body>>,
     spans: OnceCell<Vec<Span>>,
-    /// Several solids as one unfinished body (`work`), worked out once.
-    joined: OnceCell<Body>,
     /// What `Eval::no_effect` compares (`shape`), worked out once.
     shape: OnceCell<Option<Shape>>,
     /// Which stage this is, never another's: equal ids, the same stage (a kept one served again
@@ -42,7 +40,6 @@ impl Stage {
             view: OnceCell::new(),
             finished: OnceCell::new(),
             spans: OnceCell::new(),
-            joined: OnceCell::new(),
             shape: OnceCell::new(),
             id: NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
         }
@@ -104,21 +101,11 @@ impl Stage {
         })
     }
 
-    /// The bodies as one, unfinished: the pieces each feature made, for lineage.
-    pub(crate) fn work(&self) -> Option<&Body> {
-        match &self.solids[..] {
-            [] => None,
-            [one] => Some(&one.body),
-            many => Some(self.joined.get_or_init(|| {
-                let mut all = Body::new();
-                for s in many {
-                    all.append(&s.body.compact());
-                }
-                all
-            })),
-        }
+    /// The bodies, unfinished: the pieces each feature made, for lineage. Their faces in turn
+    /// are the faces of the bodies appended into one and compacted, in the same order.
+    pub(crate) fn work(&self) -> Option<Work<'_>> {
+        (!self.solids.is_empty()).then_some(Work(&self.solids))
     }
-
     /// The joined body's face names, edge count and corners (to 1e-5), sorted: equal for two
     /// stages exactly when a feature between them changed nothing (`Eval::no_effect`).
     pub fn shape(&self) -> Option<&Shape> {
@@ -139,6 +126,32 @@ impl Stage {
                 Some((v, b.edge_ids().count(), c))
             })
             .as_ref()
+    }
+}
+
+/// A stage's solids, unfinished, looked at as one body (`Stage::work`).
+#[derive(Clone, Copy)]
+pub(crate) struct Work<'a>(&'a [Solid]);
+
+impl<'a> Work<'a> {
+    /// Each live face, by its body and id, in order.
+    pub(crate) fn faces(self) -> impl Iterator<Item = (&'a Body, FaceId)> {
+        self.0
+            .iter()
+            .flat_map(|s| s.body.face_ids().map(move |f| (&s.body, f)))
+    }
+    /// A face's box: kept on the body of a stage of one solid, as the kernel's next step would
+    /// find it there anyway; on a stage of several, worked out with nothing kept, as the bodies
+    /// were before they were looked at (the kernel reads what a body has kept).
+    fn face_box(self, b: &Body, f: FaceId) -> forge_math::Box3 {
+        match self.0 {
+            [_] => b.face_box(f),
+            _ => b.face_box_unkept(f),
+        }
+    }
+    /// How many faces.
+    fn len(self) -> usize {
+        self.0.iter().map(|s| s.body.faces.len()).sum()
     }
 }
 
@@ -736,7 +749,44 @@ impl Builder {
 
 /// Which features made each face, by its name (as `forge_agent::select::Lineage`, hashed for
 /// names: they are hashes already, so a multiply spreads them; nothing iterates one).
-pub type Lineage = HashMap<Name, Vec<usize>, std::hash::BuildHasherDefault<NameMix>>;
+pub type Lineage = HashMap<Name, Origin, std::hash::BuildHasherDefault<NameMix>>;
+
+/// The features that made a face, in order: almost always one, held with no allocation.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Origin {
+    One(usize),
+    Many(Rc<[usize]>),
+}
+
+impl Origin {
+    fn of(v: Vec<usize>) -> Origin {
+        match v[..] {
+            [one] => Origin::One(one),
+            _ => Origin::Many(v.into()),
+        }
+    }
+    pub fn as_slice(&self) -> &[usize] {
+        self
+    }
+}
+
+impl std::ops::Deref for Origin {
+    type Target = [usize];
+    fn deref(&self) -> &[usize] {
+        match self {
+            Origin::One(i) => std::slice::from_ref(i),
+            Origin::Many(v) => v,
+        }
+    }
+}
+
+impl<'a> IntoIterator for &'a Origin {
+    type Item = &'a usize;
+    type IntoIter = std::slice::Iter<'a, usize>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
+    }
+}
 
 /// The hasher of `Lineage`.
 #[derive(Default)]
@@ -759,21 +809,30 @@ impl std::hash::Hasher for NameMix {
 /// `forge_agent::select::lineage` with nothing copied, into a `Lineage`: each face's making
 /// features after feature `i` built `body`, given those before. A face keeps its origin while its
 /// name lives; a new face on a face before's surface, overlapping it, is that face's.
-fn lineage(body: &Body, prev: Option<(&Body, &Lineage)>, i: usize) -> Lineage {
-    let mut out = Lineage::with_capacity_and_hasher(body.faces.len(), Default::default());
-    for f in body.face_ids() {
-        let face = body.face(f);
-        let o = prev.and_then(|(pb, po)| {
-            po.get(&face.name).cloned().or_else(|| {
-                // (the surfaces first: most differ, and a face's box is worked out only then)
-                pb.face_ids()
-                    .find(|&g| {
-                        pb.face(g).surface == face.surface && pb.face_box(g).overlaps(&body.face_box(f))
-                    })
-                    .and_then(|g| po.get(&pb.face(g).name).cloned())
-            })
-        });
-        out.insert(face.name, o.unwrap_or_else(|| vec![i]));
+fn lineage(body: Work<'_>, prev: Option<(Work<'_>, &Lineage)>, i: usize) -> Lineage {
+    let mut out = Lineage::with_capacity_and_hasher(body.len(), Default::default());
+    for s in body.0 {
+        let b = &s.body;
+        for f in b.face_ids() {
+            let face = b.face(f);
+            let o = prev.and_then(|(pb, po)| {
+                po.get(&face.name).cloned().or_else(|| {
+                    // (the surfaces first: most differ, and a face's box is worked out only then)
+                    for ps in pb.0 {
+                        let p = &ps.body;
+                        for g in p.face_ids() {
+                            if p.face(g).surface == face.surface
+                                && pb.face_box(p, g).overlaps(&body.face_box(b, f))
+                            {
+                                return po.get(&p.face(g).name).cloned();
+                            }
+                        }
+                    }
+                    None
+                })
+            });
+            out.insert(face.name, o.unwrap_or(Origin::One(i)));
+        }
     }
     out
 }
@@ -831,12 +890,14 @@ fn origin_upto(
     }
     let mut origin = (**origin).clone();
     for &(piece, whole) in &b.joins.aliases {
-        if let Some(mut o) = origin.get(&piece).cloned() {
-            let w = origin.entry(whole).or_default();
-            o.append(w);
+        if let Some(o) = origin.get(&piece) {
+            let mut o = o.to_vec();
+            if let Some(w) = origin.get(&whole) {
+                o.extend_from_slice(w);
+            }
             o.sort_unstable();
             o.dedup();
-            *w = o;
+            origin.insert(whole, Origin::of(o));
         }
     }
     Rc::new(origin)

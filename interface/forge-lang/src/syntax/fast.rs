@@ -145,7 +145,7 @@ impl Fast {
                 StmtKind::Fn {
                     name,
                     params,
-                    body: self.block()?,
+                    body: self.block()?.into(),
                 }
             }
             TokKind::Kw("for") => {
@@ -523,8 +523,42 @@ impl Fast {
         }
     }
 
+    /// `or`, each level below it its operand and then its tail (`orrest`, `andrest`, ..). An
+    /// operand that starts with neither `not` nor `-` is every level's first operand at once:
+    /// its postfix chain, each level's tail applied in turn from the innermost out, and with no
+    /// operator after it, that chain is the whole `or`.
     fn or(&mut self) -> F<Expr> {
-        let mut a = self.and()?;
+        let a = if self.kw("not") || self.op("-") {
+            self.and()?
+        } else {
+            let a = self.postfix()?;
+            if !self.infix() {
+                return Some(a);
+            }
+            let a = self.pow_rest(a)?;
+            let a = self.mul_rest(a)?;
+            let a = self.add_rest(a)?;
+            let a = self.range_rest(a)?;
+            let a = self.cmp_rest(a)?;
+            self.and_rest(a)?
+        };
+        self.or_rest(a)
+    }
+
+    /// Whether the token is an operator one of `or`'s levels takes after an operand.
+    #[inline]
+    fn infix(&self) -> bool {
+        match self.kind() {
+            TokKind::Op(o) => matches!(
+                *o,
+                "^" | "*" | "/" | "+" | "-" | ".." | "..=" | "==" | "!=" | "<" | "<=" | ">" | ">="
+            ),
+            TokKind::Kw(w) => matches!(*w, "and" | "or"),
+            _ => false,
+        }
+    }
+
+    fn or_rest(&mut self, mut a: Expr) -> F<Expr> {
         while self.kw("or") {
             self.bump();
             let b = self.and()?;
@@ -534,7 +568,11 @@ impl Fast {
     }
 
     fn and(&mut self) -> F<Expr> {
-        let mut a = self.not()?;
+        let a = self.not()?;
+        self.and_rest(a)
+    }
+
+    fn and_rest(&mut self, mut a: Expr) -> F<Expr> {
         while self.kw("and") {
             self.bump();
             let b = self.not()?;
@@ -557,7 +595,11 @@ impl Fast {
     }
 
     fn cmp(&mut self) -> F<Expr> {
-        let mut a = self.range()?;
+        let a = self.range()?;
+        self.cmp_rest(a)
+    }
+
+    fn cmp_rest(&mut self, mut a: Expr) -> F<Expr> {
         loop {
             let op = match self.kind() {
                 TokKind::Op("==") => BinOp::Eq,
@@ -576,6 +618,10 @@ impl Fast {
 
     fn range(&mut self) -> F<Expr> {
         let a = self.add()?;
+        self.range_rest(a)
+    }
+
+    fn range_rest(&mut self, a: Expr) -> F<Expr> {
         let inclusive = match self.kind() {
             TokKind::Op("..") => false,
             TokKind::Op("..=") => true,
@@ -595,7 +641,11 @@ impl Fast {
     }
 
     fn add(&mut self) -> F<Expr> {
-        let mut a = self.mul()?;
+        let a = self.mul()?;
+        self.add_rest(a)
+    }
+
+    fn add_rest(&mut self, mut a: Expr) -> F<Expr> {
         loop {
             let op = match self.kind() {
                 TokKind::Op("+") => BinOp::Add,
@@ -609,7 +659,11 @@ impl Fast {
     }
 
     fn mul(&mut self) -> F<Expr> {
-        let mut a = self.unary()?;
+        let a = self.unary()?;
+        self.mul_rest(a)
+    }
+
+    fn mul_rest(&mut self, mut a: Expr) -> F<Expr> {
         loop {
             let op = match self.kind() {
                 TokKind::Op("*") => BinOp::Mul,
@@ -633,6 +687,11 @@ impl Fast {
             });
         }
         let a = self.postfix()?;
+        self.pow_rest(a)
+    }
+
+    /// unary's tail: `^` and the power, right-associated.
+    fn pow_rest(&mut self, a: Expr) -> F<Expr> {
         if !self.op("^") {
             return Some(a);
         }

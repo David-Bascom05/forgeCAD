@@ -1072,7 +1072,9 @@ fn replace_num(s: &mut Stmt, at: Span, name: &str, found: &mut Option<(f64, Unit
                 .chain(other.iter_mut().flatten())
                 .for_each(|b| replace_num(b, at, name, found));
         }
-        StmtKind::Fn { body, .. } => body.iter_mut().for_each(|b| replace_num(b, at, name, found)),
+        StmtKind::Fn { body, .. } => std::rc::Rc::make_mut(body)
+            .iter_mut()
+            .for_each(|b| replace_num(b, at, name, found)),
         StmtKind::Block { args, body, .. } => {
             args.iter_mut().for_each(|a| ex(&mut a.value, at, name, found));
             body.iter_mut().for_each(|b| replace_num(b, at, name, found));
@@ -1152,7 +1154,7 @@ pub fn strip(prog: &[Stmt]) -> Vec<Stmt> {
                         default: p.default.as_ref().map(ex),
                     })
                     .collect(),
-                body: strip(body),
+                body: strip(body).into(),
             },
             StmtKind::For { vars, iter, body } => StmtKind::For {
                 vars: vars.clone(),

@@ -108,7 +108,16 @@ fn names() -> &'static HashMap<
     >;
     static ALL: std::sync::OnceLock<Names> = std::sync::OnceLock::new();
     ALL.get_or_init(|| {
-        let mut m = Names::default();
+        // (sized for every name at once: no growing on the way)
+        let n = BUILTINS.len()
+            + crate::shapes::NAMES.len()
+            + CONSTANTS.len()
+            + MORE.len()
+            + crate::sheet::BUILTINS.len()
+            + crate::thermo::BUILTINS.len()
+            + crate::wired::NAMES.len()
+            + crate::sheet::CONSTANTS.len();
+        let mut m = Names::with_capacity_and_hasher(n, Default::default());
         for &b in BUILTINS.iter().chain(crate::shapes::NAMES) {
             m.entry(b).or_insert((Some(b), false));
         }
@@ -2570,7 +2579,10 @@ fn instance_names(
     let faces = |b: &Body| -> Vec<Name> { b.face_ids().map(|g| b.face(g).name).collect() };
     match src {
         Some(forge_model::Source::Body) => {
-            let names = before.and_then(|b| b.work()).map(faces).unwrap_or_default();
+            let names: Vec<Name> = before
+                .and_then(|b| b.work())
+                .map(|w| w.faces().map(|(b, g)| b.face(g).name).collect())
+                .unwrap_or_default();
             let Feature::Pattern { layout, .. } = &hist[i] else {
                 return vec![];
             };

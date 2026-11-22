@@ -708,7 +708,7 @@ impl<'s> Eval<'s> {
                         self.literals_expr(d, false, &None);
                     }
                 }
-                for b in body {
+                for b in body.iter() {
                     self.literals_stmt(b, &None);
                 }
             }
@@ -1199,7 +1199,7 @@ impl<'s> Eval<'s> {
                     Rc::new(FnDef {
                         name: name.clone(),
                         params: params.clone(),
-                        body: Rc::new(body.clone()),
+                        body: body.clone(),
                         span: s.span,
                         lib: None,
                     }),
