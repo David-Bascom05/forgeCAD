@@ -585,6 +585,9 @@ impl<'a> Index<'a> {
                             }
                     })
             };
+            decided!(if d <= crate::decisions::BAND && !(d <= reach && past()) {
+                crate::boolean::log::on_edge_at(body, co.edge, p, d, reach, "point_in_face: nearest edge");
+            });
             if d <= reach && !past() {
                 return Where::On;
             }

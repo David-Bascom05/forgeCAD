@@ -289,6 +289,46 @@ fn nary_reg() -> Option<usize> {
 }
 
 /// A cut of a new edge by a third tool's face.
+/// The n-ary place step's answers (step 3): each cut at its edge's ends or not, and every two cut
+/// points within four tolerances one vertex or two, both as the sweep's own test of the pair (one
+/// reach) and as its clusters (joined through others) say. `pts` and `tols`: the cuts', then the
+/// triple cuts' (on no edge of a tool).
+#[cfg(feature = "decisions")]
+fn log_place(tools: &[&Body], cuts: &[Cut], pts: &[Point3], tols: &[f64], cluster: &[usize]) {
+    use crate::boolean::log;
+    use crate::decisions::Ent;
+    let ent = |i: usize| {
+        cuts.get(i)
+            .and_then(|c| c.on.edge())
+            .map_or(Ent::NONE, |(sd, e)| Ent::e(tools[sd], e))
+    };
+    for c in cuts {
+        let Some((sd, e)) = c.on.edge() else { continue };
+        let edge = tools[sd].edge(e);
+        for v in [edge.start, edge.end] {
+            let lim = tools[sd].vertex(v).tol.max(c.tol);
+            log::at_vertex(tools[sd], v, c.point, lim, "n-ary place: a cut at its edge's end");
+        }
+    }
+    let widest = tols.iter().fold(tol::LINEAR, |a, &b| a.max(b));
+    let mut by_x: Vec<usize> = (0..pts.len()).collect();
+    by_x.sort_by(|&i, &j| pts[i].x.total_cmp(&pts[j].x));
+    for (n, &i) in by_x.iter().enumerate() {
+        for &j in &by_x[n + 1..] {
+            if pts[j].x - pts[i].x > 4.0 * widest {
+                break;
+            }
+            let reach = tols[i].max(tols[j]);
+            let dist = pts[i].distance(pts[j]);
+            if dist <= 4.0 * reach {
+                let (x, y) = ((ent(i), pts[i], tols[i]), (ent(j), pts[j], tols[j]));
+                log::same_place_at(x, y, dist <= reach, "n-ary place: one reach");
+                log::same_place_at(x, y, cluster[i] == cluster[j], "n-ary place: clusters");
+            }
+        }
+    }
+}
+
 struct SegCut {
     seg: usize,
     /// The tool whose face crosses it.
@@ -564,7 +604,12 @@ pub fn nary_with(
     root: Name,
 ) -> R<Body> {
     crate::boolean::UNDECIDED.with(|u| u.set(None));
-    let out = nary_body(tools, ops, shapes, batch, threads, root)?;
+    #[cfg(feature = "decisions")]
+    let scope = crate::decisions::scope("n-ary", String::from("plain"));
+    let body = nary_body(tools, ops, shapes, batch, threads, root);
+    #[cfg(feature = "decisions")]
+    scope.outcome(crate::decisions::Outcome::of(&body));
+    let out = body?;
     crate::boolean::undecided_touch(&out)?;
     crate::boolean::refuse_strays(&out, 0)?;
     // pieces left touching at a point pinch (boolean::pinched): where walking round a vertex from
@@ -911,6 +956,14 @@ fn nary_body(
                     SurfaceSurface::NotAnalytic => ssi::searched(sa, sb, region),
                     r => r,
                 };
+                decided!(crate::boolean::log::coincident(
+                    a,
+                    fa,
+                    b,
+                    fb,
+                    matches!(found, SurfaceSurface::Coincident),
+                    "n-ary pair: closed_or_flush"
+                ));
                 if planes && !matches!(found, SurfaceSurface::Coincident) && (inert(i, fa) || inert(j, fb)) {
                     out.loose.push(((i, fa), (j, fb)));
                     continue;
@@ -1457,6 +1510,7 @@ fn nary_body(
         }
         cluster.push(id_of_root[r]);
     }
+    decided!(log_place(tools, &cuts, &pts, &tols, &cluster));
     let mut olds: Vec<Vec<VKey>> = vec![Vec::new(); heads.len()];
     for (i, c) in cuts.iter().enumerate() {
         let Some((sd, e)) = c.on.edge() else { continue };
