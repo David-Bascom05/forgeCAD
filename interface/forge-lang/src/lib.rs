@@ -521,6 +521,8 @@ fn run_once(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
         let solids = if each { props::solids(&ev) } else { vec![] };
         // every solid's own mass is wanted anyway: the whole is their sum, not worked out again
         // over the joined body (twice the integrals, where .fc did them once)
+        // (the joined body still gives the box)
+        let boxed = whole;
         let whole = match whole {
             Some(_) if each && solids.len() == ev.b.stages.last().map_or(0, |st| st.solids.len()) => None,
             w => w,
@@ -535,7 +537,7 @@ fn run_once(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
         let (w, e, o) = if forge_geom::budget::left() == u64::MAX {
             std::thread::scope(|s| {
                 let w = whole.map(|b| s.spawn(move || mass(b)));
-                let bx = whole.map(|b| s.spawn(move || tightbox::tight_box(b)));
+                let bx = boxed.map(|b| s.spawn(move || tightbox::tight_box(b)));
                 let o: Vec<_> = owed.iter().map(|x| s.spawn(move || mass(&x.2).ok())).collect();
                 let e = each_mass();
                 let w = (w.map(joined), bx.map(joined));
@@ -544,7 +546,7 @@ fn run_once(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
         } else {
             // in the order they were asked for: the modelled parts' in the run, then the rest
             let o: Vec<_> = owed.iter().map(|x| mass(&x.2).ok()).collect();
-            let w = (whole.map(mass), whole.map(tightbox::tight_box));
+            let w = (whole.map(mass), boxed.map(tightbox::tight_box));
             (w, each_mass(), o)
         };
         for ((i, key, _), m) in owed.into_iter().zip(o) {
@@ -553,6 +555,7 @@ fn run_once(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
             }
             ev.b.memo_keep(key, m);
         }
+        let (w, bx) = w;
         let w = match (&e, from_parts) {
             (Some(parts), true) => Some(
                 parts
@@ -566,7 +569,7 @@ fn run_once(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
             .map(Ok),
             _ => w,
         };
-        (w, e)
+        ((w, bx), e)
     };
     let measure = match (built_all && opts.checks, ev.b.measured()) {
         (false, _) => None,
