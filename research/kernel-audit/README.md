@@ -696,3 +696,199 @@ geometry), and M8 (mesh certification).
 planar adversarial families and the planar fuzz histories. Every disagreement it shrinks is a
 kernel bug with a definite right answer. Phase 1 of section 4 is then "make the kernel implement
 6.1", with this property as its gate.
+
+---
+
+## 7. Scope of "everything is polynomial": every surface and curve kind the kernel has
+
+Sources: `Surface` (forge-geom/src/surface.rs:95–103) and `Curve` (curve.rs:95–105) enums, and
+every `impl Procedural` / `impl ProceduralCurve` in forge-geom.
+
+The reference decides **point sets**, not parametrisations. A kind counts as algebraic if its
+image is the zero set (or a semialgebraic piece) of a polynomial.
+
+Degrees below are implicit degrees. "≤" is the generic bound (Bézout, or 2mn for a rational
+tensor patch of bidegree (m, n)); particular cases often factor lower. Degree sets the cost of the
+reference: resultant sizes and algebraic-number degrees grow with the products of these numbers.
+
+### 7.1 Algebraic: exact reference, stages 1–3
+
+| kind | where | implicit degree |
+|---|---|---|
+| Plane | surface.rs | 1 |
+| Cylinder, Cone, Sphere | surface.rs | 2 |
+| Torus (ring, horn, spindle, lemon/apple) | surface.rs | 4 |
+| offsets of the above (shell, thicken) | forge-ops/src/shell.rs:851 | the same kind and degree: natural quadrics and tori are closed under offset |
+| `Offset` of a procedural surface | blend.rs:156 | algebraic iff the base is; the degree grows sharply (a general ellipsoid's offset is already degree 12) |
+| `Extruded` (a plane rational spline of degree d, swept straight) | spline/extruded.rs | ≤ d (an ellipse wall: 2) |
+| `Spun` (a rational section of degree d, revolved) | spline/spun.rs | ≤ 2d (r = √(x²+y²), squared out) |
+| `Swept` on a **planar** spine | spline/swept.rs:1–7 | algebraic (the frame is rational in T/\|T\|, so a square root): ≤ about twice the rational bound; certified tier at first |
+| `Pipe` (ball blend about an exact spine), `Tube` (constant distance from a rim) | blend.rs:1659, tube.rs | canal surfaces: algebraic when the spine is. Spine = the intersection of two offsets: degree ≤ 4 for two natural quadrics, 8 for quadric × torus. Eliminating the spine point gives a bound in the tens (a circle spine gives the torus, 4) |
+| `HolePatch` (corner) | corner.rs:2193 | a rational blend Σ R_i B_i of algebraic sides: algebraic in principle, degree impractical → certified tier |
+| `Ruled`, `Skinned` with **rational rails only** (line, spline, parabola) | ruled.rs, skinned.rs | Ruled: rational bidegree (max(a, b), 1) → ≤ 2·max(a, b). Skinned: per span (d, 3) → ≤ 6d with common denominators |
+| Line; Circle, Ellipse, Parabola, Hyperbola | curve.rs | 1; 2 (a plane ∩ a quadric) |
+| `SplineCurve` (rational B-spline as Bézier pieces) | spline.rs:1–4 | d per piece |
+| `Intersection` / `ChordCurve` (a re-parametrised intersection) | intcurve.rs, smooth.rs:377 | ≤ d1·d2: conic 2, quadric·quadric 4, quadric·torus 8, torus·torus 16 |
+| `Spring` (the ball's foot on a surface) | blend.rs:1052 | algebraic when the spine and surface are (foot equations are polynomial) |
+
+**A finding that affects lofts.** `Ruled` matches its rails "by the fraction t along" each
+(ruled.rs:21–44), and an `Arc` rail is parametrised by **angle**: start + t·sweep. A loft from a
+circle to a line or a spline therefore pairs cos(α + βt) with a polynomial in t. The image is
+**transcendental**, not algebraic. Two arcs are algebraic only if their angular rates are equal (or
+in a small rational ratio). `Skinned` matches its sections the same way.
+
+If the owner wants lofts inside the exact reference, the **definition** must change: parametrise
+arcs rationally, for example as a rational quadratic Bézier, as Parasolid- and NURBS-style lofts
+do. That changes which points are matched, so it changes the geometry. It is a definition decision,
+to be made once, not a numeric fix.
+
+### 7.2 Transcendental
+
+| kind | where | why |
+|---|---|---|
+| `Screw` (a section line or arc under a screw motion with drift a and rise b) | screw.rs:657 | z = b·atan2(y, x)-type relations. With a = b = 0 it is a revolution, so algebraic (plane, cone, cylinder, torus) |
+| `Helix` and coaxial `Round` curves | screw.rs:857, screw/coaxial.rs:368 | the screw's helices, conical helices, flat spirals |
+| threads, coils, `Swept` along a helix | spline/swept.rs `Spine::Helix` | the same screw motion |
+| `Wrap` curves, wrapped ruled walls (text on a cylinder, a hole across a sheet-metal bend: a right conoid) | wrap.rs:572 | the angle s/unroll appears inside cos and sin |
+| `Swept` along a **spatial** spine (rotation-minimising frame) | spline/swept.rs:5–7, 75–110 | R' = [w]R is an ODE. Note that the kernel's surface is **its Magnus table** ("tabulated by Magnus steps at build and stepped from the nearest entry"), not the exact RMF |
+| `Ruled` and `Skinned` with an `Arc` or `Wrap` rail | ruled.rs:21–44 | the angle matching of 7.1 |
+| `VarBlend` | varblend.rs:2499 | the radius law runs along a non-rational spine parameter: defined by solving, not by a formula |
+| `Fence` surfaces (screw.rs:1028, blend.rs:1208, varblend.rs:2777) | — | search aids near springs, never boundary: the reference ignores them |
+
+### 7.3 How the reference handles the transcendental kinds
+
+1. **The cylindrical-cover reduction (exact, and covers the common cases).** Write points as
+   (ρ, φ, z) with φ **unwrapped**, a real coordinate on the universal cover of the axis
+   complement. This is the reduction `Screw::nearest_turn` already performs: (ρ − a·u, z − b·u)
+   with u = φ + 2πm (screw.rs:468–493).
+
+   In those coordinates the following are all **polynomial in (ρ, φ, z)**:
+   - every screw face with that axis: G(ρ − aφ, z − bφ) = 0, with G the section line or arc, of
+     degree 1 or 2;
+   - helices;
+   - wrapped curves and walls on a cylinder about that axis;
+   - coaxial planes ⊥ the axis, cylinders, cones, spheres centred on the axis, and tori.
+
+   The faces span bounded φ ranges (`ue`, screw.rs:356–362), and screw faces stay off the axis
+   (`rmin > LINEAR`, screw.rs:382–384). So a **coaxial** configuration, which covers a thread or
+   coil cut into its shaft and its flat ends, is a semialgebraic problem in the cover. The stage-2
+   exact machinery then applies unchanged. `screw/coaxial.rs` and `screw/pair.rs` already exploit
+   this in closed form, so the reference would match their domain exactly.
+2. **Non-coaxial configurations** include a thread against a cross hole, a tilted plane, a wrap
+   against a free plane, a spatial RMF sweep, and angle-matched lofts. Here the equations mix φ
+   with cos φ and sin φ (exp-polynomial or Pfaffian), and the RMF table adds exp of bounded
+   arguments.
+   - **Finiteness still holds.** Over the bounded model box every such set is definable in
+     ℝ_an (restricted analytic functions; Denef & van den Dries 1988; van den Dries, *Tame
+     Topology and O-minimal Structures*, 1998). It has finitely many components and a cell
+     decomposition.
+   - **No effective decomposition is known.** Decidability of ℝ_exp is conditional on Schanuel's
+     conjecture (Macintyre & Wilkie 1996). Khovanskii's fewnomial bounds bound how many components
+     there are, but do not find them.
+   - So the reference here is a **δ-complete decision procedure** (Gao, Avigad & Clarke,
+     "δ-complete decision procedures for satisfiability over the reals", IJCAR 2012; dReal). It
+     uses interval subdivision with Krawczyk inclusion and exclusion over the bounded domain, with
+     δ ≪ LINEAR (say LINEAR/1000). Every question is either decided or within δ of a tolerance
+     threshold; the latter yields `Ambiguous`.
+
+     This matches the tolerance semantics exactly: the kernel is only ever asked to decide up to
+     LINEAR, and the reference never claims more than δ-precision there.
+3. **Which surface is "the" surface.** For the spatial RMF sweep the reference takes the kernel's
+   Magnus-table formula as the definition, exact on the stored f64 table. A separate certified
+   bound relates it to the true RMF (the 1e-13 step agreement in `frame_table` is a test, not a
+   bound). The same rule as for dmath applies: decide the surface the kernel holds.
+
+---
+
+## 8. Refinement: proving each fast path against the reference
+
+**The obligation.** For every optimised path P (the fast kernel, the imprint fast path, n-ary,
+memo caches, float filters), on the reference's input domain, one of these must hold:
+- (i) **P(x) ≈ Ref(x)**: the comparison relation of section 6, meaning the same verdict class,
+  boundary within c·LINEAR, and the same topology modulo sub-LINEAR features; or
+- (ii) P is **total** and refuses only under a stated condition C(x), and C is a theorem about
+  Ref(x). For example: ZeroThickness only if Ref is NonManifold or Ambiguous; Unsupported only for
+  the listed kinds (stage-4 surfaces); never Internal.
+
+The proof splits along the boundary that the ledger of 2.1 creates:
+
+```
+f64 inputs ──numeric predicates──▶ sign vector (ledger) ──combinatorial core──▶ B-rep
+              (certified bridge)                            (Aeneas → Lean)
+Lean:  bridge ⊢ ledger is a consistent sign assignment for the real inputs (band rule)
+       core   ⊢ ∀ consistent ledger, core(ledger) = RefAlgo(ledger)        (2.1 obligation ii)
+       RefAlgo ⊢ = regularised Boolean spec (section 6)
+```
+
+### 8.1 Aeneas for the combinatorial code
+
+Aeneas (Ho & Protzenko, "Aeneas: Rust verification by functional translation", ICFP 2022; Charon
+extracts MIR) translates safe Rust to pure Lean 4, with loops becoming recursive functions and
+panics becoming errors. Production use includes Microsoft's SymCrypt Rust code.
+
+From the published work (check the current release before committing):
+- *Supported:* `Vec`, structs and enums, borrows, traits.
+- *Unsupported or limited:* interior mutability (`Cell`, `RefCell`, thread-locals), concurrency,
+  trait objects (`Arc<dyn …>`), unsafe code, and heavy closure or iterator-adapter chains.
+- *Floats:* opaque, with no IEEE semantics.
+
+How the kernel fits:
+- **Good fits.** forge-topo's arena B-rep (ids as indices, no borrowed graph) and its rules (`check`,
+  already proven local≡full in research/check-local/lean). Also the post-refactor union–find over
+  decided incidences, face splitting from a ledger, the `classify_specs` flood (boolean.rs:5861),
+  `unify` joins, and naming.
+- **Blockers today, all of which the refactor removes anyway:**
+  - the thread-local retry flags (boolean.rs:853–870, intersect.rs:580);
+  - numeric and combinatorial work interleaved in `trim` (2265–3169);
+  - `Arc<dyn Procedural>` surfaces inside topology code;
+  - `par_map` threads (nary.rs:51); prove the sequential core and treat parallelism as a separate,
+    order-independence lemma.
+- **Recommendation.** Extract the ledger-driven core as its own crate with no floats in its
+  signatures (it takes signs and symbolic keys), and run Aeneas on that. Where Aeneas falls short,
+  write the Lean model by hand and tie it to the Rust by differential testing on random ledgers
+  (Lean-compiled versus Rust). That is weaker than extraction, but practical. Kani can check
+  totality and panic-freedom of that crate on small bounds.
+
+### 8.2 The certified-predicate bridge for the numeric code
+
+These are proven in Lean directly over a floating-point model, not through Aeneas:
+
+- **IEEE-754 as axioms.** Correct rounding to nearest-even for + − × ÷ and sqrt: fl(a∘b) =
+  (a∘b)(1+δ) + η, with |δ| ≤ u and |η| ≤ underflow bound. This is the model
+  research/loft-ssi/shipped/LoftMeet/Float.lean already uses. Native and wasm bit-identity is
+  consistent with it, since both use the same correctly rounded ops and no FMA contraction.
+- **Shewchuk filters and exact expansions** (forge-math/src/predicates.rs). Prove the stated bounds
+  (`CCW_BOUND`, `ICC_BOUND`, `CROSS_BOUND`, `DOT3_BOUND`, `TRIPLE_BOUND`; research/predicate-bounds),
+  and that the expansion arithmetic (two_sum, two_product) is exact under the axioms.
+- **Interval filters** (forge-math/src/interval.rs). Rust has no rounding modes, so outward rounding
+  is one-ulp widening (next_up/next_down). Prove enclosure from the rounding axiom.
+- **dmath trig** (an fdlibm port, forge-math/src/dmath.rs). State per-function axioms
+  |dmath::sin(x) − sin x| ≤ k·ulp on stated ranges, and the same for cos, atan2 and sin_cos. Justify
+  them from fdlibm's published bounds plus exhaustive or MPFR differential testing; or replace them
+  later with proven correctly-rounded kernels (CORE-MATH). The reference never needs these axioms
+  for stored data (6.2: it takes the stored results as exact). They are needed only where the
+  kernel *computes* a decision through trig.
+- **What needs the bridge:**
+  - the closed-form surface–surface meets (ssi.rs; meet.rs, meet_gen.rs from SymPy; Cardano and
+    quartic solvers in forge-math/src/poly.rs): each returns curves and contact types, which must
+    come with root-isolation certificates (2.4);
+  - `point_in_face` and ray classification (classify.rs): planar faces already use exact
+    predicates, curved faces need filters;
+  - `settle` (boolean.rs:4660 ff.): the vertex's grown tolerance must be a *proven* bound on its
+    distance to every curve;
+  - the tracer (intcurve.rs): Krawczyk certificates (2.6);
+  - `track()` clearance (2.7).
+- **Fast paths proven by keyed purity.** These are proven equal to the path they shortcut, not to
+  the reference:
+  - the memo caches (screw.rs:1128, ssi.rs:161, swept.rs:112/170): equal iff the key holds every
+    input bit, which is the op-memo audit's rule;
+  - the imprint fast path (imprint.rs:26): equal on its CLEAR domain; its `Check` mode is the test
+    form of that theorem;
+  - `may_be_empty` (bodies.rs:1099): a conservative guard, proven by box containment.
+
+**Proof cost**, smallest first:
+1. keyed-purity fast paths;
+2. Shewchuk filter bounds (textbook);
+3. the combinatorial core under a consistent ledger (the 2.1 pilot);
+4. the closed-form meets with root-isolation certificates;
+5. the tracer (Krawczyk) and the dmath axioms' justification.
