@@ -9,6 +9,7 @@ import ForgeExact.DecideOnce.Rungs
 import ForgeExact.Jordan
 import ForgeExact.DecideOnce.BRep
 import ForgeExact.DecideOnce.Witness
+import ForgeExact.DecideOnce.BoxesExact
 
 /-!
 # Only the standard axioms
@@ -106,3 +107,11 @@ elab "#standard_axioms " ids:ident* : command => do
   ForgeExact.DecideOnce.correct_off_thin
   ForgeExact.DecideOnce.side_point
   ForgeExact.DecideOnce.witness_of_samples
+  ForgeExact.DecideOnce.BoxEx.box_compat
+  ForgeExact.DecideOnce.BoxEx.box_boundary
+  ForgeExact.DecideOnce.BoxEx.box_complete
+  ForgeExact.DecideOnce.BoxEx.box_edges
+  ForgeExact.DecideOnce.BoxEx.box_verts
+  ForgeExact.DecideOnce.BoxEx.box_exact
+  ForgeExact.DecideOnce.BoxEx.box_correct
+  ForgeExact.DecideOnce.BoxEx.box_refused_iff

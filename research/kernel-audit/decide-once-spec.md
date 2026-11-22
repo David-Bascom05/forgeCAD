@@ -280,6 +280,18 @@ snapped geometry's (carriers `ps`, solids `A`); hypotheses listed in §6. Then:
   B-reps (faces with loops, membership by ray parity, `Ref.Solid.contains`) that are closed and
   flat-faced, with every face plane a carrier up to a nonzero scale. It rests on
   `Jordan.contains_const` (§6.1 below).
+- **(c) for every box family** (`DecideOnce/BoxesExact.lean`): `box_exact` proves every field of
+  `Exact` for the box generator, `Exact (boxLedger K boxes) (gridPs K) (boxA boxes)`, for every
+  finite list of boxes on the grid `0 .. K` (each of positive extent on every axis), with no
+  other hypothesis. So `box_correct` (each `ok` body is the exact regularised boolean of the open
+  boxes, its faces exactly the boundary facets) and `box_refused_iff` (the zero-thickness refusal
+  is exactly `XNonManifold`) are theorems for all box families, under every rule, not only the
+  instances of (d). The proof works in doubled coordinates (`DCell`: even = on a grid plane, odd =
+  between): a cell's covector is `cov K c` (`covCell_eq_covOf`, `cov_inj`), its dimension is its
+  number of odd coordinates (`isEdge_iff`, `isVert_iff`, from the rank of the zero normals), and
+  the generator's facets, edges and vertices are the box faces' doubled cells and their bumps
+  (`box_boundary`, `box_complete`, `box_edges`, `box_verts`). All of §6 2–5 is discharged for this
+  generator; for general B-reps they remain the bridge's.
 
 **The metric ledger** (`Metric.lean`), for every ledger, keep table and metric tables:
 `collapse_local` (no cell that is not thin changes), `collapse_comp` (one feature, one keep),
@@ -340,7 +352,7 @@ cell; face to face → one box, 6 / 12 / 8 (exact-comparison.md's "contact left 
 
    `FacesFlat` and `Closed` are what the kernel's `check` certifies of the tools it hands over.
 2. **`boundary`, `complete`** (a facet is a piece of a face of body `i` iff body `i`'s membership
-   flips across it). Jordan–Brouwer again, plus the point-in-face decisions being right. This is
+   flips across it). Proven for the box generator (`box_boundary`, `box_complete`). Jordan–Brouwer again, plus the point-in-face decisions being right. This is
    the bridge's obligation (README §8.2): the predicate that fills `pieces` must be the exact one
    in the representative plane.
 3. ~~**`witness`**~~ **proven** for B-reps (`DecideOnce/Witness.lean`, `witness_of_samples`): if each
@@ -351,9 +363,9 @@ cell; face to face → one box, 6 / 12 / 8 (exact-comparison.md's "contact left 
    piece's plus (minus) side cell. The bridge's remaining obligation here is only to evaluate the
    reference's ray exactly at that point.
 4. **`edges`, `verts`** (the listed cells of dimension 1 and 0 round the pieces are exactly the
-   arrangement's). The bridge enumerates them from the pieces; dimension is the exact rank of the
+   arrangement's). Proven for the box generator (`box_edges`, `box_verts`). The bridge enumerates them from the pieces; dimension is the exact rank of the
    zero classes' normals (`IsEdge`, `IsVert`).
-5. **`pieceReal`** (each piece is a cell with a point). The bridge's: a cell with no point is
+5. **`pieceReal`** (each piece is a cell with a point). Proven for the box generator (`box_pieceReal`). The bridge's: a cell with no point is
    never listed.
 
 What the theorems do not claim:
@@ -402,3 +414,4 @@ What the theorems do not claim:
 | `Jordan.lean` | Jordan–Brouwer for the reference's ray parity: `contains_const` |
 | `DecideOnce/Metric.lean` | §6.1 step 3: the metric ledger, `collapse`, `coreM`, `coverageM` |
 | `DecideOnce/Witness.lean` | the witness ray: `side_point`, `witness_of_samples` |
+| `DecideOnce/BoxesExact.lean` | `Exact` for every box family: `box_exact`, `box_correct`, `box_refused_iff` |
