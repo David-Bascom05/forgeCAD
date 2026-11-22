@@ -489,7 +489,9 @@ theorem suppress_text_closure (out : Piece → Bool) (L : List (List Piece)) (s 
 /-- The marks after the tag: `<`, `>`, both, or none, then a space. -/
 def marks (b a : Bool) : Line := (if b then ['<'] else []) ++ (if a then ['>'] else []) ++ [' ']
 
-def render (tag : Line) : OLine → Line
+/-- A line of the text model as the file shows it: a live line as its text, a suppressed one as the
+tag, its marks and its text. -/
+def renderLine (tag : Line) : OLine → Line
   | .live ps => textOf ps
   | .tagd b a ps => tag ++ marks b a ++ textOf ps
 
@@ -511,14 +513,14 @@ theorem isPrefixOf_append (tag l : Line) : tag.isPrefixOf (tag ++ l) = true := b
 
 /-- A tagged line reads back as its marks and its text. -/
 theorem readTag_render (tag : Line) (b a : Bool) (ps : List Piece) :
-    readTag tag (render tag (.tagd b a ps)) = some (b, a, textOf ps) := by
-  simp only [render, readTag, List.append_assoc, isPrefixOf_append, ↓reduceIte, List.drop_left]
+    readTag tag (renderLine tag (.tagd b a ps)) = some (b, a, textOf ps) := by
+  simp only [renderLine, readTag, List.append_assoc, isPrefixOf_append, ↓reduceIte, List.drop_left]
   cases b <;> cases a <;> rfl
 
 /-- An untagged line reads as untagged when it does not start with a tag already (what
 `apply_suppress` refuses, and a statement's text after a break put in starts with code or a
 blank, never `#`). -/
 theorem readTag_live (tag : Line) (ps : List Piece) (h : readTag tag (textOf ps) = none) :
-    readTag tag (render tag (.live ps)) = none := h
+    readTag tag (renderLine tag (.live ps)) = none := h
 
 end ForgeLang

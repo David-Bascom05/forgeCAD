@@ -90,23 +90,23 @@ theorem respell_subtoken : respellText "base".toList 1 3 "x".toList = "bxe".toLi
 
 /-! ## The check -/
 
-inductive TokKind where
+inductive SpanKind where
   | read | binder | other
   deriving DecidableEq
 
 /-- A token of the text: its span and what it is (a read of a name, a binder, anything else). -/
-structure Tok where
+structure SpanTok where
   lo : Nat
   hi : Nat
-  kind : TokKind
+  kind : SpanKind
 
 /-- `apply_respell`: the splice, when the span is a read token's exactly; refused otherwise. -/
-def respellChecked (toks : List Tok) (src : List Char) (lo hi : Nat) (to : List Char) : Option (List Char) :=
+def respellChecked (toks : List SpanTok) (src : List Char) (lo hi : Nat) (to : List Char) : Option (List Char) :=
   if toks.any (fun t => t.lo == lo && t.hi == hi && t.kind == .read) then some (respellText src lo hi to)
   else none
 
 /-- What a lexer gives: tokens nonempty, no two overlapping. -/
-def Lexed (toks : List Tok) : Prop :=
+def Lexed (toks : List SpanTok) : Prop :=
   (∀ t ∈ toks, t.lo < t.hi) ∧ ∀ t ∈ toks, ∀ u ∈ toks, t ≠ u → t.hi ≤ u.lo ∨ u.hi ≤ t.lo
 
 theorem respellChecked_read {toks src lo hi to out} (h : respellChecked toks src lo hi to = some out) :
@@ -120,7 +120,7 @@ theorem respellChecked_read {toks src lo hi to out} (h : respellChecked toks src
   · cases h
 
 /-- A span inside a token, or at its start and ending elsewhere, is no token's: refused. -/
-theorem respell_refuses_inside {toks src lo hi to} (hl : Lexed toks) {t : Tok} (ht : t ∈ toks)
+theorem respell_refuses_inside {toks src lo hi to} (hl : Lexed toks) {t : SpanTok} (ht : t ∈ toks)
     (hin : t.lo ≤ lo ∧ lo < t.hi) (hne : ¬ (lo = t.lo ∧ hi = t.hi)) :
     respellChecked toks src lo hi to = none := by
   cases h : respellChecked toks src lo hi to with
@@ -133,7 +133,7 @@ theorem respell_refuses_inside {toks src lo hi to} (hl : Lexed toks) {t : Tok} (
       rcases hl.2 t ht u hu tu with h1 | h1 <;> omega
 
 /-- A binder's span is refused: no read token has it. -/
-theorem respell_refuses_binder {toks src to} (hl : Lexed toks) {t : Tok} (ht : t ∈ toks)
+theorem respell_refuses_binder {toks src to} (hl : Lexed toks) {t : SpanTok} (ht : t ∈ toks)
     (hb : t.kind = .binder) : respellChecked toks src t.lo t.hi to = none := by
   cases h : respellChecked toks src t.lo t.hi to with
   | none => rfl
@@ -146,7 +146,7 @@ theorem respell_refuses_binder {toks src to} (hl : Lexed toks) {t : Tok} (ht : t
       rcases hl.2 t ht u hu tu with h1 | h1 <;> omega
 
 /-- `base = 0`: `base` a binder at 0..4, `=` at 5..6, `0` at 7..8. -/
-def baseToks : List Tok := [⟨0, 4, .binder⟩, ⟨5, 6, .other⟩, ⟨7, 8, .other⟩]
+def baseToks : List SpanTok := [⟨0, 4, .binder⟩, ⟨5, 6, .other⟩, ⟨7, 8, .other⟩]
 
 theorem baseToks_lexed : Lexed baseToks := by
   refine ⟨by decide, ?_⟩
