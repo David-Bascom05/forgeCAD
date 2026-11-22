@@ -247,6 +247,9 @@ pub struct FilletOptions {
     /// A closed round whose spring runs over a sharp rim of its face and back rests on the rim
     /// between (`fillet_cliff`). Asked only after every other retry has refused.
     pub cliff: bool,
+    /// With `cliff`: every seam of a round face beside a cliff moved to the middle of the stretch
+    /// the ball rolls on the faces, not only one in the cliff's way.
+    pub cliff_seams: bool,
 }
 
 /// The vertex each varying law of `edges` runs from. A run is the edges one varying radius was
@@ -1008,6 +1011,7 @@ fn fillet_on(body: &Body, edges: &[FilletEdge], opts: &FilletOptions, feature: u
         if opts.cliff
             && pass == 0
             && fillet_cliff::split(
+                opts.cliff_seams,
                 &mut body,
                 &by_edge,
                 &mut all,

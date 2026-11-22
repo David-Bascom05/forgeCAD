@@ -29,24 +29,23 @@ pub(super) fn retry(body: &Body, edges: &[FilletEdge], opts: &FilletOptions, fea
     // the seams left where they are where they are out of the way, then all moved where the
     // geometry puts them (which way builds depends on the joints the seam leaves)
     [false, true].into_iter().find_map(|all| {
-        MOVE_ALL.with(|m| m.set(all));
-        let got = fillet_picked(body, edges, &tried, feature);
-        MOVE_ALL.with(|m| m.set(false));
-        got.ok()
+        let tried = FilletOptions {
+            cliff_seams: all,
+            ..tried.clone()
+        };
+        fillet_picked(body, edges, &tried, feature)
+            .ok()
             .filter(|b| forge_topo::check(b).is_empty() && forge_topo::mass::mass(b).is_ok())
     })
 }
 
-thread_local! {
-    /// Whether `split` moves every seam it can off the cliff's stretch, not only one in its way.
-    static MOVE_ALL: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
-}
-
 /// Each closed round of `by_edge` whose spring runs over a rim and back cut where the ball comes
 /// onto the rim and leaves it, its seam moved off that stretch first where its vertex lies there
-/// (`seam_off`); the pieces join `all` and `picks`, the rims `rims` and the pieces `pieces`.
+/// (`seam_off`; every seam it can be with `move_all`); the pieces join `all` and `picks`, the rims
+/// `rims` and the pieces `pieces`.
 /// Whether any was cut (all is then to be rolled again).
 pub(super) fn split(
+    move_all: bool,
     body: &mut Body,
     by_edge: &BTreeMap<EdgeId, Rolled>,
     all: &mut Vec<(EdgeId, f64)>,
@@ -56,7 +55,7 @@ pub(super) fn split(
     let cliffs: Vec<Cliff> = by_edge.values().filter_map(|r| find(body, r)).collect();
     for c in &cliffs {
         // a seam in the cliff's stretch moves to the middle of the stretch rolled on the faces
-        let c = if c.at[1] <= c.at[0] || MOVE_ALL.with(|m| m.get()) {
+        let c = if c.at[1] <= c.at[0] || move_all {
             match seam_off(body, c) {
                 Some(moved) => moved,
                 None if c.at[1] <= c.at[0] => return Err(FilletError::Overflow { edge: c.edge }),
