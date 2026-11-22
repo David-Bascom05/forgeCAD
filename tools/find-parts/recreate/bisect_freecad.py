@@ -48,13 +48,12 @@ def main():
             except (F.Unsupported, F.Unresolved, F.KernelStop) as x:
                 first = {"step": "translate", "why": str(x)[:80]}
             if t.topo:
-                t.topo.kill()
-                t.topo.wait()
+                t.topo.close()
             for name, n in t.steps if first is None else []:
-                fc = os.path.join(opt("--tmp"), r["file"] + ".prefix.fc")
-                open(fc, "w").write("\n".join(t.lines[:n]) + "\n")
-                j = R.judge(opt("--judge"), fc)
-                os.remove(fc)
+                fg = os.path.join(opt("--tmp"), r["file"] + ".prefix.fg")
+                open(fg, "w").write(t.prog.text(t.lines[:n]))
+                j = R.judge(opt("--judge"), fg)
+                os.remove(fg)
                 tr = truth.get(name, {})
                 if j["v"] != "ok" and not j["sig"].startswith("nary: the part is"):
                     first = {"step": name, "type": doc.types[name], "why": j["sig"][:80]}

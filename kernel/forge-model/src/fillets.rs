@@ -1651,6 +1651,44 @@ mod tests {
         assert!(format!("{err:?}").contains("Corner"), "{err:?}");
     }
 
+    /// A varying law round a ring (no free end) starts at the ring's lowest vertex and runs one way
+    /// round, whatever order its edges are given in (a ring's start once came from the first edge
+    /// given, so the order .fc and .fg list a selection's edges in turned the law round).
+    #[test]
+    fn law_round_a_ring_is_the_same_in_any_order() {
+        let boxed = Part {
+            features: vec![block_at(Point3::ORIGIN, 20.0, 10.0, 8.0, Combine::New)],
+        };
+        let body = boxed.regenerate().expect("box");
+        let top: Vec<Name> = [
+            (10.0, 0.0, 8.0),
+            (20.0, 5.0, 8.0),
+            (10.0, 10.0, 8.0),
+            (0.0, 5.0, 8.0),
+        ]
+        .map(|(x, y, z)| edge_near(&body, Point3::new(x, y, z)))
+        .to_vec();
+        let ring = |order: &[usize]| {
+            let mut p = boxed.clone();
+            p.features.push(Feature::Fillet {
+                only: false,
+                edges: order
+                    .iter()
+                    .map(|&k| (top[k], Radius::Linear(1.0, 2.0)))
+                    .collect(),
+                starts: vec![],
+                setbacks: vec![],
+            });
+            let b = p.regenerate().expect("a varying fillet round the top");
+            mass(&b).expect("mass properties").volume
+        };
+        let v = ring(&[0, 1, 2, 3]);
+        for order in [[2, 3, 0, 1], [3, 2, 1, 0], [1, 3, 0, 2]] {
+            let w = ring(&order);
+            assert!((w - v).abs() <= 1e-9 * v, "{order:?}: {w} against {v}");
+        }
+    }
+
     #[test]
     fn setbacks_measure_along_curved_edges() {
         // a quarter disc of radius 10, 6 thick: at (10, 0, 6) the top's arc meets a line and the side

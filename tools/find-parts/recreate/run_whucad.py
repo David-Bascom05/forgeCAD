@@ -19,12 +19,12 @@ import run_cadfs as R
 
 
 def one(i, a):
-    fc = os.path.join(a["out"], "parts", i + ".fc")
+    part = os.path.join(a["out"], "parts", i + ".fg")
     h5 = a["index"].get(i)
     if h5 is None:
         return {"id": i, "status": "untranslated", "cls": "importer", "why": "no vector file"}
     try:
-        p = subprocess.run([a["h5py"], "-I", os.path.join(HERE, "whucad.py"), h5, "--topo", a["topo"], "--out", fc], capture_output=True, text=True, timeout=300)
+        p = subprocess.run([a["h5py"], "-I", os.path.join(HERE, "whucad.py"), h5, "--topo", a["topo"], "--out", part], capture_output=True, text=True, timeout=300)
         r = json.loads(p.stdout)
     except subprocess.TimeoutExpired:
         r = {"status": "untranslated", "cls": "importer", "why": "translation timed out", "notes": []}
@@ -33,7 +33,7 @@ def one(i, a):
     r["id"] = i
     if r["status"] == "untranslated":
         return r
-    j = R.judge(a["judge"], fc)
+    j = R.judge(a["judge"], part)
     if j["v"] == "fail" and j["sig"].startswith("nary: the part is"):
         j = dict(j, v="ok", sig="", multi=True)
     r["v"], r["sig"] = j["v"], j["sig"]

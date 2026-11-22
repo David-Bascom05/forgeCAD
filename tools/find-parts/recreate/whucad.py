@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
-"""WHUCAD vector sequences to .fc. Run with the venv that has h5py (a safe reader), -I; data stays outside the repo.
+"""WHUCAD vector sequences to .fg (Forge). Run with the venv that has h5py (a safe reader), -I; data stays outside the repo.
 
 Every value is quantised to 256 levels of a normalised box, so coincidences and tangencies in the source are only
 nearly kept. It is a robustness smoke test: compare to the STEP only coarsely, by shape after scaling.
 
 A selection is CATIA's name for a face: Pad K's side from curve c of sketch S, or its caps (no 1, 2); an edge is the
 faces that meet in it. Those resolve like CADFS's queries, against the part as built; faces of later features do not.
+The edges and faces found are then named by lineage (fgw, forge-proof's topo), as a Forge part names them.
 
-  whucad.py FILE.h5 --topo EXE --out OUT.fc       prints the outcome as JSON
+  whucad.py FILE.h5 --topo EXE --out OUT.fg       prints the outcome as JSON
 """
 import json
 import math
@@ -17,8 +18,9 @@ import sys
 import h5py
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from cadfs import Any, Both, KernelStop, OnPlane, Swept, Turned, Unresolved, Unsupported, add, dot, num, vtext
-from freecad import Tr as FT, along_tangents, even_regions
+from cadfs import Any, Both, KernelStop, OnPlane, Swept, Turned, Unresolved, Unsupported, add, dot, num
+from fgw import Prog, St, loop_segs
+from freecad import Tr as FT, along_tangents, even_regions, vt
 from sketch2d import Arrangement, Piece
 
 CMD = ["Line", "Arc", "Circle", "Spline", "SCP", "EOS", "SOL", "Ext", "Rev", "Pocket", "Groove", "Shell", "Chamfer", "Fillet", "Draft", "Mirror", "Hole", "Topo", "Select", "MirrorStart", "NSI", "NSIE", "AOI1", "AOI2", "AOIE", "API", "APIE"]
@@ -100,6 +102,7 @@ def curves(rows, scale):
 class Tr(FT):
     def __init__(self, v, topo):
         self.lines, self.topo, self.topo_exe = [], None, topo
+        self.prog = Prog()
         self.bodies = 0
         self.v = v
         self.sk = {}  # sketch number: (Arrangement, Frame)
@@ -179,7 +182,7 @@ class Tr(FT):
         out += [("face", c) for c in stack]
         return out
 
-    def finish(self, rows, head, faces_only=False):
+    def finish(self, rows, what, size, faces_only=False, corner=None):
         st = self.state()
         edges, faces = st.get("edges", []), st.get("faces", [])
         picked = {}
@@ -203,7 +206,9 @@ class Tr(FT):
             raise Unresolved("nothing selected")
         if not faces_only:
             along_tangents(edges, picked)  # CATIA's fillets and chamfers run on along tangents
-        self.lines.append(head + " " + " ".join(sorted(picked)))
+        names = {x["name"] if faces_only else x["n"] for x in picked.values()}
+        sel = self.select("faces" if faces_only else "edges", names)
+        self.lines.append(St(what, size=size, sel=sel, corner=corner, out=False))
 
     def extrude(self, rows, r, kind):
         fr = Frame(r)
@@ -228,19 +233,18 @@ class Tr(FT):
         name = "Pocket" if kind == "Pocket" else "Pad"
         self.count[name] += 1
         self.solid[(name, self.count[name])] = {"frame": fr, "lo": lo, "hi": hi, "first": ends[0], "second": ends[1]}
-        head = num(hi - lo)
+        ext = ("d", num(hi - lo))
         flip = False
-        frame = f"z {vtext(fr.n)} x {vtext(fr.x)} at {vtext(fr.world(0, 0, lo))}"
-        from cadfs import Tr as C
+        frame = (vt(fr.world(0, 0, lo)), vt(fr.n), vt(fr.x))
         for prof in a.merged(regs):
-            loops = " ".join(C.loop_text(self, a, lp, flip) for lp in prof)
+            loops = [loop_segs(a, lp, flip, num) for lp in prof]
             op = "cut" if cut else "add"
             if self.bodies == 0:
                 if cut:
                     raise Unsupported("first feature cuts")
                 op = ""
                 self.bodies = 1
-            self.lines.append(f"extrude {op + ' ' if op else ''}{head} {frame} {loops}")
+            self.lines.append(St("extrude", op=op, frame=frame, ext=ext, loops=loops))
 
     def mirror(self, rows):
         g = self.groups(rows)
@@ -268,7 +272,7 @@ class Tr(FT):
             if not isinstance(c, OnPlane):
                 raise Unsupported("a mirror in a curved face")
             n, o = c.n, c.o
-        self.lines.append(f"pattern body mirror z {vtext(n)} at {vtext(o)}")
+        self.lines.append(St("pattern", of="body", layout=("mirror", vt(n), vt(o))))
 
     def revolve(self, rows, r, cut):
         fr = Frame(r)
@@ -296,22 +300,22 @@ class Tr(FT):
         if not (ang >= 359.9 and back == 0):
             if back != 0:
                 raise Unsupported("a revolve both ways")
-        head = "" if ang >= 359.9 else num(ang)
+        turn = None if ang >= 359.9 else ("a", num(ang))
         name = "Groove" if cut else "Shaft"
         self.count.setdefault(name, 0)
         self.count[name] += 1
         self.solid[(name, self.count[name])] = {"frame": fr, "a2": o2, "d2": d2}
-        frame = f"z {vtext(fr.n)} x {vtext(fr.x)} at {vtext(fr.o)} axis {num(o2[0])} {num(o2[1])} {num(d2[0])} {num(d2[1])}"
-        from cadfs import Tr as C
+        frame = (vt(fr.o), vt(fr.n), vt(fr.x))
+        axis = (num(o2[0]), num(o2[1]), num(d2[0]), num(d2[1]))
         for prof in a.merged(regs):
-            loops = " ".join(C.loop_text(self, a, lp, False) for lp in prof)
+            loops = [loop_segs(a, lp, False, num) for lp in prof]
             op = "cut" if cut or r[19] == 1 else "add"
             if self.bodies == 0:
                 if op == "cut":
                     raise Unsupported("first feature cuts")
                 op = ""
                 self.bodies = 1
-            self.lines.append(f"revolve {op + ' ' if op else ''}{head} {frame} {loops}")
+            self.lines.append(St("revolve", op=op, frame=frame, turn=turn, axis=axis, loops=loops))
 
     def run(self):
         pending = []
@@ -335,20 +339,20 @@ class Tr(FT):
                 raise Unsupported("feature " + c)
             elif c == "Fillet":
                 self.kinds.append("fillet")
-                self.finish(pending, f"fillet {num(unq(r[24]))}")
+                self.finish(pending, "fillet", num(unq(r[24])))
                 pending = []
             elif c == "Chamfer":
                 self.kinds.append("chamfer")
                 if abs(r[22] - r[23]) > 1:
                     raise Unsupported("an unequal chamfer")
                 # CATIA runs three chamfers of one feature on to a point at a corner
-                self.finish(pending, f"chamfer {num(unq(r[22]))} corner point")
+                self.finish(pending, "chamfer", num(unq(r[22])), corner="point")
                 pending = []
             elif c == "Shell":
                 self.kinds.append("shell")
                 if r[21] > 128:
                     raise Unsupported("a shell with outer thickness")
-                self.finish(pending, f"shell {num(unq(r[20]))}", True)
+                self.finish(pending, "shell", num(unq(r[20])), True)
                 pending = []
             else:
                 pending.append(r)
@@ -378,11 +382,10 @@ def main():
     if t is not None:
         r["features"] = t.kinds
         if t.topo is not None:
-            t.topo.kill()
-            t.topo.wait()
+            t.topo.close()
         if r["status"] != "untranslated":
             with open(opt("--out"), "w") as f:
-                f.write("\n".join(t.lines) + "\n")
+                f.write(t.prog.text(t.lines))
     print(json.dumps(r))
 
 

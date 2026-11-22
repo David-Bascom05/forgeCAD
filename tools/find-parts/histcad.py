@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
-"""HistCAD construction sequences as .fg part files: extrudes and revolves. Lengths in mm; a frame's Euler
-angles are intrinsic XYZ, degrees. The data stays out of the repo; run with python3 -I. No volume is recorded:
-replay in OpenCascade with occt_diff.sh for a truth.
+"""HistCAD construction sequences as .fg part files: extrudes, revolves, fillets and chamfers. Lengths in mm;
+a frame's Euler angles are intrinsic XYZ, degrees. The data stays out of the repo; run with python3 -I. No
+volume is recorded: replay in OpenCascade with occt_diff.sh for a truth.
 
-HistCAD's fillets and chamfers pick their edges by 3D points; a .fg selection names edges by what made them
-and how they lie, never by where (`help forge`: Selections), so a sequence with one is not translated
-("edges by a point").
+HistCAD's fillets and chamfers pick their edges by 3D points. A .fg selection names edges by what made them
+and how they lie, never by where (`help forge`: Selections), so the points are resolved here, once: the
+program so far is built (forge-proof's topo), each point takes the edge nearest it (as the retired format's
+`edges near X Y Z` did), and those edges are written as the lineage selection that names exactly them
+(`edges(of: F, ..)`, `edges(between: (A, B))`). Without --topo such a sequence is not translated.
 
-  histcad.py FILE.json .. --out DIR
+  histcad.py FILE.json .. --out DIR [--topo EXE]
 """
 import json
 import math
@@ -15,6 +17,8 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "recreate"))
+import fgw
 import fusion
 
 fusion.MM = 1.0
@@ -67,13 +71,47 @@ def curves(sketch):
     return out
 
 
-def translate(seq):
-    """fusion.write's steps for a sequence; raises fusion.Unsupported."""
+def seg_dist(p, a, b):
+    d = [b[i] - a[i] for i in range(3)]
+    l2 = sum(x * x for x in d)
+    t = 0.0 if l2 == 0 else max(0.0, min(1.0, sum((p[i] - a[i]) * d[i] for i in range(3)) / l2))
+    return math.dist(p, [a[i] + d[i] * t for i in range(3)])
+
+
+def blend(steps, s, topo):
+    """A fillet or chamfer step: the edge nearest each of its points on the part so far, named by lineage."""
+    if topo is None:
+        raise fusion.Unsupported("edges by a point (no kernel to find them on: --topo)")
+    src = fusion.write(steps)
+    try:
+        st = topo.state(src)
+        names = set()
+        for p in s["near_points"]:
+            # a seam (two pieces of one smooth surface) is never what a blend rounds
+            es = [e for e in st.get("edges", []) if e["c"] != "smooth"]
+            if not es:
+                raise fusion.Unsupported("a blend on a part with no edges")
+            near = min(es, key=lambda e: min(seg_dist(p, a, b) for a, b in zip(e["p"], e["p"][1:])))
+            names.add(near["n"])
+        sel = topo.select(src, "edges", names)
+    except fgw.Stop as x:
+        raise fusion.Unsupported("the part before a blend does not build: " + str(x)[:60])
+    except fgw.NoName as x:
+        raise fusion.Unsupported("an edge no lineage selection names: " + str(x)[:60])
+    word = "fillet" if s["operation"] == "Fillet" else "chamfer"
+    size = s["radius"] if word == "fillet" else s.get("distance", s.get("radius"))
+    return {"kind": "blend", "word": word, "size": float(size), "sel": sel}
+
+
+def translate(seq, topo=None):
+    """fusion.write's steps for a sequence; raises fusion.Unsupported. A fillet or chamfer needs `topo`
+    (fgw.Topo) to find its edges on the part so far."""
     steps, bodies = [], 0
     for s in seq:
         op = s["operation"]
         if op in ("Fillet", "Chamfer"):
-            raise fusion.Unsupported("edges by a point")
+            steps.append(blend(steps, s, topo))
+            continue
         if "sketch" not in s:
             raise fusion.Unsupported("operation " + op)
         want = {"NewBody": "new", "Join": "add", "Cut": "cut", "Intersect": "keep"}.get(op)
@@ -132,6 +170,7 @@ def translate(seq):
 def main():
     a = sys.argv[1:]
     out = a[a.index("--out") + 1]
+    topo = fgw.Topo(a[a.index("--topo") + 1]) if "--topo" in a else None
     os.makedirs(out, exist_ok=True)
     for fn in a:
         if fn.endswith(".json"):
@@ -139,13 +178,15 @@ def main():
             with open(fn) as f:
                 seq = json.load(f)
             try:
-                text = fusion.write(translate(seq))
+                text = fusion.write(translate(seq, topo))
             except (fusion.Unsupported, KeyError) as x:
                 print(stem, "not translated:", repr(x)[:80])
                 continue
             with open(os.path.join(out, stem + ".fg"), "w") as f:
                 f.write(text)
             print(stem, "translated")
+    if topo is not None:
+        topo.close()
 
 
 if __name__ == "__main__":

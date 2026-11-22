@@ -119,6 +119,11 @@ impl Cache {
         self.stages.iter().map(|s| &s.solids[..])
     }
 
+    /// The stages themselves, to share (`fuzz::Built`).
+    pub fn stage_rcs(&self) -> &[Rc<Stage>] {
+        &self.stages
+    }
+
     /// How many kernel features the last run built.
     pub fn built(&self) -> usize {
         self.stages.len()

@@ -29,6 +29,9 @@ pub struct State {
     /// The patterns and holes of the part as `edges` last built it: their copies and places
     /// (`P[k]`) name edges alike in all else apart.
     placed: Vec<String>,
+    /// The part's top-level features as `edges` last built it, other than sketches: what
+    /// `edges(of: F)` and `faces(of: F)` may name.
+    made: Vec<String>,
 }
 
 /// A message as it travels in JSON: quotes, backslashes, controls blanked.
@@ -105,6 +108,12 @@ impl State {
             .feats
             .iter()
             .filter(|f| f.top_level && matches!(f.kind, "pattern" | "hole"))
+            .map(|f| f.id.clone())
+            .collect();
+        self.made = run
+            .feats
+            .iter()
+            .filter(|f| f.top_level && f.kind != "sketch")
             .map(|f| f.id.clone())
             .collect();
         self.anchors = run.anchors;
@@ -212,14 +221,36 @@ impl State {
 
     /// A Forge selection of exactly these edges of the part as `edges` last built it: each by
     /// the two faces it lies between, or by a feature (`feats`) that made one of its faces,
-    /// narrowed by its shape, radius or length where that names more edges than these. The
-    /// selection's text, and the params its numbers need (`(name, value)`, read in the feature's
-    /// statement). Unresolved where no narrowing keeps out an edge not wanted.
+    /// narrowed by its shape, radius or length where that names more edges than these; failing
+    /// those, between the features (or anchors) whose faces meet in it (a blend's own edges),
+    /// narrowed as well by the anchored faces at its ends (`touching: A.edges`) or the world axis
+    /// a line runs along. The selection's text, and the params its numbers need (`(name, value)`,
+    /// read in the feature's statement). Unresolved where no narrowing keeps out an edge not wanted.
     pub fn select(
         &mut self,
         want: &BTreeSet<Name>,
         feats: &[String],
     ) -> Result<(String, Vec<(String, f64)>), Fail> {
+        let picks = self.pick(want, feats)?;
+        let text: Vec<&str> = picks.iter().map(|p| p.1.as_str()).collect();
+        Ok((text.join(" + "), picks.into_iter().flat_map(|p| p.2).collect()))
+    }
+
+    /// The part's top-level features other than sketches, as `edges` last built it.
+    pub fn made(&self) -> &[String] {
+        &self.made
+    }
+
+    /// As `select`, its numbers written out in the selection (no params): for tools that write
+    /// programs the style rules do not hold (forge_lang::fuzz::options).
+    pub fn select_literal(&mut self, want: &BTreeSet<Name>, feats: &[String]) -> Result<String, Fail> {
+        let picks = self.pick(want, feats)?;
+        let text: Vec<&str> = picks.iter().map(|p| p.0.as_str()).collect();
+        Ok(text.join(" + "))
+    }
+
+    /// The pieces of a selection of exactly these edges: see `select`.
+    fn pick(&mut self, want: &BTreeSet<Name>, feats: &[String]) -> Result<Vec<Cand>, Fail> {
         let unnamed =
             || Fail::Unresolved("an edge no Forge selection names apart from its neighbours".into());
         let (Some(anchors), Some(body)) = (self.anchors.clone(), self.body.clone()) else {
@@ -230,7 +261,6 @@ impl State {
         // a pattern's copies (and a hole's places) are alike: each copy names its own
         let places = self.places()?;
         // (probe text, final text, its params): each a candidate piece of the union, broadest first
-        let mut cands: Vec<Cand> = vec![];
         let mut bases: Vec<String> = vec![];
         for n in want {
             if let Some(t) = anchors.edges.get(n)
@@ -239,93 +269,165 @@ impl State {
                 bases.push(t.clone());
             }
         }
-        for b in &bases {
-            cands.push((b.clone(), b.clone(), vec![]));
-        }
-        let mut k = 0;
-        for n in want {
-            let Some(&e) = ids.get(n) else {
-                return Err(unnamed());
-            };
-            let kind = select::curve_kind(&body.edge(e).curve);
-            let r = select::radius(&body, Ent::Edge(e));
-            let l = select::length(&body, e);
-            let len = vec![
-                ("longer".to_string(), l * (1.0 - 1e-6)),
-                ("shorter".to_string(), l * (1.0 + 1e-6)),
-            ];
-            let mut filters: Vec<Vec<(String, f64)>> = vec![vec![]];
-            if let Some(r) = r {
-                filters.push(vec![("r".into(), r)]);
-            }
-            filters.push(len.clone());
-            if let Some(r) = r {
-                let mut f = vec![("r".to_string(), r)];
-                f.extend(len.clone());
-                filters.push(f);
-            }
-            let mut heads: Vec<String> = anchors
-                .edges
-                .get(n)
-                .map(|t| t.strip_suffix(')').unwrap_or(t).to_string())
-                .into_iter()
-                .collect();
-            // the copy or place holding a face of it: its edges, its crease, or where it meets the
-            // face on the other side
-            let fs: Vec<Name> = select::faces_of_edge(&body, e)
-                .iter()
-                .map(|&f| body.face(f).name)
-                .collect();
-            let crease = select::crease(&body, e).map(|c| format!(", crease: \"{c}\""));
-            for (i, f) in fs.iter().enumerate() {
-                for p in places.get(f).into_iter().flatten() {
-                    heads.push(format!("edges(of: {p}"));
-                    if let Some(c) = &crease {
-                        heads.push(format!("edges(of: {p}{c}"));
-                    }
-                    let other = fs.get(1 - i.min(1)).filter(|_| fs.len() == 2);
-                    let mut sides: Vec<String> = other
-                        .and_then(|g| anchors.faces.get(g))
-                        .cloned()
-                        .into_iter()
-                        .collect();
-                    sides.extend(other.and_then(|g| places.get(g)).into_iter().flatten().cloned());
-                    for q in sides.iter().filter(|q| *q != p) {
-                        heads.push(format!("edges(between: ({p}, {q})"));
-                    }
-                }
-            }
-            heads.extend(feats.iter().map(|f| format!("edges(of: {f}")));
-            for h in &heads {
-                for f in &filters {
-                    let p: String = f.iter().map(|(key, v)| format!(", {key}: {}", lit(*v))).collect();
-                    let mut ps = vec![];
-                    let t: String = f
-                        .iter()
-                        .map(|(key, v)| {
-                            let name = format!("e{k}{key}");
-                            ps.push((name.clone(), *v));
-                            format!(", {key}: {name}")
-                        })
-                        .collect();
-                    cands.push((
-                        format!("{h}, shape: \"{kind}\"{p})"),
-                        format!("{h}, shape: \"{kind}\"{t})"),
-                        ps,
-                    ));
-                    k += 1;
-                }
-            }
-        }
-        let probes: Vec<String> = cands.iter().map(|c| c.0.clone()).collect();
-        let got = self.ask(&probes)?;
         let mut picks = vec![];
         let mut left: BTreeSet<Name> = want.clone();
-        for (c, s) in cands.into_iter().zip(&got) {
-            let Some(s) = s else { continue };
-            if !s.is_empty() && s.is_subset(want) && s.iter().any(|x| left.contains(x)) {
-                left.retain(|x| !s.contains(x));
-                picks.push(c);
+        let mut k = 0;
+        // first the anchors, copies and features; then, for the edges none of those names, where
+        // the faces of the features (or anchors) on either side meet: an edge of a blend's, a
+        // shell's or a cut's faces, which no anchor names on its own
+        for round in 0..2 {
+            let mut owners: HashMap<Name, Vec<String>> = HashMap::new();
+            let mut cands: Vec<Cand> = vec![];
+            if round == 0 {
+                for b in &bases {
+                    cands.push((b.clone(), b.clone(), vec![]));
+                }
+            } else {
+                if left.is_empty() {
+                    break;
+                }
+                // each face's features: those whose `faces(of: F)` holds it
+                let texts: Vec<String> = feats.iter().map(|f| format!("faces(of: {f})")).collect();
+                for (f, got) in feats.iter().zip(self.ask_faces(&texts)?) {
+                    for n in got.into_iter().flatten() {
+                        owners.entry(n).or_default().push(f.clone());
+                    }
+                }
+            }
+            let these: Vec<Name> = if round == 0 {
+                want.iter().copied().collect()
+            } else {
+                left.iter().copied().collect()
+            };
+            for n in &these {
+                let Some(&e) = ids.get(n) else {
+                    return Err(unnamed());
+                };
+                let kind = select::curve_kind(&body.edge(e).curve);
+                let r = select::radius(&body, Ent::Edge(e));
+                let l = select::length(&body, e);
+                let len = vec![
+                    ("longer".to_string(), l * (1.0 - 1e-6)),
+                    ("shorter".to_string(), l * (1.0 + 1e-6)),
+                ];
+                let mut filters: Vec<Vec<(String, f64)>> = vec![vec![]];
+                if let Some(r) = r {
+                    filters.push(vec![("r".into(), r)]);
+                }
+                filters.push(len.clone());
+                if let Some(r) = r {
+                    let mut f = vec![("r".to_string(), r)];
+                    f.extend(len.clone());
+                    filters.push(f);
+                }
+                let fs: Vec<Name> = select::faces_of_edge(&body, e)
+                    .iter()
+                    .map(|&f| body.face(f).name)
+                    .collect();
+                let mut heads: Vec<String> = vec![];
+                if round == 0 {
+                    heads.extend(
+                        anchors
+                            .edges
+                            .get(n)
+                            .map(|t| t.strip_suffix(')').unwrap_or(t).to_string()),
+                    );
+                    // the copy or place holding a face of it: its edges, its crease, or where it
+                    // meets the face on the other side
+                    let crease = select::crease(&body, e).map(|c| format!(", crease: \"{c}\""));
+                    for (i, f) in fs.iter().enumerate() {
+                        for p in places.get(f).into_iter().flatten() {
+                            heads.push(format!("edges(of: {p}"));
+                            if let Some(c) = &crease {
+                                heads.push(format!("edges(of: {p}{c}"));
+                            }
+                            let other = fs.get(1 - i.min(1)).filter(|_| fs.len() == 2);
+                            let mut sides: Vec<String> = other
+                                .and_then(|g| anchors.faces.get(g))
+                                .cloned()
+                                .into_iter()
+                                .collect();
+                            sides.extend(other.and_then(|g| places.get(g)).into_iter().flatten().cloned());
+                            for q in sides.iter().filter(|q| *q != p) {
+                                heads.push(format!("edges(between: ({p}, {q})"));
+                            }
+                        }
+                    }
+                    heads.extend(feats.iter().map(|f| format!("edges(of: {f}")));
+                } else if let [fa, fb] = fs[..] {
+                    let sides = |f: Name| -> Vec<String> {
+                        let mut v: Vec<String> = anchors.faces.get(&f).cloned().into_iter().collect();
+                        v.extend(owners.get(&f).into_iter().flatten().cloned());
+                        v
+                    };
+                    for a in sides(fa) {
+                        for b in &sides(fb) {
+                            let h = format!("edges(between: ({a}, {b})");
+                            if !heads.contains(&h) {
+                                heads.push(h);
+                            }
+                        }
+                    }
+                }
+                // last: an edge alike in all else to others (a symmetric part's) told apart by the
+                // anchored faces at its ends, or by the world axis a line runs along
+                let mut more: Vec<String> = vec![String::new()];
+                if round == 1 {
+                    let x = body.edge(e);
+                    let ends = [x.start, x.end];
+                    let mut touch: Vec<String> = vec![];
+                    for g in body.edge_ids() {
+                        let y = body.edge(g);
+                        if !ends.contains(&y.start) && !ends.contains(&y.end) {
+                            continue;
+                        }
+                        for f in select::faces_of_edge(&body, g) {
+                            if let Some(t) = anchors.faces.get(&body.face(f).name)
+                                && !touch.contains(t)
+                            {
+                                touch.push(t.clone());
+                            }
+                        }
+                    }
+                    more.extend(touch.iter().map(|t| format!(", touching: {t}.edges")));
+                    if let forge_geom::Curve::Line(l) = &x.curve {
+                        let d = l.dir.get();
+                        for (w, a) in [("X", d.x), ("Y", d.y), ("Z", d.z)] {
+                            if a.abs() >= 1.0 - 1e-12 {
+                                more.push(format!(", along: {w}"));
+                            }
+                        }
+                    }
+                }
+                for h in &heads {
+                    for (f, m) in filters.iter().flat_map(|f| more.iter().map(move |m| (f, m))) {
+                        let p: String = f.iter().map(|(key, v)| format!(", {key}: {}", lit(*v))).collect();
+                        let mut ps = vec![];
+                        let t: String = f
+                            .iter()
+                            .map(|(key, v)| {
+                                let name = format!("e{k}{key}");
+                                ps.push((name.clone(), *v));
+                                format!(", {key}: {name}")
+                            })
+                            .collect();
+                        cands.push((
+                            format!("{h}, shape: \"{kind}\"{p}{m})"),
+                            format!("{h}, shape: \"{kind}\"{t}{m})"),
+                            ps,
+                        ));
+                        k += 1;
+                    }
+                }
+            }
+            let probes: Vec<String> = cands.iter().map(|c| c.0.clone()).collect();
+            let got = self.ask(&probes)?;
+            for (c, s) in cands.into_iter().zip(&got) {
+                let Some(s) = s else { continue };
+                if !s.is_empty() && s.is_subset(want) && s.iter().any(|x| left.contains(x)) {
+                    left.retain(|x| !s.contains(x));
+                    picks.push(c);
+                }
             }
         }
         if !left.is_empty() {
@@ -339,8 +441,100 @@ impl State {
                 "a selection that would not name its edges alone".into(),
             ));
         }
-        let text: Vec<&str> = picks.iter().map(|p| p.1.as_str()).collect();
-        Ok((text.join(" + "), picks.into_iter().flat_map(|p| p.2).collect()))
+        Ok(picks)
+    }
+
+    /// The edges or faces (by name) a selection's text names on the part `src` builds.
+    pub fn names(&mut self, src: &str, text: &str) -> Result<Vec<Name>, Fail> {
+        let run = self.run(src, false, vec![text.to_string()])?;
+        Ok(match run.asked.into_iter().next().map(|x| x.1) {
+            Some(Asked::Edges(es)) => es,
+            Some(Asked::Faces(fs, _)) => fs,
+            _ => vec![],
+        })
+    }
+
+    /// What each text selects as faces on the part as `edges` last built it.
+    fn ask_faces(&mut self, texts: &[String]) -> Result<Vec<Option<BTreeSet<Name>>>, Fail> {
+        let src = self.src.clone();
+        let run = self.run(&src, false, texts.to_vec())?;
+        Ok(run
+            .asked
+            .into_iter()
+            .map(|(_, a)| match a {
+                Asked::Faces(fs, _) => Some(fs.into_iter().collect()),
+                _ => None,
+            })
+            .collect())
+    }
+
+    /// A Forge selection of exactly these faces of the part as `edges` last built it (a shell's
+    /// open faces): each by its anchor (`E.end`, `E.side(S.l)`, a pattern copy's `P[k].end`), or
+    /// by a feature (`feats`) that made it, narrowed by its shape and radius, numbers written
+    /// out. Unresolved where no union of those names exactly these.
+    pub fn select_faces(&mut self, want: &BTreeSet<Name>, feats: &[String]) -> Result<String, Fail> {
+        let unnamed = || Fail::Unresolved("a face no Forge selection names apart from its neighbours".into());
+        let (Some(anchors), Some(body)) = (self.anchors.clone(), self.body.clone()) else {
+            return Err(unnamed());
+        };
+        let ids: HashMap<Name, forge_topo::FaceId> =
+            body.face_ids().map(|f| (body.face(f).name, f)).collect();
+        let places = self.places()?;
+        let mut cands: Vec<String> = vec![];
+        let add = |t: String, cands: &mut Vec<String>| {
+            if !cands.contains(&t) {
+                cands.push(t);
+            }
+        };
+        for n in want {
+            if let Some(t) = anchors.faces.get(n) {
+                add(t.clone(), &mut cands);
+            }
+            for p in places.get(n).into_iter().flatten() {
+                add(p.clone(), &mut cands);
+            }
+        }
+        for n in want {
+            let Some(&f) = ids.get(n) else {
+                return Err(unnamed());
+            };
+            let kind = select::surface_kind(&body.face(f).surface);
+            let r = select::radius(&body, Ent::Face(f));
+            let mut heads: Vec<String> = feats.iter().map(|f| format!("faces(of: {f}")).collect();
+            heads.extend(
+                places
+                    .get(n)
+                    .into_iter()
+                    .flatten()
+                    .map(|p| format!("faces(of: {p}")),
+            );
+            for h in heads {
+                add(format!("{h}, shape: \"{kind}\")"), &mut cands);
+                if let Some(r) = r {
+                    add(format!("{h}, shape: \"{kind}\", r: {})", lit(r)), &mut cands);
+                }
+            }
+        }
+        let got = self.ask_faces(&cands)?;
+        let mut picks = vec![];
+        let mut left: BTreeSet<Name> = want.clone();
+        for (c, s) in cands.into_iter().zip(&got) {
+            let Some(s) = s else { continue };
+            if !s.is_empty() && s.is_subset(want) && s.iter().any(|x| left.contains(x)) {
+                left.retain(|x| !s.contains(x));
+                picks.push(c);
+            }
+        }
+        if !left.is_empty() {
+            return Err(unnamed());
+        }
+        let whole = self.ask_faces(&[picks.join(" + ")])?;
+        if whole.first().cloned().flatten().as_ref() != Some(want) {
+            return Err(Fail::Unresolved(
+                "a selection that would not name its faces alone".into(),
+            ));
+        }
+        Ok(picks.join(" + "))
     }
 }
 
