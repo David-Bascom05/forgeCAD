@@ -7,6 +7,7 @@ use crate::syntax::Span;
 use forge_math::{Frame, Point2, Point3, Vec2};
 use forge_ops::Profile;
 use forge_sketch::{Constraint, ConstraintId, Entity, EntityId, Sketch};
+use std::rc::Rc;
 
 pub struct Sk {
     pub id: String,
@@ -35,6 +36,17 @@ pub struct Sk {
 }
 
 type R<T> = Result<T, Error>;
+
+/// A sketch's solve, kept for the next run (`Sk::finish`): the sketch as handed to the solver,
+/// as it came back, and what the solve found.
+pub struct Solved {
+    input: Sketch,
+    out: Sketch,
+    status: forge_sketch::Status,
+    residual: f64,
+    dof: usize,
+    conflicting: Vec<ConstraintId>,
+}
 
 /// One item of a hull: a point (r = 0) or a disc, in counter-clockwise order.
 #[derive(Clone, Copy, Debug)]
@@ -458,14 +470,40 @@ impl Sk {
         self.con(c, span).map(|_| ())
     }
 
-    /// Solves; conflicting rows are an error, freedom left is reported.
-    pub fn finish(&mut self) -> R<()> {
-        let rep = self.s.solve();
-        // freedom and conflicts only: the per-entity ranks `analyze` also works out cost more
-        // than the solve, and nothing here reads them
-        let (dof, conflicting) = self.s.freedom();
-        if !conflicting.is_empty() {
-            let rows = conflicting
+    /// Solves; conflicting rows are an error, freedom left is reported. `was` is this sketch's
+    /// solve in the run before: taken as it is when the sketch is bit for bit what it solved
+    /// then (an edit elsewhere), so only a sketch that changed is solved again. What it solved
+    /// comes back with the outcome, for the next run.
+    pub fn finish(&mut self, was: Option<Rc<Solved>>) -> (Rc<Solved>, R<()>) {
+        let done = match was {
+            Some(w) if w.input.same_bits(&self.s) => {
+                self.s = w.out.clone();
+                w
+            }
+            _ => {
+                let input = self.s.clone();
+                let rep = self.s.solve();
+                // freedom and conflicts only: the per-entity ranks `analyze` also works out cost
+                // more than the solve, and nothing here reads them
+                let (dof, conflicting) = self.s.freedom();
+                Rc::new(Solved {
+                    input,
+                    out: self.s.clone(),
+                    status: rep.status,
+                    residual: rep.max_residual,
+                    dof,
+                    conflicting,
+                })
+            }
+        };
+        let r = self.outcome(&done);
+        (done, r)
+    }
+
+    fn outcome(&mut self, done: &Solved) -> R<()> {
+        if !done.conflicting.is_empty() {
+            let rows = done
+                .conflicting
                 .iter()
                 .filter_map(|c| self.cons.iter().find(|x| x.0 == *c).map(|x| x.1))
                 .collect();
@@ -475,14 +513,14 @@ impl Sk {
                 rows,
             });
         }
-        if rep.status != forge_sketch::Status::Solved {
+        if done.status != forge_sketch::Status::Solved {
             return Err(Error::SketchNotSolved {
                 span: self.span,
                 sketch: self.id.clone(),
-                residual: rep.max_residual,
+                residual: done.residual,
             });
         }
-        self.dof = dof;
+        self.dof = done.dof;
         self.solved = true;
         Ok(())
     }
@@ -524,7 +562,7 @@ impl Sk {
                         .iter()
                         .any(|g| ids.iter().any(|e| e.0 == g.1 & !PIECE))
                 })
-                .ok_or(Error::Regions {
+                .ok_or_else(|| Error::Regions {
                     span,
                     sketch: self.id.clone(),
                     count: 0,
@@ -567,18 +605,14 @@ impl Sk {
             plane: self.frame,
             on: None,
             at: None,
-            rows: vec![],
             solved: self.s.clone(),
-            driven: vec![],
             names: self
                 .ents
                 .iter()
                 .filter(|e| !e.1.starts_with('~'))
                 .map(|e| (e.1.clone(), e.0))
                 .collect(),
-            written: vec![],
-            dims: vec![],
-            driven_of: vec![],
+            note: Default::default(),
         }
     }
 }

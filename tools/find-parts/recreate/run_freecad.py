@@ -29,7 +29,7 @@ def one(h, a):
     for r in rows:
         if r["status"] == "untranslated":
             continue
-        j = R.judge(a["judge"], os.path.join(parts, f"{h}.{r['body']}.fc"))
+        j = R.judge(a["judge"], os.path.join(parts, f"{h}.{r['body']}.fg"))
         if j["v"] == "fail" and j["sig"].startswith("nary: the part is"):
             j = dict(j, v="ok", sig="", multi=True)
         r["v"], r["sig"] = j["v"], j["sig"]

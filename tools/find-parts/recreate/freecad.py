@@ -1,16 +1,20 @@
 #!/usr/bin/env python3
-"""FreeCAD library PartDesign bodies to .fc. A file is read as data (Document.xml as XML, shapes by OpenCascade
+"""FreeCAD library PartDesign bodies to .fg (Forge). A file is read as data (Document.xml as XML, shapes by OpenCascade
 in fcstd_truth.py); FreeCAD is never run and macros or scripts in the file are never touched. Each object stores
 its shape, so a fillet's EdgeN is sampled from its base's stored shape and found on our part by position, and
 every step has a truth. Keep the data outside the repo; run with python3 -I.
 
-  freecad.py FILE.FCStd --topo EXE --truth VENVPY --out DIR      one .fc and result JSON line per body
+  freecad.py FILE.FCStd --topo EXE --truth VENVPY --out DIR      one .fg and result JSON line per body
+
+Each feature is a statement (fgw.St) written as Forge by fgw.Prog; a blend's edges, found on the part by
+position, are named by lineage (`edges(of: F, ..)`, `edges(between: (A, B))`, anchors, pattern copies) by
+forge-proof's topo, as interface/forge-import names them. interface/forge-import (`forgecad import`) is
+this reader in Rust.
 """
 import io
 import json
 import math
 import os
-import resource
 import subprocess
 import sys
 import tempfile
@@ -19,7 +23,8 @@ import zipfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import sketch2d
-from cadfs import KernelStop, Unresolved, Unsupported, add, carries_on, dot, num, unit, vfine, vtext
+from cadfs import KernelStop, Unresolved, Unsupported, add, carries_on, dot, fine, num, unit
+from fgw import NoName, Prog, St, Stop, Topo, loop_segs
 from sketch2d import Arrangement
 
 TOL = 2e-3
@@ -95,6 +100,11 @@ class Doc:
         p = self.prop(obj, "Shape")
         e = p.find("Part") if p is not None else None
         return e.get("file") if e is not None else None
+
+
+def vt(v):
+    """A vector's numbers as the importer writes them."""
+    return tuple(num(x) for x in v)
 
 
 def rotate(q, v):
@@ -290,7 +300,8 @@ def wire_regions(a, ents, wires):
 class Tr:
     def __init__(self, doc, body, topo, truth):
         self.doc, self.body, self.topo_exe, self.truth = doc, body, topo, truth
-        self.lines = []
+        self.lines = []  # fgw.St, one a statement
+        self.prog = Prog()
         self.labels = {}
         self.topo = None
         self.bodies = 0
@@ -300,24 +311,30 @@ class Tr:
 
     def state(self):
         if self.topo is None:
-            def lim():
-                os.nice(19)
-                resource.setrlimit(resource.RLIMIT_AS, (3 << 30, 3 << 30))
-                resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
-                resource.setrlimit(resource.RLIMIT_CPU, (120, 121))
-            self.topo = subprocess.Popen([self.topo_exe], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, preexec_fn=lim)
-        src = ("\n".join(self.lines) + "\n").encode()
-        self.topo.stdin.write(b"%d\n" % len(src) + src)
-        self.topo.stdin.flush()
-        line = self.topo.stdout.readline()
-        if not line:
-            raise KernelStop("kernel process died (crash, memory or CPU limit)")
-        d = json.loads(line)
-        if "panic" in d:
-            raise KernelStop("kernel panic")
-        if d.get("err"):
-            raise KernelStop(d["err"])
-        return d
+            self.topo = Topo(self.topo_exe)
+        try:
+            return self.topo.state(self.prog.text(self.lines))
+        except Stop as x:
+            raise KernelStop(str(x))
+
+    def fresh(self, label):
+        """`label`, or with a suffix where a statement already has it: a Forge id is bound once."""
+        out, k = label, 0
+        while any(l.label == out for l in self.lines):
+            k += 1
+            out = f"{label}r{k}"
+        return out
+
+    def select(self, what, names):
+        """A lineage selection of exactly these edges or faces (their `n` or `name`) of the part so far."""
+        if self.topo is None:
+            self.topo = Topo(self.topo_exe)
+        try:
+            return self.topo.select(self.prog.text(self.lines), what, names)
+        except Stop as x:
+            raise KernelStop(str(x))
+        except NoName as x:
+            raise Unresolved(str(x))
 
     def profile_ents(self, sk, fr):
         if self.doc.types.get(sk) == "Sketcher::SketchObject":
@@ -346,7 +363,8 @@ class Tr:
                     ents.append({"kind": "polyline", "id": i, "points": uv})
         return ents
 
-    def profile(self, name, op, head, flip, frame_z, tail="", label="", sk=None):
+    def profile(self, name, op, make, flip, frame_z, sk=None):
+        """The sketch's regions, each a statement: `make` holds the statement's kind and its own fields."""
         sk = sk or self.doc.link(name, "Profile")
         if self.doc.types.get(sk) not in FLAT:
             raise Unsupported("a profile not from a sketch")
@@ -360,20 +378,17 @@ class Tr:
         regs = wire_regions(a, ents, wires) if all(e.get("construction") or e["id"] in wired for e in ents) else even_regions(a)
         if not regs:
             raise Unresolved("a sketch with no closed region")
-        frame = f"z {vtext(frame_z)} x {vtext(fr.x)} at {vtext(fr.o)}"
+        frame = (vt(fr.o), vt(frame_z), vt(fr.x))
         out = []
-        from cadfs import Tr as C
-        loop_text = C.loop_text
         for prof in a.merged(regs):
-            loops = " ".join(loop_text(self, a, lp, flip) for lp in prof)
+            loops = [loop_segs(a, lp, flip, num) for lp in prof]
             this = op
             if self.bodies == 0:
                 if op == "cut":
                     raise Unsupported("first feature cuts")
                 this = "new" if self.tree else ""
                 self.bodies = 1
-            k = "revolve" if tail else "extrude"
-            out.append(f"{k} {this + ' ' if this else ''}{head} {frame} {tail}{loops}")
+            out.append(St(op=this, frame=frame, loops=loops, **make))
         return out, a, fr
 
     def pad(self, name, cut):
@@ -399,7 +414,7 @@ class Tr:
                 z = tuple(-x for x in n) if down else n
         t, L, L2 = d.integer(name, "Type"), d.flt(name, "Length"), d.flt(name, "Length2")
         mid = d.boolean(name, "Midplane")
-        along = ""
+        along = None
         if d.boolean(name, "UseCustomVector"):
             # the direction is stored as used, a pocket's too: only Reversed turns it. Length runs along it unless AlongSketchNormal
             e = stored.find("PropertyVector") if stored is not None else None
@@ -414,19 +429,18 @@ class Tr:
             if not d.boolean(name, "AlongSketchNormal"):
                 L, L2 = L * abs(c), L2 * abs(c)
             if abs(abs(c) - 1) > 1e-12:
-                along = " along " + vfine(v)
+                along = tuple(fine(x) for x in v)
         if t == 0:
-            head = f"sym {num(L)}" if mid else num(L)
+            ext = ("sym", num(L)) if mid else ("d", num(L))
         elif t == 4:
-            head = f"two {num(L)} {num(L2)}"
+            ext = ("two", num(L), num(L2))
         elif t == 1 and cut:
-            head = "thru both" if mid else "thru"
+            ext = ("thru", "both" if mid else "fwd")
         elif t == 2:
-            head = "next"
+            ext = ("next", "fwd")
         else:
             raise Unsupported(f"a pad or pocket of type {t}")
-        head += along
-        return self.profile(name, "cut" if cut else "add", head, down, z)[0]
+        return self.profile(name, "cut" if cut else "add", {"kind": "extrude", "ext": ext, "along": along}, down, z)[0]
 
     def revolve(self, name, cut):
         d = self.doc
@@ -448,9 +462,9 @@ class Tr:
         if d.boolean(name, "Reversed"):
             du, dv = -du, -dv
         ang = d.flt(name, "Angle", 360.0)
-        head = "" if abs(ang - 360) < 1e-9 else (f"sym {num(ang)}" if d.boolean(name, "Midplane") else num(ang))
-        tail = f"axis {num(u)} {num(v)} {num(du)} {num(dv)} "
-        return self.profile(name, "cut" if cut else "add", head, False, fr.n, tail)[0]
+        turn = None if abs(ang - 360) < 1e-9 else (("sym", num(ang)) if d.boolean(name, "Midplane") else ("a", num(ang)))
+        make = {"kind": "revolve", "turn": turn, "axis": (num(u), num(v), num(du), num(dv))}
+        return self.profile(name, "cut" if cut else "add", make, False, fr.n)[0]
 
     def part_revolve(self, name):
         """Part workbench: a sketch turned about Axis through Base."""
@@ -468,11 +482,11 @@ class Tr:
         if abs(w) > 1e-6 or abs(dw) > 1e-6:
             raise Unsupported("a revolve axis out of the sketch's plane")
         ang = d.flt(name, "Angle", 360.0)
-        head = "" if abs(ang - 360) < 1e-9 else num(ang)
-        if d.boolean(name, "Symmetric"):
-            head = "sym " + head if head else head
-        tail = f"axis {num(u)} {num(v)} {num(du)} {num(dv)} "
-        return self.profile(name, "add", head, False, fr.n, tail, sk=sk)[0]
+        turn = None if abs(ang - 360) < 1e-9 else ("a", num(ang))
+        if turn and d.boolean(name, "Symmetric"):
+            turn = ("sym", num(ang))
+        make = {"kind": "revolve", "turn": turn, "axis": (num(u), num(v), num(du), num(dv))}
+        return self.profile(name, "add", make, False, fr.n, sk=sk)[0]
 
     def after_moved(self, name):
         """Does a real feature follow this clone in the body being built? Those are in the body's own frame, not the moved one."""
@@ -494,7 +508,7 @@ class Tr:
                 raise Unsupported("a Part boolean short of shapes")
             labs = [self.part_tree(k) for k in kids[1:] + kids[:1]]
             word = {"Part::Cut": "cut", "Part::Common": "keep", "Part::MultiCommon": "keep"}.get(t, "add")
-            self.lines.append(f"combine {word} {labs[-1]} " + " ".join(labs[:-1]))
+            self.lines.append(St("combine", word=word, target=labs[-1], tools=labs[:-1], keep=False))
             return labs[-1]
         if t == "PartDesign::Body" or t in SOLID and not t.startswith("Part::"):
             # a PartDesign chain as one shape of the tree: a body of its own, what follows it acting on it
@@ -506,9 +520,9 @@ class Tr:
                 self.step(n)
             head = self.lines[first]
             self.bodies = 1
-            if ":" not in head.split(" ")[0]:
+            if not head.label:
                 raise Unsupported("a PartDesign shape in a Part tree with no label")
-            return head.split(":")[0]
+            return head.label
         if t == "Part::Revolution":
             ls = self.part_revolve(name)
         elif t in ("Part::Box", "Part::Cylinder"):
@@ -517,34 +531,34 @@ class Tr:
             if abs(d.flt(name, "Angle1", -90.0) + 90) > 1e-9 or abs(d.flt(name, "Angle2", 90.0) - 90) > 1e-9 or abs(d.flt(name, "Angle3", 360.0) - 360) > 1e-9:
                 raise Unsupported("a part of a sphere")
             fr = Frame(d.placement(name))
-            ls = [f"ball {num(d.flt(name, 'Radius'))} z {vtext(fr.n)} x {vtext(fr.x)} at {vtext(fr.o)}"]
+            ls = [St("ball", r=num(d.flt(name, "Radius")), frame=(vt(fr.o), vt(fr.n), vt(fr.x)))]
         else:
             raise Unsupported("a Part tree through " + str(t))
         if len(ls) != 1:
             raise Unsupported("a Part solid of several regions")
         self.tree += 1
         lab = f"p{self.tree}"
-        word, rest = ls[0].split(" ", 1)
         if self.tree > 1:
             # after the first, each its own body
-            rest = rest[4:] if rest.startswith("add ") else rest
-            ls = [f"{word} new {rest}"]
-        self.lines.append(f"{lab}: {ls[0]}")
+            ls[0].op = "new"
+        ls[0].label = lab
+        self.lines.append(ls[0])
         return lab
 
     def part_solid(self, name, t):
         """Part workbench primitives, on their placement. An add: only ever the first in a chain here."""
         d = self.doc
         fr = Frame(d.placement(name))
-        frame = f"z {vtext(fr.n)} x {vtext(fr.x)} at {vtext(fr.o)}"
+        frame = (vt(fr.o), vt(fr.n), vt(fr.x))
         self.bodies = 1
+        ext = ("d", num(d.flt(name, "Height")))
         if t == "Part::Box":
-            return [f"extrude {num(d.flt(name, 'Height'))} {frame} rect 0 0 {num(d.flt(name, 'Length'))} {num(d.flt(name, 'Width'))}"]
+            return [St("extrude", frame=frame, ext=ext, loops=[[rect_row(d, name)]])]
         if abs(d.flt(name, "Angle", 360.0) - 360) > 1e-9:
             raise Unsupported("a part of a cylinder")
-        return [f"extrude {num(d.flt(name, 'Height'))} {frame} circle 0 0 {num(d.flt(name, 'Radius'))}"]
+        return [St("extrude", frame=frame, ext=ext, loops=[[("circle", ("0", "0"), num(d.flt(name, "Radius")))]])]
 
-    def blend(self, name, line, all_edges=False):
+    def blend(self, name, kind, size, all_edges=False):
         d = self.doc
         base = d.link(name, "Base")
         subs = ["ALL"] if all_edges else d.subs(name, "Base")
@@ -585,7 +599,7 @@ class Tr:
             raise Unresolved("no edge where the base's edge lies")
         # OpenCascade carries a blend along tangent edges
         along_tangents(st["edges"], picked)
-        return [line + " " + " ".join(sorted(picked))]
+        return [St(kind, size=size, sel=self.select("edges", {e["n"] for e in picked.values()}))]
 
     def axis_of(self, name, prop):
         """A pattern's direction or axis: a sketch's H, V or N axis, or the body's origin line."""
@@ -610,13 +624,13 @@ class Tr:
             o, a = self.axis_of(name, "Axis")
             if d.boolean(name, "Reversed"):
                 a = tuple(-x for x in a)
-            return f"pattern {src} circ {vtext(o)} {vtext(a)} {d.integer(name, 'Occurrences')} {num(d.flt(name, 'Angle', 360.0))}"
+            return St("pattern", of=list(src), layout=("circ", vt(o), vt(a), str(d.integer(name, "Occurrences")), num(d.flt(name, "Angle", 360.0)), False))
         if t == "PartDesign::LinearPattern":
             _, a = self.axis_of(name, "Direction")
             if d.boolean(name, "Reversed"):
                 a = tuple(-x for x in a)
             n = d.integer(name, "Occurrences")
-            return f"pattern {src} lin {vtext(a)} {n} {num(d.flt(name, 'Length') / max(n - 1, 1))}"
+            return St("pattern", of=list(src), layout=("lin", vt(a), str(n), num(d.flt(name, "Length") / max(n - 1, 1))))
         ref, subs = d.link(name, "MirrorPlane"), d.subs(name, "MirrorPlane")
         if d.types.get(ref) == "Sketcher::SketchObject":
             fr = Frame(d.placement(ref))
@@ -631,7 +645,7 @@ class Tr:
             n, o = fr.n, fr.o
         else:
             raise Unsupported("a mirror in " + (d.types.get(ref) or "nothing"))
-        return f"pattern {src} mirror z {vtext(n)} at {vtext(o)}"
+        return St("pattern", of=list(src), layout=("mirror", vt(n), vt(o)))
 
     def hole(self, name):
         """One hole at each of the sketch's circles, drilled against its normal; its seat from what the file stored."""
@@ -639,7 +653,7 @@ class Tr:
         if d.boolean(name, "Tapered") or d.boolean(name, "ModelActualThread") or d.boolean(name, "Midplane"):
             raise Unsupported("a tapered, threaded or two-way hole")
         if d.boolean(name, "Threaded"):
-            # measured: bodies with this set stored more than the plain bore; .fc records a thread, the shape is another matter
+            # measured: bodies with this set stored more than the plain bore; a hole's thread is recorded, the shape is another matter
             raise Unsupported("a hole with its thread in the shape")
         sk = d.link(name, "Profile")
         fr = Frame(d.placement(sk))
@@ -651,30 +665,33 @@ class Tr:
         ext = "thru" if t == 1 else num(d.flt(name, "Depth")) if t == 0 else None
         if ext is None:
             raise Unsupported("a hole up to a face")
+        pt = None
         if t == 0 and d.integer(name, "DrillPoint") == 1:
-            ext += f" pt {num(d.flt(name, 'DrillPointAngle'))}"
-        seat = ""
+            pt = num(d.flt(name, "DrillPointAngle"))
+        seat = None
         if d.integer(name, "HoleCutType") != 0:
             if d.flt(name, "HoleCutDepth") > 0:
-                seat = f" cb {num(d.flt(name, 'HoleCutDiameter'))} {num(d.flt(name, 'HoleCutDepth'))}"
+                seat = ("cb", num(d.flt(name, "HoleCutDiameter")), num(d.flt(name, "HoleCutDepth")))
             else:
-                seat = f" cs {num(d.flt(name, 'HoleCutDiameter'))} {num(d.flt(name, 'HoleCutCountersinkAngle'))}"
-        return [f"hole {num(d.flt(name, 'Diameter'))} z {vtext(z)} x {vtext(fr.x)} at {vtext(fr.world(*e['center']))}{seat} {ext}" for e in ents]
+                seat = ("cs", num(d.flt(name, "HoleCutDiameter")), num(d.flt(name, "HoleCutCountersinkAngle")))
+        D = num(d.flt(name, "Diameter"))
+        return [St("hole", d=D, frame=(vt(fr.world(*e["center"])), vt(z), vt(fr.x)), seat=seat, depth=ext, point=pt) for e in ents]
 
     def primitive(self, name, t):
         d = self.doc
         fr = Frame(d.placement(name))
-        frame = f"z {vtext(fr.n)} x {vtext(fr.x)} at {vtext(fr.o)}"
+        frame = (vt(fr.o), vt(fr.n), vt(fr.x))
         cut = "Subtractive" in t
         if cut and self.bodies == 0:
             raise Unsupported("first feature cuts")
-        op = ("cut " if cut else "add ") if self.bodies else ""
+        op = ("cut" if cut else "add") if self.bodies else ""
         self.bodies = 1
+        ext = ("d", num(d.flt(name, "Height")))
         if t.endswith("Box"):
-            return [f"extrude {op}{num(d.flt(name, 'Height'))} {frame} rect 0 0 {num(d.flt(name, 'Length'))} {num(d.flt(name, 'Width'))}"]
+            return [St("extrude", op=op, frame=frame, ext=ext, loops=[[rect_row(d, name)]])]
         if abs(d.flt(name, "Angle", 360.0) - 360) > 1e-9 or abs(d.flt(name, "FirstAngle")) > 1e-9 or abs(d.flt(name, "SecondAngle")) > 1e-9:
             raise Unsupported("a part of a cylinder")
-        return [f"extrude {op}{num(d.flt(name, 'Height'))} {frame} circle 0 0 {num(d.flt(name, 'Radius'))}"]
+        return [St("extrude", op=op, frame=frame, ext=ext, loops=[[("circle", ("0", "0"), num(d.flt(name, "Radius")))]])]
 
     def fail(self, what):
         raise Unsupported("a pattern reference " + what)
@@ -684,8 +701,8 @@ class Tr:
         for o in self.doc.links(name, "Originals"):
             if o not in self.labels:
                 raise Unresolved("a pattern of a feature outside the chain")
-            out.append(self.labels[o])
-        return " ".join(out)
+            out += self.labels[o].split(" ")
+        return out
 
     def run(self, chain):
         d = self.doc
@@ -711,12 +728,12 @@ class Tr:
                 return
             if self.after_moved(name):
                 raise Unsupported("features after a moved clone")
-            words = []
+            moves = []
             if sn >= 1e-12:
-                words.append(f"rot 0 0 0 {vtext(tuple(x / sn for x in q[:3]))} {num(math.degrees(2 * math.atan2(sn, q[3])))}")
+                moves.append(("rot", ("0", "0", "0"), vt(tuple(x / sn for x in q[:3])), num(math.degrees(2 * math.atan2(sn, q[3])))))
             if math.sqrt(dot(by, by)) >= 1e-9:
-                words.append(f"by {vtext(by)}")
-            self.lines.append("movebody " + " ".join(words))
+                moves.append(("by", vt(by)))
+            self.lines.append(St("movebody", moves=moves, of=None))
             self.steps.append((name, len(self.lines)))
             return
         if t.startswith("Part::"):
@@ -726,11 +743,11 @@ class Tr:
         elif t in ("PartDesign::Revolution", "PartDesign::Groove"):
             ls = self.revolve(name, t.endswith("Groove"))
         elif t == "PartDesign::Fillet":
-            ls = self.blend(name, f"fillet {num(d.flt(name, 'Radius'))}", d.boolean(name, "UseAllEdges"))
+            ls = self.blend(name, "fillet", num(d.flt(name, "Radius")), d.boolean(name, "UseAllEdges"))
         elif t == "PartDesign::Chamfer":
             if d.integer(name, "ChamferType") != 0:
                 raise Unsupported("an unequal chamfer")
-            ls = self.blend(name, f"chamfer {num(d.flt(name, 'Size'))}", d.boolean(name, "UseAllEdges"))
+            ls = self.blend(name, "chamfer", num(d.flt(name, "Size")), d.boolean(name, "UseAllEdges"))
         elif t in TRANSFORMS:
             ls = [self.transform(name, t, self.originals(name))]
         elif t == "PartDesign::MultiTransform":
@@ -738,8 +755,10 @@ class Tr:
             for k, m in enumerate(d.links(name, "Transformations")):
                 if d.types.get(m) not in TRANSFORMS:
                     raise Unsupported("a multi-transform with " + str(d.types.get(m)).split("::")[-1])
-                ls.append(f"m{len(self.labels)}x{k}: " + self.transform(m, d.types[m], src))
-                src += f" m{len(self.labels)}x{k}"
+                one = self.transform(m, d.types[m], src)
+                one.label = self.fresh(f"m{len(self.labels)}x{k}")
+                ls.append(one)
+                src = src + [one.label]
         elif t == "PartDesign::Hole":
             ls = self.hole(name)
         elif t in ("PartDesign::AdditiveBox", "PartDesign::SubtractiveBox", "PartDesign::AdditiveCylinder", "PartDesign::SubtractiveCylinder"):
@@ -748,15 +767,26 @@ class Tr:
             self.labels[name] = root
             self.bodies = 1
         elif t == "PartDesign::MultiTransform":
-            self.labels[name] = ls[-1].split(":")[0]  # already labelled, each its own
+            self.labels[name] = ls[-1].label  # already labelled, each its own
         else:
             # a feature of several lines (regions that do not touch): a pattern of it needs them all
             base = f"t{len(self.labels)}"
+            # a feature stepped again (a chain two bodies in a Part tree share) gets ids of its own
+            k = 0
+            while any(l.label == base or (l.label or "").startswith(base + "x") for l in self.lines):
+                k += 1
+                base = f"t{len(self.labels)}r{k}"
             names = [base if k == 0 else f"{base}x{k}" for k in range(len(ls))]
             self.labels[name] = " ".join(names)
-            ls = [f"{n}: {l}" for n, l in zip(names, ls)]
+            for n, l in zip(names, ls):
+                l.label = n
         self.lines += ls
         self.steps.append((name, len(self.lines)))
+
+
+def rect_row(d, name):
+    """A Box's base: Length along x, Width along y from the placement's origin."""
+    return f"rect(corner: (0, 0), size: ({num(d.flt(name, 'Length'))}, {num(d.flt(name, 'Width'))}))"
 
 
 def line_or_circle(poly):
@@ -1011,11 +1041,10 @@ def main():
             if t.approx:
                 r["notes"].append("approx")
             if t.topo is not None:
-                t.topo.kill()
-                t.topo.wait()
+                t.topo.close()
             if r["status"] != "untranslated":
-                with open(os.path.join(out, f"{stem}.{b}.fc"), "w") as f:
-                    f.write("\n".join(t.lines) + "\n")
+                with open(os.path.join(out, f"{stem}.{b}.fg"), "w") as f:
+                    f.write(t.prog.text(t.lines))
         print(json.dumps(r), flush=True)
 
 

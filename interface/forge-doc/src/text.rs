@@ -1043,7 +1043,7 @@ pub const KINDS: &[Kind] = &[
                     }
                 }
             }
-            for r in &s.rows {
+            for r in &sketch::fc(s).rows {
                 w.s.push_str("\n ");
                 r.iter().for_each(|t| w.word(t));
             }

@@ -27,7 +27,9 @@ mod upto;
 pub mod verify;
 pub mod work;
 
-pub use bodies::{BodyError, BodyFeature, Cutter, Keep, Pick, Solid, Step, step_solids};
+pub use bodies::{
+    BodyError, BodyFeature, Cutter, Keep, Pick, Solid, Step, step_solids, step_solids_finished,
+};
 pub use edit::{Edit, EditError, Motion, Side};
 pub use extent::{Extent, ExtentError, Target, Toward, Turn};
 use forge_bool::{BoolError, CpuBatch, Op, Seg2, Shape, boolean_into, boolean_unlinked};
@@ -42,7 +44,7 @@ use forge_ops::{
 use forge_topo::{Body, Name};
 pub use hole::{End, Head, Hole, HoleError, Thread};
 pub use import::Import;
-pub use params::{On, Param, Sketch, Unit};
+pub use params::{Note, On, Param, Record, Sketch, Unit};
 pub use pattern::{
     At, Layout, PatternError, Row, Source, body_motion, copy_sources, instance_name, placements,
 };
@@ -586,7 +588,18 @@ pub(crate) fn step_plain(
     i: usize,
     body: Option<Body>,
 ) -> Result<Option<Body>, RegenError> {
-    let b = step_on(features, i, body)?;
+    step_plain_finished(features, i, body, None)
+}
+
+/// `step_plain` given `body` finished already (`finish(body)`, exactly), for a feature that works
+/// on the finished part.
+pub(crate) fn step_plain_finished(
+    features: History<'_>,
+    i: usize,
+    body: Option<Body>,
+    finished: Option<&Body>,
+) -> Result<Option<Body>, RegenError> {
+    let b = step_on(features, i, body, finished)?;
     if let Some(b) = &b {
         no_pinch(features, i, b)?;
     }
@@ -846,16 +859,23 @@ fn connected_through(body: &Body, ix: &forge_bool::Index<'_>, p: forge_math::Poi
     true
 }
 
-fn step_on(features: History<'_>, i: usize, mut body: Option<Body>) -> Result<Option<Body>, RegenError> {
+fn step_on(
+    features: History<'_>,
+    i: usize,
+    mut body: Option<Body>,
+    finished: Option<&Body>,
+) -> Result<Option<Body>, RegenError> {
     let f = &features[i];
     let id = features.id(i);
     if modifies(f) {
         let b = body.ok_or(RegenError::NothingToCombine { feature: i })?;
-        // a part-changing feature works on the finished part
-        let b = if matches!(f, Feature::Fillet { .. }) {
-            finish(b)
-        } else {
-            finish_canonical(b)
+        // a part-changing feature works on the finished part (the caller's, if it has it: the
+        // same body finished, as `finish(b)` makes it)
+        let b = match (finished, matches!(f, Feature::Fillet { .. })) {
+            (Some(fb), true) => fb.clone(),
+            (Some(fb), false) => fb.clone().into_canonical(),
+            (None, true) => finish(b),
+            (None, false) => finish_canonical(b),
         };
         let b = modify(features, f, i, &b, 1)?;
         if trace::on() {

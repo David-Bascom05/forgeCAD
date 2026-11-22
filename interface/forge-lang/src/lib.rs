@@ -46,6 +46,7 @@ pub mod thermo;
 pub mod thermo_kept;
 pub mod tightbox;
 pub mod undo;
+pub mod units;
 pub mod uses;
 pub mod validity;
 pub mod values;
@@ -156,8 +157,9 @@ pub struct Options {
     pub anchors: bool,
     /// An assembly: write its structure as STEP under this product name (`fg run --step`).
     pub step: Option<String>,
-    /// A part's measures, expects and physical properties and a thermoform's wall simulation;
-    /// off, a UI shows the shape first and runs them after.
+    /// A part's measures, expects and physical properties, a thermoform's wall simulation and
+    /// the features that changed nothing (`Warning::NoEffect`); off, a UI shows the shape first
+    /// and runs them after.
     pub checks: bool,
     /// Threads on an axis not modelled but recorded (`Run::threads`), as a drawing draws them.
     pub cosmetic_threads: bool,
@@ -332,7 +334,7 @@ fn fit_sizes(src: &str, opts: &Options, run: &mut Run, mut cache: Cache) -> Cach
         let values::Src::Driving(key) = &d.num.src else {
             continue;
         };
-        let (id, key, top, dim) = (id.clone(), key.clone(), d.num.v, d.num.dim);
+        let (id, key, top, dim) = (id.clone(), (**key).clone(), d.num.v, d.num.dim);
         let builds = |v: f64, cache: Cache| -> (bool, Cache) {
             let op = error::Op::SetParam {
                 param: key.clone(),

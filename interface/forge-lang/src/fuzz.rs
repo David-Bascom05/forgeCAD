@@ -76,8 +76,9 @@ pub const MAKERS: &[Maker] = makers![
     "text" 1 text,
 ];
 
-/// The seeds the tests run. (Not 0: its program has a thread that takes the kernel four minutes,
-/// kept as `kernel_history_repros::slow_thread_after_a_moved_body`.)
+/// The seeds the tests run. (Not 0: its last statement, a thread cut into a block of many faces,
+/// builds valid but its tracing takes the kernel seconds, and seed 0 alone adds half again to the
+/// run of all the others; kept as `kernel_history_repros::slow_thread_after_a_moved_body`.)
 pub const SEEDS: [u64; 34] = [
     1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28,
     29, 30, 31, 32, 33, 34,
@@ -2489,8 +2490,10 @@ pub struct Built {
     pub run: crate::Run,
     pub features: Vec<Feature>,
     pub ids: Vec<u64>,
-    /// The solids after each feature built (one stage per feature, up to a refusal).
-    pub stages: Vec<Vec<Solid>>,
+    /// The solids after each feature built (one stage per feature, up to a refusal): the
+    /// cache's own stages, shared, not copied (a part of many features and faces would hold
+    /// every stage's bodies twice over).
+    pub stages: Vec<std::rc::Rc<crate::build::Stage>>,
 }
 
 impl Built {
@@ -2502,7 +2505,7 @@ impl Built {
     pub fn solids_after(&self, k: usize) -> &[Solid] {
         k.checked_sub(1)
             .and_then(|i| self.stages.get(i))
-            .map_or(&[], |s| &s[..])
+            .map_or(&[], |s| &s.solids[..])
     }
     /// The bodies after `k` features as one (each finished, as selections see them).
     pub fn body_after(&self, k: usize) -> Option<Body> {
@@ -2565,7 +2568,7 @@ pub fn build_cached(src: &str, opts: Options, cache: Cache) -> (Built, Cache) {
     let b = Built {
         features: f.to_vec(),
         ids: ids.to_vec(),
-        stages: cache.stages().map(|s| s.to_vec()).collect(),
+        stages: cache.stage_rcs().to_vec(),
         run,
     };
     (b, cache)
@@ -2605,10 +2608,10 @@ pub fn judge_built(src: &str) -> (Verdict, Option<Built>) {
             // a pinch on the way is the part's business if a later feature clears it: the
             // finished part is held to the full check
             let finished = i + 1 == n;
-            if !finished && b.stages[i].iter().all(|s| only_pinched(&s.body)) {
+            if !finished && b.stages[i].solids.iter().all(|s| only_pinched(&s.body)) {
                 continue;
             }
-            if let f @ Verdict::Fail(_) = valid_solids(kind, &b.stages[i]) {
+            if let f @ Verdict::Fail(_) = valid_solids(kind, &b.stages[i].solids) {
                 return (f, b);
             }
         }

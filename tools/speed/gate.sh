@@ -75,8 +75,16 @@ done
 # the real parts (interface/forge-lang/parts/bench/*.fg): the kernel's regen of the features each
 # part's .fg run sends, by the ids it names them with: the instructions of building the part and
 # regenerating it, less those of building it alone (the language and the first build, uncounted)
+# and the language with them, whole: `app` the cold build as the app makes it (no checks), `edit`
+# that build and the rebuild after one dimension changed, `cli` the cold build with the CLI's
+# checks: what the .fg front end costs on top of the kernel, held from growing
 for p in gearbox volute crank valve heatsink quadarm conrod jack frame manifold bracket insert clamp hub guard; do
   base=$(count "$bin/benchparts" resolve $p)
+  echo "$p app ${base:-FAIL}" >> "$now"
+  for m in edit cli; do
+    n=$(count "$bin/benchparts" $m $p)
+    echo "$p $m ${n:-FAIL}" >> "$now"
+  done
   for m in seq nary1; do
     n=$(count "$bin/benchparts" run $p $m)
     if [ -n "$n" ] && [ -n "$base" ]; then n=$((n - base)); else n=; fi

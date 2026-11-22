@@ -1,16 +1,54 @@
 # How well we recreate real parts
 
-Each dataset's own history is translated to `.fc`, built by the kernel, and held against the source CAD's own result.
+Each dataset's own history is translated to a Forge part (`.fg`), built by the kernel, and held against the source CAD's
+own result.
 Tools: `tools/find-parts/recreate/`. No dataset file, and no part derived from one, is in this repo: data lives in
 `~/forgecad-data/<dataset>/`, and a regression test restates geometry in its own numbers. Nothing here is used by
 shipped code.
 
-Status: these importers (`cadfs.py`, `whucad.py`, `freecad.py` and their runners) still write the retired part
-format, and they no longer run: the judge and `topo` read `.fg` now. They name a blend's edges by `@handle` or by
-a point near them, and a `.fg` selection names edges only by what made them and how they lie, so moving them is a
-port of their reference resolution (to lineage selections, as `interface/forge-import` does for FreeCAD), not a
-change of syntax. FreeCAD documents are imported to `.fg` today by `forgecad import FILE.FCStd`. The numbers
-below were measured when they ran.
+How a blend's edges are named: each importer finds the edges (and a shell's faces) it means on the part as built so
+far, by what it knows of them (a FreeCAD `EdgeN` sampled from the stored shape, a CADFS or WHUCAD query's carrier
+surfaces), exactly as before. Those edges are then written as the lineage selection that names exactly them on that part:
+`edges(of: F, shape: .., r: .., longer: ..)`, `edges(between: (A, B))` of anchors (`F.end`, `F.side(S.l)`), a pattern's
+copy `P[k]` or a hole's place `H[k]`; where none of those does, where the faces of the features on either side
+meet (`edges(between: (F, G))`, a blend's own faces too), told apart from look-alikes by the anchored faces at their ends
+(`touching: F.side(S.l).edges`) or the world axis a line runs along; never by position. forge-proof's `topo` works the selection out
+(`forge_import::state`, the same code `forgecad import` names FreeCAD's edges with) and checks the union names those
+edges and no others; where no union does, the part is `reference`, not translated. `fgw.py` writes the statements:
+every frame the importer worked out is a `plane(at:, normal:, x:)` through helper points, so the kernel gets the frame
+and the numbers the retired format gave it.
+
+Checked against the retired importers when they were ported (2026-11-22): the importers as they wrote the retired
+format, built by its own judge and topo, and as they write `.fg` now, on the same bodies and the same kernel. Classes
+as below; every body that matched still matches, and every body both built has the same volume (to 1e-9) and faces,
+except two WHUCAD parts, 1e-6 and 2e-9 apart, where an arc is now written through its ends (the retired format wrote
+centre, radius and angles, whose ends sat 1e-10 off the lines beside them).
+
+| FreeCAD, the 245 files with fillets (677 bodies) | retired | `.fg` |
+|---|---:|---:|
+| match | 482 | 484 |
+| wrong | 5 | 5 |
+| refused | 53 | 53 |
+| fail | 5 | 5 |
+| timeout | 1 | 0 |
+| not translated: form | 110 | 110 |
+| not translated: reference | 21 | 20 |
+
+The two new matches: a body the retired run lost to a wall-clock timeout under load (it builds in both, the same volume
+and faces), and a chamfer the retired importer left untranslated (its edges not found) on a part where two bodies of one
+Part tree share a chain: a feature stepped twice now gets ids of its own (a Forge id is bound once; the retired format
+let the second copy's labels shadow the first's).
+
+| WHUCAD, every 7th manual part with a fillet, chamfer or shell, and 50 more (361 bodies) | retired | `.fg` |
+|---|---:|---:|
+| built (no STEP here to hold them to) | 243 | 243 |
+| refused | 71 | 71 |
+| fail | 6 | 6 |
+| not translated: form | 19 | 19 |
+| not translated: reference | 22 | 22 |
+
+CADFS's data (and WHUCAD's STEP files) were not on the machine the port was checked on, so `cadfs.py` is ported by the
+same writer and selection as the two above, untried on its own data.
 
 ## What the numbers mean
 
@@ -18,15 +56,15 @@ Reported separately for every dataset:
 
 - **match**: regenerates, every stage valid, meshes closed, and volume, area and box agree with the source. Tolerance
   0.1% of volume, 0.1% of area, 0.1% of the box's diagonal; 1% where a polyline stands in for an ellipse or spline
-  (.fc sketches have no spline row), and those parts are noted `approx`.
-- **wrong**: built with no error and disagrees. Triaged by OpenCascade replaying the same `.fc`: OCCT agrees with the
-  source and not us is ours and silent, the most serious class; OCCT agrees with us means the `.fc` is not the source's
+  (the importers write splines as polylines), and those parts are noted `approx`.
+- **wrong**: built with no error and disagrees. Triaged by OpenCascade replaying the same `.fg`: OCCT agrees with the
+  source and not us is ours and silent, the most serious class; OCCT agrees with us means the `.fg` is not the source's
   part, an importer error.
 - **refused**: a clear error. Every part in these sets was built by its source CAD, so every refusal is a wrong refusal
   unless the importer gave the kernel the wrong input.
 - **fail, crash, oom, timeout**: a kernel bug by `history::classify`, or the process died. 3 GB, 120 s of CPU per process.
 - **not translated**: never reached the kernel, kept apart so the importer cannot flatter or hurt the kernel's number.
-  `form` is something .fc or the importer has no form for, `reference` a reference that cannot be resolved, `importer`
+  `form` is something Forge or the importer has no form for, `reference` a reference that cannot be resolved, `importer`
   the importer's own bug.
 
 The sets that translate are biased toward simple parts, so a rate is over translated parts of that kind.
@@ -151,6 +189,9 @@ python3 -I $R/bisect_freecad.py RUN/results.jsonl --files DIR --judge $E/judge -
 # WHUCAD: folders 0100-0103 are the manual parts
 python3 -I $R/run_whucad.py run IDS --vec VEC --step STP --out RUN --judge $E/judge --topo $E/topo --h5py H5PY --occt $V --jobs 4
 python3 -I $R/run_whucad.py report RUN
+
+# HistCAD: blends' points resolved to lineage selections on the part so far
+python3 -I tools/find-parts/histcad.py SEQ.json .. --out DIR --topo $E/topo
 
 # wrong and refused parts
 THREADS=1 REPS=1 CHORD=0.01 $E/oracle dir:IN > PARTS.json

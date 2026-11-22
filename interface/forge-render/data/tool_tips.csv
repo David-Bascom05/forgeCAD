@@ -61,6 +61,7 @@ sketch,Point,"A sketch point: a hole centre, or something to dimension to",sketc
 sketch,Fillet,Round the corner where two lines meet,
 sketch,Chamfer,Bevel the corner where two lines meet,
 sketch,Text,Place text for Emboss to raise or cut after the sketch,
+sketch,Project Geometry,Bring edges or faces of the part onto the sketch plane as fixed geometry,sketch_project
 sketch,Move,"Move chosen geometry from a base point to another",
 sketch,Copy,"Copy chosen geometry from a base point to another",
 sketch,Rotate,Turn chosen geometry about a centre,

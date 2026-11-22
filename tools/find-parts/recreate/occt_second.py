@@ -22,6 +22,7 @@ import zipfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
+import fgw
 sys.path.insert(0, os.path.join(HERE, "..", "..", "occt"))
 TOL = 1e-3
 
@@ -49,13 +50,17 @@ def child(job):
     print(json.dumps({"vol": v, "area": g.Mass(), "valid": bool(BRepCheck_Analyzer(s).IsValid()), "bbox": [a.X(), a.Y(), a.Z(), b.X(), b.Y(), b.Z()]}))
 
 
-def edges_of(topo, lines):
-    src = ("\n".join(lines) + "\n").encode()
-    p = subprocess.run([topo], input=b"%d\n" % len(src) + src, capture_output=True, timeout=600)
-    d = json.loads(p.stdout.splitlines()[0])
-    if d.get("err") or "panic" in d:
+def edges_of(topo, prefix, sel):
+    """The part before the blend: the kernel features it built, and the edges the blend's selection names."""
+    tp = fgw.Topo(topo)
+    try:
+        d = tp.state(prefix)
+        names = set(tp.names(prefix, sel))
+    except fgw.Stop:
         raise ValueError("the prefix does not build")
-    return {e["h"]: e for e in d.get("edges", [])}
+    finally:
+        tp.close()
+    return d["built"], [e for e in d.get("edges", []) if e["n"] in names]
 
 
 def main():
@@ -73,26 +78,25 @@ def main():
     def one(r):
         i = r["id"]
         out = {"id": i, "sig": r["sig"], "line": r.get("line"), "features": r["features"]}
-        lines = open(os.path.join(a[1], i + ".fc")).read().splitlines()
+        src = open(os.path.join(a[1], i + ".fg")).read()
+        sts = fgw.statements(src)
         L = r.get("line")
-        if L is None or i not in parts or L >= len(lines):
+        k = None if L is None else fgw.at_line(src, L)
+        if k is None or i not in parts:
             return dict(out, cls="X", why="not exported")
-        words = lines[L].split()
-        k = 1 if words[0].endswith(":") else 0
-        kind = words[k]
-        if kind not in ("fillet", "chamfer"):
-            return dict(out, cls="X", why="fails at " + kind)
-        size = float(words[k + 1])
+        b = fgw.blend(sts[k][1])
+        if b is None or b[0] == "shell":
+            return dict(out, cls="X", why="fails at " + sts[k][1].split("(")[0][-12:])
+        kind, size = b[0], b[1]
         out["kind"] = kind
         try:
-            es = edges_of(opt("--topo"), lines[:L])
-            hs = [w for w in words[k + 2:] if w.startswith("@")]
-            picks = [[q for q in es[h]["p"][1:-1:3]] for h in hs]
+            K, es = edges_of(opt("--topo"), "\n".join(t for _, t in sts[:k]) + "\n", b[2])
+            picks = [[q for q in e["p"][1:-1:3]] for e in es]
         except (KeyError, ValueError, subprocess.TimeoutExpired, IndexError) as x:
             return dict(out, cls="X", why="prefix: " + repr(x)[:60])
-        feats = parts[i]["features"][:L]
-        if len(feats) != L:
-            return dict(out, cls="X", why=f"exported {len(feats)} of {L} lines")
+        # the exported kernel features before the blend's
+        feats = [f for f in parts[i]["features"] if f["i"] < K]
+        L = K
         if kind == "fillet":
             feats = feats + [{"i": L, "kind": "fillet", "edges": [{"pts": p, "law": [[q, size] for q in p]} for p in picks]}]
         else:
@@ -112,7 +116,7 @@ def main():
         out["occt"] = o
         if not o["valid"]:
             return dict(out, cls="D", why="OCCT's result is invalid")
-        if L != len(lines) - 1 or r["status"] != "translated":
+        if k != len(sts) - 1 or r["status"] != "translated":
             return dict(out, cls="C", why="features follow it")
         st = os.path.join(tmp, i + ".step")
         with lock:

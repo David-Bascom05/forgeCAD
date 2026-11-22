@@ -81,8 +81,15 @@ fn ok(h: &mut Headless, what: &str) -> forge_lang::Run {
     built_ok(h, what)
 }
 
+use forge_render::shell::sketching::rows::{Row, V};
+
+/// A rectangle by its corner and size.
+fn rect(x: f64, y: f64, w: f64, h: f64) -> Row {
+    Row::Rect(V::N(x), V::N(y), V::N(w), V::N(h))
+}
+
 /// A sketch drawn on a plane the part names (an origin plane or a wall's skin), finished.
-fn sketch(h: &mut Headless, on: &str, rows: &[&str]) {
+fn sketch(h: &mut Headless, on: &str, rows: &[Row]) {
     let plane = match on {
         "xy" => forge_math::Frame::WORLD,
         _ => *h
@@ -97,7 +104,7 @@ fn sketch(h: &mut Headless, on: &str, rows: &[&str]) {
     let mut m = SketchMode::new(SketchFor::New, on.to_string(), plane, Vec::new());
     m.units = "mm";
     for r in rows {
-        m.add(r.to_string());
+        m.add(r.clone());
     }
     h.gui.shell.sketch = Some(m);
     h.gui.shell.tab = 1;
@@ -131,7 +138,7 @@ fn a_sheet_metal_part_made_with_the_tools_then_flat_and_its_dxf() {
     shot(&mut h, "00-new");
 
     // the base face's sketch, and Face
-    sketch(&mut h, "xy", &["rect 0 0 120 80"]);
+    sketch(&mut h, "xy", &[rect(0.0, 0.0, 120.0, 80.0)]);
     h.gui.shell.tab = forge_render::shell::SHEET_TAB;
     h.step();
     click(&mut h, "tool:Face");
@@ -218,7 +225,7 @@ fn a_sheet_metal_part_made_with_the_tools_then_flat_and_its_dxf() {
     );
 
     // a cut: a window sketched on the face's top
-    sketch(&mut h, "face1.top", &["rect 45 25 30 30"]);
+    sketch(&mut h, "face1.top", &[rect(45.0, 25.0, 30.0, 30.0)]);
     h.gui.shell.tab = forge_render::shell::SHEET_TAB;
     h.step();
     click(&mut h, "tool:Cut");

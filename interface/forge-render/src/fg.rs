@@ -472,7 +472,7 @@ pub fn rows(run: &Run, src: &str) -> (Vec<FeatRow>, Vec<ParamRow>, Vec<Issue>) {
                     dim: d.num.dim,
                     from: match &d.num.src {
                         Src::Const => From::Const,
-                        Src::Driving(p) => From::Driving(p.clone()),
+                        Src::Driving(p) => From::Driving((**p).clone()),
                         Src::Driven(ps) => From::Driven(ps.iter().cloned().collect()),
                     },
                 })

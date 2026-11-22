@@ -2,14 +2,14 @@
 
 `kernel/forge-topo/src/mass.rs` integrates each face by Green's theorem on its uv loops, or a
 corner patch's face over its domain polygon directly. The choices below were measured with
-`masstime.rs` here (copy it to `interface/forge-agent/examples/` to build it; it is not part of the
+`masstime.rs` here (copy it to `interface/forge-lang/examples/` to build it; it is not part of the
 workspace) and the two scripts, run from the repository root through `fbuild`.
 
 ## How to rerun
 
 ```
-cp research/mass-props/masstime.rs interface/forge-agent/examples/
-fbuild cargo build --release -p forge-agent --example masstime
+cp research/mass-props/masstime.rs interface/forge-lang/examples/
+fbuild cargo build --release -p forge-lang --example masstime
 # the same harness built from the tree to compare against, e.g. main in a scratch worktree
 research/mass-props/table.sh BASE target/release/examples/masstime torture tour heatsink ...
 research/mass-props/count.sh BASE target/release/examples/masstime torture tour ...

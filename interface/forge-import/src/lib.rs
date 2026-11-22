@@ -8,7 +8,9 @@
 pub mod arrangement;
 pub mod fcstd;
 mod py;
-mod state;
+/// The part a program builds, and the Forge selections that name its edges and faces (also for
+/// tools/find-parts/recreate's importers, through forge-proof's `topo`).
+pub mod state;
 mod zip;
 
 /// Why a body did not translate whole.

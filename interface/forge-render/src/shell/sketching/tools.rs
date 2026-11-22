@@ -4,9 +4,8 @@
 //! copy, rotate, scale, mirror, offset, patterns, trim, extend, split) and every constraint. Each
 //! writes sketch rows; the solver holds them.
 
+use super::rows::{self as sk, D, Pt, Ref, Row, V};
 use super::{Draft, Glyph, SkTool, SketchMode, tidy};
-use forge_doc::sketch as sk;
-use forge_doc::text::tokens;
 use forge_math::dmath;
 use forge_sketch::Entity;
 
@@ -32,26 +31,33 @@ pub struct More {
     /// A corner fillet's radius or chamfer's leg (unset: a fifth of the shorter side).
     pub size: f64,
     /// Dimensions typed at a shape's earlier clicks, written with its rows.
-    pub dims: Vec<String>,
+    pub dims: Vec<Row>,
 }
 
-fn n(v: f64) -> String {
-    forge_agent::short(tidy(v))
+/// A number as a row writes it, to the hundredth.
+fn n(v: f64) -> V {
+    V::of(&forge_agent::short(tidy(v)))
 }
 
-fn pt(p: P) -> String {
-    format!("{} {}", n(p.0), n(p.1))
+fn pt(p: P) -> Pt {
+    Pt::At(n(p.0), n(p.1))
 }
 
-fn exact_pt(p: P) -> String {
+fn exact_pt(p: P) -> Pt {
     let e = |v: f64| {
-        if (v - tidy(v)).abs() < 1e-9 {
-            n(v)
-        } else {
-            v.to_string()
-        }
+        if (v - tidy(v)).abs() < 1e-9 { n(v) } else { V::N(v) }
     };
-    format!("{} {}", e(p.0), e(p.1))
+    Pt::At(e(p.0), e(p.1))
+}
+
+/// An entity or point by its name.
+fn r(name: &str) -> Ref {
+    Ref::name(name)
+}
+
+/// The k-th line's name.
+fn l(k: usize) -> String {
+    format!("l{k}")
 }
 
 fn sub(a: P, b: P) -> P {
@@ -102,15 +108,15 @@ fn points_wanted(t: SkTool) -> Option<usize> {
     })
 }
 
-/// `hor` or `ver` for the line `l{k}` from a to b when it is drawn exactly level or plumb.
-fn level_row(a: P, b: P, k: usize) -> Option<String> {
+/// Horizontal or vertical for the line `l{k}` from a to b when it is drawn exactly level or plumb.
+fn level_row(a: P, b: P, k: usize) -> Option<Row> {
     let d = sub(b, a);
     if len(d) < 1e-9 {
         None
     } else if d.1.abs() < 1e-9 {
-        Some(format!("hor l{k}"))
+        Some(Row::Hor(vec![r(&l(k))]))
     } else if d.0.abs() < 1e-9 {
-        Some(format!("ver l{k}"))
+        Some(Row::Ver(vec![r(&l(k))]))
     } else {
         None
     }
@@ -118,7 +124,7 @@ fn level_row(a: P, b: P, k: usize) -> Option<String> {
 
 /// A shape's preview and rows from its points.
 struct Shape {
-    rows: Vec<String>,
+    rows: Vec<Row>,
     lines: Vec<(P, P)>,
     circle: Option<(P, f64)>,
     arcs: Vec<(P, f64, f64, f64)>,
@@ -159,31 +165,33 @@ impl SketchMode {
 
     /// A centre rectangle's construction diagonals (its last four lines' corners) and its centre
     /// point, tied to the middle of one: the point clicked, if it was one of the sketch's.
-    fn centre_rows(&self, s: &mut Shape, c: P, word: Option<&String>) {
+    fn centre_rows(&self, s: &mut Shape, c: P, word: Option<&Pt>) {
         let l0 = self.next_name('l');
-        s.rows.push(format!("line l{l0}.a l{}.a cons", l0 + 2));
-        s.rows.push(format!("line l{}.a l{}.a cons", l0 + 1, l0 + 3));
-        let mid = match word.filter(|w| !w.contains(' ')) {
+        s.rows
+            .push(Row::Line(Pt::R(Ref::a(&l(l0))), Pt::R(Ref::a(&l(l0 + 2)))).cons());
+        s.rows
+            .push(Row::Line(Pt::R(Ref::a(&l(l0 + 1))), Pt::R(Ref::a(&l(l0 + 3)))).cons());
+        let mid = match word.and_then(Pt::named) {
             Some(w) => w.clone(),
             None => {
-                s.rows.push(format!("pt {}", pt(c)));
-                self.name_after('p', 0)
+                s.rows.push(Row::Pt(pt(c)));
+                r(&self.name_after('p', 0))
             }
         };
-        s.rows.push(format!("mid {mid} l{}", l0 + 4));
+        s.rows.push(Row::Mid(mid, r(&l(l0 + 4))));
         if let Some(q) = s.lines.get(..4).map(<[_]>::to_vec) {
             s.lines.push((q[0].0, q[2].0));
             s.lines.push((q[1].0, q[3].0));
         }
     }
 
-    /// A point's word: the sketch's point there if one's within reach, else its numbers.
-    fn word(&self, at: P, reach: f64) -> (String, P) {
+    /// A point's pick: the sketch's point there if one's within reach, else the place.
+    fn word(&self, at: P, reach: f64) -> (Pt, P) {
         self.word_at(at, reach)
     }
 
     /// A shape tool's rows and preview from its points (the pointer's last).
-    fn shape(&self, tool: SkTool, p: &[P], words: &[String]) -> Option<Shape> {
+    fn shape(&self, tool: SkTool, p: &[P], words: &[Pt]) -> Option<Shape> {
         let mut s = Shape::new();
         // typed values place points exactly, not to the hundredth
         let typed = self.fields.iter().any(|f| f.locked) || !self.more.dims.is_empty();
@@ -191,41 +199,31 @@ impl SketchMode {
         let w = |k: usize| words.get(k).cloned().unwrap_or_else(|| pt(p[k]));
         match tool {
             SkTool::Circle3 => {
-                let (c, r) = circumcircle(p[0], p[1], p[2])?;
-                s.rows.push(format!("circle {} {}", pt(c), n(r)));
-                s.circle = Some((c, r));
+                let (c, rad) = circumcircle(p[0], p[1], p[2])?;
+                s.rows.push(Row::Circle(pt(c), n(rad)));
+                s.circle = Some((c, rad));
             }
             SkTool::Arc3 => {
                 // start, end, then a point it passes through
                 let (c, _) = circumcircle(p[0], p[1], p[2])?;
                 let side = (p[1].0 - p[0].0) * (p[2].1 - p[0].1) - (p[1].1 - p[0].1) * (p[2].0 - p[0].0);
                 let ccw = side < 0.0;
-                s.rows.push(format!(
-                    "arc {} {} {}{}",
-                    pt(c),
-                    w(0),
-                    w(1),
-                    if ccw { "" } else { " cw" }
-                ));
+                s.rows.push(Row::Arc(pt(c), w(0), w(1), !ccw));
                 s.arcs.push(arc_of(c, p[0], p[1], ccw));
             }
             SkTool::ArcTan => {
                 // from a line's or arc's end, leaving along it
-                let from = words.first()?;
-                let way = self.leaving(from)?;
+                let from = words.first()?.named()?.clone();
+                let way = self.leaving(&from)?;
                 let normal = (-way.1, way.0);
                 let chord = sub(p[1], p[0]);
                 let mid = ((p[0].0 + p[1].0) * 0.5, (p[0].1 + p[1].1) * 0.5);
                 let c = cross_lines(p[0], normal, mid, (-chord.1, chord.0))?;
                 let ccw = way.0 * chord.1 - way.1 * chord.0 > 0.0;
                 let arc = self.name_after('a', 0);
-                s.rows.push(format!(
-                    "arc {} {from} {}{}",
-                    pt(c),
-                    pt(p[1]),
-                    if ccw { "" } else { " cw" }
-                ));
-                s.rows.push(format!("tan {} {arc}", from.split('.').next()?));
+                let base = from.base.clone();
+                s.rows.push(Row::Arc(pt(c), Pt::R(from), pt(p[1]), !ccw));
+                s.rows.push(Row::Tan(r(&base), r(&arc)));
                 s.arcs.push(arc_of(c, p[0], p[1], ccw));
             }
             SkTool::RectCenter => {
@@ -234,13 +232,8 @@ impl SketchMode {
                 if hw < 1e-9 || hh < 1e-9 {
                     return None;
                 }
-                s.rows.push(format!(
-                    "rect {} {} {} {}",
-                    n(c.0 - hw),
-                    n(c.1 - hh),
-                    n(2.0 * hw),
-                    n(2.0 * hh)
-                ));
+                s.rows
+                    .push(Row::Rect(n(c.0 - hw), n(c.1 - hh), n(2.0 * hw), n(2.0 * hh)));
                 let q = [
                     (c.0 - hw, c.1 - hh),
                     (c.0 + hw, c.1 - hh),
@@ -254,11 +247,11 @@ impl SketchMode {
             }
             SkTool::RectCenter3 => {
                 let (c, u) = (p[0], sub(p[1], p[0]));
-                let l = len(u);
-                if l < 1e-9 {
+                let ul = len(u);
+                if ul < 1e-9 {
                     return None;
                 }
-                let nrm = (-u.1 / l, u.0 / l);
+                let nrm = (-u.1 / ul, u.0 / ul);
                 let h = (p[2].0 - c.0) * nrm.0 + (p[2].1 - c.1) * nrm.1;
                 if h.abs() < 1e-9 {
                     return None;
@@ -266,13 +259,10 @@ impl SketchMode {
                 let at = |a: f64, b: f64| (c.0 + u.0 * a + nrm.0 * h * b, c.1 + u.1 * a + nrm.1 * h * b);
                 let q = [at(-1.0, -1.0), at(1.0, -1.0), at(1.0, 1.0), at(-1.0, 1.0)];
                 let l0 = self.next_name('l');
-                s.rows.push(format!(
-                    "poly {}",
-                    q.iter().map(|x| pt(*x)).collect::<Vec<_>>().join(" ")
-                ));
-                s.rows.push(format!("perp l{l0} l{}", l0 + 1));
-                s.rows.push(format!("par l{l0} l{}", l0 + 2));
-                s.rows.push(format!("par l{} l{}", l0 + 1, l0 + 3));
+                s.rows.push(Row::Poly(q.iter().map(|x| pt(*x)).collect(), false));
+                s.rows.push(Row::Perp(r(&l(l0)), r(&l(l0 + 1))));
+                s.rows.push(Row::Par(r(&l(l0)), r(&l(l0 + 2))));
+                s.rows.push(Row::Par(r(&l(l0 + 1)), r(&l(l0 + 3))));
                 s.rows.extend(level_row(q[0], q[1], l0));
                 for i in 0..4 {
                     s.lines.push((q[i], q[(i + 1) % 4]));
@@ -285,26 +275,26 @@ impl SketchMode {
                     return None;
                 }
                 let a = (2.0 * c.0 - e.0, 2.0 * c.1 - e.1);
-                let l = self.next_name('l');
-                s.rows.push(format!("line {} {}", pt(a), w(1)));
-                s.rows.extend(level_row(a, e, l));
-                let mid = match words.first().filter(|x| !x.contains(' ')) {
+                let k = self.next_name('l');
+                s.rows.push(Row::Line(pt(a), w(1)));
+                s.rows.extend(level_row(a, e, k));
+                let mid = match words.first().and_then(Pt::named) {
                     Some(x) => x.clone(),
                     None => {
-                        s.rows.push(format!("pt {}", pt(c)));
-                        self.name_after('p', 0)
+                        s.rows.push(Row::Pt(pt(c)));
+                        r(&self.name_after('p', 0))
                     }
                 };
-                s.rows.push(format!("mid {mid} l{l}"));
+                s.rows.push(Row::Mid(mid, r(&l(k))));
                 s.lines.push((a, e));
             }
             SkTool::Rect3 => {
                 let u = sub(p[1], p[0]);
-                let l = len(u);
-                if l < 1e-9 {
+                let ul = len(u);
+                if ul < 1e-9 {
                     return None;
                 }
-                let nrm = (-u.1 / l, u.0 / l);
+                let nrm = (-u.1 / ul, u.0 / ul);
                 let h = (p[2].0 - p[1].0) * nrm.0 + (p[2].1 - p[1].1) * nrm.1;
                 if h.abs() < 1e-9 {
                     return None;
@@ -312,11 +302,10 @@ impl SketchMode {
                 let q2 = (p[1].0 + nrm.0 * h, p[1].1 + nrm.1 * h);
                 let q3 = (p[0].0 + nrm.0 * h, p[0].1 + nrm.1 * h);
                 let l0 = self.next_name('l');
-                s.rows
-                    .push(format!("poly {} {} {} {}", w(0), w(1), pt(q2), pt(q3)));
-                s.rows.push(format!("perp l{l0} l{}", l0 + 1));
-                s.rows.push(format!("par l{l0} l{}", l0 + 2));
-                s.rows.push(format!("par l{} l{}", l0 + 1, l0 + 3));
+                s.rows.push(Row::Poly(vec![w(0), w(1), pt(q2), pt(q3)], false));
+                s.rows.push(Row::Perp(r(&l(l0)), r(&l(l0 + 1))));
+                s.rows.push(Row::Par(r(&l(l0)), r(&l(l0 + 2))));
+                s.rows.push(Row::Par(r(&l(l0 + 1)), r(&l(l0 + 3))));
                 s.rows.extend(level_row(p[0], p[1], l0));
                 let q = [p[0], p[1], q2, q3];
                 for i in 0..4 {
@@ -330,40 +319,43 @@ impl SketchMode {
                     _ => (p[0], p[1]),
                 };
                 let u = sub(b, a);
-                let l = len(u);
-                if l < 1e-9 {
+                let ul = len(u);
+                if ul < 1e-9 {
                     return None;
                 }
-                let d = (u.0 / l, u.1 / l);
+                let d = (u.0 / ul, u.1 / ul);
                 let nrm = (-d.1, d.0);
-                let r = ((p[2].0 - a.0) * nrm.0 + (p[2].1 - a.1) * nrm.1).abs();
-                if r < 1e-9 {
+                let rad = ((p[2].0 - a.0) * nrm.0 + (p[2].1 - a.1) * nrm.1).abs();
+                if rad < 1e-9 {
                     return None;
                 }
                 // overall: the clicks are its ends; the centres stand r inside
                 let (a, b) = if tool == SkTool::SlotOverall {
-                    if l <= 2.0 * r {
+                    if ul <= 2.0 * rad {
                         return None;
                     }
-                    ((a.0 + d.0 * r, a.1 + d.1 * r), (b.0 - d.0 * r, b.1 - d.1 * r))
+                    (
+                        (a.0 + d.0 * rad, a.1 + d.1 * rad),
+                        (b.0 - d.0 * rad, b.1 - d.1 * rad),
+                    )
                 } else {
                     (a, b)
                 };
-                let off = |c: P, k: f64| (c.0 + nrm.0 * r * k, c.1 + nrm.1 * r * k);
+                let off = |c: P, k: f64| (c.0 + nrm.0 * rad * k, c.1 + nrm.1 * rad * k);
                 let (l1, l2) = (self.name_after('l', 0), self.name_after('l', 1));
                 let (a1, a2) = (self.name_after('a', 0), self.name_after('a', 1));
-                s.rows
-                    .push(format!("line {} {}", pt(off(a, 1.0)), pt(off(b, 1.0))));
-                s.rows
-                    .push(format!("line {} {}", pt(off(b, -1.0)), pt(off(a, -1.0))));
+                s.rows.push(Row::Line(pt(off(a, 1.0)), pt(off(b, 1.0))));
+                s.rows.push(Row::Line(pt(off(b, -1.0)), pt(off(a, -1.0))));
                 // round the ends, clockwise from the left side to the right
-                s.rows.push(format!("arc {} {l1}.b {l2}.a cw", pt(b)));
-                s.rows.push(format!("arc {} {l2}.b {l1}.a cw", pt(a)));
+                s.rows
+                    .push(Row::Arc(pt(b), Pt::R(Ref::b(&l1)), Pt::R(Ref::a(&l2)), true));
+                s.rows
+                    .push(Row::Arc(pt(a), Pt::R(Ref::b(&l2)), Pt::R(Ref::a(&l1)), true));
                 s.rows.extend([
-                    format!("tan {l1} {a1}"),
-                    format!("tan {l2} {a1}"),
-                    format!("tan {l2} {a2}"),
-                    format!("tan {l1} {a2}"),
+                    Row::Tan(r(&l1), r(&a1)),
+                    Row::Tan(r(&l2), r(&a1)),
+                    Row::Tan(r(&l2), r(&a2)),
+                    Row::Tan(r(&l1), r(&a2)),
                 ]);
                 s.rows.extend(level_row(a, b, self.next_name('l')));
                 s.lines.push((off(a, 1.0), off(b, 1.0)));
@@ -378,36 +370,41 @@ impl SketchMode {
                     let side = (p[1].0 - p[0].0) * (p[2].1 - p[0].1) - (p[1].1 - p[0].1) * (p[2].0 - p[0].0);
                     (c, p[0], p[1], side < 0.0)
                 } else {
-                    let r = dist(p[0], p[1]);
+                    let rad = dist(p[0], p[1]);
                     let t = dmath::atan2(p[2].1 - p[0].1, p[2].0 - p[0].0);
                     (
                         p[0],
                         p[1],
-                        (p[0].0 + r * dmath::cos(t), p[0].1 + r * dmath::sin(t)),
+                        (p[0].0 + rad * dmath::cos(t), p[0].1 + rad * dmath::sin(t)),
                         true,
                     )
                 };
                 // drawn counter-clockwise: a clockwise centre line runs from its end
                 let (st, en) = if ccw { (st, en) } else { (en, st) };
-                let r = dist(c, st);
-                let w = (dist(c, p[3]) - r).abs();
-                if r < 1e-9 || w < 1e-9 || w >= r {
+                let rad = dist(c, st);
+                let wd = (dist(c, p[3]) - rad).abs();
+                if rad < 1e-9 || wd < 1e-9 || wd >= rad {
                     return None;
                 }
                 let at = |q: P, k: f64| {
                     let u = sub(q, c);
-                    let l = len(u);
-                    (c.0 + u.0 / l * (r + k), c.1 + u.1 / l * (r + k))
+                    let ul = len(u);
+                    (c.0 + u.0 / ul * (rad + k), c.1 + u.1 / ul * (rad + k))
                 };
-                let (so, eo, ei, si) = (at(st, w), at(en, w), at(en, -w), at(st, -w));
+                let (so, eo, ei, si) = (at(st, wd), at(en, wd), at(en, -wd), at(st, -wd));
                 let a = |k: usize| self.name_after('a', k);
-                s.rows.push(format!("arc {} {} {}", pt(c), pt(so), pt(eo)));
-                s.rows.push(format!("arc {} {}.b {}", pt(en), a(0), pt(ei)));
-                s.rows.push(format!("arc {} {}.b {} cw", pt(c), a(1), pt(si)));
-                s.rows.push(format!("arc {} {}.b {}.a", pt(st), a(2), a(0)));
+                s.rows.push(Row::Arc(pt(c), pt(so), pt(eo), false));
+                s.rows.push(Row::Arc(pt(en), Pt::R(Ref::b(&a(0))), pt(ei), false));
+                s.rows.push(Row::Arc(pt(c), Pt::R(Ref::b(&a(1))), pt(si), true));
+                s.rows.push(Row::Arc(
+                    pt(st),
+                    Pt::R(Ref::b(&a(2))),
+                    Pt::R(Ref::a(&a(0))),
+                    false,
+                ));
                 // concentric sides; the caps are drawn tangent but not tied so: the solver reads a
                 // tangency at a half circle's end as implied by the arcs' shared ends
-                s.rows.push(format!("conc {} {}", a(0), a(2)));
+                s.rows.push(Row::Conc(r(&a(0)), r(&a(2))));
                 s.arcs.push(arc_of(c, so, eo, true));
                 s.arcs.push(arc_of(en, eo, ei, true));
                 s.arcs.push(arc_of(c, ei, si, false));
@@ -420,31 +417,27 @@ impl SketchMode {
                     self.more.count.max(3)
                 };
                 let (c, v) = (p[0], p[1]);
-                let r = dist(c, v);
-                if r < 1e-9 {
+                let rad = dist(c, v);
+                if rad < 1e-9 {
                     return None;
                 }
                 let t0 = dmath::atan2(v.1 - c.1, v.0 - c.0);
                 // circumscribed: the click is a side's middle, the corners half a step either side
                 let half = core::f64::consts::PI / sides as f64;
-                let (r, t0) = if tool == SkTool::PolygonOut {
-                    (r / dmath::cos(half), t0 - half)
+                let (rad, t0) = if tool == SkTool::PolygonOut {
+                    (rad / dmath::cos(half), t0 - half)
                 } else {
-                    (r, t0)
+                    (rad, t0)
                 };
                 let q: Vec<P> = (0..sides)
                     .map(|k| {
                         let t = t0 + core::f64::consts::TAU * k as f64 / sides as f64;
-                        (c.0 + r * dmath::cos(t), c.1 + r * dmath::sin(t))
+                        (c.0 + rad * dmath::cos(t), c.1 + rad * dmath::sin(t))
                     })
                     .collect();
                 let l0 = self.next_name('l');
-                s.rows.push(format!(
-                    "poly {}",
-                    q.iter().map(|x| pt(*x)).collect::<Vec<_>>().join(" ")
-                ));
-                let rest: Vec<String> = (1..sides).map(|k| format!("l{}", l0 + k)).collect();
-                s.rows.push(format!("eq l{l0} {}", rest.join(" ")));
+                s.rows.push(Row::Poly(q.iter().map(|x| pt(*x)).collect(), false));
+                s.rows.push(Row::Eq((0..sides).map(|k| r(&l(l0 + k))).collect()));
                 for i in 0..sides {
                     s.lines.push((q[i], q[(i + 1) % sides]));
                 }
@@ -486,7 +479,7 @@ impl SketchMode {
                 if a < 1e-9 || b < 1e-9 {
                     return None;
                 }
-                s.rows.push(format!("ellipse {} {} {}", pt(c), pt(m), n(b)));
+                s.rows.push(Row::Ellipse(pt(c), pt(m), n(b)));
                 let t = dmath::atan2(u.1, u.0);
                 let pts: Vec<P> = (0..=64)
                     .map(|k| {
@@ -509,17 +502,17 @@ impl SketchMode {
 
     /// Inventor's Dimension by what's picked: a line its length, a circle its diameter, an arc its
     /// radius; then a second pick makes it two lines' angle, two points' distance, or a point's
-    /// distance from a line. The row without its value, and the value as it stands.
-    pub fn dimension_pick(&mut self, at: P, reach: f64) -> Option<(String, f64)> {
+    /// distance from a line. What it sets and on what, and the value as it stands.
+    pub fn dimension_pick(&mut self, at: P, reach: f64) -> Option<((D, Vec<Ref>), f64)> {
         let s = self.solved.clone()?;
         let (w, q) = self.word(at, reach);
-        let point = (!w.contains(' ')).then_some((w, q));
+        let point = w.named().map(|r| (r.to_string(), q));
         let line = if point.is_none() {
             self.entity_near(at, reach, "l")
         } else {
             None
         };
-        let prev = self.picks.last().cloned();
+        let prev = self.picks.last().and_then(Pt::named).map(|r| r.to_string());
         let ends = |l: &str| sk::line(&s, l).ok().map(|(a, b)| ((a.x, a.y), (b.x, b.y)));
         let pt_of = |w: &str| sk::point(&s, w).ok().map(|p| (p.x, p.y));
         let got = match (&prev, &point, &line) {
@@ -527,23 +520,23 @@ impl SketchMode {
                 let ((a0, a1), (b0, b1)) = (ends(a)?, ends(b)?);
                 let t = dmath::atan2(b1.1 - b0.1, b1.0 - b0.0) - dmath::atan2(a1.1 - a0.1, a1.0 - a0.0);
                 let deg = (t.to_degrees()).rem_euclid(360.0);
-                Some((format!("ang {a} {b}"), deg))
+                Some(((D::Ang, vec![r(a), r(b)]), deg))
             }
             (Some(a), Some((p, at_p)), None) if pt_of(a).is_some() && a != p => {
-                Some((format!("dist {a} {p}"), dist(pt_of(a)?, *at_p)))
+                Some(((D::Dist, vec![r(a), r(p)]), dist(pt_of(a)?, *at_p)))
             }
-            (Some(a), None, Some(l)) if pt_of(a).is_some() && !a.starts_with('l') || a.contains('.') => {
-                let (l0, l1) = ends(l)?;
+            (Some(a), None, Some(ln)) if pt_of(a).is_some() && !a.starts_with('l') || a.contains('.') => {
+                let (l0, l1) = ends(ln)?;
                 let p = pt_of(a)?;
                 let u = sub(l1, l0);
                 let d = ((p.0 - l0.0) * u.1 - (p.1 - l0.1) * u.0).abs() / len(u).max(1e-12);
-                Some((format!("dist {a} {l}"), d))
+                Some(((D::Dist, vec![r(a), r(ln)]), d))
             }
             _ => None,
         };
         match (point, line) {
-            (Some((p, _)), _) => self.picks = vec![p],
-            (None, Some(l)) => self.picks = vec![l],
+            (Some((p, _)), _) => self.picks = vec![Pt::of(&p)],
+            (None, Some(ln)) => self.picks = vec![Pt::of(&ln)],
             _ => self.picks.clear(),
         }
         got.or_else(|| self.dimension_at(at, reach))
@@ -576,7 +569,7 @@ impl SketchMode {
     /// still solves and can move less for it.
     pub(super) fn auto_dimension(&mut self) {
         let Some(s) = self.solved.clone() else { return };
-        let mut tries: Vec<String> = vec![];
+        let mut tries: Vec<Row> = vec![];
         for (name, id) in &s.names {
             if sk::is_projected(name) || name == "o" {
                 continue;
@@ -584,13 +577,18 @@ impl SketchMode {
             match s.solved.entity(*id) {
                 Some(Entity::Line { .. }) => {
                     if let Ok((a, b)) = sk::line(&s, name) {
-                        tries.push(format!("dist {name} {}", n(dist((a.x, a.y), (b.x, b.y)))));
+                        let v = n(dist((a.x, a.y), (b.x, b.y)));
+                        tries.push(Row::Dim(D::Dist, vec![r(name)], Some(v)));
                     }
                 }
                 Some(Entity::Circle { .. }) => {
-                    tries.push(format!("dia {name} {}", n(2.0 * s.solved.radius(*id))))
+                    let v = n(2.0 * s.solved.radius(*id));
+                    tries.push(Row::Dim(D::Dia, vec![r(name)], Some(v)))
                 }
-                Some(Entity::Arc { .. }) => tries.push(format!("rad {name} {}", n(s.solved.radius(*id)))),
+                Some(Entity::Arc { .. }) => {
+                    let v = n(s.solved.radius(*id));
+                    tries.push(Row::Dim(D::Rad, vec![r(name)], Some(v)))
+                }
                 _ => {}
             }
         }
@@ -598,8 +596,8 @@ impl SketchMode {
             if w == "o" {
                 continue;
             }
-            tries.push(format!("hdist o {w} {}", n(q.0)));
-            tries.push(format!("vdist o {w} {}", n(q.1)));
+            tries.push(Row::Dim(D::HDist, vec![r("o"), r(&w)], Some(n(q.0))));
+            tries.push(Row::Dim(D::VDist, vec![r("o"), r(&w)], Some(n(q.1))));
         }
         let mut free = sk::freedom(&s).0;
         let mut added = 0;
@@ -622,10 +620,15 @@ impl SketchMode {
     }
 
     /// The direction a line or arc leaves its end by, for a tangent arc started there.
-    fn leaving(&self, end: &str) -> Option<P> {
-        let (e, which) = end.split_once('.')?;
+    fn leaving(&self, end: &Ref) -> Option<P> {
+        let which = match end.part {
+            sk::Part::A => "a",
+            sk::Part::B => "b",
+            _ => return None,
+        };
+        let e = &end.base;
         let s = self.solved.as_ref()?;
-        let (_, id) = s.names.iter().find(|x| x.0 == e)?;
+        let (_, id) = s.names.iter().find(|x| x.0 == *e)?;
         let g = &s.solved;
         match g.entity(*id)? {
             Entity::Line { a, b } => {
@@ -635,8 +638,8 @@ impl SketchMode {
                 } else {
                     (pa.x - pb.x, pa.y - pb.y)
                 };
-                let l = len(u);
-                (l > 1e-12).then(|| (u.0 / l, u.1 / l))
+                let ul = len(u);
+                (ul > 1e-12).then(|| (u.0 / ul, u.1 / ul))
             }
             Entity::Arc {
                 center,
@@ -646,11 +649,11 @@ impl SketchMode {
             } => {
                 let c = g.point(center);
                 let at = g.point(if which == "b" { stop } else { start });
-                let r = (at.x - c.x, at.y - c.y);
+                let rv = (at.x - c.x, at.y - c.y);
                 // along the arc's way at its end, back against it at its start
                 let k = if (which == "b") == ccw { 1.0 } else { -1.0 };
-                let l = len(r).max(1e-12);
-                Some((-r.1 / l * k, r.0 / l * k))
+                let ul = len(rv).max(1e-12);
+                Some((-rv.1 / ul * k, rv.0 / ul * k))
             }
             _ => None,
         }
@@ -693,7 +696,7 @@ impl SketchMode {
     }
 
     /// The outlines of geometry rows, as segments, for a preview.
-    fn outline_of_rows(&self, rows: &[String]) -> Vec<(P, P)> {
+    fn outline_of_rows(&self, rows: &[Row]) -> Vec<(P, P)> {
         let mut all = self.rows.clone();
         all.extend(rows.iter().cloned());
         let Ok(s) = self.build(&all) else {
@@ -723,16 +726,16 @@ impl SketchMode {
     /// A shape tool's next point with the pointer here: the sketch's point it's on, else where
     /// the typed values put it, else level or plumb from the last point if it nearly is; with the
     /// marks that say so.
-    fn shape_pick(&self, tool: SkTool, at: P, reach: f64) -> (String, P, Vec<(Glyph, P)>) {
+    fn shape_pick(&self, tool: SkTool, at: P, reach: f64) -> (Pt, P, Vec<(Glyph, P)>) {
         let (w, q) = self.word(at, reach);
         let stage = self.pick_at.len();
         let fixed = (0..self.fields.len()).any(|k| self.fields[k].locked);
-        if !w.contains(' ') && !fixed {
+        if w.named().is_some() && !fixed {
             return (w, q, vec![(Glyph::Coincident, q)]);
         }
         let mut q = at;
         let mut glyphs = vec![];
-        let lock = |k: usize| self.locked(k, forge_doc::text::Want::Len);
+        let lock = |k: usize| self.locked(k, super::rows::Want::Len);
         let along = |from: P, to: P, l: f64| {
             let u = sub(to, from);
             let d = len(u).max(1e-9);
@@ -934,31 +937,37 @@ impl SketchMode {
     }
 
     /// The dimensions the values typed at this stage write (those with a plain form).
-    fn shape_dims(&self, tool: SkTool, stage: usize) -> Vec<String> {
-        let typed = |k: usize| self.fields.get(k).filter(|f| f.locked).map(|f| self.file_of(f));
+    fn shape_dims(&self, tool: SkTool, stage: usize) -> Vec<Row> {
+        let typed = |k: usize| {
+            self.fields
+                .get(k)
+                .filter(|f| f.locked)
+                .map(|f| V::of(&self.file_of(f)))
+        };
         let l0 = self.next_name('l');
-        let half = |t: String| t.parse::<f64>().ok().map(|v| n(v / 2.0));
+        let half = |t: V| t.num().map(|v| n(v / 2.0));
+        let dim = |d: D, on: Vec<Ref>, v: V| Row::Dim(d, on, Some(v));
         let mut out = vec![];
         match (tool, stage) {
-            (SkTool::LineMid, 1) => out.extend(typed(0).map(|v| format!("dist l{l0} {v}"))),
+            (SkTool::LineMid, 1) => out.extend(typed(0).map(|v| dim(D::Dist, vec![r(&l(l0))], v))),
             (SkTool::RectCenter, 1) => {
-                out.extend(typed(0).map(|v| format!("hdist l{l0}.a l{l0}.b {v}")));
-                out.extend(typed(1).map(|v| format!("vdist l{0}.a l{0}.b {v}", l0 + 1)));
+                out.extend(typed(0).map(|v| dim(D::HDist, vec![Ref::a(&l(l0)), Ref::b(&l(l0))], v)));
+                out.extend(typed(1).map(|v| dim(D::VDist, vec![Ref::a(&l(l0 + 1)), Ref::b(&l(l0 + 1))], v)));
             }
             (SkTool::Rect3 | SkTool::RectCenter3 | SkTool::SlotCC, 1) => {
-                out.extend(typed(0).map(|v| format!("dist l{l0} {v}")));
+                out.extend(typed(0).map(|v| dim(D::Dist, vec![r(&l(l0))], v)));
             }
             (SkTool::Rect3 | SkTool::RectCenter3, 2) => {
-                out.extend(typed(0).map(|v| format!("dist l{} {v}", l0 + 1)));
+                out.extend(typed(0).map(|v| dim(D::Dist, vec![r(&l(l0 + 1))], v)));
             }
             (SkTool::Ellipse | SkTool::EllipseAxis, 2) => {
-                out.extend(typed(0).map(|v| format!("rad {} {v}", self.name_after('e', 0))));
+                out.extend(typed(0).map(|v| dim(D::Rad, vec![r(&self.name_after('e', 0))], v)));
             }
             (SkTool::SlotCC | SkTool::SlotOverall | SkTool::SlotCenter, 2) => {
                 out.extend(
                     typed(0)
                         .and_then(half)
-                        .map(|v| format!("rad {} {v}", self.name_after('a', 0))),
+                        .map(|v| dim(D::Rad, vec![r(&self.name_after('a', 0))], v)),
                 );
             }
             _ => {}
@@ -997,7 +1006,10 @@ impl SketchMode {
     pub(super) fn more_click(&mut self, tool: SkTool, at: P, reach: f64) -> bool {
         if let Some(want) = points_wanted(tool) {
             let (w, q, _) = self.shape_pick(tool, at, reach);
-            if tool == SkTool::ArcTan && self.picks.is_empty() && self.leaving(&w).is_none() {
+            if tool == SkTool::ArcTan
+                && self.picks.is_empty()
+                && w.named().and_then(|e| self.leaving(e)).is_none()
+            {
                 self.error = Some("a tangent arc starts at the end of a line or an arc".into());
                 return true;
             }
@@ -1027,89 +1039,115 @@ impl SketchMode {
         }
         match tool {
             SkTool::Horizontal | SkTool::Vertical => {
-                let word = if tool == SkTool::Horizontal { "hor" } else { "ver" };
+                let hor = tool == SkTool::Horizontal;
                 if self.picks.is_empty()
-                    && let Some(l) = self.entity_near(at, reach, "l")
+                    && let Some(ln) = self.entity_near(at, reach, "l")
                 {
-                    self.add(format!("{word} {l}"));
+                    self.add(if hor {
+                        Row::Hor(vec![r(&ln)])
+                    } else {
+                        Row::Ver(vec![r(&ln)])
+                    });
                     return true;
                 }
-                self.two_points(word, at, reach);
+                self.two_points(
+                    &|a, b| {
+                        if hor {
+                            Row::Hor(vec![a, b])
+                        } else {
+                            Row::Ver(vec![a, b])
+                        }
+                    },
+                    at,
+                    reach,
+                );
             }
-            SkTool::Collinear => self.two_of("colin", "l", at, reach),
+            SkTool::Collinear => self.two_of(&Row::Colin, "l", at, reach),
             SkTool::CircleTan => {
-                let Some(l) = self.entity_near(at, reach, "l") else {
+                let Some(ln) = self.entity_near(at, reach, "l") else {
                     return true;
                 };
-                if !self.picks.contains(&l) {
-                    self.picks.push(l);
+                let pick = Pt::of(&ln);
+                if !self.picks.contains(&pick) {
+                    self.picks.push(pick);
                 }
                 if self.picks.len() == 3 {
-                    let ls = std::mem::take(&mut self.picks);
+                    let ls: Vec<String> = std::mem::take(&mut self.picks)
+                        .iter()
+                        .filter_map(|p| p.named().map(|x| x.to_string()))
+                        .collect();
                     match self.incircle(&ls) {
-                        Some((c, r)) => {
+                        Some((c, rad)) => {
                             let me = self.name_after('c', 0);
-                            let mut rows = vec![format!("circle {} {}", pt(c), n(r))];
-                            rows.extend(ls.iter().map(|l| format!("tan {l} {me}")));
+                            let mut rows = vec![Row::Circle(pt(c), n(rad))];
+                            rows.extend(ls.iter().map(|x| Row::Tan(r(x), r(&me))));
                             self.add_all(rows);
                         }
                         None => self.error = Some("no circle touches those three lines".into()),
                     }
                 }
             }
-            SkTool::Concentric => self.two_of("conc", "ca", at, reach),
+            SkTool::Concentric => self.two_of(&Row::Conc, "ca", at, reach),
             SkTool::Equal => {
-                let kinds = match self.picks.first().and_then(|p| p.chars().next()) {
+                let first = self
+                    .picks
+                    .first()
+                    .and_then(Pt::named)
+                    .and_then(|x| x.base.chars().next());
+                let kinds = match first {
                     Some('l') => "l",
                     Some(_) => "ca",
                     None => "lca",
                 };
-                self.two_of("eq", kinds, at, reach);
+                self.two_of(&|a, b| Row::Eq(vec![a, b]), kinds, at, reach);
             }
             SkTool::Fix => {
                 let (w, _) = self.word(at, reach);
-                let pick = if w.contains(' ') {
-                    self.entity_near(at, reach, "lcase")
-                } else {
-                    Some(w)
+                let pick = match w.named() {
+                    Some(x) => Some(x.to_string()),
+                    None => self.entity_near(at, reach, "lcase"),
                 };
                 if let Some(x) = pick {
-                    self.add(format!("fix {x}"));
+                    self.add(Row::Fix(vec![r(&x)]));
                 }
             }
             SkTool::Symmetric => {
                 if self.picks.len() < 2 {
                     let (w, _) = self.word(at, reach);
-                    let pick = if w.contains(' ') {
-                        self.entity_near(at, reach, "lca")
-                    } else {
-                        Some(w)
+                    let pick = match w.named() {
+                        Some(x) => Some(x.to_string()),
+                        None => self.entity_near(at, reach, "lca"),
                     };
                     if let Some(x) = pick {
-                        self.picks.push(x);
+                        self.picks.push(Pt::of(&x));
                     }
-                } else if let Some(l) = self.entity_near(at, reach, "l") {
-                    let (a, b) = (self.picks[0].clone(), self.picks[1].clone());
+                } else if let Some(ln) = self.entity_near(at, reach, "l") {
+                    let name = |p: &Pt| p.named().map(|x| x.to_string()).unwrap_or_default();
+                    let (a, b) = (name(&self.picks[0]), name(&self.picks[1]));
                     self.picks.clear();
-                    let rows =
-                        if a.starts_with('l') && !a.contains('.') && b.starts_with('l') && !b.contains('.') {
-                            vec![format!("sym {a}.a {b}.a {l}"), format!("sym {a}.b {b}.b {l}")]
-                        } else {
-                            vec![format!("sym {a} {b} {l}")]
-                        };
+                    let whole_line = |x: &str| x.starts_with('l') && !x.contains('.');
+                    let rows = if whole_line(&a) && whole_line(&b) {
+                        vec![
+                            Row::Sym(Ref::a(&a), Ref::a(&b), r(&ln)),
+                            Row::Sym(Ref::b(&a), Ref::b(&b), r(&ln)),
+                        ]
+                    } else {
+                        vec![Row::Sym(r(&a), r(&b), r(&ln))]
+                    };
                     self.add_all(rows);
                 }
             }
             SkTool::Text => {
                 let (w, q) = self.word(at, reach);
-                let p = if w.contains(' ') {
-                    let name = self.name_after('p', 0);
-                    if !self.add(format!("pt {}", pt(q))) {
-                        return true;
+                let p = match w.named() {
+                    Some(x) => x.to_string(),
+                    None => {
+                        let name = self.name_after('p', 0);
+                        if !self.add(Row::Pt(pt(q))) {
+                            return true;
+                        }
+                        name
                     }
-                    name
-                } else {
-                    w
                 };
                 self.more.texts.push((p, "TEXT".into()));
             }
@@ -1142,41 +1180,46 @@ impl SketchMode {
         true
     }
 
-    fn two_points(&mut self, word: &str, at: P, reach: f64) {
+    fn two_points(&mut self, row: &dyn Fn(Ref, Ref) -> Row, at: P, reach: f64) {
         let (w, _) = self.word(at, reach);
-        if w.contains(' ') {
+        if w.named().is_none() {
             return;
         }
         self.picks.push(w);
         if self.picks.len() == 2 {
-            let row = format!("{word} {} {}", self.picks[0], self.picks[1]);
+            let (a, b) = (self.picks[0].named().cloned(), self.picks[1].named().cloned());
             self.picks.clear();
-            self.add(row);
+            if let (Some(a), Some(b)) = (a, b) {
+                self.add(row(a, b));
+            }
         }
     }
 
-    fn two_of(&mut self, word: &str, kinds: &str, at: P, reach: f64) {
+    fn two_of(&mut self, row: &dyn Fn(Ref, Ref) -> Row, kinds: &str, at: P, reach: f64) {
         let Some(e) = self.entity_near(at, reach, kinds) else {
             return;
         };
-        if self.picks.contains(&e) {
+        let pick = Pt::of(&e);
+        if self.picks.contains(&pick) {
             return;
         }
-        self.picks.push(e);
+        self.picks.push(pick);
         if self.picks.len() == 2 {
-            let row = format!("{word} {} {}", self.picks[0], self.picks[1]);
+            let (a, b) = (self.picks[0].named().cloned(), self.picks[1].named().cloned());
             self.picks.clear();
-            self.add(row);
+            if let (Some(a), Some(b)) = (a, b) {
+                self.add(row(a, b));
+            }
         }
     }
 
     /// Adds rows if the sketch still solves with them all; none if not.
-    pub(super) fn add_all(&mut self, rows: Vec<String>) -> bool {
-        let rows: Vec<String> = rows
+    pub(super) fn add_all(&mut self, rows: Vec<Row>) -> bool {
+        let rows: Vec<Row> = rows
             .into_iter()
             .map(|r| {
-                if self.more.construction && r.starts_with("line ") && !r.ends_with(" cons") {
-                    format!("{r} cons")
+                if self.more.construction && matches!(r, Row::Line(..)) {
+                    r.cons()
                 } else {
                     r
                 }
@@ -1203,23 +1246,8 @@ impl SketchMode {
         let kind = name.chars().next()?;
         let k: usize = name[1..].parse().ok()?;
         let mut seen = 0usize;
-        for (i, r) in self.rows.iter().enumerate() {
-            let t = tokens(r);
-            let made = match (t.first()?.as_str(), kind) {
-                ("line", 'l') | ("circle", 'c') | ("arc", 'a') | ("pt", 'p') => 1,
-                ("spline" | "bspline", 's') | ("ellipse" | "earc", 'e') => 1,
-                ("rect", 'l') => 4,
-                ("poly", 'l') => {
-                    let open = t.last().is_some_and(|w| w == "open");
-                    let (mut j, mut pts) = (1, 0);
-                    while j < t.len() - usize::from(open) {
-                        j += if t[j].parse::<f64>().is_ok() { 2 } else { 1 };
-                        pts += 1;
-                    }
-                    pts - usize::from(open)
-                }
-                _ => 0,
-            };
+        for (i, row) in self.rows.iter().enumerate() {
+            let made = row.made().iter().filter(|c| **c == kind && kind != 'j').count();
             if seen + made >= k && made > 0 {
                 return Some(i);
             }
@@ -1230,13 +1258,13 @@ impl SketchMode {
 
     /// Fresh rows for chosen geometry as it stands, each point moved by `f`; points the
     /// originals share are shared by the copies. With `tie`, each copied point is tied to its
-    /// original by that row word and line (a mirror's `sym`).
-    fn copy_rows(&self, f: &dyn Fn(P) -> P, flip: bool, tie: Option<&str>) -> Vec<String> {
+    /// original by symmetry about that line (a mirror's).
+    fn copy_rows(&self, f: &dyn Fn(P) -> P, flip: bool, tie: Option<&str>) -> Vec<Row> {
         let Some(s) = &self.solved else { return vec![] };
         let g = &s.solved;
         let mut rows = vec![];
-        // each copied point's word, by where its original is
-        let mut made: Vec<(P, String)> = vec![];
+        // each copied point's reference, by where its original is
+        let mut made: Vec<(P, Ref)> = vec![];
         let mut counts: std::collections::HashMap<char, usize> = Default::default();
         let mut name = |k: char| {
             let c = counts.entry(k).or_default();
@@ -1249,74 +1277,65 @@ impl SketchMode {
                 continue;
             };
             let p = |q: forge_math::Point2| (q.x, q.y);
+            let end = |me: &str, which: &str| if which == "a" { Ref::a(me) } else { Ref::b(me) };
             match g.entity(*id) {
                 Some(Entity::Line { a, b }) => {
                     let me = name('l');
                     let (pa, pb) = (p(g.point(a)), p(g.point(b)));
-                    rows.push(format!("line {} {}", pt(f(pa)), pt(f(pb))));
-                    for (q, end) in [(pa, "a"), (pb, "b")] {
+                    rows.push(Row::Line(pt(f(pa)), pt(f(pb))));
+                    for (q, which) in [(pa, "a"), (pb, "b")] {
                         if let Some(w) = made.iter().find(|m| dist(m.0, q) < 1e-9) {
-                            ties.push(format!("co {me}.{end} {}", w.1));
+                            ties.push(Row::Co(end(&me, which), w.1.clone()));
                         } else {
-                            made.push((q, format!("{me}.{end}")));
+                            made.push((q, end(&me, which)));
                         }
                     }
                     if let Some(t) = tie {
-                        ties.push(format!("sym {e}.a {me}.a {t}"));
-                        ties.push(format!("sym {e}.b {me}.b {t}"));
+                        ties.push(Row::Sym(Ref::a(e), Ref::a(&me), r(t)));
+                        ties.push(Row::Sym(Ref::b(e), Ref::b(&me), r(t)));
                     }
                 }
                 Some(Entity::Circle { center, .. }) => {
                     let me = name('c');
-                    rows.push(format!(
-                        "circle {} {}",
-                        pt(f(p(g.point(center)))),
-                        n(g.radius(*id))
-                    ));
+                    rows.push(Row::Circle(pt(f(p(g.point(center)))), n(g.radius(*id))));
                     if let Some(t) = tie {
-                        ties.push(format!("sym {e} {me} {t}"));
+                        ties.push(Row::Sym(r(e), r(&me), r(t)));
                     }
                 }
                 Some(Entity::Arc {
                     center,
                     start,
-                    end,
+                    end: stop,
                     ccw,
                 }) => {
                     let me = name('a');
-                    let (c, a0, b0) = (p(g.point(center)), p(g.point(start)), p(g.point(end)));
+                    let (c, a0, b0) = (p(g.point(center)), p(g.point(start)), p(g.point(stop)));
                     // mirrored, an arc runs the other way
                     let (a0, b0) = if flip { (b0, a0) } else { (a0, b0) };
-                    rows.push(format!(
-                        "arc {} {} {}{}",
-                        pt(f(c)),
-                        pt(f(a0)),
-                        pt(f(b0)),
-                        if ccw { "" } else { " cw" }
-                    ));
-                    for (q, end) in [(a0, "a"), (b0, "b")] {
+                    rows.push(Row::Arc(pt(f(c)), pt(f(a0)), pt(f(b0)), !ccw));
+                    for (q, which) in [(a0, "a"), (b0, "b")] {
                         if let Some(w) = made.iter().find(|m| dist(m.0, q) < 1e-9) {
-                            ties.push(format!("co {me}.{end} {}", w.1));
+                            ties.push(Row::Co(end(&me, which), w.1.clone()));
                         } else {
-                            made.push((q, format!("{me}.{end}")));
+                            made.push((q, end(&me, which)));
                         }
                     }
                     if let Some(t) = tie {
-                        ties.push(format!("sym {e} {me} {t}"));
+                        ties.push(Row::Sym(r(e), r(&me), r(t)));
                     }
                 }
                 Some(Entity::Point { .. }) => {
                     let me = name('p');
-                    rows.push(format!("pt {}", pt(f(p(g.point(*id))))));
+                    rows.push(Row::Pt(pt(f(p(g.point(*id))))));
                     if let Some(t) = tie {
-                        ties.push(format!("sym {e} {me} {t}"));
+                        ties.push(Row::Sym(r(e), r(&me), r(t)));
                     }
                 }
                 Some(Entity::Spline { .. }) => {
                     name('s');
                     if let Some(pts) = g.spline_points(*id) {
-                        let ws: Vec<String> = pts.iter().map(|q| pt(f(p(g.point(*q))))).collect();
-                        rows.push(format!("spline {} open", ws.join(" ")));
+                        let ws: Vec<Pt> = pts.iter().map(|q| pt(f(p(g.point(*q))))).collect();
+                        rows.push(Row::Spline(ws, true));
                     }
                 }
                 _ => {}
@@ -1327,7 +1346,7 @@ impl SketchMode {
     }
 
     /// The rows a Modify tool makes, with the pointer at `at` for its last point.
-    fn modify_rows(&self, tool: SkTool, at: Option<P>, reach: f64) -> Option<Vec<String>> {
+    fn modify_rows(&self, tool: SkTool, at: Option<P>, reach: f64) -> Option<Vec<Row>> {
         if self.more.sel.is_empty() || !self.more.placing {
             return None;
         }
@@ -1412,7 +1431,7 @@ impl SketchMode {
 
     /// The rows as they'd be with the chosen geometry's own numbers moved by `f`: what follows
     /// it by name moves with it. Returns the whole new set of rows.
-    fn moved_rows(&self, f: &dyn Fn(P) -> P, scale: f64, detach: bool) -> Vec<String> {
+    fn moved_rows(&self, f: &dyn Fn(P) -> P, scale: f64, detach: bool) -> Vec<Row> {
         let mut rows = self.rows.clone();
         let mut done = vec![];
         let solved = self.solved.as_ref();
@@ -1422,62 +1441,46 @@ impl SketchMode {
                 continue;
             }
             done.push(k);
-            let t = tokens(&rows[k]);
-            let num = |s: &str| s.parse::<f64>().ok();
-            let kind = t[0].clone();
-            if kind == "rect" {
+            let cons = rows[k].is_cons();
+            let mut row = rows[k].plain().clone();
+            if let Row::Rect(x, y, w, h) = &row {
                 // its corner moves, its size scales; it stays square to the sketch
-                let v: Vec<f64> = t[1..5].iter().filter_map(|x| num(x)).collect();
-                if let [x, y, w, h] = v[..] {
+                if let (Some(x), Some(y), Some(w), Some(h)) = (x.num(), y.num(), w.num(), h.num()) {
                     let q = f((x, y));
-                    rows[k] = format!("rect {} {} {} {}", n(q.0), n(q.1), n(w * scale), n(h * scale));
+                    row = Row::Rect(n(q.0), n(q.1), n(w * scale), n(h * scale));
                 }
+                rows[k] = if cons { row.cons() } else { row };
                 continue;
             }
-            let mut out = vec![kind.clone()];
-            let mut i = 1;
-            let mut points = 0;
-            // every point is moved (a number pair, or with `detach` a point it shares with what
-            // isn't chosen); a circle's radius is scaled
-            while i < t.len() {
-                if kind == "circle" && points == 1 {
-                    match num(&t[i]) {
-                        Some(r) => out.push(n(r * scale)),
-                        None => out.push(t[i].clone()),
-                    }
-                    i += 1;
-                    points += 1;
-                    continue;
-                }
-                if let (Some(x), Some(y)) = (num(&t[i]), t.get(i + 1).and_then(|s| num(s))) {
-                    let q = f((x, y));
-                    out.extend([n(q.0), n(q.1)]);
-                    i += 2;
-                    points += 1;
-                    continue;
-                }
-                let shared = !matches!(t[i].as_str(), "cw" | "cons" | "open")
-                    && !self
-                        .more
-                        .sel
-                        .iter()
-                        .any(|x| t[i].split('.').next() == Some(x.as_str()));
-                match solved.and_then(|s| sk::point(s, &t[i]).ok()) {
-                    // a shared point that stays (a rotation's centre) stays shared
-                    Some(at) if detach && shared && dist(f((at.x, at.y)), (at.x, at.y)) > 1e-9 => {
-                        let q = f((at.x, at.y));
-                        out.extend([n(q.0), n(q.1)]);
-                        points += 1;
-                    }
-                    Some(_) => {
-                        out.push(t[i].clone());
-                        points += 1;
-                    }
-                    None => out.push(t[i].clone()),
-                }
-                i += 1;
+            // a circle's radius is scaled
+            if let Row::Circle(_, rad) = &mut row
+                && let Some(v) = rad.num()
+            {
+                *rad = n(v * scale);
             }
-            rows[k] = out.join(" ");
+            // every point is moved (a number pair, or with `detach` a point it shares with what
+            // isn't chosen)
+            for p in row.points_mut() {
+                match p {
+                    Pt::At(x, y) => {
+                        if let (Some(x), Some(y)) = (x.num(), y.num()) {
+                            *p = pt(f((x, y)));
+                        }
+                    }
+                    Pt::R(q) => {
+                        let shared = !self.more.sel.contains(&q.base);
+                        if let Some(at) = solved.and_then(|s| sk::point(s, &q.to_string()).ok())
+                            && detach
+                            && shared
+                            && dist(f((at.x, at.y)), (at.x, at.y)) > 1e-9
+                        {
+                            // a shared point that stays (a rotation's centre) stays shared
+                            *p = pt(f((at.x, at.y)));
+                        }
+                    }
+                }
+            }
+            rows[k] = if cons { row.cons() } else { row };
         }
         rows
     }
@@ -1507,7 +1510,7 @@ impl SketchMode {
 
     /// Chosen lines shifted `d` to their left (a chain's corners met again), circles and arcs
     /// grown by `d`, each tied by a distance to its original.
-    fn offset_rows(&self, d: f64) -> Vec<String> {
+    fn offset_rows(&self, d: f64) -> Vec<Row> {
         let Some(s) = &self.solved else { return vec![] };
         let g = &s.solved;
         let mut rows = vec![];
@@ -1520,20 +1523,18 @@ impl SketchMode {
                 Some(Entity::Line { a, b }) => {
                     let (pa, pb) = (g.point(a), g.point(b));
                     let u = (pb.x - pa.x, pb.y - pa.y);
-                    let l = len(u).max(1e-12);
-                    let o = (-u.1 / l * d, u.0 / l * d);
+                    let ul = len(u).max(1e-12);
+                    let o = (-u.1 / ul * d, u.0 / ul * d);
                     ls.push(((pa.x + o.0, pa.y + o.1), (pb.x + o.0, pb.y + o.1)));
                 }
                 Some(Entity::Circle { center, .. }) => {
                     let c = g.point(center);
-                    let r = g.radius(*id) + d;
-                    if r > 1e-9 {
-                        let me = self.name_after(
-                            'c',
-                            rows.iter().filter(|r: &&String| r.starts_with("circle")).count(),
-                        );
-                        rows.push(format!("circle {} {}", pt((c.x, c.y)), n(r)));
-                        rows.push(format!("conc {e} {me}"));
+                    let rad = g.radius(*id) + d;
+                    if rad > 1e-9 {
+                        let me = self
+                            .name_after('c', rows.iter().filter(|x| matches!(x, Row::Circle(..))).count());
+                        rows.push(Row::Circle(pt((c.x, c.y)), n(rad)));
+                        rows.push(Row::Conc(r(e), r(&me)));
                     }
                 }
                 _ => {}
@@ -1556,22 +1557,20 @@ impl SketchMode {
         }
         let l0 = self.next_name('l');
         for (i, (a, b)) in ls.iter().enumerate() {
-            rows.push(format!("line {} {}", pt(*a), pt(*b)));
-            rows.push(format!(
-                "par l{} {}",
-                l0 + i,
-                self.more
-                    .sel
-                    .iter()
-                    .filter(|e| e.starts_with('l'))
-                    .nth(i)
-                    .cloned()
-                    .unwrap_or_default()
-            ));
+            rows.push(Row::Line(pt(*a), pt(*b)));
+            let original = self
+                .more
+                .sel
+                .iter()
+                .filter(|e| e.starts_with('l'))
+                .nth(i)
+                .cloned()
+                .unwrap_or_default();
+            rows.push(Row::Par(r(&l(l0 + i)), r(&original)));
         }
         for i in 1..ls.len() {
             if dist(ls[i - 1].1, ls[i].0) < 1e-6 {
-                rows.push(format!("co l{}.b l{}.a", l0 + i - 1, l0 + i));
+                rows.push(Row::Co(Ref::b(&l(l0 + i - 1)), Ref::a(&l(l0 + i))));
             }
         }
         rows
@@ -1660,10 +1659,10 @@ impl SketchMode {
             .collect();
         // the two lines with ends at the corner nearest the click
         let mut ends: Vec<(String, &str, P)> = vec![];
-        for l in &ls {
-            if let Ok((a, b)) = sk::line(s, l) {
-                ends.push((l.clone(), "a", (a.x, a.y)));
-                ends.push((l.clone(), "b", (b.x, b.y)));
+        for ln in &ls {
+            if let Ok((a, b)) = sk::line(s, ln) {
+                ends.push((ln.clone(), "a", (a.x, a.y)));
+                ends.push((ln.clone(), "b", (b.x, b.y)));
             }
         }
         let Some(c) = ends
@@ -1711,33 +1710,28 @@ impl SketchMode {
         let (Some(k1), Some(k2)) = (self.row_of(l1), self.row_of(l2)) else {
             return;
         };
+        let end = |name: &str, e: &str| if e == "a" { Ref::a(name) } else { Ref::b(name) };
         let mut rows = self.rows.clone();
         // each line's own row ends at its cut end; a row that's a rect is refused
-        for (k, l, e, t) in [(k1, l1, e1, t1), (k2, l2, e2, t2)] {
-            let toks = tokens(&rows[k]);
-            if toks[0] != "line" {
+        for (k, ln, e, t) in [(k1, l1, e1, t1), (k2, l2, e2, t2)] {
+            let cons = rows[k].is_cons();
+            let Row::Line(a, b) = rows[k].plain().clone() else {
+                let kind = match rows[k].plain() {
+                    Row::Rect(..) => "rectangle",
+                    Row::Poly(..) => "polygon",
+                    _ => "shape",
+                };
                 self.error = Some(format!(
-                    "{l} is part of a {}: draw it with lines to round its corners",
-                    toks[0]
+                    "{ln} is part of a {kind}: draw it with lines to round its corners"
                 ));
                 return;
-            }
-            let mut out = vec!["line".to_string()];
-            let mut i = 1;
-            for end in ["a", "b"] {
-                let numeric = toks.get(i).is_some_and(|x| x.parse::<f64>().is_ok());
-                let tok = if numeric {
-                    let v = format!("{} {}", toks[i], toks[i + 1]);
-                    i += 2;
-                    v
-                } else {
-                    i += 1;
-                    toks[i - 1].clone()
-                };
-                out.push(if end == *e { pt(t) } else { tok });
-            }
-            out.extend(toks[i..].iter().cloned());
-            rows[k] = out.join(" ");
+            };
+            let row = if *e == "a" {
+                Row::Line(pt(t), b)
+            } else {
+                Row::Line(a, pt(t))
+            };
+            rows[k] = if cons { row.cons() } else { row };
         }
         let a = self.name_after('a', 0);
         if tool == SkTool::SkFillet {
@@ -1746,15 +1740,11 @@ impl SketchMode {
             let h = size / dmath::sin(half).max(1e-9);
             let center = (c.0 + bis.0 / bl * h, c.1 + bis.1 / bl * h);
             let ccw = u1.0 * u2.1 - u1.1 * u2.0 < 0.0;
-            rows.push(format!(
-                "arc {} {l1}.{e1} {l2}.{e2}{}",
-                pt(center),
-                if ccw { "" } else { " cw" }
-            ));
-            rows.push(format!("tan {l1} {a}"));
-            rows.push(format!("tan {l2} {a}"));
+            rows.push(Row::Arc(pt(center), Pt::R(end(l1, e1)), Pt::R(end(l2, e2)), !ccw));
+            rows.push(Row::Tan(r(l1), r(&a)));
+            rows.push(Row::Tan(r(l2), r(&a)));
         } else {
-            rows.push(format!("line {l1}.{e1} {l2}.{e2}"));
+            rows.push(Row::Line(Pt::R(end(l1, e1)), Pt::R(end(l2, e2))));
         }
         match self.build(&rows) {
             Ok(s) => {
@@ -1830,22 +1820,22 @@ impl SketchMode {
     /// Trim the piece of a line clicked back to where it meets others; extend its nearer end to
     /// the next it meets; split it there.
     fn cut_line(&mut self, tool: SkTool, at: P, reach: f64) {
-        let Some(l) = self.entity_near(at, reach, "l") else {
+        let Some(ln) = self.entity_near(at, reach, "l") else {
             self.error = Some(format!("{} works on lines: click one", tool.word()));
             return;
         };
         let Some(s) = &self.solved else { return };
-        let Ok((a, b)) = sk::line(s, &l) else { return };
+        let Ok((a, b)) = sk::line(s, &ln) else { return };
         let (a, b) = ((a.x, a.y), (b.x, b.y));
         let u = sub(b, a);
         let uu = (u.0 * u.0 + u.1 * u.1).max(1e-12);
         let t_at = ((at.0 - a.0) * u.0 + (at.1 - a.1) * u.1) / uu;
-        let ts = self.crossings(&l);
+        let ts = self.crossings(&ln);
         let on = |t: f64| (a.0 + u.0 * t, a.1 + u.1 * t);
-        let Some(k) = self.row_of(&l) else { return };
-        if tokens(&self.rows[k])[0] != "line" {
+        let Some(k) = self.row_of(&ln) else { return };
+        if !matches!(self.rows[k].plain(), Row::Line(..)) {
             self.error = Some(format!(
-                "{l} is part of a shape: {} works on lines drawn as lines",
+                "{ln} is part of a shape: {} works on lines drawn as lines",
                 tool.word()
             ));
             return;
@@ -1866,30 +1856,22 @@ impl SketchMode {
             .filter(|t| *t > t_at)
             .fold(None, |m: Option<f64>, t| Some(m.map_or(t, |m| m.min(t))));
         let mut rows = self.rows.clone();
-        let tail: Vec<String> = {
-            let t = tokens(&rows[k]);
-            t.iter()
-                .skip_while(|_| false)
-                .filter(|w| *w == "cons")
-                .cloned()
-                .collect()
-        };
-        let tail = if tail.is_empty() {
-            String::new()
-        } else {
-            " cons".into()
+        let cons = rows[k].is_cons();
+        let line = |p: Pt, q: Pt| {
+            let row = Row::Line(p, q);
+            if cons { row.cons() } else { row }
         };
         match tool {
             SkTool::Trim => match (before, after) {
                 (None, None) => {
-                    self.error = Some(format!("{l} meets nothing to trim back to"));
+                    self.error = Some(format!("{ln} meets nothing to trim back to"));
                     return;
                 }
-                (Some(t0), None) => rows[k] = format!("line {} {}{tail}", pt(a), pt(on(t0))),
-                (None, Some(t1)) => rows[k] = format!("line {} {}{tail}", pt(on(t1)), pt(b)),
+                (Some(t0), None) => rows[k] = line(pt(a), pt(on(t0))),
+                (None, Some(t1)) => rows[k] = line(pt(on(t1)), pt(b)),
                 (Some(t0), Some(t1)) => {
-                    rows[k] = format!("line {} {}{tail}", pt(a), pt(on(t0)));
-                    rows.push(format!("line {} {}{tail}", pt(on(t1)), pt(b)));
+                    rows[k] = line(pt(a), pt(on(t0)));
+                    rows.push(line(pt(on(t1)), pt(b)));
                 }
             },
             SkTool::Split => {
@@ -1898,29 +1880,29 @@ impl SketchMode {
                     .copied()
                     .min_by(|x, y| (x - t_at).abs().total_cmp(&(y - t_at).abs()))
                 else {
-                    self.error = Some(format!("{l} meets nothing to split it at"));
+                    self.error = Some(format!("{ln} meets nothing to split it at"));
                     return;
                 };
-                rows[k] = format!("line {} {}{tail}", pt(a), pt(on(t)));
+                rows[k] = line(pt(a), pt(on(t)));
                 let me = self.name_after('l', 0);
-                rows.push(format!("line {l}.b {}{tail}", pt(b)));
+                rows.push(line(Pt::R(Ref::b(&ln)), pt(b)));
                 // sharing the point, parallel is collinear
-                rows.push(format!("par {l} {me}"));
+                rows.push(Row::Par(r(&ln), r(&me)));
             }
             _ => {
                 // the end nearer the click goes on to the next thing beyond it
                 if t_at > 0.5 {
                     let Some(t) = ts.iter().copied().find(|t| *t > 1.0 + 1e-6) else {
-                        self.error = Some(format!("nothing beyond {l}'s end to extend it to"));
+                        self.error = Some(format!("nothing beyond {ln}'s end to extend it to"));
                         return;
                     };
-                    rows[k] = format!("line {} {}{tail}", pt(a), pt(on(t)));
+                    rows[k] = line(pt(a), pt(on(t)));
                 } else {
                     let Some(t) = ts.iter().copied().rev().find(|t| *t < -1e-6) else {
-                        self.error = Some(format!("nothing beyond {l}'s start to extend it to"));
+                        self.error = Some(format!("nothing beyond {ln}'s start to extend it to"));
                         return;
                     };
-                    rows[k] = format!("line {} {}{tail}", pt(on(t)), pt(b));
+                    rows[k] = line(pt(on(t)), pt(b));
                 }
             }
         }
@@ -2013,7 +1995,7 @@ impl SkTool {
             SkTool::Parallel => "Click two lines",
             SkTool::Perpendicular => "Click two lines",
             SkTool::Tangent => "Click a line or curve, then the curve it touches",
-
+            SkTool::Project => "Click edges or faces of the part to project them",
             SkTool::Circle3 => [
                 "Click the first point on the circle",
                 "Click the second point",
@@ -2131,6 +2113,7 @@ impl SkTool {
 #[cfg(test)]
 mod tests {
     use super::super::SketchFor;
+    use super::super::rows::dsl::*;
     use super::*;
     use forge_math::Frame;
 
@@ -2154,21 +2137,27 @@ mod tests {
         let mut m = mode();
         m.set_tool(Some(SkTool::Circle3));
         click_all(&mut m, &[(10.0, 0.0), (0.0, 10.0), (-10.0, 0.0)]);
-        assert_eq!(m.rows, ["circle 0 0 10"]);
+        assert_eq!(m.rows, [Row::Circle(at("0", "0"), v("10"))]);
         m.set_tool(Some(SkTool::Arc3));
         click_all(&mut m, &[(30.0, 0.0), (10.0, 0.0), (20.0, 10.0)]);
-        assert_eq!(m.rows[1], "arc 20 0 30 0 10 0");
+        assert_eq!(
+            m.rows[1],
+            Row::Arc(at("20", "0"), at("30", "0"), at("10", "0"), false)
+        );
         solves(&m);
     }
 
     #[test]
     fn a_tangent_arc_leaves_a_line_end_along_it() {
         let mut m = mode();
-        m.add("line 0 0 10 0".into());
+        m.add(Row::Line(at("0", "0"), at("10", "0")));
         m.set_tool(Some(SkTool::ArcTan));
         click_all(&mut m, &[(10.0, 0.0), (10.0, 10.0)]);
-        assert_eq!(m.rows[1], "arc 10 5 l1.b 10 10");
-        assert_eq!(m.rows[2], "tan l1 a1");
+        assert_eq!(
+            m.rows[1],
+            Row::Arc(at("10", "5"), pn("l1.b"), at("10", "10"), false)
+        );
+        assert_eq!(m.rows[2], Row::Tan(rf("l1"), rf("a1")));
         solves(&m);
     }
 
@@ -2177,21 +2166,25 @@ mod tests {
         let mut m = mode();
         m.set_tool(Some(SkTool::RectCenter));
         click_all(&mut m, &[(0.0, 0.0), (5.0, 3.0)]);
-        assert_eq!(m.rows[0], "rect -5 -3 10 6");
+        assert_eq!(m.rows[0], Row::Rect(v("-5"), v("-3"), v("10"), v("6")));
         // its centre a point tied to the middle of a construction diagonal
         assert_eq!(
             m.rows[1..5],
             [
-                "line l1.a l3.a cons",
-                "line l2.a l4.a cons",
-                "pt 0 0",
-                "mid p1 l5"
+                Row::Line(pn("l1.a"), pn("l3.a")).cons(),
+                Row::Line(pn("l2.a"), pn("l4.a")).cons(),
+                Row::Pt(at("0", "0")),
+                Row::Mid(rf("p1"), rf("l5"))
             ]
         );
         m.set_tool(Some(SkTool::Rect3));
         click_all(&mut m, &[(20.0, 0.0), (30.0, 10.0), (25.0, 20.0)]);
-        assert!(m.rows[5].starts_with("poly 20 0 30 10 "), "{:?}", m.rows);
-        assert_eq!(m.rows[6], "perp l7 l8");
+        assert!(
+            matches!(&m.rows[5], Row::Poly(ps, false) if ps[..2] == [at("20", "0"), at("30", "10")]),
+            "{:?}",
+            m.rows
+        );
+        assert_eq!(m.rows[6], Row::Perp(rf("l7"), rf("l8")));
         solves(&m);
     }
 
@@ -2204,7 +2197,7 @@ mod tests {
             solves(&m);
             // drawn level, it's held so
             assert_eq!(m.rows.len(), 9, "{t:?} {:?}", m.rows);
-            assert_eq!(m.rows[8], "hor l1");
+            assert_eq!(m.rows[8], Row::Hor(vec![rf("l1")]));
             let s = m.solved.as_ref().unwrap();
             let p = sk::profile(s, None).expect("one closed loop");
             assert_eq!(p.loops.len(), 1, "{t:?}");
@@ -2249,46 +2242,67 @@ mod tests {
     #[test]
     fn a_tangent_circle_sits_in_three_lines_and_auto_dimension_pins_a_sketch() {
         let mut m = mode();
-        for r in ["line 0 0 30 0", "line 30 0 0 40", "line 0 40 0 0"] {
-            m.add(r.into());
+        for r in [
+            Row::Line(at("0", "0"), at("30", "0")),
+            Row::Line(at("30", "0"), at("0", "40")),
+            Row::Line(at("0", "40"), at("0", "0")),
+        ] {
+            m.add(r);
         }
         m.set_tool(Some(SkTool::CircleTan));
         click_all(&mut m, &[(15.0, 0.0), (15.0, 20.0), (0.0, 20.0)]);
         solves(&m);
-        assert_eq!(m.rows[3], "circle 10 10 10");
-        assert_eq!(&m.rows[4..], ["tan l1 c1", "tan l2 c1", "tan l3 c1"]);
+        assert_eq!(m.rows[3], Row::Circle(at("10", "10"), v("10")));
+        assert_eq!(
+            &m.rows[4..],
+            [
+                Row::Tan(rf("l1"), rf("c1")),
+                Row::Tan(rf("l2"), rf("c1")),
+                Row::Tan(rf("l3"), rf("c1"))
+            ]
+        );
         let mut m = mode();
-        m.add("line 5 5 25 5".into());
-        m.add("circle 40 10 6".into());
+        m.add(Row::Line(at("5", "5"), at("25", "5")));
+        m.add(Row::Circle(at("40", "10"), v("6")));
         m.set_tool(Some(SkTool::AutoDim));
         solves(&m);
         let s = m.solved.as_ref().unwrap();
         assert_eq!(sk::freedom(s).0, 0, "{:?}", m.rows);
-        assert!(m.rows.iter().any(|r| r == "dist l1 20"), "{:?}", m.rows);
+        assert!(
+            m.rows
+                .iter()
+                .any(|r| *r == Row::Dim(D::Dist, vec![rf("l1")], Some(v("20")))),
+            "{:?}",
+            m.rows
+        );
     }
 
     #[test]
     fn a_dimension_is_typed_by_what_is_picked() {
         let mut m = mode();
-        m.add("line 0 0 10 0".into());
-        m.add("line 0 5 10 15".into());
-        m.add("pt 20 20".into());
+        m.add(Row::Line(at("0", "0"), at("10", "0")));
+        m.add(Row::Line(at("0", "5"), at("10", "15")));
+        m.add(Row::Pt(at("20", "20")));
         m.set_tool(Some(SkTool::Dimension));
         assert_eq!(
             m.dimension_pick((5.0, 0.0), 0.5),
-            Some(("dist l1".to_string(), 10.0))
+            Some(((D::Dist, vec![rf("l1")]), 10.0))
         );
-        let (row, v) = m.dimension_pick((5.0, 10.0), 0.5).unwrap();
-        assert_eq!(row, "ang l1 l2");
-        assert!((v - 45.0).abs() < 1e-9, "{v}");
+        let (row, val) = m.dimension_pick((5.0, 10.0), 0.5).unwrap();
+        assert_eq!(row, (D::Ang, vec![rf("l1"), rf("l2")]));
+        assert!((val - 45.0).abs() < 1e-9, "{val}");
         m.picks.clear();
         m.dimension_pick((20.0, 20.0), 0.5);
-        let (row, v) = m.dimension_pick((0.0, 0.0), 0.5).unwrap();
-        assert_eq!(row, "dist p1 l1.a");
-        assert!((v - 800f64.sqrt()).abs() < 1e-9);
-        assert!(m.add(format!("{row} 30")));
-        assert!(m.add("ang l1 l2 30".into()));
-        assert!(m.dimensions().iter().any(|d| d.1 == "ang l1 l2"));
+        let (row, val) = m.dimension_pick((0.0, 0.0), 0.5).unwrap();
+        assert_eq!(row, (D::Dist, vec![rf("p1"), rf("l1.a")]));
+        assert!((val - 800f64.sqrt()).abs() < 1e-9);
+        assert!(m.add(Row::Dim(row.0, row.1, Some(v("30")))));
+        assert!(m.add(Row::Dim(D::Ang, vec![rf("l1"), rf("l2")], Some(v("30")))));
+        assert!(
+            m.dimensions()
+                .iter()
+                .any(|d| d.1 == (D::Ang, vec![rf("l1"), rf("l2")]))
+        );
     }
 
     #[test]
@@ -2297,8 +2311,15 @@ mod tests {
         m.more.count = 6;
         m.set_tool(Some(SkTool::Polygon));
         click_all(&mut m, &[(0.0, 0.0), (10.0, 0.0)]);
-        assert!(m.rows[0].starts_with("poly 10 0 5 8.66"), "{:?}", m.rows);
-        assert_eq!(m.rows[1], "eq l1 l2 l3 l4 l5 l6");
+        assert!(
+            matches!(&m.rows[0], Row::Poly(ps, false) if ps[..2] == [at("10", "0"), at("5", "8.66")]),
+            "{:?}",
+            m.rows
+        );
+        assert_eq!(
+            m.rows[1],
+            Row::Eq(vec![rf("l1"), rf("l2"), rf("l3"), rf("l4"), rf("l5"), rf("l6")])
+        );
         solves(&m);
     }
 
@@ -2306,14 +2327,14 @@ mod tests {
     fn every_constraint_tool_writes_its_row() {
         let mut m = mode();
         for r in [
-            "line 0 0 10 0",
-            "line 20 0 30 0",
-            "circle 50 0 5",
-            "circle 51 1 3",
-            "line 0 10 10 12",
-            "line 0 -20 0 20",
+            Row::Line(at("0", "0"), at("10", "0")),
+            Row::Line(at("20", "0"), at("30", "0")),
+            Row::Circle(at("50", "0"), v("5")),
+            Row::Circle(at("51", "1"), v("3")),
+            Row::Line(at("0", "10"), at("10", "12")),
+            Row::Line(at("0", "-20"), at("0", "20")),
         ] {
-            m.add(r.into());
+            m.add(r);
         }
         m.set_tool(Some(SkTool::Horizontal));
         m.click((5.0, 0.2), 0.5);
@@ -2331,40 +2352,43 @@ mod tests {
         assert_eq!(
             &m.rows[6..],
             [
-                "hor l1",
-                "colin l1 l2",
-                "conc c1 c2",
-                "eq l1 l3",
-                "fix l1.a",
-                "ver l4"
+                Row::Hor(vec![rf("l1")]),
+                Row::Colin(rf("l1"), rf("l2")),
+                Row::Conc(rf("c1"), rf("c2")),
+                Row::Eq(vec![rf("l1"), rf("l3")]),
+                Row::Fix(vec![rf("l1.a")]),
+                Row::Ver(vec![rf("l4")])
             ]
         );
         m.set_tool(Some(SkTool::Symmetric));
         // the two lines, then the line between
         click_all(&mut m, &[(25.0, 0.0), (5.0, 11.0), (0.0, 5.0)]);
         solves(&m);
-        assert_eq!(m.rows.last().unwrap(), "sym l2.b l3.b l4");
+        assert_eq!(
+            *m.rows.last().unwrap(),
+            Row::Sym(rf("l2.b"), rf("l3.b"), rf("l4"))
+        );
     }
 
     #[test]
     fn move_copy_rotate_scale_and_mirror_chosen_geometry() {
         let mut m = mode();
-        m.add("line 0 0 10 0".into());
-        m.add("line l1.b 10 10".into());
-        m.add("line 0 -20 0 20".into());
+        m.add(Row::Line(at("0", "0"), at("10", "0")));
+        m.add(Row::Line(pn("l1.b"), at("10", "10")));
+        m.add(Row::Line(at("0", "-20"), at("0", "20")));
         m.set_tool(Some(SkTool::Copy));
         click_all(&mut m, &[(5.0, 0.0), (10.0, 5.0)]);
         assert!(m.more_enter());
         click_all(&mut m, &[(0.0, 0.0), (20.0, 0.0)]);
         solves(&m);
-        assert_eq!(m.rows[3], "line 20 0 30 0");
-        assert_eq!(m.rows[4], "line 30 0 30 10");
-        assert_eq!(m.rows[5], "co l5.a l4.b");
+        assert_eq!(m.rows[3], Row::Line(at("20", "0"), at("30", "0")));
+        assert_eq!(m.rows[4], Row::Line(at("30", "0"), at("30", "10")));
+        assert_eq!(m.rows[5], Row::Co(rf("l5.a"), rf("l4.b")));
         m.set_tool(Some(SkTool::Move));
         click_all(&mut m, &[(25.0, 0.0)]);
         m.more_enter();
         click_all(&mut m, &[(0.0, 50.0), (0.0, 55.0)]);
-        assert_eq!(m.rows[3], "line 20 5 30 5");
+        assert_eq!(m.rows[3], Row::Line(at("20", "5"), at("30", "5")));
         m.set_tool(Some(SkTool::Mirror));
         click_all(&mut m, &[(5.0, 0.0)]);
         m.more_enter();
@@ -2373,61 +2397,82 @@ mod tests {
         assert!(
             m.rows
                 .iter()
-                .any(|r| r == "line -0 0 -10 0" || r == "line 0 0 -10 0"),
+                .any(|r| *r == Row::Line(at("0", "0"), at("-10", "0"))),
             "{:?}",
             m.rows
         );
-        assert!(m.rows.iter().any(|r| r == "sym l1.a l6.a l3"), "{:?}", m.rows);
+        assert!(
+            m.rows
+                .iter()
+                .any(|r| *r == Row::Sym(rf("l1.a"), rf("l6.a"), rf("l3"))),
+            "{:?}",
+            m.rows
+        );
         m.set_tool(Some(SkTool::Rotate));
         click_all(&mut m, &[(10.0, 5.0)]);
         m.more_enter();
         click_all(&mut m, &[(10.0, 0.0), (20.0, 0.0), (10.0, 10.0)]);
         solves(&m);
-        assert_eq!(m.rows[1], "line l1.b 0 0");
+        assert_eq!(m.rows[1], Row::Line(pn("l1.b"), at("0", "0")));
     }
 
     #[test]
     fn stretch_moves_a_side_and_its_neighbours_follow_where_move_takes_it_away() {
         let mut m = mode();
-        m.add("line 0 0 10 0".into());
-        m.add("line l1.b 10 10".into());
+        m.add(Row::Line(at("0", "0"), at("10", "0")));
+        m.add(Row::Line(pn("l1.b"), at("10", "10")));
         m.set_tool(Some(SkTool::Stretch));
         m.click((10.0, 5.0), 0.5);
         m.more_enter();
         click_all(&mut m, &[(0.0, 20.0), (5.0, 20.0)]);
         solves(&m);
         // the shared end follows by name: the first line stretches
-        assert_eq!(m.rows, ["line 0 0 10 0", "line l1.b 15 10"]);
+        assert_eq!(
+            m.rows,
+            [
+                Row::Line(at("0", "0"), at("10", "0")),
+                Row::Line(pn("l1.b"), at("15", "10"))
+            ]
+        );
         let mut m = mode();
-        m.add("line 0 0 10 0".into());
-        m.add("line l1.b 10 10".into());
+        m.add(Row::Line(at("0", "0"), at("10", "0")));
+        m.add(Row::Line(pn("l1.b"), at("10", "10")));
         m.set_tool(Some(SkTool::Move));
         m.click((10.0, 5.0), 0.5);
         m.more_enter();
         click_all(&mut m, &[(0.0, 20.0), (5.0, 20.0)]);
         solves(&m);
-        assert_eq!(m.rows, ["line 0 0 10 0", "line 15 0 15 10"]);
+        assert_eq!(
+            m.rows,
+            [
+                Row::Line(at("0", "0"), at("10", "0")),
+                Row::Line(at("15", "0"), at("15", "10"))
+            ]
+        );
     }
 
     #[test]
     fn offset_and_patterns_copy_what_is_chosen() {
         let mut m = mode();
-        m.add("circle 0 0 5".into());
+        m.add(Row::Circle(at("0", "0"), v("5")));
         m.set_tool(Some(SkTool::Offset));
         m.click((5.0, 0.0), 0.5);
         m.more_enter();
         m.click((8.0, 0.0), 0.5);
         solves(&m);
-        assert_eq!(&m.rows[1..], ["circle 0 0 8", "conc c1 c2"]);
+        assert_eq!(
+            &m.rows[1..],
+            [Row::Circle(at("0", "0"), v("8")), Row::Conc(rf("c1"), rf("c2"))]
+        );
         m.more.count = 4;
         m.set_tool(Some(SkTool::CircPattern));
-        m.add("circle 20 0 2".into());
+        m.add(Row::Circle(at("20", "0"), v("2")));
         m.click((22.0, 0.0), 0.5);
         m.more_enter();
         m.click((0.0, 0.0), 0.5);
         solves(&m);
         assert_eq!(
-            m.rows.iter().filter(|r| r.starts_with("circle")).count(),
+            m.rows.iter().filter(|r| matches!(r, Row::Circle(..))).count(),
             6,
             "{:?}",
             m.rows
@@ -2438,36 +2483,48 @@ mod tests {
         m.more_enter();
         click_all(&mut m, &[(40.0, 40.0), (50.0, 40.0)]);
         solves(&m);
-        assert!(m.rows.contains(&"circle 30 0 2".to_string()), "{:?}", m.rows);
-        assert!(m.rows.contains(&"circle 40 0 2".to_string()), "{:?}", m.rows);
+        assert!(
+            m.rows.contains(&Row::Circle(at("30", "0"), v("2"))),
+            "{:?}",
+            m.rows
+        );
+        assert!(
+            m.rows.contains(&Row::Circle(at("40", "0"), v("2"))),
+            "{:?}",
+            m.rows
+        );
     }
 
     #[test]
     fn trim_extend_split_and_corners() {
         let mut m = mode();
-        m.add("line 0 0 20 0".into());
-        m.add("line 10 -5 10 5".into());
-        m.add("line 30 -5 30 5".into());
+        m.add(Row::Line(at("0", "0"), at("20", "0")));
+        m.add(Row::Line(at("10", "-5"), at("10", "5")));
+        m.add(Row::Line(at("30", "-5"), at("30", "5")));
         m.set_tool(Some(SkTool::Extend));
         m.click((19.0, 0.0), 0.5);
-        assert_eq!(m.rows[0], "line 0 0 30 0");
+        assert_eq!(m.rows[0], Row::Line(at("0", "0"), at("30", "0")));
         m.set_tool(Some(SkTool::Split));
         m.click((11.0, 0.0), 0.5);
         solves(&m);
-        assert_eq!(m.rows[0], "line 0 0 10 0");
-        assert_eq!(m.rows[3], "line l1.b 30 0");
+        assert_eq!(m.rows[0], Row::Line(at("0", "0"), at("10", "0")));
+        assert_eq!(m.rows[3], Row::Line(pn("l1.b"), at("30", "0")));
         m.set_tool(Some(SkTool::Trim));
         m.click((10.0, 4.0), 0.5);
         solves(&m);
-        assert_eq!(m.rows[1], "line 10 -5 10 0");
+        assert_eq!(m.rows[1], Row::Line(at("10", "-5"), at("10", "0")));
         let mut m = mode();
-        m.add("line 0 0 20 0".into());
-        m.add("line l1.b 20 20".into());
+        m.add(Row::Line(at("0", "0"), at("20", "0")));
+        m.add(Row::Line(pn("l1.b"), at("20", "20")));
         m.more.size = 3.0;
         m.set_tool(Some(SkTool::SkFillet));
         m.click((19.5, 0.5), 0.5);
         solves(&m);
-        assert_eq!(m.rows[0], "line 0 0 17 0");
-        assert!(m.rows[2].starts_with("arc 17 3 l1.b l2.a"), "{:?}", m.rows);
+        assert_eq!(m.rows[0], Row::Line(at("0", "0"), at("17", "0")));
+        assert!(
+            matches!(&m.rows[2], Row::Arc(c, a, b, _) if *c == at("17", "3") && *a == pn("l1.b") && *b == pn("l2.a")),
+            "{:?}",
+            m.rows
+        );
     }
 }

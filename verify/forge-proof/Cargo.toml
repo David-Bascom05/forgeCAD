@@ -19,6 +19,8 @@ forge-model = { path = "../../kernel/forge-model" }
 # .fg part files (examples, tests); the selections' entity helpers (examples/topo)
 forge-lang = { path = "../../interface/forge-lang" }
 forge-agent = { path = "../../interface/forge-agent" }
+# examples/topo's selections by lineage (forge_import::state)
+forge-import = { path = "../../interface/forge-import" }
 
 [lints]
 workspace = true

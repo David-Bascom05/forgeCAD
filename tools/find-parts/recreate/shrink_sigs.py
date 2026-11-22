@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Each failing signature's smallest part, shrunk to a minimal .fc, one per signature.
+"""Each failing signature's smallest part, shrunk to a minimal .fg (by statements, fp.shrink), one per signature.
 
   JUDGE=EXE shrink_sigs.py RESULTS.jsonl PARTS_DIR --out DIR --name DATASET [--key file,body] [--each 1]
 
@@ -28,7 +28,7 @@ def main():
         r = json.loads(l)
         if r.get("v") in ("refused", "fail", "crash", "timeout", "oom"):
             stem = ".".join(r[k] for k in key)
-            path = os.path.join(a[1], stem + ".fc")
+            path = os.path.join(a[1], stem + ".fg")
             if os.path.exists(path):
                 by.setdefault(BLANK.sub("N", r["sig"]), []).append((os.path.getsize(path), path, stem))
 
@@ -41,7 +41,7 @@ def main():
         if BLANK.sub("N", first.get("sig", "")) != s:
             return s, "gone", len(rows)
         mini, probes = fp.shrink(src, want, timeout=60, budget=120, seconds=300.0)
-        with open(os.path.join(out, f"{name}-{fp.sig_id(s)}.fc"), "w") as f:
+        with open(os.path.join(out, f"{name}-{fp.sig_id(s)}.fg"), "w") as f:
             f.write(f"# {s}\n# {name} {stem}; {len(rows)} parts sign this; shrunk in {probes} probes\n{mini}")
         return s, "shrunk", len(rows)
 

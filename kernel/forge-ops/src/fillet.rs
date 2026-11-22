@@ -256,8 +256,10 @@ pub struct FilletOptions {
 /// given to, side by side in `edges`; it is walked from its start, each edge from the end it is
 /// reached by. An edge given one of its ends starts there; the walk starts at the vertex given
 /// for one of the run's edges, else the run's free end lowest in x, then y, then z (a lone edge's
-/// lower end). A chain apart from the rest starts likewise, or is refused where a start was given.
-/// Geometric, never by name or the order given: renaming cannot turn a law round.
+/// lower end), else, a ring having no free end, its lowest vertex. A chain apart from the rest
+/// starts likewise, or is refused where a start was given. The walk goes on from the vertex it
+/// reached last, so a ring is walked one way round: from its start toward the lower of the two
+/// next vertices. Geometric, never by name or the order given: renaming cannot turn a law round.
 pub fn law_starts(
     body: &Body,
     edges: &[FilletEdge],
@@ -278,6 +280,24 @@ pub fn law_starts(
         } else {
             b
         }
+    };
+    // the walk's next edge: one at the vertex it reached last (at a ring's start, the one whose
+    // other end is lower), else the first at any vertex it has reached
+    let next_edge = |left: &[EdgeId], reached: &[VertexId]| -> Option<usize> {
+        let touches = |e: EdgeId, v: VertexId| ends(e).0 == v || ends(e).1 == v;
+        if let Some(&last) = reached.last() {
+            let other = |e: EdgeId| if ends(e).0 == last { ends(e).1 } else { ends(e).0 };
+            let here = (0..left.len()).filter(|&k| touches(left[k], last));
+            if let Some(k) = here.min_by(|&i, &j| {
+                below(
+                    body.vertex(other(left[i])).point,
+                    body.vertex(other(left[j])).point,
+                )
+            }) {
+                return Some(k);
+            }
+        }
+        left.iter().position(|&e| reached.iter().any(|&v| touches(e, v)))
     };
     let mut out = BTreeMap::new();
     let mut i = 0;
@@ -319,13 +339,12 @@ pub fn law_starts(
             }
         });
         loop {
-            while let Some(k) = left.iter().position(|&e| {
-                let (a, b) = ends(e);
-                reached.contains(&a) || reached.contains(&b)
-            }) {
+            while let Some(k) = next_edge(&left, &reached) {
                 let e = left.remove(k);
                 let (a, b) = ends(e);
-                let (v, w) = if reached.contains(&a) { (a, b) } else { (b, a) };
+                // reached by the end the walk got to last (a ring's closing edge has both)
+                let at = |v: VertexId| reached.iter().rposition(|&x| x == v);
+                let (v, w) = if at(a) >= at(b) { (a, b) } else { (b, a) };
                 out.insert(e, v);
                 reached.push(w);
             }
@@ -334,7 +353,12 @@ pub fn law_starts(
                 return Err(FilletError::BadRadius { edge: e });
             }
             // a chain apart from the rest, or a ring, whose free end or lowest vertex starts it
-            reached.push(free_end(&left).unwrap_or_else(|| lowest(e)));
+            reached.push(free_end(&left).unwrap_or_else(|| {
+                left.iter()
+                    .flat_map(|&e| [ends(e).0, ends(e).1])
+                    .min_by(|&v, &w| below(body.vertex(v).point, body.vertex(w).point))
+                    .unwrap_or_else(|| lowest(e))
+            }));
         }
     }
     Ok(out)

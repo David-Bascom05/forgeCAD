@@ -38,6 +38,8 @@ forge-dwg = { path = "../../kernel/forge-dwg" }
 forge-math = { path = "../../kernel/forge-math" }
 forge-model = { path = "../../kernel/forge-model" }
 forge-sketch = { path = "../../kernel/forge-sketch" }
+# the sketcher's profiles (its regions' areas and loops)
+forge-ops = { path = "../../kernel/forge-ops" }
 forge-material = { path = "../../kernel/forge-material" }
 forge-thermo = { path = "../../kernel/forge-thermo" }
 # in the browser's tree already, through forge-lang: its plain math (a mass's principal axes)

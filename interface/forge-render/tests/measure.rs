@@ -613,7 +613,10 @@ fn origin_items_from_the_browser_and_sketch_geometry_are_picked() {
         SketchFor::New,
         "xy".into(),
         p.frame,
-        vec!["line -60 -50 -20 -50".into()],
+        vec![forge_render::shell::sketching::rows::Row::Line(
+            forge_render::shell::sketching::rows::Pt::at(-60.0, -50.0),
+            forge_render::shell::sketching::rows::Pt::at(-20.0, -50.0),
+        )],
     );
     m.units = "mm";
     h.gui.shell.sketch = Some(m);

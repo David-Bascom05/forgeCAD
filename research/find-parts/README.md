@@ -119,9 +119,11 @@ with what does not depend on it. The measurements below were taken on the earlie
 - `cover`: the same mutations steered by branch coverage. The judge is built with `-C instrument-coverage`; a run's raw
   profile is read directly, a part reaching a new branch joins the corpus, and parts holding rare branches get mutated
   most (FairFuzz, Lemieux and Sen, ASE 2018).
-- `histcad.py`: HistCAD's samples, extrudes and revolves; their fillets pick edges by 3D points, which a `.fg` selection
-  cannot say, so a sample with one is not translated. `occt_replay.py`: the translated parts through OCCT alone, from
-  the steps `fusion.py` keeps beside each part.
+- `histcad.py`: HistCAD's samples, extrudes, revolves, fillets and chamfers. A blend picks its edges by 3D points; with
+  `--topo` each point is resolved once, at import: the program so far is built, the point takes the edge nearest it, and
+  the edges are written as the lineage selection naming exactly them (`edges(between: (A, B))`, `edges(of: F, ..)`), as
+  the recreate importers do. `occt_replay.py`: the translated parts through OCCT alone, from the steps `fusion.py` keeps
+  beside each part.
 - `augment`: a real part, then the finishing a person adds next, sized to it.
 - `noise`: a built part with its coordinates moved 3e-7 mm: it must build, to about the same volume. Real data carries this
   much float noise, and two silent wrong answers came from it. No truth needed.

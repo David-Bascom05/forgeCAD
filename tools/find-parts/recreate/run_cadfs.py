@@ -32,8 +32,8 @@ def limits():
     resource.setrlimit(resource.RLIMIT_CPU, (CPU, CPU + 1))
 
 
-def judge(exe, fc):
-    p = subprocess.Popen([exe, fc], stdout=subprocess.PIPE, stderr=subprocess.PIPE, preexec_fn=limits, text=True)
+def judge(exe, part):
+    p = subprocess.Popen([exe, part], stdout=subprocess.PIPE, stderr=subprocess.PIPE, preexec_fn=limits, text=True)
     try:
         out, err = p.communicate(timeout=CPU * 8)
     except subprocess.TimeoutExpired:
@@ -75,9 +75,9 @@ def compare(r, t, notes):
 
 def one(i, a):
     work, run = a["work"], a["out"]
-    fc = os.path.join(run, "parts", i + ".fc")
+    part = os.path.join(run, "parts", i + ".fg")
     try:
-        p = subprocess.run([sys.executable, "-I", os.path.join(HERE, "cadfs.py"), os.path.join(work, i + ".txt"), os.path.join(work, i + ".json"), "--topo", a["topo"], "--out", fc], capture_output=True, text=True, timeout=TRANSLATE)
+        p = subprocess.run([sys.executable, "-I", os.path.join(HERE, "cadfs.py"), os.path.join(work, i + ".txt"), os.path.join(work, i + ".json"), "--topo", a["topo"], "--out", part], capture_output=True, text=True, timeout=TRANSLATE)
         r = json.loads(p.stdout)
     except subprocess.TimeoutExpired:
         r = {"status": "untranslated", "cls": "importer", "why": "translation timed out"}
@@ -86,7 +86,7 @@ def one(i, a):
     r["id"] = i
     if r["status"] == "untranslated":
         return r
-    j = judge(a["judge"], fc)
+    j = judge(a["judge"], part)
     # n-ary regeneration is single-body by design: the sequential result stands
     if j["v"] == "fail" and j["sig"].startswith("nary: the part is"):
         j = dict(j, v="ok", sig="", multi=True)
