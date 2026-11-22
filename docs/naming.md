@@ -48,13 +48,10 @@ new B-rep against the old one after the fact (matching: Agbodan et al.).
   of two segments meets itself twice, so its joints also take the segment starting there.
 - Names are 64-bit hashes: `Name::with` mixes a word in one step (a murmur3 finaliser),
   `with_str` hashes the word first, `with_set` sums its members' mixes (order-free, no sort).
-- **Feature ids are stable.** Each feature line has an id from when it was made, kept in the
-  part file (`id N` before the line where it is not the line's place among the features) and
-  passed by forge-doc to the regen (`forge_model::History`), so inserting, deleting or moving
-  lines renames nothing. A file written by hand without ids gets each line's place (or, where a line
-  already says that id is its own, the next unused one). An id is never used twice: when lines
-  with the highest ids are deleted, the file starts `next N`, so a handle to a deleted feature
-  fails rather than find a later one's entities.
+- **Feature ids are stable.** A feature's id is a hash of its full path in the part
+  (`forge_lang::build::history_id`): its name, the call site and loop index it was made at, never
+  its place among the features. It is passed to the regen (`forge_model::History`), so inserting,
+  deleting or moving lines renames nothing; renaming a feature (`Rename`) renames its entities.
 - Booleans (sequential and n-ary alike, since 2026-10-31):
   - a new edge, a piece of the curve where faces `a` and `b` meet, is named from the pair, the
     branch of the intersection, and the two edges its ends cut (not its place along the curve);

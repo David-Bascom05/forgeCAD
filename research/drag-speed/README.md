@@ -1,6 +1,6 @@
 # What a frame of a drag costs
 
-David's measure: a number dragged on a real part, a rebuild per value (`Model::update` on the retired `.fc` engine; `forge_lang::run` on the session's cache now, the Forge bench parts' params as `drags.txt` names them). `dragcost.rs` (copy to `interface/forge-lang/examples/`, build, then
+David's measure: a number dragged on a real part, a rebuild per value (`forge_lang::run` on the session's cache, the Forge bench parts' params as `drags.txt` names them; numbers recorded before the Forge move came from the engine it replaced). `dragcost.rs` (copy to `interface/forge-lang/examples/`, build, then
 `sh research/drag-speed/run.sh BIN OUT`) gives instructions a frame for each line of `drags.txt`: (played N values - played 0) / N, the edits that make the N sources
 counted in both. Regen only, not mesh or upload.
 
