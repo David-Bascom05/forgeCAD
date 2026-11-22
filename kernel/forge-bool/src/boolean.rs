@@ -5885,9 +5885,10 @@ fn classify_specs(
         }
         let body = bodies[s.side];
         let other = 1 - s.side;
-        let Some(p) = interior_point(body, s, pieces) else {
+        let Some(inner) = interior_point(body, s, pieces) else {
             continue;
         };
+        let p = inner.point();
         if specs_on() {
             let w: Vec<_> = partners
                 .iter()
@@ -5895,9 +5896,26 @@ fn classify_specs(
                 .collect();
             eprintln!("  COPLANAR spec {i} face {:?} probe {p:?} partners {w:?}", s.from);
         }
+        // a narrow region beside a partner, off it: in or out by the partner's neighbour
+        let mut off: Option<Class> = None;
         for pf in partners {
             // a hair of the face, every point of it on the partner's boundary, lies on it too
-            let w = index[other].point_in_face(pf, p);
+            let mut w = index[other].point_in_face(pf, p);
+            // a region wider than a tolerance whose point is still within one of the partner's
+            // boundary: the region lies on one side of the partner's edge that bounds it
+            if w == Where::On
+                && let Inner::Narrow(_, c) = inner
+                && 2.0 * c > tol::LINEAR
+                && let Some(b) = beside_partner(body, bodies[other], s, pieces, other, pf)
+            {
+                w = match b {
+                    Beside::On => Where::Inside,
+                    Beside::Off(c) => {
+                        off = off.or(c);
+                        Where::Outside
+                    }
+                };
+            }
             let on = w == Where::Inside
                 || (w == Where::On
                     && spare_probes(body, s, pieces).all(|q| index[other].classify(q) == Where::On));
@@ -5916,6 +5934,9 @@ fn classify_specs(
                 fixed[i] = true;
                 break;
             }
+        }
+        if !fixed[i] && off.is_some() {
+            class[i] = off;
         }
     }
     // direct: lean of the piece at a new edge
@@ -6021,11 +6042,13 @@ fn classify_specs(
             continue;
         }
         let s = &specs[i];
-        let probe = interior_point(bodies[s.side], s, pieces).ok_or_else(|| {
-            BoolError::lost(Lost::NoInteriorPoint {
-                face: FaceRef::of(bodies[s.side], s.from),
-            })
-        })?;
+        let probe = interior_point(bodies[s.side], s, pieces)
+            .ok_or_else(|| {
+                BoolError::lost(Lost::NoInteriorPoint {
+                    face: FaceRef::of(bodies[s.side], s.from),
+                })
+            })?
+            .point();
         if specs_on() {
             eprintln!(
                 "  RAY spec {i} probe {probe:?} -> {:?}",
@@ -6146,8 +6169,30 @@ fn debug_conflict(
     }
 }
 
-/// A point inside a spec's face: a small step inward from its first edge's midpoint.
-fn interior_point(body: &Body, s: &Spec, pieces: &[Piece]) -> Option<Point3> {
+/// A point inside a spec's region, and how it was found.
+#[derive(Clone, Copy, Debug)]
+enum Inner {
+    /// A step off an edge no other piece of the region comes nearer than: clear of the boundary.
+    Clear(Point3),
+    /// On a plane, where no step clears: the point a scanline of the region's own boundary finds
+    /// farthest from it, and that clearance (the region is about twice it wide there).
+    Narrow(Point3, f64),
+    /// Off a plane, where no step clears: the default step off an edge.
+    Stepped(Point3),
+}
+
+impl Inner {
+    fn point(self) -> Point3 {
+        match self {
+            Inner::Clear(p) | Inner::Narrow(p, _) | Inner::Stepped(p) => p,
+        }
+    }
+}
+
+/// A point inside a spec's face: a small step inward from its first edge's midpoint, clear of the
+/// region's other pieces; where no step is clear, on a plane, a point decided from the region's
+/// boundary (a sliver narrower than a step is never stepped across).
+fn interior_point(body: &Body, s: &Spec, pieces: &[Piece]) -> Option<Inner> {
     // (off a hair of an edge a step is too small to leave the boundary: its longest piece then)
     let first = s.loops.first()?;
     let mut h = *first.first()?;
@@ -6161,17 +6206,169 @@ fn interior_point(body: &Body, s: &Spec, pieces: &[Piece]) -> Option<Point3> {
         (h, chord) = (o, c);
     }
     if let Some(q) = clear_step(body, s, pieces, h, chord)? {
-        return Some(q);
+        return Some(Inner::Clear(q));
     }
     // (a hole a hair inside that piece, along all of it: off another)
     for &o in s.loops.iter().flatten() {
         if o != h
             && let Some(q) = clear_step(body, s, pieces, o, half_chord(&pieces[o.0]))?
         {
-            return Some(q);
+            return Some(Inner::Clear(q));
         }
     }
-    probe(body, s.from, h, pieces)
+    match &body.face(s.from).surface {
+        Surface::Plane(plane) => planar_inner(plane, s, pieces).map(|(q, c)| Inner::Narrow(q, c)),
+        _ => probe(body, s.from, h, pieces).map(Inner::Stepped),
+    }
+}
+
+/// Where a region lies against its coplanar partner face, from an edge of the partner bounding it.
+#[derive(Clone, Copy, Debug)]
+enum Beside {
+    /// Inside the partner.
+    On,
+    /// Outside it, in the partner's plane past its edge: in or out of the other body by the face
+    /// beyond that edge (None where it has none, or meets the plane too flat to say).
+    Off(Option<Class>),
+}
+
+/// Where a region of face `s.from` lies against its coplanar partner `pf` of body `other`, by an
+/// edge of `pf` imprinted on the region's boundary: the region is on one side of it, inside `pf`
+/// where the two faces' inward directions across it agree, and otherwise past the edge, inside the
+/// other body where it runs behind the edge's other face (a concave edge), outside where it runs in
+/// front of it. None if no edge of `pf` bounds the region.
+fn beside_partner(
+    body: &Body,
+    ob: &Body,
+    s: &Spec,
+    pieces: &[Piece],
+    other: Side,
+    pf: FaceId,
+) -> Option<Beside> {
+    s.loops.iter().flatten().find_map(|&(o, fwd)| {
+        if !s.foreign.contains(&o) {
+            return None;
+        }
+        let pc = &pieces[o];
+        let e = match pc.whole {
+            Some((side, e)) if side == other => e,
+            _ if pc.side == Some(other) => pc.of?,
+            _ => return None,
+        };
+        let edge = ob.edge(e);
+        let c = edge.coedges.iter().copied().find(|&c| ob.coedge_face(c) == pf)?;
+        let d = pc.curve.deriv(pc.range.mid());
+        let along = if fwd { d.d1 } else { -d.d1 };
+        let here = body
+            .face_normal(s.from, body.face(s.from).surface.project(d.p))?
+            .cross(along)
+            .normalize()?;
+        let t = edge.curve.closest(d.p, edge.range);
+        let de = edge.curve.deriv(t).d1;
+        let along_pf = if ob.coedge(c).forward { de } else { -de };
+        let there = ob
+            .face_normal(pf, ob.face(pf).surface.project(d.p))?
+            .cross(along_pf)
+            .normalize()?;
+        let cos = here.dot(there.get());
+        if cos.abs() <= 0.5 {
+            return None;
+        }
+        if cos > 0.0 {
+            return Some(Beside::On);
+        }
+        let past = ob.partner(c).and_then(|g| {
+            let g = ob.coedge_face(g);
+            let n = ob.face_normal(g, ob.face(g).surface.project(d.p))?;
+            let lean = here.dot(n.get());
+            (lean.abs() > 1e-9).then_some(if lean < 0.0 { Class::In } else { Class::Out })
+        });
+        Some(Beside::Off(past))
+    })
+}
+
+/// The distance from `q` to the nearest piece of a region's boundary.
+fn clearance(s: &Spec, pieces: &[Piece], q: Point3) -> f64 {
+    s.loops
+        .iter()
+        .flatten()
+        .map(|&(o, _)| {
+            let pc = &pieces[o];
+            pc.curve.eval(pc.curve.closest(q, pc.range)).distance(q)
+        })
+        .fold(f64::INFINITY, f64::min)
+}
+
+/// A point inside a planar region decided from its boundary alone: the region's loops as polygons
+/// in the plane (a curved piece finely enough that its chords stray under a quarter tolerance), cut
+/// by scanlines midway between successive vertex heights, where every crossing pairs off into
+/// spans inside; the middle of the span farthest from the boundary, and that clearance.
+fn planar_inner(plane: &Plane, s: &Spec, pieces: &[Piece]) -> Option<(Point3, f64)> {
+    let f = &plane.frame;
+    let flat = |p: Point3| {
+        let d = p - f.origin;
+        Point2::new(d.dot(f.x().get()), d.dot(f.y().get()))
+    };
+    let mut rings: Vec<Vec<Point2>> = Vec::with_capacity(s.loops.len());
+    for lp in &s.loops {
+        let mut ring = Vec::new();
+        for &(o, fwd) in lp {
+            let pc = &pieces[o];
+            let n = match &pc.curve {
+                Curve::Line(_) => 1,
+                Curve::Circle(c) => {
+                    // a chord of angle a sags r (1 - cos a/2) <= r a^2 / 8
+                    let a = (8.0 * 0.25 * tol::LINEAR / c.radius.max(tol::LINEAR)).sqrt();
+                    ((pc.range.width() / a).ceil() as usize).clamp(4, 4096)
+                }
+                _ => 256,
+            };
+            for k in 0..n {
+                let u = k as f64 / n as f64;
+                let t = if fwd {
+                    pc.range.lo + u * pc.range.width()
+                } else {
+                    pc.range.hi - u * pc.range.width()
+                };
+                ring.push(flat(pc.curve.eval(t)));
+            }
+        }
+        if ring.len() >= 2 {
+            rings.push(ring);
+        }
+    }
+    let mut heights: Vec<f64> = rings.iter().flatten().map(|p| p.y).collect();
+    heights.sort_by(f64::total_cmp);
+    heights.dedup();
+    // the tallest slabs first: a narrow region's widest span is in one of them
+    let mut slabs: Vec<(f64, f64)> = heights
+        .windows(2)
+        .map(|w| (w[1] - w[0], 0.5 * (w[0] + w[1])))
+        .collect();
+    slabs.sort_by(|a, b| b.0.total_cmp(&a.0));
+    let mut best: Option<(Point3, f64)> = None;
+    let mut xs = Vec::new();
+    for &(_, y) in slabs.iter().take(32) {
+        xs.clear();
+        for ring in &rings {
+            for (k, a) in ring.iter().enumerate() {
+                let b = ring[(k + 1) % ring.len()];
+                if (a.y < y) != (b.y < y) {
+                    xs.push(a.x + (y - a.y) * (b.x - a.x) / (b.y - a.y));
+                }
+            }
+        }
+        xs.sort_by(f64::total_cmp);
+        for &[x0, x1] in xs.as_chunks::<2>().0 {
+            let x = 0.5 * (x0 + x1);
+            let q = f.origin + f.x().get() * x + f.y().get() * y;
+            let c = clearance(s, pieces, q);
+            if best.is_none_or(|b| c > b.1) {
+                best = Some((q, c));
+            }
+        }
+    }
+    best
 }
 
 /// A step off half-edge `h` no other piece of the region comes nearer than: the way there crosses none
