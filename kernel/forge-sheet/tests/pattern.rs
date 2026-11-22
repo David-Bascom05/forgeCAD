@@ -423,6 +423,12 @@ fn shop_checks() {
         hole_to_edge: scaled(1.0),
         min_slot: scaled(1.0),
         min_hole: scaled(0.0),
+        bend_to_edge: forge_sheet::Scaled::NONE,
+        min_web: forge_sheet::Scaled::NONE,
+        angles: None,
+        bend_ref: forge_sheet::BendRef::Tangent,
+        bend_length_max: None,
+        not: vec![],
         hardness: None,
         relief: forge_sheet::ReliefRule::default(),
     };

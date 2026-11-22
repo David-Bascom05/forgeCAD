@@ -1091,7 +1091,7 @@ impl Error {
         match self {
             Syntax(s) => match s {
                 SyntaxError::BadNumber { .. } => "a malformed number".into(),
-                SyntaxError::UnknownUnit { .. } => "unknown unit (mm, deg)".into(),
+                SyntaxError::UnknownUnit { .. } => "unknown unit (mm, in, deg)".into(),
                 SyntaxError::OpenString { .. } => "a string not closed".into(),
                 SyntaxError::BadChar { .. } => "a character Forge does not use".into(),
                 SyntaxError::Expected { what, .. } => format!("expected {what}"),

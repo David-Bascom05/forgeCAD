@@ -56,6 +56,8 @@ fn scs() -> Process {
         box_flange_with_hardware: true,
         angles: Some((0.0, 130f64.to_radians())),
         part_min: Some((12.7, 25.4)),
+        bent_max: None,
+        bent_min: None,
     }
 }
 
@@ -173,6 +175,12 @@ fn the_shop_check_runs_them() {
             hole_to_edge: Scaled::NONE,
             min_slot: Scaled::NONE,
             min_hole: Scaled::NONE,
+            bend_to_edge: forge_sheet::Scaled::NONE,
+            min_web: forge_sheet::Scaled::NONE,
+            angles: None,
+            bend_ref: forge_sheet::BendRef::Tangent,
+            bend_length_max: None,
+            not: vec![],
             relief: forge_sheet::ReliefRule::default(),
             hardness: Some(57.0),
         }],

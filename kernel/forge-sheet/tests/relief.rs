@@ -319,6 +319,12 @@ fn reliefs_smaller_than_the_rule_are_violations() {
         hole_to_edge: forge_sheet::Scaled::NONE,
         min_slot: forge_sheet::Scaled::NONE,
         min_hole: forge_sheet::Scaled::NONE,
+        bend_to_edge: forge_sheet::Scaled::NONE,
+        min_web: forge_sheet::Scaled::NONE,
+        angles: None,
+        bend_ref: forge_sheet::BendRef::Tangent,
+        bend_length_max: None,
+        not: vec![],
         relief: forge_sheet::ReliefRule::default(),
         hardness: None,
     };
