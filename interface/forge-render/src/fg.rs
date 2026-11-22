@@ -941,7 +941,9 @@ fn work(
             None
         };
         // opening with nothing kept: the part as built without its checks first (a thermoform's
-        // forming, the measures), on screen while they run
+        // forming, the measures), on screen while they run; its mesh is the first build's too
+        // when that build is the same stage (meshed once: a face that can't mesh is slow to fail)
+        let mut quick_mesh: Option<(u64, PartMesh, Option<PartMesh>)> = None;
         let before = before.or_else(|| {
             if !opening {
                 return None;
@@ -955,7 +957,11 @@ fn work(
             let (shape, c) = forge_lang::run(&job.1, quick, std::mem::take(&mut cache));
             cache = c;
             let b = shape.body.as_ref()?;
-            Some(whole(b, flat_body(&shape).as_ref()))
+            let (mesh, flat) = whole(b, flat_body(&shape).as_ref());
+            if shape.stage != 0 {
+                quick_mesh = Some((shape.stage, mesh.clone(), flat.clone()));
+            }
+            Some((mesh, flat))
         });
         if opening && let Some((mesh, flat)) = before {
             let quick = Options {
@@ -1013,6 +1019,10 @@ fn work(
         let mut checks = false;
         // what the shape's build rebuilt, which the checks' build (all reused) reports for it
         let mut shaped: Option<(usize, usize)> = None;
+        // an opened part's faces for the GPU's live set, meshed after its checks: the check's
+        // word waits on no mesh (a face that can't mesh is slow to fail), and a newer text pays
+        // for it first, its delta only what changed
+        let mut warm: Option<Arc<forge_topo::Body>> = None;
         loop {
             let t = if checks { Instant::now() } else { t };
             let opening = opening && !checks;
@@ -1060,13 +1070,23 @@ fn work(
             let (mut mesh, mut flat, mut delta) = (None, None, None);
             match changed {
                 Some(b) if first => {
-                    let (m, f) = whole(b, flat_body(&run).as_ref());
+                    let (m, f) = match quick_mesh.take() {
+                        Some((stage, m, f)) if stage == run.stage => (m, f),
+                        _ => whole(b, flat_body(&run).as_ref()),
+                    };
                     if let (Some(place), Some(read)) = (&place, &read) {
                         keep_shown(place, &job.1, read, &m, f.as_ref());
                     }
                     (mesh, flat) = (Some(m), f);
                 }
-                Some(b) => delta = Some(mesher.delta(b)),
+                Some(b) => {
+                    if let Some(w) = warm.take()
+                        && !send(Msg::Warm(mesher.delta(&w)))
+                    {
+                        return;
+                    }
+                    delta = Some(mesher.delta(b));
+                }
                 None => {}
             }
             let sheets = run
@@ -1145,19 +1165,20 @@ fn work(
             if let Some(b) = changed {
                 if first {
                     // the GPU's live set starts as the whole part, so later deltas carry only changes
-                    if !send(Msg::Warm(mesher.delta(b))) {
-                        return;
-                    }
+                    warm = last_body.clone();
                 } else if to_mesh.send((job.0, b.clone(), flat_body(&run))).is_err() {
                     return;
                 }
             }
-            if checks {
-                break;
-            }
             // something newer sent (a text, a drive): it goes first, the checks wait for it
-            if let Ok(w) = jobs.try_recv() {
-                next = Some(w);
+            let newer = if checks { None } else { jobs.try_recv().ok() };
+            if checks || newer.is_some() {
+                if let Some(w) = warm.take()
+                    && !send(Msg::Warm(mesher.delta(&w)))
+                {
+                    return;
+                }
+                next = newer.or(next);
                 break;
             }
             checks = true;
