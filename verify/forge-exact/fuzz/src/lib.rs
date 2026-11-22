@@ -623,10 +623,14 @@ pub fn classify(r: &Answer, k: &Kernel) -> Class {
             Kernel::Refused(e) => Class::Refused(format!("refused {e} where the reference gives a solid")),
             Kernel::Built { invalid: Some(p), .. } => Class::Wrong(format!("invalid body {p}")),
             Kernel::Built {
-                volume, sig, merged, ..
+                volume,
+                area,
+                sig,
+                merged,
+                ..
             } => {
                 let (v, e, f) = (sig.verts - sig.redundant, sig.edges - sig.redundant, sig.faces);
-                if (volume - r.volume).abs() > VOLUME_SLACK * r.volume.abs().max(1.0) {
+                if !same_volume(*volume, *area, r.volume) {
                     Class::Wrong(format!("volume {volume} where the reference gives {}", r.volume))
                 } else if (v, e, f, sig.shells) != (r.vertices, r.edges, r.faces, r.shells)
                     && *merged == [r.vertices, r.edges, r.faces, r.shells]
