@@ -60,8 +60,8 @@ conrod seq 8360d7f6efd1b2b1
 conrod nary 666415dba98e5c06
 crank seq e70488cef6e578a5
 crank nary 01eab9078a07e44e
-frame seq c37eb78b7367fb63
-frame nary 035d298e090a0e28
+frame seq 880472a6f7e6e564
+frame nary 2a78f480f8316739
 gearbox seq 10fd1bac9e07e277
 gearbox nary ef006be679c2a65b
 guard seq 45496418722abee5
