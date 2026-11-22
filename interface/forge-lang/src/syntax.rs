@@ -223,7 +223,9 @@ fn lex_into<const KEEP: bool>(
     la: &mut Vec<u8>,
 ) -> Result<Vec<Tok>, Error> {
     let b = src.as_bytes();
-    let mut out = Vec::new();
+    // about a token every four bytes in a part file: room for them all at once
+    let mut out = Vec::with_capacity(b.len() / 4 + 8);
+    la.reserve(b.len() / 4 + 8);
     let mut i = 0;
     let mut depth: i32 = 0;
     let mut keep = |kind: TriviaKind, lo: usize, hi: usize| {
@@ -751,7 +753,6 @@ impl Parser {
 
     fn run(&mut self) -> R<Vec<Stmt>> {
         let expand = expansions();
-        let chains = chains();
         let mut stack: Vec<u16> = Vec::with_capacity(128);
         stack.push(table::NT_BASE as u16);
         // After the first lookahead no rule takes: what was expected there, and whether a
@@ -783,7 +784,7 @@ impl Parser {
             }
             let a = s as usize - table::NT_BASE as usize;
             if missed.is_none() {
-                let c = &chains[a * table::NT + la as usize];
+                let c = chain(a, la as usize);
                 if c.empty {
                     if let Some(r) = c.enter {
                         self.enter(r)?;
@@ -1628,64 +1629,61 @@ struct Chain {
     leaf: Option<u8>,
 }
 
-/// `chains()[nonterminal * NT + lookahead]`.
-fn chains() -> &'static [Chain] {
-    static C: std::sync::OnceLock<Vec<Chain>> = std::sync::OnceLock::new();
-    C.get_or_init(|| {
+/// The chain of nonterminal `a` on lookahead `la`, worked out the first time a parse meets it
+/// (a text meets few of them).
+fn chain(a: usize, la: usize) -> &'static Chain {
+    static C: std::sync::OnceLock<Vec<std::sync::OnceLock<Chain>>> = std::sync::OnceLock::new();
+    let all = C.get_or_init(|| {
+        (0..table::NN * table::NT)
+            .map(|_| std::sync::OnceLock::new())
+            .collect()
+    });
+    all[a * table::NT + la].get_or_init(|| {
         let expand = expansions();
-        let mut out = Vec::with_capacity(table::NN * table::NT);
-        for a in 0..table::NN {
-            for la in 0..table::NT {
-                let p0 = table::TABLE[a][la];
-                let mut c = Chain {
-                    valid: false,
-                    empty: p0 != table::NONE && table::RHS[p0 as usize].is_empty(),
-                    enter: None,
-                    push: Vec::new(),
-                    shift: false,
-                    leaf: None,
-                };
-                if c.empty && table::RULES[p0 as usize] == P::ArgkwEmpty {
-                    c.enter = Some(P::ArgkwEmpty);
-                }
-                let mut x = a;
-                loop {
-                    let p = table::TABLE[x][la];
-                    if p == table::NONE || table::RHS[p as usize].is_empty() || c.enter.is_some() {
-                        if c.valid {
-                            c.push.push((table::NT_BASE as usize + x) as u16);
-                        }
-                        break;
-                    }
-                    let rule = table::RULES[p as usize];
-                    if matches!(rule, P::AssigntailAssign | P::ArgkwColon | P::ArgkwEmpty) {
-                        if c.valid {
-                            c.push.push((table::NT_BASE as usize + x) as u16);
-                            break;
-                        }
-                        c.enter = Some(rule);
-                    }
-                    c.valid = true;
-                    let first = table::RHS[p as usize][0];
-                    if first < table::NT_BASE
-                        && table::RHS[p as usize].len() == 1
-                        && expand[p as usize].len() == 1
-                    {
-                        c.leaf = Some(p);
-                        c.shift = true;
-                        break;
-                    }
-                    c.push.extend_from_slice(&expand[p as usize]);
-                    if first < table::NT_BASE {
-                        c.shift = true;
-                        break;
-                    }
-                    x = (first - table::NT_BASE) as usize;
-                }
-                out.push(c);
-            }
+        let p0 = table::TABLE[a][la];
+        let mut c = Chain {
+            valid: false,
+            empty: p0 != table::NONE && table::RHS[p0 as usize].is_empty(),
+            enter: None,
+            push: Vec::new(),
+            shift: false,
+            leaf: None,
+        };
+        if c.empty && table::RULES[p0 as usize] == P::ArgkwEmpty {
+            c.enter = Some(P::ArgkwEmpty);
         }
-        out
+        let mut x = a;
+        loop {
+            let p = table::TABLE[x][la];
+            if p == table::NONE || table::RHS[p as usize].is_empty() || c.enter.is_some() {
+                if c.valid {
+                    c.push.push((table::NT_BASE as usize + x) as u16);
+                }
+                break;
+            }
+            let rule = table::RULES[p as usize];
+            if matches!(rule, P::AssigntailAssign | P::ArgkwColon | P::ArgkwEmpty) {
+                if c.valid {
+                    c.push.push((table::NT_BASE as usize + x) as u16);
+                    break;
+                }
+                c.enter = Some(rule);
+            }
+            c.valid = true;
+            let first = table::RHS[p as usize][0];
+            if first < table::NT_BASE && table::RHS[p as usize].len() == 1 && expand[p as usize].len() == 1 {
+                c.leaf = Some(p);
+                c.shift = true;
+                break;
+            }
+            c.push.extend_from_slice(&expand[p as usize]);
+            if first < table::NT_BASE {
+                c.shift = true;
+                break;
+            }
+            x = (first - table::NT_BASE) as usize;
+        }
+        c
     })
 }
 
@@ -1802,9 +1800,13 @@ pub fn name_uses(toks: &[Tok], word: &str) -> Vec<Span> {
 /// A reserved word used as a name, typed, with its rename fix; None if there is none or the
 /// text does not lex.
 pub fn reserved(src: &str) -> Option<Error> {
-    let toks = lex(src).ok()?;
+    reserved_in(&lex(src).ok()?)
+}
+
+/// `reserved` in the text's tokens, lexed already.
+fn reserved_in(toks: &[Tok]) -> Option<Error> {
     RESERVED.iter().find_map(|w| {
-        name_uses(&toks, w)
+        name_uses(toks, w)
             .first()
             .map(|&span| Error::Syntax(crate::error::SyntaxError::ReservedWord { span, word: w }))
     })
@@ -1816,7 +1818,7 @@ pub fn parse(src: &str) -> R<Vec<Stmt>> {
     if RESERVED
         .iter()
         .any(|w| toks.iter().any(|t| t.kind == TokKind::Kw(w)))
-        && let Some(e) = reserved(src)
+        && let Some(e) = reserved_in(&toks)
     {
         return Err(e);
     }

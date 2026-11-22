@@ -229,10 +229,7 @@ fn dropout(on) {
 drop_sk = dropout(offset(side.plane, 0 - dropy))
 drop = extrude(drop_sk, drop_t)
 # the stays and dropout mirrored to the other side
-cs_m = stay(-1, c0x, c0y, 0, cd, cu, cn, rcs, from0, csu, csv, ccu, ccv, ctu, ctv, cl, false)
-ss_m = stay(-1, q0x, q0y, q0z, sd, su, sn, rss, from0, ssu, ssv, scu, scv, stu, stv, sl, false)
-drop_m_sk = dropout(offset(side.plane, dropy))
-drop_m = extrude(drop_m_sk, 0 - drop_t)
+stays = pattern(of: [cs, ss, drop], layout: mirror(on: side.plane))
 
 # bridges, the drive-side hanger, the seat clamp and bottle bosses
 shared bbr_at = 110
@@ -330,7 +327,7 @@ seat1_pl = tplane(hbx, hbz, 0 - hdx, 0 - hdz, hdz, 0 - hdx)
 seat1 = bore(seat1_pl, seat_r1, seat_d)
 shared csb_from = 12
 csb = stay(1, c0x, c0y, 0, cd, cu, cn, rcs - wall, csb_from, csu, csv, ccu, ccv, ctu, ctv, cl, true)
-csb_m = stay(-1, c0x, c0y, 0, cd, cu, cn, rcs - wall, csb_from, csu, csv, ccu, ccv, ctu, ctv, cl, true)
+csbs = pattern(of: csb, layout: mirror(on: side.plane))
 
 # axle slots
 param slots_sk.w = 5
@@ -396,8 +393,4 @@ sketch port_sk(on: offset(side.plane, port_y)) {
   p = pt((dtl - port_up) * dux, (dtl - port_up) * duz)
 }
 port = hole(at: port_sk.p, d: port_d, depth: port_depth)
-port_m_pl = pl3((dtl - port_up) * dux, port_y, (dtl - port_up) * duz, 0, 1, 0, 1, 0, 0)
-sketch port_m_sk(on: port_m_pl) {
-  p = pt(0, 0)
-}
-port_m = hole(at: port_m_sk.p, d: port_d, depth: port_depth)
+ports = pattern(of: port, layout: mirror(on: side.plane))

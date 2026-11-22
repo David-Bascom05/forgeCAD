@@ -845,7 +845,7 @@ fn set(n: Option<&Num>, id: &str, arg: &str, value: f64, unit: &str) -> Op {
             value
         };
         return Op::SetParam {
-            param: p.clone(),
+            param: (**p).clone(),
             value: Literal { value, dim: n.dim },
         };
     }

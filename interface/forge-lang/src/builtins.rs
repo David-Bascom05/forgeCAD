@@ -91,11 +91,18 @@ pub const BUILTINS: &[&str] = &[
 
 /// A built-in function's name, this module's or another's (shapes).
 pub fn builtin(name: &str) -> Option<&'static str> {
-    BUILTINS
-        .iter()
-        .chain(crate::shapes::NAMES)
-        .find(|b| **b == name)
-        .copied()
+    // every name looked up or bound asks: a map, not a walk of the lists
+    type Names = HashMap<&'static str, &'static str, std::hash::BuildHasherDefault<crate::eval::NameHasher>>;
+    static ALL: std::sync::OnceLock<Names> = std::sync::OnceLock::new();
+    ALL.get_or_init(|| {
+        let mut m = Names::default();
+        for &b in BUILTINS.iter().chain(crate::shapes::NAMES) {
+            m.entry(b).or_insert(b);
+        }
+        m
+    })
+    .get(name)
+    .copied()
 }
 
 const MORE: [&str; 5] = ["axis", "sym", "two", "upto", "intersect"];
@@ -141,7 +148,8 @@ pub fn constant(name: &str) -> Option<Value> {
 pub struct Args {
     func: &'static str,
     call: Span,
-    vals: HashMap<&'static str, (Value, Span)>,
+    /// Each argument given, by name (a handful: a list is quicker than a map).
+    vals: Vec<(&'static str, (Value, Span))>,
 }
 
 impl Args {
@@ -152,15 +160,15 @@ impl Args {
         args: &[Arg],
         call: Span,
     ) -> R<Args> {
-        let mut vals = HashMap::new();
+        let mut vals: Vec<(&'static str, (Value, Span))> = Vec::with_capacity(args.len());
         for (k, a) in args.iter().enumerate() {
             let key = match &a.name {
-                Some((n, sp)) => *names.iter().find(|x| *x == n).ok_or(Error::UnknownArg {
+                Some((n, sp)) => *names.iter().find(|x| *x == n).ok_or_else(|| Error::UnknownArg {
                     span: *sp,
                     func,
                     arg: n.clone(),
                 })?,
-                None => *names.get(k).ok_or(Error::TooManyArgs {
+                None => *names.get(k).ok_or_else(|| Error::TooManyArgs {
                     span: a.value.span,
                     func: func.into(),
                     max: names.len(),
@@ -175,16 +183,23 @@ impl Args {
             // part built so far without one, it is a selection that found nothing
             let known_empty = ev.b.building && ev.errors.is_empty() && !unresolved_in(&v);
             ev.poisoned |= unknown_in(&v) && !known_empty;
-            vals.insert(key, (v, a.value.span));
+            // (given twice, the last is the one)
+            match vals.iter_mut().find(|x| x.0 == key) {
+                Some(x) => x.1 = (v, a.value.span),
+                None => vals.push((key, (v, a.value.span))),
+            }
         }
         Ok(Args { func, call, vals })
     }
     /// Whether an argument stands for something an earlier error left unknown.
     pub fn poisoned(&self) -> bool {
-        self.vals.values().any(|v| matches!(v.0, Value::Unresolved))
+        self.vals.iter().any(|v| matches!(v.1.0, Value::Unresolved))
+    }
+    fn get(&self, k: &str) -> Option<&(Value, Span)> {
+        self.vals.iter().find(|x| x.0 == k).map(|x| &x.1)
     }
     pub fn opt(&self, k: &str) -> Option<Value> {
-        self.vals.get(k).map(|v| v.0.clone())
+        self.get(k).map(|v| v.0.clone())
     }
     pub fn req(&self, k: &'static str) -> R<Value> {
         self.opt(k).ok_or(Error::MissingArg {
@@ -194,7 +209,7 @@ impl Args {
         })
     }
     pub fn span(&self, k: &str) -> Span {
-        self.vals.get(k).map_or(self.call, |v| v.1)
+        self.get(k).map_or(self.call, |v| v.1)
     }
     pub(crate) fn num(&self, k: &'static str, dims: &[Dim]) -> R<Option<Num>> {
         match self.opt(k) {
@@ -736,7 +751,7 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
                 v: dmath::atan2(y.v, x.v),
                 dim: Dim::Angle,
                 src: match src {
-                    Src::Driving(p) => Src::Driven([p].into()),
+                    Src::Driving(p) => Src::Driven(std::sync::Arc::new([(*p).clone()].into())),
                     s => s,
                 },
             }))
@@ -777,7 +792,7 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
                             dim: Dim::Length,
                             src: match &src {
                                 Src::Const => Src::Const,
-                                s => Src::Driven(s.params()),
+                                s => Src::Driven(std::sync::Arc::new(s.params())),
                             },
                         })
                     };
@@ -2528,10 +2543,7 @@ fn instance_names(
     let faces = |b: &Body| -> Vec<Name> { b.face_ids().map(|g| b.face(g).name).collect() };
     match src {
         Some(forge_model::Source::Body) => {
-            let names = before
-                .and_then(|b| b.work())
-                .map(|b| faces(&b))
-                .unwrap_or_default();
+            let names = before.and_then(|b| b.work()).map(faces).unwrap_or_default();
             let Feature::Pattern { layout, .. } = &hist[i] else {
                 return vec![];
             };
@@ -2702,7 +2714,7 @@ pub(crate) fn feature_local(ev: &mut Eval, id: &str, name: &str, span: Span) -> 
         Value::Num(n) => Value::Num(Num {
             v: n.v,
             dim: n.dim,
-            src: Src::Driving(ev.locals[k].key.clone()),
+            src: Src::driving(ev.locals[k].key.clone()),
         }),
         o => o.clone(),
     }))
@@ -2938,7 +2950,7 @@ fn face_center(ev: &mut Eval, fs: &Faces, span: Span) -> R<Value> {
         }
         None => faces_axis_middle(body, &faces).map(|(o, d)| Value::Axis(o, d)),
     };
-    got.ok_or(Error::NotPlanar {
+    got.ok_or_else(|| Error::NotPlanar {
         span,
         id: fs.owner.clone(),
         role: fs.role,
@@ -3595,7 +3607,7 @@ fn lines(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Value
             let src = values::join_src(&s1, &s2);
             let src = match src {
                 Src::Const => Src::Const,
-                s => Src::Driven(s.params()),
+                s => Src::Driven(std::sync::Arc::new(s.params())),
             };
             let n = |v: f64| {
                 Value::Num(Num {

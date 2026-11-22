@@ -186,7 +186,20 @@ pub(crate) fn motion(steps: &[Step]) -> Motion {
 /// Feature `i` of a history applied to the bodies features `..i` left: `regenerate_solids`
 /// one feature at a time. Only `features[..=i]` is read.
 pub fn step_solids(features: History<'_>, i: usize, solids: Vec<Solid>) -> Result<Vec<Solid>, RegenError> {
-    let solids = step_unchecked(features, i, solids)?;
+    step_solids_finished(features, i, solids, None)
+}
+
+/// `step_solids` given the one solid it starts from already finished (`crate::finish`, by a caller
+/// that looked at the part): a feature that works on the finished part takes it as it is rather
+/// than finishing it again. The very same result: finishing is a function of the body alone.
+/// `finished` is ignored unless `solids` is one solid of a history of one body.
+pub fn step_solids_finished(
+    features: History<'_>,
+    i: usize,
+    solids: Vec<Solid>,
+    finished: Option<&Body>,
+) -> Result<Vec<Solid>, RegenError> {
+    let solids = step_unchecked(features, i, solids, finished)?;
     let open = |s: &[Solid]| s.iter().find_map(|s| forge_topo::check::open_at(&s.body));
     let Some(what) = open(&solids) else {
         return Ok(solids);
@@ -205,18 +218,26 @@ pub fn step_solids(features: History<'_>, i: usize, solids: Vec<Solid>) -> Resul
     }
 }
 
-fn step_unchecked(features: History<'_>, i: usize, mut solids: Vec<Solid>) -> Result<Vec<Solid>, RegenError> {
+fn step_unchecked(
+    features: History<'_>,
+    i: usize,
+    mut solids: Vec<Solid>,
+    finished: Option<&Body>,
+) -> Result<Vec<Solid>, RegenError> {
     let upto = features.upto(i + 1);
     if !multi(&upto) {
         let id = upto.iter().rposition(starts).unwrap_or(0);
+        let finished = finished.filter(|_| solids.len() == 1);
         let body = solids.pop().map(|s| s.body);
         // (a caller stepping keeps the part so far itself: a copy only for what may need a retry, and
-        // no nesting: at worst the part once more with all its knife edges blunted)
+        // no nesting: at worst the part once more with all its knife edges blunted; each try
+        // starts from the same body, so from the same body finished)
         let tried = match crate::blunted(features, i) {
-            None => crate::step_plain(features, i, body),
-            Some(fs) => match crate::step_plain(features, i, body.clone()) {
+            None => crate::step_plain_finished(features, i, body, finished),
+            Some(fs) => match crate::step_plain_finished(features, i, body.clone(), finished) {
                 Err(e) if crate::lost_its_way(&e) => {
-                    crate::step_plain(History::new(&fs, features.ids), i, body).map_err(|_| e)
+                    crate::step_plain_finished(History::new(&fs, features.ids), i, body, finished)
+                        .map_err(|_| e)
                 }
                 r => r,
             },

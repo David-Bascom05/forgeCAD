@@ -282,12 +282,12 @@ pub fn owner(ev: &mut Eval, name: Name, face: bool, span: Span) -> R<Ref> {
         });
     }
     let origin = ev.b.origin(n);
-    let body = ev.b.body().expect("built").clone();
+    let body = ev.b.body().expect("built");
     let mut cands: Vec<usize> = vec![];
     let faces: Vec<Name> = if face {
         vec![name]
     } else if let Some(e) = body.edge_by_name(name) {
-        select::faces_of_edge(&body, e)
+        select::faces_of_edge(body, e)
             .into_iter()
             .map(|f| body.face(f).name)
             .collect()
@@ -299,7 +299,7 @@ pub fn owner(ev: &mut Eval, name: Name, face: bool, span: Span) -> R<Ref> {
             if body.vertex(edge.start).name != name && body.vertex(edge.end).name != name {
                 continue;
             }
-            for f in select::faces_of_edge(&body, e) {
+            for f in select::faces_of_edge(body, e) {
                 let n = body.face(f).name;
                 if !fs.contains(&n) {
                     fs.push(n);
@@ -318,7 +318,7 @@ pub fn owner(ev: &mut Eval, name: Name, face: bool, span: Span) -> R<Ref> {
     let h = ev.b.history();
     let mut near = None;
     for &k in &cands {
-        match forge_model::work::own_name(h, k, &body, name) {
+        match forge_model::work::own_name(h, k, body, name) {
             Some(m) if m == name => {
                 return Ok(Ref {
                     feature: k,

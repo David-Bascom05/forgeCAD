@@ -207,7 +207,84 @@ fn sign(v: f64) -> f64 {
     if v < 0.0 { -1.0 } else { 1.0 }
 }
 
+/// A constraint's number, if it holds one.
+fn value_of(c: &Constraint) -> Option<f64> {
+    match *c {
+        Constraint::Distance(_, _, d)
+        | Constraint::DistancePointLine(_, _, d)
+        | Constraint::Length(_, d)
+        | Constraint::Radius(_, d)
+        | Constraint::Diameter(_, d)
+        | Constraint::Angle(_, _, d)
+        | Constraint::HorizontalDistance(_, _, d)
+        | Constraint::VerticalDistance(_, _, d)
+        | Constraint::EllipseMinor(_, d) => Some(d),
+        _ => None,
+    }
+}
+
 impl Sketch {
+    /// Equal to `o` bit for bit: `==` and every number's bits the same (`==` takes -0.0 for
+    /// 0.0), so solving either gives the very same answer.
+    pub fn same_bits(&self, o: &Sketch) -> bool {
+        fn b(a: f64, c: f64) -> bool {
+            a.to_bits() == c.to_bits()
+        }
+        fn all(a: &[f64], c: &[f64]) -> bool {
+            a.len() == c.len() && a.iter().zip(c).all(|(x, y)| b(*x, *y))
+        }
+        fn v3(a: forge_math::Vec3, c: forge_math::Vec3) -> bool {
+            b(a.x, c.x) && b(a.y, c.y) && b(a.z, c.z)
+        }
+        fn opt(a: &Option<Vec<f64>>, c: &Option<Vec<f64>>) -> bool {
+            match (a, c) {
+                (Some(a), Some(c)) => all(a, c),
+                (None, None) => true,
+                _ => false,
+            }
+        }
+        let (p, q) = (&self.plane, &o.plane);
+        self == o
+            && v3(p.origin.to_vec(), q.origin.to_vec())
+            && v3(p.x().get(), q.x().get())
+            && v3(p.y().get(), q.y().get())
+            && v3(p.z().get(), q.z().get())
+            && all(&self.params, &o.params)
+            && self.constraints.iter().zip(&o.constraints).all(|(x, y)| {
+                all(&x.data, &y.data)
+                    && match (value_of(&x.c), value_of(&y.c)) {
+                        (Some(m), Some(n)) => b(m, n),
+                        (m, n) => m.is_none() && n.is_none(),
+                    }
+            })
+            && self.splines.iter().zip(&o.splines).all(|(x, y)| {
+                let kind = match (&x.kind, &y.kind) {
+                    (
+                        SplineKind::Control {
+                            knots: k1,
+                            weights: w1,
+                            ..
+                        },
+                        SplineKind::Control {
+                            knots: k2,
+                            weights: w2,
+                            ..
+                        },
+                    ) => opt(k1, k2) && opt(w1, w2),
+                    _ => true,
+                };
+                let slope = |m: Option<Vec2>, n: Option<Vec2>| match (m, n) {
+                    (Some(m), Some(n)) => b(m.x, n.x) && b(m.y, n.y),
+                    _ => true,
+                };
+                kind && slope(x.slopes[0], y.slopes[0]) && slope(x.slopes[1], y.slopes[1])
+            })
+            && match (&self.last, &o.last) {
+                (Some(m), Some(n)) => all(&m.0, &n.0),
+                _ => true,
+            }
+    }
+
     pub fn new(plane: Frame) -> Self {
         Sketch {
             plane,
