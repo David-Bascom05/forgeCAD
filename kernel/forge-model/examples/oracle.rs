@@ -1221,11 +1221,7 @@ fn fg(path: &std::path::Path) -> (String, Part, Vec<u64>) {
     let src = std::fs::read_to_string(path).expect("a part file");
     let dir = std::env::temp_dir().join(format!("forge-oracle-{}", std::process::id()));
     std::fs::create_dir_all(&dir).expect("temp dir");
-    std::fs::write(
-        dir.join(forge_agent::bench::FONT),
-        forge_agent::bench::font_bytes(),
-    )
-    .expect("font");
+    std::fs::write(dir.join(forge_lang::bench::FONT), forge_lang::bench::font_bytes()).expect("font");
     for e in std::fs::read_dir(path.parent().expect("a folder"))
         .expect("its folder")
         .flatten()

@@ -578,10 +578,10 @@ pub fn parse_in(text: &str, dim: Dim, doc: &str) -> Option<Literal> {
         return None;
     }
     let scaled = |word: &str| {
-        let (d, top, bottom) = forge_doc::units::lookup(word)?;
+        let (d, top, bottom) = forge_lang::units::lookup(word)?;
         let dim = match d {
-            forge_doc::units::LENGTH => Dim::Length,
-            forge_doc::units::ANGLE => Dim::Angle,
+            forge_lang::units::LENGTH => Dim::Length,
+            forge_lang::units::ANGLE => Dim::Angle,
             _ => return None,
         };
         Some(Literal {
@@ -602,14 +602,14 @@ pub fn units_of(src: &str) -> Option<&'static str> {
     let says = src.lines().any(|l| {
         l.trim()
             .strip_prefix('#')
-            .is_some_and(|n| n.trim().starts_with(forge_doc::units::LINE))
+            .is_some_and(|n| n.trim().starts_with(forge_lang::units::LINE))
     });
-    says.then(|| forge_doc::units::of_text(src))
+    says.then(|| forge_lang::units::of_text(src))
 }
 
 /// The text with its units line saying `unit`: the line there changed, else one put first.
 pub fn with_units(src: &str, unit: &str) -> String {
-    let line = format!("# {}{unit}", forge_doc::units::LINE);
+    let line = format!("# {}{unit}", forge_lang::units::LINE);
     let mut done = false;
     let mut out: Vec<String> = src
         .split_inclusive('\n')
@@ -617,7 +617,7 @@ pub fn with_units(src: &str, unit: &str) -> String {
             let is = l
                 .trim()
                 .strip_prefix('#')
-                .is_some_and(|n| n.trim().starts_with(forge_doc::units::LINE));
+                .is_some_and(|n| n.trim().starts_with(forge_lang::units::LINE));
             if is && !done {
                 done = true;
                 let end = if l.ends_with('\n') { "\n" } else { "" };

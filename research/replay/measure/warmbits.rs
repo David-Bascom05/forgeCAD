@@ -2,22 +2,26 @@
 //! Takes the traced curves (`IntCurve`) at two values of a number, matches them by edge name:
 //! chain lengths, Newton steps from old node vs from the march predictor, and the limit bits of a
 //! square solve (both surfaces + a station plane) from starts at several distances.
-use forge_agent::bench;
-use forge_agent::tools::{Dim, Part};
+//! PART is a Forge bench part (`parts/bench/PART.fg`), NAME its params (`L`, `bolt.cb`), each
+//! set by a SetParam as a drag of its field writes it. Copy to interface/forge-lang/examples/.
+use forge_lang::bench;
+use forge_lang::error::{Literal, Op};
 use forge_geom::intcurve::IntCurve;
 use forge_geom::{Curve, Surface};
 use forge_math::{Point3, Vec3};
 use std::collections::HashMap;
 
-fn curves(p: &Part) -> HashMap<forge_topo::Name, std::sync::Arc<IntCurve>> {
+/// The part's traced curves, by edge name.
+fn curves(src: &str, dir: &std::path::Path) -> HashMap<forge_topo::Name, std::sync::Arc<IntCurve>> {
+    let opts = forge_lang::Options { dir: Some(dir.to_path_buf()), checks: false, ..Default::default() };
+    let (run, _) = forge_lang::run(src, opts, Default::default());
+    assert!(run.errors.is_empty(), "{:?}", run.errors.first().map(|e| e.text()));
     let mut o = HashMap::new();
-    let m = &p.model;
-    for s in m.solids_after(m.built()) {
-        for e in s.body.edge_ids() {
-            let x = s.body.edge(e);
-            if let Curve::Intersection(c) = &x.curve {
-                o.insert(x.name, c.clone());
-            }
+    let b = run.body.as_ref().expect("a part");
+    for e in b.edge_ids() {
+        let x = b.edge(e);
+        if let Curve::Intersection(c) = &x.curve {
+            o.insert(x.name, c.clone());
         }
     }
     o
@@ -66,14 +70,19 @@ fn main() {
     let src = bench::src(&a[0]).expect("a part");
     let names: Vec<&str> = a[1].split('+').collect();
     let delta: f64 = a.get(2).map_or(0.002, |s| s.parse().unwrap());
-    let mut p = Part::of(bench::model(src));
-    let dims: Vec<Dim> = p.dims();
-    let d0 = curves(&p);
+    let dir = std::env::temp_dir().join(format!("warmbits-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("a scratch folder");
+    std::fs::write(dir.join(bench::FONT), bench::font_bytes()).expect("the font");
+    let nums = forge_lang::edit::handles(src);
+    let d0 = curves(src, &dir);
+    let mut text = src.to_string();
     for n in &names {
-        let d = dims.iter().find(|d| d.name == *n).expect("a number");
-        p.model.edit(d.at.op(forge_agent::short(d.value * (1.0 + delta)))).unwrap();
+        let (key, was) = nums.iter().find(|(k, _)| k.to_string() == *n).expect("a number");
+        let value = Literal { value: was.value * (1.0 + delta), dim: was.dim };
+        text = forge_lang::edit::apply(&text, &Op::SetParam { param: key.clone(), value }).unwrap();
     }
-    let d1 = curves(&p);
+    let d1 = curves(&text, &dir);
+    let _ = std::fs::remove_dir_all(&dir);
     let (mut same, mut len_diff, mut nodes) = (0, 0, 0usize);
     let (mut warm, mut pred, mut warm_n) = (0usize, 0usize, 0usize);
     let (mut bits_same, mut bits_tot, mut spread_max, mut fixed2, mut one_limit) = (0usize, 0usize, 0f64, 0usize, 0usize);

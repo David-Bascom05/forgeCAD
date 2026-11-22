@@ -146,7 +146,7 @@ pub struct MeasurePanel {
     /// The values' words' column, as dragged (none: as it starts).
     pub label_w: f32,
     /// Opened from a dialog's value field (which, and its kind): a value's Use puts it there.
-    pub into: Option<(IntoField, forge_doc::units::Kind)>,
+    pub into: Option<(IntoField, forge_lang::units::Kind)>,
     /// A value Use was pressed on, for the shell to put in the field.
     pub used: Option<f64>,
     /// Decimal places shown.
@@ -360,7 +360,7 @@ pub fn doc_dir(file: &str) -> Option<std::path::PathBuf> {
 
 /// A unit's factor from base units (mm, kg) and its words.
 fn per_unit(unit: &str) -> f64 {
-    match forge_doc::units::compound(unit) {
+    match forge_lang::units::compound(unit) {
         Ok((_, n, m)) => m / n,
         Err(_) => 1.0,
     }
@@ -456,14 +456,14 @@ impl Shell {
             .and_then(|t| t.params.iter().find(|p| p.name == name))
             .map(|p| p.dim);
         let kind = match dim {
-            Some(Dim::Length) => forge_doc::units::Kind::Length,
-            Some(Dim::Angle) => forge_doc::units::Kind::Angle,
+            Some(Dim::Length) => forge_lang::units::Kind::Length,
+            Some(Dim::Angle) => forge_lang::units::Kind::Angle,
             _ => return,
         };
         self.open_measure_into(IntoField::Param(name), kind);
     }
 
-    fn open_measure_into(&mut self, into: IntoField, kind: forge_doc::units::Kind) {
+    fn open_measure_into(&mut self, into: IntoField, kind: forge_lang::units::Kind) {
         if self.inspect.measure.as_ref().is_none_or(|m| m.wall) {
             self.inspect.measure = None;
             self.inspect_command(InspectCmd::Measure);

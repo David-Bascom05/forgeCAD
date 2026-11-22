@@ -46,6 +46,7 @@ pub mod thermo;
 pub mod thermo_kept;
 pub mod tightbox;
 pub mod undo;
+pub mod units;
 pub mod uses;
 pub mod validity;
 pub mod values;

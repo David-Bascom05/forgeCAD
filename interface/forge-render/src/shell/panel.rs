@@ -2,8 +2,8 @@
 //! titles, what a value field measures.
 
 /// What a field of this name measures, if it's a number.
-pub fn field_kind(label: &str) -> Option<forge_doc::units::Kind> {
-    use forge_doc::units::Kind;
+pub fn field_kind(label: &str) -> Option<forge_lang::units::Kind> {
+    use forge_lang::units::Kind;
     match label {
         "Distance" | "Diameter" | "Radius" | "Thickness" | "Depth" | "Length" | "Offset" | "Height"
         | "Pitch" | "Width" | "Value" | "Spacing" | "Seat diameter" | "Seat depth" | "Distance 1"

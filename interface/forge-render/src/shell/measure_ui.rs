@@ -241,8 +241,8 @@ impl Shell {
                             let focused = m.focus == Some(*q);
                             // into a length field a length, into an angle field an angle
                             let usable = match &m.into {
-                                Some((_, forge_doc::units::Kind::Angle)) => q.power() == 0,
-                                Some((_, forge_doc::units::Kind::Length)) => q.power() == 1,
+                                Some((_, forge_lang::units::Kind::Angle)) => q.power() == 0,
+                                Some((_, forge_lang::units::Kind::Length)) => q.power() == 1,
                                 None => false,
                             };
                             match value_row(
@@ -413,7 +413,7 @@ impl Shell {
                         .selected_text(m.unit)
                         .width(40.0)
                         .show_ui(ui, |ui| {
-                            for u in forge_doc::units::DOC_LENGTHS {
+                            for u in forge_lang::units::DOC_LENGTHS {
                                 ui.selectable_value(&mut m.unit, u, u);
                             }
                         });
@@ -465,7 +465,7 @@ impl Shell {
                             .width(60.0)
                             .show_ui(ui, |ui| {
                                 ui.selectable_value(&mut m.dual, None, "None");
-                                for u in forge_doc::units::DOC_LENGTHS {
+                                for u in forge_lang::units::DOC_LENGTHS {
                                     ui.selectable_value(&mut m.dual, Some(u), u);
                                 }
                             });
