@@ -244,4 +244,3 @@ fn seat_cut_into_a_joined_tube_end() {
     .unwrap();
     assert!((volume(&r) - volume(&seq)).abs() < 1e-6 * volume(&seq));
 }
-

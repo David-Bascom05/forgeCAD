@@ -333,7 +333,16 @@ fn log_same(body: &Body, a: FaceId, b: FaceId, same: bool) {
     }
     let key = d::pair(Ent::f(body, a), Ent::f(body, b));
     let site = Site::Named("unify: same_surface");
-    d::decide(Kind::Coincident, key, None, None, same as u8, site, gap, tol::LINEAR);
+    d::decide(
+        Kind::Coincident,
+        key,
+        None,
+        None,
+        same as u8,
+        site,
+        gap,
+        tol::LINEAR,
+    );
     let yes = crate::ssi::coincident(&fa.surface, &fb.surface);
     let site = Site::Named("unify: ssi::coincident (the boolean's test)");
     d::decide(Kind::Coincident, key, None, None, yes as u8, site, gap, f64::NAN);
@@ -715,28 +724,42 @@ fn join(body: &mut Body, c: CoedgeId, n: CoedgeId) -> bool {
     if x1.start == x1.end || x2.start == x2.end || x1.coedges.len() != 2 || x2.coedges.len() != 2 {
         return false;
     }
-    // on one line or circle (cheap tests first; the walk round v and the evaluation settle it)
-    let same_kind = match (&x1.curve, &x2.curve) {
-        (Curve::Line(a), Curve::Line(b)) => {
-            let c = a.dir.cross(b.dir);
-            c.dot(c) <= tol::ANGULAR * tol::ANGULAR
-        }
-        (Curve::Circle(a), Curve::Circle(b)) => {
-            (a.radius - b.radius).abs() <= tol::LINEAR
-                && a.frame.origin.distance(b.frame.origin) <= tol::LINEAR
-        }
-        // pieces of one other curve: only where their parameter ranges abut, not across the
-        // start of a closed curve
-        (a, b) => {
-            let abut = |t: f64, u: f64| (t - u).abs() <= 1e-9 * (1.0 + t.abs());
-            a == b
-                && if x1.end == v {
-                    x2.start == v && abut(x2.range.lo, x1.range.hi)
-                } else {
-                    x2.end == v && abut(x2.range.hi, x1.range.lo)
-                }
-        }
+    // two traces of where the same two surfaces meet (the pieces two booleans traced apart):
+    // one branch through v, whose chains are spliced there
+    let traced = match (&x1.curve, &x2.curve) {
+        (Curve::Intersection(a), Curve::Intersection(b)) => a != b,
+        _ => false,
     };
+    // on one line or circle (cheap tests first; the walk round v and the evaluation settle it)
+    let same_kind = traced
+        || match (&x1.curve, &x2.curve) {
+            (Curve::Line(a), Curve::Line(b)) => {
+                let c = a.dir.cross(b.dir);
+                c.dot(c) <= tol::ANGULAR * tol::ANGULAR
+            }
+            (Curve::Circle(a), Curve::Circle(b)) => {
+                (a.radius - b.radius).abs() <= tol::LINEAR
+                    && a.frame.origin.distance(b.frame.origin) <= tol::LINEAR
+            }
+            // pieces of one other curve: only where their parameter ranges abut, on a periodic
+            // curve (an ellipse) by whole periods too, as a circle's do: where the pieces of one
+            // ellipse meet its start falls where its frame puts it, which a mirror image moves. Not
+            // across the start of a closed curve that is not periodic.
+            (a, b) => {
+                let period = a.domain().period;
+                let abut = |t: f64, u: f64| {
+                    let d = t - u;
+                    let d = period.map_or(d, |p| d - p * (d / p).round());
+                    d.abs() <= 1e-9 * (1.0 + t.abs())
+                };
+                a == b
+                    && if x1.end == v {
+                        x2.start == v && abut(x2.range.lo, x1.range.hi)
+                    } else {
+                        x2.end == v && abut(x2.range.hi, x1.range.lo)
+                    }
+            }
+        };
     if !same_kind {
         return false;
     }
@@ -754,6 +777,9 @@ fn join(body: &mut Body, c: CoedgeId, n: CoedgeId) -> bool {
         !matches!(s, Surface::Plane(_) | Surface::Cylinder(_)) && s.singular(s.project(at))
     }) {
         return false;
+    }
+    if traced {
+        return splice(body, e1, e2, v);
     }
     // e1's curve carried on past v by e2's length (both unit-speed lines, or circles of one radius)
     let far = if x2.start == v { x2.end } else { x2.start };
@@ -804,6 +830,70 @@ fn join(body: &mut Body, c: CoedgeId, n: CoedgeId) -> bool {
     }
     edge.bbox.clear();
     // its uses leave their loops once every join is done
+    body.edges[e2.index()].alive = false;
+    body.dead += 1;
+    true
+}
+
+/// `join` for two traced edges `e1` and `e2` meeting at `v`: e1 takes one chain through v
+/// (`IntCurve::spliced`) from its own far end to e2's, if each far end is on it.
+fn splice(body: &mut Body, e1: EdgeId, e2: EdgeId, v: forge_topo::VertexId) -> bool {
+    use forge_geom::intcurve::IntCurve;
+    let (x1, x2) = (body.edge(e1), body.edge(e2));
+    let (Curve::Intersection(c1), Curve::Intersection(c2)) = (&x1.curve, &x2.curve) else {
+        return false;
+    };
+    // a piece as run the other way
+    let flip = |c: &IntCurve, r: Interval| {
+        let h = c.domain_hi();
+        (c.reversed(), Interval::new(h - r.hi, h - r.lo))
+    };
+    let at = body.vertex(v).point;
+    let far = if x2.start == v { x2.end } else { x2.start };
+    let spliced = if x1.end == v {
+        // along e1 into v, then e2 away from it
+        let (b, rb) = if x2.start == v {
+            (c2.as_ref().clone(), x2.range)
+        } else {
+            flip(c2, x2.range)
+        };
+        c1.spliced(x1.range, &b, rb, at)
+    } else {
+        // along e2 into v, then e1 away from it
+        let (a, ra) = if x2.end == v {
+            (c2.as_ref().clone(), x2.range)
+        } else {
+            flip(c2, x2.range)
+        };
+        a.spliced(ra, c1, x1.range, at)
+    };
+    let Some((curve, range)) = spliced else {
+        return false;
+    };
+    let (start, end) = if x1.end == v {
+        (x1.start, far)
+    } else {
+        (far, x1.end)
+    };
+    let other = if x1.end == v { x1.start } else { x1.end };
+    // its ends where the edge's vertices are; nor a loop back to one point (a pinch's)
+    let off = |t: f64, w: forge_topo::VertexId| {
+        curve.eval(t).distance(body.vertex(w).point) > body.vertex(w).tol.max(tol::LINEAR)
+    };
+    let pinch = body.vertex(far).tol.max(body.vertex(other).tol).max(tol::LINEAR);
+    if off(range.lo, start)
+        || off(range.hi, end)
+        || far == other
+        || body.vertex(far).point.distance(body.vertex(other).point) <= pinch
+    {
+        return false;
+    }
+    let edge = &mut body.edges[e1.index()];
+    edge.curve = Curve::Intersection(std::sync::Arc::new(curve));
+    edge.range = range;
+    edge.start = start;
+    edge.end = end;
+    edge.bbox.clear();
     body.edges[e2.index()].alive = false;
     body.dead += 1;
     true
