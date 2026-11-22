@@ -21,6 +21,16 @@ pub(super) struct Cliff {
 /// `fillet_with`'s last try, every other refused: with closed rounds rolled over rims and back.
 /// The round, where it builds and is valid.
 pub(super) fn retry(body: &Body, edges: &[FilletEdge], opts: &FilletOptions, feature: u64) -> Option<Body> {
+    if let Some(b) = retry_whole(body, edges, opts, feature) {
+        return Some(b);
+    }
+    // a closed round seams cut into pieces: whole first
+    let (whole, picks) = joined_loop(body, edges)?;
+    retry_whole(&whole, &picks, opts, feature)
+}
+
+/// `retry` with the picks as they are.
+fn retry_whole(body: &Body, edges: &[FilletEdge], opts: &FilletOptions, feature: u64) -> Option<Body> {
     // only a closed concave edge's round goes over a rim and back here: none picked, nothing to try
     // (a refusal the overlapping rounds take up costs no more for it)
     let closed = |f: &FilletEdge| {
@@ -489,4 +499,282 @@ pub(super) fn counts_sound(b: &Body) -> bool {
     let value =
         b.vertices.len() as i64 - b.edges.len() as i64 + 2 * b.faces.len() as i64 - b.loops.len() as i64;
     b.dead > 0 || (value % 2 == 0 && value <= 2 * b.shells.len() as i64)
+}
+
+/// A closed round that seams cut into pieces: the picked edges between the same two faces running
+/// round in one loop. The body with them one closed edge (the faces' meet traced whole), each seam
+/// of a round face that ran across the loop moved round off it (the middle of what the loop leaves
+/// free), and the picks with that edge for the pieces. None where the pieces are no such loop.
+pub(super) fn joined_loop(body: &Body, edges: &[FilletEdge]) -> Option<(Body, Vec<FilletEdge>)> {
+    // (nothing copied before the picks are seen to be such a loop)
+    if body.dead > 0
+        || edges
+            .iter()
+            .any(|f| f.edge.index() >= body.edges.len() || !body.edge(f.edge).alive)
+    {
+        return None;
+    }
+    let b = body;
+    let picked: Vec<EdgeId> = edges.iter().map(|f| f.edge).collect();
+    let faces_of = |b: &Body, e: EdgeId| -> Option<(FaceId, FaceId)> {
+        let x = b.edge(e);
+        let [c0, c1] = x.coedges[..] else { return None };
+        let (f0, f1) = (b.coedge_face(c0), b.coedge_face(c1));
+        (f0 != f1).then(|| if f0 < f1 { (f0, f1) } else { (f1, f0) })
+    };
+    // the first loop of open pieces between one pair of faces, all picked
+    let (fa, fb) = picked.iter().find_map(|&e| {
+        let x = b.edge(e);
+        (x.start != x.end).then(|| faces_of(&b, e)).flatten()
+    })?;
+    let chain: Vec<EdgeId> = picked
+        .iter()
+        .copied()
+        .filter(|&e| b.edge(e).start != b.edge(e).end && faces_of(&b, e) == Some((fa, fb)))
+        .collect();
+    if chain.len() < 2 {
+        return None;
+    }
+    // each vertex of the pieces two of them: a loop
+    let mut count: BTreeMap<VertexId, usize> = BTreeMap::new();
+    for &e in &chain {
+        *count.entry(b.edge(e).start).or_default() += 1;
+        *count.entry(b.edge(e).end).or_default() += 1;
+    }
+    if count.values().any(|&n| n != 2) {
+        return None;
+    }
+    let radius = edges.iter().find(|f| f.edge == chain[0])?.radius.clone();
+    if edges
+        .iter()
+        .filter(|f| chain.contains(&f.edge))
+        .any(|f| f.radius != radius)
+    {
+        return None;
+    }
+    // every other edge at a vertex of the loop a seam of one of the two faces
+    let others: Vec<EdgeId> = b
+        .edge_ids()
+        .filter(|&g| !chain.contains(&g))
+        .filter(|&g| count.contains_key(&b.edge(g).start) || count.contains_key(&b.edge(g).end))
+        .collect();
+    for &g in &others {
+        let x = b.edge(g);
+        let [c0, c1] = x.coedges[..] else { return None };
+        let f = b.coedge_face(c0);
+        if b.coedge_face(c1) != f || (f != fa && f != fb) || !matches!(x.curve, Curve::Line(_)) {
+            return None;
+        }
+    }
+    let mut b = body.clone();
+    // a face whose seam the loop splits (pieces of it at two of the loop's vertices): its seam
+    // moved to a line clear of the loop, between its two rims
+    let seam_face: Vec<(EdgeId, FaceId)> = others
+        .iter()
+        .map(|&g| (g, b.coedge_face(b.edge(g).coedges[0])))
+        .collect();
+    for f in [fa, fb] {
+        let pieces: Vec<EdgeId> = seam_face.iter().filter(|x| x.1 == f).map(|x| x.0).collect();
+        if pieces.len() >= 2 {
+            reseam_across(&mut b, f, &pieces, &chain)?;
+        }
+    }
+    // the meet traced whole, the loop's vertex the one a seam still ends at (else the first's start)
+    let (sa, sb) = (b.face(fa).surface.clone(), b.face(fb).surface.clone());
+    let mut region = Box3::EMPTY;
+    for &e in &chain {
+        region = region.hull(&b.edge_box(e));
+    }
+    let region = region.grow(0.1 * region.diagonal() + tol::LINEAR);
+    let mid = {
+        let x = b.edge(chain[0]);
+        x.curve.eval(x.range.mid())
+    };
+    let traced = forge_geom::intcurve::trace(&sa, &sb, region)?;
+    let ic = traced.into_iter().find(|c| {
+        c.closed && {
+            let t = c.closest(mid, Interval::new(0.0, c.domain_hi()));
+            c.eval(t).distance(mid) <= tol::LINEAR
+        }
+    })?;
+    let curve = Curve::Intersection(Arc::new(ic));
+    let keep = count
+        .keys()
+        .copied()
+        .find(|&v| {
+            b.edge_ids().any(|g| {
+                !chain.contains(&g) && b.edge(g).alive && (b.edge(g).start == v || b.edge(g).end == v)
+            })
+        })
+        .unwrap_or(b.edge(chain[0]).start);
+    let period = curve.domain().period?;
+    let t0 = curve.closest(b.vertex(keep).point, Interval::new(0.0, period));
+    if curve.eval(t0).distance(b.vertex(keep).point) > tol::LINEAR {
+        return None;
+    }
+    // along the pieces as the first one runs
+    let first = b.edge(chain[0]).clone();
+    let along = curve.deriv(curve.closest(mid, Interval::new(0.0, period))).d1;
+    let fwd_first = first.curve.deriv(first.range.mid()).d1;
+    let same = along.dot(fwd_first) > 0.0;
+    let name = chain.iter().map(|&e| b.edge(e).name).min()?;
+    let whole = b.add_edge(curve, Interval::new(t0, t0 + period), keep, keep, name);
+    // each face's loop through the pieces walks the one edge instead, the first piece's way
+    for f in [fa, fb] {
+        let loops = b.face(f).loops.to_vec();
+        for l in loops {
+            let uses: Vec<(EdgeId, bool)> = b
+                .lp(l)
+                .coedges()
+                .map(|c| (b.coedge(c).edge, b.coedge(c).forward))
+                .collect();
+            let Some(at) = uses.iter().position(|u| u.0 == chain[0]) else {
+                continue;
+            };
+            let dir = uses[at].1 == same;
+            let rest: Vec<(EdgeId, bool)> = uses.iter().copied().filter(|u| !chain.contains(&u.0)).collect();
+            // the pieces lie in one run of the loop: the one edge goes where that run began
+            let start = (0..uses.len())
+                .find(|&k| {
+                    chain.contains(&uses[k].0) && !chain.contains(&uses[(k + uses.len() - 1) % uses.len()].0)
+                })
+                .unwrap_or(0);
+            let before = uses[..start].iter().filter(|u| !chain.contains(&u.0)).count();
+            let mut new = rest.clone();
+            new.insert(before, (whole, dir));
+            if uses.iter().filter(|u| chain.contains(&u.0)).count() != chain.len() {
+                return None;
+            }
+            b.replace_loop(f, l, &new);
+        }
+    }
+    let b = b.compact();
+    let joined = b
+        .edge_ids()
+        .find(|&e| b.edge(e).name == name && b.edge(e).start == b.edge(e).end)?;
+    let mut picks: Vec<FilletEdge> = Vec::new();
+    for f in edges {
+        let n = body.edge(f.edge).name;
+        if chain.iter().any(|&c| body.edge(c).name == n) {
+            continue;
+        }
+        let e = b.edge_ids().find(|&e| b.edge(e).name == n)?;
+        picks.push(FilletEdge {
+            edge: e,
+            radius: f.radius.clone(),
+        });
+    }
+    picks.push(FilletEdge { edge: joined, radius });
+    Some((b, picks))
+}
+
+/// Face `f`'s seam, in pieces from its rims to the loop `chain` runs round, made one line between
+/// the rims clear of the loop: the rims' vertices moved round to the middle of the widest stretch
+/// the loop leaves free, the pieces gone. Its loops: the rims and the new seam, and the loop apart.
+fn reseam_across(b: &mut Body, f: FaceId, pieces: &[EdgeId], chain: &[EdgeId]) -> Option<()> {
+    let surface = b.face(f).surface.clone();
+    if !matches!(surface, Surface::Cylinder(_) | Surface::Cone(_)) || b.face(f).loops.len() != 1 {
+        return None;
+    }
+    let lp = b.face(f).loops[0];
+    let uses: Vec<(EdgeId, bool)> = b
+        .lp(lp)
+        .coedges()
+        .map(|c| (b.coedge(c).edge, b.coedge(c).forward))
+        .collect();
+    let ends = |b: &Body, u: (EdgeId, bool)| {
+        let x = b.edge(u.0);
+        if u.1 { (x.start, x.end) } else { (x.end, x.start) }
+    };
+    // the rims: closed circles of the face's loop
+    let rims: Vec<EdgeId> = uses
+        .iter()
+        .map(|u| u.0)
+        .filter(|&e| !pieces.contains(&e) && !chain.contains(&e))
+        .collect();
+    let [r0, r1] = rims[..] else { return None };
+    for r in [r0, r1] {
+        let x = b.edge(r);
+        if x.start != x.end || !matches!(x.curve, Curve::Circle(_)) {
+            return None;
+        }
+    }
+    // the angle round the face clear of the loop
+    let mut taken: Vec<f64> = Vec::new();
+    for &e in chain {
+        let x = b.edge(e);
+        for k in 0..=32 {
+            let p = x.curve.eval(x.range.lo + x.range.width() * k as f64 / 32.0);
+            taken.push(surface.project(p).x.rem_euclid(dmath::TAU));
+        }
+    }
+    taken.sort_by(f64::total_cmp);
+    let (mut gap, mut at) = (
+        taken[0] + dmath::TAU - taken[taken.len() - 1],
+        taken[taken.len() - 1],
+    );
+    for w in taken.windows(2) {
+        if w[1] - w[0] > gap {
+            (gap, at) = (w[1] - w[0], w[0]);
+        }
+    }
+    let u = at + 0.5 * gap;
+    let (v0, v1) = (b.edge(r0).start, b.edge(r1).start);
+    let move_to = |b: &Body, v: VertexId| {
+        let uv = surface.project(b.vertex(v).point);
+        surface.eval(forge_math::Point2::new(u, uv.y))
+    };
+    let (p0, p1) = (move_to(b, v0), move_to(b, v1));
+    for (r, v, p) in [(r0, v0, p0), (r1, v1, p1)] {
+        let x = b.edge(r).clone();
+        let t = x
+            .curve
+            .closest(p, Interval::new(x.range.lo, x.range.lo + dmath::TAU));
+        if x.curve.eval(t).distance(p) > tol::LINEAR {
+            return None;
+        }
+        let e = &mut b.edges[r.index()];
+        e.range = Interval::new(t, t + x.range.width());
+        e.bbox.clear();
+        b.vertices[v.index()].point = p;
+    }
+    // the seam up from v0 to v1, its pieces' direction kept: the first piece leaving v0's rim
+    let up = uses
+        .iter()
+        .copied()
+        .find(|&u| pieces.contains(&u.0) && ends(b, u).0 == v0)?;
+    let x = b.edge(up.0).clone();
+    let dir = (p1 - p0).normalize()?;
+    let len = (p1 - p0).length();
+    let seam = b.add_edge(
+        Curve::Line(forge_geom::Line::new(p0, dir)),
+        Interval::new(0.0, len),
+        v0,
+        v1,
+        x.name,
+    );
+    // the outer loop: each rim with the seam between, as the old loop ran round; the chain's
+    // coedges, in the order they came, the loop apart
+    let mut outer: Vec<(EdgeId, bool)> = Vec::new();
+    let mut hole: Vec<(EdgeId, bool)> = Vec::new();
+    let n = uses.len();
+    let s = uses.iter().position(|u| u.0 == r0)?;
+    for k in 0..n {
+        let u = uses[(s + k) % n];
+        if chain.contains(&u.0) {
+            hole.push(u);
+        } else if u.0 == r0 || u.0 == r1 {
+            outer.push(u);
+            let (_, e) = ends(b, u);
+            outer.push((seam, e == v0));
+        }
+    }
+    if outer.len() != 4 || hole.is_empty() {
+        return None;
+    }
+    // the hole's coedges in a closed run: rotated so each starts where the last ended
+    b.replace_loop(f, lp, &outer);
+    b.add_loop(f, &hole);
+    b.face_changed(f);
+    Some(())
 }
