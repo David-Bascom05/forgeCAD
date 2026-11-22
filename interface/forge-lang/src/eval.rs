@@ -310,7 +310,9 @@ pub struct Eval<'s> {
     scopes: Vec<Scope>,
     pub b: Builder,
     pub feats: Vec<FeatInfo>,
-    ids: HashMap<String, Span>,
+    /// Each id made so far and where: a second is DuplicateId. FNV like `Scope`; nothing
+    /// iterates it.
+    ids: HashMap<String, Span, std::hash::BuildHasherDefault<NameHasher>>,
     /// Each kernel name (`history_id`) made so far, and the feature (in `feats`) that made it
     /// first: two ids with one kernel name are refused (HistoryId.lean: `checked_distinct`).
     hids: HashMap<u64, usize, std::hash::BuildHasherDefault<NameHasher>>,
@@ -433,7 +435,7 @@ impl<'s> Eval<'s> {
             scopes: vec![Scope::default()],
             b: Builder::new(building, cache),
             feats: vec![],
-            ids: HashMap::new(),
+            ids: HashMap::default(),
             hids: HashMap::default(),
             errors: vec![],
             warnings: vec![],
@@ -2092,15 +2094,17 @@ impl<'s> Eval<'s> {
                     index: self.id_keys(span)?,
                 });
                 let id = path_text(&path);
-                if let Some(first) = self.ids.get(&id) {
-                    return Err(Error::DuplicateId {
+                match self.ids.entry(id.clone()) {
+                    std::collections::hash_map::Entry::Occupied(first) => Err(Error::DuplicateId {
                         span,
                         id,
-                        first: *first,
-                    });
+                        first: *first.get(),
+                    }),
+                    std::collections::hash_map::Entry::Vacant(e) => {
+                        e.insert(span);
+                        Ok(id)
+                    }
                 }
-                self.ids.insert(id.clone(), span);
-                Ok(id)
             }
             other => {
                 self.ctx.pending = other;
