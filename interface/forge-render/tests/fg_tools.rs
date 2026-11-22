@@ -568,6 +568,81 @@ fn a_sketch_drawn_on_a_face_is_written_in_forge_and_extruded() {
 }
 
 #[test]
+fn project_geometry_takes_edges_and_faces_clicked_and_writes_forge_project() {
+    use forge_render::shell::sketching::{SkTool, rows};
+    let Some((mut h, _)) = open(PLAIN, "project") else {
+        return;
+    };
+    assert!(h.click("tool:Start Sketch"));
+    h.step();
+    point_at(&mut h, [5.0, 30.0, 20.0]);
+    assert!(h.gui.shell.sketch.is_some(), "{}", h.gui.shell.status);
+    for _ in 0..3 {
+        h.step();
+    }
+    assert!(h.click("tool:Project Geometry"), "no Project Geometry button");
+    h.step();
+    assert_eq!(h.gui.shell.sketch.as_ref().unwrap().tool, Some(SkTool::Project));
+
+    // an edge: the top's front edge, by the anchor Forge names it by; a line rows may name
+    point_at(&mut h, [30.0, 0.0, 20.0]);
+    let m = h.gui.shell.sketch.as_ref().unwrap();
+    assert_eq!(
+        m.rows.len(),
+        1,
+        "{:?} {:?} {}",
+        m.rows,
+        m.error,
+        h.gui.shell.status
+    );
+    assert!(
+        m.rows[0].starts_with("project edge edges(between: "),
+        "{:?}",
+        m.rows
+    );
+    let (a, b) = rows::line(m.solved.as_ref().unwrap(), "j1").unwrap();
+    assert!((a.distance(b) - 60.0).abs() < 1e-9, "{a:?} {b:?}");
+
+    // the face: its boundary, held; again, nothing more
+    point_at(&mut h, [30.0, 30.0, 20.0]);
+    let m = h.gui.shell.sketch.as_ref().unwrap();
+    assert_eq!(m.rows.len(), 2, "{:?} {:?}", m.rows, m.error);
+    assert_eq!(m.rows[1], "project edges base.end");
+    assert!(m.error.is_none(), "{:?}", m.error);
+    assert_eq!(rows::freedom(m.solved.as_ref().unwrap()).0, 0);
+    point_at(&mut h, [30.0, 30.0, 20.0]);
+    assert_eq!(h.gui.shell.sketch.as_ref().unwrap().rows.len(), 2);
+
+    h.gui.shell.out.push(Action::FinishSketch);
+    h.step();
+    assert!(
+        h.gui.shell.sketch.is_none(),
+        "{:?}",
+        h.gui.shell.fg.as_ref().unwrap().refused
+    );
+    assert!(h.until(ready));
+    let src = h.gui.fg.as_ref().unwrap().src.clone();
+    assert!(src.contains("sk1_src1 = edges(between: "), "{src}");
+    assert!(src.contains("sk1_src2 = base.end\n"), "{src}");
+    assert!(
+        src.contains("  j1 = project(sk1_src1)\n  j2 = project(sk1_src2)\n"),
+        "{src}"
+    );
+    let run = forge_lang::run(&src, forge_lang::Options::default(), Default::default()).0;
+    assert!(run.errors.is_empty(), "{:?}\n{src}", run.errors);
+
+    // opened again, it reads what it projects from the part, unchanged
+    for _ in 0..3 {
+        h.step();
+    }
+    h.gui.fg_edit_feature("sk1");
+    let m = h.gui.shell.sketch.as_ref().expect("opened");
+    assert!(m.error.is_none(), "{:?} {}", m.error, h.gui.shell.status);
+    assert_eq!(m.rows, ["project edge sk1_src1", "project edges sk1_src2"]);
+    assert!(m.unchanged());
+}
+
+#[test]
 fn what_a_forge_part_cannot_take_is_refused_typed() {
     let Some((mut h, _)) = open(BLOCK, "refuse") else {
         return;

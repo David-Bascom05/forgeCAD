@@ -143,7 +143,7 @@ fn lines_draw_chain_infer_and_read_back() {
         Click((10.0, 1.0)),
     ]);
     let s = m.solved.as_ref().unwrap();
-    let (a, b) = forge_doc::sketch::line(s, "l1").unwrap();
+    let (a, b) = crate::shell::sketching::rows::line(s, "l1").unwrap();
     assert!((((b.x - a.x).powi(2) + (b.y - a.y).powi(2)).sqrt() - 30.0).abs() < 1e-6);
     assert!((forge_math::dmath::atan2(b.y - a.y, b.x - a.x).to_degrees() - 30.0).abs() < 1e-6);
     assert!(
@@ -456,7 +456,7 @@ fn polygons_inscribed_and_circumscribed() {
     let m = draw(&[Tool(SkTool::PolygonOut), Click((0.0, 0.0)), Click((10.0, 0.0))]);
     // the click is a side's middle: that side stands at x = 10, plumb
     let s = m.solved.as_ref().unwrap();
-    let (a, b) = forge_doc::sketch::line(s, "l1").unwrap();
+    let (a, b) = crate::shell::sketching::rows::line(s, "l1").unwrap();
     assert!(
         (a.x - 10.0).abs() < 1e-2 && (b.x - 10.0).abs() < 1e-2,
         "{a:?} {b:?}"

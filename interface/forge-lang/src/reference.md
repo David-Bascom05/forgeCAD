@@ -179,6 +179,9 @@ the sketch's plane, fixed there (read afresh every run): lines, circles, arcs, e
 general curve only with `approx` (a fitted cubic within TOL, else `NeedsApprox`); an axis only
 seen end-on (else `NoImage`). One curve gives an entity, several a loop; a face gives its
 boundary. Bind the edges outside the sketch (`pe = edges(of: peg.end)`, then `c = project(pe)`).
+The app's Project Geometry writes this form: each edge or face clicked, by the anchor that names it,
+bound above the block (`sk1_src1 = edges(between: (base.end, base.side(s.r[0])))`), then
+`j1 = project(sk1_src1)` in it.
 
 Lines for constructing points: `shift(LINE, d)` (moved d to the line's left, into a
 counter-clockwise loop), `hline(y)`, `vline(x)` (in this sketch), `meet(LINE, LINE)` (where they

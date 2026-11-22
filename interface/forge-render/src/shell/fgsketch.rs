@@ -11,12 +11,14 @@ mod variants;
 pub use edit::{Opened, open};
 
 use super::fgtool::ToolError;
-use forge_doc::text::tokens;
+use super::sketching::rows::tokens;
 use std::collections::{HashMap, HashSet};
 
 struct Out {
     name: String,
     params: Vec<String>,
+    /// What `project` rows read, bound above the block (a selection is no sketch row's to make).
+    binds: Vec<String>,
     rows: Vec<String>,
     /// What each row name (`l1`, `c2`, `p1`) is in Forge.
     names: HashMap<String, String>,
@@ -56,6 +58,8 @@ pub(super) fn made(t: &[String]) -> Vec<char> {
         Some("spline" | "bspline") => vec!['s'],
         Some("ellipse" | "earc") => vec!['e'],
         Some("rect") => vec!['l'; 4],
+        // one edge projected is an entity rows can name; a face's several are not
+        Some("project") if t.get(1).is_some_and(|k| k == "edge") => vec!['j'],
         Some("poly") => {
             let open = t.last().is_some_and(|w| w == "open");
             let (mut k, mut pts) = (1, 0);
@@ -74,6 +78,7 @@ impl Out {
         Out {
             name: name.to_string(),
             params: vec![],
+            binds: vec![],
             rows: vec![],
             names: HashMap::new(),
             named: HashMap::new(),
@@ -96,6 +101,25 @@ impl Out {
         let n = format!("{base}{k}");
         self.taken.insert(n.clone());
         self.params.push(format!("param {}.{n} = {text}\n", self.name));
+        n
+    }
+
+    /// A name above the block for the part's geometry `text` (a name already is one).
+    fn bind(&mut self, text: &str) -> String {
+        let plain = text
+            .chars()
+            .next()
+            .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+            && text.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
+        if plain {
+            return text.to_string();
+        }
+        let n = (1..)
+            .map(|k| format!("{}_src{k}", self.name))
+            .find(|n| !self.taken.contains(n))
+            .expect("a free name");
+        self.taken.insert(n.clone());
+        self.binds.push(format!("{n} = {text}\n"));
         n
     }
 
@@ -415,6 +439,28 @@ impl Out {
                     if open { "false" } else { "true" }
                 ));
             }
+            // the part's edges or a face's boundary, laid on the plane: read afresh each rebuild
+            "project" => {
+                let (kind, t, approx) = match rest {
+                    [k, t] => (k, t, None),
+                    [k, t, a, v] if a == "approx" => (k, t, Some(v)),
+                    _ => return Err(no_form(r)),
+                };
+                if kind != "edge" && kind != "edges" {
+                    return Err(no_form(r));
+                }
+                let of = o.bind(t);
+                let tail = match approx {
+                    Some(v) => format!(", approx: {}", o.param("tol", num(v, r)?)),
+                    None => String::new(),
+                };
+                let n = if kind == "edge" {
+                    o.entity('j')
+                } else {
+                    o.fresh('j')
+                };
+                o.rows.push(format!("{n} = project({of}{tail})"));
+            }
             "mid" => {
                 let p = o.reference(rest.first().ok_or(no_form(r))?, true, r)?;
                 let l = o.reference(rest.get(1).ok_or(no_form(r))?, false, r)?;
@@ -472,6 +518,7 @@ pub fn block(name: &str, on: &str, rows: &[String]) -> Result<String, ToolError>
     let mut o = Out::new(name, HashSet::new());
     o.rows_from(rows, 0, &[])?;
     let mut out: String = o.params.concat();
+    out.push_str(&o.binds.concat());
     out.push_str(&format!("sketch {name}(on: {on}) {{\n"));
     for r in &o.rows {
         out.push_str(&format!("  {r}\n"));
@@ -531,6 +578,61 @@ mod tests {
         // a row with no Forge form is refused, typed
         let e = block("sk1", "xy", &["project @e12".into()]).unwrap_err();
         assert_eq!(e.kind(), "NoForgeForm");
+    }
+
+    #[test]
+    fn projected_edges_are_bound_above_the_block_and_open_again_as_they_were() {
+        use crate::shell::sketching::{SketchFor, SketchMode};
+        let part =
+            "sketch s(on: xy) {\n  r = rect(corner: (0, 0), size: (40, 30))\n}\nbase = extrude(s, 10)\n";
+        let rows: Vec<String> = [
+            "project edge edges(between: (base.end, base.side(s.r[0])))",
+            "line j1.b 50 20",
+            "project edges base.start",
+            "project edge q approx 0.002",
+        ]
+        .map(String::from)
+        .to_vec();
+        let text = block("sk1", "base.end", &rows[..3]).unwrap();
+        assert!(
+            text.contains(
+                "sk1_src1 = edges(between: (base.end, base.side(s.r[0])))\nsk1_src2 = base.start\nsketch sk1(on: base.end) {\n"
+            ),
+            "{text}"
+        );
+        assert!(text.contains("  j1 = project(sk1_src1)\n"), "{text}");
+        assert!(text.contains("  l1 = line(j1.b, near(x1, y2))\n"), "{text}");
+        // a face's several curves are a loop no row names
+        assert!(text.contains("  j2 = project(sk1_src2)\n"), "{text}");
+        let t4 = block("sk1", "base.end", &rows[3..]).unwrap();
+        assert!(t4.contains("param sk1.tol1 = 0.002\n"), "{t4}");
+        assert!(t4.contains("j1 = project(q, approx: tol1)"), "{t4}");
+        let src = format!("{part}{text}");
+        let (r, _) = forge_lang::run(&src, forge_lang::Options::default(), Default::default());
+        assert!(r.errors.is_empty(), "{src}\n{:?}", r.errors);
+        // opened again: the rows it was written from, what they project as the part has it
+        let o = edit::open(&src, "sk1", None).unwrap();
+        assert!(o.read_only.is_none(), "{:?}", o.read_only);
+        assert_eq!(o.rows[0], "project edge sk1_src1", "{:?}", o.rows);
+        assert_eq!(o.rows[2], "project edges sk1_src2", "{:?}", o.rows);
+        let mut m = SketchMode::new(
+            SketchFor::Forge("sk1".into()),
+            "base.end".into(),
+            forge_math::Frame::default(),
+            o.rows.clone(),
+        );
+        m.set_params(o.params.clone());
+        m.take_sources(o.sources.clone());
+        assert!(m.error.is_none(), "{:?}", m.error);
+        let s = m.solved.as_ref().unwrap();
+        let (a, b) = crate::shell::sketching::rows::line(s, "j1").unwrap();
+        assert!((a.distance(b) - 40.0).abs() < 1e-9, "{a:?} {b:?}");
+        assert!(o.write_back(&m.rows, m.kept()).unwrap().is_empty());
+        // a line added from the projected edge's end is written after it, by its Forge name
+        assert!(m.add("line j1.a 0 20".into()), "{:?}", m.error);
+        let ops = o.write_back(&m.rows, m.kept()).unwrap();
+        let after = forge_lang::edit::apply_all_checked(&src, &ops).unwrap();
+        assert!(after.contains("= line(j1.a, near("), "{after}");
     }
 
     #[test]

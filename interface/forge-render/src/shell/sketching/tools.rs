@@ -4,9 +4,8 @@
 //! copy, rotate, scale, mirror, offset, patterns, trim, extend, split) and every constraint. Each
 //! writes sketch rows; the solver holds them.
 
+use super::rows::{self as sk, tokens};
 use super::{Draft, Glyph, SkTool, SketchMode, tidy};
-use forge_doc::sketch as sk;
-use forge_doc::text::tokens;
 use forge_math::dmath;
 use forge_sketch::Entity;
 
@@ -732,7 +731,7 @@ impl SketchMode {
         }
         let mut q = at;
         let mut glyphs = vec![];
-        let lock = |k: usize| self.locked(k, forge_doc::text::Want::Len);
+        let lock = |k: usize| self.locked(k, super::rows::Want::Len);
         let along = |from: P, to: P, l: f64| {
             let u = sub(to, from);
             let d = len(u).max(1e-9);
@@ -2013,7 +2012,7 @@ impl SkTool {
             SkTool::Parallel => "Click two lines",
             SkTool::Perpendicular => "Click two lines",
             SkTool::Tangent => "Click a line or curve, then the curve it touches",
-
+            SkTool::Project => "Click edges or faces of the part to project them",
             SkTool::Circle3 => [
                 "Click the first point on the circle",
                 "Click the second point",

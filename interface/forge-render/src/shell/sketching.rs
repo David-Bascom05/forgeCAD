@@ -1,17 +1,19 @@
-//! Sketch mode: draw on a plane with the solver behind every row. Each tool adds a row to the block a
-//! part file would hold; the rows solve here in-process, and Finish Sketch commits them as one call.
+//! Sketch mode: draw on a plane with the solver behind every row. Each tool adds a row of the
+//! sketcher's working form (`rows`); the rows solve here in-process, and Finish Sketch writes them
+//! as a Forge sketch block (`fgsketch`) in one edit.
 
 use super::theme::{mono, sans};
 use super::{Action, Shell};
 use crate::shell::placed::Placed;
 use egui::{Color32, Pos2, Rect, Sense, Stroke, vec2};
-use forge_doc::text::{Want, tokens};
-use forge_doc::{expr, sketch as sk};
 use forge_math::{Frame, Point2};
 use forge_sketch::{Entity, Status};
 use std::collections::HashMap;
 
+pub mod rows;
 mod tools;
+mod value;
+use rows::{self as sk, Want, tokens};
 pub use tools::More;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -32,6 +34,8 @@ pub enum SkTool {
     Parallel,
     Perpendicular,
     Tangent,
+    /// Edges and faces clicked in the view become `project` rows.
+    Project,
     Circle3,
     Arc3,
     ArcTan,
@@ -310,6 +314,9 @@ pub struct SketchMode {
     first_rows: Vec<String>,
     /// Where the pointer last was on the plane: typing leaves it, the preview stays.
     cursor: Option<(f64, f64)>,
+    /// What each `project` row's references come to: the part's geometry for a pick, or the
+    /// image the block solved to for a sketch opened from it.
+    pub sources: HashMap<String, Result<Vec<sk::Refd>, String>>,
     /// The Modify tools' choice, the toggles, and text placed.
     pub more: More,
 }
@@ -329,6 +336,7 @@ pub(super) fn sketch_keys(s: &Shell) -> Vec<(SkTool, crate::bindings::Chord)> {
                 "sketch_dimension" => SkTool::Dimension,
                 "sketch_trim" => SkTool::Trim,
                 "sketch_offset" => SkTool::Offset,
+                "sketch_project" => SkTool::Project,
                 "sketch_construction" => SkTool::Construction,
                 "sketch_point" => SkTool::Point,
                 _ => return None,
@@ -340,27 +348,123 @@ pub(super) fn sketch_keys(s: &Shell) -> Vec<(SkTool, crate::bindings::Chord)> {
     keys
 }
 
-/// A row added, for tests and the status bar.
+/// A `project` row's references, its words after the word (`edge T`, `edges T`), without its
+/// `approx` and `cons`: what its geometry is kept under.
+pub fn project_refs(row: &str) -> Option<String> {
+    let t = tokens(row);
+    let (first, rest) = t.split_first()?;
+    let rest = rest.strip_suffix(&["cons".to_string()]).unwrap_or(rest);
+    let rest = match rest {
+        [refs @ .., w, _] if w == "approx" => refs,
+        _ => rest,
+    };
+    (first == "project").then(|| rest.join(" "))
+}
+
+/// An edge of the part as a source to lay flat.
+fn edge_source(b: &forge_topo::Body, e: forge_topo::EdgeId) -> sk::Source {
+    let x = b.edge(e);
+    sk::Source::Edge {
+        curve: x.curve.clone(),
+        range: x.range,
+        start: b.vertex(x.start).point,
+        end: b.vertex(x.end).point,
+        closed: x.start == x.end,
+    }
+}
+
+/// What clicks on a Forge part project: each pick by the anchor Forge names it by (`edges(between:
+/// (a, b))`, `base.end`), keyed `edge T` when it is one curve (rows may name it, `j1`) or `edges
+/// T` when several (a face's boundary), with the part's geometry each anchor holds as it stands.
+/// A pick with no stable Forge name is refused, typed.
+pub fn project_picks(
+    anchors: Option<&crate::fg::AnchorView>,
+    body: Option<&forge_topo::Body>,
+    picked: &[crate::render::Entity],
+) -> Result<Vec<(String, sk::Refd)>, String> {
+    use crate::render::Entity;
+    use forge_topo::{EdgeId, FaceId};
+    let (Some(a), Some(b)) = (anchors, body) else {
+        return Err("the part is still building: pick again when it's shown".into());
+    };
+    let unnamed = |what: &str| {
+        format!("NoStableName: this {what} has no stable Forge name to project it by; pick another")
+    };
+    let mut out: Vec<(String, sk::Refd)> = vec![];
+    for e in picked {
+        let (text, edges): (String, Vec<EdgeId>) = match *e {
+            Entity::Edge(x) => {
+                let t = a
+                    .edges
+                    .get(x as usize)
+                    .cloned()
+                    .flatten()
+                    .ok_or(unnamed("edge"))?;
+                // every edge the anchor names: Forge projects them all
+                let es = (0..a.edges.len())
+                    .filter(|&k| a.edges[k].as_deref() == Some(t.as_str()) && k < b.edges.len())
+                    .map(|k| EdgeId(k as u32))
+                    .collect();
+                (t, es)
+            }
+            Entity::Face(f) => {
+                let t = a
+                    .faces
+                    .get(f as usize)
+                    .cloned()
+                    .flatten()
+                    .ok_or(unnamed("face"))?;
+                let mut es: Vec<EdgeId> = vec![];
+                let mut names = vec![];
+                for k in (0..a.faces.len()).filter(|&k| a.faces[k].as_deref() == Some(t.as_str())) {
+                    if k >= b.faces.len() {
+                        continue;
+                    }
+                    for &l in &b.face(FaceId(k as u32)).loops {
+                        for c in b.lp(l).coedges() {
+                            let x = b.coedge(c).edge;
+                            if !names.contains(&b.edge(x).name) {
+                                names.push(b.edge(x).name);
+                                es.push(x);
+                            }
+                        }
+                    }
+                }
+                (t, es)
+            }
+            Entity::Vertex(_) => return Err(unnamed("vertex")),
+        };
+        if edges.is_empty() {
+            return Err(unnamed("pick"));
+        }
+        let one = edges.len() == 1;
+        let key = format!("{} {text}", if one { "edge" } else { "edges" });
+        if out.iter().any(|o| o.0 == key) {
+            continue;
+        }
+        let sources = edges
+            .iter()
+            .map(|&x| (b.edge(x).name, sk::Src::Model(edge_source(b, x))))
+            .collect();
+        out.push((key, sk::Refd { sources, one }));
+    }
+    Ok(out)
+}
+
+/// Forge's value of `text`, its names read through `env` (a param's text by its bare name).
+pub(super) fn value_of(text: &str, env: &dyn Fn(&str) -> Option<String>) -> Result<f64, String> {
+    value::eval(text, env).map(|v| v.v)
+}
+
+/// A row's number as its slot wants it: a number as written, or Forge's value of an expression over
+/// the block's params (`value::eval`). Rows write angles in degrees; out comes radians.
 fn num_of(params: &[(String, String)]) -> impl Fn(&str, Want) -> Result<f64, String> + '_ {
     move |t: &str, want: Want| {
-        let env = |name: &str| {
-            let (_, e) = params.iter().rev().find(|p| p.0 == name)?;
-            let v: f64 = e.parse().ok().or_else(|| {
-                let inner = |n: &str| {
-                    params
-                        .iter()
-                        .rev()
-                        .find(|p| p.0 == n)
-                        .and_then(|p| p.1.parse::<f64>().ok())
-                        .map(|v| (v, forge_model::Unit::None))
-                };
-                expr::eval(e, &inner).ok().map(|r| r.0)
-            })?;
-            Some((v, forge_model::Unit::None))
-        };
+        let env = |name: &str| params.iter().rev().find(|p| p.0 == name).map(|p| p.1.clone());
+        // an angle's value is in degrees, as the rows write one
         let v = match t.parse::<f64>() {
             Ok(v) => v,
-            Err(_) => expr::eval(t, &env)?.0,
+            Err(_) => value::eval(t, &env)?.v,
         };
         Ok(match want {
             Want::Angle => v * core::f64::consts::PI / 180.0,
@@ -385,6 +489,7 @@ impl SketchMode {
             active: 0,
             first_rows: Vec::new(),
             cursor: None,
+            sources: HashMap::new(),
             rows,
             tool: None,
             picks: Vec::new(),
@@ -404,8 +509,13 @@ impl SketchMode {
 
     fn build(&self, rows: &[String]) -> Result<forge_model::Sketch, String> {
         let toks: Vec<Vec<String>> = rows.iter().map(|r| tokens(r)).collect();
-        // a Forge sketch holds no geometry projected from the part
-        let src = |_: &[String]| Err("a Forge sketch has no projected geometry".to_string());
+        let src = |t: &[String]| match self.sources.get(&t.join(" ")) {
+            Some(got) => got.clone(),
+            None => Err(format!(
+                "nothing read for `project {}`: project it again",
+                t.join(" ")
+            )),
+        };
         sk::build_on(
             self.plane,
             toks,
@@ -413,6 +523,44 @@ impl SketchMode {
             &src,
             self.solved.as_ref(),
         )
+    }
+
+    /// Takes in what the rows it opened with project, and solves with them.
+    pub fn take_sources(&mut self, got: HashMap<String, Result<Vec<sk::Refd>, String>>) {
+        self.sources = got;
+        self.solve();
+    }
+
+    /// Writes a `project` row for each reference a click named, leaving out what's already
+    /// projected; what has only a fitted image is held within 0.001 mm and says so (`approx`). A
+    /// source a sketch can't hold is refused here, its row not written.
+    pub fn project(&mut self, got: Result<Vec<(String, sk::Refd)>, String>) -> bool {
+        let refs = match got {
+            Ok(r) => r,
+            Err(e) => {
+                self.error = Some(e);
+                return false;
+            }
+        };
+        let have: Vec<String> = self.rows.iter().filter_map(|r| project_refs(r)).collect();
+        let fresh: Vec<(String, sk::Refd)> = refs.into_iter().filter(|(k, _)| !have.contains(k)).collect();
+        if fresh.is_empty() {
+            return false;
+        }
+        let mut ok = true;
+        for (key, r) in fresh {
+            let fitted = r.sources.iter().any(|s| match &s.1 {
+                sk::Src::Model(m) => forge_sketch::project::needs_fit(&self.plane, m),
+                sk::Src::Laid(_) => false,
+            });
+            self.sources.insert(key.clone(), Ok(vec![r]));
+            let tail = if fitted { " approx 0.001" } else { "" };
+            if !self.add(format!("project {key}{tail}")) {
+                self.sources.remove(&key);
+                ok = false;
+            }
+        }
+        ok
     }
 
     fn solve(&mut self) {
@@ -1377,7 +1525,7 @@ impl SketchMode {
                     }
                 }
             }
-            SkTool::Dimension => {}
+            SkTool::Dimension | SkTool::Project => {}
             SkTool::Spline | SkTool::SplineCv => {
                 // its first point again closes it, once it has a shape
                 if self.pick_at.len() >= 3
@@ -2391,6 +2539,7 @@ impl Shell {
             Some(SkTool::Rectangle) => Some("Drawing a rectangle"),
             Some(SkTool::Circle) => Some("Drawing a circle"),
             Some(SkTool::Arc) => Some("Drawing an arc"),
+            Some(SkTool::Project) => Some("Click edges or faces to project them"),
             _ => None,
         };
         let asks = m.tool.and_then(|tool| {
@@ -2540,6 +2689,134 @@ mod tests {
 
     fn mode() -> SketchMode {
         SketchMode::new(SketchFor::New, "xy".into(), Frame::default(), Vec::new())
+    }
+
+    #[test]
+    fn a_click_a_sketch_cannot_hold_writes_no_row_and_says_why() {
+        use forge_geom::Line;
+        use forge_math::{Point3, Vec3};
+        use forge_topo::Name;
+        let mut m = mode();
+        // an axis lying along the plane: no ends to make a line of
+        let axis = sk::Source::Axis(Line {
+            origin: Point3::ORIGIN,
+            dir: Vec3::new(1.0, 0.0, 0.0).normalize().unwrap(),
+        });
+        let refd = sk::Refd {
+            sources: vec![(Name(1), sk::Src::Model(axis))],
+            one: true,
+        };
+        assert!(!m.project(Ok(vec![("edge ax".into(), refd)])));
+        assert!(m.rows.is_empty(), "{:?}", m.rows);
+        assert!(m.error.as_deref().unwrap().contains("no ends"), "{:?}", m.error);
+        assert!(!m.project(Err("gone".into())));
+        assert_eq!(m.error.as_deref(), Some("gone"));
+    }
+
+    #[test]
+    fn a_tilted_circle_is_an_ellipse_and_a_general_curve_a_row_of_its_own_marked_approx() {
+        use forge_geom::{Circle, Curve, Parabola};
+        use forge_math::{Interval, Point3, Vec3};
+        use forge_topo::Name;
+        let mut m = mode();
+        let tilted = Frame::from_z(Point3::ORIGIN, Vec3::new(0.0, 1.0, 1.0).normalize().unwrap());
+        let start = tilted.plane_point(Point2::new(5.0, 0.0));
+        let rim = sk::Source::Edge {
+            curve: Curve::Circle(Circle {
+                frame: tilted,
+                radius: 5.0,
+            }),
+            range: Interval::new(0.0, core::f64::consts::TAU),
+            start,
+            end: start,
+            closed: true,
+        };
+        let par = Curve::Parabola(Parabola {
+            frame: Frame::default().with_origin(Point3::new(20.0, 0.0, 0.0)),
+            focal: 2.0,
+        });
+        let bent = sk::Source::Edge {
+            start: forge_geom::CurveGeom::eval(&par, -3.0),
+            end: forge_geom::CurveGeom::eval(&par, 3.0),
+            curve: par,
+            range: Interval::new(-3.0, 3.0),
+            closed: false,
+        };
+        let one = |s| sk::Refd {
+            sources: vec![(Name(1), sk::Src::Model(s))],
+            one: true,
+        };
+        assert!(
+            m.project(Ok(vec![
+                ("edge rim".into(), one(rim)),
+                ("edge bent".into(), one(bent))
+            ])),
+            "{:?}",
+            m.error
+        );
+        assert_eq!(m.rows, ["project edge rim", "project edge bent approx 0.001"]);
+        let s = m.solved.as_ref().unwrap();
+        let kinds: Vec<_> = s.names.iter().map(|n| s.solved.entity(n.1).unwrap()).collect();
+        assert!(
+            matches!(kinds[0], Entity::Ellipse { ends: None, .. }),
+            "{kinds:?}"
+        );
+        assert!(matches!(kinds[1], Entity::Spline { .. }), "{kinds:?}");
+        // what's projected already is not again
+        let again = sk::Refd {
+            sources: vec![],
+            one: true,
+        };
+        assert!(!m.project(Ok(vec![("edge rim".into(), again)])));
+        assert_eq!(m.rows.len(), 2);
+    }
+
+    #[test]
+    fn what_a_face_row_projects_shows_but_is_not_offered_to_rows() {
+        use forge_math::Point3;
+        use forge_topo::Name;
+        let mut m = mode();
+        let line = |a: Point3, b: Point3| sk::Source::Edge {
+            curve: forge_geom::Curve::Line(forge_geom::Line {
+                origin: a,
+                dir: (b - a).normalize().unwrap(),
+            }),
+            range: forge_math::Interval::new(0.0, a.distance(b)),
+            start: a,
+            end: b,
+            closed: false,
+        };
+        let refd = sk::Refd {
+            sources: vec![
+                (
+                    Name(7),
+                    sk::Src::Model(line(Point3::ORIGIN, Point3::new(10.0, 0.0, 0.0))),
+                ),
+                (
+                    Name(8),
+                    sk::Src::Model(line(Point3::new(10.0, 0.0, 0.0), Point3::new(10.0, 5.0, 0.0))),
+                ),
+            ],
+            one: false,
+        };
+        m.sources.insert("edges base.end".into(), Ok(vec![refd]));
+        assert!(m.add("project edges base.end".into()), "{:?}", m.error);
+        assert_eq!(m.solved.as_ref().unwrap().names.len(), 2);
+        assert!(m.points().is_empty());
+        assert_eq!(m.entity_near((5.0, 0.0), 1.0, "l"), None);
+        // and a sketch opened from its block holds what the block solved to
+        let mut m = mode();
+        let laid = sk::Refd {
+            sources: vec![(
+                Name(1),
+                sk::Src::Laid(sk::Flat::Line(Point2::new(0.0, 0.0), Point2::new(4.0, 0.0))),
+            )],
+            one: true,
+        };
+        m.take_sources([("edge e".to_string(), Ok(vec![laid]))].into_iter().collect());
+        assert!(m.add("project edge e".into()), "{:?}", m.error);
+        assert!(m.add("line j1.b 4 6".into()), "{:?}", m.error);
+        assert_eq!(sk::freedom(m.solved.as_ref().unwrap()).0, 2);
     }
 
     #[test]

@@ -9,9 +9,9 @@ use crate::feat_error::FeatError;
 use crate::sketch::Sk;
 use crate::syntax::{Arg, Span};
 use forge_agent::select;
-use forge_doc::sketch::{Flat, Source, flat};
 use forge_geom::Line;
 use forge_math::Point2;
+use forge_sketch::project::{Flat, Source, flat, needs_fit};
 use forge_sketch::{Constraint, EntityId};
 use forge_topo::{Body, EdgeId, Name};
 use std::cell::RefCell;
@@ -33,8 +33,7 @@ pub fn project(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
     let mut made = vec![];
     for (k, s) in sources.iter().enumerate() {
         let f = flat(&plane, s, approx).map_err(|why| -> crate::error::Error {
-            if approx.is_none() && matches!(s, Source::Edge { .. }) && forge_doc::sketch::needs_fit(&plane, s)
-            {
+            if approx.is_none() && matches!(s, Source::Edge { .. }) && needs_fit(&plane, s) {
                 FeatError::NeedsApprox { span: a.span("of") }.into()
             } else {
                 FeatError::NoImage {

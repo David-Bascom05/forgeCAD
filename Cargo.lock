@@ -186,7 +186,6 @@ dependencies = [
  "forge-asm",
  "forge-bool",
  "forge-dirs",
- "forge-doc",
  "forge-draw",
  "forge-dwg",
  "forge-font",

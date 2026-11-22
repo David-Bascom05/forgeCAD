@@ -6,8 +6,8 @@
 //! ones are taken out, new rows are added as `block` writes them, in one ReplaceFeature.
 
 use super::super::fgtool::ToolError;
+use super::super::sketching::rows::{Flat, Refd, Src, tokens};
 use super::{Out, fmt, made};
-use forge_doc::text::tokens;
 use forge_lang::error::{Literal, Op, ParamKey};
 use forge_lang::syntax::{self, Arg, Expr, ExprKind, Span, Stmt, StmtKind, Unit};
 use forge_lang::values::Dim;
@@ -63,6 +63,8 @@ pub struct Opened {
     taken: HashSet<String>,
     /// How many params the block has of its own.
     own: usize,
+    /// What each `project` row's reference came to as the block solved it, by its words.
+    pub sources: HashMap<String, Result<Vec<Refd>, String>>,
 }
 
 struct Rd<'a> {
@@ -76,6 +78,7 @@ struct Rd<'a> {
     named: HashMap<char, usize>,
     rows: Vec<String>,
     of: Vec<RowOf>,
+    sources: HashMap<String, Result<Vec<Refd>, String>>,
 }
 
 /// A point argument: where it is, and how it's written.
@@ -145,11 +148,12 @@ impl Rd<'_> {
                 Some(fmt(v))
             }
             How::Driven(_) => {
+                // what it reads: the params that are numbers
                 let env = |name: &str| {
-                    let v = self.env.iter().find(|p| p.0 == name)?.1.parse::<f64>().ok()?;
-                    Some((v, forge_model::Unit::None))
+                    let v = &self.env.iter().find(|p| p.0 == name)?.1;
+                    v.parse::<f64>().is_ok().then(|| v.clone())
                 };
-                forge_doc::expr::eval(t, &env).ok()?;
+                super::super::sketching::value_of(t, &env).ok()?;
                 Some(format!("({t})"))
             }
         }
@@ -198,6 +202,46 @@ impl Rd<'_> {
     fn at(&self, p: EntityId) -> (f64, f64) {
         let q = self.view.s.point(p);
         (q.x, q.y)
+    }
+
+    /// A projected entity as the block solved it: its image, to be held where it is.
+    fn laid(&self, id: EntityId) -> Option<Flat> {
+        let s = &self.view.s;
+        let p = |q: EntityId| s.point(q);
+        Some(match s.entity(id)? {
+            Entity::Point { .. } => Flat::Point(s.point(id)),
+            Entity::Line { a, b } => Flat::Line(p(a), p(b)),
+            Entity::Circle { center, .. } => Flat::Circle(p(center), s.radius(id)),
+            Entity::Arc {
+                center,
+                start,
+                end,
+                ccw,
+            } => Flat::Arc {
+                center: p(center),
+                start: p(start),
+                end: p(end),
+                ccw,
+            },
+            Entity::Ellipse {
+                center,
+                major,
+                b,
+                ends,
+            } => Flat::Ellipse {
+                center: p(center),
+                major: p(major),
+                b: s.params()[b],
+                ends: ends.map(|(x, y, ccw)| (p(x), p(y), ccw)),
+            },
+            Entity::Spline { .. } => {
+                let pts: Vec<_> = s.spline_points(id)?.iter().map(|&q| p(q)).collect();
+                let ends = s.spline_samples(id, 4);
+                let closed =
+                    ends.len() > 1 && ends[0].distance(ends[ends.len() - 1]) < 1e-12 && pts.len() > 2;
+                Flat::Spline(pts, closed)
+            }
+        })
     }
 
     fn next(&mut self, kind: char) -> String {
@@ -538,7 +582,41 @@ impl Rd<'_> {
                     row.extend(ws);
                 }
             }
-            "project" => return what("a `project`"),
+            "project" => {
+                let (e, segs) = ent()?;
+                let of = arg(args, 0, "of").ok_or_else(|| "a `project` of nothing".to_string())?;
+                let mut of_text = text(self.src, of.span).to_string();
+                if tokens(&of_text).len() != 1 {
+                    of_text = format!("({of_text})");
+                }
+                let ids = if segs.is_empty() { vec![e] } else { segs };
+                let one = ids.len() == 1;
+                let laid = ids
+                    .iter()
+                    .map(|&id| self.laid(id))
+                    .collect::<Option<Vec<Flat>>>()
+                    .ok_or_else(|| "a `project` the sketcher can't hold".to_string())?;
+                let kind = if one { "edge" } else { "edges" };
+                let key = format!("{kind} {of_text}");
+                let sources = laid
+                    .into_iter()
+                    .enumerate()
+                    .map(|(k, f)| (forge_topo::Name(k as u64 + 1), Src::Laid(f)))
+                    .collect();
+                self.sources.insert(key.clone(), Ok(vec![Refd { sources, one }]));
+                row.extend([w("project"), w(kind), w(&of_text)]);
+                if let Some(a) = arg(args, 1, "approx") {
+                    let s = self.slot(a);
+                    let v = self
+                        .value(&s)
+                        .ok_or_else(|| "an `approx` the sketcher can't read".to_string())?;
+                    row.extend([w("approx"), (v, Some(s))]);
+                }
+                if one {
+                    let n = self.next('j');
+                    ents.push((n, name.unwrap_or("").to_string()));
+                }
+            }
             f => return Err(format!("`{f}`")),
         }
         stmts.push(St {
@@ -608,8 +686,10 @@ pub fn open(src: &str, id: &str, dir: Option<std::path::PathBuf>) -> Result<Open
     let prog = syntax::parse(src).map_err(|e| no(e.text()))?;
     let (_, block) = find(&prog, id).ok_or_else(|| no(format!("{id} is not a sketch of this part")))?;
     let comp = component_of(&prog, id).map(|x| (x.0.to_string(), x.1));
+    // what it projects is read from the part, so the part is built for it
+    let projects = text(src, block.span).contains("project(");
     let opts = forge_lang::Options {
-        build: false,
+        build: projects,
         dir: dir.clone(),
         ..forge_lang::Options::default()
     };
@@ -694,6 +774,7 @@ pub fn open(src: &str, id: &str, dir: Option<std::path::PathBuf>) -> Result<Open
         named: HashMap::new(),
         rows: vec![],
         of: vec![],
+        sources: HashMap::new(),
     };
     let mut stmts = vec![];
     let mut read_only = None;
@@ -707,7 +788,7 @@ pub fn open(src: &str, id: &str, dir: Option<std::path::PathBuf>) -> Result<Open
             ));
         }
     }
-    let (rows, of) = (rd.rows, rd.of);
+    let (rows, of, sources) = (rd.rows, rd.of, rd.sources);
     let mut taken: HashSet<String> = forge_lang::edit::bound(&prog).into_iter().collect();
     taken.extend(forge_lang::edit::bound(body));
     taken.extend(params.keys().cloned());
@@ -730,6 +811,7 @@ pub fn open(src: &str, id: &str, dir: Option<std::path::PathBuf>) -> Result<Open
         of,
         taken,
         own: mine.len(),
+        sources,
     })
 }
 
@@ -872,7 +954,7 @@ impl Opened {
                 .map_or(src.len(), |n| s.hi as usize + n + 1);
             splices.push((Span::new(lo, hi), String::new()));
         }
-        if splices.is_empty() && fresh.is_empty() && o.params.is_empty() {
+        if splices.is_empty() && fresh.is_empty() && o.params.is_empty() && o.binds.is_empty() {
             return Ok(sets);
         }
         let prog = syntax::parse(src).map_err(|e| ToolError::NoForgeForm {
@@ -894,7 +976,7 @@ impl Opened {
         splices.push((Span::new(close, close), rows_text));
         splices.push((
             Span::new(block.span.lo as usize, block.span.lo as usize),
-            o.params.concat(),
+            o.params.concat() + &o.binds.concat(),
         ));
         splices.sort_by_key(|s| (s.0.lo, s.0.hi));
         let mut text = String::new();
