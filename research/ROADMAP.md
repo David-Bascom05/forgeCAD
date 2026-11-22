@@ -26,6 +26,12 @@ bits. Work happens on session branches `claude/repo-review-mbdrlj-*`, is merged 
    (research/fillets/general-method.md), on the proven boolean. Judged by the fillet oracle and the
    census.
 
+Decisions:
+- Non-manifold boolean results are refused (ZeroThickness, naming where the bodies touch), as
+  mainstream mechanical CAD does; not represented (2026-11-22).
+- Predicates: their exact paths are proven under a stated precondition (no formed product
+  underflows), checked by debug assertions; overflow is exact (a fallback on a NaN slow-path result).
+
 In parallel:
 - .fg build speed until every part is no slower than .fc (tools/speed/fc-reference.txt);
 - the one-pass parser standalone (proven equal to the table parser);
