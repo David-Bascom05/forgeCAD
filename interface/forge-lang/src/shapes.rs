@@ -77,7 +77,7 @@ fn feat(id: String, kind: &'static str, idx: usize, hid: u64, prof: Option<Rc<Re
 
 /// How a solid-making feature combines: `cut`, `keep` (intersect) or `new` (a body of its own),
 /// at most one; else it adds (a new body for the first solid).
-fn combine(ev: &Eval, a: &Args, func: &'static str) -> R<Combine> {
+pub(crate) fn combine(ev: &Eval, a: &Args, func: &'static str) -> R<Combine> {
     let flags = [
         ("cut", Combine::Cut),
         ("keep", Combine::Keep),
@@ -281,7 +281,7 @@ fn sweep(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
         ev,
         "sweep",
         &[
-            "profile", "along", "extend", "upto", "offset", "cut", "keep", "new",
+            "profile", "along", "extend", "upto", "offset", "cut", "keep", "new", "bodies",
         ],
         args,
         span,
@@ -345,6 +345,7 @@ fn sweep(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
         ends,
         op,
     }));
+    let f = crate::bodies::wrap_in(ev, &a, f)?;
     let (idx, hid) = ev.push_feature(&id, "sweep", f, span, dims)?;
     Ok(feat(id, "sweep", idx, hid, Some(sk)))
 }
@@ -359,7 +360,7 @@ fn coil(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
         "coil",
         &[
             "profile", "axis", "pitch", "turns", "height", "upto", "offset", "taper", "left", "cut", "keep",
-            "new",
+            "new", "bodies",
         ],
         args,
         span,
@@ -479,6 +480,7 @@ fn coil(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
         handed,
         op,
     }));
+    let f = crate::bodies::wrap_in(ev, &a, f)?;
     let (idx, hid) = ev.push_feature(&id, "coil", f, span, dims)?;
     let (wa, wd) = {
         let s = sk.borrow();
@@ -783,6 +785,7 @@ pub fn loft(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
         "loft",
         &[
             "profiles", "smooth", "start", "end", "align", "seams", "rails", "centre", "cut", "keep", "new",
+            "bodies",
         ],
         args,
         span,
@@ -957,6 +960,7 @@ pub fn loft(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
         options,
         op,
     }));
+    let f = crate::bodies::wrap_in(ev, &a, f)?;
     let (idx, hid) = ev.push_feature(&id, "loft", f, span, dims)?;
     Ok(feat(id, "loft", idx, hid, sketches.into_iter().next()))
 }
@@ -1217,7 +1221,7 @@ fn rib(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
     let a = Args::bind(
         ev,
         "rib",
-        &["along", "t", "side", "web", "flip", "draft"],
+        &["along", "t", "side", "web", "flip", "draft", "bodies"],
         args,
         span,
     )?;
@@ -1250,6 +1254,7 @@ fn rib(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
         flip: a.flag("flip")?,
         draft,
     })));
+    let f = crate::bodies::wrap_in(ev, &a, f)?;
     let (idx, hid) = ev.push_feature(&id, "rib", f, span, dims)?;
     Ok(feat(id, "rib", idx, hid, None))
 }
@@ -1303,7 +1308,13 @@ fn fullround(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
 fn ball(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Value> {
     not_in_sketch(ev, name, span)?;
     let id = ev.take_id(name, span)?;
-    let a = Args::bind(ev, name, &["center", "r", "cut", "keep", "new"], args, span)?;
+    let a = Args::bind(
+        ev,
+        name,
+        &["center", "r", "cut", "keep", "new", "bodies"],
+        args,
+        span,
+    )?;
     if a.poisoned() {
         return Ok(Value::Unresolved);
     }
@@ -1323,6 +1334,7 @@ fn ball(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Value>
         radius: r.v,
         op,
     };
+    let f = crate::bodies::wrap_in(ev, &a, f)?;
     let (idx, hid) = ev.push_feature(&id, "ball", f, span, vec![dim("radius", &r)])?;
     Ok(Value::Feature(Rc::new(Feat {
         id,

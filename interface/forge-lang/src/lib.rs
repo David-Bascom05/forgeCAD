@@ -43,6 +43,7 @@ pub mod store;
 pub mod syntax;
 pub mod thermo;
 pub mod thermo_kept;
+pub mod undo;
 pub mod uses;
 pub mod validity;
 pub mod values;
@@ -166,6 +167,9 @@ pub struct Options {
     /// An assembly: each in-file component call's anchors too (`Run::comp_anchors`), for a UI
     /// naming a face of an occurrence as its component names it.
     pub comp_anchors: bool,
+    /// A refused fillet, chamfer, shell or face fillet whose size a param drives: search for the
+    /// largest value that builds, the error's fix (a few rebuilds from that feature on).
+    pub fit_sizes: bool,
 }
 
 impl Default for Options {
@@ -187,6 +191,7 @@ impl Default for Options {
             meshes: true,
             asks: vec![],
             comp_anchors: false,
+            fit_sizes: false,
         }
     }
 }
@@ -280,8 +285,100 @@ impl Run {
 }
 
 /// Parses, checks, evaluates and (with `opts.build`) builds `src`, reusing `cache`'s stages
-/// where the history is unchanged. Returns the run and the cache for the next.
+/// where the history is unchanged. Returns the run and the cache for the next. With
+/// `opts.fit_sizes`, a fillet, chamfer, shell or face fillet the kernel refused, its size driven
+/// by a param, gets the largest value of that param that builds as its fix (.fc's `try:`).
 pub fn run(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
+    let fit = opts.fit_sizes;
+    let (mut run, mut cache) = run_once(src, opts.clone(), cache);
+    if fit && opts.build {
+        cache = fit_sizes(src, &opts, &mut run, cache);
+    }
+    (run, cache)
+}
+
+/// Halvings, then bisection steps, in the search for a size that builds (as .fc's).
+const FIT_HALVINGS: i32 = 8;
+const FIT_STEPS: usize = 12;
+
+/// `Options::fit_sizes`: each refused size's largest value that builds, put on its error.
+fn fit_sizes(src: &str, opts: &Options, run: &mut Run, mut cache: Cache) -> Cache {
+    let inner = Options {
+        fit_sizes: false,
+        checks: false,
+        ..opts.clone()
+    };
+    for k in 0..run.errors.len() {
+        let Error::Build { id, .. } = &run.errors[k] else {
+            continue;
+        };
+        let Some(f) = run.feats.iter().find(|f| &f.id == id) else {
+            continue;
+        };
+        if !matches!(f.kind, "fillet" | "chamfer" | "shell" | "facefillet") {
+            continue;
+        }
+        let Some(d) = f.dims.first() else { continue };
+        let values::Src::Driving(key) = &d.num.src else {
+            continue;
+        };
+        let (id, key, top, dim) = (id.clone(), key.clone(), d.num.v, d.num.dim);
+        let builds = |v: f64, cache: Cache| -> (bool, Cache) {
+            let op = error::Op::SetParam {
+                param: key.clone(),
+                value: error::Literal { value: v, dim },
+            };
+            let Ok(text) = edit::apply(src, &op) else {
+                return (false, cache);
+            };
+            let (r, c) = run_once(&text, inner.clone(), cache);
+            let ok = !r
+                .errors
+                .iter()
+                .any(|e| matches!(e, Error::Build { id: i, .. } if *i == id));
+            (ok && r.feats.iter().any(|f| f.id == id), c)
+        };
+        let mut bad = top;
+        let mut good = None;
+        for h in 1..=FIT_HALVINGS {
+            let v = top * 0.5f64.powi(h);
+            let (ok, c) = builds(v, cache);
+            cache = c;
+            if ok {
+                good = Some(v);
+                break;
+            }
+            bad = v;
+        }
+        let Some(mut lo) = good else { continue };
+        for _ in 0..FIT_STEPS {
+            let mid = (lo + bad) * 0.5;
+            let (ok, c) = builds(mid, cache);
+            cache = c;
+            if ok {
+                lo = mid;
+            } else {
+                bad = mid;
+            }
+        }
+        // three figures, rounded down so it still builds
+        let p = 10f64.powi(2 - lo.abs().log10().floor() as i32);
+        let shown = (lo * p).floor() / p;
+        let value = if shown > 0.0 && shown < lo {
+            let (ok, c) = builds(shown, cache);
+            cache = c;
+            if ok { shown } else { lo }
+        } else {
+            lo
+        };
+        if let Error::Build { fit, .. } = &mut run.errors[k] {
+            *fit = Some(Box::new((key, error::Literal { value, dim })));
+        }
+    }
+    cache
+}
+
+fn run_once(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
     let t0 = Instant::now();
     let mut timings = Timings::default();
     let prog = syntax::parse(src);

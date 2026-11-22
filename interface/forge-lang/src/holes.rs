@@ -255,7 +255,7 @@ pub fn hole(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
 /// An `upto(..)` end as a kernel target: a work plane, or a face by its owner's name.
 pub fn target_of(ev: &mut Eval, x: &ExtentV, span: Span) -> R<(Target, f64)> {
     match x {
-        ExtentV::UpToPlane(k, off) => Ok((Target::Plane(*k), *off)),
+        ExtentV::UpToPlane(k, off) => Ok((Target::Plane(*k), off.v)),
         ExtentV::UpTo(fs, off) => {
             let Some(&n) = fs.names.first() else {
                 return Err(Error::NoFace {
@@ -270,7 +270,7 @@ pub fn target_of(ev: &mut Eval, x: &ExtentV, span: Span) -> R<(Target, f64)> {
                     feature: r.feature,
                     name: r.name.unwrap_or(n),
                 },
-                *off,
+                off.v,
             ))
         }
         _ => unreachable!("an upto extent"),

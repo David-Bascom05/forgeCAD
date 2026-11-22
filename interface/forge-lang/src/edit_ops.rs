@@ -337,3 +337,108 @@ pub fn free_name(prog: &[Stmt], base: &str) -> String {
         })
         .expect("a free name")
 }
+
+/// `Respell {span, to}`: the name at `span` written `to` (an UnknownName's fix).
+pub fn apply_respell(src: &str, span: Span, to: &str) -> R<String> {
+    let (lo, hi) = (span.lo as usize, span.hi as usize);
+    let at = src
+        .get(lo..hi)
+        .filter(|t| ident(t))
+        .ok_or(Error::EmptySelection { span })?;
+    if !ident(to) || syntax::KEYWORDS.contains(&to) {
+        return Err(Error::NameTaken { name: to.into() });
+    }
+    let _ = at;
+    Ok(format!("{}{to}{}", &src[..lo], &src[hi..]))
+}
+
+/// The nearest of `names` to `name`, two edits or fewer away (as .fc's `try:` found them).
+pub fn nearest<'a>(name: &str, names: impl Iterator<Item = &'a str>) -> Option<String> {
+    let dist = |a: &str, b: &str| {
+        let (a, b): (Vec<char>, Vec<char>) = (a.chars().collect(), b.chars().collect());
+        let mut row: Vec<usize> = (0..=b.len()).collect();
+        for i in 1..=a.len() {
+            let mut prev = row[0];
+            row[0] = i;
+            for j in 1..=b.len() {
+                let cur = row[j];
+                row[j] = (row[j] + 1)
+                    .min(row[j - 1] + 1)
+                    .min(prev + usize::from(a[i - 1] != b[j - 1]));
+                prev = cur;
+            }
+        }
+        row[b.len()]
+    };
+    names
+        .filter(|n| *n != name)
+        .map(|n| (dist(name, n), n))
+        .filter(|(d, _)| *d <= 2 && *d < name.chars().count())
+        .min()
+        .map(|(_, n)| n.to_string())
+}
+
+/// The marker a suppressed line starts with: `#~ID ` (ID the feature `Suppress` named).
+fn suppress_tag(id: &str) -> String {
+    format!("#~{id} ")
+}
+
+/// `Suppress {id}`: the statement making top-level feature `id`, its params, and every later
+/// statement reading what they bind (and their params), out of the build: each of their lines
+/// kept as a comment `#~ID LINE`, so `Unsuppress {id}` puts them back as they were.
+pub fn apply_suppress(src: &str, prog: &[Stmt], id: &str) -> R<String> {
+    if src.lines().any(|l| l.starts_with(&suppress_tag(id))) {
+        return Err(Error::NameTaken {
+            name: format!("#~{id}"),
+        });
+    }
+    let (j, k) = crate::edit::block(prog, id)?;
+    let mut out: BTreeSet<usize> = (j..=k).collect();
+    let mut names = bound(&prog[j..=k]);
+    names.insert(id.to_string());
+    for m in k + 1..prog.len() {
+        if mentions(&prog[m]).iter().any(|n| names.contains(n)) {
+            out.insert(m);
+            names.extend(bound(&prog[m..=m]));
+        }
+    }
+    // the params of every feature taken out, wherever they are written
+    for (m, s) in prog.iter().enumerate() {
+        if let StmtKind::Param { owner, .. } = &s.kind
+            && owner.first().is_some_and(|o| names.contains(&o.name))
+        {
+            out.insert(m);
+        }
+    }
+    let tag = suppress_tag(id);
+    let mut text = String::with_capacity(src.len() + out.len() * (tag.len() + 8));
+    let mut at = 0usize;
+    for &m in &out {
+        let s = &prog[m];
+        let lo = src[..s.full.lo as usize].rfind('\n').map_or(0, |n| n + 1);
+        let hi = s.full.hi as usize;
+        if lo < at {
+            continue;
+        }
+        text.push_str(&src[at..lo]);
+        for line in src[lo..hi].split_inclusive('\n') {
+            text.push_str(&tag);
+            text.push_str(line);
+        }
+        at = hi;
+    }
+    text.push_str(&src[at..]);
+    Ok(text)
+}
+
+/// `Unsuppress {id}`: the lines `Suppress {id}` kept as comments put back as they were.
+pub fn apply_unsuppress(src: &str, id: &str) -> R<String> {
+    let tag = suppress_tag(id);
+    if !src.lines().any(|l| l.starts_with(&tag)) {
+        return Err(Error::UnknownFeature { id: id.into() });
+    }
+    Ok(src
+        .split_inclusive('\n')
+        .map(|l| l.strip_prefix(tag.as_str()).unwrap_or(l))
+        .collect())
+}

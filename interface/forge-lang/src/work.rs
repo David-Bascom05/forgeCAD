@@ -160,6 +160,7 @@ pub fn work(ev: &mut Eval, name: &'static str, args: &[crate::syntax::Arg], span
             span,
             id: id.clone(),
             error,
+            fit: None,
         })?
     } else {
         return Ok(Value::Unresolved);
