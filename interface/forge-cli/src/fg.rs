@@ -304,7 +304,7 @@ impl Session {
                 .ok_or("the part was not built")?
                 .origin(st.n)
                 .iter()
-                .map(|(k, v)| (*k, v.clone()))
+                .map(|(k, v)| (*k, v.to_vec()))
                 .collect();
             for t in &toks {
                 let set = feats_named(&st.feats, t);

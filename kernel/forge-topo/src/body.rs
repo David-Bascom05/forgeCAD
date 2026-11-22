@@ -673,6 +673,26 @@ impl Body {
     }
 
     /// Adds `other`'s entities after this body's, renumbered, its shells kept apart.
+    /// Room in every arena for `others` all appended, made at once: appending them one by one
+    /// then grows nothing (so no copy depends on whether the allocator can grow a block in place).
+    pub fn reserve_appends<'a>(&mut self, others: impl Iterator<Item = &'a Body>) {
+        let mut n = [0usize; 6];
+        for o in others {
+            n[0] += o.vertices.len();
+            n[1] += o.edges.len();
+            n[2] += o.coedges.len();
+            n[3] += o.loops.len();
+            n[4] += o.faces.len();
+            n[5] += o.shells.len();
+        }
+        self.vertices.reserve_exact(n[0]);
+        self.edges.reserve_exact(n[1]);
+        self.coedges.reserve_exact(n[2]);
+        self.loops.reserve_exact(n[3]);
+        self.faces.reserve_exact(n[4]);
+        self.shells.reserve_exact(n[5]);
+    }
+
     pub fn append(&mut self, other: &Body) {
         self.from_file |= other.from_file;
         self.unplaced |= other.unplaced;
@@ -1163,58 +1183,78 @@ impl Body {
     }
 
     pub fn face_box(&self, f: FaceId) -> Box3 {
+        *self
+            .face(f)
+            .bbox
+            .get_or_init(|| self.face_box_with(f, |e| self.edge_box(e)))
+    }
+
+    /// `face_box`, the same box, worked out with nothing kept: neither the face's box nor any
+    /// edge's is stored, so a body only looked at stays as it was, caches and all.
+    pub fn face_box_unkept(&self, f: FaceId) -> Box3 {
+        match self.face(f).bbox.get() {
+            Some(b) => *b,
+            None => self.face_box_with(f, |e| {
+                let edge = self.edge(e);
+                edge.bbox
+                    .get()
+                    .copied()
+                    .unwrap_or_else(|| edge.curve.bbox(edge.range))
+            }),
+        }
+    }
+
+    fn face_box_with(&self, f: FaceId, edge_box: impl Fn(EdgeId) -> Box3) -> Box3 {
         let face = self.face(f);
-        *face.bbox.get_or_init(|| {
-            let mut b = Box3::EMPTY;
-            for &l in &face.loops {
-                for c in self.lp(l).coedges() {
-                    b = b.hull(&self.edge_box(self.coedge(c).edge));
-                }
+        let mut b = Box3::EMPTY;
+        for &l in &face.loops {
+            for c in self.lp(l).coedges() {
+                b = b.hull(&edge_box(self.coedge(c).edge));
             }
-            match &face.surface {
-                Surface::Sphere(sp) => b = b.hull(&Box3::from_point(sp.frame.origin).grow(sp.radius)),
-                Surface::Torus(t) => {
-                    // within the minor radius of the centre circle's arc over the u the face's
-                    // loops span (unwrapped, so a face across the seam spans past it), padded for
-                    // an edge bulging past its samples
-                    let mut su = Interval::EMPTY;
-                    for l in crate::uv::face_uv_loops(self, f) {
-                        for p in &l.points {
-                            su.include(p.x);
-                        }
+        }
+        match &face.surface {
+            Surface::Sphere(sp) => b = b.hull(&Box3::from_point(sp.frame.origin).grow(sp.radius)),
+            Surface::Torus(t) => {
+                // within the minor radius of the centre circle's arc over the u the face's
+                // loops span (unwrapped, so a face across the seam spans past it), padded for
+                // an edge bulging past its samples
+                let mut su = Interval::EMPTY;
+                for l in crate::uv::face_uv_loops(self, f) {
+                    for p in &l.points {
+                        su.include(p.x);
                     }
-                    let tau = 2.0 * forge_math::dmath::PI;
-                    if t.is_spindle() {
-                        // only the part of the tube off the axis: between the poles, u all round
-                        // for want of knowing better
-                        use forge_geom::SurfaceGeom;
-                        let v = t.pole_v();
-                        let uv = forge_math::Box2 {
-                            u: Interval::new(0.0, tau),
-                            v: Interval::new(-v, v),
-                        };
-                        return b.hull(&t.bbox(uv)).grow(forge_math::tol::LINEAR);
-                    }
-                    let whole = Box3::from_point(t.frame.origin).grow(t.major + t.minor);
-                    b = b.hull(&if su.is_empty() || su.width() >= 0.9 * tau {
-                        whole
-                    } else {
-                        let arc = forge_geom::Circle {
-                            frame: t.frame,
-                            radius: t.major,
-                        };
-                        let pad = 0.01 * (1.0 + su.width());
-                        arc.bbox(Interval::new(su.lo - pad, su.hi + pad)).grow(t.minor)
-                    });
                 }
-                // straight across in v, a point of the face lies between two boundary points at
-                // its u: in the hull of its edges' boxes (research/thread-math)
-                Surface::Procedural(pr) if pr.v_degree() == Some(1) && !b.is_empty() => {}
-                Surface::Procedural(pr) => b = b.hull(&crate::uv::procedural_box(self, f, pr)),
-                _ => {}
+                let tau = 2.0 * forge_math::dmath::PI;
+                if t.is_spindle() {
+                    // only the part of the tube off the axis: between the poles, u all round
+                    // for want of knowing better
+                    use forge_geom::SurfaceGeom;
+                    let v = t.pole_v();
+                    let uv = forge_math::Box2 {
+                        u: Interval::new(0.0, tau),
+                        v: Interval::new(-v, v),
+                    };
+                    return b.hull(&t.bbox(uv)).grow(forge_math::tol::LINEAR);
+                }
+                let whole = Box3::from_point(t.frame.origin).grow(t.major + t.minor);
+                b = b.hull(&if su.is_empty() || su.width() >= 0.9 * tau {
+                    whole
+                } else {
+                    let arc = forge_geom::Circle {
+                        frame: t.frame,
+                        radius: t.major,
+                    };
+                    let pad = 0.01 * (1.0 + su.width());
+                    arc.bbox(Interval::new(su.lo - pad, su.hi + pad)).grow(t.minor)
+                });
             }
-            b.grow(forge_math::tol::LINEAR)
-        })
+            // straight across in v, a point of the face lies between two boundary points at
+            // its u: in the hull of its edges' boxes (research/thread-math)
+            Surface::Procedural(pr) if pr.v_degree() == Some(1) && !b.is_empty() => {}
+            Surface::Procedural(pr) => b = b.hull(&crate::uv::procedural_box(self, f, pr)),
+            _ => {}
+        }
+        b.grow(forge_math::tol::LINEAR)
     }
 
     pub fn face_by_name(&self, name: Name) -> Option<FaceId> {

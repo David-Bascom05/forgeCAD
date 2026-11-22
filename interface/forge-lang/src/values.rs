@@ -70,7 +70,119 @@ impl Dim {
 pub enum Src {
     Const,
     Driving(std::sync::Arc<ParamKey>),
-    Driven(std::sync::Arc<BTreeSet<ParamKey>>),
+    Driven(std::sync::Arc<Keys>),
+}
+
+/// A driven number's params, each shared with every set that holds it (a copy is a count): a
+/// set in ParamKey's order, as a BTreeSet of them would hold it, kept as a sorted list (most
+/// hold a few, and a list of a few is cheaper to build, copy and drop than a tree).
+#[derive(Clone, Default, PartialEq, Eq)]
+pub struct Keys(Vec<std::sync::Arc<ParamKey>>);
+
+impl Keys {
+    pub fn new() -> Keys {
+        Keys(Vec::new())
+    }
+    /// Adds `k` unless it holds one equal; whether it did.
+    pub fn insert(&mut self, k: std::sync::Arc<ParamKey>) -> bool {
+        match self.0.binary_search(&k) {
+            Ok(_) => false,
+            Err(i) => {
+                self.0.insert(i, k);
+                true
+            }
+        }
+    }
+    pub fn contains(&self, k: &ParamKey) -> bool {
+        self.0.binary_search_by(|x| (**x).cmp(k)).is_ok()
+    }
+    pub fn iter(&self) -> std::slice::Iter<'_, std::sync::Arc<ParamKey>> {
+        self.0.iter()
+    }
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+    /// The keys of both, in order.
+    pub fn union(&self, o: &Keys) -> Keys {
+        let (a, b) = (&self.0, &o.0);
+        let mut out = Vec::with_capacity(a.len() + b.len());
+        let (mut i, mut j) = (0, 0);
+        while i < a.len() && j < b.len() {
+            match a[i].cmp(&b[j]) {
+                std::cmp::Ordering::Less => {
+                    out.push(a[i].clone());
+                    i += 1;
+                }
+                std::cmp::Ordering::Greater => {
+                    out.push(b[j].clone());
+                    j += 1;
+                }
+                std::cmp::Ordering::Equal => {
+                    out.push(a[i].clone());
+                    i += 1;
+                    j += 1;
+                }
+            }
+        }
+        out.extend_from_slice(&a[i..]);
+        out.extend_from_slice(&b[j..]);
+        Keys(out)
+    }
+    /// Sorted and without repeats again, after keys were appended.
+    fn settle(&mut self) {
+        // (stable: an already sorted run and the one appended merge in one pass)
+        self.0.sort();
+        self.0.dedup();
+    }
+}
+
+impl std::fmt::Debug for Keys {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_set().entries(self.0.iter()).finish()
+    }
+}
+
+impl Extend<std::sync::Arc<ParamKey>> for Keys {
+    fn extend<I: IntoIterator<Item = std::sync::Arc<ParamKey>>>(&mut self, it: I) {
+        let n = self.0.len();
+        self.0.extend(it);
+        if self.0.len() > n {
+            self.settle();
+        }
+    }
+}
+
+impl FromIterator<std::sync::Arc<ParamKey>> for Keys {
+    fn from_iter<I: IntoIterator<Item = std::sync::Arc<ParamKey>>>(it: I) -> Keys {
+        let mut k = Keys(it.into_iter().collect());
+        k.settle();
+        k
+    }
+}
+
+impl<const N: usize> From<[std::sync::Arc<ParamKey>; N]> for Keys {
+    fn from(a: [std::sync::Arc<ParamKey>; N]) -> Keys {
+        a.into_iter().collect()
+    }
+}
+
+impl IntoIterator for Keys {
+    type Item = std::sync::Arc<ParamKey>;
+    type IntoIter = std::vec::IntoIter<std::sync::Arc<ParamKey>>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+
+impl<'a> IntoIterator for &'a Keys {
+    type Item = &'a std::sync::Arc<ParamKey>;
+    type IntoIter = std::slice::Iter<'a, std::sync::Arc<ParamKey>>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.iter()
+    }
 }
 
 impl Src {
@@ -82,8 +194,20 @@ impl Src {
         match self {
             Src::Const => BTreeSet::new(),
             Src::Driving(p) => [(**p).clone()].into(),
+            Src::Driven(s) => s.iter().map(|k| (**k).clone()).collect(),
+        }
+    }
+    /// The params, shared.
+    pub fn keys(&self) -> Keys {
+        match self {
+            Src::Const => Keys::new(),
+            Src::Driving(p) => [p.clone()].into(),
             Src::Driven(s) => (**s).clone(),
         }
+    }
+    /// A driven number's params: `keys` of these.
+    pub fn of(keys: impl IntoIterator<Item = ParamKey>) -> Keys {
+        keys.into_iter().map(std::sync::Arc::new).collect()
     }
     /// Adds the params to `out`, copying only those it lacks.
     pub fn add_to(&self, out: &mut BTreeSet<ParamKey>) {
@@ -91,6 +215,18 @@ impl Src {
             if !out.contains(p) {
                 out.insert(p.clone());
             }
+        };
+        match self {
+            Src::Const => {}
+            Src::Driving(p) => add(p),
+            Src::Driven(s) => s.iter().for_each(|k| add(k)),
+        }
+    }
+    /// `add_to`, shared.
+    pub fn add_keys(&self, out: &mut Keys) {
+        // (a copy is a count: one search, not two)
+        let mut add = |p: &std::sync::Arc<ParamKey>| {
+            out.insert(p.clone());
         };
         match self {
             Src::Const => {}
@@ -103,13 +239,19 @@ impl Src {
         match (a, b) {
             (Src::Const, x) | (x, Src::Const) => Src::derived(x),
             (Src::Driving(p), Src::Driving(q)) if p == q => Src::derived(a),
-            (Src::Driven(s), Src::Driving(p)) | (Src::Driving(p), Src::Driven(s)) if s.contains(&**p) => {
+            (Src::Driven(s), Src::Driving(p)) | (Src::Driving(p), Src::Driven(s)) if s.contains(p) => {
                 Src::Driven(s.clone())
             }
             (Src::Driven(s), Src::Driven(t)) if s == t => Src::derived(a),
             _ => {
-                let mut s = a.params();
-                b.add_to(&mut s);
+                let s = match (a, b) {
+                    (Src::Driven(x), Src::Driven(y)) => x.union(y),
+                    _ => {
+                        let mut s = a.keys();
+                        b.add_keys(&mut s);
+                        s
+                    }
+                };
                 if s.is_empty() {
                     Src::Const
                 } else {
@@ -122,7 +264,7 @@ impl Src {
     pub fn derived(a: &Src) -> Src {
         match a {
             Src::Const => Src::Const,
-            Src::Driving(p) => Src::Driven(std::sync::Arc::new([(**p).clone()].into())),
+            Src::Driving(p) => Src::Driven(std::sync::Arc::new([p.clone()].into())),
             Src::Driven(s) if s.is_empty() => Src::Const,
             Src::Driven(s) => Src::Driven(s.clone()),
         }

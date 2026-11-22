@@ -545,8 +545,8 @@ fn run_once(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
         let mass = |b: &forge_topo::Body| forge_topo::mass::mass(b);
         let each_mass =
             || -> Option<Vec<_>> { each.then(|| solids.iter().map(|x| mass(&x.2).ok()).collect()) };
-        // under a budget (spent on this thread) one after another, as before
-        let (w, e, o) = if forge_geom::budget::left() == u64::MAX {
+        // under a budget (spent on this thread), or with one thread to run on, one after another
+        let (w, e, o) = if forge_geom::budget::left() == u64::MAX && forge_math::par::threads() > 1 {
             std::thread::scope(|s| {
                 let w = whole.map(|b| s.spawn(move || mass(b)));
                 let bx = boxed.map(|b| s.spawn(move || tightbox::tight_box(b)));
