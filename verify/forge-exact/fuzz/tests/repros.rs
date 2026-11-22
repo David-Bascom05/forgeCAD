@@ -72,9 +72,10 @@ fn agrees(part: &Part) {
 /// A 10 mm cube added on the base's corner, touching it at that one vertex
 /// (plane_plane/vertex_on_vertex/Add). The union is not a manifold there: the reference says
 /// non-manifold at (20, 20, 0) and the kernel must refuse with ZeroThickness. It builds a body of
-/// 33000 mm³ that passes `forge_topo::check`.
+/// 33000 mm³ that passes `forge_topo::check`: it gave each fan of faces round the corner a vertex
+/// of its own. Now a kept vertex counts its sides as a kept edge does (more than one fan of kept
+/// faces, as more than two kept faces at an edge, is material meeting itself) and refuses.
 #[test]
-#[ignore = "exact reference: the kernel builds a solid where the union is non-manifold at a vertex"]
 fn cube_on_a_corner_vertex_is_non_manifold() {
     agrees(&degenerate("plane_plane/vertex_on_vertex/Add"));
 }
@@ -90,9 +91,15 @@ fn cut_touching_along_an_edge_leaves_no_slit() {
 }
 
 /// coincident_walls 1, its blocks: the kernel refuses ZeroThickness at (29.78, 23.23, 7) where
-/// the reference, with no decision within tolerance, gives a solid.
+/// the reference gives a solid. The reference decides the whole history as one boolean; the
+/// regen builds it a feature at a time, and after feature 10 (an Add) the part is not a manifold:
+/// the reference itself says so of that stage (`coincident_walls_1_stage_is_non_manifold`), a
+/// non-manifold edge of 4 facets from (29.70, 23.23, 7) to (29.86, 23.23, 7), where the added
+/// block and the material under a pocket's floor meet along a line, diagonally. Feature 11 cuts
+/// the block away there. The refusal is right for the stage; agreeing needs a regen that carries a
+/// non-manifold stage on to the next feature, which no B-rep body here can hold.
 #[test]
-#[ignore = "exact reference: ZeroThickness refused where the exact result is a valid solid"]
+#[ignore = "whole-history reference: the stage after feature 10 is non-manifold (the reference agrees), cut away by feature 11"]
 fn coincident_walls_1_blocks_build() {
     agrees(&family("coincident_walls", 1));
 }
@@ -137,4 +144,13 @@ sketch S5(on: plane(at: H4.p0, normal: Y)) {
 L5 = cut(S5, 5.71)
 ";
     agrees(&forge_lang::fuzz::build(src).part());
+}
+
+/// The stage coincident_walls 1 is refused at, judged alone: the reference says non-manifold along
+/// the line the kernel refuses at, and the kernel's refusal agrees.
+#[test]
+fn coincident_walls_1_stage_is_non_manifold() {
+    let mut part = family("coincident_walls", 1);
+    part.features.truncate(11);
+    agrees(&part);
 }

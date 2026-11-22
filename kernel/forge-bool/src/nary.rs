@@ -564,11 +564,11 @@ pub fn nary_with(
     root: Name,
 ) -> R<Body> {
     crate::boolean::UNDECIDED.with(|u| u.set(None));
-    let mut out = nary_body(tools, ops, shapes, batch, threads, root)?;
+    let out = nary_body(tools, ops, shapes, batch, threads, root)?;
     crate::boolean::undecided_touch(&out)?;
     crate::boolean::refuse_strays(&out, 0)?;
-    // pieces left touching at a point keep a vertex each: where walking round a vertex from one
-    // coedge leaving it (back along its loop, across to the partner) misses some of the others
+    // pieces left touching at a point pinch (boolean::pinched): where walking round a vertex from
+    // one coedge leaving it (back along its loop, across to the partner) misses some of the others
     let nv = out.vertices.len();
     let from = |x: &forge_topo::Edge, c: forge_topo::CoedgeId| {
         if out.coedges[c.index()].forward {
@@ -617,8 +617,10 @@ pub fn nary_with(
                 _ => break false,
             }
         };
-        if !one {
-            out.split_pinched(VertexId(v as u32), from, &mut prev);
+        if !one && out.fans(from, &mut prev).len() > 1 {
+            return Err(BoolError::ZeroThickness {
+                at: out.vertex(VertexId(v as u32)).point,
+            });
         }
     }
     Ok(out)

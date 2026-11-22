@@ -566,8 +566,7 @@ fn general(target: &mut Body, b: &Body, op: Op) -> R<()> {
     let (loops, verts) = (target.loops.len(), target.vertices.len());
     let touched = touched_old(&plan);
     apply(target, b, &plan);
-    split_new_pinches(target, loops, verts);
-    split_old_pinches(target, &touched);
+    let pinch = pinched_new(target, loops, verts).or_else(|| pinched_old(target, &touched));
     target.joins.extend(&b.joins);
     target.joins.pieces.extend_from_slice(&plan.wholes);
     for &w in b.split.iter().chain(&plan.split) {
@@ -579,6 +578,9 @@ fn general(target: &mut Body, b: &Body, op: Op) -> R<()> {
     lap(&mut clock, 6);
     scratch.keep(plan);
     SCRATCH.with(|s| s.replace(scratch));
+    if let Some(at) = pinch {
+        return Err(BoolError::ZeroThickness { at });
+    }
     undecided_touch(target)?;
     // what such a way made is not taken on trust: it is the case most likely to have gone wrong
     if RETRIED.with(|r| r.get()) && !forge_topo::check(&target.compact()).is_empty() {
@@ -626,11 +628,11 @@ fn touched_old(plan: &Plan) -> Vec<VertexId> {
     out
 }
 
-/// `split_new_pinches` at the target's own vertices `at`: the faces the boolean left alone may
-/// make a fan of their own there, so every use leaving the vertex is gathered.
-fn split_old_pinches(target: &mut Body, at: &[VertexId]) {
+/// `pinched_new` at the target's own vertices `at`: the faces the boolean left alone may make a
+/// fan of their own there, so every use leaving the vertex is gathered.
+fn pinched_old(target: &Body, at: &[VertexId]) -> Option<Point3> {
     if at.is_empty() {
-        return;
+        return None;
     }
     // (each use of each loop is dear on a big part: only faces about those vertices)
     let reach = forge_math::Box3::from_points(at.iter().map(|&v| target.vertex(v).point)).grow(tol::LINEAR);
@@ -644,17 +646,26 @@ fn split_old_pinches(target: &mut Body, at: &[VertexId]) {
         .collect();
     runs.sort_unstable();
     let mut prev = Vec::new();
-    for run in runs.chunk_by(|x, y| x.0 == y.0).filter(|run| run.len() > 1) {
-        let cs: Vec<_> = run.iter().map(|x| x.1).collect();
-        target.split_pinched(run[0].0, &cs, &mut prev);
-    }
+    runs.chunk_by(|x, y| x.0 == y.0)
+        .filter(|run| run.len() > 1)
+        .find(|run| pinched(target, run, &mut prev))
+        .map(|run| target.vertex(run[0].0).point)
 }
 
-/// Pieces left touching at a point keep a vertex each: looked for at the vertices a boolean
-/// made (from `verts` on, where its curves meet), from its new loops (from `loops` on).
-fn split_new_pinches(target: &mut Body, loops: usize, verts: usize) {
+/// Whether the faces round a vertex, met by the coedges of `run` leaving it, make more than one
+/// fan. A kept side is counted at a vertex as at an edge: material meets itself at an edge used by
+/// more than two kept faces, and at a vertex whose kept faces close up into more than one disk
+/// (blocks touching at a corner). Either is not a manifold, and refused with ZeroThickness.
+fn pinched(t: &Body, run: &[(VertexId, forge_topo::CoedgeId)], prev: &mut Vec<forge_topo::CoedgeId>) -> bool {
+    let cs: Vec<_> = run.iter().map(|x| x.1).collect();
+    t.fans(&cs, prev).len() > 1
+}
+
+/// Where pieces a boolean left touching at a point pinch: looked for at the vertices it made
+/// (from `verts` on, where its curves meet), from its new loops (from `loops` on).
+fn pinched_new(target: &Body, loops: usize, verts: usize) -> Option<Point3> {
     if target.vertices.len() == verts {
-        return;
+        return None;
     }
     let t: &Body = target;
     let mut from: Vec<(VertexId, forge_topo::CoedgeId)> = (loops..t.loops.len())
@@ -687,13 +698,10 @@ fn split_new_pinches(target: &mut Body, loops: usize, verts: usize) {
         false
     };
     let mut prev = Vec::new();
-    for run in from.chunk_by(|x, y| x.0 == y.0).filter(|run| run.len() > 1) {
-        if one_fan(target, run) {
-            continue;
-        }
-        let cs: Vec<_> = run.iter().map(|x| x.1).collect();
-        target.split_pinched(run[0].0, &cs, &mut prev);
-    }
+    from.chunk_by(|x, y| x.0 == y.0)
+        .filter(|run| run.len() > 1)
+        .find(|run| !one_fan(t, run) && pinched(t, run, &mut prev))
+        .map(|run| t.vertex(run[0].0).point)
 }
 
 /// Lists a boolean fills, kept per thread so the next boolean reuses their room.
