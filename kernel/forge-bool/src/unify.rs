@@ -309,10 +309,20 @@ fn between_same(body: &Body, keys: &[(u8, f64)], e: EdgeId) -> bool {
         .any(|&k| x.name == k || x.name.is_piece_of(k))
 }
 
-/// Whether the closed chain of edge uses `chain` goes round face `f`'s periodic surface.
+/// Whether the closed chain of edge uses `chain` goes round face `f`'s periodic surface. One
+/// through a singular point (a cone's apex) is taken to: round that point its turn is undefined,
+/// and a seam running to it (a pointed cone's) holds a chain there and back along it.
 fn winds(body: &Body, f: FaceId, chain: &[(EdgeId, bool)]) -> bool {
     let s = &body.face(f).surface;
     let d = s.domain();
+    if chain.iter().any(|&(e, _)| {
+        let x = body.edge(e);
+        [x.start, x.end]
+            .iter()
+            .any(|&v| s.singular(s.project(body.vertex(v).point)))
+    }) {
+        return true;
+    }
     let mut pts: Vec<Point2> = Vec::new();
     for &(e, fwd) in chain {
         let x = body.edge(e);
