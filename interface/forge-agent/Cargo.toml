@@ -18,7 +18,6 @@ forge-step = { path = "../../kernel/forge-step" }
 forge-model = { path = "../../kernel/forge-model" }
 forge-sketch = { path = "../../kernel/forge-sketch" }
 forge-font = { path = "../../kernel/forge-font" }
-forge-doc = { path = "../forge-doc" }
 
 [dev-dependencies]
 forge-asm = { path = "../../kernel/forge-asm" }

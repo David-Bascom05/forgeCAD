@@ -1,0 +1,20 @@
+# The retired .fc engine's instruction counts for the 15 bench parts, kept so .fg's can be
+# compared after the engine is deleted. Callgrind Ir (--cache-sim=no), x86-64-v2, app options
+# (checks off, fresh cache). full = cold build; edit = cold build then the first param x1.01,
+# rebuilt (the sum of both). volute.fc had no params, so its edit is its build alone.
+# part      full_M   edit_M
+bracket     10.8     20.4
+clamp       12.2     23.1
+conrod      59.8     117.5
+crank       290.5    578.8
+frame       436.4    731.6
+gearbox     263.8    524.7
+guard       55.5     109.9
+heatsink    94.3     183.6
+hub         26.1     47.9
+insert      27.0     47.0
+jack        372.8    581.1
+manifold    248.4    558.7
+quadarm     51.3     100.8
+valve       126.8    248.1
+volute      1140.0   1140.0
