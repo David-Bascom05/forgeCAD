@@ -544,7 +544,7 @@ fn fillet_picked(body: &Body, edges: &[FilletEdge], opts: &FilletOptions, featur
     let mut first = None;
     for _ in 0..4 {
         let on = work.as_ref().unwrap_or(body);
-        let notched = std::sync::atomic::AtomicBool::new(false);
+        let notched = std::cell::Cell::new(false);
         match fillet_on_noting(on, edges, opts, feature, Some(&notched)) {
             // the edge split in two, ids before it standing, its middle lies between the pieces
             Err(FilletError::SplitFirst { edge, at }) => {
@@ -559,7 +559,7 @@ fn fillet_picked(body: &Body, edges: &[FilletEdge], opts: &FilletOptions, featur
             // a closed round notched where its spring runs over a rim and back: the round
             // resting on the rim there instead, where it stands (the closing's shape), from the
             // body as it came (not with a rim a notch split first)
-            Ok(done) if !opts.cliff && notched.load(std::sync::atomic::Ordering::Relaxed) => {
+            Ok(done) if !opts.cliff && notched.get() => {
                 return Ok(fillet_cliff::retry(body, edges, opts, feature).unwrap_or(done));
             }
             ok => return ok,
@@ -846,7 +846,7 @@ fn fillet_on_noting(
     edges: &[FilletEdge],
     opts: &FilletOptions,
     feature: u64,
-    notched_out: Option<&std::sync::atomic::AtomicBool>,
+    notched_out: Option<&std::cell::Cell<bool>>,
 ) -> R<Body> {
     if body.dead > 0 && (!opts.starts.is_empty() || !opts.setbacks.is_empty()) {
         // the options name this body's entities
@@ -1069,9 +1069,9 @@ fn fillet_on_noting(
             let notched = b.notched.clone();
             let built = b.build();
             if let Some(out) = notched_out
-                && notched.load(std::sync::atomic::Ordering::Relaxed)
+                && notched.get()
             {
-                out.store(true, std::sync::atomic::Ordering::Relaxed);
+                out.set(true);
             }
             return built;
         }
@@ -2885,7 +2885,7 @@ struct Builder {
     /// takes the piece's place.
     cliff_rims: BTreeSet<EdgeId>,
     /// Set where a closed concave round's spring was notched over a rim and back (`excursions`).
-    notched: Arc<std::sync::atomic::AtomicBool>,
+    notched: std::rc::Rc<std::cell::Cell<bool>>,
     /// Walks may pass over short blends whose far vertices would otherwise close first.
     opening: bool,
     /// An edge whose blend ran out beside a tangent chain going on unpicked.
@@ -2955,7 +2955,7 @@ impl Builder {
             gone_blends: BTreeSet::new(),
             rim_sides: BTreeSet::new(),
             cliff_rims: BTreeSet::new(),
-            notched: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            notched: std::rc::Rc::new(std::cell::Cell::new(false)),
             opening: false,
             free_end: None,
             free_ends: false,
@@ -6031,7 +6031,7 @@ impl Builder {
                     // a closed concave round's spring off over a rim and back: notched here,
                     // which a cliff may round as the ball rolls
                     if !trips.is_empty() && closed && !self.rolled[i].convex {
-                        self.notched.store(true, std::sync::atomic::Ordering::Relaxed);
+                        self.notched.set(true);
                     }
                     trips
                 };
