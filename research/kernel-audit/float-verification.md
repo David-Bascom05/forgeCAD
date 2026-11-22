@@ -63,7 +63,27 @@ finite input.
 | 2^505 … 2^515 | 200,000 | 67,546 | 0 |
 | 2^520 … 2^1000 | 200,000 | — | 0 |
 
-Gates: the forge-math, forge-geom, forge-bool and forge-model release tests pass (402 tests); native and wasm32-wasip1 bits are identical; fmt and clippy are clean. The callgrind speed gate result is recorded in the next commit.
+Gates, on the final code:
+- **Release tests:** forge-math, forge-geom, forge-bool and forge-model, 402 passed, 0 failed.
+- **Bits:** native and wasm32-wasip1 bits are identical.
+- **fmt and clippy:** clean.
+- **Speed (`GATE_COUNTER=callgrind GATE_REPS=3 tools/speed/gate.sh`):** bits identical and no
+  line REGRESSED (over 0.5%). Against a base run of the unmodified commit, with binaries at
+  equal-length paths (`/home/user/gateA`, `/home/user/gateB`), the lines are *not* all at or
+  below base:
+  - 79 of 98 are higher;
+  - the synthetic parts, which are deterministic, rise by +0.01% to +0.14% (coplanar nary1);
+  - the bench parts, which the gate says move by up to about 0.4% from run to run, rise by up
+    to +0.36% (bracket edit).
+
+  The cost is not the fast filters' extra add. Profiling plate puts it all in `split_face`,
+  which inlines `angle_cmp` → `cross_sign`. Collinear directions take `cross_sign`'s slow path
+  often, and the range check there, plus how the changed slow path compiles inline, costs about
+  95k instructions per regen. Moving the slow paths out of line halved it. Checking the range
+  after the expansion instead cost more (+0.35%).
+  - Getting every line to base would mean dropping the out-of-range fallback from `cross_sign`,
+    leaving `angle_cmp` exact only inside `[2^-480, 2^500]`.
+  - Or it would need a cheaper exactness test than four magnitude checks. I have not found one.
 
 ## What is proven
 
