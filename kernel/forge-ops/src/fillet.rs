@@ -2988,6 +2988,11 @@ impl Builder {
         let first = self.rolled.first().map(|r| r.edge);
         self.collapse(no_width);
         let mut out = self.body.into_compact();
+        if !euler_sound(&out)
+            && let Some(b) = without_spurs(&out)
+        {
+            out = b;
+        }
         // new vertices sharing a name: a corner reached two ways, from pieces of one face. Which
         // should keep it nothing here can say stably, so such a corner refuses.
         let mut new: Vec<Name> = out
@@ -4056,6 +4061,97 @@ impl Builder {
         Ok(())
     }
 
+    /// Ring edge `c` (arriving at `v`), a seam of the strip blends `ra` and `rb` swallow on sides `sa`
+    /// and `sb`, resting beyond its smooth edge g, and ending at a vertex of g: the seam of the face
+    /// rested on that carries it on from there, as its coedge arriving at that vertex, and the vertex.
+    fn seam_beyond(
+        &self,
+        c: CoedgeId,
+        ra: usize,
+        rb: usize,
+        sa: usize,
+        sb: usize,
+    ) -> Option<(CoedgeId, VertexId)> {
+        let (cf, g) = self.rolled[ra].over[sa]?;
+        if ra != rb && self.rolled[rb].over[sb] != Some((cf, g)) {
+            return None;
+        }
+        let b = self.rolled[ra].faces[sa];
+        let x = self.body.edge(self.body.coedge(c).edge);
+        if !x.coedges.iter().all(|&d| self.body.coedge_face(d) == b) {
+            return None;
+        }
+        let w = self.body.coedge_start(c);
+        let gx = self.body.edge(g);
+        if gx.start != w && gx.end != w {
+            return None;
+        }
+        self.body
+            .face(cf)
+            .loops
+            .iter()
+            .flat_map(|&l| self.body.lp(l).coedges())
+            .find(|&d| {
+                let y = self.body.coedge(d).edge;
+                y != g
+                    && self.body.coedge_end(d) == w
+                    && self
+                        .body
+                        .edge(y)
+                        .coedges
+                        .iter()
+                        .all(|&o| self.body.coedge_face(o) == cf)
+            })
+            .map(|d| (d, w))
+    }
+
+    /// Where blend `ri`'s side `s`, resting beyond smooth edge g, swallows the strip as far as a
+    /// vertex of g though its section at `v` is not on g: the far end of the strip's seam from `v`,
+    /// or g's one vertex when g is closed and the strip goes whole (all its edges g, its seams and
+    /// edges of blends resting beyond g).
+    fn strip_gone_to(&self, ri: usize, s: usize, v: VertexId) -> Option<VertexId> {
+        let o = self.rolled[ri].over[s]?;
+        let b = self.rolled[ri].faces[s];
+        let gx = self.body.edge(o.1);
+        let seam = |e: EdgeId| {
+            self.body
+                .edge(e)
+                .coedges
+                .iter()
+                .all(|&d| self.body.coedge_face(d) == b)
+        };
+        let edges = || {
+            self.body
+                .face(b)
+                .loops
+                .iter()
+                .flat_map(|&l| self.body.lp(l).coedges())
+        };
+        if let Some(w) = edges().find_map(|c| {
+            let x = self.body.edge(self.body.coedge(c).edge);
+            let w = if x.start == v {
+                x.end
+            } else if x.end == v {
+                x.start
+            } else {
+                return None;
+            };
+            (seam(self.body.coedge(c).edge) && (w == gx.start || w == gx.end)).then_some(w)
+        }) {
+            return Some(w);
+        }
+        (gx.start == gx.end
+            && edges().all(|c| {
+                let e = self.body.coedge(c).edge;
+                e == o.1
+                    || seam(e)
+                    || self
+                        .filleted(c)
+                        .is_some_and(|rj| self.rolled[rj].over[self.side(c)] == Some(o))
+            }))
+        .then_some(gx.start)
+    }
+
     /// Whether coedge `c` (arriving at a vertex) arrives at its edge's end rather than its start.
     fn arrives_at_end(&self, c: CoedgeId) -> bool {
         self.body.coedge(c).forward
@@ -4127,7 +4223,16 @@ impl Builder {
                 if !change && any.is_some() {
                     continue;
                 }
-                let t = crossing(&self.rolled[ra].springs[s], t0, &e.curve, e.range).ok_or(err.clone())?;
+                let t = match crossing(&self.rolled[ra].springs[s], t0, &e.curve, e.range) {
+                    Some(t) => t,
+                    // a seam of a strip swallowed: the section lies where the spring crosses the seam
+                    // that carries it on over the face rested on
+                    None => {
+                        let (d, _) = self.seam_beyond(c, ra, rb, s, s_b).ok_or(err.clone())?;
+                        let y = self.body.edge(self.body.coedge(d).edge);
+                        crossing(&self.rolled[ra].springs[s], t0, &y.curve, y.range).ok_or(err.clone())?
+                    }
+                };
                 if !change {
                     any = Some(t);
                     continue;
@@ -4173,6 +4278,10 @@ impl Builder {
                         self.g_ends.entry((ri, side)).or_default().push(GEnd::Cut(t, qv));
                     } else if gx.start == v || gx.end == v {
                         self.g_ends.entry((ri, side)).or_default().push(GEnd::Gone(v));
+                    } else if let Some(w) = self.strip_gone_to(ri, side, v) {
+                        // swallowed up to its own vertex, with the strip's seam reaching it
+                        self.g_ends.entry((ri, side)).or_default().push(GEnd::Gone(w));
+                        self.unsure = true;
                     } else {
                         return Err(err);
                     }
@@ -4209,9 +4318,23 @@ impl Builder {
                     continue;
                 }
                 let e = self.body.edge(self.body.coedge(c).edge);
-                let (curve, range, ename) = (e.curve.clone(), e.range, e.name.whole());
+                let (mut curve, mut range, mut ename) = (e.curve.clone(), e.range, e.name.whole());
                 // a variable blend's spring stops at the section: the crossing may be b's
-                let hit = crossing(&self.rolled[ra].springs[s_a], ta, &curve, range);
+                let mut hit = crossing(&self.rolled[ra].springs[s_a], ta, &curve, range);
+                // a swallowed strip's seam goes; the seam beyond, which carries it on, is cut instead
+                let mut c = c;
+                if hit.is_none()
+                    && !var
+                    && let Some((d, _)) = self.seam_beyond(c, ra, rb, s_a, s_b)
+                {
+                    let partner = self.body.partner(c).ok_or(err.clone())?;
+                    self.drop_all(&[c, partner], ea)?;
+                    self.unsure = true;
+                    c = d;
+                    let y = self.body.edge(self.body.coedge(d).edge);
+                    (curve, range, ename) = (y.curve.clone(), y.range, y.name.whole());
+                    hit = crossing(&self.rolled[ra].springs[s_a], ta, &curve, range);
+                }
                 if hit.is_none() && !var {
                     return Err(err);
                 }
@@ -6644,6 +6767,56 @@ impl Builder {
     }
 }
 
+/// Whether a body's counts pass `check`'s Euler rule: V - E + 2F - L even and at most 2 a shell.
+fn euler_sound(b: &Body) -> bool {
+    let value =
+        b.vertices.len() as i64 - b.edges.len() as i64 + 2 * b.faces.len() as i64 - b.loops.len() as i64;
+    value % 2 == 0 && value <= 2 * b.shells.len() as i64
+}
+
+/// A seam walked out and straight back along a loop (its two uses one after the other) bounds
+/// nothing: the face lies on both its sides. Left where a round took away all of a face round its
+/// seam but a strip either side (a boss's far end rounded over), it pinches the face at the seam's
+/// far vertex and the counts come out odd. The body with each such seam gone, the loop running on
+/// round the face over the seam with no edge there; None if there is none.
+fn without_spurs(b: &Body) -> Option<Body> {
+    let mut out = b.clone();
+    let mut any = false;
+    for f in b.face_ids() {
+        let seam = |e: EdgeId| b.edge(e).coedges.iter().all(|&c| b.coedge_face(c) == f);
+        for &l in &b.face(f).loops {
+            let mut uses: Vec<(EdgeId, bool)> = b
+                .lp(l)
+                .coedges()
+                .map(|c| (b.coedge(c).edge, b.coedge(c).forward))
+                .collect();
+            let n = uses.len();
+            drop_spurs(&mut uses, seam);
+            if uses.len() < n {
+                out.replace_loop(f, l, &uses);
+                any = true;
+            }
+        }
+    }
+    any.then(|| out.into_compact())
+}
+
+/// `uses` with each seam (as `seam` tells) walked out and straight back taken out.
+fn drop_spurs(uses: &mut Vec<(EdgeId, bool)>, seam: impl Fn(EdgeId) -> bool) {
+    let mut i = 0;
+    while uses.len() > 2 && i < uses.len() {
+        let j = (i + 1) % uses.len();
+        if uses[i].0 == uses[j].0 && uses[i].1 != uses[j].1 && seam(uses[i].0) {
+            let (a, b) = (i.max(j), i.min(j));
+            uses.remove(a);
+            uses.remove(b);
+            i = i.saturating_sub(1);
+        } else {
+            i += 1;
+        }
+    }
+}
+
 /// A spring over a seam: the seam's parameter, the blend, its side, the spring's parameter, the point.
 type SeamHit = (f64, usize, usize, f64, Point3);
 
@@ -6715,9 +6888,15 @@ pub(crate) fn chain_loops(body: &Body, uses: &[(EdgeId, bool)]) -> Vec<Vec<(Edge
         // back at the start with a way on still unused (a closed rim, and the seam leaving its
         // vertex): the loop goes on
         while at != start || (0..n).any(|j| !used[j] && ends(&uses[j]).0 == at) {
-            let Some(next) = (1..n)
-                .map(|k| (i + k) % n)
-                .find(|&j| !used[j] && ends(&uses[j]).0 == at)
+            // never straight back along the edge just walked (a seam left a spur), while there
+            // is another way on
+            let way = |j: usize| !used[j] && ends(&uses[j]).0 == at;
+            let back = |j: usize| uses[j].0 == uses[i].0 && uses[j].1 != uses[i].1;
+            let order = (1..n).map(|k| (i + k) % n);
+            let Some(next) = order
+                .clone()
+                .find(|&j| way(j) && !back(j))
+                .or_else(|| order.clone().find(|&j| way(j)))
             else {
                 break;
             };
