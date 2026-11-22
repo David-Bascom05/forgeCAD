@@ -86,10 +86,11 @@ fn cube_on_a_corner_vertex_is_non_manifold() {
 
 /// A tilted plate cut from the base, touching its top face only along one edge
 /// (plane_plane/tilted_edge_on_top/Cut). Nothing is removed: the reference gives the base box,
-/// V8 E12 F6. The kernel gives V10 E13 F6 at the right volume: the touching edge left as a slit
-/// inside the top face (both sides of the edge on one face).
+/// V8 E12 F6. The kernel gave V10 E13 F6 at the right volume: the touching edge imprinted into the
+/// top face as a slit (both sides of the edge on one face). Now an edge lying in a face is
+/// imprinted only where its body crosses the face, and unify drops any edge with one face on both
+/// sides that is not a seam the face wraps round.
 #[test]
-#[ignore = "exact reference: a cut touching along an edge leaves a slit edge in the top face"]
 fn cut_touching_along_an_edge_leaves_no_slit() {
     agrees(&degenerate("plane_plane/tilted_edge_on_top/Cut"));
 }
