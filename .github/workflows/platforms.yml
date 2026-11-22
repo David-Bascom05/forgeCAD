@@ -1,5 +1,14 @@
 # ForgeCAD on Windows and macOS: the app, CLI and speech built as users install them, and the
 # tests of everything with platform code. Linux is gated by the Forgejo CI and the merge gate.
+#
+# The work is split in three jobs per OS that run at once, each with its own Rust build cache
+# (Swatinem/rust-cache: ~/.cargo and the third-party crates in each workspace's target; this
+# repository's own crates are always rebuilt from the checkout). The commands, crates, profiles
+# and flags are the ones a single job ran before:
+#   app        forge-render's release build of forge-app (its own workspace and target)
+#   app-tests  forge-render's agent tests (its test profile, its own target)
+#   build      the CLI and speech release builds, the platform crates' and the language's tests,
+#              the CLI measuring a part
 name: platforms
 
 on:
@@ -8,6 +17,61 @@ on:
   workflow_dispatch:
 
 jobs:
+  app:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    env:
+      CARGO_INCREMENTAL: 0
+      CARGO_PROFILE_DEV_DEBUG: line-tables-only
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # forge-git's tests read this repository's own history
+          fetch-depth: 0
+      - name: Defender off the build (Windows)
+        if: runner.os == 'Windows'
+        uses: ./.github/actions/defender-exclude
+      - name: toolchain (rust-toolchain.toml)
+        run: rustup show
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: interface/forge-render -> target
+      - name: build the app
+        shell: bash
+        run: cargo build --release --locked --manifest-path interface/forge-render/Cargo.toml --bin forge-app
+
+  app-tests:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    env:
+      CARGO_INCREMENTAL: 0
+      CARGO_PROFILE_DEV_DEBUG: line-tables-only
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # forge-git's tests read this repository's own history
+          fetch-depth: 0
+      - name: Defender off the build (Windows)
+        if: runner.os == 'Windows'
+        uses: ./.github/actions/defender-exclude
+      - name: toolchain (rust-toolchain.toml)
+        run: rustup show
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: interface/forge-render -> target
+      - name: tests of the platform code (the app's agent)
+        shell: bash
+        run: |
+          cargo test --locked --manifest-path interface/forge-render/Cargo.toml --lib agent::
+
   build:
     strategy:
       fail-fast: false
@@ -23,12 +87,19 @@ jobs:
         with:
           # forge-git's tests read this repository's own history
           fetch-depth: 0
+      - name: Defender off the build (Windows)
+        if: runner.os == 'Windows'
+        uses: ./.github/actions/defender-exclude
       - name: toolchain (rust-toolchain.toml)
         run: rustup show
-      - name: build the app, CLI and speech
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            . -> target
+            interface/forge-speech -> target
+      - name: build the CLI and speech
         shell: bash
         run: |
-          cargo build --release --locked --manifest-path interface/forge-render/Cargo.toml --bin forge-app
           cargo build --release --locked -p forge-cli --bin forgecad
           cargo build --release --locked --manifest-path interface/forge-speech/Cargo.toml
       - name: tests of the platform code
@@ -38,7 +109,6 @@ jobs:
         run: |
           cargo test --locked --no-fail-fast -p forge-dirs -p forge-agent -p forge-git -p forge-material
           cargo test --locked --manifest-path interface/forge-speech/Cargo.toml
-          cargo test --locked --manifest-path interface/forge-render/Cargo.toml --lib agent::
       - name: the language, its bench parts, and the kernel under its random programs (once forge-agent's history tests)
         if: ${{ !cancelled() }}
         shell: bash
@@ -62,6 +132,12 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
+      - name: Defender off the build (Windows)
+        if: runner.os == 'Windows'
+        uses: ./.github/actions/defender-exclude
+      - name: toolchain (rust-toolchain.toml)
+        run: rustup show
+      - uses: Swatinem/rust-cache@v2
       - name: bits against tools/speed/bits.txt
         shell: bash
         run: |
