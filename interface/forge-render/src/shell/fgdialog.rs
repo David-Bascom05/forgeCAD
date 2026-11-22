@@ -9,7 +9,7 @@ use super::fgtool::{FgTool, SlotKind as K};
 use super::theme::{mono, sans, semi};
 use super::{Shell, panel};
 use crate::shell::placed::Placed;
-use egui::{Align2, Color32, Rect, Sense, Stroke, pos2, vec2};
+use egui::{Align2, Rect, Sense, Stroke, pos2, vec2};
 use forge_lang::values::Dim;
 
 /// What a param is called in the dialog: Inventor's word for it.
@@ -365,17 +365,7 @@ impl Shell {
             self.fg = Some(fg);
             return;
         };
-        let frame = egui::Frame::new()
-            .fill(t.surface)
-            .stroke(Stroke::new(1.0, t.line))
-            .corner_radius(6)
-            .shadow(egui::Shadow {
-                offset: [0, 4],
-                blur: 16,
-                spread: 0,
-                color: Color32::from_black_alpha(90),
-            })
-            .inner_margin(12);
+        let frame = super::theme::panel_frame(&t);
         let v = self.view_rect;
         let mut places: Vec<(String, Rect)> = Vec::new();
         let mut asked = Asked::Nothing;
