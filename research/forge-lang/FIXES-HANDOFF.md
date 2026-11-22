@@ -1,8 +1,7 @@
 # Round 3 fixes: handoff
 
 Four bugs the Lean proofs found (ASSUMPTIONS.md, "Round 3"). All four are fixed in the Rust
-code and in the Lean model. The commit is "wip" because some gates have not run yet (listed
-below).
+code and in the Lean model, and every gate below has run.
 
 ## 1. Suppress drops neighbours on the same line
 
@@ -97,20 +96,22 @@ This was started and then stopped for the move; it has not been run.
 
 ## Gates
 
-- Passed:
-  - `cargo fmt --all`.
-  - `cargo clippy --workspace --all-targets --release -- -D warnings`.
-  - The `fc_parity` and `core_diff` release tests.
-  - `lake build` of `ForgeLang.Suppress`, `ForgeLang.Respell` and `ForgeLang.HistoryId`, which
-    builds all their dependencies.
-- Not yet run:
-  - The full `cargo test --release -p forge-lang` (it was stopped while compiling).
-  - `grammar` and `parse_diff`.
-  - The full `lake build`: `ForgeLang.LL1.Impl` and `ForgeLang.LL1.ImplUnifiedDoc` one at a
-    time, then `lake build`, `lake build fgparse fglex`, `lake env lean CheckAxioms.lean` and
-    `lake env lean Axioms.lean`.
-  - The callgrind gate.
-  - `cd interface/forge-render && cargo build --release`.
-- Then merge `claude/repo-review-mbdrlj` again right before the final commit. Another agent is
-  editing `eval.rs` and the parser, and this fix touches `eval.rs` in three small places (the
-  field, its init, and `push_made`) plus the poisoned-call match.
+All run on the merge with `claude/repo-review-mbdrlj` at 6979fa5c (nothing new to merge).
+
+- `cargo fmt --all --check` and `cargo clippy --release --workspace --all-targets -- -D warnings`:
+  clean.
+- `cargo test --release -p forge-lang --no-fail-fast`: all 69 binaries pass, `core_diff`,
+  `grammar` and `parse_diff` included.
+- Lean: `ForgeLang.LL1.Impl` and `ForgeLang.LL1.ImplUnifiedDoc` one at a time, then `lake build`
+  and `lake build fgparse fglex`; `CheckAxioms.lean` (2242 theorems, only propext,
+  Classical.choice, Quot.sound) and `Axioms.lean`; no `sorry`. The whole-library build first
+  failed: the new `Suppress.render` and `Respell.Tok` clashed with `ForgeLang.render` and
+  `ForgeLang.Tok` in `Print.lean` (each file built alone). They are now `renderLine` and
+  `SpanTok`/`SpanKind`.
+- Callgrind gate (`GATE_COUNTER=callgrind GATE_REPS=3`), base 6979fa5c and fix built at paths of
+  equal length: bits identical, no line over the 0.5% limit. The largest rise is clamp app
+  +0.32%; the synthetic lines are +247 instructions each (+0.00%).
+- forge-render: `cargo build --release` and `cargo test --release --no-fail-fast` pass. With no
+  GPU adapter, the 4 Headless tests in `chat_bridge` and `conversations` fail with "no GPU";
+  with Mesa's lavapipe (`mesa-vulkan-drivers`) they pass. `a_warm_rebuild_in_the_app_is_milliseconds`
+  failed once under the gate's load (50.8 ms) and passed 3 of 3 runs alone.
