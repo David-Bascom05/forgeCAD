@@ -17,6 +17,8 @@ forge-bool = { path = "../../kernel/forge-bool" }
 forge-ops = { path = "../../kernel/forge-ops" }
 forge-model = { path = "../../kernel/forge-model" }
 forge-lang = { path = "../../interface/forge-lang" }
+forge-mesh = { path = "../../kernel/forge-mesh" }
+forge-step = { path = "../../kernel/forge-step" }
 
 [lints]
 workspace = true

@@ -75,7 +75,7 @@ rod and block distances.
 ### The census, as labelled so far
 
 **Pipe set** (gen.py seeds 0–199, the kernel at fe8e0f1b): 170 of 200 labelled before the machine
-moved (research/fillets/oracle/pipe-labels-partial.jsonl).
+moved; all 200 are now in research/fillets/oracle/pipe-labels.jsonl.
 
 | label | parts |
 |---|---|

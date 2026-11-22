@@ -333,6 +333,10 @@ fn one(fc: &str, fg: &str, id: &str, samples: usize) -> String {
     };
     let (mut over, mut under, mut unknown, mut judged) = (0usize, 0usize, 0usize, 0usize);
     let mut worst: Vec<String> = Vec::new();
+    // every counted disagreement, for a second classifier (DUMP=DIR writes DIR/ID.pts)
+    let mut dump: Vec<(Point3, &str)> = Vec::new();
+    // every judged point, Index's answer and the oracle's (ALL=DIR writes DIR/ID.all)
+    let mut all: Vec<(Point3, bool, bool)> = Vec::new();
     // either side of each new face
     let old: BTreeSet<_> = s.face_ids().map(|f| s.face(f).name).collect();
     let new: Vec<FaceId> = after
@@ -347,7 +351,11 @@ fn one(fc: &str, fg: &str, id: &str, samples: usize) -> String {
                     continue;
                 }
                 judged += 1;
-                match filled(spec.classify(x)) {
+                let w = filled(spec.classify(x));
+                if let Some(o) = w {
+                    all.push((x, inside, o));
+                }
+                match w {
                     None => unknown += 1,
                     Some(o) if o == inside => {}
                     Some(o) => {
@@ -357,6 +365,7 @@ fn one(fc: &str, fg: &str, id: &str, samples: usize) -> String {
                             } else {
                                 under += 1
                             }
+                            dump.push((x, if inside { "over" } else { "under" }));
                             if worst.len() < 3 {
                                 worst.push(format!("[{:.4},{:.4},{:.4}]", x.x, x.y, x.z));
                             }
@@ -384,7 +393,18 @@ fn one(fc: &str, fg: &str, id: &str, samples: usize) -> String {
             continue;
         };
         judged += 1;
+        all.push((x, kin, o));
         if o != kin && robust(x, kin, o) {
+            dump.push((
+                x,
+                if w == Where::Body {
+                    "lost"
+                } else if kin {
+                    "over"
+                } else {
+                    "under"
+                },
+            ));
             if w == Where::Body {
                 lost += 1;
             } else if kin {
@@ -396,6 +416,20 @@ fn one(fc: &str, fg: &str, id: &str, samples: usize) -> String {
                 worst.push(format!("[{:.4},{:.4},{:.4}]", x.x, x.y, x.z));
             }
         }
+    }
+    if let Ok(dir) = std::env::var("DUMP") {
+        let t: String = dump
+            .iter()
+            .map(|(x, k)| format!("{} {} {} {k}\n", x.x, x.y, x.z))
+            .collect();
+        std::fs::write(format!("{dir}/{id}.pts"), t).expect("the dump");
+    }
+    if let Ok(dir) = std::env::var("ALL") {
+        let t: String = all
+            .iter()
+            .map(|(x, k, o)| format!("{} {} {} {} {}\n", x.x, x.y, x.z, u8::from(*k), u8::from(*o)))
+            .collect();
+        std::fs::write(format!("{dir}/{id}.all"), t).expect("the points");
     }
     // the fill's volume, by the oracle alone (cheap away from the candidates 0 < d < r)
     let vol_samples: usize = std::env::var("VOL_SAMPLES")

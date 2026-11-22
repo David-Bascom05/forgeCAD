@@ -182,7 +182,20 @@ fn to_edge(b: &Body, e: EdgeId, p: Point3) -> f64 {
 }
 
 /// One fillet: the body before and after, its radius; the label as a JSON object's fields.
-fn judge(s: &Body, after: &Body, r: f64, per_face: usize, randoms: usize, seed: u64) -> String {
+///
+/// With `dump` (DUMP=DIR), a fillet with counted disagreements writes DIR/NAME.pts, one counted point
+/// a line (`x y z over|under before`, `before` 1 where `Index` puts it in the body before), and the
+/// bodies before and after as DIR/NAME.before.step and DIR/NAME.after.step, for a classifier other
+/// than forge-bool's `Index` (research/fillets/oracle/occt_body.py).
+fn judge(
+    s: &Body,
+    after: &Body,
+    r: f64,
+    per_face: usize,
+    randoms: usize,
+    seed: u64,
+    dump: Option<&str>,
+) -> String {
     let names: BTreeSet<_> = after.edge_ids().map(|e| after.edge(e).name).collect();
     let rounded: Vec<EdgeId> = s
         .edge_ids()
@@ -244,6 +257,7 @@ fn judge(s: &Body, after: &Body, r: f64, per_face: usize, randoms: usize, seed: 
     let (mut over, mut under, mut unknown, mut judged, mut excused) =
         (0usize, 0usize, 0usize, 0usize, 0usize);
     let mut at = Vec::new();
+    let mut dumped: Vec<String> = Vec::new();
     let mut count = |x: Point3, k: bool, o: bool, at: &mut Vec<String>| {
         if k == o {
             return;
@@ -279,6 +293,14 @@ fn judge(s: &Body, after: &Body, r: f64, per_face: usize, randoms: usize, seed: 
         } else {
             under += 1
         }
+        dumped.push(format!(
+            "{} {} {} {} {}",
+            x.x,
+            x.y,
+            x.z,
+            if more { "over" } else { "under" },
+            u8::from(kin(&sx, x) == Some(true))
+        ));
         if at.len() < 4 {
             at.push(format!("[{:.4},{:.4},{:.4}]", x.x, x.y, x.z));
         }
@@ -320,6 +342,14 @@ fn judge(s: &Body, after: &Body, r: f64, per_face: usize, randoms: usize, seed: 
             };
             judged += 1;
             count(x, k, o, &mut at);
+        }
+    }
+    if let (Some(name), false) = (dump, dumped.is_empty()) {
+        let _ = std::fs::write(format!("{name}.pts"), dumped.join("\n") + "\n");
+        for (b, w) in [(s, "before"), (after, "after")] {
+            if let Ok(e) = forge_step::export(b, &forge_step::Options::default()) {
+                let _ = std::fs::write(format!("{name}.{w}.step"), e.text);
+            }
         }
     }
     let label = if forge_topo::check(after)
@@ -384,7 +414,8 @@ fn one(path: &str, per_face: usize, randoms: usize) -> Vec<String> {
             .bytes()
             .fold(k as u64, |h, c| h.wrapping_mul(31).wrapping_add(c as u64));
         let body = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            judge(&s, &a, r, per_face, randoms, seed)
+            let dump = std::env::var("DUMP").ok().map(|d| format!("{d}/{id}.{k}"));
+            judge(&s, &a, r, per_face, randoms, seed, dump.as_deref())
         }))
         .unwrap_or_else(|_| "\"label\":\"unjudged\",\"why\":\"panicked\"".into());
         out.push(format!("{head},{body}}}"));
