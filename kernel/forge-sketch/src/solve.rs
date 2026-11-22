@@ -718,6 +718,18 @@ impl Sketch {
         (n - base, conflicting)
     }
 
+    /// `freedom`'s conflicting constraints alone, without the rank that gives the freedom left
+    /// (the part of `freedom` that costs).
+    pub fn conflicting(&self) -> Vec<ConstraintId> {
+        let sys = self.system(&self.params);
+        let mut conflicting: Vec<ConstraintId> = (0..sys.r.len())
+            .filter(|&i| sys.r[i].abs() > CONFLICT)
+            .filter_map(|i| sys.origin[i])
+            .collect();
+        conflicting.dedup();
+        conflicting
+    }
+
     /// True when every entity is fully constrained and nothing conflicts.
     pub fn is_fully_constrained(&self) -> bool {
         let a = self.analyze();

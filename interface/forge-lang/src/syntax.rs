@@ -6,6 +6,7 @@ use table::{P, t};
 
 #[rustfmt::skip]
 pub mod table;
+mod fast;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 pub struct Span {
@@ -1812,7 +1813,24 @@ fn reserved_in(toks: &[Tok]) -> Option<Error> {
     })
 }
 
+/// The program in `src`: read in one pass (`fast`) where it parses, else by the table parser,
+/// which says what is wrong (the two give the same tree for every text that parses: tests/
+/// parse_diff.rs).
 pub fn parse(src: &str) -> R<Vec<Stmt>> {
+    let mut la = Vec::new();
+    let toks = lex_into::<false>(src, &mut Vec::new(), &mut la)?;
+    // (a text the one-pass parser takes has no reserved word as a name: it takes `at` only as
+    // an argument's key and an expect's clause, which `name_uses` passes over; one it refuses
+    // goes to `parse_table`, which looks for them first)
+    if let Some(stmts) = fast::parse(toks) {
+        return Ok(stmts);
+    }
+    parse_table(src)
+}
+
+/// `parse` by the table-driven parser alone.
+#[doc(hidden)]
+pub fn parse_table(src: &str) -> R<Vec<Stmt>> {
     let mut la = Vec::new();
     let toks = lex_into::<false>(src, &mut Vec::new(), &mut la)?;
     if RESERVED

@@ -332,8 +332,8 @@ pub struct Eval<'s> {
     pub reads: BTreeSet<ParamKey>,
     /// Measure the part's volume after every feature.
     pub volumes: bool,
-    /// Run the slow checks (a thermoform's wall simulation, what changed nothing); off, the
-    /// shape alone.
+    /// Run the slow checks (a thermoform's wall simulation, what changed nothing, a sketch's
+    /// freedom left); off, the shape alone.
     pub checks: bool,
     /// Whether the built-in being called was given something unknown.
     pub poisoned: bool,
@@ -2270,7 +2270,7 @@ impl<'s> Eval<'s> {
         }
         // solved again only if it changed since the run before
         let was = self.b.solved_was(&id);
-        let (done, r) = sk.borrow_mut().finish(was);
+        let (done, r) = sk.borrow_mut().finish(was, self.checks);
         self.b.keep_solved(id.clone(), done);
         r?;
         if sk.borrow().free {

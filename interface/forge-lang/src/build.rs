@@ -2,8 +2,7 @@
 //! anchors and selections read the part as it stands. Stages are kept, and a session reuses
 //! the stages of a run whose features (and ids) are the same up to that point.
 
-use forge_agent::select::{self, Lineage};
-use forge_model::{Feature, History, RegenError, Solid, step_solids_finished};
+use forge_model::{Feature, History, RegenError, Solid, step_solids_plain};
 use forge_topo::{Body, FaceId, Name};
 use std::any::Any;
 use std::cell::OnceCell;
@@ -367,6 +366,9 @@ pub struct Builder {
     /// Whether a step built here (a sheet) holds bodies the kernel's history cannot step: then
     /// features that make nothing pass the bodies on as they are.
     hosted: bool,
+    /// `forge_model::unwrapped` of each feature so far, once one is wrapped (`In`): handed to
+    /// each step, which would otherwise unwrap the whole history again.
+    plain: Vec<Feature>,
     pub kernel_ms: f64,
     pub rebuilt: usize,
     pub reused: usize,
@@ -394,6 +396,7 @@ impl Builder {
             cache,
             reuse: true,
             hosted: false,
+            plain: vec![],
             kernel_ms: 0.0,
             rebuilt: 0,
             reused: 0,
@@ -573,14 +576,38 @@ impl Builder {
             self.keep(keyable, id);
             return Ok(i);
         }
+        // a work plane, axis or point makes nothing either: the kernel only checks it can be
+        // placed (`forge_model::work::datum`) and hands the part on. Placed, the stage before is
+        // this one's; not placed, the kernel's step says why as before.
+        if let Feature::Work(_) = &self.features[i]
+            && forge_model::work::datum(History::new(&self.features, Some(&self.ids)), i).is_ok()
+        {
+            let st = match self.stages.last() {
+                Some(last) => last.clone(),
+                None => Rc::new(Stage::new(vec![])),
+            };
+            self.rebuilt += 1;
+            self.stages.push(st);
+            self.keep(keyable, id);
+            return Ok(i);
+        }
         let last = self.stages.last();
         let before = last.map(|s| s.solids.clone()).unwrap_or_default();
         // the part as a selection saw it (its one solid finished), for a feature that finishes
         // it again to work on it
         let finished = last.and_then(|s| s.finished_alone());
         let t = Instant::now();
+        let wrapped =
+            |f: &Feature| matches!(f, Feature::Body(b) if matches!(**b, forge_model::BodyFeature::In { .. }));
+        if !self.plain.is_empty() || self.features.iter().any(wrapped) {
+            while self.plain.len() < self.features.len() {
+                let f = forge_model::unwrapped(&self.features[self.plain.len()]);
+                self.plain.push(f);
+            }
+        }
         let history = History::new(&self.features, Some(&self.ids));
-        let r = step_solids_finished(history, i, before, finished);
+        let plain = (!self.plain.is_empty()).then_some(&self.plain[..]);
+        let r = step_solids_plain(history, plain, i, before, finished);
         self.kernel_ms += t.elapsed().as_secs_f64() * 1e3;
         self.rebuilt += 1;
         match r {
@@ -707,6 +734,50 @@ impl Builder {
     }
 }
 
+/// Which features made each face, by its name (as `forge_agent::select::Lineage`, hashed for
+/// names: they are hashes already, so a multiply spreads them; nothing iterates one).
+pub type Lineage = HashMap<Name, Vec<usize>, std::hash::BuildHasherDefault<NameMix>>;
+
+/// The hasher of `Lineage`.
+#[derive(Default)]
+pub struct NameMix(u64);
+
+impl std::hash::Hasher for NameMix {
+    fn write(&mut self, bytes: &[u8]) {
+        for &b in bytes {
+            self.0 = (self.0.rotate_left(8) ^ b as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15);
+        }
+    }
+    fn write_u64(&mut self, x: u64) {
+        self.0 = (self.0 ^ x).wrapping_mul(0x9e37_79b9_7f4a_7c15);
+    }
+    fn finish(&self) -> u64 {
+        self.0 ^ (self.0 >> 29)
+    }
+}
+
+/// `forge_agent::select::lineage` with nothing copied, into a `Lineage`: each face's making
+/// features after feature `i` built `body`, given those before. A face keeps its origin while its
+/// name lives; a new face on a face before's surface, overlapping it, is that face's.
+fn lineage(body: &Body, prev: Option<(&Body, &Lineage)>, i: usize) -> Lineage {
+    let mut out = Lineage::with_capacity_and_hasher(body.faces.len(), Default::default());
+    for f in body.face_ids() {
+        let face = body.face(f);
+        let o = prev.and_then(|(pb, po)| {
+            po.get(&face.name).cloned().or_else(|| {
+                // (the surfaces first: most differ, and a face's box is worked out only then)
+                pb.face_ids()
+                    .find(|&g| {
+                        pb.face(g).surface == face.surface && pb.face_box(g).overlaps(&body.face_box(f))
+                    })
+                    .and_then(|g| po.get(&pb.face(g).name).cloned())
+            })
+        });
+        out.insert(face.name, o.unwrap_or_else(|| vec![i]));
+    }
+    out
+}
+
 /// A run before's stages, and the lineages worked out for them, by position.
 type KeptLineage<'a> = (&'a [Rc<Stage>], &'a [Rc<Lineage>]);
 
@@ -738,8 +809,8 @@ fn origin_upto(
         }
         let prev = k.checked_sub(1).and_then(|j| stages[j].work());
         let o = match stages.get(k).and_then(|s| s.work()) {
-            None => HashMap::new(),
-            Some(b) => select::lineage(b, prev.map(|p| (p, &*origins[k - 1])), k, &HashMap::new()),
+            None => Lineage::default(),
+            Some(b) => lineage(b, prev.map(|p| (p, &*origins[k - 1])), k),
         };
         origins.push(Rc::new(o));
     }

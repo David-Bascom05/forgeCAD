@@ -30,8 +30,9 @@ fn main() {
         "../../.cargo/config.toml",
         "../../.cargo/config",
     ] {
-        println!("cargo:rerun-if-changed={f}");
+        // only a file that exists: cargo counts a missing one as changed, every build
         if Path::new(f).exists() {
+            println!("cargo:rerun-if-changed={f}");
             files.push(f.into());
         }
     }
