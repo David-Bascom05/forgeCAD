@@ -3668,7 +3668,9 @@ fn cylinder_tangent_to_top_and_wall_inside() {
 
 /// Equal rods whose axes cross meet in two ellipses that cross where the rods touch. With the
 /// rods' seams away from there, kept curve pieces end at free vertices (on no edge), whose
-/// naming once panicked. The common part is the Steinmetz solid, 16 r^3 / 3.
+/// naming once panicked. The common part is the Steinmetz solid, 16 r^3 / 3. One less the other
+/// leaves two pieces of rod meeting only at the two points the rods touch: not a manifold there,
+/// refused with ZeroThickness as a corner touch is.
 #[test]
 fn equal_rods_crossing_end_pieces_at_free_vertices() {
     use forge_math::{Frame, Point3, Vec3};
@@ -3699,6 +3701,20 @@ fn equal_rods_crossing_end_pieces_at_free_vertices() {
             part.regenerate_nary(1),
             part.regenerate_nary(2),
         ] {
+            if op == Combine::Cut {
+                assert!(
+                    matches!(
+                        b,
+                        Err(forge_model::RegenError::Boolean {
+                            feature: 1,
+                            error: forge_bool::BoolError::ZeroThickness { .. }
+                        })
+                    ),
+                    "{:?}",
+                    b.map(|b| volume(&b))
+                );
+                continue;
+            }
             let b = b.expect("regenerates");
             assert!(
                 forge_topo::check(&b).is_empty(),

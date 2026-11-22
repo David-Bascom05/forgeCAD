@@ -755,6 +755,9 @@ fill = delete_faces(faces(of: extrude1, shape: "cyl"))
 }
 
 /// A cone with a hexagon cut through it, its top edges rounded: no panic, and sound if it builds.
+/// The hexagon's corners lie on the cone's base circle (to 7e-8 mm, its 17.320508 a rounded
+/// √300), so the cut leaves six slivers round the foot touching only at those corners: refused
+/// with ZeroThickness at the cut, as any corner touch is.
 #[test]
 fn rounding_a_hex_cut_cone_top_does_not_panic() {
     let src = r#"sketch s1(on: xz) {
@@ -772,7 +775,13 @@ round = fillet(edges(between: (hexcut, cone.side(s1.p1[1]))), 0.5)
     // (it builds since corner patches stopped following storage order; a refusal must name the fillet)
     match r.errors.first() {
         None => assert!(r.measure.expect("measured").problems == 0),
-        Some(e) => assert!(format!("{e:?}").contains("round"), "{e:?}"),
+        Some(e) => {
+            let e = format!("{e:?}");
+            assert!(
+                e.contains("round") || e.contains("\"hexcut\"") && e.contains("ZeroThickness"),
+                "{e}"
+            )
+        }
     }
 }
 
