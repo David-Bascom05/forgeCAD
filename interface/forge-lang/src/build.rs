@@ -95,6 +95,12 @@ impl Cache {
     pub fn history(&self) -> (&[Feature], &[u64]) {
         (&self.features, &self.ids)
     }
+
+    /// The solids after each feature built, in order: the stages `history` stands at, for
+    /// checking every step (`fuzz.rs`).
+    pub fn stages(&self) -> impl Iterator<Item = &[Solid]> {
+        self.stages.iter().map(|s| &s.solids[..])
+    }
 }
 
 /// The last run's history and stages, for reuse.

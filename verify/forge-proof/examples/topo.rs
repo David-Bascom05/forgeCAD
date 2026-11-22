@@ -1,9 +1,9 @@
-//! A part's edges and faces after its last line, for importers that resolve references against the
-//! geometry (tools/find-parts/recreate). Keeps one model, so a longer source rebuilds only its tail.
-//! stdin: `N\n` then N bytes of source, repeatedly. stdout: one JSON line per source.
-use forge_agent::model::Model;
+//! A .fg part's edges and faces after its last statement, for importers that resolve references
+//! against the geometry (tools/find-parts/recreate). Keeps one cache, so a longer source rebuilds
+//! only its tail. stdin: `N\n` then N bytes of source, repeatedly. stdout: one JSON line per source.
 use forge_agent::select::{self, Ent};
 use forge_geom::{CurveGeom, SurfaceGeom};
+use forge_lang::fuzz::Built;
 use forge_math::Point3;
 use std::io::{BufRead, Read, Write};
 
@@ -24,14 +24,23 @@ fn esc(s: &str) -> String {
         .collect()
 }
 
-fn dump(m: &Model) -> String {
-    let mut o = format!("{{\"built\":{},\"lines\":{}", m.built(), m.lines.len());
-    if let Some(f) = &m.error {
-        o += &format!(",\"at\":{},\"err\":\"{}\"", f.at, esc(&f.msg));
+fn dump(m: &Built, src: &str) -> String {
+    let mut o = format!(
+        "{{\"built\":{},\"lines\":{}",
+        m.built(),
+        forge_lang::fuzz::statements(src).len()
+    );
+    if let Some(f) = m.error() {
+        o += &format!(
+            ",\"at\":{},\"err\":\"{}\"",
+            m.line_of(src, f),
+            esc(&forge_lang::fuzz::message(f))
+        );
     }
     let Some(b) = m.body() else {
         return o + "}";
     };
+    let b = &b;
     let hs = select::handles(b);
     let h = |e: Ent| hs.get(&select::name(b, e)).cloned().unwrap_or_default();
     let mut edges = vec![];
@@ -105,7 +114,7 @@ fn main() {
     std::panic::set_hook(Box::new(|_| {}));
     let stdin = std::io::stdin();
     let mut r = stdin.lock();
-    let mut m: Option<Model> = None;
+    let mut cache: Option<forge_lang::build::Cache> = None;
     let mut line = String::new();
     loop {
         line.clear();
@@ -117,14 +126,16 @@ fn main() {
         r.read_exact(&mut buf).expect("the source");
         let src = String::from_utf8_lossy(&buf).into_owned();
         let out = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            match &mut m {
-                Some(m) => m.update(&src),
-                None => m = Some(Model::new(&src)),
-            }
-            dump(m.as_ref().expect("just made"))
+            let (m, c) = forge_lang::fuzz::build_cached(
+                &src,
+                forge_lang::fuzz::options(),
+                cache.take().unwrap_or_default(),
+            );
+            cache = Some(c);
+            dump(&m, &src)
         }))
         .unwrap_or_else(|p| {
-            m = None;
+            cache = None;
             let t = p.downcast_ref::<String>().cloned().unwrap_or_default();
             format!("{{\"panic\":\"{}\"}}", esc(&t))
         });

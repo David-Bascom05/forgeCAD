@@ -1,10 +1,11 @@
-//! The census of what will not build (research/build-failures): random histories over every
-//! feature kind, each line refused or failed counted by kind of message, the smallest history
-//! of each kind shrunk and written as a part file.
+//! The census of what will not build (research/build-failures): random .fg programs over every
+//! feature kind (forge_lang::fuzz), each statement group refused or failed counted by kind of
+//! message, the smallest program of each kind shrunk and written as a part file.
 //! buildfail FIRST_SEED COUNT [LEN] [OUT_DIR] [all]
-//! buildfail shrink FILE: a part file's refusal or failure, shrunk
-//! all: every refused history up to 30 of a kind as found, not shrunk (for the OCCT oracle's dir: set)
-use forge_agent::history::{MAKERS, judge, run, shrink};
+//! buildfail shrink FILE.fg: a part file's refusal or failure, shrunk
+//! all: every refused program up to 30 of a kind as found, not shrunk (for the OCCT oracle's
+//! fgdir: set)
+use forge_lang::fuzz::{MAKERS, judge, run, shrink};
 use std::collections::BTreeMap;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -70,11 +71,11 @@ fn main() {
         }
     });
     let tally = tally.into_inner().expect("tally");
-    println!("{:<12} {:>6} {:>8} {:>7}", "kind", "tried", "refused", "%");
+    println!("{:<14} {:>6} {:>8} {:>7}", "kind", "tried", "refused", "%");
     for m in MAKERS {
         let (t, r) = tally.get(m.name).copied().unwrap_or_default();
         println!(
-            "{:<12} {t:>6} {r:>8} {:>6.1}%",
+            "{:<14} {t:>6} {r:>8} {:>6.1}%",
             m.name,
             100.0 * r as f64 / t.max(1) as f64
         );
@@ -87,11 +88,11 @@ fn main() {
         println!("{:>5} {} {why}", k.hits, if k.failure { "FAIL" } else { "ref " });
         if let (Some(dir), true) = (out, all) {
             for (n, src) in k.every.iter().enumerate() {
-                std::fs::write(format!("{dir}/k{i:03}-{n:02}.fc"), format!("# {why}\n{src}")).expect("write");
+                std::fs::write(format!("{dir}/k{i:03}-{n:02}.fg"), format!("# {why}\n{src}")).expect("write");
             }
         } else if let Some(dir) = out {
             let small = shrink(&k.smallest, &judge(&k.smallest));
-            std::fs::write(format!("{dir}/k{i:03}.fc"), format!("# {why}\n{small}")).expect("write");
+            std::fs::write(format!("{dir}/k{i:03}.fg"), format!("# {why}\n{small}")).expect("write");
         }
     }
 }

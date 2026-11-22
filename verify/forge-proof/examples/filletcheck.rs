@@ -1,7 +1,6 @@
-//! One part file's fate as one JSON line, with every fillet audited: filletcheck FILE.fc
+//! One .fg part file's fate as one JSON line, with every fillet audited: filletcheck FILE.fg
 //! Run per process (research/fillets/run.py), so a hang or an abort costs one part.
-use forge_agent::model::Model;
-use forge_model::{Feature, Part};
+use forge_model::Feature;
 use forge_proof::blends;
 
 fn esc(s: &str) -> String {
@@ -14,7 +13,7 @@ fn main() {
     let file = std::env::args().nth(1).expect("a part file");
     let src = std::fs::read_to_string(&file).expect("readable");
     std::panic::set_hook(Box::new(|i| eprintln!("{i}")));
-    let m = Model::new(&src);
+    let m = forge_lang::fuzz::build(&src);
     let mut audits = Vec::new();
     for k in 0..m.features.len().min(m.built()) {
         let Feature::Fillet { edges, .. } = &m.features[k] else {
@@ -25,6 +24,7 @@ fn main() {
         };
         let radii = blends::Radii::of(edges.iter().map(|e| &e.1));
         let (lo, hi) = (0, 0);
+        let (a, b) = (&a, &b);
         let x = blends::audit(a, b, &radii, k as u64 + 1);
         // bodies held as one overlap: points say nothing there
         let y = if m.solids_after(k).len() == 1 && m.solids_after(k + 1).len() == 1 {
@@ -40,9 +40,7 @@ fn main() {
             x.faces, x.points, x.worst_gap, x.unsupported, x.worst_kink, x.worst_at, x.kink_at, y.tried, y.wrong, y.worst, ridges.len(), ridges.first()
         ));
     }
-    let part = Part {
-        features: m.features.clone(),
-    };
+    let part = m.part();
     if std::env::var_os("FILLETDUMP").is_some() {
         for sol in m.solids_after(m.built()) {
             let b = &sol.body;
@@ -73,21 +71,30 @@ fn main() {
         .iter()
         .map(|s| forge_topo::check(&s.body).len())
         .sum();
-    let nary = if m.error.is_none() {
-        match part.regenerate_nary(2) {
-            Ok(b) => forge_topo::check(&b).len().to_string(),
+    let nary = if m.error().is_none() {
+        match part.regenerate_nary_solids_ids(2, Some(&m.ids)) {
+            Ok(b) => b
+                .iter()
+                .map(|s| forge_topo::check(&s.body).len())
+                .sum::<usize>()
+                .to_string(),
             Err(e) => format!("\"{}\"", esc(&format!("{e:?}"))),
         }
     } else {
         "null".into()
     };
-    let (sig, line) = m
-        .error
-        .as_ref()
-        .map_or((String::new(), 0), |f| (f.msg.clone(), m.lines[f.at].no));
-    if m.error.is_none() && problems == 0 {
-        let mut m = m;
-        let bb = m.stats().2;
+    let (sig, line) = m.error().map_or((String::new(), 0), |e| {
+        (forge_lang::fuzz::message(e), m.line_of(&src, e) + 1)
+    });
+    if m.error().is_none() && problems == 0 {
+        let bb = m
+            .body()
+            .map(|b| {
+                b.face_ids()
+                    .map(|f| b.face_box(f))
+                    .fold(forge_math::Box3::EMPTY, |a, c| a.hull(&c))
+            })
+            .unwrap_or(forge_math::Box3::EMPTY);
         let (mut vol, mut area) = (0.0, 0.0);
         let mut massed = true;
         for s in m.solids_after(m.built()) {
@@ -113,7 +120,7 @@ fn main() {
     }
     println!(
         "{{\"v\":\"{}\",\"sig\":\"{}\",\"line\":{line},\"problems\":{problems},\"audits\":[{}]}}",
-        if m.error.is_some() { "refused" } else { "invalid" },
+        if m.error().is_some() { "refused" } else { "invalid" },
         esc(&sig),
         audits.join(",")
     );
