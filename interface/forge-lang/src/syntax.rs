@@ -244,6 +244,41 @@ fn is(b: &[u8], i: usize, class: u8) -> bool {
     b.get(i).is_some_and(|&x| CLASS[x as usize] & class != 0)
 }
 
+/// A number written as up to 15 digits with at most one `.` and no exponent (`-` before it
+/// allowed): its value, the same bits `str::parse` gives. The digits make an integer below 2^53
+/// and their place a power of ten up to 10^15, both exact in an f64, so the one division rounds
+/// correctly, as the parse does. Anything else: None (and the parse).
+fn plain_number(text: &str) -> Option<f64> {
+    const TEN: [f64; 16] = [
+        1e0, 1e1, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8, 1e9, 1e10, 1e11, 1e12, 1e13, 1e14, 1e15,
+    ];
+    let (neg, b) = match text.as_bytes() {
+        [b'-', rest @ ..] => (true, rest),
+        b => (false, b),
+    };
+    let (mut m, mut digits, mut frac, mut dot) = (0u64, 0usize, 0usize, false);
+    for &c in b {
+        if c == b'.' {
+            if dot {
+                return None;
+            }
+            dot = true;
+            continue;
+        }
+        if !c.is_ascii_digit() || digits == 15 {
+            return None;
+        }
+        m = m * 10 + (c - b'0') as u64;
+        digits += 1;
+        frac += dot as usize;
+    }
+    if digits == 0 {
+        return None;
+    }
+    let v = m as f64 / TEN[frac];
+    Some(if neg { -v } else { v })
+}
+
 /// Lexes, and writes each token's terminal of grammar.ll1 to `la`.
 fn lex_into<const KEEP: bool>(
     src: &str,
@@ -320,11 +355,14 @@ fn lex_into<const KEEP: bool>(
                 }
             }
             let text = &src[s..i];
-            let v: f64 = text.parse().map_err(|_| {
-                Error::Syntax(SyntaxError::BadNumber {
-                    span: Span::new(s, i),
-                })
-            })?;
+            let v: f64 = match plain_number(text) {
+                Some(v) => v,
+                None => text.parse().map_err(|_| {
+                    Error::Syntax(SyntaxError::BadNumber {
+                        span: Span::new(s, i),
+                    })
+                })?,
+            };
             let u0 = i;
             while i < b.len() && b[i].is_ascii_alphabetic() {
                 i += 1;
@@ -1895,6 +1933,75 @@ pub fn walk<'s>(stmts: &'s [Stmt], f: &mut dyn FnMut(&'s Stmt)) {
                 }
             }
             _ => {}
+        }
+    }
+}
+
+#[cfg(test)]
+mod plain_number_tests {
+    /// `plain_number` is `str::parse` to the bit wherever it answers, on numbers of up to 16
+    /// digits, a dot anywhere or none, signed or not; and it answers for every one of up to 15.
+    #[test]
+    fn plain_numbers_are_the_parse() {
+        let mut x = 0x9e37_79b9_7f4a_7c15u64;
+        let mut next = || {
+            x ^= x << 13;
+            x ^= x >> 7;
+            x ^= x << 17;
+            x
+        };
+        let mut answered = 0;
+        for k in 0..400_000 {
+            let n = 1 + (next() % 16) as usize;
+            let mut t = String::new();
+            if k % 3 == 0 {
+                t.push('-');
+            }
+            for j in 0..n {
+                // leading zeros, and runs of nines and zeros, often
+                let d = match next() % 4 {
+                    0 => 0,
+                    1 => 9,
+                    _ => next() % 10,
+                };
+                t.push((b'0' + d as u8) as char);
+                if j + 1 < n && next() % (n as u64 + 1) == 0 && !t.contains('.') {
+                    t.push('.');
+                }
+            }
+            if k % 7 == 0 && !t.contains('.') {
+                t.push('.');
+            }
+            let want: f64 = t.parse().expect("a number");
+            match super::plain_number(&t) {
+                Some(v) => {
+                    assert_eq!(v.to_bits(), want.to_bits(), "{t}");
+                    answered += 1;
+                }
+                None => assert!(n > 15, "{t} not answered"),
+            }
+        }
+        assert!(answered > 300_000, "{answered}");
+        for t in [
+            "0",
+            "-0",
+            "7.",
+            "0.5",
+            "1.25",
+            "90",
+            "2.5",
+            "123456789012345",
+            "0.00000000000001",
+        ] {
+            let want: f64 = t.parse().expect("a number");
+            assert_eq!(
+                super::plain_number(t).map(f64::to_bits),
+                Some(want.to_bits()),
+                "{t}"
+            );
+        }
+        for t in ["1e3", "1.2.3", "", "-", "1234567890123456"] {
+            assert_eq!(super::plain_number(t), None, "{t}");
         }
     }
 }

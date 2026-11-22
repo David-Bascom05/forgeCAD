@@ -395,6 +395,9 @@ pub struct Builder {
     switches: Rc<str>,
     /// This run's sketch solves, by sketch id: what the next run takes where a sketch is the same.
     sketches: HashMap<String, Rc<crate::sketch::Solved>>,
+    /// The datum of the last feature pushed, a work feature placed as it was pushed: what
+    /// `work::work` would work out again (`take_datum`).
+    datum: Option<(usize, forge_model::work::Datum)>,
 }
 
 impl Builder {
@@ -406,6 +409,7 @@ impl Builder {
             building,
             origins: vec![],
             sketches: HashMap::new(),
+            datum: None,
             cache,
             reuse: true,
             hosted: false,
@@ -593,8 +597,9 @@ impl Builder {
         // placed (`forge_model::work::datum`) and hands the part on. Placed, the stage before is
         // this one's; not placed, the kernel's step says why as before.
         if let Feature::Work(_) = &self.features[i]
-            && forge_model::work::datum(History::new(&self.features, Some(&self.ids)), i).is_ok()
+            && let Ok(d) = forge_model::work::datum(History::new(&self.features, Some(&self.ids)), i)
         {
+            self.datum = Some((i, d));
             let st = match self.stages.last() {
                 Some(last) => last.clone(),
                 None => Rc::new(Stage::new(vec![])),
@@ -605,10 +610,23 @@ impl Builder {
             return Ok(i);
         }
         let last = self.stages.last();
-        let before = last.map(|s| s.solids.clone()).unwrap_or_default();
         // the part as a selection saw it (its one solid finished), for a feature that finishes
         // it again to work on it
         let finished = last.and_then(|s| s.finished_alone());
+        // (a feature that works on that alone needs no copy of the unfinished solid)
+        let before = match last {
+            Some(s)
+                if finished.is_some()
+                    && s.solids.len() == 1
+                    && forge_model::finished_suffices(History::new(&self.features, Some(&self.ids)), i) =>
+            {
+                vec![Solid {
+                    id: s.solids[0].id,
+                    body: Body::new(),
+                }]
+            }
+            _ => last.map(|s| s.solids.clone()).unwrap_or_default(),
+        };
         let t = Instant::now();
         let wrapped =
             |f: &Feature| matches!(f, Feature::Body(b) if matches!(**b, forge_model::BodyFeature::In { .. }));
@@ -724,6 +742,15 @@ impl Builder {
 
     pub fn history(&self) -> History<'_> {
         History::new(&self.features, Some(&self.ids))
+    }
+
+    /// `forge_model::work::datum` of feature `i`, the last pushed: as `push` worked it out where
+    /// it did, else afresh.
+    pub fn take_datum(&mut self, i: usize) -> Result<forge_model::work::Datum, RegenError> {
+        match self.datum.take() {
+            Some((j, d)) if j == i && j + 1 == self.features.len() => Ok(d),
+            _ => forge_model::work::datum(self.history(), i),
+        }
     }
 
     /// The id of the stage the part stands at (`Stage::id`), 0 before any.

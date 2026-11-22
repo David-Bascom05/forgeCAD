@@ -91,48 +91,100 @@ pub const BUILTINS: &[&str] = &[
 
 /// A built-in function's name, this module's or another's (shapes).
 pub fn builtin(name: &str) -> Option<&'static str> {
-    names().get(name).and_then(|n| n.0)
+    names_get(name).and_then(|n| n.1)
 }
 
-/// Every built-in's name (Some, `builtin`'s) and every name `constant` knows (true), in one map:
-/// every name looked up or bound asks, so a map, not a walk of the lists.
-fn names() -> &'static HashMap<
-    &'static str,
-    (Option<&'static str>, bool),
-    std::hash::BuildHasherDefault<crate::eval::NameHasher>,
-> {
-    type Names = HashMap<
-        &'static str,
-        (Option<&'static str>, bool),
-        std::hash::BuildHasherDefault<crate::eval::NameHasher>,
-    >;
-    static ALL: std::sync::OnceLock<Names> = std::sync::OnceLock::new();
-    ALL.get_or_init(|| {
-        // (sized for every name at once: no growing on the way)
-        let n = BUILTINS.len()
-            + crate::shapes::NAMES.len()
-            + CONSTANTS.len()
-            + MORE.len()
-            + crate::sheet::BUILTINS.len()
-            + crate::thermo::BUILTINS.len()
-            + crate::wired::NAMES.len()
-            + crate::sheet::CONSTANTS.len();
-        let mut m = Names::with_capacity_and_hasher(n, Default::default());
-        for &b in BUILTINS.iter().chain(crate::shapes::NAMES) {
-            m.entry(b).or_insert((Some(b), false));
+/// One place of `NAMES`: a name ("" for none), its built-in (Some, `builtin`'s) and whether
+/// `constant` knows it.
+type NameSlot = (&'static str, Option<&'static str>, bool);
+
+/// Places in `NAMES`: a power of two, at least twice the names.
+const NAME_SLOTS: usize = 1024;
+
+/// FNV-1a of a name, as a place in `NAMES`.
+const fn name_slot(s: &[u8]) -> usize {
+    let mut h = 0xcbf2_9ce4_8422_2325u64;
+    let mut i = 0;
+    while i < s.len() {
+        h = (h ^ s[i] as u64).wrapping_mul(0x0100_0000_01b3);
+        i += 1;
+    }
+    (h ^ (h >> 32)) as usize & (NAME_SLOTS - 1)
+}
+
+const fn same(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut i = 0;
+    while i < a.len() {
+        if a[i] != b[i] {
+            return false;
         }
-        for &c in CONSTANTS
-            .iter()
-            .chain(&MORE)
-            .chain(crate::sheet::BUILTINS)
-            .chain(crate::thermo::BUILTINS)
-            .chain(crate::wired::NAMES)
-            .chain(crate::sheet::CONSTANTS)
-        {
-            m.entry(c).or_insert((None, true)).1 = true;
+        i += 1;
+    }
+    true
+}
+
+/// Every built-in's name and every name `constant` knows, in one open-addressed table worked
+/// out when the crate compiles: every name looked up or bound asks, so a table, not a walk of
+/// the lists, and nothing to build at run time.
+#[allow(clippy::large_const_arrays)]
+const NAMES: [NameSlot; NAME_SLOTS] = {
+    let mut t: [NameSlot; NAME_SLOTS] = [("", None, false); NAME_SLOTS];
+    let builtins: [&[&str]; 2] = [BUILTINS, crate::shapes::NAMES];
+    let constants: [&[&str]; 6] = [
+        &CONSTANTS,
+        &MORE,
+        crate::sheet::BUILTINS,
+        crate::thermo::BUILTINS,
+        crate::wired::NAMES,
+        crate::sheet::CONSTANTS,
+    ];
+    let mut used = 0;
+    let mut pass = 0;
+    while pass < 2 {
+        let lists: &[&[&str]] = if pass == 0 { &builtins } else { &constants };
+        let mut l = 0;
+        while l < lists.len() {
+            let mut k = 0;
+            while k < lists[l].len() {
+                let n = lists[l][k];
+                let mut i = name_slot(n.as_bytes());
+                // the first entry of a name stands (a built-in before a constant)
+                while !t[i].0.is_empty() && !same(t[i].0.as_bytes(), n.as_bytes()) {
+                    i = (i + 1) & (NAME_SLOTS - 1);
+                }
+                if t[i].0.is_empty() {
+                    used += 1;
+                    t[i] = (n, if pass == 0 { Some(n) } else { None }, pass == 1);
+                } else if pass == 1 {
+                    t[i].2 = true;
+                }
+                k += 1;
+            }
+            l += 1;
         }
-        m
-    })
+        pass += 1;
+    }
+    assert!(2 * used <= NAME_SLOTS);
+    t
+};
+
+/// `name`'s place in `NAMES`, if it has one.
+#[inline]
+fn names_get(name: &str) -> Option<&'static NameSlot> {
+    let mut i = name_slot(name.as_bytes());
+    loop {
+        let e = &NAMES[i];
+        if e.0.is_empty() {
+            return None;
+        }
+        if e.0 == name {
+            return Some(e);
+        }
+        i = (i + 1) & (NAME_SLOTS - 1);
+    }
 }
 
 /// `constant`'s own names (the lists it also answers for are named in `names`).
@@ -141,7 +193,7 @@ const CONSTANTS: [&str; 10] = ["pi", "X", "Y", "Z", "xy", "xz", "yz", "thru", "t
 const MORE: [&str; 5] = ["axis", "sym", "two", "upto", "intersect"];
 
 pub fn constant(name: &str) -> Option<Value> {
-    if !names().get(name).is_some_and(|n| n.1) {
+    if !names_get(name).is_some_and(|n| n.2) {
         return None;
     }
     let world = |n: &'static str, f: Frame| {
@@ -3671,7 +3723,7 @@ mod names_tests {
     /// Each name the map says `constant` knows, it does.
     #[test]
     fn every_constant_name_is_a_constant() {
-        for (n, (_, c)) in super::names() {
+        for &(n, _, c) in super::NAMES.iter().filter(|e| !e.0.is_empty()) {
             assert!(!c || super::constant(n).is_some(), "{n}");
         }
     }

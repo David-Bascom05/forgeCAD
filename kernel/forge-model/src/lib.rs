@@ -28,8 +28,8 @@ pub mod verify;
 pub mod work;
 
 pub use bodies::{
-    BodyError, BodyFeature, Cutter, Keep, Pick, Solid, Step, step_solids, step_solids_finished,
-    step_solids_plain, unwrapped,
+    BodyError, BodyFeature, Cutter, Keep, Pick, Solid, Step, finished_suffices, step_solids,
+    step_solids_finished, step_solids_plain, unwrapped,
 };
 pub use edit::{Edit, EditError, Motion, Side};
 pub use extent::{Extent, ExtentError, Target, Toward, Turn};
