@@ -15,7 +15,10 @@ fn main() {
             d
         }
     };
-    let unit = 10.0;
+    let unit: f64 = std::env::var("UNIT")
+        .ok()
+        .and_then(|u| u.parse().ok())
+        .unwrap_or(10.0);
     // BAND_AXES=02: move the coincident ends on these axes only (default all three)
     let axes: Vec<usize> = std::env::var("BAND_AXES")
         .map(|s| {

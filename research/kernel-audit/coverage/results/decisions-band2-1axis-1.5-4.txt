@@ -1,0 +1,24 @@
+NO-CONTRADICTION	1.5	meets/overlaps/starts union	zero-thickness
+NO-CONTRADICTION	1.5	meets/overlaps/equal union	zero-thickness
+NO-CONTRADICTION	1.5	meets/overlaps/startedBy union	zero-thickness
+NO-CONTRADICTION	1.5	meets/finishedBy/overlaps union	zero-thickness
+NO-CONTRADICTION	1.5	meets/finishedBy/finishedBy union	zero-thickness
+== delta 1.5 axes [0]: 527 of 3549 fail; 389 failing runs with no contradiction; 642 passing runs with one
+pass	507	point on edge	coincide: an edge's end on the other  vs  point_in_face: nearest edge
+		e.g. finishedBy/meets/starts union -> ok 4000 | finishedBy/meets/starts union 1.5 [sequential; plain] E8 (20.000015, 10.000000, 0.000000): `coincide: an edge's end on the other` says 0 (1.500e-5 vs 1.000e-5), `point_in_face: nearest edge` says 1 (7.500e-6 vs 1.000e-5)
+pass	507	point on edge	on_edge <- boolean.rs:4346  vs  point_in_face: nearest edge
+		e.g. finishedBy/meets/starts union -> ok 4000 | finishedBy/meets/starts union 1.5 [sequential; plain] E8 (20.000015, 10.000000, 0.000000): `on_edge <- boolean.rs:4346` says 0 (1.500e-5 vs 1.000e-5), `point_in_face: nearest edge` says 1 (7.500e-6 vs 1.000e-5)
+pass	642	point on edge	point_in_face: nearest edge  vs  point_in_face: nearest edge
+		e.g. finishedBy/meets/starts union -> ok 4000 | finishedBy/meets/starts union 1.5 [sequential; plain] E8 (20.000015, 10.000000, 0.000000): `point_in_face: nearest edge` says 0 (1.500e-5 vs 1.000e-5), `point_in_face: nearest edge` says 1 (7.500e-6 vs 1.000e-5)
+FAIL	111	point on edge	coincide: an edge's end on the other  vs  point_in_face: nearest edge
+		e.g. finishedBy/meets/equal union -> invalid EdgeUses | finishedBy/meets/equal union 1.5 [sequential; plain] E8 (20.000015, 10.000000, 0.000000): `coincide: an edge's end on the other` says 0 (1.500e-5 vs 1.000e-5), `point_in_face: nearest edge` says 1 (7.500e-6 vs 1.000e-5)
+FAIL	111	point on edge	on_edge <- boolean.rs:4346  vs  point_in_face: nearest edge
+		e.g. finishedBy/meets/equal union -> invalid EdgeUses | finishedBy/meets/equal union 1.5 [sequential; plain] E8 (20.000015, 10.000000, 0.000000): `on_edge <- boolean.rs:4346` says 0 (1.500e-5 vs 1.000e-5), `point_in_face: nearest edge` says 1 (7.500e-6 vs 1.000e-5)
+FAIL	138	point on edge	point_in_face: nearest edge  vs  point_in_face: nearest edge
+		e.g. finishedBy/meets/equal union -> invalid EdgeUses | finishedBy/meets/equal union 1.5 [sequential; plain] E8 (20.000015, 10.000000, 0.000000): `point_in_face: nearest edge` says 0 (1.500e-5 vs 1.000e-5), `point_in_face: nearest edge` says 1 (7.500e-6 vs 1.000e-5)
+NO-CONTRADICTION	4	meets/overlaps/starts union	zero-thickness
+NO-CONTRADICTION	4	meets/overlaps/equal union	zero-thickness
+NO-CONTRADICTION	4	meets/overlaps/startedBy union	zero-thickness
+NO-CONTRADICTION	4	meets/finishedBy/overlaps union	zero-thickness
+NO-CONTRADICTION	4	meets/finishedBy/finishedBy union	zero-thickness
+== delta 4 axes [0]: 527 of 3549 fail; 527 failing runs with no contradiction; 0 passing runs with one

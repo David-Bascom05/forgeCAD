@@ -1,0 +1,50 @@
+FAIL	cap	union	2e-6	zero-thickness	exact 1499.999750000 flat 1500.000000000
+FAIL	cap	union	4.9999999999999996e-6	zero-thickness	exact 1499.999375000 flat 1500.000000000
+FAIL	cap	union	1e-5	zero-thickness	exact 1499.998750000 flat 1500.000000000
+FAIL	cap	union	2e-3	internal InconsistentClassification	exact 1499.749999917 flat 1500.000000000
+FAIL	cap	subtract	4.9999999999999996e-6	zero-thickness	exact 999.999375000 flat 1000.000000000
+FAIL	cap	subtract	1e-5	zero-thickness	exact 999.998750000 flat 1000.000000000
+FAIL	cap	subtract	1.1000000000000002e-4	zero-thickness	exact 999.986250000 flat 1000.000000000
+FAIL	cap	subtract	2e-4	zero-thickness	exact 999.975000000 flat 1000.000000000
+FAIL	cap	subtract	5e-4	zero-thickness	exact 999.937499999 flat 1000.000000000
+FAIL	cap	subtract	9.000000000000001e-4	zero-thickness	exact 999.887499992 flat 1000.000000000
+FAIL	cap	subtract	1e-3	zero-thickness	exact 999.874999990 flat 1000.000000000
+FAIL	cap	subtract	1.1e-3	zero-thickness	exact 999.862499986 flat 1000.000000000
+FAIL	cap	subtract	2e-3	internal InconsistentClassification	exact 999.749999917 flat 1000.000000000
+FAIL	cap	intersect	4.9999999999999996e-6	invalid EdgeUses	exact 0.000625000 flat 0.000000000
+FAIL	cap	intersect	1e-5	invalid EdgeUses	exact 0.001250000 flat 0.000000000
+FAIL	cap	intersect	2e-3	internal InconsistentClassification	exact 0.250000083 flat 0.000000000
+FAIL	cap_over	union	2e-6	internal SplitCrossed	exact 1699.999750000 flat 1700.000000000
+FAIL	cap_over	union	4.9999999999999996e-6	zero-thickness	exact 1699.999375000 flat 1700.000000000
+FAIL	cap_over	union	1e-5	zero-thickness	exact 1699.998750000 flat 1700.000000000
+FAIL	cap_over	subtract	2e-6	internal SplitCrossed	exact 999.999750000 flat 1000.000000000
+FAIL	cap_over	subtract	4.9999999999999996e-6	zero-thickness	exact 999.999375000 flat 1000.000000000
+FAIL	cap_over	subtract	1e-5	zero-thickness	exact 999.998750000 flat 1000.000000000
+FAIL	cap_over	intersect	2e-6	internal SplitCrossed	exact 0.000250000 flat 0.000000000
+FAIL	cap_over	intersect	4.9999999999999996e-6	invalid EdgeUses	exact 0.000625000 flat 0.000000000
+FAIL	cap_over	intersect	1e-5	invalid EdgeUses	exact 0.001250000 flat 0.000000000
+FAIL	wall_flush	union	2e-6	zero-thickness	exact 1999.999750000 flat 2000.000000000
+FAIL	wall_flush	union	4.9999999999999996e-6	zero-thickness	exact 1999.999375000 flat 2000.000000000
+FAIL	wall_flush	union	1e-5	zero-thickness	exact 1999.998750000 flat 2000.000000000
+FAIL	wall_flush	union	2e-3	internal InconsistentClassification	exact 1999.749999917 flat 2000.000000000
+FAIL	wall_flush	subtract	4.9999999999999996e-6	zero-thickness	exact 999.999375000 flat 1000.000000000
+FAIL	wall_flush	subtract	1e-5	zero-thickness	exact 999.998750000 flat 1000.000000000
+FAIL	wall_flush	subtract	1.1000000000000002e-4	zero-thickness	exact 999.986250000 flat 1000.000000000
+FAIL	wall_flush	subtract	2e-4	zero-thickness	exact 999.975000000 flat 1000.000000000
+FAIL	wall_flush	subtract	5e-4	zero-thickness	exact 999.937499999 flat 1000.000000000
+FAIL	wall_flush	subtract	9.000000000000001e-4	zero-thickness	exact 999.887499992 flat 1000.000000000
+FAIL	wall_flush	subtract	1e-3	zero-thickness	exact 999.874999990 flat 1000.000000000
+FAIL	wall_flush	subtract	1.1e-3	zero-thickness	exact 999.862499986 flat 1000.000000000
+FAIL	wall_flush	subtract	2e-3	internal InconsistentClassification	exact 999.749999917 flat 1000.000000000
+FAIL	wall_flush	intersect	4.9999999999999996e-6	invalid EdgeUses	exact 0.000625000 flat 0.000000000
+FAIL	wall_flush	intersect	1e-5	invalid EdgeUses	exact 0.001250000 flat 0.000000000
+FAIL	wall_flush	intersect	2e-3	internal InconsistentClassification	exact 0.250000083 flat 0.000000000
+FAIL	wall_over	union	2e-6	internal SplitCrossed	exact 2399.999750000 flat 2400.000000000
+FAIL	wall_over	union	4.9999999999999996e-6	zero-thickness	exact 2399.999375000 flat 2400.000000000
+FAIL	wall_over	union	1e-5	zero-thickness	exact 2399.998750000 flat 2400.000000000
+FAIL	wall_over	subtract	2e-6	internal SplitCrossed	exact 999.999750000 flat 1000.000000000
+FAIL	wall_over	subtract	4.9999999999999996e-6	zero-thickness	exact 999.999375000 flat 1000.000000000
+FAIL	wall_over	subtract	1e-5	zero-thickness	exact 999.998750000 flat 1000.000000000
+FAIL	wall_over	intersect	2e-6	internal SplitCrossed	exact 0.000250000 flat 0.000000000
+FAIL	wall_over	intersect	4.9999999999999996e-6	invalid EdgeUses	exact 0.000625000 flat 0.000000000
+FAIL	wall_over	intersect	1e-5	invalid EdgeUses	exact 0.001250000 flat 0.000000000

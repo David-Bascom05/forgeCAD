@@ -6,6 +6,8 @@
 //! `Coverage.Allen` lists them). A pattern is realised by putting each endpoint at ten times its rank.
 //! `exact` is the regularised boolean of the pattern computed on its cells; `kernel` runs
 //! `forge_bool::boolean` on the realisation; both give an `Outcome`.
+pub mod tilt;
+
 use forge_bool::{BoolError, Op};
 use forge_math::{Frame, Point2, Point3};
 use forge_ops::{Profile, extrude};
@@ -293,4 +295,25 @@ pub fn manifold_octants(kept: impl Fn(usize) -> bool) -> bool {
         seen.len() == members.len()
     };
     connected(true) && connected(false)
+}
+
+/// The pattern's boxes with B's ends that coincide with one of A's moved by `delta` x LINEAR on
+/// `axes` (outwards on both of B's ends), as examples/box_band moves them; None if none moved.
+pub fn band_boxes(
+    p: &Pattern,
+    unit: f64,
+    delta: f64,
+    axes: &[usize],
+) -> Option<([[f64; 2]; 3], [[f64; 2]; 3])> {
+    let (a, mut b) = p.boxes(unit);
+    let mut moved = false;
+    for &k in axes {
+        for s in 0..2 {
+            if a[k].contains(&b[k][s]) {
+                b[k][s] += if s == 0 { -delta } else { delta } * forge_math::tol::LINEAR;
+                moved = true;
+            }
+        }
+    }
+    moved.then_some((a, b))
 }
