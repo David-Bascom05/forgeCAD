@@ -87,15 +87,17 @@ fn g5a_cap_2_2e_3() {
 }
 
 /// The bands' edges, and across them, in the drafted lid: NEAR, LINEAR and φ·LINEAR at 0.0057,
-/// 0.0810 and 0.1031 degrees (d = 5 θ²). Every draft from 0.0012 degrees up builds right, on all
-/// three ops. Below it, 0.0003-0.0011 degrees, the bottom dips 2.6-9.6 LINEAR and crosses the
-/// block's top at an angle under NEAR: the probe floor's band (G3/G4, `clear_step`), not G5's.
+/// 0.0810 and 0.1031 degrees (d = 5 θ²). Every draft from 0.0002 degrees up builds right, on all
+/// three ops (0.0003-0.0011 degrees, where the bottom dips 2.6-9.6 LINEAR across the block's top,
+/// is the probe floor's band, G3/G4, closed by the probe fix). Below, the bottom dips under
+/// 1.6 LINEAR: a sub-LINEAR sliver, not G5.
 #[test]
 fn g5_drafted_lid_edges() {
     let mut bad = Vec::new();
     let degs = [
-        0.0012, 0.002, 0.005, 0.0057, 0.0058, 0.006, 0.01, 0.02, 0.03, 0.05, 0.07, 0.08, 0.0809, 0.0811,
-        0.085, 0.09, 0.095, 0.1, 0.102, 0.103, 0.1031, 0.1032, 0.105, 0.11, 0.15, 0.2, 0.5, 1.0,
+        0.0002, 0.0003, 0.0005, 0.0007, 0.001, 0.0012, 0.002, 0.005, 0.0057, 0.0058, 0.006, 0.01, 0.02, 0.03,
+        0.05, 0.07, 0.08, 0.0809, 0.0811, 0.085, 0.09, 0.095, 0.1, 0.102, 0.103, 0.1031, 0.1032, 0.105, 0.11,
+        0.15, 0.2, 0.5, 1.0,
     ];
     for deg in degs {
         for op in OPS {

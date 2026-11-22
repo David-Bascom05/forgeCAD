@@ -4,7 +4,7 @@
 # The part is valid (1500.218 mm3). The kernel refused the block with ZeroThickness near
 # (10, 2.5, 9.9956) (G5a: imprint stretch samples, forge-bool boolean.rs, `imprint`), and at 0.05deg
 # with UntouchedOnOther (G5b: nearly_flush's NEAR cap, ssi.rs); both now decided by one rule each,
-# it builds at every draft from 0.0012deg up but a knife edge at d = LINEAR, 0.08099-0.08103deg
+# it builds at every draft from 0.0002deg up but a knife edge at d = LINEAR, 0.08099-0.08103deg
 # (verify/forge-coverage/tests/g5.rs).
 shared W = 10
 shared H = 10
