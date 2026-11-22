@@ -18,3 +18,8 @@ root = "Main"
 [[lean_exe]]
 name = "tilt"
 root = "TiltMain"
+
+# the exact spec (verify/forge-exact): Coverage/Correct.lean states the model against its regBool
+[[require]]
+name = "forgeexact"
+path = "../../../verify/forge-exact"

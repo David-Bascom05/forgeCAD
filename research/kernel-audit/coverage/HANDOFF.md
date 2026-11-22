@@ -1,4 +1,25 @@
-# Coverage of the flat-face boolean: handoff (2026-11-22)
+# Coverage of the flat-face boolean: handoff
+
+**State (2026-11-22, second session): the write-up is research/kernel-audit/coverage.md.** Done:
+- Theorems.lean built in full (724 s).
+- Aeneas end to end on place_cuts, with three proofs (aeneas/lean).
+- Bands G2–G4 pinned to their sites, with tests (verify/forge-coverage/tests/band.rs).
+- Tilted planes modelled (Coverage/Tilt.lean) and checked against the kernel (tilt_compare.sh).
+- The scoreboard mismatch explained (a stale baseline).
+- The correctness theorem against ForgeExact (Coverage/Correct.lean).
+
+The Rust harness moved from verify/forge-exact (now the spec's Lean project) to
+verify/forge-coverage.
+
+Open:
+- G5: the flush-ended tilt's second strip at 0.01°–0.15°. Wants a forge-model draft repro and a
+  pinned site.
+- Extract `clear_step` (coverage.md §6.2) to make G3/G4's edge a theorem on the code.
+- Regenerate tools/reliability/baseline.txt. Its point-touch rows are stale.
+
+What follows is the first session's handoff, kept for its detail. Paths under verify/forge-exact
+now live under verify/forge-coverage.
+
 
 Task: prove in Lean whether `forge_bool::boolean` covers every consistent sign pattern of flat
 faces, and turn each gap into a kernel site, a part and a test. Kernel at 888fc195 (branch
