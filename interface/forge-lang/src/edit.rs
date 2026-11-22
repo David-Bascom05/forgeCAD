@@ -130,6 +130,26 @@ pub fn reads_at(prog: &[Stmt], span: Span) -> bool {
     found
 }
 
+/// `bound`'s names, borrowed, into `out`.
+pub fn bound_into<'a>(stmts: &'a [Stmt], out: &mut std::collections::HashSet<&'a str>) {
+    for s in stmts {
+        match &s.kind {
+            StmtKind::Assign { name, .. }
+            | StmtKind::Block { name, .. }
+            | StmtKind::Shared { name, .. }
+            | StmtKind::Fn { name, .. } => {
+                out.insert(name);
+            }
+            StmtKind::For { body, .. } => bound_into(body, out),
+            StmtKind::If { then, other, .. } => {
+                bound_into(then, out);
+                bound_into(other.as_deref().unwrap_or(&[]), out);
+            }
+            _ => {}
+        }
+    }
+}
+
 /// The top-level names statements bind (a loop's body binds its names at top level too).
 pub fn bound(stmts: &[Stmt]) -> BTreeSet<String> {
     let mut out = BTreeSet::new();
@@ -1088,7 +1108,9 @@ fn replace_num(s: &mut Stmt, at: Span, name: &str, found: &mut Option<(f64, Unit
                 .chain(other.iter_mut().flatten())
                 .for_each(|b| replace_num(b, at, name, found));
         }
-        StmtKind::Fn { body, .. } => body.iter_mut().for_each(|b| replace_num(b, at, name, found)),
+        StmtKind::Fn { body, .. } => std::rc::Rc::make_mut(body)
+            .iter_mut()
+            .for_each(|b| replace_num(b, at, name, found)),
         StmtKind::Block { args, body, .. } => {
             args.iter_mut().for_each(|a| ex(&mut a.value, at, name, found));
             body.iter_mut().for_each(|b| replace_num(b, at, name, found));
@@ -1168,7 +1190,7 @@ pub fn strip(prog: &[Stmt]) -> Vec<Stmt> {
                         default: p.default.as_ref().map(ex),
                     })
                     .collect(),
-                body: strip(body),
+                body: strip(body).into(),
             },
             StmtKind::For { vars, iter, body } => StmtKind::For {
                 vars: vars.clone(),
@@ -1310,7 +1332,7 @@ pub fn apply_checked_in(src: &str, op: &Op, dir: Option<std::path::PathBuf>) -> 
                     .filter(|d| d.num.src.params().iter().any(|p| reach.contains(p)))
                     .count();
                 values += n;
-                if (n > 0 || f.reads.iter().any(|p| reach.contains(p))) && !features.contains(&f.id) {
+                if (n > 0 || f.reads.iter().any(|p| reach.contains(&**p))) && !features.contains(&f.id) {
                     features.push(f.id.clone());
                 }
             }

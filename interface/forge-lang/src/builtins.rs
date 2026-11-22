@@ -91,23 +91,111 @@ pub const BUILTINS: &[&str] = &[
 
 /// A built-in function's name, this module's or another's (shapes).
 pub fn builtin(name: &str) -> Option<&'static str> {
-    // every name looked up or bound asks: a map, not a walk of the lists
-    type Names = HashMap<&'static str, &'static str, std::hash::BuildHasherDefault<crate::eval::NameHasher>>;
-    static ALL: std::sync::OnceLock<Names> = std::sync::OnceLock::new();
-    ALL.get_or_init(|| {
-        let mut m = Names::default();
-        for &b in BUILTINS.iter().chain(crate::shapes::NAMES) {
-            m.entry(b).or_insert(b);
-        }
-        m
-    })
-    .get(name)
-    .copied()
+    names_get(name).and_then(|n| n.1)
 }
+
+/// One place of `NAMES`: a name ("" for none), its built-in (Some, `builtin`'s) and whether
+/// `constant` knows it.
+type NameSlot = (&'static str, Option<&'static str>, bool);
+
+/// Places in `NAMES`: a power of two, at least twice the names.
+const NAME_SLOTS: usize = 1024;
+
+/// FNV-1a of a name, as a place in `NAMES`.
+const fn name_slot(s: &[u8]) -> usize {
+    let mut h = 0xcbf2_9ce4_8422_2325u64;
+    let mut i = 0;
+    while i < s.len() {
+        h = (h ^ s[i] as u64).wrapping_mul(0x0100_0000_01b3);
+        i += 1;
+    }
+    (h ^ (h >> 32)) as usize & (NAME_SLOTS - 1)
+}
+
+const fn same(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut i = 0;
+    while i < a.len() {
+        if a[i] != b[i] {
+            return false;
+        }
+        i += 1;
+    }
+    true
+}
+
+/// Every built-in's name and every name `constant` knows, in one open-addressed table worked
+/// out when the crate compiles: every name looked up or bound asks, so a table, not a walk of
+/// the lists, and nothing to build at run time.
+#[allow(clippy::large_const_arrays)]
+const NAMES: [NameSlot; NAME_SLOTS] = {
+    let mut t: [NameSlot; NAME_SLOTS] = [("", None, false); NAME_SLOTS];
+    let builtins: [&[&str]; 2] = [BUILTINS, crate::shapes::NAMES];
+    let constants: [&[&str]; 6] = [
+        &CONSTANTS,
+        &MORE,
+        crate::sheet::BUILTINS,
+        crate::thermo::BUILTINS,
+        crate::wired::NAMES,
+        crate::sheet::CONSTANTS,
+    ];
+    let mut used = 0;
+    let mut pass = 0;
+    while pass < 2 {
+        let lists: &[&[&str]] = if pass == 0 { &builtins } else { &constants };
+        let mut l = 0;
+        while l < lists.len() {
+            let mut k = 0;
+            while k < lists[l].len() {
+                let n = lists[l][k];
+                let mut i = name_slot(n.as_bytes());
+                // the first entry of a name stands (a built-in before a constant)
+                while !t[i].0.is_empty() && !same(t[i].0.as_bytes(), n.as_bytes()) {
+                    i = (i + 1) & (NAME_SLOTS - 1);
+                }
+                if t[i].0.is_empty() {
+                    used += 1;
+                    t[i] = (n, if pass == 0 { Some(n) } else { None }, pass == 1);
+                } else if pass == 1 {
+                    t[i].2 = true;
+                }
+                k += 1;
+            }
+            l += 1;
+        }
+        pass += 1;
+    }
+    assert!(2 * used <= NAME_SLOTS);
+    t
+};
+
+/// `name`'s place in `NAMES`, if it has one.
+#[inline]
+fn names_get(name: &str) -> Option<&'static NameSlot> {
+    let mut i = name_slot(name.as_bytes());
+    loop {
+        let e = &NAMES[i];
+        if e.0.is_empty() {
+            return None;
+        }
+        if e.0 == name {
+            return Some(e);
+        }
+        i = (i + 1) & (NAME_SLOTS - 1);
+    }
+}
+
+/// `constant`'s own names (the lists it also answers for are named in `names`).
+const CONSTANTS: [&str; 10] = ["pi", "X", "Y", "Z", "xy", "xz", "yz", "thru", "thru_all", "next"];
 
 const MORE: [&str; 5] = ["axis", "sym", "two", "upto", "intersect"];
 
 pub fn constant(name: &str) -> Option<Value> {
+    if !names_get(name).is_some_and(|n| n.2) {
+        return None;
+    }
     let world = |n: &'static str, f: Frame| {
         Some(Value::Plane(Rc::new(Plane {
             frame: f,
@@ -176,9 +264,9 @@ impl Args {
             };
             let v = ev.expr(&a.value)?;
             if let Some(sk) = ev.sketch_ref() {
-                crate::eval::collect_params(&v, &mut sk.borrow_mut().params);
+                crate::eval::collect_keys(&v, &mut sk.borrow_mut().params);
             }
-            crate::eval::collect_params(&v, &mut ev.reads);
+            crate::eval::collect_keys(&v, &mut ev.reads);
             // an empty face set is unknown only after an earlier failure (or in `check`); on a
             // part built so far without one, it is a selection that found nothing
             let known_empty = ev.b.building && ev.errors.is_empty() && !unresolved_in(&v);
@@ -751,7 +839,7 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
                 v: dmath::atan2(y.v, x.v),
                 dim: Dim::Angle,
                 src: match src {
-                    Src::Driving(p) => Src::Driven(std::sync::Arc::new([(*p).clone()].into())),
+                    Src::Driving(p) => Src::Driven(std::sync::Arc::new([p.clone()].into())),
                     s => s,
                 },
             }))
@@ -792,7 +880,7 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
                             dim: Dim::Length,
                             src: match &src {
                                 Src::Const => Src::Const,
-                                s => Src::Driven(std::sync::Arc::new(s.params())),
+                                s => Src::Driven(std::sync::Arc::new(s.keys())),
                             },
                         })
                     };
@@ -2543,7 +2631,10 @@ fn instance_names(
     let faces = |b: &Body| -> Vec<Name> { b.face_ids().map(|g| b.face(g).name).collect() };
     match src {
         Some(forge_model::Source::Body) => {
-            let names = before.and_then(|b| b.work()).map(faces).unwrap_or_default();
+            let names: Vec<Name> = before
+                .and_then(|b| b.work())
+                .map(|w| w.faces().map(|(b, g)| b.face(g).name).collect())
+                .unwrap_or_default();
             let Feature::Pattern { layout, .. } = &hist[i] else {
                 return vec![];
             };
@@ -3607,7 +3698,7 @@ fn lines(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Value
             let src = values::join_src(&s1, &s2);
             let src = match src {
                 Src::Const => Src::Const,
-                s => Src::Driven(std::sync::Arc::new(s.params())),
+                s => Src::Driven(std::sync::Arc::new(s.keys())),
             };
             let n = |v: f64| {
                 Value::Num(Num {
@@ -3625,4 +3716,15 @@ fn lines(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Value
 enum By {
     Feats(Vec<Rc<Feat>>),
     Faces(Vec<Name>),
+}
+
+#[cfg(test)]
+mod names_tests {
+    /// Each name the map says `constant` knows, it does.
+    #[test]
+    fn every_constant_name_is_a_constant() {
+        for &(n, _, c) in super::NAMES.iter().filter(|e| !e.0.is_empty()) {
+            assert!(!c || super::constant(n).is_some(), "{n}");
+        }
+    }
 }
