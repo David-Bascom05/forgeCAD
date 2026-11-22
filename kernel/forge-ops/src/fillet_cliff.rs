@@ -525,12 +525,12 @@ pub(super) fn joined_loop(body: &Body, edges: &[FilletEdge]) -> Option<(Body, Ve
     // the first loop of open pieces between one pair of faces, all picked
     let (fa, fb) = picked.iter().find_map(|&e| {
         let x = b.edge(e);
-        (x.start != x.end).then(|| faces_of(&b, e)).flatten()
+        (x.start != x.end).then(|| faces_of(b, e)).flatten()
     })?;
     let chain: Vec<EdgeId> = picked
         .iter()
         .copied()
-        .filter(|&e| b.edge(e).start != b.edge(e).end && faces_of(&b, e) == Some((fa, fb)))
+        .filter(|&e| b.edge(e).start != b.edge(e).end && faces_of(b, e) == Some((fa, fb)))
         .collect();
     if chain.len() < 2 {
         return None;
