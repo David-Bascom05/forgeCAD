@@ -170,3 +170,4 @@ elab "#standard_axioms " ids:ident* : command => do
   ForgeExact.DecideOnce.Ledger.core_inc
   ForgeExact.DecideOnce.core_refines
   ForgeExact.DecideOnce.flat_refines
+  ForgeExact.DecideOnce.IncLedger.coreI_zeroThickness_iff

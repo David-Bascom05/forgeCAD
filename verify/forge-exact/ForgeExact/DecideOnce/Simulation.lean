@@ -1208,3 +1208,50 @@ theorem flat_refines {β : Type} [DecidableEq β] [BEq β] [LawfulBEq β] (L : L
   exact core_refines L.inc B σ τ ν κ (Ledger.inc_splitOk hs) h rule
 
 end ForgeExact.DecideOnce
+
+namespace ForgeExact.DecideOnce
+
+namespace IncLedger
+
+variable {α : Type u} [DecidableEq α] [BEq α] [LawfulBEq α]
+
+/-- **The touch rule, read off** (for curved route B, q1's bridge (1)). Past the two checks,
+`coreI` refuses ZeroThickness iff some edge has more than two result wings round it, or some vert
+has two result sectors in different fans. -/
+theorem coreI_zeroThickness_iff (L : IncLedger α) (hs : L.splitOk = true) (hc : L.classifyOk = true)
+    (rule : Rule) (hnd : ∀ v ∈ L.verts, (L.vertSectors v).Nodup) :
+    (∃ x, coreI L rule = .refused (.zeroThickness x)) ↔
+    (∃ e ∈ L.edges, 2 < (L.aroundE (L.keepTab rule) e).length) ∨
+    (∃ v ∈ L.verts, ∃ c ∈ L.aroundV (L.keepTab rule) v, ∃ d ∈ L.aroundV (L.keepTab rule) v,
+      ¬Conn fanRel (L.aroundV (L.keepTab rule) v) c d) := by
+  have hb : ∀ v ∈ L.verts, (L.badVert (L.keepTab rule) v = true ↔
+      ∃ c ∈ L.aroundV (L.keepTab rule) v, ∃ d ∈ L.aroundV (L.keepTab rule) v,
+        ¬Conn fanRel (L.aroundV (L.keepTab rule) v) c d) :=
+    fun v hv => L.badVert_iff _ v ((hnd v hv).filter _)
+  simp only [coreI, hs, hc, Bool.not_true, coreK]
+  cases hE : L.edges.find? (L.badEdge (L.keepTab rule)) with
+  | some e =>
+    have := List.find?_some hE
+    simp only [badEdge, decide_eq_true_eq] at this
+    exact ⟨fun _ => Or.inl ⟨e, List.mem_of_find?_eq_some hE, this⟩, fun _ => ⟨e, rfl⟩⟩
+  | none =>
+    have hn : ∀ e ∈ L.edges, ¬ 2 < (L.aroundE (L.keepTab rule) e).length := fun e he h' => by
+      have := List.find?_eq_none.mp hE e he; simp [badEdge, h'] at this
+    cases hV : L.verts.find? (L.badVert (L.keepTab rule)) with
+    | some v =>
+      simp only
+      refine ⟨fun _ => Or.inr ⟨v, List.mem_of_find?_eq_some hV,
+        (hb v (List.mem_of_find?_eq_some hV)).mp (List.find?_some hV)⟩, fun _ => ⟨v, rfl⟩⟩
+    | none =>
+      simp only
+      constructor
+      · rintro ⟨x, hx⟩
+        by_cases hr : L.result (L.keepTab rule) = [] <;> simp [hr] at hx
+      · rintro (⟨e, he, h'⟩ | ⟨v, hv, h'⟩)
+        · exact absurd h' (hn e he)
+        · have := List.find?_eq_none.mp hV v hv
+          rw [(hb v hv).mpr h'] at this; exact absurd rfl this
+
+end IncLedger
+
+end ForgeExact.DecideOnce
