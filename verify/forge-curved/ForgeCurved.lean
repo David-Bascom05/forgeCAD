@@ -20,3 +20,4 @@ import ForgeCurved.Rooms
 import ForgeCurved.FacetSides
 import ForgeCurved.SweepCross
 import ForgeCurved.SweepFacet
+import ForgeCurved.SweepBound
