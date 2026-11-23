@@ -87,6 +87,8 @@ struct Data {
     k: Interval,
     big2: Interval,
     s_bound: f64,
+    s_lo: f64,
+    s_hi: f64,
 }
 
 fn data(eq: &Eqn) -> Option<Data> {
@@ -124,6 +126,19 @@ fn data(eq: &Eqn) -> Option<Data> {
         k: big.sqr() - r.sqr(),
         big2: big.sqr(),
         s_bound,
+        s_lo: -s_bound,
+        s_hi: s_bound,
+    })
+    .map(|mut d: Data| {
+        // EXPERIMENT (CERT_S=tight): F = 0 needs |q| <= R + r, and |rad| = 1, so
+        // |c0 + s cz| <= R + r + rho; with |cz| = 1, (s + c0.cz)^2 <= |c0 + s cz|^2
+        if std::env::var_os("CERT_S").is_some() {
+            let sc = -d.c0.dot(d.cz);
+            let half = (big + r + d.rho).hi * (1.0 + 1e-9) + 1e-9;
+            d.s_lo = (sc.lo - half).max(-s_bound);
+            d.s_hi = (sc.hi + half).min(s_bound);
+        }
+        d
     })
 }
 
@@ -200,6 +215,19 @@ fn krawczyk(d: &Data, u: Interval, s: Interval) -> bool {
     ku.lo > u.lo && ku.hi < u.hi && ks.lo > s.lo && ks.hi < s.hi
 }
 
+/// EXPERIMENT: the mean-value form of F and F_s on the box (both must contain 0 for an event):
+/// G(X) in G(m) + J(X) (X - m), sound for any m in X.
+fn mean_value_has_zero(d: &Data, u: Interval, s: Interval) -> bool {
+    let (um, sm) = (u.mid(), s.mid());
+    let (g0, g1) = enclose(d, Interval::point(um), Interval::point(sm));
+    let j = jacobian(d, u, s);
+    let du = u - Interval::point(um);
+    let ds = s - Interval::point(sm);
+    let f = g0 + j[0][0] * du + j[0][1] * ds;
+    let fs = g1 + j[1][0] * du + j[1][1] * ds;
+    f.contains_zero() && fs.contains_zero()
+}
+
 /// The events of F(u, .) on a torus–cylinder pair against `found` (u in [0, 2π)).
 pub(crate) fn certify(eq: &Eqn, found: &[(f64, bool)]) -> Verdict {
     let Some(d) = data(eq) else {
@@ -207,16 +235,26 @@ pub(crate) fn certify(eq: &Eqn, found: &[(f64, bool)]) -> Verdict {
     };
     let tau = dmath::TAU;
     let mut stack: Vec<(Interval, Interval)> = Vec::new();
-    let (nu, ns) = (64, 8);
+    let ev = |k: &str, d: f64| std::env::var(k).ok().and_then(|v| v.parse::<f64>().ok()).unwrap_or(d);
+    let (nu, ns) = (ev("CERT_NU", 64.0) as usize, ev("CERT_NS", 8.0) as usize);
+    let w_krawczyk = ev("CERT_WK", W_KRAWCZYK);
     for i in 0..nu {
         let u = Interval::new(tau * i as f64 / nu as f64, tau * (i + 1) as f64 / nu as f64);
         for j in 0..ns {
-            let lo = -d.s_bound + 2.0 * d.s_bound * j as f64 / ns as f64;
-            let hi = -d.s_bound + 2.0 * d.s_bound * (j + 1) as f64 / ns as f64;
+            let w = d.s_hi - d.s_lo;
+            let lo = d.s_lo + w * j as f64 / ns as f64;
+            let hi = if j + 1 == ns { d.s_hi } else { d.s_lo + w * (j + 1) as f64 / ns as f64 };
             stack.push((u, Interval::new(lo, hi)));
         }
     }
     let mut boxes = 0;
+    let mv = std::env::var_os("CERT_MV").is_some();
+    if std::env::var_os("CERT_KEY").is_some() {
+        let k = [d.c0.x, d.c0.y, d.c0.z, d.cz.x, d.cz.y, d.cz.z, d.cx.x, d.cx.y, d.rho, d.k, d.big2]
+            .iter()
+            .fold(0u64, |h, x| (h ^ x.lo.to_bits()).wrapping_mul(0x100000001b3));
+        eprintln!("poly4-key {k:016x}");
+    }
     // event boxes: (u, one event proven by Krawczyk)
     let mut events: Vec<(Interval, bool)> = Vec::new();
     while let Some((u, s)) = stack.pop() {
@@ -228,7 +266,10 @@ pub(crate) fn certify(eq: &Eqn, found: &[(f64, bool)]) -> Verdict {
         if !f.contains_zero() || !fs.contains_zero() {
             continue;
         }
-        if u.width() < W_KRAWCZYK && krawczyk(&d, u, s) {
+        if mv && !mean_value_has_zero(&d, u, s) {
+            continue;
+        }
+        if u.width() < w_krawczyk && krawczyk(&d, u, s) {
             events.push((u, true));
             continue;
         }
