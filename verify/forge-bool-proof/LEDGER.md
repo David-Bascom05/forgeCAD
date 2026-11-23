@@ -106,7 +106,8 @@ seams, and the curved screens S3/S4).
 | C.cuts | the `on_edge` / `place_cuts` coincidence sites on curved faces | CURVED-SITES | open | — |
 | C.poles | poles and seams (`sphere_nearest`'s pole rule, periodic seams) | CURVED-SITES | open | — |
 | G12 | the `decide_once` feature becomes the fallback branch | FALLBACK | open | — |
-| G13 | `face_point`'s unchecked inward step | FLAT-SITES | open | — |
+| G13 | `face_point`'s unchecked inward step, planar faces: the probe is kept only inside its face (`probe_inside`: `point_in_face`, or a cheap sufficient test whose soundness is argued in classify.rs `probe_clear`/`curve_clear`, not yet in Lean, and cross-checked against `point_in_face` in debug builds); the probe's class is the face's: `where_const` (FlatSites/G13.lean, on proof/flat-sites-1a) | FLAT-SITES | open | kernel/forge-bool classify.rs |
+| G13.curved | `face_point` on a curved face: the probe is unchecked (the full check cost +1.7% on the gate, manifold +22%) | FLAT-SITES / CURVED-SITES | open | — |
 | G14 | trim_in's box-only accept | FLAT-SITES | open | — |
 | G15 | the stretch whose midpoint is exactly on ∂f_k | FLAT-SITES | open | — |
 | M.ct | forge-geom `meet::intersect`, cylinder × torus (`Form::Poly4`): its events from a sampled discriminant, which lost one of two loops on fuzz295 f69 (a wrong `Ok`) | FALLBACK (fix), CURVED-SITES (#7, certified isolation) | interim fix (PR proof/fix-torus-loops): a root-count scan where the discriminant flags double roots; NOT provably complete (a loop narrower than one sample can be lost): UNKNOWN | kernel/forge-geom/src/meet_tests.rs `thin_torus_on_a_wide_cylinder_both_loops` |

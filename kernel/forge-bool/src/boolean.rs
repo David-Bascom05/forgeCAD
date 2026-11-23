@@ -5391,9 +5391,10 @@ fn local_split(c: LocalSplit) -> Option<Local> {
     })
 }
 
-/// A point on face `f` a little inside its boundary, beside the middle of its first edge: one that
-/// `point_in_face` places inside `f`, the step halved until it is (a face narrower than the step
-/// there), else None (G13: verify/forge-bool-proof FlatSites/G13.lean).
+/// A point on face `f` a little inside its boundary, beside the middle of its first edge. On a
+/// planar face, one inside `f` (`classify::probe_inside`), the step halved until it is (a face
+/// narrower than the step there), else None (G13: verify/forge-bool-proof FlatSites/G13.lean); on
+/// a curved face, unchecked (G13.curved, open).
 pub(crate) fn face_point(body: &Body, f: FaceId) -> Option<Point3> {
     let face = body.face(f);
     let c = body.lp(*face.loops.first()?).coedges().next()?;
@@ -5410,10 +5411,10 @@ pub(crate) fn face_point(body: &Body, f: FaceId) -> Option<Point3> {
         .max(d.p.distance(edge.curve.eval(edge.range.hi)));
     let step = (0.01 * len.max(1e-3)).min(0.05);
     let q = face.surface.eval(face.surface.project(d.p + inward * step));
-    if crate::classify::inside_own_face(body, f, q) {
+    if crate::classify::probe_inside(body, f, c, d.p, q, step) {
         return Some(q);
     }
-    nearer_face_point(body, f, d.p, inward, step)
+    nearer_face_point(body, f, c, d.p, inward, step)
 }
 
 /// `face_point` with the step halved, up to four times, until the point is inside the face.
@@ -5422,6 +5423,7 @@ pub(crate) fn face_point(body: &Body, f: FaceId) -> Option<Point3> {
 fn nearer_face_point(
     body: &Body,
     f: FaceId,
+    c: forge_topo::CoedgeId,
     at: Point3,
     inward: forge_math::UnitVec3,
     step: f64,
@@ -5431,7 +5433,7 @@ fn nearer_face_point(
     for _ in 0..4 {
         step *= 0.5;
         let q = surface.eval(surface.project(at + inward * step));
-        if crate::classify::inside_own_face(body, f, q) {
+        if crate::classify::probe_inside(body, f, c, at, q, step) {
             return Some(q);
         }
     }
@@ -7565,5 +7567,69 @@ pub(crate) mod log {
             dist,
             reach,
         );
+    }
+}
+
+#[cfg(test)]
+mod face_point_tests {
+    use super::*;
+    use forge_ops::{Profile, extrude};
+
+    fn plate(w: f64, h: f64, holes: &[(f64, f64, f64)]) -> Body {
+        let mut loops = vec![Profile::rectangle(Point2::ORIGIN, w, h, 0)];
+        for (i, &(x, y, r)) in holes.iter().enumerate() {
+            loops.push(Profile::circle(Point2::new(x, y), r, 10 + i as u64));
+        }
+        extrude(
+            &Profile {
+                plane: Frame::WORLD,
+                loops,
+            },
+            5.0,
+            1,
+        )
+        .unwrap()
+    }
+
+    /// G13: a planar face's probe is inside its own face, whichever test let it through.
+    #[test]
+    fn probes_are_inside_their_planar_faces() {
+        for b in [
+            plate(10.0, 20.0, &[]),
+            plate(
+                30.0,
+                30.0,
+                &[(10.0, 10.0, 3.0), (20.0, 20.0, 0.004), (15.0, 25.0, 2.0)],
+            ),
+            plate(10.0, 0.01, &[]),
+        ] {
+            for f in b.face_ids() {
+                if !matches!(b.face(f).surface, Surface::Plane(_)) {
+                    continue;
+                }
+                let q = face_point(&b, f).expect("a probe");
+                assert!(crate::classify::inside_own_face(&b, f, q), "{f:?} {q:?}");
+            }
+        }
+    }
+
+    /// A face narrower than the first step (10 by 0.003, the step from a long edge 0.05) gives a
+    /// probe inside it or none, never one off it.
+    #[test]
+    fn a_thin_face_gets_no_probe_off_it() {
+        let b = plate(10.0, 0.003, &[]);
+        let thin: Vec<FaceId> = b
+            .face_ids()
+            .filter(|&f| match &b.face(f).surface {
+                Surface::Plane(p) => p.frame.z().get().z.abs() > 0.5,
+                _ => false,
+            })
+            .collect();
+        assert_eq!(thin.len(), 2);
+        for f in thin {
+            if let Some(q) = face_point(&b, f) {
+                assert!(crate::classify::inside_own_face(&b, f, q), "{f:?} {q:?}");
+            }
+        }
     }
 }

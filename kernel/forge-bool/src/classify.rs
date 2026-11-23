@@ -709,6 +709,123 @@ impl<'a> Index<'a> {
     }
 }
 
+/// `face_point`'s check of its probe `q`, `step` inward from `a` on the first boundary use `c` of
+/// face `f` (G13): a planar face's probe is kept only if it is inside the face, by the cheap
+/// sufficient test (a straight edge, or a circle wider than the step, and no other boundary use
+/// near the step) or else `point_in_face`. A curved face's probe is kept unchecked (G13.curved,
+/// open: the check there cost +1.7% on the gate).
+pub(crate) fn probe_inside(
+    body: &Body,
+    f: FaceId,
+    c: forge_topo::CoedgeId,
+    a: Point3,
+    q: Point3,
+    step: f64,
+) -> bool {
+    if !matches!(body.face(f).surface, Surface::Plane(_)) {
+        return true;
+    }
+    // (the step meets a straight edge only where it starts, and a circle's, whose plane is the
+    // face's, again only 2r on)
+    let clear = match &body.edge(body.coedge(c).edge).curve {
+        Curve::Line(_) => true,
+        Curve::Circle(circle) => step < circle.radius,
+        _ => false,
+    } && step > 2.0 * tol::LINEAR
+        && probe_clear(body, f, c, a, q);
+    // (debug builds: the cheap test never keeps a probe `point_in_face` would not)
+    #[cfg(debug_assertions)]
+    if clear {
+        assert!(
+            inside_own_face(body, f, q),
+            "G13 probe_clear kept {q:?} off face {f:?}"
+        );
+    }
+    clear || inside_own_face(body, f, q)
+}
+
+/// Whether the segment from `a`, a point of boundary use `c` of face `f`, to `q` stays clear of
+/// every other use of `f`'s boundary: no other use's box (grown by LINEAR) meets the segment's box
+/// grown by LINEAR, or misses the curve inside it (`curve_clear`). `probe_inside`'s cheap
+/// sufficient test.
+fn probe_clear(body: &Body, f: FaceId, c: forge_topo::CoedgeId, a: Point3, q: Point3) -> bool {
+    let bx = Box3::from_points([a, q]).grow(tol::LINEAR);
+    let face = body.face(f);
+    let Some(info) = face.query.get().and_then(|q| q.downcast_ref::<FaceInfo>()) else {
+        // (no index of the face yet: its boundary walked, the same boxes as an index's, none kept)
+        return face.loops.iter().flat_map(|&l| body.lp(l).coedges()).all(|u| {
+            u == c
+                || !body.edge_box(body.coedge(u).edge).grow(tol::LINEAR).overlaps(&bx)
+                || curve_clear(body, u, a, q)
+        });
+    };
+    let clear = |e: &(forge_topo::CoedgeId, Box3)| {
+        e.0 == c || e.0 == GONE || !e.1.overlaps(&bx) || curve_clear(body, e.0, a, q)
+    };
+    match &info.bands {
+        // (only the bands the box meets, unsorted, repeats harmless: the box, the segment grown
+        // by LINEAR, spans across the bands at most the ends' span grown by √3·LINEAR < 2·LINEAR)
+        Some(bands) => {
+            let (wa, wq) = (
+                (a - bands.origin).dot(bands.across),
+                (q - bands.origin).dot(bands.across),
+            );
+            let lo = ((wa.min(wq) - 2.0 * tol::LINEAR - bands.w0) * bands.inv)
+                .floor()
+                .max(0.0) as usize;
+            let hi = (((wa.max(wq) + 2.0 * tol::LINEAR - bands.w0) * bands.inv)
+                .floor()
+                .max(0.0) as usize)
+                .min(bands.rows.len() - 1);
+            bands
+                .rows
+                .iter()
+                .take(hi + 1)
+                .skip(lo)
+                .flatten()
+                .all(|&i| clear(&info.edges[i as usize]))
+        }
+        None => info.edges.iter().all(clear),
+    }
+}
+
+/// Whether the segment `a`–`q` keeps more than LINEAR from the whole curve of use `u`'s edge
+/// (its carrier: the edge is a part of it), for a line or a circle; false for any other curve.
+/// A circle's points are all at distance r from its centre, so a segment wholly farther than
+/// r + LINEAR, or wholly nearer than r - LINEAR, misses it.
+fn curve_clear(body: &Body, u: forge_topo::CoedgeId, a: Point3, q: Point3) -> bool {
+    let v = q - a;
+    // the point of segment a–q nearest `o`
+    let nearest = |o: Point3| a + v * ((o - a).dot(v) / v.length_sq()).clamp(0.0, 1.0);
+    match &body.edge(body.coedge(u).edge).curve {
+        Curve::Circle(circle) => {
+            let o = circle.frame.origin;
+            let far = a.distance(o).max(q.distance(o));
+            nearest(o).distance(o) > circle.radius + tol::LINEAR || far < circle.radius - tol::LINEAR
+        }
+        Curve::Line(line) => {
+            // a point's distance to the line is |across(p - o)|, at least across(p - o)·m for any
+            // unit m (Cauchy-Schwarz), and that is affine along the segment: ends beyond LINEAR
+            // on one side bound every point between (m: the segment's direction across the line,
+            // in the plane of the two, else `a`'s)
+            let w = line.dir.get();
+            let across = |x: Vec3| x - w * x.dot(w);
+            let Some(m) = across(v)
+                .normalize()
+                .or_else(|| across(a - line.origin).normalize())
+            else {
+                return false;
+            };
+            let (sa, sq) = (
+                across(a - line.origin).dot(m.get()),
+                across(q - line.origin).dot(m.get()),
+            );
+            (sa > tol::LINEAR && sq > tol::LINEAR) || (sa < -tol::LINEAR && sq < -tol::LINEAR)
+        }
+        _ => false,
+    }
+}
+
 /// Whether `point_in_face` places `p` inside face `f` of `body` (no index of the body's boxes is
 /// needed for one face).
 pub(crate) fn inside_own_face(body: &Body, f: FaceId, p: Point3) -> bool {
