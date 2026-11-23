@@ -78,6 +78,9 @@ jobs:
       - name: test (native)
         run: cargo test --workspace
       - name: test (wasm, same arithmetic as the browser)
+        # no debug info: with it the wasm test binaries come to tens of GB
+        env:
+          CARGO_PROFILE_TEST_DEBUG: "0"
         run: sh tools/test-wasm.sh
 
   # forge-render is its own workspace: wgpu stays out of every job above. The GPU tests skip on a runner with no GPU.
@@ -110,6 +113,65 @@ jobs:
         run: |
           rustup target add wasm32-unknown-unknown
           cargo clippy --lib --target wasm32-unknown-unknown -- -D warnings
+
+  # The app in a browser: built for wasm32, then in Chromium (software WebGPU) end to end on
+  # `forgecad web`'s files, and every bench part and example built in the page against the native
+  # build, bit for bit (interface/forge-render/web/tests, docs/web.md).
+  web:
+    needs: gate
+    if: github.event_name != 'push'
+    runs-on: members
+    env:
+      CARGO_TERM_COLOR: always
+      CARGO_INCREMENTAL: "0"
+    steps:
+      - name: checkout
+        run: |
+          git init -q .
+          # the public door rate-limits (HTTP 429) when the jobs clone at once: back off and retry
+          for i in 1 2 3 4 5; do git fetch -q --depth=1 "https://code.commonty.org/${{ github.repository }}.git" "${{ github.sha }}" && break; sleep $((i * 15)); done
+          git checkout -q FETCH_HEAD
+      - name: rust
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain none
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      - name: playwright
+        run: |
+          mkdir -p "$HOME/pw" && cd "$HOME/pw"
+          npm init -y >/dev/null && npm install --no-save playwright@1.63.0
+          npx playwright install --with-deps chromium
+          echo "NODE_PATH=$HOME/pw/node_modules" >> "$GITHUB_ENV"
+      - name: build, end to end, parity
+        run: sh interface/forge-render/web/tests/ci.sh
+
+  # The threaded artifact (the build on a Web Worker; std rebuilt with atomics on the pinned
+  # toolchain): the same parity and end to end, and the page never blocking for a build.
+  web-threaded:
+    needs: gate
+    if: github.event_name != 'push'
+    runs-on: members
+    env:
+      CARGO_TERM_COLOR: always
+      CARGO_INCREMENTAL: "0"
+    steps:
+      - name: checkout
+        run: |
+          git init -q .
+          # the public door rate-limits (HTTP 429) when the jobs clone at once: back off and retry
+          for i in 1 2 3 4 5; do git fetch -q --depth=1 "https://code.commonty.org/${{ github.repository }}.git" "${{ github.sha }}" && break; sleep $((i * 15)); done
+          git checkout -q FETCH_HEAD
+      - name: rust
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain none
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      - name: playwright
+        run: |
+          mkdir -p "$HOME/pw" && cd "$HOME/pw"
+          npm init -y >/dev/null && npm install --no-save playwright@1.63.0
+          npx playwright install --with-deps chromium
+          echo "NODE_PATH=$HOME/pw/node_modules" >> "$GITHUB_ENV"
+      - name: build, end to end, parity
+        run: THREADED=1 sh interface/forge-render/web/tests/ci.sh
 
   # One release build feeds every step.
   parts:

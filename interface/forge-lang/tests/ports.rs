@@ -1,6 +1,5 @@
-//! The fair test's three parts, ported by hand from their originals in the retired format
-//! (fastcad-lab/k/fair/fc/{crank,bracket,manifold}): each builds, with the original's
-//! volume, face and edge counts, and no errors or lints.
+//! The fair test's three parts (parts/{crank,bracket,manifold}.fg): each builds, with its
+//! recorded volume, face and edge counts, and no errors or lints.
 
 use forge_lang::{Options, Run};
 
@@ -45,33 +44,33 @@ fn parity_bodies(name: &str, volume: f64, faces: usize, edges: usize, bodies: us
 }
 
 #[test]
-fn crank_matches_its_fc_version() {
+fn crank_matches_its_recorded_solid() {
     parity("crank", 107177.0, 65, 141);
 }
 
 #[test]
-fn bracket_matches_its_fc_version() {
+fn bracket_matches_its_recorded_solid() {
     parity("bracket", 183449.2, 137, 316);
 }
 
 #[test]
-fn manifold_matches_its_fc_version() {
+fn manifold_matches_its_recorded_solid() {
     parity("manifold", 687248.8, 209, 484);
 }
 
-// Bench parts against the volumes, faces and edges their originals (the retired format) built to.
+// Bench parts against their recorded volumes, faces and edges.
 
 #[test]
-fn bench_quadarm_matches_its_fc_version() {
+fn bench_quadarm_matches_its_recorded_solid() {
     parity("bench/quadarm", 19376.0, 73, 167);
 }
 
 #[test]
-fn bench_volute_matches_its_fc_version() {
+fn bench_volute_matches_its_recorded_solid() {
     parity("bench/volute", 802514.1, 70, 165);
 }
 
 #[test]
-fn bench_manifold_matches_its_fc_version() {
+fn bench_manifold_matches_its_recorded_solid() {
     parity("bench/manifold", 884334.5, 78, 192);
 }

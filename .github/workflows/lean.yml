@@ -9,10 +9,12 @@ on:
     branches: [main]
     paths: ["research/**/*.lean", "research/**/lean-toolchain", "research/**/lakefile.toml",
             "research/**/lake-manifest.json", "interface/forge-lang/grammar.ll1",
+            "interface/forge-lang/src/**", "interface/forge-lang/tests/parse_diff*",
             ".github/workflows/lean.yml"]
   pull_request:
     paths: ["research/**/*.lean", "research/**/lean-toolchain", "research/**/lakefile.toml",
             "research/**/lake-manifest.json", "interface/forge-lang/grammar.ll1",
+            "interface/forge-lang/src/**", "interface/forge-lang/tests/parse_diff*",
             ".github/workflows/lean.yml"]
   workflow_dispatch:
 
@@ -57,6 +59,14 @@ jobs:
           lake env lean CheckAxioms.lean
           lake env lean Axioms.lean | tee axioms.txt
           ! grep -E "sorryAx|ofReduceBool" axioms.txt
+      - name: parser and lexer against the Lean oracle
+        # Any change to the .fg language must carry its proof: the Rust lexer and parser are
+        # compared answer by answer with the Lean model (lake exe fgparse/fglex), and the committed
+        # digest must be what the oracle gives.
+        run: |
+          rustup show
+          FG_LEAN=1 cargo test --release --locked -p forge-lang --test parse_diff
+          git diff --exit-code interface/forge-lang/tests/parse_diff.digest
       - name: check-local
         if: ${{ !cancelled() }}
         working-directory: research/check-local/lean

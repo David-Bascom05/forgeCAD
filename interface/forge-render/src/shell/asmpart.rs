@@ -31,10 +31,12 @@ pub fn part_text(file: &str, dir: Option<&Path>) -> Result<String, String> {
     match part_path(file, dir) {
         None => forge_lang::stdparts::text_of(file).ok_or(format!("{file}: no such standard part")),
         // through forge-lang's checked reader: a Forge file, or nothing of it said
-        Some(p) => forge_lang::asm::read_capped(&p).ok_or_else(|| match std::fs::symlink_metadata(&p) {
-            Err(_) => format!("{file}: no such file"),
-            Ok(_) => format!("{file}: not a Forge file this reads"),
-        }),
+        Some(p) => {
+            forge_lang::asm::read_capped(&p).ok_or_else(|| match forge_dirs::fs::symlink_metadata(&p) {
+                Err(_) => format!("{file}: no such file"),
+                Ok(_) => format!("{file}: not a Forge file this reads"),
+            })
+        }
     }
 }
 
@@ -290,7 +292,7 @@ impl InPlace {
         }
         let path = self.path.as_ref().ok_or("a standard part's table makes it")?;
         let text = forge_lang::edit::apply_all_checked(&self.source, &ops).map_err(|e| e.text())?;
-        std::fs::write(path, text).map_err(|e| format!("{}: {e}", path.display()))?;
+        forge_dirs::fs::write(path, text).map_err(|e| format!("{}: {e}", path.display()))?;
         Ok(true)
     }
 }
@@ -457,7 +459,7 @@ impl Shell {
                                     )
                                     .on_hover_text(why.as_str());
                                     ui.label(
-                                        egui::RichText::new(why.as_str()).font(sans(10.0)).color(t.ink2),
+                                        egui::RichText::new(why.as_str()).font(sans(11.0)).color(t.ink2),
                                     );
                                 }
                                 w => {
@@ -477,7 +479,7 @@ impl Shell {
                                     };
                                     ui.label(
                                         egui::RichText::new(format!("{} {src}", unit(f.dim)))
-                                            .font(sans(10.0))
+                                            .font(sans(11.0))
                                             .color(t.ink2),
                                     );
                                 }

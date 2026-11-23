@@ -147,8 +147,8 @@ fn button(h: &mut Headless, tool: &str) {
     h.step();
 }
 
-/// The tool on a sketch a feature reads already: the button would start a new sketch (as `.fc`'s
-/// did with no sketch free), so the tool is opened as Edit Feature's would be, on that sketch.
+/// The tool on a sketch a feature reads already: the button would start a new sketch (as it
+/// does with no sketch free), so the tool is opened as Edit Feature's would be, on that sketch.
 fn reuse(h: &mut Headless, kind: &'static str) {
     h.gui.fg_open_tool(kind);
     assert!(h.gui.shell.fg.as_ref().is_some_and(|p| p.tool.is_some()));
@@ -578,6 +578,20 @@ fn a_sketch_drawn_on_a_face_is_written_in_forge_and_extruded() {
         "{}",
         volume(&run)
     );
+}
+
+#[test]
+fn a_click_on_a_faces_edge_starts_the_sketch_on_that_face() {
+    let Some((mut h, _)) = open(BLOCK, "sketch-edge") else {
+        return;
+    };
+    assert!(h.click("tool:Start Sketch"));
+    h.step();
+    assert!(h.gui.shell.sketch_pick);
+    // the top's front edge: the pick takes the edge, the sketch the planar face turned to the eye
+    point_at(&mut h, [30.0, 0.0, 20.0]);
+    assert!(h.gui.shell.sketch.is_some(), "{}", h.gui.shell.status);
+    assert_eq!(h.gui.shell.sketch.as_ref().unwrap().head, "base.end");
 }
 
 #[test]

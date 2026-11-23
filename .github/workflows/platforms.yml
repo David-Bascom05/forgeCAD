@@ -132,6 +132,10 @@ jobs:
         if: ${{ !cancelled() }}
         shell: bash
         run: cargo test --locked -p forge-lang --test bench_ports --test ports --test harness --test fuzz --test kernel_history_repros
+      - name: the one-pass parser against the table parser, answers and errors, with overflow checks on
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: cargo test --locked -p forge-lang --test parse_diff
 
   # the kernel's results bit for bit on another CPU and OS: informative until it holds
   bits:

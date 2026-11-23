@@ -23,16 +23,16 @@ import zipfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import sketch2d
-from cadfs import KernelStop, Unresolved, Unsupported, add, carries_on, dot, fine, num, unit
+from cadfs import KernelStop, Unresolved, Unsupported, WPiece, add, carries_on, chain_pieces, dot, fine, num, path_from, tangent_fit, unit
 from fgw import NoName, Prog, St, Stop, Topo, loop_segs
 from sketch2d import Arrangement
 
 TOL = 2e-3
 HERE = os.path.dirname(os.path.abspath(__file__))
-SOLID = {"PartDesign::Pad", "PartDesign::Pocket", "PartDesign::Revolution", "PartDesign::Groove", "PartDesign::Fillet", "PartDesign::Chamfer", "PartDesign::Mirrored", "PartDesign::PolarPattern", "PartDesign::LinearPattern", "PartDesign::Hole", "PartDesign::Loft", "PartDesign::Pipe", "PartDesign::AdditiveLoft", "PartDesign::AdditivePipe", "PartDesign::SubtractiveLoft", "PartDesign::SubtractivePipe", "PartDesign::Draft", "PartDesign::Thickness", "PartDesign::MultiTransform", "PartDesign::Scaled", "PartDesign::AdditiveBox", "PartDesign::AdditiveCylinder", "PartDesign::Boolean", "PartDesign::Helix", "PartDesign::AdditiveHelix", "PartDesign::SubtractiveHelix", "PartDesign::FeatureBase", "PartDesign::SubtractiveBox", "PartDesign::SubtractiveCylinder", "PartDesign::AdditiveSphere", "PartDesign::SubtractiveSphere", "PartDesign::AdditiveCone", "PartDesign::SubtractiveCone", "PartDesign::AdditiveTorus", "PartDesign::SubtractiveTorus", "PartDesign::AdditivePrism", "PartDesign::SubtractivePrism", "PartDesign::AdditiveWedge", "PartDesign::SubtractiveWedge", "PartDesign::AdditiveEllipsoid", "PartDesign::SubtractiveEllipsoid", "Part::Revolution", "Part::Box", "Part::Cylinder", "Part::Cut", "Part::Fuse", "Part::Common", "Part::MultiFuse", "Part::MultiCommon", "Part::Sphere"}
+SOLID = {"PartDesign::Pad", "PartDesign::Pocket", "PartDesign::Revolution", "PartDesign::Groove", "PartDesign::Fillet", "PartDesign::Chamfer", "PartDesign::Mirrored", "PartDesign::PolarPattern", "PartDesign::LinearPattern", "PartDesign::Hole", "PartDesign::Loft", "PartDesign::Pipe", "PartDesign::AdditiveLoft", "PartDesign::AdditivePipe", "PartDesign::SubtractiveLoft", "PartDesign::SubtractivePipe", "PartDesign::Draft", "PartDesign::Thickness", "PartDesign::MultiTransform", "PartDesign::Scaled", "PartDesign::AdditiveBox", "PartDesign::AdditiveCylinder", "PartDesign::Boolean", "PartDesign::Helix", "PartDesign::AdditiveHelix", "PartDesign::SubtractiveHelix", "PartDesign::FeatureBase", "PartDesign::SubtractiveBox", "PartDesign::SubtractiveCylinder", "PartDesign::AdditiveSphere", "PartDesign::SubtractiveSphere", "PartDesign::AdditiveCone", "PartDesign::SubtractiveCone", "PartDesign::AdditiveTorus", "PartDesign::SubtractiveTorus", "PartDesign::AdditivePrism", "PartDesign::SubtractivePrism", "PartDesign::AdditiveWedge", "PartDesign::SubtractiveWedge", "PartDesign::AdditiveEllipsoid", "PartDesign::SubtractiveEllipsoid", "Part::Revolution", "Part::Extrusion", "Part::Box", "Part::Cylinder", "Part::Cut", "Part::Fuse", "Part::Common", "Part::MultiFuse", "Part::MultiCommon", "Part::Sphere"}
 TRANSFORMS = {"PartDesign::PolarPattern", "PartDesign::LinearPattern", "PartDesign::Mirrored"}
 FLAT = {"Sketcher::SketchObject", "Part::Part2DObjectPython"}  # what a pad's profile can be; only a sketch has rows, the rest a stored shape
-NEEDS = {"PartDesign::FeatureBase", "Part::Cut", "Part::Fuse", "Part::Common", "Part::MultiFuse", "Part::MultiCommon", "Part::Sphere", "PartDesign::Hole", "PartDesign::MultiTransform", "PartDesign::AdditiveBox", "PartDesign::SubtractiveBox", "PartDesign::AdditiveCylinder", "PartDesign::SubtractiveCylinder", "Part::Revolution", "Part::Box", "Part::Cylinder", "PartDesign::Pad", "PartDesign::Pocket", "PartDesign::Revolution", "PartDesign::Groove", "PartDesign::Fillet", "PartDesign::Chamfer", "PartDesign::Mirrored", "PartDesign::PolarPattern", "PartDesign::LinearPattern"}
+NEEDS = {"PartDesign::Thickness", "PartDesign::Draft", "PartDesign::AdditivePipe", "PartDesign::SubtractivePipe", "PartDesign::FeatureBase", "Part::Cut", "Part::Fuse", "Part::Common", "Part::MultiFuse", "Part::MultiCommon", "Part::Sphere", "PartDesign::Hole", "PartDesign::MultiTransform", "PartDesign::AdditiveBox", "PartDesign::SubtractiveBox", "PartDesign::AdditiveCylinder", "PartDesign::SubtractiveCylinder", "Part::Revolution", "Part::Extrusion", "Part::Box", "Part::Cylinder", "PartDesign::Pad", "PartDesign::Pocket", "PartDesign::Revolution", "PartDesign::Groove", "PartDesign::Fillet", "PartDesign::Chamfer", "PartDesign::Mirrored", "PartDesign::PolarPattern", "PartDesign::LinearPattern"}
 
 
 class Doc:
@@ -170,9 +170,13 @@ def sketch_ents(doc, name):
             ents.append({"kind": "skArc", "id": f"e{k}", "start": pt(a0), "mid": pt((a0 + a1) / 2), "end": pt(a1), "construction": con})
         elif t == "Part::GeomBSplineCurve":
             e = g.find("BSplineCurve")
-            if e.get("IsPeriodic") == "1":
-                raise Unsupported("a periodic spline")
-            ents.append({"kind": "polyline", "id": f"e{k}", "points": bspline_points(e), "construction": con})
+            nb = bspline_exact(e)
+            if nb is None:
+                if e.get("IsPeriodic") == "1":
+                    raise Unsupported("a periodic spline")
+                ents.append({"kind": "polyline", "id": f"e{k}", "points": bspline_points(e), "construction": con})
+            else:
+                ents.append({"kind": "nurbs", "id": f"e{k}", "points": bspline_points(e, nb), "nurbs": nb, "construction": con})
         elif t == "Part::GeomPoint":
             continue
         elif not con:
@@ -180,13 +184,54 @@ def sketch_ents(doc, name):
     return ents
 
 
-def bspline_points(e):
-    """A fine polyline along a non-periodic NURBS: the part is then marked approx."""
+def bspline_exact(e):
+    """A NURBS as (degree, poles, full knot vector, weights), the form Forge's `spline(.., degree:, knots:,
+    weights:)` takes. A clamped one as it is; an unclamped one with its own knots (the curve runs from knot
+    `degree` to knot `len(poles)`); a periodic one as its poles wrapped, the first `degree` again after the last,
+    with one period's knots extended periodically to the whole vector. None where the data is not a B-spline."""
     deg = int(e.get("Degree"))
-    cp = [(float(p.get("X")), float(p.get("Y")), float(p.get("Weight", "1"))) for p in e.findall("Pole")]
-    k = []
-    for x in e.findall("Knot"):
-        k += [float(x.get("Value"))] * int(x.get("Mult"))
+    cp = [(float(p.get("X")), float(p.get("Y"))) for p in e.findall("Pole")]
+    ws = [float(p.get("Weight", "1")) for p in e.findall("Pole")]
+    ks = [(float(x.get("Value")), int(x.get("Mult"))) for x in e.findall("Knot")]
+    if deg < 1 or len(ks) < 2 or any(w <= 0 for w in ws) or any(m < 1 for _, m in ks):
+        return None
+    if any(b <= a for (a, _), (b, _) in zip(ks, ks[1:])) or any(m > deg for _, m in ks[1:-1]):
+        return None
+    if e.get("IsPeriodic") == "1":
+        # one period's flat knots: the last knot is the first one period on, so its count is the first's
+        one = [v for v, m in ks[:-1] for _ in range(m)]
+        n, per = len(cp), ks[-1][0] - ks[0][0]
+        if ks[-1][1] != ks[0][1] or len(one) != n or n < deg + 1 or ks[0][1] > deg:
+            return None
+        # the i-th knot: one[] run on by periods both ways, placed so that the curve's domain, knots `deg` to
+        # `deg + n`, is the source's [first knot, last knot] (checked against OCCT's periodic curves)
+        at = lambda i: one[i % n] + per * (i // n)
+        full = [at(i - deg + ks[0][1] - 1) for i in range(n + 2 * deg + 1)]
+        return (deg, cp + cp[:deg], full, ws + ws[:deg])
+    full = [v for v, m in ks for _ in range(m)]
+    if len(full) != len(cp) + deg + 1 or ks[0][1] > deg + 1 or ks[-1][1] > deg + 1:
+        return None
+    return (deg, cp, full, ws)
+
+
+def clamped(nb):
+    """Whether a NURBS from bspline_exact runs from its first pole to its last."""
+    deg, _, k, _ = nb
+    return k[: deg + 1] == [k[0]] * (deg + 1) and k[-deg - 1 :] == [k[-1]] * (deg + 1)
+
+
+def bspline_points(e, nb=None):
+    """A fine polyline along a NURBS (the part is then marked approx unless the NURBS is written exactly): along
+    `nb`, bspline_exact's form, where given, else along the data's poles and knots as they are."""
+    if nb is not None:
+        deg, poles, k, ws = nb
+        cp = [(x, y, w) for (x, y), w in zip(poles, ws)]
+    else:
+        deg = int(e.get("Degree"))
+        cp = [(float(p.get("X")), float(p.get("Y")), float(p.get("Weight", "1"))) for p in e.findall("Pole")]
+        k = []
+        for x in e.findall("Knot"):
+            k += [float(x.get("Value"))] * int(x.get("Mult"))
     def at(u):
         s = deg
         while s < len(cp) - 1 and k[s + 1] <= u:
@@ -204,7 +249,10 @@ def bspline_points(e):
     us = []
     for a, b in zip(spans, spans[1:]):
         us += [a + (b - a) * i / 16 for i in range(16)]
-    return [at(u) for u in us] + [at(hi)]
+    ps = [at(u) for u in us] + [at(hi)]
+    if e.get("IsPeriodic") == "1":
+        ps[-1] = ps[0]  # closed exactly, as the arrangement reads a loop
+    return ps
 
 
 def closed_wires(ents):
@@ -220,7 +268,7 @@ def closed_wires(ents):
             continue
         if e["kind"] == "skCircle":
             keep.append([e["id"]])
-        elif e["kind"] == "polyline":
+        elif e["kind"] in ("polyline", "nurbs"):
             left.append((e["id"], e["points"][0], e["points"][-1]))
         elif e["kind"] in ("skLineSegment", "skArc"):
             left.append((e["id"], e["start"], e["end"]))
@@ -382,6 +430,9 @@ class Tr:
         out = []
         for prof in a.merged(regs):
             loops = [loop_segs(a, lp, flip, num) for lp in prof]
+            # a spline the arrangement cut, or one not clamped, is written as a polyline: the part is then approx
+            if any(a.pieces[i].kind == "poly" and (a.pieces[i].src is None or a.pieces[i].src[0] != "nurbs") for lp in prof for i, _ in lp):
+                self.approx = True
             this = op
             if self.bodies == 0:
                 if op == "cut":
@@ -488,6 +539,178 @@ class Tr:
         make = {"kind": "revolve", "turn": turn, "axis": (num(u), num(v), num(du), num(dv))}
         return self.profile(name, "add", make, False, fr.n, sk=sk)[0]
 
+    def edge_hits(self, st, poly):
+        """Our edges where their edge (samples `poly`) lies: ours on theirs, or theirs a piece of ours."""
+        tol = TOL + sag(poly)
+        lo = [min(q[k] for q in poly) - tol for k in range(3)]
+        hi = [max(q[k] for q in poly) + tol for k in range(3)]
+        inbox = lambda p: all(lo[k] <= p[k] <= hi[k] for k in range(3))
+        hits = [e for e in st.get("edges", []) if any(inbox(p) and near(p, poly, tol) <= tol for p in e["p"][4:13:4])]
+        return hits or [e for e in st.get("edges", []) if contains(e["p"], poly)]
+
+    def face_of(self, st, polys):
+        """Our face bounded by their face's edges: the one face every one of those edges borders."""
+        common, matched = None, set()
+        for poly in polys:
+            fs = set()
+            for e in self.edge_hits(st, poly):
+                fs |= set(e["f"])
+                matched.add(e["h"])
+            common = fs if common is None else common & fs
+            if not common:
+                break
+        if not common:
+            raise Unresolved("no face where the base's face lies")
+        if len(common) > 1:
+            # a face's edges all shared with another face too (a disc on a cylinder's end): the one bounded by
+            # nothing else
+            common = {h for h in common if all(e["h"] in matched for e in st["edges"] if h in e["f"])}
+        if len(common) != 1:
+            raise Unresolved("a face its edges do not settle")
+        h = common.pop()
+        return next(f for f in st["faces"] if f["h"] == h)
+
+    def thickness(self, name):
+        """A hollow: the faces of Base opened, walls Value thick, inward when Reversed (FreeCAD's "inwards"), as
+        `shell(t, open: FACES, out:)`. Only the skin mode."""
+        d = self.doc
+        if d.integer(name, "Mode", 0) != 0:
+            raise Unsupported("a thickness of mode " + str(d.integer(name, "Mode", 0)))
+        base = d.link(name, "Base")
+        data = self.truth.get(base, {}).get("subs", {})
+        st = self.state()
+        faces = []
+        for sub in [x for x in d.subs(name, "Base") if x]:
+            if not sub.startswith("Face") or sub not in data:
+                raise Unresolved("a thickness on " + sub[:4] + " not sampled")
+            faces.append(self.face_of(st, data[sub]))
+        if not faces:
+            raise Unsupported("a thickness with no open face")
+        sel = self.select("faces", {f["name"] for f in faces})
+        return St("shell", size=num(d.flt(name, "Value")), sel=sel, out=not d.boolean(name, "Reversed"))
+
+    def draft(self, name):
+        """Faces tilted about where they cross a neutral plane, the pull along the plane's outward normal (turned
+        by Reversed), as FreeCAD's BRepOffsetAPI_DraftAngle gets them."""
+        d = self.doc
+        base = d.link(name, "Base")
+        data = self.truth.get(base, {}).get("subs", {})
+        nb = d.link(name, "NeutralPlane")
+        ns = [x for x in d.subs(name, "NeutralPlane") if x]
+        if nb != base or len(ns) != 1 or not ns[0].startswith("Face"):
+            raise Unsupported("a draft's neutral plane not a face of its base")
+        st = self.state()
+        faces = []
+        for sub in [x for x in d.subs(name, "Base") if x]:
+            if not sub.startswith("Face") or sub not in data:
+                raise Unresolved("a draft on " + sub[:4] + " not sampled")
+            faces.append(self.face_of(st, data[sub]))
+        if not faces:
+            raise Unresolved("a draft of no faces")
+        if ns[0] not in data:
+            raise Unresolved("a draft's neutral face not sampled")
+        nf = self.face_of(st, data[ns[0]])
+        if nf.get("k") != "plane":
+            raise Unsupported("a draft's neutral face not a plane")
+        nrm = tuple(float(x) for x in nf["n"])
+        if d.link(name, "PullDirection"):
+            # its own pull: a line edge, run from its start, square to the neutral plane (Forge pulls along its normal)
+            pb, ps = d.link(name, "PullDirection"), [x for x in d.subs(name, "PullDirection") if x]
+            polys = self.truth.get(pb, {}).get("subs", {}).get(ps[0]) if len(ps) == 1 else None
+            if not polys or len(polys) != 1 or not ps[0].startswith("Edge"):
+                raise Unsupported("a draft's pull direction not an edge")
+            v = unit(add(polys[0][-1], polys[0][0], -1))
+            c = dot(v, nrm)
+            if abs(abs(c) - 1) > 1e-9:
+                raise Unsupported("a draft pulled off its neutral plane's normal")
+            nrm = v
+        if d.boolean(name, "Reversed"):
+            nrm = tuple(-x for x in nrm)
+        at = tuple(float(x) for x in nf["p"][0])
+        sel = self.select("faces", {f["name"] for f in faces})
+        return St("draft", sel=sel, angle=num(d.flt(name, "Angle")), plane=(vt(at), vt(nrm), None))
+
+    def pipe(self, name, cut):
+        """A pipe: along a helix in Frenet mode it is a coil (the Frenet frame of a helix turns with the screw
+        motion, so the profile is wound rigidly); along a sketch's lines and arcs, a sweep (Standard, OpenCascade's
+        corrected Frenet, and Frenet both carry a planar path's profile without twist)."""
+        d = self.doc
+        sec = d.prop(name, "Sections")
+        if sec is not None and sec.find(".//Link") is not None:
+            raise Unsupported("a pipe through sections")
+        for k in ("AuxillerySpine", "AuxiliarySpine"):
+            if d.link(name, k):
+                raise Unsupported("a pipe with an auxiliary spine")
+        mode = d.integer(name, "Mode", 0)
+        sp = d.link(name, "Spine")
+        helix = sp if d.types.get(sp) == "Part::Helix" else None
+        if d.types.get(sp) == "PartDesign::ShapeBinder":
+            p = d.prop(sp, "Support")
+            got = [l.get("obj") or l.get("value") for l in p.iter("Link")] if p is not None else []
+            if len(got) == 1 and d.types.get(got[0]) == "Part::Helix" and d.placement(sp) == d.placement(got[0]):
+                helix = got[0]
+            else:
+                raise Unsupported("a pipe along a shape binder of " + ", ".join(str(d.types.get(g)).split("::")[-1] for g in got))
+        sk = d.link(name, "Profile")
+        if d.types.get(sk) not in FLAT:
+            raise Unsupported("a profile not from a sketch")
+        fr = Frame(d.placement(sk))
+        op = "cut" if cut else "add"
+        if helix is not None:
+            if mode != 2:
+                raise Unsupported("a pipe along a helix, not Frenet")
+            if abs(d.flt(helix, "Angle")) > 1e-12 or d.integer(helix, "Style", 1) != 1:
+                raise Unsupported("a pipe along a tapered or old-style helix")
+            o, q = d.placement(helix)
+            ax = rotate(q, (0.0, 0.0, 1.0))
+            pitch, height, left = helix_turns(self.truth.get(sp, {}).get("wires"), o, ax)
+            u, v, w = fr.uvw(o)
+            du, dv, dw = dot(ax, fr.x), dot(ax, fr.y), dot(ax, fr.n)
+            if abs(w) > 1e-6 or abs(dw) > 1e-9:
+                raise Unsupported("a helix axis out of the profile's plane")
+            make = {"kind": "coil", "axis": (num(u), num(v), num(du), num(dv)), "pitch": num(pitch), "height": num(height), "left": left}
+            return self.profile(name, op, make, False, fr.n)[0]
+        if d.types.get(sp) != "Sketcher::SketchObject":
+            raise Unsupported("a pipe along " + str(d.types.get(sp)).split("::")[-1])
+        if mode not in (0, 2):
+            raise Unsupported(f"a pipe of mode {mode}")
+        if d.integer(name, "Transition", 0) not in (0, 1, 2):
+            raise Unsupported("a pipe transition")
+        sfr = Frame(d.placement(sp))
+        ents = [e for e in sketch_ents(d, sp) if not e.get("construction")]
+        subs = [x for x in d.subs(name, "Spine") if x]
+        if subs:
+            # the spine's edges by name: only all of them is read (a sketch's EdgeN is its shape's order, not its rows')
+            n_edges = sum(1 for e in ents if e["kind"] in ("skLineSegment", "skArc", "skCircle", "nurbs", "polyline"))
+            if len(set(subs)) != n_edges:
+                raise Unsupported("a pipe along some edges of a sketch")
+        pieces = []
+        for pc in sketch2d.entities(ents)[0]:
+            if pc.kind == "line":
+                pieces.append(WPiece(sfr.world(*pc.a), sfr.world(*pc.b), ent=pc.ent))
+            elif pc.kind == "arc":
+                _, sw = pc.sweep()
+                pieces.append(WPiece(sfr.world(*pc.a), sfr.world(*pc.b), sfr.world(*pc.c), sfr.n, sw, ent=pc.ent))
+            elif pc.kind == "circle":
+                x = sfr.world(*pc.a)
+                pieces.append(WPiece(x, x, sfr.world(*pc.c), sfr.n, 2 * math.pi, ent=pc.ent))
+            else:
+                raise Unsupported("a pipe along a spline")
+        if not pieces:
+            raise Unresolved("a pipe along nothing")
+        run, closed = chain_pieces(pieces)
+        first = next((e for e in self.profile_ents(sk, fr) if not e.get("construction")), None)
+        if first is None:
+            raise Unresolved("a pipe's profile with no curve")
+        q = first.get("start") or first.get("center") or first["points"][0]
+        paths = path_from(run, closed, fr, fr.world(q[0], q[1]))
+        if len(paths) != 1:
+            raise Unsupported("a pipe from inside its path")
+        path = tangent_fit(paths[0])
+        down = dot(path[0].tangent(path[0].a), fr.n) < 0
+        sts = self.profile(name, op, {"kind": "sweep", "path": [x.path() for x in path]}, down, tuple(-x for x in fr.n) if down else fr.n)[0]
+        return sts
+
     def after_moved(self, name):
         """Does a real feature follow this clone in the body being built? Those are in the body's own frame, not the moved one."""
         return bool(self.chain_rest) and any(self.doc.types[c] != "PartDesign::FeatureBase" for c in self.chain_rest[self.chain_rest.index(name) + 1:])
@@ -525,6 +748,8 @@ class Tr:
             return head.label
         if t == "Part::Revolution":
             ls = self.part_revolve(name)
+        elif t == "Part::Extrusion":
+            ls = self.part_extrude(name)
         elif t in ("Part::Box", "Part::Cylinder"):
             ls = self.part_solid(name, t)
         elif t == "Part::Sphere":
@@ -544,6 +769,55 @@ class Tr:
         ls[0].label = lab
         self.lines.append(ls[0])
         return lab
+
+    def part_extrude(self, name):
+        """Part workbench: a sketch's faces moved along Dir. Older files have no LengthFwd: Dir's own length is the
+        distance. Newer ones run LengthFwd along it (and LengthRev back), Dir's length when both are zero."""
+        d = self.doc
+        if not d.boolean(name, "Solid"):
+            raise Unsupported("a Part extrusion that makes a shell")
+        if abs(d.flt(name, "TaperAngle")) > 1e-12 or abs(d.flt(name, "TaperAngleRev")) > 1e-12:
+            raise Unsupported("a tapered Part extrusion")
+        pl = d.placement(name)
+        if any(abs(x) > 1e-9 for x in pl[0]) or abs(abs(pl[1][3]) - 1) > 1e-9:
+            raise Unsupported("a moved Part extrusion")
+        sk = d.link(name, "Base")
+        if d.types.get(sk) not in FLAT:
+            raise Unsupported("a Part extrusion of something not a sketch")
+        fr = Frame(d.placement(sk))
+        n = fr.n
+        v = tuple(float(d.prop(name, "Dir").find("PropertyVector").get(w)) for w in ("valueX", "valueY", "valueZ"))
+        lv = math.sqrt(dot(v, v))
+        if d.prop(name, "LengthFwd") is None:
+            fwd, rev, sym = lv, 0.0, False
+        else:
+            if d.integer(name, "DirMode", 0) == 2:
+                v, lv = n, 1.0
+            elif d.integer(name, "DirMode", 0) != 0:
+                raise Unsupported("a Part extrusion along an edge")
+            fwd, rev, sym = d.flt(name, "LengthFwd"), d.flt(name, "LengthRev"), d.boolean(name, "Symmetric")
+            if abs(fwd) < 1e-12 and abs(rev) < 1e-12:
+                fwd = lv
+            if d.boolean(name, "Reversed"):
+                v = tuple(-x for x in v)
+        if lv < 1e-12:
+            raise Unsupported("a Part extrusion of no direction")
+        u = unit(v)
+        c = dot(u, n)
+        if abs(c) < 1e-9:
+            raise Unsupported("a Part extrusion along its sketch's plane")
+        down = c < 0
+        z = tuple(-x for x in n) if down else n
+        # the distances run along Dir; Forge measures them along the normal and slants the walls
+        fwd, rev = fwd * abs(c), rev * abs(c)
+        along = tuple(fine(x) for x in u) if abs(abs(c) - 1) > 1e-12 else None
+        if sym:
+            ext = ("sym", num(fwd))
+        elif rev > 1e-12:
+            ext = ("two", num(fwd), num(rev))
+        else:
+            ext = ("d", num(fwd))
+        return self.profile(name, "add", {"kind": "extrude", "ext": ext, "along": along}, down, z, sk=sk)[0]
 
     def part_solid(self, name, t):
         """Part workbench primitives, on their placement. An add: only ever the first in a chain here."""
@@ -566,6 +840,7 @@ class Tr:
         st = self.state()
         data = self.truth.get(base, {}).get("subs", {})
         picked = {}
+        every = [poly for sub in subs for poly in data.get(sub, [])]
         for sub in subs:
             if sub not in data:
                 raise Unresolved("a blend on " + sub[:4] + " not sampled")
@@ -589,6 +864,10 @@ class Tr:
                         # only a clear winner: a second edge as close would be a guess
                         close = [h for d, h in scored if d <= scored[0][0] + 1e-9]
                         hits = [e for e in st["edges"] if e["h"] in close]
+                if not hits:
+                    # theirs a piece of one of ours (a loop they split at a vertex we do not have): every sample of theirs
+                    # on our edge, and our edge covered by the edges they pick, so the blend rounds no more than theirs
+                    hits = [e for e in st.get("edges", []) if contains(e["p"], poly) and covered(e["p"], every)]
                 if not hits:
                     if not all_edges:
                         raise Unresolved("no edge where the base's edge lies")
@@ -616,6 +895,16 @@ class Tr:
         if d.types.get(ref) == "PartDesign::Line":
             fr = Frame(d.placement(ref))
             return fr.o, fr.n
+        if d.types.get(ref) in SOLID and s.startswith("Edge"):
+            # a straight edge of a feature's stored shape: from its first sample to its last
+            polys = self.truth.get(ref, {}).get("subs", {}).get(s)
+            if not polys or len(polys) != 1 or not line_or_circle(polys[0]):
+                raise Unsupported("a pattern axis on an edge not sampled or not straight")
+            a, b = polys[0][0], polys[0][-1]
+            u = unit(add(b, a, -1))
+            if any(math.dist(add(a, u, dot(add(q, a, -1), u)), q) > 1e-6 for q in polys[0]):
+                raise Unsupported("a pattern axis on a curved edge")
+            return tuple(a), u
         raise Unsupported("a pattern axis on " + (d.types.get(ref) or "nothing"))
 
     def transform(self, name, t, src):
@@ -643,6 +932,13 @@ class Tr:
         elif d.types.get(ref) == "PartDesign::Plane":
             fr = Frame(d.placement(ref))
             n, o = fr.n, fr.o
+        elif d.types.get(ref) in SOLID and subs and subs[0].startswith("Face"):
+            # a planar face of a feature's stored shape: the plane through its edges' samples
+            polys = self.truth.get(ref, {}).get("subs", {}).get(subs[0])
+            pts = [q for poly in polys or [] for q in poly]
+            n, o = plane_of(pts)
+            if n is None:
+                raise Unsupported("a mirror in a face not sampled or not flat")
         else:
             raise Unsupported("a mirror in " + (d.types.get(ref) or "nothing"))
         return St("pattern", of=list(src), layout=("mirror", vt(n), vt(o)))
@@ -710,8 +1006,6 @@ class Tr:
             t = d.types[name]
             if t not in NEEDS:
                 raise Unsupported("feature " + t.split("::")[-1])
-            if doc_approx(d, name):
-                self.approx = True
         self.chain_rest = chain
         for name in chain:
             self.step(name)
@@ -761,6 +1055,12 @@ class Tr:
                 src = src + [one.label]
         elif t == "PartDesign::Hole":
             ls = self.hole(name)
+        elif t == "PartDesign::Draft":
+            ls = [self.draft(name)]
+        elif t == "PartDesign::Thickness":
+            ls = [self.thickness(name)]
+        elif t in ("PartDesign::AdditivePipe", "PartDesign::SubtractivePipe"):
+            ls = self.pipe(name, t == "PartDesign::SubtractivePipe")
         elif t in ("PartDesign::AdditiveBox", "PartDesign::SubtractiveBox", "PartDesign::AdditiveCylinder", "PartDesign::SubtractiveCylinder"):
             ls = self.primitive(name, t)
         if t.startswith("Part::"):
@@ -822,10 +1122,73 @@ def along_tangents(edges, picked):
                     todo.append(g)
 
 
-def doc_approx(d, name):
-    sk = d.link(name, "Profile")
-    p = d.prop(sk, "Geometry") if sk in d.props else None
-    return p is not None and any(g.get("type") == "Part::GeomBSplineCurve" for g in p.find("GeometryList").findall("Geometry"))
+def helix_turns(ws, o, ax):
+    """The pitch, height and hand of the helix a spine's stored shape holds (a shape binder keeps the helix as it was
+    when bound, which an edit of the helix since does not move): from its samples, the rise along the axis through
+    `o` and the turn about it. The sweep starts where the profile is and rises that far."""
+    pts = [p for w in ws or [] for e in w for p in e["p"]]
+    if len(pts) < 8:
+        raise Unresolved("a helix whose stored shape would not read")
+    # one edge after another, each run its own way: order the samples by their rise
+    pts.sort(key=lambda p: dot(add(p, o, -1), ax))
+    k = (1.0, 0.0, 0.0) if abs(ax[0]) < 0.9 else (0.0, 1.0, 0.0)
+    e1 = unit(add(k, ax, -dot(k, ax)))
+    e2 = (ax[1] * e1[2] - ax[2] * e1[1], ax[2] * e1[0] - ax[0] * e1[2], ax[0] * e1[1] - ax[1] * e1[0])
+    hs, th, last = [], [], None
+    for p in pts:
+        r = add(p, o, -1)
+        a = math.atan2(dot(r, e2), dot(r, e1))
+        if last is not None:
+            while a - last > math.pi:
+                a -= 2 * math.pi
+            while a - last < -math.pi:
+                a += 2 * math.pi
+        last = a
+        hs.append(dot(r, ax))
+        th.append(a)
+    height, turn = hs[-1] - hs[0], th[-1] - th[0]
+    if height <= 1e-9 or abs(turn) < 1e-6:
+        raise Unsupported("a pipe along a helix of no rise or turn")
+    pitch = height * 2 * math.pi / abs(turn)
+    # the same pitch all the way: a taper or a varying pitch is no coil
+    for h, t in zip(hs, th):
+        if abs((h - hs[0]) - abs(t - th[0]) * pitch / (2 * math.pi)) > 1e-4 * max(1.0, height):
+            raise Unsupported("a pipe along a helix of varying pitch")
+    return round(pitch, 9), round(height, 9), turn < 0
+
+
+def plane_of(pts):
+    """The plane through points that are flat (within 1e-7 of it): its unit normal (Newell's, about the centroid)
+    and a point; (None, None) if they are not."""
+    if len(pts) < 3:
+        return None, None
+    c = tuple(sum(p[k] for p in pts) / len(pts) for k in range(3))
+    # the two points farthest apart and the one farthest from their line span it
+    a = max(pts, key=lambda p: math.dist(p, c))
+    b = max(pts, key=lambda p: math.dist(p, a))
+    ab = unit(add(b, a, -1))
+    e = max(pts, key=lambda p: math.dist(add(a, ab, dot(add(p, a, -1), ab)), p))
+    n = (lambda u, v: (u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]))(add(b, a, -1), add(e, a, -1))
+    if math.sqrt(dot(n, n)) < 1e-12:
+        return None, None
+    n = unit(n)
+    if any(abs(dot(add(p, a, -1), n)) > 1e-7 * max(1.0, math.dist(a, b)) for p in pts):
+        return None, None
+    return n, a
+
+
+def contains(ours, poly):
+    """Does our edge (its samples `ours`) hold every sample of their edge `poly`? Ours are coarse: their
+    distance from our chords is allowed our chords' own bow."""
+    tol = TOL + sag(ours)
+    lo = [min(q[k] for q in ours) - tol for k in range(3)]
+    hi = [max(q[k] for q in ours) + tol for k in range(3)]
+    return all(all(lo[k] <= p[k] <= hi[k] for k in range(3)) and near(p, ours, tol) <= tol for p in poly[::4] + [poly[-1]])
+
+
+def covered(ours, polys):
+    """Is every sample of our edge on one of their edges?"""
+    return all(any(near(p, poly, TOL + sag(poly)) <= TOL + sag(poly) for poly in polys) for p in ours)
 
 
 def sag(poly):
@@ -883,6 +1246,9 @@ def base_of(doc, n):
         if doc.bodied is None:
             doc.bodied = {x for k, t in doc.types.items() if t == "PartDesign::Body" for x in doc.links(k, "Group")}
         s = support_of(doc, doc.link(n, "Profile")) if doc.link(n, "Profile") in doc.props else ""
+        if not s and n not in doc.bodied and doc.types.get(n) in ("PartDesign::Fillet", "PartDesign::Chamfer"):
+            # a blend outside any body acts on its Base
+            s = doc.link(n, "Base")
         return s if n not in doc.bodied and doc.types.get(s) in SOLID else ""
     b = doc.link(n, "Base")
     if b in doc.types and doc.types[b] in SOLID:
@@ -1010,6 +1376,29 @@ def main():
                     want["shapes"][sk] = doc.shape_file(sk)
                     want["wires"].append(sk)
             for c in members:
+                if doc.types[c] in ("PartDesign::AdditivePipe", "PartDesign::SubtractivePipe"):
+                    sp = doc.link(c, "Spine")
+                    if doc.types.get(sp) in ("PartDesign::ShapeBinder", "Part::Helix"):
+                        want["shapes"][sp] = doc.shape_file(sp)
+                        want["wires"].append(sp)
+                if doc.types[c] in TRANSFORMS or doc.types[c] == "PartDesign::MultiTransform":
+                    for m in [c] + doc.links(c, "Transformations"):
+                        for k in ("MirrorPlane", "Axis", "Direction"):
+                            o = doc.link(m, k) if m in doc.props else ""
+                            if doc.types.get(o) in SOLID and doc.subs(m, k):
+                                want["shapes"][o] = doc.shape_file(o)
+                                want["subs"].setdefault(o, []).extend(x for x in doc.subs(m, k) if x)
+                if doc.types[c] == "PartDesign::Thickness":
+                    o = doc.link(c, "Base")
+                    if o in doc.props:
+                        want["shapes"][o] = doc.shape_file(o)
+                        want["subs"].setdefault(o, []).extend(x for x in doc.subs(c, "Base") if x)
+                if doc.types[c] == "PartDesign::Draft":
+                    for k in ("Base", "NeutralPlane", "PullDirection"):
+                        o = doc.link(c, k)
+                        if o in doc.props:
+                            want["shapes"][o] = doc.shape_file(o)
+                            want["subs"].setdefault(o, []).extend(x for x in doc.subs(c, k) if x)
                 if doc.types[c] in ("PartDesign::Fillet", "PartDesign::Chamfer"):
                     base = doc.link(c, "Base")
                     want["shapes"][base] = doc.shape_file(base)

@@ -134,15 +134,15 @@ impl Gui {
                 continue;
             }
             let (send, waker, dir) = (self.extras.send.clone(), self.waker.clone(), dir.clone());
-            std::thread::spawn(move || {
+            crate::plat::spawn("forge-job", move || {
                 let path = dir
                     .as_ref()
                     .map(|d| d.join(&file))
-                    .filter(|p| p.exists())
+                    .filter(|p| forge_dirs::fs::exists(p))
                     .unwrap_or_else(|| std::path::PathBuf::from(&file));
                 let text = text
                     .or_else(|| forge_lang::stdparts::text_of(&file))
-                    .or_else(|| std::fs::read_to_string(&path).ok());
+                    .or_else(|| forge_dirs::fs::read_to_string(&path).ok());
                 let frames = text.map_or(vec![], |t| {
                     let at = if file == SELF {
                         dir.clone()
@@ -209,7 +209,9 @@ impl Gui {
         let (c, r) = v.scene.bounds();
         let (cam, size, px) = (&v.nav.camera, v.size, self.pixels_per_point);
         let ink = {
-            let i = self.shell.theme.ink2;
+            // on a light view the secondary ink is too near the background to read at a grid's alpha
+            let th = self.shell.theme;
+            let i = if th.dark { th.ink2 } else { th.ink };
             crate::viewcube::rgb((i.r() as u32) << 16 | (i.g() as u32) << 8 | i.b() as u32)
         };
         if o.grid {

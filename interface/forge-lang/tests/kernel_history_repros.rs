@@ -1,6 +1,6 @@
-//! Programs the random history generators shrank from their failures (the .fc generator's,
-//! forge_agent::history, ported to .fg feature for feature: each builds the very kernel features
-//! the part file did, but for the names the language gives them; the helper sketches `h*` hold the
+//! Programs the random history generators shrank from their failures (each written feature for
+//! feature: it builds the very kernel features the failing history did, but for the names the
+//! language gives them; the helper sketches `h*` hold the
 //! points and directions a placement needs): each builds valid, meshes closed and regenerates the
 //! same n-ary, or is refused with a clear error; never a panic or a hang. Two forms the language
 //! has no word for (a revolve kept or turned symmetrically, a revolve up to a plane) are written

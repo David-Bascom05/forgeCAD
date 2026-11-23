@@ -21,14 +21,16 @@ fn balls_at_pole() {
     sized("balls-at-pole", 24345.744936, 14, 43);
 }
 
+// crank and frame: the ported edge counts less the redundant vertices unify now joins (one
+// across an ellipse's start in crank, four between traces of one branch in frame)
 #[test]
 fn crank() {
-    sized("crank", 116600.869023, 153, 414);
+    sized("crank", 116600.869023, 153, 413);
 }
 
 #[test]
 fn frame() {
-    sized("frame", 330944.186405, 174, 501);
+    sized("frame", 330944.186405, 174, 497);
 }
 
 #[test]

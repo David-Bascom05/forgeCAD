@@ -18,6 +18,15 @@ pub struct Edge {
     pub t: [Option<V3>; 2],
     /// 17 points evenly along it.
     pub p: Vec<V3>,
+    /// The faces it bounds, by name.
+    pub f: Vec<Name>,
+}
+
+/// A planar face of the part: a point on it and its outward normal.
+#[derive(Clone, Copy, Debug)]
+pub struct Plane {
+    pub at: V3,
+    pub n: V3,
 }
 
 #[derive(Default)]
@@ -468,6 +477,21 @@ impl State {
             .collect())
     }
 
+    /// The face of this name on the part as `edges` last built it, where it is planar.
+    pub fn plane(&self, face: Name) -> Option<Plane> {
+        let b = self.body.as_ref()?;
+        let f = select::all(b).into_iter().find_map(|e| match e {
+            Ent::Face(f) if b.face(f).name == face => Some(f),
+            _ => None,
+        })?;
+        let n = select::plane_normal(b, f)?;
+        let at = *select::samples(b, Ent::Face(f)).first()?;
+        Some(Plane {
+            at: (at.x, at.y, at.z),
+            n: (n.x, n.y, n.z),
+        })
+    }
+
     /// A Forge selection of exactly these faces of the part as `edges` last built it (a shell's
     /// open faces): each by its anchor (`E.end`, `E.side(S.l)`, a pattern copy's `P[k].end`), or
     /// by a feature (`feats`) that made it, narrowed by its shape and radius, numbers written
@@ -550,6 +574,10 @@ fn dump(b: &Body) -> Vec<Edge> {
             v: [edge.start.0 as usize, edge.end.0 as usize],
             t: [tan(edge.range.lo), tan(edge.range.hi)],
             p: b.edge_points(x, 16).iter().map(|q| (q.x, q.y, q.z)).collect(),
+            f: select::faces_of_edge(b, x)
+                .into_iter()
+                .map(|f| b.face(f).name)
+                .collect(),
         });
     }
     out

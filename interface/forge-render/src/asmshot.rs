@@ -16,8 +16,8 @@ pub struct AsmStage {
 }
 
 pub fn stage(path: &str) -> Result<AsmStage, String> {
-    let src = std::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
-    let dir = std::fs::canonicalize(path)
+    let src = forge_dirs::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
+    let dir = forge_dirs::fs::canonicalize(path)
         .ok()
         .and_then(|p| p.parent().map(|d| d.to_path_buf()));
     let opts = forge_lang::Options {

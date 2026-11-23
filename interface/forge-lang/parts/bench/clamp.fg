@@ -1,6 +1,6 @@
 # Split pipe clamp as a small assembly: the lower jaw machined, the upper jaw a turned copy of
 # it with a gap, a welded foot combined in, two cap screws as bodies of their own, copied, that
-# cut their own seats in both jaws and stay. Hand port of tools/bench-parts/clamp.fc.
+# cut their own seats in both jaws and stay.
 
 shared bore = 40
 shared gap = 1

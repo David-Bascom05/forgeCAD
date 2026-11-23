@@ -1,4 +1,4 @@
-# Belt guard (tools/bench-parts/guard.fc), hand port: the belt's envelope round two pulleys
+# Belt guard: the belt's envelope round two pulleys
 # drawn as a solid (a hull of the two discs: its lines held tangent by the solver), grown by the
 # running clearance with offset_faces, its top edges rounded for the sheet's bend.
 # The sheet is a body of its own: louvres and tabs made as bodies and subtracted from or

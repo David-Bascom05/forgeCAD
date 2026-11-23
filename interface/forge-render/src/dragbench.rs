@@ -105,7 +105,7 @@ fn nums(part: &mut Part) -> Result<Vec<(String, Num)>, String> {
 }
 
 /// A part's numbers as `--dims` lists them: each param's name and its value as written, then each
-/// number written in a feature's call (as `.fc` listed an argument's): the feature's word for it
+/// number written in a feature's call: the feature's word for it
 /// where it reads one (`base.depth`), else where it's written (`base@6:22`), and `(literal)`.
 pub fn dims(name: &str) -> Result<Vec<(String, String)>, String> {
     let mut part = Part::open(name)?;
