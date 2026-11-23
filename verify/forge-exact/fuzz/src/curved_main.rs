@@ -1,5 +1,5 @@
 //! `cargo run -p forge-exact-fuzz --release --bin exact-curved [-- SOURCE..] [--seeds N]
-//! [--lang N] [--rule strict|snap] [--threads N] [--only NAME] [--shrink] [--oracle]`
+//! [--lang N] [--rule strict|snap] [--threads N] [--only NAME|FAMILY] [--shrink] [--oracle]`
 //!
 //! The kernel's booleans of solids bounded by planes, cylinders, cones and spheres against the
 //! exact curved reference: totals per source and path, every disagreement, and with --shrink one
@@ -162,7 +162,7 @@ fn main() {
     }
     let mut cs = cases(&sources, seeds, lang);
     if !only.is_empty() {
-        cs.retain(|c| only.contains(&c.name));
+        cs.retain(|c| only.iter().any(|o| c.name == *o || c.name.starts_with(&format!("{o}/"))));
     }
     eprintln!("{} cases, rule {rule}", cs.len());
     let cs = std::sync::Arc::new(cs);
