@@ -67,6 +67,7 @@ fn inside(q: &HPoint, g: usize, fs: &[In], pts: &[Pts], snapped: &[DyPlane]) -> 
 
 /// Per class plane: (segments, distinct vertices, graph faces, faces with holders), summed over
 /// near class planes; for the milestone's counts.
+#[inline(never)]
 pub(crate) fn counts(
     bodies: &[&Body],
     fs: &[In],

@@ -21,7 +21,7 @@
 //!    rounded once from their exact points, edges as straight runs, loops walked round each face.
 
 use crate::boolean::{BoolError, Op};
-#[cfg(debug_assertions)]
+#[cfg(any(debug_assertions, feature = "a8_builder"))]
 mod face_builder;
 use crate::decide_once_row as row;
 use forge_bool_core::{self as core, BodyId, CellId, FaceId as CFace, Ledger, Outcome, Refusal, Rule, Sgn};
@@ -2557,6 +2557,8 @@ fn plan_of(bodies: &[&Body], rule: &Rule) -> Result<Option<Plan>, BoolError> {
             return Ok(None);
         }
     };
+    #[cfg(feature = "a8_builder")]
+    std::hint::black_box(face_builder::counts(bodies, &fs, &cls, &pts, &snapped));
     let outcome = core::core(&built.ledger, rule, &core::MetricLedger::default());
     // (debug: the A8 core on the plane ledger's incidence form answers alike, CoreInc.lean)
     #[cfg(debug_assertions)]
