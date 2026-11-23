@@ -5,6 +5,7 @@
 //! The API (JSON; every file has an ETag, the hash `forgecad edit --base` takes as a version):
 //!   GET    /api/info                  {"server":"forgecad web","root":NAME,"writable":B}
 //!   GET    /api/files                 {"files":[{"path","size","etag"}]} (no dot files)
+//!   GET    /api/bundle                every one of those files in one answer (see `bundle`)
 //!   GET    /api/files/PATH            the bytes, ETag
 //!   PUT    /api/files/PATH            the bytes; If-Match: ETAG (the version it was made from)
 //!                                     or If-None-Match: * (a new file); {"etag"}
@@ -386,6 +387,7 @@ fn answer(q: &Request, c: &Config, lock: &Mutex<()>) -> Response {
             ]),
         ),
         ("GET", "/files") => list(c),
+        ("GET", "/bundle") => bundle(c),
         ("POST", "/rename") => {
             if !c.writable {
                 return error(403, "read only");
@@ -482,7 +484,8 @@ pub fn etag(bytes: &[u8]) -> String {
     format!("\"{:016x}\"", forge_math::hash::hash128(bytes) as u64)
 }
 
-fn list(c: &Config) -> Response {
+/// Every file the API serves (no dot files, no links), its path from the root and its bytes, by path.
+fn walk(c: &Config) -> Vec<(String, Vec<u8>)> {
     let mut files = vec![];
     let mut dirs = vec![c.root.clone()];
     while let Some(d) = dirs.pop() {
@@ -504,11 +507,49 @@ fn list(c: &Config) -> Response {
                     .components()
                     .map(|x| x.as_os_str().to_string_lossy().into_owned())
                     .collect();
-                files.push((rel.join("/"), bytes.len(), etag(&bytes)));
+                files.push((rel.join("/"), bytes));
             }
         }
     }
     files.sort();
+    files
+}
+
+/// The most a bundle holds: past it the page reads the files one by one.
+const MAX_BUNDLE: usize = 512 << 20;
+
+/// Every file in one answer, for the page to start with (a project of hundreds of files was as
+/// many round trips): `FGB1`, the count, then each file's path, ETag and bytes, each a u32 length
+/// (little-endian) and the bytes.
+fn bundle(c: &Config) -> Response {
+    let files = walk(c);
+    if files.iter().map(|f| f.1.len()).sum::<usize>() > MAX_BUNDLE {
+        return error(413, "too much for one bundle: read the files one by one");
+    }
+    let mut out = b"FGB1".to_vec();
+    out.extend((files.len() as u32).to_le_bytes());
+    for (path, bytes) in &files {
+        for part in [path.as_bytes(), etag(bytes).as_bytes(), bytes] {
+            out.extend((part.len() as u32).to_le_bytes());
+            out.extend(part);
+        }
+    }
+    Response {
+        status: 200,
+        kind: "application/octet-stream",
+        headers: vec![],
+        body: out,
+    }
+}
+
+fn list(c: &Config) -> Response {
+    let files: Vec<(String, usize, String)> = walk(c)
+        .into_iter()
+        .map(|(p, b)| {
+            let e = etag(&b);
+            (p, b.len(), e)
+        })
+        .collect();
     json(
         200,
         Json::obj(vec![(
@@ -980,6 +1021,39 @@ mod tests {
         );
         assert_eq!(s, 403);
         assert!(!root.join("x.fg").exists());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_bundle_holds_every_listed_file_with_its_version() {
+        let (at, root) = started(None, true);
+        let (s, _, b) = call(at, "GET", "/api/bundle", &[], b"");
+        assert_eq!(s, 200);
+        assert_eq!(&b[..4], b"FGB1");
+        let u32_at = |k: usize| u32::from_le_bytes(b[k..k + 4].try_into().unwrap()) as usize;
+        let n = u32_at(4);
+        let mut k = 8;
+        let mut got = vec![];
+        for _ in 0..n {
+            let mut parts = vec![];
+            for _ in 0..3 {
+                let len = u32_at(k);
+                parts.push(b[k + 4..k + 4 + len].to_vec());
+                k += 4 + len;
+            }
+            got.push(parts);
+        }
+        assert_eq!(k, b.len());
+        let names: Vec<String> = got
+            .iter()
+            .map(|p| String::from_utf8(p[0].clone()).unwrap())
+            .collect();
+        assert_eq!(names, ["part.fg", "sub/b.fg"], "no dot files");
+        assert_eq!(got[0][2], b"shared t = 2\n");
+        assert_eq!(
+            String::from_utf8(got[0][1].clone()).unwrap(),
+            etag(b"shared t = 2\n")
+        );
         let _ = std::fs::remove_dir_all(&root);
     }
 

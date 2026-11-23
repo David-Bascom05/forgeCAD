@@ -7,9 +7,15 @@ const path = require("node:path");
 
 const repo = path.resolve(__dirname, "../../../..");
 const env = (k, d) => process.env[k] ?? d;
+/// Where cargo puts a workspace's builds, as cargo says (CARGO_TARGET_DIR, a config's target-dir).
+function targetDir(dir) {
+  const { execFileSync } = require("node:child_process");
+  const meta = execFileSync("cargo", ["metadata", "--format-version", "1", "--no-deps"], { cwd: dir, maxBuffer: 1 << 26 });
+  return JSON.parse(meta).target_directory;
+}
 const bins = {
-  forgecad: env("FORGECAD", path.join(repo, "target/release/forgecad")),
-  parity: env("FORGE_PARITY", path.join(repo, "interface/forge-render/target/release/forge-parity")),
+  forgecad: env("FORGECAD", path.join(targetDir(repo), "release/forgecad")),
+  parity: env("FORGE_PARITY", path.join(targetDir(path.join(repo, "interface/forge-render")), "release/forge-parity")),
 };
 
 async function browser() {
@@ -53,6 +59,13 @@ async function until(p, f, what, ms = 600000) {
     await new Promise((r) => setTimeout(r, 250));
   }
   throw new Error(`timed out waiting for ${what}; last state ${JSON.stringify(st)}`);
+}
+
+/// Every project file in the page (they follow the app's first frame) and the rebuild that comes
+/// after them done: the state then.
+async function loaded(p) {
+  await p.evaluate(() => window.forgecad.loaded);
+  return until(p, (s) => s.done >= s.seq && s.built?.checked && s.built.seq >= s.seq, "the rebuild after every file");
 }
 
 /// `forgecad web DIR --app APP` on a free port; resolves with its URL once it listens.
@@ -115,4 +128,4 @@ function tmpdir(tag) {
   return fs.mkdtempSync(path.join(require("node:os").tmpdir(), `forgecad-${tag}-`));
 }
 
-module.exports = { repo, bins, browser, page, check, until, serve, native, differs, tmpdir, pixels, shot, SAME };
+module.exports = { repo, bins, browser, page, check, until, loaded, serve, native, differs, tmpdir, pixels, shot, SAME };

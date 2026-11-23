@@ -34,7 +34,8 @@ round = fillet(edges(of: boss, crease: "convex"), r)
     // offscreen: a headless browser's software WebGPU can't show a canvas (docs/web.md)
     const p = await t.page(b, `${url}?open=plate.fg&offscreen=1280x800`);
     // opened and built: the panel's word is the native build's
-    let st = await t.until(p, (s) => s.built?.checked, "the first build");
+    await t.until(p, (s) => s.built?.checked, "the first build");
+    let st = await t.loaded(p);
     assert.equal(st.path, "/project/plate.fg");
     // THREADED=1: the threaded artifact must be the one running (the build on a Web Worker)
     const threaded = await p.evaluate(() => window.forgecad.threaded);

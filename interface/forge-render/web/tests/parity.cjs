@@ -18,7 +18,8 @@ const t = require("./lib.cjs");
   let n = 0;
   try {
     const p = await t.page(b, `${url}?storage=memory&noapp=1`);
-    await p.waitForFunction(() => window.forgecad?.fc, null, { timeout: 120000 });
+    await p.waitForFunction(() => window.forgecad?.loaded, null, { timeout: 120000 });
+    await p.evaluate(() => window.forgecad.loaded);
     // THREADED=1: the threaded artifact's kernel (std with atomics, the spin-locked heap) is the one
     const threaded = await p.evaluate(() => window.forgecad.threaded);
     if (process.env.THREADED) assert.equal(threaded, true, "the threaded build isn't the one running");

@@ -7,7 +7,15 @@
 # THREADS=1 also builds the threaded artifact into OUT/threads (see below).
 set -e
 out=$1
-target=${CARGO_TARGET_DIR:-target}
+# where cargo puts this workspace's builds, as cargo says (CARGO_TARGET_DIR, a target-dir in a
+# config, or ./target): jq where there is one, else the JSON's one field by sed
+meta=$(cargo metadata --format-version 1 --no-deps)
+if command -v jq >/dev/null; then
+  target=$(printf '%s' "$meta" | jq -r .target_directory)
+else
+  target=$(printf '%s' "$meta" | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p')
+fi
+[ -n "$target" ] || { echo "build.sh: cargo metadata gave no target directory" >&2; exit 1; }
 cargo build --lib --release --target wasm32-unknown-unknown
 mkdir -p "$out"
 wasm-bindgen --target web --no-typescript --out-dir "$out" "$target/wasm32-unknown-unknown/release/forge_render.wasm"

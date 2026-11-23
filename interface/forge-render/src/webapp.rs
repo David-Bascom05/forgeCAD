@@ -49,6 +49,8 @@ enum Ask {
     Open(String),
     SaveAs(String),
     Save,
+    /// Files arrived behind the first frame: the open part built again (what it read may be new).
+    Rebuild,
     Apply(forge_lang::error::Op),
     /// The next frame's pixels, for the page (`app_pixels`).
     Pixels(js_sys::Function),
@@ -59,6 +61,8 @@ thread_local! {
     static WAKE: RefCell<Option<EventLoopProxy<Msg>>> = const { RefCell::new(None) };
     /// The app's state as the page reads it (`app_state`), made after each frame.
     static STATE: RefCell<String> = RefCell::new("{\"ready\":false}".into());
+    /// When the app's first frame was drawn (`performance.now()`, ms from the page's start).
+    static FIRST_FRAME: std::cell::Cell<f64> = const { std::cell::Cell::new(0.0) };
     /// The page's own changes are not echoed back to it.
     static LOADING: RefCell<bool> = const { RefCell::new(false) };
 }
@@ -159,7 +163,9 @@ async fn open_host(
         "forge-app: {} {:?} {}",
         info.name, info.device_type, info.backend
     ));
-    let size = window.inner_size();
+    // the canvas's pixels: its CSS size times the device's pixel ratio (winit's first size can
+    // come before the page's layout)
+    let size = backing_size(&window).unwrap_or_else(|| window.inner_size());
     let (config, target) = match (&surface, offscreen) {
         (Some(surface), _) => {
             let mut config = surface
@@ -167,11 +173,19 @@ async fn open_host(
                 .ok_or("no surface format")?;
             // the chrome blends in sRGB, as on the desktop
             config.format = config.format.remove_srgb_suffix();
+            set_backing(&window, (config.width, config.height));
             surface.configure(&device, &config);
             (config, None)
         }
         (None, size) => {
-            let (width, height) = size.unwrap_or((1280, 800));
+            // WxH in CSS pixels, drawn at the device's pixel ratio as a canvas would be
+            let scale = window.scale_factor();
+            let (width, height) = size.map_or((1280, 800), |(w, h)| {
+                (
+                    (w as f64 * scale).round() as u32,
+                    (h as f64 * scale).round() as u32,
+                )
+            });
             let config = wgpu::SurfaceConfiguration {
                 usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
                 format: wgpu::TextureFormat::Rgba8Unorm,
@@ -226,7 +240,65 @@ fn offscreen_texture(device: &wgpu::Device, c: &wgpu::SurfaceConfiguration) -> w
     })
 }
 
+/// The canvas's size in device pixels: its CSS size times the pixel ratio.
+fn backing_size(window: &Window) -> Option<winit::dpi::PhysicalSize<u32>> {
+    use winit::platform::web::WindowExtWebSys;
+    let c = window.canvas()?;
+    let dpr = web_sys::window()?.device_pixel_ratio();
+    let (w, h) = (c.client_width() as f64 * dpr, c.client_height() as f64 * dpr);
+    (w >= 1.0 && h >= 1.0).then(|| winit::dpi::PhysicalSize::new(w.round() as u32, h.round() as u32))
+}
+
+/// The canvas's own pixel count (its `width` and `height`): what a WebGPU canvas draws at. winit
+/// follows the canvas's size but leaves these as they are.
+fn set_backing(window: &Window, (w, h): (u32, u32)) {
+    use winit::platform::web::WindowExtWebSys;
+    if let Some(c) = window.canvas() {
+        if c.width() != w {
+            c.set_width(w);
+        }
+        if c.height() != h {
+            c.set_height(h);
+        }
+    }
+}
+
 impl Host {
+    /// The canvas's pixels and the surface to `size` (device pixels; none: measured now).
+    /// The canvas as drawn: the pixel ratio, its CSS size, its own pixels, what the frames are
+    /// drawn at.
+    fn canvas_json(&self) -> Json {
+        use winit::platform::web::WindowExtWebSys;
+        let pair = |a: f64, b: f64| Json::Arr(vec![num(a), num(b)]);
+        let dpr = web_sys::window().map_or(1.0, |w| w.device_pixel_ratio());
+        let (css, own) = self.window.canvas().map_or((Json::Null, Json::Null), |c| {
+            (
+                pair(c.client_width() as f64, c.client_height() as f64),
+                pair(c.width() as f64, c.height() as f64),
+            )
+        });
+        Json::obj(vec![
+            ("dpr", num(dpr)),
+            ("css", css),
+            ("backing", own),
+            ("drawn", pair(self.config.width as f64, self.config.height as f64)),
+            ("offscreen", self.surface.is_none().into()),
+        ])
+    }
+
+    fn fit(&mut self, size: Option<(u32, u32)>) {
+        if let Some(surface) = &self.surface {
+            let s = size.or_else(|| backing_size(&self.window).map(|s| (s.width, s.height)));
+            if let Some((w, h)) = s.filter(|s| s.0 > 0 && s.1 > 0) {
+                self.config.width = w;
+                self.config.height = h;
+                set_backing(&self.window, (w, h));
+                surface.configure(&self.gui.device(), &self.config);
+            }
+        }
+        self.window.request_redraw();
+    }
+
     fn draw(&mut self) {
         use wgpu::CurrentSurfaceTexture as T;
         let ppp = self.window.scale_factor() as f32;
@@ -257,6 +329,9 @@ impl Host {
             (None, None) => return,
         };
         self.frames += 1;
+        if self.frames == 1 {
+            FIRST_FRAME.with(|f| f.set(perf_now()));
+        }
         if self.frames == 2 {
             say("forge-app: drawn in the canvas");
         }
@@ -285,7 +360,7 @@ impl Host {
                 _ => {}
             }
         }
-        STATE.with(|s| *s.borrow_mut() = state_json(&self.gui));
+        STATE.with(|s| *s.borrow_mut() = state_json(&self.gui, self.canvas_json()));
     }
 
     fn cursor(&self, c: egui::CursorIcon) {
@@ -317,6 +392,11 @@ impl Host {
                 Ask::Open(p) => self.gui.open(&p),
                 Ask::SaveAs(p) => self.gui.save_as(&p),
                 Ask::Save => self.gui.fg_save(),
+                Ask::Rebuild => {
+                    if let Some(s) = &mut self.gui.fg {
+                        s.rebuild();
+                    }
+                }
                 Ask::Apply(op) => {
                     if let Err(e) = self.gui.fg_apply(op) {
                         self.gui.shell.status = e;
@@ -474,13 +554,14 @@ impl ApplicationHandler<Msg> for App {
                 h.draw();
                 return;
             }
+            // the canvas's CSS size or the device's pixel ratio changed (a resize, another
+            // monitor, the page zoomed): its pixels made to match
             WindowEvent::Resized(s) if s.width > 0 && s.height > 0 => {
-                if let Some(surface) = &h.surface {
-                    h.config.width = s.width;
-                    h.config.height = s.height;
-                    surface.configure(&h.gui.device(), &h.config);
-                }
-                h.window.request_redraw();
+                h.fit(Some((s.width, s.height)));
+                return;
+            }
+            WindowEvent::ScaleFactorChanged { .. } => {
+                h.fit(None);
                 return;
             }
             _ => {}
@@ -514,7 +595,7 @@ fn num(x: f64) -> Json {
 
 /// What the page (and the tests) read of the app: the open document, its last build's word,
 /// exact (the volume's bits too, to compare with a native build's).
-fn state_json(g: &Gui) -> String {
+fn state_json(g: &Gui, canvas: Json) -> String {
     let doc = g.fg.as_ref();
     let built = g.last_built.as_ref().map(|b| {
         let mut f = vec![
@@ -533,6 +614,8 @@ fn state_json(g: &Gui) -> String {
     });
     Json::obj(vec![
         ("ready", true.into()),
+        ("first_frame_ms", num(FIRST_FRAME.with(|f| f.get()))),
+        ("canvas", canvas),
         (
             "path",
             doc.and_then(|s| s.path.clone()).map_or(Json::Null, Json::from),
@@ -648,6 +731,12 @@ pub fn app_open(path: String) {
 #[wasm_bindgen]
 pub fn app_save_as(path: String) {
     ask(Ask::SaveAs(path));
+}
+
+/// The page's files have all arrived: the open part built again, through its warm stages.
+#[wasm_bindgen]
+pub fn app_rebuild() {
+    ask(Ask::Rebuild);
 }
 
 #[wasm_bindgen]
