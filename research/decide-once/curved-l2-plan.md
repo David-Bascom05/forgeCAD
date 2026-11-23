@@ -265,3 +265,12 @@ renamed `elim_t` (QPropose's `elimT`), and `propose_vert3` checks its gcd by `gc
 `#guard`s are tests, and so is kind (c): the sphere with `∂_y`, which has `lz = 0` and goes through
 the exchange, and `∂_z`. **Sizes** on the three-quadric test: `R_A` has degree 8, with
 coefficients up to 93 bits; `A`, `B`, `C` hold 569 rationals of at most 84 bits.
+
+**Milestone 1g: three-quadric vertices mirror QVert3.lean (5da8e4e).** `zcoef`, `elim_z`, `bdeg`,
+`blc`, `bzero_q`, `bcontent`, `bdivc`, `prem` (content divided out at every step, `PREM_FUEL = 64`),
+`chain` (`CHAIN_FUEL = 16`, the last linear remainder trimmed), `proj`, `comb3`, `lin_ok`,
+`hom_sub`, `bpad`, `try_shear`, `second_proj` and `propose_vert3` replace the 1e draft. The roots
+come from `roots_of G`, the samples' `R` is `sqfree G`, and `len L ≤ 2` is required. Same test,
+same answer (4 vertices), same certificate sizes. It takes 0.89 s in release, against the draft's
+0.44 s, for the per-step content gcds and the two extra checks. The `Big` divmod/gcd request is
+the lever.

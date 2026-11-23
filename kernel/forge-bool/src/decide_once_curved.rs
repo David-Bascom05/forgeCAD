@@ -38,7 +38,8 @@
 use forge_bool_core::Sgn;
 use forge_math::Interval;
 use forge_math::exact::alg::{
-    Coef, Num, Poly, Q, eqv, gcd, is_zero_p, padd, pdiv, pmul, pneg, pscale, psub, roots_of,
+    Coef, Num, Poly, Q, eqv, gcd, is_zero_p, padd, pdiv, pmul, pneg, ppow, propose_sqfree, pscale, pshift_up,
+    psub, roots_of, xgcd,
 };
 
 /// Why a boolean is not decided here, and goes to the old path, counted.
@@ -1331,56 +1332,53 @@ fn btrim(b: &[Poly]) -> BPoly {
 }
 
 // =============================================================================================
-// The vertex proposer, three quadrics (untrusted; checked by `bezout3` twice, a gcd identity,
-// `roots_of`, `on_vert`, `d_ok`). Drafted here for dol-curved's Lean mirror.
+// QVert3.lean: the vertex proposer for three quadrics
 // =============================================================================================
 
-/// `q` as a quadratic in `z` over `ℚ[x][y]`.
-fn ztriple(q: &Quadric) -> (BPoly, BPoly, BPoly) {
+/// `zcoef q k`: the `z^k` coefficient of `q` over `ℚ[x][y]`.
+pub fn zcoef(q: &Quadric, k: usize) -> BPoly {
     let t = restr_t(q);
-    (t[0].clone(), t[1].clone(), t[2].clone())
+    if k < t.len() { t[k].clone() } else { Vec::new() }
 }
 
-/// The `y`-polynomial `y^k p`.
-fn yshift(k: usize, p: &[Poly]) -> BPoly {
-    let mut out: BPoly = Vec::with_capacity(k + p.len());
-    let mut i = 0;
-    while i < k {
-        out.push(Vec::new());
-        i += 1;
-    }
-    let mut j = 0;
-    while j < p.len() {
-        out.push(p[j].clone());
-        j += 1;
-    }
-    out
+/// `elimZ qa qb`: QPropose's closed-form elimination over `ℚ[x][y]`.
+pub fn elim_z(qa: &Quadric, qb: &Quadric) -> ElimG<BPoly> {
+    elim_gen(
+        &(zcoef(qa, 0), zcoef(qa, 1), zcoef(qa, 2)),
+        &(zcoef(qb, 0), zcoef(qb, 1), zcoef(qb, 2)),
+    )
 }
 
-/// Every coefficient divided by `c` (exact by construction; anything else fails a later check).
-fn bdiv(p: &[Poly], c: &[Q]) -> BPoly {
-    let mut out: BPoly = Vec::with_capacity(p.len());
-    let mut i = 0;
-    while i < p.len() {
-        out.push(pdiv(&p[i], c));
-        i += 1;
-    }
-    out
+/// `bdeg`.
+pub fn bdeg(f: &[Poly]) -> usize {
+    let t = btrim(f);
+    if t.is_empty() { 0 } else { t.len() - 1 }
 }
 
-/// The gcd (in `ℚ[x]`) of every coefficient of `ps`.
-fn content(ps: &[&BPoly]) -> Poly {
+/// `blc`.
+pub fn blc(f: &[Poly]) -> Poly {
+    let t = btrim(f);
+    if t.is_empty() {
+        Vec::new()
+    } else {
+        t[t.len() - 1].clone()
+    }
+}
+
+/// `bzeroQ`.
+pub fn bzero_q(f: &[Poly]) -> bool {
+    btrim(f).is_empty()
+}
+
+/// `bcontent`: the `ℚ[x]`-content of a list of bivariates.
+pub fn bcontent(fs: &[&BPoly]) -> Poly {
     let mut g: Poly = Vec::new();
     let mut i = 0;
-    while i < ps.len() {
+    while i < fs.len() {
         let mut j = 0;
-        while j < ps[i].len() {
-            if !is_zero_p(&ps[i][j]) {
-                g = if g.is_empty() {
-                    ps[i][j].clone()
-                } else {
-                    gcd(&g, &ps[i][j])
-                };
+        while j < fs[i].len() {
+            if !is_zero_p(&fs[i][j]) {
+                g = gcd(&g, &fs[i][j]);
             }
             j += 1;
         }
@@ -1389,178 +1387,316 @@ fn content(ps: &[&BPoly]) -> Poly {
     g
 }
 
-/// One projection: `R(x)` with the cofactors of `A q_a + B q_b + C q_c = R`, and the last
-/// remainder of `y`-degree 1, `p₁ y + p₀`, when the sequence has one.
+/// `bdivc c f`.
+pub fn bdivc(c: &[Q], f: &[Poly]) -> BPoly {
+    let mut out: BPoly = Vec::with_capacity(f.len());
+    let mut i = 0;
+    while i < f.len() {
+        out.push(pdiv(&f[i], c));
+        i += 1;
+    }
+    out
+}
+
+/// `lg a − lf yᵏ b`, the step of `prem`.
+fn prem_step(lg: &[Q], lf: &[Q], k: usize, a: &[Poly], b: &[Poly]) -> BPoly {
+    psub(&pscale(&lg.to_vec(), a), &pscale(&lf.to_vec(), &pshift_up(k, b)))
+}
+
+/// `prem g gs gt n f fs ft`: reduce `f` (with cofactors) by `g` until `deg f < deg g`, the
+/// common content divided out at every step.
+#[allow(clippy::too_many_arguments)]
+pub fn prem(
+    g: &[Poly],
+    gs: &[Poly],
+    gt: &[Poly],
+    n: usize,
+    f0: &[Poly],
+    fs0: &[Poly],
+    ft0: &[Poly],
+) -> (BPoly, BPoly, BPoly) {
+    let mut f = f0.to_vec();
+    let mut fs = fs0.to_vec();
+    let mut ft = ft0.to_vec();
+    let mut k2 = n;
+    while k2 > 0 && !(bzero_q(&f) || bdeg(&f) < bdeg(g)) {
+        let k = bdeg(&f) - bdeg(g);
+        let lg = blc(g);
+        let lf = blc(&f);
+        let f1 = prem_step(&lg, &lf, k, &f, g);
+        let fs1 = prem_step(&lg, &lf, k, &fs, gs);
+        let ft1 = prem_step(&lg, &lf, k, &ft, gt);
+        let c = bcontent(&[&f1, &fs1, &ft1]);
+        if deg_p(&c) == 0 {
+            f = f1;
+            fs = fs1;
+            ft = ft1;
+        } else {
+            f = bdivc(&c, &f1);
+            fs = bdivc(&c, &fs1);
+            ft = bdivc(&c, &ft1);
+        }
+        k2 -= 1;
+    }
+    (f, fs, ft)
+}
+
+/// `Chain`: `R = S R₁ + T R₂` free of `y`, and the last linear remainder `L = LS R₁ + LT R₂`.
 #[derive(Clone, Debug)]
 pub struct Chain {
+    pub r: Poly,
+    pub s: BPoly,
+    pub t: BPoly,
+    pub l: BPoly,
+    pub ls: BPoly,
+    pub lt: BPoly,
+}
+
+/// The remainder sequence's fuel (`chain 16`) and `prem`'s (`prem … 64`).
+pub const CHAIN_FUEL: usize = 16;
+pub const PREM_FUEL: usize = 64;
+
+/// `chain`: the remainder sequence, to the last remainder constant in `y` and the last linear one.
+#[allow(clippy::type_complexity, clippy::too_many_arguments)]
+pub fn chain(
+    fuel: usize,
+    f0: BPoly,
+    fs0: BPoly,
+    ft0: BPoly,
+    g0: BPoly,
+    gs0: BPoly,
+    gt0: BPoly,
+) -> Option<Chain> {
+    let (mut f, mut fs, mut ft, mut g, mut gs, mut gt) = (f0, fs0, ft0, g0, gs0, gt0);
+    let mut lin: Option<(BPoly, BPoly, BPoly)> = None;
+    let mut out: Option<Chain> = None;
+    let mut done = false;
+    let mut n = fuel;
+    while !done && n > 0 {
+        if bzero_q(&g) {
+            done = true;
+        } else if bdeg(&g) == 0 {
+            let lin2 = if bdeg(&f) == 1 {
+                Some((f.clone(), fs.clone(), ft.clone()))
+            } else {
+                lin.clone()
+            };
+            out = lin2.map(|(l, ls, lt)| {
+                let tg = btrim(&g);
+                Chain {
+                    r: if tg.is_empty() { Vec::new() } else { tg[0].clone() },
+                    s: gs.clone(),
+                    t: gt.clone(),
+                    l: btrim(&l),
+                    ls,
+                    lt,
+                }
+            });
+            done = true;
+        } else {
+            let (r, rs, rt) = prem(&g, &gs, &gt, PREM_FUEL, &f, &fs, &ft);
+            if bdeg(&g) == 1 {
+                lin = Some((g.clone(), gs.clone(), gt.clone()));
+            }
+            f = g;
+            fs = gs;
+            ft = gt;
+            g = r;
+            gs = rs;
+            gt = rt;
+        }
+        n -= 1;
+    }
+    out
+}
+
+/// `Proj`: one projection.
+#[derive(Clone, Debug)]
+pub struct Proj {
     pub r: Poly,
     pub a: TPoly,
     pub b: TPoly,
     pub c: TPoly,
-    pub lin: Option<(Poly, Poly)>,
-    /// `D z + N` from the elimination of `z` between `q_a` and `q_b`, over `ℚ[x][y]`
-    pub dz: BPoly,
-    pub nz: BPoly,
+    pub l: BPoly,
+    pub al: TPoly,
+    pub bl: TPoly,
+    pub cl: TPoly,
+    pub n: BPoly,
+    pub d: BPoly,
 }
 
-/// Steps the remainder sequence may take (the `y`-degree is at most 4, so 8 is ample).
-pub const CHAIN_STEPS: usize = 8;
+/// `(S U₁ + T U₂, S V₁, T V₂)`.
+fn cof(s: &[Poly], t: &[Poly], e1: &ElimG<BPoly>, e2: &ElimG<BPoly>) -> (TPoly, TPoly, TPoly) {
+    let s1: TPoly = vec![s.to_vec()];
+    let t1: TPoly = vec![t.to_vec()];
+    (
+        padd(&pmul(&s1, &e1.u), &pmul(&t1, &e2.u)),
+        pmul(&s1, &e1.v),
+        pmul(&t1, &e2.v),
+    )
+}
 
-/// **The chain**: `R₁ = Res_z(q_a, q_b) = U₁q_a + V₁q_b` and `R₂ = Res_z(q_a, q_c) = U₂q_a + V₂q_c`
-/// over `ℚ[x][y]` (`elim_gen`), then a pseudo-remainder sequence in `y` that tracks cofactors,
-/// `f = s R₁ + t R₂` (each step `f ← lc(g) f − lc(f) yᵏ g`, the common content in `ℚ[x]` divided
-/// out), down to `R = S R₁ + T R₂` free of `y`. So `A = S U₁ + T U₂`, `B = S V₁`, `C = T V₂`.
-/// `None` if a remainder vanishes (`R₁`, `R₂` share a factor: a common curve).
-pub fn chain(qa: &Quadric, qb: &Quadric, qc: &Quadric) -> Option<Chain> {
-    let ea = elim_gen(&ztriple(qa), &ztriple(qb));
-    let eb = elim_gen(&ztriple(qa), &ztriple(qc));
-    let r1 = btrim(&ea.r);
-    let r2 = btrim(&eb.r);
-    if r1.is_empty() || r2.is_empty() {
-        return None;
-    }
+/// **`proj`**: the two eliminations and the chain.
+pub fn proj(qa: &Quadric, qb: &Quadric, qc: &Quadric) -> Option<Proj> {
+    let e1 = elim_z(qa, qb);
+    let e2 = elim_z(qa, qc);
     let one: BPoly = vec![vec![Q::one()]];
-    let (mut f, mut sf, mut tf, mut g, mut sg, mut tg) = if r1.len() >= r2.len() {
-        (r1, one.clone(), Vec::new(), r2, Vec::new(), one)
+    let ch = if bdeg(&e1.r) >= bdeg(&e2.r) {
+        chain(
+            CHAIN_FUEL,
+            e1.r.clone(),
+            one.clone(),
+            Vec::new(),
+            e2.r.clone(),
+            Vec::new(),
+            one,
+        )
     } else {
-        (r2, Vec::new(), one.clone(), r1, one, Vec::new())
-    };
-    let mut ok = true;
-    let mut it = 0;
-    while ok && g.len() > 1 && it < CHAIN_STEPS {
-        // reduce f by g
-        let mut k2 = 0;
-        while !f.is_empty() && f.len() >= g.len() && k2 < 16 {
-            let k = f.len() - g.len();
-            let lf = f[f.len() - 1].clone();
-            let lg = g[g.len() - 1].clone();
-            f = btrim(&psub(&pscale(&lg, &f), &pscale(&lf, &yshift(k, &g))));
-            sf = psub(&pscale(&lg, &sf), &pscale(&lf, &yshift(k, &sg)));
-            tf = psub(&pscale(&lg, &tf), &pscale(&lf, &yshift(k, &tg)));
-            k2 += 1;
-        }
-        let c = content(&[&f, &sf, &tf]);
-        if deg_p(&c) > 0 {
-            f = bdiv(&f, &c);
-            sf = bdiv(&sf, &c);
-            tf = bdiv(&tf, &c);
-        }
-        if f.is_empty() {
-            ok = false;
-        } else {
-            let (f0, s0, t0) = (g, sg, tg);
-            g = f;
-            sg = sf;
-            tg = tf;
-            f = f0;
-            sf = s0;
-            tf = t0;
-        }
-        it += 1;
-    }
-    if !ok || g.len() != 1 {
-        None
-    } else {
-        let lin = if f.len() == 2 {
-            Some((f[0].clone(), f[1].clone()))
-        } else {
-            None
-        };
-        let s1: TPoly = vec![sg];
-        let t1: TPoly = vec![tg];
-        Some(Chain {
-            r: g[0].clone(),
-            a: padd(&pmul(&s1, &ea.u), &pmul(&t1, &eb.u)),
-            b: pmul(&s1, &ea.v),
-            c: pmul(&t1, &eb.v),
-            lin,
-            dz: btrim(&ea.d),
-            nz: btrim(&ea.n),
-        })
-    }
+        chain(
+            CHAIN_FUEL,
+            e2.r.clone(),
+            Vec::new(),
+            one.clone(),
+            e1.r.clone(),
+            one,
+            Vec::new(),
+        )
+    }?;
+    let (a, b, c) = cof(&ch.s, &ch.t, &e1, &e2);
+    let (al, bl, cl) = cof(&ch.ls, &ch.lt, &e1, &e2);
+    Some(Proj {
+        r: ch.r,
+        a,
+        b,
+        c,
+        l: ch.l,
+        al,
+        bl,
+        cl,
+        n: e1.n,
+        d: e1.d,
+    })
 }
 
-/// `deg` over ℚ (local name, to keep the import list short).
-fn deg_p(p: &[Q]) -> usize {
-    forge_math::exact::alg::deg(p)
+/// **`comb3`**: `L = A q_a + B q_b + C q_c`, checked.
+#[allow(clippy::too_many_arguments)]
+pub fn comb3(
+    qa: &Quadric,
+    qb: &Quadric,
+    qc: &Quadric,
+    a: &[BPoly],
+    b: &[BPoly],
+    c: &[BPoly],
+    l: &[Poly],
+) -> bool {
+    tzero(&psub(
+        &padd(
+            &padd(&pmul(a, &restr_t(qa)), &pmul(b, &restr_t(qb))),
+            &pmul(c, &restr_t(qc)),
+        ),
+        &[l.to_vec()],
+    ))
 }
 
-/// `F(x, −p₀/p₁) p₁^m` for a `y`-polynomial `F` of degree `≤ m`.
-fn hom_y(f: &[Poly], p0: &[Q], p1: &[Q], m: usize) -> Poly {
+/// **`linOk`**: `b₂ q_a − a₂ q_b = N + D z`, checked.
+pub fn lin_ok(qa: &Quadric, qb: &Quadric, n: &[Poly], d: &[Poly]) -> bool {
+    tzero(&psub(
+        &padd(
+            &pmul(&[zcoef(qb, 2)], &restr_t(qa)),
+            &pmul(&[pneg(&zcoef(qa, 2))], &restr_t(qb)),
+        ),
+        &[n.to_vec(), d.to_vec()],
+    ))
+}
+
+/// `homSub p0 p1 f = f(x, −p₀/p₁) p₁^(len f − 1)` (Horner).
+pub fn hom_sub(p0: &[Q], p1: &[Q], f: &[Poly]) -> Poly {
     let mp0 = pneg(p0);
     let mut acc: Poly = Vec::new();
-    let mut i = 0;
-    while i < f.len() {
-        let mut t = f[i].clone();
-        let mut k = 0;
-        while k < i {
-            t = pmul(&t, &mp0);
-            k += 1;
-        }
-        while k < m {
-            t = pmul(&t, p1);
-            k += 1;
-        }
-        acc = padd(&acc, &t);
-        i += 1;
+    let mut i = f.len();
+    while i > 0 {
+        i -= 1;
+        acc = padd(&pmul(&f[i], &ppow(p1, f.len() - 1 - i)), &pmul(&mp0, &acc));
     }
     acc
 }
 
-/// **`proposeVert3`**: every common point of three quadrics, each certified, or `None`.
-/// - Projection A on the quadrics as given, projection B after the first shear `λ ≠ 0` of
-///   `shears()` whose chain exists. A shear keeps `x`, so a vertex's `x` is a root of both `R_A`
-///   and `R_B` (`bezout3` on each; B's on the sheared quadrics, by `shear_ev`).
-/// - `G = gcd(R_A, R_B)`, checked as `G = u R_A + v R_B`: every vertex's `x` is a root of `G`.
-/// - Samples on `roots_of(sqfree G)`: `y = −p₀/p₁` from A's linear remainder, `z = −N(x, y)/D(x, y)`
-///   from A's `z`-elimination, homogenised; each checked by `on_vert` and `d_ok`.
-pub fn propose_vert3(qa: &Quadric, qb: &Quadric, qc: &Quadric, fuel: usize) -> Option<Vec<VSample>> {
-    let ca_ = chain(qa, qb, qc)?;
-    if !bezout3(qa, qb, qc, &ca_.a, &ca_.b, &ca_.c, &ca_.r) {
-        return None;
+/// `bpad m f`: `f` padded with zero coefficients to length `m`.
+pub fn bpad(m: usize, f: &[Poly]) -> BPoly {
+    let mut out = f.to_vec();
+    while out.len() < m {
+        out.push(Vec::new());
     }
+    out
+}
+
+/// `tryShear`: the projection after the shear `λ`, if its chain checks.
+pub fn try_shear(qa: &Quadric, qb: &Quadric, qc: &Quadric, l: &Q) -> Option<(Q, Proj)> {
+    let (sa, sb, sc) = (qa.shear(l), qb.shear(l), qc.shear(l));
+    let p = proj(&sa, &sb, &sc)?;
+    if bezout3(&sa, &sb, &sc, &p.a, &p.b, &p.c, &p.r) {
+        Some((l.clone(), p))
+    } else {
+        None
+    }
+}
+
+/// `secondProj`: the first shear `λ ≠ 0` whose chain checks.
+pub fn second_proj(qa: &Quadric, qb: &Quadric, qc: &Quadric) -> Option<(Q, Proj)> {
     let ls = shears();
-    let mut cb: Option<Chain> = None;
-    let mut i = 1;
-    while cb.is_none() && i < ls.len() {
-        let (sa, sb, sc) = (qa.shear(&ls[i]), qb.shear(&ls[i]), qc.shear(&ls[i]));
-        if let Some(c) = chain(&sa, &sb, &sc)
-            && bezout3(&sa, &sb, &sc, &c.a, &c.b, &c.c, &c.r)
-        {
-            cb = Some(c);
+    let mut out: Option<(Q, Proj)> = None;
+    let mut i = 0;
+    while out.is_none() && i < ls.len() {
+        if !ls[i].is_zero() {
+            out = try_shear(qa, qb, qc, &ls[i]);
         }
         i += 1;
     }
-    let cb = cb?;
-    let (g, u, v) = forge_math::exact::alg::xgcd(&ca_.r, &cb.r);
-    if !gcd_ok(&g, &u, &v, &ca_.r, &cb.r) {
+    out
+}
+
+/// **`proposeVert3`**: every common point of three quadrics, each certified, or `None`
+/// (`proposeVert3_complete`).
+pub fn propose_vert3(qa: &Quadric, qb: &Quadric, qc: &Quadric, fuel: usize) -> Option<Vec<VSample>> {
+    let pa = proj(qa, qb, qc)?;
+    if !(bezout3(qa, qb, qc, &pa.a, &pa.b, &pa.c, &pa.r)
+        && comb3(qa, qb, qc, &pa.al, &pa.bl, &pa.cl, &pa.l)
+        && lin_ok(qa, qb, &pa.n, &pa.d))
+    {
         return None;
     }
-    if is_zero_p(&g) {
+    let (_, pb) = second_proj(qa, qb, qc)?;
+    let (g, u, v) = xgcd(&pa.r, &pb.r);
+    if !gcd_ok(&g, &u, &v, &pa.r, &pb.r) {
         return None;
     }
-    if deg_p(&g) == 0 {
-        return Some(Vec::new());
-    }
-    let (p0, p1) = ca_.lin.clone()?;
-    let sp = forge_math::exact::alg::propose_sqfree(&g)?;
-    let ns = roots_of(&sp, fuel)?;
-    let m = if ca_.dz.len() >= ca_.nz.len() {
-        ca_.dz.len()
+    let sp = propose_sqfree(&g)?;
+    let ns = roots_of(&g, fuel)?;
+    let p0 = if pa.l.is_empty() {
+        Vec::new()
     } else {
-        ca_.nz.len()
+        pa.l[0].clone()
     };
-    let m = if m == 0 { 0 } else { m - 1 };
-    let nz = hom_y(&ca_.nz, &p0, &p1, m);
-    let dz = hom_y(&ca_.dz, &p0, &p1, m);
+    let p1 = if pa.l.len() > 1 {
+        pa.l[1].clone()
+    } else {
+        Vec::new()
+    };
+    let m = if pa.n.len() >= pa.d.len() {
+        pa.n.len()
+    } else {
+        pa.d.len()
+    };
+    let nz = hom_sub(&p0, &p1, &bpad(m, &pa.n));
+    let dz = hom_sub(&p0, &p1, &bpad(m, &pa.d));
     let wa = pdiv(&homog3(qa, &p0, &p1, &nz, &dz), &sp);
     let wb = pdiv(&homog3(qb, &p0, &p1, &nz, &dz), &sp);
     let wc = pdiv(&homog3(qc, &p0, &p1, &nz, &dz), &sp);
     let mut vs: Vec<VSample> = Vec::with_capacity(ns.len());
-    let mut ok = true;
+    let mut ok = pa.l.len() <= 2;
     let mut k = 0;
     while k < ns.len() {
-        let v = VSample {
+        let vsm = VSample {
             r: sp.clone(),
             ny: p0.clone(),
             dy: p1.clone(),
@@ -1571,11 +1707,16 @@ pub fn propose_vert3(qa: &Quadric, qb: &Quadric, qc: &Quadric, fuel: usize) -> O
             qb: wb.clone(),
             qc: wc.clone(),
         };
-        ok = ok && v.on_vert(qa, qb, qc) && v.d_ok(SIGN_FUEL);
-        vs.push(v);
+        ok = ok && vsm.on_vert(qa, qb, qc) && vsm.d_ok(SIGN_FUEL);
+        vs.push(vsm);
         k += 1;
     }
     if ok { Some(vs) } else { None }
+}
+
+/// `deg` over ℚ.
+fn deg_p(p: &[Q]) -> usize {
+    forge_math::exact::alg::deg(p)
 }
 
 // =============================================================================================
@@ -1882,7 +2023,7 @@ mod tests {
         let vs = propose_vert3(&s0, &s1, &cyl, 60);
         if std::env::var("VDBG").is_ok() {
             println!("{:?} in {:?}", vs.as_ref().map(|v| v.len()), t0.elapsed());
-            if let Some(c) = chain(&s0, &s1, &cyl) {
+            if let Some(c) = proj(&s0, &s1, &cyl) {
                 let mut n = 0;
                 let mut bits = 0;
                 let ts = [&c.a, &c.b, &c.c];
