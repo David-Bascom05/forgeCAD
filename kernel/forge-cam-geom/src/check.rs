@@ -354,7 +354,7 @@ impl Trim {
 /// How far a trim arc's stored ends may lie off its circle (|r − |a − c||, |r − |b − c||, an
 /// upper bound): the trim is the circle's arc plus the radial pieces from it to those ends, so
 /// that it closes exactly with its neighbours (which share the ends bit for bit).
-fn arc_gap(a: [f64; 2], b: [f64; 2], c: [f64; 2], r: f64) -> f64 {
+pub(crate) fn arc_gap(a: [f64; 2], b: [f64; 2], c: [f64; 2], r: f64) -> f64 {
     let d = |p: [f64; 2]| {
         Ival::pt(p[0])
             .sub(Ival::pt(c[0]))
