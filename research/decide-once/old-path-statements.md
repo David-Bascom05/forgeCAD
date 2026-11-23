@@ -71,6 +71,16 @@ The parts:
   `⟦b⟧ := ⟦b*⟧`. `Bounds` is dol-curved's (ForgeCurved/BodyModel.lean, 30c0577b): exact, on the exact
   counterpart.
 
+  **The counterpart is canonical (review, b0ed0be4).** dol-curved proved `bounds_unique` (under
+  `Seeded`), `Refines δ`, edges and vertices, and `meet_on_edges`. ⟦b⟧ is unique per counterpart.
+  The code decides on one specific counterpart: its own exact data, with each vertex the exact meet
+  of its faces' carriers. So the theorem uses that one, `exactOf b`, and not an arbitrary b* within
+  δ:
+  - `ValidSolid δ b := ∃ bs, exactOf b = some bs ∧ ValidExact bs`;
+  - `⟦b⟧ := denoteExact (exactOf b)`;
+  - `exactOf = none` (a vertex whose meet isn't unique in its δ-ball) is a typed refusal.
+  Requested of dol-curved.
+
 ## D. The chain of contracts (boolean.rs `general`, as written)
 
 Each step names its function, its contract, and what it hands the next. Composition: D1–D5 build
