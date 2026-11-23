@@ -142,7 +142,8 @@ pub fn links<T: Topo, S: Sink>(t: &T, out: &mut S) {
         let f = t.loop_face(l);
         // left over from an in-place edit (a dead face's, or one `remove_loop` took off): no part
         // of the body, left for `compact`
-        if f >= nf || (t.face_alive(f) && listed[l] != 0) {
+        let skip = f < nf && (!t.face_alive(f) || listed[l] == 0);
+        if !skip {
             let first = t.loop_first(l);
             let len = t.loop_len(l);
             // (its coedges in range first, so `first + i` cannot overflow)

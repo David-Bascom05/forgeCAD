@@ -360,7 +360,7 @@ def topo.links_loop1
     (out, e)
 
 /-- [forge_topo::topo::links]: loop body 5:
-    Source: 'kernel/forge-topo/src/topo.rs', lines 151:12-158:13
+    Source: 'kernel/forge-topo/src/topo.rs', lines 152:12-159:13
     Visibility: public -/
 @[rust_loop_body]
 def topo.links_loop2_loop0.body
@@ -394,7 +394,7 @@ def topo.links_loop2_loop0.body
   else ok (done ok1)
 
 /-- [forge_topo::topo::links]: loop 5:
-    Source: 'kernel/forge-topo/src/topo.rs', lines 151:12-158:13
+    Source: 'kernel/forge-topo/src/topo.rs', lines 152:12-159:13
     Visibility: public -/
 @[rust_loop]
 def topo.links_loop2_loop0
@@ -408,57 +408,8 @@ def topo.links_loop2_loop0
       i1)
     (ok1, i)
 
-/-- [forge_topo::topo::links]: loop body 6:
-    Source: 'kernel/forge-topo/src/topo.rs', lines 151:12-158:13
-    Visibility: public -/
-@[rust_loop_body]
-def topo.links_loop2_loop1.body
-  {T : Type _} (TopoInst : topo.Topo T) (t : T) (ne : Std.Usize)
-  (l : Std.Usize) (first : Std.Usize) (len : Std.Usize) (ok1 : Bool)
-  (i : Std.Usize) :
-  Result (ControlFlow (Bool × Std.Usize) Bool)
-  := do
-  if ok1
-  then
-    if i < len
-    then
-      let c ← lift (Std.Usize.wrapping_add first i)
-      let i1 ← TopoInst.coedge_loop t c
-      let ok2 ←
-        if i1 = l
-        then
-          do
-          let e ← TopoInst.coedge_edge t c
-          if e < ne
-          then
-            let b ← TopoInst.edge_alive t e
-            if b
-            then topo.uses TopoInst t e c
-            else ok false
-          else ok false
-        else ok false
-      let i2 ← lift (Std.Usize.wrapping_add i 1#usize)
-      ok (cont (ok2, i2))
-    else ok (done ok1)
-  else ok (done ok1)
-
-/-- [forge_topo::topo::links]: loop 6:
-    Source: 'kernel/forge-topo/src/topo.rs', lines 151:12-158:13
-    Visibility: public -/
-@[rust_loop]
-def topo.links_loop2_loop1
-  {T : Type _} (TopoInst : topo.Topo T) (t : T) (ne : Std.Usize)
-  (l : Std.Usize) (first : Std.Usize) (len : Std.Usize) (ok1 : Bool)
-  (i : Std.Usize) :
-  Result Bool
-  := do
-  loop
-    (fun (ok2, i1) => topo.links_loop2_loop1.body TopoInst t ne l first len ok2
-      i1)
-    (ok1, i)
-
 /-- [forge_topo::topo::links]: loop body 4:
-    Source: 'kernel/forge-topo/src/topo.rs', lines 141:4-164:5
+    Source: 'kernel/forge-topo/src/topo.rs', lines 141:4-165:5
     Visibility: public -/
 @[rust_loop_body]
 def topo.links_loop2.body
@@ -470,8 +421,23 @@ def topo.links_loop2.body
   if l < nl
   then
     let f ← TopoInst.loop_face t l
-    if f >= nf
-    then
+    let skip ←
+      if f < nf
+      then
+        do
+        let b ← TopoInst.face_alive t f
+        if b
+        then
+          let i ←
+            alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32)
+              listed l
+          ok (i = 0#u32)
+        else ok true
+      else ok false
+    if skip
+    then let l1 ← lift (Std.Usize.wrapping_add l 1#usize)
+         ok (cont (out, l1))
+    else
       let first ← TopoInst.loop_first t l
       let len ← TopoInst.loop_len t l
       let ok1 ←
@@ -499,50 +465,10 @@ def topo.links_loop2.body
                    else SinkInst.back_link out 2#u8 l
       let l1 ← lift (Std.Usize.wrapping_add l 1#usize)
       ok (cont (out1, l1))
-    else
-      let b ← TopoInst.face_alive t f
-      if b
-      then
-        let i ←
-          alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32)
-            listed l
-        if i != 0#u32
-        then
-          let first ← TopoInst.loop_first t l
-          let len ← TopoInst.loop_len t l
-          let ok1 ←
-            if f < nf
-            then
-              if i = 1#u32
-              then
-                if len = 0#usize
-                then ok true
-                else
-                  if first < nc
-                  then
-                    do
-                    let i1 ← lift (Std.Usize.wrapping_sub nc first)
-                    ok (len <= i1)
-                  else ok false
-              else ok false
-            else ok false
-          let ok2 ←
-            topo.links_loop2_loop1 TopoInst t ne l first len ok1 0#usize
-          let out1 ← if ok2
-                       then ok out
-                       else SinkInst.back_link out 2#u8 l
-          let l1 ← lift (Std.Usize.wrapping_add l 1#usize)
-          ok (cont (out1, l1))
-        else
-          let l1 ← lift (Std.Usize.wrapping_add l 1#usize)
-          ok (cont (out, l1))
-      else
-        let l1 ← lift (Std.Usize.wrapping_add l 1#usize)
-        ok (cont (out, l1))
   else ok (done out)
 
 /-- [forge_topo::topo::links]: loop 4:
-    Source: 'kernel/forge-topo/src/topo.rs', lines 141:4-164:5
+    Source: 'kernel/forge-topo/src/topo.rs', lines 141:4-165:5
     Visibility: public -/
 @[rust_loop]
 def topo.links_loop2
@@ -557,7 +483,7 @@ def topo.links_loop2
     (out, l)
 
 /-- [forge_topo::topo::links]:
-    Source: 'kernel/forge-topo/src/topo.rs', lines 87:0-165:1
+    Source: 'kernel/forge-topo/src/topo.rs', lines 87:0-166:1
     Visibility: public -/
 def topo.links
   {T : Type _} {S : Type _} (TopoInst : topo.Topo T) (SinkInst : topo.Sink S)

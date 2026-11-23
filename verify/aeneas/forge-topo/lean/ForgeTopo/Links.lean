@@ -513,4 +513,332 @@ theorem edge_pass_spec {S : Type} (SI : topo.Sink S) (P : S → List Problem) (h
       rw [← he]; exact ho
   · exact ⟨by simp, by simp⟩
 
+/-! ## The loop pass -/
+
+theorem uses_spec (R : Reads TI t b) (e c : Usize) (he : e.val < b.edges.size) :
+    topo.uses TI t e c ⦃ r => r = (b.ed e.val).uses.contains c.val ⦄ := by
+  unfold topo.uses
+  step with R.edge_n_uses e he as ⟨n, hn⟩
+  unfold topo.uses_loop
+  apply loop.spec_decr_nat (fun (i : Usize) => n.val - i.val)
+    (fun i => i.val ≤ n.val ∧ ((b.ed e.val).uses.take i.val).contains c.val = false)
+  · intro i ⟨hle, hnot⟩
+    unfold topo.uses_loop.body
+    split
+    · rename_i hlt
+      have hlt' : i.val < n.val := by scalar_tac
+      have hi : i.val < (b.ed e.val).uses.length := by omega
+      step with R.edge_use e i he hi as ⟨u, hu⟩
+      split
+      · rename_i heq
+        simp only [WP.spec_ok]
+        symm; rw [List.contains_iff_mem, ← heq, hu]
+        rw [getElem!_pos _ i.val hi]; exact List.getElem_mem hi
+      · rename_i hne
+        step as ⟨i1, hi1⟩
+        have hw : i1.val = i.val + 1 := by rw [hi1]; exact succ_val i n hlt'
+        refine ⟨by omega, ?_, by omega⟩
+        rw [hw, List.take_add_one]
+        have : (b.ed e.val).uses[i.val]? = some (b.ed e.val).uses[i.val]! := by
+          rw [getElem!_pos _ i.val hi, List.getElem?_eq_getElem]
+        rw [this, List.contains_append, hnot]
+        have : (c.val == (b.ed e.val).uses[i.val]!) = false := by
+          rw [← hu]; simp only [beq_eq_false_iff_ne, ne_eq]; intro h; exact hne (UScalar.eq_of_val_eq h.symm)
+        simp only [Option.toList_some, Bool.false_or, List.contains_cons, List.contains_nil, Bool.or_false]
+        exact this
+    · rename_i hlt
+      have hi : i.val = (b.ed e.val).uses.length := by scalar_tac
+      simp only [WP.spec_ok]
+      rw [hi, List.take_length] at hnot; rw [hnot]
+  · exact ⟨by simp, by simp⟩
+
+/-- `loopOk`'s test of one coedge. -/
+def coOk (l c : Nat) : Bool :=
+  c < b.coedges.size && (b.co c).lp == l && (b.co c).edge < b.edges.size &&
+    (b.ed (b.co c).edge).uses.contains c
+
+theorem loopOk_eq (l : Nat) :
+    b.loopOk l = ((b.lo l).face < b.faces.size && b.listed l == 1 && (b.loopCoedges l).all (coOk b l)) := by
+  unfold Body.loopOk coOk; rfl
+
+theorem loopCoedges_getElem (l i : Nat) (hi : i < (b.lo l).len) :
+    (b.loopCoedges l)[i]! = (b.lo l).first + i := by
+  unfold Body.loopCoedges
+  rw [getElem!_pos _ i (by simpa using hi)]; simp
+
+theorem co_step (l i len : Usize) (ok1 : Bool) (hlt : i.val < len.val)
+    (hL : (b.loopCoedges l.val).length = len.val)
+    (hok : (ok1 && ((b.loopCoedges l.val).take i.val).all (coOk b l.val)) = true) :
+    ∀ v : Bool, v = coOk b l.val (b.loopCoedges l.val)[i.val]! → ∀ i1 : Usize, i1 = i.wrapping_add 1#usize →
+      i1.val ≤ len.val ∧ v = (ok1 && ((b.loopCoedges l.val).take i1.val).all (coOk b l.val)) ∧
+        len.val - i1.val < len.val - i.val := by
+  intro v hv i1 hi1
+  have hw : i1.val = i.val + 1 := by rw [hi1]; exact succ_val i len hlt
+  refine ⟨by omega, ?_, by omega⟩
+  rw [hw, all_take_succ _ _ _ (by omega), ← Bool.and_assoc, hok, hv]; rfl
+
+theorem add_val (x y : Usize) (h : x.val + y.val < 2 ^ UScalarTy.Usize.numBits) :
+    (Std.Usize.wrapping_add x y).val = x.val + y.val := by
+  rw [Usize.wrapping_add_val_eq]
+  apply Nat.mod_eq_of_lt
+  simp only [UScalar.size]; exact h
+
+theorem loop_coedges_spec (R : Reads TI t b) (ne l first len : Usize) (hne : ne.val = b.edges.size)
+    (hl : l.val < b.loops.size) (hfirst : first.val = (b.lo l.val).first) (hlen : len.val = (b.lo l.val).len)
+    (ok1 : Bool) (hfit : ok1 = true → len.val ≠ 0 → first.val + len.val ≤ b.coedges.size) :
+    topo.links_loop2_loop0 TI t ne l first len ok1 0#usize ⦃ r =>
+      r = (ok1 && (b.loopCoedges l.val).all (coOk b l.val)) ⦄ := by
+  have hL : (b.loopCoedges l.val).length = len.val := by simp [Body.loopCoedges, hlen]
+  unfold topo.links_loop2_loop0
+  apply loop.spec_decr_nat (fun (y : Bool × Usize) => len.val - y.2.val)
+    (fun y => y.2.val ≤ len.val ∧ y.1 = (ok1 && ((b.loopCoedges l.val).take y.2.val).all (coOk b l.val)))
+  · rintro ⟨ok, i⟩ ⟨hle, hok⟩
+    simp only at hle hok ⊢
+    unfold topo.links_loop2_loop0.body
+    split
+    · rename_i hok1
+      split
+      · rename_i hlt
+        have hlt' : i.val < len.val := by scalar_tac
+        have hok1' : ok1 = true := by
+          revert hok; rw [hok1]; cases ok1 <;> simp
+        have hfit' := hfit hok1' (by omega)
+        have hsum : first.val + i.val < b.coedges.size := by omega
+        have hok' : (ok1 && ((b.loopCoedges l.val).take i.val).all (coOk b l.val)) = true := by
+          rw [← hok]; exact hok1
+        have fin := co_step b l i len ok1 hlt' hL hok'
+        have hci : (b.loopCoedges l.val)[i.val]! = first.val + i.val := by
+          rw [loopCoedges_getElem b l.val i.val (by omega), hfirst]
+        clear hok hok1 hok'
+        step as ⟨c, hc⟩
+        have hcv : c.val = first.val + i.val := by
+          rw [hc]; apply add_val
+          obtain ⟨n, hn⟩ := WP.spec_exists R.nc
+          have := n.hBounds
+          omega
+        clear hc
+        rw [← hcv] at hci hsum
+        step with R.coedge_loop c hsum as ⟨cl, hcl⟩
+        split
+        · rename_i hcll
+          rw [hcll] at hcl; clear hcll
+          step with R.coedge_edge c hsum as ⟨e, he⟩
+          split
+          · rename_i hen
+            have hen' : e.val < b.edges.size := by rw [← hne]; exact hen
+            step with R.edge_alive e hen' as ⟨al, hal⟩
+            rw [hal]; simp only [ite_true]
+            step with uses_spec TI t b R e c hen' as ⟨u, hu⟩
+            step as ⟨i1, hi1⟩
+            apply fin _ _ i1 hi1
+            rw [hci]; unfold coOk
+            rw [← hcl, ← he, hu]
+            simp [hsum, hen']
+          · rename_i hen
+            have hen' : ¬ e.val < b.edges.size := by rw [← hne]; exact hen
+            step as ⟨i1, hi1⟩
+            apply fin _ _ i1 hi1
+            rw [hci]; unfold coOk
+            rw [← he]; simp [hen']
+        · rename_i hcll
+          step as ⟨i1, hi1⟩
+          apply fin _ _ i1 hi1
+          rw [hci]; unfold coOk
+          have : (b.co c.val).lp ≠ l.val := by
+            rw [← hcl]; intro h; exact hcll (UScalar.eq_of_val_eq h)
+          simp [this]
+      · rename_i hlt
+        have hi : i.val = len.val := by scalar_tac
+        simp only [WP.spec_ok]
+        rw [hok, hi, ← hL, List.take_length]
+    · rename_i hok1
+      simp only [WP.spec_ok]
+      simp only [Bool.not_eq_true] at hok1
+      rw [hok1] at hok
+      rw [hok1, ← List.take_append_drop i.val (b.loopCoedges l.val), List.all_append]
+      rw [← Bool.and_assoc, ← hok]; rfl
+  · exact ⟨by simp, by simp⟩
+
+/-- A loop whose run of coedges leaves the array has a coedge `coOk` rejects. -/
+theorem all_coOk_unfit (l : Nat) (h0 : (b.lo l).len ≠ 0)
+    (h : ¬ ((b.lo l).first < b.coedges.size ∧ (b.lo l).len ≤ b.coedges.size - (b.lo l).first)) :
+    (b.loopCoedges l).all (coOk b l) = false := by
+  rw [Bool.eq_false_iff]
+  intro hall
+  rw [List.all_eq_true] at hall
+  have hmem : (b.lo l).first + ((b.lo l).len - 1) ∈ b.loopCoedges l := by
+    unfold Body.loopCoedges; rw [List.mem_map]; exact ⟨(b.lo l).len - 1, by simp; omega, rfl⟩
+  have := hall _ hmem
+  simp only [coOk, Bool.and_eq_true, decide_eq_true_eq] at this
+  omega
+
+set_option hygiene false in
+/-- The end of a loop the pass does not skip: its coedges tested, the loop handed to the sink if
+they fail. Needs `ok1`, `hfit`, `hval : (ok1 && all coOk) = loopOk l`, `hskip : loopSkip l = false`. -/
+macro "finish_loop" v:term : tactic => `(tactic| (
+  step with loop_coedges_spec TI t b R ne l first len hne hl hfirst hlen $v hfit as ⟨ok2, hok2⟩
+  split
+  · rename_i hok2t
+    step as ⟨l1, hl1⟩
+    refine ⟨by rw [hw l1 hl1]; omega, ?_, by rw [hw l1 hl1]; omega⟩
+    rw [hw l1 hl1]; apply hacc; rw [hskip, ← hval, ← hok2, hok2t]; simp
+  · rename_i hok2t
+    step with hS o 2#u8 l as ⟨o1, ho1⟩
+    step as ⟨l1, hl1⟩
+    refine ⟨by rw [hw l1 hl1]; omega, ?_, by rw [hw l1 hl1]; omega⟩
+    rw [hw l1 hl1]; apply hacc; rw [ho1, hskip, ← hval, ← hok2]
+    simp only [Bool.not_eq_true] at hok2t; simp [hok2t]))
+
+theorem loop_pass_spec {S : Type} (SI : topo.Sink S) (P : S → List Problem) (hS : Appends SI P)
+    (R : Reads TI t b) (ne nc nl nf : Usize) (hne : ne.val = b.edges.size)
+    (hnc : nc.val = b.coedges.size) (hnl : nl.val = b.loops.size) (hnf : nf.val = b.faces.size)
+    (listed : alloc.vec.Vec U32) (hk : Kept b b.faces.size 0 listed) (out : S) :
+    topo.links_loop2 TI SI t out ne nc nl nf listed 0#usize ⦃ r =>
+      P r = P out ++ ((List.range b.loops.size).filterMap fun l =>
+        if b.loopSkip l || b.loopOk l then none else some (Problem.backLink 2 l)) ⦄ := by
+  unfold topo.links_loop2
+  apply loop.spec_decr_nat (fun (y : S × Usize) => nl.val - y.2.val)
+    (fun y => y.2.val ≤ nl.val ∧
+      P y.1 = P out ++ ((List.range y.2.val).filterMap fun l =>
+        if b.loopSkip l || b.loopOk l then none else some (Problem.backLink 2 l)))
+  · rintro ⟨o, l⟩ ⟨hle, ho⟩
+    simp only at hle ho ⊢
+    unfold topo.links_loop2.body
+    split
+    · rename_i hlt
+      have hlt' : l.val < nl.val := by scalar_tac
+      have hl : l.val < b.loops.size := by omega
+      have hlb : l.val < listed.val.length := by rw [hk.1]; exact hl
+      have hacc : ∀ o', P o' = P o ++ (if b.loopSkip l.val || b.loopOk l.val then none
+            else some (Problem.backLink 2 l.val)).toList →
+          P o' = P out ++ ((List.range (l.val + 1)).filterMap fun l =>
+            if b.loopSkip l || b.loopOk l then none else some (Problem.backLink 2 l)) := by
+        intro o' h; rw [h, filterMap_range_succ, ho, List.append_assoc]
+      have hw : ∀ l1 : Usize, l1 = l.wrapping_add 1#usize → l1.val = l.val + 1 := by
+        intro l1 h; rw [h]; exact succ_val l nl hlt'
+      step with R.loop_face l hl as ⟨f, hf⟩
+      split
+      · rename_i hfn
+        have hfn' : f.val < b.faces.size := by rw [← hnf]; exact hfn
+        have hfl : (b.lo l.val).face < b.faces.size := by rw [← hf]; exact hfn'
+        step with R.face_alive f hfn' as ⟨al, hal⟩
+        rw [hal]; simp only [ite_true]
+        step as ⟨x, hx⟩
+        have hx' : x.val = (listed.val[l.val]!).val := by rw [hx, getElem!_pos]
+        split
+        · rename_i hx0
+          have h0 : b.listed l.val = 0 := by
+            rw [← kept_zero b listed hk l.val hl, ← hx']; simp at hx0; rw [hx0]; rfl
+          step as ⟨l1, hl1⟩
+          refine ⟨by rw [hw l1 hl1]; omega, ?_, by rw [hw l1 hl1]; omega⟩
+          rw [hw l1 hl1]; apply hacc
+          have : b.loopSkip l.val = true := by simp [Body.loopSkip, hfl, h0]
+          simp [this]
+        · rename_i hx0
+          have h0 : b.listed l.val ≠ 0 := by
+            intro h; apply hx0; simp only [decide_eq_true_eq]; apply UScalar.eq_of_val_eq
+            rw [hx']; exact (kept_zero b listed hk l.val hl).2 h
+          have hskip : b.loopSkip l.val = false := by simp [Body.loopSkip, h0]
+          step with R.loop_first l hl as ⟨first, hfirst⟩
+          step with R.loop_len l hl as ⟨len, hlen⟩
+          step as ⟨y, hy⟩
+          have hy' : y.val = (listed.val[l.val]!).val := by rw [hy, getElem!_pos]
+          split
+          · rename_i hy1
+            have h1 : b.listed l.val = 1 := by
+              rw [← kept_one b listed hk l.val hl, ← hy', hy1]; rfl
+            split
+            · rename_i hl0
+              have hl0' : (b.lo l.val).len = 0 := by rw [← hlen, hl0]; rfl
+              simp only [Std.bind_ok]
+              have hval : (true && (b.loopCoedges l.val).all (coOk b l.val)) = b.loopOk l.val := by
+                rw [loopOk_eq]; simp [hfl, h1]
+              have hfit : true = true → len.val ≠ 0 → first.val + len.val ≤ b.coedges.size := by
+                intro _ h; exact absurd (by rw [hl0]; rfl) h
+              finish_loop true
+            · rename_i hl0
+              have hl0' : len.val ≠ 0 := by intro h; exact hl0 (UScalar.eq_of_val_eq h)
+              split
+              · rename_i hfc
+                have hfc' : first.val < nc.val := hfc
+                step as ⟨d, hd⟩
+                have hd' : d.val = nc.val - first.val := by rw [hd]; exact sub_val nc first (by omega)
+                have hfit : decide (len ≤ d) = true → len.val ≠ 0 → first.val + len.val ≤ b.coedges.size := by
+                  intro h _; simp only [decide_eq_true_eq] at h
+                  have : len.val ≤ d.val := h
+                  omega
+                have hval : (decide (len ≤ d) && (b.loopCoedges l.val).all (coOk b l.val)) = b.loopOk l.val := by
+                  rw [loopOk_eq]; simp only [hfl, h1, decide_true, beq_self_eq_true, Bool.true_and]
+                  by_cases hfits : len.val ≤ d.val
+                  · have : decide (len ≤ d) = true := by simp only [decide_eq_true_eq]; exact hfits
+                    rw [this, Bool.true_and]
+                  · have : decide (len ≤ d) = false := by simp only [decide_eq_false_iff_not]; exact hfits
+                    rw [this, Bool.false_and, all_coOk_unfit b l.val (by rw [← hlen]; exact hl0')
+                      (by rw [← hfirst, ← hlen, ← hnc]; omega)]
+                finish_loop (decide (len ≤ d))
+              · rename_i hfc
+                have hfc' : ¬ first.val < nc.val := hfc
+                simp only [Std.bind_ok]
+                have hfit : false = true → len.val ≠ 0 → first.val + len.val ≤ b.coedges.size := by simp
+                have hval : (false && (b.loopCoedges l.val).all (coOk b l.val)) = b.loopOk l.val := by
+                  rw [loopOk_eq, all_coOk_unfit b l.val (by rw [← hlen]; exact hl0')
+                    (by rw [← hfirst, ← hnc]; omega)]; simp
+                finish_loop false
+          · rename_i hy1
+            have h1 : b.listed l.val ≠ 1 := by
+              intro h; apply hy1; apply UScalar.eq_of_val_eq
+              rw [hy']; exact (kept_one b listed hk l.val hl).2 h
+            simp only [Std.bind_ok]
+            have hfit : false = true → len.val ≠ 0 → first.val + len.val ≤ b.coedges.size := by simp
+            have hval : (false && (b.loopCoedges l.val).all (coOk b l.val)) = b.loopOk l.val := by
+              rw [loopOk_eq]; simp [h1]
+            finish_loop false
+      · rename_i hfn
+        have hfn' : ¬ f.val < b.faces.size := by rw [← hnf]; exact hfn
+        have hfl : ¬ (b.lo l.val).face < b.faces.size := by rw [← hf]; exact hfn'
+        have hskip : b.loopSkip l.val = false := by simp [Body.loopSkip, hfl]
+        simp only [Std.bind_ok, Bool.false_eq_true, ite_false]
+        step with R.loop_first l hl as ⟨first, hfirst⟩
+        step with R.loop_len l hl as ⟨len, hlen⟩
+        have hfit : false = true → len.val ≠ 0 → first.val + len.val ≤ b.coedges.size := by simp
+        have hval : (false && (b.loopCoedges l.val).all (coOk b l.val)) = b.loopOk l.val := by
+          rw [loopOk_eq]; simp [hfl]
+        finish_loop false
+    · rename_i hlt
+      have he : l.val = b.loops.size := by scalar_tac
+      simp only [WP.spec_ok]
+      rw [← he]; exact ho
+  · exact ⟨by simp, by simp⟩
+
+/-! ## The whole of `links` -/
+
+/-- **The shipped `check_links` refines the model.** For any `Topo` view that reads model body `b`
+(`Reads`: its counts and fields by index, every entity alive, as `check.rs`'s `View` does of the
+compact bodies `check` looks at) and any sink that appends the problem it is handed (as
+`Vec<Problem>`'s `back_link` does), the translated Rust `links` terminates without panic or
+overflow and appends exactly `Model.checkLinks`. -/
+theorem links_refines {S : Type} (SI : topo.Sink S) (P : S → List Problem) (hS : Appends SI P)
+    (R : Reads TI t b) (out : S) :
+    topo.links TI SI t out ⦃ r => P r = P out ++ b.checkLinks ⦄ := by
+  unfold topo.links
+  have rnv := R.nv
+  step with rnv as ⟨nv, hnv⟩
+  have rne := R.ne
+  step with rne as ⟨ne, hne⟩
+  have rnc := R.nc
+  step with rnc as ⟨nc, hnc⟩
+  have rnl := R.nl
+  step with rnl as ⟨nl, hnl⟩
+  have rnf := R.nf
+  step with rnf as ⟨nf, hnf⟩
+  step as ⟨listed, hlisted⟩
+  have hk : Kept b 0 0 listed := by
+    refine ⟨by rw [hlisted]; simp [hnl], fun l hl => ?_⟩
+    rw [hlisted]; simp [pre, hl, hnl]
+  step with face_pass_spec TI t b SI P hS R nl nf hnl hnf out listed hk as ⟨o1, l1, hk1, ho1⟩
+  step with edge_pass_spec TI t b SI P hS R nv ne nc nl hnv hne hnc hnl l1 hk1 o1 as ⟨o2, ho2⟩
+  step with loop_pass_spec TI t b SI P hS R ne nc nl nf hne hnc hnl hnf l1 hk1 o2 as ⟨o3, ho3⟩
+  rw [ho3, ho2, ho1, Body.checkLinks]
+  simp only [List.append_assoc]
+
 end forge_topo
