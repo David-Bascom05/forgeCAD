@@ -77,18 +77,33 @@ pub mod mem {
     /// Tells `hook` of every change from now on (writes, removals; a rename is the new file
     /// written and the old removed). Files put with `load` are not changes.
     pub fn set_hook(hook: Option<Hook>) {
-        *HOOK.lock().unwrap_or_else(|e| e.into_inner()) = hook;
+        *locked(&HOOK) = hook;
     }
 
     fn tell(p: &Path, c: Change<'_>) {
-        let h = *HOOK.lock().unwrap_or_else(|e| e.into_inner());
+        let h = *locked(&HOOK);
         if let Some(h) = h {
             h(p, c);
         }
     }
 
+    /// A lock taken without waiting where waiting is not allowed: in a browser page's threaded
+    /// build (shared memory) the page's main thread may not block, so it spins on `try_lock`.
+    fn locked<T>(m: &'static Mutex<T>) -> std::sync::MutexGuard<'static, T> {
+        #[cfg(target_feature = "atomics")]
+        loop {
+            match m.try_lock() {
+                Ok(g) => return g,
+                Err(std::sync::TryLockError::Poisoned(e)) => return e.into_inner(),
+                Err(std::sync::TryLockError::WouldBlock) => std::hint::spin_loop(),
+            }
+        }
+        #[cfg(not(target_feature = "atomics"))]
+        m.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
     fn tree() -> std::sync::MutexGuard<'static, Tree> {
-        TREE.lock().unwrap_or_else(|e| e.into_inner())
+        locked(&TREE)
     }
 
     /// The path as the tree keys it: absolute, `.` and `..` resolved.

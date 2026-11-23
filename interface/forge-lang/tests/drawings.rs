@@ -524,7 +524,7 @@ fn each_part_file_of_a_drawing_is_loaded_once() {
 /// its start, the other its end) share one load of it.
 #[test]
 fn another_files_component_is_loaded_once_for_every_model() {
-    let dir = std::env::temp_dir().join(format!("fg-dwg-wants-{}", std::process::id()));
+    let dir = forge_dirs::temp_dir().join(format!("fg-dwg-wants-{}", forge_dirs::process_id()));
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(
         dir.join("lib.fg"),

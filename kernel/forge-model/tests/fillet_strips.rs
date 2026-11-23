@@ -446,12 +446,9 @@ fn foot_of_a_rib_over_a_cones_seam() {
     );
 }
 
-/// A wall on a floor whose height falls below the ball along the edge: past where the spring reaches
-/// the wall's top the ball rests on the top's edge, and the top meets the round along that edge.
-/// Reference: the section's area integrated along the edge, taken square to it; the rim's slope
-/// makes that an estimate, good to about 1%.
-#[test]
-fn wall_falling_below_the_ball() {
+/// The floor and wall `wall_falling_below_the_ball` rounds: a plate, and a wedge on it whose ends
+/// are flush with the plate's.
+fn floor_and_wall() -> (forge_topo::Body, forge_topo::Body) {
     use forge_ops::{ProfileLoop, Segment};
     let at = Frame::from_zx(Point3::new(0.0, 0.0, -5.0), UnitVec3::Z, Vec3::X).expect("frame");
     let plate = extrude(
@@ -473,7 +470,7 @@ fn wall_falling_below_the_ball() {
             id,
         )
     };
-    let (h0, h1, r) = (10.0, 1.0, 3.0);
+    let (h0, h1) = (10.0, 1.0);
     let wedge = extrude(
         &Profile {
             plane,
@@ -488,7 +485,12 @@ fn wall_falling_below_the_ball() {
         2,
     )
     .expect("wedge");
-    let body = boolean(&plate, &wedge, Op::Union, 3).expect("union");
+    (plate, wedge)
+}
+
+/// `floor_and_wall`'s wall's foot, the edge along y = z = 0, rounded at radius 3 on `body`: the
+/// volume added, against the reference.
+fn round_the_foot(body: &forge_topo::Body) {
     let foot: Vec<FilletEdge> = body
         .edge_ids()
         .filter(|&e| {
@@ -498,14 +500,14 @@ fn wall_falling_below_the_ball() {
         })
         .map(|edge| FilletEdge {
             edge,
-            radius: Radius::Constant(r),
+            radius: Radius::Constant(3.0),
         })
         .collect();
     assert_eq!(foot.len(), 1);
-    let b = fillet(&body, &foot, 9).expect("rounds");
+    let b = fillet(body, &foot, 9).expect("rounds");
     assert!(forge_topo::check(&b).is_empty());
     let volume = |x: &forge_topo::Body| forge_topo::mass::mass(x).expect("mass").volume;
-    let added = volume(&b) - volume(&body);
+    let added = volume(&b) - volume(body);
     assert!((added / 54.785 - 1.0).abs() < 0.01, "added {added}");
     let fine = Quality {
         chord: 0.001,
@@ -514,6 +516,19 @@ fn wall_falling_below_the_ball() {
     let mesh = tessellate(&b, &fine).expect("meshes");
     assert!(mesh.open_edges().is_empty());
     assert!((mesh.volume() - volume(&b)).abs() < 1e-4 * volume(&b));
+}
+
+/// A wall on a floor whose height falls below the ball along the edge: past where the spring reaches
+/// the wall's top the ball rests on the top's edge, and the top meets the round along that edge.
+/// Reference: the section's area integrated along the edge, taken square to it; the rim's slope
+/// makes that an estimate, good to about 1%. On the boolean's pieces, as the union left them in
+/// place: the wall's ends are still faces of their own beside the plate's.
+#[test]
+fn wall_falling_below_the_ball() {
+    let (plate, wedge) = floor_and_wall();
+    let mut body = plate;
+    forge_bool::boolean_into(&mut body, &wedge, Op::Union, 3).expect("union");
+    round_the_foot(&body.into_compact());
 }
 
 /// A boss just reaching over the rim onto the top: the edge of its foot on the top is short, and the

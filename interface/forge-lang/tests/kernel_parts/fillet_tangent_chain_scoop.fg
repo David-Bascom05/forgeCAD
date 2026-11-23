@@ -1,0 +1,23 @@
+# A 19-thick plate whose outline runs tangent from a concave arc (radius 54) up a straight side into
+# a top arc (radius 45), its end face trimmed near the top arc by a through scoop. A fillet of 1.5
+# on the end face's edge along the concave arc, carried along the tangent chain, stops on
+# Overflow. Without the scoop, or with the plate 18 thick (the scoop then running past the end
+# face), it builds. Restated in round numbers from a FreeCAD library part that FreeCAD rounds there.
+sketch plate(on: plane(at: xy.origin, normal: X, x: Y)) {
+  l0 = line((-45, 0), (-45, -16))
+  l1 = line((-45, -16), (-65, -56))
+  l2 = line((-65, -56), (-64, -94))
+  l3 = line((-64, -94), (64, -94))
+  l4 = line((64, -94), (64.2894690769, -57.3663999284))
+  a5 = arc(center: (99, -16), from: (64.2894690769, -57.3663999284), to: (45, -16), cw: true)
+  l6 = line((45, -16), (45, 0))
+  a7 = arc(center: (0, 0), from: (45, 0), to: (-45, 0))
+}
+slab = extrude(plate, 19)
+sketch scoop(on: plane(at: xy.origin, normal: Y, x: X)) {
+  l0 = line((19, -46), (14, -46))
+  a1 = arc(center: (-141, -6), from: (14, -46), to: (19, -11.0))
+  l2 = line((19, -11.0), (19, -46))
+}
+trim = cut(scoop, thru_all)
+rim = fillet(edges(between: (slab.end, slab.side(plate.a5))), 1.5)

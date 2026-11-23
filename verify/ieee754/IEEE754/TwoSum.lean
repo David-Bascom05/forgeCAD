@@ -340,4 +340,250 @@ theorem two_sum_exact_of_le {a b : FP f} (ha : a.isFinite) (hb : b.isFinite)
   show s.val + (add ar br).val = _
   rw [he', har', hbr']; ring
 
+/-! ## TwoSum when `|a| < |b|` (Knuth) -/
+
+/-- Every finite value in canonical form: normal, or on the finest grid. -/
+lemma val_repr_canon {x : FP f} (hx : x.isFinite) :
+    ∃ k e : ℤ, |k| < 2 ^ f.prec ∧ f.qmin ≤ e ∧ x.val = k * 2 ^ e ∧ (2 ^ (f.prec - 1) ≤ |k| ∨ e = f.qmin) := by
+  cases x with
+  | zero s => exact ⟨0, f.qmin, by simp, le_rfl, by simp, Or.inr rfl⟩
+  | fin s m e h =>
+    obtain ⟨_, hmp, he1, _, hn⟩ := h
+    refine ⟨if s then -(m : ℤ) else m, e, ?_, he1, ?_, ?_⟩
+    · cases s <;> simp <;> exact_mod_cast hmp
+    · cases s <;> simp [val, sgn]
+    · rcases hn with hn | hn
+      · left; cases s <;> simp <;> exact_mod_cast hn
+      · exact Or.inr hn
+  | _ => simp [isFinite] at hx
+
+/-- A datum nearest to `r` is at least any finite value below `r`, at most any above. -/
+lemma near_ge {S r : ℚ} (hN : ∀ x : FP f, x.isFinite → |S - r| ≤ |x.val - r|) {x : FP f} (hx : x.isFinite)
+    (h : x.val ≤ r) : x.val ≤ S := by
+  have := hN x hx
+  rw [abs_of_nonpos (by linarith : x.val - r ≤ 0)] at this
+  linarith [neg_abs_le (S - r)]
+
+lemma near_le {S r : ℚ} (hN : ∀ x : FP f, x.isFinite → |S - r| ≤ |x.val - r|) {x : FP f} (hx : x.isFinite)
+    (h : r ≤ x.val) : S ≤ x.val := by
+  have := hN x hx
+  rw [abs_of_nonneg (by linarith : 0 ≤ x.val - r)] at this
+  linarith [le_abs_self (S - r)]
+
+/-- Twice a finite `x ≥ 0` is finite, or at least the overflow threshold. -/
+lemma two_x {x : FP f} (hx : x.isFinite) (h0 : 0 ≤ x.val) :
+    (∃ y : FP f, y.isFinite ∧ y.val = 2 * x.val) ∨ 2 ^ (f.emax + 1) ≤ 2 * x.val := by
+  rcases lt_or_ge (2 * x.val) (2 ^ (f.emax + 1)) with h | h
+  · left
+    obtain ⟨k, e, hk, he, hv, _⟩ := FP.val_repr hx
+    have h2 : 2 * x.val = (k : ℚ) * 2 ^ (e + 1) := by rw [hv, zpow_add_one₀ two_ne_zero]; ring
+    have hr := rep_grid (f := f) hk.le (show f.qmin ≤ e + 1 by omega) (by rw [← h2, abs_of_nonneg (by linarith)]; exact h)
+    exact ⟨_, (hr false).1, by rw [(hr false).2, h2]⟩
+  · exact Or.inr h
+
+/-- A sum that rounds to a finite value is below the overflow threshold. -/
+lemma abs_lt_of_round_finite {zs : Bool} {r : ℚ} (h : (round f zs r).isFinite) : |r| < 2 ^ (f.emax + 1) := by
+  by_contra hc
+  rw [not_lt] at hc
+  have hr : r ≠ 0 := by intro e; rw [e, abs_zero] at hc; linarith [two_zpow_pos (K := ℚ) (f.emax + 1)]
+  have hu := (round_finite_iff (K := ℚ) f hr).mp h
+  have hpow : (2 : ℚ) ^ (f.emax + 1) = ((2 ^ (f.prec - 1) : ℕ) : ℚ) * 2 ^ (f.qmax + 1) := by
+    push_cast
+    rw [← zpow_natCast, ← two_zpow_add, f.prec_sub_one]; congr 1; unfold Format.qmax; ring
+  have hex : uround f ((2 : ℚ) ^ (f.emax + 1)) = 2 ^ (f.emax + 1) := by
+    rw [hpow, uround_exact f (by positivity) (by have := f.qmin_le_qmax; omega)
+      (Nat.pow_le_pow_right (by norm_num) (by omega))]
+  have := uround_mono f (two_zpow_pos _) hc
+  rw [hex] at this
+  linarith
+
+/-- The core of TwoSum when `|a| < b`: `v` is nearest to `s − a`, `s` nearest to `a + b`. -/
+lemma two_sum_core {a b s v : FP f} (ha : a.isFinite) (hb : b.isFinite) (hs : s.isFinite) (hv : v.isFinite)
+    (hp : 3 ≤ f.prec)
+    (hNs : ∀ x : FP f, x.isFinite → |s.val - (a.val + b.val)| ≤ |x.val - (a.val + b.val)|)
+    (hNv : ∀ x : FP f, x.isFinite → |v.val - (s.val - a.val)| ≤ |x.val - (s.val - a.val)|)
+    (hrel : |s.val - (a.val + b.val)| ≤ 2 ^ (-(f.prec : ℤ)) * |s.val|)
+    (hov : |a.val + b.val| < 2 ^ (f.emax + 1))
+    (hb0 : 0 < b.val) (hab : |a.val| < b.val) :
+    Rep f (s.val - v.val) ∧ Rep f (b.val - v.val) := by
+  obtain ⟨ka, ga, hka, hga, hva, _⟩ := FP.val_repr ha
+  obtain ⟨kb, gb, _, hgb, hvb, _⟩ := FP.val_repr hb
+  obtain ⟨ks, es, hks, hes, hvs, hcan⟩ := val_repr_canon hs
+  set A := a.val
+  set B := b.val
+  set S := s.val
+  set V := v.val
+  have hA := abs_lt.mp hab
+  -- `0 ≤ s ≤ 2b`, and the error is at most `b / 4`
+  have hS0 : 0 ≤ S := near_ge hNs (x := FP.zero false) (by simp [isFinite]) (by simp; linarith)
+  have hS2 : S ≤ 2 * B := by
+    rcases two_x hb hb0.le with ⟨y, hy, hyv⟩ | h
+    · rw [← hyv]; exact near_le hNs hy (by rw [hyv]; linarith)
+    · have := FP.abs_val_lt hs; rw [abs_of_nonneg hS0] at this; linarith
+  have hpow : (2 : ℚ) ^ (-(f.prec : ℤ)) ≤ 1 / 8 := by
+    calc (2 : ℚ) ^ (-(f.prec : ℤ)) ≤ 2 ^ (-3 : ℤ) := two_zpow_le (by omega)
+      _ = 1 / 8 := by norm_num
+  have hd : |S - (A + B)| ≤ B / 4 := by
+    rw [abs_of_nonneg hS0] at hrel
+    calc _ ≤ 2 ^ (-(f.prec : ℤ)) * S := hrel
+      _ ≤ 1 / 8 * (2 * B) := mul_le_mul hpow hS2 hS0 (by norm_num)
+      _ = B / 4 := by ring
+  have hdv := abs_le.mp hd
+  -- `b/2 ≤ v ≤ 2b`, so `b − v` is exact
+  have hvb := hNv b hb
+  rw [show B - (S - A) = A + B - S by ring, show A + B - S = -(S - (A + B)) by ring, abs_neg] at hvb
+  have hvb' := abs_le.mp (le_trans hvb hd)
+  have hV0 : B / 2 ≤ V := by linarith
+  have hV2 : V ≤ 2 * B := by linarith
+  have P2 : Rep f (B - V) := rep_sub hb hv (by linarith) (by linarith)
+  refine ⟨?_, P2⟩
+  -- `s − v`
+  have exact_v : Rep f (S - A) → Rep f (S - V) := by
+    intro hr
+    have := hNv _ (hr false).1
+    rw [(hr false).2, _root_.sub_self, abs_zero] at this
+    have hv' : V = S - A := by linarith [abs_nonneg (V - (S - A)), abs_nonpos_iff.mp this]
+    rw [hv', show S - (S - A) = A by ring]
+    exact rep_val ha
+  rcases le_or_gt 0 A with hA0 | hA0
+  · -- same signs: `b ≤ s`, `2a ≤ s`, so `s/2 ≤ s − a ≤ s`
+    have hSB : B ≤ S := near_ge hNs hb (by linarith)
+    have hS2a : 2 * A ≤ S := by
+      rcases two_x ha hA0 with ⟨y, hy, hyv⟩ | h
+      · rw [← hyv]; exact near_ge hNs hy (by rw [hyv]; linarith)
+      · rw [abs_of_nonneg (by linarith)] at hov; linarith
+    have hVS : V ≤ S := near_le hNv hs (by linarith)
+    rcases hcan with hn | hq
+    · -- `s / 2` is a datum
+      have hes' : f.qmin < es ∨ f.qmin = es := lt_or_eq_of_le hes
+      rcases hes' with hlt | heq
+      · have h2 : S / 2 = (ks : ℚ) * 2 ^ (es - 1) := by rw [hvs, zpow_sub_one₀ two_ne_zero]; ring
+        have hr : Rep f (S / 2) := by
+          rw [h2]; refine rep_grid hks.le (by omega) ?_
+          rw [← h2, abs_of_nonneg (by linarith)]
+          have := FP.abs_val_lt hs; rw [abs_of_nonneg hS0] at this; linarith
+        have : S / 2 ≤ V := by
+          have := near_ge hNv (hr false).1 (by rw [(hr false).2]; linarith)
+          rwa [(hr false).2] at this
+        exact rep_sub hs hv (by linarith) (by linarith)
+      · subst heq
+        -- the finest grid: `s − a` is a datum
+        apply exact_v
+        obtain ⟨pa, hpa⟩ := FP.two_zpow_dvd hga
+        have hk : S - A = ((ks - ka * pa : ℤ) : ℚ) * 2 ^ f.qmin := by rw [hvs, hva, hpa]; push_cast; ring
+        have hpos : (0 : ℚ) < 2 ^ f.qmin := two_zpow_pos _
+        rw [hk]; refine rep_grid ?_ le_rfl ?_
+        · have : |((ks - ka * pa : ℤ) : ℚ)| * 2 ^ f.qmin ≤ (2 ^ f.prec : ℚ) * 2 ^ f.qmin := by
+            rw [← abs_of_pos hpos, ← abs_mul, abs_of_pos hpos, ← hk, abs_of_nonneg (by linarith)]
+            calc S - A ≤ S := by linarith
+              _ = |(ks : ℚ)| * 2 ^ f.qmin := by rw [← abs_of_nonneg hS0, hvs, abs_mul, abs_of_pos hpos]
+              _ ≤ _ := mul_le_mul_of_nonneg_right (by exact_mod_cast hks.le) hpos.le
+          exact_mod_cast le_of_mul_le_mul_right this hpos
+        · rw [← hk, abs_of_nonneg (by linarith)]
+          have := FP.abs_val_lt hs; rw [abs_of_nonneg hS0] at this; linarith
+    · -- `es = qmin`
+      apply exact_v
+      obtain ⟨pa, hpa⟩ := FP.two_zpow_dvd hga
+      have hk : S - A = ((ks - ka * pa : ℤ) : ℚ) * 2 ^ f.qmin := by rw [hvs, hq, hva, hpa]; push_cast; ring
+      have hpos : (0 : ℚ) < 2 ^ f.qmin := two_zpow_pos _
+      rw [hk]; refine rep_grid ?_ le_rfl ?_
+      · have hSk : S = |(ks : ℚ)| * 2 ^ f.qmin := by
+          rw [← abs_of_nonneg hS0, hvs, hq, abs_mul, abs_of_pos hpos]
+        have : |((ks - ka * pa : ℤ) : ℚ)| * 2 ^ f.qmin ≤ (2 ^ f.prec : ℚ) * 2 ^ f.qmin := by
+          rw [← abs_of_pos hpos, ← abs_mul, abs_of_pos hpos, ← hk, abs_of_nonneg (by linarith)]
+          calc S - A ≤ S := by linarith
+            _ = |(ks : ℚ)| * 2 ^ f.qmin := hSk
+            _ ≤ _ := mul_le_mul_of_nonneg_right (by exact_mod_cast hks.le) hpos.le
+        exact_mod_cast le_of_mul_le_mul_right this hpos
+      · rw [← hk, abs_of_nonneg (by linarith)]
+        have := FP.abs_val_lt hs; rw [abs_of_nonneg hS0] at this; linarith
+  · -- opposite signs
+    rcases le_or_gt (B / 2) (-A) with hB2 | hB2
+    · -- Sterbenz: `a + b` is exact, so `s = a + b` and `s − a = b`
+      have hr : Rep f (A + B) := by
+        have := rep_sub hb (by simpa using ha : a.neg.isFinite) (by rw [FP.val_neg]; linarith)
+          (by rw [FP.val_neg]; linarith)
+        rwa [FP.val_neg, sub_neg_eq_add, _root_.add_comm] at this
+      have hsr : S = A + B := by
+        have := hNs _ (hr false).1
+        rw [(hr false).2, _root_.sub_self, abs_zero] at this
+        linarith [abs_nonneg (S - (A + B)), abs_nonpos_iff.mp this]
+      apply exact_v
+      rw [hsr, show A + B - A = B by ring]
+      exact rep_val hb
+    · -- `−a ≤ s`, so `s ≤ s − a ≤ 2s`
+      have hSa : -A ≤ S := by
+        have := near_ge hNs (by simpa using ha : a.neg.isFinite) (by rw [FP.val_neg]; linarith)
+        rwa [FP.val_neg] at this
+      have hSV : S ≤ V := near_ge hNv hs (by linarith)
+      have hV2S : V ≤ 2 * S := by
+        rcases two_x hs hS0 with ⟨y, hy, hyv⟩ | h
+        · rw [← hyv]; exact near_le hNv hy (by rw [hyv]; linarith)
+        · have := FP.abs_val_lt hv; linarith [le_abs_self V]
+      exact rep_sub hs hv (by linarith) (by linarith)
+
+lemma near_neg {S r : ℚ} (hN : ∀ x : FP f, x.isFinite → |S - r| ≤ |x.val - r|) :
+    ∀ x : FP f, x.isFinite → |-S - -r| ≤ |x.val - -r| := by
+  intro x hx
+  have := hN x.neg (by simpa using hx)
+  rw [FP.val_neg] at this
+  rw [show -S - -r = -(S - r) by ring, abs_neg, show x.val - -r = -(-x.val - r) by ring, abs_neg]
+  exact this
+
+/-- **TwoSum is error-free.** For any finite `a`, `b` whose sum and `s ⊖ a` do not overflow
+(precision at least 3; binary64 has 53), `s + e = a + b`. -/
+theorem two_sum_exact {a b : FP f} (ha : a.isFinite) (hb : b.isFinite) (hs : (add a b).isFinite)
+    (hbv : (sub (add a b) a).isFinite) (hp : 3 ≤ f.prec) :
+    (twoSum a b).1 = add a b ∧ (twoSum a b).2.isFinite ∧
+      (twoSum a b).1.val + (twoSum a b).2.val = a.val + b.val := by
+  rcases le_total |b.val| |a.val| with h | h
+  · exact two_sum_exact_of_le ha hb hs h
+  rcases eq_or_lt_of_le h with heq | hlt
+  · exact two_sum_exact_of_le ha hb hs heq.symm.le
+  set s := add a b with hsdef
+  set v := sub s a with hvdef
+  have hsr : s = round f (a.sign && b.sign) (a.val + b.val) := add_eq_round ha hb
+  have hvr : v = round f (s.sign && !a.sign) (s.val - a.val) := sub_eq_round hs ha
+  have hNs : ∀ x : FP f, x.isFinite → |s.val - (a.val + b.val)| ≤ |x.val - (a.val + b.val)| := by
+    intro x hx; rw [hsr]; exact round_nearest (by rw [← hsr]; exact hs) hx
+  have hNv : ∀ x : FP f, x.isFinite → |v.val - (s.val - a.val)| ≤ |x.val - (s.val - a.val)| := by
+    intro x hx; rw [hvr]; exact round_nearest (by rw [← hvr]; exact hbv) hx
+  have hrel := add_err_res ha hb hs
+  have hov : |a.val + b.val| < 2 ^ (f.emax + 1) := abs_lt_of_round_finite (by rw [← hsr]; exact hs)
+  obtain ⟨P1, P2⟩ : Rep f (s.val - v.val) ∧ Rep f (b.val - v.val) := by
+    rcases lt_or_gt_of_ne (show b.val ≠ 0 by intro e; rw [e, abs_zero] at hlt; linarith [abs_nonneg a.val]) with hb0 | hb0
+    · have := two_sum_core (a := a.neg) (b := b.neg) (s := s.neg) (v := v.neg) (by simpa using ha) (by simpa using hb)
+        (by simpa using hs) (by simpa using hbv) hp
+        (by have := near_neg hNs; simp only [FP.val_neg]; rwa [show -a.val + -b.val = -(a.val + b.val) by ring])
+        (by have := near_neg hNv; simp only [FP.val_neg]; rwa [show -s.val - -a.val = -(s.val - a.val) by ring])
+        (by simp only [FP.val_neg]; rw [show -s.val - (-a.val + -b.val) = -(s.val - (a.val + b.val)) by ring,
+              abs_neg, abs_neg]; exact hrel)
+        (by simp only [FP.val_neg]; rw [show -a.val + -b.val = -(a.val + b.val) by ring, abs_neg]; exact hov)
+        (by simp only [FP.val_neg]; linarith)
+        (by simp only [FP.val_neg, abs_neg]; rwa [abs_of_neg hb0] at hlt)
+      simp only [FP.val_neg] at this
+      obtain ⟨h1, h2⟩ := this
+      have e1 := rep_neg h1; have e2 := rep_neg h2
+      rw [show -(-s.val - -v.val) = s.val - v.val by ring] at e1
+      rw [show -(-b.val - -v.val) = b.val - v.val by ring] at e2
+      exact ⟨e1, e2⟩
+    · exact two_sum_core ha hb hs hbv hp hNs hNv hrel hov hb0 (by rwa [abs_of_pos hb0] at hlt)
+  -- the remaining steps, each exact
+  obtain ⟨hav, hav'⟩ := sub_of_rep hs hbv P1
+  obtain ⟨hbr, hbr'⟩ := sub_of_rep hb hbv P2
+  have hη : Rep f (a.val - (sub s v).val) := by
+    have := add_err_representable hs (by simpa using ha : a.neg.isFinite) (by have : v = add s a.neg := rfl; rw [← this]; exact hbv)
+    have hr : Rep f (s.val + a.neg.val - (add s a.neg).val) := fun zs => this zs
+    have := rep_neg hr
+    rw [hav']
+    rw [show (add s a.neg) = v by rfl, FP.val_neg] at this
+    rwa [show -(s.val + -a.val - v.val) = a.val - (s.val - v.val) by ring] at this
+  obtain ⟨har, har'⟩ := sub_of_rep ha hav hη
+  obtain ⟨he, he'⟩ := add_of_rep har hbr (by
+    rw [har', hbr', hav', show a.val - (s.val - v.val) + (b.val - v.val) = a.val + b.val - s.val by ring]
+    exact fun zs => add_err_representable ha hb hs zs)
+  refine ⟨rfl, he, ?_⟩
+  show s.val + (add (sub a (sub s v)) (sub b v)).val = _
+  rw [he', har', hbr', hav']; ring
+
 end IEEE754

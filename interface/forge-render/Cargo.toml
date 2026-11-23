@@ -26,6 +26,8 @@ path = "src/bin/forge_parity.rs"
 
 [dependencies]
 forge-dirs = { path = "../../kernel/forge-dirs" }
+# the kernel's scoped threads: the threaded browser build gives them its Web Workers
+forge-par = { path = "../../kernel/forge-par" }
 wgpu = { version = "=30.0.1", default-features = false, features = ["std", "parking_lot", "wgsl", "vulkan", "webgpu"] }
 winit = { version = "=0.30.13", default-features = false, features = ["rwh_06", "wayland", "wayland-dlopen", "x11"] }
 egui = { version = "=0.37.0", default-features = false }
@@ -52,6 +54,8 @@ forge-topo = { path = "../../kernel/forge-topo" }
 forge-mesh = { path = "../../kernel/forge-mesh" }
 forge-geom = { path = "../../kernel/forge-geom" }
 forge-sheet = { path = "../../kernel/forge-sheet" }
+forge-brake = { path = "../../kernel/forge-brake" }
+forge-vendor = { path = "../../kernel/forge-vendor" }
 forge-step = { path = "../../kernel/forge-step" }
 png = "=0.18.1"
 # a background image's file (zune: MIT OR Apache-2.0 OR Zlib), already in the lock

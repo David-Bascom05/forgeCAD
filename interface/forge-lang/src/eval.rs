@@ -391,6 +391,8 @@ pub struct Eval<'s> {
     pub sheets: crate::sheet::Sheets,
     /// The part's thermoforms (`thermo.rs`).
     pub thermos: Vec<crate::thermo::ThermoOut>,
+    /// The part's weldments (`weld.rs`).
+    pub welds: crate::weld::Welds,
     /// Thermoforms' modelled parts whose mass is worked out after the run, beside the part's own
     /// measure (`run` does; any other evaluation works it out in place): each one's place in
     /// `thermos`, its memo key and the part.
@@ -500,6 +502,7 @@ impl<'s> Eval<'s> {
             poisoned: false,
             sheets: Default::default(),
             thermos: vec![],
+            welds: Default::default(),
             masses_owed: None,
             harness: None,
             cosmetic_threads: false,
@@ -855,7 +858,8 @@ impl<'s> Eval<'s> {
     }
 
     fn recursion(&mut self, prog: &[Stmt]) {
-        let mut calls: HashMap<String, (Span, BTreeSet<String>)> = HashMap::new();
+        // (by name: the errors come out in that order, not a hash's)
+        let mut calls: std::collections::BTreeMap<String, (Span, BTreeSet<String>)> = Default::default();
         for s in prog {
             if let StmtKind::Fn { name, body, .. } = &s.kind {
                 let mut names = BTreeSet::new();
@@ -1601,6 +1605,7 @@ impl<'s> Eval<'s> {
             ExprKind::Num(v, u) => Ok(Value::Num(match u {
                 Unit::Deg => Num::konst(v.to_radians(), Dim::Angle),
                 Unit::Mm => Num::konst(*v, Dim::Length),
+                Unit::In => Num::konst(*v * 25.4, Dim::Length),
                 // in a param too: a bare number takes the other operand's dimension, so `W / 2`
                 // is a Length; what is still bare when the param is made settles to Length
                 Unit::None => Num::konst(*v, Dim::Any),
@@ -1989,16 +1994,8 @@ impl<'s> Eval<'s> {
                         max: 1,
                     });
                 };
-                let ev = self.expr(&a.value)?;
-                let Value::Ent(e) = ev else {
-                    return Err(Error::WrongType {
-                        span: a.value.span,
-                        what: "side(entity)",
-                        want: Ty::Entity,
-                        found: ev.ty(),
-                    });
-                };
-                return crate::builtins::side(self, feat, &e, span);
+                let v = self.expr(&a.value)?;
+                return crate::builtins::side_of(self, feat, v, span);
             }
         }
         let fv = self.expr(f)?;
@@ -2296,12 +2293,77 @@ impl<'s> Eval<'s> {
             last.fingerprint = Some(h.finish());
         }
         r?;
+        if status == Status::Ok
+            && let Some(w) = self.taper_closes(idx, span, id)
+        {
+            self.warnings.push(w);
+        }
         // a check (it joins each stage's faces to compare them): a run without checks shows the
         // shape first, and the run with them, every stage reused, says what changed nothing
         if status == Status::Ok && idx > 0 && self.checks && self.no_effect(idx) {
             self.warnings.push(Warning::NoEffect { span, id: id.into() });
         }
         Ok((idx, hid))
+    }
+
+    /// A tapered extrude whose outline closes before its depth (the kernel's `closes_at`): a lint
+    /// with the depth's param set to where it closes, or the taper's to the largest angle that
+    /// reaches the depth, where params drive them.
+    fn taper_closes(&self, idx: usize, span: Span, id: &str) -> Option<Warning> {
+        let forge_model::Feature::Extrude {
+            profile,
+            extent: forge_model::Extent::Tapered { distance, angle },
+            ..
+        } = &self.b.features[idx]
+        else {
+            return None;
+        };
+        let at = forge_ops::taper::closes_at(profile, *distance, *angle)?;
+        let depth = distance.abs();
+        let dims = &self.feats.last()?.dims;
+        let driven = |what: &str| {
+            dims.iter()
+                .find(|d| d.what == what)
+                .and_then(|d| match &d.num.src {
+                    values::Src::Driving(key) => Some(((**key).clone(), d.num.v)),
+                    _ => None,
+                })
+        };
+        // three figures, rounded towards 0 so the walls meet at the depth or past it (a lesser
+        // depth, or a shallower taper): the fixed part has no lint
+        let down = |x: f64| {
+            let p = 10f64.powi(2 - x.abs().log10().floor() as i32);
+            (x.abs() * p).floor() / p * x.signum()
+        };
+        let depth_fix = driven("depth").map(|(key, v)| {
+            Box::new((
+                key,
+                crate::error::Literal {
+                    value: down(at) * v.signum(),
+                    dim: values::Dim::Length,
+                },
+            ))
+        });
+        // the walls close at the same offset whatever the angle: at tan a = depth tan a'
+        let angle_fix = driven("taper").map(|(key, v)| {
+            let (s, c) = forge_math::dmath::sin_cos(v.abs());
+            let a = forge_math::dmath::atan2(at * s / c, depth);
+            Box::new((
+                key,
+                crate::error::Literal {
+                    value: down(a.to_degrees()) * v.signum(),
+                    dim: values::Dim::Angle,
+                },
+            ))
+        });
+        Some(Warning::Lint(Error::TaperCloses {
+            span,
+            id: id.into(),
+            at,
+            depth,
+            depth_fix,
+            angle_fix,
+        }))
     }
 
     fn no_effect(&self, idx: usize) -> bool {

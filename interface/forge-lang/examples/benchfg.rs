@@ -8,7 +8,7 @@ use forge_math::hash::BitHasher;
 
 /// Part `name`'s .fg run, the bench font beside it, and the time it took (ms).
 fn build(name: &str) -> (forge_lang::Run, f64, forge_model::Part, Vec<u64>) {
-    let dir = std::env::temp_dir().join(format!("forge-benchfg-{}", std::process::id()));
+    let dir = forge_dirs::temp_dir().join(format!("forge-benchfg-{}", forge_dirs::process_id()));
     std::fs::create_dir_all(&dir).expect("temp dir");
     let font = dir.join(forge_lang::bench::FONT);
     if !font.exists() {
