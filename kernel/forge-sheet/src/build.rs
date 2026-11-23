@@ -3223,6 +3223,7 @@ impl Strips<'_> {
                         };
                         let c = FlatPiece {
                             id: bound.id,
+                            from: by.apply(a),
                             curve: c,
                             spline,
                         };
@@ -3239,7 +3240,25 @@ impl Strips<'_> {
                     out[0] = c;
                     out.pop();
                 }
+                // every contour vertex is one point, the class point of the piece leaving it:
+                // the piece before ends there and this one starts there, so consecutive pieces
+                // meet in one double (README §6.1; Region.lean `closes`, gap 0). Lines and splines
+                // (clamped: their ends are their end control points) store their ends; an arc's
+                // are its centre, radius and angles'
+                let from: Vec<Point2> = out.iter().map(|c| c.from).collect();
                 let mut out: Vec<Curve2> = out.into_iter().map(|c| c.curve).collect();
+                let n = out.len();
+                for (k, c) in out.iter_mut().enumerate() {
+                    let (a, b) = (from[k], from[(k + 1) % n]);
+                    match c {
+                        Curve2::Line { a: x, b: y } => (*x, *y) = (a, b),
+                        Curve2::Spline { points, .. } => {
+                            points[0] = a;
+                            *points.last_mut().expect("a spline has points") = b;
+                        }
+                        Curve2::Arc { .. } => {}
+                    }
+                }
                 // a contour of one arc closes on itself: a whole turn, by topology
                 if let [Curve2::Arc { sweep, .. }] = &mut out[..] {
                     *sweep = dmath::TAU.copysign(*sweep);
@@ -4250,6 +4269,9 @@ impl ZoneLine {
 /// strip with the strip's motion, so pieces of one spline join on that one curve.
 struct FlatPiece<'a> {
     id: u64,
+    /// The contour vertex it leaves: its first bound's start (its vertex class's point, in its
+    /// strip), carried into the developed plane.
+    from: Point2,
     curve: Curve2,
     spline: Option<(&'a std::sync::Arc<Spline>, f64, f64, &'a Rigid)>,
 }
@@ -4305,6 +4327,7 @@ fn joined<'a>(x: &FlatPiece<'a>, y: &FlatPiece<'a>) -> Option<FlatPiece<'a>> {
             let ends = x.curve.ends().0;
             return Some(FlatPiece {
                 id,
+                from: x.from,
                 curve: developed(&piece, ends, ends, by)?,
                 spline: Some((s, t0, u1, by)),
             });
@@ -4313,6 +4336,7 @@ fn joined<'a>(x: &FlatPiece<'a>, y: &FlatPiece<'a>) -> Option<FlatPiece<'a>> {
     };
     Some(FlatPiece {
         id,
+        from: x.from,
         curve,
         spline: None,
     })

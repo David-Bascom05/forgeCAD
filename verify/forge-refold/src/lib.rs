@@ -14,8 +14,8 @@
 //! 5. continuity: each zone meets its walls at u = 0 and u = BA in position and direction;
 //! 7. physical K: R <= rn <= R + t (the neutral layer inside the material);
 //! 8. export: one contour runs counter-clockwise, the contours close (consecutive pieces meet in
-//!    one vertex class, within the spread cap 2 LINEAR), and their area times t is the flat
-//!    body's volume.
+//!    one double, the vertex class's point; at an arc, whose end is computed from its angles,
+//!    within the spread cap 2 LINEAR of it), and their area times t is the flat body's volume.
 //!
 //! A form's own vertices are left out: formed (folded) and pierced (flat) by design.
 //! (6, injectivity, is the builder's own clash and overlap checks, which refuse; it is not
@@ -262,15 +262,17 @@ pub fn judge(sheet: &Sheet, fold: &Built, flat: &Built) -> Result<Refolded, Vec<
                 signed.iter().filter(|a| **a > 0.0).count()
             ));
         }
-        // consecutive pieces meet in one vertex class: each strip writes its own copy of the
-        // class's point, so within the class spread cap, twice LINEAR (to rounding where no class
-        // merges distinct points; past it where the one rule merged two, as a joint's mold-line
-        // ends within LINEAR)
+        // consecutive pieces meet in one double: the contour vertex, its class's point, which a
+        // line or a spline stores as its end. An arc stores its centre, radius and angles, so its
+        // end is computed: there the vertex is within the class spread cap, twice LINEAR, of it
         let spread = 2.0 * forge_math::tol::LINEAR;
+        let arc = |x: &forge_sheet::Curve2| matches!(x, forge_sheet::Curve2::Arc { .. });
         for c in &pat.contours {
             for (k, x) in c.iter().enumerate() {
-                let gap = x.ends().1.distance(c[(k + 1) % c.len()].ends().0);
-                if gap > spread {
+                let y = &c[(k + 1) % c.len()];
+                let gap = x.ends().1.distance(y.ends().0);
+                let cap = if arc(x) || arc(y) { spread } else { 0.0 };
+                if gap > cap {
                     bad.push(format!("a contour opens by {gap}"));
                 }
             }
