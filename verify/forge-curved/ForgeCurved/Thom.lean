@@ -19,7 +19,7 @@ direction at a time. This file has the facts that do not depend on the geometry:
 
 namespace ForgeCurved.Thom
 
-open ForgeExact ForgeExact.DecideOnce ForgeExact.DecideOnce.Curved Set
+open ForgeExact ForgeExact.DecideOnce ForgeExact.DecideOnce.Curved Set Topology
 
 /-- A continuous function with no zero on a preconnected set keeps its sign. -/
 theorem sgnK_const {α : Type*} [TopologicalSpace α] {S : Set α} (hS : IsPreconnected S)
@@ -231,5 +231,49 @@ theorem merge {T : Type*} [TopologicalSpace T] {C : Set T} (hC : IsPreconnected 
   · exact heq i (sel (idx i)) (by rw [hsel, hidx]) t ht
   · apply emb.injective
     rw [hidx, hsel]
+
+/-- **Coincidences from their count.** If the number of coinciding pairs between two families of
+continuous functions is the same at every point of a preconnected `C`, each pair is equal
+everywhere on `C` or nowhere. (A coincidence absent at a point stays absent nearby, so with the
+count fixed the set of coincidences is locally constant, hence constant.) -/
+theorem ed_of_count {T : Type*} [TopologicalSpace T] {C : Set T} (hC : IsPreconnected C)
+    {ι κ : Type*} [Fintype ι] [Fintype κ] [DecidableEq ι] [DecidableEq κ]
+    (g : ι → T → ℝ) (h : κ → T → ℝ) (hg : ∀ a, ContinuousOn (g a) C)
+    (hh : ∀ b, ContinuousOn (h b) C)
+    (hN : ∀ p ∈ C, ∀ q ∈ C, (Finset.univ.filter fun ab : ι × κ => g ab.1 p = h ab.2 p).card =
+      (Finset.univ.filter fun ab : ι × κ => g ab.1 q = h ab.2 q).card) :
+    ∀ a b, (∀ t ∈ C, g a t = h b t) ∨ ∀ t ∈ C, g a t ≠ h b t := by
+  classical
+  let M : T → Finset (ι × κ) := fun p => Finset.univ.filter fun ab => g ab.1 p = h ab.2 p
+  let _ : TopologicalSpace (Finset (ι × κ)) := ⊥
+  have : DiscreteTopology (Finset (ι × κ)) := ⟨rfl⟩
+  have hM : ContinuousOn M C := by
+    intro p₀ hp₀
+    refine (continuousWithinAt_const (b := M p₀)).congr_of_eventuallyEq ?_ rfl
+    have hev : ∀ᶠ p in 𝓝[C] p₀, ∀ ab : ι × κ, g ab.1 p₀ ≠ h ab.2 p₀ → g ab.1 p ≠ h ab.2 p := by
+      refine Filter.eventually_all.2 fun ab => ?_
+      by_cases hab : g ab.1 p₀ = h ab.2 p₀
+      · exact Filter.Eventually.of_forall fun p h' => absurd hab h'
+      · have hc : ContinuousWithinAt (fun p => g ab.1 p - h ab.2 p) C p₀ :=
+          ((hg ab.1).sub (hh ab.2)) p₀ hp₀
+        have := hc.eventually_ne (sub_ne_zero.mpr hab)
+        exact this.mono fun p hp _ h0 => hp (sub_eq_zero.mpr h0)
+    filter_upwards [hev, self_mem_nhdsWithin] with p hp hpC
+    have hsub : M p ⊆ M p₀ := by
+      intro ab hab
+      simp only [M, Finset.mem_filter, Finset.mem_univ, true_and] at hab ⊢
+      by_contra h'
+      exact hp ab h' hab
+    exact Finset.eq_of_subset_of_card_le hsub (le_of_eq (hN p₀ hp₀ p hpC))
+  intro a b
+  by_cases hex : ∃ t ∈ C, g a t = h b t
+  · obtain ⟨t, ht, hab⟩ := hex
+    left
+    intro t' ht'
+    have hmem : (a, b) ∈ M t := by simp [M, hab]
+    rw [hC.constant hM ht ht'] at hmem
+    simpa [M] using hmem
+  · push Not at hex
+    exact Or.inr hex
 
 end ForgeCurved.Thom

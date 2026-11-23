@@ -94,6 +94,44 @@ theorem fibreOI_of_roots (cs : List (T × ℝ → ℝ)) (J isBase : ℕ → Prop
       obtain ⟨a, ha, rfl⟩ := Finset.mem_image.mp hk
       exact ⟨a, ha, by rw [hidx a t ht]; exact hks⟩
 
+/-- **`FibreOI` from per-carrier roots and common-root counts.** Each fibre carrier either vanishes
+on the whole cylinder over `C` or has distinct continuous root functions `g i 0, …` giving all of
+its zeros. If for every two carriers the number of common roots is the same at every point of `C`
+(what the sign invariance of Res and psc₁ guarantees), the fibres are delineable and order
+invariant. -/
+theorem fibreOI_of_counts (cs : List (T × ℝ → ℝ)) (J isBase : ℕ → Prop) {C : Set T}
+    (hC : IsPreconnected C) (n : Fin cs.length → ℕ) (g : ∀ i, Fin (n i) → T → ℝ)
+    (hg : ∀ i a, ContinuousOn (g i a) C) (hinj : ∀ i, ∀ t ∈ C, Function.Injective fun a => g i a t)
+    (hroots : ∀ i : Fin cs.length, J i → ¬isBase i →
+      (∀ t ∈ C, ∀ s, cs[i] (t, s) = 0) ∨ ∀ t ∈ C, ∀ s, cs[i] (t, s) = 0 ↔ ∃ a, g i a t = s)
+    (hN : ∀ i i' : Fin cs.length, i ≠ i' → ∀ p ∈ C, ∀ q ∈ C,
+      (Finset.univ.filter fun ab : Fin (n i) × Fin (n i') => g i ab.1 p = g i' ab.2 p).card =
+      (Finset.univ.filter fun ab : Fin (n i) × Fin (n i') => g i ab.1 q = g i' ab.2 q).card) :
+    FibreOI cs J isBase C := by
+  classical
+  let G : (Σ i : Fin cs.length, Fin (n i)) → T → ℝ := fun x => g x.1 x.2
+  refine fibreOI_of_roots cs J isBase hC G (fun x => hg x.1 x.2) ?_ ?_
+  · rintro ⟨i, a⟩ ⟨i', b⟩
+    by_cases hii : i = i'
+    · subst hii
+      by_cases hab : a = b
+      · subst hab; exact Or.inl fun _ _ => rfl
+      · exact Or.inr fun t ht h => hab (hinj i t ht h)
+    · exact ed_of_count hC (g i) (g i') (hg i) (hg i') (hN i i' hii) a b
+  · intro i hi hJ hb
+    rcases hroots ⟨i, hi⟩ hJ hb with h | h
+    · exact Or.inl h
+    · simp only [Fin.getElem_fin] at h
+      refine Or.inr ⟨Finset.univ.filter fun x => x.1 = ⟨i, hi⟩, fun t ht s => ?_⟩
+      rw [h t ht s]
+      constructor
+      · rintro ⟨a, rfl⟩
+        exact ⟨⟨⟨i, hi⟩, a⟩, by simp, rfl⟩
+      · rintro ⟨⟨i', a⟩, hx, rfl⟩
+        simp only [Finset.mem_filter, Finset.mem_univ, true_and] at hx
+        subst hx
+        exact ⟨a, rfl⟩
+
 /-- The level-≤2 arrangement on the `(t, r)`-plane. -/
 def lower (cs : List ((ℝ × ℝ) × ℝ → ℝ)) : List (ℝ × ℝ → ℝ) := cs.map fun c p => c (p, 0)
 

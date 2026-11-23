@@ -33,3 +33,5 @@ import ForgeCurved
 #print axioms ForgeCurved.CAD.cad3_R1
 #print axioms ForgeCurved.CAD.cad_R1
 #print axioms ForgeCurved.CAD.fibreOI_of_roots
+#print axioms ForgeCurved.Thom.ed_of_count
+#print axioms ForgeCurved.CAD.fibreOI_of_counts
