@@ -523,6 +523,27 @@ implementation first." "Even the slow fallback should still be as fast as we can
    `split_face`, `classify`, the meet chains), with only the guess steps swapped for screens. Only
    then the exact fallback's speed work and further optimisations.
 
+**Owner decisions (2026-11-23, via the master).**
+- **Target: today's flat boolean, the old path** (boolean.rs, classify.rs, imprint.rs, nary.rs),
+  with its guess steps swapped for proven per-question screens. This is the same plan as curved.
+- **A8 is not shipped as a second boolean.** Its proven core (`IncCoreSpec`, `EndToEndF`) stays as a
+  spec and as a debug and fuzz oracle. The R3 builder proof for face_fast is dropped.
+- **No refactoring for the prover.** The code is proven as written. Charon running out of memory is
+  a tooling problem to fix, not a reason to restructure. A construct that truly can't translate once
+  the tooling is fixed goes to the master, named exactly.
+
+**Order of Lean work.**
+1. IEEE: proven screens for today's guess steps (LINEAR snapping, the touch, strays, pinched, and
+   the retry and re-snap ladders as per-question screens).
+2. aeneas: fix Charon on boolean.rs and nary.rs as they stand. Then translate, in order: classify
+   (`Index`, `face_box`, `classify`), ssi and unify, imprint, boolean (pair loop `plan_once_in`,
+   `trim`, `split_face`, `classify_specs`, `touches`, the meet chain), and nary.
+3. Lean coordinator: refinement proofs of each translated function as it lands, against the Lean
+   models.
+4. dol-curved: the F-series, as the spec for today's curved code.
+5. After all of that: the thin ≠ [] end-to-end theorem and speed work on the exact per-question
+   fallback.
+
 **Review of the plans against this ruling (Lean coordinator).** These assume a whole-boolean
 fallback, and must change to per-question exact plus a typed refusal:
 
