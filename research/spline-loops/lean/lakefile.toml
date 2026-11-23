@@ -16,3 +16,12 @@ rev = "v4.36.0-rc2"
 
 [[lean_lib]]
 name = "SplineLoops"
+
+# The specification of .fg's splines (research/spline-spec): core-only definitions, the
+# Mathlib theorems about them, and the oracle the Rust is checked against.
+[[lean_lib]]
+name = "SplineSpec"
+
+[[lean_exe]]
+name = "splineoracle"
+root = "SplineSpec.Oracle"
