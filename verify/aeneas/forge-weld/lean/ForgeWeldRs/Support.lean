@@ -52,19 +52,24 @@ theorem loop_lines (l : Slice Seg) (w : V2) (wl : F64) :
       have : 0 < 2 ^ Usize.numBits := Nat.two_pow_pos _
       omega
     have h2 : i.val + 1 ≤ l.val.length := hlt
-    have h1 : (Std.Usize.wrapping_add i 1#usize).val = i.val + 1 := by
-      simp only [Std.Usize.wrapping_add_val_eq, UScalar.size_UScalarTyUsize]
-      apply Nat.mod_eq_of_lt
-      simp; omega
+    obtain ⟨j, hj, h1⟩ : ∃ j, i + 1#usize = ok j ∧ j.val = i.val + 1 := by
+      have h := @UScalar.add_equiv .Usize i 1#usize
+      split at h
+      next z heq =>
+        obtain ⟨_, hval, _⟩ := h
+        simp at heq
+        exact ⟨z, heq, by simpa using hval⟩
+      next heq => exfalso; scalar_tac
+      next => exact h.elim
     have hidx : Slice.index_usize l i = ok (.Line a c) := by
       simp [Slice.index_usize, List.getElem?_eq_getElem hlt, hac]
     have step : section.support_loop_loop.body l wl w best wa ang i =
-        ok (.cont (w, top (top best (dot a w)) (dot c w), wa, ang, Std.Usize.wrapping_add i 1#usize)) := by
+        ok (.cont (w, top (top best (dot a w)) (dot c w), wa, ang, j)) := by
       simp only [section.support_loop_loop.body]
-      simp [hlt, hidx, forge_ops.profile.Segment.start, forge_ops.profile.Segment.end,
+      simp [hlt, hidx, hj, forge_ops.profile.Segment.start, forge_ops.profile.Segment.end,
         section.arc_of, top_eq, lift, forge_math.vec.Point2.to_vec, forge_math.vec.Vec2.new,
         forge_math.vec.Vec2.dot, dot]
-    have ih' := ih (top (top best (dot a w)) (dot c w)) wa ang (Std.Usize.wrapping_add i 1#usize)
+    have ih' := ih (top (top best (dot a w)) (dot c w)) wa ang (j)
       (by omega) (by omega) (by rw [h1]; intro s hs'; exact hl s (List.mem_cons_of_mem _ hs'))
     rw [h1] at ih'
     unfold section.support_loop_loop at ih' ⊢

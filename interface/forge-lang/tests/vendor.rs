@@ -115,7 +115,7 @@ fn what_the_vendor_does_not_offer_is_refused_with_the_options() {
 
 #[test]
 fn a_projects_own_profile_is_found_first() {
-    let dir = std::env::temp_dir().join(format!("fg-vendor-{}", std::process::id()));
+    let dir = forge_dirs::temp_dir().join(format!("fg-vendor-{}", forge_dirs::process_id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join("vendors")).unwrap();
     std::fs::write(

@@ -4,6 +4,8 @@
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 #[test]
+// std's threads: under WASI (wasip1) there are none, and a scope runs inline (lib.rs)
+#[cfg(not(target_os = "wasi"))]
 fn with_no_spawner_a_scope_is_stds() {
     assert!(forge_par::spawner().is_none());
     let here = std::thread::current().id();

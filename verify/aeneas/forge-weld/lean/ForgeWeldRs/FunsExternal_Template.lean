@@ -42,7 +42,7 @@ axiom alloc.sync.Arc.Insts.CoreOpsDerefDeref.deref
   {T : Type _} (A : Type _) : alloc.sync.Arc T → Result T
 
 /-- [forge_geom::spline::{forge_geom::spline::PlaneSpline}::start]:
-    Source: 'kernel/forge-geom/src/spline.rs', lines 1324:4-1324:33
+    Source: 'kernel/forge-geom/src/spline.rs', lines 1330:4-1330:33
     Name pattern: [forge_geom::spline::{forge_geom::spline::PlaneSpline}::start]
     Visibility: public -/
 @[rust_fun "forge_geom::spline::{forge_geom::spline::PlaneSpline}::start"]
@@ -50,7 +50,7 @@ axiom forge_geom.spline.PlaneSpline.start
   : forge_geom.spline.PlaneSpline → Result forge_math.vec.Point2
 
 /-- [forge_geom::spline::{forge_geom::spline::PlaneSpline}::end]:
-    Source: 'kernel/forge-geom/src/spline.rs', lines 1328:4-1328:31
+    Source: 'kernel/forge-geom/src/spline.rs', lines 1334:4-1334:31
     Name pattern: [forge_geom::spline::{forge_geom::spline::PlaneSpline}::end]
     Visibility: public -/
 @[rust_fun "forge_geom::spline::{forge_geom::spline::PlaneSpline}::end"]
