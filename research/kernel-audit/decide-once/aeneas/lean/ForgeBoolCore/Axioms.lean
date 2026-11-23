@@ -88,3 +88,4 @@ import ForgeBoolCore.EndToEnd
 #print axioms forge_bool_core.end_to_end_encode
 #print axioms forge_bool_core.U.has_spec
 #print axioms forge_bool_core.U.same_set_spec
+#print axioms forge_bool_core.U.faces_at_spec

@@ -139,4 +139,82 @@ theorem U.same_set_spec (a b : Slice U32) :
   apply WP.spec_mono (U.same_set_loop1_spec a b s0 0#usize (by simp))
   intro r hr; rw [hr, hs0]; simp
 
+/-! ## `faces_at`: the face numbers round a cell, each once, in order -/
+
+/-- Append `f` unless it is there. -/
+def U.pushNew (out : List U32) (f : U32) : List U32 := if f ∈ out then out else out ++ [f]
+
+/-- `faces_at`'s reading: the faces of `ar`'s positions, first occurrences kept, after `out`. -/
+def U.facesL (fo : List U32) (out : List U32) (ar : List U32) : List U32 :=
+  (ar.map fun a => fo[a.val]!).foldl U.pushNew out
+
+theorem U.pushNew_len (out : List U32) (f : U32) : (U.pushNew out f).length ≤ out.length + 1 := by
+  unfold U.pushNew; split <;> simp
+
+theorem U.facesL_len (fo out ar : List U32) : (U.facesL fo out ar).length ≤ out.length + ar.length := by
+  induction ar generalizing out with
+  | nil => simp [U.facesL]
+  | cons a t ih =>
+    simp only [U.facesL, List.map_cons, List.foldl_cons] at ih ⊢
+    have := ih (U.pushNew out fo[a.val]!)
+    have := U.pushNew_len out fo[a.val]!
+    simp only [List.length_cons]; omega
+
+theorem U.faces_at_loop_spec (fo ar : Slice U32) (out : alloc.vec.Vec U32) (j : Usize)
+    (hj : j.val ≤ ar.val.length) (hin : ∀ a ∈ ar.val, a.val < fo.val.length)
+    (hlen : out.val.length + ar.val.length ≤ Usize.max) :
+    faces_at_loop fo ar out j ⦃ r => r.val = U.facesL fo.val out.val (ar.val.drop j.val) ⦄ := by
+  unfold faces_at_loop
+  apply loop.spec_decr_nat (fun (p : alloc.vec.Vec U32 × Usize) => ar.val.length - p.2.val)
+    (fun p => p.2.val ≤ ar.val.length ∧ p.1.val.length + (ar.val.length - p.2.val) ≤ out.val.length + ar.val.length ∧
+      U.facesL fo.val p.1.val (ar.val.drop p.2.val) = U.facesL fo.val out.val (ar.val.drop j.val))
+  · rintro ⟨o, k⟩ ⟨hk, ho, heq⟩
+    unfold faces_at_loop.body
+    simp only at hk ho heq ⊢
+    by_cases hlt : k.val < ar.val.length
+    · have hlt' : k < Slice.len ar := by scalar_tac
+      simp only [hlt', ite_true]
+      step as ⟨a, ha⟩
+      have hamem : a ∈ ar.val := by rw [ha]; exact List.getElem_mem hlt
+      have hab := hin a hamem
+      step as ⟨i2, hi2⟩
+      have hi2' : i2.val < fo.val.length := by scalar_tac
+      step as ⟨f, hf⟩
+      step with U.has_spec as ⟨b, hb⟩
+      have hd := List.drop_eq_getElem_cons (l := ar.val) hlt
+      have key : U.facesL fo.val o.val (ar.val.drop k.val) =
+          U.facesL fo.val (U.pushNew o.val f) (ar.val.drop (k.val + 1)) := by
+        rw [hd]; simp only [U.facesL, List.map_cons, List.foldl_cons]
+        congr 2
+        have hia : i2.val = a.val := by scalar_tac
+        rw [hf, ← ha, getElem!_pos fo.val a.val hab]
+        simp only [hia]
+      by_cases hm : f ∈ o.val
+      · have : b = true := by rw [hb]; simpa [alloc.vec.Vec.deref] using hm
+        simp only [this, ite_true]
+        step as ⟨k1, hk1⟩
+        refine ⟨by scalar_tac, by scalar_tac, ?_, by scalar_tac⟩
+        rw [← heq, key, hk1]; simp [U.pushNew, hm]
+      · have : b = false := by rw [hb]; simpa [alloc.vec.Vec.deref] using hm
+        simp only [this, Bool.false_eq_true, ite_false]
+        have hroom : o.val.length < Usize.max := by scalar_tac
+        step as ⟨o1, ho1⟩
+        step as ⟨k1, hk1⟩
+        refine ⟨by scalar_tac, by simp [ho1]; scalar_tac, ?_, by scalar_tac⟩
+        rw [← heq, key, hk1, ho1]; simp [U.pushNew, hm]
+    · have : ¬ k < Slice.len ar := by scalar_tac
+      simp only [this, ite_false, WP.spec_ok]
+      rw [← heq]
+      have : k.val = ar.val.length := by omega
+      rw [this]; simp [U.facesL]
+  · exact ⟨hj, by simp only; omega, rfl⟩
+
+/-- **`faces_at`**: the face numbers of `ar`'s positions, each once, in first-seen order. -/
+theorem U.faces_at_spec (fo ar : Slice U32) (hin : ∀ a ∈ ar.val, a.val < fo.val.length)
+    (hlen : ar.val.length ≤ Usize.max) :
+    faces_at fo ar ⦃ r => r.val = U.facesL fo.val [] ar.val ⦄ := by
+  unfold faces_at
+  apply WP.spec_mono (U.faces_at_loop_spec fo ar (alloc.vec.Vec.new U32) 0#usize (by simp) hin (by simpa using hlen))
+  intro r hr; rw [hr]; simp
+
 end forge_bool_core
