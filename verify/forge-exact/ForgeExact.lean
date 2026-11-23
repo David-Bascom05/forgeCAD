@@ -23,6 +23,7 @@ import ForgeExact.DecideOnce.LocalK
 import ForgeExact.DecideOnce.QForm
 import ForgeExact.DecideOnce.FlatK
 import ForgeExact.DecideOnce.Classes
+import ForgeExact.DecideOnce.QLine
 import ForgeExact.DecideOnce.SampleLocal
 import ForgeExact.JordanLocal
 import ForgeExact.DecideOnce.LocalJordan

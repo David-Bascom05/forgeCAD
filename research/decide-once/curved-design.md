@@ -489,7 +489,7 @@ Open:
 
 ## 6. Files and references
 
-New on this branch (also `CorrectK.lean`, `LocalK.lean`, `QForm.lean`, `FlatK.lean`, §5.2):
+New on this branch (also `CorrectK.lean`, `LocalK.lean`, `QForm.lean`, `FlatK.lean`, `Classes.lean`, §5.2; Q1 L2 begun: `QLine.lean`, plan in curved-l2-plan.md):
 - `verify/forge-exact/ForgeExact/DecideOnce/Curved.lean`: `Carrier`, `sgnK`, `covOfK`, `covCellK`,
   `RealisedK`, `IsVertK`, `IsEdgeK`, `covCell_iff_covOf`, **`covCellK_flat`**, `Connected`,
   `Faithful` (R1 `connected`, R2 `incidence`, R3 `sides`, R4 `wing`), `memTK`, `FlipK`, `FullK`,

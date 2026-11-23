@@ -20,6 +20,7 @@ import ForgeExact.DecideOnce.LocalK
 import ForgeExact.DecideOnce.QForm
 import ForgeExact.DecideOnce.FlatK
 import ForgeExact.DecideOnce.Classes
+import ForgeExact.DecideOnce.QLine
 import ForgeExact.DecideOnce.SampleLocal
 import ForgeExact.JordanLocal
 import ForgeExact.DecideOnce.LocalJordan
@@ -187,6 +188,8 @@ elab "#standard_axioms " ids:ident* : command => do
   ForgeExact.DecideOnce.Curved.noScaled_classesOf
   ForgeExact.DecideOnce.Curved.scaled_classesOf
   ForgeExact.DecideOnce.Curved.flat_correct_classes
+  ForgeExact.DecideOnce.Curved.alongLine_ev
+  ForgeExact.DecideOnce.Curved.covOn_spec
   ForgeExact.DecideOnce.Sample.local_exact
   ForgeExact.DecideOnce.Sample.local_correct
   ForgeExact.DecideOnce.Sample.wall_region
