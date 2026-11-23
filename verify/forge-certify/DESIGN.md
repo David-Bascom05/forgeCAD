@@ -212,3 +212,31 @@ that is not a kernel bug is a checker bug, and is fixed.
   (`Ref/Input.lean`, the same note).
 * Completeness is not proven: a correct result can be rejected if the kernel's pieces are not a
   common refinement or a separating plane is not found. Each such case is a checker bug to fix.
+
+## 9. Results (this branch, three frames)
+
+`cargo run -p forge-certify --release --bin certify -- --time` (families, plane_plane, notched
+with its 400 ulp stages, suite FUZZ_SEEDS=150, lang 192 seeds): **2073 booleans: 1363 accepted,
+0 rejected, 710 out of scope**: 339 the kernel refused (no result to check), 194 a curved edge, 134
+done by the n-ary boolean (not instrumented), 43 a vertex the kernel settled by tolerance (6 whose
+snapped planes do not meet in one point, 37 a crossing snapped onto an edge it is not exactly on):
+there the snapped inputs' exact boolean has a sliver the kernel's result has not.
+
+`certify repros plane_plane --mutate`: every repro of verify/forge-exact/fuzz/tests/repros.rs and the
+drafted lid. **One rejection, a real kernel bug**: `near_tolerance_45` boolean 4, the kernel keeps a
+wall at x = 50.00002 whose class snaps to 50.000005 (1.5e-5 off, over LINEAR): repros.rs
+`near_tolerance_45_chained_walls_are_one`. The others: the corner-touch pinch, `near_tolerance_24`
+and `_53`, the two- and three-axis bands, `coincident_walls_1`'s last stage and the notched part at
+ulp 0 are refused by the kernel (out of scope: nothing to certify); the slit edge, the touching
+subtract (its extra imprint face is the right point set), the notched part at ulp 13, the n-ary
+lost-face part (now fixed) and the drafted lid at 0.1° and 0.2° are accepted; the drafted lid at
+0.05° (G5b, a corner within LINEAR of the block's side) is out of scope as a tolerance merge.
+Mutants (each accepted result sent with its first or last face dropped, or claimed for another op):
+240 of 242 rejected; the 2 accepted are `identical`'s A∪A claimed as A∩A and back, the same set.
+
+Cost (`--time`, the checker's process against the kernel's boolean, 3 reps): 1406 booleans checked
+in 3201 s against the kernel's 0.12 s: 2.3 s per boolean on average, per-boolean ratio median 7515×,
+p90 74229×, slowest check 307 s. Far over §5's estimate: the checker is all-pairs in exact
+rationals with no spatial index and runs three frames. CI and an on-demand app switch only, as
+planned; an index on the witness rays and the separation pairs (sort by projected box) is the next
+step for speed, and changes nothing proven.
