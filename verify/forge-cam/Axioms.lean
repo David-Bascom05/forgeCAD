@@ -16,6 +16,7 @@ import ForgeCam
 #print axioms ForgeCam.leftover_slice
 #print axioms ForgeCam.G5_line_iff
 #print axioms ForgeCam.G5_arc
+#print axioms ForgeCam.G5rt_of_check
 #print axioms ForgeCam.lineOkQ_iff
 #print axioms ForgeCam.Post.round_trip
 #print axioms ForgeCam.Post.G6
@@ -87,3 +88,5 @@ import ForgeCam
 #print axioms ForgeCam.Shadow.shadow_cover
 #print axioms ForgeCam.Shadow.shadow_face
 #print axioms ForgeCam.Shadow.certified_clear_gen
+#print axioms ForgeCam.PathEnds.chord_mono
+#print axioms ForgeCam.PathEnds.proj_near
