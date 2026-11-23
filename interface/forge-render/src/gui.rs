@@ -24,6 +24,10 @@ pub mod gui_apptools;
 mod gui_asm;
 #[path = "gui_asmdrag.rs"]
 mod gui_asmdrag;
+#[path = "gui_cam.rs"]
+mod gui_cam;
+#[path = "gui_camsim.rs"]
+pub mod gui_camsim;
 #[path = "gui_docs.rs"]
 pub mod gui_docs;
 #[path = "gui_explode.rs"]
@@ -376,6 +380,7 @@ impl Gui {
     /// Opens a part into the active document, in the background: the window never waits on the
     /// kernel. A bench part's name opens its Forge port. False if nothing could be opened.
     fn load(&mut self, path: &str) -> bool {
+        self.shell.camsim = None;
         // a DWG file: AutoCAD's layout, its own tab
         if is_dwg(path) {
             match crate::shell::dwgdoc::DwgDoc::open(path) {
@@ -399,6 +404,13 @@ impl Gui {
                 }
             }
             return true;
+        }
+        // a machining document opens in the Manufacture workspace, over its part
+        if path.ends_with(".fg")
+            && let Ok(s) = forge_dirs::fs::read_to_string(path)
+            && forge_cam_lang::is_machining(&s)
+        {
+            return self.open_cam(path, &s);
         }
         if path.ends_with(".fg") {
             return self.open_fg(path);
@@ -431,6 +443,8 @@ impl Gui {
         let camera = view_camera(center, fit, self.shell.view.parallel, size);
         renderer.resize(size);
         self.theme_view(&mut renderer);
+        let waker = self.waker.clone();
+        renderer.set_pick_wake(Arc::new(move || waker()));
         let target = Offscreen::new(&self.device, size);
         let raw = raw_view(&target);
         let tex = self
@@ -1052,6 +1066,12 @@ impl Gui {
                         self.fg_text();
                         continue;
                     }
+                    Action::Cam(c) => {
+                        if let Some(w) = &mut self.shell.cam {
+                            w.command(c.into());
+                        }
+                        continue;
+                    }
                     Action::Fg(c) => {
                         self.shell.fg_command(c);
                         self.apply_fg();
@@ -1234,11 +1254,12 @@ impl Gui {
         }
         self.watch_frame();
         self.take_fg();
+        self.cam_host();
         self.take_agent();
         self.take_speech();
         self.take_extras(false);
         times.events = now_ms() - t0;
-        let mut animating = false;
+        let mut animating = self.camsim_tick();
         if let Some(v) = &mut self.view {
             if v.nav.tick(now_ms()) {
                 v.dirty = true;
@@ -1434,6 +1455,12 @@ impl Gui {
                     world.extend(local);
                 }
             }
+            let solid = match self.shell.camsim.as_deref_mut() {
+                Some(st) if self.shell.tab == crate::shell::CAM_TAB => {
+                    gui_camsim::geometry(st, &v.nav.camera, v.size, &mut world)
+                }
+                _ => vec![],
+            };
             let behind = extra_behind;
             let marks = {
                 let quiet = self
@@ -1480,12 +1507,15 @@ impl Gui {
                 marks: &marks,
                 world: &world,
                 behind: &behind,
+                solid: &solid,
             };
             // a wall or draft map shows its colours as the legend has them: no occlusion over it
             let ao = v.renderer.ao;
             if self.shell.fg.as_ref().is_some_and(|p| {
                 p.thermo.analysis != crate::shell::thermo_ui::Analysis::None && !self.fg_walls.is_empty()
-            }) {
+            }) || (self.shell.camsim.is_some() && self.shell.tab == crate::shell::CAM_TAB)
+            {
+                // and a simulation: its light is baked in, its depth has no normals to occlude by
                 v.renderer.ao = false;
             }
             let (key, map) = gui_overlay::map_of(&self.fg_walls, self.shell.fg.as_ref());
@@ -3203,6 +3233,19 @@ impl Gui {
                 (None, Err(e)) => Err(e.text()),
             };
             d.take(got);
+            v.nav.selected.clear();
+            v.clicked.clear();
+            v.dirty = true;
+            return;
+        }
+        // an op dialog of the Manufacture workspace takes the pick as its geometry
+        if let Some(w) = &mut self.shell.cam
+            && w.op_dlg.is_some()
+        {
+            self.shell.status = match &text {
+                Ok(t) => w.pick(t),
+                Err(e) => e.text(),
+            };
             v.nav.selected.clear();
             v.clicked.clear();
             v.dirty = true;

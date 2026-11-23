@@ -25,6 +25,7 @@
 //! check, where, and a fix. The reply is `forgecad.cam/1`.
 use forge_lang::syntax::{self, Arg, Expr, ExprKind, StmtKind};
 pub mod holes;
+pub mod sim;
 
 use forge_agent::json::Json;
 use forge_cam::ops::{self, CheckOut, Heights, OpPath, PMove, Phase, Stock, ToolUse};
@@ -142,6 +143,9 @@ pub struct OpOut {
     target: Option<Vec<Face>>,
     /// Declared removals (Δ): what each is and where.
     pub removals: Vec<String>,
+    /// The paths as the posted text means them (read back from the program, in the part's
+    /// frame), one per path once a program posts the op: what the checks' `move_index` counts.
+    pub posted: Vec<OpPath>,
     /// The stock this op starts from (G2, G3 are checked against it).
     stock_before: Option<forge_cam::stock::InProcess>,
     /// What the op provably clears: (region, or the whole box; its final floor).
@@ -422,14 +426,14 @@ pub fn run(src: &str, dir: &Path) -> Cam {
     }
     // a project library beside the document
     let proj = dir.join("cam");
-    if let Ok(rd) = std::fs::read_dir(&proj) {
+    if let Ok(rd) = forge_dirs::fs::read_dir(&proj) {
         let mut files: Vec<PathBuf> = rd
             .filter_map(|e| e.ok().map(|e| e.path()))
             .filter(|p| p.extension().is_some_and(|x| x == "toml"))
             .collect();
         files.sort();
         for f in files {
-            if let Ok(s) = std::fs::read_to_string(&f)
+            if let Ok(s) = forge_dirs::fs::read_to_string(&f)
                 && let Err(e) = cam.lib.add(&f.display().to_string(), &s)
             {
                 cam.errors.push(e.to_string());
@@ -475,9 +479,10 @@ pub fn run(src: &str, dir: &Path) -> Cam {
                         }
                     }
                     let a = cam.named(args, &local)?;
-                    let t0 = std::time::Instant::now();
+                    // the kernel's clock: std's Instant panics in a browser
+                    let t0 = std::env::var("FORGE_CAM_TIME").is_ok().then(forge_math::clock::Instant::now);
                     let v = cam.call(name, fname, &a, dir)?;
-                    if std::env::var("FORGE_CAM_TIME").is_ok() {
+                    if let Some(t0) = t0 {
                         eprintln!("{name}: {:?}", t0.elapsed());
                     }
                     env.insert(name.clone(), v);
@@ -746,7 +751,7 @@ impl Cam {
             "part" => {
                 let file = get_str(a, "#0", None)?;
                 let path = dir.join(&file);
-                let src = std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+                let src = forge_dirs::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
                 let (run, _) = forge_lang::run(&src, forge_lang::Options::default(), Default::default());
                 let holes = holes::hole_view(&src, forge_lang::Options::default());
                 if !run.ok() {
@@ -2081,6 +2086,7 @@ impl Cam {
             leave: get_num(a, "leave", Some(0.0))?,
             target: None,
             removals: vec![],
+            posted: vec![],
             stock_before: Some(s.ip.clone()),
             voids: vec![],
             deepest: f64::INFINITY,
@@ -3318,9 +3324,11 @@ impl Cam {
                 .clone()
                 .unwrap_or_else(|| forge_cam::stock::InProcess::new(s.stock.min, s.stock.max));
             let faces_of = |ip: &forge_cam::stock::InProcess| {
-                let t0 = std::time::Instant::now();
+                let t0 = std::env::var("FORGE_CAM_DEBUG")
+                    .is_ok()
+                    .then(forge_math::clock::Instant::now);
                 let r = ip.faces();
-                if std::env::var("FORGE_CAM_DEBUG").is_ok() {
+                if let Some(t0) = t0 {
                     eprintln!(
                         "{}: stock faces {:?} in {:?} (voids {}, under {})",
                         s.name,
@@ -3451,6 +3459,10 @@ impl Cam {
                 .fold(f64::INFINITY, f64::min);
             let op = &mut self.ops[oi];
             op.deepest = op.deepest.min(low);
+            if op.posted.len() <= pi {
+                op.posted.resize(pi + 1, posted.clone());
+            }
+            op.posted[pi] = posted.clone();
             op.moves += posted.moves.len();
             op.pairs += sum.pairs;
             op.cells += sum.cells;
