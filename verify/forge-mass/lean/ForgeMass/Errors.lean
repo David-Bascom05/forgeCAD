@@ -17,13 +17,18 @@ It reports:
 
 Proven here:
 * `centroid_bound`: |g − G| ≤ (√(e₁² + e₂² + e₃²) + |g| e₀) / (|t₀| − e₀), the rigorous bound.
-* `centroid_err_understates`: with em in place of the Euclidean norm of (e₁, e₂, e₃), `err[2]` is
-  not a bound. Three first moments, each off by its whole bound, put the centroid √3 times
+* `centroid_err_understates`: with em in place of the Euclidean norm of (e₁, e₂, e₃), the form
+  `err[2]` had before 2026-11 was not a bound. Three first moments, each off by its whole bound, put the centroid √3 times
   farther off than it says. This is first order, whatever e₀ is.
 * `second_moment_bound`: the exact error of one `S_ij`. Its first-order terms are what `err[3]`'s
   `es + 2|g| em + |g|² e₀` covers per entry; the factor 2 covers `I_ii = S_jj + S_kk`. It leaves
   out one second-order term, `(eᵢ + |gᵢ|e₀)(eⱼ + |gⱼ|e₀) / (|t₀| − e₀)`. That term is negligible
   under the kernel's own e₀ ≤ 10⁻³|t₀| (mass.rs:181).
+* `inertia_entry_bound`: an entry's error with that term included.
+
+mass.rs now reports `err[2] = (√(e₁² + e₂² + e₃²) + |g| e₀) / (|t₀| − e₀)`, which is
+`centroid_bound`. It reports `err[3] = 2 (es + 2|g| em + |g|² e₀ + (em + |g| e₀)² / (|t₀| − e₀))`,
+which is twice `inertia_entry_bound`.
 -/
 
 noncomputable section
@@ -138,6 +143,34 @@ theorem second_moment_bound (T0 t0 e0 Ti ti ei Tj tj ej M m es : ℝ) (h0 : |t0 
         have f3 : |gi| * |dj| ≤ |gi| * ej := mul_le_mul_of_nonneg_left hj (abs_nonneg _)
         have f4 : |gj| * |di| ≤ |gj| * ei := mul_le_mul_of_nonneg_left hi (abs_nonneg _)
         linarith
+
+/-- What mass.rs's `err[3]` takes per entry of S: with every |gᵢ| ≤ G and eᵢ ≤ em, an entry's error
+is at most es + 2 G em + G² e₀ + (em + G e₀)² / (|t₀| − e₀). An inertia entry is an entry of S
+(off the diagonal) or a sum of two (on it), so twice this bounds them all. -/
+theorem inertia_entry_bound (T0 t0 e0 Ti ti ei Tj tj ej M m es G em : ℝ) (h0 : |t0 - T0| ≤ e0)
+    (hi : |ti - Ti| ≤ ei) (hj : |tj - Tj| ≤ ej) (hm : |m - M| ≤ es) (he : e0 < |t0|)
+    (hgi : |ti / t0| ≤ G) (hgj : |tj / t0| ≤ G) (hei : ei ≤ em) (hej : ej ≤ em) :
+    |(m - ti * tj / t0) - (M - Ti * Tj / T0)| ≤
+      es + 2 * G * em + G * G * e0 + (em + G * e0) * (em + G * e0) / (|t0| - e0) := by
+  have base := second_moment_bound T0 t0 e0 Ti ti ei Tj tj ej M m es h0 hi hj hm he
+  have he0 : 0 ≤ e0 := le_trans (abs_nonneg _) h0
+  have hei0 : 0 ≤ ei := le_trans (abs_nonneg _) hi
+  have hej0 : 0 ≤ ej := le_trans (abs_nonneg _) hj
+  have hpos : 0 < |t0| - e0 := by linarith
+  have hG : 0 ≤ G := le_trans (abs_nonneg _) hgi
+  have p1 : |ti / t0 * (tj / t0)| * e0 ≤ G * G * e0 := by
+    rw [abs_mul]; exact mul_le_mul_of_nonneg_right (mul_le_mul hgi hgj (abs_nonneg _) hG) he0
+  have p2 : |ti / t0| * ej ≤ G * em := mul_le_mul hgi hej hej0 hG
+  have p3 : |tj / t0| * ei ≤ G * em := mul_le_mul hgj hei hei0 hG
+  have p4 : (ei + |ti / t0| * e0) * (ej + |tj / t0| * e0) / (|t0| - e0) ≤
+      (em + G * e0) * (em + G * e0) / (|t0| - e0) := by
+    apply div_le_div_of_nonneg_right _ hpos.le
+    apply mul_le_mul
+    · linarith [mul_le_mul_of_nonneg_right hgi he0]
+    · linarith [mul_le_mul_of_nonneg_right hgj he0]
+    · exact add_nonneg hej0 (mul_nonneg (abs_nonneg _) he0)
+    · linarith [mul_nonneg hG he0, le_trans hei0 hei]
+  linarith
 
 end ForgeMass
 end

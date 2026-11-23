@@ -231,3 +231,43 @@ fn reported_error_covers_the_difference() {
     }
     eprintln!("smallest err / difference: {slack:e}");
 }
+
+/// `err[2]` (the centroid's distance, Errors.lean `centroid_bound`) holds the distance from the
+/// closed-form centroid of boxes and cylinders.
+#[test]
+fn centroid_error_within_err() {
+    let mut r = Rng::new(77);
+    for _ in 0..200 {
+        let plane = frame(&mut r);
+        let (w, h, t) = (r.range(1.0, 50.0), r.range(1.0, 50.0), r.range(1.0, 50.0));
+        let at = Point2::new(r.range(-5.0, 5.0), r.range(-5.0, 5.0));
+        let bx = extrude(
+            &Profile {
+                plane,
+                loops: vec![Profile::rectangle(at, w, h, 0)],
+            },
+            t,
+            1,
+        )
+        .unwrap();
+        let want = plane.point_to_world(Point3::new(at.x + w / 2.0, at.y + h / 2.0, t / 2.0));
+        let rad = r.range(1.0, 30.0);
+        let cy = extrude(
+            &Profile {
+                plane,
+                loops: vec![Profile::circle(at, rad, 0)],
+            },
+            t,
+            1,
+        )
+        .unwrap();
+        let want_c = plane.point_to_world(Point3::new(at.x, at.y, t / 2.0));
+        for (b, c) in [(bx, want), (cy, want_c)] {
+            let m = mass(&b).unwrap();
+            let off = m.centroid.distance(c);
+            // the closed form's own rounding, a few ulps of the coordinates
+            let own = 16.0 * f64::EPSILON * (c - Point3::ORIGIN).length().max(1.0);
+            assert!(off <= m.err[2] + own, "centroid off {off:e}, err {:e}", m.err[2]);
+        }
+    }
+}

@@ -16,7 +16,7 @@ inertia, and checks the kernel against both.
 | `Trig.lean`, `Degrees.lean`, `Table.lean` | Trigonometric polynomials (span of e^{iqx}) and polynomials of bounded degree, closed under products. For every row of the rule table, every moment of F is in the class its rule needs, along the inner parameter and along the other: plane poly 3 (GL2); cylinder along v poly 3 (GL2); cone along v poly 4 (GL3); cylinder round u trig 4 × poly 3; cone round u trig 4 × poly 4; sphere and torus trig 4 × trig 5 either way. `mom_flux` ties each moment to its divergence field. |
 | `Gauss.lean` | `gl2_exact`, `gl3_exact`: GL2 integrates degree ≤ 3, GL3 degree ≤ 5. `gl2_G`, `gl3_G`: `Inner::Poly`'s `(x/2) Σ w F(a0 + x(1+t)/2)` (mass.rs:2015–2022) is ∫_{a0}^{a0+x} F. |
 | `Fourier.lean` | `sum_exp`: Σⱼ e^{ipθⱼ} = N·[p = 0] for \|p\| < N. `dft_exact`: `dft`'s coefficients (mass.rs:1821–1834), on 2k+1 samples, reproduce every trigonometric polynomial of degree ≤ k. `fourier_G`: the closed form `Inner::Fourier` adds up (mass.rs:2066–2073) is ∫_{a0}^{a0+x} F. `Along::Trig` is the same fit. |
-| `Errors.lean` | `centroid_bound`: the rigorous centroid error, (√(e₁²+e₂²+e₃²) + \|g\| e₀)/(\|t₀\| − e₀). `centroid_err_understates`: `err[2]` is not a bound (below). `second_moment_bound`: the exact error of each S_ij. Its first-order part is what `err[3]` covers; the factor 2 covers I_ii = S_jj + S_kk. |
+| `Errors.lean` | `centroid_bound`: the rigorous centroid error, (√(e₁²+e₂²+e₃²) + \|g\| e₀)/(\|t₀\| − e₀), which `err[2]` now reports. `centroid_err_understates`: the old `err[2]` was not a bound (below). `second_moment_bound`: the exact error of each S_ij. `inertia_entry_bound`: what `err[3]` now reports per entry, the factor 2 covering I_ii = S_jj + S_kk. |
 | `Rounding.lean` | `sum_err`: under the standard model (verify/ieee754's `F64.add_rel_err`, as a hypothesis), a running sum of n terms is within ((1+u)ⁿ − 1) Σ\|xᵢ\|. |
 
 Assumed, not proven:
@@ -40,13 +40,12 @@ trigonometric polynomial along the edge.
 
 ## Found
 
-**`err[2]` (centroid, "distance") can understate by √3.** mass.rs:205 takes
-`em = max(e₁, e₂, e₃)` as the first moments' error. The centroid's distance needs the Euclidean
-norm of (e₁, e₂, e₃), which reaches √3·em when the three are alike: `centroid_err_understates`
-gives an instance. This is first order. The rigorous bound also divides by |t₀| − e₀, not |t₀|,
-which is second order under mass.rs:181. The fix is
-`let em = (e[1] * e[1] + e[2] * e[2] + e[3] * e[3]).sqrt();`, with `vol.abs() - e[0]` in the
-denominator at mass.rs:217. `err[3]`'s first-order terms are right per entry.
+**`err[2]` (centroid, "distance") could understate by √3; fixed.** mass.rs took
+`em = max(e₁, e₂, e₃)` as the first moments' error, where the centroid's distance needs the
+Euclidean norm of (e₁, e₂, e₃): `centroid_err_understates` is an instance. It now reports
+`(√(e₁²+e₂²+e₃²) + |g| e₀) / (|t₀| − e₀)`, which is `centroid_bound`. `err[3]` now also carries
+the second-order term `second_moment_bound` found missing, so it is twice `inertia_entry_bound`.
+`centroid_error_within_err` checks the new `err[2]` against closed-form centroids.
 
 **The rounding allowance is a rule of thumb.** Each piece adds `1e-15·|contribution|`
 (mass.rs:2277, 2635), about 4.5u. `sum_err` is what the model gives for the face sum. On the

@@ -202,8 +202,13 @@ pub fn mass_rel(body: &Body, rel: f64) -> Result<MassProps, MassError> {
         std::array::from_fn(|i| std::array::from_fn(|j| if i == j { tr - s(i, i) } else { -s(i, j) }));
     let (principal, axes) = eigen(inertia);
     let gl = g.length();
+    // the bounds verify/forge-mass/lean/ForgeMass/Errors.lean proves: the centroid's distance takes
+    // the first moments' errors as a vector (`centroid_bound`), each second moment its own error
+    // to second order (`inertia_entry_bound`), both over the volume's least |vol| - e0
     let em = e[1].abs().max(e[2]).max(e[3]);
+    let en = (e[1] * e[1] + e[2] * e[2] + e[3] * e[3]).sqrt();
     let es = e[4..10].iter().fold(0.0f64, |a, &x| a.max(x));
+    let least = vol.abs() - e[0];
     Ok(MassProps {
         volume: vol,
         area: t[10],
@@ -214,8 +219,16 @@ pub fn mass_rel(body: &Body, rel: f64) -> Result<MassProps, MassError> {
         err: [
             e[0],
             e[10],
-            (em + gl * e[0]) / vol.abs(),
-            2.0 * (es + 2.0 * gl * em + gl * gl * e[0]),
+            if least > 0.0 {
+                (en + gl * e[0]) / least
+            } else {
+                f64::INFINITY
+            },
+            if least > 0.0 {
+                2.0 * (es + 2.0 * gl * em + gl * gl * e[0] + (em + gl * e[0]) * (em + gl * e[0]) / least)
+            } else {
+                f64::INFINITY
+            },
         ],
         faces,
     })
