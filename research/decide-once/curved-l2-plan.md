@@ -50,8 +50,9 @@ losing its roots. The curved ledger takes its roots from a checked cover instead
 - both rays root-free by Descartes on the shifted polynomial.
 
 `cover_complete` proves every root in any model is in `coverRoots`. `certifiedRoots` is the
-proposer, and it answers `none` when the cover does not check (`Skip::Budget`). This needs a
-square-free input; the squarefree reduction is the next small step (a certificate `p | sqfree(p)^k`).
+proposer, and it answers `none` when the cover does not check (`Skip::Budget`). Square-free inputs come from `proposeSqfree`,
+checked both ways (`sp^k = p·w` and `p = sp·h`; `sqfree_roots`). **`rootsOf_complete`**: if
+`rootsOf p fuel = some ns`, every root of `p` in any model is denoted by some number in `ns`.
 
 **Order of work:**
 1. QSep (small);

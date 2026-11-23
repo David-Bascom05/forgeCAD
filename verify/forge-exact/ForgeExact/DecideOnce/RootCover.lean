@@ -160,6 +160,106 @@ def proposeCover (p : Poly) (fuel : Nat) : Option (Rat × List Rat) := do
 def certifiedRoots (p : Poly) (fuel : Nat) : Option (List Num) :=
   (proposeCover p fuel).map fun c => coverRoots p c.1 c.2
 
+theorem proposeCover_ok {p : Poly} {fuel : Nat} {t0 : Rat} {ts : List Rat}
+    (h : proposeCover p fuel = some (t0, ts)) : coverOk p t0 ts = true := by
+  unfold proposeCover at h
+  cases hB : rayBound p fuel (QRef.rootBound p) with
+  | none => simp [hB] at h
+  | some B =>
+    cases hm : splitGap p fuel (-B) B with
+    | none => simp [hB, hm] at h
+    | some mid =>
+      simp only [hB, hm, Option.bind_eq_bind, Option.bind_some] at h
+      split at h
+      · rename_i hc; simp only [Option.some.injEq, Prod.mk.injEq] at h
+        obtain ⟨rfl, rfl⟩ := h; exact hc
+      · cases h
+
+/-! ## The square-free step
+
+The cover needs simple roots. `sp = sqfree p` is proposed (gcd with the derivative, untrusted)
+and checked both ways: `sp^k = p·w` (every root of `p` is one of `sp`) and `p = sp·h` (and back),
+so `p` and `sp` have the same roots in every model (`sqfree_roots`). -/
+
+def sqfreeOk (p sp : Poly) (k : Nat) (w h : Poly) : Bool :=
+  Poly.eqv (ppow sp k) (pmul p w) && Poly.eqv p (pmul sp h)
+
+section Model2
+
+variable {K : Type} [Field K] [LE K] [LT K] [Std.IsLinearOrder K] [Std.LawfulOrderLT K]
+  [OrderedRing K] (M : Model K)
+
+theorem pow_eq_zero' {a : K} : ∀ k : Nat, a ^ k = 0 → a = 0
+  | 0, h => by
+    have : (1 : K) = 0 := by rw [← Semiring.pow_zero a]; exact h
+    have h1 : (0 : K) < 1 := OrderedRing.zero_lt_one
+    rw [this] at h1; exact absurd h1 Std.lt_irrefl
+  | k + 1, h => by
+    by_cases ha : a = 0
+    · exact ha
+    · have hk : a ^ k * a = 0 := by rw [← Semiring.pow_succ]; exact h
+      have hinv : a * a⁻¹ = 1 := Field.mul_inv_cancel ha
+      have : a ^ k = 0 := by
+        calc a ^ k = a ^ k * a * a⁻¹ := by grind
+          _ = 0 := by rw [hk]; grind
+      exact pow_eq_zero' k this
+
+/-- **`p` and its square-free part have the same roots.** -/
+theorem sqfree_roots {p sp w h : Poly} {k : Nat} (hc : sqfreeOk p sp k w h = true) (x : K) :
+    M.ev p x = 0 ↔ M.ev sp x = 0 := by
+  simp only [sqfreeOk, Bool.and_eq_true] at hc
+  have e1 := eqv_spec M hc.1 x
+  have e2 := eqv_spec M hc.2 x
+  simp only [Model.ev, eval_ppow, eval_pmul] at e1 e2 ⊢
+  constructor
+  · intro hp
+    rw [hp] at e1
+    exact pow_eq_zero' k (by rw [e1]; grind)
+  · intro hs
+    rw [e2, hs]; grind
+
+end Model2
+
+/-- The square-free part with its certificate, proposed (untrusted) and checked. -/
+def proposeSqfree (p : Poly) : Option Poly :=
+  let sp := Poly.sqfree p
+  let k := Poly.deg p + 1
+  let w := Poly.pdiv (ppow sp k) p
+  let h := Poly.pdiv p sp
+  if sqfreeOk p sp k w h then some sp else none
+
+/-- **The real roots of any polynomial, complete by certificate**, or `none` (`Skip::Budget`). -/
+def rootsOf (p : Poly) (fuel : Nat) : Option (List Num) := do
+  let sp ← proposeSqfree p
+  certifiedRoots sp fuel
+
+theorem rootsOf_complete {K : Type} [Field K] [LE K] [LT K] [Std.IsLinearOrder K]
+    [Std.LawfulOrderLT K] [OrderedRing K] (M : Model K) {p : Poly} {fuel : Nat} {ns : List Num}
+    (h : rootsOf p fuel = some ns) {x : K} (hx : M.ev p x = 0) : ∃ n ∈ ns, Denotes M n x := by
+  unfold rootsOf at h
+  cases hs : proposeSqfree p with
+  | none => simp [hs] at h
+  | some sp =>
+    simp only [hs, Option.bind_eq_bind, Option.bind_some] at h
+    unfold proposeSqfree at hs
+    dsimp only at hs
+    split at hs
+    · rename_i hc
+      simp only [Option.some.injEq] at hs
+      subst hs
+      have hx' := (sqfree_roots M hc x).mp hx
+      unfold certifiedRoots at h
+      cases hpc : proposeCover (Poly.sqfree p) fuel with
+      | none => simp [hpc] at h
+      | some c =>
+        simp only [hpc, Option.map_some, Option.some.injEq] at h
+        subst h
+        exact cover_complete M (proposeCover_ok hpc) hx'
+    · cases hs
+
+-- (x − 1)²(x + 2): the roots 1 and −2, through the square-free part
+#guard (rootsOf [2, -3, 0, 1] 30).map List.length = some 2
+
 -- y² − 1: the roots ±1, both found
 #guard (certifiedRoots [-1, 0, 1] 30).map List.length = some 2
 -- x³ − 2x: 0 and ±√2

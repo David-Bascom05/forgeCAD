@@ -210,6 +210,8 @@ elab "#standard_axioms " ids:ident* : command => do
   ForgeExact.DecideOnce.Curved.bezout3_spec
   ForgeExact.DecideOnce.Curved.gaps_complete
   ForgeExact.DecideOnce.Curved.cover_complete
+  ForgeExact.DecideOnce.Curved.sqfree_roots
+  ForgeExact.DecideOnce.Curved.rootsOf_complete
   ForgeExact.DecideOnce.Sample.local_exact
   ForgeExact.DecideOnce.Sample.local_correct
   ForgeExact.DecideOnce.Sample.wall_region
