@@ -666,3 +666,36 @@ has both feet on at its middle is a cliff where one foot runs off. The three the
 
 **Open:** concave edges keep rule (d) (`fillD`), with the 15's concave rows (§13 table) not yet
 judged against it. Curved supports (00318570, 00366714, 00607956) are not yet classified.
+
+**What the spindle torus changes, part by part (2026-11-23, head 2f5e90c's kernel against main
+ec32818).** I built all 1287 translated CADFS parts with both CLIs and compared each part's build
+status, volume, face count, validity, face kinds and STEP export (hashed without its header). 1273
+parts are identical in all of these, including the STEP bytes. 14 change, and only in one way: pipe
+faces become analytic (spindle) tori. Status, face count and validity are unchanged on every one of
+them. For each:
+- the Lean judge (`fillet-check`, on `fillet-spec parts`) agrees on every blend: 59 tori and
+  62 cylinders, with no disagreement;
+- volume against Onshape's STEP is OCCT's adaptive integration at 1e-10, relative;
+- instructions are callgrind's count for the whole `forgecad build`.
+
+| part | faces (main → head) | volume vs Onshape, head | main | instructions |
+|---|---|---|---|---|
+| 00107721 | 1 pipe, 0 torus → 0 pipe, 1 torus | -1.4e-08 | -3.6e-07 | -62.9% |
+| 00116142 | 4 pipe, 2 torus → 0 pipe, 6 torus | +1.9e-12 | -2.7e-07 | -68.1% |
+| 00355821 | 1 pipe, 0 torus → 0 pipe, 1 torus | -7.4e-13 | -2.0e-06 | -29.6% |
+| 00383942 | 12 pipe, 2 torus → 0 pipe, 14 torus | +9.8e-07 | +1.1e-06 | -51.6% |
+| 00508513 | 1 pipe, 0 torus → 0 pipe, 1 torus | -9.4e-16 | -2.9e-06 | -83.5% |
+| 00553446 | 4 pipe, 4 torus → 0 pipe, 8 torus | -1.7e-16 | -7.1e-07 | -42.7% |
+| 00591657 | 4 pipe, 0 torus → 2 pipe, 2 torus | +6.5e-08 | -2.5e-06 | -0.1% |
+| 00611306 | 8 pipe, 0 torus → 0 pipe, 8 torus | +1.2e-10 | -9.9e-07 | -75.8% |
+| 00626079 | 1 pipe, 1 torus → 0 pipe, 2 torus | -6.1e-16 | -1.7e-06 | -69.8% |
+| 00745590 | 1 pipe, 0 torus → 0 pipe, 1 torus | +5.0e-16 | -7.8e-06 | -82.7% |
+| 00825142 | 1 pipe, 1 torus → 0 pipe, 2 torus | -6.7e-12 | -2.2e-06 | -64.0% |
+| 00918074 | 2 pipe, 3 torus → 0 pipe, 5 torus | -3.7e-04 | -3.7e-04 | -20.8% |
+| 00972891 | 1 pipe, 0 torus → 0 pipe, 1 torus | -2.7e-16 | -1.0e-06 | -47.0% |
+| 00984443 | 2 pipe, 0 torus → 0 pipe, 2 torus | +2.2e-15 | -7.6e-07 | -40.6% |
+
+Head is nearer Onshape on 13 of the 14, ten of them to 1e-10 or better. The last, 00918074, is tied:
+its −3.7e-4 is an earlier feature's, the same on main. Every changed part is faster, by 0.1% to
+83.5%. The rest of the gate (the exact speed gate, reliability, fuzz, bits) is to be run on the tree
+merged with main.
