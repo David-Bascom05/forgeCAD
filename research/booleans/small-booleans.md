@@ -159,3 +159,68 @@ curved formula route of curved-design.md §2.5a gives one).
 Not run: a local micro-benchmark of Manifold on a 380-face part (installing the third-party
 package here was declined). Every library timing above is the authors' own, at sizes 10²–10⁴ times
 ours.
+
+## 5. Update: measured fill data (decide-once Rust, 2026-11-23)
+
+Measured on coplanar seq with callgrind, switch on: total 0.935G against a base of 0.21G. The run
+has 70 decide-once booleans and 140 NotFlat ones on the old path (111M). Per boolean: about 380
+faces, about 11 near, and about 10 near classes plus 6 walls. Averaged over 625 calls, one
+`arrange` sees:
+
+| | count |
+|---|---|
+| classes, with the 6 walls | 16.0 |
+| classes crossing the clipped section | 9.5 |
+| cells | 33.6 |
+| vertices | 46.4, of which 23.6 are class–class |
+
+Other measurements:
+- `arrange` costs about 148k instructions per call, 93M in all (1.33M per boolean).
+- `vertex()` costs about 1.3k per new vertex: a full covector of 16 f64-screened signs.
+- Only about 0.3% of sign evaluations go exact.
+- After the inline-limb `Big` (b6a9dd4), no L-form allocations remain.
+
+**Corrections to prior-art.md and §2 above:**
+
+- **A2 is worth much less than estimated.** 9.5 of 16 classes cross each section, so the skip
+  already prunes most of what it can. A2 still saves:
+  - the repeated skip scans;
+  - about 6.5 inherited covector entries per vertex.
+
+  Revised: `vertex()` 1.3k → about 0.8k, `arrange` 148k → about 110k, so the arrangement goes
+  1.33M → about 1.0M per boolean. It stays cheap to prove (`skip_pos`), but it is no longer the
+  top lever.
+- **A4 (fixed width) is moot.** Exact fallbacks are 0.3%, and the inline-limb `Big` removed the
+  allocations.
+- **The real cost is the number of cells,** about 9 sections × 34 cells ≈ 300 cells per
+  boolean. Three phases scale with it:
+  - the arrangement (per vertex);
+  - the ledger (CellTab interning, about 22k lookups per run);
+  - the core (`around`/`between`, about 20k `find_h`).
+
+  These three are 1.33M + 1.6M + 1.63M ≈ 4.6M of the ≈10M. The old path splits each face only
+  where another face actually crosses it, which on this bench means 2–4 pieces per near face.
+
+**The floor is in the spec, not in constants** (decide-once Rust's conclusion, which I share). The
+spec's cells are the sign classes of the *plane* arrangement. A line that crosses a section splits
+it everywhere, even where no face of that class reaches. Every fast exact method in prior-art.md
+instead arranges *faces*: segments within polygons (Zhou et al. 2016, Cherchi 2020/2022, EMBER's
+per-polygon BSPs, trueform's per-face arrangements). That is why they, and our old path, cut far
+fewer cells.
+
+Two ways to get there, re-ranked as the top two levers:
+
+| Rank | Lever | Cells per boolean | Expected (arrangement + ledger + core) | Proof |
+|---|---|---|---|---|
+| 1 | **A6′ region partition, within today's spec.** Split the near box into boxes (kd splits at face-free coordinates) until each box holds about 3–4 near faces. Each box's ledger uses only the classes of faces meeting it: `sampleLedger` of the region, exactly as the single-region ledger does now. Lines then extend only across one box. | about 300 → about 100–150 (estimate) | 4.6M → about 2.0M | **M.** L1: `reg_local` (Frontier.lean, proven) gives the result on each open box from its own faces. One new lemma, `reg_dense`: two sets whose regularisations agree on a dense open set have equal regularisations, since `closure (U ∩ W) = closure U` for open `U` and dense open `W`. The walls are nowhere dense (`wall_nowhereDense`). L3: `local_correct_sampler` per box, unchanged. New Rust: the box splitter, and stitching between boxes in the write (today it stitches region to far only). |
+| 2 | **A8 face arrangement, a spec change.** Cells become the components of space minus the faces, not the sign classes of the planes. Each near face is split only by the segments where other faces cross it. | about 300 → about 40 | 4.6M → about 0.7M | **L.** L1/L3: membership is constant on each piece by `contains_const_local` (JordanLocal.lean, proven: parity is constant along a segment that meets no face), so the spec side has its key lemma. But the core reads incidence from covectors (`Cov.le`), and face-arrangement cells have no covector over all classes. So the core needs explicit incidence, which means a new `forge_bool_core` and its Aeneas proof redone. This is the Lean side's call. |
+
+Revised per-boolean picture, all estimates:
+- **Today:** ≈10.0M.
+- **With A1 (done), A5 and A6′:** about 5M.
+- **Adding core packing:** about 4M.
+- **Only A8 reaches the old path's ≈3.0M with margin:** about 2M with everything.
+
+So "nothing slower" on coplanar seq needs the spec change (A8). That is a decision for the master
+and the Lean side. The levers within today's spec (A6′, A5, core packing) get decide-once to about
+1.3–1.7× the old path.
