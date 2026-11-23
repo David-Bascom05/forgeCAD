@@ -39,6 +39,7 @@ use forge_cam_geom::ival::Ival;
 use forge_cam_geom::real::Ctx;
 use forge_cam_geom::region::{self, Exact, Region, Seg};
 use forge_cam_geom::slab::{Sec, dist};
+use forge_math::dmath;
 
 /// One piece of an obstacle's boundary: the curve, its end gap (0 for a segment), its box.
 #[derive(Clone, Debug)]
@@ -98,7 +99,7 @@ fn arc_pieces(a: [f64; 2], b: [f64; 2], c: [f64; 2], ccw: bool, out: &mut Vec<OP
         let d = len2(sub(p, c)).sub(ip(r)).abs();
         d.hi
     };
-    let ang = |p: [f64; 2]| (p[1] - c[1]).atan2(p[0] - c[0]);
+    let ang = |p: [f64; 2]| dmath::atan2(p[1] - c[1], p[0] - c[0]);
     let (t0, mut t1) = (ang(a), ang(b));
     let full = a == b;
     if ccw {
@@ -123,10 +124,16 @@ fn arc_pieces(a: [f64; 2], b: [f64; 2], c: [f64; 2], ccw: bool, out: &mut Vec<OP
             b
         } else {
             let t = t0 + (t1 - t0) * i as f64 / n as f64;
-            [c[0] + r * t.cos(), c[1] + r * t.sin()]
+            [c[0] + r * dmath::cos(t), c[1] + r * dmath::sin(t)]
         };
         let gap = gap_of(prev).max(gap_of(p));
-        let sec = Sec::Arc { c, r, a: prev, b: p, ccw };
+        let sec = Sec::Arc {
+            c,
+            r,
+            a: prev,
+            b: p,
+            ccw,
+        };
         let bx = [
             ip(c[0]).sub(ip(r)).lo.min(prev[0]).min(p[0]),
             ip(c[1]).sub(ip(r)).lo.min(prev[1]).min(p[1]),
@@ -268,7 +275,9 @@ impl Obstacle {
                             bx: [a[0].min(b[0]), a[1].min(b[1]), a[0].max(b[0]), a[1].max(b[1])],
                         });
                     }
-                    Seg::Arc { a, b, c, ccw } => arc_pieces([a.x, a.y], [b.x, b.y], [c.x, c.y], ccw, &mut pieces),
+                    Seg::Arc { a, b, c, ccw } => {
+                        arc_pieces([a.x, a.y], [b.x, b.y], [c.x, c.y], ccw, &mut pieces)
+                    }
                 }
             }
             let mut lb = [f64::INFINITY, f64::INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY];
@@ -323,8 +332,16 @@ impl Obstacle {
 /// A move of the tool's reference point in (ρ, z).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Move {
-    Line { a: [f64; 2], b: [f64; 2] },
-    Arc { a: [f64; 2], b: [f64; 2], c: [f64; 2], ccw: bool },
+    Line {
+        a: [f64; 2],
+        b: [f64; 2],
+    },
+    Arc {
+        a: [f64; 2],
+        b: [f64; 2],
+        c: [f64; 2],
+        ccw: bool,
+    },
 }
 
 impl Move {
@@ -370,7 +387,15 @@ fn round_allow(m: f64, k: f64) -> f64 {
 /// The least of dist(σ, f) − 2·gap_f over the boundary segments σ of Z (given by base point p0,
 /// generators g1, g2, core K) and the obstacle's pieces near Z. `cut`: pieces whose box gap from
 /// Z's box is at least this are skipped (their distance is at least the box gap).
-fn zono_lower(core: &[[f64; 2]], p0: [f64; 2], g1: [f64; 2], g2: [f64; 2], obs: &Obstacle, cut: f64, zbox: &[f64; 4]) -> f64 {
+fn zono_lower(
+    core: &[[f64; 2]],
+    p0: [f64; 2],
+    g1: [f64; 2],
+    g2: [f64; 2],
+    obs: &Obstacle,
+    cut: f64,
+    zbox: &[f64; 4],
+) -> f64 {
     let n = core.len();
     let corners = [[0.0, 0.0], g1, g2, [g1[0] + g2[0], g1[1] + g2[1]]];
     let pt = |k: [f64; 2], t: [f64; 2]| [p0[0] + k[0] + t[0], p0[1] + k[1] + t[1]];
@@ -378,18 +403,33 @@ fn zono_lower(core: &[[f64; 2]], p0: [f64; 2], g1: [f64; 2], g2: [f64; 2], obs: 
     for i in 0..n {
         let (u, v) = (core[i], core[(i + 1) % n]);
         for t in corners {
-            segs.push(Sec::Seg { a: pt(u, t), b: pt(v, t) });
+            segs.push(Sec::Seg {
+                a: pt(u, t),
+                b: pt(v, t),
+            });
         }
         if g1 != [0.0, 0.0] {
-            segs.push(Sec::Seg { a: pt(u, [0.0, 0.0]), b: pt(u, g1) });
+            segs.push(Sec::Seg {
+                a: pt(u, [0.0, 0.0]),
+                b: pt(u, g1),
+            });
             if g2 != [0.0, 0.0] {
-                segs.push(Sec::Seg { a: pt(u, g2), b: pt(u, corners[3]) });
+                segs.push(Sec::Seg {
+                    a: pt(u, g2),
+                    b: pt(u, corners[3]),
+                });
             }
         }
         if g2 != [0.0, 0.0] {
-            segs.push(Sec::Seg { a: pt(u, [0.0, 0.0]), b: pt(u, g2) });
+            segs.push(Sec::Seg {
+                a: pt(u, [0.0, 0.0]),
+                b: pt(u, g2),
+            });
             if g1 != [0.0, 0.0] {
-                segs.push(Sec::Seg { a: pt(u, g1), b: pt(u, corners[3]) });
+                segs.push(Sec::Seg {
+                    a: pt(u, g1),
+                    b: pt(u, corners[3]),
+                });
             }
         }
     }
@@ -477,17 +517,29 @@ fn body_line(body: &Body, a: [f64; 2], b: [f64; 2], obs: &mut Obstacle, need: f6
     // the sides the outline reaches: +x always, −x when some of it is at x < 0 at either end
     let xmin_core = body.core.iter().map(|k| k[0]).fold(f64::INFINITY, f64::min);
     let reach_neg = ip(a[0].min(b[0])).add(ip(xmin_core)).sub(ip(body.r)).lo < 0.0;
-    let sides: &[f64] = if body.on_axis || !reach_neg { &[1.0] } else { &[1.0, -1.0] };
+    let sides: &[f64] = if body.on_axis || !reach_neg {
+        &[1.0]
+    } else {
+        &[1.0, -1.0]
+    };
     let mut lower = f64::INFINITY;
     let mut checked_point = false;
-    let n = if body.on_axis || body.depth[1] == 0.0 { 1 } else { slabs.max(1) };
+    let n = if body.on_axis || body.depth[1] == 0.0 {
+        1
+    } else {
+        slabs.max(1)
+    };
     let core = &body.core;
     let mg = [b[0] - a[0], b[1] - a[1]];
     for &side in sides {
         for j in 0..n {
             let (d0, d1) = (body.depth[0], body.depth[1]);
             let top = d0 + (d1 - d0) * j as f64 / n as f64;
-            let bot = if j + 1 == n { d1 } else { d0 + (d1 - d0) * (j + 1) as f64 / n as f64 };
+            let bot = if j + 1 == n {
+                d1
+            } else {
+                d0 + (d1 - d0) * (j + 1) as f64 / n as f64
+            };
             // the slab's radius: the outline shrunk by its relief at the slab's top
             let rj = if body.relief > 0.0 {
                 ip(body.r).sub(ip(top - d0).mul(ip(body.relief))).hi.max(0.0)
@@ -499,7 +551,11 @@ fn body_line(body: &Body, a: [f64; 2], b: [f64; 2], obs: &mut Obstacle, need: f6
             let e = if body.on_axis || bot == 0.0 {
                 0.0
             } else {
-                let xm = if reach_neg { 0.0 } else { ip(a[0].min(b[0])).add(ip(xmin_core)).sub(ip(rj)).lo.max(0.0) };
+                let xm = if reach_neg {
+                    0.0
+                } else {
+                    ip(a[0].min(b[0])).add(ip(xmin_core)).sub(ip(rj)).lo.max(0.0)
+                };
                 ip(xm).sqr().add(ip(bot).sqr()).sqrt().sub(ip(xm)).hi
             };
             let g1 = [side * e, 0.0];
@@ -608,7 +664,7 @@ pub fn clearance(body: &Body, mv: &Move, obs: &mut Obstacle, need: f64) -> Verdi
             let rb = len2(sub(b, c));
             let r = 0.5 * (ra.mid() + rb.mid());
             let dr = ra.sub(rb).abs().hi;
-            let ang = |p: [f64; 2]| (p[1] - c[1]).atan2(p[0] - c[0]);
+            let ang = |p: [f64; 2]| dmath::atan2(p[1] - c[1], p[0] - c[0]);
             let (t0, mut t1) = (ang(a), ang(b));
             if ccw {
                 while t1 <= t0 {
@@ -629,14 +685,18 @@ pub fn clearance(body: &Body, mv: &Move, obs: &mut Obstacle, need: f64) -> Verdi
                         b
                     } else {
                         let t = t0 + (t1 - t0) * i as f64 / n as f64;
-                        [c[0] + r * t.cos(), c[1] + r * t.sin()]
+                        [c[0] + r * dmath::cos(t), c[1] + r * dmath::sin(t)]
                     };
                     // the arc between prev and p lies within the chord's sagitta, the ends' gap
                     // off the circle and the radius difference
                     let half = len2(sub(p, prev)).scale(0.5);
                     let rr = ra.hull(rb);
                     let sag = rr.sub(rr.sqr().sub(half.sqr()).max(ip(0.0)).sqrt()).hi.max(0.0);
-                    let g = len2(sub(prev, c)).sub(ip(r)).abs().hi.max(len2(sub(p, c)).sub(ip(r)).abs().hi);
+                    let g = len2(sub(prev, c))
+                        .sub(ip(r))
+                        .abs()
+                        .hi
+                        .max(len2(sub(p, c)).sub(ip(r)).abs().hi);
                     let allow = ip(sag).add(ip(g)).add(ip(dr)).hi;
                     let v = clearance(body, &Move::Line { a: prev, b: p }, obs, need + allow);
                     match v {

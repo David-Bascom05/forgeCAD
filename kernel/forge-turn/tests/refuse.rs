@@ -60,7 +60,13 @@ fn a_drill_into_a_solid_shaft_is_refused() {
     let s = v_groove();
     let d = ops::drill(&s, &builtin("drill-8").unwrap(), 6, -10.0, 3.0).unwrap();
     let rep = ops::certify(&s, &[d], None).unwrap();
-    assert!(rep.refusals.iter().any(|r| r.rule == "part" && r.verdict.starts_with("Hit")), "{:?}", rep.refusals);
+    assert!(
+        rep.refusals
+            .iter()
+            .any(|r| r.rule == "part" && r.verdict.starts_with("Hit")),
+        "{:?}",
+        rep.refusals
+    );
 }
 
 #[test]
@@ -75,7 +81,10 @@ fn a_bored_part_is_drilled() {
 
 #[test]
 fn a_short_blade_cannot_part_a_big_bar() {
-    let s = setup_of(common::part(&[(0.0, -50.0), (28.0, -50.0), (28.0, 0.0), (0.0, 0.0)]), 30.0);
+    let s = setup_of(
+        common::part(&[(0.0, -50.0), (28.0, -50.0), (28.0, 0.0), (0.0, 0.0)]),
+        30.0,
+    );
     assert!(ops::part_off(&s, &builtin("part-3").unwrap(), 5, -50.0).is_err());
 }
 
@@ -99,12 +108,21 @@ fn a_groove_to_the_part_certifies_and_one_too_deep_is_refused() {
     assert!(rep.ok(), "{:?}", rep.refusals);
     let g = ops::groove(&s, &t, 3, -20.0, -16.0, 7.5).unwrap();
     let rep = ops::certify(&s, &[g], None).unwrap();
-    assert!(rep.refusals.iter().any(|r| r.rule == "part" && r.verdict.starts_with("Hit")), "{:?}", rep.refusals);
+    assert!(
+        rep.refusals
+            .iter()
+            .any(|r| r.rule == "part" && r.verdict.starts_with("Hit")),
+        "{:?}",
+        rep.refusals
+    );
 }
 
 #[test]
 fn a_part_bigger_than_the_bar_is_refused_at_the_setup() {
-    let s = setup_of(common::part(&[(0.0, -20.0), (10.0, -20.0), (10.0, 0.0), (0.0, 0.0)]), 9.0);
+    let s = setup_of(
+        common::part(&[(0.0, -20.0), (10.0, -20.0), (10.0, 0.0), (0.0, 0.0)]),
+        9.0,
+    );
     assert!(s.check().is_err());
 }
 

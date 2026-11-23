@@ -53,12 +53,17 @@ impl Dialect {
     }
 
     pub fn parse(src: &str) -> Result<Dialect, PostError> {
-        let root = toml::parse(src).map_err(|e| PostError::Dialect(format!("line {}: {}", e.line, e.what)))?;
+        let root =
+            toml::parse(src).map_err(|e| PostError::Dialect(format!("line {}: {}", e.line, e.what)))?;
         let t = match root.get("dialect") {
             Some(Val::Table(t)) => t.clone(),
             _ => return Err(PostError::Dialect("no [dialect] table".into())),
         };
-        let s = |k: &str| toml::text(&t, k).map(|x| x.to_string()).ok_or(PostError::Dialect(format!("missing `{k}`")));
+        let s = |k: &str| {
+            toml::text(&t, k)
+                .map(|x| x.to_string())
+                .ok_or(PostError::Dialect(format!("missing `{k}`")))
+        };
         let n = |k: &str| toml::num(&t, k).ok_or(PostError::Dialect(format!("missing `{k}`")));
         let point = match s("point")?.as_str() {
             "always" => Point::Always,
@@ -99,14 +104,28 @@ fn fill(tpl: &str, vars: &[(&str, String)]) -> String {
 pub enum QRec {
     /// The start of op n (a comment with its name).
     Op(usize, String),
-    Tool { t: u32, name: String },
-    Css { vc: Q, max_rpm: Q },
+    Tool {
+        t: u32,
+        name: String,
+    },
+    Css {
+        vc: Q,
+        max_rpm: Q,
+    },
     Rpm(Q),
     Rapid([Q; 2]),
     Feed([Q; 2], Q),
     /// The centre's X is a diameter too, of the start's parity.
-    Arc { to: [Q; 2], c: [Q; 2], cw: bool, f: Q },
-    Thread { to: [Q; 2], pitch: Q },
+    Arc {
+        to: [Q; 2],
+        c: [Q; 2],
+        cw: bool,
+        f: Q,
+    },
+    Thread {
+        to: [Q; 2],
+        pitch: Q,
+    },
     Stop,
     Home,
 }
@@ -155,7 +174,9 @@ pub fn quantize(ops: &[OpPath], number: u32, title: &str, d: &Dialect) -> Result
             Spindle::Rpm(r) => recs.push(QRec::Rpm(q(r, 0)?)),
         }
         let tip = op.tool.tip;
-        let pos = |p: [f64; 2]| -> Result<[Q; 2], PostError> { Ok([q(2.0 * (p[0] + tip[0]), k)?, q(p[1] + tip[1], k)?]) };
+        let pos = |p: [f64; 2]| -> Result<[Q; 2], PostError> {
+            Ok([q(2.0 * (p[0] + tip[0]), k)?, q(p[1] + tip[1], k)?])
+        };
         let f = q(op.f, d.feed_decimals)?;
         let mut at = pos(op.start)?;
         recs.push(QRec::Rapid(at));
@@ -228,7 +249,10 @@ pub fn motions(p: &QProgram) -> Vec<Motion> {
                 cw: *cw,
                 f: *f,
             },
-            QRec::Thread { to, pitch } => Motion::Thread { to: *to, pitch: *pitch },
+            QRec::Thread { to, pitch } => Motion::Thread {
+                to: *to,
+                pitch: *pitch,
+            },
             QRec::Stop => Motion::Stop,
             QRec::Home => Motion::Home,
         })
@@ -239,7 +263,17 @@ pub fn motions(p: &QProgram) -> Vec<Motion> {
 pub fn print(p: &QProgram, d: &Dialect) -> String {
     let k = d.decimals;
     let num = |v: Q| digits(v, k, d.point);
-    let fnum = |v: Q, kk: u32| digits(v, kk, if d.point == Point::Full { Point::Never } else { d.point });
+    let fnum = |v: Q, kk: u32| {
+        digits(
+            v,
+            kk,
+            if d.point == Point::Full {
+                Point::Never
+            } else {
+                d.point
+            },
+        )
+    };
     let mut lines: Vec<String> = Vec::new();
     let numbered = toml::boolean(&d.t, "line_numbers") == Some(true);
     let step = toml::num(&d.t, "line_step").unwrap_or(10.0) as i64;
@@ -258,7 +292,13 @@ pub fn print(p: &QProgram, d: &Dialect) -> String {
     let strip = d.s("comment_strip").to_string();
     let clean = |t: &str| -> String { t.chars().filter(|c| !strip.contains(*c) && *c != '\n').collect() };
     for l in d.lines("program_open") {
-        emit(fill(&l, &[("num", format!("{:04}", p.number)), ("title", clean(&p.title))]), &mut lines);
+        emit(
+            fill(
+                &l,
+                &[("num", format!("{:04}", p.number)), ("title", clean(&p.title))],
+            ),
+            &mut lines,
+        );
     }
     for l in d.lines("safe_start") {
         emit(l, &mut lines);
@@ -270,17 +310,36 @@ pub fn print(p: &QProgram, d: &Dialect) -> String {
     let thread_word = d.s("thread_word").to_string();
     for r in &p.recs {
         match r {
-            QRec::Op(i, name) => emit(fill(d.s("comment"), &[("text", format!("op {}: {}", i + 1, clean(name)))]), &mut lines),
+            QRec::Op(i, name) => emit(
+                fill(
+                    d.s("comment"),
+                    &[("text", format!("op {}: {}", i + 1, clean(name)))],
+                ),
+                &mut lines,
+            ),
             QRec::Tool { t, name } => {
                 for l in d.lines("tool_change") {
-                    emit(fill(&l, &[("tt", format!("{t:02}")), ("t", t.to_string()), ("name", clean(name))]), &mut lines);
+                    emit(
+                        fill(
+                            &l,
+                            &[
+                                ("tt", format!("{t:02}")),
+                                ("t", t.to_string()),
+                                ("name", clean(name)),
+                            ],
+                        ),
+                        &mut lines,
+                    );
                 }
                 pos = [None, None];
                 motion = None;
             }
             QRec::Css { vc, max_rpm } => {
                 for l in d.lines("css") {
-                    emit(fill(&l, &[("vc", vc.to_string()), ("max", max_rpm.to_string())]), &mut lines);
+                    emit(
+                        fill(&l, &[("vc", vc.to_string()), ("max", max_rpm.to_string())]),
+                        &mut lines,
+                    );
                 }
             }
             QRec::Rpm(r) => {
@@ -411,7 +470,10 @@ pub fn read(text: &str, d: &Dialect) -> Result<Vec<Motion>, ReadError> {
         // a comment: an op's start when it stands alone after the line number
         let mut comment = None;
         if let Some(i) = s.find('(') {
-            let j = s[i..].find(')').map(|j| i + j).ok_or(err(ln, "an unclosed comment"))?;
+            let j = s[i..]
+                .find(')')
+                .map(|j| i + j)
+                .ok_or(err(ln, "an unclosed comment"))?;
             comment = Some(s[i + 1..j].to_string());
             s = format!("{}{}", &s[..i], &s[j + 1..]);
         }
@@ -460,7 +522,7 @@ pub fn read(text: &str, d: &Dialect) -> Result<Vec<Motion>, ReadError> {
                     k_ = Some(parse_q(v, k).ok_or(err(ln, &format!("K `{v}`")))?)
                 }
                 "S" => s_word = Some(parse_q(v, 0).ok_or(err(ln, &format!("S `{v}`")))?),
-                _ if l.chars().next() == Some(thread_word) && gm.as_deref() == Some(thread_g.as_str()) => {
+                _ if l.starts_with(thread_word) && gm.as_deref() == Some(thread_g.as_str()) => {
                     pitch = Some(parse_q(v, d.pitch_decimals).ok_or(err(ln, &format!("pitch `{v}`")))?)
                 }
                 "F" => f = Some(v.to_string()),
@@ -496,10 +558,8 @@ pub fn read(text: &str, d: &Dialect) -> Result<Vec<Motion>, ReadError> {
         }
         if gm.is_none() && x.is_none() && z.is_none() {
             // a setting or a home line
-            if d.lines("home").iter().any(|h| h == &line) {
-                if !matches!(out.last(), Some(Motion::Home)) {
-                    out.push(Motion::Home);
-                }
+            if d.lines("home").iter().any(|h| h == &line) && !matches!(out.last(), Some(Motion::Home)) {
+                out.push(Motion::Home);
             }
             continue;
         }
@@ -508,7 +568,10 @@ pub fn read(text: &str, d: &Dialect) -> Result<Vec<Motion>, ReadError> {
         }
         let g = motion.clone().ok_or(err(ln, "a move with no motion mode"))?;
         let start = pos;
-        let to = [x.or(pos[0]).ok_or(err(ln, "no X yet"))?, z.or(pos[1]).ok_or(err(ln, "no Z yet"))?];
+        let to = [
+            x.or(pos[0]).ok_or(err(ln, "no X yet"))?,
+            z.or(pos[1]).ok_or(err(ln, "no Z yet"))?,
+        ];
         if let Some(fv) = &f {
             feed = Some(parse_q(fv, d.feed_decimals).ok_or(err(ln, &format!("F `{fv}`")))?);
         }
@@ -517,8 +580,14 @@ pub fn read(text: &str, d: &Dialect) -> Result<Vec<Motion>, ReadError> {
             "G00" => out.push(Motion::Rapid(to)),
             "G01" => out.push(Motion::Feed(to, feed.ok_or(err(ln, "a feed with no F"))?)),
             "G02" | "G03" => {
-                let (sx, sz) = (start[0].ok_or(err(ln, "an arc with no start"))?, start[1].ok_or(err(ln, "an arc with no start"))?);
-                let c = [sx + 2 * i_.ok_or(err(ln, "an arc without I"))?, sz + k_.ok_or(err(ln, "an arc without K"))?];
+                let (sx, sz) = (
+                    start[0].ok_or(err(ln, "an arc with no start"))?,
+                    start[1].ok_or(err(ln, "an arc with no start"))?,
+                );
+                let c = [
+                    sx + 2 * i_.ok_or(err(ln, "an arc without I"))?,
+                    sz + k_.ok_or(err(ln, "an arc without K"))?,
+                ];
                 out.push(Motion::Arc {
                     to,
                     c,
@@ -592,7 +661,11 @@ pub fn round_trip(p: &QProgram, d: &Dialect) -> Result<(String, Vec<Motion>), St
     let back = read(&text, d).map_err(|e| format!("line {}: {}", e.line, e.what))?;
     let want = motions(p);
     if back != want {
-        let i = back.iter().zip(want.iter()).position(|(a, b)| a != b).unwrap_or(back.len().min(want.len()));
+        let i = back
+            .iter()
+            .zip(want.iter())
+            .position(|(a, b)| a != b)
+            .unwrap_or(back.len().min(want.len()));
         return Err(format!(
             "the text does not read back as the program: at motion {i}, read {:?}, meant {:?}",
             back.get(i),
@@ -634,7 +707,17 @@ pub fn posted_moves(ms: &[Motion], ops: &[OpPath], d: &Dialect) -> Vec<Vec<PMove
             Motion::Arc { to, c, cw, .. } => {
                 let b = refp(*to);
                 let cc = refp(*c);
-                (b, at.map(|a| Move::Arc { a, b, c: cc, ccw: *cw }), true, false)
+                (
+                    b,
+                    at.map(|a| Move::Arc {
+                        a,
+                        b,
+                        c: cc,
+                        ccw: *cw,
+                    }),
+                    true,
+                    false,
+                )
             }
             _ => continue,
         };

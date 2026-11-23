@@ -17,11 +17,12 @@
 //! piece against the stock as the pieces before left it. At the end, the leftover (G4): the final stock less the part grown by tol, exactly,
 //! each region listed.
 use crate::check::{self, Move, Obstacle, Verdict};
-use crate::insert::{Body, Kind, TurnTool};
+use crate::insert::{Body, Kind, TurnTool, tan};
 use crate::profile::{HalfProfile, poly, rect};
 use forge_cam_geom::boolean::{self, Op};
 use forge_cam_geom::offset::offset;
 use forge_cam_geom::region::{Loop, Region, Seg};
+use forge_math::dmath;
 
 /// The work holding: a three-jaw chuck's envelope as it turns (a region of revolution).
 #[derive(Clone, Debug, PartialEq)]
@@ -83,7 +84,12 @@ impl Setup {
     /// The bar as loaded: from the jaws' back to its front face.
     pub fn bar(&self) -> Region {
         Region {
-            loops: vec![rect(0.0, self.chuck.z_face - self.chuck.grip, self.bar_r, self.bar_front)],
+            loops: vec![rect(
+                0.0,
+                self.chuck.z_face - self.chuck.grip,
+                self.bar_r,
+                self.bar_front,
+            )],
         }
     }
 
@@ -101,9 +107,7 @@ impl Setup {
         if hb[1] < self.chuck.z_face + self.fixture_clearance {
             return Err(SetupError::Bad(format!(
                 "the part reaches z = {} but the jaws' face is at {}: pull the bar out to at least {} past the jaws",
-                hb[1],
-                self.chuck.z_face,
-                self.fixture_clearance
+                hb[1], self.chuck.z_face, self.fixture_clearance
             )));
         }
         Ok(())
@@ -116,9 +120,16 @@ pub enum Step {
     Rapid([f64; 2]),
     Feed([f64; 2]),
     /// An arc to `to` about `c`, counter-clockwise in (ρ, z) when `ccw`.
-    Arc { to: [f64; 2], c: [f64; 2], ccw: bool },
+    Arc {
+        to: [f64; 2],
+        c: [f64; 2],
+        ccw: bool,
+    },
     /// A thread pass to `to` at `pitch` per revolution.
-    Thread { to: [f64; 2], pitch: f64 },
+    Thread {
+        to: [f64; 2],
+        pitch: f64,
+    },
 }
 
 impl Step {
@@ -133,7 +144,10 @@ impl Step {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Spindle {
     /// Constant surface speed (m/min), with a top speed.
-    Css { vc: f64, max_rpm: f64 },
+    Css {
+        vc: f64,
+        max_rpm: f64,
+    },
     Rpm(f64),
 }
 
@@ -167,17 +181,25 @@ pub const APPROACH: f64 = 1.0;
 pub const RETRACT: f64 = 0.5;
 
 fn css(t: &TurnTool) -> Spindle {
-    Spindle::Css { vc: t.vc, max_rpm: 3000.0 }
+    Spindle::Css {
+        vc: t.vc,
+        max_rpm: 3000.0,
+    }
 }
 
 /// Facing: passes of depth ≤ ap from the bar's front down to z_face, the nose from outside the
 /// bar to the centre line (its centre on ρ = 0).
 pub fn face(s: &Setup, tool: &TurnTool, t: u32, z_face: f64, ap: f64) -> Result<OpPath, OpError> {
     if tool.kind != Kind::Turn {
-        return Err(OpError::Tool(format!("facing needs a turning tool, not `{}`", tool.id)));
+        return Err(OpError::Tool(format!(
+            "facing needs a turning tool, not `{}`",
+            tool.id
+        )));
     }
     if !(z_face < s.bar_front) {
-        return Err(OpError::Geometry("nothing to face: the face is at or past the bar's front".into()));
+        return Err(OpError::Geometry(
+            "nothing to face: the face is at or past the bar's front".into(),
+        ));
     }
     let re = tool.re;
     let x_out = s.bar_r + APPROACH + re;
@@ -185,7 +207,11 @@ pub fn face(s: &Setup, tool: &TurnTool, t: u32, z_face: f64, ap: f64) -> Result<
     let start = [x_out, s.bar_front + APPROACH + re];
     let mut steps = vec![Step::Rapid(start)];
     for k in 1..=n {
-        let z = if k == n { z_face } else { s.bar_front - (s.bar_front - z_face) * k as f64 / n as f64 };
+        let z = if k == n {
+            z_face
+        } else {
+            s.bar_front - (s.bar_front - z_face) * k as f64 / n as f64
+        };
         let zc = z + re;
         steps.push(Step::Rapid([x_out, zc]));
         steps.push(Step::Feed([0.0, zc]));
@@ -218,7 +244,11 @@ fn grown(s: &Setup, d: f64) -> Result<Loop, OpError> {
         }
     }
     let (_, lp) = best.ok_or(OpError::Geometry("the grown part is empty".into()))?;
-    Ok(if crate::profile::area2(&lp) < 0.0 { lp.reversed() } else { lp })
+    Ok(if crate::profile::area2(&lp) < 0.0 {
+        lp.reversed()
+    } else {
+        lp
+    })
 }
 
 /// The heights where the vertical line ρ = x meets a piece (f64; the checker certifies).
@@ -248,8 +278,14 @@ fn meet_vertical(s: &Seg, x: f64, out: &mut Vec<f64>) {
     }
 }
 
-fn on_arc(a: forge_cam_geom::region::P2, b: forge_cam_geom::region::P2, c: forge_cam_geom::region::P2, ccw: bool, p: [f64; 2]) -> bool {
-    let ang = |x: f64, y: f64| (y - c.y).atan2(x - c.x);
+fn on_arc(
+    a: forge_cam_geom::region::P2,
+    b: forge_cam_geom::region::P2,
+    c: forge_cam_geom::region::P2,
+    ccw: bool,
+    p: [f64; 2],
+) -> bool {
+    let ang = |x: f64, y: f64| dmath::atan2(y - c.y, x - c.x);
     let (t0, t1, tp) = (ang(a.x, a.y), ang(b.x, b.y), ang(p[0], p[1]));
     let tau = std::f64::consts::TAU;
     let norm = |t: f64| ((t % tau) + tau) % tau;
@@ -264,9 +300,20 @@ fn on_arc(a: forge_cam_geom::region::P2, b: forge_cam_geom::region::P2, c: forge
 
 /// Roughing along −z (a G71-like cycle, expanded): passes at depth ap, each from ahead of the
 /// stock down to the grown part H ⊕ B_{r_ε + leave} or to z_lo, retracting at 45°.
-pub fn rough(s: &Setup, tool: &TurnTool, t: u32, leave: f64, ap: f64, z_lo: f64, z_top: f64) -> Result<OpPath, OpError> {
+pub fn rough(
+    s: &Setup,
+    tool: &TurnTool,
+    t: u32,
+    leave: f64,
+    ap: f64,
+    z_lo: f64,
+    z_top: f64,
+) -> Result<OpPath, OpError> {
     if tool.kind != Kind::Turn {
-        return Err(OpError::Tool(format!("roughing needs a turning tool, not `{}`", tool.id)));
+        return Err(OpError::Tool(format!(
+            "roughing needs a turning tool, not `{}`",
+            tool.id
+        )));
     }
     let re = tool.re;
     let c = grown(s, re + leave)?;
@@ -304,7 +351,11 @@ pub fn rough(s: &Setup, tool: &TurnTool, t: u32, leave: f64, ap: f64, z_lo: f64,
         for sg in &c.segs {
             meet_vertical(sg, x, &mut zs);
         }
-        let hit = zs.iter().copied().filter(|z| *z < z_start).fold(f64::NEG_INFINITY, f64::max);
+        let hit = zs
+            .iter()
+            .copied()
+            .filter(|z| *z < z_start)
+            .fold(f64::NEG_INFINITY, f64::max);
         let z_end = hit.max(z_lo);
         if z_end >= z_top {
             // the pass would cut nothing below the stock's top
@@ -382,7 +433,10 @@ fn clip_above(s: &Seg, z0: f64) -> Option<(Seg, bool)> {
 /// it crosses ρ = ρ_min of the part (over the front face) down to z = z_lo.
 pub fn finish(s: &Setup, tool: &TurnTool, t: u32, leave: f64, z_lo: f64) -> Result<OpPath, OpError> {
     if tool.kind != Kind::Turn {
-        return Err(OpError::Tool(format!("finishing needs a turning tool, not `{}`", tool.id)));
+        return Err(OpError::Tool(format!(
+            "finishing needs a turning tool, not `{}`",
+            tool.id
+        )));
     }
     let re = tool.re;
     let c = grown(s, re + leave)?.reversed();
@@ -397,7 +451,9 @@ pub fn finish(s: &Setup, tool: &TurnTool, t: u32, leave: f64, z_lo: f64) -> Resu
             break;
         }
     }
-    let i0 = start_at.ok_or(OpError::Geometry("the finish path finds no start over the front face".into()))?;
+    let i0 = start_at.ok_or(OpError::Geometry(
+        "the finish path finds no start over the front face".into(),
+    ))?;
     let mut segs = Vec::new();
     // the first piece from x0 on
     let first = c.segs[i0];
@@ -470,7 +526,10 @@ pub fn finish(s: &Setup, tool: &TurnTool, t: u32, leave: f64, z_lo: f64) -> Resu
 /// blade, the first and last at the walls.
 pub fn groove(s: &Setup, tool: &TurnTool, t: u32, z0: f64, z1: f64, rho: f64) -> Result<OpPath, OpError> {
     if !matches!(tool.kind, Kind::Groove | Kind::Part) {
-        return Err(OpError::Tool(format!("grooving needs a blade, not `{}`", tool.id)));
+        return Err(OpError::Tool(format!(
+            "grooving needs a blade, not `{}`",
+            tool.id
+        )));
     }
     let (w, rc) = (tool.width, tool.re);
     if z1 - z0 < w {
@@ -482,7 +541,15 @@ pub fn groove(s: &Setup, tool: &TurnTool, t: u32, z0: f64, z1: f64, rho: f64) ->
     let x_out = s.bar_r + APPROACH + rc;
     let (zr0, zr1) = (z0 + rc, z1 - (w - rc));
     let n = ((zr1 - zr0) / (0.8 * w)).ceil() as usize;
-    let mut zs: Vec<f64> = (0..=n).map(|i| if n == 0 { zr0 } else { zr0 + (zr1 - zr0) * i as f64 / n as f64 }).collect();
+    let mut zs: Vec<f64> = (0..=n)
+        .map(|i| {
+            if n == 0 {
+                zr0
+            } else {
+                zr0 + (zr1 - zr0) * i as f64 / n as f64
+            }
+        })
+        .collect();
     zs.dedup();
     let start = [x_out, zr0];
     let mut steps = vec![Step::Rapid(start)];
@@ -508,7 +575,10 @@ pub fn groove(s: &Setup, tool: &TurnTool, t: u32, z0: f64, z1: f64, rho: f64) ->
 /// Part-off: the blade's +z side on the part's back face (z = z_back), plunged past the centre.
 pub fn part_off(s: &Setup, tool: &TurnTool, t: u32, z_back: f64) -> Result<OpPath, OpError> {
     if tool.kind != Kind::Part {
-        return Err(OpError::Tool(format!("parting needs a part-off blade, not `{}`", tool.id)));
+        return Err(OpError::Tool(format!(
+            "parting needs a part-off blade, not `{}`",
+            tool.id
+        )));
     }
     let (w, rc) = (tool.width, tool.re);
     if tool.l < s.bar_r + rc {
@@ -529,7 +599,10 @@ pub fn part_off(s: &Setup, tool: &TurnTool, t: u32, z_back: f64) -> Result<OpPat
         name: format!("part off at z = {z_back}"),
         tool: tool.clone(),
         t,
-        spindle: Spindle::Css { vc: tool.vc, max_rpm: 2000.0 },
+        spindle: Spindle::Css {
+            vc: tool.vc,
+            max_rpm: 2000.0,
+        },
         f: tool.f,
         leave: 0.0,
         start,
@@ -543,9 +616,21 @@ pub fn part_off(s: &Setup, tool: &TurnTool, t: u32, z_back: f64) -> Result<OpPat
 /// The part as modelled shows the major diameter: the thread is a declared removal Δ, the band
 /// [d/2 − h, d/2] over the thread's length and the insert's half width past its end, and G1 holds
 /// the tool from P ∖ Δ (research/cam/design.md §7b).
-pub fn thread(s: &Setup, tool: &TurnTool, t: u32, d: f64, p: f64, z_start: f64, z_end: f64, passes: usize) -> Result<OpPath, OpError> {
+pub fn thread(
+    s: &Setup,
+    tool: &TurnTool,
+    t: u32,
+    d: f64,
+    p: f64,
+    z_start: f64,
+    z_end: f64,
+    passes: usize,
+) -> Result<OpPath, OpError> {
     if tool.kind != Kind::Thread {
-        return Err(OpError::Tool(format!("threading needs a thread insert, not `{}`", tool.id)));
+        return Err(OpError::Tool(format!(
+            "threading needs a thread insert, not `{}`",
+            tool.id
+        )));
     }
     if !(p >= tool.pitch[0] && p <= tool.pitch[1]) {
         return Err(OpError::Tool(format!(
@@ -564,14 +649,17 @@ pub fn thread(s: &Setup, tool: &TurnTool, t: u32, d: f64, p: f64, z_start: f64, 
         let depth = h * (k as f64 / n as f64).sqrt();
         let x = rmaj - depth + rt;
         steps.push(Step::Rapid([x, z_start]));
-        steps.push(Step::Thread { to: [x, z_end], pitch: p });
+        steps.push(Step::Thread {
+            to: [x, z_end],
+            pitch: p,
+        });
         // the pull-out at the thread's end cuts (it leaves through the groove): a feed
         steps.push(Step::Feed([x_out, z_end]));
         steps.push(Step::Rapid([x_out, z_start]));
     }
     // the band: the insert's flanks at ±30° from +ρ about the tip centre reach half width
     // (h + margin)·tan 30° + rt past the reference's end
-    let half = (h + 0.2) * 30f64.to_radians().tan() + rt;
+    let half = (h + 0.2) * tan(30f64.to_radians()) + rt;
     let band = Region {
         loops: vec![rect(rmaj - h, z_end - half, s.bar_r + 1.0, s.part.bbox[3] + 1.0)],
     };
@@ -591,7 +679,10 @@ pub fn thread(s: &Setup, tool: &TurnTool, t: u32, d: f64, p: f64, z_start: f64, 
 /// A drill on the centre line to depth z_end (its tip), pecking by `peck` (0: one feed).
 pub fn drill(s: &Setup, tool: &TurnTool, t: u32, z_end: f64, peck: f64) -> Result<OpPath, OpError> {
     if tool.kind != Kind::Drill {
-        return Err(OpError::Tool(format!("drilling needs a drill, not `{}`", tool.id)));
+        return Err(OpError::Tool(format!(
+            "drilling needs a drill, not `{}`",
+            tool.id
+        )));
     }
     let z0 = s.part.bbox[3] + APPROACH;
     let start = [0.0, z0];
@@ -685,7 +776,10 @@ const SNAP: f64 = 1.0 / 16777216.0;
 /// every rounded vertex moves at most SNAP/√2 per axis, so the result stays inside the original.
 fn snap_inside(q: &[[f64; 2]], pull: f64) -> Vec<[f64; 2]> {
     let n = q.len() as f64;
-    let m = [q.iter().map(|p| p[0]).sum::<f64>() / n, q.iter().map(|p| p[1]).sum::<f64>() / n];
+    let m = [
+        q.iter().map(|p| p[0]).sum::<f64>() / n,
+        q.iter().map(|p| p[1]).sum::<f64>() / n,
+    ];
     let mut out: Vec<[f64; 2]> = Vec::new();
     for p in q {
         let v = [m[0] - p[0], m[1] - p[1]];
@@ -694,7 +788,10 @@ fn snap_inside(q: &[[f64; 2]], pull: f64) -> Vec<[f64; 2]> {
             return Vec::new();
         }
         let k = pull * SNAP / l;
-        let r = [((p[0] + v[0] * k) / SNAP).round() * SNAP, ((p[1] + v[1] * k) / SNAP).round() * SNAP];
+        let r = [
+            ((p[0] + v[0] * k) / SNAP).round() * SNAP,
+            ((p[1] + v[1] * k) / SNAP).round() * SNAP,
+        ];
         if out.last() != Some(&r) {
             out.push(r);
         }
@@ -741,24 +838,30 @@ fn outline_points(b: &Body, p: [f64; 2], less: f64, out: &mut Vec<[f64; 2]>) {
     let k = &b.core;
     let n = k.len();
     let rr = (b.r - less).max(0.0) * (1.0 - 1e-6);
-    let c = [k.iter().map(|v| v[0]).sum::<f64>() / n as f64, k.iter().map(|v| v[1]).sum::<f64>() / n as f64];
+    let c = [
+        k.iter().map(|v| v[0]).sum::<f64>() / n as f64,
+        k.iter().map(|v| v[1]).sum::<f64>() / n as f64,
+    ];
     for i in 0..n {
         // the vertex, pulled a relative 1e-9 toward the centroid (inside under rounding)
-        let v = [k[i][0] + (c[0] - k[i][0]) * 1e-9, k[i][1] + (c[1] - k[i][1]) * 1e-9];
+        let v = [
+            k[i][0] + (c[0] - k[i][0]) * 1e-9,
+            k[i][1] + (c[1] - k[i][1]) * 1e-9,
+        ];
         out.push([p[0] + v[0], p[1] + v[1]]);
         if rr > 0.0 && n >= 2 {
             let (u, w) = (k[(i + n - 1) % n], k[(i + 1) % n]);
             // outward normals of the edges into and out of the vertex (counter-clockwise core)
             let e1 = [k[i][0] - u[0], k[i][1] - u[1]];
             let e2 = [w[0] - k[i][0], w[1] - k[i][1]];
-            let t1 = e1[1].atan2(e1[0]) - std::f64::consts::FRAC_PI_2;
-            let mut t2 = e2[1].atan2(e2[0]) - std::f64::consts::FRAC_PI_2;
+            let t1 = dmath::atan2(e1[1], e1[0]) - std::f64::consts::FRAC_PI_2;
+            let mut t2 = dmath::atan2(e2[1], e2[0]) - std::f64::consts::FRAC_PI_2;
             while t2 < t1 {
                 t2 += std::f64::consts::TAU;
             }
             for j in 0..3 {
                 let t = t1 + (t2 - t1) * j as f64 / 2.0;
-                out.push([p[0] + v[0] + rr * t.cos(), p[1] + v[1] + rr * t.sin()]);
+                out.push([p[0] + v[0] + rr * dmath::cos(t), p[1] + v[1] + rr * dmath::sin(t)]);
             }
         }
     }
@@ -771,7 +874,8 @@ fn hull2(mut p: Vec<[f64; 2]>) -> Vec<[f64; 2]> {
     if p.len() < 3 {
         return p;
     }
-    let cr = |o: [f64; 2], a: [f64; 2], b: [f64; 2]| (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+    let cr =
+        |o: [f64; 2], a: [f64; 2], b: [f64; 2]| (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
     let mut lo: Vec<[f64; 2]> = Vec::new();
     for &q in &p {
         while lo.len() >= 2 && cr(lo[lo.len() - 2], lo[lo.len() - 1], q) <= 0.0 {
@@ -831,7 +935,7 @@ fn pieces(mv: &Move) -> Vec<(Move, [f64; 2], [f64; 2], f64)> {
         Move::Arc { a, b, c, ccw } => {
             let r = ((a[0] - c[0]).powi(2) + (a[1] - c[1]).powi(2)).sqrt();
             let rb = ((b[0] - c[0]).powi(2) + (b[1] - c[1]).powi(2)).sqrt();
-            let ang = |p: [f64; 2]| (p[1] - c[1]).atan2(p[0] - c[0]);
+            let ang = |p: [f64; 2]| dmath::atan2(p[1] - c[1], p[0] - c[0]);
             let (t0, mut t1) = (ang(a), ang(b));
             if ccw {
                 while t1 <= t0 {
@@ -843,18 +947,32 @@ fn pieces(mv: &Move) -> Vec<(Move, [f64; 2], [f64; 2], f64)> {
                 }
             }
             let sweep = (t1 - t0).abs();
-            let n = (sweep / 10f64.to_radians()).ceil().max((sweep * r / SUB).ceil()).max(1.0) as usize;
+            let n = (sweep / 10f64.to_radians())
+                .ceil()
+                .max((sweep * r / SUB).ceil())
+                .max(1.0) as usize;
             let mut v = Vec::new();
             let mut prev = a;
             for i in 1..=n {
                 let t = t0 + (t1 - t0) * i as f64 / n as f64;
-                let p = if i == n { b } else { [c[0] + r * t.cos(), c[1] + r * t.sin()] };
+                let p = if i == n {
+                    b
+                } else {
+                    [c[0] + r * dmath::cos(t), c[1] + r * dmath::sin(t)]
+                };
                 let half = 0.5 * ((p[0] - prev[0]).powi(2) + (p[1] - prev[1]).powi(2)).sqrt();
                 let rm = r.max(rb);
                 // the sagitta, the radius mismatch at the ends, and a relative margin for the
                 // f64 points on the circle
-                let sag = rm - (rm * rm - half * half).max(0.0).sqrt() + (r - rb).abs() + 1e-12 * (1.0 + rm + c[0].abs() + c[1].abs());
-                let sub = Move::Arc { a: prev, b: p, c, ccw };
+                let sag = rm - (rm * rm - half * half).max(0.0).sqrt()
+                    + (r - rb).abs()
+                    + 1e-12 * (1.0 + rm + c[0].abs() + c[1].abs());
+                let sub = Move::Arc {
+                    a: prev,
+                    b: p,
+                    c,
+                    ccw,
+                };
                 v.push((sub, prev, p, sag * 1.01));
                 prev = p;
             }
@@ -873,8 +991,17 @@ fn remove(stock: &mut Region, obs: &mut Obstacle, q: &[[f64; 2]], rep: &mut Repo
             return;
         }
         // the obstacle validates the region exactly; an invalid result keeps the old stock
-        let next = region_diff(stock, &Region { loops: vec![poly(&q)] })
-            .and_then(|r| Obstacle::of("stock", &r, 0.0).map(|o| (r, o)).map_err(|e| format!("{e:?}")));
+        let next = region_diff(
+            stock,
+            &Region {
+                loops: vec![poly(&q)],
+            },
+        )
+        .and_then(|r| {
+            Obstacle::of("stock", &r, 0.0)
+                .map(|o| (r, o))
+                .map_err(|e| format!("{e:?}"))
+        });
         match next {
             Ok((r, o)) => {
                 if r != *stock {
@@ -913,7 +1040,10 @@ pub fn certify(s: &Setup, ops: &[OpPath], posted: Option<&[Vec<PMove>]>) -> Resu
             Some(d) => {
                 rep.removals.push((oi, d.clone()));
                 let pr = region_diff(&s.part.region, d)?;
-                Some(Obstacle::of("part less the declared removal", &pr, s.part.mu).map_err(|e| format!("{e:?}"))?)
+                Some(
+                    Obstacle::of("part less the declared removal", &pr, s.part.mu)
+                        .map_err(|e| format!("{e:?}"))?,
+                )
             }
             None => None,
         };
@@ -945,7 +1075,10 @@ pub fn certify(s: &Setup, ops: &[OpPath], posted: Option<&[Vec<PMove>]>) -> Resu
                     Verdict::Undecided { .. } => m.start(),
                 };
                 if std::env::var("FORGE_TURN_TRACE").is_ok() {
-                    eprintln!("REFUSED op {oi} step {si} {} vs {}: {v:?} on {m:?}", b.name, obs.name);
+                    eprintln!(
+                        "REFUSED op {oi} step {si} {} vs {}: {v:?} on {m:?}",
+                        b.name, obs.name
+                    );
                 }
                 rep.refusals.push(Refusal {
                     op: oi,
@@ -958,7 +1091,11 @@ pub fn certify(s: &Setup, ops: &[OpPath], posted: Option<&[Vec<PMove>]>) -> Resu
             };
             for b in &op.tool.bodies {
                 // G1 (the part, or the part less the declared removal)
-                let need = if b.cutter { op.leave - s.tol } else { s.holder_clearance };
+                let need = if b.cutter {
+                    op.leave - s.tol
+                } else {
+                    s.holder_clearance
+                };
                 match target.as_mut() {
                     Some(t) => run(b, mv, t, need, "part", &mut rep),
                     None => run(b, mv, &mut part, need, "part", &mut rep),
@@ -979,7 +1116,12 @@ pub fn certify(s: &Setup, ops: &[OpPath], posted: Option<&[Vec<PMove>]>) -> Resu
             // removal (none for a thread pass: the teeth stay, so the stock of revolution keeps
             // them).
             let clears = op.tool.kind != Kind::Thread;
-            let cutters: Vec<&Body> = op.tool.bodies.iter().filter(|b| b.cutter && b.depth[0] == 0.0).collect();
+            let cutters: Vec<&Body> = op
+                .tool
+                .bodies
+                .iter()
+                .filter(|b| b.cutter && b.depth[0] == 0.0)
+                .collect();
             let mut whole = true;
             for b in op.tool.bodies.iter().filter(|b| !b.cutter) {
                 rep.checks += 1;
@@ -1028,7 +1170,12 @@ pub fn certify(s: &Setup, ops: &[OpPath], posted: Option<&[Vec<PMove>]>) -> Resu
     // what lies behind the part's back face (the bar left in the chuck after part-off) is not
     // leftover of this part
     let behind = Region {
-        loops: vec![rect(0.0, s.chuck.z_face - s.chuck.grip - 1.0, s.bar_r + 1.0, s.part.bbox[1])],
+        loops: vec![rect(
+            0.0,
+            s.chuck.z_face - s.chuck.grip - 1.0,
+            s.bar_r + 1.0,
+            s.part.bbox[1],
+        )],
     };
     let left = region_diff(&region_diff(&stock_region, &keep)?, &behind)?;
     for l in left.loops {

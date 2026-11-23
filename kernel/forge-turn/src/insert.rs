@@ -23,6 +23,7 @@
 //! [0, e]·ρ̂ with e = √(xm² + b²) − xm, xm the least x of S (√(x² + y²) − x falls as x grows). A
 //! section reaching x < 0 is mirrored too (check.rs). So the checker bounds dist(π(B), H) by the
 //! distance of a polygon swept along the move and along [0, e]·ρ̂, less the slab's radius.
+use forge_math::dmath;
 use forge_tooling::toml::{self, Table};
 
 /// One body of a lathe tool (see the module doc).
@@ -92,10 +93,22 @@ pub struct TurnTool {
 #[derive(Clone, Debug, PartialEq)]
 pub enum ToolError {
     /// A code this library cannot decode: what, which character, the fix.
-    Code { code: String, why: String },
-    Missing { record: String, field: &'static str },
-    Bad { record: String, why: String },
-    Unknown { id: String, near: Vec<String> },
+    Code {
+        code: String,
+        why: String,
+    },
+    Missing {
+        record: String,
+        field: &'static str,
+    },
+    Bad {
+        record: String,
+        why: String,
+    },
+    Unknown {
+        id: String,
+        near: Vec<String>,
+    },
 }
 
 impl std::fmt::Display for ToolError {
@@ -139,7 +152,10 @@ fn code_err(code: &str, why: impl Into<String>) -> ToolError {
 pub fn decode_insert(code: &str) -> Result<InsertSpec, ToolError> {
     let c: Vec<char> = code.trim().chars().collect();
     if c.len() < 8 {
-        return Err(code_err(code, "too short for an ISO 1832 insert code (e.g. CNMG120408)"));
+        return Err(code_err(
+            code,
+            "too short for an ISO 1832 insert code (e.g. CNMG120408)",
+        ));
     }
     let shape = c[0];
     let eps: f64 = match shape {
@@ -155,7 +171,12 @@ pub fn decode_insert(code: &str) -> Result<InsertSpec, ToolError> {
                 "the trigon (W) outline is not in this library yet: use C, D, V, T, S or R",
             ));
         }
-        x => return Err(code_err(code, format!("insert shape `{x}` not in this library (C D V T S R)"))),
+        x => {
+            return Err(code_err(
+                code,
+                format!("insert shape `{x}` not in this library (C D V T S R)"),
+            ));
+        }
     };
     let clearance = match c[1] {
         'N' => 0.0,
@@ -176,8 +197,15 @@ pub fn decode_insert(code: &str) -> Result<InsertSpec, ToolError> {
         ('C', "12") | ('D', "15") | ('V', "22") | ('T', "22") | ('S', "12") => 12.7,
         ('C', "16") | ('S', "15") | ('T', "27") => 15.875,
         ('C', "19") | ('S', "19") => 19.05,
-        ('R', s) => s.parse::<f64>().map_err(|_| code_err(code, "round insert size: two digits (mm)"))?,
-        _ => return Err(code_err(code, format!("size code `{size}` not in the {shape} series"))),
+        ('R', s) => s
+            .parse::<f64>()
+            .map_err(|_| code_err(code, "round insert size: two digits (mm)"))?,
+        _ => {
+            return Err(code_err(
+                code,
+                format!("size code `{size}` not in the {shape} series"),
+            ));
+        }
     };
     let thickness = match thick.as_str() {
         "01" => 1.59,
@@ -206,7 +234,7 @@ pub fn decode_insert(code: &str) -> Result<InsertSpec, ToolError> {
         let l = match shape {
             'T' => ic * 3f64.sqrt(),
             'S' => ic,
-            _ => ic / e.sin(),
+            _ => ic / dmath::sin(e),
         };
         (re, l)
     };
@@ -237,7 +265,10 @@ pub struct HolderSpec {
 pub fn decode_holder(code: &str) -> Result<HolderSpec, ToolError> {
     let c: Vec<char> = code.trim().chars().collect();
     if c.len() < 10 {
-        return Err(code_err(code, "too short for an ISO 5608 holder code (e.g. PCLNR2525M12)"));
+        return Err(code_err(
+            code,
+            "too short for an ISO 5608 holder code (e.g. PCLNR2525M12)",
+        ));
     }
     // the approach angle of each style letter (common catalogue practice)
     let kapr = match c[2] {
@@ -258,8 +289,16 @@ pub fn decode_holder(code: &str) -> Result<HolderSpec, ToolError> {
             "only right-hand (R) OD holders in this phase: left-hand and boring bars are next",
         ));
     }
-    let h: f64 = c[5..7].iter().collect::<String>().parse().map_err(|_| code_err(code, "shank height: two digits"))?;
-    let b: f64 = c[7..9].iter().collect::<String>().parse().map_err(|_| code_err(code, "shank width: two digits"))?;
+    let h: f64 = c[5..7]
+        .iter()
+        .collect::<String>()
+        .parse()
+        .map_err(|_| code_err(code, "shank height: two digits"))?;
+    let b: f64 = c[7..9]
+        .iter()
+        .collect::<String>()
+        .parse()
+        .map_err(|_| code_err(code, "shank width: two digits"))?;
     let length = match c[9] {
         'H' => 100.0,
         'K' => 125.0,
@@ -279,9 +318,15 @@ pub fn decode_holder(code: &str) -> Result<HolderSpec, ToolError> {
     })
 }
 
+/// tan through forge_math::dmath (the platform's libm differs between targets).
+pub(crate) fn tan(x: f64) -> f64 {
+    let (s, c) = dmath::sin_cos(x);
+    s / c
+}
+
 fn dir(deg: f64) -> [f64; 2] {
     let t = deg.to_radians();
-    [t.cos(), t.sin()]
+    [dmath::cos(t), dmath::sin(t)]
 }
 
 fn add(a: [f64; 2], b: [f64; 2]) -> [f64; 2] {
@@ -299,7 +344,8 @@ fn hull(mut p: Vec<[f64; 2]>) -> Vec<[f64; 2]> {
     if p.len() < 3 {
         return p;
     }
-    let cr = |o: [f64; 2], a: [f64; 2], b: [f64; 2]| (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+    let cr =
+        |o: [f64; 2], a: [f64; 2], b: [f64; 2]| (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
     let mut lo: Vec<[f64; 2]> = Vec::new();
     for &q in &p {
         while lo.len() >= 2 && cr(lo[lo.len() - 2], lo[lo.len() - 1], q) <= 0.0 {
@@ -331,7 +377,12 @@ const SEAT_INSET: f64 = 0.5;
 /// corner at the nose centre, the reference point), its body to its thickness below centre
 /// height with the effective clearance `clear_deg` (a negative insert in a negatively inclined
 /// seat: about 6°), and the holder's head and shank.
-pub fn turning_tool(id: &str, insert: &str, holder: &str, seat_deg: Option<f64>) -> Result<TurnTool, ToolError> {
+pub fn turning_tool(
+    id: &str,
+    insert: &str,
+    holder: &str,
+    seat_deg: Option<f64>,
+) -> Result<TurnTool, ToolError> {
     let ins = decode_insert(insert)?;
     let hol = decode_holder(holder)?;
     // a negative insert sits in a seat inclined about 6°, a positive one flat
@@ -355,13 +406,16 @@ pub fn turning_tool(id: &str, insert: &str, holder: &str, seat_deg: Option<f64>)
     let phi1 = hol.kapr - 90.0;
     let phi2 = phi1 + ins.eps;
     if phi2 > 180.0 || phi1 < -90.0 {
-        return Err(code_err(holder, "this style and insert leave no clearance at the face"));
+        return Err(code_err(
+            holder,
+            "this style and insert leave no clearance at the face",
+        ));
     }
     let (d1, d2) = (dir(phi1), dir(phi2));
     let re = ins.re;
     // the shrunk insert: same angles, sides shorter by the corner allowances; its nose corner
     // is at the nose centre (0, 0)
-    let ls = ins.l - 2.0 * re / (0.5 * ins.eps.to_radians()).tan().max(1e-9);
+    let ls = ins.l - 2.0 * re / tan(0.5 * ins.eps.to_radians()).max(1e-9);
     let core = match ins.shape {
         'T' => vec![[0.0, 0.0], sc(d1, ls), sc(d2, ls)],
         _ => {
@@ -370,7 +424,7 @@ pub fn turning_tool(id: &str, insert: &str, holder: &str, seat_deg: Option<f64>)
             vec![[0.0, 0.0], a, add(a, b), b]
         }
     };
-    let relief = (ins.clearance + clear_deg).max(0.0).to_radians().tan();
+    let relief = tan((ins.clearance + clear_deg).max(0.0).to_radians());
     let insert_body = Body {
         name: "insert".into(),
         cutter: true,
@@ -398,7 +452,10 @@ pub fn turning_tool(id: &str, insert: &str, holder: &str, seat_deg: Option<f64>)
     // clearance, continuing the insert's own relief; it reaches back to the shank's front
     let mid = {
         let n = core.len() as f64;
-        [core.iter().map(|p| p[0]).sum::<f64>() / n, core.iter().map(|p| p[1]).sum::<f64>() / n]
+        [
+            core.iter().map(|p| p[0]).sum::<f64>() / n,
+            core.iter().map(|p| p[1]).sum::<f64>() / n,
+        ]
     };
     let mut head_pts: Vec<[f64; 2]> = far
         .iter()
@@ -450,7 +507,15 @@ pub fn turning_tool(id: &str, insert: &str, holder: &str, seat_deg: Option<f64>)
 /// A grooving or part-off blade: width w, corner radius rc, reach (depth from the tip to the
 /// blade's holder), side clearance per side in degrees. The reference point is the centre of
 /// the corner on the −z side; the blade plunges along −ρ.
-pub fn groove_tool(id: &str, kind: Kind, w: f64, rc: f64, reach: f64, side_deg: f64, h: f64) -> Result<TurnTool, ToolError> {
+pub fn groove_tool(
+    id: &str,
+    kind: Kind,
+    w: f64,
+    rc: f64,
+    reach: f64,
+    side_deg: f64,
+    h: f64,
+) -> Result<TurnTool, ToolError> {
     if !(w > 2.0 * rc && rc >= 0.0 && reach > 0.0) {
         return Err(ToolError::Bad {
             record: id.into(),
@@ -458,7 +523,7 @@ pub fn groove_tool(id: &str, kind: Kind, w: f64, rc: f64, reach: f64, side_deg: 
         });
     }
     let core_w = w - 2.0 * rc;
-    let taper = side_deg.to_radians().tan() * reach;
+    let taper = tan(side_deg.to_radians()) * reach;
     // the blade narrows by the side clearance on both sides as it runs back (+ρ) from the tip
     let core = vec![[0.0, 0.0], [reach, taper], [reach, core_w - taper], [0.0, core_w]];
     if core_w - 2.0 * taper <= 0.0 {
@@ -473,13 +538,18 @@ pub fn groove_tool(id: &str, kind: Kind, w: f64, rc: f64, reach: f64, side_deg: 
         core: ccw(core),
         r: rc,
         depth: [0.0, 3.0],
-        relief: 7f64.to_radians().tan(),
+        relief: tan(7f64.to_radians()),
         on_axis: false,
     };
     let holder = Body {
         name: "blade holder".into(),
         cutter: false,
-        core: vec![[reach + rc, -6.0], [reach + rc + 60.0, -6.0], [reach + rc + 60.0, w + 6.0], [reach + rc, w + 6.0]],
+        core: vec![
+            [reach + rc, -6.0],
+            [reach + rc + 60.0, -6.0],
+            [reach + rc + 60.0, w + 6.0],
+            [reach + rc, w + 6.0],
+        ],
         r: HOLDER_PAD,
         depth: [0.0, h],
         relief: 0.0,
@@ -512,7 +582,7 @@ pub fn thread_tool(id: &str, rt: f64, pitch: [f64; 2], h: f64) -> Result<TurnToo
     let reach = 4.0;
     // the core: an isoceles triangle, apex at the tip centre, flanks at ±30° from +ρ (the
     // insert's 60° V), cut off at the reach
-    let side = reach * half.tan();
+    let side = reach * tan(half);
     let core = vec![[0.0, 0.0], [reach, -side], [reach, side]];
     let tip = Body {
         name: "thread insert".into(),
@@ -520,13 +590,18 @@ pub fn thread_tool(id: &str, rt: f64, pitch: [f64; 2], h: f64) -> Result<TurnToo
         core: ccw(core),
         r: rt,
         depth: [0.0, 3.5],
-        relief: 8f64.to_radians().tan(),
+        relief: tan(8f64.to_radians()),
         on_axis: false,
     };
     let holder = Body {
         name: "thread holder".into(),
         cutter: false,
-        core: vec![[reach + rt, -2.5], [reach + rt + 60.0, -2.5], [reach + rt + 60.0, 22.5], [reach + rt, 22.5]],
+        core: vec![
+            [reach + rt, -2.5],
+            [reach + rt + 60.0, -2.5],
+            [reach + rt + 60.0, 22.5],
+            [reach + rt, 22.5],
+        ],
         r: HOLDER_PAD,
         depth: [0.0, h],
         relief: 0.0,
@@ -554,7 +629,7 @@ pub fn thread_tool(id: &str, rt: f64, pitch: [f64; 2], h: f64) -> Result<TurnToo
 /// A drill on the centre line: diameter d, point angle, flute length, shank diameter.
 pub fn drill_tool(id: &str, d: f64, point_deg: f64, flute: f64, shank: f64) -> Result<TurnTool, ToolError> {
     let r = 0.5 * d;
-    let tip_h = r / (0.5 * point_deg.to_radians()).tan();
+    let tip_h = r / tan(0.5 * point_deg.to_radians());
     let sr = 0.5 * shank;
     let core = vec![
         [0.0, 0.0],
@@ -653,7 +728,11 @@ fn from_table(r: &Table) -> Result<TurnTool, ToolError> {
         }
         "groove" | "part" => groove_tool(
             &id,
-            if kind == "groove" { Kind::Groove } else { Kind::Part },
+            if kind == "groove" {
+                Kind::Groove
+            } else {
+                Kind::Part
+            },
             need("width")?,
             need("corner")?,
             need("reach")?,
@@ -661,11 +740,18 @@ fn from_table(r: &Table) -> Result<TurnTool, ToolError> {
             toml::num(r, "shank").unwrap_or(25.0),
         )?,
         "thread" => {
-            let p = toml::nums(r, "pitch").filter(|v| v.len() == 2).ok_or(ToolError::Missing {
-                record: rec.clone(),
-                field: "pitch",
-            })?;
-            thread_tool(&id, need("tip_radius")?, [p[0], p[1]], toml::num(r, "shank").unwrap_or(25.0))?
+            let p = toml::nums(r, "pitch")
+                .filter(|v| v.len() == 2)
+                .ok_or(ToolError::Missing {
+                    record: rec.clone(),
+                    field: "pitch",
+                })?;
+            thread_tool(
+                &id,
+                need("tip_radius")?,
+                [p[0], p[1]],
+                toml::num(r, "shank").unwrap_or(25.0),
+            )?
         }
         "drill" => drill_tool(
             &id,
@@ -700,5 +786,7 @@ fn from_table(r: &Table) -> Result<TurnTool, ToolError> {
 pub fn builtin(id: &str) -> Result<TurnTool, ToolError> {
     let lib = library(BUILTIN)?;
     let near: Vec<String> = lib.iter().map(|t| t.id.clone()).collect();
-    lib.into_iter().find(|t| t.id == id).ok_or(ToolError::Unknown { id: id.into(), near })
+    lib.into_iter()
+        .find(|t| t.id == id)
+        .ok_or(ToolError::Unknown { id: id.into(), near })
 }

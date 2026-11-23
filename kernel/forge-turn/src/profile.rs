@@ -23,7 +23,7 @@
 use forge_cam_geom::region::{Loop, P2, Region, Seg, p2};
 use forge_geom::curve::Curve;
 use forge_geom::surface::Surface;
-use forge_math::{Frame, Point3, tol};
+use forge_math::{Frame, Point3, dmath, tol};
 use forge_topo::{Body, FaceId};
 
 /// The half-profile: the region in the (ρ, z) half-plane (x = ρ ≥ 0, y = z), counter-clockwise
@@ -39,11 +39,19 @@ pub struct HalfProfile {
 #[derive(Clone, Debug, PartialEq)]
 pub enum ProfileError {
     /// A face that is not a surface of revolution about the axis: its index, its kind and why.
-    NotTurned { face: usize, kind: String, why: String },
+    NotTurned {
+        face: usize,
+        kind: String,
+        why: String,
+    },
     /// The meridians do not chain into closed loops (an end with no partner, at this point).
-    Open { at: P2 },
+    Open {
+        at: P2,
+    },
     /// The meridians chain, but not into one valid region (crossing, wrong nesting).
-    Invalid { why: String },
+    Invalid {
+        why: String,
+    },
     Empty,
 }
 
@@ -80,7 +88,13 @@ fn circle_rz(c: &forge_geom::curve::Circle, size: f64) -> Option<(P2, f64)> {
 
 /// The ends a face's edges give: each circle edge's (ρ, z); each vertex lying on the axis (an
 /// apex or a pole) its (0, z). Seam lines (in a meridian plane) give nothing of their own.
-fn face_ends(body: &Body, fid: FaceId, size: f64, k: usize, kind: &str) -> Result<(Vec<P2>, f64), ProfileError> {
+fn face_ends(
+    body: &Body,
+    fid: FaceId,
+    size: f64,
+    k: usize,
+    kind: &str,
+) -> Result<(Vec<P2>, f64), ProfileError> {
     let mut ends: Vec<P2> = Vec::new();
     let mut off = 0.0f64;
     let bad = |why: &str| ProfileError::NotTurned {
@@ -96,7 +110,8 @@ fn face_ends(body: &Body, fid: FaceId, size: f64, k: usize, kind: &str) -> Resul
                     // a seam of a sphere or torus: an arc in a plane through the axis
                 }
                 Curve::Circle(ci) => {
-                    let (q, o) = circle_rz(ci, size).ok_or_else(|| bad("a circle edge not about the axis"))?;
+                    let (q, o) =
+                        circle_rz(ci, size).ok_or_else(|| bad("a circle edge not about the axis"))?;
                     off = off.max(o);
                     if !ends.contains(&q) {
                         ends.push(q);
@@ -120,7 +135,10 @@ fn face_ends(body: &Body, fid: FaceId, size: f64, k: usize, kind: &str) -> Resul
                 if r <= tol::LINEAR {
                     off = off.max(r);
                     let q = p2(0.0, p.z);
-                    if !ends.iter().any(|x| x.x == 0.0 && (x.y - q.y).abs() <= tol::LINEAR) {
+                    if !ends
+                        .iter()
+                        .any(|x| x.x == 0.0 && (x.y - q.y).abs() <= tol::LINEAR)
+                    {
                         ends.push(q);
                     }
                 }
@@ -180,13 +198,23 @@ fn meridian(body: &Body, fid: FaceId, k: usize, size: f64) -> Result<(Option<Mer
             }
             let (a, b) = two(&ends)?;
             let c = p2(0.0, o.z);
-            (Some(Mer { seg: arc_on_face(body, fid, a, b, c)? }), off)
+            (
+                Some(Mer {
+                    seg: arc_on_face(body, fid, a, b, c)?,
+                }),
+                off,
+            )
         }
         Surface::Torus(to) => {
             let off = off_axis(&to.frame, size).ok_or_else(|| bad("a torus not about the axis"))?;
             let (a, b) = two(&ends)?;
             let c = p2(to.major, to.frame.origin.z);
-            (Some(Mer { seg: arc_on_face(body, fid, a, b, c)? }), off)
+            (
+                Some(Mer {
+                    seg: arc_on_face(body, fid, a, b, c)?,
+                }),
+                off,
+            )
         }
         Surface::Procedural(_) => return Err(bad("a procedural surface")),
     };
@@ -215,11 +243,17 @@ fn arc_on_face(body: &Body, fid: FaceId, a: P2, b: P2, c: P2) -> Result<Seg, Pro
     let m = match &body.face(fid).surface {
         Surface::Torus(t) => {
             let sz = t.frame.z().get().z.signum();
-            p2(t.major + t.minor * v.cos(), t.frame.origin.z + sz * t.minor * v.sin())
+            p2(
+                t.major + t.minor * dmath::cos(v),
+                t.frame.origin.z + sz * t.minor * dmath::sin(v),
+            )
         }
         Surface::Sphere(sp) => {
             let sz = sp.frame.z().get().z.signum();
-            p2(sp.radius * v.cos(), sp.frame.origin.z + sz * sp.radius * v.sin())
+            p2(
+                sp.radius * dmath::cos(v),
+                sp.frame.origin.z + sz * sp.radius * dmath::sin(v),
+            )
         }
         _ => return Err(undecided()),
     };
@@ -240,7 +274,7 @@ fn arc_on_face(body: &Body, fid: FaceId, a: P2, b: P2, c: P2) -> Result<Seg, Pro
 /// The z range and the largest ρ of the arc from a to b about c (counter-clockwise or not).
 fn arc_range(a: P2, b: P2, c: P2, ccw: bool) -> (f64, f64, f64) {
     let r = ((a.x - c.x).powi(2) + (a.y - c.y).powi(2)).sqrt();
-    let ang = |p: P2| (p.y - c.y).atan2(p.x - c.x);
+    let ang = |p: P2| dmath::atan2(p.y - c.y, p.x - c.x);
     let (mut t0, mut t1) = (ang(a), ang(b));
     if !ccw {
         std::mem::swap(&mut t0, &mut t1);
@@ -257,7 +291,7 @@ fn arc_range(a: P2, b: P2, c: P2, ccw: bool) -> (f64, f64, f64) {
             t += std::f64::consts::TAU;
         }
         if t <= t1 {
-            let (x, y) = (c.x + r * t.cos(), c.y + r * t.sin());
+            let (x, y) = (c.x + r * dmath::cos(t), c.y + r * dmath::sin(t));
             zl = zl.min(y);
             zh = zh.max(y);
             rh = rh.max(x);
@@ -302,7 +336,7 @@ pub fn half_profile(body: &Body) -> Result<HalfProfile, ProfileError> {
         }
     }
     axis.sort_by(|a, b| a.total_cmp(b));
-    if axis.len() % 2 != 0 {
+    if !axis.len().is_multiple_of(2) {
         return Err(ProfileError::Invalid {
             why: format!("{} meridian ends on the axis, not an even number", axis.len()),
         });
@@ -327,7 +361,9 @@ pub fn half_profile(body: &Body) -> Result<HalfProfile, ProfileError> {
     }
     let mu = tol::LINEAR + off + 64.0 * f64::EPSILON * (1.0 + size);
     let mut cx = forge_cam_geom::real::Ctx::new();
-    forge_cam_geom::region::validate(&mut cx, &region).map_err(|e| ProfileError::Invalid { why: format!("{e:?}") })?;
+    forge_cam_geom::region::validate(&mut cx, &region).map_err(|e| ProfileError::Invalid {
+        why: format!("{e:?}"),
+    })?;
     Ok(HalfProfile { region, mu, bbox })
 }
 
@@ -394,7 +430,7 @@ pub(crate) fn area2(l: &Loop) -> f64 {
         if let Seg::Arc { a: s0, b: s1, c, ccw } = *s {
             let r2 = (s0.x - c.x).powi(2) + (s0.y - c.y).powi(2);
             let r = r2.sqrt();
-            let mut t = (s1.y - c.y).atan2(s1.x - c.x) - (s0.y - c.y).atan2(s0.x - c.x);
+            let mut t = dmath::atan2(s1.y - c.y, s1.x - c.x) - dmath::atan2(s0.y - c.y, s0.x - c.x);
             if ccw {
                 while t <= 0.0 {
                     t += std::f64::consts::TAU;
@@ -405,7 +441,7 @@ pub(crate) fn area2(l: &Loop) -> f64 {
                 }
             }
             // the circular segment between chord and arc, signed by the sense
-            a += r * r * (t - t.sin());
+            a += r * r * (t - dmath::sin(t));
             let _ = r;
         }
     }
