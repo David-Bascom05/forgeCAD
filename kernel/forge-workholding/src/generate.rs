@@ -73,7 +73,7 @@ pub fn plate_from_part(
     for i in 0..holes.len() {
         for j in i + 1..holes.len() {
             let (a, b) = (holes[i].at, holes[j].at);
-            let d = (a[0] - b[0]).hypot(a[1] - b[1]);
+            let d = ((a[0] - b[0]) * (a[0] - b[0]) + (a[1] - b[1]) * (a[1] - b[1])).sqrt();
             if d > best.0 {
                 best = (d, [i, j]);
             }
@@ -206,7 +206,7 @@ pub fn bored_jaws(
     let (jh, jl) = (chuck.get("jaw_height")?, chuck.get("jaw_len")?);
     let r0 = 0.5 * closed_d;
     let r1 = 0.5 * grip_d;
-    if !(grip_d > closed_d) {
+    if grip_d.is_nan() || grip_d <= closed_d {
         return Err(refuse(
             name,
             format!("the bore ⌀{grip_d:.2} is not larger than the jaws as closed (⌀{closed_d:.2})"),
