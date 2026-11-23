@@ -381,7 +381,8 @@ fn snap(fs: &[In]) -> Result<(Vec<DyPlane>, Vec<usize>), Skip> {
     for (i, f) in fs.iter().enumerate() {
         let r = uf.find(i);
         let rp = &fs[r].plane;
-        planes.push(if f.plane.n.dot(&rp.n).signum() < 0 {
+        // (a face its own representative keeps its plane)
+        planes.push(if r != i && f.plane.n.dot(&rp.n).signum() < 0 {
             rp.flipped()
         } else {
             rp.clone()
@@ -1565,6 +1566,8 @@ struct Built {
     sides: Dense<Vec<(u32, i32)>>,
     /// a facet: the input faces it is a piece of
     holders: Dense<Vec<usize>>,
+    /// per cell: its covector as signs (the bridge's own; the ledger holds it packed)
+    cells: Vec<Vec<Sgn>>,
     /// per cell: is it on a wall (some wall class zero); for the write
     #[allow(dead_code)]
     wall: Vec<bool>,
@@ -1866,7 +1869,8 @@ fn build_ledger(
         nb,
         face_body: fs.iter().map(|f| BodyId(f.body as u32)).collect(),
         face_class: cls.of_face.clone(),
-        cells: tab.cells.clone(),
+        width: cls.planes.len() as u32,
+        cells: tab.cells.iter().map(|c| core::row::row_of(c)).collect(),
         pieces: pieces.iter().map(|&(f, c)| (CellId(c), CFace(f))).collect(),
         inside: Vec::new(),
         edges: edges.into_iter().map(CellId).collect(),
@@ -1882,6 +1886,7 @@ fn build_ledger(
         sides,
         holders: holders_of,
         wall: tab.cells.iter().map(|cv| on_wall(cv)).collect(),
+        cells: tab.cells,
         by: tab.by,
     }
 }
@@ -1890,7 +1895,7 @@ fn build_ledger(
 fn witness_point(b: &Built, cls: &Classes, t: u32) -> HPoint {
     let (f, s) = b.side_of[&t];
     let fc = &b.facet[&f];
-    let cov = &b.ledger.cells[f as usize];
+    let cov = &b.cells[f as usize];
     let c = fc.class as usize;
     let n = &cls.planes[c].n;
     let mut k = 4;
@@ -1916,16 +1921,16 @@ fn witness_point(b: &Built, cls: &Classes, t: u32) -> HPoint {
 /// range, distinct edge ids, and the counts the core's u32 ids and usize sizes can hold.
 fn ledger_wf(l: &Ledger) -> bool {
     let n = l.cells.len();
-    let distinct = |xs: Vec<&[Sgn]>| {
-        let mut xs = xs;
-        xs.sort();
+    let distinct = |xs: Vec<&core::Row>| {
+        let mut xs: Vec<(u64, u64)> = xs.iter().map(|r| (r.pos, r.neg)).collect();
+        xs.sort_unstable();
         xs.windows(2).all(|w| w[0] != w[1])
     };
     let mut es: Vec<u32> = l.edges.iter().map(|e| e.0).collect();
     es.sort_unstable();
     let total = n as u128 + 2 * l.pieces.len() as u128 + 1;
     l.nb > 0
-        && distinct(l.cells.iter().map(|c| &c[..]).collect())
+        && distinct(l.cells.iter().collect())
         && l.pieces.iter().all(|(c, _)| (c.0 as usize) < n)
         && l.inside.iter().all(|(c, _)| (c.0 as usize) < n)
         && l.edges.iter().all(|c| (c.0 as usize) < n)
@@ -1938,6 +1943,10 @@ fn ledger_wf(l: &Ledger) -> bool {
         && (l.verts.len() as u128) < u32::MAX as u128
         && 3 * total <= usize::MAX as u128
 }
+
+/// How many booleans the core skipped for width (more classes than a packed row holds), for the
+/// gate's report.
+pub static SKIP_WIDE: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 
 /// The op as the core's rule.
 fn rule_of(op: Op) -> Rule {
@@ -2219,6 +2228,11 @@ pub fn nary(bodies: &[&Body], rule: &Rule) -> Result<Option<Body>, BoolError> {
         write(&w, out).unwrap_or_else(|| panic!("decide-once: the result's segments do not close into loops"))
     };
     match outcome {
+        // (more classes than a row holds: the old path, counted)
+        Outcome::Skip(_) => {
+            SKIP_WIDE.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            Ok(None)
+        }
         Outcome::Empty => Ok(Some(written(None))),
         Outcome::Refused(Refusal::ZeroThickness(c)) => Err(BoolError::ZeroThickness {
             at: cell_point(&built, c.0),
@@ -2241,8 +2255,10 @@ pub fn nary(bodies: &[&Body], rule: &Rule) -> Result<Option<Body>, BoolError> {
 fn why_split(l: &Ledger) -> Option<String> {
     let mut seen: HashMap<(u32, u32), u32> = HashMap::default();
     for &(c, f) in &l.pieces {
-        let x = &l.cells[c.0 as usize];
-        let zeros: Vec<usize> = (0..x.len()).filter(|&k| x[k] == Sgn::Zero).collect();
+        let x = l.cells[c.0 as usize];
+        let zeros: Vec<usize> = (0..l.width as usize)
+            .filter(|&k| core::row::row_get(x, k) == Sgn::Zero)
+            .collect();
         if zeros.len() != 1 {
             return Some(format!(
                 "piece of face {} has zeros {zeros:?}, face class {}",
@@ -2540,8 +2556,6 @@ fn inside_loop(w: &Wr, lp: &[Seg], ax: (usize, usize), q: (f64, f64)) -> bool {
 /// valid ledger never gives.
 fn write(w: &Wr, out: Option<&core::Body>) -> Option<Body> {
     let (bodies, fs, cls, built, reg) = (w.bodies, w.fs, w.cls, w.built, w.reg);
-    let l = &built.ledger;
-    let on_wall = |cv: &[Sgn]| cls.walls.iter().any(|&x| cv[x as usize] == Sgn::Zero);
     let mut pools: std::collections::BTreeMap<Grp, Vec<Seg>> = std::collections::BTreeMap::new();
     // body 0's global face index by FaceId
     let mut gidx: HashMap<FaceId, usize> = HashMap::default();
@@ -2662,7 +2676,7 @@ fn write(w: &Wr, out: Option<&core::Body>) -> Option<Body> {
             }
             let pool = pools.entry(grp).or_default();
             for (u, v, e) in segs {
-                if count[&e] == 1 && !on_wall(&l.cells[e as usize]) {
+                if count[&e] == 1 && !built.wall[e as usize] {
                     pool.push(Seg {
                         a: PK::Cell(u),
                         b: PK::Cell(v),
@@ -2998,7 +3012,7 @@ fn vid_of_orig(w: &Wr, v: VertexId) -> bool {
 
 /// The edge cell between two vertex cells of a facet.
 fn edge_cell(b: &Built, u: u32, v: u32) -> Option<u32> {
-    let cu = &b.ledger.cells[u as usize];
-    let cv = &b.ledger.cells[v as usize];
+    let cu = &b.cells[u as usize];
+    let cv = &b.cells[v as usize];
     b.by.get(&join(&[cu, cv])).copied()
 }

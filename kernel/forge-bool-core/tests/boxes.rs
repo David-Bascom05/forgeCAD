@@ -3,7 +3,7 @@
 //! face touches. The Lean evaluates the same ledgers at build time; the answers must agree.
 
 use forge_bool_core::{
-    BodyId, CellId, FaceId, Ledger, MetricLedger, Outcome, Refusal, Rule, Sgn, core, witnesses,
+    BodyId, CellId, FaceId, Ledger, MetricLedger, Outcome, Refusal, Rule, Sgn, core, row, witnesses,
 };
 
 type D = (i64, i64, i64);
@@ -186,8 +186,11 @@ fn box_ledger(k: i64, boxes: &[BoxN]) -> Ledger {
     let edges = es.iter().map(|&c| id(c, &mut cells)).collect();
     let verts = vs.iter().map(|&c| id(c, &mut cells)).collect();
     let nf = 6 * boxes.len();
+    let width = cells.first().map_or(0, |c| c.len()) as u32;
+    let cells = cells.iter().map(|c| row::row_of(c)).collect();
     Ledger {
         nb: boxes.len() as u32,
+        width,
         face_body: (0..nf).map(|f| BodyId((f / 6) as u32)).collect(),
         face_class: (0..nf)
             .map(|f| {
@@ -231,7 +234,10 @@ fn summary(l: &Ledger, o: Outcome) -> Summary {
         Outcome::Empty => Summary::Empty,
         Outcome::Refused(Refusal::SplitCrossed) => Summary::Split,
         Outcome::Refused(Refusal::InconsistentClassification) => Summary::Inconsistent,
-        Outcome::Refused(Refusal::ZeroThickness(c)) => Summary::Zero(l.cells[c.0 as usize].clone()),
+        Outcome::Refused(Refusal::ZeroThickness(c)) => {
+            Summary::Zero(row::row_signs(l.cells[c.0 as usize], l.width as usize))
+        }
+        Outcome::Skip(_) => panic!("a box ledger is never wide"),
     }
 }
 
@@ -375,7 +381,7 @@ fn box_pairs_never_retry() {
 /// The metric ledger (stage 4b) on Rungs.lean's two features, with the Lean's answers.
 fn run_m(k: i64, boxes: &[BoxN], rule: Rule, thin: D) -> Summary {
     let l = box_ledger(k, boxes);
-    let c = cov(k, thin);
+    let c = row::row_of(&cov(k, thin));
     let id = CellId(
         l.cells
             .iter()
