@@ -7135,6 +7135,16 @@ pub(crate) mod log {
             return;
         }
         let (sine, off) = gap.unwrap_or((f64::NAN, f64::NAN));
+        if yes && !crate::ssi::same_carrier(sa, sb) && std::env::var_os("FORGE_DECISIONS_DUMP").is_some() {
+            // (the guess-site list: a coincidence no exact key holds, by its faces' names)
+            eprintln!(
+                "decision-unkeyed {site} | {:?} | {:?} | {:?} | {:?} | off {off:e} sine {sine:e}",
+                a.face(fa).name,
+                b.face(fb).name,
+                sa,
+                sb
+            );
+        }
         let key = d::pair(Ent::f(a, fa), Ent::f(b, fb));
         d::decide(
             Kind::Coincident,
