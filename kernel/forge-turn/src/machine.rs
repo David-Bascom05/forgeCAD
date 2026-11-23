@@ -88,3 +88,6 @@ pub struct Place {
     pub z0: f64,
     pub tools: Vec<(u32, [f64; 2])>,
 }
+
+/// The built-in lathes (CAM-MACHINE's generic lathe, copied until forge-machine is on main).
+pub const BUILTIN: &str = include_str!("../data/machines-lathe.toml");

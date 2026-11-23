@@ -1,9 +1,9 @@
-//! G5 and the machine's limits on CAM-MACHINE's generic lathe (tests/data/generic-lathe.toml).
+//! G5 and the machine's limits on CAM-MACHINE's generic lathe (data/machines-lathe.toml).
 mod common;
 use forge_turn::machine::{Place, lathe};
 use forge_turn::ops;
 
-const SRC: &str = include_str!("data/generic-lathe.toml");
+const SRC: &str = forge_turn::machine::BUILTIN;
 
 #[test]
 fn the_generic_lathe_reads() {

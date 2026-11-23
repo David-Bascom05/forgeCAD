@@ -132,6 +132,7 @@ dependencies = [
  "forge-ops",
  "forge-step",
  "forge-topo",
+ "forge-turn-lang",
 ]
 
 [[package]]
@@ -521,6 +522,16 @@ dependencies = [
  "forge-post",
  "forge-tooling",
  "forge-topo",
+]
+
+[[package]]
+name = "forge-turn-lang"
+version = "0.1.0"
+dependencies = [
+ "forge-agent",
+ "forge-cam-geom",
+ "forge-lang",
+ "forge-turn",
 ]
 
 [[package]]

@@ -313,6 +313,11 @@ pub fn rough(
     z_lo: f64,
     z_top: f64,
 ) -> Result<OpPath, OpError> {
+    if !(leave >= 0.0) {
+        return Err(OpError::Geometry(format!(
+            "a leave of {leave}: below the part (G1 holds the cutter from P ⊕ B_leave, leave ≥ 0)"
+        )));
+    }
     if tool.kind != Kind::Turn {
         return Err(OpError::Tool(format!(
             "roughing needs a turning tool, not `{}`",
@@ -436,6 +441,11 @@ fn clip_above(s: &Seg, z0: f64) -> Option<(Seg, bool)> {
 /// Finishing: the nose centre along the boundary of H ⊕ B_{r_ε + leave}, clockwise from where
 /// it crosses ρ = ρ_min of the part (over the front face) down to z = z_lo.
 pub fn finish(s: &Setup, tool: &TurnTool, t: u32, leave: f64, z_lo: f64) -> Result<OpPath, OpError> {
+    if !(leave >= 0.0) {
+        return Err(OpError::Geometry(format!(
+            "a leave of {leave}: below the part (G1 holds the cutter from P ⊕ B_leave, leave ≥ 0)"
+        )));
+    }
     if tool.kind != Kind::Turn {
         return Err(OpError::Tool(format!(
             "finishing needs a turning tool, not `{}`",

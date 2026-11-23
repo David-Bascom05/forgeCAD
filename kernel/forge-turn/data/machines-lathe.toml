@@ -1,4 +1,5 @@
-# CAM-MACHINE's generic-lathe (branch cam/machine, kernel/forge-machine/data/machines.toml @9fb8684), copied for the boundary test
+# CAM-MACHINE's generic-lathe (branch cam/machine, kernel/forge-machine/data/machines.toml @9fb8684), copied
+# here until forge-machine is on main (the boundary conversion, machine.rs). Placeholders, not a real machine.
 [[machine]]
 name = "generic-lathe"
 kind = "lathe"

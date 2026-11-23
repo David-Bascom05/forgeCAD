@@ -77,10 +77,11 @@ What the checks caught while the examples were written (each now a test, tests/r
    oracle for `axis_gap` (L6).
 2. ID work: boring bars, internal grooving and threading, left-hand tools (the holder decoder
    refuses them by name today).
-3. The .fg surface: lathe setups and ops in the `machining` document (interface), and
-   `forgecad cam` replies for lathe programs (needs the seam with forge-cam-lang, CAM-CORE's).
-4. The machine: a lathe in CAM-MACHINE's format (travel, turret, spindle limits, the dialect
-   link); today `Setup.travel` is a local stand-in.
+3. Done: the .fg surface (interface/forge-turn-lang, docs/cam-turning.md; forge-cli sends a
+   turning document there by one branch on `is_turning`, no change to forge-cam-lang), and the
+   machine in CAM-MACHINE's format (machine.rs reads it; data/machines-lathe.toml is a copy of
+   its generic-lathe until forge-machine is on main). Left: the setup sheet for turning, more
+   than one setup per document.
 5. G4 reasons: "nose radius r" (inside the part grown by the smallest finishing nose, decided by
    exact booleans) or "uncut"; reach and undercut are not told apart yet.
 6. Speed: certification is dominated by the in-process stock's exact booleans (~73%); next, a
