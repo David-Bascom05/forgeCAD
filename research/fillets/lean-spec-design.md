@@ -384,3 +384,37 @@ respects a rim next to its support, and its convex round ignores a far wall. Pro
 the fillet of a pick is the closing (opening) of its **local obstacle**, the two supports and the
 faces sharing an edge with either one. Far faces meet the result only through the final boolean with
 S. Every theorem of §8 holds under it unchanged.
+
+## 13. Decision: the local rolling ball (the owner, 2026-11-23)
+
+The owner chose the **local rolling ball** for both kinds of fillet, relayed by the master on 2026-11-23.
+- The ball touches the pick's two faces, with its springs inside them.
+- No other generator blocks its interior.
+- Interactions are P3 events on the springs: cliff, roll-over, crowding, overlapping rounds.
+- The closing is its theorem where no third generator is within reach.
+
+This replaces the opening for convex picks (§1.3's dual) and the whole-body obstacle for concave ones.
+
+In Lean: `Fillet/LocalBall.lean`.
+- The definitions: `Pick` (the two supports as carried solids, and their face patches), `Centre` (free of the two supports, a foot inside each face), `Witness` (the nearest free centre is a rolling ball's), `localFill`, and `concave` / `convex` (the dual pick on the complements).
+- `local_eq_closing`: where `S` agrees with the two supports within 2r of x, and x has a witness, the local fill is the closing's fill of `S`. So every closing theorem of §8 is a theorem of the local ball on its domain. Standard axioms only.
+
+### The corpus under it
+
+| case | verdict |
+|---|---|
+| fillet_tangent_chain_scoop (r 1.5) | kernel gap: the run-out at the 1.8° end face (§11) |
+| fillet_crescent_both_edges (r 2) | **kernel gap**, changed from §11. The far wall is no obstacle. The two picks' springs, 2 from each edge, cross on the 2.5-wide start face: a crowding event, so the two rounds meet in a ridge (the overlapping-rounds row) |
+| fillet_spline_walls_noblend (r 10) | kernel gap. Not focal (18.1 > 10 across the edge), and no other face blocks the ball, so the spec has centres where the kernel's trace finds none. To confirm with a certified centre |
+| fillet_wavy_plate_notch (r 5) | kernel gap. Not focal (8.5 > 5). An overflow is an event on the springs with a defined result, so a bare refusal is a gap unless the event's vertex type is outside the table. Which event it is needs the certified springs |
+| pipe set p00010, p00133, p00164 | **kernel right; OCCT disagrees with the spec.** The rim of the face next to the support does not block the ball's interior, and the springs stay inside their faces, so the spec is the kernel's pipe. OCCT respects the rim, as the closing does (§12) |
+| pipe set p00029, p00111, p00124 | open: both kernels agree there, and the run-out row's Cap_v decides |
+| census thin-wall convex "wrongs" (63, census.md fault 2) | kernel right, by the spec now |
+
+Under this rule, refusals are typed by what the spec lacks:
+- `Focal`: P7.
+- `NoSeed`: no centre touches both faces near the edge.
+- `VertexType`: a vertex outside the table.
+- `Undecided`: a predicate whose sign is not certified.
+
+Any other refusal is a kernel gap.

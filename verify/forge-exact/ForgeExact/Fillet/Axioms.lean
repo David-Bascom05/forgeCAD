@@ -2,6 +2,7 @@ import ForgeExact.Axioms
 import ForgeExact.Fillet.RevCorner
 import ForgeExact.Fillet.Conic
 import ForgeExact.Fillet.Overflow
+import ForgeExact.Fillet.LocalBall
 
 /-!
 # The fillet spec: only the standard axioms
@@ -33,3 +34,4 @@ the build fails on `sorryAx` or any axiom past `propext`, `Classical.choice` and
   ForgeExact.Fillet.Conic.conic_tangent
   ForgeExact.Fillet.quadNonneg_spec
   ForgeExact.Fillet.clear_sphere
+  ForgeExact.Fillet.Pick.local_eq_closing
