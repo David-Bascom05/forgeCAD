@@ -5,7 +5,7 @@ import Lean
 import IEEE754.Binary64
 import IEEE754.Compare
 import IEEE754.Computed
-import IEEE754.TwoProduct
+import IEEE754.Dmath.Reduction
 
 /-!
 # Only the standard axioms
@@ -61,3 +61,6 @@ elab "#standard_axioms " ids:ident* : command => do
   IEEE754.two_sum_core IEEE754.two_sum_exact
   IEEE754.veltkamp_core IEEE754.veltkamp IEEE754.dekker_core IEEE754.two_product_exact
   IEEE754.F64.two_product_exact
+  -- dmath: rem_pio2
+  IEEE754.Dmath.quadrant IEEE754.Dmath.rem1 IEEE754.Dmath.tail IEEE754.Dmath.refine
+  IEEE754.Dmath.remPio2_rat IEEE754.Dmath.remPio2_spec

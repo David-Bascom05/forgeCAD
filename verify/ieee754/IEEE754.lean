@@ -13,4 +13,5 @@ import IEEE754.Computed
 import IEEE754.Nearest
 import IEEE754.TwoSum
 import IEEE754.TwoProduct
+import IEEE754.Dmath.Reduction
 import IEEE754.Axioms
