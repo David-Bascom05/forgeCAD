@@ -2691,6 +2691,82 @@ pub fn pair_curve(qj: &Quadric, qk: &Quadric) -> Result<PairCurve, Skip> {
 }
 
 // =============================================================================================
+// The builder, stage (c) part 1: trims (curved-brep-route.md §1, the build order's first step)
+// =============================================================================================
+
+/// A B-rep edge of an operand, as a trim of the faces it bounds.
+#[derive(Clone, Debug)]
+pub struct Trim {
+    pub body: usize,
+    pub edge: forge_topo::EdgeId,
+    /// the faces it bounds, as indices into `read_faces`' list (one face twice for a seam)
+    pub faces: (usize, usize),
+    /// their carrier classes (`carrier_classes`)
+    pub classes: (usize, usize),
+    /// its end vertices and their stored points
+    pub start: forge_topo::VertexId,
+    pub end: forge_topo::VertexId,
+    pub p0: [f64; 3],
+    pub p1: [f64; 3],
+    /// a closed edge (a circle round a hole): one vertex, which is not a point of three
+    /// carriers, so the trim is a loop with no exact vertex
+    pub closed: bool,
+}
+
+/// **Trims**: every edge of the operands with the faces it bounds and their classes. An edge
+/// whose curve is procedural or an intersection curve (no quadric pair) is outside the domain.
+pub fn read_trims(bodies: &[&forge_topo::Body], fs: &[CIn], cls: &[usize]) -> Result<Vec<Trim>, Skip> {
+    use forge_geom::Curve;
+    let mut out: Vec<Trim> = Vec::new();
+    let mut k = 0;
+    while k < bodies.len() {
+        let b = bodies[k];
+        // face id -> index in fs, for this body
+        let mut idx: Vec<(forge_topo::FaceId, usize)> = Vec::new();
+        let mut i = 0;
+        while i < fs.len() {
+            if fs[i].body == k {
+                idx.push((fs[i].face, i));
+            }
+            i += 1;
+        }
+        let find = |f: forge_topo::FaceId| idx.iter().find(|p| p.0 == f).map(|p| p.1);
+        let eids: Vec<forge_topo::EdgeId> = b.edge_ids().collect();
+        let mut j = 0;
+        while j < eids.len() {
+            let e = b.edge(eids[j]);
+            if matches!(e.curve, Curve::Procedural(_) | Curve::Intersection(_)) {
+                return Err(Skip::OutOfDomain("an edge with no quadric pair"));
+            }
+            if e.coedges.len() != 2 {
+                return Err(Skip::OutOfDomain("an edge without two uses"));
+            }
+            let f0 = b.lp(b.coedge(e.coedges[0]).lp).face;
+            let f1 = b.lp(b.coedge(e.coedges[1]).lp).face;
+            let (i0, i1) = match (find(f0), find(f1)) {
+                (Some(a), Some(c)) => (a, c),
+                _ => return Err(Skip::OutOfDomain("an edge of an unread face")),
+            };
+            let (v0, v1) = (b.vertex(e.start).point, b.vertex(e.end).point);
+            out.push(Trim {
+                body: k,
+                edge: eids[j],
+                faces: (i0, i1),
+                classes: (cls[i0], cls[i1]),
+                start: e.start,
+                end: e.end,
+                p0: [v0.x, v0.y, v0.z],
+                p1: [v1.x, v1.y, v1.z],
+                closed: e.start == e.end,
+            });
+            j += 1;
+        }
+        k += 1;
+    }
+    Ok(out)
+}
+
+// =============================================================================================
 // QForm.lean: a body's sign formula
 // =============================================================================================
 
