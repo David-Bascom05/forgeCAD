@@ -1,4 +1,57 @@
-# verify/sheet: the sheet-metal spec in Lean (design note)
+# verify/sheet: the sheet-metal spec in Lean (design note, then status)
+
+## Status (what is built and proven)
+
+`lake build` (no `sorry`; Sheet/Axioms.lean, in the default target, checks every main theorem
+rests on propext, Classical.choice and Quot.sound only). CI: .github/workflows/sheet-lean.yml.
+
+| file | content |
+|---|---|
+| Fold.lean | one bend over ℝ: s = ρ tan(θ/2), `inner_radius` (towardRef), `neutral_radius`, κ ∈ [0,1] ⟺ rn ∈ [R, R+t], φ(BA) = θ, `zone_zero`/`zone_BA`, C¹ (`dir_zero`/`dir_BA`), `iso`, `neutral_length`, `deduction`, `refold_a`/`refold_b`, the hem branch `zone_BA_hem` and `Jat_eq_J` |
+| Tree.lean | `refold`: fold ∘ develop = folded on every wall of a strip tree, zones glue on every tangent line, by induction on paths |
+| Rules.lean | `BA_from_rule`, `ktable_physical`, `allowance_physical` (per-row κ check suffices), K ↔ BA, `s_eq_setback` (ISSB/OSSB), `flat_length_consistent`, `deduction_is_bd`, `bd90`, `outsideReach_eq` (min flange + t tan(θ/2)) |
+| Classes.lean | Snap.lean's classes, generic: `cls_spec`, `rep_order`, `rep_class`, `rep_unique`, `conn_map` |
+| Region.lean | the 2D LINEAR rule exact over ℚ, vertex classes, spread cap, half-open crossing, loop = polygon XOR lenses, hole owner |
+| BranchBound.lean | `certify_sound`: forge-brake's Clear/Hit/Undecided sound for any work order, from the primitives' contracts |
+| Trig.lean | rational intervals; `sc_mem`: proven sin/cos enclosures at a rational |
+| Checker.lean | conditions 1, 3/4, 5, 7 three-valued; `kappa_sound`, `setback_sound`, `refoldVertex_sound`, `near_sound` |
+| Oracle.lean | `lake exe sheet-oracle`: reads the kernel's dumps (f64 bits, exact) |
+
+Differential tests (committed digests; `SHEET_LEAN=1` runs the oracle and rewrites them):
+* interface/forge-lang/tests/sheet_lean_diff.rs: every sheet part in parts/sheet and examples/ (51
+  sheets) and 57 seeded random strips (two flanges, random angle 20–160°, sense, R/t, K, gauge):
+  condition 7, 3/4, 5, 1 per sheet. **Result: 431 of 432 pass**; the one FAIL is below.
+* kernel/forge-sheet/tests/lean_diff_region.rs: 46 regions from the trims' case sets (those with
+  no splines), 400 random points each plus points 1e-6/1e-3 off every vertex and 1e-9/1e-6 off
+  every piece's middle: region.rs `holds` against `inLoop`. **Result: 0 disagreements.**
+
+## Disagreements found (for the fix-sheet session)
+
+1. **parts/sheet/holes.fg, condition 1 (names)**: the hole wholly inside the bend zone (`zone`, the
+   r = 1 circle at (38.2, 50)) has its vertices named differently in the flat and folded bodies.
+   Flat vertex `#8e2a7322f8f5ac98` at (39.2, 50, −2) (the circle's +u extreme, bottom skin) is
+   named like the folded vertex at (38.829, **49**, −0.828) (the circle's −y extreme); the true
+   refold of (39.2, 50) at depth 2, (39.639, 50, 0.340), exists in the folded body under another
+   name (`#99949d97d41e1965`). The point sets agree; the name bijection does not (the wrapped
+   circle is split at different points in the two maps).
+2. hems: none (the hem's s = R + t is the kernel's `fl(R + t)`; the spec compares within tol).
+
+## For the Rust session: the region statement (Region.lean)
+
+* `near(p, q) ⟺ (px−qx)² + (py−qy)² ≤ L²`; line carriers `orient(a,b,c)² ≤ L²·|b−a|²` for the
+  four ends (one), within 2L but not L (ambiguous → NearCoincident), else two; zero length:
+  degenerate (refuse). Evaluate exactly (expansions; a float filter with a proven error bound
+  first). Today: orient2d / float length, float sqrt in `distance`.
+* Spread cap: every two points of a class within 2L; the box-diagonal test region.rs uses implies it.
+* `inside` without a turned ray: horizontal ray, edge a→b counts iff `(a.y > p.y) ≠ (b.y > p.y)`
+  and `(b.y > a.y) = (orient(a,b,p) > 0)`, over the loop's class points (lines end on them);
+  each arc adds its lens `|p−c|² < r²` ∧ (`orient(a,b,p) < 0` for a ccw arc, `> 0` cw), XOR.
+* `holds_hole` without the 0.3/0.7 vote: a hole goes to the outer loop holding its least-named
+  vertex that is innermost (every other outer loop holding the vertex holds that loop's
+  representative). One exact query; no areas.
+* Splines: exact rational de Casteljau until no piece's hull holds p, then chords; fuel → refuse.
+
+# Design note (as sent before building)
 
 Step 7 of research/kernel-audit/audit2.md §2.10, taken over from the fix-sheet session. Lean
 4.36.0 + Mathlib v4.36.0 (the pin of verify/ieee754 and verify/krawczyk), standard axioms only,
