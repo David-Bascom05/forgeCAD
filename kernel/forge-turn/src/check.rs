@@ -499,7 +499,13 @@ pub fn clearance(body: &Body, mv: &Move, obs: &mut Obstacle, need: f64) -> Verdi
                     let allow = ip(sag).add(ip(g)).add(ip(dr)).hi;
                     let v = clearance(body, &Move::Line { a: prev, b: p }, obs, need + allow);
                     match v {
-                        Verdict::Hit { .. } => return v,
+                        // a witness on a chord is a real path point (the chord's ends are on
+                        // the arc, up to their gap): a hit only against the arc's own need
+                        Verdict::Hit { d, .. } if ip(d).add(ip(g)).hi < need => return v,
+                        Verdict::Hit { d, .. } => {
+                            undecided = true;
+                            lower = lower.min(ip(d).sub(ip(allow)).lo);
+                        }
                         Verdict::Undecided { lower: l } => {
                             undecided = true;
                             lower = lower.min(ip(l).sub(ip(allow)).lo);

@@ -3,6 +3,7 @@
 mod common;
 use forge_turn::insert::builtin;
 use forge_turn::ops::{self, Chuck, Setup};
+use forge_turn::post;
 use forge_turn::profile::half_profile;
 
 pub fn setup() -> Setup {
@@ -33,6 +34,40 @@ pub fn setup() -> Setup {
         rapid_clearance: 0.2,
         tol: 0.002,
         travel: None,
+    }
+}
+
+pub fn job(s: &Setup) -> Vec<ops::OpPath> {
+    let rough_t = builtin("od-rough-cnmg").unwrap();
+    let fin_t = builtin("od-finish-dnmg").unwrap();
+    let part_t = builtin("part-3").unwrap();
+    let thr_t = builtin("thread-60").unwrap();
+    vec![
+        ops::face(s, &rough_t, 1, 0.0, 1.0).unwrap(),
+        ops::rough(s, &rough_t, 1, 0.3, 2.0, -56.0, 0.0).unwrap(),
+        ops::finish(s, &fin_t, 2, 0.0, -55.0).unwrap(),
+        ops::thread(s, &thr_t, 4, 20.0, 1.5, 3.0, -30.0, 8).unwrap(),
+        ops::part_off(s, &part_t, 5, -55.0).unwrap(),
+    ]
+}
+
+#[test]
+fn the_posted_job_round_trips_and_certifies() {
+    let s = setup();
+    let job = job(&s);
+    for (name, _) in post::DIALECTS {
+        let d = post::Dialect::get(name).unwrap();
+        let q = post::quantize(&job, 1, "shaft", &d).unwrap();
+        let (text, motions) = post::round_trip(&q, &d).unwrap_or_else(|e| panic!("{name}: {e}"));
+        if std::env::var("FORGE_TURN_SHOW").is_ok() {
+            eprintln!("{text}");
+        }
+        let posted = post::posted_moves(&motions, &job, &d);
+        let rep = ops::certify(&s, &job, Some(&posted)).unwrap();
+        for r in &rep.refusals {
+            eprintln!("{name} REFUSED op {} step {} {} {} {}", r.op, r.step, r.body, r.rule, r.verdict);
+        }
+        assert!(rep.ok(), "{name}");
     }
 }
 
