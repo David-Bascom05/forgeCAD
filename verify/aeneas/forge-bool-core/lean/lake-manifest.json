@@ -6,7 +6,7 @@
    "name": "forgeexact",
    "manifestFile": "lake-manifest.json",
    "inherited": false,
-   "dir": "../../../../../verify/forge-exact",
+   "dir": "../../../forge-exact",
    "copy": false,
    "configFile": "lakefile.toml"},
   {"url": "https://github.com/AeneasVerif/aeneas",

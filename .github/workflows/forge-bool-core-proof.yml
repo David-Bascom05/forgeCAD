@@ -1,8 +1,8 @@
 # The shipped boolean core (kernel/forge-bool-core) is proven to refine the decide-once core end to end
-# (research/kernel-audit/decide-once/aeneas: end_to_end_proof). This job keeps that true for every
-# change to the crate:
-#   1. the translation check: Charon + Aeneas at their pins re-translate the crate, and the committed
-#      Types.lean / Funs.lean must be exactly what they produce (no stale translation);
+# (verify/aeneas/forge-bool-core: end_to_end_proof). This job keeps that true for every change to the
+# crate:
+#   1. the translation check is aeneas.yml's (`tools/aeneas/translate.sh --all --check`): the committed
+#      translation must be exactly what Charon + Aeneas at their pins produce;
 #   2. the proofs: `lake build` of the refinement project, which fails on any broken lemma;
 #   3. the axiom report: every `#print axioms` line must show only propext, Classical.choice and
 #      Quot.sound (no sorryAx), and end_to_end_proof must be among them.
@@ -15,21 +15,16 @@ on:
     branches: [main]
     paths:
       - "kernel/forge-bool-core/**"
-      - "research/kernel-audit/decide-once/aeneas/**"
+      - "verify/aeneas/forge-bool-core/**"
       - "verify/forge-exact/**"
       - ".github/workflows/forge-bool-core-proof.yml"
   pull_request:
     paths:
       - "kernel/forge-bool-core/**"
-      - "research/kernel-audit/decide-once/aeneas/**"
+      - "verify/aeneas/forge-bool-core/**"
       - "verify/forge-exact/**"
       - ".github/workflows/forge-bool-core-proof.yml"
   workflow_dispatch:
-
-env:
-  AENEAS_REV: 2e3d4488280bb8a95411db81019a7854a784861f
-  CHARON_REV: 9e193f0
-  AV: /home/user/aeneasverif
 
 jobs:
   refinement:
@@ -38,43 +33,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: workspace for the toolchains (the scripts use /home/user/aeneasverif)
-        run: |
-          sudo mkdir -p /home/user && sudo chown "$USER" /home/user
-          sudo apt-get update -qq && sudo apt-get install -y -qq libgmp-dev
-
-      - name: toolchain cache (opam switch, charon, aeneas)
-        id: tc
-        uses: actions/cache@v4
-        with:
-          path: /home/user/aeneasverif
-          key: aeneas-${{ runner.os }}-${{ env.AENEAS_REV }}-${{ env.CHARON_REV }}-${{ hashFiles('research/kernel-audit/coverage/aeneas/*.sh') }}
-
-      - name: Charon and Aeneas at their pins
-        if: steps.tc.outputs.cache-hit != 'true'
-        run: |
-          git clone -q https://github.com/AeneasVerif/aeneas "$AV/aeneas"
-          git -C "$AV/aeneas" checkout -q "$AENEAS_REV"
-          git clone -q https://github.com/AeneasVerif/charon "$AV/charon"
-          git -C "$AV/charon" checkout -q "$(tail -1 "$AV/aeneas/charon-pin")"
-          bash research/kernel-audit/coverage/aeneas/setup.sh
-          export OPAMROOT=$AV/work/opamroot OPAMYES=1
-          "$AV/work/bin/opam" install odoc -y --switch=5.3.0
-          bash research/kernel-audit/coverage/aeneas/build.sh
-
-      - name: rust nightly for charon
-        run: rustup toolchain install nightly-2026-09-17 --profile minimal -c rustc-dev,llvm-tools,rust-src
-
-      - name: 1. the translation is the crate's
-        run: |
-          export OPAMROOT=$AV/work/opamroot OPAMSWITCH=5.3.0
-          export PATH=$AV/work/bin:$PATH
-          eval "$(opam env --switch=5.3.0 --set-switch)"
-          AENEAS=$AV sh research/kernel-audit/decide-once/aeneas/translate.sh
-          git diff --exit-code -- research/kernel-audit/decide-once/aeneas/lean/ForgeBoolCore/Types.lean \
-            research/kernel-audit/decide-once/aeneas/lean/ForgeBoolCore/Funs.lean \
-            || { echo "::error::the committed translation is stale: run translate.sh and update the proofs"; exit 1; }
-
       - name: elan and the pinned Lean
         run: |
           if [ ! -x "$HOME/.elan/bin/elan" ]; then
@@ -82,17 +40,17 @@ jobs:
             sh elan-init.sh -y --default-toolchain none
           fi
           echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
-          "$HOME/.elan/bin/elan" toolchain install "$(cat research/kernel-audit/decide-once/aeneas/lean/lean-toolchain)"
+          "$HOME/.elan/bin/elan" toolchain install "$(cat verify/aeneas/forge-bool-core/lean/lean-toolchain)"
 
       - name: 2. the proofs
-        working-directory: research/kernel-audit/decide-once/aeneas/lean
+        working-directory: verify/aeneas/forge-bool-core/lean
         run: |
           lake exe cache get || true
           lake build 2>&1 | tee build.log
           grep -q "Build completed successfully" build.log
 
       - name: 3. the axiom report
-        working-directory: research/kernel-audit/decide-once/aeneas/lean
+        working-directory: verify/aeneas/forge-bool-core/lean
         run: |
           bad=$(grep "depends on axioms" build.log | grep -v -E "\[(propext(, Classical\.choice)?(, Quot\.sound)?|propext, Quot\.sound|)\]" || true)
           if [ -n "$bad" ]; then echo "::error::non-standard axioms:"; echo "$bad"; exit 1; fi

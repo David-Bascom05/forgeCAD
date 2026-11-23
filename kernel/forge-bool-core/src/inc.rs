@@ -7,7 +7,7 @@
 //! loops, no closures, no iterators, no maps.
 
 use crate::union_find::Uf;
-use crate::{BodyId, FaceId, Rule, Sgn, apply_rule};
+use crate::{BodyId, FaceId, Rule, Sgn, apply_rule, faces_at, same_set};
 
 /// A facet: a component of a near face's relative interior minus its cut set.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -172,9 +172,24 @@ fn count_in(ids: &[u32], lo: usize, hi: usize, x: u32) -> usize {
     n
 }
 
-/// `LedgerWF` v2: the Csrs well formed, a facet at most twice per edge row, no repeat in a
-/// vert's edges, each sector's facet in range and its two edges in its vert's row, ids and counts
-/// in range, a sector's facet round both its edges, a facet's two sides distinct rooms, and every
+/// How many of `secs[lo..hi]` are `x` (facet and both edges alike).
+fn count_sec(secs: &[Sector], lo: usize, hi: usize, x: Sector) -> usize {
+    let mut n = 0;
+    let mut i = lo;
+    while i < hi {
+        let y = secs[i];
+        if y.facet == x.facet && y.a == x.a && y.b == x.b {
+            n += 1;
+        }
+        i += 1;
+    }
+    n
+}
+
+/// `LedgerWF` v2: the Csrs well formed; a facet at most twice per edge row; no repeat in a
+/// vert's edges or in its sectors; face ids and sectors below `u32::MAX`, and the facet-body
+/// table's size within `usize`; each sector's facet in range, its two edges in its vert's row and
+/// the facet round both; ids and counts in range; a facet's two sides distinct rooms; and every
 /// facet a piece of some face of its own class.
 pub fn ledger_wf(l: &Ledger) -> bool {
     let nf = l.facet_class.len();
@@ -186,6 +201,9 @@ pub fn ledger_wf(l: &Ledger) -> bool {
         && (nf as u64) < u32::MAX as u64
         && (ne as u64) < u32::MAX as u64
         && (nv as u64) < u32::MAX as u64
+        && (l.face_body.len() as u64) < u32::MAX as u64
+        && (nf as u128) * (l.nb as u128) <= usize::MAX as u128
+        && (l.vert_sectors.sec.len() as u64) < u32::MAX as u64
         && l.n_rooms < u32::MAX
         && csr_ok(&l.edge_facets, nf as u32)
         && csr_ok(&l.vert_edges, ne as u32)
@@ -230,7 +248,8 @@ pub fn ledger_wf(l: &Ledger) -> bool {
         let mut j = slo;
         while ok && j < shi {
             let sc = l.vert_sectors.sec[j];
-            ok = (sc.facet as usize) < nf
+            ok = count_sec(&l.vert_sectors.sec, slo, shi, sc) == 1
+                && (sc.facet as usize) < nf
                 && count_in(&l.vert_edges.ids, lo, hi, sc.a) == 1
                 && count_in(&l.vert_edges.ids, lo, hi, sc.b) == 1;
             // the sector's facet is round both its edges
@@ -756,53 +775,6 @@ fn bad_vert(l: &Ledger, a: &Assembled, v: usize) -> bool {
     bad
 }
 
-/// `xs` with repeats dropped, first occurrences in order.
-fn dedup(xs: &[u32]) -> Vec<u32> {
-    let mut out: Vec<u32> = Vec::new();
-    let mut i = 0;
-    while i < xs.len() {
-        let mut seen = false;
-        let mut j = 0;
-        while !seen && j < out.len() {
-            seen = out[j] == xs[i];
-            j += 1;
-        }
-        if !seen {
-            out.push(xs[i]);
-        }
-        i += 1;
-    }
-    out
-}
-
-/// `sameSetI`.
-fn same_set(a: &[u32], b: &[u32]) -> bool {
-    let mut ok = true;
-    let mut i = 0;
-    while ok && i < a.len() {
-        let mut j = 0;
-        let mut hit = false;
-        while !hit && j < b.len() {
-            hit = b[j] == a[i];
-            j += 1;
-        }
-        ok = hit;
-        i += 1;
-    }
-    let mut j = 0;
-    while ok && j < b.len() {
-        let mut i = 0;
-        let mut hit = false;
-        while !hit && i < a.len() {
-            hit = a[i] == b[j];
-            i += 1;
-        }
-        ok = hit;
-        j += 1;
-    }
-    ok
-}
-
 /// Stage 7, unify: result facets of one carrier and sense sharing an edge are one face (the class's
 /// first in result order is its head); an edge run joins edges with one pair of faces
 /// through verts that are not result verts.
@@ -861,13 +833,7 @@ fn unify(l: &Ledger, a: &Assembled) -> Body {
     let mut e = 0;
     while e < ne {
         let ar = around_e(l, a, e);
-        let mut ks = Vec::with_capacity(ar.len());
-        let mut k = 0;
-        while k < ar.len() {
-            ks.push(head_of[ar[k] as usize]);
-            k += 1;
-        }
-        at_e.push(dedup(&ks));
+        at_e.push(faces_at(&head_of, &ar));
         e += 1;
     }
     let mut is_out_v = vec![false; nv];
@@ -875,14 +841,14 @@ fn unify(l: &Ledger, a: &Assembled) -> Body {
     let mut v = 0;
     while v < nv {
         let ar = around_v(l, a, v);
-        let mut ks = Vec::with_capacity(ar.len());
+        // (the sectors' facets as result positions, then their faces, v1's `faces_at`)
+        let mut ps = Vec::with_capacity(ar.len());
         let mut k = 0;
         while k < ar.len() {
-            let f = l.vert_sectors.sec[ar[k]].facet;
-            ks.push(head_of[a.rpos[f as usize] as usize]);
+            ps.push(a.rpos[l.vert_sectors.sec[ar[k]].facet as usize]);
             k += 1;
         }
-        if dedup(&ks).len() >= 3 {
+        if faces_at(&head_of, &ps).len() >= 3 {
             is_out_v[v] = true;
             verts.push(VertId(v as u32));
         }
