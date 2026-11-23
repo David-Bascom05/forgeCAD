@@ -23,3 +23,4 @@ import ForgeBoolCore.RefineTouch
 import ForgeBoolCore.RefineBetween
 import ForgeBoolCore.RefineFan
 import ForgeBoolCore.Axioms
+import ForgeBoolCore.Specs
