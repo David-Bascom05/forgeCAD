@@ -426,13 +426,15 @@ fn adds(features: crate::History<'_>, i: usize) -> Vec<Box3> {
 }
 
 /// A feature whose material the history gives no sound box for: faces moved, replaced,
-/// deleted, offset or drafted, an outward shell or a thickening (their faces' neighbours are
+/// deleted, offset or drafted, or an outward shell (their faces' neighbours are
 /// re-intersected, so an edge can slide far past any box grown by the distance: by d / sin θ
 /// for faces at θ), or a feature on other bodies. Each is a part-changing feature, so the regen
-/// has the part as built after it (`History::base`).
+/// has the part as built after it (`Given::base`).
 pub(crate) fn unbounded(f: &Feature) -> bool {
     match f {
-        Feature::Edit(e) => !matches!(e, crate::Edit::Rib(_)),
+        // a rib is bounded (`rib_reach`), and so is a thickening: a slab of the faces themselves,
+        // offset by its thickness with ruled sides, no neighbour re-intersected (`reach` grows by it)
+        Feature::Edit(e) => !matches!(e, crate::Edit::Rib(_) | crate::Edit::Thicken { .. }),
         Feature::Draft { .. } => true,
         Feature::Shell { outward, .. } => *outward,
         Feature::Body(b) => matches!(**b, crate::BodyFeature::In { .. }),
@@ -488,28 +490,26 @@ pub(crate) fn sized_through(features: crate::History<'_>, i: usize) -> bool {
 
 /// A box holding the body: what the regen hands a through tool as the part's extent. Any box that
 /// holds the part sizes a through tool to the same cut (research/ops-spec, H1), so this one is
-/// sound and cheap rather than tight: the hull of the edges' boxes (kept ones, else a line's ends
-/// and a circle's or ellipse's whole box, else `Curve::bbox` over the range), which holds every plane, cylinder, cone and ruled face (a straight line through any of
+/// sound and cheap rather than tight: the hull of the vertices and the curved edges' boxes (kept
+/// ones, else a circle's or ellipse's whole box, else `Curve::bbox` over the range), which holds every plane, cylinder, cone and ruled face (a straight line through any of
 /// their points meets the boundary on both sides), with a sphere's or torus's whole box for the
 /// faces that can bulge past their edges, and the face's own box for any other procedural face.
 pub(crate) fn body_box(b: &forge_topo::Body) -> Box3 {
     use forge_geom::{Curve, Surface};
-    let mut bx = Box3::EMPTY;
+    // every edge's ends: so a line edge adds nothing more
+    let mut bx = Box3::from_points(b.vertex_ids().map(|v| b.vertex(v).point));
     for e in b.edge_ids() {
         let edge = b.edge(e);
-        // the edge's box if it is kept already, else one as cheap as sound: a line's ends, a
-        // circle's or ellipse's whole box (no arc extremes worked out)
-        let eb = match (edge.bbox.get(), &edge.curve) {
-            (Some(k), _) => *k,
-            (None, Curve::Line(l)) => Box3::from_points([
-                l.origin + l.dir.get() * edge.range.lo,
-                l.origin + l.dir.get() * edge.range.hi,
-            ]),
-            (None, Curve::Circle(c)) => Box3::from_point(c.frame.origin).grow(c.radius.abs()),
-            (None, Curve::Ellipse(el)) => {
+        // a curved edge's box if it is kept already, else one as cheap as sound: a circle's or
+        // ellipse's whole box (no arc extremes worked out)
+        let eb = match (&edge.curve, edge.bbox.get()) {
+            (Curve::Line(_), _) => continue,
+            (_, Some(k)) => *k,
+            (Curve::Circle(c), None) => Box3::from_point(c.frame.origin).grow(c.radius.abs()),
+            (Curve::Ellipse(el), None) => {
                 Box3::from_point(el.frame.origin).grow(el.major.abs().max(el.minor.abs()))
             }
-            (None, _) => b.edge_box(e),
+            (_, None) => b.edge_box(e),
         };
         bx = bx.hull(&eb);
     }

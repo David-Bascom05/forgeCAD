@@ -979,6 +979,14 @@ fn half(s: &Surface, b: &Box3, (i, id): (usize, u64)) -> Result<(Body, bool), Re
     }
 }
 
+/// Whether a through tool before the next part-changing feature after `i` is sized by the
+/// bodies as built (`hole::needs_base`): only then is their box worked out at `i`.
+fn sized_next(plain: History<'_>, i: usize) -> bool {
+    (i + 1..plain.len())
+        .take_while(|&k| !modifies(&plain[k]) && !matches!(plain[k], Feature::Body(_)))
+        .any(|k| crate::hole::needs_base(plain, k))
+}
+
 /// A box holding every body (`hole::body_box` of each).
 fn solids_box(solids: &[Solid]) -> forge_math::Box3 {
     solids.iter().fold(forge_math::Box3::EMPTY, |b, s| {
@@ -1193,7 +1201,7 @@ fn nary_pass(features: History<'_>, threads: usize) -> Result<Vec<Solid>, RegenE
             Feature::Body(b) => {
                 let mut solids = flush(std::mem::take(&mut runs), plain, threads)?;
                 body_feature(plain, i, b, p, &mut solids)?;
-                if based {
+                if based && sized_next(plain, i) {
                     base = Some((i, solids_box(&solids)));
                 }
                 runs = unflush(solids, i);
@@ -1201,7 +1209,7 @@ fn nary_pass(features: History<'_>, threads: usize) -> Result<Vec<Solid>, RegenE
             _ if modifies(f) => {
                 let mut solids = flush(std::mem::take(&mut runs), plain, threads)?;
                 modify_on(plain, i, p, &mut solids, threads)?;
-                if based {
+                if based && sized_next(plain, i) {
                     base = Some((i, solids_box(&solids)));
                 }
                 runs = unflush(solids, i);
