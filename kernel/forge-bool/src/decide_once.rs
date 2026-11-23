@@ -1317,24 +1317,59 @@ struct Facet {
     class: u32,
     /// counter-clockwise about the class plane's normal
     poly: Vec<u32>,
+    /// `poly_e[k]`: the edge cell from `poly[k]` to `poly[k + 1]`
+    poly_e: Vec<u32>,
     mid: HPoint,
 }
 
-/// Everything the bridge decided, kept to build the body.
+/// A table by cell id (dense: ids are the ledger's, 0..n).
+pub(crate) struct Dense<T>(Vec<Option<T>>);
+
+impl<T> Default for Dense<T> {
+    fn default() -> Self {
+        Dense(Vec::new())
+    }
+}
+
+impl<T> Dense<T> {
+    fn get(&self, k: &u32) -> Option<&T> {
+        self.0.get(*k as usize).and_then(|x| x.as_ref())
+    }
+    /// The entry of `k`, made by `f` if empty.
+    fn or_insert_with(&mut self, k: u32, f: impl FnOnce() -> T) -> &mut T {
+        let k = k as usize;
+        if self.0.len() <= k {
+            self.0.resize_with(k + 1, || None);
+        }
+        self.0[k].get_or_insert_with(f)
+    }
+}
+
+impl<T> std::ops::Index<&u32> for Dense<T> {
+    type Output = T;
+    fn index(&self, k: &u32) -> &T {
+        self.get(k).expect("no entry for that cell")
+    }
+}
+
+/// Everything the bridge decided, kept to build the body. Each table is by cell id.
 struct Built {
     ledger: Ledger,
-    /// per cell id: its facet geometry, if a facet
-    facet: HashMap<u32, Facet>,
-    /// per vertex cell: its exact point
-    point: HashMap<u32, HPoint>,
-    /// per edge cell: its two vertex cells
-    ends: HashMap<u32, (u32, u32)>,
-    /// per side cell: a facet it is a side of and which side
-    side_of: HashMap<u32, (u32, i32)>,
-    /// per side cell: every (facet, side) it is a side of
-    sides: HashMap<u32, Vec<(u32, i32)>>,
-    /// per facet: the input faces it is a piece of
-    holders: HashMap<u32, Vec<usize>>,
+    /// a facet's geometry
+    facet: Dense<Facet>,
+    /// a vertex cell's exact point
+    point: Dense<HPoint>,
+    /// an edge cell's two vertex cells
+    ends: Dense<(u32, u32)>,
+    /// a side cell: a facet it is a side of and which side
+    side_of: Dense<(u32, i32)>,
+    /// a side cell: every (facet, side) it is a side of
+    sides: Dense<Vec<(u32, i32)>>,
+    /// a facet: the input faces it is a piece of
+    holders: Dense<Vec<usize>>,
+    /// per cell: is it on a wall (some wall class zero); for the write
+    #[allow(dead_code)]
+    wall: Vec<bool>,
     /// cell ids by covector
     by: FxMap<Vec<Sgn>, u32>,
 }
@@ -1425,12 +1460,12 @@ fn build_ledger(
     let on_wall = |cv: &[Sgn]| cls.walls.iter().any(|&w| cv[w as usize] == Sgn::Zero);
     let pf: Vec<PlaneF> = cls.planes.iter().map(plane_f).collect();
     let mut tab = CellTab::default();
-    let mut facet = HashMap::default();
-    let mut point = HashMap::default();
-    let mut ends = HashMap::default();
-    let mut side_of = HashMap::default();
-    let mut sides: HashMap<u32, Vec<(u32, i32)>> = HashMap::default();
-    let mut holders_of: HashMap<u32, Vec<usize>> = HashMap::default();
+    let mut facet: Dense<Facet> = Dense::default();
+    let mut point: Dense<HPoint> = Dense::default();
+    let mut ends: Dense<(u32, u32)> = Dense::default();
+    let mut side_of: Dense<(u32, i32)> = Dense::default();
+    let mut sides: Dense<Vec<(u32, i32)>> = Dense::default();
+    let mut holders_of: Dense<Vec<usize>> = Dense::default();
     let mut pieces: Vec<(u32, u32)> = Vec::new(); // (face, cell)
     let mut edges: Vec<u32> = Vec::new();
     let mut verts: Vec<u32> = Vec::new();
@@ -1541,6 +1576,7 @@ fn build_ledger(
             let id = tab.id_of(&fc);
             // its vertices and edges, as cells
             let mut poly = Vec::with_capacity(cell.len());
+            let mut poly_e = Vec::with_capacity(cell.len());
             for k in 0..cell.len() {
                 let (i, j) = (cell[k].0, cell[(k + 1) % cell.len()].0);
                 let mut vertex_id = |i: u32, tab: &mut CellTab| {
@@ -1550,7 +1586,7 @@ fn build_ledger(
                     vid[i as usize]
                 };
                 let vi = vertex_id(i, &mut tab);
-                point.entry(vi).or_insert_with(|| pl.exact(cls, i as usize));
+                point.or_insert_with(vi, || pl.exact(cls, i as usize));
                 let vj = vertex_id(j, &mut tab);
                 let (ci, cj) = (pl.cov(i).unwrap(), pl.cov(j).unwrap());
                 ec.clear();
@@ -1560,22 +1596,27 @@ fn build_ledger(
                         .map(|(&x, &y)| if x == Sgn::Zero { y } else { x }),
                 );
                 let e = tab.id_of(&ec);
-                ends.entry(e).or_insert((vi, vj));
+                ends.or_insert_with(e, || (vi, vj));
                 poly.push(vi);
+                poly_e.push(e);
             }
             if flip {
+                // (reversed, the edge from new k to k + 1 is old n - 2 - k's)
                 poly.reverse();
+                let n = poly_e.len();
+                poly_e = (0..n).map(|k| poly_e[(2 * n - 2 - k) % n]).collect();
             }
             for &i in &holders {
                 per_face[i].push(id);
-                let h = holders_of.entry(id).or_default();
+                let h = holders_of.or_insert_with(id, Vec::new);
                 if !h.contains(&i) {
                     h.push(i);
                 }
             }
-            facet.entry(id).or_insert(Facet {
+            facet.or_insert_with(id, || Facet {
                 class: c as u32,
                 poly,
+                poly_e,
                 mid,
             });
         }
@@ -1587,17 +1628,14 @@ fn build_ledger(
         }
     }
     for &(_, id) in &pieces {
-        let poly = facet[&id].poly.clone();
-        for k in 0..poly.len() {
-            let v = poly[k];
+        let fc = &facet[&id];
+        for k in 0..fc.poly.len() {
+            let v = fc.poly[k];
             if !on_wall(&tab.cells[v as usize]) && is_v.insert(v, ()).is_none() {
                 verts.push(v);
             }
-            let w = poly[(k + 1) % poly.len()];
-            let ec = join(&[&tab.cells[v as usize].clone(), &tab.cells[w as usize].clone()]);
-            let wall_edge = on_wall(&ec);
-            let e = tab.id(ec);
-            if !wall_edge && is_e.insert(e, ()).is_none() {
+            let e = fc.poly_e[k];
+            if !on_wall(&tab.cells[e as usize]) && is_e.insert(e, ()).is_none() {
                 edges.push(e);
             }
         }
@@ -1615,8 +1653,8 @@ fn build_ledger(
             let mut cv = tab.cells[id as usize].clone();
             cv[c] = sg;
             let t = tab.id(cv);
-            side_of.entry(t).or_insert((id, s));
-            sides.entry(t).or_default().push((id, s));
+            side_of.or_insert_with(t, || (id, s));
+            sides.or_insert_with(t, Vec::new).push((id, s));
         }
     }
     let nb = bodies.len() as u32;
@@ -1638,6 +1676,7 @@ fn build_ledger(
         side_of,
         sides,
         holders: holders_of,
+        wall: tab.cells.iter().map(|cv| on_wall(cv)).collect(),
         by: tab.by,
     }
 }
