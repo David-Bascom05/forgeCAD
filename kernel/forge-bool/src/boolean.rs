@@ -440,6 +440,10 @@ pub(crate) enum Class {
     OnOpposite,
 }
 
+/// `a` combined with `b`, in canonical form: what the boolean left on one surface or one curve is
+/// joined (`unify`), so the result depends on the solid alone, not on where the operands met.
+/// (`boolean_into` leaves that to its caller, who may go on combining: the regen unifies once,
+/// when it hands the part out.)
 pub fn boolean(a: &Body, b: &Body, op: Op, feature: u64) -> R<Body> {
     // flat faces: the part read by reference and the result written fresh, with no copy first
     #[cfg(feature = "decide_once")]
@@ -448,6 +452,7 @@ pub fn boolean(a: &Body, b: &Body, op: Op, feature: u64) -> R<Body> {
     }
     let mut out = a.clone();
     boolean_into(&mut out, b, op, feature)?;
+    crate::unify::unify(&mut out);
     Ok(out.into_compact())
 }
 

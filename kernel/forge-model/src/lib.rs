@@ -1449,6 +1449,15 @@ fn nary_run(
     .map_err(err)
 }
 
+/// `a` combined with `b` as the regen goes on from it: the boolean's pieces left as they are
+/// (`boolean_into`), compacted. `forge_bool::boolean` hands its result out joined; the regen
+/// joins once, when it hands the part out (`finish`), so every path combines the same pieces.
+pub(crate) fn combined(a: &Body, b: &Body, op: Op, feature: u64) -> Result<Body, BoolError> {
+    let mut out = a.clone();
+    boolean_into(&mut out, b, op, feature)?;
+    Ok(out.into_compact())
+}
+
 /// The part as regeneration hands it out: faces on one surface and edges on one curve joined
 /// (`forge_bool::unify`), compacted. `step` leaves this to its caller, so the next step builds
 /// on the pieces the n-ary regen also sees.
@@ -1541,14 +1550,13 @@ fn threaded_shell(
     }
     let mut plain = body.clone();
     for r in &rings {
-        plain =
-            forge_bool::boolean(&plain, r, if outward { Op::Union } else { Op::Subtract }, id).map_err(be)?;
+        plain = combined(&plain, r, if outward { Op::Union } else { Op::Subtract }, id).map_err(be)?;
     }
     let Some(solid) = forge_ops::offset_solid(&plain, thickness, outward, open, id).map_err(e)? else {
         return shell(body, thickness, outward, open, id).map_err(e);
     };
     let (a, b) = if outward { (&solid, body) } else { (body, &solid) };
-    let out = forge_bool::boolean(a, b, Op::Subtract, id).map_err(be)?;
+    let out = combined(a, b, Op::Subtract, id).map_err(be)?;
     // the solid taken lies wholly in the one it is taken from: else a wall ran through the skin
     let volume = |b: &Body| forge_topo::mass::mass(b).map_or(f64::NAN, |m| m.volume);
     let (va, vb, v) = (volume(a), volume(b), volume(&out));
@@ -1928,8 +1936,8 @@ fn overlapping_rounds(body: &Body, want: &[FilletEdge], opts: &FilletOptions, id
         };
         let cut = fillet_with(body, &pick(true), opts, id).ok()?;
         let fill = fillet_with(body, &pick(false), opts, id).ok()?;
-        let taken = forge_bool::boolean(body, &cut, forge_bool::Op::Subtract, id).ok()?;
-        let done = forge_bool::boolean(&fill, &taken, forge_bool::Op::Subtract, id).ok()?;
+        let taken = combined(body, &cut, forge_bool::Op::Subtract, id).ok()?;
+        let done = combined(&fill, &taken, forge_bool::Op::Subtract, id).ok()?;
         return (forge_topo::check(&done).is_empty() && !face_turned(body, &done)).then_some(done);
     }
     let op = if kinds[0] == Some(true) {
@@ -1941,7 +1949,7 @@ fn overlapping_rounds(body: &Body, want: &[FilletEdge], opts: &FilletOptions, id
     for (edges, _) in &groups {
         let round = fillet_with(body, edges, opts, id).ok()?;
         done = Some(match done {
-            Some(d) => forge_bool::boolean(&d, &round, op, id).ok()?,
+            Some(d) => combined(&d, &round, op, id).ok()?,
             None => round,
         });
     }
@@ -2165,7 +2173,7 @@ fn tool(i: usize, id: u64, f: &Feature, build: bool) -> Result<Tool, RegenError>
             b = if k == 0 {
                 s
             } else {
-                forge_bool::boolean(&b, &s, Op::Union, (id + 1_000_000) | ((k as u64) << 40))
+                combined(&b, &s, Op::Union, (id + 1_000_000) | ((k as u64) << 40))
                     .map_err(|error| RegenError::Boolean { feature: i, error })?
             };
         }
