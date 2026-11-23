@@ -360,6 +360,7 @@ def compact(o, d, cls, cause):
         row["ours"] = {
             "system": d.get("system", "")[:40], "schema": d.get("schema", "")[:30], "ms": d.get("all_ms"),
             "unc": d.get("unc"), "mm": d.get("mm"), "faces": d.get("faces"), "tolerant": d.get("tolerant"),
+            "maxtol": d.get("maxtol"), "coff": d.get("coff"), "voff": d.get("voff"),
             "refusals": d.get("refusals") or {}, "why": d.get("why", "")[:160],
             "solids": [{k: x.get(k) for k in ("faces", "vol", "area", "problems", "first", "warn", "merr", "mesh")}
                        for x in sol[:50]],
@@ -552,7 +553,7 @@ def report(cs, ncause):
 
 def main():
     a = argparse.ArgumentParser()
-    a.add_argument("cmd", choices=["index", "run", "report", "fetch", "examples"])
+    a.add_argument("cmd", choices=["index", "run", "report", "fetch", "examples", "compare"])
     a.add_argument("args", nargs="*")
     a.add_argument("--jobs", type=int, default=4)
     a.add_argument("--causes", type=int, default=15)
@@ -565,6 +566,36 @@ def main():
         c, k0 = o.args[0], int(o.args[1])
         k1 = int(o.args[2]) if len(o.args) > 2 else k0 + 1
         run(c, k0, k1, o.jobs, o.stride)
+    elif o.cmd == "compare":  # compare OTHER_OUT [CORPUS..]: each file judged in both, by class; worse first
+        global OUT
+        other, cs = o.args[0], o.args[1:]
+        mine = OUT
+        cs = cs or sorted(x for x in os.listdir(other) if os.path.isdir(os.path.join(other, x)))
+        rank = {"match": 0, "uncertain": 1, "empty": 1, "mismatch": 2, "refused": 3, "timeout": 4, "crash": 5}
+        worse = better = same = judge_only = 0
+        for c in cs:
+            OUT = mine
+            a = {r["id"]: r for r in load(c)}
+            OUT = other
+            b = {r["id"]: r for r in load(c)}
+            moves = collections.Counter()
+            for i in sorted(set(a) & set(b)):
+                x, y = a[i], b[i]
+                if (x["cls"], x["cause"]) == (y["cls"], y["cause"]):
+                    same += 1
+                    continue
+                if any(z["cause"].startswith("occt-") for z in (x, y)):
+                    judge_only += 1
+                    continue
+                d = rank.get(y["cls"], 9) - rank.get(x["cls"], 9)
+                worse += d > 0
+                better += d < 0
+                moves[(x["cls"] + " " + x["cause"], y["cls"] + " " + y["cause"], "WORSE" if d > 0 else "better" if d < 0 else "moved")] += 1
+            print(f"== {c}: {len(set(a) & set(b))} files in both")
+            for (f, t, k), n in sorted(moves.items(), key=lambda m: (m[0][2] != "WORSE", -m[1])):
+                print(f"   {n:5d} {k:6s} {f}  ->  {t}")
+        print(f"same {same}, better {better}, worse {worse} (the judge's own moves, OCCT's or the lemon rule's, apart: {judge_only})")
+        OUT = mine
     elif o.cmd == "fetch":  # fetch CORPUS DIR ID..: files to study a cause by, outside the repository
         c, into, want = o.args[0], o.args[1], set(o.args[2:])
         os.makedirs(into, exist_ok=True)
