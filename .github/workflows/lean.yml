@@ -36,6 +36,7 @@ jobs:
         id: lake
         run: python3 tools/ci/lake-cache.py lean research/forge-lang/lean research/check-local/lean research/drag-speed/lean
       - name: Lake build (restored; Lake rebuilds what changed)
+        id: restore
         uses: actions/cache/restore@v4
         with:
           path: ${{ steps.lake.outputs.paths }}
@@ -54,6 +55,7 @@ jobs:
             "$HOME/.elan/bin/elan" toolchain install "$(cat $d/lean-toolchain)"
           done
       - name: forge-lang
+        if: ${{ github.event_name != 'push' || steps.restore.outputs.cache-hit != 'true' }}
         working-directory: research/forge-lang/lean
         run: |
           # the two kernel `decide`s of the parser's grammar take ~8 GB each: one at a time
@@ -61,10 +63,12 @@ jobs:
           lake build ForgeLang.LL1.ImplUnifiedDoc
           lake build
           lake build fgparse fglex  # the oracles of tests/parse_diff.rs
+          if [ "$GITHUB_EVENT_NAME" = push ]; then exit 0; fi  # main: the build above is what is saved; the checks below ran on the pull request
           lake env lean CheckAxioms.lean
           lake env lean Axioms.lean | tee axioms.txt
           ! grep -E "sorryAx|ofReduceBool" axioms.txt
       - name: parser and lexer against the Lean oracle
+        if: ${{ github.event_name != 'push' }}
         # Any change to the .fg language must carry its proof: the Rust lexer and parser are
         # compared answer by answer with the Lean model (lake exe fgparse/fglex), and the committed
         # digest must be what the oracle gives.
@@ -73,21 +77,23 @@ jobs:
           FG_LEAN=1 cargo test --release --locked -p forge-lang --test parse_diff
           git diff --exit-code interface/forge-lang/tests/parse_diff.digest
       - name: check-local
-        if: ${{ !cancelled() }}
+        if: ${{ (!cancelled()) && (github.event_name != 'push' || steps.restore.outputs.cache-hit != 'true') }}
         working-directory: research/check-local/lean
         run: |
           lake build
+          if [ "$GITHUB_EVENT_NAME" = push ]; then exit 0; fi  # main: the build above is what is saved; the checks below ran on the pull request
           lake env lean Axioms.lean | tee axioms.txt
           ! grep -E "sorryAx|ofReduceBool" axioms.txt
       - name: drag-speed
-        if: ${{ !cancelled() }}
+        if: ${{ (!cancelled()) && (github.event_name != 'push' || steps.restore.outputs.cache-hit != 'true') }}
         working-directory: research/drag-speed/lean
         run: |
           lake build
+          if [ "$GITHUB_EVENT_NAME" = push ]; then exit 0; fi  # main: the build above is what is saved; the checks below ran on the pull request
           lake env lean Axioms.lean | tee axioms.txt
           ! grep -E "sorryAx|ofReduceBool" axioms.txt
       - name: save the Lake build (main only, even when a check failed)
-        if: ${{ always() && steps.lake.outcome == 'success' && github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+        if: ${{ always() && steps.lake.outcome == 'success' && steps.restore.outputs.cache-hit != 'true' && github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
         uses: actions/cache/save@v4
         with:
           path: ${{ steps.lake.outputs.paths }}
@@ -110,6 +116,7 @@ jobs:
         id: lake
         run: python3 tools/ci/lake-cache.py "loft-ssi-$(basename ${{ matrix.dir }})" ${{ matrix.dir }}
       - name: Lake build (restored; Lake rebuilds what changed)
+        id: restore
         uses: actions/cache/restore@v4
         with:
           path: ${{ steps.lake.outputs.paths }}
@@ -118,6 +125,7 @@ jobs:
             ${{ steps.lake.outputs.prefix }}
             ${{ steps.lake.outputs.any }}
       - name: elan, the toolchain, Mathlib's build
+        if: ${{ github.event_name != 'push' || steps.restore.outputs.cache-hit != 'true' }}
         working-directory: ${{ matrix.dir }}
         run: |
           if [ ! -x "$HOME/.elan/bin/elan" ]; then
@@ -128,10 +136,11 @@ jobs:
           "$HOME/.elan/bin/elan" toolchain install "$(cat lean-toolchain)"
           "$HOME/.elan/bin/lake" exe cache get
       - name: build
+        if: ${{ github.event_name != 'push' || steps.restore.outputs.cache-hit != 'true' }}
         working-directory: ${{ matrix.dir }}
         run: lake build
       - name: save the Lake build (main only, even when the build failed)
-        if: ${{ always() && steps.lake.outcome == 'success' && github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+        if: ${{ always() && steps.lake.outcome == 'success' && steps.restore.outputs.cache-hit != 'true' && github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
         uses: actions/cache/save@v4
         with:
           path: ${{ steps.lake.outputs.paths }}
