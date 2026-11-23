@@ -63,3 +63,6 @@ import ForgeCurved
 #print axioms ForgeCurved.Rooms.room_preconnected
 #print axioms ForgeCurved.Rooms.room_class
 #print axioms ForgeCurved.Rooms.res_eq_reg
+#print axioms ForgeCurved.Chart.box_halves
+#print axioms ForgeCurved.FacetSides.side_all
+#print axioms ForgeCurved.FacetSides.sideLocal_of_data
