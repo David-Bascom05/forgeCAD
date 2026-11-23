@@ -81,9 +81,13 @@ fn control_line(p: usize, knots: &[f64], w: Option<&[f64]>, poles: &[Point3], d:
 
 /// A through-spline's line: points (the first repeated last when periodic), end slopes.
 fn through_line(pts: &[Point3], from: Option<Vec3>, to: Option<Vec3>, d: usize) -> Option<String> {
-    let s = Spline::through(pts, from, to)?;
     let n = pts.len();
-    let periodic = n > 2 && pts[0].distance(pts[n - 1]) <= forge_math::tol::LINEAR;
+    let periodic = from.is_none() && to.is_none() && n > 3 && pts[0] == pts[n - 1];
+    let s = if periodic {
+        Spline::through_periodic(pts)?
+    } else {
+        Spline::through(pts, from, to)?
+    };
     let mut line = format!("T {d} {} ", n - 1);
     let end = |v: Option<Vec3>| match v {
         None => "natural".to_string(),
@@ -243,11 +247,13 @@ fn corpus() -> Vec<String> {
         None,
     ));
     // the sheet part's window: x0 8, x1 22, y0 6, y1 24, bulge 3, closed
-    planar.extend(PlaneSpline::through(
-        p2(&[(8.0, 6.0), (19.0, 9.0), (22.0, 24.0), (11.0, 21.0), (8.0, 6.0)]),
-        None,
-        None,
-    ));
+    planar.extend(PlaneSpline::through_periodic(p2(&[
+        (8.0, 6.0),
+        (19.0, 9.0),
+        (22.0, 24.0),
+        (11.0, 21.0),
+        (8.0, 6.0),
+    ])));
     let arc = |i: usize| {
         // the 60-point closed loop of kernel_build_failures.rs: two lobes, restated as the
         // curve its points sample (a circle of radius 12 about (38, 0) rolled on one of 12)
@@ -260,7 +266,7 @@ fn corpus() -> Vec<String> {
     };
     let mut lobe: Vec<(f64, f64)> = (0..60).map(arc).collect();
     lobe.push(lobe[0]);
-    planar.extend(PlaneSpline::through(p2(&lobe), None, None));
+    planar.extend(PlaneSpline::through_periodic(p2(&lobe)));
     let poly = p2(&[
         (55.0, 10.0),
         (47.19638711935487, 10.614871027096626),
@@ -287,7 +293,7 @@ fn corpus() -> Vec<String> {
                 let poles: Vec<Point3> = pts.iter().map(p3).collect();
                 out.extend(control_line(*degree, &k, weights.as_deref(), &poles, 2));
             }
-            forge_geom::spline::Form::Through { pts, from, to } => {
+            forge_geom::spline::Form::Through { pts, from, to, .. } => {
                 let q: Vec<Point3> = pts.iter().map(p3).collect();
                 out.extend(through_line(&q, from.map(v3), to.map(v3), 2));
             }

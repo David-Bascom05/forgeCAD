@@ -39,3 +39,7 @@ open SplineSpec
 #print axioms Oracle.rows_in
 #print axioms Oracle.residual_in
 #print axioms Oracle.through_cert
+-- A profile loop's simplicity: boxes apart do not touch; cones apart meet only at the joint.
+#print axioms apart_of_boxes
+#print axioms cone_sep
+#print axioms convex_in_cone

@@ -142,9 +142,13 @@ h = hull(ITEM, ITEM, ..)            convex outline, counter-clockwise: an item i
                                     the line to the next item (four discs of one r at a
                                     rectangle's corners inset by r: a rounded rectangle)
 o = poly([P, ..], closed: true)     side k runs from point k to point k+1
-s = spline([P, ..], closed: true)   the cubic through the points; cv: true, a B-spline the points
+s = spline([P, ..], closed: false)  the cubic through the points (centripetal, C2), open with
+                                    natural ends unless `closed: true` (periodic, through the
+                                    first point again); points apart (`SplinePointsMeet`).
+                                    cv: true, a B-spline the points
                                     pull as its control vertices (cubic, lower with under four
-                                    points, or five closed); `degree: n`, `knots: [k, ..]`
+                                    points, or five closed; closed unless `closed: false`);
+                                    `degree: n`, `knots: [k, ..]`
                                     (points + degree + 1 of them, never falling), `weights:
                                     [w, ..]` (one a point) make it one on control vertices,
                                     open (`cv` and `closed` follow: `cv: false` or `closed:

@@ -254,7 +254,7 @@ bounds (`SplineSpec.Oracle`). -/
 * `cv: true` without those: open (`closed: false`) as above, else `closedCV p n` with degree 3 or
   `n - 2` with fewer points.
 * otherwise a through-spline at the centripetal parameters: `Ends.periodic` (the points then the
-  first again) unless `closed: false` or an end slope is given, then `Ends.open_` with
+  first again) when `closed: true`, else (the default) `Ends.open_` with
   `slope v` where `start_slope`/`end_slope` (or a tangent tie, its unit tangent) is given and
   `natural` where not. -/
 
@@ -277,7 +277,9 @@ def formOf (n : Nat) (degree : Option Nat) (knotsOrWeights : Bool) (cv : Option 
   else if closed = some true && (control || sloped) then none
   else
     let isCv := cv.getD control
-    let closed' := closed.getD (!control && !sloped)
+    -- a through-spline is open unless `closed: true` (the owner's rule, 2026-11-23); points on
+    -- their own (`cv: true`) are a closed control polygon unless `closed: false`
+    let closed' := closed.getD (isCv && !control)
     if isCv then
       if control then
         some (.control (degree.getD (max 1 (min 3 (n - 1)))) false)
@@ -285,4 +287,14 @@ def formOf (n : Nat) (degree : Option Nat) (knotsOrWeights : Bool) (cv : Option 
         some (.control (max 1 (min 3 (n - 1 - (if closed' then 1 else 0)))) closed')
     else some (.through closed')
 
+end SplineSpec
+
+namespace SplineSpec
+/-! The defaults, checked by evaluation. -/
+example : formOf 4 none false none none false = some (.through false) := rfl
+example : formOf 4 none false none (some true) false = some (.through true) := rfl
+example : formOf 4 none false (some true) none false = some (.control 2 true) := rfl
+example : formOf 5 none false (some true) (some false) false = some (.control 3 false) := rfl
+example : formOf 4 (some 2) false none none false = some (.control 2 false) := rfl
+example : formOf 4 none false none (some true) true = none := rfl
 end SplineSpec

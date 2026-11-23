@@ -302,7 +302,7 @@ fn a_taper_is_refused_where_it_cannot_apply() {
         "{BOX}sketch k(on: box.end) {{\n  c = circle((0, 0), g)\n}}\nh = cut(k.c, thru_all, taper: a)\n"
     );
     assert_eq!(errors(&src), ["NotWith"]);
-    let src = "shared L = 40\nshared a = 5deg\nsketch s(on: xy) {\n  o = spline([(0, 0), (L, 0), (L, L), (0, L)])\n}\nb = extrude(s, L, taper: a)\n";
+    let src = "shared L = 40\nshared a = 5deg\nsketch s(on: xy) {\n  o = spline([(0, 0), (L, 0), (L, L), (0, L)], closed: true)\n}\nb = extrude(s, L, taper: a)\n";
     assert_eq!(errors(src), ["TaperOnCurve"]);
     // a depth takes one
     ok(&format!(

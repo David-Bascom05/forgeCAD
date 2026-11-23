@@ -467,7 +467,8 @@ fn splines_through_and_by_control_vertices() {
         (
             SkTool::Spline,
             "Spline Interpolation",
-            W::R(Row::Spline(vec![at("0", "0")], false)),
+            // open: a through-spline says closed only when it is
+            W::R(Row::Spline(vec![at("0", "0")], true)),
         ),
         // cubic, open
         (

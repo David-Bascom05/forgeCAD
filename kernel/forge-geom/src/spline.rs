@@ -336,10 +336,25 @@ impl Spline {
     }
 
     /// The cubic through `pts`, curvature continuous, its knots spaced by the square root of the
-    /// distance between points (centripetal) and scaled to run as long as those distances together:
-    /// closed and periodic if first and last are the same point, else natural at an end with no
-    /// slope given. A slope given is per that parameter.
+    /// distance between points (centripetal) and scaled to run as long as those distances together,
+    /// natural at an end with no slope given; a slope given is per that parameter. Open, whatever
+    /// its ends: a closed one is `through_periodic`. The specification is
+    /// research/spline-loops/lean/SplineSpec (`interp_exists_unique`, `spline_exists_unique`).
     pub fn through(pts: &[Point3], from: Option<Vec3>, to: Option<Vec3>) -> Option<Spline> {
+        Spline::through_ends(pts, false, from, to)
+    }
+
+    /// The periodic cubic through `pts`, the first point repeated last (exactly): C2 across the
+    /// joint too.
+    pub fn through_periodic(pts: &[Point3]) -> Option<Spline> {
+        let n = pts.len();
+        if n < 4 || pts[0] != pts[n - 1] {
+            return None;
+        }
+        Spline::through_ends(pts, true, None, None)
+    }
+
+    fn through_ends(pts: &[Point3], closed: bool, from: Option<Vec3>, to: Option<Vec3>) -> Option<Spline> {
         let n = pts.len();
         if n < 2 {
             return None;
@@ -356,7 +371,6 @@ impl Spline {
         }
         let scale = length / t[n - 1];
         t.iter_mut().for_each(|x| *x *= scale);
-        let closed = n > 2 && pts[0].distance(pts[n - 1]) <= tol::LINEAR;
         let h = |i: usize| t[i + 1] - t[i];
         let dp = |i: usize| (pts[i + 1] - pts[i]) / h(i);
         // slopes m of the Hermite pieces: tridiagonal rows, C2 at the middle points
@@ -1235,11 +1249,13 @@ pub enum Form {
         knots: Option<Vec<f64>>,
         weights: Option<Vec<f64>>,
     },
-    /// The cubic through the points, with slopes at its ends where given.
+    /// The cubic through the points, with slopes at its ends where given; closed, periodic, its
+    /// first point repeated last.
     Through {
         pts: Vec<Point2>,
         from: Option<Vec2>,
         to: Option<Vec2>,
+        closed: bool,
     },
     /// Semi-axes a along the angle `rot` and b across; from angle `start` through `sweep`
     /// (each measured in the ellipse's own frame).
@@ -1299,13 +1315,33 @@ impl PlaneSpline {
             },
         })
     }
+    /// The open cubic through the points (`Spline::through`).
     pub fn through(pts: Vec<Point2>, from: Option<Vec2>, to: Option<Vec2>) -> Option<PlaneSpline> {
         let ctrl: Vec<Point3> = pts.iter().map(|&p| p3(p)).collect();
         let v = |d: Vec2| Vec3::new(d.x, d.y, 0.0);
         let c = Spline::through(&ctrl, from.map(v), to.map(v))?;
         Some(PlaneSpline {
             c: Arc::new(c),
-            form: Form::Through { pts, from, to },
+            form: Form::Through {
+                pts,
+                from,
+                to,
+                closed: false,
+            },
+        })
+    }
+    /// The periodic cubic through the points, the first repeated last (`Spline::through_periodic`).
+    pub fn through_periodic(pts: Vec<Point2>) -> Option<PlaneSpline> {
+        let ctrl: Vec<Point3> = pts.iter().map(|&p| p3(p)).collect();
+        let c = Spline::through_periodic(&ctrl)?;
+        Some(PlaneSpline {
+            c: Arc::new(c),
+            form: Form::Through {
+                pts,
+                from: None,
+                to: None,
+                closed: true,
+            },
         })
     }
     pub fn ellipse(center: Point2, a: f64, b: f64, rot: f64, start: f64, sweep: f64) -> Option<PlaneSpline> {
@@ -1354,10 +1390,16 @@ impl PlaneSpline {
                 }),
                 weights: weights.as_ref().map(|w| w.iter().rev().copied().collect()),
             },
-            Form::Through { pts, from, to } => Form::Through {
+            Form::Through {
+                pts,
+                from,
+                to,
+                closed,
+            } => Form::Through {
                 pts: pts.iter().rev().copied().collect(),
                 from: to.map(|d| -d),
                 to: from.map(|d| -d),
+                closed: *closed,
             },
             &Form::Ellipse {
                 center,
@@ -1396,10 +1438,16 @@ impl PlaneSpline {
                 knots: knots.clone(),
                 weights: weights.clone(),
             },
-            Form::Through { pts, from, to } => Form::Through {
+            Form::Through {
+                pts,
+                from,
+                to,
+                closed,
+            } => Form::Through {
                 pts: pts.iter().map(m).collect(),
                 from: from.as_ref().map(v),
                 to: to.as_ref().map(v),
+                closed: *closed,
             },
             &Form::Ellipse {
                 center,
@@ -1447,13 +1495,19 @@ impl PlaneSpline {
                 knots.clone(),
                 weights.clone(),
             ),
-            Form::Through { pts, from, to } => {
+            Form::Through {
+                pts,
+                from,
+                to,
+                closed,
+            } => {
                 let v = |d: &Vec2| pt(Point2::ORIGIN + *d) - pt(Point2::ORIGIN);
-                PlaneSpline::through(
-                    pts.iter().map(|&p| pt(p)).collect(),
-                    from.as_ref().map(v),
-                    to.as_ref().map(v),
-                )
+                let q: Vec<Point2> = pts.iter().map(|&p| pt(p)).collect();
+                if *closed {
+                    PlaneSpline::through_periodic(q)
+                } else {
+                    PlaneSpline::through(q, from.as_ref().map(v), to.as_ref().map(v))
+                }
             }
             &Form::Ellipse {
                 center,

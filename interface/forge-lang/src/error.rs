@@ -592,6 +592,12 @@ pub enum Error {
         what: &'static str,
         value: f64,
     },
+    /// A through-spline's points `index` and the next (the first, closing a closed one) within the
+    /// kernel's tolerance of each other: the curve through them has no parameter between them.
+    SplinePointsMeet {
+        span: Span,
+        index: usize,
+    },
     UnknownName {
         span: Span,
         name: String,
@@ -886,6 +892,7 @@ impl Error {
             | WrongDim { span, .. }
             | NotWhole { span, .. }
             | BadValue { span, .. }
+            | SplinePointsMeet { span, .. }
             | UnknownName { span, .. }
             | UnknownMember { span, .. }
             | UnknownArg { span, .. }
@@ -961,6 +968,7 @@ impl Error {
             WrongDim { .. } => "WrongDim",
             NotWhole { .. } => "NotWhole",
             BadValue { .. } => "BadValue",
+            SplinePointsMeet { .. } => "SplinePointsMeet",
             UnknownName { .. } => "UnknownName",
             UnknownMember { .. } => "UnknownMember",
             UnknownArg { .. } => "UnknownArg",
@@ -1155,6 +1163,9 @@ impl Error {
             } => format!("{what}: needs a {want:?}, found a {found:?}"),
             NotWhole { value, .. } => format!("{value} is not a whole number"),
             BadValue { what, value, .. } => format!("{what} cannot be {}", crate::values::fmt(*value)),
+            SplinePointsMeet { index, .. } => {
+                format!("the spline's points {index} and {} are one point", index + 1)
+            }
             UnknownName { name, .. } => format!("unknown name {name}"),
             UnknownMember { ty, member, .. } => format!("{ty:?} has no member {member}"),
             UnknownArg { func, arg, .. } => format!("{func} takes no argument {arg}"),
@@ -1328,6 +1339,7 @@ impl Error {
             }
             NotWhole { value, .. } => vec![("value", (*value).into())],
             BadValue { what, value, .. } => vec![("what", s(what)), ("value", (*value).into())],
+            SplinePointsMeet { index, .. } => vec![("index", (*index as f64).into())],
             UnknownName { name, .. } => vec![("name", s(name))],
             UnknownMember { ty, member, .. } => vec![("type", s(&format!("{ty:?}"))), ("member", s(member))],
             UnknownArg { func, arg, .. } => vec![("func", s(func)), ("arg", s(arg))],

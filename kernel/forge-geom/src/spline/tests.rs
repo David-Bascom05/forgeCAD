@@ -214,7 +214,7 @@ fn through_passes_its_points_and_is_c2() {
     // closed: runs on past the joint smoothly
     let mut q = p.clone();
     q.push(p[0]);
-    let cl = Spline::through(&q, None, None).unwrap();
+    let cl = Spline::through_periodic(&q).unwrap();
     let dm = cl.domain();
     let (a, b) = (cl.deriv(dm.lo), cl.deriv(dm.hi));
     assert!(a.p.distance(b.p) < 1e-12);

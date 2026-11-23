@@ -565,8 +565,11 @@ impl Sketch {
                 let mut pts: Vec<Point2> = s.points.iter().map(|&p| self.point(p)).collect();
                 match &s.kind {
                     SplineKind::Through => {
+                        // the flag decides: closed is periodic, open has its ends (natural, or
+                        // the slopes given or tied), wherever those ends lie
                         if s.closed {
                             pts.push(pts[0]);
+                            return PlaneSpline::through_periodic(pts).map(Arc::new);
                         }
                         let from = s.slopes[0].or_else(|| self.tie_slope(s, 0, &pts));
                         let to = s.slopes[1].or_else(|| self.tie_slope(s, 1, &pts));

@@ -472,7 +472,13 @@ impl fmt::Display for Row {
                 "arc(center: {c}, from: {a}, to: {b}{})",
                 if *cw { ", cw: true" } else { "" }
             ),
-            Row::Spline(ps, o) => write!(f, "spline([{}]{})", list(ps), open(*o)),
+            // a through-spline is open unless it says closed
+            Row::Spline(ps, o) => write!(
+                f,
+                "spline([{}]{})",
+                list(ps),
+                if *o { "" } else { ", closed: true" }
+            ),
             Row::BSpline(d, ps, o) => write!(f, "spline([{}], degree: {d}, cv: true{})", list(ps), open(*o)),
             Row::Ellipse(c, m, b) => write!(f, "ellipse(center: {c}, major: {m}, b: {b})"),
             Row::Project { of, approx, .. } => match approx {

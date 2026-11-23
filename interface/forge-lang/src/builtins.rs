@@ -1169,8 +1169,11 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
                     with: CONTROL.into_iter().find(|k| a.opt(k).is_some()).expect("one"),
                 });
             }
+            // a polygon is closed unless `closed: false`; a through-spline open unless
+            // `closed: true`; points on their own (`cv: true`) a closed control polygon unless
+            // `closed: false`
             let closed = match a.opt("closed") {
-                None => !control && !sloped,
+                None => name == "poly" || (cv && !control),
                 Some(Value::Bool(true)) if control || sloped => {
                     return Err(Error::NotWith {
                         span: a.span(given()),
@@ -1217,6 +1220,21 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
             } else {
                 let mut s = sk.borrow_mut();
                 let ids = pts.iter().map(|&p| s.p2(p, span)).collect::<R<Vec<_>>>()?;
+                if !cv {
+                    // the curve through them needs each point apart from the next (and the last
+                    // from the first, closed)
+                    let at: Vec<Point2> = ids.iter().map(|&id| s.s.point(id)).collect();
+                    let n = at.len();
+                    let pairs = if closed { n } else { n - 1 };
+                    if let Some(i) =
+                        (0..pairs).find(|&i| at[i].distance(at[(i + 1) % n]) <= forge_math::tol::LINEAR)
+                    {
+                        return Err(Error::SplinePointsMeet {
+                            span: a.span("points"),
+                            index: i,
+                        });
+                    }
+                }
                 let nm = pending_name(ev, span);
                 let id = if control {
                     let (degree, knots, weights) = control_args(&a, ids.len())?;

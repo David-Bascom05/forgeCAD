@@ -185,7 +185,13 @@ fn fit(
         for i in 1..=n {
             knots.push(knots[i - 1] + pts[i].distance(pts[i - 1]));
         }
-        let made = forge_geom::spline::PlaneSpline::through(pts.clone(), None, None);
+        // a closed curve's image is periodic, through its start again
+        let made = if closed {
+            pts[n] = pts[0];
+            forge_geom::spline::PlaneSpline::through_periodic(pts.clone())
+        } else {
+            forge_geom::spline::PlaneSpline::through(pts.clone(), None, None)
+        };
         let Some(sp) = made else {
             return Err("the curve's image doubles back on itself here; it has no spline through it".into());
         };

@@ -9,3 +9,4 @@ import SplineSpec.Insert
 import SplineSpec.Oracle
 import SplineSpec.Cert
 import SplineSpec.Interval
+import SplineSpec.Simple

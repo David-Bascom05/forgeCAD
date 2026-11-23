@@ -701,6 +701,50 @@ fn spline_forms_refused() {
     }
 }
 
+/// A through-spline is open unless `closed: true` (the owner's rule), and the flag alone decides:
+/// an open one whose ends meet is open, its slopes kept, a corner where its ends meet; points that
+/// repeat are a typed error at the points (research/spline-spec).
+#[test]
+fn through_splines_open_unless_closed() {
+    let arch = |extra: &str| {
+        format!(
+            "sketch s(on: xy) {{\n  c = spline([(0, 0), (10, 8), (20, 8), (30, 0)]{extra})\n  l = line((30, 0), (0, 0))\n}}\na = extrude(s, 5)\n"
+        )
+    };
+    // the default is the open curve
+    assert_eq!(
+        volume(&arch("")).to_bits(),
+        volume(&arch(", closed: false")).to_bits()
+    );
+    // ends that meet: open (natural ends, a corner there) and closed (periodic) are two curves
+    let drop = |extra: &str| {
+        format!(
+            "sketch s(on: xy) {{\n  c = spline([(0, 0), (10, 8), (20, 0), (10, -8), (0, 0)]{extra})\n}}\na = extrude(s, 2)\n"
+        )
+    };
+    // the closed one is through the same points, the first not repeated
+    let ring = "sketch s(on: xy) {\n  c = spline([(0, 0), (10, 8), (20, 0), (10, -8)], closed: true)\n}\na = extrude(s, 2)\n";
+    let (open, closed) = (volume(&drop("")), volume(ring));
+    assert!(
+        open > 0.0 && closed > 0.0 && (open - closed).abs() > 1e-3,
+        "{open} {closed}"
+    );
+    // a slope at an end that meets the other is kept
+    let sloped = volume(&drop(", start_slope: (1, 1)"));
+    assert!((sloped - open).abs() > 1e-3, "{sloped} {open}");
+    for curve in [
+        "spline([(0, 0), (0, 0), (10, 8), (20, 0)])",
+        "spline([(0, 0), (10, 8), (20, 0), (20, 0.000001)])",
+        "spline([(0, 0), (10, 8), (20, 0), (0, 0)], closed: true)",
+    ] {
+        let src = format!(
+            "sketch s(on: xy) {{\n  c = {curve}\n  l = line((20, 0), (0, 0))\n}}\na = extrude(s, 2)\n"
+        );
+        let msg = common::refused(&src);
+        assert!(msg.contains("SplinePointsMeet"), "{curve}: {msg}");
+    }
+}
+
 /// Loops that cross are refused at the sketch (a circle r 40 and one r 30 at (20, 0): a
 /// SketchProfile self intersection); loops that touch at a corner go on to the kernel, which says
 /// where the solid pinches (a 20 square with a triangle touching its edge at (10, 0): ZeroThickness

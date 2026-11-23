@@ -460,7 +460,17 @@ impl Rd<'_> {
                 let Some(ExprKind::List(ps)) = arg(args, 0, "points").map(|x| &x.kind) else {
                     return what("a list of points built from other values");
                 };
-                let closed = !arg(args, 9, "closed").is_some_and(|c| matches!(c.kind, ExprKind::Bool(false)));
+                let cv = arg(args, 9, "cv").is_some_and(|c| matches!(c.kind, ExprKind::Bool(true)));
+                let given = |b: bool| {
+                    arg(args, 9, "closed").is_some_and(|c| matches!(c.kind, ExprKind::Bool(x) if x == b))
+                };
+                // a through-spline is open unless `closed: true`; a polygon and control points
+                // closed unless `closed: false`
+                let closed = if f == "spline" && !cv {
+                    given(true)
+                } else {
+                    !given(false)
+                };
                 let at: Vec<EntityId> = if f == "poly" {
                     let ls: Vec<(EntityId, EntityId)> = segs
                         .iter()
@@ -487,7 +497,6 @@ impl Rd<'_> {
                 let first = self.named.get(&'l').copied().unwrap_or(0) + 1;
                 let sides = ps.len() - usize::from(!closed);
                 let sn = if f == "spline" { Some(self.next('s')) } else { None };
-                let cv = arg(args, 9, "cv").is_some_and(|c| matches!(c.kind, ExprKind::Bool(true)));
                 let degree = 3.min(ps.len().saturating_sub(1 + usize::from(closed))).max(1);
                 if cv {
                     slots.push(None);
