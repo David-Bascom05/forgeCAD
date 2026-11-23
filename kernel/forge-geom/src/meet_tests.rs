@@ -247,7 +247,7 @@ fn thin_torus_on_a_wide_cylinder_both_loops() {
         .iter()
         .map(|(k, _)| {
             let q = k.eval(k.domain().lo) - o;
-            (-q.y).atan2(q.x).to_degrees().rem_euclid(360.0)
+            (forge_math::dmath::atan2(-q.y, q.x) * 180.0 / forge_math::dmath::PI).rem_euclid(360.0)
         })
         .collect();
     at.sort_by(f64::total_cmp);
