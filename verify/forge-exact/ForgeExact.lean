@@ -19,7 +19,9 @@ import ForgeExact.DecideOnce.Frontier
 import ForgeExact.DecideOnce.Local
 import ForgeExact.DecideOnce.Curved
 import ForgeExact.DecideOnce.CorrectK
+import ForgeExact.DecideOnce.LocalK
 import ForgeExact.DecideOnce.QForm
+import ForgeExact.DecideOnce.FlatK
 import ForgeExact.DecideOnce.SampleLocal
 import ForgeExact.JordanLocal
 import ForgeExact.DecideOnce.LocalJordan

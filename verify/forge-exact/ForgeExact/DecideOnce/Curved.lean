@@ -58,9 +58,9 @@ def IsVertK (cs : List (Carrier P K)) (X : Cov) : Prop :=
 
 /-- An edge cell: on two or more carriers, and more than one point. Under `Faithful` (connected
 cells) and with no two carriers sharing a component (the snap merges equal surfaces), this is a
-curve. -/
+curve. For planes it is the rank test `IsEdge` (FlatK.lean, `isEdgeK_iff`). -/
 def IsEdgeK (cs : List (Carrier P K)) (X : Cov) : Prop :=
-  RealisedK cs X ∧ 2 ≤ X.count .zero ∧ ¬IsVertK cs X
+  RealisedK cs X ∧ (∃ a b : Nat, a ≠ b ∧ X[a]? = some Sgn.zero ∧ X[b]? = some Sgn.zero) ∧ ¬IsVertK cs X
 
 /-! ## The flat cells are an instance -/
 

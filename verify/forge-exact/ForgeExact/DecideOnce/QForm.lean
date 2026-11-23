@@ -1,5 +1,6 @@
 import ForgeExact.DecideOnce.CorrectK
 import ForgeExact.DecideOnce.Local
+import ForgeExact.DecideOnce.LocalK
 
 /-!
 # Sign formulas: `compat` with no Jordan (design §2.5a), and separator invariance (§2.3)
@@ -118,6 +119,11 @@ theorem qform_localCompat (ps : List Ref.Plane) (F : Nat → SForm) (In : Cov �
   rcases qform_compat (ps.map fun p => p.eval) F T i with hs | hd
   · exact Or.inl fun x hx => hs x ((covCellK_flat ps T x).mpr hx)
   · exact Or.inr fun x hx => hd x ((covCellK_flat ps T x).mpr hx)
+
+/-- **`LocalCompatK` for formula bodies**: (c′) over any carriers needs no localized Jordan. -/
+theorem qform_localCompatK [Topology P] (cs : List (Carrier P K)) (F : Nat → SForm) (In : Cov → Prop) :
+    LocalCompatK cs (fun i => (F i).den cs) In :=
+  fun T _ _ i => qform_compat cs F T i
 
 /-- **Separator invariance, the set.** Two exact ledgers of one family of solids, over any two
 carrier lists (say `cs` and `cs ++ seps`), regularise their kept full cells to the same set. -/

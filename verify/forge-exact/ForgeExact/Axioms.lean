@@ -16,7 +16,9 @@ import ForgeExact.DecideOnce.Frontier
 import ForgeExact.DecideOnce.Local
 import ForgeExact.DecideOnce.Curved
 import ForgeExact.DecideOnce.CorrectK
+import ForgeExact.DecideOnce.LocalK
 import ForgeExact.DecideOnce.QForm
+import ForgeExact.DecideOnce.FlatK
 import ForgeExact.DecideOnce.SampleLocal
 import ForgeExact.JordanLocal
 import ForgeExact.DecideOnce.LocalJordan
@@ -165,6 +167,18 @@ elab "#standard_axioms " ids:ident* : command => do
   ForgeExact.DecideOnce.Curved.qform_localCompat
   ForgeExact.DecideOnce.Curved.den_sep
   ForgeExact.DecideOnce.Curved.sep_invariant_reg
+  ForgeExact.DecideOnce.Curved.qform_localCompatK
+  ForgeExact.DecideOnce.Curved.ExactInK.consistent
+  ForgeExact.DecideOnce.Curved.result_iff_in_k
+  ForgeExact.DecideOnce.Curved.reg_in_k
+  ForgeExact.DecideOnce.Curved.zeroThickness_iff_in_k
+  ForgeExact.DecideOnce.Curved.correct_ok_in_k
+  ForgeExact.DecideOnce.Curved.vert_unique
+  ForgeExact.DecideOnce.Curved.line_in_cell
+  ForgeExact.DecideOnce.Curved.isVertK_iff
+  ForgeExact.DecideOnce.Curved.isEdgeK_iff
+  ForgeExact.DecideOnce.Curved.exactK_of_exact
+  ForgeExact.DecideOnce.Curved.flat_correct_k
   ForgeExact.DecideOnce.Sample.local_exact
   ForgeExact.DecideOnce.Sample.local_correct
   ForgeExact.DecideOnce.Sample.wall_region

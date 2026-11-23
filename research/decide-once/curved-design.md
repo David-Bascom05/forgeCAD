@@ -34,7 +34,7 @@ holding a borrow, no `break` or `return` inside a loop, no `Ordering`.
    built: a curve of surfaces j and k, a Krawczyk-certified vertex, a seam through an axis. Its
    other signs are interval-filtered evaluations with an exact algebraic fallback. A sign is never
    decided to be zero by evaluating it.
-5. **Phases** (§4): Q0, the generalised `Exact` (Lean, small; mostly done, §5.2); Q1, quadrics
+5. **Phases** (§4): Q0, the generalised `Exact` (Lean, small; done, §5.2); Q1, quadrics
    (Lean L1–L3 and a Rust bridge); Q2, tori; Q3, offsets; Q4, splines. The seven decisions are made
    (§5).
 
@@ -387,7 +387,7 @@ proof session on verify/forge-exact; "Rust" means a bridge session in the kernel
 - `qform_compat` (Nef.lean generalised to literals on any carriers).
 - `sep_invariant` (§2.3).
 - Deliverable: L1/L3 statements for any carriers, with the flat theorems re-derived as an instance.
-- Status: §5.2 (`correct_k`, `zeroThickness_iff_k`, `qform_compat`, `sep_invariant_reg` done).
+- Status: done but for the refusal half of `sep_invariant` (§5.2).
 
 ### Q1. Quadrics (planes, cylinders, cones, spheres)
 
@@ -456,21 +456,37 @@ planes, for every region. The two are not interchangeable:
 
 ### 5.2 Q0 status
 
-Done, standard axioms only (Axioms.lean):
-- `Curved.lean`: the definitions, and `covCellK_flat`;
+Done, standard axioms only (all in Axioms.lean):
+- `Curved.lean`: the definitions, and `covCellK_flat`. `IsEdgeK` is now "two distinct zero
+  indices, and more than one point".
 - `CorrectK.lean`: `ExactK.consistent`, `result_iff_k`, `correct_k`, `correct_ok_k`,
-  `badEdge_iff_k`, `badVert_iff_k`, `zeroThickness_iff_k` (Correct.lean for any carriers;
-  `topeDecompK` over any nowhere-dense wall);
-- `QForm.lean`: `SForm`, `den_iff`, `den_cell`, `qform_compat`, `qform_localCompat`, `den_append`,
-  `den_sep`, and `sep_invariant_reg` (the set half of `sep_invariant`).
+  `badEdge_iff_k`, `badVert_iff_k`, `zeroThickness_iff_k`. This is Correct.lean for any carriers;
+  `topeDecompK` works over any nowhere-dense wall.
+- `LocalK.lean`: `ExactInK`, `LocalCompatK`, `result_iff_in_k`, `reg_in_k`,
+  `zeroThickness_iff_in_k`, `correct_ok_in_k`. This is Local.lean for any carriers.
+- `QForm.lean`:
+  - `SForm`, `den_iff`, `den_cell`;
+  - `qform_compat`, `qform_localCompat` (flat), `qform_localCompatK` (any carriers);
+  - `den_append`, `den_sep`, and `sep_invariant_reg` (the set half of `sep_invariant`).
+- `FlatK.lean`: **the flat (c) is an instance of the curved one.**
+  - `exactK_of_exact : Exact L ps A → NoScaled ps → ExactK L (ps.map Plane.eval) A`.
+  - `flat_correct_k` gives `correct_k` and `zeroThickness_iff_k` for every flat exact ledger.
+  - The one real step is that the rank tests are the cell tests on realised cells
+    (`isVertK_iff`, `isEdgeK_iff`). It rests on Cramer's identity (`vert_unique`), a step that
+    keeps a point in its cell (`line_in_cell`, by `Flat.stepFor`), and `perp_exists`.
+  - `NoScaled` (no two carriers are one plane up to scale) is the snap's distinct classes.
+    `Exact` does not state it, so it is a named hypothesis here.
 
-Open in Q0: `ExactInK` (Local.lean's theorems over `ExactK`), and re-deriving `flat_correct` as an
-instance of `correct_k`. The refusal half of `sep_invariant` needs Q1's `xNonManifold_iff_top`:
-both refusals are then the same topological statement.
+Open:
+- The refusal half of `sep_invariant` needs Q1's `xNonManifold_iff_top`: both refusals are then
+  the same topological statement.
+- `NoScaled` for the sampler's planes would let `flat_correct_k` apply to `flat_exact`'s ledger
+  with no extra hypothesis. The sampler's planes are distinct by the snap, but no Lean lemma states
+  this yet.
 
 ## 6. Files and references
 
-New on this branch (also `CorrectK.lean` and `QForm.lean`, §5.2):
+New on this branch (also `CorrectK.lean`, `LocalK.lean`, `QForm.lean`, `FlatK.lean`, §5.2):
 - `verify/forge-exact/ForgeExact/DecideOnce/Curved.lean`: `Carrier`, `sgnK`, `covOfK`, `covCellK`,
   `RealisedK`, `IsVertK`, `IsEdgeK`, `covCell_iff_covOf`, **`covCellK_flat`**, `Connected`,
   `Faithful` (R1 `connected`, R2 `incidence`, R3 `sides`, R4 `wing`), `memTK`, `FlipK`, `FullK`,
