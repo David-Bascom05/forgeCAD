@@ -217,4 +217,40 @@ theorem U.faces_at_spec (fo ar : Slice U32) (hin : ∀ a ∈ ar.val, a.val < fo.
   apply WP.spec_mono (U.faces_at_loop_spec fo ar (alloc.vec.Vec.new U32) 0#usize (by simp) hin (by simpa using hlen))
   intro r hr; rw [hr]; simp
 
+/-- `dedupAux` reads its seen list only through membership. -/
+theorem U.dedupAux_congr {α} [DecidableEq α] :
+    ∀ (t s1 s2 : List α), (∀ z, z ∈ s1 ↔ z ∈ s2) →
+      ForgeExact.DecideOnce.dedupAux t s1 = ForgeExact.DecideOnce.dedupAux t s2
+  | [], _, _, _ => by simp [ForgeExact.DecideOnce.dedupAux]
+  | x :: t, s1, s2, h => by
+    simp only [ForgeExact.DecideOnce.dedupAux]
+    by_cases h1 : x ∈ s1
+    · have h2 : x ∈ s2 := (h x).mp h1
+      simp only [h1, h2, ite_true]
+      exact U.dedupAux_congr t s1 s2 h
+    · have h2 : x ∉ s2 := fun e => h1 ((h x).mpr e)
+      simp only [h1, h2, ite_false]
+      congr 1
+      exact U.dedupAux_congr t _ _ (fun z => by simp [h z])
+
+/-- The fold appending new members is the seen-list dedup after `out`. -/
+theorem U.foldl_pushNew (ys out : List U32) :
+    ys.foldl U.pushNew out = out ++ ForgeExact.DecideOnce.dedupAux ys out := by
+  induction ys generalizing out with
+  | nil => simp [ForgeExact.DecideOnce.dedupAux]
+  | cons y t ih =>
+    simp only [List.foldl_cons, ForgeExact.DecideOnce.dedupAux]
+    by_cases hy : y ∈ out
+    · simp only [U.pushNew, hy, ite_true]; exact ih out
+    · simp only [U.pushNew, hy, ite_false]
+      rw [ih]
+      simp only [List.append_assoc, List.singleton_append]
+      congr 2
+      exact U.dedupAux_congr t _ _ (fun z => by simp [or_comm])
+
+/-- **`faces_at` is the Lean's `dedup`** of the face numbers. -/
+theorem U.facesL_dedup (fo ar : List U32) :
+    U.facesL fo [] ar = ForgeExact.DecideOnce.dedup (ar.map fun a => fo[a.val]!) := by
+  simp [U.facesL, U.foldl_pushNew, ForgeExact.DecideOnce.dedup]
+
 end forge_bool_core
