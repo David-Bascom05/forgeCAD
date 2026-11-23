@@ -66,7 +66,7 @@ The parts:
   I recommend F1. It is what "today's code, proven" can mean. Then ValidSolid R holds for `Rexact`,
   and for R itself when δ is below the body's own feature size, which is checked or refused.
 
-  **Ruled (the master, 2026-11-23): F1**, faithful within a proven δ ("we can use floating point").
+  **Ruled (the master, 2026-11-23): F1**, refined to vertex clusters (see §0); faithful within a proven δ ("we can use floating point").
   Inputs are read the same way: `ValidSolid b := ∃ b*, Refines_δ b b* ∧ ∃ S, Bounds b* S`, and
   `⟦b⟧ := ⟦b*⟧`. `Bounds` is dol-curved's (ForgeCurved/BodyModel.lean, 30c0577b): exact, on the exact
   counterpart.
@@ -79,15 +79,20 @@ The parts:
   - `ValidSolid δ b := ∃ bs, exactOf b = some bs ∧ ValidExact bs`;
   - `⟦b⟧ := denoteExact (exactOf b)`;
   - `exactOf = none` (a vertex whose meet isn't unique in its δ-ball) is a typed refusal.
-  **Open, pending the master (2026-11-23).** On real kernel bodies the f64 planes round a 4+ face
+  **Ruled (the master, 2026-11-23): option (iv), the refined F1.** (Recorded first as an open
+  question; the record follows.) On real kernel bodies the f64 planes round a 4+ face
   vertex are only approximately concurrent, so exactOf's unique-meet vertex is `none` on normal
   parts. B:3387's trial refused bench part insert (VertexNotUnique at (40.3, −17, 36)).
-  - Recommended, option (iv), vertex clusters:
+  - Approved, option (iv), vertex clusters, for inputs and outputs alike:
     - the exact body is its exact carriers plus its topology;
     - each f64 vertex corresponds to a connected exact cluster of diameter ≤ δ;
     - `Refines_δ` is one-to-one up to vertex clusters;
     - `exactOf = none` only for invalid input;
-    - a refusal happens only when a decision needs a vertex that nothing separates.
+    - ⟦b⟧ is the solid the exact planes bound under that topology;
+    - a refusal happens only per decision, when a decision needs a cluster point that neither the
+      screen nor exact can separate.
+  - This replaces the snapping steer: decide-once's snap merges coincident planes, not concurrent
+    ones.
   - Rejected:
     - (i) per-face canonical triples: the faces don't close;
     - (ii) decide-once's snap: it merges coincident planes, not concurrent ones;
