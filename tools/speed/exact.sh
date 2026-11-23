@@ -10,6 +10,8 @@
 # - taskset -c N: one core (GATE_CORE, default 0, so two gates can run side by side), so
 #   available_parallelism is 1 and no worker threads interleave their allocations (glibc malloc's
 #   paths otherwise moved the counts by up to ~0.4% run to run).
+# - env -i: a fixed environment (PATH and the two settings above only), since reading a variable
+#   scans the whole environment: the caller's own variables moved every count by hundreds.
 # usage: exact_dir=TARGET_DIR; . tools/speed/exact.sh   (after RUSTFLAGS, CARGO_TARGET_DIR are set)
 export FORGE_KERNEL_HASH_PIN=0123456789abcdef
 export FORGECAD_CACHE=off
@@ -21,4 +23,6 @@ fi
 exact_pin=
 if command -v taskset > /dev/null; then exact_pin="taskset -c ${GATE_CORE:-0}"; fi
 # exact_run CMD..: CMD under the exact conditions
-exact_run() { LD_PRELOAD="$exact_so" $exact_pin "$@"; }
+exact_run() {
+  env -i PATH=/usr/local/bin:/usr/bin:/bin FORGECAD_CACHE=off LD_PRELOAD="$exact_so" $exact_pin "$@"
+}
