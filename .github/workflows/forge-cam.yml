@@ -9,9 +9,9 @@ name: forge-cam
 on:
   push:
     branches: [main]
-    paths: ["verify/forge-cam/**", ".github/workflows/forge-cam.yml"]
+    paths: ["verify/forge-cam/**", "kernel/forge-cam-geom/**", ".github/workflows/forge-cam.yml"]
   pull_request:
-    paths: ["verify/forge-cam/**", ".github/workflows/forge-cam.yml"]
+    paths: ["verify/forge-cam/**", "kernel/forge-cam-geom/**", ".github/workflows/forge-cam.yml"]
   workflow_dispatch:
 
 jobs:
@@ -57,3 +57,15 @@ jobs:
         run: |
           lake env lean --run Oracle.lean < tests/oracle.in > oracle.got
           diff oracle.got tests/oracle.out
+      - name: rust (rust-toolchain.toml)
+        working-directory: .
+        run: rustup show
+      # L6: forge-cam-geom's slab::dist, the shipped f64 code, against the ℚ oracle on 2000 cases
+      - name: L6, slab::dist against the ℚ oracle
+        working-directory: .
+        run: |
+          cargo run --release --locked -p forge-cam-geom --example oracle_segseg -- gen 2000 cases ours
+          (cd verify/forge-cam && lake env lean --run Oracle.lean < ../../cases > ../../answers)
+          test "$(wc -l < answers)" -eq 2000 && ! grep -q "error:" answers
+          cargo run --release --locked -p forge-cam-geom --example oracle_segseg -- check ours answers | tee l6.txt
+          grep -q "2000 cases, 0 outside" l6.txt
