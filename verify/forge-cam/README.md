@@ -18,6 +18,13 @@ lake exe cache get && lake build && lake env lean Axioms.lean
 | ForgeCam/Fixture.lean | Soft jaws as forge-cam cuts them (5b32f0a): `softJaw = blank ∖ (M × [seat, top])`. `softJaw_seat`: if the held body is a stack of prisms whose sections each lie in M (forge-cam's exact seating check), and it meets the blank only within the grip heights, it misses the jaws. `softJaw_needs_grip` shows that last condition is needed. The earlier model: `jaw = blank ∖ ((H ⊕ B_k) ∩ slab)`. `jaw_seat` proves the held body misses the jaw, for any k, provided H meets the blank only inside the grip slab. `jaw_seat_needs_slab` shows that proviso is needed. |
 | ForgeCam/Pocket.lean | **Pocket coverage** (`passes_cover`): offset passes at depths r + k·s from the original boundary, with 0 < s ≤ r, put every point of the opening R ∘ B_r within r of a pass. This is the void stock.rs assumes. |
 | ForgeCam/Dist2.lean | **slab::dist's segment–segment candidates, exact** (over any ordered field, so they run over ℚ). `ptSegSq_le` / `ptSegSq_attained`: the end-or-perpendicular candidate is the least squared distance from a point to a segment. `segSegLo_le`: the low end (the four end-to-segment candidates if apart, else 0) is a lower bound for every pair of points. `segSegLo_attained`: when the segments are apart, it is attained. `clearFace_segSeg`: for a segment move against a wall over a segment, hypothesis (i) of `ClearFace` is proven, not assumed. |
+| ForgeCam/DistArc.lean | **slab::dist's candidates with arcs, sound over ℝ.**
+- `dot_le_max_of_not_inSector`, the cone lemma: for a direction outside the sector, the nearer arc end is nearest. Proven by algebra, with no angles.
+- `ptArcSq_le`: the point–arc candidate is a lower bound.
+- `cross_eq_zero_of_arc_min`: first order on an arc.
+- `segArcLo_le`: segment–arc (the end candidates, the centre's foot, the crossing).
+- `arcArcLo_le`: arc–arc (the end candidates, the four line-of-centres candidates, the crossing, and |r1 − r2| for concentric arcs).
+- `clearFace_segArc` and `arcArc_D` discharge `ClearFace` (i). |
 | ForgeCam/Machine.lean | G5 for 3-axis. `G5_line_iff`: a line move is within travel iff its ends are. `G5_arc`: an arc or helix is within travel if its circle's box is. `lineOkQ_iff`: the ℚ Bool check equals the ℝ spec. |
 | ForgeCam/Post.lean | G6 for forge-post's motion subset. The printer is modal: G only on a mode change, an axis only when it changes, F only when the feed changes, and a null move is dropped. **`round_trip`**: `read (print p) = normalize (motions p)`. `G6` adds quantisation, with error ≤ ½·10^−d (`roundEven_isQuant`, ties to even). **`faulty_counterexample`**: the printer as of 155e2f2 reads a plunge back as a rapid. Arc semantics: `arcFull_agrees` (the meant `full` equals the control's reading on every posted arc, as forge-post 4bfe2a2 compares), `arc2_safe` (with X, Y compared, a posted arc read as a full circle was planned as a full turn or more than a half turn) and `arc3_unsafe` (with all three compared, as in 0a4c189, a short helical arc is read as a full helical turn). |
 
@@ -51,8 +58,9 @@ For one face, slab.rs answers `Clear { lower }` when two things hold:
 
 ## Not covered yet
 
-- `slab::dist` for pairs with an arc (segment–arc, arc–arc), and for flat regions
-  (`dist_region`): these are still hypothesis (i) above. Segment–segment is proven (Dist2.lean).
+- `slab::dist` for flat regions (`dist_region`: the box cutoff and the inside test) is still
+  hypothesis (i). Segment–segment (Dist2), segment–arc and arc–arc (DistArc) are proven. The arc
+  forms have no ℚ executable: they need ℚ(√d).
 - The interval arithmetic (L5) and the B&B checker for non-prism faces.
 - The character level of G-code text: words to digits, and the dialect's templates.
 - The Aeneas translation of forge-cam-geom and forge-post (L4).

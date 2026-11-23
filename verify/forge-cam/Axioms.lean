@@ -54,3 +54,5 @@ import ForgeCam
 #print axioms ForgeCam.DistArc.cross_eq_zero_of_arc_min
 #print axioms ForgeCam.DistArc.segArcLo_le
 #print axioms ForgeCam.DistArc.clearFace_segArc
+#print axioms ForgeCam.DistArc.arcArcLo_le
+#print axioms ForgeCam.DistArc.arcArc_D

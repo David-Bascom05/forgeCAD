@@ -89,11 +89,18 @@ ForgeCam/Vise.lean adds 7 theorems (41 in all).
   `near_section_sqrt` (it also shrinks the radius by 1e-12 relative, which is conservative).
 - The ℚ oracle: Oracle.lean (segseg, ptseg, apart), in CI.
 
+## Segment–arc and arc–arc (DistArc.lean): done
+
+`segArcLo_le` and `arcArcLo_le` prove slab::dist's low end for pairs with arcs is a lower bound
+for every pair of points: exact signs, arcs counter-clockwise and less than a half turn (a
+clockwise arc is the counter-clockwise arc with its ends swapped). `clearFace_segArc` and
+`arcArc_D` discharge ClearFace (i). The soft jaws' pocket walls over arcs (quarter turns at most)
+are covered.
+
 ## Still to do when asked
 
-1. Soft jaws' `Certified`: the pockets' walls are arcs and segments, so this needs segment–arc
-   (below) for walls over arcs.
-2. If 2.5D contours with arcs are in active use: segment–arc in Dist2 (over ℝ, or ℚ(√d) for an
-   executable form), then arc–arc.
+1. `dist_region` (flat faces): the box cutoff and the trim's inside test (`Trim::classify`).
+   This is the last part of hypothesis (i).
+2. An executable ℚ(√d) form of the arc candidates, if the L6 tests want one.
 3. Not yet asked for: the character level of G-code (digits and templates), canned-cycle
    expansion in the G6 model, L5 for the checker's intervals, and L4 (Aeneas).
