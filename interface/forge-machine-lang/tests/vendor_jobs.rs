@@ -87,7 +87,55 @@ fn ac_trunnion_3_plus_2_on_brother_m200x3() {
     assert_clear(
         &s,
         &tl,
-        Prim::Box { min: [-20.0, -20.0, 60.0], max: [20.0, 20.0, 100.0] },
-        Prim::Box { min: [-15.0, -15.0, 0.0], max: [15.0, 15.0, 60.0] },
+        Prim::Box {
+            min: [-20.0, -20.0, 60.0],
+            max: [20.0, 20.0, 100.0],
+        },
+        Prim::Box {
+            min: [-15.0, -15.0, 0.0],
+            max: [15.0, 15.0, 60.0],
+        },
+    );
+}
+
+/// HMC (horizontal spindle along -z, B under the pallet): a 100 x 200 x 100 block on the pallet, its +Z face
+/// (toward the spindle) faced at B0, then B90 turns its -X face to the spindle and that face is cut
+/// 1 mm deep.
+#[test]
+fn hmc_index_and_face_on_makino_a51nx() {
+    let m = machine("makino", "makino-a51nx");
+    let c = Control::for_dialect(&m, "fanuc", 1).unwrap();
+    assert_eq!(c.letters, vec!['X', 'Y', 'Z', 'B']);
+    let nose = m.mount("spindle").unwrap().at;
+    let mut s = Setup::new(&m, c).unwrap();
+    // Y word 0 on the pallet top (the spindle's centre is nose[1] above it at Y = 0); Z word 0 at
+    // the pallet centre (tip z = nose[2] + q_Z - H, q_Z = word + wcs + H)
+    s.wcs = vec![(54, vec![0.0, -nose[1], -nose[2], 0.0])];
+    s.tools = vec![end_mill(1, 250.0, 5.0)];
+    s.h = vec![(1, 250.0)];
+    let prog = "G90 G17 G21\nT1 M06\nG54\nG43 H1\nS8000 M03\nG0 B0\nG0 X-70. Y120.\nZ60.\nZ49.5\nG1 X70. F1000.\nG0 Z300.\nB90.\nG0 X0 Y120.\nZ60.\nG1 Z49. F300.\nG0 Z300.\nM05\nM30\n";
+    // a 250 mm tool: the spindle housing (radius 120, estimate) stays off the 400 mm pallet
+    let tl = sim::simulate(prog, &s).unwrap();
+    assert!(tl.violations.is_empty(), "{:?}", tl.violations);
+    let last_cut = tl
+        .segments
+        .iter()
+        .rev()
+        .find(|g| g.kind == sim::SegKind::Feed)
+        .unwrap();
+    let (tip, _) = kin::tip_in_part(&m, &last_cut.q1, "spindle", "pallet", 250.0).unwrap();
+    // B90 about +y takes the part's -X face to +z: the tip 1 mm inside x = -50, at the face centre
+    assert!(close(tip, [-49.0, 120.0, 0.0]), "{tip:?}");
+    assert_clear(
+        &s,
+        &tl,
+        Prim::Box {
+            min: [-50.0, 0.0, -50.0],
+            max: [50.0, 200.0, 50.0],
+        },
+        Prim::Box {
+            min: [-50.0, 0.0, -70.0],
+            max: [50.0, 20.0, -55.0],
+        },
     );
 }

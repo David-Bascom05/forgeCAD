@@ -1,0 +1,264 @@
+# Bridgeport (Hardinge group) machines: the maker's published specifications, restated (never copied); each record's
+# `source` is the page or catalogue read and `taken` the date. Estimates and UNKNOWNs are named in
+# each record's `note` and beside the field. Bodies are conservative envelopes from published
+# overall dimensions, not the maker's CAD. Format: docs/cam-machine.md.
+
+# ---------------------------------------------------------------------------------------------
+# Bridgeport V480 APC: V-Series VMC, Fanuc 0i-MF.
+# X 480 Y 400 Z 430; 10000 rpm #40 BIG-PLUS; 20 tools.
+[[machine]]
+name = "bridgeport-v480-apc"
+kind = "vmc3"
+control = "fanuc"
+length_joint = "Z"
+coolants = ["flood"]
+clearance = 1
+source = "https://bridgeportmachinetools.com/product/milling/v-series/ | https://bridgeportmachinetools.com/blog/bridgeport-v480-apc-shines-in-speed-savings-and-size/"
+taken = "2026-11-23"
+note = "architecture assumed: X table on a Y saddle, Z head on a fixed column (the maker's page does not say which unit carries which: UNKNOWN unless stated above); spindle centre to column UNKNOWN: put at the least that clears the table at full Y (estimate); spindle nose to table UNKNOWN: 150 to 150 + Z (estimate); spindle power as published: cont 5.5 kW; 30min 7.5 kW (no curve: no power check); max tool length UNKNOWN: 1000 (no check); max tool diameter UNKNOWN: 500 (no check); overall 1676 x 2718 x 2797; machine 3520 kg; an unpublished required field takes the value that makes its check vacuous (rapid high, max feed = rapid, change time 0.001 s, tool weight 99 kg), named UNKNOWN beside it; joint 0 = mid-travel for X and Y and the top of travel for Z; the control's machine zero is at a travel end (which: UNKNOWN), so a real G54 differs by a constant per axis; bodies are single boxes/cylinders from published overall sizes; head, column, saddle, bed and turret sizes are estimates, the spindle housing radius kept large; the enclosure is not modelled."
+
+[[machine.joint]]
+name = "Y"
+parent = "base"
+side = "table"
+type = "linear"
+axis = [0, -1, 0]
+range = [-200, 200]
+rapid = 100000   # UNKNOWN (unpublished): a high value keeps t_min a lower bound
+max_feed = 100000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.joint]]
+name = "X"
+parent = "Y"
+side = "table"
+type = "linear"
+axis = [-1, 0, 0]
+range = [-240, 240]
+rapid = 100000   # UNKNOWN (unpublished): a high value keeps t_min a lower bound
+max_feed = 100000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.joint]]
+name = "Z"
+parent = "base"
+side = "head"
+type = "linear"
+axis = [0, 0, 1]
+range = [-430, 0]
+rapid = 100000   # UNKNOWN (unpublished): a high value keeps t_min a lower bound
+max_feed = 100000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.spindle]]
+name = "S1"
+link = "Z"
+kind = "milling"
+axis = [0, 0, 1]
+nose = [0, 0, 580]
+rpm = [1, 10000]   # rpm min UNKNOWN (unpublished): 1 = no lower check
+max = [1000, 500]
+interface = "#40 BIG-PLUS"
+
+[[machine.changer]]
+pockets = 20
+change_s = 0.001   # UNKNOWN (unpublished): 0.001 s (must be > 0), so t_min stays a lower bound
+max_tool_kg = 99   # UNKNOWN (unpublished): no weight check
+
+[[machine.mount]]
+name = "spindle"
+kind = "tool"
+link = "Z"
+at = [0, 0, 580]
+dir = [0, 0, -1]
+
+[[machine.mount]]
+name = "table"
+kind = "part"
+link = "X"
+at = [0, 0, 0]
+dir = [0, 0, 1]
+xdir = [1, 0, 0]
+
+[[machine.body]]
+name = "bed"
+link = "base"
+part = "parts/bridgeport/v480-apc/bed.fg"
+ignore = ["saddle", "column"]
+[[machine.body.box]]
+min = [-300, -500, -700]
+max = [300, 910, -400]
+
+[[machine.body]]
+name = "column"
+link = "base"
+part = "parts/bridgeport/v480-apc/column.fg"
+ignore = ["bed", "head"]
+[[machine.body.box]]
+min = [-300, 460, -400]
+max = [300, 910, 1230]
+
+[[machine.body]]
+name = "saddle"
+link = "Y"
+part = "parts/bridgeport/v480-apc/saddle.fg"
+ignore = ["bed", "table"]
+[[machine.body.box]]
+min = [-240, -200, -250]
+max = [240, 200, -100]
+
+[[machine.body]]
+name = "table"
+link = "X"
+part = "parts/bridgeport/v480-apc/table.fg"
+ignore = ["saddle"]
+[[machine.body.box]]
+min = [-300, -200, -100]
+max = [300, 200, 0]
+
+[[machine.body]]
+name = "nose"
+link = "Z"
+part = "parts/bridgeport/v480-apc/nose.fg"
+ignore = ["column"]
+[[machine.body.cyl]]
+base = [0, 0, 580]
+axis = [0, 0, 1]
+r = 110
+h = 150
+
+[[machine.body]]
+name = "head"
+link = "Z"
+part = "parts/bridgeport/v480-apc/head.fg"
+ignore = ["column"]
+[[machine.body.box]]
+min = [-140, -140, 730]
+max = [140, 460, 1180]
+
+# ---------------------------------------------------------------------------------------------
+# Bridgeport V710: V-Series VMC, Fanuc 0i-MF.
+# X 710 Y 400 Z 430; 10000 rpm #40 BIG-PLUS; 20 tools.
+[[machine]]
+name = "bridgeport-v710"
+kind = "vmc3"
+control = "fanuc"
+length_joint = "Z"
+coolants = ["flood"]
+clearance = 1
+source = "https://bridgeportmachinetools.com/product/milling/v-series/"
+taken = "2026-11-23"
+note = "architecture assumed: X table on a Y saddle, Z head on a fixed column (the maker's page does not say which unit carries which: UNKNOWN unless stated above); spindle centre to column UNKNOWN: put at the least that clears the table at full Y (estimate); spindle nose to table UNKNOWN: 150 to 150 + Z (estimate); spindle power as published: cont 5.5 kW; 30min 7.5 kW (no curve: no power check); max tool length UNKNOWN: 1000 (no check); max tool diameter UNKNOWN: 500 (no check); overall 2572 x 2827 x 2659; machine 3907 kg; an unpublished required field takes the value that makes its check vacuous (rapid high, max feed = rapid, change time 0.001 s, tool weight 99 kg), named UNKNOWN beside it; joint 0 = mid-travel for X and Y and the top of travel for Z; the control's machine zero is at a travel end (which: UNKNOWN), so a real G54 differs by a constant per axis; bodies are single boxes/cylinders from published overall sizes; head, column, saddle, bed and turret sizes are estimates, the spindle housing radius kept large; the enclosure is not modelled."
+
+[[machine.joint]]
+name = "Y"
+parent = "base"
+side = "table"
+type = "linear"
+axis = [0, -1, 0]
+range = [-200, 200]
+rapid = 100000   # UNKNOWN (unpublished): a high value keeps t_min a lower bound
+max_feed = 100000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.joint]]
+name = "X"
+parent = "Y"
+side = "table"
+type = "linear"
+axis = [-1, 0, 0]
+range = [-355, 355]
+rapid = 100000   # UNKNOWN (unpublished): a high value keeps t_min a lower bound
+max_feed = 100000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.joint]]
+name = "Z"
+parent = "base"
+side = "head"
+type = "linear"
+axis = [0, 0, 1]
+range = [-430, 0]
+rapid = 100000   # UNKNOWN (unpublished): a high value keeps t_min a lower bound
+max_feed = 100000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.spindle]]
+name = "S1"
+link = "Z"
+kind = "milling"
+axis = [0, 0, 1]
+nose = [0, 0, 580]
+rpm = [1, 10000]   # rpm min UNKNOWN (unpublished): 1 = no lower check
+max = [1000, 500]
+interface = "#40 BIG-PLUS"
+
+[[machine.changer]]
+pockets = 20
+change_s = 0.001   # UNKNOWN (unpublished): 0.001 s (must be > 0), so t_min stays a lower bound
+max_tool_kg = 99   # UNKNOWN (unpublished): no weight check
+
+[[machine.mount]]
+name = "spindle"
+kind = "tool"
+link = "Z"
+at = [0, 0, 580]
+dir = [0, 0, -1]
+
+[[machine.mount]]
+name = "table"
+kind = "part"
+link = "X"
+at = [0, 0, 0]
+dir = [0, 0, 1]
+xdir = [1, 0, 0]
+
+[[machine.body]]
+name = "bed"
+link = "base"
+part = "parts/bridgeport/v710/bed.fg"
+ignore = ["saddle", "column"]
+[[machine.body.box]]
+min = [-400, -500, -700]
+max = [400, 910, -400]
+
+[[machine.body]]
+name = "column"
+link = "base"
+part = "parts/bridgeport/v710/column.fg"
+ignore = ["bed", "head"]
+[[machine.body.box]]
+min = [-300, 460, -400]
+max = [300, 910, 1230]
+
+[[machine.body]]
+name = "saddle"
+link = "Y"
+part = "parts/bridgeport/v710/saddle.fg"
+ignore = ["bed", "table"]
+[[machine.body.box]]
+min = [-320, -200, -250]
+max = [320, 200, -100]
+
+[[machine.body]]
+name = "table"
+link = "X"
+part = "parts/bridgeport/v710/table.fg"
+ignore = ["saddle"]
+[[machine.body.box]]
+min = [-400, -200, -100]
+max = [400, 200, 0]
+
+[[machine.body]]
+name = "nose"
+link = "Z"
+part = "parts/bridgeport/v710/nose.fg"
+ignore = ["column"]
+[[machine.body.cyl]]
+base = [0, 0, 580]
+axis = [0, 0, 1]
+r = 110
+h = 150
+
+[[machine.body]]
+name = "head"
+link = "Z"
+part = "parts/bridgeport/v710/head.fg"
+ignore = ["column"]
+[[machine.body.box]]
+min = [-140, -140, 730]
+max = [140, 460, 1180]

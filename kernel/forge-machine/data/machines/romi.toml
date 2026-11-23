@@ -1,0 +1,398 @@
+# Romi machines: the maker's published specifications, restated (never copied); each record's
+# `source` is the page or catalogue read and `taken` the date. Estimates and UNKNOWNs are named in
+# each record's `note` and beside the field. Bodies are conservative envelopes from published
+# overall dimensions, not the maker's CAD. Format: docs/cam-machine.md.
+
+# ---------------------------------------------------------------------------------------------
+# Romi D 800: ROMI D Series New Generation, Fanuc 0i-MF Plus i-HMI (15in touch).
+# X 800 Y 610 Z 640; 10000 rpm ISO 40 (BT/BBT-40 std; CAT/DIN 40 opt); 30 tools.
+[[machine]]
+name = "romi-d-800"
+kind = "vmc3"
+control = "fanuc"
+length_joint = "Z"
+coolants = ["flood"]
+clearance = 1
+source = "https://www.romi.com/wp-content/uploads/2018/04/cat_romi_d_ng_in_rmtl_aj_092025_low.pdf | https://romi.com/en/produtos/machining-centers"
+taken = "2026-11-23"
+note = "architecture assumed: X table on a Y saddle, Z head on a fixed column (the maker's page does not say which unit carries which: UNKNOWN unless stated above); spindle centre to column UNKNOWN: put at the least that clears the table at full Y (estimate); spindle power as published: peak/other: 18.5 kW S3-15%; torque max 118 N.m (no curve: no power check); max tool diameter 75 with the neighbouring pockets full, 127 with them empty; magazine options: 48; overall 3170 x 3795 x 3140; machine 6600 kg; an unpublished required field takes the value that makes its check vacuous (rapid high, max feed = rapid, change time 0.001 s, tool weight 99 kg), named UNKNOWN beside it; joint 0 = mid-travel for X and Y and the top of travel for Z; the control's machine zero is at a travel end (which: UNKNOWN), so a real G54 differs by a constant per axis; bodies are single boxes/cylinders from published overall sizes; head, column, saddle, bed and turret sizes are estimates, the spindle housing radius kept large; the enclosure is not modelled."
+
+[[machine.joint]]
+name = "Y"
+parent = "base"
+side = "table"
+type = "linear"
+axis = [0, -1, 0]
+range = [-305, 305]
+rapid = 40000
+max_feed = 20000
+
+[[machine.joint]]
+name = "X"
+parent = "Y"
+side = "table"
+type = "linear"
+axis = [-1, 0, 0]
+range = [-400, 400]
+rapid = 40000
+max_feed = 20000
+
+[[machine.joint]]
+name = "Z"
+parent = "base"
+side = "head"
+type = "linear"
+axis = [0, 0, 1]
+range = [-640, 0]
+rapid = 40000
+max_feed = 20000
+
+[[machine.spindle]]
+name = "S1"
+link = "Z"
+kind = "milling"
+axis = [0, 0, 1]
+nose = [0, 0, 750]
+rpm = [10, 10000]
+max = [300, 75]
+interface = "ISO 40 (BT/BBT-40 std; CAT/DIN 40 opt)"
+
+[[machine.changer]]
+pockets = 30
+change_s = 3.2   # tool to tool, published (chip to chip UNKNOWN): a lower bound
+max_tool_kg = 7
+
+[[machine.mount]]
+name = "spindle"
+kind = "tool"
+link = "Z"
+at = [0, 0, 750]
+dir = [0, 0, -1]
+
+[[machine.mount]]
+name = "table"
+kind = "part"
+link = "X"
+at = [0, 0, 0]
+dir = [0, 0, 1]
+xdir = [1, 0, 0]
+
+[[machine.body]]
+name = "bed"
+link = "base"
+part = "parts/romi/d-800/bed.fg"
+ignore = ["saddle", "column"]
+[[machine.body.box]]
+min = [-457, -685, -700]
+max = [457, 1095, -400]
+
+[[machine.body]]
+name = "column"
+link = "base"
+part = "parts/romi/d-800/column.fg"
+ignore = ["bed", "head"]
+[[machine.body.box]]
+min = [-300, 645, -400]
+max = [300, 1095, 1400]
+
+[[machine.body]]
+name = "saddle"
+link = "Y"
+part = "parts/romi/d-800/saddle.fg"
+ignore = ["bed", "table"]
+[[machine.body.box]]
+min = [-365.6, -280, -250]
+max = [365.6, 280, -100]
+
+[[machine.body]]
+name = "table"
+link = "X"
+part = "parts/romi/d-800/table.fg"
+ignore = ["saddle"]
+[[machine.body.box]]
+min = [-457, -280, -100]
+max = [457, 280, 0]
+
+[[machine.body]]
+name = "nose"
+link = "Z"
+part = "parts/romi/d-800/nose.fg"
+ignore = ["column"]
+[[machine.body.cyl]]
+base = [0, 0, 750]
+axis = [0, 0, 1]
+r = 110
+h = 150
+
+[[machine.body]]
+name = "head"
+link = "Z"
+part = "parts/romi/d-800/head.fg"
+ignore = ["column"]
+[[machine.body.box]]
+min = [-140, -140, 900]
+max = [140, 645, 1350]
+
+# ---------------------------------------------------------------------------------------------
+# Romi DCM 620-5X: ROMI DCM 620 New Generation, Siemens SINUMERIK ONE (24in).
+# X 620 Y 520 Z 470; 15000 rpm ISO 40 (BT/BBT-40 or DIN-40; CAT opt); 30 tools.
+[[machine]]
+name = "romi-dcm-620-5x"
+kind = "table-table"
+control = "siemens"
+length_joint = "Z"
+coolants = ["flood"]
+clearance = 1
+source = "https://www.romi.com/wp-content/uploads/2023/05/cat_romi_dcm_620_ng_en_rmtl_ac_092025_low.pdf | https://www.romi.com/en/produtos/romi-dcm-620-series-new-generation/"
+taken = "2026-11-23"
+note = "B tilts the cradle about Y (-50..110 deg, published) and carries C; the sense of +B (which way the table tips) is UNKNOWN: modelled right-handed about +y; B's pivot below the table top UNKNOWN: 150 mm (estimate); which unit carries X/Y/Z: see the header (where not published, all on the head here); the tool-to-part motion is the same either way; rotary table diameter UNKNOWN: 600 (estimate); spindle power as published: cont 11 kW; peak/other: 16.5 kW S6-40% 10 min; torque max 82 N.m (no curve: no power check); max tool diameter 75 with the neighbouring pockets full, 117 with them empty; overall 3559 x 4370 x 2963; machine 9100 kg; an unpublished required field takes the value that makes its check vacuous (rapid high, max feed = rapid, change time 0.001 s, tool weight 99 kg), named UNKNOWN beside it; joint 0 = mid-travel for X and Y and the top of travel for Z; the control's machine zero is at a travel end (which: UNKNOWN), so a real G54 differs by a constant per axis; bodies are single boxes/cylinders from published overall sizes; head, column, saddle, bed and turret sizes are estimates, the spindle housing radius kept large; the enclosure is not modelled."
+
+[[machine.joint]]
+name = "X"
+parent = "base"
+side = "head"
+type = "linear"
+axis = [1, 0, 0]
+range = [-310, 310]
+rapid = 36000
+max_feed = 36000
+
+[[machine.joint]]
+name = "Y"
+parent = "X"
+side = "head"
+type = "linear"
+axis = [0, 1, 0]
+range = [-260, 260]
+rapid = 36000
+max_feed = 36000
+
+[[machine.joint]]
+name = "Z"
+parent = "Y"
+side = "head"
+type = "linear"
+axis = [0, 0, 1]
+range = [-470, 0]
+rapid = 36000
+max_feed = 36000
+
+[[machine.joint]]
+name = "B"
+parent = "base"
+side = "table"
+type = "rotary"
+axis = [0, 1, 0]
+pivot = [0, 0, -150]
+range = [-50, 110]
+rapid = 9000
+max_feed = 9000   # rotary max feed UNKNOWN: = rapid
+tcp = true
+preference = 1
+
+[[machine.joint]]
+name = "C"
+parent = "B"
+side = "table"
+type = "rotary"
+axis = [0, 0, 1]
+pivot = [0, 0, 0]
+range = [-360, 360]
+rapid = 9000
+max_feed = 9000   # rotary max feed UNKNOWN: = rapid
+cyclic = true
+tcp = true
+
+[[machine.spindle]]
+name = "S1"
+link = "Z"
+kind = "milling"
+axis = [0, 0, 1]
+nose = [0, 0, 620]
+rpm = [15, 15000]
+max = [250, 75]
+interface = "ISO 40 (BT/BBT-40 or DIN-40; CAT opt)"
+
+[[machine.changer]]
+pockets = 30
+change_s = 0.001   # UNKNOWN (unpublished): 0.001 s (must be > 0), so t_min stays a lower bound
+max_tool_kg = 7
+
+[[machine.mount]]
+name = "spindle"
+kind = "tool"
+link = "Z"
+at = [0, 0, 620]
+dir = [0, 0, -1]
+
+[[machine.mount]]
+name = "table"
+kind = "part"
+link = "C"
+at = [0, 0, 0]
+dir = [0, 0, 1]
+xdir = [1, 0, 0]
+
+[[machine.body]]
+name = "bed"
+link = "base"
+part = "parts/romi/dcm-620-5x/bed.fg"
+ignore = ["support-l", "support-r"]
+[[machine.body.box]]
+min = [-610, -560, -943.411941]
+max = [610, 560, -543.411941]
+
+[[machine.body]]
+name = "support-l"
+link = "base"
+part = "parts/romi/dcm-620-5x/support-l.fg"
+ignore = ["bed", "cradle"]
+[[machine.body.box]]
+min = [-360, -540, -550]
+max = [360, -400, 0]
+
+[[machine.body]]
+name = "support-r"
+link = "base"
+part = "parts/romi/dcm-620-5x/support-r.fg"
+ignore = ["bed", "cradle"]
+[[machine.body.box]]
+min = [-360, 400, -550]
+max = [360, 540, 0]
+
+[[machine.body]]
+name = "cradle"
+link = "B"
+part = "parts/romi/dcm-620-5x/cradle.fg"
+ignore = ["rotary", "support-l", "support-r"]
+[[machine.body.box]]
+min = [-320, -380, -200]
+max = [320, 380, -80]
+
+[[machine.body]]
+name = "rotary"
+link = "C"
+part = "parts/romi/dcm-620-5x/rotary.fg"
+ignore = ["cradle"]
+[[machine.body.cyl]]
+base = [0, 0, -80]
+axis = [0, 0, 1]
+r = 300
+h = 80
+
+[[machine.body]]
+name = "nose"
+link = "Z"
+part = "parts/romi/dcm-620-5x/nose.fg"
+[[machine.body.cyl]]
+base = [0, 0, 620]
+axis = [0, 0, 1]
+r = 110
+h = 150
+
+[[machine.body]]
+name = "head"
+link = "Z"
+part = "parts/romi/dcm-620-5x/head.fg"
+[[machine.body.box]]
+min = [-150, -150, 770]
+max = [150, 150, 1220]
+
+# ---------------------------------------------------------------------------------------------
+# Romi GL 250: ROMI GL Series New Generation, Fanuc 0i-TF Plus i-HMI (15in).
+# X 160 Z 600 W 540; 6000 rpm ASA A2-5 built-in.
+[[machine]]
+name = "romi-gl-250"
+kind = "lathe"
+control = "fanuc-lathe"
+coolants = ["flood"]
+clearance = 1
+source = "https://www.romi.com/wp-content/uploads/2019/05/cat_romi_gl_ng_en_rmtl_ah-01_042024_low.pdf | https://www.romi.com/en/produtos/turning-centers-gl/"
+taken = "2026-11-23"
+note = "spindle power as published: cont 13.4 kW; 30min 14.3 kW; torque cont 124.6 N.m; torque max 160.2 N.m (no curve: no power check); overall 2927 x 2019 x 2009; machine 4800 kg; where each stroke sits relative to the spindle centreline and chuck face is UNKNOWN: X's top end is put at the max turning radius and Z's at the max turning length + 50 mm (estimates); an unpublished required field takes the value that makes its check vacuous (rapid high, max feed = rapid, change time 0.001 s, tool weight 99 kg), named UNKNOWN beside it; bodies are single boxes/cylinders from published overall sizes; head, column, saddle, bed and turret sizes are estimates, the spindle housing radius kept large; the enclosure is not modelled; the base frame is turned so x is the slide's X (a slant bed's angle is not modelled); the tailstock is not modelled."
+
+[[machine.joint]]
+name = "Z"
+parent = "base"
+side = "head"
+type = "linear"
+axis = [0, 0, 1]
+range = [50, 650]
+home = 650
+rapid = 30000
+max_feed = 30000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.joint]]
+name = "X"
+parent = "Z"
+side = "head"
+type = "linear"
+axis = [1, 0, 0]
+range = [-19, 141]   # radius; the program's X word is twice it
+home = 141
+rapid = 30000
+max_feed = 30000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+diameter = true
+
+[[machine.spindle]]
+name = "main"
+link = "base"
+kind = "turning"
+axis = [0, 0, 1]
+nose = [0, 0, 0]
+rpm = [1, 6000]   # rpm min UNKNOWN (unpublished): 1 = no lower check
+max = [530, 600]
+interface = "A2-5 (bar 42)"
+
+[[machine.turret]]
+name = "T1"
+link = "X"
+stations = 12
+index_s = 0.001   # UNKNOWN (unpublished): 0.001 s (must be > 0)
+center = [297.55, 0, 0]
+index_axis = [0, 0, 1]
+
+[[machine.mount]]
+name = "turret"
+kind = "tool"
+link = "X"
+at = [137.55, 0, 0]
+dir = [-1, 0, 0]
+
+[[machine.mount]]
+name = "chuck"
+kind = "part"
+link = "base"
+at = [0, 0, 0]
+dir = [0, 0, 1]
+xdir = [1, 0, 0]
+
+[[machine.body]]
+name = "headstock"
+link = "base"
+part = "parts/romi/gl-250/headstock.fg"
+ignore = ["chuck"]
+[[machine.body.box]]
+min = [-177.55, -177.55, -610]
+max = [177.55, 177.55, -110]
+
+[[machine.body]]
+name = "chuck"
+link = "base"
+part = "parts/romi/gl-250/chuck.fg"
+ignore = ["headstock"]
+[[machine.body.cyl]]
+base = [0, 0, -110]
+axis = [0, 0, 1]
+r = 97.55
+h = 110
+
+[[machine.body]]
+name = "turret"
+link = "X"
+part = "parts/romi/gl-250/turret.fg"
+[[machine.body.cyl]]
+base = [297.55, 0, -45]
+axis = [0, 0, 1]
+r = 160
+h = 90

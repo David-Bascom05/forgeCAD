@@ -285,7 +285,7 @@ type = "linear"
 axis = [1, 0, 0]
 range = [-254, 254]
 rapid = 60000
-max_feed = 56000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+max_feed = 60000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
 
 [[machine.joint]]
 name = "Y"
@@ -295,7 +295,7 @@ type = "linear"
 axis = [0, 1, 0]
 range = [-457.2, 457.2]
 rapid = 60000
-max_feed = 56000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+max_feed = 60000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
 
 [[machine.joint]]
 name = "Z"
@@ -450,7 +450,7 @@ type = "linear"
 axis = [1, 0, 0]
 range = [-317.5, 317.5]
 rapid = 60000
-max_feed = 56000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+max_feed = 60000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
 
 [[machine.joint]]
 name = "Y"
@@ -460,7 +460,7 @@ type = "linear"
 axis = [0, 1, 0]
 range = [-546.1, 546.1]
 rapid = 60000
-max_feed = 56000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+max_feed = 60000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
 
 [[machine.joint]]
 name = "Z"
@@ -784,7 +784,7 @@ axis = [1, 0, 0]
 range = [-228.6, 304.8]   # radius; the program's X word is twice it
 home = 304.8
 rapid = 48000
-max_feed = 40000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+max_feed = 48000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
 diameter = true
 
 [[machine.joint]]
