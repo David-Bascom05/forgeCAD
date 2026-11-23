@@ -327,6 +327,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-sketch-check"
+version = "0.1.0"
+dependencies = [
+ "forge-math",
+ "forge-sketch",
+]
+
+[[package]]
 name = "forge-step"
 version = "0.1.0"
 dependencies = [

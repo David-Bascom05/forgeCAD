@@ -5,7 +5,8 @@
 //!   on mutants of them.
 //! - `kernel_bodies_have_back_links`: the parts' bodies pass check and have the back-links (`WF`)
 //!   the proof assumes.
-//! - `repro_*`: bodies check accepts that are not what `Valid` promises past the model.
+//! - `*_rejected`, `seam_corners_one_to_one`: the holes the first model left (a shell in pieces,
+//!   broken back-links, stray vertices, corner tables not one to one), each now rejected.
 
 use forge_math::rng::Rng;
 use forge_math::{Frame, Point2};
@@ -192,73 +193,115 @@ fn one_shell(a: &Body, b: &Body) -> Body {
     m
 }
 
-/// A shell's V − E + 2F − L being even and at most 2 does not make it connected: a plate with a
-/// hole (0) and a plate (2), overlapping, in one shell pass check. The overlap test between shells
-/// (`check_shells`) runs only with two shells or more, and `genus` reads 0 for a body with a hole.
+/// A shell in two pieces: a plate with a hole (V − E + 2F − L = 0) and an overlapping plate (2) as
+/// one shell. Its Euler value (2) passes, and the overlap test runs only between shells; the
+/// connectivity test finds it.
 #[test]
-fn repro_disconnected_shell_passes() {
+fn disconnected_shell_rejected() {
     let holed = plate(1, Point2::new(0.0, 0.0), 40.0, true);
     let other = plate(2, Point2::new(20.0, 20.0), 40.0, false);
     assert_eq!(check(&holed), vec![]);
     assert_eq!(genus(&holed), 1);
-    let mut two = holed.clone();
-    two.append(&other);
-    assert!(
-        check(&two)
-            .iter()
-            .any(|p| matches!(p, Problem::ShellsOverlap { .. })),
-        "as two shells the overlap is found"
-    );
     let one = one_shell(&holed, &other);
     assert_eq!(one.shells.len(), 1);
     assert_eq!(
         check(&one),
-        vec![],
-        "one shell, two pieces, overlapping: accepted"
+        vec![Problem::ShellDisconnected {
+            shell: forge_topo::body::ShellId(0)
+        }]
     );
-    assert_eq!(genus(&one), 0, "the hole is not counted");
+    // a face its shell does not list, and one listed twice
+    let mut lost = holed.clone();
+    lost.shells[0].faces.pop();
+    assert!(
+        check(&lost)
+            .iter()
+            .any(|p| matches!(p, Problem::ShellFaces { .. }))
+    );
+    let mut twice = holed.clone();
+    let f = twice.shells[0].faces[0];
+    twice.shells[0].faces.push(f);
+    assert!(
+        check(&twice)
+            .iter()
+            .any(|p| matches!(p, Problem::ShellFaces { .. }))
+    );
 }
 
-/// check never tests the back-links: two loops on a face that the face does not list and whose
-/// coedges no edge lists (V − E + 2F − L drops by 2, still even) pass check.
+/// Broken back-links: an edge's use swapped for a copy of it outside every listed loop (the old
+/// `check` accepted this), and two coedges trading their loops (the old `check` panicked).
 #[test]
-fn repro_back_links_unchecked() {
+fn broken_back_links_rejected() {
     let mut b = plate(1, Point2::new(0.0, 0.0), 40.0, false);
-    assert_eq!(check(&b), vec![]);
     let f = forge_topo::body::FaceId(0);
+    let l0 = b.face(f).loops[0];
     let uses: Vec<_> = b
-        .lp(b.face(f).loops[0])
+        .lp(l0)
         .coedges()
         .map(|c| (b.coedge(c).edge, b.coedge(c).forward))
         .collect();
+    let first = b.coedges.len() as u32;
+    // two copies, left over as `remove_loop` leaves loops, so V − E + 2F − L stays even
     for _ in 0..2 {
-        let first = b.coedges.len() as u32;
         let lp = b.add_loop(f, &uses);
         b.faces[0].loops.retain(|&l| l != lp);
-        for e in b.edges.iter_mut() {
-            e.coedges.retain(|c| c.0 < first);
+    }
+    for e in b.edges.iter_mut() {
+        e.coedges.retain(|c| c.0 < first);
+    }
+    assert_eq!(check(&b), vec![], "left-over loops are no part of the body");
+    let c = b.lp(l0).coedge(0);
+    let e = b.coedge(c).edge;
+    for x in b.edges[e.index()].coedges.iter_mut() {
+        if *x == c {
+            *x = forge_topo::body::CoedgeId(first);
         }
     }
     assert!(back_links(&b).is_err());
-    assert_eq!(
-        check(&b),
-        vec![],
-        "loops no face lists, coedges no edge lists: accepted"
+    let p = check(&b);
+    assert!(
+        !p.is_empty() && p.iter().all(|p| matches!(p, Problem::BackLink { .. })),
+        "{p:?}"
+    );
+
+    let mut b = plate(1, Point2::new(0.0, 0.0), 40.0, false);
+    let (la, lb) = (
+        b.face(forge_topo::body::FaceId(0)).loops[0],
+        b.face(forge_topo::body::FaceId(1)).loops[0],
+    );
+    let (ca, cb) = (b.lp(la).coedge(0), b.lp(lb).coedge(0));
+    b.coedges[ca.index()].lp = lb;
+    b.coedges[cb.index()].lp = la;
+    let p = check(&b);
+    assert!(
+        !p.is_empty() && p.iter().all(|p| matches!(p, Problem::BackLink { .. })),
+        "{p:?}"
     );
 }
 
-/// check never tests that every vertex is used: two vertices on no edge pass, on a body with a
-/// hole (the global V − E + 2F − L goes from 0 to 2).
+/// Vertices on no edge: two added to a plate with a hole, where the global V − E + 2F − L goes
+/// from 0 to 2 and so passed.
 #[test]
-fn repro_stray_vertices_pass() {
+fn stray_vertices_rejected() {
     let mut b = plate(1, Point2::new(0.0, 0.0), 40.0, true);
+    let n = b.vertices.len() as u32;
     for _ in 0..2 {
         b.add_vertex(
             forge_math::Point3::new(500.0, 500.0, 500.0),
             forge_topo::Name::NONE,
         );
     }
-    assert_eq!(check(&b), vec![], "two vertices on no edge: accepted");
+    assert_eq!(
+        check(&b),
+        vec![
+            Problem::StrayVertex {
+                vertex: forge_topo::body::VertexId(n)
+            },
+            Problem::StrayVertex {
+                vertex: forge_topo::body::VertexId(n + 1)
+            }
+        ]
+    );
 }
 
 fn pin(feature: u64, frame: Frame) -> Body {
@@ -269,13 +312,12 @@ fn pin(feature: u64, frame: Frame) -> Body {
     extrude(&p, 10.0, feature).expect("a pin")
 }
 
-/// `Body::corners` is not one to one: at a cylinder's seam vertex the closed circle edge both
-/// leaves and arrives, and both leaving coedges (the circle and the seam) get the seam's arriving
-/// use. So a single fan by the corner route is not by itself a single cycle (Proof.lean,
-/// `one_cycle_by`, takes it as a hypothesis); loop order, used wherever it already finds one fan,
-/// is (`one_cycle`).
+/// `Body::corners` at a cylinder's seam vertex, where the closed circle edge both leaves and
+/// arrives: the seam's other use leaves the same way as the seam, and is taken last, so the two
+/// leaving coedges are closed by two different arriving ones. (`fans` trusts a corner table only
+/// where it is one to one in any case.)
 #[test]
-fn repro_seam_corners_not_one_to_one() {
+fn seam_corners_one_to_one() {
     let b = pin(1, Frame::WORLD);
     assert_eq!(check(&b), vec![]);
     let side = b
@@ -285,10 +327,14 @@ fn repro_seam_corners_not_one_to_one() {
     let seam_vertex = b.edge(b.coedge(b.lp(b.face(side).loops[0]).coedge(0)).edge).start;
     let k = corners(&b, side, seam_vertex);
     assert_eq!(k.len(), 2, "{k:?}");
-    assert_eq!(
-        k[0].1, k[1].1,
-        "two leaving coedges closed by one arriving: {k:?}"
-    );
+    assert_ne!(k[0].1, k[1].1, "{k:?}");
+    // and as loop order closes them
+    for (c, into) in k {
+        let lp = b.lp(b.coedge(c).lp);
+        let n = lp.coedges().len();
+        let i = (c.0 - lp.coedge(0).0) as usize;
+        assert_eq!(into, lp.coedge((i + n - 1) % n));
+    }
 }
 
 /// Two tangent pins sharing their seam vertices: pinched at both, which check finds (through the

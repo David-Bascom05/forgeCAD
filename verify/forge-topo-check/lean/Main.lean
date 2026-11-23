@@ -10,7 +10,7 @@ body <nv>
 E <start> <end> <k> <coedge>*k      one per edge, in order
 C <edge> <forward 0|1> <loop>       one per coedge
 L <first> <len> <face>              one per loop
-F <k> <loop>*k                      one per face
+F <shell> <k> <loop>*k              one per face
 S <k> <face>*k                      one per shell
 K <face> <vertex> <k> (<leaving> <arriving>)*k   `Body::corners`, where not empty
 end
@@ -28,6 +28,10 @@ def TopoCheck.Problem.line : Problem → String
   | .faceNoLoops f => s!"face-no-loops {f}"
   | .shellEuler s v => s!"shell-euler {s} {v}"
   | .vertexFans v n => s!"vertex-fans {v} {n}"
+  | .backLink w i => s!"back-link {["face", "edge", "loop"].getD w "?"} {i}"
+  | .shellFaces sh => s!"shell-faces {sh}"
+  | .shellDisconnected sh => s!"shell-disconnected {sh}"
+  | .strayVertex v => s!"stray-vertex {v}"
 
 partial def nats (ts : List String) (k : Nat) (acc : Array Nat) : Option (Array Nat × List String) :=
   if k = 0 then some (acc, ts)
@@ -68,10 +72,11 @@ partial def parseBody (ts : List String) (b : Body) (ks : Corners) :
     | some (#[a, n, f], r) => parseBody r { b with loops := b.loops.push (⟨a, n, f⟩) } ks
     | _ => .error "L"
   | "F" :: r =>
-    match nats r 1 #[] with
-    | some (#[k], r) =>
+    match nats r 2 #[] with
+    | some (#[sh, k], r) =>
       match nats r k #[] with
-      | some (ls, r) => parseBody r { b with faces := b.faces.push (ls.toList) } ks
+      | some (ls, r) =>
+        parseBody r { b with faces := b.faces.push (ls.toList), fshell := b.fshell.push sh } ks
       | none => .error "F loops"
     | _ => .error "F"
   | "S" :: r =>
@@ -91,7 +96,7 @@ partial def run (ts : List String) (out : IO.FS.Stream) : IO Unit := do
     match n.toNat? with
     | none => throw (IO.userError "body count")
     | some nv =>
-      match parseBody r { nv, edges := #[], coedges := #[], loops := #[], faces := #[], shells := #[] } #[] with
+      match parseBody r { nv, edges := #[], coedges := #[], loops := #[], faces := #[], shells := #[], fshell := #[] } #[] with
       | .error e => throw (IO.userError e)
       | .ok (b, ks, r) =>
         out.putStrLn "body"

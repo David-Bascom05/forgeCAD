@@ -35,7 +35,7 @@ pub fn encode(b: &Body, out: &mut String) {
         debug_assert!(l.coedges().len() == 0 || b.loops[i].coedge(0).0 == first);
     }
     for f in &b.faces {
-        let _ = write!(out, "F {}", f.loops.len());
+        let _ = write!(out, "F {} {}", f.shell.0, f.loops.len());
         for l in f.loops.iter() {
             let _ = write!(out, " {}", l.0);
         }
@@ -65,6 +65,10 @@ pub fn combinatorial(problems: &[Problem]) -> Vec<String> {
             Problem::FaceNoLoops { face } => Some(format!("face-no-loops {}", face.0)),
             Problem::ShellEuler { shell, value } => Some(format!("shell-euler {} {value}", shell.0)),
             Problem::VertexFans { vertex, fans } => Some(format!("vertex-fans {} {fans}", vertex.0)),
+            Problem::BackLink { what, id } => Some(format!("back-link {what} {id}")),
+            Problem::ShellFaces { shell } => Some(format!("shell-faces {}", shell.0)),
+            Problem::ShellDisconnected { shell } => Some(format!("shell-disconnected {}", shell.0)),
+            Problem::StrayVertex { vertex } => Some(format!("stray-vertex {}", vertex.0)),
             _ => None,
         })
         .collect()
@@ -191,6 +195,23 @@ pub fn mutants(b: &Body, r: &mut Rng) -> Vec<(String, Body)> {
         m.shells.pop();
         out.push(("merge the last shell into the first".to_string(), m));
     }
+    {
+        let mut m = b.clone();
+        m.add_vertex(forge_math::Point3::new(1e3, 1e3, 1e3), forge_topo::Name::NONE);
+        out.push(("a vertex on no edge".to_string(), m));
+    }
+    if ns > 0 && !b.shells[0].faces.is_empty() {
+        let mut m = b.clone();
+        let k = pick(r, m.shells[0].faces.len());
+        m.shells[0].faces.remove(k);
+        out.push((format!("drop face {k} from shell 0's list"), m));
+    }
+    if nc > 1 {
+        let (c, d) = (pick(r, nc), pick(r, nc));
+        let mut m = b.clone();
+        m.coedges[c].lp = b.coedges[d].lp;
+        out.push((format!("coedge {c} names coedge {d}'s loop"), m));
+    }
     if !b.faces.is_empty() {
         let f = pick(r, b.faces.len());
         let mut m = b.clone();
@@ -201,7 +222,7 @@ pub fn mutants(b: &Body, r: &mut Rng) -> Vec<(String, Body)> {
     out
 }
 
-/// `Body::corners` (body.rs:1018–1081, private there), transcribed: the corners of face `f` at
+/// `Body::corners` (body.rs, private there), transcribed: the corners of face `f` at
 /// vertex `v` where it meets `v` more than once, each coedge leaving `v` with the arriving one that
 /// closes its corner, by the angle round the face normal a vertex tolerance out along each edge.
 pub fn corners(b: &Body, f: FaceId, v: VertexId) -> Vec<(CoedgeId, CoedgeId)> {
@@ -248,9 +269,19 @@ pub fn corners(b: &Body, f: FaceId, v: VertexId) -> Vec<(CoedgeId, CoedgeId)> {
         .filter(|&&c| b.coedge_start(c) == v)
         .filter_map(|&c| {
             let a = angle(c, true);
+            let own = b.coedge(c).edge;
             arriving
                 .iter()
-                .map(|&(x, b)| (x, (b - a).rem_euclid(tau)))
+                .map(|&(x, t)| {
+                    (
+                        x,
+                        if b.coedge(x).edge == own {
+                            tau
+                        } else {
+                            (t - a).rem_euclid(tau)
+                        },
+                    )
+                })
                 .filter(|x| x.0 != c)
                 .min_by(|x, y| x.1.total_cmp(&y.1))
                 .map(|x| (c, x.0))

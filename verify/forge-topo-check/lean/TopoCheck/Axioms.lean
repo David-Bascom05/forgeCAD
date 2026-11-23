@@ -7,7 +7,3 @@ import TopoCheck.Proof
 
 /-- info: 'TopoCheck.Body.one_cycle' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in #print axioms TopoCheck.Body.one_cycle
-
-/-- info: 'TopoCheck.Body.one_cycle_by' depends on axioms: [propext, Classical.choice, Quot.sound] -/
-#guard_msgs in #print axioms TopoCheck.Body.one_cycle_by
-
