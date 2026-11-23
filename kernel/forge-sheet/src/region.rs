@@ -407,6 +407,72 @@ fn circle_circle(c0: Point2, r0: f64, c1: Point2, r1: f64) -> Vec<Point2> {
     vec![m - n * h, m + n * h]
 }
 
+/// The least distance between two line or arc pieces, and the point of `x` where it is, in closed
+/// form: the least over where they meet (`meet`), the ends of each against the other, and
+/// the interior critical points (a line against an arc: the foot of the arc's centre on the line;
+/// two arcs: the points of each on the line of centres). None for a spline (no closed form).
+pub(crate) fn closest(x: &Piece, y: &Piece) -> Option<(f64, Point2)> {
+    if matches!(x, Piece::Spline { .. }) || matches!(y, Piece::Spline { .. }) {
+        return None;
+    }
+    let mut best: Option<(f64, Point2)> = None;
+    let mut take = |p: Point2, q: Point2| {
+        let d = p.distance(q);
+        if best.is_none_or(|b| d < b.0) {
+            best = Some((d, p));
+        }
+    };
+    // where they meet (each hit within `meet`'s 2 TOL of both: its own distance counts)
+    let (mut ux, mut uy) = (Vec::new(), Vec::new());
+    meet(x, y, &mut ux, &mut uy);
+    for (&u, &v) in ux.iter().zip(&uy) {
+        take(x.at(u.clamp(0.0, 1.0)), y.at(v.clamp(0.0, 1.0)));
+    }
+    // a point of x against y, and a point of y against x
+    let on_x = |p: Point2| (p, y.at(y.nearest(p)));
+    let on_y = |q: Point2| (x.at(x.nearest(q)), q);
+    for u in [0.0, 1.0] {
+        let (p, q) = on_x(x.at(u));
+        take(p, q);
+        let (p, q) = on_y(y.at(u));
+        take(p, q);
+    }
+    let within = |pc: &Piece, p: Point2| (0.0..=1.0).contains(&pc.arc_param(p));
+    match (x, y) {
+        (Piece::Line { .. }, &Piece::Arc { c, .. }) => {
+            let f = x.at(x.nearest(c));
+            let (p, q) = on_x(f);
+            take(p, q);
+        }
+        (&Piece::Arc { c, .. }, Piece::Line { .. }) => {
+            let f = y.at(y.nearest(c));
+            let (p, q) = on_y(f);
+            take(p, q);
+        }
+        (&Piece::Arc { c, r, .. }, &Piece::Arc { c: e, r: q, .. }) => {
+            let d = e - c;
+            let n = d.length();
+            if n > 0.0 {
+                let u = d * (1.0 / n);
+                for p in [c + u * r, c - u * r] {
+                    if within(x, p) {
+                        let (a, b) = on_x(p);
+                        take(a, b);
+                    }
+                }
+                for p in [e + u * q, e - u * q] {
+                    if within(y, p) {
+                        let (a, b) = on_y(p);
+                        take(a, b);
+                    }
+                }
+            }
+        }
+        _ => {}
+    }
+    best
+}
+
 /// All the fractions on x and on y where the two pieces meet.
 fn meet(x: &Piece, y: &Piece, ux: &mut Vec<f64>, uy: &mut Vec<f64>) {
     let mut pts: Vec<Point2> = Vec::new();
@@ -1351,6 +1417,55 @@ mod in_loop_tests {
             for x in [-3.0, -1.5, 1.5, 3.0] {
                 assert!(!at(x, 0.0) && !at(x, 0.5 * b.y), "{ccw} {x}");
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod closest_tests {
+    use super::*;
+
+    #[test]
+    fn closest_is_the_least_distance_between_lines_and_arcs() {
+        // against dense sampling of both pieces: never above it (it is a true pair's distance),
+        // and never below it by more than the sampling's own error
+        let mut seed = 7u64;
+        let mut rnd = |lo: f64, hi: f64| {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            lo + (hi - lo) * ((seed >> 11) as f64 / (1u64 << 53) as f64)
+        };
+        for _ in 0..400 {
+            let piece = |rnd: &mut dyn FnMut(f64, f64) -> f64| {
+                if rnd(0.0, 1.0) < 0.5 {
+                    Piece::Line {
+                        a: Point2::new(rnd(-10.0, 10.0), rnd(-10.0, 10.0)),
+                        b: Point2::new(rnd(-10.0, 10.0), rnd(-10.0, 10.0)),
+                    }
+                } else {
+                    let t0 = rnd(-3.0, 3.0);
+                    Piece::Arc {
+                        c: Point2::new(rnd(-10.0, 10.0), rnd(-10.0, 10.0)),
+                        r: rnd(0.5, 8.0),
+                        t0,
+                        t1: t0 + rnd(-3.0, 3.0),
+                    }
+                }
+            };
+            let x = piece(&mut rnd);
+            let y = piece(&mut rnd);
+            let (d, p) = closest(&x, &y).unwrap();
+            let n = 2000;
+            let mut brute = f64::INFINITY;
+            for i in 0..=n {
+                let q = x.at(i as f64 / n as f64);
+                brute = brute.min(q.distance(y.at(y.nearest(q))));
+            }
+            // the point is on x, at that distance from y
+            assert!((p.distance(y.at(y.nearest(p))) - d).abs() < 1e-9, "{x:?} {y:?}");
+            assert!(d <= brute + 1e-9, "{d} > {brute}: {x:?} {y:?}");
+            assert!(d >= brute - 0.05, "{d} << {brute}: {x:?} {y:?}");
         }
     }
 }

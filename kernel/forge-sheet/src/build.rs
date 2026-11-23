@@ -4137,11 +4137,19 @@ impl Strips<'_> {
 /// when sigma is 1, so the arc's angles turn the other way.
 /// A piece's own stretch of its spline, in the spline's parameter: a wall built on the whole of a
 /// closed spline is carried past its ends onto itself at the seam, where points project to either.
-/// A point where two sets of pieces come within `tol` of each other, if they do: nearest
-/// points by alternating projection from nine starts on each piece of `a` (exact for lines).
+/// A point where two sets of pieces come within `tol` of each other, if they do: lines and arcs in
+/// closed form; a pair with a spline by alternating projection from nine starts on its piece of
+/// `a`.
 fn contact(a: &[Piece], b: &[Piece], tol: f64) -> Option<Point2> {
     for pa in a {
         for pb in b {
+            // lines and arcs in closed form (`region::closest`); splines by projection
+            if let Some((d, p)) = crate::region::closest(pa, pb) {
+                if d <= tol {
+                    return Some(p);
+                }
+                continue;
+            }
             for k in 0..=8 {
                 let mut p = pa.at(k as f64 / 8.0);
                 let mut q = pb.at(pb.nearest(p));
