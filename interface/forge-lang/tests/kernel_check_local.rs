@@ -80,8 +80,21 @@ fn a_fault_in_any_one_entity_is_found() {
             b.vertices.push(b.vertices[0].clone())
         });
         for i in 0..good.faces.len() {
+            // its loops taken off as `remove_loop` does (emptying the list alone leaves its edges
+            // naming coedges of loops no face lists: a broken link)
             run(format!("face {i} no loops"), &|b| {
                 b.faces[i].loops.retain(|_| false)
+            });
+            run(format!("face {i} loops removed"), &|b| {
+                let f = forge_topo::FaceId(i as u32);
+                let loops: Vec<_> = b.faces[i].loops.iter().copied().collect();
+                for l in loops {
+                    b.remove_loop(f, l);
+                }
+            });
+            // taken off in place, links kept: the shell is open at its edges
+            run(format!("face {i} killed"), &|b| {
+                b.kill_face(forge_topo::FaceId(i as u32))
             });
             run(format!("face {i} sense"), &|b| b.faces[i].same_sense ^= true);
             run(format!("face {i} surface"), &|b| {
@@ -158,6 +171,8 @@ fn a_fault_in_any_one_entity_is_found() {
         "VertexFans",
         "Euler",
         "FaceNoLoops",
+        "BackLink",
+        "StrayVertex",
     ] {
         assert!(kinds.contains(k), "no fault tried shows {k}: {kinds:?}");
     }

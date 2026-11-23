@@ -25,14 +25,15 @@ pub fn recall() {
 /// Keeps what this run worked out since the last call.
 pub fn keep() {
     let l = learned();
-    if l.gaps.is_empty() && l.narrows.is_empty() {
+    // nowhere to keep it (the browser has no cache folder, nor a process id for the key)
+    if l.gaps.is_empty() && l.narrows.is_empty() || store::root().is_none() {
         return;
     }
     let key = store::key(KIND, |h| {
-        h.word(std::process::id() as u64);
+        h.word(forge_dirs::process_id() as u64);
         h.word(
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
+            forge_math::clock::system_now()
+                .duration_since(forge_math::clock::UNIX_EPOCH)
                 .map_or(0, |d| d.as_nanos() as u64),
         );
         h.word(l.gaps.len() as u64);

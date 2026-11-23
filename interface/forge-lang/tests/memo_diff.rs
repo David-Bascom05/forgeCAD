@@ -270,7 +270,7 @@ fn key_part_file_content() {
         eprintln!("key_part_file_content: skipped, no second font here");
         return;
     };
-    let tmp = std::env::temp_dir().join(format!("memo-diff-font-{}", std::process::id()));
+    let tmp = forge_dirs::temp_dir().join(format!("memo-diff-font-{}", forge_dirs::process_id()));
     std::fs::create_dir_all(&tmp).expect("mkdir");
     let font = "PublicSans-SemiBold.ttf";
     std::fs::copy(dir.join(font), tmp.join(font)).expect("copy font");
@@ -300,7 +300,7 @@ fn key_part_file_content_same_stamp() {
         v
     };
     let (a, b) = (pad(a), pad(b));
-    let tmp = std::env::temp_dir().join(format!("memo-diff-stamp-{}", std::process::id()));
+    let tmp = forge_dirs::temp_dir().join(format!("memo-diff-stamp-{}", forge_dirs::process_id()));
     std::fs::create_dir_all(&tmp).expect("mkdir");
     let when = std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_700_000_000);
     let put = |name: &str, bytes: &[u8]| {
@@ -334,10 +334,12 @@ fn key_part_file_content_same_stamp() {
 
 /// `backend` and thread count: a fresh build is the same on one thread and on all, and with the
 /// batch backend on or off (when it is not, the backend must be in the key: op-memo-proof.md 5).
+// runs `fg` as a process: WASI starts none, so native only
+#[cfg(not(target_os = "wasi"))]
 #[test]
 fn key_part_backend_and_threads() {
     let fg = env!("CARGO_BIN_EXE_fg");
-    let tmp = std::env::temp_dir().join(format!("memo-diff-{}", std::process::id()));
+    let tmp = forge_dirs::temp_dir().join(format!("memo-diff-{}", forge_dirs::process_id()));
     std::fs::create_dir_all(&tmp).expect("mkdir");
     let examples: Vec<(usize, PathBuf)> = examples().into_iter().enumerate().collect();
     let bad = forge_model::suite::each(&examples, |(i, path)| {

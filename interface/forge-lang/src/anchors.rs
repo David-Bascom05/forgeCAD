@@ -169,6 +169,18 @@ fn sketch_refs(id: &str, v: &Value) -> Option<SketchRefs> {
         r.points.push(format!("{id}.points"));
     }
     for (name, val) in &sk.named {
+        // a text: a loop per drawn character, each named by its place
+        if let Value::List(xs) = val {
+            for (k, x) in xs.iter().enumerate() {
+                let Value::Ent(e) = x else { continue };
+                let text = format!("{id}.{name}[{k}]");
+                for seg in e.loop_segs.iter() {
+                    r.shapes.push((text.clone(), polyline(&sk, *seg)));
+                }
+                r.closed.push(text);
+            }
+            continue;
+        }
         let Value::Ent(e) = val else { continue };
         let text = format!("{id}.{name}");
         if e.loop_segs.is_empty() {

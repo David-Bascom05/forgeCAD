@@ -11,7 +11,7 @@ A feature meets the standard when it has all six.
 | # | Level | The boolean's instance |
 |---|---|---|
 | L1 | **A spec in Lean over the reals.** It is the one definition of the feature's result, with standard axioms only and no `sorry`. | `reg_kept`: the regularised boolean (verify/forge-exact) |
-| L2 | **An exact executable reference.** It runs over ℚ, or over exact algebraic numbers, and is proven equal to L1 on its domain. | the flat exact reference; Alg/Quad for curved |
+| L2 | **An exact executable reference.** It runs over ℚ, or over exact algebraic numbers, and is proven equal to L1 on its domain. For non-algebraic carriers (general offsets, splines) a certified enclosure counts as L2: signs by outward-rounded enclosures refined until decided, zeros only by construction, never decided by evaluation (decided 2026-11-23, research/decide-once/curved-design.md §5 D7). | the flat exact reference; Alg/Quad for curved |
 | L3 | **Correctness for every input in a stated domain.** No enumeration of logged cases: the algorithm's decisions give exactly L1, and a refusal happens exactly when L1 has no valid result. | decide-once (c): `flat_correct`; refusal iff `XNonManifold` |
 | L4 | **The shipped Rust refines the proven algorithm.** The kernel crate goes through Aeneas to Lean, with no panic and no overflow within stated size limits. Where Aeneas can't take the code, a differential test against the L2 oracle with a committed digest is the interim, marked interim. | forge-bool-core: union–find, flood, index, rules, … |
 | L5 | **Its floating-point predicates are proven** against verify/ieee754, under stated preconditions that debug builds check. | orient2d, cross_sign, dot3, incircle; TwoSum and TwoProduct |
@@ -36,6 +36,15 @@ A feature meets the standard when it has all six.
   - a CI check that the translations are current;
   - the per-module survey (research/aeneas/SURVEY.md) that names each module's L4 target.
 
+## No proofs at runtime for what is proven (the owner, 2026-11-23)
+
+"If we have proven all cases of a thing, and you are REALLY SURE, then we should not need to do a proof in runtime."
+
+- Code proven for every input in its stated domain (L3 plus L4) runs with no runtime re-check. Certificate checkers and re-verification of proven results run only in tests, fuzzing, CI and explicit on-demand commands, never on a normal build, edit or render.
+- A precondition the proof relies on is checked in debug builds only (as L5 already says).
+- Runtime work remains where the result depends on the particular input and can't be decided ahead of time: the exact fallback behind a proven float filter, and certifying a traced intersection curve. That is computing the answer, not re-proving it, and it is held to the speed rule like any other code.
+- A runtime check is removed only once the proof covers the shipped code (L4 by Aeneas, or the interim differential test named), not just the algorithm.
+
 ## Features
 
 Each row says who owns it, which levels it has, and what is next. The levels are counted from what
@@ -43,8 +52,8 @@ has been reported to the master.
 
 | Feature | Owner session (branch suffix) | Has | Next |
 |---|---|---|---|
-| Boolean, flat | decide-once-lean, decide-once (Rust), ieee | L1 L2 L3 L4 L5 (partial L6). L4: `forge_bool_core::core` end to end, `end_to_end_proof` (no hypotheses; size limits in `LedgerWF`/`LFits`) | the bridge's `build_ledger` to L4 (`LedgerWF` on its Aeneas skeleton; debug_assert meanwhile); local ledger: `LocalCompat` (dol-jordan) and its other `ExactIn` clauses |
-| Boolean, curved | exact-curved, trace | L1 (quadrics) | L2 executable, L3 |
+| Boolean, flat | decide-once-lean, decide-once (Rust), ieee | L1 L2 L3 L5 (partial L4, L6). L4 for the forge-bool-core cores (v1 `end_to_end_proof`; A8 inc `incCoreSpec_proof`, `endToEndF_proof`), kept as spec and oracle. The shipped old path (boolean.rs) is the target: owner ruling 2026-11-23 | the old path end to end, as written (research/decide-once/old-path-statements.md §E, §D, §G) |
+| Boolean, curved | exact-curved, trace, dol-curved (decide-once design: research/decide-once/curved-design.md) | L1 (quadrics) | L2 executable, L3; decide-once Q0 done: (c) and (c′) for any carriers, flat as an instance (`exactK_of_exact`), `qform_compat` (DecideOnce/{Curved, CorrectK, LocalK, QForm, FlatK}.lean); Q1 next |
 | Fillets / rounds | fillet-spec, fillets, conic-fillet | — | L1 (ball closing), L2 |
 | Splines | spline-spec | — | L1, L2 oracle |
 | Sheet metal (fold, regions, refold) | sheet-spec, fix-sheet | — | L1 fold, L2 refold checker |
@@ -56,8 +65,9 @@ has been reported to the master.
 | Sketch solver | fundamentals (item 5) | — | L1 |
 | Intersection tracing | trace | step lemma (Krawczyk) | phase B, binary64 |
 | .fg language | ieee (language proofs) | lexer, LL(1), edits, reparse | — |
-| Extrude / revolve / sweep / loft / coil / thread | sweep-spec | — | L1 |
-| Shell / draft / hole / rib / chamfer / pattern | ops-spec, fix-shell, fix-draft | — | L1 |
+| Extrude / revolve / sweep / loft / coil / thread | sweep-spec | extrude: L1 (`Prism`, `through_finite`), L2 over ℚ (polygons), L6 (`sweep-diff`, interim L4); taper: L1 algebra (mitre, events linear), the decided rule, L2 over ℚ (rational edge lengths), L6; revolve: lt_mul_sqrt_iff, reach_arc, CrossesAxis exact; coil: coil_injective, exact TurnsTouch; loft: ruled_translate, L2 over ℚ (homothetic), L6 | revolve L2 (QForm or the sign lemma over Fillet.Rev); taper over Alg (research/sweep-spec) |
+| Shell / draft / hole / rib / chamfer / pattern-of-features | ops-spec, fix-shell, fix-draft | L1 partial: pattern P1–P3, hole H1 H3 H4, chamfer C1 C2 (plane pair), draft D1–D3 (planes) | L1 recarrier, shell, rib; L2 reference; L6 harness |
+| Thicken | surfaces (thin/thicken) | — | L1 with ValidSheet |
 | Surfaces and thin | surfaces | — | ValidSheet with fundamentals |
 | Sketch text | sketch-text | exact glyph geometry | L1 |
 | Weldments | weldments | — | L1 (members are extrudes and half-spaces) |

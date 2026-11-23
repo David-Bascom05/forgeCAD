@@ -91,23 +91,112 @@ pub const BUILTINS: &[&str] = &[
 
 /// A built-in function's name, this module's or another's (shapes).
 pub fn builtin(name: &str) -> Option<&'static str> {
-    // every name looked up or bound asks: a map, not a walk of the lists
-    type Names = HashMap<&'static str, &'static str, std::hash::BuildHasherDefault<crate::eval::NameHasher>>;
-    static ALL: std::sync::OnceLock<Names> = std::sync::OnceLock::new();
-    ALL.get_or_init(|| {
-        let mut m = Names::default();
-        for &b in BUILTINS.iter().chain(crate::shapes::NAMES) {
-            m.entry(b).or_insert(b);
-        }
-        m
-    })
-    .get(name)
-    .copied()
+    names_get(name).and_then(|n| n.1)
 }
+
+/// One place of `NAMES`: a name ("" for none), its built-in (Some, `builtin`'s) and whether
+/// `constant` knows it.
+type NameSlot = (&'static str, Option<&'static str>, bool);
+
+/// Places in `NAMES`: a power of two, at least twice the names.
+const NAME_SLOTS: usize = 1024;
+
+/// FNV-1a of a name, as a place in `NAMES`.
+const fn name_slot(s: &[u8]) -> usize {
+    let mut h = 0xcbf2_9ce4_8422_2325u64;
+    let mut i = 0;
+    while i < s.len() {
+        h = (h ^ s[i] as u64).wrapping_mul(0x0100_0000_01b3);
+        i += 1;
+    }
+    (h ^ (h >> 32)) as usize & (NAME_SLOTS - 1)
+}
+
+const fn same(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut i = 0;
+    while i < a.len() {
+        if a[i] != b[i] {
+            return false;
+        }
+        i += 1;
+    }
+    true
+}
+
+/// Every built-in's name and every name `constant` knows, in one open-addressed table worked
+/// out when the crate compiles: every name looked up or bound asks, so a table, not a walk of
+/// the lists, and nothing to build at run time.
+#[allow(clippy::large_const_arrays)]
+const NAMES: [NameSlot; NAME_SLOTS] = {
+    let mut t: [NameSlot; NAME_SLOTS] = [("", None, false); NAME_SLOTS];
+    let builtins: [&[&str]; 2] = [BUILTINS, crate::shapes::NAMES];
+    let constants: [&[&str]; 7] = [
+        &CONSTANTS,
+        &MORE,
+        crate::sheet::BUILTINS,
+        crate::thermo::BUILTINS,
+        crate::weld::BUILTINS,
+        crate::wired::NAMES,
+        crate::sheet::CONSTANTS,
+    ];
+    let mut used = 0;
+    let mut pass = 0;
+    while pass < 2 {
+        let lists: &[&[&str]] = if pass == 0 { &builtins } else { &constants };
+        let mut l = 0;
+        while l < lists.len() {
+            let mut k = 0;
+            while k < lists[l].len() {
+                let n = lists[l][k];
+                let mut i = name_slot(n.as_bytes());
+                // the first entry of a name stands (a built-in before a constant)
+                while !t[i].0.is_empty() && !same(t[i].0.as_bytes(), n.as_bytes()) {
+                    i = (i + 1) & (NAME_SLOTS - 1);
+                }
+                if t[i].0.is_empty() {
+                    used += 1;
+                    t[i] = (n, if pass == 0 { Some(n) } else { None }, pass == 1);
+                } else if pass == 1 {
+                    t[i].2 = true;
+                }
+                k += 1;
+            }
+            l += 1;
+        }
+        pass += 1;
+    }
+    assert!(2 * used <= NAME_SLOTS);
+    t
+};
+
+/// `name`'s place in `NAMES`, if it has one.
+#[inline]
+fn names_get(name: &str) -> Option<&'static NameSlot> {
+    let mut i = name_slot(name.as_bytes());
+    loop {
+        let e = &NAMES[i];
+        if e.0.is_empty() {
+            return None;
+        }
+        if e.0 == name {
+            return Some(e);
+        }
+        i = (i + 1) & (NAME_SLOTS - 1);
+    }
+}
+
+/// `constant`'s own names (the lists it also answers for are named in `names`).
+const CONSTANTS: [&str; 10] = ["pi", "X", "Y", "Z", "xy", "xz", "yz", "thru", "thru_all", "next"];
 
 const MORE: [&str; 5] = ["axis", "sym", "two", "upto", "intersect"];
 
 pub fn constant(name: &str) -> Option<Value> {
+    if !names_get(name).is_some_and(|n| n.2) {
+        return None;
+    }
     let world = |n: &'static str, f: Frame| {
         Some(Value::Plane(Rc::new(Plane {
             frame: f,
@@ -137,6 +226,10 @@ pub fn constant(name: &str) -> Option<Value> {
             .find(|m| **m == n)
             .map(|m| Value::Builtin(m)),
         n if crate::thermo::BUILTINS.contains(&n) => crate::thermo::BUILTINS
+            .iter()
+            .find(|m| **m == n)
+            .map(|m| Value::Builtin(m)),
+        n if crate::weld::BUILTINS.contains(&n) => crate::weld::BUILTINS
             .iter()
             .find(|m| **m == n)
             .map(|m| Value::Builtin(m)),
@@ -176,9 +269,9 @@ impl Args {
             };
             let v = ev.expr(&a.value)?;
             if let Some(sk) = ev.sketch_ref() {
-                crate::eval::collect_params(&v, &mut sk.borrow_mut().params);
+                crate::eval::collect_keys(&v, &mut sk.borrow_mut().params);
             }
-            crate::eval::collect_params(&v, &mut ev.reads);
+            crate::eval::collect_keys(&v, &mut ev.reads);
             // an empty face set is unknown only after an earlier failure (or in `check`); on a
             // part built so far without one, it is a selection that found nothing
             let known_empty = ev.b.building && ev.errors.is_empty() && !unresolved_in(&v);
@@ -751,7 +844,7 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
                 v: dmath::atan2(y.v, x.v),
                 dim: Dim::Angle,
                 src: match src {
-                    Src::Driving(p) => Src::Driven(std::sync::Arc::new([(*p).clone()].into())),
+                    Src::Driving(p) => Src::Driven(std::sync::Arc::new([p.clone()].into())),
                     s => s,
                 },
             }))
@@ -792,7 +885,7 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
                             dim: Dim::Length,
                             src: match &src {
                                 Src::Const => Src::Const,
-                                s => Src::Driven(std::sync::Arc::new(s.params())),
+                                s => Src::Driven(std::sync::Arc::new(s.keys())),
                             },
                         })
                     };
@@ -832,7 +925,7 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
                 Value::Wired(w) if w.plane().is_some() && w.work_ref().is_some() => Ok(Value::Extent(
                     ExtentV::UpToPlane(w.work_ref().expect("checked").feature, off),
                 )),
-                // a sketch's plane (.fc `to SKETCH`)
+                // a sketch's plane
                 Value::Sketch(s) => Ok(Value::Extent(ExtentV::UpToPlane(s.borrow().idx, off))),
                 Value::Unresolved => Ok(Value::Unresolved),
                 o => Err(Error::WrongType {
@@ -1156,6 +1249,7 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
         "use" => crate::uses::call(ev, args, span),
         n if crate::sheet::BUILTINS.contains(&n) => crate::sheet::call(ev, name, args, span),
         n if crate::thermo::BUILTINS.contains(&n) => crate::thermo::call(ev, name, args, span),
+        n if crate::weld::BUILTINS.contains(&n) => crate::weld::call(ev, name, args, span),
         n if crate::harness::BUILTINS.contains(&n) => crate::harness::call(ev, name, args, span),
         "revolve" => revolve(ev, args, span),
         "fillet" => crate::fillets::fillet(ev, args, span),
@@ -1573,6 +1667,48 @@ pub(crate) fn profile_of(
     }
 }
 
+/// A profile argument's sketch, its regions, and the entities they were taken from.
+type Regions = (Rc<RefCell<Sk>>, Vec<forge_ops::Profile>, Vec<EntityId>);
+
+/// The regions a list of loops of one sketch (a sketch text) bound, only they.
+pub(crate) fn profiles_of(xs: &[Value], span: Span) -> R<Regions> {
+    let mut sk: Option<Rc<RefCell<Sk>>> = None;
+    let mut ids = Vec::new();
+    for x in xs.iter() {
+        match x {
+            Value::Ent(e) if !e.loop_segs.is_empty() => {
+                if let Some(s) = &sk
+                    && !Rc::ptr_eq(s, &e.sk)
+                {
+                    return Err(Error::OtherSketch {
+                        span,
+                        sketch: e.sk.borrow().id.clone(),
+                        here: s.borrow().id.clone(),
+                    });
+                }
+                sk = Some(e.sk.clone());
+                ids.extend(e.loop_segs.iter().copied());
+            }
+            o => {
+                return Err(Error::WrongType {
+                    span,
+                    what: "a profile (a sketch, one of its loops, or a text)",
+                    want: Ty::Sketch,
+                    found: o.ty(),
+                });
+            }
+        }
+    }
+    let sk = sk.ok_or(Error::WrongType {
+        span,
+        what: "a profile (a sketch, one of its loops, or a text)",
+        want: Ty::Sketch,
+        found: Ty::List,
+    })?;
+    let ps = sk.borrow().profiles_among(&ids, span)?;
+    Ok((sk, ps, ids))
+}
+
 pub(crate) fn has_solid(ev: &Eval) -> bool {
     ev.feats.iter().any(|f| {
         (matches!(f.kind, "extrude" | "revolve" | "loft" | "import")
@@ -1595,7 +1731,25 @@ fn extrude(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Val
     if a.poisoned() {
         return Ok(Value::Unresolved);
     }
-    let (sk, profile, segs) = profile_of(ev, a.req("profile")?, a.span("profile"))?;
+    // one region (a sketch's, a loop's), or every region of a list of loops (a text's)
+    let (sk, profile, many, segs) = match a.req("profile")? {
+        Value::List(xs) => {
+            let (sk, mut ps, segs) = profiles_of(&xs, a.span("profile"))?;
+            if ps.is_empty() {
+                return Err(Error::Regions {
+                    span: a.span("profile"),
+                    sketch: sk.borrow().id.clone(),
+                    count: 0,
+                });
+            }
+            let one = ps.remove(0);
+            (sk, one, ps, segs)
+        }
+        v => {
+            let (sk, p, segs) = profile_of(ev, v, a.span("profile"))?;
+            (sk, p, Vec::new(), segs)
+        }
+    };
     if a.opt("taper").is_some() {
         if !matches!(a.req("d")?, Value::Num(_)) {
             return Err(Error::NotWith {
@@ -1614,11 +1768,14 @@ fn extrude(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Val
             }
             .into());
         }
-        let curved = profile.loops.iter().any(|l| {
-            l.segments
-                .iter()
-                .any(|g| matches!(g.0, forge_ops::Segment::Spline(_)))
-        });
+        let curved = std::iter::once(&profile)
+            .chain(&many)
+            .flat_map(|p| &p.loops)
+            .any(|l| {
+                l.segments
+                    .iter()
+                    .any(|g| matches!(g.0, forge_ops::Segment::Spline(_)))
+            });
         if curved {
             return Err(Error::TaperOnCurve {
                 span: a.span("taper"),
@@ -1794,7 +1951,24 @@ fn extrude(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Val
         _ if a.flag("new")? || !has_solid(ev) => Combine::New,
         _ => Combine::Add,
     };
-    let f = crate::bodies::wrap_in(ev, &a, Feature::Extrude { profile, extent, op })?;
+    let f = if many.is_empty() {
+        Feature::Extrude { profile, extent, op }
+    } else {
+        // several regions (a text's glyphs): each extruded alike, none reaching a face
+        if matches!(extent, Extent::To { .. } | Extent::ToNext { .. }) {
+            return Err(Error::NotWith {
+                span: a.span("d"),
+                func: name,
+                arg: "d",
+                with: "several regions (a text): next and upto end each region on its own face",
+            });
+        }
+        // (in order: the first region was taken out above)
+        let mut profiles = many;
+        profiles.insert(0, profile);
+        Feature::Regions(Box::new(forge_model::regions::Regions { profiles, extent, op }))
+    };
+    let f = crate::bodies::wrap_in(ev, &a, f)?;
     let (idx, hid) = ev.push_feature(&id, "extrude", f, span, dims)?;
     let axis = single_circle_axis(&sk, &segs);
     Ok(Value::Feature(Rc::new(Feat {
@@ -1868,7 +2042,7 @@ fn revolve(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
     let ax = ent_of(axv, a.span("axis"), EntKind::Line)?;
     let mut profiled = profile_of(ev, a.req("profile")?, a.span("profile"));
     // an axis drawn as a plain line (not construction) that is no side of the profile: the
-    // profile without it (as .fc's `axis L`)
+    // profile without it
     if profiled.is_err() && ax.kind == EntKind::Line && !ax.sk.borrow().s.is_construction(ax.id) {
         let _ = ax.sk.borrow_mut().s.set_construction(ax.id, true);
         let again = profile_of(ev, a.req("profile")?, a.span("profile"));
@@ -2543,7 +2717,10 @@ fn instance_names(
     let faces = |b: &Body| -> Vec<Name> { b.face_ids().map(|g| b.face(g).name).collect() };
     match src {
         Some(forge_model::Source::Body) => {
-            let names = before.and_then(|b| b.work()).map(faces).unwrap_or_default();
+            let names: Vec<Name> = before
+                .and_then(|b| b.work())
+                .map(|w| w.faces().map(|(b, g)| b.face(g).name).collect())
+                .unwrap_or_default();
             let Feature::Pattern { layout, .. } = &hist[i] else {
                 return vec![];
             };
@@ -2660,7 +2837,18 @@ fn cap(ev: &mut Eval, f: &Feat, end: bool) -> Value {
     // which of the tool's caps lies where: the one the kernel names "start" sits at the sketch
     // unless the extrude ran backwards. Asked of the part as the feature left it, so a cap a
     // later edit moved (an offset, a draft, a slab) is still found by its name.
-    let names = [forge_ops::roles::start(root), forge_ops::roles::end(root)];
+    let own_caps = [forge_ops::roles::start(root), forge_ops::roles::end(root)];
+    // a several-region extrude's (a text's): each region's
+    let region_caps: Vec<Name> = region_roots(ev, f).map_or(Vec::new(), |rs| {
+        rs.iter()
+            .flat_map(|r| [forge_ops::roles::start(r.0), forge_ops::roles::end(r.0)])
+            .collect()
+    });
+    let names: &[Name] = if region_caps.is_empty() {
+        &own_caps
+    } else {
+        &region_caps
+    };
     let at_height = |body: &Body, fr: Frame, nm: Name| {
         crate::build::role_faces(body, nm).into_iter().any(|x| {
             face_plane(body, x).is_some_and(|fp| (fp.origin - fr.origin).dot(fr.z().get()).abs() < 1e-6)
@@ -2733,6 +2921,9 @@ pub fn member(ev: &mut Eval, v: Value, name: &str, span: Span) -> R<Value> {
                 return v;
             }
             if let Some(v) = crate::shapes::member(ev, f, name) {
+                return Ok(v);
+            }
+            if let Some(v) = crate::weld::member(ev, f, name) {
                 return Ok(v);
             }
             match name {
@@ -2998,6 +3189,66 @@ pub fn edge_snap(body: &Body, e: EdgeId, name: &str) -> Result<Point3, (Point3, 
 }
 
 /// `E.side(entity)`: the face an entity of the profile made.
+/// A several-region extrude's (a text's) regions: each one's root name and the segment ids of
+/// its loops. None for any other feature.
+pub(crate) fn region_roots(ev: &Eval, f: &Feat) -> Option<Vec<(Name, Vec<u64>)>> {
+    let Some(Feature::Regions(r)) = crate::holes::kernel_feature(ev, f.idx) else {
+        return None;
+    };
+    const PIECE: u64 = 0xffff << 48;
+    Some(
+        r.profiles
+            .iter()
+            .filter_map(|p| {
+                let key = forge_model::regions::key(p)?;
+                let segs = p
+                    .loops
+                    .iter()
+                    .flat_map(|l| l.segments.iter().map(|s| s.1 & !PIECE))
+                    .collect();
+                Some((Name::feature(forge_model::regions::region_id(f.hid, key)), segs))
+            })
+            .collect(),
+    )
+}
+
+/// `E.side(X)` of an entity or loop, or of a list of them (a text): every face they made.
+pub fn side_of(ev: &mut Eval, f: &Feat, v: Value, span: Span) -> R<Value> {
+    let Value::List(xs) = v else {
+        let Value::Ent(e) = v else {
+            return Err(Error::WrongType {
+                span,
+                what: "side(entity)",
+                want: Ty::Entity,
+                found: v.ty(),
+            });
+        };
+        return side(ev, f, &e, span);
+    };
+    let mut out: Option<Faces> = None;
+    for x in xs.iter() {
+        let Value::Ent(e) = x else {
+            return Err(Error::WrongType {
+                span,
+                what: "side(entity)",
+                want: Ty::Entity,
+                found: x.ty(),
+            });
+        };
+        match side(ev, f, e, span)? {
+            Value::Faces(fs) => match &mut out {
+                None => out = Some((*fs).clone()),
+                Some(o) => {
+                    o.names.extend(fs.names.iter().copied());
+                    o.plane = None;
+                }
+            },
+            other => return Ok(other),
+        }
+    }
+    Ok(out.map_or(Value::Unresolved, |o| Value::Faces(Rc::new(o))))
+}
+
 pub fn side(ev: &mut Eval, f: &Feat, e: &Ent, span: Span) -> R<Value> {
     let sk = f.prof.clone().expect("a profile feature");
     if !Rc::ptr_eq(&sk, &e.sk) {
@@ -3014,12 +3265,18 @@ pub fn side(ev: &mut Eval, f: &Feat, e: &Ent, span: Span) -> R<Value> {
     };
     let root = Name::feature(f.hid);
     let segs: Vec<u64> = ids.iter().map(|&i| sk.borrow().seg_id(i)).collect();
+    let regions = region_roots(ev, f);
     let names: Vec<Name> = match crate::shapes::side_names(ev, f, &segs) {
         Some(n) => n,
         None => ids
             .iter()
             .flat_map(|&i| {
                 let seg = sk.borrow().seg_id(i);
+                // a several-region extrude's wall is named under its region's root
+                let root = regions
+                    .as_ref()
+                    .and_then(|rs| rs.iter().find(|r| r.1.contains(&seg)))
+                    .map_or(root, |r| r.0);
                 // a revolve's faces are named per part of the turn as well
                 if f.kind == "revolve" {
                     vec![
@@ -3372,7 +3629,7 @@ fn selection(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<V
 
 /// The selection filters faces and edges share beyond the first set: radius under or over a
 /// value (`r_below`, `r_above`), touching given faces or edges (`touching`: the faces and edges
-/// that share an edge or a vertex with them, as .fc's `on`), and in a body (`body: F`).
+/// that share an edge or a vertex with them), and in a body (`body: F`).
 struct More {
     below: Option<f64>,
     above: Option<f64>,
@@ -3607,7 +3864,7 @@ fn lines(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Value
             let src = values::join_src(&s1, &s2);
             let src = match src {
                 Src::Const => Src::Const,
-                s => Src::Driven(std::sync::Arc::new(s.params())),
+                s => Src::Driven(std::sync::Arc::new(s.keys())),
             };
             let n = |v: f64| {
                 Value::Num(Num {
@@ -3625,4 +3882,15 @@ fn lines(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Value
 enum By {
     Feats(Vec<Rc<Feat>>),
     Faces(Vec<Name>),
+}
+
+#[cfg(test)]
+mod names_tests {
+    /// Each name the map says `constant` knows, it does.
+    #[test]
+    fn every_constant_name_is_a_constant() {
+        for &(n, _, c) in super::NAMES.iter().filter(|e| !e.0.is_empty()) {
+            assert!(!c || super::constant(n).is_some(), "{n}");
+        }
+    }
 }

@@ -6,6 +6,10 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 
+[dependencies]
+# the scoped threads every parallel path runs on (a host's spawner where std has none)
+forge-par = { path = "../forge-par" }
+
 [target.'cfg(target_family = "wasm")'.dependencies]
 forge-alloc = { path = "../forge-alloc" }
 

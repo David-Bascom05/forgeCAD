@@ -7,6 +7,10 @@ pub mod apptools;
 pub mod claude;
 pub mod codex;
 pub mod conversations;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod keys;
+#[cfg(target_arch = "wasm32")]
+#[path = "keys_web.rs"]
 pub mod keys;
 pub mod mcp;
 pub mod openai;
@@ -68,7 +72,7 @@ impl Watch {
         project::files(&self.dir)
             .into_iter()
             .filter(|p| p.metadata().is_ok_and(|m| m.is_file() && m.len() <= WATCH_BYTES))
-            .filter_map(|p| Some((p.clone(), std::fs::read_to_string(&p).ok()?)))
+            .filter_map(|p| Some((p.clone(), forge_dirs::fs::read_to_string(&p).ok()?)))
             .collect()
     }
 

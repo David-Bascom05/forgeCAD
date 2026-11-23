@@ -758,7 +758,7 @@ impl Shell {
                 p.rect_filled(
                     Rect::from_min_size(pos2(r.left(), r.bottom() - 2.0), vec2(tw, 2.0)),
                     0.0,
-                    t.focus,
+                    t.accent,
                 );
             } else if resp.hovered() {
                 p.rect_filled(r, 3.0, t.hover);

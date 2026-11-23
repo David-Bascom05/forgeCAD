@@ -434,3 +434,28 @@ fn timing() {
         at.elapsed().as_secs_f64() / n as f64 * 1e6
     );
 }
+
+#[test]
+fn square_is_square_within_the_tolerance_over_the_edge() {
+    // the crossed edges square to the bend line by the one rule (off square by at most LINEAR
+    // over their length), not to 1e-12 in sine: a line 1e-10 off square (5e-9 over the 50 long
+    // edge) bends, valid; one 2e-5 off over 40 (8e-4 across) is not square
+    let p = Point2::new;
+    for (dx, ok) in [(0.0, true), (5e-9, true), (8e-4, false)] {
+        let mut s = plate(100.0, 50.0);
+        let r = s.sketched_bend(
+            WallId(0),
+            p(50.0, 0.0),
+            p(50.0 + dx, 50.0),
+            PI / 2.0,
+            R,
+            BendAt::Centre,
+        );
+        assert_eq!(r.is_ok(), ok, "{dx}: {:?}", r.map(|_| ()));
+        if ok {
+            for m in [Map::Folded, Map::Flat] {
+                checked(&build_with(&s, m).expect("builds").body);
+            }
+        }
+    }
+}

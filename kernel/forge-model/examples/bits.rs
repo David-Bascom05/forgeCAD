@@ -11,7 +11,10 @@ fn main() {
     let mut parts = suite::parts();
     parts.push(("torture", torture::part(221)));
     // BITS_PREFIX=n: each part's first n features only
-    if let Some(n) = std::env::var("BITS_PREFIX").ok().and_then(|n| n.parse::<usize>().ok()) {
+    if let Some(n) = std::env::var("BITS_PREFIX")
+        .ok()
+        .and_then(|n| n.parse::<usize>().ok())
+    {
         for (_, p) in &mut parts {
             p.features.truncate(n);
         }
@@ -28,10 +31,19 @@ fn main() {
                 Ok(b) if sorted => {
                     let b = b.compact();
                     if std::env::var_os("BITS_COUNTS").is_some() {
-                        eprintln!("{name} {path}: {} vertices, {} edges, {} faces", b.vertices.len(), b.edges.len(), b.faces.len());
+                        eprintln!(
+                            "{name} {path}: {} vertices, {} edges, {} faces",
+                            b.vertices.len(),
+                            b.edges.len(),
+                            b.faces.len()
+                        );
                     }
                     let key = |x: f64| x.to_bits();
-                    let mut ps: Vec<[u64; 3]> = b.vertices.iter().map(|v| [key(v.point.x), key(v.point.y), key(v.point.z)]).collect();
+                    let mut ps: Vec<[u64; 3]> = b
+                        .vertices
+                        .iter()
+                        .map(|v| [key(v.point.x), key(v.point.y), key(v.point.z)])
+                        .collect();
                     ps.sort_unstable();
                     // an edge by its end points (its range depends on how its curve is
                     // parametrised, which a write may keep or remake)

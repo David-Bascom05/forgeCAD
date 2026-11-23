@@ -1,6 +1,8 @@
 //! ForgeCAD's own repository through this crate: objects read (deltas applied), hashed, and
 //! written back byte for byte. The default test takes every pack and every 50th object; the
 //! ignored one takes them all (`cargo test --release -p forge-git --test own_repo -- --ignored`).
+// finds the checkout by canonical paths, which WASI does not give (Unsupported): native only
+#![cfg(not(target_os = "wasi"))]
 
 use forge_git::object::{self, Kind};
 use forge_git::{Oid, Repo};

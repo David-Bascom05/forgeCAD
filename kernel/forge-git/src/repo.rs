@@ -46,19 +46,19 @@ const EXTENSIONS: &[&str] = &[
 impl Repo {
     /// The repository whose work tree holds `start` (a file or directory).
     pub fn discover(start: &Path) -> Result<Repo, Error> {
-        let abs = std::fs::canonicalize(start).map_err(|_| Error::NotARepo(start.to_path_buf()))?;
-        let mut cur: Option<&Path> = Some(if abs.is_dir() {
+        let abs = forge_dirs::fs::canonicalize(start).map_err(|_| Error::NotARepo(start.to_path_buf()))?;
+        let mut cur: Option<&Path> = Some(if forge_dirs::fs::is_dir(&abs) {
             &abs
         } else {
             abs.parent().unwrap_or(&abs)
         });
         while let Some(d) = cur {
             let dot = d.join(".git");
-            if dot.is_dir() && dot.join("HEAD").exists() {
+            if forge_dirs::fs::is_dir(&dot) && forge_dirs::fs::exists(dot.join("HEAD")) {
                 return Repo::open(&dot, Some(d));
             }
-            if dot.is_file() {
-                let t = std::fs::read_to_string(&dot)?;
+            if forge_dirs::fs::is_file(&dot) {
+                let t = forge_dirs::fs::read_to_string(&dot)?;
                 let g = t
                     .trim()
                     .strip_prefix("gitdir:")
@@ -77,8 +77,8 @@ impl Repo {
     }
 
     pub fn open(git_dir: &Path, work: Option<&Path>) -> Result<Repo, Error> {
-        let git_dir = std::fs::canonicalize(git_dir)?;
-        let common = match std::fs::read_to_string(git_dir.join("commondir")) {
+        let git_dir = forge_dirs::fs::canonicalize(git_dir)?;
+        let common = match forge_dirs::fs::read_to_string(git_dir.join("commondir")) {
             Ok(c) => {
                 let c = c.trim();
                 let p = if Path::new(c).is_absolute() {
@@ -86,7 +86,7 @@ impl Repo {
                 } else {
                     git_dir.join(c)
                 };
-                std::fs::canonicalize(p)?
+                forge_dirs::fs::canonicalize(p)?
             }
             Err(_) => git_dir.clone(),
         };
@@ -114,7 +114,7 @@ impl Repo {
         let work = if config.bool("core.bare") == Some(true) {
             None
         } else {
-            work.map(|w| std::fs::canonicalize(w).unwrap_or(w.to_path_buf()))
+            work.map(|w| forge_dirs::fs::canonicalize(w).unwrap_or(w.to_path_buf()))
         };
         Ok(Repo {
             refs: Refs {
@@ -134,11 +134,11 @@ impl Repo {
     /// A new repository in `work/.git`, HEAD on `main`; refuses one already there.
     pub fn init(work: &Path, hash: HashKind) -> Result<Repo, Error> {
         let g = work.join(".git");
-        if g.exists() {
+        if forge_dirs::fs::exists(&g) {
             return Err(Error::Unsupported(format!("{} already exists", g.display())));
         }
         for d in ["objects/info", "objects/pack", "refs/heads", "refs/tags", "info"] {
-            std::fs::create_dir_all(g.join(d))?;
+            forge_dirs::fs::create_dir_all(g.join(d))?;
         }
         let cfg = match hash {
             HashKind::Sha1 => {
@@ -176,7 +176,7 @@ impl Repo {
             ("BISECT_LOG", "bisect"),
         ]
         .into_iter()
-        .find(|(f, _)| g.join(f).exists())
+        .find(|(f, _)| forge_dirs::fs::exists(g.join(f)))
         .map(|x| x.1)
     }
 
@@ -206,12 +206,12 @@ impl Repo {
     /// A path relative to the work tree, `/`-separated, for a file inside it.
     pub fn rel_path(&self, file: &Path) -> Result<String, Error> {
         let w = self.work_dir()?;
-        let abs = match std::fs::canonicalize(file) {
+        let abs = match forge_dirs::fs::canonicalize(file) {
             Ok(a) => a,
             // a removed file: its directory's real place
             Err(_) => {
                 let parent = file.parent().ok_or(Error::NoPath(file.display().to_string()))?;
-                std::fs::canonicalize(parent)?.join(
+                forge_dirs::fs::canonicalize(parent)?.join(
                     file.file_name()
                         .ok_or(Error::NoPath(file.display().to_string()))?,
                 )
@@ -256,7 +256,7 @@ impl Repo {
                 Some(t) => tree::lookup(&self.odb, t, p)?.filter(|e| !e.is_tree()),
                 None => None,
             };
-            let meta = match std::fs::symlink_metadata(&file) {
+            let meta = match forge_dirs::fs::symlink_metadata(&file) {
                 Ok(m) => m,
                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
                     if old.is_some() {
@@ -268,11 +268,14 @@ impl Repo {
                 Err(e) => return Err(e.into()),
             };
             let (mode, data) = if meta.file_type().is_symlink() {
-                let t = std::fs::read_link(&file)?;
+                let t = forge_dirs::fs::read_link(&file)?;
                 (MODE_LINK, t.to_string_lossy().as_bytes().to_vec())
             } else if meta.is_file() {
                 let exec = executable(&meta) && self.config.bool("core.filemode") != Some(false);
-                (if exec { MODE_EXEC } else { MODE_FILE }, std::fs::read(&file)?)
+                (
+                    if exec { MODE_EXEC } else { MODE_FILE },
+                    forge_dirs::fs::read(&file)?,
+                )
             } else {
                 return Err(Error::NoPath(p.clone()));
             };
@@ -363,13 +366,13 @@ impl Repo {
 }
 
 #[cfg(unix)]
-fn executable(m: &std::fs::Metadata) -> bool {
+fn executable(m: &forge_dirs::fs::Metadata) -> bool {
     use std::os::unix::fs::PermissionsExt;
     m.permissions().mode() & 0o111 != 0
 }
 
 /// No execute bit where the platform keeps none (the browser's WASI).
 #[cfg(not(unix))]
-fn executable(_: &std::fs::Metadata) -> bool {
+fn executable(_: &forge_dirs::fs::Metadata) -> bool {
     false
 }

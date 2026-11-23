@@ -1,4 +1,4 @@
-//! What the retired `.fc` document mode did in the app, done on a Forge (.fg) part: a number
+//! Document tools in the app on a Forge (.fg) part: a number
 //! dragged on the model, a browser row lighting its faces, suppression and the End of Part, the
 //! build's flags on the model, the dialogs' placings and axes, window selection, a sketch started
 //! for an extrude and picked in the view, undo kept with the file, literal sketch points held
@@ -759,23 +759,13 @@ fn a_part_the_check_faults_says_so_and_fixing_the_part_clears_it() {
 }
 
 #[test]
-fn a_part_with_an_edge_off_its_face_is_found_too() {
+fn a_round_cut_through_by_a_cross_builds_valid() {
+    // once a part the kernel built with edges off their faces (EdgeOffFace): a boss's top edge
+    // rounded, then a cross with rounded inner corners cut down through the round. The kernel now
+    // builds it valid, at the volume OpenCascade gives the same body (50.7519 mm³ from its STEP)
     let part = faulty("check-edge-off-face.fg");
-    let found = faults(&part);
-    assert!(found.iter().any(|f| f.0 == "EdgeOffFace"), "{found:?}");
-    // its broken face has no mesh, so the view is never whole: wait on the build's word alone
-    let mut h = match Headless::new((1300.0, 1000.0), 1.0) {
-        Ok(h) => h,
-        Err(e) => {
-            eprintln!("skipped: {e}");
-            return;
-        }
-    };
-    h.step();
-    h.gui.open(file(&part, "edgeoff").to_str().unwrap());
-    assert!(
-        h.until(|g| g.shell.fg.as_ref().is_some_and(|p| p.summary.contains("INVALID"))),
-        "the check found nothing on a part known to fail it: {}",
-        summary(&h)
-    );
+    assert!(faults(&part).is_empty(), "{:?}", faults(&part));
+    let run = forge_lang::run(&part, forge_lang::Options::default(), Default::default()).0;
+    let v = run.measure.expect("measured").volume;
+    assert!((v - 50.7519).abs() < 1e-3, "volume {v}");
 }

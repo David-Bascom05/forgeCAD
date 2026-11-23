@@ -505,6 +505,22 @@ fn random_sentences_and_edits() {
 /// files change; `FG_LEAN=1` still asks Lean).
 #[test]
 fn every_fg_file() {
+    // WASI (wasip1) starts no threads: the body runs on the test's own (wasm) stack there
+    if cfg!(target_os = "wasi") {
+        return every_fg_file_body();
+    }
+    // `reference` is a direct, recursive port of the Lean parser (one frame per rule and symbol),
+    // so a long file nests deeply; debug frames on Windows overflow the default 2 MB test stack.
+    // The shipped parser is iterative and is not what needs the room.
+    std::thread::Builder::new()
+        .stack_size(256 << 20)
+        .spawn(every_fg_file_body)
+        .expect("spawn")
+        .join()
+        .unwrap();
+}
+
+fn every_fg_file_body() {
     let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../..");
     let mut files = Vec::new();
     let mut dirs = vec![std::path::PathBuf::from(root)];
@@ -573,6 +589,7 @@ fn lexed(src: &str) -> String {
             TokKind::Num(_, Unit::None) => "n0".into(),
             TokKind::Num(_, Unit::Mm) => "n1".into(),
             TokKind::Num(_, Unit::Deg) => "n2".into(),
+            TokKind::Num(_, Unit::In) => "n3".into(),
             TokKind::Str(_) => "s".into(),
             TokKind::Id(_) => "i".into(),
             TokKind::Kw(w) => format!("k{}", KEYWORDS.iter().position(|k| k == w).expect("a keyword")),
@@ -653,6 +670,9 @@ fn lexer_is_the_model() {
         "deg",
         "1..2",
         "7.",
+        "0.063in",
+        "5in",
+        " in ",
     ];
     for _ in 0..if long() { 100000 } else { 8000 } {
         let k = rng.below(24);
@@ -675,7 +695,7 @@ fn lexer_is_the_model() {
     }
     let answers: Vec<(String, String)> = texts.iter().map(|t| (hex(t), lexed(t))).collect();
     for kind in [
-        "eN ", "eU ", "eS ", "eC ", "n0:", "n1:", "n2:", "k", "o", "s:", "c:", "j:",
+        "eN ", "eU ", "eS ", "eC ", "n0:", "n1:", "n2:", "n3:", "k", "o", "s:", "c:", "j:",
     ] {
         let k = answers
             .iter()

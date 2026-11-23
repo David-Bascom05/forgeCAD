@@ -71,7 +71,9 @@ fn merges(body: &Body, po: &Lineage) -> Vec<(Name, Name)> {
         .joins
         .aliases
         .iter()
-        .filter(|&&(piece, whole)| piece != whole && po.contains_key(&piece) && now.binary_search(&piece).is_err())
+        .filter(|&&(piece, whole)| {
+            piece != whole && po.contains_key(&piece) && now.binary_search(&piece).is_err()
+        })
         .map(|&(piece, whole)| (whole, piece))
         .collect();
     out.sort_unstable();

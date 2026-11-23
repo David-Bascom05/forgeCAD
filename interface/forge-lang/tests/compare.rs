@@ -58,7 +58,7 @@ hole1 = hole(at: spot.p, d: 6, depth: thru)
 
 #[test]
 fn a_hole_between_two_versions() {
-    let d = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("compare-{}", std::process::id()));
+    let d = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("compare-{}", forge_dirs::process_id()));
     std::fs::create_dir_all(&d).unwrap();
     let d = std::fs::canonicalize(d).unwrap();
     let h = History::turn_on(&d).unwrap();

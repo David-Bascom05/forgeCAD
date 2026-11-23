@@ -214,8 +214,8 @@ pub const LIGHT: Palette = Palette {
     face: rgb(0xF7F8FA),
     hover: rgb(0xE3ECF5),
     hover_ink: rgb(0x1D4470),
-    ink: rgb(0x1A1F1C),
-    line: rgb(0x525A55),
+    ink: rgb(0x1A1F26),
+    line: rgb(0x545C66),
     focus: rgb(0xE0A21B),
 };
 

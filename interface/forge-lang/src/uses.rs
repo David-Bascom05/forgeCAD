@@ -13,7 +13,7 @@ use crate::syntax::{ExprKind, Key, Seg, Span, StmtKind};
 use crate::values::{Num, Src, Ty};
 use forge_agent::json::Json;
 use std::cell::RefCell;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::rc::Rc;
 
@@ -202,7 +202,7 @@ pub fn call(ev: &mut Eval, args: &[crate::syntax::Arg], span: Span) -> R<Value> 
         if ev
             .dir
             .as_ref()
-            .is_some_and(|d| std::fs::symlink_metadata(d.join(&file)).is_ok())
+            .is_some_and(|d| forge_dirs::fs::symlink_metadata(d.join(&file)).is_ok())
         {
             return Err(err(UseErr::NotForge { span, file }));
         }
@@ -320,9 +320,9 @@ fn rekey(v: &Value, binding: &str) -> Value {
             src: match &n.src {
                 Src::Const => Src::Const,
                 Src::Driving(k) => Src::driving(under(k)),
-                Src::Driven(ks) => {
-                    Src::Driven(std::sync::Arc::new(ks.iter().map(under).collect::<BTreeSet<_>>()))
-                }
+                Src::Driven(ks) => Src::Driven(std::sync::Arc::new(
+                    ks.iter().map(|k| std::sync::Arc::new(under(k))).collect(),
+                )),
             },
             ..n.clone()
         }),

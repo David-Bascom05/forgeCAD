@@ -66,7 +66,7 @@ enum Answer {
 /// The host's state for the tools.
 #[derive(Default)]
 pub struct Inspector {
-    to: Option<Sender<Job>>,
+    to: Option<crate::plat::Server<Job>>,
     from: Option<Receiver<Answer>>,
     seq: u64,
     pub(crate) data: Option<Arc<InspectData>>,
@@ -102,9 +102,9 @@ fn kind_word(b: &Body, e: Ent) -> String {
     }
 }
 
-fn work(jobs: Receiver<Job>, out: Sender<Answer>, wake: super::Waker) {
+fn work(out: Sender<Answer>, wake: super::Waker) -> crate::plat::Server<Job> {
     let mut meshes: HashMap<usize, Arc<TriMesh>> = HashMap::new();
-    let mut mesh = |b: &Arc<Body>| -> Result<Arc<TriMesh>, String> {
+    let mut mesh = move |b: &Arc<Body>| -> Result<Arc<TriMesh>, String> {
         let key = Arc::as_ptr(b) as usize;
         if let Some(m) = meshes.get(&key) {
             return Ok(m.clone());
@@ -115,7 +115,7 @@ fn work(jobs: Receiver<Job>, out: Sender<Answer>, wake: super::Waker) {
         meshes.insert(key, m.clone());
         Ok(m)
     };
-    while let Ok(mut job) = jobs.recv() {
+    crate::plat::serve("forge-inspect", move |mut job, jobs: &Receiver<Job>| {
         // a newer job of the same kind replaces one not yet started
         while let Ok(j) = jobs.try_recv() {
             if std::mem::discriminant(&j) != std::mem::discriminant(&job) {
@@ -124,10 +124,11 @@ fn work(jobs: Receiver<Job>, out: Sender<Answer>, wake: super::Waker) {
             job = j;
         }
         if handle(job, &mut mesh, &out).is_err() {
-            return;
+            return false;
         }
         wake();
-    }
+        true
+    })
 }
 
 fn handle(
@@ -215,18 +216,13 @@ impl Gui {
     fn inspect_send(&mut self, job: Job) {
         let i = &mut self.inspector;
         if i.to.is_none() {
-            let (to, jobs) = channel();
             let (answers, from) = channel();
             let wake = self.waker.clone();
-            std::thread::Builder::new()
-                .name("forge-inspect".into())
-                .spawn(move || work(jobs, answers, wake))
-                .expect("a thread");
-            i.to = Some(to);
+            i.to = Some(work(answers, wake));
             i.from = Some(from);
         }
         if let Some(to) = &i.to {
-            let _ = to.send(job);
+            to.send(job);
         }
     }
 
@@ -418,6 +414,40 @@ impl Gui {
         ))
     }
 
+    /// The face a click on an edge or a corner meant, of those `ok` takes (a sketch: the planar
+    /// ones): of the faces meeting there, the one turned most to the eye.
+    pub(crate) fn face_at(
+        &self,
+        pl: u32,
+        e: Entity,
+        at: Option<[f32; 3]>,
+        ok: impl Fn(u32) -> bool,
+    ) -> Option<Entity> {
+        let d = self.inspector.data.as_ref()?;
+        let &(mesh, frame) = d.placed.get(pl as usize)?;
+        let b = d.bodies.get(mesh)?;
+        let near = at.map(|p| frame.point_to_local(Point3::new(p[0] as f64, p[1] as f64, p[2] as f64)));
+        let near = near.unwrap_or_else(|| select::centre(b, ent(e)));
+        let eye = self
+            .view
+            .as_ref()
+            .map(|v| v.nav.camera.eye())
+            .map(|q| frame.point_to_local(Point3::new(q[0] as f64, q[1] as f64, q[2] as f64)));
+        let mut faces: Vec<FaceId> = match ent(e) {
+            Ent::Face(_) => return Some(e),
+            Ent::Edge(x) => select::faces_of_edge(b, x),
+            Ent::Vert(v) => b
+                .edge_ids()
+                .filter(|&x| [b.edge(x).start, b.edge(x).end].contains(&v))
+                .flat_map(|x| select::faces_of_edge(b, x))
+                .collect(),
+        };
+        faces.sort_by_key(|f| f.0);
+        faces.dedup();
+        faces.retain(|f| ok(f.0));
+        Some(Entity::Face(self.facing(b, &faces, near, eye)?.0))
+    }
+
     /// Of faces meeting at a point, the one turned most to the eye there.
     fn facing(&self, b: &Body, faces: &[FaceId], near: Point3, eye: Option<Point3>) -> Option<FaceId> {
         let to_eye = eye.map_or(Vec3::Z, |e| e - near);
@@ -507,7 +537,7 @@ impl Gui {
             let (send, recv) = channel();
             self.inspector.outline = Some(recv);
             let waker = self.waker.clone();
-            std::thread::spawn(move || {
+            crate::plat::spawn("forge-job", move || {
                 let got = match doc {
                     None => Err("Section numbers are a Forge (.fg) document's".to_string()),
                     Some((src, path)) => {

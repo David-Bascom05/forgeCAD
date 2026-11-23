@@ -554,7 +554,7 @@ impl Chol {
                 .collect::<Vec<_>>()
         };
         let done: Vec<(usize, Option<Vec<f64>>)> = if threads > 1 {
-            std::thread::scope(|sc| {
+            forge_math::par::scope(|sc| {
                 let hs: Vec<_> = hands.into_iter().map(|h| sc.spawn(move || run(h))).collect();
                 hs.into_iter()
                     .flat_map(|h| h.join().unwrap_or_default())

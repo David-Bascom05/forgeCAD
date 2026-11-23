@@ -440,6 +440,10 @@ pub(crate) enum Class {
     OnOpposite,
 }
 
+/// `a` combined with `b`, in canonical form: what the boolean left on one surface or one curve is
+/// joined (`unify`), so the result depends on the solid alone, not on where the operands met.
+/// (`boolean_into` leaves that to its caller, who may go on combining: the regen unifies once,
+/// when it hands the part out.)
 pub fn boolean(a: &Body, b: &Body, op: Op, feature: u64) -> R<Body> {
     // flat faces: the part read by reference and the result written fresh, with no copy first
     #[cfg(feature = "decide_once")]
@@ -448,6 +452,7 @@ pub fn boolean(a: &Body, b: &Body, op: Op, feature: u64) -> R<Body> {
     }
     let mut out = a.clone_roomy();
     boolean_into(&mut out, b, op, feature)?;
+    crate::unify::unify(&mut out);
     Ok(out.into_compact())
 }
 
@@ -633,7 +638,7 @@ fn general(target: &mut Body, b: &Body, op: Op) -> R<()> {
     RETRIED.with(|r| r.set(false));
     let mut scratch = SCRATCH.with(|s| s.take());
     let plan = plan(target, b, op, &mut scratch)?;
-    let mut clock = phases_on().then(std::time::Instant::now);
+    let mut clock = phases_on().then(forge_math::clock::Instant::now);
     let (loops, verts) = (target.loops.len(), target.vertices.len());
     let touched = touched_old(&plan);
     apply(target, b, &plan);
@@ -974,9 +979,9 @@ fn specs_on() -> bool {
 }
 
 /// Adds the time since `*t` to phase `k` and restarts the clock.
-fn lap(t: &mut Option<std::time::Instant>, k: usize) {
+fn lap(t: &mut Option<forge_math::clock::Instant>, k: usize) {
     if let Some(t0) = t {
-        let now = std::time::Instant::now();
+        let now = forge_math::clock::Instant::now();
         PHASES.with(|p| p.borrow_mut()[k] += (now - *t0).as_nanos() as u64);
         *t = Some(now);
     }
@@ -1111,7 +1116,7 @@ fn plan_once(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
 use self::plan_once_in as plan_once;
 
 fn plan_once_in(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
-    let mut clock = phases_on().then(std::time::Instant::now);
+    let mut clock = phases_on().then(forge_math::clock::Instant::now);
     let bodies = [a, b];
     let index = [Index::new(a), Index::new(b)];
     scratch.across.next();
@@ -2486,7 +2491,10 @@ pub(crate) fn trim(
     mut memo: Option<&mut AcrossMemo>,
 ) -> R<()> {
     // the curve's cuts by parameter: a list kept with the memo and reused
-    let mut ts = memo.as_deref_mut().map(|m| std::mem::take(&mut m.ts)).unwrap_or_default();
+    let mut ts = memo
+        .as_deref_mut()
+        .map(|m| std::mem::take(&mut m.ts))
+        .unwrap_or_default();
     ts.clear();
     let r = trim_in(
         bodies,
@@ -2711,16 +2719,13 @@ fn trim_in(
                     ));
                     CurveSurface::Hits(crossing_on_face(&curve, range, body, f, edge))
                 } else {
-                    with_hairs!(
-                        curve_surface_in(&curve, range, across, near),
-                        |hairs| log::hairs(
-                            [(bodies[0], faces[0]), (bodies[1], faces[1])],
-                            body,
-                            e,
-                            (&curve, range, across),
-                            &hairs,
-                        )
-                    )
+                    with_hairs!(curve_surface_in(&curve, range, across, near), |hairs| log::hairs(
+                        [(bodies[0], faces[0]), (bodies[1], faces[1])],
+                        body,
+                        e,
+                        (&curve, range, across),
+                        &hairs,
+                    ))
                 };
                 decided!({
                     let sine = match (&curve, &edge.curve) {
@@ -4606,9 +4611,16 @@ pub(crate) fn imprint(
                         a.2 == sides[src] && a.3 == e
                     }
                 };
+                // (all three On, a straight stretch ending at this edge's own vertex lies along the
+                // boundary only if that vertex is on it: coverage G5a)
                 let place = match at(0.5) {
                     Where::On if !along.iter().any(lies_along) => match at(0.381_966_011_250_105_1) {
-                        Where::On => at(0.618_033_988_749_894_9),
+                        Where::On => match at(0.618_033_988_749_894_9) {
+                            Where::On if matches!(edge.curve, Curve::Line(_)) => {
+                                on_to_its_vertex(index[dst], dst_face, sb, e, [w[0], w[1]], &ts)
+                            }
+                            o => o,
+                        },
                         o => o,
                     },
                     o => o,
@@ -4642,6 +4654,26 @@ pub(crate) fn imprint(
         }
     }
     Ok(())
+}
+
+/// Where a straight stretch `w` of edge `e` that its samples read On the destination face's boundary
+/// lies: decided once, at the edge's own vertex it ends at (not a crossing), when that vertex is off
+/// the boundary. Samples (1 - f) d from the boundary all read On while d <= LINEAR / 0.618, so with
+/// the vertex d > LINEAR off they would drop as running along the boundary a stretch whose vertex
+/// was decided off it (coverage G5a). Out of line: the imprint's loop is hot and this is not.
+#[cold]
+#[inline(never)]
+fn on_to_its_vertex(index: &Index, face: FaceId, body: &Body, e: EdgeId, w: [f64; 2], ts: &[f64]) -> Where {
+    let edge = body.edge(e);
+    let off = |at_end: bool, v: VertexId| {
+        let o = at_end.then(|| index.point_in_face(face, body.vertex(v).point));
+        o.filter(|&o| o != Where::On)
+    };
+    let lo = w[0] == edge.range.lo && !ts.contains(&w[0]);
+    let hi = w[1] == edge.range.hi && !ts.contains(&w[1]);
+    off(lo, edge.start)
+        .or_else(|| off(hi, edge.end))
+        .unwrap_or(Where::On)
 }
 
 pub(crate) fn overlap(a: &forge_math::Box3, b: &forge_math::Box3) -> forge_math::Box3 {
@@ -5485,7 +5517,12 @@ fn split_face_in(
     gone: &dyn Fn((usize, bool)) -> Option<bool>,
     s: &mut SplitScratch,
 ) -> R<Split> {
-    let SplitScratch { half, by_start, dirs, used } = s;
+    let SplitScratch {
+        half,
+        by_start,
+        dirs,
+        used,
+    } = s;
     half.clear();
     half.extend(boundary.iter().flatten().copied());
     for &p in new_edges {
@@ -7070,6 +7107,8 @@ mod bent_edge_tests {
 mod held_tests {
     use super::*;
 
+    // catches the panic it causes: under WASI a panic aborts (no unwinding), so native only
+    #[cfg(not(target_os = "wasi"))]
     #[test]
     fn a_retry_flag_is_cleared_when_its_boolean_panics() {
         for k in [

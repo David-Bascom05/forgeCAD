@@ -1,0 +1,16 @@
+[package]
+name = "forge-par"
+description = "Scoped threads for the kernel: std's natively, or a host's spawner (a browser's Web Workers)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+# the third crate allowed unsafe code: running a borrowing closure on a host's thread erases its
+# lifetime, as std::thread::scope does inside std (one block, `Scope::spawn`, with its SAFETY)
+[lints.rust]
+unsafe_code = "allow"
+
+[lints.clippy]
+float_cmp = "allow"
+many_single_char_names = "allow"

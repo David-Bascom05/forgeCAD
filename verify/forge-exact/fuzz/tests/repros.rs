@@ -4,9 +4,6 @@
 //!
 //! The first three were found under the strict rule and fail under either; the rest were found
 //! under §6.1's snap rule (research/kernel-audit/exact-comparison.md) and are judged under it.
-//!
-//! The kernel's decide-once path (`--features decide_once`, forge-bool's switch) passes every one:
-//! with it on, the open-bug repros run as tests (with `reference`).
 
 use forge_bool::Op;
 use forge_exact_fuzz::pairs::{Boxes, Pattern, RELS, block, kernel_pair, pair_input_rule};
@@ -180,14 +177,7 @@ fn cut_touching_along_an_edge_leaves_no_slit() {
 /// finds the top's split crossing itself: the gap re-measured after the planes were decided
 /// coincident.
 #[test]
-#[cfg_attr(
-    not(feature = "decide_once"),
-    ignore = "exact reference (snap): the near-coincident notched part refuses SplitCrossed on 301 of 400 ulp nudges"
-)]
-#[cfg_attr(
-    all(feature = "decide_once", not(feature = "reference")),
-    ignore = "asks the Lean reference: lake build in verify/forge-exact, then cargo test -p forge-exact-fuzz --features reference"
-)]
+#[ignore = "exact reference (snap): the near-coincident notched part refuses SplitCrossed on 301 of 400 ulp nudges"]
 fn notched_part_nudged_builds() {
     nudged_agrees_snap(&forge_exact_fuzz::notched(), 0);
 }
@@ -196,14 +186,7 @@ fn notched_part_nudged_builds() {
 /// (EdgeDegenerate, 32 of 400 seeds). Likely site: `place_cuts` / `end_vertex`
 /// (boolean.rs:4561) making a crossing ~1e-5 from a corner its own vertex instead of the corner.
 #[test]
-#[cfg_attr(
-    not(feature = "decide_once"),
-    ignore = "exact reference (snap): the notched part nudged builds an invalid body (EdgeDegenerate)"
-)]
-#[cfg_attr(
-    all(feature = "decide_once", not(feature = "reference")),
-    ignore = "asks the Lean reference: lake build in verify/forge-exact, then cargo test -p forge-exact-fuzz --features reference"
-)]
+#[ignore = "exact reference (snap): the notched part nudged builds an invalid body (EdgeDegenerate)"]
 fn notched_part_nudged_has_no_degenerate_edge() {
     nudged_agrees_snap(&forge_exact_fuzz::notched(), 13);
 }
@@ -214,14 +197,7 @@ fn notched_part_nudged_has_no_degenerate_edge() {
 /// Likely site: `classify_specs`' flood (boolean.rs:5861, the refusal at 6000): one piece reached
 /// from two specs classified differently, the in/out of a face 1e-5 off another decided twice.
 #[test]
-#[cfg_attr(
-    not(feature = "decide_once"),
-    ignore = "exact reference (snap): InconsistentClassification refused where the exact result is a solid"
-)]
-#[cfg_attr(
-    all(feature = "decide_once", not(feature = "reference")),
-    ignore = "asks the Lean reference: lake build in verify/forge-exact, then cargo test -p forge-exact-fuzz --features reference"
-)]
+#[ignore = "exact reference (snap): InconsistentClassification refused where the exact result is a solid"]
 fn near_tolerance_24_blocks_build() {
     agrees_snap(&shrunk("near_tolerance", 24, &[0, 1, 2]));
 }
@@ -230,14 +206,7 @@ fn near_tolerance_24_blocks_build() {
 /// reference gives a solid; the kernel refuses SplitCrossed at feature 2, with no ulp move (also
 /// seed 103). Likely site as `notched_part_nudged_builds`: `on_edge` / `split_face`.
 #[test]
-#[cfg_attr(
-    not(feature = "decide_once"),
-    ignore = "exact reference (snap): SplitCrossed refused where the exact result is a solid"
-)]
-#[cfg_attr(
-    all(feature = "decide_once", not(feature = "reference")),
-    ignore = "asks the Lean reference: lake build in verify/forge-exact, then cargo test -p forge-exact-fuzz --features reference"
-)]
+#[ignore = "exact reference (snap): SplitCrossed refused where the exact result is a solid"]
 fn near_tolerance_53_blocks_build() {
     agrees_snap(&shrunk("near_tolerance", 53, &[0, 2, 3]));
 }
@@ -251,31 +220,19 @@ fn near_tolerance_53_blocks_build() {
 /// coincidence tests (`planes_coincident`, forge-geom intersect.rs:845, and `ssi::nearly_flush`, forge-bool
 /// ssi.rs:65) decided per pair.
 #[test]
-#[cfg_attr(
-    not(feature = "decide_once"),
-    ignore = "exact reference (snap): walls chained within LINEAR are not one surface (a §6.1 class kept as steps)"
-)]
-#[cfg_attr(
-    all(feature = "decide_once", not(feature = "reference")),
-    ignore = "asks the Lean reference: lake build in verify/forge-exact, then cargo test -p forge-exact-fuzz --features reference"
-)]
+#[ignore = "exact reference (snap): walls chained within LINEAR are not one surface (a §6.1 class kept as steps)"]
 fn near_tolerance_45_chained_walls_are_one() {
     agrees_snap(&shrunk("near_tolerance", 45, &[0, 1, 2, 3, 4, 5]));
 }
 
 /// boxes meets/overlaps/overlaps subtract: B touches A's x = 10 face from outside, so A is left
-/// as it was (V8 E12 F6). The kernel's body, valid and of the right volume, keeps the contact
-/// rectangle imprinted as a seventh face (V10 E15 F7). 1444 of the 6591 box patterns, and the
-/// near_tolerance unmerged cases, are this: one surface left as several faces. Site:
-/// `general` (forge-bool boolean.rs:557): no pass dissolves an edge between two faces of one
-/// carrier after `apply`.
+/// as it was (V8 E12 F6). The kernel's body kept the contact rectangle imprinted as a seventh
+/// face (V10 E15 F7): 1444 of the 6591 box patterns, and the near_tolerance unmerged cases, were
+/// this. Fixed: `forge_bool::boolean` hands its result out unified, and unify's same-surface test
+/// is the boolean's own (`ssi::coincident`).
 #[test]
 #[cfg_attr(
-    not(feature = "decide_once"),
-    ignore = "exact reference (snap): a touching boolean leaves its contact imprinted as an extra face"
-)]
-#[cfg_attr(
-    all(feature = "decide_once", not(feature = "reference")),
+    not(feature = "reference"),
     ignore = "asks the Lean reference: lake build in verify/forge-exact, then cargo test -p forge-exact-fuzz --features reference"
 )]
 fn touching_subtract_leaves_no_imprint() {
@@ -296,14 +253,7 @@ fn touching_subtract_leaves_no_imprint() {
 /// should be on: `on_edge` (forge-bool boolean.rs:283) and `place_cuts`' `end_vertex`
 /// (boolean.rs:4561) miss it, and `split_face` (5154) finds a crossed split.
 #[test]
-#[cfg_attr(
-    not(feature = "decide_once"),
-    ignore = "exact reference (snap): the two-axis tolerance band refuses SplitCrossed"
-)]
-#[cfg_attr(
-    all(feature = "decide_once", not(feature = "reference")),
-    ignore = "asks the Lean reference: lake build in verify/forge-exact, then cargo test -p forge-exact-fuzz --features reference"
-)]
+#[ignore = "exact reference (snap): the two-axis tolerance band refuses SplitCrossed"]
 fn band_two_axes_split_does_not_cross() {
     band_agrees_snap("meets/meets/overlaps", Op::Union, &[0, 1], 0.9);
 }
@@ -315,14 +265,7 @@ fn band_two_axes_split_does_not_cross() {
 /// `cube_on_a_corner_vertex_is_non_manifold`, whose site this shares: the touch test
 /// (boolean.rs:1108) and the four-use count (1746) only see a touch the cuts made exact.
 #[test]
-#[cfg_attr(
-    not(feature = "decide_once"),
-    ignore = "exact reference (snap): a corner overlap under LINEAR is built where §6.1 makes it a vertex touch"
-)]
-#[cfg_attr(
-    all(feature = "decide_once", not(feature = "reference")),
-    ignore = "asks the Lean reference: lake build in verify/forge-exact, then cargo test -p forge-exact-fuzz --features reference"
-)]
+#[ignore = "exact reference (snap): a corner overlap under LINEAR is built where §6.1 makes it a vertex touch"]
 fn band_three_axes_corner_overlap_is_a_touch() {
     band_agrees_snap("meets/meets/meets", Op::Union, &[0, 1, 2], 0.9);
 }
@@ -335,14 +278,7 @@ fn band_three_axes_corner_overlap_is_a_touch() {
 /// boolean.rs:4561, merging with the heads' reach, a 2× allowance) while the strip between
 /// keeps both edges; the `4.0 * LINEAR` sample break (boolean.rs:3022) then skips it.
 #[test]
-#[cfg_attr(
-    not(feature = "decide_once"),
-    ignore = "exact reference (snap): a one-axis 1.5·LINEAR offset builds an invalid body (EdgeUses)"
-)]
-#[cfg_attr(
-    all(feature = "decide_once", not(feature = "reference")),
-    ignore = "asks the Lean reference: lake build in verify/forge-exact, then cargo test -p forge-exact-fuzz --features reference"
-)]
+#[ignore = "exact reference (snap): a one-axis 1.5·LINEAR offset builds an invalid body (EdgeUses)"]
 fn band_one_axis_offset_builds_valid() {
     band_agrees_snap("equal/meets/equal", Op::Union, &[0], 1.5);
 }
@@ -354,14 +290,7 @@ fn band_one_axis_offset_builds_valid() {
 /// the four-use count (boolean.rs:1746) after `place_cuts` merged the strip's two edges, 1.5e-5
 /// apart, within its 2× reach.
 #[test]
-#[cfg_attr(
-    not(feature = "decide_once"),
-    ignore = "exact reference (snap): ZeroThickness refused for a contact strip 1.5·LINEAR wide"
-)]
-#[cfg_attr(
-    all(feature = "decide_once", not(feature = "reference")),
-    ignore = "asks the Lean reference: lake build in verify/forge-exact, then cargo test -p forge-exact-fuzz --features reference"
-)]
+#[ignore = "exact reference (snap): ZeroThickness refused for a contact strip 1.5·LINEAR wide"]
 fn band_one_axis_strip_builds() {
     band_agrees_snap("meets/meets/overlaps", Op::Union, &[0], 1.5);
 }

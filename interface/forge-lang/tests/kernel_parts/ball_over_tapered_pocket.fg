@@ -1,0 +1,19 @@
+# A 1 deg tapered pocket (a 30 by 10 rounded rectangle, corners of radius 4) 13 deep in an 18
+# block, then a ball of radius 13 centred on the top face: the boolean stops on SplitCrossed (the
+# sphere). Found by a search of my own over pocket shapes and places; a 16 by 8 pocket builds.
+param block.d = 18
+sketch base(on: xy) {
+  r = rect(center: (0, 0), size: (100, 60))
+}
+block = extrude(base, d)
+param pocket.d = 13
+param pocket.a = 1deg
+sketch way(on: block.end) {
+  o = hull(disc((-11.0, -9.0), 4), disc((11.0, -9.0), 4), disc((11.0, -7.0), 4), disc((-11.0, -7.0), 4))
+}
+pocket = cut(way, d, taper: a)
+param bowl.r = 13
+sketch top(on: block.end) {
+  c = pt(0, 0)
+}
+bowl = ball(top.c, r, cut: true)
