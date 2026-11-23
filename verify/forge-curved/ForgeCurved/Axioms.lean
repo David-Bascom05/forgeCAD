@@ -54,3 +54,6 @@ import ForgeCurved
 #print axioms ForgeCurved.cellsConnected_of_diagonal
 #print axioms ForgeCurved.plate_faithful
 #print axioms ForgeCurved.plate1_not_faithful
+#print axioms ForgeCurved.FaceLocal.edgeLocal_of_model
+#print axioms ForgeCurved.FaceLocal.vertLocal_of_model
+#print axioms ForgeCurved.FaceLocal.xNonManifoldF_iff_top_of_models

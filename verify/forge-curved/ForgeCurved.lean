@@ -11,3 +11,4 @@ import ForgeCurved.Linked
 import ForgeCurved.ConeModel
 import ForgeCurved.Diagonal
 import ForgeCurved.PlateHole
+import ForgeCurved.FaceModel
