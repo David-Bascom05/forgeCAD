@@ -1199,3 +1199,32 @@ round = fillet(edges(of: bore), r)
     let want = 100.0 * 60.0 * 10.0 - pi * a * b * 10.0 - 2.0 * sec * (l + 2.0 * pi * xb);
     assert!((v - want).abs() <= 1e-9 * want, "{v} against {want}");
 }
+
+/// A round of 0.05 at a notch in a boss whose wall is flush with the disc under it: refused as
+/// Overflow at one notch while its mirror twin builds (fillet_flush_notch_twin.fg), so the verdict
+/// turns on rounding.
+#[test]
+#[ignore = "open: fillet Overflow at one notch of a flush wall, its mirror twin builds (for the fillet session)"]
+fn a_round_at_a_notch_in_a_flush_wall_builds_like_its_twin() {
+    use forge_lang::fuzz::{Verdict, judge_built};
+    let (v, _) = judge_built(include_str!("kernel_parts/fillet_flush_notch.fg"));
+    assert!(matches!(v, Verdict::Ok), "{v:?}");
+}
+
+/// The mirror twin of fillet_flush_notch.fg, which builds: kept so the pair stays a pair.
+#[test]
+fn the_flush_notch_twin_rounds() {
+    use forge_lang::fuzz::{Verdict, judge_built};
+    let (v, _) = judge_built(include_str!("kernel_parts/fillet_flush_notch_twin.fg"));
+    assert!(matches!(v, Verdict::Ok), "{v:?}");
+}
+
+/// A drill down a lug's hole, its wall coincident with the hole's, after a counterbore cut through
+/// the lug: Boolean Internal(RetryInvalid), a judge fail, where a build (or a clean refusal) is due.
+#[test]
+#[ignore = "open: Boolean Internal(RetryInvalid) drilling down a hole's own wall"]
+fn a_drill_down_a_lug_hole_builds() {
+    use forge_lang::fuzz::{Verdict, judge_built};
+    let (v, _) = judge_built(include_str!("kernel_parts/drill_coincident_lug_hole.fg"));
+    assert!(matches!(v, Verdict::Ok), "{v:?}");
+}

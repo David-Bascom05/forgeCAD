@@ -270,12 +270,27 @@ Direction stays unsupported.
 
 **Two kernel findings from these.**
 
-- 1833f02f.Body023's pocket (a circle of radius 2 cut 15 along the stored direction, through about 2.1 of material)
-  is a judge fail, `Internal(RetryInvalid)`. It is not yet reduced to a part of my own.
-- 1833f02f.Body009's fillet builds from the Rust reader's file and is refused (`Overflow`) from the Python reader's.
-  The two files have the same edges and the same radius (2.2), and the part before the fillet has the same volume to
-  1.6e-12. They differ only in how the sketch's numbers are written: ten decimals in Rust, every digit in Python. A
-  fillet decision this sensitive to the last digits is the kernel's. It is not yet reduced either.
+- **1833f02f.Body023 → drill_coincident_lug_hole.fg.** Its pocket (a circle of radius 2 cut 15 along the stored
+  direction) is a judge fail, `Internal(RetryInvalid)`. Delta-debugged and restated in round numbers:
+  - a tube, counterbored;
+  - a slot-shaped lug on its side with a hole of radius 2;
+  - the counterbore cut again through the lug;
+  - a drill of radius 2 down that hole, its wall coincident with the hole's.
+
+  Moved 0.3 off the hole, or without the second counterbore, it builds. The test is
+  `a_drill_down_a_lug_hole_builds` (ignored, open).
+- **1833f02f.Body009 → fillet_flush_notch.fg and its twin.** Its fillet builds from the Rust reader's file and is
+  refused (`Overflow`) from the Python reader's. The files name the same two edges at the same radius (2.2), and the
+  part before the fillet has the same volume in both, to 1.6e-12. They differ only in how the numbers are written:
+  Rust rounds them to ten decimals and sets its sketch planes elsewhere, and Python writes every digit.
+  - Delta-debugged, the edges are the upright ones where a notch in a boss meets a wall flush with the disc under it.
+    The boss's wall and the disc's are one face.
+  - Restated in round numbers (a disc of radius 16, the boss's notches of radius 2.75), a round of only 0.05 is
+    refused as Overflow at one notch, while the same round at its mirror twin builds.
+  - The printed-digit flip itself did not survive the restating: with the sketch solved, 10 to 12 decimals give the
+    same verdict. The mirror pair shows the same fault, a verdict that turns on rounding and not on the shape.
+  - Tests: `a_round_at_a_notch_in_a_flush_wall_builds_like_its_twin` (ignored, open), and
+    `the_flush_notch_twin_rounds` (active), which keeps the pair a pair.
 
 ### What still stops FreeCAD (39 bodies)
 
