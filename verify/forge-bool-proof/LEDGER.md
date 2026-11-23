@@ -128,7 +128,7 @@ verify/forge-bool-proof/ForgeBoolProof/<file>.
 | C.poles | poles and seams (`sphere_nearest`'s pole rule, periodic seams) | CURVED-SITES | open | — |
 | G12 | the `decide_once` feature becomes the fallback branch | FALLBACK | open | — |
 | G13 | `face_point`'s unchecked inward step | FLAT-SITES | open | — |
-| G14 | trim_in's box-only accept | FLAT-SITES | open | — |
+| G14 | trim_in's box-only accept | FLAT-SITES | proven (hyp: D4's cut completeness, `Sorted`) | verify/forge-curved/ForgeCurved/G14.lean `kept_iff`, `extra_not_end`, `edge_cut_not_kept` |
 | G15 | the stretch whose midpoint is exactly on ∂f_k | FLAT-SITES | open | — |
 | M.ct | forge-geom `meet::intersect`, cylinder × torus (`Form::Poly4`): its events from a sampled discriminant, which lost one of two loops on fuzz295 f69 (a wrong `Ok`) | FALLBACK (fix), CURVED-SITES (#7, certified isolation) | interim fix (PR proof/fix-torus-loops): a root-count scan where the discriminant flags double roots; NOT provably complete (a loop narrower than one sample can be lost): UNKNOWN | kernel/forge-geom/src/meet_tests.rs `thin_torus_on_a_wide_cylinder_both_loops` |
 | M.cert | M.ct's events certified: interval cover of (u, s), Krawczyk boxes of one event each (kernel/forge-geom/src/meet_cert.rs, tests and the decision log only) | CURVED-SITES | soundness of the cover proven (`no_event_of_cover`); `IntervalSound`, `CountConstant` stated; on seed 295 it proves the missed events (Missed at host u 1.918, 2.097, 2.149); runtime design open (cost) | verify/forge-curved EventCover.lean |

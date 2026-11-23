@@ -2713,6 +2713,7 @@ fn trim_in(
                             "own",
                         );
                         if let Some((s, tol)) = on_edge(body, e, h.point) {
+                            // (the box alone may keep a cut off the other face: harmless, G14.lean)
                             let other = index[1 - k].face_box(faces[1 - k]);
                             if other.grow(tol::LINEAR).contains(h.point)
                                 && ((other.contains(h.point) && !rung.careful)
@@ -3034,7 +3035,9 @@ fn trim_in(
                     // off the other face no piece of the curve starts here: cutting the edge would
                     // only split it where nothing meets it (and not its coincident twin). Its box
                     // says so cheaply; a grazing crossing, or one within two tolerances of the
-                    // box's side (where a face's own boundary lies), is checked exactly
+                    // box's side (where a face's own boundary lies), is checked exactly. (A cut the
+                    // box keeps off the other face is harmless: it lies on this face's boundary, so
+                    // only in stretches that are dropped; verify/forge-curved/ForgeCurved/G14.lean)
                     let other = index[1 - k].face_box(faces[1 - k]);
                     #[cfg(feature = "decisions")]
                     crate::edge_screen::log(

@@ -166,3 +166,6 @@ import ForgeCurved
 #print axioms ForgeCurved.VertexScreen.det3_independent
 #print axioms ForgeCurved.BodyModel.mem_denote_zone
 #print axioms ForgeCurved.AngleOrder.before_iff_arg
+#print axioms ForgeCurved.G14.kept_iff
+#print axioms ForgeCurved.G14.extra_not_end
+#print axioms ForgeCurved.G14.edge_cut_not_kept
