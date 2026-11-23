@@ -115,23 +115,32 @@ pub fn draw_loop_near(body: &Body, face: FaceId, samples: &[Point3]) -> (Vec<Poi
 
 /// `draw_loop` from the samples' parameters `raw`.
 fn draw(body: &Body, face: FaceId, mut raw: Vec<Point2>) -> (Vec<Point2>, Vec<usize>) {
-    let surface = &body.face(face).surface;
+    let f = body.face(face);
+    let surface = &f.surface;
     let domain = surface.domain();
     let n = raw.len();
     if !raw.iter().any(|&uv| surface.singular(uv)) {
-        // one run, unwrapped from the first sample
-        for i in 1..n {
-            raw[i] = unwrap_in(&domain, raw[i], raw[i - 1]);
+        // one run, unwrapped from the first sample (as `unwrap_in`, each period apart)
+        let fix = |x: f64, r: f64, p: f64| x + p * ((r - x) / p).round();
+        if let Some(p) = domain.u.period {
+            for i in 1..n {
+                raw[i].x = fix(raw[i].x, raw[i - 1].x, p);
+            }
+        }
+        if let Some(p) = domain.v.period {
+            for i in 1..n {
+                raw[i].y = fix(raw[i].y, raw[i - 1].y, p);
+            }
         }
         // a face's only loop bounds a disc: it winds no turn round the surface's period. Where
         // the unwrapping left it winding (a step of half a period, a tie, taken the long way),
         // the steps from the most nearly half a turn on are taken the other way round
         if let Some(period) = domain.u.period
             && n > 1
-            && body.face(face).loops.len() == 1
+            && f.loops.len() == 1
         {
-            let back = unwrap_in(&domain, raw[0], raw[n - 1]).x - raw[0].x;
-            let turns = (back / period).round();
+            // (the closing step, unwrapped, is the turns it leaves)
+            let turns = ((raw[n - 1].x - raw[0].x) / period).round();
             if turns != 0.0 {
                 let step = |i: usize| (raw[i].x - raw[i - 1].x).abs();
                 let at = (1..n).fold(1, |b, i| if step(i) > step(b) { i } else { b });
@@ -191,7 +200,7 @@ fn draw(body: &Body, face: FaceId, mut raw: Vec<Point2>) -> (Vec<Point2>, Vec<us
     if runs.len() > 1
         && let Some(period) = period
     {
-        let want_ccw = body.face(face).same_sense;
+        let want_ccw = f.same_sense;
         let count = 3usize.pow(runs.len() as u32 - 1);
         let mut best_score = f64::INFINITY;
         for combo in 0..count {
@@ -516,27 +525,16 @@ pub fn loops_cross_steeply(loops: &[UvLoop], at: &dyn Fn(Point2) -> Point3, band
 }
 
 fn first_cross(loops: &[UvLoop], counts: &dyn Fn((Point2, Point2), (Point2, Point2)) -> bool) -> bool {
-    // only chords whose boxes overlap are compared (`chords::near_pairs`), each once
-    let mut pts: Vec<Point2> = Vec::with_capacity(loops.iter().map(|l| l.points.len()).sum());
-    let mut idx: Vec<Vec<u32>> = Vec::with_capacity(loops.len());
-    for l in loops {
-        let from = pts.len() as u32;
-        pts.extend_from_slice(&l.points);
-        idx.push((from..pts.len() as u32).collect());
-    }
+    // only chords whose boxes overlap are compared (`chords::near_pairs`), each once; a point's
+    // id is its place in its loop (the pairs are told by their ends)
     let opposite = |p: f64, q: f64| (p < 0.0 && q > 0.0) || (p > 0.0 && q < 0.0);
     let orient = forge_math::predicates::orient2d;
-    crate::chords::near_pairs(
-        &pts,
-        &idx,
+    crate::chords::walk(
+        loops.len(),
+        |i| loops[i].points.len(),
+        |i, k| (k as u32, loops[i].points[k]),
         |_, _| {},
-        |s, t| {
-            let (a, b, c, d) = (
-                pts[s.0 as usize],
-                pts[s.1 as usize],
-                pts[t.0 as usize],
-                pts[t.1 as usize],
-            );
+        |_, _, (a, b), (c, d)| {
             if a == c || a == d || b == c || b == d {
                 return Ok(());
             }

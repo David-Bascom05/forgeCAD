@@ -284,6 +284,8 @@ no-output (a test's timing)  @ forge-thermo/src/tests.rs|clock|let t0 = std::tim
 no-output (a test's own check)  @ forge-thermo/src/tests.rs|hash-order|let mut sides: std::collections::HashMap<(u32, u32), Vec<usize>> = Default::default();
 speed (lazy field or constant table)  @ forge-topo/src/body.rs|lazy|Cached(std::sync::OnceLock::new())
 speed (lazy field or constant table)  @ forge-topo/src/body.rs|lazy|pub struct Cached<T>(std::sync::OnceLock<T>);
+no-output (scratch buffers, emptied before they are put back: a walk's answers come from its arguments alone)  @ forge-topo/src/chords.rs|static|static SCRATCH: std::cell::Cell<Scratch> = const { std::cell::Cell::new(Scratch {
+no-output (scratch buffers, emptied before they are put back: a walk's answers come from its arguments alone)  @ forge-topo/src/chords.rs|thread_local|thread_local! {
 no-output (test switch, off unless a test sets it)  @ forge-topo/src/check.rs|atomic|static BOTH: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 no-output (test switch, off unless a test sets it)  @ forge-topo/src/check.rs|lazy|let drawn: Vec<std::cell::OnceCell<Drawn>> = vec![std::cell::OnceCell::new(); body.faces.len()];
 no-output (test switch, off unless a test sets it)  @ forge-topo/src/check.rs|lazy|let fine = std::cell::OnceCell::new();
