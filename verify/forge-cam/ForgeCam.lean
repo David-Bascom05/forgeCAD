@@ -8,3 +8,4 @@ import ForgeCam.Fixture
 import ForgeCam.Pocket
 import ForgeCam.Dist2
 import ForgeCam.Vise
+import ForgeCam.DistArc

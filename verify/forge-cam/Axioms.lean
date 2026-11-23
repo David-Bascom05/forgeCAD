@@ -49,3 +49,8 @@ import ForgeCam
 #print axioms ForgeCam.near_section_cthickening
 #print axioms ForgeCam.near_section_sqrt
 #print axioms ForgeCam.Post.arcFull_agrees
+#print axioms ForgeCam.DistArc.dot_le_max_of_not_inSector
+#print axioms ForgeCam.DistArc.ptArcSq_le
+#print axioms ForgeCam.DistArc.cross_eq_zero_of_arc_min
+#print axioms ForgeCam.DistArc.segArcLo_le
+#print axioms ForgeCam.DistArc.clearFace_segArc

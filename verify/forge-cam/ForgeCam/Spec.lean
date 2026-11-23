@@ -139,7 +139,7 @@ z′ just past the band (dz the band's farthest height from z′): the leftover 
 an exact superset, as G4_upper needs. -/
 theorem near_section_cthickening {P : Set E3} {p q : E3} {g ρ dz : ℝ} (hq : q ∈ P)
     (hz : |p 2 - q 2| ≤ dz) (hxy : (p 0 - q 0) ^ 2 + (p 1 - q 1) ^ 2 ≤ ρ ^ 2)
-    (hρ : 0 ≤ ρ) (hdz : 0 ≤ dz) (hg : ρ ^ 2 + dz ^ 2 ≤ g ^ 2) (hg0 : 0 ≤ g) :
+    (_hρ : 0 ≤ ρ) (_hdz : 0 ≤ dz) (hg : ρ ^ 2 + dz ^ 2 ≤ g ^ 2) (hg0 : 0 ≤ g) :
     p ∈ cthickening g P := by
   refine mem_cthickening_of_dist_le p q g P hq ?_
   rw [dist3]
