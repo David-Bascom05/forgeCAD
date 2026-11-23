@@ -243,7 +243,7 @@ def run_cmd(a):
     if opt("--limit"):
         ids = ids[: int(opt("--limit"))]
     todo = [i for i in ids if i not in done]
-    json.dump({"corpus": a[0], "shard": k, "of": S, "ids": len(ids)}, open(os.path.join(run, "shard.json"), "w"))
+    json.dump({"corpus": a[0], "shard": k, "of": S, "ids": len(ids), "tools": HERE, "exe": EXE}, open(os.path.join(run, "shard.json"), "w"))
     tmp = tempfile.mkdtemp(prefix="scale-", dir=opt("--tmp"))
     log = open(path, "a")
     jobs = min(int(opt("--jobs", "4")), 4)
