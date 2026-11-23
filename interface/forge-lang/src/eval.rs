@@ -1970,16 +1970,8 @@ impl<'s> Eval<'s> {
                         max: 1,
                     });
                 };
-                let ev = self.expr(&a.value)?;
-                let Value::Ent(e) = ev else {
-                    return Err(Error::WrongType {
-                        span: a.value.span,
-                        what: "side(entity)",
-                        want: Ty::Entity,
-                        found: ev.ty(),
-                    });
-                };
-                return crate::builtins::side(self, feat, &e, span);
+                let v = self.expr(&a.value)?;
+                return crate::builtins::side_of(self, feat, v, span);
             }
         }
         let fv = self.expr(f)?;

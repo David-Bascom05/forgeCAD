@@ -129,6 +129,7 @@ fn op(f: &Feature) -> Option<Combine> {
         Feature::Edit(Edit::Thicken { op, .. }) => Some(*op),
         Feature::Import(t) => Some(t.op),
         Feature::Member(_) => Some(Combine::New),
+        Feature::Regions(r) => Some(r.op),
         _ => crate::swept::op(f),
     }
 }

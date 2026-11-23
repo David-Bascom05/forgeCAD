@@ -316,7 +316,9 @@ class Prog:
             if getattr(st, "along", None):
                 # the walls slanted along it, each end square to the normal
                 more += f", along: {self.dir(st.along)}"
-            self.out.append(f"{i} = {call}({sk}, {x}{more}{new}{self.opts(st, made)})")
+            # a row's own regions (a text's glyphs: `sk.r0`), or the sketch's one
+            prof = f"{sk}.{st.member}" if getattr(st, "member", None) else sk
+            self.out.append(f"{i} = {call}({prof}, {x}{more}{new}{self.opts(st, made)})")
             if made:
                 self.cur = i
         elif k == "revolve":
