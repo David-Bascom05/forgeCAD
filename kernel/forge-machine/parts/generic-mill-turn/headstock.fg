@@ -1,0 +1,10 @@
+# generic-mill-turn headstock (main spindle axis z, chuck face z = 0).
+# frame: the machine's base frame at the home pose.
+shared S = 440
+shared z0 = -450
+shared H = 360
+
+sketch plan(on: offset(xy, z0)) {
+  outline = rect(center: (0, 0), size: (S, S))
+}
+body = extrude(plan, H)
