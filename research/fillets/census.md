@@ -8,18 +8,24 @@ Kernel as of 1a1f132 (its kernel/ differs from fe8e0f1b by clippy edits only). N
 
 ## Headline
 
-Labels per fillet feature. **Final** is after the OCCT witnesses; first-pass labels are in brackets
-where they differ.
+Labels per fillet feature, 2026-11-23: FreeCAD, WHUCAD and CADFS relabelled with the convex rule
+mended (fault 2, below; label_body at fcc5b59, 7112559's stacks for 00154651). **Final** is after the
+witnesses (OCCT's classifier, OCCT's own fillet, the source STEP); the oracle's own label before
+them is in brackets where it differs. The pipe set is unchanged: its rounds are all concave.
 
 | set | fillets | right | wrong | unsure | refused | unjudged | invalid |
 |---|---|---|---|---|---|---|---|
 | pipe set (certified obstacle) | 200 | 161 (147) | 8 (17) | 0 (5) | 31 | 0 | 0 |
-| FreeCAD library | 576 | 507 (474) | 0 (33) | 0 | 45 | 24 | 0 |
-| WHUCAD, 1 in 7 of the hand-drawn parts | 381 | 293 (281) | 0 (20) | 8 (0) | 50 | 29 | 1 |
-| CADFS pilot, 1 in 200 | 326 | 246 (226) | 0 (23) | 3 (0) | 42 | 31 (30) | 4 |
+| FreeCAD library | 576 | 507 | 0 | 0 | 45 | 24 | 0 |
+| WHUCAD, 1 in 7 of the hand-drawn parts | 381 | 301 (300) | 0 (1) | 0 | 50 | 29 | 1 |
+| CADFS pilot, 1 in 200 | 326 | 249 (246) | 0 (3) | 0 | 43 | 30 | 4 |
 
-- **Wrong** that survives: the pipe set's 8 fillets only (below). On FreeCAD, WHUCAD and CADFS every
-  first-pass wrong is the oracle's, or has no reference to settle it (unsure).
+The first pass (2026-11-22, the old convex rule), for comparison: FreeCAD 474 right and 33 wrong,
+WHUCAD 281 and 20, CADFS 226 and 23, all those wrongs the oracle's. With the rule mended the
+oracle's own wrongs fall to 0, 1 and 3, and the witnesses overrule each of those 4 (below).
+
+- **Wrong** that survives: the pipe set's 8 fillets only (below). On FreeCAD, WHUCAD and CADFS no
+  fillet is wrong and none is unsure.
 - **Unjudged**: the fillet rounds convex and concave edges together, and label_body judges one kind at a time.
 - **Refused**: the kernel refused the fillet. Causes below.
 
@@ -53,6 +59,28 @@ where they differ.
    valid and equal to ours in volume to 1e-15 on 32 of FreeCAD's 33, 1.7e-8 on the 33rd. It puts none of
    the counted points on the oracle's side. On WHUCAD it is equal (to 2.2e-7 or better) on 12 of the 20.
 
+### Fault 2 mended (fcc5b59)
+
+label_body's convex rule now lets the ball out of the body: a witness is clear when it lies in the
+body (the old rule), or when it lies wholly on the material side of the surfaces of the asked-for
+edge nearest the point (and the picked edges meeting it at a vertex) and crosses no face whose
+normal at its nearest point looks the way a contact's does. It may leave through the back of a
+wall, not through the faces beside the ones it rests on. Farther than 3r from every picked edge the
+body is kept. Rerun on the three sets (856 parts):
+- every first-pass wrong of FreeCAD (33) and all but one of WHUCAD's (19 of 20) and CADFS's (21 of
+  23) are now right; the unsure ones are gone with them;
+- 4 fillets the oracle still calls wrong, each overruled: WHUCAD 100000603 f8 and CADFS 00807159
+  f10 are concave (the closing rule, unchanged; OCCT's fillet is ours to 1e-16 and 1.8e-8), CADFS
+  00033108 f21 matches Parasolid's STEP at 1e-4 (OCCT refuses it), CADFS 00740860 f6 is new;
+- **one regression: CADFS 00740860 f6** (convex, r 0.127), right under the old rule and wrong (35
+  under) under the new one. The kernel is right: OCCT's own fillet equals it to 4e-16 and the part
+  matches Parasolid's STEP to 1e-14. The new rule admits a ball there that is not clear: it is too
+  lenient on that part, and the case is the first to look at when the spec's obstacle replaces it.
+- sensitivity: judging real rounds against r ±10% on five parts, the new rule flags the same 12 of
+  14 convex fillets as the old, with the error's sign now right (`R_SCALE`).
+- concave rounds still use the closing of the body's air; by the spec session's P3 framing that may
+  over-constrain them too (100000603, 00807159).
+
 ## Wrong, by cause
 
 **Pipe set, 8 (kernel), all concave rounds, all `over` against the certified closing**: p00010 p00029 p00072 p00111 p00124 p00133
@@ -64,6 +92,9 @@ p00111 −9.2e-6 with OCCT's result invalid. p00188 has no OCCT reference: its S
 for OCCT, and it has both convexities. The kernel-obstacle label (label_body) finds only p00010's and
 p00164's disagreements: the other six show only against the certified obstacle, with its denser
 sampling. Where on each part the excess lies is not yet sorted.
+
+(The FreeCAD, WHUCAD and CADFS paragraphs below are the first pass's, under the old convex rule;
+the rerun above supersedes their counts.)
 
 **FreeCAD, 0.** All 33 first-pass wrongs (all convex, all `over`) are the oracle's (fault 2).
 
@@ -81,7 +112,8 @@ README lists as open), 00273783 (OCCT +3.8e-4) and 00918074 (OCCT −1.8e-6). Th
 refusal in all three, so there is no STEP to compare. The 4 invalid fillets (00153157 f10, 00731664 f64,
 00984443 f10 and f11) agree with the oracle at every judged point, and the parts match the STEP at
 1e-4. They fail only the topology check, so the fault is in the kernel's topology, not its shape.
-00154651 overflows label_body's stack (exit 134). Its one fillet counts as unjudged.
+00154651 overflowed label_body's 2 MiB worker stack (exit 134) and counted as unjudged; with 7112559's
+64 MiB stacks it is refused (Crossed), as the rerun counts it.
 
 ## Refused, by cause (the kernel's error)
 
@@ -142,8 +174,9 @@ Match means volume and area within the tolerance (README: the pilot's 1e-3 hid a
 
 ## What step 1 should take from this
 
-- The oracle's convex rule must not demand that the ball fit inside the body. It should ask what a
-  ball touching both faces sweeps, as OCCT and Parasolid do. Until then, every thin wall reads as wrong.
+- The oracle's convex rule must not demand that the ball fit inside the body (mended in fcc5b59, with
+  a heuristic for which neighbouring faces stop the ball, to be replaced by the spec's obstacle;
+  00740860 shows it too lenient once).
 - `Index` is not fit to be the oracle's classifier near new faces. A classifier with a certificate
   (or OCCT's, as here) is needed before a label counts.
 - The only kernel wrongs found are the pipe set's 8 concave rounds, over the certified closing. They are 1.6e-7 to
