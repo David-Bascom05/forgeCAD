@@ -3082,7 +3082,9 @@ fn orient2(a: &HPoint, b: &HPoint, c: &HPoint, ax: (usize, usize)) -> i32 {
 /// The sign of `(u − v) · (q − v)` in the projection `ax`, exactly.
 fn dot2(v: &HPoint, u: &HPoint, q: &HPoint, ax: (usize, usize)) -> i32 {
     let comp = |p: &HPoint, k: usize| p.p.get(k).mul(&v.w).sub(&v.p.get(k).mul(&p.w));
-    let d = comp(u, ax.0).mul(&comp(q, ax.0)).add(&comp(u, ax.1).mul(&comp(q, ax.1)));
+    let d = comp(u, ax.0)
+        .mul(&comp(q, ax.0))
+        .add(&comp(u, ax.1).mul(&comp(q, ax.1)));
     d.signum() * u.w.signum() * q.w.signum()
 }
 
@@ -3425,7 +3427,13 @@ fn write(w: &Wr, out: Option<&core::Body>) -> Option<Plan> {
         PK::Cell(c) => c,
         PK::Orig(v) => ncell + origs.binary_search(&v).expect("a point of the stitch") as u32,
     };
-    let pk_of = |i: u32| if i < ncell { PK::Cell(i) } else { PK::Orig(origs[(i - ncell) as usize]) };
+    let pk_of = |i: u32| {
+        if i < ncell {
+            PK::Cell(i)
+        } else {
+            PK::Orig(origs[(i - ncell) as usize])
+        }
+    };
     let mut groups: Vec<Grp> = pools.keys().copied().collect();
     groups.extend(core_grp.iter().copied());
     groups.extend(kept.iter().map(|x| x.grp));
@@ -3489,9 +3497,17 @@ fn write(w: &Wr, out: Option<&core::Body>) -> Option<Plan> {
     // its segment ends clockwise about the group's outward normal, from the first one's way
     // (ends in one direction: the ways out first)
     let turns = {
-        let mut out_at: Vec<(u32, u32, u32)> = ssegs.iter().enumerate().map(|(i, x)| (x.grp, x.a, i as u32)).collect();
+        let mut out_at: Vec<(u32, u32, u32)> = ssegs
+            .iter()
+            .enumerate()
+            .map(|(i, x)| (x.grp, x.a, i as u32))
+            .collect();
         out_at.sort_unstable();
-        let mut in_at: Vec<(u32, u32, u32)> = ssegs.iter().enumerate().map(|(i, x)| (x.grp, x.b, i as u32)).collect();
+        let mut in_at: Vec<(u32, u32, u32)> = ssegs
+            .iter()
+            .enumerate()
+            .map(|(i, x)| (x.grp, x.b, i as u32))
+            .collect();
         in_at.sort_unstable();
         let mut keys: Vec<(u32, u32)> = Vec::new();
         let mut k = 0;
@@ -3505,7 +3521,7 @@ fn write(w: &Wr, out: Option<&core::Body>) -> Option<Plan> {
             }
             k = j;
         }
-        let mut ends = forge_bool_core::v2::Csr {
+        let mut ends = forge_bool_core::inc::Csr {
             start: vec![0],
             ids: Vec::new(),
         };
@@ -3575,11 +3591,19 @@ fn write(w: &Wr, out: Option<&core::Body>) -> Option<Plan> {
         .map(|lp| {
             let mut pf = Vec::new();
             lp_points(w, &kept, lp, &mut pf);
-            Ld { pf, ph: std::cell::OnceCell::new() }
+            Ld {
+                pf,
+                ph: std::cell::OnceCell::new(),
+            }
         })
         .collect();
-    let lax: Vec<(usize, usize)> = lgrp.iter().map(|&g| axes_of(w.normal(groups[g as usize]))).collect();
-    let outer: Vec<bool> = (0..loops.len()).map(|l| loop_sense(w, &kept, &loops[l], &lds[l], lax[l]) > 0).collect();
+    let lax: Vec<(usize, usize)> = lgrp
+        .iter()
+        .map(|&g| axes_of(w.normal(groups[g as usize])))
+        .collect();
+    let outer: Vec<bool> = (0..loops.len())
+        .map(|l| loop_sense(w, &kept, &loops[l], &lds[l], lax[l]) > 0)
+        .collect();
     let mut holder: Vec<u32> = vec![forge_bool_core::stitch::NONE; loops.len()];
     for h in 0..loops.len() {
         if outer[h] {
@@ -3602,7 +3626,11 @@ fn write(w: &Wr, out: Option<&core::Body>) -> Option<Plan> {
     let mut slots: Vec<Option<Lp>> = loops.into_iter().map(Some).collect();
     let mut fins: Vec<Fin> = Vec::with_capacity(faces.len());
     for f in faces {
-        let fl: Vec<Lp> = f.loops.iter().map(|&l| slots[l as usize].take().expect("a loop once")).collect();
+        let fl: Vec<Lp> = f
+            .loops
+            .iter()
+            .map(|&l| slots[l as usize].take().expect("a loop once"))
+            .collect();
         fins.push(Fin {
             grp: groups[f.grp as usize],
             loops: fl,

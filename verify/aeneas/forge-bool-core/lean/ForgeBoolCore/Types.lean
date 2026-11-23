@@ -65,13 +65,13 @@ structure inc.SecCsr where
   sec : alloc.vec.Vec inc.Sector
 
 /-- [forge_bool_core::BodyId]
-    Source: 'kernel/forge-bool-core/src/lib.rs', lines 48:0-48:27
+    Source: 'kernel/forge-bool-core/src/lib.rs', lines 49:0-49:27
     Visibility: public -/
 @[reducible]
 def BodyId := Std.U32
 
 /-- [forge_bool_core::FaceId]
-    Source: 'kernel/forge-bool-core/src/lib.rs', lines 44:0-44:27
+    Source: 'kernel/forge-bool-core/src/lib.rs', lines 45:0-45:27
     Visibility: public -/
 @[reducible]
 def FaceId := Std.U32
@@ -100,7 +100,7 @@ structure inc.MetricLedger where
   enclosed : alloc.vec.Vec inc.RoomId
 
 /-- [forge_bool_core::Sgn]
-    Source: 'kernel/forge-bool-core/src/lib.rs', lines 32:0-36:1
+    Source: 'kernel/forge-bool-core/src/lib.rs', lines 33:0-37:1
     Visibility: public -/
 @[discriminant isize]
 inductive Sgn where
@@ -171,7 +171,7 @@ structure inc.Assembled where
   orient : alloc.vec.Vec Sgn
 
 /-- [forge_bool_core::Rule]
-    Source: 'kernel/forge-bool-core/src/lib.rs', lines 85:0-94:1
+    Source: 'kernel/forge-bool-core/src/lib.rs', lines 86:0-95:1
     Visibility: public -/
 @[discriminant isize]
 inductive Rule where
@@ -188,13 +188,13 @@ structure index.Index where
   hs : alloc.vec.Vec (Std.U64 × Std.U32)
 
 /-- [forge_bool_core::CellId]
-    Source: 'kernel/forge-bool-core/src/lib.rs', lines 40:0-40:27
+    Source: 'kernel/forge-bool-core/src/lib.rs', lines 41:0-41:27
     Visibility: public -/
 @[reducible]
 def CellId := Std.U32
 
 /-- [forge_bool_core::Ledger]
-    Source: 'kernel/forge-bool-core/src/lib.rs', lines 53:0-72:1
+    Source: 'kernel/forge-bool-core/src/lib.rs', lines 54:0-73:1
     Visibility: public -/
 structure Ledger where
   nb : Std.U32
@@ -207,14 +207,14 @@ structure Ledger where
   verts : alloc.vec.Vec CellId
 
 /-- [forge_bool_core::MetricLedger]
-    Source: 'kernel/forge-bool-core/src/lib.rs', lines 76:0-81:1
+    Source: 'kernel/forge-bool-core/src/lib.rs', lines 77:0-82:1
     Visibility: public -/
 structure MetricLedger where
   thin : alloc.vec.Vec CellId
   enclosed : alloc.vec.Vec CellId
 
 /-- [forge_bool_core::OutFace]
-    Source: 'kernel/forge-bool-core/src/lib.rs', lines 98:0-107:1
+    Source: 'kernel/forge-bool-core/src/lib.rs', lines 99:0-108:1
     Visibility: public -/
 structure OutFace where
   facets : alloc.vec.Vec CellId
@@ -223,14 +223,14 @@ structure OutFace where
   origin : FaceId
 
 /-- [forge_bool_core::OutEdge]
-    Source: 'kernel/forge-bool-core/src/lib.rs', lines 111:0-117:1
+    Source: 'kernel/forge-bool-core/src/lib.rs', lines 112:0-118:1
     Visibility: public -/
 structure OutEdge where
   cells : alloc.vec.Vec CellId
   faces : alloc.vec.Vec CellId
 
 /-- [forge_bool_core::Body]
-    Source: 'kernel/forge-bool-core/src/lib.rs', lines 121:0-126:1
+    Source: 'kernel/forge-bool-core/src/lib.rs', lines 122:0-127:1
     Visibility: public -/
 structure Body where
   faces : alloc.vec.Vec OutFace
@@ -238,7 +238,7 @@ structure Body where
   verts : alloc.vec.Vec CellId
 
 /-- [forge_bool_core::Refusal]
-    Source: 'kernel/forge-bool-core/src/lib.rs', lines 130:0-135:1
+    Source: 'kernel/forge-bool-core/src/lib.rs', lines 131:0-136:1
     Visibility: public -/
 @[discriminant isize]
 inductive Refusal where
@@ -247,7 +247,7 @@ inductive Refusal where
 | ZeroThickness : CellId → Refusal
 
 /-- [forge_bool_core::Outcome]
-    Source: 'kernel/forge-bool-core/src/lib.rs', lines 139:0-143:1
+    Source: 'kernel/forge-bool-core/src/lib.rs', lines 140:0-144:1
     Visibility: public -/
 @[discriminant isize]
 inductive Outcome where
@@ -256,13 +256,13 @@ inductive Outcome where
 | Refused : Refusal → Outcome
 
 /-- [forge_bool_core::Ext]
-    Source: 'kernel/forge-bool-core/src/lib.rs', lines 207:0-210:1 -/
+    Source: 'kernel/forge-bool-core/src/lib.rs', lines 208:0-211:1 -/
 structure Ext where
   index : index.Index
   extra : alloc.vec.Vec (alloc.vec.Vec Sgn)
 
 /-- [forge_bool_core::Split]
-    Source: 'kernel/forge-bool-core/src/lib.rs', lines 287:0-301:1 -/
+    Source: 'kernel/forge-bool-core/src/lib.rs', lines 288:0-302:1 -/
 structure Split where
   facets : alloc.vec.Vec Std.U32
   plus : alloc.vec.Vec Std.U32
@@ -273,10 +273,46 @@ structure Split where
   piece_of : alloc.vec.Vec (alloc.vec.Vec Bool)
 
 /-- [forge_bool_core::Assembled]
-    Source: 'kernel/forge-bool-core/src/lib.rs', lines 506:0-513:1 -/
+    Source: 'kernel/forge-bool-core/src/lib.rs', lines 507:0-514:1 -/
 structure Assembled where
   result : alloc.vec.Vec Std.U32
   orient : alloc.vec.Vec Sgn
   rpos : alloc.vec.Vec Std.U32
+
+/-- [forge_bool_core::stitch::Side]
+    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 20:0-26:1
+    Visibility: public -/
+structure stitch.Side where
+  face : Std.U32
+  u : Std.U32
+  v : Std.U32
+  e : Std.U32
+  wall : Bool
+
+/-- [forge_bool_core::stitch::Seg]
+    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 32:0-39:1
+    Visibility: public -/
+structure stitch.Seg where
+  a : Std.U32
+  b : Std.U32
+  grp : Std.U32
+  src : Std.U32
+  keep : Std.U32
+  cf : Std.U32
+
+/-- [forge_bool_core::stitch::Turns]
+    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 91:0-94:1
+    Visibility: public -/
+structure stitch.Turns where
+  keys : alloc.vec.Vec (Std.U32 × Std.U32)
+  ends : inc.Csr
+
+/-- [forge_bool_core::stitch::FaceOut]
+    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 230:0-234:1
+    Visibility: public -/
+structure stitch.FaceOut where
+  grp : Std.U32
+  src : Std.U32
+  loops : alloc.vec.Vec Std.U32
 
 end forge_bool_core

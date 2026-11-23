@@ -8,8 +8,8 @@
 //! In the style of the rest of the crate (for Aeneas): plain loops, no closures or iterators, no
 //! `Ordering`, no maps (sorted lists and binary search), no floats, no return inside a loop.
 
+use crate::inc::Csr;
 use crate::sort::sort_triples;
-use crate::v2::Csr;
 
 /// No id.
 pub const NONE: u32 = u32::MAX;
@@ -105,7 +105,11 @@ fn turn_row(t: &Turns, grp: u32, p: u32) -> u32 {
             hi = mid;
         }
     }
-    if lo < t.keys.len() && t.keys[lo] == (grp, p) { lo as u32 } else { NONE }
+    if lo < t.keys.len() && t.keys[lo] == (grp, p) {
+        lo as u32
+    } else {
+        NONE
+    }
 }
 
 /// The segments by start point within their group: (grp, a, segment) sorted.
@@ -158,7 +162,10 @@ fn next_seg(segs: &[Seg], starts: &[(u32, u32, u32)], used: &[bool], turns: &Tur
     if r == NONE {
         return NONE;
     }
-    let (s, e) = (turns.ends.start[r as usize] as usize, turns.ends.start[r as usize + 1] as usize);
+    let (s, e) = (
+        turns.ends.start[r as usize] as usize,
+        turns.ends.start[r as usize + 1] as usize,
+    );
     let len = e - s;
     // the arrival's place in the row
     let mut pos = len;
@@ -199,7 +206,9 @@ pub fn chain(segs: &[Seg], turns: &Turns) -> Option<Vec<Vec<u32>>> {
         if !used[s0] {
             used[s0] = true;
             let start = segs[s0].a;
-            let mut lp: Vec<u32> = vec![s0 as u32];
+            // (no `vec![x]`: it builds through `MaybeUninit`, which Aeneas cannot translate)
+            let mut lp: Vec<u32> = Vec::new();
+            lp.push(s0 as u32);
             let mut cur = s0 as u32;
             let mut steps = 0;
             while ok && segs[cur as usize].b != start {
@@ -245,10 +254,12 @@ pub fn faces(grp: &[u32], src: &[u32], outer: &[bool], holder: &[u32]) -> Option
     while l < n {
         if outer[l] {
             face_of[l] = out.len() as u32;
+            let mut loops: Vec<u32> = Vec::new();
+            loops.push(l as u32);
             out.push(FaceOut {
                 grp: grp[l],
                 src: src[l],
-                loops: vec![l as u32],
+                loops,
             });
         }
         l += 1;
@@ -317,11 +328,21 @@ mod tests {
         ];
         let segs = cancel(&sides, &[7], &[3]);
         assert_eq!(segs.len(), 4);
-        assert!(segs.iter().all(|s| s.grp == 7 && s.src == 3 && s.cf == 0 && s.keep == NONE));
+        assert!(
+            segs.iter()
+                .all(|s| s.grp == 7 && s.src == 3 && s.cf == 0 && s.keep == NONE)
+        );
         let loops = chain(&segs, &Turns::default()).expect("closes");
         assert_eq!(loops, vec![vec![0, 1, 2, 3]]);
         let fs = faces(&[7], &[3], &[true], &[NONE]).expect("one face");
-        assert_eq!(fs, vec![FaceOut { grp: 7, src: 3, loops: vec![0] }]);
+        assert_eq!(
+            fs,
+            vec![FaceOut {
+                grp: 7,
+                src: 3,
+                loops: vec![0]
+            }]
+        );
     }
 
     #[test]
@@ -345,7 +366,16 @@ mod tests {
             cf: NONE,
         };
         // the loop starts at point 1, so it meets point 0 mid-way: 1 2 3 0, then 0 4 5 6 0 or 0 1
-        let segs = vec![mk(1, 2), mk(2, 3), mk(3, 0), mk(0, 1), mk(0, 4), mk(4, 5), mk(5, 6), mk(6, 0)];
+        let segs = vec![
+            mk(1, 2),
+            mk(2, 3),
+            mk(3, 0),
+            mk(0, 1),
+            mk(0, 4),
+            mk(4, 5),
+            mk(5, 6),
+            mk(6, 0),
+        ];
         // at point 0, clockwise: the arrival of 2, the way out by 4, the arrival of 7, the way out
         // by 3
         let turns = Turns {
@@ -366,7 +396,10 @@ mod tests {
                 ids: vec![2 * 2 + 1, 2 * 3, 2 * 7 + 1, 2 * 4],
             },
         };
-        assert_eq!(chain(&segs, &turns).expect("closes"), vec![vec![0, 1, 2, 3], vec![4, 5, 6, 7]]);
+        assert_eq!(
+            chain(&segs, &turns).expect("closes"),
+            vec![vec![0, 1, 2, 3], vec![4, 5, 6, 7]]
+        );
     }
 
     #[test]
@@ -376,8 +409,16 @@ mod tests {
         assert_eq!(
             fs,
             vec![
-                FaceOut { grp: 0, src: 1, loops: vec![0, 2] },
-                FaceOut { grp: 0, src: 2, loops: vec![1] },
+                FaceOut {
+                    grp: 0,
+                    src: 1,
+                    loops: vec![0, 2]
+                },
+                FaceOut {
+                    grp: 0,
+                    src: 2,
+                    loops: vec![1]
+                },
             ]
         );
         assert_eq!(faces(&[0, 0], &[0, 0], &[true, false], &[NONE, NONE]), None);
