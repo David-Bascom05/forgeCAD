@@ -523,6 +523,31 @@ impl<'a> Index<'a> {
     /// tolerance of only those it is not on the boundary but on the side of it the curve went
     /// (a stretch shorter than two tolerances, between two crossings, is still decided).
     pub fn point_in_face_past(&self, f: FaceId, p: Point3, crossed: &[forge_topo::EdgeId]) -> Where {
+        self.place(f, p, crossed, |_, _, _| None)
+    }
+
+    /// As `point_in_face`, with the nearest-edge decision handed to `near` first: where `p` is
+    /// within the edge's reach (the only place `near` is called), `near(c, t, d)` with the boundary
+    /// use `c`, the parameter `t` of the edge's nearest point and the f64 distance `d` may answer
+    /// for the caller's exact point (`Some`), or leave today's rule to decide (`None`).
+    #[inline(never)]
+    pub fn point_in_face_at(
+        &self,
+        f: FaceId,
+        p: Point3,
+        near: &dyn Fn(forge_topo::CoedgeId, f64, f64) -> Option<Where>,
+    ) -> Where {
+        self.place(f, p, &[], near)
+    }
+
+    #[inline(always)]
+    fn place(
+        &self,
+        f: FaceId,
+        p: Point3,
+        crossed: &[forge_topo::EdgeId],
+        near_answer: impl Fn(forge_topo::CoedgeId, f64, f64) -> Option<Where>,
+    ) -> Where {
         let body = self.body;
         let face = body.face(f);
         let info = self.info(f);
@@ -597,6 +622,11 @@ impl<'a> Index<'a> {
             decided!(if d <= crate::decisions::BAND && !(d <= reach && past()) {
                 crate::boolean::log::on_edge_at(body, co.edge, p, d, reach, "point_in_face: nearest edge");
             });
+            if d <= reach
+                && let Some(w) = near_answer(c, t, d)
+            {
+                return w;
+            }
             if d <= reach && !past() {
                 return Where::On;
             }
