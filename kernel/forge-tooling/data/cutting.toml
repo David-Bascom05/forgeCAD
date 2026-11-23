@@ -1,0 +1,75 @@
+# Cutting data per ISO 513 group: our own round mid-range numbers for general carbide and HSS
+# end milling, restated from the public ranges tool makers' handbooks give. A starting point:
+# verify with the tool maker for the tool and the material.
+
+[[group]]
+group = "P"
+name = "steels"
+vc_carbide = 180
+vc_hss = 30
+fz_d1 = 0.008
+fz_d20 = 0.08
+kc1_1 = 1700
+mc = 0.25
+source = "forgecad generic mid-range, restated from public handbook ranges"
+note = "verify with the tool maker"
+
+[[group]]
+group = "M"
+name = "stainless steels"
+vc_carbide = 110
+vc_hss = 15
+fz_d1 = 0.006
+fz_d20 = 0.06
+kc1_1 = 2100
+mc = 0.21
+source = "forgecad generic mid-range, restated from public handbook ranges"
+note = "verify with the tool maker"
+
+[[group]]
+group = "K"
+name = "cast irons"
+vc_carbide = 160
+vc_hss = 25
+fz_d1 = 0.01
+fz_d20 = 0.1
+kc1_1 = 1100
+mc = 0.28
+source = "forgecad generic mid-range, restated from public handbook ranges"
+note = "verify with the tool maker"
+
+[[group]]
+group = "N"
+name = "non-ferrous (aluminium, copper alloys)"
+vc_carbide = 400
+vc_hss = 90
+fz_d1 = 0.01
+fz_d20 = 0.12
+kc1_1 = 700
+mc = 0.25
+source = "forgecad generic mid-range, restated from public handbook ranges"
+note = "verify with the tool maker"
+
+[[group]]
+group = "S"
+name = "heat-resistant alloys and titanium"
+vc_carbide = 45
+vc_hss = 8
+fz_d1 = 0.005
+fz_d20 = 0.05
+kc1_1 = 2500
+mc = 0.24
+source = "forgecad generic mid-range, restated from public handbook ranges"
+note = "verify with the tool maker"
+
+[[group]]
+group = "H"
+name = "hardened steels"
+vc_carbide = 60
+vc_hss = 5
+fz_d1 = 0.004
+fz_d20 = 0.04
+kc1_1 = 3400
+mc = 0.2
+source = "forgecad generic mid-range, restated from public handbook ranges"
+note = "verify with the tool maker"

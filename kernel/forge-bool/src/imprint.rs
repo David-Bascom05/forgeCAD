@@ -25,8 +25,10 @@ use forge_topo::{Body, EdgeId, FaceId, LoopId, Name, Unlinked, VertexId};
 /// general boolean.
 const CLEAR: f64 = 10.0 * tol::LINEAR;
 
-/// Which boolean runs: FORGE_IMPRINT=on takes this path where it can, =check also runs the
-/// general boolean and panics where they differ. Off by default.
+/// Which boolean runs. Only with the `imprint_column` feature (off in every shipped build) is it
+/// chosen at run time: FORGE_IMPRINT=on takes this path where it can, =check also runs the
+/// general boolean and panics where they differ. Without the feature it is `Off`, a constant:
+/// the shipped boolean reads no switch (old-path-statements.md §G, G8: a hidden input).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Mode {
     Off,
@@ -34,8 +36,10 @@ pub enum Mode {
     Check,
 }
 
+#[cfg(feature = "imprint_column")]
 static MODE: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(u8::MAX);
 
+#[cfg(feature = "imprint_column")]
 pub fn mode() -> Mode {
     let m = MODE.load(std::sync::atomic::Ordering::Relaxed);
     let m = if m == u8::MAX {
@@ -52,7 +56,15 @@ pub fn mode() -> Mode {
     [Mode::Off, Mode::On, Mode::Check][m as usize]
 }
 
+/// The shipped boolean's mode: always `Off`.
+#[cfg(not(feature = "imprint_column"))]
+#[inline(always)]
+pub const fn mode() -> Mode {
+    Mode::Off
+}
+
 /// Sets the mode for the whole process (tests).
+#[cfg(feature = "imprint_column")]
 pub fn set_mode(m: Mode) {
     MODE.store(m as u8, std::sync::atomic::Ordering::Relaxed);
 }
