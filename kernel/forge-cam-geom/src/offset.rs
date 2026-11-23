@@ -264,7 +264,7 @@ fn unit_normal(cx: &mut Ctx, e: &Elem, at_end: bool, r: R) -> Pt {
 }
 
 /// The piece split at the given points (on its curve, within its span).
-fn split(cx: &mut Ctx, pc: &Piece, pts: &mut Vec<Pt>) -> Vec<Piece> {
+pub(crate) fn split(cx: &mut Ctx, pc: &Piece, pts: &mut Vec<Pt>) -> Vec<Piece> {
     let mut out = Vec::new();
     if pc.full {
         if pts.is_empty() {
@@ -410,7 +410,7 @@ fn duplicate(cx: &mut Ctx, kept: &[Piece], sp: &Piece) -> bool {
 }
 
 /// Links kept pieces into closed loops.
-fn link(cx: &mut Ctx, kept: &[Piece]) -> Result<Vec<OLoop>, OffsetError> {
+pub(crate) fn link(cx: &mut Ctx, kept: &[Piece]) -> Result<Vec<OLoop>, OffsetError> {
     let n = kept.len();
     let mut used = vec![false; n];
     // the f64 of each exact end, computed once per piece end and shared with the next piece

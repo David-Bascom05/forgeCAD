@@ -80,6 +80,8 @@ struct SetupIn {
     tol: f64,
     clearance: f64,
     heights: Heights,
+    /// The in-process stock as the ops so far left it.
+    ip: forge_cam::stock::InProcess,
 }
 
 /// One operation, as made and as checked.
@@ -102,6 +104,8 @@ pub struct OpOut {
     pub time_s: f64,
     pub least: f64,
     pub plan: Vec<String>,
+    /// The stock this op starts from (G2, G3 are checked against it).
+    stock_before: Option<forge_cam::stock::InProcess>,
 }
 
 pub struct ProgramOut {
@@ -281,7 +285,11 @@ pub fn run(src: &str, dir: &Path) -> Cam {
                         }
                     }
                     let a = cam.named(args, &local)?;
+                    let t0 = std::time::Instant::now();
                     let v = cam.call(name, fname, &a, dir)?;
+                    if std::env::var("FORGE_CAM_TIME").is_ok() {
+                        eprintln!("{name}: {:?}", t0.elapsed());
+                    }
                     env.insert(name.clone(), v);
                 }
                 StmtKind::Expr(_) => {}
@@ -380,10 +388,11 @@ impl Cam {
                     tol: get_num(a, "tol", Some(0.01))?,
                     clearance: get_num(a, "clearance", Some(0.1))?,
                     heights: Heights { clear, retract },
+                    ip: forge_cam::stock::InProcess::new(stock.min, stock.max),
                 });
                 Ok(V::Setup(self.setups.len() - 1))
             }
-            "facing" | "contour" | "pocket" | "drill" => self.op(name, f, a),
+            "facing" | "contour" | "pocket" | "clear" | "drill" => self.op(name, f, a),
             "program" => {
                 let su: Vec<usize> = match a.get("#0") {
                     Some(V::Setup(i)) => vec![*i],
@@ -425,6 +434,7 @@ impl Cam {
                 "facing" => "facing",
                 "contour" => "contour",
                 "pocket" => "pocket",
+                "clear" => "clear",
                 _ => "drill",
             },
             setup: su,
@@ -443,9 +453,11 @@ impl Cam {
             time_s: 0.0,
             least: f64::INFINITY,
             plan: vec![],
+            stock_before: Some(s.ip.clone()),
         };
+        let mut voids: Vec<(Option<Region>, f64)> = vec![];
         let paths: Result<Vec<OpPath>, String> = match kind {
-            "drill" => self.plan_holes(su, a, &mut out),
+            "drill" => self.plan_holes(su, a, &mut out, &mut voids),
             _ => {
                 let ti = match a.get("tool") {
                     Some(V::Tool(i)) => *i,
@@ -469,7 +481,35 @@ impl Cam {
                 match kind {
                     "facing" => {
                         let z = get_num(a, "to", Some(part.bbox.1[2]))?;
-                        Ok(vec![ops::facing(&s.stock, t, ti, h, s.stock.max[2], z, step, (vf, vp))])
+                        let p = ops::facing(&s.stock, t, ti, h, s.stock.max[2], z, step, (vf, vp));
+                        voids.push((None, z));
+                        Ok(vec![p])
+                    }
+                    "clear" => {
+                        // everything between the stock's outline and the part's section, from a
+                        // height down to another: a pocket with the part as islands
+                        let top = get_num(a, "from", Some(s.stock.max[2]))?;
+                        let bottom = get_num(a, "to", None)?;
+                        let zmid = 0.5 * (top + bottom);
+                        let r = 0.5 * d;
+                        let sec = forge_cam::section::section(&part.faces, zmid, 1e-5).map_err(|e| format!("the part's section at z = {zmid}: {e:?}"))?;
+                        let islands = outer_or_inner(&sec, true)?;
+                        let g = r;
+                        let (x0, y0, x1, y1) = (s.stock.min[0] - g, s.stock.min[1] - g, s.stock.max[0] + g, s.stock.max[1] + g);
+                        let (pa, pb, pc, pd) = (p2(x0, y0), p2(x1, y0), p2(x1, y1), p2(x0, y1));
+                        let mut loops = vec![Loop { segs: vec![Seg::Line { a: pa, b: pb }, Seg::Line { a: pb, b: pc }, Seg::Line { a: pc, b: pd }, Seg::Line { a: pd, b: pa }] }];
+                        for l in &islands.loops {
+                            loops.push(l.reversed());
+                        }
+                        let rg = Region { loops };
+                        let stepover = get_num(a, "stepover", Some(0.4 * d))?;
+                        let p = ops::pocket(&rg, t, ti, h, top, bottom, step, stepover, get_num(a, "leave", Some(0.0))?, (vf, vp)).map_err(|e| format!("{e:?}"))?;
+                        if stepover <= r {
+                            if let Some(o) = opening(&rg, r) {
+                                voids.push((Some(o), bottom));
+                            }
+                        }
+                        Ok(vec![p])
                     }
                     "contour" => {
                         let top = get_num(a, "from", Some(part.bbox.1[2]))?;
@@ -480,6 +520,16 @@ impl Cam {
                         let sec = forge_cam::section::section(&part.faces, zmid, 1e-5).map_err(|e| format!("the part's section at z = {zmid}: {e:?}"))?;
                         let rg = outer_or_inner(&sec, side == "outside")?;
                         if side == "outside" {
+                            // the band the loop sweeps is cleared
+                            let r = 0.5 * d;
+                            if let Ok((c, _)) = forge_cam_geom::offset::offset(&rg, -(r + leave)) {
+                                let cr = forge_cam_geom::boolean::region_of(&c);
+                                if let (Ok((outer, _)), Ok((inner, _))) = (forge_cam_geom::offset::offset(&cr, -r), forge_cam_geom::offset::offset(&cr, r)) {
+                                    if let Ok(band) = forge_cam_geom::boolean::boolean(&forge_cam_geom::boolean::region_of(&outer), &forge_cam_geom::boolean::region_of(&inner), forge_cam_geom::boolean::Op::Diff) {
+                                        voids.push((Some(forge_cam_geom::boolean::region_of(&band)), bottom));
+                                    }
+                                }
+                            }
                             ops::contour(&rg, t, ti, h, top, bottom, step, leave, true, (vf, vp)).map(|p| vec![p]).map_err(|e| format!("{e:?}"))
                         } else {
                             ops::contour(&rg, t, ti, h, top, bottom, step, leave, false, (vf, vp)).map(|p| vec![p]).map_err(|e| format!("{e:?}"))
@@ -506,6 +556,11 @@ impl Cam {
                                 None => self.parts[pi].bbox.0[2] - 0.5,
                             };
                             paths.push(ops::pocket(&rg, t, ti, h, p[2], bottom, step, stepover, get_num(a, "leave", Some(0.0))?, (vf, vp)).map_err(|e| format!("{e:?}"))?);
+                            if stepover <= 0.5 * d {
+                                if let Some(o) = opening(&rg, 0.5 * d) {
+                                    voids.push((Some(o), bottom));
+                                }
+                            }
                         }
                         Ok(paths)
                     }
@@ -522,12 +577,18 @@ impl Cam {
             }
         };
         out.paths = paths;
+        for (v, floor) in voids {
+            match v {
+                None => self.setups[su].ip.face_to(floor),
+                Some(r) => self.setups[su].ip.cut(r, floor),
+            }
+        }
         self.ops.push(out);
         Ok(V::Op(self.ops.len() - 1))
     }
 
     /// The hole plan from the feature: spot, then drill (peck past 3 D), then tap if threaded.
-    fn plan_holes(&mut self, su: usize, a: &BTreeMap<String, V>, out: &mut OpOut) -> Result<Vec<OpPath>, String> {
+    fn plan_holes(&mut self, su: usize, a: &BTreeMap<String, V>, out: &mut OpOut, voids: &mut Vec<(Option<Region>, f64)>) -> Result<Vec<OpPath>, String> {
         let (pi, hn) = match a.get("#1") {
             Some(V::Holes(p, n)) => (*p, n.clone()),
             _ => return Err("drill(SETUP, PART.HOLE, plan: \"auto\")".into()),
@@ -597,6 +658,12 @@ impl Cam {
         let f = self.feeds_for(su, t, t.tool.dc, t.tool.dc).map(|x| 0.1 * x.vf.min(2000.0)).unwrap_or(100.0);
         let kind = if peck { CycleKind::Peck } else { CycleKind::Drill };
         paths.push(ops::holes(&hole.places, kind, t, ti, h, depth, if peck { t.tool.dc } else { 0.0 }, f));
+        // each hole's circle is cleared down to where the full diameter reaches
+        for p in &hole.places {
+            let r = 0.5 * t.tool.dc;
+            let st = p2(p[0] + r, p[1]);
+            voids.push((Some(Region { loops: vec![Loop { segs: vec![Seg::Arc { a: st, b: st, c: p2(p[0], p[1]), ccw: true }] }] }), p[2] - depth));
+        }
         plan.push(format!("{} {} {}{}", if peck { "peck" } else { "drill" }, t.tool.id, if through { "through" } else { "to depth" }, if peck { format!(", q {}", t.tool.dc) } else { String::new() }));
         out.tool = Some(ti);
         if let Some(tp) = tap {
@@ -613,6 +680,18 @@ impl Cam {
         // the plan's paths are posted one after the other, each with its tool
         Ok(paths)
     }
+}
+
+/// The opening of a region by a disc of radius r, (R ⊖ B_r) ⊕ B_r: what a pocket with
+/// stepover ≤ r provably clears.
+fn opening(rg: &Region, r: f64) -> Option<Region> {
+    let (c, _) = forge_cam_geom::offset::offset(rg, r).ok()?;
+    if c.is_empty() {
+        return None;
+    }
+    let cr = forge_cam_geom::boolean::region_of(&c);
+    let (o, _) = forge_cam_geom::offset::offset(&cr, -r).ok()?;
+    Some(forge_cam_geom::boolean::region_of(&o))
 }
 
 /// The section's outer loops alone (outside work), or its islands as pocket boundaries.
@@ -757,15 +836,21 @@ impl Cam {
                     lc += l;
                     time += if f > 0.0 { l / f * 60.0 } else { 0.0 };
                 }
-                // a feed move straight down is a plunge
+                // a feed move straight down is a plunge; a rapid straight back up its column, from
+                // where a plunge ended, retraces positions already checked: a link
                 let ph = if ph == Phase::Cut && to[0] == at[0] && to[1] == at[1] && to[2] < at[2] { Phase::Plunge } else { ph };
+                let ph = if ph == Phase::Rapid && to[0] == at[0] && to[1] == at[1] && to[2] > at[2] && matches!(moves.last(), Some(PMove::Line { phase: Phase::Plunge, .. })) { Phase::Link } else { ph };
                 moves.push(if ph == Phase::Rapid { PMove::Rapid { to } } else { PMove::Line { to, f, phase: ph } });
                 at = to;
             }
             let posted = OpPath { tool: path.tool, start: start.unwrap_or(path.start), moves, rpm: path.rpm, coolant: path.coolant };
             let tool = self.tools[path.tool].clone();
             let part = &self.parts[s.part];
-            let sum = ops::certify(&posted, &tool, &part.faces, &s.stock.faces(), s.tol, s.clearance);
+            let stock_faces = match self.ops[oi].stock_before.as_ref().map(|ip| ip.faces()) {
+                Some(Ok(f)) => f,
+                _ => s.stock.faces(),
+            };
+            let sum = ops::certify(&posted, &tool, &part.faces, &stock_faces, s.tol, s.clearance);
             let op = &mut self.ops[oi];
             op.moves += posted.moves.len();
             op.pairs += sum.pairs;
@@ -780,6 +865,7 @@ impl Cam {
                 let c = &op.checks[0];
                 op.refusal = Some(format!("{} {} at move {} ({}): {} vs {} on {}", c.rule, c.verdict, c.move_index, c.phase, c.value, c.limit, c.other));
                 op.fix = Some(match c.rule {
+                    "holder_collision" if c.other.starts_with("stock") => "SetArg tool: a tool whose flutes reach the depth (lcf above the stock top), or clear the stock above first".into(),
                     "holder_collision" => "SetArg stickout: a longer stick-out, or a smaller holder".into(),
                     "rapid_clear" => "SetArg clear: a higher clearance height".into(),
                     _ => "SetArg leave: leave stock, or choose a smaller tool".into(),

@@ -19,6 +19,35 @@ fn close(a: P2, b: P2, tol: f64) -> bool {
     (a.x - b.x).abs() <= tol && (a.y - b.y).abs() <= tol
 }
 
+/// Consecutive arcs about the same centre in the same sense are one arc (a loop of such arcs
+/// alone is one full circle): pieces of one circle must stay one circle, or their exact centres,
+/// each on its own chord's bisector, differ in the last bits and every later decision near them
+/// becomes a near-tie.
+fn merge_arcs(lp: Vec<Seg>) -> Vec<Seg> {
+    let same = |x: &Seg, y: &Seg| matches!((x, y), (Seg::Arc { c: c1, ccw: w1, .. }, Seg::Arc { c: c2, ccw: w2, .. }) if c1 == c2 && w1 == w2);
+    if lp.iter().all(|s| same(s, &lp[0])) {
+        if let Seg::Arc { a, c, ccw, .. } = lp[0] {
+            return vec![Seg::Arc { a, b: a, c, ccw }];
+        }
+    }
+    // rotate so the loop starts at a break between different pieces
+    let n = lp.len();
+    let start = (0..n).find(|&i| !same(&lp[(i + n - 1) % n], &lp[i])).unwrap_or(0);
+    let mut out: Vec<Seg> = Vec::new();
+    for k in 0..n {
+        let s = lp[(start + k) % n];
+        if let Some(last) = out.last_mut()
+            && same(last, &s)
+            && let (Seg::Arc { a, c, ccw, .. }, Seg::Arc { b, .. }) = (*last, s)
+        {
+            *last = Seg::Arc { a, b, c, ccw };
+            continue;
+        }
+        out.push(s);
+    }
+    out
+}
+
 /// The section of the lowered part at height z (strictly inside every wall's height range it
 /// meets: a height at a floor or top is refused as ambiguous by `NotPrism` of that flat face).
 pub fn section(faces: &[Face], z: f64, mu: f64) -> Result<Region, SectionError> {
@@ -96,7 +125,7 @@ pub fn section(faces: &[Face], z: f64, mu: f64) -> Result<Region, SectionError> 
                 Seg::Arc { b, c, ccw, .. } => Seg::Arc { a: e, b, c, ccw },
             };
         }
-        loops.push(Loop { segs: lp });
+        loops.push(Loop { segs: merge_arcs(lp) });
     }
     // orient: validate, and flip loops whose sense is wrong for their depth
     let mut rg = Region { loops };

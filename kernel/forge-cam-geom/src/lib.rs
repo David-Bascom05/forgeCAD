@@ -19,6 +19,7 @@
 
 pub mod arr;
 pub mod big;
+pub mod boolean;
 pub mod check;
 pub mod dual;
 pub mod ival;
