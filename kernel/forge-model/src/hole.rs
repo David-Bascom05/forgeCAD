@@ -425,6 +425,44 @@ fn adds(features: crate::History<'_>, i: usize) -> Vec<Box3> {
     }
 }
 
+/// A feature whose material the history gives no sound box for: faces moved, replaced,
+/// deleted, offset or drafted, an outward shell or a thickening (their faces' neighbours are
+/// re-intersected, so an edge can slide far past any box grown by the distance: by d / sin θ
+/// for faces at θ), or a feature on other bodies. Each is a part-changing feature, so the regen
+/// has the part as built after it (`History::base`).
+pub(crate) fn unbounded(f: &Feature) -> bool {
+    match f {
+        Feature::Edit(e) => !matches!(e, crate::Edit::Rib(_)),
+        Feature::Draft { .. } => true,
+        Feature::Shell { outward, .. } => *outward,
+        Feature::Body(b) => matches!(**b, crate::BodyFeature::In { .. }),
+        _ => false,
+    }
+}
+
+/// A feature whose tool is sized by `reach`: a through hole, a through extrude, a thread (on a
+/// through hole, its full length).
+pub(crate) fn thru_consumer(f: &Feature) -> bool {
+    match f {
+        Feature::Hole(h) => matches!(h.end, End::Through),
+        Feature::Extrude { extent, .. } => matches!(extent, Extent::Through(_) | Extent::ThroughAlong { .. }),
+        Feature::Thread(_) => true,
+        _ => false,
+    }
+}
+
+/// Whether feature `i`'s tool needs the part's box as built (`History::with_base`).
+pub(crate) fn needs_base(features: crate::History<'_>, i: usize) -> bool {
+    thru_consumer(&features[i]) && features[..i].iter().any(unbounded)
+}
+
+/// A box holding the body: what the regen hands a through tool as the part's extent.
+// TODO(exact extent): forge_topo's exact_box (fix-mesh-asm) when it lands; faces_box hulls the
+// edges' boxes, the sphere's and torus's, and procedural faces' (uv::procedural_box)
+pub(crate) fn body_box(b: &forge_topo::Body) -> Box3 {
+    b.faces_box()
+}
+
 /// A box holding the part after rib `r` is added to a part inside `b`.
 ///
 /// Every point of the rib's lump lies on a segment from a point within `t` of the path's plane
@@ -470,8 +508,12 @@ fn rib_reach(b: &Box3, r: &crate::rib::Rib) -> Box3 {
 
 /// A box holding all the material `features` can make, to size through holes by.
 pub(crate) fn reach(features: crate::History<'_>) -> Box3 {
-    let mut b = Box3::EMPTY;
-    for (i, f) in features.iter().enumerate() {
+    // past a feature the history does not bound, the part as the regen built it does
+    let (from, mut b) = match features.base() {
+        Some((at, bx)) if at < features.len() && features[..=at].iter().any(unbounded) => (at + 1, bx),
+        _ => (0, Box3::EMPTY),
+    };
+    for (i, f) in features.iter().enumerate().skip(from) {
         match f {
             Feature::Shell {
                 thickness,

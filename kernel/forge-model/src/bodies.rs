@@ -416,6 +416,12 @@ fn apply_once(
         }
         _ => {}
     }
+    // a through tool past faces the history does not bound is sized by the bodies as they stand
+    let plain = if i > 0 && crate::hole::needs_base(plain, i) {
+        plain.with_base(i - 1, solids_box(&solids))
+    } else {
+        plain
+    };
     let ts = tools(plain, i, true)?;
     // parameters and sketches make nothing
     if ts.is_empty() {
@@ -965,6 +971,13 @@ fn half(s: &Surface, b: &Box3, (i, id): (usize, u64)) -> Result<(Body, bool), Re
     }
 }
 
+/// A box holding every body (`hole::body_box` of each).
+fn solids_box(solids: &[Solid]) -> forge_math::Box3 {
+    solids.iter().fold(forge_math::Box3::EMPTY, |b, s| {
+        b.hull(&crate::hole::body_box(&s.body))
+    })
+}
+
 /// A body's run of tools in the n-ary regen: its base and the tools since, in order.
 struct Run {
     id: usize,
@@ -1046,6 +1059,8 @@ fn build_each(plain: History<'_>, start: usize, threads: usize) -> Result<Vec<Ve
     let some = |r: std::ops::Range<usize>| -> Result<Vec<Vec<Tool>>, RegenError> {
         r.map(|i| match &plain[i] {
             f if modifies(f) || matches!(f, Feature::Plane(_)) => Ok(vec![]),
+            // sized by the bodies as built (`nary_pass`)
+            _ if crate::hole::needs_base(plain, i) => Ok(vec![]),
             _ => tools(plain, i, true),
         })
         .collect()
@@ -1138,10 +1153,20 @@ fn nary_pass(features: History<'_>, threads: usize) -> Result<Vec<Solid>, RegenE
     }
     let mut built = build_each(plain, start, threads)?;
     let mut runs: Vec<Run> = Vec::new();
+    // the bodies' box after the last part-changing feature, for through tools past it
+    let based = (start..plain.len()).any(|i| crate::hole::needs_base(plain, i));
+    let mut base: Option<(usize, forge_math::Box3)> = None;
     for i in start..plain.len() {
         let f = &plain[i];
         let p = pick(&picks, i);
         let mut ts = std::mem::take(&mut built[i]);
+        if crate::hole::needs_base(plain, i) {
+            let h = match base {
+                Some((at, b)) => plain.with_base(at, b),
+                None => plain,
+            };
+            ts = tools(h, i, true)?;
+        }
         if starts(f) {
             runs.push(Run {
                 id: i,
@@ -1160,11 +1185,17 @@ fn nary_pass(features: History<'_>, threads: usize) -> Result<Vec<Solid>, RegenE
             Feature::Body(b) => {
                 let mut solids = flush(std::mem::take(&mut runs), plain, threads)?;
                 body_feature(plain, i, b, p, &mut solids)?;
+                if based {
+                    base = Some((i, solids_box(&solids)));
+                }
                 runs = unflush(solids, i);
             }
             _ if modifies(f) => {
                 let mut solids = flush(std::mem::take(&mut runs), plain, threads)?;
                 modify_on(plain, i, p, &mut solids, threads)?;
+                if based {
+                    base = Some((i, solids_box(&solids)));
+                }
                 runs = unflush(solids, i);
             }
             _ if ts.is_empty() => {}

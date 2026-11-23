@@ -64,6 +64,10 @@ pub use work::{AxisBy, Datum, PlaneBy, PointBy, Ref, UcsBy, Work, WorkError};
 pub struct History<'a> {
     features: &'a [Feature],
     ids: Option<&'a [u64]>,
+    /// A box holding the part as the regen built it after feature `.0`: where the history alone
+    /// bounds the part no longer (faces moved, offset or drafted: `hole::reach`), a through tool
+    /// after it is sized from this.
+    base: Option<(usize, forge_math::Box3)>,
 }
 
 impl<'a> History<'a> {
@@ -72,7 +76,11 @@ impl<'a> History<'a> {
         if let Some(ids) = ids {
             assert_eq!(ids.len(), features.len(), "one id per feature");
         }
-        History { features, ids }
+        History {
+            features,
+            ids,
+            base: None,
+        }
     }
 
     /// The id feature `i`'s names derive from.
@@ -85,7 +93,21 @@ impl<'a> History<'a> {
         History {
             features: &self.features[..n],
             ids: self.ids.map(|ids| &ids[..n]),
+            base: self.base.filter(|b| b.0 < n),
         }
+    }
+
+    /// The same history with the part's box after feature `at` (as built).
+    pub(crate) fn with_base(&self, at: usize, b: forge_math::Box3) -> History<'a> {
+        History {
+            base: Some((at, b)),
+            ..*self
+        }
+    }
+
+    /// The box of the part after a feature, if the regen gave one.
+    pub(crate) fn base(&self) -> Option<(usize, forge_math::Box3)> {
+        self.base
     }
 
     /// The same ids on `features`, one for each of these (a copy with some rewritten).
@@ -93,7 +115,11 @@ impl<'a> History<'a> {
     where
         'a: 'b,
     {
-        History::new(features, self.ids)
+        History {
+            features,
+            ids: self.ids,
+            base: self.base,
+        }
     }
 }
 
@@ -574,6 +600,7 @@ pub fn step(features: History<'_>, i: usize, body: Option<Body>) -> Result<Optio
                 History {
                     features: &fs,
                     ids: features.ids,
+                    base: None,
                 },
                 i,
                 so_far,
@@ -623,6 +650,7 @@ fn careful(
                     History {
                         features: &fs,
                         ids: features.ids,
+                        base: None,
                     },
                     i,
                     body,
@@ -650,6 +678,7 @@ fn in_turn(features: History<'_>) -> Result<Option<Body>, RegenError> {
                     plain(History {
                         features: &all,
                         ids: features.ids,
+                        base: None,
                     })
                 })
                 .map_err(|_| e)
@@ -664,6 +693,7 @@ pub(crate) fn rebuilt_blunted(features: History<'_>, i: usize) -> Option<Result<
     let h = History {
         features: &all,
         ids: features.ids,
+        base: None,
     };
     Some((0..=i).try_fold(None, |b, k| step_plain(h, k, b)))
 }
@@ -885,6 +915,11 @@ fn step_on(
         return Ok(Some(b));
     }
     let err = |error| RegenError::Boolean { feature: i, error };
+    // a through tool past faces the history does not bound is sized by the part as it stands
+    let features = match &body {
+        Some(b) if i > 0 && hole::needs_base(features, i) => features.with_base(i - 1, hole::body_box(b)),
+        _ => features,
+    };
     if let Some((tool, op)) = unlinked(features, i)
         && let Some(mut b) = body.take()
     {
@@ -1369,6 +1404,12 @@ fn nary_run(
             // one refused: the n-ary pass from the part as it was
             body = modified()?;
         }
+        // through tools past faces the history does not bound are sized by the part as modified
+        let features = if (m + 1..features.len()).any(|k| hole::needs_base(features, k)) {
+            features.with_base(m, hole::body_box(&body))
+        } else {
+            features
+        };
         let built = build_tools(features, m + 1, threads, true)?;
         if may_empty(&body, &built) {
             return one_at_a_time(features);

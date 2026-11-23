@@ -1139,3 +1139,44 @@ bore = hole(at: spot.p, d: d, depth: thru, flip: true)
     let exact = 80.0 * 30.0 * 6.0 + boss - dmath::PI * 2.5 * 2.5 * 36.0;
     assert!((v - exact).abs() < 1e-6, "volume {v}, through the boss {exact}");
 }
+
+/// A through hole goes through faces moved past the history's box. `move_faces` lifts the plate's
+/// top 20 mm; `hole::reach`, from the history alone, sized the hole by the plate as extruded (it
+/// ran 7 mm). Past a feature the history does not bound, the regen hands the through tool the
+/// part's box as built (`History::base`), on every path: the language's build, the kernel's
+/// sequential regen, and its n-ary one.
+#[test]
+fn thru_hole_goes_through_moved_faces() {
+    let src = "shared L = 80
+shared W = 30
+shared t = 6
+param lift.d = 20
+param bore.d = 5
+sketch plan(on: xy) {
+  outline = rect(corner: (0, 0), size: (L, W))
+}
+base = extrude(plan, t)
+lift = move_faces(base.end, along: Z, d: d)
+sketch spot(on: xy) {
+  c = pt(L / 2, W / 2)
+}
+bore = hole(at: spot.c, d: d, depth: thru, flip: true)
+";
+    let b = built(src);
+    let exact = 80.0 * 30.0 * 26.0 - dmath::PI * 2.5 * 2.5 * 26.0;
+    assert!(
+        (b.volume() - exact).abs() < 1e-6,
+        "volume {}, through {exact}",
+        b.volume()
+    );
+    for (path, solids) in [("seq", b.seq()), ("nary", b.nary(1))] {
+        let body = kernel_util::joined(&solids.expect("regenerates"));
+        assert!(
+            forge_topo::check(&body).is_empty(),
+            "{path}: {:?}",
+            forge_topo::check(&body)
+        );
+        let v = forge_topo::mass::mass(&body).expect("a mass").volume;
+        assert!((v - exact).abs() < 1e-6, "{path}: volume {v}, through {exact}");
+    }
+}
