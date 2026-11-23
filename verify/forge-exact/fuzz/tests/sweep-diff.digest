@@ -2,6 +2,7 @@ examples/demo/part_tools.fg#1 agree
 examples/harness/header.fg#1 agree
 examples/harness/plate.fg#1 agree
 examples/machined/flange.fg#1 agree
+examples/machined/nameplate.fg#1 agree
 examples/rack18u/asm/dummy_d01.fg#3 agree
 examples/rack18u/asm/dummy_d02.fg#3 agree
 examples/rack18u/asm/dummy_d04.fg#3 agree
@@ -29,6 +30,8 @@ examples/rack18u/panels/test_parts/post_standin.fg#1 agree
 examples/thermoform/validation/ref_corner_fill.fg#1 agree
 examples/unified/hinged_box.fg#1 agree
 examples/unified/hinged_box.fg#4 agree
+examples/weldments/table_frame.fg#15 agree
+examples/weldments/table_frame.fg#16 agree
 interface/forge-lang/parts/bench/bracket.fg#1 agree
 interface/forge-lang/parts/bench/bracket.fg#13 agree
 interface/forge-lang/parts/bench/clamp.fg#1 agree
@@ -70,12 +73,15 @@ interface/forge-lang/stdparts/gen/ring.fg#3 agree
 interface/forge-lang/stdparts/gen/setscrew.fg#3 agree
 interface/forge-lang/stdparts/gen/shcs.fg#3 agree
 interface/forge-lang/stdparts/gen/shoulder.fg#3 agree
+interface/forge-lang/tests/kernel_parts/ball_over_tapered_pocket.fg#1 agree
 interface/forge-lang/tests/kernel_parts/balls_at_pole.fg#1 agree
+interface/forge-lang/tests/kernel_parts/fillet_wavy_plate_notch.fg#3 agree
 interface/forge-lang/tests/kernel_parts/frame.fg#30 agree
 interface/forge-lang/tests/kernel_parts/frame.fg#40 agree
 interface/forge-lang/tests/kernel_parts/frame.fg#45 agree
 interface/forge-lang/tests/kernel_parts/frame.fg#98 agree
 interface/forge-lang/tests/kernel_parts/frame_slot_ids.fg#12 agree
+interface/forge-lang/tests/kernel_parts/ring_cut_tangent.fg#1 agree
 interface/forge-lang/tests/kernel_parts/taper_collapses.fg#1 agree
 interface/forge-lang/tests/kernel_parts/taper_collapses.fg#3 out_of_scope
 interface/forge-lang/tests/kernel_parts/tapered_lobe_bore.fg#1 agree
@@ -459,7 +465,7 @@ taper/00063 refused_ok
 taper/00064 agree
 taper/00065 agree
 taper/00066 agree
-taper/00067 agree
+taper/00067 refused_valid
 taper/00068 refused_ok
 taper/00069 refused_ok
 taper/00070 refused_ok
@@ -643,7 +649,7 @@ taper/00247 agree
 taper/00248 agree
 taper/00249 refused_valid
 taper/00250 agree
-taper/00251 agree
+taper/00251 refused_valid
 taper/00252 agree
 taper/00253 agree
 taper/00254 refused_valid
