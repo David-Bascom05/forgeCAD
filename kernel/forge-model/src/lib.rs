@@ -1165,7 +1165,11 @@ fn sequential(features: History<'_>, from: usize, b: Body) -> Option<Body> {
 /// wasm has no threads.
 /// Elsewhere, no more threads than cores (`forge_math::par::cap`).
 fn wasm_one(threads: usize) -> usize {
-    if cfg!(target_family = "wasm") { 1 } else { forge_math::par::cap(threads) }
+    if cfg!(target_family = "wasm") {
+        1
+    } else {
+        forge_math::par::cap(threads)
+    }
 }
 
 /// How an n-ary regen classifies its regions in one batch.

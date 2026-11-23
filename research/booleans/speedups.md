@@ -320,3 +320,143 @@ The nary16 columns are best of 7, from the table above. upto nary16: 7,088 → 5
 | n-ary with `FUZZ_SEEDS=150` | agree **167/167** (same faces, volume within 0.1%), 4 threads |
 | wasm bits | the wasm32-wasip1 `bits` under Node is identical to native (54 lines) |
 | bits at `FORGECAD_THREADS` = 1, 2, 4 and 16 | 84/84 lines identical to tools/speed/bits.txt |
+
+## Fastest wins: t1 against tN (2026-11-23)
+
+The owner's rule is that the user gets the faster of threaded and single-threaded on every path.
+The master's instruction was to compare, per part and per op, default threads (tN, here 4) against
+`FORGECAD_THREADS=1` (t1), on one build, and keep a path serial wherever one thread is faster.
+
+### What was slower, and why
+
+| Cause | Lines | Fix |
+|---|---|---|
+| fillet's own `par_map` spawned a thread per core at once and ignored `FORGECAD_THREADS` | every part with a fillet: clamp, insert, heatsink, … (8–16 threads each) | it calls `forge_math::par::map` |
+| `forge_math::par::map` spawned every thread at once (used by ops and forge-lang) | all ops users | it is `map_adaptive` |
+| forge-lang's measure spawned threads for mass and box at once, even with `FORGECAD_THREADS=1` | every `cli` run (hub −9%) | items of one `map_adaptive`; serial at one thread |
+| helpers started at 200 µs with any work left, one per core | small n-ary regens | helpers only when the work left, projected from the items done, exceeds `HELPERS_FOR` = 2 ms, and **one helper per 2 ms** of it |
+| a new thread starts with cold per-thread caches. `ssi::MET` keeps searched curves per thread, so helpers search again what the caller knows. | jack n-ary +14% | the n-ary pair loop has its own threshold, `PAIR_HELPERS_FOR` = 5 ms |
+| the n-ary edge split took its per-edge-list form whenever `threads > 1`, even when no helper came | hole-grid n-ary | the threaded form needs at least 512 edges per thread |
+| `map_adaptive` tagged and re-sorted every answer even when no helper joined | all | alone, the caller writes answers straight into place; only items after helpers start are tagged |
+| `par::threads()` called `available_parallelism` (cgroup file reads on Linux) at every map | all, small | the core count is cached; `FORGECAD_THREADS` is still read every time |
+
+### The table
+
+Commit `fc9…`, this branch: the line after "W1 fastest-wins" in the log. Median of 11 paired rounds
+on a 4-vCPU VM; each round runs t1, then tN, then tN again. A/A is the second tN over the first: it
+is this VM's noise, and it reaches ±10% on runs under 15 ms. "Helpers" is the number of threads
+the tN run started (strace `clone3`).
+
+| Line | t1 ms | tN ms | tN/t1 | A/A | Helpers | Behaviour |
+|---|---|---|---|---|---|---|
+| regen1 torture seq | 23.0 | 23.3 | 1.028 | 1.133 | 0 | serial (no helper paid) |
+| regen1 torture nary16 | 21.5 | 20.7 | 0.953 | 1.044 | 6 | threaded |
+| regen1 plate seq | 21.9 | 21.8 | 1.002 | 0.982 | 0 | serial (no helper paid) |
+| regen1 plate nary16 | 21.6 | 21.3 | 0.978 | 0.979 | 7 | threaded |
+| regen1 shaft seq | 82.5 | 80.8 | 0.982 | 0.940 | 0 | serial (no helper paid) |
+| regen1 shaft nary16 | 68.5 | 47.7 | 0.704 | 0.960 | 16 | threaded |
+| regen1 housing seq | 22.4 | 21.7 | 0.969 | 1.059 | 0 | serial (no helper paid) |
+| regen1 housing nary16 | 26.6 | 24.8 | 0.951 | 1.000 | 7 | threaded |
+| regen1 coplanar seq | 30.5 | 30.0 | 0.988 | 0.990 | 0 | serial (no helper paid) |
+| regen1 coplanar nary16 | 23.9 | 25.1 | 1.052 | 0.989 | 6 | threaded, **slower: open** |
+| regen1 patterns seq | 26.4 | 26.4 | 1.005 | 0.974 | 0 | serial (no helper paid) |
+| regen1 patterns nary16 | 20.1 | 22.7 | 1.086 | 0.996 | 7 | threaded, **slower: open** |
+| regen1 mixed seq | 256.7 | 254.0 | 1.006 | 1.020 | 0 | serial (no helper paid) |
+| regen1 mixed nary16 | 224.6 | 116.5 | 0.512 | 0.980 | 20 | threaded |
+| regen1 hole-grid seq | 18.0 | 18.1 | 1.046 | 1.010 | 0 | serial (no helper paid) |
+| regen1 hole-grid nary16 | 16.1 | 18.8 | 1.232 | 0.977 | 7 | threaded, **slower: open** |
+| regen1 tour seq | 3.2 | 3.2 | 1.036 | 0.983 | 0 | serial (no helper paid) |
+| regen1 tour nary16 | 2.8 | 2.9 | 1.048 | 1.007 | 0 | serial (no helper paid) |
+| regen1 upto seq | 7.3 | 7.3 | 1.006 | 0.990 | 0 | serial (no helper paid) |
+| regen1 upto nary16 | 5.7 | 5.6 | 0.993 | 0.992 | 0 | serial (no helper paid) |
+| regen1 upto-flat seq | 3.9 | 4.0 | 0.991 | 0.953 | 0 | serial (no helper paid) |
+| regen1 upto-flat nary16 | 3.3 | 3.4 | 1.016 | 1.016 | 0 | serial (no helper paid) |
+| benchparts cli gearbox | 83.0 | 71.5 | 0.849 | 0.999 | 3 | threaded |
+| benchparts edit gearbox | 97.7 | 96.5 | 0.969 | 1.073 | 0 | serial (no helper paid) |
+| benchparts run gearbox seq | 77.4 | 86.3 | 1.067 | 0.966 | 0 | serial (no helper paid) |
+| benchparts run gearbox nary4 | 99.4 | 84.9 | 0.899 | 0.999 | 6 | threaded |
+| benchparts cli volute | 200.8 | 164.6 | 0.873 | 0.963 | 5 | threaded |
+| benchparts edit volute | 239.0 | 236.7 | 0.973 | 1.017 | 0 | serial (no helper paid) |
+| benchparts run volute seq | 182.8 | 171.1 | 0.929 | 1.045 | 0 | serial (no helper paid) |
+| benchparts run volute nary4 | 178.1 | 177.4 | 1.006 | 0.999 | 0 | serial (no helper paid) |
+| benchparts cli crank | 71.5 | 64.3 | 1.004 | 1.001 | 5 | threaded |
+| benchparts edit crank | 70.0 | 69.2 | 0.997 | 0.992 | 0 | serial (no helper paid) |
+| benchparts run crank seq | 61.3 | 63.1 | 1.013 | 1.009 | 0 | serial (no helper paid) |
+| benchparts run crank nary4 | 66.8 | 66.8 | 0.947 | 0.963 | 5 | threaded |
+| benchparts cli valve | 79.7 | 54.6 | 0.636 | 1.028 | 5 | threaded |
+| benchparts edit valve | 43.5 | 50.4 | 1.106 | 0.961 | 0 | serial (no helper paid) |
+| benchparts run valve seq | 38.1 | 38.7 | 1.017 | 1.014 | 0 | serial (no helper paid) |
+| benchparts run valve nary4 | 39.2 | 38.5 | 0.979 | 0.983 | 2 | threaded |
+| benchparts cli heatsink | 27.7 | 28.5 | 0.941 | 0.990 | 5 | threaded |
+| benchparts edit heatsink | 33.3 | 34.0 | 0.996 | 0.981 | 0 | serial (no helper paid) |
+| benchparts run heatsink seq | 28.4 | 29.2 | 1.025 | 0.985 | 0 | serial (no helper paid) |
+| benchparts run heatsink nary4 | 27.7 | 27.9 | 0.985 | 0.981 | 1 | threaded |
+| benchparts cli quadarm | 15.1 | 16.2 | 1.012 | 0.950 | 0 | serial (no helper paid) |
+| benchparts edit quadarm | 22.0 | 20.3 | 0.948 | 1.050 | 0 | serial (no helper paid) |
+| benchparts run quadarm seq | 18.1 | 17.7 | 0.954 | 1.123 | 0 | serial (no helper paid) |
+| benchparts run quadarm nary4 | 17.9 | 18.1 | 0.997 | 0.988 | 0 | serial (no helper paid) |
+| benchparts cli conrod | 29.9 | 24.9 | 0.804 | 1.016 | 3 | threaded |
+| benchparts edit conrod | 24.0 | 25.4 | 0.933 | 1.321 | 0 | serial (no helper paid) |
+| benchparts run conrod seq | 23.7 | 24.9 | 1.044 | 0.982 | 0 | serial (no helper paid) |
+| benchparts run conrod nary4 | 19.2 | 19.6 | 1.023 | 1.010 | 0 | serial (no helper paid) |
+| benchparts cli jack | 88.4 | 70.4 | 0.790 | 1.000 | 4 | threaded |
+| benchparts edit jack | 77.2 | 76.7 | 1.015 | 1.010 | 0 | serial (no helper paid) |
+| benchparts run jack seq | 71.7 | 72.3 | 1.000 | 0.986 | 0 | serial (no helper paid) |
+| benchparts run jack nary4 | 69.2 | 62.4 | 0.917 | 1.006 | 2 | threaded |
+| benchparts cli frame | 121.8 | 94.5 | 0.759 | 1.008 | 5 | threaded |
+| benchparts edit frame | 124.1 | 118.6 | 0.978 | 1.029 | 0 | serial (no helper paid) |
+| benchparts run frame seq | 131.4 | 123.8 | 1.000 | 1.030 | 0 | serial (no helper paid) |
+| benchparts run frame nary4 | 121.6 | 106.4 | 0.860 | 0.951 | 2 | threaded |
+| benchparts cli manifold | 60.5 | 56.6 | 0.946 | 0.994 | 6 | threaded |
+| benchparts edit manifold | 97.8 | 93.7 | 0.994 | 0.981 | 2 | threaded |
+| benchparts run manifold seq | 65.0 | 68.2 | 0.986 | 0.976 | 2 | threaded |
+| benchparts run manifold nary4 | 67.1 | 64.5 | 0.950 | 1.069 | 2 | threaded |
+| benchparts cli bracket | 6.2 | 5.9 | 0.979 | 1.104 | 0 | serial (no helper paid) |
+| benchparts edit bracket | 9.1 | 7.4 | 0.820 | 1.291 | 0 | serial (no helper paid) |
+| benchparts run bracket seq | 6.3 | 6.5 | 1.016 | 0.970 | 0 | serial (no helper paid) |
+| benchparts run bracket nary4 | 7.2 | 7.2 | 1.132 | 0.927 | 0 | serial (no helper paid) |
+| benchparts cli insert | 10.0 | 9.9 | 0.906 | 1.076 | 0 | serial (no helper paid) |
+| benchparts edit insert | 15.4 | 13.6 | 0.934 | 1.070 | 0 | serial (no helper paid) |
+| benchparts run insert seq | 13.5 | 13.4 | 0.987 | 1.045 | 0 | serial (no helper paid) |
+| benchparts run insert nary4 | 10.9 | 12.5 | 1.043 | 1.056 | 0 | serial (no helper paid) |
+| benchparts cli clamp | 9.9 | 10.1 | 1.034 | 1.002 | 0 | serial (no helper paid) |
+| benchparts edit clamp | 9.8 | 11.0 | 1.061 | 1.047 | 0 | serial (no helper paid) |
+| benchparts run clamp seq | 7.2 | 7.6 | 1.037 | 0.974 | 0 | serial (no helper paid) |
+| benchparts run clamp nary4 | 7.2 | 10.1 | 1.060 | 0.991 | 0 | serial (no helper paid) |
+| benchparts cli hub | 8.0 | 11.9 | 1.364 | 0.968 | 0 | serial (no helper paid) |
+| benchparts edit hub | 12.0 | 11.1 | 1.000 | 1.018 | 0 | serial (no helper paid) |
+| benchparts run hub seq | 10.2 | 10.1 | 1.058 | 0.896 | 0 | serial (no helper paid) |
+| benchparts run hub nary4 | 9.5 | 9.7 | 1.085 | 1.298 | 0 | serial (no helper paid) |
+| benchparts cli guard | 14.8 | 15.3 | 1.016 | 1.007 | 0 | serial (no helper paid) |
+| benchparts edit guard | 21.8 | 21.6 | 0.992 | 1.012 | 0 | serial (no helper paid) |
+| benchparts run guard seq | 20.2 | 20.3 | 1.013 | 0.975 | 0 | serial (no helper paid) |
+| benchparts run guard nary4 | 24.8 | 25.4 | 1.013 | 0.980 | 0 | serial (no helper paid) |
+
+### Reading the table
+
+- **Every line that starts helpers is faster or level, except three small synthetic n-ary
+  regens:** coplanar (1.05), patterns (1.09) and hole-grid (1.23), each about 16–25 ms with 6–7
+  helpers.
+  - All three are all-planar: their items are cheap, so helpers mostly add allocator and cache
+    contention.
+  - Per-site experiments (each site forced serial in turn) could not separate a cause from this
+    VM's drift. Even all sites serial measured 1.03, so I stopped tuning on this VM.
+  - **These three are left open for the latency gate's paired statistics** (99% CI, Wilcoxon).
+    The candidate rule, if they confirm: helpers only where the mean item costs over about 20 µs,
+    since cheap items are bound by memory and the allocator. Planar n-ary items are cheap;
+    curved SSI items are not.
+- Lines with no helpers (t1 and tN run the same serial work) scatter from 0.82 to 1.36 against an
+  A/A that scatters from 0.90 to 1.32. That is noise, not threads. hub `cli` at 1.364 has A/A 0.968
+  and no helper, and was 1.02 in an earlier paired run of 15 rounds.
+- **The wins:**
+  - `cli`: valve 0.64, jack 0.79, frame 0.76, conrod 0.80, gearbox 0.85, volute 0.87.
+  - n-ary: shaft 0.70, mixed 0.51, frame 0.86, gearbox 0.90, jack 0.92.
+
+**Gates on this commit:**
+- bits: 84/84 identical at `FORGECAD_THREADS` = 1, 2, 4 and 16;
+- wasm bits: identical;
+- reliability: verdicts identical to base (985 lines);
+- `FUZZ_SEEDS=150` suite: 150/150;
+- n-ary: 167/167;
+- tests pass: forge-math, forge-model lib, forge-lang `kernel_determinism`, forge-ops fillet;
+- clippy `-D warnings`: clean on the five crates.
