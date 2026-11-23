@@ -169,6 +169,7 @@ sheet,Sheet Metal Defaults,"The thickness, bend radius and reliefs the part uses
 sheet,Rules,The sheet metal rules and their values,
 sheet,Convert to Part,Make this a plain part again,
 flat,Bend Table,"Each bend: its direction, angle and radius",
+flat,Bend Simulation,"The part bent on a press brake, bend by bend: the tools, the order, every clearance through the motion",
 flat,Save Copy As DXF/DWG,Write the flat pattern to a DXF or DWG,
 flat,Extents,Show the flat pattern's size,
 flat,Bend Lines,Show the bend lines,

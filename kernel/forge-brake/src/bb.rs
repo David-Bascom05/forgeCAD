@@ -328,11 +328,11 @@ mod tests {
     fn just_inside_and_just_outside_the_limit() {
         // the true least distance is 1 - s1: limit 0.5, resolution 1e-4
         match certify(&Seg1, &[root(0.498)], 0.5, 1e-4, 1_000_000, false) {
-            Verdict::Clear { lower, .. } => assert!(lower >= 0.5 - 1e-4 && lower <= 0.502, "{lower}"),
+            Verdict::Clear { lower, .. } => assert!((0.5 - 1e-4..=0.502).contains(&lower), "{lower}"),
             v => panic!("{v:?}"),
         }
         match certify(&Seg1, &[root(0.502)], 0.5, 1e-4, 1_000_000, false) {
-            Verdict::Hit { d, .. } => assert!(d < 0.5 && d >= 0.498 - 1e-6, "{d}"),
+            Verdict::Hit { d, .. } => assert!((0.498 - 1e-6..0.5).contains(&d), "{d}"),
             v => panic!("{v:?}"),
         }
     }
