@@ -16,6 +16,7 @@ import ForgeBoolCore.RefineAround
 import ForgeBoolCore.RefineTouch
 import ForgeBoolCore.RefineBetween
 import ForgeBoolCore.RefineFan
+import ForgeBoolCore.BridgeTouch
 import ForgeBoolCore.EndToEnd
 /-! The refinement lemmas use the standard axioms only. -/
 #print axioms forge_bool_core.zero_idx_spec
@@ -78,6 +79,14 @@ import ForgeBoolCore.EndToEnd
 #print axioms forge_bool_core.fan_classes
 #print axioms forge_bool_core.bad_vert_spec
 #print axioms forge_bool_core.vert_scan_spec
+-- group R: the bridges from positions and ids to covectors
+#print axioms forge_bool_core.R_result_eq
+#print axioms forge_bool_core.R_orient_eq
+#print axioms forge_bool_core.R_resOK_of
+#print axioms forge_bool_core.result_bridge_proof
+#print axioms forge_bool_core.around_bridge_proof
+#print axioms forge_bool_core.bad_edge_bridge_proof
+#print axioms forge_bool_core.bad_vert_bridge_proof
 #print axioms forge_bool_core.new_ext_spec_proof
 #print axioms forge_bool_core.core_k_spec_of
 #print axioms forge_bool_core.classify_on_spec_of
