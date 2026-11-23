@@ -473,8 +473,10 @@ impl Mesh {
             budget = budget
                 .checked_sub(1)
                 .ok_or(CdtError::Internal("constraint recovery did not converge"))?;
-            if budget.is_multiple_of(1024) {
-                forge_geom::budget::spend_many(16 * 1024);
+            // (each a search round a vertex, thousands of steps in a file's tangled fan: looked at
+            // every 64, not 1024)
+            if budget.is_multiple_of(64) {
+                forge_geom::budget::spend_many(16 * 64);
                 if forge_geom::budget::over() {
                     return Err(CdtError::Internal("the boundary would take too long"));
                 }
@@ -521,6 +523,9 @@ impl Mesh {
         let mut changed = true;
         let mut rounds = 0;
         while changed && rounds < 64 {
+            if forge_geom::budget::over() {
+                return Err(CdtError::Internal("the boundary would take too long"));
+            }
             changed = false;
             rounds += 1;
             for edge in fresh.iter_mut() {
@@ -892,6 +897,11 @@ pub fn triangulate_within(
         if !(p.x.is_finite() && p.y.is_finite()) {
             return Err(CdtError::NonFinite { point: i as u32 });
         }
+        // a coordinate below the smallest normal number (a file's face laid out over a span of
+        // 1e-308): every predicate on it runs on subnormals, a hundred times slower, for minutes
+        if p.x.is_subnormal() || p.y.is_subnormal() {
+            return Err(CdtError::Internal("a point's coordinate is subnormal"));
+        }
     }
     for (li, lp) in loops.iter().enumerate() {
         if lp.len() < 3 && !tangled {
@@ -939,7 +949,7 @@ pub fn triangulate_within(
     let kept: Vec<Point2> = interior
         .iter()
         .copied()
-        .filter(|p| p.x.is_finite() && p.y.is_finite())
+        .filter(|p| p.x.is_finite() && p.y.is_finite() && !p.x.is_subnormal() && !p.y.is_subnormal())
         .filter(|&p| p.x >= lo.x && p.x <= hi.x && p.y >= lo.y && p.y <= hi.y)
         .collect();
 

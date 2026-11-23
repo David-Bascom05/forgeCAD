@@ -1,0 +1,6 @@
+# A cylinder's origin moved to y = -1e308: its face laid out over a span of 1e-308, every point's
+# coordinate subnormal, every predicate a hundred times slower: 116 s. Subnormal points are refused.
+from: verify/forge-read-fuzz/seeds/strike.brep
+replace: 0 0 0 1 \n2 12.92 -3.48 -20 0 0 -1 0 1 0 1 -0 0 1.6000000000000001\n
+with: 0 0 0 1 \n2 12.92 -1.E308 -20 0 0 -1 0 1 0 1 -0 0 1.6000000000000001\n
+max-ms: 5000

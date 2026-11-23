@@ -33,7 +33,7 @@ pub fn unpack(b: &[u8]) -> Option<Vec<Member>> {
         let data = b.get(lho + 30 + lnl + lxl..lho + 30 + lnl + lxl + csize)?;
         let raw = match method {
             0 => data.to_vec(),
-            8 => forge_git::zlib::inflate(data, 256 << 20).ok()?,
+            8 => forge_git::zlib::inflate(data, 64 << 20).ok()?,
             _ => return None,
         };
         out.push((name, method == 8, raw));

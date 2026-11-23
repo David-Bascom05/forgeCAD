@@ -93,14 +93,17 @@ All of these are fixed at the root.
 | brep | add overflow in `default_segments`, then minutes in the check's crossing sweep | a circle's edge given the range −1e308..π/2: 65 536 samples, all overlapping | `finish`: an edge runs at most once round a closed curve, over a finite range |
 | brep | index `u32::MAX` in cdt.rs's constraint walk | a line's edge from −1e308: the walk stepped through the hull | running off the hull is an error |
 | brep, step | minutes in one constraint walk, then in `legalize`'s flips | a cylinder moved 1e6 off its edges; a sliver face (CADFS seed) | the walk checks the budget every 64 steps; flips count with the walks: refused in 1.4 s and 10 s (within the budget's 7–17 s) |
+| brep | 116 s | a cylinder moved to y = −1e308: its face laid out over a span of 1e-308, every coordinate subnormal, every predicate on subnormals | subnormal points are refused (interior ones dropped) |
+| step | 35 s, refused only at the end | a hole's circle made radius 2^64: constraint recovery looked at the budget every 1024 crossings (each a search of thousands of steps), its Delaunay rounds never | every 64, and each round: 2 s |
 | step | index `u32::MAX` in tessellate.rs (CADFS seed) | a grid's staircase over a node never placed | the face fails cleanly |
 | dwg | index out of bounds (2 sites) | a file cut short in its first 0x15 bytes; an object map ending where its CRC is | `get` |
 | git | slice index panic | a signature with `>` before `<` | the `>` searched after the `<` |
 | git | abort allocating | a pack delta declaring a result of 2^50 bytes | capacity bounded by what the delta's ops can make |
 
-No finding remained in the last runs of json, material, inflate, ttf, stl, obj or 3mf. Four
+No finding remained in the last runs of json, material, inflate, ttf, stl, obj or 3mf. Five
 findings were the harness's own and are fixed there: memory an earlier case left resident counted
-against every case after it (a case's memory is now its peak less what was resident before it), a mutant grown past the memory cap inside the
+against every case after it (a case's memory is now its peak less what was resident before it),
+its own unzip inflating 256 MB members of mutants, a mutant grown past the memory cap inside the
 mutator, a 64 MB deflate bomb whose making outran the timeout, and quadratic repeats.
 
 **Seeds from the datasets** (a long run of step on the 1531 CADFS files) found the last two rows'
