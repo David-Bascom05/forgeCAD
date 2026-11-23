@@ -17,6 +17,7 @@ import IEEE754.Screen.First
 import IEEE754.Screen.Near
 import IEEE754.Screen.Cross
 import IEEE754.Screen.Interior
+import IEEE754.Interval.Sin
 
 /-!
 # Only the standard axioms
@@ -98,3 +99,6 @@ elab "#standard_axioms " ids:ident* : command => do
   IEEE754.Screen.e_close IEEE754.Screen.r_close IEEE754.Screen.near_f_past IEEE754.Screen.near_f_within
   IEEE754.Screen.above_sound IEEE754.Screen.d0_close IEEE754.Screen.crosses_f_sound
   IEEE754.Screen.proj_close IEEE754.Screen.e_nonneg
+  -- Interval sin/cos
+  IEEE754.Interval.below_round IEEE754.Interval.above_round IEEE754.Interval.crit_counted
+  IEEE754.Interval.sin_encloses IEEE754.Interval.cos_encloses
