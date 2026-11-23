@@ -22,12 +22,22 @@ the repository; `scale/CORPUS.manifest.json` names each source, its licence, its
 | ABC (Koch et al. 2019) STEP, through CADFS's `raw/step_abc.zip` mirror (same ids as CADFS) | 450 307 | models' rights their creators' under Onshape's terms 1.g.ii; benchmarking only, nothing redistributed | yes |
 | AutoMate (Jones et al. 2021, Zenodo 7776208): parts of real Onshape assemblies | 447 442 | CC0-1.0 | yes |
 | NIST MBE PMI test models (NIST-PMI-STEP-Files.zip): CATIA, NX, Creo, SolidWorks | 33 | "used without any restrictions" | yes, whole |
-| Fusion 360 Gallery (Reconstruction r1.0.1, Segmentation s2.0.1, extended STEP set, Assembly a1.0.0) | ~200k | Autodesk licence: non-commercial research only; for-profit employers bound | **held**: asked the master whether our use qualifies |
+| Fusion 360 Gallery, Segmentation s2.0.1 extended STEP set (`s2.0.1_extended_step.zip`) | 42 912 | Fusion 360 Gallery Dataset License (non-commercial research). Used for testing only, not redistributed; owner approved 2026-11-23. No file or excerpt of one is in the repository | yes |
 | MFCAD++ (pure.qub.ac.uk, DOI 10.17034/d1fec5a0-…) | 59 665 | CC BY | **blocked**: Cloudflare challenge on pure.qub.ac.uk; not worked around |
 | WHUCAD B-rep (gitee fred926/whucad-brep) | ~130k | no licence on the brep repository (main repo MIT) | **blocked**: gitee.com fails at the proxy; no other mirror found |
 
-ABC's original host (archive.nyu.edu) takes no range requests and serves 0.6–1.7 GB 7z chunks; the mirror is used
+The Fusion 360 Gallery's other sets (Reconstruction, Assembly) are not used yet. ABC's original host (archive.nyu.edu) takes no range requests and serves 0.6–1.7 GB 7z chunks; the mirror is used
 instead. MFCAD's original 15 488 (github hducg/MFCAD, MIT) and the Fusion sets are candidates for later shards.
+
+## The judge
+
+The truth rule as truth.md has it, and two more grounds for an uncertain truth:
+
+- OCCT's shape is invalid, or OCCT fails or takes past 120 s;
+- the file has a degenerate torus's inner part (DEGENERATE_TOROIDAL_SURFACE, select_outer .F., a lemon). OCCT measures
+  such a face as if it were on the whole torus: `repro/lemon_ring.step`, a tube capped by a lemon ring, is 2398.876 by
+  its closed form and by ours, and 2683.12 by OCCT's Gauss–Kronrod volume. Rows from before the census told lemons
+  from apples count any degenerate torus.
 
 ## Rerun
 
