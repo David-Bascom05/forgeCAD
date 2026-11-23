@@ -362,6 +362,37 @@ impl Section {
         })
     }
 
+    /// Whether a point is material: inside the outline and outside every hole (crossings of a ray
+    /// along +x with the loops, counted; lines and arcs exactly).
+    pub fn contains(&self, p: Point2) -> bool {
+        let mut inside = false;
+        for seg in self.loops.iter().flatten() {
+            if let Some((c, r, st, sw)) = arc_of(seg) {
+                let dy = p.y - c.y;
+                if dy.abs() >= r {
+                    continue;
+                }
+                let dx = (r * r - dy * dy).sqrt();
+                for x in [c.x - dx, c.x + dx] {
+                    // a crossing at the arc's ends counted once: half-open in angle
+                    let a = dmath::atan2(dy, x - c.x);
+                    if x > p.x && on_arc(a, st, sw) {
+                        inside = !inside;
+                    }
+                }
+            } else {
+                let (a, b) = (seg.start(), seg.end());
+                if (a.y > p.y) != (b.y > p.y) {
+                    let x = a.x + (p.y - a.y) * (b.x - a.x) / (b.y - a.y);
+                    if x > p.x {
+                        inside = !inside;
+                    }
+                }
+            }
+        }
+        inside
+    }
+
     /// Its outline alone: the solid the member fills (its envelope).
     pub fn outline(&self) -> Section {
         Section {
