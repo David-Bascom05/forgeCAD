@@ -29,6 +29,7 @@ fn usage() -> ExitCode {
          forgecad web DIR [--port P] [--bind ADDR] [--token T] [--app WEBDIR] [--read-only]   (the browser app on DIR's files)\n       \
          forgecad import FILE.FCStd [-o DIR] [--json]   (each body a part file DIR/<file>.<body>.fg)\n       \
          forgecad machine SETUP.toml [--json] | list   (posted G-code on a machine: timeline, collisions, removal)\n       \
+         forgecad mesh FILE.stl|obj|3mf [--json]        (a mesh read and measured: not a B-rep)\n       \
          forgecad vendor list | show ID | export ID [-o F] | import F | new ID [--from ID] | check F [--json]   (sheet-metal vendor profiles)\n       \
          forgecad demo <out.stl> [chord-mm] | preview <out.json>\nthe language: AGENTS.md, forgecad help forge"
     );
@@ -215,6 +216,7 @@ fn main() -> ExitCode {
         Some("web") => web::main(&args[2..]),
         Some("import") if args.len() >= 3 => import(&args[2..]),
         Some("machine") if args.len() >= 3 => machine(&args[2..]),
+        Some("mesh") if args.len() >= 3 => mesh(&args[2..]),
         Some("vendor") => {
             let json = args.iter().any(|a| a == "--json");
             let rest: Vec<String> = args[2..].iter().filter(|a| *a != "--json").cloned().collect();
@@ -254,6 +256,84 @@ fn quoted(s: &str) -> String {
         }
     }
     o + "\""
+}
+
+/// A mesh file read and measured: triangles, whether it is closed, its volume, area and box. A
+/// mesh is for reference: nothing is built on it.
+fn mesh(argv: &[String]) -> ExitCode {
+    let json = argv.iter().any(|a| a == "--json");
+    let Some(file) = argv.iter().find(|a| !a.starts_with("--")) else {
+        return usage();
+    };
+    let ext = std::path::Path::new(file)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    let read = std::fs::read(file).map_err(|e| e.to_string()).and_then(|d| {
+        match ext.as_str() {
+            "stl" => forge_mesh::read::stl(&d),
+            "obj" => forge_mesh::read::obj(&d),
+            "3mf" => forge_import::threemf::read(&d),
+            _ => return Err(format!("{ext:?}: a mesh is .stl, .obj or .3mf")),
+        }
+        .map_err(|e| e.to_string())
+    });
+    let m = match read {
+        Ok(m) => m,
+        Err(e) => {
+            if json {
+                println!("{{\"file\":{},\"error\":{}}}", quoted(file), quoted(&e));
+            } else {
+                eprintln!("{file}: {e}");
+            }
+            return ExitCode::FAILURE;
+        }
+    };
+    let s = forge_mesh::read::summary(&m);
+    let num = |x: f64| {
+        if x.is_finite() {
+            format!("{x}")
+        } else {
+            "null".into()
+        }
+    };
+    if json {
+        println!(
+            "{{\"file\":{},\"kind\":\"mesh\",\"brep\":false,\"triangles\":{},\"vertices\":{},\"closed\":{},\"open_edges\":{},\"volume\":{},\"area\":{},\"box\":[{},{},{},{},{},{}]}}",
+            quoted(file),
+            s.triangles,
+            s.vertices,
+            s.closed,
+            s.open_edges,
+            s.volume.map_or("null".into(), num),
+            num(s.area),
+            num(s.bbox.0[0]),
+            num(s.bbox.0[1]),
+            num(s.bbox.0[2]),
+            num(s.bbox.1[0]),
+            num(s.bbox.1[1]),
+            num(s.bbox.1[2])
+        );
+    } else {
+        println!(
+            "{file}: a mesh (triangles, not a B-rep: for reference and measurement), {} triangles, {} vertices",
+            s.triangles, s.vertices
+        );
+        match s.volume {
+            Some(v) => println!("  closed; volume {v:.6} mm3"),
+            None => println!(
+                "  open ({} edges not shared by two triangles): no volume",
+                s.open_edges
+            ),
+        }
+        println!("  area {:.6} mm2", s.area);
+        println!(
+            "  box ({:.4}, {:.4}, {:.4}) to ({:.4}, {:.4}, {:.4}) mm",
+            s.bbox.0[0], s.bbox.0[1], s.bbox.0[2], s.bbox.1[0], s.bbox.1[1], s.bbox.1[2]
+        );
+    }
+    ExitCode::SUCCESS
 }
 
 /// Posted G-code simulated on a machine (forge-machine): `list` the machines, or run a setup file.

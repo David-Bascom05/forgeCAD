@@ -49,6 +49,7 @@ import ForgeLang.Undo
 import ForgeLang.Suppress
 import ForgeLang.Respell
 import ForgeLang.Fit
+import ForgeLang.Bounds
 import ForgeLang.HistoryId
 import ForgeLang.LL1.Driver
 import ForgeLang.LL1.ImplDriver

@@ -263,6 +263,7 @@ dependencies = [
  "forge-git",
  "forge-lang",
  "forge-math",
+ "forge-mesh",
  "forge-step",
  "forge-topo",
  "roxmltree",
@@ -418,6 +419,23 @@ dependencies = [
  "forge-mesh",
  "forge-model",
  "forge-ops",
+ "forge-topo",
+]
+
+[[package]]
+name = "forge-read-fuzz"
+version = "0.1.0"
+dependencies = [
+ "forge-agent",
+ "forge-dwg",
+ "forge-font",
+ "forge-git",
+ "forge-import",
+ "forge-lang",
+ "forge-material",
+ "forge-math",
+ "forge-mesh",
+ "forge-step",
  "forge-topo",
 ]
 

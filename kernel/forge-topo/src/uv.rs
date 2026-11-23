@@ -34,7 +34,10 @@ pub const PROC_SAG: f64 = 1e-4;
 pub fn default_segments(e: &Edge) -> usize {
     let n = match e.curve {
         Curve::Line(_) => 2,
-        Curve::Circle(_) | Curve::Ellipse(_) => (e.range.width() / (dmath::PI / 16.0)).ceil() as usize,
+        // (a file's edge can run many turns, or say it does: capped like the others)
+        Curve::Circle(_) | Curve::Ellipse(_) => {
+            ((e.range.width() / (dmath::PI / 16.0)).ceil() as usize).min(1 << 16)
+        }
         Curve::Parabola(_) | Curve::Hyperbola(_) => 16,
         // follow the chain: a sample per chain segment or two
         Curve::Intersection(_) => (e.range.width().ceil() as usize).clamp(4, 256),
