@@ -3,7 +3,7 @@
 //! `.brep`: a fillet's `EdgeN` is sampled from its base's stored shape and found on our part by
 //! position. Macros and scripts in the file are never touched.
 
-use crate::arrangement::{Arrangement, Ent, Kind, Shape, circle_from};
+use crate::arrangement::{Arrangement, Ent, Kind, Nurbs, Shape, circle_from};
 use crate::py::{self, V2, V3, add, dot, neg, num, pmax, pmin};
 use crate::state::{Edge, State};
 use crate::zip::Zip;
@@ -12,6 +12,7 @@ use forge_math::{Point3, Vec3};
 use forge_topo::Name;
 use roxmltree::Node;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::rc::Rc;
 
 /// A stored edge's samples lie this close to ours (mm).
 const TOL: f64 = 2e-3;
@@ -59,6 +60,7 @@ const SOLID: &[&str] = &[
     "PartDesign::AdditiveEllipsoid",
     "PartDesign::SubtractiveEllipsoid",
     "Part::Revolution",
+    "Part::Extrusion",
     "Part::Box",
     "Part::Cylinder",
     "Part::Cut",
@@ -76,6 +78,9 @@ const TRANSFORMS: &[&str] = &[
 /// What a pad's profile can be; only a sketch has rows, the rest a stored shape.
 const FLAT: &[&str] = &["Sketcher::SketchObject", "Part::Part2DObjectPython"];
 const NEEDS: &[&str] = &[
+    "PartDesign::Draft",
+    "PartDesign::AdditivePipe",
+    "PartDesign::SubtractivePipe",
     "PartDesign::FeatureBase",
     "Part::Cut",
     "Part::Fuse",
@@ -90,6 +95,7 @@ const NEEDS: &[&str] = &[
     "PartDesign::AdditiveCylinder",
     "PartDesign::SubtractiveCylinder",
     "Part::Revolution",
+    "Part::Extrusion",
     "Part::Box",
     "Part::Cylinder",
     "PartDesign::Pad",
@@ -373,8 +379,13 @@ fn sketch_ents(doc: &Doc, name: &str) -> Result<Vec<Ent>, Fail> {
                 if e.attribute("IsPeriodic") == Some("1") {
                     return Err(Fail::Unsupported("a periodic spline".into()));
                 }
-                Shape::Poly {
-                    points: bspline_points(e)?,
+                let points = bspline_points(e)?;
+                match bspline_exact(e)? {
+                    Some(n) => Shape::Nurbs {
+                        points,
+                        nurbs: Rc::new(n),
+                    },
+                    None => Shape::Poly { points },
                 }
             }
             Some("Part::GeomPoint") => continue,
@@ -389,6 +400,42 @@ fn sketch_ents(doc: &Doc, name: &str) -> Result<Vec<Ent>, Fail> {
         });
     }
     Ok(ents)
+}
+
+/// A clamped, non-periodic NURBS as Forge writes one (`spline(.., degree:, knots:, weights:)`);
+/// none where its ends are not its end poles.
+fn bspline_exact(e: Node) -> Result<Option<Nurbs>, Fail> {
+    let degree = usize::try_from(int(e.attribute("Degree"))?).or(bug("a negative degree"))?;
+    let (mut poles, mut weights) = (vec![], vec![]);
+    for p in kids(e, "Pole") {
+        poles.push((float(p.attribute("X"))?, float(p.attribute("Y"))?));
+        weights.push(float(Some(p.attribute("Weight").unwrap_or("1")))?);
+    }
+    let mut ks = vec![];
+    for x in kids(e, "Knot") {
+        ks.push((float(x.attribute("Value"))?, int(x.attribute("Mult"))?));
+    }
+    let clamped = |m: i64| usize::try_from(m).ok() == Some(degree + 1);
+    let (Some(first), Some(last)) = (ks.first(), ks.last()) else {
+        return Ok(None);
+    };
+    if ks.len() < 2 || !clamped(first.1) || !clamped(last.1) || weights.iter().any(|&w| w <= 0.0) {
+        return Ok(None);
+    }
+    let mut knots = vec![];
+    for &(v, m) in &ks {
+        // bspline_points has already capped the counts
+        knots.extend(std::iter::repeat_n(v, usize::try_from(m).unwrap_or(0)));
+    }
+    if knots.len() != poles.len() + degree + 1 || knots.windows(2).any(|w| w[1] < w[0]) {
+        return Ok(None);
+    }
+    Ok(Some(Nurbs {
+        degree,
+        poles,
+        knots,
+        weights,
+    }))
 }
 
 /// A fine polyline along a non-periodic NURBS: the part is then marked approx.
@@ -472,7 +519,7 @@ fn bspline_points(e: Node) -> Result<Vec<V2>, Fail> {
 fn ends(e: &Ent) -> Option<(V2, V2)> {
     match &e.shape {
         Shape::Line { start, end } | Shape::Arc { start, end, .. } => Some((*start, *end)),
-        Shape::Poly { points } => Some((points[0], points[points.len() - 1])),
+        Shape::Poly { points } | Shape::Nurbs { points, .. } => Some((points[0], points[points.len() - 1])),
         Shape::Circle { .. } => None,
     }
 }
@@ -750,6 +797,118 @@ fn sag(poly: &[V3]) -> f64 {
     near(poly[i], &[poly[i - 1], poly[i + 1]], 0.0) / 2.0
 }
 
+/// The pitch, height and hand of the helix a spine's stored shape holds (a shape binder keeps the
+/// helix as it was when bound, which an edit of the helix since does not move): from its samples,
+/// the rise along the axis through `o` along `ax` and the turn about it. The sweep starts where the
+/// profile is and rises that far.
+fn helix_turns(ws: Option<&Vec<Vec<Sampled>>>, o: V3, ax: V3) -> Result<(f64, f64, bool), Fail> {
+    let mut pts: Vec<V3> = ws
+        .into_iter()
+        .flatten()
+        .flatten()
+        .flat_map(|e| e.1.iter().copied())
+        .collect();
+    if pts.len() < 8 {
+        return Err(Fail::Unresolved(
+            "a helix whose stored shape would not read".into(),
+        ));
+    }
+    // one edge after another, each run its own way: the samples in order of their rise
+    let rise = |p: &V3| dot(add(*p, o, -1.0), ax);
+    pts.sort_by(|a, b| rise(a).partial_cmp(&rise(b)).unwrap_or(std::cmp::Ordering::Equal));
+    let k = if ax.0.abs() < 0.9 {
+        (1.0, 0.0, 0.0)
+    } else {
+        (0.0, 1.0, 0.0)
+    };
+    let Some(e1) = py::unit(add(k, ax, -dot(k, ax))) else {
+        return bug("a helix of no axis");
+    };
+    let e2 = py::cross(ax, e1);
+    let (mut hs, mut th): (Vec<f64>, Vec<f64>) = (vec![], vec![]);
+    for p in &pts {
+        let r = add(*p, o, -1.0);
+        let mut a = py::atan2(dot(r, e2), dot(r, e1));
+        if let Some(&last) = th.last() {
+            while a - last > py::PI {
+                a -= py::TAU;
+            }
+            while a - last < -py::PI {
+                a += py::TAU;
+            }
+        }
+        hs.push(dot(r, ax));
+        th.push(a);
+    }
+    let (height, turn) = (hs[hs.len() - 1] - hs[0], th[th.len() - 1] - th[0]);
+    if height <= 1e-9 || turn.abs() < 1e-6 {
+        return unsupported("a pipe along a helix of no rise or turn");
+    }
+    let pitch = height * py::TAU / turn.abs();
+    // the same pitch all the way: a taper or a varying pitch is no coil
+    if hs
+        .iter()
+        .zip(&th)
+        .any(|(h, t)| ((h - hs[0]) - (t - th[0]).abs() * pitch / py::TAU).abs() > 1e-4 * height.max(1.0))
+    {
+        return unsupported("a pipe along a helix of varying pitch");
+    }
+    let r9 = |x: f64| (x * 1e9).round() / 1e9;
+    Ok((r9(pitch), r9(height), turn < 0.0))
+}
+
+/// Does our edge (its samples `ours`) hold every sample of their edge `poly`? Ours are coarse:
+/// their distance from our chords is allowed our chords' own bow.
+fn contains(ours: &[V3], poly: &[V3]) -> bool {
+    let tol = TOL + sag(ours);
+    let lo = |f: fn(&V3) -> f64| ours.iter().map(f).fold(f64::INFINITY, pmin) - tol;
+    let hi = |f: fn(&V3) -> f64| ours.iter().map(f).fold(f64::NEG_INFINITY, pmax) + tol;
+    let (l, h) = (
+        [lo(|q| q.0), lo(|q| q.1), lo(|q| q.2)],
+        [hi(|q| q.0), hi(|q| q.1), hi(|q| q.2)],
+    );
+    let Some(&last) = poly.last() else { return false };
+    poly.iter().step_by(4).chain([&last]).all(|p| {
+        let q = [p.0, p.1, p.2];
+        (0..3).all(|k| l[k] <= q[k] && q[k] <= h[k]) && near(*p, ours, tol) <= tol
+    })
+}
+
+/// Is every sample of our edge on one of their edges?
+fn covered(ours: &[V3], polys: &[&Vec<V3>]) -> bool {
+    ours.iter().all(|&p| {
+        polys.iter().any(|poly| {
+            let tol = TOL + sag(poly);
+            near(p, poly, tol) <= tol
+        })
+    })
+}
+
+/// Our edges where their edge (samples `poly`) lies: ours on theirs, or theirs a piece of ours.
+fn edge_hits(edges: &[Edge], poly: &[V3]) -> Vec<usize> {
+    let tol = TOL + sag(poly);
+    let lo = |f: fn(&V3) -> f64| poly.iter().map(f).fold(f64::INFINITY, pmin) - tol;
+    let hi = |f: fn(&V3) -> f64| poly.iter().map(f).fold(f64::NEG_INFINITY, pmax) + tol;
+    let (l, h) = (
+        [lo(|q| q.0), lo(|q| q.1), lo(|q| q.2)],
+        [hi(|q| q.0), hi(|q| q.1), hi(|q| q.2)],
+    );
+    let inbox = |p: &V3| (0..3).all(|k| l[k] <= [p.0, p.1, p.2][k] && [p.0, p.1, p.2][k] <= h[k]);
+    let on: Vec<usize> = (0..edges.len())
+        .filter(|&i| {
+            [4, 8, 12]
+                .iter()
+                .any(|&k| inbox(&edges[i].p[k]) && near(edges[i].p[k], poly, tol) <= tol)
+        })
+        .collect();
+    if !on.is_empty() {
+        return on;
+    }
+    (0..edges.len())
+        .filter(|&i| contains(&edges[i].p, poly))
+        .collect()
+}
+
 fn near(p: V3, poly: &[V3], enough: f64) -> f64 {
     let mut best = f64::INFINITY;
     for w in poly.windows(2) {
@@ -768,20 +927,6 @@ fn near(p: V3, poly: &[V3], enough: f64) -> f64 {
         }
     }
     best
-}
-
-fn doc_approx(d: &Doc, name: &str) -> Result<bool, Fail> {
-    let sk = d.link(name, "Profile")?;
-    let p = if d.props.contains_key(&sk) {
-        d.prop(&sk, "Geometry")?
-    } else {
-        None
-    };
-    let Some(p) = p else { return Ok(false) };
-    let Some(list) = kid(p, "GeometryList") else {
-        return bug("a sketch's geometry without its list");
-    };
-    Ok(kids(list, "Geometry").any(|g| g.attribute("type") == Some("Part::GeomBSplineCurve")))
 }
 
 /// A feature of an older file whose stored result is just its own tool has no base.
@@ -848,12 +993,17 @@ fn base_of(doc: &Doc, n: &str) -> Result<String, Fail> {
             let _ = doc.bodied.set(s);
         }
         let prof = doc.link(n, "Profile")?;
-        let s = if doc.props.contains_key(&prof) {
+        let mut s = if doc.props.contains_key(&prof) {
             support_of(doc, &prof)?
         } else {
             String::new()
         };
         let bodied = doc.bodied.get().is_some_and(|b| b.contains(n));
+        if s.is_empty() && !bodied && matches!(doc.ty(n), Some("PartDesign::Fillet" | "PartDesign::Chamfer"))
+        {
+            // a blend outside any body acts on its Base
+            s = doc.link(n, "Base")?;
+        }
         return Ok(if !bodied && is(SOLID, doc.ty(&s)) {
             s
         } else {
@@ -993,6 +1143,8 @@ struct Sk {
     pts: Vec<String>,
     radii: Vec<String>,
     rows: Vec<String>,
+    /// Further params: a spline's degree, knots and weights.
+    more: Vec<(String, String)>,
 }
 
 impl Sk {
@@ -1045,6 +1197,9 @@ impl Sk {
         }
         if !self.radii.is_empty() {
             out += &format!("param {id}.r = [{}]\n", self.radii.join(", "));
+        }
+        for (k, v) in &self.more {
+            out += &format!("param {id}.{k} = {v}\n");
         }
         out += &format!("sketch {id}(on: {}) {{\n", at.on);
         for r in &self.rows {
@@ -1114,6 +1269,36 @@ impl Sk {
                     let cw = if d * turn < 0.0 { ", cw: true" } else { "" };
                     self.row("a", format!("arc(center: {c}, from: {f}, to: {t}{cw})"));
                 }
+                Kind::Poly if p.src.is_some() => {
+                    // the whole of a clamped NURBS: its poles, knots and weights, run the loop's way
+                    let Some(nb) = &p.src else { continue };
+                    let (mut poles, mut ws, mut ks) =
+                        (nb.poles.clone(), nb.weights.clone(), nb.knots.clone());
+                    if !fwd {
+                        poles.reverse();
+                        ws.reverse();
+                        let (k0, k1) = (ks[0], ks[ks.len() - 1]);
+                        ks = ks.iter().rev().map(|k| k0 + k1 - k).collect();
+                    }
+                    let n = poles.len();
+                    poles[0] = s;
+                    poles[n - 1] = e;
+                    let ps: Vec<String> = poles.iter().map(|&q| self.p(to(q))).collect();
+                    let k = self.rows.len();
+                    let ratios = |xs: &[f64]| {
+                        let r: Vec<String> = xs.iter().map(|&x| format!("ratio({})", num(x))).collect();
+                        format!("[{}]", r.join(", "))
+                    };
+                    self.more
+                        .push((format!("sd{k}"), format!("count({})", nb.degree)));
+                    self.more.push((format!("sk{k}"), ratios(&ks)));
+                    let mut t = format!("spline([{}], degree: sd{k}, knots: sk{k}", ps.join(", "));
+                    if ws.iter().any(|&w| w != 1.0) {
+                        self.more.push((format!("sw{k}"), ratios(&ws)));
+                        t += &format!(", weights: sw{k}");
+                    }
+                    self.row("s", t + ")");
+                }
                 Kind::Poly => {
                     let mut ps: Vec<V2> = p.pts.clone();
                     if !fwd {
@@ -1176,6 +1361,15 @@ enum Make {
         dir: V2,
         angle: Option<f64>,
         sym: bool,
+    },
+    /// Wound about an axis in the sketch's coordinates, rising along it.
+    Coil {
+        cut: bool,
+        at: V2,
+        dir: V2,
+        pitch: f64,
+        height: f64,
+        left: bool,
     },
 }
 
@@ -1439,6 +1633,13 @@ impl Tr<'_, '_, '_> {
             }
             axis = Some((o, k));
         }
+        if let Make::Coil { at, dir, .. } = &make {
+            let (o, k) = (fr.world(at.0, at.1), add(fr.world(dir.0, dir.1), fr.o, -1.0));
+            let Some(k) = py::unit(k) else {
+                return bug("a coil about a zero axis");
+            };
+            axis = Some((o, k));
+        }
         let mut make = make;
         if let Make::Extrude {
             cut: true,
@@ -1457,7 +1658,7 @@ impl Tr<'_, '_, '_> {
         }
         let (cut, travel) = match &make {
             Make::Extrude { cut, travel, .. } => (*cut, *travel),
-            Make::Revolve { cut, .. } => (*cut, normal),
+            Make::Revolve { cut, .. } | Make::Coil { cut, .. } => (*cut, normal),
         };
         // an extrude runs along its sketch's normal, a cut against it
         let n = if matches!(make, Make::Extrude { .. }) && cut {
@@ -1495,6 +1696,13 @@ impl Tr<'_, '_, '_> {
             let mut s = Sk::default();
             for lp in &prof {
                 s.lp(&a, lp, &to, turn);
+                // a spline the arrangement cut, or one not clamped, is written as a polyline
+                if lp
+                    .iter()
+                    .any(|&(i, _)| a.pieces[i].kind == Kind::Poly && a.pieces[i].src.is_none())
+                {
+                    self.approx = true;
+                }
             }
             if let Some((o, k)) = axis {
                 let (p, q) = (s.p(at.uv(o)), s.p(at.uv(add(o, k, 1.0))));
@@ -1565,6 +1773,18 @@ impl Tr<'_, '_, '_> {
                         opts += ", cut: true";
                     }
                     format!("revolve({skid}, axis: {skid}.ax")
+                }
+                Make::Coil {
+                    pitch, height, left, ..
+                } => {
+                    params.extend([("pitch", num(*pitch)), ("h", num(*height))]);
+                    if *left {
+                        opts += ", left: true";
+                    }
+                    if cut {
+                        opts += ", cut: true";
+                    }
+                    format!("coil({skid}, axis: {skid}.ax, pitch: pitch, height: h")
                 }
             };
             if new {
@@ -1708,6 +1928,76 @@ impl Tr<'_, '_, '_> {
     }
 
     /// Part workbench: a sketch turned about Axis through Base.
+    /// A pipe along a helix in Frenet mode, as a coil: the Frenet frame of a helix turns with the
+    /// screw motion, so the profile is wound rigidly about the helix's axis.
+    fn pipe(&mut self, name: &str, lab: &str, cut: bool) -> Result<Vec<String>, Fail> {
+        let d = self.doc;
+        if d.prop(name, "Sections")?
+            .is_some_and(|p| p.descendants().any(|n| n.has_tag_name("Link")))
+        {
+            return unsupported("a pipe through sections");
+        }
+        for k in ["AuxillerySpine", "AuxiliarySpine"] {
+            if !d.link(name, k)?.is_empty() {
+                return unsupported("a pipe with an auxiliary spine");
+            }
+        }
+        let sp = d.link(name, "Spine")?;
+        let helix = match d.ty(&sp) {
+            Some("Part::Helix") => sp.clone(),
+            Some("PartDesign::ShapeBinder") => {
+                let got: Vec<String> = d
+                    .prop(&sp, "Support")?
+                    .map(|p| {
+                        p.descendants()
+                            .filter(|n| n.has_tag_name("Link"))
+                            .filter_map(|n| n.attribute("obj").or(n.attribute("value")).map(String::from))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                match &got[..] {
+                    [h] if d.ty(h) == Some("Part::Helix") && d.placement(&sp)? == d.placement(h)? => {
+                        h.clone()
+                    }
+                    _ => {
+                        let w: Vec<&str> = got.iter().map(|g| d.ty(g).map_or("None", last_word)).collect();
+                        return unsupported(format!("a pipe along a shape binder of {}", w.join(", ")));
+                    }
+                }
+            }
+            t => return unsupported(format!("a pipe along {}", t.map_or("None", last_word))),
+        };
+        if d.integer(name, "Mode", 0)? != 2 {
+            return unsupported("a pipe along a helix, not Frenet");
+        }
+        if d.flt(&helix, "Angle", 0.0)?.abs() > 1e-12 || d.integer(&helix, "Style", 1)? != 1 {
+            return unsupported("a pipe along a tapered or old-style helix");
+        }
+        let sk = d.link(name, "Profile")?;
+        if !is(FLAT, d.ty(&sk)) {
+            return unsupported("a profile not from a sketch");
+        }
+        let fr = Frame::new(d.placement(&sk)?);
+        let (o, q) = d.placement(&helix)?;
+        let ax = rotate(q, (0.0, 0.0, 1.0));
+        let (u, v, w) = fr.uvw(o);
+        let (du, dv, dw) = (dot(ax, fr.x), dot(ax, fr.y), dot(ax, fr.n));
+        if w.abs() > 1e-6 || dw.abs() > 1e-9 {
+            return unsupported("a helix axis out of the profile's plane");
+        }
+        let ws = self.truth.get(&sp).and_then(|s| s.wires.as_ref());
+        let (pitch, height, left) = helix_turns(ws, o, ax)?;
+        let make = Make::Coil {
+            cut,
+            at: (u, v),
+            dir: (du, dv),
+            pitch,
+            height,
+            left,
+        };
+        self.profile(name, lab, make, Some(&sk))
+    }
+
     fn part_revolve(&mut self, name: &str, lab: &str) -> Result<Vec<String>, Fail> {
         let d = self.doc;
         if !d.boolean(name, "Solid")? {
@@ -1730,6 +2020,81 @@ impl Tr<'_, '_, '_> {
             sym: !whole && d.boolean(name, "Symmetric")?,
         };
         self.profile(name, lab, make, Some(&sk))
+    }
+
+    /// Part workbench: a sketch's faces moved along Dir. Older files have no LengthFwd: Dir's own
+    /// length is the distance. Newer ones run LengthFwd along it (and LengthRev back), Dir's
+    /// length when both are zero.
+    fn part_extrude(&mut self, name: &str, lab: &str) -> Result<Vec<String>, Fail> {
+        let d = self.doc;
+        if !d.boolean(name, "Solid")? {
+            return unsupported("a Part extrusion that makes a shell");
+        }
+        if d.flt(name, "TaperAngle", 0.0)?.abs() > 1e-12 || d.flt(name, "TaperAngleRev", 0.0)?.abs() > 1e-12 {
+            return unsupported("a tapered Part extrusion");
+        }
+        let (o, q) = d.placement(name)?;
+        if [o.0, o.1, o.2].iter().any(|x| x.abs() > 1e-9) || (q.3.abs() - 1.0).abs() > 1e-9 {
+            return unsupported("a moved Part extrusion");
+        }
+        let sk = d.link(name, "Base")?;
+        if !is(FLAT, d.ty(&sk)) {
+            return unsupported("a Part extrusion of something not a sketch");
+        }
+        let n = Frame::new(d.placement(&sk)?).n;
+        let mut v = d.vec_prop(name, "Dir")?;
+        let mut lv = dot(v, v).sqrt();
+        let (mut fwd, mut rev, mut sym) = (lv, 0.0, false);
+        if d.prop(name, "LengthFwd")?.is_some() {
+            match d.integer(name, "DirMode", 0)? {
+                0 => {}
+                2 => (v, lv) = (n, 1.0),
+                _ => return unsupported("a Part extrusion along an edge"),
+            }
+            (fwd, rev, sym) = (
+                d.flt(name, "LengthFwd", 0.0)?,
+                d.flt(name, "LengthRev", 0.0)?,
+                d.boolean(name, "Symmetric")?,
+            );
+            if fwd.abs() < 1e-12 && rev.abs() < 1e-12 {
+                fwd = lv;
+            }
+            if d.boolean(name, "Reversed")? {
+                v = neg(v);
+            }
+        }
+        let Some(u) = py::unit(v).filter(|_| lv >= 1e-12) else {
+            return unsupported("a Part extrusion of no direction");
+        };
+        let c = dot(u, n);
+        if c.abs() < 1e-9 {
+            return unsupported("a Part extrusion along its sketch's plane");
+        }
+        let z = if c < 0.0 { neg(n) } else { n };
+        // the distances run along Dir; Forge measures them along the normal
+        let (fwd, rev) = (fwd * c.abs(), rev * c.abs());
+        let ext = if (c.abs() - 1.0).abs() > 1e-12 {
+            // walls along a slant: a ruled loft, as a slanted pad's
+            let w = (u.0 / c.abs(), u.1 / c.abs(), u.2 / c.abs());
+            let (from, to) = if sym { (-fwd / 2.0, fwd / 2.0) } else { (-rev, fwd) };
+            Ext::Along { w, from, to }
+        } else if sym {
+            Ext::Sym(fwd)
+        } else if rev > 1e-12 {
+            Ext::Two(fwd, rev)
+        } else {
+            Ext::D(fwd)
+        };
+        self.profile(
+            name,
+            lab,
+            Make::Extrude {
+                cut: false,
+                ext,
+                travel: z,
+            },
+            Some(&sk),
+        )
     }
 
     /// Does a real feature follow this clone in the body being built? Those are in the body's own
@@ -1813,6 +2178,12 @@ impl Tr<'_, '_, '_> {
                     self.bodies = 0;
                 }
                 self.part_revolve(name, &lab)?
+            }
+            "Part::Extrusion" => {
+                if new {
+                    self.bodies = 0;
+                }
+                self.part_extrude(name, &lab)?
             }
             "Part::Box" | "Part::Cylinder" => self.part_solid(name, t, &lab, new)?,
             "Part::Sphere" => {
@@ -1971,6 +2342,19 @@ impl Tr<'_, '_, '_> {
                             .collect();
                     }
                 }
+                if hits.is_empty() {
+                    // theirs a piece of one of ours (a loop they split at a vertex we do not have):
+                    // every sample of theirs on our edge, and our edge covered by the edges they
+                    // pick, so the blend rounds no more than theirs
+                    let every: Vec<&Vec<V3>> = subs
+                        .iter()
+                        .filter_map(|x| self.truth.get(&base).and_then(|s| s.subs.get(x)))
+                        .flatten()
+                        .collect();
+                    hits = (0..edges.len())
+                        .filter(|&i| contains(&edges[i].p, poly) && covered(&edges[i].p, &every))
+                        .collect();
+                }
                 if hits.is_empty() && !all_edges {
                     return Err(Fail::Unresolved("no edge where the base's edge lies".into()));
                 }
@@ -2010,6 +2394,126 @@ impl Tr<'_, '_, '_> {
             ("fillet", "r")
         };
         b += &format!("{lab} = {word}({sel}, {arg})\n");
+        self.blocks.push(b);
+        Ok(vec![lab.into()])
+    }
+
+    /// Our face bounded by their face's edges (samples `polys`): the one face every one of those
+    /// edges borders, or where another shares them all (a disc on a cylinder's end), the one
+    /// bounded by nothing else.
+    fn face_of(edges: &[Edge], polys: &[Vec<V3>]) -> Result<Name, Fail> {
+        let mut common: Option<BTreeSet<Name>> = None;
+        let mut matched = HashSet::new();
+        for poly in polys {
+            let mut fs = BTreeSet::new();
+            for i in edge_hits(edges, poly) {
+                fs.extend(edges[i].f.iter().copied());
+                matched.insert(edges[i].h);
+            }
+            let c = match common {
+                Some(c) => c.intersection(&fs).copied().collect(),
+                None => fs,
+            };
+            let empty = c.is_empty();
+            common = Some(c);
+            if empty {
+                break;
+            }
+        }
+        let mut common = common.unwrap_or_default();
+        if common.is_empty() {
+            return Err(Fail::Unresolved("no face where the base's face lies".into()));
+        }
+        if common.len() > 1 {
+            common.retain(|f| {
+                edges
+                    .iter()
+                    .filter(|e| e.f.contains(f))
+                    .all(|e| matched.contains(&e.h))
+            });
+        }
+        match common.into_iter().collect::<Vec<_>>()[..] {
+            [f] => Ok(f),
+            _ => Err(Fail::Unresolved("a face its edges do not settle".into())),
+        }
+    }
+
+    /// Faces tilted about where they cross a neutral plane, the pull along the plane's outward
+    /// normal (or a line edge's way), turned by Reversed: FreeCAD's BRepOffsetAPI_DraftAngle.
+    fn draft(&mut self, name: &str, lab: &str) -> Result<Vec<String>, Fail> {
+        let d = self.doc;
+        let base = d.link(name, "Base")?;
+        let sampled = |o: &str, sub: &str| self.truth.get(o).and_then(|s| s.subs.get(sub)).cloned();
+        let nb = d.link(name, "NeutralPlane")?;
+        let ns: Vec<String> = d
+            .subs(name, "NeutralPlane")?
+            .into_iter()
+            .filter(|x| !x.is_empty())
+            .collect();
+        if nb != base || ns.len() != 1 || !ns[0].starts_with("Face") {
+            return unsupported("a draft's neutral plane not a face of its base");
+        }
+        let edges = self.state.edges(&self.program())?;
+        let mut want = BTreeSet::new();
+        for sub in d.subs(name, "Base")?.into_iter().filter(|x| !x.is_empty()) {
+            let polys = sampled(&base, &sub).filter(|_| sub.starts_with("Face"));
+            let Some(polys) = polys else {
+                let s: String = sub.chars().take(4).collect();
+                return Err(Fail::Unresolved(format!("a draft on {s} not sampled")));
+            };
+            want.insert(Self::face_of(&edges, &polys)?);
+        }
+        if want.is_empty() {
+            return Err(Fail::Unresolved("a draft of no faces".into()));
+        }
+        let Some(np) = sampled(&base, &ns[0]) else {
+            return Err(Fail::Unresolved("a draft's neutral face not sampled".into()));
+        };
+        let Some(pl) = self.state.plane(Self::face_of(&edges, &np)?) else {
+            return unsupported("a draft's neutral face not a plane");
+        };
+        let mut n = pl.n;
+        let pb = d.link(name, "PullDirection")?;
+        if !pb.is_empty() {
+            // its own pull: a line edge, run from its start, square to the neutral plane (Forge
+            // pulls along the plane's normal)
+            let ps: Vec<String> = d
+                .subs(name, "PullDirection")?
+                .into_iter()
+                .filter(|x| !x.is_empty())
+                .collect();
+            let poly = match &ps[..] {
+                [e] if e.starts_with("Edge") => sampled(&pb, e).filter(|p| p.len() == 1),
+                _ => None,
+            };
+            let Some(poly) = poly else {
+                return unsupported("a draft's pull direction not an edge");
+            };
+            let Some(v) = py::unit(add(poly[0][poly[0].len() - 1], poly[0][0], -1.0)) else {
+                return unsupported("a draft's pull direction not an edge");
+            };
+            if (dot(v, n).abs() - 1.0).abs() > 1e-9 {
+                return unsupported("a draft pulled off its neutral plane's normal");
+            }
+            n = v;
+        }
+        if d.boolean(name, "Reversed")? {
+            n = neg(n);
+        }
+        let mut feats: Vec<String> = self
+            .labels
+            .values()
+            .flat_map(|l| l.split(' ').map(String::from))
+            .collect();
+        feats.sort();
+        feats.dedup();
+        let sel = self.state.select_faces(&want, &feats)?;
+        let at = self.plane(n, pl.at)?;
+        let mut b = format!("param {lab}.a = {}deg\n", num(d.flt(name, "Angle", 0.0)?));
+        if let Some(dd) = &at.d {
+            b += &format!("param {lab}.d = {dd}\n");
+        }
+        b += &format!("{lab} = draft({sel}, angle: a, neutral: {})\n", at.on);
         self.blocks.push(b);
         Ok(vec![lab.into()])
     }
@@ -2240,9 +2744,6 @@ impl Tr<'_, '_, '_> {
             if !NEEDS.contains(&t) {
                 return unsupported(format!("feature {}", last_word(t)));
             }
-            if doc_approx(self.doc, name)? {
-                self.approx = true;
-            }
         }
         self.chain_rest = chain.to_vec();
         for name in chain {
@@ -2341,6 +2842,10 @@ impl Tr<'_, '_, '_> {
                 ls
             }
             "PartDesign::Hole" => self.hole(name, &lab)?,
+            "PartDesign::Draft" => self.draft(name, &lab)?,
+            "PartDesign::AdditivePipe" | "PartDesign::SubtractivePipe" => {
+                self.pipe(name, &lab, t == "PartDesign::SubtractivePipe")?
+            }
             "PartDesign::AdditiveBox"
             | "PartDesign::SubtractiveBox"
             | "PartDesign::AdditiveCylinder"
@@ -2543,6 +3048,15 @@ fn body_of(doc: &Doc, b: &str) -> Body {
         let mut wires = vec![];
         let members = tree_members(doc, &chain)?;
         for c in &members {
+            let sp = doc.link(c, "Spine")?;
+            let pipe = matches!(
+                doc.ty(c),
+                Some("PartDesign::AdditivePipe" | "PartDesign::SubtractivePipe")
+            );
+            if pipe && matches!(doc.ty(&sp), Some("PartDesign::ShapeBinder" | "Part::Helix")) {
+                put(&sp, doc.shape_file(&sp)?);
+                wires.push(sp);
+            }
             let sk = doc.link(c, "Profile")?;
             if doc.ty(&sk) == Some("Part::Part2DObjectPython") {
                 put(&sk, doc.shape_file(&sk)?);
@@ -2553,6 +3067,16 @@ fn body_of(doc: &Doc, b: &str) -> Body {
             let Some(t) = doc.ty(c) else {
                 return bug("a member of no type");
             };
+            if t == "PartDesign::Draft" {
+                for k in ["Base", "NeutralPlane", "PullDirection"] {
+                    let o = doc.link(c, k)?;
+                    if doc.props.contains_key(&o) {
+                        put(&o, doc.shape_file(&o)?);
+                        let s = doc.subs(c, k)?.into_iter().filter(|x| !x.is_empty());
+                        subs.entry(o).or_default().extend(s);
+                    }
+                }
+            }
             if t == "PartDesign::Fillet" || t == "PartDesign::Chamfer" {
                 let base = doc.link(c, "Base")?;
                 put(&base, doc.shape_file(&base)?);

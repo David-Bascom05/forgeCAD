@@ -190,12 +190,21 @@ def entities(ents):
             d0, d1 = e.get("startDerivative"), e.get("endDerivative")
             sp = spline_points(pts, d0, d1)
             p = Piece(e["id"], "poly", sp[0], sp[-1], pts=sp)
-            p.src = (pts, d0, d1)
-            approx = approx or not e.get("construction")
+            if e.get("exact"):
+                # written as Forge's cubic through the same points while whole (fgw.loop_segs), not a polyline
+                p.src = ("through", pts, d0, d1)
+            else:
+                p.src = (pts, d0, d1)
+                approx = approx or not e.get("construction")
         elif k == "polyline":
             pts = [tuple(x) for x in e["points"]]
             p = Piece(e["id"], "poly", pts[0], pts[-1], pts=pts)
             approx = approx or not e.get("construction")
+        elif k == "nurbs":
+            # a clamped NURBS: sampled for the arrangement, written exactly while a piece is the whole of it
+            pts = [tuple(x) for x in e["points"]]
+            p = Piece(e["id"], "poly", pts[0], pts[-1], pts=pts)
+            p.src = ("nurbs",) + tuple(e["nurbs"])
         elif k == "skPoint":
             every[e["id"]] = Piece(e["id"], "point", tuple(e["position"]), tuple(e["position"]))
             continue
