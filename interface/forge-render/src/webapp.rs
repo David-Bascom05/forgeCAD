@@ -301,6 +301,14 @@ impl Host {
 
     fn draw(&mut self) {
         use wgpu::CurrentSurfaceTexture as T;
+        // the canvas's pixels checked each frame: not every change of the pixel ratio comes as an
+        // event (a page zoomed, a window dragged to another monitor)
+        if self.surface.is_some()
+            && let Some(s) = backing_size(&self.window)
+            && (s.width, s.height) != (self.config.width, self.config.height)
+        {
+            self.fit(Some((s.width, s.height)));
+        }
         let ppp = self.window.scale_factor() as f32;
         let size = (self.config.width, self.config.height);
         let out = match (&self.surface, &self.target) {
