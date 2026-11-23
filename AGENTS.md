@@ -27,6 +27,13 @@ bolts = pattern(of: bolt, layout: lin(along: plan.outline[0].dir, n: count(2), s
 round = fillet(edges(of: boss, crease: "convex"), r)
 ```
 
+Sheet metal can be held to a fabricator's published capabilities: `sheet(plan, t: inch(0.063),
+vendor: "sendcutsend", material: "5052-H32 aluminum")` takes the vendor's radius and K for that
+stock and refuses a thickness or material it does not offer, with the options as fixes;
+`query F dfm` lists every violation (rule, measured, limit, faces, place on the flat).
+`forgecad vendor list|show|new|import|export` manages profiles (built in: sendcutsend, fabworks,
+oshcut, xometry, restated from their public guides: verify with the vendor before ordering).
+
 Select in the part's own text: `edges(of: boss, crease: "convex")`, `edges(between: (a, b))`,
 anchors like `base.end`, `base.side(plan.outline[2])`, `hole.bore`; one copy of a pattern or one
 place of a hole: `edges(of: bolts[1], crease: "convex")`. Features: extrude cut revolve
@@ -43,7 +50,7 @@ diff A B [volume]           what B changed from A: features, params, faces by na
 query F params|features|stat|check
 query F SEL [--at FEAT]     @handles: `faces plane normal +z top`, `edges of boss convex`;
                             --at: the part as it stood after that feature (measure, render too)
-query F holes|aligned|interference|faces | section z=67 | gap A B | frame SKETCH
+query F holes|aligned|interference|faces | section z=67 | gap A B | frame SKETCH | dfm
 measure F REF [REF] | mass | wall [exact]
 render F [VIEW] [--labels SEL] [--px N] [-o F.png]
 export F [ap214|ap242] [tol MM] [-o F.step] | dxf [SHEET] | dwg [SHEET]

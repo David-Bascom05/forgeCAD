@@ -12,6 +12,7 @@ pub mod build;
 pub mod builtins;
 pub mod compare;
 pub mod deps;
+pub mod dfm;
 pub mod drawing;
 pub mod edit;
 pub mod edit_ops;
@@ -854,11 +855,10 @@ fn expect(ev: &mut Eval, s: &syntax::Stmt, m: &Measure) -> Option<ExpectResult> 
         }
         return Some(ExpectResult { metric, measured, ok });
     };
-    let inch = |x: f64, u: syntax::Unit| if u == syntax::Unit::In { x * 25.4 } else { x };
     let lit = |e: &syntax::Expr| match e.kind {
-        ExprKind::Num(x, u) => Some(inch(x, u)),
+        ExprKind::Num(x, _) => Some(x),
         ExprKind::Neg(ref a) => match a.kind {
-            ExprKind::Num(x, u) => Some(-inch(x, u)),
+            ExprKind::Num(x, _) => Some(-x),
             _ => None,
         },
         _ => None,

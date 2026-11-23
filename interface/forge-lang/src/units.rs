@@ -397,7 +397,6 @@ impl Ev<'_, '_> {
             }
             TokKind::Num(v, Unit::None) => Ok((v, None)),
             TokKind::Num(v, Unit::Mm) => Ok((v, Some(LEN))),
-            TokKind::Num(v, Unit::In) => Ok((v * 25.4, Some(LEN))),
             TokKind::Num(v, Unit::Deg) => Ok((v, Some(ANG))),
             TokKind::Id(name) if name == "pi" => Ok((dmath::PI, None)),
             TokKind::Id(name) if FUNCS.contains(&name.as_str()) => {

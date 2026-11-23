@@ -130,6 +130,8 @@ pub(super) fn sheet_groups(s: &Shell) -> Vec<Group> {
             )],
             vec![
                 tool("Rules", SheetCmd::Rules, s.sheet.rules_open.is_some()),
+                tool("Vendor", SheetCmd::Vendor, s.sheet.vendor.open),
+                tool("Check (DFM)", SheetCmd::Dfm, s.sheet.vendor.dfm_open),
                 Tool {
                     name: "Convert to Part",
                     icon: "folder",
@@ -155,6 +157,7 @@ pub(super) fn flat_groups(s: &Shell) -> Vec<Group> {
             "Manage",
             vec![
                 tool("Bend Table", SheetCmd::BendTable, u.bend_table),
+                tool("Check (DFM)", SheetCmd::Dfm, u.vendor.dfm_open),
                 tool("Save Copy As DXF/DWG", SheetCmd::ExportDxf, u.dxf_open.is_some()),
             ],
             vec![],
@@ -234,6 +237,7 @@ impl Shell {
         self.sheet_rules(ctx);
         self.sheet_bend_table(ctx);
         self.sheet_dxf(ctx);
+        self.vendor_ui(ctx);
     }
 
     fn sheet_window<R>(
@@ -1308,6 +1312,27 @@ impl Shell {
                         Stroke::new(1.2, t.focus),
                     );
                     p.text(c + vec2(7.0, 7.0), Align2::LEFT_TOP, id, mono(10.0), t.focus);
+                }
+            }
+        }
+        // the DFM panel's violations on the blank, the chosen one larger
+        if self.sheet.vendor.dfm_open {
+            for (pts, chosen) in self.sheet.vendor.flat_marks(&f.sheet) {
+                let c = if chosen {
+                    super::vendorui::CHOSEN
+                } else {
+                    super::vendorui::MARK
+                };
+                let ps: Vec<egui::Pos2> = pts.iter().filter_map(|q| at(*q)).collect();
+                if let [a, b, ..] = ps[..] {
+                    p.line_segment([a, b], Stroke::new(if chosen { 2.5 } else { 1.5 }, c));
+                }
+                for q in ps {
+                    p.circle_stroke(
+                        q,
+                        if chosen { 9.0 } else { 5.0 },
+                        Stroke::new(if chosen { 2.5 } else { 1.5 }, c),
+                    );
                 }
             }
         }

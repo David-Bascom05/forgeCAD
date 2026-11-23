@@ -419,6 +419,7 @@ fn shop_checks() {
         rule: BendRule::K(0.4),
         radii: vec![2.0, 4.0],
         min_flange: scaled(11.0),
+        flange_outside: false,
         hole_to_bend: scaled(2.0),
         hole_to_edge: scaled(1.0),
         min_slot: scaled(1.0),

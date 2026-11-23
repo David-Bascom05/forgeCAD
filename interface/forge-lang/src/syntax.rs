@@ -47,8 +47,6 @@ pub enum Unit {
     None,
     Mm,
     Deg,
-    /// Inches: a length, 25.4 mm exactly.
-    In,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -373,7 +371,6 @@ fn lex_into<const KEEP: bool>(
                 "" => Unit::None,
                 "mm" => Unit::Mm,
                 "deg" => Unit::Deg,
-                "in" => Unit::In,
                 _ => {
                     return Err(Error::Syntax(SyntaxError::UnknownUnit {
                         span: Span::new(u0, i),

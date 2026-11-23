@@ -315,6 +315,7 @@ fn reliefs_smaller_than_the_rule_are_violations() {
         rule: BendRule::K(K),
         radii: vec![R],
         min_flange: forge_sheet::Scaled::NONE,
+        flange_outside: false,
         hole_to_bend: forge_sheet::Scaled::NONE,
         hole_to_edge: forge_sheet::Scaled::NONE,
         min_slot: forge_sheet::Scaled::NONE,

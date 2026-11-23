@@ -24,6 +24,7 @@ fn usage() -> ExitCode {
          forgecad release F REASON [--approver NAME] [--numeric] | releases F | regenerate_release F REV   (JSON; FORGECAD_AGENT names an agent)\n       \
          forgecad serve | mcp [--root DIR] [--writable]   (JSON-RPC / MCP on stdio, parts under DIR, default .; edits only if --writable)\n       \
          forgecad import FILE.FCStd [-o DIR] [--json]   (each body a part file DIR/<file>.<body>.fg)\n       \
+         forgecad vendor list | show ID | export ID [-o F] | import F | new ID [--from ID] | check F [--json]   (sheet-metal vendor profiles)\n       \
          forgecad demo <out.stl> [chord-mm] | preview <out.json>\nthe language: AGENTS.md, forgecad help forge"
     );
     ExitCode::from(2)
@@ -207,6 +208,25 @@ fn main() -> ExitCode {
             }
         }
         Some("import") if args.len() >= 3 => import(&args[2..]),
+        Some("vendor") => {
+            let json = args.iter().any(|a| a == "--json");
+            let rest: Vec<String> = args[2..].iter().filter(|a| *a != "--json").cloned().collect();
+            let here = std::env::current_dir().ok();
+            match forge_lang::vendor::tool(&rest, here.as_deref()) {
+                Ok((j, text)) => {
+                    if json {
+                        println!("{j}");
+                    } else {
+                        print!("{text}");
+                    }
+                    ExitCode::SUCCESS
+                }
+                Err(e) => {
+                    eprintln!("error: {e}");
+                    ExitCode::from(1)
+                }
+            }
+        }
         Some("help" | "--help" | "-h") => {
             println!("{}", forge_lang::help(&args[2..].join(" ")));
             ExitCode::SUCCESS

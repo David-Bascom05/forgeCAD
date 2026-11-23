@@ -55,8 +55,15 @@ pub fn check(sheet: &Sheet, shop: &ShopProfile) -> Vec<Violation> {
     };
     let min_flange = stock.min_flange.at(t, 0.0);
     for j in &sheet.joints {
-        let JointKind::Bend { radius, .. } = j.kind else {
+        let JointKind::Bend { radius, angle } = j.kind else {
             continue;
+        };
+        // the reference skin is the bend's inside where it turns towards a's top: the outside
+        // dimension is a setback of t further along each leg
+        let outside = if stock.flange_outside && angle > 0.0 {
+            crate::shop::setback(t, angle.abs())
+        } else {
+            0.0
         };
         if !stock.radii.is_empty() && !stock.radii.iter().any(|r| (r - radius).abs() <= RADIUS_MATCH) {
             let nearest = stock
@@ -81,8 +88,8 @@ pub fn check(sheet: &Sheet, shop: &ShopProfile) -> Vec<Violation> {
             let Ok((p0, p1)) = straight(w, segment) else {
                 continue;
             };
-            let length = reach(w, p0, p1);
-            if length < min_flange {
+            let length = reach(w, p0, p1) + outside;
+            if length < min_flange - AT_LIMIT {
                 out.push(Violation::FlangeTooShort {
                     feature,
                     wall,
@@ -95,8 +102,13 @@ pub fn check(sheet: &Sheet, shop: &ShopProfile) -> Vec<Violation> {
     }
     out.extend(stock_process(sheet, stock, &shop.process));
     out.extend(holes(sheet, stock));
-    out.extend(bend_edges(sheet, stock));
-    out.extend(webs(sheet, stock));
+    // the flat once for the rules that read it whole
+    let wants = stock.bend_to_edge != crate::shop::Scaled::NONE && !sheet.joints.is_empty()
+        || stock.min_web.at(t, 0.0) > 0.0;
+    if let Some(flat) = wants.then(|| Flat::of(sheet)).flatten() {
+        out.extend(bend_edges(sheet, stock, &flat));
+        out.extend(webs(sheet, stock, &flat));
+    }
     out.extend(mounts(sheet, Some(stock)));
     out.extend(reliefs(sheet, &shop.relief_rule(t).unwrap_or(stock.relief)));
     out
@@ -632,13 +644,12 @@ pub fn operations(sheet: &Sheet, shop: &ShopProfile) -> Vec<Violation> {
 /// the bend's own ends, its reliefs or the walls' sides running off it), but the far edge of a
 /// flange, which runs the zone's whole length (the minimum flange's to check). Exact distances
 /// between the flat's lines and arcs.
-fn bend_edges(sheet: &Sheet, stock: &Stock) -> Vec<Violation> {
+fn bend_edges(sheet: &Sheet, stock: &Stock, flat: &Flat) -> Vec<Violation> {
     let t = sheet.gauge.thickness;
     let mut out = vec![];
-    if stock.bend_to_edge == crate::shop::Scaled::NONE || sheet.joints.is_empty() {
+    if stock.bend_to_edge == crate::shop::Scaled::NONE {
         return out;
     }
-    let Some(flat) = Flat::of(sheet) else { return out };
     for z in &flat.zones {
         let limit = stock.bend_to_edge.at(t, z.radius);
         let mut best: Option<(f64, Point2)> = None;
@@ -681,17 +692,16 @@ fn bend_edges(sheet: &Sheet, stock: &Stock) -> Vec<Violation> {
 
 /// Webs narrower than the stock's least: between two holes (any two inner contours of the flat),
 /// and necks of the outline (two pieces of the outer contour, not neighbours, whose nearest
-/// points face each other square across material). A hole's distance to the outline is
+/// points face each other square to both, across material). A hole's distance to the outline is
 /// `hole_to_edge`'s, and a slot's own width `min_slot`'s, so neither is measured here. Exact
 /// nearest points on lines and arcs.
-fn webs(sheet: &Sheet, stock: &Stock) -> Vec<Violation> {
+fn webs(sheet: &Sheet, stock: &Stock, flat: &Flat) -> Vec<Violation> {
     let t = sheet.gauge.thickness;
     let limit = stock.min_web.at(t, 0.0);
     let mut out = vec![];
     if limit <= 0.0 {
         return out;
     }
-    let Some(flat) = Flat::of(sheet) else { return out };
     let all = &flat.contours;
     let polys: Vec<Vec<Point2>> = all
         .iter()
@@ -753,7 +763,7 @@ fn webs(sheet: &Sheet, stock: &Stock) -> Vec<Violation> {
             push(d, at, to, &mut out);
         }
     }
-    // necks of the outline: pieces not neighbours, met square at points inside both
+    // necks of the outline: pieces not neighbours, met square
     let outer = &all[flat.outer_k];
     let n = outer.len();
     let pb: Vec<_> = outer.iter().map(|p| boxed(std::slice::from_ref(p))).collect();
@@ -764,11 +774,10 @@ fn webs(sheet: &Sheet, stock: &Stock) -> Vec<Violation> {
                 continue;
             }
             let (d, at, to, _) = gap(&[(outer[i].clone(), 0)], std::slice::from_ref(&outer[j]));
+            // square to both pieces where it meets them (parallel lines meet so at their ends
+            // too; a rounded corner's chord is square to neither line)
             let square = |p: &Piece, q: Point2, other: Point2| {
                 let u = p.nearest(q);
-                if u <= 1e-9 || u >= 1.0 - 1e-9 {
-                    return false;
-                }
                 let e = 1e-6;
                 let tan = p.at((u + e).min(1.0)) - p.at((u - e).max(0.0));
                 unit(tan).dot(unit(other - q)).abs() < 1e-6

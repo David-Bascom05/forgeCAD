@@ -74,6 +74,7 @@ fn shop(hardness: Option<f64>) -> ShopProfile {
             rule: BendRule::K(0.4),
             radii: vec![R],
             min_flange: Scaled::NONE,
+            flange_outside: false,
             hole_to_bend: per_t(2.5, 1.0),
             hole_to_edge: per_t(2.0, 0.0),
             min_slot: per_t(1.0, 0.0),

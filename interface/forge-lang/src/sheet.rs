@@ -383,6 +383,9 @@ pub struct SheetOut {
     pub reliefs: Vec<fs::ReliefMade>,
     pub corners: Vec<fs::build::CornerMade>,
     pub material: Option<String>,
+    /// The shop it is checked against (none: unchecked), and the vendor profile it came from.
+    pub shop: Option<fs::ShopProfile>,
+    pub vendor: Option<crate::vendor::VendorTag>,
 }
 
 impl SheetState {
@@ -3032,6 +3035,7 @@ fn stock(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
         rule: rule.rule.clone(),
         radii: radii.iter().map(|r| r.v).collect(),
         min_flange: scaled_of(&a, "min_flange")?,
+        flange_outside: false,
         hole_to_bend: scaled_of(&a, "hole_to_bend")?,
         hole_to_edge: scaled_of(&a, "hole_to_edge")?,
         min_slot: scaled_of(&a, "min_slot")?,
@@ -3238,8 +3242,11 @@ fn base(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
     });
     let r = match (a.num("r", LEN)?, &stock) {
         (Some(r), _) => r,
-        (None, Some(s)) => s.radii[0].clone(),
-        (None, None) => {
+        (None, Some(s)) if !s.radii.is_empty() => s.radii[0].clone(),
+        // a stock the shop only cuts: no bend is made of it (each one is OperationNotOffered),
+        // so t stands for the radius the sheet must carry
+        (None, Some(s)) if s.stock.not.contains(&fs::Operation::Bend) => Num::konst(t.v, Dim::Length),
+        (None, _) => {
             return Err(Error::MissingArg {
                 span,
                 func: "sheet",
@@ -3249,8 +3256,9 @@ fn base(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
     };
     let rule = match (rule_of(&a, "bend")?, &stock) {
         (Some(r), _) => r,
-        (None, Some(s)) => s.rule.clone(),
-        (None, None) => {
+        // a vendor that states no bend rule for the stock: none is made up for it
+        (None, Some(s)) if shop.as_ref().is_none_or(|x| crate::vendor::states_rule(x, t.v)) => s.rule.clone(),
+        (None, _) => {
             return Err(Error::MissingArg {
                 span,
                 func: "sheet",
@@ -4912,6 +4920,8 @@ pub fn outputs(ev: &Eval) -> Vec<SheetOut> {
             reliefs: st.folded.as_ref().map_or(vec![], |b| b.reliefs.clone()),
             corners: st.folded.as_ref().map_or(vec![], |b| b.corners.clone()),
             material: st.material.clone(),
+            shop: st.shop.as_ref().map(|s| s.shop.clone()),
+            vendor: st.shop.as_ref().and_then(|s| s.vendor.as_deref().cloned()),
             unfolds: st
                 .unfolds
                 .iter()
@@ -4964,7 +4974,12 @@ impl SheetOut {
         format!(
             "{}  MATERIAL {}  T {:.2}  {rule}",
             self.id.to_uppercase(),
-            self.material.as_deref().unwrap_or("UNSPECIFIED").to_uppercase(),
+            self.vendor
+                .as_ref()
+                .map(|v| v.material.as_str())
+                .or(self.material.as_deref())
+                .unwrap_or("UNSPECIFIED")
+                .to_uppercase(),
             g.thickness
         )
     }
@@ -5002,6 +5017,10 @@ impl SheetOut {
             ("thickness", g.thickness.into()),
             ("radius", g.radius.into()),
             ("rule", rule),
+            (
+                "vendor",
+                self.vendor.as_ref().map_or(Json::Null, crate::dfm::vendor_json),
+            ),
             ("walls", self.walls.len().into()),
             ("bends", Json::Arr(bends)),
             (

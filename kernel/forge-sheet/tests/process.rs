@@ -171,6 +171,7 @@ fn the_shop_check_runs_them() {
             rule: BendRule::K(0.4),
             radii: vec![1.6],
             min_flange: Scaled::NONE,
+            flange_outside: false,
             hole_to_bend: Scaled::NONE,
             hole_to_edge: Scaled::NONE,
             min_slot: Scaled::NONE,

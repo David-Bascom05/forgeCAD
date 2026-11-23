@@ -1593,7 +1593,6 @@ impl<'s> Eval<'s> {
             ExprKind::Num(v, u) => Ok(Value::Num(match u {
                 Unit::Deg => Num::konst(v.to_radians(), Dim::Angle),
                 Unit::Mm => Num::konst(*v, Dim::Length),
-                Unit::In => Num::konst(*v * 25.4, Dim::Length),
                 // in a param too: a bare number takes the other operand's dimension, so `W / 2`
                 // is a Length; what is still bare when the param is made settles to Length
                 Unit::None => Num::konst(*v, Dim::Any),

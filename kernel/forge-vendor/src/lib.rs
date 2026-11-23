@@ -1047,6 +1047,8 @@ impl Vendor {
                 rule,
                 radii,
                 min_flange: at(&rules.min_flange),
+                // fabricators quote a flange's outside dimension
+                flange_outside: true,
                 hole_to_bend: at(&rules.hole_to_bend),
                 hole_to_edge: at(&rules.hole_to_edge),
                 min_slot: at(&rules.min_slot),
@@ -1235,7 +1237,8 @@ impl Profiles {
     /// `load`, kept while the profile files are unchanged (their names and bytes).
     pub fn cached(doc_dir: Option<&Path>) -> Arc<Profiles> {
         type Key = (Option<PathBuf>, Vec<(PathBuf, Option<Vec<u8>>)>);
-        static CACHE: OnceLock<Mutex<Vec<(Key, Arc<Profiles>)>>> = OnceLock::new();
+        type Cache = Mutex<Vec<(Key, Arc<Profiles>)>>;
+        static CACHE: OnceLock<Cache> = OnceLock::new();
         let stamp = |d: Option<PathBuf>| {
             d.map(|d| toml_files(&d))
                 .unwrap_or_default()

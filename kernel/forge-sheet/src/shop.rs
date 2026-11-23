@@ -170,6 +170,9 @@ pub struct Stock {
     pub radii: Vec<f64>,
     /// The shortest flange the die can hold, from the mold line.
     pub min_flange: Scaled,
+    /// The minimum flange is to the outer virtual sharp (the outside dimension, as fabricators
+    /// quote it), not the mold line on the reference skin.
+    pub flange_outside: bool,
     pub hole_to_bend: Scaled,
     pub hole_to_edge: Scaled,
     pub min_slot: Scaled,

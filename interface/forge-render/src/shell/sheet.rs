@@ -44,6 +44,10 @@ pub enum SheetCmd {
     ShowBends,
     ShowTangents,
     ShowTools,
+    /// The vendor window: pick, edit, import and export vendor profiles.
+    Vendor,
+    /// The DFM panel: the part against its vendor.
+    Dfm,
 }
 
 /// The feature kinds the sheet metal dialogs make, by the call each writes.
@@ -112,6 +116,8 @@ pub fn icon(c: SheetCmd) -> &'static str {
         SheetCmd::BendTable => "bendtable",
         SheetCmd::Defaults => "smdefaults",
         SheetCmd::Rules => "params",
+        SheetCmd::Vendor => "folder",
+        SheetCmd::Dfm => "check",
         _ => "smface",
     }
 }
@@ -1783,6 +1789,8 @@ pub struct SheetUi {
     /// The tree asked to edit this feature.
     pub edit_req: Option<String>,
     pub out: Vec<SheetAct>,
+    /// Vendor profiles and the DFM panel (`vendorui.rs`).
+    pub vendor: super::vendorui::VendorUi,
 }
 
 /// What the sheet metal chrome asks the host for.
@@ -1862,6 +1870,8 @@ impl SheetUi {
             SheetCmd::BendTable => self.bend_table = !self.bend_table,
             SheetCmd::ShowExtents => self.extents = !self.extents,
             SheetCmd::ShowBends => self.bend_lines = !self.bend_lines,
+            SheetCmd::Vendor => self.vendor.open = !self.vendor.open,
+            SheetCmd::Dfm => self.vendor.dfm_open = !self.vendor.dfm_open,
             SheetCmd::ShowTangents => self.tangents = !self.tangents,
             SheetCmd::ShowTools => self.tool_marks = !self.tool_marks,
             SheetCmd::NewPart => {}
