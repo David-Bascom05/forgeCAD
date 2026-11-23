@@ -85,6 +85,10 @@ impl Keys {
     }
     /// Adds `k` unless it holds one equal; whether it did.
     pub fn insert(&mut self, k: std::sync::Arc<ParamKey>) -> bool {
+        // the very key held already (most are, a few long): no text compared
+        if self.0.iter().any(|x| std::sync::Arc::ptr_eq(x, &k)) {
+            return false;
+        }
         match self.0.binary_search(&k) {
             Ok(_) => false,
             Err(i) => {
