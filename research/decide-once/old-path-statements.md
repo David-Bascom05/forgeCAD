@@ -125,6 +125,7 @@ definitions (`keep`, `coreI`) are reused as the spec of D6–D8.
 | G10 | `nary`'s `Batch` (a trait object: GPU or CPU) and its threads | an external verdict source; parallel order | `Batch` sound when decided (a hypothesis on the impl; CpuBatch proven); results merged in a fixed order |
 | G11 | the many `LINEAR` / `RIM` tolerance tests (`on_edge`, `settle`, `tolerant_cuts`, `grown_tols`, `holds_edge`, `rolls_off`, `through_smooth_edge`, …) | each is a guess unless it is a proven screen | each becomes a screen plus exact; listed per function as the aeneas table arrives |
 | G13 | `face_point`'s inward step (min(0.01·len, 0.05)) is never checked against cuts or other loops | a probe may land in the wrong region: a wrong class, not an undecided one | a screened distance check with an exact fallback, then another probe or a typed refusal |
+| G14 | trim_in B:2614/2938: `(box contains && !CAREFUL) \|\| point_in_face(..)` accepts a hit on the face's box alone | a box contains far more than the face: a guess that the hit is in the face | point_in_face_at on the exact point, behind a screen (the box test may stay as a fast *reject* only) |
 | G12 | the `decide_once` cargo feature (off by default) | ships as the flat fallback (owner clarification) | it becomes the fallback branch: on in release, entered only after today's path refuses or is undecided, with no env switch; proven by IncCoreSpec/EndToEndF plus R3 |
 
 
@@ -256,6 +257,11 @@ Proof shape:
 
   Measured (flat-guess-site-rates.md, 4d260609): On ≤ 1e-12 and almost always exactly 0, and the
   all-rays branch fired 0 times, so the exact path is rare.
+- **Measured (decide-once Rust, 2026-11-23):**
+  - the first (A) attempt, at trim_in's planar hit sites, ran 58 times on the gate and fuzz 1–40, never with all three faces planar; it cost +0.53% on coplanar by un-inlining on_edge, so it was reverted;
+  - flat `On` comes mostly from B:3387, trim_in's `at(k, p)` midpoint between two cuts (3,011 of 5,602), and that is the next flat step;
+  - the nine point_in_face near-misses are all curved (B:2845, B:3315);
+  - rule for every exact fallback: one `#[cold] #[inline(never)]` helper with a single call site, measured against the inlining effect.
 - **Rust plan:**
   - exact companions: `classify_exact(ExactPt) → Result<Where, Refusal>` and
     `point_in_face_at(f, ExactPt)`, where `ExactPt` is a key or a foot;
