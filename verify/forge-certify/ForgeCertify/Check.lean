@@ -104,19 +104,19 @@ def planeThrough (p n : V3) : Plane := ⟨n, n.dot p⟩
 def vmin3 (a b c : Rat) : Rat := qmin a (qmin b c)
 def vmax3 (a b c : Rat) : Rat := qmax a (qmax b c)
 
-/-- Some separating plane, tried in turn (cheapest first): axis planes between the boxes, `u`'s
-plane, the planes through each edge of either square to its own plane, and through an edge of
-each. -/
+/-- Along direction `d`, a plane at `u`'s extreme: `u` on one side, the atom on the other. -/
+def sepAlong (d : V3) (τ u : Tri) : Bool :=
+  sepOK ⟨d, vmax3 (d.dot u.a) (d.dot u.b) (d.dot u.c)⟩ τ u ||
+    sepOK (Plane.neg ⟨d, vmin3 (d.dot u.a) (d.dot u.b) (d.dot u.c)⟩) τ u
+
+/-- Some separating plane (the separating axes of two triangles, cheapest first: the coordinate
+axes, the two planes' normals, each edge square to either plane, each pair of edges). -/
 def separated (P Q : Plane) (τ u : Tri) : Bool :=
   let axes : List V3 := [⟨1, 0, 0⟩, ⟨0, 1, 0⟩, ⟨0, 0, 1⟩]
-  let both (H : Plane) := sepOK H τ u || sepOK H.neg τ u
-  axes.any (fun d =>
-      sepOK ⟨d, vmax3 (d.dot u.a) (d.dot u.b) (d.dot u.c)⟩ τ u ||
-        sepOK (Plane.neg ⟨d, vmin3 (d.dot u.a) (d.dot u.b) (d.dot u.c)⟩) τ u) ||
-    both Q ||
-    τ.segs.any (fun s => both (planeThrough s.1 ((s.2 - s.1).cross P.n))) ||
-    u.segs.any (fun s => both (planeThrough s.1 ((s.2 - s.1).cross Q.n))) ||
-    τ.segs.any (fun s => u.segs.any fun s' => both (planeThrough s.1 ((s.2 - s.1).cross (s'.2 - s'.1))))
+  axes.any (fun d => sepAlong d τ u) || sepAlong Q.n τ u || sepAlong P.n τ u ||
+    τ.segs.any (fun s => sepAlong ((s.2 - s.1).cross P.n) τ u) ||
+    u.segs.any (fun s => sepAlong ((s.2 - s.1).cross Q.n) τ u) ||
+    τ.segs.any (fun s => u.segs.any fun s' => sepAlong ((s.2 - s.1).cross (s'.2 - s'.1)) τ u)
 
 /-- Two triangles of one plane with disjoint interiors in projection: some edge line has one on
 each closed side. -/

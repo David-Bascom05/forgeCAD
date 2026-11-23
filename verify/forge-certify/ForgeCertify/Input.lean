@@ -250,7 +250,12 @@ def explain (op : List Bool → Bool) (ins : List Opd) (res : List Face) : Strin
         let w := witness ins P τ
         match firstBad (allSoup ins) (fun t => !offP P t || witnessOK w t.1 t.2) with
         | some _ => return s!"{pn}: the witness {fmtV w} is tied with another surface"
-        | none => return s!"{pn}: a surface passes through the piece at {fmtV w}"
+        | none =>
+          let bad := (allSoup ins).find? (fun t => offP P t && !separated P t.1 τ t.2)
+          let d := match bad with
+            | some t => s!" (triangle {fmtV t.2.a} {fmtV t.2.b} {fmtV t.2.c} of plane {qf t.1.n.x} {qf t.1.n.y} {qf t.1.n.z} {qf t.1.c}; piece {fmtV τ.a} {fmtV τ.b} {fmtV τ.c})"
+            | none => ""
+          return s!"{pn}: a surface passes through the piece at {fmtV w}{d}"
     if !resultOK op ins res P As then
       return s!"{pn}: the result's faces there are not the boolean's (a face missing, extra or misplaced)"
   return "?"
