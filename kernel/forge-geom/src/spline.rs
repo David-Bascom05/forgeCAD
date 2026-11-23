@@ -219,6 +219,21 @@ fn lerp(a: &H, b: &H, s: f64) -> H {
     ]
 }
 
+/// de Casteljau on `w[0..=degree]`, in place: `w[0]` ends as the piece at s. Levels from the
+/// degree down, each lerp in turn (verify/aeneas/forge-geom translates this as it ships;
+/// research/spline-loops/fp bounds its rounding).
+fn decasteljau(w: &mut [H; MAX_DEGREE + 1], degree: usize, s: f64) {
+    let mut r = degree;
+    while r > 0 {
+        let mut j = 0;
+        while j < r {
+            w[j] = lerp(&w[j], &w[j + 1], s);
+            j += 1;
+        }
+        r -= 1;
+    }
+}
+
 fn sub(a: &H, b: &H) -> H {
     [a[0] - b[0], a[1] - b[1], a[2] - b[2], a[3] - b[3]]
 }
@@ -530,11 +545,7 @@ impl Spline {
         let (i, s, _) = self.locate(t);
         let mut w = [[0.0; 4]; MAX_DEGREE + 1];
         w[..=self.degree].copy_from_slice(self.row(i));
-        for r in (1..=self.degree).rev() {
-            for j in 0..r {
-                w[j] = lerp(&w[j], &w[j + 1], s);
-            }
-        }
+        decasteljau(&mut w, self.degree, s);
         point_of(&w[0])
     }
 
@@ -1195,7 +1206,10 @@ fn tridiagonal(rows: &[(f64, f64, f64, Vec3)]) -> Vec<Vec3> {
         c[i] = cc / m;
         d[i] = (dd - d[i - 1] * a) / m;
     }
-    for i in (0..n - 1).rev() {
+    // back from the last row (a while loop, as verify/aeneas translates it)
+    let mut i = n - 1;
+    while i > 0 {
+        i -= 1;
         d[i] = d[i] - d[i + 1] * c[i];
     }
     d

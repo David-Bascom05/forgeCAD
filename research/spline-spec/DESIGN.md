@@ -124,36 +124,49 @@ Theorems (all over ℝ, no sorry, standard axioms only, `Axioms.lean` prints the
   "nothing that works now may fail after", the per-entity opt-in stays until those faults are fixed, and I can take the
   repro of each if you want.
 
-## A default I would question (not changing it)
-Through-splines closed by default: every fit-spline source (CADFS, WHUCAD, Fusion, FreeCAD) is open by default, and the
-import session's "open chain" bug came from it. Open by default, closed by `closed: true`, would be the usual rule.
+## The default (decided: open)
+Through-splines were closed by default. Every fit-spline source (CADFS, WHUCAD, Fusion, FreeCAD) is open by default, and
+the import session's "open chain" bug came from that. The owner decided: open by default, closed by `closed: true`.
+Fixtures were migrated with `closed: true` and still give the same bits.
 
 ## Status (built)
 
-Lean, `research/spline-loops/lean` (`lake build`; `lake env lean Axioms.lean`, `CheckAxioms.lean`: 369 theorems,
-standard axioms only, no sorry):
+Lean, `research/spline-loops/lean` (`lake build`; `Axioms.lean` and `CheckAxioms.lean`: 488 theorems, standard axioms
+only, no sorry):
 
 | file | what |
 |---|---|
-| `SplineSpec/Defs.lean` | the definitions, core Lean, generic over the number type (the spec over ℝ, the model over `Rat`) |
+| `SplineSpec/Defs.lean` | the definitions, in core Lean and generic over the number type (the spec over ℝ, the model over `Rat`); `formOf`, with closedness decided by the flag |
 | `Slopes.lean` | the slope system: row dominance, `slopes_exist`, `slopes_unique`, `slopes_bound` (Varah, row-scaled) |
 | `Interp.lean` | T7: `interp_exists_unique` (every C2 cubic interpolant is the Hermite form of a solution), `interp_through` |
 | `Centripetal.lean` | the parameters over ℝ, `centripetal_strictMono`, `spline_exists_unique` (the language's through-spline) |
 | `Basis.lean` | T1, T2, T5: `nb_sum_one`, `nb_nonneg`, `eval_between` (convex hull), `clamped_start`, `clamped_end` |
-| `Deriv.lean` | T3: `hasDerivAt_nb`, `hasDerivAt_curve` (the derivative is the B-spline of degree p - 1 on differenced poles) |
-| `Continuity.lean` | T4: `nb_continuous`, `iter_curveOn`, `curve_smooth` (C^(p-k) at a knot of multiplicity k) |
-| `Cert.lean` | the control-spline certificate: `span_bernstein`, `bern_close` |
-| `Interval.lean` | the oracle's intervals enclose; `rows_in`, `residual_in`, `through_cert` |
+| `Deriv.lean` | T3: `hasDerivAt_nb`, `hasDerivAt_curve`, `hasDerivAt_rational` |
+| `Continuity.lean` | T4: `curve_smooth` (C^(p-k) at a knot of multiplicity k) |
+| `Insert.lean` | T6: `insert_basis`, `insert_curve` (Boehm insertion leaves the curve unchanged) |
+| `Thomas.lean` | the kernel's tridiagonal solve, line by line in exact arithmetic: `pivot_ne`, `thomas_solves` |
+| `Cyclic.lean` | the periodic solve (Sherman–Morrison on the plain one): `sm_solves`, `sm_den_ne`, `cyclic_solves`, `two_solves` |
+| `Simple.lean` | what the exact self-intersection test relies on: `apart_of_boxes`, `cone_sep`, `injective_of_dir_deriv_pos`, `bern_pos_off_start` |
+| `Cert.lean`, `Interval.lean` | the oracle's certificates and intervals: `span_bernstein`, `bern_close`, `rows_in`, `residual_in`, `through_cert` |
 | `Oracle.lean` | `lake exe splineoracle` |
 
-Not yet: T6 (Boehm insertion leaves the curve unchanged) as a theorem. The kernel's insertion is checked
-case by case instead: the oracle compares its Bezier pieces with the spec's curve computed by Cox-de Boor,
-not with an insertion of its own. The rational derivative is the quotient rule on `hasDerivAt_curve`
-applied to the homogeneous coordinates and the weight.
+Rounding, `research/spline-loops/fp` (on verify/ieee754): `lerp_err`, `lerp_err_M` (8uM + 4η per lerp), `dc_step` (one
+de Casteljau level).
 
-Differential test, `kernel/forge-geom/tests/spline_diff.rs`: 698 curves, all within the curve's scale
-over 2^30 of the spec. The largest bound Lean proves is 6.2e-12. A planted 1e-6 error in the natural end
-row is caught.
+The shipped Rust, `verify/aeneas/forge-geom` (Charon and Aeneas on `kernel/forge-geom` itself, with the f64 bridge;
+`tools/aeneas/translate.sh forge-geom --check` in CI; `Axioms.lean`):
+- `lerp_spec`: `spline::lerp` returns the binary64 lerp, coordinate by coordinate.
+- `decasteljau_spec`: `spline::decasteljau` (both loops, every degree up to 15) returns `ok`, and returns exactly the
+  levels of those lerps. So `dc_step` bounds each level of the evaluation that ships.
+- `tridiagonal_spec`: `spline::tridiagonal` returns `ok` on any n ≥ 1 rows, with n points. These are
+  `SplineSpec.sweep`/`backSub` with each field operation the binary64 one, in the Rust's order. So the algorithm that
+  `thomas_solves` proves is the one that ships.
 
-Rust changes so far: `Spline::homogeneous` (an accessor for the test). No disagreement past the bound,
-so no numeric change. R1 and R2 wait on the master's answer.
+To make the translation possible, the de Casteljau and back-substitution loops became plain `while` loops. The bits are
+the same and the callgrind gate is below base on every line.
+
+Not yet: Aeneas on `through`/`through_ends`/`insert_knot`/`from_nurbs` (iterator chains and closures to rewrite first);
+a binary64 bound for the Thomas solve; the crossing certificate's margin in Lean (it only decides which refusal is given).
+
+Differential test, `kernel/forge-geom/tests/spline_diff.rs`: 698 curves, all within the curve's scale over 2^30 of the
+spec. The largest bound Lean proves is 6.2e-12. A planted 1e-6 error in the natural end row is caught.
