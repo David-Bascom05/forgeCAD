@@ -152,3 +152,113 @@ for nm, src, tx, ty, tz, passage, rapid, rmax, kw, pockets, bed, extra in [
         tx=tx, ty=ty, tz=tz, passage=passage, rapid=rapid, feed=rapid, rpm=[3000, rmax],
         iface="direct shank" if "m8" not in nm else "HSK-E25", tmax=(100, 20), changer=(pockets, 0.1, 1),
         cites=cites, coolants=("mist", "air"), spindle_r=45, bed_xy=bed))
+
+# ================================================================ batch 2: gantry routers
+# Only machines whose maker states the moving-gantry layout. Manual tool change (no changer) unless
+# an ATC is part of the model: M6 is refused until FORMAT-GAPS row 8 lands.
+RPM_BAND_UNK = ("spindle speed unpublished; a narrow band ({lo}-{hi} rpm) held so programs outside it "
+                "are flagged: check your spindle")
+PASSAGE_UNK = ("gantry clearance unpublished; the beam's underside put at the Z travel ({v} mm) above the "
+               "bed: errs low (more Hits)")
+
+
+def router(vendor, nm, ctrl, src, note, tx, ty, tz, *, rapid, feed, rpm, iface, passage, cites,
+           changer=None, tmax=(80, 13)):
+    rc = cites.pop("rapid")
+    c = {f"joint.{a}.rapid": rc for a in "XYZ"}
+    fc = cites.pop("feed")
+    c.update({f"joint.{a}.max_feed": fc for a in "XYZ"})
+    c.update(cites)
+    c.setdefault("spindle.S1.max", unk(f"tool limits unpublished; {tmax[0]} x {tmax[1]} mm ours"))
+    if passage is None:
+        c["body.gantry"] = unk(PASSAGE_UNK.format(v=tz))
+    MACHINES.append(gantry(vendor, nm, ctrl, src, note, tx=tx, ty=ty, tz=tz,
+                           passage=passage if passage is not None else tz, rapid=rapid, feed=feed, rpm=rpm,
+                           iface=iface, tmax=tmax, changer=changer, cites=c, coolants=("air",),
+                           spindle_r=40))
+    if passage is None:  # the builder's published passage cite does not apply
+        MACHINES[-1].cites = [x for x in MACHINES[-1].cites
+                              if not (x["path"] == "body.gantry" and x["status"] == "published")]
+
+
+# ---- Carbide 3D Shapeoko (Carbide Motion; a GRBL-style subset per guides.carbide3d.com)
+SO4 = "https://shop.carbide3d.com/products/shapeoko4"
+SO5 = "https://carbide3d.com/shapeoko/shapeoko5pro-specs/"
+CR = "https://shop.carbide3d.com/products/carbide-compact-router"
+CMG = "https://guides.carbide3d.com/faq/supported-gcodes/"
+CNOTE = (NOTE + "; Carbide Motion control (supported codes: guides.carbide3d.com/faq/supported-gcodes): no "
+         "carbide-motion dialect yet (the grbl dialect is the nearest); manual tool change (no changer)")
+ROUTER = dict(rpm=[12000, 30000], iface="1/4 in collet (65 mm trim router)")
+ROUTER_C = {"spindle.S1.rpm": pub(CR, "Carbide Compact Router 12,000-30,000 rpm"),
+            "spindle.S1.interface": pub(CR, "1/4 in collet; 65 mm router mount")}
+for nm, x_in, y_in in (("shapeoko-4", 17.5, 17.5), ("shapeoko-4-xl", 33, 17.5), ("shapeoko-4-xxl", 33, 33)):
+    x, y, z = round(x_in * 25.4, 1), round(y_in * 25.4, 1), 101.6
+    router("carbide3d", nm, "carbide-motion", SO4, CNOTE, x, y, z, rapid=2540, feed=2540, passage=None,
+           cites=dict(
+               rapid=unk("speeds unpublished by Carbide 3D; 2,540 mm/min (100 in/min) held low"),
+               feed=unk("speeds unpublished by Carbide 3D; held at the rapid"),
+               **{"joint.X.range": pub(SO4, f"cutting area {x_in} x {y_in} x 4 in"),
+                  "machine.control": pub(SO4, "Carbide Motion on V3 electronics; accepts standard G-code"),
+                  "machine.dialect": pub(CMG, "G0-G4, G17-19, G20/21, G28, G90/91; G40 G43 G49 G54-59 "
+                                              "accepted but ignored; M0-M3 M5 M6 M30")}),
+           **ROUTER)
+    [MACHINES[-1].cite(k, **v) for k, v in ROUTER_C.items()]
+for nm, x, y in (("shapeoko-5-pro-2x2", 623, 623), ("shapeoko-5-pro-4x2", 1237, 623),
+                 ("shapeoko-5-pro-4x4", 1237, 1237)):
+    router("carbide3d", nm, "carbide-motion", SO5, CNOTE, x, y, 155, rapid=5080, feed=5080, passage=101.6,
+           cites=dict(
+               rapid=dict(status="estimate", source="https://community.carbide3d.com/t/max-feed-speed-on-pro-5/91075",
+                          value="user report (not Carbide 3D): XY 200 in/min as shipped, 275 in/min cap",
+                          basis="unpublished by the maker; the user-reported 200 in/min (5,080 mm/min) held "
+                                "(the lower), Z assumed no faster: secondary source"),
+               feed=est("unpublished; held at the rapid"),
+               **{"machine.control": pub(SO4, "Carbide Motion")}),
+           **ROUTER)
+    [MACHINES[-1].cite(k, **v) for k, v in ROUTER_C.items()]
+    MACHINES[-1].cite("joint.Z.range", **pub(SO5, "Z travel 155 mm (140 mm with Sweepy Pro)"))
+
+# ---- Avid CNC PRO (moving gantry, rack and pinion XY; EX controller with Centroid CNC12)
+AV = {"pro4824": ("https://www.avidcnc.com/pro4824-4-x-2-cnc-router-machine-p-1334.html", 1260, 609),
+      "pro4848": ("https://www.avidcnc.com/pro4848-4-x-4-cnc-router-machine-p-1335.html", 1260, 1260),
+      "pro6060": ("https://www.avidcnc.com/pro6060-5-x-5-cnc-router-machine-p-1336.html", 1559, 1559)}
+AVS = "https://www.avidcnc.com/4-hp-plug-and-play-spindle-vfd-system-p-856.html"
+for k, (url, x, y) in AV.items():
+    router("avid", f"avid-{k}", "centroid-cnc12", url,
+           NOTE + "; NEMA 23 drive option (the slowest; N34 and servo options are faster); 4 HP spindle; "
+                  "8 in Z; EX controller with Centroid CNC12 (Mach4 before rev 22.2): no dialect yet; manual "
+                  "tool change (the Smart ATC is an option, not modelled)",
+           x, y, 203, rapid=12700, feed=6350, passage=None, rpm=[6000, 24000], iface="ER20",
+           cites=dict(rapid=pub(url, "rapid 500 in/min with N23 motors (800 N34, 1200 servo)"),
+                      feed=pub(url, "cut speed 250 in/min with N23 motors (400 N34, 600 servo)"),
+                      **{"joint.X.range": pub(url, f"work area {x} x {y} mm, Z 8 in (203 mm)"),
+                         "spindle.S1.rpm": pub(AVS, "4 HP spindle 6,000-24,000 rpm"),
+                         "spindle.S1.interface": pub(AVS, "ER20, 1/2 in shank max"),
+                         "machine.control": pub("https://www.avidcnc.com/support/faq",
+                                                "EX controller, Centroid CNC12 from 8/2024; Mach4 rev 22.2 and earlier")}))
+
+# ---- ShopBot (dual Y drive motors stated on the Desktop pages; OpenSBP control: SB3 runs G-code)
+SB = "https://shopbottools.com/products/{}/"
+SBC = ("ShopBot SB3 control (OpenSBP; G-code run or converted by the FP/FC commands, some codes "
+       "unsupported): no shopbot dialect yet")
+for nm, page, x, y, z, rapid, feed, iface, chg in (
+        ("shopbot-desktop", "desktop", 640, 510, 130, 9000, 6000, "ER20", None),
+        ("shopbot-desktop-max", "desktop-max", 1042, 640, 130, 9000, 6000, "ER20", None),
+        ("shopbot-desktop-max-atc", "desktop-max-atc", 1042, 640, 130, 9000, 6000, "ISO20 (ER20)", 7),
+        ("shopbot-prs5-alpha-96-48", "shopbot-prs5-alpha", 2616, 1245, 200, 45000, 18000, "ER25", None),
+        ("shopbot-prs5-standard-96-48", "shopbot-prs5-standard", 2616, 1245, 200, 18000, 12000, "ER20", None)):
+    url = SB.format(page)
+    cites = dict(rapid=pub(url, f"max rapid {rapid / 60:g} mm/s"), feed=pub(url, f"max cut speed {feed / 60:g} mm/s"),
+                 **{"joint.X.range": pub(url, f"XYZ movement {x} x {y} x {z} mm"),
+                    "spindle.S1.rpm": unk(RPM_BAND_UNK.format(lo=10000, hi=18000)),
+                    "spindle.S1.interface": pub(url, iface),
+                    "machine.control": pub(url, "ShopBot control software (OpenSBP)")})
+    if chg:
+        cites["changer.pockets"] = pub(url, "7-position tool bar ATC")
+        cites["changer.change_s"] = unk("change time unpublished; 0.1 s held (the format needs > 0) so t_min "
+                                        "stays a lower bound")
+        cites["changer.max_tool_kg"] = unk("max tool weight unpublished; 0.5 kg held (ISO20 holders); heavier "
+                                           "tools are flagged")
+    router("shopbot", nm, "shopbot-opensbp", url,
+           NOTE + "; " + SBC + ("" if chg else "; manual tool change (no changer)"),
+           x, y, z, rapid=rapid, feed=feed, passage=None, rpm=[10000, 18000], iface=iface, cites=cites,
+           changer=(chg, 0.1, 0.5) if chg else None)
