@@ -41,3 +41,5 @@ import Tess.Torus
 #guard_msgs in #print axioms Sag.F_sag
 /-- info: 'Sag.stray_bound' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in #print axioms Sag.stray_bound
+/-- info: 'Sag.cone_candidates' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in #print axioms Sag.cone_candidates

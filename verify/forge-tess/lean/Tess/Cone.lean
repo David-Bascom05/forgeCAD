@@ -72,4 +72,38 @@ theorem chord_convex {E F : Type*} [NormedAddCommGroup E] [NormedSpace ℝ E]
     rw [show q = 1 - p by linarith]; ring
   exact (hn.smul hα).add ha
 
+/-- **The cone's chord candidates.** Along a chord the cone's signed distance is
+f(s) = ca·(√(α + 2βs + γs²) − R₀) − sa·(z₀ + s·dz) (ca, sa the half angle's cosine and sine,
+α, β, γ from the chord's shadows on the plane square to the axis). At a local minimum s off the
+axis (the quadratic positive there), s is a root of the code's quadratic
+γ(γ − k²)s² + 2β(γ − k²)s + (β² − k²α) = 0 with k = (sa/ca)·dz: so its deepest point is one of
+the roots the code judges, or the axis point, or an end. -/
+theorem cone_candidates (α β γ R₀ ca sa z₀ dz s : ℝ) (hca : 0 < ca)
+    (hQ : 0 < α + 2 * β * s + γ * s ^ 2)
+    (hmin : IsLocalMin (fun s => ca * (Real.sqrt (α + 2 * β * s + γ * s ^ 2) - R₀) - sa * (z₀ + s * dz)) s) :
+    γ * (γ - (sa / ca * dz) ^ 2) * s ^ 2 + 2 * β * (γ - (sa / ca * dz) ^ 2) * s
+      + (β ^ 2 - (sa / ca * dz) ^ 2 * α) = 0 := by
+  set Q := α + 2 * β * s + γ * s ^ 2
+  have hq : HasDerivAt (fun s => α + 2 * β * s + γ * s ^ 2) (2 * β + 2 * γ * s) s := by
+    have := (((hasDerivAt_id s).const_mul (2 * β)).const_add α).add (((hasDerivAt_id s).pow 2).const_mul γ)
+    convert this using 1
+    · funext y; simp only [id, Pi.add_apply, Pi.pow_apply]
+    · simp only [id]; ring
+  have hf : HasDerivAt (fun s => ca * (Real.sqrt (α + 2 * β * s + γ * s ^ 2) - R₀) - sa * (z₀ + s * dz))
+      (ca * ((2 * β + 2 * γ * s) / (2 * Real.sqrt Q)) - sa * dz) s := by
+    have := (((hq.sqrt hQ.ne').sub_const R₀).const_mul ca).sub ((((hasDerivAt_id s).mul_const dz).const_add z₀).const_mul sa)
+    convert this using 1
+    · funext y; simp only [id, Pi.sub_apply]
+    · simp only [Q, id]; ring
+  have h0 := hmin.hasDerivAt_eq_zero hf
+  have sq : 0 < Real.sqrt Q := Real.sqrt_pos.mpr hQ
+  have h2 : Real.sqrt Q ^ 2 = Q := Real.sq_sqrt hQ.le
+  -- ca·(β + γs)/√Q = sa·dz, so (β + γs) = k·√Q and (β + γs)² = k²·Q
+  have e : β + γ * s = sa / ca * dz * Real.sqrt Q := by
+    field_simp at h0 ⊢
+    linarith
+  have e2 : (β + γ * s) ^ 2 = (sa / ca * dz) ^ 2 * Q := by rw [e, mul_pow, h2]
+  simp only [Q] at e2
+  linear_combination e2
+
 end Sag
