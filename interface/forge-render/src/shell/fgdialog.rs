@@ -372,6 +372,60 @@ fn choice_row(
     first.or(second)
 }
 
+/// Choices a kind will have once the language does: each row's name, its words (the first the
+/// one there is now), and why the others are held off.
+fn coming(kind: &str) -> Vec<(&'static str, &'static [&'static str], &'static str)> {
+    match kind {
+        "extrude" | "revolve" => vec![(
+            "Body",
+            &["Solid", "Thin", "Surface"],
+            "not yet: the language has no thin: or surface: (research/surfaces/design.md); Thicken makes a wall from faces meanwhile",
+        )],
+        "fillet" => vec![(
+            "Section",
+            &["Circular", "Conic"],
+            "not yet: the conic section (rho) is being built in the kernel",
+        )],
+        _ => vec![],
+    }
+}
+
+/// A row of toggles whose first is on and the rest held off: drawn dimmed, their tooltip why.
+fn stub_row(
+    ui: &mut egui::Ui,
+    t: &super::theme::Theme,
+    name: &str,
+    items: &[&str],
+    why: &str,
+    places: &mut Vec<(String, Rect)>,
+) {
+    heading(ui, name, t);
+    let (row, _) = ui.allocate_exact_size(vec2(DIALOG_W, 26.0), Sense::hover());
+    let n = items.len() as f32;
+    let w = (DIALOG_W - 3.0 * (n - 1.0)) / n;
+    for (k, word) in items.iter().enumerate() {
+        let r = Rect::from_min_size(row.left_top() + vec2(k as f32 * (w + 3.0), 0.0), vec2(w, 26.0));
+        let on = k == 0;
+        let resp = ui.interact(r, ui.scope_id().with(("stub", name, k)), Sense::hover());
+        resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::RadioButton, on, on, *word));
+        let p = ui.painter();
+        let r1 = super::theme::R1;
+        p.rect_filled(r, r1, if on { t.on } else { t.raised });
+        p.rect_stroke(
+            r,
+            r1,
+            Stroke::new(1.0, if on { t.on_ink } else { t.line }),
+            egui::StrokeKind::Inside,
+        );
+        let ink = if on { t.on_ink } else { t.ink2.gamma_multiply(0.55) };
+        p.text(r.center(), Align2::CENTER_CENTER, *word, sans(12.0), ink);
+        if !on {
+            resp.on_hover_text(why);
+        }
+        places.push((format!("fg:tool:stub:{name}:{word}"), r));
+    }
+}
+
 /// What the dialog was asked to do this frame.
 #[derive(Clone, Copy, PartialEq)]
 pub(super) enum Asked {
@@ -656,6 +710,10 @@ impl Shell {
             if let Some(k) = choice_row(ui, t, c, true, places) {
                 chose = Some((c.name, k));
             }
+        }
+        // what's coming for this kind: shown, its way in held off, saying why
+        for (name, items, why) in coming(tool.kind) {
+            stub_row(ui, t, name, items, why, places);
         }
         let options = tool.options.clone();
         let hide = shown_only_with_picks(tool);
