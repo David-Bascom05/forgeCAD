@@ -709,6 +709,22 @@ The obligations are now split:
 
 **Wings, final (the master):** W2 with sectors, cutting allowed, as recorded above (9ad6336).
 
+**The generic theorem is done (q1, 6484f71 on `dol-curved-q1`):** `xNonManifoldF_iff_top`,
+ForgeCurved/FaceLocal.lean, standard axioms only. F4 reads, per wing (`EdgeLocal`) and per
+sector (`VertLocal`): the labelled piece reaches the point, is one connected piece in arbitrarily
+small neighbourhoods, and labels are locally constant. A facet cut along a reference seam is just
+more facets with one wing each.
+
+**A note for the record on Tier-0 seams (tier0 session, 2026-11-23).** One axial plane per axis
+does not make the seam's own cells connected:
+- on a cylinder, the seam plane meets it in two lines `x = ±R` with one covector;
+- on a cone, it meets each nappe in two rays.
+
+So Tier0Sound would fail for every cylinder and cone. The fix, should Tier 0 ever return to the
+theorem's path, is a second axial seam per axis, through the axis with normal `z × (z × e)`
+(`x = 0` and `y = 0` for the axis `z`). Under route B the reference needs only `ExactK`, whose
+`IsEdgeK` asks no connectedness, so QSep is unchanged for now.
+
 **4. Effect on the work in flight.**
 - L2 (this branch: QLine, QEdge, QVert, RootCover, QPropose) is the reference's executable and
   stays. It also becomes the builder's exact fallback: the same certified crossings, computed only
