@@ -82,3 +82,59 @@ fn a_near_singular_loop_is_a_warning_row_with_no_line() {
     assert!(h.gui.shell.place(&format!("fg:issue:{k}")).is_some(), "no row");
     shot(&mut h, "issues-near-singular");
 }
+
+#[test]
+fn a_taper_that_closes_short_of_its_depth_shows_its_fixes_and_one_clears_it() {
+    let src = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../forge-lang/tests/kernel_parts/taper_collapses.fg"
+    ))
+    .unwrap();
+    let Some(mut h) = open(&src, "taper") else {
+        return;
+    };
+    let issues = h.gui.shell.fg.as_ref().unwrap().issues.clone();
+    let (k, is) = issues
+        .iter()
+        .enumerate()
+        .find(|(_, i)| i.kind == "TaperCloses")
+        .expect("a TaperCloses lint");
+    assert_eq!(is.severity, Severity::Lint);
+    assert!(
+        is.text.starts_with("pit: the taper closes at depth"),
+        "{}",
+        is.text
+    );
+    assert_eq!(is.fixes.len(), 2);
+    let labels: Vec<String> = is
+        .fixes
+        .iter()
+        .map(|f| forge_render::shell::fg::fix_label(&is.kind, f))
+        .collect();
+    assert!(
+        labels[0].starts_with("Depth to where it closes: Set pit.d = 0.305"),
+        "{labels:?}"
+    );
+    assert!(
+        labels[1].starts_with("Largest taper that reaches the depth: Set pit.a = 73.8"),
+        "{labels:?}"
+    );
+    // the Issues window: its row and both fixes; the first applied clears it
+    h.gui.shell.fg.as_mut().unwrap().issues_list = true;
+    for _ in 0..4 {
+        h.step();
+    }
+    assert!(h.gui.shell.place(&format!("fg:issue:{k}")).is_some());
+    assert!(h.gui.shell.place(&format!("fg:fix:{k}:1")).is_some());
+    shot(&mut h, "issues-taper-closes");
+    assert!(h.click(&format!("fg:fix:{k}:0")), "no first fix");
+    h.step();
+    let t = std::time::Instant::now();
+    while t.elapsed().as_secs_f64() < 30.0 && !h.until(ready) {}
+    for _ in 0..4 {
+        h.step();
+    }
+    let p = h.gui.shell.fg.as_ref().unwrap();
+    assert!(p.source.contains("param pit.d = 0.305"), "{}", p.source);
+    assert!(p.issues.iter().all(|i| i.kind != "TaperCloses"), "{:?}", p.issues);
+}

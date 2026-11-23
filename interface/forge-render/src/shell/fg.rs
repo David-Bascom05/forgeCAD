@@ -531,6 +531,22 @@ pub fn statements(feats: &[FeatRow]) -> Vec<String> {
 }
 
 /// What a fix or an op does, in a few words for its button.
+/// A fix's button: what it does where the issue says, then its op.
+pub fn fix_label(kind: &str, op: &Op) -> String {
+    let what = match (kind, op) {
+        // a taper whose walls meet before its depth: the depth to where they meet, or the
+        // largest taper that still reaches the depth (either leaves the part with no lint)
+        ("TaperCloses", Op::SetParam { value, .. }) if value.dim == Dim::Length => {
+            "Depth to where it closes: "
+        }
+        ("TaperCloses", Op::SetParam { value, .. }) if value.dim == Dim::Angle => {
+            "Largest taper that reaches the depth: "
+        }
+        _ => "",
+    };
+    format!("{what}{}", op_label(op))
+}
+
 pub fn op_label(op: &Op) -> String {
     match op {
         Op::SetParam { param, value } => format!("Set {param} = {}", value.text()),
@@ -1573,7 +1589,7 @@ impl Shell {
                 ui.horizontal_wrapped(|ui| {
                     ui.spacing_mut().item_spacing = vec2(super::theme::S1 + 2.0, super::theme::S1);
                     for (j, op) in is.fixes.iter().enumerate() {
-                        if Self::fg_button(ui, &op_label(op), format!("fg:fix:{i}:{j}"), places) {
+                        if Self::fg_button(ui, &fix_label(&is.kind, op), format!("fg:fix:{i}:{j}"), places) {
                             out.push(FgAct::Apply(op.clone()));
                         }
                     }
