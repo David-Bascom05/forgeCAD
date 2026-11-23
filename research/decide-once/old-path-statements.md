@@ -79,7 +79,11 @@ The parts:
   - `ValidSolid δ b := ∃ bs, exactOf b = some bs ∧ ValidExact bs`;
   - `⟦b⟧ := denoteExact (exactOf b)`;
   - `exactOf = none` (a vertex whose meet isn't unique in its δ-ball) is a typed refusal.
-  Requested of dol-curved.
+  Done in BodyModel.lean, b66293ec (`exactOf`, `exactOf_refines`, `denote_spec`, `denote_refines`).
+  Also asked: `exactOf = none` when a second branch of the meet enters an edge's δ-tube.
+  `exactOf_refines` needs `hface` and `hedge` (each stored region and curve within δ of its exact
+  meet). For inputs, this is a named hypothesis of `boolean_correct`, `FaithfulInput δ A`, supplied
+  by the producing feature. For outputs, D8 proves it.
 
 ## D. The chain of contracts (boolean.rs `general`, as written)
 
