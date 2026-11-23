@@ -745,6 +745,20 @@ fn through_splines_open_unless_closed() {
     }
 }
 
+/// A closed spline through a long hairpin whose tip turns a small loop crosses itself: refused,
+/// exactly (forge-ops simple.rs), where sixteen samples a piece saw no crossing and let it through.
+#[test]
+fn a_hairpin_spline_that_crosses_itself_is_refused() {
+    let msg = common::refused(
+        "sketch s(on: xy) {
+  c = spline([(0, 0), (20, 1.47), (40, 0.035), (40.7, -0.001), (39.77, -0.035), (20, -1.25), (0, -0.41), (-5, -3)], closed: true)
+}
+e = extrude(s, 2)
+",
+    );
+    assert!(msg.contains("self intersect"), "{msg}");
+}
+
 /// Loops that cross are refused at the sketch (a circle r 40 and one r 30 at (20, 0): a
 /// SketchProfile self intersection); loops that touch at a corner go on to the kernel, which says
 /// where the solid pinches (a 20 square with a triangle touching its edge at (10, 0): ZeroThickness

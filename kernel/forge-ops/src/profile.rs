@@ -77,6 +77,12 @@ pub enum ProfileError {
     SelfIntersecting {
         loop_index: usize,
     },
+    /// Whether a loop with a free curve meets itself near `at` (world coordinates) is not decided
+    /// within the certified search's budget (crate::simple): refused there rather than guessed.
+    SelfIntersectionUndecided {
+        loop_index: usize,
+        at: Point3,
+    },
 }
 
 /// A piece of a loop as a line or an arc, for exact nearest points.
@@ -452,10 +458,26 @@ impl ProfileLoop {
     /// Whether the loop crosses or touches itself, as a profile refuses it: a knife edge, its
     /// sides running within tolerance of each other into the cusp, does not.
     pub fn crosses_itself(&self) -> bool {
-        // a lone circle is drawn as a convex polygon: it cannot cross itself
-        let circle = matches!(self.segments[..], [(Segment::Circle { .. }, _)]);
+        self.simplicity() != crate::simple::Simplicity::Simple
+    }
+    /// Whether the loop is simple: with a free curve in it, decided on its exact pieces
+    /// (crate::simple); of lines and arcs alone, on its outline, a knife edge (sides running
+    /// within tolerance of each other into the cusp) allowed.
+    pub fn simplicity(&self) -> crate::simple::Simplicity {
+        use crate::simple::Simplicity;
+        // a lone circle cannot cross itself
+        if matches!(self.segments[..], [(Segment::Circle { .. }, _)]) {
+            return Simplicity::Simple;
+        }
+        if self.segments.iter().any(|(s, _)| matches!(s, Segment::Spline(_))) {
+            return crate::simple::simplicity(self);
+        }
         // (a knife edge's sides, samples of them, cross within tolerance)
-        !circle && crosses_itself(&self.outline()) && crosses_itself(&blunt_cusps(self).outline())
+        if crosses_itself(&self.outline()) && crosses_itself(&blunt_cusps(self).outline()) {
+            Simplicity::Meets(self.segments[0].0.start())
+        } else {
+            Simplicity::Simple
+        }
     }
     /// Curves with corners cut there, each arc a face of its own (as Inventor shows them), and one
     /// closing on itself cut in two. The first piece keeps the segment's id.
@@ -775,8 +797,17 @@ impl Profile {
             }
         }
         for (i, l) in self.loops.iter().enumerate() {
-            if l.crosses_itself() {
-                return Err(ProfileError::SelfIntersecting { loop_index: i });
+            match l.simplicity() {
+                crate::simple::Simplicity::Simple => {}
+                crate::simple::Simplicity::Meets(_) => {
+                    return Err(ProfileError::SelfIntersecting { loop_index: i });
+                }
+                crate::simple::Simplicity::Undecided(at) => {
+                    return Err(ProfileError::SelfIntersectionUndecided {
+                        loop_index: i,
+                        at: self.plane.plane_point(at),
+                    });
+                }
             }
         }
         let mut loops = Vec::with_capacity(self.loops.len());

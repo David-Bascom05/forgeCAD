@@ -43,3 +43,5 @@ open SplineSpec
 #print axioms apart_of_boxes
 #print axioms cone_sep
 #print axioms convex_in_cone
+#print axioms injective_of_dir_deriv_pos
+#print axioms bern_pos_off_start

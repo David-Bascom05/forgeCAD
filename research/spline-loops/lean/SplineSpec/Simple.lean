@@ -22,6 +22,7 @@ A pair is refused as touching when two of its points, evaluated, are within ε. 
 cannot decide within its budget is refused at its locus, undecided.
 -/
 import SplineSpec.Cert
+import Mathlib.Analysis.Calculus.Deriv.MeanValue
 
 open Finset
 
@@ -119,5 +120,45 @@ theorem convex_in_cone (J : P2) (a : ℕ → P2) (m : ℕ) (β : ℕ → ℝ) (h
     simp only [smul_sub, sum_sub_distrib]
     abel
   rw [this, hsum, one_smul]
+
+/-- **A piece whose derivative keeps a positive component along a direction meets itself
+nowhere**: `n · C` then increases strictly, so two parameters with one point are one. The kernel's
+`one_to_one` finds that component's positivity from the Bernstein coefficients of the derivative's
+numerator `A' W - A W'` (`bern_pos`); W² > 0 keeps its sign. -/
+theorem injective_of_dir_deriv_pos (C : ℝ → P2) (C' : ℝ → P2) (n : P2)
+    (hd : ∀ t ∈ Set.Icc (0 : ℝ) 1, HasDerivAt (fun s => n.1 * (C s).1 + n.2 * (C s).2)
+      (n.1 * (C' t).1 + n.2 * (C' t).2) t)
+    (hpos : ∀ t ∈ Set.Icc (0 : ℝ) 1, 0 < n.1 * (C' t).1 + n.2 * (C' t).2) :
+    ∀ s ∈ Set.Icc (0 : ℝ) 1, ∀ r ∈ Set.Icc (0 : ℝ) 1, C s = C r → s = r := by
+  have hmono : StrictMonoOn (fun s => n.1 * (C s).1 + n.2 * (C s).2) (Set.Icc 0 1) := by
+    apply strictMonoOn_of_deriv_pos (convex_Icc 0 1)
+    · intro t ht
+      exact (hd t ht).continuousAt.continuousWithinAt
+    · intro t ht
+      rw [interior_Icc] at ht
+      have ht' : t ∈ Set.Icc (0 : ℝ) 1 := ⟨ht.1.le, ht.2.le⟩
+      rw [(hd t ht').deriv]
+      exact hpos t ht'
+  intro s hs r hr he
+  by_contra hne
+  rcases lt_or_gt_of_ne hne with h | h
+  · have := hmono hs hr h; simp only [he] at this; exact lt_irrefl _ this
+  · have := hmono hr hs h; simp only [he] at this; exact lt_irrefl _ this
+
+/-- **A piece leaving a tangent joint**: offsets from J whose side of a line through J has
+nonnegative Bernstein coefficients, the last positive, are strictly on that side for every t in
+(0, 1]; so a piece weakly on the other side meets it only at J (`half_planes_apart`). -/
+theorem bern_pos_off_start (p : ℕ) (c : ℕ → ℝ) (hc : ∀ k ≤ p, 0 ≤ c k) (hp : 0 < c p) {t : ℝ}
+    (h0 : 0 < t) (h1 : t ≤ 1) : 0 < SplineLoops.bern p c t := by
+  unfold SplineLoops.bern
+  rw [sum_range_succ]
+  have hrest : 0 ≤ ∑ k ∈ range p, c k * SplineLoops.bb p k t :=
+    sum_nonneg fun k hk => mul_nonneg (hc k (by have := mem_range.1 hk; omega))
+      (SplineLoops.bb_nonneg p k h0.le h1)
+  have hlast : 0 < c p * SplineLoops.bb p p t := by
+    unfold SplineLoops.bb
+    simp only [Nat.choose_self, Nat.cast_one, one_mul, Nat.sub_self, pow_zero, mul_one]
+    exact mul_pos hp (pow_pos h0 p)
+  linarith
 
 end SplineSpec
