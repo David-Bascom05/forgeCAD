@@ -648,3 +648,56 @@ fn fillet_spring_tangent_to_a_hole_rim() {
     // as thick as the radius: the side face goes whole too
     valid(&spring_touching_a_hole(5.0, 5.0, 5.0));
 }
+
+#[test]
+fn fillet_cut_across_a_counterbore_on_a_slope() {
+    // a 10 mm round on a sloping face's edge, a counterbored hole square to the slope and a slot
+    // leaving a wall (CADFS 00961869, reduced): the round's cut across the head's pocket is a
+    // traced loop whose exit lies just before the loop's seam, where the nearest point was not
+    // looked for, so the walk lost it and refused
+    valid(
+        r#"
+sketch ref(on: xy) {
+}
+sketch q0(on: offset(ref, 14.975)) {
+  p = pt(0, 8.646)
+}
+sketch q1(on: offset(ref, -0.866)) {
+  p = pt(0, -0.5)
+}
+sketch q2(on: ref) {
+  p = pt(1, 0)
+}
+sketch b1_sk(on: plane(at: q0.p, normal: axis(ref.origin, q1.p), x: axis(ref.origin, q2.p))) {
+  c0 = circle((0, -36.204), 7.5)
+}
+b1 = extrude(b1_sk, 50)
+sketch q3(on: offset(ref, 0.866)) {
+  p = pt(0, 0.5)
+}
+sketch f1_sk(on: plane(at: q0.p, normal: axis(ref.origin, q3.p), x: axis(ref.origin, q2.p))) {
+  c0 = circle((0, 36.204), 11.75)
+}
+f1 = extrude(f1_sk, 25)
+sketch q4(on: ref) {
+  p = pt(0, 1)
+}
+sketch b2_sk(on: plane(at: ref.origin, normal: axis(ref.origin, q2.p), x: axis(ref.origin, q4.p))) {
+  l0 = line((36.656, -40.919), (65.887, 9.711))
+  l1 = line((65.887, 9.711), (0, 47.751))
+  l2 = line((0, 47.751), (0, -40.919))
+  l3 = line((0, -40.919), (36.656, -40.919))
+}
+b2 = extrude(b2_sk, sym(40), new: true)
+f2 = combine(b2, tools: b1, op: "cut")
+sketch f3_sk(on: plane(at: ref.origin, normal: axis(ref.origin, q2.p), x: axis(ref.origin, q4.p))) {
+  l0 = line((20.647, 55.902), (8.942, -50.742))
+  l1 = line((8.942, -50.742), (53.79, -51.125))
+  l2 = line((53.79, -51.125), (102.165, 22.974))
+  l3 = line((102.165, 22.974), (20.647, 55.902))
+}
+f3 = cut(f3_sk, sym(15))
+f4 = fillet(edges(between: (b2.end, b2.side(b2_sk.l1))), 10)
+"#,
+    );
+}

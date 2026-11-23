@@ -417,17 +417,40 @@ impl IntCurve {
                 best = (d, k as f64);
             }
         }
+        // (an end's point is the exact curve's already: its distance is not asked for again)
+        let mut at_end = false;
         for t in [lo, hi] {
             let d = self.eval(t).distance_sq(p);
             if d < best.0 {
                 best = (d, t);
+                at_end = true;
             }
         }
         // Newton on (C(t) - p) . C'(t) = 0 along the cubic, on the segments either side
         let near = best.1;
         let mut out = near;
-        let mut out_d = self.eval(near).distance_sq(p);
-        for (s0, s1) in [((near - 1.0).max(lo), near), (near, (near + 1.0).min(hi))] {
+        let mut out_d = if at_end {
+            best.0
+        } else {
+            self.eval(near).distance_sq(p)
+        };
+        // on the curve there (a vertex at its own parameter): nothing is nearer
+        if out_d == 0.0 {
+            return near;
+        }
+        // round a whole closed chain, the segment past an end nearest is the one before the other
+        // end (the seam's sample is both: clamped, the segment over the seam was never searched)
+        let over = if (near == lo || near == hi) && self.closed && hi - lo >= seg as f64 {
+            let from = if near == lo {
+                lo + seg as f64 - 1.0
+            } else {
+                hi - seg as f64
+            };
+            (from, from + 1.0)
+        } else {
+            (0.0, 0.0)
+        };
+        for (s0, s1) in [((near - 1.0).max(lo), near), (near, (near + 1.0).min(hi)), over] {
             if s1 <= s0 {
                 continue;
             }
@@ -1112,6 +1135,31 @@ mod tests {
         assert!(!cs.is_empty());
         cs.iter().for_each(on_both);
         let _ = cs[0].a.project(Point3::ORIGIN);
+    }
+
+    #[test]
+    fn closest_finds_a_point_just_before_a_closed_loops_seam() {
+        let a = Surface::Cylinder(Cylinder {
+            frame: Frame::WORLD,
+            radius: 2.0,
+        });
+        let b = Surface::Cylinder(Cylinder {
+            frame: Frame::from_z(Point3::new(0.0, 0.5, 0.0), UnitVec3::X),
+            radius: 1.2,
+        });
+        let region = Box3::from_points([Point3::new(-5.0, -5.0, -5.0), Point3::new(5.0, 5.0, 5.0)]);
+        for c in trace(&a, &b, region).unwrap() {
+            assert!(c.closed);
+            let seg = c.segments() as f64;
+            let full = Interval::new(0.0, seg);
+            // between the last sample and the seam, nearer the seam's sample than any other
+            for f in [0.6, 0.75, 0.9] {
+                let p = CurveGeom::eval(&c, seg - 1.0 + f);
+                let t = c.closest(p, full);
+                assert!(full.contains(t), "{t} outside {full:?}");
+                assert!(CurveGeom::eval(&c, t).distance(p) <= 1e-9, "{f}: {t}");
+            }
+        }
     }
 }
 
