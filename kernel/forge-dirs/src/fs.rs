@@ -52,7 +52,8 @@ pub mod mem {
     struct Tree {
         nodes: BTreeMap<PathBuf, Node>,
         /// Counts changes: a file's stamp is the count when it was written (its modified time,
-        /// in nanoseconds, so a change is always seen as one).
+        /// in microseconds, so a change is always seen as one: Windows' SystemTime ticks in
+        /// 100 ns, which would merge stamps a nanosecond apart).
         clock: u64,
     }
 
@@ -409,9 +410,9 @@ pub mod mem {
         pub fn permissions(&self) -> Permissions {
             Permissions { readonly: false }
         }
-        /// When it was last written: the tree's count of changes then, in nanoseconds after 1970.
+        /// When it was last written: the tree's count of changes then, in microseconds after 1970.
         pub fn modified(&self) -> io::Result<SystemTime> {
-            Ok(UNIX_EPOCH + Duration::from_nanos(self.stamp))
+            Ok(UNIX_EPOCH + Duration::from_micros(self.stamp))
         }
         /// Not kept: the last write's time.
         pub fn created(&self) -> io::Result<SystemTime> {
