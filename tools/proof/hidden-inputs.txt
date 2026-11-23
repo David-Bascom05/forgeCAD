@@ -183,7 +183,8 @@ no-output (constant tables or print switches)  @ forge-bool/src/boolean.rs|stati
 speed (buffers, stats)  @ forge-bool/src/boolean.rs|static|static PHASES: std::cell::RefCell<[u64; 7]> = const { std::cell::RefCell::new([0; 7]) };
 no-output (reset at op entry, boolean.rs:539-540, 910)  @ forge-bool/src/boolean.rs|static|static RETRIED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 speed (buffers, stats)  @ forge-bool/src/boolean.rs|static|static SCRATCH: std::cell::RefCell<Scratch> = std::cell::RefCell::default();
-no-output (the retry flags, Held-scoped to one boolean; SCRATCH speed; PHASES stats)  @ forge-bool/src/boolean.rs|thread_local|thread_local! {  x 3
+speed (buffers: split_face's lists, cleared before each use; bool-speed S2)  @ forge-bool/src/boolean.rs|static|static SPLIT: std::cell::Cell<SplitScratch> = std::cell::Cell::new(SplitScratch::default());
+no-output (the retry flags, Held-scoped to one boolean; SCRATCH and SPLIT speed; PHASES stats)  @ forge-bool/src/boolean.rs|thread_local|thread_local! {  x 4
 speed (lazy field or constant table)  @ forge-bool/src/classify.rs|lazy|boxes: std::sync::OnceLock::new(),
 speed (lazy field or constant table)  @ forge-bool/src/classify.rs|lazy|boxes: std::sync::OnceLock<Vec<Box3>>,
 speed (lazy field or constant table)  @ forge-bool/src/classify.rs|lazy|drawn: std::sync::OnceLock::new(),
@@ -195,6 +196,9 @@ speed (lazy field or constant table)  @ forge-bool/src/classify.rs|lazy|simple: 
 no-output (Fx-hashed: a fixed hasher, the same order every run; lookups and sets)  @ forge-bool/src/decide_once.rs|hash-order|by_cov: HashMap<(u64, u64), u32>,
 speed (lazy field or constant table)  @ forge-bool/src/decide_once.rs|lazy|let mid = std::cell::OnceCell::new();
 speed (lazy field or constant table)  @ forge-bool/src/decide_once.rs|lazy|mid: std::cell::OnceCell<HPoint>,
+speed (lazy field or constant table: a loop's exact points, made once when first asked)  @ forge-bool/src/decide_once.rs|lazy|Ld { pf, ph: std::cell::OnceCell::new() }
+speed (lazy field or constant table: a loop's exact points, made once when first asked)  @ forge-bool/src/decide_once.rs|lazy|let me: std::cell::OnceCell<HPoint> = std::cell::OnceCell::new();
+speed (lazy field or constant table: a loop's exact points, made once when first asked)  @ forge-bool/src/decide_once.rs|lazy|ph: std::cell::OnceCell<Vec<HPoint>>,
 speed (a counter of skipped booleans, for the gate's report; never read by an op)  @ forge-bool/src/decide_once.rs|atomic|pub static SKIP_WIDE: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 speed (a counter of skipped booleans, for the gate's report; never read by an op)  @ forge-bool/src/decide_once.rs|static|pub static SKIP_WIDE: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 no-output (FORGE_DECIDE_STATS, prints only)  @ forge-bool/src/decide_once.rs|env|*ON.get_or_init(|| std::env::var_os("FORGE_DECIDE_STATS").is_some())
@@ -356,6 +360,10 @@ speed (lazy field or constant table)  @ forge-model/src/lib.rs|lazy|let index = 
 speed (a counter, stats only)  @ forge-model/src/lib.rs|static|static NAME_FALLBACKS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 speed (a counter, stats only)  @ forge-model/src/lib.rs|thread_local|thread_local! {
 no-output (results and errors put back in index order)  @ forge-model/src/lib.rs|threads|let done: Vec<Vec<Built>> = std::thread::scope(|s| {
+no-output (W3: a stop flag; the helper builds tools in item order and the steps take them in order)  @ forge-model/src/lib.rs|atomic|let stop = std::sync::atomic::AtomicBool::new(false);
+speed (W3: the clock decides only which thread builds a tool, never what it is; tools are functions of the history)  @ forge-model/src/lib.rs|clock|let start = std::time::Instant::now();
+speed (W3: the clock decides only which thread builds a tool, never what it is; tools are functions of the history)  @ forge-model/src/lib.rs|clock|let t = std::time::Instant::now();
+no-output (W3: tools built ahead in item order, taken by the steps in order; errors met at the same step; bits identical at 1, 2, 4, 16 threads)  @ forge-model/src/lib.rs|threads|std::thread::scope(|s| {
 no-output (looked up by key, never iterated)  @ forge-model/src/names.rs|hash-order|let mut built: std::collections::HashMap<(usize, usize), Option<std::sync::Arc<Body>>> =
 no-output (no iteration order reaches an output; audit)  @ forge-model/src/splitface.rs|hash-order|leave: &HashMap<VertexId, Use>,
 no-output (no iteration order reaches an output; audit)  @ forge-model/src/splitface.rs|hash-order|let mut cuts: HashMap<EdgeId, Vec<(f64, VertexId)>> = HashMap::new();
