@@ -71,16 +71,37 @@ Still to prove for the sphere: that with the foot outside the triangle, its deep
 an edge (the segment from the foot to any point of it crosses an edge, nearer the foot).
 
 **Cone.** Along a chord between two points of the cone, the signed distance
-(ρ − R₀)·cos α − z·sin α is convex in the chord's parameter (ρ is the norm of an affine map), zero
-at both ends, so the chord lies inside; but its deepest point is not its middle unless the ends
-are symmetric, and convexity alone gives only sag ≤ 2× the middle's. Both the edge and the
-triangle tests need the exact deepest point: a convex minimisation with a closed form (the slope's
-zero solves a quadratic), and for a triangle, the axis's foot when the triangle's image holds the
-axis, else its edges.
+(ρ − R₀)·cos α − z·sin α is convex in the chord's parameter (ρ is the norm of an affine map;
+`chord_convex`), zero at both ends, so the chord lies inside; but its deepest point is not its
+middle unless the ends are symmetric, and convexity alone gives only sag ≤ 2× the middle's
+(`convex_dip`). Today's meshes had chords past the chord there: buntinx2014_tray25 at chord 0.01,
+8 triangles up to 1.12·c, all on long chords of a cone's `strips` (the row-by-row path for
+revolve and extrude walls, which judged a cone's triangles only at their middles and centroids).
 
-**Torus.** The distance along a chord is not convex, and its exact minimum is a root of a
-polynomial of high degree. A sound test there is a proven bound (accepting only what the bound
-shows within c), not a closed form.
+The rule now (tessellate.rs `cone_chord_sags`, `cone_axis_sags`): a chord is judged at its
+deepest point, where the slope is zero (ρ′ = tan α·Δz: a root of
+p(p − k²)s² + 2q(p − k²)s + (q² − k²c₀) = 0) or where it passes nearest the axis (ρ's kink),
+asked only when its middle sags past c/2. A triangle: the distance is convex over its plane, its
+slope zero inside only along a line parallel to a ruling, which reaches the edges; so its deepest
+point is on an edge or where the axis crosses it (near the apex). Still to prove: that the
+candidates hold the minimum (Fermat, and the derivative's algebra), and the triangle's.
+
+**Torus (major R, minor r).** With h the distance from the core circle and F = h² − r² =
+|p|² + R² − r² − 2R·ρ: |h − r| = |F|/(h + r), so a point where |h − r| reached c has
+|F| ≥ c·(2r − c), and the tests work with F.
+- A chord (tessellate.rs `torus_chord_holds`): F is zero at its ends; along a + s·d its third
+  derivative is −2R·ρ‴, ρ‴ = −3(αγ − β²)(γs + β)/ρ⁵ (ρ² = α + 2βs + γs² over the shadows on the
+  plane square to the axis), at most 6R·(αγ − β²)·max(|β|, |β + γ|)/ρ⁵ with ρ the chord's least;
+  F strays from the parabola through its ends and middle by at most that times √3/216 (the
+  remainder of interpolation at 0, ½, 1). Accepted when |F(middle)| + stray < c·(2r − c), a
+  proven bound, not the exact deepest point. For a chord running round the major circle the
+  stray is fourth order in its length (αγ − β² ≈ ρ²l², |β| ≈ l²/2).
+- A triangle (`torus_triangle_holds`): F's gradient is 2(p − c(p)), c(p) the core circle's point
+  nearest p, so in the triangle's plane (normal n) its slope is zero only where p − c ∥ n: c at
+  the angle of n's shadow on the plane square to the axis or the opposite one, p = c + t·n on the
+  plane; with the axis's point (ρ's kink), each such point in the triangle is judged exactly.
+- A torus that reaches its axis (R ≤ r + c) is left to the middle's and centroid's tests: outside
+  the domain of this rule.
 
 **Procedural.** Accepted by the Cells bounds on its bending (tessellate.rs `Cells::within`), so its
 statement is relative to those bounds.

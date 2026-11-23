@@ -168,6 +168,104 @@ fn cone_axis_point_sags(c: &forge_geom::Cone, l: [forge_math::Point3; 3], chord:
         > chord
 }
 
+/// On a torus (major R, minor r) a point's F = h² − r², h its distance from the core circle:
+/// in the torus's frame |p|² + R² − r² − 2R·ρ (ρ its distance from the axis). |h − r| = |F|/(h + r).
+fn torus_f(t: &forge_geom::Torus, p: forge_math::Point3) -> f64 {
+    let l = t.frame.point_to_local(p);
+    let rho = (l.x * l.x + l.y * l.y).sqrt();
+    l.x * l.x + l.y * l.y + l.z * l.z + t.major * t.major - t.minor * t.minor - 2.0 * t.major * rho
+}
+
+/// The least distance from the axis of a point within `chord` of the torus: R − r − chord (a
+/// ring torus that far from its axis), or none.
+fn torus_reach(t: &forge_geom::Torus, chord: f64) -> Option<f64> {
+    let rho = t.major - t.minor - chord;
+    (rho > 0.0 && t.minor > chord).then_some(rho)
+}
+
+/// Whether the chord x–y, its ends on the torus `t`, is shown within `chord` of it. Along the
+/// chord a + s·d (in the torus's frame) F is zero at its ends, and its third derivative is
+/// −2R·ρ''' with ρ''' = −3(αγ − β²)(γs + β)/ρ⁵ (ρ² = α + 2βs + γs², over the shadows on the
+/// plane square to the axis): at most 6R·(αγ − β²)·max(|β|, |β + γ|)/ρ⁵, ρ its least on the
+/// chord. So F strays from the parabola through its ends and middle by at most that over 6·(√3/36);
+/// and a point where |h − r| reached the chord would have |F| ≥ chord·(2r − chord). (A chord that
+/// passes the axis, or a torus within the chord of it, is left to the middle's test.)
+fn torus_chord_holds(
+    t: &forge_geom::Torus,
+    x: forge_math::Point3,
+    y: forge_math::Point3,
+    chord: f64,
+) -> bool {
+    if torus_reach(t, chord).is_none() {
+        return true;
+    }
+    let (a, b) = (t.frame.point_to_local(x), t.frame.point_to_local(y));
+    let (dx, dy) = (b.x - a.x, b.y - a.y);
+    let (al, be, ga) = (a.x * a.x + a.y * a.y, a.x * dx + a.y * dy, dx * dx + dy * dy);
+    // the least ρ² on the chord
+    let s = if ga > 0.0 { (-be / ga).clamp(0.0, 1.0) } else { 0.0 };
+    let rho2 = al + 2.0 * be * s + ga * s * s;
+    if rho2 <= 0.0 {
+        return true;
+    }
+    let rho = rho2.sqrt();
+    let cross2 = (al * ga - be * be).max(0.0);
+    let third = 6.0 * t.major * cross2 * be.abs().max((be + ga).abs()) / (rho2 * rho2 * rho);
+    let stray = third * 3f64.sqrt() / 216.0;
+    torus_f(t, x.lerp(y, 0.5)).abs() + stray < chord * (2.0 * t.minor - chord)
+}
+
+/// Whether the triangle `x`, its corners on the torus `t`, lies within `chord` of it inside (its
+/// edges are judged as chords). F = h² − r² has gradient 2(p − c(p)), c(p) the core circle's
+/// point nearest p, so in the triangle's plane (normal n) its slope is zero only where p − c ∥ n:
+/// c at the angle of n's shadow on the plane square to the axis or the opposite one, p = c + t·n
+/// on the plane; besides, F has a kink on the axis. Each such point in the triangle is judged.
+/// (A plane square to the axis has F constant round the circle ρ = R in it, whose points in the
+/// triangle reach its edges unless the triangle holds the whole circle: a triangle that large is
+/// left to its other tests.)
+fn torus_triangle_holds(t: &forge_geom::Torus, x: [forge_math::Point3; 3], chord: f64) -> bool {
+    let l = x.map(|p| t.frame.point_to_local(p));
+    let n = (l[1] - l[0]).cross(l[2] - l[0]);
+    let nn = n.length();
+    if nn <= 0.0 {
+        return true;
+    }
+    let n = n * (1.0 / nn);
+    let inside = |p: forge_math::Point3| {
+        let side = |a: forge_math::Point3, b: forge_math::Point3| (b - a).cross(p - a).dot(n) >= 0.0;
+        side(l[0], l[1]) && side(l[1], l[2]) && side(l[2], l[0])
+    };
+    let off = |p: forge_math::Point3| {
+        let rho = (p.x * p.x + p.y * p.y).sqrt();
+        let d = rho - t.major;
+        ((d * d + p.z * p.z).sqrt() - t.minor).abs() > chord
+    };
+    let nxy = (n.x * n.x + n.y * n.y).sqrt();
+    if nxy > 0.0 {
+        for sign in [1.0, -1.0] {
+            let (ex, ey) = (sign * n.x / nxy, sign * n.y / nxy);
+            let c = forge_math::Point3::new(t.major * ex, t.major * ey, 0.0);
+            let s = n.dot(l[0] - c);
+            let p = c + n * s;
+            // (its shadow on the plane square to the axis along c's direction, past the axis)
+            if t.major + s * sign * nxy > 0.0 && inside(p) && off(p) {
+                return false;
+            }
+        }
+    }
+    // the axis's point in the plane, when the triangle's shadow holds the axis
+    let cross = |a: forge_math::Point3, b: forge_math::Point3| a.x * b.y - a.y * b.x;
+    let w = [cross(l[1], l[2]), cross(l[2], l[0]), cross(l[0], l[1])];
+    let total = w[0] + w[1] + w[2];
+    if total != 0.0 && w.iter().all(|&v| v * total >= 0.0) {
+        let z = (w[0] * l[0].z + w[1] * l[1].z + w[2] * l[2].z) / total;
+        if off(forge_math::Point3::new(0.0, 0.0, z)) {
+            return false;
+        }
+    }
+    true
+}
+
 /// Whether the surface curves both ways, so a triangle on it sags by its sag along each side.
 fn doubly_curved(s: &Surface) -> bool {
     matches!(s, Surface::Sphere(_) | Surface::Torus(_))
@@ -1765,6 +1863,9 @@ fn mesh_face(
                                     surface.implicit(m).abs() > 0.5 * q.chord
                                         && cone_chord_sags(c, x, y, q.chord)
                                 }
+                                // on a torus, a bound: what its middle sags and how far the chord
+                                // can stray from the parabola through its ends and middle
+                                Surface::Torus(t) => !torus_chord_holds(t, x, y, q.chord),
                                 _ => false,
                             }
                     })))
@@ -1800,6 +1901,7 @@ fn mesh_face(
                     // its slope inside but along a line to its edges: its deepest point is on an
                     // edge (judged with the edges) or where the axis crosses it
                     Surface::Cone(c) => cone_axis_sags(c, x, q.chord),
+                    Surface::Torus(t) => !torus_triangle_holds(t, x, q.chord),
                     _ => false,
                 }
         }
@@ -2666,8 +2768,9 @@ fn strips(
     // and where one strays the Delaunay meshes the face instead
     // (each at its deepest point, as the refinement judges it: on a cone, its edges' deepest
     // points and where the axis crosses it; on a sphere, its edges' middles and the centre's foot;
-    // a cylinder's rows are an arc's chords apart, its triangles' deepest points their edges'
-    // middles, each within the chord)
+    // on a torus, its edges by the bound and its inside where F's slope is zero; a cylinder's rows
+    // are an arc's chords apart, its triangles' deepest points their edges' middles, each within
+    // the chord)
     let strays = match surface {
         Surface::Cone(c) => {
             let off = |x: forge_math::Point3| surface.implicit(x).abs() > q.chord;
@@ -2699,6 +2802,15 @@ fn strips(
                 }
             })
         }
+        Surface::Torus(tor) => tris.iter().any(|t| {
+            let p = t.map(|i| mesh.positions[i as usize]);
+            let sag = |x: forge_math::Point3| surface.implicit(x).abs();
+            (0..3).any(|k| {
+                sag(p[k].lerp(p[(k + 1) % 3], 0.5)) > q.chord
+                    || !torus_chord_holds(tor, p[k], p[(k + 1) % 3], q.chord)
+            }) || sag(p[0].lerp(p[1], 0.5).lerp(p[2], 1.0 / 3.0)) > q.chord
+                || !torus_triangle_holds(tor, p, q.chord)
+        }),
         _ => false,
     };
     if strays {
@@ -2819,7 +2931,11 @@ mod tests {
         // two points of it, far apart in height and a little apart in angle
         let at = |z: f64, phi: f64| {
             let r = cone.radius_at(z);
-            Point3::new(r * forge_math::dmath::cos(phi), r * forge_math::dmath::sin(phi), z)
+            Point3::new(
+                r * forge_math::dmath::cos(phi),
+                r * forge_math::dmath::sin(phi),
+                z,
+            )
         };
         let (x, y) = (at(0.0, 0.0), at(30.0, 0.35));
         assert!(s.implicit(x).abs() < 1e-12 && s.implicit(y).abs() < 1e-12);
@@ -2831,6 +2947,61 @@ mod tests {
         let between = 0.5 * (mid + deepest);
         assert!(cone_chord_sags(&cone, x, y, between));
         assert!(!cone_chord_sags(&cone, x, y, deepest * 1.0001));
+    }
+
+    /// On a torus, what the rule accepts lies within the chord: random chords and triangles with
+    /// their corners on it, each accepted one sampled densely (and the rule accepts most of what
+    /// the middle's and centroid's tests do: it is a bound, not a wall).
+    #[test]
+    fn a_toruss_accepted_chords_and_triangles_hold_the_chord() {
+        use forge_math::Point3;
+        let t = forge_geom::Torus::new(Frame::WORLD, 20.0, 5.0).expect("a torus");
+        let s = Surface::Torus(t);
+        let at = |u: f64, v: f64| {
+            let (su, cu) = forge_math::dmath::sin_cos(u);
+            let (sv, cv) = forge_math::dmath::sin_cos(v);
+            Point3::new((20.0 + 5.0 * cv) * cu, (20.0 + 5.0 * cv) * su, 5.0 * sv)
+        };
+        let mut r = Rng::new(7);
+        let chord = 0.05;
+        let (mut chords, mut tris) = ((0, 0), (0, 0));
+        for _ in 0..4000 {
+            let (u, v) = (
+                r.range(0.0, forge_math::dmath::TAU),
+                r.range(0.0, forge_math::dmath::TAU),
+            );
+            let x: [Point3; 3] = core::array::from_fn(|_| at(u + r.range(-0.1, 0.1), v + r.range(-0.2, 0.2)));
+            let deepest = |n: usize, f: &dyn Fn(f64, f64) -> Point3| {
+                let mut d = 0.0f64;
+                for i in 0..=n {
+                    for j in 0..=(n - i) {
+                        d = d.max(s.implicit(f(i as f64 / n as f64, j as f64 / n as f64)).abs());
+                    }
+                }
+                d
+            };
+            let mid = s.implicit(x[0].lerp(x[1], 0.5)).abs();
+            if mid <= chord {
+                chords.1 += 1;
+                if torus_chord_holds(&t, x[0], x[1], chord) {
+                    chords.0 += 1;
+                    let d = deepest(400, &|a, _| x[0].lerp(x[1], a));
+                    assert!(d <= chord * (1.0 + 1e-9), "a chord accepted at {d}");
+                }
+            }
+            let mids = (0..3).all(|k| s.implicit(x[k].lerp(x[(k + 1) % 3], 0.5)).abs() <= chord)
+                && s.implicit(x[0].lerp(x[1], 0.5).lerp(x[2], 1.0 / 3.0)).abs() <= chord;
+            if mids && (0..3).all(|k| torus_chord_holds(&t, x[k], x[(k + 1) % 3], chord)) {
+                tris.1 += 1;
+                if torus_triangle_holds(&t, x, chord) {
+                    tris.0 += 1;
+                    let d = deepest(60, &|a, b| x[0] + (x[1] - x[0]) * a + (x[2] - x[0]) * b);
+                    assert!(d <= chord * (1.0 + 1e-6), "a triangle accepted at {d}");
+                }
+            }
+        }
+        assert!(chords.0 * 10 >= chords.1 * 9, "{chords:?}");
+        assert!(tris.1 > 100, "{tris:?}");
     }
 
     #[test]
