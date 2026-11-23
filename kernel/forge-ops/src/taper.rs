@@ -10,8 +10,8 @@
 //! - a corner reaching a side it does not end, two loops touching, or neighbours whose carriers no
 //!   longer meet: `WallsCross`, refused, as no solid is the taper past it.
 //!
-//! Loops with an arc meeting a neighbour at an angle still find wiped-out segments by search
-//! (`next_event`).
+//! Where an arc meets a neighbour at an angle (a line or another arc) its joint moves on a circle:
+//! `curved_event`, exact as well.
 use crate::draft::{DraftError, draft, drafted};
 use crate::extrude::{ExtrudeError, extrude, prepared};
 use crate::profile::{Profile, ProfileLoop, Segment};
@@ -202,14 +202,30 @@ fn arc_sweep(segs: &[(Segment, u64)], i: usize, d: f64, sweep: f64, raw: f64) ->
     }
     let n = segs.len();
     let at = |x: Point2| dmath::atan2(x.y - center.y, x.x - center.x);
+    let swept = |t: f64| Some(at(joint(segs, (i + 1) % n, t)?) - at(joint(segs, i, t)?));
     const STEPS: u32 = 32;
     let mut last = sweep;
-    for k in 1..STEPS {
-        let t = d * f64::from(k) / f64::from(STEPS);
-        let (Some(p), Some(q)) = (joint(segs, i, t), joint(segs, (i + 1) % n, t)) else {
-            return sw;
-        };
-        last = near(last, at(q) - at(p));
+    let mut from = 0.0;
+    for k in 1..=STEPS {
+        // each step halved where the sweep turns fast (an arc's sweep running out goes as a root
+        // of what is left, most of it in the last step)
+        let mut ends = vec![d * f64::from(k) / f64::from(STEPS)];
+        while let Some(&t) = ends.last() {
+            let Some(s) = swept(t) else {
+                if k == STEPS {
+                    return near(last, raw);
+                }
+                return sw;
+            };
+            let s = near(last, s);
+            if (s - last).abs() > 0.25 && ends.len() < 64 && t - from > 1e-15 * d {
+                ends.push(0.5 * (from + t));
+                continue;
+            }
+            last = s;
+            from = t;
+            ends.pop();
+        }
     }
     near(last, raw)
 }
@@ -408,7 +424,7 @@ fn slab(
     let bottom = b.add_face(ShellId(0), Surface::Plane(Plane::new(base)), false, start);
     // a top is left where the loops still bound something
     let mut tops: Vec<(VertexId, Point2)> = Vec::new();
-    let mut top_edges: Vec<(VertexId, VertexId, EdgeId, bool)> = Vec::new();
+    let mut top_edges: Vec<(VertexId, VertexId, EdgeId, bool, Point2)> = Vec::new();
     let mut top_loops: Vec<Vec<(EdgeId, bool)>> = Vec::new();
     let mut bottom_loops: Vec<Vec<(EdgeId, bool)>> = Vec::new();
     let mut uprights: Vec<EdgeId> = Vec::new();
@@ -492,9 +508,14 @@ fn slab(
             }
             let mut uses = vec![(lo, forward), (rises[j], true)];
             if ta != tc {
-                // run along another wall's top edge: that edge, used the other way
-                let used = match top_edges.iter().find(|x| (x.0, x.1) == (tc, ta)) {
-                    Some(&(_, _, e, fwd)) => {
+                // run along another wall's top edge: that edge, used the other way (the same ends
+                // and the same way between them: a lens's two arcs share their ends, not their edge)
+                let mid = m[i].seg.samples(2)[1];
+                let used = match top_edges
+                    .iter()
+                    .find(|x| (x.0, x.1) == (tc, ta) && x.4.distance(mid) <= 2.0 * GONE)
+                {
+                    Some(&(_, _, e, fwd, _)) => {
                         shared.push(e);
                         (e, !fwd)
                     }
@@ -502,7 +523,7 @@ fn slab(
                         let (_, _, c, r, f) = wall(&m[i].seg, &lid);
                         let (s, en) = if f { (ta, tc) } else { (tc, ta) };
                         let e = b.add_edge(c, r, s, en, Name::NONE.with_set(&[end, names[i]]));
-                        top_edges.push((ta, tc, e, !f));
+                        top_edges.push((ta, tc, e, !f, mid));
                         up.push((e, f));
                         (e, !f)
                     }
@@ -690,8 +711,12 @@ pub fn tapered(profile: &Profile, distance: f64, angle: f64, feature: u64) -> Re
             Some(None) => None,
             None => next_event(&p, sign, left * lean),
         };
-        // an event at the start: a side with no length, no slab to make
-        if event.is_some_and(|d| d / lean <= tol::LINEAR) {
+        // an event at the start: a side with no length, no slab to make; where it is the outline
+        // closing up (within LINEAR of the last slab's top), closed there
+        if let Some(d) = event.filter(|d| d / lean <= tol::LINEAR) {
+            if !out.is_empty() && p.loops.iter().all(|l| closes(&l.segments, d * sign)) {
+                break;
+            }
             return Err(TaperError::WallsCross { at: up });
         }
         let Some(d) = event else {
@@ -823,12 +848,50 @@ fn radical_roots(a: &[f64], (b1, r1): (f64, &[f64]), (b2, r2): (f64, &[f64]), re
         .collect()
 }
 
+/// The offsets in (0, reach] where joint `jk` is on the circle about `cc` of radius r0 + dr δ:
+/// `|J - c|² - ρ² = A + B w` (w² = r), whose roots are those of `A² - B² r` kept where the radical
+/// form vanishes.
+fn on_circle(jk: &Joint, cc: Point2, r0: f64, dr: f64, reach: f64) -> Vec<f64> {
+    let px = padd(&jk.p[0], &[-cc.x]);
+    let py = padd(&jk.p[1], &[-cc.y]);
+    let rho = [r0, dr];
+    let a = padd(
+        &padd(
+            &padd(&pmul(&px, &px), &pmul(&py, &py)),
+            &pscale(&jk.r, jk.v.dot(jk.v)),
+        ),
+        &pscale(&pmul(&rho, &rho), -1.0),
+    );
+    let b = padd(
+        &pscale(&px, 2.0 * jk.v.x * jk.sg),
+        &pscale(&py, 2.0 * jk.v.y * jk.sg),
+    );
+    if forge_math::poly::eval(&a, 0.0).abs() <= 0.0 {
+        return vec![];
+    }
+    let mut poly = padd(&pmul(&a, &a), &pscale(&pmul(&pmul(&b, &b), &jk.r), -1.0));
+    let lead = poly.iter().rposition(|x| x.abs() > 0.0).map_or(0, |i| i + 1);
+    if lead <= 1 {
+        return vec![];
+    }
+    poly.truncate(lead);
+    forge_math::poly::real_roots(&poly, 0.0, reach)
+        .into_iter()
+        .map(|r| r.x)
+        .filter(|&d| {
+            let rho_d = r0 + dr * d;
+            d > 0.0 && ((jk.at(d) - cc).length() - rho_d).abs() <= 1e-9 * (1.0 + rho_d)
+        })
+        .collect()
+}
+
 /// `first_event` where some joint is an arc meeting its neighbour at an angle: the joint moves
 /// on the circle where the other's carrier meets it, so a side's length, a corner's distance from
 /// a line and its distance from a circle are radicals of polynomials in the offset, whose roots
 /// are those of the polynomial squaring gives (kept where the radical form vanishes). The joint is
-/// lost (event J) where its radicand reaches 0. Arcs meeting each other at an angle: None (the
-/// search decides).
+/// lost (event J) where its radicand reaches 0. Two arcs meeting at an angle: the joint is where
+/// their circles meet, `c1 + e a(δ) ± e⊥ sqrt(ρ1² - a²)` with `a = (ρ1² - ρ2² + D²) / 2D`, the
+/// same form (p quadratic, r quartic in δ).
 pub(crate) fn curved_event(p: &Profile, sign: f64, reach: f64) -> Option<Option<(f64, Event)>> {
     let mut loops: Vec<Moving> = Vec::new();
     let line = |s: &Segment| match *s {
@@ -884,8 +947,37 @@ pub(crate) fn curved_event(p: &Profile, sign: f64, reach: f64) -> Option<Option<
                     return Some(Some((0.0, Event::Cross)));
                 }
                 still((ca.n + cb.n) * (1.0 / den))
+            } else if let (Some((c1, r1, k1)), Some((c2, r2, k2)), None, None) =
+                (round(a), round(b), line(a), line(b))
+            {
+                // two circles: along the centres' line a(δ) from c1, across it sqrt(ρ1² - a²)
+                let dd = c2 - c1;
+                let dist = dd.length();
+                if dist <= 1e-9 * (1.0 + r1 + r2) {
+                    return None;
+                }
+                let e = dd * (1.0 / dist);
+                let (rho1, rho2) = ([r1, k1], [r2, k2]);
+                let along = pscale(
+                    &padd(
+                        &padd(&pmul(&rho1, &rho1), &pscale(&pmul(&rho2, &rho2), -1.0)),
+                        &[dist * dist],
+                    ),
+                    0.5 / dist,
+                );
+                let r = padd(&pmul(&rho1, &rho1), &pscale(&pmul(&along, &along), -1.0));
+                let v = e.perp();
+                let mid = c1 + e * along[0];
+                Joint {
+                    p: [
+                        padd(&[c1.x], &pscale(&along, e.x)),
+                        padd(&[c1.y], &pscale(&along, e.y)),
+                    ],
+                    v,
+                    r,
+                    sg: if (at - mid).dot(v) < 0.0 { -1.0 } else { 1.0 },
+                }
             } else {
-                // (arcs meeting each other at an angle: the search decides)
                 let l = line(a).or_else(|| line(b))?;
                 let (cc, r0, dr) = round(a).or_else(|| round(b))?;
                 // the foot of the centre on the carrier, d(δ) from it, and along it sqrt(ρ² - d²)
@@ -948,6 +1040,13 @@ pub(crate) fn curved_event(p: &Profile, sign: f64, reach: f64) -> Option<Option<
                             let (g, w) = a.along(cb.a, cb.n);
                             let g = padd(&g, &[0.0, -sign]);
                             for d in radical_roots(&g, (w, &a.r), (0.0, &[]), reach) {
+                                if a.at(d).distance(b.at(d)) <= 1e-7 * (1.0 + r0) {
+                                    edge = edge.min(d);
+                                }
+                            }
+                        } else if let Some((cn, rn, dn)) = round(&cyc(segs, i + 1).0) {
+                            // ... or the next arc's circle
+                            for d in on_circle(a, cn, rn, dn, reach) {
                                 if a.at(d).distance(b.at(d)) <= 1e-7 * (1.0 + r0) {
                                     edge = edge.min(d);
                                 }
@@ -1017,41 +1116,9 @@ pub(crate) fn curved_event(p: &Profile, sign: f64, reach: f64) -> Option<Option<
                     }
                 } else if let Some((cc, r0, dr)) = round(&cyc(sb, j).0) {
                     for k in (0..na).filter(|&k| !near(k) && na > 1) {
-                        // |J - c|² - ρ² = A + B w, w² = r
-                        let jk = &cyc(ja, k);
-                        let px = padd(&jk.p[0], &[-cc.x]);
-                        let py = padd(&jk.p[1], &[-cc.y]);
-                        let rho = [r0, dr];
-                        let a = padd(
-                            &padd(
-                                &padd(&pmul(&px, &px), &pmul(&py, &py)),
-                                &pscale(&jk.r, jk.v.dot(jk.v)),
-                            ),
-                            &pscale(&pmul(&rho, &rho), -1.0),
-                        );
-                        let b = padd(
-                            &pscale(&px, 2.0 * jk.v.x * jk.sg),
-                            &pscale(&py, 2.0 * jk.v.y * jk.sg),
-                        );
-                        if forge_math::poly::eval(&a, 0.0).abs() <= 0.0 {
-                            continue;
-                        }
-                        // A + B w = 0: A² - B² r = 0, kept where A + B w vanishes
-                        let mut poly = padd(&pmul(&a, &a), &pscale(&pmul(&pmul(&b, &b), &jk.r), -1.0));
-                        let lead = poly.iter().rposition(|x| x.abs() > 0.0).map_or(0, |i| i + 1);
-                        if lead <= 1 {
-                            continue;
-                        }
-                        poly.truncate(lead);
-                        for root in forge_math::poly::real_roots(&poly, 0.0, reach) {
-                            let d = root.x;
-                            let q = jk.at(d);
-                            let rho_d = r0 + dr * d;
-                            if d > 0.0
-                                && ((q - cc).length() - rho_d).abs() <= 1e-9 * (1.0 + rho_d)
-                                && on_arc(sb, jb, j, q, d)
-                                && !same(d)
-                            {
+                        let jk = cyc(ja, k);
+                        for d in on_circle(jk, cc, r0, dr, reach) {
+                            if on_arc(sb, jb, j, jk.at(d), d) && !same(d) {
                                 cross = cross.min(d);
                             }
                         }
@@ -1529,5 +1596,134 @@ mod tests {
         // ∫0^d (w - 2z)(h - 2z) dz - (4 - pi) ∫0^r (r - z)^2 dz
         let exact = w * h * d - (w + h) * d * d + 4.0 * d * d * d / 3.0 - (4.0 - PI) * r * r * r / 3.0;
         close(volume(tapered(&rr, d, a, 7)), exact);
+    }
+
+    /// Simpson's rule over [0, d] of `area` at the offset `h tan a`.
+    fn swept(area: impl Fn(f64) -> f64, d: f64, a: f64) -> f64 {
+        let (n, h) = (20000, d / 20000.0);
+        (0..=n)
+            .map(|k| {
+                let w = if k == 0 || k == n {
+                    1.0
+                } else if k % 2 == 1 {
+                    4.0
+                } else {
+                    2.0
+                };
+                w * area(k as f64 * h * tan(a))
+            })
+            .sum::<f64>()
+            * h
+            / 3.0
+    }
+
+    fn arc(cx: f64, cy: f64, radius: f64, start: f64, sweep: f64, id: u64) -> (Segment, u64) {
+        (
+            Segment::Arc {
+                center: Point2::new(cx, cy),
+                radius,
+                start,
+                sweep,
+            },
+            id,
+        )
+    }
+
+    /// The area two discs share, radii r1 and r2, centres d apart.
+    fn lens(r1: f64, r2: f64, d: f64) -> f64 {
+        if d >= r1 + r2 {
+            return 0.0;
+        }
+        if d <= (r1 - r2).abs() {
+            return PI * r1.min(r2) * r1.min(r2);
+        }
+        let a1 = dmath::acos((d * d + r1 * r1 - r2 * r2) / (2.0 * d * r1));
+        let a2 = dmath::acos((d * d + r2 * r2 - r1 * r1) / (2.0 * d * r2));
+        let (s1, c1) = dmath::sin_cos(a1);
+        let (s2, c2) = dmath::sin_cos(a2);
+        r1 * r1 * (a1 - s1 * c1) + r2 * r2 * (a2 - s2 * c2)
+    }
+
+    /// Two arcs meeting at an angle (the joint where their circles meet, moving on neither): a
+    /// lens of two radius 2 discs 2 apart closes to a point where the circles turn tangent, 1 in.
+    /// Exact against its sections, short of the point and past it.
+    #[test]
+    fn a_lens_closes_to_its_point() {
+        let w = FRAC_PI_2 / 1.5; // 60 deg
+        let lens2 = profile(vec![ProfileLoop::new(vec![
+            arc(-1.0, 0.0, 2.0, -w, 2.0 * w, 1),
+            arc(1.0, 0.0, 2.0, PI - w, 2.0 * w, 2),
+        ])]);
+        let a = 45f64.to_radians();
+        let area = |t: f64| lens(2.0 - t, 2.0 - t, 2.0);
+        for d in [0.5, 1.5] {
+            let exact = swept(area, d, a);
+            assert!((volume(tapered(&lens2, d, a, 7)) - exact).abs() <= 1e-6 * exact);
+        }
+    }
+
+    /// A disc of radius 3 with a bite of radius 2 out of it, 3 from its centre. In, the bite grows
+    /// as the disc shrinks and the crescent closes at a point where the bite takes it all (2 in):
+    /// exact. Out, the bite shrinks inside the growing disc and the crescent's tips meet where the
+    /// circles turn tangent inside, a hole pinched off at (d - r1 + r2) / 2 = 1: refused there.
+    #[test]
+    fn a_crescent_closes_in_and_pinches_out() {
+        let (r1, r2, d) = (3.0, 2.0, 3.0);
+        let w1 = dmath::acos((r1 * r1 + d * d - r2 * r2) / (2.0 * r1 * d));
+        let w2 = dmath::acos((r2 * r2 + d * d - r1 * r1) / (2.0 * r2 * d));
+        let crescent = profile(vec![ProfileLoop::new(vec![
+            arc(0.0, 0.0, r1, w1, 2.0 * PI - 2.0 * w1, 1),
+            arc(d, 0.0, r2, PI + w2, -2.0 * w2, 2),
+        ])]);
+        let a = 45f64.to_radians();
+        let area = |t: f64| {
+            let (q1, q2) = (r1 - t, r2 + t);
+            if q2 - q1 >= d {
+                0.0
+            } else {
+                PI * q1 * q1 - lens(q1, q2, d)
+            }
+        };
+        for depth in [1.0, 3.0] {
+            let exact = swept(area, depth, a);
+            assert!((volume(tapered(&crescent, depth, a, 7)) - exact).abs() <= 1e-6 * exact);
+        }
+        let a = 30f64.to_radians();
+        match tapered(&crescent, 3.0, -a, 7) {
+            Err(TaperError::WallsCross { at }) => close(at, 1.0 / tan(a)),
+            other => panic!("{:?}", other.map(|v| v.len())),
+        }
+    }
+
+    /// A Reuleaux triangle (three discs of radius √3 about the corners of a triangle of circumradius
+    /// 1): in, its three arcs run out together at the centre, √3 - 1 in. Each section is the
+    /// triangle of its corners, q = sqrt(ρ² - 3/4) - 1/2 from the centre, and three segments.
+    #[test]
+    fn a_reuleaux_triangle_closes_on_its_centre() {
+        let s = 3f64.sqrt();
+        let v = |k: f64| dmath::sin_cos(FRAC_PI_2 + k * 2.0 * PI / 3.0);
+        let (v0, v1, v2) = (v(0.0), v(1.0), v(2.0));
+        // the arc about v2 from v0 to v1, about v0 from v1 to v2, about v1 from v2 to v0
+        let start = |c: (f64, f64), p: (f64, f64)| dmath::atan2(p.0 - c.0, p.1 - c.1);
+        let reuleaux = profile(vec![ProfileLoop::new(vec![
+            arc(v2.1, v2.0, s, start(v2, v0), PI / 3.0, 1),
+            arc(v0.1, v0.0, s, start(v0, v1), PI / 3.0, 2),
+            arc(v1.1, v1.0, s, start(v1, v2), PI / 3.0, 3),
+        ])]);
+        let a = 60f64.to_radians();
+        let area = |t: f64| {
+            let rho = s - t;
+            let q = (rho * rho - 0.75).max(0.0).sqrt() - 0.5;
+            if q <= 0.0 {
+                return 0.0;
+            }
+            let l = q * s;
+            let phi = 2.0 * dmath::asin(l / (2.0 * rho));
+            s / 4.0 * l * l + 1.5 * rho * rho * (phi - dmath::sin_cos(phi).0)
+        };
+        for depth in [0.2, 1.0] {
+            let exact = swept(area, depth, a);
+            assert!((volume(tapered(&reuleaux, depth, a, 7)) - exact).abs() <= 1e-6 * exact);
+        }
     }
 }

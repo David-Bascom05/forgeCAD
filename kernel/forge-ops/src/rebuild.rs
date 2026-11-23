@@ -570,6 +570,14 @@ fn edge_curve(
     let guess = refine(a, b, old_mid).unwrap_or(old_mid);
     let analytic = match (a, b) {
         (Surface::Plane(p), s) | (s, Surface::Plane(p)) => plane_surface(p, s),
+        (Surface::Cone(_), Surface::Cone(_)) => match cones_meet(a, b) {
+            Some(cs) => SurfaceSurface::Curves(
+                cs.into_iter()
+                    .map(|c| (c, forge_geom::intersect::Contact::Crossing))
+                    .collect(),
+            ),
+            None => SurfaceSurface::NotAnalytic,
+        },
         _ => SurfaceSurface::NotAnalytic,
     };
     let curves: Vec<Curve> = match analytic {
@@ -579,13 +587,34 @@ fn edge_curve(
                 .bbox(or)
                 .hull(&Box3::from_points([ps, pe, guess]))
                 .grow(2.0 * shift + 10.0 * tol::LINEAR);
-            trace(a, b, region)?
+            // (none traced: perhaps two cones meeting on a plane, below)
+            trace(a, b, region)
+                .unwrap_or_default()
                 .into_iter()
                 .map(|c| Curve::Intersection(std::sync::Arc::new(c)))
                 .collect()
         }
         _ => return None,
     };
+    let best = fitted(curves, oc, or, ps, pe, closed, guess);
+    if best.is_none() {
+        // two cones on parallel axes with one slope, as a taper's walls where two arcs meet: the
+        // conic they meet on, which tracing loses where they come to touch
+        return fitted(cones_meet(a, b)?, oc, or, ps, pe, closed, guess);
+    }
+    best
+}
+
+/// Of `curves` (each either way), the one through `ps` and `pe` nearest `guess` at its middle.
+fn fitted(
+    curves: Vec<Curve>,
+    oc: &Curve,
+    or: Interval,
+    ps: Point3,
+    pe: Point3,
+    closed: bool,
+    guess: Point3,
+) -> Option<(Curve, Interval)> {
     let mut best: Option<(f64, Curve, Interval)> = None;
     for c in curves {
         for c in [reversed(&c), c] {
@@ -607,6 +636,45 @@ fn edge_curve(
         }
     }
     best.map(|b| (b.1, b.2))
+}
+
+/// Two cones on parallel axes with one slope meet on a plane: measured along a's axis each radius
+/// is linear in the height s, `α + β s`, and `|u|² = ρa²`, `|u - w|² = ρb²` (u, w across the axis)
+/// differ by `2 u.w + 2 (αb βb - αa βa) s = |w|² - αb² + αa²` where `βa² = βb²`. The curves are that
+/// plane's cut of a (exact conics), or None for any other pair.
+#[cold]
+#[inline(never)]
+fn cones_meet(a: &Surface, b: &Surface) -> Option<Vec<Curve>> {
+    let (Surface::Cone(a), Surface::Cone(b)) = (a, b) else {
+        return None;
+    };
+    let z = a.frame.z();
+    let zb = b.frame.z();
+    let same = z.dot(zb);
+    if z.cross(zb).length() > tol::ANGULAR {
+        return None;
+    }
+    let (aa, ba) = (a.radius, a.tan_a());
+    // b's v runs along z or against it; its radius at a's height s
+    let sb = (b.frame.origin - a.frame.origin).dot(z.get());
+    let bb = b.tan_a() * same.signum();
+    let ab = b.radius - bb * sb;
+    if (ba * ba - bb * bb).abs() > 1e-12 * ba * ba {
+        return None;
+    }
+    let w = (b.frame.origin - a.frame.origin) - z * sb;
+    if w.length() <= tol::LINEAR {
+        return None;
+    }
+    let n = w + z * (ab * bb - aa * ba);
+    let k = 0.5 * (w.dot(w) - ab * ab + aa * aa);
+    let len = n.length();
+    let normal = (n * (1.0 / len)).normalize()?;
+    let plane = Plane::new(Frame::from_z(a.frame.origin + n * (k / (len * len)), normal));
+    match forge_geom::intersect::plane_cone(&plane, a) {
+        SurfaceSurface::Curves(cs) => Some(cs.into_iter().map(|c| c.0).collect()),
+        _ => None,
+    }
 }
 
 #[cfg(test)]
