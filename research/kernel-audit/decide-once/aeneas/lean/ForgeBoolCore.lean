@@ -27,3 +27,4 @@ import ForgeBoolCore.Specs
 import ForgeBoolCore.RefineCore
 import ForgeBoolCore.Encode
 import ForgeBoolCore.EndToEnd
+import ForgeBoolCore.RefineUnify

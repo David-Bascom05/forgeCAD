@@ -1,3 +1,4 @@
+import ForgeBoolCore.RefineUnify
 import ForgeBoolCore.Refine
 import ForgeBoolCore.RefineUF
 import ForgeBoolCore.HeadBridge
@@ -85,3 +86,5 @@ import ForgeBoolCore.EndToEnd
 #print axioms forge_bool_core.end_to_end
 #print axioms forge_bool_core.encode_spec_proof
 #print axioms forge_bool_core.end_to_end_encode
+#print axioms forge_bool_core.U.has_spec
+#print axioms forge_bool_core.U.same_set_spec
