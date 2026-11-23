@@ -1,0 +1,18 @@
+== abc: 500 files in both
+       2 better refused refused:CONICAL_SURFACE: radius half angle  ->  match 
+== automate: 1500 files in both
+      16 better refused refused:MANIFOLD_SOLID_BREP: a closed cylinder face with  ->  match 
+       5 better mismatch invalid:FaceWrongSide  ->  match 
+       1 better refused refused:BREP_WITH_VOIDS: a closed cylinder face with  ->  mismatch off:area
+       1 moved  refused refused:MANIFOLD_SOLID_BREP: a closed spline surface face  ->  refused refused:MANIFOLD_SOLID_BREP: a closed cylinder face with
+       1 moved  mismatch invalid:FaceWrongSide  ->  mismatch off:volume 1e-2+
+       1 better refused refused:MANIFOLD_SOLID_BREP: a closed cylinder face with  ->  mismatch invalid:LoopsCross
+       1 better refused refused:MANIFOLD_SOLID_BREP: a closed spline surface face  ->  match 
+       1 better refused refused:MANIFOLD_SOLID_BREP: a closed spline surface face  ->  mismatch warned:its volume and area
+       1 better refused refused:MANIFOLD_SOLID_BREP: a closed cylinder face with  ->  mismatch off:volume
+       1 better refused refused:MANIFOLD_SOLID_BREP: a closed spline surface face  ->  mismatch off:volume
+       1 better refused refused:MANIFOLD_SOLID_BREP: a closed cone face with  ->  match 
+       1 better refused refused:MANIFOLD_SOLID_BREP: a closed cylinder face with  ->  mismatch off:volume 1e-2+
+== cadfs: 1000 files in both
+== nist: 33 files in both
+same 2989, better 31, worse 0 (the judge's own moves, OCCT's or the lemon rule's, apart: 11)
