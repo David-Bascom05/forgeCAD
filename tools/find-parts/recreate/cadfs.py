@@ -22,7 +22,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import fs
 import sketch2d
 from fgw import NoName, Prog, St, Stop, Topo, loop_segs
-from sketch2d import Arrangement, Unsupported, curve_dist, meets
+from sketch2d import Arrangement, Unsupported, carrier_dist, curve_dist, meets
 
 TOL = 2e-4  # mm: a sample this close lies on its carrier
 SIDE = 1  # TD weight +1: the region on this side of the entity (+1 left)
@@ -143,7 +143,7 @@ class Swept:
 
     def dist(self, p):
         u, v, w = self.fr.uvw(p)
-        d = curve_dist(self.piece, (u, v))
+        d = carrier_dist(self.piece, (u, v))
         out = 0.0
         if self.lo is not None and w < self.lo:
             out = self.lo - w
@@ -166,7 +166,7 @@ class Turned:
         r = math.hypot(dx - s * self.d2[0], dy - s * self.d2[1])
         r = math.hypot(r, w)
         e = (-self.d2[1], self.d2[0])
-        return min(curve_dist(self.piece, (self.a2[0] + s * self.d2[0] + k * r * e[0], self.a2[1] + s * self.d2[1] + k * r * e[1])) for k in (1, -1))
+        return min(carrier_dist(self.piece, (self.a2[0] + s * self.d2[0] + k * r * e[0], self.a2[1] + s * self.d2[1] + k * r * e[1])) for k in (1, -1))
 
 
 class Any:
@@ -763,7 +763,7 @@ class Tr:
         if not ents:
             return hit
         c = self.carrier(q, env)
-        hs = {h for e in st["edges"] if set(e["f"]) & hit and all(c.dist(p) <= TOL and any(curve_dist(g[3], g[2].uvw(p)[:2]) <= TOL for g in ents) for p in e["p"]) for h in set(e["f"]) & hit}
+        hs = {h for e in st["edges"] if set(e["f"]) & hit and all(c.dist(p) <= TOL and any(carrier_dist(g[3], g[2].uvw(p)[:2]) <= TOL for g in ents) for p in e["p"]) for h in set(e["f"]) & hit}
         return hs or hit
 
     def edge_ent(self, e, fr):

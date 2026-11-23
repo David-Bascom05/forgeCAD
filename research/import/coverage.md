@@ -259,18 +259,44 @@ spline's shape, not by anything else in the part.
      - 00553987 went from off to refused (a self-intersecting profile);
      - 4 refused parts became untranslated: the importer finds no edge on the spline faces' carriers.
    - It would have gained 4 (00261814 and 00527258 from off to match, 00533379 from fail to match, 00359539 from
-     refused to built). So CADFS's fit splines stay polylines, and only WHUCAD's are written exactly. The CADFS rows
-     in the tables above are with polylines.
+     refused to built). For now CADFS's fit splines stay polylines, and only WHUCAD's are written exactly. The CADFS
+     rows in the tables above are with polylines.
+   - **Spline policy (the owner's direction).** The spline form is not chosen by which matches more of another
+     kernel's parts. The definitive spec of `.fg` splines is being written in Lean (branch
+     claude/repo-review-mbdrlj-spline-spec), and the kernel will be matched to it. The importers' rule will then
+     be:
+     - where the source gives control points, knots and weights (FreeCAD's B-splines), write them exactly, as now;
+     - where it gives only fit points (CADFS, WHUCAD), write the spec's interpolant, with a typed note that the
+       source's own interpolation may differ.
+
+     WHUCAD's opt-in stays as it is until then.
+   - The regressions above are kernel or importer faults, not reasons to keep polylines:
+     - Shell `Rebuild` → shell_revolved_spline.fg;
+     - the mesh failures → mesh_wavy_spline.fg (below);
+     - 00553987's `SelfIntersecting` is semantics. The source's own fit points cross the revolve axis at x = 0, and
+       Forge's cubic through them reaches x = −0.6, so the refusal is right for that curve.
+     - **The missing edges were the importer's.** A spline face's carrier measured distance to the sampled chords,
+       and an exactly written spline's faces lie off them by the chords' sag. Now a carrier measures distance to the
+       exact curve wherever the spline is written exactly (`sketch2d.carrier_dist`). That curve is the spec's
+       centripetal C2 cubic, ported from forge-geom's `Spline::through`; it agrees with the kernel's faces to 3e-13,
+       with end slopes and without. With fit splines written exactly, all 4 parts now translate (00123784 and
+       00539691 now refused at a fillet, 00154651 refused, 00335925 built at 1.2e-3).
 2. Two fails, restated in my own numbers as fixtures in interface/forge-lang/tests/kernel_parts, each with an
    ignored test in kernel_misc.rs that states what is due:
    - CADFS 00713562 → taper_collapses.fg: a hexagonal pit whose 80° taper meets before its depth builds an invalid
      body (`EdgeDegenerate`, a judge fail) where a refusal is due. At 70° it builds.
    - CADFS 00981084 → tapered_lobe_bore.fg: a 1°-tapered lobe pocket (an arc of radius 3 and two lines), and a bore
      of radius 3 whose wall runs within 0.15 of the lobe's cone. The boolean stops on `InconsistentClassification`
-     (cone against plane). A smaller bore, or the lobe untapered, builds. WHUCAD 100002274 fails the same way.
+     (cone against plane). A smaller bore, or the lobe untapered, builds.
    - The tests are `a_bore_beside_a_tapered_lobe_builds` and `a_taper_that_collapses_is_refused_cleanly`.
-   - In a search of my own (a 1°-tapered rounded rectangle under a ball cut), a 30 by 10 pocket of corner radius 4
-     also fails the boolean, as `SplitCrossed` on the sphere: a third internal error, not yet reduced.
+   - In a search of my own, a ball cut over a 1°-tapered 30 by 10 rounded-rectangle pocket fails as `SplitCrossed`
+     on the sphere → ball_over_tapered_pocket.fg.
+   - The shelled spline cup (CADFS 00316638, WHUCAD 100000526) → shell_revolved_spline.fg. The wavy spline wall
+     that builds but fails to mesh (CADFS 00468533, 00893869) → mesh_wavy_spline.fg.
+   - WHUCAD 100002274 (`InconsistentClassification`) is **tolerance-scale**: a plate 0.0156 thick and a 0.0158 box
+     on a plane tilted 1.4°. It is left for the decide-once near-coincident work, not reduced further. WHUCAD
+     100001734 (`Fillet Overflow`) is a correct refusal: its bump stands 0.0016 above the rim, a quantisation
+     sliver, too small a step for the 0.0078 round.
 3. Refusals newly reached:
    - CADFS 00277536 (`Fillet NoBlend`), 00515265 (`Sweep TooTight`), 00714299 (`Shell Collapses`);
    - FreeCAD d45d0db3.Body001 (`Extent Ambiguous` at feature 17, after its sweep).
