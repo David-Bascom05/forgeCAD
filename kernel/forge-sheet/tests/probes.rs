@@ -148,6 +148,8 @@ fn sweep(
     bad
 }
 
+const KINDS: [&str; 8] = ["one0", "one1", "auto", "circ", "sq", "tear", "trim", "open"];
+
 const ANGLES: [f64; 8] = [60.0, 75.0, 85.0, 90.0, 95.0, 100.0, 120.0, 135.0];
 
 #[test]
@@ -197,4 +199,19 @@ fn the_two_end_conditions_differ_by_their_triangle() {
             vn - va
         );
     }
+}
+
+#[test]
+fn corners_off_square_build_at_every_kind_and_sense() {
+    // rank 2: both flanges at a corner of A, up or down, every corner kind: folded and flat,
+    // valid (the corner built in the true frame of the two edges, not as if they were square)
+    let mut bad = sweep("pentagon", pentagon, &ANGLES, &KINDS, EndCondition::Normal);
+    bad.extend(sweep(
+        "quad",
+        quad,
+        &[90.0, 100.0, 120.0, 135.0],
+        &KINDS,
+        EndCondition::Normal,
+    ));
+    assert!(bad.is_empty(), "{} failures:\n{}", bad.len(), bad.join("\n"));
 }

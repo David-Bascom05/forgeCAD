@@ -481,7 +481,30 @@ fn corners(
                 Vec2::new(d.y, -d.x)
             };
             let (n1, n2) = (out_of(p0, p1), out_of(q0, q1));
-            let at = |x: f64, y: f64| v + n1 * x + n2 * y;
+            // the true frame: `off(x, y)` is the step from the corner to the point x out of edge
+            // 1's line and y out of edge 2's (n1 . d = x, n2 . d = y, by Cramer); the lines cross
+            // at the corner's angle, sin A = |n1 x n2|, so the edges are not parallel
+            let det = n1.cross(n2);
+            if det.abs() <= tol::ANGULAR {
+                continue;
+            }
+            // (where the edges are exactly perpendicular the solve is the expansion in the normals,
+            // unit to rounding, and is evaluated so, to the bit as a square corner always was)
+            let square = n1.dot(n2) == 0.0;
+            let off = |x: f64, y: f64| {
+                if square {
+                    n1 * x + n2 * y
+                } else {
+                    Vec2::new((x * n2.y - y * n1.y) / det, (n1.x * y - n2.x * x) / det)
+                }
+            };
+            let at = |x: f64, y: f64| {
+                if square {
+                    v + n1 * x + n2 * y
+                } else {
+                    v + off(x, y)
+                }
+            };
             // the square of both zones' ends near the corner, a thickness to spare
             let lo = |b: &Bend| -b.s - t;
             let hi = |b: &Bend| (b.ba - b.s).max(0.0) + t;
@@ -537,13 +560,10 @@ fn corners(
                 joints,
                 size,
             };
+            // the region within h of c out of both edges' lines: a square at a right angle, else
+            // the parallelogram of the four offset lines
             let square_at = |c: Point2, h: f64| {
-                polygon(&[
-                    c + (n1 + n2) * -h,
-                    c + (n1 - n2) * h,
-                    c + (n1 + n2) * h,
-                    c + (n2 - n1) * h,
-                ])
+                polygon(&[c + off(-h, -h), c + off(h, -h), c + off(h, h), c + off(-h, h)])
             };
             let (lp, size, automatic) = match kind {
                 CornerKind::Circular { size, placement } | CornerKind::Square { size, placement } => {
@@ -591,10 +611,14 @@ fn corners(
                     if width.is_nan() || width <= RELIEF_MIN {
                         return Err(unbuilt(width));
                     }
+                    // the bisector of the two zones' inner lines (their tangent lines on this
+                    // wall), through where they cross, from a thickness inside it to a thickness
+                    // past the far corner of the zones' overlap
                     let m = (n1 + n2) * (1.0 / (n1 + n2).length());
                     let across = Vec2::new(-m.y, m.x) * (0.5 * width);
-                    let inner = at(-b1.s, -b2.s) - v;
-                    let (from, to) = (v - m * (inner.length() + t), v + m * (t + b1.ba.max(b2.ba)));
+                    let inner = at(-b1.s, -b2.s);
+                    let far = (at(b1.ba - b1.s, b2.ba - b2.s) - inner).dot(m).max(0.0);
+                    let (from, to) = (inner - m * t, inner + m * (far + t));
                     (
                         polygon(&[from - across, to - across, to + across, from + across]),
                         width,
@@ -689,15 +713,39 @@ fn corners(
                 } else {
                     p0.distance(v) <= TOL
                 };
-                let (bt, jt, jo, start) = if first_is_cut {
-                    (b1, j1, j2, p0.distance(v) <= TOL)
+                let (bt, bo, jt, jo, start) = if first_is_cut {
+                    (b1, b2, j1, j2, p0.distance(v) <= TOL)
                 } else {
-                    (b2, j2, j1, q0.distance(v) <= TOL)
+                    (b2, b1, j2, j1, q0.distance(v) <= TOL)
+                };
+                let (nt, no) = if first_is_cut { (n1, n2) } else { (n2, n1) };
+                // how far along its edge from the corner the cut wall goes, in the true frame:
+                // past the other wall's thickness and the gap, (t + gap) / sin A, and across its
+                // own thickness, t |cot A| (at a right angle, t + gap); for a tear, which leaves
+                // the corner's material, past the other zone's whole footprint too (out of the
+                // other edge's line by its setback, over this zone's width), and a kerf
+                let (sin_a, cos_a) = if square {
+                    (1.0, 0.0)
+                } else {
+                    (det.abs(), -no.dot(nt))
+                };
+                // (the reach past a thickness: at a right angle the gap itself)
+                let past = if square {
+                    gap
+                } else {
+                    (t + gap + t * cos_a.abs()) / sin_a - t
+                };
+                let past = match kind {
+                    CornerKind::Tear | CornerKind::ConstantWidth { .. } => {
+                        let x = (bt.s * cos_a).max(-(bt.ba - bt.s) * cos_a);
+                        past.max((bo.s + x) / sin_a + sheet.rule.kerf - t)
+                    }
+                    _ => past,
                 };
                 let (y0, y1) = if start {
-                    (-t, t + gap)
+                    (-t, t + past)
                 } else {
-                    (bt.len - t - gap, bt.len + t)
+                    (bt.len - t - past, bt.len + t)
                 };
                 let far = sheet.walls[bt.b]
                     .outline
