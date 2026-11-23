@@ -7,8 +7,8 @@
 #   must-fix N  item N of forgecad-gate/instant-load/op-memo-proof.md ("Audit"): an op's output
 #               depends on it today; remove it or key it, then reclass the line
 # Reviewed 2026-11-04 (impl-proof audit of main f730c784). Format: class  @ file|kind|line  [x count]
-speed (timing stats; a clock that picks a path is must-fix 5)  @ forge-bool/src/boolean.rs|clock|let mut clock = phases_on().then(std::time::Instant::now);  x 2
-speed (timing stats; a clock that picks a path is must-fix 5)  @ forge-bool/src/boolean.rs|clock|let now = std::time::Instant::now();
+speed (timing stats; a clock that picks a path is must-fix 5)  @ forge-bool/src/boolean.rs|clock|let mut clock = phases_on().then(forge_math::clock::Instant::now);  x 2
+speed (timing stats; a clock that picks a path is must-fix 5)  @ forge-bool/src/boolean.rs|clock|let now = forge_math::clock::Instant::now();
 no-output (prints only)  @ forge-bool/src/boolean.rs|env|*ON.get_or_init(|| std::env::var_os("FORGE_DEBUG").is_some())
 no-output (prints only)  @ forge-bool/src/boolean.rs|env|*ON.get_or_init(|| std::env::var_os("FORGE_PHASES").is_some())
 no-output (prints only)  @ forge-bool/src/boolean.rs|env|*ON.get_or_init(|| std::env::var_os("FORGE_SPECS").is_some())
@@ -54,12 +54,12 @@ speed (stats counter)  @ forge-bool/src/imprint.rs|static|static TAKEN: std::syn
 no-output (work index, counter or stop flag)  @ forge-bool/src/nary.rs|atomic|let next = AtomicUsize::new(0);
 no-output (work index, counter or stop flag)  @ forge-bool/src/nary.rs|atomic|static PICK: AtomicUsize = AtomicUsize::new(0);
 no-output (work index, counter or stop flag)  @ forge-bool/src/nary.rs|atomic|use std::sync::atomic::{AtomicUsize, Ordering};
-speed (timing stats; a clock that picks a path is must-fix 5)  @ forge-bool/src/nary.rs|clock|let merge_start = std::time::Instant::now();
-speed (timing stats; a clock that picks a path is must-fix 5)  @ forge-bool/src/nary.rs|clock|let mut clock = std::time::Instant::now();
-speed (timing stats; a clock that picks a path is must-fix 5)  @ forge-bool/src/nary.rs|clock|let now = std::time::Instant::now();
-speed (timing stats; a clock that picks a path is must-fix 5)  @ forge-bool/src/nary.rs|clock|let start = std::time::Instant::now();
-speed (timing stats; a clock that picks a path is must-fix 5)  @ forge-bool/src/nary.rs|clock|let t = std::time::Instant::now();
-speed (timing stats; a clock that picks a path is must-fix 5)  @ forge-bool/src/nary.rs|clock|let t0 = std::time::Instant::now();
+speed (timing stats; a clock that picks a path is must-fix 5)  @ forge-bool/src/nary.rs|clock|let merge_start = forge_math::clock::Instant::now();
+speed (timing stats; a clock that picks a path is must-fix 5)  @ forge-bool/src/nary.rs|clock|let mut clock = forge_math::clock::Instant::now();
+speed (timing stats; a clock that picks a path is must-fix 5)  @ forge-bool/src/nary.rs|clock|let now = forge_math::clock::Instant::now();
+speed (timing stats; a clock that picks a path is must-fix 5)  @ forge-bool/src/nary.rs|clock|let start = forge_math::clock::Instant::now();
+speed (timing stats; a clock that picks a path is must-fix 5)  @ forge-bool/src/nary.rs|clock|let t = forge_math::clock::Instant::now();
+speed (timing stats; a clock that picks a path is must-fix 5)  @ forge-bool/src/nary.rs|clock|let t0 = forge_math::clock::Instant::now();
 no-output (prints only)  @ forge-bool/src/nary.rs|env|*ON.get_or_init(|| std::env::var_os("FORGE_NARY").is_some())
 no-output (prints only)  @ forge-bool/src/nary.rs|env|*REG.get_or_init(|| std::env::var("FORGE_NARY_REG").ok().and_then(|v| v.parse().ok()))
 no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-bool/src/nary.rs|float|let r = |e: forge_math::Vec3| ((a * x.dot(e)).powi(2) + (b * y.dot(e)).powi(2)).sqrt();
@@ -160,6 +160,14 @@ no-output (read only by the n-ary regen, Part::regenerate_nary*; forge-lang buil
 no-output (read only by the n-ary regen, Part::regenerate_nary*; forge-lang builds by step_solids, which never batches, and the n-ary regen is not memoised)  @ forge-gpu/src/lib.rs|static|static RENT: AtomicU64 = AtomicU64::new(0);
 no-output (constant tables or print switches)  @ forge-gpu/src/lib.rs|static|static SAID: Once = Once::new();
 no-output (read only by the n-ary regen, Part::regenerate_nary*; forge-lang builds by step_solids, which never batches, and the n-ary regen is not memoised)  @ forge-gpu/src/lib.rs|threads|std::thread::spawn(gpu);
+no-output (the clock itself: timings only, the browser host sets its source)  @ forge-math/src/clock.rs|clock|SystemTime::now()
+no-output (the clock itself: timings only, the browser host sets its source)  @ forge-math/src/clock.rs|clock|pub fn system_now() -> SystemTime {
+no-output (the clock itself: timings only, the browser host sets its source)  @ forge-math/src/clock.rs|clock|pub fn system_now() -> std::time::SystemTime {
+no-output (the clock itself: timings only, the browser host sets its source)  @ forge-math/src/clock.rs|clock|pub use std::time::{SystemTime, UNIX_EPOCH};
+no-output (the clock itself: timings only, the browser host sets its source)  @ forge-math/src/clock.rs|clock|span(Instant::now().0 - self.0)
+no-output (the clock itself: timings only, the browser host sets its source)  @ forge-math/src/clock.rs|lazy|static CLOCKS: OnceLock<(fn() -> f64, fn() -> f64)> = OnceLock::new();
+no-output (the clock itself: timings only, the browser host sets its source)  @ forge-math/src/clock.rs|lazy|use std::sync::OnceLock;
+no-output (the clock itself: timings only, the browser host sets its source)  @ forge-math/src/clock.rs|static|static CLOCKS: OnceLock<(fn() -> f64, fn() -> f64)> = OnceLock::new();
 no-output (forge_math::par: answers in item order, each a function of its item; the thread count only splits the work)  @ forge-math/src/par.rs|atomic|let next = std::sync::atomic::AtomicUsize::new(0);
 no-output (forge_math::par: answers in item order, each a function of its item; the thread count only splits the work)  @ forge-math/src/par.rs|env|std::env::var("FORGECAD_THREADS")
 no-output (forge_math::par: answers in item order, each a function of its item; the thread count only splits the work)  @ forge-math/src/par.rs|threads|.unwrap_or_else(|| std::thread::available_parallelism().map_or(1, |n| n.get()))
