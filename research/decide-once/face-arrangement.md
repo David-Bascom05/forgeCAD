@@ -532,6 +532,16 @@ implementation first." "Even the slow fallback should still be as fast as we can
   a tooling problem to fix, not a reason to restructure. A construct that truly can't translate once
   the tooling is fixed goes to the master, named exactly.
 
+**Owner clarification (2026-11-23, later): A8 ships as the flat fallback.** "New perfect bool code
+can ship, but only as a fallback to faster code."
+- Flat booleans run today's path first. If it is undecided or would refuse, A8 (face_fast plus the
+  inc core) runs. If A8 can't decide either, the result is a typed refusal.
+- So the earlier line "A8 is not shipped as a second boolean" is superseded: A8 ships, as the
+  fallback only.
+- `boolean_correct`'s Ok case covers both branches. The A8 branch is proven by `IncCoreSpec` /
+  `EndToEndF` plus the R3 builder proof, which is back in scope after today's path's proofs.
+- An `Undecided` refusal now means both paths were undecided.
+
 **Order of Lean work.**
 1. IEEE: proven screens for today's guess steps (LINEAR snapping, the touch, strays, pinched, and
    the retry and re-snap ladders as per-question screens).
@@ -541,8 +551,9 @@ implementation first." "Even the slow fallback should still be as fast as we can
 3. Lean coordinator: refinement proofs of each translated function as it lands, against the Lean
    models.
 4. dol-curved: the F-series, as the spec for today's curved code.
-5. After all of that: the thin ≠ [] end-to-end theorem and speed work on the exact per-question
-   fallback.
+5. Then R3 for face_fast (A8's branch), and the thin ≠ [] end-to-end theorem, which A8's branch needs
+   wherever thin rooms occur.
+6. After all of that: speed work on the exact per-question fallback.
 
 **Review of the plans against this ruling (Lean coordinator).** These assume a whole-boolean
 fallback, and must change to per-question exact plus a typed refusal:

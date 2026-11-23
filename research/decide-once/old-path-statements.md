@@ -22,6 +22,24 @@ theorem boolean_correct (A B : Body) (op : Op) (feature : U64)
       | .err e  => RefusalTrue A B op e ⦄
 ```
 
+**Flat fallback (owner clarification, 2026-11-23).** For flat inputs, `boolean` runs today's
+path first. If that path ends `Undecided`, or in a refusal, A8 runs (face_fast plus the inc core). If
+A8 can't decide either, the result is a typed refusal. The theorem is unchanged in shape, and the
+proof splits on the branch:
+- **Today's path returns Ok:** the §D chain proves it. A wrong Ok here is not rescued by the
+  fallback, so the §D chain must hold on its own.
+- **Today's path refuses or is undecided, and A8 runs:**
+  - A8's Ok is proven by `IncCoreSpec`/`EndToEndF` (done, for thin = []) plus R3 for face_fast
+    (Refines from the input bodies to the face ledger), plus the write-out to a Body.
+  - A8 needs the thin ≠ [] theorem wherever thin rooms occur.
+  - A8's refusals are already `RefusalTrue`, via `coreI_zeroThickness_iff` and the collapse.
+- **`Undecided`** means both paths were undecided. A refusal with a true reason (e.g.
+  `ZeroThickness`) from today's path may be returned directly, or after A8 agrees: either way it is
+  `RefusalTrue`.
+- One check for decide-once Rust: the fallback must start from the **original inputs**, not from a
+  part-built body. `boolean_into` edits `target` in place, so the in-place entry needs the target
+  restored, or the path must only commit on success.
+
 The same statement covers:
 - `boolean_into` and `boolean_unlinked`, for the target in place;
 - `nary_with`, over n tools with the ops folded left;
@@ -92,7 +110,7 @@ definitions (`keep`, `coreI`) are reused as the spec of D6–D8.
 | G9 | `SCRATCH` (thread-local) reused across booleans; `Face::query` (`FaceInfo`) kept across booleans and patched by `extend_query`/`drop_query_loops` | caches that outlive a call: a stale cache is a wrong answer | an invariant `CacheOK b` (the cached FaceInfo equals the one built fresh), preserved by every edit; a hypothesis of each D-step, proven for apply |
 | G10 | `nary`'s `Batch` (a trait object: GPU or CPU) and its threads | an external verdict source; parallel order | `Batch` sound when decided (a hypothesis on the impl; CpuBatch proven); results merged in a fixed order |
 | G11 | the many `LINEAR` / `RIM` tolerance tests (`on_edge`, `settle`, `tolerant_cuts`, `grown_tols`, `holds_edge`, `rolls_off`, `through_smooth_edge`, …) | each is a guess unless it is a proven screen | each becomes a screen plus exact; listed per function as the aeneas table arrives |
-| G12 | the `decide_once` cargo feature (off by default) | a second boolean, which is not shipped | out of scope (§3b′); the theorem is for the default build |
+| G12 | the `decide_once` cargo feature (off by default) | ships as the flat fallback (owner clarification) | it becomes the fallback branch: on in release, entered only after today's path refuses or is undecided, with no env switch; proven by IncCoreSpec/EndToEndF plus R3 |
 
 
 Owner decisions (face-arrangement.md §3b′, c5ecf9be):
