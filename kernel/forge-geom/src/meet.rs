@@ -1101,22 +1101,38 @@ fn setup(a: &Surface, b: &Surface) -> Option<(Surface, Surface, Form)> {
     }
 }
 
-/// How many samples round the host a root count is taken at, to find events the discriminant
-/// missed: 64, and for a torus on a cylinder enough that every arc of the host half the torus's
-/// minor radius long holds one, so a loop of the meet round the tube (at least the tube's width of
-/// the host's angle) cannot fall between two samples.
-fn count_samples(host: &Surface, other: &Surface) -> usize {
-    match (host, other) {
-        (Surface::Cylinder(c), Surface::Torus(t)) if t.minor > 0.0 => {
-            let n = (dmath::TAU * c.radius / (0.5 * t.minor)).ceil();
-            if n.is_finite() {
-                (n as usize).clamp(64, 1024)
-            } else {
-                64
-            }
-        }
-        _ => 64,
+/// Where a cylinder host's root count is sampled for a thin torus's loops the discriminant missed:
+/// (first u, width, samples), the samples an arc of half the torus's minor radius apart, over the
+/// rulings that can reach the torus (those passing within its bounding ball; the count is 0 on
+/// every other ruling). None for other pairs, and where 64 samples round the whole host are already
+/// that fine.
+fn thin_window(eq: &Eqn, other: &Surface) -> Option<(f64, f64, usize)> {
+    let (Surface::Cylinder(_), Surface::Torus(t), Some((f, rho, _))) = (&eq.host, other, eq.line) else {
+        return None;
+    };
+    let step = 0.5 * t.minor / rho;
+    if !(step > 0.0 && dmath::TAU > 64.0 * step) {
+        return None;
     }
+    // the ruling at u passes through (rho cos u, rho sin u) in the host's frame, along its axis
+    let c = f.point_to_local(t.frame.origin);
+    let d = (c.x * c.x + c.y * c.y).sqrt();
+    let reach = t.major.abs() + t.minor + tol::LINEAR;
+    let k = if d > 0.0 {
+        (d * d + rho * rho - reach * reach) / (2.0 * d * rho)
+    } else {
+        -2.0
+    };
+    if k >= 1.0 {
+        return None;
+    }
+    let (from, width) = if k <= -1.0 {
+        (0.0, dmath::TAU)
+    } else {
+        let half = (dmath::acos(k) + step).min(dmath::PI);
+        (dmath::atan2(c.y, c.x) - half, 2.0 * half)
+    };
+    Some((from, width, ((width / step).ceil() as usize).clamp(2, 1024)))
 }
 
 /// One root of F(u, .) over an interval between events.
@@ -1222,20 +1238,11 @@ pub fn intersect(a: &Surface, b: &Surface, region: Box3) -> Option<SurfaceSurfac
         }
         _ => false,
     };
-    // a small loop round a thin tube on a wide host (a torus's minor radius a fraction of the
-    // cylinder's) is found by its root count too, where the discriminant is too poorly scaled to
-    // see it: it then flags double roots that are flicker (fuzz seed 295, feature 69: one of two
-    // loops lost among them, and the boolean kept an edge on one face)
-    let scan = if !axes_meet && events.iter().any(|e| e.1) {
-        count_samples(&eq.host, &other)
-    } else {
-        64
-    };
-    if matches!(form, Form::Poly4 | Form::Trig2) && (axes_meet || scan > 64) {
-        let at = |k: usize| dmath::TAU * k as f64 / scan as f64;
+    if matches!(form, Form::Poly4 | Form::Trig2) && axes_meet {
+        let at = |k: usize| dmath::TAU * k as f64 / 64.0;
         let mut found = Vec::new();
         let mut ch = eq.count(at(0));
-        for k in 0..scan {
+        for k in 0..64 {
             let (mut lo, mut hi) = (at(k), at(k + 1));
             let cl = ch;
             ch = eq.count(hi);
@@ -1251,6 +1258,43 @@ pub fn intersect(a: &Surface, b: &Surface, region: Box3) -> Option<SurfaceSurfac
                 }
             }
             found.push((0.5 * (lo + hi), true));
+        }
+        if !found.is_empty() {
+            events.extend(found);
+            events.sort_by(|p, q| p.0.total_cmp(&q.0));
+        }
+    } else if form == Form::Poly4
+        && events.iter().any(|e| e.1)
+        && let Some((from, width, n)) = thin_window(&eq, &other)
+    {
+        // a small loop round a thin tube on a wide host (a torus's minor radius a fraction of the
+        // cylinder's) is found by its root count too, where the discriminant is too poorly scaled
+        // to see it: it then flags double roots that are flicker (fuzz seed 295, feature 69: one
+        // of two loops lost among them, and the boolean kept an edge on one face)
+        let at = |k: usize| from + width * k as f64 / n as f64;
+        let mut found = Vec::new();
+        let mut ch = eq.count(at(0));
+        for k in 0..n {
+            let (mut lo, mut hi) = (at(k), at(k + 1));
+            let cl = ch;
+            ch = eq.count(hi);
+            // (events lie in [0, 2π); the window may run past either end)
+            if cl == ch
+                || events
+                    .iter()
+                    .any(|e| (e.0 - lo + 1e-6).rem_euclid(dmath::TAU) <= hi - lo + 2e-6)
+            {
+                continue;
+            }
+            for _ in 0..60 {
+                let m = 0.5 * (lo + hi);
+                if eq.count(m) == cl {
+                    lo = m;
+                } else {
+                    hi = m;
+                }
+            }
+            found.push(((0.5 * (lo + hi)).rem_euclid(dmath::TAU), true));
         }
         if !found.is_empty() {
             events.extend(found);
