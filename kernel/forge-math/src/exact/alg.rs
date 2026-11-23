@@ -37,54 +37,14 @@ fn big1() -> Big {
     Big::from_i64(1)
 }
 
-/// A float near `a / b` (both nonzero), from their top bits.
-fn ratio_approx(a: &Big, b: &Big) -> f64 {
-    super::ratio_f64(&Dy { m: a.clone(), e: 0 }, &Dy { m: b.clone(), e: 0 })
-}
-
-/// Quotients below this are estimated in one float division.
-const EST_LIMIT: f64 = 4503599627370496.0; // 2^52
-
-/// `(q, r)` with `a = q b + r` and `0 ≤ r < b`, for `a ≥ 0` and `b > 0`. The quotient is
-/// estimated by a float division of the top bits and corrected exactly; a quotient past 2⁵² is
-/// taken 50 bits at a time against `b` shifted. The result is exact whatever the estimate.
+/// `(q, r)` with `a = q b + r` and `0 ≤ r < b`, for `a ≥ 0` and `b > 0` (`Big::divrem`).
 pub fn divmod_nat(a: &Big, b: &Big) -> (Big, Big) {
-    if bcmp(a, b) < 0 {
-        (Big::zero(), a.clone())
-    } else {
-        let est = ratio_approx(a, b);
-        if est.is_finite() && est < EST_LIMIT {
-            let mut q = Big::from_i64(est.floor() as i64);
-            let mut r = a.sub(&q.mul(b));
-            while r.signum() < 0 {
-                q = q.sub(&big1());
-                r = r.add(b);
-            }
-            while bcmp(&r, b) >= 0 {
-                q = q.add(&big1());
-                r = r.sub(b);
-            }
-            (q, r)
-        } else {
-            let k = a.bits() - b.bits() - 50;
-            let t = b.shl(k);
-            let (q1, r1) = divmod_nat(a, &t);
-            let (q2, r2) = divmod_nat(&r1, b);
-            (q1.shl(k).add(&q2), r2)
-        }
-    }
+    a.divrem(b)
 }
 
-/// The gcd of `|a|` and `|b|` (Euclid).
+/// The gcd of `|a|` and `|b|` (`Big::gcd`).
 pub fn gcd_big(a: &Big, b: &Big) -> Big {
-    let mut x = a.abs();
-    let mut y = b.abs();
-    while !y.is_zero() {
-        let r = divmod_nat(&x, &y).1;
-        x = y;
-        y = r;
-    }
-    x
+    a.gcd(b)
 }
 
 /// `⌊√a⌋` for `a ≥ 0`, bit by bit.
@@ -215,15 +175,41 @@ impl Q {
         }
     }
 
+    /// Henrici's sum: with `g = gcd(d₁, d₂)`, `t = n₁(d₂/g) + n₂(d₁/g)` and `h = gcd(t, g)`,
+    /// the normal form is `(t/h) / ((d₁/g)(d₂/h))`: gcds of the small operands only.
     pub fn add(&self, o: &Q) -> Q {
         if self.is_zero() {
             o.clone()
         } else if o.is_zero() {
             self.clone()
-        } else if bcmp(&self.d, &o.d) == 0 {
-            Q::ratio(&self.n.add(&o.n), &self.d)
         } else {
-            Q::ratio(&self.n.mul(&o.d).add(&o.n.mul(&self.d)), &self.d.mul(&o.d))
+            let g = self.d.gcd(&o.d);
+            if bcmp(&g, &big1()) == 0 {
+                Q {
+                    n: self.n.mul(&o.d).add(&o.n.mul(&self.d)),
+                    d: self.d.mul(&o.d),
+                }
+            } else {
+                let d1g = self.d.divrem(&g).0;
+                let d2g = o.d.divrem(&g).0;
+                let t = self.n.mul(&d2g).add(&o.n.mul(&d1g));
+                if t.is_zero() {
+                    Q::zero()
+                } else {
+                    let h = t.gcd(&g);
+                    if bcmp(&h, &big1()) == 0 {
+                        Q {
+                            n: t,
+                            d: d1g.mul(&o.d),
+                        }
+                    } else {
+                        Q {
+                            n: t.divrem(&h).0,
+                            d: d1g.mul(&o.d.divrem(&h).0),
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -231,11 +217,29 @@ impl Q {
         self.add(&o.neg())
     }
 
+    /// Henrici's product: `g₁ = gcd(n₁, d₂)`, `g₂ = gcd(n₂, d₁)`, and the normal form is
+    /// `(n₁/g₁)(n₂/g₂) / ((d₁/g₂)(d₂/g₁))`.
     pub fn mul(&self, o: &Q) -> Q {
         if self.is_zero() || o.is_zero() {
             Q::zero()
         } else {
-            Q::ratio(&self.n.mul(&o.n), &self.d.mul(&o.d))
+            let g1 = self.n.gcd(&o.d);
+            let g2 = o.n.gcd(&self.d);
+            let one = big1();
+            let (n1, d2) = if bcmp(&g1, &one) == 0 {
+                (self.n.clone(), o.d.clone())
+            } else {
+                (self.n.divrem(&g1).0, o.d.divrem(&g1).0)
+            };
+            let (n2, d1) = if bcmp(&g2, &one) == 0 {
+                (o.n.clone(), self.d.clone())
+            } else {
+                (o.n.divrem(&g2).0, self.d.divrem(&g2).0)
+            };
+            Q {
+                n: n1.mul(&n2),
+                d: d1.mul(&d2),
+            }
         }
     }
 
@@ -1319,5 +1323,109 @@ mod tests {
         assert!(s2.cmp_rat(&b) < 0 && b.lt(&Q::from_i64(3)));
         assert_eq!(simplest(&q(1, 3), &q(1, 2)), q(1, 2));
         assert_eq!(simplest(&q(3, 10), &q(2, 5)), q(1, 3));
+    }
+
+    /// The shift-and-subtract division, kept as the oracle for `Big::divrem`.
+    fn divmod_slow(a: &Big, b: &Big) -> (Big, Big) {
+        let mut q = Big::zero();
+        let mut r = a.clone();
+        if bcmp(a, b) >= 0 {
+            let mut k: i64 = a.bits() as i64 - b.bits() as i64;
+            while k >= 0 {
+                let t = b.shl(k as u32);
+                if bcmp(&t, &r) <= 0 {
+                    r = r.sub(&t);
+                    q = q.add(&Big::from_i64(1).shl(k as u32));
+                }
+                k -= 1;
+            }
+        }
+        (q, r)
+    }
+
+    #[test]
+    fn divrem_and_gcd_against_the_oracle() {
+        let mut s: u64 = 0x1234_5678_9abc_def1;
+        let mut next = || {
+            s ^= s << 13;
+            s ^= s >> 7;
+            s ^= s << 17;
+            s
+        };
+        let mut k = 0;
+        while k < 3000 {
+            // magnitudes of 1..600 bits, built from random 63-bit words
+            let wa = 1 + (next() % 10) as usize;
+            let wb = 1 + (next() % 10) as usize;
+            let mut a = Big::zero();
+            let mut b = Big::zero();
+            let mut i = 0;
+            while i < wa {
+                a = a.shl(63).add(&Big::from_i64((next() >> 1) as i64));
+                i += 1;
+            }
+            i = 0;
+            while i < wb {
+                b = b.shl(63).add(&Big::from_i64((next() >> 1) as i64));
+                i += 1;
+            }
+            // sometimes a long run of high limbs, to stress qhat's correction
+            if k % 7 == 0 {
+                b = Big::from_i64(1).shl(32 * wb as u32).sub(&Big::from_i64(1));
+            }
+            if b.is_zero() {
+                b = Big::from_i64(3);
+            }
+            let (q, r) = a.divrem(&b);
+            assert_eq!((q.clone(), r.clone()), divmod_slow(&a, &b), "divrem {k}");
+            assert_eq!(q.mul(&b).add(&r), a);
+            // signs: truncated
+            let (qn, rn) = a.neg().divrem(&b);
+            assert_eq!((qn, rn), (q.neg(), r.neg()));
+            // gcd against Euclid by the oracle
+            let g = a.gcd(&b);
+            let (mut x, mut y) = (a.clone(), b.clone());
+            while !y.is_zero() {
+                let t = divmod_slow(&x, &y).1;
+                x = y;
+                y = t;
+            }
+            assert_eq!(g, x, "gcd {k}");
+            k += 1;
+        }
+        assert_eq!(Big::from_i64(12).gcd(&Big::from_i64(-18)), Big::from_i64(6));
+        assert_eq!(Big::zero().gcd(&Big::zero()), Big::zero());
+    }
+
+    #[test]
+    fn henrici_against_ratio() {
+        let mut st: u64 = 0x9e37_79b9_7f4a_7c15;
+        let mut next = || {
+            st ^= st << 13;
+            st ^= st >> 7;
+            st ^= st << 17;
+            st
+        };
+        let mut big = |w: usize| {
+            let mut x = Big::from_i64(1 + (next() % 1000) as i64);
+            let mut i = 0;
+            while i < w {
+                x = x.mul(&Big::from_i64(1 + (next() % 4_000_000_000) as i64));
+                i += 1;
+            }
+            if next() % 2 == 0 { x.neg() } else { x }
+        };
+        let mut k = 0;
+        while k < 2000 {
+            let w = (k % 9) as usize;
+            let a = Q::ratio(&big(w), &big(w).abs());
+            let b = Q::ratio(&big(w / 2), &big(w).abs());
+            let sum = Q::ratio(&a.n.mul(&b.d).add(&b.n.mul(&a.d)), &a.d.mul(&b.d));
+            let prod = Q::ratio(&a.n.mul(&b.n), &a.d.mul(&b.d));
+            assert_eq!(a.add(&b), sum, "add {k}");
+            assert_eq!(a.mul(&b), prod, "mul {k}");
+            assert_eq!(a.add(&a.neg()), Q::zero());
+            k += 1;
+        }
     }
 }

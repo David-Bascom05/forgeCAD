@@ -319,6 +319,220 @@ impl Big {
     }
 }
 
+/// `(q, r)` with `a = q b + r`, `r < b`, for magnitudes with `b` nonzero: Knuth's algorithm D
+/// (TAOCP 4.3.1) on base-2³² limbs, a short division for a one-limb `b`.
+fn divrem_mag(a: &[u32], b: &[u32]) -> (Vec<u32>, Vec<u32>) {
+    if cmp_mag(a, b) == Ordering::Less {
+        return (Vec::new(), a.to_vec());
+    }
+    if b.len() == 1 {
+        let d = b[0] as u64;
+        let mut q = vec![0u32; a.len()];
+        let mut r = 0u64;
+        let mut i = a.len();
+        while i > 0 {
+            i -= 1;
+            let cur = (r << 32) | a[i] as u64;
+            q[i] = (cur / d) as u32;
+            r = cur % d;
+        }
+        trim(&mut q);
+        let mut rv = vec![r as u32];
+        trim(&mut rv);
+        return (q, rv);
+    }
+    let s = b[b.len() - 1].leading_zeros();
+    let v = shl_mag(b, s);
+    let mut u = shl_mag(a, s);
+    if u.len() == a.len() {
+        u.push(0);
+    }
+    let n = v.len();
+    let m = u.len() - n;
+    let mut q = vec![0u32; m];
+    let base = 1u64 << 32;
+    let (v1, v2) = (v[n - 1] as u64, v[n - 2] as u64);
+    let mut j = m;
+    while j > 0 {
+        j -= 1;
+        let num = ((u[j + n] as u64) << 32) | u[j + n - 1] as u64;
+        let mut qhat = num / v1;
+        let mut rhat = num % v1;
+        while qhat >= base || (qhat as u128) * (v2 as u128) > (((rhat as u128) << 32) | u[j + n - 2] as u128)
+        {
+            qhat -= 1;
+            rhat += v1;
+            if rhat >= base {
+                break;
+            }
+        }
+        // u[j..j+n+1] -= qhat * v
+        let mut borrow = 0i64;
+        let mut carry = 0u64;
+        for i in 0..n {
+            let p = qhat * v[i] as u64 + carry;
+            carry = p >> 32;
+            let t = u[i + j] as i64 - borrow - (p & 0xffff_ffff) as i64;
+            u[i + j] = t as u32;
+            borrow = if t < 0 { 1 } else { 0 };
+        }
+        let t = u[j + n] as i64 - borrow - carry as i64;
+        u[j + n] = t as u32;
+        if t < 0 {
+            // add back
+            qhat -= 1;
+            let mut c = 0u64;
+            for i in 0..n {
+                let s2 = u[i + j] as u64 + v[i] as u64 + c;
+                u[i + j] = s2 as u32;
+                c = s2 >> 32;
+            }
+            u[j + n] = u[j + n].wrapping_add(c as u32);
+        }
+        q[j] = qhat as u32;
+    }
+    trim(&mut q);
+    // the remainder: u[0..n] shifted back
+    let mut r = vec![0u32; n];
+    if s == 0 {
+        r.copy_from_slice(&u[..n]);
+    } else {
+        for i in 0..n {
+            let hi = if i + 1 < n { u[i + 1] << (32 - s) } else { 0 };
+            r[i] = (u[i] >> s) | hi;
+        }
+    }
+    trim(&mut r);
+    (q, r)
+}
+
+/// The gcd of two magnitudes below 2¹²⁸ (binary).
+fn gcd_u128(a: u128, b: u128) -> u128 {
+    if a == 0 {
+        return b;
+    }
+    if b == 0 {
+        return a;
+    }
+    let shift = (a | b).trailing_zeros();
+    let mut a = a >> a.trailing_zeros();
+    let mut b = b;
+    while b != 0 {
+        b >>= b.trailing_zeros();
+        if a > b {
+            core::mem::swap(&mut a, &mut b);
+        }
+        b -= a;
+    }
+    a << shift
+}
+
+impl Big {
+    /// `(q, r)` with `self = q o + r`, `q` truncated toward zero and `r` of `self`'s sign
+    /// (`|r| < |o|`); `o = 0` gives `(0, self)`.
+    pub fn divrem(&self, o: &Big) -> (Big, Big) {
+        if o.is_zero() {
+            return (Big::zero(), self.clone());
+        }
+        if let (Big::S(a), Big::S(b)) = (self, o) {
+            return (Big::S(a / b), Big::S(a % b));
+        }
+        let ((an, am), (bn, bm)) = (self.to_l(), o.to_l());
+        let (q, r) = divrem_mag(&am, &bm);
+        (Big::from_l(an != bn, q), Big::from_l(an, r))
+    }
+
+    /// The gcd of `|self|` and `|o|` (`gcd(0, 0) = 0`). Lehmer's algorithm (TAOCP 4.5.2, L) while
+    /// the larger is past 2¹²⁶: the leading 64 bits of both decide a run of Euclid steps, applied
+    /// at once as a unimodular 2×2 matrix (so the gcd is kept whatever the run), a full division
+    /// when the run is empty; then binary on `u128`.
+    pub fn gcd(&self, o: &Big) -> Big {
+        let mut x = self.abs();
+        let mut y = o.abs();
+        if bcmp_abs(&x, &y) < 0 {
+            core::mem::swap(&mut x, &mut y);
+        }
+        loop {
+            if let (Big::S(a), Big::S(b)) = (&x, &y) {
+                return Big::S(gcd_u128(a.unsigned_abs(), b.unsigned_abs()) as i128);
+            }
+            if y.is_zero() {
+                return x;
+            }
+            // x ≥ y > 0, x past the inline range
+            let sh = x.bits() - 64;
+            let xh = top_at(&x, sh) as i128;
+            let yh = top_at(&y, sh) as i128;
+            let (mut a, mut b, mut c, mut d) = (1i128, 0i128, 0i128, 1i128);
+            let (mut u, mut v) = (xh, yh);
+            loop {
+                if v + c == 0 || v + d == 0 {
+                    break;
+                }
+                let q = (u + a) / (v + c);
+                let q2 = (u + b) / (v + d);
+                if q != q2 {
+                    break;
+                }
+                let t = a - q * c;
+                a = c;
+                c = t;
+                let t = b - q * d;
+                b = d;
+                d = t;
+                let t = u - q * v;
+                u = v;
+                v = t;
+            }
+            if b == 0 {
+                let r = x.divrem(&y).1;
+                x = y;
+                y = r;
+            } else {
+                let nx = x.mul(&Big::S(a)).add(&y.mul(&Big::S(b))).abs();
+                let ny = x.mul(&Big::S(c)).add(&y.mul(&Big::S(d))).abs();
+                x = nx;
+                y = ny;
+                if bcmp_abs(&x, &y) < 0 {
+                    core::mem::swap(&mut x, &mut y);
+                }
+            }
+        }
+    }
+}
+
+/// `|a|` against `|b|`: −1, 0 or 1.
+fn bcmp_abs(a: &Big, b: &Big) -> i32 {
+    let (ba, bb) = (a.bits(), b.bits());
+    if ba != bb {
+        if ba < bb { -1 } else { 1 }
+    } else {
+        a.abs().sub(&b.abs()).signum()
+    }
+}
+
+/// `⌊|x| / 2^sh⌋` truncated to 64 bits (the leading digits Lehmer's step reads).
+fn top_at(x: &Big, sh: u32) -> u64 {
+    match x {
+        Big::S(v) => {
+            let m = v.unsigned_abs();
+            if sh >= 128 { 0 } else { (m >> sh) as u64 }
+        }
+        Big::L { mag, .. } => {
+            let (w, b) = ((sh / 32) as usize, sh % 32);
+            let mut acc = 0u128;
+            let mut i = 0;
+            while i < 4 {
+                if let Some(&t) = mag.get(w + i) {
+                    acc |= (t as u128) << (32 * i);
+                }
+                i += 1;
+            }
+            (acc >> b) as u64
+        }
+    }
+}
+
 /// An exact dyadic rational `m · 2^e`.
 #[derive(Clone, Debug, Default)]
 pub struct Dy {

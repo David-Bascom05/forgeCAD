@@ -274,3 +274,23 @@ come from `roots_of G`, the samples' `R` is `sqfree G`, and `len L ≤ 2` is req
 same answer (4 vertices), same certificate sizes. It takes 0.89 s in release, against the draft's
 0.44 s, for the per-step content gcds and the two extra checks. The `Big` divmod/gcd request is
 the lever.
+
+**Milestone 1h: `Big` division and gcd, owned here (the master, 2026-11-23).** These are
+additions to `forge_math::exact`; no existing function is changed:
+- `Big::divrem`: truncating; i128 when both operands are inline, else Knuth's algorithm D on the
+  32-bit limbs (`divrem_mag`);
+- `Big::gcd`: binary on `u128` once both fit, else Lehmer's algorithm L on the leading 64 bits,
+  falling back to a full `divrem` when a run is empty. The 2×2 matrix is unimodular, so the gcd
+  is kept whatever the run.
+
+In `alg`, `divmod_nat` and `gcd_big` call them, and `Q::add` and `Q::mul` normalise by Henrici
+(gcds of the small operands only). The result is the same normal form, so the digest is
+unchanged. Oracles: 3000 random cases of up to 600 bits against shift-and-subtract division and
+Euclid, and 2000 against `Q::ratio`, native and wasm.
+
+The three-quadric vertex case dropped from 0.89 s to 37–74 ms wall (noisy on 4 shared cores).
+In exact callgrind counts, `propose_vert3` went from 8.57 G to 0.39 G instructions. Part of that
+is that `homog3` is built once per quadric, with `on_vert`'s identity checked on it once per
+proposal, since every sample shares it. **Gate:** the `.text` of the speed gate's binaries
+(`regen1`, `bits`, `benchparts`) is byte-identical before and after, so every gate line and
+every bit is unchanged.

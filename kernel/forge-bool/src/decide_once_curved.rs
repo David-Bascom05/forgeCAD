@@ -1689,9 +1689,16 @@ pub fn propose_vert3(qa: &Quadric, qb: &Quadric, qc: &Quadric, fuel: usize) -> O
     };
     let nz = hom_sub(&p0, &p1, &bpad(m, &pa.n));
     let dz = hom_sub(&p0, &p1, &bpad(m, &pa.d));
-    let wa = pdiv(&homog3(qa, &p0, &p1, &nz, &dz), &sp);
-    let wb = pdiv(&homog3(qb, &p0, &p1, &nz, &dz), &sp);
-    let wc = pdiv(&homog3(qc, &p0, &p1, &nz, &dz), &sp);
+    let ha = homog3(qa, &p0, &p1, &nz, &dz);
+    let hb = homog3(qb, &p0, &p1, &nz, &dz);
+    let hc = homog3(qc, &p0, &p1, &nz, &dz);
+    let wa = pdiv(&ha, &sp);
+    let wb = pdiv(&hb, &sp);
+    let wc = pdiv(&hc, &sp);
+    // `on_vert` reads only what every sample shares (R, the representation, the quotients), so
+    // it is decided once, on the `homog3`s already built: the same value as the Lean's
+    // per-sample `vs.all (onVert ..)`
+    let vert_ok = eqv(&ha, &pmul(&sp, &wa)) && eqv(&hb, &pmul(&sp, &wb)) && eqv(&hc, &pmul(&sp, &wc));
     let mut vs: Vec<VSample> = Vec::with_capacity(ns.len());
     let mut ok = pa.l.len() <= 2;
     let mut k = 0;
@@ -1707,7 +1714,8 @@ pub fn propose_vert3(qa: &Quadric, qb: &Quadric, qc: &Quadric, fuel: usize) -> O
             qb: wb.clone(),
             qc: wc.clone(),
         };
-        ok = ok && vsm.on_vert(qa, qb, qc) && vsm.d_ok(SIGN_FUEL);
+        ok = ok && vert_ok && vsm.d_ok(SIGN_FUEL);
+        debug_assert!(!ok || vsm.on_vert(qa, qb, qc));
         vs.push(vsm);
         k += 1;
     }
