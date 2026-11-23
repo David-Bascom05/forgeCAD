@@ -6,10 +6,10 @@ name: sheet-lean
 on:
   push:
     branches: [main]
-    paths: ["verify/sheet/**", "verify/ieee754/**", "kernel/forge-sheet/**", "interface/forge-lang/src/sheet*",
+    paths: ["verify/sheet/**", "verify/ieee754/**", "verify/winding2d/**", "kernel/forge-sheet/**", "interface/forge-lang/src/sheet*",
       "interface/forge-lang/tests/sheet_lean_diff*", ".github/workflows/sheet-lean.yml"]
   pull_request:
-    paths: ["verify/sheet/**", "verify/ieee754/**", "kernel/forge-sheet/**", "interface/forge-lang/src/sheet*",
+    paths: ["verify/sheet/**", "verify/ieee754/**", "verify/winding2d/**", "kernel/forge-sheet/**", "interface/forge-lang/src/sheet*",
       "interface/forge-lang/tests/sheet_lean_diff*", ".github/workflows/sheet-lean.yml"]
   workflow_dispatch:
 

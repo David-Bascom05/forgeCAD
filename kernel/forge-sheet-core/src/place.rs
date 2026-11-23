@@ -48,3 +48,23 @@ pub fn inverse(m: Place) -> Place {
         xy: -m.xy,
     }
 }
+
+/// A joint frame (build.rs `ja`/`jb`): origin `p0`, x axis `right((p1 − p0) · (1 / la))` with
+/// `right(d) = (d.y, −d.x)` and `la = |p0 − p1|` as `Point2::distance` computes it; and `la`.
+pub fn joint(p0x: f64, p0y: f64, p1x: f64, p1y: f64) -> (Place, f64) {
+    let ex = p0x - p1x;
+    let ey = p0y - p1y;
+    let la = (ex * ex + ey * ey).sqrt();
+    let k = 1.0 / la;
+    let vx = (p1x - p0x) * k;
+    let vy = (p1y - p0y) * k;
+    (
+        Place {
+            ox: p0x,
+            oy: p0y,
+            xx: vy,
+            xy: -vx,
+        },
+        la,
+    )
+}

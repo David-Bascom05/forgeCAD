@@ -1,8 +1,10 @@
 # kernel/forge-sheet-core in Lean, by Aeneas (L4 of research/PROOF-STANDARD.md)
 
 The shipped Rust of `kernel/forge-sheet-core` (forge-sheet's combinatorial core: vertex classes,
-chaining, a hole's owner) is translated by `tools/aeneas/translate.sh forge-sheet-core` (Charon
-9e193f0, Aeneas 2e3d448 with the float patch; 26 definitions, nothing opaque) into
+chaining, a hole's owner; the development's rigid motions and joint frames, `place.rs`) is
+translated by `tools/aeneas/translate.sh forge-sheet-core` (Charon 9e193f0, Aeneas 2e3d448 with the
+float patch, release with overflow checks; 35 definitions, 1 opaque: `f64::sqrt`, which the bridge
+defines as verify/ieee754's correctly rounded square root, never an axiom) into
 `lean/ForgeSheetCore/{Types,Funs}.lean`, and the translation is proven against verify/sheet.
 
 Proven (no `sorry`; `lean/ForgeSheetCore/Axioms.lean` checks the standard axioms only):
@@ -21,9 +23,52 @@ Proven (no `sorry`; `lean/ForgeSheetCore/Axioms.lean` checks the standard axioms
   Unchained` at the first vertex of unequal degrees (its first leaving, else arriving piece, and
   both degrees); `Err Pinched` with every vertex of degree past one, in order. The walk's own
   refusal (`at != start`) never happens (`WalkModel.walk_closes`).
+- `place.rs`, through the f64 bridge (each operation verify/ieee754's binary64 one, `u = 2⁻⁵³`,
+  `η = 2⁻¹⁰⁷⁵`): `apply_spec`, `vec_spec`, `then_spec`, `local_spec`, `inverse_spec` (each computed
+  coordinate, when finite, within a stated `a u S + b η` of the exact motion of the doubles'
+  values); `develop_err` (DevelopErr.lean): along a path of `n` joints the axis error grows as
+  `n ex`, the origin's as `n eo + R n² ex`, never exponentially.
+- `joint_spec` (RefineJoint.lean, model JointErr.lean): on the domain where each coordinate
+  difference `D = p1 − p0` of the doubles is `0` or in `[2⁻⁵⁰⁰, 2⁵⁰⁰]` in magnitude, not both `0`,
+  every step's exact result is zero or normal; then the frame's origin is `p0` exactly and, when
+  the outputs are finite, the length is within `(1 + u)³ − 1` of `|D|` and the axis within
+  `(1 + u)³ / (1 − u)³ − 1` (about `6 u`) of `(D.y, −D.x) / |D|`, each component relatively.
+- `setback_spec` (RefineSetback.lean, model SetbackErr.lean): `fold::setback(ρ, s, c)` (shop.rs's
+  `ρ ⊗ s ⊘ (1 ⊕ c)`, op for op) fed dmath's `sin_cos(θ)` (verify/ieee754 `Dmath.sinCos_err`,
+  within `ε = 2⁻⁵²`): for finite `ρ`, finite `|θ| ≤ 2²⁰` with `C = 1 + cos θ ≥ 2⁻⁵⁰`, the
+  setback, when finite, is within `|ρ| (4ε + 4η) / C² + 10 u |ρ| / C + 3η / C + η` of
+  `ρ sin θ / C = ρ tan(θ/2)`. The `ε / C²` term is the hairpin's ill-conditioning.
+- `zone_spec` (RefineZone.lean, model ZoneErr.lean): build.rs `Geo::Round`'s point as composed
+  there, `fold::phi` (θ at the far tangent line, else `u ⊘ rn`), dmath's `sin_cos`
+  (`Dmath.sinCos_err`), `fold::round_local` (`r = ρ0 ⊕ σ⊗w`; `r⊗c`, `r⊗s`, `(−σ)⊗y`) and the axis
+  frame's `Frame::point_to_world` from the aeneas session's forge-math translation (`ptw_spec`, not
+  a copy): for finite inputs, `rn ≠ 0`, the exact angle within `2¹⁹`, each world coordinate, when
+  finite, is within `ptwE` of the exact `o + A (R cos φ, R sin φ, −σ y)`, the local point's errors
+  (`locE`: the angle's rounding, dmath's `2⁻⁵²`, each product's) carried through the axes.
+  Composed from `mul_approx`/`add_approx`, one forward-error rule per operation.
+- `disc_spec` (RefineDisc.lean; models RefineExact.lean, ExactModel.lean): exact.rs `disc`, the
+  shipped `sign(|p − c|² − r²)`. On the domain (every input a multiple of `2⁻²⁰⁰`, at most `2¹⁰⁰`
+  in magnitude) it returns `+1`, `−1` or `+0` as the exact value of the input doubles is positive,
+  negative or zero. The filter branch is proved outright (`disc_filter`: on the domain every
+  rounding lands on the `2⁻¹⁰⁷⁴` grid, so is relatively accurate, `rel_mult`, which is
+  Filter16.lean's model). The exact branch is the refinement specs (`exp_*_spec`: the Rust loops
+  are the list models `diffL`, `mulL`, `addL`, `negL`, `signL`) and `disc_model`: every two-sum
+  and two-product the expansions make is exact, finite and on the grid, so their sum is the exact
+  value. The sign is the expansion theory (Shewchuk 1997), proven generic over the format in
+  verify/ieee754's IEEE754/Expansion.lean: nonoverlapping as a `Mult` grid condition
+  (`Nonoverlapping`), kept by Grow-Expansion (`grow_nonoverlapping`, Theorem 10) and by dropping
+  components (zero elimination), and the sign of an expansion is its topmost nonzero
+  component's (`NO_sign`). ExpansionInst.lean instantiates it (`expansionTheory`), so
+  `disc_exact` holds with no assumption beyond the domain.
+- `line_gap_exact` (LineGapExact.lean; filter RefineLineGap.lean): exact.rs `line_gap`, the shipped
+  `sign(orient(a, b, c)² − l²|b − a|²)`, on the same domain and with no further assumption. The
+  filter branch is Filter16's `line_gap_filter_sound` with every rounding on the grid
+  (`line_gap_filter`). The exact branch is the refinement specs and `line_model`, whose sums and
+  products (`add_gen`, `mul_gen`: any grid down to `2⁻¹⁰⁷⁴`, up to `2¹¹` components; `o·o` has up
+  to 512) are exact, finite and on the grid.
 - under them: the least-root union–find (`new_spec`, `find_spec`, `union_spec`), ported from the
   decide-once core's proofs (research/kernel-audit/decide-once/aeneas: the same `union_find.rs`),
-  with the release build's wrapping `+= 1` shown not to wrap.
+  with every `+= 1` (overflow-checked in the canonical translation) shown not to overflow.
 
 All of forge-sheet-core is proven. What remains of region.rs's L4 is the wiring (the fix-sheet
 session: region.rs calls `classes`, `chain` and `owner`, bits identical) and the geometric
