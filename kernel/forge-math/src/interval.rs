@@ -157,8 +157,10 @@ impl Interval {
         );
         // the extremes m pi (m = k + half) possibly in [a, b]: m in [a / pi, b / pi], which lies in
         // [qa, qb], a's quotient by the larger of PI and PI_UP and b's by the smaller, each rounded
-        // out (PI < pi < PI_UP); m - half is exact (|m| < 2^52), so k runs over the integers there,
-        // at most three
+        // out (PI < pi < PI_UP). qa - half need not be exact (a negative qa just below a power of
+        // two crosses a binade), but rounding is monotone and k is a float, so every integer k with
+        // k + half in [qa, qb] lies in [ceil(fl(qa - half)), floor(fl(qb - half))]: none is
+        // missed (verify/ieee754 Interval/Trig, sin_encloses). k runs over at most three
         let qa = (a / dmath::PI).min(a / PI_UP).next_down();
         let qb = (b / dmath::PI).max(b / PI_UP).next_up();
         let mut k = (qa - half).ceil();

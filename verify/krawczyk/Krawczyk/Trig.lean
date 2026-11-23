@@ -15,11 +15,12 @@ maximum is -1, so every value is at most sin a.
 
 The float side has two parts. The kernel's test for a critical point uses an enclosure of
 (k + 1/2)π that contains it, so it never misses one (`crit_enclosed`). The endpoint values are
-dmath's, within an absolute 2^-52 of the true values for |x| ≤ 2048: verify/ieee754's
+dmath's, within an absolute 2^-52 of the true values for |x| ≤ 2^20 (TRIG_MOST): verify/ieee754's
 `Dmath.sin_err` and `Dmath.cos_err` (the IEEE branch). forge-math's `trig_within_the_contract`
 also checks this against a double-double reference, measured worst 8.4e-17. Each end is pushed out
 by that absolute 2^-52 and then rounded outward (`Krawczyk.nearest_between`), so it encloses the
-true value. Joining the two needs the IEEE branch merged.
+true value. The join is proven on claude/repo-review-mbdrlj-ieee at 746ecf8 (IEEE754/Interval/Trig.lean,
+`sin_encloses` and `cos_encloses`, which use this file's `crit_quotients`).
 -/
 
 namespace Krawczyk
