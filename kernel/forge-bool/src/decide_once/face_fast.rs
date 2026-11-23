@@ -54,6 +54,7 @@ struct Line {
 
 /// Screen tallies: (decided in f64, went exact), per kind.
 #[derive(Default, Clone, Copy, Debug)]
+#[allow(dead_code)] // (read through Debug, by the measurement build)
 pub(crate) struct Tally {
     pub side: (u32, u32),
     pub along: (u32, u32),
@@ -85,7 +86,7 @@ struct Ctx<'a> {
     mc: u32,
     mtab: Vec<u32>,
     mtouched: Vec<u32>,
-    t: Cell<Tally>,
+    t: [Cell<u32>; 23],
     /// per face, the axis its in-face tests project along
     fax: Vec<usize>,
     /// per near face, its coedges' ends as point ids: `fe_pt[fe_start[g]..fe_start[g + 1]]`
@@ -93,12 +94,41 @@ struct Ctx<'a> {
     fe_pt: Vec<(u32, u32)>,
     /// per face, a bound on its points' coordinates (its box's, and a margin)
     fscale: Vec<f64>,
+    /// the current plane's lines `C ∩ K`, by `K`, made once each (`lset` lists the made ones)
+    lines: Vec<Option<Line>>,
+    lset: Vec<u32>,
+    /// per near face and axis (`3 g + a`), its edges as (low, high, edge) on that axis, by low
+    /// (the points' bounds included): `ax_ent[ax_start[i]..ax_start[i + 1]]`; and the longest
+    /// span, so the edges reaching `x` start at low `x − longest`
+    ax_start: Vec<u32>,
+    ax_ent: Vec<(f64, f64, u32)>,
+    ax_long: Vec<f64>,
+    /// scratch for `mid_in`
+    js: Cell<Vec<u32>>,
 }
 
-fn bump(t: &Cell<Tally>, f: impl FnOnce(&mut Tally)) {
-    let mut x = t.get();
-    f(&mut x);
-    t.set(x);
+/// One counter of the tally: `2 k` and `2 k + 1` are kind `k`'s (f64, exact), in `Tally`'s
+/// field order; 22 is `whole`.
+fn tick(t: &[Cell<u32>; 23], i: usize, n: u32) {
+    t[i].set(t[i].get() + n);
+}
+
+fn tally(t: &[Cell<u32>; 23]) -> Tally {
+    let p = |k: usize| (t[2 * k].get(), t[2 * k + 1].get());
+    Tally {
+        side: p(0),
+        along: p(1),
+        apart: p(2),
+        orient: p(3),
+        angle: p(4),
+        axis: p(5),
+        meet: p(6),
+        cross: p(7),
+        lines: p(8),
+        edges: p(9),
+        mids: p(10),
+        whole: t[22].get(),
+    }
 }
 
 fn m3(p: &[f64; 3]) -> f64 {
@@ -147,8 +177,56 @@ impl<'a> Ctx<'a> {
         id
     }
 
+    /// Plane `C ∩ K`'s line for the current plane, made once.
+    fn ensure_line(&mut self, k: u32) {
+        if self.lines[k as usize].is_none() {
+            let l = self.line(self.mc, k);
+            self.lines[k as usize] = Some(l);
+            self.lset.push(k);
+        }
+    }
+
+    fn ln(&self, k: u32) -> &Line {
+        self.lines[k as usize].as_ref().expect("the line is made")
+    }
+
+    /// Face `g`'s edges (positions in its coedge list) whose span on axis `a` meets
+    /// `[x − tol, x + tol]`, a superset of those with an end there or crossing it.
+    fn edges_at(&self, g: usize, a: usize, x: f64, tol: f64, out: &mut Vec<u32>) {
+        let i = 3 * g + a;
+        let ent = &self.ax_ent[self.ax_start[i] as usize..self.ax_start[i + 1] as usize];
+        if ent.is_empty() {
+            // (not indexed: every edge)
+            out.extend(0..self.fe_start[g + 1] - self.fe_start[g]);
+            return;
+        }
+        let from = ent.partition_point(|e| e.0 < x - tol - self.ax_long[i]);
+        let to = ent.partition_point(|e| e.0 <= x + tol);
+        out.extend(
+            ent[from..to.max(from)]
+                .iter()
+                .filter(|e| e.1 >= x - tol)
+                .map(|e| e.2),
+        );
+    }
+
+    /// Plane `k` as `x_a = x` when its normal is along one axis `a`: (a, x, its bound).
+    fn axis_plane(&self, k: u32) -> Option<(usize, f64, f64)> {
+        let n = &self.cpf[k as usize].n;
+        if (0..3).filter(|&a| n[a] != 0.0).count() != 1 {
+            return None;
+        }
+        let a = (0..3).find(|&a| n[a] != 0.0)?;
+        let x = self.cpf[k as usize].c / n[a];
+        Some((a, x, 8.0 * f64::EPSILON * (1.0 + x.abs())))
+    }
+
     /// Start plane `c`'s meets.
     fn plane_meets(&mut self, c: u32) {
+        for &k in &self.lset {
+            self.lines[k as usize] = None;
+        }
+        self.lset.clear();
         for &i in &self.mtouched {
             self.mtab[i as usize] = NONE;
         }
@@ -183,13 +261,22 @@ impl<'a> Ctx<'a> {
         let (ea, eb, ec) = (&pl[k[0] as usize], &pl[k[1] as usize], &pl[k[2] as usize]);
         let got = match meet_f(pa, pb, pc) {
             Some((f, e)) if e <= 1e-13 * (1.0 + m3(&f)) => {
-                bump(&self.t, |t| t.meet.0 += 1);
+                tick(&self.t, 12, 1);
                 Some((f, e, None))
             }
             _ => {
-                bump(&self.t, |t| t.meet.1 += 1);
-                // (dependent normals, the usual reason: settled without the meet)
-                if ea.n.dot(&eb.n.cross(&ec.n)).is_zero() {
+                tick(&self.t, 13, 1);
+                // (dependent normals, the usual reason: settled without the meet; three normals
+                // each along one axis are dependent exactly when two share an axis)
+                let axis = |p: &PlaneF| {
+                    let nz = (0..3).filter(|&a| p.n[a] != 0.0).count();
+                    (nz == 1).then(|| (0..3).find(|&a| p.n[a] != 0.0).unwrap())
+                };
+                let dep = match (axis(pa), axis(pb), axis(pc)) {
+                    (Some(x), Some(y), Some(z)) => x == y || y == z || x == z,
+                    _ => ea.n.dot(&eb.n.cross(&ec.n)).is_zero(),
+                };
+                if dep {
                     None
                 } else {
                     meet3(ea, eb, ec).map(|h| {
@@ -224,7 +311,7 @@ impl<'a> Ctx<'a> {
 
     /// Class `k`'s side at point `i`: -1, 0, 1.
     fn side(&self, k: u32, i: u32) -> i32 {
-        bump(&self.t, |t| t.edges.1 += 1);
+        tick(&self.t, 19, 1);
         let pt = &self.p[i as usize];
         if pt.on >> k & 1 == 1 {
             return 0;
@@ -251,10 +338,10 @@ impl<'a> Ctx<'a> {
             + pff.c.abs();
         let bound = GAMMA * mag + (pff.n[0].abs() + pff.n[1].abs() + pff.n[2].abs()) * pt.e;
         if e.abs() > bound {
-            bump(&self.t, |t| t.side.0 += 1);
+            tick(&self.t, 0, 1);
             return if e > 0.0 { 1 } else { -1 };
         }
-        bump(&self.t, |t| t.side.1 += 1);
+        tick(&self.t, 1, 1);
         let s = side_err(&self.cls.planes[k as usize], pff, &pt.f, pt.e, || {
             self.ex(i).clone()
         });
@@ -312,10 +399,10 @@ impl<'a> Ctx<'a> {
             b += (p.e + q.e) * (l.f[k].abs() + 1e-13 * l.ab[k]) + 1e-13 * dk.abs() * (l.f[k].abs() + l.ab[k]);
         }
         if v.abs() > b {
-            bump(&self.t, |t| t.along.0 += 1);
+            tick(&self.t, 2, 1);
             return if v > 0.0 { 1 } else { -1 };
         }
-        bump(&self.t, |t| t.along.1 += 1);
+        tick(&self.t, 3, 1);
         let (hp, hq) = (self.ex(i), self.ex(j));
         let pd = hp.p.dot(&l.d).mul(&hq.w);
         let qd = hq.p.dot(&l.d).mul(&hp.w);
@@ -379,10 +466,10 @@ impl<'a> Ctx<'a> {
         }
         let tol = (p.e + q.e) * (1.0 + 1e-12) + 1e-300;
         if (0..3).any(|k| (p.f[k] - q.f[k]).abs() > tol) {
-            bump(&self.t, |t| t.apart.0 += 1);
+            tick(&self.t, 4, 1);
             return false;
         }
-        bump(&self.t, |t| t.apart.1 += 1);
+        tick(&self.t, 5, 1);
         self.ex(i).same(self.ex(j))
     }
 
@@ -391,10 +478,10 @@ impl<'a> Ctx<'a> {
         let (p, q) = (&self.p[i as usize], &self.p[j as usize]);
         let d = p.f[a] - q.f[a];
         if d.abs() > (p.e + q.e) * (1.0 + 1e-12) + 1e-300 {
-            bump(&self.t, |t| t.axis.0 += 1);
+            tick(&self.t, 10, 1);
             return if d > 0.0 { 1 } else { -1 };
         }
-        bump(&self.t, |t| t.axis.1 += 1);
+        tick(&self.t, 11, 1);
         self.ex(i).cmp_axis(self.ex(j), a)
     }
 
@@ -413,10 +500,10 @@ impl<'a> Ctx<'a> {
             + e * e
             + 1e-14 * ((bs * ct).abs() + (bt * cs).abs());
         if v.abs() > bound {
-            bump(&self.t, |x| x.orient.0 += 1);
+            tick(&self.t, 6, 1);
             return if v > 0.0 { 1 } else { -1 };
         }
-        bump(&self.t, |x| x.orient.1 += 1);
+        tick(&self.t, 7, 1);
         orient2(self.ex(a), self.ex(b), self.ex(c), s, t)
     }
 
@@ -425,7 +512,7 @@ impl<'a> Ctx<'a> {
     /// `a`–`b` (along `t` when the line runs more along `s`), so it does not run along the face's
     /// edges on that line.
     fn mid_in(&self, a: u32, b: u32, g: usize) -> bool {
-        bump(&self.t, |t| t.mids.0 += 1);
+        tick(&self.t, 20, 1);
         let (pa, pb) = (&self.p[a as usize], &self.p[b as usize]);
         let qf = [
             0.5 * (pa.f[0] + pb.f[0]),
@@ -442,24 +529,30 @@ impl<'a> Ctx<'a> {
         // with its margin at a scale no smaller than its own)
         let tol = 1e-12 * (1.0 + m3(&qf).max(self.fscale[g]));
         let (lo, hi) = (qf[t] - tol, qf[t] + tol);
-        for &(ia, ib) in &self.fe_pt[self.fe_start[g] as usize..self.fe_start[g + 1] as usize] {
+        let base = self.fe_start[g] as usize;
+        let mut js = self.js.take();
+        js.clear();
+        self.edges_at(g, t, qf[t], tol, &mut js);
+        for &j in &js {
+            let (ia, ib) = self.fe_pt[base + j as usize];
             let (fa, fb) = (&self.p[ia as usize].f, &self.p[ib as usize].f);
             if (fa[t] > hi && fb[t] > hi) || (fa[t] < lo && fb[t] < lo) {
                 continue;
             }
             let c = match crosses_f(qf, *fa, *fb, s, t) {
                 Some(c) => {
-                    bump(&self.t, |x| x.cross.0 += 1);
+                    tick(&self.t, 14, 1);
                     c
                 }
                 None => {
-                    bump(&self.t, |x| x.cross.1 += 1);
+                    tick(&self.t, 15, 1);
                     let q = q.get_or_init(|| HPoint::mean(&[self.ex(a), self.ex(b)]));
                     crosses(q, self.ex(ia), self.ex(ib), s, t)
                 }
             };
             n += c as usize;
         }
+        self.js.set(js);
         n % 2 == 1
     }
 }
@@ -580,7 +673,7 @@ pub(crate) fn counts(
         mc: NONE,
         mtab: vec![NONE; cls.planes.len() * cls.planes.len()],
         mtouched: Vec::with_capacity(256),
-        t: Cell::new(Tally::default()),
+        t: Default::default(),
         fax: snapped
             .iter()
             .enumerate()
@@ -592,10 +685,13 @@ pub(crate) fn counts(
                 }
             })
             .collect(),
-        fscale: fs
-            .iter()
-            .map(|f| (0..3).fold(0.0f64, |m, k| m.max(f.lo[k].abs()).max(f.hi[k].abs())) + 1.0)
-            .collect(),
+        fscale: vec![0.0; fs.len()],
+        lines: (0..cls.planes.len()).map(|_| None).collect(),
+        lset: Vec::new(),
+        ax_start: Vec::with_capacity(3 * fs.len() + 1),
+        ax_ent: Vec::new(),
+        ax_long: Vec::with_capacity(3 * fs.len()),
+        js: Cell::new(Vec::new()),
         fe_start: Vec::new(),
         fe_pt: Vec::with_capacity(fe.len()),
     };
@@ -607,11 +703,42 @@ pub(crate) fn counts(
         }
     }
     cx.fe_start = fe_start.clone();
+    // per face, 1 + the largest coordinate of its vertices' shadows (mid_in's prefilter scale)
+    for g in 0..fs.len() {
+        let mut m = 0.0f64;
+        for j in fe_start[g] as usize..fe_start[g + 1] as usize {
+            let (ia, ib) = cx.fe_pt[j];
+            m = m.max(m3(&cx.p[ia as usize].f)).max(m3(&cx.p[ib as usize].f));
+        }
+        cx.fscale[g] = 1.0 + m;
+    }
+    cx.ax_start.push(0);
+    for g in 0..fs.len() {
+        let (lo, hi) = (fe_start[g] as usize, fe_start[g + 1] as usize);
+        // (a face of few edges is scanned whole: no index)
+        let hi = if hi - lo > 16 { hi } else { lo };
+        for a in 0..3 {
+            let from = cx.ax_ent.len();
+            let mut long = 0.0f64;
+            for j in lo..hi {
+                let (ia, ib) = cx.fe_pt[j];
+                let (pa, pb) = (&cx.p[ia as usize], &cx.p[ib as usize]);
+                let e = pa.e.max(pb.e);
+                let (l, h) = (pa.f[a].min(pb.f[a]) - e, pa.f[a].max(pb.f[a]) + e);
+                long = long.max(h - l);
+                cx.ax_ent.push((l, h, (j - lo) as u32));
+            }
+            cx.ax_ent[from..].sort_unstable_by(|x, y| x.0.total_cmp(&y.0));
+            cx.ax_start.push(cx.ax_ent.len() as u32);
+            cx.ax_long.push(long);
+        }
+    }
     let (mut nseg, mut nvert, mut nfacet) = (0, 0, 0);
     // reused per plane
     let mut segs: Vec<Seg> = Vec::new();
     let mut ps: Vec<(u32, u128)> = Vec::new();
     let mut covered: Vec<bool> = Vec::new();
+    let mut js: Vec<u32> = Vec::new();
     for c in 0..nc {
         if on[c].is_empty() {
             continue;
@@ -620,12 +747,12 @@ pub(crate) fn counts(
         // a plane the other operand does not come near, whose faces are all strictly inside the
         // box: its faces are its facets (a solid's own faces meet only at their edges)
         if whole_plane(c, &on, fs, cls, &cx.cpf, &cbox, &wbox) {
-            bump(&cx.t, |t| t.whole += 1);
+            tick(&cx.t, 22, 1);
             nfacet += on[c].len();
             continue;
         }
         cx.plane_meets(c32);
-        bump(&cx.t, |t| t.lines.0 += 1);
+        tick(&cx.t, 16, 1);
         segs.clear();
         // 1. boundary edges of the faces of C, each on C ∩ (the class across it)
         for (pos, &f) in on[c].iter().enumerate() {
@@ -684,12 +811,41 @@ pub(crate) fn counts(
                 if rel >> 64 == 0 {
                     continue;
                 }
+                // only faces of different bodies cut each other (a solid's own faces meet at
+                // their edges, which are C's boundary segments already): keep a face of either
+                // plane only if one of the other plane's faces is of another body
+                let (mut bc, mut bk) = (0u64, 0u64);
+                for (pos, &f) in on[c].iter().enumerate() {
+                    if rel >> pos & 1 == 1 {
+                        bc |= 1 << fs[f].body;
+                    }
+                }
+                for (pos, &h) in on[k as usize].iter().enumerate() {
+                    if rel >> (64 + pos) & 1 == 1 {
+                        bk |= 1 << fs[h].body;
+                    }
+                }
+                for (pos, &f) in on[c].iter().enumerate() {
+                    if bk & !(1u64 << fs[f].body) == 0 {
+                        rel &= !(1u128 << pos);
+                    }
+                }
+                for (pos, &h) in on[k as usize].iter().enumerate() {
+                    if bc & !(1u64 << fs[h].body) == 0 {
+                        rel &= !(1u128 << (64 + pos));
+                    }
+                }
+                if rel as u64 == 0 || rel >> 64 == 0 {
+                    continue;
+                }
             }
-            let ln = cx.line(c32, k);
+            cx.ensure_line(k);
+            let ln = cx.lines[k as usize].take().unwrap();
             if ln.d.x.is_zero() && ln.d.y.is_zero() && ln.d.z.is_zero() {
+                cx.lines[k as usize] = Some(ln);
                 continue; // parallel
             }
-            bump(&cx.t, |t| t.lines.1 += 1);
+            tick(&cx.t, 17, 1);
             ps.clear();
             // the points where the line meets a boundary edge of a face of C or of K, each with
             // the faces (bits: C's at their position in on[c], K's at 64 + theirs) whose boundary
@@ -701,6 +857,7 @@ pub(crate) fn counts(
                                other: u32,
                                ps: &mut Vec<(u32, u128)>,
                                always: &mut u128,
+                               js: &mut Vec<u32>,
                                cx: &mut Ctx| {
                 for (pos, &f) in faces.iter().enumerate() {
                     let bit = 1u128 << (off + pos as u32);
@@ -708,8 +865,17 @@ pub(crate) fn counts(
                         continue;
                     }
                     let base = fe_start[f] as usize;
-                    bump(&cx.t, |t| t.edges.0 += edges_of(f).len() as u32);
-                    for (j, &(_, _, across)) in edges_of(f).iter().enumerate() {
+                    let es = edges_of(f);
+                    // the edges reaching the other plane (all, unless it is along an axis)
+                    js.clear();
+                    match cx.axis_plane(other) {
+                        Some((a, x, tol)) => cx.edges_at(f, a, x, tol, js),
+                        None => js.extend(0..es.len() as u32),
+                    }
+                    tick(&cx.t, 18, js.len() as u32);
+                    for &j in js.iter() {
+                        let j = j as usize;
+                        let across = es[j].2;
                         let (ia, ib) = cx.fe_pt[base + j];
                         // (the face's vertices are on its own plane; on the line when on the other)
                         let (sa, sb) = (cx.side(other, ia), cx.side(other, ib));
@@ -733,9 +899,18 @@ pub(crate) fn counts(
                     }
                 }
             };
-            cross_edges(&on[c], 0, c32, k, &mut ps, &mut always, &mut cx);
+            cross_edges(&on[c], 0, c32, k, &mut ps, &mut always, &mut js, &mut cx);
             if !wall {
-                cross_edges(&on[k as usize], 64, k, c32, &mut ps, &mut always, &mut cx);
+                cross_edges(
+                    &on[k as usize],
+                    64,
+                    k,
+                    c32,
+                    &mut ps,
+                    &mut always,
+                    &mut js,
+                    &mut cx,
+                );
             }
             for &w in &cls.walls {
                 if w != k
@@ -796,12 +971,19 @@ pub(crate) fn counts(
                 let adj = sa | sb;
                 // (a face's answer does not carry past its own points)
                 known &= !adj;
-                let in_k = wall
-                    || on[k as usize]
-                        .iter()
-                        .enumerate()
-                        .any(|(pos, &h)| inside(a, b, adj, 1u128 << (64 + pos), h, &mut known, &mut ins));
-                if !in_k {
+                // the bodies whose faces of K hold the stretch (a wall: any)
+                let mut in_k: u64 = 0;
+                if wall {
+                    in_k = u64::MAX;
+                } else {
+                    for (pos, &h) in on[k as usize].iter().enumerate() {
+                        let bb = 1u64 << fs[h].body;
+                        if in_k & bb == 0 && inside(a, b, adj, 1u128 << (64 + pos), h, &mut known, &mut ins) {
+                            in_k |= bb;
+                        }
+                    }
+                }
+                if in_k == 0 {
                     continue;
                 }
                 match wi {
@@ -826,11 +1008,11 @@ pub(crate) fn counts(
                         }
                     }
                     None => {
-                        if on[c]
-                            .iter()
-                            .enumerate()
-                            .any(|(pos, &f)| inside(a, b, adj, 1u128 << pos, f, &mut known, &mut ins))
-                        {
+                        // in a face of C of a body other than one whose face of K holds it
+                        if on[c].iter().enumerate().any(|(pos, &f)| {
+                            in_k & !(1u64 << fs[f].body) != 0
+                                && inside(a, b, adj, 1u128 << pos, f, &mut known, &mut ins)
+                        }) {
                             segs.push(Seg {
                                 a,
                                 b,
@@ -841,14 +1023,18 @@ pub(crate) fn counts(
                     }
                 }
             }
+            cx.lines[k as usize] = Some(ln);
         }
         nseg += segs.len();
+        for g in &segs {
+            cx.ensure_line(g.line);
+        }
         let xs = crossings(&mut cx, &segs);
         let (nv, nf) = plane(&cx, c32, &segs, &xs);
         nvert += nv;
         nfacet += nf;
     }
-    let mut t = cx.t.get();
+    let mut t = tally(&cx.t);
     t.mids.1 = cx.p.len() as u32;
     Some(((nseg, nvert, nfacet), t))
 }
@@ -912,6 +1098,7 @@ fn sort_along(cx: &Ctx, ps: &mut [(u32, u128)], ln: &Line) {
 }
 
 /// The meets of segments on different lines of plane `C` whose f64 boxes meet: (i, j, point).
+#[inline(never)]
 fn crossings(cx: &mut Ctx, segs: &[Seg]) -> Vec<(u32, u32, u32)> {
     let boxes: Vec<([f64; 3], [f64; 3])> = segs
         .iter()
@@ -947,6 +1134,7 @@ fn crossings(cx: &mut Ctx, segs: &[Seg]) -> Vec<(u32, u32, u32)> {
 
 /// Plane `C`'s graph from its segments and their crossings; (vertices, facets).
 #[allow(clippy::needless_range_loop)]
+#[inline(never)]
 fn plane(cx: &Ctx, c: u32, segs: &[Seg], xs: &[(u32, u32, u32)]) -> (usize, usize) {
     let cls = cx.cls;
     let pc = &cls.planes[c as usize];
@@ -975,11 +1163,11 @@ fn plane(cx: &Ctx, c: u32, segs: &[Seg], xs: &[(u32, u32, u32)]) -> (usize, usiz
         on_line[li(g.line)].push(a);
         on_line[li(g.line)].push(b);
     }
-    let lns: Vec<Line> = lines.iter().map(|&k| cx.line(c, k)).collect();
+    let lns: Vec<&Line> = lines.iter().map(|&k| cx.ln(k)).collect();
     // crossings within both segments
     for &(i, j, x) in xs {
         let (gs, gt) = (&segs[i as usize], &segs[j as usize]);
-        let (ls, lt) = (&lns[li(gs.line)], &lns[li(gt.line)]);
+        let (ls, lt) = (lns[li(gs.line)], lns[li(gt.line)]);
         let within = |g: &Seg, l: &Line| cx.along(x, g.a, l) * cx.along(x, g.b, l) <= 0;
         if within(gs, ls) && within(gt, lt) {
             let v = vof(x, &mut vs);
@@ -991,7 +1179,7 @@ fn plane(cx: &Ctx, c: u32, segs: &[Seg], xs: &[(u32, u32, u32)]) -> (usize, usiz
     for (k, ol) in on_line.iter_mut().enumerate() {
         ol.sort_unstable();
         ol.dedup();
-        let l = &lns[k];
+        let l = lns[k];
         for i in 1..ol.len() {
             let mut j = i;
             while j > 0 && cx.along(vs[ol[j - 1] as usize], vs[ol[j] as usize], l) > 0 {
@@ -1052,7 +1240,9 @@ fn plane(cx: &Ctx, c: u32, segs: &[Seg], xs: &[(u32, u32, u32)]) -> (usize, usiz
         .iter()
         .map(|l| {
             let (x, mut y) = (l.d.get(s).clone(), l.d.get(t).clone());
-            let (fx, mut fy) = (l.f[s], l.f[t]);
+            // (the exact direction rounded, not the f64 normals' cross product: that loses its
+            // relative accuracy for nearly parallel normals)
+            let (fx, mut fy) = (x.to_f64(), y.to_f64());
             if flip {
                 y = y.neg();
                 fy = -fy;
@@ -1076,12 +1266,12 @@ fn plane(cx: &Ctx, c: u32, segs: &[Seg], xs: &[(u32, u32, u32)]) -> (usize, usiz
         let sg = if ra == rb { 1 } else { -1 };
         let (da, db) = (&dirs[ka], &dirs[kb]);
         let v = da.2 * db.3 - da.3 * db.2;
-        let bound = 4.0 * f64::EPSILON * ((da.2 * db.3).abs() + (da.3 * db.2).abs());
+        let bound = 8.0 * f64::EPSILON * ((da.2 * db.3).abs() + (da.3 * db.2).abs());
         let cr = if v.abs() > bound {
-            bump(&cx.t, |t| t.angle.0 += 1);
+            tick(&cx.t, 8, 1);
             if v > 0.0 { 1 } else { -1 }
         } else {
-            bump(&cx.t, |t| t.angle.1 += 1);
+            tick(&cx.t, 9, 1);
             da.0.mul(&db.1).sub(&da.1.mul(&db.0)).signum()
         } * sg;
         // a before b if a × b > 0
@@ -1160,10 +1350,10 @@ fn plane(cx: &Ctx, c: u32, segs: &[Seg], xs: &[(u32, u32, u32)]) -> (usize, usiz
                 + 2.0 * cy.len() as f64 * e * e
                 + (cy.len() as f64 + 2.0) * 2.0 * f64::EPSILON * mag;
             if a2.abs() > bound {
-                bump(&cx.t, |x| x.orient.0 += 1);
+                tick(&cx.t, 6, 1);
                 return (if flip { -a2 } else { a2 }) > 0.0;
             }
-            bump(&cx.t, |x| x.orient.1 += 1);
+            tick(&cx.t, 7, 1);
             let k = (0..cy.len())
                 .min_by(|&x, &y| {
                     let (p, q) = (pid(from(cy[x])), pid(from(cy[y])));

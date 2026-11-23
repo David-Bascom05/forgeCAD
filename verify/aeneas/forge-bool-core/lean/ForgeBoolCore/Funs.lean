@@ -1961,7 +1961,7 @@ def inc.count_sec
   inc.count_sec_loop secs hi x 0#usize lo
 
 /-- [forge_bool_core::inc::row]:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 303:0-305:1 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 306:0-308:1 -/
 def inc.row
   (c : inc.Csr) (k : Std.Usize) : Result (Std.Usize × Std.Usize) := do
   let i ←
@@ -1976,7 +1976,7 @@ def inc.row
   ok (i1, i4)
 
 /-- [forge_bool_core::inc::ledger_wf]: loop body 0:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 216:8-219:9
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 219:8-222:9
     Visibility: public -/
 @[rust_loop_body]
 def inc.ledger_wf_loop0.body
@@ -2000,7 +2000,7 @@ def inc.ledger_wf_loop0.body
   else ok (done ok1)
 
 /-- [forge_bool_core::inc::ledger_wf]: loop 0:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 216:8-219:9
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 219:8-222:9
     Visibility: public -/
 @[rust_loop]
 def inc.ledger_wf_loop0
@@ -2010,7 +2010,7 @@ def inc.ledger_wf_loop0
     (ok1, k)
 
 /-- [forge_bool_core::inc::ledger_wf]: loop body 2:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 229:8-232:9
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 232:8-235:9
     Visibility: public -/
 @[rust_loop_body]
 def inc.ledger_wf_loop1_loop0.body
@@ -2032,7 +2032,7 @@ def inc.ledger_wf_loop1_loop0.body
   else ok (done ok1)
 
 /-- [forge_bool_core::inc::ledger_wf]: loop 2:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 229:8-232:9
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 232:8-235:9
     Visibility: public -/
 @[rust_loop]
 def inc.ledger_wf_loop1_loop0
@@ -2045,7 +2045,7 @@ def inc.ledger_wf_loop1_loop0
     (ok1, i)
 
 /-- [forge_bool_core::inc::ledger_wf]: loop body 1:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 223:4-234:5
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 226:4-237:5
     Visibility: public -/
 @[rust_loop_body]
 def inc.ledger_wf_loop1.body
@@ -2072,7 +2072,7 @@ def inc.ledger_wf_loop1.body
   else ok (done ok1)
 
 /-- [forge_bool_core::inc::ledger_wf]: loop 1:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 223:4-234:5
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 226:4-237:5
     Visibility: public -/
 @[rust_loop]
 def inc.ledger_wf_loop1
@@ -2085,7 +2085,7 @@ def inc.ledger_wf_loop1
     (ok1, e)
 
 /-- [forge_bool_core::inc::ledger_wf]: loop body 4:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 240:8-243:9
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 243:8-246:9
     Visibility: public -/
 @[rust_loop_body]
 def inc.ledger_wf_loop2_loop0.body
@@ -2107,7 +2107,7 @@ def inc.ledger_wf_loop2_loop0.body
   else ok (done ok1)
 
 /-- [forge_bool_core::inc::ledger_wf]: loop 4:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 240:8-243:9
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 243:8-246:9
     Visibility: public -/
 @[rust_loop]
 def inc.ledger_wf_loop2_loop0
@@ -2120,7 +2120,7 @@ def inc.ledger_wf_loop2_loop0
     (ok1, i)
 
 /-- [forge_bool_core::inc::ledger_wf]: loop body 5:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 249:8-263:9
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 252:8-266:9
     Visibility: public -/
 @[rust_loop_body]
 def inc.ledger_wf_loop2_loop1.body
@@ -2182,7 +2182,7 @@ def inc.ledger_wf_loop2_loop1.body
   else ok (done ok1)
 
 /-- [forge_bool_core::inc::ledger_wf]: loop 5:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 249:8-263:9
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 252:8-266:9
     Visibility: public -/
 @[rust_loop]
 def inc.ledger_wf_loop2_loop1
@@ -2198,7 +2198,7 @@ def inc.ledger_wf_loop2_loop1
     (ok1, j)
 
 /-- [forge_bool_core::inc::ledger_wf]: loop body 3:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 237:4-265:5
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 240:4-268:5
     Visibility: public -/
 @[rust_loop_body]
 def inc.ledger_wf_loop2.body
@@ -2238,7 +2238,7 @@ def inc.ledger_wf_loop2.body
   else ok (done ok1)
 
 /-- [forge_bool_core::inc::ledger_wf]: loop 3:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 237:4-265:5
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 240:4-268:5
     Visibility: public -/
 @[rust_loop]
 def inc.ledger_wf_loop2
@@ -2253,7 +2253,7 @@ def inc.ledger_wf_loop2
     (ok1, v6)
 
 /-- [forge_bool_core::inc::ledger_wf]: loop body 6:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 268:4-272:5
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 271:4-275:5
     Visibility: public -/
 @[rust_loop_body]
 def inc.ledger_wf_loop3.body
@@ -2280,7 +2280,7 @@ def inc.ledger_wf_loop3.body
   else ok (done ok1)
 
 /-- [forge_bool_core::inc::ledger_wf]: loop 6:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 268:4-272:5
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 271:4-275:5
     Visibility: public -/
 @[rust_loop]
 def inc.ledger_wf_loop3
@@ -2293,7 +2293,7 @@ def inc.ledger_wf_loop3
     (ok1, f)
 
 /-- [forge_bool_core::inc::ledger_wf]: loop body 7:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 276:4-285:5
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 279:4-288:5
     Visibility: public -/
 @[rust_loop_body]
 def inc.ledger_wf_loop4.body
@@ -2348,7 +2348,7 @@ def inc.ledger_wf_loop4.body
   else ok (done (ok1, is_piece))
 
 /-- [forge_bool_core::inc::ledger_wf]: loop 7:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 276:4-285:5
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 279:4-288:5
     Visibility: public -/
 @[rust_loop]
 def inc.ledger_wf_loop4
@@ -2364,7 +2364,7 @@ def inc.ledger_wf_loop4
     (ok1, is_piece, k)
 
 /-- [forge_bool_core::inc::ledger_wf]: loop body 8:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 287:4-291:5
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 290:4-294:5
     Visibility: public -/
 @[rust_loop_body]
 def inc.ledger_wf_loop5.body
@@ -2389,7 +2389,7 @@ def inc.ledger_wf_loop5.body
   else ok (done ok1)
 
 /-- [forge_bool_core::inc::ledger_wf]: loop 8:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 287:4-291:5
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 290:4-294:5
     Visibility: public -/
 @[rust_loop]
 def inc.ledger_wf_loop5
@@ -2402,7 +2402,7 @@ def inc.ledger_wf_loop5
     (ok1, k)
 
 /-- [forge_bool_core::inc::ledger_wf]: loop body 9:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 293:4-296:5
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 296:4-299:5
     Visibility: public -/
 @[rust_loop_body]
 def inc.ledger_wf_loop6.body
@@ -2423,7 +2423,7 @@ def inc.ledger_wf_loop6.body
   else ok (done ok1)
 
 /-- [forge_bool_core::inc::ledger_wf]: loop 9:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 293:4-296:5
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 296:4-299:5
     Visibility: public -/
 @[rust_loop]
 def inc.ledger_wf_loop6
@@ -2436,7 +2436,7 @@ def inc.ledger_wf_loop6
     (ok1, f)
 
 /-- [forge_bool_core::inc::ledger_wf]: loop body 11:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 229:8-232:9
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 232:8-235:9
     Visibility: public -/
 @[rust_loop_body]
 def inc.ledger_wf_loop7_loop0.body
@@ -2458,7 +2458,7 @@ def inc.ledger_wf_loop7_loop0.body
   else ok (done ok1)
 
 /-- [forge_bool_core::inc::ledger_wf]: loop 11:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 229:8-232:9
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 232:8-235:9
     Visibility: public -/
 @[rust_loop]
 def inc.ledger_wf_loop7_loop0
@@ -2471,7 +2471,7 @@ def inc.ledger_wf_loop7_loop0
     (ok1, i)
 
 /-- [forge_bool_core::inc::ledger_wf]: loop body 10:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 223:4-234:5
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 226:4-237:5
     Visibility: public -/
 @[rust_loop_body]
 def inc.ledger_wf_loop7.body
@@ -2498,7 +2498,7 @@ def inc.ledger_wf_loop7.body
   else ok (done ok1)
 
 /-- [forge_bool_core::inc::ledger_wf]: loop 10:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 223:4-234:5
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 226:4-237:5
     Visibility: public -/
 @[rust_loop]
 def inc.ledger_wf_loop7
@@ -2511,7 +2511,7 @@ def inc.ledger_wf_loop7
     (ok1, e)
 
 /-- [forge_bool_core::inc::ledger_wf]: loop body 13:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 240:8-243:9
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 243:8-246:9
     Visibility: public -/
 @[rust_loop_body]
 def inc.ledger_wf_loop8_loop0.body
@@ -2533,7 +2533,7 @@ def inc.ledger_wf_loop8_loop0.body
   else ok (done ok1)
 
 /-- [forge_bool_core::inc::ledger_wf]: loop 13:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 240:8-243:9
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 243:8-246:9
     Visibility: public -/
 @[rust_loop]
 def inc.ledger_wf_loop8_loop0
@@ -2546,7 +2546,7 @@ def inc.ledger_wf_loop8_loop0
     (ok1, i)
 
 /-- [forge_bool_core::inc::ledger_wf]: loop body 14:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 249:8-263:9
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 252:8-266:9
     Visibility: public -/
 @[rust_loop_body]
 def inc.ledger_wf_loop8_loop1.body
@@ -2608,7 +2608,7 @@ def inc.ledger_wf_loop8_loop1.body
   else ok (done ok1)
 
 /-- [forge_bool_core::inc::ledger_wf]: loop 14:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 249:8-263:9
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 252:8-266:9
     Visibility: public -/
 @[rust_loop]
 def inc.ledger_wf_loop8_loop1
@@ -2624,7 +2624,7 @@ def inc.ledger_wf_loop8_loop1
     (ok1, j)
 
 /-- [forge_bool_core::inc::ledger_wf]: loop body 12:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 237:4-265:5
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 240:4-268:5
     Visibility: public -/
 @[rust_loop_body]
 def inc.ledger_wf_loop8.body
@@ -2664,7 +2664,7 @@ def inc.ledger_wf_loop8.body
   else ok (done ok1)
 
 /-- [forge_bool_core::inc::ledger_wf]: loop 12:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 237:4-265:5
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 240:4-268:5
     Visibility: public -/
 @[rust_loop]
 def inc.ledger_wf_loop8
@@ -2678,7 +2678,7 @@ def inc.ledger_wf_loop8
     (ok1, v4)
 
 /-- [forge_bool_core::inc::ledger_wf]: loop body 15:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 268:4-272:5
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 271:4-275:5
     Visibility: public -/
 @[rust_loop_body]
 def inc.ledger_wf_loop9.body
@@ -2705,7 +2705,7 @@ def inc.ledger_wf_loop9.body
   else ok (done ok1)
 
 /-- [forge_bool_core::inc::ledger_wf]: loop 15:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 268:4-272:5
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 271:4-275:5
     Visibility: public -/
 @[rust_loop]
 def inc.ledger_wf_loop9
@@ -2718,7 +2718,7 @@ def inc.ledger_wf_loop9
     (ok1, f)
 
 /-- [forge_bool_core::inc::ledger_wf]: loop body 16:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 276:4-285:5
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 279:4-288:5
     Visibility: public -/
 @[rust_loop_body]
 def inc.ledger_wf_loop10.body
@@ -2773,7 +2773,7 @@ def inc.ledger_wf_loop10.body
   else ok (done (ok1, is_piece))
 
 /-- [forge_bool_core::inc::ledger_wf]: loop 16:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 276:4-285:5
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 279:4-288:5
     Visibility: public -/
 @[rust_loop]
 def inc.ledger_wf_loop10
@@ -2789,7 +2789,7 @@ def inc.ledger_wf_loop10
     (ok1, is_piece, k)
 
 /-- [forge_bool_core::inc::ledger_wf]: loop body 17:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 287:4-291:5
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 290:4-294:5
     Visibility: public -/
 @[rust_loop_body]
 def inc.ledger_wf_loop11.body
@@ -2814,7 +2814,7 @@ def inc.ledger_wf_loop11.body
   else ok (done ok1)
 
 /-- [forge_bool_core::inc::ledger_wf]: loop 17:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 287:4-291:5
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 290:4-294:5
     Visibility: public -/
 @[rust_loop]
 def inc.ledger_wf_loop11
@@ -2827,7 +2827,7 @@ def inc.ledger_wf_loop11
     (ok1, k)
 
 /-- [forge_bool_core::inc::ledger_wf]: loop body 18:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 293:4-296:5
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 296:4-299:5
     Visibility: public -/
 @[rust_loop_body]
 def inc.ledger_wf_loop12.body
@@ -2848,7 +2848,7 @@ def inc.ledger_wf_loop12.body
   else ok (done ok1)
 
 /-- [forge_bool_core::inc::ledger_wf]: loop 18:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 293:4-296:5
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 296:4-299:5
     Visibility: public -/
 @[rust_loop]
 def inc.ledger_wf_loop12
@@ -2861,7 +2861,7 @@ def inc.ledger_wf_loop12
     (ok1, f)
 
 /-- [forge_bool_core::inc::ledger_wf]:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 194:0-298:1
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 194:0-301:1
     Visibility: public -/
 def inc.ledger_wf (l : inc.Ledger) : Result Bool := do
   let nf := alloc.vec.Vec.len l.facet_class
@@ -2909,20 +2909,43 @@ def inc.ledger_wf (l : inc.Ledger) : Result Bool := do
                     let b ←
                       if i17 < i18
                       then
-                        if l.n_rooms < core.num.U32.MAX
+                        do
+                        let i19 := alloc.vec.Vec.len l.pieces
+                        let i20 ← lift (UScalar.cast .U64 i19)
+                        let i21 ← lift (UScalar.cast .U64 core.num.U32.MAX)
+                        if i20 < i21
                         then
-                          do
-                          let i19 ← lift (UScalar.cast .U32 nf)
-                          let b1 ← inc.csr_ok l.edge_facets i19
-                          if b1
+                          let i22 ← lift (UScalar.cast .U128 l.n_rooms)
+                          let i23 ← lift (UScalar.cast .U128 l.nb)
+                          let i24 ← i22 * i23
+                          let i25 ←
+                            lift (UScalar.cast .U128 core.num.Usize.MAX)
+                          if i24 <= i25
                           then
-                            let i20 ← lift (UScalar.cast .U32 ne)
-                            let b2 ← inc.csr_ok l.vert_edges i20
-                            if b2
+                            let i26 ← lift (UScalar.cast .U128 nf)
+                            let i27 ← 3#u128 * i26
+                            let i28 ←
+                              lift (UScalar.cast .U128 core.num.Usize.MAX)
+                            if i27 <= i28
                             then
-                              let i21 := alloc.vec.Vec.len l.vert_sectors.start
-                              let i22 := alloc.vec.Vec.len l.vert_edges.start
-                              ok (i21 = i22)
+                              if l.n_rooms < core.num.U32.MAX
+                              then
+                                let i29 ← lift (UScalar.cast .U32 nf)
+                                let b1 ← inc.csr_ok l.edge_facets i29
+                                if b1
+                                then
+                                  let i30 ← lift (UScalar.cast .U32 ne)
+                                  let b2 ← inc.csr_ok l.vert_edges i30
+                                  if b2
+                                  then
+                                    let i31 :=
+                                      alloc.vec.Vec.len l.vert_sectors.start
+                                    let i32 :=
+                                      alloc.vec.Vec.len l.vert_edges.start
+                                    ok (i31 = i32)
+                                  else ok false
+                                else ok false
+                              else ok false
                             else ok false
                           else ok false
                         else ok false
@@ -2982,11 +3005,11 @@ def inc.ledger_wf (l : inc.Ledger) : Result Bool := do
     inc.ledger_wf_loop12 nf ok6 is_piece1 0#usize
 
 /-- [forge_bool_core::inc::NONE]
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 300:0-300:27 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 303:0-303:27 -/
 @[global_simps, irreducible] def inc.NONE : Std.U32 := core.num.U32.MAX
 
 /-- [forge_bool_core::inc::body_of]:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 308:0-314:1 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 311:0-317:1 -/
 def inc.body_of (l : inc.Ledger) (f : FaceId) : Result Std.U32 := do
   let i ← lift (UScalar.cast .Usize f)
   let i1 := alloc.vec.Vec.len l.face_body
@@ -2998,7 +3021,7 @@ def inc.body_of (l : inc.Ledger) (f : FaceId) : Result Std.U32 := do
   else ok 0#u32
 
 /-- [forge_bool_core::inc::cls_of]:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 317:0-323:1 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 320:0-326:1 -/
 def inc.cls_of (l : inc.Ledger) (f : FaceId) : Result Std.U32 := do
   let i ← lift (UScalar.cast .Usize f)
   let i1 := alloc.vec.Vec.len l.face_class
@@ -3010,7 +3033,7 @@ def inc.cls_of (l : inc.Ledger) (f : FaceId) : Result Std.U32 := do
   else ok 0#u32
 
 /-- [forge_bool_core::inc::split_ok]: loop body 0:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 334:4-350:5 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 337:4-353:5 -/
 @[rust_loop_body]
 def inc.split_ok_loop.body
   (i : Std.U32) (v : alloc.vec.Vec BodyId) (v1 : alloc.vec.Vec Std.U32)
@@ -3111,7 +3134,7 @@ def inc.split_ok_loop.body
   else ok (done ok1)
 
 /-- [forge_bool_core::inc::split_ok]: loop 0:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 334:4-350:5 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 337:4-353:5 -/
 @[rust_loop]
 def inc.split_ok_loop
   (i : Std.U32) (v : alloc.vec.Vec BodyId) (v1 : alloc.vec.Vec Std.U32)
@@ -3129,7 +3152,7 @@ def inc.split_ok_loop
     (first, ok1, k)
 
 /-- [forge_bool_core::inc::split_ok]:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 327:0-352:1 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 330:0-355:1 -/
 def inc.split_ok (l : inc.Ledger) : Result Bool := do
   let nf := alloc.vec.Vec.len l.facet_class
   let nb ← lift (UScalar.cast .Usize l.nb)
@@ -3141,7 +3164,7 @@ def inc.split_ok (l : inc.Ledger) : Result Bool := do
     nf nb first (i1 = nf) 0#usize
 
 /-- [forge_bool_core::inc::split]: loop body 0:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 367:4-374:5 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 370:4-377:5 -/
 @[rust_loop_body]
 def inc.split_loop0.body
   (i : Std.U32) (v : alloc.vec.Vec BodyId) (v1 : alloc.vec.Vec Std.U32)
@@ -3192,7 +3215,7 @@ def inc.split_loop0.body
   else ok (done piece_of)
 
 /-- [forge_bool_core::inc::split]: loop 0:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 367:4-374:5 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 370:4-377:5 -/
 @[rust_loop]
 def inc.split_loop0
   (i : Std.U32) (v : alloc.vec.Vec BodyId) (v1 : alloc.vec.Vec Std.U32)
@@ -3210,7 +3233,7 @@ def inc.split_loop0
     (piece_of, k)
 
 /-- [forge_bool_core::inc::split]: loop body 1:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 378:4-389:5 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 381:4-392:5 -/
 @[rust_loop_body]
 def inc.split_loop1.body
   (v : alloc.vec.Vec (Std.U32 × Std.U32)) (nf : Std.Usize)
@@ -3265,7 +3288,7 @@ def inc.split_loop1.body
   else ok (done (room_pos, rooms))
 
 /-- [forge_bool_core::inc::split]: loop 1:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 378:4-389:5 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 381:4-392:5 -/
 @[rust_loop]
 def inc.split_loop1
   (v : alloc.vec.Vec (Std.U32 × Std.U32)) (nf : Std.Usize)
@@ -3279,7 +3302,7 @@ def inc.split_loop1
     (room_pos, rooms, f)
 
 /-- [forge_bool_core::inc::split]:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 362:0-395:1 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 365:0-398:1 -/
 def inc.split (l : inc.Ledger) : Result inc.Split := do
   let nf := alloc.vec.Vec.len l.facet_class
   let nb ← lift (UScalar.cast .Usize l.nb)
@@ -3404,7 +3427,7 @@ def union_find.Uf.new (n : Std.Usize) : Result union_find.Uf := do
   ok { parent := parent1 }
 
 /-- [forge_bool_core::inc::flood]: loop body 0:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 403:4-409:5 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 406:4-412:5 -/
 @[rust_loop_body]
 def inc.flood_loop.body
   (v : alloc.vec.Vec Std.U32) (v1 : alloc.vec.Vec (Std.U32 × Std.U32))
@@ -3443,7 +3466,7 @@ def inc.flood_loop.body
   else ok (done uf)
 
 /-- [forge_bool_core::inc::flood]: loop 0:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 403:4-409:5 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 406:4-412:5 -/
 @[rust_loop]
 def inc.flood_loop
   (v : alloc.vec.Vec Std.U32) (v1 : alloc.vec.Vec (Std.U32 × Std.U32))
@@ -3456,7 +3479,7 @@ def inc.flood_loop
     (uf, f)
 
 /-- [forge_bool_core::inc::flood]:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 399:0-411:1 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 402:0-414:1 -/
 def inc.flood
   (l : inc.Ledger) (s : inc.Split) (i : Std.Usize) : Result union_find.Uf := do
   let nb ← lift (UScalar.cast .Usize l.nb)
@@ -3466,7 +3489,7 @@ def inc.flood
     0#usize
 
 /-- [forge_bool_core::inc::witnesses]: loop body 1:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 423:12-428:13
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 426:12-431:13
     Visibility: public -/
 @[rust_loop_body]
 def inc.witnesses_loop0_loop0.body
@@ -3495,7 +3518,7 @@ def inc.witnesses_loop0_loop0.body
   else ok (done (out, s.piece_of, s.rooms, s.room_pos))
 
 /-- [forge_bool_core::inc::witnesses]: loop 1:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 423:12-428:13
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 426:12-431:13
     Visibility: public -/
 @[rust_loop]
 def inc.witnesses_loop0_loop0
@@ -3509,7 +3532,7 @@ def inc.witnesses_loop0_loop0
     (out, uf, t)
 
 /-- [forge_bool_core::inc::witnesses]: loop body 0:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 420:8-430:9
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 423:8-433:9
     Visibility: public -/
 @[rust_loop_body]
 def inc.witnesses_loop0.body
@@ -3528,7 +3551,7 @@ def inc.witnesses_loop0.body
   else ok (done out)
 
 /-- [forge_bool_core::inc::witnesses]: loop 0:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 420:8-430:9
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 423:8-433:9
     Visibility: public -/
 @[rust_loop]
 def inc.witnesses_loop0
@@ -3541,7 +3564,7 @@ def inc.witnesses_loop0
     (out, s, i)
 
 /-- [forge_bool_core::inc::witnesses]:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 415:0-433:1
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 418:0-436:1
     Visibility: public -/
 def inc.witnesses
   (l : inc.Ledger) : Result (alloc.vec.Vec (inc.RoomId × BodyId)) := do
@@ -3553,7 +3576,7 @@ def inc.witnesses
   else ok (alloc.vec.Vec.new (inc.RoomId × BodyId))
 
 /-- [forge_bool_core::inc::membership]: loop body 0:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 441:4-447:5 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 444:4-450:5 -/
 @[rust_loop_body]
 def inc.membership_loop0.body
   (v : alloc.vec.Vec (inc.RoomId × BodyId)) (nb : Std.Usize) (nr : Std.Usize)
@@ -3589,7 +3612,7 @@ def inc.membership_loop0.body
   else ok (done inside)
 
 /-- [forge_bool_core::inc::membership]: loop 0:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 441:4-447:5 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 444:4-450:5 -/
 @[rust_loop]
 def inc.membership_loop0
   (v : alloc.vec.Vec (inc.RoomId × BodyId)) (nb : Std.Usize) (nr : Std.Usize)
@@ -3601,7 +3624,7 @@ def inc.membership_loop0
     (inside, k)
 
 /-- [forge_bool_core::inc::membership]: loop body 2:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 454:8-458:9 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 457:8-461:9 -/
 @[rust_loop_body]
 def inc.membership_loop1_loop0.body
   (s : inc.Split) (nb : Std.Usize) (inside : alloc.vec.Vec Bool)
@@ -3630,7 +3653,7 @@ def inc.membership_loop1_loop0.body
   else ok (done (s.piece_of, s.rooms, s.room_pos, row))
 
 /-- [forge_bool_core::inc::membership]: loop 2:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 454:8-458:9 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 457:8-461:9 -/
 @[rust_loop]
 def inc.membership_loop1_loop0
   (s : inc.Split) (nb : Std.Usize) (inside : alloc.vec.Vec Bool)
@@ -3645,7 +3668,7 @@ def inc.membership_loop1_loop0
     (uf, row, t)
 
 /-- [forge_bool_core::inc::membership]: loop body 1:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 450:4-461:5 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 453:4-464:5 -/
 @[rust_loop_body]
 def inc.membership_loop1.body
   (i : Std.U32) (v : alloc.vec.Vec BodyId) (v1 : alloc.vec.Vec Std.U32)
@@ -3685,7 +3708,7 @@ def inc.membership_loop1.body
   else ok (done memb)
 
 /-- [forge_bool_core::inc::membership]: loop 1:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 450:4-461:5 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 453:4-464:5 -/
 @[rust_loop]
 def inc.membership_loop1
   (i : Std.U32) (v : alloc.vec.Vec BodyId) (v1 : alloc.vec.Vec Std.U32)
@@ -3704,7 +3727,7 @@ def inc.membership_loop1
     (s, memb, i2)
 
 /-- [forge_bool_core::inc::membership]:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 436:0-463:1 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 439:0-466:1 -/
 def inc.membership
   (l : inc.Ledger) (s : inc.Split) :
   Result (alloc.vec.Vec (alloc.vec.Vec Bool))
@@ -3962,7 +3985,7 @@ def faces_at
   faces_at_loop face_of ar (alloc.vec.Vec.new Std.U32) 0#usize
 
 /-- [forge_bool_core::inc::around_v]: loop body 0:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 734:4-739:5 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 737:4-742:5 -/
 @[rust_loop_body]
 def inc.around_v_loop.body
   (v : alloc.vec.Vec inc.Sector) (a : inc.Assembled) (hi : Std.Usize)
@@ -3987,7 +4010,7 @@ def inc.around_v_loop.body
   else ok (done out)
 
 /-- [forge_bool_core::inc::around_v]: loop 0:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 734:4-739:5 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 737:4-742:5 -/
 @[rust_loop]
 def inc.around_v_loop
   (v : alloc.vec.Vec inc.Sector) (a : inc.Assembled) (hi : Std.Usize)
@@ -3999,7 +4022,7 @@ def inc.around_v_loop
     (out, k)
 
 /-- [forge_bool_core::inc::around_v]:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 727:0-741:1 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 730:0-744:1 -/
 def inc.around_v
   (l : inc.Ledger) (a : inc.Assembled) (v : Std.Usize) :
   Result (alloc.vec.Vec Std.Usize)
@@ -4016,7 +4039,7 @@ def inc.around_v
   inc.around_v_loop l.vert_sectors.sec a hi (alloc.vec.Vec.new Std.Usize) lo
 
 /-- [forge_bool_core::inc::around_e]: loop body 0:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 716:4-722:5 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 719:4-725:5 -/
 @[rust_loop_body]
 def inc.around_e_loop.body
   (c : inc.Csr) (a : inc.Assembled) (hi : Std.Usize)
@@ -4041,7 +4064,7 @@ def inc.around_e_loop.body
   else ok (done out)
 
 /-- [forge_bool_core::inc::around_e]: loop 0:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 716:4-722:5 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 719:4-725:5 -/
 @[rust_loop]
 def inc.around_e_loop
   (c : inc.Csr) (a : inc.Assembled) (hi : Std.Usize)
@@ -4053,7 +4076,7 @@ def inc.around_e_loop
     (out, k)
 
 /-- [forge_bool_core::inc::around_e]:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 712:0-724:1 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 715:0-727:1 -/
 def inc.around_e
   (l : inc.Ledger) (a : inc.Assembled) (e : Std.Usize) :
   Result (alloc.vec.Vec Std.U32)
@@ -4062,7 +4085,7 @@ def inc.around_e
   inc.around_e_loop l.edge_facets a hi (alloc.vec.Vec.new Std.U32) lo
 
 /-- [forge_bool_core::inc::unify]: loop body 2:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 793:12-801:13 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 796:12-804:13 -/
 @[rust_loop_body]
 def inc.unify_loop0_loop0_loop0.body
   (v : alloc.vec.Vec Std.U32) (v1 : alloc.vec.Vec Std.U32)
@@ -4107,7 +4130,7 @@ def inc.unify_loop0_loop0_loop0.body
   else ok (done join)
 
 /-- [forge_bool_core::inc::unify]: loop 2:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 793:12-801:13 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 796:12-804:13 -/
 @[rust_loop]
 def inc.unify_loop0_loop0_loop0
   (v : alloc.vec.Vec Std.U32) (v1 : alloc.vec.Vec Std.U32)
@@ -4120,7 +4143,7 @@ def inc.unify_loop0_loop0_loop0
     (join, q)
 
 /-- [forge_bool_core::inc::unify]: loop body 1:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 791:8-803:9 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 794:8-806:9 -/
 @[rust_loop_body]
 def inc.unify_loop0_loop0.body
   (v : alloc.vec.Vec Std.U32) (v1 : alloc.vec.Vec Std.U32)
@@ -4138,7 +4161,7 @@ def inc.unify_loop0_loop0.body
   else ok (done join)
 
 /-- [forge_bool_core::inc::unify]: loop 1:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 791:8-803:9 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 794:8-806:9 -/
 @[rust_loop]
 def inc.unify_loop0_loop0
   (v : alloc.vec.Vec Std.U32) (v1 : alloc.vec.Vec Std.U32)
@@ -4151,7 +4174,7 @@ def inc.unify_loop0_loop0
     (join, p)
 
 /-- [forge_bool_core::inc::unify]: loop body 0:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 788:4-805:5 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 791:4-808:5 -/
 @[rust_loop_body]
 def inc.unify_loop0.body
   (i : Std.U32) (v : alloc.vec.Vec BodyId) (v1 : alloc.vec.Vec Std.U32)
@@ -4188,7 +4211,7 @@ def inc.unify_loop0.body
   else ok (done join)
 
 /-- [forge_bool_core::inc::unify]: loop 0:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 788:4-805:5 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 791:4-808:5 -/
 @[rust_loop]
 def inc.unify_loop0
   (i : Std.U32) (v : alloc.vec.Vec BodyId) (v1 : alloc.vec.Vec Std.U32)
@@ -4208,7 +4231,7 @@ def inc.unify_loop0
     (join, e)
 
 /-- [forge_bool_core::inc::unify]: loop body 3:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 811:4-825:5 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 814:4-828:5 -/
 @[rust_loop_body]
 def inc.unify_loop1.body
   (v : alloc.vec.Vec Std.U32) (v1 : alloc.vec.Vec Std.U32)
@@ -4272,7 +4295,7 @@ def inc.unify_loop1.body
   else ok (done (face_of, faces, head_of))
 
 /-- [forge_bool_core::inc::unify]: loop 3:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 811:4-825:5 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 814:4-828:5 -/
 @[rust_loop]
 def inc.unify_loop1
   (v : alloc.vec.Vec Std.U32) (v1 : alloc.vec.Vec Std.U32)
@@ -4288,7 +4311,7 @@ def inc.unify_loop1
     (join, face_of, faces, head_of, p)
 
 /-- [forge_bool_core::inc::unify]: loop body 4:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 827:4-830:5 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 830:4-833:5 -/
 @[rust_loop_body]
 def inc.unify_loop2.body
   (v : alloc.vec.Vec Std.U32) (nr : Std.Usize)
@@ -4315,7 +4338,7 @@ def inc.unify_loop2.body
   else ok (done faces)
 
 /-- [forge_bool_core::inc::unify]: loop 4:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 827:4-830:5 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 830:4-833:5 -/
 @[rust_loop]
 def inc.unify_loop2
   (v : alloc.vec.Vec Std.U32) (nr : Std.Usize)
@@ -4328,7 +4351,7 @@ def inc.unify_loop2
     (faces, p)
 
 /-- [forge_bool_core::inc::unify]: loop body 5:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 834:4-838:5 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 837:4-841:5 -/
 @[rust_loop_body]
 def inc.unify_loop3.body
   (i : Std.U32) (v : alloc.vec.Vec BodyId) (v1 : alloc.vec.Vec Std.U32)
@@ -4370,7 +4393,7 @@ def inc.unify_loop3.body
   else ok (done at_e)
 
 /-- [forge_bool_core::inc::unify]: loop 5:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 834:4-838:5 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 837:4-841:5 -/
 @[rust_loop]
 def inc.unify_loop3
   (i : Std.U32) (v : alloc.vec.Vec BodyId) (v1 : alloc.vec.Vec Std.U32)
@@ -4391,7 +4414,7 @@ def inc.unify_loop3
     (at_e, e)
 
 /-- [forge_bool_core::inc::unify]: loop body 7:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 847:8-850:9 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 850:8-853:9 -/
 @[rust_loop_body]
 def inc.unify_loop4_loop0.body
   (sc : inc.SecCsr) (v : alloc.vec.Vec Std.U32) (ar : alloc.vec.Vec Std.Usize)
@@ -4417,7 +4440,7 @@ def inc.unify_loop4_loop0.body
   else ok (done (sc, ps))
 
 /-- [forge_bool_core::inc::unify]: loop 7:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 847:8-850:9 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 850:8-853:9 -/
 @[rust_loop]
 def inc.unify_loop4_loop0
   (sc : inc.SecCsr) (v : alloc.vec.Vec Std.U32) (ar : alloc.vec.Vec Std.Usize)
@@ -4429,7 +4452,7 @@ def inc.unify_loop4_loop0
     (ps, k)
 
 /-- [forge_bool_core::inc::unify]: loop body 6:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 842:4-856:5 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 845:4-859:5 -/
 @[rust_loop_body]
 def inc.unify_loop4.body
   (i : Std.U32) (v : alloc.vec.Vec BodyId) (v1 : alloc.vec.Vec Std.U32)
@@ -4488,7 +4511,7 @@ def inc.unify_loop4.body
   else ok (done (is_out_v, verts))
 
 /-- [forge_bool_core::inc::unify]: loop 6:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 842:4-856:5 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 845:4-859:5 -/
 @[rust_loop]
 def inc.unify_loop4
   (i : Std.U32) (v : alloc.vec.Vec BodyId) (v1 : alloc.vec.Vec Std.U32)
@@ -4509,7 +4532,7 @@ def inc.unify_loop4
     (sc, is_out_v, verts, v13)
 
 /-- [forge_bool_core::inc::unify]: loop body 8:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 861:4-867:5 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 864:4-870:5 -/
 @[rust_loop_body]
 def inc.unify_loop5.body
   (ne : Std.Usize) (at_e : alloc.vec.Vec (alloc.vec.Vec Std.U32))
@@ -4543,7 +4566,7 @@ def inc.unify_loop5.body
   else ok (done (ecs, ec_pos))
 
 /-- [forge_bool_core::inc::unify]: loop 8:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 861:4-867:5 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 864:4-870:5 -/
 @[rust_loop]
 def inc.unify_loop5
   (ne : Std.Usize) (at_e : alloc.vec.Vec (alloc.vec.Vec Std.U32))
@@ -4556,7 +4579,7 @@ def inc.unify_loop5
     (ecs, ec_pos, e)
 
 /-- [forge_bool_core::inc::unify]: loop body 11:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 877:16-883:17 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 880:16-886:17 -/
 @[rust_loop_body]
 def inc.unify_loop6_loop0_loop0.body
   (v : alloc.vec.Vec Std.U32) (at_e : alloc.vec.Vec (alloc.vec.Vec Std.U32))
@@ -4603,7 +4626,7 @@ def inc.unify_loop6_loop0_loop0.body
   else ok (done erel)
 
 /-- [forge_bool_core::inc::unify]: loop 11:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 877:16-883:17 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 880:16-886:17 -/
 @[rust_loop]
 def inc.unify_loop6_loop0_loop0
   (v : alloc.vec.Vec Std.U32) (at_e : alloc.vec.Vec (alloc.vec.Vec Std.U32))
@@ -4617,7 +4640,7 @@ def inc.unify_loop6_loop0_loop0
     (erel, j)
 
 /-- [forge_bool_core::inc::unify]: loop body 10:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 874:12-885:13 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 877:12-888:13 -/
 @[rust_loop_body]
 def inc.unify_loop6_loop0.body
   (v : alloc.vec.Vec Std.U32) (at_e : alloc.vec.Vec (alloc.vec.Vec Std.U32))
@@ -4637,7 +4660,7 @@ def inc.unify_loop6_loop0.body
   else ok (done erel)
 
 /-- [forge_bool_core::inc::unify]: loop 10:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 874:12-885:13 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 877:12-888:13 -/
 @[rust_loop]
 def inc.unify_loop6_loop0
   (v : alloc.vec.Vec Std.U32) (at_e : alloc.vec.Vec (alloc.vec.Vec Std.U32))
@@ -4650,7 +4673,7 @@ def inc.unify_loop6_loop0
     (erel, i)
 
 /-- [forge_bool_core::inc::unify]: loop body 9:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 870:4-888:5 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 873:4-891:5 -/
 @[rust_loop_body]
 def inc.unify_loop6.body
   (v : alloc.vec.Vec Std.U32) (v1 : alloc.vec.Vec Std.U32) (nv : Std.Usize)
@@ -4675,7 +4698,7 @@ def inc.unify_loop6.body
   else ok (done erel)
 
 /-- [forge_bool_core::inc::unify]: loop 9:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 870:4-888:5 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 873:4-891:5 -/
 @[rust_loop]
 def inc.unify_loop6
   (v : alloc.vec.Vec Std.U32) (v1 : alloc.vec.Vec Std.U32) (nv : Std.Usize)
@@ -4690,7 +4713,7 @@ def inc.unify_loop6
     (erel, v2)
 
 /-- [forge_bool_core::inc::unify]: loop body 13:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 899:12-902:13 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 902:12-905:13 -/
 @[rust_loop_body]
 def inc.unify_loop7_loop0.body
   (fs : alloc.vec.Vec Std.U32) (ff : alloc.vec.Vec inc.FacetId) (k : Std.Usize)
@@ -4709,7 +4732,7 @@ def inc.unify_loop7_loop0.body
   else ok (done ff)
 
 /-- [forge_bool_core::inc::unify]: loop 13:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 899:12-902:13 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 902:12-905:13 -/
 @[rust_loop]
 def inc.unify_loop7_loop0
   (fs : alloc.vec.Vec Std.U32) (ff : alloc.vec.Vec inc.FacetId) (k : Std.Usize)
@@ -4721,7 +4744,7 @@ def inc.unify_loop7_loop0
     (ff, k)
 
 /-- [forge_bool_core::inc::unify]: loop body 12:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 892:4-912:5 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 895:4-915:5 -/
 @[rust_loop_body]
 def inc.unify_loop7.body
   (at_e : alloc.vec.Vec (alloc.vec.Vec Std.U32)) (ecs : alloc.vec.Vec Std.U32)
@@ -4795,7 +4818,7 @@ def inc.unify_loop7.body
   else ok (done edges)
 
 /-- [forge_bool_core::inc::unify]: loop 12:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 892:4-912:5 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 895:4-915:5 -/
 @[rust_loop]
 def inc.unify_loop7
   (at_e : alloc.vec.Vec (alloc.vec.Vec Std.U32)) (ecs : alloc.vec.Vec Std.U32)
@@ -4809,7 +4832,7 @@ def inc.unify_loop7
     (erel, edges, edge_of, p)
 
 /-- [forge_bool_core::inc::unify]:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 781:0-914:1 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 784:0-917:1 -/
 def inc.unify (l : inc.Ledger) (a : inc.Assembled) : Result inc.Body := do
   let nr := alloc.vec.Vec.len a.result
   let s := alloc.vec.Vec.deref l.edge_facets.start
@@ -4855,7 +4878,7 @@ def inc.unify (l : inc.Ledger) (a : inc.Assembled) : Result inc.Body := do
   ok { faces := faces1, edges, verts }
 
 /-- [forge_bool_core::inc::fan_rel]:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 744:0-746:1 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 747:0-749:1 -/
 def inc.fan_rel (s : inc.Sector) (t : inc.Sector) : Result Bool := do
   if s.a = t.a
   then ok true
@@ -4867,7 +4890,7 @@ def inc.fan_rel (s : inc.Sector) (t : inc.Sector) : Result Bool := do
          else ok (s.b = t.b)
 
 /-- [forge_bool_core::inc::fans]: loop body 1:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 754:8-759:9 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 757:8-762:9 -/
 @[rust_loop_body]
 def inc.fans_loop0_loop0.body
   (l : inc.Ledger) (ar : Slice Std.Usize) (p : Std.Usize) (uf : union_find.Uf)
@@ -4895,7 +4918,7 @@ def inc.fans_loop0_loop0.body
   else ok (done (l, uf))
 
 /-- [forge_bool_core::inc::fans]: loop 1:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 754:8-759:9 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 757:8-762:9 -/
 @[rust_loop]
 def inc.fans_loop0_loop0
   (l : inc.Ledger) (ar : Slice Std.Usize) (uf : union_find.Uf) (p : Std.Usize)
@@ -4907,7 +4930,7 @@ def inc.fans_loop0_loop0
     (uf, q)
 
 /-- [forge_bool_core::inc::fans]: loop body 0:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 752:4-761:5 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 755:4-764:5 -/
 @[rust_loop_body]
 def inc.fans_loop0.body
   (ar : Slice Std.Usize) (l : inc.Ledger) (uf : union_find.Uf) (p : Std.Usize)
@@ -4924,7 +4947,7 @@ def inc.fans_loop0.body
   else ok (done uf)
 
 /-- [forge_bool_core::inc::fans]: loop 0:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 752:4-761:5 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 755:4-764:5 -/
 @[rust_loop]
 def inc.fans_loop0
   (l : inc.Ledger) (ar : Slice Std.Usize) (uf : union_find.Uf) (p : Std.Usize)
@@ -4936,7 +4959,7 @@ def inc.fans_loop0
     (l, uf, p)
 
 /-- [forge_bool_core::inc::fans]:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 749:0-763:1 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 752:0-766:1 -/
 def inc.fans
   (l : inc.Ledger) (ar : Slice Std.Usize) : Result union_find.Uf := do
   let i := Slice.len ar
@@ -4944,7 +4967,7 @@ def inc.fans
   inc.fans_loop0 l ar uf 0#usize
 
 /-- [forge_bool_core::inc::bad_vert]: loop body 0:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 771:4-774:5 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 774:4-777:5 -/
 @[rust_loop_body]
 def inc.bad_vert_loop.body
   (ar : alloc.vec.Vec Std.Usize) (uf : union_find.Uf) (bad : Bool)
@@ -4964,7 +4987,7 @@ def inc.bad_vert_loop.body
     else ok (done bad)
 
 /-- [forge_bool_core::inc::bad_vert]: loop 0:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 771:4-774:5 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 774:4-777:5 -/
 @[rust_loop]
 def inc.bad_vert_loop
   (ar : alloc.vec.Vec Std.Usize) (uf : union_find.Uf) (bad : Bool)
@@ -4976,7 +4999,7 @@ def inc.bad_vert_loop
     (uf, bad, p)
 
 /-- [forge_bool_core::inc::bad_vert]:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 766:0-776:1 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 769:0-779:1 -/
 def inc.bad_vert
   (l : inc.Ledger) (a : inc.Assembled) (v : Std.Usize) : Result Bool := do
   let ar ← inc.around_v l a v
@@ -4985,7 +5008,7 @@ def inc.bad_vert
   inc.bad_vert_loop ar uf false 1#usize
 
 /-- [forge_bool_core::inc::core_k]: loop body 0:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 668:4-678:5 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 671:4-681:5 -/
 @[rust_loop_body]
 def inc.core_k_loop0.body
   (v : alloc.vec.Vec (Std.U32 × Std.U32)) (s : inc.Split) (keep : Slice Bool)
@@ -5038,7 +5061,7 @@ def inc.core_k_loop0.body
   else ok (done (v1, v2, v3))
 
 /-- [forge_bool_core::inc::core_k]: loop 0:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 668:4-678:5 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 671:4-681:5 -/
 @[rust_loop]
 def inc.core_k_loop0
   (v : alloc.vec.Vec (Std.U32 × Std.U32)) (s : inc.Split) (keep : Slice Bool)
@@ -5052,7 +5075,7 @@ def inc.core_k_loop0
     (v1, v2, v3, f)
 
 /-- [forge_bool_core::inc::core_k]: loop body 1:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 686:4-692:5 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 689:4-695:5 -/
 @[rust_loop_body]
 def inc.core_k_loop1.body
   (i : Std.U32) (v : alloc.vec.Vec BodyId) (v1 : alloc.vec.Vec Std.U32)
@@ -5099,7 +5122,7 @@ def inc.core_k_loop1.body
     else ok (done (bad, found))
 
 /-- [forge_bool_core::inc::core_k]: loop 1:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 686:4-692:5 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 689:4-695:5 -/
 @[rust_loop]
 def inc.core_k_loop1
   (i : Std.U32) (v : alloc.vec.Vec BodyId) (v1 : alloc.vec.Vec Std.U32)
@@ -5119,7 +5142,7 @@ def inc.core_k_loop1
     (bad, found, e)
 
 /-- [forge_bool_core::inc::core_k]: loop body 2:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 694:4-700:5 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 697:4-703:5 -/
 @[rust_loop_body]
 def inc.core_k_loop2.body
   (i : Std.U32) (v : alloc.vec.Vec BodyId) (v1 : alloc.vec.Vec Std.U32)
@@ -5165,7 +5188,7 @@ def inc.core_k_loop2.body
     else ok (done (bad, found))
 
 /-- [forge_bool_core::inc::core_k]: loop 2:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 694:4-700:5 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 697:4-703:5 -/
 @[rust_loop]
 def inc.core_k_loop2
   (i : Std.U32) (v : alloc.vec.Vec BodyId) (v1 : alloc.vec.Vec Std.U32)
@@ -5185,7 +5208,7 @@ def inc.core_k_loop2
     (bad, found, v13)
 
 /-- [forge_bool_core::inc::core_k]:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 659:0-709:1 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 662:0-712:1 -/
 def inc.core_k
   (l : inc.Ledger) (s : inc.Split) (keep : Slice Bool) :
   Result inc.Outcome
@@ -5374,7 +5397,7 @@ def sort.sort_u32
     sort.sort_u32_loop0 n src src 1#usize
 
 /-- [forge_bool_core::inc::collapse]: loop body 0:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 537:4-544:5 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 540:4-547:5 -/
 @[rust_loop_body]
 def inc.collapse_loop0.body
   (v : alloc.vec.Vec Std.U32) (mt : inc.MetricLedger) (nr : Std.Usize)
@@ -5411,7 +5434,7 @@ def inc.collapse_loop0.body
   else ok (done (mt.enclosed, is_thin, any))
 
 /-- [forge_bool_core::inc::collapse]: loop 0:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 537:4-544:5 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 540:4-547:5 -/
 @[rust_loop]
 def inc.collapse_loop0
   (v : alloc.vec.Vec Std.U32) (mt : inc.MetricLedger) (nr : Std.Usize)
@@ -5424,7 +5447,7 @@ def inc.collapse_loop0
     (is_thin, any, k)
 
 /-- [forge_bool_core::inc::collapse]: loop body 1:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 548:8-554:9 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 551:8-557:9 -/
 @[rust_loop_body]
 def inc.collapse_loop1.body
   (v : alloc.vec.Vec Std.U32) (v1 : alloc.vec.Vec inc.RoomId) (nr : Std.Usize)
@@ -5459,7 +5482,7 @@ def inc.collapse_loop1.body
   else ok (done is_enc)
 
 /-- [forge_bool_core::inc::collapse]: loop 1:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 548:8-554:9 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 551:8-557:9 -/
 @[rust_loop]
 def inc.collapse_loop1
   (v : alloc.vec.Vec Std.U32) (v1 : alloc.vec.Vec inc.RoomId) (nr : Std.Usize)
@@ -5471,7 +5494,7 @@ def inc.collapse_loop1
     (is_enc, k)
 
 /-- [forge_bool_core::inc::collapse]: loop body 2:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 559:8-566:9 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 562:8-569:9 -/
 @[rust_loop_body]
 def inc.collapse_loop2.body
   (v : alloc.vec.Vec (Std.U32 × Std.U32)) (v1 : alloc.vec.Vec Std.U32)
@@ -5511,7 +5534,7 @@ def inc.collapse_loop2.body
   else ok (done uf)
 
 /-- [forge_bool_core::inc::collapse]: loop 2:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 559:8-566:9 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 562:8-569:9 -/
 @[rust_loop]
 def inc.collapse_loop2
   (v : alloc.vec.Vec (Std.U32 × Std.U32)) (v1 : alloc.vec.Vec Std.U32)
@@ -5524,7 +5547,7 @@ def inc.collapse_loop2
     (uf, f)
 
 /-- [forge_bool_core::inc::collapse]: loop body 3:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 571:8-577:9 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 574:8-580:9 -/
 @[rust_loop_body]
 def inc.collapse_loop3.body
   (nt : Std.Usize) (is_thin : alloc.vec.Vec Bool) (is_enc : alloc.vec.Vec Bool)
@@ -5559,7 +5582,7 @@ def inc.collapse_loop3.body
   else ok (done (uf, all_enc))
 
 /-- [forge_bool_core::inc::collapse]: loop 3:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 571:8-577:9 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 574:8-580:9 -/
 @[rust_loop]
 def inc.collapse_loop3
   (nt : Std.Usize) (is_thin : alloc.vec.Vec Bool) (is_enc : alloc.vec.Vec Bool)
@@ -5572,7 +5595,7 @@ def inc.collapse_loop3
     (uf, all_enc, t)
 
 /-- [forge_bool_core::inc::collapse]: loop body 4:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 579:8-591:9 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 582:8-594:9 -/
 @[rust_loop_body]
 def inc.collapse_loop4.body
   (v : alloc.vec.Vec (Std.U32 × Std.U32)) (v1 : alloc.vec.Vec Std.U32)
@@ -5640,7 +5663,7 @@ def inc.collapse_loop4.body
   else ok (done (uf, rim))
 
 /-- [forge_bool_core::inc::collapse]: loop 4:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 579:8-591:9 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 582:8-594:9 -/
 @[rust_loop]
 def inc.collapse_loop4
   (v : alloc.vec.Vec (Std.U32 × Std.U32)) (v1 : alloc.vec.Vec Std.U32)
@@ -5654,7 +5677,7 @@ def inc.collapse_loop4
     (uf, rim, f)
 
 /-- [forge_bool_core::inc::collapse]: loop body 6:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 598:16-603:17 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 601:16-606:17 -/
 @[rust_loop_body]
 def inc.collapse_loop5_loop0.body
   (rim : alloc.vec.Vec (alloc.vec.Vec Std.U32)) (t : Std.Usize)
@@ -5699,7 +5722,7 @@ def inc.collapse_loop5_loop0.body
   else ok (done d)
 
 /-- [forge_bool_core::inc::collapse]: loop 6:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 598:16-603:17 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 601:16-606:17 -/
 @[rust_loop]
 def inc.collapse_loop5_loop0
   (rim : alloc.vec.Vec (alloc.vec.Vec Std.U32)) (t : Std.Usize)
@@ -5711,7 +5734,7 @@ def inc.collapse_loop5_loop0
     (d, j)
 
 /-- [forge_bool_core::inc::collapse]: loop body 5:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 593:8-607:9 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 596:8-610:9 -/
 @[rust_loop_body]
 def inc.collapse_loop5.body
   (nt : Std.Usize) (rim : alloc.vec.Vec (alloc.vec.Vec Std.U32))
@@ -5745,7 +5768,7 @@ def inc.collapse_loop5.body
   else ok (done rim)
 
 /-- [forge_bool_core::inc::collapse]: loop 5:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 593:8-607:9 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 596:8-610:9 -/
 @[rust_loop]
 def inc.collapse_loop5
   (nt : Std.Usize) (rim : alloc.vec.Vec (alloc.vec.Vec Std.U32))
@@ -5757,7 +5780,7 @@ def inc.collapse_loop5
     (rim, t)
 
 /-- [forge_bool_core::inc::collapse]: loop body 8:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 621:16-624:17 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 624:16-627:17 -/
 @[rust_loop_body]
 def inc.collapse_loop6_loop0.body
   (keep : Slice Bool) (rm : alloc.vec.Vec Std.U32) (first : Bool)
@@ -5780,7 +5803,7 @@ def inc.collapse_loop6_loop0.body
   else ok (done uniform)
 
 /-- [forge_bool_core::inc::collapse]: loop 8:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 621:16-624:17 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 624:16-627:17 -/
 @[rust_loop]
 def inc.collapse_loop6_loop0
   (keep : Slice Bool) (rm : alloc.vec.Vec Std.U32) (first : Bool)
@@ -5793,7 +5816,7 @@ def inc.collapse_loop6_loop0
     (uniform, j)
 
 /-- [forge_bool_core::inc::collapse]: loop body 7:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 610:8-630:9 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 613:8-633:9 -/
 @[rust_loop_body]
 def inc.collapse_loop6.body
   (v : alloc.vec.Vec Std.U32) (keep : Slice Bool) (nt : Std.Usize)
@@ -5851,7 +5874,7 @@ def inc.collapse_loop6.body
   else ok (done (bad, uf))
 
 /-- [forge_bool_core::inc::collapse]: loop 7:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 610:8-630:9 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 613:8-633:9 -/
 @[rust_loop]
 def inc.collapse_loop6
   (v : alloc.vec.Vec Std.U32) (keep : Slice Bool) (nt : Std.Usize)
@@ -5866,7 +5889,7 @@ def inc.collapse_loop6
     (bad, uf, t)
 
 /-- [forge_bool_core::inc::collapse]: loop body 9:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 635:12-645:13 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 638:12-648:13 -/
 @[rust_loop_body]
 def inc.collapse_loop7.body
   (keep : Slice Bool) (nt : Std.Usize) (is_thin : alloc.vec.Vec Bool)
@@ -5910,7 +5933,7 @@ def inc.collapse_loop7.body
   else ok (done fill)
 
 /-- [forge_bool_core::inc::collapse]: loop 9:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 635:12-645:13 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 638:12-648:13 -/
 @[rust_loop]
 def inc.collapse_loop7
   (keep : Slice Bool) (nt : Std.Usize) (is_thin : alloc.vec.Vec Bool)
@@ -5924,7 +5947,7 @@ def inc.collapse_loop7
     (uf, fill, t)
 
 /-- [forge_bool_core::inc::collapse]: loop body 10:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 647:12-652:13 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 650:12-655:13 -/
 @[rust_loop_body]
 def inc.collapse_loop8.body
   (nt : Std.Usize) (is_thin : alloc.vec.Vec Bool) (fill : alloc.vec.Vec Bool)
@@ -5950,7 +5973,7 @@ def inc.collapse_loop8.body
   else ok (done keep)
 
 /-- [forge_bool_core::inc::collapse]: loop 10:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 647:12-652:13 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 650:12-655:13 -/
 @[rust_loop]
 def inc.collapse_loop8
   (keep : Slice Bool) (nt : Std.Usize) (is_thin : alloc.vec.Vec Bool)
@@ -5962,7 +5985,7 @@ def inc.collapse_loop8
     (keep, t)
 
 /-- [forge_bool_core::inc::collapse]:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 530:0-656:1 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 533:0-659:1 -/
 def inc.collapse
   (l : inc.Ledger) (s : inc.Split) (keep : Slice Bool) (mt : inc.MetricLedger)
   :
@@ -6002,7 +6025,7 @@ def inc.collapse
   else ok (inc.NONE, keep)
 
 /-- [forge_bool_core::inc::core]: loop body 1:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 491:12-494:13
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 494:12-497:13
     Visibility: public -/
 @[rust_loop_body]
 def inc.core_loop0_loop0.body
@@ -6040,7 +6063,7 @@ def inc.core_loop0_loop0.body
   else ok (done ok1)
 
 /-- [forge_bool_core::inc::core]: loop 1:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 491:12-494:13
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 494:12-497:13
     Visibility: public -/
 @[rust_loop]
 def inc.core_loop0_loop0
@@ -6054,7 +6077,7 @@ def inc.core_loop0_loop0
     (ok1, i)
 
 /-- [forge_bool_core::inc::core]: loop body 0:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 487:8-496:9
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 490:8-499:9
     Visibility: public -/
 @[rust_loop_body]
 def inc.core_loop0.body
@@ -6087,7 +6110,7 @@ def inc.core_loop0.body
   else ok (done (s, ok1))
 
 /-- [forge_bool_core::inc::core]: loop 0:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 487:8-496:9
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 490:8-499:9
     Visibility: public -/
 @[rust_loop]
 def inc.core_loop0
@@ -6101,7 +6124,7 @@ def inc.core_loop0
     (ok1, f)
 
 /-- [forge_bool_core::inc::core]: loop body 3:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 506:16-509:17
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 509:16-512:17
     Visibility: public -/
 @[rust_loop_body]
 def inc.core_loop1_loop0.body
@@ -6122,7 +6145,7 @@ def inc.core_loop1_loop0.body
   else ok (done mv)
 
 /-- [forge_bool_core::inc::core]: loop 3:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 506:16-509:17
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 509:16-512:17
     Visibility: public -/
 @[rust_loop]
 def inc.core_loop1_loop0
@@ -6135,7 +6158,7 @@ def inc.core_loop1_loop0
     (mv, i)
 
 /-- [forge_bool_core::inc::core]: loop body 2:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 503:12-512:13
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 506:12-515:13
     Visibility: public -/
 @[rust_loop_body]
 def inc.core_loop1.body
@@ -6157,7 +6180,7 @@ def inc.core_loop1.body
   else ok (done keep)
 
 /-- [forge_bool_core::inc::core]: loop 2:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 503:12-512:13
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 506:12-515:13
     Visibility: public -/
 @[rust_loop]
 def inc.core_loop1
@@ -6171,7 +6194,7 @@ def inc.core_loop1
     (keep, t)
 
 /-- [forge_bool_core::inc::core]:
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 476:0-522:1
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 479:0-525:1
     Visibility: public -/
 def inc.core
   (l : inc.Ledger) (rule : Rule) (m : inc.MetricLedger) :

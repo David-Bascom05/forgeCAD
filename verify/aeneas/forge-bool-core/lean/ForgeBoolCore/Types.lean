@@ -152,7 +152,7 @@ inductive inc.Outcome where
 | Refused : inc.Refusal → inc.Outcome
 
 /-- [forge_bool_core::inc::Split]
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 356:0-360:1 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 359:0-363:1 -/
 structure inc.Split where
   piece_of : alloc.vec.Vec Bool
   rooms : alloc.vec.Vec Std.U32
@@ -164,7 +164,7 @@ structure union_find.Uf where
   parent : alloc.vec.Vec Std.U32
 
 /-- [forge_bool_core::inc::Assembled]
-    Source: 'kernel/forge-bool-core/src/inc.rs', lines 467:0-471:1 -/
+    Source: 'kernel/forge-bool-core/src/inc.rs', lines 470:0-474:1 -/
 structure inc.Assembled where
   result : alloc.vec.Vec Std.U32
   rpos : alloc.vec.Vec Std.U32
