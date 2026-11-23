@@ -117,6 +117,19 @@ theorem filterMap_inj {γ : Type u} {δ : Type v} {f : γ → Option δ} :
       · subst eb; rw [hy] at hfb; cases hfb; exact absurd ⟨a, ha', hfa⟩ hnd.1
       · exact filterMap_inj hnd.2 ha' hb' hfa hfb
 
+/-- A chain whose steps keep a property, re-read with another relation that agrees on such pairs. -/
+theorem conn_restrict2 {r r' : γ → γ → Bool} {xs ys : List γ} {P : γ → Prop} {a b : γ}
+    (hab : Conn r xs a b) (ha : P a) (hstep : ∀ x y, P x → y ∈ xs → r x y = true → P y)
+    (hys : ∀ y ∈ xs, P y → y ∈ ys) (hrel : ∀ x y, P x → P y → r x y = true → r' x y = true) :
+    Conn r' ys a b := by
+  have : P b ∧ Conn r' ys a b := by
+    induction hab with
+    | refl => exact ⟨ha, Conn.refl⟩
+    | step _ hc hbc ih =>
+      have hP := hstep _ _ ih.1 hc hbc
+      exact ⟨hP, Conn.step ih.2 (hys _ hc hP) (hrel _ _ ih.1 hP hbc)⟩
+  exact this.2
+
 end ConnMap
 
 namespace IncLedger
@@ -152,6 +165,47 @@ theorem badVert_iff (L : IncLedger α) (kt : KeepTabI α) (v : α) (hnd : (L.aro
         · exact absurd ((Conn.symm fanRel_symm hc₀ Hc).trans Hd) hn
         · exact ⟨d, hd, Hd⟩
       · exact ⟨c, hc, Hc⟩
+
+/-! ### Faces of the result (IncLedger) -/
+
+theorem joinRel_symm (L : IncLedger α) (kt : KeepTabI α) : ∀ x y, L.joinRel kt x y = L.joinRel kt y x := by
+  intro x y
+  rw [Bool.eq_iff_iff]
+  simp only [joinRel, Bool.and_eq_true, beq_iff_eq, List.any_eq_true]
+  exact ⟨fun ⟨⟨a, b⟩, e, he, c, d⟩ => ⟨⟨a.symm, b.symm⟩, e, he, d, c⟩,
+    fun ⟨⟨a, b⟩, e, he, c, d⟩ => ⟨⟨a.symm, b.symm⟩, e, he, d, c⟩⟩
+
+theorem result_nodup (L : IncLedger α) (kt : KeepTabI α) (h : L.facets.Nodup) : (L.result kt).Nodup :=
+  h.filter _
+
+theorem mem_heads (L : IncLedger α) {kt : KeepTabI α} {h : α} :
+    h ∈ L.heads kt ↔ h ∈ L.result kt ∧ head (L.joinRel kt) (L.result kt) h = some h := by
+  simp [heads]
+
+theorem mem_faceOf (L : IncLedger α) {kt : KeepTabI α} (hnd : L.facets.Nodup) {h c : α} (hh : h ∈ L.result kt) :
+    c ∈ L.faceOf kt h ↔ c ∈ L.result kt ∧ Conn (L.joinRel kt) (L.result kt) h c := by
+  simp only [faceOf, List.mem_filter, List.contains_iff_mem]
+  rw [cls_spec _ (L.result_nodup kt hnd) hh]
+
+theorem in_some_face (L : IncLedger α) {kt : KeepTabI α} (hnd : L.facets.Nodup) {c : α} (hc : c ∈ L.result kt) :
+    ∃ h ∈ L.heads kt, c ∈ L.faceOf kt h := by
+  obtain ⟨h, hhd, hm, hconn⟩ := head_some (L.joinRel kt) (L.result_nodup kt hnd) hc
+  have hh : head (L.joinRel kt) (L.result kt) h = some h := by
+    rw [← head_eq (L.joinRel kt) (L.joinRel_symm kt) (L.result_nodup kt hnd) hc hconn]; exact hhd
+  refine ⟨h, (L.mem_heads).mpr ⟨hm, hh⟩, (L.mem_faceOf hnd hm).mpr ⟨hc, ?_⟩⟩
+  exact Conn.symm (L.joinRel_symm kt) hc hconn
+
+/-- Carrier and sense are constant along `joinRel`. -/
+theorem joinRel_carrier (L : IncLedger α) {kt : KeepTabI α} {x y : α} (h : L.joinRel kt x y = true) :
+    L.carrier x = L.carrier y ∧ L.orient kt x = L.orient kt y := by
+  simp only [joinRel, Bool.and_eq_true, beq_iff_eq] at h
+  exact ⟨h.1.1, h.1.2⟩
+
+theorem conn_carrier (L : IncLedger α) {kt : KeepTabI α} {xs : List α} {x y : α}
+    (h : Conn (L.joinRel kt) xs x y) : L.carrier x = L.carrier y ∧ L.orient kt x = L.orient kt y := by
+  induction h with
+  | refl => exact ⟨rfl, rfl⟩
+  | step _ _ hr ih => exact ⟨ih.1.trans (L.joinRel_carrier hr).1, ih.2.trans (L.joinRel_carrier hr).2⟩
 
 end IncLedger
 
@@ -436,6 +490,86 @@ theorem bad_vert_iff (h : Refines A B σ τ ν κ) (rule : Rule) :
     cases hν : ν w with
     | none => rw [badVert_none h rule hw hν] at hb; cases hb
     | some V => exact ⟨V, h.vert_mem w hw V hν, by rw [badVert_some h rule hw hν]; exact hb⟩
+
+/-! ### 4. Unify: faces -/
+
+theorem join_conn (h : Refines A B σ τ ν κ) (rule : Rule) {c d : α}
+    (hc : c ∈ A.result (A.keepTab rule)) (hd : d ∈ A.result (A.keepTab rule)) :
+    Conn (A.joinRel (A.keepTab rule)) (A.result (A.keepTab rule)) c d ↔
+    Conn (B.joinRel (B.keepTab rule)) (B.result (B.keepTab rule)) (σ c) (σ d) := by
+  have hfA : ∀ x ∈ A.result (A.keepTab rule), x ∈ A.facets := fun x hx => (A.mem_result.mp hx).1
+  refine conn_map (fun x hx => (result_iff h rule (hfA x hx)).mpr hx) ?_ ?_ ?_ hc hd
+  · intro x hx y hy hr
+    have hxf := hfA x hx
+    have hyf := hfA y hy
+    obtain ⟨hcar, hor⟩ := A.joinRel_carrier hr
+    simp only [IncLedger.joinRel, Bool.and_eq_true, List.any_eq_true, List.contains_iff_mem] at hr
+    obtain ⟨_, e, he, hxe, hye⟩ := hr
+    cases hτ : τ e with
+    | none => exact Or.inl ((h.edge_inner e he hτ).2 x hxe y hye)
+    | some E =>
+      right
+      have hw := h.edge_wings e he E hτ
+      simp only [IncLedger.joinRel, Bool.and_eq_true, beq_iff_eq, List.any_eq_true, List.contains_iff_mem]
+      refine ⟨⟨by rw [h.carrier x hxf, h.carrier y hyf, hcar], by rw [orient_eq h rule hxf, orient_eq h rule hyf, hor]⟩,
+        E, h.edge_mem e he E hτ, hw.mem_iff.mp (List.mem_map_of_mem hxe), hw.mem_iff.mp (List.mem_map_of_mem hye)⟩
+  · intro C hC D hD hr
+    obtain ⟨hcar, hor⟩ := B.joinRel_carrier hr
+    simp only [IncLedger.joinRel, Bool.and_eq_true, List.any_eq_true, List.contains_iff_mem] at hr
+    obtain ⟨_, E, hE, hCE, hDE⟩ := hr
+    obtain ⟨e, he, hτ⟩ := h.edge_onto E hE
+    have hw := h.edge_wings e he E hτ
+    obtain ⟨c, hce, rfl⟩ := List.mem_map.mp (hw.mem_iff.mpr hCE)
+    obtain ⟨d, hde, rfl⟩ := List.mem_map.mp (hw.mem_iff.mpr hDE)
+    have hcf := h.edge_facets_A e he c hce
+    have hdf := h.edge_facets_A e he d hde
+    refine ⟨c, (result_iff h rule hcf).mp hC, d, (result_iff h rule hdf).mp hD, rfl, rfl, ?_⟩
+    simp only [IncLedger.joinRel, Bool.and_eq_true, beq_iff_eq, List.any_eq_true, List.contains_iff_mem]
+    exact ⟨⟨by rw [← h.carrier c hcf, ← h.carrier d hdf, hcar], by rw [← orient_eq h rule hcf, ← orient_eq h rule hdf, hor]⟩,
+      e, he, hce, hde⟩
+  · intro x hx y hy e
+    have hxf := hfA x hx
+    have hc := h.facet_fibre x hxf y (hfA y hy) e
+    refine conn_restrict2 (P := fun z => z ∈ A.facets ∧ σ z = σ x) hc ⟨hxf, rfl⟩ ?_ ?_ ?_
+    · intro z w ⟨hz, hze⟩ hw hr
+      refine ⟨hw, ?_⟩
+      simp only [List.any_eq_true, Bool.and_eq_true, beq_iff_eq, List.contains_iff_mem] at hr
+      obtain ⟨g, hg, ⟨hτg, hzg⟩, hwg⟩ := hr
+      rw [← hze]; exact ((h.edge_inner g hg hτg).2 z hzg w hwg).symm
+    · intro z _ ⟨hz, hze⟩
+      exact (result_iff h rule hz).mp (by rw [hze]; exact (result_iff h rule hxf).mpr hx)
+    · intro z w ⟨hz, hze⟩ ⟨hw, hwe⟩ hr
+      simp only [List.any_eq_true, Bool.and_eq_true, beq_iff_eq, List.contains_iff_mem] at hr
+      obtain ⟨g, hg, ⟨_, hzg⟩, hwg⟩ := hr
+      simp only [IncLedger.joinRel, Bool.and_eq_true, beq_iff_eq, List.any_eq_true, List.contains_iff_mem]
+      refine ⟨⟨?_, ?_⟩, g, hg, hzg, hwg⟩
+      · rw [← h.carrier z hz, ← h.carrier w hw, hze, hwe]
+      · rw [← orient_eq h rule hz, ← orient_eq h rule hw, hze, hwe]
+
+/-- The coarse face of `σ c` corresponds to the fine face of `c`. -/
+theorem face_corr (h : Refines A B σ τ ν κ) (rule : Rule) {c h₀ : α} {h₁ : β}
+    (hc : c ∈ A.result (A.keepTab rule)) (h₀m : h₀ ∈ A.heads (A.keepTab rule)) (hc₀ : c ∈ A.faceOf (A.keepTab rule) h₀)
+    (h₁m : h₁ ∈ B.heads (B.keepTab rule)) (hc₁ : σ c ∈ B.faceOf (B.keepTab rule) h₁) :
+    FaceCorr σ ⟨B.faceOf (B.keepTab rule) h₁, B.carrier h₁, B.orient (B.keepTab rule) h₁⟩
+      ⟨A.faceOf (A.keepTab rule) h₀, A.carrier h₀, A.orient (A.keepTab rule) h₀⟩ := by
+  have hA0 := ((A.mem_heads).mp h₀m).1
+  have hB1 := ((B.mem_heads).mp h₁m).1
+  have cA := ((A.mem_faceOf h.nodupA hA0).mp hc₀).2
+  have cB := ((B.mem_faceOf h.nodupB hB1).mp hc₁).2
+  have hcf := (A.mem_result.mp hc).1
+  refine ⟨?_, ?_, fun ψ => ⟨fun hψ => ?_, fun ⟨φ, hφ, e⟩ => ?_⟩⟩
+  · simp only
+    rw [(B.conn_carrier cB).1, h.carrier c hcf, ← (A.conn_carrier cA).1]
+  · simp only
+    rw [(B.conn_carrier cB).2, orient_eq h rule hcf, ← (A.conn_carrier cA).2]
+  · obtain ⟨hψr, hψc⟩ := (B.mem_faceOf h.nodupB hB1).mp hψ
+    obtain ⟨φ, hφ, rfl⟩ := result_from h rule hψr
+    refine ⟨φ, (A.mem_faceOf h.nodupA hA0).mpr ⟨hφ, cA.trans ?_⟩, rfl⟩
+    exact (join_conn h rule hc hφ).mpr ((Conn.symm (B.joinRel_symm _) hB1 cB).trans hψc)
+  · subst e
+    obtain ⟨hφr, hφc⟩ := (A.mem_faceOf h.nodupA hA0).mp hφ
+    refine (B.mem_faceOf h.nodupB hB1).mpr ⟨(result_iff h rule (A.mem_result.mp hφr).1).mpr hφr, cB.trans ?_⟩
+    exact (join_conn h rule hc hφr).mp ((Conn.symm (A.joinRel_symm _) hA0 cA).trans hφc)
 
 end Refines
 
