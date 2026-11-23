@@ -49,7 +49,10 @@ fn one(path: &str) -> Vec<String> {
             Ok(Ok(m)) => (m.volume, m.area),
             _ => (f64::NAN, f64::NAN),
         };
-        let (vol, area) = (if vol.is_finite() { vol } else { -1.0 }, if area.is_finite() { area } else { -1.0 });
+        let (vol, area) = (
+            if vol.is_finite() { vol } else { -1.0 },
+            if area.is_finite() { area } else { -1.0 },
+        );
         out.push(format!(
             "{head},\"outcome\":\"built\",\"valid\":{valid},\"vol\":{vol},\"area\":{area},\"faces\":{}}}",
             a.face_ids().count()
@@ -73,21 +76,29 @@ fn main() {
     } else {
         a[2..].to_vec()
     };
-    let jobs: usize = std::env::var("JOBS").ok().and_then(|s| s.parse().ok()).unwrap_or(2);
+    let jobs: usize = std::env::var("JOBS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(2);
     let next = AtomicUsize::new(0);
     let rows = std::sync::Mutex::new(Vec::new());
     std::thread::scope(|sc| {
         for _ in 0..jobs {
-            let _ = std::thread::Builder::new().stack_size(STACK).spawn_scoped(sc, || loop {
-                let i = next.fetch_add(1, Ordering::SeqCst);
-                let Some(f) = files.get(i) else { break };
-                let r = std::panic::catch_unwind(|| one(f))
-                    .unwrap_or_else(|_| vec![format!("{{\"file\":\"{}\",\"outcome\":\"panicked\"}}", esc(f))]);
-                for l in &r {
-                    println!("{l}");
-                }
-                rows.lock().unwrap().extend(r);
-            });
+            let _ = std::thread::Builder::new()
+                .stack_size(STACK)
+                .spawn_scoped(sc, || {
+                    loop {
+                        let i = next.fetch_add(1, Ordering::SeqCst);
+                        let Some(f) = files.get(i) else { break };
+                        let r = std::panic::catch_unwind(|| one(f)).unwrap_or_else(|_| {
+                            vec![format!("{{\"file\":\"{}\",\"outcome\":\"panicked\"}}", esc(f))]
+                        });
+                        for l in &r {
+                            println!("{l}");
+                        }
+                        rows.lock().unwrap().extend(r);
+                    }
+                });
         }
     });
     let mut rows = rows.into_inner().unwrap();

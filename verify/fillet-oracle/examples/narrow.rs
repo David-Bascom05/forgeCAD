@@ -25,7 +25,9 @@ fn one(path: &str) -> Vec<String> {
     let m = forge_lang::fuzz::build(&src);
     let mut out = Vec::new();
     for (k, f) in m.features.iter().enumerate() {
-        let Feature::Fillet { edges, .. } = f else { continue };
+        let Feature::Fillet { edges, .. } = f else {
+            continue;
+        };
         let Some(s) = m.body_after(k) else { break };
         let built = k < m.built();
         let mut hits = Vec::new();
@@ -34,7 +36,9 @@ fn one(path: &str) -> Vec<String> {
                 continue;
             };
             let Some(r) = rad.constant() else { continue };
-            let Curve::Line(line) = &s.edge(e).curve else { continue };
+            let Curve::Line(line) = &s.edge(e).curve else {
+                continue;
+            };
             for g in faces_of(&s, e) {
                 if !matches!(s.face(g).surface, Surface::Plane(_)) {
                     continue;
@@ -72,7 +76,11 @@ fn one(path: &str) -> Vec<String> {
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     let files: Vec<String> = if a.len() == 3 && a[2].ends_with(".txt") {
-        std::fs::read_to_string(&a[2]).expect("a list").lines().map(String::from).collect()
+        std::fs::read_to_string(&a[2])
+            .expect("a list")
+            .lines()
+            .map(String::from)
+            .collect()
     } else {
         a[2..].to_vec()
     };

@@ -664,16 +664,18 @@ fn main() {
     let lines = std::sync::Mutex::new(Vec::new());
     std::thread::scope(|sc| {
         for _ in 0..jobs {
-            let _ = std::thread::Builder::new().stack_size(STACK).spawn_scoped(sc, || {
-                loop {
-                    let i = next.fetch_add(1, Ordering::Relaxed);
-                    let Some(f) = files.get(i) else { break };
-                    for l in one(f, per_face, randoms) {
-                        eprintln!("{l}");
-                        lines.lock().expect("lines").push(l);
+            let _ = std::thread::Builder::new()
+                .stack_size(STACK)
+                .spawn_scoped(sc, || {
+                    loop {
+                        let i = next.fetch_add(1, Ordering::Relaxed);
+                        let Some(f) = files.get(i) else { break };
+                        for l in one(f, per_face, randoms) {
+                            eprintln!("{l}");
+                            lines.lock().expect("lines").push(l);
+                        }
                     }
-                }
-            });
+                });
         }
     });
     let mut lines = lines.into_inner().expect("lines");
