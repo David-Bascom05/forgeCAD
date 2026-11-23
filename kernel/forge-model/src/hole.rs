@@ -497,28 +497,33 @@ pub(crate) fn sized_through(features: crate::History<'_>, i: usize) -> bool {
 pub(crate) fn body_box(b: &forge_topo::Body) -> Box3 {
     use forge_geom::{Curve, Surface};
     // every edge's ends: so a line edge adds nothing more
-    let mut bx = Box3::from_points(b.vertex_ids().map(|v| b.vertex(v).point));
-    for e in b.edge_ids() {
-        let edge = b.edge(e);
-        // a curved edge's box if it is kept already, else one as cheap as sound: a circle's or
-        // ellipse's whole box (no arc extremes worked out)
+    let mut bx = Box3::from_points(b.vertices.iter().map(|v| v.point));
+    // (the arrays walked directly: a part's bodies after many steps hold many dead entries)
+    for (k, edge) in b.edges.iter().enumerate() {
+        // a line's ends are vertices; a curved edge's box if it is kept already, else one as cheap
+        // as sound: a circle's or ellipse's whole box (no arc extremes worked out)
+        if matches!(edge.curve, Curve::Line(_)) || !edge.alive {
+            continue;
+        }
         let eb = match (&edge.curve, edge.bbox.get()) {
-            (Curve::Line(_), _) => continue,
             (_, Some(k)) => *k,
             (Curve::Circle(c), None) => Box3::from_point(c.frame.origin).grow(c.radius.abs()),
             (Curve::Ellipse(el), None) => {
                 Box3::from_point(el.frame.origin).grow(el.major.abs().max(el.minor.abs()))
             }
-            (_, None) => b.edge_box(e),
+            (_, None) => b.edge_box(forge_topo::EdgeId(k as u32)),
         };
         bx = bx.hull(&eb);
     }
-    for f in b.face_ids() {
-        match &b.face(f).surface {
+    for (k, face) in b.faces.iter().enumerate() {
+        if !face.alive {
+            continue;
+        }
+        match &face.surface {
             Surface::Sphere(s) => bx = bx.hull(&Box3::from_point(s.frame.origin).grow(s.radius)),
             Surface::Torus(t) => bx = bx.hull(&Box3::from_point(t.frame.origin).grow(t.major + t.minor)),
             Surface::Procedural(pr) if pr.v_degree() == Some(1) => {}
-            Surface::Procedural(_) => bx = bx.hull(&b.face_box(f)),
+            Surface::Procedural(_) => bx = bx.hull(&b.face_box(forge_topo::FaceId(k as u32))),
             _ => {}
         }
     }
