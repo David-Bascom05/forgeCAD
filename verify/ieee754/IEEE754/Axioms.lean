@@ -11,7 +11,7 @@ import IEEE754.Dmath.SinCos
 import IEEE754.Dmath.AtanPoly
 import IEEE754.Dmath.AtanEval
 import IEEE754.Dmath.AtanFacts
-import IEEE754.Dmath.Atan2
+import IEEE754.Dmath.AsinAcos
 
 /-!
 # Only the standard axioms
@@ -81,3 +81,5 @@ elab "#standard_axioms " ids:ident* : command => do
   IEEE754.Dmath.big_err IEEE754.Dmath.small_err IEEE754.Dmath.tiny_err IEEE754.Dmath.atan_err
   IEEE754.Dmath.quot_le IEEE754.Dmath.arctan_rel IEEE754.Dmath.zA IEEE754.Dmath.zB IEEE754.Dmath.zC IEEE754.Dmath.quad
   IEEE754.Dmath.atan2_err IEEE754.Dmath.atan2_err50 IEEE754.Dmath.arctan_rel_gen
+  IEEE754.Dmath.prod_err IEEE754.Dmath.sqrt_pert IEEE754.Dmath.sqrtArg_err IEEE754.Dmath.pert_y IEEE754.Dmath.pert_x
+  IEEE754.Dmath.arccos_eq_atan2R IEEE754.Dmath.arcsin_eq_atan2R IEEE754.Dmath.asin_err IEEE754.Dmath.acos_err
