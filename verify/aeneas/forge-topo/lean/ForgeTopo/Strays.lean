@@ -68,7 +68,7 @@ theorem loop0_spec (nv : Usize) (ne : Usize) (S E : Nat → Nat)
       TopoInst.edge_ends t e ⦃ p => p.1.val = S e.val ∧ p.2.val = E e.val ⦄)
     (used : alloc.vec.Vec Bool) (hl : used.val.length = nv.val)
     (h0 : ∀ i < nv.val, used.val[i]! = false) :
-    topo.strays_loop0 TopoInst t nv used ne 0#usize ⦃ r =>
+    topo.strays_loop0 TopoInst t used ne 0#usize ⦃ r =>
       r.val.length = nv.val ∧ ∀ i < nv.val, r.val[i]! = marked S E ne.val i ⦄ := by
   unfold topo.strays_loop0
   apply loop.spec_decr_nat (fun (y : alloc.vec.Vec Bool × Usize) => ne.val - y.2.val)
@@ -83,40 +83,42 @@ theorem loop0_spec (nv : Usize) (ne : Usize) (S E : Nat → Nat)
       apply WP.spec_bind (hse e hlt)
       rintro ⟨a, b⟩ ⟨ha, hb⟩
       show (do
-        let used1 ← if a < nv then do
+        let used1 ← if a < alloc.vec.Vec.len u then do
             let (_, index_mut_back) ← alloc.vec.Vec.index_mut (core.slice.index.SliceIndexUsizeSlice Bool) u a
             ok (index_mut_back true)
           else ok u
-        let used2 ← if b < nv then do
+        let used2 ← if b < alloc.vec.Vec.len used1 then do
             let (_, index_mut_back) ← alloc.vec.Vec.index_mut (core.slice.index.SliceIndexUsizeSlice Bool) used1 b
             ok (index_mut_back true)
           else ok used1
         let e1 ← lift (e.wrapping_add 1#usize)
         ok (ControlFlow.cont (used2, e1))) ⦃ _ => _ ⦄
       -- the first end
-      have step1 : (if a < nv then do
+      have hvl : (alloc.vec.Vec.len u).val = nv.val := by rw [alloc.vec.Vec.len_val]; exact hlen
+      have step1 : (if a < alloc.vec.Vec.len u then do
             let (_, index_mut_back) ← alloc.vec.Vec.index_mut (core.slice.index.SliceIndexUsizeSlice Bool) u a
             ok (index_mut_back true)
           else ok u) = ok (if a.val < nv.val then u.set a true else u) := by
         by_cases han : a.val < nv.val
-        · have han' : a < nv := by scalar_tac
+        · have han' : a < alloc.vec.Vec.len u := by scalar_tac
           simp only [han', ite_true, han]
           rw [idxm u a (by omega)]; simp [Std.bind_ok]
-        · have han' : ¬ a < nv := by scalar_tac
+        · have han' : ¬ a < alloc.vec.Vec.len u := by scalar_tac
           simp only [han', ite_false, han]
       rw [step1]; simp only [Std.bind_ok]
       set u1 := (if a.val < nv.val then u.set a true else u)
       have hl1 : u1.val.length = nv.val := by
         simp only [u1]; split <;> simp [alloc.vec.Vec.set_val_eq, hlen]
-      have step2 : (if b < nv then do
+      have hvl1 : (alloc.vec.Vec.len u1).val = nv.val := by rw [alloc.vec.Vec.len_val]; exact hl1
+      have step2 : (if b < alloc.vec.Vec.len u1 then do
             let (_, index_mut_back) ← alloc.vec.Vec.index_mut (core.slice.index.SliceIndexUsizeSlice Bool) u1 b
             ok (index_mut_back true)
           else ok u1) = ok (if b.val < nv.val then u1.set b true else u1) := by
         by_cases hbn : b.val < nv.val
-        · have hbn' : b < nv := by scalar_tac
+        · have hbn' : b < alloc.vec.Vec.len u1 := by scalar_tac
           simp only [hbn', ite_true, hbn]
           rw [idxm u1 b (by omega)]; simp [Std.bind_ok]
-        · have hbn' : ¬ b < nv := by scalar_tac
+        · have hbn' : ¬ b < alloc.vec.Vec.len u1 := by scalar_tac
           simp only [hbn', ite_false, hbn]
       rw [step2]; simp only [Std.bind_ok]
       have hw := succ_val e ne hlt
@@ -142,7 +144,7 @@ theorem loop0_spec (nv : Usize) (ne : Usize) (S E : Nat → Nat)
   · refine ⟨by simp, hl, fun i hi => by rw [h0 i hi]; simp [marked]⟩
 
 theorem loop1_spec (nv : Usize) (used : alloc.vec.Vec Bool) (hl : used.val.length = nv.val) :
-    topo.strays_loop1 nv used (alloc.vec.Vec.new Std.Usize) 0#usize ⦃ r =>
+    topo.strays_loop1 used (alloc.vec.Vec.new Std.Usize) 0#usize ⦃ r =>
       r.val.map (·.val) = (List.range nv.val).filter fun i => !used.val[i]! ⦄ := by
   unfold topo.strays_loop1
   apply loop.spec_decr_nat (fun (y : alloc.vec.Vec Std.Usize × Usize) => nv.val - y.2.val)
@@ -151,8 +153,9 @@ theorem loop1_spec (nv : Usize) (used : alloc.vec.Vec Bool) (hl : used.val.lengt
   · rintro ⟨o, v⟩ ⟨hle, ho⟩
     simp only at hle ho ⊢
     unfold topo.strays_loop1.body
+    have hvl : (alloc.vec.Vec.len used).val = nv.val := by rw [alloc.vec.Vec.len_val]; exact hl
     by_cases hlt : v.val < nv.val
-    · have hlt' : v < nv := by scalar_tac
+    · have hlt' : v < alloc.vec.Vec.len used := by scalar_tac
       simp only [hlt', ite_true]
       rw [idx used v (by omega)]
       simp only [Std.bind_ok]
@@ -175,7 +178,7 @@ theorem loop1_spec (nv : Usize) (used : alloc.vec.Vec Bool) (hl : used.val.lengt
         refine ⟨⟨by rw [hw]; omega, ?_⟩, by rw [hw]; omega⟩
         rw [hw, List.range_succ, List.filter_append, ho1, List.map_append, ho]
         simp_all
-    · have hlt' : ¬ (v < nv) := by scalar_tac
+    · have hlt' : ¬ (v < alloc.vec.Vec.len used) := by scalar_tac
       simp only [hlt', ite_false, WP.spec_ok]
       have : v.val = nv.val := by omega
       rw [ho, this]

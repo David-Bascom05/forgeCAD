@@ -17,6 +17,7 @@ pub trait Topo {
 }
 
 /// `check_strays`: the vertices no edge (live or left over) starts or ends at, in order.
+#[inline]
 pub fn strays<T: Topo>(t: &T) -> Vec<usize> {
     let nv = t.n_vertices();
     let mut used: Vec<bool> = vec![false; nv];
@@ -24,17 +25,17 @@ pub fn strays<T: Topo>(t: &T) -> Vec<usize> {
     let mut e = 0;
     while e < ne {
         let (a, b) = t.edge_ends(e);
-        if a < nv {
+        if a < used.len() {
             used[a] = true;
         }
-        if b < nv {
+        if b < used.len() {
             used[b] = true;
         }
         e += 1;
     }
     let mut out = Vec::new();
     let mut v = 0;
-    while v < nv {
+    while v < used.len() {
         if !used[v] {
             out.push(v);
         }
