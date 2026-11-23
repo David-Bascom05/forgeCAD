@@ -1603,6 +1603,9 @@ fn kernel_data(e: &SheetError, n: &Names) -> Vec<(&'static str, Json)> {
                     vec![("rule", "TableOrder".into()), ("row", f(row as f64))]
                 }
                 fs::RuleError::Allowance { ba } => vec![("rule", "Allowance".into()), ("ba", f(ba))],
+                fs::RuleError::RowK { row, k } => {
+                    vec![("rule", "RowK".into()), ("row", f(row as f64)), ("k", f(k))]
+                }
             });
             v
         }

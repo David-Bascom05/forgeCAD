@@ -260,8 +260,9 @@ impl Sheet {
                 }
                 let (u, w) = (u * (1.0 / lu), w * (1.0 / lw));
                 let (c, d) = (u.cross(w), u.dot(w));
-                // convex only: the outline runs counter-clockwise
-                if c <= 1e-9 {
+                // convex only (the outline runs counter-clockwise): a corner within the tolerance
+                // of straight over its shorter side is no corner
+                if c * lu.min(lw) <= tol::LINEAR {
                     continue;
                 }
                 let turn = dmath::atan2(c, d);
