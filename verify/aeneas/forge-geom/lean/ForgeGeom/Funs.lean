@@ -134,8 +134,144 @@ def spline.decasteljau
   := do
   spline.decasteljau_loop0 w s degree
 
+/-- [forge_geom::spline::insert_knot]: loop body 0:
+    Source: 'kernel/forge-geom/src/spline.rs', lines 1180:4-1188:5 -/
+@[rust_loop_body]
+def spline.insert_knot_loop0.body
+  (u : alloc.vec.Vec F64) (k : F64) (le : Std.Usize) (mult : Std.Usize)
+  (j : Std.Usize) :
+  Result (ControlFlow (Std.Usize × Std.Usize × Std.Usize) (Std.Usize ×
+    Std.Usize))
+  := do
+  let i := alloc.vec.Vec.len u
+  if j < i
+  then
+    let fl ←
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice F64) u j
+    let (le1, mult1) ←
+      if F64.Ops.le fl k
+      then
+        do
+        let le2 ← le + 1#usize
+        let i1 ← if F64.Ops.eq fl k
+                   then mult + 1#usize
+                   else ok mult
+        ok (le2, i1)
+      else ok (le, mult)
+    let j1 ← j + 1#usize
+    ok (cont (le1, mult1, j1))
+  else ok (done (le, mult))
+
+/-- [forge_geom::spline::insert_knot]: loop 0:
+    Source: 'kernel/forge-geom/src/spline.rs', lines 1180:4-1188:5 -/
+@[rust_loop]
+def spline.insert_knot_loop0
+  (u : alloc.vec.Vec F64) (k : F64) (le : Std.Usize) (mult : Std.Usize)
+  (j : Std.Usize) :
+  Result (Std.Usize × Std.Usize)
+  := do
+  loop
+    (fun (le1, mult1, j1) => spline.insert_knot_loop0.body u k le1 mult1 j1)
+    (le, mult, j)
+
+/-- [forge_geom::spline::insert_knot]: loop body 1:
+    Source: 'kernel/forge-geom/src/spline.rs', lines 1198:4-1203:5 -/
+@[rust_loop_body]
+def spline.insert_knot_loop1.body
+  (u : alloc.vec.Vec F64) (p : alloc.vec.Vec (Array F64 4#usize))
+  (degree : Std.Usize) (k : F64) (mult : Std.Usize) (s : Std.Usize)
+  (q : alloc.vec.Vec (Array F64 4#usize)) (i : Std.Usize) :
+  Result (ControlFlow ((alloc.vec.Vec (Array F64 4#usize)) × Std.Usize)
+    (alloc.vec.Vec (Array F64 4#usize)))
+  := do
+  let i1 ← s - mult
+  if i <= i1
+  then
+    let i2 ← i + degree
+    let fl ←
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice F64) u i2
+    let fl1 ←
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice F64) u i
+    let den ← lift (F64.Ops.sub fl fl1)
+    let a ←
+      if F64.Ops.gt den (F64.Ops.ofBits 0)
+      then do
+           let fl2 ← lift (F64.Ops.sub k fl1)
+           ok (F64.Ops.div fl2 den)
+      else ok (F64.Ops.ofBits 0)
+    let i3 ← i - 1#usize
+    let a1 ←
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice (Array F64
+        4#usize)) p i3
+    let a2 ←
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice (Array F64
+        4#usize)) p i
+    let a3 ← spline.lerp a1 a2 a
+    let q1 ← alloc.vec.Vec.push q a3
+    let i4 ← i + 1#usize
+    ok (cont (q1, i4))
+  else ok (done q)
+
+/-- [forge_geom::spline::insert_knot]: loop 1:
+    Source: 'kernel/forge-geom/src/spline.rs', lines 1198:4-1203:5 -/
+@[rust_loop]
+def spline.insert_knot_loop1
+  (u : alloc.vec.Vec F64) (p : alloc.vec.Vec (Array F64 4#usize))
+  (degree : Std.Usize) (k : F64) (mult : Std.Usize) (s : Std.Usize)
+  (q : alloc.vec.Vec (Array F64 4#usize)) (i : Std.Usize) :
+  Result (alloc.vec.Vec (Array F64 4#usize))
+  := do
+  loop
+    (fun (q1, i1) => spline.insert_knot_loop1.body u p degree k mult s q1 i1)
+    (q, i)
+
+/-- [forge_geom::spline::insert_knot]:
+    Source: 'kernel/forge-geom/src/spline.rs', lines 1175:0-1207:1 -/
+def spline.insert_knot
+  (u : alloc.vec.Vec F64) (p : alloc.vec.Vec (Array F64 4#usize))
+  (degree : Std.Usize) (k : F64) :
+  Result ((alloc.vec.Vec F64) × (alloc.vec.Vec (Array F64 4#usize)))
+  := do
+  let (le, mult) ← spline.insert_knot_loop0 u k 0#usize 0#usize 0#usize
+  let s ← le - 1#usize
+  let i := alloc.vec.Vec.len u
+  let i1 ← i - 1#usize
+  let fl ←
+    alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice F64) u i1
+  let s1 ←
+    if F64.Ops.ge k fl
+    then
+      do
+      let i2 := alloc.vec.Vec.len p
+      let i3 ← i2 - 1#usize
+      ok (core.cmp.impls.OrdUsize.min s i3)
+    else ok s
+  let i2 := alloc.vec.Vec.len p
+  let i3 ← i2 + 1#usize
+  let q := alloc.vec.Vec.with_capacity (Array F64 4#usize) i3
+  let i4 ← s1 - degree
+  let i5 ← i4 + 1#usize
+  let s2 ←
+    alloc.vec.Vec.index (core.slice.index.SliceIndexRangeToUsizeSlice (Array
+      F64 4#usize)) p { «end» := i5 }
+  let q1 ←
+    alloc.vec.Vec.extend_from_slice (core.clone.CloneArray 4#usize
+      F64.Insts.CoreCloneClone) q s2
+  let i6 ← i4 + 1#usize
+  let q2 ← spline.insert_knot_loop1 u p degree k mult s1 q1 i6
+  let i7 ← s1 - mult
+  let s3 ←
+    alloc.vec.Vec.index (core.slice.index.SliceIndexRangeFromUsizeSlice (Array
+      F64 4#usize)) p { start := i7 }
+  let q3 ←
+    alloc.vec.Vec.extend_from_slice (core.clone.CloneArray 4#usize
+      F64.Insts.CoreCloneClone) q2 s3
+  let i8 ← s1 + 1#usize
+  let u1 ← alloc.vec.Vec.insert u i8 k
+  ok (u1, q3)
+
 /-- [forge_geom::spline::tridiagonal]: loop body 0:
-    Source: 'kernel/forge-geom/src/spline.rs', lines 1203:4-1208:5 -/
+    Source: 'kernel/forge-geom/src/spline.rs', lines 1216:4-1221:5 -/
 @[rust_loop_body]
 def spline.tridiagonal_loop0.body
   (rows : Slice (F64 × F64 × F64 × forge_math.vec.Vec3))
@@ -177,7 +313,7 @@ def spline.tridiagonal_loop0.body
     ok (cont (iter1, c1, d1))
 
 /-- [forge_geom::spline::tridiagonal]: loop 0:
-    Source: 'kernel/forge-geom/src/spline.rs', lines 1203:4-1208:5 -/
+    Source: 'kernel/forge-geom/src/spline.rs', lines 1216:4-1221:5 -/
 @[rust_loop]
 def spline.tridiagonal_loop0
   (iter : core.ops.range.Range Std.Usize)
@@ -190,7 +326,7 @@ def spline.tridiagonal_loop0
     (iter, c, d)
 
 /-- [forge_geom::spline::tridiagonal]: loop body 1:
-    Source: 'kernel/forge-geom/src/spline.rs', lines 1211:4-1214:5 -/
+    Source: 'kernel/forge-geom/src/spline.rs', lines 1224:4-1227:5 -/
 @[rust_loop_body]
 def spline.tridiagonal_loop1.body
   (c : alloc.vec.Vec F64) (d : alloc.vec.Vec forge_math.vec.Vec3)
@@ -220,7 +356,7 @@ def spline.tridiagonal_loop1.body
   else ok (done d)
 
 /-- [forge_geom::spline::tridiagonal]: loop 1:
-    Source: 'kernel/forge-geom/src/spline.rs', lines 1211:4-1214:5 -/
+    Source: 'kernel/forge-geom/src/spline.rs', lines 1224:4-1227:5 -/
 @[rust_loop]
 def spline.tridiagonal_loop1
   (c : alloc.vec.Vec F64) (d : alloc.vec.Vec forge_math.vec.Vec3)
@@ -232,7 +368,7 @@ def spline.tridiagonal_loop1
     (d, i)
 
 /-- [forge_geom::spline::tridiagonal]:
-    Source: 'kernel/forge-geom/src/spline.rs', lines 1196:0-1216:1 -/
+    Source: 'kernel/forge-geom/src/spline.rs', lines 1209:0-1229:1 -/
 def spline.tridiagonal
   (rows : Slice (F64 × F64 × F64 × forge_math.vec.Vec3)) :
   Result (alloc.vec.Vec forge_math.vec.Vec3)

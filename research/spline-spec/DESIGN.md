@@ -161,11 +161,16 @@ The shipped Rust, `verify/aeneas/forge-geom` (Charon and Aeneas on `kernel/forge
 - `tridiagonal_spec`: `spline::tridiagonal` returns `ok` on any n ≥ 1 rows, with n points. These are
   `SplineSpec.sweep`/`backSub` with each field operation the binary64 one, in the Rust's order. So the algorithm that
   `thomas_solves` proves is the one that ships.
+- `insert_knot_spec`: `spline::insert_knot` returns `ok` whenever its indices are in range. The knots it returns have k
+  after the span. The poles are the binary64 Boehm insertion: the first poles kept, the lerps by
+  `(k - U[i]) / (U[i+p] - U[i])` in between, and the rest shifted.
 
-To make the translation possible, the de Casteljau and back-substitution loops became plain `while` loops. The bits are
-the same and the callgrind gate is below base on every line.
+To make the translation possible, the de Casteljau and back-substitution loops became plain `while` loops. So did
+`insert_knot`'s span search and multiplicity count: one pass over the sorted knots now replaces `partition_point` and
+`filter().count()`. The bits are the same, and the callgrind gate is below base on every line.
 
-Not yet: Aeneas on `through`/`through_ends`/`insert_knot`/`from_nurbs` (iterator chains and closures to rewrite first);
+Not yet: Aeneas on `through`/`through_ends`/`from_nurbs` (iterator chains and closures to rewrite first); the theorem
+that `insQ` is `SplineSpec.insPoles` in exact arithmetic;
 a binary64 bound for the Thomas solve; the crossing certificate's margin in Lean (it only decides which refusal is given).
 
 Differential test, `kernel/forge-geom/tests/spline_diff.rs`: 698 curves, all within the curve's scale over 2^30 of the

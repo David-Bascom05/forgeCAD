@@ -1173,20 +1173,33 @@ fn box_gap_sq(b: &Box3, p: Point3) -> f64 {
 }
 
 fn insert_knot(u: &mut Vec<f64>, p: &mut Vec<H>, degree: usize, k: f64) {
-    // k lies in the span [u[s], u[s + 1]); the last knot of all, in the last span
-    let s = u.partition_point(|&x| x <= k) - 1;
+    // k lies in the span [u[s], u[s + 1]); the last knot of all, in the last span. The knots are
+    // sorted, so the knots at most k are the first `le` of them (plain loops, as verify/aeneas
+    // translates them)
+    let (mut le, mut mult, mut j) = (0, 0, 0);
+    while j < u.len() {
+        if u[j] <= k {
+            le += 1;
+            if u[j] == k {
+                mult += 1;
+            }
+        }
+        j += 1;
+    }
+    let s = le - 1;
     let s = if k >= u[u.len() - 1] {
         s.min(p.len() - 1)
     } else {
         s
     };
-    let mult = u.iter().filter(|&&x| x == k).count();
     let mut q = Vec::with_capacity(p.len() + 1);
-    q.extend_from_slice(&p[..=s - degree]);
-    for i in (s - degree + 1)..=(s - mult) {
+    q.extend_from_slice(&p[..s - degree + 1]);
+    let mut i = s - degree + 1;
+    while i <= s - mult {
         let den = u[i + degree] - u[i];
         let a = if den > 0.0 { (k - u[i]) / den } else { 0.0 };
         q.push(lerp(&p[i - 1], &p[i], a));
+        i += 1;
     }
     q.extend_from_slice(&p[s - mult..]);
     *p = q;
