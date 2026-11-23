@@ -30,3 +30,6 @@ import ForgeCurved
 #print axioms ForgeCurved.Thom.thom
 #print axioms ForgeCurved.Thom.merge
 #print axioms ForgeCurved.CAD.cyl_R1
+#print axioms ForgeCurved.CAD.cad3_R1
+#print axioms ForgeCurved.CAD.cad_R1
+#print axioms ForgeCurved.CAD.fibreOI_of_roots

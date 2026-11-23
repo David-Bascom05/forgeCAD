@@ -73,15 +73,15 @@ theorem sgnK_between {a b c : ℝ} {σ : Sgn} (ha : sgnK a = σ) (hb : sgnK b = 
     | (exact sgnK_zero_iff.mpr (by linarith))
     | (cases hb)
 
-/-- The derivative rule of a Thom family: each member's derivative is a constant or an earlier
-member. -/
-def ThomFamily (fs : List (ℝ → ℝ)) : Prop :=
-  ∀ i (hi : i < fs.length), Differentiable ℝ fs[i] ∧
-    ((∃ k : ℝ, ∀ s, deriv fs[i] s = k) ∨ ∃ j, ∃ hj : j < i, deriv fs[i] = fs[j])
+/-- The derivative rule of a Thom family, on the members with index in `J`: each member's
+derivative is a constant or an earlier member in `J`. -/
+def ThomFamily (fs : List (ℝ → ℝ)) (J : ℕ → Prop) : Prop :=
+  ∀ i (hi : i < fs.length), J i → Differentiable ℝ fs[i] ∧
+    ((∃ k : ℝ, ∀ s, deriv fs[i] s = k) ∨ ∃ j, ∃ hj : j < i, J j ∧ deriv fs[i] = fs[j])
 
-/-- The points of `ℝ` where the first `n` members have the signs `σ`. -/
-def signSet (fs : List (ℝ → ℝ)) (σ : ℕ → Sgn) (n : ℕ) : Set ℝ :=
-  {s | ∀ i (hi : i < fs.length), i < n → sgnK (fs[i] s) = σ i}
+/-- The points of `ℝ` where the members in `J` below `n` have the signs `X`. -/
+def signSet (fs : List (ℝ → ℝ)) (J : ℕ → Prop) (X : Cov) (n : ℕ) : Set ℝ :=
+  {s | ∀ i (hi : i < fs.length), i < n → J i → X[i]? = some (sgnK (fs[i] s))}
 
 /-- A function whose derivative has one sign on an interval is monotone or antitone there, so its
 sign classes there are intervals. -/
@@ -127,39 +127,62 @@ theorem ordConnected_sign_of_deriv {A : Set ℝ} (hA : A.OrdConnected) {f : ℝ 
     exact sgnK_between hy.2 hx.2 h2 h1
 
 /-- **Thom's lemma.** In a family closed under derivation (each derivative a constant or an earlier
-member), every sign condition on the first `n` members is an interval. -/
-theorem thom {fs : List (ℝ → ℝ)} (hfs : ThomFamily fs) (σ : ℕ → Sgn) :
-    ∀ n, (signSet fs σ n).OrdConnected := by
+member), every sign condition is an interval. -/
+theorem thom {fs : List (ℝ → ℝ)} {J : ℕ → Prop} (hfs : ThomFamily fs J) (X : Cov) :
+    ∀ n, (signSet fs J X n).OrdConnected := by
   intro n
   induction n with
   | zero =>
-    have : signSet fs σ 0 = univ := by ext s; simp [signSet]
+    have : signSet fs J X 0 = univ := by ext s; simp [signSet]
     rw [this]; exact ordConnected_univ
   | succ n ih =>
-    by_cases hn : n < fs.length
-    · have heq : signSet fs σ (n + 1) = signSet fs σ n ∩ {s | sgnK (fs[n] s) = σ n} := by
+    by_cases hn : n < fs.length ∧ J n
+    · obtain ⟨hn, hJ⟩ := hn
+      rcases hX : X[n]? with _ | τ
+      · have : signSet fs J X (n + 1) = ∅ := by
+          ext s
+          simp only [signSet, mem_ofPred_eq, mem_empty_iff_false, iff_false]
+          intro h
+          have := h n hn (by omega) hJ
+          rw [hX] at this; cases this
+        rw [this]; exact ordConnected_empty
+      have heq : signSet fs J X (n + 1) = signSet fs J X n ∩ {s | sgnK (fs[n] s) = τ} := by
         ext s
         simp only [signSet, mem_ofPred_eq, mem_inter_iff]
         constructor
         · intro h
-          exact ⟨fun i hi hin => h i hi (by omega), h n hn (by omega)⟩
-        · rintro ⟨h, h'⟩ i hi hin
+          refine ⟨fun i hi hin hJi => h i hi (by omega) hJi, ?_⟩
+          have := h n hn (by omega) hJ
+          rw [hX] at this; exact (Option.some.inj this).symm
+        · rintro ⟨h, h'⟩ i hi hin hJi
           rcases Nat.lt_succ_iff_lt_or_eq.mp hin with h1 | h1
-          · exact h i hi h1
-          · subst h1; exact h'
+          · exact h i hi h1 hJi
+          · subst h1; rw [hX, h']
       rw [heq]
-      obtain ⟨hd, hder⟩ := hfs n hn
-      rcases hder with ⟨k, hk⟩ | ⟨j, hj, hjd⟩
-      · exact ordConnected_sign_of_deriv ih hd (τ := sgnK k) (fun s _ => by rw [hk]) (σ n)
-      · refine ordConnected_sign_of_deriv ih hd (τ := σ j) (fun s hs => ?_) (σ n)
+      obtain ⟨hd, hder⟩ := hfs n hn hJ
+      rcases hder with ⟨k, hk⟩ | ⟨j, hj, hJj, hjd⟩
+      · exact ordConnected_sign_of_deriv ih hd (τ := sgnK k) (fun s _ => by rw [hk]) τ
+      · rcases hXj : X[j]? with _ | τj
+        · have : signSet fs J X n = ∅ := by
+            ext s
+            simp only [signSet, mem_ofPred_eq, mem_empty_iff_false, iff_false]
+            intro h
+            have := h j (lt_trans hj hn) hj hJj
+            rw [hXj] at this; cases this
+          rw [this, empty_inter]; exact ordConnected_empty
+        refine ordConnected_sign_of_deriv ih hd (τ := τj) (fun s hs => ?_) τ
         rw [hjd]
-        exact hs j (lt_trans hj hn) hj
-    · have heq : signSet fs σ (n + 1) = signSet fs σ n := by
+        have := hs j (lt_trans hj hn) hj hJj
+        rw [hXj] at this; exact (Option.some.inj this).symm
+    · have heq : signSet fs J X (n + 1) = signSet fs J X n := by
         ext s
         simp only [signSet, mem_ofPred_eq]
         constructor
-        · exact fun h i hi hin => h i hi (by omega)
-        · exact fun h i hi hin => h i hi (by omega)
+        · exact fun h i hi hin hJi => h i hi (by omega) hJi
+        · intro h i hi hin hJi
+          rcases Nat.lt_succ_iff_lt_or_eq.mp hin with h1 | h1
+          · exact h i hi h1 hJi
+          · subst h1; exact absurd ⟨hi, hJi⟩ hn
       rw [heq]; exact ih
 
 /-- **Merging root functions.** Continuous functions on a preconnected `C`, any two equal

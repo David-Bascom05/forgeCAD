@@ -47,19 +47,28 @@ theorem covOfK_eq_iff {Y : Type} (cs : List (Y → ℝ)) (y : Y) (X : Cov) :
 
 variable {T : Type} [TopologicalSpace T]
 
-/-- The base cell of `X`: the base carriers' signs. -/
-def BaseCell (cs : List (T × ℝ → ℝ)) (isBase : ℕ → Prop) (X : Cov) : Set T :=
-  {t | ∀ i (hi : i < cs.length), isBase i → X[i]? = some (sgnK (cs[i] (t, 0)))}
+/-- The sign condition of `X` on the carriers with index in `J`. -/
+def SignOn {Y : Type} (cs : List (Y → ℝ)) (J : ℕ → Prop) (X : Cov) : Set Y :=
+  {y | ∀ i (hi : i < cs.length), J i → X[i]? = some (sgnK (cs[i] y))}
 
-/-- The fibre of `X` over `t`: the fibre carriers' signs. -/
-def FibreSet (cs : List (T × ℝ → ℝ)) (isBase : ℕ → Prop) (X : Cov) (t : T) : Set ℝ :=
-  {s | ∀ i (hi : i < cs.length), ¬isBase i → X[i]? = some (sgnK (cs[i] (t, s)))}
+theorem signOn_univ {Y : Type} (cs : List (Y → ℝ)) (X : Cov) :
+    {y | covOfK cs y = X} = {_y | X.length = cs.length} ∩ SignOn cs (fun _ => True) X := by
+  ext y
+  simp only [mem_inter_iff, mem_ofPred_eq, SignOn, covOfK_eq_iff, forall_const]
 
-/-- Delineability with order invariance over `C`: the fibre carriers' zeros are fixed sets of
-continuous, strictly ordered sections, or the carrier vanishes over all of `C`. -/
-def FibreOI (cs : List (T × ℝ → ℝ)) (isBase : ℕ → Prop) (C : Set T) : Prop :=
+/-- The base cell of `X`: the signs of the base carriers in `J`. -/
+def BaseCell (cs : List (T × ℝ → ℝ)) (J isBase : ℕ → Prop) (X : Cov) : Set T :=
+  {t | ∀ i (hi : i < cs.length), J i → isBase i → X[i]? = some (sgnK (cs[i] (t, 0)))}
+
+/-- The fibre of `X` over `t`: the signs of the fibre carriers in `J`. -/
+def FibreSet (cs : List (T × ℝ → ℝ)) (J isBase : ℕ → Prop) (X : Cov) (t : T) : Set ℝ :=
+  {s | ∀ i (hi : i < cs.length), J i → ¬isBase i → X[i]? = some (sgnK (cs[i] (t, s)))}
+
+/-- Delineability with order invariance over `C`: the zeros of the fibre carriers in `J` are fixed
+sets of continuous, strictly ordered sections, or the carrier vanishes over all of `C`. -/
+def FibreOI (cs : List (T × ℝ → ℝ)) (J isBase : ℕ → Prop) (C : Set T) : Prop :=
   ∃ m, ∃ ρ : Fin m → T → ℝ, (∀ k, ContinuousOn (ρ k) C) ∧ (∀ t ∈ C, StrictMono fun k => ρ k t) ∧
-    ∀ i (hi : i < cs.length), ¬isBase i →
+    ∀ i (hi : i < cs.length), J i → ¬isBase i →
       (∀ t ∈ C, ∀ s, cs[i] (t, s) = 0) ∨
         ∃ S : Finset (Fin m), ∀ t ∈ C, ∀ s, cs[i] (t, s) = 0 ↔ ∃ k ∈ S, ρ k t = s
 
@@ -111,31 +120,29 @@ theorem sector_rep {C : Set T} {m : ℕ} (ρ : Fin m → T → ℝ) (hρc : ∀ 
     · exact absurd ⟨k, Finset.mem_filter.mpr ⟨Finset.mem_univ _, hk⟩⟩ hA
     · exact absurd ⟨k, Finset.mem_filter.mpr ⟨Finset.mem_univ _, hk⟩⟩ hB
 
-/-- **R1 for a cylindrical arrangement.** Every sign class is preconnected, given preconnected
-base cells, order-invariant delineable fibres over each, and Thom fibres. -/
-theorem cyl_R1 (cs : List (T × ℝ → ℝ)) (isBase : ℕ → Prop) (hcont : ∀ c ∈ cs, Continuous c)
-    (hbase : ∀ i (hi : i < cs.length), isBase i → ∀ t s, cs[i] (t, s) = cs[i] (t, 0))
-    (h1 : ∀ X, IsPreconnected (BaseCell cs isBase X))
-    (h2 : ∀ X, FibreOI cs isBase (BaseCell cs isBase X))
-    (h3 : ∀ X t, (FibreSet cs isBase X t).OrdConnected) (X : Cov) :
-    IsPreconnected {y | covOfK cs y = X} := by
+/-- **R1 for a cylindrical arrangement.** Every sign condition on the carriers in `J` is
+preconnected, given preconnected base cells, order-invariant delineable fibres over each, and Thom
+fibres. -/
+theorem cyl_R1 (cs : List (T × ℝ → ℝ)) (J isBase : ℕ → Prop) (hcont : ∀ c ∈ cs, Continuous c)
+    (hbase : ∀ i (hi : i < cs.length), J i → isBase i → ∀ t s, cs[i] (t, s) = cs[i] (t, 0))
+    (h1 : ∀ X, IsPreconnected (BaseCell cs J isBase X))
+    (h2 : ∀ X, FibreOI cs J isBase (BaseCell cs J isBase X))
+    (h3 : ∀ X, ∀ t ∈ BaseCell cs J isBase X, (FibreSet cs J isBase X t).OrdConnected) (X : Cov) :
+    IsPreconnected (SignOn cs J X) := by
   classical
-  rcases ({y | covOfK cs y = X} : Set (T × ℝ)).eq_empty_or_nonempty with hE | ⟨⟨t₀, s₀⟩, h₀⟩
+  rcases (SignOn cs J X).eq_empty_or_nonempty with hE | ⟨⟨t₀, s₀⟩, h₀⟩
   · rw [hE]; exact isPreconnected_empty
-  have hlen : X.length = cs.length := ((covOfK_eq_iff cs _ X).mp h₀).1
-  set C := BaseCell cs isBase X
-  have hmemE : ∀ t s, covOfK cs (t, s) = X ↔ t ∈ C ∧ s ∈ FibreSet cs isBase X t := by
+  set C := BaseCell cs J isBase X
+  have hmemE : ∀ t s, (t, s) ∈ SignOn cs J X ↔ t ∈ C ∧ s ∈ FibreSet cs J isBase X t := by
     intro t s
-    rw [covOfK_eq_iff]
     constructor
-    · rintro ⟨-, h⟩
-      refine ⟨fun i hi hb => ?_, fun i hi _ => h i hi⟩
-      rw [h i hi, hbase i hi hb t s]
-    · rintro ⟨hb, hf⟩
-      refine ⟨hlen, fun i hi => ?_⟩
+    · intro h
+      refine ⟨fun i hi hJ hb => ?_, fun i hi hJ _ => h i hi hJ⟩
+      rw [h i hi hJ, hbase i hi hJ hb t s]
+    · rintro ⟨hb, hf⟩ i hi hJ
       by_cases hib : isBase i
-      · rw [hb i hi hib, hbase i hi hib t s]
-      · exact hf i hi hib
+      · rw [hb i hi hJ hib, hbase i hi hJ hib t s]
+      · exact hf i hi hJ hib
   obtain ⟨ht₀, hs₀⟩ := (hmemE t₀ s₀).mp h₀
   obtain ⟨m, ρ, hρc, hρm, hOI⟩ := h2 X
   have hC := h1 X
@@ -143,13 +150,13 @@ theorem cyl_R1 (cs : List (T × ℝ → ℝ)) (isBase : ℕ → Prop) (hcont : �
       ContinuousOn (fun t => cs[i] (t, σ t)) C := fun i hi σ hσ =>
     (hcont _ (List.getElem_mem hi)).comp_continuousOn (continuousOn_id.prodMk hσ)
   -- a continuous representative of the class over the base cell
-  have key : ∃ σ : T → ℝ, ContinuousOn σ C ∧ ∀ t ∈ C, σ t ∈ FibreSet cs isBase X t := by
+  have key : ∃ σ : T → ℝ, ContinuousOn σ C ∧ ∀ t ∈ C, σ t ∈ FibreSet cs J isBase X t := by
     by_cases hsec : ∃ k₀, ρ k₀ t₀ = s₀
     · obtain ⟨k₀, hk₀⟩ := hsec
-      refine ⟨ρ k₀, hρc k₀, fun t ht i hi hib => ?_⟩
-      rw [hs₀ i hi hib]
+      refine ⟨ρ k₀, hρc k₀, fun t ht i hi hJ hib => ?_⟩
+      rw [hs₀ i hi hJ hib]
       congr 1
-      rcases hOI i hi hib with hz | ⟨S, hS⟩
+      rcases hOI i hi hJ hib with hz | ⟨S, hS⟩
       · rw [hz t ht, hz t₀ ht₀]
       · by_cases hkS : k₀ ∈ S
         · rw [(hS t ht _).mpr ⟨k₀, hkS, rfl⟩, (hS t₀ ht₀ _).mpr ⟨k₀, hkS, hk₀⟩]
@@ -163,10 +170,10 @@ theorem cyl_R1 (cs : List (T × ℝ → ℝ)) (isBase : ℕ → Prop) (hcont : �
         (fun a b hab hb => lt_of_le_of_lt ((hρm t₀ ht₀).monotone hab) hb)
       have hgt : ∀ k, ¬ρ k t₀ < s₀ → s₀ < ρ k t₀ := fun k hk =>
         lt_of_le_of_ne (not_lt.mp hk) (hsec k).symm
-      refine ⟨σ, hσc, fun t ht i hi hib => ?_⟩
-      rw [hs₀ i hi hib]
+      refine ⟨σ, hσc, fun t ht i hi hJ hib => ?_⟩
+      rw [hs₀ i hi hJ hib]
       congr 1
-      rcases hOI i hi hib with hz | ⟨S, hS⟩
+      rcases hOI i hi hJ hib with hz | ⟨S, hS⟩
       · rw [hz t ht, hz t₀ ht₀]
       · have hne : ∀ t' ∈ C, cs[i] (t', σ t') ≠ 0 := fun t' ht' h0 => by
           obtain ⟨k, -, hk⟩ := (hS t' ht' _).mp h0
@@ -191,10 +198,10 @@ theorem cyl_R1 (cs : List (T × ℝ → ℝ)) (isBase : ℕ → Prop) (hcont : �
   -- the class is the union of its fibres, each joined to the graph of `σ`
   set Γ := (fun t => (t, σ t)) '' C
   have hΓ : IsPreconnected Γ := hC.image _ (continuousOn_id.prodMk hσc)
-  set 𝒮 := (fun t => ({t} ×ˢ FibreSet cs isBase X t) ∪ Γ) '' C
-  have hE : {y | covOfK cs y = X} = ⋃₀ 𝒮 := by
+  set 𝒮 := (fun t => ({t} ×ˢ FibreSet cs J isBase X t) ∪ Γ) '' C
+  have hE : SignOn cs J X = ⋃₀ 𝒮 := by
     ext ⟨t, s⟩
-    simp only [mem_ofPred_eq, mem_sUnion, 𝒮, mem_image, exists_exists_and_eq_and]
+    simp only [mem_sUnion, 𝒮, mem_image, exists_exists_and_eq_and]
     rw [hmemE]
     constructor
     · rintro ⟨ht, hs⟩
@@ -212,6 +219,6 @@ theorem cyl_R1 (cs : List (T × ℝ → ℝ)) (isBase : ℕ → Prop) (hcont : �
     exact Or.inr ⟨t₀, ht₀, rfl⟩
   · rintro _ ⟨t, ht, rfl⟩
     refine IsPreconnected.union (t, σ t) ⟨rfl, hσ t ht⟩ ⟨t, ht, rfl⟩ ?_ hΓ
-    exact isPreconnected_singleton.prod (h3 X t).isPreconnected
+    exact isPreconnected_singleton.prod (h3 X t ht).isPreconnected
 
 end ForgeCurved.CAD
