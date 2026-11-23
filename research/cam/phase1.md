@@ -16,8 +16,8 @@ Branch claude/repo-review-mbdrlj-cam. User doc: docs/cam.md. Phase 0: phase0.md.
 | libraries | kernel/forge-tooling | tools, holders, assemblies, machines, cutting groups; feeds with chip thinning, ball D_eff, power |
 | post | kernel/forge-post | fanuc, haas, linuxcnc, grbl as data; exact quantisation; reader; round trip |
 | Fusion importer | interface/forge-cam-import | JSON → our TOML, read back |
-| machining document | interface/forge-lang/src/cam.rs | no grammar change; `fg cam`, `forgecad cam`, MCP `cam` |
-| feature-aware holes | forge-lang holes.rs `HoleInfo` | from `hole()` features: d, depth, thread, fit, heads |
+| machining document | interface/forge-cam-lang | no grammar change; `forgecad cam`, MCP `cam`; forge-lang gains only `hole_view` |
+| feature-aware holes | forge-lang holes.rs `HoleInfo`, `hole_view` | from `hole()` features: d, depth, thread, fit, heads; its own evaluation, never in a part's build |
 | reply, setup sheet | cam.rs | `forgecad.cam/1`; HTML sheet |
 
 The flange (examples/machined/flange_cam.fg): five ops, every move certified on the posted path,
@@ -33,8 +33,9 @@ and bolt-hole rapids into stock nobody had cleared (both now test cases with typ
 | FUZZ_SEEDS=150 suite | 150/150 |
 | n-ary | 167/167 |
 | parse_diff (Rust side) | pass |
+| forge-render tests | 450 passed, 4 failed: all four panic with "no GPU" (no adapter in this container) |
 | FG_LEAN=1 parse_diff | **not run**: no Lean toolchain in this container, and installing one was refused by the permission policy. No grammar change was made (`machining` is a bare name). |
-| callgrind speed gate | see the milestone report (run against a baseline saved on 29a524e) |
+| callgrind speed gate | pass: 67 of 67 strict lines exactly equal to a baseline saved on 29a524e (built at a path of the same length), bits identical. Two lessons on the way: a base built at a longer path differs by a few instructions (string layout), and any byte added to forge-lang shifts the bench binaries' counts by tens of instructions, so CAM's document layer lives in interface/forge-cam-lang and forge-lang is unchanged |
 | native = wasm | kernel/forge-cam/tests/bits.rs: one digest over offsets, booleans, verdicts and the four dialects' text, equal on x86-64 and wasm32-wasip1 |
 | no third-party crates in kernel/ | none: the new kernel crates depend on std and our own crates only |
 

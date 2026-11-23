@@ -13,8 +13,9 @@ and a fix. A program is written only when every operation in it is certified.
 ```
 forgecad cam F.fg [--json] [-o PROGRAM]     the reply, and the program if released
 forgecad cam F.fg sheet -o SHEET.html        the setup sheet
-fg cam F.fg [--json] [-o PROGRAM] [--sheet SHEET.html]
 ```
+The document layer is `interface/forge-cam-lang` (`forge_cam_lang::run`); forge-lang itself only
+gains `hole_view`, so a part's build links and runs none of CAM.
 Over MCP the tool is `cam` (`file`, and `what: sheet`).
 
 ## The document
