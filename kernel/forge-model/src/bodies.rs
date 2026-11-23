@@ -1057,7 +1057,7 @@ fn build_each(plain: History<'_>, start: usize, threads: usize) -> Result<Vec<Ve
         return Ok(out);
     }
     let chunk = n.div_ceil(threads);
-    let built: Vec<Result<Vec<Vec<Tool>>, RegenError>> = std::thread::scope(|s| {
+    let built: Vec<Result<Vec<Vec<Tool>>, RegenError>> = forge_math::par::scope(|s| {
         let hs: Vec<_> = (start..plain.len())
             .step_by(chunk)
             .map(|a| {

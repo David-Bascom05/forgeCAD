@@ -233,6 +233,7 @@ name = "forge-math"
 version = "0.1.0"
 dependencies = [
  "forge-alloc",
+ "forge-par",
 ]
 
 [[package]]
@@ -269,6 +270,10 @@ dependencies = [
  "forge-math",
  "forge-topo",
 ]
+
+[[package]]
+name = "forge-par"
+version = "0.1.0"
 
 [[package]]
 name = "forge-proof"

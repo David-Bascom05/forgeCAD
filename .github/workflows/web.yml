@@ -4,10 +4,12 @@
 # (interface/forge-render/web/tests/ci.sh, its `web` job); here they are split to run at once:
 #   cli      the native `forgecad` (serves the page)        root workspace, release
 #   parity   the native reference, forge-parity             forge-render's workspace, release
-#   wasm     the page: wasm32 release build + wasm-bindgen  forge-render's workspace
+#   wasm     the page: wasm32 release build + wasm-bindgen  forge-render's workspace; the
+#            default build and the threaded artifact (THREADS=only) at once, put together after
 #   clippy   the wasm32 build stays warning-free
-#   browser  e2e, and parity on every bench part and example, in three shards that between
-#            them test each file once (PARITY_SHARD in web/tests/parity.cjs)
+#   browser  for the default build and for the threaded artifact (THREADED=1, which adds
+#            responsive.cjs): e2e, and parity on every bench part and example, in three shards
+#            that between them test each file once (PARITY_SHARD in web/tests/parity.cjs)
 # The commands, crates, profiles and flags are ci.sh's. Each Rust job has its own build cache,
 # saved only from main (and manual runs), so a pull request restores main's and never races it.
 name: web
@@ -62,6 +64,10 @@ jobs:
           retention-days: 1
 
   wasm:
+    strategy:
+      fail-fast: false
+      matrix:
+        threads: ["", only]
     runs-on: ubuntu-latest
     timeout-minutes: 60
     defaults:
@@ -74,17 +80,18 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: interface/forge-render -> target
+          key: threads-${{ matrix.threads }}
           save-if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
       # the release binary of the version Cargo.toml pins, not a 1.5 min `cargo install`
       - uses: taiki-e/install-action@v2
         with:
           tool: wasm-bindgen@0.2.130
       - run: wasm-bindgen --version | grep -x 'wasm-bindgen 0.2.130'
-      - run: NO_MESHES=1 sh web/build.sh "$GITHUB_WORKSPACE/target/web"
+      - run: NO_MESHES=1 THREADS=${{ matrix.threads }} sh web/build.sh "$GITHUB_WORKSPACE/target/web"
       - uses: actions/upload-artifact@v4
         with:
-          name: web
-          path: target/web
+          name: web${{ matrix.threads && '-threads' || '' }}
+          path: target/web${{ matrix.threads && '/threads' || '' }}
           retention-days: 1
 
   clippy:
@@ -111,8 +118,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # the default build, and the threaded artifact (docs/web.md)
+        threaded: ["", "1"]
         shard: [0, 1, 2]
+    name: browser${{ matrix.threaded && ' (threaded)' || '' }} ${{ matrix.shard }}
     env:
+      THREADED: ${{ matrix.threaded }}
       FORGECAD: ${{ github.workspace }}/bin/forgecad
       FORGE_PARITY: ${{ github.workspace }}/bin/forge-parity
     steps:
@@ -142,6 +153,11 @@ jobs:
         with:
           name: web
           path: target/web
+      - uses: actions/download-artifact@v4
+        if: matrix.threaded
+        with:
+          name: web-threads
+          path: target/web/threads
       - run: chmod +x bin/forgecad bin/forge-parity
       - name: end to end
         if: matrix.shard == 0
@@ -152,9 +168,15 @@ jobs:
         env:
           PARITY_SHARD: ${{ matrix.shard }}/3
         run: node web/tests/parity.cjs "$GITHUB_WORKSPACE/target/web"
+      # the threaded artifact: the page never blocks for a build
+      - name: responsive
+        if: matrix.threaded && matrix.shard == 0
+        working-directory: interface/forge-render
+        run: node web/tests/responsive.cjs "$GITHUB_WORKSPACE/target/web"
 
   # the one check a pull request waits on, as before the split: every job above passed
   web:
+    name: web
     needs: [cli, parity, wasm, clippy, browser]
     if: always()
     runs-on: ubuntu-latest

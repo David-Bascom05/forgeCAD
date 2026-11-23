@@ -547,7 +547,7 @@ fn run_once(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
             || -> Option<Vec<_>> { each.then(|| solids.iter().map(|x| mass(&x.2).ok()).collect()) };
         // under a budget (spent on this thread), or with one thread to run on, one after another
         let (w, e, o) = if forge_geom::budget::left() == u64::MAX && forge_math::par::threads() > 1 {
-            std::thread::scope(|s| {
+            forge_math::par::scope(|s| {
                 let w = whole.map(|b| s.spawn(move || mass(b)));
                 let bx = boxed.map(|b| s.spawn(move || tightbox::tight_box(b)));
                 let o: Vec<_> = owed.iter().map(|x| s.spawn(move || mass(&x.2).ok())).collect();
@@ -765,7 +765,7 @@ pub fn sketch_view(src: &str, id: &str, opts: Options) -> Option<SketchView> {
 }
 
 /// A scoped thread's answer, its panic carried on.
-fn joined<T>(h: std::thread::ScopedJoinHandle<'_, T>) -> T {
+fn joined<T>(h: forge_math::par::ScopedJoinHandle<'_, T>) -> T {
     h.join().unwrap_or_else(|p| std::panic::resume_unwind(p))
 }
 
