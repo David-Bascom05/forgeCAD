@@ -3734,7 +3734,7 @@ def apply_rule (rule : Rule) (m : Slice Bool) : Result Bool := do
     else ok false
 
 /-- [forge_bool_core::inc::same_set]: loop body 1:
-    Source: 'src/inc.rs', lines 644:8-647:9 -/
+    Source: 'src/inc.rs', lines 785:8-788:9 -/
 @[rust_loop_body]
 def inc.same_set_loop0_loop0.body
   (a : Slice Std.U32) (b : Slice Std.U32) (i : Std.Usize) (j : Std.Usize)
@@ -3754,7 +3754,7 @@ def inc.same_set_loop0_loop0.body
     else ok (done hit)
 
 /-- [forge_bool_core::inc::same_set]: loop 1:
-    Source: 'src/inc.rs', lines 644:8-647:9 -/
+    Source: 'src/inc.rs', lines 785:8-788:9 -/
 @[rust_loop]
 def inc.same_set_loop0_loop0
   (a : Slice Std.U32) (b : Slice Std.U32) (i : Std.Usize) (j : Std.Usize)
@@ -3766,7 +3766,7 @@ def inc.same_set_loop0_loop0
     (j, hit)
 
 /-- [forge_bool_core::inc::same_set]: loop body 0:
-    Source: 'src/inc.rs', lines 641:4-650:5 -/
+    Source: 'src/inc.rs', lines 782:4-791:5 -/
 @[rust_loop_body]
 def inc.same_set_loop0.body
   (a : Slice Std.U32) (b : Slice Std.U32) (ok1 : Bool) (i : Std.Usize) :
@@ -3784,7 +3784,7 @@ def inc.same_set_loop0.body
   else ok (done ok1)
 
 /-- [forge_bool_core::inc::same_set]: loop 0:
-    Source: 'src/inc.rs', lines 641:4-650:5 -/
+    Source: 'src/inc.rs', lines 782:4-791:5 -/
 @[rust_loop]
 def inc.same_set_loop0
   (a : Slice Std.U32) (b : Slice Std.U32) (ok1 : Bool) (i : Std.Usize) :
@@ -3795,7 +3795,7 @@ def inc.same_set_loop0
     (ok1, i)
 
 /-- [forge_bool_core::inc::same_set]: loop body 3:
-    Source: 'src/inc.rs', lines 655:8-658:9 -/
+    Source: 'src/inc.rs', lines 796:8-799:9 -/
 @[rust_loop_body]
 def inc.same_set_loop1_loop0.body
   (a : Slice Std.U32) (b : Slice Std.U32) (j : Std.Usize) (i : Std.Usize)
@@ -3815,7 +3815,7 @@ def inc.same_set_loop1_loop0.body
     else ok (done hit)
 
 /-- [forge_bool_core::inc::same_set]: loop 3:
-    Source: 'src/inc.rs', lines 655:8-658:9 -/
+    Source: 'src/inc.rs', lines 796:8-799:9 -/
 @[rust_loop]
 def inc.same_set_loop1_loop0
   (a : Slice Std.U32) (b : Slice Std.U32) (j : Std.Usize) (i : Std.Usize)
@@ -3827,7 +3827,7 @@ def inc.same_set_loop1_loop0
     (i, hit)
 
 /-- [forge_bool_core::inc::same_set]: loop body 2:
-    Source: 'src/inc.rs', lines 652:4-661:5 -/
+    Source: 'src/inc.rs', lines 793:4-802:5 -/
 @[rust_loop_body]
 def inc.same_set_loop1.body
   (a : Slice Std.U32) (b : Slice Std.U32) (ok1 : Bool) (j : Std.Usize) :
@@ -3845,7 +3845,7 @@ def inc.same_set_loop1.body
   else ok (done ok1)
 
 /-- [forge_bool_core::inc::same_set]: loop 2:
-    Source: 'src/inc.rs', lines 652:4-661:5 -/
+    Source: 'src/inc.rs', lines 793:4-802:5 -/
 @[rust_loop]
 def inc.same_set_loop1
   (a : Slice Std.U32) (b : Slice Std.U32) (ok1 : Bool) (j : Std.Usize) :
@@ -3856,13 +3856,13 @@ def inc.same_set_loop1
     (ok1, j)
 
 /-- [forge_bool_core::inc::same_set]:
-    Source: 'src/inc.rs', lines 638:0-663:1 -/
+    Source: 'src/inc.rs', lines 779:0-804:1 -/
 def inc.same_set (a : Slice Std.U32) (b : Slice Std.U32) : Result Bool := do
   let ok1 ← inc.same_set_loop0 a b true 0#usize
   inc.same_set_loop1 a b ok1 0#usize
 
 /-- [forge_bool_core::inc::dedup]: loop body 1:
-    Source: 'src/inc.rs', lines 625:8-628:9 -/
+    Source: 'src/inc.rs', lines 766:8-769:9 -/
 @[rust_loop_body]
 def inc.dedup_loop0_loop0.body
   (xs : Slice Std.U32) (out : alloc.vec.Vec Std.U32) (i : Std.Usize)
@@ -3884,7 +3884,7 @@ def inc.dedup_loop0_loop0.body
     else ok (done seen)
 
 /-- [forge_bool_core::inc::dedup]: loop 1:
-    Source: 'src/inc.rs', lines 625:8-628:9 -/
+    Source: 'src/inc.rs', lines 766:8-769:9 -/
 @[rust_loop]
 def inc.dedup_loop0_loop0
   (xs : Slice Std.U32) (out : alloc.vec.Vec Std.U32) (i : Std.Usize)
@@ -3896,7 +3896,7 @@ def inc.dedup_loop0_loop0
     (seen, j)
 
 /-- [forge_bool_core::inc::dedup]: loop body 0:
-    Source: 'src/inc.rs', lines 622:4-633:5 -/
+    Source: 'src/inc.rs', lines 763:4-774:5 -/
 @[rust_loop_body]
 def inc.dedup_loop0.body
   (xs : Slice Std.U32) (out : alloc.vec.Vec Std.U32) (i : Std.Usize) :
@@ -3918,7 +3918,7 @@ def inc.dedup_loop0.body
   else ok (done out)
 
 /-- [forge_bool_core::inc::dedup]: loop 0:
-    Source: 'src/inc.rs', lines 622:4-633:5 -/
+    Source: 'src/inc.rs', lines 763:4-774:5 -/
 @[rust_loop]
 def inc.dedup_loop0
   (xs : Slice Std.U32) (out : alloc.vec.Vec Std.U32) (i : Std.Usize) :
@@ -3929,13 +3929,13 @@ def inc.dedup_loop0
     (out, i)
 
 /-- [forge_bool_core::inc::dedup]:
-    Source: 'src/inc.rs', lines 619:0-635:1 -/
+    Source: 'src/inc.rs', lines 760:0-776:1 -/
 @[reducible]
 def inc.dedup (xs : Slice Std.U32) : Result (alloc.vec.Vec Std.U32) := do
   inc.dedup_loop0 xs (alloc.vec.Vec.new Std.U32) 0#usize
 
 /-- [forge_bool_core::inc::around_v]: loop body 0:
-    Source: 'src/inc.rs', lines 574:4-579:5 -/
+    Source: 'src/inc.rs', lines 715:4-720:5 -/
 @[rust_loop_body]
 def inc.around_v_loop.body
   (v : alloc.vec.Vec inc.Sector) (a : inc.Assembled) (hi : Std.Usize)
@@ -3960,7 +3960,7 @@ def inc.around_v_loop.body
   else ok (done out)
 
 /-- [forge_bool_core::inc::around_v]: loop 0:
-    Source: 'src/inc.rs', lines 574:4-579:5 -/
+    Source: 'src/inc.rs', lines 715:4-720:5 -/
 @[rust_loop]
 def inc.around_v_loop
   (v : alloc.vec.Vec inc.Sector) (a : inc.Assembled) (hi : Std.Usize)
@@ -3972,7 +3972,7 @@ def inc.around_v_loop
     (out, k)
 
 /-- [forge_bool_core::inc::around_v]:
-    Source: 'src/inc.rs', lines 567:0-581:1 -/
+    Source: 'src/inc.rs', lines 708:0-722:1 -/
 def inc.around_v
   (l : inc.Ledger) (a : inc.Assembled) (v : Std.Usize) :
   Result (alloc.vec.Vec Std.Usize)
@@ -3989,7 +3989,7 @@ def inc.around_v
   inc.around_v_loop l.vert_sectors.sec a hi (alloc.vec.Vec.new Std.Usize) lo
 
 /-- [forge_bool_core::inc::around_e]: loop body 0:
-    Source: 'src/inc.rs', lines 556:4-562:5 -/
+    Source: 'src/inc.rs', lines 697:4-703:5 -/
 @[rust_loop_body]
 def inc.around_e_loop.body
   (c : inc.Csr) (a : inc.Assembled) (hi : Std.Usize)
@@ -4014,7 +4014,7 @@ def inc.around_e_loop.body
   else ok (done out)
 
 /-- [forge_bool_core::inc::around_e]: loop 0:
-    Source: 'src/inc.rs', lines 556:4-562:5 -/
+    Source: 'src/inc.rs', lines 697:4-703:5 -/
 @[rust_loop]
 def inc.around_e_loop
   (c : inc.Csr) (a : inc.Assembled) (hi : Std.Usize)
@@ -4026,7 +4026,7 @@ def inc.around_e_loop
     (out, k)
 
 /-- [forge_bool_core::inc::around_e]:
-    Source: 'src/inc.rs', lines 552:0-564:1 -/
+    Source: 'src/inc.rs', lines 693:0-705:1 -/
 def inc.around_e
   (l : inc.Ledger) (a : inc.Assembled) (e : Std.Usize) :
   Result (alloc.vec.Vec Std.U32)
@@ -4035,7 +4035,7 @@ def inc.around_e
   inc.around_e_loop l.edge_facets a hi (alloc.vec.Vec.new Std.U32) lo
 
 /-- [forge_bool_core::inc::unify]: loop body 2:
-    Source: 'src/inc.rs', lines 680:12-688:13 -/
+    Source: 'src/inc.rs', lines 821:12-829:13 -/
 @[rust_loop_body]
 def inc.unify_loop0_loop0_loop0.body
   (v : alloc.vec.Vec Std.U32) (v1 : alloc.vec.Vec Std.U32)
@@ -4080,7 +4080,7 @@ def inc.unify_loop0_loop0_loop0.body
   else ok (done join)
 
 /-- [forge_bool_core::inc::unify]: loop 2:
-    Source: 'src/inc.rs', lines 680:12-688:13 -/
+    Source: 'src/inc.rs', lines 821:12-829:13 -/
 @[rust_loop]
 def inc.unify_loop0_loop0_loop0
   (v : alloc.vec.Vec Std.U32) (v1 : alloc.vec.Vec Std.U32)
@@ -4093,7 +4093,7 @@ def inc.unify_loop0_loop0_loop0
     (join, q)
 
 /-- [forge_bool_core::inc::unify]: loop body 1:
-    Source: 'src/inc.rs', lines 678:8-690:9 -/
+    Source: 'src/inc.rs', lines 819:8-831:9 -/
 @[rust_loop_body]
 def inc.unify_loop0_loop0.body
   (v : alloc.vec.Vec Std.U32) (v1 : alloc.vec.Vec Std.U32)
@@ -4111,7 +4111,7 @@ def inc.unify_loop0_loop0.body
   else ok (done join)
 
 /-- [forge_bool_core::inc::unify]: loop 1:
-    Source: 'src/inc.rs', lines 678:8-690:9 -/
+    Source: 'src/inc.rs', lines 819:8-831:9 -/
 @[rust_loop]
 def inc.unify_loop0_loop0
   (v : alloc.vec.Vec Std.U32) (v1 : alloc.vec.Vec Std.U32)
@@ -4124,7 +4124,7 @@ def inc.unify_loop0_loop0
     (join, p)
 
 /-- [forge_bool_core::inc::unify]: loop body 0:
-    Source: 'src/inc.rs', lines 675:4-692:5 -/
+    Source: 'src/inc.rs', lines 816:4-833:5 -/
 @[rust_loop_body]
 def inc.unify_loop0.body
   (i : Std.U32) (v : alloc.vec.Vec BodyId) (v1 : alloc.vec.Vec Std.U32)
@@ -4161,7 +4161,7 @@ def inc.unify_loop0.body
   else ok (done join)
 
 /-- [forge_bool_core::inc::unify]: loop 0:
-    Source: 'src/inc.rs', lines 675:4-692:5 -/
+    Source: 'src/inc.rs', lines 816:4-833:5 -/
 @[rust_loop]
 def inc.unify_loop0
   (i : Std.U32) (v : alloc.vec.Vec BodyId) (v1 : alloc.vec.Vec Std.U32)
@@ -4181,7 +4181,7 @@ def inc.unify_loop0
     (join, e)
 
 /-- [forge_bool_core::inc::unify]: loop body 3:
-    Source: 'src/inc.rs', lines 698:4-712:5 -/
+    Source: 'src/inc.rs', lines 839:4-853:5 -/
 @[rust_loop_body]
 def inc.unify_loop1.body
   (v : alloc.vec.Vec Std.U32) (v1 : alloc.vec.Vec Std.U32)
@@ -4245,7 +4245,7 @@ def inc.unify_loop1.body
   else ok (done (face_of, faces, head_of))
 
 /-- [forge_bool_core::inc::unify]: loop 3:
-    Source: 'src/inc.rs', lines 698:4-712:5 -/
+    Source: 'src/inc.rs', lines 839:4-853:5 -/
 @[rust_loop]
 def inc.unify_loop1
   (v : alloc.vec.Vec Std.U32) (v1 : alloc.vec.Vec Std.U32)
@@ -4261,7 +4261,7 @@ def inc.unify_loop1
     (join, face_of, faces, head_of, p)
 
 /-- [forge_bool_core::inc::unify]: loop body 4:
-    Source: 'src/inc.rs', lines 714:4-717:5 -/
+    Source: 'src/inc.rs', lines 855:4-858:5 -/
 @[rust_loop_body]
 def inc.unify_loop2.body
   (v : alloc.vec.Vec Std.U32) (nr : Std.Usize)
@@ -4288,7 +4288,7 @@ def inc.unify_loop2.body
   else ok (done faces)
 
 /-- [forge_bool_core::inc::unify]: loop 4:
-    Source: 'src/inc.rs', lines 714:4-717:5 -/
+    Source: 'src/inc.rs', lines 855:4-858:5 -/
 @[rust_loop]
 def inc.unify_loop2
   (v : alloc.vec.Vec Std.U32) (nr : Std.Usize)
@@ -4301,7 +4301,7 @@ def inc.unify_loop2
     (faces, p)
 
 /-- [forge_bool_core::inc::unify]: loop body 6:
-    Source: 'src/inc.rs', lines 725:8-728:9 -/
+    Source: 'src/inc.rs', lines 866:8-869:9 -/
 @[rust_loop_body]
 def inc.unify_loop3_loop0.body
   (head_of : alloc.vec.Vec Std.U32) (ar : alloc.vec.Vec Std.U32)
@@ -4324,7 +4324,7 @@ def inc.unify_loop3_loop0.body
   else ok (done ks)
 
 /-- [forge_bool_core::inc::unify]: loop 6:
-    Source: 'src/inc.rs', lines 725:8-728:9 -/
+    Source: 'src/inc.rs', lines 866:8-869:9 -/
 @[rust_loop]
 def inc.unify_loop3_loop0
   (head_of : alloc.vec.Vec Std.U32) (ar : alloc.vec.Vec Std.U32)
@@ -4336,7 +4336,7 @@ def inc.unify_loop3_loop0
     (ks, k)
 
 /-- [forge_bool_core::inc::unify]: loop body 5:
-    Source: 'src/inc.rs', lines 721:4-731:5 -/
+    Source: 'src/inc.rs', lines 862:4-872:5 -/
 @[rust_loop_body]
 def inc.unify_loop3.body
   (i : Std.U32) (v : alloc.vec.Vec BodyId) (v1 : alloc.vec.Vec Std.U32)
@@ -4380,7 +4380,7 @@ def inc.unify_loop3.body
   else ok (done at_e)
 
 /-- [forge_bool_core::inc::unify]: loop 5:
-    Source: 'src/inc.rs', lines 721:4-731:5 -/
+    Source: 'src/inc.rs', lines 862:4-872:5 -/
 @[rust_loop]
 def inc.unify_loop3
   (i : Std.U32) (v : alloc.vec.Vec BodyId) (v1 : alloc.vec.Vec Std.U32)
@@ -4401,7 +4401,7 @@ def inc.unify_loop3
     (at_e, e)
 
 /-- [forge_bool_core::inc::unify]: loop body 8:
-    Source: 'src/inc.rs', lines 739:8-743:9 -/
+    Source: 'src/inc.rs', lines 880:8-884:9 -/
 @[rust_loop_body]
 def inc.unify_loop4_loop0.body
   (sc : inc.SecCsr) (v : alloc.vec.Vec Std.U32)
@@ -4432,7 +4432,7 @@ def inc.unify_loop4_loop0.body
   else ok (done (sc, ks))
 
 /-- [forge_bool_core::inc::unify]: loop 8:
-    Source: 'src/inc.rs', lines 739:8-743:9 -/
+    Source: 'src/inc.rs', lines 880:8-884:9 -/
 @[rust_loop]
 def inc.unify_loop4_loop0
   (sc : inc.SecCsr) (v : alloc.vec.Vec Std.U32)
@@ -4445,7 +4445,7 @@ def inc.unify_loop4_loop0
     (ks, k)
 
 /-- [forge_bool_core::inc::unify]: loop body 7:
-    Source: 'src/inc.rs', lines 735:4-749:5 -/
+    Source: 'src/inc.rs', lines 876:4-890:5 -/
 @[rust_loop_body]
 def inc.unify_loop4.body
   (i : Std.U32) (v : alloc.vec.Vec BodyId) (v1 : alloc.vec.Vec Std.U32)
@@ -4503,7 +4503,7 @@ def inc.unify_loop4.body
   else ok (done (is_out_v, verts))
 
 /-- [forge_bool_core::inc::unify]: loop 7:
-    Source: 'src/inc.rs', lines 735:4-749:5 -/
+    Source: 'src/inc.rs', lines 876:4-890:5 -/
 @[rust_loop]
 def inc.unify_loop4
   (i : Std.U32) (v : alloc.vec.Vec BodyId) (v1 : alloc.vec.Vec Std.U32)
@@ -4524,7 +4524,7 @@ def inc.unify_loop4
     (sc, is_out_v, verts, v13)
 
 /-- [forge_bool_core::inc::unify]: loop body 9:
-    Source: 'src/inc.rs', lines 754:4-760:5 -/
+    Source: 'src/inc.rs', lines 895:4-901:5 -/
 @[rust_loop_body]
 def inc.unify_loop5.body
   (ne : Std.Usize) (at_e : alloc.vec.Vec (alloc.vec.Vec Std.U32))
@@ -4558,7 +4558,7 @@ def inc.unify_loop5.body
   else ok (done (ecs, ec_pos))
 
 /-- [forge_bool_core::inc::unify]: loop 9:
-    Source: 'src/inc.rs', lines 754:4-760:5 -/
+    Source: 'src/inc.rs', lines 895:4-901:5 -/
 @[rust_loop]
 def inc.unify_loop5
   (ne : Std.Usize) (at_e : alloc.vec.Vec (alloc.vec.Vec Std.U32))
@@ -4571,7 +4571,7 @@ def inc.unify_loop5
     (ecs, ec_pos, e)
 
 /-- [forge_bool_core::inc::unify]: loop body 12:
-    Source: 'src/inc.rs', lines 770:16-776:17 -/
+    Source: 'src/inc.rs', lines 911:16-917:17 -/
 @[rust_loop_body]
 def inc.unify_loop6_loop0_loop0.body
   (v : alloc.vec.Vec Std.U32) (at_e : alloc.vec.Vec (alloc.vec.Vec Std.U32))
@@ -4618,7 +4618,7 @@ def inc.unify_loop6_loop0_loop0.body
   else ok (done erel)
 
 /-- [forge_bool_core::inc::unify]: loop 12:
-    Source: 'src/inc.rs', lines 770:16-776:17 -/
+    Source: 'src/inc.rs', lines 911:16-917:17 -/
 @[rust_loop]
 def inc.unify_loop6_loop0_loop0
   (v : alloc.vec.Vec Std.U32) (at_e : alloc.vec.Vec (alloc.vec.Vec Std.U32))
@@ -4632,7 +4632,7 @@ def inc.unify_loop6_loop0_loop0
     (erel, j)
 
 /-- [forge_bool_core::inc::unify]: loop body 11:
-    Source: 'src/inc.rs', lines 767:12-778:13 -/
+    Source: 'src/inc.rs', lines 908:12-919:13 -/
 @[rust_loop_body]
 def inc.unify_loop6_loop0.body
   (v : alloc.vec.Vec Std.U32) (at_e : alloc.vec.Vec (alloc.vec.Vec Std.U32))
@@ -4652,7 +4652,7 @@ def inc.unify_loop6_loop0.body
   else ok (done erel)
 
 /-- [forge_bool_core::inc::unify]: loop 11:
-    Source: 'src/inc.rs', lines 767:12-778:13 -/
+    Source: 'src/inc.rs', lines 908:12-919:13 -/
 @[rust_loop]
 def inc.unify_loop6_loop0
   (v : alloc.vec.Vec Std.U32) (at_e : alloc.vec.Vec (alloc.vec.Vec Std.U32))
@@ -4665,7 +4665,7 @@ def inc.unify_loop6_loop0
     (erel, i)
 
 /-- [forge_bool_core::inc::unify]: loop body 10:
-    Source: 'src/inc.rs', lines 763:4-781:5 -/
+    Source: 'src/inc.rs', lines 904:4-922:5 -/
 @[rust_loop_body]
 def inc.unify_loop6.body
   (v : alloc.vec.Vec Std.U32) (v1 : alloc.vec.Vec Std.U32) (nv : Std.Usize)
@@ -4690,7 +4690,7 @@ def inc.unify_loop6.body
   else ok (done erel)
 
 /-- [forge_bool_core::inc::unify]: loop 10:
-    Source: 'src/inc.rs', lines 763:4-781:5 -/
+    Source: 'src/inc.rs', lines 904:4-922:5 -/
 @[rust_loop]
 def inc.unify_loop6
   (v : alloc.vec.Vec Std.U32) (v1 : alloc.vec.Vec Std.U32) (nv : Std.Usize)
@@ -4705,7 +4705,7 @@ def inc.unify_loop6
     (erel, v2)
 
 /-- [forge_bool_core::inc::unify]: loop body 14:
-    Source: 'src/inc.rs', lines 792:12-795:13 -/
+    Source: 'src/inc.rs', lines 933:12-936:13 -/
 @[rust_loop_body]
 def inc.unify_loop7_loop0.body
   (fs : alloc.vec.Vec Std.U32) (ff : alloc.vec.Vec inc.FacetId) (k : Std.Usize)
@@ -4724,7 +4724,7 @@ def inc.unify_loop7_loop0.body
   else ok (done ff)
 
 /-- [forge_bool_core::inc::unify]: loop 14:
-    Source: 'src/inc.rs', lines 792:12-795:13 -/
+    Source: 'src/inc.rs', lines 933:12-936:13 -/
 @[rust_loop]
 def inc.unify_loop7_loop0
   (fs : alloc.vec.Vec Std.U32) (ff : alloc.vec.Vec inc.FacetId) (k : Std.Usize)
@@ -4736,7 +4736,7 @@ def inc.unify_loop7_loop0
     (ff, k)
 
 /-- [forge_bool_core::inc::unify]: loop body 13:
-    Source: 'src/inc.rs', lines 785:4-805:5 -/
+    Source: 'src/inc.rs', lines 926:4-946:5 -/
 @[rust_loop_body]
 def inc.unify_loop7.body
   (at_e : alloc.vec.Vec (alloc.vec.Vec Std.U32)) (ecs : alloc.vec.Vec Std.U32)
@@ -4810,7 +4810,7 @@ def inc.unify_loop7.body
   else ok (done edges)
 
 /-- [forge_bool_core::inc::unify]: loop 13:
-    Source: 'src/inc.rs', lines 785:4-805:5 -/
+    Source: 'src/inc.rs', lines 926:4-946:5 -/
 @[rust_loop]
 def inc.unify_loop7
   (at_e : alloc.vec.Vec (alloc.vec.Vec Std.U32)) (ecs : alloc.vec.Vec Std.U32)
@@ -4824,7 +4824,7 @@ def inc.unify_loop7
     (erel, edges, edge_of, p)
 
 /-- [forge_bool_core::inc::unify]:
-    Source: 'src/inc.rs', lines 668:0-807:1 -/
+    Source: 'src/inc.rs', lines 809:0-948:1 -/
 def inc.unify (l : inc.Ledger) (a : inc.Assembled) : Result inc.Body := do
   let nr := alloc.vec.Vec.len a.result
   let s := alloc.vec.Vec.deref l.edge_facets.start
@@ -4870,7 +4870,7 @@ def inc.unify (l : inc.Ledger) (a : inc.Assembled) : Result inc.Body := do
   ok { faces := faces1, edges, verts }
 
 /-- [forge_bool_core::inc::fan_rel]:
-    Source: 'src/inc.rs', lines 584:0-586:1 -/
+    Source: 'src/inc.rs', lines 725:0-727:1 -/
 def inc.fan_rel (s : inc.Sector) (t : inc.Sector) : Result Bool := do
   if s.a = t.a
   then ok true
@@ -4882,7 +4882,7 @@ def inc.fan_rel (s : inc.Sector) (t : inc.Sector) : Result Bool := do
          else ok (s.b = t.b)
 
 /-- [forge_bool_core::inc::fans]: loop body 1:
-    Source: 'src/inc.rs', lines 594:8-599:9 -/
+    Source: 'src/inc.rs', lines 735:8-740:9 -/
 @[rust_loop_body]
 def inc.fans_loop0_loop0.body
   (l : inc.Ledger) (ar : Slice Std.Usize) (p : Std.Usize) (uf : union_find.Uf)
@@ -4910,7 +4910,7 @@ def inc.fans_loop0_loop0.body
   else ok (done (l, uf))
 
 /-- [forge_bool_core::inc::fans]: loop 1:
-    Source: 'src/inc.rs', lines 594:8-599:9 -/
+    Source: 'src/inc.rs', lines 735:8-740:9 -/
 @[rust_loop]
 def inc.fans_loop0_loop0
   (l : inc.Ledger) (ar : Slice Std.Usize) (uf : union_find.Uf) (p : Std.Usize)
@@ -4922,7 +4922,7 @@ def inc.fans_loop0_loop0
     (uf, q)
 
 /-- [forge_bool_core::inc::fans]: loop body 0:
-    Source: 'src/inc.rs', lines 592:4-601:5 -/
+    Source: 'src/inc.rs', lines 733:4-742:5 -/
 @[rust_loop_body]
 def inc.fans_loop0.body
   (ar : Slice Std.Usize) (l : inc.Ledger) (uf : union_find.Uf) (p : Std.Usize)
@@ -4939,7 +4939,7 @@ def inc.fans_loop0.body
   else ok (done uf)
 
 /-- [forge_bool_core::inc::fans]: loop 0:
-    Source: 'src/inc.rs', lines 592:4-601:5 -/
+    Source: 'src/inc.rs', lines 733:4-742:5 -/
 @[rust_loop]
 def inc.fans_loop0
   (l : inc.Ledger) (ar : Slice Std.Usize) (uf : union_find.Uf) (p : Std.Usize)
@@ -4951,7 +4951,7 @@ def inc.fans_loop0
     (l, uf, p)
 
 /-- [forge_bool_core::inc::fans]:
-    Source: 'src/inc.rs', lines 589:0-603:1 -/
+    Source: 'src/inc.rs', lines 730:0-744:1 -/
 def inc.fans
   (l : inc.Ledger) (ar : Slice Std.Usize) : Result union_find.Uf := do
   let i := Slice.len ar
@@ -4959,7 +4959,7 @@ def inc.fans
   inc.fans_loop0 l ar uf 0#usize
 
 /-- [forge_bool_core::inc::bad_vert]: loop body 0:
-    Source: 'src/inc.rs', lines 611:4-614:5 -/
+    Source: 'src/inc.rs', lines 752:4-755:5 -/
 @[rust_loop_body]
 def inc.bad_vert_loop.body
   (ar : alloc.vec.Vec Std.Usize) (uf : union_find.Uf) (bad : Bool)
@@ -4979,7 +4979,7 @@ def inc.bad_vert_loop.body
     else ok (done bad)
 
 /-- [forge_bool_core::inc::bad_vert]: loop 0:
-    Source: 'src/inc.rs', lines 611:4-614:5 -/
+    Source: 'src/inc.rs', lines 752:4-755:5 -/
 @[rust_loop]
 def inc.bad_vert_loop
   (ar : alloc.vec.Vec Std.Usize) (uf : union_find.Uf) (bad : Bool)
@@ -4991,7 +4991,7 @@ def inc.bad_vert_loop
     (uf, bad, p)
 
 /-- [forge_bool_core::inc::bad_vert]:
-    Source: 'src/inc.rs', lines 606:0-616:1 -/
+    Source: 'src/inc.rs', lines 747:0-757:1 -/
 def inc.bad_vert
   (l : inc.Ledger) (a : inc.Assembled) (v : Std.Usize) : Result Bool := do
   let ar ← inc.around_v l a v
@@ -5000,7 +5000,7 @@ def inc.bad_vert
   inc.bad_vert_loop ar uf false 1#usize
 
 /-- [forge_bool_core::inc::core_k]: loop body 0:
-    Source: 'src/inc.rs', lines 508:4-518:5 -/
+    Source: 'src/inc.rs', lines 649:4-659:5 -/
 @[rust_loop_body]
 def inc.core_k_loop0.body
   (v : alloc.vec.Vec (Std.U32 × Std.U32)) (s : inc.Split) (keep : Slice Bool)
@@ -5053,7 +5053,7 @@ def inc.core_k_loop0.body
   else ok (done (v1, v2, v3))
 
 /-- [forge_bool_core::inc::core_k]: loop 0:
-    Source: 'src/inc.rs', lines 508:4-518:5 -/
+    Source: 'src/inc.rs', lines 649:4-659:5 -/
 @[rust_loop]
 def inc.core_k_loop0
   (v : alloc.vec.Vec (Std.U32 × Std.U32)) (s : inc.Split) (keep : Slice Bool)
@@ -5067,7 +5067,7 @@ def inc.core_k_loop0
     (v1, v2, v3, f)
 
 /-- [forge_bool_core::inc::core_k]: loop body 1:
-    Source: 'src/inc.rs', lines 526:4-532:5 -/
+    Source: 'src/inc.rs', lines 667:4-673:5 -/
 @[rust_loop_body]
 def inc.core_k_loop1.body
   (i : Std.U32) (v : alloc.vec.Vec BodyId) (v1 : alloc.vec.Vec Std.U32)
@@ -5114,7 +5114,7 @@ def inc.core_k_loop1.body
     else ok (done (bad, found))
 
 /-- [forge_bool_core::inc::core_k]: loop 1:
-    Source: 'src/inc.rs', lines 526:4-532:5 -/
+    Source: 'src/inc.rs', lines 667:4-673:5 -/
 @[rust_loop]
 def inc.core_k_loop1
   (i : Std.U32) (v : alloc.vec.Vec BodyId) (v1 : alloc.vec.Vec Std.U32)
@@ -5134,7 +5134,7 @@ def inc.core_k_loop1
     (bad, found, e)
 
 /-- [forge_bool_core::inc::core_k]: loop body 2:
-    Source: 'src/inc.rs', lines 534:4-540:5 -/
+    Source: 'src/inc.rs', lines 675:4-681:5 -/
 @[rust_loop_body]
 def inc.core_k_loop2.body
   (i : Std.U32) (v : alloc.vec.Vec BodyId) (v1 : alloc.vec.Vec Std.U32)
@@ -5180,7 +5180,7 @@ def inc.core_k_loop2.body
     else ok (done (bad, found))
 
 /-- [forge_bool_core::inc::core_k]: loop 2:
-    Source: 'src/inc.rs', lines 534:4-540:5 -/
+    Source: 'src/inc.rs', lines 675:4-681:5 -/
 @[rust_loop]
 def inc.core_k_loop2
   (i : Std.U32) (v : alloc.vec.Vec BodyId) (v1 : alloc.vec.Vec Std.U32)
@@ -5200,7 +5200,7 @@ def inc.core_k_loop2
     (bad, found, v13)
 
 /-- [forge_bool_core::inc::core_k]:
-    Source: 'src/inc.rs', lines 499:0-549:1 -/
+    Source: 'src/inc.rs', lines 640:0-690:1 -/
 def inc.core_k
   (l : inc.Ledger) (s : inc.Split) (keep : Slice Bool) :
   Result inc.Outcome
@@ -5234,8 +5234,790 @@ def inc.core_k
       let b1 ← inc.unify l { result := v1, rpos := v2, orient := v3 }
       ok (inc.Outcome.Ok b1)
 
+/-- [forge_bool_core::sort::sort_u32]: loop body 2:
+    Source: 'src/sort.rs', lines 52:12-61:13 -/
+@[rust_loop_body]
+def sort.sort_u32_loop0_loop0_loop0.body
+  (src : alloc.vec.Vec Std.U32) (mid : Std.Usize) (hi : Std.Usize)
+  (dst : alloc.vec.Vec Std.U32) (i : Std.Usize) (j : Std.Usize) (k : Std.Usize)
+  :
+  Result (ControlFlow ((alloc.vec.Vec Std.U32) × Std.Usize × Std.Usize ×
+    Std.Usize) (alloc.vec.Vec Std.U32))
+  := do
+  if k < hi
+  then
+    let (dst1, i1, j1) ←
+      if i < mid
+      then
+        if j >= hi
+        then
+          do
+          let i2 ←
+            alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32)
+              src i
+          let (_, index_mut_back) ←
+            alloc.vec.Vec.index_mut (core.slice.index.SliceIndexUsizeSlice
+              Std.U32) dst k
+          let i3 ← i + 1#usize
+          let dst2 := index_mut_back i2
+          ok (dst2, i3, j)
+        else
+          do
+          let i2 ←
+            alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32)
+              src i
+          let i3 ←
+            alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32)
+              src j
+          if i2 <= i3
+          then
+            let (_, index_mut_back) ←
+              alloc.vec.Vec.index_mut (core.slice.index.SliceIndexUsizeSlice
+                Std.U32) dst k
+            let i4 ← i + 1#usize
+            let dst2 := index_mut_back i2
+            ok (dst2, i4, j)
+          else
+            let (_, index_mut_back) ←
+              alloc.vec.Vec.index_mut (core.slice.index.SliceIndexUsizeSlice
+                Std.U32) dst k
+            let j2 ← j + 1#usize
+            let dst2 := index_mut_back i3
+            ok (dst2, i, j2)
+      else
+        do
+        let i2 ←
+          alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32)
+            src j
+        let (_, index_mut_back) ←
+          alloc.vec.Vec.index_mut (core.slice.index.SliceIndexUsizeSlice
+            Std.U32) dst k
+        let j2 ← j + 1#usize
+        let dst2 := index_mut_back i2
+        ok (dst2, i, j2)
+    let k1 ← k + 1#usize
+    ok (cont (dst1, i1, j1, k1))
+  else ok (done dst)
+
+/-- [forge_bool_core::sort::sort_u32]: loop 2:
+    Source: 'src/sort.rs', lines 52:12-61:13 -/
+@[rust_loop]
+def sort.sort_u32_loop0_loop0_loop0
+  (src : alloc.vec.Vec Std.U32) (dst : alloc.vec.Vec Std.U32) (mid : Std.Usize)
+  (hi : Std.Usize) (i : Std.Usize) (j : Std.Usize) (k : Std.Usize) :
+  Result (alloc.vec.Vec Std.U32)
+  := do
+  loop
+    (fun (dst1, i1, j1, k1) => sort.sort_u32_loop0_loop0_loop0.body src mid hi
+      dst1 i1 j1 k1)
+    (dst, i, j, k)
+
+/-- [forge_bool_core::sort::sort_u32]: loop body 1:
+    Source: 'src/sort.rs', lines 48:8-63:9 -/
+@[rust_loop_body]
+def sort.sort_u32_loop0_loop0.body
+  (n : Std.Usize) (src : alloc.vec.Vec Std.U32) (width : Std.Usize)
+  (dst : alloc.vec.Vec Std.U32) (lo : Std.Usize) :
+  Result (ControlFlow ((alloc.vec.Vec Std.U32) × Std.Usize) (alloc.vec.Vec
+    Std.U32))
+  := do
+  if lo < n
+  then
+    let i ← lo + width
+    let mid ← if i < n
+                then ok i
+                else ok n
+    let i1 ← 2#usize * width
+    let i2 ← lo + i1
+    let hi ← if i2 < n
+               then lo + i1
+               else ok n
+    let dst1 ← sort.sort_u32_loop0_loop0_loop0 src dst mid hi lo mid lo
+    ok (cont (dst1, hi))
+  else ok (done dst)
+
+/-- [forge_bool_core::sort::sort_u32]: loop 1:
+    Source: 'src/sort.rs', lines 48:8-63:9 -/
+@[rust_loop]
+def sort.sort_u32_loop0_loop0
+  (n : Std.Usize) (src : alloc.vec.Vec Std.U32) (dst : alloc.vec.Vec Std.U32)
+  (width : Std.Usize) (lo : Std.Usize) :
+  Result (alloc.vec.Vec Std.U32)
+  := do
+  loop
+    (fun (dst1, lo1) => sort.sort_u32_loop0_loop0.body n src width dst1 lo1)
+    (dst, lo)
+
+/-- [forge_bool_core::sort::sort_u32]: loop body 0:
+    Source: 'src/sort.rs', lines 46:4-66:5 -/
+@[rust_loop_body]
+def sort.sort_u32_loop0.body
+  (n : Std.Usize) (src : alloc.vec.Vec Std.U32) (dst : alloc.vec.Vec Std.U32)
+  (width : Std.Usize) :
+  Result (ControlFlow ((alloc.vec.Vec Std.U32) × (alloc.vec.Vec Std.U32) ×
+    Std.Usize) (alloc.vec.Vec Std.U32))
+  := do
+  if width < n
+  then
+    let dst1 ← sort.sort_u32_loop0_loop0 n src dst width 0#usize
+    let (src1, dst2) := core.mem.swap src dst1
+    let width1 ← width * 2#usize
+    ok (cont (src1, dst2, width1))
+  else ok (done src)
+
+/-- [forge_bool_core::sort::sort_u32]: loop 0:
+    Source: 'src/sort.rs', lines 46:4-66:5 -/
+@[rust_loop]
+def sort.sort_u32_loop0
+  (n : Std.Usize) (src : alloc.vec.Vec Std.U32) (dst : alloc.vec.Vec Std.U32)
+  (width : Std.Usize) :
+  Result (alloc.vec.Vec Std.U32)
+  := do
+  loop
+    (fun (src1, dst1, width1) => sort.sort_u32_loop0.body n src1 dst1 width1)
+    (src, dst, width)
+
+/-- [forge_bool_core::sort::sort_u32]:
+    Source: 'src/sort.rs', lines 38:0-68:1 -/
+def sort.sort_u32
+  (v : alloc.vec.Vec Std.U32) : Result (alloc.vec.Vec Std.U32) := do
+  let n := alloc.vec.Vec.len v
+  if n < 2#usize
+  then ok v
+  else
+    let src ← alloc.vec.CloneVec.clone core.clone.CloneU32 v
+    sort.sort_u32_loop0 n src src 1#usize
+
+/-- [forge_bool_core::inc::collapse]: loop body 0:
+    Source: 'src/inc.rs', lines 518:4-525:5 -/
+@[rust_loop_body]
+def inc.collapse_loop0.body
+  (v : alloc.vec.Vec Std.U32) (mt : inc.MetricLedger) (nr : Std.Usize)
+  (is_thin : alloc.vec.Vec Bool) (any : Bool) (k : Std.Usize) :
+  Result (ControlFlow ((alloc.vec.Vec Bool) × Bool × Std.Usize)
+    ((alloc.vec.Vec inc.RoomId) × (alloc.vec.Vec Bool) × Bool))
+  := do
+  let i := alloc.vec.Vec.len mt.thin
+  if k < i
+  then
+    let ri ←
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice inc.RoomId)
+        mt.thin k
+    let r ← lift (UScalar.cast .Usize ri)
+    let (is_thin1, any1) ←
+      if r < nr
+      then
+        do
+        let i1 ←
+          alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32) v
+            r
+        if i1 != inc.NONE
+        then
+          let i2 ← lift (UScalar.cast .Usize i1)
+          let (_, index_mut_back) ←
+            alloc.vec.Vec.index_mut (core.slice.index.SliceIndexUsizeSlice
+              Bool) is_thin i2
+          let is_thin2 := index_mut_back true
+          ok (is_thin2, true)
+        else ok (is_thin, any)
+      else ok (is_thin, any)
+    let k1 ← k + 1#usize
+    ok (cont (is_thin1, any1, k1))
+  else ok (done (mt.enclosed, is_thin, any))
+
+/-- [forge_bool_core::inc::collapse]: loop 0:
+    Source: 'src/inc.rs', lines 518:4-525:5 -/
+@[rust_loop]
+def inc.collapse_loop0
+  (v : alloc.vec.Vec Std.U32) (mt : inc.MetricLedger) (nr : Std.Usize)
+  (is_thin : alloc.vec.Vec Bool) (any : Bool) (k : Std.Usize) :
+  Result ((alloc.vec.Vec inc.RoomId) × (alloc.vec.Vec Bool) × Bool)
+  := do
+  loop
+    (fun (is_thin1, any1, k1) => inc.collapse_loop0.body v mt nr is_thin1 any1
+      k1)
+    (is_thin, any, k)
+
+/-- [forge_bool_core::inc::collapse]: loop body 1:
+    Source: 'src/inc.rs', lines 529:8-535:9 -/
+@[rust_loop_body]
+def inc.collapse_loop1.body
+  (v : alloc.vec.Vec Std.U32) (v1 : alloc.vec.Vec inc.RoomId) (nr : Std.Usize)
+  (is_enc : alloc.vec.Vec Bool) (k : Std.Usize) :
+  Result (ControlFlow ((alloc.vec.Vec Bool) × Std.Usize) (alloc.vec.Vec Bool))
+  := do
+  let i := alloc.vec.Vec.len v1
+  if k < i
+  then
+    let ri ←
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice inc.RoomId) v1
+        k
+    let r ← lift (UScalar.cast .Usize ri)
+    let is_enc1 ←
+      if r < nr
+      then
+        do
+        let i1 ←
+          alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32) v
+            r
+        if i1 != inc.NONE
+        then
+          let i2 ← lift (UScalar.cast .Usize i1)
+          let (_, index_mut_back) ←
+            alloc.vec.Vec.index_mut (core.slice.index.SliceIndexUsizeSlice
+              Bool) is_enc i2
+          ok (index_mut_back true)
+        else ok is_enc
+      else ok is_enc
+    let k1 ← k + 1#usize
+    ok (cont (is_enc1, k1))
+  else ok (done is_enc)
+
+/-- [forge_bool_core::inc::collapse]: loop 1:
+    Source: 'src/inc.rs', lines 529:8-535:9 -/
+@[rust_loop]
+def inc.collapse_loop1
+  (v : alloc.vec.Vec Std.U32) (v1 : alloc.vec.Vec inc.RoomId) (nr : Std.Usize)
+  (is_enc : alloc.vec.Vec Bool) (k : Std.Usize) :
+  Result (alloc.vec.Vec Bool)
+  := do
+  loop
+    (fun (is_enc1, k1) => inc.collapse_loop1.body v v1 nr is_enc1 k1)
+    (is_enc, k)
+
+/-- [forge_bool_core::inc::collapse]: loop body 2:
+    Source: 'src/inc.rs', lines 540:8-547:9 -/
+@[rust_loop_body]
+def inc.collapse_loop2.body
+  (v : alloc.vec.Vec (Std.U32 × Std.U32)) (v1 : alloc.vec.Vec Std.U32)
+  (is_thin : alloc.vec.Vec Bool) (nf : Std.Usize) (uf : union_find.Uf)
+  (f : Std.Usize) :
+  Result (ControlFlow (union_find.Uf × Std.Usize) union_find.Uf)
+  := do
+  if f < nf
+  then
+    let (p, m) ←
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice (Std.U32 ×
+        Std.U32)) v f
+    let i ← lift (UScalar.cast .Usize p)
+    let i1 ←
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32) v1 i
+    let pp ← lift (UScalar.cast .Usize i1)
+    let i2 ← lift (UScalar.cast .Usize m)
+    let i3 ←
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32) v1 i2
+    let mp ← lift (UScalar.cast .Usize i3)
+    let b ←
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Bool) is_thin
+        pp
+    let uf1 ←
+      if b
+      then
+        do
+        let b1 ←
+          alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Bool)
+            is_thin mp
+        if b1
+        then union_find.Uf.union uf pp mp
+        else ok uf
+      else ok uf
+    let f1 ← f + 1#usize
+    ok (cont (uf1, f1))
+  else ok (done uf)
+
+/-- [forge_bool_core::inc::collapse]: loop 2:
+    Source: 'src/inc.rs', lines 540:8-547:9 -/
+@[rust_loop]
+def inc.collapse_loop2
+  (v : alloc.vec.Vec (Std.U32 × Std.U32)) (v1 : alloc.vec.Vec Std.U32)
+  (is_thin : alloc.vec.Vec Bool) (nf : Std.Usize) (uf : union_find.Uf)
+  (f : Std.Usize) :
+  Result union_find.Uf
+  := do
+  loop
+    (fun (uf1, f1) => inc.collapse_loop2.body v v1 is_thin nf uf1 f1)
+    (uf, f)
+
+/-- [forge_bool_core::inc::collapse]: loop body 3:
+    Source: 'src/inc.rs', lines 552:8-558:9 -/
+@[rust_loop_body]
+def inc.collapse_loop3.body
+  (nt : Std.Usize) (is_thin : alloc.vec.Vec Bool) (is_enc : alloc.vec.Vec Bool)
+  (uf : union_find.Uf) (all_enc : alloc.vec.Vec Bool) (t : Std.Usize) :
+  Result (ControlFlow (union_find.Uf × (alloc.vec.Vec Bool) × Std.Usize)
+    (union_find.Uf × (alloc.vec.Vec Bool)))
+  := do
+  if t < nt
+  then
+    let b ←
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Bool) is_thin
+        t
+    let (uf1, all_enc1) ←
+      if b
+      then
+        do
+        let b1 ←
+          alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Bool)
+            is_enc t
+        if b1
+        then ok (uf, all_enc)
+        else
+          let (r, uf2) ← union_find.Uf.find uf t
+          let (_, index_mut_back) ←
+            alloc.vec.Vec.index_mut (core.slice.index.SliceIndexUsizeSlice
+              Bool) all_enc r
+          let all_enc2 := index_mut_back false
+          ok (uf2, all_enc2)
+      else ok (uf, all_enc)
+    let t1 ← t + 1#usize
+    ok (cont (uf1, all_enc1, t1))
+  else ok (done (uf, all_enc))
+
+/-- [forge_bool_core::inc::collapse]: loop 3:
+    Source: 'src/inc.rs', lines 552:8-558:9 -/
+@[rust_loop]
+def inc.collapse_loop3
+  (nt : Std.Usize) (is_thin : alloc.vec.Vec Bool) (is_enc : alloc.vec.Vec Bool)
+  (uf : union_find.Uf) (all_enc : alloc.vec.Vec Bool) (t : Std.Usize) :
+  Result (union_find.Uf × (alloc.vec.Vec Bool))
+  := do
+  loop
+    (fun (uf1, all_enc1, t1) => inc.collapse_loop3.body nt is_thin is_enc uf1
+      all_enc1 t1)
+    (uf, all_enc, t)
+
+/-- [forge_bool_core::inc::collapse]: loop body 4:
+    Source: 'src/inc.rs', lines 560:8-572:9 -/
+@[rust_loop_body]
+def inc.collapse_loop4.body
+  (v : alloc.vec.Vec (Std.U32 × Std.U32)) (v1 : alloc.vec.Vec Std.U32)
+  (is_thin : alloc.vec.Vec Bool) (nf : Std.Usize) (uf : union_find.Uf)
+  (rim : alloc.vec.Vec (alloc.vec.Vec Std.U32)) (f : Std.Usize) :
+  Result (ControlFlow (union_find.Uf × (alloc.vec.Vec (alloc.vec.Vec Std.U32))
+    × Std.Usize) (union_find.Uf × (alloc.vec.Vec (alloc.vec.Vec Std.U32))))
+  := do
+  if f < nf
+  then
+    let (p, m) ←
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice (Std.U32 ×
+        Std.U32)) v f
+    let i ← lift (UScalar.cast .Usize p)
+    let i1 ←
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32) v1 i
+    let pp ← lift (UScalar.cast .Usize i1)
+    let i2 ← lift (UScalar.cast .Usize m)
+    let i3 ←
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32) v1 i2
+    let mp ← lift (UScalar.cast .Usize i3)
+    let b ←
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Bool) is_thin
+        pp
+    let (uf1, rim1) ←
+      if b
+      then
+        do
+        let b1 ←
+          alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Bool)
+            is_thin mp
+        if b1
+        then ok (uf, rim)
+        else
+          let (r, uf2) ← union_find.Uf.find uf pp
+          let (v2, index_mut_back) ←
+            alloc.vec.Vec.index_mut (core.slice.index.SliceIndexUsizeSlice
+              (alloc.vec.Vec Std.U32)) rim r
+          let i4 ← lift (UScalar.cast .U32 mp)
+          let v3 ← alloc.vec.Vec.push v2 i4
+          let rim2 := index_mut_back v3
+          ok (uf2, rim2)
+      else ok (uf, rim)
+    let b1 ←
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Bool) is_thin
+        mp
+    let (uf2, rim2) ←
+      if b1
+      then
+        if b
+        then ok (uf1, rim1)
+        else
+          do
+          let (r, uf3) ← union_find.Uf.find uf1 mp
+          let (v2, index_mut_back) ←
+            alloc.vec.Vec.index_mut (core.slice.index.SliceIndexUsizeSlice
+              (alloc.vec.Vec Std.U32)) rim1 r
+          let i4 ← lift (UScalar.cast .U32 pp)
+          let v3 ← alloc.vec.Vec.push v2 i4
+          let rim3 := index_mut_back v3
+          ok (uf3, rim3)
+      else ok (uf1, rim1)
+    let f1 ← f + 1#usize
+    ok (cont (uf2, rim2, f1))
+  else ok (done (uf, rim))
+
+/-- [forge_bool_core::inc::collapse]: loop 4:
+    Source: 'src/inc.rs', lines 560:8-572:9 -/
+@[rust_loop]
+def inc.collapse_loop4
+  (v : alloc.vec.Vec (Std.U32 × Std.U32)) (v1 : alloc.vec.Vec Std.U32)
+  (is_thin : alloc.vec.Vec Bool) (nf : Std.Usize) (uf : union_find.Uf)
+  (rim : alloc.vec.Vec (alloc.vec.Vec Std.U32)) (f : Std.Usize) :
+  Result (union_find.Uf × (alloc.vec.Vec (alloc.vec.Vec Std.U32)))
+  := do
+  loop
+    (fun (uf1, rim1, f1) => inc.collapse_loop4.body v v1 is_thin nf uf1 rim1
+      f1)
+    (uf, rim, f)
+
+/-- [forge_bool_core::inc::collapse]: loop body 6:
+    Source: 'src/inc.rs', lines 579:16-584:17 -/
+@[rust_loop_body]
+def inc.collapse_loop5_loop0.body
+  (rim : alloc.vec.Vec (alloc.vec.Vec Std.U32)) (t : Std.Usize)
+  (d : alloc.vec.Vec Std.U32) (j : Std.Usize) :
+  Result (ControlFlow ((alloc.vec.Vec Std.U32) × Std.Usize) (alloc.vec.Vec
+    Std.U32))
+  := do
+  let v ←
+    alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice (alloc.vec.Vec
+      Std.U32)) rim t
+  let i := alloc.vec.Vec.len v
+  if j < i
+  then
+    let b ← alloc.vec.Vec.is_empty d
+    let d1 ←
+      if b
+      then
+        do
+        let i1 ←
+          alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32) v
+            j
+        alloc.vec.Vec.push d i1
+      else
+        do
+        let i1 := alloc.vec.Vec.len d
+        let i2 ← i1 - 1#usize
+        let i3 ←
+          alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32) d
+            i2
+        let i4 ←
+          alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32) v
+            j
+        if i3 != i4
+        then
+          let i5 ←
+            alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32)
+              v j
+          alloc.vec.Vec.push d i5
+        else ok d
+    let j1 ← j + 1#usize
+    ok (cont (d1, j1))
+  else ok (done d)
+
+/-- [forge_bool_core::inc::collapse]: loop 6:
+    Source: 'src/inc.rs', lines 579:16-584:17 -/
+@[rust_loop]
+def inc.collapse_loop5_loop0
+  (rim : alloc.vec.Vec (alloc.vec.Vec Std.U32)) (t : Std.Usize)
+  (d : alloc.vec.Vec Std.U32) (j : Std.Usize) :
+  Result (alloc.vec.Vec Std.U32)
+  := do
+  loop
+    (fun (d1, j1) => inc.collapse_loop5_loop0.body rim t d1 j1)
+    (d, j)
+
+/-- [forge_bool_core::inc::collapse]: loop body 5:
+    Source: 'src/inc.rs', lines 574:8-588:9 -/
+@[rust_loop_body]
+def inc.collapse_loop5.body
+  (nt : Std.Usize) (rim : alloc.vec.Vec (alloc.vec.Vec Std.U32))
+  (t : Std.Usize) :
+  Result (ControlFlow ((alloc.vec.Vec (alloc.vec.Vec Std.U32)) × Std.Usize)
+    (alloc.vec.Vec (alloc.vec.Vec Std.U32)))
+  := do
+  if t < nt
+  then
+    let v ←
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice (alloc.vec.Vec
+        Std.U32)) rim t
+    let i := alloc.vec.Vec.len v
+    if i > 1#usize
+    then
+      let (v1, index_mut_back) ←
+        alloc.vec.Vec.index_mut (core.slice.index.SliceIndexUsizeSlice
+          (alloc.vec.Vec Std.U32)) rim t
+      let v2 ← sort.sort_u32 v1
+      let rim1 := index_mut_back v2
+      let d ←
+        inc.collapse_loop5_loop0 rim1 t (alloc.vec.Vec.new Std.U32) 0#usize
+      let (_, index_mut_back1) ←
+        alloc.vec.Vec.index_mut (core.slice.index.SliceIndexUsizeSlice
+          (alloc.vec.Vec Std.U32)) rim1 t
+      let t1 ← t + 1#usize
+      let rim2 := index_mut_back1 d
+      ok (cont (rim2, t1))
+    else let t1 ← t + 1#usize
+         ok (cont (rim, t1))
+  else ok (done rim)
+
+/-- [forge_bool_core::inc::collapse]: loop 5:
+    Source: 'src/inc.rs', lines 574:8-588:9 -/
+@[rust_loop]
+def inc.collapse_loop5
+  (nt : Std.Usize) (rim : alloc.vec.Vec (alloc.vec.Vec Std.U32))
+  (t : Std.Usize) :
+  Result (alloc.vec.Vec (alloc.vec.Vec Std.U32))
+  := do
+  loop
+    (fun (rim1, t1) => inc.collapse_loop5.body nt rim1 t1)
+    (rim, t)
+
+/-- [forge_bool_core::inc::collapse]: loop body 8:
+    Source: 'src/inc.rs', lines 602:16-605:17 -/
+@[rust_loop_body]
+def inc.collapse_loop6_loop0.body
+  (keep : Slice Bool) (rm : alloc.vec.Vec Std.U32) (first : Bool)
+  (uniform : Bool) (j : Std.Usize) :
+  Result (ControlFlow (Bool × Std.Usize) Bool)
+  := do
+  if uniform
+  then
+    let i := alloc.vec.Vec.len rm
+    if j < i
+    then
+      let i1 ←
+        alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32) rm
+          j
+      let i2 ← lift (UScalar.cast .Usize i1)
+      let b ← Slice.index_usize keep i2
+      let j1 ← j + 1#usize
+      ok (cont (b = first, j1))
+    else ok (done uniform)
+  else ok (done uniform)
+
+/-- [forge_bool_core::inc::collapse]: loop 8:
+    Source: 'src/inc.rs', lines 602:16-605:17 -/
+@[rust_loop]
+def inc.collapse_loop6_loop0
+  (keep : Slice Bool) (rm : alloc.vec.Vec Std.U32) (first : Bool)
+  (uniform : Bool) (j : Std.Usize) :
+  Result Bool
+  := do
+  loop
+    (fun (uniform1, j1) => inc.collapse_loop6_loop0.body keep rm first uniform1
+      j1)
+    (uniform, j)
+
+/-- [forge_bool_core::inc::collapse]: loop body 7:
+    Source: 'src/inc.rs', lines 591:8-611:9 -/
+@[rust_loop_body]
+def inc.collapse_loop6.body
+  (v : alloc.vec.Vec Std.U32) (keep : Slice Bool) (nt : Std.Usize)
+  (is_thin : alloc.vec.Vec Bool) (rim : alloc.vec.Vec (alloc.vec.Vec Std.U32))
+  (all_enc : alloc.vec.Vec Bool) (bad : Std.U32) (uf : union_find.Uf)
+  (t : Std.Usize) :
+  Result (ControlFlow (Std.U32 × union_find.Uf × Std.Usize) (Std.U32 ×
+    union_find.Uf))
+  := do
+  if bad = inc.NONE
+  then
+    if t < nt
+    then
+      let b ←
+        alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Bool)
+          is_thin t
+      if b
+      then
+        let (r, uf1) ← union_find.Uf.find uf t
+        let rm ←
+          alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice
+            (alloc.vec.Vec Std.U32)) rim r
+        let b1 ← alloc.vec.Vec.is_empty rm
+        let first ←
+          if b1
+          then Slice.index_usize keep t
+          else
+            do
+            let i ←
+              alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice
+                Std.U32) rm 0#usize
+            let i1 ← lift (UScalar.cast .Usize i)
+            Slice.index_usize keep i1
+        let uniform ← inc.collapse_loop6_loop0 keep rm first true 0#usize
+        let bad1 ←
+          if uniform
+          then
+            do
+            let b2 ←
+              alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Bool)
+                all_enc r
+            if b2
+            then ok bad
+            else
+              alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice
+                Std.U32) v t
+          else
+            alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32)
+              v t
+        let t1 ← t + 1#usize
+        ok (cont (bad1, uf1, t1))
+      else let t1 ← t + 1#usize
+           ok (cont (bad, uf, t1))
+    else ok (done (bad, uf))
+  else ok (done (bad, uf))
+
+/-- [forge_bool_core::inc::collapse]: loop 7:
+    Source: 'src/inc.rs', lines 591:8-611:9 -/
+@[rust_loop]
+def inc.collapse_loop6
+  (v : alloc.vec.Vec Std.U32) (keep : Slice Bool) (nt : Std.Usize)
+  (is_thin : alloc.vec.Vec Bool) (bad : Std.U32) (uf : union_find.Uf)
+  (rim : alloc.vec.Vec (alloc.vec.Vec Std.U32)) (all_enc : alloc.vec.Vec Bool)
+  (t : Std.Usize) :
+  Result (Std.U32 × union_find.Uf)
+  := do
+  loop
+    (fun (bad1, uf1, t1) => inc.collapse_loop6.body v keep nt is_thin rim
+      all_enc bad1 uf1 t1)
+    (bad, uf, t)
+
+/-- [forge_bool_core::inc::collapse]: loop body 9:
+    Source: 'src/inc.rs', lines 616:12-626:13 -/
+@[rust_loop_body]
+def inc.collapse_loop7.body
+  (keep : Slice Bool) (nt : Std.Usize) (is_thin : alloc.vec.Vec Bool)
+  (rim : alloc.vec.Vec (alloc.vec.Vec Std.U32)) (uf : union_find.Uf)
+  (fill : alloc.vec.Vec Bool) (t : Std.Usize) :
+  Result (ControlFlow (union_find.Uf × (alloc.vec.Vec Bool) × Std.Usize)
+    (alloc.vec.Vec Bool))
+  := do
+  if t < nt
+  then
+    let b ←
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Bool) is_thin
+        t
+    let (uf1, fill1) ←
+      if b
+      then
+        do
+        let (r, uf2) ← union_find.Uf.find uf t
+        let v ←
+          alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice
+            (alloc.vec.Vec Std.U32)) rim r
+        let b1 ← alloc.vec.Vec.is_empty v
+        let b2 ←
+          if b1
+          then Slice.index_usize keep t
+          else
+            do
+            let i ←
+              alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice
+                Std.U32) v 0#usize
+            let i1 ← lift (UScalar.cast .Usize i)
+            Slice.index_usize keep i1
+        let (_, index_mut_back) ←
+          alloc.vec.Vec.index_mut (core.slice.index.SliceIndexUsizeSlice Bool)
+            fill t
+        let fill2 := index_mut_back b2
+        ok (uf2, fill2)
+      else ok (uf, fill)
+    let t1 ← t + 1#usize
+    ok (cont (uf1, fill1, t1))
+  else ok (done fill)
+
+/-- [forge_bool_core::inc::collapse]: loop 9:
+    Source: 'src/inc.rs', lines 616:12-626:13 -/
+@[rust_loop]
+def inc.collapse_loop7
+  (keep : Slice Bool) (nt : Std.Usize) (is_thin : alloc.vec.Vec Bool)
+  (uf : union_find.Uf) (rim : alloc.vec.Vec (alloc.vec.Vec Std.U32))
+  (fill : alloc.vec.Vec Bool) (t : Std.Usize) :
+  Result (alloc.vec.Vec Bool)
+  := do
+  loop
+    (fun (uf1, fill1, t1) => inc.collapse_loop7.body keep nt is_thin rim uf1
+      fill1 t1)
+    (uf, fill, t)
+
+/-- [forge_bool_core::inc::collapse]: loop body 10:
+    Source: 'src/inc.rs', lines 628:12-633:13 -/
+@[rust_loop_body]
+def inc.collapse_loop8.body
+  (nt : Std.Usize) (is_thin : alloc.vec.Vec Bool) (fill : alloc.vec.Vec Bool)
+  (keep : Slice Bool) (t : Std.Usize) :
+  Result (ControlFlow ((Slice Bool) × Std.Usize) (Slice Bool))
+  := do
+  if t < nt
+  then
+    let b ←
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Bool) is_thin
+        t
+    let keep1 ←
+      if b
+      then
+        do
+        let b1 ←
+          alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Bool) fill
+            t
+        Slice.update keep t b1
+      else ok keep
+    let t1 ← t + 1#usize
+    ok (cont (keep1, t1))
+  else ok (done keep)
+
+/-- [forge_bool_core::inc::collapse]: loop 10:
+    Source: 'src/inc.rs', lines 628:12-633:13 -/
+@[rust_loop]
+def inc.collapse_loop8
+  (keep : Slice Bool) (nt : Std.Usize) (is_thin : alloc.vec.Vec Bool)
+  (fill : alloc.vec.Vec Bool) (t : Std.Usize) :
+  Result (Slice Bool)
+  := do
+  loop
+    (fun (keep1, t1) => inc.collapse_loop8.body nt is_thin fill keep1 t1)
+    (keep, t)
+
+/-- [forge_bool_core::inc::collapse]:
+    Source: 'src/inc.rs', lines 511:0-637:1 -/
+def inc.collapse
+  (l : inc.Ledger) (s : inc.Split) (keep : Slice Bool) (mt : inc.MetricLedger)
+  :
+  Result (Std.U32 × (Slice Bool))
+  := do
+  let nt := alloc.vec.Vec.len s.rooms
+  let nr ← lift (UScalar.cast .Usize l.n_rooms)
+  let is_thin ← alloc.vec.from_elem core.clone.CloneBool false nt
+  let (v, is_thin1, any) ←
+    inc.collapse_loop0 s.room_pos mt nr is_thin false 0#usize
+  if any
+  then
+    let is_enc ← inc.collapse_loop1 s.room_pos v nr is_thin 0#usize
+    let nf := alloc.vec.Vec.len l.facet_class
+    let uf ← union_find.Uf.new nt
+    let uf1 ←
+      inc.collapse_loop2 l.facet_rooms s.room_pos is_thin1 nf uf 0#usize
+    let rim ←
+      alloc.vec.from_elem (core.clone.CloneallocvecVec core.clone.CloneU32)
+        (alloc.vec.Vec.new Std.U32) nt
+    let all_enc ← alloc.vec.from_elem core.clone.CloneBool true nt
+    let (uf2, all_enc1) ←
+      inc.collapse_loop3 nt is_thin1 is_enc uf1 all_enc 0#usize
+    let (uf3, rim1) ←
+      inc.collapse_loop4 l.facet_rooms s.room_pos is_thin1 nf uf2 rim 0#usize
+    let rim2 ← inc.collapse_loop5 nt rim1 0#usize
+    let (bad, uf4) ←
+      inc.collapse_loop6 s.rooms keep nt is_thin1 inc.NONE uf3 rim2 all_enc1
+        0#usize
+    if bad = inc.NONE
+    then
+      let fill ← alloc.vec.from_elem core.clone.CloneBool false nt
+      let fill1 ← inc.collapse_loop7 keep nt is_thin1 uf4 rim2 fill 0#usize
+      let keep1 ← inc.collapse_loop8 keep nt is_thin1 fill1 0#usize
+      ok (bad, keep1)
+    else ok (bad, keep)
+  else ok (inc.NONE, keep)
+
 /-- [forge_bool_core::inc::core]: loop body 1:
-    Source: 'src/inc.rs', lines 471:12-474:13
+    Source: 'src/inc.rs', lines 472:12-475:13
     Visibility: public -/
 @[rust_loop_body]
 def inc.core_loop0_loop0.body
@@ -5273,7 +6055,7 @@ def inc.core_loop0_loop0.body
   else ok (done ok1)
 
 /-- [forge_bool_core::inc::core]: loop 1:
-    Source: 'src/inc.rs', lines 471:12-474:13
+    Source: 'src/inc.rs', lines 472:12-475:13
     Visibility: public -/
 @[rust_loop]
 def inc.core_loop0_loop0
@@ -5287,7 +6069,7 @@ def inc.core_loop0_loop0
     (ok1, i)
 
 /-- [forge_bool_core::inc::core]: loop body 0:
-    Source: 'src/inc.rs', lines 467:8-476:9
+    Source: 'src/inc.rs', lines 468:8-477:9
     Visibility: public -/
 @[rust_loop_body]
 def inc.core_loop0.body
@@ -5320,7 +6102,7 @@ def inc.core_loop0.body
   else ok (done (s, ok1))
 
 /-- [forge_bool_core::inc::core]: loop 0:
-    Source: 'src/inc.rs', lines 467:8-476:9
+    Source: 'src/inc.rs', lines 468:8-477:9
     Visibility: public -/
 @[rust_loop]
 def inc.core_loop0
@@ -5334,7 +6116,7 @@ def inc.core_loop0
     (ok1, f)
 
 /-- [forge_bool_core::inc::core]: loop body 3:
-    Source: 'src/inc.rs', lines 486:16-489:17
+    Source: 'src/inc.rs', lines 487:16-490:17
     Visibility: public -/
 @[rust_loop_body]
 def inc.core_loop1_loop0.body
@@ -5355,7 +6137,7 @@ def inc.core_loop1_loop0.body
   else ok (done mv)
 
 /-- [forge_bool_core::inc::core]: loop 3:
-    Source: 'src/inc.rs', lines 486:16-489:17
+    Source: 'src/inc.rs', lines 487:16-490:17
     Visibility: public -/
 @[rust_loop]
 def inc.core_loop1_loop0
@@ -5368,7 +6150,7 @@ def inc.core_loop1_loop0
     (mv, i)
 
 /-- [forge_bool_core::inc::core]: loop body 2:
-    Source: 'src/inc.rs', lines 483:12-492:13
+    Source: 'src/inc.rs', lines 484:12-493:13
     Visibility: public -/
 @[rust_loop_body]
 def inc.core_loop1.body
@@ -5390,7 +6172,7 @@ def inc.core_loop1.body
   else ok (done keep)
 
 /-- [forge_bool_core::inc::core]: loop 2:
-    Source: 'src/inc.rs', lines 483:12-492:13
+    Source: 'src/inc.rs', lines 484:12-493:13
     Visibility: public -/
 @[rust_loop]
 def inc.core_loop1
@@ -5404,9 +6186,12 @@ def inc.core_loop1
     (keep, t)
 
 /-- [forge_bool_core::inc::core]:
-    Source: 'src/inc.rs', lines 456:0-496:1
+    Source: 'src/inc.rs', lines 457:0-503:1
     Visibility: public -/
-def inc.core (l : inc.Ledger) (rule : Rule) : Result inc.Outcome := do
+def inc.core
+  (l : inc.Ledger) (rule : Rule) (m : inc.MetricLedger) :
+  Result inc.Outcome
+  := do
   let b ← inc.split_ok l
   if b
   then
@@ -5420,8 +6205,14 @@ def inc.core (l : inc.Ledger) (rule : Rule) : Result inc.Outcome := do
       let i := alloc.vec.Vec.len s1.rooms
       let keep := alloc.vec.Vec.with_capacity Bool i
       let keep1 ← inc.core_loop1 rule s1.rooms memb nb keep 0#usize
-      let s2 := alloc.vec.Vec.deref keep1
-      inc.core_k l s1 s2
+      let (s2, deref_mut_back) ← lift (alloc.vec.Vec.deref_mut keep1)
+      let (bad, s3) ← inc.collapse l s1 s2 m
+      if bad != inc.NONE
+      then ok (inc.Outcome.Refused (inc.Refusal.ZeroThicknessRoom bad))
+      else
+        let keep2 := deref_mut_back s3
+        let s4 := alloc.vec.Vec.deref keep2
+        inc.core_k l s1 s4
     else ok (inc.Outcome.Refused inc.Refusal.InconsistentClassification)
   else ok (inc.Outcome.Refused inc.Refusal.SplitCrossed)
 
@@ -8773,160 +9564,6 @@ def membership
       l.edges l.verts ext nb inside 0#usize
   membership_loop1 s nb inside1 (alloc.vec.Vec.new (alloc.vec.Vec Bool))
     0#usize
-
-/-- [forge_bool_core::sort::sort_u32]: loop body 2:
-    Source: 'src/sort.rs', lines 52:12-61:13 -/
-@[rust_loop_body]
-def sort.sort_u32_loop0_loop0_loop0.body
-  (src : alloc.vec.Vec Std.U32) (mid : Std.Usize) (hi : Std.Usize)
-  (dst : alloc.vec.Vec Std.U32) (i : Std.Usize) (j : Std.Usize) (k : Std.Usize)
-  :
-  Result (ControlFlow ((alloc.vec.Vec Std.U32) × Std.Usize × Std.Usize ×
-    Std.Usize) (alloc.vec.Vec Std.U32))
-  := do
-  if k < hi
-  then
-    let (dst1, i1, j1) ←
-      if i < mid
-      then
-        if j >= hi
-        then
-          do
-          let i2 ←
-            alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32)
-              src i
-          let (_, index_mut_back) ←
-            alloc.vec.Vec.index_mut (core.slice.index.SliceIndexUsizeSlice
-              Std.U32) dst k
-          let i3 ← i + 1#usize
-          let dst2 := index_mut_back i2
-          ok (dst2, i3, j)
-        else
-          do
-          let i2 ←
-            alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32)
-              src i
-          let i3 ←
-            alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32)
-              src j
-          if i2 <= i3
-          then
-            let (_, index_mut_back) ←
-              alloc.vec.Vec.index_mut (core.slice.index.SliceIndexUsizeSlice
-                Std.U32) dst k
-            let i4 ← i + 1#usize
-            let dst2 := index_mut_back i2
-            ok (dst2, i4, j)
-          else
-            let (_, index_mut_back) ←
-              alloc.vec.Vec.index_mut (core.slice.index.SliceIndexUsizeSlice
-                Std.U32) dst k
-            let j2 ← j + 1#usize
-            let dst2 := index_mut_back i3
-            ok (dst2, i, j2)
-      else
-        do
-        let i2 ←
-          alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32)
-            src j
-        let (_, index_mut_back) ←
-          alloc.vec.Vec.index_mut (core.slice.index.SliceIndexUsizeSlice
-            Std.U32) dst k
-        let j2 ← j + 1#usize
-        let dst2 := index_mut_back i2
-        ok (dst2, i, j2)
-    let k1 ← k + 1#usize
-    ok (cont (dst1, i1, j1, k1))
-  else ok (done dst)
-
-/-- [forge_bool_core::sort::sort_u32]: loop 2:
-    Source: 'src/sort.rs', lines 52:12-61:13 -/
-@[rust_loop]
-def sort.sort_u32_loop0_loop0_loop0
-  (src : alloc.vec.Vec Std.U32) (dst : alloc.vec.Vec Std.U32) (mid : Std.Usize)
-  (hi : Std.Usize) (i : Std.Usize) (j : Std.Usize) (k : Std.Usize) :
-  Result (alloc.vec.Vec Std.U32)
-  := do
-  loop
-    (fun (dst1, i1, j1, k1) => sort.sort_u32_loop0_loop0_loop0.body src mid hi
-      dst1 i1 j1 k1)
-    (dst, i, j, k)
-
-/-- [forge_bool_core::sort::sort_u32]: loop body 1:
-    Source: 'src/sort.rs', lines 48:8-63:9 -/
-@[rust_loop_body]
-def sort.sort_u32_loop0_loop0.body
-  (n : Std.Usize) (src : alloc.vec.Vec Std.U32) (width : Std.Usize)
-  (dst : alloc.vec.Vec Std.U32) (lo : Std.Usize) :
-  Result (ControlFlow ((alloc.vec.Vec Std.U32) × Std.Usize) (alloc.vec.Vec
-    Std.U32))
-  := do
-  if lo < n
-  then
-    let i ← lo + width
-    let mid ← if i < n
-                then ok i
-                else ok n
-    let i1 ← 2#usize * width
-    let i2 ← lo + i1
-    let hi ← if i2 < n
-               then lo + i1
-               else ok n
-    let dst1 ← sort.sort_u32_loop0_loop0_loop0 src dst mid hi lo mid lo
-    ok (cont (dst1, hi))
-  else ok (done dst)
-
-/-- [forge_bool_core::sort::sort_u32]: loop 1:
-    Source: 'src/sort.rs', lines 48:8-63:9 -/
-@[rust_loop]
-def sort.sort_u32_loop0_loop0
-  (n : Std.Usize) (src : alloc.vec.Vec Std.U32) (dst : alloc.vec.Vec Std.U32)
-  (width : Std.Usize) (lo : Std.Usize) :
-  Result (alloc.vec.Vec Std.U32)
-  := do
-  loop
-    (fun (dst1, lo1) => sort.sort_u32_loop0_loop0.body n src width dst1 lo1)
-    (dst, lo)
-
-/-- [forge_bool_core::sort::sort_u32]: loop body 0:
-    Source: 'src/sort.rs', lines 46:4-66:5 -/
-@[rust_loop_body]
-def sort.sort_u32_loop0.body
-  (n : Std.Usize) (src : alloc.vec.Vec Std.U32) (dst : alloc.vec.Vec Std.U32)
-  (width : Std.Usize) :
-  Result (ControlFlow ((alloc.vec.Vec Std.U32) × (alloc.vec.Vec Std.U32) ×
-    Std.Usize) (alloc.vec.Vec Std.U32))
-  := do
-  if width < n
-  then
-    let dst1 ← sort.sort_u32_loop0_loop0 n src dst width 0#usize
-    let (src1, dst2) := core.mem.swap src dst1
-    let width1 ← width * 2#usize
-    ok (cont (src1, dst2, width1))
-  else ok (done src)
-
-/-- [forge_bool_core::sort::sort_u32]: loop 0:
-    Source: 'src/sort.rs', lines 46:4-66:5 -/
-@[rust_loop]
-def sort.sort_u32_loop0
-  (n : Std.Usize) (src : alloc.vec.Vec Std.U32) (dst : alloc.vec.Vec Std.U32)
-  (width : Std.Usize) :
-  Result (alloc.vec.Vec Std.U32)
-  := do
-  loop
-    (fun (src1, dst1, width1) => sort.sort_u32_loop0.body n src1 dst1 width1)
-    (src, dst, width)
-
-/-- [forge_bool_core::sort::sort_u32]:
-    Source: 'src/sort.rs', lines 38:0-68:1 -/
-def sort.sort_u32
-  (v : alloc.vec.Vec Std.U32) : Result (alloc.vec.Vec Std.U32) := do
-  let n := alloc.vec.Vec.len v
-  if n < 2#usize
-  then ok v
-  else
-    let src ← alloc.vec.CloneVec.clone core.clone.CloneU32 v
-    sort.sort_u32_loop0 n src src 1#usize
 
 /-- [forge_bool_core::around_enum]: loop body 2:
     Source: 'src/lib.rs', lines 547:12-555:13 -/

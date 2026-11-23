@@ -2177,7 +2177,7 @@ mod v2check {
         let (il, facets, ev) = inc(l);
         assert!(inc::ledger_wf(&il), "inc L is well formed");
         let ne = l.edges.len();
-        let o2 = inc::core(&il, rule);
+        let o2 = inc::core(&il, rule, &inc::MetricLedger::default());
         match (out, &o2) {
             (Outcome::Ok(b), inc::Outcome::Ok(b2)) => {
                 assert_eq!(b.faces.len(), b2.faces.len(), "faces");

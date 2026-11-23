@@ -237,15 +237,17 @@ fn summary(l: &Ledger, o: Outcome) -> Summary {
 
 fn run(k: i64, boxes: &[BoxN], rule: Rule) -> Summary {
     let l = box_ledger(k, boxes);
-    let out = core(&l, &rule, &MetricLedger::default());
-    agrees_v2(&l, &rule, &out);
+    let m = MetricLedger::default();
+    let out = core(&l, &rule, &m);
+    agrees_v2(&l, &rule, &m, &out);
     summary(&l, out)
 }
 
 /// CoreInc.lean's `inc`: the plane ledger as an incidence ledger (facets the pieces' cells, rooms
 /// their side cells, an edge's facets those it is a face of, a vert's sectors one per facet with
 /// the two edges between them), each id the v1 cell's position in its list.
-fn inc(l: &Ledger) -> (forge_bool_core::inc::Ledger, Vec<u32>, Vec<u32>) {
+#[allow(clippy::type_complexity)]
+fn inc(l: &Ledger) -> (forge_bool_core::inc::Ledger, Vec<u32>, Vec<u32>, Vec<Vec<Sgn>>) {
     use forge_bool_core::inc;
     let le = |x: &[Sgn], y: &[Sgn]| x.iter().zip(y).all(|(&a, &b)| a == Sgn::Zero || a == b);
     let zero = |x: &[Sgn]| x.iter().position(|&s| s == Sgn::Zero).unwrap();
@@ -357,17 +359,28 @@ fn inc(l: &Ledger) -> (forge_bool_core::inc::Ledger, Vec<u32>, Vec<u32>) {
             .map(|e| e.0)
             .chain(l.verts.iter().map(|v| v.0))
             .collect(),
+        rooms,
     )
 }
 
 /// `core L` corresponds to `coreI (inc L)` (CoreInc.lean): the same outcome, the same faces (as
 /// facet cells), edge runs and vertices.
-fn agrees_v2(l: &Ledger, rule: &Rule, out: &Outcome) {
+fn agrees_v2(l: &Ledger, rule: &Rule, m: &MetricLedger, out: &Outcome) {
     use forge_bool_core::inc;
-    let (il, facets, ev) = inc(l);
+    let (il, facets, ev, rooms) = inc(l);
     assert!(inc::ledger_wf(&il), "inc L is well formed");
     let ne = l.edges.len();
-    let o2 = inc::core(&il, rule);
+    let room_of = |c: &CellId| {
+        rooms
+            .iter()
+            .position(|r| *r == l.cells[c.0 as usize])
+            .map(|i| inc::RoomId(i as u32))
+    };
+    let im = inc::MetricLedger {
+        thin: m.thin.iter().filter_map(room_of).collect(),
+        enclosed: m.enclosed.iter().filter_map(room_of).collect(),
+    };
+    let o2 = inc::core(&il, rule, &im);
     match (out, &o2) {
         (Outcome::Ok(b), inc::Outcome::Ok(b2)) => {
             assert_eq!(b.faces.len(), b2.faces.len(), "faces");
@@ -397,6 +410,9 @@ fn agrees_v2(l: &Ledger, rule: &Rule, out: &Outcome) {
             let at = match r {
                 inc::Refusal::ZeroThicknessEdge(e) => ev[e.0 as usize],
                 inc::Refusal::ZeroThicknessVert(v) => ev[ne + v.0 as usize],
+                inc::Refusal::ZeroThicknessRoom(r) => {
+                    l.cells.iter().position(|x| *x == rooms[r.0 as usize]).unwrap() as u32
+                }
                 other => panic!("v1 refused at a cell, v2 {other:?}"),
             };
             assert_eq!(c.0, at, "the refused cell");
@@ -551,7 +567,9 @@ fn run_m(k: i64, boxes: &[BoxN], rule: Rule, thin: D) -> Summary {
         thin: vec![id],
         enclosed: vec![id],
     };
-    summary(&l, core(&l, &rule, &m))
+    let out = core(&l, &rule, &m);
+    agrees_v2(&l, &rule, &m, &out);
+    summary(&l, out)
 }
 
 #[test]
