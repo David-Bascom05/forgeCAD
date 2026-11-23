@@ -133,6 +133,16 @@ pub enum FilletError {
     /// The round was built and the result fails `forge_topo::check` here: no body rather than a
     /// wrong one. Mass and every later boolean on such a body are not to be trusted.
     Invalid(Vec<forge_topo::Problem>),
+    /// Not built yet (the fillet spec's Unbuilt: a rim-limited concave fill). This closed concave
+    /// edge's spring runs off its face over `rim` at `at` and comes back. There the fill stops where
+    /// balls resting on the rim and the other face reach (the cliff), which does not stand here; the
+    /// round notched by the face beyond would keep fill those balls take away. `rim` is none where
+    /// the rim is not an edge of the part as it came. Every retry an Overflow takes, this takes.
+    RimFill {
+        edge: EdgeId,
+        rim: Option<EdgeId>,
+        at: Point3,
+    },
 }
 
 type R<T> = Result<T, FilletError>;
@@ -441,9 +451,12 @@ pub fn fillet_with(body: &Body, edges: &[FilletEdge], opts: &FilletOptions, feat
     };
     // every other way refused: a closed round may roll over a rim and back
     match got {
-        Err(FilletError::Overflow { .. } | FilletError::Corner { .. } | FilletError::Mitre { .. })
-            if !opts.cliff && opts.setbacks.is_empty() =>
-        {
+        Err(
+            FilletError::Overflow { .. }
+            | FilletError::RimFill { .. }
+            | FilletError::Corner { .. }
+            | FilletError::Mitre { .. },
+        ) if !opts.cliff && opts.setbacks.is_empty() => {
             fillet_cliff::retry(body, edges, opts, feature).map_or(got, Ok)
         }
         // built, but its counts break the Euler rule (the caller refuses such a round): a closed
@@ -457,7 +470,11 @@ pub fn fillet_with(body: &Body, edges: &[FilletEdge], opts: &FilletOptions, feat
 
 fn fillet_tried(body: &Body, edges: &[FilletEdge], opts: &FilletOptions, feature: u64) -> R<Body> {
     let got = fillet_picked(body, edges, opts, feature);
-    if matches!(got, Err(FilletError::Overflow { .. })) && !opts.across {
+    if matches!(
+        got,
+        Err(FilletError::Overflow { .. } | FilletError::RimFill { .. })
+    ) && !opts.across
+    {
         let across = FilletOptions {
             across: true,
             ..opts.clone()
@@ -486,7 +503,7 @@ fn fillet_tried(body: &Body, edges: &[FilletEdge], opts: &FilletOptions, feature
     }
     if matches!(
         got,
-        Err(FilletError::Overflow { .. } | FilletError::Corner { .. })
+        Err(FilletError::Overflow { .. } | FilletError::RimFill { .. } | FilletError::Corner { .. })
     ) && !opts.walk
     {
         // (a joint that would not close says Corner: Overflow can only want the rims)
@@ -514,7 +531,9 @@ fn fillet_tried(body: &Body, edges: &[FilletEdge], opts: &FilletOptions, feature
             }
         }
     }
-    if let Err(FilletError::Overflow { edge } | FilletError::NoBlend { edge }) = got
+    if let Err(
+        FilletError::Overflow { edge } | FilletError::RimFill { edge, .. } | FilletError::NoBlend { edge },
+    ) = got
         && opts.only
     {
         // what stops it is the end of the pick, if the whole chain builds
@@ -587,9 +606,12 @@ fn fillet_picked(body: &Body, edges: &[FilletEdge], opts: &FilletOptions, featur
     });
     // a spring crossing a round face's seam meets a line that is no boundary at all: with the seam
     // moved round to where nothing is, the blend never sees it
-    let seams = matches!(e, FilletError::Overflow { .. } | FilletError::Corner { .. })
-        .then(|| reseamed(body, edges))
-        .flatten();
+    let seams = matches!(
+        e,
+        FilletError::Overflow { .. } | FilletError::RimFill { .. } | FilletError::Corner { .. }
+    )
+    .then(|| reseamed(body, edges))
+    .flatten();
     if let Some(b) = &seams
         && let Ok(done) = fillet_on(b, edges, opts, feature)
     {
@@ -599,7 +621,10 @@ fn fillet_picked(body: &Body, edges: &[FilletEdge], opts: &FilletOptions, featur
     // that crosses its other piece: whole, the corner sees the edge the spring crosses
     if matches!(
         e,
-        FilletError::Corner { .. } | FilletError::Mitre { .. } | FilletError::Overflow { .. }
+        FilletError::Corner { .. }
+            | FilletError::Mitre { .. }
+            | FilletError::Overflow { .. }
+            | FilletError::RimFill { .. }
     ) && opts.setbacks.is_empty()
         && opts.starts.is_empty()
         && let Some(b) = joined_pieces(seams.as_ref().unwrap_or(body), edges)
@@ -2827,6 +2852,8 @@ type UvLoops = Vec<forge_topo::uv::UvLoop>;
 #[derive(Clone)]
 struct Builder {
     body: Body,
+    /// The edges of the part as it came: those below this index.
+    old_edges: usize,
     rolled: Vec<Rolled>,
     root: Name,
     /// Rolled index of each filleted edge.
@@ -2923,6 +2950,7 @@ impl Builder {
             }
         }
         Builder {
+            old_edges: body.edges.len(),
             body,
             rolled,
             root,
@@ -3334,7 +3362,7 @@ impl Builder {
                 // the ball may run off a short or narrow face there: then it rolls on over the next
                 let (trims, paths, carried) = (self.trims.clone(), self.paths.clone(), self.carried.clone());
                 match self.run_out(v, &ring, h) {
-                    Err(FilletError::Overflow { .. }) => {
+                    Err(FilletError::Overflow { .. } | FilletError::RimFill { .. }) => {
                         (self.trims, self.paths, self.carried) = (trims, paths, carried);
                         self.roll_over(v, &ring, h)
                     }
@@ -6065,7 +6093,15 @@ impl Builder {
                     // beyond carried on, it keeps fill a ball resting on the rim takes away (the
                     // closing's shape is the cliff's, which the retries build)
                     if !trips.is_empty() && closed && !self.rolled[i].convex {
-                        return Err(FilletError::Overflow { edge: e });
+                        return Err(FilletError::RimFill {
+                            edge: e,
+                            rim: trips[0]
+                                .gap
+                                .first()
+                                .map(|g| g.0)
+                                .filter(|r| r.index() < self.old_edges),
+                            at: self.body.vertex(trips[0].v_out).point,
+                        });
                     }
                     trips
                 };

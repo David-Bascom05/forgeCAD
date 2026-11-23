@@ -1471,6 +1471,14 @@ fn regen_text(e: &forge_model::RegenError) -> String {
         G::NotClosed { what, .. } => format!("{what} is gone, so the part is no closed solid"),
         G::MissingEdge { name, .. } => format!("the part has no edge {name:?}"),
         G::Bodies { count } => format!("the part ends as {count} bodies, not one"),
+        G::Fillet {
+            error: forge_ops::FilletError::RimFill { at, .. },
+            ..
+        } => format!(
+            "fillet: not built yet: the round runs over a rim and back at ({:.3}, {:.3}, {:.3}), where \
+             balls resting on the rim limit the fill",
+            at.x, at.y, at.z
+        ),
         _ => words(e),
     }
 }

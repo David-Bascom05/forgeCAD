@@ -1724,6 +1724,7 @@ fn apply_fillet(
             Err(
                 e @ (FilletError::Overflow { .. } | FilletError::Corner { .. } | FilletError::Mitre { .. }),
             ) if opts.setbacks.is_empty() => e,
+            Err(e @ FilletError::RimFill { .. }) if opts.setbacks.is_empty() => e,
             // a round that would leave the part unsound is refused, never kept. Its counts tell at
             // no cost (V - E + 2F - L odd, or above 2 a shell: a face pinched, a loop astray); only
             // then is it checked where it differs from the part before it, to say what is wrong

@@ -172,5 +172,5 @@ fn a_round_over_a_boss_end_leaves_no_seam_spur() {
     // round kept fill a ball resting on the end's rim and the block takes away (label_body: 32
     // points over), and the round resting on the rim does not stand, so it is refused
     let refused = round(2.3).expect_err("refused, not notched");
-    assert!(format!("{refused:?}").contains("Overflow"), "{refused:?}");
+    assert!(format!("{refused:?}").contains("RimFill"), "{refused:?}");
 }
