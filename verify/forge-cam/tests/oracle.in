@@ -1,0 +1,8 @@
+segseg 0 0 1 0 0 3 1 0
+segseg 0 0 2 2 0 2 2 -2
+segseg 0 0 1 0 2 1 0 1
+ptseg 1/2 7 0 0 1 0
+ptseg 3 4 0 0 1 0
+apart 0 0 1 0 0 3 1 0
+segseg 1 2
+segseg 0 0 1 0 0 3/2 1/1024 0

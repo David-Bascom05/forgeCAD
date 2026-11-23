@@ -53,3 +53,7 @@ jobs:
           # every theorem listed, each on the standard axioms (or fewer)
           test "$(grep -c 'depends on axioms' axioms.txt)" -eq "$(grep -c '^#print axioms' Axioms.lean)"
           ! grep 'depends on axioms' axioms.txt | grep -vE '\[(propext|Classical.choice|Quot.sound)(, (propext|Classical.choice|Quot.sound))*\]$'
+      - name: the ℚ oracle answers known cases
+        run: |
+          lake env lean --run Oracle.lean < tests/oracle.in > oracle.got
+          diff oracle.got tests/oracle.out

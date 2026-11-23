@@ -79,6 +79,16 @@ ForgeCam/Vise.lean adds 7 theorems (41 in all).
     Rust at 99f39bf: `G3 X5. Y0. Z-0.5 I-5. J0.` from X5 Y0.
   - `arc2_safe`: comparing X and Y is safe.
 
+## 4bfe2a2 checked (go from the master, 2026-11-23)
+
+- forge-post's arc rule is now exactly `quantizeArc2`. `arcFull_agrees`: its meant `full`
+  equals the control's reading on every posted arc.
+- soft_jaw refuses held material above the part's top inside the blank's footprint. That is
+  `softJaw_seat`'s grip hypothesis.
+- G4 grows the part by max(leave) + tol (δ + ε). Its near-face rule is
+  `near_section_sqrt` (it also shrinks the radius by 1e-12 relative, which is conservative).
+- The ℚ oracle: Oracle.lean (segseg, ptseg, apart), in CI.
+
 ## Still to do when asked
 
 1. Soft jaws' `Certified`: the pockets' walls are arcs and segments, so this needs segment–arc

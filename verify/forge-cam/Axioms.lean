@@ -46,3 +46,6 @@ import ForgeCam
 #print axioms ForgeCam.softJaw_needs_grip
 #print axioms ForgeCam.Post.arc2_safe
 #print axioms ForgeCam.Post.arc3_unsafe
+#print axioms ForgeCam.near_section_cthickening
+#print axioms ForgeCam.near_section_sqrt
+#print axioms ForgeCam.Post.arcFull_agrees

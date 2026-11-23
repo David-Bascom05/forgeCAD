@@ -421,6 +421,30 @@ theorem arc3_unsafe (d e : ℕ) (s dst : ℚ × ℚ × ℚ) (c : ℚ × ℚ) (cw
   simp only [readsFull, q3]
   exact ⟨hxy.1.symm, hxy.2.symm⟩
 
+/-- forge-post's meant `full` (4bfe2a2): the plan's X, Y end on its start, or they round onto it
+over more than a half turn. -/
+def meantFull (d : ℕ) (s dst : ℚ × ℚ × ℚ) (c : ℚ × ℚ) (cw : Bool) : Prop :=
+  xyEq dst s ∨ (q2eq d dst s ∧ ¬ shortArc s dst c cw)
+
+/-- **The meant `full` is what the control reads**, for every arc the safe rule posts: the
+round trip's `full` on the two sides agree (forge-post 4bfe2a2 compares them). -/
+theorem arcFull_agrees (d e : ℕ) (s dst : ℚ × ℚ × ℚ) (c : ℚ × ℚ) (cw : Bool) (f : ℚ)
+    {dq : Q3} {cq : ℤ × ℤ} {cwq : Bool} {fq : ℤ}
+    (h : quantizeArc2 d e s dst c cw f = .arc dq cq cwq fq) :
+    readsFull (q3 d s) (quantizeArc2 d e s dst c cw f) ↔ meantFull d s dst c cw := by
+  unfold quantizeArc2 at h ⊢
+  split_ifs at h ⊢ with hc
+  simp only [readsFull, q3, meantFull]
+  constructor
+  · intro hr
+    have hq : q2eq d dst s := ⟨hr.1.symm, hr.2.symm⟩
+    by_cases hx : xyEq dst s
+    · exact Or.inl hx
+    · exact Or.inr ⟨hq, fun hs => hc ⟨hx, hq, hs⟩⟩
+  · rintro (hx | ⟨hq, -⟩)
+    · exact ⟨by rw [hx.1], by rw [hx.2]⟩
+    · exact ⟨hq.1.symm, hq.2.symm⟩
+
 -- The ramp piece found in forge-post at 99f39bf (fanuc, 3 digits): from (5, 0, 0), ccw about the
 -- origin to (5 − 2e-9, 0.0002, −0.5). Short, X and Y round onto the start, Z does not.
 #guard decide (shortArc (5, 0, 0) (5 - 2/1000000000, 2/10000, -1/2) (0, 0) false)

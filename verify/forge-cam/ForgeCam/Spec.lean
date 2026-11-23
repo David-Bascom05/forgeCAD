@@ -130,4 +130,33 @@ theorem G4_held (Send P : Set E3) (r : ℝ) (K : Set E3) :
   · exact Set.disjoint_left.mpr fun x h1 h2 => h2.2 h1.2
   · ext x; simp only [leftoverHeld, leftover, Set.mem_inter_iff, Set.mem_sdiff]; tauto
 
+/-! ### G4 near faces: the three-dimensional rule (forge-cam-lang, 3bb5cd3) -/
+
+/-- **A section at another height, grown by √(g² − dz²), stays within g of the part.** If a point
+is within dz of height z′ and its xy is within ρ of a point (x, y, z′) of P, with ρ² + dz² ≤ g²,
+then it is within g of P. forge-cam uses this to cover a band's material from a section taken at
+z′ just past the band (dz the band's farthest height from z′): the leftover it reports is then
+an exact superset, as G4_upper needs. -/
+theorem near_section_cthickening {P : Set E3} {p q : E3} {g ρ dz : ℝ} (hq : q ∈ P)
+    (hz : |p 2 - q 2| ≤ dz) (hxy : (p 0 - q 0) ^ 2 + (p 1 - q 1) ^ 2 ≤ ρ ^ 2)
+    (hρ : 0 ≤ ρ) (hdz : 0 ≤ dz) (hg : ρ ^ 2 + dz ^ 2 ≤ g ^ 2) (hg0 : 0 ≤ g) :
+    p ∈ cthickening g P := by
+  refine mem_cthickening_of_dist_le p q g P hq ?_
+  rw [dist3]
+  have h2 : (p 2 - q 2) ^ 2 ≤ dz ^ 2 := by
+    rw [← sq_abs]; exact pow_le_pow_left₀ (abs_nonneg _) hz 2
+  calc √((p 0 - q 0) ^ 2 + (p 1 - q 1) ^ 2 + (p 2 - q 2) ^ 2) ≤ √(g ^ 2) :=
+        Real.sqrt_le_sqrt (by linarith)
+    _ = g := Real.sqrt_sq hg0
+
+/-- The form forge-cam computes: ρ = √(g² − dz²). -/
+theorem near_section_sqrt {P : Set E3} {p q : E3} {g dz : ℝ} (hq : q ∈ P)
+    (hz : |p 2 - q 2| ≤ dz) (hdz : 0 ≤ dz) (hgd : dz ≤ g)
+    (hxy : (p 0 - q 0) ^ 2 + (p 1 - q 1) ^ 2 ≤ (√(g ^ 2 - dz ^ 2)) ^ 2) :
+    p ∈ cthickening g P := by
+  have hg0 : 0 ≤ g := hdz.trans hgd
+  have hs : (√(g ^ 2 - dz ^ 2)) ^ 2 = g ^ 2 - dz ^ 2 :=
+    Real.sq_sqrt (by nlinarith)
+  exact near_section_cthickening hq hz hxy (Real.sqrt_nonneg _) hdz (by rw [hs]; linarith) hg0
+
 end ForgeCam
