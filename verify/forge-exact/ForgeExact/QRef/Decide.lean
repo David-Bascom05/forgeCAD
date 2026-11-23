@@ -904,8 +904,8 @@ def components (pts : Array (Float × Float × Float)) (ang : Float) : Nat := Id
 
 /-- The result at a cone's apex lying on other surfaces: its tangent cone there (first order:
 the cone's own quadratic form, the other surfaces' gradients), sampled over the sphere of
-directions with exact signs; non-manifold if the kept or the dropped directions fall apart.
-(Probed: the directions are samples, the signs at each exact.) -/
+directions with exact signs; flagged if the kept or the dropped directions fall apart.
+Sampled, so it never decides a verdict: a flag makes it ambiguous. -/
 def apexCheck (A : Arr) (solids : Array QSolid) : Array String := Id.run do
   let mut out : Array String := #[]
   let dirs := sphereDirs 3000
