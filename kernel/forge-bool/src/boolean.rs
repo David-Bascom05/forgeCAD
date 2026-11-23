@@ -2569,11 +2569,14 @@ pub(crate) fn trim(
     tried: &mut Tried,
 ) -> R<()> {
     // the curve's cuts by parameter: a list kept with the memo and reused
-    let mut ts = memo
-        .as_deref_mut()
-        .map(|m| std::mem::take(&mut m.ts))
-        .unwrap_or_default();
-    ts.clear();
+    let mut t = Trimming {
+        ts: memo
+            .as_deref_mut()
+            .map(|m| std::mem::take(&mut m.ts))
+            .unwrap_or_default(),
+        tried: *tried,
+    };
+    t.ts.clear();
     let r = trim_in(
         bodies,
         index,
@@ -2587,13 +2590,20 @@ pub(crate) fn trim(
         imprints,
         touching,
         memo.as_deref_mut(),
-        &mut ts,
-        tried,
+        &mut t,
     );
+    *tried = t.tried;
     if let Some(m) = memo {
-        m.ts = ts;
+        m.ts = t.ts;
     }
     r
+}
+
+/// What `trim_in` works in besides its pair: the curve's cuts by parameter and the tries' record,
+/// behind one pointer (one argument fewer to hold through its loops).
+struct Trimming {
+    ts: Vec<(f64, usize)>,
+    tried: Tried,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -2610,9 +2620,9 @@ fn trim_in(
     imprints: &mut Vec<Imprint>,
     touching: &mut Vec<Touch>,
     mut memo: Option<&mut AcrossMemo>,
-    ts: &mut Vec<(f64, usize)>,
-    tried: &mut Tried,
+    t: &mut Trimming,
 ) -> R<()> {
+    let Trimming { ts, tried } = t;
     let rung = tried.rung;
     let domain = curve.domain();
     let closed = domain.period.is_some();
