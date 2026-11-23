@@ -76,10 +76,7 @@ for nm, model, tx, ty, tz, table, rapid, feed, rpm, iface, chg, ctrl, ctrl_v, co
         iface=iface, tmax=(150, 63), changer=(chg[0], chg[1] or 0.1, 3) if chg else None, coolants=cool,
         nose_r=60 if iface == "R8" else 70, head=(260, 380), tt=50,
         rapid_src=(url, f"rapid {rapid} mm/min ({round(rapid / 25.4, 2)} in/min published)"),
-        hmin_status="unknown", cites=cites))
-    MACHINES[-1].cite("body.column", "estimate",
-                      basis="spindle-to-column distance unpublished: column face put 50 mm beyond the table's "
-                            "furthest y reach (the least that fits the travel); the real column may be further")
+        hmin_status="unknown", D_pub=False, cites=cites))
 
 # ---------------------------------------------------------------- SHERLINE (LinuxCNC systems)
 SH = "https://www.sherline.com/product/{}/"
@@ -97,7 +94,7 @@ for nm, page, tx, ty, tz, table in [
         tx=tx, ty=ty, tz=tz, hmin=5, hmax=tz + 5, D=ty / 2 + table[1] / 2 + 30, table=table, rapid=559, feed=559,
         rpm=[70, 2800], iface="MT1 (3/4-16 nose)", tmax=(80, 20), changer=None, coolants=(),
         nose_r=35, head=(110, 200), tt=20,
-        rapid_src=(spec, "max CNC positioning speed 22 in/min (559 mm/min)"), hmin_status="unknown",
+        rapid_src=(spec, "max CNC positioning speed 22 in/min (559 mm/min)"), hmin_status="unknown", D_pub=False,
         cites={
             "joint.X.max_feed": pub(spec, "22 in/min max; cutting usually 6 in/min or slower"),
             "joint.Y.max_feed": pub(spec, "22 in/min max"),
@@ -109,8 +106,6 @@ for nm, page, tx, ty, tz, table in [
             "machine.power": pub("https://www.sherline.com/product/hill-house-dc-motor-2013/",
                                  "90 VDC motor, 60 W output"),
         }))
-    MACHINES[-1].cite("body.column", "estimate",
-                      basis="column distance unpublished: face 30 mm beyond the table's furthest y reach")
 
 # ---------------------------------------------------------------- DATRON (DATRON next, SimPL)
 DN = "https://datron.com/cnc-machines/datron-neo/"

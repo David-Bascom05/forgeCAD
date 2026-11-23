@@ -271,20 +271,12 @@ basis = "unpublished; a slab under the saddle's travel; size ours, inside the pu
 [[machine.cite]]
 path = "body.column"
 status = "estimate"
-source = "https://cdn0.grizzly.com/specsheets/G0875_ds.pdf"
-taken = "2026-11-23"
-value = "spindle centre to column 215.0 mm"
-basis = "column face placed at the published spindle-to-column distance; width, depth (300 mm) and height ours"
+basis = "spindle-to-column distance unpublished: column face put 50 mm beyond the table's furthest y reach (the least that fits the travel); the real column may be further; width, depth (300 mm) and height ours"
 
 [[machine.cite]]
 path = "body.head"
 status = "estimate"
 basis = "unpublished; nose cylinder r 70 mm and a 260 mm head box are ours, sized for the BT30 taper class; the real housing may be larger: check before trusting a head-vs-fixture Clear"
-
-[[machine.cite]]
-path = "body.column"
-status = "estimate"
-basis = "spindle-to-column distance unpublished: column face put 50 mm beyond the table's furthest y reach (the least that fits the travel); the real column may be further"
 
 
 [[machine]]
@@ -574,20 +566,12 @@ basis = "unpublished; a slab under the saddle's travel; size ours, inside the pu
 [[machine.cite]]
 path = "body.column"
 status = "estimate"
-source = "https://cdn0.grizzly.com/specsheets/G0876_ds.pdf"
-taken = "2026-11-23"
-value = "spindle centre to column 253.5 mm"
-basis = "column face placed at the published spindle-to-column distance; width, depth (300 mm) and height ours"
+basis = "spindle-to-column distance unpublished: column face put 50 mm beyond the table's furthest y reach (the least that fits the travel); the real column may be further; width, depth (300 mm) and height ours"
 
 [[machine.cite]]
 path = "body.head"
 status = "estimate"
 basis = "unpublished; nose cylinder r 70 mm and a 260 mm head box are ours, sized for the BT30 taper class; the real housing may be larger: check before trusting a head-vs-fixture Clear"
-
-[[machine.cite]]
-path = "body.column"
-status = "estimate"
-basis = "spindle-to-column distance unpublished: column face put 50 mm beyond the table's furthest y reach (the least that fits the travel); the real column may be further"
 
 
 [[machine]]
@@ -875,20 +859,12 @@ basis = "unpublished; a slab under the saddle's travel; size ours, inside the pu
 [[machine.cite]]
 path = "body.column"
 status = "estimate"
-source = "https://cdn0.grizzly.com/specsheets/G0877_ds.pdf"
-taken = "2026-11-23"
-value = "spindle centre to column 294.5 mm"
-basis = "column face placed at the published spindle-to-column distance; width, depth (300 mm) and height ours"
+basis = "spindle-to-column distance unpublished: column face put 50 mm beyond the table's furthest y reach (the least that fits the travel); the real column may be further; width, depth (300 mm) and height ours"
 
 [[machine.cite]]
 path = "body.head"
 status = "estimate"
 basis = "unpublished; nose cylinder r 70 mm and a 260 mm head box are ours, sized for the BT30 taper class; the real housing may be larger: check before trusting a head-vs-fixture Clear"
-
-[[machine.cite]]
-path = "body.column"
-status = "estimate"
-basis = "spindle-to-column distance unpublished: column face put 50 mm beyond the table's furthest y reach (the least that fits the travel); the real column may be further"
 
 
 [[machine]]
@@ -1160,20 +1136,12 @@ basis = "unpublished; a slab under the saddle's travel; size ours, inside the pu
 [[machine.cite]]
 path = "body.column"
 status = "estimate"
-source = "https://cdn0.grizzly.com/specsheets/G0951_ds.pdf"
-taken = "2026-11-23"
-value = "spindle centre to column 188.25 mm"
-basis = "column face placed at the published spindle-to-column distance; width, depth (300 mm) and height ours"
+basis = "spindle-to-column distance unpublished: column face put 50 mm beyond the table's furthest y reach (the least that fits the travel); the real column may be further; width, depth (300 mm) and height ours"
 
 [[machine.cite]]
 path = "body.head"
 status = "estimate"
 basis = "unpublished; nose cylinder r 60 mm and a 260 mm head box are ours, sized for the R8 taper class; the real housing may be larger: check before trusting a head-vs-fixture Clear"
-
-[[machine.cite]]
-path = "body.column"
-status = "estimate"
-basis = "spindle-to-column distance unpublished: column face put 50 mm beyond the table's furthest y reach (the least that fits the travel); the real column may be further"
 
 
 [[machine]]

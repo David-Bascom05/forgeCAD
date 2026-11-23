@@ -277,20 +277,12 @@ basis = "unpublished; a slab under the saddle's travel; size ours, inside the pu
 [[machine.cite]]
 path = "body.column"
 status = "estimate"
-source = "https://www.sherline.com/product/8540/"
-taken = "2026-11-23"
-value = "spindle centre to column 128.5 mm"
-basis = "column face placed at the published spindle-to-column distance; width, depth (300 mm) and height ours"
+basis = "spindle-to-column distance unpublished: column face put 30 mm beyond the table's furthest y reach (the least that fits the travel); the real column may be further; width, depth (300 mm) and height ours"
 
 [[machine.cite]]
 path = "body.head"
 status = "estimate"
 basis = "unpublished; nose cylinder r 35 mm and a 110 mm head box are ours, sized for the MT1 (3/4-16 nose) taper class; the real housing may be larger: check before trusting a head-vs-fixture Clear"
-
-[[machine.cite]]
-path = "body.column"
-status = "estimate"
-basis = "column distance unpublished: face 30 mm beyond the table's furthest y reach"
 
 
 [[machine]]
@@ -562,20 +554,12 @@ basis = "unpublished; a slab under the saddle's travel; size ours, inside the pu
 [[machine.cite]]
 path = "body.column"
 status = "estimate"
-source = "https://www.sherline.com/product/8580/"
-taken = "2026-11-23"
-value = "spindle centre to column 204.5 mm"
-basis = "column face placed at the published spindle-to-column distance; width, depth (300 mm) and height ours"
+basis = "spindle-to-column distance unpublished: column face put 30 mm beyond the table's furthest y reach (the least that fits the travel); the real column may be further; width, depth (300 mm) and height ours"
 
 [[machine.cite]]
 path = "body.head"
 status = "estimate"
 basis = "unpublished; nose cylinder r 35 mm and a 110 mm head box are ours, sized for the MT1 (3/4-16 nose) taper class; the real housing may be larger: check before trusting a head-vs-fixture Clear"
-
-[[machine.cite]]
-path = "body.column"
-status = "estimate"
-basis = "column distance unpublished: face 30 mm beyond the table's furthest y reach"
 
 
 [[machine]]

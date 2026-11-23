@@ -129,6 +129,10 @@ def fg_part(machine, body, boxes, cyls, comment):
     return "\n".join(o) + "\n"
 
 
+def per(v, a):
+    return v[a] if isinstance(v, dict) else v
+
+
 # ------------------------------------------------------------------------------------------------
 ZERO_BASIS = ("travel length published; where the control's machine zero sits in it is not; we put "
               "zero at the + end (range [-travel, 0]); a setup's WCS absorbs the choice")
@@ -136,16 +140,16 @@ ZERO_BASIS = ("travel length published; where the control's machine zero sits in
 
 def vmc3(vendor, name, control, src, note, *, tx, ty, tz, hmin, hmax, D, table, rapid, feed, rpm, iface,
          tmax, changer, cites, coolants=("flood",), nose_r=75, head=(300, 420), tt=60, rapid_src=None,
-         hmin_status="published"):
+         hmin_status="published", D_pub=True):
     """Knee-less VMC: table X on saddle Y (part side), head Z on the column. Origin: the spindle axis at
     the table-top plane, home pose (all joints at 0 = their + ends)."""
     m = M(vendor, name, "vmc3", control, src, note, list(coolants))
     L, W = table
     for n, ax, rng in (("Y", [0, -1, 0], ty), ("X", [-1, 0, 0], tx)):
         m.joints.append(dict(name=n, parent="base" if n == "Y" else "Y", side="table", type="linear",
-                             axis=ax, range=[-rng, 0], rapid=rapid, max_feed=feed))
+                             axis=ax, range=[-rng, 0], rapid=per(rapid, n), max_feed=per(feed, n)))
     m.joints.append(dict(name="Z", parent="base", side="head", type="linear", axis=[0, 0, 1],
-                         range=[-tz, 0], rapid=rapid, max_feed=feed))
+                         range=[-tz, 0], rapid=per(rapid, "Z"), max_feed=per(feed, "Z")))
     m.spindles.append(dict(name="S1", link="Z", kind="milling", axis=[0, 0, 1], nose=[0, 0, hmax],
                            rpm=rpm, max=list(tmax), interface=iface))
     if changer:
@@ -175,8 +179,9 @@ def vmc3(vendor, name, control, src, note, *, tx, ty, tz, hmin, hmax, D, table, 
     for n, rng in (("X", tx), ("Y", ty), ("Z", tz)):
         m.cite(f"joint.{n}.range", "published", src, value=f"{n} travel {rng} mm")
         m.cite(f"joint.{n}.range", "estimate", basis=ZERO_BASIS)
-        rs, rv = rapid_src or (src, f"rapid {rapid} mm/min")
-        m.cite(f"joint.{n}.rapid", "published", rs, value=rv)
+        if rapid_src is not False:
+            rs, rv = rapid_src or (src, f"rapid {per(rapid, n)} mm/min")
+            m.cite(f"joint.{n}.rapid", "published", rs, value=rv)
     for path, c in cites.items():
         for x in (c if isinstance(c, list) else [c]):
             m.cite(path, **x)
@@ -192,8 +197,15 @@ def vmc3(vendor, name, control, src, note, *, tx, ty, tz, hmin, hmax, D, table, 
            basis=f"published table size; thickness {tt} mm ours; T-slots inside the box (larger than the real plate)")
     m.cite("body.saddle", "estimate", basis="unpublished; a block under the table inside its y extent; size ours")
     m.cite("body.bed", "estimate", basis="unpublished; a slab under the saddle's travel; size ours, inside the published footprint")
-    m.cite("body.column", "estimate", src if D else None, value=f"spindle centre to column {D} mm" if D else None,
-           basis=f"column face placed at the published spindle-to-column distance; width, depth ({cd} mm) and height ours")
+    if D_pub:
+        m.cite("body.column", "estimate", src, value=f"spindle centre to column {D} mm",
+               basis=f"column face placed at the published spindle-to-column distance; width, depth ({cd} mm) and "
+               "height ours")
+    else:
+        m.cite("body.column", "estimate",
+               basis=f"spindle-to-column distance unpublished: column face put {D - ymax:g} mm beyond the table's "
+               f"furthest y reach (the least that fits the travel); the real column may be further; width, depth "
+               f"({cd} mm) and height ours")
     m.cite("body.head", "estimate",
            basis=f"unpublished; nose cylinder r {nose_r} mm and a {hw} mm head box are ours, sized for the "
            f"{iface} taper class; the real housing may be larger: check before trusting a head-vs-fixture Clear")
