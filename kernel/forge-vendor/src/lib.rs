@@ -775,6 +775,21 @@ impl Vendor {
                         p.at
                     )));
                 }
+                // a table is read by r/t: two rows of one r/t (or one radius twice, where the
+                // radii make it) are refused, naming the second
+                if let Some(rows) = &ktable
+                    && let Some(k) = repeated(rows.iter().map(|r| r.0))
+                {
+                    return Err(bad(format!("{}.ktable: row {k} repeats r/t {}", p.at, rows[k].0)));
+                }
+                if bend_deduction.is_some()
+                    && let Some(k) = repeated(radius.iter().copied())
+                {
+                    return Err(bad(format!(
+                        "{}.radius: radius {k} repeats {} (bend_deduction gives one K per radius)",
+                        p.at, radius[k]
+                    )));
+                }
                 if let Some(k) = k
                     && !(0.0..=1.0).contains(&k)
                 {
@@ -1024,9 +1039,12 @@ impl Vendor {
             let r0 = radii.first().copied().unwrap_or(t);
             let rule = match (s.k, &s.ktable, &s.bend_deduction) {
                 (Some(k), _, _) => fs::BendRule::K(k),
-                (None, Some(rows), _) => {
-                    fs::BendRule::KTable(rows.iter().map(|&(q, k)| fs::KRow { r_over_t: q, k }).collect())
-                }
+                (None, Some(rows), _) => fs::BendRule::KTable(
+                    sorted(rows)
+                        .iter()
+                        .map(|&(q, k)| fs::KRow { r_over_t: q, k })
+                        .collect(),
+                ),
                 (None, None, Some(d)) => {
                     // BA = 2 (R + t) tan 45deg - BD; K from BA = pi/2 (R + K t), at each radius
                     let ks: Vec<(f64, f64)> = radii
@@ -1039,8 +1057,12 @@ impl Vendor {
                         .collect();
                     match ks.as_slice() {
                         [(_, k)] => fs::BendRule::K(*k),
+                        // by r/t, as the kernel interpolates it, whichever radius is the default
                         _ => fs::BendRule::KTable(
-                            ks.iter().map(|&(q, k)| fs::KRow { r_over_t: q, k }).collect(),
+                            sorted(&ks)
+                                .iter()
+                                .map(|&(q, k)| fs::KRow { r_over_t: q, k })
+                                .collect(),
                         ),
                     }
                 }
@@ -1148,6 +1170,23 @@ impl Vendor {
             ..Default::default()
         }
     }
+}
+
+/// Rows by increasing first value (a table's r/t), whatever order they were written in.
+fn sorted(rows: &[(f64, f64)]) -> Vec<(f64, f64)> {
+    let mut v = rows.to_vec();
+    v.sort_by(|a, b| a.0.total_cmp(&b.0));
+    v
+}
+
+/// The index of the first value equal to one before it.
+fn repeated(xs: impl Iterator<Item = f64>) -> Option<usize> {
+    let xs: Vec<f64> = xs.collect();
+    (1..xs.len()).find(|&k| {
+        xs[..k]
+            .iter()
+            .any(|x| (x - xs[k]).abs() <= 1e-12 * xs[k].abs().max(1.0))
+    })
 }
 
 /// Where a profile was found.

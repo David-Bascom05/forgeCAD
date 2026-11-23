@@ -204,3 +204,43 @@ fn jlc_holds_its_published_bend_table() {
             .any(|h| h.code == "CLS-M3-1" && h.hole == 4.25)
     );
 }
+
+#[test]
+fn a_default_radius_in_the_middle_still_bends() {
+    // the default (first) radius is neither the least nor the greatest
+    let text = r#"
+format = 1
+id = "mid"
+units = "mm"
+[[material]]
+name = "m"
+[[material.stock]]
+t = 2
+radius = [3, 1, 6]
+bend_deduction = [4.2, 3.4, 5.9]
+[[material.stock]]
+t = 3
+radius = [4, 2]
+ktable = [[1.5, 0.42], [0.5, 0.33], [3, 0.47]]
+"#;
+    let v = Vendor::parse(text).unwrap();
+    let shop = v.shop(&v.materials[0]);
+    let s = shop.stock(2.0).unwrap();
+    assert_eq!(s.radii[0], 3.0, "the default stays first");
+    // each tooled radius develops by its own K, the default included
+    for (r, bd) in [(3.0, 4.2), (1.0, 3.4), (6.0, 5.9)] {
+        let ba = s.rule.allowance(2.0, r, std::f64::consts::FRAC_PI_2).unwrap();
+        assert!((2.0 * (r + 2.0) - ba - bd).abs() < 1e-12, "r {r}");
+    }
+    // a table written out of order is read by r/t
+    let s = shop.stock(3.0).unwrap();
+    assert!(s.rule.allowance(3.0, 4.0, 1.0).is_ok());
+    assert!(s.rule.allowance(3.0, 2.0, 1.0).is_ok());
+    // a repeated r/t, or a repeated radius with deductions, is refused naming the row
+    let dup = text.replace("[3, 0.47]", "[1.5, 0.47]");
+    let e = Vendor::parse(&dup).unwrap_err();
+    assert!(e.why.contains("row 2 repeats r/t 1.5"), "{e}");
+    let dup = text.replace("radius = [3, 1, 6]", "radius = [3, 1, 3]");
+    let e = Vendor::parse(&dup).unwrap_err();
+    assert!(e.why.contains("radius 2 repeats 3"), "{e}");
+}
