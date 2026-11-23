@@ -4508,6 +4508,8 @@ pub(crate) fn imprint(
         let edge = body.edge(e);
         body.vertex(edge.start).tol.max(body.vertex(edge.end).tol)
     };
+    // each edge's cuts, the edges they cross, and its marks: lists kept from edge to edge
+    let (mut ts, mut crossed, mut marks): (Vec<f64>, Vec<(f64, EdgeId)>, Vec<f64>) = Default::default();
     for &l in &sb.face(src_face).loops {
         for c in sb.lp(l).coedges() {
             let e = sb.coedge(c).edge;
@@ -4520,8 +4522,8 @@ pub(crate) fn imprint(
             }
             let edge = sb.edge(e);
             let (reach, grow) = (sb.edge_box(e), slack(sb, e));
-            let mut ts: Vec<f64> = Vec::new();
-            let mut crossed: Vec<(f64, EdgeId)> = Vec::new();
+            ts.clear();
+            crossed.clear();
             for &l2 in &db.face(dst_face).loops {
                 for c2 in db.lp(l2).coedges() {
                     let e2 = db.coedge(c2).edge;
@@ -4600,7 +4602,8 @@ pub(crate) fn imprint(
                 }
             }
             ts.sort_by(f64::total_cmp);
-            let mut marks = vec![edge.range.lo];
+            marks.clear();
+            marks.push(edge.range.lo);
             marks.extend(
                 ts.iter()
                     .copied()
