@@ -2434,6 +2434,11 @@ fn finish(features: &[Feature], ids: &[u64], seq: &[Solid]) -> Verdict {
                 "{path} mesh: {}",
                 kind_of_msg(&format!("{e:?}"))
             ))),
+            // a sheet: open only along its boundary, and no volume
+            Ok(Ok(t)) if b.is_sheet() => match t.open_edges_of(&b).is_empty() {
+                true => Ok((0.0, 0.0)),
+                false => Err(Verdict::Fail(format!("{path} mesh: open edges"))),
+            },
             Ok(Ok(t)) if !t.open_edges().is_empty() => Err(Verdict::Fail(format!("{path} mesh: open edges"))),
             Ok(Ok(t)) if t.volume() <= 0.0 => Err(Verdict::Fail(format!("{path} mesh: volume <= 0"))),
             Ok(Ok(t)) => Ok((t.volume(), t.area())),
@@ -2650,6 +2655,7 @@ pub fn feature_kind(f: &Feature) -> &'static str {
         Feature::Regions(_) => "extrude",
         Feature::Import(_) => "import",
         Feature::Body(_) => "body",
+        Feature::Sheet(_) => "sheet",
     }
 }
 

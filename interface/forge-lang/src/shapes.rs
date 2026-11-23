@@ -1126,7 +1126,7 @@ fn direct(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Valu
     Ok(feat(id, name, idx, hid, None))
 }
 
-fn side_word(a: &Args) -> R<Side> {
+pub(crate) fn side_word(a: &Args) -> R<Side> {
     Ok(match word(a, "side", &["out", "in", "both"])? {
         Some("in") => Side::Neg,
         Some("both") => Side::Both,
@@ -1470,4 +1470,111 @@ pub fn member(ev: &mut Eval, f: &Feat, name: &str) -> Option<Value> {
         }
         _ => None,
     }
+}
+
+// ---- sheets ---------------------------------------------------------------------------------
+
+/// One piece of a sheet's chain in its sketch's plane, its ends, as drawn: lines, arcs, splines and
+/// whole circles (a circle is a chain alone).
+fn plane_piece(sk: &Sk, id: EntityId) -> (Segment, Point2, Point2) {
+    match sk.s.entity(id) {
+        Some(Entity::Line { a, b }) => {
+            let (p, q) = (sk.pos(a), sk.pos(b));
+            (Segment::Line { a: p, b: q }, p, q)
+        }
+        Some(Entity::Arc {
+            center,
+            start,
+            end,
+            ccw,
+        }) => {
+            let (c, a, b) = (sk.pos(center), sk.pos(start), sk.pos(end));
+            let (a0, a1) = (
+                dmath::atan2(a.y - c.y, a.x - c.x),
+                dmath::atan2(b.y - c.y, b.x - c.x),
+            );
+            let sweep = if ccw {
+                dmath::wrap_tau(a1 - a0)
+            } else {
+                -dmath::wrap_tau(a0 - a1)
+            };
+            (
+                Segment::Arc {
+                    center: c,
+                    radius: a.distance(c),
+                    start: a0,
+                    sweep,
+                },
+                a,
+                b,
+            )
+        }
+        Some(Entity::Circle { center, .. }) => {
+            let c = sk.pos(center);
+            let r = sk.s.radius(id);
+            let p = Point2::new(c.x + r, c.y);
+            (
+                Segment::Circle {
+                    center: c,
+                    radius: r,
+                    ccw: true,
+                },
+                p,
+                p,
+            )
+        }
+        _ => {
+            let c = sk.s.curve(id).expect("a curve entity");
+            let (a, b) = (c.start(), c.end());
+            (Segment::Spline(c), a, b)
+        }
+    }
+}
+
+/// A chain's segments in its sketch's plane, each named as a profile names it.
+pub(crate) type Chain = Vec<(Segment, u64)>;
+
+/// A sheet's chain: the entities of one sketch end to end, each turned to run on from the one
+/// before (`path_of`'s rule), in that sketch's plane, named as a profile names its segments.
+pub(crate) fn chain_of(v: Value, span: Span) -> R<(Rc<RefCell<Sk>>, Chain)> {
+    let mut ents = vec![];
+    match v {
+        Value::Ent(e) if e.loop_segs.is_empty() && e.kind == EntKind::Circle => {
+            ents.push((e.sk.clone(), e.id))
+        }
+        v => path_ents(v, span, &mut ents)?,
+    }
+    let Some(sk) = ents.first().map(|e| e.0.clone()) else {
+        return Err(Error::EmptySelection { span });
+    };
+    // a sheet's chain lies in one sketch's plane
+    if let Some(e) = ents.iter().find(|e| !Rc::ptr_eq(&e.0, &sk)) {
+        return Err(Error::OtherSketch {
+            span,
+            sketch: e.0.borrow().id.clone(),
+            here: sk.borrow().id.clone(),
+        });
+    }
+    let s = sk.borrow();
+    let at = |p: Point2| Point3::new(p.x, p.y, 0.0);
+    let mut pieces: Vec<((Segment, u64), Point3, Point3)> = ents
+        .iter()
+        .map(|(_, id)| {
+            let (g, a, b) = plane_piece(&s, *id);
+            ((g, s.seg_id(*id)), at(a), at(b))
+        })
+        .collect();
+    if pieces.len() > 1 {
+        let (a, b) = (pieces[0].1, pieces[0].2);
+        let (c, d) = (pieces[1].1, pieces[1].2);
+        let end_meets = b.distance(c) <= MEET || b.distance(d) <= MEET;
+        let start_meets = a.distance(c) <= MEET || a.distance(d) <= MEET;
+        if !end_meets && start_meets {
+            let (p, a, b) = pieces.remove(0);
+            pieces.insert(0, ((p.0.reversed(), p.1), b, a));
+        }
+    }
+    let chain = chain(pieces, |(g, id): (Segment, u64)| (g.reversed(), id), span)?;
+    drop(s);
+    Ok((sk, chain))
 }

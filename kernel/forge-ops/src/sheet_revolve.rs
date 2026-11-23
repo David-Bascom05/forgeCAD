@@ -1,0 +1,636 @@
+//! Sheets spun about an axis (`revolve_sheet`): the revolve's builder, in a module of its own with
+//! open chains (no caps; an open chain's last end a vertex of its own), so the solid revolve is
+//! compiled as it was.
+
+use crate::profile::{Profile, Segment};
+use crate::revolve::{Axis2, RevolveError};
+use forge_geom::spline::{SplineCurve, Spun};
+use forge_geom::{Circle, Cone, Curve, Cylinder, Line, Plane, Sphere, Surface, SurfaceGeom, Torus};
+use forge_math::{Frame, Interval, Point2, Point3, Vec2, Vec3, dmath, tol};
+use forge_topo::{Body, EdgeId, FaceId, Name, ShellId, VertexId};
+
+/// A sheet (`Body::sheet`): each chain (segments end to end, open or closed, as `extrude_sheet`
+/// takes them) spun about `axis` by `angle`, with no caps. Faces are named and made as `revolve`
+/// makes them; the front is the right of each chain, outside a loop (turned counter-clockwise).
+pub fn revolve_sheet(
+    plane: &Frame,
+    chains: &[Vec<(Segment, u64)>],
+    axis: Axis2,
+    angle: f64,
+    feature: u64,
+) -> Result<Body, RevolveError> {
+    let chains = crate::sheet_chain::sheet_chains(chains)?;
+    let closed: Vec<bool> = chains.iter().map(|c| c.1).collect();
+    let profile = Profile {
+        plane: *plane,
+        loops: chains
+            .into_iter()
+            .map(|(segments, _)| crate::profile::ProfileLoop { segments })
+            .collect(),
+    };
+    build(&profile, axis, angle, feature, false, Some(&closed))
+}
+
+fn build(
+    profile: &Profile,
+    axis: Axis2,
+    angle: f64,
+    feature: u64,
+    cutter: bool,
+    // a sheet's chains, each closed or not (already checked)
+    sheet: Option<&[bool]>,
+) -> Result<Body, RevolveError> {
+    if !(angle > tol::ANGULAR && angle <= dmath::TAU + tol::ANGULAR) {
+        return Err(RevolveError::BadAngle);
+    }
+    let full = angle >= dmath::TAU - tol::ANGULAR;
+    let mut profile = match sheet {
+        None => profile.normalized()?,
+        Some(_) => profile.clone(),
+    };
+    let dir2 = axis.dir.normalize().ok_or(RevolveError::BadAxis)?;
+    let perp2 = dir2.perp();
+    // a whole circle tangent to the axis, turned part way, ends on the axis at an apex: its seam goes
+    // there, so that the ends meet at that vertex
+    if !full {
+        for l in &mut profile.loops {
+            for (seg, _) in &mut l.segments {
+                if let Segment::Circle { center, radius, ccw } = *seg {
+                    let off = (center - axis.origin).dot(perp2);
+                    if (off.abs() - radius).abs() <= tol::LINEAR {
+                        let to = if off > 0.0 { -perp2 } else { perp2 };
+                        let sweep = if ccw { dmath::TAU } else { -dmath::TAU };
+                        *seg = Segment::Arc {
+                            center,
+                            radius,
+                            start: dmath::atan2(to.y, to.x),
+                            sweep,
+                        };
+                    }
+                }
+            }
+        }
+    }
+    let mut side = 0.0f64;
+    for l in &profile.loops {
+        for (s, _) in &l.segments {
+            for p in s.side_samples() {
+                let r = (p - axis.origin).dot(perp2);
+                side = if r.abs() > side.abs() { r } else { side };
+            }
+        }
+    }
+    if side.abs() <= tol::LINEAR {
+        return Err(RevolveError::CrossesAxis);
+    }
+    let side = side.signum();
+    let plane = profile.plane;
+    let vec3 = |v: Vec2| plane.x() * v.x + plane.y() * v.y;
+    let z = vec3(dir2).normalize().ok_or(RevolveError::BadAxis)?;
+    let x0 = (vec3(perp2) * side).normalize().ok_or(RevolveError::BadAxis)?;
+    let rf = Frame::from_zx(plane.plane_point(axis.origin), z, x0.get()).ok_or(RevolveError::BadAxis)?;
+    let b = Revolver {
+        profile: &profile,
+        axis_origin: axis.origin,
+        dir2,
+        perp2: perp2 * side,
+        rf,
+        angles: vec![0.0, if full { dmath::PI } else { angle }],
+        full,
+        cutter,
+        root: Name::feature(feature),
+        body: Body::new(),
+        closed: sheet.map(|c| c.to_vec()),
+    };
+    let mut b = b;
+    let flat_or_round = |s: &Segment| {
+        matches!(
+            b.surface_of(s),
+            Ok(None | Some(Surface::Plane(_) | Surface::Cylinder(_) | Surface::Cone(_)))
+        )
+    };
+    if full
+        && profile
+            .loops
+            .iter()
+            .all(|l| l.segments.iter().all(|(s, _)| flat_or_round(s)))
+    {
+        b.angles = vec![0.0];
+    }
+    for l in &profile.loops {
+        for (s, _) in &l.segments {
+            for p in s.side_samples() {
+                if (p - axis.origin).dot(perp2) * side < -tol::LINEAR {
+                    return Err(RevolveError::CrossesAxis);
+                }
+            }
+        }
+    }
+    b.build()
+}
+
+/// What an open chain's last vertex is named by: its last segment's id with this set, apart from
+/// the vertex where that segment starts.
+const CHAIN_END: u64 = 1 << 63;
+
+struct Revolver<'a> {
+    profile: &'a Profile,
+    axis_origin: Point2,
+    dir2: Vec2,
+    perp2: Vec2,
+    /// z along the axis, x towards the profile.
+    rf: Frame,
+    /// Angles of the profile copies; spans run between consecutive copies
+    /// (and from the last back to the first on a whole turn).
+    angles: Vec<f64>,
+    full: bool,
+    cutter: bool,
+    root: Name,
+    body: Body,
+    /// A sheet's chains, each closed or not; None for a solid (every loop closed, capped).
+    closed: Option<Vec<bool>>,
+}
+
+/// Where a profile segment goes: its edges in each copy and how it walks them.
+struct SegInfo {
+    seg: Segment,
+    id: u64,
+    start: usize,
+    end: usize,
+    /// Profile direction runs with the edge curve's parameter.
+    forward: bool,
+}
+
+impl Revolver<'_> {
+    /// Height along the axis and distance from it.
+    fn hr(&self, p: Point2) -> (f64, f64) {
+        let d = p - self.axis_origin;
+        (d.dot(self.dir2), d.dot(self.perp2).max(0.0))
+    }
+    fn on_axis(&self, p: Point2) -> bool {
+        self.hr(p).1 <= tol::LINEAR
+    }
+    fn point3(&self, p: Point2) -> Point3 {
+        self.profile.plane.plane_point(p)
+    }
+    fn vec3(&self, v: Vec2) -> Vec3 {
+        let f = &self.profile.plane;
+        f.x() * v.x + f.y() * v.y
+    }
+    fn rotate(&self, p: Point3, a: f64) -> Point3 {
+        let l = self.rf.point_to_local(p);
+        let (s, c) = dmath::sin_cos(a);
+        self.rf
+            .point_to_world(Point3::new(l.x * c - l.y * s, l.x * s + l.y * c, l.z))
+    }
+    fn rotate_vec(&self, v: Vec3, a: f64) -> Vec3 {
+        let l = self.rf.vec_to_local(v);
+        let (s, c) = dmath::sin_cos(a);
+        self.rf
+            .vec_to_world(Vec3::new(l.x * c - l.y * s, l.x * s + l.y * c, l.z))
+    }
+    fn rotate_frame(&self, f: &Frame, a: f64) -> Frame {
+        let z = self
+            .rotate_vec(f.z().get(), a)
+            .normalize()
+            .expect("rotation keeps length");
+        let x = self.rotate_vec(f.x().get(), a);
+        Frame::from_zx(self.rotate(f.origin, a), z, x).expect("rotation keeps axes perpendicular")
+    }
+    fn axis_point(&self, h: f64) -> Point3 {
+        self.rf.origin + self.rf.z() * h
+    }
+    fn span_end(&self, k: usize) -> f64 {
+        if k + 1 < self.angles.len() {
+            self.angles[k + 1]
+        } else {
+            self.angles[0] + dmath::TAU
+        }
+    }
+    fn next_copy(&self, k: usize) -> usize {
+        (k + 1) % self.angles.len()
+    }
+    fn spans(&self) -> usize {
+        if self.full {
+            self.angles.len()
+        } else {
+            self.angles.len() - 1
+        }
+    }
+
+    fn surface_of(&self, s: &Segment) -> Result<Option<Surface>, RevolveError> {
+        let rf = self.rf;
+        match *s {
+            Segment::Spline(ref c) => {
+                let section = c.c.mapped(|q| {
+                    let (h, r) = self.hr(Point2::new(q.x, q.y));
+                    Point3::new(r, h, 0.0)
+                });
+                Spun::new(rf, std::sync::Arc::new(section))
+                    .map(|s| Some(s.surface()))
+                    .ok_or(RevolveError::Unsupported(
+                        "a curve crossing the axis or with a cusp",
+                    ))
+            }
+            Segment::Line { a, b } => {
+                let ((h0, r0), (h1, r1)) = (self.hr(a), self.hr(b));
+                if r0 <= tol::LINEAR && r1 <= tol::LINEAR {
+                    return Ok(None);
+                }
+                if (h1 - h0).abs() <= tol::LINEAR {
+                    return Ok(Some(Surface::Plane(Plane::new(
+                        rf.with_origin(self.axis_point(h0)),
+                    ))));
+                }
+                if (r1 - r0).abs() <= tol::LINEAR {
+                    return Ok(Some(Surface::Cylinder(Cylinder {
+                        frame: rf,
+                        radius: 0.5 * (r0 + r1),
+                    })));
+                }
+                let k = (r1 - r0) / (h1 - h0);
+                let (frame, radius) = if k > 0.0 {
+                    if r0 <= r1 {
+                        (rf.with_origin(self.axis_point(h0)), r0)
+                    } else {
+                        (rf.with_origin(self.axis_point(h1)), r1)
+                    }
+                } else {
+                    let (h, r) = if r0 <= r1 { (h0, r0) } else { (h1, r1) };
+                    (rf.with_origin(self.axis_point(h)).flipped(), r)
+                };
+                let cone = Cone::new(frame, radius.max(0.0), dmath::atan(k.abs()))
+                    .ok_or(RevolveError::Unsupported("cone too close to a flat disc"))?;
+                Ok(Some(Surface::Cone(cone)))
+            }
+            Segment::Arc { center, radius, .. } | Segment::Circle { center, radius, .. } => {
+                let d = center - self.axis_origin;
+                // (signed: a centre across the axis from the arc is a lemon, not a sphere)
+                let (hc, rc) = (d.dot(self.dir2), d.dot(self.perp2));
+                let frame = rf.with_origin(self.axis_point(hc));
+                if rc.abs() <= tol::LINEAR {
+                    return Ok(Some(Surface::Sphere(Sphere { frame, radius })));
+                }
+                // a whole circle tangent to the axis turned all the way round meets itself at one point;
+                // part way round it is an apex, like a cone's. One across the axis sweeps through itself
+                if matches!(s, Segment::Circle { .. })
+                    && (rc < radius - tol::LINEAR || (self.full && rc <= radius + tol::LINEAR))
+                {
+                    return Err(RevolveError::Unsupported(
+                        "a whole circle touching the axis pinches the solid there",
+                    ));
+                }
+                Torus::new(frame, rc, radius)
+                    .or_else(|| Torus::spindle(frame, rc, radius))
+                    .map(|t| Some(Surface::Torus(t)))
+                    .ok_or(RevolveError::Unsupported("arc whose circle reaches the axis"))
+            }
+        }
+    }
+
+    /// The segment's curve in copy k, its range, start/end profile vertex order.
+    fn copy_curve(&self, s: &Segment, a: f64) -> (Curve, Interval) {
+        match *s {
+            Segment::Spline(ref c) => {
+                let world =
+                    c.c.mapped(|q| self.rotate(self.profile.plane.point_to_world(q), a));
+                let d = c.c.domain();
+                (SplineCurve::curve(std::sync::Arc::new(world), d), d)
+            }
+            Segment::Line { a: p, b: q } => {
+                let (p3, q3) = (self.rotate(self.point3(p), a), self.rotate(self.point3(q), a));
+                (
+                    Curve::Line(Line::through(p3, q3).expect("profile rejects degenerate lines")),
+                    Interval::new(0.0, p3.distance(q3)),
+                )
+            }
+            Segment::Arc {
+                center,
+                radius,
+                start,
+                sweep,
+            } => {
+                let frame = self.rotate_frame(&self.profile.plane.with_origin(self.point3(center)), a);
+                (
+                    Curve::Circle(Circle { frame, radius }),
+                    Interval::new(start.min(start + sweep), start.max(start + sweep)),
+                )
+            }
+            Segment::Circle { center, radius, .. } => {
+                let frame = self.rotate_frame(&self.profile.plane.with_origin(self.point3(center)), a);
+                (
+                    Curve::Circle(Circle { frame, radius }),
+                    Interval::new(0.0, dmath::TAU),
+                )
+            }
+        }
+    }
+
+    fn build(mut self) -> Result<Body, RevolveError> {
+        let shell = self.body.add_shell();
+        let copies = self.angles.len();
+
+        // profile vertices and segments, loop by loop
+        let mut pverts: Vec<Point2> = Vec::new();
+        let mut pvert_name: Vec<u64> = Vec::new();
+        let mut segs: Vec<SegInfo> = Vec::new();
+        let mut loop_ranges: Vec<std::ops::Range<usize>> = Vec::new();
+        for (li, l) in self.profile.loops.iter().enumerate() {
+            let first_v = pverts.len();
+            let first_s = segs.len();
+            let n = l.segments.len();
+            let open = self.closed.as_ref().is_some_and(|c| !c[li]);
+            for (i, (seg, id)) in l.segments.iter().enumerate() {
+                let (seg, id) = (seg.clone(), *id);
+                pverts.push(seg.start());
+                pvert_name.push(id);
+                let forward = match seg {
+                    Segment::Line { .. } | Segment::Spline(_) => true,
+                    Segment::Arc { sweep, .. } => sweep > 0.0,
+                    Segment::Circle { ccw, .. } => ccw,
+                };
+                segs.push(SegInfo {
+                    seg,
+                    id,
+                    start: first_v + i,
+                    end: if open {
+                        first_v + i + 1
+                    } else {
+                        first_v + (i + 1) % n
+                    },
+                    forward,
+                });
+            }
+            if open {
+                // an open chain's last end, named by its last segment and marked the chain's end
+                pverts.push(l.segments[n - 1].0.end());
+                pvert_name.push(l.segments[n - 1].1 ^ CHAIN_END);
+            }
+            loop_ranges.push(first_s..segs.len());
+        }
+
+        // vertices per copy; a vertex on the axis is one vertex for every copy
+        let mut vid: Vec<Vec<VertexId>> = vec![Vec::new(); copies];
+        // on a whole turn only a cone's seam ends on the axis (at its apex)
+        let mut seam_end = vec![false; pverts.len()];
+        if copies == 1 {
+            for s in &segs {
+                if let Ok(Some(Surface::Cone(_))) = self.surface_of(&s.seg) {
+                    seam_end[s.start] = true;
+                    seam_end[s.end] = true;
+                }
+            }
+        }
+        // on a whole turn a segment on the axis makes nothing, so a point between two such is on nothing
+        let mut made = vec![0u8; pverts.len()];
+        for s in &segs {
+            if !matches!(self.surface_of(&s.seg), Ok(None)) {
+                made[s.start] += 1;
+                made[s.end] += 1;
+            }
+        }
+        // two segments leaving a point on the axis: a whole turn makes two faces meeting only at it
+        let pinch = self.full
+            && pverts
+                .iter()
+                .enumerate()
+                .any(|(i, &p)| self.on_axis(p) && made[i] == 2);
+        for (i, &p) in pverts.iter().enumerate() {
+            if self.on_axis(p) && self.full && made[i] == 0 {
+                for c in vid.iter_mut() {
+                    c.push(VertexId(u32::MAX));
+                }
+            } else if self.on_axis(p) && copies == 1 && !seam_end[i] {
+                // a whole-turn disc has no seam to end there: nothing uses the vertex
+                vid[0].push(VertexId(u32::MAX));
+            } else if self.on_axis(p) {
+                // (a profile's arc may end a little short of the axis point the line gives)
+                let v = self.body.add_tolerant_vertex(
+                    self.point3(p),
+                    3.0 * tol::LINEAR,
+                    self.root.with_str("pole").with(pvert_name[i]),
+                );
+                for c in vid.iter_mut() {
+                    c.push(v);
+                }
+            } else {
+                for (k, c) in vid.iter_mut().enumerate() {
+                    let name = self.root.with_str("vertex").with(k as u64).with(pvert_name[i]);
+                    c.push(
+                        self.body
+                            .add_vertex(self.rotate(self.point3(p), self.angles[k]), name),
+                    );
+                }
+            }
+        }
+
+        // copy edges; a segment on the axis keeps a single edge, used only by the caps
+        let mut eid: Vec<Vec<Option<EdgeId>>> = vec![Vec::new(); copies];
+        let mut surfaces = Vec::with_capacity(segs.len());
+        for s in &segs {
+            let surface = self.surface_of(&s.seg)?;
+            let mut shared: Option<EdgeId> = None;
+            // a whole-turn disc or ring has no seam: just its circles
+            let seamless = copies == 1 && matches!(surface, Some(Surface::Plane(_)));
+            for k in 0..copies {
+                if (surface.is_none() && self.full) || seamless {
+                    eid[k].push(None);
+                    continue;
+                }
+                if let Some(e) = shared {
+                    eid[k].push(Some(e));
+                    continue;
+                }
+                let (curve, range) = self.copy_curve(&s.seg, self.angles[k]);
+                let (v0, v1) = (vid[k][s.start], vid[k][s.end]);
+                let (start, end) = if s.forward { (v0, v1) } else { (v1, v0) };
+                let name = self.root.with_str("copy").with(k as u64).with(s.id);
+                let e = self.body.add_edge(curve, range, start, end, name);
+                if surface.is_none() {
+                    shared = Some(e);
+                }
+                eid[k].push(Some(e));
+            }
+            surfaces.push(surface);
+        }
+
+        // sweep edges: each vertex off the axis traces an arc per span
+        let mut sid: Vec<Vec<Option<EdgeId>>> = vec![Vec::new(); self.spans()];
+        for (i, &p) in pverts.iter().enumerate() {
+            for (k, row) in sid.iter_mut().enumerate() {
+                if self.on_axis(p) {
+                    row.push(None);
+                    continue;
+                }
+                let (h, r) = self.hr(p);
+                let centre = self.axis_point(h);
+                let frame = Frame::from_zx(centre, self.rf.z(), self.point3(p) - centre)
+                    .expect("vertex off the axis");
+                let range = Interval::new(self.angles[k], self.span_end(k));
+                let name = self.root.with_str("sweep").with(k as u64).with(pvert_name[i]);
+                let (v0, v1) = (vid[k][i], vid[self.next_copy(k)][i]);
+                row.push(Some(self.body.add_edge(
+                    Curve::Circle(Circle { frame, radius: r }),
+                    range,
+                    v0,
+                    v1,
+                    name,
+                )));
+            }
+        }
+
+        for (si, s) in segs.iter().enumerate() {
+            let Some(surface) = surfaces[si].clone() else {
+                continue;
+            };
+            for k in 0..self.spans() {
+                let k1 = self.next_copy(k);
+                let (same_sense, flip) = self.orientation(&s.seg, &surface, self.angles[k], self.span_end(k));
+                let name = crate::roles::revolve_side(self.root, s.id, k as u64);
+                let face = self.body.add_face(shell, surface.clone(), same_sense, name);
+                let Some(first) = eid[k][si] else {
+                    // a whole-turn disc or ring: each circle a loop of its own, the outer first
+                    let mut rims = [
+                        (sid[k][s.end], true, pverts[s.end]),
+                        (sid[k][s.start], false, pverts[s.start]),
+                    ];
+                    rims.sort_by(|a, b| self.hr(b.2).1.total_cmp(&self.hr(a.2).1));
+                    for (e, fwd, _) in rims {
+                        if let Some(e) = e {
+                            self.body.add_loop(face, &[(e, fwd != flip)]);
+                        }
+                    }
+                    continue;
+                };
+                let mut uses: Vec<(EdgeId, bool)> = vec![(first, s.forward)];
+                if let Some(e) = sid[k][s.end] {
+                    uses.push((e, true));
+                }
+                uses.push((eid[k1][si].expect("segment has a face"), !s.forward));
+                if let Some(e) = sid[k][s.start] {
+                    uses.push((e, false));
+                }
+                if flip {
+                    uses = uses.into_iter().rev().map(|(e, f)| (e, !f)).collect();
+                }
+                self.body.add_loop(face, &uses);
+            }
+        }
+
+        if !self.full && self.closed.is_none() {
+            self.add_cap(shell, 0, &segs, &eid, &loop_ranges);
+            self.add_cap(shell, 1, &segs, &eid, &loop_ranges);
+        }
+        if self.closed.is_some() {
+            self.body.mark_sheet();
+        }
+        if copies == 1 {
+            // what the second half-turn was named finds the whole
+            let root = self.root;
+            for s in &segs {
+                let side = crate::roles::side(root, s.id);
+                let copy = |k: u64| root.with_str("copy").with(k).with(s.id);
+                let sweep = |k: u64| root.with_str("sweep").with(k).with(s.id);
+                self.body.joins.aliases.extend([
+                    (side.with(1), side.with(0)),
+                    (copy(1), copy(0)),
+                    (sweep(1), sweep(0)),
+                ]);
+            }
+        }
+        // a whole turn of a profile leaving the axis and coming back: what closes up inside is a void,
+        // a shell of its own
+        let on_axis_runs = segs
+            .iter()
+            .filter(|s| matches!(self.surface_of(&s.seg), Ok(None)))
+            .count();
+        if self.full && on_axis_runs > 1 || self.closed.as_ref().is_some_and(|c| c.len() > 1) {
+            self.body.rebuild_shells();
+        }
+        // (real parts make these, and a seam may hold them together; what does not close is refused)
+        if pinch && !self.cutter && !forge_topo::check(&self.body).is_empty() {
+            return Err(RevolveError::Unsupported(
+                "a profile touching the axis at a point pinches the solid there",
+            ));
+        }
+        Ok(self.body)
+    }
+
+    /// The face sense, and whether the loop as built runs the wrong way round.
+    fn orientation(&self, seg: &Segment, surface: &Surface, a0: f64, a1: f64) -> (bool, bool) {
+        let samples = seg.samples(2);
+        let spline_mid = match seg {
+            Segment::Spline(c) => Some(c.c.deriv(c.c.domain().mid())),
+            _ => None,
+        };
+        let m = match *seg {
+            Segment::Spline(_) => {
+                let d = spline_mid.expect("a spline");
+                Point2::new(d.p.x, d.p.y)
+            }
+            Segment::Line { a, b } => a.lerp(b, 0.5),
+            Segment::Arc {
+                center,
+                radius,
+                start,
+                sweep,
+            } => crate::profile::arc_point(center, radius, start + 0.5 * sweep),
+            Segment::Circle { .. } => samples[1],
+        };
+        let t2 = match *seg {
+            Segment::Spline(_) => {
+                let d = spline_mid.expect("a spline");
+                Vec2::new(d.d1.x, d.d1.y)
+            }
+            Segment::Line { a, b } => b - a,
+            Segment::Arc { center, sweep, .. } => (m - center).perp() * sweep.signum(),
+            Segment::Circle { center, ccw, .. } => (m - center).perp() * if ccw { 1.0 } else { -1.0 },
+        };
+        // material is left of every profile loop, so outward is to the right
+        let out2 = Vec2::new(t2.y, -t2.x);
+        let mid = 0.5 * (a0 + a1);
+        let p = self.rotate(self.point3(m), mid);
+        let out = self.rotate_vec(self.vec3(out2), mid);
+        let same_sense = surface
+            .normal(surface.project(p))
+            .is_none_or(|n| n.dot(out) > 0.0);
+        // at copy a0, walking the profile direction, the face lies towards increasing angle
+        let p0 = self.rotate(self.point3(m), a0);
+        let into = self.rf.z().cross(p0 - self.rf.origin);
+        let n0 = self.rotate_vec(self.vec3(out2), a0);
+        let t0 = self.rotate_vec(self.vec3(t2), a0);
+        let flip = n0.cross(t0).dot(into) < 0.0;
+        (same_sense, flip)
+    }
+
+    fn add_cap(
+        &mut self,
+        shell: ShellId,
+        copy: usize,
+        segs: &[SegInfo],
+        eid: &[Vec<Option<EdgeId>>],
+        loop_ranges: &[std::ops::Range<usize>],
+    ) -> FaceId {
+        let a = self.angles[copy];
+        let frame = self.rotate_frame(&self.profile.plane, a);
+        // outward at the start cap is against the turn, at the end cap with it
+        let turn = self.rf.z().cross(self.rf.x());
+        let with_turn = frame.z().dot(self.rotate_vec(turn, a)) > 0.0;
+        let same_sense = if copy == 0 { !with_turn } else { with_turn };
+        let name = self.root.with_str(if copy == 0 { "start" } else { "end" });
+        let face = self
+            .body
+            .add_face(shell, Surface::Plane(Plane::new(frame)), same_sense, name);
+        for r in loop_ranges {
+            let mut uses: Vec<(EdgeId, bool)> = r
+                .clone()
+                .map(|si| (eid[copy][si].expect("caps use every segment"), segs[si].forward))
+                .collect();
+            if !same_sense {
+                uses = uses.into_iter().rev().map(|(e, f)| (e, !f)).collect();
+            }
+            self.body.add_loop(face, &uses);
+        }
+        face
+    }
+}

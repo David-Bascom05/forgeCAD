@@ -936,6 +936,7 @@ fn export(features: History<'_>, i: usize, before: Option<&Before>) -> Result<St
             Edit::Move { .. } => Err("move faces: OCCT has no operation that moves faces"),
         },
         Feature::Import(_) => Err("import: a body read from a file, no operation to rebuild it by"),
+        Feature::Sheet(_) => Err("sheet: the oracle measures solids (sheets: tools/occt/sheets.py)"),
         Feature::Text(t) => {
             // the outlines as our layout sets them (OCCT's own text builder needs a font file
             // and lays text out its own way); the solids are OCCT's
@@ -1566,6 +1567,7 @@ mod tests {
             Feature::Sweep(_) => "sweep",
             Feature::Coil(_) => "coil",
             Feature::Loft(_) => "loft",
+            Feature::Sheet(_) => "sheet",
             Feature::Edit(e) => match e {
                 Edit::Rib(_) => "rib",
                 Edit::Offset { .. } => "offset",
