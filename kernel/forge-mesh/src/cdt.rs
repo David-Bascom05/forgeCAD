@@ -125,6 +125,46 @@ fn through(a: u32, b: u32, point: u32, shift: u32) -> CdtError {
     }
 }
 
+/// Whether l-r and a-b are one chord, either way round.
+fn same_chord(l: u32, r: u32, a: u32, b: u32) -> bool {
+    (l == a && r == b) || (l == b && r == a)
+}
+
+/// Where the chord a-b is, or goes, in `uses` (sorted by lower end, then upper): its index, and
+/// whether it is there.
+fn find_use(uses: &[(u32, u32, u32)], a: u32, b: u32) -> (usize, bool) {
+    let (lo, hi) = if a < b { (a, b) } else { (b, a) };
+    // the first entry not below (lo, hi)
+    let (mut l, mut r) = (0, uses.len());
+    while l < r {
+        let m = l + (r - l) / 2;
+        let (x, y, _) = uses[m];
+        if x < lo || (x == lo && y < hi) {
+            l = m + 1;
+        } else {
+            r = m;
+        }
+    }
+    (l, l < uses.len() && uses[l].0 == lo && uses[l].1 == hi)
+}
+
+/// One more use of the chord a-b.
+fn count_use(uses: &mut Vec<(u32, u32, u32)>, a: u32, b: u32) {
+    let (k, there) = find_use(uses, a, b);
+    if there {
+        uses[k].2 += 1;
+    } else {
+        let (lo, hi) = if a < b { (a, b) } else { (b, a) };
+        uses.insert(k, (lo, hi, 1));
+    }
+}
+
+/// The chord a-b's uses, taken off the count (one if it has none: a chord drawn once).
+fn take_uses(uses: &mut Vec<(u32, u32, u32)>, a: u32, b: u32) -> u32 {
+    let (k, there) = find_use(uses, a, b);
+    if there { uses.remove(k).2 } else { 1 }
+}
+
 /// Where x is in a triangle's three vertices or neighbours.
 fn slot(a: [u32; 3], x: u32) -> Option<usize> {
     if a[0] == x {
@@ -655,74 +695,107 @@ impl Mesh {
     /// they cross or pass through a point. Each chord's uses are counted, and one used an even
     /// number of times bounds nothing (a slit, a loop there and back).
     fn insert_tangled(&mut self, chords: Vec<(u32, u32)>) -> Result<(), CdtError> {
-        let mut uses: std::collections::BTreeMap<(u32, u32), u32> = std::collections::BTreeMap::new();
-        let key = |a: u32, b: u32| (a.min(b), a.max(b));
+        // each chord's uses, sorted by its ends (lower first)
+        let mut uses: Vec<(u32, u32, u32)> = Vec::new();
         let mut budget = 64 * chords.len() + 1024;
         let mut todo = chords;
         todo.reverse();
-        while let Some((a, b)) = todo.pop() {
-            if a == b {
-                continue;
-            }
-            budget = budget
-                .checked_sub(1)
-                .ok_or(CdtError::Internal("a tangled boundary did not untangle"))?;
-            if forge_geom::budget::over() {
-                return Err(CdtError::Internal("the boundary would take too long"));
-            }
-            match self.insert_constraint(a, b, 0) {
-                Ok(()) => *uses.entry(key(a, b)).or_insert(0) += 1,
-                Err(CdtError::ConstraintThroughPoint { point, .. }) => {
-                    todo.push((point, b));
-                    todo.push((a, point));
-                }
-                // the same chord again
-                Err(CdtError::ConstraintsIntersect { .. }) if key(self.hit.0, self.hit.1) == key(a, b) => {
-                    *uses.entry(key(a, b)).or_insert(0) += 1;
-                }
-                Err(CdtError::ConstraintsIntersect { .. }) => {
-                    let (l, r) = self.hit;
-                    let (pa, pb, pl, pr) = (self.p(a), self.p(b), self.p(l), self.p(r));
-                    let (dl, dr) = (orient2d(pa, pb, pl), orient2d(pa, pb, pr));
-                    let x = pl.lerp(pr, dl / (dl - dr));
-                    let (t, i) = self
-                        .has_edge(l, r)
-                        .ok_or(CdtError::Internal("crossed edge vanished"))?;
-                    self.unmark(t, i);
-                    let n = uses.remove(&key(l, r)).unwrap_or(1);
-                    let loc = self
-                        .locate(x)
-                        .ok_or(CdtError::Internal("point location failed"))?;
-                    let w = match loc {
-                        // on a corner, to the last bit: the chords go through it
-                        Location::Vertex(w) => w,
-                        loc => {
-                            let w = self.pts.len() as u32;
-                            self.pts.push(x);
-                            self.vtri.push(0);
-                            self.insert(w, loc);
-                            w
-                        }
-                    };
-                    todo.push((w, b));
-                    todo.push((a, w));
-                    for _ in 0..n {
-                        todo.push((w, r));
-                        todo.push((l, w));
+        let mut err: Option<CdtError> = None;
+        while err.is_none() && !todo.is_empty() {
+            let (a, b) = todo[todo.len() - 1];
+            todo.pop();
+            if a != b {
+                if budget == 0 {
+                    err = Some(CdtError::Internal("a tangled boundary did not untangle"));
+                } else {
+                    budget -= 1;
+                    if forge_geom::budget::over() {
+                        err = Some(CdtError::Internal("the boundary would take too long"));
                     }
                 }
-                Err(e) => return Err(e),
+            }
+            if a != b && err.is_none() {
+                match self.insert_constraint(a, b, 0) {
+                    Ok(()) => count_use(&mut uses, a, b),
+                    Err(CdtError::ConstraintThroughPoint { point, .. }) => {
+                        todo.push((point, b));
+                        todo.push((a, point));
+                    }
+                    Err(CdtError::ConstraintsIntersect { .. }) => {
+                        let (l, r) = self.hit;
+                        if same_chord(l, r, a, b) {
+                            // the same chord again
+                            count_use(&mut uses, a, b);
+                        } else {
+                            match self.cut(a, b, l, r, &mut uses) {
+                                Err(e) => err = Some(e),
+                                Ok((w, n)) => {
+                                    todo.push((w, b));
+                                    todo.push((a, w));
+                                    let mut k = 0;
+                                    while k < n {
+                                        todo.push((w, r));
+                                        todo.push((l, w));
+                                        k += 1;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => err = Some(e),
+                }
             }
         }
-        for (&(a, b), &n) in &uses {
+        let mut k = 0;
+        while err.is_none() && k < uses.len() {
+            let (a, b, n) = uses[k];
             if n % 2 == 0 {
-                let (t, i) = self
-                    .has_edge(a, b)
-                    .ok_or(CdtError::Internal("a boundary chord vanished"))?;
-                self.unmark(t, i);
+                match self.has_edge(a, b) {
+                    None => err = Some(CdtError::Internal("a boundary chord vanished")),
+                    Some((t, i)) => self.unmark(t, i),
+                }
             }
+            k += 1;
         }
-        Ok(())
+        match err {
+            Some(e) => Err(e),
+            None => Ok(()),
+        }
+    }
+
+    /// The chord a-b crosses the constraint l-r: a point where they cross (or the corner it
+    /// rounds to), l-r unmarked and its uses taken off the count. With the point and those uses.
+    fn cut(
+        &mut self,
+        a: u32,
+        b: u32,
+        l: u32,
+        r: u32,
+        uses: &mut Vec<(u32, u32, u32)>,
+    ) -> Result<(u32, u32), CdtError> {
+        let (pa, pb, pl, pr) = (self.p(a), self.p(b), self.p(l), self.p(r));
+        let (dl, dr) = (orient2d(pa, pb, pl), orient2d(pa, pb, pr));
+        let x = pl.lerp(pr, dl / (dl - dr));
+        let Some((t, i)) = self.has_edge(l, r) else {
+            return Err(CdtError::Internal("crossed edge vanished"));
+        };
+        self.unmark(t, i);
+        let n = take_uses(uses, l, r);
+        let Some(loc) = self.locate(x) else {
+            return Err(CdtError::Internal("point location failed"));
+        };
+        let w = match loc {
+            // on a corner, to the last bit: the chords go through it
+            Location::Vertex(w) => w,
+            loc => {
+                let w = self.pts.len() as u32;
+                self.pts.push(x);
+                self.vtri.push(0);
+                self.insert(w, loc);
+                w
+            }
+        };
+        Ok((w, n))
     }
 
     fn unmark(&mut self, t: u32, i: usize) {
