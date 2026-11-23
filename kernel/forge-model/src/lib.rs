@@ -1,5 +1,13 @@
 //! A part as a history of features, and regenerating it into a solid.
 
+/// This crate's Cargo features and whether this build has each: a result cache keyed by the
+/// sources alone would hand one build's answers to a build with other features
+/// (forge-lang's `store::key` folds them in).
+pub const FEATURES: &[(&str, bool)] = &[
+    ("decisions", cfg!(feature = "decisions")),
+    ("decide_once", cfg!(feature = "decide_once")),
+];
+
 pub mod adversarial;
 pub mod bodies;
 mod edit;
