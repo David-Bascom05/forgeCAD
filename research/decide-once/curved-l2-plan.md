@@ -104,3 +104,66 @@ Aeneas and bignum arithmetic.
 The flat bridge is being restructured for speed (a body-local read, then a sparse arrangement).
 `decide_once_curved.rs` shares code with it only through `forge_math::exact` and
 `forge_bool_core`, never through `decide_once.rs` internals.
+
+## 4. Rust status (branch `dol-curved-rust`)
+
+**Milestone 1 (2026-11-23): the numeric core and the four checked modules.** Feature
+`forge-bool/decide_once_curved`, off by default. Nothing in `boolean.rs` reaches it yet, so on or
+off every boolean is the old path's, bit for bit; the gates hold trivially (no gate line runs new
+code).
+
+| Rust | Lean | State |
+|---|---|---|
+| `forge_math::exact::alg`: `Q` (rationals over `Big`, normalised, `x/0 = 0`), `Poly` ops (`padd` … `sqfree`), `moebius`, `no_pos_root`, `one_pos_root`, `Iso::{ok, zero_at}`, `Num::{cmp_rat, bisect, refine, sign_nz, sign, cmp}`, `real_roots`, `between`, `simplest`, `root_bound`, `rat_sqrt` | Alg/Poly, Alg/Model, Alg/Real, QRef/Decide | done, line for line (list lengths included) |
+| `decide_once_curved`: `V3`, `Plane::{eval, canon}`, `Quadric::{eval, grad, quad, canon}`, `QFace::{quadric, nappe, wf}`, `centred` | Ref/Geom, Quad/Basic, QRef/Faces | done |
+| `along_line`, `sgn_of_int`, **`cov_on`** | QLine | done |
+| `off_axis`, `axis_plane`, `nappe_plane`, `centre_plane`, `equator_plane`, `seams_of`, `classes_of`, `seams` | QSep, Classes | done |
+| `restr`, `homog`, `ESample::{on_curve, d_ok}`, **`edge_cov`**, `restr_b`, `bpadd`/`bpmul`/`bzero`, **`bezout`**; the proposer `propose_edge` | QEdge | done; the proposer is new (below) |
+| `homog3`, `VSample::{on_vert, d_ok}`, **`vert_cov`** | QVert | checker done; proposer next |
+| `SForm::{on_cov, below}` | QForm | done |
+| QSweep, QSample, QLedger, write | — | next, in that order |
+
+`Skip` has `OutOfDomain`, `Uncertified`, `Ambiguous` and `Budget`. Fuel: `SIGN_FUEL = 200`,
+`ROOT_FUEL = 60` (§2), and `REAL_ROOTS_STEPS = 4000` (the Lean's loop bound).
+
+**The edge proposer** (untrusted; every output checked by `bezout`, `on_curve`, `d_ok`). On
+`x = c`, with `f = a₀ + a₁z + a₂z²` and `g = b₀ + b₁z + b₂z²`: `D = b₂a₁ − a₂b₁`,
+`N = b₂a₀ − a₂b₀` (so `b₂f − a₂g = Dz + N`), `Res = N² + D(a₁b₀ − a₀b₁)`. Then
+`homog q_j = a₂ Res` and `homog q_k = b₂ Res` identically, and with `M = a₂Dz − a₂N + a₁D`,
+`a₂ Res = (D² − b₂M) f + a₂M g` is the Bezout certificate (j and k swapped when `a₂ = 0`).
+Decided refusals, all `Uncertified`: both `zz = 0`; `Res ≡ 0`; `Res` not square-free (a
+tangency on the sweep plane); `D(α) = 0` at a root.
+
+**Float filters** (`FILTERS` in the module, for the IEEE session):
+- `sign_filter_iv`: Horner in `forge_math::Interval` (one ulp outward per operation), with each
+  rational coefficient enclosed by floats checked exactly (`Q::lo_f64 ≤ v ≤ Q::hi_f64`, by
+  `Q::cmp_f64`, a cross-multiplied comparison). An enclosure excluding 0 is the sign. Precondition:
+  every bound finite (checked; otherwise the exact path).
+- `tighten`: the enclosure of an isolated root, bisected in floats. It keeps `a ≤ lo < hi ≤ b`
+  with filter-decided opposite signs of `p` at `lo` and `hi`, so the root (the only one in
+  `(a, b)`, by `Iso.ok`) stays inside. A midpoint the filter cannot sign ends it.
+- A filter's answer is the true sign, so it equals `Num.sign`'s whenever that one answers
+  (`sign_spec`); debug builds check this at every call. Where `Num.sign` would run out of fuel,
+  the filter's answer stands. **For L4** the Lean side needs that rule stated: a `signF` that is
+  "the filter's sign, else `Num.sign`", with the filter abstracted as any correct partial sign
+  oracle. Then `covOn_spec` and the like hold for it unchanged.
+
+**L6 / interim L4.** `digest::exact_digest` hashes the exact path's outputs over a fixed family
+(66 quadric pairs × a sweep plane: samples, roots and covectors over 12 carriers; 40 random
+cubics and quartics isolated). The constant is committed, and the test passes natively and on
+wasm32-wasip1 (native = wasm). The differential against exact-curved's QRef families waits for
+QSample/QLedger; it needs `lake` here (not installed in this container).
+
+**Found on the way, for the Lean side (dol-curved):**
+1. `ESample.R` must be the polynomial whose roots are isolated, so the Rust takes `R = monic Res`
+   and refuses a non-square-free `Res`. Tangent crossings need a cover lemma (`R ∣ sqf^k`, checked)
+   to isolate `sqfree R` instead.
+2. `ESample` fixes the sweep plane as `x = c` and eliminates `z`; two quadrics with `zz = 0` (both
+   linear in `z` on the plane) are refused. The Tier-1 direction `d` of design §2.3 needs either a
+   rotated frame (rational, by the Pythagorean quadruple) or the `ESample` generalised to `d·x = c`.
+
+**Cost, measured** (release, the digest family): the 66 edge proposals take 143 ms, about 2 ms
+each, and the 150-odd covectors over 12 carriers take 42 ms. Of that, 76% is `gcd` normalising
+rationals, done through `Big`'s public API (Euclid with a float-estimated quotient, corrected
+exactly). The fix is in `Big`: a `divmod` and a `gcd` (or an inline-word accessor). They are
+asked of the decide-once Rust session, which owns it.

@@ -19,6 +19,9 @@ decisions = ["forge-geom/decisions", "forge-topo/decisions"]
 # the decide-once flat-face boolean (src/decide_once.rs over forge-bool-core): flat booleans go
 # through the ledger and the combinatorial core; off by default, the old path unchanged
 decide_once = ["dep:forge-bool-core"]
+# the decide-once boolean for quadric carriers (src/decide_once_curved.rs, research/decide-once/
+# curved-design.md): off by default; not yet reached from boolean.rs, so on or off the old path runs
+decide_once_curved = ["dep:forge-bool-core"]
 
 [dev-dependencies]
 forge-ops = { path = "../forge-ops" }

@@ -6,6 +6,9 @@
 
 use core::cmp::Ordering;
 
+/// Rationals, polynomials and real algebraic numbers over [`Big`] (the curved decide-once side).
+pub mod alg;
+
 /// A signed big integer: inline while it fits under 2¹²⁶ in magnitude (the common case: the
 /// kernel's numbers are short dyadics), else its magnitude in base 2³² limbs, least significant
 /// first, with no trailing zero limb. One representation per value, so equality is structural.
