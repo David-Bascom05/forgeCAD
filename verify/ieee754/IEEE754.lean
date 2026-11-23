@@ -17,4 +17,6 @@ import IEEE754.Dmath.Reduction
 import IEEE754.Dmath.CosPoly
 import IEEE754.Dmath.SinCos
 import IEEE754.Dmath.AtanPoly
+import IEEE754.Dmath.AtanEval
+import IEEE754.Dmath.AtanFacts
 import IEEE754.Axioms
