@@ -1940,7 +1940,7 @@ impl Session {
         let path = self.path.as_ref().ok_or("no file to save to")?;
         forge_dirs::fs::write(path, &self.src).map_err(|e| format!("{path}: {e}"))?;
         self.saved = self.src.clone();
-        // the undo depth kept with it (`F.fg.log`), as `.fc`'s op log kept it: for the next
+        // the undo depth kept with it (`F.fg.log`): for the next
         // time it opens, and `fg edit F Undo`
         forge_lang::undo::keep(std::path::Path::new(path), &self.undo, &self.src, &self.redo)
             .map_err(|e| format!("{path}.log: {e}"))?;

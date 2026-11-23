@@ -901,12 +901,10 @@ extrude1 = extrude(s1, 5)
     );
 }
 
-// ---- gaps: what the .fc parts did that Forge cannot write yet
+// ---- awkward profiles: knife edges, touching loops, sheared prisms
 
-/// A disc a hair inside its scoop, the scoop's sides running into its arcs as knife edges.
-/// The .fc part:
-///   extrude 2 z 0 1 0 x 1 0 0 at 0 0 0 loop arc 0 0 4.5 170 -160 line 4.431635 0.781417 7.878462 -18.610815 arc 0 -20 8 10 80 arc 0 -20 8 90 80 line -7.878462 -18.610815 -4.431635 0.781417 circle 0 0 2.25
-///   extrude add 5 z 0 1 0 x 1 0 0 at 0 0 0 loop arc 0 -20 8 170 -80 arc 0 -20 8 90 -80 arc 0 -20 8 10 -200 circle 0 -20 4
+/// A disc a hair inside its scoop, the scoop's sides running into its arcs as knife edges: it
+/// builds.
 #[test]
 fn disc_in_a_scoop_with_knife_edges() {
     builds(
@@ -934,9 +932,7 @@ extrude2 = extrude(s2, 5)
 }
 
 /// A boss whose bore touches its flat at a vertex on a plate: its cap's two loops meet at a point the
-/// triangulation parts by a hair, the 3D points staying where they are. The .fc part:
-///   extrude 6 z 0 1 0 x 1 0 0 at 0 0 0 poly 0 -30 0 30 120 30 120 -30 circle 14 0 7 circle 106 0 7
-///   extrude add 60 z 0 0 -1 x 1 0 0 at 0 0 30 loop arc 60 -28 34 40.320215 -260.64043 line 34.077037 -6 60 -6 line 60 -6 85.922963 -6 circle 60 -28 22
+/// triangulation parts by a hair, the 3D points staying where they are: it builds and meshes.
 #[test]
 fn cap_whose_loops_touch_meshes() {
     builds(
@@ -963,19 +959,13 @@ extrude2 = extrude(s3, 60)
     );
 }
 
-// A sheared prism keeps its section's area at every height (Cavalieri): area x height. The .fc
-// parts, `extrude D along X Y Z PROFILE` (the walls run along X Y Z, the ends D along the normal):
-//   extrude 10 along 0.3 0.1 1 rect 0 0 8 5            400
-//   extrude 10 along -2 0 1 circle 0 0 3               90 pi
-//   extrude 10 along 0 1 1 circle 0 0 4 circle 0 0 1   150 pi
-//   extrude -10 along 0.5 0 1 rect 0 0 8 5             400
-//   extrude 10 along -0.5 0 -1 rect 0 0 8 5            400
-//   extrude sym 10 along 0.5 0 1 circle 0 0 3          90 pi
-//   extrude two 6 4 along 0.5 0 1 rect 0 0 8 5        400
-// and tools: a plate 40 x 40 x 10 less `extrude cut 10 along 0.5 0 1 circle 0 0 3` (16000 - 90 pi),
-// plus `extrude add 8 along 0.5 0 1 at 0 0 10 rect -5 -5 10 10` (16800), less `extrude cut thru
-// along 0.5 0 1 circle 0 0 3`; and `extrude 10 along 1 0 0 rect 0 0 8 5` refused (in the plane).
-// In Forge: the same extrudes with `along:` a work axis through the origin and (X, Y, Z).
+// A sheared prism keeps its section's area at every height (Cavalieri): area x height. Each extrude
+// runs `along:` a work axis from the origin to (X, Y, Z), its walls along that axis and its ends D
+// along the normal: an 8 x 5 rect 10 along (0.3, 0.1, 1) is 400, a circle r 3 along (-2, 0, 1) is
+// 90 pi, a ring r 4 less r 1 along (0, 1, 1) is 150 pi; the rect is 400 again reversed, along a
+// downward axis and two-sided (6 and 4), the circle 90 pi symmetric. As tools: a 40 x 40 x 10 plate
+// less a slanted circle r 3 (16000 - 90 pi), plus a slanted 10 x 10 boss 8 tall (16800), less a
+// slanted hole thru; and an axis in the sketch's plane is refused.
 #[test]
 fn oblique_extrude_keeps_area_times_height() {
     use dmath::PI;

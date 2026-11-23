@@ -1,7 +1,6 @@
 # Cast pillow-block bracket: an L of base and upright in one casting, the upright's top a
 # full round, a face fillet in the corner, a bearing boss with a seat bored from the back on its
 # work axis, two gussets, mounting holes from a hole table, a cored lightening pocket.
-# Hand port of tools/bench-parts/bracket.fc.
 
 shared w = 80
 shared t = 12                  # base thickness
