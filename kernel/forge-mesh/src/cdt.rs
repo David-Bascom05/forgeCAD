@@ -814,32 +814,20 @@ impl Mesh {
         let loc = self
             .locate(p)
             .ok_or(CdtError::Internal("point location failed"))?;
-        let near = |w: u32, mesh: &Mesh| (mesh.p(w) - p).length_sq() <= eps * eps;
-        let near_constraint = |t: u32, mesh: &Mesh| {
-            let tt = mesh.tris[t as usize];
-            (0..3).any(|i| {
-                tt.c[i] && segment_distance_sq(p, mesh.p(tt.v[nx(i)]), mesh.p(tt.v[pv(i)])) <= eps * eps
-            })
-        };
         let skip = match &loc {
             Location::Vertex(_) => true,
             Location::Inside(t) => {
-                !self.inside[*t as usize]
-                    || near_constraint(*t, self)
-                    || self.tris[*t as usize].v.iter().any(|&w| near(w, self))
+                !self.inside[*t as usize] || self.near_constraint(*t, p, eps) || self.near_corner(*t, p, eps)
             }
             Location::OnEdge(t, i) => {
                 let tt = self.tris[*t as usize];
                 let u = tt.n[*i];
                 tt.c[*i]
                     || !self.inside[*t as usize]
-                    || near_constraint(*t, self)
-                    || near_constraint(u, self)
-                    || tt
-                        .v
-                        .iter()
-                        .chain(self.tris[u as usize].v.iter())
-                        .any(|&w| near(w, self))
+                    || self.near_constraint(*t, p, eps)
+                    || self.near_constraint(u, p, eps)
+                    || self.near_corner(*t, p, eps)
+                    || self.near_corner(u, p, eps)
             }
         };
         if !skip {
@@ -849,6 +837,23 @@ impl Mesh {
             self.insert(v, loc);
         }
         Ok(())
+    }
+
+    /// Whether p is within eps of a corner of t, in the corners' order.
+    fn near_corner(&self, t: u32, p: Point2, eps: f64) -> bool {
+        let v = self.tris[t as usize].v;
+        (self.p(v[0]) - p).length_sq() <= eps * eps
+            || (self.p(v[1]) - p).length_sq() <= eps * eps
+            || (self.p(v[2]) - p).length_sq() <= eps * eps
+    }
+
+    /// Whether p is within eps of a constraint edge of t, in the edges' order.
+    fn near_constraint(&self, t: u32, p: Point2, eps: f64) -> bool {
+        let tt = self.tris[t as usize];
+        let (a, b, c) = (self.p(tt.v[0]), self.p(tt.v[1]), self.p(tt.v[2]));
+        (tt.c[0] && segment_distance_sq(p, b, c) <= eps * eps)
+            || (tt.c[1] && segment_distance_sq(p, c, a) <= eps * eps)
+            || (tt.c[2] && segment_distance_sq(p, a, b) <= eps * eps)
     }
 
     fn mark(&mut self, t: u32, i: usize, err: CdtError) -> Result<(), CdtError> {
