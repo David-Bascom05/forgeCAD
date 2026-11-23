@@ -1,0 +1,23 @@
+# The callgrind gate's +2282 on housing, coplanar and patterns (seq and nary1) at 4f801fda
+#
+# regen1 housing seq, base 5de0a5f (old) against 4f801fda (new), the gate's x86-64-v2 build (target/callgrind),
+# run under valgrind --tool=callgrind --cache-sim=no, env -i, setarch -R, taskset -c 1, from /.
+# Totals: old 140497902, new 140497915 (+13 here; +2282 in the gate's own fixed environment).
+# Every function's count, by callgrind_annotate --threshold=100, old and new joined on its name:
+# the functions whose counts differ, new minus old. Every kernel function is identical; the
+# differences are ld.so relocation and PLT/startup stubs (binary layout), not kernel work.
+# Accepted by the master under the layout-only rule (2026-11-23).
+#
+-14	 ???:0x00000000001982b0
+-12	 ???:0x00000000001982f0
+-7	 ???:0x0000000000956ea4
+-5	 ???:0x0000000000198240
+-4	 ???:0x0000000000956ec0
+4	 ???:0x00000000009572f0
+5	 ./elf/./elf/do-rel.h:_dl_relocate_object
+5	 ???:0x0000000000198290
+7	 ???:0x00000000009572d4
+8	 ./elf/../sysdeps/x86_64/dl-machine.h:_dl_relocate_object
+12	 ???:0x0000000000198340
+13	 PROGRAM TOTALS
+14	 ???:0x0000000000198300
