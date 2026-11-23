@@ -1834,11 +1834,23 @@ fn plan_once_in(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
 
     // pieces of the two bodies' edges with the same ends along the same curve (coincident walls
     // meeting a face at one line) are one edge: B's copy gives way to A's
+    let ends = |pc: &Piece| (pc.start.min(pc.end).packed(), pc.start.max(pc.end).packed());
+    // where B has fewer pieces than A, B's pieces' ends sorted first: only A's pieces with the
+    // ends of one of B's can be shared, so only those are sorted (the lookups below find the same)
+    let nb = pieces.iter().filter(|pc| pc.side == Some(1)).count();
+    let na = pieces.iter().filter(|pc| pc.side == Some(0)).count();
+    let mut wanted: Vec<(u64, u64)> = Vec::new();
+    if nb < na {
+        wanted.extend(pieces.iter().filter(|pc| pc.side == Some(1)).map(ends));
+        wanted.sort_unstable();
+        wanted.dedup();
+    }
     let mut by_ends: Vec<((u64, u64), usize)> = pieces
         .iter()
         .enumerate()
         .filter(|(_, pc)| pc.side == Some(0))
-        .map(|(i, pc)| ((pc.start.min(pc.end).packed(), pc.start.max(pc.end).packed()), i))
+        .map(|(i, pc)| (ends(pc), i))
+        .filter(|(k, _)| nb >= na || wanted.binary_search(k).is_ok())
         .collect();
     // (keys packed in VKey's order; the piece index breaks every tie, so unstable is stable)
     by_ends.sort_unstable();
@@ -1846,7 +1858,7 @@ fn plan_once_in(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
     let mut canon: Vec<(usize, bool)> = (0..pieces.len()).map(|p| (p, false)).collect();
     let mut shared: Vec<usize> = Vec::new();
     for (p, pc) in pieces.iter().enumerate().filter(|(_, pc)| pc.side == Some(1)) {
-        let key = (pc.start.min(pc.end).packed(), pc.start.max(pc.end).packed());
+        let key = ends(pc);
         let from = by_ends.partition_point(|x| x.0 < key);
         let mid = pc.curve.eval(pc.range.mid());
         for &(_, a) in by_ends[from..].iter().take_while(|x| x.0 == key) {
