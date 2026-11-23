@@ -273,7 +273,6 @@ impl Reference {
             },
         }
     }
-
 }
 
 impl Drop for Reference {
