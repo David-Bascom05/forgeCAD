@@ -12,6 +12,7 @@ import ForgeBoolCore.RefineClassify
 import ForgeBoolCore.RefineKeep
 import ForgeBoolCore.RefineZeros
 import ForgeBoolCore.RefineSortU32
+import ForgeBoolCore.RefineAround
 /-! The refinement lemmas use the standard axioms only. -/
 #print axioms forge_bool_core.zero_idx_spec
 #print axioms forge_bool_core.is_facet_spec
@@ -54,3 +55,14 @@ import ForgeBoolCore.RefineSortU32
 #print axioms forge_bool_core.keep_res_spec
 #print axioms forge_bool_core.zeros_spec
 #print axioms forge_bool_core.sort_u32_spec
+#print axioms forge_bool_core.enc_complete
+#print axioms forge_bool_core.enc_unique
+#print axioms forge_bool_core.enum_buf_spec
+#print axioms forge_bool_core.enum_m_spec
+#print axioms forge_bool_core.enum_keep_spec
+#print axioms forge_bool_core.enc_iff
+#print axioms forge_bool_core.mem_hitsAll
+#print axioms forge_bool_core.hitsAll_nodup
+#print axioms forge_bool_core.around_enum_spec
+#print axioms forge_bool_core.around_loop_spec
+#print axioms forge_bool_core.around_spec

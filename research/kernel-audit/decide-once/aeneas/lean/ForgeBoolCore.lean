@@ -17,4 +17,6 @@ import ForgeBoolCore.RefineClassify
 import ForgeBoolCore.RefineKeep
 import ForgeBoolCore.RefineZeros
 import ForgeBoolCore.RefineSortU32
+import ForgeBoolCore.EnumModel
+import ForgeBoolCore.RefineAround
 import ForgeBoolCore.Axioms
