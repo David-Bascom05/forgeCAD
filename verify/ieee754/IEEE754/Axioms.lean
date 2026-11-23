@@ -59,4 +59,5 @@ elab "#standard_axioms " ids:ident* : command => do
   IEEE754.rne_nearest IEEE754.round_nearest
   IEEE754.add_err_representable IEEE754.fast2sum IEEE754.fast_two_sum_exact IEEE754.two_sum_exact_of_le
   IEEE754.two_sum_core IEEE754.two_sum_exact
-  IEEE754.veltkamp_core IEEE754.veltkamp
+  IEEE754.veltkamp_core IEEE754.veltkamp IEEE754.dekker_core IEEE754.two_product_exact
+  IEEE754.F64.two_product_exact
