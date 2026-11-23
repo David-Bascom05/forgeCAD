@@ -848,6 +848,21 @@ pub fn build_result(id: u32) -> Option<String> {
     all.swap_remove(k).1
 }
 
+/// What a test that timed out reports: the builds handed out and not yet taken (by number,
+/// whether done) and, in the threaded build, the worker pool (`plat::threads::state`).
+#[wasm_bindgen]
+pub fn pool_state() -> String {
+    let builds: Vec<String> = crate::plat::lock(&BUILDS)
+        .iter()
+        .map(|b| format!("[{},{}]", b.0, b.1.is_some()))
+        .collect();
+    #[cfg(target_feature = "atomics")]
+    let pool = crate::plat::threads::state();
+    #[cfg(not(target_feature = "atomics"))]
+    let pool = "null".to_string();
+    format!(r#"{{"builds":[{}],"pool":{pool}}}"#, builds.join(","))
+}
+
 /// The bench parts (and their font) written into `dir`; their paths.
 #[wasm_bindgen]
 pub fn bench_load(dir: &str) -> js_sys::Array {

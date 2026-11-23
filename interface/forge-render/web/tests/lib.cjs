@@ -34,11 +34,14 @@ async function browser() {
 async function page(b, url) {
   const p = await b.newPage({ viewport: { width: 1280, height: 800 } });
   p.problems = [];
-  p.on("console", (m) => {
+  const heard = (m) => {
     const t = m.text();
     if (process.env.VERBOSE) console.log(`  console: ${t.slice(0, 300)}`);
-    if (/panicked/.test(t)) p.problems.push(t);
-  });
+    if (/panicked|forge worker/.test(t)) p.problems.push(t);
+  };
+  p.on("console", heard);
+  // the threaded build's Web Workers: a panic or a death on one is the page's too
+  p.on("worker", (w) => w.on?.("console", heard));
   p.on("pageerror", (e) => p.problems.push(`page error: ${e.message}`));
   await p.goto(url);
   return p;
@@ -86,7 +89,8 @@ function serve(dir, app, extra = []) {
 /// The native build of each file, as forge-parity reports it, by file.
 function native(files) {
   const { execFileSync } = require("node:child_process");
-  const out = execFileSync(bins.parity, files, { maxBuffer: 1 << 26 }).toString();
+  // capped: a native hang is said, not waited out (the sync call holds the run's own timers)
+  const out = execFileSync(bins.parity, files, { maxBuffer: 1 << 26, timeout: Number(env("NATIVE_MS", 600000)) }).toString();
   return Object.fromEntries(out.trim().split("\n").map((l) => {
     const j = JSON.parse(l);
     return [j.file, j];
