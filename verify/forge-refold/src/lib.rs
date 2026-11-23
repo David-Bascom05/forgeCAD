@@ -13,8 +13,9 @@
 //!    BA - 2s apart on the flat, the bend deduction);
 //! 5. continuity: each zone meets its walls at u = 0 and u = BA in position and direction;
 //! 7. physical K: R <= rn <= R + t (the neutral layer inside the material);
-//! 8. export: one contour runs counter-clockwise, the contours close, and their area times t is
-//!    the flat body's volume.
+//! 8. export: one contour runs counter-clockwise, the contours close (consecutive pieces meet in
+//!    one double, the vertex class's point, which each piece stores as its end), and their area
+//!    times t is the flat body's volume.
 //!
 //! A form's own vertices are left out: formed (folded) and pierced (flat) by design.
 //! (6, injectivity, is the builder's own clash and overlap checks, which refuse; it is not
@@ -261,10 +262,12 @@ pub fn judge(sheet: &Sheet, fold: &Built, flat: &Built) -> Result<Refolded, Vec<
                 signed.iter().filter(|a| **a > 0.0).count()
             ));
         }
+        // consecutive pieces meet in one double: the contour vertex, its class's point, which
+        // every piece stores as its end (an arc beside its angles)
         for c in &pat.contours {
             for (k, x) in c.iter().enumerate() {
                 let gap = x.ends().1.distance(c[(k + 1) % c.len()].ends().0);
-                if gap > tol {
+                if gap != 0.0 {
                     bad.push(format!("a contour opens by {gap}"));
                 }
             }
