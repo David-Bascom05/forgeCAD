@@ -10,7 +10,6 @@
 use crate::{FontError, Seg, cff_core};
 use forge_math::Point2;
 
-
 /// An INDEX: where each of its objects lies in the data.
 #[derive(Clone, Debug, Default)]
 struct Index {

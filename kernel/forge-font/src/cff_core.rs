@@ -228,7 +228,15 @@ fn sixes(p: &mut Pen, s: &Stack, k0: usize, n6: usize) -> Code {
     let mut j = 0;
     while e == OK && j < n6 {
         let k = k0 + 6 * j;
-        e = curve(p, arg(s, k), arg(s, k + 1), arg(s, k + 2), arg(s, k + 3), arg(s, k + 4), arg(s, k + 5));
+        e = curve(
+            p,
+            arg(s, k),
+            arg(s, k + 1),
+            arg(s, k + 2),
+            arg(s, k + 3),
+            arg(s, k + 4),
+            arg(s, k + 5),
+        );
         j += 1;
     }
     e
@@ -279,7 +287,11 @@ fn fours(p: &mut Pen, s: &Stack, op: u8) -> Code {
     let mut k = k0;
     while e == OK && k + 3 < n {
         let (a, b, c, d) = (arg(s, k), arg(s, k + 1), arg(s, k + 2), arg(s, k + 3));
-        e = if op == 26 { curve(p, d1, a, b, c, 0, d) } else { curve(p, a, d1, b, c, d, 0) };
+        e = if op == 26 {
+            curve(p, d1, a, b, c, 0, d)
+        } else {
+            curve(p, a, d1, b, c, d, 0)
+        };
         d1 = 0;
         k += 4;
     }
@@ -297,9 +309,22 @@ fn alternating(p: &mut Pen, s: &Stack, op: u8) -> Code {
     let mut e = OK;
     let mut k = 0;
     while e == OK && k < m {
-        let (a, b, c, d) = (arg(s, 4 * k), arg(s, 4 * k + 1), arg(s, 4 * k + 2), arg(s, 4 * k + 3));
-        let last = if k + 1 == m && n % 4 == 1 { arg(s, n - 1) } else { 0 };
-        e = if h { curve(p, a, 0, b, c, last, d) } else { curve(p, 0, a, b, c, d, last) };
+        let (a, b, c, d) = (
+            arg(s, 4 * k),
+            arg(s, 4 * k + 1),
+            arg(s, 4 * k + 2),
+            arg(s, 4 * k + 3),
+        );
+        let last = if k + 1 == m && n % 4 == 1 {
+            arg(s, n - 1)
+        } else {
+            0
+        };
+        e = if h {
+            curve(p, a, 0, b, c, last, d)
+        } else {
+            curve(p, 0, a, b, c, d, last)
+        };
         h = !h;
         k += 1;
     }
@@ -327,8 +352,15 @@ fn flex(p: &mut Pen, s: &Stack, b1: u8) -> Code {
 }
 
 fn hflex(p: &mut Pen, s: &Stack) -> Code {
-    let (dx1, dx2, dy2, dx3, dx4, dx5, dx6) =
-        (arg(s, 0), arg(s, 1), arg(s, 2), arg(s, 3), arg(s, 4), arg(s, 5), arg(s, 6));
+    let (dx1, dx2, dy2, dx3, dx4, dx5, dx6) = (
+        arg(s, 0),
+        arg(s, 1),
+        arg(s, 2),
+        arg(s, 3),
+        arg(s, 4),
+        arg(s, 5),
+        arg(s, 6),
+    );
     let e = curve(p, dx1, 0, dx2, dy2, dx3, 0);
     if e != OK {
         return e;
@@ -350,8 +382,20 @@ fn hflex1(p: &mut Pen, s: &Stack) -> Code {
 fn flex1(p: &mut Pen, s: &Stack) -> Code {
     let dx = arg(s, 0) + arg(s, 2) + arg(s, 4) + arg(s, 6) + arg(s, 8);
     let dy = arg(s, 1) + arg(s, 3) + arg(s, 5) + arg(s, 7) + arg(s, 9);
-    let (ex, ey) = if abs(dx) > abs(dy) { (arg(s, 10), -dy) } else { (-dx, arg(s, 10)) };
-    let e = curve(p, arg(s, 0), arg(s, 1), arg(s, 2), arg(s, 3), arg(s, 4), arg(s, 5));
+    let (ex, ey) = if abs(dx) > abs(dy) {
+        (arg(s, 10), -dy)
+    } else {
+        (-dx, arg(s, 10))
+    };
+    let e = curve(
+        p,
+        arg(s, 0),
+        arg(s, 1),
+        arg(s, 2),
+        arg(s, 3),
+        arg(s, 4),
+        arg(s, 5),
+    );
     if e != OK {
         return e;
     }
@@ -380,7 +424,11 @@ fn subr(d: &[u8], offs: &[usize], k: i64) -> Option<(usize, usize)> {
     }
     let i = i as usize;
     let (a, b) = (offs[i], offs[i + 1]);
-    if a <= b && b <= d.len() { Some((a, b)) } else { None }
+    if a <= b && b <= d.len() {
+        Some((a, b))
+    } else {
+        None
+    }
 }
 
 /// Where the interpreter is: the charstring it runs (a range of `d`) and its next byte.
@@ -405,13 +453,19 @@ fn operand(d: &[u8], o: usize, e: usize, b0: u8) -> Option<(i64, usize)> {
         Some(((b0 as i64 - 139) * ONE, o))
     } else if b0 <= 250 {
         if o < e {
-            Some((((b0 as i64 - 247) * 256 + byte_or0(d, o) as i64 + 108) * ONE, o + 1))
+            Some((
+                ((b0 as i64 - 247) * 256 + byte_or0(d, o) as i64 + 108) * ONE,
+                o + 1,
+            ))
         } else {
             None
         }
     } else if b0 <= 254 {
         if o < e {
-            Some(((-(b0 as i64 - 251) * 256 - byte_or0(d, o) as i64 - 108) * ONE, o + 1))
+            Some((
+                (-(b0 as i64 - 251) * 256 - byte_or0(d, o) as i64 - 108) * ONE,
+                o + 1,
+            ))
         } else {
             None
         }
@@ -428,7 +482,12 @@ fn operand(d: &[u8], o: usize, e: usize, b0: u8) -> Option<(i64, usize)> {
 
 /// Runs the charstring `d[cs.0..cs.1]` (its subroutines in the INDEXes with offsets `gsubrs` and
 /// `local`) to its closed contours.
-pub fn run(d: &[u8], cs: (usize, usize), gsubrs: &[usize], local: &[usize]) -> Result<Vec<Vec<SegC>>, FontError> {
+pub fn run(
+    d: &[u8],
+    cs: (usize, usize),
+    gsubrs: &[usize],
+    local: &[usize],
+) -> Result<Vec<Vec<SegC>>, FontError> {
     let mut p = Pen {
         at: Pc { x: 0, y: 0 },
         start: None,
