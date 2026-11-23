@@ -3,7 +3,11 @@ use forge_machine::library;
 
 #[test]
 fn builtin_machines_parse_and_have_their_kinds() {
-    let ms = library::builtin();
+    let ms: Vec<MachineDef> = library::builtin_files()
+        .into_iter()
+        .filter(|(_, f)| f == "builtin/generic.toml")
+        .map(|(m, _)| m)
+        .collect();
     let kinds: Vec<(&str, Kind)> = ms.iter().map(|m| (m.name.as_str(), m.kind)).collect();
     assert_eq!(
         kinds,
@@ -172,4 +176,63 @@ fn builtin_layout_is_per_vendor() {
             );
         }
     }
+}
+
+/// Provenance: a real record cites every value; cites name real values; each status carries what
+/// it needs.
+#[test]
+fn cites_are_checked() {
+    // not real: no cites needed
+    assert!(MachineDef::parse_all(MINI).is_ok());
+    let real = MINI.replace("source = \"test\"", "source = \"test\"\nreal = true");
+    match MachineDef::parse_all(&real) {
+        Err(DefError::Bad {
+            field: "real", why, ..
+        }) => {
+            assert!(
+                why.contains("joint.X.range") && why.contains("mount.p.at"),
+                "{why}"
+            )
+        }
+        r => panic!("{r:?}"),
+    }
+    let m = MachineDef::parse_all(MINI).unwrap().remove(0);
+    let mut all = real.clone();
+    for p in m.cite_paths() {
+        all.push_str(&format!(
+            "[[machine.cite]]\npath = \"{p}\"\nstatus = \"published\"\nsource = \"https://example.com/spec\"\ntaken = \"2026-11-23\"\n"
+        ));
+    }
+    let ok = MachineDef::parse_all(&all).unwrap().remove(0);
+    assert!(ok.real && ok.cites.len() == m.cite_paths().len());
+    let bad = |extra: &str| MachineDef::parse_all(&format!("{all}[[machine.cite]]\n{extra}")).unwrap_err();
+    assert!(matches!(
+        bad("path = \"joint.Q.range\"\nstatus = \"published\"\nsource = \"s\"\ntaken = \"2026-11-23\"\n"),
+        DefError::Bad { field: "path", .. }
+    ));
+    assert!(matches!(
+        bad("path = \"joint.X.range\"\nstatus = \"published\"\n"),
+        DefError::Missing { field: "source", .. }
+    ));
+    assert!(matches!(
+        bad("path = \"joint.X.range\"\nstatus = \"published\"\nsource = \"s\"\n"),
+        DefError::Missing { field: "taken", .. }
+    ));
+    assert!(matches!(
+        bad("path = \"joint.X.accel\"\nstatus = \"estimate\"\n"),
+        DefError::Missing { field: "basis", .. }
+    ));
+    assert!(matches!(
+        bad("path = \"joint.X.range\"\nstatus = \"conflict\"\nsource = \"s\"\ntaken = \"2026-11-23\"\n"),
+        DefError::Missing { field: "note", .. }
+    ));
+    assert!(matches!(
+        bad("path = \"joint.X.range\"\nstatus = \"maybe\"\n"),
+        DefError::Unknown { field: "status", .. }
+    ));
+    // an estimate with its basis is fine
+    assert!(MachineDef::parse_all(&format!(
+        "{all}[[machine.cite]]\npath = \"joint.X.home\"\nstatus = \"estimate\"\nbasis = \"centre of travel\"\n"
+    ))
+    .is_ok());
 }
