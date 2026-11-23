@@ -7,7 +7,8 @@ text, read back, and the path the text means is **certified** against the exact 
 - **holder_collision**: the shank and holder keep `clearance` from the part and the stock;
 - **rapid_clear**: rapids keep `clearance` from the part and the stock;
 - **fixture_collision**: every body of the tool, the cutter too, keeps the fixture's clearance
-  (default 1 mm) from the vise, on every move;
+  (default 1 mm) from the vise, on every move; with no workholding declared, from the support
+  under the stock (the plane of the stock's bottom): nothing cuts below the stock;
 - **axis_limit** (G5): every posted position within the machine's travel, joint by joint (the
   spindle's Z is the tip's plus the tool's length: stick-out and holder gauge), for a setup placed
   with `at:` (the work offset in machine coordinates); an unplaced setup has each axis's span
@@ -18,7 +19,9 @@ text, read back, and the path the text means is **certified** against the exact 
   Placed or not.
 
 An operation whose checks are not all proven is **refused**, with the check that failed, where,
-and a fix. A program is written only when every operation in it is certified.
+and a fix. A program is written only when every operation in it is certified. Every tool change is
+preceded by Z to the machine's safe position (the dialect's `retract_home`: `G91 G28 Z0.` on
+Fanuc and Haas, `G53 G0 Z0` on LinuxCNC; GRBL's manual change emits none).
 
 ```
 forgecad cam F.fg [--json] [-o PROGRAM]     the reply, and the program if released; exit 0 certified
@@ -52,7 +55,7 @@ prog  = program(op1, post: "fanuc", number: 1001)
 | `part(FILE, group:)` | a part file beside the document; `group` (default `N`) picks the cutting data |
 | `machine(NAME)` | from the library (`generic-vmc3`, `generic-router`, or the project's) |
 | `tool(ID, t:, stickout:, holder:)` | a library tool, its T number, stick-out (tip to holder nose), holder |
-| `setup(PART, machine:, stock:, origin:, wcs:, at:, tol:, clearance:, clear:, retract:, fixture:, from:)` | `stock: box(margin: (x, y, z))` or `box(min:, max:)`; `origin: "top-center"`, `"top-corner"` or `(x, y, z)` in the part's frame; heights above the stock top; `from: SETUP`: the part turned over about x, starting from the stock that setup provably left (turned) |
+| `setup(PART, machine:, stock:, origin:, wcs:, at:, tol:, clearance:, clear:, retract:, fixture:, from:)` | `stock: box(margin: (x, y, z), below: b)` (b mm of stock under the part, default 0) or `box(min:, max:)`; `origin: "top-center"`, `"top-corner"` or `(x, y, z)` in the part's frame; heights above the stock top; `from: SETUP`: the part turned over about x, starting from the stock that setup provably left (turned) |
 | `vise(NAME, across:, clamp:, parallel:, clearance:)` | a library vise (`generic-vise-150`, `generic-vise-100`) closed on the stock along `across` (`"x"` or `"y"`), gripping `clamp` mm of it, on parallels `parallel` wide (default 6); `clearance` default 1 |
 | `soft_jaw(vise(NAME, across:), blank:, from: SETUP, grip:, fit:, tool:, relief: "corners", min_contact:)` | soft jaws cut to what `from:` left, turned over, `grip` deep: the pocket is the opening of that outline by `tool`'s radius, grown by `fit` (default 0.02), with a relief of radius r + fit at each corner if asked. Refused unless what `from:` left seats in the pocket (exactly), the seat is at least `min_contact` mm² (default a quarter of the largest section), the blank keeps 3 mm of wall and the part stands more than the fixture clearance above the jaws. The value is a part (the jaws closed, pocketed: `setup(jaws, ..)` cuts them, held by the vise) and a fixture (`setup(f, from: op1, fixture: jaws)`) |
 | `facing(SETUP, tool:, to:, step:)` | zig-zag over the stock down to `to` |

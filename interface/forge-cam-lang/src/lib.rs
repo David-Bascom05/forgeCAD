@@ -76,8 +76,12 @@ struct ViseSpec {
 
 #[derive(Clone, Debug)]
 enum StockSpec {
-    Margin([f64; 3]),
-    Box { min: [f64; 3], max: [f64; 3] },
+    /// Margins x, y, above, and below the part.
+    Margin([f64; 3], f64),
+    Box {
+        min: [f64; 3],
+        max: [f64; 3],
+    },
 }
 
 struct PartIn {
@@ -303,7 +307,13 @@ impl Cam {
                 if fname == "box" {
                     let named = self.named(args, env)?;
                     if let Some(m) = named.get("margin").and_then(tuple3) {
-                        return Ok(V::Stock(StockSpec::Margin(m)));
+                        // `below:`: stock under the part too (it rests on that much)
+                        let below = match named.get("below") {
+                            None => 0.0,
+                            Some(V::Num(b)) if *b >= 0.0 => *b,
+                            Some(_) => return Err("box: below: a length ≥ 0".into()),
+                        };
+                        return Ok(V::Stock(StockSpec::Margin(m, below)));
                     }
                     if let (Some(lo), Some(hi)) = (
                         named.get("min").and_then(tuple3),
@@ -839,8 +849,8 @@ impl Cam {
                             max: ip.max,
                         }
                     }
-                    Some(V::Stock(StockSpec::Margin(m))) => Stock {
-                        min: [plo[0] - m[0], plo[1] - m[1], plo[2]],
+                    Some(V::Stock(StockSpec::Margin(m, below))) => Stock {
+                        min: [plo[0] - m[0], plo[1] - m[1], plo[2] - below],
                         max: [phi[0] + m[0], phi[1] + m[1], phi[2] + m[2]],
                     },
                     Some(V::Stock(StockSpec::Box { min, max })) => Stock { min: *min, max: *max },
@@ -2814,6 +2824,49 @@ fn opening(rg: &Region, r: f64) -> Option<Region> {
     out
 }
 
+/// The support under the stock when no workholding is declared: the plane of the stock's
+/// bottom, over the stock's box grown by 1 m each way (a path that leaves that square is far
+/// outside any table this phase models; G5 bounds it by the travel when the setup is placed).
+fn support_face(st: &Stock) -> Face {
+    use forge_cam_geom::check::{Surf, TSeg, Trim};
+    use forge_cam_geom::ival::Ival;
+    let g = 1000.0;
+    let (x0, y0) = (st.min[0] - g, st.min[1] - g);
+    let (w, h) = (st.max[0] - st.min[0] + 2.0 * g, st.max[1] - st.min[1] + 2.0 * g);
+    let rect = Trim {
+        segs: vec![
+            TSeg::Line {
+                a: [0.0, 0.0],
+                b: [w, 0.0],
+            },
+            TSeg::Line {
+                a: [w, 0.0],
+                b: [w, h],
+            },
+            TSeg::Line {
+                a: [w, h],
+                b: [0.0, h],
+            },
+            TSeg::Line {
+                a: [0.0, h],
+                b: [0.0, 0.0],
+            },
+        ],
+    };
+    Face::new(
+        Surf::Plane {
+            o: [x0, y0, st.min[2]],
+            u: [1.0, 0.0, 0.0],
+            v: [0.0, 1.0, 0.0],
+        },
+        Ival::new(0.0, w),
+        Ival::new(0.0, h),
+        Some(rect),
+        1e-9,
+        3000,
+    )
+}
+
 /// Each hole of a section as a pocket region: the hole's loop reversed (its inside on the
 /// left), with the islands standing in it, the loops it directly holds, reversed as holes. The
 /// section is validated (closed loops whose pieces meet only at shared ends), so one point
@@ -3093,6 +3146,10 @@ impl Cam {
                         recs.push(Rec::SpindleStop);
                         recs.push(Rec::Coolant(forge_post::Coolant::Off));
                     }
+                    // Z to the machine's safe position first (the dialect's retract_home: G91 G28 Z0,
+                    // G53 G0 Z0): an M06 need not move Z, and a longer tool would come down
+                    // into the stock where the last one stood
+                    recs.push(Rec::Home);
                     recs.push(Rec::ToolChange {
                         t: t.t,
                         h: t.t,
@@ -3395,9 +3452,11 @@ impl Cam {
                     stages.iter().map(|s| (s.0, s.1.len())).collect::<Vec<_>>()
                 );
             }
+            // with no workholding declared, whatever holds the stock is under it: the plane of the
+            // stock's bottom is the support, and no body of the tool may reach it (G2)
             let (ffaces, fclear) = match &s.fixture {
                 Some(f) => (f.faces(), f.clearance),
-                None => (vec![], 0.0),
+                None => (vec![support_face(&s.stock)], 0.0),
             };
             let target = self.ops[oi].target.as_ref().unwrap_or(&part.faces);
             let mut sum = ops::certify_fixtured(
@@ -3417,6 +3476,12 @@ impl Cam {
                         && let Some(p) = f.piece_of(id)
                     {
                         c.other = format!("{} ({p})", c.other);
+                    }
+                }
+            } else {
+                for c in &mut sum.checks {
+                    if c.rule == "fixture_collision" {
+                        c.other = "the support under the stock (no workholding declared)".into();
                     }
                 }
             }
@@ -3469,6 +3534,10 @@ impl Cam {
                 op.fix = Some(match c.rule {
                     "machine_limit" => "a tool or feeds the machine can run (its spindle range and feed limit are in the machine's record), or another machine".into(),
                     "axis_limit" => "SetArg at: a work offset that keeps the program within travel, or the part placed elsewhere on the table (or a shorter tool for Z)".into(),
+                    "fixture_collision" if s.fixture.is_none() => format!(
+                        "the path reaches below the stock's bottom (z = {:.2}), where whatever holds it is: cut no lower than the stock, or SetArg stock: a box whose bottom is below the cut (the rest left to a second setup), or declare the workholding (SetArg fixture)",
+                        s.stock.min[2]
+                    ),
                     "fixture_collision" => {
                         let f = s.fixture.as_ref().expect("a fixture check has a fixture");
                         let seat = s.stock.min[2];
