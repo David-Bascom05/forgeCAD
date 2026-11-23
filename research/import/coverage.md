@@ -25,7 +25,7 @@ measure are given beside them where they differ.
 | set | parts | untranslated before | after | match (1e-4) before | after | uncertain after | match after, old measure |
 |---|---:|---:|---:|---:|---:|---:|---:|
 | FreeCAD library, bodies | 677 | 130 | 39 | 394 | 570 | 20 | 523 |
-| CADFS, all parts | 1914 | 640 | 612 | 1108 | 1126 | 3 | 1114 |
+| CADFS, all parts | 1914 | 640 | 604 | 1108 | 1129 | 3 | 1117 |
 | CADFS, parts with a fillet | 476 | 238 | 227 | 164 | 167 | 0 | 167 |
 | WHUCAD, 1 in 7 with a fillet | 319 | 35 | 29 | (1e-3: STEPs staged for the newly built only) | 0 new | | |
 
@@ -37,7 +37,8 @@ The first pass took on the four biggest FreeCAD causes and CADFS's extrude draft
 need only importer work: FreeCAD's Thickness, a mirror plane on a feature's face, a pattern axis on a feature's edge,
 CADFS's extrude up to a curved face, and WHUCAD's splines. A third pass writes sketch ellipses and elliptical arcs
 exactly, reads FreeCAD's pad or pocket up to a face, takes a profile that is a binder or a feature's edge or
-face, and reads CADFS's elliptical arcs.
+face, reads CADFS's elliptical arcs, and takes CADFS's pattern and revolve axes from the part's own edges and
+faces.
 
 In the first pass FreeCAD's matches rose by 112, and only 30 of those were newly translated parts:
 - 30 refused before and match now;
@@ -320,13 +321,13 @@ All 1914 sampled parts:
 
 | class | before | after |
 |---|---:|---:|
-| match | 1108 | 1126 |
-| mismatch | 69 | 68 |
+| match | 1108 | 1129 |
+| mismatch | 69 | 72 |
 | uncertain | 3 | 3 |
-| refused | 85 | 93 |
+| refused | 85 | 94 |
 | fail | 8 | 11 |
 | timeout | 1 | 1 |
-| untranslated | 640 | 612 |
+| untranslated | 640 | 604 |
 
 **Draft on an extrude (24 → 0 under that name).** Onshape's extrude draft is Forge's `taper:`, on a depth. Its sign
 was read from the STEP: with the pull-direction flag set, Onshape narrows the extrude as Forge's positive taper does
@@ -361,6 +362,24 @@ second direction or a draft along with it is still unsupported (Forge has no `ta
 Both CADFS changes act only where the importer used to refuse. The merged run's every change of class is one of
 those 43 parts.
 
+**An axis on the part (13 → 2 under that name).** A circular pattern's or a revolve's axis can be one of the part's
+own edges or faces rather than a sketch line. It is now read from the part as built:
+- a straight edge: the line through it;
+- a cylinder's face or a circle's edge swept from a sketch: the sketch's normal through the circle's centre;
+- a revolved cylinder or cone: the revolve's axis;
+- a single closed circle otherwise: the normal through the circle its samples lie on.
+
+Which way Onshape runs such an axis is not known here. So it is taken only where the way cannot matter: a full or
+symmetric revolve, or a pattern spread evenly over a whole turn.
+
+| part | after |
+|---|---|
+| 00501978, 00718900, 00754089 | match (to 2.4e-13 or better) |
+| 00677337 | refused: `Fillet Corner` |
+| 00670276 | mismatch: 1.5e-4 (approx: a polyline stands in for a spline) |
+| 00293826, 00724634, 00846949 | mismatch: a pattern of new bodies that spins each copy onto the last. The STEP holds the same copies, 6 to 17 of them, and step_truth counts identical solids once. Ours counts each, so the convention, not the shape, sets them apart. Reported, not counted. |
+| 5 others | another cause (a surface revolve, a pattern's copy 2, more than one edge 2) |
+
 ### What still stops CADFS
 
 Ranked for the parts with a fillet (all 1914 parts in brackets):
@@ -376,7 +395,7 @@ Ranked for the parts with a fillet (all 1914 parts in brackets):
 | BLEND_EDGE / BLEND_FACE / OFFSET_* of an unknown feature, no edge or face on the carrier | 24 | importer: queries on blends' and offsets' own faces |
 | feature deleteBodies | 4 (17) | importer (bodies dropped from the part) |
 | sketch curve skEllipticalArc | 1 (2) | read from the dataset's sketch record where one record has the program's entities (above); in these 2, none does |
-| a pattern of many bodies, a mirror in a curved face, an axis on a solid's edge | 7 (18) | importer; a curved mirror has no form |
+| a pattern of many bodies, a mirror in a curved face | 5 (13) | importer; a curved mirror has no form |
 
 ## WHUCAD
 

@@ -1191,12 +1191,17 @@ class Tr:
         fr = self.sk[fid][1]
         ax = single(a["axis"], env)
         ax = self.deref(ax, env)
+        t0 = a.get("revolveType")
+        t0 = t0[1].split(".")[-1] if isinstance(t0, tuple) else "FULL"
         if not (isinstance(ax, fs.Call) and ax[0] == "sQuery"):
-            raise Unsupported("revolve about a solid's edge")
-        _, _, afr, e = self.ent(ax)
-        if e.kind != "line":
-            raise Unresolved("axis not a line")
-        p0, p1 = afr.world(*e.a), afr.world(*e.b)
+            # a full or symmetric turn is the same either way round
+            p0, dw = self.edge_line(ax, env, sense_free=t0 in ("FULL", "SYMMETRIC"))
+            p1 = add(p0, dw, 1)
+        else:
+            _, _, afr, e = self.ent(ax)
+            if e.kind != "line":
+                raise Unresolved("axis not a line")
+            p0, p1 = afr.world(*e.a), afr.world(*e.b)
         u0, v0, w0 = fr.uvw(p0)
         u1, v1, w1 = fr.uvw(p1)
         if abs(w0) > 1e-6 or abs(w1) > 1e-6:
@@ -1528,10 +1533,61 @@ class Tr:
         if len(bs) != 1 or self.bodies != 1:
             raise Unsupported("a pattern of many bodies")
 
-    def world_line(self, q0, env):
+    def edge_line(self, q0, env, sense_free):
+        """An axis on a solid's edge: the one straight edge the query names on the part as built, from its first
+        sample to its last. Which way Onshape runs that edge is not known here, so only where the way cannot
+        matter (`sense_free`: a full or symmetric revolve, a pattern spread evenly over a whole turn)."""
+        if not sense_free:
+            raise Unsupported("an axis on a solid's edge, run one way")
+        c = self.carrier(q0, env)
+        while isinstance(c, Any) and len(c.cs) == 1:
+            c = c.cs[0]
+        ld = add((c.piece.b[0], c.piece.b[1], 0.0), (c.piece.a[0], c.piece.a[1], 0.0), -1) if isinstance(c, Turned) else None
+        if isinstance(c, Turned) and c.piece.kind == "line" and abs(ld[0] * c.d2[0] + ld[1] * c.d2[1]) > 1e-9 * math.hypot(ld[0], ld[1]):
+            # a cylinder or a cone turned from a line: its axis is the turn's
+            return c.fr.world(*c.a2), add(c.fr.world(c.a2[0] + c.d2[0], c.a2[1] + c.d2[1]), c.fr.world(*c.a2), -1)
+        if isinstance(c, Swept) and c.piece.kind in ("circle", "arc"):
+            # a cylinder's face or a circle's edge, swept from a sketch: its axis is the sketch's normal through the
+            # circle's centre
+            return c.fr.world(*c.piece.c), c.fr.n
+        hs = self.edges_for([q0], env, False)
+        if len(hs) != 1:
+            raise Unresolved("an axis on a solid's edge: not one edge")
+        e = next(x for x in self.state().get("edges", []) if x["h"] == next(iter(hs)))
+        ps = [tuple(float(c) for c in q) for q in e["p"]]
+        p0, p1 = ps[0], ps[-1]
+        d = add(p1, p0, -1)
+        l = math.sqrt(dot(d, d))
+        if l < 1e-9 and e.get("k") == "circle":
+            # a closed circle: the axis through its centre, square to its plane (three of its samples)
+            a3, b3, c3 = ps[0], ps[len(ps) // 3], ps[2 * len(ps) // 3]
+            u, v = add(b3, a3, -1), add(c3, a3, -1)
+            n = (u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0])
+            nn = dot(n, n)
+            if nn < 1e-18:
+                raise Unresolved("an axis on a solid's edge: a closed edge")
+            uu, vv, uv = dot(u, u), dot(v, v), dot(u, v)
+            den = 2 * (uu * vv - uv * uv)
+            al, be = vv * (uu - uv) / den, uu * (vv - uv) / den
+            centre = add(add(a3, u, al), v, be)
+            r = math.sqrt(dot(add(a3, centre, -1), add(a3, centre, -1)))
+            if any(abs(math.sqrt(dot(add(q, centre, -1), add(q, centre, -1))) - r) > 1e-7 * max(r, 1.0) for q in ps):
+                raise Unresolved("an axis on a solid's edge: a closed edge")
+            return centre, tuple(x / math.sqrt(nn) for x in n)
+        if l < 1e-9:
+            raise Unresolved("an axis on a solid's edge: a closed edge")
+        d = tuple(x / l for x in d)
+        for q in ps:
+            w = add(q, p0, -1)
+            off = add(w, d, -dot(w, d))
+            if math.sqrt(dot(off, off)) > 1e-7 * max(l, 1.0):
+                raise Unresolved("an axis not a line")
+        return p0, d
+
+    def world_line(self, q0, env, sense_free=False):
         q = self.deref(q0, env)
         if not (isinstance(q, fs.Call) and q[0] == "sQuery"):
-            raise Unsupported("an axis on a solid's edge")
+            return self.edge_line(q, env, sense_free)
         _, _, fr, e = self.ent(q)
         if e.kind != "line":
             raise Unresolved("an axis not a line")
@@ -1555,11 +1611,13 @@ class Tr:
         self.one_body(f)
         if self.op_of(a) not in ("new", "add"):
             raise Unsupported("a pattern that cuts")
-        o, d = self.world_line(single(a["axis"], env), env)
-        if a.get("oppositeDirection") is True:
-            d = tuple(-x for x in d)
         n, ang = int(self.val(a["instanceCount"])), self.val(a["angle"])
         tail = "" if a.get("equalSpace") is True else " step"
+        # spread evenly over a whole turn, the copies are the same either way round
+        whole = abs((ang if not tail else ang * n) - 360) < 1e-9
+        o, d = self.world_line(single(a["axis"], env), env, sense_free=whole)
+        if a.get("oppositeDirection") is True:
+            d = tuple(-x for x in d)
         if self.op_of(a) == "new":
             # each instance a body of its own, summed where they overlap, as the source's file holds them
             step = ang if tail else ang / n if abs(ang - 360) < 1e-9 else ang / max(n - 1, 1)
