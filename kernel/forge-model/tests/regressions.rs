@@ -3895,16 +3895,28 @@ fn a_plane_torus_curve_does_not_fold_at_a_turn() {
 /// a radius e round. The common part built 4190.78 mm³ (its mass error 2.8, under the gate) and the
 /// cut's mass did not settle: the closed form's chain dropped a tip. The volumes are the ball's less
 /// the cap outside the wall, 1.712719606e-5 mm³ (by quadrature of its z sections, 30 digits).
+/// The cut leaves the ball's pole touching the bottom cap at a point (non-manifold, as the exact
+/// reference decides): refused ZeroThickness there.
 #[test]
 fn ball_a_hair_through_a_cylinder_wall_measures_exactly() {
     let cap = 1.712719606e-5;
     let ball = 4.0 / 3.0 * forge_math::dmath::PI * 1000.0;
     let cyl = forge_math::dmath::PI * 100.0 * 20.0;
-    for (op, want) in [
-        ("Keep", ball - cap),
-        ("Cut", cyl - ball + cap),
-        ("Add", cyl + cap),
-    ] {
+    let cut = "cylinder_sphere/tangent_wall_equator/Cut";
+    for b in degenerate_moved(cut, forge_math::Vec3::X * (3.0 * forge_math::tol::LINEAR)) {
+        assert!(
+            matches!(
+                b,
+                Err(forge_model::RegenError::Boolean {
+                    error: forge_bool::BoolError::ZeroThickness { .. },
+                    ..
+                })
+            ),
+            "{cut}: {:?}",
+            b.map(|_| ())
+        );
+    }
+    for (op, want) in [("Keep", ball - cap), ("Add", cyl + cap)] {
         let name = format!("cylinder_sphere/tangent_wall_equator/{op}");
         let (_, part) = forge_model::adversarial::degenerate_parts()
             .into_iter()
