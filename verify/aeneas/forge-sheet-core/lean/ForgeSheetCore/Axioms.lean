@@ -3,6 +3,7 @@ import ForgeSheetCore.RefineClasses
 import ForgeSheetCore.RefineOwner
 import ForgeSheetCore.RefineChain
 import ForgeSheetCore.RefinePlace
+import ForgeSheetCore.DevelopErr
 
 /-! Only the standard axioms: each listed theorem about the translated Rust rests on `propext`,
 `Classical.choice` and `Quot.sound` alone (a `sorry` or `native_decide` fails the build). -/
@@ -29,3 +30,4 @@ elab "#standard_axioms " ids:ident* : command => do
   forge_sheet_core.three_round forge_sheet_core.two_round forge_sheet_core.apply_spec
   forge_sheet_core.vec_spec forge_sheet_core.then_spec forge_sheet_core.diff_prod
   forge_sheet_core.two_round' forge_sheet_core.local_spec forge_sheet_core.inverse_spec
+  ForgeSheetCore.Develop.develop_err
