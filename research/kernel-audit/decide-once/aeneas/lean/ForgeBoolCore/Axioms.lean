@@ -20,6 +20,7 @@ import ForgeBoolCore.BridgeTouch
 import ForgeBoolCore.EndToEnd
 import ForgeBoolCore.Integrate
 import ForgeBoolCore.RefineSplitOk
+import ForgeBoolCore.RefineCollapse
 /-! The refinement lemmas use the standard axioms only. -/
 #print axioms forge_bool_core.zero_idx_spec
 #print axioms forge_bool_core.is_facet_spec
@@ -105,3 +106,6 @@ import ForgeBoolCore.RefineSplitOk
 #print axioms forge_bool_core.s_loop1_spec
 #print axioms forge_bool_core.split_ok_spec_proof
 #print axioms forge_bool_core.end_to_end_KU
+#print axioms forge_bool_core.collapse_spec_proof
+#print axioms forge_bool_core.K.collapse_eq
+#print axioms forge_bool_core.end_to_end_U
