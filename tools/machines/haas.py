@@ -95,15 +95,28 @@ class Rec:
         self.cites = []
         self.bodies = []  # (name, link, prims, ignore, part_text)
 
+    ALIASES = {
+        "Max Swing": ["Swing Over Front Apron"],
+        "Chuck Size": ["Chuck Optional"],
+        "Platter Diameter": ["Trunnion Platter Diameter"],
+    }
+
+    def key(self, key):
+        """The page's own key for `key` (an alias where the page words it differently)."""
+        for k in [key] + self.ALIASES.get(key, []):
+            if k in self.facts["specs"]:
+                return k
+        return key
+
     def f(self, key):
-        return self.facts["specs"][key]
+        return self.facts["specs"][self.key(key)]
 
     def has(self, key):
-        return key in self.facts["specs"]
+        return self.key(key) in self.facts["specs"]
 
     def pub(self, path, *keys, note=""):
         """Cite `path` as published on the machine's page under `keys`."""
-        val = "; ".join(f"{k}: {self.f(k)}" for k in keys)
+        val = "; ".join(f"{self.key(k)}: {self.f(k)}" for k in keys)
         self.cites.append(dict(path=path, status="published", source=self.url, taken=TAKEN, value=val, note=note))
 
     def cite(self, path, status, basis="", source="", value="", note=""):
@@ -360,6 +373,9 @@ def umc(r):
         r.cite(f"joint.{n}.range", "published", source=HFO_MILL, value="zero return moves every axis to its extreme positive location",
                note=HOME_BASIS)
         r.pub(f"joint.{n}.rapid", "Rapid Traverse Rate")
+        if r.name != "haas-umc-750":
+            r.pub(f"joint.{n}.max_feed", "Max Cutting Feedrate")
+            continue
         r.cite(f"joint.{n}.rapid", "conflict", source=UK_UMC750, value="Rapids on X/Y/Z: 1200 in/min (30.5 m/min)",
                note=f"Haas UK lists 1200 ipm; the cited page (restating haascnc.com, verified 2026-10-02) lists 900 ipm. The record holds 900 ipm = {rapid:g} mm/min (current listing; slower rapids give longer, not shorter, time estimates)")
         r.pub(f"joint.{n}.max_feed", "Max Cutting Feedrate")
@@ -367,9 +383,11 @@ def umc(r):
     table(r, "machine.joint", name="B", parent="base", side="table", type="rotary", axis=[0, -1, 0],
           pivot=[0, 0, pivot_z], range=[blo, bhi], home=0, rapid=brate, max_feed=brate, tcp=True)
     r.pub("joint.B.range", "B Axis Travel")
-    r.cite("joint.B.range", "conflict", source=DS_UMC750SS, value="B Axis - Tilt Travels: +110, -35 (UMC-750SS data sheet)",
-           note="the older UMC-750SS data sheet lists +110/-35; the current UMC-750 listing (and Haas UK) +120/-35. The record holds +120/-35 for the UMC-750")
-    r.cite("joint.B.range", "published", source=UK_UMC750, value="B Axis - Tilt Travel: +120 to -35")
+    if r.name in ("haas-umc-750", "haas-umc-750ss"):
+        r.cite("joint.B.range", "conflict", source=DS_UMC750SS, value="B Axis - Tilt Travels: +110, -35 (UMC-750SS data sheet)",
+               note=f"the older UMC-750SS data sheet lists +110/-35; the current listing {bhi:g}/{blo:g}. The record holds the current listing")
+    if r.name == "haas-umc-750":
+        r.cite("joint.B.range", "published", source=UK_UMC750, value="B Axis - Tilt Travel: +120 to -35")
     r.pub("joint.B.rapid", "B Axis Max Speed", note="50 deg/s = 3000 deg/min")
     r.cite("joint.B.max_feed", "unknown", basis="no rotary feed limit published; taken equal to the rapid (errs permissive)")
     r.cite("joint.B.pivot", "unknown",
@@ -387,18 +405,23 @@ def umc(r):
     table(r, "machine.spindle", name="S1", link="Z", kind="milling", axis=[0, 0, 1], nose=nose,
           rpm=[1, rpm(r.f("Max Spindle Speed"))], curve_rpm=curve_rpm, curve_kw=curve_kw,
           max=[mm(r.f("Max Tool Length")), mm(r.f("Max Tool Diameter (full magazine)"))],
-          interface=r.f("Spindle Taper").split("/")[0].strip())
+          interface=re.split(r"/| or ", r.f("Spindle Taper"))[0].strip().replace("CT or BT 40", "CT40"))
     r.pub("spindle.S1.rpm", "Max Spindle Speed", note=MIN_RPM)
     r.pub("spindle.S1.nose", "Spindle Nose to Platter (max)", "Spindle Nose to Platter (min)", note="x, y: " + CENTRED)
     r.pub("spindle.S1.max", "Max Tool Length", "Max Tool Diameter (full magazine)")
-    r.cite("spindle.S1.max", "conflict", source=UK_UMC750, value="Max Tool Diameter (full): 3 in (76 mm)",
-           note="Haas UK lists 3 in with a full magazine, the cited page 2.5 in; the record holds the smaller, 64 mm")
+    if r.name == "haas-umc-750":
+        r.cite("spindle.S1.max", "conflict", source=UK_UMC750, value="Max Tool Diameter (full): 3 in (76 mm)",
+               note="Haas UK lists 3 in with a full magazine, the cited page 2.5 in; the record holds the smaller, 64 mm")
     r.pub("spindle.S1.interface", "Spindle Taper", note="the first listed taper; the others are options")
+    tool_kg = kg(r.f("Max Tool Weight")) if r.has("Max Tool Weight") else 4.0
     table(r, "machine.changer", pockets=count(r.f("Tool Capacity")), change_s=secs(r.f("Tool Change (chip-to-chip)")),
-          max_tool_kg=kg(r.f("Max Tool Weight")))
+          max_tool_kg=tool_kg)
     r.pub("changer.pockets", "Tool Capacity", "Tool Changer Type")
     r.pub("changer.change_s", "Tool Change (chip-to-chip)")
-    r.pub("changer.max_tool_kg", "Max Tool Weight")
+    if r.has("Max Tool Weight"):
+        r.pub("changer.max_tool_kg", "Max Tool Weight")
+    else:
+        r.cite("changer.max_tool_kg", "unknown", basis="max tool weight not on this page; 4 kg stands in, under the 5.4 kg of the other 40-taper Haas listings (errs small)")
     table(r, "machine.mount", name="spindle", kind="tool", link="Z", at=nose, dir=[0, 0, -1])
     r.pub("mount.spindle.at", "Spindle Nose to Platter (max)", note="gauge point at the nose face; x, y: " + CENTRED)
     table(r, "machine.mount", name="platter", kind="part", link="C", at=[0, 0, 0], dir=[0, 0, 1], xdir=[1, 0, 0])
@@ -430,12 +453,15 @@ def umc(r):
 
 def lathe_common(r, kind, control_note):
     table(r, "machine", name=r.name, kind=kind, control="fanuc-lathe", real=True,
-          length_joint=None, coolants=["flood"], clearance=1.0,
+          length_joint=None, coolants=["flood"] if r.has("Coolant Capacity") else [], clearance=1.0,
           source=r.url + " (restating haascnc.com; see the cites)", taken=TAKEN,
           note=("forgecad's Haas record from public spec data; every value cited, estimates and unknowns marked. "
                 "Base frame = main spindle centre at the chuck face; +z along the spindle away from the headstock, "
                 "+x radial toward the turret, +y = z cross x. " + control_note))
-    r.cite("machine.coolants", "published", source=r.url, value=f"Coolant Capacity: {r.f('Coolant Capacity')}")
+    if r.has("Coolant Capacity"):
+        r.cite("machine.coolants", "published", source=r.url, value=f"Coolant Capacity: {r.f('Coolant Capacity')}")
+    else:
+        r.cite("machine.coolants", "unknown", basis="no coolant system listed on the page: none declared")
     r.cite("machine.control", "estimate",
            basis="Haas lathes speak a Fanuc-style lathe dialect (diameter X, G50 clamp, G96/G97, G70-G76); forge-post has no haas-lathe dialect yet (research/cam/machines/haas-dialect-audit.md)")
 
@@ -520,10 +546,16 @@ def lathe(r, note=""):
     lathe_common(r, "lathe", note)
     tip, rmax = lathe_axes(r)
     main_spindle(r, "base")
-    stations = count(r.f("Turret Stations"))
     cx = 250.0
+    if r.has("Turret Stations"):
+        stations = count(r.f("Turret Stations"))
+        r.pub("turret.T1.stations", "Turret Stations")
+    else:
+        stations = 1
+        r.cite("turret.T1.stations", "estimate", source=r.url,
+               value="Max Turning Diameter with 4 Station Turret: " + r.f("Max Turning Diameter with 4 Station Turret"),
+               basis="no turret in the base listing (the 4-station turret is an option): a tool post as one station, changed by hand")
     table(r, "machine.turret", name="T1", link=tip, stations=stations, index_s=0.5, center=[cx, 0, 0], index_axis=[0, 0, 1])
-    r.pub("turret.T1.stations", "Turret Stations")
     r.cite("turret.T1.index_s", "unknown", basis="turret index time not published on the cited page; 0.5 s stand-in")
     r.cite("turret.T1.center", "unknown", basis="turret geometry unpublished; centre 250 mm behind the reference tool point (stand-in)")
     table(r, "machine.mount", name="turret", kind="tool", link=tip, at=[0, 0, 0], dir=[-1, 0, 0])
@@ -637,6 +669,28 @@ MACHINES = [
     ("haas-st-20y", "haas-st-20y", "millturn", {}),
     ("haas-st-30y", "haas-st-30y", "millturn", {}),
     ("haas-ds-30y", "haas-ds-30y", "millturn-sub", {}),
+    # batch 2
+    ("haas-vf-1", "haas-vf-1", "vmc", {}),
+    ("haas-vf-2yt", "haas-vf-2yt", "vmc", {}),
+    ("haas-vf-3yt", "haas-vf-3yt", "vmc", {}),
+    ("haas-vf-5-40", "haas-vf-5-40", "vmc", {}),
+    ("haas-vf-6-40", "haas-vf-6-40", "vmc", {}),
+    ("haas-super-mini-mill", "haas-super-mini-mill", "vmc", {}),
+    ("haas-tm-0", "haas-tm-0", "vmc", dict(default_len=279, default_dia=89, max_basis=(
+        "manual tool change: no tool limits published; 279 x 89 mm (the VF-2SS length, the VF-2 full-magazine "
+        "diameter) stand in (errs small)"))),
+    ("haas-dt-2", "haas-dt-2", "vmc", {}),
+    ("haas-dm-2", "haas-dm-2", "vmc", {}),
+    ("haas-umc-400", "haas-umc-400", "umc", {}),
+    ("haas-umc-500", "haas-umc-500", "umc", {}),
+    ("haas-umc-750ss", "haas-umc-750ss", "umc", {}),
+    ("haas-umc-1000", "haas-umc-1000", "umc", {}),
+    ("haas-st-15", "haas-st-15", "lathe", {}),
+    ("haas-st-25", "haas-st-25", "lathe", {}),
+    ("haas-st-35", "haas-st-35", "lathe", {}),
+    ("haas-st-40", "haas-st-40", "lathe", {}),
+    ("haas-tl-1", "haas-tl-1", "lathe", {}),
+    ("haas-tl-2", "haas-tl-2", "lathe", {}),
 ]
 
 VMC_NOTES = {
