@@ -341,3 +341,28 @@ against its value ct², so a box of side t/2 is excluded: about 8πr/w boxes. Th
 10⁶, and it is also the main cost the certificate has today. Then the shared circles of pipe joints
 (cylinder–torus, sphere–torus, torus–torus with equal tube radii), each decided once, claim a thin
 tube.
+
+## 9. The completeness walk in a surface's own domain (built)
+
+Coverage now walks (u, v) boxes of one of the two surfaces (the host: plane, cylinder, cone,
+sphere or torus, cheapest first) instead of 3D boxes. P(u, v) = o + B·l(u, v), with l the local
+coordinates each form is written in, and B an interval enclosure of the exact inverse of the
+frame's rows: its transpose, widened by ‖Xᵀ‖ρ/(1 − ρ), where ρ bounds ‖I − M Xᵀ‖ (the Neumann
+series). So the image of the domain covers the form's zero set exactly, not just the frame's
+rounding of it. A (u, v) box is done when:
+- its image misses the region;
+- the other surface's Lipschitz or nappe test clears the image box;
+- g = f_b ∘ P excludes 0, by g(c) + g_u(D)(u − u_c) + g_v(D)(v − v_c) with g_u = ∇f_b(P(D))·P_u(D),
+  which is tight near a tangency;
+- or its image lies in a step's claim or a site.
+
+The twice walk stays 3D: it runs over the small meets of two step boxes.
+
+Feature on, after this:
+- **every test passes**: forge-geom 138, forge-bool 42 (`ssi::a_stall_counts_only_on_the_faces`
+  now expects the certified trace through the touch), forge-model 204, forge-lang 814, including
+  the pipe-bend joint of `slow_histories_finish`;
+- scoreboard: **0 worse** (978/985);
+- rack18u guard_120: 674 ms (5566 before, 155 off). Its volume differs in the 12th digit,
+  because the first march was refused and the quarter-step march certified;
+- the 300-pair sweep: the certificate takes 2.2 s (4.2 before).

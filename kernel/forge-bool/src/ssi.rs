@@ -713,16 +713,19 @@ mod tests {
             Point3::new(-206.39862274227644, -0.22540519861131517, 87.06967569277985),
             Point3::new(-142.12940588811063, 9.994697390738665, 100.51202637097762),
         ]);
-        assert!(forge_geom::intcurve::trace(&rod, &torus, region).is_none());
-        let got = past_stalls(&rod, &torus, region, |_| true);
-        assert!(past_stalls(&rod, &torus, region, |_| false).is_none());
-        // certified, the branches that stop at the stall are not the whole intersection: refused
+        // certified, the touch is a singular site the chains run into, and the trace is whole
         #[cfg(feature = "certified_trace")]
         {
-            assert!(got.is_none());
+            let cs = forge_geom::intcurve::trace(&rod, &torus, region).expect("certified through the touch");
+            assert!(forge_geom::certify::certify(&rod, &torus, region, &cs).is_ok());
             return;
         }
         #[allow(unreachable_code)]
+        let got = {
+            assert!(forge_geom::intcurve::trace(&rod, &torus, region).is_none());
+            assert!(past_stalls(&rod, &torus, region, |_| false).is_none());
+            past_stalls(&rod, &torus, region, |_| true)
+        };
         for (c, _) in got.expect("the branches off the touch") {
             let d = c.domain();
             for i in 0..=20 {

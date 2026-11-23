@@ -946,6 +946,244 @@ fn walk(
     Ok(())
 }
 
+/// A surface's parametrisation over a (u, v) box, for the completeness walk: it covers the
+/// surface's polynomial zero set (the cone's nappe), so that walking its domain visits every point
+/// of the surface. P(u, v) = o + B l(u, v), with l the local coordinates the form is written in
+/// and B an interval enclosure of the exact inverse of the frame's rows (x; y; z).
+#[derive(Clone, Copy, Debug)]
+struct Host {
+    form: Form,
+    b: [[I; 3]; 3],
+}
+
+/// An interval enclosure of the inverse of the near-orthonormal matrix with rows x, y, z: its
+/// transpose X, widened by |X| rho / (1 - rho), rho bounding ||I - M X|| (the Neumann series).
+fn inverse_rows(x: Vec3, y: Vec3, z: Vec3) -> Option<[[I; 3]; 3]> {
+    let m = [x, y, z];
+    let xt: [[f64; 3]; 3] = std::array::from_fn(|i| std::array::from_fn(|j| m[j].dot_k(i)));
+    let mut rho = I::point(0.0);
+    let mut row_max: f64 = 0.0;
+    for i in 0..3 {
+        let mut sum = I::point(0.0);
+        #[allow(clippy::needless_range_loop)]
+        for j in 0..3 {
+            let mut r = I::point(if i == j { 1.0 } else { 0.0 });
+            for (k, mk) in m[i].to_vec_k().iter().enumerate() {
+                r = r - (*mk * xt[k][j]).widened_point();
+            }
+            sum = sum + I::point(mag(r));
+        }
+        rho = rho.hull(&sum);
+        row_max = row_max.max(xt[i].iter().map(|v| v.abs()).sum());
+    }
+    let rho = rho.hi;
+    if rho >= 0.5 {
+        return None;
+    }
+    let e = I::point(row_max) * I::point(rho).div(&(I::point(1.0) - I::point(rho)));
+    let e = e.hi;
+    Some(std::array::from_fn(|i| {
+        std::array::from_fn(|j| I::new(xt[i][j], xt[i][j]).grow(e).widened())
+    }))
+}
+
+trait Comps {
+    fn to_vec_k(self) -> [f64; 3];
+}
+
+impl Comps for Vec3 {
+    fn to_vec_k(self) -> [f64; 3] {
+        [self.x, self.y, self.z]
+    }
+}
+
+fn mat_v(b: &[[I; 3]; 3], l: &V) -> V {
+    std::array::from_fn(|i| b[i][0] * l[0] + b[i][1] * l[1] + b[i][2] * l[2])
+}
+
+/// The floats just above 2 pi and pi / 2 (dmath's TAU and FRAC_PI_2 lie just below).
+const TAU_UP: f64 = forge_math::dmath::TAU.next_up();
+const HALF_PI_UP: f64 = forge_math::dmath::FRAC_PI_2.next_up();
+
+impl Host {
+    fn of(form: Form) -> Option<Host> {
+        let id = std::array::from_fn(|i| std::array::from_fn(|j| I::point(if i == j { 1.0 } else { 0.0 })));
+        let b = match form {
+            Form::Sphere { .. } => id,
+            Form::Plane { o: _, z } => {
+                // any two directions completing z: the plane's points are o + u x + v y, and z.q = 0
+                // fixes q's z-component only, so x, y need only span the plane with z
+                let x = if z.x.abs() < 0.9 { Vec3::X } else { Vec3::Y };
+                let x = (x - z * z.dot(x)).normalize()?.get();
+                let y = z.cross(x);
+                inverse_rows(x, y, z)?
+            }
+            Form::Cylinder { x, y, .. } => inverse_rows(x, y, x.cross(y))?,
+            Form::Cone { x, y, z, .. } | Form::Torus { x, y, z, .. } => inverse_rows(x, y, z)?,
+        };
+        Some(Host { form, b })
+    }
+
+    /// The local coordinates and their u and v derivatives over the box.
+    fn local(&self, u: I, v: I) -> (V, V, V) {
+        let z0 = I::point(0.0);
+        let one = I::point(1.0);
+        let (cu, su) = (u.cos(), u.sin());
+        match self.form {
+            Form::Plane { .. } => ([u, v, z0], [one, z0, z0], [z0, one, z0]),
+            Form::Cylinder { r, .. } => ([cu * r, su * r, v], [-(su * r), cu * r, z0], [z0, z0, one]),
+            Form::Cone { r, sin, cos, .. } => {
+                let tan = I::point(sin).div(&I::point(cos));
+                let rho = I::point(r) + v * tan;
+                (
+                    [rho * cu, rho * su, v],
+                    [-(rho * su), rho * cu, z0],
+                    [tan * cu, tan * su, one],
+                )
+            }
+            Form::Sphere { r, .. } => {
+                let (cv, sv) = (v.cos(), v.sin());
+                (
+                    [cv * cu * r, cv * su * r, sv * r],
+                    [-(cv * su * r), cv * cu * r, z0],
+                    [-(sv * cu * r), -(sv * su * r), cv * r],
+                )
+            }
+            Form::Torus { big, r, .. } => {
+                let (cv, sv) = (v.cos(), v.sin());
+                let w = I::point(big) + cv * r;
+                (
+                    [w * cu, w * su, sv * r],
+                    [-(w * su), w * cu, z0],
+                    [-(sv * cu * r), -(sv * su * r), cv * r],
+                )
+            }
+        }
+    }
+
+    /// The surface's points over the (u, v) box, and P's u and v derivatives there.
+    fn patch(&self, u: I, v: I) -> (V, V, V) {
+        let (l, lu, lv) = self.local(u, v);
+        let o = match self.form {
+            Form::Plane { o, .. } | Form::Sphere { o, .. } | Form::Cylinder { o, .. } => o,
+            Form::Cone { o, .. } | Form::Torus { o, .. } => o,
+        };
+        let p = mat_v(&self.b, &l);
+        (
+            [p[0] + I::point(o.x), p[1] + I::point(o.y), p[2] + I::point(o.z)],
+            mat_v(&self.b, &lu),
+            mat_v(&self.b, &lv),
+        )
+    }
+
+    /// A (u, v) box whose image holds every point of the surface in the region.
+    fn domain(&self, region: &V) -> Option<(I, I)> {
+        let whole = I::new(0.0, TAU_UP);
+        let along = |d: Vec3, o: Point3| dot(d, &sub_p(region, o));
+        Some(match self.form {
+            Form::Plane { o, z } => {
+                // u, v are the local coordinates of B's first two columns' duals: x.q, y.q with x, y
+                // the rows B inverts; from the region, through the rows themselves
+                let x = if z.x.abs() < 0.9 { Vec3::X } else { Vec3::Y };
+                let x = (x - z * z.dot(x)).normalize()?.get();
+                let y = z.cross(x);
+                (along(x, o), along(y, o))
+            }
+            Form::Cylinder { o, x, y, .. } => (whole, along(x.cross(y), o)),
+            Form::Cone {
+                o, z, r, sin, cos, ..
+            } => {
+                let v = along(z, o);
+                let apex = (I::point(-r * cos).widened().div(&I::point(sin))).lo;
+                // (empty when the region lies wholly past the apex: no point of the nappe in it)
+                (
+                    whole,
+                    I {
+                        lo: v.lo.max(apex),
+                        hi: v.hi,
+                    },
+                )
+            }
+            Form::Sphere { .. } => (whole, I::new(-HALF_PI_UP, HALF_PI_UP)),
+            Form::Torus { .. } => (whole, whole),
+        })
+    }
+}
+
+/// The completeness walk in the host's domain: every (u, v) box either maps outside the region,
+/// carries no zero of the other surface's polynomial (its natural extension met with the mean-value
+/// form in u and v, the cheap test near a tangency), or maps into a step's claim or a site. The box
+/// it could not show, if not.
+fn walk_domain(
+    host: &Host,
+    other: &Form,
+    region: &V,
+    segs: &[Seg],
+    sites: &[(V, Point3)],
+    budget: &mut usize,
+) -> Result<(), (V, bool)> {
+    let Some((u0, v0)) = host.domain(region) else {
+        return Err((*region, false));
+    };
+    let near = |p: &V, from: &[u32]| -> Vec<u32> {
+        from.iter()
+            .copied()
+            .filter(|&i| !segs[i as usize].site && meets(&segs[i as usize].x, p).is_some())
+            .collect()
+    };
+    if u0.is_empty() || v0.is_empty() {
+        return Ok(());
+    }
+    let all: Vec<u32> = (0..segs.len() as u32).collect();
+    let mut stack = vec![(u0, v0, near(region, &all))];
+    while let Some((u, v, cand)) = stack.pop() {
+        if *budget == 0 {
+            return Err((host.patch(u, v).0, true));
+        }
+        *budget -= 1;
+        let (p, pu, pv) = host.patch(u, v);
+        if meets(&p, region).is_none() {
+            continue;
+        }
+        // the other surface over the patch
+        if other.off(&p) {
+            continue;
+        }
+        let (um, vm) = (I::point(u.mid()), I::point(v.mid()));
+        let (pc, _, _) = host.patch(um, vm);
+        let (gc, _) = other.eval(&pc);
+        let (_, grad) = other.eval(&p);
+        let gu = grad[0] * pu[0] + grad[1] * pu[1] + grad[2] * pu[2];
+        let gv = grad[0] * pv[0] + grad[1] * pv[1] + grad[2] * pv[2];
+        let g = gc + gu * (u - um) + gv * (v - vm);
+        if !g.contains_zero() {
+            continue;
+        }
+        if sites.iter().any(|(q, _)| inside(&p, q)) || cand.iter().any(|&i| segs[i as usize].claims(&p)) {
+            continue;
+        }
+        // split across the side whose image is the longer
+        let side = |d: &V, w: f64| w * d.iter().map(|c| mag(*c)).fold(0.0, f64::max);
+        let (lu, lv) = (side(&pu, u.width()), side(&pv, v.width()));
+        if lu.max(lv) <= LEAST {
+            return Err((p, false));
+        }
+        let halves = if lu >= lv {
+            let (a, b) = u.split();
+            [(a, v), (b, v)]
+        } else {
+            let (a, b) = v.split();
+            [(u, a), (u, b)]
+        };
+        for (hu, hv) in halves {
+            let (hp, _, _) = host.patch(hu, hv);
+            let c = near(&hp, &cand);
+            stack.push((hu, hv, c));
+        }
+    }
+    Ok(())
+}
+
 /// Certifies the chains `curves` of the pair `a`, `b` as every branch inside `region`, each once.
 pub fn certify(a: &Surface, b: &Surface, region: Box3, curves: &[IntCurve]) -> Result<(), Refusal> {
     let mut last = None;
@@ -1013,18 +1251,25 @@ fn certify_with(
         region: to_box(&b),
         why: if over { Why::Budget } else { why },
     };
-    // completeness: every zero in the region lies in some segment's claim
-    walk(
-        of_box(&region),
-        &segs,
-        |b| cert.pair.excludes(b) || in_site(b),
-        |b, near| {
-            near.iter()
-                .any(|&i| !segs[i as usize].site && segs[i as usize].claims(b))
-        },
-        &mut budget,
-    )
-    .map_err(|e| (fail(e, Why::Uncovered), sited))?;
+    // completeness: every zero in the region lies in some step's claim or a site, shown over the
+    // domain of the surface whose walk is the cheaper
+    let host = [fa, fb]
+        .into_iter()
+        .enumerate()
+        .filter_map(|(k, f)| Host::of(f).map(|h| (k, h)))
+        .min_by_key(|(_, h)| match h.form {
+            Form::Plane { .. } => 0,
+            Form::Cylinder { .. } => 1,
+            Form::Cone { .. } => 2,
+            Form::Sphere { .. } => 3,
+            Form::Torus { .. } => 4,
+        });
+    let Some((k, host)) = host else {
+        return Err(out(Why::OutOfScope));
+    };
+    let other = if k == 0 { fb } else { fa };
+    walk_domain(&host, &other, &of_box(&region), &segs, &sites, &mut budget)
+        .map_err(|e| (fail(e, Why::Uncovered), sited))?;
     // no zero twice: segments not neighbours in one chain claim no zero in common
     let mut order: Vec<usize> = (0..segs.len()).collect();
     order.sort_by(|&i, &j| segs[i].x[0].lo.total_cmp(&segs[j].x[0].lo));
