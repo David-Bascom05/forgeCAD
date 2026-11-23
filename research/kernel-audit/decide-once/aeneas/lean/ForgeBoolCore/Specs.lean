@@ -251,13 +251,12 @@ structure LFits (L : ForgeExact.DecideOnce.Ledger) : Prop where
   faces : L.faceBody.length < U32.max ∧ L.faceCls.length < U32.max ∧
     (∀ b ∈ L.faceBody, b < U32.max) ∧ (∀ c ∈ L.faceCls, c < U32.max)
   ids : (∀ p ∈ L.pieces, p.2 < U32.max) ∧ (∀ q ∈ L.inside, q.2 < U32.max)
-  edges_nodup : L.edges.Nodup
   width : ∀ X ∈ L.pieces.map Prod.fst ++ L.inside.map Prod.fst ++ L.edges ++ L.verts, X.length < U32.max
   size : 32 * (L.pieces.length + L.inside.length + L.edges.length + L.verts.length + 1) < U32.max
 
 /-- A Lean ledger within the limits, every facet's sides among its cells, has a Rust ledger reading
 as it. (Its cells: the distinct covectors of pieces, sides, inside, edges and verts.) -/
 def EncodeSpec : Prop :=
-  ∀ (L : ForgeExact.DecideOnce.Ledger), LFits L → ∃ l : Ledger, toL l = L ∧ LedgerWF l ∧ SidesListed l
+  ∀ (L : ForgeExact.DecideOnce.Ledger), LFits L → L.edges.Nodup → ∃ l : Ledger, toL l = L ∧ LedgerWF l ∧ SidesListed l
 
 end forge_bool_core
