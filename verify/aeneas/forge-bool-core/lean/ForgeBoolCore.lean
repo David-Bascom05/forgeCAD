@@ -60,3 +60,10 @@ import ForgeBoolCore.RefineIncFan
 import ForgeBoolCore.RefineIncCore
 import ForgeBoolCore.RefineIncCollapseLean
 import ForgeBoolCore.RefineIncCollapse
+import ForgeBoolCore.RefineIncUnifyJoin
+import ForgeBoolCore.RefineIncUnifyFaces
+import ForgeBoolCore.RefineIncUnifyAt
+import ForgeBoolCore.RefineIncUnifyErel
+import ForgeBoolCore.RefineIncUnifyEdges
+import ForgeBoolCore.RefineIncUnifyLean
+import ForgeBoolCore.RefineIncUnify

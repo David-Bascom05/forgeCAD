@@ -1,4 +1,5 @@
 import ForgeBoolCore.RefineIncCollapse
+import ForgeBoolCore.RefineIncUnify
 import ForgeBoolCore.Specs
 import ForgeBoolCore.Refine
 import ForgeBoolCore.RefineUF
@@ -167,3 +168,36 @@ import ForgeBoolCore.RefineUnify
 #print axioms forge_bool_core.inc.KI.collapse_pos
 #print axioms forge_bool_core.inc.collapse_specI
 #print axioms forge_bool_core.inc.incCoreSpec_of_unify
+#print axioms forge_bool_core.inc.join_inner_spec
+#print axioms forge_bool_core.inc.join_mid_spec
+#print axioms forge_bool_core.inc.join_spec
+#print axioms forge_bool_core.inc.hdL_get
+#print axioms forge_bool_core.inc.faces1_spec
+#print axioms forge_bool_core.inc.faces2_spec
+#print axioms forge_bool_core.inc.ate_spec
+#print axioms forge_bool_core.inc.ps_spec
+#print axioms forge_bool_core.inc.mem_avL_lt
+#print axioms forge_bool_core.inc.verts_spec
+#print axioms forge_bool_core.inc.ecs_spec
+#print axioms forge_bool_core.inc.erel_inner_spec
+#print axioms forge_bool_core.inc.erel_mid_spec
+#print axioms forge_bool_core.inc.subL_get
+#print axioms forge_bool_core.inc.subL_getD
+#print axioms forge_bool_core.inc.erel_spec
+#print axioms forge_bool_core.inc.ff_spec
+#print axioms forge_bool_core.inc.edges_spec
+#print axioms forge_bool_core.inc.fr_get
+#print axioms forge_bool_core.inc.fr_pos
+#print axioms forge_bool_core.inc.UCtx.rpA_some
+#print axioms forge_bool_core.inc.UCtx.rpA_rAt
+#print axioms forge_bool_core.inc.UCtx.mem_aroundL
+#print axioms forge_bool_core.inc.UCtx.result_pos
+#print axioms forge_bool_core.inc.UCtx.crA_inj
+#print axioms forge_bool_core.inc.UCtx.orient_cr
+#print axioms forge_bool_core.inc.UCtx.aroundE_pos
+#print axioms forge_bool_core.inc.UCtx.joinRel_iff
+#print axioms forge_bool_core.inc.joinRel_symm
+#print axioms forge_bool_core.inc.sameSetI_map
+#print axioms forge_bool_core.inc.unify_specI
+#print axioms forge_bool_core.inc.incCoreSpec_proof
+#print axioms forge_bool_core.inc.endToEndF_proof
