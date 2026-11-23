@@ -292,6 +292,54 @@ The go/no-go is phase 0's checker speed. If certified checking of a 10⁵-move a
 more than about a second per op natively, the plan keeps the certificate as a background
 `query F cam --certify` and shows `undecided: pending` until it lands, never `pass`.
 
+## 7b. Fixtures, soft jaws and declared removals (2026-11-23, the owner's requirements)
+
+**G2, corrected.** For every instant s of every piece (cut, plunge, link, rapid):
+(g(s)·(T ∪ N)) ∩ (F(s) ⊕ B_c) = ∅, with c > 0 the setup's fixture clearance (default 1 mm). The
+cutter is kept off the vise as strictly as the holder; G1 protects the part, G2 the fixture.
+Together with the stock: (g(s)·N) ∩ int S(s) = ∅ (N clear of the in-process stock; a shank no
+wider than the cutter is held to the cutter's rule, §8), and G3 on rapids.
+
+**The vise** is F. A generic vise is a parameterised .fg part (body, fixed and moving jaw: jaw
+height, width, open range; plain or soft jaws), placed so the jaws close on the stock. The setup's
+`clamp` is the depth the stock sits in the jaws. In the checker the jaws are prism faces (boxes, or
+soft jaws' pockets): `fixture_collision` is the certified check of T ∪ N against F ⊕ B_c, the same
+verdicts, undecided refused. The part's region inside the jaws (below the jaws' top, between them)
+goes into G4's leftover L with reason "held by fixture". An op whose target cannot be reached without
+entering F ⊕ B_c is refused with a fix: raise the stock, change the clamp depth, or split the setup.
+
+**Soft jaws.** `soft_jaw(vise, blank: (w, h, t), from: SETUP | PART, grip_depth:, clearance:)` is a
+pair of .fg parts (fixed, moving). Each jaw's pocket is the held body's profile at the jaw plane
+(the stock, or the result of an earlier setup) offset by the clearance and cut to the grip depth:
+pocket = (held ⊕ B_clearance) ∩ {depth ≤ grip_depth}. It is associative (an edit of the part
+updates the jaws). Inside corners the jaw tool's radius cannot reach get a relief (a drilled
+corner) or are listed as leftover. Machining the jaws is its own setup on the blanks in the vise,
+with the same ops, checker (G1–G5) and post. In a setup that uses them, F is the cut jaws and G2
+applies unchanged. A seating check: the held part's contact area with the pockets ≥ a stated
+minimum, and the pocket no deeper than the part; refused with a fix otherwise. Jaw blanks are a
+library of presets (aluminium and steel, generic 6" vise), sourced and dated, "verify with the
+vendor before ordering", no logos.
+
+**Declared removals.** Deburr, chamfer milling and thread milling remove material the target may
+not show. (1) Preferred: the model carries the geometry (`chamfer()` faces, a modelled `thread()`),
+and G1 checks against it. (2) Otherwise a declared, named removal Δ (`edge_break(edges(..), 0.3)`,
+`cosmetic_thread(hole.bore, M6)`): an explicit finite region of the part, each with its name; G1 and
+G4 use P' = P ∖ Δ, and the reply lists each Δ with what it removed. Never a blanket tolerance. A Δ
+lies within a stated distance of the edges or faces it names, or it is refused.
+
+**The checker's statements, as the Lean session formalises them** (verify/forge-cam on
+claude/repo-review-mbdrlj-cam-lean):
+- body: a ρ-hypograph {z ∈ Z, ρ ≤ w(z)}; sd non-decreasing in ρ (sd_hyp_mono, proven);
+- prism faces and planar or vertical moves: Clear{lower} when D ≤ |σ − γ(s)| for all σ, s (D the
+  low end of slab::dist) and lower ≤ sdRZ(D, h − z_t) over H − z_t (z_t an interval for a vertical
+  move), each lowered face within mu of the true one, the claim being lower − mu;
+- G1–G3 from faces need one point of the moved tool outside the set: the tool's top above every
+  face checked (ops::certify checks it on every move, else `containment` undecided);
+- G4 as S_end ⊆ (P' ⊕ B_{δ+ε_out}) ∪ L, L listed; G6 as read(print q) = normalize(motions q) with
+  |quantize − g| ≤ ½·10^−d, absolute coordinates (G90) only, I and J on every arc, X and Y on every
+  arc, other axes and F only on change, a block's G only when the motion kind changes and only with
+  the block written (the null-move bug the Lean model found, fixed in b6ec16c).
+
 ## 8. Decision log
 
 Every CAM decision, dated, with the commit that records or implements it. Newest last. The
@@ -316,3 +364,5 @@ build notes are build.md (the design as built), phase0.md (the go/no-go) and pha
 | 2026-11-23 | Cones and tori are lowered as surfaces of revolution about z (a torus's tube angle measured about its face's middle); they take the general B&B. Ops that no `program(..)` posts are `unposted`, never called certified. | cam session | this commit |
 | 2026-11-23 | `pocket(SETUP, from:, to:, tool:)` with no hole named pockets every inner loop (hole, slot) of the part's section between the heights, islands kept; a slot is such a loop (a stadium exactly 2r wide comes out as a there-and-back path). A uniform grid over face boxes picks the faces near each move (the certified clear is still `apart` on each). | cam session | this commit |
 | 2026-11-23 | **Open, for the master:** deburring, chamfer milling and thread milling remove material the target model does not show (an unmodelled edge break, a cosmetic thread). G1 as stated refuses them. Proposed: they are allowed only where the model carries the geometry (a `chamfer()` gives cone/plane faces, now lowered; a modelled `thread()`), or with a declared, named removal Δ that G1 and G4 subtract (P' = P − Δ), never a blanket tolerance. Not built until decided. | cam session | this commit |
+| 2026-11-23 | G2 corrected: T ∪ N clear of F ⊕ B_c on every piece (fixture clearance c, default 1 mm); vises and custom soft jaws in phase 1; declared removals Δ (P' = P ∖ Δ) for deburr, chamfer and thread milling where the model lacks the geometry (§7b). | owner via the master | this commit |
+| 2026-11-23 | The null-move printer bug found by the Lean model of G6 fixed; ops::certify checks the one-point-outside hypothesis (tool top above every face) on every move. | Lean session; cam session | b6ec16c, this commit |

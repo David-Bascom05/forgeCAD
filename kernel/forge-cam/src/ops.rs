@@ -293,6 +293,14 @@ pub fn certify_staged(
     let pgrid = check::Grid::new(part, pad);
     let sgrids: Vec<check::Grid> = stages.iter().map(|s| check::Grid::new(&s.1, pad)).collect();
     let mut cand: Vec<u32> = Vec::new();
+    // the one point outside: the tool's top (an axis point of a body) is above every face it is
+    // checked against, at every instant (G1-G3 need one point of the moved tool outside the set,
+    // the faces' distances do the rest)
+    let mut zmax = f64::NEG_INFINITY;
+    for f in part.iter().chain(stages.iter().flat_map(|s| s.1.iter())) {
+        zmax = zmax.max(f.bbox[2].hi);
+    }
+    let top = tool.shape.top();
     let mv = checker_moves(p);
     let cutter_r = tool
         .shape
@@ -302,6 +310,22 @@ pub fn certify_staged(
         .map(|b| b.rmax)
         .fold(0.0, f64::max);
     for (m, phase, idx) in &mv {
+        let tip_lo = m.at(forge_cam_geom::ival::Ival::new(0.0, 1.0))[2].lo;
+        if !(forge_cam_geom::ival::Ival::pt(tip_lo).add(forge_cam_geom::ival::Ival::pt(top)).lo > zmax) {
+            sum.clear = false;
+            sum.checks.push(CheckOut {
+                rule: "containment",
+                verdict: "undecided",
+                value: tip_lo + top,
+                limit: zmax,
+                at: [f64::NAN; 3],
+                tool_part: "holder",
+                other: "the tool's top is not above the part and stock".into(),
+                phase: phase.name(),
+                move_index: *idx,
+            });
+            return sum;
+        }
         let mut st = 0;
         while st + 1 < stages.len() && stages[st + 1].0 <= *idx {
             st += 1;
