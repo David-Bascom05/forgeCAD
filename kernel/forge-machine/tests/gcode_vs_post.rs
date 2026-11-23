@@ -253,5 +253,5 @@ fn interpreter_agrees_with_forge_post_reader() {
             n += 1;
         }
     }
-    assert_eq!(n, 240);
+    assert_eq!(n, 60 * forge_post::DIALECTS.len());
 }

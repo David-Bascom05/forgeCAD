@@ -372,3 +372,35 @@ fn haas_dwell_coolant_and_no_mist() {
         r => panic!("{r:?}"),
     }
 }
+
+/// G187 is opt-in: `haas` posts none (an option-less control may alarm on it), `haas-hsm` posts
+/// G187 P2 and is otherwise the same dialect line for line.
+#[test]
+fn g187_only_with_the_hsm_option() {
+    let (h, s) = (Dialect::get("haas").unwrap(), Dialect::get("haas-hsm").unwrap());
+    let p = prog(false);
+    let th = print(&quantize(&p, &h).unwrap(), &h).unwrap();
+    let ts = print(&quantize(&p, &s).unwrap(), &s).unwrap();
+    assert!(!th.contains("G187"), "{th}");
+    assert!(ts.contains("G187 P2\n"), "{ts}");
+    // the same program apart from that block (and the line numbers after it)
+    let strip = |t: &str| -> Vec<String> {
+        t.lines()
+            .filter(|l| !l.contains("G187"))
+            .map(|l| {
+                l.split_once(' ')
+                    .map_or(l, |(n, rest)| if n.starts_with('N') { rest } else { l })
+                    .to_string()
+            })
+            .collect()
+    };
+    assert_eq!(strip(&th), strip(&ts));
+    let src = |n: &str| DIALECTS.iter().find(|d| d.0 == n).unwrap().1;
+    let keys = |t: &str| -> Vec<String> {
+        t.lines()
+            .filter(|l| !l.starts_with('#') && !l.starts_with("name") && !l.starts_with("safe_start"))
+            .map(str::to_string)
+            .collect()
+    };
+    assert_eq!(keys(src("haas")), keys(src("haas-hsm")));
+}
