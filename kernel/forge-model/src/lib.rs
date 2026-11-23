@@ -612,7 +612,19 @@ pub(crate) fn step_plain_finished(
     body: Option<Body>,
     finished: Option<&Body>,
 ) -> Result<Option<Body>, RegenError> {
-    let b = step_on(features, i, body, finished)?;
+    step_plain_made(features, i, body, finished, None)
+}
+
+/// `step_plain_finished` with feature `i`'s tools made already (`tools(features, i, true)`,
+/// exactly), if `made`.
+fn step_plain_made(
+    features: History<'_>,
+    i: usize,
+    body: Option<Body>,
+    finished: Option<&Body>,
+    made: Option<Vec<Tool>>,
+) -> Result<Option<Body>, RegenError> {
+    let b = step_on(features, i, body, finished, made)?;
     if let Some(b) = &b {
         no_pinch(features, i, b)?;
     }
@@ -652,7 +664,7 @@ fn careful(
 /// knife edges: nothing nests.
 fn in_turn(features: History<'_>) -> Result<Option<Body>, RegenError> {
     let plain = |h: History<'_>| (0..h.len()).try_fold(None, |b, i| step_plain(h, i, b));
-    match plain(features) {
+    match ahead(features) {
         Err(e) if lost_its_way(&e) => {
             let Some(all) = all_blunted(features, features.len().saturating_sub(1)) else {
                 return Err(e);
@@ -669,6 +681,113 @@ fn in_turn(features: History<'_>) -> Result<Option<Body>, RegenError> {
         r => r,
     }
 }
+
+/// Whether the regen builds feature `i`'s tools apart from the part (`tools(features, i, true)`,
+/// in `step_on`): a feature that changes the part works on it, a sketch makes nothing, and an
+/// unlinked extrude makes its own.
+fn tools_apart(features: History<'_>, i: usize) -> bool {
+    let f = &features[i];
+    !modifies(f)
+        && !matches!(f, Feature::Plane(_) | Feature::Param(_) | Feature::Sketch(_) | Feature::Work(_))
+        && unlinked(features, i).is_none()
+}
+
+/// Every feature in turn, as `step_plain` makes them, with a helper building the tools of the
+/// features ahead while the part takes each boolean in turn, once tools have shown they are worth
+/// it (at least `AHEAD_AFTER` of building them, and a fifth of the time so far: a part of cheap
+/// tools stays on one thread). A tool is a function of the history alone (`tools` reads no part),
+/// so where it is built changes nothing: the steps take them in order, each as the step would
+/// have made it, an error met at the step that met it before; the clock decides only which
+/// thread builds a tool. One thread (wasm, `FORGECAD_THREADS=1`, one core): plainly, after the
+/// clock trips.
+fn ahead(h: History<'_>) -> Result<Option<Body>, RegenError> {
+    if cfg!(target_family = "wasm") || trace::on() {
+        return (0..h.len()).try_fold(None, |b, i| step_plain(h, i, b));
+    }
+    let start = std::time::Instant::now();
+    let mut building = std::time::Duration::ZERO;
+    let mut body = None;
+    let mut i = 0;
+    while i < h.len() {
+        let made = if tools_apart(h, i) {
+            let t = std::time::Instant::now();
+            let made = tools(h, i, true)?;
+            // (a tool that starts the part has no boolean beside it to hide behind)
+            if !starts(&h[i]) {
+                building += t.elapsed();
+            }
+            Some(made)
+        } else {
+            None
+        };
+        body = step_plain_made(h, i, body, None, made)?;
+        i += 1;
+        if building >= AHEAD_AFTER && building * 5 >= start.elapsed() {
+            break;
+        }
+    }
+    // (the threads there are asked only now: a part of cheap tools never asks)
+    let apart: Vec<usize> = match i < h.len() && forge_math::par::threads() >= 2 {
+        true => (i..h.len()).filter(|&k| tools_apart(h, k)).collect(),
+        false => Vec::new(),
+    };
+    if apart.len() < 2 {
+        for k in i..h.len() {
+            body = step_plain(h, k, body)?;
+        }
+        return Ok(body);
+    }
+    let stop = std::sync::atomic::AtomicBool::new(false);
+    std::thread::scope(|s| {
+        let (tx, rx) = std::sync::mpsc::channel::<Result<Vec<Tool>, RegenError>>();
+        let (apart, stop) = (&apart, &stop);
+        let kept = swept::take_kept();
+        let helper = s.spawn(move || {
+            swept::put_kept(kept);
+            for &k in apart {
+                if stop.load(std::sync::atomic::Ordering::Relaxed) {
+                    break;
+                }
+                if tx.send(tools(h, k, true)).is_err() {
+                    break;
+                }
+            }
+            swept::take_kept()
+        });
+        let mut next = apart.iter().peekable();
+        let mut r = Ok(());
+        for k in i..h.len() {
+            let made = if next.next_if(|&&a| a == k).is_some() {
+                // (none only if the helper died: its panic is resumed below)
+                let Ok(t) = rx.recv() else { break };
+                match t {
+                    Ok(t) => Some(t),
+                    Err(e) => {
+                        r = Err(e);
+                        break;
+                    }
+                }
+            } else {
+                None
+            };
+            match step_plain_made(h, k, body.take(), None, made) {
+                Ok(b) => body = b,
+                Err(e) => {
+                    r = Err(e);
+                    break;
+                }
+            }
+        }
+        stop.store(true, std::sync::atomic::Ordering::Relaxed);
+        drop(rx);
+        let kept = helper.join().unwrap_or_else(|p| std::panic::resume_unwind(p));
+        swept::put_kept(kept);
+        r.map(|()| body)
+    })
+}
+
+/// The tool building `ahead` waits for before it starts a helper.
+const AHEAD_AFTER: std::time::Duration = std::time::Duration::from_micros(100);
 
 /// Features up to `i` with every knife edge blunted: for a part whose earlier tip a tool trips on.
 pub(crate) fn rebuilt_blunted(features: History<'_>, i: usize) -> Option<Result<Option<Body>, RegenError>> {
@@ -877,6 +996,7 @@ fn step_on(
     i: usize,
     mut body: Option<Body>,
     finished: Option<&Body>,
+    made: Option<Vec<Tool>>,
 ) -> Result<Option<Body>, RegenError> {
     let f = &features[i];
     let id = features.id(i);
@@ -906,7 +1026,10 @@ fn step_on(
         }
         return Ok(Some(b));
     }
-    let mut tools = tools(features, i, true)?;
+    let mut tools = match made {
+        Some(t) => t,
+        None => tools(features, i, true)?,
+    };
     if starts(f) {
         let b = tools.swap_remove(0).0;
         if trace::on() {
