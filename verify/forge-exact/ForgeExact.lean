@@ -13,4 +13,5 @@ import ForgeExact.DecideOnce.BRep
 import ForgeExact.DecideOnce.Metric
 import ForgeExact.DecideOnce.Witness
 import ForgeExact.DecideOnce.BoxesExact
+import ForgeExact.DecideOnce.Sample
 import ForgeExact.Axioms

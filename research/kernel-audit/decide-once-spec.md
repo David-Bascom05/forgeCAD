@@ -291,7 +291,27 @@ snapped geometry's (carriers `ps`, solids `A`); hypotheses listed in §6. Then:
   number of odd coordinates (`isEdge_iff`, `isVert_iff`, from the rank of the zero normals), and
   the generator's facets, edges and vertices are the box faces' doubled cells and their bumps
   (`box_boundary`, `box_complete`, `box_edges`, `box_verts`). All of §6 2–5 is discharged for this
-  generator; for general B-reps they remain the bridge's.
+  generator.
+- **(c) for every flat input** (`DecideOnce/Sample.lean`): `sample_exact` proves every field of
+  `Exact` for `sampleLedger ps ss X`, the ledger built from the reference's flat B-reps `ss`
+  (`Ref.Solid`, ray parity), the carriers `ps` and sample points `X`. The hypotheses are only:
+  - nonzero carrier normals;
+  - `FlatInput`: each solid is `FacesFlat` and `Closed`, with face planes carriers up to scale;
+  - `Samples`: the samples hit every cell the boundary needs. This is implied by `Covers`, which
+    asks for a point in every cell lying in a carrier, a statement about the arrangement alone.
+
+  The decisions, each made once by evaluating the reference:
+  - *piece of body `i`* (`flipB`): `i`'s ray parity differs at the two points stepped off the
+    facet's sample across its carrier (`sideAt`, `side_cells`). No point-in-face test is needed.
+    `flip_iff` proves this is exactly `Flip`, by `brep_compat`;
+  - *side cell inside body `i`*: the ray at its side point;
+  - *edge / vertex*: the samples' cells of rank 2 / 3 (`IsEdge`, `IsVert`, decided exactly) below a
+    facet.
+
+  `sample_correct` is then (c) for every flat input. Each `ok` body is the exact regularised boolean
+  of the reference's solids, with its faces exactly the boundary facets. The zero-thickness refusal
+  is exactly `XNonManifold`. Checked by `#guard` on boxes given as B-reps: a cube is 6 / 12 / 8,
+  two cubes face to face give one box, and two cubes along an edge are refused.
 
 **The metric ledger** (`Metric.lean`), for every ledger, keep table and metric tables:
 `collapse_local` (no cell that is not thin changes), `collapse_comp` (one feature, one keep),
@@ -352,7 +372,9 @@ cell; face to face → one box, 6 / 12 / 8 (exact-comparison.md's "contact left 
 
    `FacesFlat` and `Closed` are what the kernel's `check` certifies of the tools it hands over.
 2. **`boundary`, `complete`** (a facet is a piece of a face of body `i` iff body `i`'s membership
-   flips across it). Proven for the box generator (`box_boundary`, `box_complete`). Jordan–Brouwer again, plus the point-in-face decisions being right. This is
+   flips across it). Proven for the box generator (`box_boundary`, `box_complete`). **Proven for every flat input** (`Sample.lean`): with pieces decided by the
+   ray on both sides (`flipB`), `boundary` is `s_boundary` (by `flip_iff`) and `complete` is
+   `s_complete`, given `Samples`. Jordan–Brouwer again, plus the point-in-face decisions being right. This is
    the bridge's obligation (README §8.2): the predicate that fills `pieces` must be the exact one
    in the representative plane.
 3. ~~**`witness`**~~ **proven** for B-reps (`DecideOnce/Witness.lean`, `witness_of_samples`): if each
@@ -363,10 +385,23 @@ cell; face to face → one box, 6 / 12 / 8 (exact-comparison.md's "contact left 
    piece's plus (minus) side cell. The bridge's remaining obligation here is only to evaluate the
    reference's ray exactly at that point.
 4. **`edges`, `verts`** (the listed cells of dimension 1 and 0 round the pieces are exactly the
-   arrangement's). Proven for the box generator (`box_edges`, `box_verts`). The bridge enumerates them from the pieces; dimension is the exact rank of the
+   arrangement's). Proven for the box generator (`box_edges`, `box_verts`). **Proven for every flat input** given `Samples` (`s_low`). The bridge enumerates them from the pieces; dimension is the exact rank of the
    zero classes' normals (`IsEdge`, `IsVert`).
-5. **`pieceReal`** (each piece is a cell with a point). Proven for the box generator (`box_pieceReal`). The bridge's: a cell with no point is
+5. **`pieceReal`** (each piece is a cell with a point). Proven for the box generator (`box_pieceReal`). **Proven for every flat input** (`s_pieceReal`: each piece is a sample's cell). The bridge's: a cell with no point is
    never listed.
+
+6. **`Samples`** (open): the bridge's sample points must hit every realised facet some body flips
+   across, and every realised edge and vertex cell below one. `Covers` (a point in every cell
+   lying in a carrier) suffices. This is the one hypothesis left for flat inputs. It is a statement
+   about the arrangement and the sample list, not about the solids or any decision. Proving it for
+   a sampler means proving that the sampler enumerates every cell of a plane arrangement in ℚ³.
+   Every sign vector the arrangement realises has to be met. That needs realisability theory:
+   - Fourier–Motzkin, or a sweep in which the cells in a slab between critical coordinates keep
+     their sign vectors;
+   - a separate development, not a consequence of the core.
+
+   Of §6's obligations for flat inputs, only `Samples` remains. The others are discharged by
+   `sample_exact`: `boundary`, `complete`, `edges`, `verts`, `pieceReal`, `witness`, `compat`.
 
 What the theorems do not claim:
 - That each output face is a disc, or the body's Euler characteristic: `Valid` is local
@@ -414,4 +449,5 @@ What the theorems do not claim:
 | `Jordan.lean` | Jordan–Brouwer for the reference's ray parity: `contains_const` |
 | `DecideOnce/Metric.lean` | §6.1 step 3: the metric ledger, `collapse`, `coreM`, `coverageM` |
 | `DecideOnce/Witness.lean` | the witness ray: `side_point`, `witness_of_samples` |
+| `DecideOnce/Sample.lean` | the ledger from samples for flat B-reps: `flip_iff`, `sample_exact`, `sample_correct` |
 | `DecideOnce/BoxesExact.lean` | `Exact` for every box family: `box_exact`, `box_correct`, `box_refused_iff` |

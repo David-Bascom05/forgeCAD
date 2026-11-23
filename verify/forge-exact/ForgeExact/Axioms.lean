@@ -10,6 +10,7 @@ import ForgeExact.Jordan
 import ForgeExact.DecideOnce.BRep
 import ForgeExact.DecideOnce.Witness
 import ForgeExact.DecideOnce.BoxesExact
+import ForgeExact.DecideOnce.Sample
 
 /-!
 # Only the standard axioms
@@ -115,3 +116,12 @@ elab "#standard_axioms " ids:ident* : command => do
   ForgeExact.DecideOnce.BoxEx.box_exact
   ForgeExact.DecideOnce.BoxEx.box_correct
   ForgeExact.DecideOnce.BoxEx.box_refused_iff
+  ForgeExact.DecideOnce.Sample.side_cells
+  ForgeExact.DecideOnce.Sample.flip_iff
+  ForgeExact.DecideOnce.Sample.s_witness
+  ForgeExact.DecideOnce.Sample.s_boundary
+  ForgeExact.DecideOnce.Sample.s_complete
+  ForgeExact.DecideOnce.Sample.s_low
+  ForgeExact.DecideOnce.Sample.sample_exact
+  ForgeExact.DecideOnce.Sample.samples_of_covers
+  ForgeExact.DecideOnce.Sample.sample_correct
