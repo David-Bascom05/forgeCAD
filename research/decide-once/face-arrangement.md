@@ -70,7 +70,8 @@ What each table means:
   plate, or a pinched piece, gives two sectors at one vert.
 
   The builder must cut such a facet along a seam through the cell. Flat: the line of the slit
-  through the edge, or any line in the facet through the vert. These lines are lines of the
+  through the edge, or the trace of a reference plane through the vert (the touching solid's face
+  planes pass through it). These lines are lines of the
   reference arrangement, so `Refines` still holds.
 
   How the builder detects a wing: a facet's boundary loop runs along an edge in both directions,
