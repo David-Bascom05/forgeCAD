@@ -38,7 +38,7 @@ impl Lin<'_> {
         let mut at = Vec::with_capacity(n);
         let mut vel = Vec::with_capacity(n);
         for i in 0..n {
-            let (a, b) = (&segs[(i + n - 1) % n].0, &segs[i].0);
+            let (a, b) = (&cyc(&segs, i + n - 1).0, &cyc(&segs, i).0);
             let (ta, tb) = (unit(ends_dir(a).1), unit(ends_dir(b).0));
             let c = ta.x * tb.y - ta.y * tb.x;
             let w = if c.abs() < 1e-7 && ta.dot(tb) > 0.0 {
@@ -61,12 +61,12 @@ impl Lin<'_> {
     }
 
     fn joint(&self, i: usize, d: f64) -> Point2 {
-        self.at[i] + self.vel[i] * d
+        *cyc(&self.at, i) + *cyc(&self.vel, i) * d
     }
 
     /// An arc's (or a circle's) centre and radius at offset `d`, and the radius's rate.
     fn round(&self, i: usize, sign: f64) -> Option<(Point2, f64, f64)> {
-        match self.segs[i].0 {
+        match cyc(&self.segs, i).0 {
             Segment::Arc {
                 center,
                 radius,
@@ -80,7 +80,7 @@ impl Lin<'_> {
 
     /// Whether direction `v` from an arc's centre lies within its sweep (a circle: always).
     fn within(&self, i: usize, v: Vec2) -> bool {
-        match self.segs[i].0 {
+        match cyc(&self.segs, i).0 {
             Segment::Arc { start, sweep, .. } => {
                 let a = dmath::atan2(v.y, v.x);
                 let (lo, hi) = (start.min(start + sweep), start.max(start + sweep));
@@ -96,6 +96,12 @@ impl Lin<'_> {
             _ => true,
         }
     }
+}
+
+/// `v[i]`, `i` taken round the loop (`v.len()` and past wrap): a loop's reads, one place to fail.
+#[inline]
+pub(crate) fn cyc<T>(v: &[T], i: usize) -> &T {
+    &v[i % v.len()]
 }
 
 /// The least root in (0, reach] of `a δ² + b δ + c` (c the value at 0), or None.
@@ -137,11 +143,11 @@ pub(crate) fn first_event(p: &Profile, sign: f64, reach: f64) -> Option<Option<(
         let n = l.segs.len();
         let mut rs = Vec::with_capacity(n);
         for i in 0..n {
-            let r = match l.segs[i].0 {
+            let r = match cyc(&l.segs, i).0 {
                 Segment::Line { a, b } => {
                     let u = unit(b - a);
                     let len0 = (b - a).dot(u);
-                    let rate = (l.vel[(i + 1) % n] - l.vel[i]).dot(u);
+                    let rate = (*cyc(&l.vel, i + 1) - *cyc(&l.vel, i)).dot(u);
                     least_root(0.0, rate, len0, reach)
                 }
                 _ => {
@@ -166,12 +172,12 @@ pub(crate) fn first_event(p: &Profile, sign: f64, reach: f64) -> Option<Option<(
     // whether joints k and m of loop l come together at the edge event: every side between them,
     // one way round, runs out with it
     let merged = |l: usize, k: usize, m: usize| {
-        let n = gone[l].len();
+        let n = cyc(&gone, l).len();
         let run = |a: usize, b: usize| {
             (0..n)
-                .map(|t| (a + t) % n)
+                .map(|t| if a + t < n { a + t } else { a + t - n })
                 .take_while(|&t| t != b)
-                .all(|t| gone[l][t])
+                .all(|t| *cyc(cyc(&gone, l), t))
         };
         run(k, m) || run(m, k)
     };
@@ -187,7 +193,7 @@ pub(crate) fn first_event(p: &Profile, sign: f64, reach: f64) -> Option<Option<(
             let nb = b.segs.len();
             for j in 0..nb {
                 let adjacent = |k: usize| la == lb && (k == j || k == (j + 1) % nb);
-                match b.segs[j].0 {
+                match cyc(&b.segs, j).0 {
                     Segment::Line { a: s0, b: s1 } => {
                         let u = unit(s1 - s0);
                         let nrm = u.perp();
@@ -197,8 +203,8 @@ pub(crate) fn first_event(p: &Profile, sign: f64, reach: f64) -> Option<Option<(
                             if a.segs.len() == 1 && matches!(a.segs[0].0, Segment::Circle { .. }) {
                                 break;
                             }
-                            let g0 = (a.at[k] - b.at[j]).dot(nrm);
-                            let g1 = (a.vel[k] - b.vel[j]).dot(nrm);
+                            let g0 = (*cyc(&a.at, k) - *cyc(&b.at, j)).dot(nrm);
+                            let g1 = (*cyc(&a.vel, k) - *cyc(&b.vel, j)).dot(nrm);
                             if g0 == 0.0 {
                                 continue;
                             }
@@ -220,8 +226,8 @@ pub(crate) fn first_event(p: &Profile, sign: f64, reach: f64) -> Option<Option<(
                                 continue;
                             };
                             // the centre's distance from the side's carrier, against the radius
-                            let e0 = (c - b.at[j]).dot(nrm);
-                            let e1 = -b.vel[j].dot(nrm);
+                            let e0 = (c - *cyc(&b.at, j)).dot(nrm);
+                            let e1 = -cyc(&b.vel, j).dot(nrm);
                             for side in [1.0, -1.0] {
                                 // e(δ) = side r(δ)
                                 if let Some(d) = least_root(0.0, e1 - side * dr, e0 - side * r, reach) {
@@ -241,7 +247,7 @@ pub(crate) fn first_event(p: &Profile, sign: f64, reach: f64) -> Option<Option<(
                         // S, C: a corner reaching this arc
                         if !(a.segs.len() == 1 && matches!(a.segs[0].0, Segment::Circle { .. })) {
                             for k in (0..na).filter(|&k| !adjacent(k)) {
-                                let (p0, v) = (a.at[k] - c, a.vel[k]);
+                                let (p0, v) = (*cyc(&a.at, k) - c, *cyc(&a.vel, k));
                                 let qa = v.dot(v) - dr * dr;
                                 let qb = 2.0 * (p0.dot(v) - r * dr);
                                 let qc = p0.dot(p0) - r * r;

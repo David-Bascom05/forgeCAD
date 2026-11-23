@@ -16,7 +16,7 @@ use crate::draft::{DraftError, draft, drafted};
 use crate::extrude::{ExtrudeError, extrude, prepared};
 use crate::profile::{Profile, ProfileLoop, Segment};
 use crate::rebuild::rebuild_some;
-use crate::taper_events::{Event, adjacent_seg, first_event, least_root};
+use crate::taper_events::{Event, adjacent_seg, cyc, first_event, least_root};
 use forge_geom::{Circle, Curve, Cylinder, Line, Plane, Surface};
 use forge_math::{Frame, Interval, Point2, Vec2, dmath, tol};
 use forge_topo::{Body, EdgeId, Name, ShellId, VertexId, check};
@@ -165,7 +165,7 @@ fn meet(a: &Segment, b: &Segment, d: f64, near: Point2, from: Point2) -> Option<
 /// Joint `i` of a loop offset `d`: where segment `i` starts.
 fn joint(segs: &[(Segment, u64)], i: usize, d: f64) -> Option<Point2> {
     let n = segs.len();
-    let (a, b) = (&segs[(i + n - 1) % n].0, &segs[i].0);
+    let (a, b) = (&cyc(segs, i + n - 1).0, &cyc(segs, i).0);
     let (ta, tb) = (unit(ends_dir(a).1), unit(ends_dir(b).0));
     let p = b.start();
     let left = unit(ta + tb).perp();
@@ -423,19 +423,19 @@ fn slab(
         // starts: its two joints are one top vertex, decided by the segment, not by how far apart
         // the joints happen to be (a hexagon closing on its centre has joints 2 GONE apart)
         let mut first: Vec<usize> = (0..n).collect();
-        for i in (0..n).filter(|&i| wiped[li][i]) {
-            let (a, c) = (first[i], first[(i + 1) % n]);
+        for i in (0..n).filter(|&i| *cyc(cyc(wiped, li), i)) {
+            let (a, c) = (*cyc(&first, i), *cyc(&first, i + 1));
             let (lo, hi) = (a.min(c), a.max(c));
             first.iter_mut().filter(|f| **f == hi).for_each(|f| *f = lo);
         }
         let mut verts: Vec<[VertexId; 2]> = Vec::with_capacity(n);
         for i in 0..n {
-            let prev = names[(i + n - 1) % n];
-            let name = joint(i, Name::NONE.with_set(&[start, prev, names[i]]));
-            let vb = b.add_vertex(base.plane_point(segs[i].0.start()), name);
-            let q = m[i].seg.start();
-            let vt = if first[i] < i {
-                verts[first[i]][1]
+            let prev = *cyc(&names, i + n - 1);
+            let name = joint(i, Name::NONE.with_set(&[start, prev, *cyc(&names, i)]));
+            let vb = b.add_vertex(base.plane_point(cyc(segs, i).0.start()), name);
+            let q = cyc(m, i).seg.start();
+            let vt = if *cyc(&first, i) < i {
+                verts[*cyc(&first, i)][1]
             } else {
                 match tops.iter().find(|t| t.1.distance(q) <= 2.0 * GONE) {
                     Some(t) => t.0,
@@ -749,8 +749,8 @@ fn pmul(a: &[f64], b: &[f64]) -> Poly {
     }
     let mut out = vec![0.0; a.len() + b.len() - 1];
     for (i, x) in a.iter().enumerate() {
-        for (j, y) in b.iter().enumerate() {
-            out[i + j] += x * y;
+        for (o, y) in out.iter_mut().skip(i).zip(b) {
+            *o += x * y;
         }
     }
     out
@@ -796,7 +796,7 @@ struct Carrier {
 /// The roots in (0, reach] of `a + b1 sqrt(r1) + b2 sqrt(r2)` (b1, b2 already signed), found
 /// on the polynomial its squares give and kept where the expression itself vanishes.
 fn radical_roots(a: &[f64], (b1, r1): (f64, &[f64]), (b2, r2): (f64, &[f64]), reach: f64) -> Vec<f64> {
-    let poly = if b1 == 0.0 && b2 == 0.0 {
+    let mut poly = if b1 == 0.0 && b2 == 0.0 {
         a.to_vec()
     } else if b2 == 0.0 || b1 == 0.0 {
         let (b, r) = if b1 == 0.0 { (b2, r2) } else { (b1, r1) };
@@ -815,7 +815,8 @@ fn radical_roots(a: &[f64], (b1, r1): (f64, &[f64]), (b2, r2): (f64, &[f64]), re
         forge_math::poly::eval(a, d) + b1 * w(r1) + b2 * w(r2)
     };
     let scale = a.iter().fold(0.0f64, |m, x| m.max(x.abs())) + b1.abs() + b2.abs() + 1.0;
-    forge_math::poly::real_roots(&poly[..lead], 0.0, reach)
+    poly.truncate(lead);
+    forge_math::poly::real_roots(&poly, 0.0, reach)
         .into_iter()
         .map(|r| r.x)
         .filter(|&d| d > 0.0 && f(d).abs() <= 1e-9 * scale * (1.0 + d))
@@ -865,7 +866,7 @@ pub(crate) fn curved_event(p: &Profile, sign: f64, reach: f64) -> Option<Option<
         }
         let mut js = Vec::with_capacity(n);
         for i in 0..n {
-            let (a, b) = (&segs[(i + n - 1) % n].0, &segs[i].0);
+            let (a, b) = (&cyc(&segs, i + n - 1).0, &cyc(&segs, i).0);
             let (ta, tb) = (unit(ends_dir(a).1), unit(ends_dir(b).0));
             let at = b.start();
             let c = ta.x * tb.y - ta.y * tb.x;
@@ -928,10 +929,10 @@ pub(crate) fn curved_event(p: &Profile, sign: f64, reach: f64) -> Option<Option<
             }
         }
         for i in 0..n {
-            let (a, b) = (&js[i], &js[(i + 1) % n]);
-            match segs[i].0 {
+            let (a, b) = (&cyc(&js, i), &cyc(&js, i + 1));
+            match cyc(&segs, i).0 {
                 Segment::Line { .. } => {
-                    let c = line(&segs[i].0)?;
+                    let c = line(&cyc(&segs, i).0)?;
                     // (b - a) . u
                     let (pa, wa) = a.along(Point2::new(0.0, 0.0), c.u);
                     let (pb, wb) = b.along(Point2::new(0.0, 0.0), c.u);
@@ -939,11 +940,11 @@ pub(crate) fn curved_event(p: &Profile, sign: f64, reach: f64) -> Option<Option<
                     least(&mut edge, radical_roots(&len, (-wa, &a.r), (wb, &b.r), reach));
                 }
                 _ => {
-                    let (_, r0, dr) = round(&segs[i].0)?;
+                    let (_, r0, dr) = round(&cyc(&segs, i).0)?;
                     least(&mut edge, least_root(0.0, dr, r0, reach).into_iter().collect());
                     if n > 1 {
                         // its sweep running out: its start reaching the next side's carrier
-                        if let Some(cb) = line(&segs[(i + 1) % n].0) {
+                        if let Some(cb) = line(&cyc(&segs, i + 1).0) {
                             let (g, w) = a.along(cb.a, cb.n);
                             let g = padd(&g, &[0.0, -sign]);
                             for d in radical_roots(&g, (w, &a.r), (0.0, &[]), reach) {
@@ -961,15 +962,14 @@ pub(crate) fn curved_event(p: &Profile, sign: f64, reach: f64) -> Option<Option<
     let mut cross = lost;
     // the arc's sweep from its start joint to `q`, against its whole sweep, at δ
     let on_arc = |segs: &[(Segment, u64)], js: &[Joint], j: usize, q: Point2, d: f64| -> bool {
-        let Segment::Arc { center, sweep, .. } = segs[j].0 else {
+        let Segment::Arc { center, sweep, .. } = cyc(&segs, j).0 else {
             return true;
         };
-        let n = segs.len();
         let ang = |x: Point2| dmath::atan2(x.y - center.y, x.x - center.x);
         let k = if sweep > 0.0 { 1.0 } else { -1.0 };
         let turn = |from: f64, to: f64| (k * (to - from)).rem_euclid(dmath::TAU);
-        let a0 = ang(js[j].at(d));
-        let whole = turn(a0, ang(js[(j + 1) % n].at(d)));
+        let a0 = ang(cyc(&js, j).at(d));
+        let whole = turn(a0, ang(cyc(&js, j + 1).at(d)));
         let t = turn(a0, ang(q));
         t <= whole + 1e-9 || t >= dmath::TAU - 1e-9
     };
@@ -979,19 +979,19 @@ pub(crate) fn curved_event(p: &Profile, sign: f64, reach: f64) -> Option<Option<
             let nb = sb.len();
             for j in 0..nb {
                 let near = |k: usize| la == lb && (k == j || k == (j + 1) % nb);
-                if let Some(c) = line(&sb[j].0) {
-                    let len = |d: f64| (jb[(j + 1) % nb].at(d) - jb[j].at(d)).dot(c.u);
+                if let Some(c) = line(&cyc(&sb, j).0) {
+                    let len = |d: f64| (cyc(&jb, j + 1).at(d) - cyc(&jb, j).at(d)).dot(c.u);
                     for k in (0..na).filter(|&k| !near(k) && na > 1) {
-                        let (g, w) = ja[k].along(c.a, c.n);
+                        let (g, w) = cyc(&ja, k).along(c.a, c.n);
                         let g = padd(&g, &[0.0, -sign]);
                         if forge_math::poly::eval(&g, 0.0)
-                            + w * forge_math::poly::eval(&ja[k].r, 0.0).max(0.0).sqrt()
+                            + w * forge_math::poly::eval(&cyc(&ja, k).r, 0.0).max(0.0).sqrt()
                             == 0.0
                         {
                             continue;
                         }
-                        for d in radical_roots(&g, (w, &ja[k].r), (0.0, &[]), reach) {
-                            let f = (ja[k].at(d) - jb[j].at(d)).dot(c.u);
+                        for d in radical_roots(&g, (w, &cyc(&ja, k).r), (0.0, &[]), reach) {
+                            let f = (cyc(&ja, k).at(d) - cyc(&jb, j).at(d)).dot(c.u);
                             let l = len(d);
                             let e = 1e-9 * l.abs().max(1.0);
                             if f >= -e && f <= l + e && !(same(d) && (f <= e || f >= l - e)) {
@@ -1000,7 +1000,7 @@ pub(crate) fn curved_event(p: &Profile, sign: f64, reach: f64) -> Option<Option<
                         }
                     }
                     for i in (0..na).filter(|&i| !adjacent_seg(la, lb, i, j, na)) {
-                        let Some((cc, r0, dr)) = round(&sa[i].0) else {
+                        let Some((cc, r0, dr)) = round(&cyc(&sa, i).0) else {
                             continue;
                         };
                         let e0 = (cc - c.a).dot(c.n);
@@ -1008,17 +1008,17 @@ pub(crate) fn curved_event(p: &Profile, sign: f64, reach: f64) -> Option<Option<
                             if let Some(d) = least_root(0.0, -sign - side * dr, e0 - side * r0, reach) {
                                 let e = e0 - sign * d;
                                 let foot = cc - c.n * e;
-                                let f = (foot - jb[j].at(d)).dot(c.u);
+                                let f = (foot - cyc(&jb, j).at(d)).dot(c.u);
                                 if f >= 0.0 && f <= len(d) && on_arc(sa, ja, i, foot, d) && !same(d) {
                                     cross = cross.min(d);
                                 }
                             }
                         }
                     }
-                } else if let Some((cc, r0, dr)) = round(&sb[j].0) {
+                } else if let Some((cc, r0, dr)) = round(&cyc(&sb, j).0) {
                     for k in (0..na).filter(|&k| !near(k) && na > 1) {
                         // |J - c|² - ρ² = A + B w, w² = r
-                        let jk = &ja[k];
+                        let jk = &cyc(&ja, k);
                         let px = padd(&jk.p[0], &[-cc.x]);
                         let py = padd(&jk.p[1], &[-cc.y]);
                         let rho = [r0, dr];
@@ -1037,12 +1037,13 @@ pub(crate) fn curved_event(p: &Profile, sign: f64, reach: f64) -> Option<Option<
                             continue;
                         }
                         // A + B w = 0: A² - B² r = 0, kept where A + B w vanishes
-                        let poly = padd(&pmul(&a, &a), &pscale(&pmul(&pmul(&b, &b), &jk.r), -1.0));
+                        let mut poly = padd(&pmul(&a, &a), &pscale(&pmul(&pmul(&b, &b), &jk.r), -1.0));
                         let lead = poly.iter().rposition(|x| x.abs() > 0.0).map_or(0, |i| i + 1);
                         if lead <= 1 {
                             continue;
                         }
-                        for root in forge_math::poly::real_roots(&poly[..lead], 0.0, reach) {
+                        poly.truncate(lead);
+                        for root in forge_math::poly::real_roots(&poly, 0.0, reach) {
                             let d = root.x;
                             let q = jk.at(d);
                             let rho_d = r0 + dr * d;
@@ -1059,7 +1060,7 @@ pub(crate) fn curved_event(p: &Profile, sign: f64, reach: f64) -> Option<Option<
                         if (la, i) >= (lb, j) || adjacent_seg(la, lb, i, j, na) {
                             continue;
                         }
-                        let Some((c2, r2, dr2)) = round(&sa[i].0) else {
+                        let Some((c2, r2, dr2)) = round(&cyc(&sa, i).0) else {
                             continue;
                         };
                         let dist = (c2 - cc).length();

@@ -61,7 +61,6 @@ pub(crate) fn closes(
         id: id.into(),
         at,
         depth,
-        depth_fix,
-        angle_fix,
+        fixes: [depth_fix, angle_fix],
     }))
 }
