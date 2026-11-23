@@ -6,6 +6,8 @@ the proofs are about that translation. They are not about a hand-written Lean mo
 
 | | |
 |---|---|
+| `tools/aeneas/patches/` | `aeneas-f64.patch`, the float bridge's tool side (below), and `aeneas-robust.patch`: when a trait method's signature cannot be translated (several of `Iterator`'s cannot), Aeneas skips it with a warning, as it already does for functions, and skips impls of a trait it could not translate. It used to stop the whole crate. |
+| `tools/aeneas/survey.sh`, `leancheck.sh` | every kernel module translated on its own, and whether the output elaborates in Lean: research/aeneas/SURVEY.md |
 | `tools/aeneas/setup.sh` | the pinned toolchain: aeneas `2e3d448`, charon `9e193f0` (aeneas's `charon-pin`), OCaml 5.3.0 through opam 2.3.0, charon's own Rust nightly, Lean `v4.36.0`. It also applies `tools/aeneas/patches/`. |
 | `tools/aeneas/translate.sh CRATE [--check]` | translates `kernel/CRATE`, in place and built as release, into `verify/aeneas/CRATE/lean/PKG/{Types,Funs}.lean`. With `--check` it writes nothing and fails if the committed files differ from a fresh translation. |
 | `.github/workflows/aeneas.yml` | runs `translate.sh --all --check` on every change to `kernel/` or to these files, then builds the Lean. A proof cannot go stale against the code. |

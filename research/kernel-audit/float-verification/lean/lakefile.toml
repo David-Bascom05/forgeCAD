@@ -19,6 +19,11 @@ name = "ieee754"
 path = "../../../../verify/ieee754"
 
 # The Aeneas translation of ../predicates, with its f64 operations defined by the model
+# The shared float bridge: `F64` and the f64 library functions (verify/aeneas/bridge)
+[[require]]
+name = "aeneasf64"
+path = "../../../../verify/aeneas/bridge"
+
 [[lean_lib]]
 name = "FvPredicates"
 
