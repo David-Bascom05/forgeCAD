@@ -138,3 +138,37 @@ fn a_taper_that_closes_short_of_its_depth_shows_its_fixes_and_one_clears_it() {
     assert!(p.source.contains("param pit.d = 0.305"), "{}", p.source);
     assert!(p.issues.iter().all(|i| i.kind != "TaperCloses"), "{:?}", p.issues);
 }
+
+/// The fix-mesh-asm session's fixture: two hinges on axes 1e-11 rad apart fix the lid, but not
+/// clearly (rank 6 of 10 rows, its smallest singular value within the gap of the floor). Its
+/// controls: in line (d = 0, the lid turns, rank 5 clear) and far apart (d = 3e-6, rank 6
+/// clear) are not flagged.
+#[test]
+fn the_near_singular_hinge_fixture_shows_its_row_and_its_controls_dont() {
+    let src = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../forge-lang/tests/parts/near_singular_hinge.fg"
+    ))
+    .unwrap();
+    for (d, flagged) in [("3e-10", true), ("0", false), ("3e-6", false)] {
+        let text = src.replace("shared d = 3e-10", &format!("shared d = {d}"));
+        let Some(mut h) = open(&text, &format!("hinge{d}")) else {
+            return;
+        };
+        let p = h.gui.shell.fg.as_ref().unwrap();
+        let rows: Vec<&forge_render::shell::fg::Issue> =
+            p.issues.iter().filter(|i| i.kind == "NearSingular").collect();
+        assert_eq!(!rows.is_empty(), flagged, "d = {d}: {:?}", p.issues);
+        if flagged {
+            assert!(rows[0].text.contains("lid"), "{}", rows[0].text);
+            assert!(rows[0].text.contains("6 counted, at most 6"), "{}", rows[0].text);
+            let k = p.issues.iter().position(|i| i.kind == "NearSingular").unwrap();
+            h.gui.shell.fg.as_mut().unwrap().issues_list = true;
+            for _ in 0..4 {
+                h.step();
+            }
+            assert!(h.gui.shell.place(&format!("fg:issue:{k}")).is_some());
+            shot(&mut h, "issues-near-singular-hinge");
+        }
+    }
+}
