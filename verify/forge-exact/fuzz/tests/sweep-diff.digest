@@ -14,6 +14,9 @@ examples/machined/nameplate.fg#1 agree
 examples/machined/plate_break.fg#1 agree
 examples/machined/plate_mark.fg#1 agree
 examples/machined/plate_mark.fg#3 agree
+examples/machined/slot_plate.fg#1 agree
+examples/machined/well_island.fg#1 agree
+examples/machined/well_island.fg#3 agree
 examples/rack18u/asm/dummy_d01.fg#3 agree
 examples/rack18u/asm/dummy_d02.fg#3 agree
 examples/rack18u/asm/dummy_d04.fg#3 agree
