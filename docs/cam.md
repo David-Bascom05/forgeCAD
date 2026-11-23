@@ -84,7 +84,7 @@ ok, schema: "forgecad.cam/1", errors[], warnings[],
 setups[]   name, part, machine, wcs {origin, axes, offset}, stock {kind, min, max}, tol, clearance,
            heights {clear, retract}, fixture {kind, name, across, jaw_top, clamp, clearance,
            pieces[] {name, min, max}} | null
-ops[]      name, kind (facing|clear|contour|pocket|drill), setup, status (built|refused),
+ops[]      name, kind (facing|clear|contour|pocket|drill|engrave|thread_mill), setup, status (built|refused),
            tool {id, T, H, type, d, holder, stickout} | null, plan[] (hole plans),
            feeds {rpm, vc, fz, hex, f, power_kw} | null,
            path {moves, length_cut, length_rapid, time_s},
