@@ -1,0 +1,12 @@
+# A conic round where the faces meet at 60 degrees: the feet stand r tan(60deg) from the edge.
+shared W = 30
+shared B = 40
+shared H = 30
+param round.r = 4
+param round.rho = ratio(0.6)
+
+sketch plan(on: xz) {
+  outline = poly([(0, 0), (B, 0), (B - H / tan(60deg), H), (0, H)], closed: true)
+}
+base = extrude(plan, W)
+round = fillet(edges(between: (base.side(plan.outline[1]), base.side(plan.outline[2]))), r, conic: rho)

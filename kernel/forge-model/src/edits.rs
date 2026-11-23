@@ -415,6 +415,7 @@ pub fn parts() -> Vec<(&'static str, Part, Option<f64>)> {
                     edges: vec![(edge(top, side(0, 1)), Radius::Constant(4.0))],
                     starts: vec![],
                     setbacks: vec![],
+                    conic: None,
                 },
                 edit(Edit::Delete {
                     faces: vec![

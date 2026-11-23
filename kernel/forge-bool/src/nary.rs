@@ -1734,7 +1734,8 @@ fn nary_body(
         by_edge: &by_edge,
         cut_vertex: &cut_vertex,
         alias: &alias,
-        list: Vec::new(),
+        // at most a piece per edge and one more per cut: grown once, not doubled up to there
+        list: Vec::with_capacity(tools.iter().map(|b| b.edges.len()).sum::<usize>() + cuts.len()),
         of_edge: tools.iter().map(|b| vec![(0, 0); b.edges.len()]).collect(),
     };
     let mut seg_pieces: Vec<std::ops::Range<usize>> = Vec::with_capacity(segs.len());

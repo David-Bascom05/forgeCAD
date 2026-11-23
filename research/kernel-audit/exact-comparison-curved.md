@@ -99,6 +99,39 @@ All of these are in Axioms.lean's standard-axioms check, with no `sorry`.
   - `ambiguous` when a contact is undecided or neither is shown;
   - `sliver` under snap at a near touch.
 
+### Step 4: tori, by polynomials of any degree (ForgeExact/Poly3, QRef/Poly.lean)
+
+Rounds and pipes are tori, so this is the step that reaches fillets. Offsets of the analytic
+surfaces are again planes, cylinders, cones, spheres and tori, so they need nothing more.
+- **Lean (Poly3).** Polynomials in x, y, z of any degree, as monomial lists. The quadric results
+  hold for them too, all in Axioms.lean:
+  - escape: restricted to a line, a nonzero polynomial has at most its degree's roots
+    (`zero_of_roots`, by synthetic division), so it is nonzero somewhere in every open set;
+  - the box bound, taken about the box's centre (`about_bound`, `eval_about`);
+  - sign neighbourhoods, and `wall_nowhereDense`;
+  - `reg_off_wall`, `in_box`, `out_box` and `empty_of_leaves`.
+- **The polynomial path.** A history with a torus face (a ring torus, 0 < r < R) goes here; the
+  quadric path is unchanged.
+  - Every face becomes a polynomial: a torus its quartic, the rest their quadrics, a cone its
+    nappe as well.
+  - The octree is the same as the quadric one, with the proven `Poly3.boxSign`, so `[lo, hi]`
+    and `empty` are proven as before. The budget is 40k boxes, because tori need finer boxes.
+  - The volume estimate splits vertical slices at the polynomials' roots, which are found in
+    floating point. It integrates by Gauss–Legendre between the points where the slices change
+    structure, and reports a two-resolution error. That error is about 3e-4 relative on a thin
+    hollow torus.
+- **Manifold check, by hand (curved-l2-proofs.md §5).** Each undecided leaf is accepted or split
+  until one of these holds:
+  - it has one undecided surface, with a gradient component of certified sign: a smooth sheet;
+  - it has two, with a component of their gradients' cross product of certified sign
+    (transversal), and their sectors are not kept as a checkerboard;
+  - it has three, with the determinant of their gradients of certified sign, and the kept octants
+    form a disc on the link.
+
+  A leaf left unaccepted makes the verdict ambiguous. So `solid` means proven manifold. Tangent
+  contacts with a torus and cone apexes on one stay undecided: never `nonmanifold`, which is
+  honest but not a decision.
+
 ### What is proven, and what is not (PROOF-STANDARD levels)
 
 - **L1 (spec over ℝ / every model):** done for the quadric boolean over ℚ³. The results are

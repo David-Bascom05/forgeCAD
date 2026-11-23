@@ -139,6 +139,7 @@ dependencies = [
  "forge-geom",
  "forge-lang",
  "forge-math",
+ "forge-mesh",
  "forge-model",
  "forge-ops",
  "forge-proof",
@@ -371,6 +372,7 @@ dependencies = [
  "forge-mesh",
  "forge-ops",
  "forge-refold",
+ "forge-sheet-core",
  "forge-topo",
 ]
 

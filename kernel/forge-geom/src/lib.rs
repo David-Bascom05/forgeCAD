@@ -13,6 +13,7 @@ pub mod corner;
 pub mod curve;
 pub mod intcurve;
 pub mod intersect;
+pub mod isolate;
 pub mod loftmeet;
 pub mod meet;
 mod meet_gen;
