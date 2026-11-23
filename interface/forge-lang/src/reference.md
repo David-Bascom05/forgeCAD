@@ -531,7 +531,7 @@ FACES - FACES   EDGES - EDGES       the first set less the second's (one piece o
 `verts` finds the part's vertices: `of` a feature, those on a face it made (lineage, as for
 edges); `of` faces or edges, their corners and ends; `between: (A, B)` where faces of both meet;
 `body` in those bodies. One vertex is a reference the kernel follows through every edit above
-it (by its maker's own name for it, as `.fc`'s `(verts ..)`): a work feature's point, a fillet's
+it (by its maker's own name for it): a work feature's point, a fillet's
 `from` or setback corner, a place of `places(at:)` (each vertex of a set one place); where a
 plain point is wanted it is where the vertex is. Several where one is wanted is `NotOne`; a
 vertex no earlier solid feature made is `NoOwner`.

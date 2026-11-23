@@ -1,6 +1,6 @@
 # Extruded aluminium heat sink, cross-cut, for a 40 W module: a fin field on a 6 mm base,
 # a plain land at the back carrying the part mark, a pad pocket and four M3 screws below.
-# Hand port of tools/bench-parts/heatsink.fc (its text in the bench block font).
+# Its text is in the bench block font.
 
 shared L = 100
 shared W = 80

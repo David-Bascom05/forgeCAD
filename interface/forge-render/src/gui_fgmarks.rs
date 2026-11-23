@@ -303,7 +303,7 @@ fn unit(a: [f64; 3]) -> [f64; 3] {
 
 /// Where on the face (a point `on` it, its normal `n`) a place is that's `d.0` in from the first
 /// edge and `d.1` from the second (each by its ends), on the side of each the face's point is:
-/// three planes met, as `.fc`'s linear hole placed it. None if the edges are parallel.
+/// three planes met. None if the edges are parallel.
 pub fn linear_place(
     on: [f64; 3],
     n: [f64; 3],

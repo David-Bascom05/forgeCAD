@@ -2643,7 +2643,7 @@ pub fn arith(op: BinOp, x: &Value, y: &Value, span: Span, sa: Span, sb: Span) ->
         (Value::Verts(a), Value::Verts(b)) if op == BinOp::Sub => Ok(Value::Verts(Rc::new(
             a.iter().copied().filter(|n| !b.contains(n)).collect(),
         ))),
-        // the first set less what the second holds (`.fc` picked one of several by place)
+        // the first set less what the second holds
         (Value::Faces(a), Value::Faces(b)) if op == BinOp::Sub => Ok(Value::Faces(Rc::new(Faces {
             names: a.names.iter().copied().filter(|n| !b.names.contains(n)).collect(),
             owner: a.owner.clone(),

@@ -1,7 +1,7 @@
 # Bicycle crank arm, left hand, 170 mm: a lofted arm that tapers from the spindle to the pedal,
 # a JIS square-taper bore with an M22x1 puller thread, a 9/16-20 pedal thread, and a five-arm
 # 110 BCD spider on the inboard side, the length cut into the arm's inboard face.
-# Hand port of tools/bench-parts/crank.fc (its text in the bench block font).
+# Its text is in the bench block font.
 
 shared al = 170
 shared rs = 21                 # spindle boss radius
