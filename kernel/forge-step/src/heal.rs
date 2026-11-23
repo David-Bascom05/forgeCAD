@@ -443,9 +443,13 @@ impl Proto {
                 continue;
             }
             let (mut lo, mut hi, mut last) = (f64::INFINITY, f64::NEG_INFINITY, None::<f64>);
-            for &(e, _) in lp {
+            for &(e, fw) in lp {
                 let x = &self.edges[e];
                 for k in 0..=8 {
+                    // in the loop's direction: each point unwrapped against the one before it (an
+                    // edge sampled against the loop jumped half its arc there, and the hole came
+                    // out a turn too wide)
+                    let k = if fw { k } else { 8 - k };
                     let q = s.project(x.curve.eval(x.range.lo + x.range.width() * f64::from(k) / 8.0));
                     let mut t = if dir == 0 { q.x } else { q.y };
                     if let Some(w) = last {
@@ -1473,6 +1477,97 @@ mod tests {
     use super::*;
     use forge_geom::Plane;
     use forge_math::Frame;
+
+    /// A cylinder's side between two rims, with a hole spanning 1.2 pi round it whose top arc
+    /// runs against the loop (as files write a hole's edges, each its own way): the seam starts
+    /// clear of the hole. Measured against the edges' own direction, the hole came out a turn too
+    /// wide, and the seam went through it (CADFS 00213853, 00233593: FaceWrongSide).
+    #[test]
+    fn a_seam_keeps_clear_of_a_hole_whose_edges_run_against_its_loop() {
+        let z = forge_math::UnitVec3::Z;
+        let axis = Frame::from_z(Point3::ORIGIN, z);
+        let at = |h: f64| Frame::from_z(Point3::new(0.0, 0.0, h), z);
+        let mut p = Proto::default();
+        let mut vert = |p: &mut Proto, q: Point3| {
+            p.verts.push((q, Name::feature(1 + p.verts.len() as u64)));
+            p.verts.len() - 1
+        };
+        let mut edge = |p: &mut Proto, curve: Curve, range: Interval, a: usize, b: usize| {
+            p.edges.push(PEdge {
+                curve,
+                range,
+                start: a,
+                end: b,
+                name: Name::feature(100 + p.edges.len() as u64),
+            });
+            p.edges.len() - 1
+        };
+        let circ = |h: f64| {
+            Curve::Circle(Circle {
+                frame: at(h),
+                radius: 1.0,
+            })
+        };
+        let on = |a: f64, h: f64| {
+            let (s, c) = dmath::sin_cos(a);
+            Point3::new(c, s, h)
+        };
+        let (b0, t0) = (vert(&mut p, on(0.0, 0.0)), vert(&mut p, on(0.0, 4.0)));
+        let bottom = edge(&mut p, circ(0.0), Interval::new(0.0, dmath::TAU), b0, b0);
+        let top = edge(&mut p, circ(4.0), Interval::new(0.0, dmath::TAU), t0, t0);
+        let (lo, hi) = (0.4 * dmath::PI, 1.6 * dmath::PI);
+        let c = [
+            vert(&mut p, on(lo, 1.0)),
+            vert(&mut p, on(hi, 1.0)),
+            vert(&mut p, on(hi, 3.0)),
+            vert(&mut p, on(lo, 3.0)),
+        ];
+        let line = |a: Point3, b: Point3| {
+            Curve::Line(Line {
+                origin: a,
+                dir: (b - a).normalize().unwrap(),
+            })
+        };
+        let arc1 = edge(&mut p, circ(1.0), Interval::new(lo, hi), c[0], c[1]);
+        let up = edge(
+            &mut p,
+            line(on(hi, 1.0), on(hi, 3.0)),
+            Interval::new(0.0, 2.0),
+            c[1],
+            c[2],
+        );
+        // the top arc, and the left side, each defined the other way from the loop
+        let arc3 = edge(&mut p, circ(3.0), Interval::new(lo, hi), c[3], c[2]);
+        let down = edge(
+            &mut p,
+            line(on(lo, 1.0), on(lo, 3.0)),
+            Interval::new(0.0, 2.0),
+            c[0],
+            c[3],
+        );
+        p.faces.push(PFace {
+            surface: Surface::Cylinder(forge_geom::Cylinder {
+                frame: axis,
+                radius: 1.0,
+            }),
+            same_sense: true,
+            name: Name::feature(200),
+            shell: 0,
+            loops: vec![
+                vec![(bottom, true)],
+                vec![(top, false)],
+                vec![(arc1, false), (down, true), (arc3, true), (up, false)],
+            ],
+        });
+        p.shells = 1;
+        let s = p.faces[0].surface.clone();
+        let v = p.seam_start(0, 0, 1, 0, &s);
+        let u = s.project(p.verts[v].0).x.rem_euclid(dmath::TAU);
+        assert!(
+            !(lo..=hi).contains(&u),
+            "the seam starts at {u}, in the hole's {lo}..{hi}"
+        );
+    }
 
     /// Two tetrahedra touching only at a corner: one vertex in the file, two fans of faces.
     fn tetrahedra() -> Proto {
