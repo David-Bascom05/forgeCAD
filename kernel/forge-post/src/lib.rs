@@ -18,12 +18,13 @@ use forge_cam_geom::big::Nat;
 use forge_cam_geom::real::Dy;
 use forge_tooling::toml::{self, Table, num, text, texts};
 
-pub const DIALECTS: [(&str, &str); 5] = [
+pub const DIALECTS: [(&str, &str); 6] = [
     ("fanuc", include_str!("../data/fanuc.toml")),
     ("haas", include_str!("../data/haas.toml")),
     ("linuxcnc", include_str!("../data/linuxcnc.toml")),
     ("grbl", include_str!("../data/grbl.toml")),
     ("siemens", include_str!("../data/siemens.toml")),
+    ("heidenhain", include_str!("../data/heidenhain.toml")),
 ];
 
 /// Controls whose dialect we cannot restate: no openly published programming manual gives the
@@ -105,7 +106,7 @@ pub struct Cite {
 }
 
 /// The template keys a dialect may set; with `cite_required`, each one it sets is cited.
-pub const KEYS: [&str; 34] = [
+pub const KEYS: [&str; 37] = [
     "program_open",
     "program_close",
     "comment",
@@ -140,6 +141,9 @@ pub const KEYS: [&str; 34] = [
     "read_g_skip",
     "read_words",
     "coolant_through_off",
+    "sign",
+    "g_digits",
+    "tool_word",
 ];
 
 impl Dialect {
@@ -223,6 +227,30 @@ impl Dialect {
 
     fn s(&self, k: &str) -> &str {
         text(&self.t, k).unwrap_or("")
+    }
+    /// A coordinate word's digits: `sign = "always"` writes + on non-negative values (X+10).
+    fn coord(&self, q: Q) -> String {
+        let s = digits(q, self.decimals, self.point);
+        if self.s("sign") == "always" && q >= 0 {
+            format!("+{s}")
+        } else {
+            s
+        }
+    }
+    /// A motion G word: `g_digits = 2` writes G00 .. G03.
+    fn g(&self, g: u32) -> String {
+        if self.n("g_digits") == Some(2.0) {
+            format!("G{g:02}")
+        } else {
+            format!("G{g}")
+        }
+    }
+    /// A template that may be one line or several (an array).
+    fn tpl_lines(&self, k: &str) -> Vec<String> {
+        match self.t.get(k) {
+            Some(toml::Val::Str(x)) => vec![x.clone()],
+            _ => self.lines(k),
+        }
     }
     fn lines(&self, k: &str) -> Vec<String> {
         texts(&self.t, k).unwrap_or_default()
@@ -730,7 +758,13 @@ impl Writer<'_> {
             return;
         }
         let numbered = self.d.t.get("line_numbers") == Some(&toml::Val::Bool(true)) && s != "%";
-        let end = self.d.s("block_end");
+        // a comment runs to the end of its line: no terminator after it
+        let eol = self.d.s("comment_eol");
+        let end = if !eol.is_empty() && s.contains(eol) {
+            ""
+        } else {
+            self.d.s("block_end")
+        };
         if numbered {
             self.lines.push(format!("N{} {}{end}", self.n, s));
             self.n += self.d.n("line_step").unwrap_or(10.0) as i64;
@@ -752,7 +786,7 @@ impl Writer<'_> {
 /// Writes the program in the dialect.
 pub fn print(p: &QProgram, d: &Dialect) -> Result<String, PostError> {
     let k = d.decimals;
-    let num_ = |q: Q| digits(q, k, d.point);
+    let num_ = |q: Q| d.coord(q);
     let fnum = |q: Q| {
         digits(
             q,
@@ -777,7 +811,7 @@ pub fn print(p: &QProgram, d: &Dialect) -> Result<String, PostError> {
     for l in d.lines("program_open") {
         let s = fill(&l, &[("num", p.number.to_string()), ("title", title.clone())]);
         // a `%` line (a tape mark, or a header such as `%NAME G71 *`) is written as it is
-        if s.starts_with('%') {
+        if s.contains('%') {
             w.lines.push(s)
         } else {
             w.emit(&s)
@@ -824,7 +858,9 @@ pub fn print(p: &QProgram, d: &Dialect) -> Result<String, PostError> {
             }
             QRec::Spindle { rpm, cw } => {
                 let key = if *cw { "spindle_cw" } else { "spindle_ccw" };
-                w.emit(&fill(d.s(key), &[("rpm", rpm.to_string())]));
+                for l in d.tpl_lines(key) {
+                    w.emit(&fill(&l, &[("rpm", rpm.to_string())]));
+                }
             }
             QRec::SpindleStop => w.emit(d.s("spindle_stop")),
             QRec::Coolant(c) => {
@@ -855,7 +891,7 @@ pub fn print(p: &QProgram, d: &Dialect) -> Result<String, PostError> {
                 if !axes.is_empty() {
                     let mut ws = Vec::new();
                     if motion != Some(g) {
-                        ws.push(format!("G{g}"));
+                        ws.push(d.g(g));
                         motion = Some(g);
                     }
                     ws.extend(axes);
@@ -879,14 +915,21 @@ pub fn print(p: &QProgram, d: &Dialect) -> Result<String, PostError> {
                     }
                 };
                 let g = if *cw { 2 } else { 3 };
-                let mut ws = vec![format!("G{g}")];
+                let centre_first = d.s("arc") == "centre_abs";
+                if centre_first {
+                    // the centre as its own block, absolute (HEIDENHAIN ISO: I J, then G02/G03)
+                    w.emit(&format!("I{} J{}", num_(c[0]), num_(c[1])));
+                }
+                let mut ws = vec![d.g(g)];
                 motion = Some(g);
                 // an arc always states its end, so a full circle is unambiguous
                 word(&mut ws, 'X', to[0], &mut pos[0], true);
                 word(&mut ws, 'Y', to[1], &mut pos[1], true);
                 word(&mut ws, 'Z', to[2], &mut pos[2], false);
-                ws.push(format!("I{}", num_(c[0] - sx)));
-                ws.push(format!("J{}", num_(c[1] - sy)));
+                if !centre_first {
+                    ws.push(format!("I{}", num_(c[0] - sx)));
+                    ws.push(format!("J{}", num_(c[1] - sy)));
+                }
                 if feed != Some(*f) {
                     ws.push(format!("F{}", fnum(*f)));
                     feed = Some(*f);
@@ -991,7 +1034,8 @@ pub fn print(p: &QProgram, d: &Dialect) -> Result<String, PostError> {
         }
     }
     for l in d.lines("program_close") {
-        if l.starts_with('%') {
+        let l = fill(&l, &[("num", p.number.to_string()), ("title", title.clone())]);
+        if l.contains('%') {
             w.lines.push(l)
         } else {
             w.emit(&l)
@@ -1010,7 +1054,7 @@ fn write_moves(
     feed: &mut Option<Q>,
     motion: &mut Option<u32>,
 ) {
-    let num_ = |q: Q| digits(q, d.decimals, d.point);
+    let num_ = |q: Q| d.coord(q);
     let fnum = |q: Q| {
         digits(
             q,
@@ -1037,7 +1081,7 @@ fn write_moves(
                 if !axes.is_empty() {
                     let mut ws = Vec::new();
                     if *motion != Some(g) {
-                        ws.push(format!("G{g}"));
+                        ws.push(d.g(g));
                         *motion = Some(g);
                     }
                     ws.extend(axes);
@@ -1128,6 +1172,9 @@ pub fn read(text_: &str, d: &Dialect) -> Result<Vec<Motion>, ReadError> {
         .map(|x| x as u32)
         .collect();
     let more_words = d.s("read_words").to_string();
+    let centre_first = d.s("arc") == "centre_abs";
+    let tool_word = d.t.get("tool_word") == Some(&toml::Val::Bool(true));
+    let mut centre: Option<(Q, Q)> = None;
     // the dwell's word: the letter before the dwell template's `{ms}` or `{s}`
     let word_of = |tpl: &str| -> char {
         tpl.find("{ms}")
@@ -1161,7 +1208,7 @@ pub fn read(text_: &str, d: &Dialect) -> Result<Vec<Motion>, ReadError> {
             }
         }
         let s = s.trim();
-        if s.is_empty() || s.starts_with('%') {
+        if s.is_empty() || s.contains('%') {
             continue;
         }
         let mut words: Vec<(char, String)> = Vec::new();
@@ -1227,6 +1274,15 @@ pub fn read(text_: &str, d: &Dialect) -> Result<Vec<Motion>, ReadError> {
                     });
                 }
             }
+        }
+        // a control whose T block is the tool change (no M6): T with a number; a bare T changes
+        // only the speed
+        if tool_word
+            && !ms.contains(&6)
+            && let Some(t) = get('T')
+            && let Ok(t) = t.parse::<u32>()
+        {
+            out.push(Motion::Tool(t));
         }
         // grbl's tool change is a pause with the tool in a comment: the comment named it
         if ms.contains(&0) && !ms.contains(&6) {
@@ -1319,6 +1375,15 @@ pub fn read(text_: &str, d: &Dialect) -> Result<Vec<Motion>, ReadError> {
         if skip_motion {
             continue;
         }
+        if centre_first && (get('I').is_some() || get('J').is_some()) {
+            let need = |c: char| {
+                get(c).ok_or_else(|| ReadError {
+                    line: ln,
+                    what: format!("a centre with no {c}"),
+                })
+            };
+            centre = Some((parse_q(&need('I')?, k, ln)?, parse_q(&need('J')?, k, ln)?));
+        }
         let has_xyz = get('X').is_some() || get('Y').is_some() || get('Z').is_some();
         if !has_xyz {
             continue;
@@ -1360,22 +1425,31 @@ pub fn read(text_: &str, d: &Dialect) -> Result<Vec<Motion>, ReadError> {
                     })?,
                     pos[1].unwrap(),
                 );
-                let i = parse_q(
-                    &get('I').ok_or_else(|| ReadError {
+                let (i, j) = if centre_first {
+                    let (cx, cy) = centre.ok_or_else(|| ReadError {
                         line: ln,
-                        what: "an arc with no I".into(),
-                    })?,
-                    k,
-                    ln,
-                )?;
-                let j = parse_q(
-                    &get('J').ok_or_else(|| ReadError {
-                        line: ln,
-                        what: "an arc with no J".into(),
-                    })?,
-                    k,
-                    ln,
-                )?;
+                        what: "an arc with no centre defined".into(),
+                    })?;
+                    (cx - sx, cy - sy)
+                } else {
+                    let i = parse_q(
+                        &get('I').ok_or_else(|| ReadError {
+                            line: ln,
+                            what: "an arc with no I".into(),
+                        })?,
+                        k,
+                        ln,
+                    )?;
+                    let j = parse_q(
+                        &get('J').ok_or_else(|| ReadError {
+                            line: ln,
+                            what: "an arc with no J".into(),
+                        })?,
+                        k,
+                        ln,
+                    )?;
+                    (i, j)
+                };
                 let p = [
                     to[0].unwrap(),
                     to[1].unwrap(),

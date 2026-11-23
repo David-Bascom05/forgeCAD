@@ -106,7 +106,7 @@ fn every_dialect_round_trips() {
     for (name, _) in DIALECTS {
         let d = Dialect::get(name).unwrap();
         let mut p = prog(false);
-        if name != "grbl" {
+        if !d.lines("retract_home").is_empty() {
             p.recs.push(Rec::Home);
         }
         let q = quantize(&p, &d).unwrap();
@@ -406,10 +406,8 @@ fn data_driven_extras_round_trip() {
     let (txt, back) = round_trip(&q, &d).unwrap_or_else(|e| panic!("{e}"));
     assert!(back.len() > 20);
     assert!(txt.starts_with("%P1001 G71\nN10 G15 H1 *\n"), "{txt}");
-    assert!(
-        txt.contains("; op1 face *") || txt.contains("; op1 (face) *"),
-        "{txt}"
-    );
+    // a comment runs to the end of its line: no terminator after it
+    assert!(txt.contains("N30 ; op1 (face)\n"), "{txt}");
     assert!(txt.contains("G04 F0.5 *"), "{txt}");
     // a comment after a block is dropped by the reader, the terminator too
     assert!(read("G0 X1. Y1. Z1. ; here *\nG1 X2. F100 *\n", &d).is_ok());
@@ -453,5 +451,48 @@ fn siemens_iso_program_reads_as_the_manual_says() {
     assert!(txt.contains("G00 G43 H1"), "{txt}");
     assert!(txt.contains("G04 X0.5"), "{txt}");
     assert!(txt.contains("G98 G82 X0. Y-30. Z-3. R2. P250 F120."), "{txt}");
+    eprintln!("{txt}");
+}
+
+#[test]
+fn heidenhain_iso_program_reads_as_the_manual_says() {
+    let d = Dialect::get("heidenhain").unwrap();
+    let q = quantize(&prog(false), &d).unwrap();
+    let (txt, _) = round_trip(&q, &d).unwrap();
+    assert!(
+        txt.starts_with("%P1001 G71 *\nN10 G40 G90*\nN20 ;op1 (face)\n"),
+        "{txt}"
+    );
+    assert!(txt.ends_with("M30*\nN99999999 %P1001 G71 *\n"), "{txt}");
+    // tool call by T (no M6), speed in a bare T block, centre-first arcs, signed words
+    assert!(
+        txt.contains("T1 G17*") && txt.contains("T G17 S9549*") && txt.contains("M3*"),
+        "{txt}"
+    );
+    assert!(
+        txt.contains("I+43 J-40*\nN") && txt.contains("G03 X+46 Y-40"),
+        "{txt}"
+    );
+    assert!(txt.contains("G04 F0.25*"), "{txt}");
+    assert!(
+        !txt.contains("G81") && !txt.contains("G83") && !txt.contains("M6"),
+        "{txt}"
+    );
+    // tapping and a machine-home retract are refused, a second work offset too
+    let mut p = prog(true);
+    let qt = quantize(&p, &d).unwrap();
+    assert!(matches!(print(&qt, &d), Err(PostError::Unsupported { .. })));
+    p = prog(false);
+    p.recs.push(Rec::Home);
+    assert!(matches!(
+        print(&quantize(&p, &d).unwrap(), &d),
+        Err(PostError::Unsupported { .. })
+    ));
+    p = prog(false);
+    p.recs.insert(0, Rec::Wcs(1));
+    assert!(matches!(
+        print(&quantize(&p, &d).unwrap(), &d),
+        Err(PostError::Unsupported { .. })
+    ));
     eprintln!("{txt}");
 }
