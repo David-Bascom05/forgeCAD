@@ -43,16 +43,26 @@ pub fn cap(requested: usize) -> usize {
 pub const HELPERS_AFTER: std::time::Duration = std::time::Duration::from_micros(200);
 
 /// The serial work still left, projected from the items done so far, below which
-/// [`map_adaptive`] never starts helpers. Starting and joining 3 helpers costs about 0.1–0.2 ms
-/// on a 4-core VM, so break-even is about 0.3 ms of work left. Measured across the bench parts,
-/// 1 ms still lost on some (hole-grid n-ary: helpers whose items contend), 4 ms gave up wins;
-/// 2 ms kept every win and no loss beyond noise (research/booleans/speedups.md, "Fastest wins").
-pub const HELPERS_FOR: std::time::Duration = std::time::Duration::from_millis(2);
+/// [`map_adaptive`] never starts helpers. Starting and joining 3 helpers costs about 0.1–0.2 ms on
+/// a 4-core VM, but a new thread costs more than its start: its own allocator arena, cold pages,
+/// and per-thread caches that start empty (`ssi::MET`: a helper searches again what the caller
+/// knows). Measured across the bench parts: at 2 ms jack's n-ary ran 14% slower on 4 threads than
+/// on one; at 5 ms it was faster, and every win was kept (research/booleans/speedups.md,
+/// "Fastest wins").
+pub const HELPERS_FOR: std::time::Duration = std::time::Duration::from_millis(5);
+
+/// The mean cost of an item, measured over the items done, below which [`map_adaptive`] never
+/// starts helpers, however much work is left. Cheap items are bound by memory and the allocator,
+/// so helpers contend more than they help: the small all-planar n-ary regens (coplanar, patterns,
+/// hole-grid) ran 5–23% slower on 4 threads than on one (research/booleans/speedups.md,
+/// "Fastest wins").
+pub const HELPERS_ITEM: std::time::Duration = std::time::Duration::from_micros(20);
 
 /// `f` of each of `0..n`, in order, on up to `threads` threads, each given at least `per` items.
 /// The calling thread starts alone. The others join only once it has worked for
-/// [`HELPERS_AFTER`] and the work left, projected from the items done, exceeds [`HELPERS_FOR`],
-/// so batches too small to pay for threads stay on one. The answers are
+/// [`HELPERS_AFTER`], the items done cost [`HELPERS_ITEM`] each on average, and the work left,
+/// projected from them, exceeds [`HELPERS_FOR`], so batches too small or too cheap to pay for
+/// threads stay on one. The answers are
 /// collected by item index: they are the same, and in the same order, whatever the thread count
 /// or the scheduling (`par_map_eq`, research/booleans/lean/Speedups.lean).
 pub fn map_adaptive<T: Send>(n: usize, threads: usize, per: usize, f: impl Fn(usize) -> T + Sync) -> Vec<T> {
@@ -99,7 +109,7 @@ pub fn map_adaptive_for<T: Send>(
             // asked after every item: items differ widely in cost, so the projection can grow
             let taken = i + 1;
             let elapsed = start.elapsed();
-            if taken < n && elapsed > HELPERS_AFTER {
+            if taken < n && elapsed > HELPERS_AFTER && elapsed >= HELPERS_ITEM.mul_f64(taken as f64) {
                 // the work left, at the pace so far
                 let left = elapsed.mul_f64((n - taken) as f64 / taken as f64);
                 if left > helpers_for {

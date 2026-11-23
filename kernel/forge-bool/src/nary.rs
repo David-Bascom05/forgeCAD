@@ -52,17 +52,14 @@ fn par_map<T: Send>(n: usize, threads: usize, per: usize, f: impl Fn(usize) -> T
     forge_math::par::map_adaptive(n, threads, per, f)
 }
 
-/// The pair loop's work left below which it stays on one thread: its searched curves are kept per
-/// thread (`ssi::MET`), so a helper starts cold and searches again what this thread already
-/// knows. Measured: at 2 ms (the default) jack's n-ary ran 14% slower on 4 threads than on one;
-/// at 5 ms it ran 7% faster, and shaft and mixed kept most of their win
-/// (research/booleans/speedups.md, "Fastest wins").
-const PAIR_HELPERS_FOR: std::time::Duration = std::time::Duration::from_millis(5);
-
-/// `par_map` for the pair loop, with its own threshold of work left ([`PAIR_HELPERS_FOR`]).
-fn pair_map<T: Send>(n: usize, threads: usize, f: impl Fn(usize) -> T + Sync) -> Vec<T> {
-    forge_math::par::map_adaptive_for(n, threads, 2, PAIR_HELPERS_FOR, f)
-}
+/// An n-ary boolean that has run for less than this by the end of its pairs stage takes its later
+/// stages on one thread. Those stages' items (a face's split, its regions) allocate heavily: their
+/// answers, made in a helper's allocator arena and freed on this thread, plus the helpers' cold
+/// arenas and pages, cost more than the threads save on a small boolean. Measured: hole-grid's,
+/// patterns' and coplanar's n-ary (about 15–25 ms in all) ran 5–23% slower on 4 threads than on
+/// one, and level with no helpers; mixed and shaft, whose pairs (curved) take far longer, gain
+/// 35–50% (research/booleans/speedups.md, "Fastest wins").
+const THREADED_AFTER_PAIRS: std::time::Duration = std::time::Duration::from_millis(20);
 
 /// How far clear of a tool's boundary a point must be for its analytic solid to answer.
 const SHAPE_MARGIN: f64 = tol::LINEAR;
@@ -658,6 +655,7 @@ fn nary_body(
 ) -> R<Body> {
     assert_eq!(ops.len() + 1, tools.len(), "one op per tool after the first");
     let n = tools.len();
+    let born = forge_math::clock::Instant::now();
     let mut clock = forge_math::clock::Instant::now();
     let index: Vec<Index> = par_map(n, threads, 16, |k| Index::new(tools[k]));
     let debug = crate::boolean::debug_on();
@@ -883,7 +881,7 @@ fn nary_body(
             }
         }
     }
-    let outs = pair_map(pairs.len(), threads, |pi| -> R<PairOut> {
+    let outs = par_map(pairs.len(), threads, 2, |pi| -> R<PairOut> {
         let (i, j) = pairs[pi];
         let (a, b) = (tools[i], tools[j]);
         let (ia, ib) = (&index[i], &index[j]);
@@ -1392,6 +1390,13 @@ fn nary_body(
         }));
     }
     lap(&mut clock, 1);
+    // a small boolean's later stages, on one thread (THREADED_AFTER_PAIRS); the answers are the
+    // same either way
+    let threads = if born.elapsed() < THREADED_AFTER_PAIRS {
+        1
+    } else {
+        threads
+    };
 
     // 3: one vertex per cluster of cut points (an existing tool vertex where a cut sits at an
     // edge's end; vertices of different tools at one place are one)
