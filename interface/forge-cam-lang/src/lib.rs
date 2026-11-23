@@ -3128,6 +3128,8 @@ impl Cam {
         };
         let mut recs = vec![];
         let mut current_tool: Option<u32> = None;
+        // where the last path left the tool, in the part's frame
+        let mut last: Option<(usize, [f64; 3])> = None;
         // each op's records, and which records are whose
         let mut spans: Vec<(usize, usize, usize, usize)> = vec![];
         let op_ids: Vec<usize> = (0..self.ops.len())
@@ -3147,14 +3149,29 @@ impl Cam {
                 let start = recs.len();
                 let t = &self.tools[p.tool];
                 if current_tool != Some(t.t) {
+                    // GRBL changes tools by hand (M0) and has no machine-safe Z to go to: Z up to
+                    // the setup's clearance height in the work coordinates first (known in the
+                    // WCS without homing), and the operator told to set Z for the new tool
+                    if post == "grbl"
+                        && current_tool.is_some()
+                        && let Some((ls, l)) = last
+                        && ls == op.setup
+                    {
+                        recs.push(Rec::Rapid(w([l[0], l[1], s.heights.clear])));
+                    }
+                    if post == "grbl" && current_tool.is_some() {
+                        recs.push(Rec::Comment("set Z zero for the new tool before resuming".into()));
+                    }
                     if current_tool.is_some() {
                         recs.push(Rec::SpindleStop);
                         recs.push(Rec::Coolant(forge_post::Coolant::Off));
                     }
                     // Z to the machine's safe position first (the dialect's retract_home: G91 G28 Z0,
                     // G53 G0 Z0): an M06 need not move Z, and a longer tool would come down
-                    // into the stock where the last one stood
-                    recs.push(Rec::Home);
+                    // into the stock where the last one stood (GRBL has none: above)
+                    if post != "grbl" {
+                        recs.push(Rec::Home);
+                    }
                     recs.push(Rec::ToolChange {
                         t: t.t,
                         h: t.t,
@@ -3201,6 +3218,15 @@ impl Cam {
                         },
                     });
                 }
+                // where this path leaves the tool (the part's frame)
+                let mut at = p.start;
+                for m in &p.moves {
+                    match *m {
+                        PMove::Rapid { to } | PMove::Line { to, .. } | PMove::Arc { to, .. } => at = to,
+                        PMove::Cycle { holes, clear, .. } => at = [holes[0], holes[1], clear],
+                    }
+                }
+                last = Some((op.setup, at));
                 spans.push((oi, pi, start, recs.len()));
             }
         }

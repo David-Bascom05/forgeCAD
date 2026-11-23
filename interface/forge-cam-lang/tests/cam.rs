@@ -937,3 +937,49 @@ fn z_retracts_before_every_tool_change() {
         assert_eq!(changes, 3, "{post}: T1, T11, T12");
     }
 }
+
+/// GRBL changes tools by hand and has no machine-safe Z: before each change the tool is at the
+/// setup's clearance height in the work coordinates (Z10 for the flange, top-centre origin), and
+/// the program tells the operator to set Z for the new tool. The program posts (it did not:
+/// the machine-home retract is refused on GRBL).
+#[test]
+fn grbl_tool_changes_stand_at_the_clearance_height() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    let src = std::fs::read_to_string(dir.join("flange_cam.fg"))
+        .unwrap()
+        .replace("post: \"fanuc\"", "post: \"grbl\"");
+    let cam = forge_cam_lang::run(&src, &dir);
+    assert!(
+        cam.ok,
+        "{:?}",
+        cam.programs.iter().map(|p| &p.error).collect::<Vec<_>>()
+    );
+    let (txt, _) = cam.program_text().unwrap();
+    let lines: Vec<&str> = txt.lines().collect();
+    let changes: Vec<usize> = (0..lines.len())
+        .filter(|&i| lines[i].starts_with("(TOOL"))
+        .collect();
+    assert_eq!(changes.len(), 3);
+    for &i in &changes[1..] {
+        assert!(
+            lines[..i]
+                .iter()
+                .rev()
+                .take(4)
+                .any(|l| l.contains("set Z zero for the new tool"))
+        );
+        // the last Z word before it: the clearance height
+        let z = lines[..i]
+            .iter()
+            .rev()
+            .filter(|l| !l.starts_with('('))
+            .find_map(|l| l.split_whitespace().find_map(|w| w.strip_prefix('Z')))
+            .unwrap();
+        assert_eq!(
+            z.parse::<f64>().unwrap(),
+            10.0,
+            "{:?}",
+            &lines[i.saturating_sub(6)..=i]
+        );
+    }
+}
