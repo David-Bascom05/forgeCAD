@@ -34,3 +34,4 @@ elab "#standard_axioms " ids:ident* : command => do
   ForgeMath.cross_sign_of_fast ForgeMath.cross_sign_fast
   ForgeMath.orient2d_of_fast ForgeMath.orient2d_fast
   ForgeMath.slice_sum ForgeMath.estimate_eq
+  F64.Ops.add_err F64.Ops.sub_err F64.Ops.mul_err F64.Ops.div_err

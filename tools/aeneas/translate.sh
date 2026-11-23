@@ -73,13 +73,14 @@ mkdir -p "$work/gen"
 for f in Types Funs FunsExternal_Template TypesExternal_Template; do
   [ -f "$work/out/$f.lean" ] || continue
   sed -e '/^module$/d' -e 's/^public import /import /' -e '/^@\[expose\] public section$/d' \
-      -e "s/^import [A-Za-z_]*\.\(Types\|Funs\|FunsExternal\)$/import $PKG.\1/" \
+      -e "s/^import [A-Za-z_]*\.\(Types\|Funs\|FunsExternal\|TypesExternal\)$/import $PKG.\1/" \
       "$work/out/$f.lean" > "$work/gen/$f.lean"
 done
 sed -i 's/^import Aeneas$/import Aeneas\nimport AeneasF64/' "$work/gen/Types.lean"
 
 # The opaque functions Aeneas wants, against what FunsExternal.lean defines.
-opaque_list() { { grep -oE '^(@\[[^]]*\] )?axiom [^ ]+' "$1" || true; } | sed -E 's/^.*axiom //' | sort; }
+# (an axiom's name is on its own line, or on the line after a bare `axiom`)
+opaque_list() { awk '/^(@\[[^]]*\] )?axiom *$/ { getline; print $1; next } /^(@\[[^]]*\] )?axiom / { sub(/^.*axiom /, ""); print $1 }' "$1" | sort; }
 for f in FunsExternal_Template TypesExternal_Template; do
   if [ -f "$work/gen/$f.lean" ]; then opaque_list "$work/gen/$f.lean"; fi
 done | sort > "$work/opaque"

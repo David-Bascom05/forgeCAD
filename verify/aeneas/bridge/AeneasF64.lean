@@ -5,3 +5,4 @@ import AeneasF64.Ops
 import AeneasF64.Std
 import AeneasF64.Core
 import AeneasF64.Lemmas
+import AeneasF64.Err

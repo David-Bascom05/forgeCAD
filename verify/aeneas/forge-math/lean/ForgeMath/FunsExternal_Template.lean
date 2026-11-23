@@ -26,6 +26,23 @@ open forge_math
 @[rust_fun "core::clone::impls::{core::clone::Clone<f64>}::clone"]
 axiom F64.Insts.CoreCloneClone.clone : F64 → Result F64
 
+/-- [core::default::{impl core::default::Default for f64}::default]:
+    Source: '/rustc/library/core/src/default.rs', lines 157:12-157:30; this code is generated from a macro invocation at: '/rustc/library/core/src/default.rs', lines 185:0-185:67
+    Name pattern: [core::default::{core::default::Default<f64>}::default]
+    Visibility: public -/
+@[rust_fun "core::default::{core::default::Default<f64>}::default"]
+axiom F64.Insts.CoreDefaultDefault.default : Result F64
+
+/-- [core::fmt::float::{impl core::fmt::Debug for f64}::fmt]:
+    Source: '/rustc/library/core/src/fmt/float.rs', lines 210:16-210:64; this code is generated from a macro invocation at: '/rustc/library/core/src/fmt/float.rs', lines 239:0-239:21
+    Name pattern: [core::fmt::float::{core::fmt::Debug<f64>}::fmt]
+    Visibility: public -/
+@[rust_fun "core::fmt::float::{core::fmt::Debug<f64>}::fmt"]
+axiom F64.Insts.CoreFmtDebug.fmt
+  :
+  F64 → core.fmt.Formatter → Result ((core.result.Result Unit
+    core.fmt.Error) × core.fmt.Formatter)
+
 /-- [core::iter::traits::accum::{impl core::iter::traits::accum::Sum<&'a f64> for f64}::sum]:
     Source: '/rustc/library/core/src/iter/traits/accum.rs', lines 184:12-184:63; this code is generated from a macro invocation at: '/rustc/library/core/src/iter/traits/accum.rs', lines 208:0-208:39
     Name pattern: [core::iter::traits::accum::{core::iter::traits::accum::Sum<f64, &'a f64>}::sum]
@@ -55,12 +72,39 @@ axiom core.iter.traits.iterator.Iterator.sum.default
 @[rust_const "core::f64::{f64}::EPSILON"]
 axiom core.f64.F64.EPSILON : Result F64
 
+/-- [core::f64::{f64}::NAN]
+    Source: '/rustc/library/core/src/num/f64.rs', lines 516:4-516:22
+    Name pattern: [core::f64::{f64}::NAN]
+    Visibility: public -/
+@[rust_const "core::f64::{f64}::NAN"] axiom core.f64.F64.NAN : Result F64
+
 /-- [core::f64::{f64}::is_nan]:
     Source: '/rustc/library/core/src/num/f64.rs', lines 666:4-666:37
     Name pattern: [core::f64::{f64}::is_nan]
     Visibility: public -/
 @[rust_fun "core::f64::{f64}::is_nan"]
 axiom core.f64.F64.is_nan : F64 → Result Bool
+
+/-- [core::f64::{f64}::is_finite]:
+    Source: '/rustc/library/core/src/num/f64.rs', lines 714:4-714:40
+    Name pattern: [core::f64::{f64}::is_finite]
+    Visibility: public -/
+@[rust_fun "core::f64::{f64}::is_finite"]
+axiom core.f64.F64.is_finite : F64 → Result Bool
+
+/-- [core::f64::{f64}::max]:
+    Source: '/rustc/library/core/src/num/f64.rs', lines 1058:4-1058:45
+    Name pattern: [core::f64::{f64}::max]
+    Visibility: public -/
+@[rust_fun "core::f64::{f64}::max"]
+axiom core.f64.F64.max : F64 → F64 → Result F64
+
+/-- [core::f64::{f64}::to_bits]:
+    Source: '/rustc/library/core/src/num/f64.rs', lines 1319:4-1319:37
+    Name pattern: [core::f64::{f64}::to_bits]
+    Visibility: public -/
+@[rust_fun "core::f64::{f64}::to_bits"]
+axiom core.f64.F64.to_bits : F64 → Result Std.U64
 
 /-- [core::f64::{f64}::abs]:
     Source: '/rustc/library/core/src/num/f64.rs', lines 1744:4-1744:33
@@ -77,12 +121,38 @@ axiom core.option.OptionShared0T.copied
   {T : Type _} (markerCopyInst : core.marker.Copy T) :
   Option T → Result (Option T)
 
+/-- [core::option::{impl core::ops::try_trait::Try for core::option::Option<T>}::branch]:
+    Source: '/rustc/library/core/src/option.rs', lines 2875:4-2875:64
+    Name pattern: [core::option::{core::ops::try_trait::Try<core::option::Option<@T>>}::branch]
+    Visibility: public -/
+@[rust_fun
+  "core::option::{core::ops::try_trait::Try<core::option::Option<@T>>}::branch"]
+axiom core.option.Option.Insts.CoreOpsTry_traitTry.branch
+  {T : Type _} :
+  Option T → Result (core.ops.control_flow.ControlFlow (Option Never) T)
+
+/-- [core::option::{impl core::ops::try_trait::FromResidual<core::option::Option<!>> for core::option::Option<T>}::from_residual]:
+    Source: '/rustc/library/core/src/option.rs', lines 2889:4-2889:49
+    Name pattern: [core::option::{core::ops::try_trait::FromResidual<core::option::Option<@T>, core::option::Option<!>>}::from_residual]
+    Visibility: public -/
+@[rust_fun
+  "core::option::{core::ops::try_trait::FromResidual<core::option::Option<@T>, core::option::Option<!>>}::from_residual"]
+axiom
+  core.option.Option.Insts.CoreOpsTry_traitFromResidualOptionNever.from_residual
+  (T : Type _) : Option Never → Result (Option T)
+
 /-- [core::slice::{[T]}::last]:
     Source: '/rustc/library/core/src/slice/mod.rs', lines 283:4-283:42
     Name pattern: [core::slice::{[@T]}::last]
     Visibility: public -/
 @[rust_fun "core::slice::{[@T]}::last"]
 axiom core.slice.Slice.last {T : Type _} : Slice T → Result (Option T)
+
+/-- [std::f64::{f64}::sqrt]:
+    Source: '/rustc/library/std/src/num/f64.rs', lines 386:4-386:28
+    Name pattern: [std::f64::{f64}::sqrt]
+    Visibility: public -/
+@[rust_fun "std::f64::{f64}::sqrt"] axiom std.f64.F64.sqrt : F64 → Result F64
 
 /-- [forge_math::predicates::cross_big]:
     Source: 'kernel/forge-math/src/predicates.rs', lines 264:0-270:1 -/

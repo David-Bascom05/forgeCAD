@@ -48,3 +48,33 @@ def F64.sumStep {I : Type} (inst : core.iter.traits.iterator.Iterator I F64) (st
 def F64.Insts.CoreIterTraitsAccumSumSharedAF64.sum {I : Type}
     (inst : core.iter.traits.iterator.Iterator I F64) (it : I) : Result F64 :=
   loop (F64.sumStep inst) (F64.Ops.ofBits 0x8000000000000000, it)
+
+/-- `<f64 as Default>::default`: `0.0` -/
+def F64.Insts.CoreDefaultDefault.default : Result F64 := ok (F64.Ops.ofBits 0)
+
+/-- `x.to_bits()`: the encoding. For a NaN the payload is outside the float trusted base (the
+model has one NaN, encoded as the quiet NaN), so no theorem may depend on it. -/
+def core.f64.F64.to_bits (x : F64) : Result Std.U64 :=
+  ok (UScalar.ofNatCore (IEEE754.FP.toBits x) (by
+    have := IEEE754.F64.toBits_lt x
+    simpa [UScalarTy.numBits] using this))
+
+/-- `<Option<T> as Try>::branch`: `Some v ⇒ Continue v`, `None ⇒ Break None` (the `?` operator). -/
+def core.option.Option.Insts.CoreOpsTry_traitTry.branch {T : Type _} :
+    Option T → Result (core.ops.control_flow.ControlFlow (Option Never) T)
+  | some v => ok (.Continue v)
+  | none => ok (.Break none)
+
+/-- `<Option<T> as FromResidual<Option<!>>>::from_residual`: `None`. -/
+def core.option.Option.Insts.CoreOpsTry_traitFromResidualOptionNever.from_residual
+    (T : Type _) : Option Never → Result (Option T) := fun _ => ok none
+
+/-- `f64::max`: Lean `opaque`. Rust leaves the sign of a zero result unspecified
+(`max(-0.0, 0.0)`), and LLVM's `maxnum` lowers differently on x86-64 and wasm32, so no single
+definition is the shipped one; a theorem cannot use its value. -/
+opaque core.f64.F64.max : F64 → F64 → Result F64 := fun _ _ => fail .panic
+
+/-- `<f64 as Debug>::fmt`: Lean `opaque` (formatting is not part of any feature). -/
+opaque F64.Insts.CoreFmtDebug.fmt :
+    F64 → core.fmt.Formatter → Result ((core.result.Result Unit core.fmt.Error) × core.fmt.Formatter) :=
+  fun _ f => ok (.Ok (), f)
