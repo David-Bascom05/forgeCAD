@@ -547,7 +547,20 @@ class Tr:
             return self.sweep_carrier(kind, m, rec, env)
         if rec["kind"] == "loft":
             return self.loft_carrier(kind, m, rec, env)
-        ents = [self.ent(s) for s in self.osd(m, env)]
+        ents, stale = [], 0
+        for x in self.osd(m, env):
+            try:
+                ents.append(self.ent(x))
+            except Unresolved as err:
+                # a disambiguation naming an entity the sketch no longer has (an id of an older draft of it): the
+                # entities it still has say the same, and a choice they leave open stays unresolved further on
+                if "unknown sketch entity" not in str(err):
+                    raise
+                stale += 1
+        if stale and not ents:
+            raise Unresolved("unknown sketch entity")
+        if stale:
+            self.notes.add("stale-disambiguation")
         if not ents and "derivedFrom" in m:
             ents = [self.ent(self.deref(m["derivedFrom"], env))]
         if not ents:

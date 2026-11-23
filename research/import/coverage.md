@@ -25,8 +25,8 @@ measure are given beside them where they differ.
 | set | parts | untranslated before | after | match (1e-4) before | after | uncertain after | match after, old measure |
 |---|---:|---:|---:|---:|---:|---:|---:|
 | FreeCAD library, bodies | 677 | 130 | 39 | 394 | 570 | 20 | 523 |
-| CADFS, all parts | 1914 | 640 | 600 | 1108 | 1134 | 4 | 1120 |
-| CADFS, parts with a fillet | 476 | 238 | 226 | 164 | 166 | 1 | 167 |
+| CADFS, all parts | 1914 | 640 | 597 | 1108 | 1135 | 4 | 1121 |
+| CADFS, parts with a fillet | 476 | 238 | 225 | 164 | 166 | 1 | 167 |
 | WHUCAD, 1 in 7 with a fillet | 319 | 35 | 29 | (1e-3: STEPs staged for the newly built only) | 0 new | | |
 
 No part got worse on any set through the importers: no match was lost, and nothing that built before stopped
@@ -329,13 +329,13 @@ All 1914 sampled parts:
 
 | class | before | after |
 |---|---:|---:|
-| match | 1108 | 1134 |
+| match | 1108 | 1135 |
 | mismatch | 69 | 69 |
 | uncertain | 3 | 4 |
-| refused | 85 | 95 |
+| refused | 85 | 97 |
 | fail | 8 | 11 |
 | timeout | 1 | 1 |
-| untranslated | 640 | 600 |
+| untranslated | 640 | 597 |
 
 **Draft on an extrude (24 → 0 under that name).** Onshape's extrude draft is Forge's `taper:`, on a depth. Its sign
 was read from the STEP: with the pull-direction flag set, Onshape narrows the extrude as Forge's positive taper does
@@ -405,6 +405,21 @@ same volume, area and box, so the reading of the sense rests on the circular pat
 where the sense changes the shape would show it as a mismatch, not as a false match. SCALE_UNIFORMLY (4 parts) has
 no form. **Language gap: a scale motion** for `movebody`/`copybody` (00194324, 00371302, 00593192, 00743818). It is a
 language change, so it needs the Lean model extended, and is left for the language work.
+
+**A disambiguation naming an entity the sketch no longer has (6 → 0 under that name).** A query's disambiguation can
+list, beside the entities that bound a face, one the sketch no longer has. These are UUIDs found nowhere in the
+program or its sketch records, ids from an older draft. They are now passed over where the entities the sketch still
+has remain, and a choice those leave open stays unresolved further on. Such parts are noted `stale-disambiguation`.
+
+| part | after |
+|---|---|
+| 00595973 | match: 1.1e-11 |
+| 00077264, 00098356 | refused: `Shell Collapses`, `Shell Rebuild` |
+| 00005492, 00091915, 00910163 | another cause further on (OFFSET_FACE of an unknown feature, imprint edges 2) |
+
+A full sweep of all 1914 parts, against the one before, moves only these six. One part moves within its class:
+00035608, a mismatch, comes nearer, from 1.6e-1 to 3.7e-5 in volume (1.5e-4 in area). It too had a stale entity
+there, which had sent its query down a fallback.
 
 ### What still stops CADFS
 
