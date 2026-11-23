@@ -354,13 +354,99 @@ pub fn triple_samples(qs: &[Quadric], a: &Quadric, b: &Quadric, c: &Quadric) -> 
     }
 }
 
-/// `vertSamples`.
+// =============================================================================================
+// QEnum.lean: every common point of a triple, enumerated
+// =============================================================================================
+
+/// `PtD`: a point descriptor, a vertex sample or a root on two planes' line.
+#[derive(Clone, Debug)]
+pub enum PtD {
+    Vs(VSample),
+    Ln(V3, V3, Num),
+}
+
+/// **`enumTriple`**: the descriptors of a triple's common points (`None`: undecided).
+/// `enumTriple_complete`: every common point is named by one.
+pub fn enum_triple(a: &Quadric, b: &Quadric, c: &Quadric, fuel: usize) -> Option<Vec<PtD>> {
+    let ln = |x: &Quadric, y: &Quadric, q: &Quadric| -> Option<Vec<PtD>> {
+        let l = line_of(x, y);
+        roots_of(&along_line(q, &l.0, &l.1), fuel).map(|ns| {
+            ns.into_iter()
+                .map(|n| PtD::Ln(l.0.clone(), l.1.clone(), n))
+                .collect()
+        })
+    };
+    if nzc(a) || nzc(b) || nzc(c) || parallel_apart(a, b) || parallel_apart(a, c) || parallel_apart(b, c) {
+        Some(Vec::new())
+    } else if line_ok(a, b, &line_of(a, b)) {
+        ln(a, b, c)
+    } else if line_ok(a, c, &line_of(a, c)) {
+        ln(a, c, b)
+    } else if line_ok(b, c, &line_of(b, c)) {
+        ln(b, c, a)
+    } else if is_plane_q(a) && is_plane_q(b) && is_plane_q(c) {
+        None
+    } else {
+        propose_triple(a, b, c, fuel).map(|vs| vs.into_iter().map(PtD::Vs).collect())
+    }
+}
+
+impl PtD {
+    /// `PtD.cov`: the descriptor's covector (`cov_spec`).
+    pub fn cov(&self, qs: &[Quadric]) -> Option<Cov> {
+        match self {
+            PtD::Vs(v) => {
+                if iso_ok_n(&v.x) && v.d_ok(SIGN_FUEL) {
+                    vert_cov(qs, v, SIGN_FUEL)
+                } else {
+                    None
+                }
+            }
+            PtD::Ln(p, d, n) => {
+                if iso_ok_n(n) {
+                    cov_on(qs, p, d, n, SIGN_FUEL)
+                } else {
+                    None
+                }
+            }
+        }
+    }
+}
+
+/// `critTriples`: every pair with its turning-point quadric.
+pub fn crit_triples(qs: &[Quadric]) -> Vec<(Quadric, Quadric, Quadric)> {
+    pairs(qs)
+        .into_iter()
+        .map(|(a, b)| {
+            let c = crit_q(&a, &b);
+            (a, b, c)
+        })
+        .collect()
+}
+
+/// `enumSamples`: a triple's vertex samples, one per common point.
+pub fn enum_samples(qs: &[Quadric], t: &(Quadric, Quadric, Quadric)) -> Option<Vec<QS>> {
+    let ds = enum_triple(&t.0, &t.1, &t.2, ROOT_FUEL)?;
+    let mut out: Vec<QS> = Vec::with_capacity(ds.len());
+    let mut i = 0;
+    while i < ds.len() {
+        out.push(QS {
+            tag: Tag::Vert,
+            cov: ds[i].cov(qs)?,
+        });
+        i += 1;
+    }
+    Some(out)
+}
+
+/// **`vertSamples`**: every common point of three carriers, and every turn and tangency of two.
 pub fn vert_samples(qs: &[Quadric]) -> Option<Vec<QS>> {
-    let ts = tri(qs);
+    let mut ts = tri(qs);
+    ts.extend(crit_triples(qs));
     let mut out: Vec<Vec<QS>> = Vec::new();
     let mut i = 0;
     while i < ts.len() {
-        out.push(triple_samples(qs, &ts[i].0, &ts[i].1, &ts[i].2)?);
+        out.push(enum_samples(qs, &ts[i])?);
         i += 1;
     }
     Some(flatten(out))
@@ -407,20 +493,25 @@ pub fn samples_at(qs: &[Quadric]) -> Option<Vec<QS>> {
     Some(all)
 }
 
-/// **`samplesOf`**: the samples in the first frame that passes `frame_ok` and `sing_all` and
-/// where every step succeeds.
-pub fn samples_of(qs: &[Quadric]) -> Option<Vec<QS>> {
+/// **`samplesOfF`**: the samples in the first frame that passes `frame_ok` and `sing_all` and
+/// where every step succeeds, with that frame.
+pub fn samples_of_f(qs: &[Quadric]) -> Option<(Frame, Vec<QS>)> {
     let fs = frames();
-    let mut out: Option<Vec<QS>> = None;
+    let mut out: Option<(Frame, Vec<QS>)> = None;
     let mut i = 0;
     while out.is_none() && i < fs.len() {
         let fq: Vec<Quadric> = qs.iter().map(|q| in_frame(&fs[i], q)).collect();
         if frame_ok(&fq) && sing_all(&fq) {
-            out = samples_at(&fq);
+            out = samples_at(&fq).map(|ss| (fs[i].clone(), ss));
         }
         i += 1;
     }
     out
+}
+
+/// `samplesOf`: the samples, without their frame.
+pub fn samples_of(qs: &[Quadric]) -> Option<Vec<QS>> {
+    samples_of_f(qs).map(|p| p.1)
 }
 
 // =============================================================================================
@@ -845,11 +936,49 @@ pub fn sides_ok(l: &RefLedger, ss: &[QS]) -> bool {
     })
 }
 
-/// **`qledger qs forms`**: the curved ledger, checked (`splitOk`, `sidesOk`), or `None`.
+/// `zeroIdxs`: a covector's zero positions.
+pub fn zero_idxs(x: &[Sgn]) -> Vec<usize> {
+    (0..x.len()).filter(|&i| x[i] == Sgn::Zero).collect()
+}
+
+/// `uTriple`: the triple whose common points hold every point of the vertex candidate `v`: three
+/// of its zero carriers, or, with two zeros, the pair and its turning-point quadric.
+pub fn u_triple(qs: &[Quadric], v: &[Sgn]) -> Option<(Quadric, Quadric, Quadric)> {
+    let z = zero_idxs(v);
+    let g = |i: usize| qs.get(i).cloned().unwrap_or_default();
+    if z.len() >= 3 {
+        Some((g(z[0]), g(z[1]), g(z[2])))
+    } else if z.len() == 2 {
+        let (a, b) = (g(z[0]), g(z[1]));
+        let c = crit_q(&a, &b);
+        Some((a, b, c))
+    } else {
+        None
+    }
+}
+
+/// **`vertOneAt`, (U)**: the triple's complete list has a covector for every point, and exactly
+/// one carries `v` (`vertOneAt_spec`: two points with covector `v` on the triple are equal).
+pub fn vert_one_at(qs: &[Quadric], v: &[Sgn]) -> bool {
+    match u_triple(qs, v) {
+        Some(t) => match enum_triple(&t.0, &t.1, &t.2, ROOT_FUEL) {
+            Some(ds) => {
+                let cs: Vec<Option<Cov>> = ds.iter().map(|d| d.cov(qs)).collect();
+                cs.iter().all(|c| c.is_some()) && cs.iter().filter(|c| c.as_deref() == Some(v)).count() == 1
+            }
+            None => false,
+        },
+        None => false,
+    }
+}
+
+/// **`qledger qs forms`**: the curved ledger, checked (`splitOk`, `sidesOk`, and (U) on every
+/// vertex candidate in the sampling frame), or `None`.
 pub fn qledger(qs: &[Quadric], forms: &[SForm]) -> Option<RefLedger> {
-    let ss = samples_of(qs)?;
+    let (f, ss) = samples_of_f(qs)?;
     let l = curved_ledger(qs.len(), forms, &ss);
-    if l.split_ok() && sides_ok(&l, &ss) {
+    let fq: Vec<Quadric> = qs.iter().map(|q| in_frame(&f, q)).collect();
+    if l.split_ok() && sides_ok(&l, &ss) && l.verts.iter().all(|v| vert_one_at(&fq, v)) {
         Some(l)
     } else {
         None
@@ -1389,19 +1518,6 @@ mod tests {
         );
     }
 
-    fn show_cov(x: &Cov) -> String {
-        x.iter()
-            .map(|s| match s {
-                Sgn::Neg => '-',
-                Sgn::Zero => '0',
-                Sgn::Pos => '+',
-            })
-            .collect()
-    }
-    fn same_set(a: &[Cov], b: &[&str]) -> bool {
-        let sa: Vec<String> = a.iter().map(show_cov).collect();
-        sa.len() == b.len() && b.iter().all(|x| sa.iter().any(|y| y == x))
-    }
     fn plane_q(a: i64, b: i64, c: i64, d: (i64, i64)) -> Quadric {
         Quadric {
             lx: qi(a),
@@ -1448,10 +1564,9 @@ mod tests {
     #[test]
     fn qledger_guards() {
         let plane_y0 = quad([0, 0, 0, 0, 0, 0, 0, 1, 0, 0]);
-        let l = qledger(&[sphere1(), plane_y0, plane_z()], &[SForm::Lit(0, Sgn::Neg)]).unwrap();
-        assert!(same_set(&l.facets(), &["0-+", "0--", "0++", "0+-"]));
-        assert!(same_set(&l.edges, &["00+", "00-", "0-0", "0+0"]));
-        assert!(same_set(&l.verts, &["000"]));
+        // cut by y = 0 and z = 0 (not by its own seam): the covector (0, 0, 0) is two points,
+        // (±1, 0, 0), so the vertex certificate (U) refuses, as it must
+        assert!(qledger(&[sphere1(), plane_y0, plane_z()], &[SForm::Lit(0, Sgn::Neg)]).is_none());
         let (b, f) = unit_box();
         assert_eq!(qledger(&b, &[f]).map(|l| counts(&l)), Some((6, 12, 8)));
     }
@@ -1554,7 +1669,11 @@ mod tests {
                     c: q(-9, 4),
                     ..Quadric::default()
                 }],
-                &[plane_q(1, 0, 0, (0, 1))],
+                &[
+                    plane_q(1, 0, 0, (0, 1)),
+                    plane_q(0, 1, 0, (0, 1)),
+                    plane_q(0, 0, 1, (0, 1)),
+                ],
             ),
             vec![box_f(), lit(6, Sgn::Neg)],
         );

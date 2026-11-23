@@ -639,6 +639,23 @@ pub fn centre_plane(o: &V3) -> Plane {
     }
 }
 
+/// `centrePlaneY`: `y = o.y`. Points mirrored in a plane through the centre share every other
+/// sign: the vertex certificate (U) refuses a sphere ∩ box seamed by `x = o.x` alone.
+pub fn centre_plane_y(o: &V3) -> Plane {
+    Plane {
+        n: ey(),
+        c: o.y.clone(),
+    }
+}
+
+/// `centrePlaneZ`: `z = o.z`.
+pub fn centre_plane_z(o: &V3) -> Plane {
+    Plane {
+        n: ez(),
+        c: o.z.clone(),
+    }
+}
+
 /// `equatorPlane`: `z·(p − o) = 0`.
 pub fn equator_plane(o: &V3, z: &V3) -> Plane {
     Plane {
@@ -653,7 +670,7 @@ pub fn seams_of(f: &QFace) -> Vec<Plane> {
         Kind::Plane => Vec::new(),
         Kind::Cyl => vec![axis_plane(&f.o, &f.z), axis_plane2(&f.o, &f.z)],
         Kind::Cone => vec![axis_plane(&f.o, &f.z), axis_plane2(&f.o, &f.z), nappe_plane(f)],
-        Kind::Sphere => vec![centre_plane(&f.o)],
+        Kind::Sphere => vec![centre_plane(&f.o), centre_plane_y(&f.o), centre_plane_z(&f.o)],
         Kind::Torus => vec![axis_plane(&f.o, &f.z), equator_plane(&f.o, &f.z)],
     }
 }
@@ -3440,6 +3457,7 @@ mod tests {
         let pt = V3::new(qi(7), q(-1, 3), qi(5));
         assert_eq!(nq.eval(&pt), np.eval(&pt).neg());
         assert!(centre_plane(&o).eval(&o).is_zero());
+        assert!(centre_plane_y(&o).eval(&o).is_zero() && centre_plane_z(&o).eval(&o).is_zero());
         assert!(
             cone.wf()
                 && !QFace {
