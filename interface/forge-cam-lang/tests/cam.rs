@@ -394,3 +394,33 @@ fn a_thread_milled_as_a_declared_cosmetic_thread() {
     assert_eq!(t.status, "refused");
     assert!(t.refusal.as_deref().unwrap().contains("records no thread"), "{:?}", t.refusal);
 }
+
+#[test]
+fn every_posted_position_is_within_the_machines_travel() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    let src = std::fs::read_to_string(dir.join("flange_cam.fg")).unwrap();
+    let placed = |at: &str| {
+        src.replace(
+            "origin: \"top-center\", tol: tol)",
+            &format!("origin: \"top-center\", tol: tol, at: {at})"),
+        )
+    };
+    // generic-vmc3: X −300..300, Y −200..200, spindle Z −400..0. A work offset in the middle of
+    // the table, its Z low enough that the tools' lengths stay under 0
+    let cam = forge_cam_lang::run(&placed("(0, 0, -250)"), &dir);
+    assert!(cam.ok, "{:?}", cam.ops.iter().map(|o| (&o.name, &o.refusal)).collect::<Vec<_>>());
+    assert!(cam.warnings.iter().all(|w| !w.contains("not placed")), "{:?}", cam.warnings);
+    // near the end of X: the profile's far side runs off the travel
+    let cam = forge_cam_lang::run(&placed("(280, 0, -250)"), &dir);
+    assert!(!cam.ok);
+    let o = cam.ops.iter().find(|o| o.checks.iter().any(|c| c.rule == "axis_limit")).expect("an axis limit");
+    assert!(o.checks.iter().any(|c| c.other.contains("joint X")), "{:?}", o.checks);
+    assert!(cam.program_text().is_none());
+    // the spindle above its top: Z offset too high for the tool's length
+    let cam = forge_cam_lang::run(&placed("(0, 0, -20)"), &dir);
+    assert!(cam.ops.iter().any(|o| o.checks.iter().any(|c| c.rule == "axis_limit" && c.other.contains("joint Z"))));
+    // unplaced: the spans are checked, and the reply says the positions were not
+    let cam = forge_cam_lang::run(&src, &dir);
+    assert!(cam.ok);
+    assert!(cam.warnings.iter().any(|w| w.contains("not placed")), "{:?}", cam.warnings);
+}
