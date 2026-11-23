@@ -121,7 +121,7 @@ pub fn each<T: Sync, R: Send>(items: &[T], f: impl Fn(&T) -> R + Sync) -> Vec<R>
     let f = &f;
     let mut done = Vec::with_capacity(items.len());
     for wave in items.chunks(each_at_once()) {
-        std::thread::scope(|s| {
+        forge_math::par::scope(|s| {
             let hs: Vec<_> = wave.iter().map(|x| s.spawn(move || f(x))).collect();
             done.extend(hs.into_iter().map(|h| h.join()));
         });

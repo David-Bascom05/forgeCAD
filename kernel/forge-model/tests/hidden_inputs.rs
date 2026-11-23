@@ -13,7 +13,8 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-const CRATES: [&str; 11] = [
+const CRATES: [&str; 12] = [
+    "forge-par",
     "forge-geom",
     "forge-topo",
     "forge-bool",
@@ -69,7 +70,7 @@ fn kinds(line: &str) -> Vec<&'static str> {
     if has("HashMap<") || has("HashSet<") || has("RandomState") {
         out.push("hash-order");
     }
-    if has("available_parallelism") || has("thread::spawn") || has("thread::scope") {
+    if has("available_parallelism") || has("thread::spawn") || has("thread::scope") || has("par::scope") {
         out.push("threads");
     }
     if has("ptr_eq") || has("as_ptr") {

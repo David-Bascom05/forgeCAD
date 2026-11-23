@@ -51,36 +51,74 @@ pub fn lock<T>(m: &std::sync::Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 /// instantiates this same module on the page's shared memory and runs it (`worker_run`).
 #[cfg(all(target_arch = "wasm32", target_feature = "atomics"))]
 pub mod threads {
-    use std::sync::Mutex;
-    use std::sync::atomic::{AtomicU32, Ordering};
+    use std::collections::VecDeque;
+    use std::sync::{Condvar, Mutex};
     use wasm_bindgen::prelude::*;
 
     type Job = Box<dyn FnOnce() + Send>;
-    static JOBS: Mutex<Vec<(u32, Job)>> = Mutex::new(Vec::new());
-    static NEXT: AtomicU32 = AtomicU32::new(1);
+
+    /// The jobs waiting, how many workers wait for one, and the wakes handed out: a job pushed
+    /// either reserves a waiting worker (a wake) or starts a new one, so a job that waits for
+    /// jobs it spawned (a scope) always has a worker for them.
+    struct Pool {
+        jobs: VecDeque<Job>,
+        idle: usize,
+        wakes: usize,
+    }
+
+    static POOL: Mutex<Pool> = Mutex::new(Pool {
+        jobs: VecDeque::new(),
+        idle: 0,
+        wakes: 0,
+    });
+    static READY: Condvar = Condvar::new();
 
     #[wasm_bindgen]
     extern "C" {
-        /// The page's (and each worker's): a Web Worker running job `id` (web/app.js, worker.js).
+        /// The page's (and each worker's): a Web Worker on the shared memory, into the pool
+        /// (web/threads.js, worker.js).
         #[wasm_bindgen(js_namespace = globalThis, js_name = forge_thread)]
         fn js_thread(module: JsValue, memory: JsValue, id: u32);
     }
 
+    /// A job for the pool's workers. Never waits: the page's main thread calls it.
     pub fn spawn(f: Job) {
-        let id = NEXT.fetch_add(1, Ordering::Relaxed);
-        super::lock(&JOBS).push((id, f));
-        js_thread(wasm_bindgen::module(), wasm_bindgen::memory(), id);
+        let new_worker = {
+            let mut p = super::lock(&POOL);
+            p.jobs.push_back(f);
+            if p.idle > 0 {
+                p.idle -= 1;
+                p.wakes += 1;
+                READY.notify_one();
+                false
+            } else {
+                true
+            }
+        };
+        if new_worker {
+            js_thread(wasm_bindgen::module(), wasm_bindgen::memory(), 0);
+        }
     }
 
-    /// A worker's start: job `id`, run to its end on this thread.
+    /// A worker's life: the pool's jobs, one after another, waiting between them (a worker may).
     #[wasm_bindgen]
-    pub fn worker_run(id: u32) {
-        let job = {
-            let mut j = super::lock(&JOBS);
-            j.iter().position(|x| x.0 == id).map(|k| j.swap_remove(k).1)
-        };
-        if let Some(f) = job {
-            f();
+    pub fn worker_run(_id: u32) {
+        let mut p = POOL.lock().unwrap_or_else(|e| e.into_inner());
+        loop {
+            if let Some(job) = p.jobs.pop_front() {
+                drop(p);
+                job();
+                p = POOL.lock().unwrap_or_else(|e| e.into_inner());
+                continue;
+            }
+            p.idle += 1;
+            loop {
+                p = READY.wait(p).unwrap_or_else(|e| e.into_inner());
+                if p.wakes > 0 {
+                    p.wakes -= 1;
+                    break;
+                }
+            }
         }
     }
 }

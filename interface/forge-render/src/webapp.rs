@@ -86,6 +86,18 @@ extern "C" {
     fn wake_page();
 }
 
+/// The threads the page's machine has (`navigator.hardwareConcurrency`, in a worker too), at
+/// most 8, as natively.
+#[cfg(target_feature = "atomics")]
+fn hardware_threads() -> usize {
+    let n = js_sys::Reflect::get(&js_sys::global(), &"navigator".into())
+        .and_then(|nav| js_sys::Reflect::get(&nav, &"hardwareConcurrency".into()))
+        .ok()
+        .and_then(|v| v.as_f64())
+        .unwrap_or(1.0);
+    (n as usize).clamp(1, 8)
+}
+
 /// The page's: a worker said its thread has news (the threaded build).
 #[wasm_bindgen]
 pub fn app_wake() {
@@ -586,6 +598,14 @@ fn tell_page(path: &std::path::Path, c: forge_dirs::fs::mem::Change<'_>) {
 #[wasm_bindgen]
 pub fn app_init() {
     PAGE.with(|p| p.set(true));
+    // the threaded build: the kernel's parallel paths (n-ary booleans, `forge_math::par`) on Web
+    // Workers too; on the page's thread, which may not wait, each runs where it is spawned
+    #[cfg(target_feature = "atomics")]
+    forge_par::set_spawner(forge_par::Spawner {
+        spawn: crate::plat::threads::spawn,
+        can_block: || !on_page(),
+        threads: hardware_threads,
+    });
     panic_hook();
     forge_math::clock::set(perf_now, date_now);
     forge_dirs::fs::mem::set_hook(Some(tell_page));
@@ -696,6 +716,34 @@ pub fn fs_list(prefix: &str) -> js_sys::Array {
 pub fn build_json(path: &str) -> String {
     app_init();
     crate::parity::build_report(path)
+}
+
+/// Builds handed to a worker (`build_start`), by number, and their reports once done.
+static BUILDS: std::sync::Mutex<Vec<(u32, Option<String>)>> = std::sync::Mutex::new(Vec::new());
+static NEXT_BUILD: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(1);
+
+/// `build_json` on a worker's thread (the threaded build: the kernel's parallel paths on more
+/// workers; the single-threaded build: at once): its number, for `build_result`.
+#[wasm_bindgen]
+pub fn build_start(path: String) -> u32 {
+    app_init();
+    let id = NEXT_BUILD.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    crate::plat::lock(&BUILDS).push((id, None));
+    crate::plat::spawn("forge-build", move || {
+        let r = crate::parity::build_report(&path);
+        if let Some(b) = crate::plat::lock(&BUILDS).iter_mut().find(|b| b.0 == id) {
+            b.1 = Some(r);
+        }
+    });
+    id
+}
+
+/// Build `id`'s report once it is done (then forgotten), else undefined.
+#[wasm_bindgen]
+pub fn build_result(id: u32) -> Option<String> {
+    let mut all = crate::plat::lock(&BUILDS);
+    let k = all.iter().position(|b| b.0 == id && b.1.is_some())?;
+    all.swap_remove(k).1
 }
 
 /// The bench parts (and their font) written into `dir`; their paths.
