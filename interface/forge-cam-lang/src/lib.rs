@@ -35,6 +35,11 @@ use forge_tooling::{Kind, Library, feeds};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
+/// Builds the staged stock even where the checks against it cannot fail (tests/stock_skip.rs,
+/// the skip's differential test). Off by default.
+#[doc(hidden)]
+pub static FULL_STOCK: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 /// Whether a source is a machining document.
 pub fn is_machining(src: &str) -> bool {
     match syntax::parse(src) {
@@ -3394,7 +3399,40 @@ impl Cam {
                     s.stock.faces()
                 })
             };
-            let mut stages = vec![(0usize, faces_of(&base))];
+            // the stock is checked against the tool's non-cutting bodies, and against every body
+            // on a rapid. Where each such body stays, through each move, at least the
+            // clearance (and the stock faces' μ, with room) above the stock's top, no stock point
+            // comes within the limit (the stock lies under its top; the limit is at most the
+            // clearance): those checks cannot fail, and the staged stock is not built
+            // (Heights.lean `setDist_of_heights`). Else it is, as before.
+            let top = base.max[2];
+            let stock_needed = {
+                use forge_cam_geom::ival::Ival;
+                // the least a checked body's lowest point may be: top + clearance + room
+                let need = Ival::pt(top)
+                    .add(Ival::pt(s.clearance.max(0.0)))
+                    .add(Ival::pt(1e-3))
+                    .hi;
+                ops::checker_moves(&posted).iter().any(|(m, ph, _)| {
+                    let tip = m.at(Ival::new(0.0, 1.0))[2].lo;
+                    tool.shape.bodies.iter().any(|b| {
+                        let low = Ival::pt(tip).add(Ival::pt(b.z0)).lo;
+                        // above it (a NaN is not)
+                        let above = matches!(
+                            low.partial_cmp(&need),
+                            Some(std::cmp::Ordering::Greater | std::cmp::Ordering::Equal)
+                        );
+                        (b.part == forge_cam_geom::tool::Part::NonCutting || *ph == Phase::Rapid) && !above
+                    })
+                })
+            };
+            // FULL_STOCK: build it anyway (the differential test of the skip)
+            let stock_needed = stock_needed || FULL_STOCK.load(std::sync::atomic::Ordering::Relaxed);
+            let mut stages = if stock_needed {
+                vec![(0usize, faces_of(&base))]
+            } else {
+                vec![(0usize, vec![])]
+            };
             let mut deepest = f64::INFINITY;
             let mut cut_z: Option<f64> = None;
             for (i, m) in posted.moves.iter().enumerate() {
@@ -3411,6 +3449,7 @@ impl Cam {
                     }
                     | PMove::Rapid { .. } => {
                         if let Some(z) = cut_z.take()
+                            && stock_needed
                             && z < deepest
                             && !self.ops[oi].voids.is_empty()
                         {
