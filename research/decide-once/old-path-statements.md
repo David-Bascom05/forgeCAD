@@ -192,28 +192,39 @@ translates them. Each statement is a refinement: the translated function, read t
 abstraction of its inputs, equals or soundly approximates a Lean definition over ℝ. Statements are
 written before the translation lands, so the proofs can start as soon as it elaborates.
 
-## 0. The missing layer: a Lean model of a `forge_topo::Body`
+## 0. The body layer: a Lean model of a `forge_topo::Body` (exists; this section was stale)
 
-Every statement below is about a `Body`. The repository has **no Lean model of one**: the decide-once
-models (`ForgeExact.DecideOnce`) are over ledgers, and forge-topo is not translated.
+Every statement below is about a `Body`. When this page was first written there was no Lean model
+of one. That is no longer true; the layer exists in three pieces, and §E/§D are stated against
+them:
 
-Needed:
-1. **The translated types.** Aeneas's `Body`, `Face`, `Loop`, `Coedge`, `Edge` and `Vertex`, with
-   `Surface` and `Curve` as translated enums, and the `Proc`/`ProcCurve` arms opaque (the aeneas
-   session's markers).
-2. **An abstraction `⟦b⟧ : Set ℝ³`, the solid a body bounds,** plus `⟦f⟧ : Set ℝ³` for each face: its
-   surface's points inside its trimming loops. These are defined only under a validity predicate,
-   `ValidSolid b`: faces meet only along common edges, the loops are closed and properly nested, and
-   the shell is closed and oriented.
-3. **The bridge to dol-curved's F-series.** F1–F6 work over an abstract arrangement `G` with rooms and
-   facets. `⟦b⟧` should be a union of rooms of the arrangement of the body's own faces, so F5/F6 apply
-   to it unchanged.
+1. **The exact model and its denotation: `verify/forge-curved/ForgeCurved/BodyModel.lean`** (on
+   main since #11). `FaceModel`, `EdgeModel`, `BodyModel`, `Bounds b S` (S is the solid the faces
+   bound), `bounds_unique`, `ValidExact`, `denoteExact`, `Refines δ`, `exactOf`, `exactOf_refines`,
+   `ValidSolid δ b`, `denote_spec`, `denote_refines`, and the bridge to the F-series
+   (`denote_eq_closure_rooms`, `f6_hyps`, `oriented_denote`): ⟦b⟧ is a union of closed rooms of the
+   arrangement of the body's own faces, so F5/F6 apply to it unchanged. The vertex-cluster
+   restatement (option iv, bc5f25d3) and the local formula Φ_u (53957ebb) are on dol-curved and
+   land on main with the S3/S4 screens (the spine's second PR).
+2. **The combinatorial validity of a body: `verify/forge-topo-check`** (on main). `TopoCheck.Body`
+   (the model), `Valid` (Spec.lean) and `check_sound` (Proof.lean): `check` returning no problem
+   implies `Valid`, at L1/L3, with the differential test on 1159 kernel bodies (L6). At L4 the
+   shipped `check_strays`, `check_links`, `check_shell_faces`, `check_edges` and `check_loops`
+   are proven on their Aeneas translation (`verify/aeneas/forge-topo`: `strays_refines`,
+   `links_refines`, `shell_faces_refines`, `edges_refines`, `loops_refines`; branch
+   rebase-fundamentals, landing as the spine's forge-topo PR). Left: `check_shell_euler`,
+   `check_fans`, and the composition into `Model.check` (research/fundamentals/RESUME.md there).
+   This is the `WellFormed` half of `ValidSolid` on outputs: it is what lets the post-build check
+   leave release once §E is proven (PROOF-STANDARD.md, the validity row).
+3. **The translated types.** Aeneas's `Body`, `Face`, `Loop`, `Coedge`, `Edge` and `Vertex` for
+   forge-bool, with `Surface` and `Curve` as translated enums and the `Proc`/`ProcCurve` arms
+   opaque, are the TRANSLATE agent's (verify/aeneas/forge-bool). Until they exist, §E and §D are
+   stated over `BodyModel` through an abstraction function `abs : Body → BodyModel ℝ³` taken as a
+   parameter, with the named hypothesis `FormulaOfTopology abs` (§E). When the translation lands,
+   `abs` becomes a definition and the statements are re-elaborated over it unchanged.
 
-This layer is the first piece of Lean, before any refinement proof. It is shared with the curved
-plan. **Owners (the master, 2026-11-23):** aeneas does (1), as part of the Charon fix. dol-curved
-does (2) and (3): ForgeCurved/BodyModel.lean (30c0577b) has `FaceModel`, `BodyModel`, `Bounds`,
-`ValidSolid`, `denote` and the bridge. Asked of it (review, 2026-11-23): uniqueness of `S`,
-`Refines_δ` with b*, and edges and vertices with their incidences (for F1 and the names).
+The Lean statements of §E and §D go in `verify/forge-bool-proof`. Its `LEDGER.md` is the single
+source of truth for what remains unproven: one row per contract, with its owner, status and file.
 
 ## 1. classify.rs
 
