@@ -580,3 +580,217 @@ for nm, path, tx, ty, tz, table, kw, pockets in [
         feed=10000, rpm=[100, 12000], iface="CAT40", tmax=(250, 80), changer=(pockets, 0.1, 7) if pockets else None,
         coolants=("flood",), nose_r=80, head=(360, 480), tt=60, rapid_src=False, hmin_status="unknown",
         D_pub=False, cites=cites))
+
+# ---- Milltronics (own INSPIRE / 9000-DGI control: no dialect). Web spec blocks (M1) vs line cards.
+MW = "https://milltronics.com/cnc-machines/{}/"
+MC = {"vm": "https://milltronics.com/wp-content/uploads/Milltronics_linecard_VM_series-1.pdf",
+      "il": "https://milltronics.com/wp-content/uploads/Milltronics_linecard_IL_series.pdf",
+      "xp": "https://milltronics.com/wp-content/uploads/Milltronics_linecard_XP_series.pdf",
+      "sl": "https://milltronics.com/wp-content/uploads/Milltronics_linecard_SL_series.pdf"}
+IN = 25.4
+for nm, slug, card, x, y, z, tab, nt, rap, rpm, iface, pockets, tool, kg, pw in [
+    ("milltronics-vm3018", "vm3018", "vm", 30, 18, 20, (34, 18), (4, 24), 945, 10000, "BIG-PLUS ISO 40", 24,
+     (250, 89), 7, "web 20/15 HP; card 23/15 HP (17/11 kW); 75 ft-lb"),
+    ("milltronics-vm4020", "vm4020", "vm", 40, 20, 20, (46, 20), (4, 24), 945, 10000, "BIG-PLUS ISO 40", 24,
+     (250, 89), 7, "web 20/15 HP; card 23/15 HP; 75 ft-lb"),
+    ("milltronics-vm5020", "vm5020", "vm", 50, 20, 20, (52, 20), (4, 24), 945, 10000, "BIG-PLUS ISO 40", 24,
+     (250, 89), 7, "web 20/15 HP; card 23/15 HP; 75 ft-lb"),
+    ("milltronics-vm3020il", "vm3020il", "il", 30, 20, 22, (34, 20), (6, 28), {"X": 1200, "Y": 1200, "Z": 1000},
+     12000, "BIG-PLUS ISO 40", 30, (300, 80), 7, "web 24/15 HP; card 32/10 HP (24/7.5 kW); 89 ft-lb"),
+    ("milltronics-vm5025xp", "vm5025xp", "xp", 50, 25, 24, (54, 25), (6, 30), {"X": 1000, "Y": 1000, "Z": 787},
+     8000, "BIG-PLUS ISO 50", 30, (300, 125), 15, "30/15 HP (22.2/11 kW); 208.5 ft-lb"),
+]:
+    url, cu = MW.format(slug), MC[card]
+    rap_mm = {a: round(per(rap, a) * IN) for a in "XYZ"}
+    tx, ty, tz = x * IN, y * IN, z * IN
+    table = (tab[0] * IN, tab[1] * IN)
+    cites = {f"joint.{a}.max_feed": unk(FEED_UNK) for a in "XYZ"}
+    cites.update({
+        "spindle.S1.rpm": [pub(url, f"{rpm} rpm"), unk(RPM_MIN_UNK.format(v=100))],
+        "spindle.S1.max": [pub(cu, f"max tool {tool[1]} mm dia, {tool[0]} mm long (line card p.2)")]
+        + ([dict(status="conflict", source=url, note="web: 3.15 in / 9.45 in; the line card's larger values held")]
+           if card == "vm" else []),
+        "spindle.S1.interface": pub(url, iface),
+        "changer.pockets": [pub(url, f"{pockets} double-arm")]
+        + ([dict(status="conflict", source=url, note="the web feature list also says 20 pocket; 24 held")]
+           if card == "vm" else []),
+        "changer.change_s": unk(CHG_UNK),
+        "changer.max_tool_kg": pub(cu, f"max tool weight {kg} kg"),
+        "machine.control": pub(url, "Milltronics 9000-DGI (web); INSPIRE v11 / INSPIRE+ (line card)"),
+        "machine.power": pub(cu, pw + "; no curve published"),
+    })
+    big = "50" in iface
+    MACHINES.append(vmc3(
+        "milltronics", nm, "milltronics", url,
+        NOTE + "; Milltronics' own control (9000-DGI / INSPIRE): no dialect yet; web page and line card differ "
+               "in places (cited as conflicts)",
+        tx=tx, ty=ty, tz=tz, hmin=nt[0] * IN, hmax=nt[1] * IN, D=ty / 2 + table[1] / 2 + 50, table=table,
+        rapid=rap_mm, feed=rap_mm, rpm=[100, rpm], iface=iface, tmax=tool, changer=(pockets, 0.1, kg),
+        coolants=("flood", "air"), nose_r=100 if big else 75, head=(440, 560) if big else (340, 480),
+        tt=80 if big else 60, rapid_src=False, D_pub=False, cites=cites))
+    for a in "XYZ":
+        MACHINES[-1].cite(f"joint.{a}.rapid", **pub(url, f"rapid {per(rap, a)} in/min"))
+
+MLT = [("milltronics-sl6-ii", "sl6-ii", 7, 14, 405, 340, 6, 6000, "A2-5", 113),
+       ("milltronics-sl8-ii", "sl8-ii", 8, 21, 550, 533, 8, 4000, "A2-6", 219),
+       ("milltronics-sl10-ii", "sl10-ii", 9.8, 31.1, 582, 760, 10, 3000, "A2-8", 352)]
+for nm, slug, xi, zi, swing, tl, ch, rpm, nose, nm_t in MLT:
+    url = MW.format(slug)
+    MACHINES.append(lathe(
+        "milltronics", nm, "milltronics", url,
+        NOTE + "; Milltronics 9000-DGI control: no dialect yet",
+        xt=xi * IN, zt=zi * IN, swing=swing, centres=tl, rpm=[1, rpm], iface=nose, rapid=30000, feed=10160,
+        chuck_r=ch * IN / 2, chuck_l=90, stations=12, index_s=0.1, turret_r=150, hs=250,
+        chuck_pub=(url, f"{ch} in chuck"),
+        cites={"joint.X.range": pub(url, f"X travel {xi} in"), "joint.Z.range": pub(url, f"Z travel {zi} in"),
+               **{f"joint.{a}.rapid": pub(url, "rapid 1,181 in/min (30 m/min)") for a in "XZ"},
+               **{f"joint.{a}.max_feed": pub(MC["sl"], "max cutting feed 400 in/min") for a in "XZ"},
+               "spindle.main.rpm": pub(url, f"0-{rpm} rpm (0 held as 1: the format needs > 0)"),
+               "spindle.main.max": pub(url, f"swing {swing} mm; max turning length {tl} mm"),
+               "spindle.main.interface": pub(url, nose),
+               "turret.T1.stations": pub(url, "12-station bi-directional turret"),
+               "turret.T1.index_s": unk("index time unpublished; 0.1 s held so t_min stays a lower bound"),
+               "machine.torque": pub(url, f"max torque {nm_t} Nm (single point)"),
+               "machine.control": pub(url, "Milltronics 9000-DGI")}))
+
+# ---- Fryer (2026 catalog F1; Fryer/Siemens 828-HS, Fanuc 0i Plus optional)
+F1 = "https://www.fryermachine.com/pdf/FRYER_Catalog.pdf"
+for nm, x, y, z, tab, nt, col, rap, feed, rpm, iface, pockets, tc, pw in [
+    ("fryer-mc-24l", 24, 16, 17, (27.5, 16.5), (4, 21), 18, 1450, 1200, (60, 10000), "Big Plus CAT40", 30, 1.5,
+     "20 HP peak; 100 ft-lb at 350 rpm"),
+    ("fryer-mc-30l", 30, 22, 21, (38, 22), (4, 25), 21, 1450, 1200, (60, 10000), "Big Plus CAT40", 30, 1.5,
+     "20 HP peak; 100 ft-lb at 350 rpm"),
+    ("fryer-mc-40l", 40, 22, 22, (43, 22), (4, 26), 23, 1450, 1200, (60, 10000), "Big Plus CAT40", 30, 1.5,
+     "20 HP peak; 100 ft-lb at 350 rpm"),
+    ("fryer-mc-30b", 30, 18, 22, (31.5, 16.5), (3, 25), 18, {"X": 1200, "Y": 1200, "Z": 900}, 900, (60, 8500),
+     "CAT40", 24, 3, "30 HP peak; 155 ft-lb at 350 rpm"),
+    ("fryer-mc-40b", 40, 20, 28, (40, 20), (4, 32), 21, {"X": 1200, "Y": 1200, "Z": 900}, 900, (60, 8500),
+     "CAT40", 24, 3, "30 HP peak; 155 ft-lb at 350 rpm"),
+]:
+    tx, ty, tz = x * IN, y * IN, z * IN
+    table = (tab[0] * IN, tab[1] * IN)
+    rap_mm = {a: round(per(rap, a) * IN) for a in "XYZ"}
+    feed_mm = {a: min(round(feed * IN), rap_mm[a]) for a in "XYZ"}
+    cites = {f"joint.{a}.max_feed": pub(F1, f"cutting feed 0.001-{feed} in/min (p.41)") for a in "XYZ"}
+    cites.update({
+        "spindle.S1.rpm": pub(F1, f"{rpm[0]}-{rpm[1]} rpm (p.41)"),
+        "spindle.S1.max": pub(F1, "max tool 3.2 in (81 mm) dia with full pockets, 11.8 in (300 mm) long (p.41)"),
+        "spindle.S1.interface": pub(F1, iface),
+        "changer.pockets": pub(F1, f"{pockets}-station arm ATC"),
+        "changer.change_s": est(f"the catalog's tool change {tc} s is held (chip-to-chip unpublished; shorter keeps "
+                                "t_min a lower bound)", source=F1, value=f"tool change {tc} s (p.41)"),
+        "changer.max_tool_kg": pub(F1, "max tool weight 15.4 lb (7 kg) (p.41)"),
+        "machine.control": pub(F1, "Fryer/Siemens 828-HS; Fryer/Fanuc 0i Plus offered (p.34)"),
+        "machine.power": pub(F1, pw + "; no curve published"),
+    })
+    MACHINES.append(vmc3(
+        "fryer", nm, "siemens", F1,
+        NOTE + "; Fryer/Siemens 828-HS (Fanuc 0i Plus optional): no siemens dialect yet; fryermachine.com HTML "
+               "pages answer plain clients with a 409 cookie challenge (not bypassed): numbers from the catalog PDF",
+        tx=tx, ty=ty, tz=tz, hmin=nt[0] * IN, hmax=nt[1] * IN, D=col * IN, table=table, rapid=rap_mm, feed=feed_mm,
+        rpm=list(rpm), iface=iface, tmax=(300, 81), changer=(pockets, tc, 7), coolants=("flood", "air"),
+        nose_r=75, head=(340, 480), tt=60, rapid_src=False, cites=cites))
+    for a in "XYZ":
+        MACHINES[-1].cite(f"joint.{a}.rapid", **pub(F1, f"rapid {per(rap, a)} in/min (p.41)"))
+    MACHINES[-1].cite("spindle.S1.nose", **pub(F1, f"spindle nose to table {nt[0]}-{nt[1]} in (p.41)"))
+    MACHINES[-1].cite("body.column", **pub(F1, f"spindle centre to column {col} in (p.41)"))
+
+for nm, xi, zi, swing, tl, ch, rpm, nose in [("fryer-sl-8", 7.5, 16, 20, 16, 8, 4200, "A2-6"),
+                                              ("fryer-sl-10", 8.5, 24, 24, 24, 10, 3500, "A2-8"),
+                                              ("fryer-sl-12", 11, 24, 28, 24, 12, 3000, "A2-8")]:
+    MACHINES.append(lathe(
+        "fryer", nm, "siemens", F1,
+        NOTE + "; Fryer/Siemens 828-HS (Fanuc offered): no siemens lathe dialect yet",
+        xt=xi * IN, zt=zi * IN, swing=swing * IN, centres=tl * IN, rpm=[50, rpm], iface=nose, rapid=30480,
+        feed=30480, chuck_r=ch * IN / 2, chuck_l=100, stations=12, index_s=1.0, turret_r=170, hs=300,
+        chuck_pub=(F1, f"{ch} in chuck (p.45)"),
+        cites={"joint.X.range": pub(F1, f"X travel {xi} in (p.45)"), "joint.Z.range": pub(F1, f"Z travel {zi} in (p.45)"),
+               **{f"joint.{a}.rapid": pub(F1, "rapid 1,200 in/min (p.45)") for a in "XZ"},
+               **{f"joint.{a}.max_feed": unk(FEED_UNK) for a in "XZ"},
+               "spindle.main.rpm": [pub(F1, f"max {rpm} rpm (p.45)"), unk(RPM_MIN_UNK.format(v=50))],
+               "spindle.main.max": pub(F1, f"swing over bed {swing} in; working length {tl} in (p.45)"),
+               "spindle.main.interface": pub(F1, nose),
+               "turret.T1.stations": pub(F1, "12 positions (p.45)"),
+               "turret.T1.index_s": pub(F1, "index 1 s (p.45)"),
+               "machine.control": pub("https://www.fryermachine.com/products/turning_centers/sl_series.php",
+                                      "Fryer/Siemens 828-HS; Siemens or Fanuc")}))
+
+# ---- Leadwell (leadwell.com.tw product pages; catalogue needs a login: not used)
+LWV = "https://www.leadwell.com.tw/eng_products_view.asp?Fkindno=F002669&Skindno=S004876&Pidno=201304020001"
+for nm, x, y, z, tab in [("leadwell-v-22i", 510, 420, 510, (600, 400)), ("leadwell-v-30i", 800, 460, 510, (860, 450)),
+                         ("leadwell-v-32a", 800, 520, 610, (890, 500)), ("leadwell-v-42a", 1000, 520, 610, (1100, 500)),
+                         ("leadwell-v-52a", 1270, 600, 610, (1420, 580))]:
+    rap = {"X": 48000, "Y": 48000, "Z": 36000}
+    rc = {a: est("printed \"48/48/36mm\" with the unit as mm; read as m/min", source=LWV,
+                 value="rapid feed rate 48/48/36") for a in "XYZ"}
+    cites = {**{f"joint.{a}.rapid": rc[a] for a in "XYZ"}, **{f"joint.{a}.max_feed": unk(FEED_UNK) for a in "XYZ"}}
+    cites.update({
+        "spindle.S1.rpm": [pub(LWV, "10,000 rpm (12,000 optional)"), unk(RPM_MIN_UNK.format(v=100))],
+        "spindle.S1.max": unk("tool limits unpublished; 250 x 80 mm ours (40 taper class)"),
+        "spindle.S1.interface": unk("taper unpublished; recorded as unknown"),
+        "changer.pockets": pub(LWV, "24 tools (30 optional)"),
+        "changer.change_s": pub(LWV, "chip to chip 4 s (tool to tool 1.8 s)"),
+        "changer.max_tool_kg": unk("max tool weight unpublished; 7 kg held"),
+        "machine.control": unk("control not named (the page lists Fanuc spindle-motor codes alpha 8 / 15 only); "
+                               "recorded as \"unknown\""),
+    })
+    MACHINES.append(vmc3(
+        "leadwell", nm, "unknown", LWV,
+        NOTE + "; the product page gives travels, table, rpm, motors and ATC; leadwellcnc.com now belongs to another "
+               "company (not used)",
+        tx=x, ty=y, tz=z, hmin=5, hmax=z + 5, D=y / 2 + tab[1] / 2 + 50, table=tab, rapid=rap, feed=rap,
+        rpm=[100, 10000], iface="unknown", tmax=(250, 80), changer=(24, 4, 7), coolants=("flood",), nose_r=80,
+        head=(360, 480), tt=60, rapid_src=False, hmin_status="unknown", D_pub=False, cites=cites))
+
+LWL = "https://www.leadwell.com.tw/eng_products_view.asp?Fkindno=F002672&Skindno={}&Pidno={}"
+for nm, sk, pid, swing, tl, xt, zt, rpm, ch, rap in [
+    ("leadwell-t-7i", "S004860", "201301230045", 520, 580, 220, 600, 4500, 8, 36000),
+    ("leadwell-t-8", "S004860", "201303270026", 670, 760, 250, 790, 3500, 10, 20000),
+    ("leadwell-ltc-200", "S004861", "201303010003", 500, 330, 165, 330, 4500, 8, 20000),
+]:
+    url = LWL.format(sk, pid)
+    MACHINES.append(lathe(
+        "leadwell", nm, "unknown", url, NOTE + "; control not named on the page",
+        xt=xt, zt=zt, swing=swing, centres=tl, rpm=[50, rpm], iface=f"{ch} in chuck (nose unpublished)",
+        rapid=rap, feed=rap, chuck_r=ch * IN / 2, chuck_l=90, stations=12, index_s=0.1, turret_r=150, hs=250,
+        chuck_pub=(url, f"{ch} in chuck"),
+        cites={"joint.X.range": pub(url, f"X travel {xt} mm (printed as a sum, e.g. 210+10)"),
+               "joint.Z.range": pub(url, f"Z travel {zt} mm"),
+               **{f"joint.{a}.rapid": pub(url, f"rapid {rap / 1000:g} m/min") for a in "XZ"},
+               **{f"joint.{a}.max_feed": unk(FEED_UNK) for a in "XZ"},
+               "spindle.main.rpm": [pub(url, f"max {rpm} rpm"), unk(RPM_MIN_UNK.format(v=50))],
+               "spindle.main.max": pub(url, f"max swing {swing} mm; max turning length {tl} mm"),
+               "turret.T1.stations": pub(url, "12 stations"),
+               "turret.T1.index_s": unk("index time unpublished; 0.1 s held so t_min stays a lower bound"),
+               "machine.control": unk("control not named; recorded as \"unknown\"")}))
+
+# ---- Victor Taichung (machine-tools.victortaichung.com /shop pages; catalogues behind a form: not used)
+VT = "https://machine-tools.victortaichung.com/shop/{}"
+for nm, slug, x, y, z, tab, iface, rpm, pockets, kg in [
+    ("victor-vcenter-f76", "vcenter-f76-vertical-machining-center-61", 760, 500, 510, (840, 500), "BT40", 8000, 24, 7),
+    ("victor-vcenter-f106", "vcenter-f106-vertical-machining-center-62", 1060, 600, 560, (1120, 520), "BT40", 8000, 24, 7),
+    ("victor-vcenter-p76", "vcenter-p76-three-axis-vertical-machining-center-63", 760, 500, 510, (840, 500), "BBT40",
+     12000, 30, 7),
+    ("victor-vcenter-p106", "vcenter-p106-vmc-machine-65", 1060, 600, 560, (1120, 520), "BBT40", 12000, 30, 7),
+    ("victor-vcenter-g105", "vcenter-g105-boxway-machining-center-68", 1050, 600, 600, (1100, 600), "BBT50", 6000, 24, 15),
+]:
+    url = VT.format(slug)
+    slow = unk("rapids unpublished on the open page; 10,000 mm/min held low")
+    cites = {f"joint.{a}.{f}": slow if f == "rapid" else unk(FEED_UNK) for a in "XYZ" for f in ("rapid", "max_feed")}
+    cites.update({
+        "spindle.S1.rpm": [pub(url, f"{rpm} rpm"), unk(RPM_MIN_UNK.format(v=100))],
+        "spindle.S1.max": unk("tool limits unpublished; 250 x 80 mm ours"),
+        "spindle.S1.interface": pub(url, iface),
+        "changer.pockets": pub(url, f"{pockets} tools"),
+        "changer.change_s": unk(CHG_UNK),
+        "changer.max_tool_kg": pub(url, f"max tool weight {kg} kg"),
+        "machine.control": unk("control not stated on the page; recorded as \"unknown\""),
+    })
+    big = "50" in iface
+    MACHINES.append(vmc3(
+        "victor", nm, "unknown", url,
+        NOTE + "; the open page gives travels, table, taper, rpm, motor and ATC only (victorcnc.com unreachable)",
+        tx=x, ty=y, tz=z, hmin=5, hmax=z + 5, D=y / 2 + tab[1] / 2 + 50, table=tab, rapid=10000, feed=10000,
+        rpm=[100, rpm], iface=iface, tmax=(250, 80), changer=(pockets, 0.1, kg), coolants=("flood",),
+        nose_r=100 if big else 80, head=(440, 560) if big else (360, 480), tt=80 if big else 60, rapid_src=False,
+        hmin_status="unknown", D_pub=False, cites=cites))

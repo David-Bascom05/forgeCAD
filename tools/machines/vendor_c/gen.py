@@ -145,6 +145,10 @@ def vmc3(vendor, name, control, src, note, *, tx, ty, tz, hmin, hmax, D, table, 
     the table-top plane, home pose (all joints at 0 = their + ends)."""
     m = M(vendor, name, "vmc3", control, src, note, list(coolants))
     L, W = table
+    # the table's centre sits at the travel's centre unless the published column distance forbids it:
+    # then it is moved toward the operator just enough to clear the column at full Y (an estimate)
+    shift = max(0.0, ty / 2 + W / 2 - (D - 5))
+    cy = -ty / 2 - shift
     for n, ax, rng in (("Y", [0, -1, 0], ty), ("X", [-1, 0, 0], tx)):
         m.joints.append(dict(name=n, parent="base" if n == "Y" else "Y", side="table", type="linear",
                              axis=ax, range=[-rng, 0], rapid=per(rapid, n), max_feed=per(feed, n)))
@@ -155,18 +159,18 @@ def vmc3(vendor, name, control, src, note, *, tx, ty, tz, hmin, hmax, D, table, 
     if changer:
         m.changer = dict(pockets=changer[0], change_s=changer[1], max_tool_kg=changer[2])
     m.mounts.append(dict(name="spindle", kind="tool", link="Z", at=[0, 0, hmax], dir=[0, 0, -1]))
-    m.mounts.append(dict(name="table", kind="part", link="X", at=[-tx / 2, -ty / 2, 0], dir=[0, 0, 1],
+    m.mounts.append(dict(name="table", kind="part", link="X", at=[-tx / 2, cy, 0], dir=[0, 0, 1],
                          xdir=[1, 0, 0]))
     ts, hb = 120, 200
-    ymax = ty / 2 + W / 2
+    ymax = ty / 2 + W / 2 - shift
     assert ymax < D, (name, ymax, D)
     hw, hh = head
     cd = 300
-    m.body("table", "X", boxes=[([-tx / 2 - L / 2, -ty / 2 - W / 2, -tt], [-tx / 2 + L / 2, -ty / 2 + W / 2, 0])],
+    m.body("table", "X", boxes=[([-tx / 2 - L / 2, cy - W / 2, -tt], [-tx / 2 + L / 2, cy + W / 2, 0])],
            ignore=["saddle"], comment="the table top plate; T-slots are inside the box")
-    m.body("saddle", "Y", boxes=[([-0.3 * L, -ty / 2 - W / 2, -tt - ts], [0.3 * L, -ty / 2 + W / 2, -tt])],
+    m.body("saddle", "Y", boxes=[([-0.3 * L, cy - W / 2, -tt - ts], [0.3 * L, cy + W / 2, -tt])],
            ignore=["bed", "table"])
-    m.body("bed", "base", boxes=[([-0.35 * L, -ty - W / 2, -tt - ts - hb], [0.35 * L, D + cd, -tt - ts])],
+    m.body("bed", "base", boxes=[([-0.35 * L, cy - ty / 2 - W / 2, -tt - ts - hb], [0.35 * L, D + cd, -tt - ts])],
            ignore=["saddle", "column"])
     top = hmax + 100 + hh
     m.body("column", "base", boxes=[([-0.3 * L, D, -tt - ts], [0.3 * L, D + cd, top + 100])],
@@ -192,7 +196,9 @@ def vmc3(vendor, name, control, src, note, *, tx, ty, tz, hmin, hmax, D, table, 
            "consistent with the self-collision test, not data; the head errs low (more Hits), the tool's reach "
            "errs long")
     m.cite("mount.spindle.at", "estimate", basis="gauge point taken at the spindle nose face (see spindle.S1.nose)")
-    m.cite("mount.table.at", "estimate", basis="table top centre at the travel's centre; table thickness ours")
+    m.cite("mount.table.at", "estimate", basis="table top centre at the travel's centre; table thickness ours"
+           if not shift else f"table top centre {shift:g} mm toward the operator from the travel's centre, the least "
+           "that clears the published column distance at full Y (the real offset is unpublished)")
     m.cite("body.table", "estimate", src, value=f"table {L} x {W} mm",
            basis=f"published table size; thickness {tt} mm ours; T-slots inside the box (larger than the real plate)")
     m.cite("body.saddle", "estimate", basis="unpublished; a block under the table inside its y extent; size ours")
