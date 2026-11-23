@@ -202,7 +202,12 @@ fn count_use(uses: &mut Vec<(u32, u32, u32)>, a: u32, b: u32) {
         uses[k].2 += 1;
     } else {
         let (lo, hi) = if a < b { (a, b) } else { (b, a) };
-        uses.insert(k, (lo, hi, 1));
+        // (push at the end: Aeneas's model of insert takes only a place before the end)
+        if k == uses.len() {
+            uses.push((lo, hi, 1));
+        } else {
+            uses.insert(k, (lo, hi, 1));
+        }
     }
 }
 
