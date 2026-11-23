@@ -832,7 +832,9 @@ pub enum ExactFail {
     Boolean(String),
 }
 
-/// The exact overlap volume of two parts, B placed by `b_in_a` in A's frame.
+/// The exact overlap volume of two parts, B placed by `b_in_a` in A's frame: the volume of their
+/// common solid, regularised at the model's tolerance (a common skin no thicker than LINEAR, as two
+/// faces in contact leave, is no volume: 0).
 pub trait Exact: Sync {
     fn overlap_volume(&self, a: &PartRef, b: &PartRef, b_in_a: &Frame) -> Result<f64, ExactFail>;
 }
@@ -911,8 +913,13 @@ impl BrepExact {
         let moved = rigid_copy(bb, b_in_a);
         match forge_bool::boolean::boolean(ba, &moved, forge_bool::boolean::Op::Intersect, 0) {
             Ok(c) if c.face_ids().next().is_none() => Ok(0.0),
+            // a common solid no thicker than the tolerance (its volume over half its area: the
+            // mean thickness of a slab) is the two touching: no overlap
             Ok(c) => forge_topo::mass::mass(&c)
-                .map(|m| m.volume.abs())
+                .map(|m| {
+                    let v = m.volume.abs();
+                    if 2.0 * v <= tol::LINEAR * m.area { 0.0 } else { v }
+                })
                 .map_err(|e| ExactFail::Boolean(format!("mass of the intersection: {e:?}"))),
             Err(e) => Err(ExactFail::Boolean(format!("{e:?}"))),
         }
@@ -1000,7 +1007,7 @@ enum PairHit {
     Interference(Interference),
     /// With the engagement and its minimum where a rule's threads engage too little.
     Intended(IntendedContact, Option<Measured>),
-    /// The meshes crossed but the exact solids only touch.
+    /// In contact: no common solid (or none thicker than LINEAR), within the tolerance.
     Touch(Path, Path),
 }
 
@@ -1010,7 +1017,8 @@ pub struct InterferenceReport {
     pub interferences: Vec<Interference>,
     /// Contact covered by a fit or a fit rule, by path.
     pub intended: Vec<IntendedContact>,
-    /// Pairs whose solids only touch.
+    /// Pairs whose solids only touch: within the meshes' tolerance of each other (their chords
+    /// and LINEAR), with no common solid thicker than LINEAR (face to face, edge to face).
     pub touching: Vec<(Path, Path)>,
     /// Each fit rule that covered something, and what.
     pub rules: Vec<RuleUse>,
@@ -1202,7 +1210,9 @@ pub struct Checker<P: Parts, E: Exact> {
     parts: P,
     exact: E,
     pub threads: usize,
-    cache: BTreeMap<Key, (Narrow, Result<f64, ExactFail>)>,
+    /// Per pair: the meshes' crossing test, whether they come within the tolerance, and the
+    /// exact overlap where it was asked for.
+    cache: BTreeMap<Key, (Narrow, bool, Result<f64, ExactFail>)>,
     last: Option<(Vec<Occ>, PairResults)>,
 }
 
@@ -1252,9 +1262,6 @@ fn par_any<T: Send>(n: usize, threads: usize, f: impl Fn(usize) -> T + Sync) -> 
     got.into_iter().map(|x| x.1).collect()
 }
 
-/// Below this exact volume (mm³) two solids only touch.
-pub const TOUCH_VOLUME: f64 = 1e-6;
-
 impl<P: Parts, E: Exact> Checker<P, E> {
     pub fn parts(&self) -> &P {
         &self.parts
@@ -1299,12 +1306,14 @@ impl<P: Parts, E: Exact> Checker<P, E> {
         let occ = self.occurrences(sol);
         let mut rep = InterferenceReport::default();
         let n = occ.len();
+        // each grown by its mesh's tolerance and half of LINEAR: pairs within the tolerance of
+        // touching are candidates too
         let boxes: Vec<Box3> = occ
             .iter()
             .map(|o| {
-                o.mesh
-                    .as_ref()
-                    .map_or(Box3::EMPTY, |m| moved_box(&m.bounds(), &o.pose))
+                o.mesh.as_ref().map_or(Box3::EMPTY, |m| {
+                    moved_box(&m.bounds(), &o.pose).grow(m.tolerance + 0.5 * tol::LINEAR)
+                })
             })
             .collect();
         for o in occ.iter().filter(|o| o.mesh.is_none()) {
@@ -1439,11 +1448,19 @@ impl<P: Parts, E: Exact> Checker<P, E> {
                 })
         };
         let intent = |i: usize, j: usize| intent_of(i, j).map(|x| x.0);
-        // exact confirmation for hits that are not intended
+        // the meshes only rule a pair out: each is within its chord of its solid, so a pair whose
+        // meshes neither cross nor come within both chords and LINEAR of each other is clear, and
+        // every other pair is the boolean's to classify, once
+        let near: Vec<bool> = par(todo.len(), self.threads, |t| {
+            let k = todo[t];
+            let (ma, mb) = meshes(k);
+            let reach = ma.tolerance + mb.tolerance + tol::LINEAR;
+            narrowed[t] != Narrow::Clear || distance_kept(ma, mb, &keyed[k].1, reach).is_some()
+        });
         let confirm: Vec<usize> = todo
             .iter()
-            .zip(&narrowed)
-            .filter(|(k, r)| **r != Narrow::Clear && intent(pairs[**k].0, pairs[**k].1).is_none())
+            .zip(&near)
+            .filter(|(k, n)| **n && intent(pairs[**k].0, pairs[**k].1).is_none())
             .map(|(k, _)| *k)
             .collect();
         rep.exact_runs = confirm.len();
@@ -1453,12 +1470,12 @@ impl<P: Parts, E: Exact> Checker<P, E> {
             let (x, y) = if keyed[k].2 { (j, i) } else { (i, j) };
             self.exact.overlap_volume(&occ[x].part, &occ[y].part, &keyed[k].1)
         });
-        for (k, r) in todo.iter().zip(&narrowed) {
+        for ((k, r), n) in todo.iter().zip(&narrowed).zip(&near) {
             let vol = match confirm.iter().position(|c| c == k) {
                 Some(t) => volumes[t].clone(),
                 None => Err(ExactFail::NoSolid),
             };
-            self.cache.insert(keyed[*k].0.clone(), (*r, vol));
+            self.cache.insert(keyed[*k].0.clone(), (*r, *n, vol));
         }
 
         let mut results: PairResults = BTreeMap::new();
@@ -1471,8 +1488,8 @@ impl<P: Parts, E: Exact> Checker<P, E> {
             }
         }
         for (k, &(i, j)) in pairs.iter().enumerate() {
-            let (r, vol) = self.cache[&keyed[k].0].clone();
-            let hit = if r == Narrow::Clear {
+            let (r, near, vol) = self.cache[&keyed[k].0].clone();
+            let hit = if !near {
                 None
             } else {
                 let (ma, mb) = (
@@ -1483,7 +1500,10 @@ impl<P: Parts, E: Exact> Checker<P, E> {
                 Some(match intent_of(i, j) {
                     Some((by, short)) => PairHit::Intended(IntendedContact { a, b, by }, short),
                     None => match vol {
-                        Ok(v) if v <= TOUCH_VOLUME => PairHit::Touch(a, b),
+                        // no common solid: in contact (the meshes come within the tolerance)
+                        Ok(v) if v <= 0.0 => PairHit::Touch(a, b),
+                        // no exact solids, and the meshes do not cross: in contact as far as is known
+                        Err(_) if r == Narrow::Clear => PairHit::Touch(a, b),
                         _ => PairHit::Interference(Interference {
                             a,
                             b,

@@ -45,10 +45,18 @@ pub enum CdtError {
         b: u32,
         point: u32,
     },
+    /// Refinement stopped with chords or triangles still asking to be split: past its rounds, or
+    /// past its budget of points. A mesh that may break the tolerance is never returned as good.
+    Unsettled {
+        rounds: u32,
+        points: u32,
+    },
     /// An invariant broke; a bug, not bad input.
     Internal(&'static str),
 }
 
+/// Rounds of refinement before it counts as unsettled.
+const ROUNDS: usize = 200;
 const NONE: u32 = u32::MAX;
 const SUPER: u32 = 3;
 
@@ -855,6 +863,34 @@ pub fn triangulate_within(
     refine: Option<&dyn Refine>,
     tangled: bool,
 ) -> Result<Triangulation, CdtError> {
+    within(points, loops, interior, refine, tangled, ROUNDS, false).map(|t| t.0)
+}
+
+/// `triangulate_within`, but a refinement that does not settle (`CdtError::Unsettled`) gives the
+/// triangulation as far as it got, with `false`: for a file's body, drawn as it is, its caller
+/// to say so (`TriMesh::unsettled`).
+pub fn triangulate_as_far(
+    points: &[Point2],
+    loops: &[Vec<u32>],
+    interior: &[Point2],
+    refine: Option<&dyn Refine>,
+    tangled: bool,
+) -> Result<(Triangulation, bool), CdtError> {
+    within(points, loops, interior, refine, tangled, ROUNDS, true)
+}
+
+/// `triangulate_within`, refining for at most `rounds` rounds; with `as_far`, an unsettled
+/// refinement stops where it is instead of failing. With whether it settled.
+#[inline(never)]
+fn within(
+    points: &[Point2],
+    loops: &[Vec<u32>],
+    interior: &[Point2],
+    refine: Option<&dyn Refine>,
+    tangled: bool,
+    rounds: usize,
+    as_far: bool,
+) -> Result<(Triangulation, bool), CdtError> {
     let n = points.len() as u32;
     for (i, p) in points.iter().enumerate() {
         if !(p.x.is_finite() && p.y.is_finite()) {
@@ -882,10 +918,13 @@ pub fn triangulate_within(
         hi = Point2::new(hi.x.max(p.x), hi.y.max(p.y));
     }
     if points.is_empty() {
-        return Ok(Triangulation {
-            points: vec![],
-            triangles: vec![],
-        });
+        return Ok((
+            Triangulation {
+                points: vec![],
+                triangles: vec![],
+            },
+            true,
+        ));
     }
     let size = (hi.x - lo.x).max(hi.y - lo.y).max(f64::MIN_POSITIVE);
     let eps = 1e-12 * size;
@@ -992,6 +1031,7 @@ pub fn triangulate_within(
     for &p in &kept {
         mesh.insert_interior(p, eps)?;
     }
+    let mut settled = true;
     // then the points the caller asks for, round after round, into the same triangulation; each
     // round looks only at the triangles the last one made (each made triangle holds a new point)
     if let Some(refine) = refine {
@@ -1001,12 +1041,21 @@ pub fn triangulate_within(
         let mut split = vec![false; mesh.tris.len()];
         let mut look: Vec<u32> = (0..mesh.tris.len() as u32).collect();
         let triangles = refine.triangles();
-        // only stops a cascade that never ends; a cascade that only grows is cut off by a budget
-        // of points (a quarter of a million, or four for each point given), failing cleanly
+        // a cascade that never ends stops at a number of rounds (each halves what it splits:
+        // two hundred halvings are past any double's precision), one that only grows at a budget
+        // of points (a quarter of a million, or four for each point given); either fails, typed
         let budget = (4 * (points.len() + kept.len())).max(1 << 18);
-        for _ in 0..200 {
+        let unsettled = |rounds: usize, mesh: &Mesh| CdtError::Unsettled {
+            rounds: rounds as u32,
+            points: (mesh.pts.len() as u32).saturating_sub(SUPER),
+        };
+        settled = false;
+        for round in 0..rounds {
             if mesh.pts.len() > budget {
-                return Err(CdtError::Internal("refinement did not settle"));
+                if as_far {
+                    break;
+                }
+                return Err(unsettled(round, &mesh));
             }
             if forge_geom::budget::over() {
                 return Err(CdtError::Internal("refinement would take too long"));
@@ -1061,6 +1110,7 @@ pub fn triangulate_within(
                 split[t as usize] = false;
             }
             if mids.is_empty() {
+                settled = true;
                 break;
             }
             // along a Hilbert curve, so each walk starts beside the point before
@@ -1097,6 +1147,9 @@ pub fn triangulate_within(
             look.sort_unstable();
             fresh_from = first_new;
         }
+        if !settled && !as_far {
+            return Err(unsettled(rounds, &mesh));
+        }
     }
 
     let triangles = mesh
@@ -1106,10 +1159,13 @@ pub fn triangulate_within(
         .filter(|(t, inside)| **inside && t.v.iter().all(|&v| v >= SUPER))
         .map(|(t, _)| t.v.map(|v| v - SUPER))
         .collect();
-    Ok(Triangulation {
-        points: mesh.pts.split_off(SUPER as usize),
-        triangles,
-    })
+    Ok((
+        Triangulation {
+            points: mesh.pts.split_off(SUPER as usize),
+            triangles,
+        },
+        settled,
+    ))
 }
 
 #[cfg(test)]
@@ -1662,9 +1718,16 @@ mod tests {
             Point2::new(1.0, 1.0),
             Point2::new(0.0, 1.0),
         ];
+        // past the budget of points
         assert!(matches!(
             triangulate_refined(&sq, &[vec![0, 1, 2, 3]], &[], Some(&Always)),
-            Err(CdtError::Internal(_))
+            Err(CdtError::Unsettled { .. })
         ));
+        // past the rounds, with points to spare: an error too, never a mesh that breaks the test
+        let got = within(&sq, &[vec![0, 1, 2, 3]], &[], Some(&Always), false, 3, false);
+        assert!(
+            matches!(got, Err(CdtError::Unsettled { rounds: 3, .. })),
+            "{got:?}"
+        );
     }
 }

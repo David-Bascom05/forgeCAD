@@ -1,8 +1,5 @@
-//! Dense Householder QR with column pivoting, as `forge_math::linalg` does it, but keeping the
-//! factors: a loop block needs its rank, a minimum-norm step and its null space from one
-//! factorization. Pivot ties go to the lower index.
-
-pub(crate) struct Qr {
+#![allow(dead_code)]
+struct Qr {
     /// rows x cols, row-major; R above the diagonal after factoring, reflectors below.
     a: Vec<f64>,
     m: usize,
@@ -138,62 +135,16 @@ impl Qr {
 }
 
 /// Numerical rank of a row-major `m x n` matrix.
-pub(crate) fn rank(a: &[f64], m: usize, n: usize) -> usize {
+fn rank(a: &[f64], m: usize, n: usize) -> usize {
     Qr::new(a.to_vec(), m, n, 1e-9).rank
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use forge_math::rng::Rng;
-
-    fn transpose(a: &[f64], m: usize, n: usize) -> Vec<f64> {
-        let mut t = vec![0.0; m * n];
-        for i in 0..m {
-            for j in 0..n {
-                t[j * m + i] = a[i * n + j];
-            }
-        }
-        t
-    }
-
-    #[test]
-    fn min_norm_solves_and_null_space_is_null() {
-        let mut r = Rng::new(7);
-        for _ in 0..500 {
-            let m = 1 + r.below(6);
-            let n = m + r.below(6);
-            // J: m equations over n unknowns, maybe with a repeated row
-            let mut j: Vec<f64> = (0..m * n).map(|_| r.range(-1.0, 1.0)).collect();
-            if m > 1 && r.bool() {
-                for c in 0..n {
-                    j[(m - 1) * n + c] = 2.0 * j[c];
-                }
-            }
-            let x: Vec<f64> = (0..n).map(|_| r.range(-1.0, 1.0)).collect();
-            let b: Vec<f64> = (0..m)
-                .map(|i| (0..n).map(|c| j[i * n + c] * x[c]).sum())
-                .collect();
-            let qr = Qr::new(transpose(&j, m, n), n, m, 1e-12);
-            let d = qr.min_norm(&b);
-            for i in 0..m {
-                let got: f64 = (0..n).map(|c| j[i * n + c] * d[c]).sum();
-                assert!((got - b[i]).abs() < 1e-9, "row {i}");
-            }
-            assert!(d.iter().map(|v| v * v).sum::<f64>() <= x.iter().map(|v| v * v).sum::<f64>() + 1e-9);
-            for z in qr.null_space() {
-                for i in 0..m {
-                    assert!((0..n).map(|c| j[i * n + c] * z[c]).sum::<f64>().abs() < 1e-9);
-                }
-            }
-            assert_eq!(qr.null_space().len(), n - qr.rank);
-        }
-    }
-
-    #[test]
-    fn ranks() {
-        assert_eq!(rank(&[1.0, 2.0, 2.0, 4.0], 2, 2), 1);
-        assert_eq!(rank(&[1.0, 0.0, 0.0, 1.0], 2, 2), 2);
-        assert_eq!(rank(&[0.0; 6], 2, 3), 0);
-    }
+fn main() {
+    // a joint's 1 gradient row projected on a 2-dim null space: pure rounding noise
+    println!("noise 1x2 rank = {}", rank(&[1e-17, -3e-17], 1, 2));
+    println!("noise 3x2 rank = {}", rank(&[1e-17, -3e-17, 2e-17, 0.0, 0.0, 5e-18], 3, 2));
+    println!("exact zero rank = {}", rank(&[0.0, 0.0], 1, 2));
+    // a near-toggle: row 2 = row 1 + 1e-10 perturbation
+    println!("near-dep rank 1e-9 = {}", rank(&[1.0, 0.0, 1.0, 1e-10], 2, 2));
+    println!("near-dep rank 1e-8 = {}", rank(&[1.0, 0.0, 1.0, 5e-9], 2, 2));
 }

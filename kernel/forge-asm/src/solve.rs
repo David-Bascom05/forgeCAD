@@ -5,16 +5,14 @@ use crate::diag::{Diagnostic, Item};
 use crate::joint::{self, Ends, Row};
 use crate::model::*;
 use crate::plan::{self, Plan};
-use crate::qr::Qr;
+use crate::rank::{self, Svd};
 use forge_math::{Frame, Vec3, dmath};
 use std::collections::BTreeMap;
 
 const MAX_ITERATIONS: usize = 60;
-/// Residual (mm, angles × block size) per unit of block size at which Newton stops.
+/// Residual (mm, angles × block size) per unit of block size at which Newton stops: where it
+/// aims, not what it decides (a stuck or capped solve is solved or a conflict by `plan::met`).
 const TIGHT: f64 = 1e-13;
-/// Residual per unit of block size that still counts as solved where no step improves it (the
-/// rounding floor); above it, a stuck solve is a conflict.
-const SOLVED: f64 = 1e-9;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Options {
@@ -69,7 +67,14 @@ pub struct BlockReport {
     /// Unknowns minus the Jacobian's rank at the solution: the numeric answer.
     pub mobility: usize,
     pub rows: usize,
+    /// The rank of the Jacobian at the solution, by the one rule (`rank`), at most `generic_rank`.
     pub rank: usize,
+    /// The rank no configuration of this block could pass: exact, from which bodies each row
+    /// moves with.
+    pub generic_rank: usize,
+    /// Whether the singular values decide `rank`: false near a singular configuration, where one
+    /// lies between the floor and `rank::GAP` times it, and `rank` counts those over the floor.
+    pub rank_clear: bool,
     pub iterations: usize,
 }
 
@@ -748,9 +753,9 @@ fn place_bridge(plan: &Plan, poses: &Poses, u: &Unit, known: &Known) -> UnitOut 
                 0.0
             }
         };
-        // a value at a limit to within the solve's rounding is at the limit, not past it
+        // a value past a limit by what `plan::met` calls met is at the limit, not past it
         let slack = if f.is_angle() {
-            1e-9
+            forge_math::tol::LINEAR / plan.size
         } else {
             forge_math::tol::LINEAR
         };
@@ -878,6 +883,8 @@ struct GRow {
     src: usize,
     r: f64,
     g: Vec<(usize, [f64; 6])>,
+    /// A row of angles only: by its formula, no translation moves it.
+    angular: bool,
 }
 
 struct Block<'a> {
@@ -915,6 +922,7 @@ impl Block<'_> {
                 src: si,
                 r: row.r * s,
                 g: vec![(clus(k, 0), ga), (clus(k, 1), gb)],
+                angular: row.angular,
             });
         };
         for (si, src) in srcs.iter().enumerate() {
@@ -952,6 +960,7 @@ impl Block<'_> {
                         src: si,
                         r: (fv.r - slope * lv.r - offset) * s,
                         g,
+                        angular: false,
                     });
                 }
             }
@@ -1026,6 +1035,27 @@ impl Block<'_> {
         j
     }
 
+    /// The generic rank of the rows: matched to the columns their formulas move with (a row of
+    /// angles to its bodies' turns only, any other to their turns and shifts), exactly.
+    fn generic_rank(&self, rows: &[GRow]) -> usize {
+        let cols: Vec<Vec<usize>> = rows
+            .iter()
+            .map(|row| {
+                let mut c: Vec<usize> = Vec::new();
+                for (cl, _) in &row.g {
+                    if let Some(&s) = self.slot.get(cl) {
+                        let k = if row.angular { 3 } else { 6 };
+                        c.extend(6 * s..6 * s + k);
+                    }
+                }
+                c.sort_unstable();
+                c.dedup();
+                c
+            })
+            .collect();
+        rank::generic_rank(&cols, 6 * self.vars.len())
+    }
+
     fn apply(&self, poses: &mut Poses, d: &[f64], a: f64) {
         for (s, &v) in self.vars.iter().enumerate() {
             let w = Vec3::new(d[6 * s], d[6 * s + 1], d[6 * s + 2]) * (a / self.size);
@@ -1040,7 +1070,7 @@ impl Block<'_> {
         let ss = |rows: &[GRow]| rows.iter().map(|r| r.r * r.r).sum::<f64>();
         let worst = |rows: &[GRow]| rows.iter().fold(0.0f64, |m, r| m.max(r.r.abs()));
         let tol = TIGHT * self.size.max(1.0);
-        let ok = SOLVED * self.size.max(1.0);
+        let ok = |e: f64| plan::met(e);
         let mut rows = self.rows(poses, srcs, active);
         for it in 0..MAX_ITERATIONS {
             let e = worst(&rows);
@@ -1049,15 +1079,11 @@ impl Block<'_> {
             }
             let m = rows.len();
             let jac = self.jacobian(&rows);
-            let mut jt = vec![0.0; n * m];
-            for i in 0..m {
-                for c in 0..n {
-                    jt[c * m + i] = jac[i * n + c];
-                }
-            }
-            let qr = Qr::new(jt, n, m, 1e-12);
+            // the step over the rank the one rule gives, of J as it is here (rounding its floor)
+            let svd = Svd::new(&jac, m, n);
+            let r = svd.verdict(0.0, self.generic_rank(&rows)).rank;
             let b: Vec<f64> = rows.iter().map(|r| -r.r).collect();
-            let d = qr.min_norm(&b);
+            let d = svd.min_norm(&b, r);
             let f0 = ss(&rows);
             let saved = poses.at.clone();
             let before = self.signs(poses, srcs, active);
@@ -1082,12 +1108,12 @@ impl Block<'_> {
                 a *= 0.5;
             }
             if !took {
-                let st = if e <= ok { Status::Solved } else { Status::Stuck };
+                let st = if ok(e) { Status::Solved } else { Status::Stuck };
                 return (st, e, it);
             }
         }
         let e = worst(&rows);
-        let st = if e <= ok { Status::Solved } else { Status::Capped };
+        let st = if ok(e) { Status::Solved } else { Status::Capped };
         (st, e, MAX_ITERATIONS)
     }
 }
@@ -1119,14 +1145,10 @@ fn solve_group(
         };
     }
     let begin = poses.at.clone();
-    let mut size = 1.0f64;
     let mut near = BTreeMap::new();
     let mut srcs: Vec<Src> = Vec::new();
     for &k in &u.joints {
         let j = &plan.links[k];
-        for l in &j.local {
-            size = size.max(l.origin.to_vec().abs_max());
-        }
         for p in 0..j.prims.len() {
             srcs.push(Src::Prim { k, p });
         }
@@ -1148,10 +1170,18 @@ fn solve_group(
             offset: relation_offset(plan, &plan.relations[r]),
         });
     }
-    for &v in &u.vars {
-        size = size.max(poses.at[v].origin.to_vec().abs_max());
-    }
-    let size = size.min(plan.size.max(1.0)).max(1.0);
+    // the block's own lever: its bodies about their centroid, its anchors about their bodies
+    let world: Vec<forge_math::Point3> = u
+        .vars
+        .iter()
+        .chain(&u.fixed)
+        .map(|&v| poses.at[v].origin)
+        .collect();
+    let offsets = u
+        .joints
+        .iter()
+        .flat_map(|&k| plan.links[k].local.iter().map(|l| l.origin.to_vec()));
+    let size = plan::lever(&world, offsets).min(plan.size);
     let slot: BTreeMap<usize, usize> = u
         .vars
         .iter()
@@ -1292,7 +1322,8 @@ fn solve_group(
                     continue;
                 }
                 let v = poses.ends(k).value(f, blk.tracked(k, f)).r;
-                if v < lo - 1e-9 || v > hi + 1e-9 {
+                let s = if f.is_angle() { size } else { 1.0 };
+                if !plan::met((lo - v).max(v - hi).max(0.0) * s) {
                     add.push((k, f, v, if v < lo { lo } else { hi }, (lo, hi)));
                 }
             }
@@ -1334,23 +1365,21 @@ fn solve_group(
         }
     }
 
-    // rank at the solution: redundancy, mobility, each joint's free motions
+    // rank at the solution: redundancy, mobility, each joint's free motions, all from one SVD by
+    // one rule, its floor the rounding and the residual left (per unit of the block's lever)
     let rows = blk.rows(&poses, &srcs, &active);
     let m = rows.len();
     let n = 6 * blk.vars.len();
     let jac = blk.jacobian(&rows);
-    let mut jt = vec![0.0; n * m];
-    for i in 0..m {
-        for c in 0..n {
-            jt[c * m + i] = jac[i * n + c];
-        }
-    }
-    let qr = Qr::new(jt, n, m, 1e-9);
-    let rank = qr.rank;
+    let svd = Svd::new(&jac, m, n);
+    let left = rows.iter().fold(0.0f64, |w, r| w.max(r.r.abs())) / size;
+    let generic_rank = blk.generic_rank(&rows);
+    let verdict = svd.verdict(left, generic_rank);
+    let rank = verdict.rank;
     if rank < m && status == Status::Solved {
-        redundancy(plan, &srcs, &rows, &jac, n, &mut diagnostics);
+        redundancy(plan, &srcs, &rows, &svd, rank, verdict.floor(), &mut diagnostics);
     }
-    let null = qr.null_space();
+    let null = svd.null_space(rank);
     let mut joints = Vec::new();
     for &k in &u.joints {
         let j = &plan.links[k];
@@ -1372,6 +1401,7 @@ fn solve_group(
                     (plan.bodies[j.body[0]].cluster, row.ga.map(|x| x * s)),
                     (plan.bodies[j.body[1]].cluster, row.gb.map(|x| x * s)),
                 ],
+                angular: row.angular,
             };
             grads.extend(blk.jacobian(std::slice::from_ref(&gr)));
             if j.kind() != JointKind::Ball {
@@ -1393,9 +1423,9 @@ fn solve_group(
                 }
                 g.extend(row);
             }
-            projected_rank(&g, 3, n, &null)
+            projected_rank(&g, 3, n, &null, left)
         } else {
-            projected_rank(&grads, nf, n, &null)
+            projected_rank(&grads, nf, n, &null, left)
         };
         joints.push(JointReport {
             joint: j.joint_id().expect("a joint"),
@@ -1426,6 +1456,8 @@ fn solve_group(
         mobility: n - rank,
         rows: m,
         rank,
+        generic_rank,
+        rank_clear: verdict.clear,
         iterations,
     };
     UnitOut {
@@ -1439,8 +1471,8 @@ fn solve_group(
     }
 }
 
-/// Rank of the `f x n` gradient rows restricted to the null space.
-fn projected_rank(g: &[f64], f: usize, n: usize, null: &[Vec<f64>]) -> usize {
+/// Rank of the `f x n` gradient rows restricted to the null space, by the one rule.
+fn projected_rank(g: &[f64], f: usize, n: usize, null: &[Vec<f64>], residual: f64) -> usize {
     if null.is_empty() || f == 0 {
         return 0;
     }
@@ -1451,56 +1483,88 @@ fn projected_rank(g: &[f64], f: usize, n: usize, null: &[Vec<f64>]) -> usize {
             a[i * k + c] = (0..n).map(|t| g[i * n + t] * z[t]).sum();
         }
     }
-    crate::qr::rank(&a, f, k)
+    rank::rank(&a, f, k, residual)
 }
 
-/// Rows that add no rank, taken in item order: each is named with the items its row is a
-/// combination of.
-fn redundancy(plan: &Plan, srcs: &[Src], rows: &[GRow], jac: &[f64], n: usize, out: &mut Vec<Diagnostic>) {
-    let mut order: Vec<usize> = (0..rows.len()).collect();
+/// The `m − rank` rows that add no rank, taken in item order: each is named with the items its row
+/// is a combination of. In the coordinates of J's row space of that rank (`Svd::row_coords`), the
+/// rows are kept in blame order while each adds to the span of those kept by more than the floor,
+/// until `rank` are kept; if rounding left fewer, those adding most are kept after. What implies a
+/// row is what its combination of the kept rows takes more than the floor from.
+fn redundancy(
+    plan: &Plan,
+    srcs: &[Src],
+    rows: &[GRow],
+    svd: &Svd,
+    rank: usize,
+    floor: f64,
+    out: &mut Vec<Diagnostic>,
+) {
+    let m = rows.len();
+    let mut order: Vec<usize> = (0..m).collect();
     order.sort_by_key(|&i| (plan.blame(srcs[rows[i].src].item(plan)), i));
-    // modified Gram-Schmidt in item order, twice for safety
+    let y: Vec<Vec<f64>> = (0..m).map(|i| svd.row_coords(i, rank)).collect();
+    let dot = |a: &[f64], b: &[f64]| a.iter().zip(b).map(|(x, y)| x * y).sum::<f64>();
+    let off = |v: &[f64], basis: &[Vec<f64>]| {
+        let mut v = v.to_vec();
+        for _ in 0..2 {
+            for b in basis {
+                let d = dot(&v, b);
+                v.iter_mut().zip(b).for_each(|(x, y)| *x -= d * y);
+            }
+        }
+        v
+    };
     let mut basis: Vec<Vec<f64>> = Vec::new();
     let mut kept: Vec<usize> = Vec::new();
-    let mut found: BTreeMap<Item, (usize, Vec<Item>)> = BTreeMap::new();
+    let mut rest: Vec<usize> = Vec::new();
+    let keep = |i: usize, v: Vec<f64>, basis: &mut Vec<Vec<f64>>, kept: &mut Vec<usize>| {
+        let l = dot(&v, &v).sqrt();
+        basis.push(v.iter().map(|x| x / l).collect());
+        kept.push(i);
+    };
     for &i in &order {
-        let row = &jac[i * n..(i + 1) * n];
-        let norm0 = row.iter().map(|x| x * x).sum::<f64>().sqrt();
-        let mut v = row.to_vec();
-        for _ in 0..2 {
-            for b in &basis {
-                let d: f64 = v.iter().zip(b).map(|(x, y)| x * y).sum();
-                for (x, y) in v.iter_mut().zip(b) {
-                    *x -= d * y;
-                }
-            }
+        let v = off(&y[i], &basis);
+        if kept.len() < rank && dot(&v, &v).sqrt() > floor {
+            keep(i, v, &mut basis, &mut kept);
+        } else {
+            rest.push(i);
         }
-        let norm = v.iter().map(|x| x * x).sum::<f64>().sqrt();
-        if norm > 1e-8 * norm0.max(1e-300) && norm0 > 0.0 {
-            for x in v.iter_mut() {
-                *x /= norm;
-            }
-            basis.push(v);
-            kept.push(i);
-            continue;
+    }
+    while kept.len() < rank && !rest.is_empty() {
+        let (at, v) = rest
+            .iter()
+            .enumerate()
+            .map(|(x, &i)| (x, off(&y[i], &basis)))
+            .fold(None, |b: Option<(usize, Vec<f64>)>, (x, v)| match b {
+                Some((_, ref w)) if dot(w, w) >= dot(&v, &v) => b,
+                _ => Some((x, v)),
+            })
+            .expect("a row left");
+        if dot(&v, &v) == 0.0 {
+            break;
         }
-        // which kept rows it depends on
-        let m = kept.len();
-        let mut a = vec![0.0; n * m];
-        for (c, &r) in kept.iter().enumerate() {
-            for t in 0..n {
-                a[t * m + c] = jac[r * n + t];
-            }
-        }
+        let i = rest.remove(at);
+        keep(i, v, &mut basis, &mut kept);
+    }
+    let mut found: BTreeMap<Item, (usize, Vec<Item>)> = BTreeMap::new();
+    let r = kept.len();
+    for &i in &rest {
         let item = srcs[rows[i].src].item(plan);
         let mut by: Vec<Item> = Vec::new();
-        if m > 0
-            && let Some(c) = forge_math::linalg::solve_least_squares(&a, n, m, row)
+        // y_i as a combination of the kept rows (r unknowns over r coordinates)
+        let mut a = vec![0.0; rank * r];
+        for (c, &k) in kept.iter().enumerate() {
+            for t in 0..rank {
+                a[t * r + c] = y[k][t];
+            }
+        }
+        if r > 0
+            && let Some(c) = forge_math::linalg::solve_least_squares(&a, rank, r, &y[i])
         {
-            let cmax = c.iter().fold(0.0f64, |s, x| s.max(x.abs()));
-            for (ci, &r) in kept.iter().enumerate() {
-                let it = srcs[rows[r].src].item(plan);
-                if c[ci].abs() > 1e-9 * cmax.max(1.0) && it != item {
+            for (ci, &k) in kept.iter().enumerate() {
+                let it = srcs[rows[k].src].item(plan);
+                if (c[ci] * dot(&y[k], &y[k]).sqrt()).abs() > floor && it != item {
                     by.push(it);
                 }
             }
