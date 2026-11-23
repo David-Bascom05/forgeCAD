@@ -1095,3 +1095,35 @@ fn a_wavy_spline_wall_meshes() {
     let (v, _) = judge_built(include_str!("kernel_parts/mesh_wavy_spline.fg"));
     assert!(matches!(v, Verdict::Ok), "{v:?}");
 }
+
+/// A fillet carried along a tangent chain (a concave arc, a straight side, a top arc) into an end
+/// face a scoop has trimmed: Overflow, where FreeCAD rounds it. Open: ignored until the fillet
+/// builds there.
+#[test]
+#[ignore = "open: Fillet Overflow along a tangent chain into a trimmed face"]
+fn a_fillet_along_a_tangent_chain_past_a_scoop_builds() {
+    use forge_lang::fuzz::{Verdict, judge_built};
+    let (v, _) = judge_built(include_str!("kernel_parts/fillet_tangent_chain_scoop.fg"));
+    assert!(matches!(v, Verdict::Ok), "{v:?}");
+}
+
+/// A drill started on a plane tangent to a round crown, cut up to a bore: NotClosed (a judge fail).
+/// Open: ignored until the cut builds.
+#[test]
+#[ignore = "open: NotClosed drilling from a plane tangent to the crown"]
+fn a_drill_from_a_tangent_plane_to_a_bore_builds() {
+    use forge_lang::fuzz::{Verdict, judge_built};
+    let (v, _) = judge_built(include_str!("kernel_parts/drill_from_tangent_plane.fg"));
+    assert!(matches!(v, Verdict::Ok), "{v:?}");
+}
+
+/// A ring cut whose outer circle is tangent to the block's top and bottom: ZeroThickness, where
+/// Onshape builds it. Open, and the owner's call: ignored until it is decided whether a tangent
+/// cut's knife edge builds.
+#[test]
+#[ignore = "open: whether a tangent cut's knife edge builds (ZeroThickness today)"]
+fn a_ring_cut_tangent_to_two_faces_builds() {
+    use forge_lang::fuzz::{Verdict, judge_built};
+    let (v, _) = judge_built(include_str!("kernel_parts/ring_cut_tangent.fg"));
+    assert!(matches!(v, Verdict::Ok), "{v:?}");
+}
