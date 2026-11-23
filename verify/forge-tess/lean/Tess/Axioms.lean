@@ -1,5 +1,6 @@
 import Tess.Sag
 import Tess.Cone
+import Tess.Interp
 
 /-- info: 'Sag.mid_nearest' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in #print axioms Sag.mid_nearest
@@ -25,3 +26,9 @@ import Tess.Cone
 #guard_msgs in #print axioms Sag.convex_dip
 /-- info: 'Sag.chord_convex' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in #print axioms Sag.chord_convex
+/-- info: 'Sag.four_zeros' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in #print axioms Sag.four_zeros
+/-- info: 'Sag.node_le' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in #print axioms Sag.node_le
+/-- info: 'Sag.interp_remainder' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in #print axioms Sag.interp_remainder
