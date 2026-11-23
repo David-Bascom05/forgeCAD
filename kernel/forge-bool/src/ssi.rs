@@ -169,8 +169,38 @@ pub fn searched_keeps(most: usize) {
     MET.with(|m| *m.borrow_mut() = Default::default());
 }
 
+/// `r` pushed out to a grid of powers of two about 2^-36 of its size: the same face boxes reach here
+/// by more than one path, a rounding apart, and each would be searched again (the answers are kept by
+/// their region's exact bits). The grid's box holds `r`, a hair larger, and it is the same box for
+/// all of them.
+fn snapped(r: Box3) -> Box3 {
+    let size = r.diagonal().max(
+        r.x.lo
+            .abs()
+            .max(r.x.hi.abs())
+            .max(r.y.lo.abs().max(r.y.hi.abs()))
+            .max(r.z.lo.abs().max(r.z.hi.abs())),
+    );
+    if !(size.is_finite() && size > 0.0) || r.is_empty() {
+        return r;
+    }
+    // the power of two just past size, times 2^-36: x / g and back are exact
+    let e = ((size.to_bits() >> 52) & 0x7ff) as i64 - 1023 + 1 - 36;
+    let g = f64::from_bits(((e + 1023).clamp(1, 2046) as u64) << 52);
+    let out = |i: forge_math::Interval| forge_math::Interval {
+        lo: (i.lo / g).floor() * g,
+        hi: (i.hi / g).ceil() * g,
+    };
+    Box3 {
+        x: out(r.x),
+        y: out(r.y),
+        z: out(r.z),
+    }
+}
+
 /// Where two surfaces with no closed form meet in `region`: by marching or tracing.
 pub fn searched(a: &Surface, b: &Surface, region: Box3) -> SurfaceSurface {
+    let region = snapped(region);
     // an apex in the region: a branch may change sheets there, and curves cannot end at one yet
     if forge_geom::sheet::apex_met(a, b, &region) {
         return SurfaceSurface::NotAnalytic;

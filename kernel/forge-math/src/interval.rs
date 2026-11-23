@@ -113,6 +113,9 @@ impl Interval {
     /// sin and cos over the interval together, each as `sin` and `cos` give it (one dmath call
     /// per end for both).
     pub fn sin_cos(&self) -> (Interval, Interval) {
+        if let Some(w) = self.trig_whole() {
+            return (w, w);
+        }
         let (a, b) = (dmath::sin_cos(self.lo), dmath::sin_cos(self.hi));
         (self.trig_at(a.0, b.0, 0.5), self.trig_at(a.1, b.1, 0.0))
     }
@@ -123,41 +126,48 @@ impl Interval {
     /// 2^-52 of the true values. So each end's value, pushed out by TRIG_ERR and then rounded
     /// outward, encloses the true one; the error is absolute, not relative (dmath is not within a
     /// few ulps of tiny values: near the zeros, ulps are far below its error). A point (k + half) pi
-    /// is counted inside when its enclosure [(k + half) PI, (k + half) PI_UP], rounded outward,
-    /// meets the interval: PI < pi < PI_UP, so a point that may be inside is never missed. The
-    /// result is clamped to [-1, 1]. Past TRIG_MOST, or across 6 (less than a turn), it is [-1, 1].
+    /// is counted inside when k + half lies in [a / PI or a / PI_UP, b / PI or b / PI_UP], rounded
+    /// outward: PI < pi < PI_UP, so a point that may be inside is never missed. The
+    /// result is clamped to [-1, 1]. Past TRIG_MOST, or across a whole turn, it is [-1, 1].
     fn trig(&self, f: fn(f64) -> f64, half: f64) -> Interval {
-        if self.is_empty() || !(self.lo.is_finite() && self.hi.is_finite()) {
-            return self.trig_at(f64::NAN, f64::NAN, half);
+        if let Some(w) = self.trig_whole() {
+            return w;
         }
         self.trig_at(f(self.lo), f(self.hi), half)
     }
-    /// `trig` from the function's values at the ends, `fa` and `fb`.
-    fn trig_at(&self, fa: f64, fb: f64, half: f64) -> Interval {
-        const WHOLE: Interval = Interval { lo: -1.0, hi: 1.0 };
+    /// The answer with no value of dmath's asked: empty for empty, [-1, 1] past TRIG_MOST, for a
+    /// non-finite end, or across a whole turn.
+    fn trig_whole(&self) -> Option<Interval> {
         let (a, b) = (self.lo, self.hi);
         if self.is_empty() {
-            return *self;
+            return Some(*self);
         }
-        if !(a.is_finite() && b.is_finite()) || a.abs().max(b.abs()) > TRIG_MOST || b - a >= 6.0 {
-            return WHOLE;
+        if !(a.is_finite() && b.is_finite()) || a.abs().max(b.abs()) > TRIG_MOST || b - a >= dmath::TAU {
+            return Some(Interval { lo: -1.0, hi: 1.0 });
         }
-        let (mut lo, mut hi) = ((fa.min(fb) - TRIG_ERR).next_down(), (fa.max(fb) + TRIG_ERR).next_up());
-        // the extremes' indices k with (k + half) pi possibly in [a, b]: |k| <= TRIG_MOST / pi + 1,
-        // exact as floats, and (k + half) exact too; the width < 6 leaves at most three
-        let first = (a / dmath::PI - half).floor() - 1.0;
-        let mut k = first;
-        while k <= first + 4.0 {
-            let m = k + half;
-            // m pi lies in [m PI, m PI_UP] (m >= 0) or [m PI_UP, m PI] (m < 0), each product rounded out
-            let (p, q) = ((m * dmath::PI), (m * PI_UP));
-            let (pl, ph) = (p.min(q).next_down(), p.max(q).next_up());
-            if pl <= b && ph >= a {
-                if (k as i64).rem_euclid(2) == 0 {
-                    hi = 1.0;
-                } else {
-                    lo = -1.0;
-                }
+        None
+    }
+    /// `trig` from the function's values at the ends, `fa` and `fb` (finite ends within TRIG_MOST
+    /// and under a turn apart: `trig_whole` is None).
+    fn trig_at(&self, fa: f64, fb: f64, half: f64) -> Interval {
+        let (a, b) = (self.lo, self.hi);
+        let (mut lo, mut hi) = (
+            (fa.min(fb) - TRIG_ERR).next_down(),
+            (fa.max(fb) + TRIG_ERR).next_up(),
+        );
+        // the extremes m pi (m = k + half) possibly in [a, b]: m in [a / pi, b / pi], which lies in
+        // [qa, qb], a's quotient by the larger of PI and PI_UP and b's by the smaller, each rounded
+        // out (PI < pi < PI_UP); m - half is exact (|m| < 2^52), so k runs over the integers there,
+        // at most three
+        let qa = (a / dmath::PI).min(a / PI_UP).next_down();
+        let qb = (b / dmath::PI).max(b / PI_UP).next_up();
+        let mut k = (qa - half).ceil();
+        let last = (qb - half).floor();
+        while k <= last {
+            if (k as i64).rem_euclid(2) == 0 {
+                hi = 1.0;
+            } else {
+                lo = -1.0;
             }
             k += 1.0;
         }
