@@ -67,11 +67,25 @@ None for the core itself. What remains is the frontier optimisation:
    - F1: `far_unchanged`;
    - F2: `frontier_local`;
    - the global split: `split_at_region` (`DecideOnce/Frontier.lean`);
-   - (c′) in the open region for any ledger satisfying `ExactIn` (`DecideOnce/Local.lean`).
+   - (c′) in the open region for any ledger satisfying `ExactIn` (`DecideOnce/Local.lean`);
+   - every `ExactIn` clause but compatibility, for the bridge's local ledger: it is the sampler's
+     ledger of the region's samples, `sampleLedger ps ss (regionX ps X In)` (`local_exact`), and
+     `local_correct` is (c′) for it (`DecideOnce/SampleLocal.lean`).
 
-   Open:
-   - **`LocalCompat`**, the named hypothesis that every `ExactIn` theorem carries: each body's
-     membership is constant on the local arrangement's full cells inside the region. It needs a
-     localized Jordan–Brouwer, since far face planes may cut a region cell.
-   - the remaining `ExactIn` clauses for the bridge's local ledger, i.e. the sampler's lemmas
-     restricted to the region.
+   - (proven) `LocalCompat`, the localized Jordan–Brouwer (group dol-jordan):
+     - `Jordan.contains_const_local`: ray parity is constant along a segment that meets no face, or
+       only faces whose box it stays outside;
+     - `local_compat`: compatibility for near/far B-reps.
+   - (proven) the six walls' region facts (`wall_region`, `wall_up`, R° open), and `SamplesIn` for
+     the local arrangement's sampler (`samplesIn_of`, from `sampler_covers`).
+
+   **Closed:** `local_correct_final hnz ws hws (h : LocalInput ps ss ws) rule`
+   (`DecideOnce/LocalFinal.lean`) is (c′) for the local ledger the sampler builds. It has no hypothesis
+   beyond the input's domain:
+   - carriers with nonzero normals;
+   - valid wall indices;
+   - closed flat B-reps whose faces are near (plane a carrier) or far (a nonzero normal, and the
+     region outside the face's box).
+
+   With F1, F2 and `split_at_region`, this proves the whole of §3a except the stitching (F3), which
+   is the bridge's own obligation.
