@@ -511,3 +511,47 @@ fn band_rims_within_tolerance_close() {
         agrees_curved(&forge_model::adversarial::canonical(&moved));
     }
 }
+
+/// A ball over a tapered pocket (from the importer's ball_over_tapered_pocket.fg, by the trace
+/// session): the pocket's far top edge is tangent to the ball at P = (0, -13, 18), a pole of the
+/// ball's parameters (its axis is y). The top face's circle and the 1° wall's small circle (radius
+/// 13 sin 1°) leave P along one tangent. The split walk tells such ways apart by chords, but a
+/// chord at a pole had no direction, so the tie stood and the cycle did not close (SplitCrossed).
+/// At a pole the chord is taken in the tangent plane the pole's directions are.
+#[test]
+#[cfg_attr(
+    not(feature = "reference"),
+    ignore = "asks the Lean reference: lake build in verify/forge-exact, then cargo test -p forge-exact-fuzz --features reference"
+)]
+fn ball_tangent_to_a_pocket_edge_at_its_pole_builds() {
+    let src = "param block.d = 18
+sketch base(on: xy) {
+  r = rect(center: (0, 0), size: (100, 60))
+}
+block = extrude(base, d)
+param pocket.d = 13
+param pocket.a = 1deg
+sketch way(on: block.end) {
+  o = rect(center: (0, -8), size: (30, 10))
+}
+pocket = cut(way, d, taper: a)
+param bowl.r = 13
+sketch top(on: block.end) {
+  c = pt(0, 0)
+}
+bowl = ball(top.c, r, cut: true)
+";
+    let part = forge_exact_fuzz::curved::curved_part(&forge_lang::fuzz::build(src).part());
+    assert_eq!(
+        part.features
+            .iter()
+            .filter(|f| !matches!(
+                f,
+                forge_model::Feature::Sketch(_) | forge_model::Feature::Param(_)
+            ))
+            .count(),
+        3,
+        "every feature is a quadric solid"
+    );
+    agrees_curved(&part);
+}

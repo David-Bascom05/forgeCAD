@@ -4993,8 +4993,18 @@ fn uv_chord(body: &Body, f: FaceId, p: &Piece, forward: bool, at_end: bool) -> O
     let speed = p.curve.deriv(t).d1.length().max(f64::MIN_POSITIVE);
     let dt = (0.01 / speed).min(0.1 * p.range.width());
     let face = body.face(f);
-    let a = face.surface.project(p.curve.eval(t));
-    face.surface.normal(a)?;
+    let at = p.curve.eval(t);
+    let a = face.surface.project(at);
+    if face.surface.normal(a).is_none() {
+        // at a pole, in the tangent plane `uv_dir` tells the ways apart in (an apex: none)
+        if let Surface::Cone(_) = face.surface {
+            return None;
+        }
+        let (e1, e2) = pole_frame(&face.surface, a)?;
+        let d = p.curve.eval(if from_lo { t + dt } else { t - dt }) - at;
+        let x = d.dot(e1);
+        return Some(Vec2::new(if face.same_sense { x } else { -x }, d.dot(e2)));
+    }
     let b = forge_topo::uv::unwrap_near(
         body,
         f,
@@ -5113,29 +5123,12 @@ pub(crate) fn uv_dir(body: &Body, f: FaceId, p: &Piece, forward: bool, at_end: b
         return round_point(face, p, t, uv, forward != at_end);
     }
     if sd.du.dot(sd.du) <= 1e-18 * sd.dv.dot(sd.dv) {
-        // at a pole u says nothing: the ways are told apart in the tangent plane, turned as the
-        // parameter plane is (its normal du x dv, taken a hair off the pole)
-        let v = face.surface.domain().v;
-        let step = if uv.y > 0.5 * (v.lo + v.hi) { -1e-6 } else { 1e-6 } * (v.hi - v.lo);
-        let n = face
-            .surface
-            .normal(Point2::new(uv.x, uv.y + step))
-            .ok_or_else(|| {
-                BoolError::unhandled(Unhandled::SplitThroughSingular {
-                    face: FaceRef::of(body, f),
-                })
-            })?
-            .get();
-        let helper = if n.x.abs() < 0.9 { Vec3::X } else { Vec3::Y };
-        let e1 = (helper - n * helper.dot(n))
-            .normalize()
-            .ok_or_else(|| {
-                BoolError::unhandled(Unhandled::SplitThroughSingular {
-                    face: FaceRef::of(body, f),
-                })
-            })?
-            .get();
-        let (a, b) = (dir.dot(e1), dir.dot(n.cross(e1)));
+        let (e1, e2) = pole_frame(&face.surface, uv).ok_or_else(|| {
+            BoolError::unhandled(Unhandled::SplitThroughSingular {
+                face: FaceRef::of(body, f),
+            })
+        })?;
+        let (a, b) = (dir.dot(e1), dir.dot(e2));
         return Ok(Vec2::new(if face.same_sense { a } else { -a }, b));
     }
     // least squares for (a, b) with a du + b dv = dir
@@ -5146,6 +5139,17 @@ pub(crate) fn uv_dir(body: &Body, f: FaceId, p: &Piece, forward: bool, at_end: b
     };
     let a = if face.same_sense { a } else { -a };
     Ok(Vec2::new(a, b))
+}
+
+/// At a pole u says nothing: the ways are told apart in the tangent plane, turned as the
+/// parameter plane is (its normal du x dv, taken a hair off the pole). Its axes.
+fn pole_frame(s: &Surface, uv: Point2) -> Option<(Vec3, Vec3)> {
+    let v = s.domain().v;
+    let step = if uv.y > 0.5 * (v.lo + v.hi) { -1e-6 } else { 1e-6 } * (v.hi - v.lo);
+    let n = s.normal(Point2::new(uv.x, uv.y + step))?.get();
+    let helper = if n.x.abs() < 0.9 { Vec3::X } else { Vec3::Y };
+    let e1 = (helper - n * helper.dot(n)).normalize()?.get();
+    Some((e1, n.cross(e1)))
 }
 
 /// `uv_dir` at a cone's apex or a sphere's pole, where every way leaves along v: a way is told
