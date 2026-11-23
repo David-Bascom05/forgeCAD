@@ -352,7 +352,7 @@ fn coincident_walls_1_stage_is_non_manifold() {
 
 // ---- The curved reference (ForgeExact/QRef): research/kernel-audit/exact-comparison-curved.md.
 // Each is a degenerate pair of the reliability scoreboard (two features), judged under the snap
-// rule. The first two agree; the rest are kernel disagreements, ignored until fixed.
+// rule. All agree now; the ball repros were kernel disagreements until the pole and apex rule.
 
 fn degenerate_curved(name: &str) -> Part {
     let part = forge_model::adversarial::degenerate_parts()
@@ -399,37 +399,35 @@ fn identical_cylinder_cut_is_empty() {
 
 /// A ball resting on the base's top face, touching it at one point (plane_sphere/tangent_top_above
 /// /Add). The union is non-manifold at (0, 0, 0): the two solids meet at a point. The kernel
-/// builds a body of 32 523.6 mm³ that passes `forge_topo::check`, as it did for a cube on a
-/// corner vertex (exact-comparison.md). Expected: ZeroThickness there.
+/// built a body of 32 523.6 mm³ that passed `forge_topo::check`, as it did for a cube on a
+/// corner vertex (exact-comparison.md): the ball's pole had no normal, so the touch went
+/// undecided. Now ZeroThickness there.
 #[test]
-#[ignore = "exact curved reference: a ball touching the top at a point is built, not refused ZeroThickness"]
 fn ball_resting_on_the_top_is_non_manifold() {
     agrees_curved(&degenerate_curved("plane_sphere/tangent_top_above/Add"));
 }
 
 /// A ball inside the base touching its top face from below, cut away
 /// (plane_sphere/tangent_top_inside/Cut). What is left pinches to nothing at (0, 0, 0): the
-/// material between the cavity and the top is a cusp ring. The kernel builds 31 476.4 mm³.
+/// material between the cavity and the top is a cusp ring. The kernel built 31 476.4 mm³; now
+/// ZeroThickness.
 #[test]
-#[ignore = "exact curved reference: a cavity touching the top from inside at a point is built"]
 fn cavity_touching_the_top_from_inside_is_non_manifold() {
     agrees_curved(&degenerate_curved("plane_sphere/tangent_top_inside/Cut"));
 }
 
 /// Two balls touching from outside (sphere_sphere/tangent_outside/Add): the union is two
-/// solids meeting at a point. The kernel builds 4 712.4 mm³.
+/// solids meeting at a point. The kernel built 4 712.4 mm³; now ZeroThickness.
 #[test]
-#[ignore = "exact curved reference: two balls touching at a point are united"]
 fn balls_touching_at_a_point_are_non_manifold() {
     agrees_curved(&degenerate_curved("sphere_sphere/tangent_outside/Add"));
 }
 
 /// A ball centred on the cylinder's top rim (cylinder_sphere/centre_on_rim/Add). The union is
 /// an ordinary solid (the reference certifies interior boxes, finds no contact, and its volume
-/// estimate is 6 806.8 mm³). The kernel refuses Unsupported(SplitThroughSingular) on the sphere,
-/// whose pole lies on the rim. Cut and Keep refuse alike.
+/// estimate is 6 806.8 mm³). The kernel refused Unsupported(SplitThroughSingular) on the sphere,
+/// whose pole lies on the rim (a hair off it, `normal` refused for a ball this small); it builds.
 #[test]
-#[ignore = "exact curved reference: a ball centred on a cylinder's rim is refused Unsupported(SplitThroughSingular)"]
 fn ball_centred_on_a_rim_builds() {
     agrees_curved(&degenerate_curved("cylinder_sphere/centre_on_rim/Add"));
 }
