@@ -41,13 +41,15 @@ for c in "${crates[@]}"; do
     work=$(mktemp -d)
     start=(--start-from "$mod")
     [ "$mod" = "$name" ] && start=(--start-from "$name" --exclude "$name::*::*")
-    ( cd "$root/kernel/$c" && PATH=$H/charon/bin:$PATH RUSTUP_TOOLCHAIN=$TC \
+    # 8 GB per tool: one module once took charon to 13 GB (the OOM killer then takes the culprit,
+    # but other work in the same memory group can go first)
+    ( ulimit -v 8000000; cd "$root/kernel/$c" && PATH=$H/charon/bin:$PATH RUSTUP_TOOLCHAIN=$TC \
         CARGO_TARGET_DIR=$H/target-survey/$c CARGO_PROFILE_RELEASE_OVERFLOW_CHECKS=true timeout 1800 "$H/charon/bin/charon" cargo --preset=aeneas \
         "${start[@]}" --dest-file "$work/x.llbc" -- --release ) > "$OUT/$c/$tag.charon.log" 2>&1
     fatal=-
     total=0; failed=0
     if [ -f "$work/x.llbc" ]; then
-      timeout 1800 "$H/aeneas/bin/aeneas" -backend lean -split-files "$work/x.llbc" -dest "$work/out" \
+      ( ulimit -v 8000000; timeout 1800 "$H/aeneas/bin/aeneas" -backend lean -split-files "$work/x.llbc" -dest "$work/out" ) \
         > "$OUT/$c/$tag.aeneas.log" 2>&1
       sed -i -e 's/\x1b\[[0-9;?]*[a-zA-Z]//g' -e 's/\r/\n/g' "$OUT/$c/$tag.aeneas.log"
       log=$OUT/$c/$tag.aeneas.log
@@ -66,7 +68,11 @@ for c in "${crates[@]}"; do
       fi
     else
       lean="-"
-      fatal="charon: $(grep -m1 -E '^error|ERROR|panicked' "$OUT/$c/$tag.charon.log" | cut -c1-120)"
+      if grep -q 'memory allocation of' "$OUT/$c/$tag.charon.log"; then
+        fatal="charon: out of memory (over the 8 GB cap)"
+      else
+        fatal="charon: $(grep -m1 -E '^error|ERROR|panicked' "$OUT/$c/$tag.charon.log" | cut -c1-120)"
+      fi
       errs=
     fi
     lines=$(wc -l < "$root/$file")
