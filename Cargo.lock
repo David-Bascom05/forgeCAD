@@ -74,6 +74,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-bool-core"
+version = "0.1.0"
+
+[[package]]
 name = "forge-cli"
 version = "0.1.0"
 dependencies = [
