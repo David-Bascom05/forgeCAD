@@ -15,6 +15,10 @@ At a convex edge of two closed faces, with `M = {a₁ ≤ 0} ∩ {a₂ ≤ 0}` (
   erosion is exactly the sharp offset `{a₁ ≤ −t} ∩ {a₂ ≤ −t}`: at convex edges the kernel's sharp
   join *is* the exact inward offset, and the shell `M \ C` has constant thickness `t`.
 
+* S2 `sharp_sub_erosion`: at a reflex edge the sharp offset `{a₁ ≤ −t} ∪ {a₂ ≤ −t}` lies inside
+  the erosion: the sharp shell's wall is nowhere thinner than `t`, only thicker at the inner
+  corner, where the erosion would round it.
+
 The nearest face point is the foot on the nearer plane: it lies on its face because the edge is
 convex (`a_j` at the foot is `a_j x + s c ≤ −s (1 − c) ≤ 0`).
 -/
@@ -111,6 +115,37 @@ theorem erosion_eq_sharp {t : K} (ht : 0 < t) {x : V K} (hx : M P x) :
 where
   le_of_lt {a b : K} (h : a < b) : a ≤ b := by grind
   Draft_dot_comm (p q : V K) : V.dot p q = V.dot q p := by simp only [V.dot_def]; grind
+
+/-! ## S2: at a reflex edge the sharp offset lies inside the erosion -/
+
+/-- The closed faces of a reflex (concave) edge, `S = {a₁ ≤ 0} ∪ {a₂ ≤ 0}`: each face runs on
+from the edge where the other plane's material is not. -/
+def rfaces (y : V K) : Prop := (P.a₁ y = 0 ∧ 0 ≤ P.a₂ y) ∨ (P.a₂ y = 0 ∧ 0 ≤ P.a₁ y)
+
+/-- **S2.** At a reflex edge every point of the sharp offset `{a₁ ≤ −t} ∪ {a₂ ≤ −t}` is free of
+the faces by `t`: the cavity the kernel's sharp join leaves lies inside the erosion, so the wall
+it leaves is nowhere thinner than `t` (it is thicker by the erosion's round at the inner corner,
+which the sharp join keeps as wall). -/
+theorem sharp_sub_erosion {t : K} (ht : 0 < t) {x : V K}
+    (hx : P.a₁ x ≤ -t ∨ P.a₂ x ≤ -t) : Free (rfaces P) t x := by
+  have u₁ := P.unit₁
+  have u₂ := P.unit₂
+  intro y hy
+  -- the level of the plane x is deep under, at y, is at least 0: so y is at least t away
+  have far : ∀ (n : V K) (d : K), V.dot n n = 1 → V.dot n x - d ≤ -t → 0 ≤ V.dot n y - d →
+      t * t ≤ V.d2 y x := by
+    intro n d hn h1 h2
+    have := level_le_d2 n hn d x y
+    have := mul_self_le_mul_self' (le_of_lt ht) (show t ≤ V.dot n y - d - (V.dot n x - d) by grind)
+    grind
+  rcases hx with h | h
+  · rcases hy with ⟨hy₁, _⟩ | ⟨_, hy₁⟩
+    · exact far P.n₁ P.d₁ u₁ h (by simp only [PlanePair.a₁] at hy₁; grind)
+    · exact far P.n₁ P.d₁ u₁ h hy₁
+  · rcases hy with ⟨_, hy₂⟩ | ⟨hy₂, _⟩
+    · exact far P.n₂ P.d₂ u₂ h hy₂
+    · exact far P.n₂ P.d₂ u₂ h (by simp only [PlanePair.a₂] at hy₂; grind)
+where le_of_lt {a b : K} (h : a < b) : a ≤ b := by grind
 
 end Shell
 
