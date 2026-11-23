@@ -4,7 +4,9 @@ A turning document is a machining document whose setup is a `lathe_setup(..)`. `
 plans it, posts it, reads the text back, and certifies the path the text means; the reply is
 `forgecad.cam/1` with `"process": "turning"`. The program is written (`-o F.nc`) only when every
 op is certified. Exit 0: certified in full; 3: certified except G5 (no machine, or not placed);
-1: refused.
+1: refused. `forgecad cam F check` also keeps the exact in-process stock and lists the G4
+leftover; the normal path keeps the stock as columns (a superset by construction: sound for the
+rapid and holder checks, and about four times faster).
 
 ```
 machining

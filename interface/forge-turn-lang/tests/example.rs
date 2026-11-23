@@ -17,6 +17,11 @@ fn the_shaft_turns() {
     assert_eq!(cam.ops.len(), 5);
     assert!(cam.ops.iter().all(|o| o.status == "built"));
     let text = cam.program_text().unwrap();
+    assert_eq!(cam.report.as_ref().unwrap().stock_model, "columns");
+    // and with the exact stock: the same verdicts, and the leftover (the shoulder's corner)
+    let exact = forge_turn_lang::run_checked(&src, &d);
+    assert!(exact.ok && exact.report.as_ref().unwrap().leftover_done);
+    assert_eq!(exact.report.as_ref().unwrap().leftover.len(), 1);
     assert!(text.contains("G32") && text.contains("G96") && text.contains("T0505"));
 }
 

@@ -86,6 +86,9 @@ pub struct TurnCam {
     pub ops: Vec<OpOut>,
     pub programs: Vec<ProgramOut>,
     pub report: Option<Report>,
+    /// The exact in-process stock and the G4 leftover (`cam F check`); otherwise the normal
+    /// path: the stock as columns, no leftover.
+    pub exact: bool,
     parts: Vec<forge_turn::profile::HalfProfile>,
     tools: Vec<(TurnTool, u32)>,
     setups: Vec<(String, Setup)>,
@@ -419,7 +422,11 @@ impl TurnCam {
                 let q = post::quantize(&job, number, name, &d).map_err(|e| format!("{e:?}"))?;
                 let (text, motions) = post::round_trip(&q, &d)?;
                 let posted = post::posted_moves(&motions, &job, &d);
-                let rep = ops::certify(s, &job, Some(&posted))?;
+                let rep = if self.exact {
+                    ops::certify(s, &job, Some(&posted))?
+                } else {
+                    ops::certify_fast(s, &job, Some(&posted))?
+                };
                 Ok((text, rep))
             });
         match r {
@@ -547,9 +554,14 @@ impl TurnCam {
             ("programs", Json::Arr(programs)),
             ("checks", Json::Num(checks as f64)),
             (
+                "stock_model",
+                Json::Str(self.report.as_ref().map_or(String::new(), |r| r.stock_model.clone())),
+            ),
+            (
                 "leftover",
                 Json::obj(vec![
-                    ("rule", Json::Str("G4: final stock ⊆ (part ⊕ B_tol) ∪ these regions ∪ the declared removals, in (ρ, z)".into())),
+                    ("computed", self.report.as_ref().is_some_and(|r| r.leftover_done).into()),
+                    ("rule", Json::Str("G4: final stock ⊆ (part ⊕ B_tol) ∪ these regions ∪ the declared removals, in (ρ, z); computed by `cam F check`".into())),
                     ("regions", Json::Arr(leftover)),
                 ]),
             ),
@@ -557,9 +569,19 @@ impl TurnCam {
     }
 }
 
-/// Runs a turning document (its file's directory finds the part).
+/// Runs a turning document (its file's directory finds the part): the normal path.
 pub fn run(src: &str, dir: &Path) -> TurnCam {
+    run_with(src, dir, false)
+}
+
+/// `run` with the exact in-process stock and the G4 leftover (`forgecad cam F check`).
+pub fn run_checked(src: &str, dir: &Path) -> TurnCam {
+    run_with(src, dir, true)
+}
+
+fn run_with(src: &str, dir: &Path, exact: bool) -> TurnCam {
     let mut cam = TurnCam {
+        exact,
         ok: true,
         errors: vec![],
         warnings: vec![],

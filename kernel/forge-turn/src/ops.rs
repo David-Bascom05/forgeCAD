@@ -862,6 +862,10 @@ pub struct Report {
     /// Stock removals left out because their boolean would not round to a valid region (the
     /// stock model is then larger than it could be: sound, and the G4 leftover may list more).
     pub stock_skipped: usize,
+    /// "exact" (booleans: the oracle, and G4) or "columns" (the normal path: stair.rs).
+    pub stock_model: String,
+    /// Whether the G4 leftover was computed (the exact model only).
+    pub leftover_done: bool,
     /// "full" (every joint position checked), "except G5" (a machine but no placement: the
     /// spans only), or "no machine".
     pub g5: String,
@@ -1189,6 +1193,51 @@ fn move_box(mv: &Move) -> ([f64; 2], [f64; 2]) {
 /// Certifies the ops in order on the setup (see the module doc). `posted`: each op's moves as
 /// the posted program states them, read back (post.rs); None certifies the ops' own paths.
 pub fn certify(s: &Setup, ops: &[OpPath], posted: Option<&[Vec<PMove>]>) -> Result<Report, String> {
+    certify_with(s, ops, posted, true)
+}
+
+/// `certify` for the normal path: the in-process stock as columns (stair.rs: a superset by
+/// construction, so G3 against it is sound, with no booleans), and no G4 leftover (the exact
+/// stock and the leftover are `certify`'s, on demand and as the test oracle).
+pub fn certify_fast(s: &Setup, ops: &[OpPath], posted: Option<&[Vec<PMove>]>) -> Result<Report, String> {
+    certify_with(s, ops, posted, false)
+}
+
+/// The stock as certify keeps it.
+enum StockModel {
+    Exact(Region),
+    Columns(crate::stair::Stair),
+}
+
+impl StockModel {
+    fn region(&self) -> Region {
+        match self {
+            StockModel::Exact(r) => r.clone(),
+            StockModel::Columns(c) => c.region(),
+        }
+    }
+
+    fn remove(&mut self, obs: &mut Obstacle, q: &[[f64; 2]], rep: &mut Report) {
+        match self {
+            StockModel::Exact(r) => remove(r, obs, q, rep),
+            StockModel::Columns(c) => {
+                if c.clear_poly(q) {
+                    match Obstacle::of_valid("stock", &c.region(), 0.0) {
+                        Ok(o) => *obs = o,
+                        Err(_) => rep.stock_skipped += 1,
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn certify_with(
+    s: &Setup,
+    ops: &[OpPath],
+    posted: Option<&[Vec<PMove>]>,
+    exact: bool,
+) -> Result<Report, String> {
     s.check().map_err(|e| format!("{e:?}"))?;
     let mut rep = Report {
         least: f64::INFINITY,
@@ -1196,7 +1245,16 @@ pub fn certify(s: &Setup, ops: &[OpPath], posted: Option<&[Vec<PMove>]>) -> Resu
     };
     let mut part = Obstacle::of("part", &s.part.region, s.part.mu).map_err(|e| format!("{e:?}"))?;
     let mut chuck = Obstacle::of("chuck", &s.chuck_region(), 0.0).map_err(|e| format!("{e:?}"))?;
-    let mut stock_region = s.bar();
+    let mut stock_model = if exact {
+        StockModel::Exact(s.bar())
+    } else {
+        StockModel::Columns(crate::stair::Stair::bar(
+            s.bar_r,
+            s.bar_front,
+            s.chuck.z_face - s.chuck.grip,
+        ))
+    };
+    rep.stock_model = if exact { "exact" } else { "columns" }.into();
     for (oi, op) in ops.iter().enumerate() {
         let moves = match posted {
             Some(p) => p[oi].clone(),
@@ -1237,7 +1295,8 @@ pub fn certify(s: &Setup, ops: &[OpPath], posted: Option<&[Vec<PMove>]>) -> Resu
                 }
             }
         }
-        let mut stock = Obstacle::of("stock", &stock_region, 0.0).map_err(|e| format!("stock: {e:?}"))?;
+        let mut stock =
+            Obstacle::of("stock", &stock_model.region(), 0.0).map_err(|e| format!("stock: {e:?}"))?;
         let mut target = match &op.removal {
             Some(d) => {
                 rep.removals.push((oi, d.clone()));
@@ -1363,7 +1422,7 @@ pub fn certify(s: &Setup, ops: &[OpPath], posted: Option<&[Vec<PMove>]>) -> Resu
                     } {
                         for b in &cutters {
                             let q = swept_inner(b, pa, pb, sag, op.leave == 0.0);
-                            remove(&mut stock_region, &mut stock, &q, &mut rep);
+                            stock_model.remove(&mut stock, &q, &mut rep);
                         }
                     }
                 }
@@ -1376,7 +1435,7 @@ pub fn certify(s: &Setup, ops: &[OpPath], posted: Option<&[Vec<PMove>]>) -> Resu
                 if clears {
                     for b in &cutters {
                         let q = swept_inner(b, pa, pb, sag, op.leave == 0.0);
-                        remove(&mut stock_region, &mut stock, &q, &mut rep);
+                        stock_model.remove(&mut stock, &q, &mut rep);
                     }
                 }
             }
@@ -1408,6 +1467,10 @@ pub fn certify(s: &Setup, ops: &[OpPath], posted: Option<&[Vec<PMove>]>) -> Resu
         (Some(_), None) => "except G5 (no placement: the spans only)".into(),
         (None, _) => "no machine".into(),
     };
+    let StockModel::Exact(stock_region) = stock_model else {
+        return Ok(rep);
+    };
+    rep.leftover_done = true;
     // G4: the final stock less the part grown by tol (and less the declared removals)
     let (grown, _) = offset(&s.part.region, -s.tol).map_err(|e| format!("{e:?}"))?;
     let mut keep = boolean::region_of(&grown);
