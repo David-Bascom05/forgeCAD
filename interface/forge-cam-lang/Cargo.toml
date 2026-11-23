@@ -1,0 +1,21 @@
+[package]
+name = "forge-cam-lang"
+description = "The machining document: CAM in .fg (`forgecad cam`), its reply forgecad.cam/1 and setup sheet"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+forge-lang = { path = "../forge-lang" }
+forge-agent = { path = "../forge-agent" }
+forge-cam = { path = "../../kernel/forge-cam" }
+forge-cam-geom = { path = "../../kernel/forge-cam-geom" }
+forge-tooling = { path = "../../kernel/forge-tooling" }
+forge-post = { path = "../../kernel/forge-post" }
+forge-model = { path = "../../kernel/forge-model" }
+forge-math = { path = "../../kernel/forge-math" }
+forge-sketch = { path = "../../kernel/forge-sketch" }
+
+[lints]
+workspace = true

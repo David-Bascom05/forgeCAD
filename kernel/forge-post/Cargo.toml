@@ -1,0 +1,14 @@
+[package]
+name = "forge-post"
+description = "ForgeCAD's post processor: a fixed engine over data dialects (Fanuc, Haas, LinuxCNC, GRBL), numbers printed from exact integer quantisation, and a reader of its own output for the round-trip proof"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+forge-cam-geom = { path = "../forge-cam-geom" }
+forge-tooling = { path = "../forge-tooling" }
+
+[lints]
+workspace = true

@@ -1,0 +1,23 @@
+# A bracket plate with an irregular outline: a six-sided plate with a notch in its top edge and
+# a through hole, made in two setups (bracket_cam.fg): the top and the outline in a vise, then
+# turned over into soft jaws cut to its outline.
+
+shared L = 70
+shared H = 45
+shared t = 14
+shared rise = 30
+shared lean = 20
+shared foot = 25
+shared notch = 14
+shared notch_d = 7
+shared bore = 10
+shared bore_y = 18
+
+sketch plan(on: xy) {
+  outline = poly([(0, 0), (L, 0), (L, rise), (L - lean, H), (L / 2 + notch / 2, H), (L / 2 + notch / 2, H - notch_d), (L / 2 - notch / 2, H - notch_d), (L / 2 - notch / 2, H), (lean, H), (0, foot)])
+}
+plate = extrude(plan, t)
+sketch hs(on: plate.end) {
+  c = pt(L / 2, bore_y)
+}
+bore_h = hole(at: hs.c, d: bore, depth: thru)
