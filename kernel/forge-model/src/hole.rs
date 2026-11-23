@@ -143,7 +143,9 @@ fn cone_ok(a: f64) -> bool {
 
 impl Hole {
     /// The revolve that cuts the hole; `reach` holds all the part's material (for Through).
-    pub(crate) fn revolve(&self, reach: &Box3) -> Result<Feature, HoleError> {
+    /// (Public for the differential against the spec's exact profile, forge-lang's
+    /// `kernel_hole_ref`.) A hole up to a face or the next face is resolved to a depth first.
+    pub fn revolve(&self, reach: &Box3) -> Result<Feature, HoleError> {
         let r = self.diameter / 2.0;
         let pos = |v: f64| v.is_finite() && v > 0.0;
         if !pos(r) || !self.at.origin.is_finite() {
