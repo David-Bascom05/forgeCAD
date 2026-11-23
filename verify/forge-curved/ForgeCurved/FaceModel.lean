@@ -12,8 +12,9 @@ they are:
 * at a vert, the **bounding edges** are realised edge covectors `E` above `v`'s, each lying in its
   ledger edge, and a sector is bounded by exactly the edges whose covector is below its own.
 
-With the local picture of Local.lean at the point (`LocalGood`: transversal points by
-`localGood'_of_transversal`, cone apexes by `localGood_of_homogeneous`), that is F1–F4:
+With local connectivity at the point (`LocalConn`, the `conn` half of Local.lean's `LocalGood`:
+transversal points by `localGood'_of_transversal`, cone apexes by `localGood_of_homogeneous`,
+tangent contacts by a graph model), and the closures the models list, that is F1–F4:
 * **`edgeLocal_of_model`**: an `EdgeModel` gives `EdgeLocal` (the wing label is the index of the
   point's covector in `Φ`);
 * **`vertLocal_of_model`**: a `VertModel` gives `VertLocal`.
@@ -46,6 +47,16 @@ are equal. -/
 theorem eq_of_le_count_eq {X Y : Cov} (h : Cov.le X Y = true)
     (hc : X.count .zero = Y.count .zero) : X = Y := eq_of_le_of_count h hc.le
 
+/-- **Local connectivity at `x`**: the `conn` half of `LocalGood`. It is all the face models
+need of the local picture; the closures they need are fields of the models. (At a tangent contact
+the other half, `LocalGood.near`, fails for cells realised only far away.) -/
+def LocalConn (cs : List (Carrier P ℝ)) (x : P) : Prop :=
+  ∀ W : Set P, IsOpen W → x ∈ W → ∃ U : Set P, IsOpen U ∧ U ⊆ W ∧ x ∈ U ∧
+    ∀ Y, Cov.le (covOfK cs x) Y = true → IsPreconnected (cell cs Y ∩ U)
+
+theorem LocalGood.localConn {cs : List (Carrier P ℝ)} {x : P} (h : LocalGood cs x) :
+    LocalConn cs x := h.conn
+
 /-- **The local model at an edge point**: the wings are the facet covectors `Φ`. -/
 structure EdgeModel (G : FaceGeo P) (cs : List (Carrier P ℝ)) (wf : List Nat) (x : P) where
   W : Set P
@@ -56,7 +67,8 @@ structure EdgeModel (G : FaceGeo P) (cs : List (Carrier P ℝ)) (wf : List Nat) 
   nodup : Φ.Nodup
   facet : ∀ φ ∈ Φ, φ.count .zero = 1
   above : ∀ φ ∈ Φ, Cov.le (covOfK cs x) φ = true
-  real : ∀ φ ∈ Φ, RealisedK cs φ
+  /-- each wing reaches `x` (from `LocalGood.near` when realised) -/
+  near : ∀ φ ∈ Φ, x ∈ closure (cell cs φ)
   /-- the wing's cell lies, near `x`, in the row's facet -/
   sub : ∀ i (h : i < Φ.length), cell cs Φ[i] ∩ W ⊆ G.facet (wf.getD i 0)
   /-- every facet point near `x` is on a listed wing -/
@@ -89,7 +101,7 @@ theorem piece_eq {wf : List Nat} {x : P} (m : EdgeModel G cs wf x) (i : Nat) (hi
 
 /-- **F1–F4 at an edge point, from the local model and the local picture.** -/
 theorem edgeLocal_of_model (hc : ∀ c ∈ cs, Continuous c) {wf : List Nat} {x : P}
-    (m : EdgeModel G cs wf x) (hl : LocalGood cs x) : Nonempty (EdgeLocal G wf x) := by
+    (m : EdgeModel G cs wf x) (hl : LocalConn cs x) : Nonempty (EdgeLocal G wf x) := by
   refine ⟨{
     W₀ := m.W
     hW₀ := m.hWo.mem_nhds m.hxW
@@ -112,12 +124,11 @@ theorem edgeLocal_of_model (hc : ∀ c ∈ cs, Continuous c) {wf : List Nat} {x 
     have hi' : i < m.Φ.length := m.len ▸ hi
     show x ∈ closure {y | y ∈ m.W ∧ y ∈ G.facet (wf.getD i 0) ∧ m.Φ.idxOf (covOfK cs y) = i}
     rw [piece_eq m i hi']
-    exact mem_closure_inter_open (hl.near _ (m.above _ (List.getElem_mem hi'))
-      (m.real _ (List.getElem_mem hi'))) m.hWo m.hxW
+    exact mem_closure_inter_open (m.near _ (List.getElem_mem hi')) m.hWo m.hxW
   · intro i hi U hU
     have hi' : i < m.Φ.length := m.len ▸ hi
     obtain ⟨O, hOU, hOo, hxO⟩ := mem_nhds_iff.mp (Filter.inter_mem hU (m.hWo.mem_nhds m.hxW))
-    obtain ⟨U'', hU''o, hU''O, hxU'', hcon⟩ := hl.conn O hOo hxO
+    obtain ⟨U'', hU''o, hU''O, hxU'', hcon⟩ := hl O hOo hxO
     refine ⟨U'', hU''o.mem_nhds hxU'', fun y hy => (hOU (hU''O hy)).1, ?_⟩
     show IsPreconnected
       ({y | y ∈ m.W ∧ y ∈ G.facet (wf.getD i 0) ∧ m.Φ.idxOf (covOfK cs y) = i} ∩ U'')
@@ -142,14 +153,14 @@ structure VertModel (G : FaceGeo P) (cs : List (Carrier P ℝ)) (ss : List Sec) 
   nodup : Φ.Nodup
   facet : ∀ φ ∈ Φ, φ.count .zero = 1
   above : ∀ φ ∈ Φ, Cov.le (covOfK cs v) φ = true
-  real : ∀ φ ∈ Φ, RealisedK cs φ
+  near : ∀ φ ∈ Φ, v ∈ closure (cell cs φ)
   sub : ∀ i (h : i < Φ.length), cell cs Φ[i] ∩ W ⊆ G.facet (ss.getD i (0, 0, 0)).1
   complete : ∀ y ∈ W, y ∈ FacetPts G → covOfK cs y ∈ Φ
   E : List Cov
   ea : Nat → Nat
   edge2 : ∀ ε ∈ E, ε.count .zero = 2
   eabove : ∀ ε ∈ E, Cov.le (covOfK cs v) ε = true
-  ereal : ∀ ε ∈ E, RealisedK cs ε
+  enear : ∀ ε ∈ E, v ∈ closure (cell cs ε)
   esub : ∀ j (h : j < E.length), cell cs E[j] ∩ W ⊆ G.edge (ea j)
   /-- a point of a ledger edge near `v` is on one of the listed edge cells of that edge -/
   esharp : ∀ y ∈ W, ∀ a, y ∈ G.edge a → ∃ j, ∃ h : j < E.length, covOfK cs y = E[j] ∧ ea j = a
@@ -160,8 +171,12 @@ structure VertModel (G : FaceGeo P) (cs : List (Carrier P ℝ)) (ss : List Sec) 
   /-- a sector's bounding edges are listed edges below it -/
   le_of_bounds : ∀ i (hi : i < Φ.length) a, Sec.bounds (ss.getD i (0, 0, 0)) a →
     ∃ j, ∃ hj : j < E.length, ea j = a ∧ Cov.le E[j] Φ[i] = true
-  /-- the local picture at the edge points near `v` (transversal there) -/
-  local_ : ∀ y ∈ W, LocalGood cs y
+  /-- local connectivity at `v` -/
+  conn : LocalConn cs v
+  /-- near `v`, an edge cell below a sector is in its closure (`LocalGood.near` at the edge
+  points, transversal there) -/
+  inc : ∀ y ∈ W, ∀ i (hi : i < Φ.length) j (hj : j < E.length), covOfK cs y = E[j] →
+    Cov.le E[j] Φ[i] = true → y ∈ closure (cell cs Φ[i])
 
 /-- The sector pieces are the sectors' cells near the vert. -/
 theorem vpiece_eq {ss : List Sec} {v : P} (m : VertModel G cs ss v) (i : Nat) (hi : i < m.Φ.length) :
@@ -244,12 +259,11 @@ theorem vertLocal_of_model (hc : ∀ c ∈ cs, Continuous c) {ss : List Sec} {v 
     show v ∈ closure {y | y ∈ m.W ∧ y ∈ G.facet (ss.getD i (0, 0, 0)).1 ∧
       m.Φ.idxOf (covOfK cs y) = i}
     rw [hpiece i hi']
-    exact mem_closure_inter_open ((m.local_ v m.hvW).near _ (m.above _ (List.getElem_mem hi'))
-      (m.real _ (List.getElem_mem hi'))) m.hWo m.hvW
+    exact mem_closure_inter_open (m.near _ (List.getElem_mem hi')) m.hWo m.hvW
   · intro i hi U hU
     have hi' : i < m.Φ.length := m.len ▸ hi
     obtain ⟨O, hOU, hOo, hxO⟩ := mem_nhds_iff.mp (Filter.inter_mem hU (m.hWo.mem_nhds m.hvW))
-    obtain ⟨U'', hU''o, hU''O, hxU'', hcon⟩ := (m.local_ v m.hvW).conn O hOo hxO
+    obtain ⟨U'', hU''o, hU''O, hxU'', hcon⟩ := m.conn O hOo hxO
     refine ⟨U'', hU''o.mem_nhds hxU'', fun y hy => (hOU (hU''O hy)).1, ?_⟩
     show IsPreconnected ({y | y ∈ m.W ∧ y ∈ G.facet (ss.getD i (0, 0, 0)).1 ∧
       m.Φ.idxOf (covOfK cs y) = i} ∩ U'')
@@ -266,17 +280,14 @@ theorem vertLocal_of_model (hc : ∀ c ∈ cs, Continuous c) {ss : List Sec} {v 
     have hEm := List.getElem_mem hj
     refine ⟨?_, fun y ⟨hya, hyW⟩ => ?_⟩
     · refine closure_mono (hea ▸ m.esub j hj) ?_
-      exact mem_closure_inter_open ((m.local_ v m.hvW).near _ (m.eabove _ hEm) (m.ereal _ hEm))
-        m.hWo m.hvW
+      exact mem_closure_inter_open (m.enear _ hEm) m.hWo m.hvW
     · obtain ⟨j', hj', e, hea'⟩ := m.esharp y hyW a hya
       have hjj : j' = j := m.ea_inj j' j hj' hj (hea'.trans hea.symm)
       subst hjj
       show y ∈ closure {y | y ∈ m.W ∧ y ∈ G.facet (ss.getD i (0, 0, 0)).1 ∧
         m.Φ.idxOf (covOfK cs y) = i}
       rw [hpiece i hi']
-      refine mem_closure_inter_open ((m.local_ y hyW).near _ ?_ (m.real _ (List.getElem_mem hi')))
-        m.hWo hyW
-      rw [e]; exact hle
+      exact mem_closure_inter_open (m.inc y hyW i hi' j' hj' e hle) m.hWo hyW
 
 /-- **The builder's obligations from local models**: F5 (the rooms), and at every point of every
 listed edge, and at every listed vert, a local carrier model with the local picture (carriers
@@ -284,7 +295,7 @@ may differ from point to point: the near faces there). -/
 theorem obligations_of_models {keep : Nat → Bool} {L : Rows (P := P)} (hs : SideLocal G keep)
     (hne : ∀ e ∈ L.es, (G.edge e).Nonempty)
     (he : ∀ e ∈ L.es, ∀ x ∈ G.edge e, ∃ cs : List (Carrier P ℝ), (∀ c ∈ cs, Continuous c) ∧
-      Nonempty (EdgeModel G cs (L.erow e) x) ∧ LocalGood cs x)
+      Nonempty (EdgeModel G cs (L.erow e) x) ∧ LocalConn cs x)
     (hv : ∀ v ∈ L.vs, ∃ cs : List (Carrier P ℝ), (∀ c ∈ cs, Continuous c) ∧
       Nonempty (VertModel G cs (L.vsec v) (L.vpt v))) :
     Obligations G keep L where
@@ -301,7 +312,7 @@ result's non-manifoldness, given F5 and the local carrier models. -/
 theorem xNonManifoldF_iff_top_of_models {keep : Nat → Bool} {L : Rows (P := P)}
     (hs : SideLocal G keep) (hne : ∀ e ∈ L.es, (G.edge e).Nonempty)
     (he : ∀ e ∈ L.es, ∀ x ∈ G.edge e, ∃ cs : List (Carrier P ℝ), (∀ c ∈ cs, Continuous c) ∧
-      Nonempty (EdgeModel G cs (L.erow e) x) ∧ LocalGood cs x)
+      Nonempty (EdgeModel G cs (L.erow e) x) ∧ LocalConn cs x)
     (hv : ∀ v ∈ L.vs, ∃ cs : List (Carrier P ℝ), (∀ c ∈ cs, Continuous c) ∧
       Nonempty (VertModel G cs (L.vsec v) (L.vpt v))) :
     XNonManifoldF G keep L ↔ TopNonManifoldF G (Res G keep) L :=
