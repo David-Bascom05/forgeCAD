@@ -5,13 +5,14 @@ translation is proven equal, function by function, to the Lean core it implement
 `ForgeExact.DecideOnce.core` (verify/forge-exact/ForgeExact/DecideOnce/Core.lean). That is the
 obligation in decide-once-spec.md §4.
 
-- `translate.sh`: Charon (9e193f0) and Aeneas (2e3d4488) on the crate, writing
-  `lean/ForgeBoolCore/{Types,Funs}.lean`. The toolchains come from
-  research/kernel-audit/coverage/aeneas/{setup,build}.sh. The OCaml build also needs `libgmp-dev`
-  (apt) and `opam install odoc`, which those scripts do not install.
-- `lean/`: a lake project. It requires the Aeneas Lean library at the same commit, and
-  verify/forge-exact by path. `lake build` checks the translation, the refinement lemmas and the
-  axiom report. It takes about 5 min once the Mathlib cache is fetched (`lake exe cache get`).
+- Translation: `tools/aeneas/translate.sh forge-bool-core` (the toolchain: `tools/aeneas/setup.sh`),
+  configured by `translate.conf`: the whole crate, release with overflow checks, and `BRIDGE=none`
+  (no f64, so no float bridge). It writes `lean/ForgeBoolCore/{Types,Funs,FunsExternal_Template}.lean`.
+  CI (`.github/workflows/aeneas.yml`) re-translates and fails if the committed files differ, then
+  builds the Lean.
+- `lean/`: a lake project. It requires the Aeneas Lean library at the pinned commit, and
+  verify/forge-exact by path. `lake exe cache get && lake build` checks the translation, the
+  refinement lemmas and the axiom report.
 
 ## What translates
 
@@ -25,8 +26,10 @@ nothing left opaque that the core itself defines. Getting there took a style pas
 - No local variable named `uf`, because it shadowed the generated namespace `uf`. The module is
   now `union_find`.
 
-`FunsExternal.lean` declares seven std functions as axioms: `Bool::ne`, the derived `Debug`, `eq`
-and `ne` of pairs, two `Hash` impls, and `Vec::default`. The core's proven path uses none of them.
+`FunsExternal.lean` defines the seven std functions Aeneas leaves opaque, none as an axiom:
+`Bool::ne`, the tuple `eq` and `ne` (std's bodies) and `Vec::default` (the empty vector) are
+`def`s; the two `Hash` impls and the tuple `Debug` are Lean `opaque`s. The core's proven path uses
+none of them.
 `sort_triples` now compares field by field (`le3`), so the tuple `PartialOrd` axiom is gone.
 
 ## What is proven
@@ -37,7 +40,9 @@ no `sorry`. The obligations are stated in `lean/ForgeBoolCore/Specs.lean`; how t
 sessions is in `lean/SPLIT.md`.
 
 - **Every stage**, `unify` and `collapse` included:
-  - the index, `cov`, `find` and `intern`;
+  - the index, `cov`, `find` and `intern`. `find` looks up through the hashed index `Index::find_h`
+    (`RefineHash.lean`). The hash need not be injective: `find_h` binary-searches the run of entries
+    with the key's hash, then compares covectors (`same`);
   - `split` and `split_ok` (group S);
   - `membership`, the classify check, and the keep table;
   - `around`, `between`, `edges_between` and `bad_vert`;

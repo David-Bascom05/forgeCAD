@@ -15,4 +15,4 @@ name = "ForgeBoolCore"
 # The spec the translation is proven against: ForgeExact.DecideOnce (core Lean)
 [[require]]
 name = "forgeexact"
-path = "../../../../../verify/forge-exact"
+path = "../../../forge-exact"

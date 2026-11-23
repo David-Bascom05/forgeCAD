@@ -4,6 +4,11 @@ import ForgeExact.Flat
 import ForgeExact.SnapSym
 import ForgeExact.RefFacts
 import ForgeExact.DecideOnce.Ledger
+import ForgeExact.DecideOnce.CoreInc
+import ForgeExact.DecideOnce.Simulation
+import ForgeExact.DecideOnce.RoomConst
+import ForgeExact.DecideOnce.MetricI
+import ForgeExact.DecideOnce.CoverageI
 import ForgeExact.DecideOnce.Nef
 import ForgeExact.DecideOnce.Rungs
 import ForgeExact.Jordan
@@ -323,3 +328,17 @@ elab "#standard_axioms " ids:ident* : command => do
   ForgeExact.Poly3.empty_of_leaves
   ForgeExact.Poly3.eval_about
   ForgeExact.Poly3.about_bound
+  ForgeExact.DecideOnce.cls_map
+  ForgeExact.DecideOnce.Ledger.core_inc
+  ForgeExact.DecideOnce.core_refines
+  ForgeExact.DecideOnce.coreK_refines
+  ForgeExact.DecideOnce.flat_refines
+  ForgeExact.DecideOnce.IncLedger.coreI_zeroThickness_iff
+  ForgeExact.DecideOnce.room_const
+  ForgeExact.DecideOnce.room_const_all
+  ForgeExact.DecideOnce.IncLedger.collapse_idem
+  ForgeExact.DecideOnce.IncLedger.collapse_subset
+  ForgeExact.DecideOnce.IncLedger.collapse_refuse
+  ForgeExact.DecideOnce.Refines.collapse_exact_off_thin
+  ForgeExact.DecideOnce.IncLedger.coverageKI
+  ForgeExact.DecideOnce.IncLedger.coverageMI

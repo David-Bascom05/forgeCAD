@@ -24,6 +24,12 @@ A feature meets the standard when it has all six.
 - L4 is done by Aeneas, translating the real Rust and proving it refines the proven algorithm, wherever that can be made to work.
 - A hand-written Lean model plus a differential test counts only while Aeneas can't take the code yet, and is marked interim with the blocker named.
 - Writing new kernel code in the style Aeneas accepts (research/aeneas/STYLE.md) is the default, as long as bits and speed stay identical.
+- **Speed changes are re-proven, not refused** (the owner, 2026-11-23: "You can redo lean to prove
+  faster rust"). A speed change to proven Rust is planned together with its re-proof. The proof's
+  Lean is redone to match the faster code; the change is never held back because it breaks the
+  existing proof. Until its re-proof lands, the change stays off main and behind its switch. The
+  CI gate (forge-bool-core-proof) keeps the shipped line proven. New proven code is designed in its
+  fast form from the start.
 - The aeneas session (branch suffix `aeneas`) owns:
   - the toolchain;
   - the float bridge to verify/ieee754;

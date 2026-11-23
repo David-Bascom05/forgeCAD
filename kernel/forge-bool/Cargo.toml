@@ -26,6 +26,9 @@ decide_once_curved = ["dep:forge-bool-core", "dep:forge-alg", "forge-math/exact"
 # the curved L2 reference (src/decide_once_curved_ref.rs), executable, for the L6 differential:
 # tests and fuzzing only, never the production path
 curved_reference = ["decide_once_curved"]
+# measurement only: run A8's face builder (src/decide_once/face_builder.rs) in release too, beside
+# the plane ledger, its answer dropped, so its instructions and allocations can be counted
+a8_builder = ["decide_once"]
 
 [dev-dependencies]
 forge-ops = { path = "../forge-ops" }

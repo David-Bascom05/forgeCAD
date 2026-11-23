@@ -45,4 +45,11 @@ import ForgeExact.Quad.Cert
 import ForgeExact.QRef.Poly
 import ForgeExact.QRef.Octree
 import ForgeExact.Poly3.Octree
+import ForgeExact.DecideOnce.IncCore
+import ForgeExact.DecideOnce.CoreInc
+import ForgeExact.DecideOnce.Refines
+import ForgeExact.DecideOnce.Simulation
+import ForgeExact.DecideOnce.RoomConst
+import ForgeExact.DecideOnce.MetricI
+import ForgeExact.DecideOnce.CoverageI
 import ForgeExact.Axioms

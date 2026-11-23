@@ -18,6 +18,15 @@ fn walk(dir: &Path, files: &mut Vec<std::path::PathBuf>) {
 }
 
 fn main() {
+    println!("cargo:rerun-if-changed=build.rs");
+    // a measurement build pins it (tools/speed/gate.sh, FORGE_KERNEL_HASH_PIN): the hash is in
+    // every cache key, so a kernel change that compiles to the same code (a comment, a module
+    // behind a feature that is off) would otherwise move the keys and with them the count
+    println!("cargo:rerun-if-env-changed=FORGE_KERNEL_HASH_PIN");
+    if let Ok(pin) = std::env::var("FORGE_KERNEL_HASH_PIN") {
+        println!("cargo:rustc-env=FORGE_KERNEL_HASH={pin}");
+        return;
+    }
     let mut files = Vec::new();
     for d in ["../../kernel", "../forge-agent/src", "src"] {
         println!("cargo:rerun-if-changed={d}");
@@ -63,5 +72,4 @@ fn main() {
         }
     }
     println!("cargo:rustc-env=FORGE_KERNEL_HASH={h:016x}");
-    println!("cargo:rerun-if-changed=build.rs");
 }

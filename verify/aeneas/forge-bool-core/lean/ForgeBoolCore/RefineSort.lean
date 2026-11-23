@@ -1,5 +1,6 @@
 import ForgeBoolCore.RefineIndex
 import ForgeBoolCore.SortModel
+import ForgeBoolCore.RefineHash
 open Aeneas Aeneas.Std Result
 
 /-!
@@ -362,7 +363,7 @@ theorem index_new_loop_spec (cells : Slice (alloc.vec.Vec Sgn)) (hsmall : cells.
 `3·n` within `usize`). -/
 theorem index_new_spec (cells : Slice (alloc.vec.Vec Sgn)) (hsmall : cells.val.length < U32.max)
     (hmax : 3 * cells.val.length ≤ Usize.max) :
-    index.Index.new cells ⦃ ix => IndexOK ix.order cells ⦄ := by
+    index.Index.new cells ⦃ ix => IndexOK ix.order cells ∧ HashOK ix.hs cells ⦄ := by
   unfold index.Index.new
   step with index_new_loop_spec cells hsmall (alloc.vec.Vec.with_capacity U32 (Slice.len cells)) 0#usize
     (by simp [alloc.vec.Vec.with_capacity]) (by simp) as ⟨o, ho⟩
@@ -373,7 +374,8 @@ theorem index_new_spec (cells : Slice (alloc.vec.Vec Sgn)) (hsmall : cells.val.l
     rw [ho] at this; simpa using this
   step with sort_by_cov_spec o cells hids (by omega) as ⟨r, hrp, hrs⟩
   have hrl : r.val.length = cells.val.length := by rw [hrp.length_eq, hol]
-  refine ⟨fun p hp => ?_, fun p q hpq hq => ?_, fun id hid => ?_, hsmall⟩
+  step with hash_table_spec cells hsmall (by omega) as ⟨hs, hhs⟩
+  refine ⟨⟨fun p hp => ?_, fun p q hpq hq => ?_, fun id hid => ?_, hsmall⟩, hhs⟩
   · rw [ordAt_eq hp]; exact idsIn_perm hrp hids _ (List.getElem_mem _)
   · rw [ordAt_eq (by omega), ordAt_eq hq]
     exact List.pairwise_iff_getElem.mp hrs p q (by omega) hq hpq
