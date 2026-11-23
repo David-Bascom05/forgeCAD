@@ -29,6 +29,15 @@ f = 0.08
 ap = 0.5
 
 [[lathe_tool]]
+id = "od-profile-vbmt-left"
+kind = "turn"
+insert = "VBMT160404"
+holder = "SVJBL2525M16"
+vc = 250.0
+f = 0.08
+ap = 0.5
+
+[[lathe_tool]]
 id = "id-bore-ccmt"
 kind = "bore"
 insert = "CCMT09T304"

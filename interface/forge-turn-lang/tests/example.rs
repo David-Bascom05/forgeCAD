@@ -85,3 +85,19 @@ fn the_nut_is_bored_grooved_and_threaded_inside() {
     let cam = forge_turn_lang::run(&through, &d);
     assert!(!cam.ok && cam.ops.iter().any(|o| o.name == "fin" && o.status == "refused"));
 }
+
+#[test]
+fn the_collar_back_chamfer_is_finished_left_hand() {
+    let d = dir();
+    let src = std::fs::read_to_string(d.join("collar_turn.fg")).unwrap();
+    let cam = forge_turn_lang::run(&src, &d);
+    assert!(cam.ok, "{:?} {:?}", cam.errors, cam.ops);
+    assert_eq!(cam.certification(), "full");
+    let text = cam.program_text().unwrap();
+    assert!(text.contains("T0909") && text.contains("Z-15.6"), "{text}");
+    // the right-hand profiling tool on down the chamfer instead: its trailing edge meets the collar
+    let rh = src.replace("to: -16)\nneck", "to: -21)\nneck");
+    assert_ne!(rh, src);
+    let cam = forge_turn_lang::run(&rh, &d);
+    assert!(!cam.ok && cam.ops.iter().any(|o| o.name == "fin" && o.status == "refused"));
+}
