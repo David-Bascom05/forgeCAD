@@ -97,6 +97,44 @@ theorem res_keepRoom {Aex Bex : BodyModel E} {a : Arr E} (hvA : ValidExact Aex)
   show ForgeExact.Topology.closure (ForgeExact.Topology.interior _) x ↔ x ∈ closure (interior _)
   rw [ForgeCurved.closure_iff, ForgeCurved.interior_eq, hset]
 
+/-- **The closure of the kept rooms has its frontier on the arrangement's faces**: off them a
+point is in a room, which is kept (then the point is interior) or misses the closure. -/
+theorem frontier_res_sub {G : FaceGeo E} {FacesG : Set E} {cf : Nat → E → ℝ}
+    (hd : FacetData G FacesG cf) (keep : Nat → Bool) : frontier (Res G keep) ⊆ FacesG := by
+  intro x hx
+  by_contra hxF
+  obtain ⟨r, hr⟩ := hd.room_cover x hxF
+  cases hk : keep r
+  · have := room_disj_res (sideLocal_of_data hd keep) hk
+    exact disjoint_left.mp this hr (isClosed_closure.frontier_subset hx)
+  · have hint : x ∈ interior (Res G keep) :=
+      interior_maximal ((room_sub_kept hk).trans subset_closure) (hd.room_open r) hr
+    exact hx.2 hint
+
+/-- **D8's face obligations give `Bounds`**: the closure of the kept rooms is closed, regular
+(the closure of an open set), bounded (it is the exact result, inside `⟦A⟧ ∪ ⟦B⟧`), and its
+frontier is on the arrangement's faces. -/
+theorem bounds_of_faces {Aex Bex Rs : BodyModel E} {a : Arr E} (hvA : ValidExact Aex)
+    (hvB : ValidExact Bex) (ha : ArrOK Aex Bex a) (op : Op)
+    (h : BoundsFaces Rs a.FacesG (Res a.G (keepRoom a.G (denoteExact Aex) (denoteExact Bex) op))) :
+    Bounds Rs (Res a.G (keepRoom a.G (denoteExact Aex) (denoteExact Bex) op)) := by
+  set keep := keepRoom a.G (denoteExact Aex) (denoteExact Bex) op
+  have hKo : IsOpen (Kept a.G keep) :=
+    isOpen_iUnion fun r => isOpen_iUnion fun _ => ha.data.room_open r
+  refine ⟨isClosed_closure, ?_, ?_, fun x hx => h.frontier_on ⟨frontier_res_sub ha.data keep hx, hx⟩,
+    h.faces_sub, h.local_formula, h.oriented, h.seeded⟩
+  · apply Set.Subset.antisymm
+    · exact (closure_mono interior_subset).trans_eq closure_closure
+    · exact closure_mono (interior_maximal subset_closure hKo)
+  · have hsub : opSet op (denoteExact Aex) (denoteExact Bex) ⊆ denoteExact Aex ∪ denoteExact Bex := by
+      cases op
+      · exact Subset.rfl
+      · exact fun x hx => Or.inl hx.1
+      · exact fun x hx => Or.inl hx.1
+    have hb := ((bounds_denoteExact hvA).bounded.union (bounds_denoteExact hvB).bounded).subset hsub
+    rw [res_keepRoom hvA hvB ha op]
+    exact hb.closure.subset (closure_mono interior_subset)
+
 section Compose
 
 variable {Body K Q : Type} {δ : ℝ} {abs : Body → BodyModel E} {sc : Scope Body K Q}
@@ -108,7 +146,8 @@ theorem apply_correct {A B R : Body} {op : Op} {Aex Bex : BodyModel E} {a : Arr 
     (hvA : ValidExact Aex) (hvB : ValidExact Bex) (ha : ArrOK Aex Bex a)
     (hpost : ApplyPost δ abs Names A B op a (denoteExact Aex) (denoteExact Bex) R) :
     Correct δ abs sc Names A B op (.ok R) := by
-  obtain ⟨Rs, hRs, hiso, hwf, hbd, hfa, hnames⟩ := hpost
+  obtain ⟨Rs, hRs, hiso, hwf, hbf, hfa, hnames⟩ := hpost
+  have hbd := bounds_of_faces hvA hvB ha op hbf
   refine ⟨⟨Rs, hRs, hiso, hwf, _, hbd⟩, hfa, ?_, hnames⟩
   rw [denote_spec hRs, denoteExact_eq hwf hbd, res_keepRoom hvA hvB ha op, denote_spec hAex,
     denote_spec hBex]

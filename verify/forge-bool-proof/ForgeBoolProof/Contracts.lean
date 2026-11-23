@@ -175,6 +175,18 @@ def KeepRuleBd : Prop :=
     ClassesOK a (denoteExact Aex) (denoteExact Bex) c →
     KeptIsBd a (fun f => keepRule op (a.src f) (c f)) (keepRoom a.G (denoteExact Aex) (denoteExact Bex) op)
 
+/-- **What D8 owes of the result's faces** against the closure `S` of the kept rooms: the parts
+of `Bounds Rs S` about the faces. `apply_correct` derives the rest: `S` is closed, regular and
+bounded, and its frontier lies on the arrangement's faces. -/
+structure BoundsFaces (b : BodyModel E) (FacesG S : Set E) : Prop where
+  /-- the frontier, where it is on the arrangement's faces, is on the result's faces -/
+  frontier_on : FacesG ∩ frontier S ⊆ Faces b
+  faces_sub : Faces b \ Zones b ⊆ frontier S
+  local_formula : ∀ u Φ z, b.formulas[u]? = some Φ → b.zones[u]? = some z → ∀ x ∈ z,
+    (∀ f ∈ b.faces, IncV b u f → f.carrier x ≠ 0) → (x ∈ S ↔ Φ.den (carriers b) x)
+  oriented : ∀ f ∈ b.faces, ∀ y, Alone b f y → Oriented f.carrier S f.sense y
+  seeded : Seeded b
+
 /-! ## The pipeline and its views -/
 
 /-- `general`'s nine steps over the translation's data types. -/
@@ -275,8 +287,8 @@ def D7 : Prop := ∀ A B Aex Bex op fs cs, Ctx δ abs Size A B Aex Bex → ArrOK
 def ApplyPost (A B : Body) (op : Op) (a : Arr E) (SA SB : Set E) (R : Body) : Prop :=
   ∃ Rs, exactOf δ (abs R) = some Rs ∧
     (∀ i (h : i < (abs R).edges.length), EdgeIsolated δ (abs R) i (abs R).edges[i]) ∧
-    WellFormed Rs ∧ Bounds Rs (Res a.G (keepRoom a.G SA SB op)) ∧ Faithful δ (abs R) ∧
-    Names A B op R
+    WellFormed Rs ∧ BoundsFaces Rs a.FacesG (Res a.G (keepRoom a.G SA SB op)) ∧
+    Faithful δ (abs R) ∧ Names A B op R
 
 def D8 : Prop := ∀ A B Aex Bex op fs kp, Ctx δ abs Size A B Aex Bex → ArrOK Aex Bex (V.arr fs) →
   KeptIsBd (V.arr fs) (V.kept kp) (keepRoom (V.arr fs).G (denoteExact Aex) (denoteExact Bex) op) →

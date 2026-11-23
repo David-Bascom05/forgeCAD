@@ -61,6 +61,7 @@ verify/forge-bool-proof/ForgeBoolProof/<file>.
 | T.links | `topo::links` refines `checkLinks` (L4) | SPINE | proven on rebase-fundamentals | `forge_topo.links_refines` |
 | T.shells | `topo_shell::shell_faces` refines `checkShellFaces` (L4) | SPINE | proven on rebase-fundamentals | `forge_topo.shell_faces_refines` |
 | T.edges | `topo_edges::edges`, `loops` refine `checkEdges`, `checkLoops` (L4) | SPINE | proven on rebase-fundamentals | `forge_topo.edges_refines`, `loops_refines` |
+| T.ovf | the L4 refinements above hold for the overflow-checked translation (today they are proven on the wrapping one, `OVERFLOW_CHECKS=false` in translate.conf): every `+ 1` on a count needs the count below `usize::MAX`/`u32::MAX`, from the view's hypotheses | SPINE | open (gap) | verify/aeneas/forge-topo/translate.conf |
 | T.euler | `check_shell_euler` (stamped distinct count = eraseDups) | SPINE | open | — |
 | T.fans | `check_fans` (corner table as an opaque view method) | SPINE | open | — |
 | T.all | `check_known`'s combinatorial part composed (`Model.check`) | SPINE | open | — |
@@ -78,12 +79,13 @@ verify/forge-bool-proof/ForgeBoolProof/<file>.
 | D5 | `imprint`, `share_cuts`, `place_cuts`, `edge_split`, `split_face`, `plane_split` | the regions are the arrangement's facets on f (`FacetData`) | SPINE (statement), FLAT-SITES (proof, after §1a) | stated | Contracts.lean `D5`, `ArrOK`; `place_cuts`: research/kernel-audit/coverage/aeneas (proven, L4) |
 | D6 | `classify_specs`, `interior_point`, `probe`, `Index::classify` (§1a), coplanar sense | each region's class is `whereR` of the other solid at the region | FLAT-SITES | stated | Contracts.lean `D6`, `ClassesOK` |
 | D7 | `keep_of`, `lean`, the naming functions | kept = facets separating a kept room from an unkept one; names by the rule | SPINE (keep), FALLBACK (names, with A8's edge-name parity) | stated | Contracts.lean `D7`, `KeepOK` |
-| D8 | `apply`, `edge_split`, joins/splits, `sole_survivors` | R's exact counterpart: faces = the kept facets, `Bounds Rs (reg (opSet ⟦A⟧ ⟦B⟧))`, `WellFormed` | SPINE | stated | Contracts.lean `D8`, `ApplyPost` |
+| D8 | `apply`, `edge_split`, joins/splits, `sole_survivors` | R's exact counterpart is well formed with isolated edges, R is faithful (F1) and named by the rule, and its faces meet `BoundsFaces` against the closure of the kept rooms (frontier on the faces where the arrangement's are, `faces_sub`, Φ_u, orientation, seeded) | SPINE | stated | Contracts.lean `D8`, `ApplyPost` |
 | D9 | `pinched_new`, `pinched_old`, `touched_old`, `undecided_touch`, `refuse_strays` | refuses iff the exact result is non-manifold there | FALLBACK (G6, G7) | stated | Contracts.lean `D9` |
 | D5.zone | `ArrOK.on_frontier` inside vertex-cluster zones: a facet on a body's faces in a zone (micro-faces) is on that solid's frontier, or the contract changes there | SPINE | open (with the cluster ruling) | Contracts.lean `ArrOK.on_frontier` |
 | D7.math | `KeepRuleBd`: on exact classes, `keepRule` picks each boundary facet of the kept rooms once (a coplanar piece once, as A's) | SPINE | proven | KeepRule.lean `keepRuleBd_proof` (`facet_rooms`, `table` by `decide`) |
 | D7.table | `keep_of` computes `keepRule` (the table in Contracts.lean is the spec; if boolean.rs's table differs, it changes here with a reason) | SPINE | open | — |
-| D8.math | the assembly boundary lemma: a well-formed exact body whose faces are the kept boundary facets, oriented to the kept rooms, bounds `Res G keepRoom` (`FaceLocal.frontier_iff_bd`) | SPINE | open | — |
+| D8.derived | the rest of `Bounds` for the result: the closure of the kept rooms is closed, regular, bounded, with its frontier on the arrangement's faces | SPINE | proven | Compose.lean `bounds_of_faces`, `frontier_res_sub` |
+| D8.math | the assembly boundary lemma: from `KeptIsBd` and the faces `apply` writes (the kept facets, oriented to the kept rooms), `BoundsFaces` holds; it is what D8's proof reduces to once `apply`'s output is read as faces | SPINE | open | — |
 | Dn | `nary_with` | D1–D9 over n tools, the op fold as keep; `Batch` sound when decided | FALLBACK (G10) | open | — |
 
 ## §1a. The exact `On` (classify.rs)
@@ -101,7 +103,7 @@ verify/forge-bool-proof/ForgeBoolProof/<file>.
 
 | id | site | owner | status | file / theorem |
 |---|---|---|---|---|
-| G1 | the output geometry is f64 | SPINE | proven (ruled F1; B.F1) | BodyModel.lean |
+| G1 | the output geometry is f64 | SPINE | stated (ruled F1: the reading `exactOf`/`Refines`/`denote` is proven in BodyModel; that the output is within δ, `Faithful δ (abs R)`, is D8's obligation, open) | BodyModel.lean; Contracts.lean `ApplyPost` |
 | G2 | the retry ladder (`plan_retried`, `plan_fenced`, thread-local flags) | FALLBACK | open | — |
 | G3 | `RETRIED` + post-hoc `forge_topo::check` → `Lost::RetryInvalid` | FALLBACK | open | — |
 | G4 | `UNDECIDED` touch + post-hoc `FaceWrongSide` check | FALLBACK | open | — |
