@@ -36,29 +36,7 @@ impl From<ProfileError> for RevolveError {
 /// the second half-turn had stay as aliases); a profile with a cone, sphere or torus in it gives
 /// two half-turn faces per segment.
 pub fn revolve(profile: &Profile, axis: Axis2, angle: f64, feature: u64) -> Result<Body, RevolveError> {
-    build(profile, axis, angle, feature, false, None)
-}
-
-/// A sheet (`Body::sheet`): each chain (segments end to end, open or closed, as `extrude_sheet`
-/// takes them) spun about `axis` by `angle`, with no caps. Faces are named and made as `revolve`
-/// makes them; the front is the right of each chain, outside a loop (turned counter-clockwise).
-pub fn revolve_sheet(
-    plane: &Frame,
-    chains: &[Vec<(Segment, u64)>],
-    axis: Axis2,
-    angle: f64,
-    feature: u64,
-) -> Result<Body, RevolveError> {
-    let chains = crate::profile::sheet_chains(chains)?;
-    let closed: Vec<bool> = chains.iter().map(|c| c.1).collect();
-    let profile = Profile {
-        plane: *plane,
-        loops: chains
-            .into_iter()
-            .map(|(segments, _)| crate::profile::ProfileLoop { segments })
-            .collect(),
-    };
-    build(&profile, axis, angle, feature, false, Some(&closed))
+    build(profile, axis, angle, feature, false)
 }
 
 /// `revolve` for a tool that cuts: a profile touching the axis at a point is no solid of its own but
@@ -69,7 +47,7 @@ pub fn revolve_cutter(
     angle: f64,
     feature: u64,
 ) -> Result<Body, RevolveError> {
-    build(profile, axis, angle, feature, true, None)
+    build(profile, axis, angle, feature, true)
 }
 
 fn build(
@@ -78,17 +56,12 @@ fn build(
     angle: f64,
     feature: u64,
     cutter: bool,
-    // a sheet's chains, each closed or not (already checked)
-    sheet: Option<&[bool]>,
 ) -> Result<Body, RevolveError> {
     if !(angle > tol::ANGULAR && angle <= dmath::TAU + tol::ANGULAR) {
         return Err(RevolveError::BadAngle);
     }
     let full = angle >= dmath::TAU - tol::ANGULAR;
-    let mut profile = match sheet {
-        None => profile.normalized()?,
-        Some(_) => profile.clone(),
-    };
+    let mut profile = profile.normalized()?;
     let dir2 = axis.dir.normalize().ok_or(RevolveError::BadAxis)?;
     let perp2 = dir2.perp();
     // a whole circle tangent to the axis, turned part way, ends on the axis at an apex: its seam goes
@@ -141,7 +114,6 @@ fn build(
         cutter,
         root: Name::feature(feature),
         body: Body::new(),
-        closed: sheet.map(|c| c.to_vec()),
     };
     let mut b = b;
     let flat_or_round = |s: &Segment| {
@@ -170,10 +142,6 @@ fn build(
     b.build()
 }
 
-/// What an open chain's last vertex is named by: its last segment's id with this set, apart from
-/// the vertex where that segment starts.
-const CHAIN_END: u64 = 1 << 63;
-
 struct Revolver<'a> {
     profile: &'a Profile,
     axis_origin: Point2,
@@ -188,8 +156,6 @@ struct Revolver<'a> {
     cutter: bool,
     root: Name,
     body: Body,
-    /// A sheet's chains, each closed or not; None for a solid (every loop closed, capped).
-    closed: Option<Vec<bool>>,
 }
 
 /// Where a profile segment goes: its edges in each copy and how it walks them.
@@ -376,11 +342,10 @@ impl Revolver<'_> {
         let mut pvert_name: Vec<u64> = Vec::new();
         let mut segs: Vec<SegInfo> = Vec::new();
         let mut loop_ranges: Vec<std::ops::Range<usize>> = Vec::new();
-        for (li, l) in self.profile.loops.iter().enumerate() {
+        for l in &self.profile.loops {
             let first_v = pverts.len();
             let first_s = segs.len();
             let n = l.segments.len();
-            let open = self.closed.as_ref().is_some_and(|c| !c[li]);
             for (i, (seg, id)) in l.segments.iter().enumerate() {
                 let (seg, id) = (seg.clone(), *id);
                 pverts.push(seg.start());
@@ -394,18 +359,9 @@ impl Revolver<'_> {
                     seg,
                     id,
                     start: first_v + i,
-                    end: if open {
-                        first_v + i + 1
-                    } else {
-                        first_v + (i + 1) % n
-                    },
+                    end: first_v + (i + 1) % n,
                     forward,
                 });
-            }
-            if open {
-                // an open chain's last end, named by its last segment and marked the chain's end
-                pverts.push(l.segments[n - 1].0.end());
-                pvert_name.push(l.segments[n - 1].1 ^ CHAIN_END);
             }
             loop_ranges.push(first_s..segs.len());
         }
@@ -558,12 +514,9 @@ impl Revolver<'_> {
             }
         }
 
-        if !self.full && self.closed.is_none() {
+        if !self.full {
             self.add_cap(shell, 0, &segs, &eid, &loop_ranges);
             self.add_cap(shell, 1, &segs, &eid, &loop_ranges);
-        }
-        if self.closed.is_some() {
-            self.body.mark_sheet();
         }
         if copies == 1 {
             // what the second half-turn was named finds the whole
@@ -585,7 +538,7 @@ impl Revolver<'_> {
             .iter()
             .filter(|s| matches!(self.surface_of(&s.seg), Ok(None)))
             .count();
-        if self.full && on_axis_runs > 1 || self.closed.as_ref().is_some_and(|c| c.len() > 1) {
+        if self.full && on_axis_runs > 1 {
             self.body.rebuild_shells();
         }
         // (real parts make these, and a seam may hold them together; what does not close is refused)

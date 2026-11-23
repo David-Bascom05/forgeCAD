@@ -954,9 +954,15 @@ pub fn tool_shapes(features: History<'_>, i: usize) -> Result<Vec<(Shape, Combin
 /// pass never sees the part in between, where the feature-by-feature regen refuses an empty
 /// one however later tools add to it; such histories are rebuilt feature by feature instead.
 fn may_empty(first: &Body, tools: &[Tool]) -> bool {
+    // (each live face's box, in id order: a loop over the faces, not their ids' iterator)
     let bx = |b: &Body| {
-        b.face_ids()
-            .fold(forge_math::Box3::EMPTY, |a, f| a.hull(&b.face_box(f)))
+        let mut a = forge_math::Box3::EMPTY;
+        for (k, f) in b.faces.iter().enumerate() {
+            if f.alive {
+                a = a.hull(&b.face_box(forge_topo::FaceId(k as u32)));
+            }
+        }
+        a
     };
     let holds = |a: &forge_math::Box3, b: &forge_math::Box3| {
         let h = a.grow(forge_math::tol::LINEAR);
@@ -1007,14 +1013,16 @@ pub(crate) fn not_empty(b: Body, i: usize) -> Result<Body, RegenError> {
 
 /// Whether a feature makes a new body.
 fn starts(f: &Feature) -> bool {
-    matches!(
-        f,
-        Feature::Extrude { op: Combine::New, .. }
-            | Feature::Revolve { op: Combine::New, .. }
-            | Feature::Ball { op: Combine::New, .. }
-    ) || swept::op(f) == Some(Combine::New)
-        || matches!(f, Feature::Import(t) if t.op == Combine::New)
-        || matches!(f, Feature::Sheet(s) if sheets::op(s) == Combine::New)
+    // one match: an extrude, revolve, ball or import says by its own op, a sheet by its (a new body
+    // unless it is a thin wall); the rest as `swept::op` says
+    match f {
+        Feature::Extrude { op, .. } | Feature::Revolve { op, .. } | Feature::Ball { op, .. } => {
+            *op == Combine::New
+        }
+        Feature::Import(t) => t.op == Combine::New,
+        Feature::Sheet(s) => sheets::op(s) == Combine::New,
+        _ => swept::op(f) == Some(Combine::New),
+    }
 }
 
 /// Whether a feature changes the part as a whole, rather than making tools to combine with it.

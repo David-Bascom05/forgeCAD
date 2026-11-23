@@ -113,13 +113,23 @@ pub enum BodyError {
 
 /// Whether a history makes or works on more than one body.
 pub fn multi(features: &[Feature]) -> bool {
-    // one pass: a body feature or a sheet (a body of its own) anywhere, or a second new body
+    // one pass: a body feature or a sheet (a body of its own) anywhere, or a second new body (each
+    // feature's op read as `op` reads it, in one match)
     let mut new = false;
     for f in features {
-        if matches!(f, Feature::Body(_) | Feature::Sheet(_)) {
-            return true;
-        }
-        if op(f) == Some(Combine::New) {
+        let made = match f {
+            Feature::Body(_) | Feature::Sheet(_) => return true,
+            Feature::Extrude { op, .. } | Feature::Revolve { op, .. } | Feature::Ball { op, .. } => {
+                *op == Combine::New
+            }
+            Feature::Edit(Edit::Thicken { op, .. }) => *op == Combine::New,
+            Feature::Import(t) => t.op == Combine::New,
+            Feature::Sweep(s) => s.op == Combine::New,
+            Feature::Coil(c) => c.op == Combine::New,
+            Feature::Loft(l) => l.op == Combine::New,
+            _ => false,
+        };
+        if made {
             if new {
                 return true;
             }
@@ -922,11 +932,19 @@ fn body_feature(
                 let [k] = on[..] else {
                     return Err(bad(BodyError::NotOne));
                 };
-                let body = moved(&solids[k].body.compact(), &m, |n| salted(n, "copy", me)).map_err(pe)?;
+                let mut body = moved(&solids[k].body.compact(), &m, |n| salted(n, "copy", me)).map_err(pe)?;
+                // (a moved copy of a sheet is a sheet)
+                if solids[k].body.is_sheet() {
+                    body.mark_sheet();
+                }
                 solids.push(Solid { id: i, body });
             } else {
                 for k in on {
+                    let sheet = solids[k].body.is_sheet();
                     solids[k].body = moved(&solids[k].body.compact(), &m, |n| n).map_err(pe)?;
+                    if sheet {
+                        solids[k].body.mark_sheet();
+                    }
                 }
             }
         }

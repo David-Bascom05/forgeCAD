@@ -197,3 +197,21 @@ fn a_sheet_thickened_joins_the_solid_or_is_a_body() {
         assert!(s.iter().any(|x| x.body.is_sheet()));
     }
 }
+
+#[test]
+fn a_moved_or_copied_sheet_is_a_sheet() {
+    use forge_model::{BodyFeature, Pick, Step};
+    let s = both(vec![
+        block(Point3::ORIGIN, 10.0, 10.0, 10.0, Combine::New),
+        wall(),
+        Feature::Body(Box::new(BodyFeature::In {
+            bodies: Pick::Some(vec![1]),
+            feature: Feature::Body(Box::new(BodyFeature::Move {
+                steps: vec![Step::Translate(forge_math::Vec3::new(0.0, 0.0, 5.0))],
+                copy: true,
+            })),
+        })),
+    ]);
+    assert_eq!(s.len(), 3);
+    assert_eq!(s.iter().filter(|x| x.body.is_sheet()).count(), 2);
+}
