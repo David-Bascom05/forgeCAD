@@ -76,6 +76,8 @@ struct In {
     face: FaceId,
     /// its own plane, exactly (the kernel's frame)
     plane: DyPlane,
+    /// that plane in f64 (the frame's normal exactly, the offset rounded), for screening
+    pf: PlaneF,
     /// its box, from the kernel's vertices (f64, exact as dyadics)
     lo: [f64; 3],
     hi: [f64; 3],
@@ -90,13 +92,11 @@ fn lin() -> f64 {
 
 /// The faces of the operands, in arena order (body 0's first), or `NotFlat`.
 fn inputs(bodies: &[&Body]) -> Result<Vec<In>, Skip> {
+    if !bodies.iter().all(|b| flat(b)) {
+        return Err(Skip::NotFlat);
+    }
     let mut out = Vec::new();
     for (k, b) in bodies.iter().enumerate() {
-        for e in b.edge_ids() {
-            if !matches!(b.edge(e).curve, Curve::Line(_)) {
-                return Err(Skip::NotFlat);
-            }
-        }
         for f in b.face_ids() {
             let face = b.face(f);
             let Surface::Plane(pl) = &face.surface else {
@@ -128,10 +128,12 @@ fn inputs(bodies: &[&Body]) -> Result<Vec<In>, Skip> {
             if loops.is_empty() {
                 continue;
             }
+            let plane = DyPlane::from_frame([o.x, o.y, o.z], [n.x, n.y, n.z]);
             out.push(In {
                 body: k,
                 face: f,
-                plane: DyPlane::from_frame([o.x, o.y, o.z], [n.x, n.y, n.z]),
+                pf: plane_f(&plane),
+                plane,
                 lo,
                 hi,
                 loops,
@@ -216,12 +218,8 @@ impl Uf {
 /// normals plainly not parallel over it, so they are not tolerance-equal (exact test skipped).
 fn plainly_apart(a: &In, b: &In, k: f64) -> bool {
     let l = lin();
-    let f = |p: &DyPlane| {
-        let n = [p.n.x.to_f64(), p.n.y.to_f64(), p.n.z.to_f64()];
-        (n, p.c.to_f64())
-    };
-    let (na, ca) = f(&a.plane);
-    let (nb, cb) = f(&b.plane);
+    let (na, ca) = (a.pf.n, a.pf.c);
+    let (nb, cb) = (b.pf.n, b.pf.c);
     let la = (na[0] * na[0] + na[1] * na[1] + na[2] * na[2]).sqrt();
     let lb = (nb[0] * nb[0] + nb[1] * nb[1] + nb[2] * nb[2]).sqrt();
     for x in [a.lo[0].min(b.lo[0]) - l, a.hi[0].max(b.hi[0]) + l] {
@@ -340,6 +338,7 @@ fn vertices(bodies: &[&Body], fs: &[In], planes: &[DyPlane], reg: &Region) -> Re
         let pts = Pts {
             exact: RefCell::new(HashMap::default()),
             f: RefCell::new(HashMap::default()),
+            spf: planes.iter().map(plane_f).collect(),
             round: rk,
         };
         // the near faces' vertices in the region now, each checked (§6.1's ambiguity is decided
@@ -541,7 +540,7 @@ fn rule_at(rule: &Rule, m: &[bool]) -> bool {
 }
 
 /// §3a: the region round the tools, decided once from the inputs.
-fn region(bodies: &[&Body], fs: &[In], snapped: &[DyPlane], rule: &Rule) -> Region {
+fn region(bodies: &[&Body], fs: &[In], snapped: &[DyPlane], reps: &[usize], rule: &Rule) -> Region {
     let all = Region {
         bx: None,
         near: vec![true; fs.len()],
@@ -586,10 +585,17 @@ fn region(bodies: &[&Body], fs: &[In], snapped: &[DyPlane], rule: &Rule) -> Regi
         let mut clash = false;
         'check: for (i, f) in fs.iter().enumerate() {
             let p = &snapped[i];
-            let nf = [p.n.x.to_f64(), p.n.y.to_f64(), p.n.z.to_f64()];
+            let pf = &fs[reps[i]].pf;
+            let nf = pf.n;
             for a in 0..3 {
                 if nf[(a + 1) % 3] == 0.0 && nf[(a + 2) % 3] == 0.0 {
                     for x in [lo[a], hi[a]] {
+                        // (f64 screen: the offset of the rep's plane, rounded once from the exact
+                        // one, is within an ulp of it; a wall plainly off it is not that plane)
+                        let off = (pf.c - nf[a] * x).abs();
+                        if off > 1e-9 * (pf.c.abs() + (nf[a] * x).abs()) {
+                            continue;
+                        }
                         if wall(a, x).same_set(p) {
                             clash = true;
                             break 'check;
@@ -627,7 +633,7 @@ fn region(bodies: &[&Body], fs: &[In], snapped: &[DyPlane], rule: &Rule) -> Regi
         if fs
             .iter()
             .enumerate()
-            .any(|(i, f)| !near[i] && !snapped[i].same_set(&f.plane))
+            .any(|(i, f)| !near[i] && reps[i] != i && !snapped[i].same_set(&f.plane))
         {
             return all;
         }
@@ -668,11 +674,9 @@ struct Vx {
     /// its f64 point and a bound on each coordinate's distance from the exact one
     f: [f64; 3],
     err: f64,
-    cov: Option<Vec<Sgn>>,
+    /// where its covector starts in `Plane2::covs`, or NONE (a vertex on a wall)
+    cov: u32,
 }
-
-/// A convex polygon: (vertex, plane of the edge to the next vertex).
-type Poly = Vec<(u32, Pl)>;
 
 /// A plane a polygon's edge lies on: a class, or a wall of the working box.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
@@ -682,10 +686,14 @@ enum Pl {
 }
 
 /// The arrangement on one class plane: vertices, and convex cells as (vertex, plane of the edge
-/// to the next vertex) lists.
+/// to the next vertex) lists, flat: cell `k` is `cv[cs[k]..cs[k + 1]]`.
 struct Plane2 {
     vx: Vec<Vx>,
-    cells: Vec<Vec<(u32, Pl)>>,
+    /// the class vertices' covectors, one after another (`nc` signs each)
+    covs: Vec<Sgn>,
+    nc: usize,
+    cs: Vec<u32>,
+    cv: Vec<(u32, Pl)>,
     /// the section's plane and its box walls, to work out exact points
     pc: DyPlane,
     walls: Vec<DyPlane>,
@@ -694,6 +702,16 @@ struct Plane2 {
 impl Plane2 {
     fn exact(&self, cls: &Classes, i: usize) -> HPoint {
         exact_vx(&self.vx[i], &self.pc, &self.walls, cls)
+    }
+    fn cov(&self, i: u32) -> Option<&[Sgn]> {
+        let o = self.vx[i as usize].cov;
+        (o != NONE).then(|| &self.covs[o as usize..o as usize + self.nc])
+    }
+    fn ncells(&self) -> usize {
+        self.cs.len().saturating_sub(1)
+    }
+    fn cell(&self, k: usize) -> &[(u32, Pl)] {
+        &self.cv[self.cs[k] as usize..self.cs[k + 1] as usize]
     }
 }
 
@@ -793,6 +811,7 @@ fn side_at(plane: &DyPlane, pf: &[f64; 3], pff: &PlaneF, h: &HPoint) -> Sgn {
 }
 
 /// A plane's f64 shadow, for screening.
+#[derive(Clone, Copy)]
 struct PlaneF {
     n: [f64; 3],
     c: f64,
@@ -816,6 +835,185 @@ fn covector(cls: &Classes, pf: &[PlaneF], h: &HPoint, zero: &[u32]) -> Vec<Sgn> 
             }
         })
         .collect()
+}
+
+/// The working state of `arrange`: the vertices so far, found by the planes they meet and (class
+/// vertices) by covector.
+struct Arr<'a> {
+    cls: &'a Classes,
+    pf: &'a [PlaneF],
+    c: u32,
+    pc: &'a DyPlane,
+    walls: [DyPlane; 6],
+    wf: [PlaneF; 6],
+    vx: Vec<Vx>,
+    covs: Vec<Sgn>,
+    by_pair: HashMap<(Pl, Pl), u32>,
+    /// covector hash → the first vertex with it; `next` chains the others with the same hash
+    by_cov: HashMap<u64, u32>,
+    next: Vec<u32>,
+    /// scratch for a new covector
+    buf: Vec<Sgn>,
+}
+
+impl Arr<'_> {
+    fn plane(&self, p: Pl) -> &DyPlane {
+        match p {
+            Pl::Class(k) => &self.cls.planes[k as usize],
+            Pl::Wall(w) => &self.walls[w as usize],
+        }
+    }
+    fn planef(&self, p: Pl) -> &PlaneF {
+        match p {
+            Pl::Class(k) => &self.pf[k as usize],
+            Pl::Wall(w) => &self.wf[w as usize],
+        }
+    }
+    fn cov(&self, i: u32) -> Option<&[Sgn]> {
+        let o = self.vx[i as usize].cov;
+        let nc = self.cls.planes.len();
+        (o != NONE).then(|| &self.covs[o as usize..o as usize + nc])
+    }
+    /// The vertex where planes `x` and `y` cross the section: an existing one with that pair, or
+    /// (class vertices) that covector, else a new one.
+    fn vertex(&mut self, x: Pl, y: Pl) -> u32 {
+        let key = if x <= y { (x, y) } else { (y, x) };
+        if let Some(&i) = self.by_pair.get(&key) {
+            return i;
+        }
+        let mut x0 = Vx {
+            p: RefCell::new(None),
+            meet: (x, y),
+            f: [0.0; 3],
+            err: 0.0,
+            cov: NONE,
+        };
+        match meet_f(&self.pf[self.c as usize], self.planef(x), self.planef(y)) {
+            Some((f, e)) => {
+                x0.f = f;
+                x0.err = e;
+            }
+            None => {
+                let h = meet3(self.pc, self.plane(x), self.plane(y))
+                    .expect("a polygon's edge crosses the plane splitting it");
+                x0.f = h.to_f64();
+                x0.err = 0.0;
+                x0.p = RefCell::new(Some(h));
+            }
+        }
+        let id = match (x, y) {
+            (Pl::Class(i), Pl::Class(j)) => {
+                let nc = self.cls.planes.len();
+                let mut buf = std::mem::take(&mut self.buf);
+                buf.clear();
+                let mut h = Fx::default();
+                for k in 0..nc {
+                    let s = if k as u32 == self.c || k as u32 == i || k as u32 == j {
+                        Sgn::Zero
+                    } else {
+                        side_err(&self.cls.planes[k], &self.pf[k], &x0.f, x0.err, || {
+                            exact_vx(&x0, self.pc, &self.walls, self.cls)
+                        })
+                    };
+                    h.write_u8(s as u8);
+                    buf.push(s);
+                }
+                let hv = h.finish();
+                let mut found = self.by_cov.get(&hv).copied().unwrap_or(NONE);
+                while found != NONE && self.cov(found) != Some(&buf[..]) {
+                    found = self.next[found as usize];
+                }
+                let id = if found != NONE {
+                    found
+                } else {
+                    x0.cov = self.covs.len() as u32;
+                    self.covs.extend_from_slice(&buf);
+                    let id = self.vx.len() as u32;
+                    self.vx.push(x0);
+                    // (a new head of its hash's chain)
+                    let head = self.by_cov.insert(hv, id).unwrap_or(NONE);
+                    self.next.push(head);
+                    id
+                };
+                self.buf = buf;
+                id
+            }
+            _ => {
+                self.vx.push(x0);
+                self.next.push(NONE);
+                self.vx.len() as u32 - 1
+            }
+        };
+        self.by_pair.insert(key, id);
+        id
+    }
+    /// The side of plane `p` at vertex `i`: -1, 0 or 1.
+    fn side(&self, i: u32, p: Pl) -> i32 {
+        let x = &self.vx[i as usize];
+        // (a vertex is on the planes it is the meet of)
+        if p == x.meet.0 || p == x.meet.1 {
+            return 0;
+        }
+        if let (Pl::Class(k), Some(cv)) = (p, self.cov(i)) {
+            return match cv[k as usize] {
+                Sgn::Pos => 1,
+                Sgn::Neg => -1,
+                Sgn::Zero => 0,
+            };
+        }
+        match side_err(self.plane(p), self.planef(p), &x.f, x.err, || {
+            exact_vx(x, self.pc, &self.walls, self.cls)
+        }) {
+            Sgn::Pos => 1,
+            Sgn::Neg => -1,
+            Sgn::Zero => 0,
+        }
+    }
+    /// Split `poly` by `p` into (part with side ≥ 0, part with side ≤ 0), appended to `pos` and
+    /// `neg`; `s` is scratch.
+    fn split(
+        &mut self,
+        poly: &[(u32, Pl)],
+        p: Pl,
+        s: &mut Vec<i32>,
+        pos: &mut Vec<(u32, Pl)>,
+        neg: &mut Vec<(u32, Pl)>,
+    ) {
+        let n = poly.len();
+        s.clear();
+        for &(i, _) in poly {
+            s.push(self.side(i, p));
+        }
+        let (p0, n0) = (pos.len(), neg.len());
+        for k in 0..n {
+            let (vi, line) = poly[k];
+            let (fa, fb) = (s[k], s[(k + 1) % n]);
+            // the edge from vertex k to k+1 lies on `line`; a part's edge out of a vertex on the
+            // splitting plane runs along that plane when the part turns there
+            if fa >= 0 {
+                pos.push((vi, line));
+            }
+            if fa <= 0 {
+                neg.push((vi, line));
+            }
+            if (fa > 0 && fb < 0) || (fa < 0 && fb > 0) {
+                let w = self.vertex(line, p);
+                pos.push((w, line));
+                neg.push((w, line));
+            }
+        }
+        // the edge plane of each part's vertex is the plane the part runs on to its next vertex:
+        // where a part's two consecutive vertices both lie on `p`, that edge is on `p`
+        for (part, from) in [(pos, p0), (neg, n0)] {
+            let m = part.len() - from;
+            for k in 0..m {
+                let (i, j) = (part[from + k].0, part[from + (k + 1) % m].0);
+                if self.side(i, p) == 0 && self.side(j, p) == 0 {
+                    part[from + k].1 = p;
+                }
+            }
+        }
+    }
 }
 
 /// The cells of class plane `c` within the box `[lo, hi]`: its section split by every class
@@ -843,104 +1041,37 @@ fn arrange(cls: &Classes, pf: &[PlaneF], c: u32, lo: [f64; 3], hi: [f64; 3]) -> 
         wall(a, lo[a]),
         wall(a, hi[a]),
     ];
-    let wf: Vec<PlaneF> = walls.iter().map(plane_f).collect();
-    let plane_of = |p: Pl| -> &DyPlane {
-        match p {
-            Pl::Class(k) => &cls.planes[k as usize],
-            Pl::Wall(w) => &walls[w as usize],
-        }
+    let wf = [0, 1, 2, 3, 4, 5].map(|k| plane_f(&walls[k]));
+    let nc = cls.planes.len();
+    let mut ar = Arr {
+        cls,
+        pf,
+        c,
+        pc,
+        walls,
+        wf,
+        vx: Vec::new(),
+        covs: Vec::new(),
+        by_pair: HashMap::default(),
+        by_cov: HashMap::default(),
+        next: Vec::new(),
+        buf: Vec::with_capacity(nc),
     };
-    let mut vx: Vec<Vx> = Vec::new();
-    // a vertex by the two planes (besides c) it is the meet of, and class vertices by covector
-    let mut by_pair: HashMap<(Pl, Pl), u32> = HashMap::default();
-    let mut by_cov: FxMap<Vec<Sgn>, u32> = FxMap::default();
-    let mut vertex = |x: Pl, y: Pl, vx: &mut Vec<Vx>| -> u32 {
-        let key = if x <= y { (x, y) } else { (y, x) };
-        if let Some(&i) = by_pair.get(&key) {
-            return i;
-        }
-        let pff_of = |p: Pl| match p {
-            Pl::Class(k) => &pf[k as usize],
-            Pl::Wall(w) => &wf[w as usize],
-        };
-        let mut x0 = Vx {
-            p: RefCell::new(None),
-            meet: (x, y),
-            f: [0.0; 3],
-            err: 0.0,
-            cov: None,
-        };
-        match meet_f(&pf[c as usize], pff_of(x), pff_of(y)) {
-            Some((f, e)) => {
-                x0.f = f;
-                x0.err = e;
-            }
-            None => {
-                let h = meet3(pc, plane_of(x), plane_of(y))
-                    .expect("a polygon's edge crosses the plane splitting it");
-                x0.f = h.to_f64();
-                x0.err = 0.0;
-                x0.p = RefCell::new(Some(h));
-            }
-        }
-        let id = match (x, y) {
-            (Pl::Class(i), Pl::Class(j)) => {
-                let cov: Vec<Sgn> = (0..cls.planes.len())
-                    .map(|k| {
-                        if k as u32 == c || k as u32 == i || k as u32 == j {
-                            Sgn::Zero
-                        } else {
-                            side_err(&cls.planes[k], &pf[k], &x0.f, x0.err, || {
-                                exact_vx(&x0, pc, &walls, cls)
-                            })
-                        }
-                    })
-                    .collect();
-                if let Some(&k) = by_cov.get(&cov) {
-                    k
-                } else {
-                    x0.cov = Some(cov.clone());
-                    vx.push(x0);
-                    by_cov.insert(cov, vx.len() as u32 - 1);
-                    vx.len() as u32 - 1
-                }
-            }
-            _ => {
-                vx.push(x0);
-                vx.len() as u32 - 1
-            }
-        };
-        by_pair.insert(key, id);
-        id
-    };
-    let side = |vx: &Vec<Vx>, i: u32, p: Pl| -> i32 {
-        let x = &vx[i as usize];
-        match (p, &x.cov) {
-            (Pl::Class(k), Some(cv)) => match cv[k as usize] {
-                Sgn::Pos => 1,
-                Sgn::Neg => -1,
-                Sgn::Zero => 0,
-            },
-            _ => {
-                let pl = plane_of(p);
-                let pff = match p {
-                    Pl::Class(k) => &pf[k as usize],
-                    Pl::Wall(w) => &wf[w as usize],
-                };
-                match side_err(pl, pff, &x.f, x.err, || exact_vx(x, pc, &walls, cls)) {
-                    Sgn::Pos => 1,
-                    Sgn::Neg => -1,
-                    Sgn::Zero => 0,
-                }
-            }
-        }
+    let done = |ar: Arr, cs: Vec<u32>, cv: Vec<(u32, Pl)>| Plane2 {
+        vx: ar.vx,
+        covs: ar.covs,
+        nc,
+        cs,
+        cv,
+        pc: pc.clone(),
+        walls: ar.walls.to_vec(),
     };
     // the quad on the u and v walls, counter-clockwise in (u, v)
     let q = [
-        vertex(Pl::Wall(0), Pl::Wall(2), &mut vx),
-        vertex(Pl::Wall(1), Pl::Wall(2), &mut vx),
-        vertex(Pl::Wall(1), Pl::Wall(3), &mut vx),
-        vertex(Pl::Wall(0), Pl::Wall(3), &mut vx),
+        ar.vertex(Pl::Wall(0), Pl::Wall(2)),
+        ar.vertex(Pl::Wall(1), Pl::Wall(2)),
+        ar.vertex(Pl::Wall(1), Pl::Wall(3)),
+        ar.vertex(Pl::Wall(0), Pl::Wall(3)),
     ];
     let mut poly: Vec<(u32, Pl)> = vec![
         (q[0], Pl::Wall(2)),
@@ -948,95 +1079,74 @@ fn arrange(cls: &Classes, pf: &[PlaneF], c: u32, lo: [f64; 3], hi: [f64; 3]) -> 
         (q[2], Pl::Wall(3)),
         (q[3], Pl::Wall(0)),
     ];
-    // split: (part with side ≥ 0, part with side ≤ 0)
-    let mut split = |poly: &[(u32, Pl)], p: Pl, vx: &mut Vec<Vx>| -> (Poly, Poly) {
-        let n = poly.len();
-        let s: Vec<i32> = poly.iter().map(|&(i, _)| side(vx, i, p)).collect();
-        let (mut pos, mut neg) = (Vec::new(), Vec::new());
-        for k in 0..n {
-            let (vi, line) = poly[k];
-            let (fa, fb) = (s[k], s[(k + 1) % n]);
-            // the edge from vertex k to k+1 lies on `line`; a part's edge out of a vertex on the
-            // splitting plane runs along that plane when the part turns there
-            if fa >= 0 {
-                pos.push((vi, line));
-            }
-            if fa <= 0 {
-                neg.push((vi, line));
-            }
-            if (fa > 0 && fb < 0) || (fa < 0 && fb > 0) {
-                let w = vertex(line, p, vx);
-                pos.push((w, line));
-                neg.push((w, line));
-            }
-        }
-        // the edge plane of each part's vertex is the plane the part runs on to its next vertex:
-        // where a part's two consecutive vertices both lie on `p`, that edge is on `p`
-        let fix = |part: &mut Vec<(u32, Pl)>, vx: &Vec<Vx>| {
-            let m = part.len();
-            for k in 0..m {
-                let (i, j) = (part[k].0, part[(k + 1) % m].0);
-                if side(vx, i, p) == 0 && side(vx, j, p) == 0 {
-                    part[k].1 = p;
-                }
-            }
-        };
-        fix(&mut pos, vx);
-        fix(&mut neg, vx);
-        (pos, neg)
-    };
+    let mut s = Vec::new();
     for w in [Pl::Wall(4), Pl::Wall(5)] {
-        let (p, n) = split(&poly, w, &mut vx);
+        let (mut p, mut n) = (Vec::new(), Vec::new());
+        ar.split(&poly, w, &mut s, &mut p, &mut n);
         poly = if w == Pl::Wall(4) { p } else { n };
         if poly.len() < 3 {
-            return Plane2 {
-                vx,
-                cells: Vec::new(),
-                pc: pc.clone(),
-                walls: walls.to_vec(),
-            };
+            return done(ar, Vec::new(), Vec::new());
         }
     }
-    let mut cells = vec![poly];
-    for j in 0..cls.planes.len() as u32 {
+    // the cells, flat, double-buffered
+    let mut cs: Vec<u32> = vec![0, poly.len() as u32];
+    let mut cv: Vec<(u32, Pl)> = poly;
+    let (mut cs2, mut cv2): (Vec<u32>, Vec<(u32, Pl)>) = (Vec::new(), Vec::new());
+    let (mut pp, mut nn) = (Vec::new(), Vec::new());
+    for j in 0..nc as u32 {
         if j == c {
             continue;
         }
         let pj = Pl::Class(j);
-        let first = &cells;
-        let all_pos = first
-            .iter()
-            .all(|cl| cl.iter().all(|&(i, _)| side(&vx, i, pj) > 0));
-        let all_neg = first
-            .iter()
-            .all(|cl| cl.iter().all(|&(i, _)| side(&vx, i, pj) < 0));
+        // (a plane missing every cell leaves them all whole)
+        let mut any_pos = false;
+        let mut any_neg = false;
+        let mut all_pos = true;
+        let mut all_neg = true;
+        for &(i, _) in &cv {
+            let x = ar.side(i, pj);
+            any_pos |= x >= 0;
+            any_neg |= x <= 0;
+            all_pos &= x > 0;
+            all_neg &= x < 0;
+        }
+        let _ = (any_pos, any_neg);
         if all_pos || all_neg {
             continue;
         }
-        let mut next = Vec::with_capacity(cells.len() + 4);
-        for cl in &cells {
+        cs2.clear();
+        cv2.clear();
+        cs2.push(0);
+        for k in 0..cs.len() - 1 {
+            let cl = &cv[cs[k] as usize..cs[k + 1] as usize];
             // (a cell the plane does not cross stays whole)
-            let sides: Vec<i32> = cl.iter().map(|&(i, _)| side(&vx, i, pj)).collect();
-            if sides.iter().all(|&x| x > 0) || sides.iter().all(|&x| x < 0) {
-                next.push(cl.clone());
+            let (mut cp, mut cn) = (true, true);
+            for &(i, _) in cl {
+                let x = ar.side(i, pj);
+                cp &= x > 0;
+                cn &= x < 0;
+            }
+            if cp || cn {
+                cv2.extend_from_slice(cl);
+                cs2.push(cv2.len() as u32);
                 continue;
             }
-            let (p, n) = split(cl, pj, &mut vx);
-            if p.len() >= 3 {
-                next.push(p);
+            pp.clear();
+            nn.clear();
+            ar.split(cl, pj, &mut s, &mut pp, &mut nn);
+            if pp.len() >= 3 {
+                cv2.extend_from_slice(&pp);
+                cs2.push(cv2.len() as u32);
             }
-            if n.len() >= 3 {
-                next.push(n);
+            if nn.len() >= 3 {
+                cv2.extend_from_slice(&nn);
+                cs2.push(cv2.len() as u32);
             }
         }
-        cells = next;
+        std::mem::swap(&mut cs, &mut cs2);
+        std::mem::swap(&mut cv, &mut cv2);
     }
-    Plane2 {
-        vx,
-        cells,
-        pc: pc.clone(),
-        walls: walls.to_vec(),
-    }
+    done(ar, cs, cv)
 }
 
 /// Is the exact point inside face `f`'s polygon (its loops, with exact vertices), by the parity
@@ -1070,6 +1180,8 @@ fn in_face(q: &HPoint, f: &In, pts: &Pts, planes: &[DyPlane], s: usize, t: usize
 pub(crate) struct Pts {
     exact: RefCell<HashMap<VertexId, HPoint>>,
     f: RefCell<HashMap<VertexId, [f64; 3]>>,
+    /// the snapped planes in f64, by face
+    spf: Vec<PlaneF>,
     /// per vertex, the faces round it
     round: HashMap<VertexId, Vec<usize>>,
 }
@@ -1101,9 +1213,49 @@ impl Pts {
         self.f.borrow_mut().insert(v, p.to_f64());
         self.exact.borrow_mut().insert(v, p);
     }
+    /// The vertex in f64, within 1e-13 of the exact one relative to its size (for screening;
+    /// `crosses_f`'s margin, 1e-12 of the scale, covers twice that plus its own rounding):
+    /// the f64 meet of the three planes `ensure` would meet, where its bound says so; else the
+    /// exact point rounded.
     fn pf(&self, v: VertexId, planes: &[DyPlane]) -> [f64; 3] {
+        if let Some(p) = self.f.borrow().get(&v) {
+            return *p;
+        }
+        if let Some(p) = self.first_meet_f(v, planes) {
+            self.f.borrow_mut().insert(v, p);
+            return p;
+        }
         self.ensure(v, planes);
         self.f.borrow()[&v]
+    }
+    /// The f64 meet of the first independent three of the planes round `v` (their order as
+    /// `vertex_at`'s), if its forward bound is within 1e-13 of its size; None to go exact (an
+    /// earlier three the f64 cannot tell from dependent, or a loose bound).
+    fn first_meet_f(&self, v: VertexId, planes: &[DyPlane]) -> Option<[f64; 3]> {
+        let r = &self.round[&v];
+        for (x, &a) in r.iter().enumerate() {
+            for (y, &b) in r.iter().enumerate() {
+                for (z, &c) in r.iter().enumerate() {
+                    if x == y || y == z || x == z {
+                        continue; // (a repeated plane: dependent)
+                    }
+                    match meet_f(&self.spf[a], &self.spf[b], &self.spf[c]) {
+                        Some((p, e)) => {
+                            let m = 1.0 + p[0].abs().max(p[1].abs()).max(p[2].abs());
+                            return (e <= 1e-13 * m).then_some(p);
+                        }
+                        None => {
+                            // dependent exactly, or the exact meet decides
+                            let (pa, pb, pc) = (&planes[a], &planes[b], &planes[c]);
+                            if !pa.n.dot(&pb.n.cross(&pc.n)).is_zero() {
+                                return None;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        None
     }
     fn ph(&self, v: VertexId, planes: &[DyPlane]) -> HPoint {
         self.ensure(v, planes);
@@ -1195,6 +1347,15 @@ struct CellTab {
 }
 
 impl CellTab {
+    /// The id of `c`, added if new (copied only then).
+    fn id_of(&mut self, c: &[Sgn]) -> u32 {
+        if let Some(&i) = self.by.get(c) {
+            return i;
+        }
+        self.cells.push(c.to_vec());
+        self.by.insert(c.to_vec(), self.cells.len() as u32 - 1);
+        self.cells.len() as u32 - 1
+    }
     fn id(&mut self, c: Vec<Sgn>) -> u32 {
         if let Some(&i) = self.by.get(&c) {
             return i;
@@ -1203,6 +1364,33 @@ impl CellTab {
         self.by.insert(c, self.cells.len() as u32 - 1);
         self.cells.len() as u32 - 1
     }
+}
+
+/// A point strictly inside the facet of class plane `c` with covector `fc`, near the f64 point
+/// `m`: `m`'s coordinates off axis `a` exactly, and the one on `a` that puts it on the plane
+/// (`W = n_a`, so its terms stay small). None where that point is not strictly inside (a facet
+/// too thin for `m`): the mean of its vertices is then.
+fn interior(cls: &Classes, pf: &[PlaneF], c: usize, a: usize, m: [f64; 3], fc: &[Sgn]) -> Option<HPoint> {
+    let pc = &cls.planes[c];
+    let (s, t) = ((a + 1) % 3, (a + 2) % 3);
+    let (ms, mt) = (Dy::from_f64(m[s]), Dy::from_f64(m[t]));
+    let w = pc.n.get(a).clone();
+    if w.is_zero() {
+        return None;
+    }
+    let pa = pc.c.sub(&pc.n.get(s).mul(&ms)).sub(&pc.n.get(t).mul(&mt));
+    let mut xyz = [Dy::zero(), Dy::zero(), Dy::zero()];
+    xyz[a] = pa;
+    xyz[s] = ms.mul(&w);
+    xyz[t] = mt.mul(&w);
+    let [x, y, z] = xyz;
+    let h = HPoint {
+        p: DyV3::new(x, y, z),
+        w,
+    };
+    let hf = h.to_f64();
+    let inside = (0..cls.planes.len()).all(|k| k == c || side_at(&cls.planes[k], &hf, &pf[k], &h) == fc[k]);
+    inside.then_some(h)
 }
 
 /// The covector of the cell spanned by vertices: on each class the side of any vertex off it.
@@ -1256,6 +1444,8 @@ fn build_ledger(
         }
     }
     let mut per_face: Vec<Vec<u32>> = vec![Vec::new(); fs.len()];
+    // scratch: a facet's covector, an edge's, the faces boxing a facet
+    let (mut fc, mut ec, mut boxed): (Vec<Sgn>, Vec<Sgn>, Vec<usize>) = (Vec::new(), Vec::new(), Vec::new());
     for (c, faces) in on.iter().enumerate() {
         if faces.is_empty() {
             continue;
@@ -1290,16 +1480,25 @@ fn build_ledger(
             .unwrap();
         let (s, t) = ((a + 1) % 3, (a + 2) % 3);
         let flip = nf[a] < 0.0;
-        for cell in &pl.cells {
+        // per arrangement vertex: its cell id, once interned
+        let mut vid = vec![NONE; pl.vx.len()];
+        for ck in 0..pl.ncells() {
+            let cell = pl.cell(ck);
             // a cell inside a face is bounded by classes only
-            if cell.iter().any(|&(i, _)| pl.vx[i as usize].cov.is_none()) {
+            if cell.iter().any(|&(i, _)| pl.cov(i).is_none()) {
                 continue;
             }
-            let covs: Vec<&Vec<Sgn>> = cell
-                .iter()
-                .map(|&(i, _)| pl.vx[i as usize].cov.as_ref().unwrap())
-                .collect();
-            let fc = join(&covs);
+            // its covector: on each class the side of any vertex off it
+            fc.clear();
+            fc.extend_from_slice(pl.cov(cell[0].0).unwrap());
+            for &(i, _) in &cell[1..] {
+                let cv = pl.cov(i).unwrap();
+                for k in 0..fc.len() {
+                    if fc[k] == Sgn::Zero {
+                        fc[k] = cv[k];
+                    }
+                }
+            }
             if !open(&fc) {
                 continue;
             }
@@ -1310,44 +1509,59 @@ fn build_ledger(
                 pl.vx[cell[1].0 as usize].f,
                 pl.vx[cell[2].0 as usize].f,
             );
+            let _ = ck;
             let midf = [0, 1, 2].map(|k| (a0[k] + a1[k] + a2[k]) / 3.0);
             let g = 4.0 * lin() + 1e-9 * (1.0 + midf[0].abs() + midf[1].abs() + midf[2].abs());
-            let boxed: Vec<usize> = faces
-                .iter()
-                .copied()
-                .filter(|&i| (0..3).all(|k| fs[i].lo[k] - g <= midf[k] && midf[k] <= fs[i].hi[k] + g))
-                .collect();
+            boxed.clear();
+            boxed.extend(
+                faces
+                    .iter()
+                    .copied()
+                    .filter(|&i| (0..3).all(|k| fs[i].lo[k] - g <= midf[k] && midf[k] <= fs[i].hi[k] + g)),
+            );
             if boxed.is_empty() {
                 continue;
             }
-            let (e0, e1, e2) = (
-                pl.exact(cls, cell[0].0 as usize),
-                pl.exact(cls, cell[1].0 as usize),
-                pl.exact(cls, cell[2].0 as usize),
-            );
-            let mid = HPoint::mean(&[&e0, &e1, &e2]);
+            let mid = interior(cls, &pf, c, a, midf, &fc).unwrap_or_else(|| {
+                let (e0, e1, e2) = (
+                    pl.exact(cls, cell[0].0 as usize),
+                    pl.exact(cls, cell[1].0 as usize),
+                    pl.exact(cls, cell[2].0 as usize),
+                );
+                HPoint::mean(&[&e0, &e1, &e2])
+            });
             let holders: Vec<usize> = boxed
-                .into_iter()
+                .iter()
+                .copied()
                 .filter(|&i| in_face(&mid, &fs[i], &pts[fs[i].body], snapped, s, t))
                 .collect();
             if holders.is_empty() {
                 continue;
             }
-            let id = tab.id(fc.clone());
+            let id = tab.id_of(&fc);
             // its vertices and edges, as cells
-            let mut poly = Vec::new();
+            let mut poly = Vec::with_capacity(cell.len());
             for k in 0..cell.len() {
-                let (i, j) = (cell[k].0 as usize, cell[(k + 1) % cell.len()].0 as usize);
-                let vi = tab.id(pl.vx[i].cov.clone().unwrap());
-                point.entry(vi).or_insert_with(|| pl.exact(cls, i));
-                let vj = tab.id(pl.vx[j].cov.clone().unwrap());
-                let e = tab.id(join(&[
-                    pl.vx[i].cov.as_ref().unwrap(),
-                    pl.vx[j].cov.as_ref().unwrap(),
-                ]));
+                let (i, j) = (cell[k].0, cell[(k + 1) % cell.len()].0);
+                let mut vertex_id = |i: u32, tab: &mut CellTab| {
+                    if vid[i as usize] == NONE {
+                        vid[i as usize] = tab.id_of(pl.cov(i).unwrap());
+                    }
+                    vid[i as usize]
+                };
+                let vi = vertex_id(i, &mut tab);
+                point.entry(vi).or_insert_with(|| pl.exact(cls, i as usize));
+                let vj = vertex_id(j, &mut tab);
+                let (ci, cj) = (pl.cov(i).unwrap(), pl.cov(j).unwrap());
+                ec.clear();
+                ec.extend(
+                    ci.iter()
+                        .zip(cj)
+                        .map(|(&x, &y)| if x == Sgn::Zero { y } else { x }),
+                );
+                let e = tab.id_of(&ec);
                 ends.entry(e).or_insert((vi, vj));
                 poly.push(vi);
-                let _ = vj;
             }
             if flip {
                 poly.reverse();
@@ -1476,7 +1690,7 @@ type Filled = (Vec<In>, Vec<DyPlane>, Classes, Vec<Pts>, Built, Region);
 fn fill(bodies: &[&Body], rule: &Rule) -> Result<Filled, Skip> {
     let fs = inputs(bodies)?;
     let (snapped, reps) = snap(&fs)?;
-    let reg = region(bodies, &fs, &snapped, rule);
+    let reg = region(bodies, &fs, &snapped, &reps, rule);
     let pts = vertices(bodies, &fs, &snapped, &reg)?;
     let mut cls = classes(&snapped, &reps, &reg.near);
     if let Some((lo, hi)) = reg.bx {
@@ -1695,7 +1909,12 @@ pub fn nary(bodies: &[&Body], rule: &Rule) -> Result<Option<Body>, BoolError> {
     let _scope = crate::decisions::scope("decide-once", String::from("plain"));
     let (fs, snapped, cls, pts, built, reg) = match fill(bodies, rule) {
         Ok(x) => x,
-        Err(_) => return Ok(None),
+        Err(e) => {
+            if std::env::var_os("FORGE_DECIDE_STATS").is_some() {
+                eprintln!("decide-once skip: {e:?}");
+            }
+            return Ok(None);
+        }
     };
     let outcome = core::core(&built.ledger, rule, &core::MetricLedger::default());
     if std::env::var_os("FORGE_DECIDE_STATS").is_some() {
