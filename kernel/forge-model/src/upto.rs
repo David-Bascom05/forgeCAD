@@ -1228,10 +1228,11 @@ fn first_change(
 }
 
 /// Points just inside a profile (one per outer segment, a hair in from its middle) to cast
-/// rays from, in the sketch's coordinates: only those the region holds, by the exact parity test
-/// (a strip narrower than two hairs would put one outside; its ray proves nothing about the
-/// region's). The pick they make is proven by `verify_next` either way (research/sweep-spec
-/// DESIGN.md §1.3): a ray from inside meets the picked surface first whenever any pick is right.
+/// rays from, in the sketch's coordinates. A strip narrower than two hairs puts its point
+/// outside, where its ray proves nothing about the region: the pick is the rays' where they agree
+/// (verify_next proves it), and where they do not, the rays from the points the region holds
+/// (`Profile::holds`, exact) decide (research/sweep-spec DESIGN.md §1.3): a ray from inside meets
+/// the picked surface first whenever any pick is right.
 pub(crate) fn samples(profile: &Profile) -> Vec<Point2> {
     let Some(outer) = profile.loops.first() else {
         return vec![];
@@ -1249,7 +1250,6 @@ pub(crate) fn samples(profile: &Profile) -> Vec<Point2> {
             let left = Vec2::new(-along.y, along.x);
             m + if ccw { left } else { left * -1.0 } * hair
         })
-        .filter(|&q| profile.holds(q))
         .collect()
 }
 

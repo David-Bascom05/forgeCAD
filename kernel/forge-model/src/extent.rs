@@ -443,8 +443,23 @@ pub(crate) fn resolve<'a>(features: History<'a>, i: usize) -> Result<Resolved<'a
                 }
                 Extent::ToNext { reverse } => {
                     let z = if reverse { -at.z() } else { at.z() };
-                    let rays: Vec<Point3> = samples(profile).into_iter().map(|q| at.plane_point(q)).collect();
-                    let (s, m) = next(features, i, &rays, z)?;
+                    let inset = samples(profile);
+                    let rays: Vec<Point3> = inset.iter().map(|&q| at.plane_point(q)).collect();
+                    let (s, m) = match next(features, i, &rays, z) {
+                        Ok(x) => x,
+                        Err(e) => {
+                            // where the rays disagree, those from points the region holds decide
+                            let held: Vec<Point3> = inset
+                                .iter()
+                                .filter(|&&q| profile.holds(q))
+                                .map(|&q| at.plane_point(q))
+                                .collect();
+                            if held.is_empty() || held.len() == rays.len() {
+                                return Err(e);
+                            }
+                            next(features, i, &held, z)?
+                        }
+                    };
                     material = Some(m);
                     if let Some(p) = square(&s, &at) {
                         let end = along(&at, &p, 0.0, i)?;
