@@ -22,5 +22,5 @@ import ForgeBoolCore.RefineExt
 #print axioms forge_bool_core.sort_by_cov_spec
 #print axioms forge_bool_core.index_new_spec
 #print axioms forge_bool_core.cov_spec
-#print axioms forge_bool_core.find_spec
+#print axioms forge_bool_core.cells_find_spec
 #print axioms forge_bool_core.intern_spec

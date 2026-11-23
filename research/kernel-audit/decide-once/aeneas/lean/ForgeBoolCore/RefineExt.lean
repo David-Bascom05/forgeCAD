@@ -6,7 +6,7 @@ open Aeneas Aeneas.Std Result
 
 `allCells l ext` is the ledger's cells then the core's (`Ext.extra`). `ExtOK` says the index is
 exact over the ledger's cells, no covector is listed twice, and the ids fit `u32` below `NONE`.
-`cov` reads it (`cov_spec`), `find` is lookup by covector (`find_spec`), and `intern` adds a covector
+`cov` reads it (`cov_spec`), `find` is lookup by covector (`cells_find_spec`), and `intern` adds a covector
 only when absent, keeping `ExtOK` (`intern_spec`).
 -/
 
@@ -74,7 +74,7 @@ def FindAll (l : Ledger) (ext : Ext) (key : List Sgn) (r : U32) : Prop :=
 theorem u32_le_usize : U32.max ≤ Usize.max := by
   rcases Usize.bounds_eq with h | h <;> rw [h] <;> simp [U32.max_eq, U64.max_eq]
 
-theorem find_loop_spec (l : Ledger) (ext : Ext) (hok : ExtOK l ext) (key : Slice Sgn) (f : U32) (i : Usize)
+theorem cells_find_loop_spec (l : Ledger) (ext : Ext) (hok : ExtOK l ext) (key : Slice Sgn) (f : U32) (i : Usize)
     (hi : i.val ≤ ext.extra.val.length)
     (hn : f = NONE → (∀ id, id < l.cells.val.length → covAt l ext id ≠ key.val) ∧
       ∀ i', i' < i.val → covAt l ext (l.cells.val.length + i') ≠ key.val)
@@ -142,13 +142,13 @@ theorem find_loop_spec (l : Ledger) (ext : Ext) (hok : ExtOK l ext) (key : Slice
   · exact ⟨hi, hn, hs⟩
 
 /-- **`find` is lookup by covector** over every cell. -/
-theorem find_spec (l : Ledger) (ext : Ext) (hok : ExtOK l ext) (key : Slice Sgn) :
+theorem cells_find_spec (l : Ledger) (ext : Ext) (hok : ExtOK l ext) (key : Slice Sgn) :
     find l ext key ⦃ r => FindAll l ext key.val r ⦄ := by
   unfold find
   step with index_find_spec ext.index (alloc.vec.Vec.deref l.cells) key hok.index as ⟨f, hf⟩
   obtain ⟨hf1, hf2⟩ := hf
   have hdl : (alloc.vec.Vec.deref l.cells).val.length = l.cells.val.length := by simp [alloc.vec.Vec.deref]
-  apply find_loop_spec l ext hok key f 0#usize (by simp)
+  apply cells_find_loop_spec l ext hok key f 0#usize (by simp)
   · intro e
     refine ⟨fun id hid => ?_, fun i' h => by simp at h⟩
     rw [← cellAt_deref l ext hid]; exact hf1 e id (by omega)
@@ -182,7 +182,7 @@ theorem intern_spec (l : Ledger) (ext : Ext) (hok : ExtOK l ext) (key : alloc.ve
       allCells l r.2 = allCells l ext ++ (if key.val ∈ allCells l ext then [] else [key.val]) ∧
       r.1.val < (allCells l r.2).length ∧ covAt l r.2 r.1.val = key.val ⦄ := by
   unfold intern
-  step with find_spec l ext hok (alloc.vec.Vec.deref key) as ⟨f, hf⟩
+  step with cells_find_spec l ext hok (alloc.vec.Vec.deref key) as ⟨f, hf⟩
   obtain ⟨hf1, hf2⟩ := hf
   have hkv : (alloc.vec.Vec.deref key).val = key.val := by simp [alloc.vec.Vec.deref]
   rw [hkv] at hf1 hf2
