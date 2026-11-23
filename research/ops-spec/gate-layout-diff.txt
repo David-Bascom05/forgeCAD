@@ -1,0 +1,173 @@
+# The exact callgrind gate's lines over base, function by function
+#
+# Round-6 head 9b7c9f3 (kernel 6988026: f6693c1 + 2906698 + 6988026) against the gate's baseline,
+# taken on 5de0a5f. Each line was profiled under the gate's exact conditions (tools/speed/gate.sh:
+# env -i, fixedrandom, taskset, setarch -R, --fair-sched=yes).
+#
+# Summary, per line (instructions, head minus base):
+#
+#   line           total    the changed code    all forge_*    non-forge (libc, std)
+#   gearbox cli  +308203         -46241            -46300          +368552
+#   frame edit    +85142         -54418            -29929          +150767
+#   valve cli     +75069              0               +14           +78707
+#   crank cli     +65971         -14056            -14056           +79924
+#   bracket app   +18228          -4688             -4979           +23097
+#   volute app    +13882              0               +14           +17015
+#   volute edit     -507              0               -21            +4528
+#   hub edit       +3777          -2776             -2623            +6551
+#   bracket edit   +1720          -9968             -9757           +11253
+#   hub app        +1210           -692             -1387            +2533
+#
+# "The changed code" is every forge_model::hole function, Box3::from_points' instantiations and
+# forge_math::dmath. (The total includes unnamed addresses, so the columns do not add up to it.)
+#
+# Where the excess is: glibc's _int_realloc copying (memcpy). On gearbox cli that is +355185, with
+# the same realloc calls as base. It comes from Vec growth elsewhere: forge_topo Body::edges
+# grow_one +184075 and forge_bool imprint::Wall grow_one +143570, the same call counts as base.
+# The fix allocates less (no Vec per profile segment, no list per feature in `reach`), the heap
+# lies differently, and those two vectors no longer grow in place. The boolean-speed session's
+# growth that never moves removes this.
+#
+# Forge functions that rose on a line:
+# - forge_model::hole::reach and hole::tool_box (gearbox cli +22782 reach; frame edit +23786 reach,
+#   +32560 tool_box; hub edit +1072 reach; bracket edit +1932 reach, +1584 tool_box). These are
+#   inlining: add_into (in place of adds) and the prism-box helpers plane_box and shifted (in place
+#   of from_points over twice the points) are inlined into reach and tool_box. adds and
+#   Box3::from_points fell by more: the changed code is down on each of these lines.
+# - forge_math::dmath::sin_cos, +1720 on gearbox cli: the tapered extrude's box, new and needed
+#   (that box was empty before, the bug).
+# - forge_geom::intersect::subdivide_pieces, +14 on valve cli and volute app (-21 on volute edit).
+#   Untouched code: a layout effect.
+#
+# The full per-function diff for each line follows. Functions are grouped by name with generic
+# arguments dropped, and every group that moved by more than 1000 is listed.
+
+== gearbox cli: base 532150167, head 532458370, +308203
+      -70743  ::from_points::
+      -27700  _int_free
+      -19978  malloc
+      -13691  free
+       -7880  malloc_consolidate
+       -3978  __rustc::__rdl_alloc
+       -1916  __memcmp_avx2_movbe
+       +1720  forge_math::dmath::sin_cos  FORGE-ROSE
+      +20033  unlink_chunk.isra.0
+      +22782  forge_model::hole::reach  FORGE-ROSE
+      +72519  _int_malloc
+     +355399  __memcpy_avx_unaligned_erms
+
+== frame edit: base 744550250, head 744635392, +85142
+      -86688  ::from_points::
+      -42112  _int_free
+      -36592  malloc
+      -25296  free
+      -24762  0x00000000049906b0
+      -24076  forge_model::hole::adds
+       -7344  __rustc::__rdl_alloc
+       +1283  malloc_consolidate
+       +1288  _int_realloc
+       +3591  _int_free_maybe_consolidate
+       +9816  _int_free_merge_chunk
+      +13343  unlink_chunk.isra.0
+      +23786  forge_model::hole::reach  FORGE-ROSE
+      +24640  core::slice::sort::unstable::quicksort::quicksort::
+      +31982  _int_malloc
+      +32560  forge_model::hole::tool_box  FORGE-ROSE
+     +229976  __memcpy_avx_unaligned_erms
+
+== valve cli: base 631012544, head 631087613, +75069
+      -15370  __memcpy_avx_unaligned_erms
+       -6292  _int_free
+       -5158  _int_free_merge_chunk
+       -4050  malloc
+       -2790  free
+       -1663  __memcmp_avx2_movbe
+       +2177  _int_realloc
+       +4048  malloc_consolidate
+      +20034  unlink_chunk.isra.0
+      +89527  _int_malloc
+
+== crank cli: base 529726784, head 529792755, +65971
+      -30063  __memcpy_avx_unaligned_erms
+      -14056  ::from_points::
+       -6459  _int_free
+       -3780  malloc
+       -2604  free
+       +8956  unlink_chunk.isra.0
+      +11340  _int_free_maybe_consolidate
+      +32556  _int_free_merge_chunk
+      +71765  _int_malloc
+
+== bracket app: base 10378800, head 10397028, +18228
+       -5616  ::from_points::
+       -2703  _int_free
+       -2210  malloc
+       -1550  free
+       +1344  __memcpy_avx_unaligned_erms
+       +4047  _int_malloc
+       +6571  unlink_chunk.isra.0
+      +18624  malloc_consolidate
+
+== volute app: base 1116283416, head 1116297298, +13882
+       -1575  malloc
+       -1522  _int_free
+       -1085  free
+       +1442  malloc_consolidate
+       +4794  _int_malloc
+      +16511  __memcpy_avx_unaligned_erms
+
+== volute edit: base 2242791347, head 2242790840, -507
+      -19653  _int_malloc
+       -4348  _int_free
+       -3867  unlink_chunk.isra.0
+       -3150  malloc
+       -2170  free
+       -1274  malloc_consolidate
+       +1113  _int_free_maybe_consolidate
+       +3164  _int_free_merge_chunk
+      +35019  __memcpy_avx_unaligned_erms
+
+== hub edit: base 44684147, head 44687924, +3777
+      -31455  __memcpy_avx_unaligned_erms
+       -5304  core::iter::adapters::flatten::and_then_or_clear::
+       -2402  malloc
+       -2054  __memcmp_avx2_movbe
+       -2009  _int_free
+       -1736  free
+       -1392  forge_model::hole::segment_points
+       +1072  forge_model::hole::reach  FORGE-ROSE
+       +1172  _int_realloc
+       +1877  _int_free_maybe_consolidate
+       +3312  ::next
+       +5469  _int_free_merge_chunk
+       +8587  unlink_chunk.isra.0
+      +13883  _int_malloc
+      +15630  malloc_consolidate
+
+== bracket edit: base 19788836, head 19790556, +1720
+      -11232  ::from_points::
+       -5649  _int_free
+       -4466  malloc
+       -3100  free
+       -1652  forge_model::hole::adds
+       +1106  __memcpy_avx_unaligned_erms
+       +1584  forge_model::hole::tool_box  FORGE-ROSE
+       +1932  forge_model::hole::reach  FORGE-ROSE
+       +3268  _int_malloc
+       +6944  unlink_chunk.isra.0
+      +15504  malloc_consolidate
+
+== hub app: base 24182541, head 24183751, +1210
+       -2652  core::iter::adapters::flatten::and_then_or_clear::
+       -1256  malloc
+       +1656  ::next
+       +3244  malloc_consolidate
+
+== forge functions that rose
+gearbox cli +1720 forge_math::dmath::sin_cos
+gearbox cli +22782 forge_model::hole::reach
+frame edit +23786 forge_model::hole::reach
+frame edit +32560 forge_model::hole::tool_box
+hub edit +1072 forge_model::hole::reach
+bracket edit +1584 forge_model::hole::tool_box
+bracket edit +1932 forge_model::hole::reach
