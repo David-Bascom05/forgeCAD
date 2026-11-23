@@ -9,6 +9,13 @@
 //!
 //! `FG_REGEN=1 cargo test -p forge-model --test hidden_inputs` adds the new ones as `unreviewed`
 //! (which still fails) and drops the ones gone.
+//!
+//! Sources compiled only behind a cargo feature that no shipped build turns on (`GATED`) are
+//! scanned only when this test is built with that feature: the default run covers the shipped
+//! kernel, and `cargo test -p forge-model --test hidden_inputs --features decide_once` covers
+//! the decide-once boolean too. That second run may fail for now (its sources are not all
+//! reviewed yet), but it is required to pass before `decide_once` is ever turned on by default
+//! or in any build that ships: `gated_files_are_gated` keeps the list honest.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -102,6 +109,44 @@ fn rs_files(dir: &Path, out: &mut Vec<PathBuf>) {
     }
 }
 
+/// Kernel sources behind a cargo feature no shipped build enables: (file, feature, the line in
+/// its crate's lib.rs that gates it). Scanned only when this test has the feature.
+const GATED: [(&str, &str, &str); 1] = [(
+    "forge-bool/src/decide_once.rs",
+    "decide_once",
+    "#[cfg(feature = \"decide_once\")]\npub mod decide_once;",
+)];
+
+/// Whether a source file is scanned in this build of the test.
+fn scanned(rel: &str) -> bool {
+    GATED
+        .iter()
+        .all(|(f, feature, _)| *f != rel || (*feature == "decide_once" && cfg!(feature = "decide_once")))
+}
+
+/// Each gated file is still compiled only behind its feature (its lib.rs says so), and that
+/// feature is in no default feature set of its crate.
+#[test]
+fn gated_files_are_gated() {
+    for (f, feature, gate) in GATED {
+        let krate = f.split('/').next().expect("a crate");
+        let lib = std::fs::read_to_string(kernel().join(krate).join("src/lib.rs")).expect("lib.rs");
+        assert!(
+            lib.contains(gate),
+            "{f}: {krate}/src/lib.rs no longer gates it with {gate:?}"
+        );
+        let toml = std::fs::read_to_string(kernel().join(krate).join("Cargo.toml")).expect("Cargo.toml");
+        let default = toml
+            .lines()
+            .find(|l| l.trim_start().starts_with("default"))
+            .unwrap_or("");
+        assert!(
+            !default.contains(feature),
+            "{krate}: `{feature}` is a default feature: {f} ships"
+        );
+    }
+}
+
 /// `crate/path.rs|kind|trimmed line` -> how many such lines.
 fn scan() -> BTreeMap<String, usize> {
     let mut out = BTreeMap::new();
@@ -115,6 +160,9 @@ fn scan() -> BTreeMap<String, usize> {
                 .expect("in the kernel")
                 .to_string_lossy()
                 .replace('\\', "/");
+            if !scanned(&rel) {
+                continue;
+            }
             let text = std::fs::read_to_string(&f).expect("read");
             // test modules sit at the end of a file: stop at `#[cfg(test)]`
             for line in text
@@ -160,6 +208,13 @@ fn every_hidden_input_is_reviewed() {
     let (head, list) = listed();
     if std::env::var_os("FG_REGEN").is_some() {
         let mut lines = head;
+        let kept = list
+            .iter()
+            .filter(|(e, _)| !scanned(e.split('|').next().unwrap_or("")));
+        let mut found = found.clone();
+        for (e, (_, n)) in kept {
+            found.insert(e.clone(), *n);
+        }
         for (e, n) in &found {
             let class = list.get(e).map_or("unreviewed".to_string(), |x| x.0.clone());
             let count = if *n > 1 { format!("  x {n}") } else { String::new() };
@@ -185,7 +240,10 @@ fn every_hidden_input_is_reviewed() {
             }
         }
     }
-    for e in list.keys().filter(|e| !found.contains_key(*e)) {
+    for e in list
+        .keys()
+        .filter(|e| !found.contains_key(*e) && scanned(e.split('|').next().unwrap_or("")))
+    {
         bad.push(format!("listed but gone (FG_REGEN=1 to drop): {e}"));
     }
     assert!(

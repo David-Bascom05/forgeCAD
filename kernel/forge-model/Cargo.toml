@@ -20,6 +20,9 @@ forge-font = { path = "../forge-font" }
 # the boolean's decision log (forge-bool's `decisions`), with the n-ary regen's fallbacks to the
 # sequential one counted as rungs of its retry ladder
 decisions = ["forge-bool/decisions"]
+# the decide-once flat-face boolean (forge-bool's `decide_once`): off in every shipped build.
+# `cargo test -p forge-model --test hidden_inputs --features decide_once` reviews its sources too
+decide_once = ["forge-bool/decide_once"]
 
 [dev-dependencies]
 forge-dirs = { path = "../forge-dirs" }

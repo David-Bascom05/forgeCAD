@@ -134,8 +134,6 @@
 #   LOOKUP  |  interface/forge-lang/src/drawing/doc.rs:575  |  env  |  HashMap<String, Val>  |  drawing
 #   LOOKUP  |  interface/forge-lang/src/drawing/regen.rs:502  |  drawn  |  HashMap<DrawKey, (Vec<Piece>, Vec<Stroke>)>  |  drawing
 #   LOOKUP  |  interface/forge-lang/src/drawing/regen.rs:3070  |  stack  |  HashMap<String, f64>  |  drawing
-speed (timing stats; a clock that picks a path is must-fix 5)  @ forge-bool/src/boolean.rs|clock|let mut clock = phases_on().then(std::time::Instant::now);  x 2
-speed (timing stats; a clock that picks a path is must-fix 5)  @ forge-bool/src/boolean.rs|clock|let now = std::time::Instant::now();
 speed (timing stats; a clock that picks a path is must-fix 5)  @ forge-bool/src/boolean.rs|clock|let mut clock = phases_on().then(forge_math::clock::Instant::now);  x 2
 speed (timing stats; a clock that picks a path is must-fix 5)  @ forge-bool/src/boolean.rs|clock|let now = forge_math::clock::Instant::now();
 no-output (prints only)  @ forge-bool/src/boolean.rs|env|*ON.get_or_init(|| std::env::var_os("FORGE_DEBUG").is_some())
@@ -167,26 +165,6 @@ speed (lazy field or constant table)  @ forge-bool/src/classify.rs|lazy|info.dra
 speed (lazy field or constant table)  @ forge-bool/src/classify.rs|lazy|info.simple = std::sync::OnceLock::new();  x 2
 speed (lazy field or constant table)  @ forge-bool/src/classify.rs|lazy|simple: std::sync::OnceLock::new(),
 speed (lazy field or constant table)  @ forge-bool/src/classify.rs|lazy|simple: std::sync::OnceLock<Option<Simple>>,
-no-output (FORGE_DECIDE_STATS, prints only)  @ forge-bool/src/decide_once.rs|env|*ON.get_or_init(|| std::env::var_os("FORGE_DECIDE_STATS").is_some())
-no-output (Fx-hashed: a fixed hasher, the same order every run; lookups and sets)  @ forge-bool/src/decide_once.rs|hash-order|by_cov: HashMap<u64, u32>,
-no-output (Fx-hashed: a fixed hasher, the same order every run; lookups and sets)  @ forge-bool/src/decide_once.rs|hash-order|by_pair: HashMap<u64, u32>,
-no-output (Fx-hashed: a fixed hasher, the same order every run; lookups and sets)  @ forge-bool/src/decide_once.rs|hash-order|fn unique(used: &mut HashMap<Name, ()>, name: Name) -> Name {
-no-output (Fx-hashed: a fixed hasher, the same order every run; lookups and sets)  @ forge-bool/src/decide_once.rs|hash-order|let mut by_key: HashMap<(i64, i64, i64, i64), Vec<u32>> = HashMap::default();
-no-output (Fx-hashed: a fixed hasher, the same order every run; lookups and sets)  @ forge-bool/src/decide_once.rs|hash-order|let mut count: HashMap<u32, u32> = HashMap::default();
-no-output (Fx-hashed: a fixed hasher, the same order every run; lookups and sets)  @ forge-bool/src/decide_once.rs|hash-order|let mut done: HashMap<u32, ()> = HashMap::default();
-no-output (Fx-hashed: a fixed hasher, the same order every run; lookups and sets)  @ forge-bool/src/decide_once.rs|hash-order|let mut eused: HashMap<Name, ()> = HashMap::default();
-no-output (Fx-hashed: a fixed hasher, the same order every run; lookups and sets)  @ forge-bool/src/decide_once.rs|hash-order|let mut is_e: HashMap<u32, ()> = HashMap::default();
-no-output (Fx-hashed: a fixed hasher, the same order every run; lookups and sets)  @ forge-bool/src/decide_once.rs|hash-order|let mut is_v: HashMap<u32, ()> = HashMap::default();
-no-output (Fx-hashed: a fixed hasher, the same order every run; lookups and sets)  @ forge-bool/src/decide_once.rs|hash-order|let mut members: HashMap<usize, Vec<usize>> = HashMap::default();
-no-output (Fx-hashed: a fixed hasher, the same order every run; lookups and sets)  @ forge-bool/src/decide_once.rs|hash-order|let mut named: HashMap<Name, ()> = fnames.iter().map(|&n| (n, ())).collect();
-no-output (Fx-hashed: a fixed hasher, the same order every run; lookups and sets)  @ forge-bool/src/decide_once.rs|hash-order|let mut on: HashMap<u32, ()> = HashMap::default();
-no-output (Fx-hashed: a fixed hasher, the same order every run; lookups and sets)  @ forge-bool/src/decide_once.rs|hash-order|let mut seen: HashMap<(u32, u32), u32> = HashMap::default();
-no-output (Fx-hashed: a fixed hasher, the same order every run; lookups and sets)  @ forge-bool/src/decide_once.rs|hash-order|let mut used: HashMap<Name, ()> = HashMap::default();
-no-output (Fx-hashed: a fixed hasher, the same order every run; lookups and sets)  @ forge-bool/src/decide_once.rs|hash-order|let mut vused: HashMap<Name, ()> = HashMap::default();
-no-output (Fx-hashed: a fixed hasher, the same order every run; lookups and sets)  @ forge-bool/src/decide_once.rs|hash-order|type FxMap<K, V> = std::collections::HashMap<K, V, BuildHasherDefault<Fx>>;
-no-output (Fx-hashed: a fixed hasher, the same order every run; lookups and sets)  @ forge-bool/src/decide_once.rs|hash-order|type HashMap<K, V> = FxMap<K, V>;
-no-output (FORGE_DECIDE_STATS, prints only)  @ forge-bool/src/decide_once.rs|lazy|static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-no-output (FORGE_DECIDE_STATS, prints only)  @ forge-bool/src/decide_once.rs|static|static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
 no-output (decision log, feature `decisions` only, off in every build: records and prints, never read by the boolean; STRICT panics as the log's assertion)  @ forge-bool/src/decisions.rs|env|if found > 0 && std::env::var_os("FORGE_DECISIONS_STRICT").is_some() && !std::thread::panicking() {
 no-output (decision log, feature `decisions` only, off in every build: records and prints, never read by the boolean; STRICT panics as the log's assertion)  @ forge-bool/src/decisions.rs|env|if std::env::var_os("FORGE_DECISIONS_TRACE").is_some() {
 no-output (decision log, feature `decisions` only, off in every build: records and prints, never read by the boolean; STRICT panics as the log's assertion)  @ forge-bool/src/decisions.rs|static|static INPUT: RefCell<(String, String)> = const { RefCell::new((String::new(), String::new())) };
