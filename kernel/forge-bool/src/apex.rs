@@ -14,10 +14,33 @@
 //! the caller refuses at the apex and never guesses. A face going only part of the turn round its
 //! apex is decided by the whole turn: a verdict on every generator is one on the face's.
 
+use crate::boolean::{BoolError, R, Touch};
 use crate::classify::{Index, Where};
 use forge_geom::{CurveGeom, Surface, SurfaceGeom};
 use forge_math::{Point3, Vec3, dmath, tol};
 use forge_topo::{Body, FaceId};
+
+/// Whether face `f` lies on a cone (the only surface `apex_sheet` reads).
+#[inline]
+pub(crate) fn is_cone(body: &Body, f: FaceId) -> bool {
+    matches!(body.face(f).surface, Surface::Cone(_))
+}
+
+/// How each side of an isolated touch lies at a cone's apex against the other solid (None where
+/// its face has a tangent plane there: `local_class` decides); an apex that cannot be read is
+/// refused at the point.
+#[cold]
+#[inline(never)]
+pub(crate) fn sheets_at(bodies: [&Body; 2], index: [&Index; 2], t: &Touch) -> R<[Option<Where>; 2]> {
+    let mut out = [None; 2];
+    for (side, slot) in out.iter_mut().enumerate() {
+        if let Some(sheet) = apex_sheet(bodies[side], t.faces[side], t.at) {
+            let w = sheet.and_then(|sh| where_sheet(bodies[1 - side], index[1 - side], t.at, &sh));
+            *slot = Some(w.ok_or(BoolError::ZeroThickness { at: t.at })?);
+        }
+    }
+    Ok(out)
+}
 
 /// A cone face's generators at its apex: g(u) = axis + side (cos u e1 + sin u e2).
 #[derive(Clone, Copy, Debug)]

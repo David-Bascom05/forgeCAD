@@ -1164,20 +1164,16 @@ fn plan_once_in(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
     for t in &touching {
         // at a cone's apex the face's sheet is its generators, decided in closed form; one that
         // cannot be read there is refused at the point, never guessed
-        let mut sheets = [None; 2];
-        if t.dir.is_none() {
-            for side in 0..2 {
-                match crate::apex::apex_sheet(bodies[side], t.faces[side], t.at) {
-                    None => {}
-                    Some(sheet) => {
-                        let w = sheet.and_then(|sh| {
-                            crate::apex::where_sheet(bodies[1 - side], &index[1 - side], t.at, &sh)
-                        });
-                        sheets[side] = Some(w.ok_or(BoolError::ZeroThickness { at: t.at })?);
-                    }
-                }
-            }
-        }
+        let sheets = if t.dir.is_none()
+            && t.faces
+                .iter()
+                .enumerate()
+                .any(|(k, &f)| crate::apex::is_cone(bodies[k], f))
+        {
+            crate::apex::sheets_at(bodies, [&index[0], &index[1]], t)?
+        } else {
+            [None; 2]
+        };
         let near = |side: Side| {
             if let Some(w) = sheets[side] {
                 return Some(w);
@@ -5129,73 +5125,106 @@ fn clockwise(
 pub(crate) fn uv_dir(body: &Body, f: FaceId, p: &Piece, forward: bool, at_end: bool) -> R<Vec2> {
     let t = if forward != at_end { p.range.lo } else { p.range.hi };
     let d = p.curve.deriv(t);
-    let mut dir = if forward != at_end { d.d1 } else { -d.d1 };
+    let dir = if forward != at_end { d.d1 } else { -d.d1 };
     let face = body.face(f);
-    let mut uv = face.surface.project(d.p);
-    let mut sd = face.surface.deriv(uv);
-    // an end snapped to a ball's pole (the cut placed there within LINEAR: a curve passing a hair
-    // beside it) is at the pole, as the snap decided: its way out is the chord from the pole along
-    // the piece, not its tangent where it passes (square to that chord), and it is told in the
-    // pole's chart with the ways that end there exactly
-    if let Surface::Sphere(s) = &face.surface
-        && sd.du.dot(sd.du) > 1e-18 * sd.dv.dot(sd.dv)
-        && let Some(pole) = [1.0, -1.0]
-            .map(|k| s.frame.origin + s.frame.z() * (k * s.radius))
-            .into_iter()
-            .find(|q| q.distance(d.p) <= tol::LINEAR)
+    let uv = face.surface.project(d.p);
+    let sd = face.surface.deriv(uv);
+    let (uu, uv2, vv) = (sd.du.dot(sd.du), sd.du.dot(sd.dv), sd.dv.dot(sd.dv));
+    // at or within LINEAR of a point where u degenerates (uu under 1e-18 vv there, under LINEAR²
+    // within LINEAR of a ball's pole): one test, the rest decided off the common path
+    if uu <= 1e-18 * vv.max(1e8)
+        && let Some(way) = singular_way(body, f, p, t, d.p, forward != at_end, dir, uv, uu, vv)
     {
-        let h = 1e-3 * p.range.width();
-        dir = p.curve.eval(if forward != at_end { t + h } else { t - h }) - pole;
-        uv = face.surface.project(pole);
-        sd = face.surface.deriv(uv);
-    }
-    if let Surface::Cone(_) = face.surface
-        && sd.du.dot(sd.du) <= 1e-18 * sd.dv.dot(sd.dv)
-    {
-        // an apex has no tangent plane: its rulings are told by their u
-        return round_point(face, p, t, uv, forward != at_end);
-    }
-    if sd.du.dot(sd.du) <= 1e-18 * sd.dv.dot(sd.dv) {
-        // at a pole u says nothing: the ways are told apart in the tangent plane, turned as the
-        // parameter plane is (its normal du x dv, taken a hair off the pole)
-        let v = face.surface.domain().v;
-        let step = if uv.y > 0.5 * (v.lo + v.hi) { -1e-6 } else { 1e-6 } * (v.hi - v.lo);
-        let off = Point2::new(uv.x, uv.y + step);
-        // (`normal` refuses where |du| is under LINEAR, as it is that hair off the pole of a ball
-        // of radius under about 3 mm: du x dv itself there, which `normal` is elsewhere)
-        let n = face
-            .surface
-            .normal(off)
-            .or_else(|| {
-                let d = face.surface.deriv(off);
-                d.du.cross(d.dv).normalize()
-            })
-            .ok_or_else(|| {
-                BoolError::unhandled(Unhandled::SplitThroughSingular {
-                    face: FaceRef::of(body, f),
-                })
-            })?
-            .get();
-        let helper = if n.x.abs() < 0.9 { Vec3::X } else { Vec3::Y };
-        let e1 = (helper - n * helper.dot(n))
-            .normalize()
-            .ok_or_else(|| {
-                BoolError::unhandled(Unhandled::SplitThroughSingular {
-                    face: FaceRef::of(body, f),
-                })
-            })?
-            .get();
-        let (a, b) = (dir.dot(e1), dir.dot(n.cross(e1)));
-        return Ok(Vec2::new(if face.same_sense { a } else { -a }, b));
+        return way;
     }
     // least squares for (a, b) with a du + b dv = dir
-    let (uu, uv2, vv) = (sd.du.dot(sd.du), sd.du.dot(sd.dv), sd.dv.dot(sd.dv));
     let (ru, rv) = (sd.du.dot(dir), sd.dv.dot(dir));
     let Some((a, b)) = forge_math::linalg::solve2(uu, uv2, uv2, vv, ru, rv) else {
         return round_point(face, p, t, uv, forward != at_end);
     };
     let a = if face.same_sense { a } else { -a };
     Ok(Vec2::new(a, b))
+}
+
+/// `uv_dir` where u degenerates at or near the end `at` of piece `p` (at parameter `t`, from its
+/// low end when `from_lo`, leaving along `dir`): None to go on by least squares.
+/// - A cone's apex has no tangent plane: its rulings are told by their u (`round_point`).
+/// - At a pole u says nothing: the ways are told apart in the tangent plane (`pole_way`).
+/// - An end snapped to a ball's pole (the cut placed there within LINEAR: a curve passing a hair
+///   beside it) is at the pole, as the snap decided: its way out is the chord from the pole along
+///   the piece, not its tangent where it passes (square to that chord), told in the pole's chart
+///   with the ways that end there exactly. (Within LINEAR of a pole uu is under LINEAR²: |du| =
+///   r sin θ ≤ 2r sin(θ/2), the distance, θ the angle off the pole.)
+#[cold]
+#[inline(never)]
+#[allow(clippy::too_many_arguments)]
+fn singular_way(
+    body: &Body,
+    f: FaceId,
+    p: &Piece,
+    t: f64,
+    at: Point3,
+    from_lo: bool,
+    dir: Vec3,
+    uv: Point2,
+    uu: f64,
+    vv: f64,
+) -> Option<R<Vec2>> {
+    let face = body.face(f);
+    if uu <= 1e-18 * vv {
+        return Some(match face.surface {
+            Surface::Cone(_) => round_point(face, p, t, uv, from_lo),
+            _ => pole_way(body, f, uv, dir),
+        });
+    }
+    let Surface::Sphere(s) = &face.surface else {
+        return None;
+    };
+    if uu > tol::LINEAR * tol::LINEAR {
+        return None;
+    }
+    let pole = [1.0, -1.0]
+        .map(|k| s.frame.origin + s.frame.z() * (k * s.radius))
+        .into_iter()
+        .find(|q| q.distance(at) <= tol::LINEAR)?;
+    let h = 1e-3 * p.range.width();
+    let way = p.curve.eval(if from_lo { t + h } else { t - h }) - pole;
+    Some(pole_way(body, f, face.surface.project(pole), way))
+}
+
+/// `uv_dir` at a pole, `uv` its parameters, where u says nothing: way `dir` told apart in the
+/// tangent plane, turned as the parameter plane is (its normal du x dv, taken a hair off the pole).
+fn pole_way(body: &Body, f: FaceId, uv: Point2, dir: Vec3) -> R<Vec2> {
+    let face = body.face(f);
+    let v = face.surface.domain().v;
+    let step = if uv.y > 0.5 * (v.lo + v.hi) { -1e-6 } else { 1e-6 } * (v.hi - v.lo);
+    let off = Point2::new(uv.x, uv.y + step);
+    // (`normal` refuses where |du| is under LINEAR, as it is that hair off the pole of a ball
+    // of radius under about 3 mm: du x dv itself there, which `normal` is elsewhere)
+    let n = face
+        .surface
+        .normal(off)
+        .or_else(|| {
+            let d = face.surface.deriv(off);
+            d.du.cross(d.dv).normalize()
+        })
+        .ok_or_else(|| {
+            BoolError::unhandled(Unhandled::SplitThroughSingular {
+                face: FaceRef::of(body, f),
+            })
+        })?
+        .get();
+    let helper = if n.x.abs() < 0.9 { Vec3::X } else { Vec3::Y };
+    let e1 = (helper - n * helper.dot(n))
+        .normalize()
+        .ok_or_else(|| {
+            BoolError::unhandled(Unhandled::SplitThroughSingular {
+                face: FaceRef::of(body, f),
+            })
+        })?
+        .get();
+    let (a, b) = (dir.dot(e1), dir.dot(n.cross(e1)));
+    Ok(Vec2::new(if face.same_sense { a } else { -a }, b))
 }
 
 /// `uv_dir` at a cone's apex or a sphere's pole, where every way leaves along v: a way is told

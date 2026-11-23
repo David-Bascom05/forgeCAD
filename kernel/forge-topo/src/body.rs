@@ -1090,10 +1090,15 @@ impl Body {
     /// where the chart is singular (du = 0) but the sphere is not, its geometric normal
     /// (p - c) / r. None only where the surface itself has no tangent plane (a cone's apex).
     pub fn face_normal_at(&self, f: FaceId, p: Point3) -> Option<UnitVec3> {
+        self.face_normal(f, self.face(f).surface.project(p))
+            .or_else(|| self.pole_normal(f, p))
+    }
+
+    /// A ball's geometric normal at `p` (where its chart, not it, is singular); None off a ball.
+    #[cold]
+    #[inline(never)]
+    fn pole_normal(&self, f: FaceId, p: Point3) -> Option<UnitVec3> {
         let face = self.face(f);
-        if let Some(n) = self.face_normal(f, face.surface.project(p)) {
-            return Some(n);
-        }
         let Surface::Sphere(s) = &face.surface else {
             return None;
         };

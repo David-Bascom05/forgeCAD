@@ -671,6 +671,42 @@ pub fn nary_with(
     Ok(out)
 }
 
+/// `boolean::apex::sheets_at` for n tools: whether each side's face, at a cone's apex, is kept in
+/// the result, from its sheet's place against every other tool.
+#[cold]
+#[inline(never)]
+fn apex_kept(
+    tools: &[&Body],
+    index: &[Index],
+    ops: &[Op],
+    any_intersect: bool,
+    t: &Touch,
+) -> R<[Option<bool>; 2]> {
+    let n = tools.len();
+    let mut out = [None; 2];
+    for (k, slot) in out.iter_mut().enumerate() {
+        let (sd, f) = (t.sides[k], t.faces[k]);
+        let Some(sheet) = crate::apex::apex_sheet(tools[sd], f, t.at) else {
+            continue;
+        };
+        let refuse = BoolError::ZeroThickness { at: t.at };
+        let sheet = sheet.ok_or(refuse.clone())?;
+        let mut inner = vec![false; n];
+        inner[sd] = true;
+        for j in (0..n).filter(|&j| j != sd) {
+            match crate::apex::where_sheet(tools[j], &index[j], t.at, &sheet) {
+                Some(Where::Inside) => inner[j] = true,
+                Some(_) => {}
+                None => return Err(refuse),
+            }
+        }
+        let mut outer = inner.clone();
+        outer[sd] = false;
+        *slot = Some(in_result(ops, &inner, any_intersect) != in_result(ops, &outer, any_intersect));
+    }
+    Ok(out)
+}
+
 fn nary_body(
     tools: &[&Body],
     ops: &[Op],
@@ -1162,29 +1198,12 @@ fn nary_body(
         }
         // at a cone's apex the face's sheet is its generators, decided in closed form against
         // every other tool; one that cannot be read there is refused at the point, never guessed
-        let mut sheets = [None; 2];
-        if t.dir.is_none() {
-            for (k, slot) in sheets.iter_mut().enumerate() {
-                let (sd, f) = (t.sides[k], t.faces[k]);
-                let Some(sheet) = crate::apex::apex_sheet(tools[sd], f, t.at) else {
-                    continue;
-                };
-                let refuse = BoolError::ZeroThickness { at: t.at };
-                let sheet = sheet.ok_or(refuse.clone())?;
-                let mut inner = vec![false; n];
-                inner[sd] = true;
-                for j in (0..n).filter(|&j| j != sd) {
-                    match crate::apex::where_sheet(tools[j], &index[j], t.at, &sheet) {
-                        Some(Where::Inside) => inner[j] = true,
-                        Some(_) => {}
-                        None => return Err(refuse),
-                    }
-                }
-                let mut outer = inner.clone();
-                outer[sd] = false;
-                *slot = Some(in_result(ops, &inner, any_intersect) != in_result(ops, &outer, any_intersect));
-            }
-        }
+        let sheets = if t.dir.is_none() && (0..2).any(|k| crate::apex::is_cone(tools[t.sides[k]], t.faces[k]))
+        {
+            apex_kept(tools, &index, ops, any_intersect, t)?
+        } else {
+            [None; 2]
+        };
         let kept = [0, 1].map(|k| {
             if let Some(w) = sheets[k] {
                 return Some(w);
