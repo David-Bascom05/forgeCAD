@@ -616,3 +616,35 @@ root = fillet(edges(between: (pad, box), crease: "concave"), 5)
     };
     assert!(shape(&base, false) == shape(&reversed_storage(&base), true));
 }
+
+/// A plate's top edge rounded where a through hole's rim is tangent to the round's spring on the
+/// top (CADFS 00092585 restated). The ball's feet stay in both faces all along, so by the local
+/// rolling ball it rounds: the top face is left pinched where the rim touches the spring.
+fn spring_touching_a_hole(t: f64, r: f64, d: f64) -> String {
+    format!(
+        r#"
+shared L = 40
+shared T = {t}
+shared R = {r}
+shared D = {d}
+param round.r = R
+sketch plan(on: xy) {{
+  outline = rect(corner: (0, 0), size: (L, L))
+}}
+plate = extrude(plan, T)
+sketch spot(on: plate.end) {{
+  c = circle((L - R - D / 2, L / 2), D / 2)
+}}
+drill = cut(spot.c, thru)
+round = fillet(edges(between: (plate.end, plate.side(plan.outline[1]))), r)
+"#
+    )
+}
+
+#[test]
+fn fillet_spring_tangent_to_a_hole_rim() {
+    // the probe of the spring's side was at its middle, the very point the rim touches
+    valid(&spring_touching_a_hole(8.0, 4.0, 6.0));
+    // as thick as the radius: the side face goes whole too
+    valid(&spring_touching_a_hole(5.0, 5.0, 5.0));
+}

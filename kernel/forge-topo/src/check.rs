@@ -811,33 +811,39 @@ fn check_sides_of(body: &Body, faces: &[FaceId], known: Option<&Known>, out: &mu
                 {
                     continue;
                 }
-                let t = e.range.mid();
-                let d = e.curve.deriv(t);
-                let d0 = d.p;
+                let mut d = e.curve.deriv(e.range.mid());
+                let mut mid_uv = ul.point_of_sample(ul.coedge_first[k] + default_segments(e) / 2);
+                // and well short of any other edge of the face (a hole may pass within a hair): one
+                // whose box is 4 steps off leaves the step as it is, and one whose box is no nearer
+                // than the least found so far cannot lessen it
+                let clearance_at = |p: Point3| {
+                    let mut least = f64::INFINITY;
+                    for &o in loops.iter().flat_map(|l| l.coedges.iter()) {
+                        let oe = body.coedge(o).edge;
+                        let off = box_distance(body.edge_box(oe), p);
+                        if oe != co.edge && off < 4.0 * step && off < least {
+                            let other = body.edge(oe);
+                            least =
+                                least.min(other.curve.eval(other.curve.closest(p, other.range)).distance(p));
+                        }
+                    }
+                    least
+                };
+                let mut clearance = clearance_at(d.p);
+                // another loop touching this edge at its middle (a hole's rim tangent to a spring): a
+                // probe there lands on both, so the face is probed a third of the way along instead
+                if clearance <= tol::LINEAR {
+                    d = e.curve.deriv(e.range.lo + e.range.width() / 3.0);
+                    mid_uv = unwrap_near(body, f, surface.project(d.p), mid_uv);
+                    clearance = clearance_at(d.p);
+                }
                 let along = if co.forward { d.d1 } else { -d.d1 };
-                let mid_uv = ul.point_of_sample(ul.coedge_first[k] + default_segments(e) / 2);
                 let Some(n) = body.face_normal(f, mid_uv) else {
                     continue;
                 };
                 let Some(inward) = n.cross(along).normalize() else {
                     continue;
                 };
-                // and well short of any other edge of the face (a hole may pass within a hair): one
-                // whose box is 4 steps off leaves the step as it is
-                let near = |b: Box3| box_distance(b, d0) < 4.0 * step;
-                let clearance = loops
-                    .iter()
-                    .flat_map(|l| l.coedges.iter())
-                    .map(|&o| body.coedge(o).edge)
-                    .filter(|&oe| oe != co.edge && near(body.edge_box(oe)))
-                    .map(|oe| {
-                        let other = body.edge(oe);
-                        other
-                            .curve
-                            .eval(other.curve.closest(d.p, other.range))
-                            .distance(d.p)
-                    })
-                    .fold(f64::INFINITY, f64::min);
                 let step = step.min(0.25 * clearance);
                 let inside = |step: f64| {
                     let probe = surface.project(d.p + inward * step);
