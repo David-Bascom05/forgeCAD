@@ -588,3 +588,34 @@ At head `1a25c1a`:
 | W3 (tools ahead of the boolean chain), W4 (face-pair batches) | bool-speed | queued |
 | S5 (per-body caches across booleans) | unassigned | ranked, not started |
 | A8 (face arrangement) | Lean coordinator, decide-once Rust | signed off; budget and rules in a8-review.md §6 |
+
+### S4′ re-scoped from bool-speed's measurement (2026-11-23)
+
+**Measured** (bool-speed; coplanar seq, switch off, exact callgrind, at S3+lir):
+- `point_in_face_past` is 26.2M inclusive, 13.5% of the line. Of that:
+  - 10.0M lazily builds `FaceInfo` once per changed face per boolean, because every pad modifies
+    coplanar's big faces;
+  - 9.4M is `planar_parity`;
+  - 4.0M is its own nearest-edge scan and the `past` scan.
+- It runs only when a sample lands **On** a boundary. S4′'s conditions exclude exactly those
+  stretches.
+- **So S4′ reaches −2 to −5M, not −6 to −9M.**
+
+**Re-ranked** (all bit-identical by construction):
+1. **(b) `past` through `bands.near`,** not a linear scan of `info.edges`: −1 to −2M; small.
+2. **(a) Incremental `FaceInfo` (S5 for faces):** when `apply` modifies a face, patch its info
+   instead of resetting `face.query`. Up to −10M. The invariant and proof route:
+   - **Invariant:** after every `apply`, every face whose `query` cache is `Some(info)` has
+     `info == FaceInfo::build(body, f)`. Equality is the structure's `PartialEq`, order included,
+     not just equal answers. Debug builds recompute and compare after every `apply`.
+   - **Making patch equal to rebuild by construction:** `build` must be a function of the face's
+     edge *set*. It sorts its edges by a total key first (the edge id, or a geometric key), and
+     builds `Bands` and `Simple` from that sorted list. A patch then removes and inserts edges at
+     their sorted positions. Two sorted permutations of one set are equal (`sorted_unique`,
+     Speedups.lean), so the patched list is the rebuilt list, and every field derived from it
+     (the bands) follows.
+   - If `Bands` keeps internal order beyond the sorted edges (bucket boundaries from extents, say),
+     the patch must recompute exactly those buckets, or fall back to a rebuild of `Bands` alone.
+3. **S4′ last, or not at all:** −2 to −5M at more risk. The debug both-ways check must also see
+   through trim's de-dup of near cuts, which can hide a second crossing.
+4. **(c) `planar_parity`'s per-call setup:** measure first.
