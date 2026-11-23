@@ -18,6 +18,10 @@ const t = require("./lib.cjs");
   try {
     const p = await t.page(b, `${url}?storage=memory&noapp=1`);
     await p.waitForFunction(() => window.forgecad?.fc, null, { timeout: 120000 });
+    // THREADED=1: the threaded artifact's kernel (std with atomics, the spin-locked heap) is the one
+    const threaded = await p.evaluate(() => window.forgecad.threaded);
+    if (process.env.THREADED) assert.equal(threaded, true, "the threaded build isn't the one running");
+    console.log(`the ${threaded ? "threaded" : "single-threaded"} build`);
     // the bench parts: natively written to a folder, in the page to its filesystem
     const benchDir = path.join(dir, "bench");
     const nat = t.native(["--bench", benchDir]);

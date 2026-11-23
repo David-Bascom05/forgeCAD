@@ -36,6 +36,10 @@ round = fillet(edges(of: boss, crease: "convex"), r)
     // opened and built: the panel's word is the native build's
     let st = await t.until(p, (s) => s.built?.checked, "the first build");
     assert.equal(st.path, "/project/plate.fg");
+    // THREADED=1: the threaded artifact must be the one running (the build on a Web Worker)
+    const threaded = await p.evaluate(() => window.forgecad.threaded);
+    if (process.env.THREADED) assert.equal(threaded, true, "the threaded build isn't the one running");
+    console.log(`ok - the ${threaded ? "threaded" : "single-threaded"} build`);
     const n0 = t.native([path.join(dir, "plate.fg")])[path.join(dir, "plate.fg")];
     assert.deepEqual(t.differs(n0, st.built), [], `first build: native ${JSON.stringify(n0)} page ${JSON.stringify(st.built)}`);
     console.log(`ok - opened plate.fg: volume ${st.built.volume}, ${st.built.faces} faces, as native`);

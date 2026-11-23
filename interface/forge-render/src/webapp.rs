@@ -64,11 +64,32 @@ thread_local! {
 }
 
 fn wake() {
-    WAKE.with(|w| {
-        if let Some(p) = &*w.borrow() {
+    let here = WAKE.with(|w| {
+        w.borrow().as_ref().map(|p| {
             let _ = p.send_event(Msg::Wake);
-        }
+        })
     });
+    // a worker's thread (the threaded build): the page is told through the worker's messages
+    #[cfg(target_feature = "atomics")]
+    if here.is_none() {
+        wake_page();
+    }
+    #[cfg(not(target_feature = "atomics"))]
+    let _ = here;
+}
+
+#[cfg(target_feature = "atomics")]
+#[wasm_bindgen]
+extern "C" {
+    /// The worker's (web/worker.js): a message to the page, which wakes the app.
+    #[wasm_bindgen(js_namespace = globalThis, js_name = forge_wake_page)]
+    fn wake_page();
+}
+
+/// The page's: a worker said its thread has news (the threaded build).
+#[wasm_bindgen]
+pub fn app_wake() {
+    wake();
 }
 
 enum Msg {
@@ -278,6 +299,7 @@ impl Host {
     }
 
     fn take_inbox(&mut self) {
+        pass_on();
         for a in INBOX.with(|b| std::mem::take(&mut *b.borrow_mut())) {
             match a {
                 Ask::Open(p) => self.gui.open(&p),
@@ -517,15 +539,39 @@ fn panic_hook() {
     std::panic::set_hook(Box::new(|p| console_error(&format!("forge-app panicked: {p}"))));
 }
 
+/// Changes made on a worker's thread (the threaded build), for the page's thread to pass on.
+type Pending = Vec<(String, Option<Vec<u8>>)>;
+static PENDING: std::sync::Mutex<Pending> = std::sync::Mutex::new(Vec::new());
+
+/// Whether this is the page's own thread (the one the app's loop runs on).
+fn on_page() -> bool {
+    WAKE.with(|w| w.borrow().is_some())
+}
+
+/// The changes made on other threads, to the page, in order.
+fn pass_on() {
+    let all = std::mem::take(&mut *crate::plat::lock(&PENDING));
+    for (p, b) in all {
+        page_changed(&p, b.map(|b| Uint8Array::from(&b[..])));
+    }
+}
+
 /// The filesystem's changes to the page, but not those it made itself.
 fn tell_page(path: &std::path::Path, c: forge_dirs::fs::mem::Change<'_>) {
     if LOADING.with(|l| *l.borrow()) {
         return;
     }
-    let p = path.to_string_lossy();
-    match c {
-        forge_dirs::fs::mem::Change::Wrote(b) => page_changed(&p, Some(Uint8Array::from(b))),
-        forge_dirs::fs::mem::Change::Removed => page_changed(&p, None),
+    let p = path.to_string_lossy().into_owned();
+    let bytes = match c {
+        forge_dirs::fs::mem::Change::Wrote(b) => Some(b),
+        forge_dirs::fs::mem::Change::Removed => None,
+    };
+    if on_page() {
+        pass_on();
+        page_changed(&p, bytes.map(Uint8Array::from));
+    } else {
+        crate::plat::lock(&PENDING).push((p, bytes.map(<[u8]>::to_vec)));
+        wake();
     }
 }
 

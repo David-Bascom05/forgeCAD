@@ -7,9 +7,9 @@
 //   ?storage=memory  nothing kept (tests)
 //   ?offscreen=WxH  frames drawn to a texture, not the canvas (a headless browser's software
 //                    WebGPU can't show a canvas); forgecad.pixels() reads them
+//   ?threads=0       the single-threaded build even where the page is cross-origin isolated
 //   ?noapp           no canvas: the kernel and files only (the parity test)
 
-import init, * as fc from "./forge_render.js";
 import { Mirror, ServerBackend, localBackend, cleanPath } from "./storage.js";
 import { zip, unzip } from "./zip.js";
 
@@ -115,7 +115,22 @@ function openDialog() {
   d.showModal();
 }
 
-await init();
+// the threaded build (threads/, the build on a Web Worker) where the page may share memory
+// (cross-origin isolated: `forgecad web` sends the headers) and it was built; else the
+// single-threaded one. Both build the same bits.
+async function threadedBuild() {
+  if (!self.crossOriginIsolated || q.get("threads") === "0") return false;
+  try {
+    return (await fetch("threads/forge_render.js", { method: "HEAD" })).ok;
+  } catch {
+    return false;
+  }
+}
+const threaded = await threadedBuild();
+const fc = await import(threaded ? "./threads/forge_render.js" : "./forge_render.js");
+await fc.default();
+if (threaded) (await import("./threads/threads.js")).threadsOn(() => fc.app_wake());
+say(threaded ? "the threaded build: builds on a Web Worker" : "the single-threaded build");
 fc.app_init();
 const store = await backend();
 let mirror = null;
@@ -149,6 +164,7 @@ window.forge_save_as = (name) => {
 };
 window.forgecad = {
   fc,
+  threaded,
   mirror,
   problems,
   state: () => JSON.parse(fc.app_state()),
