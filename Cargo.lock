@@ -86,10 +86,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-cam-lang"
+version = "0.1.0"
+dependencies = [
+ "forge-agent",
+ "forge-cam",
+ "forge-cam-geom",
+ "forge-lang",
+ "forge-math",
+ "forge-post",
+ "forge-tooling",
+]
+
+[[package]]
 name = "forge-cli"
 version = "0.1.0"
 dependencies = [
  "forge-agent",
+ "forge-cam-lang",
  "forge-geom",
  "forge-import",
  "forge-lang",
@@ -224,8 +238,6 @@ dependencies = [
  "forge-agent",
  "forge-asm",
  "forge-bool",
- "forge-cam",
- "forge-cam-geom",
  "forge-dirs",
  "forge-draw",
  "forge-dwg",
@@ -239,12 +251,10 @@ dependencies = [
  "forge-mesh",
  "forge-model",
  "forge-ops",
- "forge-post",
  "forge-sheet",
  "forge-sketch",
  "forge-step",
  "forge-thermo",
- "forge-tooling",
  "forge-topo",
  "forge-units",
 ]

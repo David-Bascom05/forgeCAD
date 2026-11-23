@@ -231,7 +231,7 @@ impl Session {
         let path = self.path(&a.file)?;
         let src = std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
         let dir = path.parent().map(Path::to_path_buf).unwrap_or_default();
-        let cam = forge_lang::cam::run(&src, &dir);
+        let cam = forge_cam_lang::run(&src, &dir);
         let mut text = String::new();
         for e in &cam.errors {
             text.push_str(&format!("error: {e}\n"));

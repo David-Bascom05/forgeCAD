@@ -10,7 +10,6 @@ pub mod bench;
 pub mod bodies;
 pub mod build;
 pub mod builtins;
-pub mod cam;
 pub mod compare;
 pub mod deps;
 pub mod drawing;

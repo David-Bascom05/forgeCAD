@@ -12,7 +12,7 @@ fn doc(body: &str) -> String {
 fn the_flange_program_is_certified() {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
     let src = std::fs::read_to_string(dir.join("flange_cam.fg")).unwrap();
-    let cam = forge_lang::cam::run(&src, &dir);
+    let cam = forge_cam_lang::run(&src, &dir);
     assert!(
         cam.ok,
         "{:?} {:?}",
@@ -39,7 +39,7 @@ fn the_flange_program_is_certified() {
 fn leftover_is_listed() {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
     // facing alone: the plate's sides, the bore and the holes are all still stock
-    let cam = forge_lang::cam::run(&doc("skim = facing(op1, tool: t1, to: 18, step: 1)\n"), &dir);
+    let cam = forge_cam_lang::run(&doc("skim = facing(op1, tool: t1, to: 18, step: 1)\n"), &dir);
     assert!(cam.leftover_done);
     assert!(!cam.leftover.is_empty());
     assert!(
@@ -53,7 +53,7 @@ fn leftover_is_listed() {
 fn refusals_name_the_check_and_a_fix() {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
     // the bore with a short-fluted tool and nothing cleared above: the shank reaches the stock
-    let cam = forge_lang::cam::run(
+    let cam = forge_cam_lang::run(
         &doc(
             "bore = pocket(op1, f.bore_h, tool: t2, stepover: 2.5, step: 3)\nprog = program(op1, post: \"haas\")\n",
         ),
@@ -73,7 +73,7 @@ fn refusals_name_the_check_and_a_fix() {
         "no program is released with a refused op"
     );
     // the bolt holes before the plate top is cleared: the rapids would enter stock
-    let cam = forge_lang::cam::run(
+    let cam = forge_cam_lang::run(
         &doc(
             "skim = facing(op1, tool: t1, to: 18, step: 1)\nbolts = drill(op1, f.bolts, plan: \"auto\")\nprog = program(op1)\n",
         ),
@@ -83,7 +83,7 @@ fn refusals_name_the_check_and_a_fix() {
     assert_eq!(b.status, "refused", "{:?}", b.checks);
     assert!(b.checks.iter().any(|c| c.rule == "rapid_clear"));
     // a typed error for an unknown name
-    let cam = forge_lang::cam::run(&doc("x = drill(op1, f.nope)\n"), &dir);
+    let cam = forge_cam_lang::run(&doc("x = drill(op1, f.nope)\n"), &dir);
     assert!(
         cam.errors.iter().any(|e| e.contains("no hole feature `nope`")),
         "{:?}",

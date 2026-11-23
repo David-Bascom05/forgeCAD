@@ -23,7 +23,7 @@
 //! what is certified: the cutter against the part (gouge), the shank and holder against the part
 //! and the stock, rapids against both. An op whose checks are not all `pass` is refused, with the
 //! check, where, and a fix. The reply is `forgecad.cam/1`.
-use crate::syntax::{self, Arg, Expr, ExprKind, StmtKind};
+use forge_lang::syntax::{self, Arg, Expr, ExprKind, StmtKind};
 use forge_agent::json::Json;
 use forge_cam::ops::{self, CheckOut, Heights, OpPath, PMove, Phase, Stock, ToolUse};
 use forge_cam_geom::check::Face;
@@ -67,7 +67,7 @@ enum StockSpec {
 struct PartIn {
     file: String,
     faces: Vec<Face>,
-    holes: Vec<crate::holes::HoleInfo>,
+    holes: Vec<forge_lang::holes::HoleInfo>,
     bbox: ([f64; 3], [f64; 3]),
     group: String,
 }
@@ -446,8 +446,8 @@ impl Cam {
                 let file = get_str(a, "#0", None)?;
                 let path = dir.join(&file);
                 let src = std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
-                let (run, _) = crate::run(&src, crate::Options::default(), Default::default());
-                let holes = crate::hole_view(&src, crate::Options::default());
+                let (run, _) = forge_lang::run(&src, forge_lang::Options::default(), Default::default());
+                let holes = forge_lang::hole_view(&src, forge_lang::Options::default());
                 if !run.ok() {
                     return Err(format!(
                         "the part `{file}` does not build: {:?}",
