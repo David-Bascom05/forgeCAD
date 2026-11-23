@@ -367,3 +367,45 @@ MACHINES.append(bridge(
            "spindle.S1.max": unk("tool limits unpublished; 50 x 6 mm ours"),
            "machine.control": pub(SRM, "RML-1 and NC code")}))
 MACHINES[-1].cite("body.table", "published", SRM, value="table 232.2 x 156.6 mm")
+
+# ================================================================ batch 4: lathes
+G884 = GZ.format("G0884")
+MACHINES.append(lathe(
+    "grizzly", "grizzly-g0884", "siemens", G884,
+    NOTE + "; Siemens Sinumerik (model not stated): no siemens lathe dialect yet; grizzly.com product pages "
+           "refuse automated clients (403): numbers from Grizzly's own spec-sheet PDF",
+    xt=158.75, zt=596.9, swing=330.2, centres=685.8, rpm=[30, 4000], iface="A2-4",
+    rapid={"X": 5969, "Z": 8001}, feed={"X": 5969, "Z": 8001}, chuck_r=90, chuck_l=80, stations=6, index_s=0.1,
+    cites={"joint.X.range": pub(G884, "cross slide travel 6-1/4 in (158.75 mm)"),
+           "joint.Z.range": pub(G884, "carriage travel 23-1/2 in (596.9 mm)"),
+           "joint.X.rapid": pub(G884, "rapid X 235 in/min"), "joint.Z.rapid": pub(G884, "rapid Z 315 in/min"),
+           "joint.X.max_feed": unk(FEED_UNK), "joint.Z.max_feed": unk(FEED_UNK),
+           "spindle.main.rpm": pub(G884, "30-4,000 rpm, 4 HP"),
+           "spindle.main.max": pub(G884, "swing 13 in over bed, 6 in over cross slide; 27 in between centres"),
+           "spindle.main.interface": pub(G884, "A2-4 nose, 1.5 in bore"),
+           "turret.T1.stations": pub(G884, "6-position turret"),
+           "turret.T1.index_s": unk("index time unpublished; 0.1 s held so t_min stays a lower bound"),
+           "machine.control": pub(G884, "Siemens Sinumerik"),
+           "machine.tailstock": pub(G884, "MT3 tailstock (not modelled)")}))
+
+SL = "https://www.sherline.com/product/8440/"
+SL4 = "https://www.sherline.com/product/4400-cnc4410-cnc-lathe/"
+MACHINES.append(lathe(
+    "sherline", "sherline-8440", "linuxcnc", SL,
+    NOTE + "; Sherline stopped taking orders 2026-10-19; a single tool post (no turret), modelled as a "
+           "1-station turret; LinuxCNC; Sherline says the standard CNC lathe cannot cut threads",
+    xt=110, zt=300, swing=90, centres=430, rpm=[70, 2800], iface="3/4-16 nose, #1 Morse",
+    rapid=559, feed=559, chuck_r=50, chuck_l=50, stations=1, index_s=0.1, coolants=(), turret_r=40, hs=80,
+    cites={"joint.X.range": pub(SL4, "crosslide travel 4.25 in (110 mm)"),
+           "joint.Z.range": unk("carriage travel unpublished (17 in / 430 mm between centres); 300 mm held "
+                                "(smaller: overtravel errs early)"),
+           **{f"joint.{a}.rapid": pub("https://www.sherline.com/cnc-specifications/", "22 in/min max positioning")
+              for a in "XZ"},
+           **{f"joint.{a}.max_feed": pub("https://www.sherline.com/cnc-specifications/", "22 in/min max")
+              for a in "XZ"},
+           "spindle.main.rpm": pub(SL4, "70-2,800 rpm"),
+           "spindle.main.max": pub(SL4, "swing 3.5 in over bed; 17 in between centres"),
+           "spindle.main.interface": pub(SL4, "3/4-16 TPI nose, #1 Morse taper"),
+           "turret.T1.stations": est("a single tool post, no turret: one station"),
+           "turret.T1.index_s": unk("no indexing; 0.1 s held (the format needs > 0)"),
+           "machine.control": pub(SL, "PC with LinuxCNC")}))

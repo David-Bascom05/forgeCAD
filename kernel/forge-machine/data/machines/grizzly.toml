@@ -1174,3 +1174,234 @@ basis = "unpublished; nose cylinder r 60 mm and a 260 mm head box are ours, size
 path = "body.column"
 status = "estimate"
 basis = "spindle-to-column distance unpublished: column face put 50 mm beyond the table's furthest y reach (the least that fits the travel); the real column may be further"
+
+
+[[machine]]
+name = "grizzly-g0884"
+kind = "lathe"
+control = "siemens"
+coolants = ["flood"]
+clearance = 1
+source = "https://cdn0.grizzly.com/specsheets/G0884_ds.pdf"
+taken = "2026-11-23"
+note = "real model, published numbers cited per value; bodies are conservative boxes, not the maker's CAD; verify against your machine before trusting a collision verdict; Siemens Sinumerik (model not stated): no siemens lathe dialect yet; grizzly.com product pages refuse automated clients (403): numbers from Grizzly's own spec-sheet PDF"
+real = true
+
+[[machine.joint]]
+name = "Z"
+parent = "base"
+side = "head"
+type = "linear"
+axis = [0, 0, 1]
+range = [-596.9, 0]
+rapid = 8001
+max_feed = 8001
+
+[[machine.joint]]
+name = "X"
+parent = "Z"
+side = "head"
+type = "linear"
+axis = [1, 0, 0]
+range = [-10, 148.75]
+rapid = 5969
+max_feed = 5969
+diameter = true
+
+[[machine.spindle]]
+name = "main"
+link = "base"
+kind = "turning"
+axis = [0, 0, 1]
+nose = [0, 0, 0]
+rpm = [30, 4000]
+max = [330.2, 685.8]
+interface = "A2-4"
+
+[[machine.turret]]
+name = "T1"
+link = "X"
+stations = 6
+index_s = 0.1
+center = [230, 0, 666.9]
+index_axis = [0, 0, 1]
+
+[[machine.mount]]
+name = "turret"
+kind = "tool"
+link = "X"
+at = [110, 0, 666.9]
+dir = [-1, 0, 0]
+
+[[machine.mount]]
+name = "chuck"
+kind = "part"
+link = "base"
+at = [0, 0, 0]
+dir = [0, 0, 1]
+xdir = [1, 0, 0]
+
+[[machine.body]]
+name = "headstock"
+link = "base"
+part = "parts/grizzly/grizzly-g0884/headstock.fg"
+ignore = ["chuck"]
+[[machine.body.box]]
+min = [-200, -200, -380]
+max = [200, 200, -80]
+
+[[machine.body]]
+name = "chuck"
+link = "base"
+part = "parts/grizzly/grizzly-g0884/chuck.fg"
+ignore = ["headstock"]
+[[machine.body.cyl]]
+base = [0, 0, -80]
+axis = [0, 0, 1]
+r = 90
+h = 80
+
+[[machine.body]]
+name = "turret"
+link = "X"
+part = "parts/grizzly/grizzly-g0884/turret.fg"
+[[machine.body.cyl]]
+base = [230, 0, 626.9]
+axis = [0, 0, 1]
+r = 120
+h = 80
+
+[[machine.cite]]
+path = "machine.unmodelled"
+status = "unknown"
+basis = "bed, tailstock, guarding and coolant are not bodies: their geometry is unpublished; a crash into them is not checked"
+
+[[machine.cite]]
+path = "joint.X.range"
+status = "published"
+source = "https://cdn0.grizzly.com/specsheets/G0884_ds.pdf"
+taken = "2026-11-23"
+value = "cross slide travel 6-1/4 in (158.75 mm)"
+
+[[machine.cite]]
+path = "joint.Z.range"
+status = "published"
+source = "https://cdn0.grizzly.com/specsheets/G0884_ds.pdf"
+taken = "2026-11-23"
+value = "carriage travel 23-1/2 in (596.9 mm)"
+
+[[machine.cite]]
+path = "joint.X.rapid"
+status = "published"
+source = "https://cdn0.grizzly.com/specsheets/G0884_ds.pdf"
+taken = "2026-11-23"
+value = "rapid X 235 in/min"
+
+[[machine.cite]]
+path = "joint.Z.rapid"
+status = "published"
+source = "https://cdn0.grizzly.com/specsheets/G0884_ds.pdf"
+taken = "2026-11-23"
+value = "rapid Z 315 in/min"
+
+[[machine.cite]]
+path = "joint.X.max_feed"
+status = "unknown"
+basis = "max cutting feed unpublished; held at the rapid so t_min stays a lower bound; the feed clamp check is not meaningful on this machine"
+
+[[machine.cite]]
+path = "joint.Z.max_feed"
+status = "unknown"
+basis = "max cutting feed unpublished; held at the rapid so t_min stays a lower bound; the feed clamp check is not meaningful on this machine"
+
+[[machine.cite]]
+path = "spindle.main.rpm"
+status = "published"
+source = "https://cdn0.grizzly.com/specsheets/G0884_ds.pdf"
+taken = "2026-11-23"
+value = "30-4,000 rpm, 4 HP"
+
+[[machine.cite]]
+path = "spindle.main.max"
+status = "published"
+source = "https://cdn0.grizzly.com/specsheets/G0884_ds.pdf"
+taken = "2026-11-23"
+value = "swing 13 in over bed, 6 in over cross slide; 27 in between centres"
+
+[[machine.cite]]
+path = "spindle.main.interface"
+status = "published"
+source = "https://cdn0.grizzly.com/specsheets/G0884_ds.pdf"
+taken = "2026-11-23"
+value = "A2-4 nose, 1.5 in bore"
+
+[[machine.cite]]
+path = "turret.T1.stations"
+status = "published"
+source = "https://cdn0.grizzly.com/specsheets/G0884_ds.pdf"
+taken = "2026-11-23"
+value = "6-position turret"
+
+[[machine.cite]]
+path = "turret.T1.index_s"
+status = "unknown"
+basis = "index time unpublished; 0.1 s held so t_min stays a lower bound"
+
+[[machine.cite]]
+path = "machine.control"
+status = "published"
+source = "https://cdn0.grizzly.com/specsheets/G0884_ds.pdf"
+taken = "2026-11-23"
+value = "Siemens Sinumerik"
+
+[[machine.cite]]
+path = "machine.tailstock"
+status = "published"
+source = "https://cdn0.grizzly.com/specsheets/G0884_ds.pdf"
+taken = "2026-11-23"
+value = "MT3 tailstock (not modelled)"
+
+[[machine.cite]]
+path = "joint.X.range"
+status = "estimate"
+basis = "the travel's length published; its place ([-10, 148.75] mm of radius from a tool gauge 110 mm off the axis) is ours; setup offsets absorb it"
+
+[[machine.cite]]
+path = "joint.Z.range"
+status = "estimate"
+basis = "travel length published; where the control's machine zero sits in it is not; we put zero at the + end (range [-travel, 0]); a setup's WCS absorbs the choice"
+
+[[machine.cite]]
+path = "spindle.main.nose"
+status = "estimate"
+basis = "the chuck face at the origin (our frame)"
+
+[[machine.cite]]
+path = "turret.T1.center"
+status = "estimate"
+basis = "unpublished; a 120 mm disc behind the gauge face, ours"
+
+[[machine.cite]]
+path = "mount.turret.at"
+status = "estimate"
+basis = "the gauge face 110 mm from the axis at X = 0 (ours); at Z's bottom the turret's front is 30 mm from the chuck face (ours)"
+
+[[machine.cite]]
+path = "mount.chuck.at"
+status = "estimate"
+basis = "the chuck face centre (our origin)"
+
+[[machine.cite]]
+path = "body.headstock"
+status = "estimate"
+basis = "unpublished; a 400 mm block behind the chuck, ours"
+
+[[machine.cite]]
+path = "body.chuck"
+status = "estimate"
+basis = "chuck size unpublished; r 90 x 80 mm ours"
+
+[[machine.cite]]
+path = "body.turret"
+status = "estimate"
+basis = "unpublished; a disc r 120 x 80 mm, ours; the real tool post or turret and its tools may be larger"

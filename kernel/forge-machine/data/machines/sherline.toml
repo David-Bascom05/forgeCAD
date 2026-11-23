@@ -576,3 +576,227 @@ basis = "unpublished; nose cylinder r 35 mm and a 110 mm head box are ours, size
 path = "body.column"
 status = "estimate"
 basis = "column distance unpublished: face 30 mm beyond the table's furthest y reach"
+
+
+[[machine]]
+name = "sherline-8440"
+kind = "lathe"
+control = "linuxcnc"
+coolants = []
+clearance = 1
+source = "https://www.sherline.com/product/8440/"
+taken = "2026-11-23"
+note = "real model, published numbers cited per value; bodies are conservative boxes, not the maker's CAD; verify against your machine before trusting a collision verdict; Sherline stopped taking orders 2026-10-19; a single tool post (no turret), modelled as a 1-station turret; LinuxCNC; Sherline says the standard CNC lathe cannot cut threads"
+real = true
+
+[[machine.joint]]
+name = "Z"
+parent = "base"
+side = "head"
+type = "linear"
+axis = [0, 0, 1]
+range = [-300, 0]
+rapid = 559
+max_feed = 559
+
+[[machine.joint]]
+name = "X"
+parent = "Z"
+side = "head"
+type = "linear"
+axis = [1, 0, 0]
+range = [-10, 100]
+rapid = 559
+max_feed = 559
+diameter = true
+
+[[machine.spindle]]
+name = "main"
+link = "base"
+kind = "turning"
+axis = [0, 0, 1]
+nose = [0, 0, 0]
+rpm = [70, 2800]
+max = [90, 430]
+interface = "3/4-16 nose, #1 Morse"
+
+[[machine.turret]]
+name = "T1"
+link = "X"
+stations = 1
+index_s = 0.1
+center = [150, 0, 370]
+index_axis = [0, 0, 1]
+
+[[machine.mount]]
+name = "turret"
+kind = "tool"
+link = "X"
+at = [110, 0, 370]
+dir = [-1, 0, 0]
+
+[[machine.mount]]
+name = "chuck"
+kind = "part"
+link = "base"
+at = [0, 0, 0]
+dir = [0, 0, 1]
+xdir = [1, 0, 0]
+
+[[machine.body]]
+name = "headstock"
+link = "base"
+part = "parts/sherline/sherline-8440/headstock.fg"
+ignore = ["chuck"]
+[[machine.body.box]]
+min = [-80, -80, -350]
+max = [80, 80, -50]
+
+[[machine.body]]
+name = "chuck"
+link = "base"
+part = "parts/sherline/sherline-8440/chuck.fg"
+ignore = ["headstock"]
+[[machine.body.cyl]]
+base = [0, 0, -50]
+axis = [0, 0, 1]
+r = 50
+h = 50
+
+[[machine.body]]
+name = "turret"
+link = "X"
+part = "parts/sherline/sherline-8440/turret.fg"
+[[machine.body.cyl]]
+base = [150, 0, 330]
+axis = [0, 0, 1]
+r = 40
+h = 80
+
+[[machine.cite]]
+path = "machine.unmodelled"
+status = "unknown"
+basis = "bed, tailstock, guarding and coolant are not bodies: their geometry is unpublished; a crash into them is not checked"
+
+[[machine.cite]]
+path = "joint.X.range"
+status = "published"
+source = "https://www.sherline.com/product/4400-cnc4410-cnc-lathe/"
+taken = "2026-11-23"
+value = "crosslide travel 4.25 in (110 mm)"
+
+[[machine.cite]]
+path = "joint.Z.range"
+status = "unknown"
+basis = "carriage travel unpublished (17 in / 430 mm between centres); 300 mm held (smaller: overtravel errs early)"
+
+[[machine.cite]]
+path = "joint.X.rapid"
+status = "published"
+source = "https://www.sherline.com/cnc-specifications/"
+taken = "2026-11-23"
+value = "22 in/min max positioning"
+
+[[machine.cite]]
+path = "joint.Z.rapid"
+status = "published"
+source = "https://www.sherline.com/cnc-specifications/"
+taken = "2026-11-23"
+value = "22 in/min max positioning"
+
+[[machine.cite]]
+path = "joint.X.max_feed"
+status = "published"
+source = "https://www.sherline.com/cnc-specifications/"
+taken = "2026-11-23"
+value = "22 in/min max"
+
+[[machine.cite]]
+path = "joint.Z.max_feed"
+status = "published"
+source = "https://www.sherline.com/cnc-specifications/"
+taken = "2026-11-23"
+value = "22 in/min max"
+
+[[machine.cite]]
+path = "spindle.main.rpm"
+status = "published"
+source = "https://www.sherline.com/product/4400-cnc4410-cnc-lathe/"
+taken = "2026-11-23"
+value = "70-2,800 rpm"
+
+[[machine.cite]]
+path = "spindle.main.max"
+status = "published"
+source = "https://www.sherline.com/product/4400-cnc4410-cnc-lathe/"
+taken = "2026-11-23"
+value = "swing 3.5 in over bed; 17 in between centres"
+
+[[machine.cite]]
+path = "spindle.main.interface"
+status = "published"
+source = "https://www.sherline.com/product/4400-cnc4410-cnc-lathe/"
+taken = "2026-11-23"
+value = "3/4-16 TPI nose, #1 Morse taper"
+
+[[machine.cite]]
+path = "turret.T1.stations"
+status = "estimate"
+basis = "a single tool post, no turret: one station"
+
+[[machine.cite]]
+path = "turret.T1.index_s"
+status = "unknown"
+basis = "no indexing; 0.1 s held (the format needs > 0)"
+
+[[machine.cite]]
+path = "machine.control"
+status = "published"
+source = "https://www.sherline.com/product/8440/"
+taken = "2026-11-23"
+value = "PC with LinuxCNC"
+
+[[machine.cite]]
+path = "joint.X.range"
+status = "estimate"
+basis = "the travel's length published; its place ([-10, 100] mm of radius from a tool gauge 110 mm off the axis) is ours; setup offsets absorb it"
+
+[[machine.cite]]
+path = "joint.Z.range"
+status = "estimate"
+basis = "travel length published; where the control's machine zero sits in it is not; we put zero at the + end (range [-travel, 0]); a setup's WCS absorbs the choice"
+
+[[machine.cite]]
+path = "spindle.main.nose"
+status = "estimate"
+basis = "the chuck face at the origin (our frame)"
+
+[[machine.cite]]
+path = "turret.T1.center"
+status = "estimate"
+basis = "unpublished; a 40 mm disc behind the gauge face, ours"
+
+[[machine.cite]]
+path = "mount.turret.at"
+status = "estimate"
+basis = "the gauge face 110 mm from the axis at X = 0 (ours); at Z's bottom the turret's front is 30 mm from the chuck face (ours)"
+
+[[machine.cite]]
+path = "mount.chuck.at"
+status = "estimate"
+basis = "the chuck face centre (our origin)"
+
+[[machine.cite]]
+path = "body.headstock"
+status = "estimate"
+basis = "unpublished; a 160 mm block behind the chuck, ours"
+
+[[machine.cite]]
+path = "body.chuck"
+status = "estimate"
+basis = "chuck size unpublished; r 50 x 50 mm ours"
+
+[[machine.cite]]
+path = "body.turret"
+status = "estimate"
+basis = "unpublished; a disc r 40 x 80 mm, ours; the real tool post or turret and its tools may be larger"

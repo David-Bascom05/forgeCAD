@@ -27,6 +27,7 @@ class M:
         self.vendor, self.name = vendor, name
         self.head = dict(name=name, kind=kind, control=control, length_joint=length_joint,
                          coolants=coolants, clearance=clearance, source=source, taken=T, note=note, real=True)
+        self.turrets = []
         self.joints, self.spindles, self.changer, self.mounts, self.bodies, self.cites = [], [], None, [], [], []
         self.parts = {}
 
@@ -64,6 +65,9 @@ class M:
         for s in self.spindles:
             o.append("\n[[machine.spindle]]")
             o += [f"{k} = {fmt(v)}" for k, v in s.items()]
+        for t in self.turrets:
+            o.append("\n[[machine.turret]]")
+            o += [f"{k} = {fmt(v)}" for k, v in t.items()]
         if self.changer:
             o.append("\n[[machine.changer]]")
             o += [f"{k} = {fmt(v)}" for k, v in self.changer.items()]
@@ -299,6 +303,51 @@ def bridge(vendor, name, control, src, note, *, tx, ty, tz, nose, nose_cite, tab
     m.cite("body.bridge", "estimate", basis="unpublished; a wall behind the table's furthest reach, size ours")
     m.cite("body.carriage", "estimate", basis="unpublished; a block between the spindle and the bridge, ours")
     m.cite("body.head", "estimate", basis=f"unpublished; spindle cylinder r {spindle_r} mm ours; the real head may be larger")
+    return m
+
+
+def lathe(vendor, name, control, src, note, *, xt, zt, swing, centres, rpm, iface, rapid, feed, chuck_r,
+          chuck_l, stations, index_s, cites, coolants=("flood",), turret_r=120, hs=200):
+    """2-axis lathe, the generic-lathe layout: Z along the spindle (the carriage), X radial (the cross
+    slide, programmed as a diameter) on Z, the turret or tool post on X. Origin: the spindle axis at the
+    chuck face; the part grows along +z. X = 0 puts the turret face 110 mm from the axis (a tool's
+    gauge point); tools reach the axis through their offsets."""
+    m = M(vendor, name, "lathe", control, src, note, list(coolants), length_joint=None)
+    ax = lambda v, a: v[a] if isinstance(v, dict) else v
+    face = 110
+    gap = 30  # turret disc front at Z's bottom, from the chuck face
+    zc = gap + 40 + zt  # the turret disc's mid-plane at Z = 0
+    m.joints.append(dict(name="Z", parent="base", side="head", type="linear", axis=[0, 0, 1], range=[-zt, 0],
+                         rapid=ax(rapid, "Z"), max_feed=ax(feed, "Z")))
+    m.joints.append(dict(name="X", parent="Z", side="head", type="linear", axis=[1, 0, 0], range=[-10, xt - 10],
+                         rapid=ax(rapid, "X"), max_feed=ax(feed, "X"), diameter=True))
+    m.spindles.append(dict(name="main", link="base", kind="turning", axis=[0, 0, 1], nose=[0, 0, 0], rpm=rpm,
+                           max=[swing, centres], interface=iface))
+    m.turrets.append(dict(name="T1", link="X", stations=stations, index_s=index_s,
+                          center=[face + turret_r, 0, zc], index_axis=[0, 0, 1]))
+    m.mounts.append(dict(name="turret", kind="tool", link="X", at=[face, 0, zc], dir=[-1, 0, 0]))
+    m.mounts.append(dict(name="chuck", kind="part", link="base", at=[0, 0, 0], dir=[0, 0, 1], xdir=[1, 0, 0]))
+    m.body("headstock", "base", boxes=[([-hs, -hs, -chuck_l - 300], [hs, hs, -chuck_l])], ignore=["chuck"])
+    m.body("chuck", "base", cyls=[([0, 0, -chuck_l], chuck_r, chuck_l)], ignore=["headstock"])
+    m.body("turret", "X", cyls=[([face + turret_r, 0, zc - 40], turret_r, 80)])
+    assert face - 10 > chuck_r + 1, name
+    m.cite("machine.unmodelled", "unknown", basis="bed, tailstock, guarding and coolant are not bodies: their "
+           "geometry is unpublished; a crash into them is not checked")
+    for path, c in cites.items():
+        for x in (c if isinstance(c, list) else [c]):
+            m.cite(path, **x)
+    m.cite("joint.X.range", "estimate", basis=f"the travel's length published; its place ([-10, {xt - 10}] mm of "
+           "radius from a tool gauge 110 mm off the axis) is ours; setup offsets absorb it")
+    m.cite("joint.Z.range", "estimate", basis=ZERO_BASIS)
+    m.cite("spindle.main.nose", "estimate", basis="the chuck face at the origin (our frame)")
+    m.cite("turret.T1.center", "estimate", basis=f"unpublished; a {turret_r} mm disc behind the gauge face, ours")
+    m.cite("mount.turret.at", "estimate", basis="the gauge face 110 mm from the axis at X = 0 (ours); at Z's "
+           f"bottom the turret's front is {gap} mm from the chuck face (ours)")
+    m.cite("mount.chuck.at", "estimate", basis="the chuck face centre (our origin)")
+    m.cite("body.headstock", "estimate", basis=f"unpublished; a {2 * hs} mm block behind the chuck, ours")
+    m.cite("body.chuck", "estimate", basis=f"chuck size unpublished; r {chuck_r} x {chuck_l} mm ours")
+    m.cite("body.turret", "estimate", basis=f"unpublished; a disc r {turret_r} x 80 mm, ours; the real "
+           "tool post or turret and its tools may be larger")
     return m
 
 
