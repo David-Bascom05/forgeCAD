@@ -11,9 +11,8 @@ is a nonzero quadric, every body reads only the input carriers), over ℝ, these
 * `pieceFacet`, `oneFace`, `pieceReal`, `witness`, `boundary` (`qledger_*`);
 * `complete` (`qledgerB_complete`).
 
-These are `ExactK`'s fields except `edges` and `verts`. Those two need R1 on the listed cells,
-through route B's local models (the master's decision of 2026-11-23). The bodies are the input's
-(`qledgerB_bodies`).
+These are `ExactK`'s fields except `edges` and `verts`; QExactAll.lean adds those two through (U)
+and assembles the whole `ExactK` (`curved_exact`). The bodies are the input's (`qledgerB_bodies`).
 -/
 
 namespace ForgeCurved

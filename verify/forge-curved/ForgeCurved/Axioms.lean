@@ -136,3 +136,6 @@ import ForgeCurved
 #print axioms ForgeCurved.two_not_point
 #print axioms ForgeCurved.edges_frame
 #print axioms ForgeCurved.verts_frame
+#print axioms ForgeCurved.facets_negB
+#print axioms ForgeCurved.curved_edges_verts
+#print axioms ForgeCurved.curved_exact
