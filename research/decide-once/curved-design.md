@@ -698,7 +698,16 @@ No global Jordan is needed. Estimate:
 - **(b)** ≈ 1–1.5k lines of generic Lean, plus M-sized builder obligations;
 - **(a)** (Tier0Sound and `cad_R1`) ≈ 8–15k lines.
 
-Recommended: (b). The reference then needs only `ExactK` (done). Awaiting the master's ruling.
+**Ruled by the master (2026-11-23): route (b) approved.** The reference needs only `ExactK`
+(done, CorrectK.lean). The Tier-1 CAD stays out of the runtime and off the theorem's path; §2.3
+remains as the agreed design of a proof-only reference, should it ever be wanted.
+
+The obligations are now split:
+- Tier0 session: F1, F2 and F4;
+- LemmaD session: F5, plus the delineability lemmas (Sweep.lean, for `qsampler_covers`);
+- q1: the generic face-ledger theorem.
+
+**Wings, final (the master):** W2 with sectors, cutting allowed, as recorded above (9ad6336).
 
 **4. Effect on the work in flight.**
 - L2 (this branch: QLine, QEdge, QVert, RootCover, QPropose) is the reference's executable and
