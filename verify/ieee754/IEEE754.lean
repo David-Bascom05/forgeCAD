@@ -29,4 +29,5 @@ import IEEE754.Screen.Interior
 import IEEE754.Interval.Sin
 import IEEE754.Exact.Big
 import IEEE754.Exact.QHenrici
+import IEEE754.Exact.DivRem2
 import IEEE754.Axioms

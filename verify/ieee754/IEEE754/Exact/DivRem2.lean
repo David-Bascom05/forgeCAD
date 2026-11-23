@@ -202,4 +202,254 @@ theorem rshift_spec {U : ℕ → ℕ} {n s : ℕ} (hU : Limbs U n) (hs : s < 64)
       Nat.mul_le_mul_left _ this
     rw [hB]; nlinarith
 
+/-! ## The Knuth path of `divrem_mag` -/
+
+/-- Knuth's path: shift both, run the loop, shift the remainder back. -/
+def knuthDiv (a : ℕ → ℕ) (la : ℕ) (b : ℕ → ℕ) (lb : ℕ) : (ℕ → ℕ) × (ℕ → ℕ) :=
+  let s := 64 - Nat.size (b (lb - 1))
+  let res := knuthRun (shlInto a la s) (shlInto b lb s) lb (la + 1 - lb) (la + 1 - lb)
+  (res.2, rshift res.1 lb s)
+
+lemma valF_ge_pow {w : ℕ → ℕ} {n : ℕ} (hn : 1 ≤ n) (ht : w (n - 1) ≠ 0) : B ^ (n - 1) ≤ valF w n := by
+  have := valF_ge_top (f := w) (show 0 < n by omega)
+  have : B ^ (n - 1) ≤ w (n - 1) * B ^ (n - 1) := Nat.le_mul_of_pos_left _ (Nat.pos_of_ne_zero ht)
+  omega
+
+set_option maxHeartbeats 1000000 in
+/-- **Knuth's path.** For trimmed `a ≥ b` with `b` of at least two limbs: `a = q·b + r`, `r < b`,
+`q` on `la + 1 − lb` limbs and `r` on `lb`, every limb under `2^64`. -/
+theorem knuthDiv_spec {a b : ℕ → ℕ} {la lb : ℕ} (ha : Limbs a la) (hb : Limbs b lb) (hl : 2 ≤ lb)
+    (ht : b (lb - 1) ≠ 0) (hle : lb ≤ la) :
+    valF a la = valF (knuthDiv a la b lb).1 (la + 1 - lb) * valF b lb + valF (knuthDiv a la b lb).2 lb ∧
+      valF (knuthDiv a la b lb).2 lb < valF b lb ∧
+      Limbs (knuthDiv a la b lb).1 (la + 1 - lb) ∧ Limbs (knuthDiv a la b lb).2 lb := by
+  unfold knuthDiv
+  simp only
+  set s := 64 - Nat.size (b (lb - 1)) with hsd
+  set m := la + 1 - lb with hm
+  have hmn : m + lb = la + 1 := by omega
+  obtain ⟨-, n2', n3'⟩ := norm_top (Nat.pos_of_ne_zero ht) (hb _ (by omega))
+  have n3 : s < 64 := n3'
+  obtain ⟨vtop, vval, vnorm, vlim⟩ := norm_v hb (by omega) ht
+  obtain ⟨ue, ulim, uz⟩ := shl_small_spec (s := s) ha n3
+  -- the first window is under `V`
+  have hV : valF (shlInto b lb s) lb = valF b lb * 2 ^ s := vval
+  have hbpow := valF_ge_pow (w := b) (n := lb) (by omega) ht
+  have halt := valF_lt ha
+  have htop : win (shlInto a la s) m lb < valF (shlInto b lb s) lb := by
+    have hsp := valF_split (shlInto a la s) m lb
+    rw [hmn, ue] at hsp
+    have h1 : B ^ m * win (shlInto a la s) m lb ≤ valF a la * 2 ^ s := by omega
+    have h2 : valF a la * 2 ^ s < B ^ m * valF (shlInto b lb s) lb := by
+      rw [hV]
+      have : B ^ la ≤ B ^ m * valF b lb := by
+        calc B ^ la = B ^ m * B ^ (lb - 1) := by rw [← pow_add]; congr 1; omega
+          _ ≤ B ^ m * valF b lb := Nat.mul_le_mul_left _ hbpow
+      calc valF a la * 2 ^ s < B ^ la * 2 ^ s := Nat.mul_lt_mul_of_pos_right halt (by positivity)
+        _ ≤ B ^ m * valF b lb * 2 ^ s := Nat.mul_le_mul_right _ this
+        _ = B ^ m * (valF b lb * 2 ^ s) := by ring
+    have h3 : B ^ m * win (shlInto a la s) m lb < B ^ m * valF (shlInto b lb s) lb := lt_of_le_of_lt h1 h2
+    exact Nat.lt_of_mul_lt_mul_left h3
+  have hz : ∀ i ≥ m + lb, shlInto a la s i = 0 := fun i hi => uz i (by omega)
+  have hu : Limbs (shlInto a la s) (m + lb) := by rw [hmn]; exact ulim
+  obtain ⟨ke, kz, ktop, klim, kqlim, -⟩ := knuthRun_spec hl vlim vnorm hu hz htop m le_rfl
+  generalize hres : knuthRun (shlInto a la s) (shlInto b lb s) lb m m = res at ke kz ktop klim kqlim
+  simp only [Nat.sub_self, zero_add] at kz ktop
+  -- the remainder array is `R` on `lb` limbs
+  have hR : valF res.1 (m + lb) = valF res.1 lb := by
+    have hsp := valF_split res.1 lb m
+    have : win res.1 lb m = 0 := by
+      unfold win valF; exact Finset.sum_eq_zero (fun i _ => by simp only [kz (lb + i) (by omega), zero_mul])
+    rw [show m + lb = lb + m by ring, hsp, this, mul_zero, add_zero]
+  have hwin0 : win res.1 0 lb = valF res.1 lb := valF_congr (fun i _ => by simp)
+  rw [hwin0] at ktop
+  rw [hR, hmn, ue, hV] at ke
+  -- `R = 2^s (a − q b)`, so `u[0] mod 2^s = 0`
+  obtain ⟨re, rlim⟩ := rshift_spec (U := res.1) (n := lb) (s := s) (fun i hi => klim i (by omega)) n3
+  rw [if_neg (by omega), mul_one] at re
+  have hdiv : 2 ^ s ∣ valF res.1 lb := by
+    have : valF res.1 lb + valF b lb * 2 ^ s * valF res.2 m = valF a la * 2 ^ s := ke
+    have h1 : 2 ^ s ∣ valF a la * 2 ^ s := dvd_mul_left _ _
+    have h2 : 2 ^ s ∣ valF b lb * 2 ^ s * valF res.2 m := ⟨valF b lb * valF res.2 m, by ring⟩
+    have := (Nat.dvd_add_right h2).mp (by rw [add_comm, this]; exact h1)
+    exact this
+  have hmod0 : res.1 0 % 2 ^ s = 0 := by
+    have hsp := valF_split res.1 1 (lb - 1)
+    rw [show 1 + (lb - 1) = lb by omega] at hsp
+    have h1 : valF res.1 1 = res.1 0 := by simp [valF]
+    rw [h1] at hsp
+    have h2 : 2 ^ s ∣ B ^ 1 := by rw [pow_one, B]; exact pow_dvd_pow 2 (by omega)
+    have h3 : 2 ^ s ∣ B ^ 1 * win res.1 1 (lb - 1) := Dvd.dvd.mul_right h2 _
+    rw [hsp] at hdiv
+    exact Nat.mod_eq_zero_of_dvd ((Nat.dvd_add_left h3).mp hdiv)
+  rw [hmod0, add_zero] at re
+  have hsP : 0 < 2 ^ s := by positivity
+  refine ⟨?_, ?_, kqlim, rlim⟩
+  · -- `(q b + r)·2^s = a·2^s`
+    have : (valF res.2 m * valF b lb + valF (rshift res.1 lb s) lb) * 2 ^ s = valF a la * 2 ^ s := by
+      rw [← ke, ← re]; ring
+    exact (Nat.eq_of_mul_eq_mul_right hsP this).symm
+  · have : valF (rshift res.1 lb s) lb * 2 ^ s < valF b lb * 2 ^ s := by rw [re, ← hV]; exact ktop
+    exact Nat.lt_of_mul_lt_mul_right this
+
+/-! ## `divrem_mag` and `Big::divrem` -/
+
+/-- `divrem_mag(a, b)`: `(q, |q|, r, |r|)`. -/
+def divremMag (a : ℕ → ℕ) (la : ℕ) (b : ℕ → ℕ) (lb : ℕ) : (ℕ → ℕ) × ℕ × (ℕ → ℕ) × ℕ :=
+  if cmpMag a la b lb = .lt then (fun _ => 0, 0, a, la)
+  else if lb = 1 then
+    ((shortRun a la (b 0) la).1, la, fun i => if i = 0 then (shortRun a la (b 0) la).2 else 0, 1)
+  else ((knuthDiv a la b lb).1, la + 1 - lb, (knuthDiv a la b lb).2, lb)
+
+lemma len_le_of_le {a b : ℕ → ℕ} {la lb : ℕ} (ha : Limbs a la) (hl : 1 ≤ lb) (ht : b (lb - 1) ≠ 0)
+    (h : valF b lb ≤ valF a la) : lb ≤ la := by
+  by_contra hc; push Not at hc
+  have h1 := valF_lt ha
+  have h2 := valF_ge_pow (w := b) hl ht
+  have h3 : B ^ la ≤ B ^ (lb - 1) := Nat.pow_le_pow_right (by norm_num) (by omega)
+  omega
+
+/-- **`divrem_mag`.** For trimmed magnitudes with `b ≠ 0`: `a = q·b + r`, `r < b`. -/
+theorem divremMag_spec {a b : ℕ → ℕ} {la lb : ℕ} (ha : Limbs a la) (hb : Limbs b lb)
+    (ta : la = 0 ∨ a (la - 1) ≠ 0) (hl : 1 ≤ lb) (ht : b (lb - 1) ≠ 0) :
+    valF a la = valF (divremMag a la b lb).1 (divremMag a la b lb).2.1 * valF b lb +
+        valF (divremMag a la b lb).2.2.1 (divremMag a la b lb).2.2.2 ∧
+      valF (divremMag a la b lb).2.2.1 (divremMag a la b lb).2.2.2 < valF b lb ∧
+      Limbs (divremMag a la b lb).1 (divremMag a la b lb).2.1 ∧
+      Limbs (divremMag a la b lb).2.2.1 (divremMag a la b lb).2.2.2 := by
+  have cm := cmp_mag_spec ha hb ta (Or.inr ht)
+  unfold divremMag
+  split_ifs with h1 h2
+  · rw [h1] at cm
+    have := compare_lt_iff_lt.mp cm.symm
+    exact ⟨by simp [valF], this, fun i hi => absurd hi (Nat.not_lt_zero _), ha⟩
+  · have hle : valF b lb ≤ valF a la := by
+      by_contra hc; push Not at hc; exact h1 (by rw [cm]; exact compare_lt_iff_lt.mpr hc)
+    subst h2
+    have hd0 : 0 < b 0 := Nat.pos_of_ne_zero ht
+    obtain ⟨e, rd, lim⟩ := shortDiv_spec ha hd0 (hb 0 (by omega))
+    have hb1 : valF b 1 = b 0 := by simp [valF]
+    have hr1 : valF (fun i => if i = 0 then (shortRun a la (b 0) la).2 else 0) 1 = (shortRun a la (b 0) la).2 := by
+      simp [valF]
+    simp only
+    rw [hb1, hr1]
+    refine ⟨e.symm, rd, lim, fun i hi => ?_⟩
+    have : i = 0 := by omega
+    subst this; simp only [if_true]; exact lt_trans rd (hb 0 (by omega))
+  · have hle : valF b lb ≤ valF a la := by
+      by_contra hc; push Not at hc; exact h1 (by rw [cm]; exact compare_lt_iff_lt.mpr hc)
+    have hl2 : 2 ≤ lb := by omega
+    exact knuthDiv_spec ha hb hl2 ht (len_le_of_le ha hl ht hle)
+
+namespace Big
+
+/-- `Big::divrem`: `o = 0` gives `(0, self)`; two inline values divide in i128 (`/`, `%` truncate);
+otherwise `divrem_mag` on the magnitudes, `q` with the product sign and `r` with `self`'s. -/
+def divrem (x y : Big) : Big × Big :=
+  if isZero y then (S 0, x) else
+    match x, y with
+    | S a, S b => (S (Int.tdiv a b), S (Int.tmod a b))
+    | _, _ =>
+      let d := divremMag (view x).2.1 (view x).2.2 (view y).2.1 (view y).2.2
+      (fromMag ((view x).1 != (view y).1) d.1 d.2.1, fromMag (view x).1 d.2.2.1 d.2.2.2)
+
+/-- The truncated division's laws: `x = q·y + r`, `|r| < |y|`, and `r` takes `x`'s sign (or is 0). -/
+def TruncDiv (x y q r : ℤ) : Prop :=
+  x = q * y + r ∧ |r| < |y| ∧ (0 ≤ x → 0 ≤ r) ∧ (x ≤ 0 → r ≤ 0)
+
+lemma truncDiv_int {a b : ℤ} (hb : b ≠ 0) : TruncDiv a b (Int.tdiv a b) (Int.tmod a b) := by
+  refine ⟨by have := Int.tmod_add_tdiv_mul a b; linarith, ?_, fun h => Int.tmod_nonneg b h, fun h => ?_⟩
+  · rw [Int.abs_eq_natAbs, Int.abs_eq_natAbs, Int.natAbs_tmod]
+    exact_mod_cast Nat.mod_lt _ (Int.natAbs_pos.mpr hb)
+  · have := Int.tmod_nonneg b (show 0 ≤ -a by omega)
+    rw [Int.neg_tmod] at this; omega
+
+lemma abs_sgnz (n : Bool) (a : ℕ) : |sgnz n a| = (a : ℤ) := by
+  cases n <;> simp [sgnz]
+
+lemma view_pos {x : Big} (hx : Canon x) (h0 : val x ≠ 0) : 0 < valF (view x).2.1 (view x).2.2 := by
+  obtain ⟨-, -, ex, -⟩ := view_spec hx
+  by_contra hc; push Not at hc
+  have : valF (view x).2.1 (view x).2.2 = 0 := by omega
+  rw [ex, this] at h0; cases (view x).1 <;> simp [sgnz] at h0
+
+set_option maxHeartbeats 1000000 in
+/-- **`Big::divrem`.** Both results are canonical. For `y ≠ 0` they are the truncated quotient
+and remainder; for `y = 0`, `(0, x)`. -/
+theorem divrem_spec {x y : Big} (hx : Canon x) (hy : Canon y) :
+    Canon (divrem x y).1 ∧ Canon (divrem x y).2 ∧
+      (val y ≠ 0 → TruncDiv (val x) (val y) (val (divrem x y).1) (val (divrem x y).2)) ∧
+      (val y = 0 → val (divrem x y).1 = 0 ∧ val (divrem x y).2 = val x) := by
+  by_cases hz : isZero y = true
+  · have hy0 := (isZero_spec hy).mp hz
+    unfold divrem; rw [if_pos hz]
+    exact ⟨canon_zero, hx, fun h => absurd hy0 h, fun _ => ⟨rfl, rfl⟩⟩
+  have hy0 : val y ≠ 0 := fun h => hz ((isZero_spec hy).mpr h)
+  -- the general path
+  have slow : Canon (fromMag ((view x).1 != (view y).1) (divremMag (view x).2.1 (view x).2.2 (view y).2.1 (view y).2.2).1
+        (divremMag (view x).2.1 (view x).2.2 (view y).2.1 (view y).2.2).2.1) ∧
+      Canon (fromMag (view x).1 (divremMag (view x).2.1 (view x).2.2 (view y).2.1 (view y).2.2).2.2.1
+        (divremMag (view x).2.1 (view x).2.2 (view y).2.1 (view y).2.2).2.2.2) ∧
+      TruncDiv (val x) (val y)
+        (val (fromMag ((view x).1 != (view y).1) (divremMag (view x).2.1 (view x).2.2 (view y).2.1 (view y).2.2).1
+          (divremMag (view x).2.1 (view x).2.2 (view y).2.1 (view y).2.2).2.1))
+        (val (fromMag (view x).1 (divremMag (view x).2.1 (view x).2.2 (view y).2.1 (view y).2.2).2.2.1
+          (divremMag (view x).2.1 (view x).2.2 (view y).2.1 (view y).2.2).2.2.2)) := by
+    obtain ⟨lx, tx, ex, -⟩ := view_spec hx
+    obtain ⟨ly, ty, ey, -⟩ := view_spec hy
+    have ypos := view_pos hy hy0
+    have hly : 1 ≤ (view y).2.2 := by
+      rcases ty with h | h
+      · rw [h] at ypos; simp [valF] at ypos
+      · by_contra hc; push Not at hc
+        have : (view y).2.2 = 0 := by omega
+        rw [this] at ypos; simp [valF] at ypos
+    have hty : (view y).2.1 ((view y).2.2 - 1) ≠ 0 := by
+      rcases ty with h | h
+      · omega
+      · exact h
+    obtain ⟨de, dlt, dql, drl⟩ := divremMag_spec lx ly tx hly hty
+    generalize divremMag (view x).2.1 (view x).2.2 (view y).2.1 (view y).2.2 = d at de dlt dql drl ⊢
+    obtain ⟨cq, vq⟩ := fromMag_spec (neg := ((view x).1 != (view y).1)) dql
+    obtain ⟨cr, vr⟩ := fromMag_spec (neg := (view x).1) drl
+    refine ⟨cq, cr, ?_⟩
+    rw [vq, vr, ex, ey]
+    generalize (view x).1 = an at *
+    generalize (view y).1 = bn at *
+    generalize valF (view x).2.1 (view x).2.2 = A at de ypos ⊢
+    generalize valF (view y).2.1 (view y).2.2 = Bv at de dlt ypos ⊢
+    generalize valF d.1 d.2.1 = Q at de ⊢
+    generalize valF d.2.2.1 d.2.2.2 = R at de dlt ⊢
+    subst de
+    have hQB : (0 : ℤ) ≤ (Q : ℤ) * (Bv : ℤ) := by positivity
+    refine ⟨?_, ?_, ?_, ?_⟩
+    · cases an <;> cases bn <;> simp [sgnz] <;> push_cast <;> ring
+    · rw [abs_sgnz, abs_sgnz]; exact_mod_cast dlt
+    · intro h; cases an <;> simp only [sgnz, Bool.false_eq_true, ite_false, ite_true] at h ⊢ <;> push_cast at h ⊢ <;> omega
+    · intro h; cases an <;> simp only [sgnz, Bool.false_eq_true, ite_false, ite_true] at h ⊢ <;> push_cast at h ⊢ <;> omega
+  unfold divrem; rw [if_neg hz]
+  cases x with
+  | S a =>
+    cases y with
+    | S b =>
+      simp only
+      have hb0 : b ≠ 0 := by simpa [val] using hy0
+      refine ⟨?_, ?_, fun _ => truncDiv_int hb0, fun h => absurd h hy0⟩
+      · simp only [Canon] at hx ⊢
+        calc |Int.tdiv a b| = (Int.natAbs (Int.tdiv a b) : ℤ) := Int.abs_eq_natAbs _
+          _ ≤ (Int.natAbs a : ℤ) := by exact_mod_cast Int.natAbs_tdiv_le_natAbs a b
+          _ = |a| := (Int.abs_eq_natAbs _).symm
+          _ < 2 ^ 126 := hx
+      · simp only [Canon] at hx ⊢
+        calc |Int.tmod a b| = (Int.natAbs (Int.tmod a b) : ℤ) := Int.abs_eq_natAbs _
+          _ ≤ (Int.natAbs a : ℤ) := by rw [Int.natAbs_tmod]; exact_mod_cast Nat.mod_le _ _
+          _ = |a| := (Int.abs_eq_natAbs _).symm
+          _ < 2 ^ 126 := hx
+    | M n k w => exact ⟨slow.1, slow.2.1, fun _ => slow.2.2, fun h => absurd h hy0⟩
+    | L n k w => exact ⟨slow.1, slow.2.1, fun _ => slow.2.2, fun h => absurd h hy0⟩
+  | M n k w => exact ⟨slow.1, slow.2.1, fun _ => slow.2.2, fun h => absurd h hy0⟩
+  | L n k w => exact ⟨slow.1, slow.2.1, fun _ => slow.2.2, fun h => absurd h hy0⟩
+
+end Big
+
 end IEEE754.Exact

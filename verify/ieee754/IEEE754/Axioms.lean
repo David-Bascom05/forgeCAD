@@ -21,6 +21,7 @@ import IEEE754.Screen.Interior
 import IEEE754.Interval.Sin
 import IEEE754.Exact.Big
 import IEEE754.Exact.QHenrici
+import IEEE754.Exact.DivRem2
 
 /-!
 # Only the standard axioms
@@ -113,3 +114,6 @@ elab "#standard_axioms " ids:ident* : command => do
   IEEE754.Exact.Big.shl_spec IEEE754.Exact.Big.signum_spec IEEE754.Exact.Big.isZero_spec IEEE754.Exact.Big.cmpBig_spec IEEE754.Exact.Big.limbs_unique IEEE754.Exact.Big.eq_iff_val
   IEEE754.Exact.QZ.ratio_spec IEEE754.Exact.QZ.add_spec IEEE754.Exact.QZ.mul_spec IEEE754.Exact.QZ.neg_spec
   IEEE754.Exact.QZ.normal_unique
+  IEEE754.Exact.shortDiv_spec IEEE754.Exact.Step.corr_spec IEEE754.Exact.dStep_spec IEEE754.Exact.knuthRun_spec
+  IEEE754.Exact.norm_v IEEE754.Exact.rshift_spec IEEE754.Exact.knuthDiv_spec IEEE754.Exact.divremMag_spec
+  IEEE754.Exact.Big.divrem_spec
