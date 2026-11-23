@@ -1778,6 +1778,7 @@ fn extrude(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Val
             match (a.num("taper", ANG)?, along) {
                 (Some(t), _) => {
                     dims.push(dim("taper", &t));
+                    ev.tapers += 1;
                     (
                         Extent::Tapered {
                             distance: dist,

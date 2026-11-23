@@ -8,6 +8,10 @@ use crate::values;
 
 /// The run's lints for its tapers that close before their depth.
 pub(crate) fn lint(ev: &mut Eval) {
+    // (a part with no taper pays this test alone)
+    if ev.tapers == 0 {
+        return;
+    }
     let tapered = |f: &forge_model::Feature| {
         matches!(
             f,

@@ -363,6 +363,8 @@ pub struct Eval<'s> {
     hids: HashMap<u64, usize, std::hash::BuildHasherDefault<NameHasher>>,
     pub errors: Vec<Error>,
     pub warnings: Vec<Warning>,
+    /// Tapered extrudes made: the taper lint looks at the features only when there are some.
+    pub tapers: usize,
     ctx: Ctx,
     sketch: Option<Rc<RefCell<Sk>>>,
     /// Inside a path block: its last segment and current end point.
@@ -485,6 +487,7 @@ impl<'s> Eval<'s> {
             hids: HashMap::default(),
             errors: vec![],
             warnings: vec![],
+            tapers: 0,
             ctx: Ctx::default(),
             sketch: None,
             path: None,
