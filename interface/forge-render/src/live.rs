@@ -127,25 +127,7 @@ fn mesh_all(body: &Body, faces: &[(FaceId, u64)], q: &Quality) -> Vec<(u64, Arc<
     if faces.len() < THREADS_FROM {
         return faces.iter().map(|&(f, k)| (k, mesh_face(body, f, q))).collect();
     }
-    let at = std::sync::atomic::AtomicUsize::new(0);
-    std::thread::scope(|s| {
-        let workers: Vec<_> = (0..THREADS)
-            .map(|_| {
-                s.spawn(|| {
-                    let mut got = Vec::new();
-                    loop {
-                        let i = at.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                        let Some(&(f, k)) = faces.get(i) else { return got };
-                        got.push((k, mesh_face(body, f, q)));
-                    }
-                })
-            })
-            .collect();
-        workers
-            .into_iter()
-            .flat_map(|w| w.join().expect("a mesher panicked"))
-            .collect()
-    })
+    crate::plat::par_map(faces, THREADS, |&(f, k)| (k, mesh_face(body, f, q)))
 }
 
 #[cfg(test)]

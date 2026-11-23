@@ -1,0 +1,26 @@
+# A nameplate: raised lettering in the shipped Open Sans, a serial engraved in Source Sans 3
+# (CFF outlines), both drawn exactly from the fonts' own curves, on a plate with rounded corners.
+shared L = 90
+shared W = 36
+shared t = 4
+param corners.r = 4
+param title.size = 11
+param title.y = 18
+param serial.size = 5
+param serial.y = 7
+param raised.h = 1.2
+param serial_cut.d = 0.6
+
+sketch plan(on: xy) {
+  outline = rect(corner: (0, 0), size: (L, W))
+}
+plate = extrude(plan, t)
+corners = fillet(edges(of: plate, along: Z), r)
+sketch title(on: plate.end) {
+  name = text("FORGE CAD", at: (L / 2, y), size: size, bold: true, align: "center")
+}
+raised = extrude(title.name, h)
+sketch serial(on: plate.end) {
+  no = text("SN 2026-0417", at: (L / 2, y), size: size, font: "Source Sans 3", align: "center")
+}
+serial_cut = cut(serial.no, d)

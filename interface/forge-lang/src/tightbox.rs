@@ -6,7 +6,7 @@
 //! past its boundary (a sphere, torus, curved-across procedural surface, or a cone holding its
 //! apex; a plane, cylinder, other cone or ruled surface is furthest along any axis on its
 //! boundary) and whose bound does reach past the box so far: that face alone is meshed and its
-//! points taken. The same box the retired `.fc` stats gave
+//! points taken. The same box as meshing every face
 //! (face triangles and edges), at the cost of meshing only the faces that stick out.
 
 use forge_geom::{Curve, Surface};

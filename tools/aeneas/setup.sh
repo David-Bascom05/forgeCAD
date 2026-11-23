@@ -51,7 +51,8 @@ git -C "$H/charon" submodule update --init --recursive -q   # crates/minirust (m
 ln -sfn "$H/charon" "$H/aeneas/charon"
 
 say "forge-aeneas patches"
-# tools/aeneas/patches/aeneas-*.patch: f64 support (the float bridge's Rust side). Applied once;
+# tools/aeneas/patches/aeneas-*.patch: f64 support (aeneas-f64: the float bridge's tool side) and
+# robustness (aeneas-robust: one untranslatable trait method no longer stops a crate). Applied once;
 # a tree that already has them is left alone, a tree that has something else stops here.
 for p in "$(cd "$(dirname "$0")" && pwd)"/patches/aeneas-*.patch; do
   if git -C "$H/aeneas" apply --check "$p" 2>/dev/null; then git -C "$H/aeneas" apply "$p"

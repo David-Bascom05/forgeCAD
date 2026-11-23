@@ -65,6 +65,7 @@ pub fn simple(g: &TestGlyph) -> Vec<u8> {
                 match *s {
                     Seg::Line(a, _) => pts.push((a, true)),
                     Seg::Quad(a, ctrl, _) => pts.extend([(a, true), (ctrl, false)]),
+                    Seg::Cubic(..) => unreachable!("a TrueType glyph holds no cubics: build_cff writes them"),
                 }
             }
             let len = pts.len();
@@ -220,4 +221,173 @@ pub fn build_raw(units_per_em: u16, glyphs: &[(char, Vec<u8>, u16)], kern: Optio
         }
     }
     out
+}
+
+/// A charstring number: the short forms for small whole ones, 16.16 fixed for the rest.
+fn cs_num(v: &mut Vec<u8>, x: f64) {
+    if x.fract() == 0.0 && (-107.0..=107.0).contains(&x) {
+        v.push((x as i32 + 139) as u8);
+    } else if x.fract() == 0.0 && x.abs() <= 32767.0 {
+        v.push(28);
+        v.extend((x as i16).to_be_bytes());
+    } else {
+        v.push(255);
+        v.extend(((x * 65536.0).round() as i32).to_be_bytes());
+    }
+}
+
+/// A Type 2 charstring drawing the contours: rmoveto, rlineto and rrcurveto (a quadratic raised
+/// to the cubic it is), endchar.
+pub fn charstring(g: &TestGlyph) -> Vec<u8> {
+    let mut v = Vec::new();
+    let mut at = Point2::new(0.0, 0.0);
+    // each step to the nearest 2^-16 from where the last one landed: whole points land exactly
+    let d = |v: &mut Vec<u8>, at: &mut Point2, p: Point2| {
+        let q = |x: f64| (x * 65536.0).round() / 65536.0;
+        let (dx, dy) = (q(p.x - at.x), q(p.y - at.y));
+        cs_num(v, dx);
+        cs_num(v, dy);
+        *at = Point2::new(at.x + dx, at.y + dy);
+    };
+    for c in &g.contours {
+        let Some(first) = c.first() else { continue };
+        d(&mut v, &mut at, first.start());
+        v.push(21);
+        for s in c {
+            match *s {
+                Seg::Line(_, b) => {
+                    d(&mut v, &mut at, b);
+                    v.push(5);
+                }
+                Seg::Quad(a, m, b) => {
+                    let c1 = Point2::new(a.x + 2.0 * (m.x - a.x) / 3.0, a.y + 2.0 * (m.y - a.y) / 3.0);
+                    let c2 = Point2::new(b.x + 2.0 * (m.x - b.x) / 3.0, b.y + 2.0 * (m.y - b.y) / 3.0);
+                    for p in [c1, c2, b] {
+                        d(&mut v, &mut at, p);
+                    }
+                    v.push(8);
+                }
+                Seg::Cubic(_, c1, c2, b) => {
+                    for p in [c1, c2, b] {
+                        d(&mut v, &mut at, p);
+                    }
+                    v.push(8);
+                }
+            }
+        }
+    }
+    v.push(14);
+    v
+}
+
+/// An INDEX of the objects, offsets four bytes wide.
+pub fn cff_index(objs: &[Vec<u8>]) -> Vec<u8> {
+    let mut v = Vec::new();
+    be16(&mut v, objs.len() as u16);
+    if objs.is_empty() {
+        return v;
+    }
+    v.push(4);
+    let mut o = 1u32;
+    be32(&mut v, o);
+    for x in objs {
+        o += x.len() as u32;
+        be32(&mut v, o);
+    }
+    objs.iter().for_each(|x| v.extend(x));
+    v
+}
+
+/// An OpenType 'OTTO' font of CFF outlines given as charstrings (glyph k + 1 is the k-th
+/// character's, sorted; glyph 0 an empty one), with global and local subroutines.
+pub fn build_cff_raw(
+    units_per_em: u16,
+    glyphs: &[(char, Vec<u8>, u16)],
+    gsubrs: &[Vec<u8>],
+    subrs: &[Vec<u8>],
+) -> Vec<u8> {
+    let mut chars = vec![vec![14u8]];
+    chars.extend(glyphs.iter().map(|g| g.1.clone()));
+    let five = |v: &mut Vec<u8>, x: u32| {
+        v.push(29);
+        v.extend(x.to_be_bytes());
+    };
+    // the header, then the name, top DICT, string and global subroutine INDEXes, with the top
+    // DICT's offsets (fixed-width, so its size is known before they are)
+    let head = [1u8, 0, 4, 4];
+    let name = cff_index(&[b"Test".to_vec()]);
+    let strings = cff_index(&[]);
+    let gs = cff_index(gsubrs);
+    let top_len = 5 + 1 + 5 + 5 + 1;
+    let top_index_len = cff_index(&[vec![0; top_len]]).len();
+    let chars_at = head.len() + name.len() + top_index_len + strings.len() + gs.len();
+    let char_index = cff_index(&chars);
+    let private_at = chars_at + char_index.len();
+    let mut private = Vec::new();
+    if !subrs.is_empty() {
+        five(&mut private, 5 + 1);
+        private.push(19);
+    }
+    let mut top = Vec::new();
+    five(&mut top, chars_at as u32);
+    top.push(17);
+    five(&mut top, private.len() as u32);
+    five(&mut top, private_at as u32);
+    top.push(18);
+    assert_eq!(top.len(), top_len);
+    let mut cff = head.to_vec();
+    cff.extend(name);
+    cff.extend(cff_index(&[top]));
+    cff.extend(strings);
+    cff.extend(gs);
+    cff.extend(char_index);
+    cff.extend(private);
+    if !subrs.is_empty() {
+        cff.extend(cff_index(subrs));
+    }
+    // the other tables from a TrueType font of empty glyphs, its glyf and loca dropped
+    let tt: Vec<(char, Vec<u8>, u16)> = glyphs.iter().map(|g| (g.0, Vec::new(), g.2)).collect();
+    let ttf = build_raw(units_per_em, &tt, None);
+    let n = u16::from_be_bytes([ttf[4], ttf[5]]) as usize;
+    let mut tables: Vec<([u8; 4], Vec<u8>)> = Vec::new();
+    for k in 0..n {
+        let r = 12 + 16 * k;
+        let tag: [u8; 4] = ttf[r..r + 4].try_into().expect("four bytes");
+        let at = u32::from_be_bytes(ttf[r + 8..r + 12].try_into().expect("four bytes")) as usize;
+        let len = u32::from_be_bytes(ttf[r + 12..r + 16].try_into().expect("four bytes")) as usize;
+        if &tag != b"glyf" && &tag != b"loca" {
+            tables.push((tag, ttf[at..at + len].to_vec()));
+        }
+    }
+    tables.push((*b"CFF ", cff));
+    let mut out = Vec::new();
+    out.extend(b"OTTO");
+    be16(&mut out, tables.len() as u16);
+    out.extend([0; 6]);
+    let mut at = 12 + 16 * tables.len();
+    for (tag, t) in &tables {
+        out.extend(tag);
+        be32(&mut out, 0);
+        be32(&mut out, at as u32);
+        be32(&mut out, t.len() as u32);
+        at += t.len().div_ceil(4) * 4;
+    }
+    for (_, t) in &tables {
+        out.extend(t);
+        while out.len() % 4 != 0 {
+            out.push(0);
+        }
+    }
+    out
+}
+
+/// An OpenType CFF font of these glyphs, no subroutines.
+pub fn build_cff(units_per_em: u16, glyphs: &[(char, TestGlyph)]) -> Vec<u8> {
+    let mut glyphs = glyphs.to_vec();
+    glyphs.sort_by_key(|g| g.0);
+    let raw: Vec<(char, Vec<u8>, u16)> = glyphs
+        .iter()
+        .map(|(c, g)| (*c, charstring(g), g.advance))
+        .collect();
+    build_cff_raw(units_per_em, &raw, &[], &[])
 }

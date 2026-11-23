@@ -1,0 +1,12 @@
+# A crescent between an outer spline and an inner one, 2.5 wide at its ends, extruded both ways. A
+# fillet of 2 on both of its edges along the start face stops on Overflow (the rounds would meet
+# where the crescent is narrower than 4); at 1 it builds. Round numbers restating a CADFS part
+# (00154651) with its fit splines written exactly. The fillet spec is to judge it.
+sketch moon(on: xy) {
+  s0 = spline([(31.5, 14), (61.5, 42.5), (37, 54)], start_slope: (1.23, 0.87), end_slope: (-1.18, -0.22))
+  l1 = line((37, 54), (37.5, 51.5))
+  s2 = spline([(37.5, 51.5), (42, 52), (50, 50.5), (56, 47), (58.5, 43.5), (58.8, 41), (58, 38.5), (53, 32.7), (45, 26.4), (34, 18.5), (30, 16)], closed: false)
+  l3 = line((30, 16), (31.5, 14))
+}
+rim = extrude(moon, two(10, 10))
+edge = fillet(edges(between: (rim.side(moon.s0), rim.start)) + edges(between: (rim.side(moon.s2), rim.start)), 2)

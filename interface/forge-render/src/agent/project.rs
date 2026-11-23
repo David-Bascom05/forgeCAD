@@ -48,7 +48,7 @@ pub fn path(root: &Path, name: &str, file: bool) -> Result<PathBuf, String> {
     let mut p = root;
     for part in Path::new(name).components() {
         p.push(part);
-        match std::fs::symlink_metadata(&p) {
+        match forge_dirs::fs::symlink_metadata(&p) {
             Ok(m) if m.file_type().is_symlink() => {
                 return Err("Project paths cannot follow symbolic links".into());
             }
@@ -73,7 +73,7 @@ pub fn files(root: &Path) -> Vec<PathBuf> {
         if depth > 32 || *count >= 10000 || out.len() >= 500 {
             return;
         }
-        let Ok(entries) = std::fs::read_dir(dir) else {
+        let Ok(entries) = forge_dirs::fs::read_dir(dir) else {
             return;
         };
         let mut entries: Vec<_> = entries.filter_map(Result::ok).collect();
@@ -194,16 +194,16 @@ pub fn call(name: &str, args: &Json, root: &Path) -> Result<Json, String> {
     }
     if name == "project_mkdir" {
         let p = path(root, required("path")?, false)?;
-        std::fs::create_dir_all(&p).map_err(|e| e.to_string())?;
+        forge_dirs::fs::create_dir_all(&p).map_err(|e| e.to_string())?;
         return Ok(Json::obj(vec![("created", required("path")?.into())]));
     }
     if matches!(name, "project_read" | "project_write") {
         let p = path(root, required("file")?, true)?;
         if name == "project_read" {
-            if std::fs::metadata(&p).map_err(|e| e.to_string())?.len() > 4 << 20 {
+            if forge_dirs::fs::metadata(&p).map_err(|e| e.to_string())?.len() > 4 << 20 {
                 return Err("File is too large (4 MiB maximum)".into());
             }
-            let text = std::fs::read_to_string(p).map_err(|e| e.to_string())?;
+            let text = forge_dirs::fs::read_to_string(p).map_err(|e| e.to_string())?;
             return Ok(Json::obj(vec![
                 ("file", required("file")?.into()),
                 ("text", text.into()),
@@ -215,12 +215,12 @@ pub fn call(name: &str, args: &Json, root: &Path) -> Result<Json, String> {
         }
         if p.exists() {
             let old = required("old")?;
-            if std::fs::read_to_string(&p).map_err(|e| e.to_string())? != old {
+            if forge_dirs::fs::read_to_string(&p).map_err(|e| e.to_string())? != old {
                 return Err("File changed: read it again before writing".into());
             }
             let mut lock = forge_git::fsutil::Lock::take(&p).map_err(|e| e.to_string())?;
             // Check again under our write lock.
-            if std::fs::read_to_string(&p).map_err(|e| e.to_string())? != old {
+            if forge_dirs::fs::read_to_string(&p).map_err(|e| e.to_string())? != old {
                 return Err("File changed: read it again before writing".into());
             }
             lock.write(text.as_bytes())
@@ -231,7 +231,7 @@ pub fn call(name: &str, args: &Json, root: &Path) -> Result<Json, String> {
                 return Err("File no longer exists: read the project again".into());
             }
             if let Some(parent) = p.parent() {
-                std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+                forge_dirs::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
             }
             forge_git::fsutil::write_new(&p, text.as_bytes()).map_err(|e| e.to_string())?;
         }
@@ -301,7 +301,7 @@ pub fn call(name: &str, args: &Json, root: &Path) -> Result<Json, String> {
         // those untracked inputs, as a normal document save does, so its version can rebuild.
         let history =
             forge_history::History::open(&f).ok_or("This project keeps no history; turn history on first")?;
-        let source = std::fs::read_to_string(&f).map_err(|e| e.to_string())?;
+        let source = forge_dirs::fs::read_to_string(&f).map_err(|e| e.to_string())?;
         let watching = forge_lang::deps::watch();
         if forge_lang::drawing::is_drawing(&source) {
             let _ = forge_lang::drawing::regen::make_in(&source, f.parent().unwrap_or(root), Some(root));

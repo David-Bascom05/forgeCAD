@@ -1,0 +1,29 @@
+# The workspace's tests as wasm32-wasip1 under Node's WASI (tools/test-wasm.sh): the same
+# arithmetic as the browser, so a result that rounds differently there fails here. The Forgejo
+# CI runs the same script (its gate job). Debug info is off: with it the test binaries come to
+# tens of GB.
+name: wasm
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  wasm:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    env:
+      CARGO_INCREMENTAL: 0
+      CARGO_PROFILE_TEST_DEBUG: 0
+    steps:
+      - uses: actions/checkout@v4
+      - name: toolchain (rust-toolchain.toml, with wasm32-wasip1)
+        run: rustup show
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: test (wasm32-wasip1)
+        run: sh tools/test-wasm.sh

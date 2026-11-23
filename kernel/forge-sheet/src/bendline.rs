@@ -169,12 +169,15 @@ impl Sheet {
                     here.push(k);
                     let square = match *seg {
                         Segment::Line { a, b } => {
-                            let e = (b - a) * (1.0 / a.distance(b));
+                            let len = a.distance(b);
+                            let e = (b - a) * (1.0 / len);
                             let cross = e.cross(n).abs();
                             // its ends clear of the band
                             let (ua, ub) = (u(a), u(b));
                             let clear = ua.min(ub) < lo - tol::LINEAR && ua.max(ub) > hi + tol::LINEAR;
-                            (cross <= 1e-12 && clear, dmath::asin(cross.min(1.0)))
+                            // square to the line by the one rule: off square by at most the
+                            // tolerance over its own length
+                            (cross * len <= tol::LINEAR && clear, dmath::asin(cross.min(1.0)))
                         }
                         _ => (false, f64::NAN),
                     };

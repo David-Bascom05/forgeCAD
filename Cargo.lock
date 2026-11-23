@@ -54,6 +54,7 @@ dependencies = [
 name = "forge-bool"
 version = "0.1.0"
 dependencies = [
+ "forge-bool-core",
  "forge-geom",
  "forge-math",
  "forge-mesh",
@@ -62,13 +63,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-bool-core"
+version = "0.1.0"
+
+[[package]]
+name = "forge-brake"
+version = "0.1.0"
+dependencies = [
+ "forge-math",
+ "forge-ops",
+ "forge-sheet",
+]
+
+[[package]]
 name = "forge-cli"
 version = "0.1.0"
 dependencies = [
  "forge-agent",
+ "forge-dirs",
  "forge-geom",
  "forge-import",
  "forge-lang",
+ "forge-material",
  "forge-math",
  "forge-mesh",
  "forge-model",
@@ -82,6 +98,7 @@ name = "forge-coverage"
 version = "0.1.0"
 dependencies = [
  "forge-bool",
+ "forge-geom",
  "forge-math",
  "forge-mesh",
  "forge-model",
@@ -125,6 +142,21 @@ dependencies = [
  "forge-model",
  "forge-ops",
  "forge-proof",
+ "forge-topo",
+]
+
+[[package]]
+name = "forge-fillet-oracle"
+version = "0.1.0"
+dependencies = [
+ "forge-bool",
+ "forge-geom",
+ "forge-lang",
+ "forge-math",
+ "forge-mesh",
+ "forge-model",
+ "forge-ops",
+ "forge-step",
  "forge-topo",
 ]
 
@@ -173,7 +205,9 @@ name = "forge-history"
 version = "0.1.0"
 dependencies = [
  "forge-agent",
+ "forge-dirs",
  "forge-git",
+ "forge-math",
 ]
 
 [[package]]
@@ -197,6 +231,7 @@ dependencies = [
  "forge-agent",
  "forge-asm",
  "forge-bool",
+ "forge-brake",
  "forge-dirs",
  "forge-draw",
  "forge-dwg",
@@ -210,12 +245,15 @@ dependencies = [
  "forge-mesh",
  "forge-model",
  "forge-ops",
+ "forge-refold",
  "forge-sheet",
  "forge-sketch",
  "forge-step",
  "forge-thermo",
  "forge-topo",
  "forge-units",
+ "forge-vendor",
+ "forge-weld",
 ]
 
 [[package]]
@@ -240,6 +278,7 @@ name = "forge-math"
 version = "0.1.0"
 dependencies = [
  "forge-alloc",
+ "forge-par",
 ]
 
 [[package]]
@@ -247,6 +286,7 @@ name = "forge-mesh"
 version = "0.1.0"
 dependencies = [
  "forge-geom",
+ "forge-git",
  "forge-math",
  "forge-ops",
  "forge-topo",
@@ -268,6 +308,7 @@ name = "forge-model"
 version = "0.1.0"
 dependencies = [
  "forge-bool",
+ "forge-dirs",
  "forge-font",
  "forge-geom",
  "forge-gpu",
@@ -289,11 +330,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-par"
+version = "0.1.0"
+
+[[package]]
 name = "forge-proof"
 version = "0.1.0"
 dependencies = [
  "forge-agent",
  "forge-bool",
+ "forge-dirs",
  "forge-geom",
  "forge-import",
  "forge-lang",
@@ -301,6 +347,16 @@ dependencies = [
  "forge-mesh",
  "forge-model",
  "forge-ops",
+ "forge-topo",
+]
+
+[[package]]
+name = "forge-refold"
+version = "0.1.0"
+dependencies = [
+ "forge-math",
+ "forge-ops",
+ "forge-sheet",
  "forge-topo",
 ]
 
@@ -314,7 +370,15 @@ dependencies = [
  "forge-math",
  "forge-mesh",
  "forge-ops",
+ "forge-refold",
  "forge-topo",
+]
+
+[[package]]
+name = "forge-sheet-core"
+version = "0.1.0"
+dependencies = [
+ "forge-math",
 ]
 
 [[package]]
@@ -390,6 +454,23 @@ dependencies = [
 [[package]]
 name = "forge-units"
 version = "0.1.0"
+
+[[package]]
+name = "forge-vendor"
+version = "0.1.0"
+dependencies = [
+ "forge-dirs",
+ "forge-material",
+ "forge-sheet",
+]
+
+[[package]]
+name = "forge-weld"
+version = "0.1.0"
+dependencies = [
+ "forge-math",
+ "forge-ops",
+]
 
 [[package]]
 name = "roxmltree"

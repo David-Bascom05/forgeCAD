@@ -87,7 +87,8 @@ fn a_fault_in_any_one_entity_is_found() {
             });
             run(format!("face {i} loops removed"), &|b| {
                 let f = forge_topo::FaceId(i as u32);
-                for l in b.faces[i].loops.to_vec() {
+                let loops: Vec<_> = b.faces[i].loops.iter().copied().collect();
+                for l in loops {
                     b.remove_loop(f, l);
                 }
             });

@@ -106,7 +106,7 @@ impl Shell {
                 }
                 // the selection priority: what a click takes
                 ui.horizontal(|ui| {
-                    ui.spacing_mut().item_spacing.x = 2.0;
+                    ui.spacing_mut().item_spacing.x = super::theme::S1;
                     for f in Filter::ALL {
                         let on = m.filter == f;
                         let r = ui.add(
@@ -194,7 +194,7 @@ impl Shell {
                                     let on = m.follow == *f;
                                     let r = ui.add(
                                         egui::Button::new(
-                                            egui::RichText::new(f.word()).font(sans(10.0)).color(if on {
+                                            egui::RichText::new(f.word()).font(sans(11.0)).color(if on {
                                                 t.on_ink
                                             } else {
                                                 t.ink
@@ -357,7 +357,7 @@ impl Shell {
                                 ui.add_sized(
                                     vec2(col - 10.0, 14.0),
                                     egui::Label::new(
-                                        egui::RichText::new(&a.what).font(sans(10.0)).color(t.ink2),
+                                        egui::RichText::new(&a.what).font(sans(11.0)).color(t.ink2),
                                     )
                                     .truncate(),
                                 );
@@ -368,7 +368,7 @@ impl Shell {
                                 );
                                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                                     let x = ui
-                                        .small_button(egui::RichText::new("×").font(sans(10.0)))
+                                        .small_button(egui::RichText::new("×").font(sans(11.0)))
                                         .on_hover_text("Delete the value");
                                     places.push((format!("measure:accum:entry:{i}"), x.rect));
                                     if x.clicked() {
@@ -384,7 +384,7 @@ impl Shell {
                     if let Some(p) = drop_kind {
                         m.accum.retain(|a| a.q.power() != p);
                     }
-                    let c = ui.small_button(egui::RichText::new("Clear totals").font(sans(10.0)));
+                    let c = ui.small_button(egui::RichText::new("Clear totals").font(sans(11.0)));
                     places.push(("measure:clear".into(), c.rect));
                     if c.clicked() {
                         m.accum.clear();
@@ -515,7 +515,7 @@ impl Shell {
                         egui::RichText::new(
                             "Esc clears, Enter starts again. Shift on a third point: the angle at the second",
                         )
-                        .font(sans(10.0))
+                        .font(sans(11.0))
                         .color(t.ink2),
                     )
                     .wrap(),
@@ -888,7 +888,7 @@ fn value_row(
         });
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             let c = ui
-                .add(egui::Button::new(egui::RichText::new("Copy").font(sans(10.0))).small())
+                .add(egui::Button::new(egui::RichText::new("Copy").font(sans(11.0))).small())
                 .on_hover_text("Copy the value");
             places.push((format!("measure:copy:{what}"), c.rect));
             if c.clicked() {
@@ -896,7 +896,7 @@ fn value_row(
             }
             if usable {
                 let u = ui
-                    .add(egui::Button::new(egui::RichText::new("Use").font(sans(10.0))).small())
+                    .add(egui::Button::new(egui::RichText::new("Use").font(sans(11.0))).small())
                     .on_hover_text("Put the value in the field");
                 places.push((format!("measure:use:{what}"), u.rect));
                 if u.clicked() {
@@ -1250,7 +1250,7 @@ pub(super) fn coord_table(
         for h in ["X", "Y", "Z"] {
             ui.add_sized(
                 vec2(cell, 14.0),
-                egui::Label::new(egui::RichText::new(h).font(medium(10.0)).color(t.ink2)),
+                egui::Label::new(egui::RichText::new(h).font(medium(11.0)).color(t.ink2)),
             );
         }
     });
@@ -1271,7 +1271,7 @@ pub(super) fn coord_table(
                     unit,
                     4.0,
                     egui::TextFormat {
-                        font_id: sans(10.0),
+                        font_id: sans(11.0),
                         color: t.ink2.gamma_multiply(0.7),
                         ..Default::default()
                     },
@@ -1296,7 +1296,7 @@ pub(super) fn coord_table(
                 places.push((format!("measure:{name}:{}", ["x", "y", "z"][k]), r.rect));
             }
             let c = ui
-                .add(egui::Button::new(egui::RichText::new("Copy").font(sans(10.0))).small())
+                .add(egui::Button::new(egui::RichText::new("Copy").font(sans(11.0))).small())
                 .on_hover_text("Copy x, y, z");
             places.push((format!("measure:copy:{name}"), c.rect));
             if c.clicked() {

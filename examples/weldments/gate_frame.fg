@@ -1,0 +1,22 @@
+# A gate leaf with an arched top: one closed layout of RHS (a line along the bottom, the stiles,
+# an arc over the top), mitered at every corner, the arc's ends too; a diagonal brace of flat
+# bar coped into the corners it runs between.
+shared W = 1000
+shared H = 1200
+shared rise = 150
+
+sketch leaf(on: xy) {
+  c = pt(W / 2, H - ((W / 2) * (W / 2) - rise * rise) / (2 * rise))
+  path o(start: (0, 0)) {
+    line(to: (W, 0))
+    line(to: (W, H))
+  }
+  top = arc(center: c, from: (W, H), to: (0, H))
+  left = line((0, H), (0, 0))
+  d = line((0, 0), (W, H))
+}
+outer = members([leaf.o, leaf.top, leaf.left], section: "RHS 60x40x3")
+brace = members(leaf.d, section: "FB 40x8", turn: 90deg)
+# each end coped to both members of its corner
+seat0 = end_trim(brace[0], to: [outer[0], outer[3]])
+seat1 = end_trim(brace[0], to: [outer[1], outer[2]])

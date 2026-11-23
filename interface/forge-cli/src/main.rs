@@ -1,5 +1,6 @@
 mod fg;
 mod serve;
+mod web;
 
 use fg::{Args, COMMANDS};
 use forge_geom::{CurveGeom, SurfaceGeom};
@@ -17,13 +18,15 @@ fn usage() -> ExitCode {
          forgecad agent list | send WINDOW MESSAGE | status WINDOW REQUEST\n       \
          forgecad update [INSTALL_ROOT]   (install latest main)\n       \
          forgecad build|check|query|measure|render|export FILE.fg [ARGS] [--json] [--labels SEL] [--px N] [--at FEAT] [-o OUT]\n       \
-         forgecad edit FILE.fg 'OP'.. [--base VERSION]   (typed ops, as a part's fixes give them; export F.fg dxf [SHEET])\n       \
+         forgecad edit FILE.fg 'OP'.. [--base VERSION]   (typed ops, as a part's fixes give them; export F.fg stl|3mf|obj|dxf [SHEET])\n       \
          forgecad diff A.fg B.fg [volume]   (what B changed from A: features, params, faces, volume)\n       \
          forgecad help [forge | WORD]   (the .fg language, or its sections on WORD)\n       \
          forgecad versions F | history F [--all] | create_version F NAME [NOTES] | restore F v3|SAVE | compare F A B [--volume]\n       \
          forgecad release F REASON [--approver NAME] [--numeric] | releases F | regenerate_release F REV   (JSON; FORGECAD_AGENT names an agent)\n       \
          forgecad serve | mcp [--root DIR] [--writable]   (JSON-RPC / MCP on stdio, parts under DIR, default .; edits only if --writable)\n       \
+         forgecad web DIR [--port P] [--bind ADDR] [--token T] [--app WEBDIR] [--read-only]   (the browser app on DIR's files)\n       \
          forgecad import FILE.FCStd [-o DIR] [--json]   (each body a part file DIR/<file>.<body>.fg)\n       \
+         forgecad vendor list | show ID | export ID [-o F] | import F | new ID [--from ID] | check F [--json]   (sheet-metal vendor profiles)\n       \
          forgecad demo <out.stl> [chord-mm] | preview <out.json>\nthe language: AGENTS.md, forgecad help forge"
     );
     ExitCode::from(2)
@@ -206,7 +209,27 @@ fn main() -> ExitCode {
                 _ => usage(),
             }
         }
+        Some("web") => web::main(&args[2..]),
         Some("import") if args.len() >= 3 => import(&args[2..]),
+        Some("vendor") => {
+            let json = args.iter().any(|a| a == "--json");
+            let rest: Vec<String> = args[2..].iter().filter(|a| *a != "--json").cloned().collect();
+            let here = std::env::current_dir().ok();
+            match forge_lang::vendor::tool(&rest, here.as_deref()) {
+                Ok((j, text)) => {
+                    if json {
+                        println!("{j}");
+                    } else {
+                        print!("{text}");
+                    }
+                    ExitCode::SUCCESS
+                }
+                Err(e) => {
+                    eprintln!("error: {e}");
+                    ExitCode::from(1)
+                }
+            }
+        }
         Some("help" | "--help" | "-h") => {
             println!("{}", forge_lang::help(&args[2..].join(" ")));
             ExitCode::SUCCESS
@@ -315,9 +338,18 @@ fn command(cmd: &str, argv: &[String]) -> ExitCode {
             "--px" => a.px = it.next().and_then(|p| p.parse().ok()),
             "--at" => a.at = it.next().cloned(),
             "--base" => a.base = it.next().cloned(),
+            // `query F bendsim`'s: carried as its words
+            flag @ ("--vendor" | "--tooling" | "--sequence" | "--sheet" | "--uts") => {
+                a.words.push(flag.trim_start_matches("--").to_string());
+                if let Some(v) = it.next() {
+                    a.words.push(v.clone());
+                }
+            }
             "-o" => out = it.next().cloned(),
             w if w.starts_with("--") => {
-                eprintln!("unknown option {w} (--json --labels --px --at --base -o)");
+                eprintln!(
+                    "unknown option {w} (--json --labels --px --at --base -o; bendsim: --vendor --tooling --sequence --sheet --uts)"
+                );
                 return ExitCode::from(2);
             }
             _ => a.words.push(w.clone()),
@@ -329,6 +361,9 @@ fn command(cmd: &str, argv: &[String]) -> ExitCode {
         let ext = match cmd {
             "export" if a.words.first().is_some_and(|w| w == "dxf") => "dxf",
             "export" if a.words.first().is_some_and(|w| w == "dwg") => "dwg",
+            "export" if a.words.first().is_some_and(|w| w == "stl") => "stl",
+            "export" if a.words.first().is_some_and(|w| w == "3mf") => "3mf",
+            "export" if a.words.first().is_some_and(|w| w == "obj") => "obj",
             "export" => "step",
             _ => "png",
         };

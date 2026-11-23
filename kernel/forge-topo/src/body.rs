@@ -1250,6 +1250,8 @@ impl Body {
         }
     }
 
+    // (inlined into each caller: `face_box`'s cached path is as it was before it was split out)
+    #[inline(always)]
     fn face_box_with(&self, f: FaceId, edge_box: impl Fn(EdgeId) -> Box3) -> Box3 {
         let face = self.face(f);
         let mut b = Box3::EMPTY;

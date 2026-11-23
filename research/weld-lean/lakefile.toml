@@ -1,0 +1,16 @@
+name = "forgeweld"
+version = "0.1.0"
+defaultTargets = ["ForgeWeld"]
+
+[leanOptions]
+relaxedAutoImplicit = false
+autoImplicit = false
+
+# The weldment spec (research/PROOF-STANDARD.md, L1) on the boolean's own ground: core Lean over
+# ℚ³ (forge-exact's `Ref.V3`, `Pred`, planes and `wall_nowhereDense`), no Mathlib.
+[[require]]
+name = "forgeexact"
+path = "../../verify/forge-exact"
+
+[[lean_lib]]
+name = "ForgeWeld"
