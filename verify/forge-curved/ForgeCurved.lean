@@ -58,3 +58,4 @@ import ForgeCurved.Star
 import ForgeCurved.Crossings
 import ForgeCurved.BodyModel
 import ForgeCurved.VertexScreen
+import ForgeCurved.AngleOrder

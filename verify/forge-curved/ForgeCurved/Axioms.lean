@@ -156,3 +156,4 @@ import ForgeCurved
 #print axioms ForgeCurved.VertexScreen.localGood_of_screen
 #print axioms ForgeCurved.VertexScreen.det3_independent
 #print axioms ForgeCurved.BodyModel.mem_denote_zone
+#print axioms ForgeCurved.AngleOrder.before_iff_arg
