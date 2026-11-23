@@ -953,6 +953,73 @@ fn with_shapes(d: &str, extra: &[(&str, &str)]) -> Vec<u8> {
 
 /// The cubic B-spline's knots and poles here are written as they are, so the side is exact: its
 /// weights too. The area under a rational curve, by Gauss on many spans.
+/// A periodic B-spline is written as Forge's NURBS: its poles wrapped (the first `degree` again after
+/// the last) and its knots run on periodically to all `poles + degree + 1` of them.
+#[test]
+fn a_periodic_spline_is_written_with_its_poles_wrapped() {
+    let poles = [(10.0, 0.0), (0.0, 10.0), (-10.0, 0.0), (0.0, -10.0)];
+    let pole: String = poles
+        .iter()
+        .map(|p| format!("<Pole X=\"{}\" Y=\"{}\" Z=\"0\" Weight=\"1\"/>", p.0, p.1))
+        .collect();
+    // one period of uniform knots, from 2 to 6: the last is the first one period on
+    let knot: String = (2..=6)
+        .map(|v| format!("<Knot Value=\"{v}\" Mult=\"1\"/>"))
+        .collect();
+    let g = format!(
+        "<GeometryList count=\"1\"><Geometry type=\"Part::GeomBSplineCurve\"><BSplineCurve PolesCount=\"4\" KnotsCount=\"5\" Degree=\"3\" IsPeriodic=\"1\">{pole}{knot}</BSplineCurve><Construction value=\"0\"/></Geometry></GeometryList>"
+    );
+    let d = doc(&[
+        body("Pad", &["Sketch", "Pad"]),
+        sketch("Sketch", place(0.0), g),
+        pad("Pad", "", "Sketch", 5.0, &[]),
+    ]);
+    let bodies = translate(&with_shapes(&d, &[])).expect("reads");
+    assert_eq!(bodies[0].status(), "translated", "{:?}", bodies[0].fail);
+    assert!(!bodies[0].approx);
+    let fg = bodies[0].fg.clone().expect("a part file");
+    // 4 poles and the first 3 again; 4 + 2 * 3 + 1 knots, uniform, the curve's own from knot 3 to 7
+    assert!(fg.contains("degree: sd0, knots: sk0)"), "{fg}");
+    let ks: Vec<String> = (-1..=9).map(|v| format!("ratio({v})")).collect();
+    assert!(
+        fg.contains(&format!("param t0_sk.sk0 = [{}]", ks.join(", "))),
+        "{fg}"
+    );
+    // the closed uniform cubic over the poles: each span's point is the poles' blend by the uniform basis
+    let at = |i: usize, t: f64| {
+        let b = [
+            (1.0 - t).powi(3) / 6.0,
+            (3.0 * t.powi(3) - 6.0 * t * t + 4.0) / 6.0,
+            (-3.0 * t.powi(3) + 3.0 * t * t + 3.0 * t + 1.0) / 6.0,
+            t.powi(3) / 6.0,
+        ];
+        let x: f64 = (0..4).map(|j| b[j] * poles[(i + j) % 4].0).sum();
+        let y: f64 = (0..4).map(|j| b[j] * poles[(i + j) % 4].1).sum();
+        (x, y)
+    };
+    // the area it bounds, half the integral of x dy - y dx, by 3-point Gauss in each of 4 x 100 pieces
+    let (n, h) = (100, 1e-7);
+    let g3 = [
+        (-0.774_596_669_241_483_4, 5.0 / 9.0),
+        (0.0, 8.0 / 9.0),
+        (0.774_596_669_241_483_4, 5.0 / 9.0),
+    ];
+    let mut area = 0.0;
+    for i in 0..4 {
+        for k in 0..n {
+            let (a, b) = (k as f64 / n as f64, (k + 1) as f64 / n as f64);
+            for (z, w) in g3 {
+                let t = (a + b) / 2.0 + z * (b - a) / 2.0;
+                let (p, q, r) = (at(i, t), at(i, t + h), at(i, t - h));
+                let (dx, dy) = ((q.0 - r.0) / (2.0 * h), (q.1 - r.1) / (2.0 * h));
+                area += w * (b - a) / 2.0 * (p.0 * dy - p.1 * dx) / 2.0;
+            }
+        }
+    }
+    let m = built(&fg);
+    near(m.volume, 5.0 * area.abs(), "volume", &fg);
+}
+
 #[test]
 fn a_pad_with_a_spline_side_writes_the_spline_exactly() {
     let poles = [(40.0, 10.0), (28.0, 22.0), (12.0, 22.0), (0.0, 10.0)];

@@ -53,6 +53,14 @@ class Frame:
         return add(add(add(self.o, self.x, u), self.y, v), self.n, w)
 
 
+def fit_reinterpolated(entity, source):
+    """The typed note for a source fit spline written as Forge's centripetal C2 interpolant through the same
+    points: the source's own curve through them may differ between the points. End derivatives, where the source
+    has them, are written as start_slope/end_slope in the source's direction exactly; their magnitude then means a
+    rate per Forge's parameter, not the source's."""
+    return {"FitSplineReinterpolated": {"entity": entity, "source": source}}
+
+
 def curves(rows, scale):
     """Sketch rows as entities, numbered from 1 as CATIA's selections count them."""
     f = lambda v: (v - 128.0) * scale
@@ -121,6 +129,15 @@ class Tr(FT):
         self.solid = {}  # ("Pad", k): record
         self.count = {"Pad": 0, "Pocket": 0, "Shaft": 0, "Sketch": 0}
         self.kinds = []
+        self.notes = []  # typed notes beside "quantised", e.g. FitSplineReinterpolated
+
+    def curves(self, rows, scale, s):
+        """curves(), noting each fit spline written as Forge's interpolant rather than CATIA's own curve."""
+        ents = curves(rows, scale)
+        for e in ents:
+            if e["kind"] == "skFitSpline" and e.get("exact"):
+                self.notes.append(fit_reinterpolated(f"sketch {s}/{e['id']}", "WHUCAD SCP"))
+        return ents
 
     def groups(self, rows):
         """A finishing feature's selection rows, split at each Topo; NoShared and the like are left out."""
@@ -226,7 +243,7 @@ class Tr(FT):
         fr = Frame(r)
         self.count["Sketch"] += 1
         s = self.count["Sketch"]
-        a = Arrangement(curves(rows, fr.size / 95.0))
+        a = Arrangement(self.curves(rows, fr.size / 95.0, s))
         self.sk[s] = (a, fr)
         regs = even_regions(a)
         if not regs:
@@ -290,7 +307,7 @@ class Tr(FT):
         fr = Frame(r)
         self.count["Sketch"] += 1
         s = self.count["Sketch"]
-        a = Arrangement(curves(rows, fr.size / 95.0))
+        a = Arrangement(self.curves(rows, fr.size / 95.0, s))
         self.sk[s] = (a, fr)
         regs = even_regions(a)
         if not regs:
@@ -393,6 +410,7 @@ def main():
         r.update(status="untranslated", cls="importer", why="bug: " + repr(x)[:70])
     if t is not None:
         r["features"] = t.kinds
+        r["notes"] += t.notes
         if t.topo is not None:
             t.topo.close()
         if r["status"] != "untranslated":

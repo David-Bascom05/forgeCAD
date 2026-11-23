@@ -170,13 +170,13 @@ def sketch_ents(doc, name):
             ents.append({"kind": "skArc", "id": f"e{k}", "start": pt(a0), "mid": pt((a0 + a1) / 2), "end": pt(a1), "construction": con})
         elif t == "Part::GeomBSplineCurve":
             e = g.find("BSplineCurve")
-            if e.get("IsPeriodic") == "1":
-                raise Unsupported("a periodic spline")
             nb = bspline_exact(e)
             if nb is None:
+                if e.get("IsPeriodic") == "1":
+                    raise Unsupported("a periodic spline")
                 ents.append({"kind": "polyline", "id": f"e{k}", "points": bspline_points(e), "construction": con})
             else:
-                ents.append({"kind": "nurbs", "id": f"e{k}", "points": bspline_points(e), "nurbs": nb, "construction": con})
+                ents.append({"kind": "nurbs", "id": f"e{k}", "points": bspline_points(e, nb), "nurbs": nb, "construction": con})
         elif t == "Part::GeomPoint":
             continue
         elif not con:
@@ -185,27 +185,53 @@ def sketch_ents(doc, name):
 
 
 def bspline_exact(e):
-    """A clamped, non-periodic NURBS as (degree, poles, full knot vector, weights), the form Forge's
-    `spline(.., degree:, knots:, weights:)` takes; None where its ends are not its end poles."""
+    """A NURBS as (degree, poles, full knot vector, weights), the form Forge's `spline(.., degree:, knots:,
+    weights:)` takes. A clamped one as it is; an unclamped one with its own knots (the curve runs from knot
+    `degree` to knot `len(poles)`); a periodic one as its poles wrapped, the first `degree` again after the last,
+    with one period's knots extended periodically to the whole vector. None where the data is not a B-spline."""
     deg = int(e.get("Degree"))
     cp = [(float(p.get("X")), float(p.get("Y"))) for p in e.findall("Pole")]
     ws = [float(p.get("Weight", "1")) for p in e.findall("Pole")]
     ks = [(float(x.get("Value")), int(x.get("Mult"))) for x in e.findall("Knot")]
-    if len(ks) < 2 or ks[0][1] != deg + 1 or ks[-1][1] != deg + 1 or any(w <= 0 for w in ws):
+    if deg < 1 or len(ks) < 2 or any(w <= 0 for w in ws) or any(m < 1 for _, m in ks):
         return None
+    if any(b <= a for (a, _), (b, _) in zip(ks, ks[1:])) or any(m > deg for _, m in ks[1:-1]):
+        return None
+    if e.get("IsPeriodic") == "1":
+        # one period's flat knots: the last knot is the first one period on, so its count is the first's
+        one = [v for v, m in ks[:-1] for _ in range(m)]
+        n, per = len(cp), ks[-1][0] - ks[0][0]
+        if ks[-1][1] != ks[0][1] or len(one) != n or n < deg + 1 or ks[0][1] > deg:
+            return None
+        # the i-th knot: one[] run on by periods both ways, placed so that the curve's domain, knots `deg` to
+        # `deg + n`, is the source's [first knot, last knot] (checked against OCCT's periodic curves)
+        at = lambda i: one[i % n] + per * (i // n)
+        full = [at(i - deg + ks[0][1] - 1) for i in range(n + 2 * deg + 1)]
+        return (deg, cp + cp[:deg], full, ws + ws[:deg])
     full = [v for v, m in ks for _ in range(m)]
-    if len(full) != len(cp) + deg + 1 or any(b < a for a, b in zip(full, full[1:])):
+    if len(full) != len(cp) + deg + 1 or ks[0][1] > deg + 1 or ks[-1][1] > deg + 1:
         return None
     return (deg, cp, full, ws)
 
 
-def bspline_points(e):
-    """A fine polyline along a non-periodic NURBS: the part is then marked approx."""
-    deg = int(e.get("Degree"))
-    cp = [(float(p.get("X")), float(p.get("Y")), float(p.get("Weight", "1"))) for p in e.findall("Pole")]
-    k = []
-    for x in e.findall("Knot"):
-        k += [float(x.get("Value"))] * int(x.get("Mult"))
+def clamped(nb):
+    """Whether a NURBS from bspline_exact runs from its first pole to its last."""
+    deg, _, k, _ = nb
+    return k[: deg + 1] == [k[0]] * (deg + 1) and k[-deg - 1 :] == [k[-1]] * (deg + 1)
+
+
+def bspline_points(e, nb=None):
+    """A fine polyline along a NURBS (the part is then marked approx unless the NURBS is written exactly): along
+    `nb`, bspline_exact's form, where given, else along the data's poles and knots as they are."""
+    if nb is not None:
+        deg, poles, k, ws = nb
+        cp = [(x, y, w) for (x, y), w in zip(poles, ws)]
+    else:
+        deg = int(e.get("Degree"))
+        cp = [(float(p.get("X")), float(p.get("Y")), float(p.get("Weight", "1"))) for p in e.findall("Pole")]
+        k = []
+        for x in e.findall("Knot"):
+            k += [float(x.get("Value"))] * int(x.get("Mult"))
     def at(u):
         s = deg
         while s < len(cp) - 1 and k[s + 1] <= u:
@@ -223,7 +249,10 @@ def bspline_points(e):
     us = []
     for a, b in zip(spans, spans[1:]):
         us += [a + (b - a) * i / 16 for i in range(16)]
-    return [at(u) for u in us] + [at(hi)]
+    ps = [at(u) for u in us] + [at(hi)]
+    if e.get("IsPeriodic") == "1":
+        ps[-1] = ps[0]  # closed exactly, as the arrangement reads a loop
+    return ps
 
 
 def closed_wires(ents):

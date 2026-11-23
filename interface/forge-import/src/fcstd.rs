@@ -377,16 +377,32 @@ fn sketch_ents(doc: &Doc, name: &str) -> Result<Vec<Ent>, Fail> {
             }
             Some("Part::GeomBSplineCurve") => {
                 let e = el("BSplineCurve")?;
-                if e.attribute("IsPeriodic") == Some("1") {
-                    return Err(Fail::Unsupported("a periodic spline".into()));
-                }
-                let points = bspline_points(e)?;
+                let periodic = e.attribute("IsPeriodic") == Some("1");
                 match bspline_exact(e)? {
-                    Some(n) => Shape::Nurbs {
-                        points,
-                        nurbs: Rc::new(n),
+                    Some(n) => {
+                        let mut points = sampled(
+                            n.degree,
+                            n.poles
+                                .iter()
+                                .zip(&n.weights)
+                                .map(|(p, &w)| (p.0, p.1, w))
+                                .collect(),
+                            &n.knots,
+                        )?;
+                        if periodic {
+                            // closed exactly, as the arrangement reads a loop
+                            points.pop();
+                            points.push(points[0]);
+                        }
+                        Shape::Nurbs {
+                            points,
+                            nurbs: Rc::new(n),
+                        }
+                    }
+                    None if periodic => return Err(Fail::Unsupported("a periodic spline".into())),
+                    None => Shape::Poly {
+                        points: bspline_points(e)?,
                     },
-                    None => Shape::Poly { points },
                 }
             }
             Some("Part::GeomPoint") => continue,
@@ -403,32 +419,70 @@ fn sketch_ents(doc: &Doc, name: &str) -> Result<Vec<Ent>, Fail> {
     Ok(ents)
 }
 
-/// A clamped, non-periodic NURBS as Forge writes one (`spline(.., degree:, knots:, weights:)`);
-/// none where its ends are not its end poles.
+/// A NURBS as Forge writes one (`spline(.., degree:, knots:, weights:)`). A clamped one as it is; an
+/// unclamped one with its own knots (the curve runs from knot `degree` to knot `poles.len()`); a periodic
+/// one as its poles wrapped, the first `degree` again after the last, with one period's knots extended
+/// periodically to the whole vector. None where the data is not a B-spline.
 fn bspline_exact(e: Node) -> Result<Option<Nurbs>, Fail> {
-    let degree = usize::try_from(int(e.attribute("Degree"))?).or(bug("a negative degree"))?;
+    let Ok(degree) = usize::try_from(int(e.attribute("Degree"))?) else {
+        return Ok(None);
+    };
     let (mut poles, mut weights) = (vec![], vec![]);
     for p in kids(e, "Pole") {
         poles.push((float(p.attribute("X"))?, float(p.attribute("Y"))?));
         weights.push(float(Some(p.attribute("Weight").unwrap_or("1")))?);
     }
-    let mut ks = vec![];
+    let mut ks: Vec<(f64, usize)> = vec![];
     for x in kids(e, "Knot") {
-        ks.push((float(x.attribute("Value"))?, int(x.attribute("Mult"))?));
+        let Ok(m) = usize::try_from(int(x.attribute("Mult"))?) else {
+            return Ok(None);
+        };
+        ks.push((float(x.attribute("Value"))?, m));
     }
-    let clamped = |m: i64| usize::try_from(m).ok() == Some(degree + 1);
-    let (Some(first), Some(last)) = (ks.first(), ks.last()) else {
+    // a file is untrusted: counts are checked before anything is made of them
+    const MAX: usize = 100_000;
+    let n = poles.len();
+    let total = ks.iter().try_fold(0usize, |t, k| t.checked_add(k.1));
+    if !(1..=MAX).contains(&degree)
+        || n > MAX
+        || ks.len() < 2
+        || total.is_none_or(|t| t > MAX)
+        || weights.iter().any(|&w| w <= 0.0)
+        || ks.iter().any(|k| k.1 < 1)
+        || ks.windows(2).any(|w| w[1].0 <= w[0].0)
+        || ks[1..ks.len() - 1].iter().any(|k| k.1 > degree)
+    {
         return Ok(None);
+    }
+    let (first, last) = (ks[0], ks[ks.len() - 1]);
+    let flat = |ks: &[(f64, usize)]| -> Vec<f64> {
+        ks.iter().flat_map(|&(v, m)| std::iter::repeat_n(v, m)).collect()
     };
-    if ks.len() < 2 || !clamped(first.1) || !clamped(last.1) || weights.iter().any(|&w| w <= 0.0) {
-        return Ok(None);
+    if e.attribute("IsPeriodic") == Some("1") {
+        // one period's flat knots: the last knot is the first one period on, so its count is the first's
+        let one = flat(&ks[..ks.len() - 1]);
+        let per = last.0 - first.0;
+        if last.1 != first.1 || one.len() != n || n <= degree || first.1 > degree {
+            return Ok(None);
+        }
+        // the i-th knot: one period's run on by periods both ways, placed so that the curve's domain,
+        // knots `degree` to `degree + n`, is the source's [first knot, last knot] (as OCCT's periodic curves)
+        let at = |i: usize| {
+            let j = i + first.1 + n - 1 - degree; // i - degree + first.1 - 1, run on by one period
+            one[j % n] + per * ((j / n) as f64 - 1.0)
+        };
+        let knots = (0..n + 2 * degree + 1).map(at).collect();
+        poles.extend_from_within(..degree);
+        weights.extend_from_within(..degree);
+        return Ok(Some(Nurbs {
+            degree,
+            poles,
+            knots,
+            weights,
+        }));
     }
-    let mut knots = vec![];
-    for &(v, m) in &ks {
-        // bspline_points has already capped the counts
-        knots.extend(std::iter::repeat_n(v, usize::try_from(m).unwrap_or(0)));
-    }
-    if knots.len() != poles.len() + degree + 1 || knots.windows(2).any(|w| w[1] < w[0]) {
+    let knots = flat(&ks);
+    if knots.len() != n + degree + 1 || first.1 > degree + 1 || last.1 > degree + 1 {
         return Ok(None);
     }
     Ok(Some(Nurbs {
@@ -437,6 +491,12 @@ fn bspline_exact(e: Node) -> Result<Option<Nurbs>, Fail> {
         knots,
         weights,
     }))
+}
+
+/// Whether a NURBS from bspline_exact runs from its first pole to its last.
+fn clamped(nb: &Nurbs) -> bool {
+    let (d, k) = (nb.degree, &nb.knots);
+    k[..=d].iter().all(|&x| x == k[0]) && k[k.len() - d - 1..].iter().all(|&x| x == k[k.len() - 1])
 }
 
 /// A fine polyline along a non-periodic NURBS: the part is then marked approx.
@@ -465,6 +525,13 @@ fn bspline_points(e: Node) -> Result<Vec<V2>, Fail> {
             k.extend(std::iter::repeat_n(v, m));
         }
     }
+    sampled(deg, cp, &k)
+}
+
+/// A fine polyline along a NURBS of these weighted poles and full knots, from knot `deg` to knot
+/// `cp.len()`.
+fn sampled(deg: usize, cp: Vec<V3>, k: &[f64]) -> Result<Vec<V2>, Fail> {
+    const MAX: usize = 100_000;
     let need = cp.len().checked_add(deg).and_then(|n| n.checked_add(1));
     if cp.len() <= deg || cp.len() > MAX || need.is_none_or(|n| k.len() < n) {
         return bug("a spline's knots and poles do not add up");
@@ -500,7 +567,7 @@ fn bspline_points(e: Node) -> Result<Vec<V2>, Fail> {
     };
     let (lo, hi) = (k[deg], k[cp.len()]);
     let mut spans: Vec<f64> = vec![];
-    for &x in &k {
+    for &x in k {
         if lo <= x && x <= hi && !spans.contains(&x) {
             spans.push(x);
         }
@@ -1309,7 +1376,7 @@ impl Sk {
                     self.row("a", format!("arc(center: {c}, from: {f}, to: {t}{cw})"));
                 }
                 Kind::Poly if p.src.is_some() => {
-                    // the whole of a clamped NURBS: its poles, knots and weights, run the loop's way
+                    // the whole of a NURBS: its poles, knots and weights, run the loop's way
                     let Some(nb) = &p.src else { continue };
                     let (mut poles, mut ws, mut ks) =
                         (nb.poles.clone(), nb.weights.clone(), nb.knots.clone());
@@ -1319,9 +1386,13 @@ impl Sk {
                         let (k0, k1) = (ks[0], ks[ks.len() - 1]);
                         ks = ks.iter().rev().map(|k| k0 + k1 - k).collect();
                     }
-                    let n = poles.len();
-                    poles[0] = s;
-                    poles[n - 1] = e;
+                    // a clamped one's end poles are its ends, set to the loop's own; an unclamped or
+                    // periodic one's poles are written as they are
+                    if clamped(nb) {
+                        let n = poles.len();
+                        poles[0] = s;
+                        poles[n - 1] = e;
+                    }
                     let ps: Vec<String> = poles.iter().map(|&q| self.p(to(q))).collect();
                     let k = self.rows.len();
                     let ratios = |xs: &[f64]| {

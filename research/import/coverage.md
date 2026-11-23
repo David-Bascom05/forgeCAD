@@ -270,6 +270,23 @@ spline's shape, not by anything else in the part.
        source's own interpolation may differ.
 
      WHUCAD's opt-in stays as it is until then.
+   - **The rule as agreed with the spline spec** (branch claude/repo-review-mbdrlj-spline-spec):
+     - Control data is written exactly: `spline(poles, degree:, knots:, weights:)`.
+       - A periodic source has its poles wrapped (its n poles, then the first `degree` again). Its one period of
+         knots is run on periodically to the full unclamped vector of n + 2·degree + 1. The curve's domain is the
+         source's first to last knot.
+       - An unclamped source keeps its own knots and poles. Only a clamped one has its end poles set to the loop's
+         ends.
+       - Both readers do this. The periodic form was checked against OCCT's own periodic curves (degrees 1 to 5,
+         rational and not, first knots of multiplicity above 1: within 1e-9). The FreeCAD sample has none to gain:
+         its 850 B-spline records are all clamped, and the readers give each the same output as before.
+     - A fit-point source (WHUCAD's SCP; CADFS's `skFitSpline` where its opt-in is on) is written as the spec's
+       centripetal C2 interpolant through the same points. Each one carries a typed note,
+       `{"FitSplineReinterpolated": {"entity", "source"}}`: the source's own curve through those points may differ
+       between them. Where the source gives end derivatives, they are written as `start_slope:`/`end_slope:` in
+       the source's direction exactly. Their magnitude then means a rate per Forge's parameter, not the source's.
+     - Through-points splines are to become open by default on the spec's branch. Until that merges, fgw keeps
+       writing `closed: false`.
    - The regressions above are kernel or importer faults, not reasons to keep polylines:
      - Shell `Rebuild` → shell_revolved_spline.fg;
      - the mesh failures → mesh_wavy_spline.fg (below);
@@ -297,6 +314,18 @@ spline's shape, not by anything else in the part.
      on a plane tilted 1.4°. It is left for the decide-once near-coincident work, not reduced further. WHUCAD
      100001734 (`Fillet Overflow`) is a correct refusal: its bump stands 0.0016 above the rim, a quantisation
      sliver, too small a step for the 0.0078 round.
+   - FreeCAD 50c1d207 (`Fillet Overflow`) → fillet_tangent_chain_scoop.fg: a fillet of 1.5 carried along a tangent
+     chain (a concave arc, a straight side, a top arc) into an end face trimmed by a scoop. FreeCAD rounds it.
+   - CADFS 00308391 (`NotClosed` at the cut) → drill_from_tangent_plane.fg: a drill down from a plane tangent to
+     a round crown, to a bore's surface. Starting 1 above the crown, it builds.
+   - The three fillets on exactly written spline walls (CADFS 00123784 `NoBlend`; 00539691 and 00154651
+     `Overflow`) → fillet_spline_walls_noblend.fg, fillet_wavy_plate_notch.fg, fillet_crescent_both_edges.fg,
+     left for the fillet spec to judge.
+   - **CADFS 00850232 (`Boolean ZeroThickness`) is a correct refusal** → ring_cut_tangent.fg. A ring is cut
+     through a block from its side, its outer circle tangent to the block's top and bottom. The two sides left
+     meet only along the tangent lines. Onshape builds it, as a body that is non-manifold there. Per the owner's
+     decision (ROADMAP, "Decisions"), Forge refuses non-manifold results, as mainstream mechanical CAD does. Its
+     test, `a_ring_cut_tangent_to_two_faces_is_refused_at_the_tangent_lines`, is active and asserts that refusal.
 3. Refusals newly reached:
    - CADFS 00277536 (`Fillet NoBlend`), 00515265 (`Sweep TooTight`), 00714299 (`Shell Collapses`);
    - FreeCAD d45d0db3.Body001 (`Extent Ambiguous` at feature 17, after its sweep).
@@ -312,8 +341,9 @@ refuses later.
 The Rust reader writes a spline's degree, knots and weights as the sketch's params (`count(..)`, `ratio(..)`), so
 its parts stay lint-free. New tests in interface/forge-import/tests/fcstd.rs use small documents written there, each
 built and its volume worked out by hand: a rational spline side, an edge stored in pieces (both picked; one alone),
-a draft, a helix pipe whose binder holds a different helix from the helix's own properties, and a fillet outside a
-body on a `Part::Extrusion`.
+a draft, a helix pipe whose binder holds a different helix from the helix's own properties, a fillet outside a
+body on a `Part::Extrusion`, and a periodic spline (its poles wrapped, its volume checked against the closed uniform
+cubic's own area).
 
 ## Reproduce
 
