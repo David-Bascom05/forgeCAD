@@ -11,6 +11,7 @@ import ForgeSheetCore.RefineSetback
 import ForgeSheetCore.ZoneErr
 import ForgeSheetCore.RefineZone
 import ForgeSheetCore.RefineExact
+import ForgeSheetCore.ExactModel
 
 /-! Only the standard axioms: each listed theorem about the translated Rust rests on `propext`,
 `Classical.choice` and `Quot.sound` alone (a `sorry` or `native_decide` fails the build). -/
@@ -51,3 +52,5 @@ elab "#standard_axioms " ids:ident* : command => do
   forge_sheet_core.two_sum_eq forge_sheet_core.grow_spec forge_sheet_core.two_product_eq
   forge_sheet_core.exp_of_spec forge_sheet_core.exp_diff_spec forge_sheet_core.exp_neg_spec
   forge_sheet_core.exp_add_spec forge_sheet_core.exp_mul_spec forge_sheet_core.exp_sign_spec
+  forge_sheet_core.round_mult forge_sheet_core.rel_mult forge_sheet_core.twoSum_good
+  forge_sheet_core.fold_grow_good

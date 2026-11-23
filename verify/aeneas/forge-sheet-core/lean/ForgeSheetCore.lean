@@ -14,4 +14,5 @@ import ForgeSheetCore.RefineSetback
 import ForgeSheetCore.ZoneErr
 import ForgeSheetCore.RefineZone
 import ForgeSheetCore.RefineExact
+import ForgeSheetCore.ExactModel
 import ForgeSheetCore.Axioms
