@@ -207,3 +207,15 @@ spec of the interpreter, timeline output). Read research/cam/*.md and verify/for
 See branch proof/forge-topo, or: strict lines = regen1 parts (torture plate shaft housing coplanar patterns
 mixed hole-grid tour upto upto-flat) and bench app/edit/cli; fail if any strict line > +0.03% over base or
 the strict sum > +0.03%; bench seq/nary1 diagnostic.
+
+## 8. Cloud coordinator state (from 2026-11-23 21:20 UTC)
+Coordinator: cloud session session_01WJtawwACx4hZuk77VMadNk (hostname `vm`, 4 cores, 15 GB).
+Workers (each its own cloud session, tag `forgecad-worker`; they report via send_message):
+- SPINE        session_01WJtawvzNrcD4yRNQVEeHda
+- TRANSLATE    session_01WJtawzk4EzQbVx9RRkma3R
+- FLAT-SITES   session_01WJtawx9MPCJQJvxtMfau59
+- FALLBACK     session_01WJtawvTfttkoAtbqGu3AmW (first: #33 full workspace tests)
+- CURVED-SITES session_01WJtawyv7xKrBkRdL3dwDcS
+- MERGE        session_01WJtawyh9MKsEbjQPJ9FL4j
+- CAM (4 workers): not started; waits for #15/#16 to merge.
+Queue: #31 CI running on 924bc4d0 (contains main db5c0759).
