@@ -618,7 +618,7 @@ fn careful(
     for i in from..to {
         body = match blunted(features, i) {
             None => step_plain(features, i, body)?,
-            Some(fs) => match step_plain(features, i, body.clone()) {
+            Some(fs) => match step_plain(features, i, body.as_ref().map(Body::clone_roomy)) {
                 Err(e) if lost_its_way(&e) => step_plain(
                     History {
                         features: &fs,
@@ -1666,7 +1666,7 @@ fn apply_fillet(
     let body = if body.dead > 0 {
         body.compact()
     } else {
-        body.clone()
+        body.clone_roomy()
     };
     let edge = |name: Name| {
         body.edge_by_name(name)

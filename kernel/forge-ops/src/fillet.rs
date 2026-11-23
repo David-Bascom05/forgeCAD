@@ -881,7 +881,7 @@ fn fillet_on_noting(
     let mut body = if body.dead > 0 {
         body.compact()
     } else {
-        body.clone()
+        body.clone_roomy()
     };
     let mut seen = BTreeSet::new();
     for fe in edges {

@@ -446,7 +446,7 @@ pub fn boolean(a: &Body, b: &Body, op: Op, feature: u64) -> R<Body> {
     if let Some(r) = crate::decide_once::boolean(a, b, op)? {
         return Ok(r);
     }
-    let mut out = a.clone();
+    let mut out = a.clone_roomy();
     boolean_into(&mut out, b, op, feature)?;
     Ok(out.into_compact())
 }

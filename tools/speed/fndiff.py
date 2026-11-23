@@ -8,7 +8,9 @@ def fns(path):
     for line in out.splitlines():
         m = re.match(r'^\s*([\d,]+) \([^)]*\)\s+(.*)$', line)
         if not m or 'PROGRAM TOTALS' in line: continue
-        d[m.group(2)] = d.get(m.group(2), 0) + int(m.group(1).replace(',', ''))
+        # (keyed without the binary's path, so two builds' functions pair up; glibc's kept)
+        k = re.sub(r' \[(/[^\]]*/)?([^/\]]+)\]$', lambda x: ' [' + x.group(2) + ']', m.group(2))
+        d[k] = d.get(k, 0) + int(m.group(1).replace(',', ''))
     return d
 a, b = fns(sys.argv[1]), fns(sys.argv[2])
 keys = set(a) | set(b)
