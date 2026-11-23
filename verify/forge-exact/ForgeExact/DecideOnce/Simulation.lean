@@ -1211,6 +1211,8 @@ end ForgeExact.DecideOnce
 
 namespace ForgeExact.DecideOnce
 
+universe u
+
 namespace IncLedger
 
 variable {α : Type u} [DecidableEq α] [BEq α] [LawfulBEq α]
