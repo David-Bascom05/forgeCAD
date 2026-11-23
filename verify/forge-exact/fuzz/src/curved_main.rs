@@ -9,7 +9,8 @@
 //! planes, cylinders, cones and spheres, with Add, Cut and Keep), `families` (every scoreboard
 //! family, `--seeds` each, where its tools are quadric solids), `lang` (forge_lang::fuzz
 //! programs drawn from extrude, revolve, ball, hole, pattern, workplane, param and sketch),
-//! `band` (each degenerate pair with its tool moved by δ·LINEAR along x, y and z).
+//! `band` (each degenerate pair with its tool moved by δ·LINEAR along x, y and z), `torus` (the
+//! degenerate pairs with a torus, on the polynomial path) and `torusband` (those moved as `band`).
 
 use forge_exact_fuzz::curved::{judge_curved, judge_curved_path, tool_moved};
 use forge_exact_fuzz::{Class, Reference};
@@ -59,17 +60,18 @@ fn adv(name: String, part: Part) -> Case {
 const BAND: [f64; 3] = [0.9, -0.9, 3.0];
 
 fn cases(sources: &[String], seeds: u64, lang: u64) -> Vec<Case> {
-    let on = |s: &str| sources.is_empty() && s != "band" || sources.iter().any(|x| x == s);
+    let on = |s: &str| sources.is_empty() && s != "band" && s != "torusband" || sources.iter().any(|x| x == s);
     let mut out = Vec::new();
-    if on("degen") || on("band") {
+    if on("degen") || on("band") || on("torus") || on("torusband") {
         for (name, part) in forge_model::adversarial::degenerate_parts() {
-            if !quadric_pair(&name) {
+            if name.starts_with("plane_plane") {
                 continue;
             }
-            if on("degen") {
+            let (whole, band) = if quadric_pair(&name) { ("degen", "band") } else { ("torus", "torusband") };
+            if on(whole) {
                 out.push(adv(name.clone(), part.clone()));
             }
-            if on("band") {
+            if on(band) {
                 for (ax, axis) in [(0, Vec3::X), (1, Vec3::Y), (2, Vec3::Z)] {
                     for d in BAND {
                         if let Some(p) = tool_moved(&part, axis * (d * LINEAR)) {

@@ -107,7 +107,31 @@ fn face_of(body: &Body, f: forge_topo::FaceId) -> Result<Face, String> {
                 }),
             })
         }
-        Surface::Torus(_) => Err("a face is a torus".into()),
+        Surface::Torus(t) => {
+            if !face.same_sense {
+                return Err("a torus face with the solid outside".into());
+            }
+            let (o, z, big, r) = (t.frame.origin, t.frame.z().get(), t.major, t.minor);
+            if !(0.0 < r && r < big) {
+                return Err("a torus that is not a ring".into());
+            }
+            Ok(Face {
+                json: format!(
+                    "{{\"kind\":\"torus\",\"o\":{},\"z\":{},\"R\":{},\"r\":{},{lohi}}}",
+                    p3(o),
+                    v3(z),
+                    exact(big),
+                    exact(r)
+                ),
+                q: Box::new(move |p: Point3| {
+                    let d = p - o;
+                    let s2 = d.dot(d);
+                    let w = d.dot(z);
+                    let a = s2 + big * big - r * r;
+                    a * a - 4.0 * big * big * (s2 - w * w / z.dot(z))
+                }),
+            })
+        }
         Surface::Procedural(_) => Err("a face is procedural".into()),
     }
 }

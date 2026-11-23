@@ -1,4 +1,4 @@
-import ForgeExact.Poly3.Basic
+import ForgeExact.Poly3.Shift
 import ForgeExact.QRef.BF
 
 /-!
@@ -118,9 +118,10 @@ theorem reg_off_wall (ps : List P3) (f : BF) {x : V3} (hx : ¬wall ps x) :
   · intro hv
     exact sub_closure _ x ⟨allPos hs, isOpen_allPos _, fun p hp => (hconst p hp).mpr hv, hxs⟩
 
-/-- The sign a box certifies for `p` (`0`: none). -/
+/-- The sign a box certifies for `p` (`0`: none), by the bound about the box's centre. -/
 def boxSign (p : P3) (c : V3) (h : Rat) : Int :=
-  if p.eval c > bound p c h then 1 else if p.eval c < -bound p c h then -1 else 0
+  if p.eval c > bound (about p c) zero3 h then 1
+  else if p.eval c < -bound (about p c) zero3 h then -1 else 0
 
 theorem boxSign_cases (p : P3) (c : V3) (h : Rat) :
     boxSign p c h = 1 ∨ boxSign p c h = -1 ∨ boxSign p c h = 0 := by
@@ -133,7 +134,7 @@ theorem boxSign_cases (p : P3) (c : V3) (h : Rat) :
 
 theorem boxSign_spec (p : P3) (c : V3) {h : Rat} (hh : 0 ≤ h) (x : V3) (hx : Near c x h) :
     (boxSign p c h = 1 → 0 < p.eval x) ∧ (boxSign p c h = -1 → p.eval x < 0) := by
-  have b := box_bound p c x hh hx
+  have b := about_bound p c x hh hx
   have l := le_qabs (p.eval x - p.eval c)
   have l' := neg_le_qabs (p.eval x - p.eval c)
   unfold boxSign
@@ -150,7 +151,7 @@ theorem boxSign_spec (p : P3) (c : V3) {h : Rat} (hh : 0 ≤ h) (x : V3) (hx : N
 def boxSigns (ps : List P3) (c : V3) (h : Rat) : Nat → Int := fun k => boxSign (ps.getD k zeroP) c h
 
 theorem boxSign_zeroP (c : V3) (h : Rat) : boxSign zeroP c h = 0 := by
-  unfold boxSign; simp [zeroP, P3.eval, bound]
+  unfold boxSign; simp [zeroP, P3.eval, bound, about, shift, collect]
 
 theorem boxSigns_agree (ps : List P3) (c : V3) {h : Rat} (hh : 0 ≤ h) {x : V3} (hx : Near c x h) :
     BF.Agree (boxSigns ps c h) (sig ps x) := by

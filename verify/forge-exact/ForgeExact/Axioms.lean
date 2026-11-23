@@ -93,3 +93,5 @@ elab "#standard_axioms " ids:ident* : command => do
   ForgeExact.Poly3.in_box
   ForgeExact.Poly3.out_box
   ForgeExact.Poly3.empty_of_leaves
+  ForgeExact.Poly3.eval_about
+  ForgeExact.Poly3.about_bound

@@ -333,3 +333,65 @@ judges it. The triple-curve test stands aside.
 The local verdict needs second order along the edge (the edge and the surface part quadratically
 away from `p`), so such a contact is reported undecided, and the verdict is ambiguous. This
 replaces the hint check as the reference's own detection of these contacts.
+
+## 5. Polynomial surfaces (tori): `QRef.Poly`
+
+A history with a torus face takes the polynomial path. Every face is a polynomial `P3`: a torus
+gives its quartic, the other faces their quadrics, and a cone also gives its nappe.
+
+**In Lean (ForgeExact/Poly3):**
+- `escape_one`: restricted to a line, a nonzero polynomial has finitely many roots (`zero_of_roots`).
+- `wall_nowhereDense`, `reg_off_wall`.
+- `about_bound`: the box bound about the box's centre. `eval_about` says `about p c` is `p`
+  expanded about `c`.
+- `in_box`, `out_box`, `empty_of_leaves`.
+
+So the octree's volume enclosure and its `empty` verdict rest on these exactly as §1's rest on the
+quadric ones: §1's argument holds word for word with `Poly3.boxSign` in place of `Quad.boxSign`.
+
+**The manifold check (`QRef.Poly.check`), by hand.** It runs on each undecided leaf `B` of the
+octree. Let `U` be the surfaces whose signs `B` leaves undecided. Every other surface keeps one
+sign on `B` (`boxSign_spec`), so on `B` membership is the history on `U`'s signs alone
+(`reg_off_wall`). The check accepts `B` in three cases; otherwise it splits `B`, within a budget.
+
+- **One surface `f`, a component of `∇f` with a certified sign on `B`.** Then `∇f ≠ 0` on `B`,
+  so `f = 0` is a smooth sheet in `B`. On each side membership is constant, so near every point of
+  `B` the result is empty, everything, or a half-space bounded by the sheet: a manifold.
+- **Two surfaces `f`, `g`, a component of `∇f × ∇g` with a certified sign on `B`.**
+  - The two normals are independent at every point of `B`. So each sheet is smooth, and where they
+    meet, `(f, g)` is a submersion. Near a common point `p` the map `x ↦ (f(x), g(x), t(x))`, with
+    `t` a coordinate along the curve, is a local diffeomorphism. It sends the four sign sectors to
+    the quadrants of the `(f, g)` plane times an interval.
+  - So the result near `p` is (union of kept closed quadrants) × interval. That is a half-space
+    iff the kept quadrants are one run round the cycle `(+,+), (+,−), (−,−), (−,+)`. With four
+    sectors, the only kept sets that are not one run (or none, or all) are the checkerboards
+    `{(+,+), (−,−)}` and `{(+,−), (−,+)}`, which `pairOk` rejects.
+  - Points of `B` on one sheet only are the first case.
+- **Three surfaces, `det(∇f₁, ∇f₂, ∇f₃)` with a certified sign on `B`.**
+  - At a common point the map `(f₁, f₂, f₃)` is a local diffeomorphism, so the result is the cone
+    over the kept closed octants' trace on the link sphere. The eight octants trace the eight
+    triangles of an octahedron.
+  - The cone over a closed region of `S²` is a manifold with boundary at the apex iff the region is
+    empty, all of `S²`, or a closed disc.
+  - A union of triangles is a disc iff three things hold: it is connected through shared edges;
+    its complement is too; and round each of the six vertices, the four triangles there are not a
+    checkerboard. Without a pinch vertex, the region is a compact surface with boundary. When it is
+    connected, its boundary circles correspond to its complement's components, and one circle in
+    `S²` bounds a disc (Schoenflies). That is `octantsOk`.
+  - Points of `B` on two of the three sheets give one of the six vertices' four-cycles, which the
+    same check covers. Points on one sheet give the first case.
+
+A check that accepts every undecided leaf proves the result is a 3-manifold with boundary
+everywhere off the certified boxes. Inside a certified box the result is all or nothing. Every
+point of the wall lies in an undecided leaf, because a box with all signs certified holds no wall
+point. Leaves the budget or the depth cut off report `und`, and the verdict is `ambiguous`.
+
+So on this path:
+- `solid` is proven: a box is certified in, and the result is a manifold.
+- `empty` is proven (`empty_of_leaves`).
+- The path never says `nonmanifold`. A failed check (a tangency, a cone apex, a checkerboard, or
+  four undecided surfaces) is not proof of a bad point.
+
+**What stays unproven in Lean:** the check above, and the executable `norm`, `mul3` and `deriv3`
+that build the gradients and the cross products. A wrong derivative could accept a bad box. The
+signs of those polynomials are taken with the proven `Poly3.boxSign`.

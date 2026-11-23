@@ -8,7 +8,7 @@ import ForgeExact.Ref.Input
 import ForgeExact.Alg.Sum
 import ForgeExact.Alg.Examples
 import ForgeExact.Quad.Cert
-import ForgeExact.QRef.Run
+import ForgeExact.QRef.Poly
 import ForgeExact.QRef.Octree
 import ForgeExact.Poly3.Octree
 import ForgeExact.Axioms
