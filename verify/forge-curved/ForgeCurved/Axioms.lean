@@ -66,3 +66,6 @@ import ForgeCurved
 #print axioms ForgeCurved.Chart.box_halves
 #print axioms ForgeCurved.FacetSides.side_all
 #print axioms ForgeCurved.FacetSides.sideLocal_of_data
+#print axioms ForgeCurved.Sweep.chart
+#print axioms ForgeCurved.Sweep.component_crosses
+#print axioms ForgeCurved.Sweep.crossesAll_edges_of_transverse

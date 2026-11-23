@@ -27,6 +27,7 @@ for `EndToEndCurved`. That project builds in about 2 minutes on the shared Mathl
 | Rooms | `room_preconnected`, `room_class`, **`res_eq_reg`** | F5's room facts (route B). A room flooded over preconnected pieces whose closures meet in the room at each step is preconnected. A connected room missing a body's frontier is inside or outside it. Rooms that are open, connected, cover off a nowhere-dense set, and are classified at one point each give `Res G keep = reg (combine op A)` (via `reg_eq_of_sdiff`) |
 | Chart, FacetSides | `box_pos`, `box_halves`; `side_all`, **`sideLocal_of_data`** | F5 at facet points (route B). At a zero with strict derivative `≠ 0`, arbitrarily small boxes have connected `±` halves reaching the point. From the builder's `FacetData` (rooms open, disjoint, off the faces, covering; each facet connected on a regular carrier, alone near its points; one certified `±` sample per facet), `SideLocal G keep` holds for every `keep` |
 | Thom, CAD, CADLevels | `thom`, `merge`, `ed_of_count`, `cyl_R1`, `cad3_R1`, `cad_R1`, `fibreOI_of_counts` | Tier 1's R1 for the CAD with Thom closure (paused under route B, kept as the proof-only reference's R1) |
+| SweepCross | `chart`, **`component_crosses`**, **`crossesAll_edges_of_transverse`** | the edge half of `CrossesAll` from the critical-set conditions themselves (no global graph labels). Mathlib's inverse function theorem gives a local graph at each transverse common zero. In the slab, a component's levels are open (chart) and closed (properness, compactness, chart at the limit), so they are all of `(a, b)`; the other carriers keep their signs on it (no triple point) |
 | WallsCounter | `parallel_walls_not_faithful`, **`lemmaD_parallel_walls_false`** | **`LemmaD` is false for one-direction sweep walls** (design §2.3 Tier 1): see below |
 | Local | `LocalGood`, **`faithfulAll_of_local`**, `faithfulAll_of_local'` | R2–R5 are local: continuous carriers, R1, R3 and a local picture at every point (small neighbourhoods meet each cell above the point's in a connected set; each realised one comes near) give `FaithfulAll` |
 | Transversal | `TransversalAt`, `transversal_chart`, `localGood'_of_transversal`, **`faithfulAll_of_transversal`** | at a point where the gradients of the `C¹` carriers through it are jointly onto, the inverse function theorem makes the cells near it convex orthant faces; so for transversal carriers `FaithfulAll` is R1 alone |
@@ -101,9 +102,10 @@ covector count is wrong.
   `CAD.cad3_R1` / `cad_R1` (three levels, then ℝ³), and `fibreOI_of_counts`. What is left is the
   quadratic algebra: Disc, Res and psc₁ sign invariance ⇒ constant common-root counts, and
   level 2 from `delineable`.
-- **`GraphLemma` and `FacetCrossing`** (Sweep.lean), the rest of `qsampler_covers`' input. The
-  graph lemma needs the 2D implicit function theorem (Mathlib's `HasStrictFDerivAt.implicitFunction`)
-  plus properness for the covering argument.
+- **`FacetCrossing`** (Sweep.lean), the rest of `qsampler_covers`' input. The edge half is
+  `crossesAll_edges_of_transverse`. The facet half follows the same pattern: a component's levels
+  are open and closed. At a limit point on a bounding curve, the chart is `(ℓ, c_k)` on `Z(c_j)`.
+  `GraphLemma` (global labels) is not needed for `CrossesAll`.
 - **The refusal half of `sep_invariant`.** `TopNonManifold` reads the carriers' strata (which
   points are on one carrier, which cells are edges or vertices), so it is not yet carrier-free.
   The half closes once `TopNonManifold cs R ↔ TopNonManifold (cs ++ seps) R` is proven for
