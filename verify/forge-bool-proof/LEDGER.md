@@ -22,8 +22,8 @@ G11 flat, G13–G15); FALLBACK (G2–G10, G12, A8 as the fallback, and the fallb
 (the curved guess sites: G11 on curved faces, coincidence, unify's curved decisions, poles and
 seams, and the curved screens S3/S4).
 
-**Where the gap is.** `boolean_correct_of_contracts` proves §E from the contracts D1–D9 and
-`KeepRuleBd`. So the end-to-end theorem is down to the rows below that are still open or stated.
+**Where the gap is.** `boolean_correct_of_steps` proves §E from the contracts D1–D9 alone (the
+boundary lemma `KeepRuleBd` is proven). So the end-to-end theorem is down to the rows below that are still open or stated.
 Each one is a per-function contract, the shape lemma, or a named hypothesis. A bare file name means
 verify/forge-bool-proof/ForgeBoolProof/<file>.
 
@@ -32,7 +32,7 @@ verify/forge-bool-proof/ForgeBoolProof/<file>.
 | id | contract | owner | status | file / theorem |
 |---|---|---|---|---|
 | E | `boolean_correct`: Ok ⇒ ValidSolid ∧ Faithful (F1) ∧ NamesOK; Err ⇒ RefusalTrue | SPINE | stated | Statement.lean `BooleanCorrect` |
-| E.comp | the composition: D1–D9 and `KeepRuleBd` ⇒ E, for `Pipeline.run` | SPINE | proven | Compose.lean `boolean_correct_of_contracts` (with `res_keepRoom`, `apply_correct`) |
+| E.comp | the composition: D1–D9 ⇒ E, for `Pipeline.run` | SPINE | proven | KeepRule.lean `boolean_correct_of_steps`; Compose.lean `boolean_correct_of_contracts` (with `res_keepRoom`, `apply_correct`) |
 | E.shape | the translated `general` is `Pipeline.run` of its translated steps, with a `View` per stage (`boolean`'s clone/`into_compact` wrapper is D0) | TRANSLATE | open | — |
 | E.seq | sequential regen as a fold of booleans | SPINE | proven (given E and `boolean_preserves_InputSize`) | Compose.lean `seq_correct` |
 | E.fb | the flat fallback branch: today's path refuses or is undecided ⇒ A8, then a typed refusal; A8 starts from the original inputs | FALLBACK | composition proven (`TodayOK` + A8's `BooleanCorrect` ⇒ E); A8's `BooleanCorrect` open (rows A8.*) | Compose.lean `withFallback`, `fallback_correct` |
@@ -80,7 +80,7 @@ verify/forge-bool-proof/ForgeBoolProof/<file>.
 | D8 | `apply`, `edge_split`, joins/splits, `sole_survivors` | R's exact counterpart: faces = the kept facets, `Bounds Rs (reg (opSet ⟦A⟧ ⟦B⟧))`, `WellFormed` | SPINE | stated | Contracts.lean `D8`, `ApplyPost` |
 | D9 | `pinched_new`, `pinched_old`, `touched_old`, `undecided_touch`, `refuse_strays` | refuses iff the exact result is non-manifold there | FALLBACK (G6, G7) | stated | Contracts.lean `D9` |
 | D5.zone | `ArrOK.on_frontier` inside vertex-cluster zones: a facet on a body's faces in a zone (micro-faces) is on that solid's frontier, or the contract changes there | SPINE | open (with the cluster ruling) | Contracts.lean `ArrOK.on_frontier` |
-| D7.math | `KeepRuleBd`: on exact classes, `keepRule` picks each boundary facet of the kept rooms once (F6 across pieces; a coplanar piece once, as A's) | SPINE | stated | Contracts.lean `KeepRuleBd` |
+| D7.math | `KeepRuleBd`: on exact classes, `keepRule` picks each boundary facet of the kept rooms once (a coplanar piece once, as A's) | SPINE | proven | KeepRule.lean `keepRuleBd_proof` (`facet_rooms`, `table` by `decide`) |
 | D7.table | `keep_of` computes `keepRule` (the table in Contracts.lean is the spec; if boolean.rs's table differs, it changes here with a reason) | SPINE | open | — |
 | D8.math | the assembly boundary lemma: a well-formed exact body whose faces are the kept boundary facets, oriented to the kept rooms, bounds `Res G keepRoom` (`FaceLocal.frontier_iff_bd`) | SPINE | open | — |
 | Dn | `nary_with` | D1–D9 over n tools, the op fold as keep; `Batch` sound when decided | FALLBACK (G10) | open | — |

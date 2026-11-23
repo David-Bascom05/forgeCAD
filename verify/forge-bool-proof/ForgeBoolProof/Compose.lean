@@ -116,7 +116,7 @@ theorem apply_correct {A B R : Body} {op : Op} {Aex Bex : BodyModel E} {a : Arr 
 /-- `KeptIsBd` depends only on the flags of the regions. -/
 theorem keptIsBd_congr {a : Arr E} {k k' keepR : Nat → Bool} (hk : ∀ f ∈ a.regions, k f = k' f)
     (h : KeptIsBd a k' keepR) : KeptIsBd a k keepR := by
-  refine ⟨fun g hg => ?_, fun f hf f' hf' h1 h2 h3 => h.2 f hf f' hf' ((hk f hf) ▸ h1)
+  refine ⟨fun g hg => ?_, fun f hf f' hf' hne h1 h2 h3 => h.2 f hf f' hf' hne ((hk f hf) ▸ h1)
     ((hk f' hf') ▸ h2) h3⟩
   rw [h.1 g hg]
   constructor

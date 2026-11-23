@@ -46,5 +46,5 @@ jobs:
           if grep -q "sorryAx\|declaration uses 'sorry'" build.log axioms.log; then echo "::error::sorry"; exit 1; fi
           bad=$(grep "depends on axioms" axioms.log | grep -v -E "\[(propext(, Classical\.choice)?(, Quot\.sound)?|propext, Quot\.sound|)\]" || true)
           if [ -n "$bad" ]; then echo "::error::non-standard axioms:"; echo "$bad"; exit 1; fi
-          grep -q "'ForgeBoolProof.boolean_correct_of_contracts' depends on axioms" axioms.log \
-            || { echo "::error::boolean_correct_of_contracts missing from the axiom report"; exit 1; }
+          grep -q "'ForgeBoolProof.boolean_correct_of_steps' depends on axioms" axioms.log \
+            || { echo "::error::boolean_correct_of_steps missing from the axiom report"; exit 1; }

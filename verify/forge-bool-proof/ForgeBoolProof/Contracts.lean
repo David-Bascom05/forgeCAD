@@ -122,14 +122,20 @@ structure ArrOK (Aex Bex : BodyModel E) (a : Arr E) : Prop where
       (inSide (a.sense f) (a.cf (a.gf f) z) ↔ inSide F.sense (F.carrier z)) ∧
       (outSide (a.sense f) (a.cf (a.gf f) z) ↔ outSide F.sense (F.carrier z))
 
+/-- The exact class of facet `g` of `G` against a solid `Oth`, for a region of solid `Own`: inside
+`Oth`, outside it, or on its boundary with the two solids on the same side of the facet (each of
+the facet's rooms is in `Oth` iff it is in `Own`) or on opposite sides. -/
+def ClassAt (G : FaceGeo E) (g : Nat) (Own Oth : Set E) : Class → Prop
+  | .inside => G.facet g ⊆ interior Oth
+  | .outside => Disjoint (G.facet g) Oth
+  | .onSame => G.facet g ⊆ frontier Oth ∧ (G.room (G.rp g) ⊆ Oth ↔ G.room (G.rp g) ⊆ Own) ∧
+      (G.room (G.rm g) ⊆ Oth ↔ G.room (G.rm g) ⊆ Own)
+  | .onOpposite => G.facet g ⊆ frontier Oth ∧ (G.room (G.rp g) ⊆ Oth ↔ ¬ G.room (G.rp g) ⊆ Own) ∧
+      (G.room (G.rm g) ⊆ Oth ↔ ¬ G.room (G.rm g) ⊆ Own)
+
 /-- The exact class of region `f` against the other solid. -/
-def ClassOK (a : Arr E) (SA SB : Set E) (f : Nat) : Class → Prop
-  | .inside => a.G.facet (a.gf f) ⊆ interior (pick (a.src f) SB SA)
-  | .outside => Disjoint (a.G.facet (a.gf f)) (pick (a.src f) SB SA)
-  | .onSame => a.G.facet (a.gf f) ⊆ frontier (pick (a.src f) SB SA) ∧
-      a.G.room (inRoom a.G (a.sense f) (a.gf f)) ⊆ pick (a.src f) SB SA
-  | .onOpposite => a.G.facet (a.gf f) ⊆ frontier (pick (a.src f) SB SA) ∧
-      a.G.room (outRoom a.G (a.sense f) (a.gf f)) ⊆ pick (a.src f) SB SA
+def ClassOK (a : Arr E) (SA SB : Set E) (f : Nat) (k : Class) : Prop :=
+  ClassAt a.G (a.gf f) (pick (a.src f) SA SB) (pick (a.src f) SB SA) k
 
 /-- D6: every region's class is its exact class. -/
 def ClassesOK (a : Arr E) (SA SB : Set E) (c : Nat → Class) : Prop :=
@@ -153,10 +159,12 @@ open Classical in
 noncomputable def keepRoom (G : FaceGeo E) (SA SB : Set E) (op : Op) (r : Nat) : Bool :=
   decide (∃ x ∈ G.room r, op.eval (x ∈ SA) (x ∈ SB))
 
-/-- The kept regions are the boundary facets of the kept rooms, each once. -/
+/-- The kept regions are the boundary facets of the kept rooms, each once (a region on an empty
+facet adds no point, and is left to D8). -/
 def KeptIsBd (a : Arr E) (k : Nat → Bool) (keepR : Nat → Bool) : Prop :=
   (∀ g, (a.G.facet g).Nonempty → (Bd a.G keepR g ↔ ∃ f ∈ a.regions, a.gf f = g ∧ k f = true)) ∧
-    ∀ f ∈ a.regions, ∀ f' ∈ a.regions, k f = true → k f' = true → a.gf f = a.gf f' → f = f'
+    ∀ f ∈ a.regions, ∀ f' ∈ a.regions, (a.G.facet (a.gf f)).Nonempty → k f = true → k f' = true →
+      a.gf f = a.gf f' → f = f'
 
 /-- **D7, the mathematics (the boundary lemma, per facet)**: on an arrangement of two valid exact
 solids' faces, the keep rule on exact classes picks each boundary facet of the kept rooms once,

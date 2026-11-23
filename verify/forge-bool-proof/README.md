@@ -10,6 +10,7 @@ unproven, row by row.
 | `ForgeBoolProof/Statement.lean` | §E: `opSet`, `reg`, `Faithful` (F1), `ManifoldPt`, `Refusal`, `RefusalTrue`, `Correct`, **`BooleanCorrect`** |
 | `ForgeBoolProof/Contracts.lean` | §D: `general` as a nine-step `Pipeline` with a `View` per stage; the contracts `D1`–`D9`, each stage's postcondition (`PairsOK` … `ArrOK`, `ClassesOK`, `KeepOK`, `ApplyPost`), and the boundary lemma `KeepRuleBd` |
 | `ForgeBoolProof/Compose.lean` | **`boolean_correct_of_contracts`**: D1–D9 and `KeepRuleBd` give `BooleanCorrect` of `Pipeline.run`; `res_keepRoom` (the closure of the kept rooms is `reg (A op B)`, through F5's `res_eq_reg`); `fallback_correct` (today's path, then A8); `seq_correct` (sequential regen) |
+| `ForgeBoolProof/KeepRule.lean` | **`keepRuleBd_proof`**: the keep rule on exact classes picks each boundary facet of the kept rooms once (`facet_rooms`: a facet on a solid's frontier has exactly one room in it; `table`, checked by `decide`); **`boolean_correct_of_steps`**: D1–D9 alone give `BooleanCorrect` |
 | `ForgeBoolProof/Axioms.lean` | the axiom report |
 
 All of it is stated over the body layer `ForgeCurved.BodyModel` (verify/forge-curved). A stored

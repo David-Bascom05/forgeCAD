@@ -9,3 +9,5 @@ import ForgeBoolProof
 #print axioms ForgeBoolProof.fallback_correct
 #print axioms ForgeBoolProof.todayOK_of_correct
 #print axioms ForgeBoolProof.seq_correct
+#print axioms ForgeBoolProof.keepRuleBd_proof
+#print axioms ForgeBoolProof.boolean_correct_of_steps
