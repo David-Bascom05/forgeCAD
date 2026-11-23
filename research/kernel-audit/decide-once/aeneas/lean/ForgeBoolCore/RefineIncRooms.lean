@@ -290,7 +290,7 @@ theorem split_spec (l : Ledger) (hw : LedgerWF2 l) (hs : (toLF l).splitOk = true
   step as ⟨nb, hnb⟩
   have hnbv : nb.val = l.nb.val := by rw [hnb]; scalar_tac
   have hmul : (alloc.vec.Vec.len l.facet_class).val * nb.val ≤ Usize.max := by
-    rw [hnbv]; simpa [nfacets] using hsm.2.2.2.2
+    rw [hnbv]; simpa [nfacets] using hsm.2.2.2.2.1
   step as ⟨i, hi⟩
   step with alloc.vec.from_elem_spec core.clone.CloneBool false i (by rfl) as ⟨po, hp1, hp2⟩
   have h0 : POInv l po.val (0#usize).val := by

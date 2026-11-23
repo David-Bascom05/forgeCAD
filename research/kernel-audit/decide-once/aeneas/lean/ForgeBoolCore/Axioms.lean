@@ -1,4 +1,4 @@
-import ForgeBoolCore.RefineIncFlood
+import ForgeBoolCore.RefineIncMemb
 import ForgeBoolCore.Specs
 import ForgeBoolCore.Refine
 import ForgeBoolCore.RefineUF
@@ -140,3 +140,7 @@ import ForgeBoolCore.RefineUnify
 #print axioms forge_bool_core.inc.split_loop0_spec
 #print axioms forge_bool_core.inc.split_spec
 #print axioms forge_bool_core.inc.flood_spec
+#print axioms ForgeBoolCore.UF.head_leastI
+#print axioms forge_bool_core.inc.membership_loop0_spec
+#print axioms forge_bool_core.inc.memb_bridge
+#print axioms forge_bool_core.inc.membership_spec

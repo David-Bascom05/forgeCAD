@@ -50,3 +50,5 @@ import ForgeBoolCore.RefineIncTables
 import ForgeBoolCore.RefineIncSplit
 import ForgeBoolCore.RefineIncRooms
 import ForgeBoolCore.RefineIncFlood
+import ForgeBoolCore.HeadBridgeI
+import ForgeBoolCore.RefineIncMemb

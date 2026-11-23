@@ -344,7 +344,7 @@ theorem split_ok_spec (l : Ledger) (hw : LedgerWF2 l) : split_ok l ⦃ r => r = 
   step as ⟨nb, hnb⟩
   have hnbv : nb.val = l.nb.val := by rw [hnb]; scalar_tac
   have hmul : (alloc.vec.Vec.len l.facet_class).val * nb.val ≤ Usize.max := by
-    rw [hnbv]; simpa [nfacets] using hsm.2.2.2.2
+    rw [hnbv]; simpa [nfacets] using hsm.2.2.2.2.1
   step as ⟨i, hi⟩
   step with alloc.vec.from_elem_spec core.clone.CloneU32 NONE i (by rfl) as ⟨first, hf1, hf2⟩
   have hr : (decide (alloc.vec.Vec.len l.facet_rooms = alloc.vec.Vec.len l.facet_class)) = true := by
