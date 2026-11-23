@@ -3923,5 +3923,77 @@ mod digest {
         assert_eq!(h, DIGEST, "the exact path's digest changed: {h:#018x}");
     }
 
-    const DIGEST: u64 = 0xe2c8e3e43408b4a8;
+    // (0xe2c8e3e43408b4a8 before the float-guided root cover: new isolating intervals, same values,
+    // `value_digest`)
+    const DIGEST: u64 = 0x100439954b1088a9;
+
+    /// A number's value to 1e-9 (its enclosure tightened), as text: representation-free.
+    fn val(n: &Num) -> String {
+        let t = tighten(n);
+        let v = 0.5 * (t.lo + t.hi);
+        // (−0 and +0 alike)
+        format!("{:.9}", if v.abs() < 5e-10 { 0.0 } else { v })
+    }
+
+    /// The same inputs as `exact_digest`, hashed by value only: root counts, covectors, and roots
+    /// to 1e-9. A change of isolating intervals (the proposer's choice) leaves it unchanged.
+    #[test]
+    fn value_digest() {
+        let mut g = Lcg(0x5eed);
+        let qs = family(&mut g);
+        let mut h: u64 = 0xcbf29ce484222325;
+        let mut i = 0;
+        while i < qs.len() {
+            let mut j = i + 1;
+            while j < qs.len() {
+                let c = q(g.next(), 8);
+                let s = match propose_edge_any(&qs[i], &qs[j], &c, ROOT_FUEL) {
+                    Some(es) => {
+                        let mut t = format!("{}:", es.len());
+                        let mut k = 0;
+                        while k < es.len() {
+                            let cov = edge_cov(&qs, &es[k], SIGN_FUEL);
+                            t = format!("{t}{}{:?};", val(&es[k].y), cov);
+                            k += 1;
+                        }
+                        t
+                    }
+                    None => "none".to_string(),
+                };
+                if std::env::var_os("VD_DUMP").is_some() {
+                    println!("VD {i} {j} {s}");
+                }
+                h = fnv(h, &s);
+                j += 1;
+            }
+            i += 1;
+        }
+        let mut k = 0;
+        while k < 40 {
+            let deg = 3 + (k % 2) as usize;
+            let mut p: Poly = Vec::new();
+            let mut t = 0;
+            while t <= deg {
+                p.push(Q::from_i64(g.next()));
+                t += 1;
+            }
+            // the roots as a set: `roots_of` promises completeness, not an order
+            let rs = roots_of(&p, ROOT_FUEL).map(|r| {
+                let mut v: Vec<(f64, String)> = r.iter().map(|n| (tighten(n).lo, val(n))).collect();
+                v.sort_by(|a, b| a.0.total_cmp(&b.0));
+                v.into_iter().map(|x| x.1).collect::<Vec<_>>()
+            });
+            if std::env::var_os("VD_DUMP").is_some() {
+                println!("VR {k} {rs:?}");
+            }
+            h = fnv(h, &format!("{rs:?}"));
+            k += 1;
+        }
+        println!("value digest {h:#018x}");
+        assert_eq!(h, VALUE_DIGEST, "the exact path's values changed: {h:#018x}");
+    }
+
+    /// `value_digest` before and after the float-guided root cover (forge-alg `guided_cover`): the
+    /// same, so that change moved isolating intervals and the order of `roots_of`'s list only.
+    const VALUE_DIGEST: u64 = 0x19500ed3fac64463;
 }

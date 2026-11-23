@@ -9,6 +9,19 @@ fn qi(n: i64) -> Q {
     Q::from_i64(n)
 }
 
+/// The best of 5 runs of `f`, and its last result.
+fn best<T>(f: impl Fn() -> T) -> (std::time::Duration, T) {
+    let mut b = std::time::Duration::MAX;
+    let mut out = None;
+    for _ in 0..5 {
+        let t = std::time::Instant::now();
+        let r = f();
+        b = b.min(t.elapsed());
+        out = Some(r);
+    }
+    (b, out.unwrap())
+}
+
 #[test]
 #[ignore]
 fn exact_piece_costs() {
@@ -89,4 +102,77 @@ fn exact_piece_costs() {
         t.elapsed(),
         v.map(|v| v.len())
     );
+}
+
+/// One piece, once, chosen by CURVED_PIECE (plane-cyl, plane-cyl-nodes, cyl-cyl, ppc, pcc), for
+/// an exact instruction count under callgrind.
+#[test]
+#[ignore]
+fn one_piece() {
+    let pl = Quadric {
+        lz: qi(1),
+        c: qi(-3),
+        ..Quadric::default()
+    };
+    let cyl = Quadric {
+        xx: qi(1),
+        yy: qi(1),
+        lx: qi(-8),
+        ly: qi(-4),
+        c: qi(4),
+        ..Quadric::default()
+    };
+    let c2 = Quadric {
+        yy: qi(1),
+        zz: qi(1),
+        c: qi(-9),
+        ..Quadric::default()
+    };
+    let c1 = Quadric {
+        xx: qi(1),
+        yy: qi(1),
+        c: qi(-16),
+        ..Quadric::default()
+    };
+    let px = Quadric {
+        lx: qi(1),
+        c: qi(-6),
+        ..Quadric::default()
+    };
+    let f0 = frames()[0].clone();
+    match std::env::var("CURVED_PIECE").as_deref() {
+        Ok("plane-cyl") => {
+            std::hint::black_box(pair_curve(&pl, &cyl).unwrap());
+        }
+        Ok("plane-cyl-nodes") => {
+            let pc = pair_curve(&pl, &cyl).unwrap();
+            std::hint::black_box(curve_nodes(&pl, &cyl, &pc).unwrap());
+        }
+        Ok("cyl-cyl") => {
+            std::hint::black_box(pair_curve(&c1, &c2).unwrap());
+        }
+        Ok("ppc") => {
+            std::hint::black_box(
+                propose_triple(
+                    &in_frame(&f0, &pl),
+                    &in_frame(&f0, &px),
+                    &in_frame(&f0, &cyl),
+                    ROOT_FUEL,
+                )
+                .unwrap(),
+            );
+        }
+        Ok("pcc") => {
+            std::hint::black_box(
+                propose_triple(
+                    &in_frame(&f0, &pl),
+                    &in_frame(&f0, &c1),
+                    &in_frame(&f0, &c2),
+                    ROOT_FUEL,
+                )
+                .unwrap(),
+            );
+        }
+        _ => {}
+    }
 }

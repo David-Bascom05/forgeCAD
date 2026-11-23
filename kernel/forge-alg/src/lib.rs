@@ -24,6 +24,7 @@
 //! it can move `forge-math`'s code generation (see `div`).
 
 mod div;
+mod fguide;
 pub use div::{divrem, gcd as big_gcd};
 use forge_math::exact::{Big, Dy};
 
@@ -1171,22 +1172,93 @@ pub fn ray_bound(p: &[Q], n: usize, b0: &Q) -> Option<Q> {
     out
 }
 
-/// `proposeCover p fuel`: a cover `(t₀, ts)`, checked by `cover_ok`, or `None`.
-pub fn propose_cover(p: &[Q], fuel: usize) -> Option<(Q, Vec<Q>)> {
-    match ray_bound(p, fuel, &root_bound(p)) {
-        None => None,
-        Some(b) => match split_gap(p, fuel, &b.neg(), &b) {
-            None => None,
-            Some(mid) => {
-                let mut ts = mid;
-                ts.push(b.clone());
-                if cover_ok(p, &b.neg(), &ts) {
-                    Some((b.neg(), ts))
-                } else {
-                    None
+/// The float guide's cover of `(−b, b)`: breakpoints between approximate roots; a gap that does
+/// not check (a complex pair near it, or two roots the guide merged) is broken at the critical
+/// points inside it, and a piece that still fails is bisected alone (`split_gap`). Untrusted:
+/// `propose_cover` checks the whole cover with `cover_ok`.
+fn guided_cover(p: &[Q], b: &Q, fuel: usize) -> Option<Vec<Q>> {
+    let pf: Vec<f64> = p.iter().map(|c| c.approx()).collect();
+    let (pts, crit) = fguide::cover_points(&pf, b.approx())?;
+    let mut guide: Vec<Q> = Vec::with_capacity(pts.len() + 1);
+    let mut i = 0;
+    while i < pts.len() {
+        let q = Q::from_f64(pts[i])?;
+        if !(b.neg().lt(&q) && q.lt(b)) {
+            return None;
+        }
+        guide.push(q);
+        i += 1;
+    }
+    guide.push(b.clone());
+    let mut ts: Vec<Q> = Vec::with_capacity(guide.len());
+    let mut a = b.neg();
+    let mut k = 0;
+    while k < guide.len() {
+        if !gap_ok(p, &a, &guide[k]) {
+            // the critical points strictly inside, as breakpoints
+            let (al, bl) = (a.approx(), guide[k].approx());
+            let mut sub: Vec<Q> = Vec::new();
+            let mut j = 0;
+            while j < crit.len() {
+                if crit[j] > al
+                    && crit[j] < bl
+                    && let Some(c) = Q::from_f64(crit[j]).filter(|c| a.lt(c) && c.lt(&guide[k]))
+                {
+                    sub.push(c);
                 }
+                j += 1;
             }
-        },
+            sub.push(guide[k].clone());
+            let mut lo = a.clone();
+            let mut m = 0;
+            while m < sub.len() {
+                if !gap_ok(p, &lo, &sub[m]) {
+                    ts.extend(split_gap(p, fuel, &lo, &sub[m])?);
+                }
+                if m + 1 < sub.len() {
+                    ts.push(sub[m].clone());
+                }
+                lo = sub[m].clone();
+                m += 1;
+            }
+        }
+        ts.push(guide[k].clone());
+        a = guide[k].clone();
+        k += 1;
+    }
+    Some(ts)
+}
+
+/// `proposeCover p fuel`: a cover `(t₀, ts)`, checked by `cover_ok`, or `None`. The float guide
+/// first (`guided_cover`), then bisection (`split_gap`).
+pub fn propose_cover(p: &[Q], fuel: usize) -> Option<(Q, Vec<Q>)> {
+    // Fujiwara's bound from the float guide when both rays check (usually far tighter than
+    // Cauchy's, so the gaps' Möbius transforms are smaller), else Cauchy's doubled
+    let pf: Vec<f64> = p.iter().map(|c| c.approx()).collect();
+    let cb = root_bound(p);
+    // (only where it is much tighter: its two ray checks cost more than they save otherwise)
+    let fb = fguide::fujiwara(&pf)
+        .filter(|f| 4.0 * f < cb.approx())
+        .and_then(Q::from_f64)
+        .filter(|f| {
+            no_pos_root(&pcomp(p, &[f.neg(), Q::from_i64(-1)]))
+                && no_pos_root(&pcomp(p, &[f.clone(), Q::one()]))
+        });
+    let b = match fb {
+        Some(f) => f,
+        None => ray_bound(p, fuel, &cb)?,
+    };
+    if let Some(ts) = guided_cover(p, &b, fuel)
+        && cover_ok(p, &b.neg(), &ts)
+    {
+        return Some((b.neg(), ts));
+    }
+    let mut ts = split_gap(p, fuel, &b.neg(), &b)?;
+    ts.push(b.clone());
+    if cover_ok(p, &b.neg(), &ts) {
+        Some((b.neg(), ts))
+    } else {
+        None
     }
 }
 
