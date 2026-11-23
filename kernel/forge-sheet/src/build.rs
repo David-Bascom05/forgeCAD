@@ -205,6 +205,15 @@ struct LoopData {
     kinds: Vec<Kind>,
 }
 
+/// The first tangent-line bound with no twin across its line, if one is.
+fn untwinned(loops: &[LoopData], twin: &HashMap<(usize, usize), (usize, usize)>) -> Option<(usize, usize)> {
+    loops.iter().enumerate().find_map(|(l, ld)| {
+        (0..ld.kinds.len())
+            .find(|&i| matches!(ld.kinds[i], Kind::Tangent(..)) && !twin.contains_key(&(l, i)))
+            .map(|i| (l, i))
+    })
+}
+
 struct StripData {
     strip: Strip,
     /// Under the map built.
@@ -2069,6 +2078,21 @@ impl<'a> Strips<'a> {
                     *b = p;
                 }
             }
+        }
+        // every tangent-line bound, wall's or zone's, has its twin across the line: decided here
+        // once, so the walks over the twins (`next`, the body's edges) never meet a missing one
+        if let Some((l, i)) = untwinned(&loops, &twin) {
+            let Kind::Tangent(bi, side) = loops[l].kinds[i] else {
+                unreachable!("untwinned names tangent bounds")
+            };
+            return Err(SheetError::TangentMismatch {
+                feature,
+                joint: cx.sheet.joints[bends[bi].joint].id,
+                side,
+                at: loops[l].bounds[i].start,
+                gap: f64::INFINITY,
+                limit: TOL,
+            });
         }
         // every wall stretch must have found its bend's
         for (&(bi, side), list) in &stretches {
@@ -4660,5 +4684,32 @@ mod pattern_piece_tests {
         };
         let p = Point2::new(1.0, 1.0);
         assert!(developed(&piece, p, p, &Rigid::ID).is_none());
+    }
+}
+
+#[cfg(test)]
+mod twin_tests {
+    use super::*;
+
+    #[test]
+    fn a_tangent_bound_without_its_twin_is_found() {
+        let line = |a: (f64, f64), b: (f64, f64)| Bound {
+            piece: Piece::Line {
+                a: Point2::new(a.0, a.1),
+                b: Point2::new(b.0, b.1),
+            },
+            id: 0,
+            start: Point2::new(a.0, a.1),
+        };
+        let loops = vec![LoopData {
+            strip: 0,
+            comp: 0,
+            bounds: vec![line((0.0, 0.0), (1.0, 0.0)), line((1.0, 0.0), (0.0, 0.0))],
+            kinds: vec![Kind::Side, Kind::Tangent(0, Side::A)],
+        }];
+        let mut twin = HashMap::new();
+        assert_eq!(untwinned(&loops, &twin), Some((0, 1)));
+        twin.insert((0, 1), (1, 0));
+        assert_eq!(untwinned(&loops, &twin), None);
     }
 }
