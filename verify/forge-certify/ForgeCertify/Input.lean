@@ -68,9 +68,9 @@ def rres (j : Json) : Except String RRes := do
 /-! ## The boolean -/
 
 def boolOp : String → Option (List Bool → Bool)
-  | "union" => some fun l => l.getD 0 false || l.getD 1 false
-  | "inter" => some fun l => l.getD 0 false && l.getD 1 false
-  | "diff" => some fun l => l.getD 0 false && !l.getD 1 false
+  | "union" => some (binOp .union)
+  | "inter" => some (binOp .inter)
+  | "diff" => some (binOp .diff)
   | _ => none
 
 def historyOp (ops : Array String) : List Bool → Bool := fun l =>

@@ -10,3 +10,6 @@ import ForgeCertify.Check
 import ForgeCertify.Input
 import ForgeCertify.Bridge
 import ForgeCertify.Sound
+import ForgeCertify.Walls
+import ForgeCertify.Theorem
+import ForgeCertify.Axioms

@@ -200,6 +200,12 @@ def resOn (res : List Face) (P : Plane) : List Face :=
 def resultOK (op : List Bool → Bool) (ins : List Opd) (res : List Face) (P : Plane) (As : List Tri) : Bool :=
   zero1 ((resOn res P).flatMap faceSegs ++ (As.filter (jump op ins P)).flatMap Tri.segs)
 
+/-- A two-operand boolean as the checker's rule. -/
+def binOp : ForgeExact.Op → List Bool → Bool
+  | .union => fun l => l.getD 0 false || l.getD 1 false
+  | .inter => fun l => l.getD 0 false && l.getD 1 false
+  | .diff => fun l => l.getD 0 false && !l.getD 1 false
+
 /-- **The checker.** -/
 def check (op : List Bool → Bool) (ins : List Opd) (res : List Face) : Bool :=
   op (vec ins.length fun _ => false) == false &&
