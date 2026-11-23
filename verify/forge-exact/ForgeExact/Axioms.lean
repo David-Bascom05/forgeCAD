@@ -163,3 +163,4 @@ elab "#standard_axioms " ids:ident* : command => do
   ForgeExact.DecideOnce.local_compat
   ForgeExact.DecideOnce.Sample.localCompat_of
   ForgeExact.DecideOnce.Sample.local_correct_final
+  ForgeExact.DecideOnce.Frontier.stitch_reg
