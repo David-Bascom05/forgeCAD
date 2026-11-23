@@ -25,7 +25,7 @@ set_option maxRecDepth 2048
 axiom alloc.sync.Arc (T : Type _) : Type
 
 /-- [forge_geom::spline::Spline]
-    Source: 'kernel/forge-geom/src/spline.rs', lines 232:0-232:17
+    Source: 'kernel/forge-geom/src/spline.rs', lines 247:0-247:17
     Name pattern: [forge_geom::spline::Spline]
     Visibility: public -/
 @[rust_type "forge_geom::spline::Spline"]
