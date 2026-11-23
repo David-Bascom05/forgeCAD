@@ -404,3 +404,31 @@ No `.fg` language change is planned. `join: round` for shell is named and not ad
    base get them first?
 4. The regen-level `careful` blunting retry (lib.rs:641–659) applies to holes and patterns through
    the boolean. I take it to be the boolean owners' to decide. Please confirm.
+
+## 9. Status
+
+Milestone 1. In `verify/forge-exact/ForgeExact/Ops/`, checked by `Ops/Axioms.lean`, which the
+default `lake build` includes, so `.github/workflows/forge-exact.yml` runs it. Standard axioms only;
+no `sorry`.
+
+- `Pattern.lean`:
+  - P1: `reg_img`, `solid_img`.
+  - P2: `reg_diff_reg` (no hypotheses) and `reg_union_reg` (for `Full` sets).
+  - `steps_eq`: a history of solid tools applied one at a time is the regularised pointwise
+    formula, i.e. the one n-ary boolean.
+  - `cuts_perm` and `adds_perm` (any order); `pattern_cut` and `pattern_add` (the spec).
+  - P3: `bigUnion_dedup`.
+- `Hole.lean`:
+  - H4: `no_target_iff`.
+  - The frustum meridian form; `wall_mem_iff`.
+  - H1: `thru_finite` and `thru_enclosed`.
+  - H3: `profile_wf` (the kernel's builder, under its size checks).
+- `Chamfer.lean`:
+  - `contact_dist`, which takes the distance `d` to the level `δ`.
+  - C1: `spring_level` and `spring_dist` (`(1 − c²) d² = r² (1 − c)²`).
+  - C2: `fill_sub_chamfer`.
+- `Draft.lean`:
+  - D1: `on_neutral_line`.
+  - D2: `drafted_angle` (`sin² φ = s²/(c² + s²)`).
+  - D3: `h_sq` and `h_zero_iff` (AlongPull and NoNeutralLine are one condition).
+  - `beta_ne_zero`.
