@@ -1,3 +1,4 @@
+import ForgeBoolCore.Specs
 import ForgeBoolCore.Refine
 import ForgeBoolCore.RefineUF
 import ForgeBoolCore.HeadBridge
@@ -37,6 +38,11 @@ import ForgeBoolCore.RefineUnify
 #print axioms forge_bool_core.cmp_cov_spec
 #print axioms forge_bool_core.index_find_spec
 #print axioms forge_bool_core.sort_by_cov_spec
+#print axioms forge_bool_core.h_sort_hashed_spec
+#print axioms forge_bool_core.hash_cov_spec
+#print axioms forge_bool_core.same_spec
+#print axioms forge_bool_core.hash_table_spec
+#print axioms forge_bool_core.find_h_spec
 #print axioms forge_bool_core.index_new_spec
 #print axioms forge_bool_core.cov_spec
 #print axioms forge_bool_core.cells_find_spec

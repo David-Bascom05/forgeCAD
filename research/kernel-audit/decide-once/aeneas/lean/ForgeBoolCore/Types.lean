@@ -21,10 +21,11 @@ set_option maxRecDepth 2048
 namespace forge_bool_core
 
 /-- [forge_bool_core::index::Index]
-    Source: 'src/index.rs', lines 8:0-10:1
+    Source: 'src/index.rs', lines 9:0-12:1
     Visibility: public -/
 structure index.Index where
   order : alloc.vec.Vec Std.U32
+  hs : alloc.vec.Vec (Std.U64 × Std.U32)
 
 /-- [forge_bool_core::Sgn]
     Source: 'src/lib.rs', lines 31:0-35:1

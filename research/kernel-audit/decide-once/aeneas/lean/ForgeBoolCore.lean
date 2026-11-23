@@ -8,6 +8,8 @@ import ForgeBoolCore.RefineCells
 import ForgeBoolCore.RefineIndex
 import ForgeBoolCore.SortModel
 import ForgeBoolCore.RefineSort
+import ForgeBoolCore.RefineHashSort
+import ForgeBoolCore.RefineHash
 import ForgeBoolCore.RefineExt
 import ForgeBoolCore.DedupModel
 import ForgeBoolCore.RefineSplit

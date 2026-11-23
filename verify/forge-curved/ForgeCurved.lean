@@ -32,3 +32,9 @@ import ForgeCurved.QOffY
 import ForgeCurved.QOffX
 import ForgeCurved.QFacetSampled
 import ForgeCurved.QLift
+import ForgeCurved.Bridge1
+import ForgeCurved.TangentRefusal
+import ForgeCurved.CoaxialContact
+import ForgeCurved.Bridge1Core
+import ForgeCurved.Bridge2
+import ForgeCurved.SpherePlane

@@ -246,11 +246,12 @@ theorem edge_iff {keep : Nat → Bool} (hs : SideLocal G keep) {wf : List Nat} {
 
 /-! ## Vertices -/
 
-/-- A sector: its facet and its two bounding edges. -/
-abbrev Sec := Nat × Nat × Nat
+/-- A sector: its facet and its bounding edges (none, at an isolated tangent point; as the core's
+`Sector`). -/
+abbrev Sec := Nat × List Nat
 
 /-- The edges bounding a sector. -/
-def Sec.bounds (s : Sec) (a : Nat) : Prop := a = s.2.1 ∨ a = s.2.2
+def Sec.bounds (s : Sec) (a : Nat) : Prop := a ∈ s.2
 
 /-- **F1–F4 at a vertex `v`**, for its sectors `ss`. -/
 structure VertLocal (G : FaceGeo P) (ss : List Sec) (v : P) where
@@ -261,7 +262,7 @@ structure VertLocal (G : FaceGeo P) (ss : List Sec) (v : P) where
   v_facet : v ∉ FacetPts G
   v_edge : v ∉ EdgePts G
   /-- F2: a facet point near `v` is on a sector -/
-  cov : ∀ y ∈ W₀, y ∈ FacetPts G → slab y < ss.length ∧ y ∈ G.facet (ss.getD (slab y) (0, 0, 0)).1
+  cov : ∀ y ∈ W₀, y ∈ FacetPts G → slab y < ss.length ∧ y ∈ G.facet (ss.getD (slab y) (0, [])).1
   /-- F3: sectors are separated, and facet points are off the edges -/
   loc : ∀ y ∈ W₀ ∩ FacetPts G, ∃ N ∈ 𝓝 y,
     (∀ z ∈ N ∩ (W₀ ∩ FacetPts G), slab z = slab y) ∧ ∀ z ∈ N, z ∉ EdgePts G
@@ -270,46 +271,46 @@ structure VertLocal (G : FaceGeo P) (ss : List Sec) (v : P) where
   ecov : ∀ y ∈ W₀, y ∈ EdgePts G → y ∈ G.edge (elb y)
   eloc : ∀ y ∈ W₀ ∩ EdgePts G, ∃ N ∈ 𝓝 y,
     (∀ z ∈ N ∩ (W₀ ∩ EdgePts G), elb z = elb y) ∧
-    ∀ z ∈ N ∩ (W₀ ∩ FacetPts G), Sec.bounds (ss.getD (slab z) (0, 0, 0)) (elb y)
+    ∀ z ∈ N ∩ (W₀ ∩ FacetPts G), Sec.bounds (ss.getD (slab z) (0, [])) (elb y)
   /-- F1: each sector reaches `v` -/
   near : ∀ i < ss.length,
-    v ∈ closure {y | y ∈ W₀ ∧ y ∈ G.facet (ss.getD i (0, 0, 0)).1 ∧ slab y = i}
+    v ∈ closure {y | y ∈ W₀ ∧ y ∈ G.facet (ss.getD i (0, [])).1 ∧ slab y = i}
   /-- F4: each sector is one piece in arbitrarily small neighbourhoods -/
   conn : ∀ i < ss.length, ∀ U ∈ 𝓝 v, ∃ U' ∈ 𝓝 v, U' ⊆ U ∧
-    IsPreconnected ({y | y ∈ W₀ ∧ y ∈ G.facet (ss.getD i (0, 0, 0)).1 ∧ slab y = i} ∩ U')
+    IsPreconnected ({y | y ∈ W₀ ∧ y ∈ G.facet (ss.getD i (0, [])).1 ∧ slab y = i} ∩ U')
   /-- F1 for edges: a sector's bounding edges reach `v` and lie in the sector's closure near it -/
-  adj : ∀ i < ss.length, ∀ a, Sec.bounds (ss.getD i (0, 0, 0)) a →
+  adj : ∀ i < ss.length, ∀ a, Sec.bounds (ss.getD i (0, [])) a →
     v ∈ closure (G.edge a) ∧
-      G.edge a ∩ W₀ ⊆ closure {y | y ∈ W₀ ∧ y ∈ G.facet (ss.getD i (0, 0, 0)).1 ∧ slab y = i}
+      G.edge a ∩ W₀ ⊆ closure {y | y ∈ W₀ ∧ y ∈ G.facet (ss.getD i (0, [])).1 ∧ slab y = i}
 
 def VertLocal.piece {ss : List Sec} {v : P} (h : VertLocal G ss v) (i : Nat) : Set P :=
-  {y | y ∈ h.W₀ ∧ y ∈ G.facet (ss.getD i (0, 0, 0)).1 ∧ h.slab y = i}
+  {y | y ∈ h.W₀ ∧ y ∈ G.facet (ss.getD i (0, [])).1 ∧ h.slab y = i}
 
 /-- Two boundary sectors sharing a bounding edge: the core's `fanRel`, on the result. -/
 def FanRel (G : FaceGeo P) (keep : Nat → Bool) (ss : List Sec) (i j : Nat) : Prop :=
-  i < ss.length ∧ j < ss.length ∧ Bd G keep (ss.getD i (0, 0, 0)).1 ∧
-    Bd G keep (ss.getD j (0, 0, 0)).1 ∧
-    ∃ a, Sec.bounds (ss.getD i (0, 0, 0)) a ∧ Sec.bounds (ss.getD j (0, 0, 0)) a
+  i < ss.length ∧ j < ss.length ∧ Bd G keep (ss.getD i (0, [])).1 ∧
+    Bd G keep (ss.getD j (0, [])).1 ∧
+    ∃ a, Sec.bounds (ss.getD i (0, [])) a ∧ Sec.bounds (ss.getD j (0, [])) a
 
 /-- The core's bad vertex, over sectors: two boundary sectors in different fan classes. -/
 def BadVertS (G : FaceGeo P) (keep : Nat → Bool) (ss : List Sec) : Prop :=
-  ∃ i j, i < ss.length ∧ j < ss.length ∧ Bd G keep (ss.getD i (0, 0, 0)).1 ∧
-    Bd G keep (ss.getD j (0, 0, 0)).1 ∧ ¬Relation.ReflTransGen (FanRel G keep ss) i j
+  ∃ i j, i < ss.length ∧ j < ss.length ∧ Bd G keep (ss.getD i (0, [])).1 ∧
+    Bd G keep (ss.getD j (0, [])).1 ∧ ¬Relation.ReflTransGen (FanRel G keep ss) i j
 
 theorem vpiece_sheet {keep : Nat → Bool} (hs : SideLocal G keep) {ss : List Sec} {v : P}
-    (h : VertLocal G ss v) {i : Nat} (hb : Bd G keep (ss.getD i (0, 0, 0)).1) :
+    (h : VertLocal G ss v) {i : Nat} (hb : Bd G keep (ss.getD i (0, [])).1) :
     h.piece i ⊆ fanS G (Res G keep) v ∩ h.W₀ := fun y hy => by
   refine ⟨⟨fun e => h.v_facet (e ▸ Set.mem_iUnion.mpr ⟨_, hy.2.1⟩), Or.inl
     ⟨frontier_of_bd hs hb hy.2.1, Set.mem_iUnion.mpr ⟨_, hy.2.1⟩⟩⟩, hy.1⟩
 
 theorem vpiece_sheet' {keep : Nat → Bool} (hs : SideLocal G keep) {ss : List Sec} {v : P}
-    (h : VertLocal G ss v) {i : Nat} (hb : Bd G keep (ss.getD i (0, 0, 0)).1) :
+    (h : VertLocal G ss v) {i : Nat} (hb : Bd G keep (ss.getD i (0, [])).1) :
     h.piece i ⊆ sheet G (Res G keep) := fun _ hy =>
   ⟨frontier_of_bd hs hb hy.2.1, Set.mem_iUnion.mpr ⟨_, hy.2.1⟩⟩
 
 theorem fan_bd {keep : Nat → Bool} {ss : List Sec} {i j : Nat}
-    (hr : Relation.ReflTransGen (FanRel G keep ss) i j) (hi : Bd G keep (ss.getD i (0, 0, 0)).1) :
-    Bd G keep (ss.getD j (0, 0, 0)).1 := by
+    (hr : Relation.ReflTransGen (FanRel G keep ss) i j) (hi : Bd G keep (ss.getD i (0, [])).1) :
+    Bd G keep (ss.getD j (0, [])).1 := by
   induction hr with
   | refl => exact hi
   | tail _ hr _ => exact hr.2.2.2.1
@@ -326,7 +327,7 @@ theorem vert_iff {keep : Nat → Bool} (hs : SideLocal G keep) {ss : List Sec} {
   constructor
   · rintro ⟨i, j, hi, hj, bi, bj, hn⟩
     refine ⟨h.W₀, h.hW₀, fun U hU => ?_⟩
-    have pick : ∀ l, l < ss.length → Bd G keep (ss.getD l (0, 0, 0)).1 →
+    have pick : ∀ l, l < ss.length → Bd G keep (ss.getD l (0, [])).1 →
         ∃ y ∈ sheet G (Res G keep) ∩ U, y ∈ h.piece l := by
       intro l hl bl
       obtain ⟨y, hyU, hy⟩ := mem_closure_iff_nhds.mp (h.near l hl) U hU
@@ -339,7 +340,7 @@ theorem vert_iff {keep : Nat → Bool} (hs : SideLocal G keep) {ss : List Sec} {
     -- membership in `i`'s fan class, read off a point's sector or edge, is locally constant
     let fz : P → Prop := fun u => (u ∈ FacetPts G ∧ Relation.ReflTransGen (FanRel G keep ss) i (h.slab u)) ∨
       (u ∉ FacetPts G ∧ ∃ k, Relation.ReflTransGen (FanRel G keep ss) i k ∧
-        Sec.bounds (ss.getD k (0, 0, 0)) (h.elb u))
+        Sec.bounds (ss.getD k (0, [])) (h.elb u))
     have hloc : ∀ u ∈ fanS G (Res G keep) v ∩ h.W₀, ∃ N ∈ 𝓝 u,
         ∀ w ∈ N ∩ (fanS G (Res G keep) v ∩ h.W₀), fz w = fz u := by
       intro u ⟨hu, huW⟩
@@ -399,7 +400,7 @@ theorem vert_iff {keep : Nat → Bool} (hs : SideLocal G keep) {ss : List Sec} {
     set U₀ := ⋂ i ∈ {i | i ∈ List.range ss.length}, g i
     obtain ⟨y, ⟨sy, uy⟩, z, ⟨sz, uz⟩, hn⟩ := H (U₀ ∩ V) (Filter.inter_mem hU₀ hV)
     have info : ∀ {y}, y ∈ sheet G (Res G keep) → y ∈ U₀ ∩ V →
-        h.slab y < ss.length ∧ Bd G keep (ss.getD (h.slab y) (0, 0, 0)).1 ∧ y ∈ h.piece (h.slab y) := by
+        h.slab y < ss.length ∧ Bd G keep (ss.getD (h.slab y) (0, [])).1 ∧ y ∈ h.piece (h.slab y) := by
       intro y hs' hu
       have hyW : y ∈ h.W₀ := (interior_subset hu.2).1
       obtain ⟨hl, hf⟩ := h.cov y hyW hs'.2
@@ -410,7 +411,7 @@ theorem vert_iff {keep : Nat → Bool} (hs : SideLocal G keep) {ss : List Sec} {
     have gU : ∀ k, k < ss.length → U₀ ⊆ g k := fun k hk w hw =>
       Set.mem_iInter₂.mp hw _ (List.mem_range.mpr hk)
     have gV : ∀ k, k < ss.length → g k ⊆ V := fun k hk => (hg k (List.mem_range.mpr hk)).1.1
-    have pieceS : ∀ k, k < ss.length → Bd G keep (ss.getD k (0, 0, 0)).1 →
+    have pieceS : ∀ k, k < ss.length → Bd G keep (ss.getD k (0, [])).1 →
         h.piece k ∩ g k ⊆ fanS G (Res G keep) v ∩ W₁ := fun k hk hb w hw =>
       ⟨(vpiece_sheet hs h hb hw.1).1, (interior_subset (gV k hk hw.2)).2⟩
     have claim : ∀ k, Relation.ReflTransGen (FanRel G keep ss) (h.slab y) k →
