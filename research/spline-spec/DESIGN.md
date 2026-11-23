@@ -1,6 +1,6 @@
 # The splines of .fg: one specification, in Lean, that the kernel matches
 
-Design note, before building. Branch `claude/repo-review-mbdrlj-spline-spec`, from `claude/repo-review-mbdrlj` (736149e).
+Design note, before building. Branch `claude/repo-review-mbdrlj-spline-spec`, from `claude/repo-review-mbdrlj` at 3dcdfb4.
 
 ## What the Rust does today (read 2026-11-23)
 
