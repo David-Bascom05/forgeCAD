@@ -226,13 +226,15 @@ fn near_tolerance_45_chained_walls_are_one() {
 }
 
 /// boxes meets/overlaps/overlaps subtract: B touches A's x = 10 face from outside, so A is left
-/// as it was (V8 E12 F6). The kernel's body, valid and of the right volume, keeps the contact
-/// rectangle imprinted as a seventh face (V10 E15 F7). 1444 of the 6591 box patterns, and the
-/// near_tolerance unmerged cases, are this: one surface left as several faces. Site:
-/// `general` (forge-bool boolean.rs:557): no pass dissolves an edge between two faces of one
-/// carrier after `apply`.
+/// as it was (V8 E12 F6). The kernel's body kept the contact rectangle imprinted as a seventh
+/// face (V10 E15 F7): 1444 of the 6591 box patterns, and the near_tolerance unmerged cases, were
+/// this. Fixed: `forge_bool::boolean` hands its result out unified, and unify's same-surface test
+/// is the boolean's own (`ssi::coincident`).
 #[test]
-#[ignore = "exact reference (snap): a touching boolean leaves its contact imprinted as an extra face"]
+#[cfg_attr(
+    not(feature = "reference"),
+    ignore = "asks the Lean reference: lake build in verify/forge-exact, then cargo test -p forge-exact-fuzz --features reference"
+)]
 fn touching_subtract_leaves_no_imprint() {
     pair_agrees_snap(
         [[0.0, 10.0], [0.0, 20.0], [0.0, 20.0]],

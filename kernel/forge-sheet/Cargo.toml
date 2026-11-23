@@ -17,6 +17,8 @@ forge-dwg = { path = "../forge-dwg" }
 [dev-dependencies]
 forge-bool = { path = "../forge-bool" }
 forge-mesh = { path = "../forge-mesh" }
+# the refold reference, for the tests (it lives in verify/, outside the kernel)
+forge-refold = { path = "../../verify/forge-refold" }
 
 [lints]
 workspace = true

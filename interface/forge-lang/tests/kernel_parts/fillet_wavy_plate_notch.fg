@@ -1,0 +1,19 @@
+# A plate between two wavy splines, notched by a triangular cut through it. A fillet of 5 between the
+# upper spline wall and the notch's faces stops on Overflow; at 2 it builds. The plate is thinner
+# than 10 in places. Round numbers restating a CADFS part (00539691) with its fit splines written
+# exactly, which Onshape rounds at 5. The fillet spec is to judge it.
+sketch wave(on: xy) {
+  s0 = spline([(85, 0), (48, 15), (36, 6), (17, 8), (9, 11), (-22, 11.5), (-57, 7), (-75, 0)], start_slope: (-1.36, 0.8), end_slope: (-0.74, -0.35))
+  l1 = line((-75, 0), (-62, 0))
+  s2 = spline([(-62, 0), (-11, 4.6), (25, -9.2), (40, 0), (49, 6.8), (57, 8.1), (65, 4.6)], start_slope: (1.44, 0.37), end_slope: (0.53, -0.3))
+  l3 = line((65, 4.6), (81.5, -3.8))
+  l4 = line((81.5, -3.8), (85, 0))
+}
+plate = extrude(wave, 25)
+sketch wedge(on: xz) {
+  l0 = line((-78, 5), (48, 7))
+  l1 = line((48, 7), (39, -36))
+  l2 = line((39, -36), (-78, 5))
+}
+notch = cut(wedge, sym(110))
+edge = fillet(edges(between: (plate.side(wave.s0), notch.faces)), 5)

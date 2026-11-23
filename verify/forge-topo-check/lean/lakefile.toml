@@ -1,0 +1,17 @@
+name = "topocheck"
+version = "0.1.0"
+defaultTargets = ["TopoCheck", "topo-check"]
+
+[leanOptions]
+relaxedAutoImplicit = false
+autoImplicit = false
+
+# The model of check's combinatorial part (Model), what a valid closed oriented manifold B-rep is
+# (Spec), and the proof that the model's acceptance implies it (Proof): core Lean only.
+[[lean_lib]]
+name = "TopoCheck"
+
+# The model as a program, for the differential test against forge_topo::check (Main.lean gives the format).
+[[lean_exe]]
+name = "topo-check"
+root = "Main"

@@ -414,6 +414,40 @@ impl Gui {
         ))
     }
 
+    /// The face a click on an edge or a corner meant, of those `ok` takes (a sketch: the planar
+    /// ones): of the faces meeting there, the one turned most to the eye.
+    pub(crate) fn face_at(
+        &self,
+        pl: u32,
+        e: Entity,
+        at: Option<[f32; 3]>,
+        ok: impl Fn(u32) -> bool,
+    ) -> Option<Entity> {
+        let d = self.inspector.data.as_ref()?;
+        let &(mesh, frame) = d.placed.get(pl as usize)?;
+        let b = d.bodies.get(mesh)?;
+        let near = at.map(|p| frame.point_to_local(Point3::new(p[0] as f64, p[1] as f64, p[2] as f64)));
+        let near = near.unwrap_or_else(|| select::centre(b, ent(e)));
+        let eye = self
+            .view
+            .as_ref()
+            .map(|v| v.nav.camera.eye())
+            .map(|q| frame.point_to_local(Point3::new(q[0] as f64, q[1] as f64, q[2] as f64)));
+        let mut faces: Vec<FaceId> = match ent(e) {
+            Ent::Face(_) => return Some(e),
+            Ent::Edge(x) => select::faces_of_edge(b, x),
+            Ent::Vert(v) => b
+                .edge_ids()
+                .filter(|&x| [b.edge(x).start, b.edge(x).end].contains(&v))
+                .flat_map(|x| select::faces_of_edge(b, x))
+                .collect(),
+        };
+        faces.sort_by_key(|f| f.0);
+        faces.dedup();
+        faces.retain(|f| ok(f.0));
+        Some(Entity::Face(self.facing(b, &faces, near, eye)?.0))
+    }
+
     /// Of faces meeting at a point, the one turned most to the eye there.
     fn facing(&self, b: &Body, faces: &[FaceId], near: Point3, eye: Option<Point3>) -> Option<FaceId> {
         let to_eye = eye.map_or(Vec3::Z, |e| e - near);

@@ -64,7 +64,7 @@ fn par_map<T: Send>(n: usize, threads: usize, per: usize, f: impl Fn(usize) -> T
             got.push((i, f(i)));
         }
     };
-    let parts: Vec<Vec<(usize, T)>> = std::thread::scope(|s| {
+    let parts: Vec<Vec<(usize, T)>> = forge_math::par::scope(|s| {
         let start = forge_math::clock::Instant::now();
         let mut mine = Vec::new();
         let mut helpers = Vec::new();
@@ -603,6 +603,13 @@ pub fn nary_with(
     threads: usize,
     root: Name,
 ) -> R<Body> {
+    // flat faces: the whole history as one pointwise rule, one call of the decide-once core
+    #[cfg(feature = "decide_once")]
+    if let Some(r) = crate::decide_once::history(tools, ops)? {
+        #[cfg(feature = "certify")]
+        crate::certify::skipped("the decide-once path");
+        return Ok(r);
+    }
     crate::boolean::UNDECIDED.with(|u| u.set(None));
     #[cfg(feature = "decisions")]
     let scope = crate::decisions::scope("n-ary", String::from("plain"));

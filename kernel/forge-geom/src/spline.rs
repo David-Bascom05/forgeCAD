@@ -8,6 +8,7 @@ use forge_math::{Box3, Frame, Interval, Point2, Point3, Vec2, Vec3, dmath, tol};
 use std::sync::Arc;
 
 mod extruded;
+mod fold;
 pub mod meet;
 mod spun;
 pub mod swept;
@@ -475,6 +476,11 @@ impl Spline {
         (p, knots, pts, any.then_some(weights))
     }
     /// Degree, breaks, and each piece's points in turn as x y z w (each its own, not times w).
+    /// The degree and every piece's control points as stored: homogeneous (x w, y w, z w, w),
+    /// degree + 1 per piece, unrounded.
+    pub fn homogeneous(&self) -> (usize, &[H]) {
+        (self.degree, &self.pts)
+    }
     pub fn bezier_data(&self) -> (usize, Vec<f64>, Vec<H>) {
         let pts = self
             .pts

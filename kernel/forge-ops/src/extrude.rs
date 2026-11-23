@@ -488,10 +488,11 @@ mod tests {
         (broken.coedges[c0].edge, broken.coedges[c0].forward) =
             (broken.coedges[c1].edge, broken.coedges[c1].forward);
         (broken.coedges[c1].edge, broken.coedges[c1].forward) = e0;
+        // the coedges now name each other's edges, which their edges do not list as uses
         assert!(
             check(&broken)
                 .iter()
-                .any(|p| matches!(p, Problem::LoopBroken { .. }))
+                .any(|p| matches!(p, Problem::LoopBroken { .. } | Problem::BackLink { .. }))
         );
 
         let mut moved = good.clone();

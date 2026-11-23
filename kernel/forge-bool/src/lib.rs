@@ -13,6 +13,8 @@ macro_rules! decided {
 
 pub mod boolean;
 pub mod classify;
+#[cfg(feature = "decide_once")]
+pub mod decide_once;
 #[cfg(feature = "decisions")]
 pub mod decisions;
 pub mod imprint;

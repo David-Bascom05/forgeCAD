@@ -1,4 +1,4 @@
-use forge_bool::{Op, boolean, unify};
+use forge_bool::{Op, boolean, boolean_into, unify};
 use forge_geom::Surface;
 use forge_math::{Frame, Point2, Point3, Vec2};
 use forge_mesh::{Quality, tessellate};
@@ -39,8 +39,13 @@ fn blocks_side_by_side_are_one_box() {
         block(0.0, 0.0, 10.0, 6.0, 4.0, 1),
         block(10.0, 0.0, 5.0, 6.0, 4.0, 2),
     );
-    let joined = boolean(&a, &b, Op::Union, 3).unwrap();
+    // (in place: `boolean` hands the result out unified already)
+    let mut joined = a.clone();
+    boolean_into(&mut joined, &b, Op::Union, 3).unwrap();
+    // (the decide-once path writes the union unified: one box at once)
+    #[cfg(not(feature = "decide_once"))]
     assert!(joined.face_ids().count() > 6);
+    assert_eq!(counts(&boolean(&a, &b, Op::Union, 3).unwrap()), (8, 12, 6));
     let pieces: Vec<_> = joined.face_ids().map(|f| joined.face(f).name).collect();
     let u = unified(joined);
     assert_eq!(counts(&u), (8, 12, 6));
