@@ -367,4 +367,181 @@ theorem loop0_chain_spec (fr dst : Slice U32) (m : Usize) (hm : m.val = fr.val.l
       rw [← this]; exact hst
   · exact ⟨he, hs⟩
 
+/-! ## The second loop: the verdict on degrees -/
+
+/-- An `Unchained` verdict at vertex `u`, as the model has it. -/
+def unchainedAt (NO NI FO FI : Nat → Nat) (u : Nat) (b : ChainError) : Prop :=
+  ∃ a pc l r, b = .Unchained a pc l r ∧ a.val = u ∧ l.val = NO u ∧ r.val = NI u ∧
+    pc.val = (if NO u > 0 then FO u else FI u)
+
+/-- The pinches below `v`: every vertex left (and so reached) more than once. -/
+def pinchList (NO FI SI : Nat → Nat) (v : Nat) : List (Nat × Nat × Nat) :=
+  ((List.range v).filter fun u => 1 < NO u).map fun u => (u, FI u, SI u)
+
+def tvals (p : alloc.vec.Vec (U32 × U32 × U32)) : List (Nat × Nat × Nat) :=
+  p.val.map fun x => (x.1.val, x.2.1.val, x.2.2.val)
+
+/-- What the second loop decides: the first vertex with unequal degrees is `Unchained`;
+with none, the pinches are every vertex of degree past one, in order. -/
+def Verdict1 (nv : Nat) (NO NI FO FI SI : Nat → Nat) (bad : Option ChainError)
+    (pinches : alloc.vec.Vec (U32 × U32 × U32)) : Prop :=
+  (bad = none ∧ (∀ u < nv, NO u = NI u) ∧ tvals pinches = pinchList NO FI SI nv) ∨
+  (∃ u < nv, (∀ u' < u, NO u' = NI u') ∧ NO u ≠ NI u ∧ ∃ b, bad = some b ∧ unchainedAt NO NI FO FI u b)
+
+theorem pinch_succ (NO FI SI : Nat → Nat) (v : Nat) :
+    pinchList NO FI SI (v + 1) = pinchList NO FI SI v ++ (if 1 < NO v then [(v, FI v, SI v)] else []) := by
+  simp only [pinchList, List.range_succ, List.filter_append, List.map_append]
+  split <;> simp_all
+
+theorem u32_of_lt' (v : Usize) (b : Nat) (h : v.val < b) (hb : b ≤ U32.max + 1) (r : U32)
+    (hr : UScalar.cast .U32 v = r) : r.val = v.val := by
+  rw [← hr]; simp only [UScalar.cast_val_eq]; apply Nat.mod_eq_of_lt
+  have : U32.max + 1 = 2 ^ UScalarTy.U32.numBits := by simp [U32.max_eq, UScalarTy.U32_numBits_eq]
+  omega
+
+theorem unchained_block (nv : Nat) (NO NI FO FI : Nat → Nat) (fo fi : alloc.vec.Vec U32)
+    (hfo : Holds fo nv FO) (hfi : Holds fi nv FI) (v : Usize) (hv : v.val < nv)
+    (hnv : nv ≤ U32.max) (a c : U32) (ha : a.val = NO v.val) (hc : c.val = NI v.val)
+    (pin : alloc.vec.Vec (U32 × U32 × U32)) :
+    (do
+      let piece ← if a > 0#u32 then fo.index_usize v else fi.index_usize v
+      let i2 ← lift (UScalar.cast UScalarTy.U32 v)
+      ok (some (ChainError.Unchained i2 piece a c), pin)) ⦃ r => r.2 = pin ∧
+        ∃ b, r.1 = some b ∧ unchainedAt NO NI FO FI v.val b ⦄ := by
+  have hfl : v.val < fo.val.length := by rw [holds_len hfo]; exact hv
+  have hil : v.val < fi.val.length := by rw [holds_len hfi]; exact hv
+  split
+  · rename_i hpos
+    step with alloc.vec.Vec.index_usize_spec fo v (by simpa using hfl) as ⟨pc, hpc⟩
+    step as ⟨i2, hi2⟩
+    refine ⟨_, rfl, i2, pc, a, c, rfl, u32_of_lt' v nv hv (by omega) i2 hi2.symm, ha, hc, ?_⟩
+    have : NO v.val > 0 := by rw [← ha]; scalar_tac
+    rw [if_pos this, hpc]; exact holds_get hfo hv hfl
+  · rename_i hpos
+    step with alloc.vec.Vec.index_usize_spec fi v (by simpa using hil) as ⟨pc, hpc⟩
+    step as ⟨i2, hi2⟩
+    refine ⟨_, rfl, i2, pc, a, c, rfl, u32_of_lt' v nv hv (by omega) i2 hi2.symm, ha, hc, ?_⟩
+    have : ¬ NO v.val > 0 := by rw [← ha]; scalar_tac
+    rw [if_neg this, hpc]; exact holds_get hfi hv hil
+
+theorem pinch_block (nv : Nat) (NO FI SI : Nat → Nat) (fi si : alloc.vec.Vec U32)
+    (hfi : Holds fi nv FI) (hsi : Holds si nv SI) (v : Usize) (hv : v.val < nv)
+    (hnv : nv ≤ U32.max) (a : U32) (ha : a.val = NO v.val) (bad : Option ChainError)
+    (pin : alloc.vec.Vec (U32 × U32 × U32)) (hpl : pin.val.length < nv) :
+    (do
+      let v1 ←
+        if a > 1#u32 then do
+            let i2 ← lift (UScalar.cast UScalarTy.U32 v)
+            let i3 ← fi.index_usize v
+            let i4 ← si.index_usize v
+            pin.push (i2, i3, i4)
+          else ok pin
+      ok (bad, v1)) ⦃ r => r.1 = bad ∧
+        tvals r.2 = tvals pin ++ (if 1 < NO v.val then [(v.val, FI v.val, SI v.val)] else []) ⦄ := by
+  have hil : v.val < fi.val.length := by rw [holds_len hfi]; exact hv
+  have hsl : v.val < si.val.length := by rw [holds_len hsi]; exact hv
+  split
+  · rename_i hgt
+    step as ⟨i2, hi2⟩
+    step with alloc.vec.Vec.index_usize_spec fi v (by simpa using hil) as ⟨i3, hi3⟩
+    step with alloc.vec.Vec.index_usize_spec si v (by simpa using hsl) as ⟨i4, hi4⟩
+    step with alloc.vec.Vec.push_spec pin (i2, i3, i4) (by
+      have : nv ≤ Usize.max := by scalar_tac
+      omega) as ⟨p2, hp2⟩
+    have : 1 < NO v.val := by rw [← ha]; scalar_tac
+    rw [if_pos this]
+    simp only [tvals, hp2, List.map_append, List.map_cons, List.map_nil]
+    rw [u32_of_lt' v nv hv (by omega) i2 hi2.symm, hi3, hi4, holds_get hfi hv hil,
+      holds_get hsi hv hsl]
+  · rename_i hgt
+    simp only [Std.bind_ok, WP.spec_ok]
+    refine ⟨trivial, ?_⟩
+    have : ¬ 1 < NO v.val := by rw [← ha]; scalar_tac
+    rw [if_neg this]; simp
+
+theorem loop1_chain_spec (nv : Usize) (hnv : nv.val ≤ U32.max) (no ni fo fi si : alloc.vec.Vec U32)
+    (NO NI FO FI SI : Nat → Nat) (hno : Holds no nv.val NO) (hni : Holds ni nv.val NI)
+    (hfo : Holds fo nv.val FO) (hfi : Holds fi nv.val FI) (hsi : Holds si nv.val SI)
+    (pinches : alloc.vec.Vec (U32 × U32 × U32)) (hp0 : pinches.val = []) :
+    chain_loop1 nv no ni fo fi si none pinches 0#usize ⦃ r => Verdict1 nv.val NO NI FO FI SI r.1 r.2 ⦄ := by
+  unfold chain_loop1
+  apply loop.spec_decr_nat
+    (fun (q : Option ChainError × alloc.vec.Vec (U32 × U32 × U32) × Usize) =>
+      nv.val + 1 - q.2.2.val - (if q.1.isSome then 1 else 0))
+    (fun q => q.2.2.val ≤ nv.val ∧
+      ((q.1 = none ∧ (∀ u < q.2.2.val, NO u = NI u) ∧ tvals q.2.1 = pinchList NO FI SI q.2.2.val) ∨
+       (∃ u < nv.val, (∀ u' < u, NO u' = NI u') ∧ NO u ≠ NI u ∧ ∃ b, q.1 = some b ∧
+          unchainedAt NO NI FO FI u b)))
+  · rintro ⟨bad, pin, v⟩ ⟨hv, hst⟩
+    unfold chain_loop1.body
+    simp only at hv hst ⊢
+    split
+    · rename_i h
+      have hvl : v.val < nv.val := by scalar_tac
+      split
+      · rename_i hnone
+        have hb : bad = none := by cases bad <;> simp_all [core.option.Option.is_none]
+        rcases hst with ⟨_, heq, hpin⟩ | ⟨u, _, _, _, b, hbs, _⟩
+        swap
+        · rw [hb] at hbs; cases hbs
+        have hl := holds_len hno
+        have hl2 := holds_len hni
+        step as ⟨a, ha⟩
+        step as ⟨c, hc⟩
+        have hav : a.val = NO v.val := by rw [ha]; exact holds_get hno hvl (by omega)
+        have hcv : c.val = NI v.val := by rw [hc]; exact holds_get hni hvl (by omega)
+        have hj1 : ∀ v1 : Usize, v1 = v.wrapping_add 1#usize → v1.val = v.val + 1 :=
+          fun v1 e => by rw [e]; exact usize_inc v nv hvl
+        split
+        · rename_i hne
+          have hne' : NO v.val ≠ NI v.val := by
+            rw [← hav, ← hcv]; intro e; apply (bne_iff_ne.mp hne); exact UScalar.eq_of_val_eq e
+          apply WP.spec_bind (unchained_block nv.val NO NI FO FI fo fi hfo hfi v hvl hnv a c hav hcv pin)
+          rintro ⟨bad1, pin1⟩ ⟨hp, b, hb, hu⟩
+          show WP.spec (do
+            let v1 ← lift (Std.Usize.wrapping_add v 1#usize)
+            ok (ControlFlow.cont (bad1, pin1, v1))) _
+          step as ⟨v1, hv1⟩
+          have hv1v := hj1 v1 hv1
+          refine ⟨by omega, Or.inr ⟨v.val, hvl, heq, hne', b, hb, hu⟩, ?_⟩
+          simp only at hb ⊢; rw [hb, hv1v]; simp [‹bad = none›]; omega
+        · rename_i hne
+          have heqv : NO v.val = NI v.val := by
+            rw [← hav, ← hcv]; simp at hne; rw [hne]
+          have hpl : pin.val.length < nv.val := by
+            have : (tvals pin).length = (pinchList NO FI SI v.val).length := by rw [hpin]
+            have h2 : (pinchList NO FI SI v.val).length ≤ v.val := by
+              simp only [pinchList, List.length_map]
+              have := List.length_filter_le (fun u => 1 < NO u) (List.range v.val)
+              simpa using this
+            simp [tvals] at this; omega
+          apply WP.spec_bind (pinch_block nv.val NO FI SI fi si hfi hsi v hvl hnv a hav bad pin hpl)
+          rintro ⟨bad1, pin1⟩ ⟨hb, hp⟩
+          show WP.spec (do
+            let v1 ← lift (Std.Usize.wrapping_add v 1#usize)
+            ok (ControlFlow.cont (bad1, pin1, v1))) _
+          step as ⟨v1, hv1⟩
+          have hv1v := hj1 v1 hv1
+          simp only at hb hp
+          refine ⟨by omega, Or.inl ⟨by rw [hb, ‹bad = none›], ?_, ?_⟩, ?_⟩
+          · intro u hu
+            rw [hv1v] at hu
+            rcases Nat.lt_succ_iff_lt_or_eq.mp hu with h | h
+            · exact heq u h
+            · rw [h]; exact heqv
+          · rw [hp, hv1v, pinch_succ, hpin]
+          · rw [hb, ‹bad = none›, hv1v]; simp; omega
+      · rename_i hsome
+        simp only [WP.spec_ok]
+        rcases hst with ⟨hb, _, _⟩ | h2
+        · rw [hb] at hsome; simp [core.option.Option.is_none] at hsome
+        · exact Or.inr h2
+    · rename_i h
+      have : v.val = nv.val := by scalar_tac
+      simp only [WP.spec_ok]
+      rcases hst with ⟨hb, heq, hpin⟩ | h2
+      · exact Or.inl ⟨hb, by rw [← this]; exact heq, by rw [← this]; exact hpin⟩
+      · exact Or.inr h2
+  · exact ⟨by simp, Or.inl ⟨rfl, fun u hu => by simp at hu, by simp [tvals, hp0, pinchList]⟩⟩
+
 end forge_sheet_core

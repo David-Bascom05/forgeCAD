@@ -21,3 +21,4 @@ elab "#standard_axioms " ids:ident* : command => do
   forge_sheet_core.loop0_spec forge_sheet_core.loop1_spec forge_sheet_core.classes_spec
   forge_sheet_core.classList_iff forge_sheet_core.inner_spec forge_sheet_core.owner_spec
   forge_sheet_core.fo_block forge_sheet_core.in_block forge_sheet_core.loop0_chain_spec
+  forge_sheet_core.unchained_block forge_sheet_core.pinch_block forge_sheet_core.loop1_chain_spec
