@@ -1,7 +1,7 @@
 # Cavity insert for an injection mould: a block with a filleted pocket for a lid, its walls
 # offset for shrink, the floor moved up after a wall-thickness change, the top face put on the
 # parting plane, a core pin deleted with its faces, a vent, ejector pins, cooling channels
-# across, a pry slot and chamfered edges. Hand port of tools/bench-parts/insert.fc.
+# across, a pry slot and chamfered edges.
 
 shared bl = 120
 shared bw = 80

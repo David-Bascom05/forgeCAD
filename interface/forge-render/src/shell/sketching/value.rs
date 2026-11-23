@@ -83,8 +83,9 @@ impl Ev<'_> {
 
     fn expr(&self, e: &Expr) -> Result<Val, String> {
         Ok(match &e.kind {
+            // an inch literal is its length in mm, as Forge reads it
             ExprKind::Num(v, u) => Val {
-                v: *v,
+                v: if *u == Unit::In { *v * 25.4 } else { *v },
                 angle: *u == Unit::Deg,
             },
             ExprKind::Name(n) if n == "pi" => plain(core::f64::consts::PI),
@@ -202,7 +203,8 @@ mod tests {
         assert_eq!(eval("max(w, 40)", &env), Ok(plain(40.0)));
         assert!(eval("nope + 1", &env).unwrap_err().contains("no param"));
         assert!(eval("me", &env).unwrap_err().contains("reads itself"));
-        assert!(eval("1in", &env).is_err());
+        assert_eq!(eval("1in", &env), Ok(plain(25.4)));
+        assert!(eval("1ft", &env).is_err());
         assert!(eval("w / 0", &env).unwrap_err().contains("finite"));
     }
 }

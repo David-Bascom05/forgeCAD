@@ -242,7 +242,7 @@ pub(super) fn ball(p: &Painter, c: Pos2, r: f32, col: Color32) {
 
 /// A small rounded label: its rect, from its left edge (or its right, `right`).
 pub(super) fn pill(p: &Painter, at: Pos2, right: bool, text: &str, ink: Color32, fill: Color32) -> Rect {
-    let g = p.layout_no_wrap(text.to_string(), medium(10.5), ink);
+    let g = p.layout_no_wrap(text.to_string(), medium(11.0), ink);
     let size = vec2(g.size().x + 14.0, 18.0);
     let min = if right {
         at - vec2(size.x, size.y / 2.0)
@@ -280,7 +280,7 @@ pub(super) fn section(ui: &mut Ui, t: &Theme, text: &str) {
     ui.add_space(10.0);
     let w = ui.available_width();
     let (r, _) = ui.allocate_exact_size(vec2(w, 20.0), Sense::hover());
-    let g = ui.fonts_mut(|f| f.layout_no_wrap(text.to_uppercase(), semi(10.5), t.ink2));
+    let g = ui.fonts_mut(|f| f.layout_no_wrap(text.to_uppercase(), semi(11.0), t.ink2));
     let right = r.left() + g.size().x + 10.0;
     ui.painter()
         .galley(pos2(r.left(), r.center().y - g.size().y / 2.0), g, t.ink2);
@@ -305,7 +305,7 @@ pub(super) fn tab_strip(
     let mut x = row.left();
     let mut clicked = false;
     for (k, name) in names.iter().enumerate() {
-        let g = ui.fonts_mut(|f| f.layout_no_wrap(name.to_string(), medium(12.5), t.ink));
+        let g = ui.fonts_mut(|f| f.layout_no_wrap(name.to_string(), medium(13.0), t.ink));
         let r = Rect::from_min_size(pos2(x, row.top()), vec2(g.size().x + 26.0, row.height()));
         x = r.right() + 2.0;
         let resp = ui.interact(r, ui.scope_id().with((key, k)), Sense::click());
@@ -337,7 +337,7 @@ pub(super) fn tab_strip(
         }
         let ink = if sel { t.ink } else { t.ink2 };
         ui.painter()
-            .text(r.center(), Align2::CENTER_CENTER, *name, medium(12.5), ink);
+            .text(r.center(), Align2::CENTER_CENTER, *name, medium(13.0), ink);
         places.push((format!("{key}:{name}"), r));
         if resp.clicked() {
             *on = k;
@@ -357,9 +357,9 @@ pub(super) fn button_at(
     enabled: bool,
 ) -> Response {
     let words = if primary {
-        egui::RichText::new(text).font(medium(12.5)).color(Color32::WHITE)
+        egui::RichText::new(text).font(medium(13.0)).color(Color32::WHITE)
     } else {
-        egui::RichText::new(text).font(sans(12.5))
+        egui::RichText::new(text).font(sans(13.0))
     };
     let mut b = egui::Button::new(words).min_size(r.size());
     if primary {
@@ -541,7 +541,7 @@ impl Shell {
             pos2(head.left() + 16.0, head.center().y),
             Align2::LEFT_CENTER,
             "Material Browser",
-            semi(15.0),
+            semi(14.0),
             t.ink,
         );
         let x = Rect::from_center_size(pos2(head.right() - 22.0, head.center().y), vec2(22.0, 22.0));
@@ -562,7 +562,7 @@ impl Shell {
         let s = ui.put(
             field,
             egui::TextEdit::singleline(&mut b.search)
-                .font(sans(12.5))
+                .font(sans(13.0))
                 .margin(vec2(8.0, 6.0))
                 .hint_text("Search names and aliases"),
         );
@@ -578,7 +578,7 @@ impl Shell {
             pos2(area.left() + 6.0, area.top() + 8.0),
             Align2::LEFT_CENTER,
             "LIBRARIES",
-            semi(10.5),
+            semi(11.0),
             t.ink2,
         );
         ui.add_space(20.0);
@@ -597,7 +597,7 @@ impl Shell {
                     ui.painter().rect_filled(r, 4.0, t.hover);
                 }
                 let ink = if indent > 0.0 && !on { t.ink2 } else { t.ink };
-                let font = if indent > 0.0 { sans(12.5) } else { medium(12.5) };
+                let font = if indent > 0.0 { sans(13.0) } else { medium(13.0) };
                 let g = ui.fonts_mut(|f| f.layout_no_wrap(text.to_string(), font, ink));
                 let gw = g.size().x;
                 ui.painter().galley(
@@ -610,7 +610,7 @@ impl Shell {
                         pos2(r.left() + 16.0 + indent + gw, r.center().y + 0.5),
                         Align2::LEFT_CENTER,
                         tag,
-                        sans(10.5),
+                        sans(11.0),
                         t.ink2,
                     );
                 }
@@ -718,7 +718,7 @@ impl Shell {
             if r.clicked() {
                 let file = PathBuf::from(path.as_str());
                 b.status = if import {
-                    match std::fs::read_to_string(&file)
+                    match forge_dirs::fs::read_to_string(&file)
                         .map_err(|e| e.to_string())
                         .and_then(|s| {
                             forge_material::parse(&s).map_err(|e| format!("line {}: {}", e.line, e.why))
@@ -839,7 +839,7 @@ impl Shell {
             pos2(hr.left() + 14.0, hr.center().y),
             Align2::LEFT_CENTER,
             what.to_uppercase(),
-            semi(10.5),
+            semi(11.0),
             t.ink2,
         );
         ui.painter()
@@ -1232,7 +1232,7 @@ impl Shell {
             pos2(r.left(), r.top() + 15.0),
             Align2::LEFT_CENTER,
             words,
-            sans(12.5),
+            sans(13.0),
             t.ink2,
         );
         let value = Rect::from_min_max(
@@ -1267,7 +1267,7 @@ impl Shell {
             ui.put(
                 Rect::from_min_size(r.min, vec2(r.width(), 26.0)),
                 egui::TextEdit::singleline(s)
-                    .font(sans(12.5))
+                    .font(sans(13.0))
                     .margin(vec2(8.0, 5.0))
                     .hint_text(hint),
             )
@@ -1342,7 +1342,7 @@ impl Shell {
                     ui,
                     Rect::from_min_size(r.min, vec2(r.width(), 26.0)),
                     &s,
-                    mono(11.5),
+                    mono(12.0),
                     t.ink,
                     "mb-file",
                 )
@@ -1417,7 +1417,7 @@ impl Shell {
                 let resp = ui.put(
                     field,
                     egui::TextEdit::singleline(&mut s)
-                        .font(mono(12.5))
+                        .font(mono(13.0))
                         .margin(vec2(8.0, 5.0))
                         .align(Align2::RIGHT_CENTER)
                         .hint_text("—"),
@@ -1518,7 +1518,7 @@ impl Shell {
             pos2(x, sw.center().y),
             Align2::LEFT_CENTER,
             "Model tint",
-            sans(12.5),
+            sans(13.0),
             t.ink2,
         );
         if editable {
@@ -1535,7 +1535,7 @@ impl Shell {
         }
         for (k, (words, val)) in rows.iter().enumerate() {
             let y = sw.center().y + 34.0 * (k + 1) as f32;
-            p.text(pos2(x, y), Align2::LEFT_CENTER, *words, sans(12.5), t.ink2);
+            p.text(pos2(x, y), Align2::LEFT_CENTER, *words, sans(13.0), t.ink2);
             p.text(pos2(x + 90.0, y), Align2::LEFT_CENTER, val, mono(13.0), t.ink);
         }
         edited
@@ -1550,7 +1550,7 @@ impl Shell {
             edited |= ui
                 .add(
                     egui::TextEdit::multiline(&mut m.source)
-                        .font(sans(12.5))
+                        .font(sans(13.0))
                         .margin(vec2(8.0, 6.0))
                         .desired_width(w)
                         .desired_rows(3)
@@ -1580,7 +1580,7 @@ impl Shell {
                     pos2(r.left(), r.center().y),
                     Align2::LEFT_CENTER,
                     key_words(&k),
-                    sans(12.5),
+                    sans(13.0),
                     t.ink,
                 );
                 let (r, _) = ui.allocate_exact_size(vec2(84.0, 26.0), Sense::hover());
@@ -1658,7 +1658,7 @@ impl Shell {
         if !text.is_empty() {
             ui.scope(|ui| {
                 ui.set_max_width(w);
-                Self::paragraph(ui, &text, sans(12.5), ink);
+                Self::paragraph(ui, &text, sans(13.0), ink);
             });
         }
         if let Some(u) = url {

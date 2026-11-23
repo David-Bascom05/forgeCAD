@@ -22,8 +22,12 @@ forge-font = { path = "../forge-font" }
 decisions = ["forge-bool/decisions"]
 # certified surface-surface tracing (forge-geom's `certified_trace`)
 certified_trace = ["forge-bool/certified_trace"]
+# the decide-once flat-face boolean (forge-bool's `decide_once`): off in every shipped build.
+# `cargo test -p forge-model --test hidden_inputs --features decide_once` reviews its sources too
+decide_once = ["forge-bool/decide_once"]
 
 [dev-dependencies]
+forge-dirs = { path = "../forge-dirs" }
 forge-lang = { path = "../../interface/forge-lang" }
 forge-mesh = { path = "../forge-mesh" }
 

@@ -12,8 +12,8 @@
 //!   benchparts font DIR            the block font the parts' text uses, as DIR/block.ttf
 //!   benchparts check [NAME]        each part's features, faces, validity, closed mesh and times
 //!   benchparts nary FILE.fg        a part file's n-ary regen, ok or its error (for shrinking)
-//! (`run`'s instructions less `resolve`'s are the kernel's regen alone, as the .fc gate counted
-//! one regen of a part whose selectors were resolved beforehand.)
+//! (`run`'s instructions less `resolve`'s are the kernel's regen alone: one regen of a part whose
+//! selectors were resolved beforehand.)
 use forge_math::hash::BitHasher;
 use forge_model::{Feature, Part, Solid};
 
@@ -33,7 +33,7 @@ fn names() -> Vec<String> {
 /// A folder with the block font in it, for the parts' text.
 fn font_dir() -> std::path::PathBuf {
     // (one name for every run, not one by process id: a count must not depend on the id's digits)
-    let dir = std::env::temp_dir().join("forge-benchparts");
+    let dir = forge_dirs::temp_dir().join("forge-benchparts");
     std::fs::create_dir_all(&dir).expect("temp dir");
     std::fs::write(dir.join(forge_lang::bench::FONT), forge_lang::bench::font_bytes()).expect("font");
     dir

@@ -1144,6 +1144,8 @@ mod tests {
 
 #[cfg(test)]
 mod noting_tests {
+    // catches the panic it causes: under WASI a panic aborts (no unwinding), so native only
+    #[cfg(not(target_os = "wasi"))]
     #[test]
     fn a_trace_that_panics_leaves_no_noting_behind() {
         let r = std::panic::catch_unwind(|| super::noting(|| panic!("a trace lost")));

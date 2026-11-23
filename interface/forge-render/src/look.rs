@@ -250,9 +250,8 @@ impl Default for Look {
 }
 
 /// A PNG or JPEG file as RGBA (sRGB) and its size, if it reads.
-#[cfg(not(target_arch = "wasm32"))]
 pub fn read_image(path: &str) -> Option<(u32, u32, Vec<u8>)> {
-    let bytes = std::fs::read(path).ok()?;
+    let bytes = forge_dirs::fs::read(path).ok()?;
     if bytes.starts_with(b"\x89PNG") {
         let mut d = png::Decoder::new(std::io::Cursor::new(&bytes));
         d.set_transformations(

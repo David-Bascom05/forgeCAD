@@ -3,7 +3,7 @@ resolver = "3"
 members = ["kernel/*", "interface/*", "verify/*", "verify/forge-exact/fuzz"]
 # its own workspace, so wgpu never enters a kernel build or this Cargo.lock
 # (verify/krawczyk is a Lean project)
-exclude = ["interface/forge-render", "interface/forge-speech", "verify/forge-exact", "verify/krawczyk"]
+exclude = ["interface/forge-render", "interface/forge-speech", "verify/forge-exact", "verify/ieee754", "verify/aeneas", "verify/forge-certify", "verify/forge-mesh-files", "verify/sheet", "verify/krawczyk"]
 
 [workspace.package]
 version = "0.1.0"

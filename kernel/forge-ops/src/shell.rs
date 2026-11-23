@@ -17,6 +17,12 @@ pub enum ShellError {
     Collapses {
         face: Name,
     },
+    /// The offset of this face folds over itself at `at` (the wall is as thick as the face's
+    /// radius of curvature there, or thicker), or whether it does there cannot be decided.
+    Folds {
+        face: Name,
+        at: Box<forge_math::Point3>,
+    },
     /// The walls run through each other here: too thick for the part.
     SelfIntersecting {
         a: Name,
@@ -197,6 +203,10 @@ fn offset_all(body: &Body, thickness: f64, outward: bool, open: &[Name]) -> Resu
         .collect();
     let shift = if outward { thickness } else { -thickness };
     let along = |f: &forge_topo::Face| if f.same_sense { shift } else { -shift };
+    // a face whose surface decides where its offset folds is refused there
+    for f in base.face_ids().filter(|f| !opened[f.index()]) {
+        folds(&base, f, along(base.face(f)))?;
+    }
     // faces whose offsets vanish go, and their neighbours meet instead
     let gone: Vec<bool> = (0..base.faces.len() as u32)
         .map(FaceId)
@@ -884,11 +894,40 @@ pub fn offset(s: &Surface, d: f64) -> Option<Surface> {
 }
 
 /// Face `f`'s surface moved `d` along its normal; a procedural one is refused only where it would
-/// close up over the stretch of it the face spans (a blend's run-outs past its ends may be tighter).
+/// close up over the stretch of it the face spans (a blend's run-outs past its ends may be tighter),
+/// and one that decides that exactly (`offset_fold`) only where it folds (`folds` refuses those
+/// first, at the place).
 fn face_offset(body: &Body, f: FaceId, d: f64) -> Option<Surface> {
     let Surface::Procedural(p) = &body.face(f).surface else {
         return offset(&body.face(f).surface, d);
     };
+    let uv = face_uv(body, f, p);
+    let reach = match p.offset_fold(d, uv) {
+        Some(None) => f64::INFINITY,
+        Some(Some(_)) => return None,
+        None => p.mesh_radius_over(uv),
+    };
+    forge_geom::blend::Offset::surface_over(p, d, reach)
+}
+
+/// Where face `f`'s offset by `d` folds over itself, where its surface decides that exactly: the
+/// refusal there.
+fn folds(body: &Body, f: FaceId, d: f64) -> Result<(), ShellError> {
+    let Surface::Procedural(p) = &body.face(f).surface else {
+        return Ok(());
+    };
+    match p.offset_fold(d, face_uv(body, f, p)) {
+        Some(Some(q)) => Err(ShellError::Folds {
+            face: body.face(f).name,
+            at: Box::new(p.point(q)),
+        }),
+        _ => Ok(()),
+    }
+}
+
+/// The stretch of a procedural surface's parameters face `f` spans: all of them where one runs
+/// round.
+fn face_uv(body: &Body, f: FaceId, p: &forge_geom::surface::Proc) -> Box2 {
     let dom = p.domain();
     let mut uv = Box2::new(dom.u.interval(), dom.v.interval());
     if dom.u.period.is_none() && dom.v.period.is_none() {
@@ -903,7 +942,7 @@ fn face_offset(body: &Body, f: FaceId, d: f64) -> Option<Surface> {
             uv = Box2::new(su, sv);
         }
     }
-    forge_geom::blend::Offset::surface_over(p, d, p.mesh_radius_over(uv))
+    uv
 }
 
 #[cfg(test)]

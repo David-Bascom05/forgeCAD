@@ -75,8 +75,9 @@ pub fn specs() -> Json {
 
 /// Runs a tool on the file: what it says back, and whether it failed.
 pub fn call(name: &str, args: &Json, file: &Path) -> (String, bool) {
-    let read = || std::fs::read_to_string(file).map_err(|e| format!("{}: {e}", file.display()));
-    let write = |text: &str| std::fs::write(file, text).map_err(|e| format!("{}: {e}", file.display()));
+    let read = || forge_dirs::fs::read_to_string(file).map_err(|e| format!("{}: {e}", file.display()));
+    let write =
+        |text: &str| forge_dirs::fs::write(file, text).map_err(|e| format!("{}: {e}", file.display()));
     let got = match name {
         "read_file" => read().map(|t| {
             t.lines()
@@ -138,7 +139,7 @@ pub fn call(name: &str, args: &Json, file: &Path) -> (String, bool) {
             }
             let dir = file.parent().ok_or("the open file has no folder")?;
             let new = dir.join(name);
-            let mut f = std::fs::OpenOptions::new()
+            let mut f = forge_dirs::fs::OpenOptions::new()
                 .write(true)
                 .create_new(true)
                 .open(&new)
@@ -201,8 +202,8 @@ pub fn in_folder(dir: &Path, name: &str) -> Result<std::path::PathBuf, String> {
         ));
     }
     super::project::path(dir, name, true)?;
-    let root = std::fs::canonicalize(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
-    let full = std::fs::canonicalize(root.join(p)).map_err(|e| format!("{name}: {e}"))?;
+    let root = forge_dirs::fs::canonicalize(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    let full = forge_dirs::fs::canonicalize(root.join(p)).map_err(|e| format!("{name}: {e}"))?;
     if !full.starts_with(&root) {
         return Err(format!("`{name}` leads out of the folder"));
     }
@@ -217,7 +218,7 @@ pub fn fg_call(name: &str, args: &Json, dir: &Path) -> (String, bool) {
     }
     let got = (|| {
         let f = in_folder(dir, args.get("file").and_then(Json::str).unwrap_or(""))?;
-        let text = std::fs::read_to_string(&f).map_err(|e| format!("{}: {e}", f.display()))?;
+        let text = forge_dirs::fs::read_to_string(&f).map_err(|e| format!("{}: {e}", f.display()))?;
         match name {
             "fg_run" => Ok(check(&text, &f)),
             "fg_query" => {
@@ -260,7 +261,7 @@ pub fn fg_call(name: &str, args: &Json, dir: &Path) -> (String, bool) {
                     e.json(&text).write(&mut s);
                     s
                 })?;
-                std::fs::write(&f, &new).map_err(|e| format!("{}: {e}", f.display()))?;
+                forge_dirs::fs::write(&f, &new).map_err(|e| format!("{}: {e}", f.display()))?;
                 Ok(format!("Applied.\n{}", check(&new, &f)))
             }
             other => Err(format!("no tool `{other}`")),

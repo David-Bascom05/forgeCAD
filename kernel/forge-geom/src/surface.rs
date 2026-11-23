@@ -302,6 +302,14 @@ pub trait Procedural: Send + Sync + std::fmt::Debug {
     fn feature(&self) -> f64 {
         f64::INFINITY
     }
+    /// Whether the surface moved `d` along its normal folds over itself (passes a centre of its
+    /// curvature) over the parameter box, where the construction decides it: Some(None) where it
+    /// provably does not, Some(Some(uv)) at a place where it does or where that cannot be decided;
+    /// None where the surface has no such rule.
+    fn offset_fold(&self, d: f64, uv: Box2) -> Option<Option<Point2>> {
+        let _ = (d, uv);
+        None
+    }
     /// `mesh_radius` over the parameter box only (a face on part of the surface).
     fn mesh_radius_over(&self, _uv: Box2) -> f64 {
         self.mesh_radius()

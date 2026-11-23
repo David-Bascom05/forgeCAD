@@ -290,7 +290,7 @@ pub struct DrawingEnv {
     pending: Option<Receiver<Made>>,
     /// While making: the views made of how many, and whether what is shown is only a preview.
     pub progress: Option<(usize, usize)>,
-    started: std::time::Instant,
+    started: crate::plat::Instant,
     previewing: bool,
     /// The files its last make read (its models and theirs), for the host's watch.
     pub deps: std::sync::Arc<std::sync::Mutex<Vec<std::path::PathBuf>>>,
@@ -352,7 +352,7 @@ impl DrawingEnv {
     }
 
     fn open_in(path: &str, block: Option<String>) -> Result<DrawingEnv, String> {
-        let src = std::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
+        let src = forge_dirs::fs::read_to_string(path).map_err(|e| format!("{path}: {e}"))?;
         if let Some(b) = &block
             && !forge_lang::drawing::block::blocks(&src)
                 .iter()
@@ -368,7 +368,7 @@ impl DrawingEnv {
             made: None,
             pending: None,
             progress: None,
-            started: std::time::Instant::now(),
+            started: crate::plat::Instant::now(),
             previewing: false,
             deps: Default::default(),
             sheet: 0,
@@ -427,8 +427,7 @@ impl DrawingEnv {
     fn regen(&mut self) {
         let (send, recv) = channel();
         let src = self.src.clone();
-        let dir = std::path::Path::new(&self.path)
-            .canonicalize()
+        let dir = forge_dirs::fs::canonicalize(&self.path)
             .ok()
             .and_then(|p| p.parent().map(|d| d.to_path_buf()))
             .unwrap_or_default();
@@ -436,7 +435,7 @@ impl DrawingEnv {
         let deps = self.deps.clone();
         let block = self.block.clone();
         let own = name_of(&self.path);
-        std::thread::spawn(move || {
+        crate::plat::spawn("forge-job", move || {
             let watch = forge_lang::deps::watch();
             let d = match &block {
                 // a block of the .fg: the document it is in drawn
@@ -461,7 +460,7 @@ impl DrawingEnv {
         self.pending = Some(recv);
         self.busy = true;
         self.progress = None;
-        self.started = std::time::Instant::now();
+        self.started = crate::plat::Instant::now();
     }
 
     /// Takes a finished make, if there is one: true when the sheet changed.
@@ -508,7 +507,7 @@ impl DrawingEnv {
     fn apply(&mut self, ops: Vec<DrawOp>) {
         // a block edits the file as it is now: what another tab of it saved stays
         if self.block.is_some()
-            && let Ok(now) = std::fs::read_to_string(&self.path)
+            && let Ok(now) = forge_dirs::fs::read_to_string(&self.path)
         {
             self.src = now;
         }
@@ -526,7 +525,7 @@ impl DrawingEnv {
                 }
             }
         }
-        if let Err(e) = std::fs::write(&self.path, &src) {
+        if let Err(e) = forge_dirs::fs::write(&self.path, &src) {
             self.message = format!("{}: {e}", self.path);
             return;
         }
@@ -544,7 +543,7 @@ impl DrawingEnv {
         if text == self.src {
             return;
         }
-        if !on_disk && let Err(e) = std::fs::write(&self.path, &text) {
+        if !on_disk && let Err(e) = forge_dirs::fs::write(&self.path, &text) {
             self.message = format!("{}: {e}", self.path);
             return;
         }
@@ -582,14 +581,14 @@ impl DrawingEnv {
         match &self.block {
             // a block's undo is its block only, onto the rest of the file as it is now
             Some(b) => {
-                let now = std::fs::read_to_string(&self.path).unwrap_or_else(|_| self.src.clone());
+                let now = forge_dirs::fs::read_to_string(&self.path).unwrap_or_else(|_| self.src.clone());
                 let back = forge_lang::drawing::block::with_body(&now, b, &src).unwrap_or(src);
                 to.push(std::mem::replace(&mut self.src, now));
                 self.src = back;
             }
             None => to.push(std::mem::replace(&mut self.src, src)),
         }
-        if let Err(e) = std::fs::write(&self.path, &self.src) {
+        if let Err(e) = forge_dirs::fs::write(&self.path, &self.src) {
             self.message = format!("{}: {e}", self.path);
         }
         self.wrote = true;
@@ -904,7 +903,7 @@ impl DrawingEnv {
                 return;
             }
             DwgCmd::Update => {
-                if let Ok(s) = std::fs::read_to_string(&self.path) {
+                if let Ok(s) = forge_dirs::fs::read_to_string(&self.path) {
                     self.src = s;
                 }
                 self.regen();
@@ -970,7 +969,7 @@ impl DrawingEnv {
         let stem = self.path.strip_suffix(".fg").unwrap_or(&self.path).to_string();
         let res = if c == DwgCmd::ExportPdf {
             let out = format!("{stem}.pdf");
-            std::fs::write(&out, forge_draw::pdf::pdf(&d.pages)).map(|_| out)
+            forge_dirs::fs::write(&out, forge_draw::pdf::pdf(&d.pages)).map(|_| out)
         } else {
             let ext = if c == DwgCmd::ExportDwg { "dwg" } else { "dxf" };
             let mut last = Ok(String::new());
@@ -985,7 +984,7 @@ impl DrawingEnv {
                 } else {
                     forge_draw::dxf::dxf(p).into_bytes()
                 };
-                last = std::fs::write(&out, bytes).map(|_| out);
+                last = forge_dirs::fs::write(&out, bytes).map(|_| out);
             }
             last
         };
@@ -2064,7 +2063,7 @@ impl Shell {
             let mut edit = false;
             resp.context_menu(|ui| {
                 ui.set_min_width(220.0);
-                ui.label(egui::RichText::new(&id).font(semi(12.5)));
+                ui.label(egui::RichText::new(&id).font(semi(13.0)));
                 if ui.button("Edit...").clicked() {
                     edit = true;
                     ui.close();
@@ -2238,7 +2237,7 @@ impl Shell {
                 pos2(x + 22.0, y + 12.0),
                 Align2::LEFT_CENTER,
                 &label,
-                if depth == 0 { semi(12.5) } else { sans(12.5) },
+                if depth == 0 { semi(13.0) } else { sans(13.0) },
                 ink,
             );
             self.places.push((format!("dwgrow:{id}"), r));
@@ -2263,7 +2262,7 @@ impl Shell {
                 if y > side.bottom() - 16.0 {
                     break;
                 }
-                let g = ui.fonts_mut(|f| f.layout(pr, sans(11.5), t.ink2, side.width() - 20.0));
+                let g = ui.fonts_mut(|f| f.layout(pr, sans(12.0), t.ink2, side.width() - 20.0));
                 let h = g.size().y;
                 p.galley(pos2(side.left() + 10.0, y), g, t.ink2);
                 y += h + 4.0;
@@ -2300,7 +2299,7 @@ impl Shell {
                             ui.separator();
                             ui.label(
                                 egui::RichText::new(tool.prompt(env.step()))
-                                    .font(sans(12.5))
+                                    .font(sans(13.0))
                                     .color(t.ink2),
                             );
                             if matches!(tool, DwgCmd::Baseline | DwgCmd::Ordinate | DwgCmd::Chain)
@@ -2358,7 +2357,7 @@ impl Shell {
                         tangent,
                         label,
                     } => {
-                        ui.label(egui::RichText::new("Orientation").font(semi(12.5)));
+                        ui.label(egui::RichText::new("Orientation").font(semi(13.0)));
                         egui::Grid::new("dirs").spacing(vec2(6.0, 6.0)).show(ui, |ui| {
                             for (k, (n, _)) in DIRS.iter().enumerate() {
                                 if ui.selectable_label(*dir == k, *n).clicked() {
@@ -2382,7 +2381,7 @@ impl Shell {
                             ui.label("Label");
                             ui.text_edit_singleline(label);
                         });
-                        ui.label(egui::RichText::new("Style").font(semi(12.5)));
+                        ui.label(egui::RichText::new("Style").font(semi(13.0)));
                         ui.horizontal(|ui| {
                             ui.selectable_value(hidden, true, "Hidden Line");
                             ui.selectable_value(hidden, false, "Hidden Line Removed");
@@ -2772,7 +2771,7 @@ fn moved(env: &mut DrawingEnv, d: &Drag) {
 }
 
 fn fcf_form(ui: &mut Ui, f: &mut FcfForm, t: super::theme::Theme) {
-    ui.label(egui::RichText::new("Characteristic").font(semi(12.5)));
+    ui.label(egui::RichText::new("Characteristic").font(semi(13.0)));
     egui::Grid::new("chars").spacing(vec2(4.0, 4.0)).show(ui, |ui| {
         for (k, (word, _)) in forge_draw::gdt::CHARS.iter().enumerate() {
             let (r, resp) = ui.allocate_exact_size(vec2(36.0, 30.0), Sense::click());
@@ -2823,7 +2822,7 @@ fn fcf_form(ui: &mut Ui, f: &mut FcfForm, t: super::theme::Theme) {
             }
         }
     });
-    ui.label(egui::RichText::new("Tolerance").font(semi(12.5)));
+    ui.label(egui::RichText::new("Tolerance").font(semi(13.0)));
     ui.horizontal(|ui| {
         ui.toggle_value(&mut f.dia, "\u{d8}");
         ui.add(egui::TextEdit::singleline(&mut f.tol).desired_width(70.0));
@@ -2831,7 +2830,7 @@ fn fcf_form(ui: &mut Ui, f: &mut FcfForm, t: super::theme::Theme) {
             ui.toggle_value(&mut f.mods[k], *m);
         }
     });
-    ui.label(egui::RichText::new("Datums").font(semi(12.5)));
+    ui.label(egui::RichText::new("Datums").font(semi(13.0)));
     ui.horizontal(|ui| {
         for d in f.datums.iter_mut() {
             ui.add(egui::TextEdit::singleline(d).desired_width(56.0).hint_text("—"));
@@ -2859,9 +2858,9 @@ pub fn new_drawing(model: &str, size: &str, standard: &str) -> Result<String, St
                 format!("{stem}_dwg{k}.fg")
             })
         })
-        .find(|p| !p.exists())
+        .find(|p| !forge_dirs::fs::exists(p))
         .ok_or("no name free")?;
-    std::fs::write(&out, text).map_err(|e| e.to_string())?;
+    forge_dirs::fs::write(&out, text).map_err(|e| e.to_string())?;
     Ok(out.to_string_lossy().into_owned())
 }
 
@@ -2873,7 +2872,7 @@ fn drawing_text(model: &str, size: &str, standard: &str) -> Result<String, Strin
         .map(|s| s.to_string_lossy().into_owned())
         .ok_or("no file name")?;
     let dir = path.parent().unwrap_or(std::path::Path::new("."));
-    let src = std::fs::read_to_string(model).map_err(|e| format!("{model}: {e}"))?;
+    let src = forge_dirs::fs::read_to_string(model).map_err(|e| format!("{model}: {e}"))?;
     let asm = forge_lang::syntax::parse(&src).is_ok_and(|p| forge_lang::asm::declared(&p));
     let (w, h) = forge_draw::sheet::size(size).ok_or("no such sheet size")?;
     // a scale that fits the model's front view in a third of the sheet
@@ -2926,7 +2925,7 @@ fn drawing_text(model: &str, size: &str, standard: &str) -> Result<String, Strin
 /// File > New Drawing in the model's own file: `new_drawing`'s sheet and views as a drawing block
 /// (`drawing dwgN { .. }`) at the end of the .fg, drawing the document (`part()`); its name.
 pub fn new_drawing_block(model: &str, size: &str, standard: &str) -> Result<String, String> {
-    let src = std::fs::read_to_string(model).map_err(|e| format!("{model}: {e}"))?;
+    let src = forge_dirs::fs::read_to_string(model).map_err(|e| format!("{model}: {e}"))?;
     let have: Vec<String> = forge_lang::drawing::block::blocks(&src)
         .into_iter()
         .map(|b| b.name)
@@ -2957,7 +2956,7 @@ pub fn new_drawing_block(model: &str, size: &str, standard: &str) -> Result<Stri
         out.push('\n');
     }
     out.push_str(&format!("\ndrawing {name} {{\n{body}}}\n"));
-    std::fs::write(model, out).map_err(|e| format!("{model}: {e}"))?;
+    forge_dirs::fs::write(model, out).map_err(|e| format!("{model}: {e}"))?;
     Ok(name)
 }
 

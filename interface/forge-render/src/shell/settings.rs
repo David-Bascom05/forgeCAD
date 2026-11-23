@@ -402,10 +402,10 @@ pub fn load() -> Settings {
     let Some(dir) = config_dir() else {
         return Settings::default();
     };
-    if let Ok(text) = std::fs::read_to_string(dir.join("settings.toml")) {
+    if let Ok(text) = forge_dirs::fs::read_to_string(dir.join("settings.toml")) {
         return Settings::from_toml(&text);
     }
-    let old = std::fs::read_to_string(dir.join("settings")).unwrap_or_default();
+    let old = forge_dirs::fs::read_to_string(dir.join("settings")).unwrap_or_default();
     let mut s = Settings::default();
     for l in old.lines() {
         match l.split_once('=').map(|(k, v)| (k.trim(), v.trim())) {
@@ -420,8 +420,19 @@ pub fn load() -> Settings {
 #[cfg(not(target_arch = "wasm32"))]
 pub fn save(s: &Settings) {
     let Some(dir) = config_dir() else { return };
-    let _ = std::fs::create_dir_all(&dir);
-    let _ = std::fs::write(dir.join("settings.toml"), s.to_toml());
+    let _ = forge_dirs::fs::create_dir_all(&dir);
+    let _ = forge_dirs::fs::write(dir.join("settings.toml"), s.to_toml());
+}
+
+/// In the browser the same TOML, kept in the page's storage.
+#[cfg(target_arch = "wasm32")]
+pub fn load() -> Settings {
+    crate::plat::kv_get("settings.toml").map_or_else(Settings::default, |t| Settings::from_toml(&t))
+}
+
+#[cfg(target_arch = "wasm32")]
+pub fn save(s: &Settings) {
+    crate::plat::kv_set("settings.toml", &s.to_toml());
 }
 
 /// The window's own state.
@@ -469,7 +480,7 @@ pub fn row(ui: &mut Ui, t: &Theme, label: &str, body: impl FnOnce(&mut Ui)) {
         pos2(r.left(), r.center().y),
         egui::Align2::LEFT_CENTER,
         label,
-        sans(12.5),
+        sans(13.0),
         t.ink2,
     );
     let at = Rect::from_min_max(
@@ -498,7 +509,7 @@ pub fn segmented(
     let ws: Vec<f32> = items
         .iter()
         .map(|(s, _)| {
-            ui.fonts_mut(|f| f.layout_no_wrap(s.to_string(), sans(12.5), t.ink))
+            ui.fonts_mut(|f| f.layout_no_wrap(s.to_string(), sans(13.0), t.ink))
                 .size()
                 .x
                 + 24.0
@@ -535,7 +546,7 @@ pub fn segmented(
             r.center(),
             egui::Align2::CENTER_CENTER,
             *text,
-            if *on { medium(12.5) } else { sans(12.5) },
+            if *on { medium(13.0) } else { sans(13.0) },
             if *on { t.on_ink } else { t.ink },
         );
         places.push((name(k), r));
@@ -599,7 +610,7 @@ pub fn cards(
             ui,
             words,
             text,
-            if *on { medium(12.5) } else { sans(12.5) },
+            if *on { medium(13.0) } else { sans(13.0) },
             if *on { t.on_ink } else { t.ink },
             &name(k),
         );
@@ -631,12 +642,15 @@ impl Shell {
         let prefs = &mut self.prefs;
         let area = super::dialog_area(ctx);
         let h = WIN_H.min(area.height() - 16.0).max(400.0);
+        // centred, as a modal is, over a scrim that sets the app behind it back
         let at = pos2(
             area.center().x - WIN_W * 0.5,
-            (area.top() + 60.0)
+            (area.center().y - h * 0.5)
                 .min(area.bottom() - h - 8.0)
                 .max(area.top() + 4.0),
         );
+        ctx.layer_painter(egui::LayerId::background())
+            .rect_filled(ctx.content_rect(), 0.0, t.scrim);
         let r = egui::Window::new("Settings")
             .id(egui::Id::unique("settings-window"))
             .title_bar(false)
@@ -722,7 +736,7 @@ impl Shell {
                         pos2(body.left(), body.top() + 12.0),
                         egui::Align2::LEFT_CENTER,
                         title,
-                        semi(17.0),
+                        semi(18.0),
                         t.ink,
                     );
                     ui.add_space(28.0);
@@ -1110,7 +1124,7 @@ fn appearance(ui: &mut Ui, t: &Theme, s: &mut Settings, _: &mut Window, places: 
         s.dark = k == 1;
     }
     section(ui, t, "Part colours");
-    let items = [("Inventor grey", !s.pastel), ("A pastel per part", s.pastel)];
+    let items = [("Neutral grey", !s.pastel), ("A pastel per part", s.pastel)];
     if let Some(k) = cards(
         ui,
         t,
@@ -1185,19 +1199,16 @@ fn appearance(ui: &mut Ui, t: &Theme, s: &mut Settings, _: &mut Window, places: 
                 egui::TextEdit::singleline(&mut s.image)
                     .desired_width(260.0)
                     .hint_text("a .png or .jpg file")
-                    .font(sans(12.5)),
+                    .font(sans(13.0)),
             );
             places.push(("settings:image".into(), r.rect));
-            #[cfg(not(target_arch = "wasm32"))]
             {
-                let r = ui.button(egui::RichText::new("Browse...").font(sans(12.5)));
+                let r = ui.button(egui::RichText::new("Browse...").font(sans(13.0)));
                 places.push(("settings:image:browse".into(), r.rect));
                 if r.clicked()
-                    && let Some(f) = rfd::FileDialog::new()
-                        .add_filter("Image", &["png", "jpg", "jpeg"])
-                        .pick_file()
+                    && let Some(f) = crate::plat::pick_file(None, "Image", &["png", "jpg", "jpeg"])
                 {
-                    s.image = f.to_string_lossy().into_owned();
+                    s.image = f;
                 }
             }
         });
@@ -1247,7 +1258,7 @@ fn appearance(ui: &mut Ui, t: &Theme, s: &mut Settings, _: &mut Window, places: 
         ui.spacing_mut().item_spacing.x = 18.0;
         for (g, name, word) in GROUND {
             let mut on = s.toggle(g);
-            let r = ui.checkbox(&mut on, egui::RichText::new(word).font(sans(12.5)));
+            let r = ui.checkbox(&mut on, egui::RichText::new(word).font(sans(13.0)));
             places.push((format!("settings:ground:{name}"), r.rect));
             if on != s.toggle(g) {
                 s.set_toggle(g, on);
@@ -1260,12 +1271,12 @@ fn display(ui: &mut Ui, t: &Theme, s: &mut Settings, _: &mut Window, places: &mu
     section(ui, t, "View");
     row(ui, t, "Visual style", |ui| {
         let r = egui::ComboBox::from_id_salt("settings visual style")
-            .selected_text(egui::RichText::new(s.style.name()).font(sans(12.5)))
+            .selected_text(egui::RichText::new(s.style.name()).font(sans(13.0)))
             .width(260.0)
             .show_ui(ui, |ui| {
                 for v in VisualStyle::ALL {
                     let r =
-                        ui.selectable_value(&mut s.style, v, egui::RichText::new(v.name()).font(sans(12.5)));
+                        ui.selectable_value(&mut s.style, v, egui::RichText::new(v.name()).font(sans(13.0)));
                     places.push((format!("settings:style:{}", v.key()), r.rect));
                 }
             });
@@ -1304,7 +1315,7 @@ fn display(ui: &mut Ui, t: &Theme, s: &mut Settings, _: &mut Window, places: &mu
             pos2(r.left(), r.center().y),
             egui::Align2::LEFT_CENTER,
             word,
-            sans(12.5),
+            sans(13.0),
             t.ink,
         );
         for k in 0..2 {
@@ -1397,7 +1408,7 @@ fn units(ui: &mut Ui, t: &Theme, s: &mut Settings, _: &mut Window, places: &mut 
     row(ui, t, "Reads as", |ui| {
         ui.label(
             egui::RichText::new(format!("{len:.d$} {}   ·   {ang}", s.length))
-                .font(super::theme::mono(12.5))
+                .font(super::theme::mono(13.0))
                 .color(t.ink),
         );
     });
@@ -1417,7 +1428,7 @@ fn keycaps(p: &egui::Painter, t: &Theme, at: egui::Pos2, chord: &str, ink: Color
             );
             x += 10.0;
         }
-        let g = p.layout_no_wrap(part.to_string(), super::theme::mono(11.5), ink);
+        let g = p.layout_no_wrap(part.to_string(), super::theme::mono(12.0), ink);
         let r = Rect::from_min_size(pos2(x, at.y - 10.0), vec2(g.size().x + 12.0, 20.0));
         p.rect_filled(r.translate(vec2(0.0, 1.5)), 4.0, edge.gamma_multiply(0.5));
         p.rect_filled(r, 4.0, t.raised);
@@ -1437,7 +1448,7 @@ fn keyboard(ui: &mut Ui, t: &Theme, s: &mut Settings, w: &mut Window, places: &m
     let f = ui.put(
         Rect::from_min_size(r.min, vec2(280.0, 28.0)),
         egui::TextEdit::singleline(search)
-            .font(sans(12.5))
+            .font(sans(13.0))
             .margin(vec2(8.0, 6.0))
             .hint_text("Search commands and keys"),
     );
@@ -1467,7 +1478,7 @@ fn keyboard(ui: &mut Ui, t: &Theme, s: &mut Settings, w: &mut Window, places: &m
             pos2(h.left() + x, h.center().y),
             egui::Align2::LEFT_CENTER,
             word,
-            semi(10.5),
+            semi(11.0),
             t.ink2,
         );
     }
@@ -1512,7 +1523,7 @@ fn keyboard(ui: &mut Ui, t: &Theme, s: &mut Settings, w: &mut Window, places: &m
             pos2(r.left() + 10.0, r.center().y),
             egui::Align2::LEFT_CENTER,
             &c.name,
-            sans(12.5),
+            sans(13.0),
             t.ink,
         );
         let waiting = capture.as_deref() == Some(c.id.as_str());
@@ -1542,7 +1553,7 @@ fn keyboard(ui: &mut Ui, t: &Theme, s: &mut Settings, w: &mut Window, places: &m
                     pos2(cell.left() + 8.0, cell.center().y),
                     egui::Align2::LEFT_CENTER,
                     "—",
-                    sans(12.5),
+                    sans(13.0),
                     t.ink2,
                 );
             } else {
@@ -1561,7 +1572,7 @@ fn keyboard(ui: &mut Ui, t: &Theme, s: &mut Settings, w: &mut Window, places: &m
                 pos2(cell.right() + 10.0, r.top()),
                 pos2(r.right() - 64.0, r.bottom()),
             );
-            super::materials::clipped(ui, room, &format!("also {other}"), sans(11.5), t.error, &c.id);
+            super::materials::clipped(ui, room, &format!("also {other}"), sans(12.0), t.error, &c.id);
         }
         // reset to its default, take it off
         for (k, (icon, what, enabled)) in [
@@ -1754,11 +1765,11 @@ fn mouse(ui: &mut Ui, t: &Theme, s: &mut Settings, w: &mut Window, places: &mut 
         };
         ui.add_sized(
             vec2(110.0, 24.0),
-            egui::Label::new(egui::RichText::new(words).font(sans(12.5)).color(t.ink)),
+            egui::Label::new(egui::RichText::new(words).font(sans(13.0)).color(t.ink)),
         );
         let r = ui.checkbox(
             &mut s.invert_zoom,
-            egui::RichText::new("Reverse").font(sans(12.5)),
+            egui::RichText::new("Reverse").font(sans(13.0)),
         );
         places.push(("settings:invert-zoom".into(), r.rect));
     });

@@ -1,0 +1,32 @@
+name = "floatverification"
+version = "0.1.0"
+defaultTargets = ["FvPredicates", "FloatVerification"]
+
+[leanOptions]
+autoImplicit = false
+relaxedAutoImplicit = false
+
+# Aeneas's Lean library at the commit whose aeneas translated the predicates (charon 9e193f0)
+[[require]]
+name = "aeneas"
+git = "https://github.com/AeneasVerif/aeneas"
+rev = "2e3d4488280bb8a95411db81019a7854a784861f"
+subDir = "backends/lean"
+
+# The IEEE 754 model the f64 operations are bound to
+[[require]]
+name = "ieee754"
+path = "../../../../verify/ieee754"
+
+# The Aeneas translation of ../predicates, with its f64 operations defined by the model
+# The shared float bridge: `F64` and the f64 library functions (verify/aeneas/bridge)
+[[require]]
+name = "aeneasf64"
+path = "../../../../verify/aeneas/bridge"
+
+[[lean_lib]]
+name = "FvPredicates"
+
+# The theorems about it
+[[lean_lib]]
+name = "FloatVerification"

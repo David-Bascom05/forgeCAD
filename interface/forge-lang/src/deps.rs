@@ -120,7 +120,7 @@ pub fn looked(path: &Path) {
 }
 
 fn presence(path: &Path) -> Seen {
-    if std::fs::symlink_metadata(path).is_ok() {
+    if forge_dirs::fs::symlink_metadata(path).is_ok() {
         Seen::There
     } else {
         Seen::Absent
@@ -156,7 +156,7 @@ fn listing_key(dir: &Path) -> PathBuf {
 }
 
 fn tomls_in(dir: &Path) -> Vec<PathBuf> {
-    let mut out: Vec<PathBuf> = std::fs::read_dir(dir)
+    let mut out: Vec<PathBuf> = forge_dirs::fs::read_dir(dir)
         .map(|r| {
             r.filter_map(|e| e.ok().map(|e| e.path()))
                 .filter(|p| p.extension().is_some_and(|x| x == "toml"))
@@ -203,14 +203,14 @@ const NOFOLLOW: i32 = if cfg!(any(target_os = "macos", target_os = "ios", target
 /// at (device and inode), and read no further than `max` (a file grown since is refused).
 pub fn read_plain(p: &Path, max: u64) -> Result<Vec<u8>, Refused> {
     use std::io::Read;
-    let checked = std::fs::symlink_metadata(p).map_err(|_| Refused::NotPlain)?;
+    let checked = forge_dirs::fs::symlink_metadata(p).map_err(|_| Refused::NotPlain)?;
     if !checked.is_file() {
         return Err(Refused::NotPlain);
     }
     if checked.len() > max {
         return Err(Refused::TooBig(checked.len()));
     }
-    let mut o = std::fs::OpenOptions::new();
+    let mut o = forge_dirs::fs::OpenOptions::new();
     o.read(true);
     #[cfg(unix)]
     std::os::unix::fs::OpenOptionsExt::custom_flags(&mut o, NOFOLLOW);
@@ -242,7 +242,7 @@ fn contents(path: &Path, limit: u64) -> Seen {
     if path.file_name().is_some_and(|n| n == "*.toml") {
         return path.parent().map_or(Seen::Absent, |d| Seen::Bytes(listing(d)));
     }
-    let Ok(meta) = std::fs::symlink_metadata(path) else {
+    let Ok(meta) = forge_dirs::fs::symlink_metadata(path) else {
         return presence(path);
     };
     if !meta.is_file() {
@@ -251,7 +251,7 @@ fn contents(path: &Path, limit: u64) -> Seen {
     let nanos = meta
         .modified()
         .ok()
-        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .and_then(|t| t.duration_since(forge_math::clock::UNIX_EPOCH).ok())
         .map_or(0, |d| d.as_nanos() as u64);
     match read_plain(path, limit) {
         Ok(data) => Seen::Bytes(hash128(&data)),
@@ -337,11 +337,11 @@ mod tests {
 
     #[test]
     fn a_watch_sees_reads_and_its_parent_gets_them() {
-        let d = std::env::temp_dir().join(format!("forge-deps-{}", std::process::id()));
-        std::fs::create_dir_all(&d).unwrap();
+        let d = forge_dirs::temp_dir().join(format!("forge-deps-{}", forge_dirs::process_id()));
+        forge_dirs::fs::create_dir_all(&d).unwrap();
         let (a, b) = (d.join("a.fg"), d.join("b.fg"));
-        std::fs::write(&a, "one").unwrap();
-        let _ = std::fs::remove_file(&b);
+        forge_dirs::fs::write(&a, "one").unwrap();
+        let _ = forge_dirs::fs::remove_file(&b);
         let outer = watch();
         let inner = watch();
         file(&a);
@@ -351,24 +351,24 @@ mod tests {
         assert!(got.current());
         let all = outer.done();
         assert_eq!(all, got);
-        std::fs::write(&b, "now here").unwrap();
+        forge_dirs::fs::write(&b, "now here").unwrap();
         assert!(!all.current(), "a file that came is a change");
-        std::fs::remove_file(&b).unwrap();
+        forge_dirs::fs::remove_file(&b).unwrap();
         assert!(all.current());
-        std::fs::write(&a, "two").unwrap();
+        forge_dirs::fs::write(&a, "two").unwrap();
         assert!(!all.current(), "new bytes are a change");
-        let _ = std::fs::remove_dir_all(&d);
+        let _ = forge_dirs::fs::remove_dir_all(&d);
     }
 
     #[test]
     fn a_file_replaced_with_its_time_put_back_is_a_change() {
-        let d = std::env::temp_dir().join(format!("forge-deps-stamp-{}", std::process::id()));
-        std::fs::create_dir_all(&d).unwrap();
+        let d = forge_dirs::temp_dir().join(format!("forge-deps-stamp-{}", forge_dirs::process_id()));
+        forge_dirs::fs::create_dir_all(&d).unwrap();
         let a = d.join("a.ttf");
-        let when = std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_700_000_000);
+        let when = forge_math::clock::UNIX_EPOCH + std::time::Duration::from_secs(1_700_000_000);
         let put = |bytes: &[u8]| {
-            std::fs::write(&a, bytes).unwrap();
-            std::fs::File::options()
+            forge_dirs::fs::write(&a, bytes).unwrap();
+            forge_dirs::fs::File::options()
                 .write(true)
                 .open(&a)
                 .unwrap()
@@ -382,17 +382,17 @@ mod tests {
         assert!(seen.current());
         put(b"two");
         assert!(!seen.current(), "same length and time, new bytes");
-        let _ = std::fs::remove_dir_all(&d);
+        let _ = forge_dirs::fs::remove_dir_all(&d);
     }
 
     #[cfg(unix)]
     #[test]
     fn the_checked_reader_reads_only_a_plain_file_by_its_own_name() {
-        let d = std::env::temp_dir().join(format!("forge-deps-plain-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&d);
-        std::fs::create_dir_all(&d).unwrap();
+        let d = forge_dirs::temp_dir().join(format!("forge-deps-plain-{}", forge_dirs::process_id()));
+        let _ = forge_dirs::fs::remove_dir_all(&d);
+        forge_dirs::fs::create_dir_all(&d).unwrap();
         let (a, link, pipe) = (d.join("a.ttf"), d.join("l.ttf"), d.join("p.ttf"));
-        std::fs::write(&a, b"12345").unwrap();
+        forge_dirs::fs::write(&a, b"12345").unwrap();
         std::os::unix::fs::symlink(&a, &link).unwrap();
         assert_eq!(read_plain(&a, 5), Ok(b"12345".to_vec()));
         assert_eq!(read_plain(&a, 4), Err(Refused::TooBig(5)));
@@ -409,7 +409,7 @@ mod tests {
         if made.is_ok_and(|s| s.success()) {
             assert_eq!(read_plain(&pipe, 100), Err(Refused::NotPlain));
         }
-        let _ = std::fs::remove_dir_all(&d);
+        let _ = forge_dirs::fs::remove_dir_all(&d);
     }
 
     #[test]
@@ -423,31 +423,37 @@ mod tests {
 
     #[test]
     fn a_large_file_is_not_read_past_the_limit() {
-        let d = std::env::temp_dir().join(format!("forge-deps-big-{}", std::process::id()));
-        std::fs::create_dir_all(&d).unwrap();
+        let d = forge_dirs::temp_dir().join(format!("forge-deps-big-{}", forge_dirs::process_id()));
+        forge_dirs::fs::create_dir_all(&d).unwrap();
         let f = d.join("big.fg");
-        std::fs::write(&f, vec![b'x'; 100]).unwrap();
+        forge_dirs::fs::write(&f, vec![b'x'; 100]).unwrap();
         assert!(matches!(contents(&f, 10), Seen::Big(100, _)));
         assert!(matches!(contents(&f, 1000), Seen::Bytes(_)));
     }
 
     /// A root with a part in it, a file outside it, and a link inside it to that file.
     fn fenced(tag: &str) -> (PathBuf, PathBuf) {
-        let base = std::env::temp_dir().join(format!("forge-deps-fence-{tag}-{}", std::process::id()));
+        let base =
+            forge_dirs::temp_dir().join(format!("forge-deps-fence-{tag}-{}", forge_dirs::process_id()));
         let (root, out) = (base.join("root"), base.join("outside"));
-        std::fs::create_dir_all(&root).unwrap();
-        std::fs::create_dir_all(&out).unwrap();
-        std::fs::write(out.join("secret.fg"), "shared s = 1\n").unwrap();
+        forge_dirs::fs::create_dir_all(&root).unwrap();
+        forge_dirs::fs::create_dir_all(&out).unwrap();
+        forge_dirs::fs::write(out.join("secret.fg"), "shared s = 1\n").unwrap();
         let link = root.join("link.fg");
-        if std::fs::symlink_metadata(&link).is_err() {
+        // a link where the system makes one (unix); elsewhere (wasm, Windows without the right)
+        // there is none, and a name with nothing there must be refused all the same
+        #[cfg(unix)]
+        if forge_dirs::fs::symlink_metadata(&link).is_err() {
             std::os::unix::fs::symlink(out.join("secret.fg"), &link).unwrap();
         }
+        #[cfg(not(unix))]
+        let _ = &link;
         (root, out)
     }
 
     fn located(root: &Path, file: &str) -> (Option<PathBuf>, Deps) {
         let w = watch();
-        let fence = Some(std::fs::canonicalize(root).unwrap());
+        let fence = Some(forge_dirs::fs::canonicalize(root).unwrap());
         let got = crate::asm::locate(&Some(root.to_path_buf()), &fence, file);
         (got, w.done())
     }
@@ -473,6 +479,8 @@ mod tests {
         let (got, d) = located(&root, "link.fg");
         assert_eq!(got, None);
         assert!(!read_any(&d), "{d:?}");
+        // the link was seen, as there, not followed
+        #[cfg(unix)]
         assert_eq!(d.0.get(&root.join("link.fg")), Some(&Seen::There));
     }
 

@@ -433,7 +433,7 @@ mod tests {
             radius: 0.1,
         });
         let tiny = Box3::from_points([at, at]).grow(0.05);
-        let t = std::time::Instant::now();
+        let t = forge_math::clock::Instant::now();
         let thread = Screw::loop_faces(
             f,
             &sections,

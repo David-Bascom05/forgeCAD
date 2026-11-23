@@ -19,7 +19,10 @@ Units are millimetres. Tolerances live in `forge_math::tol`.
 
 The repository is split by what a thing is:
 
-- `kernel/` is the geometry kernel: exact results, zero third-party crates.
+- `kernel/` is the geometry kernel: exact results, zero third-party crates. No unsafe code but in
+  two crates, each reviewed: `forge-alloc` (a global allocator is unsafe by definition) and
+  `forge-par` (one block: running a borrowing closure on a host's thread erases its lifetime, as
+  `std::thread::scope` does inside std; every closure is joined before its scope returns).
 - `interface/` is everything that uses the kernel: part files, the agent layer and the command
   line. The app, host and protocol go here too ([design](docs/interface-design.md)).
 - `verify/` is what checks the kernel and is never shipped.
@@ -29,6 +32,7 @@ The repository is split by what a thing is:
 | `kernel/` | what |
 |---|---|
 | `forge-alloc` | the wasm heap |
+| `forge-par` | scoped threads for every parallel path: std's, or a host's (a browser's Web Workers) |
 | `forge-math` | vectors, frames, deterministic trig, intervals, polynomial roots, small linear algebra |
 | `forge-geom` | curves, surfaces, intersections |
 | `forge-topo` | B-rep bodies, stable names, the validity checker |
@@ -110,6 +114,23 @@ tools/speed/wasm.sh                                 # wasm instruction counts, r
 
 wasm is single-threaded (wasm32-wasip1 has no threads), so the n-ary regen runs on one thread
 there.
+
+The .fg language has a Lean proof in `research/forge-lang/lean`. It covers:
+- the lexer model;
+- the LL(1) grammar and parser;
+- scope and built-in names;
+- edit ops, undo and refactors.
+
+A change to any of these extends that proof in the same commit. After it, check the
+language against its proof:
+
+```
+cd research/forge-lang/lean && lake build ForgeLang.LL1.Impl && lake build ForgeLang.LL1.ImplUnifiedDoc \
+  && lake build && lake build fgparse fglex && lake env lean Axioms.lean   # no sorryAx, no ofReduceBool
+FG_LEAN=1 cargo test --release -p forge-lang --test parse_diff             # Rust against the Lean oracle; commit the digest
+```
+
+CI (`lean.yml`) runs both, and fails if the committed digest is not the oracle's.
 
 The toolchain is pinned in `rust-toolchain.toml`; rustup installs it on first use.
 
