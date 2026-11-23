@@ -3,8 +3,8 @@
 The shipped Rust of `kernel/forge-sheet-core` (forge-sheet's combinatorial core: vertex classes,
 chaining, a hole's owner; the development's rigid motions and joint frames, `place.rs`) is
 translated by `tools/aeneas/translate.sh forge-sheet-core` (Charon 9e193f0, Aeneas 2e3d448 with the
-float patch; 33 definitions, 1 opaque: `f64::sqrt`, defined in `FunsExternal.lean` as verify/ieee754's
-correctly rounded square root, never an axiom) into
+float patch, release with overflow checks; 35 definitions, 1 opaque: `f64::sqrt`, which the bridge
+defines as verify/ieee754's correctly rounded square root, never an axiom) into
 `lean/ForgeSheetCore/{Types,Funs}.lean`, and the translation is proven against verify/sheet.
 
 Proven (no `sorry`; `lean/ForgeSheetCore/Axioms.lean` checks the standard axioms only):
@@ -38,6 +38,14 @@ Proven (no `sorry`; `lean/ForgeSheetCore/Axioms.lean` checks the standard axioms
   within `ε = 2⁻⁵²`): for finite `ρ`, finite `|θ| ≤ 2²⁰` with `C = 1 + cos θ ≥ 2⁻⁵⁰`, the
   setback, when finite, is within `|ρ| (4ε + 4η) / C² + 10 u |ρ| / C + 3η / C + η` of
   `ρ sin θ / C = ρ tan(θ/2)`. The `ε / C²` term is the hairpin's ill-conditioning.
+- `zone_spec` (RefineZone.lean, model ZoneErr.lean): build.rs `Geo::Round`'s point as composed
+  there, `fold::phi` (θ at the far tangent line, else `u ⊘ rn`), dmath's `sin_cos`
+  (`Dmath.sinCos_err`), `fold::round_local` (`r = ρ0 ⊕ σ⊗w`; `r⊗c`, `r⊗s`, `(−σ)⊗y`) and the axis
+  frame's `Frame::point_to_world` from the aeneas session's forge-math translation (`ptw_spec`, not
+  a copy): for finite inputs, `rn ≠ 0`, the exact angle within `2¹⁹`, each world coordinate, when
+  finite, is within `ptwE` of the exact `o + A (R cos φ, R sin φ, −σ y)`, the local point's errors
+  (`locE`: the angle's rounding, dmath's `2⁻⁵²`, each product's) carried through the axes.
+  Composed from `mul_approx`/`add_approx`, one forward-error rule per operation.
 - under them: the least-root union–find (`new_spec`, `find_spec`, `union_spec`), ported from the
   decide-once core's proofs (research/kernel-audit/decide-once/aeneas: the same `union_find.rs`),
   with every `+= 1` (overflow-checked in the canonical translation) shown not to overflow.

@@ -8,6 +8,8 @@ import ForgeSheetCore.JointErr
 import ForgeSheetCore.RefineJoint
 import ForgeSheetCore.SetbackErr
 import ForgeSheetCore.RefineSetback
+import ForgeSheetCore.ZoneErr
+import ForgeSheetCore.RefineZone
 
 /-! Only the standard axioms: each listed theorem about the translated Rust rests on `propext`,
 `Classical.choice` and `Quot.sound` alone (a `sorry` or `native_decide` fails the build). -/
@@ -42,3 +44,6 @@ elab "#standard_axioms " ids:ident* : command => do
   ForgeSheetCore.Setback.den_pos ForgeSheetCore.Setback.setback_err
   forge_sheet_core.round_fin_q forge_sheet_core.div_err forge_sheet_core.cast_err
   forge_sheet_core.setback_spec
+  ForgeSheetCore.Zone.mul_approx ForgeSheetCore.Zone.add_approx ForgeSheetCore.Zone.trig_approx
+  forge_sheet_core.coord_err forge_sheet_core.ptw_spec forge_sheet_core.phi_spec
+  forge_sheet_core.round_local_spec forge_sheet_core.zone_spec

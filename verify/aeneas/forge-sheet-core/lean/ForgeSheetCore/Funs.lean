@@ -31,6 +31,29 @@ def fold.setback (rho : F64) (s : F64) (c : F64) : Result F64 := do
   let fl1 ← lift (F64.Ops.add (F64.Ops.ofBits 4607182418800017408) c)
   ok (F64.Ops.div fl fl1)
 
+/-- [forge_sheet_core::fold::phi]:
+    Source: 'kernel/forge-sheet-core/src/fold.rs', lines 14:0-16:1
+    Visibility: public -/
+def fold.phi (u : F64) (rn : F64) (theta : F64) (ba : F64) : Result F64 := do
+  if F64.Ops.eq u ba
+  then ok theta
+  else ok (F64.Ops.div u rn)
+
+/-- [forge_sheet_core::fold::round_local]:
+    Source: 'kernel/forge-sheet-core/src/fold.rs', lines 21:0-24:1
+    Visibility: public -/
+def fold.round_local
+  (rho0 : F64) (sigma : F64) (s : F64) (c : F64) (y : F64) (w : F64) :
+  Result (F64 × F64 × F64)
+  := do
+  let fl ← lift (F64.Ops.mul sigma w)
+  let r ← lift (F64.Ops.add rho0 fl)
+  let fl1 ← lift (F64.Ops.mul r c)
+  let fl2 ← lift (F64.Ops.mul r s)
+  let fl3 ← lift (F64.Ops.neg sigma)
+  let fl4 ← lift (F64.Ops.mul fl3 y)
+  ok (fl1, fl2, fl4)
+
 /-- [forge_sheet_core::union_find::{forge_sheet_core::union_find::Uf}::find]: loop body 0:
     Source: 'kernel/forge-sheet-core/src/union_find.rs', lines 22:8-27:9 -/
 @[rust_loop_body]
