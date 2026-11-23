@@ -5,7 +5,7 @@ import ForgeExact.DecideOnce.QForm
 /-!
 # End to end, curved: the shipped Rust core on a curved ledger
 
-The flat theorem (research/kernel-audit/decide-once/aeneas, `end_to_end_of`) is `CoreSpec` (the
+The flat theorem (verify/aeneas/forge-bool-core, `end_to_end_of`) is `CoreSpec` (the
 Rust `forge_bool_core::core` computes the Lean `coreM`), then `coreM_nil`, then `flat_correct`.
 The core reads covectors and nothing else (design §0.1), so the curved theorem is the same
 `CoreSpec` followed by **`curved_correct`** in `flat_correct`'s place:

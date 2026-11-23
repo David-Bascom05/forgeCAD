@@ -8,9 +8,9 @@ name: forge-curved
 on:
   push:
     branches: [main]
-    paths: ["verify/forge-curved/**", "verify/forge-exact/**", "research/kernel-audit/decide-once/aeneas/lean/**", ".github/workflows/forge-curved.yml"]
+    paths: ["verify/forge-curved/**", "verify/forge-exact/**", "verify/aeneas/forge-bool-core/lean/**", ".github/workflows/forge-curved.yml"]
   pull_request:
-    paths: ["verify/forge-curved/**", "verify/forge-exact/**", "research/kernel-audit/decide-once/aeneas/lean/**", ".github/workflows/forge-curved.yml"]
+    paths: ["verify/forge-curved/**", "verify/forge-exact/**", "verify/aeneas/forge-bool-core/lean/**", ".github/workflows/forge-curved.yml"]
   workflow_dispatch:
 
 jobs:
