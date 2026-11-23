@@ -485,7 +485,20 @@ its radius. Results:
   spines, 0 refused;
 - 4 × 40 random parts: 0.
 
-The rest of the census is staged next, and run the same way.
+- the CADFS 1-in-200 sample (1 287 translated parts; staged from its public source, not committed):
+  first 1 refusal in 201 542 closed forms.
+
+**The one refusal found a gap in the argument.** CADFS 00284112, rolling an unpicked edge at its
+fillet's radius (12.7; not the part's own build). The pair is the plane z = 12.7 and a rim tube that
+is a spindle torus (major 6.35 < minor 12.7), and the plane holds the torus's axis. `plane_surface`
+gave the meridian circle. That circle is on the torus's quartic, but near the spindle's apex it runs
+on the other sheet: 5.1 off the torus itself. The class must include the spindle's used sheet,
+which forge-geom already decides for the boolean (`sheet::used`; NotAnalytic through an apex). So a
+pair holding a spindle torus takes `spindle_closed_form`: the plane section kept to the used sheet,
+and through an apex none, leaving the pair to tracing, as the old check's refusal did.
+
+With that: 0 refused in 13 223 + 201 451 closed forms over 1 799 parts, and 0 on the random parts.
+All 1 287 CADFS parts build to the same volume, area and faces on the base and on this branch.
 
 **Speed.** The exact callgrind gate on c217ce1 passes: every line ≤ base, bits identical, the
 user-facing lines −14 093 178 instructions in all. Without the check, LLVM inlined `sheet::side` into

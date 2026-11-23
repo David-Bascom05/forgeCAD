@@ -21,7 +21,7 @@ for f,s in ((sys.argv[2],-1),(sys.argv[3],1)):
     for l in open(f):
         n,name=l.rstrip('\n').split('\t',1); d[name]=d.get(name,0)+s*int(n)
 tot=d.pop('PROGRAM TOTALS',0)
-lib=lambda k: any(x in k for x in ('memcmp','memmove','memcpy','memset','strlen','malloc','free','_dl_','dl-','do-rel','ld-linux','???:0x'))
+lib=lambda k: any(x in k for x in ('memcmp','scanf','strto','memmove','memcpy','memset','strlen','malloc','free','_dl_','dl-','do-rel','ld-linux','???:0x'))
 moved={k:v for k,v in d.items() if v and not lib(k)}
 libd=sum(v for k,v in d.items() if lib(k))
 print(f"{sys.argv[1]}: total {tot:+d}; libc/ld.so/heap {libd:+d}; kernel/app functions moved: {len(moved)}"+("" if not moved else " "+"; ".join(f"{v:+d} {k[:90]}" for k,v in sorted(moved.items(),key=lambda x:-abs(x[1]))[:4])))

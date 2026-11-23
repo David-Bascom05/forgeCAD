@@ -502,10 +502,37 @@ pub fn closed_form(a: &Surface, b: &Surface) -> Option<Vec<Curve>> {
         .filter(|cs| !cs.is_empty())
 }
 
+/// `closed_form` for a pair holding a spindle torus: its quartic holds the other sheet too, so the
+/// answer is kept to the used sheet (`sheet::used_by`; NotAnalytic through an apex leaves the pair to
+/// tracing). The fillet spec, lean-spec-design.md §14.
+#[cold]
+#[inline(never)]
+fn spindle_closed_form(a: &Surface, b: &Surface) -> Option<Vec<Curve>> {
+    let planar = match (a, b) {
+        (Surface::Plane(p), s) | (s, Surface::Plane(p)) => {
+            match crate::sheet::used_by(a, b, plane_surface(p, s)) {
+                SurfaceSurface::Curves(cs) => Some(cs.into_iter().map(|c| c.0).collect()),
+                SurfaceSurface::Empty => Some(vec![]),
+                _ => return None,
+            }
+        }
+        _ => None,
+    };
+    planar
+        .filter(|cs: &Vec<Curve>| !cs.is_empty())
+        .or_else(|| parallel_cylinders(a, b))
+        .or_else(|| coaxial(a, b))
+        .filter(|cs| !cs.is_empty())
+}
+
 /// The branch of the intersection of `a` and `b` passing nearest `near`, in
 /// closed form where the pair has one, traced within `region` otherwise.
 pub fn spine(a: &Surface, b: &Surface, near: Point3, region: Box3, r: f64) -> Option<Curve> {
-    let closed = closed_form(a, b);
+    let closed = if crate::sheet::spindle_in(a, b) {
+        spindle_closed_form(a, b)
+    } else {
+        closed_form(a, b)
+    };
     let dist = |c: &Curve| {
         let r = c.full_range(1e6);
         c.eval(c.closest(near, r)).distance(near)
@@ -520,6 +547,16 @@ pub fn spine(a: &Surface, b: &Surface, near: Point3, region: Box3, r: f64) -> Op
         #[cfg(feature = "spec-probe")]
         if !on_both(&c, local_range(&c, near), a, b) {
             ON_BOTH_FAILS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            if std::env::var_os("ON_BOTH_LOG").is_some() {
+                let range = local_range(&c, near);
+                let worst = (0..=8)
+                    .map(|i| {
+                        let p = c.eval(range.lo + range.width() * i as f64 / 8.0);
+                        (a.implicit(p).abs(), b.implicit(p).abs())
+                    })
+                    .fold((0.0f64, 0.0f64), |m, x| (m.0.max(x.0), m.1.max(x.1)));
+                eprintln!("on_both refuses: {a:?}\n  vs {b:?}\n  curve {c:?}\n  near {near:?} worst {worst:?}");
+            }
         }
         return Some(c);
     }

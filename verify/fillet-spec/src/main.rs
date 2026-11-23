@@ -332,6 +332,10 @@ fn onboth(files: &[String]) {
         let Ok(src) = std::fs::read_to_string(f) else { continue };
         let before = forge_geom::blend::ON_BOTH_FAILS.load(Ordering::Relaxed);
         let m = forge_lang::fuzz::build_with(&src, opts());
+        let in_build = forge_geom::blend::ON_BOTH_FAILS.load(Ordering::Relaxed) - before;
+        if in_build > 0 {
+            println!("{f}: {in_build} in the part's own build");
+        }
         for k in 0..m.features.len() {
             let forge_model::Feature::Fillet { edges, .. } = &m.features[k] else { continue };
             let Some(body) = m.body_after(k) else { continue };
@@ -342,7 +346,26 @@ fn onboth(files: &[String]) {
             });
             if let Some(r) = r {
                 for e in body.edge_ids().collect::<Vec<_>>() {
-                    let _ = forge_ops::fillet::edge_blend(&body, e, r);
+                    let b0 = forge_geom::blend::ON_BOTH_FAILS.load(Ordering::Relaxed);
+                    let got = forge_ops::fillet::edge_blend(&body, e, r);
+                    if forge_geom::blend::ON_BOTH_FAILS.load(Ordering::Relaxed) > b0 {
+                        let x = body.edge(e);
+                        let faces: Vec<String> = x
+                            .coedges
+                            .iter()
+                            .map(|&c| surf(&body.face(body.coedge_face(c)).surface))
+                            .collect();
+                        println!(
+                            "  edge {} at {:?} r {r}: {} | blend {}",
+                            e.index(),
+                            x.curve.eval(x.range.mid()),
+                            faces.join(" / "),
+                            match &got {
+                                Ok((b, _, _)) => format!("{} {}", surf(&b.surface), spine(&b.spine)),
+                                Err(err) => format!("{err:?}"),
+                            }
+                        );
+                    }
                 }
             }
         }
