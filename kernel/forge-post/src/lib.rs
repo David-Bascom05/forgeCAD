@@ -58,8 +58,61 @@ pub struct Dialect {
     pub decimals: u32,
     pub feed_decimals: u32,
     pub point: Point,
+    /// Where each code comes from (`[[dialect.cite]]`): a dialect restated from a control maker's
+    /// manual cites every code it uses (`cite_required = true`).
+    pub cites: Vec<Cite>,
     t: Table,
 }
+
+/// One code's source: the dialect key (`dwell`, `cycle_peck`, ...), the document and where in it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Cite {
+    pub key: String,
+    /// `published` (the manual states it) or `refused` (not in any open manual: the post refuses it)
+    pub status: String,
+    pub source: String,
+    pub taken: String,
+    pub r#where: String,
+    pub note: String,
+}
+
+/// The template keys a dialect may set; with `cite_required`, each one it sets is cited.
+pub const KEYS: [&str; 34] = [
+    "program_open",
+    "program_close",
+    "comment",
+    "line_numbers",
+    "block_end",
+    "safe_start",
+    "tool_change",
+    "length_comp",
+    "spindle_cw",
+    "spindle_ccw",
+    "spindle_stop",
+    "wcs",
+    "arc",
+    "retract_home",
+    "coolant_flood",
+    "coolant_mist",
+    "coolant_through",
+    "coolant_off",
+    "dwell",
+    "cycle_drill",
+    "cycle_dwell",
+    "cycle_peck",
+    "cycle_chipbreak",
+    "cycle_tap",
+    "cycle_ream",
+    "cycle_next",
+    "cycle_cancel",
+    "point",
+    "decimals",
+    "comment_eol",
+    "read_g_ignore",
+    "read_g_skip",
+    "read_words",
+    "coolant_through_off",
+];
 
 impl Dialect {
     pub fn get(name: &str) -> Result<Dialect, PostError> {
@@ -91,7 +144,40 @@ impl Dialect {
             "full" => Point::Full,
             p => return Err(PostError::Dialect(format!("point = `{p}`"))),
         };
+        let mut cites = Vec::new();
+        for c in toml::tables(&t, "cite") {
+            let key = text(c, "key").ok_or_else(|| PostError::Dialect("a cite with no key".into()))?;
+            if !KEYS.contains(&key) {
+                return Err(PostError::Dialect(format!("cite `{key}` names no dialect key")));
+            }
+            let status = text(c, "status").unwrap_or("published");
+            if !["published", "refused"].contains(&status) {
+                return Err(PostError::Dialect(format!("cite `{key}`: status `{status}`")));
+            }
+            let source = text(c, "source").unwrap_or("");
+            if status == "published" && (source.is_empty() || text(c, "taken").is_none()) {
+                return Err(PostError::Dialect(format!(
+                    "cite `{key}`: a published code needs source and taken"
+                )));
+            }
+            cites.push(Cite {
+                key: key.to_string(),
+                status: status.to_string(),
+                source: source.to_string(),
+                taken: text(c, "taken").unwrap_or("").to_string(),
+                r#where: text(c, "where").unwrap_or("").to_string(),
+                note: text(c, "note").unwrap_or("").to_string(),
+            });
+        }
+        if t.get("cite_required") == Some(&toml::Val::Bool(true)) {
+            for k in KEYS {
+                if t.contains_key(k) && !cites.iter().any(|c| c.key == k) {
+                    return Err(PostError::Dialect(format!("`{k}` is set but not cited")));
+                }
+            }
+        }
         Ok(Dialect {
+            cites,
             extension: text(&t, "extension").unwrap_or("nc").to_string(),
             feed_decimals: num(&t, "feed_decimals").unwrap_or(1.0) as u32,
             name,
@@ -610,11 +696,12 @@ impl Writer<'_> {
             return;
         }
         let numbered = self.d.t.get("line_numbers") == Some(&toml::Val::Bool(true)) && s != "%";
+        let end = self.d.s("block_end");
         if numbered {
-            self.lines.push(format!("N{} {}", self.n, s));
+            self.lines.push(format!("N{} {}{end}", self.n, s));
             self.n += self.d.n("line_step").unwrap_or(10.0) as i64;
         } else {
-            self.lines.push(s.to_string());
+            self.lines.push(format!("{s}{end}"));
         }
     }
     fn comment(&mut self, text: &str) {
@@ -655,7 +742,12 @@ pub fn print(p: &QProgram, d: &Dialect) -> Result<String, PostError> {
         .collect();
     for l in d.lines("program_open") {
         let s = fill(&l, &[("num", p.number.to_string()), ("title", title.clone())]);
-        if s == "%" { w.lines.push(s) } else { w.emit(&s) }
+        // a `%` line (a tape mark, or a header such as `%NAME G71 *`) is written as it is
+        if s.starts_with('%') {
+            w.lines.push(s)
+        } else {
+            w.emit(&s)
+        }
     }
     for l in d.lines("safe_start") {
         w.emit(&l);
@@ -865,7 +957,11 @@ pub fn print(p: &QProgram, d: &Dialect) -> Result<String, PostError> {
         }
     }
     for l in d.lines("program_close") {
-        if l == "%" { w.lines.push(l) } else { w.emit(&l) }
+        if l.starts_with('%') {
+            w.lines.push(l)
+        } else {
+            w.emit(&l)
+        }
     }
     let mut s = w.lines.join("\n");
     s.push('\n');
@@ -983,8 +1079,42 @@ pub fn read(text_: &str, d: &Dialect) -> Result<Vec<Motion>, ReadError> {
     let mut motion: Option<u32> = None;
     let mut cycle: Option<(CycleKind, Q, Q, Q, Q, Q)> = None; // kind, z, r, q, dwell ms, clear
     let mut rpm: Q = 0;
+    // the dialect's extras: an end-of-line comment mark, a block terminator, G codes that carry
+    // no motion (ignored) or that make the block carry none (skipped), more word letters
+    let eol = d.s("comment_eol").chars().next();
+    let block_end = d.s("block_end").trim().to_string();
+    let g_ignore: Vec<u32> = toml::nums(&d.t, "read_g_ignore")
+        .unwrap_or_default()
+        .into_iter()
+        .map(|x| x as u32)
+        .collect();
+    let g_skip: Vec<u32> = toml::nums(&d.t, "read_g_skip")
+        .unwrap_or_default()
+        .into_iter()
+        .map(|x| x as u32)
+        .collect();
+    let more_words = d.s("read_words").to_string();
+    // the dwell's word: the letter before the dwell template's `{ms}` or `{s}`
+    let word_of = |tpl: &str| -> char {
+        tpl.find("{ms}")
+            .or_else(|| tpl.find("{s}"))
+            .and_then(|i| tpl[..i].chars().last())
+            .filter(|c| c.is_ascii_alphabetic())
+            .unwrap_or('P')
+    };
+    let dwell_letter = word_of(d.s("dwell"));
+    let cycle_dwell_letter = word_of(d.s("cycle_dwell"));
     for (n, raw) in text_.lines().enumerate() {
         let ln = n + 1;
+        let raw = match eol.and_then(|c| raw.find(c)) {
+            Some(i) => &raw[..i],
+            None => raw,
+        };
+        let raw = if block_end.is_empty() {
+            raw
+        } else {
+            raw.trim_end().strip_suffix(block_end.as_str()).unwrap_or(raw)
+        };
         // comments and the program brackets
         let mut s = String::new();
         let mut depth = 0;
@@ -997,7 +1127,7 @@ pub fn read(text_: &str, d: &Dialect) -> Result<Vec<Motion>, ReadError> {
             }
         }
         let s = s.trim();
-        if s.is_empty() || s == "%" {
+        if s.is_empty() || s.starts_with('%') {
             continue;
         }
         let mut words: Vec<(char, String)> = Vec::new();
@@ -1028,6 +1158,7 @@ pub fn read(text_: &str, d: &Dialect) -> Result<Vec<Motion>, ReadError> {
                     what: format!("M{v}"),
                 })?),
                 'N' | 'O' | 'X' | 'Y' | 'Z' | 'I' | 'J' | 'F' | 'R' | 'Q' | 'P' | 'S' | 'T' | 'H' | 'K' => {}
+                c if more_words.contains(*c) => {}
                 c => {
                     return Err(ReadError {
                         line: ln,
@@ -1039,7 +1170,10 @@ pub fn read(text_: &str, d: &Dialect) -> Result<Vec<Motion>, ReadError> {
         if let Some(sv) = get('S') {
             rpm = parse_q(&sv, 0, ln)?;
         }
-        if let Some(fv) = get('F') {
+        // a dwell written with F (G4 F seconds) is not a feed
+        if let Some(fv) = get('F')
+            && !(dwell_letter == 'F' && gs.contains(&4))
+        {
             feed = parse_q(&fv, fk, ln)?;
         }
         for m in &ms {
@@ -1095,7 +1229,7 @@ pub fn read(text_: &str, d: &Dialect) -> Result<Vec<Motion>, ReadError> {
                         Some(v) => parse_q(&v, k, ln)?,
                         None => 0,
                     };
-                    let dw = match get('P') {
+                    let dw = match get(cycle_dwell_letter) {
                         Some(v) => parse_q(&v, if d.s("cycle_dwell").contains("{ms}") { 0 } else { 3 }, ln)?,
                         None => 0,
                     };
@@ -1111,9 +1245,9 @@ pub fn read(text_: &str, d: &Dialect) -> Result<Vec<Motion>, ReadError> {
                     motion = None;
                 }
                 4 => {
-                    let p = get('P').ok_or_else(|| ReadError {
+                    let p = get(dwell_letter).ok_or_else(|| ReadError {
                         line: ln,
-                        what: "G4 with no P".into(),
+                        what: format!("G4 with no {dwell_letter}"),
                     })?;
                     // milliseconds (integer P) or seconds (with a point), as the dialect writes it
                     let ms = if d.s("dwell").contains("{ms}") {
@@ -1126,6 +1260,8 @@ pub fn read(text_: &str, d: &Dialect) -> Result<Vec<Motion>, ReadError> {
                 }
                 90 | 94 | 17 | 21 | 40 | 49 | 98 | 64 | 54..=59 | 187 => {}
                 43 => skip_motion = true,
+                g if g_ignore.contains(g) => {}
+                g if g_skip.contains(g) => skip_motion = true,
                 28 | 53 | 91 => {
                     home = true;
                     skip_motion = true;

@@ -349,3 +349,86 @@ fn round_trip_compares_what_the_control_executes() {
     let e = round_trip(&q, &d).unwrap_err();
     assert!(e.contains("differs"), "{e}");
 }
+
+/// The data-driven extras a non-Fanuc control needs: an end-of-line comment, a block terminator,
+/// a `%` header, a dwell in another word, G codes that carry no motion; and per-code citations.
+const EXTRAS: &str = r#"
+[dialect]
+name = "extras"
+decimals = 3
+feed_decimals = 0
+point = "always"
+program_open = ["%P{num} G71", "G15 H1"]
+program_close = ["M30"]
+comment = "; {text}"
+comment_eol = ";"
+comment_strip = ";"
+block_end = " *"
+line_numbers = true
+safe_start = ["G90 G17 G94"]
+tool_change = ["T{t} M06"]
+length_comp = "G56 H{h}"
+spindle_cw = "S{rpm} M03"
+spindle_ccw = "S{rpm} M04"
+spindle_stop = "M05"
+wcs = "G15 H{n}"
+wcs_first = 1
+wcs_count = 6
+arc = "ijk"
+retract_home = ["G53 Z0."]
+coolant_flood = "M08"
+coolant_mist = "M07"
+coolant_off = "M09"
+dwell = "G04 F{s}"
+cycle_drill = "expand"
+cycle_dwell = "expand"
+cycle_peck = "expand"
+cycle_chipbreak = "expand"
+cycle_tap = "refuse"
+cycle_ream = "expand"
+read_g_ignore = [15, 71]
+read_g_skip = [56]
+"#;
+
+#[test]
+fn data_driven_extras_round_trip() {
+    let d = Dialect::parse(EXTRAS).unwrap();
+    let mut p = prog(false);
+    p.recs.push(Rec::Home);
+    let q = quantize(&p, &d).unwrap();
+    let (txt, back) = round_trip(&q, &d).unwrap_or_else(|e| panic!("{e}"));
+    assert!(back.len() > 20);
+    assert!(txt.starts_with("%P1001 G71\nN10 G15 H1 *\n"), "{txt}");
+    assert!(
+        txt.contains("; op1 face *") || txt.contains("; op1 (face) *"),
+        "{txt}"
+    );
+    assert!(txt.contains("G04 F0.5 *"), "{txt}");
+    // a comment after a block is dropped by the reader, the terminator too
+    assert!(read("G0 X1. Y1. Z1. ; here *\nG1 X2. F100 *\n", &d).is_ok());
+    // what the dialect does not list is still refused
+    assert!(read("G0 X1. Y1. Z1. *\nG41 D1 *\n", &d).is_err());
+}
+
+#[test]
+fn a_cited_dialect_cites_every_code_it_sets() {
+    let uncited = format!("{EXTRAS}cite_required = true\n");
+    assert!(matches!(Dialect::parse(&uncited), Err(PostError::Dialect(_))));
+    // every key cited: accepted, and the cites are kept
+    let mut cited = uncited.clone();
+    let keys: Vec<&str> = KEYS
+        .iter()
+        .copied()
+        .filter(|k| EXTRAS.contains(&format!("\n{k} =")))
+        .collect();
+    for k in &keys {
+        cited.push_str(&format!(
+            "[[dialect.cite]]\nkey = \"{k}\"\nsource = \"https://example.org/manual.pdf\"\ntaken = \"2026-11-23\"\nwhere = \"p. 1\"\n"
+        ));
+    }
+    let d = Dialect::parse(&cited).unwrap_or_else(|e| panic!("{e:?}"));
+    assert_eq!(d.cites.len(), keys.len());
+    // a published cite without its source is refused
+    let bad = format!("{cited}[[dialect.cite]]\nkey = \"dwell\"\n");
+    assert!(Dialect::parse(&bad).is_err());
+}
