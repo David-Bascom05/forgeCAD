@@ -125,3 +125,4 @@ import ForgeCurved
 #print axioms ForgeCurved.qledgerB_complete
 #print axioms ForgeCurved.bounded_sphereR
 #print axioms ForgeCurved.curved_exact_facets
+#print axioms ForgeCurved.pair_moves

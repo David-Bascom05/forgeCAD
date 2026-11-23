@@ -139,13 +139,15 @@ theorem component_crossesS {ℓ : V →L[ℝ] ℝ} {ks : List (V → ℝ)} {a b 
   obtain ⟨y, hy, rfl⟩ := hall hc
   exact ⟨y, hy, rfl⟩
 
-/-- **The edge half of `CrossesAll`, bounded.** -/
+/-- **The edge half of `CrossesAll`, bounded.** The cell is on the bounding carrier's negative
+side or on it (an edge of `B` itself). -/
 theorem crossesAll_edges_bounded {cs : List (V → ℝ)} {ℓ : V →L[ℝ] ℝ} {a b : ℝ}
     (hdim : Module.finrank ℝ V = 3) (hC : ∀ c ∈ cs, ContDiff ℝ 1 c)
     (ht : ∀ j k (hj : j < cs.length) (hk : k < cs.length), j ≠ k →
       ∀ x ∈ Zs ℓ [cs[j], cs[k]] a b, Transverse ℓ [cs[j], cs[k]] x)
     {bi : ℕ} (hbi : bi < cs.length) (hB : Bornology.IsBounded {z | cs[bi] z ≤ 0})
-    (h3 : NoTriple ℓ cs a b) (X : Cov) (hXb : X[bi]? = some Sgn.neg) {j k : ℕ} (hjk : j ≠ k)
+    (h3 : NoTriple ℓ cs a b) (X : Cov) (hXb : X[bi]? = some Sgn.neg ∨ X[bi]? = some Sgn.zero)
+    {j k : ℕ} (hjk : j ≠ k)
     (hXj : X[j]? = some Sgn.zero) (hXk : X[k]? = some Sgn.zero)
     (hx : ∃ x ∈ Slab ℓ a b, covCellK cs X x) :
     ∀ c, a < c → c < b → ∃ x, covCellK cs X x ∧ ℓ x = c := by
@@ -196,13 +198,16 @@ theorem crossesAll_edges_bounded {cs : List (V → ℝ)} {ℓ : V →L[ℝ] ℝ}
     isClosed_le (hC _ (List.getElem_mem hbi)).continuous continuous_const
   have hDS : D ⊆ {z : V | cs[bi] z ≤ 0} := by
     intro y hy
-    have h := hXb
-    rw [← hsign y hy, getElem?_covOfK] at h
-    simp only [hbi, getElem?_pos, Option.map_some, Option.some.injEq] at h
-    rcases lt_trichotomy (cs[bi] y) 0 with h' | h' | h'
-    · exact h'.le
-    · rw [sgnK_zero_iff.mpr h'] at h; cases h
-    · rw [sgnK_pos h'] at h; cases h
+    rcases hXb with h | h
+    · rw [← hsign y hy, getElem?_covOfK] at h
+      simp only [hbi, getElem?_pos, Option.map_some, Option.some.injEq] at h
+      rcases lt_trichotomy (cs[bi] y) 0 with h' | h' | h'
+      · exact h'.le
+      · rw [sgnK_zero_iff.mpr h'] at h; cases h
+      · rw [sgnK_pos h'] at h; cases h
+    · rw [← hsign y hy, getElem?_covOfK] at h
+      simp only [hbi, getElem?_pos, Option.map_some, Option.some.injEq] at h
+      exact (sgnK_zero_iff.mp h).le
   obtain ⟨y, hyD, hyc⟩ := component_crossesS hCk (by rw [hdim]; rfl)
     (ht j k hj hk hjk) hSc (fun a' b' _ _ => hB.subset fun z hz => hz.2.2.2) hxZ hDS c ⟨hac, hcb⟩
   exact ⟨y, hsign y hyD, hyc⟩
