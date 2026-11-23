@@ -63,6 +63,12 @@ pub(crate) struct Tally {
     pub axis: (u32, u32),
     pub meet: (u32, u32),
     pub cross: (u32, u32),
+    /// work: (planes, lines kept), (edges scanned, side calls), (mid_in calls, points)
+    pub lines: (u32, u32),
+    pub edges: (u32, u32),
+    pub mids: (u32, u32),
+    /// planes taken whole (their faces are their facets)
+    pub whole: u32,
 }
 
 struct Ctx<'a> {
@@ -218,6 +224,7 @@ impl<'a> Ctx<'a> {
 
     /// Class `k`'s side at point `i`: -1, 0, 1.
     fn side(&self, k: u32, i: u32) -> i32 {
+        bump(&self.t, |t| t.edges.1 += 1);
         let pt = &self.p[i as usize];
         if pt.on >> k & 1 == 1 {
             return 0;
@@ -418,6 +425,7 @@ impl<'a> Ctx<'a> {
     /// `a`–`b` (along `t` when the line runs more along `s`), so it does not run along the face's
     /// edges on that line.
     fn mid_in(&self, a: u32, b: u32, g: usize) -> bool {
+        bump(&self.t, |t| t.mids.0 += 1);
         let (pa, pb) = (&self.p[a as usize], &self.p[b as usize]);
         let qf = [
             0.5 * (pa.f[0] + pb.f[0]),
@@ -546,6 +554,21 @@ pub(crate) fn counts(
         }
     }
     let is_wall = |k: u32| cls.walls.contains(&k);
+    // the box, from its walls (none: everything)
+    let mut wbox = ([f64::NEG_INFINITY; 3], [f64::INFINITY; 3]);
+    for (&w, &si) in cls.walls.iter().zip(&cls.wall_in) {
+        let p = plane_f(&cls.planes[w as usize]);
+        let a = (0..3)
+            .max_by(|&i, &j| p.n[i].abs().total_cmp(&p.n[j].abs()))
+            .unwrap();
+        let x = p.c / p.n[a];
+        // (inside on the + side: a lower wall when the normal points up the axis)
+        if (si == Sgn::Pos) == (p.n[a] > 0.0) {
+            wbox.0[a] = x;
+        } else {
+            wbox.1[a] = x;
+        }
+    }
     let mut cx = Ctx {
         bodies,
         cls,
@@ -594,7 +617,15 @@ pub(crate) fn counts(
             continue;
         }
         let c32 = c as u32;
+        // a plane the other operand does not come near, whose faces are all strictly inside the
+        // box: its faces are its facets (a solid's own faces meet only at their edges)
+        if whole_plane(c, &on, fs, cls, &cx.cpf, &cbox, &wbox) {
+            bump(&cx.t, |t| t.whole += 1);
+            nfacet += on[c].len();
+            continue;
+        }
         cx.plane_meets(c32);
+        bump(&cx.t, |t| t.lines.0 += 1);
         segs.clear();
         // 1. boundary edges of the faces of C, each on C ∩ (the class across it)
         for (pos, &f) in on[c].iter().enumerate() {
@@ -658,6 +689,7 @@ pub(crate) fn counts(
             if ln.d.x.is_zero() && ln.d.y.is_zero() && ln.d.z.is_zero() {
                 continue; // parallel
             }
+            bump(&cx.t, |t| t.lines.1 += 1);
             ps.clear();
             // the points where the line meets a boundary edge of a face of C or of K, each with
             // the faces (bits: C's at their position in on[c], K's at 64 + theirs) whose boundary
@@ -676,6 +708,7 @@ pub(crate) fn counts(
                         continue;
                     }
                     let base = fe_start[f] as usize;
+                    bump(&cx.t, |t| t.edges.0 += edges_of(f).len() as u32);
                     for (j, &(_, _, across)) in edges_of(f).iter().enumerate() {
                         let (ia, ib) = cx.fe_pt[base + j];
                         // (the face's vertices are on its own plane; on the line when on the other)
@@ -815,7 +848,42 @@ pub(crate) fn counts(
         nvert += nv;
         nfacet += nf;
     }
-    Some(((nseg, nvert, nfacet), cx.t.get()))
+    let mut t = cx.t.get();
+    t.mids.1 = cx.p.len() as u32;
+    Some(((nseg, nvert, nfacet), t))
+}
+
+/// Plane `c` is taken whole: its faces all of one body, each strictly inside the box `wbox`
+/// (their boxes grown by a few LINEAR), and no near face of another body has a box that meets
+/// both plane `c` and the box of `c`'s faces.
+fn whole_plane(
+    c: usize,
+    on: &[Vec<usize>],
+    fs: &[In],
+    cls: &Classes,
+    cpf: &[PlaneF],
+    cbox: &[([f64; 3], [f64; 3])],
+    wbox: &([f64; 3], [f64; 3]),
+) -> bool {
+    let g = 4.0 * super::lin();
+    let b = fs[on[c][0]].body;
+    let tol = |x: f64| g + 1e-9 * (1.0 + x.abs());
+    let inside =
+        |f: &In| (0..3).all(|a| f.lo[a] - tol(f.lo[a]) > wbox.0[a] && f.hi[a] + tol(f.hi[a]) < wbox.1[a]);
+    if !on[c].iter().all(|&f| fs[f].body == b && inside(&fs[f])) {
+        return false;
+    }
+    let (clo, chi) = cbox[c];
+    for (h, f) in fs.iter().enumerate() {
+        if f.body == b || cls.of_face[h] == NONE {
+            continue;
+        }
+        let meets_box = (0..3).all(|a| f.lo[a] <= chi[a] + tol(chi[a]) && f.hi[a] >= clo[a] - tol(clo[a]));
+        if meets_box && touches(f, &cpf[c], g) {
+            return false;
+        }
+    }
+    true
 }
 
 /// Face `f`'s box (grown by `g`) meets plane `p`, in f64 with a margin for its rounding.
