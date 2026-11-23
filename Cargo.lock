@@ -78,6 +78,14 @@ name = "forge-cam-geom"
 version = "0.1.0"
 
 [[package]]
+name = "forge-cam-import"
+version = "0.1.0"
+dependencies = [
+ "forge-agent",
+ "forge-tooling",
+]
+
+[[package]]
 name = "forge-cli"
 version = "0.1.0"
 dependencies = [
