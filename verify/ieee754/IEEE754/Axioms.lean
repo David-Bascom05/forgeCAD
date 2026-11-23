@@ -16,6 +16,7 @@ import IEEE754.Screen.Apart
 import IEEE754.Screen.First
 import IEEE754.Screen.Near
 import IEEE754.Screen.Cross
+import IEEE754.Screen.CrossScale
 import IEEE754.Screen.Interior
 import IEEE754.Interval.Sin
 import IEEE754.Exact.Big
@@ -99,6 +100,7 @@ elab "#standard_axioms " ids:ident* : command => do
   IEEE754.Screen.searchF_sound IEEE754.Screen.meetF_sound IEEE754.Screen.tolF_hi IEEE754.Screen.first_meet_f_sound
   IEEE754.Screen.e_close IEEE754.Screen.r_close IEEE754.Screen.near_f_past IEEE754.Screen.near_f_within
   IEEE754.Screen.above_sound IEEE754.Screen.d0_close IEEE754.Screen.crosses_f_sound
+  IEEE754.Screen.float_le_round IEEE754.Screen.scale_facts IEEE754.Screen.pf_delta_ok
   IEEE754.Screen.proj_close IEEE754.Screen.e_nonneg
   -- Interval sin/cos
   IEEE754.Interval.below_round IEEE754.Interval.above_round IEEE754.Interval.crit_counted
