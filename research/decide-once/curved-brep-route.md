@@ -1,6 +1,6 @@
 # Curved decide-once on the B-rep route (route iii): design draft (2026-11-23)
 
-Status: reviewed. dol-curved (session_01Q19LzxCYQCLaMBUHLhN7Zr) accepted the design on 2026-11-23
+Status: **signed off by the master as the curved design (2026-11-23, at 412ed629).** Reviewed: dol-curved (session_01Q19LzxCYQCLaMBUHLhN7Zr) accepted the design on 2026-11-23
 and takes F6, the 2D nesting lemma and the builder's Lean L2. Their review and dol-curved-rust's arc
 model are folded in below (§1 step 1, the build order, nesting, §2, §5, §6). It goes to the master
 for sign-off.
@@ -65,14 +65,24 @@ Steps, all exact, with each step's Skip named:
      between events the branches keep their y-order.
    - **Slabs.** On a rational plane between events, each crossing is a certified edge sample
      (QEdge), sorted by y.
-   - **Matching at an event.** Two rational planes `x_e ± δ`, and QArc boxes round the fiber's
-     multiple points, match the branches on each side.
+   - **Matching at an event.** Two rational planes `x_e ± δ`, and 3D QArc boxes round the fiber's
+     points, match the branches on each side. A box is `[x_l, x_r]` × (a y-strip between
+     separators of the fiber's y-candidates) × (a z-strip, the same with z-candidates). Each box
+     holds at most one curve point over `x_e` (QArc boxCrossings on its six faces). No separator
+     plane meets the curve in `[x_l, x_r]` (QArc face crossings). A box that isn't found is
+     `Budget`. Isolating in 3D, not only in y, also keeps mirrored pairs (two space points over one
+     `(x, y)`) apart. The two lemmas matching rests on, which dol-curved assigns: (L1) the
+     projected branches keep their y-order between consecutive roots of the discriminant; (L2) a
+     box as above meets the curve in a star from its one point, one arm per face crossing.
    - **Arcs** are chains of slab pieces. A trim vertex (QVert) is placed on its arc by its x and
      its rank in y within its slab. The arc's "parameter" is the sweep order. A clip or a midpoint
      is a slab sample between two vertices.
-   - **The frame must be generic**: no vertical component of the curve, and a nonzero `R`. The
-     sweep runs in a tilted rational frame. If a frame's check fails, the builder retilts once;
-     if it fails again, `Uncertified`.
+   - **The frame must be generic**: no vertical component of the curve, a nonzero `R`, and the
+     `(x, y)` projection injective on the curve's points over each event. The frame is the same
+     decided rule as the reference's: the first frame of dol-curved's `frames` list (six tilted,
+     then the untilted shears) that passes frameOk, singAll and every certificate, else
+     `Uncertified`. One list for builder and reference keeps them in the same frame on every input,
+     and keeps the L6 comparison simple.
 
    What the proofs need from step 1 is completeness (every arc of `q_f ∩ q_g` in the trims is
    found, F2) and exact adjacency (which branch continues which at an event). The sweep gives
