@@ -106,6 +106,20 @@ candidates hold the minimum (Fermat, and the derivative's algebra), and the tria
 **Procedural.** Accepted by the Cells bounds on its bending (tessellate.rs `Cells::within`), so its
 statement is relative to those bounds.
 
+## Proof status (verify/forge-tess/lean, standard axioms only)
+
+| Kind | The code's rule | Proven | Open |
+|---|---|---|---|
+| Plane | none needed | (sag 0) | |
+| Cylinder | edge middles | | the projection argument (exact by midpoint) |
+| Sphere | edge middles, the foot (filtered) | `sphere_exact`, `sphere_filter`, `foot_far` | |
+| Cone | exact chord (filtered), the axis point | `chord_convex`, `convex_dip` (the filter) | the candidates hold the chord's minimum; a triangle's deepest point is on its edges or the axis |
+| Torus | chord bound, triangle's stationary points | `stray_bound`, `F_sag`, `interp_remainder` (the chord) | the triangle's candidates are all its interior stationary points; a chord whose shadow lies on a line through the axis (αγ = β²) |
+| Procedural | the Cells bounds | | all |
+
+All of it over ℝ: the code's f64 is L5's (the float bridge, cdt-l4's). Boundary chords' sag:
+MeshCheck's `segments_sag` (to link). The CDT's cover and its settled ⇒ every test passes: cdt-l4.
+
 ## Levels next
 
 - L3: the CDT covers each face's drawn region exactly (every constraint edge present, the
