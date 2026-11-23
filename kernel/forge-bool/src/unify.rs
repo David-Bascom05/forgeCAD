@@ -888,32 +888,38 @@ fn join(body: &mut Body, c: CoedgeId, n: CoedgeId) -> bool {
 /// (`IntCurve::spliced`) from its own far end to e2's, if each far end is on it.
 fn splice(body: &mut Body, e1: EdgeId, e2: EdgeId, v: forge_topo::VertexId) -> bool {
     use forge_geom::intcurve::IntCurve;
+    use std::borrow::Cow;
     let (x1, x2) = (body.edge(e1), body.edge(e2));
     let (Curve::Intersection(c1), Curve::Intersection(c2)) = (&x1.curve, &x2.curve) else {
         return false;
     };
-    // a piece as run the other way
-    let flip = |c: &IntCurve, r: Interval| {
-        let h = c.domain_hi();
-        (c.reversed(), Interval::new(h - r.hi, h - r.lo))
+    let far = if x2.start == v { x2.end } else { x2.start };
+    let other = if x1.end == v { x1.start } else { x1.end };
+    // nor a loop back to one point (a pinch's): asked before any chain is made
+    let pinch = body.vertex(far).tol.max(body.vertex(other).tol).max(tol::LINEAR);
+    if far == other || body.vertex(far).point.distance(body.vertex(other).point) <= pinch {
+        return false;
+    }
+    // e2 as run into v (`into`) or away from it, turned round if it runs the other way
+    let run = |into: bool| -> (Cow<'_, IntCurve>, Interval) {
+        if (x2.end == v) == into {
+            (Cow::Borrowed(c2.as_ref()), x2.range)
+        } else {
+            let h = c2.domain_hi();
+            (
+                Cow::Owned(c2.reversed()),
+                Interval::new(h - x2.range.hi, h - x2.range.lo),
+            )
+        }
     };
     let at = body.vertex(v).point;
-    let far = if x2.start == v { x2.end } else { x2.start };
     let spliced = if x1.end == v {
         // along e1 into v, then e2 away from it
-        let (b, rb) = if x2.start == v {
-            (c2.as_ref().clone(), x2.range)
-        } else {
-            flip(c2, x2.range)
-        };
+        let (b, rb) = run(false);
         c1.spliced(x1.range, &b, rb, at)
     } else {
         // along e2 into v, then e1 away from it
-        let (a, ra) = if x2.end == v {
-            (c2.as_ref().clone(), x2.range)
-        } else {
-            flip(c2, x2.range)
-        };
+        let (a, ra) = run(true);
         a.spliced(ra, c1, x1.range, at)
     };
     let Some((curve, range)) = spliced else {
@@ -924,17 +930,11 @@ fn splice(body: &mut Body, e1: EdgeId, e2: EdgeId, v: forge_topo::VertexId) -> b
     } else {
         (far, x1.end)
     };
-    let other = if x1.end == v { x1.start } else { x1.end };
-    // its ends where the edge's vertices are; nor a loop back to one point (a pinch's)
+    // its ends where the edge's vertices are
     let off = |t: f64, w: forge_topo::VertexId| {
         curve.eval(t).distance(body.vertex(w).point) > body.vertex(w).tol.max(tol::LINEAR)
     };
-    let pinch = body.vertex(far).tol.max(body.vertex(other).tol).max(tol::LINEAR);
-    if off(range.lo, start)
-        || off(range.hi, end)
-        || far == other
-        || body.vertex(far).point.distance(body.vertex(other).point) <= pinch
-    {
+    if off(range.lo, start) || off(range.hi, end) {
         return false;
     }
     let edge = &mut body.edges[e1.index()];

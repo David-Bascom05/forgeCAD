@@ -8,7 +8,7 @@ use crate::{
     Combine, Edit, Feature, History, RegenError, SHORT_RUN, Tool, cut_root, modifies, modify, op_of,
     part_shape, starts, tools,
 };
-use forge_bool::{BoolError, Op, Shape, boolean, boolean_into, nary_with};
+use forge_bool::{BoolError, Op, Shape, boolean_into, nary_with};
 use forge_geom::{Cylinder, Plane, Surface};
 use forge_math::{Box3, Frame, Point2, Point3, Vec3, tol};
 use forge_ops::{Profile, ProfileLoop, Segment, extrude};
@@ -767,7 +767,8 @@ fn body_feature(
                     solids[k].body.clone()
                 }
                 .into_canonical();
-                body = boolean(&body, &tool, op_of(*op), bool_id(me, n as u64)).map_err(boolean_err(i))?;
+                body = crate::combined(&body, &tool, op_of(*op), bool_id(me, n as u64))
+                    .map_err(boolean_err(i))?;
             }
             solids[t].body = body;
             if !keep {
@@ -789,7 +790,7 @@ fn body_feature(
                     (Op::Subtract, Op::Intersect)
                 };
                 let piece = |op: Op, h: &Body, n: u64| -> Result<Body, RegenError> {
-                    let b = boolean(&body, h, op, bool_id(me, n)).map_err(boolean_err(i))?;
+                    let b = crate::combined(&body, h, op, bool_id(me, n)).map_err(boolean_err(i))?;
                     if b.face_ids().next().is_none() {
                         return Err(bad(BodyError::Misses));
                     }
