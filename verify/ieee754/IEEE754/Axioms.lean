@@ -24,6 +24,7 @@ import IEEE754.Exact.Big
 import IEEE754.Exact.QHenrici
 import IEEE754.Exact.DivRem2
 import IEEE754.Exact.Gcd
+import IEEE754.Exact.QBig
 import IEEE754.Expansion
 import IEEE754.ExpansionSum
 
@@ -118,6 +119,11 @@ elab "#standard_axioms " ids:ident* : command => do
   IEEE754.Exact.Gcd.step_inv IEEE754.Exact.Gcd.step_bounds IEEE754.Exact.Gcd.run_brk IEEE754.Exact.Gcd.mediant
   IEEE754.Exact.Gcd.run_euclid IEEE754.Exact.Gcd.cone IEEE754.Exact.Gcd.lehmerStep_fuel IEEE754.Exact.Gcd.lehmerStep_spec
   IEEE754.Exact.Gcd.gcdL_spec IEEE754.Exact.Gcd.gcdBig_spec
+  -- Q on Big fields
+  IEEE754.Exact.QB.truncDiv_q IEEE754.Exact.QB.divq_spec IEEE754.Exact.QB.ratio_tie IEEE754.Exact.QB.add_tie
+  IEEE754.Exact.QB.neg_tie IEEE754.Exact.QB.sub_tie IEEE754.Exact.QB.mul_tie IEEE754.Exact.QB.div_tie
+  IEEE754.Exact.QB.inv_tie IEEE754.Exact.QB.cmp_tie IEEE754.Exact.QB.qadd_spec IEEE754.Exact.QB.qsub_spec
+  IEEE754.Exact.QB.qmul_spec IEEE754.Exact.QB.ratio_spec'
   -- exact.rs Big
   IEEE754.Exact.add_into_spec IEEE754.Exact.sub_into_spec IEEE754.Exact.mul_into_spec IEEE754.Exact.shl_into_spec
   IEEE754.Exact.trimLen_spec IEEE754.Exact.cmp_mag_spec IEEE754.Exact.Big.fromMag_spec IEEE754.Exact.Big.view_spec
