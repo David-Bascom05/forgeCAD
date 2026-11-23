@@ -1518,6 +1518,7 @@ fn kernel_text(e: &SheetError) -> String {
     }
 }
 
+#[inline(never)]
 fn kernel_data(e: &SheetError, n: &Names) -> Vec<(&'static str, Json)> {
     use SheetError::*;
     let f = |x: f64| Json::Num(x);
@@ -3635,6 +3636,8 @@ fn carried(l: &ProfileLoop, from: &Frame, to: &Frame) -> Option<ProfileLoop> {
     Some(ProfileLoop::new(out))
 }
 
+// out of line: the evaluator's dispatch inlines builtins, and a sheet cutout is not hot
+#[inline(never)]
 fn cutout(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
     let id = ev.take_id("cutout", span)?;
     let a = Args::bind(ev, "cutout", &["profile", "wall", "crosses_bend"], args, span)?;
