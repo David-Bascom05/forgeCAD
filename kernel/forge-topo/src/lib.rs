@@ -5,9 +5,7 @@
 /// This crate's Cargo features and whether this build has each: a result cache keyed by the
 /// sources alone would hand one build's answers to a build with other features
 /// (forge-lang's `store::key` folds them in).
-pub const FEATURES: &[(&str, bool)] = &[
-    ("decisions", cfg!(feature = "decisions")),
-];
+pub const FEATURES: &[(&str, bool)] = &[("decisions", cfg!(feature = "decisions"))];
 
 pub mod body;
 pub mod check;

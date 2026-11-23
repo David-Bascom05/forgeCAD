@@ -269,7 +269,11 @@ mod tests {
         assert!(f.contains("forge-bool/decide_once=") && f.contains("forge-geom/decisions="));
         let k = |features: &str| super::key_with("kernel", features, "kind", |h| h.str("doc"));
         let other = f.replacen("forge-bool/decide_once=0", "forge-bool/decide_once=1", 1);
-        let other = if other == f { f.replacen("forge-bool/decide_once=1", "forge-bool/decide_once=0", 1) } else { other };
+        let other = if other == f {
+            f.replacen("forge-bool/decide_once=1", "forge-bool/decide_once=0", 1)
+        } else {
+            other
+        };
         assert_ne!(k(&f), k(&other));
         assert_eq!(k(&f), k(&f));
     }

@@ -2503,7 +2503,10 @@ pub(crate) fn trim(
     mut memo: Option<&mut AcrossMemo>,
 ) -> R<()> {
     // the curve's cuts by parameter: a list kept with the memo and reused
-    let mut ts = memo.as_deref_mut().map(|m| std::mem::take(&mut m.ts)).unwrap_or_default();
+    let mut ts = memo
+        .as_deref_mut()
+        .map(|m| std::mem::take(&mut m.ts))
+        .unwrap_or_default();
     ts.clear();
     let r = trim_in(
         bodies,
@@ -2728,16 +2731,13 @@ fn trim_in(
                     ));
                     CurveSurface::Hits(crossing_on_face(&curve, range, body, f, edge))
                 } else {
-                    with_hairs!(
-                        curve_surface_in(&curve, range, across, near),
-                        |hairs| log::hairs(
-                            [(bodies[0], faces[0]), (bodies[1], faces[1])],
-                            body,
-                            e,
-                            (&curve, range, across),
-                            &hairs,
-                        )
-                    )
+                    with_hairs!(curve_surface_in(&curve, range, across, near), |hairs| log::hairs(
+                        [(bodies[0], faces[0]), (bodies[1], faces[1])],
+                        body,
+                        e,
+                        (&curve, range, across),
+                        &hairs,
+                    ))
                 };
                 decided!({
                     let sine = match (&curve, &edge.curve) {
@@ -2932,7 +2932,10 @@ fn trim_in(
                         })
                     };
                     let touch = (grazing && near.is_empty() && (corner() || touch_inside(&h))).then_some(h);
-                    one.into_iter().chain(near).chain(touch).map(move |x| (x, grazing))
+                    one.into_iter()
+                        .chain(near)
+                        .chain(touch)
+                        .map(move |x| (x, grazing))
                 }) {
                     // off the other face no piece of the curve starts here: cutting the edge would
                     // only split it where nothing meets it (and not its coincident twin). Its box
