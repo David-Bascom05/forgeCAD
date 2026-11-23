@@ -11,3 +11,5 @@ import ForgeBoolProof
 #print axioms ForgeBoolProof.seq_correct
 #print axioms ForgeBoolProof.keepRuleBd_proof
 #print axioms ForgeBoolProof.boolean_correct_of_steps
+#print axioms ForgeBoolProof.booleanCorrectR_of_shape
+#print axioms ForgeBoolProof.booleanCorrectR_of_steps

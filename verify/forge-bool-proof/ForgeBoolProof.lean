@@ -2,3 +2,4 @@ import ForgeBoolProof.Statement
 import ForgeBoolProof.Contracts
 import ForgeBoolProof.Compose
 import ForgeBoolProof.KeepRule
+import ForgeBoolProof.Bridge

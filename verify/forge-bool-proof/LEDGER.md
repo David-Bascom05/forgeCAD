@@ -33,7 +33,8 @@ verify/forge-bool-proof/ForgeBoolProof/<file>.
 |---|---|---|---|---|
 | E | `boolean_correct`: Ok ⇒ ValidSolid ∧ Faithful (F1) ∧ NamesOK; Err ⇒ RefusalTrue | SPINE | stated | Statement.lean `BooleanCorrect` |
 | E.comp | the composition: D1–D9 ⇒ E, for `Pipeline.run` | SPINE | proven | KeepRule.lean `boolean_correct_of_steps`; Compose.lean `boolean_correct_of_contracts` (with `res_keepRoom`, `apply_correct`) |
-| E.shape | the translated `general` is `Pipeline.run` of its translated steps, with a `View` per stage (`boolean`'s clone/`into_compact` wrapper is D0) | TRANSLATE | open | — |
+| E.shape | `ShapeR general read P.run`: the translated (in-place, Aeneas `Result`) `general` returns `ok`, and its output read by `readInPlace` is `Pipeline.run` of its translated steps, with a `View` per stage; the retry ladder's rungs are `general` with the flags as an argument (`boolean`'s clone/`into_compact` wrapper is D0) | TRANSLATE | stated | Bridge.lean `ShapeR`, `readInPlace` |
+| E.R | §E for the translation itself (`BooleanCorrectR`: returns `ok`, no panic or divergence, and `Correct`) from E.shape and D1–D9 | SPINE | proven | Bridge.lean `booleanCorrectR_of_steps` |
 | E.seq | sequential regen as a fold of booleans | SPINE | proven (given E and `boolean_preserves_InputSize`) | Compose.lean `seq_correct` |
 | E.fb | the flat fallback branch: today's path refuses or is undecided ⇒ A8, then a typed refusal; A8 starts from the original inputs | FALLBACK | composition proven (`TodayOK` + A8's `BooleanCorrect` ⇒ E); A8's `BooleanCorrect` open (rows A8.*) | Compose.lean `withFallback`, `fallback_correct` |
 | E.ref | `RefusalTrue A B op e` per refusal kind (`ZeroThickness`, `Unhandled k`, `Undecided q`); `Internal` mapped or unreachable | SPINE (stmt), FALLBACK (`Internal`) | stated (`internal` is never true; `unhandled`/`undecided` read through the declared `Scope`) | Statement.lean `RefusalTrue`, `ManifoldPt` |
