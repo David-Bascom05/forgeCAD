@@ -282,6 +282,7 @@ speed (lazy field or constant table)  @ forge-geom/src/smooth.rs|lazy|joins: Onc
 speed (lazy field or constant table)  @ forge-geom/src/smooth.rs|lazy|joins: OnceLock<Vec<f64>>,
 speed (lazy field or constant table)  @ forge-geom/src/smooth.rs|lazy|use std::sync::{Arc, OnceLock};
 no-output (constant tables or print switches)  @ forge-geom/src/spline.rs|static|static BINOM: [[f64; WORK]; WORK] = binomials();
+no-output (a shortcut of the value comparison beside it)  @ forge-geom/src/spline/drafted.rs|pointer|((Arc::ptr_eq(&s.c, &self.c) || *s.c == *self.c)
 no-output (FFI buffer or a local identity of one object)  @ forge-geom/src/spline/extruded.rs|pointer|let same = if Arc::ptr_eq(&s.c, &self.c) {
 no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-geom/src/spline/tests.rs|float|((x.0 - y.0).powi(2) + (x.1 - y.1).powi(2)).sqrt() < 1e-12,
 no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-geom/src/spline/tests.rs|float|(1.0 - u).powi(3),
