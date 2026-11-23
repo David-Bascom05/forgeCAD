@@ -254,6 +254,8 @@ elab "#standard_axioms " ids:ident* : command => do
   ForgeExact.DecideOnce.Curved.homSub_ev
   ForgeExact.DecideOnce.Curved.secondProj_spec
   ForgeExact.DecideOnce.Curved.proposeVert3_complete
+  ForgeExact.DecideOnce.Curved.vertXs3_complete
+  ForgeExact.DecideOnce.Curved.proposeTripleXs_complete
   ForgeExact.DecideOnce.Curved.proposeTriple_complete
   ForgeExact.DecideOnce.Curved.cramer3
   ForgeExact.DecideOnce.Curved.proposeTripleX_complete

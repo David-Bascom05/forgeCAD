@@ -244,9 +244,16 @@ def proposeTripleX (a b c : Quadric) (fuel : Nat) : Option (List Num) :=
     if det3Q a b c != 0 then some [.rat (numXQ a b c / det3Q a b c)] else none
   else (proposeTriple a b c fuel).map (List.map VSample.x)
 
+/-- The events of a triple: `proposeTripleX`, or, where three curved quadrics' points fail it
+(two over one `x`), their `x`s alone (`vertXs3`). -/
+def proposeTripleXs (a b c : Quadric) (fuel : Nat) : Option (List Num) :=
+  match proposeTripleX a b c fuel with
+  | some xs => some xs
+  | none => if !isPlaneQ a && !isPlaneQ b && !isPlaneQ c then vertXs3 a b c fuel else none
+
 def rawEvents (qs : List Quadric) (fuel : Nat) : Option (List Num) :=
   ((eventTriples qs).mapM fun (t : Quadric × Quadric × Quadric) =>
-      proposeTripleX t.1 t.2.1 t.2.2 fuel).map List.flatten
+      proposeTripleXs t.1 t.2.1 t.2.2 fuel).map List.flatten
 
 /-- Refine consecutive numbers until their intervals separate (untrusted). -/
 def separate : Nat → Num → List Num → List Num
@@ -592,20 +599,32 @@ theorem proposeTripleX_complete {a b c : Quadric} {fuel : Nat} {xs : List Num}
   obtain ⟨v, hv, hd⟩ := proposeTriple_complete M hvs ha hb hc
   exact ⟨v.x, List.mem_map_of_mem hv, hd⟩
 
+theorem proposeTripleXs_complete {a b c : Quadric} {fuel : Nat} {xs : List Num}
+    (h : proposeTripleXs a b c fuel = some xs) {x y z : K}
+    (ha : Quadric.evK M a (x, y, z) = 0) (hb : Quadric.evK M b (x, y, z) = 0)
+    (hc : Quadric.evK M c (x, y, z) = 0) : ∃ n ∈ xs, Denotes M n x := by
+  unfold proposeTripleXs at h
+  split at h
+  · rename_i xs' hx
+    cases h; exact proposeTripleX_complete M hx ha hb hc
+  · split at h
+    · exact vertXs3_complete M h ha hb hc
+    · cases h
+
 theorem rawEvents_complete {qs : List Quadric} {fuel : Nat} {raw : List Num}
     (h : rawEvents qs fuel = some raw) {a b c : Quadric} (ht : (a, b, c) ∈ eventTriples qs)
     {x y z : K} (ha : Quadric.evK M a (x, y, z) = 0) (hb : Quadric.evK M b (x, y, z) = 0)
     (hc : Quadric.evK M c (x, y, z) = 0) : ∃ n ∈ raw, Denotes M n x := by
   unfold rawEvents at h
   cases hm : (eventTriples qs).mapM (fun (t : Quadric × Quadric × Quadric) =>
-      proposeTripleX t.1 t.2.1 t.2.2 fuel) with
+      proposeTripleXs t.1 t.2.1 t.2.2 fuel) with
   | none => rw [hm] at h; cases h
   | some ls =>
     rw [hm] at h
     simp only [Option.map_some, Option.some.injEq] at h
     subst h
     obtain ⟨r, hr, hrl⟩ := mapM_mem hm (a, b, c) ht
-    obtain ⟨n, hn, hd⟩ := proposeTripleX_complete M hr ha hb hc
+    obtain ⟨n, hn, hd⟩ := proposeTripleXs_complete M hr ha hb hc
     exact ⟨n, List.mem_flatten.mpr ⟨_, hrl, hn⟩, hd⟩
 
 /-- **Every event point's `x` is an event.** -/

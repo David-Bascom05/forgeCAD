@@ -193,6 +193,18 @@ def proposeVert3 (qa qb qc : Quadric) (fuel : Nat) : Option (List VSample) := do
   let vs := ns.map mk
   if (pa.L.length ≤ 2) && vs.all (fun v => v.onVert qa qb qc && v.dOk signFuel) then some vs else none
 
+/-- The `x` of every common point of three quadrics, without a point per root (curved Rust's
+finding, 058f1ad): two points over one `x` (a pair mirrored in `z`) have no `z` as a rational
+function of `x`, but their `x` is still a root of the gcd of the two projections. Events need
+only the `x`s. -/
+def vertXs3 (qa qb qc : Quadric) (fuel : Nat) : Option (List Num) := do
+  let pa ← proj qa qb qc
+  if !bezout3 qa qb qc pa.A pa.B pa.C pa.R then none
+  let (_, pb) ← secondProj qa qb qc
+  let (G, u, v) := Poly.xgcd pa.R pb.R
+  if !gcdOk G u v pa.R pb.R then none
+  rootsOf G fuel
+
 /-! ## The proofs -/
 
 section Model
@@ -264,6 +276,41 @@ theorem bpad_length {m : Nat} {f : BPoly} (h : f.length ≤ m) : (bpad m f).leng
   simp [bpad]; omega
 
 /-- **Every vertex of three quadrics is a proposed sample's point.** -/
+theorem vertXs3_complete {qa qb qc : Quadric} {fuel : Nat} {xs : List Num}
+    (h : vertXs3 qa qb qc fuel = some xs) {x y z : K}
+    (ha : Quadric.evK M qa (x, y, z) = 0) (hb : Quadric.evK M qb (x, y, z) = 0)
+    (hc : Quadric.evK M qc (x, y, z) = 0) : ∃ n ∈ xs, Denotes M n x := by
+  unfold vertXs3 at h
+  simp only [Option.bind_eq_bind] at h
+  cases hpa : proj qa qb qc with
+  | none => simp [hpa] at h
+  | some pa =>
+    simp only [hpa, Option.bind_some] at h
+    split at h
+    · cases h
+    rename_i hb3
+    simp only [Bool.not_eq_true', Bool.not_eq_false] at hb3
+    cases hpb : secondProj qa qb qc with
+    | none => simp [hpb] at h
+    | some lp =>
+      obtain ⟨l, pb⟩ := lp
+      simp only [hpb, Option.bind_some] at h
+      have hbBz := secondProj_spec hpb
+      split at h
+      · cases h
+      rename_i hg
+      simp only [Bool.not_eq_true', Bool.not_eq_false] at hg
+      have hRA := bezout3_spec M hb3 ha hb hc
+      have hsh : ∀ q : Quadric, Quadric.evK M (q.shear l) (x, y - M.q l * z, z) =
+          Quadric.evK M q (x, y, z) := by
+        intro q
+        rw [shear_ev]
+        have e : y - M.q l * z + M.q l * z = y := by grind
+        rw [e]
+      have hRB := bezout3_spec M (x := x) (y := y - M.q l * z) (z := z) hbBz
+        ((hsh qa).trans ha) ((hsh qb).trans hb) ((hsh qc).trans hc)
+      exact rootsOf_complete M h (gcd_cover M hg hRA hRB)
+
 theorem proposeVert3_complete {qa qb qc : Quadric} {fuel : Nat} {vs : List VSample}
     (h : proposeVert3 qa qb qc fuel = some vs) {x y z : K}
     (ha : Quadric.evK M qa (x, y, z) = 0) (hb : Quadric.evK M qb (x, y, z) = 0)
