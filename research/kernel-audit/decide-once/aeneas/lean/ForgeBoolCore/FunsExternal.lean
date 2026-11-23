@@ -75,18 +75,6 @@ axiom Pair.Insts.CoreCmpPartialEqPair.eq
   (cmpPartialEqInst1 : core.cmp.PartialEq T T) :
   (U × T) → (U × T) → Result Bool
 
-/-- [core::tuple::{impl core::cmp::PartialOrd<(V, U, T)> for (V, U, T)}::le]:
-    Source: '/rustc/library/core/src/tuple.rs', lines 77:16-77:55; this code is generated from a macro invocation at: '/rustc/library/core/src/tuple.rs', lines 238:0-238:37
-    Name pattern: [core::tuple::{core::cmp::PartialOrd<(@V, @U, @T), (@V, @U, @T)>}::le]
-    Visibility: public -/
-@[rust_fun
-  "core::tuple::{core::cmp::PartialOrd<(@V, @U, @T), (@V, @U, @T)>}::le"]
-axiom TupleVUT.Insts.CoreCmpPartialOrdTupleVUT.le
-  {V : Type _} {U : Type _} {T : Type _} (cmpPartialOrdInst :
-  core.cmp.PartialOrd V V) (cmpPartialOrdInst1 : core.cmp.PartialOrd U U)
-  (cmpPartialOrdInst2 : core.cmp.PartialOrd T T) :
-  (V × U × T) → (V × U × T) → Result Bool
-
 /-- [alloc::vec::{impl core::default::Default for alloc::vec::Vec<T>}::default]:
     Source: '/rustc/library/alloc/src/vec/mod.rs', lines 4417:4-4417:26
     Name pattern: [alloc::vec::{core::default::Default<alloc::vec::Vec<@T>>}::default]

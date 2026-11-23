@@ -441,6 +441,11 @@ pub(crate) enum Class {
 }
 
 pub fn boolean(a: &Body, b: &Body, op: Op, feature: u64) -> R<Body> {
+    // flat faces: the part read by reference and the result written fresh, with no copy first
+    #[cfg(feature = "decide_once")]
+    if let Some(r) = crate::decide_once::boolean(a, b, op)? {
+        return Ok(r);
+    }
     let mut out = a.clone();
     boolean_into(&mut out, b, op, feature)?;
     Ok(out.into_compact())
@@ -451,6 +456,11 @@ pub fn boolean(a: &Body, b: &Body, op: Op, feature: u64) -> R<Body> {
 /// as tombstones until `Body::compact`. Names do not depend on `_feature`: what the boolean makes
 /// is named by what meets there, as the n-ary boolean names it.
 pub fn boolean_into(target: &mut Body, b: &Body, op: Op, _feature: u64) -> R<()> {
+    #[cfg(feature = "decide_once")]
+    if let Some(r) = crate::decide_once::boolean(target, b, op)? {
+        *target = r;
+        return Ok(());
+    }
     // (uncompacted, so the faces a boolean leaves alone keep what was worked out of them, as the
     // target does from one boolean to the next: a face's drawing is the cost of the check)
     #[cfg(debug_assertions)]
@@ -556,6 +566,14 @@ fn survivors(a: &Body, b: &Body, op: Op, r: &Body) -> Option<String> {
 /// `boolean_into` with the tool as its entities (`forge_ops::extrude_unlinked`): the Body is
 /// built only if the general boolean has to run.
 pub fn boolean_unlinked(target: &mut Body, b: forge_topo::Unlinked, op: Op) -> R<()> {
+    #[cfg(feature = "decide_once")]
+    if crate::decide_once::flat(target) {
+        let tool = b.clone().into_body();
+        if let Some(r) = crate::decide_once::boolean(target, &tool, op)? {
+            *target = r;
+            return Ok(());
+        }
+    }
     if imprinted(target, &b, || std::borrow::Cow::Owned(b.clone().into_body()), op) {
         return Ok(());
     }
@@ -1153,6 +1171,7 @@ fn plan_once_in(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
                     &mut cuts,
                     &mut segs,
                     &mut imprints,
+                    &mut touching,
                 )?;
             }
         }
@@ -2320,6 +2339,52 @@ pub(crate) fn local_class<T: PartialEq>(
     None
 }
 
+/// Whether, over the stretch `range` of edge `e` lying in face `into` of `other`, both faces of
+/// `e` leave `into`'s surface to one side of it: `body` only touches that surface along the
+/// edge, so the face's points either side of it lie alike outside (or inside) `body`. Decided by
+/// the sign of each face's direction into itself, square to the edge, against the surface's
+/// normal, all in closed form (the surfaces' gradients, at the stretch's middle and quarters); a
+/// face along the surface there (tangent, or within the angular tolerance) says neither, and so
+/// does a surface with no closed form (no answer: the edge is imprinted).
+fn touches_along(body: &Body, e: EdgeId, range: Interval, other: &Body, into: FaceId) -> bool {
+    let edge = body.edge(e);
+    if edge.coedges.len() != 2 {
+        return false;
+    }
+    // a face's outward normal at a point on it, from its surface's gradient
+    let normal = |b: &Body, f: FaceId, p: Point3| -> Option<Vec3> {
+        let face = b.face(f);
+        if matches!(face.surface, Surface::Procedural(_)) {
+            return None;
+        }
+        let g = face.surface.gradient(p);
+        let l = g.length();
+        (l > 0.0).then(|| if face.same_sense { g / l } else { -g / l })
+    };
+    let mut sign = 0.0;
+    [0.25, 0.5, 0.75].iter().all(|&x| {
+        let dv = edge.curve.deriv(range.lo + x * range.width());
+        let (Some(n), len) = (normal(other, into, dv.p), dv.d1.length()) else {
+            return false;
+        };
+        len > 0.0
+            && edge.coedges.iter().all(|&c| {
+                let Some(ng) = normal(body, body.coedge_face(c), dv.p) else {
+                    return false;
+                };
+                let along = if body.coedge(c).forward { dv.d1 } else { -dv.d1 };
+                // (sine of the angle the face leaves the surface at: the face holds the edge, so
+                // its normal is square to it)
+                let s = ng.cross(along).dot(n) / len;
+                if s.abs() <= tol::ANGULAR || s * sign < 0.0 {
+                    return false;
+                }
+                sign = s;
+                true
+            })
+    })
+}
+
 /// Whether `curve` passes the middle of edge `e`, not just an end.
 #[cold]
 fn runs_along(body: &Body, e: EdgeId, curve: &Curve, range: Interval) -> bool {
@@ -2370,6 +2435,7 @@ pub(crate) fn trim(
     cuts: &mut Vec<Cut>,
     segs: &mut Vec<Seg>,
     imprints: &mut Vec<Imprint>,
+    touching: &mut Vec<Touch>,
 ) -> R<()> {
     let domain = curve.domain();
     let closed = domain.period.is_some();
@@ -2882,9 +2948,12 @@ pub(crate) fn trim(
             }
         }
     }
-    // where the curve runs along an existing edge it crosses the other face there: the edge is
-    // cut where it leaves that face and imprinted into it (splitting that face, and stopping the
-    // classification flood across it); along a seam the curve adds no edge at all
+    // where the curve runs along an existing edge its body may cross the other face there: the
+    // edge is cut where it leaves that face and imprinted into it (splitting that face, and
+    // stopping the classification flood across it), unless both of the edge's faces leave the
+    // face's surface to one side: then the body only touches the face along the edge, the face
+    // is alike either side of it, and the touch, not an edge, says what happens there (both
+    // sides kept is material meeting itself); along a seam the curve adds no edge at all
     if !along.is_empty() {
         for &(k, e, _) in &along {
             let (body, side) = (bodies[k], sides[k]);
@@ -2920,9 +2989,19 @@ pub(crate) fn trim(
                     bodies[1 - k].face(into).surface.distance(q) <= tol::LINEAR
                 };
                 let straight = matches!(edge.curve, Curve::Line(_));
-                if index[1 - k].point_in_face(into, m) == Where::Inside
-                    && (straight || on_it(0.25) && on_it(0.75))
+                if index[1 - k].point_in_face(into, m) != Where::Inside
+                    || !(straight || on_it(0.25) && on_it(0.75))
                 {
+                    continue;
+                }
+                if touches_along(body, e, Interval::new(w[0], w[1]), bodies[1 - k], into) {
+                    touching.push(Touch {
+                        sides,
+                        faces,
+                        at: m,
+                        dir: Some(edge.curve.deriv(0.5 * (w[0] + w[1])).d1),
+                    });
+                } else {
                     imprints.push(Imprint {
                         side,
                         edge: e,
