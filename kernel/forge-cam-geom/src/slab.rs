@@ -467,6 +467,20 @@ fn sec_box(s: &Sec) -> [f64; 4] {
     }
 }
 
+/// An arc piece's stored ends may lie off its circle by `gap` (the trim is the circle's arc plus
+/// the radial pieces to them): the end candidates may then exceed the truth by gap, and the
+/// radial pieces lie up to gap nearer, so the low end comes down by twice the gap (never below
+/// 0: the closed form needs ρ ≥ 0). The high end stays: it is realised at real points.
+fn less_gap(d: Ival, gap: f64) -> Ival {
+    if gap == 0.0 {
+        return d;
+    }
+    Ival {
+        lo: Ival::pt(d.lo).sub(Ival::pt(2.0 * gap)).lo.max(0.0),
+        hi: d.hi,
+    }
+}
+
 /// A lower bound on the distance between two boxes.
 fn box_gap(a: &[f64; 4], b: &[f64; 4]) -> f64 {
     let gx = Ival::pt(b[0])
@@ -508,11 +522,11 @@ fn dist_region(path: &Sec, region: &[TSeg], boxes: &[[f64; 4]], cutoff: f64) -> 
             i += 1;
             continue;
         }
-        let s = match region[i] {
-            TSeg::Line { a, b } => Sec::Seg { a, b },
-            TSeg::Arc { a, b, c, r, ccw } => Sec::Arc { c, r, a, b, ccw },
+        let (s, gap) = match region[i] {
+            TSeg::Line { a, b } => (Sec::Seg { a, b }, 0.0),
+            TSeg::Arc { a, b, c, r, ccw } => (Sec::Arc { c, r, a, b, ccw }, crate::check::arc_gap(a, b, c, r)),
         };
-        let d = dist(path, &s);
+        let d = less_gap(dist(path, &s), gap);
         if d.lo < lo {
             lo = d.lo;
         }
@@ -777,7 +791,13 @@ pub fn certify_shared(
             let d = match *shared {
                 Some((d, _)) => d,
                 None => {
-                    let d = dist(&path, sec);
+                    // a wall's arc ends are its parametrisation's, evaluated: off the circle by
+                    // their rounding, accounted as for trims
+                    let gap = match *sec {
+                        Sec::Arc { c, r, a, b, .. } => crate::check::arc_gap(a, b, c, r),
+                        Sec::Seg { .. } => 0.0,
+                    };
+                    let d = less_gap(dist(&path, sec), gap);
                     *shared = Some((d, f64::INFINITY));
                     d
                 }

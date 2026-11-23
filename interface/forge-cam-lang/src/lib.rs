@@ -105,6 +105,9 @@ struct SetupIn {
     tol: f64,
     clearance: f64,
     heights: Heights,
+    /// The work offset: the machine coordinates of the WCS origin (as G54 holds them; the
+    /// tool's length comes from H). None: not placed (G5 then checks the spans only).
+    at: Option<[f64; 3]>,
     /// The in-process stock as the ops so far left it.
     ip: forge_cam::stock::InProcess,
     /// The workholding, if the setup names one.
@@ -478,6 +481,14 @@ pub fn run(src: &str, dir: &Path) -> Cam {
         }
     }
     cam.leftover();
+    for s in &cam.setups {
+        if s.at.is_none() {
+            cam.warnings.push(format!(
+                "setup `{}` is not placed (`at:` the work offset): G5 checked each axis's span against the travel, not the positions",
+                s.name
+            ));
+        }
+    }
     if cam.ops.iter().any(|o| o.status != "built") || cam.programs.iter().any(|p| p.error.is_some()) {
         cam.ok = false;
     }
@@ -800,6 +811,10 @@ impl Cam {
                     stock,
                     origin,
                     wcs: get_num(a, "wcs", Some(0.0))? as u32,
+                    at: match a.get("at") {
+                        None => None,
+                        Some(v) => Some(tuple3(v).ok_or("at: (x, y, z), the WCS origin in machine coordinates")?),
+                    },
                     tol: get_num(a, "tol", Some(0.01))?,
                     clearance: get_num(a, "clearance", Some(0.1))?,
                     heights: Heights { clear, retract },
@@ -2062,6 +2077,99 @@ fn outer_or_inner(sec: &Region, outer: bool) -> Result<Region, String> {
 }
 
 impl Cam {
+    /// G5 for one op's posted path: with the setup placed (`at:`), every position (an arc by its
+    /// circle's box, a superset) as each joint sees it (the spindle's Z: the tip's plus the tool's
+    /// length, stick-out and holder gauge) within the joint's travel, proven in outward-rounded
+    /// arithmetic; unplaced, each axis's span within its travel's width. The first violation.
+    fn axis_limits(&self, oi: usize, posted: &OpPath) -> Option<CheckOut> {
+        let s = &self.setups[self.ops[oi].setup];
+        let m = self.lib.machine(&s.machine).ok()?;
+        let t = &self.tools[posted.tool];
+        let gauge = t
+            .holder
+            .as_ref()
+            .and_then(|h| self.lib.holder(h).ok())
+            .map_or(0.0, |h| h.gauge_length);
+        let len = t.stickout + gauge;
+        // the path's box in program coordinates (part frame less the WCS origin)
+        let mut lo = [f64::INFINITY; 3];
+        let mut hi = [f64::NEG_INFINITY; 3];
+        let mut add = |p: [f64; 3]| {
+            for k in 0..3 {
+                lo[k] = lo[k].min(p[k] - s.origin[k]);
+                hi[k] = hi[k].max(p[k] - s.origin[k]);
+            }
+        };
+        add(posted.start);
+        let mut at = posted.start;
+        for mv in &posted.moves {
+            match *mv {
+                PMove::Rapid { to } | PMove::Line { to, .. } => {
+                    add(to);
+                    at = to;
+                }
+                PMove::Arc { to, c, .. } => {
+                    let r = ((at[0] - c[0]).powi(2) + (at[1] - c[1]).powi(2)).sqrt() * (1.0 + 1e-12);
+                    add([c[0] - r, c[1] - r, to[2].min(at[2])]);
+                    add([c[0] + r, c[1] + r, to[2].max(at[2])]);
+                    add(to);
+                    at = to;
+                }
+                PMove::Cycle { .. } => {}
+            }
+        }
+        use forge_cam_geom::ival::Ival;
+        for k in 0..3 {
+            let Some(j) = m.joints.iter().find(|j| {
+                let a = j.axis;
+                (0..3).all(|q| if q == k { a[q].abs() == 1.0 } else { a[q] == 0.0 })
+            }) else {
+                continue;
+            };
+            let sign = j.axis[k];
+            let extra = if k == 2 { len } else { 0.0 };
+            let fail = |value: f64, limit: f64, what: String| CheckOut {
+                rule: "axis_limit",
+                verdict: "fail",
+                value,
+                limit,
+                at: [f64::NAN; 3],
+                tool_part: "machine",
+                other: what,
+                phase: "path",
+                move_index: 0,
+            };
+            match s.at {
+                Some(o) => {
+                    // the joint's coordinate at the box's ends: sign (p + at) + extra
+                    for (p, end) in [(lo[k], "least"), (hi[k], "greatest")] {
+                        let v = Ival::pt(p).add(Ival::pt(o[k])).add(Ival::pt(extra)).scale(sign);
+                        if !(v.lo >= j.range[0] && v.hi <= j.range[1]) {
+                            let lim = if v.lo < j.range[0] { j.range[0] } else { j.range[1] };
+                            return Some(fail(
+                                if v.lo < j.range[0] { v.lo } else { v.hi },
+                                lim,
+                                format!("joint {}: the path's {end} reach is outside its travel {:?}", j.name, j.range),
+                            ));
+                        }
+                    }
+                }
+                None => {
+                    let span = Ival::pt(hi[k]).sub(Ival::pt(lo[k])).hi;
+                    let width = j.range[1] - j.range[0];
+                    if span > width {
+                        return Some(fail(
+                            span,
+                            width,
+                            format!("joint {}: the path spans {span:.3} mm, the travel {width:.3} mm", j.name),
+                        ));
+                    }
+                }
+            }
+        }
+        None
+    }
+
     /// Posts the setups' ops, reads the text back, and certifies the path the text means.
     fn post(&mut self, name: &str, setups: &[usize], post: &str, number: u32) -> ProgramOut {
         let mut po = ProgramOut {
@@ -2395,6 +2503,11 @@ impl Cam {
                     }
                 }
             }
+            // G5: every position the posted path reaches, as the machine's joints see it
+            if let Some(c) = self.axis_limits(oi, &posted) {
+                sum.clear = false;
+                sum.checks.insert(0, c);
+            }
             // the lowest the tool's tip goes in a move that met the fixture
             let ends: Vec<[f64; 3]> = std::iter::once(posted.start)
                 .chain(posted.moves.iter().scan(posted.start, |at, m| {
@@ -2428,6 +2541,7 @@ impl Cam {
                     c.rule, c.verdict, c.move_index, c.phase, c.value, c.limit, c.other
                 ));
                 op.fix = Some(match c.rule {
+                    "axis_limit" => "SetArg at: a work offset that keeps the program within travel, or the part placed elsewhere on the table (or a shorter tool for Z)".into(),
                     "fixture_collision" => {
                         let f = s.fixture.as_ref().expect("a fixture check has a fixture");
                         let seat = s.stock.min[2];
@@ -2493,6 +2607,7 @@ impl Cam {
                     ),
                     ("tol", n(s.tol)),
                     ("clearance", n(s.clearance)),
+                    ("at", s.at.map(v3).unwrap_or(Json::Null)),
                     (
                         "fixture",
                         match &s.fixture {

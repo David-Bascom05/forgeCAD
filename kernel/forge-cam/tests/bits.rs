@@ -29,7 +29,7 @@ fn segs(h: &mut u64, ss: &[Seg]) {
     }
 }
 
-const PINNED: u64 = 0xdd2b72f82979ec6;
+const PINNED: u64 = 0x6d4640dca7c17ed1;
 
 #[test]
 fn the_same_bits_everywhere() {
