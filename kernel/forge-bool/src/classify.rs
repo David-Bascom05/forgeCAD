@@ -1,4 +1,4 @@
-use forge_geom::intersect::{Contact, LineSurface, line_surface};
+use forge_geom::intersect::{Contact, LineSurface, line_surface, line_surface_over};
 use forge_geom::{Curve, CurveGeom, Line, Surface, SurfaceGeom};
 use forge_math::predicates::triple;
 use forge_math::{Box2, Box3, Interval, Point2, Point3, Vec3, tol};
@@ -492,6 +492,48 @@ impl<'a> Index<'a> {
         })
     }
 
+    /// The u window a windowed surface's face is swept over (`Procedural::windowed`): its loops'
+    /// u span, grown by a twentieth each way so that the balls at the window's ends stand clear
+    /// of the face. None for every other surface.
+    fn sheet_window(&self, f: FaceId) -> Option<Interval> {
+        match &self.body.face(f).surface {
+            Surface::Procedural(pr) if pr.windowed() => {
+                let u = self.drawn(f).window.u;
+                let m = 0.05 * u.width() + tol::LINEAR;
+                Some(Interval::new(u.lo - m, u.hi + m))
+            }
+            _ => None,
+        }
+    }
+
+    /// The parameters of a point on or near face `f`'s sheet: on a windowed surface, its foot on
+    /// the face's own stretch, not on another stretch of the surface nearer it.
+    fn project_in(&self, f: FaceId, p: Point3) -> Point2 {
+        let s = &self.body.face(f).surface;
+        match (s, self.sheet_window(f)) {
+            (Surface::Procedural(pr), Some(u)) => pr.project_over(p, u),
+            _ => s.project(p),
+        }
+    }
+
+    /// How far p is from face `f`'s own sheet (`project_in`).
+    fn sheet_distance(&self, f: FaceId, p: Point3) -> f64 {
+        let s = &self.body.face(f).surface;
+        match self.sheet_window(f) {
+            Some(_) => s.eval(self.project_in(f, p)).distance(p),
+            None => s.distance(p),
+        }
+    }
+
+    /// Where a line crosses face `f`'s own sheet (`line_surface_over`).
+    fn line_face(&self, line: &Line, f: FaceId) -> LineSurface {
+        let s = &self.body.face(f).surface;
+        match self.sheet_window(f) {
+            Some(u) => line_surface_over(line, s, u),
+            None => line_surface(line, s),
+        }
+    }
+
     /// The uses of face `f`'s edges whose boxes meet `b`, found through the face's bands where it
     /// keeps them, in no set order.
     pub fn coedges_meeting(&self, f: FaceId, b: &Box3) -> Vec<forge_topo::CoedgeId> {
@@ -599,7 +641,7 @@ impl<'a> Index<'a> {
                 } else {
                     -e.curve.deriv(t).d1
                 };
-                if let Some(n) = body.face_normal(f, face.surface.project(q)) {
+                if let Some(n) = body.face_normal(f, self.project_in(f, q)) {
                     let left = n.cross(along);
                     return if left.dot(p - q) > 0.0 {
                         Where::Inside
@@ -619,7 +661,7 @@ impl<'a> Index<'a> {
                     },
                     _ => None,
                 };
-                if let Some(inside) = planar_parity(body, plane, p, &info.edges, subset, angle) {
+                if let Some(inside) = planar_parity(body, plane, p, &info.edges, subset, angle, true) {
                     return if inside { Where::Inside } else { Where::Outside };
                 }
             }
@@ -635,7 +677,7 @@ impl<'a> Index<'a> {
             return if inside { Where::Inside } else { Where::Outside };
         }
         let drawn = self.drawn(f);
-        let on = face.surface.project(p);
+        let on = self.project_in(f, p);
         let uv = into_window(body, f, on, drawn);
         // a line in (u, v) sags 1/cos v times as far as an edge's chord: off the poles that is
         // under the sag decided by side above, and a chord cannot be wrong outside its own span
@@ -661,23 +703,25 @@ impl<'a> Index<'a> {
         let boxes = self.boxes();
         for f in self.body.face_ids() {
             if boxes[f.index()].contains(p)
-                && self.body.face(f).surface.distance(p) <= tol::LINEAR
+                && self.sheet_distance(f, p) <= tol::LINEAR
                 && self.point_in_face(f, p) != Where::Outside
             {
                 return Where::On;
             }
         }
-        'ray: for d in RAYS {
+        // the fixed rays, then as many more spread over the sphere: a ray is a witness only when
+        // it passes clear of every edge and vertex and crosses each face it meets
+        'ray: for d in RAYS.into_iter().chain((0..SPARE_RAYS).map(spare_ray)) {
             let dir = Vec3::new(d[0], d[1], d[2])
                 .normalize()
-                .expect("fixed ray directions are nonzero");
+                .expect("ray directions are nonzero");
             let line = Line::new(p, dir);
             let mut crossings = 0usize;
             for f in self.body.face_ids() {
                 if !ray_hits_box(p, dir.get(), &boxes[f.index()]) {
                     continue;
                 }
-                match line_surface(&line, &self.body.face(f).surface) {
+                match self.line_face(&line, f) {
                     LineSurface::OnSurface => continue 'ray,
                     LineSurface::Hits(hits) => {
                         for h in hits.iter().filter(|h| h.t > tol::LINEAR) {
@@ -733,7 +777,7 @@ pub(crate) fn in_planar_face(body: &Body, f: FaceId, p: Point3) -> Option<bool> 
             },
             _ => None,
         };
-        if let Some(inside) = planar_parity(body, plane, p, &info.edges, subset, angle) {
+        if let Some(inside) = planar_parity(body, plane, p, &info.edges, subset, angle, false) {
             return Some(inside);
         }
     }
@@ -813,6 +857,18 @@ const RAYS: [[f64; 3]; 8] = [
     [-0.0912, -0.2384, 0.9669],
 ];
 
+/// Directions tried after `RAYS`, should every one of them graze an edge or touch a face.
+const SPARE_RAYS: usize = 56;
+
+/// The k-th of `SPARE_RAYS` directions, a golden-angle spiral over the sphere (dmath, so every
+/// platform casts the same rays).
+fn spare_ray(k: usize) -> [f64; 3] {
+    let z = 1.0 - (2 * k + 1) as f64 / SPARE_RAYS as f64;
+    let r = (1.0 - z * z).sqrt();
+    let (s, c) = forge_math::dmath::sin_cos(2.399_963_229_728_653 * k as f64 + 0.1);
+    [r * c, r * s, z]
+}
+
 /// How far a loop polygon (default sampling, pi/16 per segment) can sit from
 /// a curved edge, plus tolerance.
 fn sag_bound(c: &Curve) -> f64 {
@@ -829,8 +885,9 @@ fn sag_bound(c: &Curve) -> f64 {
 
 /// Exact even-odd test for a point of a planar face: a ray from p in the
 /// plane at `angle` to its x axis, counting crossings with each edge in
-/// closed form (lines, circles, ellipses). None when the ray meets a vertex
-/// or an edge the closed forms do not cover, so another direction is tried.
+/// closed form (lines, circles, ellipses), and with `any_curve` every other edge by its certified
+/// crossings. None when the ray meets a vertex or touches an edge, or (without `any_curve`) an
+/// edge the closed forms do not cover, so another direction is tried.
 fn planar_parity(
     body: &Body,
     plane: &forge_geom::Plane,
@@ -838,6 +895,7 @@ fn planar_parity(
     edges: &[(forge_topo::CoedgeId, Box3)],
     subset: Option<&[u32]>,
     angle: f64,
+    any_curve: bool,
 ) -> Option<bool> {
     let (sn, cs) = forge_math::dmath::sin_cos(angle);
     let d = plane.frame.x() * cs + plane.frame.y() * sn;
@@ -852,7 +910,7 @@ fn planar_parity(
         }
         let e = body.edge(body.coedge(c).edge);
         // a seam cannot occur on a plane; each use of an edge here is one crossing set
-        if plane_ray_crossings(plane.frame.z().get(), p, d, &e.curve, e.range)? % 2 == 1 {
+        if ray_crossings(plane.frame.z().get(), p, d, &e.curve, e.range, any_curve)? % 2 == 1 {
             inside = !inside;
         }
     }
@@ -868,6 +926,19 @@ pub(crate) fn plane_ray_crossings(
     d: Vec3,
     curve: &Curve,
     range: Interval,
+) -> Option<usize> {
+    ray_crossings(n, p, d, curve, range, false)
+}
+
+/// `plane_ray_crossings`, and with `any_curve` for every kind of curve: those without a closed
+/// form by their crossings of the plane square to the face through the ray.
+fn ray_crossings(
+    n: Vec3,
+    p: Point3,
+    d: Vec3,
+    curve: &Curve,
+    range: Interval,
+    any_curve: bool,
 ) -> Option<usize> {
     let hits: Vec<(f64, f64)> = match curve {
         Curve::Line(l) => {
@@ -895,6 +966,15 @@ pub(crate) fn plane_ray_crossings(
         }
         Curve::Circle(k) => conic_ray(&k.frame, k.radius, k.radius, p, d),
         Curve::Ellipse(el) => conic_ray(&el.frame, el.major, el.minor, p, d),
+        // any other curve of the plane, where asked: where it crosses the plane holding the ray
+        // square to the face, by the certified subdivision, each at its signed distance along it
+        _ if any_curve => {
+            let m = n.cross(d).normalize()?;
+            curve_plane_params(curve, range, p, m)?
+                .into_iter()
+                .map(|t| ((curve.eval(t) - p).dot(d), t))
+                .collect()
+        }
         _ => return None,
     };
     let periodic = curve.domain().period;
@@ -960,7 +1040,8 @@ fn ruling_parity(
             }
             Curve::Circle(k) => conic_plane(&k.frame, k.radius, k.radius, frame.origin, m)?,
             Curve::Ellipse(el) => conic_plane(&el.frame, el.major, el.minor, frame.origin, m)?,
-            _ => return None,
+            // any other curve: its crossings of the plane, by the certified subdivision
+            _ => curve_plane_params(&e.curve, e.range, frame.origin, m.normalize()?)?,
         };
         let periodic = e.curve.domain().period;
         for t in ts {
@@ -986,6 +1067,26 @@ fn ruling_parity(
         }
     }
     Some(inside)
+}
+
+/// Where a curve crosses the plane through `at` with unit normal `m`, over `range`: the
+/// parameters of its crossings, by the certified subdivision of `curve_surface` (a curve's
+/// distance from the plane is 1-Lipschitz along it per unit speed, so no crossing is pruned).
+/// None when it touches the plane or runs in it, so the caller looks another way.
+fn curve_plane_params(
+    curve: &Curve,
+    range: Interval,
+    at: Point3,
+    m: forge_math::UnitVec3,
+) -> Option<Vec<f64>> {
+    let plane = Surface::Plane(forge_geom::Plane::new(forge_math::Frame::from_z(at, m)));
+    match forge_geom::intersect::curve_surface(curve, range, &plane) {
+        forge_geom::intersect::CurveSurface::Hits(h) => h
+            .iter()
+            .map(|h| (h.contact == Contact::Crossing).then_some(h.t))
+            .collect(),
+        _ => None,
+    }
 }
 
 /// Whether `uv` is in the box of a chord of `loops`.
@@ -1372,7 +1473,7 @@ mod planar_vs_polygon {
                 if near {
                     continue;
                 }
-                let Some(fast) = planar_parity(&body, &pl, p, &info.edges, None, 0.1234) else {
+                let Some(fast) = planar_parity(&body, &pl, p, &info.edges, None, 0.1234, false) else {
                     continue;
                 };
                 let drawn = ix.drawn(f);

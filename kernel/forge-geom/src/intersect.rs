@@ -56,6 +56,66 @@ pub fn line_surface(line: &Line, s: &Surface) -> LineSurface {
 }
 
 /// A line against a procedural surface: clipped to the surface's box, then subdivided.
+/// `line_surface`, crossing only the sheet over u in `u` where the surface's implicit holds more
+/// than it (`Procedural::windowed`, a blend's pipe): a face's own crossings, which the balls of
+/// the rest of the spine can cover. Any other surface is `line_surface`.
+pub fn line_surface_over(line: &Line, s: &Surface, u: Interval) -> LineSurface {
+    match s {
+        Surface::Procedural(pr) if pr.windowed() => line_sheet(line, s, pr, u),
+        _ => line_surface(line, s),
+    }
+}
+
+/// The windowed sheet's crossings: the roots of its 1-Lipschitz `implicit_over` by the same
+/// subdivision, each kept where it lies on the sheet at its own foot.
+fn line_sheet(line: &Line, s: &Surface, pr: &crate::surface::Proc, u: Interval) -> LineSurface {
+    let d = pr.domain();
+    let b = pr.bbox(forge_math::Box2::new(u, d.v.interval()));
+    let Some(range) = line_box_range(line, &b) else {
+        return LineSurface::Hits(Vec::new());
+    };
+    let c = Curve::Line(*line);
+    let imp = |p: Point3| pr.implicit_over(p, u);
+    let lip = speed_bound(&c, range) * (1.0 + 1e-9) + f64::MIN_POSITIVE;
+    let probes = 9;
+    if (0..probes).all(|i| {
+        imp(line.eval(range.lo + range.width() * i as f64 / (probes - 1) as f64)).abs() <= tol::LINEAR
+    }) {
+        return LineSurface::OnSurface;
+    }
+    match subdivide_pieces_by(&c, range, &imp, None, vec![(range.lo, range.hi, lip)]) {
+        CurveSurface::Hits(h) => LineSurface::Hits(
+            h.into_iter()
+                .filter(|h| s.eval(pr.project_over(h.point, u)).distance(h.point) <= tol::LINEAR)
+                .map(|h| LineHit {
+                    t: h.t,
+                    point: h.point,
+                    contact: h.contact,
+                })
+                .collect(),
+        ),
+        CurveSurface::OnSurface | CurveSurface::Overlap => LineSurface::OnSurface,
+    }
+}
+
+/// The stretch of a line inside a box, None when it misses.
+fn line_box_range(line: &Line, b: &Box3) -> Option<Interval> {
+    let (mut lo, mut hi) = (f64::NEG_INFINITY, f64::INFINITY);
+    let (o, dir) = (line.origin, line.dir.get());
+    for (oi, di, iv) in [(o.x, dir.x, b.x), (o.y, dir.y, b.y), (o.z, dir.z, b.z)] {
+        if di.abs() < 1e-300 {
+            if oi < iv.lo || oi > iv.hi {
+                return None;
+            }
+            continue;
+        }
+        let (a, c) = ((iv.lo - oi) / di, (iv.hi - oi) / di);
+        lo = lo.max(a.min(c));
+        hi = hi.min(a.max(c));
+    }
+    (lo < hi).then(|| Interval::new(lo, hi))
+}
+
 fn line_procedural(line: &Line, s: &Surface, pr: &crate::surface::Proc) -> LineSurface {
     let d = pr.domain();
     let b = pr.bbox(forge_math::Box2::new(d.u.interval(), d.v.interval()));
@@ -741,9 +801,20 @@ fn subdivide_pieces(
     range: Interval,
     s: &Surface,
     near: Option<Box3>,
+    stack: Vec<(f64, f64, f64)>,
+) -> CurveSurface {
+    subdivide_pieces_by(c, range, &|p| s.implicit(p), near, stack)
+}
+
+/// `subdivide_pieces` on any 1-Lipschitz implicit.
+fn subdivide_pieces_by(
+    c: &Curve,
+    range: Interval,
+    implicit: &impl Fn(Point3) -> f64,
+    near: Option<Box3>,
     mut stack: Vec<(f64, f64, f64)>,
 ) -> CurveSurface {
-    let g = |t: f64| s.implicit(c.eval(t));
+    let g = |t: f64| implicit(c.eval(t));
     let off = |p: Point3| {
         near.map_or(0.0, |b| {
             let d = |x: f64, i: Interval| (i.lo - x).max(x - i.hi).max(0.0);
@@ -759,7 +830,7 @@ fn subdivide_pieces(
         let m = 0.5 * (a + b);
         let p = c.eval(m);
         let reach = lip * 0.5 * (b - a) + tol::LINEAR;
-        if off(p) > reach || s.implicit(p).abs() > reach {
+        if off(p) > reach || implicit(p).abs() > reach {
             continue;
         }
         budget = budget.saturating_sub(1);

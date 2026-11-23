@@ -1,0 +1,22 @@
+# seed 94
+sketch q1(on: xy) {
+  q = pt(0, 0)
+}
+sketch s1(on: plane(at: q1.q, normal: Z, x: X)) {
+  o = circle((0, 0), 17.2956)
+}
+body = extrude(s1, 36.2059)
+sketch q2(on: offset(xy, 24.1531490088)) {
+  q = pt(0.515359882128, 0.310409075904)
+}
+sketch q3(on: offset(xy, -0.560239303956)) {
+  q = pt(-0.750564903159, 0.350405833926)
+}
+sketch q4(on: offset(xy, -0.530277791794)) {
+  q = pt(0, -0.847823957865)
+}
+sketch s2(on: plane(at: q2.q, normal: axis(q1.q, q3.q), x: axis(q1.q, q4.q))) {
+  o = circle((0, 0), 8.19825)
+}
+boss = extrude(s2, 43.1463)
+round = fillet(edges(between: (body, boss), crease: "concave"), 3.17443323)

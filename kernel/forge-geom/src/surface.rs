@@ -302,6 +302,26 @@ pub trait Procedural: Send + Sync + std::fmt::Debug {
     fn feature(&self) -> f64 {
         f64::INFINITY
     }
+    /// Whether `implicit` holds more than the sheet over a part of u: a sweep of balls along a
+    /// spine (a blend's pipe) is the union of all of them, so where the spine comes back near
+    /// itself another stretch's balls cover a face's own sheet, and the zero set misses it. Such a
+    /// surface gives `implicit_over` and `project_over` for a u window.
+    fn windowed(&self) -> bool {
+        false
+    }
+    /// `implicit` of the surface swept over u in `u` alone: zero on that sheet, still 1-Lipschitz
+    /// (a distance to the stretch of spine, less the radius). Equal to `implicit`, bit for bit,
+    /// where the whole surface's nearest spine point lies in the window.
+    fn implicit_over(&self, p: Point3, u: Interval) -> f64 {
+        let _ = u;
+        self.implicit(p)
+    }
+    /// `project` onto the sheet over u in `u` alone (as `implicit_over`): `project` itself where
+    /// that lands in the window.
+    fn project_over(&self, p: Point3, u: Interval) -> Point2 {
+        let _ = u;
+        self.project(p)
+    }
     /// `mesh_radius` over the parameter box only (a face on part of the surface).
     fn mesh_radius_over(&self, _uv: Box2) -> f64 {
         self.mesh_radius()

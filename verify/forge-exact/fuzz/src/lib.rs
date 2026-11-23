@@ -241,6 +241,18 @@ impl Reference {
     }
 
     pub fn ask(&mut self, line: &str) -> Answer {
+        match self.ask_raw(line) {
+            Ok(out) => parse_answer(&out),
+            Err(e) => Answer {
+                error: Some(e),
+                ..Answer::default()
+            },
+        }
+    }
+
+    /// The reference's answer line as it is (a membership question's, `points`, has its own
+    /// fields), or why there is none.
+    pub fn ask_raw(&mut self, line: &str) -> Result<String, String> {
         let secs = std::env::var("FORGE_EXACT_TIMEOUT")
             .ok()
             .and_then(|s| s.parse().ok())
@@ -253,16 +265,13 @@ impl Reference {
                 let _ = self.child.kill();
                 let _ = self.child.wait();
                 *self = Reference::start();
-                return Answer {
-                    error: Some(format!("the reference took over {secs} s")),
-                    ..Answer::default()
-                };
+                return Err(format!("the reference took over {secs} s"));
             }
         };
         if std::env::var_os("FORGE_EXACT_TRACE").is_some() {
             eprintln!("> {line}\n< {out}");
         }
-        parse_answer(&out)
+        Ok(out)
     }
 }
 

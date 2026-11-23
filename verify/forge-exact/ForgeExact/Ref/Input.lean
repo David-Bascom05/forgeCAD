@@ -21,6 +21,11 @@ step 2); the kernel's vertex is only checked against it.
 
 The answer: `{"verdict": "solid|empty|nonmanifold|ambiguous", "volume": "p/q", "volume_f": v,
 "faces": F, "edges": E, "vertices": V, "shells": S, "notes": [...]}`.
+
+With `"points": [[x,y,z], ...]` the question is membership instead, no boolean made: the answer is
+`{"inside": [...], "near": [...], "notes": [...]}`, per point whether the history's pointwise
+boolean (`keptAt`, exact, its ray perturbed symbolically) holds it, and whether it lies within
+LINEAR of a face's carrier (there the tolerance rule, not the exact set, decides the side).
 -/
 
 namespace ForgeExact.Ref
@@ -136,6 +141,12 @@ def run (line : String) : Except String Json := do
     let (s, n) := solidOf k raws[k]! planesOf[k]! l strict
     solids := solids.push s
     notes := notes ++ n
-  return answer (decide solids l notes strict)
+  match j.getObjVal? "points" with
+  | .ok ps =>
+    let pts ← (← ps.getArr?).mapM v3
+    let inside := pts.map fun p => keptAt solids p
+    let near := pts.map fun p => solids.any fun s => s.faces.any fun f => f.plane.within p l
+    return Json.mkObj [("inside", toJson inside), ("near", toJson near), ("notes", toJson notes)]
+  | .error _ => return answer (decide solids l notes strict)
 
 end ForgeExact.Ref

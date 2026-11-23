@@ -1618,15 +1618,51 @@ impl Pipe {
     /// The spine's point nearest p: well off the pipe the guiding cubic's is near enough, the
     /// value serving a Newton step or a cell test.
     fn nearest_on_spine(&self, p: Point3) -> Point3 {
+        self.nearest_on_spine_at(p).1
+    }
+
+    /// `nearest_on_spine` and its parameter.
+    fn nearest_on_spine_at(&self, p: Point3) -> (f64, Point3) {
         if let Curve::Intersection(ic) = &self.spine {
             let t = ic.closest_on_cubic(p);
             let c = ic.guide(t);
             if (p.distance(c) - self.radius).abs() > 1e-2 {
-                return c;
+                return (t, c);
             }
-            return self.spine.eval(intersection_refine(ic, &self.spine, p, t).0);
+            let u = intersection_refine(ic, &self.spine, p, t).0;
+            return (u, self.spine.eval(u));
         }
-        self.spine.eval(spine_closest(&self.spine, p))
+        let u = spine_closest(&self.spine, p);
+        (u, self.spine.eval(u))
+    }
+
+    /// Whether spine parameter u lies in the window, a whole number of periods along on a closed
+    /// spine.
+    fn in_window(&self, u: f64, w: Interval) -> bool {
+        match self.spine.domain().period {
+            Some(per) => [0.0, -per, per, -2.0 * per, 2.0 * per]
+                .iter()
+                .any(|k| w.contains(u + k)),
+            None => w.contains(u),
+        }
+    }
+
+    /// The spine's nearest point to p over the window alone: the whole spine's where that lies
+    /// in it (the same bits), else the search over the window.
+    fn nearest_over(&self, p: Point3, w: Interval) -> (f64, Point3) {
+        let (u, c) = self.nearest_on_spine_at(p);
+        if self.in_window(u, w) {
+            return (u, c);
+        }
+        let mut u = self.spine.closest(p, w);
+        // the chain's foot, finished on the exact curve as the whole spine's is
+        if let Curve::Intersection(ic) = &self.spine {
+            let t = intersection_refine(ic, &self.spine, p, u).0;
+            if self.in_window(t, w) {
+                u = t;
+            }
+        }
+        (u, self.spine.eval(u))
     }
 
     /// The parameters of p, in the normal plane of the spine at u.
@@ -1782,6 +1818,22 @@ impl Procedural for Pipe {
     }
     fn implicit(&self, p: Point3) -> f64 {
         p.distance(self.nearest_on_spine(p)) - self.radius
+    }
+    /// The balls of the whole spine, the stretch beyond a face included, cover the face's own
+    /// sheet wherever the spine comes back within the radius: a face is the sweep over its u.
+    fn windowed(&self) -> bool {
+        true
+    }
+    fn implicit_over(&self, p: Point3, u: Interval) -> f64 {
+        p.distance(self.nearest_over(p, u).1) - self.radius
+    }
+    fn project_over(&self, p: Point3, u: Interval) -> Point2 {
+        let uv = crate::surface::Procedural::project(self, p);
+        if self.in_window(uv.x, u) {
+            return uv;
+        }
+        let (t, c) = self.nearest_over(p, u);
+        self.across_at(p, t, c)
     }
     fn gradient(&self, p: Point3) -> Vec3 {
         let u = spine_closest(&self.spine, p);
