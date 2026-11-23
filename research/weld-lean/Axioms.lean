@@ -20,3 +20,7 @@ open ForgeWeld
 #print axioms line_eq_fan_x
 #print axioms line_eq_fan_y
 #print axioms fan_ne_line_on_an_edge
+#print axioms Extreme.stop_right
+#print axioms Extreme.line_max
+#print axioms Extreme.move
+#print axioms Extreme.cell_max
