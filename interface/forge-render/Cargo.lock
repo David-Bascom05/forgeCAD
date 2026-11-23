@@ -1262,8 +1262,13 @@ dependencies = [
  "forge-geom",
  "forge-math",
  "forge-ops",
+ "forge-sheet-core",
  "forge-topo",
 ]
+
+[[package]]
+name = "forge-sheet-core"
+version = "0.1.0"
 
 [[package]]
 name = "forge-sketch"

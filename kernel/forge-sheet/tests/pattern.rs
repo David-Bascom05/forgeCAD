@@ -130,20 +130,10 @@ fn read_curve(kind: &str, rest: &[(i32, String)]) -> Curve2 {
             a: p(one(rest, 10), one(rest, 20)),
             b: p(one(rest, 11), one(rest, 21)),
         },
-        "CIRCLE" => Curve2::Arc {
-            c: p(one(rest, 10), one(rest, 20)),
-            r: one(rest, 40),
-            start: 0.0,
-            sweep: dmath::TAU,
-        },
+        "CIRCLE" => Curve2::arc(p(one(rest, 10), one(rest, 20)), one(rest, 40), 0.0, dmath::TAU),
         "ARC" => {
             let (a0, a1) = (one(rest, 50).to_radians(), one(rest, 51).to_radians());
-            Curve2::Arc {
-                c: p(one(rest, 10), one(rest, 20)),
-                r: one(rest, 40),
-                start: a0,
-                sweep: a1 - a0,
-            }
+            Curve2::arc(p(one(rest, 10), one(rest, 20)), one(rest, 40), a0, a1 - a0)
         }
         "SPLINE" => {
             let (xs, ys) = (vals(rest, 10), vals(rest, 20));
@@ -194,7 +184,9 @@ fn nurbs_at(degree: usize, knots: &[f64], pts: &[Point2], w: Option<&Vec<f64>>, 
 fn area_term(c: &Curve2) -> f64 {
     match c {
         Curve2::Line { a, b } => 0.5 * (a.x * b.y - a.y * b.x),
-        Curve2::Arc { c, r, start, sweep } => {
+        Curve2::Arc {
+            c, r, start, sweep, ..
+        } => {
             let (t0, t1) = (*start, start + sweep);
             let ((s0, k0), (s1, k1)) = (dmath::sin_cos(t0), dmath::sin_cos(t1));
             0.5 * r * r * sweep + 0.5 * (c.x * r * (s1 - s0) - c.y * r * (k1 - k0))
@@ -256,7 +248,12 @@ fn dxf_round_trip_against_a_reader() {
     assert_eq!(cut.len(), written.len());
     for (r, w) in cut.iter().zip(&written) {
         match (r, w) {
-            (Curve2::Arc { c, r, start, sweep }, Curve2::Arc { c: c2, r: r2, .. }) => {
+            (
+                Curve2::Arc {
+                    c, r, start, sweep, ..
+                },
+                Curve2::Arc { c: c2, r: r2, .. },
+            ) => {
                 assert_eq!((c, r), (c2, r2));
                 if sweep.abs() >= dmath::TAU {
                     continue;

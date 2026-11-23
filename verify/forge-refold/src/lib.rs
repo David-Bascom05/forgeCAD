@@ -14,8 +14,8 @@
 //! 5. continuity: each zone meets its walls at u = 0 and u = BA in position and direction;
 //! 7. physical K: R <= rn <= R + t (the neutral layer inside the material);
 //! 8. export: one contour runs counter-clockwise, the contours close (consecutive pieces meet in
-//!    one double, the vertex class's point; at an arc, whose end is computed from its angles,
-//!    within the spread cap 2 LINEAR of it), and their area times t is the flat body's volume.
+//!    one double, the vertex class's point, which each piece stores as its end), and their area
+//!    times t is the flat body's volume.
 //!
 //! A form's own vertices are left out: formed (folded) and pierced (flat) by design.
 //! (6, injectivity, is the builder's own clash and overlap checks, which refuse; it is not
@@ -262,17 +262,12 @@ pub fn judge(sheet: &Sheet, fold: &Built, flat: &Built) -> Result<Refolded, Vec<
                 signed.iter().filter(|a| **a > 0.0).count()
             ));
         }
-        // consecutive pieces meet in one double: the contour vertex, its class's point, which a
-        // line or a spline stores as its end. An arc stores its centre, radius and angles, so its
-        // end is computed: there the vertex is within the class spread cap, twice LINEAR, of it
-        let spread = 2.0 * forge_math::tol::LINEAR;
-        let arc = |x: &forge_sheet::Curve2| matches!(x, forge_sheet::Curve2::Arc { .. });
+        // consecutive pieces meet in one double: the contour vertex, its class's point, which
+        // every piece stores as its end (an arc beside its angles)
         for c in &pat.contours {
             for (k, x) in c.iter().enumerate() {
-                let y = &c[(k + 1) % c.len()];
-                let gap = x.ends().1.distance(y.ends().0);
-                let cap = if arc(x) || arc(y) { spread } else { 0.0 };
-                if gap > cap {
+                let gap = x.ends().1.distance(c[(k + 1) % c.len()].ends().0);
+                if gap != 0.0 {
                     bad.push(format!("a contour opens by {gap}"));
                 }
             }

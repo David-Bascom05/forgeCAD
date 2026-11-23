@@ -833,7 +833,9 @@ impl Flat {
 fn piece_of(c: &Curve2) -> Option<Piece> {
     Some(match c {
         Curve2::Line { a, b } => Piece::Line { a: *a, b: *b },
-        Curve2::Arc { c, r, start, sweep } => Piece::Arc {
+        Curve2::Arc {
+            c, r, start, sweep, ..
+        } => Piece::Arc {
             c: *c,
             r: *r,
             t0: *start,

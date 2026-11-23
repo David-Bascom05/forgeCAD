@@ -7,7 +7,6 @@ pub mod checks;
 pub mod contour;
 pub mod corner;
 pub mod error;
-mod exact;
 pub mod form;
 pub mod graph;
 pub mod hardware;

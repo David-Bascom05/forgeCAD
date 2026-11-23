@@ -44,16 +44,16 @@ fn norm2(v: Vec2) -> f64 {
     v.x * v.x + v.y * v.y
 }
 
-/// `near`: two points within `l` of each other, |p - q|² <= l², the sign exact (`exact::disc`:
+/// `near`: two points within `l` of each other, |p - q|² <= l², the sign exact (`forge_sheet_core::exact::disc`:
 /// a float filter, else expansions).
 fn near(l: f64, p: Point2, q: Point2) -> bool {
-    crate::exact::disc(p.x, p.y, q.x, q.y, l) <= 0.0
+    forge_sheet_core::exact::disc(p.x, p.y, q.x, q.y, l) <= 0.0
 }
 
 /// `within`: c within `l` of the line through a and b, orient(a, b, c)² <= l² |b - a|²
-/// (Region.lean's `within_iff_dist`), the sign exact (`exact::line_gap`).
+/// (Region.lean's `within_iff_dist`), the sign exact (`forge_sheet_core::exact::line_gap`).
 fn within(l: f64, a: Point2, b: Point2, c: Point2) -> bool {
-    crate::exact::line_gap(a.x, a.y, b.x, b.y, c.x, c.y, l) <= 0.0
+    forge_sheet_core::exact::line_gap(a.x, a.y, b.x, b.y, c.x, c.y, l) <= 0.0
 }
 
 /// Two pieces' verdict, Region.lean's `Carrier`: on one carrier, two, too near to tell, or a
@@ -691,7 +691,7 @@ fn in_lens(p: Point2, a: Point2, b: Point2, c: Point2, r: f64, ccw: bool) -> boo
     // in the disc, p moved by (δ³, δ²) as `side` moves it: |p + m - c|² - r² is then
     // 2δ²(p.y - c.y) + 2δ³(p.x - c.x) + O(δ⁴) on the circle, so below its centre's height (or
     // level and left of it) is in
-    let s = crate::exact::disc(p.x, p.y, c.x, c.y, r);
+    let s = forge_sheet_core::exact::disc(p.x, p.y, c.x, c.y, r);
     let disc = s < 0.0 || (s == 0.0 && (p.y < c.y || (p.y == c.y && p.x < c.x)));
     disc && if ccw { o < 0.0 } else { o > 0.0 }
 }

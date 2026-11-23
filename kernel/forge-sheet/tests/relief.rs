@@ -147,7 +147,9 @@ fn each_kind_asked_for() {
             .flatten()
             .map(|c| match c {
                 forge_sheet::Curve2::Line { a, b } => 0.5 * (a.x * b.y - a.y * b.x),
-                forge_sheet::Curve2::Arc { c, r, start, sweep } => {
+                forge_sheet::Curve2::Arc {
+                    c, r, start, sweep, ..
+                } => {
                     let ((s0, k0), (s1, k1)) = (dmath::sin_cos(*start), dmath::sin_cos(start + sweep));
                     0.5 * r * r * sweep + 0.5 * (c.x * r * (s1 - s0) - c.y * r * (k1 - k0))
                 }

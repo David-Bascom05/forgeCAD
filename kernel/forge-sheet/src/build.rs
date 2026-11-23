@@ -178,18 +178,18 @@ impl Geo {
                 theta,
                 ba,
             } => {
+                // the fold's arithmetic is forge-sheet-core's (proven: RefineZone.lean zone_spec)
                 let (s, c) = dmath::sin_cos(phi(p.x, rn, theta, ba));
-                let r = rho0 + sigma * w;
-                axis.point_to_world(Point3::new(r * c, r * s, -sigma * p.y))
+                let (x, y, z) = forge_sheet_core::fold::round_local(rho0, sigma, s, c, p.y, w);
+                axis.point_to_world(Point3::new(x, y, z))
             }
         }
     }
 }
 
-/// The angle at u across a bend; its far tangent line is the bend's angle exactly.
-fn phi(u: f64, rn: f64, theta: f64, ba: f64) -> f64 {
-    if u == ba { theta } else { u / rn }
-}
+/// The angle at u across a bend; its far tangent line is the bend's angle exactly
+/// (forge-sheet-core's `fold::phi`, proven).
+use forge_sheet_core::fold::phi;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Kind {
@@ -3244,7 +3244,7 @@ impl Strips<'_> {
                 // the piece before ends there and this one starts there, so consecutive pieces
                 // meet in one double (README §6.1; Region.lean `closes`, gap 0). Lines and splines
                 // (clamped: their ends are their end control points) store their ends; an arc's
-                // are its centre, radius and angles'
+                // too (stored: its angles' points are within rounding of them)
                 let from: Vec<Point2> = out.iter().map(|c| c.from).collect();
                 let mut out: Vec<Curve2> = out.into_iter().map(|c| c.curve).collect();
                 let n = out.len();
@@ -3256,7 +3256,7 @@ impl Strips<'_> {
                             points[0] = a;
                             *points.last_mut().expect("a spline has points") = b;
                         }
-                        Curve2::Arc { .. } => {}
+                        Curve2::Arc { from: x, to: y, .. } => (*x, *y) = (a, b),
                     }
                 }
                 // a contour of one arc closes on itself: a whole turn, by topology
@@ -4151,6 +4151,8 @@ fn developed(p: &Piece, a: Point2, b: Point2, by: &Rigid) -> Option<Curve2> {
             r,
             start: t0 + by.angle(),
             sweep: t1 - t0,
+            from: by.apply(a),
+            to: by.apply(b),
         },
         Piece::Spline { ref s, t0, t1 } => {
             let st = own_stretch(s, Interval::new(t0.min(t1), t0.max(t1)))?;
@@ -4296,11 +4298,19 @@ fn joined<'a>(x: &FlatPiece<'a>, y: &FlatPiece<'a>) -> Option<FlatPiece<'a>> {
             same.then_some(Curve2::Line { a: *a, b: *c })?
         }
         (
-            Curve2::Arc { c, r, start, sweep },
+            Curve2::Arc {
+                c,
+                r,
+                start,
+                sweep,
+                from,
+                ..
+            },
             Curve2::Arc {
                 c: c2,
                 r: r2,
                 sweep: w2,
+                to,
                 ..
             },
         ) => {
@@ -4310,6 +4320,8 @@ fn joined<'a>(x: &FlatPiece<'a>, y: &FlatPiece<'a>) -> Option<FlatPiece<'a>> {
                 r: *r,
                 start: *start,
                 sweep: sweep + w2,
+                from: *from,
+                to: *to,
             })?
         }
         (Curve2::Spline { .. }, Curve2::Spline { .. }) if x.id == y.id => {
