@@ -103,3 +103,18 @@ fn fillets_and_chamfers_are_lowered_and_a_gouge_into_a_fillet_is_refused() {
     assert_eq!(b.status, "refused", "{:?}", b.checks);
     assert!(b.checks.iter().any(|c| c.rule == "gouge"), "{:?}", b.checks);
 }
+
+#[test]
+fn a_pocket_of_every_hole_of_the_section() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    let cam = forge_cam_lang::run(
+        &doc(
+            "skim = facing(op1, tool: t1, to: 18, step: 1)\ntop = clear(op1, tool: t1, from: 18, to: 12, step: 3, stepover: 4)\nholes = pocket(op1, tool: t2, from: 12, to: -0.5, stepover: 2, step: 4)\nprog = program(op1)\n",
+        ),
+        &dir,
+    );
+    let o = cam.ops.iter().find(|o| o.name == "holes").unwrap();
+    // the bore and the four bolt holes, each its own pocket
+    assert_eq!(o.paths.len(), 5, "{:?}", o.refusal);
+    assert_eq!(o.status, "built", "{:?}", o.checks);
+}

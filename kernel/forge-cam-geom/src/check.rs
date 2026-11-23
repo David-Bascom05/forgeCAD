@@ -1165,3 +1165,92 @@ mod tests {
         assert!(matches!(v, Verdict::Hit { .. }), "{v:?}");
     }
 }
+
+/// A uniform grid over faces' xy boxes: which faces a box may touch, without a loop over all.
+/// A face is listed in every cell its box overlaps (grown by `pad`), so a query misses none of
+/// those near the box; the certified clear is still `apart` on each candidate.
+pub struct Grid {
+    x0: f64,
+    y0: f64,
+    cw: f64,
+    ch: f64,
+    nx: usize,
+    ny: usize,
+    cells: Vec<Vec<u32>>,
+    stamp: std::cell::RefCell<(u32, Vec<u32>)>,
+}
+
+impl Grid {
+    pub fn new(faces: &[Face], pad: f64) -> Grid {
+        let (mut x0, mut y0, mut x1, mut y1) =
+            (f64::INFINITY, f64::INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY);
+        for f in faces {
+            x0 = x0.min(f.bbox[0].lo - pad);
+            y0 = y0.min(f.bbox[1].lo - pad);
+            x1 = x1.max(f.bbox[0].hi + pad);
+            y1 = y1.max(f.bbox[1].hi + pad);
+        }
+        if !(x0 < x1 && y0 < y1) {
+            return Grid {
+                x0: 0.0,
+                y0: 0.0,
+                cw: 1.0,
+                ch: 1.0,
+                nx: 1,
+                ny: 1,
+                cells: vec![(0..faces.len() as u32).collect()],
+                stamp: std::cell::RefCell::new((0, vec![0; faces.len()])),
+            };
+        }
+        let n = ((faces.len() as f64).sqrt() * 2.0).clamp(1.0, 64.0) as usize;
+        let (cw, ch) = ((x1 - x0) / n as f64, (y1 - y0) / n as f64);
+        let mut cells = vec![Vec::new(); n * n];
+        for (i, f) in faces.iter().enumerate() {
+            let (a, b) = Self::span(x0, cw, n, f.bbox[0].lo - pad, f.bbox[0].hi + pad);
+            let (c, d) = Self::span(y0, ch, n, f.bbox[1].lo - pad, f.bbox[1].hi + pad);
+            for gy in c..=d {
+                for gx in a..=b {
+                    cells[gy * n + gx].push(i as u32);
+                }
+            }
+        }
+        Grid {
+            x0,
+            y0,
+            cw,
+            ch,
+            nx: n,
+            ny: n,
+            cells,
+            stamp: std::cell::RefCell::new((0, vec![0; faces.len()])),
+        }
+    }
+
+    fn span(o: f64, w: f64, n: usize, lo: f64, hi: f64) -> (usize, usize) {
+        let a = ((lo - o) / w).floor().max(0.0) as usize;
+        let b = ((hi - o) / w).floor().max(0.0) as usize;
+        (a.min(n - 1), b.min(n - 1))
+    }
+
+    /// The faces whose (grown) boxes may meet the xy of `b`.
+    pub fn near(&self, b: &[Ival; 3], out: &mut Vec<u32>) {
+        out.clear();
+        let mut st = self.stamp.borrow_mut();
+        st.0 = st.0.wrapping_add(1);
+        let tag = st.0;
+        let (a, bb) = Self::span(self.x0, self.cw, self.nx, b[0].lo, b[0].hi);
+        let (c, d) = Self::span(self.y0, self.ch, self.ny, b[1].lo, b[1].hi);
+        // a box wholly outside the grid's range still lands in the border cells: those list
+        // every face near the border, so nothing is missed
+        for gy in c..=d {
+            for gx in a..=bb {
+                for &i in &self.cells[gy * self.nx + gx] {
+                    if st.1[i as usize] != tag {
+                        st.1[i as usize] = tag;
+                        out.push(i);
+                    }
+                }
+            }
+        }
+    }
+}

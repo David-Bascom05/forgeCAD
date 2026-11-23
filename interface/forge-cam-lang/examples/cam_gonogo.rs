@@ -194,13 +194,17 @@ fn main() {
             moves(&plate[0].segs, 2.0, k, &mut mv);
             moves(&boss[0].segs, 13.0, k, &mut mv);
             moves(&bore[0].segs, 1.0, k, &mut mv);
+            let grid = forge_cam_geom::check::Grid::new(&faces, clear + 1e-6);
+            let mut cand: Vec<u32> = Vec::new();
             let t0 = std::time::Instant::now();
             let (mut cells, mut pairs, mut near, mut bad) = (0usize, 0usize, 0usize, 0usize);
             let mut lowest = f64::INFINITY;
             let mut slow = 0;
             for m in &mv {
                 let sb = swept_box(m, t.rmax(), t.top());
-                for f in &faces {
+                grid.near(&sb, &mut cand);
+                for &fi in &cand {
+                    let f = &faces[fi as usize];
                     pairs += 1;
                     if apart(&sb, &f.bbox, clear.max(0.0) + f.mu) {
                         continue;

@@ -772,63 +772,91 @@ impl Cam {
                         }
                     }
                     _ => {
-                        // a pocket of a hole feature: its circle, its depth
-                        let (pi, hn) = match a.get("#1") {
-                            Some(V::Holes(p, n)) => (*p, n.clone()),
-                            _ => return Err("pocket(SETUP, PART.HOLE, tool: ..)".into()),
-                        };
-                        let hole = self.parts[pi]
-                            .holes
-                            .iter()
-                            .find(|x| x.name == hn)
-                            .unwrap()
-                            .clone();
-                        if hole.dir != [0.0, 0.0, -1.0] {
-                            return Err(format!(
-                                "the hole `{hn}` is not drilled along −z: it needs its own setup"
-                            ));
-                        }
-                        let stepover = get_num(a, "stepover", Some(0.4 * d))?;
-                        let mut paths = vec![];
-                        for p in &hole.places {
-                            let r = 0.5 * hole.d;
-                            let st = p2(p[0] + r, p[1]);
-                            let rg = Region {
-                                loops: vec![Loop {
-                                    segs: vec![Seg::Arc {
-                                        a: st,
-                                        b: st,
-                                        c: p2(p[0], p[1]),
-                                        ccw: true,
-                                    }],
-                                }],
-                            };
-                            let bottom = match hole.depth {
-                                Some(dd) => p[2] - dd,
-                                None => self.parts[pi].bbox.0[2] - 0.5,
-                            };
-                            paths.push(
-                                ops::pocket(
-                                    &rg,
-                                    t,
-                                    ti,
-                                    h,
-                                    p[2],
-                                    bottom,
-                                    step,
-                                    stepover,
-                                    get_num(a, "leave", Some(0.0))?,
-                                    (vf, vp),
-                                )
-                                .map_err(|e| format!("{e:?}"))?,
-                            );
-                            if stepover <= 0.5 * d {
-                                if let Some(o) = opening(&rg, 0.5 * d) {
+                        // with no hole named: every hole and slot of the part's section between
+                        // two heights (its inner loops, each a pocket; islands inside them kept)
+                        if a.get("#1").is_none() {
+                            let top = get_num(a, "from", None)?;
+                            let bottom = get_num(a, "to", None)?;
+                            let zmid = 0.5 * (top + bottom);
+                            let sec = forge_cam::section::section(&part.faces, zmid, 1e-5)
+                                .map_err(|e| format!("the part's section at z = {zmid}: {e:?}"))?;
+                            let holes = outer_or_inner(&sec, false)?;
+                            let stepover = get_num(a, "stepover", Some(0.4 * d))?;
+                            let leave = get_num(a, "leave", Some(0.0))?;
+                            let mut paths = vec![];
+                            for l in &holes.loops {
+                                let rg = Region {
+                                    loops: vec![l.clone()],
+                                };
+                                paths.push(
+                                    ops::pocket(&rg, t, ti, h, top, bottom, step, stepover, leave, (vf, vp))
+                                        .map_err(|e| format!("{e:?}"))?,
+                                );
+                                if stepover <= 0.5 * d
+                                    && let Some(o) = opening(&rg, 0.5 * d)
+                                {
                                     voids.push((Some(o), bottom));
                                 }
                             }
+                            Ok(paths)
+                        } else {
+                            let (pi, hn) = match a.get("#1") {
+                            Some(V::Holes(p, n)) => (*p, n.clone()),
+                            _ => return Err("pocket(SETUP, PART.HOLE, tool: ..) or pocket(SETUP, from:, to:, tool: ..)".into()),
+                        };
+                            let hole = self.parts[pi]
+                                .holes
+                                .iter()
+                                .find(|x| x.name == hn)
+                                .unwrap()
+                                .clone();
+                            if hole.dir != [0.0, 0.0, -1.0] {
+                                return Err(format!(
+                                    "the hole `{hn}` is not drilled along −z: it needs its own setup"
+                                ));
+                            }
+                            let stepover = get_num(a, "stepover", Some(0.4 * d))?;
+                            let mut paths = vec![];
+                            for p in &hole.places {
+                                let r = 0.5 * hole.d;
+                                let st = p2(p[0] + r, p[1]);
+                                let rg = Region {
+                                    loops: vec![Loop {
+                                        segs: vec![Seg::Arc {
+                                            a: st,
+                                            b: st,
+                                            c: p2(p[0], p[1]),
+                                            ccw: true,
+                                        }],
+                                    }],
+                                };
+                                let bottom = match hole.depth {
+                                    Some(dd) => p[2] - dd,
+                                    None => self.parts[pi].bbox.0[2] - 0.5,
+                                };
+                                paths.push(
+                                    ops::pocket(
+                                        &rg,
+                                        t,
+                                        ti,
+                                        h,
+                                        p[2],
+                                        bottom,
+                                        step,
+                                        stepover,
+                                        get_num(a, "leave", Some(0.0))?,
+                                        (vf, vp),
+                                    )
+                                    .map_err(|e| format!("{e:?}"))?,
+                                );
+                                if stepover <= 0.5 * d {
+                                    if let Some(o) = opening(&rg, 0.5 * d) {
+                                        voids.push((Some(o), bottom));
+                                    }
+                                }
+                            }
+                            Ok(paths)
                         }
-                        Ok(paths)
                     }
                 }
             }

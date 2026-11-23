@@ -289,6 +289,10 @@ pub fn certify_staged(
         least: f64::INFINITY,
         ..Default::default()
     };
+    let pad = clearance.max(0.0) + 1e-6;
+    let pgrid = check::Grid::new(part, pad);
+    let sgrids: Vec<check::Grid> = stages.iter().map(|s| check::Grid::new(&s.1, pad)).collect();
+    let mut cand: Vec<u32> = Vec::new();
     let mv = checker_moves(p);
     let cutter_r = tool
         .shape
@@ -303,10 +307,11 @@ pub fn certify_staged(
             st += 1;
         }
         let stock: &[Face] = &stages[st].1;
+        let sgrid = &sgrids[st];
         for b in &tool.shape.bodies {
             let sb = check::swept_box_body(m, b);
             // the part: the cutter may touch it within tol on a cut; nothing else may touch it
-            for (faces, what) in [(part, "part"), (stock, "stock")] {
+            for (faces, what, grid) in [(part, "part", &pgrid), (stock, "stock", sgrid)] {
                 if what == "stock" && !(b.part == Part::NonCutting || *phase == Phase::Rapid) {
                     // the cutter cuts the stock: that is the point
                     continue;
@@ -321,7 +326,9 @@ pub fn certify_staged(
                 } else {
                     clearance
                 };
-                for f in faces {
+                grid.near(&sb, &mut cand);
+                for &fi in &cand {
+                    let f = &faces[fi as usize];
                     if check::apart(&sb, &f.bbox, limit.max(0.0) + f.mu) {
                         continue;
                     }

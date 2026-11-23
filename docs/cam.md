@@ -45,6 +45,7 @@ prog  = program(op1, post: "fanuc", number: 1001)
 | `clear(SETUP, tool:, from:, to:, step:, stepover:, leave:)` | everything between the stock outline and the part's section, as offset passes |
 | `contour(SETUP, tool:, side:, from:, to:, step:, leave:)` | the part's outline (`side: "outside"`) or its holes (`"inside"`) at the section |
 | `pocket(SETUP, PART.HOLE, tool:, stepover:, step:, leave:)` | a hole feature's circle, to its depth |
+| `pocket(SETUP, tool:, from:, to:, stepover:, step:, leave:)` | every hole and slot of the part's section between the heights |
 | `drill(SETUP, PART.HOLE, plan: "auto")` | the plan from the hole feature: spot, drill (peck past 3 D), tap for a thread |
 | `program(SETUP, post:, number:)` | `fanuc`, `haas`, `linuxcnc`, `grbl` (default: the machine's control) |
 
@@ -83,7 +84,7 @@ minus what each op provably cleared (kernel/forge-cam/src/stock.rs), so it conta
 
 ## What this phase covers
 
-2.5D on parts whose faces are planes and cylinders along z (others are refused by kind, typed):
+2.5D on parts whose faces are planes, and cylinders, cones and tori about z (others are refused by kind, typed):
 facing, clearing, contours, hole pockets and hole plans, with linking by retract. Not yet:
 adaptive clearing (patents first), 3-axis surfacing, 3+2, turning, 5-axis; slots, chamfer mills,
 engraving and thread milling as ops (the tools exist); helical ramps; the leftover check.
