@@ -1,0 +1,732 @@
+# Brother SPEEDIO machines: the maker's published specifications, restated (never copied); each record's
+# `source` is the page or catalogue read and `taken` the date. Estimates and UNKNOWNs are named in
+# each record's `note` and beside the field. Bodies are conservative envelopes from published
+# overall dimensions, not the maker's CAD. Format: docs/cam-machine.md.
+
+# ---------------------------------------------------------------------------------------------
+# Brother SPEEDIO S300X2: BT30 compact drill/tap/mill centre (CNC-C00). Discontinued; successor
+# S300Xd2. X 300 Y 400 Z 300, table 600 x 400 (250 kg), 10,000 rpm (10-min 10.1 kW, cont 7.1 kW,
+# 40 N.m max), 14 tools (21 optional), chip to chip 1.3 s.
+[[machine]]
+name = "brother-speedio-s300x2"
+kind = "vmc3"
+control = "brother"
+length_joint = "Z"
+coolants = ["flood", "through"]
+clearance = 1
+source = "https://machinetool.global.brother/en-eu/sx2/spec/index.aspx"
+taken = "2026-11-23"
+note = "architecture assumed: X table on a Y saddle, Z head on a fixed column (Brother's page does not say which unit carries which axis: UNKNOWN); spindle centre to column UNKNOWN: put at the least that clears the table at full Y (460, estimate); spindle power published as ratings only (10-min 10.1 kW, continuous 7.1 kW, 40 N.m max), no curve: no power check; accel published for Z only (2.2 G); X/Y UNKNOWN; max cutting feed 30 m/min only in high accuracy mode B; through-spindle coolant optional; overall W x D = required floor space 1080 x 2463, H 2497; machine 2200 kg; joint 0 = mid-travel for X and Y and the top of travel for Z; the control's machine zero is at a travel end (which: UNKNOWN), so a real G54 differs by a constant per axis; bodies are single boxes/cylinders from published overall sizes; head, column, saddle, bed and turret sizes are estimates, the spindle housing radius kept large; the enclosure is not modelled; the control's dialect (brother) is not in forge-post yet."
+
+[[machine.joint]]
+name = "Y"
+parent = "base"
+side = "table"
+type = "linear"
+axis = [0, -1, 0]
+range = [-200, 200]
+rapid = 50000
+max_feed = 30000
+
+[[machine.joint]]
+name = "X"
+parent = "Y"
+side = "table"
+type = "linear"
+axis = [-1, 0, 0]
+range = [-150, 150]
+rapid = 50000
+max_feed = 30000
+
+[[machine.joint]]
+name = "Z"
+parent = "base"
+side = "head"
+type = "linear"
+axis = [0, 0, 1]
+range = [-300, 0]
+rapid = 56000
+max_feed = 30000
+accel = 21574.63
+
+[[machine.spindle]]
+name = "S1"
+link = "Z"
+kind = "milling"
+axis = [0, 0, 1]
+nose = [0, 0, 480]
+rpm = [10, 10000]
+max = [250, 110]
+interface = "BT30"
+
+[[machine.changer]]
+pockets = 14
+change_s = 1.3   # chip to chip, published (tool to tool 0.7)
+max_tool_kg = 3
+
+[[machine.mount]]
+name = "spindle"
+kind = "tool"
+link = "Z"
+at = [0, 0, 480]
+dir = [0, 0, -1]
+
+[[machine.mount]]
+name = "table"
+kind = "part"
+link = "X"
+at = [0, 0, 0]
+dir = [0, 0, 1]
+xdir = [1, 0, 0]
+
+[[machine.body]]
+name = "bed"
+link = "base"
+part = "parts/brother/speedio-s300x2/bed.fg"
+ignore = ["saddle", "column"]
+[[machine.body.box]]
+min = [-300, -500, -700]
+max = [300, 860, -400]
+
+[[machine.body]]
+name = "column"
+link = "base"
+part = "parts/brother/speedio-s300x2/column.fg"
+ignore = ["bed", "head"]
+[[machine.body.box]]
+min = [-300, 460, -400]
+max = [300, 860, 1080]
+
+[[machine.body]]
+name = "saddle"
+link = "Y"
+part = "parts/brother/speedio-s300x2/saddle.fg"
+ignore = ["bed", "table"]
+[[machine.body.box]]
+min = [-240, -200, -250]
+max = [240, 200, -100]
+
+[[machine.body]]
+name = "table"
+link = "X"
+part = "parts/brother/speedio-s300x2/table.fg"
+ignore = ["saddle"]
+[[machine.body.box]]
+min = [-300, -200, -100]
+max = [300, 200, 0]
+
+[[machine.body]]
+name = "nose"
+link = "Z"
+part = "parts/brother/speedio-s300x2/nose.fg"
+ignore = ["column"]
+[[machine.body.cyl]]
+base = [0, 0, 480]
+axis = [0, 0, 1]
+r = 80
+h = 150
+
+[[machine.body]]
+name = "head"
+link = "Z"
+part = "parts/brother/speedio-s300x2/head.fg"
+ignore = ["column"]
+[[machine.body.box]]
+min = [-110, -110, 630]
+max = [110, 460, 1030]
+
+# ---------------------------------------------------------------------------------------------
+# Brother SPEEDIO S500X2: BT30 compact drill/tap/mill centre (CNC-C00). Discontinued; successor
+# S500Xd2. X 500 Y 400 Z 300, table 600 x 400 (250 kg), 10,000 rpm (10-min 10.1 kW, cont 7.1 kW,
+# 40 N.m max), 14 tools (21 optional), chip to chip 1.3 s.
+[[machine]]
+name = "brother-speedio-s500x2"
+kind = "vmc3"
+control = "brother"
+length_joint = "Z"
+coolants = ["flood", "through"]
+clearance = 1
+source = "https://machinetool.global.brother/en-eu/sx2/spec/index.aspx"
+taken = "2026-11-23"
+note = "architecture assumed: X table on a Y saddle, Z head on a fixed column (Brother's page does not say which unit carries which axis: UNKNOWN); spindle centre to column UNKNOWN: put at the least that clears the table at full Y (460, estimate); spindle power published as ratings only (10-min 10.1 kW, continuous 7.1 kW, 40 N.m max), no curve: no power check; accel published for Z only (2.2 G); X/Y UNKNOWN; max cutting feed 30 m/min only in high accuracy mode B; through-spindle coolant optional; overall W x D = required floor space 1560 x 2223, H 2497; machine 2250 kg; joint 0 = mid-travel for X and Y and the top of travel for Z; the control's machine zero is at a travel end (which: UNKNOWN), so a real G54 differs by a constant per axis; bodies are single boxes/cylinders from published overall sizes; head, column, saddle, bed and turret sizes are estimates, the spindle housing radius kept large; the enclosure is not modelled; the control's dialect (brother) is not in forge-post yet."
+
+[[machine.joint]]
+name = "Y"
+parent = "base"
+side = "table"
+type = "linear"
+axis = [0, -1, 0]
+range = [-200, 200]
+rapid = 50000
+max_feed = 30000
+
+[[machine.joint]]
+name = "X"
+parent = "Y"
+side = "table"
+type = "linear"
+axis = [-1, 0, 0]
+range = [-250, 250]
+rapid = 50000
+max_feed = 30000
+
+[[machine.joint]]
+name = "Z"
+parent = "base"
+side = "head"
+type = "linear"
+axis = [0, 0, 1]
+range = [-300, 0]
+rapid = 56000
+max_feed = 30000
+accel = 21574.63
+
+[[machine.spindle]]
+name = "S1"
+link = "Z"
+kind = "milling"
+axis = [0, 0, 1]
+nose = [0, 0, 480]
+rpm = [10, 10000]
+max = [250, 110]
+interface = "BT30"
+
+[[machine.changer]]
+pockets = 14
+change_s = 1.3   # chip to chip, published (tool to tool 0.7)
+max_tool_kg = 3
+
+[[machine.mount]]
+name = "spindle"
+kind = "tool"
+link = "Z"
+at = [0, 0, 480]
+dir = [0, 0, -1]
+
+[[machine.mount]]
+name = "table"
+kind = "part"
+link = "X"
+at = [0, 0, 0]
+dir = [0, 0, 1]
+xdir = [1, 0, 0]
+
+[[machine.body]]
+name = "bed"
+link = "base"
+part = "parts/brother/speedio-s500x2/bed.fg"
+ignore = ["saddle", "column"]
+[[machine.body.box]]
+min = [-300, -500, -700]
+max = [300, 860, -400]
+
+[[machine.body]]
+name = "column"
+link = "base"
+part = "parts/brother/speedio-s500x2/column.fg"
+ignore = ["bed", "head"]
+[[machine.body.box]]
+min = [-300, 460, -400]
+max = [300, 860, 1080]
+
+[[machine.body]]
+name = "saddle"
+link = "Y"
+part = "parts/brother/speedio-s500x2/saddle.fg"
+ignore = ["bed", "table"]
+[[machine.body.box]]
+min = [-240, -200, -250]
+max = [240, 200, -100]
+
+[[machine.body]]
+name = "table"
+link = "X"
+part = "parts/brother/speedio-s500x2/table.fg"
+ignore = ["saddle"]
+[[machine.body.box]]
+min = [-300, -200, -100]
+max = [300, 200, 0]
+
+[[machine.body]]
+name = "nose"
+link = "Z"
+part = "parts/brother/speedio-s500x2/nose.fg"
+ignore = ["column"]
+[[machine.body.cyl]]
+base = [0, 0, 480]
+axis = [0, 0, 1]
+r = 80
+h = 150
+
+[[machine.body]]
+name = "head"
+link = "Z"
+part = "parts/brother/speedio-s500x2/head.fg"
+ignore = ["column"]
+[[machine.body.box]]
+min = [-110, -110, 630]
+max = [110, 460, 1030]
+
+# ---------------------------------------------------------------------------------------------
+# Brother SPEEDIO S700X2: BT30 compact drill/tap/mill centre (CNC-C00). Discontinued; successor
+# S700Xd2. X 700 Y 400 Z 300, table 800 x 400 (250 kg), 10,000 rpm (10-min 10.1 kW, cont 7.1 kW,
+# 40 N.m max), 14 tools (21 optional), chip to chip 1.3 s.
+[[machine]]
+name = "brother-speedio-s700x2"
+kind = "vmc3"
+control = "brother"
+length_joint = "Z"
+coolants = ["flood", "through"]
+clearance = 1
+source = "https://machinetool.global.brother/en-eu/sx2/spec/index.aspx"
+taken = "2026-11-23"
+note = "architecture assumed: X table on a Y saddle, Z head on a fixed column (Brother's page does not say which unit carries which axis: UNKNOWN); spindle centre to column UNKNOWN: put at the least that clears the table at full Y (460, estimate); spindle power published as ratings only (10-min 10.1 kW, continuous 7.1 kW, 40 N.m max), no curve: no power check; accel published for Z only (2.2 G); X/Y UNKNOWN; max cutting feed 30 m/min only in high accuracy mode B; through-spindle coolant optional; overall W x D = required floor space 2050 x 2223, H 2497; machine 2400 kg; joint 0 = mid-travel for X and Y and the top of travel for Z; the control's machine zero is at a travel end (which: UNKNOWN), so a real G54 differs by a constant per axis; bodies are single boxes/cylinders from published overall sizes; head, column, saddle, bed and turret sizes are estimates, the spindle housing radius kept large; the enclosure is not modelled; the control's dialect (brother) is not in forge-post yet."
+
+[[machine.joint]]
+name = "Y"
+parent = "base"
+side = "table"
+type = "linear"
+axis = [0, -1, 0]
+range = [-200, 200]
+rapid = 50000
+max_feed = 30000
+
+[[machine.joint]]
+name = "X"
+parent = "Y"
+side = "table"
+type = "linear"
+axis = [-1, 0, 0]
+range = [-350, 350]
+rapid = 50000
+max_feed = 30000
+
+[[machine.joint]]
+name = "Z"
+parent = "base"
+side = "head"
+type = "linear"
+axis = [0, 0, 1]
+range = [-300, 0]
+rapid = 56000
+max_feed = 30000
+accel = 21574.63
+
+[[machine.spindle]]
+name = "S1"
+link = "Z"
+kind = "milling"
+axis = [0, 0, 1]
+nose = [0, 0, 480]
+rpm = [10, 10000]
+max = [250, 110]
+interface = "BT30"
+
+[[machine.changer]]
+pockets = 14
+change_s = 1.3   # chip to chip, published (tool to tool 0.7)
+max_tool_kg = 3
+
+[[machine.mount]]
+name = "spindle"
+kind = "tool"
+link = "Z"
+at = [0, 0, 480]
+dir = [0, 0, -1]
+
+[[machine.mount]]
+name = "table"
+kind = "part"
+link = "X"
+at = [0, 0, 0]
+dir = [0, 0, 1]
+xdir = [1, 0, 0]
+
+[[machine.body]]
+name = "bed"
+link = "base"
+part = "parts/brother/speedio-s700x2/bed.fg"
+ignore = ["saddle", "column"]
+[[machine.body.box]]
+min = [-400, -500, -700]
+max = [400, 860, -400]
+
+[[machine.body]]
+name = "column"
+link = "base"
+part = "parts/brother/speedio-s700x2/column.fg"
+ignore = ["bed", "head"]
+[[machine.body.box]]
+min = [-300, 460, -400]
+max = [300, 860, 1080]
+
+[[machine.body]]
+name = "saddle"
+link = "Y"
+part = "parts/brother/speedio-s700x2/saddle.fg"
+ignore = ["bed", "table"]
+[[machine.body.box]]
+min = [-320, -200, -250]
+max = [320, 200, -100]
+
+[[machine.body]]
+name = "table"
+link = "X"
+part = "parts/brother/speedio-s700x2/table.fg"
+ignore = ["saddle"]
+[[machine.body.box]]
+min = [-400, -200, -100]
+max = [400, 200, 0]
+
+[[machine.body]]
+name = "nose"
+link = "Z"
+part = "parts/brother/speedio-s700x2/nose.fg"
+ignore = ["column"]
+[[machine.body.cyl]]
+base = [0, 0, 480]
+axis = [0, 0, 1]
+r = 80
+h = 150
+
+[[machine.body]]
+name = "head"
+link = "Z"
+part = "parts/brother/speedio-s700x2/head.fg"
+ignore = ["column"]
+[[machine.body.box]]
+min = [-110, -110, 630]
+max = [110, 460, 1030]
+
+# ---------------------------------------------------------------------------------------------
+# Brother SPEEDIO M140X2: BT30 mill-turn (discontinued). A tilts the trunnion about X
+# (-30..+120 deg, roller gear cam) and carries C, a direct-drive turning spindle on a 140 mm table
+# (2,000 rpm, 55 N.m, 4.2 kW motor); turning uses a stationary tool locked in the milling spindle.
+[[machine]]
+name = "brother-speedio-m140x2"
+kind = "table-table"
+control = "brother"
+length_joint = "Z"
+coolants = ["flood", "through"]
+clearance = 1
+source = "https://machinetool.global.brother/en-us/all-products/m140x2"
+taken = "2026-11-23"
+note = "C is modelled as a rotary joint only: its turning (2,000 rpm, 55 N.m, 8.7 kW max) is a format gap (a turning spindle on a table rotary of a milling machine; mill-turn requires a diameter X), FORMAT-GAPS.md; spindle nose to table top at A = 0 UNKNOWN: put at 80-385 (estimate); A's pivot 50 mm below the table top (estimate); architecture of X/Y/Z UNKNOWN (Brother does not say which unit carries which); the tool-to-part motion is the same either way; spindle power published as ratings (10-min 10.1 kW, 40 N.m max): no curve, no power check; table side load 40 kg, tail side 11 kg; max cutting feed 30 m/min only in high accuracy mode B; overall W x D = required floor space 1280 x 3829, H 2603; machine 2712 kg; joint 0 = mid-travel for X and Y and the top of travel for Z; the control's machine zero is at a travel end (which: UNKNOWN), so a real G54 differs by a constant per axis; bodies are single boxes/cylinders from published overall sizes; head, column, saddle, bed and turret sizes are estimates, the spindle housing radius kept large; the enclosure is not modelled; the control's dialect (brother) is not in forge-post yet."
+
+[[machine.joint]]
+name = "X"
+parent = "base"
+side = "head"
+type = "linear"
+axis = [1, 0, 0]
+range = [-100, 100]
+rapid = 50000
+max_feed = 30000
+
+[[machine.joint]]
+name = "Y"
+parent = "X"
+side = "head"
+type = "linear"
+axis = [0, 1, 0]
+range = [-220, 220]
+rapid = 50000
+max_feed = 30000
+
+[[machine.joint]]
+name = "Z"
+parent = "Y"
+side = "head"
+type = "linear"
+axis = [0, 0, 1]
+range = [-305, 0]
+rapid = 50000
+max_feed = 30000
+
+[[machine.joint]]
+name = "A"
+parent = "base"
+side = "table"
+type = "rotary"
+axis = [1, 0, 0]
+pivot = [0, 0, -50]
+range = [-30, 120]
+rapid = 21600
+max_feed = 21600
+tcp = true
+preference = 1
+
+[[machine.joint]]
+name = "C"
+parent = "A"
+side = "table"
+type = "rotary"
+axis = [0, 0, 1]
+pivot = [0, 0, 0]
+range = [-360, 360]
+rapid = 72000
+max_feed = 72000
+cyclic = true
+tcp = true
+
+[[machine.spindle]]
+name = "S1"
+link = "Z"
+kind = "milling"
+axis = [0, 0, 1]
+nose = [0, 0, 385]
+rpm = [10, 10000]
+max = [200, 80]
+interface = "BT30"
+
+[[machine.changer]]
+pockets = 22
+change_s = 1.4   # chip to chip, published (tool to tool 0.9)
+max_tool_kg = 3
+
+[[machine.mount]]
+name = "spindle"
+kind = "tool"
+link = "Z"
+at = [0, 0, 385]
+dir = [0, 0, -1]
+
+[[machine.mount]]
+name = "table"
+kind = "part"
+link = "C"
+at = [0, 0, 0]
+dir = [0, 0, 1]
+xdir = [1, 0, 0]
+
+[[machine.body]]
+name = "bed"
+link = "base"
+part = "parts/brother/speedio-m140x2/bed.fg"
+ignore = ["support-l", "support-r"]
+[[machine.body.box]]
+min = [-400, -520, -617.279221]
+max = [400, 520, -217.279221]
+
+[[machine.body]]
+name = "support-l"
+link = "base"
+part = "parts/brother/speedio-m140x2/support-l.fg"
+ignore = ["bed", "cradle"]
+[[machine.body.box]]
+min = [-270, -130, -450]
+max = [-130, 130, 100]
+
+[[machine.body]]
+name = "support-r"
+link = "base"
+part = "parts/brother/speedio-m140x2/support-r.fg"
+ignore = ["bed", "cradle"]
+[[machine.body.box]]
+min = [130, -130, -450]
+max = [270, 130, 100]
+
+[[machine.body]]
+name = "cradle"
+link = "A"
+part = "parts/brother/speedio-m140x2/cradle.fg"
+ignore = ["rotary", "support-l", "support-r"]
+[[machine.body.box]]
+min = [-110, -90, -140]
+max = [110, 90, -60]
+
+[[machine.body]]
+name = "rotary"
+link = "C"
+part = "parts/brother/speedio-m140x2/rotary.fg"
+ignore = ["cradle"]
+[[machine.body.cyl]]
+base = [0, 0, -60]
+axis = [0, 0, 1]
+r = 70
+h = 60
+
+[[machine.body]]
+name = "nose"
+link = "Z"
+part = "parts/brother/speedio-m140x2/nose.fg"
+[[machine.body.cyl]]
+base = [0, 0, 385]
+axis = [0, 0, 1]
+r = 80
+h = 150
+
+[[machine.body]]
+name = "head"
+link = "Z"
+part = "parts/brother/speedio-m140x2/head.fg"
+[[machine.body.box]]
+min = [-120, -120, 535]
+max = [120, 120, 935]
+
+# ---------------------------------------------------------------------------------------------
+# Brother SPEEDIO M200X3: BT30 mill-turn (discontinued). A tilts the trunnion about X
+# (-30..+120 deg, roller gear cam) and carries C, a direct-drive turning spindle on a 140 mm table
+# (2,000 rpm, 55 N.m, 3.6 kW motor); turning uses a stationary tool locked in the milling spindle.
+[[machine]]
+name = "brother-speedio-m200x3"
+kind = "table-table"
+control = "brother"
+length_joint = "Z"
+coolants = ["flood", "through"]
+clearance = 1
+source = "https://machinetool.global.brother/en-eu/mx3/spec/index.aspx"
+taken = "2026-11-23"
+note = "C is modelled as a rotary joint only: its turning (2,000 rpm, 55 N.m, 8.7 kW max) is a format gap (a turning spindle on a table rotary of a milling machine; mill-turn requires a diameter X), FORMAT-GAPS.md; spindle nose to table top at A = 0 UNKNOWN: put at 80-385 (estimate); A's pivot 50 mm below the table top (estimate); architecture of X/Y/Z UNKNOWN (Brother does not say which unit carries which); the tool-to-part motion is the same either way; spindle power published as ratings (10-min 10.1 kW, 40 N.m max): no curve, no power check; table side load 40 kg, tail side 11 kg; max cutting feed 30 m/min only in high accuracy mode B; overall W x D = required floor space 1280 x 3862, H 2603; machine 2750 kg; joint 0 = mid-travel for X and Y and the top of travel for Z; the control's machine zero is at a travel end (which: UNKNOWN), so a real G54 differs by a constant per axis; bodies are single boxes/cylinders from published overall sizes; head, column, saddle, bed and turret sizes are estimates, the spindle housing radius kept large; the enclosure is not modelled; the control's dialect (brother) is not in forge-post yet."
+
+[[machine.joint]]
+name = "X"
+parent = "base"
+side = "head"
+type = "linear"
+axis = [1, 0, 0]
+range = [-100, 100]
+rapid = 50000
+max_feed = 30000
+
+[[machine.joint]]
+name = "Y"
+parent = "X"
+side = "head"
+type = "linear"
+axis = [0, 1, 0]
+range = [-220, 220]
+rapid = 50000
+max_feed = 30000
+
+[[machine.joint]]
+name = "Z"
+parent = "Y"
+side = "head"
+type = "linear"
+axis = [0, 0, 1]
+range = [-305, 0]
+rapid = 50000
+max_feed = 30000
+
+[[machine.joint]]
+name = "A"
+parent = "base"
+side = "table"
+type = "rotary"
+axis = [1, 0, 0]
+pivot = [0, 0, -50]
+range = [-30, 120]
+rapid = 21600
+max_feed = 21600
+tcp = true
+preference = 1
+
+[[machine.joint]]
+name = "C"
+parent = "A"
+side = "table"
+type = "rotary"
+axis = [0, 0, 1]
+pivot = [0, 0, 0]
+range = [-360, 360]
+rapid = 72000
+max_feed = 72000
+cyclic = true
+tcp = true
+
+[[machine.spindle]]
+name = "S1"
+link = "Z"
+kind = "milling"
+axis = [0, 0, 1]
+nose = [0, 0, 385]
+rpm = [10, 10000]
+max = [200, 80]
+interface = "BT30"
+
+[[machine.changer]]
+pockets = 22
+change_s = 1.5   # chip to chip, published (tool to tool 0.8)
+max_tool_kg = 3
+
+[[machine.mount]]
+name = "spindle"
+kind = "tool"
+link = "Z"
+at = [0, 0, 385]
+dir = [0, 0, -1]
+
+[[machine.mount]]
+name = "table"
+kind = "part"
+link = "C"
+at = [0, 0, 0]
+dir = [0, 0, 1]
+xdir = [1, 0, 0]
+
+[[machine.body]]
+name = "bed"
+link = "base"
+part = "parts/brother/speedio-m200x3/bed.fg"
+ignore = ["support-l", "support-r"]
+[[machine.body.box]]
+min = [-400, -520, -617.279221]
+max = [400, 520, -217.279221]
+
+[[machine.body]]
+name = "support-l"
+link = "base"
+part = "parts/brother/speedio-m200x3/support-l.fg"
+ignore = ["bed", "cradle"]
+[[machine.body.box]]
+min = [-270, -130, -450]
+max = [-130, 130, 100]
+
+[[machine.body]]
+name = "support-r"
+link = "base"
+part = "parts/brother/speedio-m200x3/support-r.fg"
+ignore = ["bed", "cradle"]
+[[machine.body.box]]
+min = [130, -130, -450]
+max = [270, 130, 100]
+
+[[machine.body]]
+name = "cradle"
+link = "A"
+part = "parts/brother/speedio-m200x3/cradle.fg"
+ignore = ["rotary", "support-l", "support-r"]
+[[machine.body.box]]
+min = [-110, -90, -140]
+max = [110, 90, -60]
+
+[[machine.body]]
+name = "rotary"
+link = "C"
+part = "parts/brother/speedio-m200x3/rotary.fg"
+ignore = ["cradle"]
+[[machine.body.cyl]]
+base = [0, 0, -60]
+axis = [0, 0, 1]
+r = 70
+h = 60
+
+[[machine.body]]
+name = "nose"
+link = "Z"
+part = "parts/brother/speedio-m200x3/nose.fg"
+[[machine.body.cyl]]
+base = [0, 0, 385]
+axis = [0, 0, 1]
+r = 80
+h = 150
+
+[[machine.body]]
+name = "head"
+link = "Z"
+part = "parts/brother/speedio-m200x3/head.fg"
+[[machine.body.box]]
+min = [-120, -120, 535]
+max = [120, 120, 935]
