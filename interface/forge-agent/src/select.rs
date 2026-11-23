@@ -30,8 +30,15 @@ pub struct View<'a> {
 /// `copied` names the faces a pattern at `i` copied: their source's lineage, then `i`.
 pub fn lineage(body: &Body, prev: Option<(&Body, &Lineage)>, i: usize, copied: &Lineage) -> Lineage {
     let mut out = BTreeMap::new();
+    let merges = prev.map(|(_, po)| merges(body, po)).unwrap_or_default();
     for f in body.face_ids() {
         let face = body.face(f);
+        if let Some((_, po)) = prev
+            && let Some(o) = merged(&merges, face.name, i, po)
+        {
+            out.insert(face.name, o);
+            continue;
+        }
         let o = prev.and_then(|(pb, po)| {
             po.get(&face.name)
                 .cloned()
@@ -48,6 +55,55 @@ pub fn lineage(body: &Body, prev: Option<(&Body, &Lineage)>, i: usize, copied: &
         out.insert(face.name, o.unwrap_or_else(|| vec![i]));
     }
     out
+}
+
+/// The faces this step merged: (whole, piece) for each piece the body's joins give a whole
+/// (`Joins::aliases`) that was a face before (in `po`) and is none now, sorted (as forge-lang's
+/// `build::merges`).
+fn merges(body: &Body, po: &Lineage) -> Vec<(Name, Name)> {
+    if body.joins.aliases.is_empty() {
+        return Vec::new();
+    }
+    // (the body's own names: `face_by_name` would follow the alias to the whole)
+    let mut now: Vec<Name> = body.face_ids().map(|f| body.face(f).name).collect();
+    now.sort_unstable();
+    let mut out: Vec<(Name, Name)> = body
+        .joins
+        .aliases
+        .iter()
+        .filter(|&&(piece, whole)| {
+            piece != whole && po.contains_key(&piece) && now.binary_search(&piece).is_err()
+        })
+        .map(|&(piece, whole)| (whole, piece))
+        .collect();
+    out.sort_unstable();
+    out.dedup();
+    // (a name merged twice into different wholes would give the first whole the second's
+    // origins: names are rooted per feature and do not come back, which this checks)
+    debug_assert!({
+        let mut pieces: Vec<Name> = out.iter().map(|m| m.1).collect();
+        pieces.sort_unstable();
+        pieces.windows(2).all(|w| w[0] != w[1])
+    });
+    out
+}
+
+/// The origin of a face `whole` this step merged of faces before: every member's, its own (this
+/// feature's, `i`, if new) and each piece's; None if it merged nothing (as forge-lang's
+/// `build::merged`).
+fn merged(merges: &[(Name, Name)], whole: Name, i: usize, po: &Lineage) -> Option<Vec<usize>> {
+    let from = merges.partition_point(|m| m.0 < whole);
+    let pieces = &merges[from..from + merges[from..].partition_point(|m| m.0 == whole)];
+    if pieces.is_empty() {
+        return None;
+    }
+    let mut o: Vec<usize> = po.get(&whole).cloned().unwrap_or_else(|| vec![i]);
+    for &(_, piece) in pieces {
+        o.extend(po.get(&piece).into_iter().flatten().copied());
+    }
+    o.sort_unstable();
+    o.dedup();
+    Some(o)
 }
 
 /// The faces a pattern at `k` copied, from the part before it (`prev`, `po`): each new face is

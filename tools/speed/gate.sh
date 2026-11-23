@@ -44,6 +44,9 @@
 # way is compared only with counts made the same way.
 set -e
 dir=$(dirname "$0")
+# no disk cache on any path (callgrind or perf, exact or not): a cached result would be counted
+# as no work at all
+export FORGECAD_CACHE=off
 perf=${PERF:-perf}
 counter=${GATE_COUNTER:-}
 if [ -z "$counter" ]; then
