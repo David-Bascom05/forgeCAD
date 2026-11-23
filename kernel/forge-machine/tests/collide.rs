@@ -2,7 +2,7 @@ use forge_machine::collide::{self, Role, Verdict};
 use forge_machine::def::Prim;
 use forge_machine::gcode::Control;
 use forge_machine::library::builtin;
-use forge_machine::sim::{self, Setup, SimTool};
+use forge_machine::sim::{self, Cut, Setup, SimTool};
 
 #[test]
 fn builtin_machines_are_clear_at_home() {
@@ -43,6 +43,10 @@ fn lathe_setup(m: &forge_machine::MachineDef) -> Setup<'_> {
         name: "OD".into(),
         tip: [-120.0, 0.0, 10.0],
         body: vec![(6.0, 0.0, 30.0), (12.0, 30.0, 110.0)],
+        cut: Cut::Nose {
+            rn: 0.8,
+            centre: [0.8, 0.8],
+        },
     }];
     s.geo = vec![(1, vec![-10.0, 120.0])];
     s
@@ -82,6 +86,7 @@ fn rapid_into_the_stock_and_into_the_tilted_cradle() {
         name: "flat-10".into(),
         tip: [0.0, 0.0, -100.0],
         body: vec![(5.0, 0.0, 30.0), (8.0, 30.0, 60.0), (20.0, 60.0, 100.0)],
+        cut: Cut::Mill { r: 5.0, corner: 0.0 },
     }];
     s.start_tool = Some(1);
     let stock = collide::part_body(
@@ -141,6 +146,7 @@ fn clear_is_never_contradicted_by_samples() {
         name: "t".into(),
         tip: [0.0, 0.0, -150.0],
         body: vec![(5.0, 0.0, 150.0)],
+        cut: Cut::Mill { r: 5.0, corner: 0.0 },
     }];
     let stock = collide::part_body(
         &s,

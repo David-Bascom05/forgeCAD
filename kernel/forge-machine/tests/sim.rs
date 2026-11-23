@@ -1,6 +1,6 @@
 use forge_machine::gcode::Control;
 use forge_machine::library::builtin;
-use forge_machine::sim::{self, Happening, Path, Setup, SimTool, Violation};
+use forge_machine::sim::{self, Cut, Happening, Path, Setup, SimTool, Violation};
 
 fn vmc() -> forge_machine::MachineDef {
     builtin().remove(0)
@@ -12,6 +12,7 @@ fn mill_tool(t: u32, l: f64, r: f64) -> SimTool {
         name: format!("t{t}"),
         tip: [0.0, 0.0, -l],
         body: vec![(r, 0.0, 20.0), (r, 20.0, l)],
+        cut: Cut::Mill { r, corner: 0.0 },
     }
 }
 
@@ -118,6 +119,10 @@ fn lathe_diameter_and_turret() {
         name: "OD".into(),
         tip: [-120.0, 0.0, 10.0],
         body: vec![(6.0, 0.0, 30.0)],
+        cut: Cut::Nose {
+            rn: 0.8,
+            centre: [0.8, 0.8],
+        },
     }];
     s.geo = vec![(1, vec![-10.0, 120.0])];
     let prog =

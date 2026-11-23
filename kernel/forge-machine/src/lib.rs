@@ -9,6 +9,7 @@ pub mod def;
 pub mod gcode;
 pub mod kin;
 pub mod library;
+pub mod removal;
 pub mod sim;
 
 pub use def::{DefError, Kind, MachineDef};

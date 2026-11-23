@@ -32,6 +32,18 @@ pub struct SimTool {
     /// The tool's body from the tip toward the gauge, as stacked cylinders about its axis:
     /// (radius, from, to) distances along the axis from the tip. The first is the cutting part.
     pub body: Vec<(f64, f64, f64)>,
+    /// The cutting edge's shape, for material removal.
+    pub cut: Cut,
+}
+
+/// A cutting edge as the stock sees it.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Cut {
+    /// A revolving cutter about the tool axis: radius r and corner radius (0 flat, r ball).
+    Mill { r: f64, corner: f64 },
+    /// A turning insert's nose: radius rn, its centre at the programmed tip plus `centre`
+    /// (radial, axial) in the part's (r, z) plane.
+    Nose { rn: f64, centre: [f64; 2] },
 }
 
 /// The setup: the machine, its control, the mounts used, offsets and tools.
