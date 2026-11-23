@@ -42,16 +42,17 @@ and bolt-hole rapids into stock nobody had cleared (both now test cases with typ
 
 ## Levels (PROOF-STANDARD.md)
 
-- L1: **verify/forge-cam** (branch claude/repo-review-mbdrlj-cam-lean, CI forge-cam.yml).
-  Lean and Mathlib, standard axioms, no sorry. Proven:
-  - `sd_hyp_mono`, the lemma the 2.5D checker rests on;
-  - the closed form's verdicts imply G1–G3 for prism faces and planar moves (Prism.lean);
-  - G4 (the lower half from G1; the leftover exact, per z band);
-  - G5 for 3-axis lines and arcs, with an exact ℚ check equal to the spec;
-  - G6, the modal round trip with quantisation. This one found the printer bug below.
-
-  Stated hypotheses: `TopAbove` (the tool reaches above the set) and the frontier lying in the
-  checked faces. The 2D candidate analysis of slab::dist stays a hypothesis (L2/L3).
+- L1: **verify/forge-cam** (CI forge-cam.yml): Lean 4.36 and Mathlib, standard axioms, no sorry.
+  It has 72 theorems; verify/forge-cam/README.md maps them and RESUME.md gives the state.
+  - `sd_hyp_mono`, the lemma the 2.5D checker rests on.
+  - The closed form's verdicts imply G1–G3 for prism faces and planar, vertical or helical
+    moves, the corrected G2 (open form) included, with faces lowered within μ.
+  - G4 (with P' = P ∖ Δ and the held bands), G5 (3-axis), and G6 (modal round trip, arcs'
+    full-circle semantics).
+  - Soft-jaw seating and pocket coverage.
+  - slab::dist's candidates, sound for segment–segment, segment–arc, arc–arc and flat regions
+    (the point-in-trim test, the radial end pieces, the 2·gap lowering).
+  - Assumed: the trim's even-odd rule (a Jordan-curve fact), and L5 (the interval arithmetic).
 - L2: the offset and boolean decisions are exact (exact reals to the BFMSS bound).
 - L3: not claimed.
 - L4: forge-cam-geom is in the Aeneas style (no dependencies, loops) but not translated.
@@ -67,10 +68,13 @@ notch's sharp inside corners (no end mill reaches them).
 
 ## Gaps, in order
 
-1. forge-post's printer (155e2f2) commits the motion mode before it drops a null move. A null feed
-   after a rapid, then a plunge, prints the plunge without G1, and the control runs it as G0.
-   `round_trip` refuses such a program; the Lean model proves the fixed order
-   (verify/forge-cam Post.lean, `faulty_counterexample`). The fix belongs to the CAM session.
+1. The Lean L1 found and closed four soundness issues. Each is fixed here, and the Lean is
+   matched to the fix:
+   - the null-move printer (b6ec16c);
+   - the vanishing helical arc (4bfe2a2);
+   - the soft jaws' grip (4bfe2a2);
+   - the trim arcs' stored-end gap (3a388e5, bfa4a72).
+   Open: L5 for the checker's intervals.
 2. G4 (leftover) is checked: per z band, the final stock less the part's section grown by tol,
    exactly (booleans); the flange has none, a facing-only program lists its regions. The
    reasons (tool radius, reach) are not yet classified: every region says "uncut".
