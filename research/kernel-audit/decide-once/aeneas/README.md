@@ -37,7 +37,9 @@ no `sorry`. The obligations are stated in `lean/ForgeBoolCore/Specs.lean`; how t
 sessions is in `lean/SPLIT.md`.
 
 - **Every stage**, `unify` and `collapse` included:
-  - the index, `cov`, `find` and `intern`;
+  - the index, `cov`, `find` and `intern`. `find` looks up through the hashed index `Index::find_h`
+    (`RefineHash.lean`). The hash need not be injective: `find_h` binary-searches the run of entries
+    with the key's hash, then compares covectors (`same`);
   - `split` and `split_ok` (group S);
   - `membership`, the classify check, and the keep table;
   - `around`, `between`, `edges_between` and `bad_vert`;

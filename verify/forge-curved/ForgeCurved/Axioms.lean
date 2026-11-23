@@ -67,3 +67,5 @@ import ForgeCurved
 #print axioms ForgeCurved.tangent_edgeLocal
 #print axioms ForgeCurved.tangent_refused
 #print axioms ForgeCurved.coaxial_localConn
+#print axioms ForgeCurved.FaceLocal.coreI_refuses_iff_xNonManifoldF
+#print axioms ForgeCurved.FaceLocal.coreI_refuses_iff_top

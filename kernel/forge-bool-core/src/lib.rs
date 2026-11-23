@@ -242,7 +242,7 @@ fn same_cov(a: &[Sgn], b: &[Sgn]) -> bool {
 
 /// The id of a covector, or NONE.
 fn find(l: &Ledger, ext: &Ext, key: &[Sgn]) -> u32 {
-    let mut f = ext.index.find(&l.cells, key);
+    let mut f = ext.index.find_h(&l.cells, key);
     let mut i = 0;
     while f == NONE && i < ext.extra.len() {
         if same_cov(&ext.extra[i], key) {
