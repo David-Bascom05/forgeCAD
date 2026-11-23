@@ -41,7 +41,7 @@ Owner priorities that paused or narrowed streams (2026-11-23):
 
 | Stream | Branch suffix | Head | What's left (notes) |
 |---|---|---|---|
-| Sketch text | `sketch-text` | be95022 | Round-6 merge, TTF lsb fix. Left: CFF fonts (113/502 refused), multi-line, unshipped fonts |
+| Sketch text | `sketch-text` | 5557c8f1 | Final (round 6 merged): CFF reader at L4, bezier-margin soundness fix, TTF lsb fix; bits identical, 0 worse, fuzz 150/150, n-ary 167/167; manifold seq/nary1 diagnostic lines ~+0.2% (latency gate to check). In the merge queue. Resume: research/sketch-text/whats-left.md |
 | Surfaces / thin | `surfaces` | 3d11b00 | Round-6 merge, spline extension past ends. Left: forge-sheetops, L1 thicken spec, L6 fuzz kind, sheets.py in CI |
 | Conic fillets | `conic-fillet` | ee31e8a | Final (round 6 merged, phase 2 in): no line over base, bits identical, 0 worse, fuzz 150/150, n-ary 167/167, native = wasm. In the merge queue. Resume: research/fillets/conic/LEFT.md |
 
