@@ -380,12 +380,12 @@ theorem PTGen.cyc {Q : Plane} {u : Tri} {e w : V3} (G : PTGen Q u e w) : PTGen Q
 theorem LinesMissed.cyc {u : Tri} {e w : V3} (h : LinesMissed u e w) : LinesMissed ⟨u.b, u.c, u.a⟩ e w :=
   fun s h0 h1 μ => let ⟨a, b, c⟩ := h s h0 h1 μ; ⟨b, c, a⟩
 
-/-- **Constancy, the general case**: a triangle of a plane `Q` not along `x`, the segment off
-its edge lines and missing it: its hit changes from `e` to `w` by the parity of its edges'
+/-- **Constancy, triangles not along `x`**: a triangle of a plane `Q` with `n.x ≠ 0`, the segment
+missing it (separated by `H`): its hit changes from `e` to `w` by the parity of its edges'
 shadows. -/
 theorem pt_general (Q H : Plane) (u : Tri) (e w : V3) (hnx : Q.n.x ≠ 0) (ha : Q.eval u.a = 0)
     (hb : Q.eval u.b = 0) (hc : Q.eval u.c = 0) (hD : u.D ≠ 0) (G : PTGen Q u e w)
-    (G4 : LinesMissed u e w) (S : Sep H u e w) :
+    (S : Sep H u e w) :
     (hit Q u e ^^ hit Q u w) = par (u.segs.map fun E => decide (shadow e w E)) := by
   obtain ⟨g0, g1, g2, g3, hl⟩ : ∃ g0 g1 g2 g3, ptFns Q u e w = [g0, g1, g2, g3] := ⟨_, _, _, _, rfl⟩
   have hends : ∀ g ∈ ptFns Q u e w, g.ev 0 ≠ 0 ∧ g.ev 1 ≠ 0 := by
@@ -406,36 +406,71 @@ theorem pt_general (Q H : Plane) (u : Tri) (e w : V3) (hnx : Q.n.x ≠ 0) (ha : 
     constructor
     · intro h; rcases Rat.mul_eq_zero.mp h with h | h; exact absurd h ha; exact h
     · intro h; rw [h]; grind
-  have hdist : Distinct (ptFns Q u e w) 0 1 := by
-    intro s h0 h1
+  have hdist : DistinctW (ptFns Q u e w) 0 1 := by
+    intro s h0 h1 h2
     have hev := ptFns_ev Q u e w s
-    rw [hl] at hev ⊢
+    rw [hl] at hev h2 ⊢
     simp only [List.map_cons, List.map_nil, List.cons.injEq] at hev
     obtain ⟨e0, e1, e2, e3, -⟩ := hev
-    simp only [List.countP_cons, List.countP_nil, e0, e1, e2, e3]
+    simp only [List.countP_cons, List.countP_nil, e0, e1, e2, e3] at h2
     have k0 : -Q.eval (seg e w s) * Q.n.x = 0 ↔ Q.eval (seg e w s) = 0 := by
       rw [Rat.mul_comm, zero_iff _ _ hnx]; grind
-    simp only [k0, zero_iff _ _ hD]
+    simp only [k0, zero_iff _ _ hD] at h2
     obtain ⟨t1, t2, t3⟩ := two_sides_vertex' (yz u.a) (yz u.b) (yz u.c) (yz (seg e w s)) hD
     obtain ⟨v1, v2, v3⟩ := G.verts s h0 h1
-    have n1 := G4 s h0 h1
+    have hHs := H_seg_pos H e w S.he S.hw s (by grind) (by grind)
+    have hD2 := sq_pos' hD
+    -- a point of a closed edge would be in the triangle, which `H` separates from the segment
+    have edge_out : ∀ (p q : V3) (μ : Rat), H.eval p ≤ 0 → H.eval q ≤ 0 → seg e w s = p + μ * (q - p) →
+        μ < 0 ∨ 1 < μ := by
+      intro p q μ hp hq he
+      apply Classical.byContradiction; intro hn
+      have : H.eval (p + μ * (q - p)) = H.eval p + μ * (H.eval q - H.eval p) := by
+        simp only [Plane.eval, V3.dot]; simp; grind
+      have := convex_le (x := H.eval p) (y := H.eval q) (m := 0) (μ := μ) (by grind) (by grind) hp hq
+      rw [← he] at *; grind
+    have pos3 : ∀ x : Rat, 0 < x → 0 < u.D * (x * u.D) := fun x hx => by
+      have := Rat.mul_pos hD2 hx; grind
+    have neg3 : ∀ x : Rat, x < 0 → u.D * (x * u.D) < 0 := fun x hx => by
+      have := mul_neg_of_pos_of_neg hD2 hx; grind
     by_cases kq : Q.eval (seg e w s) = 0
     · obtain ⟨o1, o2', o3⟩ := on_edge_line Q u (seg e w s) hnx ha hb hc kq hD
       by_cases k1 : o2 (yz (seg e w s)) (yz u.b) (yz u.c) = 0
-      · obtain ⟨μ, hμ⟩ := o1 k1; exact absurd hμ (n1 μ).1
+      · obtain ⟨μ, hμ⟩ := o1 k1
+        have w2 : o2 (yz u.a) (yz (seg e w s)) (yz u.c) = (1 - μ) * u.D := by
+          rw [hμ]; unfold Tri.D o2 yz; simp; grind
+        have w3 : o2 (yz u.a) (yz u.b) (yz (seg e w s)) = μ * u.D := by
+          rw [hμ]; unfold Tri.D o2 yz; simp; grind
+        rcases edge_out _ _ μ S.hb S.hc hμ with h | h
+        · exact ⟨g3, by simp, by rw [e3, w3]; exact neg3 _ h⟩
+        · exact ⟨g2, by simp, by rw [e2, w2]; exact neg3 _ (by grind)⟩
       by_cases k2 : o2 (yz u.a) (yz (seg e w s)) (yz u.c) = 0
-      · obtain ⟨μ, hμ⟩ := o2' k2; exact absurd hμ (n1 μ).2.1
+      · obtain ⟨μ, hμ⟩ := o2' k2
+        have w1 : o2 (yz (seg e w s)) (yz u.b) (yz u.c) = μ * u.D := by
+          rw [hμ]; unfold Tri.D o2 yz; simp; grind
+        have w3 : o2 (yz u.a) (yz u.b) (yz (seg e w s)) = (1 - μ) * u.D := by
+          rw [hμ]; unfold Tri.D o2 yz; simp; grind
+        rcases edge_out _ _ μ S.hc S.ha hμ with h | h
+        · exact ⟨g1, by simp, by rw [e1, w1]; exact neg3 _ h⟩
+        · exact ⟨g3, by simp, by rw [e3, w3]; exact neg3 _ (by grind)⟩
       by_cases k3 : o2 (yz u.a) (yz u.b) (yz (seg e w s)) = 0
-      · obtain ⟨μ, hμ⟩ := o3 k3; exact absurd hμ (n1 μ).2.2
-      simp [kq, k1, k2, k3]
+      · obtain ⟨μ, hμ⟩ := o3 k3
+        have w1 : o2 (yz (seg e w s)) (yz u.b) (yz u.c) = (1 - μ) * u.D := by
+          rw [hμ]; unfold Tri.D o2 yz; simp; grind
+        have w2 : o2 (yz u.a) (yz (seg e w s)) (yz u.c) = μ * u.D := by
+          rw [hμ]; unfold Tri.D o2 yz; simp; grind
+        rcases edge_out _ _ μ S.ha S.hb hμ with h | h
+        · exact ⟨g2, by simp, by rw [e2, w2]; exact neg3 _ h⟩
+        · exact ⟨g1, by simp, by rw [e1, w1]; exact neg3 _ (by grind)⟩
+      simp [kq, k1, k2, k3] at h2
     · by_cases k1 : o2 (yz (seg e w s)) (yz u.b) (yz u.c) = 0 <;>
         by_cases k2 : o2 (yz u.a) (yz (seg e w s)) (yz u.c) = 0 <;>
-        by_cases k3 : o2 (yz u.a) (yz u.b) (yz (seg e w s)) = 0 <;> simp [kq, k1, k2, k3]
-      · exact v3 (t1 k1 k2)
-      · exact v3 (t1 k1 k2)
-      · exact v2 (t3 k1 k3)
-      · exact v1 (t2 k2 k3)
-  have hip := ip (ptFns Q u e w) 0 1 (by decide) hends hdist
+        by_cases k3 : o2 (yz u.a) (yz u.b) (yz (seg e w s)) = 0 <;> simp [kq, k1, k2, k3] at h2
+      · exact absurd (t1 k1 k2) v3
+      · exact absurd (t1 k1 k2) v3
+      · exact absurd (t3 k1 k3) v2
+      · exact absurd (t2 k2 k3) v1
+  have hip := ipW (ptFns Q u e w) 0 1 (by decide) hends hdist
   rw [pos_ptFns, pos_ptFns, seg_zero, seg_one] at hip
   rw [hip]
   -- the plane's root is no event: there the point would be inside the triangle
