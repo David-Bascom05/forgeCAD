@@ -958,18 +958,32 @@ fn uncross(
     mesh: &TriMesh,
     mend: bool,
 ) -> Result<Vec<Cut>, CdtError> {
-    let pts: Vec<Point2> = prep.uv.iter().map(|&p| prep.layout.put(p)).collect();
-    let mut segs: Vec<(f64, f64, u32, u32)> = Vec::with_capacity(pts.len());
+    let pts = &prep.scaled;
+    // each chord with its box, by the least x: a chord meets only those after it that start
+    // within its own reach (the order of keys, not of floats: one comparison of integers)
+    struct Seg {
+        x: (f64, f64),
+        y: (f64, f64),
+        a: u32,
+        b: u32,
+    }
+    let key = |x: f64| {
+        let b = x.to_bits();
+        if b >> 63 == 1 { !b } else { b | 1 << 63 }
+    };
+    let mut segs: Vec<(u64, Seg)> = Vec::with_capacity(pts.len());
     for lp in &prep.loops {
         for k in 0..lp.len() {
             let (a, b) = (lp[k], lp[(k + 1) % lp.len()]);
             let (p, r) = (pts[a as usize], pts[b as usize]);
             if p != r {
-                segs.push((p.x.min(r.x), p.x.max(r.x), a, b));
+                let x = (p.x.min(r.x), p.x.max(r.x));
+                let y = (p.y.min(r.y), p.y.max(r.y));
+                segs.push((key(x.0), Seg { x, y, a, b }));
             }
         }
     }
-    segs.sort_unstable_by(|p, q| p.0.total_cmp(&q.0).then(p.2.cmp(&q.2)).then(p.3.cmp(&q.3)));
+    segs.sort_unstable_by_key(|s| s.0);
     let global = |i: u32| prep.global[i as usize];
     let orient = forge_math::predicates::orient2d;
     let sign = |x: f64| (x > 0.0) as i8 - (x < 0.0) as i8;
@@ -997,17 +1011,20 @@ fn uncross(
         mesh.positions[a as usize].distance(mesh.positions[b as usize]) <= forge_math::tol::LINEAR
     };
     for i in 0..segs.len() {
-        let (_, reach, a, b) = segs[i];
-        let (pa, pb) = (pts[a as usize], pts[b as usize]);
-        let (ylo, yhi) = (pa.y.min(pb.y), pa.y.max(pb.y));
-        for &(lo, _, c, d) in &segs[i + 1..] {
-            if lo > reach {
+        let s = &segs[i].1;
+        let (a, b, reach, y) = (s.a, s.b, s.x.1, s.y);
+        for (_, t) in &segs[i + 1..] {
+            if t.x.0 > reach {
                 break;
             }
-            let (pc, pd) = (pts[c as usize], pts[d as usize]);
-            if yhi < pc.y.min(pd.y) || pc.y.max(pd.y) < ylo || a == c || a == d || b == c || b == d {
+            if y.1 < t.y.0 || t.y.1 < y.0 {
                 continue;
             }
+            let (c, d) = (t.a, t.b);
+            if a == c || a == d || b == c || b == d {
+                continue;
+            }
+            let (pa, pb, pc, pd) = (pts[a as usize], pts[b as usize], pts[c as usize], pts[d as usize]);
             // two points in one place, as drawn: one point, if they are one in space
             let mut same = false;
             for (x, px) in [(a, pa), (b, pb)] {
@@ -1116,6 +1133,8 @@ struct Prep {
     global: Vec<u32>,
     loops: Vec<Vec<u32>>,
     twice: Vec<u32>,
+    /// `uv` laid out: the triangulation's very points (before a cone's apex run is one point).
+    scaled: Vec<Point2>,
     lo: Point2,
     hi: Point2,
     cells: Option<Cells>,
@@ -1288,6 +1307,7 @@ fn prepare_face(
         }
         loops.retain(|l| l.len() >= 3);
     }
+    let scaled = uv.iter().map(|&p| layout.put(p)).collect();
     Ok(Prep {
         su,
         sv,
@@ -1295,6 +1315,7 @@ fn prepare_face(
         global,
         loops,
         twice,
+        scaled,
         lo,
         hi,
         cells,
@@ -1321,6 +1342,7 @@ fn mesh_face(
         mut global,
         mut loops,
         twice,
+        scaled,
         lo,
         hi,
         cells,
@@ -1378,7 +1400,11 @@ fn mesh_face(
         }
     }
 
-    let mut scaled: Vec<Point2> = uv.iter().map(|&p| layout.put(p)).collect();
+    let mut scaled: Vec<Point2> = match layout {
+        // (its apex run made one point above)
+        Layout::Unrolled { .. } => uv.iter().map(|&p| layout.put(p)).collect(),
+        Layout::Scaled(..) => scaled,
+    };
     let mut interior = Vec::new();
     // a cone that tapers little takes the grid of its widest radius: developable, so any chord of
     // a cell sags no more than its way round
