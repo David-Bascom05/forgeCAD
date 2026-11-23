@@ -561,6 +561,27 @@ pub fn drop(col: &Column, faces: &[Face], idx: &[u32], x: f64, y: f64, res: f64,
 /// proven.
 #[allow(clippy::too_many_arguments)]
 pub fn drop_above(col: &Column, faces: &[Face], idx: &[u32], x: f64, y: f64, floor: f64, res: f64, budget: usize) -> Cl {
+    search(col, faces, idx, x, y, floor, res, budget, true)
+}
+
+/// The branch and bound alone, without the closed forms: the reference the closed forms are
+/// tested against (L6).
+pub fn drop_general(col: &Column, faces: &[Face], idx: &[u32], x: f64, y: f64, res: f64, budget: usize) -> Cl {
+    search(col, faces, idx, x, y, f64::NEG_INFINITY, res, budget, false)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn search(
+    col: &Column,
+    faces: &[Face],
+    idx: &[u32],
+    x: f64,
+    y: f64,
+    floor: f64,
+    res: f64,
+    budget: usize,
+    closed_forms: bool,
+) -> Cl {
     let mv = Move::Line {
         a: [x, y, 0.0],
         b: [x, y, 0.0],
@@ -575,7 +596,8 @@ pub fn drop_above(col: &Column, faces: &[Face], idx: &[u32], x: f64, y: f64, flo
     let mut k = 0;
     while k < cand.len() {
         let f = &faces[cand[k]];
-        if let Some((ub, at)) = closed(col, &f.surf, x, y) {
+        let cf = if closed_forms { closed(col, &f.surf, x, y) } else { None };
+        if let Some((ub, at)) = cf {
             if ub == f64::NEG_INFINITY {
                 // the untrimmed surface is out of reach
                 cap[k] = ub;
