@@ -10,7 +10,7 @@
 //! family, `--seeds` each, where its tools are quadric solids), `lang` (forge_lang::fuzz
 //! programs drawn from extrude, revolve, ball, hole, pattern, workplane, param and sketch),
 //! `band` (each degenerate pair with its tool moved by δ·LINEAR along x, y and z), `torus` (the
-//! degenerate pairs with a torus, on the polynomial path) and `torusband` (those moved as `band`).
+//! degenerate pairs with a torus, on the polynomial path) and `torusband` (those moved as `band`), and `fg:PATH` (a .fg file).
 
 use forge_exact_fuzz::curved::{judge_curved, judge_curved_path, tool_moved};
 use forge_exact_fuzz::{Class, Reference};
@@ -60,7 +60,10 @@ fn adv(name: String, part: Part) -> Case {
 const BAND: [f64; 3] = [0.9, -0.9, 3.0];
 
 fn cases(sources: &[String], seeds: u64, lang: u64) -> Vec<Case> {
-    let on = |s: &str| sources.is_empty() && s != "band" && s != "torusband" || sources.iter().any(|x| x == s);
+    let only_fg = !sources.is_empty() && sources.iter().all(|s| s.starts_with("fg:"));
+    let on = |s: &str| {
+        !only_fg && (sources.is_empty() && s != "band" && s != "torusband" || sources.iter().any(|x| x == s))
+    };
     let mut out = Vec::new();
     if on("degen") || on("band") || on("torus") || on("torusband") {
         for (name, part) in forge_model::adversarial::degenerate_parts() {
@@ -92,6 +95,18 @@ fn cases(sources: &[String], seeds: u64, lang: u64) -> Vec<Case> {
                     }
                 }
             }
+        }
+    }
+    // `fg:PATH`: a .fg file, built by forge_lang, its convex sub-history judged
+    for src in sources.iter().filter_map(|s| s.strip_prefix("fg:")) {
+        let text = std::fs::read_to_string(src).unwrap_or_else(|e| panic!("{src}: {e}"));
+        match forge_exact_fuzz::guarded(|| Ok(forge_lang::fuzz::build(&text))) {
+            Ok(built) => out.push(Case {
+                name: format!("fg/{src}"),
+                part: forge_exact_fuzz::curved::curved_part(&built.part()),
+                source: text,
+            }),
+            Err(e) => eprintln!("{src}: {e}"),
         }
     }
     if on("lang") {
