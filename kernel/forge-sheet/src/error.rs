@@ -296,6 +296,15 @@ pub enum SheetError {
         b: Strip,
         at: Point3,
     },
+    /// The folded clash or touch search could not decide one pair near `at`: a's boundary there
+    /// lies at the limit (the clash's depth, or the touch's tolerance) of b's material, to the
+    /// search's last box. Refused rather than built on an undecided "no clash".
+    FoldedUndecided {
+        feature: FeatureId,
+        a: Strip,
+        b: Strip,
+        at: Point3,
+    },
     /// Two strips' flats come so close to touching (an edge `gap` from another, under `limit`)
     /// that the exact overlap check cannot tell overlapping from touching.
     FlatOverlapUndecided {
@@ -471,6 +480,13 @@ pub enum SheetWarning {
     },
     /// The folded part touches itself (see `SheetError::FoldedTouch`): the flat builds.
     FoldedTouch {
+        feature: FeatureId,
+        a: Strip,
+        b: Strip,
+        at: Point3,
+    },
+    /// The folded clash or touch search could not decide one pair (see `SheetError`).
+    FoldedUndecided {
         feature: FeatureId,
         a: Strip,
         b: Strip,
@@ -769,6 +785,9 @@ impl SheetError {
             }),
             SheetError::FoldedTouch { feature, a, b, at } => {
                 Some(SheetWarning::FoldedTouch { feature, a, b, at })
+            }
+            SheetError::FoldedUndecided { feature, a, b, at } => {
+                Some(SheetWarning::FoldedUndecided { feature, a, b, at })
             }
             SheetError::FlatOverlapUndecided {
                 feature,

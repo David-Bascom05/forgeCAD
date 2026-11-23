@@ -2204,13 +2204,15 @@ impl<'a> Strips<'a> {
                 }
                 asked();
                 let reach = |bx: &forge_math::Box3| self.may_reach(b, bx, flat[b], limit);
-                // a hem's zone and its own walls meet by design along its tangent lines: points
-                // there (within a margin along the zone) are not clashes
+                // a hem's zone and its own walls meet by design along its tangent lines: depth
+                // there is measured across the line too (`inside`), so the shared face is depth 0
                 let loose = self.loose.contains(&(a, b)) || self.loose.contains(&(b, a));
-                let margin = if loose { 100.0 * TOL } else { 0.0 };
-                let by_line = |q: Point2| match geo {
-                    Geo::Round { ba, .. } => loose && (q.x < margin || q.x > ba - margin),
-                    Geo::Plane(_) => false,
+                let with = loose.then_some(a);
+                let undecided = |at| SheetError::FoldedUndecided {
+                    feature: self.cx.feature,
+                    a: self.strips[a].strip,
+                    b: self.strips[b].strip,
+                    at,
                 };
                 for ld in self.loops.iter().filter(|l| l.strip == a) {
                     for (bi, bd) in ld.bounds.iter().enumerate() {
@@ -2245,45 +2247,49 @@ impl<'a> Strips<'a> {
                                     )
                                 })
                             };
-                            found = found.or_else(|| {
-                                self.hunt(
-                                    b,
-                                    limit,
-                                    margin,
-                                    &|u| piece_box(geo, &bd.piece, w, u),
-                                    &|u| (!by_line(inset(u))).then(|| geo.point(inset(u), w)),
-                                    &reach,
-                                    &may,
-                                )
-                            });
+                            if found.is_none() {
+                                found = self
+                                    .hunt(
+                                        b,
+                                        limit,
+                                        with,
+                                        &|u| piece_box(geo, &bd.piece, w, u),
+                                        &|u| Some(geo.point(inset(u), w)),
+                                        &reach,
+                                        &may,
+                                    )
+                                    .map_err(undecided)?;
+                            }
                         }
                         // the rail at the piece's start, straight through the sheet
                         let q = inset(0.0);
-                        found = found.or_else(|| {
-                            self.hunt(
-                                b,
-                                limit,
-                                margin,
-                                &|u| {
-                                    forge_math::Box3::from_points([
-                                        geo.point(q, t * u.lo),
-                                        geo.point(q, t * u.hi),
-                                    ])
-                                    .grow(TOL)
-                                },
-                                &|u| (!by_line(q)).then(|| geo.point(q, t * u)),
-                                &reach,
-                                &|u| {
-                                    self.may_enter(
-                                        b,
-                                        geo.point(q, t * u.lo),
-                                        geo.point(q, t * u.hi),
-                                        limit,
-                                        0.0,
-                                    )
-                                },
-                            )
-                        });
+                        if found.is_none() {
+                            found = self
+                                .hunt(
+                                    b,
+                                    limit,
+                                    with,
+                                    &|u| {
+                                        forge_math::Box3::from_points([
+                                            geo.point(q, t * u.lo),
+                                            geo.point(q, t * u.hi),
+                                        ])
+                                        .grow(TOL)
+                                    },
+                                    &|u| Some(geo.point(q, t * u)),
+                                    &reach,
+                                    &|u| {
+                                        self.may_enter(
+                                            b,
+                                            geo.point(q, t * u.lo),
+                                            geo.point(q, t * u.hi),
+                                            limit,
+                                            0.0,
+                                        )
+                                    },
+                                )
+                                .map_err(undecided)?;
+                        }
                         if let Some(first) = found {
                             // how deep: the deepest of a's boundary in b, by the same rigorous
                             // boxes, each half kept while it may still beat the deepest so far
@@ -2323,7 +2329,15 @@ impl<'a> Strips<'a> {
                 {
                     continue;
                 }
-                if let Some(at) = self.touch(a, b, flat[b]) {
+                let touched = self
+                    .touch(a, b, flat[b])
+                    .map_err(|at| SheetError::FoldedUndecided {
+                        feature: self.cx.feature,
+                        a: self.strips[a].strip,
+                        b: self.strips[b].strip,
+                        at,
+                    })?;
+                if let Some(at) = touched {
                     return Err(SheetError::FoldedTouch {
                         feature: self.cx.feature,
                         a: self.strips[a].strip,
@@ -2341,7 +2355,7 @@ impl<'a> Strips<'a> {
     /// cannot reach `b` or its middle is farther than the box is wide (distance is 1-Lipschitz).
     /// `b` is a wall; `a` a wall or a zone, whose lines fold to lines, circles or helices, each
     /// within a closed-form sag of its chord, so every line is judged by chords exactly.
-    fn touch(&self, a: usize, b: usize, flat_b: (Point2, Point2)) -> Option<Point3> {
+    fn touch(&self, a: usize, b: usize, flat_b: (Point2, Point2)) -> Result<Option<Point3>, Point3> {
         asked();
         let t = self.t;
         let geo = self.strips[a].folded;
@@ -2359,24 +2373,28 @@ impl<'a> Strips<'a> {
                 }
                 if sag(u) <= 0.5 * TOL {
                     if let Some(p) = self.segment_touch(b, point(u.lo), point(u.hi), TOL) {
-                        return Some(p);
+                        return Ok(Some(p));
                     }
                     continue;
                 }
                 let p = point(u.mid());
                 let d = self.distance(b, p);
                 if d <= TOL {
-                    return Some(p);
+                    return Ok(Some(p));
                 }
                 let size = (bx.x.width().powi(2) + bx.y.width().powi(2) + bx.z.width().powi(2)).sqrt();
-                if d > TOL + size || level >= 60 {
+                if d > TOL + size {
                     continue;
+                }
+                // its middle past the tolerance, its box not: undecided where no halving narrows
+                if level >= 60 {
+                    return Err(p);
                 }
                 let m = u.mid();
                 stack.push((Interval::new(u.lo, m), level + 1));
                 stack.push((Interval::new(m, u.hi), level + 1));
             }
-            None
+            Ok(None)
         };
         for ld in self.loops.iter().filter(|l| l.strip == a) {
             for bd in &ld.bounds {
@@ -2401,17 +2419,17 @@ impl<'a> Strips<'a> {
                         &|u| piece_box(geo, &bd.piece, w, u),
                         &|u| geo.point(bd.piece.at(u), w),
                         &sag,
-                    ) {
-                        return Some(p);
+                    )? {
+                        return Ok(Some(p));
                     }
                 }
                 let q = bd.piece.at(0.0);
                 if let Some(p) = self.segment_touch(b, geo.point(q, 0.0), geo.point(q, t), TOL) {
-                    return Some(p);
+                    return Ok(Some(p));
                 }
             }
         }
-        None
+        Ok(None)
     }
 
     /// Whether segment p0..p1 may hold a point deeper than `limit` in plane strip `s` (within
@@ -2605,12 +2623,9 @@ impl<'a> Strips<'a> {
         let t = self.t;
         let geo = self.strips[a].folded;
         let eps = 1e-3 * t;
-        // a hem zone against its own walls: their shared line is met by design
-        let margin = if self.loose.contains(&(a, b)) || self.loose.contains(&(b, a)) {
-            100.0 * TOL
-        } else {
-            0.0
-        };
+        // a hem zone against its own walls: their shared line is met by design, depth across it
+        // measured too (`inside`)
+        let with = (self.loose.contains(&(a, b)) || self.loose.contains(&(b, a))).then_some(a);
         let mut best = first;
         let run = |best: &mut (Point3, f64),
                    box_of: &dyn Fn(Interval) -> forge_math::Box3,
@@ -2622,7 +2637,7 @@ impl<'a> Strips<'a> {
                     continue;
                 }
                 let p = point(u.mid());
-                if let Some(d) = self.inside(b, p, margin)
+                if let Some(d) = self.inside(b, p, with)
                     && d > best.1
                 {
                     *best = (p, d);
@@ -2668,20 +2683,20 @@ impl<'a> Strips<'a> {
         &self,
         b: usize,
         limit: f64,
-        margin: f64,
+        with: Option<usize>,
         box_of: &dyn Fn(Interval) -> forge_math::Box3,
         point: &dyn Fn(f64) -> Option<Point3>,
         reach: &dyn Fn(&forge_math::Box3) -> bool,
         may: &dyn Fn(Interval) -> bool,
-    ) -> Option<(Point3, f64)> {
+    ) -> Result<Option<(Point3, f64)>, Point3> {
         hunt_by(
             limit,
             box_of,
             point,
             reach,
             may,
-            &|p| self.distance_below(b, p) - margin.abs(),
-            &|p| self.inside(b, p, margin),
+            &|p| self.distance_below(b, p),
+            &|p| self.inside(b, p, with),
         )
     }
 
@@ -2705,6 +2720,15 @@ impl<'a> Strips<'a> {
             limit,
         };
         let curves: Vec<Vec<Curve3>> = self.forms.iter().map(|g| g.curves(t)).collect();
+        // undecided: named by the form's wall and the other's strip
+        let undecided = |g: &FormGeo, with: usize| {
+            let (feature, a, b) = (
+                self.cx.feature,
+                self.strips[g.strip].strip,
+                self.strips[with].strip,
+            );
+            move |at| SheetError::FoldedUndecided { feature, a, b, at }
+        };
         for (gi, g) in self.forms.iter().enumerate() {
             let gb = g.bbox(t);
             let depth = |p: Point3| g.depth(p, t);
@@ -2725,7 +2749,9 @@ impl<'a> Strips<'a> {
                                 &|_| true,
                                 &|_| 0.0,
                                 &depth,
-                            ) {
+                            )
+                            .map_err(undecided(g, a))?
+                            {
                                 return Err(clash(
                                     g,
                                     crate::error::FormAgainst::Strip(self.strips[a].strip),
@@ -2743,7 +2769,9 @@ impl<'a> Strips<'a> {
                             &|_| true,
                             &|_| 0.0,
                             &depth,
-                        ) {
+                        )
+                        .map_err(undecided(g, a))?
+                        {
                             return Err(clash(
                                 g,
                                 crate::error::FormAgainst::Strip(self.strips[a].strip),
@@ -2765,8 +2793,10 @@ impl<'a> Strips<'a> {
                         &|bx| self.may_reach(b, bx, flat[b], limit),
                         &|_| true,
                         &|p| self.distance_below(b, p),
-                        &|p| self.inside(b, p, 0.0),
-                    ) {
+                        &|p| self.inside(b, p, None),
+                    )
+                    .map_err(undecided(g, b))?
+                    {
                         return Err(clash(
                             g,
                             crate::error::FormAgainst::Strip(self.strips[b].strip),
@@ -2788,7 +2818,9 @@ impl<'a> Strips<'a> {
                         &|_| true,
                         &|_| 0.0,
                         &depth,
-                    ) {
+                    )
+                    .map_err(undecided(g, h.strip))?
+                    {
                         return Err(clash(g, crate::error::FormAgainst::Form(h.index), x));
                     }
                 }
@@ -2837,7 +2869,7 @@ fn hunt_by(
     may: &dyn Fn(Interval) -> bool,
     far: &dyn Fn(Point3) -> f64,
     depth: &dyn Fn(Point3) -> Option<f64>,
-) -> Option<(Point3, f64)> {
+) -> Result<Option<(Point3, f64)>, Point3> {
     {
         let mut stack = vec![(Interval::new(0.0, 1.0), 0u32)];
         while let Some((u, level)) = stack.pop() {
@@ -2853,12 +2885,17 @@ fn hunt_by(
             {
                 continue;
             }
-            if size <= 0.5 * limit || level >= 48 {
+            // a box that halving no longer narrows to the limit: undecided there, not passed
+            if level >= 48 && size > 0.5 * limit {
+                let c = |i: Interval| i.mid();
+                return Err(point(u.mid()).unwrap_or(Point3::new(c(bx.x), c(bx.y), c(bx.z))));
+            }
+            if size <= 0.5 * limit {
                 let Some(p) = point(u.mid()) else { continue };
                 if let Some(d) = depth(p)
                     && d > limit
                 {
-                    return Some((p, d));
+                    return Ok(Some((p, d)));
                 }
                 continue;
             }
@@ -2866,7 +2903,7 @@ fn hunt_by(
             stack.push((Interval::new(u.lo, m), level + 1));
             stack.push((Interval::new(m, u.hi), level + 1));
         }
-        None
+        Ok(None)
     }
 }
 
@@ -3157,9 +3194,13 @@ impl Strips<'_> {
         })
     }
 
-    /// How deep `p` lies in strip `s`'s material, through its thickness; None outside (or, in a
-    /// bend zone, within `margin` of its tangent lines along it).
-    fn inside(&self, s: usize, p: Point3, margin: f64) -> Option<f64> {
+    /// How deep `p` lies in strip `s`'s material; None outside. The depth is through the thickness
+    /// and, where `with` names a strip that `s` meets along a tangent line (a hem's zone and its
+    /// walls), also across that line: the least of the skin depth and the in-plane distance to
+    /// the lines `s` shares with `with`, whose material the line divides from `s`'s. A point on
+    /// the shared face is then depth 0, by the same measure as every other, and no margin is
+    /// needed there.
+    fn inside(&self, s: usize, p: Point3, with: Option<usize>) -> Option<f64> {
         asked();
         let t = self.t;
         let (q, w) = match self.strips[s].folded {
@@ -3179,7 +3220,7 @@ impl Strips<'_> {
                 let phi = dmath::atan2(l.y, l.x);
                 // a hem's zone turns past half a turn: angles round from 0 to a whole turn
                 let phi = if phi < 0.0 { phi + dmath::TAU } else { phi };
-                if !(phi > 0.0 && phi < theta) || phi * rn < margin || (theta - phi) * rn < margin {
+                if !(phi > 0.0 && phi < theta) {
                     return None;
                 }
                 let rho = (l.x * l.x + l.y * l.y).sqrt();
@@ -3190,12 +3231,28 @@ impl Strips<'_> {
         if skin <= 0.0 {
             return None;
         }
-        self.strips[s]
+        if !self.strips[s]
             .region
             .parts
             .iter()
             .any(|c| crate::region::holds(c, q))
-            .then_some(skin)
+        {
+            return None;
+        }
+        let Some(a) = with else {
+            return Some(skin);
+        };
+        let mut depth = skin;
+        for (l, ld) in self.loops.iter().enumerate().filter(|(_, ld)| ld.strip == s) {
+            for (i, bd) in ld.bounds.iter().enumerate() {
+                if let Some(&(m, _)) = self.twin.get(&(l, i))
+                    && self.loops[m].strip == a
+                {
+                    depth = depth.min(bd.piece.at(bd.piece.nearest(q)).distance(q));
+                }
+            }
+        }
+        Some(depth)
     }
 
     /// The flat pattern: each boundary followed piece by piece across the strips, in the
