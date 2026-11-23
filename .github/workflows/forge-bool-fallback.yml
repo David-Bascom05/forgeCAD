@@ -3,6 +3,8 @@
 #   1. `lake build`, which fails on any broken lemma;
 #   2. the axiom report (Axioms.lean): every theorem listed shows only propext, Classical.choice
 #      and Quot.sound, never sorryAx.
+# Lake's build directory is restored from main's latest (Lake rebuilds every module whose sources
+# differ); main's runs save it (tools/ci/lake-cache.py).
 name: forge-bool-fallback
 
 on:
@@ -16,6 +18,12 @@ on:
       - "verify/forge-bool-fallback/**"
       - ".github/workflows/forge-bool-fallback.yml"
   workflow_dispatch:
+
+# A new push to a pull request cancels that pull request's runs still queued or running for its
+# older commits; pushes to main are never cancelled.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   proofs:
@@ -33,6 +41,18 @@ jobs:
           echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
           "$HOME/.elan/bin/elan" toolchain install "$(cat verify/forge-bool-fallback/lean-toolchain)"
 
+      - name: Lake cache key
+        id: lake
+        run: python3 tools/ci/lake-cache.py forge-bool-fallback verify/forge-bool-fallback
+      - name: Lake build (restored; Lake rebuilds what changed)
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ steps.lake.outputs.paths }}
+          key: ${{ steps.lake.outputs.key }}
+          restore-keys: |
+            ${{ steps.lake.outputs.prefix }}
+            ${{ steps.lake.outputs.any }}
+
       - name: the proofs
         working-directory: verify/forge-bool-fallback
         run: |
@@ -49,3 +69,10 @@ jobs:
           bad=$(grep "depends on axioms" axioms.txt | grep -v -E "\[(propext)?(, )?(Classical\.choice)?(, )?(Quot\.sound)?\]" || true)
           if [ -n "$bad" ]; then echo "::error::non-standard axioms:"; echo "$bad"; exit 1; fi
           if grep -q "sorryAx" axioms.txt; then echo "::error::sorry"; exit 1; fi
+
+      - name: save the Lake build (main only, even when a check failed)
+        if: ${{ always() && steps.lake.outcome == 'success' && github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ steps.lake.outputs.paths }}
+          key: ${{ steps.lake.outputs.key }}

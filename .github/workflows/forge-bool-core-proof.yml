@@ -8,6 +8,9 @@
 #      Quot.sound (no sorryAx), and end_to_end_proof must be among them.
 # A speed change to forge-bool-core therefore cannot silently break the proof: it fails here until the
 # proofs are updated on the re-translation.
+# Lake's build directories are restored from main's latest (Lake rebuilds every module whose sources
+# differ, and replays the messages, `#print axioms` among them, of each module it does not rebuild);
+# main's runs save them (tools/ci/lake-cache.py).
 name: forge-bool-core-proof
 
 on:
@@ -26,6 +29,12 @@ on:
       - ".github/workflows/forge-bool-core-proof.yml"
   workflow_dispatch:
 
+# A new push to a pull request cancels that pull request's runs still queued or running for its
+# older commits; pushes to main are never cancelled.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   refinement:
     runs-on: ubuntu-latest
@@ -42,6 +51,18 @@ jobs:
           echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
           "$HOME/.elan/bin/elan" toolchain install "$(cat verify/aeneas/forge-bool-core/lean/lean-toolchain)"
 
+      - name: Lake cache key
+        id: lake
+        run: python3 tools/ci/lake-cache.py forge-bool-core verify/aeneas/forge-bool-core/lean
+      - name: Lake build (restored; Lake rebuilds what changed)
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ steps.lake.outputs.paths }}
+          key: ${{ steps.lake.outputs.key }}
+          restore-keys: |
+            ${{ steps.lake.outputs.prefix }}
+            ${{ steps.lake.outputs.any }}
+
       - name: 2. the proofs
         working-directory: verify/aeneas/forge-bool-core/lean
         run: |
@@ -57,3 +78,10 @@ jobs:
           if grep -q "sorryAx\|declaration uses 'sorry'" build.log; then echo "::error::sorry"; exit 1; fi
           grep -q "'forge_bool_core.end_to_end_proof' depends on axioms" build.log \
             || { echo "::error::end_to_end_proof missing from the axiom report"; exit 1; }
+
+      - name: save the Lake build (main only, even when a check failed)
+        if: ${{ always() && steps.lake.outcome == 'success' && github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ steps.lake.outputs.paths }}
+          key: ${{ steps.lake.outputs.key }}

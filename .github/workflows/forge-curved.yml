@@ -3,6 +3,9 @@
 # test, and `end_to_end_curved` through the aeneas project's proven `CoreSpec`). One `lake build` on the pinned toolchain, with Mathlib's
 # prebuilt cache; then the axiom report: every `#print axioms` line of ForgeCurved/Axioms.lean
 # must show only propext, Classical.choice and Quot.sound (no sorryAx).
+# Lake's build directories (this project's, forge-exact's, forge-bool-core's and Aeneas's library)
+# are restored from main's latest; Lake rebuilds every module whose sources differ. Main's runs
+# save them (tools/ci/lake-cache.py). Mathlib comes from its own server (`lake exe cache get`).
 name: forge-curved
 
 on:
@@ -13,19 +16,18 @@ on:
     paths: ["verify/forge-curved/**", "verify/forge-exact/**", "verify/aeneas/forge-bool-core/lean/**", ".github/workflows/forge-curved.yml"]
   workflow_dispatch:
 
+# A new push to a pull request cancels that pull request's runs still queued or running for its
+# older commits; pushes to main are never cancelled.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   proofs:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
-      - name: toolchain and Mathlib cache
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.elan
-            ~/.cache/mathlib
-          key: forge-curved-${{ runner.os }}-${{ hashFiles('verify/forge-curved/lean-toolchain', 'verify/forge-curved/lake-manifest.json') }}
       - name: elan and the pinned toolchain
         run: |
           if [ ! -x "$HOME/.elan/bin/elan" ]; then
@@ -34,6 +36,17 @@ jobs:
           fi
           echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
           "$HOME/.elan/bin/elan" toolchain install "$(cat verify/forge-curved/lean-toolchain)"
+      - name: Lake cache key
+        id: lake
+        run: python3 tools/ci/lake-cache.py forge-curved verify/forge-curved
+      - name: Lake build (restored; Lake rebuilds what changed)
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ steps.lake.outputs.paths }}
+          key: ${{ steps.lake.outputs.key }}
+          restore-keys: |
+            ${{ steps.lake.outputs.prefix }}
+            ${{ steps.lake.outputs.any }}
       - name: the proofs
         working-directory: verify/forge-curved
         run: |
@@ -49,3 +62,9 @@ jobs:
           if [ -n "$bad" ]; then echo "::error::non-standard axioms:"; echo "$bad"; exit 1; fi
           grep -q "'ForgeCurved.xNonManifold_iff_top' depends on axioms" axioms.log \
             || { echo "::error::xNonManifold_iff_top missing from the axiom report"; exit 1; }
+      - name: save the Lake build (main only, even when a check failed)
+        if: ${{ always() && steps.lake.outcome == 'success' && github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ steps.lake.outputs.paths }}
+          key: ${{ steps.lake.outputs.key }}
