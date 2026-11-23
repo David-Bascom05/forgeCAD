@@ -203,6 +203,12 @@ Judged by `research/step/rate.py` against OCCT 8.0.1 (`tools/occt/step_read.py`)
 means valid, not warned, with volume and area within 1e-3 of OCCT's. No dataset file is in the
 repository.
 
+A file is **uncertain**, counted neither way, in two cases (research/step/truth.md):
+- OCCT's own measures disagree (the importer's truth rule);
+- its volume is off by no more than its own edge gaps allow, `maxtol · area / volume`.
+
+`rate.py --compare` applies both rules to each side of a comparison.
+
 | | base (claude/repo-review-mbdrlj) | this branch |
 |---|---|---|
 | read a solid | 3124 (99.3%) | 3124 (99.3%) |

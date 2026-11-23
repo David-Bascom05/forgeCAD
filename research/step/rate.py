@@ -69,13 +69,26 @@ def verdict(d, t):
         diag = max(1e-9, sum((tb[k + 3] - tb[k]) ** 2 for k in range(3)) ** 0.5)
         out["dbox"] = max(abs(a - b) for a, b in zip(lo + hi, tb)) / diag
     out["match"] = bool(out.get("dvol") is not None and abs(out["dvol"]) < 1e-3 and abs(out["darea"]) < 1e-3)
+    # the file's own gaps (truth.md, "Gaps"): an edge that misses its faces by up to maxtol leaves the
+    # solid's boundary defined only to within that, so its volume only to within maxtol * area; a
+    # volume that differs by no more than that relative bound is uncertain, counted neither way. The
+    # bound is this run's own (each side of a comparison judged by its own read)
+    if not out["match"] and out.get("dvol") is not None and vol > 0:
+        band = (d.get("maxtol") or 0.0) * area / vol
+        if abs(out["dvol"]) <= band:
+            out["uncertain"] = True
+            out["gap_band"] = band
     out["match1"] = bool(out.get("dvol") is not None and abs(out["dvol"]) < 1e-2 and abs(out["darea"]) < 1e-2)
     return out
 
 
-def report(paths):
+def report(paths, truth=None):
     for path in paths:
         rows = [json.loads(l) for l in open(path)]
+        if truth is not None:
+            for r in rows:
+                if "id" in r:
+                    r["v"] = verdict(r, truth.get(r["id"]))
         c = collections.Counter()
         probs, refs, panics, syst = collections.Counter(), collections.Counter(), collections.Counter(), collections.defaultdict(collections.Counter)
         for r in rows:
@@ -121,11 +134,13 @@ def report(paths):
                 c["box"] += 1
             if v.get("uncertain"):
                 c["uncertain"] += 1
+                c["uncertain_gaps" if "gap_band" in v else "uncertain_truth"] += 1
         n = c["files"] or 1
         print(f"== {path}")
         print("  ", " ".join(f"{k}={c[k]} ({100*c[k]/n:.1f}%)" for k in ["files", "read", "valid", "compared", "uncertain", "match", "match1", "valid+match", "box", "refused", "parse_err", "crash", "timeout"]))
         print(f"   matching {100*c['valid+match']/n:.1f}% / warned {100*c['warned']/n:.1f}% / refused {100*c['refused']/n:.1f}%")
         if c["uncertain"]:
+            print(f"   uncertain: the truth's own measures disagree {c['uncertain_truth']}, within the file's own gaps {c['uncertain_gaps']}")
             j = max(1, n - c["uncertain"])
             print(f"   matching where the truth is certain {100*c['valid+match']/j:.1f}% ({c['valid+match']} of {j})")
         print("   problems(files):", probs.most_common(14))
@@ -162,6 +177,31 @@ def report(paths):
             print("   read ms p50/p99/max:", ms[len(ms) // 2], ms[int(0.99 * len(ms))], ms[-1])
 
 
+def compare(base, new, truth=None):
+    """The files one run matches and the other does not. A file uncertain in either run, by the
+    truth's rule or by its own gaps as that run read it, is counted neither better nor worse."""
+    def load(p):
+        rows = {}
+        for l in open(p):
+            r = json.loads(l)
+            if "id" in r:
+                if truth is not None:
+                    r["v"] = verdict(r, truth.get(r["id"]))
+                rows[r["id"]] = r
+        return rows
+    a, b = load(base), load(new)
+    ok = lambda r: bool(r.get("v", {}).get("match") and r["v"].get("valid") and not r["v"].get("warned"))
+    unsure = lambda r: bool(r.get("v", {}).get("uncertain"))
+    both = [k for k in a if k in b]
+    better = [k for k in both if not ok(a[k]) and ok(b[k]) and not unsure(a[k])]
+    worse = [k for k in both if ok(a[k]) and not ok(b[k]) and not unsure(b[k])]
+    print(f"compared {len(both)}: better {len(better)}, worse {len(worse)}, uncertain on either side {sum(unsure(a[k]) or unsure(b[k]) for k in both)}")
+    for k in worse:
+        print("  worse ", k, (b[k].get("why") or "")[:80])
+    for k in better:
+        print("  better", k)
+
+
 def main():
     a = argparse.ArgumentParser()
     a.add_argument("bin", nargs="?")
@@ -177,9 +217,8 @@ def main():
     a.add_argument("--limit", type=int, default=0)
     a.add_argument("--flags", default="")
     a.add_argument("--report", nargs="*")
+    a.add_argument("--compare", nargs=2, metavar=("BASE", "NEW"), help="files better and worse in NEW; uncertain on either side counts neither way")
     o = a.parse_args()
-    if o.report is not None:
-        return report(o.report)
     truth = {}
     if o.truth:
         for l in open(o.truth):
@@ -187,7 +226,12 @@ def main():
                 d = json.loads(l)
             except json.JSONDecodeError:
                 continue
-            truth[str(d.get("id"))] = d
+            truth[str(d.get("id", d.get("name")))] = d
+    if o.compare:
+        return compare(*o.compare, truth or None)
+    if o.report is not None:
+        # with --truth, every row judged again against it (a new truth or rule, no file re-read)
+        return report(o.report, truth or None)
     done = set()
     if os.path.exists(o.out):
         done = {json.loads(l)["id"] for l in open(o.out)}
