@@ -118,3 +118,6 @@ import ForgeBoolCore.RefineUnify
 #print axioms forge_bool_core.u_erel_spec
 #print axioms forge_bool_core.u_edges_loop_spec
 #print axioms forge_bool_core.unify_spec'
+#print axioms forge_bool_core.unify_spec_proof
+#print axioms forge_bool_core.end_to_end_proof
+#print axioms forge_bool_core.end_to_end_encode_proof

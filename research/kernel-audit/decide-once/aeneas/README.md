@@ -36,19 +36,20 @@ Lean core's value. Proofs use only the standard axioms (`lean/ForgeBoolCore/Axio
 no `sorry`. The obligations are stated in `lean/ForgeBoolCore/Specs.lean`; how they are split across
 sessions is in `lean/SPLIT.md`.
 
-- **Every stage except two:**
+- **Every stage**, `unify` and `collapse` included:
   - the index, `cov`, `find` and `intern`;
   - `split` and `split_ok` (group S);
   - `membership`, the classify check, and the keep table;
   - `around`, `between`, `edges_between` and `bad_vert`;
   - `core_k`'s loops and the four position-to-covector bridges (group R);
+  - `collapse` (group K) and `unify` (group U);
   - `new_ext`, `core_k`, `keep_on`, `classify_on` and `core` (`RefineCore.lean`).
 - **End to end** (`EndToEnd.lean`, `Integrate.lean`):
-  - `end_to_end_KU (hK : CollapseSpec) (hU : UnifySpec) : EndToEnd`. On a Rust ledger that reads as
+  - **`end_to_end_proof : EndToEnd`**, with no hypotheses. On a Rust ledger that reads as
     the sampler's ledger of a flat input, `forge_bool_core::core` answers the exact regularised
     boolean: the body is `Valid`, its faces are exactly the boundary facets, its kept cells give
     `reg` of the boolean, and `ZeroThickness` ↔ `XNonManifold`.
-  - `end_to_end_encode`: the same for the Rust ledger `encode` builds from any sampler ledger
+  - `end_to_end_encode_proof`: the same for the Rust ledger `encode` builds from any sampler ledger
     within `LFits`.
 - **Size limits** (`LedgerWF`, `LFits`):
   - fewer than `u32::MAX` cells (the ledger's plus two new sides per piece), edges and verts;
@@ -60,9 +61,9 @@ sessions is in `lean/SPLIT.md`.
 
 ## Open obligations
 
-1. `CollapseSpec` (group K) and `UnifySpec` (group U). They are stated in `Specs.lean`, and
-   `end_to_end_KU` takes them as hypotheses.
-2. **The frontier (local ledger, decide-once-spec §3a).** Proven in verify/forge-exact:
+None for the core itself. What remains is the frontier optimisation:
+
+1. **The frontier (local ledger, decide-once-spec §3a).** Proven in verify/forge-exact:
    - F1: `far_unchanged`;
    - F2: `frontier_local`;
    - the global split: `split_at_region` (`DecideOnce/Frontier.lean`);
