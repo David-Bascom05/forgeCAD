@@ -817,16 +817,44 @@ pub(crate) fn curve_surface_subdivide(
     subdivide_pieces(c, range, s, near, stack)
 }
 
+/// A stretch of a curve's range (`pieces_near`): its ends, the curve's speed bound over it, and a
+/// ball holding it where one is known unevaluated.
+pub type Stretch = (f64, f64, f64, Option<(Point3, f64)>);
+
 /// The stretches of a curve's range that can come within tolerance of a surface, each with a
-/// bound on the curve's speed over it (|c(s) - c(t)| <= bound |s - t|): a traced curve's chain
-/// segments near the surface (those surely clear of it dropped unevaluated), else the whole range.
-pub fn pieces_near(c: &Curve, range: Interval, s: &Surface) -> Vec<(f64, f64, f64)> {
+/// bound on the curve's speed over it (|c(s) - c(t)| <= bound |s - t|) and, where one is known
+/// without evaluating the curve, a ball holding the stretch: a traced curve's chain segments near
+/// the surface (those surely clear of it dropped unevaluated), each in the ball about its first
+/// point of its chord and sag; else the whole range.
+pub fn pieces_near(c: &Curve, range: Interval, s: &Surface) -> Vec<Stretch> {
     match (c, s) {
-        (Curve::Intersection(ic), s) if !matches!(s, Surface::Procedural(_)) => chain_pieces(ic, range, s),
+        (Curve::Intersection(ic), s) if !matches!(s, Surface::Procedural(_)) => {
+            let (n, segs) = (ic.pts.len() as i64, ic.segments() as i64);
+            let mut out = Vec::new();
+            let mut k = range.lo.floor() as i64;
+            while (k as f64) < range.hi {
+                let i = if ic.closed {
+                    k.rem_euclid(segs)
+                } else {
+                    k.clamp(0, segs - 1)
+                };
+                let (a, b) = (range.lo.max(k as f64), range.hi.min((k + 1) as f64));
+                let (p, q) = (ic.pts[i as usize], ic.pts[((i + 1) % n) as usize]);
+                let chord = p.distance(q);
+                let clear = s.implicit(p).abs().max(s.implicit(q).abs()) - chord - ic.sag;
+                if b > a && clear <= 2.0 * tol::LINEAR + 1e-6 {
+                    let lip = (1.5 * chord + 2.0 * ic.sag) * (1.0 + 1e-9) + f64::MIN_POSITIVE;
+                    out.push((a, b, lip, Some((p, chord + ic.sag))));
+                }
+                k += 1;
+            }
+            out
+        }
         _ => vec![(
             range.lo,
             range.hi,
             speed_bound(c, range) * (1.0 + 1e-9) + f64::MIN_POSITIVE,
+            None,
         )],
     }
 }

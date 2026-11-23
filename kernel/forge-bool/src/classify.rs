@@ -55,6 +55,11 @@ enum Simple {
         w: [Vec3; 2],
         convex: bool,
     },
+    /// No closed form: a windowed surface's face (`Procedural::windowed`), kept here for the u
+    /// window it is swept over (`Index::sheet_window`). It places nothing.
+    Sheet {
+        u: Interval,
+    },
 }
 
 /// How far from a simple face's boundary a point must be for the closed form to decide it;
@@ -64,6 +69,21 @@ const SIMPLE_MARGIN: f64 = 1e-3;
 impl Simple {
     fn of(body: &Body, f: FaceId) -> Option<Simple> {
         let face = body.face(f);
+        if let Surface::Procedural(pr) = &face.surface
+            && pr.windowed()
+        {
+            // the loops' u span, drawn coarsely (a few points an edge, followed in parameter space
+            // as the full drawing is), grown by a twentieth each way: it holds the face between
+            // the coarse points, and the balls at its ends stand clear of the face
+            let mut u = Interval::EMPTY;
+            for l in forge_topo::uv::face_uv_loops_with(body, f, |_| 4) {
+                l.points.iter().for_each(|p| u.include(p.x));
+            }
+            let m = 0.05 * u.width() + tol::LINEAR;
+            return Some(Simple::Sheet {
+                u: Interval::new(u.lo - m, u.hi + m),
+            });
+        }
         let [l] = face.loops[..] else { return None };
         let seam = |c: forge_topo::CoedgeId| body.partner(c).is_some_and(|o| body.coedge_face(o) == f);
         let full_circle = |c: forge_topo::CoedgeId| {
@@ -163,9 +183,9 @@ impl Simple {
     }
 
     /// Where `p`, on the face's surface, lies; None near the boundary.
-    fn place(self, p: Point3) -> Option<Where> {
+    fn place(&self, p: Point3) -> Option<Where> {
         let m = SIMPLE_MARGIN;
-        match self {
+        match *self {
             Simple::Disk { centre, r } => {
                 let d = p.distance(centre);
                 (d < r - m)
@@ -202,6 +222,7 @@ impl Simple {
                     .then_some(Where::Inside)
                     .or(outside.then_some(Where::Outside))
             }
+            Simple::Sheet { .. } => None,
         }
     }
 }
@@ -492,15 +513,15 @@ impl<'a> Index<'a> {
         })
     }
 
-    /// The u window a windowed surface's face is swept over (`Procedural::windowed`): its loops'
-    /// u span, grown by a twentieth each way so that the balls at the window's ends stand clear
-    /// of the face. None for every other surface.
+    /// The u window a windowed surface's face is swept over (`Procedural::windowed`; kept with
+    /// the face's closed form, `Simple::Sheet`). None for every other surface.
     fn sheet_window(&self, f: FaceId) -> Option<Interval> {
         match &self.body.face(f).surface {
             Surface::Procedural(pr) if pr.windowed() => {
-                let u = self.drawn(f).window.u;
-                let m = 0.05 * u.width() + tol::LINEAR;
-                Some(Interval::new(u.lo - m, u.hi + m))
+                match self.info(f).simple.get_or_init(|| Simple::of(self.body, f)) {
+                    Some(Simple::Sheet { u }) => Some(*u),
+                    _ => None,
+                }
             }
             _ => None,
         }
@@ -508,7 +529,17 @@ impl<'a> Index<'a> {
 
     /// The parameters of a point on or near face `f`'s sheet: on a windowed surface, its foot on
     /// the face's own stretch, not on another stretch of the surface nearer it.
+    #[inline]
     fn project_in(&self, f: FaceId, p: Point3) -> Point2 {
+        match &self.body.face(f).surface {
+            Surface::Procedural(_) => self.project_in_procedural(f, p),
+            s => s.project(p),
+        }
+    }
+
+    /// `project_in` on a procedural surface (out of line: the others never come here).
+    #[inline(never)]
+    fn project_in_procedural(&self, f: FaceId, p: Point3) -> Point2 {
         let s = &self.body.face(f).surface;
         match (s, self.sheet_window(f)) {
             (Surface::Procedural(pr), Some(u)) => pr.project_over(p, u),
@@ -517,16 +548,36 @@ impl<'a> Index<'a> {
     }
 
     /// How far p is from face `f`'s own sheet (`project_in`).
+    #[inline]
     fn sheet_distance(&self, f: FaceId, p: Point3) -> f64 {
+        match &self.body.face(f).surface {
+            Surface::Procedural(_) => self.sheet_distance_procedural(f, p),
+            s => s.distance(p),
+        }
+    }
+
+    /// `sheet_distance` on a procedural surface (out of line).
+    #[inline(never)]
+    fn sheet_distance_procedural(&self, f: FaceId, p: Point3) -> f64 {
         let s = &self.body.face(f).surface;
         match self.sheet_window(f) {
-            Some(_) => s.eval(self.project_in(f, p)).distance(p),
+            Some(_) => s.eval(self.project_in_procedural(f, p)).distance(p),
             None => s.distance(p),
         }
     }
 
     /// Where a line crosses face `f`'s own sheet (`line_surface_over`).
+    #[inline]
     fn line_face(&self, line: &Line, f: FaceId) -> LineSurface {
+        match &self.body.face(f).surface {
+            Surface::Procedural(_) => self.line_face_procedural(line, f),
+            s => line_surface(line, s),
+        }
+    }
+
+    /// `line_face` on a procedural surface (out of line).
+    #[inline(never)]
+    fn line_face_procedural(&self, line: &Line, f: FaceId) -> LineSurface {
         let s = &self.body.face(f).surface;
         match self.sheet_window(f) {
             Some(u) => line_surface_over(line, s, u),
@@ -569,6 +620,7 @@ impl<'a> Index<'a> {
         if let Some(w) = info
             .simple
             .get_or_init(|| Simple::of(body, f))
+            .as_ref()
             .and_then(|s| s.place(p))
         {
             return w;
@@ -661,7 +713,7 @@ impl<'a> Index<'a> {
                     },
                     _ => None,
                 };
-                if let Some(inside) = planar_parity(body, plane, p, &info.edges, subset, angle, true) {
+                if let Some(inside) = planar_parity(body, plane, p, &info.edges, subset, angle) {
                     return if inside { Where::Inside } else { Where::Outside };
                 }
             }
@@ -777,7 +829,7 @@ pub(crate) fn in_planar_face(body: &Body, f: FaceId, p: Point3) -> Option<bool> 
             },
             _ => None,
         };
-        if let Some(inside) = planar_parity(body, plane, p, &info.edges, subset, angle, false) {
+        if let Some(inside) = planar_parity(body, plane, p, &info.edges, subset, angle) {
             return Some(inside);
         }
     }
@@ -885,9 +937,8 @@ fn sag_bound(c: &Curve) -> f64 {
 
 /// Exact even-odd test for a point of a planar face: a ray from p in the
 /// plane at `angle` to its x axis, counting crossings with each edge in
-/// closed form (lines, circles, ellipses), and with `any_curve` every other edge by its certified
-/// crossings. None when the ray meets a vertex or touches an edge, or (without `any_curve`) an
-/// edge the closed forms do not cover, so another direction is tried.
+/// closed form (lines, circles, ellipses). None when the ray meets a vertex
+/// or an edge the closed forms do not cover, so another direction is tried.
 fn planar_parity(
     body: &Body,
     plane: &forge_geom::Plane,
@@ -895,7 +946,6 @@ fn planar_parity(
     edges: &[(forge_topo::CoedgeId, Box3)],
     subset: Option<&[u32]>,
     angle: f64,
-    any_curve: bool,
 ) -> Option<bool> {
     let (sn, cs) = forge_math::dmath::sin_cos(angle);
     let d = plane.frame.x() * cs + plane.frame.y() * sn;
@@ -910,16 +960,7 @@ fn planar_parity(
         }
         let e = body.edge(body.coedge(c).edge);
         // a seam cannot occur on a plane; each use of an edge here is one crossing set
-        if ray_crossings(
-            plane.frame.z().get(),
-            p,
-            d,
-            &e.curve,
-            e.range,
-            any_curve.then_some(b),
-        )? % 2
-            == 1
-        {
+        if plane_ray_crossings(plane.frame.z().get(), p, d, &e.curve, e.range)? % 2 == 1 {
             inside = !inside;
         }
     }
@@ -935,19 +976,6 @@ pub(crate) fn plane_ray_crossings(
     d: Vec3,
     curve: &Curve,
     range: Interval,
-) -> Option<usize> {
-    ray_crossings(n, p, d, curve, range, None)
-}
-
-/// `plane_ray_crossings`, and given the curve's box for every kind of curve: those without a
-/// closed form by their crossings of the plane square to the face through the ray.
-fn ray_crossings(
-    n: Vec3,
-    p: Point3,
-    d: Vec3,
-    curve: &Curve,
-    range: Interval,
-    bx: Option<&Box3>,
 ) -> Option<usize> {
     let hits: Vec<(f64, f64)> = match curve {
         Curve::Line(l) => {
@@ -975,22 +1003,6 @@ fn ray_crossings(
         }
         Curve::Circle(k) => conic_ray(&k.frame, k.radius, k.radius, p, d),
         Curve::Ellipse(el) => conic_ray(&el.frame, el.major, el.minor, p, d),
-        // any other curve of the plane, where asked: its crossings of the plane holding the ray
-        // square to the face, counted where they lie ahead of p
-        _ if bx.is_some() => {
-            let m = n.cross(d).normalize()?;
-            let ahead = |x: Point3, r: f64| {
-                let along = (x - p).dot(d);
-                if along > r {
-                    Some(true)
-                } else if along < -r {
-                    Some(false)
-                } else {
-                    None
-                }
-            };
-            return region_crossings(curve, range, bx?, p, m, ahead).map(usize::from);
-        }
         _ => return None,
     };
     let periodic = curve.domain().period;
@@ -1058,17 +1070,7 @@ fn ruling_parity(
             Curve::Ellipse(el) => conic_plane(&el.frame, el.major, el.minor, frame.origin, m)?,
             // any other curve: its crossings of the plane on p's side of the axis and above p
             _ => {
-                let up = |x: Point3, r: f64| {
-                    let (side, along) = ((x - frame.origin).dot(radial), (x - p).dot(w));
-                    if side > r && along > r {
-                        Some(true)
-                    } else if side < -r || along < -r {
-                        Some(false)
-                    } else {
-                        None
-                    }
-                };
-                if region_crossings(&e.curve, e.range, b, frame.origin, m.normalize()?, up)? {
+                if ruling_crossings(&e.curve, e.range, b, frame.origin, m.normalize()?, radial, p, w)? {
                     inside = !inside;
                 }
                 continue;
@@ -1100,6 +1102,34 @@ fn ruling_parity(
     Some(inside)
 }
 
+/// `ruling_parity` for an edge with no closed form: whether it crosses the plane of the axis and
+/// p (unit normal `m`) an odd number of times on p's side of the axis (`radial`) and above p
+/// (along `w`). Out of line: rare beside the closed forms.
+#[inline(never)]
+#[allow(clippy::too_many_arguments)]
+fn ruling_crossings(
+    curve: &Curve,
+    range: Interval,
+    bx: &Box3,
+    origin: Point3,
+    m: forge_math::UnitVec3,
+    radial: Vec3,
+    p: Point3,
+    w: Vec3,
+) -> Option<bool> {
+    let up = |x: Point3, r: f64| {
+        let (side, along) = ((x - origin).dot(radial), (x - p).dot(w));
+        if side > r && along > r {
+            Some(true)
+        } else if side < -r || along < -r {
+            Some(false)
+        } else {
+            None
+        }
+    };
+    region_crossings(curve, range, bx, origin, m, up)
+}
+
 /// Whether `curve` over `range` crosses the plane through `at` with unit normal `m` an odd number
 /// of times within a region of that plane: `region(x, r)` says whether the ball of radius r about
 /// x lies wholly in the region (Some(true)), wholly out (Some(false)), or neither (None).
@@ -1110,6 +1140,7 @@ fn ruling_parity(
 /// or nothing (a touch or a pair of crossings changes no parity); any other is halved. None when
 /// the curve meets the plane at an end of its range (a vertex), or a crossing cannot be told from
 /// the region's boundary within LINEAR, so the caller looks another way.
+#[inline(never)]
 fn region_crossings(
     curve: &Curve,
     range: Interval,
@@ -1127,10 +1158,18 @@ fn region_crossings(
     if ((c - at).dot(n)).abs() > h.x * n.x.abs() + h.y * n.y.abs() + h.z * n.z.abs() + tol::LINEAR {
         return Some(false);
     }
+    // nor wholly out of the region: whatever it crosses there adds nothing
+    if region(c, h.length()) == Some(false) {
+        return Some(false);
+    }
     let f = |t: f64| (curve.eval(t) - at).dot(n);
     let plane = Surface::Plane(forge_geom::Plane::new(forge_math::Frame::from_z(at, m)));
     let mut odd = false;
-    for (a, b, lip) in forge_geom::intersect::pieces_near(curve, range, &plane) {
+    for (a, b, lip, ball) in forge_geom::intersect::pieces_near(curve, range, &plane) {
+        // a stretch whose ball lies out of the region adds nothing, unevaluated
+        if ball.is_some_and(|(x, r)| region(x, r) == Some(false)) {
+            continue;
+        }
         let (fa, fb) = (f(a), f(b));
         if (a <= range.lo && fa.abs() <= tol::LINEAR) || (b >= range.hi && fb.abs() <= tol::LINEAR) {
             return None;
@@ -1544,7 +1583,7 @@ mod planar_vs_polygon {
                 if near {
                     continue;
                 }
-                let Some(fast) = planar_parity(&body, &pl, p, &info.edges, None, 0.1234, false) else {
+                let Some(fast) = planar_parity(&body, &pl, p, &info.edges, None, 0.1234) else {
                     continue;
                 };
                 let drawn = ix.drawn(f);

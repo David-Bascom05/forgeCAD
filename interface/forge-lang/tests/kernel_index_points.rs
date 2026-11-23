@@ -173,6 +173,38 @@ fn the_census_repros_are_classified_right() {
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
 }
 
+/// Every point of the census's 14 parts where Index and OpenCascade's classifier disagreed before
+/// the fix (tests/index/misclass.tsv, from research/fillets/oracle/index-misclass.tsv): 305 points,
+/// Index now on OpenCascade's side at each.
+#[test]
+fn every_census_disagreement_now_sides_with_opencascade() {
+    let rows: Vec<Vec<&str>> = include_str!("index/misclass.tsv")
+        .lines()
+        .filter(|l| !l.starts_with('#') && !l.starts_with("part"))
+        .map(|l| l.split('\t').collect())
+        .collect();
+    assert_eq!(rows.len(), 305);
+    let mut wrong = Vec::new();
+    let mut ids: Vec<&str> = rows.iter().map(|r| r[0]).collect();
+    ids.dedup();
+    for id in ids {
+        let b = body(part(id));
+        let ix = Index::new(&b);
+        for r in rows.iter().filter(|r| r[0] == id) {
+            let num = |k: usize| r[k].parse::<f64>().expect("a number");
+            let got = ix.classify(Point3::new(num(1), num(2), num(3)));
+            let want = side(r[6] == "IN");
+            if got != want {
+                wrong.push(format!(
+                    "{id} ({}, {}, {}): Index {got:?}, OpenCascade {want:?}",
+                    r[1], r[2], r[3]
+                ));
+            }
+        }
+    }
+    assert!(wrong.is_empty(), "{} wrong:\n{}", wrong.len(), wrong.join("\n"));
+}
+
 /// A bar or block with an oblique round boss leaving its side, the concave edge between them
 /// rounded (research/pipe-speed/fuzz/gen.py's parts, without their cuts).
 fn bar_and_boss(seed: u64) -> String {
