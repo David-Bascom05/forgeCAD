@@ -731,4 +731,280 @@ theorem walk_spec (fr dst : Slice U32) (m : Nat) (hm : m = fr.val.length) (hdl :
         simp; omega
   · exact ⟨0, by simp [hP, path], by simp, by simpa [path] using hu, by simp [path], by simp [path]⟩
 
+/-- The offsets at which consecutive lists start, from `a`. -/
+def offsets : Nat → List (List Nat) → List Nat
+  | _, [] => []
+  | a, c :: cs => a :: offsets (a + c.length) cs
+
+theorem offsets_snoc (a : Nat) (cs : List (List Nat)) (c : List Nat) :
+    offsets a (cs ++ [c]) = offsets a cs ++ [a + cs.flatten.length] := by
+  induction cs generalizing a with
+  | nil => simp [offsets]
+  | cons d cs ih =>
+    simp only [List.cons_append, offsets, ih, List.flatten_cons, List.length_append, List.cons.injEq,
+      List.append_cancel_left_eq, true_and, List.cons_append]
+    simp [Nat.add_assoc]
+
+theorem offsets_length (a : Nat) (cs : List (List Nat)) : (offsets a cs).length = cs.length := by
+  induction cs generalizing a with
+  | nil => rfl
+  | cons c cs ih => simp [offsets, ih]
+
+theorem length_le_flatten (cs : List (List Nat)) (h : ∀ c ∈ cs, 0 < c.length) :
+    cs.length ≤ cs.flatten.length := by
+  induction cs with
+  | nil => simp
+  | cons c cs ih =>
+    simp only [List.length_cons, List.flatten_cons, List.length_append]
+    have := h c (by simp)
+    have := ih (fun d hd => h d (List.mem_cons_of_mem _ hd)); omega
+
+theorem nodup_missing_length (l : List Nat) (m j : Nat) (hnd : l.Nodup) (hlt : ∀ e ∈ l, e < m)
+    (hj : j < m) (hout : j ∉ l) : l.length < m := by
+  have := List.Nodup.length_le_of_subset (l₂ := (List.range m).erase j) hnd (by
+    intro x hx
+    rw [List.mem_erase_of_ne (by intro e; subst e; exact hout hx)]
+    simpa using hlt x hx)
+  rw [List.length_erase_of_mem (by simpa using hj)] at this
+  simp at this; omega
+
+open ForgeSheetCore.Walk in
+/-- The outer loop's state: the cycles found so far. -/
+def WalkInv (σ : Nat → Nat) (m s : Nat) (bad : Option ChainError) (used : alloc.vec.Vec Bool)
+    (pieces starts : alloc.vec.Vec U32) : Prop :=
+  bad = none ∧ ∃ cs : List (List Nat), vals pieces = cs.flatten ∧ vals starts = offsets 0 cs ∧
+    Marks used m cs.flatten ∧ cs.flatten.Nodup ∧ (∀ e ∈ cs.flatten, e < m) ∧
+    (∀ e < m, (e ∈ cs.flatten ↔ σ e ∈ cs.flatten)) ∧ (∀ e < s, e ∈ cs.flatten) ∧
+    (∀ c ∈ cs, IsCycle σ c)
+
+open ForgeSheetCore.Walk in
+theorem walks_spec (fr dst : Slice U32) (m : Usize) (hm : m.val = fr.val.length)
+    (hdl : m.val ≤ dst.val.length) (hmax : m.val ≤ U32.max) (nv : Nat) (hT : ∀ x ∈ sv dst, x < nv)
+    (fo : alloc.vec.Vec U32) (hfo : Holds fo nv (fOut (sv fr) m.val))
+    (hp : Perm (succ (sv fr) (sv dst)) m.val)
+    (bad : Option ChainError) (used : alloc.vec.Vec Bool) (pieces starts : alloc.vec.Vec U32)
+    (start : Usize) (hs : start.val ≤ m.val)
+    (hinv : WalkInv (succ (sv fr) (sv dst)) m.val start.val bad used pieces starts) :
+    chain_loop2 fr dst m fo bad used pieces starts start ⦃ r =>
+      ∃ u, WalkInv (succ (sv fr) (sv dst)) m.val m.val r.1 u r.2.1 r.2.2 ⦄ := by
+  set σ := succ (sv fr) (sv dst) with hσ
+  unfold chain_loop2
+  apply loop.spec_decr_nat
+    (fun (q : Option ChainError × alloc.vec.Vec Bool × alloc.vec.Vec U32 × alloc.vec.Vec U32 × Usize) =>
+      m.val - q.2.2.2.2.val)
+    (fun q => q.2.2.2.2.val ≤ m.val ∧ WalkInv σ m.val q.2.2.2.2.val q.1 q.2.1 q.2.2.1 q.2.2.2.1)
+  · rintro ⟨bd, u, pc, st, j⟩ ⟨hj, hbd, cs, hpc, hst, hmk, hnd, hlt, hcl, hall, hcyc⟩
+    unfold chain_loop2.body
+    simp only at hj hbd hpc hst hmk hnd hlt hcl hall hcyc ⊢
+    split
+    · rename_i h
+      have hjl : j.val < m.val := by scalar_tac
+      split
+      · rename_i hnone
+        have hul : j.val < u.val.length := by rw [hmk.1]; exact hjl
+        step with alloc.vec.Vec.index_usize_spec u j (by simpa using hul) as ⟨b, hb⟩
+        have hbv : b = decide (j.val ∈ cs.flatten) := by
+          have := hmk.2 j.val hjl
+          rw [List.getElem?_eq_getElem hul] at this
+          rw [hb]; simpa using this
+        split
+        · rename_i hb1
+          step as ⟨j1, hj1⟩
+          have hj1v : j1.val = j.val + 1 := by rw [hj1]; exact usize_inc j m hjl
+          have hin : j.val ∈ cs.flatten := by rw [hb1] at hbv; simpa using hbv.symm
+          refine ⟨by omega, ⟨hbd, cs, hpc, hst, hmk, hnd, hlt, hcl, ?_, hcyc⟩, by omega⟩
+          intro e he; rw [hj1v] at he
+          rcases Nat.lt_succ_iff_lt_or_eq.mp he with h | h
+          · exact hall e h
+          · rw [h]; exact hin
+        · rename_i hb1
+          have hb0 : b = false := by simpa using hb1
+          have hout0 : j.val ∉ cs.flatten := by rw [hb0] at hbv; simpa using hbv.symm
+          have hpl : (vals pc).length ≤ m.val := by
+            rw [hpc]
+            have := List.Nodup.length_le_of_subset (l₂ := List.range m.val) hnd (by
+              intro x hx; simpa using hlt x hx)
+            simpa using this
+          have hfl := nodup_missing_length cs.flatten m.val j.val hnd hlt hjl hout0
+          step as ⟨i1, hi1⟩
+          have hi1v : i1.val = pc.val.length := by
+            have := u32_of_lt' (alloc.vec.Vec.len pc) (m.val + 1)
+              (by
+                show pc.val.length < m.val + 1
+                rw [← vals_length, hpc]; omega) (by omega) i1 hi1.symm
+            simpa using this
+          step with alloc.vec.Vec.push_spec st i1 (by
+            have : m.val ≤ Usize.max := le_trans hmax u32max_le_usize
+            have hsl : st.val.length = cs.length := by rw [← vals_length, hst, offsets_length]
+            have hcsl := length_le_flatten cs (fun c hc => by
+              obtain ⟨s0, k, hk, rfl, _⟩ := hcyc c hc; simpa [path_length] using hk)
+            rw [hsl]; omega) as ⟨st1, hst1⟩
+          step with walk_spec fr dst m.val hm hdl hmax nv hT fo hfo hp cs.flatten hnd hlt
+            (fun e he h => (hcl e he).mpr h) j hjl hout0 u hmk pc hpc as ⟨u1, pc1, a, k, hk, hpc1, hcyck, ha, hmk1, hout1, hnd1⟩
+          -- the walk closed at its start: no refusal
+          have hane : (a != j) = false := by
+            simp only [bne_eq_false_iff_eq]; exact UScalar.eq_of_val_eq ha
+          simp only [hane, Bool.false_eq_true, ite_false]
+          step as ⟨j1, hj1⟩
+          have hj1v : j1.val = j.val + 1 := by rw [hj1]; exact usize_inc j m hjl
+          have hflat : (cs ++ [path σ j.val k]).flatten = cs.flatten ++ path σ j.val k := by simp
+          refine ⟨by omega, ⟨hbd, cs ++ [path σ j.val k], by rw [hflat]; exact hpc1, ?_, by rw [hflat]; exact hmk1,
+            ?_, ?_, ?_, ?_, ?_⟩, by omega⟩
+          · rw [vals_push _ _ _ hst1, hst, offsets_snoc, hi1v, ← vals_length, hpc]; simp
+          · rw [hflat]
+            exact List.Nodup.append hnd hnd1 (fun x h1 h2 => hout1 x h2 h1)
+          · rw [hflat]; intro e he
+            simp only [List.mem_append] at he
+            rcases he with he | he
+            · exact hlt e he
+            · obtain ⟨i, _, rfl⟩ := mem_path.mp he; exact iter_lt hp hjl i
+          · rw [hflat]; exact closed_add hp hcl hjl hk hcyck
+          · rw [hflat, hj1v]; intro e he
+            rcases Nat.lt_succ_iff_lt_or_eq.mp he with h | h
+            · exact List.mem_append_left _ (hall e h)
+            · rw [h]; exact List.mem_append_right _ (mem_path.mpr ⟨0, hk, rfl⟩)
+          · intro c hc
+            simp only [List.mem_append, List.mem_singleton] at hc
+            rcases hc with hc | rfl
+            · exact hcyc c hc
+            · exact ⟨j.val, k, hk, rfl, hcyck⟩
+      · rename_i hsome
+        rw [hbd] at hsome; simp [core.option.Option.is_none] at hsome
+    · rename_i h
+      have : j.val = m.val := by scalar_tac
+      simp only [WP.spec_ok]
+      rw [this] at hall
+      exact ⟨u, hbd, cs, hpc, hst, hmk, hnd, hlt, hcl, hall, hcyc⟩
+  · exact ⟨hs, hinv⟩
+
+/-! ## `chain`, whole -/
+
+theorem holds_replicate (nv : Usize) (x : U32) (v : alloc.vec.Vec U32)
+    (hv : v.val = List.replicate nv.val x) (g : Nat → Nat) (hg : ∀ j, g j = x.val) :
+    Holds v nv.val g := by
+  unfold Holds vals; rw [hv]
+  apply List.ext_getElem <;> simp [hg]
+
+open ForgeSheetCore.Walk in
+/-- **`chain` refines the chaining rule.** For kept pieces `e` running from `F[e]` to `T[e]`
+(vertices below `nv`, at most `u32::MAX` of each, `to` at least as long as `from`), the shipped
+`chain` returns without panic or overflow, and:
+* `Ok` exactly when every vertex is left as often as reached, at most once; then the loops are
+  the cycles of the successor permutation (`succ_perm`: each piece leaves where the one before
+  it arrives), each started at its least piece, together every piece once, with `starts` their
+  offsets and the total;
+* `Err Unchained` at the first vertex whose degrees differ, naming its first leaving (else
+  arriving) piece and both degrees;
+* `Err Pinched` when the degrees agree everywhere: every vertex of degree past one, in order.
+The walk's own refusal (a walk ending elsewhere than its start) never happens. -/
+theorem chain_spec (nv : Usize) (hnv : nv.val ≤ U32.max) (fr dst : Slice U32)
+    (hdl : fr.val.length ≤ dst.val.length) (hmax' : fr.val.length < U32.max)
+    (hF : ∀ x ∈ sv fr, x < nv.val) (hT : ∀ x ∈ sv dst, x < nv.val) :
+    chain nv fr dst ⦃ r =>
+      let F := sv fr
+      let m := F.length
+      let NO := nOut F m
+      let NI := nIn (sv dst) m
+      match r with
+      | .Ok l => (∀ v < nv.val, NO v = NI v ∧ NO v ≤ 1) ∧
+          ∃ cs : List (List Nat), vals l.pieces = cs.flatten ∧
+            vals l.starts = offsets 0 cs ++ [cs.flatten.length] ∧
+            cs.flatten.Perm (List.range m) ∧ ∀ c ∈ cs, IsCycle (succ F (sv dst)) c
+      | .Err b =>
+          (∃ u < nv.val, (∀ u' < u, NO u' = NI u') ∧ NO u ≠ NI u ∧
+            unchainedAt NO NI (fOut F m) (fIn (sv dst) m) u b) ∨
+          ((∀ u < nv.val, NO u = NI u) ∧ ∃ ps, b = .Pinched ps ∧
+            tvals ps = pinchList NO (fIn (sv dst) m) (sIn (sv dst) m) nv.val ∧ tvals ps ≠ []) ⦄ := by
+  have hmax : fr.val.length ≤ U32.max := hmax'.le
+  have hFl : (sv fr).length = fr.val.length := by simp [sv]
+  unfold chain
+  step with alloc.vec.from_elem_spec core.clone.CloneU32 0#u32 nv (by rfl) as ⟨z, hz, _⟩
+  step with alloc.vec.from_elem_spec core.clone.CloneU32 core.num.U32.MAX nv (by rfl) as ⟨mx, hmx, _⟩
+  have hmxv : (core.num.U32.MAX : U32).val = NONE := by
+    simp [NONE, core.num.U32.MAX, U32.max_eq, U32.rMax, U32.numBits]
+  have st0 : St0 (sv fr) (sv dst) nv.val 0 z z mx mx mx :=
+    ⟨holds_replicate nv _ z hz _ (fun j => by simp [nOut, occ]),
+     holds_replicate nv _ z hz _ (fun j => by simp [nIn, occ]),
+     holds_replicate nv _ mx hmx _ (fun j => by simp [fOut, occ, hmxv]),
+     holds_replicate nv _ mx hmx _ (fun j => by simp [fIn, occ, hmxv]),
+     holds_replicate nv _ mx hmx _ (fun j => by simp [sIn, occ, hmxv])⟩
+  step with loop0_chain_spec fr dst (Slice.len fr) (by simp) (by simpa using hdl) (by simpa using hmax)
+    nv.val hF hT z z mx mx mx 0#usize (by simp) st0 as ⟨no, ni, fo, fi, si, hst0⟩
+  obtain ⟨hno, hni, hfo, hfi, hsi⟩ := hst0
+  have hFl2 : (Slice.len fr).val = (sv fr).length := by simp [sv]
+  rw [hFl2] at hno hni hfo hfi hsi
+  step with loop1_chain_spec nv hnv no ni fo fi si _ _ _ _ _ hno hni hfo hfi hsi
+    (alloc.vec.Vec.new (U32 × U32 × U32)) (by simp [alloc.vec.Vec.new]) as ⟨bad, pin, hv⟩
+  rcases hv with ⟨hb, heq, hpin⟩ | ⟨u, hu, hpre, hne, b, hb, hub⟩
+  · subst hb
+    simp only
+    step as ⟨emp, hemp⟩
+    split
+    · rename_i hemp1
+      have hpin0 : tvals pin = [] := by
+        have : pin.val = [] := by
+          have := hemp; rw [hemp1] at this; simpa [alloc.vec.Vec.length] using this.symm
+        simp [tvals, this]
+      have hdeg : ∀ v < nv.val, nOut (sv fr) (sv fr).length v = nIn (sv dst) (sv fr).length v ∧
+          nOut (sv fr) (sv fr).length v ≤ 1 := by
+        intro v hv
+        refine ⟨heq v hv, ?_⟩
+        by_contra hgt
+        have : (v, fIn (sv dst) (sv fr).length v, sIn (sv dst) (sv fr).length v) ∈
+            pinchList (nOut (sv fr) (sv fr).length) (fIn (sv dst) (sv fr).length)
+              (sIn (sv dst) (sv fr).length) nv.val := by
+          simp only [pinchList, List.mem_map, List.mem_filter, List.mem_range]
+          exact ⟨v, ⟨hv, by simpa using (by omega : 1 < nOut (sv fr) (sv fr).length v)⟩, rfl⟩
+        rw [← hpin, hpin0] at this; cases this
+      have hTlen : (sv fr).length ≤ (sv dst).length := by simp [sv]; omega
+      obtain ⟨hperm, hmeet⟩ := succ_perm (sv fr) (sv dst) nv.val hTlen hT hdeg
+      step with alloc.vec.from_elem_spec core.clone.CloneBool false (Slice.len fr) (by rfl)
+        as ⟨used, hused, _⟩
+      have hinv : WalkInv (succ (sv fr) (sv dst)) (Slice.len fr).val 0 none used
+          (alloc.vec.Vec.with_capacity U32 (Slice.len fr)) (alloc.vec.Vec.new U32) := by
+        refine ⟨rfl, [], by simp [vals, alloc.vec.Vec.with_capacity], by simp [vals, alloc.vec.Vec.new, offsets],
+          ⟨by rw [hused]; simp, fun e he => by rw [hused]; simp at he ⊢; simp [he]⟩, by simp,
+          by simp, by simp, by simp, by simp⟩
+      step with walks_spec fr dst (Slice.len fr) (by simp) (by simpa using hdl) (by simpa using hmax)
+        nv.val hT fo (by simpa [← hFl] using hfo) (by simpa [hFl] using hperm) none used _ _ 0#usize
+        (by simp) hinv as ⟨bad1, pc, st, u1, hw⟩
+      obtain ⟨hbad1, cs, hpc, hst, hmk, hnd, hlt, hcl, hall, hcyc⟩ := hw
+      subst hbad1
+      simp only
+      step as ⟨i1, hi1⟩
+      have hfl : cs.flatten.length = (sv fr).length := by
+        have hp : cs.flatten.Perm (List.range fr.val.length) := by
+          apply (List.perm_ext_iff_of_nodup hnd List.nodup_range).mpr
+          intro x; simp only [List.mem_range]
+          exact ⟨fun h => by simpa using hlt x h, fun h => hall x (by simpa using h)⟩
+        rw [hp.length_eq]; simp [sv]
+      have hi1v : i1.val = cs.flatten.length := by
+        have := u32_of_lt' (alloc.vec.Vec.len pc) (U32.max + 1)
+          (by show pc.val.length < U32.max + 1
+              rw [← vals_length, hpc, hfl, hFl]; omega) le_rfl i1 hi1.symm
+        rw [this]; show pc.val.length = _; rw [← vals_length, hpc]
+      have hcsl := length_le_flatten cs (fun c hc => by
+        obtain ⟨s0, k, hk, rfl, _⟩ := hcyc c hc; simpa [path_length] using hk)
+      step with alloc.vec.Vec.push_spec st i1 (by
+        have : U32.max ≤ Usize.max := u32max_le_usize
+        have hsl : st.val.length = cs.length := by rw [← vals_length, hst, offsets_length]
+        rw [hsl]; rw [hfl, hFl] at hcsl; omega) as ⟨st1, hst1⟩
+      refine ⟨hdeg, cs, hpc, ?_, ?_, ?_⟩
+      · rw [vals_push _ _ _ hst1, hst, hi1v]
+      · apply (List.perm_ext_iff_of_nodup hnd List.nodup_range).mpr
+        intro x; simp only [List.mem_range]
+        exact ⟨fun h => by have := hlt x h; simpa [hFl] using this,
+          fun h => hall x (by simpa [hFl] using h)⟩
+      · simpa [hFl] using hcyc
+    · rename_i hemp1
+      simp only [WP.spec_ok]
+      have hne0 : tvals pin ≠ [] := by
+        intro h0; apply hemp1
+        have : pin.val = [] := by simpa [tvals] using h0
+        rw [hemp]; simp [alloc.vec.Vec.length, this]
+      exact Or.inr ⟨heq, pin, rfl, hpin, hne0⟩
+  · subst hb
+    simp only [WP.spec_ok]
+    exact Or.inl ⟨u, hu, hpre, hne, hub⟩
+
 end forge_sheet_core
