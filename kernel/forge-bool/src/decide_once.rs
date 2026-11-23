@@ -660,9 +660,14 @@ fn add_walls(cls: &mut Classes, lo: [f64; 3], hi: [f64; 3]) {
 /// A vertex of the arrangement on one class plane: its exact point and, for a meet of three
 /// classes, its covector.
 struct Vx {
-    p: HPoint,
-    /// its f64 shadow, for screening
+    /// its exact point, worked out when first needed (a piece's vertex, or a sign the f64 point
+    /// cannot settle)
+    p: RefCell<Option<HPoint>>,
+    /// the two planes (besides the section's) it is the meet of
+    meet: (Pl, Pl),
+    /// its f64 point and a bound on each coordinate's distance from the exact one
     f: [f64; 3],
+    err: f64,
     cov: Option<Vec<Sgn>>,
 }
 
@@ -681,6 +686,91 @@ enum Pl {
 struct Plane2 {
     vx: Vec<Vx>,
     cells: Vec<Vec<(u32, Pl)>>,
+    /// the section's plane and its box walls, to work out exact points
+    pc: DyPlane,
+    walls: Vec<DyPlane>,
+}
+
+impl Plane2 {
+    fn exact(&self, cls: &Classes, i: usize) -> HPoint {
+        exact_vx(&self.vx[i], &self.pc, &self.walls, cls)
+    }
+}
+
+/// A vertex's exact point (memoised).
+fn exact_vx(x: &Vx, pc: &DyPlane, walls: &[DyPlane], cls: &Classes) -> HPoint {
+    if let Some(h) = x.p.borrow().as_ref() {
+        return h.clone();
+    }
+    let of = |p: Pl| match p {
+        Pl::Class(k) => &cls.planes[k as usize],
+        Pl::Wall(w) => &walls[w as usize],
+    };
+    let h = meet3(pc, of(x.meet.0), of(x.meet.1)).expect("a vertex is a meet of three planes");
+    *x.p.borrow_mut() = Some(h.clone());
+    h
+}
+
+/// Rounding slack of the f64 evaluations below (generous: each is a handful of operations).
+const GAMMA: f64 = 64.0 * f64::EPSILON;
+
+/// The meet of three planes in f64, with a bound on each coordinate's error; None when the system
+/// is too near singular for the bound to hold (the exact meet decides then).
+fn meet_f(a: &PlaneF, b: &PlaneF, c: &PlaneF) -> Option<([f64; 3], f64)> {
+    let cross = |u: [f64; 3], v: [f64; 3]| {
+        [
+            u[1] * v[2] - u[2] * v[1],
+            u[2] * v[0] - u[0] * v[2],
+            u[0] * v[1] - u[1] * v[0],
+        ]
+    };
+    let cabs = |u: [f64; 3], v: [f64; 3]| {
+        [
+            (u[1] * v[2]).abs() + (u[2] * v[1]).abs(),
+            (u[2] * v[0]).abs() + (u[0] * v[2]).abs(),
+            (u[0] * v[1]).abs() + (u[1] * v[0]).abs(),
+        ]
+    };
+    let dot = |u: [f64; 3], v: [f64; 3]| u[0] * v[0] + u[1] * v[1] + u[2] * v[2];
+    let dabs = |u: [f64; 3], v: [f64; 3]| u[0].abs() * v[0] + u[1].abs() * v[1] + u[2].abs() * v[2];
+    let (bc, ca, ab) = (cross(b.n, c.n), cross(c.n, a.n), cross(a.n, b.n));
+    let (bca, caa, aba) = (cabs(b.n, c.n), cabs(c.n, a.n), cabs(a.n, b.n));
+    let det = dot(a.n, bc);
+    let edet = GAMMA * dabs(a.n, bca);
+    if det.abs() <= 4.0 * edet {
+        return None;
+    }
+    let mut p = [0.0; 3];
+    let mut err: f64 = 0.0;
+    for k in 0..3 {
+        let num = a.c * bc[k] + b.c * ca[k] + c.c * ab[k];
+        let mnum = a.c.abs() * bca[k] + b.c.abs() * caa[k] + c.c.abs() * aba[k];
+        p[k] = num / det;
+        let e = (GAMMA * mnum + p[k].abs() * edet) / (det.abs() - edet) + p[k].abs() * GAMMA;
+        err = err.max(e);
+    }
+    p.iter().all(|x| x.is_finite()).then_some((p, err))
+}
+
+/// A plane's sign at a point known to within `err` per coordinate in f64; `exact` when the f64
+/// value cannot settle it.
+fn side_err(plane: &DyPlane, pff: &PlaneF, pf: &[f64; 3], err: f64, exact: impl FnOnce() -> HPoint) -> Sgn {
+    let e = pff.n[0] * pf[0] + pff.n[1] * pf[1] + pff.n[2] * pf[2] - pff.c;
+    let mag = pff.n[0].abs() * pf[0].abs()
+        + pff.n[1].abs() * pf[1].abs()
+        + pff.n[2].abs() * pf[2].abs()
+        + pff.c.abs();
+    let bound = GAMMA * mag + (pff.n[0].abs() + pff.n[1].abs() + pff.n[2].abs()) * err;
+    let s = if e.abs() > bound {
+        if e > 0.0 { 1 } else { -1 }
+    } else {
+        plane.side(&exact())
+    };
+    match s {
+        1 => Sgn::Pos,
+        -1 => Sgn::Neg,
+        _ => Sgn::Zero,
+    }
 }
 
 /// The sign of a class plane at an exact point, f64-screened.
@@ -769,26 +859,54 @@ fn arrange(cls: &Classes, pf: &[PlaneF], c: u32, lo: [f64; 3], hi: [f64; 3]) -> 
         if let Some(&i) = by_pair.get(&key) {
             return i;
         }
-        let h = meet3(pc, plane_of(x), plane_of(y)).expect("a polygon's edge crosses the plane splitting it");
+        let pff_of = |p: Pl| match p {
+            Pl::Class(k) => &pf[k as usize],
+            Pl::Wall(w) => &wf[w as usize],
+        };
+        let mut x0 = Vx {
+            p: RefCell::new(None),
+            meet: (x, y),
+            f: [0.0; 3],
+            err: 0.0,
+            cov: None,
+        };
+        match meet_f(&pf[c as usize], pff_of(x), pff_of(y)) {
+            Some((f, e)) => {
+                x0.f = f;
+                x0.err = e;
+            }
+            None => {
+                let h = meet3(pc, plane_of(x), plane_of(y))
+                    .expect("a polygon's edge crosses the plane splitting it");
+                x0.f = h.to_f64();
+                x0.err = 0.0;
+                x0.p = RefCell::new(Some(h));
+            }
+        }
         let id = match (x, y) {
             (Pl::Class(i), Pl::Class(j)) => {
-                let cov = covector(cls, pf, &h, &[c, i, j]);
+                let cov: Vec<Sgn> = (0..cls.planes.len())
+                    .map(|k| {
+                        if k as u32 == c || k as u32 == i || k as u32 == j {
+                            Sgn::Zero
+                        } else {
+                            side_err(&cls.planes[k], &pf[k], &x0.f, x0.err, || {
+                                exact_vx(&x0, pc, &walls, cls)
+                            })
+                        }
+                    })
+                    .collect();
                 if let Some(&k) = by_cov.get(&cov) {
                     k
                 } else {
-                    let f = h.to_f64();
-                    vx.push(Vx {
-                        p: h,
-                        f,
-                        cov: Some(cov.clone()),
-                    });
+                    x0.cov = Some(cov.clone());
+                    vx.push(x0);
                     by_cov.insert(cov, vx.len() as u32 - 1);
                     vx.len() as u32 - 1
                 }
             }
             _ => {
-                let f = h.to_f64();
-                vx.push(Vx { p: h, f, cov: None });
+                vx.push(x0);
                 vx.len() as u32 - 1
             }
         };
@@ -809,7 +927,7 @@ fn arrange(cls: &Classes, pf: &[PlaneF], c: u32, lo: [f64; 3], hi: [f64; 3]) -> 
                     Pl::Class(k) => &pf[k as usize],
                     Pl::Wall(w) => &wf[w as usize],
                 };
-                match side_at(pl, &x.f, pff, &x.p) {
+                match side_err(pl, pff, &x.f, x.err, || exact_vx(x, pc, &walls, cls)) {
                     Sgn::Pos => 1,
                     Sgn::Neg => -1,
                     Sgn::Zero => 0,
@@ -874,6 +992,8 @@ fn arrange(cls: &Classes, pf: &[PlaneF], c: u32, lo: [f64; 3], hi: [f64; 3]) -> 
             return Plane2 {
                 vx,
                 cells: Vec::new(),
+                pc: pc.clone(),
+                walls: walls.to_vec(),
             };
         }
     }
@@ -911,7 +1031,12 @@ fn arrange(cls: &Classes, pf: &[PlaneF], c: u32, lo: [f64; 3], hi: [f64; 3]) -> 
         }
         cells = next;
     }
-    Plane2 { vx, cells }
+    Plane2 {
+        vx,
+        cells,
+        pc: pc.clone(),
+        walls: walls.to_vec(),
+    }
 }
 
 /// Is the exact point inside face `f`'s polygon (its loops, with exact vertices), by the parity
@@ -1195,11 +1320,12 @@ fn build_ledger(
             if boxed.is_empty() {
                 continue;
             }
-            let mid = HPoint::mean(&[
-                &pl.vx[cell[0].0 as usize].p,
-                &pl.vx[cell[1].0 as usize].p,
-                &pl.vx[cell[2].0 as usize].p,
-            ]);
+            let (e0, e1, e2) = (
+                pl.exact(cls, cell[0].0 as usize),
+                pl.exact(cls, cell[1].0 as usize),
+                pl.exact(cls, cell[2].0 as usize),
+            );
+            let mid = HPoint::mean(&[&e0, &e1, &e2]);
             let holders: Vec<usize> = boxed
                 .into_iter()
                 .filter(|&i| in_face(&mid, &fs[i], &pts[fs[i].body], snapped, s, t))
@@ -1213,7 +1339,7 @@ fn build_ledger(
             for k in 0..cell.len() {
                 let (i, j) = (cell[k].0 as usize, cell[(k + 1) % cell.len()].0 as usize);
                 let vi = tab.id(pl.vx[i].cov.clone().unwrap());
-                point.entry(vi).or_insert_with(|| pl.vx[i].p.clone());
+                point.entry(vi).or_insert_with(|| pl.exact(cls, i));
                 let vj = tab.id(pl.vx[j].cov.clone().unwrap());
                 let e = tab.id(join(&[
                     pl.vx[i].cov.as_ref().unwrap(),
