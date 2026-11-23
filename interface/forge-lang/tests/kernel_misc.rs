@@ -1117,15 +1117,22 @@ fn a_drill_from_a_tangent_plane_to_a_bore_builds() {
     assert!(matches!(v, Verdict::Ok), "{v:?}");
 }
 
-/// A ring cut whose outer circle is tangent to the block's top and bottom: ZeroThickness, where
-/// Onshape builds it. Open, and the owner's call: ignored until it is decided whether a tangent
-/// cut's knife edge builds.
+/// A ring cut whose outer circle is tangent to the block's top and bottom: the two sides it leaves
+/// meet only along lines, a non-manifold result, which the kernel refuses as ZeroThickness at the
+/// tangent lines (the owner's decision, as mainstream mechanical CAD; Onshape builds it).
 #[test]
-#[ignore = "open: whether a tangent cut's knife edge builds (ZeroThickness today)"]
-fn a_ring_cut_tangent_to_two_faces_builds() {
+fn a_ring_cut_tangent_to_two_faces_is_refused_at_the_tangent_lines() {
     use forge_lang::fuzz::{Verdict, judge_built};
     let (v, _) = judge_built(include_str!("kernel_parts/ring_cut_tangent.fg"));
-    assert!(matches!(v, Verdict::Ok), "{v:?}");
+    let Verdict::Refused(why) = &v else {
+        panic!("{v:?}")
+    };
+    assert!(why.contains("ZeroThickness"), "{why}");
+    // the tangent lines: the outer circle's top and bottom, z = 0 and z = 10
+    assert!(
+        why.contains("z: 0") || why.contains("z: 10") || why.contains("z: 9"),
+        "{why}"
+    );
 }
 
 /// Three fillets on exactly written spline walls that the kernel refuses where Onshape rounds them

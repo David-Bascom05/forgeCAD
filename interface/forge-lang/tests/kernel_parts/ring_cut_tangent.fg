@@ -1,7 +1,7 @@
 # A ring (radii 5 and 2) cut through a 10-high block from its side, its outer circle tangent to
-# the block's top and bottom: refused as ZeroThickness at the tangent lines, where Onshape builds a
-# CADFS part (00850232) of this form. A ring of radius 4 builds. Whether a knife edge left by a
-# tangent cut is to build is the owner's call; restated in round numbers.
+# the block's top and bottom: the two sides left meet only along the tangent lines, a non-manifold
+# result, refused as ZeroThickness there (the owner's decision, as mainstream mechanical CAD).
+# Onshape builds a CADFS part (00850232) of this form. A ring of radius 4 builds.
 sketch base(on: xy) {
   o = rect(corner: (0, 0), size: (30, 20))
 }
