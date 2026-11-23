@@ -19,7 +19,7 @@ Add rows; don't rewrite others'.
 | 11 | Unbounded rotary (Pocket NC B, ±9999 on the control) | (C): Penta | `cyclic = true` with the control's range | confirm pending |
 | 12 | Dialects missing: milltronics (9000-DGI / INSPIRE), siemens (SYIL 828D, Grizzly Sinumerik), mach3 (Grizzly G0951), centroid-cnc12 (Avid EX, Sherline Acorn), syntec (Laguna SmartShop), pathpilot, carbide-motion, buildbotics, mach4, masso, centroid-acorn, datron-next, shopbot (OpenSBP, not G-code), roland RML-1/NC, fanuc-lathe-multipath (+ Citizen/Star/Tsugami M-codes) | (C) | findings only; no posts yet (coordinator) | finding |
 | 13 | Manual tool post on a lathe (Sherline 8440, QCTP lathes): `lathe` kind requires a turret; modelled as a 1-station turret | (C) | `[[machine.toolpost]]` (one station, manual change) or turret `stations = 1`, `manual = true` | open |
-| 14 | Control by option: many builders sell one model with Siemens, Fanuc, Heidenhain or Mitsubishi; `control` holds one | (C): Hwacheon, Kafo, Fryer, Johnford | `controls = [...]` (the options) with `control` the default, or one record per control | open |
+| 14 | Control by option: many builders sell one model with Siemens, Fanuc, Heidenhain or Mitsubishi; `control` holds one | (C): Hwacheon, Kafo, Fryer, Johnford | `controls = [...]` (the options) with `control` the default, or one record per control | agreed to propose (coordinator) |
 
 ## Details: MACHINE-LIB C rows (8–12), 2026-11-23
 
