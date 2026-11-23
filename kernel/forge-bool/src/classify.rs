@@ -1458,6 +1458,65 @@ mod tests {
         assert_eq!(ix.classify(Point3::new(10.0, 20.0, 5.0)), Where::On);
         assert_eq!(ix.classify(Point3::new(5.0, 5.0, 2.5)), Where::Inside);
     }
+
+    /// `point_in_face_at` with a hook that declines is `point_in_face`; a hook that answers is
+    /// asked only within its nearest edge's reach, and its answer is the result.
+    #[test]
+    fn point_in_face_at_hook() {
+        let plate = Profile::rectangle(Point2::ORIGIN, 20.0, 20.0, 0);
+        let bodies = [
+            extrude(
+                &Profile {
+                    plane: Frame::WORLD,
+                    loops: vec![plate, Profile::circle(Point2::new(10.0, 10.0), 4.0, 10)],
+                },
+                5.0,
+                1,
+            )
+            .unwrap(),
+            revolve(
+                &Profile {
+                    plane: Frame::WORLD,
+                    loops: vec![Profile::circle(Point2::new(10.0, 0.0), 3.0, 0)],
+                },
+                Y,
+                dmath::TAU,
+                1,
+            )
+            .unwrap(),
+        ];
+        let mut asked = 0;
+        for b in &bodies {
+            let ix = Index::new(b);
+            for f in b.face_ids() {
+                for e in b.edge_ids() {
+                    let e = b.edge(e);
+                    for i in 0..=16 {
+                        let t = e.range.lo + (e.range.hi - e.range.lo) * i as f64 / 16.0;
+                        let q = e.curve.eval(t);
+                        for o in [0.0, 1e-9, -1e-7, 1e-3, -0.5] {
+                            let p = Point3::new(q.x + o, q.y - o, q.z + 0.5 * o);
+                            let want = ix.point_in_face(f, p);
+                            assert_eq!(ix.point_in_face_at(f, p, &|_, _, _| None), want, "{p:?}");
+                            let calls = std::cell::Cell::new(0);
+                            let got = ix.point_in_face_at(f, p, &|_, _, d| {
+                                assert!(d.is_finite() && d >= 0.0, "{d}");
+                                calls.set(calls.get() + 1);
+                                Some(Where::Inside)
+                            });
+                            if calls.get() > 0 {
+                                assert_eq!(got, Where::Inside);
+                                asked += 1;
+                            } else {
+                                assert_eq!(got, want, "{p:?}");
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        assert!(asked > 0);
+    }
 }
 
 #[cfg(test)]
