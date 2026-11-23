@@ -1,6 +1,14 @@
 {"version": "1.3.0",
  "packagesDir": ".lake/packages",
- "packages": [],
+ "packages":
+ [{"type": "path",
+   "scope": "",
+   "name": "winding2d",
+   "manifestFile": "lake-manifest.json",
+   "inherited": false,
+   "dir": "../../winding2d",
+   "copy": false,
+   "configFile": "lakefile.toml"}],
  "name": "forgetext",
  "lakeDir": ".lake",
  "fixedToolchain": false}

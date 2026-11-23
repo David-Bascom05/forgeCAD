@@ -118,12 +118,7 @@ theorem winding_from_any_start (vs : List Pt) (p : Pt) (k : Nat) :
   | zero => rfl
   | succ k ih => simp only [rot]; rw [polyWinding_rot1, ih]
 
-/-- The rule's claim (L3, to be proven): for a simple polygon (no two non-adjacent sides
-meet) and a point off it, the count is 1 or -1 (inside) or 0 (outside), and two points joined by a
-segment missing the polygon count alike. -/
-def WindingIsTopological (simple : List Pt → Prop) (missing : List Pt → Pt → Pt → Prop) : Prop :=
-  ∀ (vs : List Pt) (p q : Pt), simple vs →
-    (∀ w, polyWinding vs p = some w → w = 0 ∨ w = 1 ∨ w = -1) ∧
-    (missing vs p q → polyWinding vs p = polyWinding vs q)
+-- The rule's claim (`WindingIsTopological`) is proven in ForgeText.Topological
+-- (`winding_is_topological`), from verify/winding2d's Jordan theorem.
 
 end ForgeText

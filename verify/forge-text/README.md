@@ -4,7 +4,7 @@
 are each part's contours nested by the winding rule; a glyph's region is the union of its parts'
 (a composite's components), the text's the union of its glyphs', refused where two glyphs meet.
 
-`lean/` (core Lean only; `lake build`, then `lake env lean Axioms.lean`: standard axioms only, no
+`lean/` (core Lean only, requiring verify/winding2d by path; `lake build`, then `lake env lean Axioms.lean`: standard axioms only, no
 `sorry`; CI: .github/workflows/lean-forge-text.yml).
 
 | Name | Status | What it says |
@@ -16,7 +16,8 @@ are each part's contours nested by the winding rule; a glyph's region is the uni
 | `winding_from_any_start` | proven | the crossing count is the polygon's: rotating its vertex list changes nothing |
 | `mem_textRegion` | proven | the text's region is the union of every glyph's parts, in any order |
 | `refuses_meeting` | proven | the check before a text is set (every pair of loops of different glyphs) passing means no two glyphs meet |
-| `WindingIsTopological` | **open** | for a simple polygon the count is ±1 inside, 0 outside, alike along a path missing it (a Jordan-curve theorem) |
+| `winding_is_topological` | proven | for a polygon `Simple` in winding2d's sense, the count off it is 0, 1 or -1, and two points joined by a segment meeting no side count alike: winding2d's `wind_simple_mem` and `wind_eq_of_seg`, through `polyWinding_eq` |
+| `lineCross_eq`, `onSeg_of_within`, `sides_toQ`, `polyWinding_eq` | proven | the bridge: off the polygon, `lineCross` is winding2d's half-open `cross` on the points cast to rationals (its refusal happens only on the side), and the sides are the same, so `polyWinding` is `wind` |
 
 ## Levels (research/PROOF-STANDARD.md)
 
@@ -24,7 +25,20 @@ are each part's contours nested by the winding rule; a glyph's region is the uni
 |---|---|
 | L1 | the specs above: placed outline = the font's curves moved; nesting = the winding rule; a glyph = the union of its parts; refusal iff two glyphs meet. Curves are the spline-spec project's Béziers (control points only here) |
 | L2 | the exact references: the font's own numbers on an integer grid (TrueType integers, halves; CFF 2⁻¹⁶), `orient2d` exact, OpenCascade rebuilding every text part (tools/occt, 11 parts agree) |
-| L3 | proven for every input of the models: `decode_closes`, `winding_from_any_start`, `refuses_meeting`; open: `WindingIsTopological` |
+| L3 | proven for every input of the models: `decode_closes`, `winding_from_any_start`, `refuses_meeting`, `winding_is_topological` |
 | L4 | not yet: the Lean models are written from the Rust. Targets for Aeneas: forge-font's glyf and CFF readers (integer-only), the TrueType `contour` walk, the line crossing (`winding::line` on integers) |
 | L5 | the curve pieces' counts rest on rounding bounds (winding.rs: `m` per split); the line test on forge_math's proven orient2d |
 | L6 | differential in CI: OCCT oracle on text parts, text parts' exact bits pinned native = wasm32, font corruption fuzzing (forge-font, forge-lang fonts.rs) |
+
+## What `winding_is_topological` covers, and what it does not
+
+- verify/winding2d is copied unchanged from claude/repo-review-mbdrlj-winding2d at ae22b628, so the two
+  branches merge it as one file set; forge-text requires it by path (lakefile.toml).
+- It is about polygons: sides that are lines, the line test of forge-sketch's `winding::line`. A
+  glyph's curve pieces are counted by splitting them until their control hulls decide (L5,
+  rounding bounds), which the Lean model does not cover.
+- winding2d's `Simple` asks more than forge-sketch's check: forge-sketch refuses a loop that crosses
+  itself or overlaps itself, but lets one touch itself at a point without crossing, which `Simple`
+  forbids. The shipped faces have no such contour as far as checked: across Latin-1, in Open Sans
+  Regular and Bold and Source Sans 3, no contour repeats a vertex and none has a zero-length side
+  (a touch at the interior of a side is not checked this way).
