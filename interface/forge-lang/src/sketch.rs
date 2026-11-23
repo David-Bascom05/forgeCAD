@@ -564,6 +564,20 @@ impl Sk {
     /// entity's name path, so adding entities elsewhere renames nothing.
     pub fn seg_id(&self, e: EntityId) -> u64 {
         let name = self.ents.iter().find(|x| x.0 == e).map_or("?", |x| x.1.as_str());
+        self.seg_id_of(name)
+    }
+
+    /// `seg_id` for every entity at once: a lookup built once (`seg_id` searches the entities,
+    /// and a profile of every segment of a large sketch was quadratic).
+    fn seg_ids(&self) -> impl Fn(EntityId) -> u64 + '_ {
+        let mut by: std::collections::HashMap<EntityId, &str> = std::collections::HashMap::new();
+        for x in &self.ents {
+            by.entry(x.0).or_insert(x.1.as_str());
+        }
+        move |e| self.seg_id_of(by.get(&e).copied().unwrap_or("?"))
+    }
+
+    fn seg_id_of(&self, name: &str) -> u64 {
         let mut h = 0xcbf2_9ce4_8422_2325u64;
         for b in self.id.bytes().chain(*b"/").chain(name.bytes()) {
             h = (h ^ b as u64).wrapping_mul(0x0100_0000_01b3);
@@ -622,10 +636,11 @@ impl Sk {
                 })?
                 .clone(),
         };
+        let seg_id = self.seg_ids();
         for l in &mut p.loops {
             for g in &mut l.segments {
                 let (piece, e) = (g.1 & PIECE, EntityId(g.1 & !PIECE));
-                g.1 = piece | self.seg_id(e);
+                g.1 = piece | seg_id(e);
             }
         }
         Ok(p)
@@ -635,13 +650,14 @@ impl Sk {
     pub fn profiles(&self, span: Span) -> R<Vec<Profile>> {
         let ps = self.regions(span)?.into_owned();
         const PIECE: u64 = 0xffff << 48;
+        let seg_id = self.seg_ids();
         Ok(ps
             .into_iter()
             .map(|mut p| {
                 for l in &mut p.loops {
                     for g in &mut l.segments {
                         let (piece, e) = (g.1 & PIECE, EntityId(g.1 & !PIECE));
-                        g.1 = piece | self.seg_id(e);
+                        g.1 = piece | seg_id(e);
                     }
                 }
                 p

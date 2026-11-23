@@ -4,6 +4,7 @@
 
 pub mod cdt;
 pub mod mesh;
+pub mod read;
 pub mod stl;
 pub mod tessellate;
 

@@ -378,6 +378,8 @@ pub struct Eval<'s> {
     pub observed: BTreeSet<ParamKey>,
     /// Calls made for the top-level statement being evaluated: its budget.
     calls: usize,
+    /// Expressions being evaluated, one inside the next (`NEST_BUDGET`).
+    nest: usize,
     /// Params read since the last feature was made.
     pub reads: values::Keys,
     /// Measure the part's volume after every feature.
@@ -431,6 +433,8 @@ pub struct Eval<'s> {
     /// The whole run's budget, shared by every evaluation it makes (each component's call, at
     /// any depth): function calls, and component evaluations.
     pub(crate) total: Rc<std::cell::Cell<(usize, usize)>>,
+    /// Statements the whole run has executed, every evaluation's (`STEP_BUDGET`).
+    pub(crate) steps: Rc<std::cell::Cell<u64>>,
     /// How deep in calls this evaluation starts (a component's, its caller's depth).
     pub(crate) depth0: usize,
     /// Each pattern's copied features, by its id in the history: what an anchor on one of its
@@ -458,6 +462,20 @@ pub const TOTAL_COMPONENTS: usize = 2_000;
 
 /// How deep calls may nest (the evaluator's own stack is the limit).
 pub const DEPTH_BUDGET: usize = 128;
+/// How deep expressions may nest in evaluation, calls and all (a parsed one is at most
+/// `syntax::fast::MAX_DEPTH`): within a 2 MB thread stack.
+pub const NEST_BUDGET: usize = 600;
+/// The largest magnitude a number may have, in mm, radians or a count: past it a value is a
+/// file's corruption or a runaway, and the kernel's tolerances and loops mean nothing there.
+pub const MAX_MAGNITUDE: f64 = 1e12;
+/// The largest angle, in radians (some 16 000 turns): within what the sine and cosine reduce exactly.
+pub const MAX_ANGLE: f64 = 1e5;
+/// The most items a range may make.
+pub const MAX_LIST: usize = 1 << 20;
+/// Statements a whole run may execute, loops and calls and components with it.
+pub const STEP_BUDGET: u64 = 10_000_000;
+/// Features one evaluation may make (each kept with its record, sketches too).
+pub const MAX_FEATURES: usize = 20_000;
 
 pub const WORDS: [&str; 6] = ["thru", "thru_all", "next", "X", "Y", "Z"];
 
@@ -494,6 +512,7 @@ impl<'s> Eval<'s> {
             ent_name: None,
             observed: BTreeSet::new(),
             calls: 0,
+            nest: 0,
             reads: values::Keys::new(),
             volumes: false,
             checks: true,
@@ -518,6 +537,7 @@ impl<'s> Eval<'s> {
             comps: vec![],
             comp_path: String::new(),
             total: Default::default(),
+            steps: Default::default(),
             depth0: 0,
             copied: HashMap::new(),
         }
@@ -539,6 +559,7 @@ impl<'s> Eval<'s> {
         c.fns = self.fns.clone();
         c.comp_path = self.comp_path.clone();
         c.total = self.total.clone();
+        c.steps = self.steps.clone();
         c.depth0 = self.depth0 + self.ctx.in_fn;
         // the component definitions above it, as functions are: a block may place them
         for (n, (v, sp)) in &self.scopes[0] {
@@ -1144,6 +1165,21 @@ impl<'s> Eval<'s> {
     }
 
     pub fn stmt(&mut self, s: &Stmt) -> R<()> {
+        // loops in loops can ask for any number of statements, and each feature is kept
+        let n = self.steps.get() + 1;
+        self.steps.set(n);
+        if n > STEP_BUDGET || self.feats.len() > MAX_FEATURES {
+            let (func, budget) = if n > STEP_BUDGET {
+                ("statements", STEP_BUDGET as usize)
+            } else {
+                ("features", MAX_FEATURES)
+            };
+            return Err(Error::Fuel {
+                span: s.span,
+                func: func.into(),
+                budget,
+            });
+        }
         match &s.kind {
             StmtKind::Shared { name, value } | StmtKind::Param { name, value, .. }
                 if crate::builtins::builtin(name).is_some() || crate::builtins::constant(name).is_some() =>
@@ -1589,6 +1625,40 @@ impl<'s> Eval<'s> {
     // ---- expressions -------------------------------------------------------------------------
 
     pub fn expr(&mut self, e: &Expr) -> R<Value> {
+        // the parser bounds one expression's depth; calls nest them, so the evaluation's own
+        // depth is held too (the stack is the limit, and a file can ask for any depth)
+        self.nest += 1;
+        if self.nest > NEST_BUDGET {
+            self.nest -= 1;
+            return Err(Error::Fuel {
+                span: e.span,
+                func: "nested evaluation".into(),
+                budget: NEST_BUDGET,
+            });
+        }
+        let r = self.expr_in(e);
+        self.nest -= 1;
+        // no part has such a number: refused where it arises, before the kernel sees it
+        // (NaN is past every bound: `is_finite` first)
+        let most = if let Ok(Value::Num(n)) = &r
+            && n.dim == Dim::Angle
+        {
+            MAX_ANGLE
+        } else {
+            MAX_MAGNITUDE
+        };
+        if let Ok(Value::Num(n)) = &r
+            && (!n.v.is_finite() || n.v.abs() > most)
+        {
+            return Err(Error::TooLarge {
+                span: e.span,
+                value: n.v,
+            });
+        }
+        r
+    }
+
+    fn expr_in(&mut self, e: &Expr) -> R<Value> {
         match &e.kind {
             ExprKind::Num(v, u) => Ok(Value::Num(match u {
                 Unit::Deg => Num::konst(v.to_radians(), Dim::Angle),
@@ -1680,7 +1750,14 @@ impl<'s> Eval<'s> {
                         return Err(Error::NotWhole { span: sp, value: x.v });
                     }
                 }
+                // (bounds within MAX_MAGNITUDE: `expr` refused any past it)
                 let (a0, b0) = (a.v.round() as i64, b.v.round() as i64 + i64::from(*inclusive));
+                if b0.saturating_sub(a0) > MAX_LIST as i64 {
+                    return Err(Error::TooLarge {
+                        span: e.span,
+                        value: (b0 - a0) as f64,
+                    });
+                }
                 // a range is control: its bounds are observed (however many times it runs, none
                 // too), its values constants, no data's provenance
                 self.observe(&a);

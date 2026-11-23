@@ -1074,6 +1074,7 @@ impl Build<'_, '_> {
             }
             loops.push(out);
         }
+
         self.p.faces.push(PFace {
             surface,
             same_sense: same != flip,
@@ -1404,6 +1405,15 @@ pub(crate) fn finish(
 ) -> Result<(Body, Option<forge_topo::mass::MassProps>), String> {
     if proto.faces.is_empty() {
         return Err("a solid with no faces".into());
+    }
+    // a face goes along an edge at most once each way (a seam: once each way); loops that repeat
+    // an edge are no boundary, and meshing them cut the repeats finer until memory ran out
+    for f in &proto.faces {
+        let mut used: Vec<(usize, bool)> = f.loops.iter().flatten().copied().collect();
+        used.sort_unstable();
+        if used.windows(2).any(|w| w[0] == w[1]) {
+            return Err("a face's loops go along one edge twice the same way".into());
+        }
     }
     measure_gaps(&proto, stats);
     let budget = forge_geom::budget::scoped(lim.max_evals);

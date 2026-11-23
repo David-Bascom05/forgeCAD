@@ -388,6 +388,7 @@ fn file_call(ev: &mut Eval, file: &str, key: &str, given: &[(String, Value, Stri
     sub.asm = Some(Doc::default());
     sub.comp_path = format!("{}{stem}?/", ev.comp_path);
     sub.total = ev.total.clone();
+    sub.steps = ev.steps.clone();
     let mut body = vec![];
     for st in &prog {
         match &st.kind {
@@ -499,6 +500,7 @@ fn foreign_call(
     scope.use_chain = ev.use_chain.clone();
     scope.asm = Some(Doc::default());
     scope.total = ev.total.clone();
+    scope.steps = ev.steps.clone();
     scope.run(&component_scope(&prog, name));
     // the file's shared params are its own (`STEM.W`), never this document's of the same name
     for p in scope.shared.iter_mut() {

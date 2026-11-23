@@ -75,6 +75,8 @@ struct Mesh {
     stack: Vec<(u32, usize)>,
     /// The constraint the last `insert_constraint` to fail ran into.
     hit: (u32, u32),
+    /// Triangles `locate` has stepped through, for the reading of a file's budget.
+    walked: u64,
 }
 
 enum Location {
@@ -120,6 +122,7 @@ impl Mesh {
         let mut t = self.last;
         let limit = 4 * self.tris.len() + 64;
         for step in 0..limit {
+            self.walked += 1;
             let tri = self.tris[t as usize];
             let mut moved = false;
             for k in 0..3 {
@@ -136,6 +139,7 @@ impl Mesh {
             }
         }
         // The visibility walk can cycle in a constrained triangulation; fall back to a scan.
+        self.walked += self.tris.len() as u64;
         for t in 0..self.tris.len() as u32 {
             let tri = self.tris[t as usize];
             if (0..3).all(|i| orient2d(self.p(tri.v[nx(i)]), self.p(tri.v[pv(i)]), p) >= 0.0) {
@@ -160,12 +164,17 @@ impl Mesh {
         Location::Inside(t)
     }
 
-    fn insert(&mut self, v: u32, loc: Location) {
+    fn insert(&mut self, v: u32, loc: Location) -> Result<(), CdtError> {
         match loc {
             Location::Inside(t) => self.split_inside(t, v),
+            // on the super triangle's own side: only where rounding left no room round the points
+            Location::OnEdge(t, i) if self.tris[t as usize].n[i] == NONE => {
+                return Err(CdtError::Internal("a point on the hull"));
+            }
             Location::OnEdge(t, i) => self.split_edge(t, i, v),
-            Location::Vertex(_) => unreachable!("caller rejects duplicates"),
+            Location::Vertex(_) => return Err(CdtError::Internal("a point inserted twice")),
         }
+        Ok(())
     }
 
     fn split_inside(&mut self, t: u32, p: u32) {
@@ -581,7 +590,7 @@ impl Mesh {
                             let w = self.pts.len() as u32;
                             self.pts.push(x);
                             self.vtri.push(0);
-                            self.insert(w, loc);
+                            self.insert(w, loc)?;
                             w
                         }
                     };
@@ -622,6 +631,14 @@ impl Mesh {
         let loc = self
             .locate(p)
             .ok_or(CdtError::Internal("point location failed"))?;
+        // each point's walk is counted: on a file's face whose edges are far from its surface the
+        // walks grow with the mesh, and such a face took minutes
+        if self.walked > 4096 {
+            forge_geom::budget::spend_many(std::mem::take(&mut self.walked));
+            if forge_geom::budget::over() {
+                return Err(CdtError::Internal("the face would take too long"));
+            }
+        }
         let near = |w: u32, mesh: &Mesh| (mesh.p(w) - p).length_sq() <= eps * eps;
         let near_constraint = |t: u32, mesh: &Mesh| {
             let tt = mesh.tris[t as usize];
@@ -636,6 +653,7 @@ impl Mesh {
                     || near_constraint(*t, self)
                     || self.tris[*t as usize].v.iter().any(|&w| near(w, self))
             }
+            Location::OnEdge(t, i) if self.tris[*t as usize].n[*i] == NONE => true,
             Location::OnEdge(t, i) => {
                 let tt = self.tris[*t as usize];
                 let u = tt.n[*i];
@@ -654,7 +672,7 @@ impl Mesh {
             let v = self.pts.len() as u32;
             self.pts.push(p);
             self.vtri.push(0);
-            self.insert(v, loc);
+            self.insert(v, loc)?;
         }
         Ok(())
     }
@@ -891,6 +909,18 @@ pub fn triangulate_within(
     let eps = 1e-12 * size;
     let c = Point2::new(0.5 * (lo.x + hi.x), 0.5 * (lo.y + hi.y));
     let m = 100.0 * size;
+    // the super triangle must hold every point with room to spare: a box far from the origin
+    // against its size (a file's number) rounds that room away, and its corners to infinity
+    let (s0, s1) = (c.x - m, c.x + m);
+    let (s2, s3) = (c.y - m, c.y + m);
+    if !(s0.is_finite() && s1.is_finite() && s2.is_finite() && s3.is_finite())
+        || !(s0 < lo.x - size && s1 > hi.x + size && s2 < lo.y - size && s3 > hi.y + size)
+        || (c.x.abs().max(c.y.abs())) > 1e12 * size
+    {
+        return Err(CdtError::Internal(
+            "points too far from the origin for their spread",
+        ));
+    }
 
     let kept: Vec<Point2> = interior
         .iter()
@@ -915,6 +945,7 @@ pub fn triangulate_within(
         inside: Vec::new(),
         stack: Vec::new(),
         hit: (NONE, NONE),
+        walked: 0,
     };
     let ext = |v: u32| v.wrapping_sub(SUPER);
     // a tangled boundary's second point in one place stands for the first
@@ -936,7 +967,7 @@ pub fn triangulate_within(
                     b: i as u32,
                 });
             }
-            loc => mesh.insert(v, loc),
+            loc => mesh.insert(v, loc)?,
         }
     }
     if tangled {
@@ -989,6 +1020,8 @@ pub fn triangulate_within(
 
     // interior points go in only where they land inside, clear of the boundary
     let kept: Vec<Point2> = brio_order(&kept, lo, size).into_iter().map(|i| kept[i]).collect();
+    // each point's walk is counted: on a file's face whose edges are far from its surface the
+    // walks grow with the mesh, and a face of a few hundred thousand points takes minutes
     for &p in &kept {
         mesh.insert_interior(p, eps)?;
     }

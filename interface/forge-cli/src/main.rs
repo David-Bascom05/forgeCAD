@@ -24,6 +24,7 @@ fn usage() -> ExitCode {
          forgecad release F REASON [--approver NAME] [--numeric] | releases F | regenerate_release F REV   (JSON; FORGECAD_AGENT names an agent)\n       \
          forgecad serve | mcp [--root DIR] [--writable]   (JSON-RPC / MCP on stdio, parts under DIR, default .; edits only if --writable)\n       \
          forgecad import FILE.FCStd [-o DIR] [--json]   (each body a part file DIR/<file>.<body>.fg)\n       \
+         forgecad mesh FILE.stl|obj|3mf [--json]        (a mesh read and measured: not a B-rep)\n       \
          forgecad demo <out.stl> [chord-mm] | preview <out.json>\nthe language: AGENTS.md, forgecad help forge"
     );
     ExitCode::from(2)
@@ -207,6 +208,7 @@ fn main() -> ExitCode {
             }
         }
         Some("import") if args.len() >= 3 => import(&args[2..]),
+        Some("mesh") if args.len() >= 3 => mesh(&args[2..]),
         Some("help" | "--help" | "-h") => {
             println!("{}", forge_lang::help(&args[2..].join(" ")));
             ExitCode::SUCCESS
@@ -227,6 +229,84 @@ fn quoted(s: &str) -> String {
         }
     }
     o + "\""
+}
+
+/// A mesh file read and measured: triangles, whether it is closed, its volume, area and box. A
+/// mesh is for reference: nothing is built on it.
+fn mesh(argv: &[String]) -> ExitCode {
+    let json = argv.iter().any(|a| a == "--json");
+    let Some(file) = argv.iter().find(|a| !a.starts_with("--")) else {
+        return usage();
+    };
+    let ext = std::path::Path::new(file)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    let read = std::fs::read(file).map_err(|e| e.to_string()).and_then(|d| {
+        match ext.as_str() {
+            "stl" => forge_mesh::read::stl(&d),
+            "obj" => forge_mesh::read::obj(&d),
+            "3mf" => forge_import::threemf::read(&d),
+            _ => return Err(format!("{ext:?}: a mesh is .stl, .obj or .3mf")),
+        }
+        .map_err(|e| e.to_string())
+    });
+    let m = match read {
+        Ok(m) => m,
+        Err(e) => {
+            if json {
+                println!("{{\"file\":{},\"error\":{}}}", quoted(file), quoted(&e));
+            } else {
+                eprintln!("{file}: {e}");
+            }
+            return ExitCode::FAILURE;
+        }
+    };
+    let s = forge_mesh::read::summary(&m);
+    let num = |x: f64| {
+        if x.is_finite() {
+            format!("{x}")
+        } else {
+            "null".into()
+        }
+    };
+    if json {
+        println!(
+            "{{\"file\":{},\"kind\":\"mesh\",\"brep\":false,\"triangles\":{},\"vertices\":{},\"closed\":{},\"open_edges\":{},\"volume\":{},\"area\":{},\"box\":[{},{},{},{},{},{}]}}",
+            quoted(file),
+            s.triangles,
+            s.vertices,
+            s.closed,
+            s.open_edges,
+            s.volume.map_or("null".into(), num),
+            num(s.area),
+            num(s.bbox.0[0]),
+            num(s.bbox.0[1]),
+            num(s.bbox.0[2]),
+            num(s.bbox.1[0]),
+            num(s.bbox.1[1]),
+            num(s.bbox.1[2])
+        );
+    } else {
+        println!(
+            "{file}: a mesh (triangles, not a B-rep: for reference and measurement), {} triangles, {} vertices",
+            s.triangles, s.vertices
+        );
+        match s.volume {
+            Some(v) => println!("  closed; volume {v:.6} mm3"),
+            None => println!(
+                "  open ({} edges not shared by two triangles): no volume",
+                s.open_edges
+            ),
+        }
+        println!("  area {:.6} mm2", s.area);
+        println!(
+            "  box ({:.4}, {:.4}, {:.4}) to ({:.4}, {:.4}, {:.4}) mm",
+            s.bbox.0[0], s.bbox.0[1], s.bbox.0[2], s.bbox.1[0], s.bbox.1[1], s.bbox.1[2]
+        );
+    }
+    ExitCode::SUCCESS
 }
 
 /// Another system's file as part files, one a body: a line each says what became of it.

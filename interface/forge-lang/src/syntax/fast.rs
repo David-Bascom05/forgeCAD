@@ -218,6 +218,7 @@ pub(super) fn parse(toks: Vec<Tok>, la: Vec<u8>) -> Result<Vec<Stmt>, Error> {
         las: la,
         k: 0,
         miss: None,
+        deep: 0,
     };
     match p.program() {
         Ok(s) => Ok(s),
@@ -243,9 +244,29 @@ pub(super) struct Fast {
     /// The lookahead: `las[k]`.
     la: u8,
     miss: Option<Miss>,
+    /// How deep the tree being built goes where the parse is now: a level for each nested
+    /// expression, block and prefix operator, and for each link of a chain (`a + b + ..` nests to
+    /// the left). Evaluation and drop recurse that deep, so past `MAX_DEPTH` a file is refused.
+    deep: u32,
 }
 
+/// Deeper than any program written by hand or made by a tool, shallow enough for evaluation on a
+/// thread's 2 MB stack.
+pub(super) const MAX_DEPTH: u32 = 400;
+
 impl Fast {
+    /// One level deeper, or the refusal past `MAX_DEPTH`.
+    #[inline]
+    fn deeper(&mut self) -> F<()> {
+        self.deep += 1;
+        if self.deep > MAX_DEPTH {
+            return Err(Box::new(Error::Syntax(SyntaxError::TooDeep {
+                span: self.span(),
+            })));
+        }
+        Ok(())
+    }
+
     #[inline]
     fn span(&self) -> Span {
         self.toks[self.k].span
@@ -260,7 +281,8 @@ impl Fast {
     #[cold]
     fn stop(&self, stop: u16) -> Box<Error> {
         let m = self.miss.unwrap_or(Miss {
-            set: 1 << stop,
+            // a nonterminal past the terminals' 64 has no bit: the words come from `what`
+            set: 1u64.checked_shl(u32::from(stop)).unwrap_or(0),
             end: false,
             begin: false,
         });
@@ -351,9 +373,11 @@ impl Fast {
     fn block(&mut self, fk: u64) -> F<Vec<Stmt>> {
         self.pick(BLOCK, fk)?;
         self.shift(t::LBRACE)?;
+        self.deeper()?;
         self.seps(after(P::BlockLbrace, 1, fk))?;
         let s = self.stmts(after(P::BlockLbrace, 2, fk))?;
         self.shift(t::RBRACE)?;
+        self.deep -= 1;
         Ok(s)
     }
 
@@ -837,6 +861,13 @@ impl Fast {
     // ---- expressions ------------------------------------------------------------------------
 
     pub(super) fn expr(&mut self, fk: u64) -> F<Expr> {
+        self.deeper()?;
+        let e = self.expr_in(fk)?;
+        self.deep -= 1;
+        Ok(e)
+    }
+
+    fn expr_in(&mut self, fk: u64) -> F<Expr> {
         self.pick(EXPR, fk)?;
         let a = self.or(after(P::ExprOr, 0, fk))?;
         let fk = after(P::ExprOr, 1, fk);
@@ -908,11 +939,14 @@ impl Fast {
 
     #[inline]
     fn orrest(&mut self, fk: u64, mut a: Expr) -> F<Expr> {
+        let d = self.deep;
         while self.pick(ORREST, fk)? == P::OrrestOr {
             self.take()?;
+            self.deeper()?;
             let b = self.and(after(P::OrrestOr, 1, fk))?;
             a = Self::chain(a, BinOp::Or, b);
         }
+        self.deep = d;
         Ok(a)
     }
 
@@ -924,11 +958,14 @@ impl Fast {
 
     #[inline]
     fn andrest(&mut self, fk: u64, mut a: Expr) -> F<Expr> {
+        let d = self.deep;
         while self.pick(ANDREST, fk)? == P::AndrestAnd {
             self.take()?;
+            self.deeper()?;
             let b = self.not(after(P::AndrestAnd, 1, fk))?;
             a = Self::chain(a, BinOp::And, b);
         }
+        self.deep = d;
         Ok(a)
     }
 
@@ -941,7 +978,9 @@ impl Fast {
             return self.cmprest(after(P::CmpRange, 1, fk), a);
         }
         let s = self.take()?;
+        self.deeper()?;
         let e = self.not(after(P::NotNot, 1, fk))?;
+        self.deep -= 1;
         let span = s.to(e.span);
         Ok(Expr {
             kind: ExprKind::Not(Box::new(e)),
@@ -951,7 +990,9 @@ impl Fast {
 
     #[inline]
     fn cmprest(&mut self, fk: u64, mut a: Expr) -> F<Expr> {
+        let d = self.deep;
         while self.pick(CMPREST, fk)? == P::CmprestRelop {
+            self.deeper()?;
             let op = match self.pick(RELOP, after(P::CmprestRelop, 0, fk))? {
                 P::RelopEqeq => BinOp::Eq,
                 P::RelopNe => BinOp::Ne,
@@ -964,6 +1005,7 @@ impl Fast {
             let b = self.range(after(P::CmprestRelop, 1, fk))?;
             a = Self::chain(a, op, b);
         }
+        self.deep = d;
         Ok(a)
     }
 
@@ -1002,14 +1044,19 @@ impl Fast {
 
     #[inline]
     fn addrest(&mut self, fk: u64, mut a: Expr) -> F<Expr> {
+        let d = self.deep;
         loop {
             let p = self.pick(ADDREST, fk)?;
             let op = match p {
                 P::AddrestPlus => BinOp::Add,
                 P::AddrestMinus => BinOp::Sub,
-                _ => return Ok(a),
+                _ => {
+                    self.deep = d;
+                    return Ok(a);
+                }
             };
             self.take()?;
+            self.deeper()?;
             let b = self.mul(after(P::AddrestPlus, 1, fk))?;
             a = Self::chain(a, op, b);
         }
@@ -1023,14 +1070,19 @@ impl Fast {
 
     #[inline]
     fn mulrest(&mut self, fk: u64, mut a: Expr) -> F<Expr> {
+        let d = self.deep;
         loop {
             let p = self.pick(MULREST, fk)?;
             let op = match p {
                 P::MulrestStar => BinOp::Mul,
                 P::MulrestSlash => BinOp::Div,
-                _ => return Ok(a),
+                _ => {
+                    self.deep = d;
+                    return Ok(a);
+                }
             };
             self.take()?;
+            self.deeper()?;
             let b = self.unary(after(P::MulrestStar, 1, fk))?;
             a = Self::chain(a, op, b);
         }
@@ -1045,7 +1097,9 @@ impl Fast {
             return self.powtail(after(P::PowerPostfix, 1, fk), a);
         }
         let s = self.take()?;
+        self.deeper()?;
         let e = self.unary(after(P::UnaryMinus, 1, fk))?;
+        self.deep -= 1;
         let span = s.to(e.span);
         Ok(Expr {
             kind: ExprKind::Neg(Box::new(e)),
@@ -1060,7 +1114,9 @@ impl Fast {
             return Ok(a);
         }
         self.take()?;
+        self.deeper()?;
         let e = self.unary(after(P::PowtailCaret, 1, fk))?;
+        self.deep -= 1;
         let span = a.span.to(e.span);
         Ok(Expr {
             kind: ExprKind::Bin(BinOp::Pow, Box::new(a), Box::new(e)),
@@ -1079,8 +1135,14 @@ impl Fast {
         let mut a = self.atom(after(P::PostfixAtom, 0, fk))?;
         let fk = after(P::PostfixAtom, 1, fk);
         let lo = a.span.lo;
+        let d = self.deep;
         loop {
             let q = self.pick(POSTREST, fk)?;
+            if q != P::PostrestLparen && q != P::PostrestDot && q != P::PostrestLbrack {
+                self.deep = d;
+                return Ok(a);
+            }
+            self.deeper()?;
             let (kind, hi) = match q {
                 P::PostrestLparen => {
                     self.take()?;

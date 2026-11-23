@@ -87,6 +87,13 @@ pub fn sin_cos(x: f64) -> (f64, f64) {
     if x.abs() < 1.0 / 134_217_728.0 {
         return (x, 1.0);
     }
+    // rem_pio2's three-part pi/2 holds to 2^20 pi/2; past it (no part's angle, a file's number)
+    // the turn is taken off whole first, so a sine and cosine are still a unit pair
+    let x = if x.abs() < 1_647_099.0 {
+        x
+    } else {
+        x % core::f64::consts::TAU
+    };
     let (n, y0, y1) = rem_pio2(x);
     let (s, c) = (k_sin(y0, y1), k_cos(y0, y1));
     match n & 3 {

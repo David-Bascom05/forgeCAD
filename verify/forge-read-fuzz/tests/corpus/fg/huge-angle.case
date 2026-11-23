@@ -1,0 +1,7 @@
+# rotate by -1e308 deg: sin and cos past their reduction's range, not a unit pair, and the frame's
+# `expect("rotation keeps length")` panicked. Angles past 1e5 rad are refused; sin_cos takes whole
+# turns off a huge argument first.
+from: research/thread-math/stress/taper-coil.fg
+replace: by: 90deg
+with: by: -1.E308deg
+expect: refused

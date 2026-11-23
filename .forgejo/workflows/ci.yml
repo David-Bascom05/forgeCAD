@@ -80,6 +80,39 @@ jobs:
       - name: test (wasm, same arithmetic as the browser)
         run: sh tools/test-wasm.sh
 
+  # Every file reader fed mutated files (verify/forge-read-fuzz): on PRs a short run, nightly a
+  # longer one; any panic, hang, abort or runaway fails it and its inputs are kept. The long runs
+  # and how to replay a finding: research/import/robustness.md.
+  fuzz:
+    needs: gate
+    if: github.event_name != 'push'
+    runs-on: members
+    env:
+      CARGO_TERM_COLOR: always
+      CARGO_INCREMENTAL: "0"
+    steps:
+      - name: checkout
+        run: |
+          git init -q .
+          for i in 1 2 3 4 5; do git fetch -q --depth=1 "https://code.commonty.org/${{ github.repository }}.git" "${{ github.sha }}" && break; sleep $((i * 15)); done
+          git checkout -q FETCH_HEAD
+      - name: rust
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain none
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      - name: the corpus of what was found
+        run: cargo test --release -p forge-read-fuzz
+      - name: fuzz every reader (4 min on a PR, 20 nightly)
+        run: |
+          secs=240; if [ "${{ github.event_name }}" = schedule ]; then secs=1200; fi
+          cargo build -q --profile fuzz -p forge-read-fuzz
+          seed=$(date +%s)
+          echo "seed $seed (replay: read-fuzz run TARGET --seed $seed, or replay TARGET target/read-fuzz/*.bin)"
+          target/fuzz/read-fuzz run all --seconds $secs --jobs 4 --seed $seed --timeout-ms 30000 --mem-mb 3072
+      - name: findings
+        if: failure()
+        run: for f in target/read-fuzz/*.txt; do echo "== $f"; cat "$f"; done
+
   # forge-render is its own workspace: wgpu stays out of every job above. The GPU tests skip on a runner with no GPU.
   render:
     needs: gate

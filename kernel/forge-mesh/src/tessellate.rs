@@ -671,6 +671,8 @@ pub fn tessellate_tolerant(body: &Body, q: &Quality) -> Result<TriMesh, TessErro
     if body.dead > 0 {
         return tessellate_tolerant(&body.compact(), q);
     }
+    // a file's body is drawn within a file's budget, the import's own where one is live
+    let _b = (!forge_geom::budget::limited()).then(|| forge_geom::budget::scoped(forge_geom::budget::FILE));
     match cut_finer(body, q) {
         Err((e, finer, pins)) if e.tangled() => tessellate_with(body, q, &finer, &pins, true),
         r => r.map_err(|x| x.0),

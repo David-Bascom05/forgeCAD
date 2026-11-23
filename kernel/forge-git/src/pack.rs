@@ -252,7 +252,12 @@ pub fn apply_delta(base: &[u8], delta: &[u8]) -> Result<Vec<u8>, Error> {
         return Err(Error::Corrupt("delta base size"));
     }
     let n = varint(delta, &mut i)?;
-    let mut out = Vec::with_capacity(n);
+    // the size is the file's word: room for no more than its ops can make (each op is at least a
+    // byte and copies at most 0xffffff), so a lying size costs nothing up front
+    let most = (delta.len() - i)
+        .saturating_mul(0x00ff_ffff)
+        .saturating_add(delta.len());
+    let mut out = Vec::with_capacity(n.min(most).min(base.len().saturating_add(delta.len())));
     while i < delta.len() {
         let c = delta[i];
         i += 1;
@@ -300,6 +305,13 @@ pub fn apply_delta(base: &[u8], delta: &[u8]) -> Result<Vec<u8>, Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_delta_that_lies_about_its_size_costs_nothing_up_front() {
+        // a result of 2^50 bytes declared, nothing to make it: refused, no allocation of that size
+        let delta = [0, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x01, b'x'];
+        assert!(apply_delta(b"", &delta).is_err());
+    }
 
     #[test]
     fn delta_copies_and_inserts() {
