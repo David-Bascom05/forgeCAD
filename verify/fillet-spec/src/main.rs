@@ -85,6 +85,33 @@ fn line(src: &str, body: &Body, e: EdgeId, r: f64) -> String {
     out
 }
 
+/// The faces sharing an edge with either of edge `e`'s two faces (not those two), each with whether
+/// its material lies on its surface's natural-normal side's back (`sense`, the face's same_sense).
+fn neighbours(body: &Body, e: EdgeId) -> String {
+    let x = body.edge(e);
+    let sup: Vec<_> = x.coedges.iter().map(|&c| body.coedge_face(c)).collect();
+    let mut out: Vec<forge_topo::FaceId> = Vec::new();
+    for &f in &sup {
+        for &lp in &body.face(f).loops {
+            for c in body.lp(lp).coedges() {
+                for &o in &body.edge(body.coedge(c).edge).coedges {
+                    let g = body.coedge_face(o);
+                    if !sup.contains(&g) && !out.contains(&g) {
+                        out.push(g);
+                    }
+                }
+            }
+        }
+    }
+    out.iter()
+        .map(|&g| {
+            let s = surf(&body.face(g).surface);
+            format!("{{\"s\":{s},\"sense\":{}}}", body.face(g).same_sense)
+        })
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
 fn blend(body: &Body, e: EdgeId, b: &Blend, springs: &[Curve; 2]) -> String {
     let x = body.edge(e);
     let ts: Vec<f64> = [0.1, 0.5, 0.9]
@@ -93,7 +120,7 @@ fn blend(body: &Body, e: EdgeId, b: &Blend, springs: &[Curve; 2]) -> String {
         .collect();
     let pts = |c: &Curve| ts.iter().map(|&t| p(c.eval(t))).collect::<Vec<_>>().join(",");
     format!(
-        "\"a\":{},\"b\":{},\"da\":{},\"db\":{},\"radius\":{},\"surf\":{},\"spine\":{},\"centres\":[{}],\"springs\":[[{}],[{}]]",
+        "\"a\":{},\"b\":{},\"da\":{},\"db\":{},\"radius\":{},\"surf\":{},\"spine\":{},\"centres\":[{}],\"springs\":[[{}],[{}]],\"nbrs\":[{}]",
         surf(&b.a),
         surf(&b.b),
         d(b.da),
@@ -103,7 +130,8 @@ fn blend(body: &Body, e: EdgeId, b: &Blend, springs: &[Curve; 2]) -> String {
         spine(&b.spine),
         pts(&b.spine),
         pts(&springs[0]),
-        pts(&springs[1])
+        pts(&springs[1]),
+        neighbours(body, e)
     )
 }
 
