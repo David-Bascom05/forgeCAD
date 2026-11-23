@@ -52,6 +52,8 @@ elab "#standard_axioms " ids:ident* : command => do
   Sheet.Region.carrier_spec Sheet.Region.vrep_order Sheet.Region.vrep_class
   Sheet.Region.conn_move Sheet.Region.spreadOk_spec Sheet.Region.box_spread
   Sheet.Region.inPoly_rotate Sheet.Region.crosses_reverse Sheet.Region.inPoly_translate
+  Sheet.Region.side_swap Sheet.Region.side_ne Sheet.Region.sign_ev Sheet.Region.side_move
+  Sheet.Region.disc_move
   Sheet.Region.inLoop_lines Sheet.Region.owner_unique Sheet.Region.owner_spec
   -- the bend simulator's branch and bound
   Sheet.BB.Encl.comp Sheet.BB.Ival.addOut_mem Sheet.BB.lipschitz_lower Sheet.BB.search_sound

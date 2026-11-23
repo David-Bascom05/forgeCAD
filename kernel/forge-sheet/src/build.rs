@@ -27,6 +27,7 @@ use forge_geom::wrap::{Flat, Wrap};
 use forge_geom::{Circle, Curve, CurveGeom, Cylinder, Line, Plane, Surface, SurfaceGeom};
 use forge_math::{Frame, Interval, Point2, Point3, Vec2, Vec3, dmath, tol};
 use forge_ops::{ProfileLoop, Segment};
+use forge_sheet_core::place;
 use forge_topo::{Body, EdgeId, Name, VertexId};
 use std::collections::HashMap;
 
@@ -64,28 +65,45 @@ impl Rigid {
     fn y(&self) -> Vec2 {
         Vec2::new(-self.x.y, self.x.x)
     }
+    // the motions are forge-sheet-core's `place` (proven op for op, verify/aeneas/forge-sheet-core:
+    // L4, and on the f64 bridge within their forward-error bounds of the exact motions)
+    fn place(&self) -> place::Place {
+        place::Place {
+            ox: self.o.x,
+            oy: self.o.y,
+            xx: self.x.x,
+            xy: self.x.y,
+        }
+    }
+    fn of(m: place::Place) -> Rigid {
+        Rigid {
+            o: Point2::new(m.ox, m.oy),
+            x: Vec2::new(m.xx, m.xy),
+        }
+    }
     fn apply(&self, p: Point2) -> Point2 {
-        self.o + self.x * p.x + self.y() * p.y
+        let (x, y) = place::apply(self.place(), p.x, p.y);
+        Point2::new(x, y)
     }
     fn vec(&self, v: Vec2) -> Vec2 {
-        self.x * v.x + self.y() * v.y
+        let (x, y) = place::vec(self.place(), v.x, v.y);
+        Vec2::new(x, y)
     }
     fn local(&self, p: Point2) -> Point2 {
-        let d = p - self.o;
-        Point2::new(d.dot(self.x), d.dot(self.y()))
+        let (x, y) = place::local(self.place(), p.x, p.y);
+        Point2::new(x, y)
     }
     fn then(&self, inner: &Rigid) -> Rigid {
-        Rigid {
-            o: self.apply(inner.o),
-            x: self.vec(inner.x),
-        }
+        Rigid::of(place::then(self.place(), inner.place()))
     }
     fn inverse(&self) -> Rigid {
-        let o = self.local(Point2::ORIGIN);
-        Rigid {
-            o,
-            x: Vec2::new(self.x.x, -self.x.y),
-        }
+        Rigid::of(place::inverse(self.place()))
+    }
+    /// A joint frame: origin p0, x axis the right of p0 -> p1 (out of the wall, across the joint),
+    /// as forge-sheet-core's `place::joint` builds it (proven within its bound of the exact unit
+    /// frame).
+    fn joint(p0: Point2, p1: Point2) -> Rigid {
+        Rigid::of(place::joint(p0.x, p0.y, p1.x, p1.y).0)
     }
     fn angle(&self) -> f64 {
         dmath::atan2(self.x.y, self.x.x)
@@ -160,18 +178,18 @@ impl Geo {
                 theta,
                 ba,
             } => {
+                // the fold's arithmetic is forge-sheet-core's (proven: RefineZone.lean zone_spec)
                 let (s, c) = dmath::sin_cos(phi(p.x, rn, theta, ba));
-                let r = rho0 + sigma * w;
-                axis.point_to_world(Point3::new(r * c, r * s, -sigma * p.y))
+                let (x, y, z) = forge_sheet_core::fold::round_local(rho0, sigma, s, c, p.y, w);
+                axis.point_to_world(Point3::new(x, y, z))
             }
         }
     }
 }
 
-/// The angle at u across a bend; its far tangent line is the bend's angle exactly.
-fn phi(u: f64, rn: f64, theta: f64, ba: f64) -> f64 {
-    if u == ba { theta } else { u / rn }
-}
+/// The angle at u across a bend; its far tangent line is the bend's angle exactly
+/// (forge-sheet-core's `fold::phi`, proven).
+use forge_sheet_core::fold::phi;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Kind {
@@ -185,6 +203,15 @@ struct LoopData {
     comp: usize,
     bounds: Vec<Bound>,
     kinds: Vec<Kind>,
+}
+
+/// The first tangent-line bound with no twin across its line, if one is.
+fn untwinned(loops: &[LoopData], twin: &HashMap<(usize, usize), (usize, usize)>) -> Option<(usize, usize)> {
+    loops.iter().enumerate().find_map(|(l, ld)| {
+        (0..ld.kinds.len())
+            .find(|&i| matches!(ld.kinds[i], Kind::Tangent(..)) && !twin.contains_key(&(l, i)))
+            .map(|i| (l, i))
+    })
 }
 
 struct StripData {
@@ -1116,7 +1143,13 @@ fn build_once(
             let (p0, p1) = straight(&sheet.walls[wi], j.on_a).map_err(|e| segment_error(j.a, j.on_a, e))?;
             let (q0, q1) = straight(&sheet.walls[bi], j.on_b).map_err(|e| segment_error(j.b, j.on_b, e))?;
             let (la, lb) = (p0.distance(p1), q0.distance(q1));
-            if (la - lb).abs() > TOL || la <= TOL {
+            // one mold line, by the one rule (research/kernel-audit/README.md §6.1, vertex
+            // classes): the joint lays both walls' mold lines from one start along one line, so
+            // their far ends lie |la - lb| apart, one point (`near`, squared) when within the
+            // tolerance, and the two are one segment, the least-named wall's (a's: la). Further
+            // apart they are two segments, which no fold joins: refused
+            let d = la - lb;
+            if d * d > TOL * TOL || la <= TOL {
                 return Err(SheetError::JointLengths {
                     feature,
                     joint: j.id,
@@ -1136,6 +1169,30 @@ fn build_once(
                     limit: top - tol::ANGULAR,
                 });
             }
+            // the hairpin rule: an ordinary bend's setback ρ tan(θ/2), computed as ρ s / (1 + c)
+            // from dmath's sin_cos, is within B = |ρ|(4ε + 4η)/C² + 10u|ρ|/C + 3η/C + η of the
+            // exact one, C = 1 + cos θ (verify/aeneas/forge-sheet-core setback_spec). Where that
+            // bound cannot be held to the tolerance the setback is not known to it: refused.
+            // Evaluated against acceptance: a lower bound on C, terms that over-cover B's, and half
+            // the tolerance for the bound's own rounding
+            if hem.is_none() {
+                let rho = reference_radius(&sheet.gauge, radius, angle).abs();
+                let (_, c) = dmath::sin_cos(theta);
+                let tiny = 1.0 / (1u64 << 50) as f64;
+                let k = 2.0 * tiny; // 2^-49
+                let cl = (1.0 + c) - tiny;
+                if cl <= tiny || rho * k / (cl * cl) + rho * k / cl > 0.5 * TOL {
+                    // the largest turn this radius holds: C with rho k (1/C² + 1/C) = TOL / 2
+                    let q = 0.5 * TOL / (rho * k);
+                    let cmin = (1.0 + (1.0 + 4.0 * q).sqrt()) / (2.0 * q) + tiny;
+                    return Err(SheetError::BendAngle {
+                        feature,
+                        joint: j.id,
+                        angle,
+                        limit: dmath::acos_clamped(cmin - 1.0),
+                    });
+                }
+            }
             let ba = match hem.and_then(|h| h.allowance) {
                 Some(ba) => ba,
                 None => sheet
@@ -1148,15 +1205,7 @@ fn build_once(
                         why,
                     })?,
             };
-            let right = |d: Vec2| Vec2::new(d.y, -d.x);
-            let ja = Rigid {
-                o: p0,
-                x: right((p1 - p0) * (1.0 / la)),
-            };
-            let jb = Rigid {
-                o: q1,
-                x: right((q0 - q1) * (1.0 / lb)),
-            };
+            let (ja, jb) = (Rigid::joint(p0, p1), Rigid::joint(q1, q0));
             let sigma = angle.signum();
             let rho0 = reference_radius(&sheet.gauge, radius, angle);
             // a hem's mold line is the fold's outside, not a virtual sharp
@@ -1654,7 +1703,9 @@ fn build_once(
             warnings.extend(clash.and_then(|e| e.as_warning()));
         }
     }
-    let pattern = (map == Map::Flat).then(|| built.pattern(&strip_dev, &layout));
+    let pattern = (map == Map::Flat)
+        .then(|| built.pattern(&strip_dev, &layout))
+        .transpose()?;
     let (body, roles) = built.body()?;
     Ok(Built {
         body,
@@ -1956,6 +2007,8 @@ impl<'a> Strips<'a> {
         // the wall's end: the square end of a flange beside a corner under a right angle)
         let mut twin = HashMap::new();
         let mut free = Vec::new();
+        // the wall's points each matched zone stretch takes (loop, index, its start's y, its end's)
+        let mut carry: Vec<(usize, usize, f64, f64)> = Vec::new();
         for (li, l) in loops.iter().enumerate() {
             if l.strip < nw {
                 continue;
@@ -1998,10 +2051,48 @@ impl<'a> Strips<'a> {
                 slot[li][(i + 1) % n] = slot[wl][wi];
                 twin.insert((li, i), (wl, wi));
                 twin.insert((wl, wi), (li, i));
+                // the wall runs it the other way: the zone's start is the wall stretch's end
+                let (wa, wb, _, _) = *list.iter().find(|q| (q.2, q.3) == (wl, wi)).expect("listed");
+                carry.push((li, i, wb, wa));
             }
         }
         for (li, i) in free {
             loops[li].kinds[i] = Kind::Side;
+        }
+        // the crossings carried from the walls (README §6.1, step 5: decided once, in the wall,
+        // whose points the slots already are): a matched zone stretch's ends are the wall's points,
+        // within the tolerance of the zone's own, which go; the zone's lines through them run to
+        // them (an arc or a spline keeps its carrier, its end within the tolerance)
+        for (li, i, y0, y1) in carry {
+            let l = &mut loops[li];
+            let n = l.bounds.len();
+            let x = l.bounds[i].start.x;
+            for (k, y) in [(i, y0), ((i + 1) % n, y1)] {
+                let p = Point2::new(x, y);
+                l.bounds[k].start = p;
+                if let Piece::Line { ref mut a, .. } = l.bounds[k].piece {
+                    *a = p;
+                }
+                let before = (k + n - 1) % n;
+                if let Piece::Line { ref mut b, .. } = l.bounds[before].piece {
+                    *b = p;
+                }
+            }
+        }
+        // every tangent-line bound, wall's or zone's, has its twin across the line: decided here
+        // once, so the walks over the twins (`next`, the body's edges) never meet a missing one
+        if let Some((l, i)) = untwinned(&loops, &twin) {
+            let Kind::Tangent(bi, side) = loops[l].kinds[i] else {
+                unreachable!("untwinned names tangent bounds")
+            };
+            return Err(SheetError::TangentMismatch {
+                feature,
+                joint: cx.sheet.joints[bends[bi].joint].id,
+                side,
+                at: loops[l].bounds[i].start,
+                gap: f64::INFINITY,
+                limit: TOL,
+            });
         }
         // every wall stretch must have found its bend's
         for (&(bi, side), list) in &stretches {
@@ -2087,9 +2178,13 @@ impl<'a> Strips<'a> {
     /// a's faces (planes, cylinders, ruled walls), so its greatest over a's boundary is on a's
     /// edges: each edge at both skins, and each rail. Each is cut in halves while a rigorous box of
     /// the half (the piece's own box, or the wrapped curve's) can still reach past the limit into
-    /// b's thickness and meet b's region; a box under half the limit across is decided at its
-    /// middle, stepped ten tolerances into a's own material (so walls ending flush along one line
-    /// still find each other). Depth is 1-Lipschitz, so no point deeper than 1.5 limits is missed.
+    /// b's thickness and meet b's region. Points are taken stepped one tolerance into a's own
+    /// material (so walls ending flush along one line still find each other: the step is the
+    /// tolerance itself, well under the limit, so a flush edge on a face is depth ~TOL, clear). A
+    /// box is decided where its middle is past the limit (a clash) or its middle's depth and its
+    /// size together cannot reach the limit (depth is 1-Lipschitz: clear); else it is halved, and
+    /// one halving cannot narrow is FoldedUndecided. No band: every depth past the limit is found
+    /// or refused.
     fn clash(&self) -> Result<(), SheetError> {
         let t = self.t;
         let limit = 10.0 * TOL;
@@ -2139,13 +2234,15 @@ impl<'a> Strips<'a> {
                 }
                 asked();
                 let reach = |bx: &forge_math::Box3| self.may_reach(b, bx, flat[b], limit);
-                // a hem's zone and its own walls meet by design along its tangent lines: points
-                // there (within a margin along the zone) are not clashes
+                // a hem's zone and its own walls meet by design along its tangent lines: depth
+                // there is measured across the line too (`inside`), so the shared face is depth 0
                 let loose = self.loose.contains(&(a, b)) || self.loose.contains(&(b, a));
-                let margin = if loose { 100.0 * TOL } else { 0.0 };
-                let by_line = |q: Point2| match geo {
-                    Geo::Round { ba, .. } => loose && (q.x < margin || q.x > ba - margin),
-                    Geo::Plane(_) => false,
+                let with = loose.then_some(a);
+                let undecided = |at| SheetError::FoldedUndecided {
+                    feature: self.cx.feature,
+                    a: self.strips[a].strip,
+                    b: self.strips[b].strip,
+                    at,
                 };
                 for ld in self.loops.iter().filter(|l| l.strip == a) {
                     for (bi, bd) in ld.bounds.iter().enumerate() {
@@ -2155,7 +2252,7 @@ impl<'a> Strips<'a> {
                         }
                         let inset = |u: f64| {
                             let d = bd.piece.tangent(u);
-                            bd.piece.at(u) + Vec2::new(-d.y, d.x) * (10.0 * TOL / d.length().max(1e-300))
+                            bd.piece.at(u) + Vec2::new(-d.y, d.x) * (TOL / d.length().max(1e-300))
                         };
                         // straight against a plane wall, decided exactly over each chord (a
                         // curve's widened by how far it bows): only what may enter is halved
@@ -2163,7 +2260,7 @@ impl<'a> Strips<'a> {
                             (Geo::Plane(_), Piece::Line { .. }) => Some(0.0),
                             (Geo::Plane(_), Piece::Arc { r, t0, t1, .. }) => {
                                 let half = (0.5 * (t1 - t0).abs() * u.width()).min(dmath::PI);
-                                Some((r + 10.0 * TOL) * (1.0 - dmath::cos(half)))
+                                Some((r + TOL) * (1.0 - dmath::cos(half)))
                             }
                             _ => None,
                         };
@@ -2180,45 +2277,49 @@ impl<'a> Strips<'a> {
                                     )
                                 })
                             };
-                            found = found.or_else(|| {
-                                self.hunt(
-                                    b,
-                                    limit,
-                                    margin,
-                                    &|u| piece_box(geo, &bd.piece, w, u),
-                                    &|u| (!by_line(inset(u))).then(|| geo.point(inset(u), w)),
-                                    &reach,
-                                    &may,
-                                )
-                            });
+                            if found.is_none() {
+                                found = self
+                                    .hunt(
+                                        b,
+                                        limit,
+                                        with,
+                                        &|u| piece_box(geo, &bd.piece, w, u),
+                                        &|u| Some(geo.point(inset(u), w)),
+                                        &reach,
+                                        &may,
+                                    )
+                                    .map_err(undecided)?;
+                            }
                         }
                         // the rail at the piece's start, straight through the sheet
                         let q = inset(0.0);
-                        found = found.or_else(|| {
-                            self.hunt(
-                                b,
-                                limit,
-                                margin,
-                                &|u| {
-                                    forge_math::Box3::from_points([
-                                        geo.point(q, t * u.lo),
-                                        geo.point(q, t * u.hi),
-                                    ])
-                                    .grow(TOL)
-                                },
-                                &|u| (!by_line(q)).then(|| geo.point(q, t * u)),
-                                &reach,
-                                &|u| {
-                                    self.may_enter(
-                                        b,
-                                        geo.point(q, t * u.lo),
-                                        geo.point(q, t * u.hi),
-                                        limit,
-                                        0.0,
-                                    )
-                                },
-                            )
-                        });
+                        if found.is_none() {
+                            found = self
+                                .hunt(
+                                    b,
+                                    limit,
+                                    with,
+                                    &|u| {
+                                        forge_math::Box3::from_points([
+                                            geo.point(q, t * u.lo),
+                                            geo.point(q, t * u.hi),
+                                        ])
+                                        .grow(TOL)
+                                    },
+                                    &|u| Some(geo.point(q, t * u)),
+                                    &reach,
+                                    &|u| {
+                                        self.may_enter(
+                                            b,
+                                            geo.point(q, t * u.lo),
+                                            geo.point(q, t * u.hi),
+                                            limit,
+                                            0.0,
+                                        )
+                                    },
+                                )
+                                .map_err(undecided)?;
+                        }
                         if let Some(first) = found {
                             // how deep: the deepest of a's boundary in b, by the same rigorous
                             // boxes, each half kept while it may still beat the deepest so far
@@ -2250,15 +2351,18 @@ impl<'a> Strips<'a> {
         for a in 0..ns {
             for b in 0..ns {
                 let loose = self.loose.contains(&(a, b)) || self.loose.contains(&(b, a));
-                if a == b
-                    || joined[a * ns + b]
-                    || loose
-                    || !boxes[a].grow(TOL).overlaps(&boxes[b])
-                    || !matches!(self.strips[b].folded, Geo::Plane(_))
-                {
+                if a == b || joined[a * ns + b] || loose || !boxes[a].grow(TOL).overlaps(&boxes[b]) {
                     continue;
                 }
-                if let Some(at) = self.touch(a, b, flat[b]) {
+                let touched = self
+                    .touch(a, b, flat[b])
+                    .map_err(|at| SheetError::FoldedUndecided {
+                        feature: self.cx.feature,
+                        a: self.strips[a].strip,
+                        b: self.strips[b].strip,
+                        at,
+                    })?;
+                if let Some(at) = touched {
                     return Err(SheetError::FoldedTouch {
                         feature: self.cx.feature,
                         a: self.strips[a].strip,
@@ -2276,13 +2380,14 @@ impl<'a> Strips<'a> {
     /// cannot reach `b` or its middle is farther than the box is wide (distance is 1-Lipschitz).
     /// `b` is a wall; `a` a wall or a zone, whose lines fold to lines, circles or helices, each
     /// within a closed-form sag of its chord, so every line is judged by chords exactly.
-    fn touch(&self, a: usize, b: usize, flat_b: (Point2, Point2)) -> Option<Point3> {
+    fn touch(&self, a: usize, b: usize, flat_b: (Point2, Point2)) -> Result<Option<Point3>, Point3> {
         asked();
         let t = self.t;
         let geo = self.strips[a].folded;
+        let round = matches!(self.strips[b].folded, Geo::Round { .. });
 
         // a curve halved while its box may reach b and its middle is near enough; a piece whose
-        // chord is within TOL / 2 of it is judged by its chord, exactly
+        // chord is within TOL / 2 of it is judged by its chord, exactly (b a wall)
         let search = |box_of: &dyn Fn(Interval) -> forge_math::Box3,
                       point: &dyn Fn(f64) -> Point3,
                       sag: &dyn Fn(Interval) -> f64| {
@@ -2292,26 +2397,59 @@ impl<'a> Strips<'a> {
                 if !self.may_reach(b, &bx, flat_b, 0.0) {
                     continue;
                 }
+                if round {
+                    // a zone, in its own developed coordinates (as `inside` measures depth): the
+                    // middle within TOL is a touch; the box is dropped when the middle is farther
+                    // than its size can close, the developed map stretching by `stretch`
+                    let raw = box_of(u);
+                    let size = (raw.x.width().powi(2) + raw.y.width().powi(2) + raw.z.width().powi(2)).sqrt();
+                    let p = point(u.mid());
+                    let (d, r) = self.developed_distance(b, p);
+                    if d <= TOL {
+                        return Ok(Some(p));
+                    }
+                    let stretch = match self.strips[b].folded {
+                        // a step d at radius r turns phi by at most asin(d / r) <= (pi / 2) d / r
+                        Geo::Round { rn, .. } if r - size > 0.0 => {
+                            (dmath::FRAC_PI_2 * rn / (r - size)).max(1.0)
+                        }
+                        _ => f64::INFINITY,
+                    };
+                    if d > TOL + stretch * size {
+                        continue;
+                    }
+                    if level >= 60 {
+                        return Err(p);
+                    }
+                    let m = u.mid();
+                    stack.push((Interval::new(u.lo, m), level + 1));
+                    stack.push((Interval::new(m, u.hi), level + 1));
+                    continue;
+                }
                 if sag(u) <= 0.5 * TOL {
                     if let Some(p) = self.segment_touch(b, point(u.lo), point(u.hi), TOL) {
-                        return Some(p);
+                        return Ok(Some(p));
                     }
                     continue;
                 }
                 let p = point(u.mid());
                 let d = self.distance(b, p);
                 if d <= TOL {
-                    return Some(p);
+                    return Ok(Some(p));
                 }
                 let size = (bx.x.width().powi(2) + bx.y.width().powi(2) + bx.z.width().powi(2)).sqrt();
-                if d > TOL + size || level >= 60 {
+                if d > TOL + size {
                     continue;
+                }
+                // its middle past the tolerance, its box not: undecided where no halving narrows
+                if level >= 60 {
+                    return Err(p);
                 }
                 let m = u.mid();
                 stack.push((Interval::new(u.lo, m), level + 1));
                 stack.push((Interval::new(m, u.hi), level + 1));
             }
-            None
+            Ok(None)
         };
         for ld in self.loops.iter().filter(|l| l.strip == a) {
             for bd in &ld.bounds {
@@ -2336,17 +2474,71 @@ impl<'a> Strips<'a> {
                         &|u| piece_box(geo, &bd.piece, w, u),
                         &|u| geo.point(bd.piece.at(u), w),
                         &sag,
-                    ) {
-                        return Some(p);
+                    )? {
+                        return Ok(Some(p));
                     }
                 }
                 let q = bd.piece.at(0.0);
-                if let Some(p) = self.segment_touch(b, geo.point(q, 0.0), geo.point(q, t), TOL) {
-                    return Some(p);
+                let (r0, r1) = (geo.point(q, 0.0), geo.point(q, t));
+                if round {
+                    let at = |v: f64| r0 + (r1 - r0) * v;
+                    if let Some(p) = search(
+                        &|u| forge_math::Box3::from_points([at(u.lo), at(u.hi)]),
+                        &at,
+                        &|_| f64::INFINITY,
+                    )? {
+                        return Ok(Some(p));
+                    }
+                } else if let Some(p) = self.segment_touch(b, r0, r1, TOL) {
+                    return Ok(Some(p));
                 }
             }
         }
-        None
+        Ok(None)
+    }
+
+    /// How far a point is from zone strip `s`'s material in the zone's own developed
+    /// coordinates (u = phi rn along the bend, y along the axis, w through the sheet), as
+    /// `inside` measures depth: 0 inside; and the point's radius from the axis. Angles are taken
+    /// within a half turn of the zone's middle (a zone not past half a turn: a hem's are loose).
+    fn developed_distance(&self, s: usize, p: Point3) -> (f64, f64) {
+        asked();
+        let Geo::Round {
+            axis,
+            rho0,
+            sigma,
+            rn,
+            theta,
+            ..
+        } = self.strips[s].folded
+        else {
+            return (f64::INFINITY, 0.0);
+        };
+        let l = axis.point_to_local(p);
+        let r = (l.x * l.x + l.y * l.y).sqrt();
+        let mid = 0.5 * theta;
+        let mut phi = dmath::atan2(l.y, l.x);
+        while phi < mid - dmath::PI {
+            phi += dmath::TAU;
+        }
+        while phi > mid + dmath::PI {
+            phi -= dmath::TAU;
+        }
+        let q = Point2::new(phi * rn, -sigma * l.z);
+        let w = (r - rho0) * sigma;
+        let dw = (-w).max(w - self.t).max(0.0);
+        let parts = &self.strips[s].region.parts;
+        let dr = if parts.iter().any(|c| crate::region::holds(c, q)) {
+            0.0
+        } else {
+            parts
+                .iter()
+                .flat_map(|c| std::iter::once(&c.outer).chain(&c.holes))
+                .flatten()
+                .map(|b| b.piece.at(b.piece.nearest(q)).distance(q))
+                .fold(f64::INFINITY, f64::min)
+        };
+        ((dw * dw + dr * dr).sqrt(), r)
     }
 
     /// Whether segment p0..p1 may hold a point deeper than `limit` in plane strip `s` (within
@@ -2540,12 +2732,9 @@ impl<'a> Strips<'a> {
         let t = self.t;
         let geo = self.strips[a].folded;
         let eps = 1e-3 * t;
-        // a hem zone against its own walls: their shared line is met by design
-        let margin = if self.loose.contains(&(a, b)) || self.loose.contains(&(b, a)) {
-            100.0 * TOL
-        } else {
-            0.0
-        };
+        // a hem zone against its own walls: their shared line is met by design, depth across it
+        // measured too (`inside`)
+        let with = (self.loose.contains(&(a, b)) || self.loose.contains(&(b, a))).then_some(a);
         let mut best = first;
         let run = |best: &mut (Point3, f64),
                    box_of: &dyn Fn(Interval) -> forge_math::Box3,
@@ -2557,7 +2746,7 @@ impl<'a> Strips<'a> {
                     continue;
                 }
                 let p = point(u.mid());
-                if let Some(d) = self.inside(b, p, margin)
+                if let Some(d) = self.inside(b, p, with)
                     && d > best.1
                 {
                     *best = (p, d);
@@ -2575,7 +2764,7 @@ impl<'a> Strips<'a> {
             for bd in &ld.bounds {
                 let inset = |u: f64| {
                     let d = bd.piece.tangent(u);
-                    bd.piece.at(u) + Vec2::new(-d.y, d.x) * (10.0 * TOL / d.length().max(1e-300))
+                    bd.piece.at(u) + Vec2::new(-d.y, d.x) * (TOL / d.length().max(1e-300))
                 };
                 for w in [0.0, t] {
                     run(&mut best, &|u| piece_box(geo, &bd.piece, w, u), &|u| {
@@ -2603,20 +2792,20 @@ impl<'a> Strips<'a> {
         &self,
         b: usize,
         limit: f64,
-        margin: f64,
+        with: Option<usize>,
         box_of: &dyn Fn(Interval) -> forge_math::Box3,
         point: &dyn Fn(f64) -> Option<Point3>,
         reach: &dyn Fn(&forge_math::Box3) -> bool,
         may: &dyn Fn(Interval) -> bool,
-    ) -> Option<(Point3, f64)> {
+    ) -> Result<Option<(Point3, f64)>, Point3> {
         hunt_by(
             limit,
             box_of,
             point,
             reach,
             may,
-            &|p| self.distance_below(b, p) - margin.abs(),
-            &|p| self.inside(b, p, margin),
+            &|p| self.distance_below(b, p),
+            &|p| self.inside(b, p, with),
         )
     }
 
@@ -2640,6 +2829,15 @@ impl<'a> Strips<'a> {
             limit,
         };
         let curves: Vec<Vec<Curve3>> = self.forms.iter().map(|g| g.curves(t)).collect();
+        // undecided: named by the form's wall and the other's strip
+        let undecided = |g: &FormGeo, with: usize| {
+            let (feature, a, b) = (
+                self.cx.feature,
+                self.strips[g.strip].strip,
+                self.strips[with].strip,
+            );
+            move |at| SheetError::FoldedUndecided { feature, a, b, at }
+        };
         for (gi, g) in self.forms.iter().enumerate() {
             let gb = g.bbox(t);
             let depth = |p: Point3| g.depth(p, t);
@@ -2660,7 +2858,9 @@ impl<'a> Strips<'a> {
                                 &|_| true,
                                 &|_| 0.0,
                                 &depth,
-                            ) {
+                            )
+                            .map_err(undecided(g, a))?
+                            {
                                 return Err(clash(
                                     g,
                                     crate::error::FormAgainst::Strip(self.strips[a].strip),
@@ -2678,7 +2878,9 @@ impl<'a> Strips<'a> {
                             &|_| true,
                             &|_| 0.0,
                             &depth,
-                        ) {
+                        )
+                        .map_err(undecided(g, a))?
+                        {
                             return Err(clash(
                                 g,
                                 crate::error::FormAgainst::Strip(self.strips[a].strip),
@@ -2700,8 +2902,10 @@ impl<'a> Strips<'a> {
                         &|bx| self.may_reach(b, bx, flat[b], limit),
                         &|_| true,
                         &|p| self.distance_below(b, p),
-                        &|p| self.inside(b, p, 0.0),
-                    ) {
+                        &|p| self.inside(b, p, None),
+                    )
+                    .map_err(undecided(g, b))?
+                    {
                         return Err(clash(
                             g,
                             crate::error::FormAgainst::Strip(self.strips[b].strip),
@@ -2723,7 +2927,9 @@ impl<'a> Strips<'a> {
                         &|_| true,
                         &|_| 0.0,
                         &depth,
-                    ) {
+                    )
+                    .map_err(undecided(g, h.strip))?
+                    {
                         return Err(clash(g, crate::error::FormAgainst::Form(h.index), x));
                     }
                 }
@@ -2772,7 +2978,7 @@ fn hunt_by(
     may: &dyn Fn(Interval) -> bool,
     far: &dyn Fn(Point3) -> f64,
     depth: &dyn Fn(Point3) -> Option<f64>,
-) -> Option<(Point3, f64)> {
+) -> Result<Option<(Point3, f64)>, Point3> {
     {
         let mut stack = vec![(Interval::new(0.0, 1.0), 0u32)];
         while let Some((u, level)) = stack.pop() {
@@ -2788,20 +2994,57 @@ fn hunt_by(
             {
                 continue;
             }
-            if size <= 0.5 * limit || level >= 48 {
+            // a box that halving no longer narrows to the limit: undecided there, not passed
+            if level >= 48 && size > 0.5 * limit {
+                let c = |i: Interval| i.mid();
+                return Err(point(u.mid()).unwrap_or(Point3::new(c(bx.x), c(bx.y), c(bx.z))));
+            }
+            if size <= 0.5 * limit {
                 let Some(p) = point(u.mid()) else { continue };
-                if let Some(d) = depth(p)
+                let d = depth(p);
+                if let Some(d) = d
                     && d > limit
                 {
-                    return Some((p, d));
+                    return Ok(Some((p, d)));
                 }
+                // clear where no point of the box can pass the limit (1-Lipschitz); else halved
+                if d.is_none_or(|d| d + size <= limit) {
+                    continue;
+                }
+                if level >= 48 {
+                    // a stretch under 2^-48 of the curve's parameter: its points are the computed
+                    // ones at its ends and middle to rounding, and the box's size is its padding
+                    // (TOL), not the curve's. Bound its depth by theirs and their spread
+                    let ends = [point(u.lo), Some(p), point(u.hi)];
+                    let pts: Vec<Point3> = ends.iter().flatten().copied().collect();
+                    let spread = pts
+                        .iter()
+                        .flat_map(|a| pts.iter().map(move |b| a.distance(*b)))
+                        .fold(0.0, f64::max);
+                    let most = pts.iter().map(|&q| depth(q).unwrap_or(0.0)).fold(0.0, f64::max);
+                    if most > limit {
+                        let at = pts
+                            .iter()
+                            .copied()
+                            .max_by(|a, b| depth(*a).unwrap_or(0.0).total_cmp(&depth(*b).unwrap_or(0.0)))
+                            .unwrap_or(p);
+                        return Ok(Some((at, most)));
+                    }
+                    if most + spread <= limit {
+                        continue;
+                    }
+                    return Err(p);
+                }
+                let m = u.mid();
+                stack.push((Interval::new(u.lo, m), level + 1));
+                stack.push((Interval::new(m, u.hi), level + 1));
                 continue;
             }
             let m = u.mid();
             stack.push((Interval::new(u.lo, m), level + 1));
             stack.push((Interval::new(m, u.hi), level + 1));
         }
-        None
+        Ok(None)
     }
 }
 
@@ -3092,9 +3335,13 @@ impl Strips<'_> {
         })
     }
 
-    /// How deep `p` lies in strip `s`'s material, through its thickness; None outside (or, in a
-    /// bend zone, within `margin` of its tangent lines along it).
-    fn inside(&self, s: usize, p: Point3, margin: f64) -> Option<f64> {
+    /// How deep `p` lies in strip `s`'s material; None outside. The depth is through the thickness
+    /// and, where `with` names a strip that `s` meets along a tangent line (a hem's zone and its
+    /// walls), also across that line: the least of the skin depth and the in-plane distance to
+    /// the lines `s` shares with `with`, whose material the line divides from `s`'s. A point on
+    /// the shared face is then depth 0, by the same measure as every other, and no margin is
+    /// needed there.
+    fn inside(&self, s: usize, p: Point3, with: Option<usize>) -> Option<f64> {
         asked();
         let t = self.t;
         let (q, w) = match self.strips[s].folded {
@@ -3114,7 +3361,7 @@ impl Strips<'_> {
                 let phi = dmath::atan2(l.y, l.x);
                 // a hem's zone turns past half a turn: angles round from 0 to a whole turn
                 let phi = if phi < 0.0 { phi + dmath::TAU } else { phi };
-                if !(phi > 0.0 && phi < theta) || phi * rn < margin || (theta - phi) * rn < margin {
+                if !(phi > 0.0 && phi < theta) {
                     return None;
                 }
                 let rho = (l.x * l.x + l.y * l.y).sqrt();
@@ -3125,17 +3372,33 @@ impl Strips<'_> {
         if skin <= 0.0 {
             return None;
         }
-        self.strips[s]
+        if !self.strips[s]
             .region
             .parts
             .iter()
             .any(|c| crate::region::holds(c, q))
-            .then_some(skin)
+        {
+            return None;
+        }
+        let Some(a) = with else {
+            return Some(skin);
+        };
+        let mut depth = skin;
+        for (l, ld) in self.loops.iter().enumerate().filter(|(_, ld)| ld.strip == s) {
+            for (i, bd) in ld.bounds.iter().enumerate() {
+                if let Some(&(m, _)) = self.twin.get(&(l, i))
+                    && self.loops[m].strip == a
+                {
+                    depth = depth.min(bd.piece.at(bd.piece.nearest(q)).distance(q));
+                }
+            }
+        }
+        Some(depth)
     }
 
     /// The flat pattern: each boundary followed piece by piece across the strips, in the
     /// developed plane, runs of one line or one circle joined; and the bends' middle lines.
-    fn pattern(&self, strip_dev: &[Rigid], layout: &Layout) -> Pattern {
+    fn pattern(&self, strip_dev: &[Rigid], layout: &Layout) -> Result<Pattern, SheetError> {
         let mut seen: Vec<Vec<bool>> = self.loops.iter().map(|l| vec![false; l.bounds.len()]).collect();
         let mut contours = Vec::new();
         for l0 in 0..self.loops.len() {
@@ -3151,13 +3414,24 @@ impl Strips<'_> {
                     let by = &strip_dev[ld.strip];
                     let bound = &ld.bounds[i];
                     let (a, b) = (bound.start, ld.bounds[(i + 1) % ld.bounds.len()].start);
-                    if let Some(c) = developed(&bound.piece, a, b, by) {
+                    // a piece the developed plane cannot carry (a spline whose stretch fails) is
+                    // refused, never dropped: a contour left open is no blank
+                    let Some(c) = developed(&bound.piece, a, b, by) else {
+                        return Err(SheetError::TrimCurveUnsupported {
+                            feature: self.cx.feature,
+                            strip: self.strips[ld.strip].strip,
+                            trim: self.cx.sources[bound.id as usize],
+                            curve: TrimCurveKind::Spline,
+                        });
+                    };
+                    {
                         let spline = match bound.piece {
                             Piece::Spline { ref s, t0, t1 } => Some((s, t0, t1, by)),
                             _ => None,
                         };
                         let c = FlatPiece {
                             id: bound.id,
+                            from: by.apply(a),
                             curve: c,
                             spline,
                         };
@@ -3174,7 +3448,25 @@ impl Strips<'_> {
                     out[0] = c;
                     out.pop();
                 }
+                // every contour vertex is one point, the class point of the piece leaving it:
+                // the piece before ends there and this one starts there, so consecutive pieces
+                // meet in one double (README §6.1; Region.lean `closes`, gap 0). Lines and splines
+                // (clamped: their ends are their end control points) store their ends; an arc's
+                // too (stored: its angles' points are within rounding of them)
+                let from: Vec<Point2> = out.iter().map(|c| c.from).collect();
                 let mut out: Vec<Curve2> = out.into_iter().map(|c| c.curve).collect();
+                let n = out.len();
+                for (k, c) in out.iter_mut().enumerate() {
+                    let (a, b) = (from[k], from[(k + 1) % n]);
+                    match c {
+                        Curve2::Line { a: x, b: y } => (*x, *y) = (a, b),
+                        Curve2::Spline { points, .. } => {
+                            points[0] = a;
+                            *points.last_mut().expect("a spline has points") = b;
+                        }
+                        Curve2::Arc { from: x, to: y, .. } => (*x, *y) = (a, b),
+                    }
+                }
                 // a contour of one arc closes on itself: a whole turn, by topology
                 if let [Curve2::Arc { sweep, .. }] = &mut out[..] {
                     *sweep = dmath::TAU.copysign(*sweep);
@@ -3194,12 +3486,12 @@ impl Strips<'_> {
                 allowance: b.allowance,
             })
             .collect();
-        Pattern {
+        Ok(Pattern {
             contours,
             bends,
             hits: crate::punch::hits(self.cx.sheet, layout),
             forms: crate::form::marks(self.cx.sheet, layout),
-        }
+        })
     }
 
     /// The side piece after (l, i) along the developed boundary, and whether it crossed a tangent line.
@@ -3881,11 +4173,19 @@ impl Strips<'_> {
 /// when sigma is 1, so the arc's angles turn the other way.
 /// A piece's own stretch of its spline, in the spline's parameter: a wall built on the whole of a
 /// closed spline is carried past its ends onto itself at the seam, where points project to either.
-/// A point where two sets of pieces come within `tol` of each other, if they do: nearest
-/// points by alternating projection from nine starts on each piece of `a` (exact for lines).
+/// A point where two sets of pieces come within `tol` of each other, if they do: lines and arcs in
+/// closed form; a pair with a spline by alternating projection from nine starts on its piece of
+/// `a`.
 fn contact(a: &[Piece], b: &[Piece], tol: f64) -> Option<Point2> {
     for pa in a {
         for pb in b {
+            // lines and arcs in closed form (`region::closest`); splines by projection
+            if let Some((d, p)) = crate::region::closest(pa, pb) {
+                if d <= tol {
+                    return Some(p);
+                }
+                continue;
+            }
             for k in 0..=8 {
                 let mut p = pa.at(k as f64 / 8.0);
                 let mut q = pb.at(pb.nearest(p));
@@ -4067,6 +4367,8 @@ fn developed(p: &Piece, a: Point2, b: Point2, by: &Rigid) -> Option<Curve2> {
             r,
             start: t0 + by.angle(),
             sweep: t1 - t0,
+            from: by.apply(a),
+            to: by.apply(b),
         },
         Piece::Spline { ref s, t0, t1 } => {
             let st = own_stretch(s, Interval::new(t0.min(t1), t0.max(t1)))?;
@@ -4185,6 +4487,9 @@ impl ZoneLine {
 /// strip with the strip's motion, so pieces of one spline join on that one curve.
 struct FlatPiece<'a> {
     id: u64,
+    /// The contour vertex it leaves: its first bound's start (its vertex class's point, in its
+    /// strip), carried into the developed plane.
+    from: Point2,
     curve: Curve2,
     spline: Option<(&'a std::sync::Arc<Spline>, f64, f64, &'a Rigid)>,
 }
@@ -4209,11 +4514,19 @@ fn joined<'a>(x: &FlatPiece<'a>, y: &FlatPiece<'a>) -> Option<FlatPiece<'a>> {
             same.then_some(Curve2::Line { a: *a, b: *c })?
         }
         (
-            Curve2::Arc { c, r, start, sweep },
+            Curve2::Arc {
+                c,
+                r,
+                start,
+                sweep,
+                from,
+                ..
+            },
             Curve2::Arc {
                 c: c2,
                 r: r2,
                 sweep: w2,
+                to,
                 ..
             },
         ) => {
@@ -4223,6 +4536,8 @@ fn joined<'a>(x: &FlatPiece<'a>, y: &FlatPiece<'a>) -> Option<FlatPiece<'a>> {
                 r: *r,
                 start: *start,
                 sweep: sweep + w2,
+                from: *from,
+                to: *to,
             })?
         }
         (Curve2::Spline { .. }, Curve2::Spline { .. }) if x.id == y.id => {
@@ -4240,6 +4555,7 @@ fn joined<'a>(x: &FlatPiece<'a>, y: &FlatPiece<'a>) -> Option<FlatPiece<'a>> {
             let ends = x.curve.ends().0;
             return Some(FlatPiece {
                 id,
+                from: x.from,
                 curve: developed(&piece, ends, ends, by)?,
                 spline: Some((s, t0, u1, by)),
             });
@@ -4248,6 +4564,7 @@ fn joined<'a>(x: &FlatPiece<'a>, y: &FlatPiece<'a>) -> Option<FlatPiece<'a>> {
     };
     Some(FlatPiece {
         id,
+        from: x.from,
         curve,
         spline: None,
     })
@@ -4329,7 +4646,8 @@ fn piece_box(geo: Geo, p: &Piece, w: f64, u: Interval) -> forge_math::Box3 {
             rho0,
             sigma,
             rn,
-            ..
+            theta,
+            ba,
         } => match flat_in_bend(&sub, sub.at(0.0), sub.at(1.0), sigma) {
             Some(flat) => Wrap {
                 axis,
@@ -4338,11 +4656,26 @@ fn piece_box(geo: Geo, p: &Piece, w: f64, u: Interval) -> forge_math::Box3 {
                 flat,
             }
             .bbox(Interval::new(0.0, 1.0)),
-            // past cubic is refused before this; a box that holds everything never prunes
-            None => forge_math::Box3::from_points([
-                Point3::new(-1e300, -1e300, -1e300),
-                Point3::new(1e300, 1e300, 1e300),
-            ]),
+            // no flat form (past cubic, refused before this): the sector the piece wraps onto,
+            // its angles phi = u / rn over the piece's own box (the far tangent line's theta
+            // included where it reaches it), at radius rho0 + sigma w, its heights -sigma y:
+            // rigorous, outward-rounded
+            None => {
+                let b = sub.bbox();
+                let pt = Interval::point;
+                let mut phi = Interval::new(b.x0, b.x1).div(&pt(rn));
+                if b.x1 >= ba {
+                    phi = phi.hull(&pt(theta));
+                }
+                let r = pt(rho0) + pt(sigma) * pt(w);
+                let (x, y) = (r * phi.cos(), r * phi.sin());
+                let z = pt(-sigma) * Interval::new(b.y0, b.y1);
+                forge_math::Box3::from_points((0..8).map(|k| {
+                    let pick = |i: Interval, bit: usize| if k & bit == 0 { i.lo } else { i.hi };
+                    axis.point_to_world(Point3::new(pick(x, 1), pick(y, 2), pick(z, 4)))
+                }))
+                .grow(TOL)
+            }
         },
     }
 }
@@ -4388,4 +4721,94 @@ fn asked() {
 /// that does not change with the machine's load, for tests that hold the checks to it.
 pub fn check_questions() -> u64 {
     ASKED.get()
+}
+
+#[cfg(test)]
+mod pattern_piece_tests {
+    use super::*;
+
+    #[test]
+    fn a_spline_piece_the_developed_plane_cannot_carry_is_none_so_refused() {
+        // a spline piece over no span (its stretch has no pieces): `developed` has no curve for
+        // it, which `pattern` refuses as TrimCurveUnsupported instead of leaving the contour open
+        let pts = [
+            Point3::new(0.0, 0.0, 0.0),
+            Point3::new(1.0, 2.0, 0.0),
+            Point3::new(3.0, 0.0, 0.0),
+        ];
+        let s = Spline::from_nurbs(2, &[0.0, 0.0, 0.0, 1.0, 1.0, 1.0], &pts, None).unwrap();
+        let piece = Piece::Spline {
+            s: std::sync::Arc::new(s),
+            t0: 0.5,
+            t1: 0.5,
+        };
+        let p = Point2::new(1.0, 1.0);
+        assert!(developed(&piece, p, p, &Rigid::ID).is_none());
+    }
+}
+
+#[cfg(test)]
+mod twin_tests {
+    use super::*;
+
+    #[test]
+    fn a_tangent_bound_without_its_twin_is_found() {
+        let line = |a: (f64, f64), b: (f64, f64)| Bound {
+            piece: Piece::Line {
+                a: Point2::new(a.0, a.1),
+                b: Point2::new(b.0, b.1),
+            },
+            id: 0,
+            start: Point2::new(a.0, a.1),
+        };
+        let loops = vec![LoopData {
+            strip: 0,
+            comp: 0,
+            bounds: vec![line((0.0, 0.0), (1.0, 0.0)), line((1.0, 0.0), (0.0, 0.0))],
+            kinds: vec![Kind::Side, Kind::Tangent(0, Side::A)],
+        }];
+        let mut twin = HashMap::new();
+        assert_eq!(untwinned(&loops, &twin), Some((0, 1)));
+        twin.insert((0, 1), (1, 0));
+        assert_eq!(untwinned(&loops, &twin), None);
+    }
+}
+
+#[cfg(test)]
+mod piece_box_tests {
+    use super::*;
+
+    #[test]
+    fn a_zone_piece_with_no_flat_form_still_gets_a_box_that_holds_it() {
+        // a quartic spline piece (no Bezier form `flat_in_bend` carries): its box in a zone is the
+        // wrapped sector's, finite and holding every point of the piece
+        let pts: Vec<Point3> = [(0.0, 0.0), (1.0, 2.0), (2.0, -1.0), (3.0, 1.5), (4.0, 0.5)]
+            .iter()
+            .map(|&(x, y)| Point3::new(x, y, 0.0))
+            .collect();
+        let s =
+            Spline::from_nurbs(4, &[0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 1.0], &pts, None).unwrap();
+        let piece = Piece::Spline {
+            s: std::sync::Arc::new(s),
+            t0: 0.0,
+            t1: 1.0,
+        };
+        let geo = Geo::Round {
+            axis: Frame::WORLD,
+            rho0: 2.0,
+            sigma: 1.0,
+            rn: 2.8,
+            theta: 1.5,
+            ba: 4.2,
+        };
+        let b = piece_box(geo, &piece, 0.5, Interval::new(0.0, 1.0));
+        assert!(
+            b.x.width() < 100.0 && b.y.width() < 100.0 && b.z.width() < 100.0,
+            "{b:?}"
+        );
+        for k in 0..=64 {
+            let p = geo.point(piece.at(k as f64 / 64.0), 0.5);
+            assert!(b.contains(p), "{p:?} {b:?}");
+        }
+    }
 }

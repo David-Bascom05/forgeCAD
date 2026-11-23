@@ -1535,10 +1535,18 @@ class Tr:
 
     def fillet(self, f):
         a, env = f["args"], f["env"]
-        if a.get("isVariable") is True or "vertexSettings" in a or "crossSection" in a or "filletType" in a:
-            raise Unsupported("a variable or conic fillet")
+        if a.get("isVariable") is True or "vertexSettings" in a or "filletType" in a:
+            raise Unsupported("a variable fillet")
+        # Onshape's conic: the circular fillet's feet for `radius`, a conic of shoulder ratio rho
+        # between them (measured on the source's STEP: setbacks r tan(phi/2), rho as given)
+        conic = None
+        cs = a.get("crossSection")
+        if cs is not None and not str(cs[1]).endswith("CIRCULAR"):
+            if not str(cs[1]).endswith("CONIC"):
+                raise Unsupported("a curvature fillet")
+            conic = num(self.val(a["rho"]))
         hs = self.edges_for(qunion(a["entities"]), env, a.get("tangentPropagation") is True)
-        self.lines.append(St("fillet", size=num(self.val(a["radius"])), sel=self.select("edges", hs)))
+        self.lines.append(St("fillet", size=num(self.val(a["radius"])), sel=self.select("edges", hs), conic=conic))
 
     def chamfer(self, f):
         a, env = f["args"], f["env"]

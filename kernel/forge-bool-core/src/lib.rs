@@ -19,6 +19,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod inc;
 mod index;
 mod sort;
 mod union_find;
@@ -242,7 +243,7 @@ fn same_cov(a: &[Sgn], b: &[Sgn]) -> bool {
 
 /// The id of a covector, or NONE.
 fn find(l: &Ledger, ext: &Ext, key: &[Sgn]) -> u32 {
-    let mut f = ext.index.find(&l.cells, key);
+    let mut f = ext.index.find_h(&l.cells, key);
     let mut i = 0;
     while f == NONE && i < ext.extra.len() {
         if same_cov(&ext.extra[i], key) {
@@ -468,7 +469,7 @@ fn membership(l: &Ledger, ext: &Ext, s: &Split) -> Vec<Vec<bool>> {
 }
 
 /// The rule at one membership vector.
-fn apply_rule(rule: &Rule, m: &[bool]) -> bool {
+pub(crate) fn apply_rule(rule: &Rule, m: &[bool]) -> bool {
     // the numbers of bodies in and out (the Lean's rules read `m i` past nb as false)
     let mut ins = 0;
     let mut i = 0;
@@ -916,7 +917,7 @@ fn bad_vert(l: &Ledger, ext: &Ext, a: &Assembled, is_edge: &[bool], v: u32, ar: 
 }
 
 /// `u32` in a list.
-fn has(xs: &[u32], x: u32) -> bool {
+pub(crate) fn has(xs: &[u32], x: u32) -> bool {
     let mut found = false;
     let mut i = 0;
     while !found && i < xs.len() {
@@ -928,7 +929,7 @@ fn has(xs: &[u32], x: u32) -> bool {
 
 /// `dedup (around x).map key`: the faces round a cell, as face numbers, in the order their facets
 /// come in the result.
-fn faces_at(face_of: &[u32], ar: &[u32]) -> Vec<u32> {
+pub(crate) fn faces_at(face_of: &[u32], ar: &[u32]) -> Vec<u32> {
     let mut out: Vec<u32> = Vec::new();
     let mut j = 0;
     while j < ar.len() {
@@ -942,7 +943,7 @@ fn faces_at(face_of: &[u32], ar: &[u32]) -> Vec<u32> {
 }
 
 /// `sameSet` on two face lists.
-fn same_set(a: &[u32], b: &[u32]) -> bool {
+pub(crate) fn same_set(a: &[u32], b: &[u32]) -> bool {
     let mut same = true;
     let mut i = 0;
     while same && i < a.len() {

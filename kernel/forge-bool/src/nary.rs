@@ -49,48 +49,17 @@ static PICK: AtomicUsize = AtomicUsize::new(0);
 /// order. The calling thread starts alone and the others join only once the work has run long
 /// enough to pay for starting them (tens of microseconds each).
 fn par_map<T: Send>(n: usize, threads: usize, per: usize, f: impl Fn(usize) -> T + Sync) -> Vec<T> {
-    let threads = threads.min(n / per.max(1));
-    if threads <= 1 || n < 2 {
-        return (0..n).map(f).collect();
-    }
-    let next = AtomicUsize::new(0);
-    let work = || {
-        let mut got = Vec::new();
-        loop {
-            let i = next.fetch_add(1, Ordering::Relaxed);
-            if i >= n {
-                break got;
-            }
-            got.push((i, f(i)));
-        }
-    };
-    let parts: Vec<Vec<(usize, T)>> = forge_math::par::scope(|s| {
-        let start = forge_math::clock::Instant::now();
-        let mut mine = Vec::new();
-        let mut helpers = Vec::new();
-        loop {
-            let i = next.fetch_add(1, Ordering::Relaxed);
-            if i >= n {
-                break;
-            }
-            mine.push((i, f(i)));
-            if helpers.is_empty()
-                && next.load(Ordering::Relaxed) < n
-                && start.elapsed() > std::time::Duration::from_micros(200)
-            {
-                helpers = (1..threads).map(|_| s.spawn(work)).collect();
-            }
-        }
-        let mut parts = vec![mine];
-        parts.extend(helpers.into_iter().map(|w| w.join().expect("worker")));
-        parts
-    });
-    let mut out: Vec<Option<T>> = (0..n).map(|_| None).collect();
-    for (i, t) in parts.into_iter().flatten() {
-        out[i] = Some(t);
-    }
-    out.into_iter().map(|t| t.expect("every item done")).collect()
+    forge_math::par::map_adaptive(n, threads, per, f)
 }
+
+/// An n-ary boolean that has run for less than this by the end of its pairs stage takes its later
+/// stages on one thread. Those stages' items (a face's split, its regions) allocate heavily: their
+/// answers, made in a helper's allocator arena and freed on this thread, plus the helpers' cold
+/// arenas and pages, cost more than the threads save on a small boolean. Measured: hole-grid's,
+/// patterns' and coplanar's n-ary (about 15–25 ms in all) ran 5–23% slower on 4 threads than on
+/// one, and level with no helpers; mixed and shaft, whose pairs (curved) take far longer, gain
+/// 35–50% (research/booleans/speedups.md, "Fastest wins").
+const THREADED_AFTER_PAIRS: std::time::Duration = std::time::Duration::from_millis(20);
 
 /// How far clear of a tool's boundary a point must be for its analytic solid to answer.
 const SHAPE_MARGIN: f64 = tol::LINEAR;
@@ -686,6 +655,7 @@ fn nary_body(
 ) -> R<Body> {
     assert_eq!(ops.len() + 1, tools.len(), "one op per tool after the first");
     let n = tools.len();
+    let born = forge_math::clock::Instant::now();
     let mut clock = forge_math::clock::Instant::now();
     let index: Vec<Index> = par_map(n, threads, 16, |k| Index::new(tools[k]));
     let debug = crate::boolean::debug_on();
@@ -1059,6 +1029,7 @@ fn nary_body(
                         &mut out.segs,
                         &mut out.imprints,
                         &mut out.touching,
+                        None,
                     )?;
                 }
                 if !whole || out.imprints.len() > imprints_before {
@@ -1420,6 +1391,13 @@ fn nary_body(
         }));
     }
     lap(&mut clock, 1);
+    // a small boolean's later stages, on one thread (THREADED_AFTER_PAIRS); the answers are the
+    // same either way
+    let threads = if born.elapsed() < THREADED_AFTER_PAIRS {
+        1
+    } else {
+        threads
+    };
 
     // 3: one vertex per cluster of cut points (an existing tool vertex where a cut sits at an
     // edge's end; vertices of different tools at one place are one)
@@ -1756,7 +1734,8 @@ fn nary_body(
         by_edge: &by_edge,
         cut_vertex: &cut_vertex,
         alias: &alias,
-        list: Vec::new(),
+        // at most a piece per edge and one more per cut: grown once, not doubled up to there
+        list: Vec::with_capacity(tools.iter().map(|b| b.edges.len()).sum::<usize>() + cuts.len()),
         of_edge: tools.iter().map(|b| vec![(0, 0); b.edges.len()]).collect(),
     };
     let mut seg_pieces: Vec<std::ops::Range<usize>> = Vec::with_capacity(segs.len());
@@ -1860,8 +1839,10 @@ fn nary_body(
                 }
             }
         }
-        // on one thread, straight into the list
-        if threads.min(order.len() / 32) <= 1 {
+        // on one thread, straight into the list: below about 512 edges a list per edge, copied
+        // after, costs more than threads save (hole-grid's n-ary ran 9% slower on 4 threads than
+        // on one; research/booleans/speedups.md, "Fastest wins")
+        if threads.min(order.len() / 512) <= 1 {
             for (sd, e) in order {
                 pieces.ensure(sd, e);
             }
@@ -2785,11 +2766,13 @@ fn nary_body(
         let ls = &regs[ri].loops;
         (a.0 + ls.len(), a.1 + ls.iter().map(Vec::len).sum::<usize>())
     });
-    out.faces.reserve_exact(kept.len());
-    out.loops.reserve_exact(loops);
-    out.coedges.reserve_exact(uses);
-    out.edges.reserve_exact(uses / 2);
-    out.vertices.reserve_exact(uses / 2);
+    // (with room: the in-place boolean of the next feature grows it without a copy)
+    let room = forge_topo::body::room;
+    out.faces.reserve_exact(room(kept.len()));
+    out.loops.reserve_exact(room(loops));
+    out.coedges.reserve_exact(room(uses));
+    out.edges.reserve_exact(room(uses / 2));
+    out.vertices.reserve_exact(room(uses / 2));
     for t in tools {
         out.joins.extend(&t.joins);
     }

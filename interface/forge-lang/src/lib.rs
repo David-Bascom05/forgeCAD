@@ -47,6 +47,7 @@ pub mod sketch_text;
 pub mod stdparts;
 pub mod store;
 pub mod syntax;
+mod taper_lint;
 pub mod thermo;
 pub mod thermo_kept;
 pub mod tightbox;
@@ -566,16 +567,35 @@ fn run_once(src: &str, opts: Options, mut cache: Cache) -> (Run, Cache) {
         let mass = |b: &forge_topo::Body| forge_topo::mass::mass(b);
         let each_mass =
             || -> Option<Vec<_>> { each.then(|| solids.iter().map(|x| mass(&x.2).ok()).collect()) };
-        // under a budget (spent on this thread), or with one thread to run on, one after another
+        // under a budget (spent on this thread) one after another, as before (`limited`, not
+        // `left() == u64::MAX`: what is spent with no limit set counts down from there too)
         let (w, e, o) = if !forge_geom::budget::limited() && forge_math::par::threads() > 1 {
-            forge_math::par::scope(|s| {
-                let w = whole.map(|b| s.spawn(move || mass(b)));
-                let bx = boxed.map(|b| s.spawn(move || tightbox::tight_box(b)));
-                let o: Vec<_> = owed.iter().map(|x| s.spawn(move || mass(&x.2).ok())).collect();
-                let e = each_mass();
-                let w = (w.map(joined), bx.map(joined));
-                (w, e, o.into_iter().map(joined).collect::<Vec<_>>())
-            })
+            // the whole's mass, its box, each owed mass and the solids' masses as items of one
+            // adaptive map: threads join only where the work pays for them (a small part's
+            // measure stays on this thread), answers in item order
+            enum Job<A, B, C, D> {
+                W(A),
+                B(B),
+                O(C),
+                E(D),
+            }
+            let n = 3 + owed.len();
+            let got = forge_math::par::map_adaptive(n, forge_math::par::threads(), 1, |k| match k {
+                0 => Job::W(whole.map(mass)),
+                1 => Job::B(boxed.map(tightbox::tight_box)),
+                2 => Job::E(each_mass()),
+                k => Job::O(mass(&owed[k - 3].2).ok()),
+            });
+            let (mut w, mut bx, mut e, mut o) = (None, None, None, Vec::with_capacity(owed.len()));
+            for j in got {
+                match j {
+                    Job::W(x) => w = x,
+                    Job::B(x) => bx = x,
+                    Job::E(x) => e = x,
+                    Job::O(x) => o.push(x),
+                }
+            }
+            ((w, bx), e, o)
         } else {
             // in the order they were asked for: the modelled parts' in the run, then the rest
             let o: Vec<_> = owed.iter().map(|x| mass(&x.2).ok()).collect();
@@ -791,10 +811,6 @@ pub fn sketch_view(src: &str, id: &str, opts: Options) -> Option<SketchView> {
 }
 
 /// A scoped thread's answer, its panic carried on.
-fn joined<T>(h: forge_math::par::ScopedJoinHandle<'_, T>) -> T {
-    h.join().unwrap_or_else(|p| std::panic::resume_unwind(p))
-}
-
 /// The finished part's measure; `mass` and `bbox`, its mass and box if worked out already.
 fn measure(
     ev: &mut Eval,

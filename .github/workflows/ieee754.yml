@@ -16,6 +16,12 @@ on:
       "kernel/forge-math/src/predicates.rs", ".github/workflows/ieee754.yml"]
   workflow_dispatch:
 
+# A new push to a pull request cancels that pull request's runs still queued or running for its
+# older commits; pushes to main are never cancelled.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   model:
     runs-on: ubuntu-latest

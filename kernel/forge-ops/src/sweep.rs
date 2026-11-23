@@ -63,6 +63,11 @@ pub enum SweepError {
     },
     /// The path brings the swept solid back into itself.
     SelfIntersecting,
+    /// The profile's frame cannot be carried along path piece `index` (its tangent or the carried
+    /// axes vanish): the frame rule has no answer there, so nothing is swept (no fallback).
+    Frame {
+        index: usize,
+    },
     /// A rail or centre line is a free curve: a loft takes lines and arcs there.
     CurveGuide {
         index: usize,
@@ -122,26 +127,24 @@ impl PathSeg {
         (Frame::from_z(circle.frame.origin, z), sweep.abs())
     }
 
-    /// The frame `f` carried from the piece's start to its end.
-    fn carry(&self, f: &Frame) -> Frame {
+    /// The frame `f` carried from the piece's start to its end (the frame rule, research/sweep-spec
+    /// DESIGN.md §3.3): along a line translated, along an arc turned about its axis, along a
+    /// spline by its spine's rotation (`spine`, the one `stretches` made). None where the carried
+    /// axes vanish.
+    fn carry(&self, f: &Frame, spine: Option<&Spine>) -> Option<Frame> {
         match *self {
             PathSeg::Spline(ref c) => {
-                let at = c.ends().1;
-                let Some(spine) = spine_of(c) else {
-                    return f.with_origin(at);
-                };
+                let (start, at) = c.ends();
+                let spine = spine?;
                 let z = spine.end_turn(f.z().get());
                 let x = spine.end_turn(f.x().get());
-                let start = c.ends().0;
                 let o = at + spine.end_turn(f.origin - start);
-                z.normalize()
-                    .and_then(|z| Frame::from_zx(o, z, x))
-                    .unwrap_or_else(|| f.with_origin(at))
+                z.normalize().and_then(|z| Frame::from_zx(o, z, x))
             }
-            PathSeg::Line { a, b } => f.with_origin(f.origin + (b - a)),
+            PathSeg::Line { a, b } => Some(f.with_origin(f.origin + (b - a))),
             PathSeg::Arc { circle, sweep, .. } => {
                 let (r, angle) = PathSeg::turn(&circle, sweep);
-                r.rotated_about_z(angle).compose(&r.inverse().compose(f))
+                Some(r.rotated_about_z(angle).compose(&r.inverse().compose(f)))
             }
         }
     }
@@ -161,10 +164,10 @@ pub fn sweep(profile: &crate::Profile, path: &[PathSeg], feature: u64) -> Result
 /// A sweep whose caller knows the path keeps the solid clear of itself (a wire harness's tube,
 /// whose bends are no tighter than the tube): the same body, without the self-intersection test.
 pub fn sweep_unchecked(profile: &crate::Profile, path: &[PathSeg], feature: u64) -> Result<Body, SweepError> {
-    let (prep, stretches) = stretches(profile, path)?;
+    let (prep, stretches, end) = stretches(profile, path)?;
     let segs: Vec<Segment> = prep.segments().cloned().collect();
     let mut planes: Vec<Frame> = stretches.iter().map(|s| s.plane()).collect();
-    planes.push(path[path.len() - 1].carry(&planes[planes.len() - 1]));
+    planes.push(end);
     let curves = planes
         .iter()
         .map(|f| segs.iter().map(|s| section_curve(s, f)).collect())
@@ -276,7 +279,7 @@ pub fn sweep_stretches(
     profile: &crate::Profile,
     path: &[PathSeg],
 ) -> Result<(crate::Profile, Vec<Stretch>), SweepError> {
-    stretches(profile, path).map(|(p, s)| (p.profile, s))
+    stretches(profile, path).map(|(p, s, _)| (p.profile, s))
 }
 
 /// Each piece's start and end tangents, once the path is found tangent-continuous.
@@ -301,10 +304,11 @@ pub(crate) fn check_path(path: &[PathSeg]) -> Result<Vec<(UnitVec3, UnitVec3)>, 
     Ok(tangents)
 }
 
+/// The path's stretches, and the profile's frame at the path's end.
 fn stretches(
     profile: &crate::Profile,
     path: &[PathSeg],
-) -> Result<(crate::skin::Prepared, Vec<Stretch>), SweepError> {
+) -> Result<(crate::skin::Prepared, Vec<Stretch>, Frame), SweepError> {
     let first = path.first().ok_or(SweepError::EmptyPath)?;
     let tangents = check_path(path)?;
     let t0 = tangents[0].0;
@@ -352,9 +356,13 @@ fn stretches(
                 }
             }
         });
-        plane = s.carry(&plane);
+        let spine = match out.last() {
+            Some(Stretch::Along { spine, .. }) => Some(spine),
+            _ => None,
+        };
+        plane = s.carry(&plane, spine).ok_or(SweepError::Frame { index: k })?;
     }
-    Ok((prep, out))
+    Ok((prep, out, plane))
 }
 
 /// A segment as a curve of its plane.
@@ -707,15 +715,16 @@ fn wind(
     let vec3 = |v: Vec2| plane.x() * v.x + plane.y() * v.y;
     // the side of the axis the profile is on
     let perp2 = dir2.perp();
-    let mut side = 0.0f64;
+    // (exactly for lines, arcs and circles: Segment::reach, as revolve)
+    let (mut lo, mut hi) = (0.0f64, 0.0f64);
     for l in &profile.loops {
         for (s, _) in &l.segments {
-            for p in s.side_samples() {
-                let r = (p - axis.origin).dot(perp2);
-                side = if r.abs() > side.abs() { r } else { side };
-            }
+            let (a, b) = s.reach(axis.origin, perp2);
+            lo = lo.min(a);
+            hi = hi.max(b);
         }
     }
+    let side = if hi >= -lo { hi } else { lo };
     if side.abs() <= tol::LINEAR {
         return Err(CoilError::CrossesAxis);
     }
@@ -742,23 +751,42 @@ fn wind(
         Some((_, r, h)) => (*r, *h),
         None => ring[k].extent(),
     };
-    let rmin = (0..ring.len())
-        .map(|k| extent(k).0.0)
-        .fold(f64::INFINITY, f64::min);
+    // the section's ranges of r and h (exact for lines and arcs, a curve's from its own)
+    let ((rlo, rhi), (hlo, hhi)) = (0..ring.len()).map(extent).fold(
+        (
+            (f64::INFINITY, f64::NEG_INFINITY),
+            (f64::INFINITY, f64::NEG_INFINITY),
+        ),
+        |(r, h), (er, eh)| ((r.0.min(er.0), r.1.max(er.1)), (h.0.min(eh.0), h.1.max(eh.1))),
+    );
+    let rmin = rlo;
     if rmin <= tol::LINEAR {
         return Err(CoilError::CrossesAxis);
-    }
-    let (lo, hi) = (0..ring.len())
-        .map(|k| extent(k).1)
-        .fold((f64::INFINITY, f64::NEG_INFINITY), |a, h| {
-            (a.0.min(h.0), a.1.max(h.1))
-        });
-    if pitch <= hi - lo + tol::LINEAR {
-        return Err(CoilError::TurnsTouch);
     }
     let angle = dmath::TAU * turns;
     let b = sign * pitch / dmath::TAU;
     let a = pitch / dmath::TAU * dmath::sin(taper) / dmath::cos(taper);
+    // the turns touch exactly where the section comes within LINEAR of its translate by a whole
+    // number of turns that fits (research/sweep-spec, Screw.coil_injective): k (T a, T b) in
+    // (r, h) for 1 <= k, k T <= angle. A section with a spline keeps the sufficient bound: the
+    // pitch past its height.
+    // a whole turn's shift past the section's height or width clears every turn after it (both
+    // components grow with k): the pitch past the height is the usual case, and costs nothing more
+    let clear = |w: Vec2| w.x.abs() > rhi - rlo + tol::LINEAR || w.y.abs() > hhi - hlo + tol::LINEAR;
+    let turn = Vec2::new(dmath::TAU * a, dmath::TAU * b);
+    if dmath::TAU <= angle + tol::ANGULAR && !clear(turn) {
+        if curves.iter().any(Option::is_some) {
+            // a section with a spline keeps the sufficient bound
+            return Err(CoilError::TurnsTouch);
+        }
+        let mut k = 1.0;
+        while k * dmath::TAU <= angle + tol::ANGULAR && !clear(turn * k) {
+            if !forge_geom::screw::apart_from_translate(&ring, turn * k, tol::LINEAR) {
+                return Err(CoilError::TurnsTouch);
+            }
+            k += 1.0;
+        }
+    }
     if rmin + (a * angle).min(0.0) <= tol::LINEAR {
         return Err(CoilError::BadTaper);
     }
@@ -939,6 +967,37 @@ mod tests {
             coil(&bar, up, &wind(1.5, 2.0, 0.0, Handed::Right), 1).unwrap_err(),
             CoilError::TurnsTouch
         );
+        // a section taller than the pitch that slants clear of its next turn builds (the height
+        // bound refused it); one that slants too little meets its next turn and is refused
+        let poly = |pts: [(f64, f64); 4]| Profile {
+            plane: standing,
+            loops: vec![ProfileLoop::new(
+                (0..4)
+                    .map(|i| {
+                        let (a, b) = (pts[i], pts[(i + 1) % 4]);
+                        (
+                            Segment::Line {
+                                a: Point2::new(a.0, a.1),
+                                b: Point2::new(b.0, b.1),
+                            },
+                            i as u64,
+                        )
+                    })
+                    .collect(),
+            )],
+        };
+        let slanted = poly([(8.0, 0.0), (9.0, 0.0), (15.0, 6.0), (14.0, 6.0)]);
+        for handed in [Handed::Right, Handed::Left] {
+            let b = coil(&slanted, up, &wind(4.0, 2.5, 0.0, handed), 1).unwrap();
+            valid(&b);
+        }
+        let steep = poly([(8.0, 0.0), (11.0, 0.0), (12.0, 6.0), (9.0, 6.0)]);
+        assert_eq!(
+            coil(&steep, up, &wind(4.0, 2.5, 0.0, Handed::Right), 1).unwrap_err(),
+            CoilError::TurnsTouch
+        );
+        // under one turn nothing can meet, whatever the height
+        valid(&coil(&steep, up, &wind(4.0, 0.9, 0.0, Handed::Right), 1).unwrap());
         assert_eq!(
             coil(&bar, up, &wind(4.0, 0.0, 0.0, Handed::Right), 1).unwrap_err(),
             CoilError::BadTurns

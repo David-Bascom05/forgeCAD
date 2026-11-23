@@ -1,0 +1,11 @@
+name = "forgemesh"
+version = "0.1.0"
+defaultTargets = ["ForgeMesh"]
+
+# forge-math's translation and proofs (orient2d), and through it the float bridge.
+[[require]]
+name = "forgemath"
+path = "../../forge-math/lean"
+
+[[lean_lib]]
+name = "ForgeMesh"

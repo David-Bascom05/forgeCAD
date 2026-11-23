@@ -37,7 +37,8 @@ oshcut, xometry, jlc, restated from their public guides: verify with the vendor 
 Select in the part's own text: `edges(of: boss, crease: "convex")`, `edges(between: (a, b))`,
 anchors like `base.end`, `base.side(plan.outline[2])`, `hole.bore`; one copy of a pattern or one
 place of a hole: `edges(of: bolts[1], crease: "convex")`. Features: extrude cut revolve
-sweep loft coil thread hole fillet chamfer shell draft rib pattern, text (in a sketch:
+sweep loft coil thread hole fillet (circular, or conic: `fillet(E, r, conic: ratio(0.5))`) chamfer
+shell draft rib pattern, text (in a sketch:
 `label = text("AB-1", at: (x, y), size: s, font: "Open Sans")`, then `extrude(sk.label, h)`), bodies,
 sheet metal, weldments (`members` along a layout's segments with a standard or sketched section,
 `end_trim`, `end_cap`, `corner_plate`), components and assemblies (`help forge`).
