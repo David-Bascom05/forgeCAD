@@ -684,14 +684,12 @@ impl Blend {
                     radius,
                 })
             }
-            Curve::Circle(k) if k.radius > radius + tol::LINEAR => Surface::Torus(Torus {
-                frame: k.frame,
-                major: k.radius,
-                minor: radius,
-            }),
-            // a circle spine within the ball's radius of its axis gives a spindle torus (the fillet
-            // spec's hole_closing), when the section arc keeps to its used sheet
-            Curve::Circle(k) if k.radius > tol::MIN_LENGTH && off_axis_arc(k, a, b, da, db, radius, &spine, near) => {
+            // within the ball's radius of its axis, a spindle torus (the fillet spec's hole_closing),
+            // when the section arc keeps to its used sheet
+            Curve::Circle(k)
+                if k.radius > radius + tol::LINEAR
+                    || (k.radius > tol::MIN_LENGTH && off_axis_arc(k, a, b, da, db, radius, &spine, near)) =>
+            {
                 Surface::Torus(Torus {
                     frame: k.frame,
                     major: k.radius,

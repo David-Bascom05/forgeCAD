@@ -1,0 +1,51 @@
+torture seq: total +13; libc/ld.so/heap +13; kernel/app functions moved: 0
+torture nary1: total +13; libc/ld.so/heap +13; kernel/app functions moved: 0
+plate seq: total +13; libc/ld.so/heap +13; kernel/app functions moved: 0
+plate nary1: total +13; libc/ld.so/heap +13; kernel/app functions moved: 0
+shaft seq: total +13; libc/ld.so/heap +13; kernel/app functions moved: 0
+shaft nary1: total +13; libc/ld.so/heap +13; kernel/app functions moved: 0
+housing seq: total +13; libc/ld.so/heap +13; kernel/app functions moved: 0
+housing nary1: total +13; libc/ld.so/heap +13; kernel/app functions moved: 0
+coplanar seq: total +13; libc/ld.so/heap +13; kernel/app functions moved: 0
+coplanar nary1: total +13; libc/ld.so/heap +13; kernel/app functions moved: 0
+patterns seq: total +13; libc/ld.so/heap +13; kernel/app functions moved: 0
+patterns nary1: total +13; libc/ld.so/heap +13; kernel/app functions moved: 0
+mixed seq: total +13; libc/ld.so/heap +13; kernel/app functions moved: 0
+mixed nary1: total +13; libc/ld.so/heap +13; kernel/app functions moved: 0
+hole-grid seq: total +13; libc/ld.so/heap +13; kernel/app functions moved: 0
+hole-grid nary1: total +13; libc/ld.so/heap +13; kernel/app functions moved: 0
+tour seq: total +13; libc/ld.so/heap +13; kernel/app functions moved: 0
+tour nary1: total +13; libc/ld.so/heap +13; kernel/app functions moved: 0
+upto seq: total +13; libc/ld.so/heap +13; kernel/app functions moved: 0
+upto nary1: total +13; libc/ld.so/heap +13; kernel/app functions moved: 0
+upto-flat seq: total +13; libc/ld.so/heap +13; kernel/app functions moved: 0
+upto-flat nary1: total +13; libc/ld.so/heap +13; kernel/app functions moved: 0
+gearbox app: total +36; libc/ld.so/heap +32; kernel/app functions moved: 1 +4 ???:core::iter::adapters::try_process::<core::iter::adapters::map::Map<core::iter::adapter
+crank app: total +588; libc/ld.so/heap +572; kernel/app functions moved: 3 +12 ???:<std::sync::once::Once>::call_once_force::<<std::sync::once_lock::OnceLock<[core::opti; +2 ???:<forge_geom::blend::Blend>::new; +2 ???:core::iter::adapters::try_process::<core::iter::adapters::map::Map<core::iter::adapter
+crank edit: total +948; libc/ld.so/heap +916; kernel/app functions moved: 3 +24 ???:<std::sync::once::Once>::call_once_force::<<std::sync::once_lock::OnceLock<[core::opti; +4 ???:<forge_geom::blend::Blend>::new; +4 ???:core::iter::adapters::try_process::<core::iter::adapters::map::Map<core::iter::adapter
+crank cli: total +474; libc/ld.so/heap +458; kernel/app functions moved: 3 +12 ???:<std::sync::once::Once>::call_once_force::<<std::sync::once_lock::OnceLock<[core::opti; +2 ???:<forge_geom::blend::Blend>::new; +2 ???:core::iter::adapters::try_process::<core::iter::adapters::map::Map<core::iter::adapter
+valve app: total +2160; libc/ld.so/heap +2150; kernel/app functions moved: 1 +10 ???:core::iter::adapters::try_process::<core::iter::adapters::map::Map<core::iter::adapter
+valve edit: total +4410; libc/ld.so/heap +4390; kernel/app functions moved: 1 +20 ???:core::iter::adapters::try_process::<core::iter::adapters::map::Map<core::iter::adapter
+valve cli: total +2212; libc/ld.so/heap +2202; kernel/app functions moved: 1 +10 ???:core::iter::adapters::try_process::<core::iter::adapters::map::Map<core::iter::adapter
+heatsink app: total +137; libc/ld.so/heap +137; kernel/app functions moved: 0
+heatsink edit: total +343; libc/ld.so/heap +343; kernel/app functions moved: 0
+heatsink cli: total +173; libc/ld.so/heap +173; kernel/app functions moved: 0
+quadarm app: total +111; libc/ld.so/heap +108; kernel/app functions moved: 1 +3 ???:<forge_geom::blend::Blend>::new
+quadarm edit: total +93; libc/ld.so/heap +87; kernel/app functions moved: 1 +6 ???:<forge_geom::blend::Blend>::new
+conrod app: total +298; libc/ld.so/heap +296; kernel/app functions moved: 1 +2 ???:core::iter::adapters::try_process::<core::iter::adapters::map::Map<core::iter::adapter
+conrod edit: total +361; libc/ld.so/heap +357; kernel/app functions moved: 1 +4 ???:core::iter::adapters::try_process::<core::iter::adapters::map::Map<core::iter::adapter
+conrod cli: total +272; libc/ld.so/heap +270; kernel/app functions moved: 1 +2 ???:core::iter::adapters::try_process::<core::iter::adapters::map::Map<core::iter::adapter
+jack cli: total +47; libc/ld.so/heap +23; kernel/app functions moved: 2 +20 ???:<std::sync::once::Once>::call_once_force::<<std::sync::once_lock::OnceLock<[core::opti; +4 ???:core::iter::adapters::try_process::<core::iter::adapters::map::Map<core::iter::adapter
+manifold edit: total +360; libc/ld.so/heap +350; kernel/app functions moved: 1 +10 ???:<forge_geom::blend::Blend>::new
+bracket app: total +117; libc/ld.so/heap +117; kernel/app functions moved: 0
+bracket edit: total +198; libc/ld.so/heap +198; kernel/app functions moved: 0
+bracket cli: total +106; libc/ld.so/heap +106; kernel/app functions moved: 0
+insert app: total +174; libc/ld.so/heap +166; kernel/app functions moved: 1 +8 ???:<forge_geom::blend::Blend>::new
+insert edit: total +58; libc/ld.so/heap +42; kernel/app functions moved: 1 +16 ???:<forge_geom::blend::Blend>::new
+insert cli: total +57; libc/ld.so/heap +49; kernel/app functions moved: 1 +8 ???:<forge_geom::blend::Blend>::new
+clamp app: total +92; libc/ld.so/heap +88; kernel/app functions moved: 1 +4 ???:<forge_geom::blend::Blend>::new
+clamp edit: total +40; libc/ld.so/heap +32; kernel/app functions moved: 1 +8 ???:<forge_geom::blend::Blend>::new
+clamp cli: total +25; libc/ld.so/heap +21; kernel/app functions moved: 1 +4 ???:<forge_geom::blend::Blend>::new
+guard app: total +123; libc/ld.so/heap +121; kernel/app functions moved: 1 +2 ???:<forge_geom::blend::Blend>::new
+guard edit: total +370; libc/ld.so/heap +366; kernel/app functions moved: 1 +4 ???:<forge_geom::blend::Blend>::new
+guard cli: total +165; libc/ld.so/heap +163; kernel/app functions moved: 1 +2 ???:<forge_geom::blend::Blend>::new
