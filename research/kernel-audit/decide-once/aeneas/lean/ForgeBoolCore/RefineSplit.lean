@@ -668,4 +668,124 @@ theorem split_loop4_spec (l : Ledger) (FP : alloc.vec.Vec U32) (Fl : Nat)
       exact ⟨hl1, hl2, hl3⟩
   · exact ⟨hk, hinv⟩
 
+/-! ## `split` whole -/
+
+theorem clone_u32 : core.clone.CloneU32.clone NONE = ok NONE := rfl
+
+theorem getD_replicate_none (n c : Nat) : ((List.replicate n NONE).getD c NONE) = NONE := by
+  rw [List.getD_eq_getElem?_getD]
+  by_cases h : c < n
+  · simp [h]
+  · rw [List.getElem?_eq_none (by simp; omega)]; rfl
+
+theorem clone_vec_bool_spec (v : alloc.vec.Vec Bool) :
+    alloc.vec.CloneVec.clone core.clone.CloneBool v ⦃ r => r = v ⦄ := by
+  unfold alloc.vec.CloneVec.clone
+  have hc : ∀ x ∈ v.slice.val, core.clone.CloneBool.clone x = ok x := fun _ _ => rfl
+  step as ⟨s, hs⟩
+  cases v; subst hs; rfl
+
+theorem ok_of_spec {α : Type} {x : Result α} {v : α} (h : x ⦃ r => r = v ⦄) : x = ok v := by
+  cases x with
+  | ret r => rw [WP.spec_ok] at h; rw [h]
+  | vis e k => exact (WP.spec_vis e k).mp h |>.elim
+  | div => exact WP.spec_div.mp h |>.elim
+
+/-- What `split` delivers. -/
+structure SplitOK (l : Ledger) (e0 : Ext) (s : Split) (e : Ext) : Prop where
+  ext : ExtOK l e
+  grows : Grows l e0 e
+  facets : s.facets.val.map (·.val) = dedup ((pcs l).map Prod.fst)
+  sides : L1Inv l e0 s.facets.val e s.plus.val s.minus.val s.facets.val.length
+  topes : TInv s.tope_pos.val s.topes.val (stream s.plus.val s.minus.val s.facets.val.length) (allCells l e).length
+  first : ∀ c, c < (allCells l e0).length → (s.first_face.val.getD c NONE).val = (firstF (pcs l) c).getD U32.max
+  piece_len : s.piece_of.val.length = s.facets.val.length
+  piece_row : ∀ p, p < s.facets.val.length → (s.piece_of.val.getD p default).val.length = l.nb.val
+  piece : ∀ p, p < s.facets.val.length → ∀ b, b < l.nb.val →
+    PAt s.piece_of.val p b = (pcs l).any (fun q => decide ((s.facets.val.map (·.val)).idxOf q.1 = p ∧ bodyF l q.2 = b))
+
+theorem split_spec (l : Ledger) (e0 : Ext) (hok : ExtOK l e0)
+    (hpc : ∀ q ∈ pcs l, q.1 < l.cells.val.length ∧ q.2 < U32.max)
+    (hroom : (allCells l e0).length + 2 * l.pieces.val.length + 1 < U32.max) :
+    split l e0 ⦃ r => SplitOK l e0 r.1 r.2 ⦄ := by
+  have hpl : (pcs l).length = l.pieces.val.length := by simp [pcs]
+  have hlen0 := allCells_length l e0
+  unfold split
+  step with ncells_spec l e0 (by have := u32_le_usize; omega) as ⟨n, hn⟩
+  step as ⟨ff, hff1, hff2⟩
+  step with split_loop0_spec l ff (alloc.vec.Vec.new U32) 0#usize (by simp)
+    (fun q hq => by rw [hff1]; simp [hn]; have := (hpc q hq).1; omega)
+    (fun q hq => (hpc q hq).2) (by simp [dedup, dedupAux])
+    (fun c hc => by rw [hff1, getD_replicate_none, none_val]; simp [firstF])
+    as ⟨nb', fb, fc, cl, pc, ins, ed, vt, ff1, F, h1, h2, h3, h4, h5, h6, h7, h8, hffl, hff, hF⟩
+  subst h1 h2 h3 h4 h5 h6 h7 h8
+  have hFmem : ∀ x ∈ F.val, x.val ∈ (pcs l).map Prod.fst := by
+    intro x hx
+    have : x.val ∈ F.val.map (·.val) := List.mem_map.mpr ⟨x, hx, rfl⟩
+    rw [hF] at this; exact (mem_dedup _ _).mp this
+  have hFin : ∀ x ∈ F.val, x.val < l.cells.val.length := by
+    intro x hx
+    obtain ⟨q, hq, e⟩ := List.mem_map.mp (hFmem x hx)
+    rw [← e]; exact (hpc q hq).1
+  have hFl : F.val.length ≤ l.pieces.val.length := by
+    have := congrArg List.length hF
+    simp only [List.length_map] at this
+    have := dedup_length_le ((pcs l).map Prod.fst); simp at this; omega
+  step with split_loop1_spec l e0 hok F hFin (by omega) e0 (alloc.vec.Vec.new U32) (alloc.vec.Vec.new U32)
+    0#usize ⟨by simp, hok, grows_refl l e0, by simp, by simp, by simp, fun k hk => by simp at hk⟩
+    as ⟨e1, P, M, hL1⟩
+  have hL1' := hL1
+  obtain ⟨_, hok1, hgr1, hlen1, hPl, hMl, hPM⟩ := hL1'
+  have hlenE1 := allCells_length l e1
+  step with ncells_spec l e1 (by have := u32_le_usize; omega) as ⟨n1, hn1⟩
+  step as ⟨T0, hT01, hT02⟩
+  have hside : ∀ k, k < F.val.length → P.val[k]!.val < (allCells l e1).length ∧ M.val[k]!.val < (allCells l e1).length :=
+    fun k hk => ⟨(hPM k hk).1, (hPM k hk).2.2.1⟩
+  step with split_loop2_spec F P M T0 (alloc.vec.Vec.new U32) (allCells l e1).length 0#usize hPl hMl hside
+    (by omega) (by simp)
+    ⟨by rw [hT01]; simp [hn1], by simp [stream, dedup, dedupAux], fun x hx => by simp [stream] at hx,
+      fun c hc => by rw [hT01, getD_replicate_none, none_val]; simp [stream]⟩
+    as ⟨TP, Tp, hTI⟩
+  step with ncells_spec l e1 (by have := u32_le_usize; omega) as ⟨n2, hn2⟩
+  step as ⟨FP0, hFP01, hFP02⟩
+  have hnd : (F.val.map (·.val)).Nodup := by rw [hF]; exact nodup_dedup _
+  step with split_loop3_spec F FP0 FP0 0#usize hnd
+    (fun x hx => by rw [hFP01]; simp [hn2]; have := hFin x hx; have := hgr1.1; omega)
+    (by omega) (by simp) rfl (fun c hc => by simp)
+    as ⟨FP, hFPl, hFP⟩
+  step as ⟨nbu, hnbu⟩
+  step as ⟨v7, hv71, hv72⟩
+  step with alloc.vec.from_elem_spec (core.clone.CloneallocvecVec core.clone.CloneBool) v7 (alloc.vec.Vec.len F)
+    (ok_of_spec (clone_vec_bool_spec v7)) as ⟨PO, hPO1, hPO2⟩
+  have hposq : ∀ q ∈ pcs l, posAt FP q.1 = (F.val.map (·.val)).idxOf q.1 := by
+    intro q hq
+    have hqF : q.1 ∈ F.val.map (·.val) := by rw [hF]; exact (mem_dedup _ _).mpr (List.mem_map.mpr ⟨q, hq, rfl⟩)
+    have hql : q.1 < FP0.val.length := by rw [hFP01]; simp [hn2]; have := (hpc q hq).1; have := hgr1.1; omega
+    rw [posAt, hFP q.1 hql, if_pos hqF]
+  have hidx : ∀ q ∈ pcs l, (F.val.map (·.val)).idxOf q.1 < F.val.length := by
+    intro q hq
+    have hqF : q.1 ∈ F.val.map (·.val) := by rw [hF]; exact (mem_dedup _ _).mpr (List.mem_map.mpr ⟨q, hq, rfl⟩)
+    have := List.idxOf_lt_length_iff.mpr hqF; simpa using this
+  step with split_loop4_spec l FP F.val.length
+    (fun q hq => ⟨by rw [hFPl, hFP01]; simp [hn2]; have := (hpc q hq).1; have := hgr1.1; omega,
+      by rw [hposq q hq]; exact hidx q hq⟩) PO 0#usize (by simp)
+    ⟨by rw [hPO1]; simp, fun p hp => by
+        rw [hPO1, List.getD_eq_getElem?_getD, List.getElem?_replicate]; simp [hp, hv71, hnbu],
+      fun p hp b hb => by
+        have hp' : p < (List.replicate (alloc.vec.Vec.len F).val v7).length := by simp; omega
+        simp only [PAt, hPO1, List.getD_eq_getElem?_getD, List.getElem?_eq_getElem hp', List.getElem_replicate,
+          Option.getD_some, hv71]
+        simp⟩
+    as ⟨PO1, hPO⟩
+  obtain ⟨hPOl, hPOr, hPOp⟩ := hPO
+  refine ⟨hok1, hgr1, hF, hL1, hTI, fun c hc => ?_, hPOl, hPOr, fun p hp b hb => ?_⟩
+  · have hcl : c < ff.val.length := by rw [hff1]; simp [hn]; omega
+    rw [hff c hcl]
+  · rw [hPOp p hp b hb, ← hpl, List.take_length]
+    apply Bool.eq_iff_iff.mpr
+    simp only [List.any_eq_true]
+    constructor
+    · rintro ⟨q, hq, h⟩; exact ⟨q, hq, by rw [← hposq q hq]; exact h⟩
+    · rintro ⟨q, hq, h⟩; exact ⟨q, hq, by rw [hposq q hq]; exact h⟩
+
 end forge_bool_core

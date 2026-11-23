@@ -31,3 +31,4 @@ import ForgeBoolCore.RefineSplit
 #print axioms forge_bool_core.split_loop2_spec
 #print axioms forge_bool_core.split_loop3_spec
 #print axioms forge_bool_core.split_loop4_spec
+#print axioms forge_bool_core.split_spec
