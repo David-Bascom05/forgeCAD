@@ -825,19 +825,19 @@ impl AcrossMemo {
         self.surfaces.clear();
     }
     /// `across(body, f, c)` for side `k`, worked out once per boolean.
-    fn get(&mut self, k: usize, body: &Body, f: FaceId, c: forge_topo::CoedgeId) -> R<Surface> {
+    fn get(&mut self, k: usize, body: &Body, f: FaceId, c: forge_topo::CoedgeId) -> R<&Surface> {
         let v = &mut self.at[k];
         if v.len() <= c.index() {
             v.resize(body.coedges.len().max(c.index() + 1), (0, 0));
         }
         let (at, slot) = v[c.index()];
         if at == self.stamp {
-            return Ok(self.surfaces[slot as usize].clone());
+            return Ok(&self.surfaces[slot as usize]);
         }
         let s = across(body, f, c)?;
         v[c.index()] = (self.stamp, self.surfaces.len() as u32);
-        self.surfaces.push(s.clone());
-        Ok(s)
+        self.surfaces.push(s);
+        Ok(&self.surfaces[self.surfaces.len() - 1])
     }
 }
 
@@ -2637,9 +2637,14 @@ fn trim_in(
                     }
                     continue;
                 }
-                let across = match memo.as_deref_mut() {
+                // (the memo's own copy, borrowed for this edge; without one, worked out here)
+                let own;
+                let across: &Surface = match memo.as_deref_mut() {
                     Some(m) => m.get(k, body, f, c)?,
-                    None => across(body, f, c)?,
+                    None => {
+                        own = across(body, f, c)?;
+                        &own
+                    }
                 };
                 // only hits on the edge count: within its ends' tolerance of its box
                 let near = || {
@@ -2655,10 +2660,10 @@ fn trim_in(
                 let other_surface = &bodies[1 - k].face(faces[1 - k]).surface;
                 let on_spring = matches!(&edge.curve, Curve::Procedural(pc)
                         if pc.0.as_any().is_some_and(|a| a.is::<forge_geom::blend::Spring>()))
-                    && (!matches!(other_surface, Surface::Procedural(_)) || !holds_edge(&across, edge));
+                    && (!matches!(other_surface, Surface::Procedural(_)) || !holds_edge(across, edge));
                 let bends = !on_spring
                     && !matches!(edge.curve, Curve::Line(_) | Curve::Circle(_) | Curve::Ellipse(_))
-                    && !holds_edge(&across, edge);
+                    && !holds_edge(across, edge);
                 doubtful |= bends;
                 let found = if on_spring {
                     fenced.push((k, e));
@@ -2707,12 +2712,12 @@ fn trim_in(
                     CurveSurface::Hits(crossing_on_face(&curve, range, body, f, edge))
                 } else {
                     with_hairs!(
-                        curve_surface_in(&curve, range, &across, near),
+                        curve_surface_in(&curve, range, across, near),
                         |hairs| log::hairs(
                             [(bodies[0], faces[0]), (bodies[1], faces[1])],
                             body,
                             e,
-                            (&curve, range, &across),
+                            (&curve, range, across),
                             &hairs,
                         )
                     )
@@ -2882,7 +2887,7 @@ fn trim_in(
                 };
                 for (h, grazing) in hits.into_iter().flat_map(|h| {
                     let grazing = h.contact != Contact::Crossing;
-                    let near = crossings_near(&curve, range, &across, h);
+                    let near = crossings_near(&curve, range, across, h);
                     decided!(if grazing {
                         let pair = [(bodies[0], faces[0]), (bodies[1], faces[1])];
                         log::contact(pair, body, e, h.point, 0, "curve_surface: a touching root");
