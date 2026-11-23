@@ -122,6 +122,42 @@ pub enum Refuse {
     NoMotion,
 }
 
+/// A copy of a position (index loop: Aeneas has no model of `Vec::clone`'s element clones).
+pub fn copy(p: &[Option<i64>]) -> Vec<Option<i64>> {
+    let mut out: Vec<Option<i64>> = Vec::with_capacity(p.len());
+    let mut k = 0;
+    while k < p.len() {
+        let v = p[k];
+        out.push(v);
+        k += 1;
+    }
+    out
+}
+
+/// A list of one event.
+pub fn one(e: Ev) -> Vec<Ev> {
+    let mut v = Vec::new();
+    v.push(e);
+    v
+}
+
+/// One axis's target, and whether it is an incremental word from an unknown value.
+pub fn target_one(absolute: bool, p: Option<i64>, w: Option<i64>) -> (Option<i64>, bool) {
+    match w {
+        None => (p, false),
+        Some(d) => {
+            if absolute {
+                (Some(d), false)
+            } else {
+                match p {
+                    Some(v) => (Some(v + d), false),
+                    None => (None, true),
+                }
+            }
+        }
+    }
+}
+
 /// The target of a block's axis words: absolute words replace; incremental ones add to a known
 /// value.
 pub fn target(absolute: bool, pos: &[Option<i64>], ax: &[Option<i64>]) -> Result<Vec<Option<i64>>, Refuse> {
@@ -130,22 +166,11 @@ pub fn target(absolute: bool, pos: &[Option<i64>], ax: &[Option<i64>]) -> Result
     let mut k = 0;
     while k < pos.len() {
         let w = if k < ax.len() { ax[k] } else { None };
-        let v = match w {
-            None => pos[k],
-            Some(d) => {
-                if absolute {
-                    Some(d)
-                } else {
-                    match pos[k] {
-                        Some(p) => Some(p + d),
-                        None => {
-                            bad = true;
-                            None
-                        }
-                    }
-                }
-            }
-        };
+        let pk = pos[k];
+        let (v, unknown) = target_one(absolute, pk, w);
+        if unknown {
+            bad = true;
+        }
         out.push(v);
         k += 1;
     }
@@ -176,6 +201,26 @@ pub fn put(a: &Axes, p: &[Option<i64>], x: i64, y: i64, h: i64) -> Vec<Option<i6
     out
 }
 
+/// G2 or G3.
+pub fn is_arc(g: u32) -> bool {
+    g == 2 || g == 3
+}
+
+/// A canned-cycle motion code: 81 82 83 84 85 73.
+pub fn is_cycle(g: u32) -> bool {
+    g == 81 || g == 82 || g == 83 || g == 84 || g == 85 || g == 73
+}
+
+/// A pecking cycle: 83 (back to R each peck) or 73 (chip break).
+pub fn is_peck(g: u32) -> bool {
+    g == 83 || g == 73
+}
+
+/// A cycle that feeds back out to R: 85 (bore) and 84 (tap).
+pub fn feeds_out(g: u32) -> bool {
+    g == 85 || g == 84
+}
+
 /// One hole of a cycle at (x, y) from the current height `cur`: to (x, y) at `cur`, to R, the cut,
 /// back to `back`. `pc` and `lift` are the peck clearance and chip-break lift in integer units.
 #[allow(clippy::too_many_arguments)]
@@ -194,7 +239,7 @@ pub fn hole(
 ) {
     out.push(Ev::Rapid(put(a, base, x, y, cur)));
     out.push(Ev::Rapid(put(a, base, x, y, c.r)));
-    if c.g == 83 || c.g == 73 {
+    if is_peck(c.g) {
         let step = if c.q > 0 { c.q } else { c.r - c.z };
         if step > 0 {
             let mut depth = c.r;
@@ -217,7 +262,7 @@ pub fn hole(
         if c.g == 82 && c.dwell > 0 {
             out.push(Ev::Dwell(c.dwell));
         }
-        if c.g == 85 || c.g == 84 {
+        if feeds_out(c.g) {
             out.push(Ev::Feed(put(a, base, x, y, c.r), f));
         }
     }
@@ -249,7 +294,7 @@ fn motion_code(a: &Axes, st: &State, b: &Block, s1: State) -> Result<State, Refu
                     cyc: None,
                     ..s1
                 })
-            } else if g == 81 || g == 82 || g == 83 || g == 84 || g == 85 || g == 73 {
+            } else if is_cycle(g) {
                 if s1.plane != 17 {
                     Err(Refuse::CycleNotG17)
                 } else {
@@ -349,8 +394,8 @@ fn arc(
                     Ok(Centre::Abs(sa + i, sb + j))
                 }
             }?;
-            let ev = Ev::Arc(dst.clone(), s2.plane, centre, g == 2, full, f);
-            Ok((vec![ev], State { pos: dst, ..s2 }))
+            let ev = Ev::Arc(copy(&dst), s2.plane, centre, g == 2, full, f);
+            Ok((one(ev), State { pos: dst, ..s2 }))
         }
         (Some(_), Some(_), Some(_), Some(_), None) => Err(Refuse::NoFeed),
         _ => Err(Refuse::ArcUnknown),
@@ -376,7 +421,7 @@ pub fn step(a: &Axes, pc: i64, lift: i64, st: &State, b: &Block) -> Result<(Vec<
         None => st.plane,
     };
     let s1 = State {
-        pos: st.pos.clone(),
+        pos: copy(&st.pos),
         absolute,
         mode: st.mode,
         plane,
@@ -409,7 +454,7 @@ pub fn step(a: &Axes, pc: i64, lift: i64, st: &State, b: &Block) -> Result<(Vec<
         if axes.is_empty() {
             return Err(Refuse::HomeNoAxis);
         }
-        return Ok((vec![Ev::Home(via, axes)], State { pos, ..s1 }));
+        return Ok((one(Ev::Home(via, axes)), State { pos, ..s1 }));
     }
     let s2 = motion_code(a, st, b, s1)?;
     if !any {
@@ -432,13 +477,13 @@ pub fn step(a: &Axes, pc: i64, lift: i64, st: &State, b: &Block) -> Result<(Vec<
                 _ => Err(Refuse::HoleUnknown),
             }
         }
-        (Some(0), _) => Ok((vec![Ev::Rapid(dst.clone())], State { pos: dst, ..s2 })),
+        (Some(0), _) => Ok((one(Ev::Rapid(copy(&dst))), State { pos: dst, ..s2 })),
         (Some(1), _) => match feed {
-            Some(f) => Ok((vec![Ev::Feed(dst.clone(), f)], State { pos: dst, ..s2 })),
+            Some(f) => Ok((one(Ev::Feed(copy(&dst), f)), State { pos: dst, ..s2 })),
             None => Err(Refuse::NoFeed),
         },
         (Some(g), _) => {
-            if g == 2 || g == 3 {
+            if is_arc(g) {
                 arc(a, st, b, s2, dst, g)
             } else {
                 Err(Refuse::NoMotion)
