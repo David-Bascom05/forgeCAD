@@ -441,7 +441,8 @@ theorem hole_loop_spec (c : Cyc) (pc lift f x y s : Std.I64) (out0 : alloc.vec.V
     hole_loop a base c.g c.z c.r pc lift f x y out0 s c.r ⦃ r =>
       r.val.map (E n) = out0.val.map (E n) ++
         (ForgeMachine.pecks c.z.val s.val hs c.r.val).flatMap
-          (pk n a hx hy hz base (CY c) pc.val lift.val f.val x.val y.val) ⦄ := by
+          (pk n a hx hy hz base (CY c) pc.val lift.val f.val x.val y.val) ∧
+      (r.val.length : ℤ) ≤ 2 + 3 * (c.r.val - c.z.val) ⦄ := by
   unfold hole_loop
   simp only [Bd] at hzb hrb hpc hlift
   let F := fun (d : ℤ) => (ForgeMachine.pecks c.z.val s.val hs d).flatMap
@@ -531,11 +532,151 @@ theorem hole_loop_spec (c : Cyc) (pc lift f x y s : Std.I64) (out0 : alloc.vec.V
         show (ForgeMachine.pecks c.z.val s.val hs d.val).flatMap _ = []
         rw [ForgeMachine.pecks_eq, if_neg this]; rfl
       rw [hF0, List.append_nil] at hinv
-      exact hinv
+      exact ⟨hinv, by omega⟩
   · refine ⟨hzr, le_rfl, rfl, ?_⟩
     simp only
     have : (out0.val.length : ℤ) ≤ 2 := by exact_mod_cast hout
     omega
+
+/-- The spec's hole, by its three cases. -/
+theorem spec_hole_peck (c : Cyc) (cur back pc lift f x y : ℤ)
+    (hpk : c.g.val = 83 ∨ c.g.val = 73) (s : ℤ) (hsv : s = if 0 < c.q.val then c.q.val else c.r.val - c.z.val)
+    (hs : 0 < s) :
+    ForgeMachine.hole (AX n a hx hy hz) (P n base.val) (CY c) cur back pc lift f x y =
+      [.rapid (ForgeMachine.put (AX n a hx hy hz) (P n base.val) x y cur),
+       .rapid (ForgeMachine.put (AX n a hx hy hz) (P n base.val) x y c.r.val)] ++
+      (ForgeMachine.pecks c.z.val s hs c.r.val).flatMap (pk n a hx hy hz base (CY c) pc lift f x y) ++
+      [.rapid (ForgeMachine.put (AX n a hx hy hz) (P n base.val) x y back)] := by
+  subst hsv
+  unfold ForgeMachine.hole
+  have h1 : ((CY c).g = 83 ∨ (CY c).g = 73) := hpk
+  have h2 : 0 < (if 0 < (CY c).q then (CY c).q else (CY c).r - (CY c).z) := hs
+  dsimp only
+  rw [if_pos h1, dif_pos h2]
+  rfl
+
+theorem spec_hole_peck0 (c : Cyc) (cur back pc lift f x y : ℤ)
+    (hpk : c.g.val = 83 ∨ c.g.val = 73)
+    (hs : ¬ 0 < (if 0 < c.q.val then c.q.val else c.r.val - c.z.val)) :
+    ForgeMachine.hole (AX n a hx hy hz) (P n base.val) (CY c) cur back pc lift f x y =
+      [.rapid (ForgeMachine.put (AX n a hx hy hz) (P n base.val) x y cur),
+       .rapid (ForgeMachine.put (AX n a hx hy hz) (P n base.val) x y c.r.val),
+       .rapid (ForgeMachine.put (AX n a hx hy hz) (P n base.val) x y back)] := by
+  unfold ForgeMachine.hole
+  have h1 : ((CY c).g = 83 ∨ (CY c).g = 73) := hpk
+  have h2 : ¬ 0 < (if 0 < (CY c).q then (CY c).q else (CY c).r - (CY c).z) := hs
+  dsimp only
+  rw [if_pos h1, dif_neg h2]
+  rfl
+
+theorem spec_hole_drill (c : Cyc) (cur back pc lift f x y : ℤ)
+    (hpk : ¬ (c.g.val = 83 ∨ c.g.val = 73)) :
+    ForgeMachine.hole (AX n a hx hy hz) (P n base.val) (CY c) cur back pc lift f x y =
+      [.rapid (ForgeMachine.put (AX n a hx hy hz) (P n base.val) x y cur),
+       .rapid (ForgeMachine.put (AX n a hx hy hz) (P n base.val) x y c.r.val),
+       .feed (ForgeMachine.put (AX n a hx hy hz) (P n base.val) x y c.z.val) f] ++
+      (if c.g.val = 82 ∧ 0 < c.dwell.val then [.dwell c.dwell.val] else []) ++
+      (if c.g.val = 85 ∨ c.g.val = 84 then
+        [.feed (ForgeMachine.put (AX n a hx hy hz) (P n base.val) x y c.r.val) f] else []) ++
+      [.rapid (ForgeMachine.put (AX n a hx hy hz) (P n base.val) x y back)] := by
+  unfold ForgeMachine.hole
+  have h1 : ¬ ((CY c).g = 83 ∨ (CY c).g = 73) := hpk
+  dsimp only
+  rw [if_neg h1]
+  simp only [List.append_assoc, List.cons_append, List.nil_append]
+  rfl
+
+include hb hbl in
+theorem hole_spec (c : Cyc) (cur back pc lift f x y : Std.I64) (out : alloc.vec.Vec Ev)
+    (hout : out.val = []) (hzr : c.z.val ≤ c.r.val) (hzb : Bd c.z.val) (hrb : Bd c.r.val)
+    (hqb : Bd c.q.val) (hpc : Bd pc.val) (hlift : Bd lift.val) :
+    hole a base c cur back pc lift f x y out ⦃ r =>
+      r.val.map (E n) = ForgeMachine.hole (AX n a hx hy hz) (P n base.val) (CY c) cur.val back.val
+        pc.val lift.val f.val x.val y.val ⦄ := by
+  unfold hole
+  have hbd := hzb; have hbr := hrb; have hbq := hqb
+  simp only [Bd] at hbd hbr hbq
+  step with put_P n a hx hy hz base hb hbl x y cur as ⟨v, hv⟩
+  step with alloc.vec.Vec.push_spec out (Ev.Rapid v) (by rw [hout]; simp; scalar_tac) as ⟨o1, ho1⟩
+  step with put_P n a hx hy hz base hb hbl x y c.r as ⟨v1, hv1⟩
+  step with alloc.vec.Vec.push_spec o1 (Ev.Rapid v1) (by rw [ho1, hout]; simp; scalar_tac) as ⟨o2, ho2⟩
+  step with is_peck_spec c.g as ⟨pb, hpb⟩
+  have ho2' : o2.val.map (E n) = [.rapid (P n v.val), .rapid (P n v1.val)] := by
+    rw [ho2, ho1, hout]; rfl
+  split
+  · rename_i hpk
+    have hpk' : c.g.val = 83 ∨ c.g.val = 73 := by simpa [hpb] using hpk
+    have hsv : (if c.q > 0#i64 then ok c.q else c.r - c.z) ⦃ s1 =>
+        s1.val = (if 0 < c.q.val then c.q.val else c.r.val - c.z.val) ⦄ := by
+      split
+      · rename_i h; have : 0 < c.q.val := by scalar_tac
+        simp [this]
+      · rename_i h; have : ¬ 0 < c.q.val := by scalar_tac
+        step as ⟨d, hd⟩; simp [this, hd]
+    step with hsv as ⟨s1, hs1⟩
+    split
+    · rename_i hpos
+      have hs0 : 0 < s1.val := by scalar_tac
+      rw [spec_hole_peck n a hx hy hz base c _ _ _ _ _ _ _ hpk' s1.val hs1 hs0]
+      step with hole_loop_spec n a hx hy hz base hb hbl c pc lift f x y s1 o2 hzr hzb hrb hs0
+        (by split at hs1 <;> omega) hpc hlift (by rw [ho2, ho1, hout]; simp) as ⟨o3, ho3, hl3⟩
+      step with put_P n a hx hy hz base hb hbl x y back as ⟨v2, hv2⟩
+      step with alloc.vec.Vec.push_spec o3 (Ev.Rapid v2) (by scalar_tac) as ⟨o4, ho4⟩
+      rw [ho4, List.map_append, ho3, ho2']
+      simp only [List.map_cons, List.map_nil, E, hv, hv1, hv2]
+    · rename_i hpos
+      have hs0 : ¬ 0 < (if 0 < c.q.val then c.q.val else c.r.val - c.z.val) := by
+        rw [← hs1]; scalar_tac
+      rw [spec_hole_peck0 n a hx hy hz base c _ _ _ _ _ _ _ hpk' hs0]
+      step with put_P n a hx hy hz base hb hbl x y back as ⟨v2, hv2⟩
+      step with alloc.vec.Vec.push_spec o2 (Ev.Rapid v2) (by rw [ho2, ho1, hout]; simp; scalar_tac) as ⟨o4, ho4⟩
+      rw [ho4, List.map_append, ho2']
+      simp only [List.map_cons, List.map_nil, E, hv, hv1, hv2]
+      rfl
+  · rename_i hpk
+    have hpk' : ¬ (c.g.val = 83 ∨ c.g.val = 73) := by simpa [hpb] using hpk
+    rw [spec_hole_drill n a hx hy hz base c _ _ _ _ _ _ _ hpk']
+    step with put_P n a hx hy hz base hb hbl x y c.z as ⟨v2, hv2⟩
+    step with alloc.vec.Vec.push_spec o2 (Ev.Feed v2 f) (by rw [ho2, ho1, hout]; simp; scalar_tac) as ⟨o3, ho3⟩
+    have hl3 : o3.val.length = 3 := by rw [ho3, ho2, ho1, hout]; rfl
+    have hd : (if c.g = 82#u32 then (if c.dwell > 0#i64 then o3.push (Ev.Dwell c.dwell) else ok o3) else ok o3)
+        ⦃ o4 => o4.val = o3.val ++ (if c.g.val = 82 ∧ 0 < c.dwell.val then [Ev.Dwell c.dwell] else []) ⦄ := by
+      split
+      · rename_i h82
+        have h82' : c.g.val = 82 := by rw [h82]; rfl
+        split
+        · rename_i hp
+          have hp' : 0 < c.dwell.val := by scalar_tac
+          step with alloc.vec.Vec.push_spec o3 (Ev.Dwell c.dwell) (by rw [hl3]; scalar_tac) as ⟨o4, ho4⟩
+          simp [ho4, h82', hp']
+        · rename_i hp
+          have hp' : ¬ 0 < c.dwell.val := by scalar_tac
+          simp [h82', hp']
+      · rename_i h82
+        have h82' : c.g.val ≠ 82 := fun e => h82 (UScalar.eq_of_val_eq (by simp [e]))
+        simp [h82']
+    step with hd as ⟨o4, ho4⟩
+    step with feeds_out_spec c.g as ⟨b1, hb1⟩
+    have hl4 : o4.val.length ≤ 4 := by rw [ho4, List.length_append, hl3]; split <;> simp
+    have hf : (if b1 then o4.push (Ev.Feed v1 f) else ok o4)
+        ⦃ o5 => o5.val = o4.val ++ (if c.g.val = 85 ∨ c.g.val = 84 then [Ev.Feed v1 f] else []) ⦄ := by
+      split
+      · rename_i hb
+        have : c.g.val = 85 ∨ c.g.val = 84 := by simpa [hb1] using hb
+        step with alloc.vec.Vec.push_spec o4 (Ev.Feed v1 f) (by scalar_tac) as ⟨o5, ho5⟩
+        simp [ho5, this]
+      · rename_i hb
+        have : ¬ (c.g.val = 85 ∨ c.g.val = 84) := by simpa [hb1] using hb
+        simp [this]
+    step with hf as ⟨o5, ho5⟩
+    have hl5 : o5.val.length ≤ 5 := by rw [ho5, List.length_append]; split <;> simp <;> omega
+    step with put_P n a hx hy hz base hb hbl x y back as ⟨v3, hv3⟩
+    step with alloc.vec.Vec.push_spec o5 (Ev.Rapid v3) (by scalar_tac) as ⟨o6, ho6⟩
+    rw [ho6, ho5, ho4, ho3, ho2, ho1, hout]
+    simp only [List.nil_append, List.map_append, List.map_cons, List.map_nil, E, hv, hv1, hv2, hv3,
+      List.cons_append, List.singleton_append]
+    congr 1
+    split <;> split <;> simp_all [E, CY]
 
 end hole
 
