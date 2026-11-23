@@ -228,6 +228,72 @@ fn probe(files: &[String]) {
     }
 }
 
+/// Each fillet's picked edges' midpoints and radius: `mids F.fg` (for an OCCT refillet of the same
+/// edges of the body before).
+fn mids(files: &[String]) {
+    for f in files {
+        let Ok(src) = std::fs::read_to_string(f) else { continue };
+        let m = forge_lang::fuzz::build_with(&src, opts());
+        for k in 0..m.features.len() {
+            let forge_model::Feature::Fillet { edges, .. } = &m.features[k] else { continue };
+            let Some(body) = m.body_after(k) else { continue };
+            for (name, radius) in edges {
+                let forge_ops::Radius::Constant(r) = radius else { continue };
+                let Some(e) = body.edge_by_name(*name) else { continue };
+                let x = body.edge(e);
+                let q = x.curve.eval(x.range.mid());
+                println!("{k} {r} {} {} {}", q.x, q.y, q.z);
+            }
+        }
+    }
+}
+
+/// `near F.fg PTS`: for each point (x y z per line) and each picked edge's rolled blend, the distance
+/// from the nearest spine point, against r (below r: the point is in a free ball, so air by the
+/// closing), and whether the blend surface's own projection of the point lies at distance r from it.
+fn near(f: &str, pts: &str) {
+    let Ok(src) = std::fs::read_to_string(f) else { return };
+    let m = forge_lang::fuzz::build_with(&src, opts());
+    let mut blends = Vec::new();
+    for k in 0..m.features.len() {
+        let forge_model::Feature::Fillet { edges, .. } = &m.features[k] else { continue };
+        let Some(body) = m.body_after(k) else { continue };
+        let body = if body.dead > 0 { body.compact() } else { body };
+        for (name, radius) in edges {
+            let forge_ops::Radius::Constant(r) = radius else { continue };
+            let Some(e) = body.edge_by_name(*name) else { continue };
+            if let Ok((b, _, _)) = forge_ops::fillet::edge_blend(&body, e, *r) {
+                blends.push((b, *r));
+            }
+        }
+    }
+    use forge_geom::SurfaceGeom;
+    for l in std::fs::read_to_string(pts).unwrap_or_default().lines() {
+        let v: Vec<f64> = l.split_whitespace().take(3).filter_map(|x| x.parse().ok()).collect();
+        if v.len() != 3 {
+            continue;
+        }
+        let p = Point3::new(v[0], v[1], v[2]);
+        for (b, r) in &blends {
+            let t = spine_closest(&b.spine, p);
+            let c = b.spine.eval(t);
+            let q = b.surface.eval(b.surface.project(p));
+            // inside the cap: the direction to p lies on the short arc between the feet
+            let (fa, fb) = b.feet(t);
+            let ang = |u: Vec3, w: Vec3| {
+                let (Some(u), Some(w)) = (u.normalize(), w.normalize()) else { return f64::NAN };
+                u.dot(w).clamp(-1.0, 1.0).acos()
+            };
+            let (a1, a2, a12) = (ang(p - c, fa - c), ang(p - c, fb - c), ang(fa - c, fb - c));
+            println!(
+                "{:.4} {:.4} {:.4}  |p-c| - r = {:+.3e}  surf(q): |q-c(q)| - r = {:+.3e}  cap excess {:+.3e} rad (to a {:.4}, to b {:.4}, arc {:.4})  centre off a {:+.3e} off b {:+.3e}",
+                p.x, p.y, p.z, p.distance(c) - r, q.distance(b.spine.eval(spine_closest(&b.spine, q))) - r,
+                a1 + a2 - a12, a1, a2, a12, b.a.distance(c) - r, b.b.distance(c) - r
+            );
+        }
+    }
+}
+
 fn parts(files: &[String]) {
     for f in files {
         let Ok(src) = std::fs::read_to_string(f) else {
@@ -321,6 +387,8 @@ fn main() {
     match args.first().map(String::as_str) {
         Some("parts") => parts(&args[1..]),
         Some("probe") => probe(&args[1..]),
+        Some("mids") => mids(&args[1..]),
+        Some("near") => near(&args[1], &args[2]),
         Some("random") => {
             let n = args.get(1).and_then(|x| x.parse().ok()).unwrap_or(20);
             let seed = args.get(2).and_then(|x| x.parse().ok()).unwrap_or(1);

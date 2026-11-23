@@ -345,3 +345,42 @@ It is a diagnosis, not a certificate. Its controls are the same parts at the rad
 
 CADFS 00123784, 00539691 and 00154651 are the three parts the last three restate. WHUCAD 100001734
 needs the dataset, which is not on this machine.
+
+## 12. The pipe set re-judged by the spec, and OCCT against it
+
+The pipe set was staged here with fc_twin.py, seeds 0–199; no data is committed.
+
+**Per edge.** All 269 blends match the spec at δ = 1e-9 mm: the kind, the spine on both offsets, the
+springs. That includes every blend of the 8 parts the census calls wrong.
+
+**Whole result.** The fillet session's certified-closing oracle (`label_pipe`, from its branch) was run
+on the 8, and their disagreement points dumped. Then OCCT's own fillet of the same edges of the body
+before was classified at those points, with OCCT's classifier on both results
+(`research/fillets/spec/occ_judge.py`, run in the tools/occt venv):
+
+| part | kernel over the closing | vertex zones | OCCT at those points | verdict |
+|---|---|---|---|---|
+| p00010 | 52 points | 0 | air at all 52 (valid) | kernel wrong; OCCT agrees with the spec |
+| p00133 | 11 | 0 | air at all 11 | kernel wrong; OCCT agrees |
+| p00164 | 40 | 0 | air at all 40 | kernel wrong; OCCT agrees |
+| p00029 | 64 | 2 | material at 52 | both over the oracle: the run-out row's convention, not settled |
+| p00124 | 1 | 2 | material | the same |
+| p00111 | 16 | 2 | material (OCCT invalid) | the same |
+| p00188 | 67 | 0 | OCCT invalid | no reference |
+| p00072 | 0 now | 2 | — | right |
+
+**The cause on p00010.**
+- At every excess point the kernel's spine is on both offsets to 5e-15, its pipe at r to 1e-15, and
+  the point inside the cap (`fillet-spec near`). The blend is the crease form of the closing for the
+  two supports.
+- But the points lie 1.35 under the body's top face (r = 2.14). A free ball resting over the top rim
+  covers them: an exact distance search against the twin's two rods (`research/fillets/spec/freeball.py`)
+  finds one within r for 26 of the 52, and the rest only just missed by random search.
+- The kernel misses a P3 event, the crease coming within r of a third generator (the rim of a face
+  next to a support), and over-fills where the spec has a cliff.
+
+**What this says about the convention** (with census.md's thin-wall finding). OCCT's concave round
+respects a rim next to its support, and its convex round ignores a far wall. Proposed to the owner:
+the fillet of a pick is the closing (opening) of its **local obstacle**, the two supports and the
+faces sharing an edge with either one. Far faces meet the result only through the final boolean with
+S. Every theorem of §8 holds under it unchanged.
