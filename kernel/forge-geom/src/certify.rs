@@ -323,6 +323,11 @@ impl Form {
     /// Whether the box holds no point of the surface: the polynomial has no zero there, or the
     /// box lies wholly past the cone's apex, on the nappe the surface does not have.
     fn off(&self, b: &V) -> bool {
+        self.off_cheap(b) || !self.value(b).contains_zero()
+    }
+
+    /// `off`'s Lipschitz and nappe tests alone.
+    fn off_cheap(&self, b: &V) -> bool {
         // the box's half diagonal, rounded up, with the frame's slack
         let c = mid(b);
         let half = (0..3).fold(I::point(0.0), |acc, k| {
@@ -342,7 +347,7 @@ impl Form {
         {
             return true;
         }
-        !self.value(b).contains_zero()
+        false
     }
 
     /// Whether every zero of the polynomial in the box is a point of the surface (the cone's other
@@ -953,12 +958,14 @@ fn walk(
 #[derive(Clone, Copy, Debug)]
 struct Host {
     form: Form,
-    b: [[I; 3]; 3],
+    /// B: the float matrix m, each entry widened by e.
+    m: [[f64; 3]; 3],
+    e: f64,
 }
 
 /// An interval enclosure of the inverse of the near-orthonormal matrix with rows x, y, z: its
 /// transpose X, widened by |X| rho / (1 - rho), rho bounding ||I - M X|| (the Neumann series).
-fn inverse_rows(x: Vec3, y: Vec3, z: Vec3) -> Option<[[I; 3]; 3]> {
+fn inverse_rows(x: Vec3, y: Vec3, z: Vec3) -> Option<([[f64; 3]; 3], f64)> {
     let m = [x, y, z];
     let xt: [[f64; 3]; 3] = std::array::from_fn(|i| std::array::from_fn(|j| m[j].dot_k(i)));
     let mut rho = I::point(0.0);
@@ -981,10 +988,7 @@ fn inverse_rows(x: Vec3, y: Vec3, z: Vec3) -> Option<[[I; 3]; 3]> {
         return None;
     }
     let e = I::point(row_max) * I::point(rho).div(&(I::point(1.0) - I::point(rho)));
-    let e = e.hi;
-    Some(std::array::from_fn(|i| {
-        std::array::from_fn(|j| I::new(xt[i][j], xt[i][j]).grow(e).widened())
-    }))
+    Some((xt, e.hi.next_up()))
 }
 
 trait Comps {
@@ -997,8 +1001,29 @@ impl Comps for Vec3 {
     }
 }
 
-fn mat_v(b: &[[I; 3]; 3], l: &V) -> V {
-    std::array::from_fn(|i| b[i][0] * l[0] + b[i][1] * l[1] + b[i][2] * l[2])
+/// a s, a float: two products, rounded outward (forge_math's `*` takes four).
+fn mf(a: I, s: f64) -> I {
+    let (p, q) = (a.lo * s, a.hi * s);
+    I {
+        lo: p.min(q).next_down(),
+        hi: p.max(q).next_up(),
+    }
+}
+
+/// B l, with B the float matrix m widened entrywise by e: m l, then e (|l0| + |l1| + |l2|).
+fn mat_v(m: &[[f64; 3]; 3], e: f64, l: &V) -> V {
+    let spread = if e == 0.0 {
+        0.0
+    } else {
+        (I::point(mag(l[0])) + I::point(mag(l[1])) + I::point(mag(l[2]))).hi * e
+    };
+    std::array::from_fn(|i| {
+        let v = mf(l[0], m[i][0]) + mf(l[1], m[i][1]) + mf(l[2], m[i][2]);
+        I {
+            lo: (v.lo - spread).next_down(),
+            hi: (v.hi + spread).next_up(),
+        }
+    })
 }
 
 /// The floats just above 2 pi and pi / 2 (dmath's TAU and FRAC_PI_2 lie just below).
@@ -1007,8 +1032,11 @@ const HALF_PI_UP: f64 = forge_math::dmath::FRAC_PI_2.next_up();
 
 impl Host {
     fn of(form: Form) -> Option<Host> {
-        let id = std::array::from_fn(|i| std::array::from_fn(|j| I::point(if i == j { 1.0 } else { 0.0 })));
-        let b = match form {
+        let id = (
+            std::array::from_fn(|i| std::array::from_fn(|j| if i == j { 1.0 } else { 0.0 })),
+            0.0,
+        );
+        let (m, e) = match form {
             Form::Sphere { .. } => id,
             Form::Plane { o: _, z } => {
                 // any two directions completing z: the plane's points are o + u x + v y, and z.q = 0
@@ -1021,14 +1049,14 @@ impl Host {
             Form::Cylinder { x, y, .. } => inverse_rows(x, y, x.cross(y))?,
             Form::Cone { x, y, z, .. } | Form::Torus { x, y, z, .. } => inverse_rows(x, y, z)?,
         };
-        Some(Host { form, b })
+        Some(Host { form, m, e })
     }
 
     /// The local coordinates and their u and v derivatives over the box.
     fn local(&self, u: I, v: I) -> (V, V, V) {
         let z0 = I::point(0.0);
         let one = I::point(1.0);
-        let (cu, su) = (u.cos(), u.sin());
+        let (su, cu) = u.sin_cos();
         match self.form {
             Form::Plane { .. } => ([u, v, z0], [one, z0, z0], [z0, one, z0]),
             Form::Cylinder { r, .. } => ([cu * r, su * r, v], [-(su * r), cu * r, z0], [z0, z0, one]),
@@ -1042,7 +1070,7 @@ impl Host {
                 )
             }
             Form::Sphere { r, .. } => {
-                let (cv, sv) = (v.cos(), v.sin());
+                let (sv, cv) = v.sin_cos();
                 (
                     [cv * cu * r, cv * su * r, sv * r],
                     [-(cv * su * r), cv * cu * r, z0],
@@ -1050,7 +1078,7 @@ impl Host {
                 )
             }
             Form::Torus { big, r, .. } => {
-                let (cv, sv) = (v.cos(), v.sin());
+                let (sv, cv) = v.sin_cos();
                 let w = I::point(big) + cv * r;
                 (
                     [w * cu, w * su, sv * r],
@@ -1068,11 +1096,11 @@ impl Host {
             Form::Plane { o, .. } | Form::Sphere { o, .. } | Form::Cylinder { o, .. } => o,
             Form::Cone { o, .. } | Form::Torus { o, .. } => o,
         };
-        let p = mat_v(&self.b, &l);
+        let p = mat_v(&self.m, self.e, &l);
         (
             [p[0] + I::point(o.x), p[1] + I::point(o.y), p[2] + I::point(o.z)],
-            mat_v(&self.b, &lu),
-            mat_v(&self.b, &lv),
+            mat_v(&self.m, self.e, &lu),
+            mat_v(&self.m, self.e, &lv),
         )
     }
 
@@ -1135,27 +1163,24 @@ fn walk_domain(
         return Ok(());
     }
     let all: Vec<u32> = (0..segs.len() as u32).collect();
-    let mut stack = vec![(u0, v0, near(region, &all))];
-    while let Some((u, v, cand)) = stack.pop() {
+    let first = host.patch(u0, v0);
+    let mut stack = vec![(u0, v0, first, near(region, &all))];
+    while let Some((u, v, (p, pu, pv), cand)) = stack.pop() {
         if *budget == 0 {
-            return Err((host.patch(u, v).0, true));
+            return Err((p, true));
         }
         *budget -= 1;
-        let (p, pu, pv) = host.patch(u, v);
-        if meets(&p, region).is_none() {
+        if meets(&p, region).is_none() || other.off_cheap(&p) {
             continue;
         }
-        // the other surface over the patch
-        if other.off(&p) {
-            continue;
-        }
+        // the other surface over the patch: its polynomial in u and v, by the mean-value form
         let (um, vm) = (I::point(u.mid()), I::point(v.mid()));
         let (pc, _, _) = host.patch(um, vm);
         let (gc, _) = other.eval(&pc);
-        let (_, grad) = other.eval(&p);
+        let (gn, grad) = other.eval(&p);
         let gu = grad[0] * pu[0] + grad[1] * pu[1] + grad[2] * pu[2];
         let gv = grad[0] * pv[0] + grad[1] * pv[1] + grad[2] * pv[2];
-        let g = gc + gu * (u - um) + gv * (v - vm);
+        let g = meet(gn, gc + gu * (u - um) + gv * (v - vm));
         if !g.contains_zero() {
             continue;
         }
@@ -1176,9 +1201,9 @@ fn walk_domain(
             [(u, a), (u, b)]
         };
         for (hu, hv) in halves {
-            let (hp, _, _) = host.patch(hu, hv);
-            let c = near(&hp, &cand);
-            stack.push((hu, hv, c));
+            let hp = host.patch(hu, hv);
+            let c = near(&hp.0, &cand);
+            stack.push((hu, hv, hp, c));
         }
     }
     Ok(())
@@ -1307,7 +1332,14 @@ pub fn in_scope(a: &Surface, b: &Surface) -> bool {
     Form::of(a).is_some() && Form::of(b).is_some()
 }
 
+/// The traced pairs this thread certified last, with their answers: a regen asks the same pair in
+/// the same region from more than one place (the sequential and n-ary paths both). An answer is a
+/// function of its key alone (the two surfaces and the region, compared exactly).
+type Traced = Vec<(Surface, Surface, Box3, Option<Vec<IntCurve>>)>;
+const TRACED_MOST: usize = 32;
+
 thread_local! {
+    static TRACED: std::cell::RefCell<Traced> = const { std::cell::RefCell::new(Vec::new()) };
     static LAST: std::cell::Cell<Option<Refusal>> = const { std::cell::Cell::new(None) };
     static COUNTS: std::cell::Cell<[usize; 4]> = const { std::cell::Cell::new([0; 4]) };
 }
@@ -1339,6 +1371,28 @@ pub(crate) fn traced(a: &Surface, b: &Surface, region: Box3) -> Option<Vec<IntCu
         count(3);
         return crate::intcurve::trace_marched(a, b, region, 1.0);
     }
+    let known = TRACED.with(|t| {
+        t.borrow()
+            .iter()
+            .find(|(p, q, r, _)| p == a && q == b && *r == region)
+            .map(|e| e.3.clone())
+    });
+    if let Some(answer) = known {
+        return answer;
+    }
+    let answer = crate::intcurve::not_noting(|| traced_fresh(a, b, region));
+    TRACED.with(|t| {
+        let mut t = t.borrow_mut();
+        if t.len() >= TRACED_MOST {
+            t.remove(0);
+        }
+        t.push((a.clone(), b.clone(), region, answer.clone()));
+    });
+    answer
+}
+
+/// `traced`, computed.
+fn traced_fresh(a: &Surface, b: &Surface, region: Box3) -> Option<Vec<IntCurve>> {
     let first = crate::intcurve::trace_marched(a, b, region, 1.0);
     let why = match first.as_deref().map(|cs| certify(a, b, region, cs)) {
         Some(Ok(())) => {

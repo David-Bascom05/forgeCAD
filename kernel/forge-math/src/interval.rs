@@ -16,33 +16,41 @@ impl Interval {
         hi: f64::NEG_INFINITY,
     };
 
+    #[inline]
     pub fn new(lo: f64, hi: f64) -> Self {
         Interval {
             lo: lo.min(hi),
             hi: lo.max(hi),
         }
     }
+    #[inline]
     pub fn point(v: f64) -> Self {
         Interval { lo: v, hi: v }
     }
+    #[inline]
     fn out(lo: f64, hi: f64) -> Self {
         Interval {
             lo: lo.next_down(),
             hi: hi.next_up(),
         }
     }
+    #[inline]
     pub fn is_empty(&self) -> bool {
         self.lo > self.hi
     }
+    #[inline]
     pub fn width(&self) -> f64 {
         self.hi - self.lo
     }
+    #[inline]
     pub fn mid(&self) -> f64 {
         0.5 * (self.lo + self.hi)
     }
+    #[inline]
     pub fn contains(&self, v: f64) -> bool {
         self.lo <= v && v <= self.hi
     }
+    #[inline]
     pub fn contains_zero(&self) -> bool {
         self.contains(0.0)
     }
@@ -69,6 +77,7 @@ impl Interval {
         let m = self.mid();
         (Interval { lo: self.lo, hi: m }, Interval { lo: m, hi: self.hi })
     }
+    #[inline]
     pub fn sqr(&self) -> Interval {
         let (a, b) = (self.lo * self.lo, self.hi * self.hi);
         if self.contains_zero() {
@@ -80,12 +89,14 @@ impl Interval {
             Interval::out(a.min(b), a.max(b)).clamp_lo(0.0)
         }
     }
+    #[inline]
     fn clamp_lo(self, v: f64) -> Interval {
         Interval {
             lo: self.lo.max(v),
             hi: self.hi,
         }
     }
+    #[inline]
     pub fn sqrt(&self) -> Interval {
         Interval::out(self.lo.max(0.0).sqrt(), self.hi.max(0.0).sqrt()).clamp_lo(0.0)
     }
@@ -110,6 +121,12 @@ impl Interval {
     pub fn cos(&self) -> Interval {
         self.trig(dmath::cos, 0.0)
     }
+    /// sin and cos over the interval together, each as `sin` and `cos` give it (one dmath call
+    /// per end for both).
+    pub fn sin_cos(&self) -> (Interval, Interval) {
+        let (a, b) = (dmath::sin_cos(self.lo), dmath::sin_cos(self.hi));
+        (self.trig_at(a.0, b.0, 0.5), self.trig_at(a.1, b.1, 0.0))
+    }
     /// The range of sin or cos (`f`, its extremes at (k + `half`) pi, the even k maxima).
     ///
     /// Each endpoint's value is dmath's, which is within 1 ulp of the true one for |x| <= TRIG_MOST
@@ -119,6 +136,13 @@ impl Interval {
     /// the interval: PI < pi < PI_UP, so a point that may be inside is never missed. Past TRIG_MOST,
     /// or across a whole turn, it is [-1, 1].
     fn trig(&self, f: fn(f64) -> f64, half: f64) -> Interval {
+        if self.is_empty() || !(self.lo.is_finite() && self.hi.is_finite()) {
+            return self.trig_at(f64::NAN, f64::NAN, half);
+        }
+        self.trig_at(f(self.lo), f(self.hi), half)
+    }
+    /// `trig` from the function's values at the ends, `fa` and `fb`.
+    fn trig_at(&self, fa: f64, fb: f64, half: f64) -> Interval {
         const WHOLE: Interval = Interval { lo: -1.0, hi: 1.0 };
         let (a, b) = (self.lo, self.hi);
         if self.is_empty() {
@@ -127,7 +151,6 @@ impl Interval {
         if !(a.is_finite() && b.is_finite()) || a.abs().max(b.abs()) > TRIG_MOST || b - a >= 6.0 {
             return WHOLE;
         }
-        let (fa, fb) = (f(a), f(b));
         let (mut lo, mut hi) = (fa.min(fb), fa.max(fb));
         for _ in 0..TRIG_ULPS {
             lo = lo.next_down();
@@ -167,27 +190,32 @@ const TRIG_MOST: f64 = 65_536.0;
 /// these bounds have always had (so cos bounds, which were sound, are unchanged).
 const TRIG_ULPS: u32 = 3;
 
+#[inline]
 fn min4(c: [f64; 4]) -> f64 {
     c[0].min(c[1]).min(c[2]).min(c[3])
 }
+#[inline]
 fn max4(c: [f64; 4]) -> f64 {
     c[0].max(c[1]).max(c[2]).max(c[3])
 }
 
 impl Add for Interval {
     type Output = Interval;
+    #[inline]
     fn add(self, o: Interval) -> Interval {
         Interval::out(self.lo + o.lo, self.hi + o.hi)
     }
 }
 impl Sub for Interval {
     type Output = Interval;
+    #[inline]
     fn sub(self, o: Interval) -> Interval {
         Interval::out(self.lo - o.hi, self.hi - o.lo)
     }
 }
 impl Neg for Interval {
     type Output = Interval;
+    #[inline]
     fn neg(self) -> Interval {
         Interval {
             lo: -self.hi,
@@ -197,6 +225,7 @@ impl Neg for Interval {
 }
 impl Mul for Interval {
     type Output = Interval;
+    #[inline]
     fn mul(self, o: Interval) -> Interval {
         let c = [self.lo * o.lo, self.lo * o.hi, self.hi * o.lo, self.hi * o.hi];
         Interval::out(min4(c), max4(c))
@@ -204,12 +233,14 @@ impl Mul for Interval {
 }
 impl Mul<f64> for Interval {
     type Output = Interval;
+    #[inline]
     fn mul(self, s: f64) -> Interval {
         self * Interval::point(s)
     }
 }
 impl Add<f64> for Interval {
     type Output = Interval;
+    #[inline]
     fn add(self, s: f64) -> Interval {
         self + Interval::point(s)
     }
@@ -502,6 +533,10 @@ mod tests {
                     assert!(dd::within(dd::cos(y), c.lo, c.hi), "cos {iv:?} at {y}: {c:?}");
                 }
             }
+        }
+        for (i, &x) in xs.iter().enumerate().step_by(7) {
+            let iv = Interval::new(x, x + [0.0, 1e-9, 0.3, 2.0][i % 4]);
+            assert_eq!(iv.sin_cos(), (iv.sin(), iv.cos()), "{iv:?}");
         }
         // sin near 0 (the bound that was 6e-17 high), and the extremes inside
         assert!(Interval::point(0.0).sin().lo <= 0.0);

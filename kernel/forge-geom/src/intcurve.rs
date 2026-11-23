@@ -964,12 +964,34 @@ fn stalled(pts: Vec<Point3>, p: Point3) -> Option<(Vec<Point3>, bool)> {
 /// `trace`, where a branch that stalls ends there, with the points it stalled at. The branch's other
 /// stretches are seeded and traced by themselves.
 pub fn trace_past_stalls(a: &Surface, b: &Surface, region: Box3) -> Option<(Vec<IntCurve>, Vec<Point3>)> {
-    let (curves, stalls) = noting(|| trace(a, b, region));
-    Some((curves?, stalls))
+    // certified, a trace is the whole intersection or refused: no stalls to judge
+    #[cfg(feature = "certified_trace")]
+    return Some((trace(a, b, region)?, Vec::new()));
+    #[cfg(not(feature = "certified_trace"))]
+    {
+        let (curves, stalls) = noting(|| trace(a, b, region));
+        Some((curves?, stalls))
+    }
+}
+
+/// `f` with no stalls noted, whatever the caller was noting (restored after, unwinding too): a
+/// certified trace is the same whoever asks for it.
+#[cfg(feature = "certified_trace")]
+pub(crate) fn not_noting<T>(f: impl FnOnce() -> T) -> T {
+    struct Restore(Option<Vec<Point3>>);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            let was = self.0.take();
+            STALLS.with(|s| *s.borrow_mut() = was);
+        }
+    }
+    let _guard = Restore(STALLS.with(|s| s.borrow_mut().take()));
+    f()
 }
 
 /// `f`, with the stalls of the branches it traces noted: only while it runs, unwinding too, so a
 /// trace that panics leaves the next one as it found it.
+#[cfg_attr(feature = "certified_trace", allow(dead_code))]
 fn noting<T>(f: impl FnOnce() -> T) -> (T, Vec<Point3>) {
     struct Noting(Option<Vec<Point3>>);
     impl Drop for Noting {
