@@ -17,4 +17,9 @@ import ForgeExact.DecideOnce.Sample
 import ForgeExact.DecideOnce.Sampler
 import ForgeExact.DecideOnce.Frontier
 import ForgeExact.DecideOnce.Local
+import ForgeExact.Alg.Sum
+import ForgeExact.Alg.Examples
+import ForgeExact.Quad.Cert
+import ForgeExact.QRef.Run
+import ForgeExact.QRef.Octree
 import ForgeExact.Axioms
