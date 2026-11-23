@@ -56,7 +56,7 @@ impl Stage {
             // one solid: finished into the view itself; several: each finished once, kept for
             // what looks at them one by one (validity, each one's mass)
             let several = self.solids.len() > 1;
-            let mut alone = (!several).then(|| forge_model::finish(self.solids[0].body.clone()));
+            let mut alone = (!several).then(|| forge_model::finish(self.solids[0].body.clone_roomy()));
             let each: &[Body] = if several { self.finished() } else { &[] };
             all.reserve_appends(each.iter());
             for (k, s) in self.solids.iter().enumerate() {
@@ -97,7 +97,7 @@ impl Stage {
         self.finished.get_or_init(|| {
             self.solids
                 .iter()
-                .map(|s| forge_model::finish(s.body.clone()))
+                .map(|s| forge_model::finish(s.body.clone_roomy()))
                 .collect()
         })
     }
