@@ -25,7 +25,7 @@ measure are given beside them where they differ.
 | set | parts | untranslated before | after | match (1e-4) before | after | uncertain after | match after, old measure |
 |---|---:|---:|---:|---:|---:|---:|---:|
 | FreeCAD library, bodies | 677 | 130 | 39 | 394 | 570 | 20 | 523 |
-| CADFS, all parts | 1914 | 640 | 604 | 1108 | 1131 | 4 | 1117 |
+| CADFS, all parts | 1914 | 640 | 600 | 1108 | 1134 | 4 | 1120 |
 | CADFS, parts with a fillet | 476 | 238 | 226 | 164 | 166 | 1 | 167 |
 | WHUCAD, 1 in 7 with a fillet | 319 | 35 | 29 | (1e-3: STEPs staged for the newly built only) | 0 new | | |
 
@@ -38,7 +38,7 @@ need only importer work: FreeCAD's Thickness, a mirror plane on a feature's face
 CADFS's extrude up to a curved face, and WHUCAD's splines. A third pass writes sketch ellipses and elliptical arcs
 exactly, reads FreeCAD's pad or pocket up to a face, takes a profile that is a binder or a feature's edge or
 face, reads CADFS's elliptical arcs, and takes CADFS's pattern and revolve axes from the part's own edges and
-faces.
+faces, and reads its rotating and line-following transforms.
 
 In the first pass FreeCAD's matches rose by 112, and only 30 of those were newly translated parts:
 - 30 refused before and match now;
@@ -329,13 +329,13 @@ All 1914 sampled parts:
 
 | class | before | after |
 |---|---:|---:|
-| match | 1108 | 1131 |
+| match | 1108 | 1134 |
 | mismatch | 69 | 69 |
 | uncertain | 3 | 4 |
-| refused | 85 | 94 |
+| refused | 85 | 95 |
 | fail | 8 | 11 |
 | timeout | 1 | 1 |
-| untranslated | 640 | 604 |
+| untranslated | 640 | 600 |
 
 **Draft on an extrude (24 → 0 under that name).** Onshape's extrude draft is Forge's `taper:`, on a depth. Its sign
 was read from the STEP: with the pull-direction flag set, Onshape narrows the extrude as Forge's positive taper does
@@ -387,6 +387,23 @@ symmetric revolve, or a pattern spread evenly over a whole turn.
 | 00670276 | mismatch: 1.5e-4 (approx: a polyline stands in for a spline) |
 | 00293826, 00724634, 00846949 | match under the copy rule (truth.md): 4.5e-9, 2.5e-13, 5.1e-5. Each is a pattern of new bodies that spins each copy onto the last, and the STEP holds the same copies. |
 | 5 others | another cause (a surface revolve, a pattern's copy 2, more than one edge 2) |
+
+**Transforms (11 → 0 under those names; 4 scales stay).** A transform of type ROTATION is a `spin` about its axis,
+right-handed about the axis's way. A sketch line runs from its start, as the circular patterns read it; an axis on
+the part counts only at 0° or 180°. TRANSLATION_DISTANCE is a `slide` along a line by the distance.
+TRANSLATION_ENTITY slides by a sketch line itself, from its start to its end. Each is turned by its opposite flag.
+
+| part | after |
+|---|---|
+| 00106358 (45°), 00379141 (135°), 00443458 (30°) | match: 2.2e-16, 1.9e-15, 3.8e-6 |
+| 00455425 | refused: `NoBody` at a later combine |
+| 4 others | an axis on a solid's edge at an angle that needs its way (4) |
+| 00575516, 00646531 | a reference of many (the axis or line named by two queries) |
+
+**The rotation's sense is not measured by these.** Turned the other way, all three matching parts come out with the
+same volume, area and box, so the reading of the sense rests on the circular patterns' and is still open. A part
+where the sense changes the shape would show it as a mismatch, not as a false match. SCALE_UNIFORMLY (4 parts) has
+no form: **missing: a scale motion** for `movebody`/`copybody`.
 
 ### What still stops CADFS
 

@@ -1632,10 +1632,34 @@ class Tr:
     def transform(self, f):
         a, env = f["args"], f["env"]
         t = a.get("transformType")
-        if not (isinstance(t, tuple) and t[1].endswith("TRANSLATION_3D")):
-            raise Unsupported("transform " + str(t[1] if isinstance(t, tuple) else t).split(".")[-1])
-        by = (num(self.val(a["dx"])), num(self.val(a["dy"])), num(self.val(a["dz"])))
-        still = by == ("0", "0", "0")
+        t = t[1].split(".")[-1] if isinstance(t, tuple) else str(t)
+        if t == "TRANSLATION_3D":
+            by = (num(self.val(a["dx"])), num(self.val(a["dy"])), num(self.val(a["dz"])))
+            move, still = ("by", by), by == ("0", "0", "0")
+        elif t in ("TRANSLATION_DISTANCE", "TRANSLATION_ENTITY"):
+            # along a line: by the distance given, or by the line itself, from its start to its end
+            key = "transformDirection" if t == "TRANSLATION_DISTANCE" else "transformLine"
+            o, d = self.world_line(single(a[key], env), env)
+            if t == "TRANSLATION_DISTANCE":
+                l = self.val(a["distance"]) * (-1 if a.get("oppositeDirection") is True else 1)
+            else:
+                q = self.deref(single(a[key], env), env)
+                if not (isinstance(q, fs.Call) and q[0] == "sQuery"):
+                    raise Unsupported("a transform along a solid's edge")
+                _, _, efr, e = self.ent(q)
+                l = math.dist(efr.world(*e.a), efr.world(*e.b)) * (-1 if a.get("oppositeDirectionEntity") is True else 1)
+            by = tuple(num(x * l) for x in d)
+            move, still = ("by", by), abs(l) < 1e-12
+        elif t == "ROTATION":
+            # about an axis, right-handed about its way (a sketch line's from its start, as the circular patterns
+            # read it): a turn of 0 or 180 degrees is the same either way round
+            ang = self.val(a["angle"])
+            o, d = self.world_line(single(a["transformAxis"], env), env, sense_free=abs(ang / 180 - round(ang / 180)) < 1e-12)
+            if a.get("oppositeDirection") is True:
+                d = tuple(-x for x in d)
+            move, still = ("rot", vt(o), vt(d), num(ang)), abs(ang % 360) < 1e-12
+        else:
+            raise Unsupported("transform " + t)
         for q in qunion(a["entities"]):
             b = self.body_of(q, env)
             if a.get("makeCopy") is True:
@@ -1644,13 +1668,13 @@ class Tr:
                     continue
                 self.names += 1
                 n = f"b{self.names}"
-                self.lines.append(St("copybody", label=n, of=b, moves=[("by", by)]))
+                self.lines.append(St("copybody", label=n, of=b, moves=[move]))
                 self.bodies += 1
                 q1 = self.deref(q, env)
                 self.copies[(f["id"], "1", b)] = n
                 self.current = n
             elif not still:
-                self.lines.append(St("movebody", of=b, moves=[("by", by)]))
+                self.lines.append(St("movebody", of=b, moves=[move]))
 
     def booleanBodies(self, f):
         a, env = f["args"], f["env"]
