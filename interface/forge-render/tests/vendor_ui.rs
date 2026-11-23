@@ -116,6 +116,11 @@ fn the_dfm_panel_lists_lights_and_marks_a_violation() {
     // and on the flat pattern, its mark the chosen one
     let marks = h.gui.shell.sheet.vendor.flat_marks("base");
     assert!(marks.iter().any(|m| m.1), "{marks:?}");
+    assert!(h.click("tool:Go to Flat Pattern"));
+    h.step();
+    shot(&mut h, "dfm-flat");
+    assert!(h.click("tool:Go to Folded Part"));
+    h.step();
     // moved clear of the bend, the next check finds nothing there
     let fixed = PART.replace("param hs.x = 75", "param hs.x = 40");
     let path = h.gui.fg.as_ref().unwrap().path.clone().unwrap();
