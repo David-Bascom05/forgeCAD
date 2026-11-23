@@ -1700,7 +1700,9 @@ pub fn library_files(dir: Option<&std::path::Path>) -> Vec<std::path::PathBuf> {
     let user = forge_material::user_dir().and_then(|m| m.parent().map(|p| p.join("wires")));
     let mut out = vec![];
     for d in dir.map(|d| d.join("wires")).into_iter().chain(user) {
-        let Ok(rd) = std::fs::read_dir(&d) else { continue };
+        let Ok(rd) = forge_dirs::fs::read_dir(&d) else {
+            continue;
+        };
         let mut fs: Vec<_> = rd
             .flatten()
             .map(|e| e.path())
@@ -1827,7 +1829,7 @@ fn library_row(ev: &mut Eval, name: &str, span: Span) -> R<LibRow> {
 
 /// A library file's text, its read recorded so an edit to it re-runs the document.
 fn read_text(p: &std::path::Path) -> Option<String> {
-    let bytes = std::fs::canonicalize(p)
+    let bytes = forge_dirs::fs::canonicalize(p)
         .ok()
         .and_then(|real| crate::deps::read_plain(&real, crate::asm::LIMIT).ok());
     crate::deps::read(p, bytes.as_deref());

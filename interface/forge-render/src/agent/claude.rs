@@ -265,7 +265,7 @@ impl ClaudeCode {
 
     fn spawn(&mut self) -> Result<(), Event> {
         let dir = self.cfg.cwd.clone();
-        if let Err(e) = std::fs::create_dir_all(&dir) {
+        if let Err(e) = forge_dirs::fs::create_dir_all(&dir) {
             return Err(Event::Problem {
                 text: format!("No folder for the agent to run in: {}: {e}", dir.display()),
                 fix: None,

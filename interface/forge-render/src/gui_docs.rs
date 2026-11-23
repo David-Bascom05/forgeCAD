@@ -16,6 +16,7 @@ per_doc!(
         back_image_was: Option<String>,
         view_file: Option<String>,
         fg: Option<crate::fg::Session>,
+        last_built: Option<crate::gui::LastBuilt>,
         fg_view: Option<Loaded>,
         fg_folded: Option<crate::mesh::PartMesh>,
         fg_flat: Option<crate::mesh::PartMesh>,
@@ -101,7 +102,7 @@ impl OpenDoc {
 
     /// The same file (and sub-document) as this path names.
     fn is(&self, path: &str, sub: Option<&str>) -> bool {
-        let canon = |p: &str| std::fs::canonicalize(p).unwrap_or_else(|_| p.into());
+        let canon = |p: &str| forge_dirs::fs::canonicalize(p).unwrap_or_else(|_| p.into());
         self.sub.as_deref() == sub
             && self
                 .path
@@ -131,14 +132,14 @@ impl Gui {
     pub fn open_document(&mut self, path: &str, activate: bool) -> Option<usize> {
         // a bench part's name is its Forge port's file: the tab it's in, if it's open
         let bench = match crate::load::bench_file(path) {
-            Some(Ok(file)) if !std::path::Path::new(path).exists() => Some(file),
+            Some(Ok(file)) if !forge_dirs::fs::exists(std::path::Path::new(path)) => Some(file),
             _ => None,
         };
         let path = bench.as_deref().unwrap_or(path);
         let at = self.open_in(path, None, activate)?;
         // a .fg's drawing blocks: a tab each beside its model, Onshape's way
         if path.ends_with(".fg")
-            && let Ok(src) = std::fs::read_to_string(path)
+            && let Ok(src) = forge_dirs::fs::read_to_string(path)
             && !forge_lang::drawing::is_drawing(&src)
         {
             for b in forge_lang::drawing::block::blocks(&src) {
@@ -522,11 +523,11 @@ const NOFOLLOW: i32 = if cfg!(any(target_os = "macos", target_os = "ios", target
 /// folder, or a file swapped in between the look and the open.
 fn read_file(p: &Path, max: u64) -> Option<Vec<u8>> {
     use std::io::Read;
-    let checked = std::fs::symlink_metadata(p).ok()?;
+    let checked = forge_dirs::fs::symlink_metadata(p).ok()?;
     if !checked.is_file() {
         return None;
     }
-    let mut o = std::fs::OpenOptions::new();
+    let mut o = forge_dirs::fs::OpenOptions::new();
     o.read(true);
     #[cfg(unix)]
     std::os::unix::fs::OpenOptionsExt::custom_flags(&mut o, NOFOLLOW);
@@ -548,7 +549,7 @@ fn read_file(p: &Path, max: u64) -> Option<Vec<u8>> {
 }
 
 fn look(p: &Path) -> Seen {
-    let m = std::fs::symlink_metadata(p).ok()?;
+    let m = forge_dirs::fs::symlink_metadata(p).ok()?;
     if !m.is_file() {
         return None;
     }
@@ -562,27 +563,30 @@ fn root_of(path: &str) -> Option<PathBuf> {
     let dir = folder_of(path)?;
     let repo = dir
         .ancestors()
-        .find(|a| a.join(".git").exists())
+        .find(|a| forge_dirs::fs::exists(a.join(".git")))
         .map(Path::to_path_buf);
     Some(repo.unwrap_or(dir))
 }
 
 /// The .fg files in a folder (not below it): where an agent's new part shows up.
 fn fg_in(dir: &Path) -> Vec<PathBuf> {
-    let Ok(rd) = std::fs::read_dir(dir) else {
+    let Ok(rd) = forge_dirs::fs::read_dir(dir) else {
         return vec![];
     };
     let mut out: Vec<PathBuf> = rd
         .flatten()
         .map(|e| e.path())
-        .filter(|p| p.extension().is_some_and(|x| x == "fg") && p.is_file())
+        .filter(|p| p.extension().is_some_and(|x| x == "fg") && forge_dirs::fs::is_file(p))
         .collect();
     out.sort();
     out
 }
 
 fn folder_of(path: &str) -> Option<PathBuf> {
-    std::fs::canonicalize(path).ok()?.parent().map(Path::to_path_buf)
+    forge_dirs::fs::canonicalize(path)
+        .ok()?
+        .parent()
+        .map(Path::to_path_buf)
 }
 
 /// What's watched: each open document's file and what its last build read, and the folders
@@ -628,7 +632,12 @@ impl Watch {
             return;
         }
         self.started = true;
+        // the browser's files change only through the app (or the server's API: see `storage`)
+        #[cfg(target_arch = "wasm32")]
+        let _ = waker;
+        #[cfg(not(target_arch = "wasm32"))]
         let (watched, changed) = (self.watched.clone(), self.changed.clone());
+        #[cfg(not(target_arch = "wasm32"))]
         let _ = std::thread::Builder::new()
             .name("forge-watch".into())
             .spawn(move || {
@@ -688,7 +697,7 @@ impl Gui {
         let mut dirs: Vec<PathBuf> = vec![];
         for (i, d) in self.docs.iter().enumerate() {
             let Some(p) = d.path.as_deref() else { continue };
-            let Ok(own) = std::fs::canonicalize(p) else {
+            let Ok(own) = forge_dirs::fs::canonicalize(p) else {
                 continue;
             };
             files.push(own);
@@ -775,7 +784,7 @@ impl Gui {
             return;
         };
         d.wrote = false;
-        if let Ok(p) = std::fs::canonicalize(&d.path) {
+        if let Ok(p) = forge_dirs::fs::canonicalize(&d.path) {
             self.file_changed(&p);
         }
     }
@@ -788,7 +797,7 @@ impl Gui {
             let Some(path) = self.docs[i].path.clone() else {
                 continue;
             };
-            let own = std::fs::canonicalize(&path).is_ok_and(|p| p == file);
+            let own = forge_dirs::fs::canonicalize(&path).is_ok_and(|p| p == file);
             // in an agent's turn its own writes come through its tab, as one labelled undo step
             if own && self.watch.agent {
                 continue;

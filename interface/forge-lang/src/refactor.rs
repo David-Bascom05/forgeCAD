@@ -824,10 +824,10 @@ pub enum Found {
 /// further than a part file's limit.
 pub fn found(dir: &std::path::Path, fence: Option<&std::path::Path>, file: &str) -> Found {
     let at = dir.join(file);
-    let Ok(meta) = std::fs::symlink_metadata(&at) else {
+    let Ok(meta) = forge_dirs::fs::symlink_metadata(&at) else {
         return Found::Missing;
     };
-    let Ok(real) = std::fs::canonicalize(&at) else {
+    let Ok(real) = forge_dirs::fs::canonicalize(&at) else {
         // a dangling link
         return if meta.file_type().is_symlink() {
             Found::Link
@@ -839,7 +839,7 @@ pub fn found(dir: &std::path::Path, fence: Option<&std::path::Path>, file: &str)
         return Found::Outside;
     }
     match crate::asm::read_capped(&real) {
-        Some(t) if real.is_file() => Found::Text(t),
+        Some(t) if forge_dirs::fs::is_file(&real) => Found::Text(t),
         _ if meta.file_type().is_symlink() => Found::Link,
         _ => Found::Taken,
     }
@@ -855,7 +855,7 @@ pub fn run_on_disk(
 ) -> R<Written> {
     let untitled = || comp_error(Span::default(), CompProblem::UntitledDocument);
     let doc = doc
-        .and_then(|f| std::fs::canonicalize(f).ok())
+        .and_then(|f| forge_dirs::fs::canonicalize(f).ok())
         .ok_or_else(untitled)?;
     let dir = doc.parent().ok_or_else(untitled)?.to_path_buf();
     let fence = crate::fence_for(Some(&dir), root);
@@ -903,13 +903,13 @@ pub fn write_new(dir: &std::path::Path, file: &str, text: &str) -> std::io::Resu
         ));
     }
     let path = dir.join(file);
-    if std::fs::symlink_metadata(&path).is_ok() {
+    if forge_dirs::fs::symlink_metadata(&path).is_ok() {
         return Err(std::io::Error::new(
             std::io::ErrorKind::AlreadyExists,
             format!("{file} exists already"),
         ));
     }
-    let mut f = std::fs::OpenOptions::new()
+    let mut f = forge_dirs::fs::OpenOptions::new()
         .write(true)
         .create_new(true)
         .open(&path)?;

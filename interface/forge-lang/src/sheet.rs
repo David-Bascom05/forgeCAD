@@ -16,6 +16,7 @@ use crate::syntax::{Arg, Span};
 use crate::values::{Dim, Num, Src, Ty};
 use forge_agent::json::Json;
 use forge_geom::spline::PlaneSpline;
+use forge_math::clock::Instant;
 use forge_math::{Frame, Point2, Point3, Vec3, dmath};
 use forge_model::{Feature, Solid};
 use forge_ops::{ProfileLoop, Segment};
@@ -24,7 +25,6 @@ use forge_topo::{Body, Name};
 use std::cell::RefCell;
 use std::collections::BTreeSet;
 use std::rc::Rc;
-use std::time::Instant;
 
 pub const BUILTINS: &[&str] = &[
     "sheet",

@@ -19,7 +19,7 @@ pub fn views(model: &Model, names: &[&str], opts: &Options) -> Result<Vec<Look>,
         .map(|name| {
             let view = View::named(name)
                 .ok_or_else(|| format!("no view {name}: {}", forge_draw::view::NAMED.join(" ")))?;
-            let t = std::time::Instant::now();
+            let t = forge_math::clock::Instant::now();
             let pieces = forge_draw::hlr(&insts, &view, opts);
             Ok(Look {
                 name: name.to_string(),

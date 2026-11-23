@@ -10,6 +10,11 @@ trivia between tokens), so:
 * `word_maximal`: a name or keyword is never followed by a name byte (maximal munch).
 * `num_literal`: a literal of the shape SetParam writes (sign, digits, fraction, exponent, unit)
   lexes back as exactly one number token, whatever follows that cannot continue a number.
+* `reparse_lex`: an edit of one plain number (the same sign) and of the trivia after it on its
+  line, as `syntax::reparse_number` takes it, lexes to the same pieces before the number, the new
+  number, trivia, and then the same pieces as before, each moved by the change in length. Where
+  exactly one of the two trivia holds a `#`, this needs the rest of the line to be trivia too;
+  without that the rest of a comment becomes code, or code a comment.
 
 The keywords and operators are parameters (`Cfg`); `Impl.lean` holds the parser's own lists, and
 tests/parse_diff.rs runs this model (`lake exe fglex`) against the Rust lexer.
@@ -578,5 +583,821 @@ theorem num_literal (C : Cfg) (pv : Bool) (d : Nat) (l : Lit) (hl : l.Ok) (r : B
         simp [hpv', hm1, hxd]
       unfold step
       simp only [a1, a2, a3, hg, Bool.false_eq_true, ite_false, ite_true, hnum]
+
+/-! ## An edit of one number: what the lexer gives the new text -/
+
+/-- The input starts with a digit. -/
+def DStart (y : Bytes) : Prop := ∃ a t, y = a :: t ∧ isDigit a = true
+
+/-- Two inputs that start a number alike: both with a digit, or both with `-` then a digit. -/
+def Res (Y Y' : Bytes) : Prop :=
+  (DStart Y ∧ DStart Y') ∨ (∃ y y', Y = MINUS :: y ∧ Y' = MINUS :: y' ∧ DStart y ∧ DStart y')
+
+/-- A test that does not tell digits apart. -/
+def DU (p : Nat → Bool) : Prop := ∀ x y, isDigit x = true → isDigit y = true → p x = p y
+
+/-- No operator has a digit in it. -/
+def DigitFree (C : Cfg) : Prop := ∀ o ∈ C.ops, ∀ x ∈ o, isDigit x = false
+
+theorem res_head {Y Y'} (h : Res Y Y') :
+    ∃ a a' y y', Y = a :: y ∧ Y' = a' :: y' ∧ (a = a' ∨ (isDigit a = true ∧ isDigit a' = true)) ∧
+      (isDigit a = true ∨ a = MINUS) := by
+  rcases h with ⟨⟨a, y, rfl, ha⟩, ⟨a', y', rfl, ha'⟩⟩ | ⟨y, y', rfl, rfl, _, _⟩
+  · exact ⟨a, a', y, y', rfl, rfl, Or.inr ⟨ha, ha'⟩, Or.inl ha⟩
+  · exact ⟨MINUS, MINUS, y, y', rfl, rfl, Or.inl rfl, Or.inr rfl⟩
+
+theorem res_du {p} (hp : DU p) {a a'} (h : a = a' ∨ (isDigit a = true ∧ isDigit a' = true)) : p a = p a' := by
+  rcases h with rfl | ⟨h1, h2⟩
+  · rfl
+  · exact hp _ _ h1 h2
+
+theorem du_isDigit : DU isDigit := fun _ _ h1 h2 => by rw [h1, h2]
+
+theorem du_of_ne {p : Nat → Bool} (h : ∀ x, isDigit x = true → p x = false) : DU p :=
+  fun x y hx hy => by rw [h x hx, h y hy]
+
+theorem digit_ne {x c : Nat} (hx : isDigit x = true) (hc : isDigit c = false) : (x == c) = false := by
+  by_cases h : x = c
+  · subst h; rw [hx] at hc; cases hc
+  · simp [h]
+
+theorem res_not {Y Y'} (h : Res Y Y') {c : Nat} (hc : isDigit c = false) (hm : c ≠ MINUS) :
+    ∃ a a' y y', Y = a :: y ∧ Y' = a' :: y' ∧ (a == c) = false ∧ (a' == c) = false := by
+  obtain ⟨a, a', y, y', rfl, rfl, he, hd⟩ := res_head h
+  refine ⟨a, a', y, y', rfl, rfl, ?_, ?_⟩
+  · rcases hd with hd | rfl
+    · exact digit_ne hd hc
+    · simpa using fun e => hm e.symm
+  · rcases he with rfl | ⟨_, hd'⟩
+    · rcases hd with hd | rfl
+      · exact digit_ne hd hc
+      · simpa using fun e => hm e.symm
+    · exact digit_ne hd' hc
+
+/-! Each scan, on `r₀ ++ Y` and `r₀ ++ Y'`, where what it takes lies in `r₀`. -/
+
+theorem tw_res {p} (hp : DU p) {Y Y'} (hY : Res Y Y') : ∀ (r₀ a b : Bytes), takeWhile p (r₀ ++ Y) = (a, b) →
+    a.length ≤ r₀.length → ∃ r₁, r₀ = a ++ r₁ ∧ b = r₁ ++ Y ∧ takeWhile p (r₀ ++ Y') = (a, r₁ ++ Y')
+  | [], a, b, h, hl => by
+    obtain ⟨c, c', y, y', rfl, rfl, he, _⟩ := res_head hY
+    have ha : a = [] := List.eq_nil_of_length_eq_zero (by simpa using hl)
+    subst ha
+    have hpc : p c = false := by
+      cases hq : p c
+      · rfl
+      · simp [takeWhile, hq] at h
+    have hpc' : p c' = false := by rw [← res_du hp he]; exact hpc
+    simp only [List.nil_append, takeWhile, hpc, Bool.false_eq_true, ite_false, Prod.mk.injEq] at h
+    exact ⟨[], rfl, by simp [h.2], by simp [takeWhile, hpc']⟩
+  | x :: r₀, a, b, h, hl => by
+    by_cases hx : p x = true
+    · rw [List.cons_append, takeWhile.eq_2, ite_eq_left hx] at h
+      obtain ⟨ha, hb⟩ := Prod.mk.inj h
+      subst ha
+      obtain ⟨r₁, h1, h2, h3⟩ := tw_res hp hY r₀ _ _ rfl (by simpa using hl)
+      refine ⟨r₁, by rw [List.cons_append]; exact congrArg _ h1, by rw [← hb, h2], ?_⟩
+      rw [List.cons_append, takeWhile.eq_2, ite_eq_left hx, h3]
+    · rw [List.cons_append, takeWhile.eq_2, ite_eq_right hx] at h
+      obtain ⟨rfl, rfl⟩ := Prod.mk.inj h
+      exact ⟨x :: r₀, rfl, rfl, by rw [List.cons_append, takeWhile.eq_2, ite_eq_right hx]⟩
+
+theorem head_dot {Y Y'} (hY : Res Y Y') (r₀ : Bytes) :
+    ((r₀ ++ Y).head? != some DOT) = ((r₀ ++ Y').head? != some DOT) := by
+  cases r₀ with
+  | cons x r => rfl
+  | nil =>
+    obtain ⟨a, a', y, y', rfl, rfl, ha, ha'⟩ := res_not hY (c := DOT) (by decide) (by decide)
+    show (some a != some DOT) = (some a' != some DOT)
+    have e : ∀ z : Nat, (some z != some DOT) = !(z == DOT) := fun z => rfl
+    rw [e, e, ha, ha']
+
+theorem mantissa_minus (y : Bytes) : mantissa (MINUS :: y) = ([], MINUS :: y) := by
+  simp [mantissa.eq_2, isDigit, MINUS, DOT]
+
+theorem mantissa_res {Y Y'} (hY : Res Y Y') : ∀ (r₀ a b : Bytes), mantissa (r₀ ++ Y) = (a, b) →
+    a.length ≤ r₀.length → ∃ r₁, r₀ = a ++ r₁ ∧ b = r₁ ++ Y ∧ mantissa (r₀ ++ Y') = (a, r₁ ++ Y')
+  | [], a, b, h, hl => by
+    have ha : a = [] := List.eq_nil_of_length_eq_zero (by simpa using hl)
+    subst ha
+    obtain ⟨c, c', y, y', rfl, rfl, he, hd⟩ := res_head hY
+    simp only [List.nil_append] at h ⊢
+    rcases hd with hd | rfl
+    · simp [mantissa.eq_2, hd] at h
+    · rcases he with he | ⟨h1, _⟩
+      · subst he
+        rw [mantissa_minus] at h ⊢
+        cases h
+        exact ⟨[], rfl, rfl, rfl⟩
+      · simp [isDigit, MINUS] at h1
+  | x :: r₀, a, b, h, hl => by
+    have hd := head_dot hY r₀
+    by_cases hx : (isDigit x || (x == DOT && (r₀ ++ Y).head? != some DOT)) = true
+    · have hx' : (isDigit x || (x == DOT && (r₀ ++ Y').head? != some DOT)) = true := by rw [← hd]; exact hx
+      rw [List.cons_append, mantissa.eq_2, ite_eq_left hx] at h
+      obtain ⟨ha, hb⟩ := Prod.mk.inj h
+      subst ha
+      obtain ⟨r₁, h1, h2, h3⟩ := mantissa_res hY r₀ _ _ rfl (by simpa using hl)
+      refine ⟨r₁, by rw [List.cons_append]; exact congrArg _ h1, by rw [← hb, h2], ?_⟩
+      rw [List.cons_append, mantissa.eq_2, ite_eq_left hx', h3]
+    · have hx' : ¬ (isDigit x || (x == DOT && (r₀ ++ Y').head? != some DOT)) = true := by rw [← hd]; exact hx
+      simp only [List.cons_append, mantissa.eq_2, hx, Bool.false_eq_true, ite_false, Prod.mk.injEq] at h
+      obtain ⟨rfl, rfl⟩ := h
+      exact ⟨x :: r₀, rfl, rfl, by rw [List.cons_append, mantissa.eq_2, ite_eq_right hx']⟩
+
+theorem du_of {p : Nat → Bool} (b : Bool) (h : ∀ x, isDigit x = true → p x = b) : DU p :=
+  fun x y hx hy => by rw [h x hx, h y hy]
+
+theorem ne_digit {x a : Nat} (hx : isDigit x = false) (ha : isDigit a = true) : (x == a) = false := by
+  by_cases h : x = a
+  · subst h; rw [hx] at ha; cases ha
+  · simp [h]
+
+theorem head_du {p} (hp : DU p) {Y Y'} (hY : Res Y Y') (r₀ : Bytes) :
+    (r₀ ++ Y).head?.map p = (r₀ ++ Y').head?.map p := by
+  cases r₀ with
+  | cons x r => rfl
+  | nil =>
+    obtain ⟨a, a', y, y', rfl, rfl, he, _⟩ := res_head hY
+    simp [res_du hp he]
+
+theorem exponent_nonE {c : Nat} (s : Bytes) (h1 : c ≠ 69) (h2 : c ≠ 101) : exponent (c :: s) = ([], c :: s) := by
+  cases s <;> simp [exponent, h1, h2]
+
+theorem res_nonE {Y Y'} (hY : Res Y Y') : exponent Y = ([], Y) ∧ exponent Y' = ([], Y') := by
+  obtain ⟨a, a', y, y', rfl, rfl, he, hd⟩ := res_head hY
+  have ne : ∀ {z}, (isDigit z = true ∨ z = MINUS) → z ≠ 69 ∧ z ≠ 101 := by
+    intro z hz; rcases hz with hz | rfl
+    · simp [isDigit] at hz; omega
+    · decide
+  have h' : isDigit a' = true ∨ a' = MINUS := by
+    rcases he with rfl | ⟨_, h⟩
+    · exact hd
+    · exact Or.inl h
+  exact ⟨exponent_nonE _ (ne hd).1 (ne hd).2, exponent_nonE _ (ne h').1 (ne h').2⟩
+
+theorem exponent_res {Y Y'} (hY : Res Y Y') (r₀ a b : Bytes) (h : exponent (r₀ ++ Y) = (a, b))
+    (hl : a.length ≤ r₀.length) : ∃ r₁, r₀ = a ++ r₁ ∧ b = r₁ ++ Y ∧ exponent (r₀ ++ Y') = (a, r₁ ++ Y') := by
+  match r₀, hl, h with
+  | [], hl, h =>
+    obtain ⟨e1, e2⟩ := res_nonE hY
+    simp only [List.nil_append] at h ⊢
+    rw [e1] at h
+    obtain ⟨rfl, rfl⟩ := Prod.mk.inj h
+    exact ⟨[], rfl, rfl, e2⟩
+  | [x], hl, h =>
+    obtain ⟨c, c', y, y', rfl, rfl, he, hd⟩ := res_head hY
+    have hc : (isDigit c || c == 45 || c == 43) = (isDigit c' || c' == 45 || c' == 43) := by
+      rcases he with rfl | ⟨h1, h2⟩
+      · rfl
+      · have a1 : (c == 45) = false := digit_ne h1 (by decide)
+        have a2 : (c == 43) = false := digit_ne h1 (by decide)
+        have a3 : (c' == 45) = false := digit_ne h2 (by decide)
+        have a4 : (c' == 43) = false := digit_ne h2 (by decide)
+        rw [h1, h2, a1, a2, a3, a4]
+    simp only [List.cons_append, List.nil_append] at h ⊢
+    by_cases hx : ((x == 69 || x == 101) && (isDigit c || c == 45 || c == 43)) = true
+    · simp only [exponent, hx, ite_true] at h
+      obtain ⟨rfl, _⟩ := Prod.mk.inj h
+      simp at hl
+    · have hx' : ¬ ((x == 69 || x == 101) && (isDigit c' || c' == 45 || c' == 43)) = true := by rw [← hc]; exact hx
+      simp only [exponent, hx, Bool.false_eq_true, ite_false] at h
+      obtain ⟨rfl, rfl⟩ := Prod.mk.inj h
+      exact ⟨[x], rfl, rfl, by simp only [exponent, hx', Bool.false_eq_true, ite_false]; rfl⟩
+  | x :: z :: r, hl, h =>
+    simp only [List.cons_append] at h ⊢
+    by_cases hx : ((x == 69 || x == 101) && (isDigit z || z == 45 || z == 43)) = true
+    · simp only [exponent, hx, ite_true] at h ⊢
+      obtain ⟨ha, hb⟩ := Prod.mk.inj h
+      subst ha
+      obtain ⟨r₁, h1, h2, h3⟩ := tw_res du_isDigit hY r _ _ rfl (by simp at hl; omega)
+      refine ⟨r₁, by simp [← h1], by rw [← hb, h2], by rw [h3]⟩
+    · simp only [exponent, hx, Bool.false_eq_true, ite_false] at h ⊢
+      obtain ⟨rfl, rfl⟩ := Prod.mk.inj h
+      exact ⟨x :: z :: r, rfl, rfl, rfl⟩
+
+theorem prefix_res {Y Y'} (hY : Res Y Y') : ∀ (o r₀ : Bytes), (∀ x ∈ o, isDigit x = false) →
+    o.isPrefixOf (r₀ ++ Y) = o.isPrefixOf (r₀ ++ Y')
+  | [], _, _ => by simp [List.isPrefixOf]
+  | x :: o, w :: r₀, ho => by
+    simp only [List.cons_append, List.isPrefixOf]
+    rw [prefix_res hY o r₀ (fun z hz => ho z (by simp [hz]))]
+  | x :: o, [], ho => by
+    have hx := ho x (by simp)
+    rcases hY with ⟨⟨a, t, rfl, ha⟩, ⟨a', t', rfl, ha'⟩⟩ | ⟨y, y', rfl, rfl, ⟨a, t, rfl, ha⟩, ⟨a', t', rfl, ha'⟩⟩
+    · simp [List.isPrefixOf, ne_digit hx ha, ne_digit hx ha']
+    · cases o with
+      | nil => simp [List.isPrefixOf]
+      | cons z o =>
+        have hz := ho z (by simp)
+        simp [List.isPrefixOf, ne_digit hz ha, ne_digit hz ha']
+
+theorem opAt_res {Y Y'} (hY : Res Y Y') (r₀ : Bytes) : ∀ (os : List Bytes) (k : Nat),
+    (∀ o ∈ os, ∀ x ∈ o, isDigit x = false) → opAt k os (r₀ ++ Y) = opAt k os (r₀ ++ Y')
+  | [], _, _ => rfl
+  | o :: os, k, hC => by
+    simp only [opAt]
+    rw [prefix_res hY o r₀ (hC o (by simp)), opAt_res hY r₀ os (k + 1) (fun o' h => hC o' (by simp [h]))]
+
+theorem mant_res {Y Y'} (hY : Res Y Y') (c : Nat) (r₀ a b : Bytes) (h : mant c (r₀ ++ Y) = (a, b))
+    (hl : a.length ≤ r₀.length + 1) :
+    ∃ r₁, c :: r₀ = a ++ r₁ ∧ b = r₁ ++ Y ∧ mant c (r₀ ++ Y') = (a, r₁ ++ Y') := by
+  unfold mant at h ⊢
+  by_cases hm : (c == MINUS) = true
+  · rw [ite_eq_left hm] at h ⊢
+    obtain ⟨ha, hb⟩ := Prod.mk.inj h
+    subst ha
+    obtain ⟨r₁, h1, h2, h3⟩ := mantissa_res hY r₀ _ _ rfl (by simpa using hl)
+    exact ⟨r₁, by rw [List.cons_append]; exact congrArg _ h1, by rw [← hb, h2], by rw [h3]⟩
+  · rw [ite_eq_right hm] at h ⊢
+    exact mantissa_res hY (c :: r₀) a b h hl
+
+theorem du_isAlpha : DU isAlpha := du_of false fun x hx => by simp [isDigit] at hx; simp [isAlpha]; omega
+
+theorem number_res {Y Y'} (hY : Res Y Y') {c : Nat} {r₀ : Bytes} {k t r}
+    (h : number c (r₀ ++ Y) = .ok (k, t, r)) (hl : t.length ≤ r₀.length + 1) :
+    ∃ r₁, c :: r₀ = t ++ r₁ ∧ r = r₁ ++ Y ∧ number c (r₀ ++ Y') = .ok (k, t, r₁ ++ Y') := by
+  obtain ⟨u, rfl, rfl, rfl⟩ := number_ok h
+  generalize hm : mant c (r₀ ++ Y) = m
+  obtain ⟨ma, mb⟩ := m
+  generalize he : exponent mb = e
+  obtain ⟨ea, eb⟩ := e
+  generalize hu : takeWhile isAlpha eb = w
+  obtain ⟨ua, ub⟩ := w
+  have ht : numText c (r₀ ++ Y) ++ (numUnit c (r₀ ++ Y)).1 = ma ++ ea ++ ua := by
+    simp [numText, numUnit, numRest, hm, he, hu]
+  have hr : (numUnit c (r₀ ++ Y)).2 = ub := by simp [numUnit, numRest, hm, he, hu]
+  rw [ht] at hl ⊢
+  rw [hr]
+  simp only [List.length_append] at hl
+  obtain ⟨r₁, h1, h2, h3⟩ := mant_res hY c r₀ ma mb hm (by omega)
+  subst h2
+  have hl1 : (c :: r₀).length = ma.length + r₁.length := by rw [h1, List.length_append]
+  obtain ⟨r₂, h4, h5, h6⟩ := exponent_res hY r₁ ea eb he (by simp at hl1; omega)
+  subst h5
+  have hl2 : r₁.length = ea.length + r₂.length := by rw [h4, List.length_append]
+  obtain ⟨r₃, h7, h8, h9⟩ := tw_res du_isAlpha hY r₂ ua ub hu (by simp at hl1; omega)
+  refine ⟨r₃, by rw [h1, h4, h7]; simp, h8, ?_⟩
+  have nt : numText c (r₀ ++ Y') = numText c (r₀ ++ Y) := by simp [numText, hm, he, h3, h6]
+  have nu : numUnit c (r₀ ++ Y') = (ua, r₃ ++ Y') := by simp [numUnit, numRest, h3, h6, h9]
+  have nb : numBody c (r₀ ++ Y') = numBody c (r₀ ++ Y) := by simp [numBody, nt]
+  have nu0 : (numUnit c (r₀ ++ Y)).1 = ua := by simp [numUnit, numRest, hm, he, hu]
+  unfold number at h ⊢
+  rw [nb, nu, nt]
+  rw [nu0] at h
+  revert h
+  have ntv : numText c (r₀ ++ Y) = ma ++ ea := by simp [numText, hm, he]
+  cases floatOk (numBody c (r₀ ++ Y)) <;> cases unitOf ua <;> simp [ntv]
+
+theorem du_isSpace : DU isSpace := du_of false fun x hx => by simp [isDigit] at hx; simp [isSpace]; omega
+theorem du_notNL : DU (· != NL) := du_of true fun x hx => by simp [isDigit] at hx; simp [NL]; omega
+theorem du_isWord : DU isWord := du_of true fun x hx => by simp [isWord, hx]
+theorem du_quote : DU (fun c => c != QUOTE && c != NL) :=
+  du_of true fun x hx => by simp [isDigit] at hx; simp [QUOTE, NL]; omega
+
+theorem step_res {C : Cfg} (hC : DigitFree C) {Y Y'} (hY : Res Y Y') {pv d c} {r₀ : Bytes} {k t r d'}
+    (h : step C pv d c (r₀ ++ Y) = .ok (k, t, r, d')) (hl : t.length ≤ r₀.length + 1) :
+    ∃ r₁, c :: r₀ = t ++ r₁ ∧ r = r₁ ++ Y ∧ step C pv d c (r₀ ++ Y') = .ok (k, t, r₁ ++ Y', d') := by
+  unfold step at h ⊢
+  by_cases h1 : (c == NL) = true
+  · rw [ite_eq_left h1] at h ⊢
+    simp only [Except.ok.injEq, Prod.mk.injEq] at h
+    obtain ⟨rfl, rfl, rfl, rfl⟩ := h
+    exact ⟨r₀, rfl, rfl, rfl⟩
+  rw [ite_eq_right h1] at h ⊢
+  by_cases h2 : isSpace c = true
+  · rw [ite_eq_left h2] at h ⊢
+    simp only [Except.ok.injEq, Prod.mk.injEq] at h
+    obtain ⟨rfl, rfl, rfl, rfl⟩ := h
+    obtain ⟨r₁, e1, e2, e3⟩ := tw_res du_isSpace hY r₀ _ _ rfl (by simpa using hl)
+    exact ⟨r₁, by rw [List.cons_append]; exact congrArg _ e1, e2, by rw [e3]⟩
+  rw [ite_eq_right h2] at h ⊢
+  by_cases h3 : (c == HASH) = true
+  · rw [ite_eq_left h3] at h ⊢
+    simp only [Except.ok.injEq, Prod.mk.injEq] at h
+    obtain ⟨rfl, rfl, rfl, rfl⟩ := h
+    obtain ⟨r₁, e1, e2, e3⟩ := tw_res du_notNL hY r₀ _ _ rfl (by simpa using hl)
+    exact ⟨r₁, by rw [List.cons_append]; exact congrArg _ e1, e2, by rw [e3]⟩
+  rw [ite_eq_right h3] at h ⊢
+  have hhd := head_du du_isDigit hY r₀
+  by_cases h4 : (isDigit c || (c == MINUS && ((r₀ ++ Y).head?.map isDigit).getD false && !pv)) = true
+  · have h4' : (isDigit c || (c == MINUS && ((r₀ ++ Y').head?.map isDigit).getD false && !pv)) = true := by
+      rw [← hhd]; exact h4
+    rw [ite_eq_left h4] at h
+    rw [ite_eq_left h4']
+    generalize hn : number c (r₀ ++ Y) = res at h
+    rcases res with e | ⟨k₁, t₁, r₂⟩
+    · cases h
+    · simp only [Except.ok.injEq, Prod.mk.injEq] at h
+      obtain ⟨rfl, rfl, rfl, rfl⟩ := h
+      obtain ⟨r₁, e1, e2, e3⟩ := number_res hY hn hl
+      exact ⟨r₁, e1, e2, by rw [e3]⟩
+  have h4' : ¬ (isDigit c || (c == MINUS && ((r₀ ++ Y').head?.map isDigit).getD false && !pv)) = true := by
+    rw [← hhd]; exact h4
+  rw [ite_eq_right h4] at h
+  rw [ite_eq_right h4']
+  by_cases h5 : (isAlpha c || c == 95) = true
+  · rw [ite_eq_left h5] at h ⊢
+    simp only [Except.ok.injEq, Prod.mk.injEq] at h
+    obtain ⟨rfl, rfl, rfl, rfl⟩ := h
+    obtain ⟨r₁, e1, e2, e3⟩ := tw_res du_isWord hY r₀ _ _ rfl (by simpa using hl)
+    exact ⟨r₁, by rw [List.cons_append]; exact congrArg _ e1, e2, by rw [e3]⟩
+  rw [ite_eq_right h5] at h ⊢
+  by_cases h6 : (c == QUOTE) = true
+  · rw [ite_eq_left h6] at h ⊢
+    generalize hq : upToQuote (r₀ ++ Y) = w at h
+    obtain ⟨wa, wb⟩ := w
+    have hq' := hq
+    unfold upToQuote at hq'
+    cases wb with
+    | nil => cases h
+    | cons x b' =>
+      by_cases hx : (x == QUOTE) = true
+      · simp only [ite_eq_left hx, Except.ok.injEq, Prod.mk.injEq] at h
+        obtain ⟨rfl, rfl, rfl, rfl⟩ := h
+        simp only [List.length_cons, List.length_append] at hl
+        obtain ⟨r₁, e1, e2, e3⟩ := tw_res du_quote hY r₀ _ _ hq' (by omega)
+        have hr1 : r₁ ≠ [] := by
+          intro e; subst e; simp at e1; subst e1; omega
+        obtain ⟨y, r₁', rfl⟩ : ∃ y r₁', r₁ = y :: r₁' := ⟨r₁.head hr1, r₁.tail, by simp⟩
+        simp only [List.cons_append, List.cons.injEq] at e2
+        obtain ⟨rfl, rfl⟩ := e2
+        refine ⟨r₁', by rw [e1]; simp, rfl, ?_⟩
+        have hq'' : upToQuote (r₀ ++ Y') = (wa, x :: (r₁' ++ Y')) := by unfold upToQuote; rw [e3]; rfl
+        rw [hq'']
+        simp [hx]
+      · simp only [ite_eq_right hx] at h; cases h
+  rw [ite_eq_right h6] at h ⊢
+  have ho := opAt_res hY (c :: r₀) C.ops 0 hC
+  simp only [List.cons_append] at ho
+  rw [← ho]
+  generalize hop : opAt 0 C.ops (c :: (r₀ ++ Y)) = w at h ⊢
+  rcases w with _ | ⟨k₁, o⟩
+  · cases h
+  · simp only [Except.ok.injEq, Prod.mk.injEq] at h
+    obtain ⟨rfl, rfl, rfl, rfl⟩ := h
+    obtain ⟨_, hp⟩ := opAt_prefix hop
+    have hpa := prefix_app hp
+    have hlen : o.length ≤ (c :: r₀).length := by simpa using hl
+    have dY : ∀ Z : Bytes, (c :: (r₀ ++ Z)).drop o.length = (c :: r₀).drop o.length ++ Z := fun Z => by
+      rw [← List.cons_append, List.drop_append_of_le_length hlen]
+    rw [dY] at hpa
+    refine ⟨(c :: r₀).drop o.length, ?_, dY Y, by dsimp only; rw [dY]⟩
+    have : (o ++ (c :: r₀).drop o.length) ++ Y = (c :: r₀) ++ Y := by rw [List.append_assoc, hpa]; rfl
+    exact (List.append_cancel_right this).symm
+
+/-! ## The lexer from a position -/
+
+/-- `go` with all the fuel it needs. -/
+def lx (C : Cfg) (pos : Nat) (prev : Option Kind) (depth : Nat) (s : Bytes) :
+    Except (Err × Nat × Nat) (List Piece) :=
+  go C (s.length + 1) pos prev depth s
+
+theorem lex_eq_lx (C : Cfg) (s : Bytes) : lex C s = lx C 0 none 0 s := rfl
+
+theorem step_rest_lt {C pv d c s k t r d'} (h : step C pv d c s = .ok (k, t, r, d')) : r.length < s.length + 1 := by
+  obtain ⟨ht, he⟩ := step_split h
+  have := congrArg List.length he
+  simp only [List.length_append, List.length_cons] at this
+  have : 0 < t.length := by cases t with | nil => exact absurd rfl ht | cons _ _ => simp
+  omega
+
+theorem go_fuel {C : Cfg} : ∀ (n m pos : Nat) (prev : Option Kind) (depth : Nat) (s : Bytes),
+    s.length < n → s.length < m → go C n pos prev depth s = go C m pos prev depth s
+  | 0, _, _, _, _, _, h, _ => absurd h (Nat.not_lt_zero _)
+  | _ + 1, 0, _, _, _, _, _, h => absurd h (Nat.not_lt_zero _)
+  | n + 1, m + 1, pos, prev, depth, [], _, _ => by simp [go]
+  | n + 1, m + 1, pos, prev, depth, c :: s, hn, hm => by
+    simp only [go]
+    cases hs : step C ((prev.map (Kind.isValue C)).getD false) depth c s with
+    | error e => rfl
+    | ok v =>
+      obtain ⟨k, t, r, d⟩ := v
+      have hr := step_rest_lt hs
+      simp only [List.length_cons] at hn hm
+      simp only
+      rw [go_fuel n m _ _ _ r (by omega) (by omega)]
+
+theorem lx_cons (C : Cfg) (pos : Nat) (prev : Option Kind) (depth c : Nat) (s : Bytes) :
+    lx C pos prev depth (c :: s) =
+      match step C ((prev.map (Kind.isValue C)).getD false) depth c s with
+      | .error (e, lo, hi) => .error (e, pos + lo, pos + hi)
+      | .ok (k, t, r, d) => (lx C (pos + t.length) (if isTrivia k then prev else some k) d r).map (⟨k, t⟩ :: ·) := by
+  unfold lx
+  simp only [List.length_cons, go]
+  cases hs : step C ((prev.map (Kind.isValue C)).getD false) depth c s with
+  | error e => rfl
+  | ok v =>
+    obtain ⟨k, t, r, d⟩ := v
+    have hr := step_rest_lt hs
+    simp only
+    rw [go_fuel (s.length + 1) (r.length + 1) _ _ _ r (by omega) (by omega)]
+    cases go C (r.length + 1) (pos + t.length) (if isTrivia k = true then prev else some k) d r <;> rfl
+
+theorem lx_step {C : Cfg} {pos : Nat} {prev : Option Kind} {depth c : Nat} {s : Bytes} {k t r d}
+    (h : step C ((prev.map (Kind.isValue C)).getD false) depth c s = .ok (k, t, r, d)) :
+    lx C pos prev depth (c :: s) = (lx C (pos + t.length) (if isTrivia k then prev else some k) d r).map (⟨k, t⟩ :: ·) := by
+  rw [lx_cons, h]
+
+theorem map_ok {α ε : Type} {f : α → α} {x : Except ε α} {b : α} (h : x.map f = .ok b) : ∃ a, x = .ok a ∧ b = f a := by
+  cases x with
+  | error e => cases h
+  | ok a => exact ⟨a, rfl, by simp [Except.map] at h; exact h.symm⟩
+
+theorem map_map_app {ε : Type} (x : Except ε (List Piece)) (p : Piece) (l : List Piece) :
+    (x.map (l ++ ·)).map (p :: ·) = x.map ((p :: l) ++ ·) := by cases x <;> rfl
+
+theorem map2 {ε : Type} {x y : Except ε (List Piece)} (p q : Piece) (h : x = y) :
+    (x.map (q :: ·)).map (p :: ·) = y.map ([p, q] ++ ·) := by subst h; cases x <;> rfl
+
+theorem map_nil {ε : Type} (x : Except ε (List Piece)) : x.map ([] ++ ·) = x := by cases x <;> rfl
+
+/-- The pieces of a prefix `P` of the input are cut the same whatever follows `P`, among inputs
+that start a number alike. -/
+theorem lx_prefix {C : Cfg} (hC : DigitFree C) {Y : Bytes} : ∀ (pre rest : List Piece) (P : Bytes)
+    (pos : Nat) (prev : Option Kind) (depth : Nat),
+    lx C pos prev depth (P ++ Y) = .ok (pre ++ rest) → (pre.map Piece.text).flatten = P →
+    ∃ prev' depth', lx C (pos + P.length) prev' depth' Y = .ok rest ∧
+      ∀ Y', Res Y Y' → lx C pos prev depth (P ++ Y') = (lx C (pos + P.length) prev' depth' Y').map (pre ++ ·)
+  | [], rest, P, pos, prev, depth, h, hP => by
+    simp only [List.map_nil, List.flatten_nil] at hP
+    subst hP
+    exact ⟨prev, depth, by simpa using h, fun Y' _ => by simp only [List.nil_append]; cases lx C pos prev depth Y' <;> rfl⟩
+  | ⟨k₀, t₀⟩ :: pre, rest, P, pos, prev, depth, h, hP => by
+    simp only [List.map_cons, List.flatten_cons] at hP
+    subst hP
+    generalize hP' : (pre.map Piece.text).flatten = P' at h ⊢
+    cases hPY : t₀ ++ P' ++ Y with
+    | nil =>
+      rw [hPY] at h; simp [lx, go] at h
+    | cons c s =>
+      rw [hPY, lx_cons] at h
+      cases hs : step C ((prev.map (Kind.isValue C)).getD false) depth c s with
+      | error e => rw [hs] at h; cases h
+      | ok v =>
+        obtain ⟨k, t, r, d₁⟩ := v
+        rw [hs] at h
+        obtain ⟨ps, hps, he⟩ := map_ok h
+        simp only [List.cons_append, List.cons.injEq, Piece.mk.injEq] at he
+        obtain ⟨⟨rfl, rfl⟩, rfl⟩ := he
+        obtain ⟨ht, hsplit⟩ := step_split hs
+        obtain ⟨x, t', rfl⟩ : ∃ x t', t₀ = x :: t' := ⟨t₀.head ht, t₀.tail, by simp⟩
+        simp only [List.cons_append, List.cons.injEq] at hPY hsplit
+        obtain ⟨rfl, hs'⟩ := hPY
+        obtain ⟨_, hsplit⟩ := hsplit
+        have hr : r = P' ++ Y := by
+          rw [← hs', List.append_assoc] at hsplit
+          exact List.append_cancel_left hsplit
+        rw [hr] at hps
+        obtain ⟨prev', depth', h1, h2⟩ := lx_prefix hC pre rest P' _ _ _ hps hP'
+        have hlen : pos + (x :: t' ++ P').length = pos + (x :: t').length + P'.length := by
+          simp only [List.length_append]; omega
+        refine ⟨prev', depth', by rw [hlen]; exact h1, fun Y' hY => ?_⟩
+        rw [← hs'] at hs
+        obtain ⟨r₁, e1, _, e3⟩ := step_res hC hY hs (by simp only [List.length_cons, List.length_append]; omega)
+        have hr1 : r₁ = P' := by
+          simp only [List.cons_append, List.cons.injEq] at e1
+          exact (List.append_cancel_left e1.2).symm
+        subst hr1
+        have : x :: t' ++ r₁ ++ Y' = x :: ((t' ++ r₁) ++ Y') := by simp
+        rw [this, lx_step e3, h2 Y' hY, map_map_app, hlen]
+
+/-- What came before matters to the lexer only as whether it was a value. -/
+theorem go_prev {C : Cfg} : ∀ (n pos : Nat) (prev prev' : Option Kind) (depth : Nat) (s : Bytes),
+    (prev.map (Kind.isValue C)).getD false = (prev'.map (Kind.isValue C)).getD false →
+    go C n pos prev depth s = go C n pos prev' depth s
+  | 0, _, _, _, _, _, _ => rfl
+  | _ + 1, _, _, _, _, [], _ => rfl
+  | n + 1, pos, prev, prev', depth, c :: s, hv => by
+    simp only [go]
+    rw [hv]
+    cases step C ((prev'.map (Kind.isValue C)).getD false) depth c s with
+    | error e => rfl
+    | ok v =>
+      obtain ⟨k, t, r, d⟩ := v
+      simp only
+      by_cases hk : isTrivia k = true
+      · rw [ite_eq_left hk, ite_eq_left hk, go_prev n _ prev prev' d r hv]
+      · rw [ite_eq_right hk, ite_eq_right hk]
+
+theorem lx_prev {C : Cfg} {pos : Nat} {prev prev' : Option Kind} {depth : Nat} (s : Bytes)
+    (hv : (prev.map (Kind.isValue C)).getD false = (prev'.map (Kind.isValue C)).getD false) :
+    lx C pos prev depth s = lx C pos prev' depth s := go_prev _ _ _ _ _ _ hv
+
+/-- Where the lexer starts counting changes only the positions of errors. -/
+theorem go_pos {C : Cfg} : ∀ (n pos pos' : Nat) (prev : Option Kind) (depth : Nat) (s : Bytes) (ps : List Piece),
+    go C n pos prev depth s = .ok ps → go C n pos' prev depth s = .ok ps
+  | 0, _, _, _, _, _, _, h => by simp [go] at h
+  | _ + 1, _, _, _, _, [], _, h => by simpa [go] using h
+  | n + 1, pos, pos', prev, depth, c :: s, ps, h => by
+    simp only [go] at h ⊢
+    cases hs : step C ((prev.map (Kind.isValue C)).getD false) depth c s with
+    | error e => rw [hs] at h; obtain ⟨e, lo, hi⟩ := e; cases h
+    | ok v =>
+      obtain ⟨k, t, r, d⟩ := v
+      rw [hs] at h
+      simp only at h ⊢
+      cases hg : go C n (pos + t.length) (if isTrivia k = true then prev else some k) d r with
+      | error e => rw [hg] at h; cases h
+      | ok qs =>
+        rw [hg] at h
+        rw [go_pos n _ (pos' + t.length) _ _ r qs hg]
+        exact h
+
+theorem lx_pos {C : Cfg} {pos pos' : Nat} {prev : Option Kind} {depth : Nat} {s : Bytes} {ps : List Piece}
+    (h : lx C pos prev depth s = .ok ps) : lx C pos' prev depth s = .ok ps := go_pos _ _ _ _ _ _ _ h
+
+/-! ## Trivia to the line's end -/
+
+/-- Spaces, then maybe a comment, and no line break: what `reparse_number` lets follow a number. -/
+def TrivLine (T : Bytes) : Prop :=
+  ∃ sp c, T = sp ++ c ∧ sp.all isSpace = true ∧ (c = [] ∨ ∃ c', c = HASH :: c' ∧ c'.all (· != NL) = true)
+
+/-- What the lexer takes after `W` up to the end of `W`'s last piece: the comment's rest, or the spaces. -/
+def lineSkip (W S : Bytes) : Bytes × Bytes :=
+  if HASH ∈ W then takeWhile (· != NL) S else takeWhile isSpace S
+
+theorem takeWhile_pre (p : Nat → Bool) : ∀ (u S : Bytes), u.all p = true →
+    takeWhile p (u ++ S) = (u ++ (takeWhile p S).1, (takeWhile p S).2)
+  | [], S, _ => by simp
+  | x :: u, S, h => by
+    simp only [List.all_cons, Bool.and_eq_true] at h
+    rw [List.cons_append, takeWhile.eq_2, ite_eq_left h.1, takeWhile_pre p u S h.2]
+    rfl
+
+theorem space_ne {c : Nat} (h : isSpace c = true) : (c == NL) = false := by
+  simp [isSpace] at h; simp [NL]; omega
+
+theorem lx_space_step {C : Cfg} {pos : Nat} {prev : Option Kind} {depth c : Nat} {s : Bytes} (hc : isSpace c = true) :
+    lx C pos prev depth (c :: s) =
+      (lx C (pos + (c :: (takeWhile isSpace s).1).length) prev depth (takeWhile isSpace s).2).map
+        (⟨.space, c :: (takeWhile isSpace s).1⟩ :: ·) := by
+  have hs : step C ((prev.map (Kind.isValue C)).getD false) depth c s =
+      .ok (.space, c :: (takeWhile isSpace s).1, (takeWhile isSpace s).2, depth) := by
+    unfold step
+    rw [ite_eq_right (by simp [space_ne hc]), ite_eq_left hc]
+  rw [lx_step hs]
+  rfl
+
+theorem lx_comment_step {C : Cfg} {pos : Nat} {prev : Option Kind} {depth : Nat} {s : Bytes} :
+    lx C pos prev depth (HASH :: s) =
+      (lx C (pos + (HASH :: (takeWhile (· != NL) s).1).length) prev depth (takeWhile (· != NL) s).2).map
+        (⟨.comment, HASH :: (takeWhile (· != NL) s).1⟩ :: ·) := by
+  have hs : step C ((prev.map (Kind.isValue C)).getD false) depth HASH s =
+      .ok (.comment, HASH :: (takeWhile (· != NL) s).1, (takeWhile (· != NL) s).2, depth) := by
+    unfold step
+    rw [ite_eq_right (by decide), ite_eq_right (by decide), ite_eq_left (by decide)]
+  rw [lx_step hs]
+  rfl
+
+theorem takeWhile_nil_of {p : Nat → Bool} {x : Nat} (s : Bytes) (h : p x = false) : takeWhile p (x :: s) = ([], x :: s) := by
+  rw [takeWhile.eq_2, ite_eq_right (by simp [h])]
+
+/-- After a line's trivia `W`: its pieces, all trivia, then the lexer goes on where they end. -/
+theorem lx_trivline {C : Cfg} {W : Bytes} (hW : TrivLine W) (S : Bytes) :
+    ∃ tr : List Piece, (∀ p ∈ tr, isTrivia p.kind = true) ∧ (tr.map Piece.text).flatten = W ++ (lineSkip W S).1 ∧
+      ∀ pos prev depth, lx C pos prev depth (W ++ S) =
+        (lx C (pos + (W ++ (lineSkip W S).1).length) prev depth (lineSkip W S).2).map (tr ++ ·) := by
+  obtain ⟨sp, c, rfl, hsp, hc⟩ := hW
+  have hsp' : ∀ x ∈ sp, isSpace x = true := fun x hx => List.all_eq_true.1 hsp x hx
+  rcases hc with rfl | ⟨c', rfl, hc'⟩
+  · have hh : ¬ HASH ∈ sp ++ [] := by
+      intro h; simp at h; have := hsp' _ h; simp [isSpace, HASH] at this
+    have hl : lineSkip (sp ++ []) S = takeWhile isSpace S := by unfold lineSkip; exact ite_eq_right hh
+    rw [hl]
+    simp only [List.append_nil]
+    generalize hw : takeWhile isSpace S = w
+    obtain ⟨a, b⟩ := w
+    have hab : a ++ b = S := by have := takeWhile_app isSpace S; rw [hw] at this; exact this
+    cases sp with
+    | nil =>
+      cases a with
+      | nil =>
+        refine ⟨[], by simp, by simp, fun pos prev depth => ?_⟩
+        simp only [List.nil_append] at hab ⊢
+        subst hab
+        simp only [List.length_nil, Nat.add_zero]
+        cases lx C pos prev depth b <;> rfl
+      | cons x a' =>
+        cases S with
+        | nil => simp [takeWhile] at hw
+        | cons y S' =>
+          by_cases hy : isSpace y = true
+          · rw [takeWhile.eq_2, ite_eq_left hy] at hw
+            obtain ⟨⟨rfl, ha⟩, hb⟩ := (Prod.mk.inj hw).imp (List.cons.inj) id
+            refine ⟨[⟨.space, y :: a'⟩], by simp [isTrivia], by simp, fun pos prev depth => ?_⟩
+            simp only [List.nil_append]
+            rw [lx_space_step hy, ha, hb]
+            cases lx C (pos + (y :: a').length) prev depth b <;> rfl
+          · rw [takeWhile.eq_2, ite_eq_right hy] at hw
+            cases (Prod.mk.inj hw).1
+    | cons y sp' =>
+      have hy : isSpace y = true := hsp' y (by simp)
+      have hsp2 : sp'.all isSpace = true := by simp only [List.all_cons, Bool.and_eq_true] at hsp; exact hsp.2
+      refine ⟨[⟨.space, y :: sp' ++ a⟩], by simp [isTrivia], by simp, fun pos prev depth => ?_⟩
+      rw [List.cons_append, lx_space_step hy, takeWhile_pre isSpace sp' S hsp2, hw]
+      rfl
+  · have hh : HASH ∈ sp ++ HASH :: c' := by simp
+    have hl : lineSkip (sp ++ HASH :: c') S = takeWhile (· != NL) S := by unfold lineSkip; exact ite_eq_left hh
+    rw [hl]
+    generalize hw : takeWhile (· != NL) S = w
+    obtain ⟨a, b⟩ := w
+    have hcom : ∀ pos prev depth, lx C pos prev depth (HASH :: c' ++ S) =
+        (lx C (pos + (HASH :: c' ++ a).length) prev depth b).map (⟨.comment, HASH :: c' ++ a⟩ :: ·) := by
+      intro pos prev depth
+      rw [List.cons_append, lx_comment_step, takeWhile_pre _ c' S hc', hw]
+      rfl
+    cases sp with
+    | nil =>
+      refine ⟨[⟨.comment, HASH :: c' ++ a⟩], by simp [isTrivia], by simp, fun pos prev depth => ?_⟩
+      simp only [List.nil_append]
+      rw [hcom]
+      rfl
+    | cons y sp' =>
+      have hy : isSpace y = true := hsp' y (by simp)
+      have hsp2 : sp'.all isSpace = true := by simp only [List.all_cons, Bool.and_eq_true] at hsp; exact hsp.2
+      refine ⟨[⟨.space, y :: sp'⟩, ⟨.comment, HASH :: c' ++ a⟩], by simp [isTrivia], by simp, fun pos prev depth => ?_⟩
+      have htw : takeWhile isSpace (sp' ++ HASH :: c' ++ S) = (sp', HASH :: c' ++ S) := by
+        rw [List.append_assoc, takeWhile_pre isSpace sp' _ hsp2, List.cons_append,
+          takeWhile_nil_of _ (by decide : isSpace HASH = false)]
+        simp
+      rw [List.cons_append, List.cons_append, lx_space_step hy, htw, hcom]
+      refine map2 _ _ ?_
+      congr 1
+      simp only [List.length_append, List.length_cons]; omega
+
+theorem trivline_app {T V : Bytes} (hT : TrivLine T) (hV : TrivLine V) : TrivLine (T ++ V) := by
+  obtain ⟨sp, c, rfl, hsp, hc⟩ := hT
+  obtain ⟨sp₂, c₂, rfl, hsp₂, hc₂⟩ := hV
+  have hsp₂' : sp₂.all (· != NL) = true := List.all_eq_true.2 fun x hx => by
+    have := List.all_eq_true.1 hsp₂ x hx; simp [isSpace] at this; simp [NL]; omega
+  have hc₂' : c₂.all (· != NL) = true := by
+    rcases hc₂ with rfl | ⟨c', rfl, h⟩
+    · rfl
+    · simp only [List.all_cons, h, Bool.and_true]; decide
+  rcases hc with rfl | ⟨c', rfl, h⟩
+  · exact ⟨sp ++ sp₂, c₂, by simp, by simp [hsp, hsp₂], hc₂⟩
+  · refine ⟨sp, HASH :: (c' ++ sp₂ ++ c₂), by simp, hsp, Or.inr ⟨_, rfl, ?_⟩⟩
+    simp only [List.all_append, h, hsp₂', hc₂', Bool.and_self]
+
+/-- A number piece leaves the bracket depth alone, and starts with `-` only where no value precedes. -/
+theorem step_num {C pv d c s u t r d'} (h : step C pv d c s = .ok (.num u, t, r, d')) :
+    d' = d ∧ (c = MINUS → pv = false) := by
+  unfold step at h
+  by_cases h1 : (c == NL) = true
+  · rw [ite_eq_left h1] at h
+    by_cases hd : (d == 0) = true <;> simp [hd] at h
+  rw [ite_eq_right h1] at h
+  by_cases h2 : isSpace c = true
+  · rw [ite_eq_left h2] at h; simp at h
+  rw [ite_eq_right h2] at h
+  by_cases h3 : (c == HASH) = true
+  · rw [ite_eq_left h3] at h; simp at h
+  rw [ite_eq_right h3] at h
+  by_cases h4 : (isDigit c || (c == MINUS && (s.head?.map isDigit).getD false && !pv)) = true
+  · rw [ite_eq_left h4] at h
+    generalize number c s = res at h
+    rcases res with e | ⟨k₁, t₁, r₂⟩
+    · cases h
+    · simp only [Except.ok.injEq, Prod.mk.injEq] at h
+      refine ⟨h.2.2.2.symm, fun hc => ?_⟩
+      subst hc
+      simp [isDigit, MINUS] at h4
+      exact h4.2
+  rw [ite_eq_right h4] at h
+  by_cases h5 : (isAlpha c || c == 95) = true
+  · rw [ite_eq_left h5] at h
+    generalize C.kws.findIdx? _ = o at h
+    cases o <;> simp at h
+  rw [ite_eq_right h5] at h
+  by_cases h6 : (c == QUOTE) = true
+  · rw [ite_eq_left h6] at h
+    generalize (upToQuote s).2 = w at h
+    cases w with
+    | nil => cases h
+    | cons x b => by_cases hx : (x == QUOTE) = true <;> simp [hx] at h
+  rw [ite_eq_right h6] at h
+  generalize opAt 0 C.ops (c :: s) = w at h
+  rcases w with _ | ⟨k₁, o⟩ <;> simp at h
+
+theorem lit_int {L : Lit} (hl : L.Ok) : ∃ x z, isDigit x = true ∧ L.mant = x :: z := by
+  obtain ⟨hi0, hi, _, _⟩ := hl
+  obtain ⟨x, xs, hx⟩ : ∃ x xs, L.int = x :: xs := ⟨L.int.head hi0, L.int.tail, by simp⟩
+  rw [hx] at hi
+  simp only [List.all_cons, Bool.and_eq_true] at hi
+  exact ⟨x, L.mant.tail, hi.1, by simp only [Lit.mant, hx, List.cons_append, List.tail_cons]⟩
+
+theorem lit_text {L : Lit} (hl : L.Ok) :
+    ∃ x z, isDigit x = true ∧ L.text = (if L.neg then [MINUS] else []) ++ x :: z := by
+  obtain ⟨x, z, hx, hm⟩ := lit_int hl
+  exact ⟨x, z ++ L.expPart ++ unitText L.unit, hx, by simp [Lit.text, hm]⟩
+
+/-- Two plain numbers with the same sign start alike, whatever follows them. -/
+theorem res_lit {L₁ L₂ : Lit} (hl₁ : L₁.Ok) (hl₂ : L₂.Ok) (hneg : L₁.neg = L₂.neg) (X X' : Bytes) :
+    Res (L₁.text ++ X) (L₂.text ++ X') := by
+  obtain ⟨x₁, z₁, hx₁, ht₁⟩ := lit_text hl₁
+  obtain ⟨x₂, z₂, hx₂, ht₂⟩ := lit_text hl₂
+  rw [ht₁, ht₂, ← hneg]
+  cases L₁.neg
+  · exact Or.inl ⟨⟨x₁, z₁ ++ X, by simp, hx₁⟩, ⟨x₂, z₂ ++ X', by simp, hx₂⟩⟩
+  · exact Or.inr ⟨x₁ :: z₁ ++ X, x₂ :: z₂ ++ X', by simp, by simp, ⟨x₁, z₁ ++ X, by simp, hx₁⟩,
+      ⟨x₂, z₂ ++ X', by simp, hx₂⟩⟩
+
+theorem lineSkip_end (W : Bytes) {S₁ : Bytes} (h : S₁ = [] ∨ S₁.head? = some NL) : lineSkip W S₁ = ([], S₁) := by
+  unfold lineSkip
+  rcases h with rfl | h
+  · split <;> rfl
+  · obtain ⟨z, S', rfl⟩ : ∃ z S', S₁ = z :: S' := by
+      cases S₁ with
+      | nil => simp at h
+      | cons z S' => exact ⟨z, S', rfl⟩
+    simp only [List.head?_cons, Option.some.injEq] at h
+    subst h
+    split
+    · exact takeWhile_nil_of _ (by decide)
+    · exact takeWhile_nil_of _ (by decide)
+
+/-- **The lexer, on an edit of one number.** The old text is `P`, a plain number `L₁` lexed as one
+number piece, the trivia `T₁` and the rest `S`; the new text has the plain number `L₂` (same sign)
+and the trivia `T₂` in their place. If `T₁` and `T₂` both hold a comment or both do not (or the
+rest of `S`'s line is trivia), the new text lexes to the same pieces before the number, the new
+number's piece, trivia, and then the same pieces as before, `rest`: the pieces after the trivia
+are the old ones, each `|L₂ T₂| − |L₁ T₁|` bytes later. -/
+theorem reparse_lex {C : Cfg} (hC : DigitFree C) {P T₁ T₂ S : Bytes} {L₁ L₂ : Lit} (hl₁ : L₁.Ok) (hl₂ : L₂.Ok)
+    (hneg : L₁.neg = L₂.neg) (hs₂ : Stops (T₂ ++ S)) (ht₁ : TrivLine T₁) (ht₂ : TrivLine T₂)
+    (hh : (HASH ∈ T₁ ↔ HASH ∈ T₂) ∨ ∃ V S₁, S = V ++ S₁ ∧ TrivLine V ∧ (S₁ = [] ∨ S₁.head? = some NL))
+    {pre post : List Piece} {u₁ : Unit}
+    (hlex : lex C (P ++ L₁.text ++ T₁ ++ S) = .ok (pre ++ ⟨.num u₁, L₁.text⟩ :: post))
+    (hpre : (pre.map Piece.text).flatten = P) :
+    ∃ tr₁ tr₂ rest S₀, post = tr₁ ++ rest ∧
+      lex C (P ++ L₂.text ++ T₂ ++ S) = .ok (pre ++ ⟨.num L₂.unit, L₂.text⟩ :: (tr₂ ++ rest)) ∧
+      (∀ p ∈ tr₁ ++ tr₂, isTrivia p.kind = true) ∧
+      (tr₁.map Piece.text).flatten = T₁ ++ S₀ ∧ (tr₂.map Piece.text).flatten = T₂ ++ S₀ := by
+  -- the trivia after each number
+  obtain ⟨tr₁, tr₂, S₀, S₁, a1, a2, b1, b2, e₁, e₂⟩ : ∃ tr₁ tr₂ S₀ S₁,
+      (∀ p ∈ tr₁, isTrivia p.kind = true) ∧ (∀ p ∈ tr₂, isTrivia p.kind = true) ∧
+      (tr₁.map Piece.text).flatten = T₁ ++ S₀ ∧ (tr₂.map Piece.text).flatten = T₂ ++ S₀ ∧
+      (∀ pos prev depth, lx C pos prev depth (T₁ ++ S) =
+        (lx C (pos + (T₁ ++ S₀).length) prev depth S₁).map (tr₁ ++ ·)) ∧
+      (∀ pos prev depth, lx C pos prev depth (T₂ ++ S) =
+        (lx C (pos + (T₂ ++ S₀).length) prev depth S₁).map (tr₂ ++ ·)) := by
+    rcases hh with hh | ⟨V, S₁, rfl, hV, hS₁⟩
+    · obtain ⟨tr₁, a1, b1, c1⟩ := lx_trivline (C := C) ht₁ S
+      obtain ⟨tr₂, a2, b2, c2⟩ := lx_trivline (C := C) ht₂ S
+      have hls : lineSkip T₂ S = lineSkip T₁ S := by
+        unfold lineSkip
+        by_cases h : HASH ∈ T₁
+        · rw [ite_eq_left h, ite_eq_left (hh.1 h)]
+        · rw [ite_eq_right h, ite_eq_right (fun h' => h (hh.2 h'))]
+      rw [hls] at b2 c2
+      exact ⟨tr₁, tr₂, (lineSkip T₁ S).1, (lineSkip T₁ S).2, a1, a2, b1, b2, c1, c2⟩
+    · obtain ⟨tr₁, a1, b1, c1⟩ := lx_trivline (C := C) (trivline_app ht₁ hV) S₁
+      obtain ⟨tr₂, a2, b2, c2⟩ := lx_trivline (C := C) (trivline_app ht₂ hV) S₁
+      rw [lineSkip_end _ hS₁] at b1 c1 b2 c2
+      refine ⟨tr₁, tr₂, V, S₁, a1, a2, by simpa using b1, by simpa using b2,
+        fun pos prev depth => ?_, fun pos prev depth => ?_⟩
+      · rw [← List.append_assoc, c1]; simp
+      · rw [← List.append_assoc, c2]; simp
+  rw [lex_eq_lx] at hlex ⊢
+  rw [show P ++ L₁.text ++ T₁ ++ S = P ++ (L₁.text ++ (T₁ ++ S)) by simp] at hlex
+  obtain ⟨prev', d', h1, h2⟩ := lx_prefix hC pre _ P 0 none 0 hlex hpre
+  -- the old number's step
+  obtain ⟨x₁, z₁, hx₁, ht₁⟩ := lit_text hl₁
+  obtain ⟨c, s, hcs⟩ : ∃ c s, L₁.text ++ (T₁ ++ S) = c :: s := by
+    rw [ht₁]; cases L₁.neg
+    · exact ⟨x₁, z₁ ++ (T₁ ++ S), by simp⟩
+    · exact ⟨MINUS, x₁ :: z₁ ++ (T₁ ++ S), by simp⟩
+  have hc : L₁.neg = true → c = MINUS := by
+    intro hn; rw [ht₁, hn] at hcs; simp at hcs; exact hcs.1.symm
+  rw [hcs, lx_cons] at h1
+  cases hs : step C ((prev'.map (Kind.isValue C)).getD false) d' c s with
+  | error e => rw [hs] at h1; obtain ⟨e, lo, hi⟩ := e; cases h1
+  | ok v =>
+    obtain ⟨k, t, r, d₁⟩ := v
+    rw [hs] at h1
+    obtain ⟨ps, hps, he⟩ := map_ok h1
+    simp only [List.cons.injEq, Piece.mk.injEq] at he
+    obtain ⟨⟨rfl, rfl⟩, rfl⟩ := he
+    obtain ⟨hd1, hpv⟩ := step_num hs
+    subst hd1
+    have hr : r = T₁ ++ S := by
+      have := (step_split hs).2
+      rw [← hcs] at this
+      exact List.append_cancel_left this
+    simp only [isTrivia, Bool.false_eq_true, ite_false] at hps
+    rw [hr, e₁] at hps
+    obtain ⟨rest, hrest, hpost⟩ := map_ok hps
+    refine ⟨tr₁, tr₂, rest, S₀, hpost, ?_, fun p hp => ?_, b1, b2⟩
+    · have hres : Res (L₁.text ++ (T₁ ++ S)) (L₂.text ++ (T₂ ++ S)) := res_lit hl₁ hl₂ hneg _ _
+      rw [show P ++ L₂.text ++ T₂ ++ S = P ++ (L₂.text ++ (T₂ ++ S)) by simp, h2 _ hres]
+      obtain ⟨c₂, s₂, hcs₂, hst₂⟩ := num_literal C ((prev'.map (Kind.isValue C)).getD false) d₁ L₂ hl₂
+        (T₂ ++ S) hs₂ (fun hn => hpv (hc (hneg ▸ hn)))
+      rw [hcs₂, lx_step hst₂]
+      simp only [isTrivia, Bool.false_eq_true, ite_false]
+      rw [e₂, lx_prev (prev := some (.num L₂.unit)) (prev' := some (.num u₁)) _ (by simp [Kind.isValue]),
+        lx_pos hrest]
+      rfl
+    · rcases List.mem_append.1 hp with hp | hp
+      · exact a1 p hp
+      · exact a2 p hp
 
 end ForgeLang.LL1.Lex
