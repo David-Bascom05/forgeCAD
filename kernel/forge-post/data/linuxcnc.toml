@@ -1,0 +1,41 @@
+# LinuxCNC RS274/NGC: restated from the NIST interpreter's documented behaviour and LinuxCNC's
+# G-code reference (facts only). Verify with your configuration.
+[dialect]
+name = "linuxcnc"
+extension = "ngc"
+decimals = 4
+feed_decimals = 1
+point = "never"
+program_open = ["%", "({title})"]
+program_close = ["M2", "%"]
+comment = "({text})"
+comment_strip = "()"
+line_numbers = false
+line_start = 10
+line_step = 10
+safe_start = ["G17 G21 G40 G49 G80 G90 G94", "G64 P0.01"]
+tool_change = ["T{t} M6"]
+length_comp = "G43 H{h}"
+spindle_cw = "S{rpm} M3"
+spindle_ccw = "S{rpm} M4"
+spindle_stop = "M5"
+wcs = "G{n}"
+wcs_first = 54
+wcs_count = 6
+arc = "ijk"
+retract_home = ["G53 G0 Z0"]
+coolant_flood = "M8"
+coolant_mist = "M7"
+coolant_off = "M9"
+dwell = "G4 P{s}"
+cycle_drill = "G98 G81 X{x} Y{y} Z{z} R{r} F{f}"
+cycle_dwell = "G98 G82 X{x} Y{y} Z{z} R{r} P{s} F{f}"
+cycle_peck = "G98 G83 X{x} Y{y} Z{z} R{r} Q{q} F{f}"
+cycle_chipbreak = "G98 G73 X{x} Y{y} Z{z} R{r} Q{q} F{f}"
+cycle_tap = "refuse"
+cycle_ream = "G98 G85 X{x} Y{y} Z{z} R{r} F{f}"
+cycle_next = "X{x} Y{y}"
+cycle_cancel = "G80"
+source = "forgecad, restated from NIST RS274NGC v3 and the LinuxCNC G-code reference"
+taken = "2026-11-23"
+note = "verify with your configuration"

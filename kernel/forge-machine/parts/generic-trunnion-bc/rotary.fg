@@ -1,0 +1,24 @@
+# generic-trunnion-bc rotary table: C, top at z = 0; a centre bore and a cross of T-slots.
+# frame: the machine's base frame at the home pose.
+shared R = 150
+shared H = 40
+shared bore = 40
+shared slot_w = 14
+shared slot_d = 16
+
+sketch plan(on: offset(xy, -H)) {
+  outline = circle((0, 0), R)
+}
+plate = extrude(plan.outline, H)
+sketch sx(on: plate.end) {
+  r = rect(center: (0, 0), size: (2 * R, slot_w))
+}
+slot_x = cut(sx.r, slot_d)
+sketch sy(on: plate.end) {
+  r = rect(center: (0, 0), size: (slot_w, 2 * R))
+}
+slot_y = cut(sy.r, slot_d)
+sketch cb(on: plate.end) {
+  c = circle((0, 0), bore / 2)
+}
+centre = cut(cb.c, H)

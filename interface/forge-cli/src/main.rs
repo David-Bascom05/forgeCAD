@@ -19,6 +19,7 @@ fn usage() -> ExitCode {
          forgecad update [INSTALL_ROOT]   (install latest main)\n       \
          forgecad build|check|query|measure|render|export FILE.fg [ARGS] [--json] [--labels SEL] [--px N] [--at FEAT] [-o OUT]\n       \
          forgecad edit FILE.fg 'OP'.. [--base VERSION]   (typed ops, as a part's fixes give them; export F.fg stl|3mf|obj|dxf [SHEET])\n       \
+         forgecad cam FILE.fg [sheet] [--json] [-o OUT]   (a machining document: certified toolpaths, the program or setup sheet)\n       \
          forgecad diff A.fg B.fg [volume]   (what B changed from A: features, params, faces, volume)\n       \
          forgecad help [forge | WORD]   (the .fg language, or its sections on WORD)\n       \
          forgecad versions F | history F [--all] | create_version F NAME [NOTES] | restore F v3|SAVE | compare F A B [--volume]\n       \
@@ -26,6 +27,7 @@ fn usage() -> ExitCode {
          forgecad serve | mcp [--root DIR] [--writable]   (JSON-RPC / MCP on stdio, parts under DIR, default .; edits only if --writable)\n       \
          forgecad web DIR [--port P] [--bind ADDR] [--token T] [--app WEBDIR] [--read-only]   (the browser app on DIR's files)\n       \
          forgecad import FILE.FCStd [-o DIR] [--json]   (each body a part file DIR/<file>.<body>.fg)\n       \
+         forgecad machine SETUP.toml [--json] | list   (posted G-code on a machine: timeline, collisions, removal)\n       \
          forgecad vendor list | show ID | export ID [-o F] | import F | new ID [--from ID] | check F [--json]   (sheet-metal vendor profiles)\n       \
          forgecad demo <out.stl> [chord-mm] | preview <out.json>\nthe language: AGENTS.md, forgecad help forge"
     );
@@ -211,6 +213,7 @@ fn main() -> ExitCode {
         }
         Some("web") => web::main(&args[2..]),
         Some("import") if args.len() >= 3 => import(&args[2..]),
+        Some("machine") if args.len() >= 3 => machine(&args[2..]),
         Some("vendor") => {
             let json = args.iter().any(|a| a == "--json");
             let rest: Vec<String> = args[2..].iter().filter(|a| *a != "--json").cloned().collect();
@@ -250,6 +253,41 @@ fn quoted(s: &str) -> String {
         }
     }
     o + "\""
+}
+
+/// Posted G-code simulated on a machine (forge-machine): `list` the machines, or run a setup file.
+fn machine(argv: &[String]) -> ExitCode {
+    if argv[0] == "list" {
+        let lib = match forge_machine_lang::library(std::path::Path::new(".")) {
+            Ok(l) => l,
+            Err(e) => {
+                eprintln!("error: {e}");
+                return ExitCode::FAILURE;
+            }
+        };
+        for (m, file) in &lib.machines {
+            println!("{} {} ({}) {}", m.name, m.kind.name(), m.control, file);
+        }
+        return ExitCode::SUCCESS;
+    }
+    let json = argv.iter().any(|a| a == "--json");
+    let Some(file) = argv.iter().find(|a| !a.starts_with("--")) else {
+        return usage();
+    };
+    match forge_machine_lang::run_setup(std::path::Path::new(file)) {
+        Ok(o) => {
+            let _ = writeln!(std::io::stdout(), "{}", if json { o.json } else { o.text });
+            if o.ok {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::FAILURE
+            }
+        }
+        Err(e) => {
+            eprintln!("error: {e}");
+            ExitCode::from(2)
+        }
+    }
 }
 
 /// Another system's file as part files, one a body: a line each says what became of it.
@@ -365,6 +403,8 @@ fn command(cmd: &str, argv: &[String]) -> ExitCode {
             "export" if a.words.first().is_some_and(|w| w == "3mf") => "3mf",
             "export" if a.words.first().is_some_and(|w| w == "obj") => "obj",
             "export" => "step",
+            "cam" if a.words.first().is_some_and(|w| w == "sheet") => "html",
+            "cam" => "nc",
             _ => "png",
         };
         let stem = a.file.trim_end_matches(".fg");
@@ -379,6 +419,16 @@ fn command(cmd: &str, argv: &[String]) -> ExitCode {
     }
     // a closed pipe (`| head`) is not an error worth a panic
     let _ = writeln!(std::io::stdout(), "{text}");
+    // cam: 0 fully certified, 3 released but certified except G5 (a setup not placed), 1 refused
+    if cmd == "cam"
+        && r.ok
+        && let forge_agent::json::Json::Obj(fs) = &r.json
+        && fs
+            .iter()
+            .any(|(k, v)| k == "certification" && *v == forge_agent::json::Json::Str("except G5".into()))
+    {
+        return ExitCode::from(3);
+    }
     if r.ok {
         ExitCode::SUCCESS
     } else {

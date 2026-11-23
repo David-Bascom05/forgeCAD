@@ -4,9 +4,10 @@
 # tens of GB.
 name: wasm
 
+# No push trigger: pull requests merge with current main in their head, so this ran on the tree
+# that lands, and its build cache holds no third-party crates (nothing for main to warm). A manual
+# run (workflow_dispatch) runs it on main.
 on:
-  push:
-    branches: [main]
   pull_request:
   workflow_dispatch:
 
