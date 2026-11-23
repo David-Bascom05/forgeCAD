@@ -299,6 +299,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-machine"
+version = "0.1.0"
+dependencies = [
+ "forge-math",
+ "forge-post",
+ "forge-tooling",
+]
+
+[[package]]
 name = "forge-mass"
 version = "0.1.0"
 dependencies = [
