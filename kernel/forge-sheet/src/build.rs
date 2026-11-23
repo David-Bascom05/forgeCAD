@@ -27,6 +27,7 @@ use forge_geom::wrap::{Flat, Wrap};
 use forge_geom::{Circle, Curve, CurveGeom, Cylinder, Line, Plane, Surface, SurfaceGeom};
 use forge_math::{Frame, Interval, Point2, Point3, Vec2, Vec3, dmath, tol};
 use forge_ops::{ProfileLoop, Segment};
+use forge_sheet_core::place;
 use forge_topo::{Body, EdgeId, Name, VertexId};
 use std::collections::HashMap;
 
@@ -64,28 +65,45 @@ impl Rigid {
     fn y(&self) -> Vec2 {
         Vec2::new(-self.x.y, self.x.x)
     }
+    // the motions are forge-sheet-core's `place` (proven op for op, verify/aeneas/forge-sheet-core:
+    // L4, and on the f64 bridge within their forward-error bounds of the exact motions)
+    fn place(&self) -> place::Place {
+        place::Place {
+            ox: self.o.x,
+            oy: self.o.y,
+            xx: self.x.x,
+            xy: self.x.y,
+        }
+    }
+    fn of(m: place::Place) -> Rigid {
+        Rigid {
+            o: Point2::new(m.ox, m.oy),
+            x: Vec2::new(m.xx, m.xy),
+        }
+    }
     fn apply(&self, p: Point2) -> Point2 {
-        self.o + self.x * p.x + self.y() * p.y
+        let (x, y) = place::apply(self.place(), p.x, p.y);
+        Point2::new(x, y)
     }
     fn vec(&self, v: Vec2) -> Vec2 {
-        self.x * v.x + self.y() * v.y
+        let (x, y) = place::vec(self.place(), v.x, v.y);
+        Vec2::new(x, y)
     }
     fn local(&self, p: Point2) -> Point2 {
-        let d = p - self.o;
-        Point2::new(d.dot(self.x), d.dot(self.y()))
+        let (x, y) = place::local(self.place(), p.x, p.y);
+        Point2::new(x, y)
     }
     fn then(&self, inner: &Rigid) -> Rigid {
-        Rigid {
-            o: self.apply(inner.o),
-            x: self.vec(inner.x),
-        }
+        Rigid::of(place::then(self.place(), inner.place()))
     }
     fn inverse(&self) -> Rigid {
-        let o = self.local(Point2::ORIGIN);
-        Rigid {
-            o,
-            x: Vec2::new(self.x.x, -self.x.y),
-        }
+        Rigid::of(place::inverse(self.place()))
+    }
+    /// A joint frame: origin p0, x axis the right of p0 -> p1 (out of the wall, across the joint),
+    /// as forge-sheet-core's `place::joint` builds it (proven within its bound of the exact unit
+    /// frame).
+    fn joint(p0: Point2, p1: Point2) -> Rigid {
+        Rigid::of(place::joint(p0.x, p0.y, p1.x, p1.y).0)
     }
     fn angle(&self) -> f64 {
         dmath::atan2(self.x.y, self.x.x)
@@ -1154,15 +1172,7 @@ fn build_once(
                         why,
                     })?,
             };
-            let right = |d: Vec2| Vec2::new(d.y, -d.x);
-            let ja = Rigid {
-                o: p0,
-                x: right((p1 - p0) * (1.0 / la)),
-            };
-            let jb = Rigid {
-                o: q1,
-                x: right((q0 - q1) * (1.0 / lb)),
-            };
+            let (ja, jb) = (Rigid::joint(p0, p1), Rigid::joint(q1, q0));
             let sigma = angle.signum();
             let rho0 = reference_radius(&sheet.gauge, radius, angle);
             // a hem's mold line is the fold's outside, not a virtual sharp
