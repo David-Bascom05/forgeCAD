@@ -5999,7 +5999,28 @@ fn plane_split(
                 let Some(left) = n.cross(along).normalize() else {
                     return Ok(None);
                 };
-                d.p + left * (1e-3 * size(&h))
+                // (a thousandth of the piece, but under half the way to any outer cycle's piece
+                // that near, the cycles it is tested against: a narrow ring round the hole would put
+                // it past the ring's far side)
+                let step = 1e-3 * size(&h);
+                let near = |b: &Box3| {
+                    let g = |i: Interval, x: f64| (i.lo - x).max(x - i.hi).max(0.0);
+                    g(b.x, d.p.x).max(g(b.y, d.p.y)).max(g(b.z, d.p.z)) <= step
+                };
+                let cached =
+                    boxes.get_or_init(|| regions.iter().map(|g| walk_boxes(&g[0], pieces)).collect());
+                let clear = regions
+                    .iter()
+                    .zip(cached)
+                    .filter(|(_, (hull, _))| near(hull))
+                    .flat_map(|(g, (_, each))| g[0].iter().zip(each))
+                    .filter(|&(&(o, _), b)| o != h.0 && near(b))
+                    .map(|(&(o, _), _)| {
+                        let q = &pieces[o];
+                        q.curve.eval(q.curve.closest(d.p, q.range)).distance(d.p)
+                    })
+                    .fold(f64::INFINITY, f64::min);
+                d.p + left * step.min(0.5 * clear)
             }
         };
         // the smallest outer cycle holding it; the untouched outer loop holds every hole

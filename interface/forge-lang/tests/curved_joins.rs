@@ -32,3 +32,36 @@ fn a_drill_down_a_counterbored_lug_hole_builds() {
     let (v, _) = judge_built(include_str!("kernel_parts/drill_coincident_lug_hole.fg"));
     assert!(matches!(v, Verdict::Ok), "{v:?}");
 }
+
+/// A groove 0.35 to 1 mm wide cut 0.07 into a 0.17 plate, its outer corners a little skewed (the
+/// scale-programs session's zerothick-groove.fg, from 11 DeepCAD parts). The plate's top face splits
+/// into the plate, the groove's ring and the island; the island's loop was filed under the plate,
+/// not the ring, so its edge had three faces kept (ZeroThickness). The hole's probe stepped a
+/// thousandth of its longest piece (0.44 mm) off it, past the ring's far side where the ring is
+/// 0.35 wide; it now stays under half the way to the outer cycles' pieces that near.
+#[test]
+fn a_thin_skewed_groove_cuts_a_plate() {
+    let (v, built) = judge_built(include_str!("kernel_parts/zerothick-groove.fg"));
+    assert!(matches!(v, Verdict::Ok), "{v:?}");
+    let area = |p: &[(f64, f64)]| {
+        (0..p.len())
+            .map(|i| {
+                let (a, b) = (p[i], p[(i + 1) % p.len()]);
+                a.0 * b.1 - b.0 * a.1
+            })
+            .sum::<f64>()
+            .abs()
+            / 2.0
+    };
+    let ring = area(&[(220.0, -133.0), (220.0, 133.0), (-220.0, 133.0), (-220.0, -132.7)])
+        - area(&[(219.0, 132.0), (219.5, -132.5), (-219.5, -132.5), (-219.0, 132.0)]);
+    let want = 460.0 * 300.0 * 0.17 - ring * 0.07;
+    let b = built.expect("built").part();
+    let got = b
+        .regenerate()
+        .map(|b| forge_topo::mass::mass(&b).expect("measures").volume);
+    assert!(
+        got.as_ref().is_ok_and(|v| (v - want).abs() < 1e-6),
+        "{got:?} where {want}"
+    );
+}
