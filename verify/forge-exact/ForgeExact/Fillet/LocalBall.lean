@@ -121,6 +121,69 @@ theorem fillD_eq_local {S : Pred (V K)} {r : K} {x : V K} (hr : 0 < r)
   simp only [fillD]
   exact ⟨fun h => h.1, fun h => ⟨h, hw'⟩⟩
 
+/-! ## The convex rule, by the feet (2026-11-23, replacing rule (d)'s convex half)
+
+Classified on the 15 narrow-support fillets against Onshape's truth (lean-spec-design.md §13). The
+carried ball is the ball tangent to both supports carried on: a nearest free centre of the dual
+pick's obstacle. Its feet decide, at each point (so along the whole edge, P3 on the springs):
+* **both feet on** their faces: the ordinary round, the carried ball's shadow (`localCut`);
+* **no foot on**: the carried planes, rule (c): the carried ball's shadow, inside `S`;
+* **one foot on**: rule (a)'s event, the opening of the body itself (a cliff over a sharp rim, a
+  roll onto a smooth neighbour).
+Concave edges and curved supports keep rule (d) (`fillD`) for now; they are open. -/
+
+/-- `c` is a carried ball's centre for `x`: the nearest centre free of the supports carried on. -/
+def Carried (r : K) (x c : V K) : Prop :=
+  Free P.dual.H r c ∧ ∀ c', Free P.dual.H r c' → V.d2 x c ≤ V.d2 x c'
+
+/-- The carried ball about `c` has one foot on its face and not the other. -/
+def OneFoot (r : K) (c : V K) : Prop := ¬(Foot P.F₁ r c ↔ Foot P.F₂ r c)
+
+/-- **The convex cut, by the feet.** -/
+def cutE (S : Pred (V K)) (r : K) : Pred (V K) := fun x =>
+  (S x ∧ fill P.dual.H r x ∧ ∃ c, P.Carried r x c ∧ ¬P.OneFoot r c) ∨
+  (cut S r x ∧ ∃ c, P.Carried r x c ∧ P.OneFoot r c)
+
+/-- **Both feet on: the ordinary round**, the local ball's cut. -/
+theorem cutE_both {S : Pred (V K)} {r : K} {x : V K}
+    (h : ∀ c, P.Carried r x c → Foot P.F₁ r c ∧ Foot P.F₂ r c) :
+    P.cutE S r x ↔ P.localCut S r x := by
+  simp only [cutE, localCut, localFill, Witness, Centre, OneFoot]
+  constructor
+  · rintro (⟨hs, hf, c, hc, _⟩ | ⟨_, c, hc, h1⟩)
+    · exact ⟨hs, hf, c, ⟨⟨hc.1, (h c hc).1, (h c hc).2⟩, hc.2⟩⟩
+    · exact absurd ⟨fun _ => (h c hc).2, fun _ => (h c hc).1⟩ h1
+  · rintro ⟨hs, hf, c, ⟨hc, _, _⟩, hn⟩
+    have hc' : P.Carried r x c := ⟨hc, hn⟩
+    exact Or.inl ⟨hs, hf, c, hc', fun h1 => h1 ⟨fun _ => (h c hc').2, fun _ => (h c hc').1⟩⟩
+
+/-- **No foot on: the carried planes**, rule (c): the carried ball's shadow inside `S`. -/
+theorem cutE_none {S : Pred (V K)} {r : K} {x : V K}
+    (h : ∀ c, P.Carried r x c → ¬Foot P.F₁ r c ∧ ¬Foot P.F₂ r c) (hx : ∃ c, P.Carried r x c) :
+    P.cutE S r x ↔ S x ∧ fill P.dual.H r x := by
+  simp only [cutE, OneFoot]
+  constructor
+  · rintro (⟨hs, hf, _⟩ | ⟨_, c, hc, h1⟩)
+    · exact ⟨hs, hf⟩
+    · exact absurd ⟨fun a => absurd a (h c hc).1, fun a => absurd a (h c hc).2⟩ h1
+  · rintro ⟨hs, hf⟩
+    obtain ⟨c, hc⟩ := hx
+    exact Or.inl ⟨hs, hf, c, hc,
+      fun h1 => h1 ⟨fun a => absurd a (h c hc).1, fun a => absurd a (h c hc).2⟩⟩
+
+/-- **One foot on: rule (a)'s event**, the opening of the body itself. -/
+theorem cutE_one {S : Pred (V K)} {r : K} {x : V K}
+    (h : ∀ c, P.Carried r x c → P.OneFoot r c) (hx : ∃ c, P.Carried r x c) :
+    P.cutE S r x ↔ cut S r x := by
+  simp only [cutE]
+  constructor
+  · rintro (⟨_, _, c, hc, h1⟩ | ⟨hcut, _⟩)
+    · exact absurd (h c hc) h1
+    · exact hcut
+  · intro hcut
+    obtain ⟨c, hc⟩ := hx
+    exact Or.inr ⟨hcut, c, hc, h c hc⟩
+
 end Pick
 
 end ForgeExact.Fillet

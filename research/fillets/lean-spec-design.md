@@ -650,3 +650,19 @@ middle-of-edge test: 00684321 has one edge with both feet on at its middle that 
 cliff happens elsewhere along that edge, so the predicate has to be decided along the whole edge
 (P3 on the springs), not at one sample. 00123784 and 00154651 can't be classified this way, because
 their translations facet a B-spline body.
+
+**Adopted (the master, 2026-11-23): the convex rule by the feet**, in place of rule (d)'s convex
+half. In Lean, `Pick.cutE` (LocalBall.lean). At each point, the carried ball is a nearest centre free
+of the two supports carried on (`Carried`), and its feet decide the cut:
+- `cutE_both`: where every carried ball has both feet on its faces, the cut is the local ball's
+  (`localCut`), the ordinary round;
+- `cutE_none`: where none has a foot on, the cut is the carried ball's shadow inside `S`, i.e. the
+  carried planes, rule (c);
+- `cutE_one`: where each has one foot on (`OneFoot`), the cut is rule (a)'s, the opening of the body
+  itself. That is a cliff over a sharp rim, or a roll onto a smooth neighbour.
+
+The rule is decided pointwise, so along the whole edge (P3 on the springs). The 00684321 edge that
+has both feet on at its middle is a cliff where one foot runs off. The three theorems need no axioms.
+
+**Open:** concave edges keep rule (d) (`fillD`), with the 15's concave rows (§13 table) not yet
+judged against it. Curved supports (00318570, 00366714, 00607956) are not yet classified.

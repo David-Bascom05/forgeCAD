@@ -36,3 +36,6 @@ the build fails on `sorryAx` or any axiom past `propext`, `Classical.choice` and
   ForgeExact.Fillet.clear_sphere
   ForgeExact.Fillet.Pick.local_eq_closing
   ForgeExact.Fillet.Pick.fillD_eq_local
+  ForgeExact.Fillet.Pick.cutE_both
+  ForgeExact.Fillet.Pick.cutE_none
+  ForgeExact.Fillet.Pick.cutE_one
