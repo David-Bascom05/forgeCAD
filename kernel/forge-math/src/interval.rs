@@ -122,7 +122,7 @@ impl Interval {
     /// The range of sin or cos (`f`, its extremes at (k + `half`) pi, the even k maxima).
     ///
     /// The contract (proven on verify/ieee754's model by the IEEE work, Dmath.sin_err and cos_err):
-    /// for finite |x| <= TRIG_MOST = 2048, dmath's sin and cos are within an absolute TRIG_ERR =
+    /// for finite |x| <= TRIG_MOST = 2^20, dmath's sin and cos are within an absolute TRIG_ERR =
     /// 2^-52 of the true values. So each end's value, pushed out by TRIG_ERR and then rounded
     /// outward, encloses the true one; the error is absolute, not relative (dmath is not within a
     /// few ulps of tiny values: near the zeros, ulps are far below its error). A point (k + half) pi
@@ -181,7 +181,7 @@ impl Interval {
 /// The float just above pi (dmath::PI is the one just below).
 const PI_UP: f64 = 3.141_592_653_589_793_6;
 /// dmath::sin and cos's error bound is proven up to here.
-const TRIG_MOST: f64 = 2048.0;
+const TRIG_MOST: f64 = 1_048_576.0;
 /// dmath sin and cos's proven absolute error bound for |x| <= TRIG_MOST: 2^-52.
 const TRIG_ERR: f64 = f64::EPSILON;
 
@@ -456,7 +456,13 @@ mod tests {
         let mut ks = Vec::new();
         while k * dmath::FRAC_PI_2 <= TRIG_MOST {
             ks.push(k);
-            k += if k.abs() < 64.0 { 1.0 } else { 37.0 };
+            k += if k.abs() < 64.0 {
+                1.0
+            } else if k.abs() < 40_000.0 {
+                37.0
+            } else {
+                997.0
+            };
         }
         for k in ks {
             let c = k * dmath::FRAC_PI_2;

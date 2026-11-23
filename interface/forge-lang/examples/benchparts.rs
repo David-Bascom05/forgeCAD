@@ -154,6 +154,44 @@ fn main() {
             let (part, ids) = bench(arg(1));
             assert!(regen(&part, &ids, arg(2)).is_ok(), "{} {} failed", arg(1), arg(2));
         }
+        "measures" => {
+            // `measures [part] [chord]`
+            let chord = args.get(2).and_then(|c| c.parse().ok()).unwrap_or(0.02);
+            let q = forge_mesh::Quality {
+                chord,
+                max_angle: 0.5,
+            };
+            for name in names()
+                .iter()
+                .filter(|n| args.get(1).is_none_or(|a| a == *n || a == "all"))
+            {
+                let (part, ids) = bench(name);
+                for (path, mode) in [("seq", "seq"), ("nary", "nary4")] {
+                    let line = match regen(&part, &ids, mode) {
+                        Ok(solids) => {
+                            let (mut valid, mut vol, mut area, mut faces) = (true, 0.0, 0.0, 0);
+                            for b in solids.iter().map(|s| &s.body) {
+                                valid &= forge_topo::check(b).is_empty();
+                                faces += b.faces.len();
+                                match forge_mesh::tessellate(b, &q) {
+                                    Ok(m) => {
+                                        vol += m.volume();
+                                        area += m.area();
+                                    }
+                                    Err(_) => valid = false,
+                                }
+                            }
+                            format!(
+                                "{} {vol:.6} {area:.6} {faces}",
+                                if valid { "valid" } else { "INVALID" }
+                            )
+                        }
+                        Err(_) => "error".into(),
+                    };
+                    println!("{name} {path} {line}");
+                }
+            }
+        }
         "bits" => {
             for name in names() {
                 let (part, ids) = bench(&name);
