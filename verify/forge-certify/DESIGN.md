@@ -168,14 +168,22 @@ O(T log T + hits); left for later, as it changes only speed.
 
 ## 6. Kernel emission (`certify` feature, off by default)
 
-`forge-bool` gains `[features] certify = []`. Under `#[cfg(feature = "certify")]` only, and only
-while `certify::record(true)` is set: after `plan` (the general path) the pieces are pushed to a
-thread-local sink with the operands and op, and the result is attached when the boolean returns;
-`forge_bool::certify::take()` hands them out. The n-ary boolean is not instrumented yet (a
-history's booleans are certified one binary step at a time). Nothing
-the kernel decides reads the sink, so results are bit-identical; with the feature off the code is
-not compiled, so the gate shows no instruction change. Paths not instrumented (the local-imprint
-path, off by default) give no certificate: reported out of scope, not accepted.
+`forge-bool` gains `[features] certify = []`. Only while `certify::record(true)` is set: before
+and after `plan` (the general path) the operands, op and pieces go to a thread-local sink, the
+result is attached when the boolean returns, and `forge_bool::certify::take()` hands them out; the
+local-imprint path and the n-ary boolean note that they gave no certificate
+(`certify::take_skipped()`). Nothing the kernel decides reads the sink.
+
+The hooks are line-neutral: each call site names a hook on its own line (`planned`,
+`general_into`, `took_imprint`, `nary_noted`), and the hooks are defined at the end of
+boolean.rs and nary.rs. With the feature off they are `use` aliases of the plain functions, so
+every line of the off build is the line it was (a hook statement inside a function moved every
+panic location below it, which changed LLVM's internal symbol names and, through the symbol
+table's length, valgrind's startup layout by a few instructions). Measured: the off build's
+`regen1` and `bits` are machine-code identical to base (every loaded section byte for byte; only
+the build id and symbol names differ), `benchparts` too once forge-lang's kernel-source hash
+(which changes with any kernel file, by design) is the same, and the callgrind gate at equal paths
+gives all 93 lines equal to base and the bits identical.
 
 ## 7. The harness (verify/forge-certify)
 
