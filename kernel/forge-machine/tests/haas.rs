@@ -231,7 +231,8 @@ fn vf2_posted_job_end_to_end() {
     };
     let q = forge_post::quantize(&prog, &d).unwrap();
     let text = forge_post::print(&q, &d).unwrap();
-    assert!(text.contains("G187 P2") && text.contains("G83"), "{text}");
+    // (G187 is posted only by haas-hsm, for machines with the HSM option: post/haas-audit)
+    assert!(text.contains("G83"), "{text}");
 
     let c = Control::for_dialect(&m, "haas", 1).unwrap();
     assert_eq!(c.letters, vec!['Y', 'X', 'Z']);
