@@ -640,30 +640,22 @@ fn check_shell_faces(body: &Body, out: &mut Vec<Problem>) {
 }
 
 /// Every vertex is an end of an edge (a dead edge's ends are left over from an in-place edit,
-/// for `compact` to drop with it): `topo::strays`, the part Aeneas translates.
+/// for `compact` to drop with it).
 fn check_strays(body: &Body, out: &mut Vec<Problem>) {
-    for v in crate::topo::strays(body) {
-        out.push(Problem::StrayVertex { vertex: VertexId(v as u32) });
+    let mut used = vec![false; body.vertices.len()];
+    for e in &body.edges {
+        for v in [e.start, e.end] {
+            if let Some(u) = used.get_mut(v.index()) {
+                *u = true;
+            }
+        }
     }
-}
-
-impl crate::topo::Topo for Body {
-    #[inline]
-    fn n_vertices(&self) -> usize {
-        self.vertices.len()
-    }
-    #[inline]
-    fn n_edges(&self) -> usize {
-        self.edges.len()
-    }
-    #[inline]
-    fn edge_alive(&self, e: usize) -> bool {
-        self.edges[e].alive
-    }
-    #[inline]
-    fn edge_ends(&self, e: usize) -> (usize, usize) {
-        let e = &self.edges[e];
-        (e.start.index(), e.end.index())
+    for (v, &u) in used.iter().enumerate() {
+        if !u {
+            out.push(Problem::StrayVertex {
+                vertex: VertexId(v as u32),
+            });
+        }
     }
 }
 
