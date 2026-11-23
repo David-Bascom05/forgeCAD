@@ -728,7 +728,7 @@ pub(crate) fn ahead<S>(
         }
         return Ok(state);
     }
-    let start = std::time::Instant::now();
+    let start = forge_math::clock::Instant::now();
     let mut building = std::time::Duration::ZERO;
     // (tools timed so far: past `AHEAD_LOOK` of them untripped, the rest is plain, the clock unread)
     let mut timed = 0;
@@ -737,7 +737,7 @@ pub(crate) fn ahead<S>(
     while i < h.len() && !tripped && timed < AHEAD_LOOK {
         let made = if apart(i) {
             // (a tool that starts the part has no boolean beside it to hide behind)
-            let t = (!starts(&h[i])).then(std::time::Instant::now);
+            let t = (!starts(&h[i])).then(forge_math::clock::Instant::now);
             let made = tools(h, i, true)?;
             if let Some(t) = t {
                 building += t.elapsed();
@@ -763,7 +763,7 @@ pub(crate) fn ahead<S>(
         return Ok(state);
     }
     let stop = std::sync::atomic::AtomicBool::new(false);
-    std::thread::scope(|s| {
+    forge_math::par::scope(|s| {
         let (tx, rx) = std::sync::mpsc::channel::<Result<Vec<Tool>, RegenError>>();
         let (list, stop) = (&ahead, &stop);
         let kept = swept::take_kept();
