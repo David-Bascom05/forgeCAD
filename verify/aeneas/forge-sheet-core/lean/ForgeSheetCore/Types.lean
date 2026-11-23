@@ -25,7 +25,7 @@ structure union_find.Uf where
   parent : alloc.vec.Vec Std.U32
 
 /-- [forge_sheet_core::ChainError]
-    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 60:0-71:1
+    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 62:0-73:1
     Visibility: public -/
 @[discriminant isize]
 inductive ChainError where
@@ -33,7 +33,7 @@ inductive ChainError where
 | Pinched : alloc.vec.Vec (Std.U32 × Std.U32 × Std.U32) → ChainError
 
 /-- [forge_sheet_core::Loops]
-    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 75:0-78:1
+    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 77:0-80:1
     Visibility: public -/
 structure Loops where
   pieces : alloc.vec.Vec Std.U32
