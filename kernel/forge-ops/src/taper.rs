@@ -1739,4 +1739,105 @@ mod tests {
             assert!((volume(tapered(&reuleaux, depth, a, 7)) - exact).abs() <= 1e-6 * exact);
         }
     }
+
+    /// A closed smooth spline through five points.
+    fn blob() -> Profile {
+        let pts = [
+            (0.0, 0.0),
+            (40.0, -5.0),
+            (60.0, 20.0),
+            (30.0, 40.0),
+            (-5.0, 25.0),
+            (0.0, 0.0),
+        ];
+        let sp = forge_geom::spline::PlaneSpline::through(
+            pts.iter().map(|&(x, y)| Point2::new(x, y)).collect(),
+            Some(Vec2::new(1.0, -0.6)),
+            Some(Vec2::new(1.0, -0.6)),
+        )
+        .expect("a spline");
+        profile(vec![ProfileLoop::new(vec![(
+            Segment::Spline(std::sync::Arc::new(sp)),
+            1,
+        )])])
+    }
+
+    /// A spline outline with nothing on the way: each section the parallel curve, its area
+    /// A0 - L0 δ + π δ² (Steiner, a smooth closed curve), in and out. A0 and L0 by Gauss-Legendre
+    /// (A0's integrand a polynomial, exactly).
+    #[test]
+    fn a_smooth_spline_drafts_to_its_parallel_curves() {
+        let p = blob();
+        let Segment::Spline(ref sp) = p.loops[0].segments[0].0 else {
+            unreachable!()
+        };
+        let c = &sp.c;
+        let g = [
+            (-0.906_179_845_938_664, 0.236_926_885_056_189_1),
+            (-0.538_469_310_105_683_1, 0.478_628_670_499_366_5),
+            (0.0, 0.568_888_888_888_888_9),
+            (0.538_469_310_105_683_1, 0.478_628_670_499_366_5),
+            (0.906_179_845_938_664, 0.236_926_885_056_189_1),
+        ];
+        let (mut a0, mut l0) = (0.0, 0.0);
+        for w in c.breaks().windows(2) {
+            for k in 0..64 {
+                let (lo, hi) = (
+                    w[0] + (w[1] - w[0]) * k as f64 / 64.0,
+                    w[0] + (w[1] - w[0]) * (k + 1) as f64 / 64.0,
+                );
+                for &(x, wt) in &g {
+                    let d = c.deriv(0.5 * (lo + hi) + 0.5 * (hi - lo) * x);
+                    a0 += 0.5 * (hi - lo) * wt * 0.5 * (d.p.x * d.d1.y - d.p.y * d.d1.x);
+                    l0 += 0.5 * (hi - lo) * wt * (d.d1.x * d.d1.x + d.d1.y * d.d1.y).sqrt();
+                }
+            }
+        }
+        let a0 = a0.abs();
+        let d = 10.0;
+        for deg in [5.0f64, 20.0, -5.0] {
+            let a = deg.to_radians();
+            let t = tan(a);
+            let exact = a0 * d - l0 * t * d * d / 2.0 + PI * t * t * d * d * d / 3.0;
+            let got = volume(tapered(&p, d, a, 7));
+            assert!(
+                (got - exact).abs() <= 1e-9 * exact,
+                "{deg}: {got} against {exact}"
+            );
+        }
+    }
+
+    /// What the proof does not cover is refused, not searched: an outline that would curl (a
+    /// taper deep enough that δ κ reaches 1), and a spline meeting a line at a corner.
+    #[test]
+    fn a_spline_outline_with_an_event_is_refused() {
+        assert!(matches!(
+            tapered(&blob(), 10.0, 40f64.to_radians(), 7),
+            Err(TaperError::SplineEvent)
+        ));
+        let sp = forge_geom::spline::PlaneSpline::through(
+            vec![
+                Point2::new(0.0, 0.0),
+                Point2::new(10.0, 8.0),
+                Point2::new(20.0, 0.0),
+            ],
+            None,
+            None,
+        )
+        .expect("a spline");
+        let d = profile(vec![ProfileLoop::new(vec![
+            (Segment::Spline(std::sync::Arc::new(sp)), 1),
+            (
+                Segment::Line {
+                    a: Point2::new(20.0, 0.0),
+                    b: Point2::new(0.0, 0.0),
+                },
+                2,
+            ),
+        ])]);
+        assert!(matches!(
+            tapered(&d, 1.0, 5f64.to_radians(), 7),
+            Err(TaperError::SplineEvent)
+        ));
+    }
 }

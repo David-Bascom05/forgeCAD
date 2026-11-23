@@ -98,7 +98,11 @@ fn most_bend(xs: &[f64], ys: &[f64], sign: f64) -> Option<f64> {
     let lead = crit.iter().rposition(|c| *c != 0.0).map_or(0, |i| i + 1);
     let mut at = vec![0.0, 1.0];
     if lead > 1 {
-        at.extend(forge_math::poly::real_roots(&crit[..lead], 0.0, 1.0).into_iter().map(|r| r.x));
+        at.extend(
+            forge_math::poly::real_roots(&crit[..lead], 0.0, 1.0)
+                .into_iter()
+                .map(|r| r.x),
+        );
     }
     let mut most = f64::NEG_INFINITY;
     for s in at {
@@ -133,7 +137,8 @@ fn smooth(a: Vec2, b: Vec2) -> bool {
 /// proved to meet no event: its sections all parallel curves of the outline, or the exact offsets
 /// of loops of lines and arcs, none touching another.
 pub(crate) fn clear(p: &Profile, sign: f64, reach: f64) -> bool {
-    let has_spline = |l: &crate::profile::ProfileLoop| l.segments.iter().any(|s| matches!(s.0, Segment::Spline(_)));
+    let has_spline =
+        |l: &crate::profile::ProfileLoop| l.segments.iter().any(|s| matches!(s.0, Segment::Spline(_)));
     // loops of lines and arcs: exactly, together
     let plain: Vec<_> = p.loops.iter().filter(|l| !has_spline(l)).cloned().collect();
     if !plain.is_empty() {
@@ -181,9 +186,11 @@ pub(crate) fn clear(p: &Profile, sign: f64, reach: f64) -> bool {
                 let lo = pts.iter().fold(Vec2::new(f64::INFINITY, f64::INFINITY), |m, q| {
                     Vec2::new(m.x.min(q.x), m.y.min(q.y))
                 });
-                let hi = pts.iter().fold(Vec2::new(f64::NEG_INFINITY, f64::NEG_INFINITY), |m, q| {
-                    Vec2::new(m.x.max(q.x), m.y.max(q.y))
-                });
+                let hi = pts
+                    .iter()
+                    .fold(Vec2::new(f64::NEG_INFINITY, f64::NEG_INFINITY), |m, q| {
+                        Vec2::new(m.x.max(q.x), m.y.max(q.y))
+                    });
                 parts.push(Part {
                     lp: li,
                     tangents,
@@ -206,7 +213,10 @@ pub(crate) fn clear(p: &Profile, sign: f64, reach: f64) -> bool {
                     }
                     let k = (sweep.abs() / 1.5).ceil().max(1.0) as usize;
                     for j in 0..k {
-                        let (a0, a1) = (start + sweep * j as f64 / k as f64, start + sweep * (j + 1) as f64 / k as f64);
+                        let (a0, a1) = (
+                            start + sweep * j as f64 / k as f64,
+                            start + sweep * (j + 1) as f64 / k as f64,
+                        );
                         let at = |a: f64| {
                             let (sn, cs) = dmath::sin_cos(a);
                             Vec2::new(center.x + radius * cs, center.y + radius * sn)
@@ -251,9 +261,7 @@ pub(crate) fn clear(p: &Profile, sign: f64, reach: f64) -> bool {
         runs.push((first, parts.len(), curvy));
     }
     // how far forward from each part of a smooth loop its run stays in one half-plane
-    let apart = |a: &Part, b: &Part| {
-        a.hi.x < b.lo.x || b.hi.x < a.lo.x || a.hi.y < b.lo.y || b.hi.y < a.lo.y
-    };
+    let apart = |a: &Part, b: &Part| a.hi.x < b.lo.x || b.hi.x < a.lo.x || a.hi.y < b.lo.y || b.hi.y < a.lo.y;
     for &(lo, hi, curvy) in &runs {
         if !curvy {
             continue;

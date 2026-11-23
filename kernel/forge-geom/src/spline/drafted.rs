@@ -1,13 +1,13 @@
-//! A spline wall drafted about a neutral plane across its sweep: S(u, v) = F(C(u) + (v - v0) k N(u)
-//! + v z), C a curve in the frame's xy plane, N its unit normal to the right of its direction, k the
+//! A spline wall drafted about a neutral plane across its sweep, S(u, v) = F(C(u) + (v - v0) k
+//! N(u) + v z): C a curve in the frame's xy plane, N its unit normal to the right of its direction, k the
 //! lean (tan of the draft, signed). Each section is a parallel curve of C, so a point's foot on C is
 //! its foot on the section at its height: the implicit value is the signed distance to C less the
 //! section's offset, scaled to the surface's normal, exactly. Regular while |(v - v0) k| stays under
 //! the radius of curvature on the side it moves to (the caller's to keep: a taper's cusp bound).
 
+use super::extruded::{carried, foot, section_radius, world_box};
 use super::{Spline, SplineCurve};
 use crate::curve::{CurveDeriv, Domain1, ProcCurve, ProceduralCurve};
-use super::extruded::{carried, foot, section_radius, world_box};
 use crate::screw::{fresh_id, normal_turn, remembered};
 use crate::surface::{Domain2, Proc, Procedural, SurfDeriv, Surface};
 use forge_math::{Box2, Box3, Frame, Interval, Point2, Point3, Vec2, Vec3, tol};
@@ -247,7 +247,9 @@ impl Procedural for Drafted {
                 && (0..s.c.pieces()).all(|i| {
                     let (x, y) = (self.c.row(i), s.c.row(i));
                     x.iter().zip(y).all(|(p, q)| {
-                        let w = self.frame.point_to_world(Point3::new(p[0] / p[3], p[1] / p[3], v));
+                        let w = self
+                            .frame
+                            .point_to_world(Point3::new(p[0] / p[3], p[1] / p[3], v));
                         let o = Point3::new(q[0] / q[3], q[1] / q[3], q[2] / q[3]);
                         w.distance(o) <= 1e-11 * (1.0 + w.to_vec().abs_max())
                     })
@@ -353,8 +355,14 @@ mod tests {
     #[test]
     fn derivatives_and_value_agree() {
         let pts = [(0.0, 0.0), (1.0, 2.0), (3.0, 2.5), (4.0, 0.5), (6.0, 1.0)];
-        let c = Spline::through(&pts.iter().map(|&(x, y)| Point3::new(x, y, 0.0)).collect::<Vec<_>>(), None, None)
-            .expect("a spline");
+        let c = Spline::through(
+            &pts.iter()
+                .map(|&(x, y)| Point3::new(x, y, 0.0))
+                .collect::<Vec<_>>(),
+            None,
+            None,
+        )
+        .expect("a spline");
         let s = Drafted::new(Frame::WORLD, Arc::new(c), Interval::new(0.0, 2.0), 0.0, -0.3).unwrap();
         let h = 1e-6;
         for &(u, v) in &[(0.3, 0.5), (1.1, 1.7), (1.9, 0.1)] {
