@@ -227,6 +227,9 @@ pub fn json(run: &Run, src: &str) -> Json {
     if let Some(p) = &run.physical {
         f.push(("physical", p.json()));
     }
+    if !run.welds.is_empty() {
+        f.push(("cutlist", crate::weld::json(&run.welds)));
+    }
     if !run.thermos.is_empty() {
         f.push((
             "thermoforms",

@@ -717,6 +717,42 @@ pub enum Violation {
         limit: f64,
         thickness: f64,
     },
+    /// An edge of the blank in front of a bend (a notch's side, a jog of the outline), `distance`
+    /// from it on the flat, as the stock's `bend_ref` measures; `at` the edge's nearest point on
+    /// the flat.
+    BendNearEdge {
+        feature: FeatureId,
+        joint: JointId,
+        distance: f64,
+        limit: f64,
+        at: Point2,
+    },
+    /// A web of material narrower than the stock's least: between two holes, or across a neck of
+    /// the outline, from `at` to `to` on the flat.
+    WebTooNarrow {
+        feature: FeatureId,
+        width: f64,
+        limit: f64,
+        at: Point2,
+        to: Point2,
+    },
+    /// A process the sheet needs that the shop does not list.
+    OperationNotOffered {
+        feature: FeatureId,
+        operation: crate::shop::Operation,
+        on: OpOn,
+    },
+}
+
+/// What needs an operation the shop lacks.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum OpOn {
+    Joint(JointId),
+    Cut(CutId),
+    /// An index into `Sheet::punches`.
+    Punch(usize),
+    /// An index into `Sheet::forms`.
+    Form(usize),
 }
 
 impl SheetError {

@@ -532,13 +532,13 @@ impl Revolver<'_> {
                 ]);
             }
         }
-        // a whole turn of a profile leaving the axis and coming back: what closes up inside is a void,
-        // a shell of its own
+        // a whole turn of a profile leaving the axis and coming back, or of a profile with a hole:
+        // what closes up inside is a void, a shell of its own
         let on_axis_runs = segs
             .iter()
             .filter(|s| matches!(self.surface_of(&s.seg), Ok(None)))
             .count();
-        if self.full && on_axis_runs > 1 {
+        if self.full && (on_axis_runs > 1 || self.profile.loops.len() > 1) {
             self.body.rebuild_shells();
         }
         // (real parts make these, and a seam may hold them together; what does not close is refused)

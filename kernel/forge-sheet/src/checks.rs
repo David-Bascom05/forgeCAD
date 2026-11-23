@@ -43,6 +43,7 @@ pub fn check(sheet: &Sheet, shop: &ShopProfile) -> Vec<Violation> {
             .into_iter()
             .map(|(form, why)| Violation::Form { feature, form, why }),
     );
+    out.extend(operations(sheet, shop));
     let Some(stock) = shop.stock(t) else {
         out.push(Violation::ThicknessNotStocked {
             feature,
@@ -54,10 +55,17 @@ pub fn check(sheet: &Sheet, shop: &ShopProfile) -> Vec<Violation> {
     };
     let min_flange = stock.min_flange.at(t, 0.0);
     for j in &sheet.joints {
-        let JointKind::Bend { radius, .. } = j.kind else {
+        let JointKind::Bend { radius, angle } = j.kind else {
             continue;
         };
-        if !stock.radii.iter().any(|r| (r - radius).abs() <= RADIUS_MATCH) {
+        // the reference skin is the bend's inside where it turns towards a's top: the outside
+        // dimension is a setback of t further along each leg
+        let outside = if stock.flange_outside && angle > 0.0 {
+            crate::shop::setback(t, angle.abs())
+        } else {
+            0.0
+        };
+        if !stock.radii.is_empty() && !stock.radii.iter().any(|r| (r - radius).abs() <= RADIUS_MATCH) {
             let nearest = stock
                 .radii
                 .iter()
@@ -80,8 +88,8 @@ pub fn check(sheet: &Sheet, shop: &ShopProfile) -> Vec<Violation> {
             let Ok((p0, p1)) = straight(w, segment) else {
                 continue;
             };
-            let length = reach(w, p0, p1);
-            if length < min_flange {
+            let length = reach(w, p0, p1) + outside;
+            if length < min_flange - AT_LIMIT {
                 out.push(Violation::FlangeTooShort {
                     feature,
                     wall,
@@ -92,7 +100,15 @@ pub fn check(sheet: &Sheet, shop: &ShopProfile) -> Vec<Violation> {
             }
         }
     }
+    out.extend(stock_process(sheet, stock, &shop.process));
     out.extend(holes(sheet, stock));
+    // the flat once for the rules that read it whole
+    let wants = stock.bend_to_edge != crate::shop::Scaled::NONE && !sheet.joints.is_empty()
+        || stock.min_web.at(t, 0.0) > 0.0;
+    if let Some(flat) = wants.then(|| Flat::of(sheet)).flatten() {
+        out.extend(bend_edges(sheet, stock, &flat));
+        out.extend(webs(sheet, stock, &flat));
+    }
     out.extend(mounts(sheet, Some(stock)));
     out.extend(reliefs(sheet, &shop.relief_rule(t).unwrap_or(stock.relief)));
     out
@@ -162,6 +178,8 @@ pub fn mounts(sheet: &Sheet, stock: Option<&Stock>) -> Vec<Violation> {
             });
         }
         match stock.and_then(|s| s.hardness) {
+            // a catalogue row that states no hardness limit
+            _ if p.max_hardness.is_infinite() => {}
             None => out.push(Violation::HardnessUnknown {
                 feature,
                 cut: m.cut,
@@ -407,6 +425,7 @@ fn holes(sheet: &Sheet, stock: &Stock) -> Vec<Violation> {
                 });
                 continue;
             }
+            let d = d + from_ref(stock, z);
             if d < limit - AT_LIMIT {
                 let centre = dev
                     .iter()
@@ -433,7 +452,11 @@ fn holes(sheet: &Sheet, stock: &Stock) -> Vec<Violation> {
 pub fn process(sheet: &Sheet, limits: &crate::shop::Process) -> Vec<Violation> {
     let feature = sheet.feature;
     let mut out = vec![];
-    let sized = limits.flat_max.is_some() || limits.coated_max.is_some() || limits.part_min.is_some();
+    let sized = limits.flat_max.is_some()
+        || limits.coated_max.is_some()
+        || limits.part_min.is_some()
+        || limits.bent_max.is_some()
+        || limits.bent_min.is_some();
     let flat = build_with(sheet, Map::Flat).ok();
     if sized
         && let Some(rect) = flat
@@ -441,10 +464,21 @@ pub fn process(sheet: &Sheet, limits: &crate::shop::Process) -> Vec<Violation> {
             .and_then(|b| b.pattern.as_ref())
             .and_then(blank_sizes)
     {
+        let bent = sheet
+            .joints
+            .iter()
+            .any(|j| matches!(j.kind, JointKind::Bend { .. }));
         let max = if sheet.coated {
             limits.coated_max
+        } else if bent && limits.bent_max.is_some() {
+            limits.bent_max
         } else {
             limits.flat_max
+        };
+        let part_min = if bent && limits.bent_min.is_some() {
+            limits.bent_min
+        } else {
+            limits.part_min
         };
         let least = rect
             .iter()
@@ -463,7 +497,7 @@ pub fn process(sheet: &Sheet, limits: &crate::shop::Process) -> Vec<Violation> {
                 coated: sheet.coated,
             });
         }
-        if let Some(limit) = limits.part_min
+        if let Some(limit) = part_min
             && (least.0 < limit.0 - AT_LIMIT || least.1 < limit.1 - AT_LIMIT)
         {
             out.push(Violation::PartTooSmall {
@@ -536,6 +570,225 @@ pub fn process(sheet: &Sheet, limits: &crate::shop::Process) -> Vec<Violation> {
                 }
             }
         }
+    }
+    out
+}
+
+/// The stock's own bend limits, where it states them over the process's: each bend's angle and
+/// length.
+fn stock_process(sheet: &Sheet, stock: &Stock, limits: &crate::shop::Process) -> Vec<Violation> {
+    let mut own = crate::shop::Process::default();
+    // only what the process does not check already
+    if limits.angles.is_none() {
+        own.angles = stock.angles;
+    }
+    if limits.bend_length_max.is_none() {
+        own.bend_length_max = stock.bend_length_max;
+    }
+    if own.angles.is_none() && own.bend_length_max.is_none() {
+        return vec![];
+    }
+    process(sheet, &own)
+}
+
+/// What a distance measured to a zone's tangent line gains when the stock measures from the
+/// zone's centre line: half the zone.
+fn from_ref(stock: &Stock, z: &Zone) -> f64 {
+    match stock.bend_ref {
+        crate::shop::BendRef::Tangent => 0.0,
+        crate::shop::BendRef::Centre => 0.5 * z.ba,
+    }
+}
+
+/// The operations the sheet needs that the shop does not list: bends, hems, turret hits, forms,
+/// hardware. One violation for each thing that needs it.
+pub fn operations(sheet: &Sheet, shop: &ShopProfile) -> Vec<Violation> {
+    use crate::error::OpOn;
+    use crate::shop::Operation;
+    let feature = sheet.feature;
+    let mut out = vec![];
+    let t = sheet.gauge.thickness;
+    if shop.operations.is_none() && shop.stock(t).is_none_or(|s| s.not.is_empty()) {
+        return out;
+    }
+    let mut need = |operation: Operation, on: OpOn| {
+        if !shop.offers_in(operation, t) {
+            out.push(Violation::OperationNotOffered {
+                feature,
+                operation,
+                on,
+            });
+        }
+    };
+    for j in &sheet.joints {
+        match j.kind {
+            JointKind::Bend { .. } => need(Operation::Bend, OpOn::Joint(j.id)),
+            JointKind::Hem(_) => need(Operation::Hem, OpOn::Joint(j.id)),
+            _ => {}
+        }
+    }
+    for k in 0..sheet.punches.len() {
+        need(Operation::Punch, OpOn::Punch(k));
+    }
+    for k in 0..sheet.forms.len() {
+        need(Operation::Form, OpOn::Form(k));
+    }
+    for m in &sheet.mounts {
+        need(Operation::Hardware, OpOn::Cut(m.cut));
+    }
+    out
+}
+
+/// Edges of the blank in front of a bend nearer than the stock's bend to edge: pieces of the
+/// outer contour whose nearest point to the zone lies across from it (within its length, so not
+/// the bend's own ends, its reliefs or the walls' sides running off it), but the far edge of a
+/// flange, which runs the zone's whole length (the minimum flange's to check). Exact distances
+/// between the flat's lines and arcs.
+fn bend_edges(sheet: &Sheet, stock: &Stock, flat: &Flat) -> Vec<Violation> {
+    let t = sheet.gauge.thickness;
+    let mut out = vec![];
+    if stock.bend_to_edge == crate::shop::Scaled::NONE {
+        return out;
+    }
+    for z in &flat.zones {
+        let limit = stock.bend_to_edge.at(t, z.radius);
+        let mut best: Option<(f64, Point2)> = None;
+        for p in &flat.outer {
+            let (d, at, _, _) = gap(&[(p.clone(), 0)], &z.sides);
+            if d <= TOUCH {
+                continue;
+            }
+            let q = z.place.local(at);
+            if q.y <= TOUCH || q.y >= z.len - TOUCH {
+                continue;
+            }
+            // a line along the bend spanning its whole length: the flange's far edge
+            if let Piece::Line { a, b } = p {
+                let (la, lb) = (z.place.local(*a), z.place.local(*b));
+                let along = (la.x - lb.x).abs() <= 1e-9 * (1.0 + z.len);
+                if along && la.y.min(lb.y) <= TOUCH && la.y.max(lb.y) >= z.len - TOUCH {
+                    continue;
+                }
+            }
+            let d = d + from_ref(stock, z);
+            if best.is_none_or(|b| d < b.0) {
+                best = Some((d, at));
+            }
+        }
+        if let Some((distance, at)) = best
+            && distance < limit - AT_LIMIT
+        {
+            out.push(Violation::BendNearEdge {
+                feature: sheet.feature,
+                joint: z.joint,
+                distance,
+                limit,
+                at,
+            });
+        }
+    }
+    out
+}
+
+/// Webs narrower than the stock's least: between two holes (any two inner contours of the flat),
+/// and necks of the outline (two pieces of the outer contour, not neighbours, whose nearest
+/// points face each other square to both, across material). A hole's distance to the outline is
+/// `hole_to_edge`'s, and a slot's own width `min_slot`'s, so neither is measured here. Exact
+/// nearest points on lines and arcs.
+fn webs(sheet: &Sheet, stock: &Stock, flat: &Flat) -> Vec<Violation> {
+    let t = sheet.gauge.thickness;
+    let limit = stock.min_web.at(t, 0.0);
+    let mut out = vec![];
+    if limit <= 0.0 {
+        return out;
+    }
+    let all = &flat.contours;
+    let polys: Vec<Vec<Point2>> = all
+        .iter()
+        .map(|c| {
+            c.iter()
+                .flat_map(|p| (0..16).map(move |k| p.at(k as f64 / 16.0)))
+                .collect()
+        })
+        .collect();
+    // inside the material: an odd number of contours round it
+    let solid = |q: Point2| {
+        let mut c = false;
+        for poly in &polys {
+            for i in 0..poly.len() {
+                let (a, b) = (poly[i], poly[(i + 1) % poly.len()]);
+                if (a.y > q.y) != (b.y > q.y) && q.x < a.x + (q.y - a.y) * (b.x - a.x) / (b.y - a.y) {
+                    c = !c;
+                }
+            }
+        }
+        c
+    };
+    let boxed = |c: &[Piece]| {
+        let mut lo = Point2::new(f64::INFINITY, f64::INFINITY);
+        let mut hi = Point2::new(f64::NEG_INFINITY, f64::NEG_INFINITY);
+        for p in c {
+            for k in 0..=16 {
+                let q = p.at(k as f64 / 16.0);
+                lo = Point2::new(lo.x.min(q.x), lo.y.min(q.y));
+                hi = Point2::new(hi.x.max(q.x), hi.y.max(q.y));
+            }
+        }
+        (lo, hi)
+    };
+    let near = |a: (Point2, Point2), b: (Point2, Point2)| {
+        a.0.x - limit <= b.1.x && b.0.x - limit <= a.1.x && a.0.y - limit <= b.1.y && b.0.y - limit <= a.1.y
+    };
+    let push = |d: f64, at: Point2, to: Point2, out: &mut Vec<Violation>| {
+        if d > TOUCH && d < limit - AT_LIMIT && solid(at + (to - at) * 0.5) {
+            out.push(Violation::WebTooNarrow {
+                feature: sheet.feature,
+                width: d,
+                limit,
+                at,
+                to,
+            });
+        }
+    };
+    // between holes: the nearest points of each pair
+    let holes: Vec<usize> = (0..all.len()).filter(|&k| k != flat.outer_k).collect();
+    let boxes: Vec<_> = all.iter().map(|c| boxed(c)).collect();
+    for (i, &a) in holes.iter().enumerate() {
+        for &b in &holes[i + 1..] {
+            if !near(boxes[a], boxes[b]) {
+                continue;
+            }
+            let la: Vec<(Piece, u64)> = all[a].iter().map(|p| (p.clone(), 0)).collect();
+            let (d, at, to, _) = gap(&la, &all[b]);
+            push(d, at, to, &mut out);
+        }
+    }
+    // necks of the outline: pieces not neighbours, met square
+    let outer = &all[flat.outer_k];
+    let n = outer.len();
+    let pb: Vec<_> = outer.iter().map(|p| boxed(std::slice::from_ref(p))).collect();
+    let mut necks: Vec<(f64, Point2, Point2)> = vec![];
+    for i in 0..n {
+        for j in i + 2..n {
+            if (i == 0 && j == n - 1) || !near(pb[i], pb[j]) {
+                continue;
+            }
+            let (d, at, to, _) = gap(&[(outer[i].clone(), 0)], std::slice::from_ref(&outer[j]));
+            // square to both pieces where it meets them (parallel lines meet so at their ends
+            // too; a rounded corner's chord is square to neither line)
+            let square = |p: &Piece, q: Point2, other: Point2| {
+                let u = p.nearest(q);
+                let e = 1e-6;
+                let tan = p.at((u + e).min(1.0)) - p.at((u - e).max(0.0));
+                unit(tan).dot(unit(other - q)).abs() < 1e-6
+            };
+            if square(&outer[i], at, to) && square(&outer[j], to, at) {
+                necks.push((d, at, to));
+            }
+        }
+    }
+    for (d, at, to) in necks {
+        push(d, at, to, &mut out);
     }
     out
 }
@@ -769,6 +1022,9 @@ struct Flat {
     layout: Layout,
     outer: Vec<Piece>,
     zones: Vec<Zone>,
+    /// Every contour of the blank; `outer_k` is the outer one's.
+    contours: Vec<Vec<Piece>>,
+    outer_k: usize,
 }
 
 impl Flat {
@@ -781,10 +1037,10 @@ impl Flat {
             .map(|c| c.iter().filter_map(piece_of).collect())
             .collect();
         let area = |c: &Vec<Piece>| c.iter().map(Piece::area_term).sum::<f64>().abs();
-        let outer = contours
-            .into_iter()
-            .max_by(|a, b| area(a).total_cmp(&area(b)))
-            .unwrap_or_default();
+        let outer_k = (0..contours.len())
+            .max_by(|&a, &b| area(&contours[a]).total_cmp(&area(&contours[b])))
+            .unwrap_or(0);
+        let outer = contours.get(outer_k).cloned().unwrap_or_default();
         let zones = b
             .layout
             .bends
@@ -820,6 +1076,8 @@ impl Flat {
             layout: b.layout,
             outer,
             zones,
+            contours,
+            outer_k,
         })
     }
     fn place(&self, w: crate::error::WallId) -> Option<Place> {

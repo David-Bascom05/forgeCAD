@@ -19,7 +19,10 @@ Units are millimetres. Tolerances live in `forge_math::tol`.
 
 The repository is split by what a thing is:
 
-- `kernel/` is the geometry kernel: exact results, zero third-party crates.
+- `kernel/` is the geometry kernel: exact results, zero third-party crates. No unsafe code but in
+  two crates, each reviewed: `forge-alloc` (a global allocator is unsafe by definition) and
+  `forge-par` (one block: running a borrowing closure on a host's thread erases its lifetime, as
+  `std::thread::scope` does inside std; every closure is joined before its scope returns).
 - `interface/` is everything that uses the kernel: part files, the agent layer and the command
   line. The app, host and protocol go here too ([design](docs/interface-design.md)).
 - `verify/` is what checks the kernel and is never shipped.
@@ -29,6 +32,7 @@ The repository is split by what a thing is:
 | `kernel/` | what |
 |---|---|
 | `forge-alloc` | the wasm heap |
+| `forge-par` | scoped threads for every parallel path: std's, or a host's (a browser's Web Workers) |
 | `forge-math` | vectors, frames, deterministic trig, intervals, polynomial roots, small linear algebra |
 | `forge-geom` | curves, surfaces, intersections |
 | `forge-topo` | B-rep bodies, stable names, the validity checker |

@@ -251,7 +251,7 @@ mod tests {
     /// use `\`, and its tags went missing).
     #[test]
     fn nested_loose_refs_list_by_slash_names() {
-        let d = std::env::temp_dir().join(format!("forge-git-refs-{}", std::process::id()));
+        let d = forge_dirs::temp_dir().join(format!("forge-git-refs-{}", forge_dirs::process_id()));
         let tags = d.join("refs").join("tags").join("forgecad").join("v");
         forge_dirs::fs::create_dir_all(&tags).unwrap();
         forge_dirs::fs::write(tags.join("3"), format!("{}\n", "ab".repeat(20))).unwrap();

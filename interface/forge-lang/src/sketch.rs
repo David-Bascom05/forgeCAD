@@ -649,6 +649,38 @@ impl Sk {
             .collect())
     }
 
+    /// The regions only the entities `ids` bound (a text's glyphs, whatever else the sketch
+    /// draws), their segments named as `profile` names them.
+    pub fn profiles_among(&self, ids: &[EntityId], span: Span) -> R<Vec<Profile>> {
+        let mut keep = ids.to_vec();
+        keep.sort_unstable();
+        let solved = match &self.done.0 {
+            Some(d) if d.out.same_bits(&self.s) => &d.out,
+            _ => &self.s,
+        };
+        let ps =
+            forge_sketch::profiles_among(solved, &|e| keep.binary_search(&e).is_ok()).map_err(|error| {
+                Error::SketchProfile {
+                    span,
+                    sketch: self.id.clone(),
+                    error,
+                }
+            })?;
+        const PIECE: u64 = 0xffff << 48;
+        Ok(ps
+            .into_iter()
+            .map(|mut p| {
+                for l in &mut p.loops {
+                    for g in &mut l.segments {
+                        let (piece, e) = (g.1 & PIECE, EntityId(g.1 & !PIECE));
+                        g.1 = piece | self.seg_id(e);
+                    }
+                }
+                p
+            })
+            .collect())
+    }
+
     /// What the solved sketch is as forge-model keeps it.
     pub fn model(&self) -> forge_model::Sketch {
         forge_model::Sketch {

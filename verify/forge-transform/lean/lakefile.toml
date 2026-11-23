@@ -1,0 +1,22 @@
+name = "forgetransform"
+version = "0.1.0"
+defaultTargets = ["ForgeTransform"]
+# Mathlib is shared with verify/forge-mass/lean (same pin), so it is fetched once.
+packagesDir = "../../forge-mass/lean/.lake/packages"
+
+[leanOptions]
+autoImplicit = false
+relaxedAutoImplicit = false
+
+[[require]]
+name = "mathlib"
+git = "https://github.com/leanprover-community/mathlib4.git"
+rev = "v4.36.0"
+
+# The frames, surfaces and cross-product lemmas of verify/forge-mass.
+[[require]]
+name = "forgemass"
+path = "../../forge-mass/lean"
+
+[[lean_lib]]
+name = "ForgeTransform"
