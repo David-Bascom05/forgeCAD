@@ -37,6 +37,7 @@ pub mod harness_ui;
 pub mod icons;
 pub mod inspect;
 pub mod machine;
+mod machine_parts;
 pub mod markup;
 pub mod materials;
 mod measure_ui;

@@ -95,6 +95,8 @@ pub struct MachineUi {
     pub pick: usize,
     /// YYYY-MM-DD, for `taken`.
     pub today: String,
+    /// The Bodies tab's file to attach (a path).
+    pub file_in: String,
 }
 
 fn today() -> String {
@@ -141,6 +143,7 @@ impl MachineUi {
             message: String::new(),
             pick: 0,
             today: today(),
+            file_in: String::new(),
         };
         if let Some(e) = m.cat.entries.first() {
             let (d, l, f) = (e.def.clone(), e.level, e.file.clone());
@@ -329,6 +332,26 @@ impl MachineUi {
     }
 }
 
+/// Attaches a file (.fg, .step, .stl) to body `b` of a machine saved in `dir` and fits the
+/// envelope to its part (the Bodies tab's Attach).
+pub fn attach_and_fit(
+    d: &mut MachineDef,
+    b: usize,
+    dir: &std::path::Path,
+    file: &std::path::Path,
+) -> Result<String, String> {
+    let m = super::machine_parts::attach(d, b, dir, file)?;
+    // the envelope is the user's now
+    let path = format!("body.{}", d.bodies[b].name);
+    d.cites.retain(|c| c.path != path);
+    if d.bodies[b].part.is_some() {
+        let m2 = super::machine_parts::fit(d, b, dir)?;
+        Ok(format!("{m}; {m2}"))
+    } else {
+        Ok(m)
+    }
+}
+
 /// Unit axes and directions (the reader normalises them; the writer must write what it reads).
 fn canon(d: &mut MachineDef) {
     let unit = |a: &mut [f64; 3]| {
@@ -388,6 +411,10 @@ struct Touch {
     unknown: Vec<String>,
     geometry: bool,
     any: bool,
+    /// Bodies tab: attach this file to the chosen body / fit its envelope to its part / drop it.
+    attach: Option<String>,
+    fit: bool,
+    detach: bool,
 }
 
 struct Ctx<'a> {
@@ -853,9 +880,51 @@ fn editor(ui: &mut Ui, t: &Theme, st: &mut MachineUi, places: &mut Vec<(String, 
             Tab::Spindles => tab_spindles(ui, &c, &mut d2, &mut st.pick, &mut touch),
             Tab::Changer => tab_changer(ui, &c, &mut d2, &mut touch),
             Tab::Mounts => tab_mounts(ui, &c, &mut d2, &mut st.pick, &mut touch),
-            Tab::Bodies => tab_bodies(ui, &c, &mut d2, &mut st.pick, &mut touch),
+            Tab::Bodies => tab_bodies(ui, &c, &mut d2, &mut st.pick, &mut st.file_in, &mut touch),
             Tab::Check => tab_check(ui, t, st.report.as_ref(), &d, &st.q),
         });
+    // a body's geometry from a file: beside the saved machine
+    if touch.attach.is_some() || touch.fit || touch.detach {
+        let dir = match &st.origin {
+            Some((Level::User | Level::Project, f)) => {
+                std::path::Path::new(f).parent().map(|p| p.to_path_buf())
+            }
+            _ => None,
+        };
+        let b = st.pick;
+        let got = if b >= d2.bodies.len() {
+            Err("no body chosen".to_string())
+        } else if touch.detach {
+            d2.bodies[b].part = None;
+            Ok(format!(
+                "`{}`: no part (its envelope is the body)",
+                d2.bodies[b].name
+            ))
+        } else if let Some(dir) = dir {
+            match &touch.attach {
+                Some(f) => super::machine_parts::attach(&mut d2, b, &dir, std::path::Path::new(f.trim()))
+                    .and_then(|m| {
+                        if d2.bodies[b].part.is_some() {
+                            super::machine_parts::fit(&mut d2, b, &dir).map(|m2| format!("{m}; {m2}"))
+                        } else {
+                            Ok(m)
+                        }
+                    }),
+                None => super::machine_parts::fit(&mut d2, b, &dir),
+            }
+        } else {
+            Err("save the machine to the user or project level first: its part files go beside it".into())
+        };
+        match got {
+            Ok(m) => {
+                st.message = m;
+                touch.edited.push(format!("body.{}", d2.bodies[b].name));
+                touch.any = true;
+                touch.geometry = true;
+            }
+            Err(e) => st.message = e,
+        }
+    }
     if touch.any {
         for p in &touch.edited {
             d2.cites.retain(|c| &c.path != p);
@@ -1347,7 +1416,14 @@ fn tab_mounts(ui: &mut Ui, c: &Ctx, d: &mut MachineDef, pick: &mut usize, touch:
     ));
 }
 
-fn tab_bodies(ui: &mut Ui, c: &Ctx, d: &mut MachineDef, pick: &mut usize, touch: &mut Touch) {
+fn tab_bodies(
+    ui: &mut Ui,
+    c: &Ctx,
+    d: &mut MachineDef,
+    pick: &mut usize,
+    file_in: &mut String,
+    touch: &mut Touch,
+) {
     let t = c.t;
     ui.horizontal_wrapped(|ui| {
         for (i, b) in d.bodies.iter().enumerate() {
@@ -1398,6 +1474,43 @@ fn tab_bodies(ui: &mut Ui, c: &Ctx, d: &mut MachineDef, pick: &mut usize, touch:
                 .clone()
                 .unwrap_or_else(|| "none (the envelope is the body)".into()),
         ));
+    });
+    ui.horizontal(|ui| {
+        label_w(ui, t, "Geometry");
+        ui.add(
+            egui::TextEdit::singleline(file_in)
+                .hint_text(".fg, .step or .stl path")
+                .desired_width(170.0),
+        );
+        if ui.button("Browse").clicked()
+            && let Some(f) = crate::plat::pick_file(
+                Some("A body's geometry"),
+                "Part, STEP or mesh",
+                &["fg", "step", "stp", "stl"],
+            )
+        {
+            *file_in = f;
+        }
+    });
+    ui.horizontal(|ui| {
+        if ui
+            .add_enabled(!file_in.trim().is_empty(), egui::Button::new("Attach"))
+            .clicked()
+        {
+            touch.attach = Some(file_in.clone());
+        }
+        if ui
+            .add_enabled(b.part.is_some(), egui::Button::new("Fit envelope to part"))
+            .clicked()
+        {
+            touch.fit = true;
+        }
+        if ui
+            .add_enabled(b.part.is_some(), egui::Button::new("Detach"))
+            .clicked()
+        {
+            touch.detach = true;
+        }
     });
     let mut del = None;
     let mut ch = false;

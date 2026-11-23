@@ -166,6 +166,39 @@ fn make_jog_check_save_and_close() {
     assert!(dir.join("cam/machines/parts/shop-trunnion/cradle.fg").is_file());
     shot(&mut h, "05-saved");
 
+    // a body's geometry from files beside the saved machine: a STEP file (wrapped in a .fg that
+    // imports it) and the built-in .fg part, each with its envelope fitted to its bounds
+    {
+        let m = h.gui.shell.machine.as_mut().unwrap();
+        m.tab = Tab::Bodies;
+        let d = m.def.as_ref().unwrap();
+        m.pick = d.bodies.iter().position(|b| b.name == "support-l").unwrap();
+    }
+    let step = Path::new(EXAMPLES).join("rack18u/asm/order/RACK-312_strike.step");
+    let dir2 = dir.join("cam/machines");
+    {
+        let m = h.gui.shell.machine.as_mut().unwrap();
+        let mut d = m.def.clone().unwrap();
+        let b = m.pick;
+        let msg = forge_render::shell::machine::attach_and_fit(&mut d, b, &dir2, &step).unwrap();
+        assert!(msg.contains("STEP"), "{msg}");
+        let part = d.bodies[b].part.clone().unwrap();
+        assert!(dir2.join(&part).is_file());
+        assert!(matches!(
+            d.bodies[b].prims[..],
+            [forge_machine::def::Prim::Box { .. }]
+        ));
+        assert!(
+            !d.cites.iter().any(|c| c.path == "body.support-l"),
+            "the fitted envelope is the user's"
+        );
+        m.def = Some(d);
+        m.changed = true;
+        m.edited(true);
+        assert!(m.problem.is_none(), "{:?}", m.problem);
+    }
+    shot(&mut h, "06-body-from-step");
+
     // every template, as the builder shows it
     for (k, tp) in Template::ALL.into_iter().enumerate() {
         {

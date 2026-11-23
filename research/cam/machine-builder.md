@@ -138,7 +138,27 @@ part's renderer and scene, restore on close).
   few files); CAM-UI's setup dialog calls it when it opens. A save bumps
   `catalog::generation()` so an open picker can reload.
 
-## 5. Tests and screenshots
+## 5. Status (built)
+
+- CLI and crate: §2, tests in interface/forge-machine-builder/tests.
+- App: Manage > Machines > Machine Builder (`Action::MachineBuilder`; files src/gui_machine.rs,
+  src/shell/machine.rs, src/shell/machine_parts.rs). Library by level with what each hides; new
+  from a template or a clone (copied values cited unknown / source cites kept / taken as mine);
+  editor tabs Machine, Joints (tree; add child, delete refused while used, rename follows every
+  reference and cite), Spindles (power-curve points), Changer (+ turrets), Mounts, Bodies (boxes,
+  cylinders, `ignore`, geometry from a .fg / STEP / STL with "fit envelope"), Check; a provenance
+  chip per value (copied, user, UNKNOWN, published, estimate, conflict) and "?" to mark a value
+  unknown; jog sliders per joint posing the bodies, live contact at the pose (red hit, amber
+  near); Check travel; save to the user or project folder.
+- Body geometry: an attached STEP is copied to `parts/NAME/` with a `BODY.fg` that imports it;
+  the envelope is fitted to the part's tessellated bounds + 0.05 mm (chord 0.01 mm). An STL gives
+  the envelope only (its display waits on F5).
+- Page: `fc.app_machine(cmd)` (open, pick, template, clone, jog, tab, check, save) drives the same
+  code; the answer is the state's status line.
+- Found while building it: egui's Slider rounds the value it shows into the variable; the jog
+  bar slides a copy and writes back only on the user's move.
+
+## 6. Tests and screenshots
 
 - crate tests: writer round trips (every built-in and template), CLI end to end (template at
   project level with every value cited unknown, byte-stable file, parts in envelopes; clone at

@@ -333,3 +333,99 @@ impl Gui {
         }
     }
 }
+
+impl Gui {
+    /// The Machine Builder by words, for the page and tests (`app_machine`): `open`, `close`,
+    /// `pick NAME`, `template KIND NAME`, `clone NAME`, `jog JOINT VALUE`, `tab NAME`, `check`,
+    /// `save user|project`. The answer goes to the status line, prefixed `machine:`.
+    pub fn machine_command(&mut self, cmd: &str) -> Result<String, String> {
+        use crate::shell::machine::Tab;
+        use forge_machine_builder::catalog::Level;
+        use forge_machine_builder::make::Template;
+        let w: Vec<&str> = cmd.split_whitespace().collect();
+        if w.first() == Some(&"open") {
+            if self.shell.machine.is_none() {
+                self.machine_toggle();
+            }
+        } else if w.first() == Some(&"close") {
+            self.shell.machine = None;
+            self.shell.status = "machine: closed".into();
+            return Ok("closed".into());
+        }
+        let Some(m) = &mut self.shell.machine else {
+            return Err("the Machine Builder is not open".into());
+        };
+        let got: Result<(), String> = match w.as_slice() {
+            ["open"] => Ok(()),
+            ["pick", name] => match m.cat.get(name) {
+                Some(e) => {
+                    let (d, l, f) = (e.def.clone(), e.level, e.file.clone());
+                    m.load(d, Some((l, f)), Vec::new());
+                    Ok(())
+                }
+                None => Err(format!("no machine `{name}`")),
+            },
+            ["template", kind, name] => match Template::from_word(kind) {
+                Some(t) => {
+                    m.template = t;
+                    m.new_name = name.to_string();
+                    m.make_template();
+                    Ok(())
+                }
+                None => Err(format!("no template `{kind}`")),
+            },
+            ["clone", name] => {
+                m.new_name = name.to_string();
+                m.make_clone();
+                Ok(())
+            }
+            ["jog", joint, value] => {
+                let i = m.def.as_ref().and_then(|d| d.joint_index(joint));
+                match (i, value.parse::<f64>()) {
+                    (Some(i), Ok(v)) => {
+                        m.q[i] = v;
+                        m.edited(false);
+                        Ok(())
+                    }
+                    _ => Err(format!("no joint `{joint}` or not a number `{value}`")),
+                }
+            }
+            ["tab", name] => match Tab::ALL.into_iter().find(|t| t.name().eq_ignore_ascii_case(name)) {
+                Some(t) => {
+                    m.tab = t;
+                    Ok(())
+                }
+                None => Err(format!("no tab `{name}`")),
+            },
+            ["check"] => {
+                m.run_check();
+                Ok(())
+            }
+            ["save", level] => {
+                m.level = if *level == "project" { Level::Project } else { Level::User };
+                m.save();
+                Ok(())
+            }
+            _ => Err(format!("`{cmd}`: open | close | pick NAME | template KIND NAME | clone NAME | jog JOINT VALUE | tab NAME | check | save user|project")),
+        };
+        let say = match got {
+            Ok(()) => {
+                let live: Vec<String> = m
+                    .live
+                    .iter()
+                    .map(|(a, b, hit)| format!("{a}/{b} {}", if *hit { "HIT" } else { "near" }))
+                    .collect();
+                format!(
+                    "{}{}{}{}",
+                    m.def.as_ref().map_or("none".to_string(), |d| d.name.clone()),
+                    m.problem.as_ref().map_or(String::new(), |p| format!(" refused: {p}")),
+                    if live.is_empty() { String::new() } else { format!(" contact: {}", live.join(", ")) },
+                    if m.message.is_empty() { String::new() } else { format!(" | {}", m.message) }
+                )
+            }
+            Err(e) => e,
+        };
+        self.shell.status = format!("machine: {say}");
+        Ok(say)
+    }
+}
