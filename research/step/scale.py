@@ -8,6 +8,8 @@ judged again. Another session can take shard K..K2 of the same manifest.
   scale.py run CORPUS K [K2] [--stride S] [--jobs 4]
                                             # judges shards K, K+S, .. < K2 into scale/CORPUS/K.jsonl.gz
   scale.py report [CORPUS..] [--causes N]   # per corpus: match/mismatch/uncertain/refused/crash/timeout, causes
+  scale.py examples CORPUS CAUSE [N]        # the smallest files of a cause
+  scale.py fetch CORPUS DIR ID..            # those files, to study outside the repository
 
 Every file goes to its own process twice, each capped in time and memory: OCCT's reading under the truth rule
 (occt_truth.py, research/import/truth.md) and ours (kernel/forge-step/examples/stepread.rs, as rate.py runs it).
@@ -290,7 +292,7 @@ def judge(o, d):
     if not o.get("solids"):
         return ("empty", "no-solid-either") if not sol else ("uncertain", "occt-no-solid")
     if "err" in d:
-        return "refused", "error:" + kind(d["err"])
+        return "refused", "error:" + " ".join([w for w in d["err"].split() if not any(c.isdigit() for c in w)][:6])
     if not sol:
         r = d.get("refusals") or {}
         return "refused", ("refused:" + why(d)) if r else "no-solid"
@@ -345,13 +347,33 @@ def compact(o, d, cls, cause):
     return row
 
 
+KINDS = [b"PLANE", b"CYLINDRICAL_SURFACE", b"CONICAL_SURFACE", b"SPHERICAL_SURFACE", b"DEGENERATE_TOROIDAL_SURFACE",
+         b"TOROIDAL_SURFACE", b"B_SPLINE_SURFACE", b"RATIONAL_B_SPLINE_SURFACE", b"SURFACE_OF_REVOLUTION",
+         b"SURFACE_OF_LINEAR_EXTRUSION", b"OFFSET_SURFACE", b"RECTANGULAR_TRIMMED_SURFACE", b"SEAM_CURVE",
+         b"PCURVE", b"ELLIPSE", b"B_SPLINE_CURVE", b"BREP_WITH_VOIDS", b"MAPPED_ITEM", b"TESSELLATED"]
+
+
+def census(data):
+    """Which geometry kinds a file names, counted as text (nothing runs), to tie causes to forms at scale."""
+    out = {}
+    for k in KINDS:
+        n = data.count(k + b"(") + data.count(k + b" (")
+        if k == b"TOROIDAL_SURFACE":
+            n -= data.count(b"DEGENERATE_TOROIDAL_SURFACE")
+        if k == b"B_SPLINE_SURFACE":
+            n = data.count(b"B_SPLINE_SURFACE")
+        if n > 0:
+            out[k.decode().replace("_SURFACE", "").lower()] = n
+    return out
+
+
 def one(path):
     o = child([VENV, "-I", os.path.join(HERE, "occt_truth.py"), path], OCCT_TIME, 5 << 30)
     with open(path, "rb") as f:
         data = f.read()
     d = child([BIN], OURS_TIME, OURS_MEM, stdin=data)
     cls, cause = judge(o, d)
-    return compact(o, d, cls, cause)
+    return {**compact(o, d, cls, cause), "kinds": census(data)}
 
 
 # ---- shards
@@ -460,7 +482,7 @@ def report(cs, ncause):
 
 def main():
     a = argparse.ArgumentParser()
-    a.add_argument("cmd", choices=["index", "run", "report"])
+    a.add_argument("cmd", choices=["index", "run", "report", "fetch", "examples"])
     a.add_argument("args", nargs="*")
     a.add_argument("--jobs", type=int, default=4)
     a.add_argument("--causes", type=int, default=15)
@@ -473,6 +495,16 @@ def main():
         c, k0 = o.args[0], int(o.args[1])
         k1 = int(o.args[2]) if len(o.args) > 2 else k0 + 1
         run(c, k0, k1, o.jobs, o.stride)
+    elif o.cmd == "fetch":  # fetch CORPUS DIR ID..: files to study a cause by, outside the repository
+        c, into, want = o.args[0], o.args[1], set(o.args[2:])
+        os.makedirs(into, exist_ok=True)
+        print(zip_fetch(CORPORA[c]["zip"], [r for r in manifest(c) if r["id"] in want], into))
+    elif o.cmd == "examples":  # examples CORPUS CAUSE-PREFIX [N]: ids by size, smallest first
+        c, pre = o.args[0], o.args[1]
+        n = int(o.args[2]) if len(o.args) > 2 else 10
+        rs = sorted((r for r in load(c) if r["cause"].startswith(pre)), key=lambda r: r["bytes"])
+        for r in rs[:n]:
+            print(r["id"], r["bytes"], r["cause"])
     else:
         report(o.args, o.causes)
 
