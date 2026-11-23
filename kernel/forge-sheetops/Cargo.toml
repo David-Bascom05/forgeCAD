@@ -1,0 +1,16 @@
+[package]
+name = "forge-sheetops"
+description = "Sheets (surface bodies) from extruded and revolved chains, for the ForgeCAD kernel"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+forge-math = { path = "../forge-math" }
+forge-geom = { path = "../forge-geom" }
+forge-topo = { path = "../forge-topo" }
+forge-ops = { path = "../forge-ops" }
+
+[lints]
+workspace = true

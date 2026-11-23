@@ -4,7 +4,8 @@
 use forge_geom::SurfaceGeom;
 use forge_geom::spline::PlaneSpline;
 use forge_math::{Frame, Point2, dmath};
-use forge_ops::{ExtrudeError, ProfileError, Segment, extrude_sheet};
+use forge_ops::{ExtrudeError, ProfileError, Segment};
+use forge_sheetops::extrude_sheet;
 use forge_topo::mass::{mass, sheet_area};
 use forge_topo::{Body, Problem, check};
 use std::sync::Arc;
@@ -212,7 +213,8 @@ fn a_sheet_has_no_volume_and_check_keeps_solids_closed() {
 mod revolved {
     use super::*;
     use forge_math::Vec2;
-    use forge_ops::{Axis2, revolve_sheet};
+    use forge_ops::Axis2;
+    use forge_sheetops::revolve_sheet;
 
     const Y: Axis2 = Axis2 {
         origin: Point2::ORIGIN,
@@ -291,7 +293,7 @@ mod revolved {
 
 mod thickened {
     use super::*;
-    use forge_ops::thicken;
+    use forge_sheetops::thicken;
 
     fn solid(b: &Body) -> f64 {
         let p = check(b);
@@ -395,7 +397,7 @@ mod thickened {
         // past it, the inside's offset would turn back on itself
         assert!(matches!(
             thicken(&s, &faces(&s), -3.2, 0.0, 2),
-            Err(forge_ops::ThickenError::Collapses { .. })
+            Err(forge_sheetops::ThickenError::Collapses { .. })
         ));
     }
 

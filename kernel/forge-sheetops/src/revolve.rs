@@ -2,11 +2,11 @@
 //! open chains (no caps; an open chain's last end a vertex of its own), so the solid revolve is
 //! compiled as it was.
 
-use crate::profile::{Profile, Segment};
-use crate::revolve::{Axis2, RevolveError};
 use forge_geom::spline::{SplineCurve, Spun};
 use forge_geom::{Circle, Cone, Curve, Cylinder, Line, Plane, Sphere, Surface, SurfaceGeom, Torus};
 use forge_math::{Frame, Interval, Point2, Point3, Vec2, Vec3, dmath, tol};
+use forge_ops::profile::{Profile, Segment};
+use forge_ops::revolve::{Axis2, RevolveError};
 use forge_topo::{Body, EdgeId, FaceId, Name, ShellId, VertexId};
 
 /// A sheet (`Body::sheet`): each chain (segments end to end, open or closed, as `extrude_sheet`
@@ -19,13 +19,13 @@ pub fn revolve_sheet(
     angle: f64,
     feature: u64,
 ) -> Result<Body, RevolveError> {
-    let chains = crate::sheet_chain::sheet_chains(chains)?;
+    let chains = crate::chain::sheet_chains(chains)?;
     let closed: Vec<bool> = chains.iter().map(|c| c.1).collect();
     let profile = Profile {
         plane: *plane,
         loops: chains
             .into_iter()
-            .map(|(segments, _)| crate::profile::ProfileLoop { segments })
+            .map(|(segments, _)| forge_ops::profile::ProfileLoop { segments })
             .collect(),
     };
     build(&profile, axis, angle, feature, false, Some(&closed))
@@ -486,7 +486,7 @@ impl Revolver<'_> {
             for k in 0..self.spans() {
                 let k1 = self.next_copy(k);
                 let (same_sense, flip) = self.orientation(&s.seg, &surface, self.angles[k], self.span_end(k));
-                let name = crate::roles::revolve_side(self.root, s.id, k as u64);
+                let name = forge_ops::roles::revolve_side(self.root, s.id, k as u64);
                 let face = self.body.add_face(shell, surface.clone(), same_sense, name);
                 let Some(first) = eid[k][si] else {
                     // a whole-turn disc or ring: each circle a loop of its own, the outer first
@@ -528,7 +528,7 @@ impl Revolver<'_> {
             // what the second half-turn was named finds the whole
             let root = self.root;
             for s in &segs {
-                let side = crate::roles::side(root, s.id);
+                let side = forge_ops::roles::side(root, s.id);
                 let copy = |k: u64| root.with_str("copy").with(k).with(s.id);
                 let sweep = |k: u64| root.with_str("sweep").with(k).with(s.id);
                 self.body.joins.aliases.extend([
@@ -574,7 +574,7 @@ impl Revolver<'_> {
                 radius,
                 start,
                 sweep,
-            } => crate::profile::arc_point(center, radius, start + 0.5 * sweep),
+            } => forge_ops::profile::arc_point(center, radius, start + 0.5 * sweep),
             Segment::Circle { .. } => samples[1],
         };
         let t2 = match *seg {

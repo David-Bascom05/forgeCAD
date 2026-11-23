@@ -1,9 +1,9 @@
 //! A sheet's chains checked (`sheet_chains`): a module of its own, with its own copies of the few
 //! profile helpers an open chain needs, so the profile's path is compiled as it was.
 
-use crate::profile::{Profile, ProfileError, ProfileLoop, Segment};
 use forge_math::predicates::orient2d;
 use forge_math::{Frame, Interval, Point2, dmath, tol};
+use forge_ops::profile::{Profile, ProfileError, ProfileLoop, Segment};
 use std::sync::Arc;
 
 /// A chain's segments, and whether it closes.

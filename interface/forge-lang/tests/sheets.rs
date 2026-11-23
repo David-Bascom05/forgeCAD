@@ -21,7 +21,7 @@ fn the_example_measures_its_solids_and_its_sheets_apart() {
     let want = 20.0 * (40.0 + 5.0 * pi) + 40.0 * 5.0 * pi;
     let got = forge_lang::report::sheet_area(&r).expect("sheets");
     assert!((got - want).abs() < 1e-9 * want, "{got} {want}");
-    let sheets: Vec<bool> = r.solids.iter().map(|s| s.sheet).collect();
+    let sheets: Vec<bool> = r.solids.iter().map(|s| r.is_sheet(s)).collect();
     assert_eq!(sheets.iter().filter(|&&s| s).count(), 2, "{sheets:?}");
 }
 
@@ -34,7 +34,7 @@ fn thin_walls_are_solids_mitred_at_their_corners() {
     let (t, h, l, w, rr) = (2.0, 10.0, 40.0, 25.0, 5.0);
     let want = h * ((l + w) * t + t * t) + h * t * ((l - rr) + rr * pi / 2.0);
     assert!((m.volume - want).abs() < 1e-9 * want, "{} {want}", m.volume);
-    assert!(r.solids.iter().all(|s| !s.sheet));
+    assert!(r.solids.iter().all(|s| !r.is_sheet(s)));
 }
 
 #[test]

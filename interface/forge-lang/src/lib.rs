@@ -303,6 +303,13 @@ impl Run {
     pub fn ok(&self) -> bool {
         self.errors.is_empty()
     }
+    /// Whether solid `s` (one of `solids`) is a sheet: a surface with no material, its faces a
+    /// sheet's in `body` (a body's faces are all a sheet's or none: its first says).
+    pub fn is_sheet(&self, s: &build::Span) -> bool {
+        self.body
+            .as_ref()
+            .is_some_and(|b| b.sheets && b.faces.get(s.faces.start as usize).is_some_and(|f| f.sheet))
+    }
 }
 
 /// Parses, checks, evaluates and (with `opts.build`) builds `src`, reusing `cache`'s stages

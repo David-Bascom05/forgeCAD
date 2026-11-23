@@ -11,6 +11,7 @@ forge-math = { path = "../forge-math" }
 forge-geom = { path = "../forge-geom" }
 forge-topo = { path = "../forge-topo" }
 forge-ops = { path = "../forge-ops" }
+forge-sheetops = { path = "../forge-sheetops" }
 forge-bool = { path = "../forge-bool" }
 forge-gpu = { path = "../forge-gpu" }
 forge-sketch = { path = "../forge-sketch" }

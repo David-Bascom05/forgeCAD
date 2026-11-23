@@ -5,9 +5,8 @@ use crate::rib::{Rib, RibError, rib};
 use crate::{Combine, Feature, History, RegenError, Target, op_of};
 use forge_bool::BoolError;
 use forge_math::{Frame, Point3, Vec3};
-use forge_ops::{
-    DirectError, Rounded, ThickenError, delete_faces, move_faces, offset_faces, replace_face, thicken,
-};
+use forge_ops::{DirectError, Rounded, delete_faces, move_faces, offset_faces, replace_face};
+use forge_sheetops::{ThickenError, thicken};
 use forge_topo::{Body, Name};
 
 #[derive(Clone, Debug, PartialEq)]

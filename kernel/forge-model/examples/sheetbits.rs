@@ -3,7 +3,8 @@
 //!   cargo run --release -p forge-model --example sheetbits [--target wasm32-wasip1]
 use forge_geom::spline::PlaneSpline;
 use forge_math::{Frame, Point2, dmath};
-use forge_ops::{Axis2, Segment, extrude_sheet, revolve_sheet, thicken};
+use forge_ops::{Axis2, Segment};
+use forge_sheetops::{extrude_sheet, revolve_sheet, thicken};
 use forge_topo::Body;
 use forge_topo::mass::mass;
 use std::sync::Arc;

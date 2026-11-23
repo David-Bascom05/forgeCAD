@@ -303,7 +303,7 @@ fn sheet_bodies(run: &Run) -> Option<Json> {
     let ids: Vec<Json> = run
         .solids
         .iter()
-        .filter(|s| s.sheet)
+        .filter(|s| run.is_sheet(s))
         .filter_map(|s| run.feats.iter().find(|f| f.idx == s.solid))
         .map(|f| f.id.as_str().into())
         .collect();

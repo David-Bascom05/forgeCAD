@@ -5,7 +5,8 @@
 
 use crate::{RegenError, Tool};
 use forge_math::Frame;
-use forge_ops::{Axis2, Segment, extrude_sheet, revolve_sheet};
+use forge_ops::{Axis2, Segment};
+use forge_sheetops::{extrude_sheet, revolve_sheet};
 use forge_topo::Body;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -43,11 +44,12 @@ pub(crate) fn tool(i: usize, id: u64, s: &Sheet, build: bool) -> Result<Tool, Re
         Some(t) => {
             if build {
                 let faces: Vec<forge_topo::Name> = body.face_ids().map(|f| body.face(f).name).collect();
-                body =
-                    forge_ops::thicken(&body, &faces, t.lo, t.hi, id).map_err(|error| RegenError::Edit {
+                body = forge_sheetops::thicken(&body, &faces, t.lo, t.hi, id).map_err(|error| {
+                    RegenError::Edit {
                         feature: i,
                         error: crate::EditError::Thicken(error),
-                    })?;
+                    }
+                })?;
             }
             t.op
         }

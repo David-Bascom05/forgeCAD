@@ -30,8 +30,6 @@ pub struct Span {
     pub solid: usize,
     pub faces: std::ops::Range<u32>,
     pub edges: std::ops::Range<u32>,
-    /// The body is a sheet (a surface, no material: `Face::sheet` on its faces).
-    pub sheet: bool,
 }
 
 impl Stage {
@@ -71,8 +69,6 @@ impl Stage {
                     solid: s.id,
                     faces: f..all.faces.len() as u32,
                     edges: e..all.edges.len() as u32,
-                    // (a body's faces are all a sheet's or none: its first says)
-                    sheet: all.faces.get(f as usize).is_some_and(|x| x.sheet),
                 });
             }
             let _ = self.spans.set(spans);

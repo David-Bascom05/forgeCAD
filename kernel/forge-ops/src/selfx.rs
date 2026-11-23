@@ -11,7 +11,7 @@ use std::cell::OnceCell;
 
 /// The first two faces found crossing, at least one of them flagged (by face index): faces that
 /// share no vertex yet meet, or a flagged face whose own loops cross.
-pub(crate) fn crossing(body: &Body, flagged: &[bool]) -> Option<(Name, Name)> {
+pub fn crossing(body: &Body, flagged: &[bool]) -> Option<(Name, Name)> {
     let n = body.faces.len();
     // all three are worked out for the faces it comes to: most pairs have no need of them
     let verts_of = |f: FaceId| {

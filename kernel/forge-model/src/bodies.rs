@@ -450,10 +450,7 @@ fn apply_once(
         return Ok(solids);
     }
     let mut gone: Vec<usize> = Vec::new();
-    for (n, k) in targets(&ids(&solids), &sheets(&solids), p, i)?
-        .into_iter()
-        .enumerate()
-    {
+    for (n, k) in targets(&ids(&solids), &solids, p, i)?.into_iter().enumerate() {
         let salt = (n > 0).then(|| plain.id(solids[k].id));
         let body = std::mem::take(&mut solids[k].body);
         match add_tools(body, &ts, (i, plain.id(i)), salt) {
@@ -483,34 +480,51 @@ fn ids(solids: &[Solid]) -> Vec<usize> {
     solids.iter().map(|s| s.id).collect()
 }
 
-/// The bodies (positions in `ids`) a feature picks, or the current one: the last solid made. A
-/// sheet (`sheet[k]`) holds no material to add to or cut: never the current body, left out of
-/// "all", and named is `OnSheet`.
-fn targets(ids: &[usize], sheet: &[bool], p: Option<&Pick>, i: usize) -> Result<Vec<usize>, RegenError> {
+/// The bodies (positions in `ids`, of `solids`) a feature picks, or the current one: the last
+/// solid made. A sheet holds no material to add to or cut: never the current body, left out of
+/// "all", and named is `OnSheet`. (With no sheet among them, as before: no body looked at.)
+fn targets(ids: &[usize], solids: &[Solid], p: Option<&Pick>, i: usize) -> Result<Vec<usize>, RegenError> {
+    let any = solids.iter().any(|s| s.body.sheets);
+    targets_by(
+        ids,
+        any,
+        |k| solids.get(k).is_some_and(|s| s.body.is_sheet()),
+        p,
+        i,
+    )
+}
+
+/// `targets`, a body's being a sheet told by `sheet` (asked only where `any`: some body may be).
+fn targets_by(
+    ids: &[usize],
+    any: bool,
+    is_sheet: impl Fn(usize) -> bool,
+    p: Option<&Pick>,
+    i: usize,
+) -> Result<Vec<usize>, RegenError> {
+    let sheet = |k: usize| any && is_sheet(k);
     let find = |id: usize| match ids.iter().position(|&x| x == id) {
         None => Err(RegenError::Body {
             feature: i,
             error: BodyError::NoBody { id },
         }),
-        Some(k) if sheet.get(k) == Some(&true) => Err(RegenError::Body {
+        Some(k) if sheet(k) => Err(RegenError::Body {
             feature: i,
             error: BodyError::OnSheet { id },
         }),
         Some(k) => Ok(k),
     };
-    let solid = |k: &usize| sheet.get(*k) != Some(&true);
     match p {
-        Some(Pick::All) => Ok((0..ids.len()).filter(solid).collect()),
+        Some(Pick::All) if !any => Ok((0..ids.len()).collect()),
+        Some(Pick::All) => Ok((0..ids.len()).filter(|&k| !sheet(k)).collect()),
         Some(Pick::Some(want)) => want.iter().map(|&id| find(id)).collect(),
-        None => match (0..ids.len()).rev().find(solid) {
+        None if !any && ids.is_empty() => Err(RegenError::NothingToCombine { feature: i }),
+        None if !any => Ok(vec![ids.len() - 1]),
+        None => match (0..ids.len()).rev().find(|&k| !sheet(k)) {
             Some(k) => Ok(vec![k]),
             None => Err(RegenError::NothingToCombine { feature: i }),
         },
     }
-}
-
-fn sheets(solids: &[Solid]) -> Vec<bool> {
-    solids.iter().map(|s| s.body.is_sheet()).collect()
 }
 
 /// The names a feature works on (edges, faces), which say which bodies it is on.
@@ -571,7 +585,7 @@ fn named_targets(
             return Ok(on);
         }
     }
-    targets(&ids(solids), &sheets(solids), p, i)
+    targets(&ids(solids), solids, p, i)
 }
 
 /// A fillet, chamfer, shell or draft cut down to the names `b` holds.
@@ -666,7 +680,7 @@ fn modify_on(
                 op: Combine::New,
             });
             let slab = modify(plain, &slab, i, &solids[k].body, threads)?;
-            match targets(&ids(solids), &sheets(solids), None, i) {
+            match targets(&ids(solids), solids, None, i) {
                 Ok(t) if *top != Combine::New => {
                     let shape = part_shape(&slab);
                     let tool = (slab, *top, shape);
@@ -872,7 +886,7 @@ fn body_feature(
         }
         BodyFeature::Split { by, keep } => {
             let surface = cutter(plain, i, by)?;
-            let on = targets(&ids(solids), &sheets(solids), p, i)?;
+            let on = targets(&ids(solids), solids, p, i)?;
             if *keep == Keep::Both && on.len() != 1 {
                 return Err(bad(BodyError::NotOne));
             }
@@ -1285,14 +1299,20 @@ fn nary_pass(features: History<'_>, threads: usize) -> Result<Vec<Solid>, RegenE
             _ if ts.is_empty() => {}
             _ => {
                 let ids: Vec<usize> = runs.iter().map(|r| r.id).collect();
-                let sheet: Vec<bool> = runs
-                    .iter()
-                    .map(|r| match &r.base {
-                        Ok(b) => b.is_sheet(),
-                        Err(t) => t.0.is_sheet(),
-                    })
-                    .collect();
-                let on = targets(&ids, &sheet, p, i)?;
+                fn base(r: &Run) -> &Body {
+                    match &r.base {
+                        Ok(b) => b,
+                        Err(t) => &t.0,
+                    }
+                }
+                let any = runs.iter().any(|r| base(r).sheets);
+                let on = targets_by(
+                    &ids,
+                    any,
+                    |k| runs.get(k).is_some_and(|r| base(r).is_sheet()),
+                    p,
+                    i,
+                )?;
                 // a cut or an intersect may have emptied a body, and then this add belongs to what
                 // is left, not to it (one run would make the tool a body of its own): `nary` goes
                 // one at a time

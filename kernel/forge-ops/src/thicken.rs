@@ -1,9 +1,9 @@
-use crate::rebuild::{RebuildError, rebuild_some_reach};
+use crate::rebuild::{RebuildError, rebuild_some};
 use crate::selfx::crossing;
 use crate::shell::offset;
 use forge_geom::{Cone, Curve, CurveGeom, Cylinder, Line, Plane, Surface, SurfaceGeom};
 use forge_math::{Frame, Interval, Point3, UnitVec3, dmath, tol};
-use forge_topo::{Body, CoedgeId, EdgeId, FaceId, Name, Problem, VertexId, check_against};
+use forge_topo::{Body, EdgeId, FaceId, Name, Problem, VertexId, check_against};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum ThickenError {
@@ -73,6 +73,15 @@ pub fn thicken(body: &Body, faces: &[Name], lo: f64, hi: f64, feature: u64) -> R
             .count()
             == 1
     };
+    for e in base.edge_ids().filter(|&e| rim(e)) {
+        for v in [base.edge(e).start, base.edge(e).end] {
+            if !smooth[v.index()] {
+                return Err(ThickenError::Crease {
+                    vertex: base.vertex(v).name,
+                });
+            }
+        }
+    }
 
     let root = Name::feature(feature);
     let mut out = Body::new();
@@ -152,13 +161,6 @@ pub fn thicken(body: &Body, faces: &[Name], lo: f64, hi: f64, feature: u64) -> R
             )
         })
     };
-    // each rim use: its face, its wall and the wall's sense
-    struct Rim {
-        c: CoedgeId,
-        wall: Surface,
-        sense: bool,
-    }
-    let mut rims: Vec<Rim> = Vec::new();
     for &f in &set {
         for &l in &base.face(f).loops {
             for c in base.lp(l).coedges() {
@@ -174,146 +176,37 @@ pub fn thicken(body: &Body, faces: &[Name], lo: f64, hi: f64, feature: u64) -> R
                 let away = dir.cross(outward(&base, f, mid).ok_or(no_wall.clone())?)
                     * if co.forward { 1.0 } else { -1.0 };
                 let n = w.normal(w.project(mid)).ok_or(no_wall)?;
-                rims.push(Rim {
-                    c,
-                    wall: w,
-                    sense: n.dot(away) > 0.0,
-                });
+                // round a closed rim a flat wall is a ring: two loops, no seam across it
+                let ring = edge.start == edge.end && matches!(w, Surface::Plane(_));
+                let nf = out.add_face(
+                    shell,
+                    w,
+                    n.dot(away) > 0.0,
+                    root.with_str("wall").with_name(edge.name),
+                );
+                let (bot, top) = (
+                    elo[co.edge.index()].expect("made"),
+                    ehi[co.edge.index()].expect("made"),
+                );
+                if ring {
+                    out.add_loop(nf, &[(bot, co.forward)]);
+                    out.add_loop(nf, &[(top, !co.forward)]);
+                    continue;
+                }
+                let (cs, ce) = (base.coedge_start(c), base.coedge_end(c));
+                let (up_e, up_s) = (rise_of(&mut out, ce), rise_of(&mut out, cs));
+                out.add_loop(
+                    nf,
+                    &[(bot, co.forward), (up_e, true), (top, !co.forward), (up_s, false)],
+                );
             }
         }
-    }
-    // Where the faces crease at a rim vertex (a thin wall's corner on its cap), the walls of the
-    // rim uses either side of it must lie on one plane: they are one wall face, the vertex solved
-    // onto it with the skins either side. Elsewhere at a crease the walls do not meet in one line
-    // (`Crease`). Runs of rim uses joined so, each the uses after one another round the rim.
-    let mut leaving: Vec<Vec<usize>> = vec![Vec::new(); base.vertices.len()];
-    for (k, r) in rims.iter().enumerate() {
-        leaving[base.coedge_start(r.c).index()].push(k);
-    }
-    let next = |k: usize| -> Result<Option<usize>, ThickenError> {
-        let v = base.coedge_end(rims[k].c);
-        if smooth[v.index()] {
-            return Ok(None);
-        }
-        let crease = ThickenError::Crease {
-            vertex: base.vertex(v).name,
-        };
-        match leaving[v.index()][..] {
-            [j] if same_plane((&rims[j].wall, rims[j].sense), (&rims[k].wall, rims[k].sense)) => Ok(Some(j)),
-            _ => Err(crease),
-        }
-    };
-    let mut after: Vec<Option<usize>> = Vec::with_capacity(rims.len());
-    for k in 0..rims.len() {
-        after.push(next(k)?);
-    }
-    let mut before: Vec<Option<usize>> = vec![None; rims.len()];
-    for (k, a) in after.iter().enumerate() {
-        if let Some(j) = *a {
-            before[j] = Some(k);
-        }
-    }
-    let mut taken = vec![false; rims.len()];
-    let mut rings = Vec::new();
-    for k0 in 0..rims.len() {
-        if taken[k0] {
-            continue;
-        }
-        // back to the run's first use (round a closed run, to k0 itself)
-        let mut first = k0;
-        while let Some(b) = before[first] {
-            if b == k0 {
-                break;
-            }
-            first = b;
-        }
-        let mut run = vec![first];
-        taken[first] = true;
-        let mut at = first;
-        let mut closed = false;
-        while let Some(j) = after[at] {
-            if j == first {
-                closed = true;
-                break;
-            }
-            run.push(j);
-            taken[j] = true;
-            at = j;
-        }
-        let r0 = &rims[run[0]];
-        let edge0 = base.edge(base.coedge(r0.c).edge);
-        let one_closed = run.len() == 1 && edge0.start == edge0.end;
-        // round a closed rim a flat wall is a ring: two loops, no seam across it
-        let ring = (closed || one_closed) && matches!(r0.wall, Surface::Plane(_));
-        let nf = out.add_face(
-            shell,
-            r0.wall.clone(),
-            r0.sense,
-            root.with_str("wall").with_name(edge0.name),
-        );
-        let ends = |k: usize, top: bool| {
-            let co = base.coedge(rims[k].c);
-            let e = if top { ehi } else { elo };
-            (e[co.edge.index()].expect("made"), co.forward != top)
-        };
-        let bots: Vec<(EdgeId, bool)> = run.iter().map(|&k| ends(k, false)).collect();
-        let tops: Vec<(EdgeId, bool)> = run.iter().rev().map(|&k| ends(k, true)).collect();
-        if ring {
-            out.add_loop(nf, &bots);
-            out.add_loop(nf, &tops);
-            rings.push(nf);
-            continue;
-        }
-        let (cs, ce) = (
-            base.coedge_start(rims[run[0]].c),
-            base.coedge_end(rims[run[run.len() - 1]].c),
-        );
-        let (up_e, up_s) = (rise_of(&mut out, ce), rise_of(&mut out, cs));
-        let mut uses = bots;
-        uses.push((up_e, true));
-        uses.extend(tops);
-        uses.push((up_s, false));
-        out.add_loop(nf, &uses);
     }
     let mut verts = vec![false; out.vertices.len()];
     solve_v.iter().for_each(|v| verts[v.index()] = true);
     let mut edges = vec![false; out.edges.len()];
     solve_e.iter().for_each(|e| edges[e.index()] = true);
-    // a skin's edges lie as far from the base's as the skin is offset
-    rebuild_some_reach(&mut out, &verts, &edges, lo.abs().max(hi.abs())).map_err(ThickenError::Rebuild)?;
-    // a ring's outer loop first: the one running counter-clockwise round its outward normal
-    for f in rings {
-        let face = out.face(f);
-        let Some(n) = face.surface.normal(
-            face.surface.project(
-                out.vertex(out.edge(out.coedge(out.lp(face.loops[0]).coedge(0)).edge).start)
-                    .point,
-            ),
-        ) else {
-            continue;
-        };
-        let n = if face.same_sense { n } else { -n };
-        let turn = |l: forge_topo::LoopId| {
-            let mut pts = Vec::new();
-            for c in out.lp(l).coedges() {
-                let mut p = out.edge_points(out.coedge(c).edge, 16);
-                if !out.coedge(c).forward {
-                    p.reverse();
-                }
-                p.pop();
-                pts.extend(p);
-            }
-            let mut a = forge_math::Vec3::ZERO;
-            for k in 0..pts.len() {
-                let (p, q) = (pts[k], pts[(k + 1) % pts.len()]);
-                a += (p - Point3::ORIGIN).cross(q - Point3::ORIGIN);
-            }
-            a.dot(n.get())
-        };
-        if turn(face.loops[0]) < 0.0 {
-            out.faces[f.index()].loops.swap(0, 1);
-        }
-    }
+    rebuild_some(&mut out, &verts, &edges).map_err(ThickenError::Rebuild)?;
     // faces apart from each other thicken into slabs apart: a shell each
     out.rebuild_shells();
     let problems = check_against(&out, &base);
@@ -324,18 +217,6 @@ pub fn thicken(body: &Body, faces: &[Name], lo: f64, hi: f64, feature: u64) -> R
         return Err(ThickenError::SelfIntersecting { a, b });
     }
     Ok(out)
-}
-
-/// Whether two walls, each with its sense, are one plane facing the same way.
-fn same_plane((a, sa): (&Surface, bool), (b, sb): (&Surface, bool)) -> bool {
-    let (Surface::Plane(p), Surface::Plane(q)) = (a, b) else {
-        return false;
-    };
-    let (m, n) = (p.frame.z().get(), q.frame.z().get());
-    let (m, n) = (if sa { m } else { -m }, if sb { n } else { -n });
-    m.cross(n).length() <= 1e-12
-        && m.dot(n) > 0.0
-        && m.dot(q.frame.origin - p.frame.origin).abs() <= tol::LINEAR * 1e-2
 }
 
 /// Face `f`'s outward normal at `p` (a point on it).
@@ -350,28 +231,8 @@ fn outward(b: &Body, f: FaceId, p: Point3) -> Option<UnitVec3> {
 /// a cylinder (round a plane's circle) or a cone (round a circle of latitude).
 fn wall(b: &Body, f: FaceId, c: &Curve, range: Interval) -> Option<Surface> {
     let s = &b.face(f).surface;
-    if let Surface::Procedural(p) = s {
-        // a spline's extruded wall: its normals all lie square to the extrusion, so along a
-        // section (a curve at one height) they sweep that height's plane; along a ruling they are
-        // one normal (the line case below). Any other wall built by construction has no rule here
-        let e = p
-            .spline_wall()
-            .then(|| p.as_any())
-            .flatten()?
-            .downcast_ref::<forge_geom::spline::Extruded>()?;
-        if !matches!(c, Curve::Line(_)) {
-            let (o, z) = (e.frame().origin, e.frame().z());
-            let h = |t: f64| z.dot(c.eval(t) - o);
-            let h0 = h(range.mid());
-            if [range.lo, range.hi]
-                .iter()
-                .any(|&t| (h(t) - h0).abs() > 1e-12 * (1.0 + h0.abs()))
-            {
-                return None;
-            }
-            let p = c.eval(range.mid());
-            return Some(Surface::Plane(Plane::new(Frame::from_z(p, z))));
-        }
+    if matches!(s, Surface::Procedural(_)) {
+        return None;
     }
     let at = |t: f64| {
         let p = c.eval(t);
@@ -464,47 +325,10 @@ mod tests {
         let wall = Name::feature(1).with_str("side").with(50);
         let s = thicken(&b, &[wall], 0.0, 1.0, 2).unwrap();
         assert_eq!(s.faces.len(), 4);
-        // the top and a side meet at a right angle on the rim: their walls at the corner's ends are
-        // one plane each (x = 0, x = 20), so the slabs join, mitred: 20 x 10 less the hole, 20 x 8,
-        // and the 20 x 1 corner, each 1 thick
-        let side = Name::feature(1).with_str("side").with(0);
-        let s = thicken(&b, &[top, side], 0.0, 1.0, 2).unwrap();
-        let v = forge_topo::mass::mass(&s).unwrap().volume;
-        assert!((v - (380.0 - 4.0 * dmath::PI)).abs() < 1e-9, "{v}");
-        // with the hole's wall: the crease between them is inside the set, the skins re-met there
-        // (the top's slab outside r = 1, the wall's from r = 1 to 2)
-        let s = thicken(&b, &[top, wall], 0.0, 1.0, 2).unwrap();
-        let v = forge_topo::mass::mass(&s).unwrap().volume;
-        assert!((v - (200.0 - dmath::PI + 24.0 * dmath::PI)).abs() < 1e-9, "{v}");
-        // a crease on the rim whose walls are no one plane: a triangular prism's top and one side,
-        // the walls at their corner two upright planes at the triangle's angle
-        let tri = crate::ProfileLoop::new(vec![
-            (
-                crate::Segment::Line {
-                    a: Point2::new(0.0, 0.0),
-                    b: Point2::new(10.0, 0.0),
-                },
-                0,
-            ),
-            (
-                crate::Segment::Line {
-                    a: Point2::new(10.0, 0.0),
-                    b: Point2::new(3.0, 6.0),
-                },
-                1,
-            ),
-            (
-                crate::Segment::Line {
-                    a: Point2::new(3.0, 6.0),
-                    b: Point2::new(0.0, 0.0),
-                },
-                2,
-            ),
-        ]);
-        let w = plate(vec![tri], 4.0);
+        // the top and a side meet at a right angle on the rim
         let side = Name::feature(1).with_str("side").with(0);
         assert!(matches!(
-            thicken(&w, &[top, side], 0.0, 1.0, 2),
+            thicken(&b, &[top, side], 0.0, 1.0, 2),
             Err(ThickenError::Crease { .. })
         ));
         assert!(matches!(
