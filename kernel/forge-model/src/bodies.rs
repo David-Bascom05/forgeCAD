@@ -303,13 +303,16 @@ fn step_unchecked(
         // starts from the same body, so from the same body finished)
         let tried = match crate::blunted(features, i) {
             None => crate::step_plain_finished(features, i, body, finished),
-            Some(fs) => match crate::step_plain_finished(features, i, body.as_ref().map(Body::clone_roomy), finished) {
-                Err(e) if crate::lost_its_way(&e) => {
-                    crate::step_plain_finished(History::new(&fs, features.ids), i, body, finished)
-                        .map_err(|_| e)
+            Some(fs) => {
+                match crate::step_plain_finished(features, i, body.as_ref().map(Body::clone_roomy), finished)
+                {
+                    Err(e) if crate::lost_its_way(&e) => {
+                        crate::step_plain_finished(History::new(&fs, features.ids), i, body, finished)
+                            .map_err(|_| e)
+                    }
+                    r => r,
                 }
-                r => r,
-            },
+            }
         };
         let one = match tried {
             Err(e) if crate::lost_its_way(&e) => match crate::rebuilt_blunted(features, i) {
