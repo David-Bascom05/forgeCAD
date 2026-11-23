@@ -1,0 +1,15 @@
+machining
+# plate_break.fg: face, clear the outline, bore it out, then break the top's edges 0.3 mm x 45°
+# with a 90° chamfer mill (a declared removal: the part is modelled with sharp edges).
+shared tol = 0.01
+
+f    = part("plate_break.fg", group: "N")
+m    = machine("generic-vmc3")
+t1   = tool("flat-6", t: 1, stickout: 30, holder: "bt40-er32")
+t7   = tool("chamfer-10-90", t: 7, stickout: 25, holder: "bt40-er32")
+op1  = setup(f, machine: m, stock: box(margin: (3, 3, 1)), origin: "top-corner", tol: tol, at: (-20, -20, -250))
+skim = facing(op1, tool: t1, to: 8, step: 1)
+side = clear(op1, tool: t1, from: 8, to: -0.5, step: 2, stepover: 2.4)
+bore = pocket(op1, f.bore, tool: t1, step: 2, stepover: 2.4, ramp: 3)
+brk  = edge_break(op1, tool: t7, size: 0.3)
+prog = program(op1, post: "fanuc", number: 3002)
