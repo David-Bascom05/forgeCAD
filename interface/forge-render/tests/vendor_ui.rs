@@ -67,14 +67,24 @@ fn open(text: &str, tag: &str) -> Option<Headless> {
 }
 
 fn shot(h: &mut Headless, name: &str) {
-    let Ok(dir) = std::env::var("SHEET_SHOTS") else {
+    let sheet = std::env::var("SHEET_SHOTS").ok();
+    let ui = std::env::var("FORGE_UI_SHOTS").ok();
+    if sheet.is_none() && ui.is_none() {
         return;
-    };
+    }
     for _ in 0..30 {
         h.step();
         std::thread::sleep(std::time::Duration::from_millis(15));
     }
-    std::fs::write(format!("{dir}/vendor-{name}.ppm"), h.ppm()).unwrap();
+    if let Some(dir) = sheet {
+        std::fs::write(format!("{dir}/vendor-{name}.ppm"), h.ppm()).unwrap();
+    }
+    if let Some(dir) = ui
+        && let Ok(png) = h.png()
+    {
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(format!("{dir}/vendor-{name}.png"), png).unwrap();
+    }
 }
 
 #[test]
@@ -94,11 +104,19 @@ fn the_dfm_panel_lists_lights_and_marks_a_violation() {
         .iter()
         .position(|i| i.rule == "HoleNearBend")
         .expect("the hole near the bend");
-    shot(&mut h, "dfm");
-    // chosen: its faces lit, apart from the build's own tints
-    let before = h.gui.fg_flag_colours();
-    h.gui.shell.sheet.vendor.chosen = Some((0, k));
+    let k = s
+        .all()
+        .iter()
+        .position(|i| std::ptr::eq(*i, &s.items[k]))
+        .expect("listed");
     h.step();
+    assert!(h.gui.shell.place("sheet:dfm:close").is_some(), "no close box");
+    shot(&mut h, "dfm");
+    // chosen by a click on its row: its faces lit, apart from the build's own tints
+    let before = h.gui.fg_flag_colours();
+    assert!(h.click(&format!("sheet:dfm:0:{k}")), "no row {k}");
+    h.step();
+    assert_eq!(h.gui.shell.sheet.vendor.chosen, Some((0, k)));
     let lit: Vec<u32> = h
         .gui
         .fg_flag_colours()
@@ -121,6 +139,10 @@ fn the_dfm_panel_lists_lights_and_marks_a_violation() {
     shot(&mut h, "dfm-flat");
     assert!(h.click("tool:Go to Folded Part"));
     h.step();
+    // a second click on the row lets it go
+    assert!(h.click(&format!("sheet:dfm:0:{k}")));
+    h.step();
+    assert_eq!(h.gui.shell.sheet.vendor.chosen, None);
     // moved clear of the bend, the next check finds nothing there
     let fixed = PART.replace("param hs.x = 75", "param hs.x = 40");
     let path = h.gui.fg.as_ref().unwrap().path.clone().unwrap();
@@ -143,6 +165,11 @@ fn the_vendor_window_writes_the_choice_into_the_sheet() {
     h.step();
     h.step();
     assert!(h.gui.shell.sheet.vendor.open);
+    h.step();
+    assert!(
+        h.gui.shell.place("sheet:vendorwin:close").is_some(),
+        "no close box"
+    );
     shot(&mut h, "window");
     let fg = h.gui.shell.fg.as_ref().unwrap();
     let ops =
@@ -163,4 +190,8 @@ fn the_vendor_window_writes_the_choice_into_the_sheet() {
     let run = forge_lang::run(&src, forge_lang::Options::default(), Default::default()).0;
     // the part's own r and bend stay as written: they win over the vendor's
     assert!(run.errors.is_empty(), "{:?}\n{src}", run.errors);
+    // closed by its box
+    assert!(h.click("sheet:vendorwin:close"));
+    h.step();
+    assert!(!h.gui.shell.sheet.vendor.open);
 }

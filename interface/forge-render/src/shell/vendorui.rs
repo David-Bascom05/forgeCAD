@@ -9,6 +9,7 @@
 
 use super::Shell;
 use super::fg::{FgPanel, From};
+use super::placed::Placed;
 use super::sheet::SheetAct;
 use super::theme::{medium, mono, sans, semi};
 use egui::{Color32, Ui, pos2, vec2};
@@ -319,6 +320,91 @@ impl VendorUi {
     }
 }
 
+/// A profile's `source`: links split at ` ; `, a bare `/path` the one before it with its last
+/// part replaced (`.../materials/sheet/aluminum ; /steel`).
+pub fn sources(s: &str) -> Vec<String> {
+    let mut out: Vec<String> = vec![];
+    for part in s.split(';').map(str::trim).filter(|x| !x.is_empty()) {
+        if let Some(rest) = part.strip_prefix('/')
+            && let Some(prev) = out.last()
+        {
+            let base = prev.trim_end_matches('/');
+            let cut = base
+                .rfind('/')
+                .filter(|&k| k > base.find("//").map_or(0, |d| d + 1));
+            match cut {
+                Some(k) => out.push(format!("{}/{rest}", &base[..k])),
+                None => out.push(format!("{base}/{rest}")),
+            }
+        } else {
+            out.push(part.to_string());
+        }
+    }
+    out
+}
+
+/// A link as read: no scheme, no `www.`, no trailing `/`.
+fn link_label(url: &str) -> &str {
+    let u = url.split_once("://").map_or(url, |x| x.1);
+    let u = u.strip_prefix("www.").unwrap_or(u);
+    u.trim_end_matches('/')
+}
+
+/// A rule's code in words: `HoleNearBend` is "Hole near bend".
+pub fn rule_words(code: &str) -> String {
+    let mut out = String::new();
+    for (k, c) in code.chars().enumerate() {
+        if k > 0 && c.is_ascii_uppercase() {
+            out.push(' ');
+            out.push(c.to_ascii_lowercase());
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
+/// A number as a shop reads it: to 0.01, no trailing zeros.
+pub fn round2(x: f64) -> String {
+    let s = format!("{:.2}", x);
+    let s = s.trim_end_matches('0').trim_end_matches('.');
+    if s == "-0" { "0".into() } else { s.to_string() }
+}
+
+/// A message's long decimals (more than two places) rounded as `round2` does.
+pub fn rounded_text(s: &str) -> String {
+    let b = s.as_bytes();
+    let mut out = String::with_capacity(s.len());
+    let mut k = 0;
+    while k < b.len() {
+        let start = k;
+        if b[k].is_ascii_digit() && (k == 0 || !(b[k - 1].is_ascii_alphanumeric() || b[k - 1] == b'_')) {
+            while k < b.len() && b[k].is_ascii_digit() {
+                k += 1;
+            }
+            if k + 1 < b.len() && b[k] == b'.' && b[k + 1].is_ascii_digit() {
+                let dot = k;
+                k += 1;
+                while k < b.len() && b[k].is_ascii_digit() {
+                    k += 1;
+                }
+                if k - dot - 1 > 2
+                    && let Ok(x) = s[start..k].parse::<f64>()
+                {
+                    out.push_str(&round2(x));
+                    continue;
+                }
+            }
+            out.push_str(&s[start..k]);
+            continue;
+        }
+        let ch = s[k..].chars().next().unwrap_or(' ');
+        out.push(ch);
+        k += ch.len_utf8();
+    }
+    out
+}
+
 fn small(t: &super::theme::Theme, s: impl Into<String>) -> egui::RichText {
     egui::RichText::new(s).font(sans(11.0)).color(t.ink2)
 }
@@ -354,6 +440,7 @@ impl Shell {
         }
         let mut close = false;
         let mut todo: Option<Later> = None;
+        let mut places: super::placed::Places = vec![];
         egui::Window::new("Sheet Metal Vendor")
             .id(egui::Id::unique("sheet-vendor"))
             .title_bar(false)
@@ -363,19 +450,15 @@ impl Shell {
             .default_width(560.0)
             .frame(super::fgasm::dialog_frame(&t))
             .constrain_to(super::dialog_area(ctx))
-            .show(ctx, |ui| {
-                ui.horizontal(|ui| {
-                    ui.label(
-                        egui::RichText::new("Sheet Metal Vendor")
-                            .font(semi(13.0))
-                            .color(t.ink),
-                    );
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.button("Close").clicked() {
-                            close = true;
-                        }
-                    });
-                });
+            .show_placed(ctx, &mut places, |ui, places| {
+                close = super::fgasm::dialog_head(
+                    ui,
+                    &t,
+                    "folder",
+                    "Sheet Metal Vendor",
+                    "sheet:vendorwin",
+                    places,
+                );
                 if let Some(c) = &current {
                     ui.label(small(&t, format!("This part: {c}")));
                 }
@@ -423,7 +506,18 @@ impl Shell {
                         let vd = &e.vendor;
                         ui.label(egui::RichText::new(&vd.name).font(semi(12.0)).color(t.ink));
                         if let Some(s) = &vd.source {
-                            ui.add(egui::Label::new(small(&t, format!("Source: {s}"))).wrap());
+                            let links = sources(s);
+                            ui.label(small(&t, if links.len() == 1 { "Source" } else { "Sources" }));
+                            for url in &links {
+                                ui.add(egui::Hyperlink::from_label_and_url(
+                                    egui::RichText::new(link_label(url))
+                                        .font(super::theme::caption())
+                                        .color(t.accent)
+                                        .underline(),
+                                    url,
+                                ))
+                                .on_hover_text(url);
+                            }
                         }
                         ui.label(small(
                             &t,
@@ -445,41 +539,54 @@ impl Shell {
                             .clone()
                             .filter(|m| names.contains(m))
                             .or_else(|| names.first().cloned());
-                        egui::ComboBox::from_label("Material")
-                            .selected_text(mat.clone().unwrap_or_default())
-                            .show_ui(ui, |ui| {
-                                for n in &names {
-                                    if ui.selectable_label(mat.as_deref() == Some(n), n).clicked() {
-                                        ui_state.material = Some(n.clone());
-                                        ui_state.thickness = None;
+                        let fields = egui::Grid::new("vendor-fields")
+                            .num_columns(2)
+                            .spacing(vec2(super::theme::S2, super::theme::S1))
+                            .show(ui, |ui| {
+                                ui.label(small(&t, "Material"));
+                                egui::ComboBox::from_id_salt("vendor-material")
+                                    .width(240.0)
+                                    .selected_text(mat.clone().unwrap_or_default())
+                                    .show_ui(ui, |ui| {
+                                        for n in &names {
+                                            if ui.selectable_label(mat.as_deref() == Some(n), n).clicked() {
+                                                ui_state.material = Some(n.clone());
+                                                ui_state.thickness = None;
+                                            }
+                                        }
+                                    });
+                                let m = mat.as_deref().and_then(|n| vd.material(n));
+                                let ts = m.map(|m| vd.thicknesses(m)).unwrap_or_default();
+                                let shop = m.map(|m| vd.shop(m));
+                                let label_of = |x: &(f64, Option<String>)| {
+                                    let inch = x.0 / 25.4;
+                                    match &x.1 {
+                                        Some(g) => format!("{:.3} mm  ({:.3} in, {g})", x.0, inch),
+                                        None => format!("{:.3} mm  ({:.3} in)", x.0, inch),
                                     }
-                                }
+                                };
+                                ui.end_row();
+                                let th = ui_state.thickness.or_else(|| ts.first().map(|x| x.0));
+                                ui.label(small(&t, "Thickness"));
+                                egui::ComboBox::from_id_salt("vendor-thickness")
+                                    .width(240.0)
+                                    .selected_text(
+                                        ts.iter()
+                                            .find(|x| Some(x.0) == th)
+                                            .map(label_of)
+                                            .unwrap_or_default(),
+                                    )
+                                    .show_ui(ui, |ui| {
+                                        for x in &ts {
+                                            if ui.selectable_label(Some(x.0) == th, label_of(x)).clicked() {
+                                                ui_state.thickness = Some(x.0);
+                                            }
+                                        }
+                                    });
+                                ui.end_row();
+                                (shop, th)
                             });
-                        let m = mat.as_deref().and_then(|n| vd.material(n));
-                        let ts = m.map(|m| vd.thicknesses(m)).unwrap_or_default();
-                        let shop = m.map(|m| vd.shop(m));
-                        let label_of = |x: &(f64, Option<String>)| {
-                            let inch = x.0 / 25.4;
-                            match &x.1 {
-                                Some(g) => format!("{:.3} mm  ({:.3} in, {g})", x.0, inch),
-                                None => format!("{:.3} mm  ({:.3} in)", x.0, inch),
-                            }
-                        };
-                        let th = ui_state.thickness.or_else(|| ts.first().map(|x| x.0));
-                        egui::ComboBox::from_label("Thickness")
-                            .selected_text(
-                                ts.iter()
-                                    .find(|x| Some(x.0) == th)
-                                    .map(label_of)
-                                    .unwrap_or_default(),
-                            )
-                            .show_ui(ui, |ui| {
-                                for x in &ts {
-                                    if ui.selectable_label(Some(x.0) == th, label_of(x)).clicked() {
-                                        ui_state.thickness = Some(x.0);
-                                    }
-                                }
-                            });
+                        let (shop, th) = fields.inner;
                         if let (Some(shop), Some(th)) = (&shop, th)
                             && let Some(s) = shop.stock(th)
                         {
@@ -622,6 +729,7 @@ impl Shell {
         if close {
             self.sheet.vendor.open = false;
         }
+        self.places.extend(places);
         self.sheet.out.extend(out);
     }
 
@@ -633,152 +741,234 @@ impl Shell {
         let v = self.view_rect;
         let u = &mut self.sheet.vendor;
         let mut close = false;
+        let mut places: super::placed::Places = vec![];
         egui::Window::new("Design for Manufacture")
             .id(egui::Id::unique("sheet-dfm"))
             .title_bar(false)
             .collapsible(false)
             .resizable(false)
-            .default_pos(pos2(v.right() - 520.0, v.top() + 48.0))
-            .default_width(500.0)
+            .default_pos(pos2(v.right() - 500.0, v.top() + 48.0))
+            .min_width(460.0)
+            .max_width(460.0)
             .frame(super::fgasm::dialog_frame(&t))
             .constrain_to(super::dialog_area(ctx))
-            .show(ctx, |ui| {
+            .show_placed(ctx, &mut places, |ui, places| {
+                close =
+                    super::fgasm::dialog_head(ui, &t, "check", "Design for Manufacture", "sheet:dfm", places);
                 ui.horizontal(|ui| {
-                    ui.label(
-                        egui::RichText::new("Design for Manufacture")
-                            .font(semi(13.0))
-                            .color(t.ink),
-                    );
+                    let r = ui.button(egui::RichText::new("Check again").font(sans(12.0)));
+                    places.push(("sheet:dfm:again".into(), r.rect));
+                    if r.clicked() {
+                        u.checked = None;
+                    }
                     if u.running.is_some() {
                         ui.spinner();
+                        ui.label(small(&t, "Checking…"));
                     }
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.button("Close").clicked() {
-                            close = true;
-                        }
-                        if ui.button("Check again").clicked() {
-                            u.checked = None;
-                        }
-                    });
                 });
                 let Some(r) = u.report.clone() else {
-                    ui.label(small(&t, "Checking…"));
                     return;
                 };
+                ui.add_space(super::theme::S1);
                 for it in &r.refused {
-                    ui.label(
-                        egui::RichText::new(format!("Refused, line {}: {}: {}", it.line, it.rule, it.text))
-                            .font(sans(12.0))
-                            .color(t.error),
+                    pill_row(
+                        ui,
+                        &t,
+                        "Refused",
+                        t.error,
+                        &rule_words(&it.rule),
+                        &format!("line {}", it.line),
                     );
+                    ui.label(
+                        egui::RichText::new(rounded_text(&it.text))
+                            .font(sans(12.0))
+                            .color(t.ink),
+                    );
+                    ui.add_space(super::theme::S2);
                 }
-                egui::ScrollArea::vertical().max_height(420.0).show(ui, |ui| {
-                    for (si, s) in r.sheets.iter().enumerate() {
-                        let head = match &s.vendor {
-                            Some(vt) => format!(
-                                "{}: {} {}, {:.3} mm (data of {})",
-                                s.sheet,
-                                vt.name,
-                                vt.material,
-                                s.thickness,
-                                vt.taken.as_deref().unwrap_or("undated")
-                            ),
-                            None if s.checked => format!("{}: the part's own shop", s.sheet),
-                            None => format!("{}: no vendor or shop: choose a vendor to check", s.sheet),
-                        };
-                        ui.label(egui::RichText::new(head).font(semi(12.0)).color(t.ink));
-                        if s.vendor.is_some() {
-                            ui.label(
-                                egui::RichText::new(forge_vendor::VERIFY)
-                                    .font(medium(11.0))
-                                    .color(t.focus),
-                            );
+                egui::ScrollArea::vertical()
+                    .auto_shrink([false, true])
+                    .max_height((v.height() * 0.6).max(200.0))
+                    .show(ui, |ui| {
+                        for (si, s) in r.sheets.iter().enumerate() {
+                            dfm_sheet(ui, &t, u, si, s, places);
                         }
-                        let count = s
-                            .all()
-                            .iter()
-                            .filter(|i| i.severity == "violation" || i.severity == "refused")
-                            .count();
-                        if let Some(b) = &s.brake {
-                            ui.label(small(
-                                &t,
-                                if b.feasible {
-                                    format!("Press brake: bends in order {}", b.sequence.join(", "))
-                                } else {
-                                    "Press brake: no bend order works with this tooling".to_string()
-                                },
-                            ));
-                        }
-                        ui.label(small(
-                            &t,
-                            if count == 0 {
-                                "No violations".to_string()
-                            } else {
-                                format!("{count} to fix")
-                            },
-                        ));
-                        egui::Grid::new(("dfm-grid", si))
-                            .striped(true)
-                            .spacing(vec2(10.0, 3.0))
-                            .show(ui, |ui| {
-                                for h in ["Rule", "Feature", "Measured", "Limit", ""] {
-                                    ui.label(egui::RichText::new(h).font(medium(11.0)).color(t.ink2));
-                                }
-                                ui.end_row();
-                                for (ii, it) in s.all().into_iter().enumerate() {
-                                    let on = u.chosen == Some((si, ii));
-                                    let colour = if it.severity == "violation" {
-                                        t.error
-                                    } else {
-                                        t.ink2
-                                    };
-                                    if ui
-                                        .selectable_label(
-                                            on,
-                                            egui::RichText::new(&it.rule).font(sans(12.0)).color(colour),
-                                        )
-                                        .on_hover_text(&it.text)
-                                        .clicked()
-                                    {
-                                        u.chosen = if on { None } else { Some((si, ii)) };
-                                    }
-                                    ui.label(
-                                        egui::RichText::new(format!("{} (line {})", it.feature, it.line))
-                                            .font(sans(11.0))
-                                            .color(t.ink),
-                                    );
-                                    let n = |x: Option<f64>| {
-                                        x.map_or("-".to_string(), |v| format!("{v:.3} {}", it.unit))
-                                    };
-                                    ui.label(
-                                        egui::RichText::new(n(it.measured)).font(mono(11.0)).color(t.ink),
-                                    );
-                                    ui.label(egui::RichText::new(n(it.limit)).font(mono(11.0)).color(t.ink));
-                                    ui.label(small(
-                                        &t,
-                                        if it.fixes.is_empty() { "" } else { "fix in Issues" },
-                                    ));
-                                    ui.end_row();
-                                }
-                            });
-                        if let Some((cs, ci)) = u.chosen
-                            && cs == si
-                            && let Some(it) = s.all().get(ci).copied()
-                        {
-                            ui.add(
-                                egui::Label::new(egui::RichText::new(&it.text).font(sans(12.0)).color(t.ink))
-                                    .wrap(),
-                            );
-                        }
-                        ui.add_space(6.0);
-                    }
-                });
+                    });
             });
+        self.places.extend(places);
         if close {
             u.dfm_open = false;
             u.chosen = None;
         }
     }
+}
+
+/// A severity in words and colour, as the Issues window has it.
+fn severity(t: &super::theme::Theme, s: &str) -> (&'static str, Color32) {
+    match s {
+        "violation" => ("Violation", t.error),
+        "refused" => ("Refused", t.error),
+        "warning" => ("Warning", super::fg::WARN),
+        _ => ("Info", t.ink2),
+    }
+}
+
+/// An Issues-style head: the severity's pill, then what it is, then where in secondary ink.
+fn pill_row(
+    ui: &mut Ui,
+    t: &super::theme::Theme,
+    word: &str,
+    colour: Color32,
+    what: &str,
+    at: &str,
+) -> egui::Response {
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = super::theme::S2;
+        egui::Frame::new()
+            .fill(colour.gamma_multiply(0.16))
+            .corner_radius(super::theme::R1)
+            .inner_margin(egui::Margin::symmetric(6, 1))
+            .show(ui, |ui| {
+                ui.label(egui::RichText::new(word).font(medium(11.0)).color(colour));
+            });
+        ui.label(egui::RichText::new(what).font(medium(12.0)).color(t.ink));
+        ui.label(
+            egui::RichText::new(at)
+                .font(super::theme::caption())
+                .color(t.ink2),
+        );
+    })
+    .response
+}
+
+/// One sheet's part of the DFM panel: its vendor, its brake, then a row per finding, each chosen
+/// by a click (lit on the model and the flat).
+fn dfm_sheet(
+    ui: &mut Ui,
+    t: &super::theme::Theme,
+    u: &mut VendorUi,
+    si: usize,
+    s: &forge_lang::dfm::SheetReport,
+    places: &mut super::placed::Places,
+) {
+    let head = match &s.vendor {
+        Some(vt) => format!(
+            "{} · {} {}, {} mm",
+            s.sheet,
+            vt.name,
+            vt.material,
+            round2(s.thickness)
+        ),
+        None if s.checked => format!("{} · the part's own shop", s.sheet),
+        None => format!("{} · no vendor or shop: choose a vendor to check", s.sheet),
+    };
+    ui.label(egui::RichText::new(head).font(super::theme::title()).color(t.ink));
+    if let Some(vt) = &s.vendor {
+        ui.label(small(
+            t,
+            format!("Data of {}", vt.taken.as_deref().unwrap_or("undated")),
+        ));
+        ui.label(
+            egui::RichText::new(forge_vendor::VERIFY)
+                .font(medium(11.0))
+                .color(t.focus),
+        );
+    }
+    if let Some(b) = &s.brake {
+        ui.label(small(
+            t,
+            if b.feasible {
+                format!("Press brake: bends in order {}", b.sequence.join(", "))
+            } else {
+                "Press brake: no bend order works with this tooling".to_string()
+            },
+        ));
+    }
+    let all = s.all();
+    let count = all
+        .iter()
+        .filter(|i| i.severity == "violation" || i.severity == "refused")
+        .count();
+    let (summary, ink) = if count == 0 {
+        ("No violations".to_string(), t.success)
+    } else if count == 1 {
+        ("1 to fix".to_string(), t.error)
+    } else {
+        (format!("{count} to fix"), t.error)
+    };
+    ui.label(egui::RichText::new(summary).font(medium(12.0)).color(ink));
+    for (ii, it) in all.into_iter().enumerate() {
+        ui.add_space(super::theme::S1);
+        ui.separator();
+        let on = u.chosen == Some((si, ii));
+        let (word, colour) = severity(t, &it.severity);
+        let row = egui::Frame::new()
+            .fill(if on {
+                t.accent.gamma_multiply(0.22)
+            } else {
+                Color32::TRANSPARENT
+            })
+            .corner_radius(super::theme::R1)
+            .inner_margin(egui::Margin::symmetric(4, 3))
+            .show(ui, |ui| {
+                ui.set_width(ui.available_width());
+                pill_row(
+                    ui,
+                    t,
+                    word,
+                    colour,
+                    &rule_words(&it.rule),
+                    &format!("{} · line {} · {}", it.feature, it.line, it.rule),
+                );
+                ui.add(
+                    egui::Label::new(
+                        egui::RichText::new(rounded_text(&it.text))
+                            .font(sans(12.0))
+                            .color(t.ink),
+                    )
+                    .wrap(),
+                );
+                if let (Some(m), Some(l)) = (it.measured, it.limit) {
+                    let bound = match it.sense {
+                        Some("min") => "at least ",
+                        Some("max") => "at most ",
+                        _ => "",
+                    };
+                    ui.label(
+                        egui::RichText::new(format!(
+                            "Measured {} {u} · limit {bound}{} {u}",
+                            round2(m),
+                            round2(l),
+                            u = it.unit
+                        ))
+                        .font(super::theme::code())
+                        .color(t.ink2),
+                    );
+                }
+                if !it.fixes.is_empty() {
+                    ui.label(small(t, "Fixes in the Issues window"));
+                }
+            })
+            .response;
+        let r = ui.interact(
+            row.rect,
+            ui.scope_id().with(("dfm-row", si, ii)),
+            egui::Sense::click(),
+        );
+        places.push((format!("sheet:dfm:{si}:{ii}"), row.rect));
+        if r.hovered() && !on {
+            ui.painter().rect_stroke(
+                row.rect,
+                super::theme::R1,
+                egui::Stroke::new(1.0, t.line),
+                egui::StrokeKind::Inside,
+            );
+        }
+        if r.on_hover_text("Light it on the model and the flat").clicked() {
+            u.chosen = if on { None } else { Some((si, ii)) };
+        }
+    }
+    ui.add_space(super::theme::S4);
 }
 
 /// The editor of a user's profile: its facts, its operations, a material's stocks as a table,
@@ -947,4 +1137,39 @@ fn edit_ui(ui: &mut Ui, t: &super::theme::Theme, ed: &mut Edit, saved: &mut bool
             *drop_edit = true;
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_sources_bare_paths_take_the_link_before() {
+        let s = "https://www.fabworks.com/resources/guidelines/bending ; https://www.fabworks.com/resources/materials/sheet/aluminum ; /steel ; /stainless-steel";
+        assert_eq!(
+            sources(s),
+            [
+                "https://www.fabworks.com/resources/guidelines/bending",
+                "https://www.fabworks.com/resources/materials/sheet/aluminum",
+                "https://www.fabworks.com/resources/materials/sheet/steel",
+                "https://www.fabworks.com/resources/materials/sheet/stainless-steel",
+            ]
+        );
+        assert_eq!(
+            link_label("https://sendcutsend.com/guidelines/"),
+            "sendcutsend.com/guidelines"
+        );
+        assert_eq!(sources("a book, p. 3"), ["a book, p. 3"]);
+    }
+
+    #[test]
+    fn numbers_read_as_a_shop_gives_them() {
+        assert_eq!(
+            rounded_text("the hole is 1.736872506509 from the bend, at least 2.5 (t0.063, 5052)"),
+            "the hole is 1.74 from the bend, at least 2.5 (t0.063, 5052)"
+        );
+        assert_eq!(round2(3.0), "3");
+        assert_eq!(round2(1.6002), "1.6");
+        assert_eq!(rule_words("HoleNearBend"), "Hole near bend");
+    }
 }
