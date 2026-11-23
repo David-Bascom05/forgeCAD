@@ -1,7 +1,7 @@
 //! `sweep-diff`: every extrude of every repo part, and random ones, against its definition
 //! (forge_exact_fuzz::sweep; research/sweep-spec/DESIGN.md §4.1).
 //!
-//! usage: sweep-diff [--seeds N] [--tapers N] [--from S] [--no-repo] [--digest PATH] [--check PATH] [--verbose]
+//! usage: sweep-diff [--seeds N] [--tapers N] [--lofts N] [--from S] [--no-repo] [--digest PATH] [--check PATH] [--verbose]
 //!   --digest PATH   write each case's verdict, sorted, to PATH
 //!   --check PATH    compare with PATH; exit 1 on any difference
 //! Exits 2 when any case is `differ`, `built_invalid`, `refused_valid` or `selfcheck`.
@@ -200,6 +200,39 @@ fn random_taper(seed: u64) -> Vec<Feature> {
     }]
 }
 
+/// A random ruled loft: a star polygon to its copy scaled by `lambda` on a parallel plane moved by
+/// a random offset (rising along the normal). The kernel's tool and the reference's input line.
+fn random_loft(seed: u64) -> Result<String, String> {
+    let mut rng = Rng(seed.wrapping_mul(0xA24B_AED4_963E_E407) | 1);
+    let n = 3 + rng.below(8) as usize;
+    let pts = star(&mut rng, n, Point2::new(0.0, 0.0), 3.0, 9.0);
+    let lambda = rng.range(0.2, 2.5);
+    let origin = Point3::new(rng.range(-5.0, 5.0), rng.range(-5.0, 5.0), rng.range(-5.0, 5.0));
+    let z = Vec3::new(rng.range(-1.0, 1.0), rng.range(-1.0, 1.0), rng.range(0.2, 1.0))
+        .normalize()
+        .expect("a direction");
+    let plane = Frame::from_z(origin, z);
+    let rise = rng.range(0.5, 20.0);
+    let t = z.get() * rise + plane.x() * rng.range(-5.0, 5.0) + plane.y() * rng.range(-5.0, 5.0);
+    let p0 = Profile { plane, loops: vec![lines(&pts, 1)] };
+    let scaled: Vec<Point2> = pts.iter().map(|p| Point2::new(p.x * lambda, p.y * lambda)).collect();
+    let p1 = Profile { plane: plane.with_origin(origin + t), loops: vec![lines(&scaled, 1)] };
+    let tool = guarded(|| {
+        forge_ops::loft(&[p0, p1], forge_ops::LoftKind::Ruled, &forge_ops::LoftGuides::None, 1)
+            .map_err(|e| format!("{e:?}"))
+    });
+    let kernel = match &tool {
+        Ok(b) => Ok(b),
+        Err(e) => Err(e.as_str()),
+    };
+    let base = forge_exact_fuzz::sweep::prism_line(&plane, t, false, 0.0, 1.0, &[pts], kernel)?;
+    Ok(base.replacen(
+        "\"kind\":\"prism\"",
+        &format!("\"kind\":\"loft\",\"lambda\":{}", forge_exact_fuzz::exact(lambda)),
+        1,
+    ))
+}
+
 fn repo_parts(root: &std::path::Path) -> Vec<std::path::PathBuf> {
     let mut out = Vec::new();
     let mut stack = vec![root.to_path_buf()];
@@ -328,6 +361,11 @@ fn main() {
         if let Some(line) = feature_line(&features, 0) {
             ask(format!("taper/{seed:05}"), line, &mut verdicts);
         }
+    }
+
+    let lofts: u64 = opt("--lofts").and_then(|s| s.parse().ok()).unwrap_or(100);
+    for seed in from..from + lofts {
+        ask(format!("loft/{seed:05}"), random_loft(seed), &mut verdicts);
     }
 
     let mut counts: BTreeMap<String, usize> = BTreeMap::new();

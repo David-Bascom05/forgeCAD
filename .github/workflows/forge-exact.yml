@@ -51,8 +51,9 @@ jobs:
         run: cargo test --release --locked -p forge-exact-fuzz --features reference
       - name: the swept solids against their definitions (research/sweep-spec)
         run: |
-          # every extrude of every repo part, 200 random extrudes and 300 random tapers, each
+          # every extrude of every repo part, 200 random extrudes, 300 random tapers and 100 ruled
+          # lofts, each
           # judged by sweep-ref (built by `lake build` above) against its exact definition
           cargo run --release --locked -p forge-exact-fuzz --bin sweep-diff -- \
-            --seeds 200 --tapers 300 --digest verify/forge-exact/fuzz/tests/sweep-diff.digest
+            --seeds 200 --tapers 300 --lofts 100 --digest verify/forge-exact/fuzz/tests/sweep-diff.digest
           git diff --exit-code verify/forge-exact/fuzz/tests/sweep-diff.digest

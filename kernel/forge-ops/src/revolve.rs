@@ -85,15 +85,16 @@ fn build(
             }
         }
     }
-    let mut side = 0.0f64;
+    // the profile's reach either side of the axis, exactly for lines, arcs and circles
+    let (mut lo, mut hi) = (0.0f64, 0.0f64);
     for l in &profile.loops {
         for (s, _) in &l.segments {
-            for p in s.side_samples() {
-                let r = (p - axis.origin).dot(perp2);
-                side = if r.abs() > side.abs() { r } else { side };
-            }
+            let (a, b) = s.reach(axis.origin, perp2);
+            lo = lo.min(a);
+            hi = hi.max(b);
         }
     }
+    let side = if hi >= -lo { hi } else { lo };
     if side.abs() <= tol::LINEAR {
         return Err(RevolveError::CrossesAxis);
     }
@@ -130,14 +131,9 @@ fn build(
     {
         b.angles = vec![0.0];
     }
-    for l in &profile.loops {
-        for (s, _) in &l.segments {
-            for p in s.side_samples() {
-                if (p - axis.origin).dot(perp2) * side < -tol::LINEAR {
-                    return Err(RevolveError::CrossesAxis);
-                }
-            }
-        }
+    // across the axis by more than LINEAR anywhere: the reach on the far side, exact
+    if (if side > 0.0 { -lo } else { hi }) > tol::LINEAR {
+        return Err(RevolveError::CrossesAxis);
     }
     b.build()
 }
@@ -681,6 +677,43 @@ mod tests {
         valid(&b);
         assert_eq!(genus(&b), 0);
         assert_eq!((b.vertices.len(), b.edges.len(), b.faces.len()), (2, 2, 2));
+    }
+
+    /// An arc bulging 3e-5 across the axis (past LINEAR) exactly between two of 32 samples: the
+    /// samples stay 1e-3 clear of it, the exact reach does not (research/sweep-spec §3.1).
+    #[test]
+    fn an_arc_dipping_across_the_axis_between_samples_is_refused() {
+        let (r, sweep) = (10.0, 1.0);
+        let start = dmath::PI - 15.5 / 32.0 * sweep;
+        let center = Point2::new(r - 3e-5, 0.0);
+        let arc = Segment::Arc {
+            center,
+            radius: r,
+            start,
+            sweep,
+        };
+        let (p0, p1) = (arc.start(), arc.end());
+        assert!(arc.side_samples().iter().all(|p| p.x > 1e-3));
+        let lp = ProfileLoop::new(vec![(arc, 0), (Segment::Line { a: p1, b: p0 }, 1)]);
+        for angle in [dmath::TAU, 1.0] {
+            assert_eq!(
+                revolve(&profile(vec![lp.clone()]), Y_AXIS, angle, 1).err(),
+                Some(RevolveError::CrossesAxis)
+            );
+        }
+        // 3e-6 across, within LINEAR: on the axis, as before
+        let arc = Segment::Arc {
+            center: Point2::new(r - 3e-6, 0.0),
+            radius: r,
+            start,
+            sweep,
+        };
+        let (q0, q1) = (arc.start(), arc.end());
+        let lp = ProfileLoop::new(vec![(arc, 0), (Segment::Line { a: q1, b: q0 }, 1)]);
+        assert_ne!(
+            revolve(&profile(vec![lp]), Y_AXIS, 1.0, 1).err(),
+            Some(RevolveError::CrossesAxis)
+        );
     }
 
     #[test]

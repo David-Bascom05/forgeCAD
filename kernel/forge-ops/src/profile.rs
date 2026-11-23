@@ -407,6 +407,54 @@ impl Segment {
         }
     }
     /// Points telling which side of a line the segment lies on: a line's ends do.
+    /// The least and greatest of `(p - origin) · dir` over the segment, exactly for lines, arcs
+    /// and circles: the ends, and where an arc passes the directions `±dir` from its centre
+    /// (research/sweep-spec/DESIGN.md §3.1). A spline's from its samples (`side_samples`): its
+    /// exact test is the spun surface's root check.
+    pub fn reach(&self, origin: Point2, dir: Vec2) -> (f64, f64) {
+        let at = |p: Point2| (p - origin).dot(dir);
+        match *self {
+            Segment::Line { a, b } => {
+                let (x, y) = (at(a), at(b));
+                (x.min(y), x.max(y))
+            }
+            Segment::Circle { center, radius, .. } => {
+                let c = at(center);
+                let r = radius * dir.length();
+                (c - r, c + r)
+            }
+            Segment::Arc {
+                center,
+                radius,
+                start,
+                sweep,
+            } => {
+                let (x, y) = (
+                    at(arc_point(center, radius, start)),
+                    at(arc_point(center, radius, start + sweep)),
+                );
+                let (mut lo, mut hi) = (x.min(y), x.max(y));
+                let (a, b) = (start.min(start + sweep), start.max(start + sweep));
+                let c = at(center);
+                let r = radius * dir.length();
+                let up = dmath::atan2(dir.y, dir.x);
+                for (angle, v) in [(up, c + r), (up + dmath::PI, c - r)] {
+                    if angle + ((a - angle) / dmath::TAU).ceil() * dmath::TAU <= b {
+                        lo = lo.min(v);
+                        hi = hi.max(v);
+                    }
+                }
+                (lo, hi)
+            }
+            Segment::Spline(_) => self
+                .side_samples()
+                .into_iter()
+                .fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), p| {
+                    (lo.min(at(p)), hi.max(at(p)))
+                }),
+        }
+    }
+
     pub fn side_samples(&self) -> Vec<Point2> {
         match *self {
             Segment::Line { a, b } => vec![a, b],

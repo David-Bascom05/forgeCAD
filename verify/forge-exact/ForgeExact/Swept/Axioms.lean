@@ -1,6 +1,9 @@
 import ForgeExact.Axioms
 import ForgeExact.Swept.Prism
 import ForgeExact.Swept.Taper
+import ForgeExact.Swept.Rev
+import ForgeExact.Swept.Screw
+import ForgeExact.Swept.Loft
 
 /-!
 # The swept solids rest on the standard axioms only
@@ -21,3 +24,9 @@ the build fails on `sorryAx` or any axiom past propext, Classical.choice and Quo
   ForgeExact.Swept.Taper.edge_length
   ForgeExact.Swept.Taper.contact_distance
   ForgeExact.Swept.Taper.hexagon_side
+  ForgeExact.Swept.Rev.lt_iff_sq_lt
+  ForgeExact.Swept.Rev.lt_mul_sqrt_iff
+  ForgeExact.Swept.Rev.reach_arc
+  ForgeExact.Swept.Screw.same_point_iff
+  ForgeExact.Swept.Screw.coil_injective
+  ForgeExact.Swept.ruled_translate
