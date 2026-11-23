@@ -58,6 +58,10 @@ fn one(path: &str) -> Vec<String> {
     out
 }
 
+/// Each worker's stack: some parts recurse past the 2 MiB a spawned thread gets by default (CADFS
+/// 00154651 needs more than 2 and less than 4).
+const STACK: usize = 64 << 20;
+
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     let files: Vec<String> = if a.len() == 3 && a[2].ends_with(".txt") {
@@ -74,7 +78,7 @@ fn main() {
     let rows = std::sync::Mutex::new(Vec::new());
     std::thread::scope(|sc| {
         for _ in 0..jobs {
-            sc.spawn(|| loop {
+            let _ = std::thread::Builder::new().stack_size(STACK).spawn_scoped(sc, || loop {
                 let i = next.fetch_add(1, Ordering::SeqCst);
                 let Some(f) = files.get(i) else { break };
                 let r = std::panic::catch_unwind(|| one(f))
