@@ -145,7 +145,7 @@ Shadow.lean proves S1–S4, with `shadow_face` and `certified_clear_gen` assembl
     and the model arc M (Trim.lean's: circle arc between the stored ends' rays plus radial
     pieces) are within 2ε of each other (argument in path_gap's doc), and the candidates bound
     distances to M once lowered by 2·g (segArc_trim, arcArc_trim, arc_near). The 2ε step is
-    argued in the code, not yet in Lean (hyp H.pathends). Seen in the bits test: a bull at
+    argued in the code; its metric steps are proven (PathEnds.lean: `proj_near`, `chord_mono`), the cone decomposition of the whole arc not yet (hyp H.pathends, that step only). Seen in the bits test: a bull at
     radius 11.29 about a 7.3 cylinder was a Hit at d = −0.0100000000000002 (past −0.01 by
     2e-16, on the unaccounted ends), now Undecided; refused either way. Digest re-pinned
     (native = wasm32-wasip1: 0x18f7a4235d47008e).

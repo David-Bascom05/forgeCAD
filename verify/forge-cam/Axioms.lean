@@ -88,3 +88,5 @@ import ForgeCam
 #print axioms ForgeCam.Shadow.shadow_cover
 #print axioms ForgeCam.Shadow.shadow_face
 #print axioms ForgeCam.Shadow.certified_clear_gen
+#print axioms ForgeCam.PathEnds.chord_mono
+#print axioms ForgeCam.PathEnds.proj_near
