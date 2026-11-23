@@ -788,7 +788,18 @@ def contactAt (A : Arr) (i j : Nat) (t : Rat) : Option Contact := Id.run do
     let D : V3 := ⟨v2[0]! - w * v1[0]!, v2[1]! - w * v1[1]!, v2[2]! - w * v1[2]!⟩
     let gi := alongLine qi P D
     let ls := others.map fun k => (k, alongLine A.qs[k]! P D)
-    let rootsOthers := ls.foldl (fun acc (_, g) => acc ++ realRoots g) #[]
+    let rootsOthers0 := ls.foldl (fun acc (_, g) => acc ++ realRoots g) #[]
+    -- along a contact line the transversal form S(w, w) and the cross term S(D, w), with
+    -- w = ∇q_i(P + sD) × D, are polynomials in s (degree 2 and 1): their roots join the
+    -- subdivision, so the test at one point of an interval holds on all of it
+    let n0 := qi.grad P
+    let n1 := (qi.grad (P + D)) - n0
+    let w0 := n0.cross D
+    let w1 := n1.cross D
+    let ww : Poly := [bil M w0 w0, 2 * bil M w0 w1, bil M w1 w1]
+    let dw : Poly := [bil M D w0, bil M D w1]
+    let rootsOthers := if Poly.isZero gi then rootsOthers0 ++ realRoots (Poly.sqfree ww) ++ realRoots dw
+      else rootsOthers0
     if Poly.isZero gi then
       -- a contact line: each interval between the other quadrics' roots
       match sortNums rootsOthers with
