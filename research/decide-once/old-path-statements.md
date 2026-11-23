@@ -46,7 +46,9 @@ assume, as `LedgerWF2.small` did for the core:
 - cylinder measures ≤ 1e8 (`offp_margin`);
 - all values finite (< about 1e150).
 
-Each new screen adds its bound here. The list is reviewed for a single combined bound before the
+Binding today: offp_margin's S ≤ 1e8, which gives max |coord| ≤ about 1.6e7 (16 km in mm). Today's
+code has no size check, so one `#[cold]` check at the four boolean entries (vertex max |coord|
+against one `INPUT_SIZE` const) refuses with `Unhandled::InputTooLarge`. Each new screen adds its bound here. The list is reviewed for a single combined bound before the
 theorem is closed. Outside these bounds the boolean refuses (an input out of scope); it never
 answers without a proof.
 
