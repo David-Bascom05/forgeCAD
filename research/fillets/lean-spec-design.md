@@ -369,7 +369,12 @@ before was classified at those points, with OCCT's classifier on both results
 | p00188 | 67 | 0 | OCCT invalid | no reference |
 | p00072 | 0 now | 2 | — | right |
 
-**The cause on p00010.**
+**The cause on p00010** (corrected 2026-11-23 by the fillet-fix worker: the bar's spring runs over
+the top rim and back, at z up to 52.2 against 51.44, about 58° to 80° round the ring, and the
+kernel *notched* the round by the top plane carried on. The notch over-fills. The over-filled points
+lie in that stretch, which the three sampled centres of the per-edge check missed. The analysis
+below holds for the points it measured. Its conclusion, a missed event at the rim, stands: the
+event is the spring's excursion, and the spec's result is the cliff, never the notch, §9 item 1).
 - At every excess point the kernel's spine is on both offsets to 5e-15, its pipe at r to 1e-15, and
   the point inside the cap (`fillet-spec near`). The blend is the crease form of the closing for the
   two supports.
