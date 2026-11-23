@@ -130,6 +130,30 @@ theorem conn_restrict2 {r r' : γ → γ → Bool} {xs ys : List γ} {P : γ →
       exact ⟨hP, Conn.step ih.2 (hys _ hc hP) (hrel _ _ ih.1 hP hbc)⟩
   exact this.2
 
+theorem nodup_map_of_inj {G : γ → δ} : ∀ {l : List γ}, l.Nodup → (∀ x ∈ l, ∀ y ∈ l, G x = G y → x = y) →
+    (l.map G).Nodup
+  | [], _, _ => List.nodup_nil
+  | x :: xs, hl, hinj => by
+    rw [List.nodup_cons] at hl
+    rw [List.map_cons, List.nodup_cons]
+    refine ⟨fun hm => ?_, nodup_map_of_inj hl.2 fun a ha b hb => hinj a (List.mem_cons_of_mem _ ha) b (List.mem_cons_of_mem _ hb)⟩
+    obtain ⟨y, hy, e⟩ := List.mem_map.mp hm
+    have := hinj x List.mem_cons_self y (List.mem_cons_of_mem _ hy) e.symm
+    exact hl.1 (this ▸ hy)
+
+/-- Counting distinct values through a map injective on them. -/
+theorem dedup_length_map {G : γ → δ} {l₁ : List γ} {l₂ : List δ}
+    (hinj : ∀ x ∈ l₁, ∀ y ∈ l₁, G x = G y → x = y) (hmem : ∀ y, y ∈ l₂ ↔ ∃ x ∈ l₁, G x = y) :
+    (dedup l₂).length = (dedup l₁).length := by
+  have hnd : ((dedup l₁).map G).Nodup :=
+    nodup_map_of_inj (nodup_dedup l₁) fun x hx y hy => hinj x ((mem_dedup _ _).mp hx) y ((mem_dedup _ _).mp hy)
+  have hp : (dedup l₂).Perm ((dedup l₁).map G) := by
+    apply (List.perm_ext_iff_of_nodup (nodup_dedup l₂) hnd).mpr
+    intro y
+    rw [mem_dedup, hmem, List.mem_map]
+    simp only [mem_dedup]
+  rw [hp.length_eq, List.length_map]
+
 end ConnMap
 
 namespace IncLedger
@@ -206,6 +230,63 @@ theorem conn_carrier (L : IncLedger α) {kt : KeepTabI α} {xs : List α} {x y :
   induction h with
   | refl => exact ⟨rfl, rfl⟩
   | step _ _ hr ih => exact ⟨ih.1.trans (L.joinRel_carrier hr).1, ih.2.trans (L.joinRel_carrier hr).2⟩
+
+/-- The face key unify uses: the head of a result facet's face. -/
+def faceKey (L : IncLedger α) (kt : KeepTabI α) (c : α) : α :=
+  let fk : List (α × α) := (L.heads kt).flatMap fun h => (L.faceOf kt h).map fun c => (c, h)
+  ((fk.find? fun e => e.1 == c).map Prod.snd).getD c
+
+theorem faceKey_spec (L : IncLedger α) {kt : KeepTabI α} (hnd : L.facets.Nodup) {c : α} (hc : c ∈ L.result kt) :
+    L.faceKey kt c ∈ L.heads kt ∧ c ∈ L.faceOf kt (L.faceKey kt c) := by
+  obtain ⟨h, hh, hcf⟩ := L.in_some_face hnd hc
+  simp only [faceKey]
+  have hin : (c, h) ∈ (L.heads kt).flatMap fun h => (L.faceOf kt h).map fun c => (c, h) :=
+    List.mem_flatMap.mpr ⟨h, hh, List.mem_map.mpr ⟨c, hcf, rfl⟩⟩
+  cases hf : ((L.heads kt).flatMap fun h => (L.faceOf kt h).map fun c => (c, h)).find? (fun e => e.1 == c) with
+  | none => exact absurd hin (by intro hm; have := List.find?_eq_none.mp hf _ hm; simp at this)
+  | some p =>
+    have hp := List.mem_of_find?_eq_some hf
+    have hq := List.find?_some hf
+    simp only [beq_iff_eq] at hq
+    obtain ⟨h', hh', hm⟩ := List.mem_flatMap.mp hp
+    obtain ⟨c', hc', e⟩ := List.mem_map.mp hm
+    subst e
+    simp only [Option.map_some, Option.getD_some]
+    simp only at hq
+    exact ⟨hh', hq ▸ hc'⟩
+
+/-- Two result facets have one key iff they are joined. -/
+theorem faceKey_eq_iff (L : IncLedger α) {kt : KeepTabI α} (hnd : L.facets.Nodup) {c d : α}
+    (hc : c ∈ L.result kt) (hd : d ∈ L.result kt) :
+    L.faceKey kt c = L.faceKey kt d ↔ Conn (L.joinRel kt) (L.result kt) c d := by
+  have rn := L.result_nodup kt hnd
+  have sy := L.joinRel_symm kt
+  obtain ⟨hk1, hf1⟩ := L.faceKey_spec hnd hc
+  obtain ⟨hk2, hf2⟩ := L.faceKey_spec hnd hd
+  have m1 := (L.mem_heads).mp hk1
+  have m2 := (L.mem_heads).mp hk2
+  have c1 := ((L.mem_faceOf hnd m1.1).mp hf1).2
+  have c2 := ((L.mem_faceOf hnd m2.1).mp hf2).2
+  constructor
+  · intro e
+    rw [e] at c1
+    exact (Conn.symm sy m2.1 c1).trans c2
+  · intro hcd
+    have h12 : Conn (L.joinRel kt) (L.result kt) (L.faceKey kt c) (L.faceKey kt d) :=
+      (c1.trans hcd).trans (Conn.symm sy m2.1 c2)
+    have := head_eq (L.joinRel kt) sy rn m1.1 h12
+    rw [m1.2, m2.2] at this
+    exact Option.some.inj this
+
+theorem faceKey_result (L : IncLedger α) {kt : KeepTabI α} (hnd : L.facets.Nodup) {c : α} (hc : c ∈ L.result kt) :
+    L.faceKey kt c ∈ L.result kt :=
+  ((L.mem_heads).mp (L.faceKey_spec hnd hc).1).1
+
+theorem conn_faceKey (L : IncLedger α) {kt : KeepTabI α} (hnd : L.facets.Nodup) {c : α} (hc : c ∈ L.result kt) :
+    Conn (L.joinRel kt) (L.result kt) c (L.faceKey kt c) := by
+  obtain ⟨hk, hf⟩ := L.faceKey_spec hnd hc
+  have m := (L.mem_heads).mp hk
+  exact Conn.symm (L.joinRel_symm kt) m.1 ((L.mem_faceOf hnd m.1).mp hf).2
 
 end IncLedger
 
@@ -570,6 +651,138 @@ theorem face_corr (h : Refines A B σ τ ν κ) (rule : Rule) {c h₀ : α} {h�
     obtain ⟨hφr, hφc⟩ := (A.mem_faceOf h.nodupA hA0).mp hφ
     refine (B.mem_faceOf h.nodupB hB1).mpr ⟨(result_iff h rule (A.mem_result.mp hφr).1).mpr hφr, cB.trans ?_⟩
     exact (join_conn h rule hc hφr).mp ((Conn.symm (A.joinRel_symm _) hA0 cA).trans hφc)
+
+/-! ### 4'. Unify: face keys -/
+
+theorem key_iff (h : Refines A B σ τ ν κ) (rule : Rule) {c d : α}
+    (hc : c ∈ A.result (A.keepTab rule)) (hd : d ∈ A.result (A.keepTab rule)) :
+    B.faceKey (B.keepTab rule) (σ c) = B.faceKey (B.keepTab rule) (σ d) ↔
+    A.faceKey (A.keepTab rule) c = A.faceKey (A.keepTab rule) d := by
+  have hcf := (A.mem_result.mp hc).1
+  have hdf := (A.mem_result.mp hd).1
+  rw [B.faceKey_eq_iff h.nodupB ((result_iff h rule hcf).mpr hc) ((result_iff h rule hdf).mpr hd),
+    A.faceKey_eq_iff h.nodupA hc hd, join_conn h rule hc hd]
+
+theorem key_key (h : Refines A B σ τ ν κ) (rule : Rule) {c : α} (hc : c ∈ A.result (A.keepTab rule)) :
+    B.faceKey (B.keepTab rule) (σ (A.faceKey (A.keepTab rule) c)) = B.faceKey (B.keepTab rule) (σ c) := by
+  have hk := A.faceKey_result h.nodupA hc
+  rw [key_iff h rule hk hc]
+  exact (A.faceKey_eq_iff h.nodupA hk hc).mpr (Conn.symm (A.joinRel_symm _) hc (A.conn_faceKey h.nodupA hc))
+
+/-- Distinct fine faces among result facets `xs`, and distinct coarse faces among their images. -/
+theorem faces_count (h : Refines A B σ τ ν κ) (rule : Rule) {xs : List α} {ys : List β}
+    (hxs : ∀ x ∈ xs, x ∈ A.result (A.keepTab rule)) (hys : ∀ y, y ∈ ys ↔ ∃ x ∈ xs, σ x = y) :
+    (dedup (ys.map (B.faceKey (B.keepTab rule)))).length = (dedup (xs.map (A.faceKey (A.keepTab rule)))).length := by
+  apply dedup_length_map (G := fun k => B.faceKey (B.keepTab rule) (σ k))
+  · intro x hx y hy e
+    obtain ⟨c, hc, rfl⟩ := List.mem_map.mp hx
+    obtain ⟨d, hd, rfl⟩ := List.mem_map.mp hy
+    simp only [key_key h rule (hxs c hc), key_key h rule (hxs d hd)] at e
+    exact (key_iff h rule (hxs c hc) (hxs d hd)).mp e
+  · intro k
+    simp only [List.mem_map]
+    constructor
+    · rintro ⟨y, hy, rfl⟩
+      obtain ⟨x, hx, rfl⟩ := (hys y).mp hy
+      exact ⟨A.faceKey (A.keepTab rule) x, ⟨x, hx, rfl⟩, key_key h rule (hxs x hx)⟩
+    · rintro ⟨_, ⟨x, hx, rfl⟩, rfl⟩
+      exact ⟨σ x, (hys _).mpr ⟨x, hx, rfl⟩, (key_key h rule (hxs x hx)).symm⟩
+
+theorem atE_some (h : Refines A B σ τ ν κ) (rule : Rule) {e : α} (he : e ∈ A.edges) {E : β} (hτ : τ e = some E) :
+    (B.facesAtE (B.keepTab rule) (B.faceKey (B.keepTab rule)) E).length =
+    (A.facesAtE (A.keepTab rule) (A.faceKey (A.keepTab rule)) e).length := by
+  simp only [IncLedger.facesAtE]
+  apply faces_count h rule
+  · intro x hx; exact (List.mem_filter.mp hx).2 |> fun h' => by simpa using h'
+  · intro y; rw [← (aroundE_perm h rule he hτ).mem_iff, List.mem_map]
+
+theorem atE_none (h : Refines A B σ τ ν κ) (rule : Rule) {e : α} (he : e ∈ A.edges) (hτ : τ e = none) :
+    (A.facesAtE (A.keepTab rule) (A.faceKey (A.keepTab rule)) e).length ≤ 1 := by
+  simp only [IncLedger.facesAtE]
+  match hl : A.aroundE (A.keepTab rule) e with
+  | [] => simp [dedup, dedupAux]
+  | c :: t =>
+    have hres : ∀ x ∈ c :: t, x ∈ A.result (A.keepTab rule) := fun x hx => by
+      rw [← hl] at hx; simpa using (List.mem_filter.mp hx).2
+    have hfac : ∀ x ∈ c :: t, x ∈ A.edgeFacets e := fun x hx => by
+      rw [← hl] at hx; exact (List.mem_filter.mp hx).1
+    have hk : ∀ x ∈ c :: t, A.faceKey (A.keepTab rule) x = A.faceKey (A.keepTab rule) c := fun x hx =>
+      (key_iff h rule (hres x hx) (hres c List.mem_cons_self)).mp
+        (by rw [(h.edge_inner e he hτ).2 x (hfac x hx) c (hfac c List.mem_cons_self)])
+    have hsub : dedup ((c :: t).map (A.faceKey (A.keepTab rule))) ⊆ [A.faceKey (A.keepTab rule) c] := by
+      intro y hy
+      obtain ⟨x, hx, rfl⟩ := List.mem_map.mp ((mem_dedup _ _).mp hy)
+      rw [hk x hx]; exact List.mem_singleton_self _
+    exact (nodup_dedup _).length_le_of_subset hsub
+
+theorem atV_some (h : Refines A B σ τ ν κ) (rule : Rule) {w : α} (hw : w ∈ A.verts) {V : β} (hν : ν w = some V) :
+    (B.facesAtV (B.keepTab rule) (B.faceKey (B.keepTab rule)) V).length =
+    (A.facesAtV (A.keepTab rule) (A.faceKey (A.keepTab rule)) w).length := by
+  simp only [IncLedger.facesAtV]
+  have e1 : (B.aroundV (B.keepTab rule) V).map (fun s => B.faceKey (B.keepTab rule) s.facet) =
+      ((B.aroundV (B.keepTab rule) V).map Sector.facet).map (B.faceKey (B.keepTab rule)) := by
+    rw [List.map_map]; rfl
+  have e2 : (A.aroundV (A.keepTab rule) w).map (fun s => A.faceKey (A.keepTab rule) s.facet) =
+      ((A.aroundV (A.keepTab rule) w).map Sector.facet).map (A.faceKey (A.keepTab rule)) := by
+    rw [List.map_map]; rfl
+  rw [e1, e2]
+  apply faces_count h rule
+  · intro x hx
+    obtain ⟨s, hs, rfl⟩ := List.mem_map.mp hx
+    exact (mem_aroundV.mp hs).2
+  · intro y
+    simp only [List.mem_map]
+    constructor
+    · rintro ⟨S, hS, rfl⟩
+      obtain ⟨hS1, hS2⟩ := mem_aroundV'.mp hS
+      obtain ⟨s, hs, rfl⟩ := h.sector_onto w hw V hν S hS1
+      have hsf := h.sector_facets_A w hw s hs
+      refine ⟨s.facet, ⟨s, mem_aroundV.mpr ⟨hs, (result_iff h rule hsf).mp ?_⟩, rfl⟩, (h.sector_facet w hw s hs).symm⟩
+      rw [← h.sector_facet w hw s hs]; exact hS2
+    · rintro ⟨_, ⟨s, hs, rfl⟩, rfl⟩
+      obtain ⟨hs1, hs2⟩ := mem_aroundV.mp hs
+      refine ⟨κ w s, mem_aroundV'.mpr ⟨h.sector_mem w hw V hν s hs1, ?_⟩, h.sector_facet w hw s hs1⟩
+      rw [h.sector_facet w hw s hs1]; exact (result_iff h rule (h.sector_facets_A w hw s hs1)).mpr hs2
+
+theorem atV_none (h : Refines A B σ τ ν κ) (rule : Rule) {w : α} (hw : w ∈ A.verts) (hν : ν w = none)
+    (hE : ∀ E ∈ B.edges, B.badEdge (B.keepTab rule) E = false) :
+    (A.facesAtV (A.keepTab rule) (A.faceKey (A.keepTab rule)) w).length < 3 := by
+  simp only [IncLedger.facesAtV]
+  have e2 : (A.aroundV (A.keepTab rule) w).map (fun s => A.faceKey (A.keepTab rule) s.facet) =
+      ((A.aroundV (A.keepTab rule) w).map Sector.facet).map (A.faceKey (A.keepTab rule)) := by
+    rw [List.map_map]; rfl
+  rw [e2]
+  have hxs : ∀ x ∈ (A.aroundV (A.keepTab rule) w).map Sector.facet, x ∈ A.result (A.keepTab rule) := by
+    intro x hx; obtain ⟨s, hs, rfl⟩ := List.mem_map.mp hx; exact (mem_aroundV.mp hs).2
+  have hsec : ∀ x ∈ (A.aroundV (A.keepTab rule) w).map Sector.facet, ∃ s ∈ A.vertSectors w, s.facet = x := by
+    intro x hx; obtain ⟨s, hs, rfl⟩ := List.mem_map.mp hx; exact ⟨s, (mem_aroundV.mp hs).1, rfl⟩
+  rw [← faces_count h rule hxs (fun y => List.mem_map)]
+  rcases h.vert_inner w hw hν with ⟨ψ, hψ⟩ | ⟨E, hEm, e, he, hτ, hEs⟩
+  · -- inside one coarse facet: one face
+    have hsub : dedup ((((A.aroundV (A.keepTab rule) w).map Sector.facet).map σ).map (B.faceKey (B.keepTab rule))) ⊆
+        [B.faceKey (B.keepTab rule) ψ] := by
+      intro y hy
+      obtain ⟨z, hz, rfl⟩ := List.mem_map.mp ((mem_dedup _ _).mp hy)
+      obtain ⟨x, hx, rfl⟩ := List.mem_map.mp hz
+      obtain ⟨s, hs, rfl⟩ := hsec x hx
+      rw [hψ s hs]; exact List.mem_singleton_self _
+    have := (nodup_dedup _).length_le_of_subset hsub
+    simp only [List.length_singleton] at this; omega
+  · -- inside a coarse edge: its faces, at most two since it is not bad
+    have hsub : dedup ((((A.aroundV (A.keepTab rule) w).map Sector.facet).map σ).map (B.faceKey (B.keepTab rule))) ⊆
+        (B.aroundE (B.keepTab rule) E).map (B.faceKey (B.keepTab rule)) := by
+      intro y hy
+      obtain ⟨z, hz, rfl⟩ := List.mem_map.mp ((mem_dedup _ _).mp hy)
+      obtain ⟨x, hx, rfl⟩ := List.mem_map.mp hz
+      obtain ⟨s, hs, rfl⟩ := hsec x hx
+      refine List.mem_map.mpr ⟨σ s.facet, ?_, rfl⟩
+      simp only [IncLedger.aroundE, List.mem_filter, List.contains_iff_mem, decide_eq_true_eq]
+      exact ⟨hEs s hs, (result_iff h rule (h.sector_facets_A w hw s hs)).mpr (hxs _ hx)⟩
+    have h1 := (nodup_dedup _).length_le_of_subset hsub
+    have h2 := hE E hEm
+    simp only [IncLedger.badEdge, decide_eq_false_iff_not, Nat.not_lt] at h2
+    rw [List.length_map] at h1
+    omega
 
 end Refines
 
