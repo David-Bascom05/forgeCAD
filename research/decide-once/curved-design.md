@@ -682,7 +682,23 @@ The coordinator (9453b06f) answered:
 - Route (b) would be a new L1 for the face ledger, not a corollary of `Refines`, which transfers
   facts from the reference and not to it. It may still be cheaper than Lemma D on the CAD.
 
-It is open, with q1 and the master (face-arrangement.md §5).
+q1 answered (2026-11-23), recommending route (b). Manifold.lean's use of `Faithful` is local
+and never uses R1. On the face ledger, five local obligations replace R1–R5:
+- **F1, row soundness**: everything in `row(x)` has `x` in its closure.
+- **F2, row completeness**: a neighbourhood of `x` has its sheet points in row facets, and at
+  vertices its edge points in row edges.
+- **F3, separation**: facets are disjoint and relatively open in their union; likewise edges
+  within edges ∪ facets.
+- **F4, wings**: small neighbourhoods meet each row facet in exactly its listed wings, one
+  component per wing. This replaces R4/R5, and is the wing decision made into a statement.
+- **F5, sides**: facet points lie in the closure of both rooms. Rooms are open, connected and
+  disjoint from the faces, so membership is constant per room. This replaces R3.
+
+No global Jordan is needed. Estimate:
+- **(b)** ≈ 1–1.5k lines of generic Lean, plus M-sized builder obligations;
+- **(a)** (Tier0Sound and `cad_R1`) ≈ 8–15k lines.
+
+Recommended: (b). The reference then needs only `ExactK` (done). Awaiting the master's ruling.
 
 **4. Effect on the work in flight.**
 - L2 (this branch: QLine, QEdge, QVert, RootCover, QPropose) is the reference's executable and
