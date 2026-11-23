@@ -16,14 +16,15 @@ import tempfile
 import threading
 import zipfile
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import truth_rule  # noqa: E402
+
 MEM = 3 << 30
 
 
 def measure(path):
     from OCP.Bnd import Bnd_Box
     from OCP.BRepBndLib import BRepBndLib
-    from OCP.BRepGProp import BRepGProp
-    from OCP.GProp import GProp_GProps
     from OCP.IFSelect import IFSelect_RetDone
     from OCP.STEPControl import STEPControl_Reader
     from OCP.TopAbs import TopAbs_FACE, TopAbs_SOLID
@@ -39,17 +40,13 @@ def measure(path):
     x = TopExp_Explorer(s, TopAbs_SOLID)
     while x.More():
         so = x.Current()
-        g = GProp_GProps()
-        BRepGProp.VolumeProperties_s(so, g)
-        v = abs(g.Mass())
-        g = GProp_GProps()
-        BRepGProp.SurfaceProperties_s(so, g)
-        a = g.Mass()
+        m = truth_rule.measures(so)
+        v, a = m["vol"], m["area"]
         box = Bnd_Box()
         BRepBndLib.AddOptimal_s(so, box, True, False)
         lo, hi = box.CornerMin(), box.CornerMax()
         bb = (lo.X(), lo.Y(), lo.Z(), hi.X(), hi.Y(), hi.Z())
-        seen[(round(v, 3), round(a, 3)) + tuple(round(c, 3) for c in bb)] = (v, a, bb)
+        seen[(round(v, 3), round(a, 3)) + tuple(round(c, 3) for c in bb)] = (v, a, bb, m)
         x.Next()
     n = sum(1 for _ in seen)
     copies = 0
@@ -63,6 +60,9 @@ def measure(path):
         faces += 1
         x.Next()
     out = {"solids": n, "copies": copies - n, "vol": sum(t[0] for t in seen.values()), "area": sum(t[1] for t in seen.values()), "faces": faces}
+    # the measures truth_rule judges by, each summed over the distinct solids
+    for k in ("vol_eps", "area_eps", "vol_gk"):
+        out[k] = sum(t[3][k] for t in seen.values())
     if n:
         bs = [t[2] for t in seen.values()]
         out["bbox"] = [min(b[i] for b in bs) for i in range(3)] + [max(b[i] for b in bs) for i in range(3, 6)]

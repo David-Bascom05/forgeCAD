@@ -22,9 +22,7 @@ from OCP.Geom import Geom_BezierCurve, Geom_BSplineCurve, Geom_Circle, Geom_Elli
 from OCP.GeomAbs import GeomAbs_Circle, GeomAbs_Line
 from OCP.BRepBndLib import BRepBndLib
 from OCP.BRepCheck import BRepCheck_Analyzer
-from OCP.BRepGProp import BRepGProp
 from OCP.BRepTools import BRepTools
-from OCP.GProp import GProp_GProps
 from OCP.OCP.collections import IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher as ShapeMap
 from OCP.TopAbs import TopAbs_EDGE, TopAbs_FACE, TopAbs_SOLID, TopAbs_VERTEX, TopAbs_WIRE
 from OCP.TopExp import TopExp, TopExp_Explorer
@@ -34,6 +32,7 @@ from OCP.TopoDS import TopoDS, TopoDS_Shape
 N = 256
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import dmath  # noqa: E402
+import truth_rule  # noqa: E402
 
 
 def read(path):
@@ -206,16 +205,13 @@ def main():
             if s is None or s.IsNull():
                 out[name] = {"err": "unreadable"}
                 continue
-            r = {"solids": 0, "vol": 0.0, "area": 0.0}
+            # the measures truth_rule judges by, each summed over the solids
+            r = {"solids": 0, "vol": 0.0, "area": 0.0, "vol_eps": 0.0, "area_eps": 0.0, "vol_gk": 0.0}
             x = TopExp_Explorer(s, TopAbs_SOLID)
             box = Bnd_Box()
             while x.More():
-                g = GProp_GProps()
-                BRepGProp.VolumeProperties_s(x.Current(), g)
-                r["vol"] += abs(g.Mass())
-                g = GProp_GProps()
-                BRepGProp.SurfaceProperties_s(x.Current(), g)
-                r["area"] += g.Mass()
+                for k, v in truth_rule.measures(x.Current()).items():
+                    r[k] += v
                 BRepBndLib.AddOptimal_s(x.Current(), box, True, False)
                 r["solids"] += 1
                 x.Next()
@@ -252,6 +248,22 @@ def main():
                         TopExp.MapShapes_s(fm.FindKey(int(sub[4:])), TopAbs_EDGE, fe)
                         got[sub] = [edge_points(fe.FindKey(i)) for i in range(1, fe.Extent() + 1)]
                 r["subs"] = got
+            sw = want.get("subwires", {}).get(name)
+            if sw:
+                # a profile that is an edge or a face of a feature: its wires, as wires() gives a shape's
+                em, fm = ShapeMap(), ShapeMap()
+                TopExp.MapShapes_s(s, TopAbs_EDGE, em)
+                TopExp.MapShapes_s(s, TopAbs_FACE, fm)
+                got = {}
+                for sub in sw:
+                    if sub.startswith("Face") and 0 < int(sub[4:]) <= fm.Extent():
+                        got[sub] = wires(fm.FindKey(int(sub[4:])))
+                    elif sub.startswith("Edge") and 0 < int(sub[4:]) <= em.Extent():
+                        e = em.FindKey(int(sub[4:]))
+                        c = BRepAdaptor_Curve(TopoDS.Edge(e))
+                        k = {GeomAbs_Line: "line", GeomAbs_Circle: "circle"}.get(c.GetType(), "other")
+                        got[sub] = [[{"k": k, "p": edge_points(e, 96)}]]
+                r["subwires"] = got
             out[name] = r
     finally:
         for n in os.listdir(tmp):

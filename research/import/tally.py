@@ -8,12 +8,17 @@ run_whucad.py write them) and, for CADFS and WHUCAD, step_truth.py's measures. D
   tally.py whucad BEFORE AFTER --truth TRUTH.jsonl [--tol 1e-3] [--fillet]
 
 --fillet keeps the parts with a fillet feature. A part matches when it built and both its volume and area are within
---tol of the source's (relative); a part that built with no source measure is "no truth".
+--tol of the source's (relative); a part that built with no source measure is "no truth". The source's volume and area
+are those truth_rule judges by; where its measures disagree (truth_rule.judged), the part is "uncertain", counted
+neither way.
 """
 import collections
 import json
 import os
 import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "tools", "find-parts", "recreate"))
+import truth_rule  # noqa: E402
 
 
 def rows(run):
@@ -41,16 +46,20 @@ def klass(kind, r, truths, tol):
     t = truth_of(kind, r, truths)
     if t is None:
         return "no truth"
-    ev = abs(r["vol"] - t["vol"]) / t["vol"]
-    ea = abs(r["area"] - t["area"]) / t["area"]
+    j = truth_rule.judged(t, tol)
+    if j is None:
+        return "uncertain"
+    ev = abs(r["vol"] - j[0]) / j[0]
+    ea = abs(r["area"] - j[1]) / j[1]
     return "match" if ev <= tol and ea <= tol else "mismatch"
 
 
-def err(kind, r, truths):
+def err(kind, r, truths, tol=1e-4):
     t = truth_of(kind, r, truths) if r.get("v") == "ok" else None
-    if t is None:
+    j = truth_rule.judged(t, tol) if t is not None else None
+    if j is None:
         return ""
-    return f"vol {abs(r['vol'] - t['vol']) / t['vol']:.1e}, area {abs(r['area'] - t['area']) / t['area']:.1e}"
+    return f"vol {abs(r['vol'] - j[0]) / j[0]:.1e}, area {abs(r['area'] - j[1]) / j[1]:.1e}"
 
 
 def main(a):
@@ -73,7 +82,7 @@ def main(a):
     ka = {k: klass(kind, A[k], truths, tol) for k in B if k in A}
     print(f"## {kind}: {len(B)} parts, match at {tol:g}\n")
     print("| class | before | after |\n|---|---:|---:|")
-    for c in ("match", "mismatch", "no truth", "refused", "fail", "crash", "oom", "timeout", "stopped", "untranslated"):
+    for c in ("match", "mismatch", "uncertain", "no truth", "refused", "fail", "crash", "oom", "timeout", "stopped", "untranslated"):
         x, y = C(kb.values())[c], C(ka.values())[c]
         if x or y:
             print(f"| {c} | {x} | {y} |")
@@ -95,7 +104,7 @@ def main(a):
     for k in sorted(ka, key=str):
         if kb[k] != ka[k]:
             why = A[k].get("why") or (A[k].get("sig") or "")[:80]
-            print(f"- {k if isinstance(k, str) else '.'.join(k)}: {kb[k]} -> {ka[k]} {err(kind, A[k], truths)} {why}".rstrip())
+            print(f"- {k if isinstance(k, str) else '.'.join(k)}: {kb[k]} -> {ka[k]} {err(kind, A[k], truths, tol)} {why}".rstrip())
 
 
 if __name__ == "__main__":

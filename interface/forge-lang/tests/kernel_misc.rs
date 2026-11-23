@@ -1161,3 +1161,41 @@ fn a_fillet_on_both_edges_of_a_crescent_builds() {
     let (v, _) = judge_built(include_str!("kernel_parts/fillet_crescent_both_edges.fg"));
     assert!(matches!(v, Verdict::Ok), "{v:?}");
 }
+
+/// A round along an elliptical hole's edges takes exactly what Pappus says: the rolling ball
+/// between the plate's face and the hole's wall (square to it) cuts a section of (1 - pi/4) r^2,
+/// its centroid r (10 - 3 pi) / (3 (4 - pi)) from the edge, swept once round the ellipse (the
+/// check behind research/import/truth.md).
+#[test]
+fn a_round_along_an_elliptical_hole_takes_its_closed_form() {
+    let src = "shared r = 2
+shared a = 20
+shared b = 10
+sketch plan(on: xy) {
+  outline = rect(corner: (-50, -30), size: (100, 60))
+}
+base = extrude(plan, 10)
+sketch eh(on: base.end) {
+  e = ellipse(center: (0, 0), major: (a, 0), b: b)
+}
+bore = cut(eh, thru)
+round = fillet(edges(of: bore), r)
+";
+    let (_, v) = body(src);
+    let (a, b, r) = (20.0_f64, 10.0_f64, 2.0_f64);
+    let pi = std::f64::consts::PI;
+    // the ellipse's perimeter, by chords fine enough for 1e-12
+    let n = 200_000;
+    let mut l = 0.0;
+    let mut prev = (a, 0.0);
+    for i in 1..=n {
+        let (s, c) = dmath::sin_cos(2.0 * pi * f64::from(i) / f64::from(n));
+        let p = (a * c, b * s);
+        l += ((p.0 - prev.0).powi(2) + (p.1 - prev.1).powi(2)).sqrt();
+        prev = p;
+    }
+    let sec = (1.0 - pi / 4.0) * r * r;
+    let xb = r * (10.0 - 3.0 * pi) / (3.0 * (4.0 - pi));
+    let want = 100.0 * 60.0 * 10.0 - pi * a * b * 10.0 - 2.0 * sec * (l + 2.0 * pi * xb);
+    assert!((v - want).abs() <= 1e-9 * want, "{v} against {want}");
+}
