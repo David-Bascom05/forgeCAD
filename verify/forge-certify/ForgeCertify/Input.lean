@@ -262,13 +262,6 @@ def explain (op : List Bool → Bool) (ins : List Opd) (res : List Face) : Strin
 
 /-! ## Frames -/
 
-/-- The coordinates cycled: `(x, y, z) ↦ (y, z, x)`. Rays along `+x` in the cycled frame run
-along `+y` (once) or `+z` (twice) in the original. -/
-def cyc (p : V3) : V3 := ⟨p.y, p.z, p.x⟩
-def cycPlane (P : Plane) : Plane := ⟨cyc P.n, P.c⟩
-def cycFace (f : Face) : Face := ⟨cycPlane f.plane, f.loops.map fun lp => lp.map cyc⟩
-def cycTri (t : Tri) : Tri := ⟨cyc t.a, cyc t.b, cyc t.c⟩
-
 def stats (op : List Bool → Bool) (ins : List Opd) (res : List Face) : String :=
   let ps := planes ins res
   s!"tris {(allSoup ins).length} planes {ps.length} atoms {(ps.map fun P => (atoms ins P).length).foldl (· + ·) 0} res faces {res.length} {(op [] : Bool)}"
@@ -299,7 +292,7 @@ def run (line : String) : Except String Json := do
       if !check op ins rs then
         let axis := ["x", "y", "z"].getD k "?"
         return answer "rejected" s!"({axis} frame) {explain op ins rs}"
-      ins := ins.map fun o => ⟨o.faces.map cycFace, o.tris.map fun ts => ts.map cycTri⟩
+      ins := ins.map cycOpd
       rs := rs.map cycFace
     return answer "accepted" ""
 

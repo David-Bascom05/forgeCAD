@@ -62,6 +62,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-certify"
+version = "0.1.0"
+dependencies = [
+ "forge-bool",
+ "forge-exact-fuzz",
+ "forge-geom",
+ "forge-lang",
+ "forge-math",
+ "forge-model",
+ "forge-proof",
+ "forge-topo",
+]
+
+[[package]]
 name = "forge-cli"
 version = "0.1.0"
 dependencies = [

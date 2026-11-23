@@ -200,6 +200,16 @@ def resOn (res : List Face) (P : Plane) : List Face :=
 def resultOK (op : List Bool → Bool) (ins : List Opd) (res : List Face) (P : Plane) (As : List Tri) : Bool :=
   zero1 ((resOn res P).flatMap faceSegs ++ (As.filter (jump op ins P)).flatMap Tri.segs)
 
+/-! ## Frames -/
+
+/-- The coordinates cycled: `(x, y, z) ↦ (y, z, x)`. Rays along `+x` in the cycled frame run
+along `+y` (once) or `+z` (twice) in the original. -/
+def cyc (p : V3) : V3 := ⟨p.y, p.z, p.x⟩
+def cycPlane (P : Plane) : Plane := ⟨cyc P.n, P.c⟩
+def cycFace (f : Face) : Face := ⟨cycPlane f.plane, f.loops.map fun lp => lp.map cyc⟩
+def cycTri (t : Tri) : Tri := ⟨cyc t.a, cyc t.b, cyc t.c⟩
+def cycOpd (o : Opd) : Opd := ⟨o.faces.map cycFace, o.tris.map fun ts => ts.map cycTri⟩
+
 /-- A two-operand boolean as the checker's rule. -/
 def binOp : ForgeExact.Op → List Bool → Bool
   | .union => fun l => l.getD 0 false || l.getD 1 false

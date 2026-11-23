@@ -1,5 +1,5 @@
 import Lean
-import ForgeCertify.Theorem
+import ForgeCertify.Frames
 
 /-!
 # Only the standard axioms
@@ -22,6 +22,8 @@ elab "#certify_axioms " ids:ident* : command => do
 #certify_axioms
   ForgeCertify.check_sound
   ForgeCertify.check_sound_bool
+  ForgeCertify.check_sound_xyz
+  ForgeCertify.check_sound_axis
   ForgeCertify.at_generic
   ForgeCertify.gen_of_walls
   ForgeCertify.constancy

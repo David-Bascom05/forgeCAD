@@ -12,4 +12,5 @@ import ForgeCertify.Bridge
 import ForgeCertify.Sound
 import ForgeCertify.Walls
 import ForgeCertify.Theorem
+import ForgeCertify.Frames
 import ForgeCertify.Axioms

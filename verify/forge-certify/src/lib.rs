@@ -1,8 +1,8 @@
 //! The kernel's certificates (forge-bool's `certify` feature) handed to the proven checker
 //! (`forge-certify`, the Lean executable `lake build` makes here), and its verdicts.
 
-use forge_bool::certify::Record;
 use forge_bool::Op;
+use forge_bool::certify::Record;
 use forge_exact_fuzz::exact;
 use forge_geom::{Curve, Surface};
 use forge_math::Point3;
@@ -87,7 +87,9 @@ pub fn op_name(op: Op) -> &'static str {
 /// The certificate as the checker reads it (ForgeCertify/Input.lean), or why the boolean is out of
 /// its scope.
 pub fn dump(rec: &Record, frames: &str) -> Result<String, String> {
-    let Some(res) = &rec.result else { return Err("the kernel refused".into()) };
+    let Some(res) = &rec.result else {
+        return Err("the kernel refused".into());
+    };
     for b in [&rec.a, &rec.b, res] {
         flat(b)?;
     }
@@ -101,7 +103,12 @@ pub fn dump(rec: &Record, frames: &str) -> Result<String, String> {
             let (o, n) = plane(b, f)?;
             planes.push((side, j, (o, n)));
             let ls: Vec<String> = loops(b, f).iter().map(|l| keys.lp(l)).collect();
-            faces.push(format!("{{\"o\":{},\"n\":{},\"loops\":[{}]}}", p3(o), p3(n), ls.join(",")));
+            faces.push(format!(
+                "{{\"o\":{},\"n\":{},\"loops\":[{}]}}",
+                p3(o),
+                p3(n),
+                ls.join(",")
+            ));
         }
         let mut pieces = Vec::new();
         for pc in rec.pieces.iter().filter(|p| p.side as usize == side) {

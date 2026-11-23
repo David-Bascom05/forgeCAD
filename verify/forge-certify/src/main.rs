@@ -46,7 +46,11 @@ fn flat_src(src: &str) -> String {
 
 fn case(name: String, part: Part) -> Case {
     let part = forge_model::adversarial::canonical(&part);
-    Case { source: String::new(), name, part }
+    Case {
+        source: String::new(),
+        name,
+        part,
+    }
 }
 
 fn cases(sources: &[String], seeds: u64, suite: u64, lang: u64) -> Vec<(Case, Vec<u64>)> {
@@ -69,7 +73,10 @@ fn cases(sources: &[String], seeds: u64, suite: u64, lang: u64) -> Vec<(Case, Ve
                 let Ok(raw) = guarded(|| Ok(forge_model::adversarial::canonical(&g(s)))) else {
                     continue;
                 };
-                out.push((case(format!("{f}/{s}"), forge_exact_fuzz::flat_part(&raw)), vec![]));
+                out.push((
+                    case(format!("{f}/{s}"), forge_exact_fuzz::flat_part(&raw)),
+                    vec![],
+                ));
             }
         }
     }
@@ -81,16 +88,27 @@ fn cases(sources: &[String], seeds: u64, suite: u64, lang: u64) -> Vec<(Case, Ve
         }
     }
     if on("notched") {
-        out.push((case("notched".into(), forge_exact_fuzz::notched()), (0..400).collect()));
+        out.push((
+            case("notched".into(), forge_exact_fuzz::notched()),
+            (0..400).collect(),
+        ));
     }
     if on("suite") {
         for s in 0..suite {
-            out.push((case(format!("suite/{s}"), forge_exact_fuzz::flat_part(&forge_model::suite::fuzz(s, 8))), vec![]));
+            out.push((
+                case(
+                    format!("suite/{s}"),
+                    forge_exact_fuzz::flat_part(&forge_model::suite::fuzz(s, 8)),
+                ),
+                vec![],
+            ));
         }
     }
     if on("lang") {
         for s in 1..=lang {
-            let Ok(run) = guarded(|| Ok(forge_lang::fuzz::run_kinds(s, 8, flat_kinds()))) else { continue };
+            let Ok(run) = guarded(|| Ok(forge_lang::fuzz::run_kinds(s, 8, flat_kinds()))) else {
+                continue;
+            };
             let src = flat_src(&run.src);
             if let Ok(b) = guarded(|| Ok(forge_lang::fuzz::build(&src))) {
                 out.push((case(format!("lang/{s}"), b.part()), vec![]));
@@ -105,7 +123,11 @@ fn records(c: &Case, ulps: &[u64]) -> Vec<(String, forge_bool::certify::Record)>
     let mut out = Vec::new();
     forge_bool::certify::record(true);
     let _ = guarded(|| c.part.regenerate().map_err(|e| format!("{e:?}")));
-    out.extend(forge_bool::certify::take().into_iter().map(|r| ("seq".to_string(), r)));
+    out.extend(
+        forge_bool::certify::take()
+            .into_iter()
+            .map(|r| ("seq".to_string(), r)),
+    );
     let h = History::new(&c.part.features, None);
     let k = c.part.features.len().saturating_sub(1);
     for &s in ulps {
@@ -120,8 +142,16 @@ fn records(c: &Case, ulps: &[u64]) -> Vec<(String, forge_bool::certify::Record)>
         let Ok(stage) = stage else { continue };
         let moved = forge_proof::props::nudged(&stage, s);
         forge_bool::certify::record(true);
-        let _ = guarded(|| forge_model::step(h, k, Some(moved)).map_err(|e| format!("{e:?}")).map(|_| ()));
-        out.extend(forge_bool::certify::take().into_iter().map(|r| (format!("ulp {s}"), r)));
+        let _ = guarded(|| {
+            forge_model::step(h, k, Some(moved))
+                .map_err(|e| format!("{e:?}"))
+                .map(|_| ())
+        });
+        out.extend(
+            forge_bool::certify::take()
+                .into_iter()
+                .map(|r| (format!("ulp {s}"), r)),
+        );
     }
     forge_bool::certify::record(false);
     out
@@ -130,7 +160,10 @@ fn records(c: &Case, ulps: &[u64]) -> Vec<(String, forge_bool::certify::Record)>
 fn main() {
     let mut sources = Vec::new();
     let mut seeds = 24;
-    let mut suite: u64 = std::env::var("FUZZ_SEEDS").ok().and_then(|s| s.parse().ok()).unwrap_or(150);
+    let mut suite: u64 = std::env::var("FUZZ_SEEDS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(150);
     let mut lang = 0;
     let mut frames = "xyz".to_string();
     let mut time = false;
@@ -165,7 +198,10 @@ fn main() {
                 }
                 Ok(line) => {
                     if let Ok(dir) = std::env::var("FORGE_CERTIFY_DUMP_ALL") {
-                        let name: String = what.chars().map(|c| if c.is_alphanumeric() { c } else { '_' }).collect();
+                        let name: String = what
+                            .chars()
+                            .map(|c| if c.is_alphanumeric() { c } else { '_' })
+                            .collect();
                         let _ = std::fs::write(format!("{dir}/{name}.json"), &line);
                     }
                     let t0 = std::time::Instant::now();
@@ -179,7 +215,10 @@ fn main() {
                         Verdict::Accepted => *totals.entry("accepted").or_default() += 1,
                         Verdict::Rejected(why) => {
                             if let Ok(dir) = std::env::var("FORGE_CERTIFY_DUMP") {
-                                let name: String = what.chars().map(|c| if c.is_alphanumeric() { c } else { '_' }).collect();
+                                let name: String = what
+                                    .chars()
+                                    .map(|c| if c.is_alphanumeric() { c } else { '_' })
+                                    .collect();
                                 let _ = std::fs::write(format!("{dir}/{name}.json"), &line);
                             }
                             *totals.entry("rejected").or_default() += 1;
@@ -193,7 +232,12 @@ fn main() {
                 }
             }
         }
-        eprintln!("{} ({} booleans, {:.1}s)", c.name, recs.len(), t.elapsed().as_secs_f64());
+        eprintln!(
+            "{} ({} booleans, {:.1}s)",
+            c.name,
+            recs.len(),
+            t.elapsed().as_secs_f64()
+        );
     }
     println!("== totals");
     for (k, n) in &totals {
@@ -214,8 +258,18 @@ fn main() {
         let tk: f64 = ratios.iter().map(|x| x.1).sum();
         let q = |p: f64| r[((r.len() - 1) as f64 * p) as usize];
         println!("\n== cost ({} booleans checked)", ratios.len());
-        println!("checker {:.3}s, kernel {:.3}s, total ratio {:.0}x", tc, tk, tc / tk.max(1e-9));
-        println!("per boolean checker/kernel: median {:.0}x, p90 {:.0}x, max {:.0}x", q(0.5), q(0.9), q(1.0));
+        println!(
+            "checker {:.3}s, kernel {:.3}s, total ratio {:.0}x",
+            tc,
+            tk,
+            tc / tk.max(1e-9)
+        );
+        println!(
+            "per boolean checker/kernel: median {:.0}x, p90 {:.0}x, max {:.0}x",
+            q(0.5),
+            q(0.9),
+            q(1.0)
+        );
         let mc: f64 = ratios.iter().map(|x| x.0).fold(0.0, f64::max);
         println!("slowest check {:.3}s", mc);
     }
