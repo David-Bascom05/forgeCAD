@@ -1029,6 +1029,7 @@ fn nary_body(
                         &mut out.segs,
                         &mut out.imprints,
                         &mut out.touching,
+                        None,
                     )?;
                 }
                 if !whole || out.imprints.len() > imprints_before {
