@@ -26,6 +26,7 @@ import ForgeExact.DecideOnce.Classes
 import ForgeExact.DecideOnce.QLine
 import ForgeExact.DecideOnce.QSep
 import ForgeExact.DecideOnce.QEdge
+import ForgeExact.DecideOnce.QVert
 import ForgeExact.DecideOnce.SampleLocal
 import ForgeExact.JordanLocal
 import ForgeExact.DecideOnce.LocalJordan
