@@ -11,7 +11,8 @@
 //! a strict sign on every generator is the sign near the apex, whatever the surfaces' curvature.
 //! At an edge or vertex of the other solid, its half-spaces meet as an intersection where every
 //! edge there is convex and as a union where every one is concave. Any other case is undecided:
-//! the caller refuses at the apex and never guesses.
+//! the caller refuses at the apex and never guesses. A face going only part of the turn round its
+//! apex is decided by the whole turn: a verdict on every generator is one on the face's.
 
 use crate::classify::{Index, Where};
 use forge_geom::{CurveGeom, Surface, SurfaceGeom};
@@ -28,8 +29,9 @@ pub(crate) struct Sheet {
 }
 
 /// How a face lies at a point where it has no tangent plane: None where it has one (or `p` is no
-/// apex of its cone: `local_class` decides there), Some(None) at an apex this cannot read (the face
-/// does not go the whole turn round it), else its sheet there.
+/// apex of its cone: `local_class` decides there), Some(None) at an apex this cannot read (no
+/// point of the face away from it to tell its nappe), else its sheet there: every generator of
+/// the cone's nappe, whatever part of the turn the face has.
 pub(crate) fn apex_sheet(body: &Body, f: FaceId, p: Point3) -> Option<Option<Sheet>> {
     let face = body.face(f);
     let Surface::Cone(c) = &face.surface else {
@@ -38,25 +40,18 @@ pub(crate) fn apex_sheet(body: &Body, f: FaceId, p: Point3) -> Option<Option<She
     if c.apex().distance(p) > tol::LINEAR || body.face_normal_at(f, p).is_some() {
         return None;
     }
-    // the whole turn: every edge of the face at the apex is its seam (both uses in this face)
-    let mut away = None;
-    for &l in &face.loops {
-        for co in body.lp(l).coedges() {
+    // (the face may go only part of the turn round its apex, as a rounded corner tapering to a
+    // point does: `where_sheet` decides over the whole turn, and what holds for every generator
+    // holds for the face's; a turn that crosses is undecided whatever part the face has)
+    let away = face
+        .loops
+        .iter()
+        .flat_map(|&l| body.lp(l).coedges())
+        .map(|co| {
             let e = body.edge(body.coedge(co).edge);
-            let at = |v| body.vertex(v).point.distance(p) <= tol::LINEAR;
-            if at(e.start) || at(e.end) {
-                if e.coedges.iter().filter(|&&x| body.coedge_face(x) == f).count() < 2 {
-                    return Some(None);
-                }
-            }
-            if away.is_none() {
-                let m = e.curve.eval(e.range.mid());
-                if m.distance(p) > tol::LINEAR {
-                    away = Some(m);
-                }
-            }
-        }
-    }
+            e.curve.eval(e.range.mid())
+        })
+        .find(|m| m.distance(p) > tol::LINEAR);
     let Some(m) = away else {
         return Some(None);
     };

@@ -432,10 +432,41 @@ fn ball_centred_on_a_rim_builds() {
     agrees_curved(&degenerate_curved("cylinder_sphere/centre_on_rim/Add"));
 }
 
+/// Cone apexes touching another solid at the point, united: two solids meeting there, decided
+/// non-manifold exactly by the reference (`apexDecide`, curved-l2-proofs.md §3). The kernel built
+/// each (the apex had no normal, so the touch went undecided); its apex sheet now decides them in
+/// closed form and refuses ZeroThickness. On a box's vertex and edge, a cylinder's wall, another
+/// cone's wall, and a ball's pole on the apex.
+#[test]
+fn cone_apex_on_a_box_vertex_is_non_manifold() {
+    agrees_curved(&degenerate_curved("plane_cone/apex_on_vertex/Add"));
+}
+
+#[test]
+fn cone_apex_on_a_box_edge_is_non_manifold() {
+    agrees_curved(&degenerate_curved("plane_cone/apex_on_edge/Add"));
+}
+
+#[test]
+fn cone_apex_on_a_cylinder_wall_is_non_manifold() {
+    agrees_curved(&degenerate_curved("cylinder_cone/apex_on_wall/Add"));
+}
+
+#[test]
+fn cone_apex_on_a_cone_is_non_manifold() {
+    agrees_curved(&degenerate_curved("cone_cone/apex_on_surface/Add"));
+}
+
+#[test]
+fn ball_pole_on_a_cone_apex_is_non_manifold() {
+    agrees_curved(&degenerate_curved("cone_sphere/pole_on_apex/Add"));
+}
+
 /// A degenerate pair with its tool moved by `delta` LINEARs along axis `axis` (0, 1, 2): the
 /// curved band (exact-curved's `band` source).
 fn band_curved(name: &str, axis: usize, delta: f64) -> Part {
-    let d = [forge_math::Vec3::X, forge_math::Vec3::Y, forge_math::Vec3::Z][axis] * (delta * forge_math::tol::LINEAR);
+    let d = [forge_math::Vec3::X, forge_math::Vec3::Y, forge_math::Vec3::Z][axis]
+        * (delta * forge_math::tol::LINEAR);
     forge_exact_fuzz::curved::tool_moved(&degenerate_curved(name), d).expect("a movable tool")
 }
 
@@ -490,5 +521,9 @@ fn band_ball_on_an_edge_splits() {
 #[test]
 #[ignore = "exact curved reference: HoleOutside on a cylinder nudged off an inside tangency"]
 fn band_tangent_inside_cylinder_holes() {
-    agrees_curved(&band_curved("cylinder_cylinder/perpendicular_tangent_inside/Add", 1, -0.9));
+    agrees_curved(&band_curved(
+        "cylinder_cylinder/perpendicular_tangent_inside/Add",
+        1,
+        -0.9,
+    ));
 }
