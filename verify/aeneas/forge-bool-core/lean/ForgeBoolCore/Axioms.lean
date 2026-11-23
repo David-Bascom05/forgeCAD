@@ -172,3 +172,4 @@ import ForgeBoolCore.RefineUnify
 #print axioms forge_bool_core.inc.count_sec_spec
 #print axioms forge_bool_core.inc.wf_loop1_spec
 #print axioms forge_bool_core.inc.wf_loop2_sec_spec
+#print axioms forge_bool_core.inc.wf_loop2_spec

@@ -676,6 +676,202 @@ theorem wf_loop2_sec_spec (l : Ledger) (hef : CsrOK l.edge_facets (nfacets l))
         cases this
   · exact ⟨hj.1, hj.2, h⟩
 
+theorem wf_loop2_edge_spec (v : alloc.vec.Vec U32) (lo hi : Usize) (hlo : lo.val ≤ hi.val)
+    (hhi : hi.val ≤ v.val.length) (ok0 ok : Bool) (i : Usize) (hi1 : lo.val ≤ i.val ∧ i.val ≤ hi.val)
+    (h : ok = true ↔ ok0 = true ∧ ∀ j, lo.val ≤ j → j < i.val →
+      ((v.val.drop lo.val).take (hi.val - lo.val)).count (v.val.getD j 0#u32) = 1) :
+    ledger_wf_loop2_loop0 v ok lo hi i ⦃ r => r = true ↔ ok0 = true ∧
+      ∀ x ∈ (v.val.drop lo.val).take (hi.val - lo.val), ((v.val.drop lo.val).take (hi.val - lo.val)).count x = 1 ⦄ := by
+  set sub := (v.val.drop lo.val).take (hi.val - lo.val) with hsub
+  have hfin : (ok0 = true ∧ ∀ j, lo.val ≤ j → j < hi.val → sub.count (v.val.getD j 0#u32) = 1) ↔
+      (ok0 = true ∧ ∀ x ∈ sub, sub.count x = 1) := by
+    apply and_congr_right; intro _
+    constructor
+    · intro hj x hx
+      obtain ⟨t, ht, rfl⟩ := List.getElem_of_mem hx
+      have htl : t < hi.val - lo.val := by simp [hsub] at ht; omega
+      have := hj (lo.val + t) (by omega) (by omega)
+      have e : v.val.getD (lo.val + t) 0#u32 = sub[t] := by
+        rw [List.getD_eq_getElem?_getD, List.getElem?_eq_getElem (by omega), Option.getD_some]
+        simp [hsub]
+      rw [e] at this; exact this
+    · intro hx j h1 h2
+      apply hx
+      have e : v.val.getD j 0#u32 = sub[j - lo.val]'(by simp [hsub]; omega) := by
+        rw [List.getD_eq_getElem?_getD, List.getElem?_eq_getElem (by omega), Option.getD_some]
+        simp [hsub]; congr 1; omega
+      rw [e]; exact List.getElem_mem _
+  rw [← hfin]
+  unfold ledger_wf_loop2_loop0
+  apply loop.spec_decr_nat (fun (q : Bool × Usize) => hi.val + 1 - q.2.val)
+    (fun q => lo.val ≤ q.2.val ∧ q.2.val ≤ hi.val ∧ (q.1 = true ↔ ok0 = true ∧
+      ∀ j, lo.val ≤ j → j < q.2.val → sub.count (v.val.getD j 0#u32) = 1))
+  · rintro ⟨o, j⟩ ⟨hja, hj2, ho⟩
+    unfold ledger_wf_loop2_loop0.body
+    simp only at hja hj2 ho ⊢
+    split
+    · rename_i hot
+      split
+      · rename_i hlt
+        have hjl : j.val < v.val.length := by scalar_tac
+        step as ⟨x, hx⟩
+        step with count_in_spec (alloc.vec.Vec.deref v) lo hi x hlo (by simp [alloc.vec.Vec.deref]; exact hhi) as ⟨c, hc⟩
+        simp only [alloc.vec.Vec.deref, Slice.from_val] at hc
+        have hc' : c.val = sub.count x := hc
+        step as ⟨j1, hj1⟩
+        have hj1v : j1.val = j.val + 1 := by scalar_tac
+        refine ⟨by scalar_tac, by scalar_tac, ?_, by scalar_tac⟩
+        have hg : v.val.getD j.val 0#u32 = x := by
+          rw [List.getD_eq_getElem?_getD, List.getElem?_eq_getElem hjl, Option.getD_some, hx]
+        have hok := ho.mp hot
+        rw [hj1v]
+        simp only [decide_eq_true_eq]
+        constructor
+        · intro h2
+          refine ⟨hok.1, fun a h1 ha => ?_⟩
+          rcases Nat.lt_or_ge a j.val with h3 | h3
+          · exact hok.2 a h1 h3
+          · have : a = j.val := by omega
+            subst this; rw [hg, ← hc']; scalar_tac
+        · rintro ⟨_, hm⟩
+          have := hm j.val hja (by omega)
+          rw [hg, ← hc'] at this; scalar_tac
+      · rename_i hge
+        simp only [WP.spec_ok]
+        have : j.val = hi.val := by scalar_tac
+        rw [← this]; exact ho
+    · rename_i hof
+      simp only [WP.spec_ok]
+      have : o = false := by simpa using hof
+      rw [this] at ho ⊢
+      constructor
+      · intro h; cases h
+      · intro h2; exfalso
+        have := ho.mpr ⟨h2.1, fun a h1 ha => h2.2 a h1 (by omega)⟩
+        cases this
+  · exact ⟨hi1.1, hi1.2, h⟩
+
+
+
+theorem sec_mono' (l : Ledger) (hs : SecCsrOK l.vert_sectors) {k : Nat} :
+    ∀ d, k + d < l.vert_sectors.start.val.length → sstAt l k ≤ sstAt l (k + d)
+  | 0, _ => Nat.le_refl _
+  | d + 1, hd => by
+    have ih := sec_mono' l hs (k := k) d (by omega)
+    have := hs.mono (k + d) (by omega)
+    have e : k + (d + 1) = k + d + 1 := by omega
+    rw [e]; exact Nat.le_trans ih this
+
+theorem sec_le_len' (l : Ledger) (hs : SecCsrOK l.vert_sectors) {k : Nat} (hk : k < l.vert_sectors.start.val.length) :
+    sstAt l k ≤ l.vert_sectors.sec.val.length := by
+  have := sec_mono' l hs (k := k) (l.vert_sectors.start.val.length - 1 - k) (by omega)
+  rw [show k + (l.vert_sectors.start.val.length - 1 - k) = l.vert_sectors.start.val.length - 1 by omega] at this
+  have hl := hs.last
+  unfold sstAt at *; omega
+
+/-- The checks at vert `v`. -/
+def VertOK (l : Ledger) (v : Nat) : Prop :=
+  (∀ x ∈ rowU l.vert_edges.ids.val (stAt l.vert_edges v) (stAt l.vert_edges (v + 1)),
+    (rowU l.vert_edges.ids.val (stAt l.vert_edges v) (stAt l.vert_edges (v + 1))).count x = 1) ∧
+  ∀ t, sstAt l v ≤ t → t < sstAt l (v + 1) →
+    secP l (stAt l.vert_edges v) (stAt l.vert_edges (v + 1)) (sstAt l v) (sstAt l (v + 1))
+      (l.vert_sectors.sec.val.getD t default)
+
+/-- The tables loop 2 reads are well formed (what the earlier checks give). -/
+structure Pre2 (l : Ledger) : Prop where
+  ef : CsrOK l.edge_facets (nfacets l)
+  ve : CsrOK l.vert_edges (nrowsL l.edge_facets)
+  sc : SecCsrOK l.vert_sectors
+  rows : l.vert_sectors.start.val.length = l.vert_edges.start.val.length
+
+set_option maxHeartbeats 1000000 in
+theorem wf_loop2_spec (l : Ledger) (nf nv : Usize) (hnf : nf.val = nfacets l) (hnv : nv.val = nrowsL l.vert_edges)
+    (ok0 ok : Bool) (v : Usize) (hpre : ok0 = true → Pre2 l) (hv : v.val ≤ nv.val)
+    (h : ok = true ↔ ok0 = true ∧ ∀ w, w < v.val → VertOK l w) :
+    ledger_wf_loop2 l.edge_facets.start l.edge_facets.ids l.vert_edges.start l.vert_edges.ids
+      l.vert_sectors.start l.vert_sectors.sec nf nv ok v ⦃ r => r = true ↔ ok0 = true ∧ ∀ w, w < nv.val → VertOK l w ⦄ := by
+  unfold ledger_wf_loop2
+  apply loop.spec_decr_nat (fun (q : Bool × Usize) => nv.val + 1 - q.2.val)
+    (fun q => q.2.val ≤ nv.val ∧ (q.1 = true ↔ ok0 = true ∧ ∀ w, w < q.2.val → VertOK l w))
+  · rintro ⟨o, j⟩ ⟨hj, ho⟩
+    unfold ledger_wf_loop2.body
+    simp only at hj ho ⊢
+    split
+    · rename_i hot
+      have hok := ho.mp hot
+      have hp := hpre hok.1
+      split
+      · rename_i hlt
+        have hjl : j.val < nrowsL l.vert_edges := by scalar_tac
+        have hk : j.val + 1 < l.vert_edges.start.val.length := by unfold nrowsL at hjl; omega
+        have hsk : j.val + 1 < l.vert_sectors.start.val.length := by rw [hp.rows]; exact hk
+        have hm := csr_mono hp.ve (k := j.val) 1 hk
+        have hl := csr_le_len hp.ve hk
+        have hsm := sec_mono' l hp.sc (k := j.val) 1 hsk
+        have hsl := sec_le_len' l hp.sc hsk
+        step as ⟨i, hi⟩
+        step as ⟨lo, hlo⟩
+        have hlov : lo.val = stAt l.vert_edges j.val := by
+          rw [hlo, stAt, List.getD_eq_getElem?_getD, List.getElem?_eq_getElem (by omega), Option.getD_some, ← hi]
+          scalar_tac
+        step as ⟨i1, hi1⟩
+        step as ⟨i2, hi2⟩
+        step as ⟨hiu, hhiu⟩
+        have hhv : hiu.val = stAt l.vert_edges (j.val + 1) := by
+          have : i1.val = j.val + 1 := by scalar_tac
+          rw [hhiu, stAt, ← this, List.getD_eq_getElem?_getD, List.getElem?_eq_getElem (by omega),
+            Option.getD_some, ← hi2]
+          scalar_tac
+        step with wf_loop2_edge_spec l.vert_edges.ids lo hiu (by rw [hlov, hhv]; exact hm)
+          (by rw [hhv]; exact hl) true o lo ⟨Nat.le_refl _, by rw [hlov, hhv]; exact hm⟩
+          ⟨fun _ => ⟨rfl, fun a h1 h2 => by omega⟩, fun _ => hot⟩ as ⟨ok2, hok2⟩
+        step as ⟨i3, hi3⟩
+        step as ⟨slo, hslo⟩
+        have hslov : slo.val = sstAt l j.val := by
+          rw [hslo, sstAt, List.getD_eq_getElem?_getD, List.getElem?_eq_getElem (by omega), Option.getD_some, ← hi3]
+          scalar_tac
+        step as ⟨i4, hi4⟩
+        step as ⟨i5, hi5⟩
+        step as ⟨shi, hshi⟩
+        have hshv : shi.val = sstAt l (j.val + 1) := by
+          have : i4.val = j.val + 1 := by scalar_tac
+          rw [hshi, sstAt, ← this, List.getD_eq_getElem?_getD, List.getElem?_eq_getElem (by omega),
+            Option.getD_some, ← hi5]
+          scalar_tac
+        step with wf_loop2_sec_spec l hp.ef hp.ve nf hnf lo hiu slo shi (by rw [hlov, hhv]; exact hm)
+          (by rw [hhv]; exact hl) (by rw [hslov, hshv]; exact hsm) (by rw [hshv]; exact hsl)
+          (ok0 && ok2) ok2 slo ⟨Nat.le_refl _, by rw [hslov, hshv]; exact hsm⟩
+          ⟨fun h2 => ⟨by simp [hok.1, h2], fun t h1 h3 => by omega⟩, fun h2 => by simp at h2; exact h2.2.1⟩
+          as ⟨ok3, hok3⟩
+        step as ⟨j1, hj1⟩
+        have hj1v : j1.val = j.val + 1 := by scalar_tac
+        refine ⟨by omega, ?_, by omega⟩
+        rw [hj1v, hok3]
+        simp only [Bool.and_eq_true, hok.1, true_and, hok2]
+        rw [hlov, hhv, hslov, hshv]
+        constructor
+        · rintro ⟨hE, hS⟩ w hw
+          rcases Nat.lt_or_ge w j.val with h3 | h3
+          · exact hok.2 w h3
+          · have : w = j.val := by omega
+            subst this; exact ⟨hE, hS⟩
+        · intro hw
+          exact hw j.val (by omega)
+      · rename_i hge
+        simp only [WP.spec_ok]
+        have : j.val = nv.val := by scalar_tac
+        simp only [this] at ho; exact ho
+    · rename_i hof
+      simp only [WP.spec_ok]
+      have : o = false := by simpa using hof
+      rw [this] at ho ⊢
+      constructor
+      · intro h; cases h
+      · intro h2; exfalso
+        have := ho.mpr ⟨h2.1, fun a ha => h2.2 a (by omega)⟩
+        cases this
+  · exact ⟨hv, h⟩
+
 end inc
 
 end forge_bool_core
