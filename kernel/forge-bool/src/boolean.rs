@@ -2225,6 +2225,8 @@ pub(crate) fn apply<S: crate::imprint::Src>(a: &mut Body, b: &S, plan: &Plan) {
             let loops = &mut a.faces[face.index()].loops;
             let at = loops.len() - s.loops.len();
             loops[..=at].rotate_right(1);
+            // its index keeps the order the loops came in: built afresh when next asked (CacheOK, G9)
+            a.faces[face.index()].query.clear();
         }
     }
     for &(k, t) in grown {

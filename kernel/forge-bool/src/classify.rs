@@ -238,6 +238,27 @@ const GONE: forge_topo::CoedgeId = forge_topo::CoedgeId(u32::MAX);
 pub fn drop_query_loops(body: &mut Body, f: FaceId, gone: &[forge_topo::LoopId]) {
     let mut cs: Vec<forge_topo::CoedgeId> = gone.iter().flat_map(|&l| body.lp(l).coedges()).collect();
     cs.sort_unstable();
+    // the reach a fresh index of what is left would have (CacheOK, G9): only where a going edge is
+    // the widest does it change, and then the kept entries say what it becomes
+    let reach = {
+        let Some(info) = body
+            .face(f)
+            .query
+            .get()
+            .and_then(|q| q.downcast_ref::<FaceInfo>())
+        else {
+            return;
+        };
+        let sag = |c: forge_topo::CoedgeId| sag_bound(&body.edge(body.coedge(c).edge).curve);
+        if cs.iter().all(|&c| sag(c) < info.reach) {
+            info.reach
+        } else {
+            info.edges
+                .iter()
+                .filter(|e| e.0 != GONE && cs.binary_search(&e.0).is_err())
+                .fold(tol::LINEAR, |r, e| r.max(sag(e.0)))
+        }
+    };
     let face = &mut body.faces[f.index()];
     let Some(q) = face.query.get_mut() else { return };
     let Some(info) = std::sync::Arc::get_mut(q).and_then(|a| a.downcast_mut::<FaceInfo>()) else {
@@ -251,6 +272,7 @@ pub fn drop_query_loops(body: &mut Body, f: FaceId, gone: &[forge_topo::LoopId])
         }
         dead += usize::from(e.0 == GONE);
     }
+    info.reach = reach;
     info.drawn = std::sync::OnceLock::new();
     info.simple = std::sync::OnceLock::new();
     if 2 * dead > info.edges.len() {
