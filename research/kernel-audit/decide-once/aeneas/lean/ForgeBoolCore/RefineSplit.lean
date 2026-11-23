@@ -482,4 +482,190 @@ theorem split_loop2_spec (F P M T Tp : alloc.vec.Vec U32) (n : Nat) (i : Usize)
       rw [← this]; exact hti
   · exact ⟨hi, hinv⟩
 
+/-! ## Loop 3: each facet's position -/
+
+theorem idxOf_take_succ {l : List Nat} (hnd : l.Nodup) {j : Nat} (hj : j < l.length) :
+    l.idxOf l[j] = j := List.Nodup.idxOf_getElem hnd j hj
+
+theorem split_loop3_spec (F FP0 FP : alloc.vec.Vec U32) (i : Usize)
+    (hnd : (F.val.map (·.val)).Nodup) (hin : ∀ x ∈ F.val, x.val < FP0.val.length)
+    (hsmall : F.val.length < U32.max) (hi : i.val ≤ F.val.length)
+    (hlen : FP.val.length = FP0.val.length)
+    (hinv : ∀ c, c < FP0.val.length → (FP.val.getD c NONE).val =
+      if c ∈ (F.val.take i.val).map (·.val) then (F.val.map (·.val)).idxOf c else (FP0.val.getD c NONE).val) :
+    split_loop3 F FP i ⦃ r => r.val.length = FP0.val.length ∧ ∀ c, c < FP0.val.length →
+      (r.val.getD c NONE).val = if c ∈ F.val.map (·.val) then (F.val.map (·.val)).idxOf c
+        else (FP0.val.getD c NONE).val ⦄ := by
+  unfold split_loop3
+  apply loop.spec_decr_nat (fun (q : alloc.vec.Vec U32 × Usize) => F.val.length - q.2.val)
+    (fun q => q.2.val ≤ F.val.length ∧ q.1.val.length = FP0.val.length ∧ ∀ c, c < FP0.val.length →
+      (q.1.val.getD c NONE).val = if c ∈ (F.val.take q.2.val).map (·.val) then (F.val.map (·.val)).idxOf c
+        else (FP0.val.getD c NONE).val)
+  · rintro ⟨T, j⟩ ⟨hj, hTl, hT⟩
+    unfold split_loop3.body
+    simp only at hj hTl hT ⊢
+    split
+    · rename_i hlt
+      have hjl : j.val < F.val.length := by scalar_tac
+      step as ⟨x, hx⟩
+      have hxl : x.val < FP0.val.length := hin x (by rw [hx]; exact List.getElem_mem _)
+      step as ⟨i3, hi3⟩
+      have hi3v : i3.val = x.val := by rw [hi3]; scalar_tac
+      step as ⟨w0, back, hw0⟩
+      rename_i hback
+      step as ⟨i4, hi4⟩
+      have hi4v : i4.val = j.val := by
+        rw [hi4, UScalar.cast_val_eq]; apply Nat.mod_eq_of_lt; have := U32.max_eq; simp; omega
+      step as ⟨j1, hj1⟩
+      have hxj : (F.val.map (·.val))[j.val]'(by simp; omega) = x.val := by simp [hx]
+      have htk : (F.val.take (j.val + 1)).map (·.val) = (F.val.take j.val).map (·.val) ++ [x.val] := by
+        rw [List.take_succ, List.getElem?_eq_getElem hjl, ← hx]; simp
+      refine ⟨by scalar_tac, by rw [hback]; simp [hTl], fun c hc => ?_, by scalar_tac⟩
+      rw [hback, alloc.vec.Vec.set_val_eq, hi3v, getD_set_u32 _ _ _ _ (by omega), hj1, htk]
+      by_cases e : c = x.val
+      · subst e
+        rw [if_pos rfl, if_pos (by simp), hi4v, ← hxj, idxOf_take_succ hnd]
+      · rw [if_neg e, hT c hc]
+        have : c ∈ (F.val.take j.val).map (·.val) ++ [x.val] ↔ c ∈ (F.val.take j.val).map (·.val) := by simp [e]
+        by_cases h1 : c ∈ (F.val.take j.val).map (·.val)
+        · rw [if_pos h1, if_pos (this.mpr h1)]
+        · rw [if_neg h1, if_neg (fun h' => h1 (this.mp h'))]
+    · rename_i hge
+      simp only [WP.spec_ok]
+      have : j.val = F.val.length := by scalar_tac
+      rw [this, List.take_length] at hT
+      exact ⟨hTl, hT⟩
+  · exact ⟨hi, hlen, hinv⟩
+
+/-! ## Loop 4: which bodies each facet is a piece of -/
+
+/-- `Ledger.bodyOf`: the face's body, 0 past the end. -/
+def bodyF (l : Ledger) (f : Nat) : Nat := ((l.face_body.val.getD f (0#u32 : U32)) : U32).val
+
+theorem body_of_spec (l : Ledger) (f : FaceId) : body_of l f ⦃ r => r.val = bodyF l (f : U32).val ⦄ := by
+  unfold body_of
+  step as ⟨i, hi⟩
+  have hiv : i.val = (f : U32).val := by rw [hi]; scalar_tac
+  split
+  · rename_i hlt
+    have hl : (f : U32).val < l.face_body.val.length := by scalar_tac
+    step as ⟨i2, hi2⟩
+    have : i2.val = (f : U32).val := by rw [hi2]; scalar_tac
+    step as ⟨r, hr⟩
+    rw [hr]; simp [bodyF, List.getD_eq_getElem?_getD, List.getElem?_eq_getElem hl, this]
+  · rename_i hge
+    have hl : l.face_body.val.length ≤ (f : U32).val := by scalar_tac
+    simp only [WP.spec_ok]
+    simp [bodyF, List.getD_eq_getElem?_getD, List.getElem?_eq_none hl]
+
+theorem getD_set_any {α : Type} (t : List α) (i j : Nat) (v d : α) (hi : i < t.length) :
+    (t.set i v).getD j d = if j = i then v else t.getD j d := by
+  rw [List.getD_eq_getElem?_getD, List.getElem?_set, List.getD_eq_getElem?_getD]
+  by_cases h : i = j
+  · subst h; simp [hi]
+  · simp [h, Ne.symm h]
+
+def PAt (PO : List (alloc.vec.Vec Bool)) (p b : Nat) : Bool := (PO.getD p default).val.getD b false
+
+def posAt (FP : alloc.vec.Vec U32) (c : Nat) : Nat := (FP.val.getD c NONE).val
+
+/-- Loop 4's invariant over the first `k` pieces. -/
+def L4Inv (l : Ledger) (FP : alloc.vec.Vec U32) (Fl nb : Nat) (PO : List (alloc.vec.Vec Bool)) (k : Nat) : Prop :=
+  PO.length = Fl ∧ (∀ p, p < Fl → (PO.getD p default).val.length = nb) ∧
+  ∀ p, p < Fl → ∀ b, b < nb →
+    PAt PO p b = ((pcs l).take k).any (fun q => decide (posAt FP q.1 = p ∧ bodyF l q.2 = b))
+
+theorem split_loop4_spec (l : Ledger) (FP : alloc.vec.Vec U32) (Fl : Nat)
+    (hin : ∀ q ∈ pcs l, q.1 < FP.val.length ∧ posAt FP q.1 < Fl)
+    (PO : alloc.vec.Vec (alloc.vec.Vec Bool)) (k : Usize) (hk : k.val ≤ l.pieces.val.length)
+    (hinv : L4Inv l FP Fl l.nb.val PO.val k.val) :
+    split_loop4 l.nb l.face_body l.face_class l.cells l.pieces l.inside l.edges l.verts FP PO k ⦃ r =>
+      L4Inv l FP Fl l.nb.val r.val l.pieces.val.length ⦄ := by
+  have hpl : (pcs l).length = l.pieces.val.length := by simp [pcs]
+  unfold split_loop4
+  apply loop.spec_decr_nat (fun (q : alloc.vec.Vec (alloc.vec.Vec Bool) × Usize) => l.pieces.val.length - q.2.val)
+    (fun q => q.2.val ≤ l.pieces.val.length ∧ L4Inv l FP Fl l.nb.val q.1.val q.2.val)
+  · rintro ⟨T, j⟩ ⟨hj, hl1, hl2, hl3⟩
+    unfold split_loop4.body
+    simp only at hj hl1 hl2 hl3 ⊢
+    split
+    · rename_i hlt
+      have hjl : j.val < l.pieces.val.length := by scalar_tac
+      step as ⟨c, f, hcf⟩
+      have hpj : (pcs l)[j.val]'(by omega) = ((c : U32).val, (f : U32).val) := by simp [pcs, ← hcf]
+      have hmem : ((c : U32).val, (f : U32).val) ∈ pcs l := by rw [← hpj]; exact List.getElem_mem _
+      obtain ⟨hcl, hpos⟩ := hin _ hmem
+      have htake : (pcs l).take (j.val + 1) = (pcs l).take j.val ++ [((c : U32).val, (f : U32).val)] := by
+        rw [List.take_succ, List.getElem?_eq_getElem (by omega), hpj]; rfl
+      step with body_of_spec l f as ⟨bi, hbi⟩
+      step as ⟨b, hb⟩
+      have hbv : b.val = bodyF l (f : U32).val := by rw [hb]; scalar_tac
+      step as ⟨i3, hi3⟩
+      have hi3v : i3.val = (c : U32).val := by rw [hi3]; scalar_tac
+      step as ⟨i4, hi4⟩
+      have hi4v : (i4 : U32).val = posAt FP (c : U32).val := by
+        simp only [hi3v] at hi4
+        rw [posAt, List.getD_eq_getElem?_getD, List.getElem?_eq_getElem hcl, hi4]; rfl
+      step as ⟨pp, hpp⟩
+      have hppv : pp.val = posAt FP (c : U32).val := by rw [hpp, ← hi4v]; scalar_tac
+      step as ⟨nb5, hnb5⟩
+      have hnb5v : nb5.val = l.nb.val := by rw [hnb5]; scalar_tac
+      have hex : ∀ p' b', ((pcs l).take (j.val + 1)).any (fun q => decide (posAt FP q.1 = p' ∧ bodyF l q.2 = b')) =
+            (((pcs l).take j.val).any (fun q => decide (posAt FP q.1 = p' ∧ bodyF l q.2 = b')) ||
+              decide (posAt FP (c : U32).val = p' ∧ bodyF l (f : U32).val = b')) := by
+        intro p' b'
+        rw [htake, List.any_append]; simp
+      split
+      · rename_i hbn
+        have hbl : b.val < l.nb.val := by scalar_tac
+        have hppl : pp.val < T.val.length := by rw [hl1, hppv]; exact hpos
+        step as ⟨pr, hpr1, hpr2⟩
+        obtain ⟨v7, back⟩ := pr
+        simp only at hpr1 hpr2 ⊢
+        have hv7l : b.val < v7.val.length := by
+          have := hl2 pp.val (by omega)
+          rw [hpr1]; rw [List.getD_eq_getElem?_getD, List.getElem?_eq_getElem hppl] at this; simp at this; omega
+        step as ⟨pr1, hq1, hq2⟩
+        obtain ⟨w0, back1⟩ := pr1
+        simp only at hq1 hq2 ⊢
+        step as ⟨j1, hj1⟩
+        have hnew : (back (back1 true)).val = T.val.set pp.val (v7.set b true) := by
+          rw [hpr2, hq2]; simp
+        refine ⟨by scalar_tac, ⟨by rw [hnew]; simp [hl1], fun p' hp' => ?_, fun p' hp' b' hb' => ?_⟩, by scalar_tac⟩
+        · rw [hnew, getD_set_any _ _ _ _ _ hppl]
+          split
+          · rename_i e; subst e
+            have := hl2 pp.val hp'
+            rw [List.getD_eq_getElem?_getD, List.getElem?_eq_getElem hppl] at this
+            simp [hpr1] at this ⊢; exact this
+          · exact hl2 p' hp'
+        · rw [hj1, hex p' b', ← hl3 p' hp' b' hb', PAt, PAt, hnew, getD_set_any _ _ _ _ _ hppl]
+          by_cases e : p' = pp.val
+          · subst e
+            rw [if_pos rfl]
+            have hv7' : v7 = T.val.getD pp.val default := by
+              rw [hpr1, List.getD_eq_getElem?_getD, List.getElem?_eq_getElem hppl]; rfl
+            simp only [alloc.vec.Vec.set_val_eq]
+            rw [getD_set_any _ _ _ _ _ hv7l, ← hv7', hppv, hbv]
+            by_cases eb : b' = bodyF l (f : U32).val
+            · subst eb; simp
+            · have eb' : ¬bodyF l (f : U32).val = b' := fun h => eb h.symm
+              simp [eb, eb']
+          · rw [if_neg e]
+            have : ¬posAt FP (c : U32).val = p' := by rw [← hppv]; exact fun h => e h.symm
+            simp [this]
+      · rename_i hbn
+        have hbl : l.nb.val ≤ b.val := by scalar_tac
+        step as ⟨j1, hj1⟩
+        refine ⟨by scalar_tac, ⟨hl1, hl2, fun p' hp' b' hb' => ?_⟩, by scalar_tac⟩
+        rw [hj1, hex p' b', ← hl3 p' hp' b' hb']
+        have : ¬bodyF l (f : U32).val = b' := by rw [← hbv]; omega
+        simp [this]
+    · rename_i hge
+      simp only [WP.spec_ok]
+      have : j.val = l.pieces.val.length := by scalar_tac
+      rw [this] at hl3
+      exact ⟨hl1, hl2, hl3⟩
+  · exact ⟨hk, hinv⟩
+
 end forge_bool_core

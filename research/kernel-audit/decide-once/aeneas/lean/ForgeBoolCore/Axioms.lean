@@ -29,3 +29,5 @@ import ForgeBoolCore.RefineSplit
 #print axioms ForgeBoolCore.Dedup.dedup_map
 #print axioms forge_bool_core.split_loop1_spec
 #print axioms forge_bool_core.split_loop2_spec
+#print axioms forge_bool_core.split_loop3_spec
+#print axioms forge_bool_core.split_loop4_spec
