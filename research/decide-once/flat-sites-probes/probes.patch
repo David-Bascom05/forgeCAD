@@ -1,0 +1,115 @@
+diff --git a/kernel/forge-bool/src/boolean.rs b/kernel/forge-bool/src/boolean.rs
+index 0add86ee..eeb4dfd3 100644
+--- a/kernel/forge-bool/src/boolean.rs
++++ b/kernel/forge-bool/src/boolean.rs
+@@ -2520,7 +2520,7 @@ pub(crate) fn trim(
+                         if let Some((s, tol)) = on_edge(body, e, h.point) {
+                             let other = index[1 - k].face_box(faces[1 - k]);
+                             if other.grow(tol::LINEAR).contains(h.point)
+-                                && ((other.contains(h.point) && !CAREFUL.with(|c| c.get()))
++                                && ((other.contains(h.point) && !CAREFUL.with(|c| c.get()) && g14_probe("plane", &index[1 - k], faces[1 - k], h.point))
+                                     || index[1 - k].point_in_face(faces[1 - k], h.point) != Where::Outside)
+                             {
+                                 ts.push((h.t, cuts.len()));
+@@ -2836,7 +2836,7 @@ pub(crate) fn trim(
+                     });
+                     if let Some(((s, tol), h)) = on
+                         && other.grow(tol::LINEAR).contains(h.point)
+-                        && ((!(grazing || !other.contains(h.point)) && !CAREFUL.with(|c| c.get()))
++                        && ((!(grazing || !other.contains(h.point)) && !CAREFUL.with(|c| c.get()) && g14_probe("surface", &index[1 - k], faces[1 - k], h.point))
+                             || index[1 - k].point_in_face(faces[1 - k], h.point) != Where::Outside)
+                     {
+                         ts.push((h.t, cuts.len()));
+@@ -7372,3 +7372,25 @@ pub(crate) mod log {
+         );
+     }
+ }
++
++/// PROBE (temporary): G14, the box-only accept; returns true (no behaviour change) unless FORGE_G14=strict.
++fn g14_probe(site: &str, ix: &Index, f: FaceId, p: Point3) -> bool {
++    use std::sync::OnceLock;
++    static MODE: OnceLock<u8> = OnceLock::new();
++    let mode = *MODE.get_or_init(|| match std::env::var("FORGE_G14").as_deref() {
++        Ok("log") => 1,
++        Ok("strict") => 2,
++        _ => 0,
++    });
++    if mode == 0 {
++        return true;
++    }
++    let w = ix.point_in_face(f, p);
++    if w != Where::Outside {
++        if mode == 1 { eprintln!("G14 {site} ok {w:?}"); }
++        return true;
++    }
++    let kind = match &ix.body.face(f).surface { Surface::Plane(_) => "plane", _ => "curved" };
++    eprintln!("G14 {site} OUTSIDE face {f:?} {kind} p {p:?}");
++    mode == 1
++}
+diff --git a/kernel/forge-bool/src/classify.rs b/kernel/forge-bool/src/classify.rs
+index 77da4954..e2e50758 100644
+--- a/kernel/forge-bool/src/classify.rs
++++ b/kernel/forge-bool/src/classify.rs
+@@ -591,6 +591,7 @@ impl<'a> Index<'a> {
+                 crate::boolean::log::on_edge_at(body, co.edge, p, d, reach, "point_in_face: nearest edge");
+             });
+             if d <= reach && !past() {
++                probe_pif_on(body, f, c, p, d);
+                 return Where::On;
+             }
+             // the polygon of the loop can be off by its chord sag near curved edges; decide those by side
+@@ -666,6 +667,7 @@ impl<'a> Index<'a> {
+                 && self.body.face(f).surface.distance(p) <= tol::LINEAR
+                 && self.point_in_face(f, p) != Where::Outside
+             {
++                probe_classify_on(self.body, f, p);
+                 return Where::On;
+             }
+         }
+@@ -1520,3 +1522,46 @@ mod simple_vs_polygon {
+         assert!(decided > 1000);
+     }
+ }
++
++// PROBE (temporary): exactness of classify's and point_in_face's `On`.
++fn probe_on() -> bool {
++    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
++    *ON.get_or_init(|| std::env::var("FORGE_PROBE_ON").is_ok())
++}
++fn exact_side(s: &Surface, p: Point3) -> Option<i32> {
++    use forge_math::exact::{DyPlane, DyV3, HPoint};
++    let Surface::Plane(pl) = s else { return None };
++    let o = pl.frame.origin;
++    let n = pl.frame.z().get();
++    let pp = DyPlane::from_frame([o.x, o.y, o.z], [n.x, n.y, n.z]);
++    Some(pp.side(&HPoint::from_dy(DyV3::from_f64(p.x, p.y, p.z))))
++}
++fn probe_classify_on(body: &Body, f: FaceId, p: Point3) {
++    if !probe_on() {
++        return;
++    }
++    let s = &body.face(f).surface;
++    let d = s.distance(p);
++    match exact_side(s, p) {
++        Some(0) => eprintln!("PROBE cls_on plane exact0 d={d:e}"),
++        Some(_) => eprintln!("PROBE cls_on plane OFF d={d:e}"),
++        None => eprintln!("PROBE cls_on curved d={d:e}"),
++    }
++}
++fn probe_pif_on(body: &Body, f: FaceId, c: forge_topo::CoedgeId, p: Point3, d: f64) {
++    if !probe_on() {
++        return;
++    }
++    let s = &body.face(f).surface;
++    let own = exact_side(s, p);
++    let e = body.edge(body.coedge(c).edge);
++    let line = matches!(e.curve, Curve::Line(_));
++    let across = body.partner(c).map(|o| body.coedge_face(o)).filter(|&g| g != f);
++    let acr = across.and_then(|g| exact_side(&body.face(g).surface, p));
++    let kind = match (own, line, acr) {
++        (None, _, _) => "curved".to_string(),
++        (Some(o), true, Some(a)) => format!("plane-line own={} across={}", o == 0, a == 0),
++        (Some(o), _, _) => format!("plane-other own={}", o == 0),
++    };
++    eprintln!("PROBE pif_on {kind} d={d:e}");
++}
