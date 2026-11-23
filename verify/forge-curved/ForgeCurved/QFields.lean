@@ -106,3 +106,40 @@ theorem two_not_point {qs : List Quad.Quadric} {E : List Num} (hE : eventsOf qs 
   linarith
 
 end ForgeCurved
+
+namespace ForgeCurved
+
+open ForgeExact ForgeExact.Alg ForgeExact.DecideOnce ForgeExact.DecideOnce.Curved ForgeCurved.Sweep
+  Set
+
+theorem mem_edges {nc : ℕ} {forms : List SForm} {ss : List QS} {e : Cov} :
+    e ∈ (curvedLedger nc forms ss).edges ↔
+      (∃ s ∈ ss, s.tag ≠ .vert ∧ 2 ≤ s.cov.count Sgn.zero ∧ s.cov = e) ∧
+        ∃ φ ∈ (curvedLedger nc forms ss).facets, Cov.le e φ = true := by
+  simp only [curvedLedger, List.mem_filter, mem_dedup, List.mem_map, List.any_eq_true,
+    bne_iff_ne, ne_eq, Bool.and_eq_true, decide_eq_true_eq]
+  constructor
+  · rintro ⟨⟨s, ⟨hs, htag, h2⟩, rfl⟩, φ, hφ, hle⟩
+    exact ⟨⟨s, hs, htag, h2, rfl⟩, φ, hφ, hle⟩
+  · rintro ⟨⟨s, hs, htag, h2, rfl⟩, φ, hφ, hle⟩
+    exact ⟨⟨s, ⟨hs, htag, h2⟩, rfl⟩, φ, hφ, hle⟩
+
+theorem mem_verts {nc : ℕ} {forms : List SForm} {ss : List QS} {v : Cov} :
+    v ∈ (curvedLedger nc forms ss).verts ↔
+      (∃ s ∈ ss, s.tag = .vert ∧ s.cov = v) ∧ (¬ ∃ s ∈ ss, s.tag ≠ .vert ∧ s.cov = v) ∧
+        ∃ φ ∈ (curvedLedger nc forms ss).facets, Cov.le v φ = true := by
+  simp only [curvedLedger, List.mem_filter, mem_dedup, List.mem_map, List.any_eq_true,
+    bne_iff_ne, ne_eq, Bool.and_eq_true, Bool.not_eq_true', beq_iff_eq, decide_eq_true_eq]
+  constructor
+  · rintro ⟨⟨s, ⟨hs, htag⟩, rfl⟩, hnot, φ, hφ, hle⟩
+    refine ⟨⟨s, hs, htag, rfl⟩, ?_, φ, hφ, hle⟩
+    rintro ⟨s', hs', htag', hcov⟩
+    simp only [List.any_eq_false, Bool.and_eq_true, bne_iff_ne, ne_eq, beq_iff_eq, not_and] at hnot
+    exact hnot s' hs' htag' hcov
+  · rintro ⟨⟨s, hs, htag, rfl⟩, hnot, φ, hφ, hle⟩
+    refine ⟨⟨s, ⟨hs, htag⟩, rfl⟩, ?_, φ, hφ, hle⟩
+    simp only [List.any_eq_false, Bool.and_eq_true, bne_iff_ne, ne_eq, beq_iff_eq, not_and]
+    intro s' hs' htag' hcov
+    exact hnot ⟨s', hs', htag', hcov⟩
+
+end ForgeCurved
