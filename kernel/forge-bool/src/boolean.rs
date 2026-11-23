@@ -6003,23 +6003,26 @@ fn plane_split(
                 // that near, the cycles it is tested against: a narrow ring round the hole would put
                 // it past the ring's far side)
                 let step = 1e-3 * size(&h);
+                // (a box within `step` of the point, axis by axis)
                 let near = |b: &Box3| {
-                    let g = |i: Interval, x: f64| (i.lo - x).max(x - i.hi).max(0.0);
-                    g(b.x, d.p.x).max(g(b.y, d.p.y)).max(g(b.z, d.p.z)) <= step
+                    let w = |i: Interval, x: f64| i.lo - step <= x && x <= i.hi + step;
+                    w(b.x, d.p.x) && w(b.y, d.p.y) && w(b.z, d.p.z)
                 };
                 let cached =
                     boxes.get_or_init(|| regions.iter().map(|g| walk_boxes(&g[0], pieces)).collect());
-                let clear = regions
-                    .iter()
-                    .zip(cached)
-                    .filter(|(_, (hull, _))| near(hull))
-                    .flat_map(|(g, (_, each))| g[0].iter().zip(each))
-                    .filter(|&(&(o, _), b)| o != h.0 && near(b))
-                    .map(|(&(o, _), _)| {
-                        let q = &pieces[o];
-                        q.curve.eval(q.curve.closest(d.p, q.range)).distance(d.p)
-                    })
-                    .fold(f64::INFINITY, f64::min);
+                let mut clear = f64::INFINITY;
+                for (g, (hull, each)) in regions.iter().zip(cached) {
+                    if !near(hull) {
+                        continue;
+                    }
+                    for (&(o, _), b) in g[0].iter().zip(each) {
+                        // (a piece the hole's walk shares, run the other way, bounds no gap)
+                        if o != h.0 && near(b) {
+                            let q = &pieces[o];
+                            clear = clear.min(q.curve.eval(q.curve.closest(d.p, q.range)).distance(d.p));
+                        }
+                    }
+                }
                 d.p + left * step.min(0.5 * clear)
             }
         };
