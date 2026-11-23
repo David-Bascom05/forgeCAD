@@ -46,7 +46,7 @@ def klass(kind, r, truths, tol):
     t = truth_of(kind, r, truths)
     if t is None:
         return "no truth"
-    j = truth_rule.judged(t, tol)
+    j = truth_rule.judged(t, tol, r.get("program_bodies"))
     if j is None:
         return "uncertain"
     ev = abs(r["vol"] - j[0]) / j[0]
@@ -56,7 +56,7 @@ def klass(kind, r, truths, tol):
 
 def err(kind, r, truths, tol=1e-4):
     t = truth_of(kind, r, truths) if r.get("v") == "ok" else None
-    j = truth_rule.judged(t, tol) if t is not None else None
+    j = truth_rule.judged(t, tol, r.get("program_bodies")) if t is not None else None
     if j is None:
         return ""
     return f"vol {abs(r['vol'] - j[0]) / j[0]:.1e}, area {abs(r['area'] - j[1]) / j[1]:.1e}"

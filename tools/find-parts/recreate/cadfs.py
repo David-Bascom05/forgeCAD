@@ -2189,6 +2189,9 @@ def translate(text, raw, topo, out):
         r.update(status="untranslated", cls="importer", why="bug: " + repr(x)[:70])
     if t is not None:
         r["notes"] = sorted(t.notes)
+        # the bodies the program makes, as this reader reads it (a pattern of new bodies makes one per instance):
+        # how many of the source's exact copies truth_rule keeps
+        r["program_bodies"] = t.bodies
         if t.topo is not None:
             t.topo.close()
         if r["status"] in ("translated", "stopped"):

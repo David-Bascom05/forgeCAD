@@ -37,9 +37,30 @@ def measures(solid):
     }
 
 
-def judged(t, tol):
+def with_copies(t, program_bodies):
+    """The truth with as many of its exact copies as the program makes (truth.md). step_truth counts each distinct
+    solid once and keeps its copies' measures aside. Where the source's solids, copies and all, are as many as the
+    bodies the program makes, the copies are added back; where its distinct solids are, they are left out; where
+    neither, the truth is None (uncertain). A truth with no copies, or a part whose bodies were not counted, is as
+    measured."""
+    c = t.get("copies", 0)
+    if not c or program_bodies is None or "copy_measures" not in t:
+        return t
+    n = t.get("solids", 0)
+    if program_bodies == n + c:
+        m = t["copy_measures"]
+        return dict(t, **{k: t[k] + m[k] for k in m if k in t})
+    if program_bodies == n:
+        return t
+    return None
+
+
+def judged(t, tol, program_bodies=None):
     """(volume, area) a part is judged against, or None where the truth is uncertain. A truth measured before the rule
     (no Gauss-Kronrod volume) is taken as it was measured."""
+    t = with_copies(t, program_bodies)
+    if t is None:
+        return None
     if "vol_gk" not in t:
         return t["vol"], t["area"]
     v, near = t["vol_gk"], tol / 10

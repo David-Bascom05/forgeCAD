@@ -25,8 +25,8 @@ measure are given beside them where they differ.
 | set | parts | untranslated before | after | match (1e-4) before | after | uncertain after | match after, old measure |
 |---|---:|---:|---:|---:|---:|---:|---:|
 | FreeCAD library, bodies | 677 | 130 | 39 | 394 | 570 | 20 | 523 |
-| CADFS, all parts | 1914 | 640 | 604 | 1108 | 1129 | 3 | 1117 |
-| CADFS, parts with a fillet | 476 | 238 | 227 | 164 | 167 | 0 | 167 |
+| CADFS, all parts | 1914 | 640 | 604 | 1108 | 1131 | 4 | 1117 |
+| CADFS, parts with a fillet | 476 | 238 | 226 | 164 | 166 | 1 | 167 |
 | WHUCAD, 1 in 7 with a fillet | 319 | 35 | 29 | (1e-3: STEPs staged for the newly built only) | 0 new | | |
 
 No part got worse on any set through the importers: no match was lost, and nothing that built before stopped
@@ -230,6 +230,11 @@ importers' output was the same in both runs, built for built and volume for volu
   - The 1 is 5ab390cb.Body001.
 - **CADFS:** 12 mismatches become matches and 3 become uncertain (00027022, 00294728, 00659354). The fillet subset is
   unchanged.
+- **The copy rule** (truth.md, adopted after this), for CADFS parts whose STEP holds exact copies:
+  - 3 mismatches become matches (00293826, 00724634, 00846949);
+  - 1 match becomes uncertain (00647071, a part with a fillet, so the fillet subset goes from 167 to 166).
+
+  The headline is under both rules.
 
 ### Up to a face (FreeCAD, 5 → 0)
 
@@ -324,9 +329,9 @@ All 1914 sampled parts:
 
 | class | before | after |
 |---|---:|---:|
-| match | 1108 | 1129 |
-| mismatch | 69 | 72 |
-| uncertain | 3 | 3 |
+| match | 1108 | 1131 |
+| mismatch | 69 | 69 |
+| uncertain | 3 | 4 |
 | refused | 85 | 94 |
 | fail | 8 | 11 |
 | timeout | 1 | 1 |
@@ -380,7 +385,7 @@ symmetric revolve, or a pattern spread evenly over a whole turn.
 | 00501978, 00718900, 00754089 | match (to 2.4e-13 or better) |
 | 00677337 | refused: `Fillet Corner` |
 | 00670276 | mismatch: 1.5e-4 (approx: a polyline stands in for a spline) |
-| 00293826, 00724634, 00846949 | mismatch: a pattern of new bodies that spins each copy onto the last. The STEP holds the same copies, 6 to 17 of them, and step_truth counts identical solids once. Ours counts each, so the convention, not the shape, sets them apart. Reported, not counted. |
+| 00293826, 00724634, 00846949 | match under the copy rule (truth.md): 4.5e-9, 2.5e-13, 5.1e-5. Each is a pattern of new bodies that spins each copy onto the last, and the STEP holds the same copies. |
 | 5 others | another cause (a surface revolve, a pattern's copy 2, more than one edge 2) |
 
 ### What still stops CADFS

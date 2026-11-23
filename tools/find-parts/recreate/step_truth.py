@@ -37,6 +37,7 @@ def measure(path):
     s = r.OneShape()
     # the dataset's files can hold exact copies of a part (Part 1..N, one box): a program made one
     seen = {}
+    extra = {f: 0.0 for f in ("vol", "area", "vol_eps", "area_eps", "vol_gk")}
     x = TopExp_Explorer(s, TopAbs_SOLID)
     while x.More():
         so = x.Current()
@@ -46,7 +47,14 @@ def measure(path):
         BRepBndLib.AddOptimal_s(so, box, True, False)
         lo, hi = box.CornerMin(), box.CornerMax()
         bb = (lo.X(), lo.Y(), lo.Z(), hi.X(), hi.Y(), hi.Z())
-        seen[(round(v, 3), round(a, 3)) + tuple(round(c, 3) for c in bb)] = (v, a, bb, m)
+        k = (round(v, 3), round(a, 3)) + tuple(round(c, 3) for c in bb)
+        if k in seen:
+            # an exact copy of one already seen: kept aside, for truth_rule to add back as far as the program makes
+            # copies (truth.md)
+            for f in ("vol", "area", "vol_eps", "area_eps", "vol_gk"):
+                extra[f] += m[f]
+        else:
+            seen[k] = (v, a, bb, m)
         x.Next()
     n = sum(1 for _ in seen)
     copies = 0
@@ -63,6 +71,7 @@ def measure(path):
     # the measures truth_rule judges by, each summed over the distinct solids
     for k in ("vol_eps", "area_eps", "vol_gk"):
         out[k] = sum(t[3][k] for t in seen.values())
+    out["copy_measures"] = extra
     if n:
         bs = [t[2] for t in seen.values()]
         out["bbox"] = [min(b[i] for b in bs) for i in range(3)] + [max(b[i] for b in bs) for i in range(3, 6)]
