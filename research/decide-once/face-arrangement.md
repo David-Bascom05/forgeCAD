@@ -44,10 +44,8 @@ pub struct Ledger {
     pub inside: Vec<(RoomId, BodyId)>,    // decided: witnesses, one ray per flood class (as now, per room)
     pub edge_facets: Csr,                 // per edge: the facets whose closure holds it
     pub vert_edges: Csr,                  // per vert: the edges whose closure holds it
-    pub vert_sectors: SecCsr,             // per vert: its sectors, (facet, bounding edge a, bounding edge b)
+    pub vert_facets: Csr,                 // per vert: the facets whose closure holds it
 }
-pub struct SecCsr { pub start: Vec<u32>, pub sec: Vec<(u32, u32, u32)> }
-// (edge_facets lists a facet once per wing at that edge: at most twice)
 pub struct MetricLedger { pub thin: Vec<RoomId>, pub enclosed: Vec<RoomId> }   // per room (as now, per side cell)
 // Body: faces list FacetIds, edges list EdgeIds, verts list VertIds; Outcome, Refusal and Rule are unchanged.
 ```
@@ -64,39 +62,33 @@ What each table means:
   core is combinatorial. The write gets each facet's boundary loops from the builder, outside the
   core.
 - **Edges and verts** are the 1- and 0-cells round the facets, as now.
-- **Wings and sectors (rule W2, uniform for flat and curved).** A facet can meet a cell in its
-  closure more than once. At an edge it can arrive from both sides (two *wings*). At a vert it can
-  meet in several angular *sectors* (a cone apex on a plate, a pinched piece). This happens wherever
-  a solid only touches a face, in flat inputs as well as curved.
+- **No wings (rule W1).** A facet meets each cell in its closure from one side only: one wedge at
+  an edge, one sector at a vert.
 
-  The incidence rows therefore count wings and sectors, not facets:
-  - `edge_facets[e]` lists a facet once per wing, so a facet appears at most twice;
-  - `vert_sectors[v]` lists `(facet, edge a, edge b)` per sector, the two edges bounding it at `v`.
-    A facet may appear in several sectors. This replaces `vert_facets`. `vert_edges` stays.
+  Wings happen in flat inputs too, wherever a solid only touches a face. A wedge touching a plate
+  along a line leaves the plate's piece on both sides of the contact edge. A cone apex touching a
+  plate, or a pinched piece, gives two sectors at one vert.
 
-  For the core:
-  - `around` and bad edge count wings, so a touching union (four result wings) is refused, as it
-    must be;
-  - `fanRel` joins two sectors at `v` that share a bounding edge;
-  - `facesAt` dedups to faces as now;
-  - `joinRel` may relate a facet to itself, which is harmless: classes are reflexive anyway.
+  The builder must cut such a facet along a seam through the cell. Flat: the line of the slit
+  through the edge, or any line in the facet through the vert. These lines are lines of the
+  reference arrangement, so `Refines` still holds.
 
-  Facet ids alone at verts would not be enough. A pinched facet listed once can merge fan classes
-  that the reference keeps apart, and so hide a non-manifold vert. That is why verts list sectors,
-  not facets.
+  How the builder detects a wing: a facet's boundary loop runs along an edge in both directions,
+  or visits a vert twice.
 
-  For convex flat facets every multiplicity is 1 and every vert has one sector per facet.
+  Unify re-joins the cut pieces: same class and orient, sharing the seam edge. A seam edge has one
+  face round it, so it is never an output edge.
 
-  `Refines`' (e) becomes a bijection from the reference's fine facets round an edge onto its wings:
-  `List.Perm` of the mapped list. Each plane through an edge holds at most two fine facets round
-  it, one per side, so the map is one to one. (v) is a surjection onto the sectors, with connected
-  fibres.
+  The alternative, W2, lists a facet once per wing in a Csr row. It needs wing ids, not facet ids,
+  at verts: a pinched facet listed once at a vert can merge fan classes that the reference keeps
+  apart, and so hide a non-manifold vert. With wing ids, the wings are facets in all but name. The master has
+  decided on W1, as final. The core, the interface and the proofs stay as they are. `Refines`'
+  conditions (e) (a bijection) and (v) (onto, with connected fibres) are exactly the no-wings
+  condition.
 
-  A builder may still cut a wing apart along a seam that lies in the reference arrangement (W1).
-  The cut pieces are just more facets, with multiplicity 1, so the result is a valid W2 ledger, and
-  the core and proofs do not care which a builder chose. Curved cuts along its Tier-0 seam pieces
-  where that is natural (curved-design.md §7). It emits wings or sectors where cutting is not
-  natural, for example tangent cylinders.
+  For curved, the cut is a Tier-0 seam piece, which lies in the reference arrangement
+  (curved-design.md §7): the plane through a contact line or of a contact circle, the axial plane,
+  the nappe plane at an apex, or a plane through a crossing node.
 
 The core reads the tables as follows. This is today's algorithm with lookups in place of
 covector arithmetic.
@@ -108,14 +100,13 @@ covector arithmetic.
 | classify | flood over topes across non-pieces of `i`, then a witness | the same over rooms |
 | keep, collapse | per tope | per room (metric tables per room) |
 | result | facets with one side kept | the same |
-| around(x) | result facets with `x ≤ φ` (enumerated by covector) | `edge_facets[x]` (wings) / `vert_sectors[x]` filtered by result |
+| around(x) | result facets with `x ≤ φ` (enumerated by covector) | `edge_facets[x]` / `vert_facets[x]` filtered by result |
 | bad edge / bad vert / fan | `Cov.le` between cells | `vert_edges`, `edge_facets` |
 | unify | `zeroIdx`, `orient`, a shared edge | `facet_class`, `orient` (by room keep), a shared edge from `edge_facets` |
 
 `LedgerWF` v2 has these parts:
 - Each Csr is well formed: `start` is monotone, starts at 0 and ends at `ids.len()`; ids are in
-  range; an `edge_facets` row holds a facet at most twice; `vert_edges` rows have no repeats.
-- Each sector's two edges are in its vert's `vert_edges` row.
+  range; rows have no repeats.
 - Every id is in range, and every count is below `u32::MAX`.
 - The two sides of each facet are distinct rooms.
 - Every facet is a piece of some face.
@@ -164,12 +155,12 @@ with these properties:
   - Each fibre σ⁻¹(F-facet) is connected through fine edges with τ = none. A face-arrangement
     facet is one connected piece.
 - **(e) edges.** If `τ e = some E`, σ is a bijection from the fine facets round `e` onto
-  the wings of `edge_facets E`. If `τ e = none`, σ is constant on the fine facets round `e` (`e` lies inside a
+  `edge_facets E` (no wings, and each plane through an edge holds at most two fine facets round it). If `τ e = none`, σ is constant on the fine facets round `e` (`e` lies inside a
   facet or a room). τ is onto.
 - **(v) verts.** The same at vertex stars:
-  - if `ν v = some V`, each fine facet round `v` goes to the sector of `V` it lies in. This is
-    onto, but not one to one, since the lines of other planes through `v` cut a sector into
-    several fine facets. Each fibre is connected through fine edges at `v` with τ = none, so fan
+  - if `ν v = some V`, σ maps the fine facets round `v` onto `vert_facets V`. This is onto, but
+    not one to one, since the lines of other planes through `v` cut a facet's one sector (no
+    wings) into several fine facets. Each fibre is connected through fine edges at `v` with τ = none, so fan
     classes map onto fan classes by `cls_map`. Also, τ is a bijection from the fine
     edges round `v` that have τ ≠ none onto `vert_edges V`;
   - if `ν v = none`, the star at `v` maps into a single facet, or a single edge's facets (`v` lies
