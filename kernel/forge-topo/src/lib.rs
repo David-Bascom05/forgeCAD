@@ -7,6 +7,7 @@ pub mod check;
 pub mod mass;
 pub mod name;
 pub mod small;
+pub mod topo;
 pub mod uv;
 
 pub use body::{
