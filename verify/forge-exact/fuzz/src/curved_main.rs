@@ -11,7 +11,7 @@
 //! programs drawn from extrude, revolve, ball, hole, pattern, workplane, param and sketch),
 //! `band` (each degenerate pair with its tool moved by δ·LINEAR along x, y and z).
 
-use forge_exact_fuzz::curved::{judge_curved_path, tool_moved};
+use forge_exact_fuzz::curved::{judge_curved, judge_curved_path, tool_moved};
 use forge_exact_fuzz::{Class, Reference};
 use forge_math::{Vec3, tol::LINEAR};
 use forge_model::Part;
@@ -41,7 +41,7 @@ fn lang_case(seed: u64, len: usize) -> Option<Case> {
     let built = forge_exact_fuzz::guarded(|| Ok(forge_lang::fuzz::build(&run.src))).ok()?;
     Some(Case {
         name: format!("lang/{seed}"),
-        part: built.part(),
+        part: forge_exact_fuzz::curved::curved_part(&built.part()),
         source: run.src,
     })
 }
@@ -84,7 +84,10 @@ fn cases(sources: &[String], seeds: u64, lang: u64) -> Vec<Case> {
         for (f, g) in forge_model::adversarial::families() {
             for s in 0..seeds {
                 if let Ok(p) = forge_exact_fuzz::guarded(|| Ok(g(s))) {
-                    out.push(adv(format!("{f}/{s}"), p));
+                    let p = forge_exact_fuzz::curved::curved_part(&forge_model::adversarial::canonical(&p));
+                    if p.features.len() >= 2 {
+                        out.push(adv(format!("{f}/{s}"), p));
+                    }
                 }
             }
         }
@@ -157,8 +160,7 @@ fn main() {
                 }
                 let c = &cs[i];
                 let t = std::time::Instant::now();
-                for path in ["sequential", "nary"] {
-                    let (class, ans) = judge_curved_path(&mut reference, &c.part, &rule, path);
+                for (path, class, ans) in judge_curved(&mut reference, &c.part, &rule) {
                     let note = ans.and_then(|a| a.notes.first().cloned()).unwrap_or_default();
                     tx.send(Judged { name: c.name.clone(), path, class, case: i, note }).expect("send");
                 }

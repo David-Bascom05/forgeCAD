@@ -236,17 +236,33 @@ pub fn curved_tools(part: &Part) -> Result<(Vec<String>, Vec<Point3>, forge_math
 
 /// The reference's question for a part under a rule, with its probes.
 pub fn curved_input(part: &Part, rule: &str) -> Result<(String, Vec<Point3>), String> {
+    curved_input_hints(part, rule, &[])
+}
+
+/// The question with points for the reference to examine (`hints`: where the kernel refused).
+pub fn curved_input_hints(part: &Part, rule: &str, hints: &[Point3]) -> Result<(String, Vec<Point3>), String> {
     let (solids, probes, _) = curved_tools(part)?;
     Ok((
         format!(
-            "{{\"curved\":true,\"linear\":{},\"rule\":\"{rule}\",\"probe_h\":{},\"probes\":[{}],\"solids\":[{}]}}",
+            "{{\"curved\":true,\"linear\":{},\"rule\":\"{rule}\",\"probe_h\":{},\"probes\":[{}],\"hints\":[{}],\"solids\":[{}]}}",
             exact(LINEAR),
             exact(PROBE_H * LINEAR),
             probes.iter().map(|p| p3(*p)).collect::<Vec<_>>().join(","),
+            hints.iter().map(|p| p3(*p)).collect::<Vec<_>>().join(","),
             solids.join(",")
         ),
         probes,
     ))
+}
+
+/// The location a ZeroThickness refusal names, if any.
+pub fn refusal_at(e: &str) -> Option<Point3> {
+    let (_, rest) = e.split_once("at: Point3 {")?;
+    let num = |k: &str| -> Option<f64> {
+        let (_, r) = rest.split_once(&format!("{k}: "))?;
+        r.split([',', ' ', '}']).next()?.parse().ok()
+    };
+    Some(Point3::new(num("x")?, num("y")?, num("z")?))
 }
 
 /// The curved reference's answer.
@@ -433,32 +449,83 @@ pub fn stage_class_curved(a: &CAnswer, e: &str, n: usize) -> Class {
     }
 }
 
-/// One path of a part, judged; refusals at the stage they name.
-pub fn judge_curved_path(reference: &mut Reference, part: &Part, rule: &str, path: &str) -> (Class, Option<CAnswer>) {
+/// Both kernel paths of a part, judged against one answer of the reference; refusals at the
+/// stage they name.
+pub fn judge_curved(reference: &mut Reference, part: &Part, rule: &str) -> Vec<(&'static str, Class, Option<CAnswer>)> {
     let (input, probes) = match curved_input(part, rule) {
         Ok(x) => x,
-        Err(e) => return (Class::Scope(e), None),
+        Err(e) => {
+            return vec![("sequential", Class::Scope(e.clone()), None), ("nary", Class::Scope(e), None)];
+        }
     };
     let ans = reference.ask_curved(&input);
-    let (k, body) = kernel_path(part, path);
-    if let Kernel::Refused(e) = &k
-        && !e.starts_with("NothingToCombine")
-        && let Some(n) = crate::refused_at(e)
-    {
-        if n + 1 < part.features.len() {
-            let mut prefix = part.clone();
-            prefix.features.truncate(n + 1);
-            return match curved_input(&prefix, rule) {
-                Err(e) => (Class::Scope(e), Some(ans)),
-                Ok((input, _)) => {
-                    let a = reference.ask_curved(&input);
-                    (stage_class_curved(&a, e, n), Some(ans))
+    let mut out = Vec::new();
+    for path in ["sequential", "nary"] {
+        let (k, body) = kernel_path(part, path);
+        let class = if let Kernel::Refused(e) = &k
+            && !e.starts_with("NothingToCombine")
+            && let Some(n) = crate::refused_at(e)
+        {
+            if n + 1 < part.features.len() {
+                let mut prefix = part.clone();
+                prefix.features.truncate(n + 1);
+                match curved_input(&prefix, rule) {
+                    Err(e) => Class::Scope(e),
+                    Ok((input, _)) => {
+                        let c = stage_class_curved(&reference.ask_curved(&input), e, n);
+                        match (&c, refusal_at(e)) {
+                            (Class::Refused(_), Some(at)) => match curved_input_hints(&prefix, rule, &[at]) {
+                                Ok((input, _)) => stage_class_curved(&reference.ask_curved(&input), e, n),
+                                Err(_) => c,
+                            },
+                            _ => c,
+                        }
+                    }
                 }
-            };
-        }
-        return (stage_class_curved(&ans, e, n), Some(ans));
+            } else {
+                let c = stage_class_curved(&ans, e, n);
+                // a refusal where the reference gives a solid: the reference examines the
+                // refusal's location itself (a near touch there makes it a sliver)
+                match (&c, refusal_at(e)) {
+                    (Class::Refused(_), Some(at)) => match curved_input_hints(part, rule, &[at]) {
+                        Ok((input, _)) => stage_class_curved(&reference.ask_curved(&input), e, n),
+                        Err(_) => c,
+                    },
+                    _ => c,
+                }
+            }
+        } else {
+            classify_curved(&ans, &k, body.as_ref(), &probes)
+        };
+        out.push((path, class, Some(ans.clone())));
     }
-    (classify_curved(&ans, &k, body.as_ref(), &probes), Some(ans))
+    out
+}
+
+/// One path of a part, judged.
+pub fn judge_curved_path(reference: &mut Reference, part: &Part, rule: &str, path: &str) -> (Class, Option<CAnswer>) {
+    let all = judge_curved(reference, part, rule);
+    let (_, c, a) = all.into_iter().find(|(p, _, _)| *p == path).expect("a path");
+    (c, a)
+}
+
+/// The part with every feature whose tools are not quadric solids the reference takes dropped
+/// (its convex-quadric sub-history); features that make nothing are kept.
+pub fn curved_part(part: &Part) -> Part {
+    let mut p = part.clone();
+    let mut i = 1;
+    while i < p.features.len() {
+        let f = &p.features[i];
+        let ok = inert(f)
+            || guarded(|| forge_model::feature_tools(History::new(&p.features, None), i).map_err(|e| format!("{e:?}")))
+                .is_ok_and(|ts| ts.iter().all(|(b, op)| dump_curved(b, *op).is_ok()));
+        if ok {
+            i += 1;
+        } else {
+            p.features.remove(i);
+        }
+    }
+    p
 }
 
 /// The tool (the last feature) moved by `d`.

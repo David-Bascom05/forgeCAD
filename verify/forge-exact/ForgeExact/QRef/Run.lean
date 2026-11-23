@@ -116,7 +116,7 @@ def qstr (q : Rat) : String := toString q
 def runCurved (j : Json) : Except String Json := do
   let l ← dyadic (← j.getObjVal? "linear")
   let strict := (j.getObjValAs? String "rule" |>.toOption.getD "strict") != "snap"
-  let maxBoxes := (j.getObjValAs? Nat "boxes" |>.toOption.getD 40000)
+  let maxBoxes := (j.getObjValAs? Nat "boxes" |>.toOption.getD 12000)
   let maxDepth := (j.getObjValAs? Nat "depth" |>.toOption.getD 8)
   let lines := (j.getObjValAs? Nat "lines" |>.toOption.getD 0)
   let ss ← (← j.getObjVal? "solids").getArr?
@@ -175,9 +175,56 @@ def runCurved (j : Json) : Except String Json := do
       match nearTouch A faceBoxes (qf l) i j with
       | some n => nearNotes := nearNotes.push n
       | none => pure ()
+  -- hints: points to examine (the harness passes where a kernel refused); two surfaces within
+  -- LINEAR of the point, with no exact contact between them, are a near touch there
+  let hints ← match j.getObjVal? "hints" with
+    | .ok ps => do (← ps.getArr?).mapM v3
+    | .error _ => pure #[]
+  for p in hints do
+    let close := (Array.range A.qs.size).filter fun k =>
+      let q := A.qs[k]!
+      let g := q.grad p
+      let v := q.eval p
+      g.norm2 != 0 && v * v ≤ 4 * l * l * g.norm2
+    -- a touch, not an ordinary edge: two of them nearly tangent there (normals within 1e-3
+    -- rad), or three or more through the point
+    let tangent := fun (a b : Nat) =>
+      let ga := (A.qs[a]!).grad p
+      let gb := (A.qs[b]!).grad p
+      let c := ga.cross gb
+      c.norm2 ≤ (1 / 1000000 : Rat) * ga.norm2 * gb.norm2
+    for a in close do
+      for b in close do
+        if a < b && !cts.any (fun c => c.i == a && c.j == b) &&
+            !((A.qs[a]!).qnorm == 0 && (A.qs[b]!).qnorm == 0) && (close.size ≥ 3 || tangent a b) then
+          nearNotes := nearNotes.push s!"surfaces {a}, {b} come within LINEAR of each other at {fmt p}"
+  -- two planes crossing at a hint, the other quadrics' signs certified round it: the result is
+  -- non-manifold along their crossing if it keeps opposite sectors only (a checkerboard)
+  let mut edgeBad : Array String := #[]
+  for p in hints do
+    let near := (Array.range A.qs.size).filter fun k =>
+      let q := A.qs[k]!
+      let g := q.grad p
+      let v := q.eval p
+      g.norm2 != 0 && v * v ≤ 4 * l * l * g.norm2
+    let planes := near.filter fun k => (A.qs[k]!).qnorm == 0
+    let rest := (Array.range A.qs.size).filter fun k => !planes.contains k
+    let sg := rest.map fun k => (k, boxSign A.qs[k]! p (10 * l))
+    if sg.any (fun (e : Nat × Int) => e.2 == 0) then continue
+    for a in planes do
+      for b in planes do
+        if a < b && !(((A.qs[a]!).grad p).cross ((A.qs[b]!).grad p)).isZero then
+          let at_ := fun (sa sb : Bool) => A.keptOn fun k =>
+            if k == a then sa else if k == b then sb else
+              match sg.find? (fun (e : Nat × Int) => e.1 == k) with
+              | some (_, s) => s > 0
+              | none => false
+          let (pp, mm, pm, mp) := (at_ true true, at_ false false, at_ true false, at_ false true)
+          if pp == mm && pm == mp && pp != pm then
+            edgeBad := edgeBad.push s!"planes {a}, {b} cross at {fmt p} with opposite sectors kept: non-manifold along the edge"
   if strict then ambiguous := ambiguous ++ nearNotes.filter (·.startsWith "surfaces")
   let excl := cts.map (·.excl)
-  let bad := cts.filterMap (·.bad) ++ apexCheck A solids
+  let bad := cts.filterMap (·.bad) ++ apexCheck A solids ++ edgeBad
   let opens := cts.filterMap (·.open_)
   let empty := tree.witness.isNone && tree.und.all fun b => A.anyKept (signsAt A b) excl == some false
   let verdict :=
