@@ -41,3 +41,6 @@ the build fails on `sorryAx` or any axiom past `propext`, `Classical.choice` and
   ForgeExact.Ops.Shell.level_le_d2
   ForgeExact.Ops.Shell.foot_d2
   ForgeExact.Ops.Shell.erosion_eq_sharp
+  ForgeExact.Ops.DraftCone.cone_eq_frustum
+  ForgeExact.Ops.DraftCone.neutral_circle
+  ForgeExact.Ops.DraftCone.apex_free_iff
