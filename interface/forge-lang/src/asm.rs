@@ -6844,7 +6844,7 @@ fn infile_load_in(
     // two documents at one pose were one pair to it)
     out.ident = crate::store::key("part", |h| {
         h.str(key);
-        h.str(&ev.src);
+        h.str(ev.src);
     });
     match (inst.source, comp) {
         (Source::Inline, Some(k)) => {
