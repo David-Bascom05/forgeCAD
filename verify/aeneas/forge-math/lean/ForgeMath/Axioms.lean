@@ -5,6 +5,7 @@ import Lean
 import ForgeMath.Refine
 import ForgeMath.Predicates
 import ForgeMath.Estimate
+import ForgeMath.Dmath
 
 /-!
 # Only the standard axioms
@@ -35,3 +36,6 @@ elab "#standard_axioms " ids:ident* : command => do
   ForgeMath.orient2d_of_fast ForgeMath.orient2d_fast
   ForgeMath.slice_sum ForgeMath.estimate_eq
   F64.Ops.add_err F64.Ops.sub_err F64.Ops.mul_err F64.Ops.div_err
+  ForgeMath.Dmath.k_sin_eq ForgeMath.Dmath.k_cos_eq ForgeMath.Dmath.exponent_spec
+  ForgeMath.Dmath.rem_pio2_spec ForgeMath.Dmath.sin_cos_spec ForgeMath.Dmath.sin_spec
+  ForgeMath.Dmath.cos_spec ForgeMath.Dmath.sin_err ForgeMath.Dmath.cos_err ForgeMath.Dmath.sin_cos_err

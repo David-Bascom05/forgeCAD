@@ -5,4 +5,5 @@ import ForgeMath.Funs
 import ForgeMath.Refine
 import ForgeMath.Predicates
 import ForgeMath.Estimate
+import ForgeMath.Dmath
 import ForgeMath.Axioms
