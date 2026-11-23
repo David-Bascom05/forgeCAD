@@ -148,6 +148,9 @@ pub struct CheckOut {
     pub other: String,
     pub phase: &'static str,
     pub move_index: usize,
+    /// Which of the op's paths `move_index` counts in (a hole plan posts one path per tool); 0
+    /// for a single path. `certify` checks one path and leaves it 0; the caller sets it.
+    pub path: usize,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -385,6 +388,7 @@ pub fn certify_fixtured(
                     other: "the tool's top is not above the part and stock".into(),
                     phase: phase.name(),
                     move_index: *idx,
+                    path: 0,
                 });
                 outs.push(o);
                 continue;
@@ -469,6 +473,7 @@ pub fn certify_fixtured(
                                 other: format!("{what} face {}", f.id),
                                 phase: phase.name(),
                                 move_index: *idx,
+                                path: 0,
                             },
                             o.pairs,
                             o.cells,
