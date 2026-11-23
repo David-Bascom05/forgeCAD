@@ -401,6 +401,60 @@ sign on `B` (`boxSign_spec`), so on `B` membership is the history on `U`'s signs
   - Points of `B` on two of the three sheets give one of the six vertices' four-cycles, which the
     same check covers. Points on one sheet give the first case.
 
+**Touches with a torus (`touches`, `judgeTouch`), by hand.** Let `T` be a torus with an
+axis-aligned axis, and work in its meridian half-plane: `ρ ≥ 0` is the distance from the axis
+and `w` the height along it. The solid torus is the body of revolution of the disc `Δ` about
+`(R, 0)` of radius `r`.
+
+- **Coaxial faces.** A face `F` coaxial with `T` is the body of revolution of a region `Φ` of the
+  meridian:
+  - a plane normal to the axis: a half-plane bounded by `w = c`;
+  - a cylinder on the axis: the strip `ρ < c`;
+  - a sphere centred on the axis, or a coaxial torus: a disc.
+
+  Two such bodies touch along the revolution of the points where `∂Δ` and `∂Φ` touch, and the
+  interiors' relation is that of `Δ` and `Φ`. For a circle and a line, or two circles, tangency
+  is an exact identity in ℚ: the distance from the centre to the line equals `r`, or
+  `|c₁c₂|² = (r ± s)²`. The contact point is then rational, and it is unique for distinct
+  curves. The plane's case depends on its outward normal: the torus lies on the plane's inner
+  side iff that normal points away from it.
+  - External tangency: `Δ ∩ Φ = ∅`.
+  - Internal tangency: one region contains the other.
+  
+  Both hold globally, so the combination they exclude is empty everywhere. With `ρ_P > 0` the
+  contact is a circle.
+- **Planes at a point.** The solid torus's support function in direction `n` is
+  `h(n) = n·o + R|n_⊥| + r|n|`. The farthest tube centre lies along `n_⊥`, and the tube adds
+  `r|n|`. When `n_⊥ ≠ 0` the maximum is attained at exactly one point, `o + R n_⊥/|n_⊥| + r n/|n|`.
+  So a plane `n·x = h(n)` touches the torus there and nowhere else, and the torus lies on one
+  side of it. The same holds for `−n`. The test is exact when `|n|` and `|n_⊥|` are rational.
+- **The other carriers** must keep one nonzero sign on the contact. At a point this is exact
+  evaluation. On a circle: with `t` the rational parameter, the carrier times `(1+t²)^D` is a
+  polynomial in `t`. If Descartes' rule clears every Möbius interval of `[−B, B]`, with `B` a
+  root bound (`noRealRoot`, built on the proven `noPosRoot`), it has no real root. It is then
+  nonzero on the circle except perhaps at `t = ∞`, which is checked directly to have the same
+  sign.
+- **The local rule.** Near a contact point `p` the two surfaces are tangent, and the third
+  combination, which the exclusion rules out, does not occur. In the plane normal to the
+  contact (for a circle, the meridian) the three occurring combinations are, along a small
+  circle round `p`: the side `A`, the pinched region `pin` between the two curves, and the side
+  `B`. `pin` is a cusp-shaped region that touches `p`, and the kept set is a union of these
+  closures.
+  - It is a half-disc, so a manifold, iff the kept set is one run: `∅`, `{A}`, `{B}`, `{A, pin}`,
+    `{pin, B}` or everything.
+  - It is not a manifold iff the kept set is `{A, B}` (two pieces meeting at `p`) or `{pin}`
+    (a region pinched to zero thickness at `p`).
+  
+  For a circle the picture is this one times an interval, since the other signs are constant
+  along it. This is the quadric path's `pinched` rule.
+- **Exclusions in the local check.** Inside a leaf `B`, membership is `κ` on the undecided
+  signs `U`. The exclusions above remove some patterns of `U` everywhere. If on the patterns
+  that remain `κ` is a function of `U ∖ {u}`, then off the wall the boundary of the result in `B`
+  lies on the zero sets of `U ∖ {u}`, and the regularisation does not see `u`. So the three
+  acceptance tests apply to `U ∖ {u}`. A manifold touch keeps one run, so it depends on only
+  one of the two surfaces, and the check accepts the leaves round it. A non-manifold touch
+  depends on both.
+
 A check that accepts every undecided leaf proves the result is a 3-manifold with boundary
 everywhere off the certified boxes. Inside a certified box the result is all or nothing. Every
 point of the wall lies in an undecided leaf, because a box with all signs certified holds no wall
@@ -409,8 +463,10 @@ point. Leaves the budget or the depth cut off report `und`, and the verdict is `
 So on this path:
 - `solid` is proven: a box is certified in, and the result is a manifold.
 - `empty` is proven (`empty_of_leaves`).
-- The path never says `nonmanifold`. A failed check (a tangency, a cone apex, a checkerboard, or
-  four undecided surfaces) is not proof of a bad point.
+- `nonmanifold` comes only from a touch decided exactly as above. A failed check (an undecided
+  tangency, a cone apex, a checkerboard, or four undecided surfaces) is not proof of a bad point.
+- Two undecided surfaces whose normals at a box's centre are within `1e-2` rad stop the check
+  at once. This is a shortcut to `und`, so it can only make the verdict ambiguous.
 
 **What stays unproven in Lean:** the check above, and the executable `norm`, `mul3` and `deriv3`
 that build the gradients and the cross products. A wrong derivative could accept a bad box. The

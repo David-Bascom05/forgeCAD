@@ -1,5 +1,5 @@
 //! `cargo run -p forge-exact-fuzz --release --bin exact-curved [-- SOURCE..] [--seeds N]
-//! [--lang N] [--rule strict|snap] [--threads N] [--only NAME] [--shrink]`
+//! [--lang N] [--rule strict|snap] [--threads N] [--only NAME] [--shard K/N] [--shrink]`
 //!
 //! The kernel's booleans of solids bounded by planes, cylinders, cones and spheres against the
 //! exact curved reference: totals per source and path, every disagreement, and with --shrink one
@@ -127,6 +127,7 @@ fn main() {
     let mut threads = 4;
     let mut only: Vec<String> = Vec::new();
     let mut shrink = false;
+    let mut shard: Option<(usize, usize)> = None;
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
         match a.as_str() {
@@ -136,12 +137,24 @@ fn main() {
             "--threads" => threads = args.next().and_then(|s| s.parse().ok()).expect("--threads N"),
             "--only" => only.push(args.next().expect("--only NAME")),
             "--shrink" => shrink = true,
+            "--shard" => {
+                let v = args.next().expect("--shard K/N");
+                let (k, n) = v.split_once('/').expect("--shard K/N");
+                shard = Some((k.parse().expect("K"), n.parse().expect("N")));
+            }
             s => sources.push(s.to_string()),
         }
     }
     let mut cs = cases(&sources, seeds, lang);
     if !only.is_empty() {
         cs.retain(|c| only.contains(&c.name));
+    }
+    if let Some((k, n)) = shard {
+        let mut i = 0;
+        cs.retain(|_| {
+            i += 1;
+            (i - 1) % n == k
+        });
     }
     eprintln!("{} cases, rule {rule}", cs.len());
     let cs = std::sync::Arc::new(cs);

@@ -15,8 +15,8 @@ coefficient to 1.
   (`Poly3.in_box`, `Poly3.out_box`); `[lo, hi]` are exact. `volume_f` is a floating-point
   estimate: vertical slices split at their polynomials' roots, Gauss–Legendre between the
   points where the slices change structure (a report, never a decision).
-* **Empty**: no box in, and every undecided leaf keeps no pattern of its undecided signs
-  (`Poly3.empty_of_leaves`, with no exclusions).
+* **Empty**: no box in, and every undecided leaf keeps no pattern of its undecided signs that
+  the touches' exclusions allow (`Poly3.empty_of_leaves`; the exclusions by hand, §5).
 * **Manifold**: each undecided leaf is checked (and split, within a budget) until one of these
   holds on the box: one undecided surface and a component of its gradient with a certified
   sign (a smooth sheet); two, a component of the cross product of their gradients with a
@@ -124,10 +124,10 @@ def signsP (A : PArr) (b : Cube) : Array Int := A.ps.map fun p => Poly3.boxSign 
 
 def PArr.keptK (A : PArr) (sg : Array Int) : Option Bool := A.bf.eval3 fun k => sg.getD k 0
 
-def PArr.anyKept (A : PArr) (sg : Array Int) : Option Bool :=
+def PArr.anyKept (A : PArr) (sg : Array Int) (ex : List Excl := []) : Option Bool :=
   let und := ((Array.range sg.size).filter fun i => sg[i]! == 0).toList
   if und.length > 12 then none
-  else if BF.allFalse A.bf [] und (fun i => decide (sg.getD i 0 > 0)) then some false
+  else if BF.allFalse A.bf ex und (fun i => decide (sg.getD i 0 > 0)) then some false
   else some true
 
 def octreeP (A : PArr) (root : Cube) (maxBoxes : Nat) (maxDepth : Nat) : Tree := Id.run do
@@ -604,9 +604,16 @@ def runPoly (j : Json) (solids0 : Array QSolid) : Except String Json := do
   let probeAns : Array Int := probes.map fun p =>
     let sg := A.ps.map fun q => Poly3.boxSign q p ph
     if sg.any (· == 0) then 0 else if A.bf.eval2 (fun i => sg[i]! > 0) then 1 else -1
-  let empty := tree.witness.isNone && tree.und.all fun b => A.anyKept (signsP A b) == some false
-  let mut bad : Array String := #[]
   let ts := touches A faces
+  -- each touch's empty combination: external, both insides; nested, inside the inner and
+  -- outside the outer
+  let excl := ts.map fun t => match t.nest with
+    | none => (t.iT, t.posT, t.iF, t.posF)
+    | some true => (t.iT, t.posT, t.iF, !t.posF)
+    | some false => (t.iT, !t.posT, t.iF, t.posF)
+  let exs : List Excl := (excl.map fun (i, si, j, sj) => (⟨i, si, j, sj⟩ : Excl)).toList
+  let empty := tree.witness.isNone && tree.und.all fun b => A.anyKept (signsP A b) exs == some false
+  let mut bad : Array String := #[]
   for t in ts do
     match judgeTouch A t with
     | (some n, _) => if !bad.contains n then bad := bad.push n
@@ -614,12 +621,6 @@ def runPoly (j : Json) (solids0 : Array QSolid) : Except String Json := do
   -- the local check of every undecided leaf
   let mut opens : Array String := #[]
   if !empty && bad.isEmpty then
-    -- each touch's empty combination: external, both insides; nested, inside the inner and
-    -- outside the outer
-    let excl := ts.map fun t => match t.nest with
-      | none => (t.iT, t.posT, t.iF, t.posF)
-      | some true => (t.iT, t.posT, t.iF, !t.posF)
-      | some false => (t.iT, !t.posT, t.iF, t.posF)
     let C := { Ctx.of A with excl }
     let mut budget := checkBudget
     for b in tree.und do

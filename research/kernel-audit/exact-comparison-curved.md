@@ -128,9 +128,30 @@ surfaces are again planes, cylinders, cones, spheres and tori, so they need noth
   - it has three, with the determinant of their gradients of certified sign, and the kept octants
     form a disc on the link.
 
-  A leaf left unaccepted makes the verdict ambiguous. So `solid` means proven manifold. Tangent
-  contacts with a torus and cone apexes on one stay undecided: never `nonmanifold`, which is
-  honest but not a decision.
+  A leaf left unaccepted makes the verdict ambiguous, so `solid` means proven manifold. Two
+  undecided surfaces with nearly parallel normals stop the check at once, as a near tangency.
+  That shortcut can only make the verdict ambiguous.
+- **Touches, exact.** These touches of a torus are decided in ℚ:
+  - with a coaxial plane, cylinder, sphere or torus, by tangency in the meridian half-plane,
+    which gives a rational contact circle;
+  - with a plane at a support point, by the torus's support function `R|n_⊥| + r|n|`, when its
+    roots are rational.
+
+  The other carriers' signs are proven constant along the contact (`noRealRoot`). The pinched
+  rule then decides the touch, and a non-manifold one makes the verdict `nonmanifold`. Each
+  touch's empty sign combination also lets the local check drop a surface the result does not
+  depend on there, so manifold touches can be shown `solid`.
+- **The estimate** also breaks slices at walls parallel to them, which add no root but change
+  the slice. Before this fix, plane_torus/tangent_top_and_bottom/Keep came out 1.5% off: the
+  estimate gave 23 314, and the kernel's 22 974.22 matches an independent integral. It now
+  uses two pieces per breakpoint interval, about 20 s a case; that case's error is 0.4 and its
+  reported error 1.1.
+- **Torus pairs: 74 agree, 0 wrong, 16 ambiguous.** The ambiguous ones:
+  - Keep cases whose result is empty, which the octree cannot prove without the touches'
+    exclusions;
+  - cones with tori: coaxial cones are not in the meridian test, and apexes on a torus are
+    not decided;
+  - standing_tangent_top_inside, a support point inside the box's top.
 
 ### What is proven, and what is not (PROOF-STANDARD levels)
 
@@ -151,7 +172,7 @@ surfaces are again planes, cylinders, cones, spheres and tori, so they need noth
 | source | agree | wrong | refused | ambiguous | out of scope |
 |---|--:|--:|--:|--:|--:|
 | degenerate pairs (279: plane/cylinder/cone/sphere × configs × Add/Cut/Keep) | 240 | 19 | 3 | 17 | 0 |
-| torus pairs (93: plane/cylinder/cone/sphere/torus with a torus × configs × Add/Cut/Keep) | 40 | 0 | 0 | 50 | 3 |
+| torus pairs (93: plane/cylinder/cone/sphere/torus with a torus × configs × Add/Cut/Keep) | 74 | 0 | 0 | 16 | 3 |
 | scoreboard families (36 × 4 seeds, convex-quadric sub-histories) | 86 | 4 | 0 | 5 | 21 |
 | forge_lang programs (300, extrude/revolve/ball/hole/pattern, convex-quadric sub-history) | 200 | 0 | 0 | 0 | 100 |
 | curved band (279 pairs × tool moved ±0.9, 3 LINEAR on x, y, z = 2 511) | 2 191 | 50 | 102 | 168 | 0 |
@@ -239,12 +260,9 @@ Owner: the fix-curved session.
 
 ## Still open in the reference
 
-- Tangent contacts with a torus: 50 of the 93 torus pairs are ambiguous. All are tangent
-  configurations, or a cone apex on the torus. They need a touch certificate for quartics, as
-  the pencil gives for quadrics. Without one the reference never says *nonmanifold* there.
-- The torus band (each torus pair with its tool moved ±0.9 and 3 LINEAR): about 40 s a case,
-  because the manifold check splits near-tangent boxes down to its budget. The full run was
-  stopped after 50 of 837 cases. It needs a cheaper near-tangency test first.
+- Torus touches still undecided: coaxial cones, a cone apex on a torus, non-axis-aligned tori,
+  saddle tangencies (a plane or cylinder at the inner equator from the hole's side), and empty
+  Keep results. Proving those empty needs the touches' exclusions in `anyKept`.
 - A second singular quadric through a cone's apex (two cones of different angles sharing an
   apex) is undecided. Two cones sharing the apex and the quadric are decided (§3).
 - Edge-on-surface contacts (the base_rim_on_wall gap) stay undecided.
