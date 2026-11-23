@@ -10,8 +10,8 @@ a time limit, 4 at a time at most. Data stays outside the repo; inputs are read 
   scale.py tally RUN.. [--tol 1e-4]               classes, untranslated causes, kernel failure causes
 
 CORPUS: cadfs (CADFS's FeatureScript, judged against its step.zip, as run_cadfs.py does), deepcad (DeepCAD's JSON,
-judged against ABC's STEP from CADFS's step_abc.zip), fusion (Fusion 360 Gallery reconstruction r1.0.1, its own
-STEP). Where each is fetched from, and its terms: research/import/scale.md.
+judged against ABC's STEP from CADFS's step_abc.zip). Where each is fetched from, and its terms:
+research/import/scale.md. (Fusion 360 Gallery is not used: its licence rules it out.)
 
 A part's class: untranslated (with the importer's why), match or mismatch (built, both volume and area within --tol
 of the source's by the truth rule, truth.md), uncertain (the source's OCCT measures disagree), no truth (the source
@@ -39,7 +39,6 @@ REPO = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
 EXE = os.environ.get("FORGECAD_EXE", os.path.join(REPO, "target", "release", "examples"))
 OCCT = os.environ.get("FORGECAD_OCCT", os.path.expanduser("~/.local/share/forgecad-occt/venv/bin/python"))
 HF = "https://huggingface.co/datasets/VladPyatov/CADFS/resolve/dd76a9b891a6921815fd13c0452afb2d61e5f833/cadfs/"
-FUSION = "https://fusion-360-gallery-dataset.s3.us-west-2.amazonaws.com/reconstruction/r1.0.1/r1.0.1.zip"
 TRANSLATE = 300  # wall seconds to translate one part (CADFS builds its prefixes to resolve queries)
 TRUTH = 180  # wall seconds to read and measure one STEP
 TOL = 1e-4
@@ -74,8 +73,6 @@ class Corpus:
                 self.z[key] = remote(HF + "dataset/step.zip", "dataset_step.zip")
             elif key == "abc":
                 self.z[key] = remote(HF + "raw/step_abc.zip", "raw_step_abc.zip")
-            elif key == "fusion":
-                self.z[key] = remote(FUSION, "fusion")
         return self.z[key]
 
     def _names(self, key, ext):
@@ -98,11 +95,8 @@ class Corpus:
         if not hasattr(self, "_ix"):
             if self.name == "cadfs":
                 self._ix = {"prog": self._names("fp", ".txt"), "sk": self._names("sk", ".json"), "step": self._names("step", ".step")}
-            elif self.name == "deepcad":
-                self._ix = {"prog": self._names("dc", ".json"), "step": self._names("abc", ".step")}
             else:
-                ns = self._names("fusion", ".json")
-                self._ix = {"prog": ns, "step": self._names("fusion", ".step")}
+                self._ix = {"prog": self._names("dc", ".json"), "step": self._names("abc", ".step")}
         return self._ix
 
     def ids(self):
@@ -121,7 +115,7 @@ class Corpus:
             open(b, "wb").write(self._zip("sk").read(ix["sk"][i]))
             return lambda out: [sys.executable, "-I", os.path.join(HERE, "cadfs.py"), a, b, "--topo", os.path.join(EXE, "topo"), "--out", out]
         a = os.path.join(d, i + ".json")
-        open(a, "wb").write(self._zip("dc" if self.name == "deepcad" else "fusion").read(ix["prog"][i]))
+        open(a, "wb").write(self._zip("dc").read(ix["prog"][i]))
         more = []
         if self.name == "deepcad":
             # CADFS's FeatureScript of the same ABC model: whether DeepCAD's program is all of it
@@ -136,7 +130,7 @@ class Corpus:
 
     def step(self, i, path):
         ix = self.index()
-        key = {"cadfs": "step", "deepcad": "abc", "fusion": "fusion"}[self.name]
+        key = {"cadfs": "step", "deepcad": "abc"}[self.name]
         open(path, "wb").write(self._zip(key).read(ix["step"][i]))
 
 
