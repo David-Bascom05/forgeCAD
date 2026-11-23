@@ -2770,8 +2770,8 @@ pub fn read_trims(bodies: &[&forge_topo::Body], fs: &[CIn], cls: &[usize]) -> Re
 /// frame (`x` is the same in every frame; `y`, `z` map back by [`frame_point`]).
 #[derive(Clone, Debug)]
 pub enum ExactPt {
-    Rat(V3),
-    Alg(Frame, VSample),
+    Rat(Box<V3>),
+    Alg(Box<(Frame, VSample)>),
 }
 
 /// A trim end's vertex, certified: the three carrier classes it lies on, its exact point, and a
@@ -2863,7 +2863,7 @@ pub fn cert_triple(
         let v = planes_point(a, b, c).ok_or(Skip::Uncertified("three planes meet in no point"))?;
         let bx = [enclose(&v.x), enclose(&v.y), enclose(&v.z)];
         return if near_box(&bx, p, tol) {
-            Ok((ExactPt::Rat(v), bx))
+            Ok((ExactPt::Rat(Box::new(v)), bx))
         } else {
             Err(Skip::Uncertified(
                 "the three planes' point is not the stored vertex",
@@ -2886,7 +2886,7 @@ pub fn cert_triple(
                     Some(bx) => {
                         if near_box(&bx, p, tol) {
                             many = many || hit.is_some();
-                            hit = Some((ExactPt::Alg(f.clone(), ss[k].clone()), bx));
+                            hit = Some((ExactPt::Alg(Box::new((f.clone(), ss[k].clone()))), bx));
                         }
                     }
                     None => boxed = false,
