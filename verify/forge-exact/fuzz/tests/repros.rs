@@ -515,6 +515,20 @@ fn band_ball_on_an_edge_splits() {
     agrees_curved(&band_curved("plane_sphere/centre_on_edge/Add", 0, 0.9));
 }
 
+/// A ball centred on the base's wall, its top on the top face's edge, moved 0.9 LINEAR along −x
+/// and cut (plane_sphere/centre_on_wall_tangent_top/Cut, x −0.9): the reference finds the ball's
+/// top touching the top face at (19.999991, 0, 0), 0.9 LINEAR inside its edge, and calls it
+/// non-manifold; the kernel builds once the SplitCrossed is fixed (fix-curved 19e1b6c). The touch
+/// is within LINEAR of the wall, so the ball's sheet there straddles it and the touch rule leaves
+/// it undecided; the x +0.9 mirror, alike within tolerance, the reference calls a solid, and y ±0.9
+/// ambiguous (on an edge of a third). Decided by the tolerant-edge rule of curved decide-once,
+/// with the rim tangencies; both paths alike.
+#[test]
+#[ignore = "curved decide-once: a point touch within LINEAR of a third solid's edge (tolerant-edge rule)"]
+fn band_ball_touching_the_top_beside_its_edge_is_non_manifold() {
+    agrees_curved(&band_curved("plane_sphere/centre_on_wall_tangent_top/Cut", 0, -0.9));
+}
+
 /// A cylinder tangent to the base cylinder's wall from inside, moved 0.9 LINEAR along −y
 /// (cylinder_cylinder/perpendicular_tangent_inside/Add, y −0.9): the kernel refuses
 /// Internal(HoleOutside) on the cylinder face (Add, Cut and Keep).
