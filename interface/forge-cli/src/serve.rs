@@ -17,7 +17,16 @@ type Tool = (
     &'static [(&'static str, &'static str)],
 );
 
-const TOOLS: [Tool; 15] = [
+const TOOLS: [Tool; 16] = [
+    (
+        "cam",
+        "Run a machining document (.fg starting with `machining`): every op's path certified against the exact part (gouge, holder, rapids) or refused with the check and a fix; reply forgecad.cam/1. what=sheet: the setup sheet",
+        1,
+        &[
+            ("file", "path to a machining .fg"),
+            ("what", "sheet: the setup sheet instead of the program"),
+        ],
+    ),
     (
         "query",
         "selector -> @handles; or stat, file, check, params, features; holes, section z=V, gap A B, ..",
@@ -381,6 +390,13 @@ fn call(forge: &mut fg::Session, name: &str, p: &Json) -> Reply {
         };
     }
     let mut r = forge.run(name, &a, p);
+    if name == "cam"
+        && let Some(b) = r.png.take()
+    {
+        // the program or the sheet is text: it goes as text, never as an image
+        r.text.push('\n');
+        r.text.push_str(&String::from_utf8_lossy(&b));
+    }
     if name == "export"
         && r.ok
         && let Some(out) = p.get("out").and_then(Json::str)
