@@ -2505,6 +2505,9 @@ struct Seg {
     /// a whole edge of body 0 whose other face is far (kept as it is): the segment is that edge,
     /// used as its coedge on the near face used it
     keep: Option<(EdgeId, bool)>,
+    /// the core face it bounds (NONE: a near face's remainder): its members are every input face a
+    /// facet of that face is a piece of
+    cf: u32,
 }
 
 /// A pool of segments that forms one or more final faces: a class plane and outward sense.
@@ -2970,6 +2973,7 @@ fn write(w: &Wr, out: Option<&core::Body>) -> Option<Plan> {
                         b: PK::Orig(v),
                         src: g,
                         keep,
+                        cf: NONE,
                     });
                     continue;
                 }
@@ -2981,6 +2985,7 @@ fn write(w: &Wr, out: Option<&core::Body>) -> Option<Plan> {
                         b: x,
                         src: g,
                         keep: None,
+                        cf: NONE,
                     });
                 }
                 if !iv {
@@ -2990,6 +2995,7 @@ fn write(w: &Wr, out: Option<&core::Body>) -> Option<Plan> {
                         b: PK::Orig(v),
                         src: g,
                         keep: None,
+                        cf: NONE,
                     });
                 }
             }
@@ -3063,12 +3069,24 @@ fn write(w: &Wr, out: Option<&core::Body>) -> Option<Plan> {
             at_pts.dedup();
         }
     }
+    // per core face, its members (input faces), by core face index
+    let mut core_srcs: Vec<Vec<usize>> = Vec::new();
     // 2. inside: the core's faces, their boundary off the walls
     if let Some(out) = out {
         // a face's uses of each edge cell, by cell id (reset after each face)
         let mut count: Vec<u8> = vec![0; built.wall.len()];
         let mut segs = Vec::new();
-        for f in &out.faces {
+        for (fi, f) in out.faces.iter().enumerate() {
+            // its members: every input face a facet of it is a piece of
+            let mut ms: Vec<usize> = Vec::new();
+            for c in &f.facets {
+                if let Some(hs) = built.holders.get(&c.0) {
+                    ms.extend_from_slice(hs);
+                }
+            }
+            ms.sort_unstable();
+            ms.dedup();
+            core_srcs.push(ms);
             let grp = (f.plane, if f.orient == Sgn::Pos { 1 } else { -1 });
             segs.clear();
             for c in &f.facets {
@@ -3095,6 +3113,7 @@ fn write(w: &Wr, out: Option<&core::Body>) -> Option<Plan> {
                         b: PK::Cell(v),
                         src: f.origin.0 as usize,
                         keep: None,
+                        cf: fi as u32,
                     });
                 }
             }
@@ -3151,7 +3170,14 @@ fn write(w: &Wr, out: Option<&core::Body>) -> Option<Plan> {
             let src = fl
                 .iter()
                 .map(|lp| match lp {
-                    Lp::New(segs) => segs.iter().map(|s| s.src).min().unwrap_or(usize::MAX),
+                    Lp::New(segs) => segs
+                        .iter()
+                        .map(|s| match s.cf {
+                            NONE => s.src,
+                            c => core_srcs[c as usize].first().copied().unwrap_or(s.src),
+                        })
+                        .min()
+                        .unwrap_or(usize::MAX),
                     Lp::Kept(i) => kept[*i].g,
                 })
                 .min()
@@ -3182,7 +3208,7 @@ fn write(w: &Wr, out: Option<&core::Body>) -> Option<Plan> {
     if fins.is_empty() {
         return Some(plan);
     }
-    build_body(w, &fins, &kept, &mut plan)?;
+    build_body(w, &fins, &kept, &core_srcs, &mut plan)?;
     Some(plan)
 }
 
@@ -3202,7 +3228,7 @@ fn w_out(w: &Wr, g: usize) -> i32 {
 /// face used as they are; names kept where the entity is the input's. Every table is a sorted
 /// list or a list by point index (no maps but the names').
 #[inline(never)] // a phase of the profile (tools/speed/phases.sh)
-fn build_body(w: &Wr, fins: &[Fin], kept: &[Kept], plan: &mut Plan) -> Option<()> {
+fn build_body(w: &Wr, fins: &[Fin], kept: &[Kept], core_srcs: &[Vec<usize>], plan: &mut Plan) -> Option<()> {
     let (bodies, fs, cls, built) = (w.bodies, w.fs, w.cls, w.built);
     let face_name = |g: usize| bodies[fs[g].body].face(fs[g].face).name;
     let keep_far = w.reg.bx.is_some() && w.reg.keeps_target;
@@ -3316,7 +3342,14 @@ fn build_body(w: &Wr, fins: &[Fin], kept: &[Kept], plan: &mut Plan) -> Option<()
     for (fi, f) in fins.iter().enumerate() {
         for lp in &f.loops {
             match lp {
-                Lp::New(segs) => sf.extend(segs.iter().map(|s| (s.src, fi as u32))),
+                Lp::New(segs) => {
+                    for s in segs {
+                        match s.cf {
+                            NONE => sf.push((s.src, fi as u32)),
+                            c => sf.extend(core_srcs[c as usize].iter().map(|&g| (g, fi as u32))),
+                        }
+                    }
+                }
                 Lp::Kept(i) => sf.push((kept[*i].g, fi as u32)),
             }
         }
@@ -3374,6 +3407,13 @@ fn build_body(w: &Wr, fins: &[Fin], kept: &[Kept], plan: &mut Plan) -> Option<()
             });
             if twice || held {
                 fnames[fi] = ms.iter().map(|m| m.0).min().unwrap_or(n);
+            }
+        }
+    }
+    if stats() {
+        for (fi, ms) in members.iter().enumerate() {
+            if ms.len() > 1 {
+                eprintln!("decide-once name: {:?} <- {:?}", fnames[fi], ms);
             }
         }
     }
