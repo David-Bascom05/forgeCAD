@@ -309,7 +309,6 @@ pub fn certify_fixtured(
     let pgrid = check::Grid::new(part, pad);
     let fgrid = check::Grid::new(fixture, fclear.max(0.0) + 1e-6);
     let sgrids: Vec<check::Grid> = stages.iter().map(|s| check::Grid::new(&s.1, pad)).collect();
-    let mut cand: Vec<u32> = Vec::new();
     // the one point outside: the tool's top (an axis point of a body) is above every face it is
     // checked against, at every instant (G1-G3 need one point of the moved tool outside the set,
     // the faces' distances do the rest)
@@ -326,134 +325,171 @@ pub fn certify_fixtured(
         .filter(|b| b.part == Part::Cutter)
         .map(|b| b.rmax)
         .fold(0.0, f64::max);
-    // each move's distance to each face's section, shared by the tool's bodies (one per face
-    // set and face, reset after the move)
+    // the moves are independent: chunks of them are checked on all cores (forge_math::par),
+    // each with its own scratch, and merged in move order with the sequential rules below
+    // (stop at a containment failure, or after the 21st failing check, counting what was
+    // counted up to there), so the summary is the same at any thread count
+    const CHUNK: usize = 64;
+    let nchunks = mv.len().div_ceil(CHUNK);
     let nstock = stages.iter().map(|s| s.1.len()).max().unwrap_or(0);
-    let mut shared: [Vec<Option<(forge_cam_geom::ival::Ival, f64)>>; 3] =
-        [vec![None; part.len()], vec![None; nstock], vec![None; fixture.len()]];
-    let mut touched: Vec<(usize, usize)> = Vec::new();
-    for (m, phase, idx) in &mv {
-        for (k, i) in touched.drain(..) {
-            shared[k][i] = None;
-        }
-        let tip_lo = m.at(forge_cam_geom::ival::Ival::new(0.0, 1.0))[2].lo;
-        if !(forge_cam_geom::ival::Ival::pt(tip_lo).add(forge_cam_geom::ival::Ival::pt(top)).lo > zmax) {
-            sum.clear = false;
-            sum.checks.push(CheckOut {
-                rule: "containment",
-                verdict: "undecided",
-                value: tip_lo + top,
-                limit: zmax,
-                at: [f64::NAN; 3],
-                tool_part: "holder",
-                other: "the tool's top is not above the part and stock".into(),
-                phase: phase.name(),
-                move_index: *idx,
-            });
-            return sum;
-        }
-        let mut st = 0;
-        while st + 1 < stages.len() && stages[st + 1].0 <= *idx {
-            st += 1;
-        }
-        let stock: &[Face] = &stages[st].1;
-        let sgrid = &sgrids[st];
-        for b in &tool.shape.bodies {
-            let sb = check::swept_box_body(m, b);
-            // the part: the cutter may touch it within tol on a cut; nothing else may touch it
-            for (set, (faces, what, grid)) in [(part, "part", &pgrid), (stock, "stock", sgrid), (fixture, "fixture", &fgrid)]
-                .into_iter()
-                .enumerate()
-            {
-                if faces.is_empty() {
-                    continue;
-                }
-                if what == "stock" && !(b.part == Part::NonCutting || *phase == Phase::Rapid) {
-                    // the cutter cuts the stock: that is the point
-                    continue;
-                }
-                // a shank no wider than the cutter rides in the cutter's own cut: it is held to
-                // the cutter's rule (within tol), never to a clearance it cannot have; the holder
-                // and any wider shank keep the clearance
-                let narrow = b.part == Part::NonCutting && b.rmax <= cutter_r;
-                let limit = if what == "fixture" {
-                    fclear
-                } else if (b.part == Part::Cutter && what == "part" || narrow) && *phase != Phase::Rapid
+    let chunks: Vec<Vec<MoveOut>> = forge_math::par::map(nchunks, |c| {
+        let mut cand: Vec<u32> = Vec::new();
+        let mut seen = check::Seen::default();
+        // each move's distance to each face's section, shared by the tool's bodies (one per
+        // face set and face, reset after the move)
+        let mut shared: [Vec<Option<(forge_cam_geom::ival::Ival, f64)>>; 3] =
+            [vec![None; part.len()], vec![None; nstock], vec![None; fixture.len()]];
+        let mut touched: Vec<(usize, usize)> = Vec::new();
+        let mut outs = Vec::new();
+        for (m, phase, idx) in &mv[c * CHUNK..((c + 1) * CHUNK).min(mv.len())] {
+            for (k, i) in touched.drain(..) {
+                shared[k][i] = None;
+            }
+            let mut o = MoveOut::default();
+            let tip_lo = m.at(forge_cam_geom::ival::Ival::new(0.0, 1.0))[2].lo;
+            if !(forge_cam_geom::ival::Ival::pt(tip_lo).add(forge_cam_geom::ival::Ival::pt(top)).lo > zmax) {
+                o.containment = Some(CheckOut {
+                    rule: "containment",
+                    verdict: "undecided",
+                    value: tip_lo + top,
+                    limit: zmax,
+                    at: [f64::NAN; 3],
+                    tool_part: "holder",
+                    other: "the tool's top is not above the part and stock".into(),
+                    phase: phase.name(),
+                    move_index: *idx,
+                });
+                outs.push(o);
+                continue;
+            }
+            let mut st = 0;
+            while st + 1 < stages.len() && stages[st + 1].0 <= *idx {
+                st += 1;
+            }
+            let stock: &[Face] = &stages[st].1;
+            let sgrid = &sgrids[st];
+            for b in &tool.shape.bodies {
+                let sb = check::swept_box_body(m, b);
+                // the part: the cutter may touch it within tol on a cut; nothing else may touch it
+                for (set, (faces, what, grid)) in [(part, "part", &pgrid), (stock, "stock", sgrid), (fixture, "fixture", &fgrid)]
+                    .into_iter()
+                    .enumerate()
                 {
-                    -tol
-                } else {
-                    clearance
-                };
-                grid.near(&sb, &mut cand);
-                for &fi in &cand {
-                    let f = &faces[fi as usize];
-                    if check::apart(&sb, &f.bbox, limit.max(0.0) + f.mu) {
+                    if faces.is_empty() {
                         continue;
                     }
-                    sum.pairs += 1;
-                    let slot = &mut shared[set][fi as usize];
-                    if slot.is_none() {
-                        touched.push((set, fi as usize));
+                    if what == "stock" && !(b.part == Part::NonCutting || *phase == Phase::Rapid) {
+                        // the cutter cuts the stock: that is the point
+                        continue;
                     }
-                    let (v, n) = check::certify_shared(b, f, m, limit, tol / 4.0, 200_000, slot);
-                    sum.cells += n;
-                    let rule = match (b.part, *phase, what) {
-                        (_, _, "fixture") => "fixture_collision",
-                        (_, Phase::Rapid, _) => "rapid_clear",
-                        (Part::Cutter, _, "part") => "gouge",
-                        _ => "holder_collision",
+                    // a shank no wider than the cutter rides in the cutter's own cut: it is held
+                    // to the cutter's rule (within tol), never to a clearance it cannot have; the
+                    // holder and any wider shank keep the clearance
+                    let narrow = b.part == Part::NonCutting && b.rmax <= cutter_r;
+                    let limit = if what == "fixture" {
+                        fclear
+                    } else if (b.part == Part::Cutter && what == "part" || narrow) && *phase != Phase::Rapid {
+                        -tol
+                    } else {
+                        clearance
                     };
-                    match v {
-                        Verdict::Clear { lower } => {
-                            if what == "part" && b.part == Part::Cutter {
-                                sum.least = sum.least.min(lower);
-                            }
+                    grid.near(&sb, &mut cand, &mut seen);
+                    for &fi in &cand {
+                        let f = &faces[fi as usize];
+                        if check::apart(&sb, &f.bbox, limit.max(0.0) + f.mu) {
+                            continue;
                         }
-                        Verdict::Hit { d, at, .. } => {
-                            sum.clear = false;
-                            sum.checks.push(CheckOut {
+                        o.pairs += 1;
+                        let slot = &mut shared[set][fi as usize];
+                        if slot.is_none() {
+                            touched.push((set, fi as usize));
+                        }
+                        let (v, n) = check::certify_shared(b, f, m, limit, tol / 4.0, 200_000, slot);
+                        o.cells += n;
+                        let rule = match (b.part, *phase, what) {
+                            (_, _, "fixture") => "fixture_collision",
+                            (_, Phase::Rapid, _) => "rapid_clear",
+                            (Part::Cutter, _, "part") => "gouge",
+                            _ => "holder_collision",
+                        };
+                        let tool_part = if b.part == Part::Cutter { "cutter" } else { "shank/holder" };
+                        let (verdict, value, at) = match v {
+                            Verdict::Clear { lower } => {
+                                if what == "part" && b.part == Part::Cutter {
+                                    o.least = o.least.min(lower);
+                                }
+                                continue;
+                            }
+                            Verdict::Hit { d, at, .. } => ("fail", d, at),
+                            Verdict::Undecided { lower, .. } => ("undecided", lower, [f64::NAN; 3]),
+                        };
+                        o.fails.push((
+                            CheckOut {
                                 rule,
-                                verdict: "fail",
-                                value: d,
+                                verdict,
+                                value,
                                 limit,
                                 at,
-                                tool_part: if b.part == Part::Cutter {
-                                    "cutter"
-                                } else {
-                                    "shank/holder"
-                                },
+                                tool_part,
                                 other: format!("{what} face {}", f.id),
                                 phase: phase.name(),
                                 move_index: *idx,
-                            });
-                        }
-                        Verdict::Undecided { lower, .. } => {
-                            sum.clear = false;
-                            sum.checks.push(CheckOut {
-                                rule,
-                                verdict: "undecided",
-                                value: lower,
-                                limit,
-                                at: [f64::NAN; 3],
-                                tool_part: if b.part == Part::Cutter {
-                                    "cutter"
-                                } else {
-                                    "shank/holder"
-                                },
-                                other: format!("{what} face {}", f.id),
-                                phase: phase.name(),
-                                move_index: *idx,
-                            });
-                        }
-                    }
-                    if sum.checks.len() > 20 {
-                        return sum;
+                            },
+                            o.pairs,
+                            o.cells,
+                            o.least,
+                        ));
                     }
                 }
             }
+            outs.push(o);
         }
+        outs
+    });
+    for o in chunks.into_iter().flatten() {
+        if let Some(c) = o.containment {
+            sum.clear = false;
+            sum.checks.push(c);
+            return sum;
+        }
+        let (p0, c0, l0) = (sum.pairs, sum.cells, sum.least);
+        for (c, pairs, cells, least) in o.fails {
+            sum.clear = false;
+            sum.checks.push(c);
+            if sum.checks.len() > 20 {
+                sum.pairs = p0 + pairs;
+                sum.cells = c0 + cells;
+                sum.least = l0.min(least);
+                return sum;
+            }
+        }
+        sum.pairs = p0 + o.pairs;
+        sum.cells = c0 + o.cells;
+        sum.least = l0.min(o.least);
     }
     sum
+}
+
+/// One move's checks, as the merge needs them: its counts, its least cutter distance, each
+/// failing check with the counts and least as they stood when it was found.
+struct MoveOut {
+    pairs: usize,
+    cells: usize,
+    least: f64,
+    fails: Vec<(CheckOut, usize, usize, f64)>,
+    containment: Option<CheckOut>,
+}
+
+impl Default for MoveOut {
+    fn default() -> MoveOut {
+        MoveOut {
+            pairs: 0,
+            cells: 0,
+            least: f64::INFINITY,
+            fails: vec![],
+            containment: None,
+        }
+    }
 }
 
 /// Heights an op links at.

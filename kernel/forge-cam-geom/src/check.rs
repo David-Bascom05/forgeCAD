@@ -1193,7 +1193,14 @@ pub struct Grid {
     nx: usize,
     ny: usize,
     cells: Vec<Vec<u32>>,
-    stamp: std::cell::RefCell<(u32, Vec<u32>)>,
+    n: usize,
+}
+
+/// A caller's scratch for `Grid::near` (one per thread): which faces a query has listed.
+#[derive(Clone, Debug, Default)]
+pub struct Seen {
+    tag: u32,
+    mark: Vec<u32>,
 }
 
 impl Grid {
@@ -1215,7 +1222,7 @@ impl Grid {
                 nx: 1,
                 ny: 1,
                 cells: vec![(0..faces.len() as u32).collect()],
-                stamp: std::cell::RefCell::new((0, vec![0; faces.len()])),
+                n: faces.len(),
             };
         }
         let n = ((faces.len() as f64).sqrt() * 2.0).clamp(1.0, 64.0) as usize;
@@ -1238,7 +1245,7 @@ impl Grid {
             nx: n,
             ny: n,
             cells,
-            stamp: std::cell::RefCell::new((0, vec![0; faces.len()])),
+            n: faces.len(),
         }
     }
 
@@ -1249,11 +1256,17 @@ impl Grid {
     }
 
     /// The faces whose (grown) boxes may meet the xy of `b`.
-    pub fn near(&self, b: &[Ival; 3], out: &mut Vec<u32>) {
+    pub fn near(&self, b: &[Ival; 3], out: &mut Vec<u32>, seen: &mut Seen) {
         out.clear();
-        let mut st = self.stamp.borrow_mut();
-        st.0 = st.0.wrapping_add(1);
-        let tag = st.0;
+        if seen.mark.len() < self.n {
+            seen.mark.resize(self.n, 0);
+        }
+        seen.tag = seen.tag.wrapping_add(1);
+        if seen.tag == 0 {
+            seen.mark.iter_mut().for_each(|m| *m = 0);
+            seen.tag = 1;
+        }
+        let tag = seen.tag;
         let (a, bb) = Self::span(self.x0, self.cw, self.nx, b[0].lo, b[0].hi);
         let (c, d) = Self::span(self.y0, self.ch, self.ny, b[1].lo, b[1].hi);
         // a box wholly outside the grid's range still lands in the border cells: those list
@@ -1261,8 +1274,8 @@ impl Grid {
         for gy in c..=d {
             for gx in a..=bb {
                 for &i in &self.cells[gy * self.nx + gx] {
-                    if st.1[i as usize] != tag {
-                        st.1[i as usize] = tag;
+                    if seen.mark[i as usize] != tag {
+                        seen.mark[i as usize] = tag;
                         out.push(i);
                     }
                 }
