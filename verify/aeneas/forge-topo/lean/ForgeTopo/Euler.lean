@@ -404,4 +404,186 @@ theorem shell_faces_euler_spec (R : ShellReads SI t b) (H : Sound b) (W : b.WF) 
 
 end
 
+/-! ## The shells, and `shell_euler` -/
+
+/-- Every mark is an earlier shell's (below `s`) or none. -/
+def Fresh (n s : Nat) (a : List U32) : Prop :=
+  a.length = n ∧ ∀ x < n, (a[x]!).val < s ∨ a[x]! = core.num.U32.MAX
+
+theorem stamped_of_fresh {n s : Nat} {a : List U32} (h : Fresh n s a) (σ : U32) (hσ : σ.val = s)
+    (hs : s < U32.max) : Stamped n σ [] a := by
+  refine ⟨h.1, fun y hy => ?_, fun y hy => ?_, fun y hy => by simp at hy⟩
+  · simp only [List.not_mem_nil, iff_false]
+    intro he
+    rcases h.2 y hy with h1 | h1
+    · rw [he] at h1; omega
+    · rw [he] at h1; have := max_val; rw [h1] at hσ; omega
+  · rcases h.2 y hy with h1 | h1
+    · left; omega
+    · right; exact h1
+
+theorem fresh_of_stamped {n : Nat} {σ : U32} {L : List Nat} {a : List U32} (h : Stamped n σ L a) :
+    Fresh n (σ.val + 1) a := by
+  refine ⟨h.len, fun y hy => ?_⟩
+  rcases h.le y hy with h1 | h1
+  · left; omega
+  · right; exact h1
+
+theorem fresh_replicate (n : Nat) : Fresh n 0 (List.replicate n core.num.U32.MAX) := by
+  refine ⟨by simp, fun y hy => Or.inr ?_⟩
+  rw [getElem!_pos _ y (by simpa using hy)]; simp
+
+/-- The model's shell value, read through the lists the code walks. -/
+theorem shellValue_eq (b : Body) (s : Nat) :
+    b.shellValue (b.shells.getD s []) =
+      (Body.distinct (vertsOf b (edgesOf b ((b.shellList s).flatMap (faceCoedges b)))) : Int) -
+      Body.distinct (edgesOf b ((b.shellList s).flatMap (faceCoedges b))) +
+      2 * (b.shellList s).length - ((b.shellList s).flatMap b.faceLoops).length := by
+  have hfc : faceCoedges b = fun x => (b.faceLoops x).flatMap b.loopCoedges := rfl
+  unfold Body.shellValue
+  rw [hfc]
+  simp only [Body.shellList, vertsOf, edgesOf, List.flatMap_assoc]
+
+theorem tmod_two_ne (x : Int) : Int.tmod x 2 ≠ 0 ↔ x % 2 ≠ 0 := by
+  rw [ne_eq, ne_eq, ← Int.dvd_iff_tmod_eq_zero, ← Int.dvd_iff_emod_eq_zero]
+
+/-- A sink that appends the problem it is handed. -/
+def AppendsEu {S : Type} (EI : topo_euler.EulerSink S) (P : S → List Problem) : Prop :=
+  ∀ (o : S) (s : Usize) (x : I64), EI.shell_euler o s x ⦃ o' => P o' = P o ++ [Problem.shellEuler s.val x.val] ⦄
+
+section
+variable {T : Type} (SI : topo_shell.ShellTopo T) (t : T) (b : Body)
+
+set_option hygiene false in
+/-- The end of a shell: the next index, the marks now an earlier shell's, the problem list. -/
+macro "finish_shell" o:term "," h:term : tactic => `(tactic| (
+  step with usize_add_wspec s 1#usize (succ_le_max s ns hlt') as ⟨s1, hs1⟩
+  have hE2 := fresh_of_stamped hE1
+  have hV2 := fresh_of_stamped hV1
+  rw [hσv] at hE2 hV2
+  rw [hw s1 hs1]
+  exact ⟨by omega, hE2, hV2, hacc $o $h, by omega⟩))
+
+theorem shells_euler_spec {S : Type} (EI : topo_euler.EulerSink S) (P : S → List Problem)
+    (hS : AppendsEu EI P) (R : ShellReads SI t b) (H : Sound b) (W : b.WF)
+    (hsm : ∀ s < b.shells.size, EulerSmall b s)
+    (ns nfc : Usize) (hns : ns.val = b.shells.size) (hnfc : nfc.val = b.faces.size)
+    (ea va : alloc.vec.Vec U32) (hE : Fresh b.edges.size 0 ea.val) (hV : Fresh b.nv 0 va.val) (out : S) :
+    topo_euler.shell_euler_loop0 SI EI t out ns nfc ea va 0#usize ⦃ r =>
+      P r = P out ++ b.checkShellEuler ⦄ := by
+  have hlt32 := R.ns_lt
+  unfold topo_euler.shell_euler_loop0
+  apply loop.spec_decr_nat
+    (fun (y : S × alloc.vec.Vec U32 × alloc.vec.Vec U32 × Usize) => ns.val - y.2.2.2.val)
+    (fun y => y.2.2.2.val ≤ ns.val ∧ Fresh b.edges.size y.2.2.2.val y.2.1.val ∧
+      Fresh b.nv y.2.2.2.val y.2.2.1.val ∧
+      P y.1 = P out ++ ((List.range y.2.2.2.val).filterMap fun s =>
+        let value := b.shellValue (b.shells.getD s [])
+        if value % 2 != 0 || value > 2 then some (Problem.shellEuler s value) else none))
+  · rintro ⟨o, ea0, va0, s⟩ ⟨hle, hE0, hV0, ho⟩
+    simp only at hle hE0 hV0 ho ⊢
+    unfold topo_euler.shell_euler_loop0.body
+    split
+    · rename_i hlt
+      have hlt' : s.val < ns.val := by scalar_tac
+      have hs : s.val < b.shells.size := by omega
+      have hσv : (UScalar.cast .U32 s).val = s.val := cast32_val s (by omega)
+      have hEs := stamped_of_fresh hE0 (UScalar.cast .U32 s) hσv (by omega)
+      have hVs := stamped_of_fresh hV0 (UScalar.cast .U32 s) hσv (by omega)
+      simp only [lift, Std.bind_ok]
+      step with R.shell_n_faces s hs as ⟨nf, hnf⟩
+      step with shell_faces_euler_spec SI t b R H W (UScalar.cast .U32 s) nfc s nf hnfc hs hnf (hsm s.val hs)
+        ea0 va0 hEs hVs as ⟨ea1, va1, f, l, e, v, hE1, hV1, hf, hl, he, hv⟩
+      have hsm' := hsm s.val hs
+      unfold EulerSmall at hsm'
+      set ES := edgesOf b ((b.shellList s.val).flatMap (faceCoedges b)) with hES
+      have hESl : ES.length = ((b.shellList s.val).flatMap (faceCoedges b)).length := by
+        simp [hES, edgesOf]
+      have hde := distinct_le ES
+      have hdv := distinct_le (vertsOf b ES)
+      have hvl := vertsOf_length b ES
+      have hval := shellValue_eq b s.val
+      rw [← hES] at hval
+      step as ⟨i, hi⟩
+      step as ⟨i1, hi1⟩
+      step as ⟨i2, hi2⟩
+      step as ⟨value, hvalue⟩
+      have hvv : value.val = b.shellValue (b.shells.getD s.val []) := by
+        (rw [hval, hvalue, hi2, hi1, hi, hv, he, hf, hl]) <;> push_cast <;> ring
+      step with IScalar.rem_spec value (y := 2#i64) (by decide) as ⟨i3, hi3⟩
+      have hacc : ∀ o', P o' = P o ++ (if b.shellValue (b.shells.getD s.val []) % 2 != 0 ||
+            b.shellValue (b.shells.getD s.val []) > 2
+          then some (Problem.shellEuler s.val (b.shellValue (b.shells.getD s.val []))) else none).toList →
+          P o' = P out ++ ((List.range (s.val + 1)).filterMap fun s =>
+            let value := b.shellValue (b.shells.getD s [])
+            if value % 2 != 0 || value > 2 then some (Problem.shellEuler s value) else none) := by
+        intro o' h; rw [h, filterMap_range_succ, ho, List.append_assoc]
+      have hw : ∀ s1 : Usize, s1 = s.wrapping_add 1#usize → s1.val = s.val + 1 := by
+        intro s1 h; rw [h]; exact succ_val s ns hlt'
+      have hmod : (i3 != 0#i64) = (b.shellValue (b.shells.getD s.val []) % 2 != 0) := by
+        have h0 : (0#i64).val = 0 := rfl
+        by_cases hz : value.val % 2 = 0
+        · have : Int.tmod value.val 2 = 0 := by
+            by_contra hc; exact ((tmod_two_ne _).1 hc) hz
+          have hi30 : i3 = 0#i64 := IScalar.eq_of_val_eq (by rw [hi3, this]; rfl)
+          rw [hi30, ← hvv, hz]; simp
+        · have : Int.tmod value.val 2 ≠ 0 := (tmod_two_ne _).2 hz
+          have hi30 : i3 ≠ 0#i64 := by intro hc; rw [hc, h0] at hi3; exact this hi3.symm
+          rw [← hvv, bne_iff_ne.mpr hi30, bne_iff_ne.mpr hz]
+      split
+      · rename_i hodd
+        have hodd' : (b.shellValue (b.shells.getD s.val []) % 2 != 0) = true := by rw [← hmod]; exact hodd
+        step with hS o s value as ⟨o1, ho1⟩
+        finish_shell o1, (by rw [ho1, hvv, hodd']; simp)
+      · rename_i hodd
+        have hodd' : (b.shellValue (b.shells.getD s.val []) % 2 != 0) = false := by
+          rw [← hmod]; revert hodd; cases (i3 != 0#i64) <;> simp
+        split
+        · rename_i hgt
+          have hgt' : b.shellValue (b.shells.getD s.val []) > 2 := by
+            rw [← hvv]; have h2 : (2#i64).val = 2 := rfl; scalar_tac
+          step with hS o s value as ⟨o1, ho1⟩
+          finish_shell o1, (by rw [ho1, hvv, hodd', Bool.false_or, decide_eq_true hgt']; simp)
+        · rename_i hgt
+          have hgt' : ¬ b.shellValue (b.shells.getD s.val []) > 2 := by
+            rw [← hvv]; have h2 : (2#i64).val = 2 := rfl; scalar_tac
+          simp only [Std.bind_ok]
+          finish_shell o, (by rw [hodd', Bool.false_or, decide_eq_false hgt']; simp)
+    · rename_i hlt
+      have hsn : s.val = ns.val := by scalar_tac
+      simp only [WP.spec_ok]
+      rw [ho, hsn, hns]; rfl
+  · have h0 : (0#usize).val = 0 := rfl
+    simp only [h0]
+    exact ⟨by simp, hE, hV, by simp⟩
+
+/-- **The shipped `check_shell_euler` refines the model.** For a body whose links are sound (as
+`check_known` runs it: only once `check_links` found nothing), whose shells' listings fit `i64`
+(`EulerSmall`), any `ShellTopo` view that reads it (`ShellReads`) and any sink that appends what it
+is handed, the translated Rust `shell_euler` terminates without panic or overflow and appends
+exactly `Model.checkShellEuler`, a shell's face ids past the faces included (counted as faces with
+no loops, as the model reads them). -/
+theorem shell_euler_refines {S : Type} (EI : topo_euler.EulerSink S) (P : S → List Problem)
+    (hS : AppendsEu EI P) (R : ShellReads SI t b) (hL : b.checkLinks = [])
+    (hsm : ∀ s < b.shells.size, EulerSmall b s) (out : S) :
+    topo_euler.shell_euler SI EI t out ⦃ r => P r = P out ++ b.checkShellEuler ⦄ := by
+  have H := sound_of b hL
+  have W := b.links_ok hL
+  unfold topo_euler.shell_euler
+  have rns := R.ns
+  have rnf := R.base.nf
+  have rne := R.base.ne
+  have rnv := R.base.nv
+  step with rns as ⟨ns, hns⟩
+  step with rnf as ⟨nfc, hnfc⟩
+  step with rne as ⟨ne, hne⟩
+  step as ⟨ea, hea, hea'⟩
+  step with rnv as ⟨nv, hnv⟩
+  step as ⟨va, hva, hva'⟩
+  have hE : Fresh b.edges.size 0 ea.val := by rw [hea, hne]; exact fresh_replicate _
+  have hV : Fresh b.nv 0 va.val := by rw [hva, hnv]; exact fresh_replicate _
+  exact shells_euler_spec SI t b EI P hS R H W hsm ns nfc hns hnfc ea va hE hV out
+
+end
+
 end forge_topo
