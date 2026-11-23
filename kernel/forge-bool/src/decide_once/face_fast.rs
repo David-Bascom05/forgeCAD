@@ -634,18 +634,6 @@ pub(crate) fn counts(
         fe_start[g + 1] = fe.len() as u32;
     }
     let edges_of = |g: usize| &fe[fe_start[g] as usize..fe_start[g + 1] as usize];
-    // per class, the box of its faces
-    let mut cbox: Vec<([f64; 3], [f64; 3])> = vec![([f64::INFINITY; 3], [f64::NEG_INFINITY; 3]); nc];
-    for (g, f) in fs.iter().enumerate() {
-        let c = cls.of_face[g];
-        if c != NONE {
-            let bx = &mut cbox[c as usize];
-            for k in 0..3 {
-                bx.0[k] = bx.0[k].min(f.lo[k]);
-                bx.1[k] = bx.1[k].max(f.hi[k]);
-            }
-        }
-    }
     let is_wall = |k: u32| cls.walls.contains(&k);
     // the box, from its walls (none: everything)
     let mut wbox = ([f64::NEG_INFINITY; 3], [f64::INFINITY; 3]);
@@ -712,6 +700,29 @@ pub(crate) fn counts(
         }
         cx.fscale[g] = 1.0 + m;
     }
+    // per near face, the box of its exact vertices (each shadow widened by its bound, so the box
+    // holds the exact polygon); per class, the box of its faces
+    let mut fbx: Vec<([f64; 3], [f64; 3])> = vec![([f64::INFINITY; 3], [f64::NEG_INFINITY; 3]); fs.len()];
+    for g in 0..fs.len() {
+        for j in fe_start[g] as usize..fe_start[g + 1] as usize {
+            let (ia, _) = cx.fe_pt[j];
+            let p = &cx.p[ia as usize];
+            for k in 0..3 {
+                fbx[g].0[k] = fbx[g].0[k].min(p.f[k] - p.e);
+                fbx[g].1[k] = fbx[g].1[k].max(p.f[k] + p.e);
+            }
+        }
+    }
+    let mut cbox: Vec<([f64; 3], [f64; 3])> = vec![([f64::INFINITY; 3], [f64::NEG_INFINITY; 3]); nc];
+    for g in 0..fs.len() {
+        let c = cls.of_face[g];
+        if c != NONE {
+            for k in 0..3 {
+                cbox[c as usize].0[k] = cbox[c as usize].0[k].min(fbx[g].0[k]);
+                cbox[c as usize].1[k] = cbox[c as usize].1[k].max(fbx[g].1[k]);
+            }
+        }
+    }
     cx.ax_start.push(0);
     for g in 0..fs.len() {
         let (lo, hi) = (fe_start[g] as usize, fe_start[g + 1] as usize);
@@ -746,7 +757,7 @@ pub(crate) fn counts(
         let c32 = c as u32;
         // a plane the other operand does not come near, whose faces are all strictly inside the
         // box: its faces are its facets (a solid's own faces meet only at their edges)
-        if whole_plane(c, &on, fs, cls, &cx.cpf, &cbox, &wbox) {
+        if whole_plane(c, &on, fs, cls, &cx.cpf, &fbx, &cbox, &wbox) {
             tick(&cx.t, 22, 1);
             nfacet += on[c].len();
             continue;
@@ -778,7 +789,6 @@ pub(crate) fn counts(
         }
         let nbound = segs.len();
         // 2. on each other line C ∩ K near C's faces, the stretches inside the faces of C and K
-        let g = 4.0 * super::lin();
         let (clo, chi) = cbox[c];
         for k in 0..nc as u32 {
             if k as usize == c {
@@ -787,7 +797,7 @@ pub(crate) fn counts(
             let wall = is_wall(k);
             if !wall {
                 let (klo, khi) = cbox[k as usize];
-                if (0..3).any(|a| klo[a] > chi[a] + g || khi[a] < clo[a] - g) {
+                if (0..3).any(|a| klo[a] > chi[a] || khi[a] < clo[a]) {
                     continue;
                 }
             }
@@ -795,7 +805,7 @@ pub(crate) fn counts(
             // either has a point on the line (the polygon is within a few LINEAR of its box)
             let mut rel: u128 = 0;
             for (pos, &f) in on[c].iter().enumerate() {
-                if touches(&fs[f], &cx.cpf[k as usize], g) {
+                if touches(&fbx[f], &cx.cpf[k as usize]) {
                     rel |= 1u128 << pos;
                 }
             }
@@ -804,7 +814,7 @@ pub(crate) fn counts(
             }
             if !wall {
                 for (pos, &h) in on[k as usize].iter().enumerate() {
-                    if touches(&fs[h], &cx.cpf[c], g) {
+                    if touches(&fbx[h], &cx.cpf[c]) {
                         rel |= 1u128 << (64 + pos);
                     }
                 }
@@ -1042,21 +1052,24 @@ pub(crate) fn counts(
 /// Plane `c` is taken whole: its faces all of one body, each strictly inside the box `wbox`
 /// (their boxes grown by a few LINEAR), and no near face of another body has a box that meets
 /// both plane `c` and the box of `c`'s faces.
+#[allow(clippy::too_many_arguments)]
 fn whole_plane(
     c: usize,
     on: &[Vec<usize>],
     fs: &[In],
     cls: &Classes,
     cpf: &[PlaneF],
+    fbx: &[([f64; 3], [f64; 3])],
     cbox: &[([f64; 3], [f64; 3])],
     wbox: &([f64; 3], [f64; 3]),
 ) -> bool {
-    let g = 4.0 * super::lin();
     let b = fs[on[c][0]].body;
-    let tol = |x: f64| g + 1e-9 * (1.0 + x.abs());
-    let inside =
-        |f: &In| (0..3).all(|a| f.lo[a] - tol(f.lo[a]) > wbox.0[a] && f.hi[a] + tol(f.hi[a]) < wbox.1[a]);
-    if !on[c].iter().all(|&f| fs[f].body == b && inside(&fs[f])) {
+    // (a wall's f64 position is its exact one within a few ulps)
+    let tol = |x: f64| 8.0 * f64::EPSILON * (1.0 + x.abs());
+    let inside = |g: usize| {
+        (0..3).all(|a| fbx[g].0[a] > wbox.0[a] + tol(wbox.0[a]) && fbx[g].1[a] < wbox.1[a] - tol(wbox.1[a]))
+    };
+    if !on[c].iter().all(|&f| fs[f].body == b && inside(f)) {
         return false;
     }
     let (clo, chi) = cbox[c];
@@ -1064,21 +1077,22 @@ fn whole_plane(
         if f.body == b || cls.of_face[h] == NONE {
             continue;
         }
-        let meets_box = (0..3).all(|a| f.lo[a] <= chi[a] + tol(chi[a]) && f.hi[a] >= clo[a] - tol(clo[a]));
-        if meets_box && touches(f, &cpf[c], g) {
+        let meets_box = (0..3).all(|a| fbx[h].0[a] <= chi[a] && fbx[h].1[a] >= clo[a]);
+        if meets_box && touches(&fbx[h], &cpf[c]) {
             return false;
         }
     }
     true
 }
 
-/// Face `f`'s box (grown by `g`) meets plane `p`, in f64 with a margin for its rounding.
-fn touches(f: &In, p: &PlaneF, g: f64) -> bool {
+/// A box (holding a face's exact polygon) meets plane `p`, in f64 with a margin for the plane's
+/// rounding and its own: "misses" means the exact plane's side is one nonzero sign over the box.
+fn touches(bx: &([f64; 3], [f64; 3]), p: &PlaneF) -> bool {
     let mut v = -p.c;
     let mut r = 0.0;
     let mut m = p.c.abs();
     for k in 0..3 {
-        let (mid, half) = (0.5 * (f.lo[k] + f.hi[k]), 0.5 * (f.hi[k] - f.lo[k]) + g);
+        let (mid, half) = (0.5 * (bx.0[k] + bx.1[k]), 0.5 * (bx.1[k] - bx.0[k]));
         v += p.n[k] * mid;
         r += p.n[k].abs() * half;
         m += (p.n[k] * mid).abs() + p.n[k].abs() * half;
