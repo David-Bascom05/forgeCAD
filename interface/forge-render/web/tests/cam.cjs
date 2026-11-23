@@ -29,7 +29,11 @@ function serveStatic(root) {
   });
 }
 
+const T0 = Date.now();
+const log = (m) => console.log(`[${((Date.now() - T0) / 1000).toFixed(1)}s] ${m}`);
+
 async function click(p, name, button = 0, double = false) {
+  log(`click ${name}`);
   await t.until(p, (s) => s.places?.some((x) => x.name === name), `\`${name}\` on screen`, 60000);
   await p.evaluate(([n, b, d]) => window.forgecad.fc.app_click(n, b, d), [name, button, double]);
   await settle(p);
@@ -44,7 +48,7 @@ async function settle(p) {
 async function shot(p, name) {
   await settle(p);
   const f = await t.pixels(p);
-  console.log(`  ${name}: ${t.shot(name, f)}`);
+  log(`${name}: ${t.shot(name, f)}`);
   return f;
 }
 
@@ -68,6 +72,7 @@ const generated = (s) => s.cam && s.cam.generated && !s.cam.generating;
   const b = await t.browser();
   try {
     const p = await t.page(b, `${served.url}?offscreen=1440x900${store}`);
+    await t.until(p, (s) => s.ready, "the app");
     await p.evaluate(() => window.forgecad.loaded);
     await p.evaluate((d) => window.forgecad.fc.app_open(d), doc);
     let st = await t.until(p, generated, "the document generated");
@@ -79,20 +84,53 @@ const generated = (s) => s.cam && s.cam.generated && !s.cam.generating;
     console.log("ok - opened on Manufacture, every op certified as natively");
     await shot(p, "cam-1-opened.png");
 
-    await click(p, "cam:row:prof");
+    // the pictures first, driven by the workspace's commands (a click also asks the view for a
+    // pick, which the offscreen software adapter may never finish: frames then spin)
+    const cam = async (w) => {
+      log(`cam ${w}`);
+      await p.evaluate((x) => window.forgecad.fc.app_cam(x), w);
+      await settle(p);
+    };
+    await cam("select prof");
     st = await t.until(p, (s) => s.cam.selected === "prof", "prof selected");
     await shot(p, "cam-2-selected.png");
     console.log("ok - an op selected: its tool, feeds, path and certificate");
-
-    await click(p, "cam:row:prof", 0, true);
+    await cam("edit prof");
     await t.until(p, (s) => s.cam.dialogs.includes("op"), "the op dialog");
     await shot(p, "cam-3-op-dialog.png");
-    // the Passes tab (Tool, Geometry, Heights, Passes): stock to leave
+    await cam("tab 3");
+    await cam("set leave 0.2");
+    await shot(p, "cam-4-op-passes.png");
+    await cam("close");
+    await cam("edit bolts");
+    await cam("tab 0");
+    await shot(p, "cam-5-drill-geometry.png");
+    await cam("close");
+    await cam("post");
+    await t.until(p, (s) => s.cam.dialogs.includes("post"), "the post dialog");
+    await shot(p, "cam-6-post.png");
+    await cam("close");
+    await cam("tools");
+    await t.until(p, (s) => s.cam.dialogs.includes("tools"), "the tool library");
+    await shot(p, "cam-7-tools.png");
+    await cam("close");
+    await cam("new-setup");
+    await t.until(p, (s) => s.cam.dialogs.includes("setup"), "the setup dialog");
+    await shot(p, "cam-8-setup.png");
+    await cam("tab 1");
+    await shot(p, "cam-9-setup-stock.png");
+    await cam("close");
+    await cam("checks");
+    await shot(p, "cam-10-checks.png");
+    await cam("close");
+    console.log("ok - op, post, tool library, setup and checks drawn");
+
+    // then by hand: the op dialog opened from the browser, a field typed, OK
+    await click(p, "cam:row:prof", 0, true);
+    await t.until(p, (s) => s.cam.dialogs.includes("op"), "the op dialog, by a double click");
     await click(p, "cam:op:tab:3");
     await click(p, "cam:op:arg:leave");
     await p.evaluate(() => window.forgecad.fc.app_type("0.2", false));
-    await settle(p);
-    await shot(p, "cam-4-op-passes.png");
     const before = st.cam.text;
     await click(p, "cam:op:ok");
     st = await t.until(p, (s) => s.cam.text !== before, "the edit in the text");
@@ -100,29 +138,8 @@ const generated = (s) => s.cam && s.cam.generated && !s.cam.generating;
     console.log("ok - the dialog's edit is the document's text");
     st = await t.until(p, generated, "generated again");
     assert.equal(st.cam.ops.find((o) => o.name === "prof").status, "built");
-    await shot(p, "cam-5-regenerated.png");
-
-    await click(p, "tool:Post Process");
-    await t.until(p, (s) => s.cam.dialogs.includes("post"), "the post dialog");
-    await shot(p, "cam-6-post.png");
-    await click(p, "cam:post:close");
-
-    await click(p, "tool:Tool Library");
-    await t.until(p, (s) => s.cam.dialogs.includes("tools"), "the tool library");
-    await shot(p, "cam-7-tools.png");
-    await click(p, "cam:tools:close");
-
-    await click(p, "tool:New Setup");
-    await t.until(p, (s) => s.cam.dialogs.includes("setup"), "the setup dialog");
-    await shot(p, "cam-8-setup.png");
-    await click(p, "cam:setup:tab:1");
-    await shot(p, "cam-9-setup-stock.png");
-    await click(p, "cam:setup:cancel");
-
-    await click(p, "tool:Checks");
-    await shot(p, "cam-10-checks.png");
+    console.log("ok - generated again: prof certified with its new stock to leave");
     t.check(p);
-    console.log("ok - post, tool library, setup and checks drawn");
   } finally {
     await b.close();
     served.proc.kill();

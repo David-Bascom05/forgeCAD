@@ -458,8 +458,8 @@ pub fn run(src: &str, dir: &Path) -> Cam {
                         }
                     }
                     let a = cam.named(args, &local)?;
-                    // the clock only when asked: std's Instant panics in a browser
-                    let t0 = std::env::var("FORGE_CAM_TIME").is_ok().then(std::time::Instant::now);
+                    // the kernel's clock: std's Instant panics in a browser
+                    let t0 = std::env::var("FORGE_CAM_TIME").is_ok().then(forge_math::clock::Instant::now);
                     let v = cam.call(name, fname, &a, dir)?;
                     if let Some(t0) = t0 {
                         eprintln!("{name}: {:?}", t0.elapsed());
@@ -2963,7 +2963,7 @@ impl Cam {
                 .clone()
                 .unwrap_or_else(|| forge_cam::stock::InProcess::new(s.stock.min, s.stock.max));
             let faces_of = |ip: &forge_cam::stock::InProcess| {
-                let t0 = std::time::Instant::now();
+                let t0 = forge_math::clock::Instant::now();
                 let r = ip.faces();
                 if std::env::var("FORGE_CAM_DEBUG").is_ok() {
                     eprintln!(

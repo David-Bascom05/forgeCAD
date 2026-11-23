@@ -103,7 +103,9 @@ fn role_of(func: &str) -> Role {
         "program" => Role::Program,
         f if OP_FUNCS.contains(&f) => Role::Op(f.to_string()),
         // an op built-in this workspace has no form for yet: shown, edited as text
-        f if f.ends_with("_mill") || f.starts_with("rough") || f.starts_with("finish") => Role::Op(f.to_string()),
+        f if f.ends_with("_mill") || f.starts_with("rough") || f.starts_with("finish") => {
+            Role::Op(f.to_string())
+        }
         _ => Role::Other,
     }
 }
@@ -193,17 +195,39 @@ fn stmt_of(src: &str, s: &syntax::Stmt) -> Option<Stmt> {
 #[derive(Clone, Debug, PartialEq)]
 pub enum Edit {
     /// Keyword `arg` of statement `id` set to `text` (put in if missing).
-    Set { id: String, arg: String, text: String },
+    Set {
+        id: String,
+        arg: String,
+        text: String,
+    },
     /// Keyword `arg` of statement `id` taken out (the built-in's default applies).
-    Unset { id: String, arg: String },
+    Unset {
+        id: String,
+        arg: String,
+    },
     /// A new statement `text` (`NAME = call(..)`), before statement `before` or at the end.
-    Add { before: Option<String>, text: String },
-    Delete { id: String },
+    Add {
+        before: Option<String>,
+        text: String,
+    },
+    Delete {
+        id: String,
+    },
     /// Statement `id` moved before `before` (None: to the end).
-    Move { id: String, before: Option<String> },
-    Suppress { id: String },
-    Unsuppress { id: String },
-    Rename { from: String, to: String },
+    Move {
+        id: String,
+        before: Option<String>,
+    },
+    Suppress {
+        id: String,
+    },
+    Unsuppress {
+        id: String,
+    },
+    Rename {
+        from: String,
+        to: String,
+    },
 }
 
 /// `src` with `e` made, or why not (nothing changed).
@@ -321,12 +345,30 @@ prog = program(op1, post: \"fanuc\", number: 1001)
             text: "0.5".into(),
         };
         let t = apply(DOC, &e).expect("set");
-        assert!(t.contains("skim = facing(op1, tool: t1, to: 18, step: 0.5)"), "{t}");
+        assert!(
+            t.contains("skim = facing(op1, tool: t1, to: 18, step: 0.5)"),
+            "{t}"
+        );
         assert!(t.contains("# a comment kept"));
-        let t2 = apply(&t, &Edit::Unset { id: "skim".into(), arg: "step".into() }).expect("unset");
+        let t2 = apply(
+            &t,
+            &Edit::Unset {
+                id: "skim".into(),
+                arg: "step".into(),
+            },
+        )
+        .expect("unset");
         assert!(t2.contains("skim = facing(op1, tool: t1, to: 18)"), "{t2}");
         // a new keyword is put in
-        let t3 = apply(DOC, &Edit::Set { id: "prof".into(), arg: "leave".into(), text: "0.2".into() }).expect("put in");
+        let t3 = apply(
+            DOC,
+            &Edit::Set {
+                id: "prof".into(),
+                arg: "leave".into(),
+                text: "0.2".into(),
+            },
+        )
+        .expect("put in");
         assert_eq!(read(&t3).unwrap()[5].arg("leave"), Some("0.2"));
     }
 
@@ -342,7 +384,14 @@ prog = program(op1, post: \"fanuc\", number: 1001)
         .expect("add");
         let n: Vec<String> = read(&t).unwrap().into_iter().map(|s| s.name).collect();
         assert_eq!(n, ["f", "m", "t1", "op1", "skim", "prof", "rough", "prog"]);
-        let t = apply(&t, &Edit::Move { id: "rough".into(), before: Some("prof".into()) }).expect("move");
+        let t = apply(
+            &t,
+            &Edit::Move {
+                id: "rough".into(),
+                before: Some("prof".into()),
+            },
+        )
+        .expect("move");
         let n: Vec<String> = read(&t).unwrap().into_iter().map(|s| s.name).collect();
         assert_eq!(n, ["f", "m", "t1", "op1", "skim", "rough", "prof", "prog"]);
         let s = apply(&t, &Edit::Suppress { id: "rough".into() }).expect("suppress");
