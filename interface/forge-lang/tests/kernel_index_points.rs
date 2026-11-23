@@ -20,15 +20,16 @@ use forge_mesh::mesh::TriMesh;
 use forge_mesh::tessellate::{Quality, tessellate, tessellate_tolerant};
 use forge_topo::Body;
 
+/// The part built with no folder beside it (wasi has no temp_dir; these parts read no files).
+fn run(src: &str) -> (forge_lang::Run, forge_lang::build::Cache) {
+    forge_lang::run(src, forge_lang::Options::default(), Default::default())
+}
+
 /// The part's finished body.
 fn body(src: &str) -> Body {
-    let m = forge_lang::fuzz::build(src);
-    assert!(
-        m.error().is_none(),
-        "the part builds: {:?}",
-        m.error().map(forge_lang::fuzz::message)
-    );
-    m.body().expect("a body")
+    let (r, _) = run(src);
+    assert!(r.errors.is_empty(), "{}", forge_lang::report::text(&r, src));
+    r.body.expect("a body")
 }
 
 /// A fine tessellation, at the finest chord that meshes.
@@ -135,12 +136,32 @@ const REPROS: [(&str, [f64; 3], bool); 14] = [
     ("p00199", [-7.8466, -15.2716, -2.1315], false),
 ];
 
+/// A repro part's source (tests/index), compiled in so wasm runs it too.
+fn part(id: &str) -> &'static str {
+    match id {
+        "p00006" => include_str!("index/p00006.fg"),
+        "p00007" => include_str!("index/p00007.fg"),
+        "p00023" => include_str!("index/p00023.fg"),
+        "p00056" => include_str!("index/p00056.fg"),
+        "p00071" => include_str!("index/p00071.fg"),
+        "p00080" => include_str!("index/p00080.fg"),
+        "p00094" => include_str!("index/p00094.fg"),
+        "p00128" => include_str!("index/p00128.fg"),
+        "p00137" => include_str!("index/p00137.fg"),
+        "p00167" => include_str!("index/p00167.fg"),
+        "p00168" => include_str!("index/p00168.fg"),
+        "p00170" => include_str!("index/p00170.fg"),
+        "p00190" => include_str!("index/p00190.fg"),
+        "p00199" => include_str!("index/p00199.fg"),
+        _ => panic!("no repro {id}"),
+    }
+}
+
 #[test]
 fn the_census_repros_are_classified_right() {
     let mut wrong = Vec::new();
     for (id, [x, y, z], inside) in REPROS {
-        let path = format!("{}/tests/index/{id}.fg", env!("CARGO_MANIFEST_DIR"));
-        let b = body(&std::fs::read_to_string(path).expect("the repro part"));
+        let b = body(part(id));
         let got = Index::new(&b).classify(Point3::new(x, y, z));
         if got != side(inside) {
             wrong.push(format!(
@@ -217,13 +238,14 @@ fn bar_and_boss(seed: u64) -> String {
 #[test]
 fn index_agrees_with_the_winding_number_on_rounded_bodies() {
     let (mut parts, mut judged, mut wrong) = (0usize, 0usize, Vec::new());
+    // every answer folded in, printed: a wasm run must print the same
+    let mut digest = 0xcbf2_9ce4_8422_2325u64;
     for seed in 0..12u64 {
         let src = bar_and_boss(seed);
-        let m = forge_lang::fuzz::build(&src);
-        if m.error().is_some() {
+        let (r, _) = run(&src);
+        let Some(b) = r.body.filter(|_| r.errors.is_empty()) else {
             continue;
-        }
-        let Some(b) = m.body() else { continue };
+        };
         let Some((mesh, chord)) = mesh(&b) else { continue };
         parts += 1;
         let ix = Index::new(&b);
@@ -242,6 +264,7 @@ fn index_agrees_with_the_winding_number_on_rounded_bodies() {
             judged += 1;
             let w = winding(&mesh, p);
             let got = ix.classify(p);
+            digest = (digest ^ got as u64 ^ p.x.to_bits()).wrapping_mul(0x100_0000_01b3);
             if got != side(w > 0.5) {
                 wrong.push(format!(
                     "seed {seed} ({}, {}, {}): Index {got:?}, winding {w:.4}",
@@ -250,6 +273,7 @@ fn index_agrees_with_the_winding_number_on_rounded_bodies() {
             }
         }
     }
+    println!("{parts} parts, {judged} points, answers' digest {digest:016x}");
     assert!(
         parts >= 8 && judged >= 2000,
         "too few cases: {parts} parts, {judged} points"

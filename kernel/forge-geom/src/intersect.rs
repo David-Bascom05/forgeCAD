@@ -9,7 +9,7 @@
 use crate::curve::{Circle, Curve, CurveGeom, Ellipse, Hyperbola, Line, Parabola};
 use crate::surface::{Cone, Cylinder, Plane, Sphere, Surface, SurfaceGeom, Torus};
 use forge_math::dmath;
-use forge_math::{Box3, Frame, Interval, Point3, UnitVec3, Vec3, poly, tol};
+use forge_math::{Box3, Frame, Interval, Point2, Point3, UnitVec3, Vec3, poly, tol};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Contact {
@@ -55,7 +55,6 @@ pub fn line_surface(line: &Line, s: &Surface) -> LineSurface {
     }
 }
 
-/// A line against a procedural surface: clipped to the surface's box, then subdivided.
 /// `line_surface`, crossing only the sheet over u in `u` where the surface's implicit holds more
 /// than it (`Procedural::windowed`, a blend's pipe): a face's own crossings, which the balls of
 /// the rest of the spine can cover. Any other surface is `line_surface`.
@@ -66,24 +65,20 @@ pub fn line_surface_over(line: &Line, s: &Surface, u: Interval) -> LineSurface {
     }
 }
 
-/// The windowed sheet's crossings: the roots of its 1-Lipschitz `implicit_over` by the same
-/// subdivision, each kept where it lies on the sheet at its own foot.
+/// The windowed sheet's crossings: the roots of its 1-Lipschitz `implicit_over`, found by the
+/// same subdivision as any procedural surface's, each kept where it lies on the sheet at its own
+/// foot.
 fn line_sheet(line: &Line, s: &Surface, pr: &crate::surface::Proc, u: Interval) -> LineSurface {
     let d = pr.domain();
     let b = pr.bbox(forge_math::Box2::new(u, d.v.interval()));
     let Some(range) = line_box_range(line, &b) else {
         return LineSurface::Hits(Vec::new());
     };
-    let c = Curve::Line(*line);
-    let imp = |p: Point3| pr.implicit_over(p, u);
-    let lip = speed_bound(&c, range) * (1.0 + 1e-9) + f64::MIN_POSITIVE;
-    let probes = 9;
-    if (0..probes).all(|i| {
-        imp(line.eval(range.lo + range.width() * i as f64 / (probes - 1) as f64)).abs() <= tol::LINEAR
-    }) {
-        return LineSurface::OnSurface;
-    }
-    match subdivide_pieces_by(&c, range, &imp, None, vec![(range.lo, range.hi, lip)]) {
+    let sheet = Surface::Procedural(crate::surface::Proc(std::sync::Arc::new(Sheet {
+        of: pr.clone(),
+        u,
+    })));
+    match curve_surface_subdivide(&Curve::Line(*line), range, &sheet, None) {
         CurveSurface::Hits(h) => LineSurface::Hits(
             h.into_iter()
                 .filter(|h| s.eval(pr.project_over(h.point, u)).distance(h.point) <= tol::LINEAR)
@@ -95,6 +90,44 @@ fn line_sheet(line: &Line, s: &Surface, pr: &crate::surface::Proc, u: Interval) 
                 .collect(),
         ),
         CurveSurface::OnSurface | CurveSurface::Overlap => LineSurface::OnSurface,
+    }
+}
+
+/// A windowed surface over its u window alone (`Procedural::implicit_over`, `project_over`), for
+/// the searches that read a surface's implicit.
+#[derive(Debug)]
+struct Sheet {
+    of: crate::surface::Proc,
+    u: Interval,
+}
+
+impl crate::surface::Procedural for Sheet {
+    fn deriv(&self, uv: Point2) -> crate::surface::SurfDeriv {
+        self.of.deriv(uv)
+    }
+    fn domain(&self) -> crate::surface::Domain2 {
+        self.of.domain()
+    }
+    fn project(&self, p: Point3) -> Point2 {
+        self.of.project_over(p, self.u)
+    }
+    fn bbox(&self, uv: forge_math::Box2) -> Box3 {
+        self.of.bbox(uv)
+    }
+    fn implicit(&self, p: Point3) -> f64 {
+        self.of.implicit_over(p, self.u)
+    }
+    fn gradient(&self, p: Point3) -> Vec3 {
+        self.of.gradient(p)
+    }
+    fn transformed(&self, f: &Frame) -> crate::surface::Proc {
+        crate::surface::Proc(std::sync::Arc::new(Sheet {
+            of: self.of.transformed(f),
+            u: self.u,
+        }))
+    }
+    fn mesh_radius(&self) -> f64 {
+        self.of.mesh_radius()
     }
 }
 
@@ -116,6 +149,7 @@ fn line_box_range(line: &Line, b: &Box3) -> Option<Interval> {
     (lo < hi).then(|| Interval::new(lo, hi))
 }
 
+/// A line against a procedural surface: clipped to the surface's box, then subdivided.
 fn line_procedural(line: &Line, s: &Surface, pr: &crate::surface::Proc) -> LineSurface {
     let d = pr.domain();
     let b = pr.bbox(forge_math::Box2::new(d.u.interval(), d.v.interval()));
@@ -783,6 +817,20 @@ pub(crate) fn curve_surface_subdivide(
     subdivide_pieces(c, range, s, near, stack)
 }
 
+/// The stretches of a curve's range that can come within tolerance of a surface, each with a
+/// bound on the curve's speed over it (|c(s) - c(t)| <= bound |s - t|): a traced curve's chain
+/// segments near the surface (those surely clear of it dropped unevaluated), else the whole range.
+pub fn pieces_near(c: &Curve, range: Interval, s: &Surface) -> Vec<(f64, f64, f64)> {
+    match (c, s) {
+        (Curve::Intersection(ic), s) if !matches!(s, Surface::Procedural(_)) => chain_pieces(ic, range, s),
+        _ => vec![(
+            range.lo,
+            range.hi,
+            speed_bound(c, range) * (1.0 + 1e-9) + f64::MIN_POSITIVE,
+        )],
+    }
+}
+
 /// The search over only these stretches of the range, in order: a closed form's narrow spots.
 pub(crate) fn subdivide_stretches(
     c: &Curve,
@@ -801,20 +849,9 @@ fn subdivide_pieces(
     range: Interval,
     s: &Surface,
     near: Option<Box3>,
-    stack: Vec<(f64, f64, f64)>,
-) -> CurveSurface {
-    subdivide_pieces_by(c, range, &|p| s.implicit(p), near, stack)
-}
-
-/// `subdivide_pieces` on any 1-Lipschitz implicit.
-fn subdivide_pieces_by(
-    c: &Curve,
-    range: Interval,
-    implicit: &impl Fn(Point3) -> f64,
-    near: Option<Box3>,
     mut stack: Vec<(f64, f64, f64)>,
 ) -> CurveSurface {
-    let g = |t: f64| implicit(c.eval(t));
+    let g = |t: f64| s.implicit(c.eval(t));
     let off = |p: Point3| {
         near.map_or(0.0, |b| {
             let d = |x: f64, i: Interval| (i.lo - x).max(x - i.hi).max(0.0);
@@ -830,7 +867,7 @@ fn subdivide_pieces_by(
         let m = 0.5 * (a + b);
         let p = c.eval(m);
         let reach = lip * 0.5 * (b - a) + tol::LINEAR;
-        if off(p) > reach || implicit(p).abs() > reach {
+        if off(p) > reach || s.implicit(p).abs() > reach {
             continue;
         }
         budget = budget.saturating_sub(1);

@@ -797,6 +797,7 @@ impl Blend {
             smooth: OnceLock::new(),
             samples: OnceLock::new(),
             scan: Default::default(),
+            speed: Default::default(),
         })))
     }
 }
@@ -857,6 +858,9 @@ pub struct Spring {
     /// The points `closest` last scanned, and over what: finding where two curves cross asks again
     /// and again over one range, and each of these points is a search on the surfaces.
     scan: Mutex<Option<(Interval, Arc<[Point3]>)>>,
+    /// `speed_bound`'s last range and answer: each is a search over the surface's bending, and a
+    /// face's edge is asked over its one range again and again.
+    speed: Mutex<Option<(Interval, f64)>>,
 }
 
 impl Spring {
@@ -872,6 +876,7 @@ impl Spring {
                 smooth: OnceLock::new(),
                 samples: OnceLock::new(),
                 scan: Default::default(),
+                speed: Default::default(),
             },
         })))
     }
@@ -1089,6 +1094,7 @@ impl ProceduralCurve for Spring {
                     smooth: OnceLock::new(),
                     samples: OnceLock::new(),
                     scan: Default::default(),
+                    speed: Default::default(),
                 })));
                 Some((twin, c))
             })
@@ -1154,20 +1160,29 @@ impl ProceduralCurve for Spring {
             smooth: OnceLock::new(),
             samples: OnceLock::new(),
             scan: Default::default(),
+            speed: Default::default(),
         }))
     }
     fn speed_bound(&self, range: Interval) -> f64 {
+        let same = |r: Interval| r.lo.to_bits() == range.lo.to_bits() && r.hi.to_bits() == range.hi.to_bits();
+        if let Some((r, v)) = *self.speed.lock().expect("the speed memo")
+            && same(r)
+        {
+            return v;
+        }
         // foot = c - d grad(c): its speed is at most |c'| (1 + |d| L), L the gradient's turn rate,
         // bounded piece by piece: one box round a whole turn about an axis would hold the axis
         let n = 16;
         let w = range.width() / n as f64;
-        (0..n)
+        let v = (0..n)
             .map(|i| {
                 let r = Interval::new(range.lo + w * i as f64, range.lo + w * (i + 1) as f64);
                 let b = self.spine.bbox(r);
                 curve_speed(&self.spine, r) * (1.0 + self.d.abs() * gradient_turn(&self.surface, &b))
             })
-            .fold(0.0, f64::max)
+            .fold(0.0, f64::max);
+        *self.speed.lock().expect("the speed memo") = Some((range, v));
+        v
     }
     fn segments(&self, range: Interval, chord: f64) -> usize {
         // a chord of parameter length h sags at most h^2 max|P''| / 8
@@ -1258,6 +1273,7 @@ impl Procedural for Fence {
                 smooth: OnceLock::new(),
                 samples: OnceLock::new(),
                 scan: Default::default(),
+                speed: Default::default(),
             },
         }))
     }

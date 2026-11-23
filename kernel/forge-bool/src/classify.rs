@@ -910,7 +910,16 @@ fn planar_parity(
         }
         let e = body.edge(body.coedge(c).edge);
         // a seam cannot occur on a plane; each use of an edge here is one crossing set
-        if ray_crossings(plane.frame.z().get(), p, d, &e.curve, e.range, any_curve)? % 2 == 1 {
+        if ray_crossings(
+            plane.frame.z().get(),
+            p,
+            d,
+            &e.curve,
+            e.range,
+            any_curve.then_some(b),
+        )? % 2
+            == 1
+        {
             inside = !inside;
         }
     }
@@ -927,18 +936,18 @@ pub(crate) fn plane_ray_crossings(
     curve: &Curve,
     range: Interval,
 ) -> Option<usize> {
-    ray_crossings(n, p, d, curve, range, false)
+    ray_crossings(n, p, d, curve, range, None)
 }
 
-/// `plane_ray_crossings`, and with `any_curve` for every kind of curve: those without a closed
-/// form by their crossings of the plane square to the face through the ray.
+/// `plane_ray_crossings`, and given the curve's box for every kind of curve: those without a
+/// closed form by their crossings of the plane square to the face through the ray.
 fn ray_crossings(
     n: Vec3,
     p: Point3,
     d: Vec3,
     curve: &Curve,
     range: Interval,
-    any_curve: bool,
+    bx: Option<&Box3>,
 ) -> Option<usize> {
     let hits: Vec<(f64, f64)> = match curve {
         Curve::Line(l) => {
@@ -966,14 +975,21 @@ fn ray_crossings(
         }
         Curve::Circle(k) => conic_ray(&k.frame, k.radius, k.radius, p, d),
         Curve::Ellipse(el) => conic_ray(&el.frame, el.major, el.minor, p, d),
-        // any other curve of the plane, where asked: where it crosses the plane holding the ray
-        // square to the face, by the certified subdivision, each at its signed distance along it
-        _ if any_curve => {
+        // any other curve of the plane, where asked: its crossings of the plane holding the ray
+        // square to the face, counted where they lie ahead of p
+        _ if bx.is_some() => {
             let m = n.cross(d).normalize()?;
-            curve_plane_params(curve, range, p, m)?
-                .into_iter()
-                .map(|t| ((curve.eval(t) - p).dot(d), t))
-                .collect()
+            let ahead = |x: Point3, r: f64| {
+                let along = (x - p).dot(d);
+                if along > r {
+                    Some(true)
+                } else if along < -r {
+                    Some(false)
+                } else {
+                    None
+                }
+            };
+            return region_crossings(curve, range, bx?, p, m, ahead).map(usize::from);
         }
         _ => return None,
     };
@@ -1040,8 +1056,23 @@ fn ruling_parity(
             }
             Curve::Circle(k) => conic_plane(&k.frame, k.radius, k.radius, frame.origin, m)?,
             Curve::Ellipse(el) => conic_plane(&el.frame, el.major, el.minor, frame.origin, m)?,
-            // any other curve: its crossings of the plane, by the certified subdivision
-            _ => curve_plane_params(&e.curve, e.range, frame.origin, m.normalize()?)?,
+            // any other curve: its crossings of the plane on p's side of the axis and above p
+            _ => {
+                let up = |x: Point3, r: f64| {
+                    let (side, along) = ((x - frame.origin).dot(radial), (x - p).dot(w));
+                    if side > r && along > r {
+                        Some(true)
+                    } else if side < -r || along < -r {
+                        Some(false)
+                    } else {
+                        None
+                    }
+                };
+                if region_crossings(&e.curve, e.range, b, frame.origin, m.normalize()?, up)? {
+                    inside = !inside;
+                }
+                continue;
+            }
         };
         let periodic = e.curve.domain().period;
         for t in ts {
@@ -1069,24 +1100,64 @@ fn ruling_parity(
     Some(inside)
 }
 
-/// Where a curve crosses the plane through `at` with unit normal `m`, over `range`: the
-/// parameters of its crossings, by the certified subdivision of `curve_surface` (a curve's
-/// distance from the plane is 1-Lipschitz along it per unit speed, so no crossing is pruned).
-/// None when it touches the plane or runs in it, so the caller looks another way.
-fn curve_plane_params(
+/// Whether `curve` over `range` crosses the plane through `at` with unit normal `m` an odd number
+/// of times within a region of that plane: `region(x, r)` says whether the ball of radius r about
+/// x lies wholly in the region (Some(true)), wholly out (Some(false)), or neither (None).
+///
+/// Decided by exact signs at the ends of stretches and each stretch's speed bound
+/// (`pieces_near`): a stretch whose ends lie on one side, farther from the plane together than its
+/// reach, holds no crossing; one whose ball lies wholly in or out of the region adds its sign change
+/// or nothing (a touch or a pair of crossings changes no parity); any other is halved. None when
+/// the curve meets the plane at an end of its range (a vertex), or a crossing cannot be told from
+/// the region's boundary within LINEAR, so the caller looks another way.
+fn region_crossings(
     curve: &Curve,
     range: Interval,
+    bx: &Box3,
     at: Point3,
     m: forge_math::UnitVec3,
-) -> Option<Vec<f64>> {
-    let plane = Surface::Plane(forge_geom::Plane::new(forge_math::Frame::from_z(at, m)));
-    match forge_geom::intersect::curve_surface(curve, range, &plane) {
-        forge_geom::intersect::CurveSurface::Hits(h) => h
-            .iter()
-            .map(|h| (h.contact == Contact::Crossing).then_some(h.t))
-            .collect(),
-        _ => None,
+    region: impl Fn(Point3, f64) -> Option<bool>,
+) -> Option<bool> {
+    let n = m.get();
+    // the edge's box (holding it) wholly on one side of the plane: no crossing, nothing evaluated
+    let (c, h) = (
+        bx.center(),
+        Vec3::new(bx.x.width(), bx.y.width(), bx.z.width()) * 0.5,
+    );
+    if ((c - at).dot(n)).abs() > h.x * n.x.abs() + h.y * n.y.abs() + h.z * n.z.abs() + tol::LINEAR {
+        return Some(false);
     }
+    let f = |t: f64| (curve.eval(t) - at).dot(n);
+    let plane = Surface::Plane(forge_geom::Plane::new(forge_math::Frame::from_z(at, m)));
+    let mut odd = false;
+    for (a, b, lip) in forge_geom::intersect::pieces_near(curve, range, &plane) {
+        let (fa, fb) = (f(a), f(b));
+        if (a <= range.lo && fa.abs() <= tol::LINEAR) || (b >= range.hi && fb.abs() <= tol::LINEAR) {
+            return None;
+        }
+        let mut stack = vec![(a, fa, b, fb)];
+        while let Some((a, fa, b, fb)) = stack.pop() {
+            let reach = lip * (b - a);
+            let change = (fa < 0.0) != (fb < 0.0);
+            // on one side, neither end near enough for the stretch between to reach the plane
+            if !change && fa.abs() + fb.abs() > reach {
+                continue;
+            }
+            let mid = 0.5 * (a + b);
+            let c = curve.eval(mid);
+            if let Some(inside) = region(c, 0.5 * reach) {
+                odd ^= inside && change;
+                continue;
+            }
+            if reach <= tol::LINEAR {
+                return None;
+            }
+            let fm = (c - at).dot(n);
+            stack.push((mid, fm, b, fb));
+            stack.push((a, fa, mid, fm));
+        }
+    }
+    Some(odd)
 }
 
 /// Whether `uv` is in the box of a chord of `loops`.
