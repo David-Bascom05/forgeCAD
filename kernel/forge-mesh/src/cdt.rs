@@ -127,21 +127,17 @@ impl Mesh {
     }
 
     fn write(&mut self, t: u32, tri: Tri) {
-        for &v in &tri.v {
-            self.vtri[v as usize] = t;
-        }
+        self.vtri[tri.v[0] as usize] = t;
+        self.vtri[tri.v[1] as usize] = t;
+        self.vtri[tri.v[2] as usize] = t;
         self.tris[t as usize] = tri;
     }
 
     fn relink(&mut self, n: u32, old: u32, new: u32) {
-        if n == NONE {
-            return;
-        }
-        let tri = &mut self.tris[n as usize];
-        for k in 0..3 {
-            if tri.n[k] == old {
+        if n != NONE {
+            let tri = &mut self.tris[n as usize];
+            if let Some(k) = slot(tri.n, old) {
                 tri.n[k] = new;
-                return;
             }
         }
     }
@@ -150,45 +146,61 @@ impl Mesh {
     fn locate(&mut self, p: Point2) -> Option<Location> {
         let mut t = self.last;
         let limit = 4 * self.tris.len() + 64;
-        for step in 0..limit {
+        let mut step = 0;
+        let mut found = false;
+        while !found && step < limit {
             let tri = self.tris[t as usize];
-            let mut moved = false;
-            for k in 0..3 {
+            let mut next = NONE;
+            let mut k = 0;
+            while next == NONE && k < 3 {
                 let i = (k + step) % 3;
                 let (a, b) = (self.p(tri.v[nx(i)]), self.p(tri.v[pv(i)]));
                 if orient2d(a, b, p) < 0.0 && tri.n[i] != NONE {
-                    t = tri.n[i];
-                    moved = true;
-                    break;
+                    next = tri.n[i];
                 }
+                k += 1;
             }
-            if !moved {
-                return Some(self.classify(t, p));
+            if next == NONE {
+                found = true;
+            } else {
+                t = next;
+                step += 1;
             }
         }
         // The visibility walk can cycle in a constrained triangulation; fall back to a scan.
-        for t in 0..self.tris.len() as u32 {
-            let tri = self.tris[t as usize];
-            if (0..3).all(|i| orient2d(self.p(tri.v[nx(i)]), self.p(tri.v[pv(i)]), p) >= 0.0) {
-                return Some(self.classify(t, p));
+        if !found {
+            t = 0;
+            while !found && (t as usize) < self.tris.len() {
+                let tri = self.tris[t as usize];
+                let (a, b, c) = (self.p(tri.v[0]), self.p(tri.v[1]), self.p(tri.v[2]));
+                if orient2d(b, c, p) >= 0.0 && orient2d(c, a, p) >= 0.0 && orient2d(a, b, p) >= 0.0 {
+                    found = true;
+                } else {
+                    t += 1;
+                }
             }
         }
-        None
+        if found { Some(self.classify(t, p)) } else { None }
     }
 
     fn classify(&self, t: u32, p: Point2) -> Location {
         let tri = self.tris[t as usize];
-        for &v in &tri.v {
-            if self.p(v) == p {
-                return Location::Vertex(v);
-            }
+        let (a, b, c) = (self.p(tri.v[0]), self.p(tri.v[1]), self.p(tri.v[2]));
+        if a == p {
+            Location::Vertex(tri.v[0])
+        } else if b == p {
+            Location::Vertex(tri.v[1])
+        } else if c == p {
+            Location::Vertex(tri.v[2])
+        } else if orient2d(b, c, p) == 0.0 {
+            Location::OnEdge(t, 0)
+        } else if orient2d(c, a, p) == 0.0 {
+            Location::OnEdge(t, 1)
+        } else if orient2d(a, b, p) == 0.0 {
+            Location::OnEdge(t, 2)
+        } else {
+            Location::Inside(t)
         }
-        for i in 0..3 {
-            if orient2d(self.p(tri.v[nx(i)]), self.p(tri.v[pv(i)]), p) == 0.0 {
-                return Location::OnEdge(t, i);
-            }
-        }
-        Location::Inside(t)
     }
 
     fn insert(&mut self, v: u32, loc: Location) {
