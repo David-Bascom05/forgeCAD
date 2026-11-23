@@ -1654,4 +1654,61 @@ mod tests {
             }
         }
     }
+
+    /// The sphere-cone pairs of forge-lang's ball_over_tapered_pocket (a ball of radius 13 on a
+    /// block's top over a 1 deg tapered pocket with corners of radius 4): meet.rs's closed form and
+    /// the march, each certified, must agree.
+    #[test]
+    fn a_ball_over_a_tapered_pocket_certifies() {
+        let ball = Surface::Sphere(Sphere {
+            frame: Frame::from_axes(Point3::new(0.0, 0.0, 18.0), Vec3::X, -Vec3::Z, Vec3::Y).expect("frame"),
+            radius: 13.0,
+        });
+        let r = |x0: f64, x1: f64, y0: f64, y1: f64| {
+            Box3::from_points([
+                Point3::new(x0, y0, 4.99997999984771),
+                Point3::new(x1, y1, 18.00002000015229),
+            ])
+        };
+        let (a, b, c, d) = (
+            10.99997999984771,
+            13.00002000015229,
+            2.99997999984771,
+            8.99997999984771,
+        );
+        let cases = [
+            (-11.0, -7.0, r(-b, -a, -7.00002000015229, -c)),
+            (-11.0, -9.0, r(-b, -a, -b, -d)),
+            (11.0, -7.0, r(a, b, -7.00002000015229, -c)),
+            (11.0, -9.0, r(a, b, -b, -d)),
+        ];
+        for (x, y, region) in cases {
+            let cone = Surface::Cone(
+                crate::surface::Cone::new(
+                    Frame::from_z(Point3::new(x, y, 18.0), UnitVec3::Z),
+                    4.0,
+                    (1.0f64).to_radians(),
+                )
+                .expect("cone"),
+            );
+            let marched = crate::intcurve::trace_marched(&cone, &ball, region, 1.0).expect("marched");
+            let m = certify(&cone, &ball, region, &marched);
+            let closed = crate::meet::intersect(&cone, &ball, region);
+            let chains: Option<Vec<IntCurve>> = match &closed {
+                Some(crate::intersect::SurfaceSurface::Curves(cs)) => cs
+                    .iter()
+                    .map(|(c, _)| match c {
+                        crate::Curve::Intersection(c) => Some((**c).clone()),
+                        _ => None,
+                    })
+                    .collect(),
+                Some(crate::intersect::SurfaceSurface::Empty) => Some(Vec::new()),
+                _ => None,
+            };
+            let k = chains.as_ref().map(|cs| certify(&cone, &ball, region, cs));
+            assert_eq!(chains.as_ref().map(Vec::len), Some(marched.len()), "({x}, {y})");
+            assert_eq!(k, Some(Ok(())), "the closed form at ({x}, {y})");
+            assert!(m.is_ok(), "the march at ({x}, {y}): {m:?}");
+        }
+    }
 }
