@@ -553,17 +553,17 @@ struct Cell {
 /// The interval signed distance over a cell: ρ² and z of the face point relative to the tool
 /// tip by the mean-value form (second order at a tangency) intersected with the natural
 /// extension, then the body's (ρ, z) signed distance.
-fn cell_sd(body: &Body, f: &Face, mv: &Move, c: &Cell) -> Ival {
-    cell_eval(body, f, mv, c).0
+fn cell_sd(body: &Body, f: &Face, mv: &Move, c: &Cell, pg: f64) -> Ival {
+    cell_eval(body, f, mv, c, pg).0
 }
 
 /// The signed distance over the cell, and each parameter's smear (how much of the enclosure's
 /// width it accounts for: |∂(ρ², z)| times its width), which picks what to split.
-fn cell_eval(body: &Body, f: &Face, mv: &Move, c: &Cell) -> (Ival, [f64; 3]) {
+fn cell_eval(body: &Body, f: &Face, mv: &Move, c: &Cell, pg: f64) -> (Ival, [f64; 3]) {
     if let Some(pl) = mv.planar()
         && !matches!(pl, Planar::Vertical { .. })
     {
-        return cell_eval_planar(body, f, &pl, c);
+        return cell_eval_planar(body, f, &pl, c, pg);
     }
     let x = [c.p, c.q, c.s];
     // at the centre
@@ -718,6 +718,43 @@ impl Move {
 }
 
 impl Move {
+    /// How far the planar path's arc (`planar()`'s, its ends the f64 midpoints of their
+    /// enclosures) may misstate distances to the move's true arc, for an arc or helix (0 for a
+    /// line, whose ends are exact). The candidates (DistArc, Trim) bound distances to the model
+    /// M: the circle's arc between the rays through the stored ends a, b, plus the radial pieces
+    /// to them, once lowered by 2·g, g = arc_gap(a, b, c, r). A true end A₀ is within ε of a (ε
+    /// from the enclosure's half-widths), so the point a′ = c + r·(a − c)/|a − c| of M is within
+    /// ε + g ≤ 2ε of A₀; a point of the true arc beyond a's ray lies on the circle between A₀
+    /// and a′, so within |A₀ − a′| ≤ 2ε of a′; one inside the rays is on M. So every point of the
+    /// true arc is within 2ε of M, and every point of M within 2ε of the true arc (the same
+    /// argument from a′'s side), and distances to either differ by at most 2ε: lowering by
+    /// 2g + 2ε (raising by 2ε) bounds the true arc's. Outward-rounded; +∞ if not finite.
+    pub fn path_gap(&self) -> f64 {
+        let arc = match *self {
+            Move::Line { .. } => return 0.0,
+            Move::Arc { c, x, y, r, t0, t1 }
+            | Move::Helix {
+                c, x, y, r, t0, t1, ..
+            } => Move::Arc { c, x, y, r, t0, t1 },
+        };
+        let Some(Planar::Arc { c, r, a, b, .. }) = arc.planar() else {
+            return f64::INFINITY;
+        };
+        let mut eps = 0.0f64;
+        for s in [0.0, 1.0] {
+            let e = arc.at(Ival::pt(s));
+            let hw = |v: Ival| {
+                let m = Ival::pt(v.mid());
+                Ival::pt(v.hi).sub(m).hi.max(m.sub(Ival::pt(v.lo)).hi).max(0.0)
+            };
+            let (hx, hy) = (hw(e[0]), hw(e[1]));
+            eps = eps.max(Ival::pt(hx).sqr().add(Ival::pt(hy).sqr()).sqrt().hi);
+        }
+        let g = arc_gap(a, b, c, r);
+        let pg = Ival::pt(2.0 * g).add(Ival::pt(2.0 * eps)).hi;
+        if pg.is_finite() { pg } else { f64::INFINITY }
+    }
+
     /// For a planar move: the instant whose tip is horizontally nearest the point (reported
     /// with a witness; nothing is proven by it).
     pub fn nearest_s(&self, p: [f64; 2]) -> f64 {
@@ -751,7 +788,7 @@ impl Move {
 /// instant of a planar move shares the face point's z offset; so the minimum over s is sd at
 /// (ρ_min, z), ρ_min the horizontal distance from the face point to the path. That is closed
 /// form: the motion needs no cells.
-fn cell_eval_planar(body: &Body, f: &Face, pl: &Planar, c: &Cell) -> (Ival, [f64; 3]) {
+fn cell_eval_planar(body: &Body, f: &Face, pl: &Planar, c: &Cell, pg: f64) -> (Ival, [f64; 3]) {
     let x = [c.p, c.q, Ival::pt(0.0)];
     let (pc, qc) = (Ival::pt(c.p.mid()), Ival::pt(c.q.mid()));
     let yc = f.surf.eval(pc, qc);
@@ -859,6 +896,15 @@ fn cell_eval_planar(body: &Body, f: &Face, pl: &Planar, c: &Cell) -> (Ival, [f64
             }
         }
     };
+    // the path arc's stored ends: its distances widened by `pg` (Move::path_gap)
+    let rho = if pg > 0.0 {
+        Ival {
+            lo: Ival::pt(rho.lo).sub(Ival::pt(pg)).lo.max(0.0),
+            hi: Ival::pt(rho.hi).add(Ival::pt(pg)).hi,
+        }
+    } else {
+        rho
+    };
     let sd = body.sd_rz(rho, zb);
     if point {
         return (sd, [0.0; 3]);
@@ -875,6 +921,7 @@ fn cell_eval_planar(body: &Body, f: &Face, pl: &Planar, c: &Cell) -> (Ival, [f64
                 q: Ival::pt(q),
                 s: c.s,
             },
+            pg,
         )
         .0
         .mid()
@@ -973,7 +1020,7 @@ pub fn certify_shared(
 ) -> (Verdict, usize) {
     // a planar move against a face that is a prism along z: closed form (slab.rs)
     if let (Some(pl), Some(pr)) = (mv.planar(), f.prism.as_ref()) {
-        let (v, n) = crate::slab::certify_shared(body, f, pr, &pl, limit, res, budget, shared);
+        let (v, n) = crate::slab::certify_shared(body, f, pr, &pl, limit, res, budget, shared, mv.path_gap());
         if let Verdict::Hit { d, p, q, .. } = v {
             let (s, at) = crate::slab::locate(mv, pr);
             return (Verdict::Hit { d, p, q, s, at }, n);
@@ -993,7 +1040,7 @@ pub fn certify_shared(
             b: [b[0], b[1]],
         };
         let zt = Ival::new(a[2].min(b[2]), a[2].max(b[2]));
-        let (v, n) = crate::slab::certify_path(body, f, pr, &sec, zt, limit, res, budget, &mut None);
+        let (v, n) = crate::slab::certify_path(body, f, pr, &sec, zt, limit, res, budget, &mut None, 0.0);
         if let Verdict::Clear { .. } = v {
             return (v, n);
         }
@@ -1027,6 +1074,7 @@ pub fn certify_bb(body: &Body, f: &Face, mv: &Move, limit: f64, res: f64, budget
     }
     let lim_clear = limit + f.mu;
     let lim_hit = limit - f.mu;
+    let pg = mv.path_gap();
     let s0 = if matches!(mv.planar(), Some(Planar::Line { .. } | Planar::Arc { .. })) {
         Ival::pt(0.5)
     } else {
@@ -1038,7 +1086,7 @@ pub fn certify_bb(body: &Body, f: &Face, mv: &Move, limit: f64, res: f64, budget
         s: s0,
     };
     let mut heap = Heap { v: Vec::new() };
-    heap.push(cell_sd(body, f, mv, &root).lo, root);
+    heap.push(cell_sd(body, f, mv, &root, pg).lo, root);
     let mut lower = f64::INFINITY;
     let mut spent = 0usize;
     let mut undecided = false;
@@ -1064,7 +1112,7 @@ pub fn certify_bb(body: &Body, f: &Face, mv: &Move, limit: f64, res: f64, budget
         if holds < 0 {
             continue;
         }
-        let (mut sd, smear) = cell_eval(body, f, mv, &c);
+        let (mut sd, smear) = cell_eval(body, f, mv, &c, pg);
         if std::env::var("FORGE_CAM_CELLS").is_ok() {
             eprintln!("cell p {:?} q {:?} sd {:?} smear {:?}", c.p, c.q, sd, smear);
         }
@@ -1083,6 +1131,7 @@ pub fn certify_bb(body: &Body, f: &Face, mv: &Move, limit: f64, res: f64, budget
                         q: Ival::pt(qm),
                         s: c.s,
                     },
+                    pg,
                 );
                 let img = f.surf.eval(c.p, c.q);
                 let mvd = if matches!(mv.planar(), Some(Planar::Line { .. } | Planar::Arc { .. })) {
@@ -1114,6 +1163,7 @@ pub fn certify_bb(body: &Body, f: &Face, mv: &Move, limit: f64, res: f64, budget
                     q: Ival::pt(qm),
                     s: Ival::pt(sm),
                 },
+                pg,
             );
             if w.hi < lim_hit {
                 let y = f.surf.eval(Ival::pt(pm), Ival::pt(qm));
@@ -1146,8 +1196,8 @@ pub fn certify_bb(body: &Body, f: &Face, mv: &Move, limit: f64, res: f64, budget
             continue;
         }
         let (a, b) = split_by(&c, &smear);
-        heap.push(cell_sd(body, f, mv, &a).lo, a);
-        heap.push(cell_sd(body, f, mv, &b).lo, b);
+        heap.push(cell_sd(body, f, mv, &a, pg).lo, a);
+        heap.push(cell_sd(body, f, mv, &b, pg).lo, b);
     }
     if undecided {
         return (Verdict::Undecided { lower, cells: spent }, spent);
@@ -1217,8 +1267,8 @@ fn best_split(body: &Body, f: &Face, mv: &Move, c: &Cell) -> (Cell, Cell) {
                     (Cell { s: x, ..*c }, Cell { s: y, ..*c })
                 }
             };
-            let la = cell_sd(body, f, mv, &a).lo;
-            let lb = cell_sd(body, f, mv, &b).lo;
+            let la = cell_sd(body, f, mv, &a, mv.path_gap()).lo;
+            let lb = cell_sd(body, f, mv, &b, mv.path_gap()).lo;
             let m = if la < lb { la } else { lb };
             let better = match &best {
                 None => true,

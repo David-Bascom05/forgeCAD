@@ -204,7 +204,7 @@ fn ramps_closed_form_never_contradicts_the_branch_and_bound() {
             b: [b[0], b[1]],
         };
         let zt = Ival::new(a[2].min(b[2]), a[2].max(b[2]));
-        let (sup, _) = certify_path(body, &f, &pr, &sec, zt, lim, 0.0025, 100_000, &mut None);
+        let (sup, _) = certify_path(body, &f, &pr, &sec, zt, lim, 0.0025, 100_000, &mut None, 0.0);
         let (bb, _) = certify_bb(body, &f, &mv, lim, 0.0025, 100_000);
         let (cv, _) = certify(body, &f, &mv, lim, 0.0025, 100_000);
         if matches!(sup, Verdict::Clear { .. }) {
