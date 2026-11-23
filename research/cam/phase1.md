@@ -49,12 +49,15 @@ and bolt-hole rapids into stock nobody had cleared (both now test cases with typ
 - L5: every float operation of the checker rounds outward (ival.rs); not yet tied to
   verify/ieee754.
 - L6: offset fuzz, boolean fuzz, closed form vs B&B, posted round trip on all dialects.
+- G4 is computed exactly for 2.5D (the one-sided bound S_end ⊆ (P ⊕ B_tol) ∪ L); P ⊆ S_end follows
+  from G1 on every cut.
 
 ## Gaps, in order
 
 1. Lean L1 for G1–G6 and the monotonicity lemma (needs the toolchain).
-2. G4 (leftover): the exact 2.5D removal is now computable (booleans, openings); the check that
-   the final stock is within ε of the target is not written.
+2. G4 (leftover) is checked: per z band, the final stock less the part's section grown by tol,
+   exactly (booleans); the flange has none, a facing-only program lists its regions. The
+   reasons (tool radius, reach) are not yet classified: every region says "uncut".
 3. Ops: slot, chamfer (deburr), thread milling, engraving, inside contours of pockets with
    islands from the part; helical ramps (the B&B certifies them; generation is missing).
 4. Lowering for cones and tori (chamfers, fillets): the B&B takes them; the lowering refuses.

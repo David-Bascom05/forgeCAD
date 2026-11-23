@@ -656,6 +656,22 @@ fn cam_cmd(file: &str, rest: &[String]) -> ExitCode {
                 }
             );
         }
+        if cam.leftover_done {
+            println!(
+                "leftover (G4): {}",
+                if cam.leftover.is_empty() {
+                    "none: the final stock is the part within tol".to_string()
+                } else {
+                    cam.leftover
+                        .iter()
+                        .map(|l| format!("z {:.3}..{:.3}: {} region(s)", l.z0, l.z1, l.boxes.len()))
+                        .collect::<Vec<_>>()
+                        .join("; ")
+                }
+            );
+        } else {
+            println!("leftover (G4): not decided for every band");
+        }
         for p in &cam.programs {
             println!(
                 "program {} ({}): {}",

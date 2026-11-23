@@ -119,7 +119,20 @@ pub struct ProgramOut {
     pub round_trip: bool,
 }
 
+/// G4 for one setup: in each height band, the final stock less the part grown by the
+/// tolerance: what is left. Empty bands are omitted.
+#[derive(Clone, Debug)]
+pub struct Leftover {
+    pub setup: usize,
+    pub z0: f64,
+    pub z1: f64,
+    /// Each left-over region's box, xmin ymin xmax ymax.
+    pub boxes: Vec<[f64; 4]>,
+}
+
 pub struct Cam {
+    pub leftover: Vec<Leftover>,
+    pub leftover_done: bool,
     pub ok: bool,
     pub errors: Vec<String>,
     pub warnings: Vec<String>,
@@ -243,6 +256,8 @@ fn get_str(m: &BTreeMap<String, V>, k: &str, default: Option<&str>) -> Result<St
 /// Runs a machining document (its file's directory finds the part).
 pub fn run(src: &str, dir: &Path) -> Cam {
     let mut cam = Cam {
+        leftover: vec![],
+        leftover_done: false,
         ok: true,
         errors: vec![],
         warnings: vec![],
@@ -340,6 +355,7 @@ pub fn run(src: &str, dir: &Path) -> Cam {
                 .push(format!("line {}: {e}", line_of(src, st.span.lo as usize)));
         }
     }
+    cam.leftover();
     if cam.ops.iter().any(|o| o.status != "built") || cam.programs.iter().any(|p| p.error.is_some()) {
         cam.ok = false;
     }
@@ -351,6 +367,79 @@ fn line_of(src: &str, at: usize) -> usize {
 }
 
 impl Cam {
+    /// G4: S_end ⊆ (P ⊕ B_{tol}) ∪ L, L listed. In each band between the stock's and the part's
+    /// heights: the stock's material region less the part's section grown by tol, exactly.
+    fn leftover(&mut self) {
+        let mut all_ok = true;
+        for (si, s) in self.setups.iter().enumerate() {
+            let part = &self.parts[s.part];
+            let mut zs = s.ip.levels();
+            for f in &part.faces {
+                if let Some(forge_cam_geom::slab::Prism::Flat { z, .. }) = &f.prism {
+                    zs.push(*z);
+                }
+            }
+            zs.retain(|z| *z >= s.ip.min[2] && *z <= s.ip.max[2]);
+            zs.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            zs.dedup_by(|a, b| (*a - *b).abs() < 1e-9);
+            for w in zs.windows(2) {
+                let zm = 0.5 * (w[0] + w[1]);
+                let Ok(Some(mat)) = s.ip.material(zm) else {
+                    if s.ip.material(zm).is_err() {
+                        all_ok = false;
+                    }
+                    continue;
+                };
+                let left = match forge_cam::section::section(&part.faces, zm, 1e-5) {
+                    Ok(sec) => match forge_cam_geom::offset::offset(&sec, -s.tol) {
+                        Ok((grown, _)) => forge_cam_geom::boolean::boolean(
+                            &mat,
+                            &forge_cam_geom::boolean::region_of(&grown),
+                            forge_cam_geom::boolean::Op::Diff,
+                        ),
+                        Err(e) => Err(e),
+                    },
+                    // no part at this height: all the material is left over
+                    Err(forge_cam::section::SectionError::Empty) => Ok(mat
+                        .loops
+                        .iter()
+                        .map(|l| forge_cam_geom::offset::OLoop { segs: l.segs.clone() })
+                        .collect()),
+                    Err(_) => {
+                        all_ok = false;
+                        continue;
+                    }
+                };
+                match left {
+                    Ok(ls) if !ls.is_empty() => {
+                        let boxes = ls
+                            .iter()
+                            .map(|l| {
+                                let mut b =
+                                    [f64::INFINITY, f64::INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY];
+                                for sg in &l.segs {
+                                    for p in [sg.start(), sg.end()] {
+                                        b = [b[0].min(p.x), b[1].min(p.y), b[2].max(p.x), b[3].max(p.y)];
+                                    }
+                                }
+                                b
+                            })
+                            .collect();
+                        self.leftover.push(Leftover {
+                            setup: si,
+                            z0: w[0],
+                            z1: w[1],
+                            boxes,
+                        });
+                    }
+                    Ok(_) => {}
+                    Err(_) => all_ok = false,
+                }
+            }
+        }
+        self.leftover_done = all_ok;
+    }
+
     fn call(&mut self, name: &str, f: &str, a: &BTreeMap<String, V>, dir: &Path) -> Result<V, String> {
         match f {
             "part" => {
@@ -1432,8 +1521,31 @@ impl Cam {
             ("suggestions", Json::Arr(suggestions)),
             ("programs", Json::Arr(programs)),
             (
+                "leftover",
+                Json::obj(vec![
+                    ("computed", self.leftover_done.into()),
+                    ("rule", Json::Str("G4: final stock ⊆ (part ⊕ B_tol) ∪ these regions, by z band".into())),
+                    (
+                        "regions",
+                        Json::Arr(
+                            self.leftover
+                                .iter()
+                                .map(|l| {
+                                    Json::obj(vec![
+                                        ("setup", Json::Str(self.setups[l.setup].name.clone())),
+                                        ("z", Json::Arr(vec![Json::Num(l.z0), Json::Num(l.z1)])),
+                                        ("boxes", Json::Arr(l.boxes.iter().map(|b| Json::Arr(b.iter().map(|x| Json::Num(*x)).collect())).collect())),
+                                        ("why", Json::Str("uncut".into())),
+                                    ])
+                                })
+                                .collect(),
+                        ),
+                    ),
+                ]),
+            ),
+            (
                 "scope",
-                Json::Str("Proven: the cutter, shank and holder clear the exact part (within tol for the cutter on cuts), rapids clear part and stock, on the posted path. Not claimed: cutting physics, the machine's fidelity, the in-process stock beyond the initial box, the leftover (G4).".into()),
+                Json::Str("Proven: the cutter, shank and holder clear the exact part (within tol for the cutter on cuts), rapids clear part and stock, on the posted path. Not claimed: cutting physics, the machine's fidelity, the true in-process stock beyond the proven-cleared voids.".into()),
             ),
         ])
     }

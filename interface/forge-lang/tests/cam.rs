@@ -31,6 +31,22 @@ fn the_flange_program_is_certified() {
     cam.json().write(&mut j);
     assert!(j.contains("\"schema\":\"forgecad.cam/1\""));
     assert!(cam.sheet().contains("certified"));
+    // G4: every band decided, nothing left over
+    assert!(cam.leftover_done && cam.leftover.is_empty(), "{:?}", cam.leftover);
+}
+
+#[test]
+fn leftover_is_listed() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    // facing alone: the plate's sides, the bore and the holes are all still stock
+    let cam = forge_lang::cam::run(&doc("skim = facing(op1, tool: t1, to: 18, step: 1)\n"), &dir);
+    assert!(cam.leftover_done);
+    assert!(!cam.leftover.is_empty());
+    assert!(
+        cam.leftover.iter().any(|l| l.z0 < 12.0 && l.z1 > 0.0),
+        "{:?}",
+        cam.leftover
+    );
 }
 
 #[test]

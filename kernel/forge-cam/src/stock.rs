@@ -105,7 +105,7 @@ impl InProcess {
     }
 
     /// The material's xy region in the band just above height z (None: no material).
-    fn material(&self, z: f64) -> Result<Option<Region>, String> {
+    pub fn material(&self, z: f64) -> Result<Option<Region>, String> {
         let mut m = rect(self.min, self.max);
         for (v, floor) in &self.voids {
             if *floor <= z {
@@ -117,6 +117,19 @@ impl InProcess {
             }
         }
         Ok(Some(m))
+    }
+
+    /// The heights where the stock's section changes.
+    pub fn levels(&self) -> Vec<f64> {
+        let mut zs: Vec<f64> = vec![self.min[2], self.max[2]];
+        for (_, f) in &self.voids {
+            if *f > self.min[2] && *f < self.max[2] {
+                zs.push(*f);
+            }
+        }
+        zs.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        zs.dedup();
+        zs
     }
 
     /// The stock's boundary as the checker's faces (all prisms along z).
