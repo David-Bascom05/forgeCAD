@@ -253,6 +253,7 @@ fn a_fillet_finds_its_body_by_its_edges() {
         edges: vec![(b.edge(edge).name, Radius::Constant(2.0))],
         starts: vec![],
         setbacks: vec![],
+        conic: None,
     });
     let got = bodies(f);
     assert!(near(got[0].1, 1000.0 - (4.0 - PI) * 10.0), "{got:?}");
