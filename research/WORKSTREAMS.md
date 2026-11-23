@@ -26,7 +26,7 @@ Owner priorities that paused or narrowed streams (2026-11-23):
 | Aeneas | `aeneas` | b68b72b | dmath done; sum_into/scale_into refine list models; SURVEY.md closed (topology core deferred). Next: move v2 translation into verify/aeneas/forge-bool-core |
 | Fillet fixes | `fix-fillet` | 96c6ec0 | Cliff work continues. 7f320b9 and 96c6ec0 gated, can go in a batch. Next: CADFS 00154651 stack overflow, then the 4 refused notched rounds |
 | Fillet census | `fillets` | 5acd69f | Relabel and pipe OCCT check finishing; census.md update |
-| Sheet metal fixes | `fix-sheet` | 6796799 | Arcs exact, fold wired, exact signs via forge_sheet_core. Next: step 5 wiring with FoldedUndecided (corpus condition) |
+| Sheet metal fixes | `fix-sheet` | a6aee8e | Round 6 merged in. Arcs with stored end points (Curve2::Arc from/to; forge-brake updated), wired fold zone, exact signs via forge_sheet_core::exact, FoldedUndecided, zone touch detection; 62 sheet parts' DXF/DWG byte-identical, 1206 tests, SHEET_LEAN pass, 0 worse, fuzz 150/150, bits identical. In the merge queue; correctness items continue |
 | Draft | `fix-draft` | 7e8f3fa | Final, merge-ready: curved fuzz 300/300, convex fuzz 348/349 exact (base: 117 Invalid, 1 panic), every user-facing line below base, bits identical, 0 worse, fuzz 150/150 |
 | Sweep / revolve | `sweep-spec` | 805c67a | Pinch, frame, exact selfx. Next: n-ary shape-only selfx check, exact ToNext; Aeneas item skipped |
 | Tessellation L4 (Aeneas cdt.rs) | `cdt-l4` | f91b25d | In progress |
