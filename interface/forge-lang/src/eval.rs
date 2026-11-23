@@ -391,6 +391,8 @@ pub struct Eval<'s> {
     pub sheets: crate::sheet::Sheets,
     /// The part's thermoforms (`thermo.rs`).
     pub thermos: Vec<crate::thermo::ThermoOut>,
+    /// The part's weldments (`weld.rs`).
+    pub welds: crate::weld::Welds,
     /// Thermoforms' modelled parts whose mass is worked out after the run, beside the part's own
     /// measure (`run` does; any other evaluation works it out in place): each one's place in
     /// `thermos`, its memo key and the part.
@@ -500,6 +502,7 @@ impl<'s> Eval<'s> {
             poisoned: false,
             sheets: Default::default(),
             thermos: vec![],
+            welds: Default::default(),
             masses_owed: None,
             harness: None,
             cosmetic_threads: false,
@@ -852,7 +855,8 @@ impl<'s> Eval<'s> {
     }
 
     fn recursion(&mut self, prog: &[Stmt]) {
-        let mut calls: HashMap<String, (Span, BTreeSet<String>)> = HashMap::new();
+        // (by name: the errors come out in that order, not a hash's)
+        let mut calls: std::collections::BTreeMap<String, (Span, BTreeSet<String>)> = Default::default();
         for s in prog {
             if let StmtKind::Fn { name, body, .. } = &s.kind {
                 let mut names = BTreeSet::new();
@@ -1593,6 +1597,7 @@ impl<'s> Eval<'s> {
             ExprKind::Num(v, u) => Ok(Value::Num(match u {
                 Unit::Deg => Num::konst(v.to_radians(), Dim::Angle),
                 Unit::Mm => Num::konst(*v, Dim::Length),
+                Unit::In => Num::konst(*v * 25.4, Dim::Length),
                 // in a param too: a bare number takes the other operand's dimension, so `W / 2`
                 // is a Length; what is still bare when the param is made settles to Length
                 Unit::None => Num::konst(*v, Dim::Any),
@@ -1966,16 +1971,8 @@ impl<'s> Eval<'s> {
                         max: 1,
                     });
                 };
-                let ev = self.expr(&a.value)?;
-                let Value::Ent(e) = ev else {
-                    return Err(Error::WrongType {
-                        span: a.value.span,
-                        what: "side(entity)",
-                        want: Ty::Entity,
-                        found: ev.ty(),
-                    });
-                };
-                return crate::builtins::side(self, feat, &e, span);
+                let v = self.expr(&a.value)?;
+                return crate::builtins::side_of(self, feat, v, span);
             }
         }
         let fv = self.expr(f)?;

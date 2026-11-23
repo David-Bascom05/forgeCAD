@@ -1,0 +1,22 @@
+name = "forgecertify"
+version = "0.1.0"
+defaultTargets = ["ForgeCertify", "forge-certify"]
+
+[leanOptions]
+relaxedAutoImplicit = false
+autoImplicit = false
+
+# The exact reference's definitions (reg, combine, Solid.contains, the tolerance rule), by path:
+# core Lean only, as there.
+[[require]]
+name = "forgeexact"
+path = "../forge-exact"
+
+# The checker, its soundness proof and the axioms check.
+[[lean_lib]]
+name = "ForgeCertify"
+
+# The checker's driver (ForgeCertify/Input.lean gives its format).
+[[lean_exe]]
+name = "forge-certify"
+root = "Main"

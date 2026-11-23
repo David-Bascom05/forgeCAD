@@ -1,0 +1,14 @@
+[package]
+name = "forge-sketch-check"
+description = "forge_sketch's solve and analyze against their Lean spec (lean/): what Solved and dof promise"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+forge-math = { path = "../../kernel/forge-math" }
+forge-sketch = { path = "../../kernel/forge-sketch" }
+
+[lints]
+workspace = true

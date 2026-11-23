@@ -53,8 +53,9 @@ impl TriMesh {
         (b - a).cross(c - a)
     }
 
-    /// Edges not shared by exactly one triangle in each direction. Empty means
-    /// the mesh is closed, manifold and consistently oriented.
+    /// Edges not shared by exactly one triangle in each direction. Empty means the mesh is closed
+    /// and consistently oriented, and every edge is manifold; it is a manifold surface only if
+    /// `pinched_vertices` is empty too (two tetrahedra sharing one vertex have no open edge).
     pub fn open_edges(&self) -> Vec<(u32, u32)> {
         let mut directed: Vec<(u32, u32)> = self
             .triangles
@@ -76,6 +77,45 @@ impl TriMesh {
         bad.sort_unstable();
         bad.dedup();
         bad
+    }
+
+    /// The used vertices whose triangles do not make one fan (walking from triangle to triangle
+    /// across the edges at the vertex): a pinch, where two sheets of the surface touch at a point.
+    /// Empty, with no `open_edges`, means a closed manifold surface (verify/forge-mesh-check's
+    /// `vertex_fans`, proved in its lean/).
+    pub fn pinched_vertices(&self) -> Vec<u32> {
+        // at each vertex, the step (a, b) its corner in each triangle makes (a, b the other two,
+        // in order): a fan walks from the b of one step to the step whose a it is
+        let mut at: Vec<Vec<(u32, u32)>> = vec![Vec::new(); self.positions.len()];
+        for &[a, b, c] in &self.triangles {
+            at[a as usize].push((b, c));
+            at[b as usize].push((c, a));
+            at[c as usize].push((a, b));
+        }
+        let mut out = Vec::new();
+        for (v, steps) in at.iter().enumerate() {
+            let mut seen = vec![false; steps.len()];
+            let mut fans = 0;
+            for s in 0..steps.len() {
+                if seen[s] {
+                    continue;
+                }
+                fans += 1;
+                let mut k = s;
+                while !seen[k] {
+                    seen[k] = true;
+                    let to = steps[k].1;
+                    match steps.iter().position(|x| x.0 == to) {
+                        Some(j) => k = j,
+                        None => break,
+                    }
+                }
+            }
+            if fans > 1 {
+                out.push(v as u32);
+            }
+        }
+        out
     }
 
     /// Triangles with (near) zero area.

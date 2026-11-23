@@ -1,0 +1,16 @@
+[package]
+name = "forge-mass"
+description = "forge_topo::mass against closed forms, and the error it reports; the Lean proofs are in lean/"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+forge-math = { path = "../../kernel/forge-math" }
+forge-geom = { path = "../../kernel/forge-geom" }
+forge-topo = { path = "../../kernel/forge-topo" }
+forge-ops = { path = "../../kernel/forge-ops" }
+
+[lints]
+workspace = true

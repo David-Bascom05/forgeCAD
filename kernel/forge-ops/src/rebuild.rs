@@ -2,6 +2,7 @@
 //! (offset, tilted, newly inserted): each vertex is solved onto every surface around it, each
 //! edge is the exact intersection of its two faces' surfaces between its new vertices.
 
+use forge_geom::blend::OffsetLine;
 use forge_geom::curve::{CurveDeriv, ProcCurve, ProceduralCurve};
 use forge_geom::intcurve::{IntCurve, refine, trace};
 use forge_geom::intersect::{SurfaceSurface, plane_surface};
@@ -603,6 +604,12 @@ fn edge_curve(
         if on_both(&c, r, a, b) {
             return Some((c, r));
         }
+    }
+    // two faces of one surface offset alike coincide: no intersection says where the edge between
+    // them went, and it went with the offset (a spline wall's seam, turned or swept)
+    if let Some(image) = OffsetLine::between(a, b, oc) {
+        let r = fit(&image, ps, pe, closed)?;
+        return on_both(&image, r, a, b).then_some((image, r));
     }
     let old_mid = oc.eval(or.mid());
     let guess = refine(a, b, old_mid).unwrap_or(old_mid);

@@ -2,6 +2,8 @@
 //! Ollama...) driven by ForgeCAD's own agent loop: the reply streamed, its tool calls run on the
 //! open file (`tools.rs`), their answers sent back, until it answers without one.
 
+#![cfg_attr(target_arch = "wasm32", allow(unused))]
+
 use super::{Backend, Event, Out, Watch, tools};
 use crate::shell::agent::tool_summary;
 use forge_agent::json::Json;
@@ -164,14 +166,11 @@ impl Backend for OpenAi {
             self.busy.clone(),
         );
         let root = self.root.clone();
-        std::thread::Builder::new()
-            .name("agent-openai".into())
-            .spawn(move || {
-                let done = turn(&cfg, &out, &history, &stop, &root);
-                busy.store(false, Ordering::SeqCst);
-                out.send(done);
-            })
-            .expect("a thread");
+        crate::plat::spawn("agent-openai", move || {
+            let done = turn(&cfg, &out, &history, &stop, &root);
+            busy.store(false, Ordering::SeqCst);
+            out.send(done);
+        });
     }
 
     fn stop(&mut self) {
@@ -206,243 +205,254 @@ fn turn(
             }
         },
     };
-    let agent = ureq::Agent::new_with_config(
-        ureq::Agent::config_builder()
-            .http_status_as_error(false)
-            .timeout_connect(Some(std::time::Duration::from_secs(10)))
-            .build(),
-    );
-    let url = format!("{}/chat/completions", cfg.base_url.trim().trim_end_matches('/'));
-    let mut watch = Watch::new(root);
-    let stopped = Event::Done {
-        error: None,
-        stopped: true,
-    };
-    for _ in 0..MAX_STEPS {
-        let mut messages = vec![Json::obj(vec![
-            ("role", "system".into()),
-            ("content", cfg.system.clone().into()),
-        ])];
-        messages.extend(history.lock().expect("no panics while held").iter().cloned());
-        let body = Json::obj(vec![
-            ("model", cfg.model.trim().into()),
-            ("messages", Json::Arr(messages)),
-            ("tools", {
-                let mut t = if cfg.file.is_dir() {
-                    vec![]
-                } else {
-                    match tools::specs() {
-                        Json::Arr(a) => a,
-                        _ => vec![],
-                    }
-                };
-                if cfg.apps.is_some() {
-                    t.extend(super::apptools::openai_specs());
-                }
-                Json::Arr(t)
-            }),
-            ("stream", true.into()),
-        ])
-        .to_string();
-        let mut req = agent.post(&url).header("Content-Type", "application/json");
-        if let Some(k) = key.as_deref().filter(|k| !k.is_empty()) {
-            req = req.header("Authorization", format!("Bearer {k}"));
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = (key, out, history, stop, root, MAX_STEPS);
+        Event::Done {
+            error: Some("the browser's agent doesn't reach endpoints yet: use the desktop app".into()),
+            stopped: false,
         }
-        let resp = match req.send(body.as_str()) {
-            Ok(r) => r,
-            Err(e) => {
-                return Event::Done {
-                    error: Some(format!("Can't reach {url}: {e}")),
-                    stopped: false,
-                };
-            }
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let agent = ureq::Agent::new_with_config(
+            ureq::Agent::config_builder()
+                .http_status_as_error(false)
+                .timeout_connect(Some(std::time::Duration::from_secs(10)))
+                .build(),
+        );
+        let url = format!("{}/chat/completions", cfg.base_url.trim().trim_end_matches('/'));
+        let mut watch = Watch::new(root);
+        let stopped = Event::Done {
+            error: None,
+            stopped: true,
         };
-        let status = resp.status().as_u16();
-        let stream = resp
-            .headers()
-            .get("content-type")
-            .and_then(|v| v.to_str().ok())
-            .is_some_and(|v| v.contains("event-stream"));
-        let mut reader = resp.into_body().into_reader();
-        if status >= 400 {
-            let mut b = String::new();
-            let _ = reader.read_to_string(&mut b);
-            return Event::Done {
-                error: Some(http_error(status, &b)),
-                stopped: false,
-            };
-        }
-        let mut acc = Acc::default();
-        if stream {
-            for line in BufReader::new(reader).lines() {
-                if stop.load(Ordering::SeqCst) {
-                    return stopped;
-                }
-                let Ok(line) = line else { break };
-                let Some(data) = line.strip_prefix("data:").map(str::trim) else {
-                    continue;
-                };
-                if data == "[DONE]" {
-                    break;
-                }
-                let Ok(j) = Json::parse(data) else { continue };
-                if let Some(e) = j.get("error") {
-                    let msg = e
-                        .get("message")
-                        .and_then(Json::str)
-                        .unwrap_or("the endpoint failed");
+        for _ in 0..MAX_STEPS {
+            let mut messages = vec![Json::obj(vec![
+                ("role", "system".into()),
+                ("content", cfg.system.clone().into()),
+            ])];
+            messages.extend(history.lock().expect("no panics while held").iter().cloned());
+            let body = Json::obj(vec![
+                ("model", cfg.model.trim().into()),
+                ("messages", Json::Arr(messages)),
+                ("tools", {
+                    let mut t = if cfg.file.is_dir() {
+                        vec![]
+                    } else {
+                        match tools::specs() {
+                            Json::Arr(a) => a,
+                            _ => vec![],
+                        }
+                    };
+                    if cfg.apps.is_some() {
+                        t.extend(super::apptools::openai_specs());
+                    }
+                    Json::Arr(t)
+                }),
+                ("stream", true.into()),
+            ])
+            .to_string();
+            let mut req = agent.post(&url).header("Content-Type", "application/json");
+            if let Some(k) = key.as_deref().filter(|k| !k.is_empty()) {
+                req = req.header("Authorization", format!("Bearer {k}"));
+            }
+            let resp = match req.send(body.as_str()) {
+                Ok(r) => r,
+                Err(e) => {
                     return Event::Done {
-                        error: Some(msg.to_string()),
+                        error: Some(format!("Can't reach {url}: {e}")),
                         stopped: false,
                     };
                 }
-                let mut said = Vec::new();
-                acc.take(&j, &mut said);
-                for e in said {
-                    out.send(e);
-                }
+            };
+            let status = resp.status().as_u16();
+            let stream = resp
+                .headers()
+                .get("content-type")
+                .and_then(|v| v.to_str().ok())
+                .is_some_and(|v| v.contains("event-stream"));
+            let mut reader = resp.into_body().into_reader();
+            if status >= 400 {
+                let mut b = String::new();
+                let _ = reader.read_to_string(&mut b);
+                return Event::Done {
+                    error: Some(http_error(status, &b)),
+                    stopped: false,
+                };
             }
-        } else {
-            let mut b = String::new();
-            let _ = reader.read_to_string(&mut b);
-            match Json::parse(&b) {
-                Ok(j) => {
+            let mut acc = Acc::default();
+            if stream {
+                for line in BufReader::new(reader).lines() {
+                    if stop.load(Ordering::SeqCst) {
+                        return stopped;
+                    }
+                    let Ok(line) = line else { break };
+                    let Some(data) = line.strip_prefix("data:").map(str::trim) else {
+                        continue;
+                    };
+                    if data == "[DONE]" {
+                        break;
+                    }
+                    let Ok(j) = Json::parse(data) else { continue };
+                    if let Some(e) = j.get("error") {
+                        let msg = e
+                            .get("message")
+                            .and_then(Json::str)
+                            .unwrap_or("the endpoint failed");
+                        return Event::Done {
+                            error: Some(msg.to_string()),
+                            stopped: false,
+                        };
+                    }
                     let mut said = Vec::new();
                     acc.take(&j, &mut said);
                     for e in said {
                         out.send(e);
                     }
                 }
-                Err(e) => {
-                    return Event::Done {
-                        error: Some(format!(
-                            "Not a chat completions reply ({e}): {}",
-                            b.chars().take(200).collect::<String>()
-                        )),
-                        stopped: false,
-                    };
+            } else {
+                let mut b = String::new();
+                let _ = reader.read_to_string(&mut b);
+                match Json::parse(&b) {
+                    Ok(j) => {
+                        let mut said = Vec::new();
+                        acc.take(&j, &mut said);
+                        for e in said {
+                            out.send(e);
+                        }
+                    }
+                    Err(e) => {
+                        return Event::Done {
+                            error: Some(format!(
+                                "Not a chat completions reply ({e}): {}",
+                                b.chars().take(200).collect::<String>()
+                            )),
+                            stopped: false,
+                        };
+                    }
                 }
-            }
-        }
-        if stop.load(Ordering::SeqCst) {
-            return stopped;
-        }
-        let calls: Vec<Json> = acc
-            .calls
-            .iter()
-            .enumerate()
-            .map(|(k, (id, name, args))| {
-                let id = if id.is_empty() {
-                    format!("call_{k}")
-                } else {
-                    id.clone()
-                };
-                Json::obj(vec![
-                    ("id", id.into()),
-                    ("type", "function".into()),
-                    (
-                        "function",
-                        Json::obj(vec![
-                            ("name", name.as_str().into()),
-                            ("arguments", args.as_str().into()),
-                        ]),
-                    ),
-                ])
-            })
-            .collect();
-        let mut msg = vec![
-            ("role", "assistant".into()),
-            (
-                "content",
-                if acc.text.is_empty() {
-                    Json::Null
-                } else {
-                    acc.text.clone().into()
-                },
-            ),
-        ];
-        if !calls.is_empty() {
-            msg.push(("tool_calls", Json::Arr(calls.clone())));
-        }
-        history.lock().expect("no panics while held").push(Json::obj(msg));
-        if calls.is_empty() {
-            return Event::Done {
-                error: None,
-                stopped: false,
-            };
-        }
-        for c in &calls {
-            let id = c.get("id").and_then(Json::str).unwrap_or("").to_string();
-            let f = c.get("function").cloned().unwrap_or(Json::Null);
-            let name = f.get("name").and_then(Json::str).unwrap_or("").to_string();
-            let args_text = f.get("arguments").and_then(Json::str).unwrap_or("");
-            let args = if args_text.trim().is_empty() {
-                Json::Obj(vec![])
-            } else {
-                Json::parse(args_text).unwrap_or(Json::Null)
-            };
-            out.send(Event::ToolStart {
-                id: id.clone(),
-                name: name.clone(),
-            });
-            let (summary, input) = tool_summary(&name, &args);
-            out.send(Event::ToolInput {
-                id: id.clone(),
-                summary,
-                input,
-            });
-            let mut picture = None;
-            let (text, error) = if args == Json::Null {
-                (format!("the arguments aren't JSON: {args_text}"), true)
-            } else if let (Some(app), Some(t)) = (&cfg.apps, name.strip_prefix("app_")) {
-                let r = app.call(t, args.clone());
-                picture = r.png;
-                (r.text, r.error)
-            } else if cfg.file.is_dir() {
-                (
-                    "No document is open; use the project tools to work in the project folder".into(),
-                    true,
-                )
-            } else {
-                tools::call(&name, &args, &cfg.file)
-            };
-            for c in watch.check() {
-                out.send(c);
-            }
-            out.send(Event::ToolDone {
-                id: id.clone(),
-                output: text.clone(),
-                error,
-            });
-            history.lock().expect("no panics while held").push(Json::obj(vec![
-                ("role", "tool".into()),
-                ("tool_call_id", id.into()),
-                ("content", text.into()),
-            ]));
-            // a picture comes as the person's message after it: tool messages hold text only
-            if let Some(png) = picture {
-                let url = format!("data:image/png;base64,{}", super::apptools::base64(&png));
-                history.lock().expect("no panics while held").push(Json::obj(vec![
-                    ("role", "user".into()),
-                    (
-                        "content",
-                        Json::Arr(vec![
-                            Json::obj(vec![("type", "text".into()), ("text", "The screenshot:".into())]),
-                            Json::obj(vec![
-                                ("type", "image_url".into()),
-                                ("image_url", Json::obj(vec![("url", url.into())])),
-                            ]),
-                        ]),
-                    ),
-                ]));
             }
             if stop.load(Ordering::SeqCst) {
                 return stopped;
             }
+            let calls: Vec<Json> = acc
+                .calls
+                .iter()
+                .enumerate()
+                .map(|(k, (id, name, args))| {
+                    let id = if id.is_empty() {
+                        format!("call_{k}")
+                    } else {
+                        id.clone()
+                    };
+                    Json::obj(vec![
+                        ("id", id.into()),
+                        ("type", "function".into()),
+                        (
+                            "function",
+                            Json::obj(vec![
+                                ("name", name.as_str().into()),
+                                ("arguments", args.as_str().into()),
+                            ]),
+                        ),
+                    ])
+                })
+                .collect();
+            let mut msg = vec![
+                ("role", "assistant".into()),
+                (
+                    "content",
+                    if acc.text.is_empty() {
+                        Json::Null
+                    } else {
+                        acc.text.clone().into()
+                    },
+                ),
+            ];
+            if !calls.is_empty() {
+                msg.push(("tool_calls", Json::Arr(calls.clone())));
+            }
+            history.lock().expect("no panics while held").push(Json::obj(msg));
+            if calls.is_empty() {
+                return Event::Done {
+                    error: None,
+                    stopped: false,
+                };
+            }
+            for c in &calls {
+                let id = c.get("id").and_then(Json::str).unwrap_or("").to_string();
+                let f = c.get("function").cloned().unwrap_or(Json::Null);
+                let name = f.get("name").and_then(Json::str).unwrap_or("").to_string();
+                let args_text = f.get("arguments").and_then(Json::str).unwrap_or("");
+                let args = if args_text.trim().is_empty() {
+                    Json::Obj(vec![])
+                } else {
+                    Json::parse(args_text).unwrap_or(Json::Null)
+                };
+                out.send(Event::ToolStart {
+                    id: id.clone(),
+                    name: name.clone(),
+                });
+                let (summary, input) = tool_summary(&name, &args);
+                out.send(Event::ToolInput {
+                    id: id.clone(),
+                    summary,
+                    input,
+                });
+                let mut picture = None;
+                let (text, error) = if args == Json::Null {
+                    (format!("the arguments aren't JSON: {args_text}"), true)
+                } else if let (Some(app), Some(t)) = (&cfg.apps, name.strip_prefix("app_")) {
+                    let r = app.call(t, args.clone());
+                    picture = r.png;
+                    (r.text, r.error)
+                } else if cfg.file.is_dir() {
+                    (
+                        "No document is open; use the project tools to work in the project folder".into(),
+                        true,
+                    )
+                } else {
+                    tools::call(&name, &args, &cfg.file)
+                };
+                for c in watch.check() {
+                    out.send(c);
+                }
+                out.send(Event::ToolDone {
+                    id: id.clone(),
+                    output: text.clone(),
+                    error,
+                });
+                history.lock().expect("no panics while held").push(Json::obj(vec![
+                    ("role", "tool".into()),
+                    ("tool_call_id", id.into()),
+                    ("content", text.into()),
+                ]));
+                // a picture comes as the person's message after it: tool messages hold text only
+                if let Some(png) = picture {
+                    let url = format!("data:image/png;base64,{}", super::apptools::base64(&png));
+                    history.lock().expect("no panics while held").push(Json::obj(vec![
+                        ("role", "user".into()),
+                        (
+                            "content",
+                            Json::Arr(vec![
+                                Json::obj(vec![("type", "text".into()), ("text", "The screenshot:".into())]),
+                                Json::obj(vec![
+                                    ("type", "image_url".into()),
+                                    ("image_url", Json::obj(vec![("url", url.into())])),
+                                ]),
+                            ]),
+                        ),
+                    ]));
+                }
+                if stop.load(Ordering::SeqCst) {
+                    return stopped;
+                }
+            }
         }
-    }
-    Event::Done {
-        error: Some(format!("Stopped after {MAX_STEPS} steps without a final answer")),
-        stopped: false,
+        Event::Done {
+            error: Some(format!("Stopped after {MAX_STEPS} steps without a final answer")),
+            stopped: false,
+        }
     }
 }
