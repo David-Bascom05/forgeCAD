@@ -71,11 +71,12 @@ use toml::{Item, Table};
 pub const FORMAT: f64 = 1.0;
 
 /// The built-in profiles, by file.
-pub const BUILTIN: [(&str, &str); 4] = [
+pub const BUILTIN: [(&str, &str); 5] = [
     ("sendcutsend.toml", include_str!("../data/sendcutsend.toml")),
     ("fabworks.toml", include_str!("../data/fabworks.toml")),
     ("oshcut.toml", include_str!("../data/oshcut.toml")),
     ("xometry.toml", include_str!("../data/xometry.toml")),
+    ("jlc.toml", include_str!("../data/jlc.toml")),
 ];
 
 /// What every built-in profile's note ends with, and what a profile shown anywhere is told.

@@ -32,7 +32,7 @@ vendor: "sendcutsend", material: "5052-H32 aluminum")` takes the vendor's radius
 stock and refuses a thickness or material it does not offer, with the options as fixes;
 `query F dfm` lists every violation (rule, measured, limit, faces, place on the flat).
 `forgecad vendor list|show|new|import|export` manages profiles (built in: sendcutsend, fabworks,
-oshcut, xometry, restated from their public guides: verify with the vendor before ordering).
+oshcut, xometry, jlc, restated from their public guides: verify with the vendor before ordering).
 
 Select in the part's own text: `edges(of: boss, crease: "convex")`, `edges(between: (a, b))`,
 anchors like `base.end`, `base.side(plan.outline[2])`, `hole.bore`; one copy of a pattern or one

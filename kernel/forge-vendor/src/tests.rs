@@ -13,7 +13,7 @@ fn every_builtin_reads_and_writes_back_the_same() {
             v.source.as_deref().is_some_and(|s| s.starts_with("https://")),
             "{file}"
         );
-        assert_eq!(v.taken.as_deref(), Some("2026-11-22"), "{file}");
+        assert!(matches!(v.taken.as_deref(), Some("2026-11-22" | "2026-11-23")), "{file}");
         assert!(v.note.as_deref().is_some_and(|n| n.contains(VERIFY)), "{file}");
         // every material named for density is one forge-material has
         for m in &v.materials {
@@ -178,4 +178,22 @@ backgauge = { x = [0, 600], fingers = [{ y = 0 }] }
     assert_eq!(set.tooling, Some(Tooling::Set("std-us".into())));
     assert_eq!(Vendor::parse(&set.to_text()).unwrap(), set);
     assert!(Vendor::parse("format = 1\nid = \"t\"\ntooling = 3\n").is_err());
+}
+
+#[test]
+fn jlc_holds_its_published_bend_table() {
+    let p = Profiles::builtin();
+    let v = &p.find("jlc").unwrap().vendor;
+    let shop = v.shop(v.material("SPCC").unwrap());
+    let s = shop.stock(1.5).unwrap();
+    // the guidelines' Bending Design Constraints row for t = 1.5: single bend 6.0, round hole 4.5
+    assert_eq!(s.min_flange.at(1.5, 0.0), 6.0);
+    assert_eq!(s.hole_to_bend.at(1.5, 0.0), 4.5);
+    // at least half the thickness and at least 1 mm
+    assert_eq!(s.min_hole.at(1.5, 0.0), 1.0);
+    assert_eq!(shop.stock(6.0).unwrap().min_hole.at(6.0, 0.0), 3.0);
+    // no radius or K published: none checked, none made up
+    assert!(s.radii.is_empty());
+    assert!(shop.offers(fs::Operation::Hem));
+    assert!(shop.hardware.iter().any(|h| h.code == "CLS-M3-1" && h.hole == 4.25));
 }

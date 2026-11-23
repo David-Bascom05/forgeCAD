@@ -810,14 +810,16 @@ shared fab = vendor("fabworks", material: "304")     # a shop, for sheet(.., sho
 With `vendor:`, `material:` names one of the vendor's materials (name or alias, case and
 punctuation ignored); its `library` name (forge-material) gives the mass, and the drawing's note
 the vendor's own name. `r:` and `bend:` default from the vendor's stock of thickness `t`, so the
-flat develops by the vendor's K and radius; a stock is `t` to within 0.005 mm (0.063 in is
+flat develops by the vendor's K and radius. Precedence: an `r:` or `bend:` written on the sheet
+wins over the vendor's stock (a radius it does not tool is then RadiusNotTooled in the report), and
+`shop:` with `vendor:` on one sheet is refused (BadValue: one or the other); a stock is `t` to within 0.005 mm (0.063 in is
 1.6002 mm, written 1.6mm). Refused, with the options listed and fixes: `UnknownVendor` (SetArg to the
 nearest ids), `VendorMaterial` (the materials offered; SetArg), `VendorThickness` (the stocked
 thicknesses in mm and inches with gauges; SetParam on `t` to the nearest). A vendor that states no
 bend rule for a stock it bends (a partial profile) leaves `r:` and `bend:` to the sheet
 (MissingArg). `inch(0.063)` is 1.6002 mm exactly.
 
-Built in, each restated from the vendor's public design pages, read 2026-11-22, its sources in the
+Built in, each restated from the vendor's public design pages, read 2026-11-22 (jlc 2026-11-23), its sources in the
 file and in research/sheet-metal/vendors/. Not the vendors' own, not endorsed by them: verify with
 the vendor before ordering.
 
@@ -828,6 +830,9 @@ fabworks      per stock: measured K and radius, minimum flange, distortion zone,
               length limits, minimum feature. 6061, 7075 cut only
 oshcut        partial: per-stock minimum hole, channel and wall; no bend data published as text
 xometry       partial: rules as multiples of t; thicknesses; no bend data published as text
+jlc           partial (JLCCNC, read 2026-11-23): minimum bending edge and hole to bending edge per
+              thickness, minimum hole max(0.5t, 1), hole spacing, tolerances, press-in hardware;
+              no K or inside radius published
 ```
 
 Profiles are searched in the project's `vendors/*.toml` beside the file, then the user's
