@@ -27,6 +27,9 @@ import ForgeExact.DecideOnce.QVert
 import ForgeExact.DecideOnce.RootCover
 import ForgeExact.DecideOnce.QPropose
 import ForgeExact.DecideOnce.QSweep
+import ForgeExact.DecideOnce.QSample
+import ForgeExact.DecideOnce.QLedger
+import ForgeExact.DecideOnce.QArc
 import ForgeExact.DecideOnce.QVertPlane
 import ForgeExact.DecideOnce.QVert3
 import ForgeExact.DecideOnce.SampleLocal
@@ -200,6 +203,9 @@ elab "#standard_axioms " ids:ident* : command => do
   ForgeExact.DecideOnce.Curved.covOn_spec
   ForgeExact.DecideOnce.Curved.axisPlane_on
   ForgeExact.DecideOnce.Curved.axisPlane_nz
+  ForgeExact.DecideOnce.Curved.axisPlane2_on
+  ForgeExact.DecideOnce.Curved.axisPlane2_nz
+  ForgeExact.DecideOnce.Curved.axisPlanes_orth
   ForgeExact.DecideOnce.Curved.nappePlane_on
   ForgeExact.DecideOnce.Curved.noScaled_seams
   ForgeExact.DecideOnce.Curved.homog_ev
@@ -240,6 +246,28 @@ elab "#standard_axioms " ids:ident* : command => do
   ForgeExact.DecideOnce.Curved.homSub_ev
   ForgeExact.DecideOnce.Curved.secondProj_spec
   ForgeExact.DecideOnce.Curved.proposeVert3_complete
+  ForgeExact.DecideOnce.Curved.proposeTriple_complete
+  ForgeExact.DecideOnce.Curved.cramer3
+  ForgeExact.DecideOnce.Curved.proposeTripleX_complete
+  ForgeExact.DecideOnce.Curved.rawEvents_complete
+  ForgeExact.DecideOnce.Curved.eventsOf_complete
+  ForgeExact.DecideOnce.Curved.eventsOf_sep
+  ForgeExact.DecideOnce.Curved.planes_between
+  ForgeExact.DecideOnce.Curved.lineSamples_realised
+  ForgeExact.DecideOnce.Curved.planeSamples_realised
+  ForgeExact.DecideOnce.Curved.tripleSamples_realised
+  ForgeExact.DecideOnce.Curved.realCov_shear
+  ForgeExact.DecideOnce.Curved.samplesOf_realised
+  ForgeExact.DecideOnce.Curved.qledger_pieceFacet
+  ForgeExact.DecideOnce.Curved.qledger_oneFace
+  ForgeExact.DecideOnce.Curved.qledger_pieceReal
+  ForgeExact.DecideOnce.Curved.qledger_witness
+  ForgeExact.DecideOnce.Curved.qledger_boundary
+  ForgeExact.DecideOnce.Curved.qledger_compat
+  ForgeExact.DecideOnce.Curved.perm_ev
+  ForgeExact.DecideOnce.Curved.faceCrossings_complete
+  ForgeExact.DecideOnce.Curved.boxCrossings_complete
+  ForgeExact.DecideOnce.Curved.faceCov_realised
   ForgeExact.DecideOnce.Sample.local_exact
   ForgeExact.DecideOnce.Sample.local_correct
   ForgeExact.DecideOnce.Sample.wall_region
