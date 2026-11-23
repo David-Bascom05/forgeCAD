@@ -235,12 +235,12 @@ no-output (no iteration order reaches an output; audit)  @ forge-bool/src/ssi.rs
 speed (cache answering a function of its own key)  @ forge-bool/src/ssi.rs|static|static MET: std::cell::RefCell<Mets> = std::cell::RefCell::new(Default::default());
 speed (cache answering a function of its own key)  @ forge-bool/src/ssi.rs|static|static MET_MOST: std::cell::Cell<usize> = const { std::cell::Cell::new(4096) };
 speed (cache answering a function of its own key)  @ forge-bool/src/ssi.rs|thread_local|thread_local! {
-keyed (keyed-like: identity of one traced curve, sharing made by the op itself: equality only, deterministic)  @ forge-bool/src/unify.rs|pointer|(Curve::Intersection(a), Curve::Intersection(b)) => !std::sync::Arc::ptr_eq(a, b),
+no-output (a shortcut of value equality: one Arc is the same curve, and two equal ones take the same path)  @ forge-bool/src/unify.rs|pointer|(Curve::Intersection(a), Curve::Intersection(b)) => !std::sync::Arc::ptr_eq(a, b) && a != b,
 speed (lazy field or constant table)  @ forge-geom/src/blend.rs|lazy|samples: OnceLock::new(),  x 5
 speed (lazy field or constant table)  @ forge-geom/src/blend.rs|lazy|samples: OnceLock<Vec<(f64, Point3)>>,
-speed (lazy field or constant table)  @ forge-geom/src/blend.rs|lazy|smooth: OnceLock::new(),  x 8
+speed (lazy field or constant table)  @ forge-geom/src/blend.rs|lazy|smooth: OnceLock::new(),  x 14
 speed (lazy field or constant table)  @ forge-geom/src/blend.rs|lazy|smooth: OnceLock<Option<(Curve, Arc<ChordCurve>)>>,
-speed (lazy field or constant table)  @ forge-geom/src/blend.rs|lazy|smooth: OnceLock<Option<Surface>>,
+speed (lazy field or constant table)  @ forge-geom/src/blend.rs|lazy|smooth: OnceLock<Option<Surface>>,  x 2
 speed (lazy field or constant table)  @ forge-geom/src/blend.rs|lazy|use std::sync::{Arc, Mutex, OnceLock};
 speed (cache answering a function of its own key)  @ forge-geom/src/blend.rs|static|static SEEN: Box<[Seen; 256]> = Box::new(
 speed (cache answering a function of its own key)  @ forge-geom/src/blend.rs|static|static SEEN: Box<[Seen]> = (0..1usize << BITS)
@@ -282,6 +282,7 @@ speed (lazy field or constant table)  @ forge-geom/src/smooth.rs|lazy|joins: Onc
 speed (lazy field or constant table)  @ forge-geom/src/smooth.rs|lazy|joins: OnceLock<Vec<f64>>,
 speed (lazy field or constant table)  @ forge-geom/src/smooth.rs|lazy|use std::sync::{Arc, OnceLock};
 no-output (constant tables or print switches)  @ forge-geom/src/spline.rs|static|static BINOM: [[f64; WORK]; WORK] = binomials();
+no-output (a shortcut of the value comparison beside it)  @ forge-geom/src/spline/drafted.rs|pointer|((Arc::ptr_eq(&s.c, &self.c) || *s.c == *self.c)
 no-output (FFI buffer or a local identity of one object)  @ forge-geom/src/spline/extruded.rs|pointer|let same = if Arc::ptr_eq(&s.c, &self.c) {
 no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-geom/src/spline/tests.rs|float|((x.0 - y.0).powi(2) + (x.1 - y.1).powi(2)).sqrt() < 1e-12,
 no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-geom/src/spline/tests.rs|float|(1.0 - u).powi(3),
@@ -413,12 +414,14 @@ no-output (test code)  @ forge-par/src/tests.rs|static|static MAY_WAIT: Cell<boo
 no-output (test code)  @ forge-par/src/tests.rs|thread_local|thread_local! {
 no-output (test code)  @ forge-par/src/tests.rs|threads|std::thread::spawn(j);
 no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-sheet/src/build.rs|float|let size = (bx.x.width().powi(2) + bx.y.width().powi(2) + bx.z.width().powi(2)).sqrt();  x 3
+no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-sheet/src/build.rs|float|let size = (raw.x.width().powi(2) + raw.y.width().powi(2) + raw.z.width().powi(2)).sqrt();
 no-output (no iteration order reaches an output; audit)  @ forge-sheet/src/build.rs|hash-order|let index: HashMap<(usize, usize), usize> = sides.iter().enumerate().map(|(k, s)| (*s, k)).collect();
 no-output (no iteration order reaches an output; audit)  @ forge-sheet/src/build.rs|hash-order|let joined: std::collections::HashSet<(usize, usize)> = self
 no-output (no iteration order reaches an output; audit)  @ forge-sheet/src/build.rs|hash-order|let mut count: HashMap<u64, usize> = HashMap::new();
 no-output (no iteration order reaches an output; audit)  @ forge-sheet/src/build.rs|hash-order|let mut rails: HashMap<usize, EdgeId> = HashMap::new();
 no-output (no iteration order reaches an output; audit)  @ forge-sheet/src/build.rs|hash-order|let mut tedges: HashMap<(usize, usize), [EdgeId; 2]> = HashMap::new();
 no-output (no iteration order reaches an output; audit)  @ forge-sheet/src/build.rs|hash-order|twin: HashMap<(usize, usize), (usize, usize)>,
+no-output (lookup only: contains_key, never iterated)  @ forge-sheet/src/build.rs|hash-order|fn untwinned(loops: &[LoopData], twin: &HashMap<(usize, usize), (usize, usize)>) -> Option<(usize, usize)> {
 no-output (a count of the checks' questions; tests read it, no op does)  @ forge-sheet/src/build.rs|static|static ASKED: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
 no-output (a count of the checks' questions; tests read it, no op does)  @ forge-sheet/src/build.rs|thread_local|thread_local! {
 no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-sheet/src/form.rs|float|+ (hi.powi(3) - lo.powi(3)) / 3.0 * (dmath::sin(s1) - dmath::sin(s0))
@@ -454,6 +457,8 @@ no-output (a test's timing)  @ forge-thermo/src/tests.rs|clock|let t0 = std::tim
 no-output (a test's own check)  @ forge-thermo/src/tests.rs|hash-order|let mut sides: std::collections::HashMap<(u32, u32), Vec<usize>> = Default::default();
 speed (lazy field or constant table)  @ forge-topo/src/body.rs|lazy|Cached(std::sync::OnceLock::new())
 speed (lazy field or constant table)  @ forge-topo/src/body.rs|lazy|pub struct Cached<T>(std::sync::OnceLock<T>);
+no-output (scratch buffers, emptied before they are put back: a walk's answers come from its arguments alone)  @ forge-topo/src/chords.rs|static|static SCRATCH: std::cell::Cell<Scratch> = const { std::cell::Cell::new(Scratch {
+no-output (scratch buffers, emptied before they are put back: a walk's answers come from its arguments alone)  @ forge-topo/src/chords.rs|thread_local|thread_local! {
 no-output (test switch, off unless a test sets it)  @ forge-topo/src/check.rs|atomic|static BOTH: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 no-output (test switch, off unless a test sets it)  @ forge-topo/src/check.rs|lazy|let drawn: Vec<std::cell::OnceCell<Drawn>> = vec![std::cell::OnceCell::new(); body.faces.len()];
 no-output (test switch, off unless a test sets it)  @ forge-topo/src/check.rs|lazy|let fine = std::cell::OnceCell::new();

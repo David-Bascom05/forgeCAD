@@ -1,0 +1,134 @@
+# Q1 L2: the executable curved ledger, and the Rust plan (2026-11-23)
+
+Context: research/decide-once/curved-design.md (§2, §4 Q1). This note splits Q1's L2, the exact
+`curvedLedger` in core Lean over `Alg`, into modules with their theorems. It also gives the plan for
+`decide_once_curved.rs`. Q1's Mathlib proofs (Lemma D, `Faithful`, `xNonManifold_iff_top`) belong
+to the q1 session (branch suffix `dol-curved-q1`). This side builds the executable and proves it
+equal to its spec.
+
+## 1. The shape: the flat sampler, generalised
+
+The flat L2 is `sampleLedger ps ss (sampler ps)` (Sample.lean, Sampler.lean). It has three parts:
+- *sample points* that hit every realised cell lying in a carrier (`Covers`, `sampler_covers`);
+- *the ledger read off them*: the cells are the samples' distinct covectors, the pieces come from a
+  flip on both sides, and the edges and verts are the listed cells of dimension 1 and 0;
+- *exactness* (`sample_exact`) from `Covers` and the input's semantics.
+
+The curved L2 has the same three parts. On the formula route (D2) the second part needs no
+point-in-solid test.
+
+**Samples, never walls.** The enumerator sweeps in order to *find* cells, as the flat sampler
+does. Its sweep planes are sampling devices, not carriers. Only the separators of design §2.3
+enter the covector. With `Faithful` (classes connected), a covector names its cell, so a sample
+set that hits every cell is all the enumerator needs.
+
+## 2. Modules (core Lean, verify/forge-exact/ForgeExact/DecideOnce)
+
+| # | Module | Content | Main theorem | Status |
+|---|---|---|---|---|
+| 1 | `QLine.lean` | `Quadric.evK` (a quadric's value in any model K), `linePt`, `covOn`: the exact covector of the point that a number `n` names on a rational line | `alongLine_ev`, **`covOn_spec`**: the decided covector is `covOfK` of the point, in every model | **done** |
+| 2 | `QSep.lean` | Tier-0 seams from `QFace` data (`Quadric.ofPlane`): the cylinder's and cone's axial plane, the cone's nappe plane, the sphere's centre plane; contact-curve planes from `QRef.contactAt` | `seam_through_axis` and the like: each seam holds the axis or the apex exactly; the seams carry no face | **done**: `axisPlane_on`, `axisPlane_nz`, `nappePlane_on`, `centrePlane_on`, `equatorPlane_on`, `noScaled_seams` (contact-curve planes still to add) |
+| 3 | `QEdge.lean` (the plane-section RUR) | edge samples: a point where `q_j = q_k = 0` crosses a rational plane `x = c`, given by `y = α` (a root of `R`) and `z = −N(α)/D(α)`. The data come from untrusted elimination and are checked by identities: `homog q = D²·q(c, y, −N/D)` must equal `R·Q` for both quadrics. Vertices (three quadrics) follow the same pattern | **done** (sound half): `homog_ev`, `onCurve_spec` (both quadrics vanish at the sample), `edgeCov_spec` (the decided covector is the sample's). A `#guard` runs the unit sphere against z = 0. **Completeness done**: `bezout_spec`: a Bezout certificate `A·q_j + B·q_k = R` in ℚ[y][z], checked by `bzero`, makes every crossing of the curve with the plane a root of `R` (with `#guard`). **Vertices done** (`QVert.lean`): `homog3_ev`, `onVert_spec` (all three quadrics vanish), `vertCov_spec` (the decided covector is the vertex's), with `#guard`s at (1, 0, 0). **Plane-and-two-quadrics proposer done** (`QVertPlane.lean`, mirroring the Rust's Milestone 1d): `proposeVertPlane_complete`, every vertex of a plane (`lz ≠ 0`) and two quadrics is a proposed sample's point, with its `y`; `#guard`s incl. the tilted plane. The y/z exchange done (`proposeVertPlaneAny_complete`). **Three-quadric proposer done** (`QVert3.lean`, mirroring the Rust's Milestone 1e: two projections, a checked gcd, the linear remainder for `y`, `N + D z` for `z`): `proposeVert3_complete`; `#guard` on two spheres and a cylinder (4 vertices). **Vertex completeness done**: `bezout3_spec`: `A·q_a + B·q_b + C·q_c = R(x)` over ℚ[x][y][z] (`TPoly`, `zHom`), so every vertex's `x` is a root of `R` (with `#guard`). **Edge proposer done** (`QPropose.lean`): closed-form `R`, `N`, `D` and linear Bezout cofactors (`elim`); `proposeEdge_complete`: every crossing of the curve with the plane is a proposed sample's point. **The shear** (`shear_ev`): two crossings sharing a `y` make `D ≡ 0` and the proposal is refused; every carrier is then sheared `(x, y, z) ↦ (x, y + λz, z)`, with `λ` the first of the fixed list `shears` for which every proposal succeeds (the decided rule; past it, `Skip::Budget`). **Next**: the vertex proposer (three-quadric elimination), then QSweep |
+| 4 | `QSweep.lean` | the sweep's events, all reduced to vertex samples: a curve's turning points are vertices of `q_j, q_k, critQ q_j q_k` (`critQ` = `(∇q_j × ∇q_k)ₓ`, a quadric); a surface's critical points are vertices of `q, ∂_y q, ∂_z q` (two planes); and the carriers' own vertices. Event values are the vertices' `x`-roots, ordered by `Num.cmp`, with rational sample planes between them | **events' meaning done**: `critQ_ev`, `gradPlaneY_ev`, `gradPlaneZ_ev` (and `dyK_grad`, `dzK_grad` against `Quadric.grad`), with `#guard`s on the unit circle's turning point. **Waits on** the vertex proposer (from the curved Rust session's elimination) for the events' completeness |
+| 5 | `QSample.lean` | the samples: on each sweep plane x = c and each rational line y = c' in it, the roots on carrier j (`covOn`, facet samples). Points of j∩k on sweep planes (RUR, edge samples). Vertices (RUR) | **`qsampler_covers`**: every realised cell lying in a carrier is some sample's covector. This is the curved `sampler_covers`, and L2's main theorem. It needs the delineability of the sweep (between critical values the curves on j are graphs), which is where the q1 session's Lemma D and this module meet | |
+| 6 | `QLedger.lean` | `curvedLedger`: cells are the samples' distinct covectors. Pieces: φ is a piece of body i iff i's formula differs on φ.plus and φ.minus (`SForm.onCov`, `QForm.lean`). Inside: formula evaluation. Edges: covectors hit by an edge sample. Verts: those hit only by vertex samples | **`curved_exact`**: `ExactK` (and, with the q1 session's theorem, `CurvedTarget`) for every input in the Q1 domain. The dimension rule is sound because a sample on a sweep plane between critical values is never a vertex, and a nearby point of its arc has its covector | |
+
+**Fuel.** `Num.sign` and the isolations take fuel. Spent fuel answers `none` and never a wrong
+sign. The decided rule, accepted by the master on 2026-11-23: one fixed fuel constant per call
+site, recorded here and in the module. An input whose decision runs out of fuel is
+`Skip::Budget`, goes to the old path, and is counted.
+
+| Constant | Value | Call sites | Defined in |
+|---|---|---|---|
+| `signFuel` | 200 (`Num.sign` bisections, as exact-curved's contact decisions use) | `covOn`, `edgeCov`, `ESample.dOk` | QEdge.lean |
+| `rootFuel` | 60 (`QRef.realRoots`' default) | root isolation of `R` and of the line restrictions | QEdge.lean |
+| (sizes) | three-quadric test, the curved Rust session (172a608): R_A of degree 8 with coefficients up to 93 bits; A, B, C 569 rationals of at most 84 bits; ~0.4 s in release through `Big`'s public API. No cap needed at this size; re-measure on larger families | `proposeVert3` | — |
+| `shears` | `[0, 1, 2, 3, −1, 1/2, 5, −3, 7, 1/3]` | the generic projection, one `λ` per boolean | QPropose.lean |
+
+**Root isolation is certified, not trusted** (`RootCover.lean`). `QRef.realRoots` is incomplete:
+an interval still being split at the fuel limit is dropped silently (`if d ≥ fuel then continue`),
+losing its roots. The curved ledger takes its roots from a checked cover instead:
+- breakpoints, with each gap root-free or isolating one root;
+- both rays root-free by Descartes on the shifted polynomial.
+
+`cover_complete` proves every root in any model is in `coverRoots`. `certifiedRoots` is the
+proposer, and it answers `none` when the cover does not check (`Skip::Budget`). Square-free inputs come from `proposeSqfree`,
+checked both ways (`sp^k = p·w` and `p = sp·h`; `sqfree_roots`). **`rootsOf_complete`**: if
+`rootsOf p fuel = some ns`, every root of `p` in any model is denoted by some number in `ns`.
+
+**The sweep statements** are committed by the LemmaD session (46369a9 on `dol-curved-lemmad`,
+ForgeCurved/Sweep.lean): `Slab`, `Transverse`, `NoTriple`, `NoCrit`, `ZeroGraphs`, `CrossesAll`,
+`GraphLemma`, `FacetCrossing`. `crossesAll_edges` (edge cells cross every sweep plane) is proven.
+They hold over any real normed space with a linear sweep, so the sweep-plane version is an
+instance. `qsampler_covers` is stated against them.
+
+**Correction to the critical set: properness.** Zeros over compact sub-slabs must be bounded
+(`Proper`). xy = 1 in z = 0 against the sweep x has no critical point, yet its branches are graphs
+over only part of a slab containing x = 0. The direction rule therefore also requires that no curve
+has an asymptotic direction within a level plane, a leading-form test checked exactly.
+
+**Obligation from A8 (the master, 2026-11-23): every arc at a vertex is found.** The face
+builder's sectors need it, at transversal vertices from the tangents' exact order, and at
+tangential vertices from the crossings on a certified box's faces (`proposeEdgeAny_complete`).
+
+**Order of work:**
+1. QSep (small);
+2. RUR (medium; it is the exact core of edges and vertices);
+3. QSweep;
+4. QSample;
+5. QLedger.
+
+`qsampler_covers` is proven last, with the q1 session's delineability lemma as its one geometric
+input.
+
+## 3. The Rust: `kernel/forge-bool/src/decide_once_curved.rs`
+
+The core is `forge_bool_core`, unchanged. Its `Ledger`, `Sgn`, `CellId`, `Rule` and `Outcome` are
+the interface. The bridge mirrors the Lean modules one to one, so that L4 can refine each
+function to its Lean counterpart.
+
+| Rust | Lean | Filter / exact |
+|---|---|---|
+| `carriers` (QFace → `Quadric` with dyadic coefficients, `canon`) | `QRef.Faces`, `QRef.canon` | exact (dyadic) |
+| `seams` | `QSep` | exact |
+| `crit` (critical values, isolated) | `QSweep` | float roots with certified separation; `Alg` isolation as the fallback |
+| `samples` | `QSample` | interval Krawczyk boxes (trace's `Interval`); RUR as the fallback |
+| `cov_of` (a sample's covector) | `covOn`, `rur_spec` | interval sign on the sample's box; `Num.sign` (Big-based) as the fallback |
+| `formula` (`SForm` eval on a covector) | `SForm.onCov` | exact, combinatorial |
+| `build` (cells, pieces, inside, edges, verts → `Ledger`) | `QLedger` | exact, combinatorial; Aeneas L4 target |
+| `write` (fresh B-rep: faces from carriers, edges from arcs, vertices rounded once) | — | checked by `forge_topo::check` and the exact comparison, as F3 is |
+
+**Aeneas style** (until research/aeneas/STYLE.md lands, the rules of
+research/kernel-audit/decide-once/aeneas/README.md):
+- no struct holds a borrow;
+- no `break`, and no `return` inside a loop;
+- no `Ordering` (comparisons return −1, 0 or 1);
+- no local named like a generated namespace.
+
+**Numerics (D6):** the bignum and the RUR are written in the same style, with inline limbs, as
+the decide-once Rust session is doing for `Big`. They are interim L4 for now, checked by a
+differential test against the Lean L2 with a committed digest, and the blocker is named:
+Aeneas and bignum arithmetic.
+
+**Answered by the decide-once Rust session (2026-11-23):**
+1. **The bignum.** `forge_math::exact::Big` (kernel/forge-math/src/exact.rs, feature `exact`, as of
+   b6a9dd4) has one representation per value:
+   - `S(i128)` below 2^126;
+   - `M { neg, n, w: [u64; 8] }` up to 8 inline limbs;
+   - `L { neg, mag: Vec<u64> }` beyond that.
+
+   Its API: `zero`, `from_i64`, `is_zero`, `signum`, `neg`, `abs`, `add`, `sub`, `mul`, `shl`, `bits`,
+   `cmp_big`. `Dy` (dyadic) builds on it. There is no division, gcd or sqrt: the curved side adds
+   them (rationals over `Big`, then `Alg::Num`).
+
+   It is not yet in the Aeneas style (`scratch` takes a closure, and `cmp_mag` returns `Ordering`);
+   a restyle is promised to the IEEE session. **The curved side writes against the API above, never
+   the internals.**
+2. **Where.** In `forge_math::exact`, behind the `exact` feature. The RUR and algebraic numbers go
+   in a submodule, `forge_math::exact::alg`. There is one bignum.
+3. **Width.** Ledger cells are `Vec<Vec<Sgn>>` of any one width. `LedgerWF` bounds counts, not
+   width, so near surfaces plus seams as classes is fine.
+
+The flat bridge is being restructured for speed (a body-local read, then a sparse arrangement).
+`decide_once_curved.rs` shares code with it only through `forge_math::exact` and
+`forge_bool_core`, never through `decide_once.rs` internals.

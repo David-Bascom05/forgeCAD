@@ -1592,7 +1592,9 @@ fn sh_(v: f64) -> String {
 
 fn curve_points(c: &forge_sheet::Curve2) -> Vec<forge_math::Point2> {
     match c {
-        forge_sheet::Curve2::Arc { c, r, start, sweep } => (0..=32)
+        forge_sheet::Curve2::Arc {
+            c, r, start, sweep, ..
+        } => (0..=32)
             .map(|k| {
                 let (s, co) = dmath::sin_cos(start + sweep * k as f64 / 32.0);
                 forge_math::Point2::new(c.x + r * co, c.y + r * s)

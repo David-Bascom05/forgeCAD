@@ -238,6 +238,181 @@ impl Piece {
     }
 }
 
+/// The least distance between two sections (0 where they meet). Exact as a rule: the distance
+/// between a segment and an arc, or two arcs, is reached where they meet, at an end of one, or
+/// where both lie on one line square to both (a line square to a segment through an arc's centre,
+/// or the line through two arcs' centres); every such candidate is taken.
+pub fn section_distance(p: &Section, q: &Section) -> f64 {
+    let (a, b) = (Piece::new(*p), Piece::new(*q));
+    if meet(&a, &b) {
+        return 0.0;
+    }
+    // an end of one on the other
+    let mut d2 = a
+        .dist(b.p0)
+        .0
+        .min(a.dist(b.p1).0)
+        .min(b.dist(a.p0).0)
+        .min(b.dist(a.p1).0);
+    // a common normal
+    let mut take = |x: Point2, y: Point2| d2 = d2.min((x - y).length_sq());
+    match (a.s, b.s) {
+        (Section::Line { .. }, Section::Line { .. }) => {}
+        (Section::Line { a: l0, b: l1 }, Section::Arc { c, r, sweep, .. })
+        | (Section::Arc { c, r, sweep, .. }, Section::Line { a: l0, b: l1 }) => {
+            let arc = if matches!(a.s, Section::Arc { .. }) { a } else { b };
+            let d = l1 - l0;
+            let t = (c - l0).dot(d) / d.length_sq();
+            if t > 0.0 && t < 1.0 {
+                let foot = l0.lerp(l1, t);
+                if let Some(n) = (foot - c).normalize() {
+                    for u in [n, -n] {
+                        if arc.spans(u, sweep) {
+                            take(c + u * r, foot);
+                        }
+                    }
+                }
+            }
+        }
+        (
+            Section::Arc {
+                c: c1,
+                r: r1,
+                sweep: s1,
+                ..
+            },
+            Section::Arc {
+                c: c2,
+                r: r2,
+                sweep: s2,
+                ..
+            },
+        ) => {
+            match (c2 - c1).normalize() {
+                Some(u) => {
+                    for u1 in [u, -u] {
+                        for u2 in [u, -u] {
+                            if a.spans(u1, s1) && b.spans(u2, s2) {
+                                take(c1 + u1 * r1, c2 + u2 * r2);
+                            }
+                        }
+                    }
+                }
+                // concentric: |r1 - r2| where their angles overlap (else at an end, above)
+                None => {
+                    if a.spans(b.d0, s1) || a.spans(b.d1, s1) || b.spans(a.d0, s2) || b.spans(a.d1, s2) {
+                        d2 = d2.min((r1 - r2) * (r1 - r2));
+                    }
+                }
+            }
+        }
+    }
+    d2.sqrt()
+}
+
+/// Whether two sections meet.
+fn meet(a: &Piece, b: &Piece) -> bool {
+    use forge_math::predicates::orient2d;
+    if !(a.rr.lo <= b.rr.hi && b.rr.lo <= a.rr.hi && a.hh.lo <= b.hh.hi && b.hh.lo <= a.hh.hi) {
+        return false;
+    }
+    let on_line = |l0: Point2, l1: Point2, x: Point2| {
+        let d = l1 - l0;
+        let t = (x - l0).dot(d) / d.length_sq();
+        (0.0..=1.0).contains(&t)
+    };
+    // the points of a circle on a line through l0, l1 (its carrier), as fractions along it
+    let circle_line = |c: Point2, r: f64, l0: Point2, l1: Point2| -> Vec<Point2> {
+        let d = l1 - l0;
+        let f = l0 - c;
+        let (qa, qb, qc) = (d.length_sq(), 2.0 * f.dot(d), f.length_sq() - r * r);
+        let disc = qb * qb - 4.0 * qa * qc;
+        if disc < 0.0 {
+            return Vec::new();
+        }
+        let sq = disc.sqrt();
+        [(-qb - sq) / (2.0 * qa), (-qb + sq) / (2.0 * qa)]
+            .into_iter()
+            .filter(|t| (0.0..=1.0).contains(t))
+            .map(|t| l0 + d * t)
+            .collect()
+    };
+    match (a.s, b.s) {
+        (Section::Line { a: p0, b: p1 }, Section::Line { a: q0, b: q1 }) => {
+            let (o1, o2) = (orient2d(p0, p1, q0), orient2d(p0, p1, q1));
+            let (o3, o4) = (orient2d(q0, q1, p0), orient2d(q0, q1, p1));
+            if o1 * o2 < 0.0 && o3 * o4 < 0.0 {
+                return true;
+            }
+            (o1 == 0.0 && on_line(p0, p1, q0))
+                || (o2 == 0.0 && on_line(p0, p1, q1))
+                || (o3 == 0.0 && on_line(q0, q1, p0))
+                || (o4 == 0.0 && on_line(q0, q1, p1))
+        }
+        (Section::Line { a: l0, b: l1 }, Section::Arc { c, r, sweep, .. }) => circle_line(c, r, l0, l1)
+            .into_iter()
+            .any(|x| b.spans(x - c, sweep)),
+        (Section::Arc { c, r, sweep, .. }, Section::Line { a: l0, b: l1 }) => circle_line(c, r, l0, l1)
+            .into_iter()
+            .any(|x| a.spans(x - c, sweep)),
+        (
+            Section::Arc {
+                c: c1,
+                r: r1,
+                sweep: s1,
+                ..
+            },
+            Section::Arc {
+                c: c2,
+                r: r2,
+                sweep: s2,
+                ..
+            },
+        ) => {
+            let d = c2 - c1;
+            let l = d.length();
+            if l == 0.0 || l > r1 + r2 || l < (r1 - r2).abs() {
+                return false;
+            }
+            let x = (l * l + r1 * r1 - r2 * r2) / (2.0 * l);
+            let y = (r1 * r1 - x * x).max(0.0).sqrt();
+            let (u, n) = (d / l, Vec2::new(-d.y, d.x) / l);
+            [c1 + u * x + n * y, c1 + u * x - n * y]
+                .into_iter()
+                .any(|p| a.spans(p - c1, s1) && b.spans(p - c2, s2))
+        }
+    }
+}
+
+/// Whether a section (its pieces) and its translate by `w` stay more than `gap` apart: every
+/// piece against every translated piece. Two translates of one bounded region have the same area,
+/// so neither holds the other: they share no point exactly when their boundaries are apart.
+pub fn apart_from_translate(sections: &[Section], w: Vec2, gap: f64) -> bool {
+    let moved = |s: &Section| match *s {
+        Section::Line { a, b } => Section::Line { a: a + w, b: b + w },
+        Section::Arc { c, r, start, sweep } => Section::Arc {
+            c: c + w,
+            r,
+            start,
+            sweep,
+        },
+    };
+    let pieces: Vec<Piece> = sections.iter().map(|s| Piece::new(*s)).collect();
+    // boxes further apart than `gap` are: the distance is at least the boxes' gap
+    let boxes_apart = |a: &Piece, b: &Piece| {
+        a.rr.hi + w.x + gap < b.rr.lo
+            || b.rr.hi + gap < a.rr.lo + w.x
+            || a.hh.hi + w.y + gap < b.hh.lo
+            || b.hh.hi + gap < a.hh.lo + w.y
+    };
+    pieces.iter().all(|q| {
+        let mq = moved(&q.s);
+        pieces
+            .iter()
+            .all(|p| boxes_apart(q, p) || section_distance(&p.s, &mq) > gap)
+    })
+}
+
 /// A face's track: its section carried on `e` past each end, turned back to its left by a
 /// semicircle of radius `w` at each end, and joined by the section offset `2 w` to its left. A
 /// closed curve, smooth (C1) all round, that follows the section closely.
@@ -1283,6 +1458,48 @@ mod tests {
     use crate::SurfaceGeom;
     use crate::testing::rand_frame;
     use forge_math::rng::Rng;
+
+    #[test]
+    fn section_distances() {
+        let line = |a: (f64, f64), b: (f64, f64)| Section::Line {
+            a: Point2::new(a.0, a.1),
+            b: Point2::new(b.0, b.1),
+        };
+        let arc = |c: (f64, f64), r: f64, start: f64, sweep: f64| Section::Arc {
+            c: Point2::new(c.0, c.1),
+            r,
+            start,
+            sweep,
+        };
+        let near = |a: f64, b: f64| assert!((a - b).abs() < 1e-12, "{a} against {b}");
+        // lines: parallel, crossing, end to interior
+        near(
+            section_distance(&line((0.0, 0.0), (1.0, 0.0)), &line((0.0, 2.0), (1.0, 2.0))),
+            2.0,
+        );
+        near(
+            section_distance(&line((0.0, 0.0), (1.0, 1.0)), &line((0.0, 1.0), (1.0, 0.0))),
+            0.0,
+        );
+        near(
+            section_distance(&line((0.0, 0.0), (2.0, 0.0)), &line((1.0, 0.5), (1.0, 3.0))),
+            0.5,
+        );
+        // a line over the top of an upper half circle: the common normal at its top
+        let top = arc((0.0, 0.0), 1.0, 0.0, dmath::PI);
+        near(section_distance(&top, &line((-1.0, 3.0), (1.0, 3.0))), 2.0);
+        // the lower half circle: its nearest point is an end
+        let low = arc((0.0, 0.0), 1.0, dmath::PI, dmath::PI);
+        near(section_distance(&low, &line((-1.0, 3.0), (1.0, 3.0))), 3.0);
+        // two arcs facing each other across their centre line, and crossing ones
+        let right = arc((3.0, 0.0), 1.0, dmath::FRAC_PI_2, dmath::PI);
+        let left = arc((0.0, 0.0), 1.0, -dmath::FRAC_PI_2, dmath::PI);
+        near(section_distance(&left, &right), 1.0);
+        let over = arc((1.5, 0.0), 1.0, dmath::FRAC_PI_2, dmath::PI);
+        near(section_distance(&left, &over), 0.0);
+        // concentric, overlapping angles
+        near(section_distance(&top, &arc((0.0, 0.0), 2.5, 0.5, 1.0)), 1.5);
+    }
 
     /// A random closed loop (a rectangle with one side bowed, or a circle in two halves) and
     /// one face of its sweep.

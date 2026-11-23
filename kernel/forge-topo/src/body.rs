@@ -713,6 +713,7 @@ impl Body {
     /// Adds `other`'s entities after this body's, renumbered, its shells kept apart.
     /// Room in every arena for `others` all appended, made at once: appending them one by one
     /// then grows nothing (so no copy depends on whether the allocator can grow a block in place).
+    #[inline]
     pub fn reserve_appends<'a>(&mut self, others: impl Iterator<Item = &'a Body>) {
         let mut n = [0usize; 6];
         for o in others {

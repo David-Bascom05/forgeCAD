@@ -23,7 +23,8 @@ async function measure(b, url) {
   p.on("pageerror", (e) => p.problems.push(`page error: ${e.message}`));
   p.on("console", (m) => /panicked/.test(m.text()) && p.problems.push(m.text()));
   await p.goto(url);
-  const st = await t.until(p, (s) => s.built?.checked, `${PART} built`);
+  await t.until(p, (s) => s.built?.checked, `${PART} built`);
+  const st = await t.loaded(p);
   // the app's first frames (the view put on the GPU) are long tasks either way: measure an edit's
   // rebuild
   await p.evaluate(() => (window.longest = 0));

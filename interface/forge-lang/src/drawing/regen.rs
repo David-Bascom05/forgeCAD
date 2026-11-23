@@ -1049,7 +1049,9 @@ fn decode_line(s: &str) -> (Vec2, Vec<Point2>) {
 fn curve2(c: &forge_sheet::Curve2) -> Geom2 {
     match c {
         forge_sheet::Curve2::Line { a, b } => Geom2::Line { a: *a, b: *b },
-        forge_sheet::Curve2::Arc { c, r, start, sweep } => {
+        forge_sheet::Curve2::Arc {
+            c, r, start, sweep, ..
+        } => {
             let (t0, t1) = if *sweep >= 0.0 {
                 (*start, start + sweep)
             } else {

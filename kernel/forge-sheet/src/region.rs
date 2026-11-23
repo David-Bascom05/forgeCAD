@@ -39,31 +39,74 @@ const TOL: f64 = tol::LINEAR;
 /// tolerance can tell apart (the spread cap of research/kernel-audit/README.md §6.1): refused.
 const NEAR: f64 = 2.0 * TOL;
 
+/// |v|², as verify/sheet's Region.lean has `norm2`.
+fn norm2(v: Vec2) -> f64 {
+    v.x * v.x + v.y * v.y
+}
+
+/// `near`: two points within `l` of each other, |p - q|² <= l², the sign exact (`forge_sheet_core::exact::disc`:
+/// a float filter, else expansions).
+fn near(l: f64, p: Point2, q: Point2) -> bool {
+    forge_sheet_core::exact::disc(p.x, p.y, q.x, q.y, l) <= 0.0
+}
+
+/// `within`: c within `l` of the line through a and b, orient(a, b, c)² <= l² |b - a|²
+/// (Region.lean's `within_iff_dist`), the sign exact (`forge_sheet_core::exact::line_gap`).
+fn within(l: f64, a: Point2, b: Point2, c: Point2) -> bool {
+    forge_sheet_core::exact::line_gap(a.x, a.y, b.x, b.y, c.x, c.y, l) <= 0.0
+}
+
+/// Two pieces' verdict, Region.lean's `Carrier`: on one carrier, two, too near to tell, or a
+/// piece of no length. Symmetric in the pair and in each line's direction.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Carrier {
+    One,
+    Two,
+    Ambiguous(f64),
+    Degenerate,
+}
+
 /// Whether two pieces lie on one carrier, decided once for the pair by the one tolerance rule
-/// (README §6.1, as verify/forge-exact's Snap.lean has it for planes): lines, each one's ends
-/// within the tolerance of the other's line; arcs, centres and radii within it together; splines,
-/// one curve. `Some(gap)` past the tolerance but within `NEAR`: ambiguous. Arcs against lines are
-/// never one carrier (a tangent contact is a crossing, split at the touch).
-fn carrier(x: &Piece, y: &Piece) -> Result<bool, f64> {
-    let gap = match (x, y) {
+/// (README §6.1, Region.lean's `carrier`): lines, all four ends within the tolerance of the other
+/// line (`One`), or all within twice it (`Ambiguous`), else `Two`; arcs, centres and radii within
+/// it together (twice it ambiguous); splines, one curve. Arcs against lines are never one carrier
+/// (a tangent contact is a crossing, split at the touch).
+fn carrier(x: &Piece, y: &Piece) -> Carrier {
+    match (x, y) {
         (&Piece::Line { a, b }, &Piece::Line { a: c, b: d }) => {
-            let off = |p: Point2, q: Point2, r: Point2| {
-                predicates::orient2d(p, q, r).abs() / p.distance(q).max(1e-300)
-            };
-            off(a, b, c).max(off(a, b, d)).max(off(c, d, a)).max(off(c, d, b))
+            if norm2(b - a) == 0.0 || norm2(d - c) == 0.0 {
+                return Carrier::Degenerate;
+            }
+            let all =
+                |l: f64| within(l, a, b, c) && within(l, a, b, d) && within(l, c, d, a) && within(l, c, d, b);
+            if all(TOL) {
+                Carrier::One
+            } else if all(NEAR) {
+                let off =
+                    |p: Point2, q: Point2, r: Point2| predicates::orient2d(p, q, r).abs() / p.distance(q);
+                Carrier::Ambiguous(off(a, b, c).max(off(a, b, d)).max(off(c, d, a)).max(off(c, d, b)))
+            } else {
+                Carrier::Two
+            }
         }
-        (&Piece::Arc { c, r, .. }, &Piece::Arc { c: e, r: q, .. }) => c.distance(e) + (r - q).abs(),
+        (&Piece::Arc { c, r, .. }, &Piece::Arc { c: e, r: q, .. }) => {
+            let gap = c.distance(e) + (r - q).abs();
+            if gap <= TOL {
+                Carrier::One
+            } else if gap <= NEAR {
+                Carrier::Ambiguous(gap)
+            } else {
+                Carrier::Two
+            }
+        }
         (Piece::Spline { s, .. }, Piece::Spline { s: q, .. }) => {
-            return Ok(same_curve(s, q));
+            if same_curve(s, q) {
+                Carrier::One
+            } else {
+                Carrier::Two
+            }
         }
-        _ => return Ok(false),
-    };
-    if gap <= TOL {
-        Ok(true)
-    } else if gap <= NEAR {
-        Err(gap)
-    } else {
-        Ok(false)
+        _ => Carrier::Two,
     }
 }
 
@@ -364,6 +407,79 @@ fn circle_circle(c0: Point2, r0: f64, c1: Point2, r1: f64) -> Vec<Point2> {
     vec![m - n * h, m + n * h]
 }
 
+/// Where two pieces meet: the fractions on each (`meet`'s, kept within 2 TOL of both).
+pub(crate) fn crossings(x: &Piece, y: &Piece) -> Vec<(f64, f64)> {
+    let (mut ux, mut uy) = (Vec::new(), Vec::new());
+    meet(x, y, &mut ux, &mut uy);
+    ux.into_iter().zip(uy).collect()
+}
+
+/// The least distance between two line or arc pieces, and the point of `x` where it is, in closed
+/// form: the least over where they meet (`meet`), the ends of each against the other, and
+/// the interior critical points (a line against an arc: the foot of the arc's centre on the line;
+/// two arcs: the points of each on the line of centres). None for a spline (no closed form).
+pub(crate) fn closest(x: &Piece, y: &Piece) -> Option<(f64, Point2)> {
+    if matches!(x, Piece::Spline { .. }) || matches!(y, Piece::Spline { .. }) {
+        return None;
+    }
+    let mut best: Option<(f64, Point2)> = None;
+    let mut take = |p: Point2, q: Point2| {
+        let d = p.distance(q);
+        if best.is_none_or(|b| d < b.0) {
+            best = Some((d, p));
+        }
+    };
+    // where they meet (each hit within `meet`'s 2 TOL of both: its own distance counts)
+    let (mut ux, mut uy) = (Vec::new(), Vec::new());
+    meet(x, y, &mut ux, &mut uy);
+    for (&u, &v) in ux.iter().zip(&uy) {
+        take(x.at(u.clamp(0.0, 1.0)), y.at(v.clamp(0.0, 1.0)));
+    }
+    // a point of x against y, and a point of y against x
+    let on_x = |p: Point2| (p, y.at(y.nearest(p)));
+    let on_y = |q: Point2| (x.at(x.nearest(q)), q);
+    for u in [0.0, 1.0] {
+        let (p, q) = on_x(x.at(u));
+        take(p, q);
+        let (p, q) = on_y(y.at(u));
+        take(p, q);
+    }
+    let within = |pc: &Piece, p: Point2| (0.0..=1.0).contains(&pc.arc_param(p));
+    match (x, y) {
+        (Piece::Line { .. }, &Piece::Arc { c, .. }) => {
+            let f = x.at(x.nearest(c));
+            let (p, q) = on_x(f);
+            take(p, q);
+        }
+        (&Piece::Arc { c, .. }, Piece::Line { .. }) => {
+            let f = y.at(y.nearest(c));
+            let (p, q) = on_y(f);
+            take(p, q);
+        }
+        (&Piece::Arc { c, r, .. }, &Piece::Arc { c: e, r: q, .. }) => {
+            let d = e - c;
+            let n = d.length();
+            if n > 0.0 {
+                let u = d * (1.0 / n);
+                for p in [c + u * r, c - u * r] {
+                    if within(x, p) {
+                        let (a, b) = on_x(p);
+                        take(a, b);
+                    }
+                }
+                for p in [e + u * q, e - u * q] {
+                    if within(y, p) {
+                        let (a, b) = on_y(p);
+                        take(a, b);
+                    }
+                }
+            }
+        }
+        _ => {}
+    }
+    best
+}
+
 /// All the fractions on x and on y where the two pieces meet.
 fn meet(x: &Piece, y: &Piece, ux: &mut Vec<f64>, uy: &mut Vec<f64>) {
     let mut pts: Vec<Point2> = Vec::new();
@@ -615,80 +731,87 @@ struct Member {
     bx: Bx,
 }
 
-/// How far the test ray is turned from +x. Sketches are symmetric, so a midpoint is often level with
-/// a circle's centre or a joint; neighbours' rounded end heights could then straddle a level ray and
-/// the crossing be lost. No sketch has anything at this angle.
-const RAY: f64 = 0.013_7;
+/// `crosses`: the half-open crossing of the horizontal ray from p to +x with the edge a -> b
+/// (Region.lean): it counts iff its ends lie on opposite sides of the ray's height, an end level
+/// with p counting as below it, and p is left of the edge going up (right going down). Exact:
+/// comparisons and orient2d's sign. No turned ray: the half-open rule decides an end level with
+/// p, so no sketch's symmetry can lose a crossing.
+fn crosses(p: Point2, a: Point2, b: Point2) -> bool {
+    (a.y > p.y) != (b.y > p.y) && (b.y > a.y) == (side(a, b, p) > 0.0)
+}
 
-/// Is p inside the closed loop, by crossings of the ray from p at angle `RAY`.
-fn inside<'a>(l: impl IntoIterator<Item = &'a Piece>, p: Point2) -> bool {
-    let (sn, cs) = dmath::sin_cos(RAY);
-    // x' along the ray, y' across it
-    let turn = |q: Point2| Point2::new(cs * q.x + sn * q.y, -sn * q.x + cs * q.y);
-    let pt = turn(p);
+/// orient2d(a, b, p)'s sign at p moved by (δ³, δ²), δ → 0 (simulation of simplicity): exact where
+/// p is off the line ab; on it, the sign the move gives, (b.x - a.x), else -(b.y - a.y). Never 0
+/// for a ≠ b, so an edge run either way counts alike for every p (Region.lean's
+/// `crosses_reverse`, there for p off the edge's line, holds for all p), and a point on a chord or
+/// a level edge is decided as a point a hair above it is. The half-open height test (`a.y > p.y`)
+/// is already this move's.
+fn side(a: Point2, b: Point2, p: Point2) -> f64 {
+    let o = predicates::orient2d(a, b, p);
+    if o != 0.0 {
+        o
+    } else if b.x != a.x {
+        b.x - a.x
+    } else {
+        a.y - b.y
+    }
+}
+
+/// `inLens`: p in an arc's lens, the disc's part on the arc's side of its chord a -> b (a
+/// counter-clockwise arc lies right of its chord, a clockwise one left, for every sweep).
+fn in_lens(p: Point2, a: Point2, b: Point2, c: Point2, r: f64, ccw: bool) -> bool {
+    let o = side(a, b, p);
+    // in the disc, p moved by (δ³, δ²) as `side` moves it: |p + m - c|² - r² is then
+    // 2δ²(p.y - c.y) + 2δ³(p.x - c.x) + O(δ⁴) on the circle, so below its centre's height (or
+    // level and left of it) is in
+    let s = forge_sheet_core::exact::disc(p.x, p.y, c.x, c.y, r);
+    let disc = s < 0.0 || (s == 0.0 && (p.y < c.y || (p.y == c.y && p.x < c.x)));
+    disc && if ccw { o < 0.0 } else { o > 0.0 }
+}
+
+/// The half-open crossings of the horizontal ray from p with a spline piece from a to b, its
+/// ends counted as a line's are (an end level with p is below it): `crosses` for a curve, whose
+/// count has the parity of its chord's plus its lens's (Region.lean leaves splines to exact
+/// subdivision; this is the same ray, on the curve itself).
+fn spline_crossings(p: Point2, s: &Spline, t0: f64, t1: f64) -> bool {
+    let range = Interval::new(t0.min(t1), t0.max(t1));
     let mut odd = false;
-    for q in l {
-        match *q {
-            Piece::Line { a, b } => {
-                let (a, b) = (turn(a), turn(b));
-                if (a.y > pt.y) != (b.y > pt.y) {
-                    let o = predicates::orient2d(a, b, pt);
-                    if (b.y > a.y) == (o > 0.0) {
-                        odd = !odd;
-                    }
-                }
-            }
-            Piece::Arc { c, r, t0, t1 } => {
-                let c = turn(c);
-                if (pt.y - c.y).abs() > r {
-                    continue;
-                }
-                // y'-monotone stretches between the quarter points where sin turns
-                let (lo, hi) = (t0.min(t1) - RAY, t0.max(t1) - RAY);
-                let half = dmath::PI;
-                let mut a = lo;
-                let mut k = ((lo - half / 2.0) / half).ceil();
-                loop {
-                    let b = (k * half + half / 2.0).min(hi);
-                    if b > a {
-                        let (ya, yb) = (c.y + r * dmath::sin(a), c.y + r * dmath::sin(b));
-                        if (ya > pt.y) != (yb > pt.y) {
-                            let (_, cm) = dmath::sin_cos(0.5 * (a + b));
-                            let dy = pt.y - c.y;
-                            let x = c.x + cm.signum() * (r * r - dy * dy).max(0.0).sqrt();
-                            if x > pt.x {
-                                odd = !odd;
-                            }
-                        }
-                    }
-                    if b >= hi {
-                        break;
-                    }
-                    a = b;
-                    k += 1.0;
-                }
-            }
-            Piece::Spline { ref s, t0, t1 } => {
-                let range = Interval::new(t0.min(t1), t0.max(t1));
-                for (t, touch) in s.plane_roots(Vec3::new(-sn, cs, 0.0), -pt.y, range, 1e-12) {
-                    let d = s.deriv(t);
-                    if cs * d.p.x + sn * d.p.y <= pt.x {
-                        continue;
-                    }
-                    // an end on the ray counts as below it, as a line's ends do
-                    let dy = -sn * d.d1.x + cs * d.d1.y;
-                    let cross = if t - range.lo <= 1e-9 * range.width() {
-                        dy > 0.0
-                    } else if range.hi - t <= 1e-9 * range.width() {
-                        dy < 0.0
-                    } else {
-                        !touch
-                    };
-                    if cross {
-                        odd = !odd;
-                    }
-                }
-            }
+    for (t, touch) in s.plane_roots(Vec3::new(0.0, 1.0, 0.0), -p.y, range, 1e-12) {
+        let d = s.deriv(t);
+        if d.p.x <= p.x {
+            continue;
+        }
+        let cross = if t - range.lo <= 1e-9 * range.width() {
+            d.d1.y > 0.0
+        } else if range.hi - t <= 1e-9 * range.width() {
+            d.d1.y < 0.0
+        } else {
+            !touch
+        };
+        if cross {
+            odd = !odd;
+        }
+    }
+    odd
+}
+
+/// `inLoop`: p in the closed loop of pieces, each with its start (a region's: `Bound::start`,
+/// the vertex class's point, not the piece's own end recomputed), even-odd: the polygon over the
+/// starts XOR
+/// each arc's lens (Region.lean), each spline's own crossings for its chord's. The loop's
+/// starting piece and the direction it runs do not change it, nor does where it lies
+/// (`inPoly_rotate`, `crosses_reverse`, `inPoly_translate`).
+fn in_loop<'a>(l: impl IntoIterator<Item = (&'a Piece, Point2)>, p: Point2) -> bool {
+    let l: Vec<(&Piece, Point2)> = l.into_iter().collect();
+    let n = l.len();
+    let mut odd = false;
+    for i in 0..n {
+        let (a, b) = (l[i].1, l[(i + 1) % n].1);
+        match *l[i].0 {
+            Piece::Line { .. } => odd ^= crosses(p, a, b),
+            Piece::Arc { c, r, t0, t1 } => odd ^= crosses(p, a, b) ^ in_lens(p, a, b, c, r, t1 > t0),
+            // the curve's own crossings stand for its chord's and its lens's
+            Piece::Spline { ref s, t0, t1 } => odd ^= spline_crossings(p, s, t0, t1),
         }
     }
     odd
@@ -734,20 +857,13 @@ impl Verts {
             }
         }
         let n = pts.len();
-        let mut up: Vec<u32> = (0..n as u32).collect();
-        fn root(up: &mut [u32], mut a: u32) -> u32 {
-            while up[a as usize] != a {
-                up[a as usize] = up[up[a as usize] as usize];
-                a = up[a as usize];
-            }
-            a
-        }
-        // pairs within the tolerance, found on a grid of that size
+        // pairs within the tolerance (`near`), found on a grid of that size
         let cell = |p: Point2| ((p.x / TOL).floor() as i64, (p.y / TOL).floor() as i64);
         let mut grid: Map<(i64, i64), Vec<u32>> = Map::default();
         for (i, q) in pts.iter().enumerate() {
             grid.entry(cell(q.0)).or_default().push(i as u32);
         }
+        let mut pairs: Vec<(u32, u32)> = Vec::new();
         for i in 0..n {
             let (ci, cj) = cell(pts[i].0);
             for a in ci - 1..=ci + 1 {
@@ -756,66 +872,49 @@ impl Verts {
                         continue;
                     };
                     for &j in list {
-                        if (j as usize) > i && pts[i].0.distance(pts[j as usize].0) <= TOL {
-                            let (ra, rb) = (root(&mut up, i as u32), root(&mut up, j));
-                            if ra != rb {
-                                up[ra.max(rb) as usize] = ra.min(rb);
-                            }
+                        if (j as usize) > i && near(TOL, pts[i].0, pts[j as usize].0) {
+                            pairs.push((i as u32, j));
                         }
                     }
                 }
             }
         }
-        // each class's least-named member, and its spread
-        let mut best: Map<u32, u32> = Map::default();
-        let mut boxes: Map<u32, Bx> = Map::default();
-        for i in 0..n as u32 {
-            let r = root(&mut up, i);
-            let b = best.entry(r).or_insert(i);
-            let (x, y) = (&pts[i as usize].1, &pts[*b as usize].1);
-            if (x.0, x.1).cmp(&(y.0, y.1)).then(x.2.total_cmp(&y.2)).is_lt() {
-                *b = i;
+        // the classes are forge-sheet-core's (proven): the points come in name order, so each
+        // class is numbered by, and is, its least-named point
+        let class_of = forge_sheet_core::classes(n, &pairs);
+        let count = class_of.iter().map(|&c| c as usize + 1).max().unwrap_or(0);
+        let mut rep: Vec<u32> = vec![u32::MAX; count];
+        let mut boxes: Vec<Bx> = vec![Bx::EMPTY; count];
+        for (i, &c) in class_of.iter().enumerate() {
+            if rep[c as usize] == u32::MAX {
+                rep[c as usize] = i as u32;
             }
-            let bx = boxes.entry(r).or_insert(Bx::EMPTY);
-            *bx = bx.hull(Bx::of(pts[i as usize].0));
+            boxes[c as usize] = boxes[c as usize].hull(Bx::of(pts[i].0));
         }
-        for i in 0..n as u32 {
-            let r = root(&mut up, i);
-            let b = boxes[&r];
+        for (i, &c) in class_of.iter().enumerate() {
+            let b = boxes[c as usize];
+            // the box's diagonal within twice the tolerance (Region.lean's `box_spread`: it holds
+            // every two points of the class within it, the pairwise cap)
             let (dx, dy) = (b.x1 - b.x0, b.y1 - b.y0);
-            let spread = (dx * dx + dy * dy).sqrt();
-            if spread > 2.0 * TOL {
-                let other = (0..n as u32)
-                    .find(|&j| root(&mut up, j) == r && pts[j as usize].2 != pts[i as usize].2)
+            if dx * dx + dy * dy > NEAR * NEAR {
+                let other = (0..n)
+                    .find(|&j| class_of[j] == c && pts[j].2 != pts[i].2)
                     .unwrap_or(i);
                 return Err(RegionError::NearCoincident {
-                    a: pts[i as usize].2,
-                    b: pts[other as usize].2,
-                    at: pts[i as usize].0,
-                    gap: spread,
+                    a: pts[i].2,
+                    b: pts[other].2,
+                    at: pts[i].0,
+                    gap: (dx * dx + dy * dy).sqrt(),
                     limit: 2.0 * TOL,
                 });
             }
         }
-        // classes numbered in order of their least-named points
-        let mut reps: Vec<u32> = best.values().copied().collect();
-        reps.sort_by(|&a, &b| {
-            let (x, y) = (&pts[a as usize].1, &pts[b as usize].1);
-            (x.0, x.1).cmp(&(y.0, y.1)).then(x.2.total_cmp(&y.2))
-        });
-        let mut number: Map<u32, u32> = Map::default();
-        for (k, &r) in reps.iter().enumerate() {
-            number.insert(root(&mut up, r), k as u32);
-        }
         let class = (0..all.len())
-            .map(|idx| {
-                let (a, b) = (first[idx], first[idx] + us[idx].len());
-                (a..b).map(|i| number[&root(&mut up, i as u32)]).collect()
-            })
+            .map(|idx| class_of[first[idx]..first[idx] + us[idx].len()].to_vec())
             .collect();
         Ok(Verts {
             class,
-            pts: reps.iter().map(|&r| pts[r as usize].0).collect(),
+            pts: rep.iter().map(|&r| pts[r as usize].0).collect(),
         })
     }
 }
@@ -874,12 +973,12 @@ pub fn subtract(wall: &[ProfileLoop], cuts: &[ProfileLoop]) -> Result<Region, Re
             }
             let (x, y) = (&members[ma].pieces[ka].0, &members[mb].pieces[kb].0);
             match carrier(x, y) {
-                Ok(true) => {
+                Carrier::One => {
                     along.insert((a, b));
                     along.insert((b, a));
                 }
-                Ok(false) => {}
-                Err(gap) => {
+                Carrier::Two | Carrier::Degenerate => {}
+                Carrier::Ambiguous(gap) => {
                     // side by side, the tolerance cannot say one carrier or two
                     let p = y.at(y.nearest(x.at(0.5)));
                     return Err(RegionError::NearCoincident {
@@ -964,7 +1063,9 @@ pub fn subtract(wall: &[ProfileLoop], cuts: &[ProfileLoop]) -> Result<Region, Re
         }
         let mut odd = false;
         for m in group_loops(g) {
-            if members[m].bx.holds(p, 0.0) && inside(members[m].pieces.iter().map(|q| &q.0), p) {
+            if members[m].bx.holds(p, 0.0)
+                && in_loop(members[m].pieces.iter().map(|q| (&q.0, q.0.at(0.0))), p)
+            {
                 odd = !odd;
             }
         }
@@ -1078,62 +1179,40 @@ pub fn subtract(wall: &[ProfileLoop], cuts: &[ProfileLoop]) -> Result<Region, Re
 }
 
 fn chain(kept: Vec<Kept>, pts: &[Point2]) -> Result<Region, RegionError> {
-    let mut out_of: Vec<Vec<u32>> = vec![Vec::new(); pts.len()];
-    let mut into: Vec<Vec<u32>> = vec![Vec::new(); pts.len()];
-    for (i, e) in kept.iter().enumerate() {
-        out_of[e.from as usize].push(i as u32);
-        into[e.to as usize].push(i as u32);
-    }
-    let mut pinches = Vec::new();
-    for v in 0..pts.len() {
-        let (o, a) = (out_of[v].len(), into[v].len());
-        if o != a {
-            let e = out_of[v].first().or(into[v].first()).copied().unwrap_or(0);
-            return Err(RegionError::Unchained {
-                at: pts[v],
-                edge: kept[e as usize].id,
-                leaving: o as u32,
-                arriving: a as u32,
-            });
-        }
-        if o > 1 {
-            pinches.push(RegionPinch {
-                at: pts[v],
-                a: kept[into[v][0] as usize].id,
-                b: kept[into[v][1] as usize].id,
-                width: 0.0,
-                limit: TOL,
-            });
-        }
-    }
-    if !pinches.is_empty() {
-        return Err(RegionError::Pinched { pinches });
-    }
-    // every vertex has one piece in and one out: the loops follow
-    let mut used = vec![false; kept.len()];
-    let mut loops: Vec<Vec<u32>> = Vec::new();
-    for start in 0..kept.len() {
-        if used[start] {
-            continue;
-        }
-        let mut lp = Vec::new();
-        let mut at = start as u32;
-        while !used[at as usize] {
-            used[at as usize] = true;
-            lp.push(at);
-            at = out_of[kept[at as usize].to as usize][0];
-        }
-        if at != start as u32 {
-            let e = &kept[at as usize];
-            return Err(RegionError::Unchained {
-                at: pts[e.from as usize],
-                edge: e.id,
-                leaving: 1,
-                arriving: 1,
-            });
-        }
-        loops.push(lp);
-    }
+    // the combinatorics are forge-sheet-core's `chain` (proven, verify/aeneas/forge-sheet-core):
+    // degrees, pinches, then the walks
+    let from: Vec<u32> = kept.iter().map(|e| e.from).collect();
+    let to: Vec<u32> = kept.iter().map(|e| e.to).collect();
+    let found = forge_sheet_core::chain(pts.len(), &from, &to).map_err(|e| match e {
+        forge_sheet_core::ChainError::Unchained {
+            vertex,
+            piece,
+            leaving,
+            arriving,
+        } => RegionError::Unchained {
+            at: pts[vertex as usize],
+            edge: kept[piece as usize].id,
+            leaving,
+            arriving,
+        },
+        forge_sheet_core::ChainError::Pinched { pinches } => RegionError::Pinched {
+            pinches: pinches
+                .into_iter()
+                .map(|(v, a, b)| RegionPinch {
+                    at: pts[v as usize],
+                    a: kept[a as usize].id,
+                    b: kept[b as usize].id,
+                    width: 0.0,
+                    limit: TOL,
+                })
+                .collect(),
+        },
+    })?;
+    let loops: Vec<Vec<u32>> = found
+        .starts
+        .windows(2)
+        .map(|w| found.pieces[w[0] as usize..w[1] as usize].to_vec())
+        .collect();
     let mut parts: Vec<Component> = Vec::new();
     let mut holes: Vec<Vec<Bound>> = Vec::new();
     for l in &loops {
@@ -1148,36 +1227,30 @@ fn chain(kept: Vec<Kept>, pts: &[Point2]) -> Result<Region, RegionError> {
             holes.push(b);
         }
     }
+    // each hole to its owner (Region.lean's `owner`): the outer loop holding the hole's vertex
+    // that every other outer loop holding it holds too, the innermost. One exact query each, no
+    // vote: after `chain` the loops are disjoint, so the vertex is on no other loop
+    let reps: Vec<Point2> = parts.iter().map(|c| c.outer[0].start).collect();
+    let holds_at = |c: &Component, p: Point2| in_loop(c.outer.iter().map(|b| (&b.piece, b.start)), p);
+    let k = parts.len();
     for h in holes {
-        let at = h[0].piece.at(0.5);
-        let mut best: Option<(f64, usize)> = None;
-        for (i, c) in parts.iter().enumerate() {
-            let a = loop_area(&c.outer);
-            if best.is_none_or(|b| a < b.0) && holds_hole(&c.outer, &h) {
-                best = Some((a, i));
+        let at = h[0].start;
+        // the geometric facts decided exactly here (`in_loop`), the rule forge-sheet-core's
+        // `owner` (proven); nest[o k + p]: outer p holds outer o's vertex, asked only where both
+        // hold the hole's
+        let held: Vec<bool> = parts.iter().map(|c| holds_at(c, at)).collect();
+        let mut nest = vec![false; k * k];
+        for o in (0..k).filter(|&o| held[o]) {
+            for p in (0..k).filter(|&p| p != o && held[p]) {
+                nest[o * k + p] = holds_at(&parts[p], reps[o]);
             }
         }
-        let Some((_, i)) = best else {
+        let Some(i) = forge_sheet_core::owner(k, &held, &nest) else {
             return Err(RegionError::HoleOutside { edge: h[0].id, at });
         };
-        parts[i].holes.push(h);
+        parts[i as usize].holes.push(h);
     }
     Ok(Region { parts })
-}
-
-/// Whether `outer` holds the hole: a hole may touch it, so a few of its points vote.
-fn holds_hole(outer: &[Bound], h: &[Bound]) -> bool {
-    let mut votes = 0i32;
-    for p in h {
-        for u in [0.3, 0.7] {
-            votes += if inside(outer.iter().map(|b| &b.piece), p.piece.at(u)) {
-                1
-            } else {
-                -1
-            };
-        }
-    }
-    votes > 0
 }
 
 /// Neighbours from one source piece, end to end, become one piece again.
@@ -1225,8 +1298,11 @@ fn stretch(a: &Piece, b: &Piece) -> Piece {
 
 /// Whether p is in the component.
 pub fn holds(c: &Component, p: Point2) -> bool {
-    inside(c.outer.iter().map(|b| &b.piece), p)
-        && !c.holes.iter().any(|h| inside(h.iter().map(|b| &b.piece), p))
+    in_loop(c.outer.iter().map(|b| (&b.piece, b.start)), p)
+        && !c
+            .holes
+            .iter()
+            .any(|h| in_loop(h.iter().map(|b| (&b.piece, b.start)), p))
 }
 
 #[cfg(test)]
@@ -1298,5 +1374,105 @@ mod vertex_tests {
             partition(spread),
             Err(RegionError::NearCoincident { .. })
         ));
+    }
+}
+
+#[cfg(test)]
+mod in_loop_tests {
+    use super::*;
+
+    #[test]
+    fn crossings_count_alike_either_way_even_on_the_line() {
+        // `crosses_reverse` for every p: off the edge's line by orient2d, on it by the move
+        let e = [
+            (Point2::new(0.0, 0.0), Point2::new(4.0, 1e-16)),
+            (Point2::new(1.0, 1.0), Point2::new(1.0, 5.0)),
+        ];
+        for (a, b) in e {
+            for p in [
+                a.lerp(b, -1.0),
+                a.lerp(b, 0.5),
+                a.lerp(b, 2.0),
+                Point2::new(0.5, 0.3),
+                a,
+                b,
+            ] {
+                assert_eq!(crosses(p, a, b), crosses(p, b, a), "{p:?} on {a:?} {b:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn a_circles_halves_hold_its_chords_line_rightly() {
+        // the halves' chord is the near-level diameter (its far end 1.2e-16 up): points on its
+        // line are in the disc between the ends and out beyond them, either way round
+        for ccw in [true, false] {
+            let l = ProfileLoop::new(vec![(
+                Segment::Circle {
+                    center: Point2::new(0.0, 0.0),
+                    radius: 1.0,
+                    ccw,
+                },
+                0,
+            )]);
+            let ps = pieces(&l);
+            let at = |x: f64, y: f64| in_loop(ps.iter().map(|q| (&q.0, q.0.at(0.0))), Point2::new(x, y));
+            let (_, b) = (ps[0].0.at(0.0), ps[0].0.at(1.0));
+            for x in [-0.5, 0.0, 0.3, 0.99] {
+                assert!(at(x, 0.0) && at(x, 0.5 * b.y), "{ccw} {x}");
+            }
+            for x in [-3.0, -1.5, 1.5, 3.0] {
+                assert!(!at(x, 0.0) && !at(x, 0.5 * b.y), "{ccw} {x}");
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod closest_tests {
+    use super::*;
+
+    #[test]
+    fn closest_is_the_least_distance_between_lines_and_arcs() {
+        // against dense sampling of both pieces: never above it (it is a true pair's distance),
+        // and never below it by more than the sampling's own error
+        let mut seed = 7u64;
+        let mut rnd = |lo: f64, hi: f64| {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            lo + (hi - lo) * ((seed >> 11) as f64 / (1u64 << 53) as f64)
+        };
+        for _ in 0..400 {
+            let piece = |rnd: &mut dyn FnMut(f64, f64) -> f64| {
+                if rnd(0.0, 1.0) < 0.5 {
+                    Piece::Line {
+                        a: Point2::new(rnd(-10.0, 10.0), rnd(-10.0, 10.0)),
+                        b: Point2::new(rnd(-10.0, 10.0), rnd(-10.0, 10.0)),
+                    }
+                } else {
+                    let t0 = rnd(-3.0, 3.0);
+                    Piece::Arc {
+                        c: Point2::new(rnd(-10.0, 10.0), rnd(-10.0, 10.0)),
+                        r: rnd(0.5, 8.0),
+                        t0,
+                        t1: t0 + rnd(-3.0, 3.0),
+                    }
+                }
+            };
+            let x = piece(&mut rnd);
+            let y = piece(&mut rnd);
+            let (d, p) = closest(&x, &y).unwrap();
+            let n = 2000;
+            let mut brute = f64::INFINITY;
+            for i in 0..=n {
+                let q = x.at(i as f64 / n as f64);
+                brute = brute.min(q.distance(y.at(y.nearest(q))));
+            }
+            // the point is on x, at that distance from y
+            assert!((p.distance(y.at(y.nearest(p))) - d).abs() < 1e-9, "{x:?} {y:?}");
+            assert!(d <= brute + 1e-9, "{d} > {brute}: {x:?} {y:?}");
+            assert!(d >= brute - 0.05, "{d} << {brute}: {x:?} {y:?}");
+        }
     }
 }

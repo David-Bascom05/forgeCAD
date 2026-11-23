@@ -1,7 +1,8 @@
 //! Fillets with every option the kernel's takes: a radius per group, constant or varying along
 //! each edge (`vary(a, b)`: linear; `vary([(t, r), ..])`: through radii at fractions of the
-//! way), the vertex an edge's law starts from (`from:`), setbacks at corners, and `only` (the
-//! edges named, not the tangent chains they lie on).
+//! way), the vertex an edge's law starts from (`from:`), setbacks at corners, `only` (the
+//! edges named, not the tangent chains they lie on), and `conic: rho` (a conic section between
+//! the ball's feet in place of its arc).
 
 use crate::builtins::{Args, LEN, dim, edges_value, not_in_sketch, num_of, point_of, positive};
 use crate::error::Error;
@@ -144,7 +145,7 @@ pub fn fillet(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
     let a = Args::bind(
         ev,
         "fillet",
-        &["edges", "r", "groups", "from", "setbacks", "only"],
+        &["edges", "r", "groups", "from", "setbacks", "only", "conic"],
         args,
         span,
     )?;
@@ -266,11 +267,29 @@ pub fn fillet(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
             setbacks.push((v, e, d.v));
         }
     }
+    // a conic section: its shoulder ratio rho, strictly between 0 (a chamfer) and 1 (a sharp edge)
+    let conic = match a.opt("conic") {
+        None => None,
+        Some(v) => {
+            let sp = a.span("conic");
+            let n = num_of(v, &[Dim::Ratio, Dim::Count], sp, "a conic's rho")?;
+            if !(n.v > 0.0 && n.v < 1.0) {
+                return Err(Error::BadValue {
+                    span: sp,
+                    what: "a conic's rho, between 0 and 1",
+                    value: n.v,
+                });
+            }
+            dims.push(dim("conic", &n));
+            Some(n.v)
+        }
+    };
     let f = Feature::Fillet {
         edges,
         starts,
         setbacks,
         only: a.flag("only")?,
+        conic,
     };
     let (idx, hid) = ev.push_feature(&id, "fillet", f, span, dims)?;
     Ok(feat(id, "fillet", idx, hid, None))

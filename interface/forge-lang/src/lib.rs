@@ -47,6 +47,7 @@ pub mod sketch_text;
 pub mod stdparts;
 pub mod store;
 pub mod syntax;
+mod taper_lint;
 pub mod thermo;
 pub mod thermo_kept;
 pub mod tightbox;
