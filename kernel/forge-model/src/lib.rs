@@ -1969,7 +1969,6 @@ fn unlinked(features: History<'_>, i: usize) -> Option<(forge_topo::Unlinked, Co
 /// The tools feature `i` makes: one, or a pattern's copies (each named after its place).
 fn tools(features: History<'_>, i: usize, build: bool) -> Result<Vec<Tool>, RegenError> {
     match &features[i] {
-        Feature::Sheet(s) => Ok(vec![sheets::tool(i, features.id(i), s, build)?]),
         Feature::Hole(h) => {
             let (h, up, next) = extent::hole_end(features, i, h)?;
             let cut = h
@@ -2072,6 +2071,7 @@ fn tools(features: History<'_>, i: usize, build: bool) -> Result<Vec<Tool>, Rege
         Feature::Thread(_) => thread::tools(features, i, build),
         Feature::Text(_) => text::tools(features, i),
         Feature::Import(_) => import::tools(features, i),
+        Feature::Sheet(s) => Ok(vec![sheets::tool(i, features.id(i), s, build)?]),
         f => Ok(vec![tool(i, features.id(i), f, build)?]),
     }
 }

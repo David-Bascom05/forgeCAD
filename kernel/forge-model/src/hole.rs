@@ -249,6 +249,22 @@ fn segment_points(s: &Segment) -> Vec<Point2> {
     }
 }
 
+/// `segment_points`, each handed to `f` in turn.
+fn each_segment_point(s: &Segment, mut f: impl FnMut(Point2)) {
+    match *s {
+        Segment::Line { a, b } => {
+            f(a);
+            f(b);
+        }
+        Segment::Arc { center, radius, .. } | Segment::Circle { center, radius, .. } => {
+            for (x, y) in [(1.0, 1.0), (1.0, -1.0), (-1.0, 1.0), (-1.0, -1.0)] {
+                f(center + Vec2::new(x * radius, y * radius));
+            }
+        }
+        Segment::Spline(_) => segment_points(s).into_iter().for_each(f),
+    }
+}
+
 pub(crate) fn profile_points(p: &Profile) -> impl Iterator<Item = Point2> + '_ {
     p.loops
         .iter()
@@ -262,10 +278,22 @@ fn tool_box(f: &Feature) -> Box3 {
             profile,
             extent: Extent::Distance(distance),
             ..
-        } => Box3::from_points(profile_points(profile).flat_map(|q| {
-            let p = profile.plane.plane_point(q);
-            [p, p + profile.plane.z() * *distance]
-        })),
+        } => {
+            // (each point and its copy at the far end, as `segment_points` lists them, without a
+            // list per segment)
+            let mut b = Box3::EMPTY;
+            let up = profile.plane.z() * *distance;
+            for l in &profile.loops {
+                for (seg, _) in &l.segments {
+                    each_segment_point(seg, |q| {
+                        let p = profile.plane.plane_point(q);
+                        b.include(p);
+                        b.include(p + up);
+                    });
+                }
+            }
+            b
+        }
         Feature::Revolve { profile, axis, .. } => {
             let dir = axis.dir.normalize().unwrap_or(Vec2::Y);
             let (mut lo, mut hi, mut r) = (f64::INFINITY, f64::NEG_INFINITY, 0.0f64);

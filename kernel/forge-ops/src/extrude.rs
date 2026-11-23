@@ -81,7 +81,8 @@ pub fn extrude_sheet(
     };
     let mut body = Body::new();
     body.add_shell();
-    let mut b = Builder::new(&profile, distance.abs(), Name::feature(feature), body);
+    // (a sink of its own: the solid's builder is compiled as it was)
+    let mut b = Builder::new(&profile, distance.abs(), Name::feature(feature), SheetSink(body));
     for (segs, closed) in &chains {
         if let [(Segment::Circle { center, radius, ccw }, id)] = segs[..] {
             b.circle_wall(center, radius, ccw, id);
@@ -89,7 +90,7 @@ pub fn extrude_sheet(
             b.sheet_walls(segs, *closed);
         }
     }
-    let mut body = b.body;
+    let mut body = b.body.0;
     body.mark_sheet();
     if chains.len() > 1 {
         body.rebuild_shells();
@@ -155,6 +156,31 @@ impl Sink for Body {
     }
     fn add_loop(&mut self, face: FaceId, uses: &[(EdgeId, bool)]) {
         Body::add_loop(self, face, uses);
+    }
+}
+
+/// A sheet's body, as a sink of its own.
+struct SheetSink(Body);
+
+impl Sink for SheetSink {
+    fn add_vertex(&mut self, p: Point3, name: Name) -> VertexId {
+        self.0.add_vertex(p, name)
+    }
+    fn add_edge(
+        &mut self,
+        curve: Curve,
+        range: Interval,
+        start: VertexId,
+        end: VertexId,
+        name: Name,
+    ) -> EdgeId {
+        self.0.add_edge(curve, range, start, end, name)
+    }
+    fn add_face(&mut self, surface: Surface, same_sense: bool, name: Name) -> FaceId {
+        self.0.add_face(ShellId(0), surface, same_sense, name)
+    }
+    fn add_loop(&mut self, face: FaceId, uses: &[(EdgeId, bool)]) {
+        self.0.add_loop(face, uses);
     }
 }
 

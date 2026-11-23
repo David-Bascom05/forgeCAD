@@ -541,11 +541,63 @@ pub fn open_at(body: &Body) -> Option<String> {
     for e in body.edge_ids() {
         let edge = body.edge(e);
         let uses = edge.coedges.len();
-        // a sheet's boundary edge is on one face
-        if uses == 1 && body.face(body.coedge_face(edge.coedges[0])).sheet {
-            continue;
-        }
         if uses != 2 {
+            // a sheet's boundary edges are on one face: the whole check again, as a sheet's
+            if body.has_sheet() {
+                return open_at_sheets(body);
+            }
+            let ends = format!("the edge from {} to {}", at(edge.start), at(edge.end));
+            return Some(format!("{ends} is on {uses} face(s), not 2"));
+        }
+        if body.coedge(edge.coedges[0]).forward == body.coedge(edge.coedges[1]).forward {
+            let ends = format!("the edge from {} to {}", at(edge.start), at(edge.end));
+            return Some(format!("the faces either side of {ends} turn the same way"));
+        }
+    }
+    for f in body.face_ids() {
+        if body.face(f).loops.is_empty() {
+            return Some("a face has no boundary".to_string());
+        }
+    }
+    for l in body.loop_ids() {
+        // each use's end against the next's start, the last's against the first's
+        let mut uses = body.lp(l).coedges();
+        let Some(first) = uses.next() else { continue };
+        let (start, mut end) = (body.coedge_start(first), body.coedge_end(first));
+        for c in uses {
+            let e = body.edge(body.coedge(c).edge);
+            let (from, to) = if body.coedge(c).forward {
+                (e.start, e.end)
+            } else {
+                (e.end, e.start)
+            };
+            if from != end {
+                return Some(format!("a face's boundary breaks at {}", at(end)));
+            }
+            end = to;
+        }
+        if end != start {
+            return Some(format!("a face's boundary breaks at {}", at(end)));
+        }
+    }
+    None
+}
+
+/// `open_at` of a body with sheet faces: an edge used once by a sheet face is its boundary.
+#[cold]
+#[inline(never)]
+fn open_at_sheets(body: &Body) -> Option<String> {
+    let at = |v: crate::body::VertexId| {
+        let p = body.vertex(v).point;
+        format!("({:.3}, {:.3}, {:.3})", p.x, p.y, p.z)
+    };
+    for e in body.edge_ids() {
+        let edge = body.edge(e);
+        let uses = edge.coedges.len();
+        if uses != 2 {
+            if uses == 1 && body.face(body.coedge_face(edge.coedges[0])).sheet {
+                continue;
+            }
             let ends = format!("the edge from {} to {}", at(edge.start), at(edge.end));
             return Some(format!("{ends} is on {uses} face(s), not 2"));
         }

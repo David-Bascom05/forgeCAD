@@ -461,13 +461,8 @@ impl ProfileLoop {
     /// closing on itself cut in two. The first piece keeps the segment's id.
     /// None where a curve stops being one (a cusp, a piece too short).
     fn smooth_pieces(&self) -> Option<ProfileLoop> {
-        self.smooth_pieces_of(true)
-    }
-    /// `smooth_pieces` of a closed loop, or of an open chain (`closed` false), whose lone curve
-    /// does not close on itself and is left whole.
-    pub(crate) fn smooth_pieces_of(&self, closed: bool) -> Option<ProfileLoop> {
         let mut out = Vec::with_capacity(self.segments.len());
-        let alone = closed && self.segments.len() == 1;
+        let alone = self.segments.len() == 1;
         for (s, id) in &self.segments {
             let Segment::Spline(c) = s else {
                 out.push((s.clone(), *id));
@@ -520,13 +515,6 @@ impl ProfileLoop {
     fn polygon(&self) -> Vec<Point2> {
         self.segments.iter().flat_map(|(s, _)| s.samples(16)).collect()
     }
-    /// Whether the chain, open (its last segment's end not its first's start), crosses or touches
-    /// itself, as `crosses_itself` asks of a loop.
-    pub(crate) fn crosses_itself_open(&self) -> bool {
-        let mut poly = self.outline();
-        poly.push(self.segments[self.segments.len() - 1].0.end());
-        crosses::<false>(&poly)
-    }
     /// The polygon a crossing is looked for on: a line needs only its start.
     fn outline(&self) -> Vec<Point2> {
         self.segments
@@ -540,15 +528,9 @@ impl ProfileLoop {
 /// edge through another's corner counts, as a crossing there has no proper one to show.
 /// Edges are swept by their x extent, so only edges whose boxes overlap are tested, exactly.
 fn crosses_itself(poly: &[Point2]) -> bool {
-    crosses::<true>(poly)
-}
-
-/// `crosses_itself` of a closed polygon, or (`CLOSED` false) of an open polyline: its last point not
-/// joined back to its first.
-fn crosses<const CLOSED: bool>(poly: &[Point2]) -> bool {
     let n = poly.len();
     let seg = |i: usize| (poly[i], poly[(i + 1) % n]);
-    let mut order: Vec<usize> = (0..if CLOSED { n } else { n - 1 }).collect();
+    let mut order: Vec<usize> = (0..n).collect();
     order.sort_unstable_by(|&i, &j| {
         let (a, b) = (seg(i), seg(j));
         a.0.x.min(a.1.x).total_cmp(&b.0.x.min(b.1.x))
@@ -728,7 +710,7 @@ pub(crate) fn sheet_chains(chains: &[Vec<(Segment, u64)>]) -> Result<Vec<Chain>,
     for (ci, c) in chains.iter().enumerate() {
         let n = c.len();
         for (i, (s, id)) in c.iter().enumerate() {
-            if s.degenerate() {
+            if sheet_degenerate(s) {
                 return Err(ProfileError::Degenerate { id: *id });
             }
             if matches!(s, Segment::Circle { .. }) && n != 1 {
@@ -747,7 +729,11 @@ pub(crate) fn sheet_chains(chains: &[Vec<(Segment, u64)>]) -> Result<Vec<Chain>,
         if if closed {
             l.crosses_itself()
         } else {
-            l.crosses_itself_open()
+            {
+                let mut poly = sheet_outline(&l);
+                poly.push(l.segments[l.segments.len() - 1].0.end());
+                crosses_open(&poly)
+            }
         } {
             return Err(ProfileError::SelfIntersecting { loop_index: ci });
         }
@@ -757,8 +743,7 @@ pub(crate) fn sheet_chains(chains: &[Vec<(Segment, u64)>]) -> Result<Vec<Chain>,
             l
         };
         let l = if l.segments.iter().any(|(s, _)| matches!(s, Segment::Spline(_))) {
-            l.smooth_pieces_of(closed)
-                .ok_or(ProfileError::Degenerate { id: l.segments[0].1 })?
+            sheet_pieces(&l, closed).ok_or(ProfileError::Degenerate { id: l.segments[0].1 })?
         } else {
             l
         };
@@ -778,7 +763,7 @@ pub(crate) fn sheet_chains(chains: &[Vec<(Segment, u64)>]) -> Result<Vec<Chain>,
 /// Whether two chains' sampled polylines cross or touch, edge against edge, exactly.
 fn chains_meet(a: &ProfileLoop, a_closed: bool, b: &ProfileLoop, b_closed: bool) -> bool {
     let poly = |l: &ProfileLoop, closed: bool| {
-        let mut p = l.outline();
+        let mut p = sheet_outline(l);
         p.push(if closed {
             p[0]
         } else {
@@ -819,6 +804,114 @@ fn chains_meet(a: &ProfileLoop, a_closed: bool, b: &ProfileLoop, b_closed: bool)
         }
     }
     false
+}
+
+/// `crosses_itself` of an open polyline: its last point not joined back to its first (a sheet's chain).
+fn crosses_open(poly: &[Point2]) -> bool {
+    let n = poly.len();
+    let seg = |i: usize| (poly[i], poly[(i + 1) % n]);
+    let mut order: Vec<usize> = (0..n - 1).collect();
+    order.sort_unstable_by(|&i, &j| {
+        let (a, b) = (seg(i), seg(j));
+        a.0.x.min(a.1.x).total_cmp(&b.0.x.min(b.1.x))
+    });
+    // strictly opposite sides (signs, not products: they could underflow)
+    let apart = |x: f64, y: f64| (x > 0.0 && y < 0.0) || (x < 0.0 && y > 0.0);
+    for (k, &i) in order.iter().enumerate() {
+        let (a, b) = seg(i);
+        let right = a.x.max(b.x);
+        for &j in &order[k + 1..] {
+            let (c, d) = seg(j);
+            if c.x.min(d.x) > right {
+                break;
+            }
+            if (i + 1) % n == j
+                || (j + 1) % n == i
+                || a.y.max(b.y) < c.y.min(d.y)
+                || c.y.max(d.y) < a.y.min(b.y)
+            {
+                continue;
+            }
+            let (o1, o2, o3, o4) = (
+                orient2d(a, b, c),
+                orient2d(a, b, d),
+                orient2d(c, d, a),
+                orient2d(c, d, b),
+            );
+            if apart(o1, o2) && apart(o3, o4) {
+                return true;
+            }
+            let on = |p: Point2, q: Point2, x: Point2| {
+                x.x >= p.x.min(q.x) && x.x <= p.x.max(q.x) && x.y >= p.y.min(q.y) && x.y <= p.y.max(q.y)
+            };
+            if (o1 == 0.0 && on(a, b, c))
+                || (o2 == 0.0 && on(a, b, d))
+                || (o3 == 0.0 && on(c, d, a))
+                || (o4 == 0.0 && on(c, d, b))
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// `Segment::degenerate`, for a sheet's chains (its own copy: the profile's path is compiled as it was).
+fn sheet_degenerate(s: &Segment) -> bool {
+    match *s {
+        Segment::Spline(ref c) => {
+            let (b, r) = (c.c.bbox(c.c.domain()), tol::MIN_LENGTH);
+            !(b.x.width() > r || b.y.width() > r) || !b.diagonal().is_finite() || !c.c.is_regular()
+        }
+        // written to be true for NaN or infinite sizes too
+        Segment::Line { a, b } => !(a.distance(b) > tol::MIN_LENGTH && a.distance(b) < f64::INFINITY),
+        Segment::Arc { radius, sweep, .. } => {
+            !(radius > tol::MIN_LENGTH
+                && radius < f64::INFINITY
+                && (radius * sweep).abs() > tol::MIN_LENGTH
+                && sweep.abs() < dmath::TAU - tol::ANGULAR)
+        }
+        Segment::Circle { radius, .. } => !(radius > tol::MIN_LENGTH && radius < f64::INFINITY),
+    }
+}
+
+/// `ProfileLoop::smooth_pieces` for a sheet's chain, open or closed (an open chain's lone curve is left
+/// whole).
+fn sheet_pieces(l: &ProfileLoop, closed: bool) -> Option<ProfileLoop> {
+    let mut out = Vec::with_capacity(l.segments.len());
+    let alone = closed && l.segments.len() == 1;
+    for (s, id) in &l.segments {
+        let Segment::Spline(c) = s else {
+            out.push((s.clone(), *id));
+            continue;
+        };
+        let d = c.c.domain();
+        let mut cuts = c.c.corners();
+        if cuts.is_empty() && alone {
+            // a joint where the pieces meet, else the middle
+            let b = c.c.breaks();
+            cuts.push(if b.len() > 2 { b[b.len() / 2] } else { d.mid() });
+        }
+        if cuts.is_empty() {
+            out.push((s.clone(), *id));
+            continue;
+        }
+        let mut lo = d.lo;
+        for (k, &hi) in cuts.iter().chain([&d.hi]).enumerate() {
+            let part = c.part(Interval::new(lo, hi))?;
+            out.push((Segment::Spline(Arc::new(part)), *id ^ ((k as u64) << 48)));
+            lo = hi;
+        }
+    }
+    Some(ProfileLoop::new(out))
+}
+
+/// `ProfileLoop::outline`, for a sheet's chain.
+fn sheet_outline(l: &ProfileLoop) -> Vec<Point2> {
+    l.segments
+        .iter()
+        .flat_map(|(s, _)| s.samples(if matches!(s, Segment::Line { .. }) { 1 } else { 16 }))
+        .collect()
 }
 
 impl Profile {

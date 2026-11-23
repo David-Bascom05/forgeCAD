@@ -113,14 +113,20 @@ pub enum BodyError {
 
 /// Whether a history makes or works on more than one body.
 pub fn multi(features: &[Feature]) -> bool {
-    features
-        .iter()
-        .any(|f| matches!(f, Feature::Body(_)) || matches!(f, Feature::Sheet(s) if s.thin.is_none()))
-        || features
-            .iter()
-            .filter(|f| op(f) == Some(Combine::New))
-            .nth(1)
-            .is_some()
+    // one pass: a body feature or a sheet (a body of its own) anywhere, or a second new body
+    let mut new = false;
+    for f in features {
+        if matches!(f, Feature::Body(_) | Feature::Sheet(_)) {
+            return true;
+        }
+        if op(f) == Some(Combine::New) {
+            if new {
+                return true;
+            }
+            new = true;
+        }
+    }
+    false
 }
 
 fn op(f: &Feature) -> Option<Combine> {
