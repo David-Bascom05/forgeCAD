@@ -125,6 +125,7 @@ dependencies = [
  "forge-geom",
  "forge-import",
  "forge-lang",
+ "forge-machine-lang",
  "forge-material",
  "forge-math",
  "forge-mesh",
@@ -296,6 +297,25 @@ dependencies = [
  "forge-units",
  "forge-vendor",
  "forge-weld",
+]
+
+[[package]]
+name = "forge-machine"
+version = "0.1.0"
+dependencies = [
+ "forge-math",
+ "forge-post",
+ "forge-tooling",
+]
+
+[[package]]
+name = "forge-machine-lang"
+version = "0.1.0"
+dependencies = [
+ "forge-lang",
+ "forge-machine",
+ "forge-math",
+ "forge-mesh",
 ]
 
 [[package]]

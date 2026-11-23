@@ -1,0 +1,15 @@
+# generic-mill-turn sub-spindle chuck on C2 (r 80, 70 long, face at z = 900 facing -z).
+# frame: the machine's base frame at the home pose.
+shared R = 80
+shared L = 70
+shared face = 900
+shared bore = 42
+
+sketch plan(on: offset(xy, face)) {
+  outline = circle((0, 0), R)
+}
+body = extrude(plan.outline, L)
+sketch bb(on: plan) {
+  c = circle((0, 0), bore / 2)
+}
+through = cut(bb.c, -L)
