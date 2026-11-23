@@ -3,6 +3,7 @@ import ForgeBoolCore.RefineUF
 import ForgeBoolCore.HeadBridge
 import ForgeBoolCore.RefineRule
 import ForgeBoolCore.RefineIndex
+import ForgeBoolCore.RefineSort
 /-! The refinement lemmas use the standard axioms only. -/
 #print axioms forge_bool_core.zero_idx_spec
 #print axioms forge_bool_core.is_facet_spec
@@ -17,3 +18,5 @@ import ForgeBoolCore.RefineIndex
 #print axioms forge_bool_core.same_cov_spec
 #print axioms forge_bool_core.cmp_cov_spec
 #print axioms forge_bool_core.index_find_spec
+#print axioms forge_bool_core.sort_by_cov_spec
+#print axioms forge_bool_core.index_new_spec

@@ -6,4 +6,6 @@ import ForgeBoolCore.HeadBridge
 import ForgeBoolCore.RefineRule
 import ForgeBoolCore.RefineCells
 import ForgeBoolCore.RefineIndex
+import ForgeBoolCore.SortModel
+import ForgeBoolCore.RefineSort
 import ForgeBoolCore.Axioms
