@@ -235,6 +235,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-mass"
+version = "0.1.0"
+dependencies = [
+ "forge-geom",
+ "forge-math",
+ "forge-ops",
+ "forge-topo",
+]
+
+[[package]]
 name = "forge-material"
 version = "0.1.0"
 dependencies = [
@@ -255,6 +265,17 @@ dependencies = [
  "forge-geom",
  "forge-math",
  "forge-ops",
+ "forge-topo",
+]
+
+[[package]]
+name = "forge-mesh-check"
+version = "0.1.0"
+dependencies = [
+ "forge-geom",
+ "forge-math",
+ "forge-mesh",
+ "forge-model",
  "forge-topo",
 ]
 
@@ -333,6 +354,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-sketch-check"
+version = "0.1.0"
+dependencies = [
+ "forge-math",
+ "forge-sketch",
+]
+
+[[package]]
 name = "forge-step"
 version = "0.1.0"
 dependencies = [
@@ -363,6 +392,26 @@ version = "0.1.0"
 dependencies = [
  "forge-geom",
  "forge-math",
+]
+
+[[package]]
+name = "forge-topo-check"
+version = "0.1.0"
+dependencies = [
+ "forge-geom",
+ "forge-math",
+ "forge-model",
+ "forge-ops",
+ "forge-topo",
+]
+
+[[package]]
+name = "forge-transform"
+version = "0.1.0"
+dependencies = [
+ "forge-math",
+ "forge-model",
+ "forge-topo",
 ]
 
 [[package]]
