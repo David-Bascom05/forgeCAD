@@ -1,0 +1,93 @@
+diff --git a/kernel/forge-bool/src/boolean.rs b/kernel/forge-bool/src/boolean.rs
+index c0ad56bf..e62809aa 100644
+--- a/kernel/forge-bool/src/boolean.rs
++++ b/kernel/forge-bool/src/boolean.rs
+@@ -3494,7 +3494,14 @@ fn trim_in(
+         if let Some(w) = whole {
+             return Ok(w);
+         }
+-        let at = |k: usize, p: Point3| match index[k].point_in_face(faces[k], p) {
++        let at = |k: usize, p: Point3| match {
++            crate::classify::LAST36.with(|l| l.set(None));
++            let w = index[k].point_in_face(faces[k], p);
++            if w == Where::On && let Some((c, g, d)) = crate::classify::LAST36.with(|l| l.take()) {
++                probe36(bodies[k], faces[k], g, bodies[1 - k], faces[1 - k], p, d, c, &curve, t0, t1);
++            }
++            w
++        } {
+             Where::On => {
+                 let past = crossed(k, ends);
+                 // an edge it crosses only to run within tolerance of it (a chord of a hair) is
+@@ -7643,3 +7650,24 @@ pub(crate) mod log {
+         );
+     }
+ }
++
++#[allow(clippy::too_many_arguments)]
++fn probe36(bk: &Body, fk: FaceId, g: FaceId, bo: &Body, fo: FaceId, p: Point3, d: f64, c: forge_topo::CoedgeId, curve: &Curve, t0: f64, t1: f64) {
++    use forge_math::exact::{DyPlane, DyV3, HPoint, meet3, Dy};
++    let pl = |s: &Surface| match s { Surface::Plane(pl) => { let (o, n) = (pl.frame.origin, pl.frame.z().get()); Some(DyPlane::from_frame([o.x, o.y, o.z], [n.x, n.y, n.z])) } _ => None };
++    let (Some(pk), Some(pg), Some(po)) = (pl(&bk.face(fk).surface), pl(&bk.face(g).surface), pl(&bo.face(fo).surface)) else {
++        eprintln!("P36 nonplanar"); return;
++    };
++    let dir = pk.n.cross(&po.n);
++    let h = DyPlane { n: dir.clone(), c: Dy::zero() };
++    let Some(x) = meet3(&pk, &po, &h) else { eprintln!("P36 faces parallel"); return };
++    let parallel = pg.n.dot(&dir).is_zero();
++    let on = pg.side(&x) == 0;
++    let star = meet3(&pk, &po, &pg).map(|m| { let a = m.to_f64(); Point3::new(a[0], a[1], a[2]) });
++    let (a, b) = (curve.eval(t0), curve.eval(t1));
++    let e = bk.edge(bk.coedge(c).edge);
++    let elen = e.curve.eval(e.range.lo).distance(e.curve.eval(e.range.hi));
++    eprintln!("P36 shareline={} parallel={parallel} d={d:e} stretch={:e} edge={elen:e} star_to_p={:?} star_to_ends={:?}",
++        parallel && on, a.distance(b), star.map(|s| s.distance(p)), star.map(|s| (s.distance(a), s.distance(b))));
++    let _ = (HPoint::from_dy(DyV3::from_f64(0.0, 0.0, 0.0)),);
++}
+diff --git a/kernel/forge-bool/src/classify.rs b/kernel/forge-bool/src/classify.rs
+index b56c7e2b..b971dfaf 100644
+--- a/kernel/forge-bool/src/classify.rs
++++ b/kernel/forge-bool/src/classify.rs
+@@ -601,6 +601,7 @@ impl<'a> Index<'a> {
+                 crate::boolean::log::on_edge_at(body, co.edge, p, d, reach, "point_in_face: nearest edge");
+             });
+             if d <= reach && !past() {
++                probe_pif_on(body, f, c, p, d);
+                 return Where::On;
+             }
+             // the polygon of the loop can be off by its chord sag near curved edges; decide those by side
+@@ -1657,3 +1658,35 @@ mod simple_vs_polygon {
+         assert!(decided > 1000);
+     }
+ }
++
++// PROBE (temporary): point_in_face's nearest-edge On on a plane face with a line edge: exactly on
++// the face's plane but not on the plane across.
++fn exact_side(s: &Surface, p: Point3) -> Option<i32> {
++    use forge_math::exact::{DyPlane, DyV3, HPoint};
++    let Surface::Plane(pl) = s else { return None };
++    let o = pl.frame.origin;
++    let n = pl.frame.z().get();
++    let pp = DyPlane::from_frame([o.x, o.y, o.z], [n.x, n.y, n.z]);
++    Some(pp.side(&HPoint::from_dy(DyV3::from_f64(p.x, p.y, p.z))))
++}
++fn probe_pif_on(body: &Body, f: FaceId, c: forge_topo::CoedgeId, p: Point3, d: f64) {
++    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
++    if !*ON.get_or_init(|| std::env::var("FORGE_PROBE_ON").is_ok()) {
++        return;
++    }
++    let own = exact_side(&body.face(f).surface, p);
++    let e = body.edge(body.coedge(c).edge);
++    if !matches!(e.curve, Curve::Line(_)) || own != Some(0) {
++        return;
++    }
++    let across = body.partner(c).map(|o| body.coedge_face(o)).filter(|&g| g != f);
++    let acr = across.and_then(|g| exact_side(&body.face(g).surface, p));
++    if acr == Some(0) {
++        return;
++    }
++    LAST36.with(|l| l.set(Some((c, across.unwrap(), d))));
++}
++
++thread_local! {
++    pub(crate) static LAST36: std::cell::Cell<Option<(forge_topo::CoedgeId, FaceId, f64)>> = const { std::cell::Cell::new(None) };
++}
