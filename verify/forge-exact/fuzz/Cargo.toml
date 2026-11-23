@@ -11,6 +11,12 @@ repository.workspace = true
 name = "exact-fuzz"
 path = "src/main.rs"
 
+# The swept solids against their definitions: every extrude of every repo part, and random ones
+# (sweep-ref, built by `lake build` in verify/forge-exact).
+[[bin]]
+name = "sweep-diff"
+path = "src/sweep_main.rs"
+
 # The tests that ask the compiled Lean reference: built by `lake build` in verify/forge-exact, so
 # they run where that has happened (the forge-exact workflow), not in a plain `cargo test --workspace`
 [features]
@@ -23,6 +29,7 @@ forge-topo = { path = "../../../kernel/forge-topo" }
 forge-model = { path = "../../../kernel/forge-model" }
 forge-ops = { path = "../../../kernel/forge-ops" }
 forge-bool = { path = "../../../kernel/forge-bool" }
+forge-mesh = { path = "../../../kernel/forge-mesh" }
 forge-proof = { path = "../../forge-proof" }
 forge-lang = { path = "../../../interface/forge-lang" }
 

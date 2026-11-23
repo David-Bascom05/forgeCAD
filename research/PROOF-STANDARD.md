@@ -37,7 +37,7 @@ has been reported to the master.
 | Sketch solver | fundamentals (item 5) | — | L1 |
 | Intersection tracing | trace | step lemma (Krawczyk) | phase B, binary64 |
 | .fg language | ieee (language proofs) | lexer, LL(1), edits, reparse | — |
-| Extrude / revolve / sweep / loft / coil / thread | — | — | **unowned** |
+| Extrude / revolve / sweep / loft / coil / thread | sweep-spec | extrude: L1 (`Prism`, `through_finite`), L2 over ℚ (polygons), L6 (`sweep-diff`, interim L4); taper: L1 algebra (mitre, events linear), the decided rule, L2 over ℚ (rational edge lengths), L6 | taper fix (import session); revolve QForm; coil_injective (research/sweep-spec) |
 | Shell / draft / hole / rib / thicken | — | — | **unowned** |
 | Surfaces and thin | surfaces | — | ValidSheet with fundamentals |
 | Sketch text | sketch-text | exact glyph geometry | L1 |

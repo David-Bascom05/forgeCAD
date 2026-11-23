@@ -123,6 +123,7 @@ dependencies = [
  "forge-geom",
  "forge-lang",
  "forge-math",
+ "forge-mesh",
  "forge-model",
  "forge-ops",
  "forge-proof",
