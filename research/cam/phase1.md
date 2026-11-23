@@ -10,8 +10,9 @@ Branch claude/repo-review-mbdrlj-cam. User doc: docs/cam.md. Phase 0: phase0.md.
 | exact region booleans | forge-cam-geom/boolean.rs | done; L6 fuzz (60 cases, >10k points) |
 | tools as revolved profiles | forge-cam-geom/tool.rs | flat, ball, bull, chamfer/spot/countersink/engrave, drill; taps, thread mills, reamers as envelopes |
 | certified checker | forge-cam-geom/check.rs (B&B), slab.rs (2.5D closed form) | done; L6 differential |
-| B-rep lowering, section | kernel/forge-cam (lower, section) | planes and z-cylinders; other faces refused by kind |
-| in-process stock (2.5D) | forge-cam/stock.rs | box minus proven-cleared voids (openings, bands, holes) |
+| B-rep lowering, section | kernel/forge-cam (lower, section) | planes, and cylinders, cones, tori about z; others refused by kind; turned over for a second setup (lower::turned) |
+| in-process stock (2.5D) | forge-cam/stock.rs | box minus proven-cleared voids (openings, bands, holes), and voids from below for a turned-over setup |
+| workholding | forge-cam/fixture.rs | vises (jaws, parallels, bed) and soft jaws cut to what the earlier setup left; every body keeps the fixture clearance (G2 corrected); generic presets in forge-tooling/data/fixtures.toml |
 | ops | forge-cam/ops.rs | facing, clear, contour, pocket (hole), drill/peck/tap cycles; linking by retract |
 | libraries | kernel/forge-tooling | tools, holders, assemblies, machines, cutting groups; feeds with chip thinning, ball D_eff, power |
 | post | kernel/forge-post | fanuc, haas, linuxcnc, grbl as data; exact quantisation; reader; round trip |
@@ -53,6 +54,10 @@ and bolt-hole rapids into stock nobody had cleared (both now test cases with typ
 - G4 is computed exactly for 2.5D (the one-sided bound S_end ⊆ (P ⊕ B_tol) ∪ L); P ⊆ S_end follows
   from G1 on every cut.
 
+Two setups with soft jaws (examples/machined/bracket_cam.fg): op1 in a vise, the jaws cut in
+their own setup, op2 turned over in them; three programs, every op certified, 0.9 s. G4 lists the
+notch's sharp inside corners (no end mill reaches them).
+
 ## Gaps, in order
 
 1. Lean L1 for G1–G6 and the monotonicity lemma (needs the toolchain).
@@ -61,6 +66,8 @@ and bolt-hole rapids into stock nobody had cleared (both now test cases with typ
    reasons (tool radius, reach) are not yet classified: every region says "uncut".
 3. Ops: slot, chamfer (deburr), thread milling, engraving, inside contours of pockets with
    islands from the part; helical ramps (the B&B certifies them; generation is missing).
-4. Lowering for cones and tori (chamfers, fillets): the B&B takes them; the lowering refuses.
-5. Speed: a grid over face boxes; the 10⁵-move line at 3.2 s is above the 1 s target.
-6. The Manufacture workspace in the app (UI session): the reply above is its data contract.
+4. Declared removals Δ (deburr, chamfer and thread milling where the model lacks the geometry).
+5. Speed: a grid over face boxes and shared distances (−40% instructions); the 10⁵-move line at
+   2.7 s is above the 1 s target; next, an f64 filter with a proven error bound.
+6. G5 (axis limits) is not checked yet; G4 uses tol where it should use δ + ε (leave).
+7. The Manufacture workspace in the app (UI session): the reply above is its data contract.
