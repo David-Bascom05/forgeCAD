@@ -5,4 +5,8 @@ import ForgeExact.Snap
 import ForgeExact.SnapSym
 import ForgeExact.RefFacts
 import ForgeExact.Ref.Input
+import ForgeExact.Alg.Sum
+import ForgeExact.Alg.Examples
+import ForgeExact.Quad.Cert
+import ForgeExact.QRef.Run
 import ForgeExact.Axioms
