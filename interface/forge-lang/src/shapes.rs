@@ -121,8 +121,8 @@ fn names_arg(a: &Args, k: &'static str) -> R<Vec<Name>> {
     Ok(faces_arg(a, k)?.map(|f| f.names.clone()).unwrap_or_default())
 }
 
-/// A sweep's or coil's end (`upto:`): a face set, a work plane or a sketch's plane (`.fc`'s
-/// `to PLANE`); None when not given (or unknown after an earlier failure).
+/// A sweep's or coil's end (`upto:`): a face set, a work plane or a sketch's plane;
+/// None when not given (or unknown after an earlier failure).
 fn end_arg(ev: &Eval, a: &Args, k: &'static str) -> R<Option<Target>> {
     match a.opt(k) {
         None | Some(Value::Unresolved) => Ok(None),
