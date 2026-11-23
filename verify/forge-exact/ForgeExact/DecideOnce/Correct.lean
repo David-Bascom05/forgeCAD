@@ -15,9 +15,9 @@ decision it holds is the snapped geometry's:
   across it (the Jordan–Brouwer property of a closed B-rep, with point-in-face decided right);
 * `edges`, `verts`: the edge and vertex cells listed are exactly the arrangement's cells of
   dimension 1 and 0 round the pieces;
-* `compat`: each solid's membership is constant on every full cell of the arrangement. For
-  polyhedral solids given as formulas (`Flat.HForm`) this is proven (`Flat.HForm.den_iff_onSigns`);
-  for a B-rep classified by ray parity it is RefFacts' one assumption.
+* `compat`: each solid's membership is constant on every full cell of the arrangement. Proven for
+  polyhedral solids given as formulas (`nef_compat`) and, by Jordan–Brouwer (`Jordan.contains_const`),
+  for closed flat-faced B-reps classified by the reference's ray parity (`brep_compat`).
 
 **Theorem (c).** For an exact ledger and any op:
 
@@ -76,15 +76,20 @@ theorem covOf_full : ∀ (ps : List Plane) (x : V3), ¬Flat.wall ps x → covOf 
 /-- **The full cells are a decomposition** compatible with any solids whose membership is constant
 on each (the generalisation of the box family's grid, Coverage/Correct.lean, to any planes). -/
 def topeDecomp (ps : List Plane) (hps : ∀ p ∈ ps, p.n ≠ ⟨0, 0, 0⟩) (A : Nat → Pred V3)
-    (hc : ∀ T i, (covCell ps T).Sub (A i) ∨ ∀ x, covCell ps T x → ¬A i x) :
+    (hc : ∀ T ∈ fulls ps.length, ∀ i, (covCell ps T).Sub (A i) ∨ ∀ x, covCell ps T x → ¬A i x) :
     Decomposition.{0, 0, 0} A where
   κ := Cov
   cells := fulls ps.length
-  cell := covCell ps
+  cell T x := T ∈ fulls ps.length ∧ covCell ps T x
   wall := Flat.wall ps
   wall_nowhereDense := Flat.wall_nowhereDense ps hps
-  cover x h := ⟨covOf ps x, covOf_full ps x h, covCell_covOf ps x⟩
-  compatible T i := hc T i
+  cover x h := ⟨covOf ps x, covOf_full ps x h, covOf_full ps x h, covCell_covOf ps x⟩
+  compatible T i := by
+    by_cases hT : T ∈ fulls ps.length
+    · rcases hc T hT i with hs | hd
+      · exact Or.inl fun x hx => hs x hx.2
+      · exact Or.inr fun x hx => hd x hx.2
+    · exact Or.inr fun x hx => absurd hx.1 hT
 
 /-! ## The exact facts -/
 
@@ -114,7 +119,7 @@ def IsEdge (ps : List Plane) (X : Cov) : Prop :=
 /-- **An exact ledger**: every decision it holds is the snapped geometry's. -/
 structure Exact (L : Ledger) (ps : List Plane) (A : Nat → Pred V3) : Prop where
   nonzero : ∀ p ∈ ps, p.n ≠ ⟨0, 0, 0⟩
-  compat : ∀ T i, (covCell ps T).Sub (A i) ∨ ∀ x, covCell ps T x → ¬A i x
+  compat : ∀ T ∈ fulls ps.length, ∀ i, (covCell ps T).Sub (A i) ∨ ∀ x, covCell ps T x → ¬A i x
   pieceFacet : ∀ p ∈ L.pieces, p.1.isFacet = true ∧ p.1.zeroIdx = L.clsOf p.2 ∧ L.bodyOf p.2 < L.nb
   oneFace : ∀ p ∈ L.pieces, ∀ q ∈ L.pieces, q.1 = p.1 → L.bodyOf q.2 = L.bodyOf p.2 → q.2 = p.2
   pieceReal : ∀ p ∈ L.pieces, Realised ps p.1
@@ -228,10 +233,10 @@ def opnds (L : Ledger) (A : Nat → Pred V3) : Nat → Pred V3 := fun i x => i <
 noncomputable def ruleOp (rule : Rule) : (Nat → Prop) → Prop :=
   fun m => rule (fun i => @decide (m i) (Classical.propDecidable _)) = true
 
-theorem opnds_compat (h : Exact L ps A) (T : Cov) (i : Nat) :
+theorem opnds_compat (h : Exact L ps A) (T : Cov) (hT : T ∈ fulls ps.length) (i : Nat) :
     (covCell ps T).Sub (opnds L A i) ∨ ∀ x, covCell ps T x → ¬opnds L A i x := by
   by_cases hi : i < L.nb
-  · rcases h.compat T i with hs | hd
+  · rcases h.compat T hT i with hs | hd
     · exact Or.inl fun x hx => ⟨hi, hs x hx⟩
     · exact Or.inr fun x hx ⟨_, ha⟩ => hd x hx ha
   · exact Or.inr fun x _ ⟨h', _⟩ => hi h'
@@ -241,7 +246,8 @@ def decomp (h : Exact L ps A) : Decomposition.{0, 0, 0} (opnds L A) :=
   topeDecomp ps h.nonzero (opnds L A) (opnds_compat h)
 
 /-- The exact keep is the op at every point of the cell. -/
-theorem xkeep_iff (h : Exact L ps A) (rule : Rule) (T : Cov) (x : V3) (hx : covCell ps T x) :
+theorem xkeep_iff (h : Exact L ps A) (rule : Rule) (T : Cov) (hT : T ∈ fulls ps.length) (x : V3)
+    (hx : covCell ps T x) :
     xkeep L ps A rule T = true ↔ ruleOp rule fun i => opnds L A i x := by
   unfold xkeep ruleOp opnds
   have : (fun i => @decide (i < L.nb ∧ memT ps A T i) (Classical.propDecidable _)) =
@@ -249,7 +255,7 @@ theorem xkeep_iff (h : Exact L ps A) (rule : Rule) (T : Cov) (x : V3) (hx : covC
     funext i
     apply Bool.eq_iff_iff.mpr
     simp only [decide_eq_true_iff]
-    rcases h.compat T i with hs | hd
+    rcases h.compat T hT i with hs | hd
     · exact ⟨fun ⟨a, _⟩ => ⟨a, hs x hx⟩, fun ⟨a, _⟩ => ⟨a, x, hx, hs x hx⟩⟩
     · exact ⟨fun ⟨_, y, hy, hay⟩ => absurd hay (hd y hy), fun ⟨_, hax⟩ => absurd hax (hd x hx)⟩
   rw [this]
@@ -262,7 +268,7 @@ theorem correct (h : Exact L ps A) (rule : Rule) :
     (∀ φ, φ ∈ L.result (L.keepTab rule) ↔ XBoundary L ps A rule φ) ∧
     reg ((decomp h).kept fun T => xkeep L ps A rule T = true) =
       reg (combine (ruleOp rule) (opnds L A)) :=
-  ⟨result_iff h rule, reg_kept (decomp h) (ruleOp rule) _ fun T x hx => xkeep_iff h rule T x hx⟩
+  ⟨result_iff h rule, reg_kept (decomp h) (ruleOp rule) _ fun T x hx => xkeep_iff h rule T hx.1 x hx.2⟩
 
 /-- **A valid result is the exact boolean.** If the core answers a body, the body is valid, its
 faces partition exactly the exact boundary facets, and the cells those facets bound regularise to

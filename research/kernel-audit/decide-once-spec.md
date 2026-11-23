@@ -22,6 +22,54 @@ classes, fans, faces, edges) is the transitive closure of a decided relation, ne
 by distance. It has no retry: the two refusals that started the ladder are unreachable for every
 consistent ledger.
 
+## 1a. The fact kinds, from the algorithm's structure, and their completeness
+
+Any B-rep boolean of flat-faced solids must answer, for its inputs and nothing else:
+
+1. **To split:** where each face is cut. A face is cut by every carrier crossing it, so the
+   question is *which side of carrier class `j` a cell is on* (K2, `side`), and before that *which
+   carriers are one surface* (K1, `surface`). The pieces of a face are then the cells of its
+   carrier inside it: *is this facet inside this face* (K3, `pieces`).
+2. **To classify:** *is this cell inside this body*. Off the boundary it cannot change, so it is
+   asked once per flood class (K4, `inside`); everything else is propagated by K3 (being in body
+   `i` changes only across a piece of `i`).
+3. **To assemble and check the result:** *which cells are edges and vertices* round the pieces
+   (K5, `edges`/`verts`), so that the facets round each can be counted and their fans formed.
+
+These five are the core's whole input: `core : Ledger → Rule → Outcome` and `Ledger` holds K1–K5
+and the inputs' names, nothing else, so no other fact can be asked. **They are complete**: theorem
+(c) holds for *every* ledger exact for *any* snapped flat geometry (any number of carriers, faces
+and bodies, any configuration), so no configuration needs a further kind.
+
+Against decisions.md's list (a cross-check of what today's kernel asks, not the source):
+- *two faces one surface* is K1; *vertex on surface* is K2;
+- *point on edge*, *point at vertex*, *two cuts one vertex* and *curve along edge* are not
+  primitive: each is a comparison of K2 rows (`Decisions.ask`), so they cannot disagree with each
+  other or with K2 (the closure laws);
+- *touch or crossing* is dropped as a kind: the core never asks it. For planes a line meets a
+  carrier transversally or lies in it (a K2 answer), and a *body* touching another is decided by
+  the touch rule on K3–K5, not by a contact predicate. It stays in `Fact` only as a derived lookup
+  for the bridge's own use;
+- *point in face* (K3), *inside the body* (K4) and *cell dimension* (K5) are added: decisions.md
+  logs them as sites, not kinds, but the algorithm cannot run without them.
+
+## 1b. Generality of the theorems
+
+- No logged input, fuzz seed or test part appears in any definition or in the proof of (a)–(c).
+  They quantify over all ledgers (b), and over all carriers `ps : List Plane`, all solids
+  `A : Nat → Pred V3` and all exact ledgers for them (c).
+- Global correctness is never by listing configurations: (c) is `reg_kept` over the decomposition
+  of ℚ³ into the arrangement's full cells (`topeDecomp`, for any list of planes, built by induction
+  on the list as in `Flat`), and the flood is proven right by induction along the chain of
+  crossings joining a cell to its witness (`memb_eq`, `Conn.invariant`). Classes, fans and faces
+  are transitive closures, characterised by `cls_spec` for every list.
+- Local finite checks appear only where a step is about one cell: the face order `Cov.le`, a
+  facet's two sides, counting the result facets round one edge (`three_iff`), the fans round one
+  vertex. Each holds for every geometry giving those answers.
+- The six acceptance tests (§5 (d)) are instances, checked after the general theorems and only as
+  corollaries of them (`rung_covered`, `rung_exact`); the box ledgers' `decide` checks prove that
+  those instances are consistent, nothing more.
+
 ## 2. The ledger
 
 ### 2.1 The two primitive tables
@@ -92,6 +140,15 @@ has exactly one zero. Its sides: `plus X` and `minus X` set that zero to `pos` /
    one side in `i` and one out. Else `InconsistentClassification`.
 4. **Keep.** `keep T = rule (i ↦ i < nb ∧ memb i T)`, tabled once per tope (`keepTab`); every later
    stage looks it up (`keepIn`).
+4b. **Collapse the sub-LINEAR features** (§6.1 step 3; `DecideOnce/Metric.lean`, `coreM`). The
+   metric ledger holds two more tables, decided once per side cell by the bridge: `thin` (the cell
+   is thinner than LINEAR) and `enclosed` (every facet of the cell is a piece). The thin cells fall
+   into features: classes under "adjacent across a facet" (`comp`). A feature's rim is the
+   non-thin cells adjacent to it (`rim`). If every feature's rim is kept alike and every cell of it
+   is enclosed, each thin cell takes its rim's keep (a feature with no rim keeps its own); the
+   keep table is replaced (`collapse`). Otherwise the first thin cell (in `topes` order) whose
+   feature is not so is refused `ZeroThickness` at that cell. With empty `thin` the stage is the
+   identity.
 5. **Assemble.** `result` = the facets whose two sides' keeps differ, in `facets` order.
    `orient φ` = `pos` if the minus side is kept (outward points to the dropped side), else `neg`.
 6. **Touch rule.** `around x` = the result facets `φ` with `le x φ`.
@@ -145,9 +202,14 @@ pub struct Ledger {                // built once, read-only to the core
     pub edges: Vec<CellId>,
     pub verts: Vec<CellId>,
 }
+pub struct MetricLedger {          // §6.1 step 3, built once, read-only
+    pub thin: Vec<CellId>,         // side cells thinner than LINEAR
+    pub enclosed: Vec<CellId>,     // side cells every facet of which is a piece
+}
 pub enum Rule { Union, Inter, Diff, Table(Vec<bool>) /* 2^nb rows for a history */ }
 
-pub fn core(l: &Ledger, rule: &Rule) -> Outcome;      // the whole of §3
+pub fn core(l: &Ledger, rule: &Rule, m: &MetricLedger) -> Outcome;   // the whole of §3 (coreM)
+fn collapse(l: &Ledger, kt: &KeepTab, m: &MetricLedger) -> Result<KeepTab, CellId>; // stage 4b
 fn unify(l: &Ledger, asm: &Assembled) -> Body;        // reads by reference, returns a fresh Body
 ```
 
@@ -214,6 +276,55 @@ snapped geometry's (carriers `ps`, solids `A`); hypotheses listed in §6. Then:
   than one fan, defined from the geometry alone.
 - `nef_compat`: `compat` holds for solids given as half-space formulas (`Flat.HForm`, Nef
   polyhedra) whose planes are carriers in either sense, on every cell.
+- `brep_compat` (`DecideOnce/BRep.lean`): `compat` holds for solids given as the reference's
+  B-reps (faces with loops, membership by ray parity, `Ref.Solid.contains`) that are closed and
+  flat-faced, with every face plane a carrier up to a nonzero scale. It rests on
+  `Jordan.contains_const` (§6.1 below).
+- **(c) for every box family** (`DecideOnce/BoxesExact.lean`): `box_exact` proves every field of
+  `Exact` for the box generator, `Exact (boxLedger K boxes) (gridPs K) (boxA boxes)`, for every
+  finite list of boxes on the grid `0 .. K` (each of positive extent on every axis), with no
+  other hypothesis. So `box_correct` (each `ok` body is the exact regularised boolean of the open
+  boxes, its faces exactly the boundary facets) and `box_refused_iff` (the zero-thickness refusal
+  is exactly `XNonManifold`) are theorems for all box families, under every rule, not only the
+  instances of (d). The proof works in doubled coordinates (`DCell`: even = on a grid plane, odd =
+  between): a cell's covector is `cov K c` (`covCell_eq_covOf`, `cov_inj`), its dimension is its
+  number of odd coordinates (`isEdge_iff`, `isVert_iff`, from the rank of the zero normals), and
+  the generator's facets, edges and vertices are the box faces' doubled cells and their bumps
+  (`box_boundary`, `box_complete`, `box_edges`, `box_verts`). All of §6 2–5 is discharged for this
+  generator.
+- **(c) for every flat input** (`DecideOnce/Sample.lean`): `sample_exact` proves every field of
+  `Exact` for `sampleLedger ps ss X`, the ledger built from the reference's flat B-reps `ss`
+  (`Ref.Solid`, ray parity), the carriers `ps` and sample points `X`. The hypotheses are only:
+  - nonzero carrier normals;
+  - `FlatInput`: each solid is `FacesFlat` and `Closed`, with face planes carriers up to scale;
+  - `Samples`: the samples hit every cell the boundary needs. This is implied by `Covers`, which
+    asks for a point in every cell lying in a carrier, a statement about the arrangement alone.
+
+  The decisions, each made once by evaluating the reference:
+  - *piece of body `i`* (`flipB`): `i`'s ray parity differs at the two points stepped off the
+    facet's sample across its carrier (`sideAt`, `side_cells`). No point-in-face test is needed.
+    `flip_iff` proves this is exactly `Flip`, by `brep_compat`;
+  - *side cell inside body `i`*: the ray at its side point;
+  - *edge / vertex*: the samples' cells of rank 2 / 3 (`IsEdge`, `IsVert`, decided exactly) below a
+    facet.
+
+  `sample_correct` is then (c) for every flat input. With the complete sampler (`Sampler.lean`,
+  `sampler_covers`), `flat_correct` states it with no hypothesis on the samples. Each `ok` body is
+  the exact regularised boolean of the reference's solids, with its faces exactly the boundary
+  facets. The zero-thickness refusal
+  is exactly `XNonManifold`. Checked by `#guard` on boxes given as B-reps: a cube is 6 / 12 / 8,
+  two cubes face to face give one box, and two cubes along an edge are refused.
+
+**The metric ledger** (`Metric.lean`), for every ledger, keep table and metric tables:
+`collapse_local` (no cell that is not thin changes), `collapse_comp` (one feature, one keep),
+`collapse_uniform` (a thin cell takes its rim's keep), `collapse_idem` (collapsing again changes
+nothing), `collapse_subset` (the collapse only deletes result facets, never adds one),
+`collapse_refuse` (a refusal names a thin cell whose feature's rim is kept both ways or that is not
+enclosed), `coverageM` ((b) with the stage: empty, a valid body, a stated ZeroThickness at a
+non-manifold cell, or at a thin feature), `correct_off_thin` (for an exact ledger, a facet neither
+of whose sides is thin is in the collapsed result iff it is an exact boundary facet). Checked by
+`#guard`: a sub-LINEAR enclosed void in a block is filled (one box: 6 / 12 / 8, against 12 / 24 / 16
+without the stage); a sub-LINEAR fin on a plate is refused at the fin's cell.
 
 **(d) The six rescues** (`Rungs.lean`). `rung_covered`, `rung_exact`: any instance, under every
 consistent reading of the fact its rung flipped, falls under (b) with no retry, and the exact
@@ -239,34 +350,81 @@ cell; face to face → one box, 6 / 12 / 8 (exact-comparison.md's "contact left 
 
 ## 6. Hypotheses: what is not proven, and why
 
-1. **`compat` for B-reps** (membership constant on each cell of the arrangement). Proven for
-   half-space formulas (`nef_compat`). For a B-rep given by faces and loops, classified by ray
-   parity, it is the Jordan–Brouwer property of a closed polyhedral surface: RefFacts' one
-   assumption. Not proven: it needs a proof that ray parity is invariant under moving the ray's
-   origin within a cell, i.e. the parity changes only when the origin crosses a face, which in turn
-   needs the closedness of the surface (each edge used by an even number of faces, consistently)
-   as a hypothesis and a general-position argument over the perturbed ray. Research-hard in core
-   Lean without a topology library; stated, not used anywhere else.
+1. ~~**`compat` for B-reps**~~ **proven** (`ForgeExact/Jordan.lean`, `contains_const`; used by
+   `brep_compat`). The reference's ray-parity membership of a B-rep whose loops lie in their face
+   planes (`FacesFlat`) and whose edges are each used an even number of times, either way round
+   (`Closed`), is the same at any two points strictly on one side of every face plane. This was
+   RefFacts' one assumption. The proof, with no topology and no listing of configurations:
+   - *perturbation* (`crosses_eq`, `pierced_eq`, `contains_eq`): the reference's simulation of
+     simplicity (the ray's origin moved by `(0, ε, ε²)`) is the exact count at `q + (0, δ, δ²)` for
+     every rational `δ` below an explicit bound (`bnd`: a quadratic's sign near 0 is its lowest
+     nonzero coefficient's, `small_pos`), and there every test is in general position;
+   - *one move* (`move_rise`, `move_level`, `move_x`): from `p + (0, δ, δ²)` to `q + (0, δ, δ²)`,
+     a single straight move, with no staircase. Per face (`face_step`), its pierce status changes
+     by the parity of its edges crossing the half-strip the ray sweeps along the move, and only
+     faces ahead of the move count (`ahead_of_over`). Per edge (`seg_identity`), the edge's
+     crossings of the two rays and of the move have the parity of its ends lying in the half-strip,
+     which cancels round each closed loop (`telescope`). Summed over the faces, each edge is counted
+     an even number of times (`xor_even`), so the parity does not change;
+   - *the sweep* (`Aff.sweep3`), the one local fact, along one edge: crossing the boundary of the
+     region where three affine functions are positive, at points where the other two are, has
+     the parity of the region holding at the two ends. Proven by cases on the three functions'
+     kinds (each positive, negative, rising or falling across [0, 1]), which hold for every
+     geometry.
+
+   `FacesFlat` and `Closed` are what the kernel's `check` certifies of the tools it hands over.
 2. **`boundary`, `complete`** (a facet is a piece of a face of body `i` iff body `i`'s membership
-   flips across it). Jordan–Brouwer again, plus the point-in-face decisions being right. This is
+   flips across it). Proven for the box generator (`box_boundary`, `box_complete`). **Proven for every flat input** (`Sample.lean`): with pieces decided by the
+   ray on both sides (`flipB`), `boundary` is `s_boundary` (by `flip_iff`) and `complete` is
+   `s_complete`, given `Samples`. Jordan–Brouwer again, plus the point-in-face decisions being right. This is
    the bridge's obligation (README §8.2): the predicate that fills `pieces` must be the exact one
    in the representative plane.
-3. **`witness`** (each witness answer is the solid's membership). The ray's obligation: exact
-   rational ray parity with the reference's perturbation (`Ref.crossesYZ`).
+3. ~~**`witness`**~~ **proven** for B-reps (`DecideOnce/Witness.lean`, `witness_of_samples`): if each
+   witness answer is the reference's ray parity (`Ref.Solid.contains`) at one point of its side
+   cell, every answer is the solid's membership in the cell (by `brep_compat`). The point is given by
+   `side_point`: from any point `m` of a piece (which `pieceReal` already asks the bridge for),
+   the step `m ± δ n_P` with `δ` under `stepBound` (every other carrier's slack at `m`) lies in the
+   piece's plus (minus) side cell. The bridge's remaining obligation here is only to evaluate the
+   reference's ray exactly at that point.
 4. **`edges`, `verts`** (the listed cells of dimension 1 and 0 round the pieces are exactly the
-   arrangement's). The bridge enumerates them from the pieces; dimension is the exact rank of the
+   arrangement's). Proven for the box generator (`box_edges`, `box_verts`). **Proven for every flat input** given `Samples` (`s_low`). The bridge enumerates them from the pieces; dimension is the exact rank of the
    zero classes' normals (`IsEdge`, `IsVert`).
-5. **`pieceReal`** (each piece is a cell with a point). The bridge's: a cell with no point is
+5. **`pieceReal`** (each piece is a cell with a point). Proven for the box generator (`box_pieceReal`). **Proven for every flat input** (`s_pieceReal`: each piece is a sample's cell). The bridge's: a cell with no point is
    never listed.
+
+6. ~~**`Samples`**~~ **proven** (`DecideOnce/Sampler.lean`, `sampler_covers`). The executable
+   sampler `sampler ps` hits every cell lying in a carrier (`Covers`), so `flat_exact` and
+   `flat_correct` make `Exact` and (c) theorems for every flat input. The only hypotheses are
+   nonzero carrier normals and `FlatInput`. The route is a slab sweep, one carrier at a time:
+   - *1D* (`cand1_ok`): the candidates are the roots, each root ± 1, each root's midpoint with the
+     next root above (`minAbove`), and 0. For every `t`, one candidate is on the same side of every
+     root;
+   - *2D* (`cover2`): on a carrier, every other carrier is a line `α + β u + γ v` (`coef`, `coef_ev`).
+     Take the 1D candidates of the critical `u` (`crit`: vertical lines' roots, and crossings of
+     non-vertical lines). Between two critical values the lines keep their order (`aff_same`), so
+     a point's place among the lines carries to the sampled vertical line (`emb`). There, the 1D
+     candidates of the lines' heights (`hts`) give a sample with every sign;
+   - *3D*: each carrier is a graph over two coordinates, solved for the first of z, y, x that its
+     normal has (`lift`, `proj`, `lift_proj`).
+
+   Any superset of the sampler's points also works, since `Covers` is monotone in the samples. A
+   bridge may sort or deduplicate.
+
+   For flat inputs, nothing in §6 remains a hypothesis: `flat_correct` holds for every closed
+   flat-faced B-rep on carriers with nonzero normals.
 
 What the theorems do not claim:
 - That each output face is a disc, or the body's Euler characteristic: `Valid` is local
   (manifold at every edge and vertex, faces flat and partitioning the boundary). The global
   topology is the exact set's, by (c), but is not restated combinatorially.
-- §6.1 step 3, the output's sub-LINEAR features (edges shorter than LINEAR, slabs thinner than
-  LINEAR, reported with their locus): not in this core. It is a pass on the output that needs
-  metric facts; it should be a ledger of its own (each output edge's length against LINEAR,
-  decided once) and is the next piece to specify.
+- §6.1 step 3 is specified and its rule proven (stage 4b), but its two metric decisions are the
+  bridge's: `thin` must mean the cell lies within LINEAR of its boundary everywhere (its inradius
+  under LINEAR/2), and `enclosed` that every facet of the cell is a piece. Under those meanings a
+  collapsed feature moves the result by under LINEAR (each filled or removed point is within
+  LINEAR of the rim, which keeps its keep), which is the c·LINEAR slack of README §6; that metric
+  bound is stated, not proven in the Lean, which is combinatorial. Short *edges* (under LINEAR
+  between two vertex cells) are not collapsed: §6.1 step 2 collapses them before the boolean, and
+  after it they bound a thin cell, which the stage handles.
 - The kernel's split today is by the *other* body's carriers only; this spec splits each face at
   *every* carrier crossing it. Unify re-merges, so the faces are the same; the Rust must follow
   the spec (all carriers) for Aeneas equality.
@@ -297,3 +455,10 @@ What the theorems do not claim:
 | `DecideOnce/Ledger.lean` | tables, `Fact`, `ask`, `ask_build`, closure laws, `sideIn_class`, `toCore` |
 | `DecideOnce/Boxes.lean` | box ledgers, `checkConsistent`, `consistent_of_check` |
 | `DecideOnce/Rungs.lean` | the six rungs, `rung_covered`, `rung_exact`, `instances_covered`, the `#guard` checks |
+| `DecideOnce/BRep.lean` | `brep_compat`: `compat` for closed flat-faced B-reps |
+| `Jordan.lean` | Jordan–Brouwer for the reference's ray parity: `contains_const` |
+| `DecideOnce/Metric.lean` | §6.1 step 3: the metric ledger, `collapse`, `coreM`, `coverageM` |
+| `DecideOnce/Witness.lean` | the witness ray: `side_point`, `witness_of_samples` |
+| `DecideOnce/Sample.lean` | the ledger from samples for flat B-reps: `flip_iff`, `sample_exact`, `sample_correct` |
+| `DecideOnce/Sampler.lean` | the complete sampler: `cand1_ok`, `cover2`, `sampler_covers`, `flat_exact`, `flat_correct` |
+| `DecideOnce/BoxesExact.lean` | `Exact` for every box family: `box_exact`, `box_correct`, `box_refused_iff` |

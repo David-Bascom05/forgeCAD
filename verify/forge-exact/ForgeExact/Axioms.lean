@@ -6,6 +6,12 @@ import ForgeExact.RefFacts
 import ForgeExact.DecideOnce.Ledger
 import ForgeExact.DecideOnce.Nef
 import ForgeExact.DecideOnce.Rungs
+import ForgeExact.Jordan
+import ForgeExact.DecideOnce.BRep
+import ForgeExact.DecideOnce.Witness
+import ForgeExact.DecideOnce.BoxesExact
+import ForgeExact.DecideOnce.Sample
+import ForgeExact.DecideOnce.Sampler
 
 /-!
 # Only the standard axioms
@@ -81,3 +87,50 @@ elab "#standard_axioms " ids:ident* : command => do
   ForgeExact.DecideOnce.rung_covered
   ForgeExact.DecideOnce.rung_exact
   ForgeExact.DecideOnce.instances_covered
+  ForgeExact.Jordan.Aff.sweep3
+  ForgeExact.Jordan.seg_identity
+  ForgeExact.Jordan.face_step
+  ForgeExact.Jordan.xor_even
+  ForgeExact.Jordan.move_rise
+  ForgeExact.Jordan.move_level
+  ForgeExact.Jordan.crosses_eq
+  ForgeExact.Jordan.pierced_eq
+  ForgeExact.Jordan.contains_eq
+  ForgeExact.Jordan.contains_const
+  ForgeExact.DecideOnce.brep_compat
+  ForgeExact.DecideOnce.Ledger.coverageK
+  ForgeExact.DecideOnce.Ledger.collapse_local
+  ForgeExact.DecideOnce.Ledger.collapse_uniform
+  ForgeExact.DecideOnce.Ledger.collapse_refuse
+  ForgeExact.DecideOnce.Ledger.collapse_comp
+  ForgeExact.DecideOnce.Ledger.collapse_idem
+  ForgeExact.DecideOnce.Ledger.collapse_subset
+  ForgeExact.DecideOnce.Ledger.coverageM
+  ForgeExact.DecideOnce.correct_off_thin
+  ForgeExact.DecideOnce.side_point
+  ForgeExact.DecideOnce.witness_of_samples
+  ForgeExact.DecideOnce.BoxEx.box_compat
+  ForgeExact.DecideOnce.BoxEx.box_boundary
+  ForgeExact.DecideOnce.BoxEx.box_complete
+  ForgeExact.DecideOnce.BoxEx.box_edges
+  ForgeExact.DecideOnce.BoxEx.box_verts
+  ForgeExact.DecideOnce.BoxEx.box_exact
+  ForgeExact.DecideOnce.BoxEx.box_correct
+  ForgeExact.DecideOnce.BoxEx.box_refused_iff
+  ForgeExact.DecideOnce.Sample.side_cells
+  ForgeExact.DecideOnce.Sample.flip_iff
+  ForgeExact.DecideOnce.Sample.s_witness
+  ForgeExact.DecideOnce.Sample.s_boundary
+  ForgeExact.DecideOnce.Sample.s_complete
+  ForgeExact.DecideOnce.Sample.s_low
+  ForgeExact.DecideOnce.Sample.sample_exact
+  ForgeExact.DecideOnce.Sample.samples_of_covers
+  ForgeExact.DecideOnce.Sample.sample_correct
+  ForgeExact.DecideOnce.Sampler.cand1_ok
+  ForgeExact.DecideOnce.Sampler.emb
+  ForgeExact.DecideOnce.Sampler.cover2
+  ForgeExact.DecideOnce.Sampler.lift_proj
+  ForgeExact.DecideOnce.Sampler.coef_ev
+  ForgeExact.DecideOnce.Sampler.sampler_covers
+  ForgeExact.DecideOnce.Sampler.flat_exact
+  ForgeExact.DecideOnce.Sampler.flat_correct
