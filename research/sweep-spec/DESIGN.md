@@ -178,13 +178,10 @@ This is the answer the taper fix is due to give.
    reduced profile, where a segment that has gone is dropped. This is today's slab path. It
    builds, and the L1 above covers it piecewise. It stays.
 3. **The outer region collapses at h* ≤ d**: its area reaches 0, as with the 80° hexagon pit
-   at h* = √3 / tan 80° ≈ 0.305. The result is **refused** with a new typed error
-   `TaperError::Collapses { at: h* }`, reported at the feature. Section 3 of the brief asks for
-   this ("a taper that collapses" must refuse), and refusing is the only answer that is not a
-   different solid from the one asked for: a pit 0.5 deep cannot be built 0.305 deep.
-   *Decision for the master*: the slab path today returns a roof-topped solid when the outer
-   loop closes. That is a valid set, just shallower. Refusing it is the choice I propose; the
-   alternative is to keep the roof. The scoreboard says which repo parts this changes (§7).
+   at h* = √3 / tan 80° ≈ 0.305. The sections are empty past h*, so the exact set ends there and
+   **the result is the solid up to h* (the roof)**, with a lint "taper closes at h* before d"
+   carrying a fix. This is the master's ruling (2026-11-23). It is today's slab-path answer, and
+   it is exact. A refusal is due only where nothing remains.
 4. **A hole loop closes before d**: this is an E event inside the material, and the region
    keeps positive area. The loop is dropped, the hole ends, and the result builds as in case 2.
 5. **Event S, C or J at h ≤ d**: **refused** with `TaperError::WallsCross { at: h }`.
@@ -192,7 +189,7 @@ This is the answer the taper fix is due to give.
    carriers' polygon is no longer the boundary of any offset region, so every answer the kernel
    could give there is wrong.
 
-For the hexagon pit in taper_collapses.fg, rule 3 gives `Collapses { at: 0.3054… }`. The fault
+For the hexagon pit in taper_collapses.fg, rule 3 gives the exact pyramid pit, 0.3054… deep. The fault
 is at taper.rs:416–417: a successful `draft()` is returned without asking whether an event comes
 before d. The fix computes the first event exactly. It replaces `next_event`, which takes 256
 uniform samples and 60 bisections, assumes wipe-out is monotone (so a transient J can be missed)
@@ -480,9 +477,11 @@ M1 to M4 add no kernel code except `min_r`, which runs only on arcs, does fewer 
 
 The changed answers I expect:
 
-- with the §2.2 rule, any repo part whose tapered outer loop closes before its depth changes from
-  "roof" to `Collapses`. I will list every such part with the scoreboard before anything ships;
+- with the §2.2 rule (the roof kept, per the ruling), no part that builds today changes. Only a
+  taper whose draft path built an invalid body changes, to its exact roof (taper_collapses.fg).
+  Rule 5 (`WallsCross`) changes parts whose walls really cross. I will list every repo part any
+  rule changes before anything ships;
 - exact `min_r` changes only parts where an arc dips across the axis between samples.
 
-No .fg language change is planned. `Collapses` and `WallsCross` are new error variants, not
-syntax.
+No .fg language change is planned. `WallsCross` is a new error variant and the roof a new lint,
+not syntax.

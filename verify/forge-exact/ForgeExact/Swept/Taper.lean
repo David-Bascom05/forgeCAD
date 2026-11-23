@@ -30,7 +30,8 @@ numbers.
 
 **The decided rule** (`Verdict`): no event in `(0, D]` (D = d·t): the one drafted solid; only edge
 events, the region keeping a positive area: stacked slabs, each event-free; the outer loop
-collapsing at `δ* ≤ D`: refuse, `Collapses (δ*/t)`; a corner reaching another edge first: refuse,
+collapsing at `δ* ≤ D`: the solid up to `δ*/t` (the roof: the sections are empty past it), with a
+lint; a corner reaching another edge first: refuse,
 `WallsCross (δ*/t)`; a hole closing: dropped, the rest goes on.
 -/
 
@@ -130,8 +131,9 @@ inductive Verdict (K : Type)
   | draft
   /-- Edge events only, the region keeping a positive area: slabs between these heights. -/
   | slabs (heights : List K)
-  /-- The outer loop's region reaches zero area at this height, at or before the depth. -/
-  | collapses (h : K)
+  /-- The outer loop's region reaches zero area at this height, at or before the depth: the
+  exact set ends there, so the result is the solid up to it (the roof), with a lint. -/
+  | roof (h : K)
   /-- A corner reaches an edge it is not on (within a loop, or between loops) at this height. -/
   | wallsCross (h : K)
 

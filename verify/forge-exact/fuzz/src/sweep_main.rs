@@ -373,8 +373,7 @@ fn main() {
         *counts.entry(v.clone()).or_default() += 1;
     }
     // refused_valid: the kernel refused a definition in the domain (over-refusal, reported, not a
-    // wrong result); built_roof: a taper whose outline closes before its depth, built as the
-    // solid cut off there (DESIGN.md §2.2 rule 3, a decision pending)
+    // wrong result)
     let bad = ["differ", "built_invalid", "selfcheck"];
     for (name, v) in &verdicts {
         if bad.iter().any(|b| v.starts_with(b)) || v.starts_with("error") {

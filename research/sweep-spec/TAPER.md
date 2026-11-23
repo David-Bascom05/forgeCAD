@@ -43,22 +43,24 @@ Let D = |d|·t be the whole offset. Step from τ = 0, taking the next event τ' 
 drop the edges whose length is 0, merging their corners, then:
 
 1. **No event at all**: the one drafted solid (the draft path).
-2. **The outer loop's area is ≤ 0** (fewer than 3 corners, or zero area): it collapses at
-   h = τ'/t. **Due: refuse, `TaperError::Collapses { at }`, at the feature.** This is my proposal,
-   and the master decides it. The alternative is today's slab-path answer: the solid cut off at
-   h, which `sweep-diff` calls `built_roof` and finds exact in every case it built.
+2. **The outer loop's area is ≤ 0** (fewer than 3 corners, or zero area): the outline closes at
+   h* = τ'/t. The sections are empty past h*, so the exact set ends there. **Due: the solid up to
+   h* (the roof), with a lint "taper closes at depth h* before d" carrying a fix.** This is the
+   master's ruling, and it is the slab path's answer today: `sweep-diff` finds it exact in every
+   case the kernel builds. A refusal is due only where nothing remains.
 3. **A hole's area is ≥ 0** (it has closed): drop it and go on.
 4. **The loops that are left are not simple and apart** (a corner has met an edge it is not on):
    **refuse, `TaperError::WallsCross { at: τ'/t }`.**
 5. **Otherwise** (edge events only): a slab from τ to τ', then go on from τ'.
 
-**An event at exactly D** is processed like any other. A collapse at exactly D is still case 2:
-a cap must have positive area.
+**An event at exactly D** is processed like any other. A collapse at exactly D is case 2: the
+solid ends in its apex or ridge exactly at the depth.
 
 For taper_collapses.fg, the exact hexagon (`hexagon_side`: every side is 2 − 2δ/√3 long) collapses
-at δ = √3, so h = √3/tan 80° = 0.30541 against a depth of 0.5. **Due: `Collapses { at: 0.3054 }`.**
-The fixture's comment says 0.36, which is wrong. The fixture's dyadic √3 makes the sides differ
-by an ulp: one pair goes first (case 5), then the rest collapse (case 2). The verdict is the same.
+at δ = √3, so h = √3/tan 80° = 0.30541 against a depth of 0.5. **Due: the exact hexagonal pyramid
+pit, 0.30541 deep, with the lint.** The fix-draft session made it build that way (3bc9dc1) and
+corrected the comment to 0.305. The fixture's dyadic √3 makes the sides differ by an ulp: one
+pair goes first (case 5), then the rest close (case 2). The result is the same.
 
 ## What the kernel does today, measured
 
@@ -68,7 +70,7 @@ depth, some with holes.
 | verdict | n | what |
 |---|---|---|
 | agree | 202 | the kernel's tool is the definition exactly (under the boolean's snap) |
-| built_roof | 26 | the outline closes before the depth; the kernel built the cut-off solid, exactly |
+| roof (counted in agree since the ruling) | 26 | the outline closes before the depth; the kernel built the cut-off solid, exactly |
 | refused_ok | 164 | the rule refuses too |
 | refused_valid | 8 | the kernel refused a taper the rule builds: outward tapers with edge events, the slab path failing its own `check()` (`Draft(Invalid)`) |
 | built_invalid | 0 | no skyline built a wrong body |
@@ -77,7 +79,7 @@ The wrong body (EdgeDegenerate) comes only from the **draft path accepted withou
 (taper.rs:416–417), as in the hexagon. Skylines reach the slab path because their drafts fail
 first.
 
-The kernel's refusals are typed wrongly. Where the rule says Collapses or WallsCross, the kernel
+The kernel's refusals are typed wrongly. Where the rule says roof or WallsCross, the kernel
 says:
 
 - `Draft(BadAngle)` (97): `slab()` maps a failed `offset()`, two carriers that no longer meet, to

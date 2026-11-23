@@ -13,7 +13,8 @@ over the algebraic numbers decide it; that is the Alg step).
 `run` follows the decided rule step by step: from `τ = 0`, the next event in `(τ, D]` is the least
 root of the edges' lengths and the corners' contacts; at it, the edges that have gone are dropped
 and the section is checked: still simple and apart (edge events only: go on), the outer loop
-gone (collapses), a hole gone (dropped), otherwise a corner has met another edge (walls cross).
+gone (the roof: the exact set ends there, so the solid cut off at that height is due), a hole gone
+(dropped), otherwise a corner has met another edge (walls cross: refused).
 -/
 
 namespace ForgeExact.Swept.TaperRef
@@ -251,21 +252,19 @@ def runTaper (j : Json) (l : Rat) : Except String Json := do
   match outcome (oriented loops) sg D with
   | .outOfScope why => return Json.mkObj [("verdict", "out_of_scope"), ("why", why)]
   | .collapses τ steps =>
+    -- the outline closes at τ (the roof, the master's ruling): the exact set ends there, so the
+    -- due result is the solid cut off at τ / t, with a lint, not a refusal
     match kernel with
     | .error _ =>
-      return Json.mkObj [("verdict", "refused_ok"), ("due", "collapses"),
+      return Json.mkObj [("verdict", "refused_valid"), ("closes", "roof"),
         ("at", toString (τ / t)), ("at_f", toJson (qf (τ / t))), ("why", refusedWhy)]
     | .ok kj =>
-      -- built: is it the solid cut off where the outline closes (the roof), or something else?
       let kraw ← rawOf kj
       let side : Rat := if hi > 0 then 1 else -1
       let (lo', hi') := if side > 0 then (lo, τ / t) else (-(τ / t), hi)
       let (ps, box) := taperPlanes F lo' hi' t sg steps τ
-      let c := compare l kraw ps box (taperMem F lo' hi' t sg steps) none
-      let roof := (c.getObjValAs? String "verdict").toOption == some "agree"
-      return Json.mkObj [("verdict", if roof then "built_roof" else "built_invalid"),
-        ("due", "collapses"), ("at", toString (τ / t)), ("at_f", toJson (qf (τ / t))),
-        ("against_roof", c)]
+      return compare l kraw ps box (taperMem F lo' hi' t sg steps) none
+        #[s!"slabs: {steps.size}", s!"closes at {qf (τ / t)} (a roof)"]
   | .wallsCross τ =>
     return Json.mkObj [("verdict", if refused then "refused_ok" else "built_invalid"),
       ("due", "walls_cross"), ("at", toString (τ / t)), ("at_f", toJson (qf (τ / t))),
