@@ -1001,15 +1001,17 @@ fn sort_keys(v: &mut Vec<u64>, tmp: &mut Vec<u64>) {
         s = e;
     }
     if n > 16 {
-        tmp.clear();
-        tmp.resize(n, 0);
+        // (scratch past n is left as it is: no zeroing)
+        if tmp.len() < n {
+            tmp.resize(n, 0);
+        }
         let mut w = 16;
         let mut in_v = true;
         while w < n {
             if in_v {
-                merge_runs(v, tmp, w);
+                merge_runs(v, tmp, n, w);
             } else {
-                merge_runs(tmp, v, w);
+                merge_runs(tmp, v, n, w);
             }
             in_v = if in_v { false } else { true };
             w *= 2;
@@ -1020,6 +1022,45 @@ fn sort_keys(v: &mut Vec<u64>, tmp: &mut Vec<u64>) {
                 v[i] = tmp[i];
                 i += 1;
             }
+        }
+    }
+}
+
+/// The triangles of `look`, each once and marked in `seen`, put in ascending order and unmarked.
+/// Where they are dense in their span (as a round's are: new triangles go on the end), read back
+/// off `seen` across it; elsewhere sorted.
+fn ascending(look: &mut Vec<u64>, seen: &mut [bool], tmp: &mut Vec<u64>) {
+    let n = look.len();
+    if n > 0 {
+        let (mut lo, mut hi) = (look[0], look[0]);
+        let mut k = 1;
+        while k < n {
+            let t = look[k];
+            if t < lo {
+                lo = t;
+            }
+            if t > hi {
+                hi = t;
+            }
+            k += 1;
+        }
+        if hi - lo < 8 * n as u64 {
+            look.clear();
+            let mut t = lo;
+            while t <= hi {
+                if seen[t as usize] {
+                    seen[t as usize] = false;
+                    look.push(t);
+                }
+                t += 1;
+            }
+        } else {
+            let mut k = 0;
+            while k < n {
+                seen[look[k] as usize] = false;
+                k += 1;
+            }
+            sort_keys(look, tmp);
         }
     }
 }
@@ -1042,9 +1083,8 @@ fn sink(v: &mut Vec<u64>, s: usize, i: usize) {
     v[j] = x;
 }
 
-/// One bottom-up merge pass: each two sorted runs of `w` in `src`, merged into `dst`.
-fn merge_runs(src: &[u64], dst: &mut [u64], w: usize) {
-    let n = src.len();
+/// One bottom-up merge pass: each two sorted runs of `w` in `src[..n]`, merged into `dst`.
+fn merge_runs(src: &[u64], dst: &mut [u64], n: usize, w: usize) {
     let mut s = 0;
     while s < n {
         let m = if s + w < n { s + w } else { n };
@@ -1753,12 +1793,7 @@ impl Mesh {
                         self.fan_into(v, &mut seen, &mut look);
                         v += 1;
                     }
-                    let mut k = 0;
-                    while k < look.len() {
-                        seen[look[k] as usize] = false;
-                        k += 1;
-                    }
-                    sort_keys(&mut look, &mut tmp);
+                    ascending(&mut look, &mut seen, &mut tmp);
                     fresh_from = first_new;
                 }
             }
@@ -1867,6 +1902,28 @@ mod tests {
     }
 
     /// A boundary's cost counts against a file's budget: past it, a clean error.
+    #[test]
+    fn ascending_sorts_and_unmarks() {
+        let mut rng = Rng::new(11);
+        let mut tmp = Vec::new();
+        for (n, span) in [(0, 1), (1, 1), (5, 6), (100, 120), (100, 100_000), (3000, 4000)] {
+            let mut seen = vec![false; span + 10];
+            let mut look = Vec::new();
+            while look.len() < n {
+                let t = 5 + rng.below(span);
+                if !seen[t] {
+                    seen[t] = true;
+                    look.push(t as u64);
+                }
+            }
+            let mut want = look.clone();
+            want.sort_unstable();
+            ascending(&mut look, &mut seen, &mut tmp);
+            assert_eq!(look, want);
+            assert!(seen.iter().all(|&s| !s));
+        }
+    }
+
     #[test]
     fn range_is_two_to_the_two_hundred() {
         assert_eq!(RANGE, 2f64.powi(200));
