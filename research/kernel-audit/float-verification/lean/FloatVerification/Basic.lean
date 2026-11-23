@@ -64,7 +64,10 @@ lemma mul_mono {a b c d : F64} (ha : a.isFinite) (hb : b.isFinite) (hc : c.isFin
 
 lemma lt_cases {x y : F64} (h : FP.lt x y = true) :
     x.isNaN = false ∧ y.isNaN = false ∧ x ≠ .inf false ∧ y ≠ .inf true := by
-  cases x <;> cases y <;> simp_all [FP.lt, FP.cmp, isNaN] <;> split_ifs at h <;> simp_all
+  -- (whether `simp_all` leaves the `if` of two infinities or rewrites it away depends on the simp
+  -- set the imports bring; both are closed)
+  cases x <;> cases y <;> simp_all [FP.lt, FP.cmp, isNaN] <;> (try split_ifs at h) <;> (try simp_all) <;>
+    (revert h; cases ‹Bool› <;> cases ‹Bool› <;> simp)
 
 lemma lt_finite {x y : F64} (hx : x.isFinite) (hy : y.isFinite) (h : FP.lt x y = true) :
     x.val < y.val := (lt_iff hx hy).mp h
