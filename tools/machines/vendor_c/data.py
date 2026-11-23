@@ -404,3 +404,179 @@ MACHINES.append(lathe(
            "turret.T1.stations": est("a single tool post, no turret: one station"),
            "turret.T1.index_s": unk("no indexing; 0.1 s held (the format needs > 0)"),
            "machine.control": pub(SL, "PC with LinuxCNC")}))
+
+# ================================================================ slice 2: job-shop builders
+CHG_UNK = "change time unpublished; 0.1 s held (the format needs > 0) so t_min stays a lower bound"
+NOSE_UNK = dict()  # vmc3 with hmin_status="unknown" writes its own basis
+
+# ---- Takumi (takumiusa.com; Fanuc 0i-MF): web pages (VCX versions) held over the 2024 catalog
+TK = "https://takumiusa.com/cnc-machines/{}/"
+TKC = "https://takumiusa.com/wp-content/uploads/2021/08/Takumi-Technical-Catalog.pdf"
+for nm, path, tx, ty, tz, hmin, hmax, table, rpm, iface, rap, feed, pockets, tool, kg, extra in [
+    ("takumi-vc0852", "linear-guide-machining-center/vc0852", 861, 521, 610, 114, 724, (1001, 521), 15000, "CAT40",
+     {"X": 36000, "Y": 36000, "Z": 24000}, 12000, 40, (299.7, 74.9), 7,
+     dict(conflict=("catalog p.12: 12,000 rpm, 15 kW, 24 tools, Fanuc 0i Plus; the web page's 15,000 rpm / 40 "
+                    "tools (newer) held"))),
+    ("takumi-vc1052", "linear-guide-machining-center/vc1052", 1059, 521, 610, 114, 724, (1161, 521), 15000, "CAT40",
+     {"X": 36000, "Y": 36000, "Z": 24000}, 12000, 40, (299.7, 74.9), 7, {}),
+    ("takumi-vc1200", "linear-guide-machining-center/vc1200", 1270, 660, 610, 150, 760, (1501, 660), 15000, "CAT40",
+     {"X": 36000, "Y": 36000, "Z": 24000}, 12000, 40, (299.7, 74.9), 7,
+     dict(conflict=("catalog p.12: 30 tools; the web page's 40 (newer) held"))),
+    ("takumi-vc1500", "linear-guide-machining-center/vc1500", 1524, 762, 610, 120, 729, (1679, 762), 15000, "CAT40",
+     {"X": 36000, "Y": 36000, "Z": 24000}, 12000, 40, (299.7, 74.9), 7, {}),
+    ("takumi-v10", "box-ways-machining-center/v10", 1003, 660, 610, 150, 762, (1059, 650), 12000, "CAT40",
+     {"X": 24000, "Y": 24000, "Z": 20000}, 8000, 32, (300, 79), 7, {}),
+    ("takumi-v11", "box-ways-machining-center/v11", 1100, 660, 610, 150, 762, (1059, 650), 6000, "CAT50",
+     {"X": 24000, "Y": 24000, "Z": 20000}, 8000, 32, (300, 79), 7,
+     dict(table=("catalog p.16: table 1150 x 650 mm; the web page's 1059 x 650 held"))),
+    ("takumi-v15", "box-ways-machining-center/v15", 1524, 762, 719, 150, 871, (1600, 762), 6000, "CAT50",
+     {"X": 18000, "Y": 18000, "Z": 15800}, 5000, 24, (300, 109), 15, {}),
+]:
+    url = TK.format(path)
+    cites = {f"joint.{a}.max_feed": pub(url, f"cutting feed {feed} mm/min") for a in "XYZ"}
+    cites.update({
+        "spindle.S1.rpm": [pub(url, f"max {rpm} rpm"), unk(RPM_MIN_UNK.format(v=100))],
+        "spindle.S1.max": pub(url, f"max tool {tool[1]} mm diameter (adjacent pockets full), {tool[0]} mm long"),
+        "spindle.S1.interface": pub(url, iface),
+        "changer.pockets": pub(url, f"{pockets} tools"),
+        "changer.change_s": unk(CHG_UNK),
+        "changer.max_tool_kg": pub(url, f"max tool weight {kg} kg"),
+        "machine.control": pub(url, "Fanuc 0i-MF"),
+    })
+    if "conflict" in extra:
+        cites["machine.catalog"] = dict(status="conflict", source=TKC, note=extra["conflict"])
+    if "table" in extra:
+        cites["machine.table"] = dict(status="conflict", source=TKC, note=extra["table"])
+    big = iface == "CAT50"
+    MACHINES.append(vmc3(
+        "takumi", nm, "fanuc", url, NOTE + "; Fanuc 0i-MF",
+        tx=tx, ty=ty, tz=tz, hmin=hmin, hmax=hmax, D=ty / 2 + table[1] / 2 + 50, table=table, rapid=rap, feed=feed,
+        rpm=[100, rpm], iface=iface, tmax=tool, changer=(pockets, 0.1, kg), coolants=("flood", "air"),
+        nose_r=100 if big else 75, head=(440, 560) if big else (340, 480), tt=80 if big else 60,
+        rapid_src=False, D_pub=False, cites=cites))
+    for a in "XYZ":
+        MACHINES[-1].cite(f"joint.{a}.rapid", **pub(url, f"rapid {per(rap, a)} mm/min"))
+
+# ---- Hwacheon (Korean site is script-built; numbers from Hwacheon Machinery Europe's pages)
+HW = "https://www.hwacheon-europe.com/en/{}"
+for nm, path, tx, ty, tz, table, rpm, pockets, rap, feed, kw in [
+    ("hwacheon-vesta-660", "universal-milling-machines/vesta-660", 660, 430, 400, (720, 420), 10000, 20,
+     {"X": 36000, "Y": 36000, "Z": 30000}, 24000, "15 / 11 kW, 95.5 / 52.5 Nm (which is continuous not stated)"),
+    ("hwacheon-vesta-1000", "universal-milling-machines/vesta-1000", 1000, 550, 500, (1100, 502), 12000, 30,
+     {"X": 36000, "Y": 36000, "Z": 30000}, 24000, "18.5 kW, 118 Nm"),
+    ("hwacheon-vesta-1100", "universal-milling-machines/vesta-1100", 1100, 600, 600, (1300, 600), 12000, 30,
+     {"X": 36000, "Y": 36000, "Z": 36000}, None, "18.5 kW"),
+]:
+    url = HW.format(path)
+    f = feed or {"X": rap["X"], "Y": rap["Y"], "Z": rap["Z"]}
+    fc = pub(url, f"cutting feed up to {feed} mm/min") if feed else unk(FEED_UNK)
+    cites = {f"joint.{a}.max_feed": fc for a in "XYZ"}
+    cites.update({
+        "spindle.S1.rpm": [pub(url, f"max {rpm} rpm"), unk(RPM_MIN_UNK.format(v=100))],
+        "spindle.S1.max": unk("tool limits unpublished; 250 x 80 mm ours (BT40 class)"),
+        "spindle.S1.interface": pub(url, "BBT-40"),
+        "changer.pockets": pub(url, f"{pockets} tools"),
+        "changer.change_s": unk(CHG_UNK),
+        "changer.max_tool_kg": unk("max tool weight unpublished; 7 kg held (what Takumi publishes for CAT40); "
+                                   "heavier tools are flagged"),
+        "machine.control": pub(url, "Siemens 828D, Fanuc 0i Plus or Heidenhain iTNC 620 (option); fanuc held"),
+        "machine.power": pub(url, kw + "; no curve published"),
+    })
+    MACHINES.append(vmc3(
+        "hwacheon", nm, "fanuc", url,
+        NOTE + "; hwacheon.com builds its pages by script and hwacheonusa.com is parked: numbers from the maker's "
+               "European subsidiary's pages; control by option (Siemens / Fanuc / Heidenhain), fanuc held",
+        tx=tx, ty=ty, tz=tz, hmin=5, hmax=tz + 5, D=ty / 2 + table[1] / 2 + 50, table=table, rapid=rap, feed=f,
+        rpm=[100, rpm], iface="BBT40", tmax=(250, 80), changer=(pockets, 0.1, 7), coolants=("flood", "air"),
+        nose_r=80, head=(360, 480), tt=60, rapid_src=False, hmin_status="unknown", D_pub=False, cites=cites))
+    for a in "XYZ":
+        MACHINES[-1].cite(f"joint.{a}.rapid", **pub(url, f"rapid {rap[a] / 1000:g} m/min"))
+
+HWL = "https://www.hwacheon-europe.com/en/{}"
+for nm, path, xt, zt, swing, turnl, chuck, rpm, rap, st, tr, hs, cl in [
+    ("hwacheon-hi-tech-200a", "heavy-duty-cutting-lathes/hi-tech-200", 195, 430, 500, 401, 200, 5000, 30000, 12, 150, 250, 90),
+    ("hwacheon-cutex-160a", "universal-lathes/cutex-160", 170, 335, 550, 300, 155, 6000, 36000, 12, 140, 220, 80),
+    ("hwacheon-hi-tech-550a", "heavy-duty-cutting-lathes/hi-tech-550", 345, 1150, 800, 1100, 380, 2000,
+     {"X": 20000, "Z": 24000}, 10, 220, 350, 140),
+]:
+    url = HWL.format(path)
+    col = ("the page lists values per variant column without saying which goes with which; the first column "
+           "read as type A")
+    MACHINES.append(lathe(
+        "hwacheon", nm, "fanuc", url,
+        NOTE + "; numbers from Hwacheon Machinery Europe's page; control Siemens 828D or Fanuc 0i Plus (option), "
+               "fanuc held (CAM-TURN owns lathe dialects); " + col,
+        xt=xt, zt=zt, swing=swing, centres=turnl, rpm=[50, rpm], iface=f"{chuck} mm chuck (nose unpublished)",
+        rapid=rap, feed=rap, chuck_r=chuck / 2, chuck_l=cl, stations=st, index_s=0.1, turret_r=tr, hs=hs,
+        chuck_pub=(url, f"chuck {chuck} mm (first variant column)"),
+        cites={"joint.X.range": est(col, source=url, value=f"X travel {xt} mm"),
+               "joint.Z.range": est(col, source=url, value=f"Z travel {zt} mm"),
+               **{f"joint.{a}.rapid": est(col, source=url, value=f"rapid {per(rap, a) / 1000:g} m/min") for a in "XZ"},
+               **{f"joint.{a}.max_feed": unk(FEED_UNK) for a in "XZ"},
+               "spindle.main.rpm": [est(col, source=url, value=f"max {rpm} rpm"), unk(RPM_MIN_UNK.format(v=50))],
+               "spindle.main.max": est(col, source=url, value=f"swing over bed {swing} mm; max turning length {turnl} mm"),
+               "turret.T1.stations": est(col, source=url, value=f"{st}-station turret"),
+               "turret.T1.index_s": unk("index time unpublished; 0.1 s held so t_min stays a lower bound"),
+               "machine.control": pub(url, "Siemens 828D or Fanuc 0i Plus")}))
+
+# ---- Quaser (quaser.com /shop pages; the PDF downloads need a login: not used)
+QS = "https://www.quaser.com/shop/{}"
+for nm, path, tx, ty, tz, table, tool, pockets, typo in [
+    ("quaser-mv1", "hx404-37", 661, 572, 560, (940, 550), (300, 76.2), 30, False),
+    ("quaser-mv3", "mv134-11", 1020, 610, 610, (1200, 600), (280, 76.2), 30, True),
+    ("quaser-mv4-40", "mv134-13", 1270, 700, 610, (1400, 700), (280, 76.2), 30, False),
+    ("quaser-mv5-40", "mv184-14", 1524, 700, 610, (1700, 700), (280, 76.2), 48, False),
+    ("quaser-mv6-40", "mv184-15", 2040, 800, 661, (2250, 800), (300, 76.2), 48, False),
+]:
+    url = QS.format(path)
+    slow = unk("rapids unpublished on the open pages; 10,000 mm/min held low")
+    cites = {f"joint.{a}.{f}": slow if f == "rapid" else unk(FEED_UNK) for a in "XYZ" for f in ("rapid", "max_feed")}
+    cites.update({
+        "spindle.S1.rpm": [pub(url, "spindle options 12,000 to 24,000 rpm" + (" (printed \"112K ~ 24K\")" if typo else "")),
+                           est("the lowest option's 12,000 rpm held as the max (flags more)"),
+                           unk(RPM_MIN_UNK.format(v=100))],
+        "spindle.S1.max": pub(url, f"max tool {tool[1]} mm diameter (adjacent full), {tool[0]} mm long"),
+        "spindle.S1.interface": pub(url, "taper 40"),
+        "changer.pockets": pub(url, f"{pockets} tools"),
+        "changer.change_s": unk(CHG_UNK),
+        "changer.max_tool_kg": unk("max tool weight unpublished; 7 kg held (40 taper class)"),
+        "machine.control": unk("control not stated on the open pages; recorded as \"unknown\""),
+    })
+    MACHINES.append(vmc3(
+        "quaser", nm, "unknown", url,
+        NOTE + "; Quaser's open pages give travels, table, taper, rpm and ATC only (spec PDFs need a login)",
+        tx=tx, ty=ty, tz=tz, hmin=5, hmax=tz + 5, D=ty / 2 + table[1] / 2 + 50, table=table, rapid=10000,
+        feed=10000, rpm=[100, 12000], iface="40 taper", tmax=tool, changer=(pockets, 0.1, 7),
+        coolants=("flood",), nose_r=80, head=(360, 480), tt=60, rapid_src=False, hmin_status="unknown",
+        D_pub=False, cites=cites))
+
+# ---- Smart Machine Tool (smartmachinetool.com; brochures behind a form: not used)
+SM = "https://www.smartmachinetool.com/{}"
+for nm, path, tx, ty, tz, table, kw, pockets in [
+    ("smart-sv1", "products/smart-sv1-linear-way-cat40-12k/", 599, 450, 500, (749, 450), "15/20 hp", None),
+    ("smart-sv2", "vertical-machining-center/sv-2", 701, 450, 500, (800, 450), "20/25 hp", 30),
+    ("smart-sv3", "vertical-machining-center/sv-3cat40_12k", 1050, 520, 520, (1150, 500), "20/25 hp", 30),
+    ("smart-sv4", "vertical-machining-center/sv-4", 1300, 650, 600, (1450, 600), "20/25 hp", 30),
+    ("smart-sv6", "vertical-machining-center/sv-6", 1600, 800, 800, (1750, 800), "20/25 hp", 30),
+]:
+    url = SM.format(path)
+    slow = unk("rapids unpublished; 10,000 mm/min held low")
+    cites = {f"joint.{a}.{f}": slow if f == "rapid" else unk(FEED_UNK) for a in "XYZ" for f in ("rapid", "max_feed")}
+    cites.update({
+        "spindle.S1.rpm": [pub(url, "12,000 rpm"), unk(RPM_MIN_UNK.format(v=100))],
+        "spindle.S1.max": unk("tool limits unpublished; 250 x 80 mm ours (CAT40 class)"),
+        "spindle.S1.interface": pub(url, "CAT40"),
+        "machine.control": unk("control not stated; recorded as \"unknown\""),
+        "machine.power": pub(url, kw + " (inch figures printed without units, read as inches)"),
+    })
+    if pockets:
+        cites.update({"changer.pockets": pub(url, f"ATC {pockets}"), "changer.change_s": unk(CHG_UNK),
+                      "changer.max_tool_kg": unk("max tool weight unpublished; 7 kg held (CAT40 class)")})
+    MACHINES.append(vmc3(
+        "smart", nm, "unknown", url,
+        NOTE + "; the open page gives travels, table, taper, rpm, power and ATC only" +
+        ("" if pockets else "; ATC not stated: no changer recorded (M6 refused)"),
+        tx=tx, ty=ty, tz=tz, hmin=5, hmax=tz + 5, D=ty / 2 + table[1] / 2 + 50, table=table, rapid=10000,
+        feed=10000, rpm=[100, 12000], iface="CAT40", tmax=(250, 80), changer=(pockets, 0.1, 7) if pockets else None,
+        coolants=("flood",), nose_r=80, head=(360, 480), tt=60, rapid_src=False, hmin_status="unknown",
+        D_pub=False, cites=cites))

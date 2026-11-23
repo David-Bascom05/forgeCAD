@@ -319,14 +319,14 @@ def bridge(vendor, name, control, src, note, *, tx, ty, tz, nose, nose_cite, tab
 
 
 def lathe(vendor, name, control, src, note, *, xt, zt, swing, centres, rpm, iface, rapid, feed, chuck_r,
-          chuck_l, stations, index_s, cites, coolants=("flood",), turret_r=120, hs=200):
+          chuck_l, stations, index_s, cites, coolants=("flood",), turret_r=120, hs=200, chuck_pub=None):
     """2-axis lathe, the generic-lathe layout: Z along the spindle (the carriage), X radial (the cross
     slide, programmed as a diameter) on Z, the turret or tool post on X. Origin: the spindle axis at the
     chuck face; the part grows along +z. X = 0 puts the turret face 110 mm from the axis (a tool's
     gauge point); tools reach the axis through their offsets."""
     m = M(vendor, name, "lathe", control, src, note, list(coolants), length_joint=None)
     ax = lambda v, a: v[a] if isinstance(v, dict) else v
-    face = 110
+    face = max(110, chuck_r + 20)
     gap = 30  # turret disc front at Z's bottom, from the chuck face
     zc = gap + 40 + zt  # the turret disc's mid-plane at Z = 0
     m.joints.append(dict(name="Z", parent="base", side="head", type="linear", axis=[0, 0, 1], range=[-zt, 0],
@@ -349,15 +349,19 @@ def lathe(vendor, name, control, src, note, *, xt, zt, swing, centres, rpm, ifac
         for x in (c if isinstance(c, list) else [c]):
             m.cite(path, **x)
     m.cite("joint.X.range", "estimate", basis=f"the travel's length published; its place ([-10, {xt - 10}] mm of "
-           "radius from a tool gauge 110 mm off the axis) is ours; setup offsets absorb it")
+           f"radius from a tool gauge {face} mm off the axis) is ours; setup offsets absorb it")
     m.cite("joint.Z.range", "estimate", basis=ZERO_BASIS)
     m.cite("spindle.main.nose", "estimate", basis="the chuck face at the origin (our frame)")
     m.cite("turret.T1.center", "estimate", basis=f"unpublished; a {turret_r} mm disc behind the gauge face, ours")
-    m.cite("mount.turret.at", "estimate", basis="the gauge face 110 mm from the axis at X = 0 (ours); at Z's "
+    m.cite("mount.turret.at", "estimate", basis=f"the gauge face {face} mm from the axis at X = 0 (ours); at Z's "
            f"bottom the turret's front is {gap} mm from the chuck face (ours)")
     m.cite("mount.chuck.at", "estimate", basis="the chuck face centre (our origin)")
     m.cite("body.headstock", "estimate", basis=f"unpublished; a {2 * hs} mm block behind the chuck, ours")
-    m.cite("body.chuck", "estimate", basis=f"chuck size unpublished; r {chuck_r} x {chuck_l} mm ours")
+    if chuck_pub:
+        m.cite("body.chuck", "estimate", chuck_pub[0], value=chuck_pub[1],
+               basis=f"published chuck size as the radius ({chuck_r} mm); length {chuck_l} mm ours")
+    else:
+        m.cite("body.chuck", "estimate", basis=f"chuck size unpublished; r {chuck_r} x {chuck_l} mm ours")
     m.cite("body.turret", "estimate", basis=f"unpublished; a disc r {turret_r} x 80 mm, ours; the real "
            "tool post or turret and its tools may be larger")
     return m
