@@ -44,16 +44,16 @@ fn norm2(v: Vec2) -> f64 {
     v.x * v.x + v.y * v.y
 }
 
-/// `near`: two points within `l` of each other, as squares (no root).
+/// `near`: two points within `l` of each other, |p - q|² <= l², the sign exact (`exact::disc`:
+/// a float filter, else expansions).
 fn near(l: f64, p: Point2, q: Point2) -> bool {
-    norm2(p - q) <= l * l
+    crate::exact::disc(p.x, p.y, q.x, q.y, l) <= 0.0
 }
 
-/// `within`: c within `l` of the line through a and b, as squares: orient(a, b, c)² <= l² |b - a|²
-/// (Region.lean's `within_iff_dist`; no divide, no root).
+/// `within`: c within `l` of the line through a and b, orient(a, b, c)² <= l² |b - a|²
+/// (Region.lean's `within_iff_dist`), the sign exact (`exact::line_gap`).
 fn within(l: f64, a: Point2, b: Point2, c: Point2) -> bool {
-    let o = predicates::orient2d(a, b, c);
-    o * o <= l * l * norm2(b - a)
+    crate::exact::line_gap(a.x, a.y, b.x, b.y, c.x, c.y, l) <= 0.0
 }
 
 /// Two pieces' verdict, Region.lean's `Carrier`: on one carrier, two, too near to tell, or a
@@ -667,7 +667,7 @@ fn crosses(p: Point2, a: Point2, b: Point2) -> bool {
     (a.y > p.y) != (b.y > p.y) && (b.y > a.y) == (side(a, b, p) > 0.0)
 }
 
-/// orient2d(a, b, p)'s sign at p moved by (ε², ε), ε → 0 (simulation of simplicity): exact where
+/// orient2d(a, b, p)'s sign at p moved by (δ³, δ²), δ → 0 (simulation of simplicity): exact where
 /// p is off the line ab; on it, the sign the move gives, (b.x - a.x), else -(b.y - a.y). Never 0
 /// for a ≠ b, so an edge run either way counts alike for every p (Region.lean's
 /// `crosses_reverse`, there for p off the edge's line, holds for all p), and a point on a chord or
@@ -688,10 +688,11 @@ fn side(a: Point2, b: Point2, p: Point2) -> f64 {
 /// counter-clockwise arc lies right of its chord, a clockwise one left, for every sweep).
 fn in_lens(p: Point2, a: Point2, b: Point2, c: Point2, r: f64, ccw: bool) -> bool {
     let o = side(a, b, p);
-    // in the disc, p moved by (ε², ε) as `side` moves it: on the circle, below its centre's height
-    // (or level and left of it) is in
-    let (d2, r2) = (norm2(p - c), r * r);
-    let disc = d2 < r2 || (d2 == r2 && (p.y < c.y || (p.y == c.y && p.x < c.x)));
+    // in the disc, p moved by (δ³, δ²) as `side` moves it: |p + m - c|² - r² is then
+    // 2δ²(p.y - c.y) + 2δ³(p.x - c.x) + O(δ⁴) on the circle, so below its centre's height (or
+    // level and left of it) is in
+    let s = crate::exact::disc(p.x, p.y, c.x, c.y, r);
+    let disc = s < 0.0 || (s == 0.0 && (p.y < c.y || (p.y == c.y && p.x < c.x)));
     disc && if ccw { o < 0.0 } else { o > 0.0 }
 }
 
@@ -721,17 +722,19 @@ fn spline_crossings(p: Point2, s: &Spline, t0: f64, t1: f64) -> bool {
     odd
 }
 
-/// `inLoop`: p in the closed loop of pieces, even-odd: the polygon over the pieces' starts XOR
+/// `inLoop`: p in the closed loop of pieces, each with its start (a region's: `Bound::start`,
+/// the vertex class's point, not the piece's own end recomputed), even-odd: the polygon over the
+/// starts XOR
 /// each arc's lens (Region.lean), each spline's own crossings for its chord's. The loop's
 /// starting piece and the direction it runs do not change it, nor does where it lies
 /// (`inPoly_rotate`, `crosses_reverse`, `inPoly_translate`).
-fn in_loop<'a>(l: impl IntoIterator<Item = &'a Piece>, p: Point2) -> bool {
-    let l: Vec<&Piece> = l.into_iter().collect();
+fn in_loop<'a>(l: impl IntoIterator<Item = (&'a Piece, Point2)>, p: Point2) -> bool {
+    let l: Vec<(&Piece, Point2)> = l.into_iter().collect();
     let n = l.len();
     let mut odd = false;
     for i in 0..n {
-        let (a, b) = (l[i].at(0.0), l[(i + 1) % n].at(0.0));
-        match *l[i] {
+        let (a, b) = (l[i].1, l[(i + 1) % n].1);
+        match *l[i].0 {
             Piece::Line { .. } => odd ^= crosses(p, a, b),
             Piece::Arc { c, r, t0, t1 } => odd ^= crosses(p, a, b) ^ in_lens(p, a, b, c, r, t1 > t0),
             // the curve's own crossings stand for its chord's and its lens's
@@ -987,7 +990,9 @@ pub fn subtract(wall: &[ProfileLoop], cuts: &[ProfileLoop]) -> Result<Region, Re
         }
         let mut odd = false;
         for m in group_loops(g) {
-            if members[m].bx.holds(p, 0.0) && in_loop(members[m].pieces.iter().map(|q| &q.0), p) {
+            if members[m].bx.holds(p, 0.0)
+                && in_loop(members[m].pieces.iter().map(|q| (&q.0, q.0.at(0.0))), p)
+            {
                 odd = !odd;
             }
         }
@@ -1153,7 +1158,7 @@ fn chain(kept: Vec<Kept>, pts: &[Point2]) -> Result<Region, RegionError> {
     // that every other outer loop holding it holds too, the innermost. One exact query each, no
     // vote: after `chain` the loops are disjoint, so the vertex is on no other loop
     let reps: Vec<Point2> = parts.iter().map(|c| c.outer[0].start).collect();
-    let holds_at = |c: &Component, p: Point2| in_loop(c.outer.iter().map(|b| &b.piece), p);
+    let holds_at = |c: &Component, p: Point2| in_loop(c.outer.iter().map(|b| (&b.piece, b.start)), p);
     let k = parts.len();
     for h in holes {
         let at = h[0].start;
@@ -1220,8 +1225,11 @@ fn stretch(a: &Piece, b: &Piece) -> Piece {
 
 /// Whether p is in the component.
 pub fn holds(c: &Component, p: Point2) -> bool {
-    in_loop(c.outer.iter().map(|b| &b.piece), p)
-        && !c.holes.iter().any(|h| in_loop(h.iter().map(|b| &b.piece), p))
+    in_loop(c.outer.iter().map(|b| (&b.piece, b.start)), p)
+        && !c
+            .holes
+            .iter()
+            .any(|h| in_loop(h.iter().map(|b| (&b.piece, b.start)), p))
 }
 
 #[cfg(test)]
@@ -1335,7 +1343,7 @@ mod in_loop_tests {
                 0,
             )]);
             let ps = pieces(&l);
-            let at = |x: f64, y: f64| in_loop(ps.iter().map(|q| &q.0), Point2::new(x, y));
+            let at = |x: f64, y: f64| in_loop(ps.iter().map(|q| (&q.0, q.0.at(0.0))), Point2::new(x, y));
             let (_, b) = (ps[0].0.at(0.0), ps[0].0.at(1.0));
             for x in [-0.5, 0.0, 0.3, 0.99] {
                 assert!(at(x, 0.0) && at(x, 0.5 * b.y), "{ccw} {x}");
