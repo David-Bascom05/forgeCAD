@@ -8,6 +8,7 @@ import IEEE754.Computed
 import IEEE754.Dmath.Reduction
 import IEEE754.Dmath.CosPoly
 import IEEE754.Dmath.SinCos
+import IEEE754.Dmath.AtanPoly
 
 /-!
 # Only the standard axioms
@@ -68,3 +69,4 @@ elab "#standard_axioms " ids:ident* : command => do
   IEEE754.Dmath.remPio2_rat IEEE754.Dmath.remPio2_spec IEEE754.Dmath.ksin_poly IEEE754.Dmath.kcos_poly
   IEEE754.Dmath.ksin_eval IEEE754.Dmath.half_mul IEEE754.Dmath.kcos_eval
   IEEE754.Dmath.ksin_err IEEE754.Dmath.kcos_err IEEE754.Dmath.sinCos_err IEEE754.Dmath.sin_err IEEE754.Dmath.cos_err
+  IEEE754.Dmath.atan_taylor IEEE754.Dmath.katan_poly
