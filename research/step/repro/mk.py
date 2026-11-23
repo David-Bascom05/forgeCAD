@@ -140,7 +140,7 @@ def lemon_ring(st):
     return surf, z(4.0), z(10.0), True
 
 
-def elbow(name="elbow", turn=90.0, R=63.5, r=27.94, inner=None):
+def elbow(name="elbow", turn=90.0, R=63.5, r=27.94, inner=None, rim=None):
     """A pipe elbow: a torus face between two of its meridian circles, `turn` degrees apart, capped by discs
     (a ring if `inner`, then also the inner torus). As CADFS 00022673's bent tube (R 0.0635, r 0.02794 m)."""
     st = Step()
@@ -162,7 +162,8 @@ def elbow(name="elbow", turn=90.0, R=63.5, r=27.94, inner=None):
         bounds = [st.loop(e, sg, i == 0) for i, (e, sg) in enumerate(edges_senses)]
         return st.face(bounds, pl, True)
 
-    e0, e1 = meridian(0.0, r), meridian(a, r)
+    # rim: the end circles' radius, a little off the torus's where a file's edges meet it only within tolerance
+    e0, e1 = meridian(0.0, rim or r), meridian(a, rim or r)
     tor = st.add(f"TOROIDAL_SURFACE('',{st.ax((0, 0, 0))},{R!r},{r!r})")
     faces = [st.face([st.loop(e0, True, True), st.loop(e1, False)], tor, True)]
     if inner:

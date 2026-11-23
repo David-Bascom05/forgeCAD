@@ -1,5 +1,6 @@
 //! One STEP file from stdin or a path: what the reader makes of it, as one JSON line, for
-//! research/step/rate.py. `--no-check` and `--no-mass` skip the slower measurements.
+//! research/step/rate.py. `--no-check` and `--no-mass` skip the slower measurements; `--faces` lists each face's
+//! area on stderr.
 use forge_mesh::{Quality, tessellate};
 use forge_topo::{check, mass};
 use std::collections::BTreeMap;
@@ -211,6 +212,14 @@ fn main() {
                 }
             }
             bx = format!("[{},{},{},{},{},{}]", lo[0], lo[1], lo[2], hi[0], hi[1], hi[2]);
+        }
+        if flag("--faces") {
+            // per face, on stderr: its surface's kind and area, to hold against OCCT's face by face
+            for f in s.body.face_ids() {
+                let k = format!("{:?}", s.body.face(f).surface);
+                let a = mass::face_area(&s.body, f).map_or(f64::NAN, |x| x);
+                eprintln!("face {} {} {a}", f.0, k.split(['(', ' ', '{']).next().unwrap_or(""));
+            }
         }
         let mut ed = String::new();
         if flag("--edit") && kinds.is_empty() && vol.is_finite() && vol > 0.0 {
