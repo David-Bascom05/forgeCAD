@@ -878,28 +878,125 @@ impl Mesh {
 /// consecutive points close, so the location walk stays short.
 fn brio_order(points: &[Point2], lo: Point2, size: f64) -> Vec<usize> {
     let n = points.len();
-    let mut order: Vec<usize> = (0..n).collect();
+    let mut order: Vec<usize> = Vec::with_capacity(n);
+    let mut i = 0;
+    while i < n {
+        order.push(i);
+        i += 1;
+    }
     let mut rng = forge_math::rng::Rng::new(0x5eed_cd71);
-    for i in (1..n).rev() {
+    let mut i = n;
+    while i > 1 {
+        i -= 1;
         order.swap(i, rng.below(i + 1));
     }
     let scale = 65535.0 / size;
-    let q = |v: f64| (v * scale).clamp(0.0, 65535.0) as u32;
-    let keys: Vec<u64> = points
-        .iter()
-        .map(|p| morton(q(p.x - lo.x), q(p.y - lo.y)))
-        .collect();
+    let mut keys: Vec<u64> = Vec::with_capacity(n);
+    let mut i = 0;
+    while i < n {
+        let p = points[i];
+        keys.push(morton(grid(p.x - lo.x, scale), grid(p.y - lo.y, scale)));
+        i += 1;
+    }
+    let mut run: Vec<u64> = Vec::new();
+    let mut tmp: Vec<u64> = Vec::new();
     let mut start = 0;
     let mut round = 16usize;
     while start < n {
-        let end = (start + round).min(n);
+        let end = if start + round < n { start + round } else { n };
         // the last round takes everything left so rounds keep doubling
         let end = if n - end < round { n } else { end };
-        order[start..end].sort_unstable_by_key(|&i| (keys[i], i));
+        // by key, then by index: a key below 2^32 and an index below 2^32, one u64
+        run.clear();
+        let mut k = start;
+        while k < end {
+            run.push(keys[order[k]] << 32 | order[k] as u64);
+            k += 1;
+        }
+        sort_keys(&mut run, &mut tmp);
+        let mut k = start;
+        while k < end {
+            order[k] = (run[k - start] & 0xffff_ffff) as usize;
+            k += 1;
+        }
         start = end;
         round *= 2;
     }
     order
+}
+
+/// A coordinate offset on the 65536-step grid of `scale` steps a unit, clamped to it.
+fn grid(v: f64, scale: f64) -> u32 {
+    let x = v * scale;
+    // (f64::clamp: the same two comparisons, in this order)
+    let x = if x < 0.0 { 0.0 } else { x };
+    let x = if x > 65535.0 { 65535.0 } else { x };
+    x as u32
+}
+
+/// Sorts v ascending: insertion sorts of runs of 16, merged bottom-up through `tmp`.
+fn sort_keys(v: &mut Vec<u64>, tmp: &mut Vec<u64>) {
+    let n = v.len();
+    let mut s = 0;
+    while s < n {
+        let e = if s + 16 < n { s + 16 } else { n };
+        let mut i = s + 1;
+        while i < e {
+            let x = v[i];
+            let mut j = i;
+            while j > s && v[j - 1] > x {
+                v[j] = v[j - 1];
+                j -= 1;
+            }
+            v[j] = x;
+            i += 1;
+        }
+        s = e;
+    }
+    if n > 16 {
+        tmp.clear();
+        tmp.resize(n, 0);
+        let mut w = 16;
+        let mut in_v = true;
+        while w < n {
+            if in_v {
+                merge_runs(v, tmp, w);
+            } else {
+                merge_runs(tmp, v, w);
+            }
+            in_v = !in_v;
+            w *= 2;
+        }
+        if !in_v {
+            let mut i = 0;
+            while i < n {
+                v[i] = tmp[i];
+                i += 1;
+            }
+        }
+    }
+}
+
+/// One bottom-up merge pass: each two sorted runs of `w` in `src`, merged into `dst`.
+fn merge_runs(src: &[u64], dst: &mut [u64], w: usize) {
+    let n = src.len();
+    let mut s = 0;
+    while s < n {
+        let m = if s + w < n { s + w } else { n };
+        let e = if m + w < n { m + w } else { n };
+        let (mut i, mut j, mut k) = (s, m, s);
+        while k < e {
+            if j >= e || (i < m && src[i] <= src[j]) {
+                dst[k] = src[i];
+                i += 1;
+            } else {
+                dst[k] = src[j];
+                j += 1;
+            }
+            k += 1;
+        }
+        s = e;
+    }
 }
 
 /// Position along a Hilbert curve over a 65536 x 65536 grid: neighbours along it are
@@ -916,7 +1013,9 @@ fn hilbert(mut x: u32, mut y: u32) -> u64 {
                 x = 0xffff - x;
                 y = 0xffff - y;
             }
-            std::mem::swap(&mut x, &mut y);
+            let t = x;
+            x = y;
+            y = t;
         }
         s >>= 1;
     }
@@ -940,7 +1039,10 @@ fn segment_distance_sq(p: Point2, a: Point2, b: Point2) -> f64 {
     let ab = b - a;
     let l = ab.length_sq();
     let t = if l > 0.0 {
-        ((p - a).dot(ab) / l).clamp(0.0, 1.0)
+        // (f64::clamp: the same two comparisons, in this order)
+        let t = (p - a).dot(ab) / l;
+        let t = if t < 0.0 { 0.0 } else { t };
+        if t > 1.0 { 1.0 } else { t }
     } else {
         0.0
     };
@@ -1451,6 +1553,23 @@ mod tests {
     }
 
     /// A boundary's cost counts against a file's budget: past it, a clean error.
+    #[test]
+    fn sort_keys_sorts() {
+        let mut rng = Rng::new(7);
+        let mut tmp = Vec::new();
+        for n in [0, 1, 2, 15, 16, 17, 31, 32, 33, 100, 1000, 4097] {
+            for dup in [false, true] {
+                let mut v: Vec<u64> = (0..n)
+                    .map(|_| if dup { rng.below(8) as u64 } else { rng.next_u64() })
+                    .collect();
+                let mut w = v.clone();
+                w.sort_unstable();
+                sort_keys(&mut v, &mut tmp);
+                assert_eq!(v, w, "n {n}");
+            }
+        }
+    }
+
     #[test]
     fn a_boundary_past_its_budget_fails_cleanly() {
         let n = 2048;
