@@ -68,7 +68,7 @@ def surface.Plane.normal_vec
   forge_math.frame.Frame.impl.z self.frame
 
 /-- [forge_geom::intersect::plane_cone::{impl core::ops::function::Fn<(forge_math::vec::Vec3,), forge_math::vec::Point3> for forge_geom::intersect::plane_cone::{closure}<'_0>}::call]:
-    Source: 'kernel/forge-geom/src/intersect.rs', lines 1085:19-1085:73 -/
+    Source: 'kernel/forge-geom/src/intersect.rs', lines 1111:19-1111:73 -/
 def intersect.plane_cone.closure.Insts.CoreOpsFunctionFnTupleVec3Point3.call
   (c : intersect.plane_cone.closure) (tupled_args : forge_math.vec.Vec3) :
   Result forge_math.vec.Point3
@@ -77,7 +77,7 @@ def intersect.plane_cone.closure.Insts.CoreOpsFunctionFnTupleVec3Point3.call
   forge_math.frame.Frame.point_to_world c p
 
 /-- [forge_geom::intersect::plane_cone::{impl core::ops::function::Fn<(f64, f64), forge_math::vec::Point3> for forge_geom::intersect::plane_cone::{closure#3}<'_0, '_1, '_2, '_3, '_4>}::call]:
-    Source: 'kernel/forge-geom/src/intersect.rs', lines 1150:19-1150:66 -/
+    Source: 'kernel/forge-geom/src/intersect.rs', lines 1176:19-1176:66 -/
 def intersect.plane_cone.closure_3.Insts.CoreOpsFunctionFnPairF64F64Point3.call
   (c : intersect.plane_cone.closure_3) (tupled_args : (F64 × F64)) :
   Result forge_math.vec.Point3
@@ -92,7 +92,7 @@ def intersect.plane_cone.closure_3.Insts.CoreOpsFunctionFnPairF64F64Point3.call
     v5
 
 /-- [forge_geom::intersect::plane_cone::{impl core::ops::function::Fn<(forge_math::vec::Vec3,), forge_math::vec::UnitVec3> for forge_geom::intersect::plane_cone::{closure#2}<'_0>}::call]:
-    Source: 'kernel/forge-geom/src/intersect.rs', lines 1149:20-1149:73 -/
+    Source: 'kernel/forge-geom/src/intersect.rs', lines 1175:20-1175:73 -/
 def
   intersect.plane_cone.closure_2.Insts.CoreOpsFunctionFnTupleVec3UnitVec3.call
   (c : intersect.plane_cone.closure_2) (tupled_args : forge_math.vec.Vec3) :
@@ -102,7 +102,7 @@ def
   forge_math.frame.Frame.unit_to_world c uv
 
 /-- [forge_geom::intersect::plane_cone::{impl core::ops::function::FnMut<(f64,), (forge_geom::curve::Curve, forge_geom::intersect::Contact)> for forge_geom::intersect::plane_cone::{closure#1}<'_0, '_1, '_2, '_3, '_4, '_5>}::call_mut]:
-    Source: 'kernel/forge-geom/src/intersect.rs', lines 1127:36-1135:9 -/
+    Source: 'kernel/forge-geom/src/intersect.rs', lines 1153:36-1161:9 -/
 def
   intersect.plane_cone.closure_1.Insts.CoreOpsFunctionFnMutTupleF64PairCurveContact.call_mut
   (c : intersect.plane_cone.closure_1) (tupled_args : F64) :
@@ -120,7 +120,7 @@ def
   ok ((curve.Curve.Line l, intersect.Contact.Crossing), c)
 
 /-- [forge_geom::intersect::plane_cone::{impl core::ops::function::FnOnce<(f64,), (forge_geom::curve::Curve, forge_geom::intersect::Contact)> for forge_geom::intersect::plane_cone::{closure#1}<'_0, '_1, '_2, '_3, '_4, '_5>}::call_once]:
-    Source: 'kernel/forge-geom/src/intersect.rs', lines 1127:36-1135:9 -/
+    Source: 'kernel/forge-geom/src/intersect.rs', lines 1153:36-1161:9 -/
 def
   intersect.plane_cone.closure_1.Insts.CoreOpsFunctionFnOnceTupleF64PairCurveContact.call_once
   (c : intersect.plane_cone.closure_1) (fl : F64) :
@@ -132,7 +132,7 @@ def
   ok p
 
 /-- Trait implementation: [forge_geom::intersect::plane_cone::{impl core::ops::function::FnOnce<(f64,), (forge_geom::curve::Curve, forge_geom::intersect::Contact)> for forge_geom::intersect::plane_cone::{closure#1}<'_0, '_1, '_2, '_3, '_4, '_5>}]
-    Source: 'kernel/forge-geom/src/intersect.rs', lines 1127:36-1135:9 -/
+    Source: 'kernel/forge-geom/src/intersect.rs', lines 1153:36-1161:9 -/
 @[reducible]
 def
   intersect.plane_cone.closure_1.Insts.CoreOpsFunctionFnOnceTupleF64PairCurveContact
@@ -143,7 +143,7 @@ def
 }
 
 /-- Trait implementation: [forge_geom::intersect::plane_cone::{impl core::ops::function::FnMut<(f64,), (forge_geom::curve::Curve, forge_geom::intersect::Contact)> for forge_geom::intersect::plane_cone::{closure#1}<'_0, '_1, '_2, '_3, '_4, '_5>}]
-    Source: 'kernel/forge-geom/src/intersect.rs', lines 1127:36-1135:9 -/
+    Source: 'kernel/forge-geom/src/intersect.rs', lines 1153:36-1161:9 -/
 @[reducible]
 def
   intersect.plane_cone.closure_1.Insts.CoreOpsFunctionFnMutTupleF64PairCurveContact
@@ -156,7 +156,7 @@ def
 }
 
 /-- [forge_geom::intersect::plane_cone]:
-    Source: 'kernel/forge-geom/src/intersect.rs', lines 1077:0-1229:1
+    Source: 'kernel/forge-geom/src/intersect.rs', lines 1103:0-1255:1
     Visibility: public -/
 def intersect.plane_cone
   (p : surface.Plane) (c : surface.Cone) :
@@ -730,7 +730,7 @@ def surface.Plane.signed_distance
     forge_math.vec.Vec3)) uv v
 
 /-- [forge_geom::intersect::plane_torus::{impl core::ops::function::FnMut<(f64,), (forge_geom::curve::Curve, forge_geom::intersect::Contact)> for forge_geom::intersect::plane_torus::{closure}<'_0, '_1, '_2, '_3, '_4>}::call_mut]:
-    Source: 'kernel/forge-geom/src/intersect.rs', lines 1065:38-1069:9 -/
+    Source: 'kernel/forge-geom/src/intersect.rs', lines 1091:38-1095:9 -/
 def
   intersect.plane_torus.closure.Insts.CoreOpsFunctionFnMutTupleF64PairCurveContact.call_mut
   (c : intersect.plane_torus.closure) (tupled_args : F64) :
@@ -748,7 +748,7 @@ def
     intersect.Contact.Crossing), c)
 
 /-- [forge_geom::intersect::plane_torus::{impl core::ops::function::FnOnce<(f64,), (forge_geom::curve::Curve, forge_geom::intersect::Contact)> for forge_geom::intersect::plane_torus::{closure}<'_0, '_1, '_2, '_3, '_4>}::call_once]:
-    Source: 'kernel/forge-geom/src/intersect.rs', lines 1065:38-1069:9 -/
+    Source: 'kernel/forge-geom/src/intersect.rs', lines 1091:38-1095:9 -/
 def
   intersect.plane_torus.closure.Insts.CoreOpsFunctionFnOnceTupleF64PairCurveContact.call_once
   (c : intersect.plane_torus.closure) (fl : F64) :
@@ -760,7 +760,7 @@ def
   ok p
 
 /-- Trait implementation: [forge_geom::intersect::plane_torus::{impl core::ops::function::FnOnce<(f64,), (forge_geom::curve::Curve, forge_geom::intersect::Contact)> for forge_geom::intersect::plane_torus::{closure}<'_0, '_1, '_2, '_3, '_4>}]
-    Source: 'kernel/forge-geom/src/intersect.rs', lines 1065:38-1069:9 -/
+    Source: 'kernel/forge-geom/src/intersect.rs', lines 1091:38-1095:9 -/
 @[reducible]
 def
   intersect.plane_torus.closure.Insts.CoreOpsFunctionFnOnceTupleF64PairCurveContact
@@ -771,7 +771,7 @@ def
 }
 
 /-- Trait implementation: [forge_geom::intersect::plane_torus::{impl core::ops::function::FnMut<(f64,), (forge_geom::curve::Curve, forge_geom::intersect::Contact)> for forge_geom::intersect::plane_torus::{closure}<'_0, '_1, '_2, '_3, '_4>}]
-    Source: 'kernel/forge-geom/src/intersect.rs', lines 1065:38-1069:9 -/
+    Source: 'kernel/forge-geom/src/intersect.rs', lines 1091:38-1095:9 -/
 @[reducible]
 def
   intersect.plane_torus.closure.Insts.CoreOpsFunctionFnMutTupleF64PairCurveContact
@@ -784,7 +784,7 @@ def
 }
 
 /-- [forge_geom::intersect::plane_torus]:
-    Source: 'kernel/forge-geom/src/intersect.rs', lines 1026:0-1073:1
+    Source: 'kernel/forge-geom/src/intersect.rs', lines 1052:0-1099:1
     Visibility: public -/
 def intersect.plane_torus
   (p : surface.Plane) (t : surface.Torus) :
@@ -873,7 +873,7 @@ def intersect.plane_torus
     else ok intersect.SurfaceSurface.NotAnalytic
 
 /-- [forge_geom::intersect::plane_sphere]:
-    Source: 'kernel/forge-geom/src/intersect.rs', lines 1011:0-1024:1
+    Source: 'kernel/forge-geom/src/intersect.rs', lines 1037:0-1050:1
     Visibility: public -/
 def intersect.plane_sphere
   (p : surface.Plane) (s : surface.Sphere) :
@@ -915,7 +915,7 @@ def intersect.plane_sphere
       ok (intersect.SurfaceSurface.Curves ret)
 
 /-- [forge_geom::intersect::plane_plane]:
-    Source: 'kernel/forge-geom/src/intersect.rs', lines 913:0-931:1
+    Source: 'kernel/forge-geom/src/intersect.rs', lines 939:0-957:1
     Visibility: public -/
 def intersect.plane_plane
   (p : surface.Plane) (q : surface.Plane) :
@@ -967,7 +967,7 @@ def intersect.plane_plane
     ok (intersect.SurfaceSurface.Curves ret)
 
 /-- [forge_geom::intersect::plane_surface]:
-    Source: 'kernel/forge-geom/src/intersect.rs', lines 895:0-904:1
+    Source: 'kernel/forge-geom/src/intersect.rs', lines 921:0-930:1
     Visibility: public -/
 def intersect.plane_surface
   (p : surface.Plane) (s : surface.Surface) :
@@ -982,7 +982,7 @@ def intersect.plane_surface
   | surface.Surface.Procedural _ => ok intersect.SurfaceSurface.NotAnalytic
 
 /-- [forge_geom::intersect::planes_coincident]:
-    Source: 'kernel/forge-geom/src/intersect.rs', lines 908:0-911:1
+    Source: 'kernel/forge-geom/src/intersect.rs', lines 934:0-937:1
     Visibility: public -/
 def intersect.planes_coincident
   (p : surface.Plane) (q : surface.Plane) : Result Bool := do
