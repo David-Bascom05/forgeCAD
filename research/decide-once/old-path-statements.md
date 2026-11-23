@@ -126,6 +126,7 @@ definitions (`keep`, `coreI`) are reused as the spec of D6–D8.
 | G11 | the many `LINEAR` / `RIM` tolerance tests (`on_edge`, `settle`, `tolerant_cuts`, `grown_tols`, `holds_edge`, `rolls_off`, `through_smooth_edge`, …) | each is a guess unless it is a proven screen | each becomes a screen plus exact; listed per function as the aeneas table arrives |
 | G13 | `face_point`'s inward step (min(0.01·len, 0.05)) is never checked against cuts or other loops | a probe may land in the wrong region: a wrong class, not an undecided one | a screened distance check with an exact fallback, then another probe or a typed refusal |
 | G14 | trim_in B:2614/2938: `(box contains && !CAREFUL) \|\| point_in_face(..)` accepts a hit on the face's box alone | a box contains far more than the face: a guess that the hit is in the face | point_in_face_at on the exact point, behind a screen (the box test may stay as a fast *reject* only) |
+| G15 | after an exact `On` at a trim_in stretch midpoint (M exactly on an edge of f_k), today's `past`/hair handling decides the stretch | not yet stated | review separately: state what the stretch's class is when its midpoint is on ∂f_k exactly |
 | G12 | the `decide_once` cargo feature (off by default) | ships as the flat fallback (owner clarification) | it becomes the fallback branch: on in release, entered only after today's path refuses or is undecided, with no env switch; proven by IncCoreSpec/EndToEndF plus R3 |
 
 
@@ -262,6 +263,15 @@ Proof shape:
   - flat `On` comes mostly from B:3387, trim_in's `at(k, p)` midpoint between two cuts (3,011 of 5,602), and that is the next flat step;
   - the nine point_in_face near-misses are all curved (B:2845, B:3315);
   - rule for every exact fallback: one `#[cold] #[inline(never)]` helper with a single call site, measured against the inlining effect.
+- **B:3387, approved (2026-11-23):** a stretch of a flat pair line between consecutive cuts X_i, X_j
+  (exact meets). Its class is `whereF ⟦f_k⟧ M` with `M = (X_i + X_j)/2`.
+  - Screen: today's f64 point_in_face at q = eval(mid), sound when
+    |q − M| + δ_input + parity rounding < reach.
+  - Cold helper, run only on today's On:
+    - X_i = X_j tested exactly (the stretch is empty);
+    - M on an edge exactly gives `On` (then G15);
+    - otherwise the exact parity, with a ray that avoids every exact vertex, so it is never undecided;
+    - the only refusal is VertexNotUnique.
 - **Rust plan:**
   - exact companions: `classify_exact(ExactPt) → Result<Where, Refusal>` and
     `point_in_face_at(f, ExactPt)`, where `ExactPt` is a key or a foot;
