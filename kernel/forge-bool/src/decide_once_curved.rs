@@ -1736,6 +1736,184 @@ fn deg_p(p: &[Q]) -> usize {
 }
 
 // =============================================================================================
+// The builder, stage (a): the operands' faces, exactly, their carrier classes, and the near pairs
+// =============================================================================================
+
+/// A face of an operand as the curved builder reads it.
+#[derive(Clone, Debug)]
+pub struct CIn {
+    pub body: usize,
+    pub face: forge_topo::FaceId,
+    /// the surface as stored, exactly (`QFace`); `QFace::quadric` is negative inside the solid
+    /// when `outward`, positive inside when not (a face with the solid outside: a hole's wall)
+    pub q: QFace,
+    pub outward: bool,
+    /// the face's box (f64, as the kernel keeps it)
+    pub lo: [f64; 3],
+    pub hi: [f64; 3],
+}
+
+fn v3_of(p: forge_math::Point3) -> Option<V3> {
+    V3::from_f64([p.x, p.y, p.z])
+}
+
+fn vv_of(v: forge_math::Vec3) -> Option<V3> {
+    V3::from_f64([v.x, v.y, v.z])
+}
+
+fn q_of(x: f64) -> Option<Q> {
+    Q::from_f64(x)
+}
+
+/// **Stage (a)**: every face of the operands, in arena order (body 0's first), read exactly from
+/// its stored frame, as exact-curved's harness reads it (verify/forge-exact/fuzz/src/curved.rs,
+/// `face_of`), but keeping a face whose solid lies outside it (`outward = false`). Tori and
+/// procedural faces are outside the Q1 domain (design D4).
+pub fn read_faces(bodies: &[&forge_topo::Body]) -> Result<Vec<CIn>, Skip> {
+    use forge_geom::Surface;
+    let mut out: Vec<CIn> = Vec::new();
+    let mut k = 0;
+    while k < bodies.len() {
+        let b = bodies[k];
+        let ids: Vec<forge_topo::FaceId> = b.face_ids().collect();
+        let mut i = 0;
+        while i < ids.len() {
+            let f = ids[i];
+            let face = b.face(f);
+            let bb = b.face_box(f);
+            let lo = [bb.x.lo, bb.y.lo, bb.z.lo];
+            let hi = [bb.x.hi, bb.y.hi, bb.z.hi];
+            let zero = Q::zero();
+            let read: Option<(Kind, V3, V3, Q, Q, Q, bool)> = match &face.surface {
+                Surface::Plane(pl) => {
+                    let z = pl.frame.z().get();
+                    let n = if face.same_sense { z } else { -z };
+                    match (v3_of(pl.frame.origin), vv_of(n)) {
+                        (Some(o), Some(n)) => {
+                            Some((Kind::Plane, o, n, zero.clone(), zero.clone(), zero.clone(), true))
+                        }
+                        _ => None,
+                    }
+                }
+                Surface::Cylinder(c) => {
+                    match (v3_of(c.frame.origin), vv_of(c.frame.z().get()), q_of(c.radius)) {
+                        (Some(o), Some(z), Some(r)) => {
+                            Some((Kind::Cyl, o, z, r, zero.clone(), zero.clone(), face.same_sense))
+                        }
+                        _ => None,
+                    }
+                }
+                Surface::Sphere(s) => match (v3_of(s.frame.origin), q_of(s.radius)) {
+                    (Some(o), Some(r)) => Some((
+                        Kind::Sphere,
+                        o,
+                        V3::default(),
+                        r,
+                        zero.clone(),
+                        zero.clone(),
+                        face.same_sense,
+                    )),
+                    _ => None,
+                },
+                Surface::Cone(c) => match (
+                    v3_of(c.frame.origin),
+                    vv_of(c.frame.z().get()),
+                    q_of(c.radius),
+                    q_of(c.sin_a()),
+                    q_of(c.cos_a()),
+                ) {
+                    (Some(o), Some(z), Some(r), Some(s), Some(cc)) => {
+                        Some((Kind::Cone, o, z, r, s, cc, face.same_sense))
+                    }
+                    _ => None,
+                },
+                Surface::Torus(_) => return Err(Skip::OutOfDomain("a torus face")),
+                Surface::Procedural(_) => return Err(Skip::OutOfDomain("a procedural face")),
+            };
+            match read {
+                None => return Err(Skip::OutOfDomain("a non-finite frame")),
+                Some((kind, o, z, r, s, c, outward)) => {
+                    let q = QFace {
+                        solid: k,
+                        index: f.index(),
+                        kind,
+                        o,
+                        z,
+                        r,
+                        s,
+                        c,
+                    };
+                    if !q.wf() {
+                        return Err(Skip::OutOfDomain("a degenerate frame"));
+                    }
+                    out.push(CIn {
+                        body: k,
+                        face: f,
+                        q,
+                        outward,
+                        lo,
+                        hi,
+                    });
+                }
+            }
+            i += 1;
+        }
+        k += 1;
+    }
+    Ok(out)
+}
+
+/// The carrier classes: faces on one quadric (equal up to scale, `Quadric::canon`) share one.
+/// Returns, per face, its class, and per class its canonical quadric.
+pub fn carrier_classes(fs: &[CIn]) -> (Vec<usize>, Vec<Quadric>) {
+    let mut cls: Vec<usize> = Vec::with_capacity(fs.len());
+    let mut keys: Vec<Quadric> = Vec::new();
+    let mut i = 0;
+    while i < fs.len() {
+        let (k, _) = fs[i].q.quadric().canon();
+        let mut j = 0;
+        let mut found = keys.len();
+        while found == keys.len() && j < keys.len() {
+            if keys[j] == k {
+                found = j;
+            }
+            j += 1;
+        }
+        if found == keys.len() {
+            keys.push(k);
+        }
+        cls.push(found);
+        i += 1;
+    }
+    (cls, keys)
+}
+
+/// The near pairs: faces on distinct carriers whose boxes overlap within LINEAR. Only these can
+/// cross, so only these are given to the proposers.
+pub fn near_pairs(fs: &[CIn], cls: &[usize]) -> Vec<(usize, usize)> {
+    let t = forge_math::tol::LINEAR;
+    let mut out: Vec<(usize, usize)> = Vec::new();
+    let mut i = 0;
+    while i < fs.len() {
+        let mut j = i + 1;
+        while j < fs.len() {
+            let mut apart = cls[i] == cls[j];
+            let mut a = 0;
+            while !apart && a < 3 {
+                apart = fs[i].hi[a] + t < fs[j].lo[a] || fs[j].hi[a] + t < fs[i].lo[a];
+                a += 1;
+            }
+            if !apart {
+                out.push((i, j));
+            }
+            j += 1;
+        }
+        i += 1;
+    }
+    out
+}
+
+// =============================================================================================
 // QForm.lean: a body's sign formula
 // =============================================================================================
 
