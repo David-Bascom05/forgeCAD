@@ -1,6 +1,6 @@
 # A8: decide-once over the face arrangement (design, for sign-off)
 
-Status: draft. It was written by the Lean side and merged with bool-research's draft (6b776b5 on
+Status: **signed off by the master** (ab628a33, conditions folded in). Draft history: It was written by the Lean side and merged with bool-research's draft (6b776b5 on
 -bool-research: the cell definition, the radial sides and the measurements are theirs). It goes
 to the master for sign-off. No proof work starts until it is signed off. The current proven core
 (`forge_bool_core`, `end_to_end_proof`) stays shipped-ready behind the switch, and nothing is
