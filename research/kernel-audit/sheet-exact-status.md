@@ -17,13 +17,13 @@ Until it lands, the exact fallbacks are not described as proven.
 
 ## Where the code is now
 
-- fd6971c: forge-sheet's exact.rs called predicates.rs's helpers (choice (a)).
-- 5fdaa63: region.rs calls `forge_sheet_core::exact::{disc, line_gap}` instead. That is
-  sheet-spec's Aeneas-style translation (e6ddfc1 on -sheet-spec), checked bit-for-bit against
-  forge-sheet's former exact.rs by kernel/forge-sheet-core/tests/core.rs. forge-sheet's own
-  exact.rs is removed and the predicates.rs helpers are private again.
-- Its expansion steps (two-sum, two-product, grow-expansion, the sign of the top component) are
-  translated. Their proofs are sheet-spec's to report. The same pending note applies until they
-  are done.
-- The master has ruled that choice (a) stands. Moving back to the predicates.rs helpers, if
-  wanted, is that ruling's to settle against 5fdaa63.
+**Status:** exact signs via forge_sheet_core::exact; disc proven (sheet-spec), line_gap filter
+proven, exact branch in progress.
+
+- 5fdaa63: region.rs calls `forge_sheet_core::exact::{disc, line_gap}`. That is sheet-spec's
+  Aeneas-style translation (e6ddfc1 on -sheet-spec), checked bit-for-bit against forge-sheet's
+  former exact.rs by kernel/forge-sheet-core/tests/core.rs. forge-sheet's own exact.rs is removed.
+  The master accepted this as (C)'s outcome, so the earlier predicates.rs route (fd6971c) no
+  longer applies, and the predicates.rs helpers are private again.
+- The L4 note above concerns predicates.rs's helpers. Those are no longer on the sheet's path,
+  but the note stays until sheet-spec's expansion theory lands.
