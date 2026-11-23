@@ -46,3 +46,4 @@ import ForgeBoolCore.RefineUnifyFacts
 import ForgeBoolCore.RefineUnify
 import ForgeBoolCore.IncRead
 import ForgeBoolCore.IncSpecs
+import ForgeBoolCore.RefineIncTables
