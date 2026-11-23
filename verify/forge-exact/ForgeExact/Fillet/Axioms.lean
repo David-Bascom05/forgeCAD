@@ -1,5 +1,5 @@
 import ForgeExact.Axioms
-import ForgeExact.Fillet.PlanePlane
+import ForgeExact.Fillet.RevCorner
 
 /-!
 # The fillet spec: only the standard axioms
@@ -20,3 +20,9 @@ the build fails on `sorryAx` or any axiom past `propext`, `Classical.choice` and
   ForgeExact.Fillet.PlanePair.q_eq_cyl
   ForgeExact.Fillet.PlanePair.spring₁
   ForgeExact.Fillet.PlanePair.g1_spring₁
+  ForgeExact.Fillet.free_rev
+  ForgeExact.Fillet.closing_rev
+  ForgeExact.Fillet.boss_closing
+  ForgeExact.Fillet.hole_closing
+  ForgeExact.Fillet.pivot_sphere
+  ForgeExact.Fillet.hole_too_large
