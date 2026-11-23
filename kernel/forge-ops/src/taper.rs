@@ -31,6 +31,10 @@ pub enum TaperError {
     WallsCross {
         at: f64,
     },
+    /// An outline with a spline whose taper is not proved free of events within the depth (its
+    /// joints all smooth, no part curling, no two parts meeting): refused, not searched for
+    /// (research/kernel-audit/RESUME-taper-splines.md).
+    SplineEvent,
 }
 
 /// What the offset does to a segment: where it starts by now, and how long it still is (<= 0: gone).
@@ -654,7 +658,7 @@ pub fn closes_at(profile: &Profile, distance: f64, angle: f64) -> Option<f64> {
 /// The solids of a tapered extrude, to be joined: `angle` leans the sides in going up (negative:
 /// out), the profile as drawn at the sketch.
 pub fn tapered(profile: &Profile, distance: f64, angle: f64, feature: u64) -> Result<Vec<Body>, TaperError> {
-    crate::skin::curved(profile).map_err(|e| TaperError::Extrude(ExtrudeError::Profile(e)))?;
+    let spline = crate::skin::curved(profile).is_err();
     let b = extrude(profile, distance, feature).map_err(TaperError::Extrude)?;
     let root = Name::feature(feature);
     let caps = [crate::roles::start(root), crate::roles::end(root)];
@@ -675,6 +679,15 @@ pub fn tapered(profile: &Profile, distance: f64, angle: f64, feature: u64) -> Re
     let lean = sn / cs;
     let sign = angle.signum();
     let mut p = prepared(profile, distance).map_err(TaperError::Extrude)?;
+    if spline {
+        // drafted where nothing can happen on the way, else refused
+        if !crate::taper_spline::clear(&p, sign, distance.abs() * lean) {
+            return Err(TaperError::SplineEvent);
+        }
+        return draft(&b, &sides, &neutral, angle)
+            .map(|d| vec![d])
+            .map_err(TaperError::Draft);
+    }
     // the first event decides, where the loops' joints all move straight: none within the depth,
     // the sides drafted; a side wiped out, slabs; walls crossing, refused
     let first = first_event(&p, sign, distance.abs() * lean);

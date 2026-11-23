@@ -45,6 +45,9 @@ pub enum DraftError {
     WallsCross {
         at: f64,
     },
+    /// A tapered extrude of an outline with a spline not proved free of events within its depth
+    /// (`TaperError::SplineEvent`).
+    SplineEvent,
 }
 
 /// Tilts `faces` so each makes `angle` with the pull direction, `neutral`'s z, keeping where it
@@ -202,6 +205,27 @@ pub(crate) fn drafted(
                 return Err(DraftError::NoNeutralLine { face: name });
             }
             cone(centre, r, c.frame.x().get())
+        }
+        // a spline swept along the pull: its sections parallel curves of the spline, moved in
+        // as the plane's are, (v - v0) tan a at height v from the neutral plane
+        Surface::Procedural(p) => {
+            let e = p
+                .as_any()
+                .and_then(|x| x.downcast_ref::<forge_geom::spline::Extruded>())
+                .ok_or(DraftError::NoExactSurface { face: name })?;
+            let f = e.frame();
+            let sigma = f.z().dot(pull.get());
+            let across = np.normal_vec().dot(f.z().get());
+            if f.z().cross(pull).length() > tol::ANGULAR || across.abs() < 1.0 - tol::ANGULAR {
+                return Err(DraftError::NoExactSurface { face: name });
+            }
+            let v0 = -np.signed_distance(f.origin) / across;
+            let outward = if same_sense { 1.0 } else { -1.0 };
+            let lean = -sigma.signum() * outward * sa / ca;
+            let d = p.domain();
+            forge_geom::spline::Drafted::new(*f, e.section_arc().clone(), forge_math::Interval::new(d.v.lo, d.v.hi), v0, lean)
+                .map(|w| w.surface())
+                .ok_or(DraftError::NoExactSurface { face: name })
         }
         _ => Err(DraftError::NoExactSurface { face: name }),
     }

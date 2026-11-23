@@ -107,6 +107,9 @@ pub fn rebuild_some(body: &mut Body, verts: &[bool], edges: &[bool]) -> Result<(
         {
             cons.extend(seam_constraints(&s, p0, cons.len()));
         }
+        // a drafted spline wall moves its points along its rulings: the vertex starts where its
+        // ruling now is, at its height (where the old point's foot on the section says)
+        let p0 = cons.iter().find_map(|s| ruled_start(s, p0)).unwrap_or(p0);
         let mut p = solve_point(&cons, p0).ok_or(RebuildError::Vertex {
             vertex: body.vertices[v].name,
         })?;
@@ -234,11 +237,46 @@ fn meridian(s: &Surface, p: Point3) -> Option<Surface> {
     Some(Surface::Plane(Plane::new(Frame::from_zx(o, n, radial)?)))
 }
 
+/// A drafted spline wall's seam: the plane through its ruling at `p`, across the section (the
+/// vertex stays on the ruling, as a revolve's does on its meridian).
+fn ruling(s: &Surface, p: Point3) -> Option<Surface> {
+    let Surface::Procedural(w) = s else {
+        return None;
+    };
+    w.as_any()?.downcast_ref::<forge_geom::spline::Drafted>()?;
+    let d = w.deriv(w.project(p));
+    let n = d.du - d.dv * (d.du.dot(d.dv) / d.dv.dot(d.dv));
+    Some(Surface::Plane(Plane::new(Frame::from_z(d.p, n.normalize()?))))
+}
+
+/// Where a plane across a drafted spline wall's sweep cuts it: the section there, exactly.
+fn section_of(p: &Plane, s: &Surface) -> Option<(Curve, forge_geom::intersect::Contact)> {
+    let Surface::Procedural(w) = s else {
+        return None;
+    };
+    let d = w.as_any()?.downcast_ref::<forge_geom::spline::Drafted>()?;
+    let z = d.frame().z();
+    if p.normal_vec().cross(z).length() > tol::ANGULAR {
+        return None;
+    }
+    let v = z.dot(p.frame.origin - d.frame().origin);
+    Some((d.section_at(v), forge_geom::intersect::Contact::Crossing))
+}
+
+/// On a drafted spline wall, the point at `p`'s foot and height.
+fn ruled_start(s: &Surface, p: Point3) -> Option<Point3> {
+    let Surface::Procedural(w) = s else {
+        return None;
+    };
+    w.as_any()?.downcast_ref::<forge_geom::spline::Drafted>()?;
+    Some(w.deriv(w.project(p)).p)
+}
+
 /// Extra planes pinning a vertex that the surfaces around it leave free: the meridian of a
 /// seam, or two planes through the axis for a pole.
 fn seam_constraints(s: &Surface, p: Point3, have: usize) -> Vec<Surface> {
     let Some((o, z)) = axis_of(s) else {
-        return Vec::new();
+        return ruling(s, p).into_iter().take(3 - have.min(3)).collect();
     };
     let radial = (p - o) - z * z.dot(p - o);
     if radial.length() > tol::LINEAR {
@@ -569,6 +607,9 @@ fn edge_curve(
     let old_mid = oc.eval(or.mid());
     let guess = refine(a, b, old_mid).unwrap_or(old_mid);
     let analytic = match (a, b) {
+        (Surface::Plane(p), s) | (s, Surface::Plane(p)) if section_of(p, s).is_some() => {
+            SurfaceSurface::Curves(section_of(p, s).into_iter().collect())
+        }
         (Surface::Plane(p), s) | (s, Surface::Plane(p)) => plane_surface(p, s),
         (Surface::Cone(_), Surface::Cone(_)) => match cones_meet(a, b) {
             Some(cs) => SurfaceSurface::Curves(

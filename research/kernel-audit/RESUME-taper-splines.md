@@ -1,69 +1,71 @@
 # RESUME: tapered extrudes of spline outlines
 
-Status: not built. Taper refuses splines today (`skin::curved`), and nothing here changes that. The
-master's rule was to build this only if it could be done with exact geometry and no search. It
-can't, so this note records what would be needed. Head when written: 701b4f6
-(claude/repo-review-mbdrlj-fix-draft).
+## Built: the smallest exact step
 
-## What is exact already, and would carry over
+A tapered extrude of an outline with a spline in it is drafted when a finite proof shows no event
+can come within the depth. Otherwise it is refused with `TaperError::SplineEvent` (in
+forge-model, `DraftError::SplineEvent`). Nothing is searched for. The proof is
+`forge_ops::taper_spline::clear`:
 
-- **The wall.** A drafted spline wall is a ruled surface, `S(t, z) = C(t) + z (k + tan a N(t))`,
-  where C is the outline's `PlaneSpline` (polynomial or rational pieces, `forge_geom::spline`),
-  N its unit normal in the sketch plane and k the extrude axis. It is not a NURBS, because N has
-  `|C'(t)|` in its denominator. It is exact as a `Surface::Procedural` (`forge_geom::surface::Proc`):
-  point, first and second derivatives in closed form from C's own. `draft::drafted` would need
-  this case; today a spline wall answers `NoExactSurface`.
-- **Edges against other walls.** Where the spline wall meets a plane wall (a line side) or a cone
-  wall (an arc side), the edge is a traced `Curve::Intersection`, as for any procedural pair.
-  `rebuild::edge_curve` already does this. At the bottom and top caps the edge is the
-  spline itself and its offset: the offset is `Curve::Procedural`, C(t) + δ N(t), and exact.
-- **The cusp event (an E for a spline).** The offset C + δN folds (a swallowtail) first where
-  `δ κ(t) = 1` on the side it moves to, with κ = (x'y'' − y'x'') / |C'|³. Per polynomial piece,
-  the extreme of κ comes from the roots of a polynomial: d/dt of κ² with |C'|⁶ cleared (for
-  rational pieces, after clearing the weights too). So the first cusp δ* = 1 / max κ comes out
-  exactly from `forge_math::poly::real_roots` on each span. A spline whose offset folds would be
-  refused at δ*, as WallsCross (a fold is the offset crossing itself), unless the arc length up to
-  the fold is gone, which is the same chain test as `gone_at`.
-- **A spline's ends against a line or an arc neighbour.** The joint is where C(t) + δ N(t) meets
-  the moved line or circle. That is one equation in (t, δ): polynomial in t and δ after squaring
-  out |C'|. Following the joint as δ grows means following one branch of a plane algebraic curve,
-  from the known point at δ = 0. Its E event, where the neighbour's side length runs out, is that
-  curve meeting one more polynomial equation: a resultant in t gives a one-variable polynomial in
-  δ. That's exact, but it needs a resultant (Sylvester or Bezout matrix determinant with
-  polynomial entries) that the kernel does not have yet.
+- **Smooth joints.** Every joint of a loop with a spline is tangent (G1), so each point moves
+  exactly δ along its normal and each section is the outline's parallel curve.
+- **No curling.** δκ < 1 on the side the outline moves to, over the whole reach. For each
+  non-rational Bezier span, κ's largest value is at the span's ends or at the roots of
+  `2 num' den − 3 num den'` (num = x'y'' − y'x'', den = x'² + y'²), from
+  `forge_math::poly::real_roots`. For an arc: its radius beyond the reach.
+- **No two parts meeting.** Parts are Bezier spans, lines, and arcs cut under a quarter turn.
+  - Two parts joined by a run of the loop whose tangents all lie in one open half-plane
+    cannot meet. The tangents are the hodograph's control vectors, a line's direction, or a
+    short arc's end tangents. Such a run is a graph over that half-plane's direction, and so
+    is its parallel curve.
+  - Any other two parts must sweep disjoint boxes: their control hulls grown by the reach (by
+    the reach times the mitre's speed in a loop of lines).
+- **Loops of lines and arcs alone.** `first_event` exactly, with no event within the reach.
 
-## What would need a search (why this stops)
+The wall is `forge_geom::spline::Drafted`: S(u, v) = F(C(u) + (v − v0)·k·N(u) + v·z), exact.
+- **Its value and foot.** Each section is a parallel curve of C, so a point's foot on C is its
+  foot on the section. The implicit value is the distance to C less the section's offset, scaled
+  to the normal.
+- **Its derivatives** through the second, from C''' by way of N'' (checked against
+  differences).
+- **The cap edges.** These are `Section`: the parallel curve at that height, an exact procedural
+  curve, drawn straight in the wall's parameters (`curve_uv`). `rebuild::edge_curve` takes it
+  wherever a plane across the sweep cuts such a wall. The traced intersection it replaces left
+  `mass` 1e-8 off.
+- **Vertices.** A vertex of such a wall starts where its ruling now is, at its height, and a seam
+  vertex is held to the plane through the ruling (`rebuild::ruled_start`, `ruling`).
+- **No carry past the ends.** Unlike an extruded wall, the curve is not carried past its ends: a
+  point moved in along the end ruling has its foot at the end, while a carried tail curls away
+  from the neighbouring face the section goes on to.
 
-- **S and C contacts involving a spline.** A corner, moving on a known path, touching the offset
-  spline is the system
-  `P(δ) = C(t) + δ N(t)` (2 equations, 2 unknowns t, δ). A line or arc side reaching the offset
-  spline is a tangency: the same plus `N(t) ∥ n_side`. Both eliminate to one-variable polynomials
-  by resultants. That's exact in principle, but the degrees grow fast (a cubic piece gives
-  degree ≈ 2·3·(2·3−1) before the radical is squared away), and the kernel has neither a
-  resultant nor an exact bivariate solver.
-- **Two offset splines touching (C), or one offset spline touching itself away from a cusp (S,
-  the global self-intersection).** Points C1(s) + δN1(s) = C2(t) + δN2(t) with the two normals
-  opposite: three equations in s, t, δ. The first δ is the medial axis's nearest point, the
-  bisector problem. Without a resultant over two variables or a certified 2-D solver, the only
-  way to the first δ is subdividing (s, t) boxes and bounding: a search. Per the rule, that
-  isn't built.
-- **The oracle.** sweep-ref (Lean) and sweep-diff cover lines and arcs. A spline outline would
-  need its exact sections too: the offset curve's area by Green's theorem is
-  ∫(x dy − y dx)/2 of C + δN, which is not closed-form for a general spline. So it would be a
-  1-D integral, each value of which is exact to rounding, not a closed form.
+`draft()` takes an extruded spline wall too (`draft::drafted`, `Surface::Procedural` of an
+`Extruded` along the pull). That draft refused it before.
 
-## The smallest exact step, if wanted
+**Measured.** 800 random smooth closed splines (5–10 points, 40% with a round hole), tapered
+1–40° in and 1–30° out, 1–16 deep: 668 built and every one exact against its sections
+(Steiner: the parallel curve's area by Gauss–Legendre, ∫ over height by Simpson, exact in a
+quadratic), wall areas to 3e-15; 132 refused (SplineEvent), mostly holes whose box comes
+within the reach of the outline. Nothing that built before changed (repo parts, bench bits,
+the line/arc fuzzes, identical).
 
-Build these:
-- splines that are refused unless no event of any kind can come within the depth;
-- the procedural drafted wall;
-- the per-span cusp bound δ* (exact, above);
-- a conservative bound proving no contact. Contacts are excluded when every pair of features
-  (spline span vs other side, span vs span) is farther apart than 2·reach plus the spans'
-  control-hull extents. That uses the hulls' exact distance, so it's a proof, not a search.
+## What is left
 
-Inside that, a taper is the plain draft, exact. Outside it, refuse with a new
-`TaperError::SplineEvent` (not WallsCross, which claims a crossing at a known height). That
-covers the common case, a gently curved outline tapered a little, without any search. Gates as
-usual: bits identical (nothing built changes, since splines are refused today), scoreboard 0
-worse, fuzz 150/150, native = wasm, and a spline fuzz against a numeric section integral.
+- **Splines with corners (non-tangent joints).** The joint is where C(t) + δN(t) meets the moved
+  neighbour (a line or circle). That is one equation in (t, δ), polynomial once |C'| is squared
+  out. Following it, and its E event (a neighbour's side running out), needs a **resultant**:
+  a Sylvester or Bezout determinant with polynomial entries, eliminating t to leave one
+  polynomial in δ. The kernel has none. Until then: refused.
+- **Contacts the box proof cannot rule out:** a corner, or a side, reaching an offset spline (2
+  unknowns t, δ); two offset splines touching, or one touching itself away from its cusps (3
+  unknowns s, t, δ: the bisector, the medial axis's nearest point). Exactly, these need a
+  **2–3-variable polynomial system solver** (resultants over two variables, or a certified
+  subdivision with a uniqueness test). Without one, the first δ comes only from searching, which
+  isn't built. Until then such outlines are refused whenever their boxes come within the reach,
+  even where no contact happens.
+- **Rational splines** (ellipses among them): the same curvature bound with the weights cleared,
+  a higher-degree polynomial. Refused for now.
+- **Outlines with events past the proof:** where the outline does curl, close, or split within
+  the depth, the slabs of the line/arc taper would need the events above, the curl as a ridge
+  of the parallel curve, and the slab walls as `Drafted` between event heights.
+- **The oracle:** sweep-ref/sweep-diff cover lines and arcs. A spline's sections have no closed
+  form (the fuzz uses one-dimensional quadrature, each value exact to rounding).
