@@ -445,6 +445,8 @@ pub(crate) enum Class {
 /// (`boolean_into` leaves that to its caller, who may go on combining: the regen unifies once,
 /// when it hands the part out.)
 pub fn boolean(a: &Body, b: &Body, op: Op, feature: u64) -> R<Body> {
+    #[cfg(debug_assertions)]
+    crate::size::debug_check(&[a, b]);
     // flat faces: the part read by reference and the result written fresh, with no copy first
     #[cfg(feature = "decide_once")]
     if let Some(r) = crate::decide_once::boolean(a, b, op)? {
@@ -461,6 +463,8 @@ pub fn boolean(a: &Body, b: &Body, op: Op, feature: u64) -> R<Body> {
 /// as tombstones until `Body::compact`. Names do not depend on `_feature`: what the boolean makes
 /// is named by what meets there, as the n-ary boolean names it.
 pub fn boolean_into(target: &mut Body, b: &Body, op: Op, _feature: u64) -> R<()> {
+    #[cfg(debug_assertions)]
+    crate::size::debug_check(&[target, b]);
     #[cfg(feature = "decide_once")]
     if let Some(r) = crate::decide_once::boolean(target, b, op)? {
         *target = r;
@@ -573,6 +577,8 @@ fn survivors(a: &Body, b: &Body, op: Op, r: &Body) -> Option<String> {
 /// `boolean_into` with the tool as its entities (`forge_ops::extrude_unlinked`): the Body is
 /// built only if the general boolean has to run.
 pub fn boolean_unlinked(target: &mut Body, b: forge_topo::Unlinked, op: Op) -> R<()> {
+    #[cfg(debug_assertions)]
+    crate::size::debug_check(&[target, &b.clone().into_body()]);
     #[cfg(feature = "decide_once")]
     if crate::decide_once::flat(target) {
         let tool = b.clone().into_body();

@@ -32,7 +32,7 @@ seams, and the curved screens S3/S4).
 | E.ref | `RefusalTrue A B op e` per refusal kind (`ZeroThickness`, `Unhandled k`, `Undecided q`); `Internal` mapped or unreachable | SPINE (stmt), FALLBACK (`Internal`) | open | — |
 | E.names | `NamesOK`, per entity (D7) | SPINE (stmt) | open | — |
 | E.size | `InputSize A B`, and `boolean_preserves_InputSize` | SPINE | open | — |
-| E.size.rs | the `#[cold]` entry check refusing `Unhandled::InputTooLarge` | FLAT-SITES | open | kernel/forge-bool |
+| E.size.rs | each operand within `InputSize` at the boolean's entries: checked in debug builds only (size.rs `debug_check`, `boolean`/`boolean_into`/`boolean_unlinked`/`nary_with`); release is a GAP: creation-path checks or a release refusal, the owner to choose | FLAT-SITES | open | kernel/forge-bool size.rs |
 | H.fin | `FaithfulInput δ A`: each stored region and curve within δ of its exact meet | hyp (producing feature) | hyp | BodyModel `exactOf_refines`'s `hface`, `hedge` |
 | H.abs | `FormulaOfTopology abs`: the Φ_u that `abs` reads equals the stored local cone | TRANSLATE | open | — |
 | H.batch | `Batch` sound when decided: a code other than 3 is the exact op-fold verdict | FALLBACK | proven for CpuBatch's combinatorics (fold, own tool forced, early 3, grid skipping without an intersect; Csg's three-valued combination); hyp: `MemberSound` at the leaves (Prism/Revolved float screens: IEEE, open), `BoxSound`, the GPU impl | verify/forge-bool-fallback `Batch.cpuCode_sound_all`, `Batch.cpuCode_sound_grid`, `Member.csg_sound` |
