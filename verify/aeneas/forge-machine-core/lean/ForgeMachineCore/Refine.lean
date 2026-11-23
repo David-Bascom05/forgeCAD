@@ -1172,6 +1172,9 @@ theorem homePos_P (n : ℕ) (v via : List (Option Std.I64)) (hn : via.length = n
 
 theorem lv_length (v : List (Option Std.I64)) : (lv v).length = v.length := by simp [lv]
 
+@[simp] theorem iv_some (x : Std.I64) : iv (some x) = some x.val := rfl
+@[simp] theorem iv_none : iv none = none := rfl
+
 theorem u0 : ((0#32#uscalar : Std.U32).val) = 0 := rfl
 theorem u1 : ((1#32#uscalar : Std.U32).val) = 1 := rfl
 theorem u80 : ((80#32#uscalar : Std.U32).val) = 80 := rfl
@@ -1264,7 +1267,7 @@ theorem step_spec (n : ℕ) (a : Axes) (hx : a.x.val < n) (hy : a.y.val < n) (hz
       obtain ⟨hm, hvp, hvf, hva, hvpl, hvri, hvc⟩ := hres
       simp only [core.result.Result.Insts.CoreOpsTry.branch, bind_ok]
       rw [hm]
-      dsimp only [BA, SA]
+      dsimp +instances only [BA, SA]
       simp only [anyAx_eq n _ hax]
       subst hany
       cases hA : (b.ax.val.any fun x => x.isSome) with
@@ -1347,6 +1350,157 @@ theorem step_spec (n : ℕ) (a : Axes) (hx : a.x.val < n) (hy : a.y.val < n) (hz
             · contradiction
             · rfl
       | some c =>
-        sorry
+        simp only [Option.map]
+        split
+        · -- G80 with an active cycle: the hole
+          simp only [u80, Option.map]
+          step with word_spec (alloc.vec.Vec.deref b.ax) a.z as ⟨o, ho⟩
+          have hzP : P n b.ax.val (AX n a hx hy hz).z = iv o := at_P n b.ax a.z hz o ho
+          rw [has_eq, bind_ok, hzP]
+          cases o with
+          | some zw =>
+            simp only [Option.isSome_some, iv_some, true_and, ite_true]
+            rw [has_g_eq, bind_ok]
+            cases hg : b.g with
+            | none => simp
+            | some gw =>
+              simp only [Option.isSome_some, ite_true, reduceCtorEq, ite_false]
+              step with at_spec (alloc.vec.Vec.deref val1) a.x as ⟨o1, ho1⟩
+              step with at_spec (alloc.vec.Vec.deref val1) a.y as ⟨o2, ho2⟩
+              step with at_spec (alloc.vec.Vec.deref st.pos) a.z as ⟨o3, ho3⟩
+              have ex : P n val1.val (AX n a hx hy hz).x = iv o1 := at_P n val1 a.x hx o1 ho1
+              have ey : P n val1.val (AX n a hx hy hz).y = iv o2 := at_P n val1 a.y hy o2 ho2
+              have ez : P n st.pos.val (AX n a hx hy hz).z = iv o3 := at_P n st.pos a.z hz o3 ho3
+              rw [ex, ey, ez, ← iv_or]
+              cases o1 with
+              | none => simp [iv]
+              | some x =>
+              cases o2 with
+              | none => simp [iv]
+              | some y =>
+              cases o3 with
+              | none => simp [iv]
+              | some cur =>
+              cases hfo : b.f.or st.feed with
+              | none => simp [iv]
+              | some f =>
+              simp only [iv, Option.map]
+              have hback : (if b.retract_initial.getD st.retract_initial = true then ok c.initial else ok c.r : Result Std.I64) =
+                  ok (if b.retract_initial.getD st.retract_initial = true then c.initial else c.r) := by split <;> rfl
+              rw [hback, bind_ok]
+              have hcv : CycOK (some c) := hcy ▸ hvc
+              obtain ⟨hzr, hzb, hrb, hqb⟩ := hcv c rfl
+              step with hole_spec n a hx hy hz (alloc.vec.Vec.deref val1) (by simpa [alloc.vec.Vec.deref] using hvl) hn c cur
+                (if b.retract_initial.getD st.retract_initial = true then c.initial else c.r) pc lift f x y
+                (alloc.vec.Vec.new Ev) rfl hzr hzb hrb hqb hpc hlift as ⟨out, hout⟩
+              step with put_P n a hx hy hz (alloc.vec.Vec.deref val1) (by simpa [alloc.vec.Vec.deref] using hvl) hn x y
+                (if b.retract_initial.getD st.retract_initial = true then c.initial else c.r) as ⟨pos, hp⟩
+              have hbv : (if b.retract_initial.getD st.retract_initial = true then c.initial else c.r).val =
+                  (if b.retract_initial.getD st.retract_initial = true then (CY c).initial else (CY c).r) := by
+                split <;> rfl
+              simp [alloc.vec.Vec.deref] at hout hp
+              rw [hbv] at hout hp
+              simp only [hout, SA, hp, hmo, hcy, Option.map, u80]
+          | none =>
+            simp only [Option.isSome_none, iv_none, Bool.false_eq_true, false_and, ite_false]
+            step with at_spec (alloc.vec.Vec.deref val1) a.x as ⟨o1, ho1⟩
+            step with at_spec (alloc.vec.Vec.deref val1) a.y as ⟨o2, ho2⟩
+            step with at_spec (alloc.vec.Vec.deref st.pos) a.z as ⟨o3, ho3⟩
+            have ex : P n val1.val (AX n a hx hy hz).x = iv o1 := at_P n val1 a.x hx o1 ho1
+            have ey : P n val1.val (AX n a hx hy hz).y = iv o2 := at_P n val1 a.y hy o2 ho2
+            have ez : P n st.pos.val (AX n a hx hy hz).z = iv o3 := at_P n st.pos a.z hz o3 ho3
+            rw [ex, ey, ez, ← iv_or]
+            cases o1 with
+            | none => simp [iv]
+            | some x =>
+            cases o2 with
+            | none => simp [iv]
+            | some y =>
+            cases o3 with
+            | none => simp [iv]
+            | some cur =>
+            cases hfo : b.f.or st.feed with
+            | none => simp [iv]
+            | some f =>
+            simp only [iv, Option.map]
+            have hback : (if b.retract_initial.getD st.retract_initial = true then ok c.initial else ok c.r : Result Std.I64) =
+                ok (if b.retract_initial.getD st.retract_initial = true then c.initial else c.r) := by split <;> rfl
+            rw [hback, bind_ok]
+            have hcv : CycOK (some c) := hcy ▸ hvc
+            obtain ⟨hzr, hzb, hrb, hqb⟩ := hcv c rfl
+            step with hole_spec n a hx hy hz (alloc.vec.Vec.deref val1) (by simpa [alloc.vec.Vec.deref] using hvl) hn c cur
+              (if b.retract_initial.getD st.retract_initial = true then c.initial else c.r) pc lift f x y
+              (alloc.vec.Vec.new Ev) rfl hzr hzb hrb hqb hpc hlift as ⟨out, hout⟩
+            step with put_P n a hx hy hz (alloc.vec.Vec.deref val1) (by simpa [alloc.vec.Vec.deref] using hvl) hn x y
+              (if b.retract_initial.getD st.retract_initial = true then c.initial else c.r) as ⟨pos, hp⟩
+            have hbv : (if b.retract_initial.getD st.retract_initial = true then c.initial else c.r).val =
+                (if b.retract_initial.getD st.retract_initial = true then (CY c).initial else (CY c).r) := by
+              split <;> rfl
+            simp [alloc.vec.Vec.deref] at hout hp
+            rw [hbv] at hout hp
+            simp only [hout, SA, hp, hmo, hcy, Option.map, u80]
+        · rename_i hn80
+          have g80 : g.val ≠ 80 := fun e => hn80 (UScalar.eq_of_val_eq (by rw [e, u80]))
+          split
+          · step with copy_spec (alloc.vec.Vec.deref val1) (by simpa [alloc.vec.Vec.deref] using hdl) as ⟨w, hw⟩
+            step with one_spec as ⟨w1, hw1⟩
+            have hwv : w.val = val1.val := by simpa [alloc.vec.Vec.deref] using hw
+            simp only [u0, hw1, List.map_cons, List.map_nil, E, hwv, SA, hmo, hcy, Option.map]
+          · cases hfo : b.f.or st.feed with
+            | none =>
+              have : (iv b.f).or (iv st.feed) = none := by rw [← iv_or, hfo]; rfl
+              simp only [u1, this,
+                core.result.Result.Insts.CoreOpsTry.branch, bind_ok, WP.spec_ok]
+            | some f =>
+              simp only
+              step with copy_spec (alloc.vec.Vec.deref val1) (by simpa [alloc.vec.Vec.deref] using hdl) as ⟨w, hw⟩
+              step with one_spec as ⟨w1, hw1⟩
+              have hwv : w.val = val1.val := by simpa [alloc.vec.Vec.deref] using hw
+              have : (iv b.f).or (iv st.feed) = some f.val := by rw [← iv_or, hfo]; rfl
+              simp only [u1, this, Option.map, hw1, List.map_cons, List.map_nil, E, hwv, SA, hmo, hcy]
+          · rename_i hn0 hn1
+            have g0 : g.val ≠ 0 := fun e => hn0 (UScalar.eq_of_val_eq (by rw [e, u0]))
+            have g1 : g.val ≠ 1 := fun e => hn1 (UScalar.eq_of_val_eq (by rw [e, u1]))
+            simp only [bind_ok]
+            step with is_arc_spec g as ⟨b1, hb1⟩
+            split
+            · rename_i hb
+              have g23 : g.val = 2 ∨ g.val = 3 := by simpa [hb1] using hb
+              apply WP.spec_mono (arc_spec n a hx hy hz st val b val1 g hsp hi hj hk hdl)
+              intro r hr
+              cases r with
+              | Ok p =>
+                obtain ⟨es, s3⟩ := p
+                obtain ⟨hr1, _⟩ := hr
+                simp only [SA, BA, hmo, hcy, Option.map] at hr1
+                simp only
+                split
+                all_goals first
+                  | (exfalso; rename_i h1 h2; simp only [Option.some.injEq] at h1 h2; omega)
+                  | (exfalso; rename_i h1; simp only [Option.some.injEq] at h1; omega)
+                  | (rename_i h1; simp only [Option.some.injEq] at h1; subst h1; rw [if_pos g23]; assumption)
+                  | (rename_i h1 h2; simp only [Option.some.injEq] at h1; subst h1; rw [if_pos g23]; assumption)
+                  | (rename_i h1; simp at h1)
+              | Err e =>
+                simp only [SA, BA, hmo, hcy, Option.map] at hr
+                simp only
+                split
+                all_goals first
+                  | (exfalso; rename_i h1 h2; simp only [Option.some.injEq] at h1 h2; omega)
+                  | (exfalso; rename_i h1; simp only [Option.some.injEq] at h1; omega)
+                  | (rename_i h1; simp only [Option.some.injEq] at h1; subst h1; rw [if_pos g23]; assumption)
+                  | (rename_i h1 h2; simp only [Option.some.injEq] at h1; subst h1; rw [if_pos g23]; assumption)
+                  | (rename_i h1; simp at h1)
+            · rename_i hb
+              have g23 : ¬ (g.val = 2 ∨ g.val = 3) := by simpa [hb1] using hb
+              simp only [WP.spec_ok]
+              split
+              all_goals first
+                | (exfalso; rename_i h1 h2; simp only [Option.some.injEq] at h1 h2; omega)
+                | (exfalso; rename_i h1; simp only [Option.some.injEq] at h1; omega)
+                | (rename_i h1; simp only [Option.some.injEq] at h1; subst h1; rw [if_neg g23])
+                | (rename_i h1 h2; simp only [Option.some.injEq] at h1; subst h1; rw [if_neg g23])
+                | (rename_i h1; simp at h1)
+                | rfl
 
 end forge_machine_core
