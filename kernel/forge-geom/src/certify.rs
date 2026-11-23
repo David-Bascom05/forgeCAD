@@ -1175,27 +1175,33 @@ impl Host {
     }
 }
 
-/// A polynomial in (t, v) with interval coefficients, c[i * (dv + 1) + j] of t^i v^j.
-#[derive(Clone, Debug)]
+/// A polynomial in (t, v) with interval coefficients, c[i * 9 + j] of t^i v^j, of degree at most 8
+/// in each (`over`: a product went past that, and the polynomial is not held).
+#[derive(Clone, Copy, Debug)]
 struct Bp {
     dt: usize,
     dv: usize,
-    c: Vec<I>,
+    over: bool,
+    c: [I; 81],
 }
+
+const ZERO: I = I { lo: 0.0, hi: 0.0 };
 
 impl Bp {
     fn zero(dt: usize, dv: usize) -> Bp {
         Bp {
-            dt,
-            dv,
-            c: vec![I::point(0.0); (dt + 1) * (dv + 1)],
+            dt: dt.min(8),
+            dv: dv.min(8),
+            over: dt > 8 || dv > 8,
+            c: [ZERO; 81],
         }
     }
+    #[inline]
     fn at(&self, i: usize, j: usize) -> I {
         if i <= self.dt && j <= self.dv {
-            self.c[i * (self.dv + 1) + j]
+            self.c[i * 9 + j]
         } else {
-            I::point(0.0)
+            ZERO
         }
     }
     fn of(terms: &[(usize, usize, I)]) -> Bp {
@@ -1203,41 +1209,49 @@ impl Bp {
         let dv = terms.iter().map(|t| t.1).max().unwrap_or(0);
         let mut p = Bp::zero(dt, dv);
         for &(i, j, x) in terms {
-            p.c[i * (dv + 1) + j] = p.c[i * (dv + 1) + j] + x;
+            if i <= 8 && j <= 8 {
+                p.c[i * 9 + j] = ia(p.c[i * 9 + j], x);
+            }
         }
         p
     }
     fn add(&self, o: &Bp) -> Bp {
-        let (dt, dv) = (self.dt.max(o.dt), self.dv.max(o.dv));
-        let mut p = Bp::zero(dt, dv);
-        for i in 0..=dt {
-            for j in 0..=dv {
-                p.c[i * (dv + 1) + j] = ia(self.at(i, j), o.at(i, j));
+        let mut p = Bp::zero(self.dt.max(o.dt), self.dv.max(o.dv));
+        p.over |= self.over || o.over;
+        for i in 0..=p.dt {
+            for j in 0..=p.dv {
+                p.c[i * 9 + j] = ia(self.at(i, j), o.at(i, j));
             }
         }
         p
     }
     fn scale(&self, x: I) -> Bp {
-        Bp {
-            dt: self.dt,
-            dv: self.dv,
-            c: self.c.iter().map(|c| im(*c, x)).collect(),
+        let mut p = *self;
+        for i in 0..=p.dt {
+            for j in 0..=p.dv {
+                p.c[i * 9 + j] = im(p.c[i * 9 + j], x);
+            }
         }
+        p
     }
     fn mul(&self, o: &Bp) -> Bp {
         let mut p = Bp::zero(self.dt + o.dt, self.dv + o.dv);
-        let w = p.dv + 1;
+        p.over |= self.over || o.over;
+        if p.over {
+            return p;
+        }
         for i in 0..=self.dt {
             for j in 0..=self.dv {
-                let a = self.at(i, j);
-                if a == I::point(0.0) {
+                let a = self.c[i * 9 + j];
+                if a == ZERO {
                     continue;
                 }
                 for k in 0..=o.dt {
                     for l in 0..=o.dv {
-                        let b = o.at(k, l);
-                        if b != I::point(0.0) {
-                            p.c[(i + k) * w + j + l] = ia(p.c[(i + k) * w + j + l], im(a, b));
+                        let b = o.c[k * 9 + l];
+                        if b != ZERO {
+                            let at = (i + k) * 9 + j + l;
+                            p.c[at] = ia(p.c[at], im(a, b));
                         }
                     }
                 }
@@ -1606,6 +1620,9 @@ impl Host {
                     sq(&a).add(&w2.mul(&rho2).scale(-(I::point(big * big).widened() * 4.0)))
                 }
             };
+            if f.over {
+                return None;
+            }
             out.push(Chart {
                 f,
                 t,
@@ -2549,7 +2566,7 @@ fn value_bound(f: &Bp, t: f64, s: f64) -> (f64, f64) {
     for i in 0..=f.dt {
         let mut sp = 1.0;
         for j in 0..=f.dv {
-            let c = f.c[i * (f.dv + 1) + j];
+            let c = f.c[i * 9 + j];
             let x = c.mid() * tp * sp;
             v += x;
             abs += x.abs();
@@ -2575,11 +2592,7 @@ fn root_along(f: &Bp, solve_s: bool, x: f64, range: I, up: f64, guess: Option<f6
     let mut xp = 1.0;
     for i in 0..=len {
         for (j, gj) in g.iter_mut().enumerate().take(across + 1) {
-            let c = if solve_s {
-                f.c[i * (f.dv + 1) + j]
-            } else {
-                f.c[j * (f.dv + 1) + i]
-            };
+            let c = if solve_s { f.c[i * 9 + j] } else { f.c[j * 9 + i] };
             *gj += c.mid() * xp;
         }
         xp *= x;
