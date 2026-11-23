@@ -807,7 +807,7 @@ fn join(body: &mut Body, c: CoedgeId, n: CoedgeId) -> bool {
     // two traces of where the same two surfaces meet (the pieces two booleans traced apart):
     // one branch through v, whose chains are spliced there
     let traced = match (&x1.curve, &x2.curve) {
-        (Curve::Intersection(a), Curve::Intersection(b)) => !std::sync::Arc::ptr_eq(a, b),
+        (Curve::Intersection(a), Curve::Intersection(b)) => !std::sync::Arc::ptr_eq(a, b) && a != b,
         _ => false,
     };
     // on one line or circle (cheap tests first; the walk round v and the evaluation settle it)

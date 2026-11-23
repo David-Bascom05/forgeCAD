@@ -81,6 +81,7 @@ no-output (no iteration order reaches an output; audit)  @ forge-bool/src/ssi.rs
 speed (cache answering a function of its own key)  @ forge-bool/src/ssi.rs|static|static MET: std::cell::RefCell<Mets> = std::cell::RefCell::new(Default::default());
 speed (cache answering a function of its own key)  @ forge-bool/src/ssi.rs|static|static MET_MOST: std::cell::Cell<usize> = const { std::cell::Cell::new(4096) };
 speed (cache answering a function of its own key)  @ forge-bool/src/ssi.rs|thread_local|thread_local! {
+no-output (a shortcut of value equality: one Arc is the same curve, and two equal ones take the same path)  @ forge-bool/src/unify.rs|pointer|(Curve::Intersection(a), Curve::Intersection(b)) => !std::sync::Arc::ptr_eq(a, b) && a != b,
 speed (lazy field or constant table)  @ forge-geom/src/blend.rs|lazy|samples: OnceLock::new(),  x 5
 speed (lazy field or constant table)  @ forge-geom/src/blend.rs|lazy|samples: OnceLock<Vec<(f64, Point3)>>,
 speed (lazy field or constant table)  @ forge-geom/src/blend.rs|lazy|smooth: OnceLock::new(),  x 8
