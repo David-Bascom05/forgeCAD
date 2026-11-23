@@ -29,20 +29,26 @@ pub enum ExtractError {
         inner: EntityId,
         outer: EntityId,
     },
+    /// Two groups that must stay apart (`profiles_in_groups`: two glyphs) meet: these two
+    /// entities cross or touch.
+    Meet {
+        a: EntityId,
+        b: EntityId,
+    },
 }
 
 /// The regions the sketch's non-construction lines, arcs and circles enclose:
 /// one profile per outer loop, with the loops directly inside it as holes (an
 /// island inside a hole is its own profile). Segment ids are entity ids.
 pub fn profiles(sketch: &Sketch) -> Result<Vec<Profile>, ExtractError> {
-    profiles_among(sketch, |_| true)
+    profiles_among(sketch, &|_| true)
 }
 
 /// `profiles` of only the entities `keep` takes (a text's own glyphs, whatever else the sketch
 /// draws round them).
 pub fn profiles_among(
     sketch: &Sketch,
-    keep: impl Fn(EntityId) -> bool,
+    keep: &dyn Fn(EntityId) -> bool,
 ) -> Result<Vec<Profile>, ExtractError> {
     let mut open: Vec<(Segment, EntityId)> = Vec::new();
     let mut loops: Vec<ProfileLoop> = Vec::new();
@@ -118,27 +124,34 @@ pub fn profiles_among(
     }
     check_crossings(&loops)?;
 
-    // which loop lies inside which, decided exactly (winding.rs)
+    // which loop lies inside which, decided exactly (winding.rs); each pair asked as needed
     let n = loops.len();
-    let boxes: Vec<(Point2, Point2)> = loops.iter().map(crate::winding::bbox).collect();
-    let mut within = vec![false; n * n];
-    for i in 0..n {
+    let inside = |i: usize, j: usize| -> Result<bool, ExtractError> {
+        if i == j {
+            return Ok(false);
+        }
+        crate::winding::inside(&loops[i], &loops[j], crate::winding::bbox(&loops[j])).ok_or(
+            ExtractError::Undecided {
+                inner: EntityId(loops[i].segments[0].1),
+                outer: EntityId(loops[j].segments[0].1),
+            },
+        )
+    };
+    let mut depth = vec![0usize; n];
+    for (i, d) in depth.iter_mut().enumerate() {
         for j in 0..n {
-            if i == j {
-                continue;
-            }
-            within[i * n + j] =
-                crate::winding::inside(&loops[i], &loops[j], boxes[j]).ok_or(ExtractError::Undecided {
-                    inner: EntityId(loops[i].segments[0].1),
-                    outer: EntityId(loops[j].segments[0].1),
-                })?;
+            *d += inside(i, j)? as usize;
         }
     }
-    let inside = |i: usize, j: usize| within[i * n + j];
-    let depth: Vec<usize> = (0..n).map(|i| (0..n).filter(|&j| inside(i, j)).count()).collect();
-    let parent: Vec<Option<usize>> = (0..n)
-        .map(|i| (0..n).find(|&j| inside(i, j) && depth[j] + 1 == depth[i]))
-        .collect();
+    let mut parent: Vec<Option<usize>> = vec![None; n];
+    for (i, p) in parent.iter_mut().enumerate() {
+        for j in 0..n {
+            if depth[j] + 1 == depth[i] && inside(i, j)? {
+                *p = Some(j);
+                break;
+            }
+        }
+    }
 
     let mut out = Vec::new();
     for o in (0..n).filter(|&i| depth[i].is_multiple_of(2)) {
@@ -149,6 +162,61 @@ pub fn profiles_among(
             loops: ls,
         };
         out.push(p.normalized_touching().map_err(ExtractError::Profile)?);
+    }
+    Ok(out)
+}
+
+/// The regions of groups of entities taken one group at a time (each a part of a glyph, say),
+/// each group's by `profiles_among`; groups of one `whole` (one glyph) may overlap, the union
+/// of their regions being what a feature over them makes, while loops of different wholes must
+/// neither cross nor touch (`Meet`). Each region comes with its group's index.
+pub fn profiles_in_groups(
+    sketch: &Sketch,
+    groups: &[(usize, Vec<EntityId>)],
+) -> Result<Vec<(usize, Profile)>, ExtractError> {
+    let mut out: Vec<(usize, Profile)> = Vec::new();
+    for (g, (_, ids)) in groups.iter().enumerate() {
+        let mut keep = ids.clone();
+        keep.sort_unstable();
+        for p in profiles_among(sketch, &|e| keep.binary_search(&e).is_ok())? {
+            out.push((g, p));
+        }
+    }
+    // every loop of every region, with its whole and its box
+    let loops: Vec<(usize, &ProfileLoop, (Point2, Point2))> = out
+        .iter()
+        .flat_map(|(g, p)| {
+            p.loops
+                .iter()
+                .map(move |l| (groups[*g].0, l, crate::winding::bbox(l)))
+        })
+        .collect();
+    let pad = tol::LINEAR;
+    let apart = |a: (Point2, Point2), b: (Point2, Point2)| {
+        a.1.x + pad < b.0.x || b.1.x + pad < a.0.x || a.1.y + pad < b.0.y || b.1.y + pad < a.0.y
+    };
+    for i in 0..loops.len() {
+        for j in i + 1..loops.len() {
+            let ((wi, li, bi), (wj, lj, bj)) = (&loops[i], &loops[j]);
+            if wi == wj || apart(*bi, *bj) {
+                continue;
+            }
+            for (si, ei) in &li.segments {
+                let shi = shape(si);
+                for (sj, ej) in &lj.segments {
+                    let met = match hits(&shi, &shape(sj)) {
+                        Hit::Overlap => true,
+                        Hit::Points(ps) => !ps.is_empty(),
+                    };
+                    if met {
+                        return Err(ExtractError::Meet {
+                            a: EntityId(*ei),
+                            b: EntityId(*ej),
+                        });
+                    }
+                }
+            }
+        }
     }
     Ok(out)
 }

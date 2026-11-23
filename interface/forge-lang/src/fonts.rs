@@ -1,4 +1,4 @@
-//! The fonts shipped with ForgeCAD, by family and style: Open Sans 1.10 (TrueType outlines; the
+//! The fonts shipped with ForgeCAD, by family and style: Open Sans 1.10 Regular and Bold (TrueType outlines; the
 //! version Onshape sets sketch text in; Apache License 2.0) and Source Sans 3 (CFF outlines; SIL
 //! Open Font License 1.1). Both licences allow them to be embedded and redistributed with
 //! software (fonts/README.md records where each came from, its licence and its hash).
@@ -25,16 +25,6 @@ const FACES: &[Face] = &[
         family: "Open Sans",
         style: "Bold",
         bytes: include_bytes!("../fonts/OpenSans-Bold.ttf"),
-    },
-    Face {
-        family: "Open Sans",
-        style: "Italic",
-        bytes: include_bytes!("../fonts/OpenSans-Italic.ttf"),
-    },
-    Face {
-        family: "Open Sans",
-        style: "Bold Italic",
-        bytes: include_bytes!("../fonts/OpenSans-BoldItalic.ttf"),
     },
     Face {
         family: "Source Sans 3",
@@ -77,7 +67,9 @@ pub fn shipped(family: &str, bold: bool, italic: bool) -> Option<Arc<Font>> {
         .position(|f| f.family.eq_ignore_ascii_case(family) && f.style == want)?;
     Some(
         parsed[k]
-            .get_or_init(|| Arc::new(Font::parse(FACES[k].bytes.to_vec()).expect("a shipped font reads")))
+            .get_or_init(|| {
+                Arc::new(Font::parse_cff_too(FACES[k].bytes.to_vec()).expect("a shipped font reads"))
+            })
             .clone(),
     )
 }
@@ -93,7 +85,7 @@ mod tests {
         for (family, style) in faces() {
             let (bold, italic) = (style.contains("Bold"), style.contains("Italic"));
             let f = shipped(family, bold, italic).expect("shipped");
-            assert_eq!((f.family.as_str(), f.style.as_str()), (family, style));
+            assert_eq!(f.names(), (family.to_string(), style.to_string()));
             for c in (0x21u32..0x7f).chain(0xa1..0x100).filter_map(char::from_u32) {
                 if c == '\u{ad}' {
                     continue;
@@ -105,6 +97,37 @@ mod tests {
             }
         }
         assert!(shipped("open sans", false, false).is_some());
+    }
+
+    /// Every shipped face, cut short and scrambled: refused or read, never a panic.
+    #[test]
+    fn shipped_faces_survive_corruption() {
+        let mut r = forge_math::rng::Rng::new(2026);
+        let mut files: Vec<Vec<u8>> = Vec::new();
+        for f in FACES {
+            let b = f.bytes;
+            files.extend((1..48).map(|k| b[..b.len() * k / 48].to_vec()));
+            for _ in 0..60 {
+                let mut d = b.to_vec();
+                for _ in 0..1 + r.below(16) {
+                    let k = r.below(d.len());
+                    d[k] = r.below(256) as u8;
+                }
+                files.push(d);
+            }
+        }
+        forge_math::par::map(files.len(), |i| {
+            if let Ok(f) = Font::parse_cff_too(files[i].clone()) {
+                for c in ('!'..='~').chain(['\u{e9}', '\u{c5}', '\u{2026}']) {
+                    let g = f.glyph(c);
+                    let _ = f.outline(g);
+                    let _ = f.advance(g);
+                }
+                let _ =
+                    forge_font::layout::lay_out(&f, "Fuzz 0\nSecond", forge_font::layout::Align::Center, 7.0);
+            }
+        });
         assert!(shipped("Source Sans 3", true, false).is_none());
+        assert!(shipped("Open Sans", false, true).is_none());
     }
 }

@@ -44,7 +44,7 @@ fn raised_and_cut_text_builds_valid() {
         "",
         ", font: \"Source Sans 3\"",
         ", bold: true",
-        ", italic: true, align: \"center\"",
+        ", font: \"Source Sans 3\", align: \"center\"",
     ] {
         for op in ["extrude", "cut"] {
             let r = run(&part("FORGE 40", font, op));
@@ -136,10 +136,27 @@ fn refusals_are_typed() {
     // a family not shipped, a style it lacks, a character it lacks, nothing drawn
     assert!(kind(part("A", ", font: \"Nope Sans\"", "extrude")).contains("NoFamily"));
     assert!(kind(part("A", ", font: \"Source Sans 3\", bold: true", "extrude")).contains("NoStyle"));
+    assert!(kind(part("A", ", italic: true", "extrude")).contains("NoStyle"));
     assert!(kind(part("A\u{4e2d}", "", "extrude")).contains("NoGlyph"));
     assert!(kind(part("  ", "", "extrude")).contains("Empty"));
-    // Open Sans's C cedilla: its cedilla crosses the C, refused rather than joined
-    assert!(kind(part("\u{c7}", "", "extrude")).contains("SketchProfile"));
+    // bold V and W touch: two glyphs meeting are refused, naming them; spacing sets them apart
+    assert!(kind(part("VW", ", bold: true", "extrude")).contains("GlyphsMeet { a: 0, b: 1 }"));
+    assert!(run(&part("VW", ", bold: true, spacing: 0.5", "extrude")).ok());
+}
+
+/// A composite glyph is the union of its components' regions: Open Sans's A ring, C cedilla
+/// and c cedilla overlap their letters, and build as one glyph each.
+#[test]
+fn composite_glyphs_are_unions() {
+    let plate = 80.0 * 30.0 * 4.0;
+    for c in ["\u{c5}", "\u{c7}", "\u{e7}"] {
+        for bold in ["", ", bold: true"] {
+            let r = run(&part(c, bold, "extrude"));
+            assert!(r.ok(), "{c}{bold}: {:?}", r.errors);
+            assert!(forge_topo::check(r.body.as_ref().unwrap()).is_empty());
+            assert!(volume(&r) > plate);
+        }
+    }
 }
 
 /// Text as a part's first, new body, and as a new body beside another: its glyphs one body.
@@ -189,4 +206,35 @@ fn the_nameplate_example_builds() {
     let r = run(&std::fs::read_to_string(p).expect("the example"));
     assert!(r.ok(), "{:?}", r.errors);
     assert!(forge_topo::check(r.body.as_ref().unwrap()).is_empty());
+}
+
+/// Text parts' exact bits (vertex points, edge ranges, face count): the same on every target
+/// (CI runs this natively and as wasm32-wasip1, so the constants hold for both).
+#[test]
+fn text_bits_are_the_same_everywhere() {
+    let bits = |src: &str| {
+        let r = run(src);
+        assert!(r.ok(), "{:?}", r.errors);
+        let b = r.body.as_ref().unwrap();
+        let mut h = forge_math::hash::BitHasher::new();
+        for v in &b.vertices {
+            h.p3(v.point);
+        }
+        for e in &b.edges {
+            h.f64(e.range.lo);
+            h.f64(e.range.hi);
+        }
+        h.u64(b.faces.len() as u64);
+        format!("{:016x}", h.finish())
+    };
+    let got = [
+        bits(&part("FORGE 40", ", angle: 7deg", "extrude")),
+        bits(&part(
+            "Qg&8",
+            ", font: \"Source Sans 3\", align: \"center\"",
+            "cut",
+        )),
+    ];
+    println!("{got:?}");
+    assert_eq!(got, ["62b0602ea86db6e0", "9b4b3744493af53b"]);
 }

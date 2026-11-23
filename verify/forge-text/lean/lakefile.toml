@@ -1,0 +1,10 @@
+name = "forgetext"
+version = "0.1.0"
+defaultTargets = ["ForgeText"]
+
+[leanOptions]
+autoImplicit = false
+relaxedAutoImplicit = false
+
+[[lean_lib]]
+name = "ForgeText"

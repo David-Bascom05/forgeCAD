@@ -90,6 +90,10 @@ pub enum TextError {
 /// The text's glyph regions in layout units (mm): each an outline, counter-clockwise, then its
 /// holes, clockwise. Lines break at newlines, 1.2 em apart.
 pub fn layout(font: &Font, text: &str, size: f64) -> Result<Vec<Vec<Vec<GlyphSeg>>>, TextError> {
+    // the raised letters' walls are parabolic: a CFF (cubic) font is for sketch text
+    if font.is_cff() {
+        return Err(TextError::Font(FontError::Cff));
+    }
     let k = size / font.units_per_em;
     let mut regions = Vec::new();
     let (mut x, mut y) = (0.0, 0.0);
@@ -114,14 +118,13 @@ pub fn layout(font: &Font, text: &str, size: f64) -> Result<Vec<Vec<Vec<GlyphSeg
             .map(|c| {
                 c.iter()
                     .map(|s| match *s {
-                        Seg::Line(a, b) => Ok(GlyphSeg::Line(at(a), at(b))),
-                        Seg::Quad(a, m, b) => Ok(GlyphSeg::Quad(at(a), at(m), at(b))),
-                        // the raised letters' walls are parabolic: a CFF font is for sketch text
-                        Seg::Cubic(..) => Err(TextError::Font(FontError::Cff)),
+                        Seg::Line(a, b) => GlyphSeg::Line(at(a), at(b)),
+                        Seg::Quad(a, m, b) => GlyphSeg::Quad(at(a), at(m), at(b)),
+                        Seg::Cubic(..) => unreachable!("a TrueType font's outlines hold no cubics"),
                     })
-                    .collect::<Result<Vec<_>, _>>()
+                    .collect()
             })
-            .collect::<Result<_, _>>()?;
+            .collect();
         regions.extend(nest(contours));
         x += font.advance(g) * k;
         prev = Some(g);

@@ -35,6 +35,9 @@ pub struct Sk {
     pub nums: Vec<(EntityId, &'static str, crate::values::Num)>,
     /// The solve `finish` came to (its regions worked out once, for this run and the next).
     done: Done,
+    /// A text's segments, in the order made: each with the place of its character in the
+    /// string and its part of the glyph (a composite's component), for its regions.
+    pub text_segs: Vec<(EntityId, usize, usize)>,
 }
 
 /// `Sk`'s solve: no part of what a sketch is (equal and printed as nothing).
@@ -104,6 +107,7 @@ impl Sk {
             free: false,
             nums: vec![],
             done: Done::default(),
+            text_segs: vec![],
         }
     }
 
@@ -659,7 +663,7 @@ impl Sk {
             _ => &self.s,
         };
         let ps =
-            forge_sketch::profiles_among(solved, |e| keep.binary_search(&e).is_ok()).map_err(|error| {
+            forge_sketch::profiles_among(solved, &|e| keep.binary_search(&e).is_ok()).map_err(|error| {
                 Error::SketchProfile {
                     span,
                     sketch: self.id.clone(),
@@ -670,6 +674,65 @@ impl Sk {
         Ok(ps
             .into_iter()
             .map(|mut p| {
+                for l in &mut p.loops {
+                    for g in &mut l.segments {
+                        let (piece, e) = (g.1 & PIECE, EntityId(g.1 & !PIECE));
+                        g.1 = piece | self.seg_id(e);
+                    }
+                }
+                p
+            })
+            .collect())
+    }
+
+    /// The regions of a list of loops: each loop's segments a group per part of its glyph (a
+    /// text's; anything else one part), each element's parts overlapping as they will and the
+    /// elements kept apart (`forge_sketch::profiles_in_groups`), named as `profile` names them.
+    /// Two characters meeting is `Text GlyphsMeet`, naming them.
+    pub fn profiles_grouped(&self, elements: &[&[EntityId]], span: Span) -> R<Vec<Profile>> {
+        let part = |e: EntityId| {
+            self.text_segs
+                .binary_search_by_key(&e, |t| t.0)
+                .map_or((usize::MAX, 0), |k| (self.text_segs[k].1, self.text_segs[k].2))
+        };
+        let mut groups: Vec<(usize, Vec<EntityId>)> = Vec::new();
+        for (k, el) in elements.iter().enumerate() {
+            let first = groups.len();
+            for &e in el.iter() {
+                let p = part(e).1;
+                match groups[first..].iter_mut().find(|g| part(g.1[0]).1 == p) {
+                    Some(g) => g.1.push(e),
+                    None => groups.push((k, vec![e])),
+                }
+            }
+        }
+        let solved = match &self.done.0 {
+            Some(d) if d.out.same_bits(&self.s) => &d.out,
+            _ => &self.s,
+        };
+        let ps = forge_sketch::profiles_in_groups(solved, &groups).map_err(|error| match error {
+            forge_sketch::ExtractError::Meet { a, b } => {
+                const PIECE: u64 = 0xffff << 48;
+                let (ca, cb) = (part(EntityId(a.0 & !PIECE)).0, part(EntityId(b.0 & !PIECE)).0);
+                crate::feat_error::FeatError::Text {
+                    span,
+                    problem: crate::feat_error::TextProblem::GlyphsMeet {
+                        a: ca.min(cb),
+                        b: ca.max(cb),
+                    },
+                }
+                .into()
+            }
+            error => Error::SketchProfile {
+                span,
+                sketch: self.id.clone(),
+                error,
+            },
+        })?;
+        const PIECE: u64 = 0xffff << 48;
+        Ok(ps
+            .into_iter()
+            .map(|(_, mut p)| {
                 for l in &mut p.loops {
                     for g in &mut l.segments {
                         let (piece, e) = (g.1 & PIECE, EntityId(g.1 & !PIECE));

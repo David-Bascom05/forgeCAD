@@ -149,6 +149,72 @@ def spline_points(pts, d0=None, d1=None, per=24):
     return out
 
 
+def forge_through(pts, d0=None, d1=None):
+    """Forge's cubic through points (forge-geom `Spline::through`, the spline spec's centripetal C2 interpolant), open:
+    its Bezier spans. Knots by the square root of each chord, scaled to run as long as the chords together; natural at
+    an end with no slope. `d0`, `d1` are per a parameter running 0..1 over the curve, as the importers read them."""
+    n = len(pts)
+    t = [0.0]
+    length = 0.0
+    for i in range(1, n):
+        c = max(dist(pts[i], pts[i - 1]), 1e-12)
+        length += c
+        t.append(t[-1] + math.sqrt(c))
+    t = [x * length / t[-1] for x in t]
+    h = [t[i + 1] - t[i] for i in range(n - 1)]
+    dp = [((pts[i + 1][0] - pts[i][0]) / h[i], (pts[i + 1][1] - pts[i][1]) / h[i]) for i in range(n - 1)]
+    rows = [(0.0, 1.0, 0.0, (d0[0] / length, d0[1] / length)) if d0 is not None else (0.0, 2.0, 1.0, (3 * dp[0][0], 3 * dp[0][1]))]
+    for i in range(1, n - 1):
+        rows.append((h[i], 2 * (h[i - 1] + h[i]), h[i - 1], tuple(3 * (dp[i - 1][k] * h[i] + dp[i][k] * h[i - 1]) for k in (0, 1))))
+    rows.append((0.0, 1.0, 0.0, (d1[0] / length, d1[1] / length)) if d1 is not None else (1.0, 2.0, 0.0, (3 * dp[-1][0], 3 * dp[-1][1])))
+    # Thomas: rows (below, diagonal, above, right side)
+    cp, dd = [0.0] * n, [(0.0, 0.0)] * n
+    cp[0] = rows[0][2] / rows[0][1]
+    dd[0] = (rows[0][3][0] / rows[0][1], rows[0][3][1] / rows[0][1])
+    for i in range(1, n):
+        a, b, c, r = rows[i]
+        w = b - a * cp[i - 1]
+        cp[i] = c / w
+        dd[i] = ((r[0] - a * dd[i - 1][0]) / w, (r[1] - a * dd[i - 1][1]) / w)
+    m = [None] * n
+    m[-1] = dd[-1]
+    for i in range(n - 2, -1, -1):
+        m[i] = (dd[i][0] - cp[i] * m[i + 1][0], dd[i][1] - cp[i] * m[i + 1][1])
+    return [(pts[i], (pts[i][0] + m[i][0] * h[i] / 3, pts[i][1] + m[i][1] * h[i] / 3),
+             (pts[i + 1][0] - m[i + 1][0] * h[i] / 3, pts[i + 1][1] - m[i + 1][1] * h[i] / 3), pts[i + 1]) for i in range(n - 1)]
+
+
+def bezier_dist(spans, p):
+    """The distance from p to a chain of cubic Bezier spans: the nearest few of a coarse sampling, each refined
+    within its span (a nearest point at a join is reached from either side)."""
+    def at(sp, u):
+        w = ((1 - u) ** 3, 3 * u * (1 - u) ** 2, 3 * u * u * (1 - u), u ** 3)
+        return (sum(w[j] * sp[j][0] for j in range(4)), sum(w[j] * sp[j][1] for j in range(4)))
+    coarse = sorted((dist(at(sp, j / 32), p), k, j / 32) for k, sp in enumerate(spans) for j in range(33))
+    out = math.inf
+    for d, k, u in coarse[:4]:
+        step = 1 / 32
+        for _ in range(40):
+            step /= 2
+            for v in (u - step, u + step):
+                if 0 <= v <= 1:
+                    e = dist(at(spans[k], v), p)
+                    if e < d:
+                        d, u = e, v
+        out = min(out, d)
+    return out
+
+
+def carrier_dist(pc, p):
+    """curve_dist, but to the exact curve where the piece is written exactly (the whole of a fit spline marked exact):
+    a written spline's faces lie on it, not on its sampled chords."""
+    if pc.kind == "poly" and pc.src is not None and pc.src[0] == "through":
+        if getattr(pc, "spans", None) is None:
+            pc.spans = forge_through(pc.src[1], pc.src[2], pc.src[3])
+        return bezier_dist(pc.spans, p)
+    return curve_dist(pc, p)
+
+
 def circle_from(a, m, b):
     ax, ay, bx, by, cx, cy = a[0], a[1], m[0], m[1], b[0], b[1]
     d = 2 * (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by))

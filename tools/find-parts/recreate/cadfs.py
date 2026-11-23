@@ -22,7 +22,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import fs
 import sketch2d
 from fgw import NoName, Prog, St, Stop, Topo, loop_segs, neg
-from sketch2d import Arrangement, Unsupported, curve_dist, meets
+from sketch2d import Arrangement, Unsupported, carrier_dist, curve_dist, meets
 
 TOL = 2e-4  # mm: a sample this close lies on its carrier
 SIDE = 1  # TD weight +1: the region on this side of the entity (+1 left)
@@ -31,8 +31,6 @@ TEXT = "text"  # a text sketch's regions: every glyph of each of its texts
 TEXT_FONTS = {
     "OpenSans-Regular.ttf": ("Open Sans", False, False),
     "OpenSans-Bold.ttf": ("Open Sans", True, False),
-    "OpenSans-Italic.ttf": ("Open Sans", False, True),
-    "OpenSans-BoldItalic.ttf": ("Open Sans", True, True),
 }
 SUPPORTED = {"sweep", "loft", "sketch", "extrude", "revolve", "fillet", "chamfer", "shell", "cPlane", "cPoint", "assignVariable", "hole", "mirror", "circularPattern", "transform", "booleanBodies"}
 PLANES = {"Front": ((0.0, -1.0, 0.0), (1.0, 0.0, 0.0)), "Top": ((0.0, 0.0, 1.0), (1.0, 0.0, 0.0)), "Right": ((1.0, 0.0, 0.0), (0.0, 1.0, 0.0))}
@@ -151,7 +149,7 @@ class Swept:
 
     def dist(self, p):
         u, v, w = self.fr.uvw(p)
-        d = curve_dist(self.piece, (u, v))
+        d = carrier_dist(self.piece, (u, v))
         out = 0.0
         if self.lo is not None and w < self.lo:
             out = self.lo - w
@@ -174,7 +172,7 @@ class Turned:
         r = math.hypot(dx - s * self.d2[0], dy - s * self.d2[1])
         r = math.hypot(r, w)
         e = (-self.d2[1], self.d2[0])
-        return min(curve_dist(self.piece, (self.a2[0] + s * self.d2[0] + k * r * e[0], self.a2[1] + s * self.d2[1] + k * r * e[1])) for k in (1, -1))
+        return min(carrier_dist(self.piece, (self.a2[0] + s * self.d2[0] + k * r * e[0], self.a2[1] + s * self.d2[1] + k * r * e[1])) for k in (1, -1))
 
 
 class Any:
@@ -836,7 +834,7 @@ class Tr:
         if not ents:
             return hit
         c = self.carrier(q, env)
-        hs = {h for e in st["edges"] if set(e["f"]) & hit and all(c.dist(p) <= TOL and any(curve_dist(g[3], g[2].uvw(p)[:2]) <= TOL for g in ents) for p in e["p"]) for h in set(e["f"]) & hit}
+        hs = {h for e in st["edges"] if set(e["f"]) & hit and all(c.dist(p) <= TOL and any(carrier_dist(g[3], g[2].uvw(p)[:2]) <= TOL for g in ents) for p in e["p"]) for h in set(e["f"]) & hit}
         return hs or hit
 
     def edge_ent(self, e, fr):
@@ -1215,9 +1213,19 @@ class Tr:
             elif bound == "UP_TO_NEXT":
                 head = ("next", "fwd")
             elif bound == "UP_TO_SURFACE":
-                c = self.carrier(single(a.get("endBoundEntityFace"), env), env)
+                q = single(a.get("endBoundEntityFace"), env)
+                c = self.carrier(q, env)
                 if not isinstance(c, OnPlane):
-                    raise Unsupported("up to a curved face")
+                    # Forge runs up to the faces themselves: `upto(FACES)`, named on the part as built
+                    if second or a.get("hasOffset") is True or taper is not None:
+                        raise Unsupported("up to a curved face, with an offset, a draft or a second direction")
+                    hs = self.faces_for([q], env)
+                    if not hs:
+                        raise Unresolved("no face on the carrier: up-to face")
+                    head = ("upto", self.select("faces", hs))
+                    self.solid[f["id"]] = {"kind": "extrude", "frame": fr, "lo": 0.0, "hi": None}
+                    self.emit_solid("extrude", op, {"ext": head}, frame, {fid: by[fid]}, opp, fid_out=f["id"])
+                    continue
                 w = dot(add(c.o, fr.o, -1), fr.n) * sgn
                 dn = abs(dot(c.n, fr.n))
                 if dn < 1 - 1e-9:
