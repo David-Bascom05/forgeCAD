@@ -34,7 +34,9 @@ rational: everything here is over ℚ and every decision is an exact sign. `L` i
    `(a.y > p.y) ≠ (b.y > p.y)` and `(b.y > a.y) = (side(a, b, p) > 0)`. Theorems: invariant
    under rotating the loop's start (`inPoly_rotate`), under reversing it, for every point
    (`crosses_reverse`: `side` is antisymmetric and never `0`), and under translation
-   (`inPoly_translate`).
+   (`inPoly_translate`). It is the shared signed winding number's parity at every point
+   (verify/winding2d; Sheet/Winding.lean `inPoly_wind`), hence Jordan's inside for a simple
+   polygon off its boundary (`inPoly_simple`, from `Winding2d.wind_simple`).
 6. Holes: after `chain` there are no pinches, so the loops are pairwise disjoint. A hole `H` goes
    to the outer loop `O` that holds `H`'s representative vertex and is innermost among those:
    every other outer loop holding it also holds `O`'s representative (`owner`, unique when the

@@ -7,6 +7,7 @@ import Sheet.BranchBound
 import Sheet.Build
 import Sheet.Float
 import Sheet.Exact
+import Sheet.Winding
 import Sheet.Trig
 import Sheet.Checker
 import Sheet.Oracle
