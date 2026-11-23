@@ -138,3 +138,29 @@ fn random_rotated_blocks_keep_volume_identities() {
     }
     assert!(ran >= 36, "only {ran} of 40 ran");
 }
+
+/// The local ledger (spec §3a): a small tool on a big plate is decided in a region round it, and
+/// the plate's faces outside pass through; the stitched body is valid, and the faces are whole.
+#[test]
+fn local_region_stitches_the_plate() {
+    let plate = block(Point3::ORIGIN, 200.0, 100.0, 10.0, 1);
+    // a pocket in the middle: the top keeps one face, with a hole
+    let pocket = block(Point3::new(90.0, 40.0, 5.0), 20.0, 20.0, 10.0, 2);
+    let r = run(&plate, &pocket, Op::Subtract).unwrap();
+    assert_eq!(counts(&r), (11, 24, 16));
+    assert!((volume(&r) - (200000.0 - 2000.0)).abs() < 1e-6);
+    // a slot clean across: the top is two faces now, through the region's walls
+    let slot = block(Point3::new(90.0, -1.0, 5.0), 20.0, 102.0, 10.0, 3);
+    let r = run(&plate, &slot, Op::Subtract).unwrap();
+    assert_eq!(counts(&r), (10, 24, 16));
+    assert!((volume(&r) - (200000.0 - 20.0 * 100.0 * 5.0)).abs() < 1e-6);
+    // bosses one by one, as a history: each boolean local, the result valid and exact
+    let mut part = plate.clone();
+    for k in 0..12 {
+        let x = 5.0 + 15.0 * k as f64;
+        let boss = block(Point3::new(x, 30.0, 10.0), 10.0, 10.0, 5.0, 10 + k);
+        part = run(&part, &boss, Op::Union).unwrap();
+    }
+    assert!((volume(&part) - (200000.0 + 12.0 * 500.0)).abs() < 1e-6);
+    assert_eq!(counts(&part).0, 6 + 12 * 5);
+}

@@ -6,12 +6,26 @@
 
 use core::cmp::Ordering;
 
-/// A signed big integer: magnitude in base 2³² limbs, least significant first, no trailing zero
-/// limb (zero is the empty magnitude, never negative).
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
-pub struct Big {
-    neg: bool,
-    mag: Vec<u32>,
+/// A signed big integer: inline while it fits under 2¹²⁶ in magnitude (the common case: the
+/// kernel's numbers are short dyadics), else its magnitude in base 2³² limbs, least significant
+/// first, with no trailing zero limb. One representation per value, so equality is structural.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum Big {
+    S(i128),
+    L { neg: bool, mag: Vec<u32> },
+}
+
+impl Default for Big {
+    fn default() -> Big {
+        Big::S(0)
+    }
+}
+
+/// Inline values stay below this magnitude, so a sum of two never overflows i128.
+const SMALL_BITS: u32 = 126;
+
+fn fits(v: i128) -> bool {
+    v.unsigned_abs() < (1u128 << SMALL_BITS)
 }
 
 fn trim(v: &mut Vec<u32>) {
@@ -110,69 +124,105 @@ fn shl_mag(a: &[u32], bits: u32) -> Vec<u32> {
     out
 }
 
+fn mag_of(v: u128) -> Vec<u32> {
+    let mut m = Vec::new();
+    let mut v = v;
+    while v != 0 {
+        m.push(v as u32);
+        v >>= 32;
+    }
+    m
+}
+
 impl Big {
     pub fn zero() -> Big {
-        Big::default()
+        Big::S(0)
     }
 
     pub fn from_i64(x: i64) -> Big {
-        let neg = x < 0;
-        let mut m = x.unsigned_abs();
-        let mut mag = Vec::new();
-        while m != 0 {
-            mag.push(m as u32);
-            m >>= 32;
+        Big::S(x as i128)
+    }
+
+    /// The value from sign and limbs, inline if it fits.
+    fn from_l(neg: bool, mut mag: Vec<u32>) -> Big {
+        trim(&mut mag);
+        if mag.len() <= 4 {
+            let mut v = 0u128;
+            for (i, &w) in mag.iter().enumerate() {
+                v |= (w as u128) << (32 * i);
+            }
+            if v < (1u128 << SMALL_BITS) {
+                let v = v as i128;
+                return Big::S(if neg { -v } else { v });
+            }
         }
-        Big { neg, mag }
+        Big::L {
+            neg: neg && !mag.is_empty(),
+            mag,
+        }
+    }
+
+    /// Sign and limbs.
+    fn to_l(&self) -> (bool, Vec<u32>) {
+        match self {
+            Big::S(v) => (*v < 0, mag_of(v.unsigned_abs())),
+            Big::L { neg, mag } => (*neg, mag.clone()),
+        }
     }
 
     pub fn is_zero(&self) -> bool {
-        self.mag.is_empty()
+        matches!(self, Big::S(0))
     }
 
     /// -1, 0 or 1.
     pub fn signum(&self) -> i32 {
-        if self.mag.is_empty() {
-            0
-        } else if self.neg {
-            -1
-        } else {
-            1
+        match self {
+            Big::S(v) => v.signum() as i32,
+            Big::L { neg, .. } => {
+                if *neg {
+                    -1
+                } else {
+                    1
+                }
+            }
         }
     }
 
     pub fn neg(&self) -> Big {
-        Big {
-            neg: !self.neg && !self.mag.is_empty(),
-            mag: self.mag.clone(),
+        match self {
+            Big::S(v) => Big::S(-v),
+            Big::L { neg, mag } => Big::L {
+                neg: !neg,
+                mag: mag.clone(),
+            },
         }
     }
 
     pub fn abs(&self) -> Big {
-        Big {
-            neg: false,
-            mag: self.mag.clone(),
+        match self {
+            Big::S(v) => Big::S(v.abs()),
+            Big::L { mag, .. } => Big::L {
+                neg: false,
+                mag: mag.clone(),
+            },
         }
     }
 
     pub fn add(&self, o: &Big) -> Big {
-        if self.neg == o.neg {
-            let mag = add_mag(&self.mag, &o.mag);
-            return Big {
-                neg: self.neg && !mag.is_empty(),
-                mag,
-            };
+        if let (Big::S(a), Big::S(b)) = (self, o) {
+            let s = a + b; // both under 2^126: no overflow
+            if fits(s) {
+                return Big::S(s);
+            }
         }
-        match cmp_mag(&self.mag, &o.mag) {
+        let ((an, am), (bn, bm)) = (self.to_l(), o.to_l());
+        if an == bn {
+            return Big::from_l(an, add_mag(&am, &bm));
+        }
+        match cmp_mag(&am, &bm) {
             Ordering::Equal => Big::zero(),
-            Ordering::Greater => Big {
-                neg: self.neg,
-                mag: sub_mag(&self.mag, &o.mag),
-            },
-            Ordering::Less => Big {
-                neg: o.neg,
-                mag: sub_mag(&o.mag, &self.mag),
-            },
+            Ordering::Greater => Big::from_l(an, sub_mag(&am, &bm)),
+            Ordering::Less => Big::from_l(bn, sub_mag(&bm, &am)),
         }
     }
 
@@ -181,96 +231,87 @@ impl Big {
     }
 
     pub fn mul(&self, o: &Big) -> Big {
-        let mag = mul_mag(&self.mag, &o.mag);
-        Big {
-            neg: (self.neg != o.neg) && !mag.is_empty(),
-            mag,
+        if let (Big::S(a), Big::S(b)) = (self, o)
+            && let Some(p) = a.checked_mul(*b)
+            && fits(p)
+        {
+            return Big::S(p);
         }
+        let ((an, am), (bn, bm)) = (self.to_l(), o.to_l());
+        Big::from_l(an != bn, mul_mag(&am, &bm))
     }
 
     pub fn shl(&self, bits: u32) -> Big {
-        Big {
-            neg: self.neg,
-            mag: shl_mag(&self.mag, bits),
+        if let Big::S(v) = self {
+            if *v == 0 {
+                return Big::S(0);
+            }
+            let used = 128 - v.unsigned_abs().leading_zeros();
+            if used + bits < SMALL_BITS {
+                return Big::S(v << bits);
+            }
         }
+        let (n, m) = self.to_l();
+        Big::from_l(n, shl_mag(&m, bits))
     }
 
     /// The number of significant bits of the magnitude.
     pub fn bits(&self) -> u32 {
-        match self.mag.last() {
-            None => 0,
-            Some(&t) => 32 * (self.mag.len() as u32 - 1) + (32 - t.leading_zeros()),
+        match self {
+            Big::S(v) => 128 - v.unsigned_abs().leading_zeros(),
+            Big::L { mag, .. } => match mag.last() {
+                None => 0,
+                Some(&t) => 32 * (mag.len() as u32 - 1) + (32 - t.leading_zeros()),
+            },
         }
     }
 
-    /// The trailing zero bits of the magnitude (0 for zero).
-    fn trailing_zeros(&self) -> u32 {
-        for (i, &w) in self.mag.iter().enumerate() {
-            if w != 0 {
-                return 32 * i as u32 + w.trailing_zeros();
-            }
-        }
-        0
-    }
-
-    fn shr(&self, bits: u32) -> Big {
-        let (words, bits) = ((bits / 32) as usize, bits % 32);
-        if words >= self.mag.len() {
-            return Big::zero();
-        }
-        let src = &self.mag[words..];
-        let mut out = Vec::with_capacity(src.len());
-        for i in 0..src.len() {
-            let lo = src[i] >> bits;
-            let hi = if bits == 0 {
-                0
-            } else {
-                src.get(i + 1).map_or(0, |&h| h << (32 - bits))
-            };
-            out.push(lo | hi);
-        }
-        trim(&mut out);
-        Big {
-            neg: self.neg && !out.is_empty(),
-            mag: out,
-        }
-    }
-
-    /// The top 64 bits of the magnitude and the shift they stand at: `|self| ≈ top · 2^shift`.
+    /// The top 64 bits of the magnitude and the shift they stand at: `|self| ≈ top · 2^shift`,
+    /// with a sticky low bit for what was dropped (so rounding to f64 sees it).
     fn top64(&self) -> (u64, i32) {
-        let b = self.bits();
-        if b <= 64 {
-            let mut v = 0u64;
-            for (i, &w) in self.mag.iter().enumerate() {
-                v |= (w as u64) << (32 * i);
+        match self {
+            Big::S(v) => {
+                let a = v.unsigned_abs();
+                let b = 128 - a.leading_zeros();
+                if b <= 64 {
+                    return (a as u64, 0);
+                }
+                let s = b - 64;
+                let mut t = (a >> s) as u64;
+                if a & ((1u128 << s) - 1) != 0 {
+                    t |= 1;
+                }
+                (t, s as i32)
             }
-            return (v, 0);
+            Big::L { mag, .. } => {
+                let b = self.bits();
+                let s = b - 64;
+                let (words, bits) = ((s / 32) as usize, s % 32);
+                let mut acc = 0u128;
+                for i in 0..3 {
+                    if let Some(&w) = mag.get(words + i) {
+                        acc |= (w as u128) << (32 * i);
+                    }
+                }
+                let mut t = (acc >> bits) as u64;
+                let dropped =
+                    mag[..words].iter().any(|&w| w != 0) || (bits > 0 && acc & ((1u128 << bits) - 1) != 0);
+                if dropped {
+                    t |= 1;
+                }
+                (t, s as i32)
+            }
         }
-        let s = b - 64;
-        let t = self.shr(s);
-        let mut v = 0u64;
-        for (i, &w) in t.mag.iter().enumerate().take(2) {
-            v |= (w as u64) << (32 * i);
-        }
-        // a sticky bit for what was dropped, so the rounding to f64 below sees it
-        if self.trailing_zeros() < s {
-            v |= 1;
-        }
-        (v, s as i32)
     }
 
     pub fn cmp_big(&self, o: &Big) -> Ordering {
-        match (self.neg, o.neg) {
-            (false, true) => {
-                if self.is_zero() && o.is_zero() {
-                    Ordering::Equal
-                } else {
-                    Ordering::Greater
-                }
-            }
-            (true, false) => Ordering::Less,
-            (false, false) => cmp_mag(&self.mag, &o.mag),
-            (true, true) => cmp_mag(&o.mag, &self.mag),
+        if let (Big::S(a), Big::S(b)) = (self, o) {
+            return a.cmp(b);
+        }
+        match self.sub(o).signum() {
+            1 => Ordering::Greater,
+            -1 => Ordering::Less,
+            _ => Ordering::Equal,
         }
     }
 }
@@ -624,7 +665,15 @@ mod tests {
 
     #[test]
     fn dyadic_round_trips() {
-        for x in [1.0, -0.1, 3.5e-300, 1e300, 5e-324, core::f64::consts::FRAC_1_SQRT_2, 12345.678] {
+        for x in [
+            1.0,
+            -0.1,
+            3.5e-300,
+            1e300,
+            5e-324,
+            core::f64::consts::FRAC_1_SQRT_2,
+            12345.678,
+        ] {
             assert_eq!(Dy::from_f64(x).to_f64(), x);
         }
     }
@@ -638,6 +687,35 @@ mod tests {
         let b = Dy::from_f64(1e-20);
         assert_eq!(a.add(&b).sub(&a).cmp_dy(&b), Ordering::Equal);
         assert_eq!(a.mul(&b).signum(), 1);
+    }
+
+    /// Ring laws on numbers whose exponents span hundreds of bits, so sums and products cross
+    /// between the inline and the limb forms both ways.
+    #[test]
+    fn inline_and_limbs_agree() {
+        let mut r = crate::rng::Rng::new(7);
+        let mut pick = || {
+            let m = r.range(-1.0, 1.0);
+            let e = (r.range(-200.0, 200.0)) as i32;
+            Dy::from_f64(m).scale2(e)
+        };
+        for _ in 0..3000 {
+            let (x, y, z) = (pick(), pick(), pick());
+            assert_eq!(x.add(&y).sub(&y).cmp_dy(&x), Ordering::Equal);
+            assert_eq!(x.mul(&y).mul(&z).cmp_dy(&x.mul(&y.mul(&z))), Ordering::Equal);
+            assert_eq!(
+                x.mul(&y.add(&z)).cmp_dy(&x.mul(&y).add(&x.mul(&z))),
+                Ordering::Equal
+            );
+            assert_eq!(x.sub(&x).signum(), 0);
+            let (fx, fy) = (x.to_f64(), y.to_f64());
+            if fx.is_finite() && fy.is_finite() && (fx - fy).abs() > 1e-9 * (fx.abs() + fy.abs()) {
+                assert_eq!(x.cmp_dy(&y), fx.partial_cmp(&fy).unwrap());
+            }
+            let big = x.mul(&x).mul(&x).mul(&x);
+            assert_eq!(big.sub(&big).signum(), 0);
+            assert_eq!(big.signum(), if x.is_zero() { 0 } else { 1 });
+        }
     }
 
     #[test]
