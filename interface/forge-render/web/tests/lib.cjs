@@ -89,8 +89,30 @@ function differs(a, b) {
   return d;
 }
 
+/// The app's frame (offscreen mode): {width, height, rgba}, and how many colours it has.
+async function pixels(p) {
+  const r = await p.evaluate(async () => {
+    const f = await window.forgecad.pixels();
+    return f && { width: f.width, height: f.height, rgba: Array.from(f.rgba) };
+  });
+  if (!r) throw new Error("the frame didn't read back");
+  const rgba = Uint8Array.from(r.rgba);
+  const colours = new Set();
+  for (let i = 0; i < rgba.length; i += 4 * 7) colours.add((rgba[i] << 16) | (rgba[i + 1] << 8) | rgba[i + 2]);
+  return { width: r.width, height: r.height, rgba, colours: colours.size };
+}
+
+/// Where the tests keep what the app drew: $FORGE_WEB_SHOTS, else the system's temp folder.
+function shot(name, f) {
+  const dir = process.env.FORGE_WEB_SHOTS ?? require("node:os").tmpdir();
+  fs.mkdirSync(dir, { recursive: true });
+  const at = path.join(dir, name);
+  fs.writeFileSync(at, require("./png.cjs")(f.width, f.height, f.rgba));
+  return at;
+}
+
 function tmpdir(tag) {
   return fs.mkdtempSync(path.join(require("node:os").tmpdir(), `forgecad-${tag}-`));
 }
 
-module.exports = { repo, bins, browser, page, check, until, serve, native, differs, tmpdir, SAME };
+module.exports = { repo, bins, browser, page, check, until, serve, native, differs, tmpdir, pixels, shot, SAME };

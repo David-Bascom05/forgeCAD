@@ -64,7 +64,7 @@ fn par_map<T: Send>(n: usize, threads: usize, per: usize, f: impl Fn(usize) -> T
             got.push((i, f(i)));
         }
     };
-    let parts: Vec<Vec<(usize, T)>> = std::thread::scope(|s| {
+    let parts: Vec<Vec<(usize, T)>> = forge_math::par::scope(|s| {
         let start = forge_math::clock::Instant::now();
         let mut mine = Vec::new();
         let mut helpers = Vec::new();

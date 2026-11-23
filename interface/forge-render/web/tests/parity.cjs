@@ -14,10 +14,15 @@ const t = require("./lib.cjs");
   const { url, proc } = await t.serve(dir, app);
   const b = await t.browser();
   let bad = 0;
+  let widest = 1;
   let n = 0;
   try {
     const p = await t.page(b, `${url}?storage=memory&noapp=1`);
     await p.waitForFunction(() => window.forgecad?.fc, null, { timeout: 120000 });
+    // THREADED=1: the threaded artifact's kernel (std with atomics, the spin-locked heap) is the one
+    const threaded = await p.evaluate(() => window.forgecad.threaded);
+    if (process.env.THREADED) assert.equal(threaded, true, "the threaded build isn't the one running");
+    console.log(`the ${threaded ? "threaded" : "single-threaded"} build`);
     // the bench parts: natively written to a folder, in the page to its filesystem
     const benchDir = path.join(dir, "bench");
     const nat = t.native(["--bench", benchDir]);
@@ -30,7 +35,19 @@ const t = require("./lib.cjs");
       ...examples.map((f) => [`/project/examples/${f}`, path.join(t.repo, "examples", f)]),
     ];
     for (const [pf, nf] of pairs) {
-      const got = JSON.parse(await p.evaluate((f) => window.forgecad.fc.build_json(f), pf));
+      // on a worker (the threaded build: the kernel's parallel paths on more workers)
+      const got = JSON.parse(
+        await p.evaluate(async (f) => {
+          const fc = window.forgecad.fc;
+          const id = fc.build_start(f);
+          for (;;) {
+            const r = fc.build_result(id);
+            if (r !== undefined) return r;
+            await new Promise((ok) => setTimeout(ok, 5));
+          }
+        }, pf),
+      );
+      widest = Math.max(widest, got.threads ?? 1);
       t.check(p);
       const d = t.differs(nat[nf], got);
       n += 1;
@@ -46,7 +63,8 @@ const t = require("./lib.cjs");
     proc.kill();
     fs.rmSync(dir, { recursive: true, force: true });
   }
-  console.log(`${n - bad} of ${n} the same`);
+  console.log(`${n - bad} of ${n} the same (the kernel's parallel paths on up to ${widest} threads)`);
+  if (process.env.THREADED) assert.ok(widest > 1, "the threaded build's kernel ran on one thread");
   assert.equal(bad, 0);
 })().catch((e) => {
   console.error(`not ok - ${e.stack ?? e}`);

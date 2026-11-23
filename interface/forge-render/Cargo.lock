@@ -1188,6 +1188,7 @@ name = "forge-math"
 version = "0.1.0"
 dependencies = [
  "forge-alloc",
+ "forge-par",
 ]
 
 [[package]]
@@ -1223,6 +1224,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-par"
+version = "0.1.0"
+
+[[package]]
 name = "forge-render"
 version = "0.1.0"
 dependencies = [
@@ -1245,6 +1250,7 @@ dependencies = [
  "forge-mesh",
  "forge-model",
  "forge-ops",
+ "forge-par",
  "forge-sheet",
  "forge-sketch",
  "forge-step",

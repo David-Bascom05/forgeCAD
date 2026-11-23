@@ -1128,7 +1128,7 @@ fn build_each(
     // next face against a plain extrude), so fixed chunks left threads idle
     let next = std::sync::atomic::AtomicUsize::new(from);
     type Built = (usize, Result<Vec<Tool>, RegenError>);
-    let done: Vec<Vec<Built>> = std::thread::scope(|s| {
+    let done: Vec<Vec<Built>> = forge_math::par::scope(|s| {
         let hs: Vec<_> = (0..threads.min(n))
             .map(|_| {
                 s.spawn(|| {

@@ -2101,7 +2101,7 @@ impl Headless {
 impl Gui {
     /// Opens a Forge (.fg) part: its worker builds it at once, and keeps its stages warm after.
     fn open_fg(&mut self, path: &str) -> bool {
-        let gpu = (self.device.clone(), self.queue.clone(), self.adapter.clone());
+        let gpu = crate::fg::gpu_of(&self.device, &self.queue, &self.adapter);
         let waker = self.waker.clone();
         let waker: Arc<dyn Fn() + Send + Sync> = Arc::new(move || waker());
         match crate::fg::Session::open(path, Some(gpu), waker) {
@@ -2373,7 +2373,10 @@ impl Gui {
                     });
                 }
             }
-            if let Some((renderer, scene)) = b.view {
+            if let Some((renderer, scene)) = b
+                .view
+                .map(|v| crate::fg::view_on(v, &self.device, &self.queue, &self.adapter))
+            {
                 if let Some(v) = &self.view
                     && b.asm.is_some()
                 {

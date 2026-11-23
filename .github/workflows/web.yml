@@ -11,6 +11,12 @@ on:
 
 jobs:
   web:
+    strategy:
+      fail-fast: false
+      matrix:
+        # the default build, and the threaded artifact (docs/web.md)
+        threaded: ["", "1"]
+    name: web${{ matrix.threaded && ' (threaded)' || '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 120
     env:
@@ -34,4 +40,4 @@ jobs:
           npx playwright install --with-deps chromium
           echo "NODE_PATH=$HOME/pw/node_modules" >> "$GITHUB_ENV"
       - name: build, end to end, parity
-        run: sh interface/forge-render/web/tests/ci.sh
+        run: THREADED=${{ matrix.threaded }} sh interface/forge-render/web/tests/ci.sh
