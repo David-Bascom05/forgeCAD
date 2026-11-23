@@ -399,7 +399,17 @@ In Lean: `Fillet/LocalBall.lean`.
 - The definitions: `Pick` (the two supports as carried solids, and their face patches), `Centre` (free of the two supports, a foot inside each face), `Witness` (the nearest free centre is a rolling ball's), `localFill`, and `concave` / `convex` (the dual pick on the complements).
 - `local_eq_closing`: where `S` agrees with the two supports within 2r of x, and x has a witness, the local fill is the closing's fill of `S`. So every closing theorem of §8 is a theorem of the local ball on its domain. Standard axioms only.
 
-### The corpus under it
+### The obstacle (open, 2026-11-23)
+
+The master accepted "the two supports plus the faces sharing an edge with either one, as half-solids".
+Implemented as a P3 check, that flags every pipe-set part: a neighbouring cap's carried half-space
+covers almost all of space. It also fails to explain p00010, since the free ball over the rim meets
+the carried top half-space too. Proposed instead: the points of S whose nearest point of ∂S lies on a
+support or on a face sharing an edge with one. Under it p00010 is a kernel bug, and the crescent is a
+correct refusal (its far wall neighbours the start face). Awaiting the owner. `LocalBall.lean` holds
+the two supports only for now, and the verdicts below are provisional.
+
+### The corpus under it (provisional)
 
 | case | verdict |
 |---|---|
