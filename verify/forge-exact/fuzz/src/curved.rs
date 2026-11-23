@@ -111,7 +111,31 @@ fn face_of(body: &Body, f: forge_topo::FaceId) -> Result<Face, String> {
                 }),
             })
         }
-        Surface::Torus(_) => Err("a face is a torus".into()),
+        Surface::Torus(t) => {
+            if !face.same_sense {
+                return Err("a torus face with the solid outside".into());
+            }
+            let (o, z, big, r) = (t.frame.origin, t.frame.z().get(), t.major, t.minor);
+            if !(0.0 < r && r < big) {
+                return Err("a torus that is not a ring".into());
+            }
+            Ok(Face {
+                json: format!(
+                    "{{\"kind\":\"torus\",\"o\":{},\"z\":{},\"R\":{},\"r\":{},{lohi}}}",
+                    p3(o),
+                    v3(z),
+                    exact(big),
+                    exact(r)
+                ),
+                q: Box::new(move |p: Point3| {
+                    let d = p - o;
+                    let s2 = d.dot(d);
+                    let w = d.dot(z);
+                    let a = s2 + big * big - r * r;
+                    a * a - 4.0 * big * big * (s2 - w * w / z.dot(z))
+                }),
+            })
+        }
         Surface::Procedural(_) => Err("a face is procedural".into()),
     }
 }
@@ -294,6 +318,133 @@ pub struct CAnswer {
     pub probes: Vec<i64>,
     pub notes: Vec<String>,
     pub error: Option<String>,
+    /// the decide-once oracle's answer, when asked (`oracle_on`)
+    pub oracle: Option<OAnswer>,
+    /// the probe points asked about
+    pub probe_pts: Vec<Point3>,
+}
+
+/// The decide-once oracle (ForgeExact/QRef/Oracle.lean): the curved ledger `qledgerB` of the same
+/// arrangement, its bodies the tools. When `certified`, every `ExactK` field holds over ℝ
+/// (`curved_exact`, verify/forge-curved), so its probe answers are exact memberships.
+#[derive(Clone, Debug, Default)]
+pub struct OAnswer {
+    pub certified: bool,
+    /// why it did not certify: `carriers`, `bound`, `ledger`, `form`, `torus`, or a timeout
+    pub skip: Option<String>,
+    /// facets, edges, verts
+    pub counts: [usize; 3],
+    /// per probe: 1 in, -1 out, 0 on a carrier, 2 not a listed tope
+    pub probes: Vec<i64>,
+}
+
+/// Ask the oracle too (`--oracle` of exact-curved, or FORGE_EXACT_ORACLE set).
+pub static ORACLE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub fn oracle_on() -> bool {
+    ORACLE.load(std::sync::atomic::Ordering::Relaxed) || std::env::var_os("FORGE_EXACT_ORACLE").is_some()
+}
+
+/// The `"oracle":{..}` object of an answer line, and the line without it.
+fn split_oracle(s: &str) -> (Option<&str>, String) {
+    let Some(at) = s.find("\"oracle\":{") else {
+        return (None, s.to_string());
+    };
+    let open = at + "\"oracle\":".len();
+    let end = s[open..].find('}').map(|e| open + e + 1).unwrap_or(s.len());
+    let rest = format!("{}{}", &s[..at], s[end..].trim_start_matches(','));
+    (Some(&s[open..end]), rest)
+}
+
+pub fn parse_oanswer(o: &str) -> OAnswer {
+    let count = |k: &str| {
+        field(o, k)
+            .and_then(|r| r.split([',', '}']).next())
+            .and_then(|v| v.trim().parse().ok())
+            .unwrap_or(0)
+    };
+    OAnswer {
+        certified: field(o, "certified").is_some_and(|r| r.starts_with("true")),
+        skip: field(o, "skip")
+            .and_then(|r| r.strip_prefix('"'))
+            .and_then(|r| r.split('"').next())
+            .map(String::from),
+        counts: [count("facets"), count("edges"), count("verts")],
+        probes: field(o, "probes")
+            .and_then(|r| r.strip_prefix('['))
+            .and_then(|r| r.split(']').next())
+            .map(|r| r.split(',').filter_map(|v| v.trim().parse().ok()).collect())
+            .unwrap_or_default(),
+    }
+}
+
+/// The oracle's answer to a curved question: asked apart, so its minutes (FORGE_EXACT_ORACLE_TIMEOUT
+/// seconds, default 900) never cost the reference's own answer. Arrangements of more than
+/// FORGE_EXACT_ORACLE_CARRIERS carriers (default 10) are skipped.
+pub fn ask_oracle(reference: &mut Reference, input: &str) -> OAnswer {
+    let env = |k: &str, d: u64| std::env::var(k).ok().and_then(|s| s.parse().ok()).unwrap_or(d);
+    let line = input.replacen(
+        "{\"curved\":true,",
+        &format!(
+            "{{\"curved\":true,\"oracle\":true,\"oracle_carriers\":{},",
+            env("FORGE_EXACT_ORACLE_CARRIERS", 10)
+        ),
+        1,
+    );
+    match reference.ask_raw_secs(&line, env("FORGE_EXACT_ORACLE_TIMEOUT", 900)) {
+        Ok(s) => match split_oracle(&s).0 {
+            Some(o) => parse_oanswer(o),
+            None => OAnswer {
+                skip: Some(format!("no oracle answer: {}", short(&s))),
+                ..OAnswer::default()
+            },
+        },
+        Err(e) => OAnswer {
+            skip: Some(e),
+            ..OAnswer::default()
+        },
+    }
+}
+
+/// The oracle against the reference.
+#[derive(Clone, Debug)]
+pub enum OClass {
+    /// every probe both decide agrees; with the number the oracle alone decides
+    Agree(usize),
+    /// a probe where the two exact answers differ: one of the references is wrong
+    Differ(String),
+    Skip(String),
+}
+
+pub fn oracle_class(a: &CAnswer) -> Option<OClass> {
+    let o = a.oracle.as_ref()?;
+    let probes = &a.probe_pts;
+    if !o.certified {
+        return Some(OClass::Skip(
+            o.skip.clone().unwrap_or_else(|| "not certified".into()),
+        ));
+    }
+    if a.error.is_some() || a.probes.len() != o.probes.len() {
+        return Some(OClass::Skip("no reference probes".into()));
+    }
+    let mut alone = 0;
+    for ((p, &r), &q) in probes.iter().zip(&a.probes).zip(&o.probes) {
+        let decided = |v: i64| v == 1 || v == -1;
+        if decided(r) && decided(q) && r != q {
+            return Some(OClass::Differ(format!(
+                "probe ({:.6}, {:.6}, {:.6}): the reference says {} where the oracle says {}",
+                p.x,
+                p.y,
+                p.z,
+                if r == 1 { "in" } else { "out" },
+                if q == 1 { "in" } else { "out" }
+            )));
+        }
+        if !decided(r) && decided(q) {
+            alone += 1;
+        }
+    }
+    Some(OClass::Agree(alone))
 }
 
 fn field<'a>(s: &'a str, key: &str) -> Option<&'a str> {
@@ -303,6 +454,8 @@ fn field<'a>(s: &'a str, key: &str) -> Option<&'a str> {
 }
 
 pub fn parse_canswer(s: &str) -> CAnswer {
+    let (o, s) = split_oracle(s);
+    let s = s.as_str();
     // the shared reader takes arrays of strings: the numeric probes are cut out for it
     let rest = match s.find("\"probes\":[") {
         Some(at) => {
@@ -332,6 +485,8 @@ pub fn parse_canswer(s: &str) -> CAnswer {
         probes,
         notes: a.notes,
         error: a.error,
+        oracle: o.map(parse_oanswer),
+        probe_pts: Vec::new(),
     }
 }
 
@@ -488,7 +643,11 @@ pub fn judge_curved(
             ];
         }
     };
-    let ans = reference.ask_curved(&input);
+    let mut ans = reference.ask_curved(&input);
+    ans.probe_pts = probes.clone();
+    if oracle_on() {
+        ans.oracle = Some(ask_oracle(reference, &input));
+    }
     let mut out = Vec::new();
     for path in ["sequential", "nary"] {
         let (k, body) = kernel_path(part, path);

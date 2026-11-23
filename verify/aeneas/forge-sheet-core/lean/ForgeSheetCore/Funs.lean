@@ -2,6 +2,7 @@
 -- [forge_sheet_core]: function definitions
 import Aeneas
 import ForgeSheetCore.Types
+import ForgeSheetCore.FunsExternal
 open Aeneas Aeneas.Std Result ControlFlow Error
 set_option linter.dupNamespace false
 set_option linter.hashCommand false
@@ -16,6 +17,9 @@ set_option maxHeartbeats 1000000
 
 /- You can set the `maxRecDepth` value with the `-max-recdepth` CLI option -/
 set_option maxRecDepth 2048
+
+/- You can remove the following line by using the CLI option `-all-computable`: -/
+noncomputable section
 
 namespace forge_sheet_core
 
@@ -127,7 +131,7 @@ def union_find.Uf.new (n : Std.Usize) : Result union_find.Uf := do
   ok { parent := parent1 }
 
 /-- [forge_sheet_core::classes]: loop body 0:
-    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 32:4-37:5
+    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 34:4-39:5
     Visibility: public -/
 @[rust_loop_body]
 def classes_loop0.body
@@ -146,7 +150,7 @@ def classes_loop0.body
   else ok (done uf)
 
 /-- [forge_sheet_core::classes]: loop 0:
-    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 32:4-37:5
+    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 34:4-39:5
     Visibility: public -/
 @[rust_loop]
 def classes_loop0
@@ -158,7 +162,7 @@ def classes_loop0
     (uf, k)
 
 /-- [forge_sheet_core::classes]: loop body 1:
-    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 42:4-54:5
+    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 44:4-56:5
     Visibility: public -/
 @[rust_loop_body]
 def classes_loop1.body
@@ -191,7 +195,7 @@ def classes_loop1.body
   else ok (done «class»)
 
 /-- [forge_sheet_core::classes]: loop 1:
-    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 42:4-54:5
+    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 44:4-56:5
     Visibility: public -/
 @[rust_loop]
 def classes_loop1
@@ -205,7 +209,7 @@ def classes_loop1
     (uf, number, «class», next, i)
 
 /-- [forge_sheet_core::classes]:
-    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 29:0-56:1
+    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 31:0-58:1
     Visibility: public -/
 def classes
   (n : Std.Usize) (pairs : Slice (Std.U32 × Std.U32)) :
@@ -218,7 +222,7 @@ def classes
   classes_loop1 n uf1 number «class» 0#u32 0#usize
 
 /-- [forge_sheet_core::chain]: loop body 0:
-    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 94:4-108:5
+    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 96:4-110:5
     Visibility: public -/
 @[rust_loop_body]
 def chain_loop0.body
@@ -295,7 +299,7 @@ def chain_loop0.body
   else ok (done (n_out, n_in, first_out, first_in, second_in))
 
 /-- [forge_sheet_core::chain]: loop 0:
-    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 94:4-108:5
+    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 96:4-110:5
     Visibility: public -/
 @[rust_loop]
 def chain_loop0
@@ -313,7 +317,7 @@ def chain_loop0
     (n_out, n_in, first_out, first_in, second_in, e)
 
 /-- [forge_sheet_core::chain]: loop body 1:
-    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 1:0-125:5
+    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 1:0-127:5
     Visibility: public -/
 @[rust_loop_body]
 def chain_loop1.body
@@ -373,7 +377,7 @@ def chain_loop1.body
   else ok (done (bad, pinches))
 
 /-- [forge_sheet_core::chain]: loop 1:
-    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 1:0-125:5
+    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 1:0-127:5
     Visibility: public -/
 @[rust_loop]
 def chain_loop1
@@ -391,7 +395,7 @@ def chain_loop1
     (bad, pinches, v)
 
 /-- [forge_sheet_core::chain]: loop body 3:
-    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 140:12-144:13
+    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 142:12-146:13
     Visibility: public -/
 @[rust_loop_body]
 def chain_loop2_loop0.body
@@ -422,7 +426,7 @@ def chain_loop2_loop0.body
     ok (cont (used1, pieces1, at1))
 
 /-- [forge_sheet_core::chain]: loop 3:
-    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 140:12-144:13
+    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 142:12-146:13
     Visibility: public -/
 @[rust_loop]
 def chain_loop2_loop0
@@ -437,7 +441,7 @@ def chain_loop2_loop0
     (used, pieces, «at»)
 
 /-- [forge_sheet_core::chain]: loop body 2:
-    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 1:0-155:5
+    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 1:0-157:5
     Visibility: public -/
 @[rust_loop_body]
 def chain_loop2.body
@@ -481,7 +485,7 @@ def chain_loop2.body
   else ok (done (bad, pieces, starts))
 
 /-- [forge_sheet_core::chain]: loop 2:
-    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 1:0-155:5
+    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 1:0-157:5
     Visibility: public -/
 @[rust_loop]
 def chain_loop2
@@ -498,7 +502,7 @@ def chain_loop2
     (bad, used, pieces, starts, start)
 
 /-- [forge_sheet_core::chain]:
-    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 84:0-161:1
+    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 86:0-163:1
     Visibility: public -/
 def chain
   (nv : Std.Usize) («from» : Slice Std.U32) («to» : Slice Std.U32) :
@@ -534,7 +538,7 @@ def chain
   | some b => ok (core.result.Result.Err b)
 
 /-- [forge_sheet_core::owner]: loop body 1:
-    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 1:0-179:13
+    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 1:0-181:13
     Visibility: public -/
 @[rust_loop_body]
 def owner_loop0_loop0.body
@@ -564,7 +568,7 @@ def owner_loop0_loop0.body
   else ok (done ok1)
 
 /-- [forge_sheet_core::owner]: loop 1:
-    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 1:0-179:13
+    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 1:0-181:13
     Visibility: public -/
 @[rust_loop]
 def owner_loop0_loop0
@@ -577,7 +581,7 @@ def owner_loop0_loop0
     (ok1, p)
 
 /-- [forge_sheet_core::owner]: loop body 0:
-    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 1:0-185:5
+    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 1:0-187:5
     Visibility: public -/
 @[rust_loop_body]
 def owner_loop0.body
@@ -609,7 +613,7 @@ def owner_loop0.body
   else ok (done found)
 
 /-- [forge_sheet_core::owner]: loop 0:
-    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 1:0-185:5
+    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 1:0-187:5
     Visibility: public -/
 @[rust_loop]
 def owner_loop0
@@ -622,7 +626,7 @@ def owner_loop0
     (found, o)
 
 /-- [forge_sheet_core::owner]:
-    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 167:0-187:1
+    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 169:0-189:1
     Visibility: public -/
 @[reducible]
 def owner
@@ -693,5 +697,26 @@ def place.inverse (m : place.Place) : Result place.Place := do
   let (ox, oy) ← place.local m (F64.Ops.ofBits 0) (F64.Ops.ofBits 0)
   let fl ← lift (F64.Ops.neg m.xy)
   ok { m with ox, oy, xy := fl }
+
+/-- [forge_sheet_core::place::joint]:
+    Source: 'kernel/forge-sheet-core/src/place.rs', lines 54:0-70:1
+    Visibility: public -/
+def place.joint
+  (p0x : F64) (p0y : F64) (p1x : F64) (p1y : F64) :
+  Result (place.Place × F64)
+  := do
+  let ex ← lift (F64.Ops.sub p0x p1x)
+  let ey ← lift (F64.Ops.sub p0y p1y)
+  let fl ← lift (F64.Ops.mul ex ex)
+  let fl1 ← lift (F64.Ops.mul ey ey)
+  let fl2 ← lift (F64.Ops.add fl fl1)
+  let la ← std.f64.F64.sqrt fl2
+  let k ← lift (F64.Ops.div (F64.Ops.ofBits 4607182418800017408) la)
+  let fl3 ← lift (F64.Ops.sub p1x p0x)
+  let vx ← lift (F64.Ops.mul fl3 k)
+  let fl4 ← lift (F64.Ops.sub p1y p0y)
+  let vy ← lift (F64.Ops.mul fl4 k)
+  let fl5 ← lift (F64.Ops.neg vx)
+  ok ({ ox := p0x, oy := p0y, xx := vy, xy := fl5 }, la)
 
 end forge_sheet_core

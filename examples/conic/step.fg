@@ -1,0 +1,13 @@
+# The inside edge of a step, concave: the conic fills it.
+shared L = 40
+shared W = 30
+shared T = 8
+shared S = 12
+param fill.r = 5
+param fill.rho = ratio(0.3)
+
+sketch plan(on: xz) {
+  outline = poly([(0, 0), (L, 0), (L, T), (S, T), (S, 3 * T), (0, 3 * T)], closed: true)
+}
+base = extrude(plan, W)
+fill = fillet(edges(between: (base.side(plan.outline[2]), base.side(plan.outline[3]))), r, conic: rho)

@@ -4,6 +4,9 @@
 # (research/kernel-audit/float-verification): the proofs about them, and the check that the
 # translated copy still equals kernel/forge-math's predicates bit for bit. (Regenerating the
 # translation, gen.sh, needs Charon and Aeneas and is not run here.)
+# Each job's Lake build directories are restored from main's latest (Lake rebuilds every module
+# whose sources differ); main's runs save them (tools/ci/lake-cache.py). Mathlib comes prebuilt
+# from its own server (`lake exe cache get`).
 name: ieee754
 
 on:
@@ -16,17 +19,18 @@ on:
       "kernel/forge-math/src/predicates.rs", ".github/workflows/ieee754.yml"]
   workflow_dispatch:
 
+# A new push to a pull request cancels that pull request's runs still queued or running for its
+# older commits; pushes to main are never cancelled.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   model:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
-      - name: toolchain cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.elan
-          key: elan-${{ runner.os }}-${{ hashFiles('verify/ieee754/lean-toolchain') }}
       - name: elan and the pinned toolchain
         run: |
           if [ ! -x "$HOME/.elan/bin/elan" ]; then
@@ -35,6 +39,17 @@ jobs:
           fi
           echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
           "$HOME/.elan/bin/elan" toolchain install "$(cat verify/ieee754/lean-toolchain)"
+      - name: Lake cache key
+        id: lake
+        run: python3 tools/ci/lake-cache.py ieee754 verify/ieee754
+      - name: Lake build (restored; Lake rebuilds what changed)
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ steps.lake.outputs.paths }}
+          key: ${{ steps.lake.outputs.key }}
+          restore-keys: |
+            ${{ steps.lake.outputs.prefix }}
+            ${{ steps.lake.outputs.any }}
       - name: prebuilt Mathlib
         working-directory: verify/ieee754
         run: lake exe cache get
@@ -44,17 +59,18 @@ jobs:
       - name: the model against this CPU
         working-directory: verify/ieee754/check
         run: cargo run --release -- --n 30000
+      - name: save the Lake build (main only, even when a check failed)
+        if: ${{ always() && steps.lake.outcome == 'success' && github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ steps.lake.outputs.paths }}
+          key: ${{ steps.lake.outputs.key }}
 
   kernel-predicates:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
-      - name: toolchain cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.elan
-          key: elan-${{ runner.os }}-${{ hashFiles('verify/ieee754/lean-toolchain') }}
       - name: elan and the pinned toolchain
         run: |
           if [ ! -x "$HOME/.elan/bin/elan" ]; then
@@ -63,6 +79,17 @@ jobs:
           fi
           echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
           "$HOME/.elan/bin/elan" toolchain install "$(cat research/kernel-audit/float-verification/lean/lean-toolchain)"
+      - name: Lake cache key
+        id: lake
+        run: python3 tools/ci/lake-cache.py float-verification research/kernel-audit/float-verification/lean
+      - name: Lake build (restored; Lake rebuilds what changed)
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ steps.lake.outputs.paths }}
+          key: ${{ steps.lake.outputs.key }}
+          restore-keys: |
+            ${{ steps.lake.outputs.prefix }}
+            ${{ steps.lake.outputs.any }}
       - name: the theorems about the translated predicates (Aeneas's library, the model, the proofs)
         working-directory: research/kernel-audit/float-verification/lean
         run: |
@@ -71,3 +98,9 @@ jobs:
       - name: the translated copy equals the kernel's predicates
         working-directory: research/kernel-audit/float-verification/predicates
         run: cargo test --release
+      - name: save the Lake build (main only, even when a check failed)
+        if: ${{ always() && steps.lake.outcome == 'success' && github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ steps.lake.outputs.paths }}
+          key: ${{ steps.lake.outputs.key }}

@@ -2,7 +2,7 @@
 
 use crate::Sgn;
 
-fn rank(s: Sgn) -> u8 {
+pub(crate) fn rank(s: Sgn) -> u8 {
     match s {
         Sgn::Neg => 0,
         Sgn::Zero => 1,
@@ -124,6 +124,44 @@ pub(crate) fn sort_by_cov(v: &mut Vec<u32>, cells: &[Vec<Sgn>]) {
                 let take_left =
                     i < mid && (j >= hi || cmp_cov(&cells[src[i] as usize], &cells[src[j] as usize]) != 1);
                 if take_left {
+                    dst[k] = src[i];
+                    i += 1;
+                } else {
+                    dst[k] = src[j];
+                    j += 1;
+                }
+                k += 1;
+            }
+            lo = hi;
+        }
+        std::mem::swap(&mut src, &mut dst);
+        width *= 2;
+    }
+    *v = src;
+}
+
+/// `a ≤ b` on (hash, id), field by field.
+fn le2(a: (u64, u32), b: (u64, u32)) -> bool {
+    a.0 < b.0 || (a.0 == b.0 && a.1 <= b.1)
+}
+
+/// Ascending on (hash, id), stable.
+pub(crate) fn sort_hashed(v: &mut Vec<(u64, u32)>) {
+    let n = v.len();
+    if n < 2 {
+        return;
+    }
+    let mut src = v.clone();
+    let mut dst = v.clone();
+    let mut width = 1;
+    while width < n {
+        let mut lo = 0;
+        while lo < n {
+            let mid = if lo + width < n { lo + width } else { n };
+            let hi = if lo + 2 * width < n { lo + 2 * width } else { n };
+            let (mut i, mut j, mut k) = (lo, mid, lo);
+            while k < hi {
+                if i < mid && (j >= hi || le2(src[i], src[j])) {
                     dst[k] = src[i];
                     i += 1;
                 } else {

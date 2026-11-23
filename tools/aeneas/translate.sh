@@ -10,6 +10,8 @@
 #   PKG=ForgeMath                  the Lean library (lean/PKG/...)
 #   CHARON_ARGS=(--start-from forge_math::predicates::orient2d --opaque ...)
 #                                  Charon's item selection; the defaults are --preset=aeneas
+#   BRIDGE=none                    a crate with no f64: Types.lean does not import the float
+#                                  bridge (AeneasF64), and its lakefile requires Aeneas directly
 #   OVERFLOW_CHECKS=false          interim, per crate: translate without overflow checks (integer ops
 #                                  as wrapping). The default, and the target, is true (below); a crate
 #                                  set to false carries a TODO in its translate.conf.
@@ -47,6 +49,7 @@ dir=$root/verify/aeneas/$crate
 conf=$dir/translate.conf
 [ -f "$conf" ] || { echo "no $conf" >&2; exit 2; }
 PKG=
+BRIDGE=
 OVERFLOW_CHECKS=true
 CHARON_ARGS=()
 # shellcheck source=/dev/null
@@ -80,10 +83,13 @@ for f in Types Funs FunsExternal_Template TypesExternal_Template; do
       -e "s/^import [A-Za-z_]*\.\(Types\|Funs\|FunsExternal\|TypesExternal\)$/import $PKG.\1/" \
       "$work/out/$f.lean" > "$work/gen/$f.lean"
 done
-sed -i 's/^import Aeneas$/import Aeneas\nimport AeneasF64/' "$work/gen/Types.lean"
+if [ "$BRIDGE" != none ]; then
+  sed -i 's/^import Aeneas$/import Aeneas\nimport AeneasF64/' "$work/gen/Types.lean"
+fi
 
 # The opaque functions Aeneas wants, against what FunsExternal.lean defines.
-opaque_list() { { grep -oE '^(@\[[^]]*\] )?axiom [^ ]+' "$1" || true; } | sed -E 's/^.*axiom //' | sort; }
+# (an axiom's name is on its own line, or on the line after a bare `axiom`)
+opaque_list() { awk '/^(@\[[^]]*\] )?axiom *$/ { getline; print $1; next } /^(@\[[^]]*\] )?axiom / { sub(/^.*axiom /, ""); print $1 }' "$1" | sort; }
 for f in FunsExternal_Template TypesExternal_Template; do
   if [ -f "$work/gen/$f.lean" ]; then opaque_list "$work/gen/$f.lean"; fi
 done | sort > "$work/opaque"
@@ -94,7 +100,9 @@ dest=$dir/lean/$PKG
 missing=0
 while read -r n; do
   [ -n "$n" ] || continue
-  if ! { cat "$dest/FunsExternal.lean" "$dest/TypesExternal.lean" "$root/verify/aeneas/bridge/AeneasF64/Std.lean" 2>/dev/null || true; } \
+  bridge_files=("$root"/verify/aeneas/bridge/AeneasF64/*.lean)
+  [ "$BRIDGE" != none ] || bridge_files=()
+  if ! { cat "$dest/FunsExternal.lean" "$dest/TypesExternal.lean" "${bridge_files[@]}" 2>/dev/null || true; } \
       | awk '$1 == "def" || $1 == "opaque" || $1 == "abbrev" { print $2 }' | grep -qxF "$n"; then
     echo "$crate: opaque $n has no definition (FunsExternal.lean, TypesExternal.lean or the bridge)" >&2
     missing=1

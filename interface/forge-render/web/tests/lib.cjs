@@ -7,9 +7,15 @@ const path = require("node:path");
 
 const repo = path.resolve(__dirname, "../../../..");
 const env = (k, d) => process.env[k] ?? d;
+/// Where cargo puts a workspace's builds, as cargo says (CARGO_TARGET_DIR, a config's target-dir).
+function targetDir(dir) {
+  const { execFileSync } = require("node:child_process");
+  const meta = execFileSync("cargo", ["metadata", "--format-version", "1", "--no-deps"], { cwd: dir, maxBuffer: 1 << 26 });
+  return JSON.parse(meta).target_directory;
+}
 const bins = {
-  forgecad: env("FORGECAD", path.join(repo, "target/release/forgecad")),
-  parity: env("FORGE_PARITY", path.join(repo, "interface/forge-render/target/release/forge-parity")),
+  forgecad: env("FORGECAD", path.join(targetDir(repo), "release/forgecad")),
+  parity: env("FORGE_PARITY", path.join(targetDir(path.join(repo, "interface/forge-render")), "release/forge-parity")),
 };
 
 async function browser() {
@@ -28,11 +34,14 @@ async function browser() {
 async function page(b, url) {
   const p = await b.newPage({ viewport: { width: 1280, height: 800 } });
   p.problems = [];
-  p.on("console", (m) => {
+  const heard = (m) => {
     const t = m.text();
     if (process.env.VERBOSE) console.log(`  console: ${t.slice(0, 300)}`);
-    if (/panicked/.test(t)) p.problems.push(t);
-  });
+    if (/panicked|forge worker/.test(t)) p.problems.push(t);
+  };
+  p.on("console", heard);
+  // the threaded build's Web Workers: a panic or a death on one is the page's too
+  p.on("worker", (w) => w.on?.("console", heard));
   p.on("pageerror", (e) => p.problems.push(`page error: ${e.message}`));
   await p.goto(url);
   return p;
@@ -55,6 +64,13 @@ async function until(p, f, what, ms = 600000) {
   throw new Error(`timed out waiting for ${what}; last state ${JSON.stringify(st)}`);
 }
 
+/// Every project file in the page (they follow the app's first frame) and the rebuild that comes
+/// after them done: the state then.
+async function loaded(p) {
+  await p.evaluate(() => window.forgecad.loaded);
+  return until(p, (s) => s.done >= s.seq && s.built?.checked && s.built.seq >= s.seq, "the rebuild after every file");
+}
+
 /// `forgecad web DIR --app APP` on a free port; resolves with its URL once it listens.
 function serve(dir, app, extra = []) {
   return new Promise((ok, fail) => {
@@ -73,7 +89,8 @@ function serve(dir, app, extra = []) {
 /// The native build of each file, as forge-parity reports it, by file.
 function native(files) {
   const { execFileSync } = require("node:child_process");
-  const out = execFileSync(bins.parity, files, { maxBuffer: 1 << 26 }).toString();
+  // capped: a native hang is said, not waited out (the sync call holds the run's own timers)
+  const out = execFileSync(bins.parity, files, { maxBuffer: 1 << 26, timeout: Number(env("NATIVE_MS", 600000)) }).toString();
   return Object.fromEntries(out.trim().split("\n").map((l) => {
     const j = JSON.parse(l);
     return [j.file, j];
@@ -90,21 +107,46 @@ function differs(a, b) {
 }
 
 /// The app's frame (offscreen mode): {width, height, rgba}, and how many colours it has.
+/// The app's next frame (offscreen mode), looked at in the page (a frame is megabytes: carried
+/// out as numbers it took minutes): {width, height, colours, changed} (bytes changed from the
+/// frame read before it, -1 for the first), and its RGBA only when $FORGE_WEB_SHOTS asks to keep
+/// pictures.
 async function pixels(p) {
-  const r = await p.evaluate(async () => {
+  const keep = !!process.env.FORGE_WEB_SHOTS;
+  const r = await p.evaluate(async (keep) => {
     const f = await window.forgecad.pixels();
-    return f && { width: f.width, height: f.height, rgba: Array.from(f.rgba) };
-  });
+    if (!f) return null;
+    const rgba = f.rgba;
+    const colours = new Set();
+    for (let i = 0; i < rgba.length; i += 4 * 7) colours.add((rgba[i] << 16) | (rgba[i + 1] << 8) | rgba[i + 2]);
+    const last = window.forge_last_frame;
+    let changed = -1;
+    if (last && last.length === rgba.length) {
+      changed = 0;
+      for (let i = 0; i < rgba.length; i++) if (rgba[i] !== last[i]) changed++;
+    }
+    window.forge_last_frame = rgba;
+    let b64 = null;
+    if (keep) {
+      let s = "";
+      for (let i = 0; i < rgba.length; i += 0x8000) s += String.fromCharCode(...rgba.subarray(i, i + 0x8000));
+      b64 = btoa(s);
+    }
+    return { width: f.width, height: f.height, colours: colours.size, changed, b64 };
+  }, keep);
   if (!r) throw new Error("the frame didn't read back");
-  const rgba = Uint8Array.from(r.rgba);
-  const colours = new Set();
-  for (let i = 0; i < rgba.length; i += 4 * 7) colours.add((rgba[i] << 16) | (rgba[i + 1] << 8) | rgba[i + 2]);
-  return { width: r.width, height: r.height, rgba, colours: colours.size };
+  return { ...r, rgba: r.b64 && Uint8Array.from(Buffer.from(r.b64, "base64")) };
+}
+
+/// Frames drawn after the state `st` was read: waits for `n` more (a change on screen is drawn).
+async function frames(p, st, n = 2) {
+  return until(p, (s) => s.frames >= st.frames + n, `${n} frames drawn`);
 }
 
 /// Where the tests keep what the app drew: $FORGE_WEB_SHOTS, else the system's temp folder.
 function shot(name, f) {
-  const dir = process.env.FORGE_WEB_SHOTS ?? require("node:os").tmpdir();
+  if (!f.rgba) return "not kept: FORGE_WEB_SHOTS=DIR keeps it";
+  const dir = process.env.FORGE_WEB_SHOTS;
   fs.mkdirSync(dir, { recursive: true });
   const at = path.join(dir, name);
   fs.writeFileSync(at, require("./png.cjs")(f.width, f.height, f.rgba));
@@ -115,4 +157,4 @@ function tmpdir(tag) {
   return fs.mkdtempSync(path.join(require("node:os").tmpdir(), `forgecad-${tag}-`));
 }
 
-module.exports = { repo, bins, browser, page, check, until, serve, native, differs, tmpdir, pixels, shot, SAME };
+module.exports = { repo, bins, browser, page, check, until, loaded, frames, serve, native, differs, tmpdir, pixels, shot, SAME };

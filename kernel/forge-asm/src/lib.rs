@@ -17,7 +17,7 @@ pub mod diag;
 mod joint;
 pub mod model;
 mod plan;
-mod qr;
+mod rank;
 mod solve;
 pub mod step;
 

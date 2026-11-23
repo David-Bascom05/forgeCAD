@@ -64,6 +64,7 @@ fn a_reference_to_nothing_is_an_error() {
             edges: vec![(gone, Radius::Constant(1.0))],
             starts: vec![],
             setbacks: vec![],
+            conic: None,
         },
         Feature::FaceFillet {
             first: vec![gone],
@@ -129,6 +130,7 @@ fn one_gone_reference_among_good_ones_is_an_error() {
         edges: vec![(edge, Radius::Constant(1.0)), (gone, Radius::Constant(1.0))],
         starts: vec![],
         setbacks: vec![],
+        conic: None,
     };
     for two in [false, true] {
         let mut f = vec![block(0.0, Combine::New)];
@@ -169,6 +171,7 @@ fn a_feature_naming_nothing_is_an_error() {
             edges: vec![],
             starts: vec![],
             setbacks: vec![],
+            conic: None,
         },
         Feature::Chamfer {
             corner: Default::default(),
