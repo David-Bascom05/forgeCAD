@@ -6,3 +6,4 @@ import ForgeExact.SnapSym
 import ForgeExact.RefFacts
 import ForgeExact.Ref.Input
 import ForgeExact.Axioms
+import ForgeExact.Fillet
