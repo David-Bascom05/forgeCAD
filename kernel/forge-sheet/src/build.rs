@@ -1160,6 +1160,30 @@ fn build_once(
                     limit: top - tol::ANGULAR,
                 });
             }
+            // the hairpin rule: an ordinary bend's setback ρ tan(θ/2), computed as ρ s / (1 + c)
+            // from dmath's sin_cos, is within B = |ρ|(4ε + 4η)/C² + 10u|ρ|/C + 3η/C + η of the
+            // exact one, C = 1 + cos θ (verify/aeneas/forge-sheet-core setback_spec). Where that
+            // bound cannot be held to the tolerance the setback is not known to it: refused.
+            // Evaluated against acceptance: a lower bound on C, terms that over-cover B's, and half
+            // the tolerance for the bound's own rounding
+            if hem.is_none() {
+                let rho = reference_radius(&sheet.gauge, radius, angle).abs();
+                let (_, c) = dmath::sin_cos(theta);
+                let tiny = 1.0 / (1u64 << 50) as f64;
+                let k = 2.0 * tiny; // 2^-49
+                let cl = (1.0 + c) - tiny;
+                if cl <= tiny || rho * k / (cl * cl) + rho * k / cl > 0.5 * TOL {
+                    // the largest turn this radius holds: C with rho k (1/C² + 1/C) = TOL / 2
+                    let q = 0.5 * TOL / (rho * k);
+                    let cmin = (1.0 + (1.0 + 4.0 * q).sqrt()) / (2.0 * q) + tiny;
+                    return Err(SheetError::BendAngle {
+                        feature,
+                        joint: j.id,
+                        angle,
+                        limit: dmath::acos_clamped(cmin - 1.0),
+                    });
+                }
+            }
             let ba = match hem.and_then(|h| h.allowance) {
                 Some(ba) => ba,
                 None => sheet

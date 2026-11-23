@@ -379,3 +379,40 @@ fn a_crossing_is_the_walls_in_the_zone_too() {
         assert!(gap < 1e-12, "{rot}: {gap:e}");
     }
 }
+
+#[test]
+fn a_hairpin_whose_setback_is_not_known_to_the_tolerance_is_refused() {
+    // the setback rho tan(theta/2) near a half turn: its computed value's proven error bound grows
+    // as (1 + cos theta)^-2; past LINEAR / 2 the bend is BendAngle, its limit the largest turn that
+    // holds. R = 1 inside, up (rho = 1): the band starts about 0.0073 short of pi, where the
+    // setback is about 270, so the walls are long
+    let g = Gauge {
+        thickness: 0.5,
+        radius: 1.0,
+        rule: BendRule::K(0.4),
+    };
+    let at = |turn: f64| {
+        let (mut s, base) = Sheet::face(
+            FeatureId(1),
+            g.clone(),
+            Frame::WORLD,
+            &[poly(&[(0.0, 0.0), (2000.0, 0.0), (2000.0, 40.0), (0.0, 40.0)])],
+        )
+        .unwrap();
+        s.flange(base, 1, turn, 1500.0).map_err(|e| format!("{e:?}"))?;
+        build_with(&s, Map::Flat).map(|_| ()).map_err(|e| match e {
+            forge_sheet::SheetError::BendAngle { limit, .. } => format!("limit {limit}"),
+            e => format!("{e:?}"),
+        })
+    };
+    assert_eq!(at(dmath::PI - 0.02), Ok(()));
+    let r = at(dmath::PI - 0.005);
+    let Err(l) = &r else { panic!("built at pi - 0.005") };
+    let limit: f64 = l
+        .strip_prefix("limit ")
+        .unwrap_or_else(|| panic!("{l}"))
+        .parse()
+        .unwrap();
+    assert!(limit > dmath::PI - 0.01 && limit < dmath::PI - 0.005, "{limit}");
+    assert_eq!(at(limit - 1e-5), Ok(()), "the limit holds: {limit}");
+}
