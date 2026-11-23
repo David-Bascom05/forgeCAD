@@ -455,3 +455,34 @@ Only (d) fits every witness. The fillet session's oracle converged on the same r
 The concave column holds three OCCT witnesses and no STEP truth yet. The systematic score is the
 census, run under each rule. Until then, L1's obstacle is provisional. What holds under every
 candidate stays proven: `local_eq_closing`, and the closing theorems of §8.
+
+## 14. The spine's sampled check goes (the class decides)
+
+`blend::spine` took the closed-form intersection of the two offset surfaces when the pair had one.
+It then checked that curve with `on_both`: 9 points on a short range near the ball, each with both
+surfaces' implicits within LINEAR. If the check failed, it traced the pair instead. That is two ways
+to one spine, the sampled check selecting between them (§9, item N1). The spec's rule is the
+class alone.
+
+**Why the check is redundant.** `closed_form` returns a curve only for a pair in its table, and
+each entry is decided by the class predicates under the spec's snaps (§1.4):
+- a plane with any analytic surface (`plane_surface`: the exact plane sections);
+- parallel cylinders, under `parallel` (τₐ);
+- coaxial surfaces of revolution, under `shared_axis`, `parallel` (τₐ) and `on_axis` (τ = LINEAR).
+
+On the input as those predicates snap it (exactly parallel, exactly coaxial), the returned curve lies
+on both surfaces by construction: plane sections are exact, and parallel and coaxial pairs give lines
+and circles (`PlanePair.closing_iff`, `closing_rev`). By §1.4 the spec's result is the snapped input's,
+so the closed form is the spec's spine. The sampled check tests the unsnapped input, so it could only
+refuse a closed form the spec takes, and replace it with a trace of a different input: a second
+answer, which the spec does not allow.
+
+**That removing it changes nothing.** Under the `spec-probe` feature the kernel still evaluates the
+old check and counts each refusal (`blend::ON_BOTH_FAILS`, out of `CLOSED_FORMS`).
+`fillet-spec onboth` builds each part whole, and rolls every edge of each body before a fillet at
+its radius. Results:
+- 512 parts (every .fg in the repository, the pipe set, the four corpus cases): 13 223 closed-form
+  spines, 0 refused;
+- 4 × 40 random parts: 0.
+
+The rest of the census is staged next, and run the same way.

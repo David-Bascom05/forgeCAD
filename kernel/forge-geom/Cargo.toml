@@ -13,6 +13,8 @@ forge-math = { path = "../forge-math" }
 # the boolean's decision log (forge-bool's `decisions`): the hair-root choice recorded where a
 # collector asks (`intersect::hair_log`)
 decisions = []
+# the fillet spec's probes (verify/fillet-spec): `blend::ON_BOTH_FAILS`
+spec-probe = []
 
 [lints]
 workspace = true

@@ -16,4 +16,4 @@ workspace = true
 
 [features]
 # forge_ops::fillet::edge_blend, the fillet spec's probe (verify/fillet-spec)
-spec-probe = []
+spec-probe = ["forge-geom/spec-probe"]

@@ -475,6 +475,7 @@ fn parallel_cylinders(a: &Surface, b: &Surface) -> Option<Vec<Curve>> {
 }
 
 /// Whether the curve lies on both surfaces (sampled over `range`).
+#[cfg(any(test, feature = "spec-probe"))]
 fn on_both(c: &Curve, range: Interval, a: &Surface, b: &Surface) -> bool {
     (0..=8).all(|i| {
         let p = c.eval(range.lo + range.width() * i as f64 / 8.0);
@@ -510,9 +511,16 @@ pub fn spine(a: &Surface, b: &Surface, near: Point3, region: Box3, r: f64) -> Op
         c.eval(c.closest(near, r)).distance(near)
     };
     let pick = |cs: Vec<Curve>| cs.into_iter().min_by(|x, y| dist(x).total_cmp(&dist(y)));
-    if let Some(c) = closed.and_then(pick)
-        && on_both(&c, local_range(&c, near), a, b)
-    {
+    // A closed form is the pair's class (the fillet spec, lean-spec-design.md §14): its curve lies on
+    // both surfaces of the input as the class predicates snap it, so it is the spine, with no
+    // sampled check after it and no trace instead of it.
+    if let Some(c) = closed.and_then(pick) {
+        #[cfg(feature = "spec-probe")]
+        CLOSED_FORMS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        #[cfg(feature = "spec-probe")]
+        if !on_both(&c, local_range(&c, near), a, b) {
+            ON_BOTH_FAILS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        }
         return Some(c);
     }
     let traced = crate::intcurve::trace(a, b, region)?;
@@ -524,7 +532,16 @@ pub fn spine(a: &Surface, b: &Surface, near: Point3, region: Box3, r: f64) -> Op
     )
 }
 
+/// (`spec-probe` only.) How many closed-form spines the sampled check `on_both`, which they no
+/// longer pass through, would have refused: the fillet spec's test asserts none, on every part.
+#[cfg(feature = "spec-probe")]
+pub static ON_BOTH_FAILS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+/// (`spec-probe` only.) How many closed-form spines were taken, for the same test.
+#[cfg(feature = "spec-probe")]
+pub static CLOSED_FORMS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
 /// A short parameter range around the point of `c` nearest `p` (for checks).
+#[cfg(any(test, feature = "spec-probe"))]
 fn local_range(c: &Curve, p: Point3) -> Interval {
     let t = c.closest(p, c.full_range(1e6));
     match c {

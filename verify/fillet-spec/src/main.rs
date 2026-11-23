@@ -322,6 +322,43 @@ fn near(f: &str, pts: &str) {
     }
 }
 
+/// `onboth F.fg ..`: each part built whole, and every edge of each body before a fillet rolled at its
+/// radius; how many closed-form spines the sampled check `on_both` would have refused (it is gone
+/// from the kernel: lean-spec-design.md §14). One line per part with any, and the total.
+fn onboth(files: &[String]) {
+    use std::sync::atomic::Ordering;
+    let mut total = 0;
+    for f in files {
+        let Ok(src) = std::fs::read_to_string(f) else { continue };
+        let before = forge_geom::blend::ON_BOTH_FAILS.load(Ordering::Relaxed);
+        let m = forge_lang::fuzz::build_with(&src, opts());
+        for k in 0..m.features.len() {
+            let forge_model::Feature::Fillet { edges, .. } = &m.features[k] else { continue };
+            let Some(body) = m.body_after(k) else { continue };
+            let body = if body.dead > 0 { body.compact() } else { body };
+            let r = edges.iter().find_map(|(_, x)| match x {
+                forge_ops::Radius::Constant(r) => Some(*r),
+                _ => None,
+            });
+            if let Some(r) = r {
+                for e in body.edge_ids().collect::<Vec<_>>() {
+                    let _ = forge_ops::fillet::edge_blend(&body, e, r);
+                }
+            }
+        }
+        let n = forge_geom::blend::ON_BOTH_FAILS.load(Ordering::Relaxed) - before;
+        if n > 0 {
+            println!("{f}: {n}");
+        }
+        total += n;
+    }
+    println!(
+        "total {total} refused of {} closed-form spines, {} parts",
+        forge_geom::blend::CLOSED_FORMS.load(Ordering::Relaxed),
+        files.len()
+    );
+}
+
 fn parts(files: &[String]) {
     for f in files {
         let Ok(src) = std::fs::read_to_string(f) else {
@@ -408,6 +445,10 @@ fn random(n: usize, seed: u64) {
             println!("{}", line(&format!("random {seed}/{i}"), &body, e, r));
         }
     }
+    eprintln!(
+        "on_both would have refused: {}",
+        forge_geom::blend::ON_BOTH_FAILS.load(std::sync::atomic::Ordering::Relaxed)
+    );
 }
 
 fn main() {
@@ -416,6 +457,7 @@ fn main() {
         Some("parts") => parts(&args[1..]),
         Some("probe") => probe(&args[1..]),
         Some("mids") => mids(&args[1..]),
+        Some("onboth") => onboth(&args[1..]),
         Some("near") => near(&args[1], &args[2]),
         Some("random") => {
             let n = args.get(1).and_then(|x| x.parse().ok()).unwrap_or(20);
