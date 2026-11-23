@@ -6,6 +6,7 @@ import SplineSpec.Basis
 import SplineSpec.Deriv
 import SplineSpec.Continuity
 import SplineSpec.Insert
+import SplineSpec.Thomas
 import SplineSpec.Oracle
 import SplineSpec.Cert
 import SplineSpec.Interval

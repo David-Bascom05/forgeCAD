@@ -45,3 +45,6 @@ open SplineSpec
 #print axioms convex_in_cone
 #print axioms injective_of_dir_deriv_pos
 #print axioms bern_pos_off_start
+-- The kernel's tridiagonal solve, in exact arithmetic: nonzero pivots, every row satisfied.
+#print axioms pivot_ne
+#print axioms thomas_solves
