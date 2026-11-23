@@ -43,6 +43,13 @@ pub trait CurveGeom {
     fn closest(&self, p: Point3, range: Interval) -> f64;
     /// A box guaranteed to contain the curve over `range`.
     fn bbox(&self, range: Interval) -> Box3;
+    /// A box, cheaper than `bbox` and perhaps looser, guaranteed to contain `bbox(range)` itself:
+    /// a caller that only needs `bbox` when it would reach past a box it holds asks this first.
+    /// None where there is none cheaper.
+    fn bbox_outer(&self, range: Interval) -> Option<Box3> {
+        let _ = range;
+        None
+    }
     fn transformed(&self, f: &Frame) -> Self
     where
         Self: Sized;
@@ -123,6 +130,13 @@ pub trait ProceduralCurve: Send + Sync + std::fmt::Debug {
     fn closest(&self, p: Point3, range: Interval) -> f64;
     /// A box guaranteed to contain the curve over `range`.
     fn bbox(&self, range: Interval) -> Box3;
+    /// A box, cheaper than `bbox` and perhaps looser, guaranteed to contain `bbox(range)` itself:
+    /// a caller that only needs `bbox` when it would reach past a box it holds asks this first.
+    /// None where there is none cheaper.
+    fn bbox_outer(&self, range: Interval) -> Option<Box3> {
+        let _ = range;
+        None
+    }
     fn transformed(&self, f: &Frame) -> ProcCurve;
     /// A bound on the speed |d/dt| over `range` (for subdivision searches).
     fn speed_bound(&self, range: Interval) -> f64;

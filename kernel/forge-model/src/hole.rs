@@ -502,25 +502,9 @@ pub(crate) fn sized_through(features: crate::History<'_>, i: usize) -> bool {
 /// whole domain (its face box where that is not finite).
 pub(crate) fn body_box(b: &forge_topo::Body) -> Box3 {
     use forge_geom::{Curve, Surface};
-    // every edge's ends: so a line edge adds nothing more
-    let mut bx = Box3::from_points(b.vertices.iter().map(|v| v.point));
-    // (the arrays walked directly: a part's bodies after many steps hold many dead entries)
-    for (k, edge) in b.edges.iter().enumerate() {
-        // a line's ends are vertices; a curved edge's box if it is kept already, else one as cheap
-        // as sound: a circle's or ellipse's whole box (no arc extremes worked out)
-        if matches!(edge.curve, Curve::Line(_)) || !edge.alive {
-            continue;
-        }
-        let eb = match (&edge.curve, edge.bbox.get()) {
-            (_, Some(k)) => *k,
-            (Curve::Circle(c), None) => Box3::from_point(c.frame.origin).grow(c.radius.abs()),
-            (Curve::Ellipse(el), None) => {
-                Box3::from_point(el.frame.origin).grow(el.major.abs().max(el.minor.abs()))
-            }
-            (_, None) => b.edge_box(forge_topo::EdgeId(k as u32)),
-        };
-        bx = bx.hull(&eb);
-    }
+    // (faces first, then vertices, then edges: a hull is the same in any order, and a curved
+    // edge inside what is held by then needs no box of its own)
+    let mut bx = Box3::EMPTY;
     for (k, face) in b.faces.iter().enumerate() {
         if !face.alive {
             continue;
@@ -545,6 +529,36 @@ pub(crate) fn body_box(b: &forge_topo::Body) -> Box3 {
             }
             _ => {}
         }
+    }
+    // every edge's ends: so a line edge adds nothing more
+    bx = bx.hull(&Box3::from_points(b.vertices.iter().map(|v| v.point)));
+    // (the arrays walked directly: a part's bodies after many steps hold many dead entries)
+    for (k, edge) in b.edges.iter().enumerate() {
+        // a line's ends are vertices; a curved edge's box if it is kept already, else one as cheap
+        // as sound: a circle's or ellipse's whole box (no arc extremes worked out)
+        if matches!(edge.curve, Curve::Line(_)) || !edge.alive {
+            continue;
+        }
+        let eb = match (&edge.curve, edge.bbox.get()) {
+            (_, Some(k)) => *k,
+            (Curve::Circle(c), None) => Box3::from_point(c.frame.origin).grow(c.radius.abs()),
+            (Curve::Ellipse(el), None) => {
+                Box3::from_point(el.frame.origin).grow(el.major.abs().max(el.minor.abs()))
+            }
+            // (a box already holding a cheaper outer one of the curve's holds the curve's own: the
+            // hull comes out the same, bit for bit, without working the curve's box out)
+            (Curve::Procedural(pc), None)
+                if pc.bbox_outer(edge.range).is_some_and(|o| {
+                    [(o.x, bx.x), (o.y, bx.y), (o.z, bx.z)]
+                        .iter()
+                        .all(|(a, h)| a.lo >= h.lo && a.hi <= h.hi)
+                }) =>
+            {
+                continue;
+            }
+            (_, None) => b.edge_box(forge_topo::EdgeId(k as u32)),
+        };
+        bx = bx.hull(&eb);
     }
     bx.grow(forge_math::tol::LINEAR)
 }

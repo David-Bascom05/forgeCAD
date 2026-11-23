@@ -858,6 +858,25 @@ impl ProceduralCurve for Helix {
     fn as_any(&self) -> Option<&dyn std::any::Any> {
         Some(self)
     }
+    /// `bbox` with the turn's cosine and sine taken whole: the axis's stretch grown by the
+    /// largest radius along each world axis as `Motion::bbox`'s interval sums can reach (|x_i| +
+    /// |y_i| of it), then by `bbox`'s own tolerance and a margin for its rounding. No sines.
+    fn bbox_outer(&self, range: Interval) -> Option<Box3> {
+        let r = range * self.m.a + self.p.x;
+        let h = range * self.m.b + self.p.y;
+        let rm = r.lo.abs().max(r.hi.abs());
+        let f = &self.m.frame;
+        let (x, y, z, o) = (f.x().get(), f.y().get(), f.z().get(), f.origin);
+        let slack =
+            tol::LINEAR + 1e-9 * (1.0 + rm + h.lo.abs().max(h.hi.abs()) + o.x.abs() + o.y.abs() + o.z.abs());
+        let axis =
+            |zi: f64, oi: f64, xi: f64, yi: f64| (h * zi + oi).grow(rm * (xi.abs() + yi.abs()) + slack);
+        Some(Box3 {
+            x: axis(z.x, o.x, x.x, y.x),
+            y: axis(z.y, o.y, x.y, y.y),
+            z: axis(z.z, o.z, x.z, y.z),
+        })
+    }
     fn exact_d1(&self) -> bool {
         true
     }
