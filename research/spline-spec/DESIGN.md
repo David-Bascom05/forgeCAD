@@ -171,9 +171,44 @@ To make the translation possible, the de Casteljau and back-substitution loops b
 `insert_knot`'s span search and multiplicity count: one pass over the sorted knots now replaces `partition_point` and
 `filter().count()`. The bits are the same, and the callgrind gate is below base on every line.
 
-Not yet: Aeneas on `through`/`through_ends`/`from_nurbs` (iterator chains and closures to rewrite first); a binary64
-bound on the insertion's lerps (the de Casteljau `lerp_err_M` applies to each one);
-a binary64 bound for the Thomas solve; the crossing certificate's margin in Lean (it only decides which refusal is given).
+## What is left (paused 2026-11-23, on the owner's ruling: the spline code is not changing under an active feature)
+
+Each item below is independent of the others. Each Rust change goes under the gates of research/PROOF-STANDARD.md
+(exact callgrind ≤ base, bits native = wasm, reliability 0 worse, FUZZ_SEEDS=150).
+
+1. **L4 for the constructors.** Aeneas on `Spline::through`, `through_periodic`, `through_ends` and `from_nurbs`.
+   - The translation needs plain loops first. Charon/Aeneas at the pin take no closures, no iterator adapters
+     (`map`, `filter`, `zip`, `windows`, `rposition`, `any`), no `RangeInclusive` and no `Vec::dedup`. `insert_knot`
+     shows the pattern: one counting pass replaced `partition_point` and `filter().count()`, and the bits and the gate
+     both held.
+   - What each should be proved to compute:
+     - `through`: the centripetal parameters (`SplineSpec.Centripetal`), the Hermite rows (`rows`), then
+       `tridiagonal_spec`. Rows → solve → `hermite` pieces, each in binary64.
+     - `through_periodic`: the cyclic system. `cyclic` is Sherman–Morrison over two `tridiagonal` calls, and
+       `Cyclic.lean` proves it in exact arithmetic.
+     - `from_nurbs`: the loop of `insert_knot` calls, with `insert_knot_spec` and `insQ_get` per call, then the slicing
+       into Bezier pieces. `kernelPoles_eq` already holds of each insertion (m ≤ p and the uncapped span, both of which
+       `from_nurbs` ensures).
+   - Aeneas's `Vec.insert` refuses index = length (Rust allows it). Specs carry `s + 1 < len`, which always holds for a
+     spline.
+   - The bridge now has `Option ?`, `to_bits`, `f64` `Default`, `sqrt` and per-op error lemmas
+     (`verify/aeneas/bridge/AeneasF64/Err.lean`, aeneas session @541f69e). forge-math's translation now covers
+     `forge_math::vec`: take `Vec3` from there instead of the hand definitions in `ForgeGeom/FunsExternal.lean`, once
+     merged. `translate.sh` is now release with overflow checks on: regenerate forge-geom and rerun `--check` after the
+     merge.
+2. **L5 bounds still to state.**
+   - The Thomas solve in binary64. Under row dominance the forward-sweep pivots stay at least `|b_i| - |a_i| - |c_i|`
+     away from 0 (exact: `sweep_bound`). The forward error of each `fsweep`/`fback` step is then a few `u` of the
+     row's scale, by `SplineFP`'s `add_err`/`mul_err`/`div`. A div error lemma is needed in `SplineFP`, or the bridge's
+     `Err.lean` can supply it.
+   - The insertion's lerps: `lerp_err_M` applies to each `newPt` coordinate directly. The ratio `alphaF`'s own rounding
+     (a sub and a div) has to be carried in as an error in `s`.
+3. **The crossing certificate's margin** (`kernel/forge-ops/src/simple.rs`). Acceptance is proved sound in exact
+   arithmetic (`Simple.lean`). The margin that turns "undecided" into "crosses" is not, and it decides only which
+   refusal is given, never a wrong acceptance.
+4. **Past the ends.** `spanOf` continues the end spans' polynomials (as the kernel does). No theorem covers it yet:
+   the convex hull and the oracle's samples are stated only on [u_p, u_n]. A rational spline can reach a zero weight
+   there. See the surfaces session's answer for what its extension needs.
 
 Differential test, `kernel/forge-geom/tests/spline_diff.rs`: 698 curves, all within the curve's scale over 2^30 of the
 spec. The largest bound Lean proves is 6.2e-12. A planted 1e-6 error in the natural end row is caught.
