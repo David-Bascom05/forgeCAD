@@ -62,6 +62,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-cam"
+version = "0.1.0"
+dependencies = [
+ "forge-cam-geom",
+ "forge-geom",
+ "forge-math",
+ "forge-topo",
+]
+
+[[package]]
 name = "forge-cam-geom"
 version = "0.1.0"
 
@@ -204,6 +214,8 @@ dependencies = [
  "forge-agent",
  "forge-asm",
  "forge-bool",
+ "forge-cam",
+ "forge-cam-geom",
  "forge-dirs",
  "forge-draw",
  "forge-dwg",
@@ -275,6 +287,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-post"
+version = "0.1.0"
+dependencies = [
+ "forge-cam-geom",
+ "forge-tooling",
+]
+
+[[package]]
 name = "forge-proof"
 version = "0.1.0"
 dependencies = [
@@ -335,6 +355,14 @@ dependencies = [
  "forge-mesh",
  "forge-ops",
  "forge-topo",
+]
+
+[[package]]
+name = "forge-tooling"
+version = "0.1.0"
+dependencies = [
+ "forge-cam-geom",
+ "forge-math",
 ]
 
 [[package]]

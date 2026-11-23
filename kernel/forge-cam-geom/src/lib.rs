@@ -14,6 +14,8 @@
 //! that style: loops over indices, no closures in the algorithms, no iterator chains, no u128.
 // Arithmetic is spelled as plain methods (Aeneas translates them; operator traits it does not).
 #![allow(clippy::should_implement_trait, clippy::manual_map, clippy::manual_div_ceil)]
+// `!(x > 0.0)` is deliberate: it refuses NaN as well.
+#![allow(clippy::neg_cmp_op_on_partial_ord)]
 
 pub mod arr;
 pub mod big;

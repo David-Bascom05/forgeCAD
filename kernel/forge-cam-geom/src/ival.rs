@@ -180,6 +180,9 @@ impl Ival {
     }
     #[inline]
     pub fn width(self) -> f64 {
+        if self.hi == self.lo {
+            return 0.0;
+        }
         up(self.hi - self.lo)
     }
     /// -1, 0 (undecided: zero inside) or 1.

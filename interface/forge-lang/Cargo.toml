@@ -35,6 +35,8 @@ forge-draw = { path = "../../kernel/forge-draw" }
 
 [dev-dependencies]
 forge-dwg = { path = "../../kernel/forge-dwg" }
+forge-cam = { path = "../../kernel/forge-cam" }
+forge-cam-geom = { path = "../../kernel/forge-cam-geom" }
 
 [lints]
 workspace = true

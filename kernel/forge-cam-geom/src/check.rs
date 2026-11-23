@@ -506,8 +506,14 @@ fn cell_eval_planar(body: &Body, f: &Face, pl: &Planar, c: &Cell) -> (Ival, [f64
     if point {
         return (sd, [0.0; 3]);
     }
-    // the split: each parameter's share of the image's width (a heuristic only)
-    let sm = [diam(&f.surf.eval(c.p, qc)), diam(&f.surf.eval(pc, c.q)), 0.0];
+    // the split: how much the signed distance changes across the cell along each parameter,
+    // at the centre, plus a little of the image's width (a heuristic only)
+    let at = |p: f64, q: f64| cell_eval_planar(body, f, pl, &Cell { p: Ival::pt(p), q: Ival::pt(q), s: c.s }).0.mid();
+    let (pm, qm) = (c.p.mid(), c.q.mid());
+    let (hp, hq) = (0.5 * c.p.width(), 0.5 * c.q.width());
+    let dp = (at(pm + hp, qm) - at(pm - hp, qm)).abs() + (at(pm + hp, qm) + at(pm - hp, qm) - 2.0 * at(pm, qm)).abs();
+    let dq = (at(pm, qm + hq) - at(pm, qm - hq)).abs() + (at(pm, qm + hq) + at(pm, qm - hq) - 2.0 * at(pm, qm)).abs();
+    let sm = [dp + 1e-4 * diam(&f.surf.eval(c.p, qc)), dq + 1e-4 * diam(&f.surf.eval(pc, c.q)), 0.0];
     (sd, sm)
 }
 
@@ -595,7 +601,25 @@ pub fn certify(body: &Body, f: &Face, mv: &Move, limit: f64, res: f64, budget: u
         if holds < 0 {
             continue;
         }
-        let (sd, smear) = cell_eval(body, f, mv, &c);
+        let (mut sd, smear) = cell_eval(body, f, mv, &c);
+        if std::env::var("FORGE_CAM_CELLS").is_ok() {
+            eprintln!("cell p {:?} q {:?} sd {:?} smear {:?}", c.p, c.q, sd, smear);
+        }
+        if holds == 0 && sd.lo < lim_clear {
+            // the cell crosses the face's trim: its off-face points mean nothing. Every face
+            // point of the cell is within the image's diameter of a face point of the cell, and
+            // the minimum over the motion of the signed distance is 1-Lipschitz
+            let (pm, qm) = (c.p.mid(), c.q.mid());
+            if f.holds(Ival::pt(pm), Ival::pt(qm)) == 1 {
+                let w = cell_sd(body, f, mv, &Cell { p: Ival::pt(pm), q: Ival::pt(qm), s: c.s });
+                let img = f.surf.eval(c.p, c.q);
+                let mvd = if mv.planar().is_some() { 0.0 } else { diam(&mv.at(c.s)) };
+                let lip = Ival::pt(w.lo).sub(Ival::pt(diam(&img))).sub(Ival::pt(mvd)).lo;
+                if lip > sd.lo {
+                    sd = Ival { lo: lip, hi: sd.hi };
+                }
+            }
+        }
         if sd.lo >= lim_clear {
             if sd.lo < lower {
                 lower = sd.lo;

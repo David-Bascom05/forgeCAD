@@ -1,0 +1,41 @@
+# Fanuc-style ISO milling (generic): restated from public RS274/NGC practice (NIST IR 6556) and
+# common Fanuc conventions; facts only, no vendor post copied. Verify with your control's manual.
+[dialect]
+name = "fanuc"
+extension = "nc"
+decimals = 3
+feed_decimals = 1
+point = "always"          # always: X10. ; never: X10 ; full: X10.000
+program_open = ["%", "O{num:04} ({title})"]
+program_close = ["M30", "%"]
+comment = "({text})"
+comment_strip = "()"
+line_numbers = true
+line_start = 10
+line_step = 10
+safe_start = ["G90 G94 G17 G49 G40 G80", "G21"]
+tool_change = ["T{t} M06"]
+length_comp = "G43 H{h}"
+spindle_cw = "S{rpm} M03"
+spindle_ccw = "S{rpm} M04"
+spindle_stop = "M05"
+wcs = "G{n}"             # n = 54..59
+wcs_first = 54
+wcs_count = 6
+arc = "ijk"
+retract_home = ["G91 G28 Z0.", "G90"]
+coolant_flood = "M08"
+coolant_mist = "M07"
+coolant_off = "M09"
+dwell = "G04 P{ms}"      # milliseconds
+cycle_drill = "G98 G81 X{x} Y{y} Z{z} R{r} F{f}"
+cycle_dwell = "G98 G82 X{x} Y{y} Z{z} R{r} P{ms} F{f}"
+cycle_peck = "G98 G83 X{x} Y{y} Z{z} R{r} Q{q} F{f}"
+cycle_chipbreak = "G98 G73 X{x} Y{y} Z{z} R{r} Q{q} F{f}"
+cycle_tap = "G98 G84 X{x} Y{y} Z{z} R{r} F{f}"
+cycle_ream = "G98 G85 X{x} Y{y} Z{z} R{r} F{f}"
+cycle_next = "X{x} Y{y}"
+cycle_cancel = "G80"
+source = "forgecad, restated from NIST RS274NGC v3 and common Fanuc practice"
+taken = "2026-11-23"
+note = "verify with your control's manual"
