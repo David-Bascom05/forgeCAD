@@ -473,11 +473,11 @@ theorem vert_scan_spec (l : Ledger) (ext : Ext) (hok : ExtOK l ext) (a : Assembl
     (isE : alloc.vec.Vec Bool) (hN : isE.val.length = (allCells l ext).length)
     (hV : ∀ x ∈ l.verts.val, (x : U32).val < (allCells l ext).length) (hVs : l.verts.val.length < U32.max)
     (b0 : U32) :
-    keep_on_loop4 l.nb l.face_body l.face_class l.cells l.pieces l.inside l.edges l.verts ext
+    core_k_loop3 l.nb l.face_body l.face_class l.cells l.pieces l.inside l.edges l.verts ext
       a.result a.orient a.rpos isE b0 (alloc.vec.Vec.new (alloc.vec.Vec U32)) 0#usize ⦃ r =>
       (b0 ≠ NONE → r.1 = b0) ∧
       (b0 = NONE → ScanOutV l ext a isE.val (idsOf l.verts) r.1 (r.2.val.map fun v => v.val.map (·.val))) ⦄ := by
-  unfold keep_on_loop4
+  unfold core_k_loop3
   apply loop.spec_decr_nat
     (fun (q : U32 × alloc.vec.Vec (alloc.vec.Vec U32) × Usize) => l.verts.val.length - q.2.2.val)
     (fun q => q.2.2.val ≤ l.verts.val.length ∧ q.2.1.val.length = q.2.2.val ∧
@@ -486,7 +486,7 @@ theorem vert_scan_spec (l : Ledger) (ext : Ext) (hok : ExtOK l ext) (a : Assembl
           ((idsOf l.verts).take q.2.2.val).map fun e => aroundL l ext a (covAt l ext e)) ∧
       (q.1 ≠ NONE → (b0 ≠ NONE → q.1 = b0) ∧ (b0 = NONE → (idsOf l.verts).find? (badV l ext a isE.val) = some q.1.val)))
   · rintro ⟨bd, av0, j⟩ ⟨hj, havl, hb1, hb2⟩
-    unfold keep_on_loop4.body
+    unfold core_k_loop3.body
     simp only at hj havl hb1 hb2 ⊢
     split
     · rename_i hnone

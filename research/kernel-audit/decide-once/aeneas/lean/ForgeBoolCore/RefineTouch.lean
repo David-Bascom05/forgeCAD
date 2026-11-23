@@ -11,28 +11,31 @@ open Aeneas Aeneas.Std Result
 
 namespace forge_bool_core
 
-theorem is_edge_spec (v : alloc.vec.Vec CellId) (E : alloc.vec.Vec Bool) (k : Usize) (N : Nat)
-    (hk : k.val ≤ v.val.length) (hl : E.val.length = N)
-    (hE : ∀ c, c < N → E.val.getD c false = decide (c ∈ (v.val.take k.val).map (fun (x : U32) => x.val))) :
-    keep_on_loop2 v E k ⦃ r => r.val.length = N ∧
-      ∀ c, c < N → r.val.getD c false = decide (c ∈ v.val.map (fun (x : U32) => x.val)) ⦄ := by
-  unfold keep_on_loop2
+theorem is_edge_spec (l : Ledger) (E : alloc.vec.Vec Bool) (k : Usize) (N : Nat)
+    (hk : k.val ≤ l.edges.val.length) (hl : E.val.length = N)
+    (hE : ∀ c, c < N → E.val.getD c false = decide (c ∈ (l.edges.val.take k.val).map (fun (x : U32) => x.val))) :
+    core_k_loop1 l E k ⦃ r =>
+      (r.1, r.2.1, r.2.2.1, r.2.2.2.1, r.2.2.2.2.1, r.2.2.2.2.2.1, r.2.2.2.2.2.2.1, r.2.2.2.2.2.2.2.1) =
+        (l.nb, l.face_body, l.face_class, l.cells, l.pieces, l.inside, l.edges, l.verts) ∧
+      r.2.2.2.2.2.2.2.2.val.length = N ∧
+      ∀ c, c < N → r.2.2.2.2.2.2.2.2.val.getD c false = decide (c ∈ l.edges.val.map (fun (x : U32) => x.val)) ⦄ := by
+  unfold core_k_loop1
   apply loop.spec_decr_nat
-    (fun (q : alloc.vec.Vec Bool × Usize) => v.val.length - q.2.val)
-    (fun q => q.2.val ≤ v.val.length ∧ q.1.val.length = N ∧
-      ∀ c, c < N → q.1.val.getD c false = decide (c ∈ (v.val.take q.2.val).map (fun (x : U32) => x.val)))
+    (fun (q : alloc.vec.Vec Bool × Usize) => l.edges.val.length - q.2.val)
+    (fun q => q.2.val ≤ l.edges.val.length ∧ q.1.val.length = N ∧
+      ∀ c, c < N → q.1.val.getD c false = decide (c ∈ (l.edges.val.take q.2.val).map (fun (x : U32) => x.val)))
   · rintro ⟨E0, j⟩ ⟨hj, hl0, hE0⟩
-    unfold keep_on_loop2.body
+    unfold core_k_loop1.body
     simp only at hj hl0 hE0 ⊢
     split
     · rename_i hlt
-      have hjl : j.val < v.val.length := by scalar_tac
-      have htake : (v.val.take (j.val + 1)).map (fun (x : U32) => x.val) =
-          (v.val.take j.val).map (fun (x : U32) => x.val) ++ [(v.val[j.val]'hjl : U32).val] := by
+      have hjl : j.val < l.edges.val.length := by scalar_tac
+      have htake : (l.edges.val.take (j.val + 1)).map (fun (x : U32) => x.val) =
+          (l.edges.val.take j.val).map (fun (x : U32) => x.val) ++ [(l.edges.val[j.val]'hjl : U32).val] := by
         rw [List.take_succ_eq_append_getElem hjl, List.map_append, List.map_singleton]
       step as ⟨ci, hci⟩
       step as ⟨i1, hi1⟩
-      have hi1v : i1.val = (v.val[j.val]'hjl : U32).val := by rw [hi1, hci]; scalar_tac
+      have hi1v : i1.val = (l.edges.val[j.val]'hjl : U32).val := by rw [hi1, hci]; scalar_tac
       split
       · rename_i hin
         step as ⟨i3, hi3⟩
@@ -43,7 +46,7 @@ theorem is_edge_spec (v : alloc.vec.Vec CellId) (E : alloc.vec.Vec Bool) (k : Us
         step as ⟨j1, hj1⟩
         refine ⟨by scalar_tac, by simp [hl0], ?_, by scalar_tac⟩
         intro c hc
-        have hi3v : i3.val = (v.val[j.val]'hjl : U32).val := by rw [hi3, hci]; scalar_tac
+        have hi3v : i3.val = (l.edges.val[j.val]'hjl : U32).val := by rw [hi3, hci]; scalar_tac
         rw [hj1, htake, alloc.vec.Vec.set_val_eq, List.getD_eq_getElem?_getD]
         by_cases hce : c = i3.val
         · subst hce; rw [List.getElem?_set_self (by omega)]; simp [hi3v]
@@ -54,15 +57,15 @@ theorem is_edge_spec (v : alloc.vec.Vec CellId) (E : alloc.vec.Vec Bool) (k : Us
         refine ⟨by scalar_tac, hl0, ?_, by scalar_tac⟩
         intro c hc
         rw [hj1, htake, hE0 c hc]
-        have : c ≠ (v.val[j.val]'hjl : U32).val := by
+        have : c ≠ (l.edges.val[j.val]'hjl : U32).val := by
           intro e; apply hout
           have : i1.val < E0.val.length := by rw [hi1v, ← e]; omega
           scalar_tac
         simp [this]
     · rename_i hge
       simp only [WP.spec_ok]
-      have : j.val = v.val.length := by scalar_tac
-      refine ⟨hl0, fun c hc => ?_⟩
+      have : j.val = l.edges.val.length := by scalar_tac
+      refine ⟨trivial, hl0, fun c hc => ?_⟩
       rw [hE0 c hc, this, List.take_length]
   · exact ⟨hk, hl, hE⟩
 
@@ -87,10 +90,10 @@ def ScanOut (l : Ledger) (ext : Ext) (a : Assembled) (es : List Nat) (bad : U32)
 
 theorem edge_scan_spec (l : Ledger) (ext : Ext) (hok : ExtOK l ext) (a : Assembled) (W : Nat) (h : ResOK l ext a W)
     (hE : ∀ e ∈ l.edges.val, (e : U32).val < (allCells l ext).length) (hEs : l.edges.val.length < U32.max) :
-    keep_on_loop3 l.nb l.face_body l.face_class l.cells l.pieces l.inside l.edges l.verts ext
+    core_k_loop2 l.nb l.face_body l.face_class l.cells l.pieces l.inside l.edges l.verts ext
       a.result a.orient a.rpos NONE (alloc.vec.Vec.new (alloc.vec.Vec U32)) 0#usize ⦃ r =>
       ScanOut l ext a (idsOf l.edges) r.1 (r.2.val.map fun v => v.val.map (·.val)) ⦄ := by
-  unfold keep_on_loop3
+  unfold core_k_loop2
   apply loop.spec_decr_nat
     (fun (q : U32 × alloc.vec.Vec (alloc.vec.Vec U32) × Usize) => l.edges.val.length - q.2.2.val)
     (fun q => q.2.2.val ≤ l.edges.val.length ∧ q.2.1.val.length = q.2.2.val ∧
@@ -99,7 +102,7 @@ theorem edge_scan_spec (l : Ledger) (ext : Ext) (hok : ExtOK l ext) (a : Assembl
         ((idsOf l.edges).take q.2.2.val).map fun e => aroundL l ext a (covAt l ext e)) ∧
       (q.1 ≠ NONE → (idsOf l.edges).find? (badE l ext a) = some q.1.val))
   · rintro ⟨b0, ae0, j⟩ ⟨hj, hael, hb1, hb2, hb3⟩
-    unfold keep_on_loop3.body
+    unfold core_k_loop2.body
     simp only at hj hael hb1 hb2 hb3 ⊢
     split
     · rename_i hnone
