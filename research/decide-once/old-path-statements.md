@@ -48,7 +48,12 @@ assume, as `LedgerWF2.small` did for the core:
 
 Binding today: offp_margin's S ≤ 1e8, which gives max |coord| ≤ about 1.6e7 (16 km in mm). Today's
 code has no size check, so one `#[cold]` check at the four boolean entries (vertex max |coord|
-against one `INPUT_SIZE` const) refuses with `Unhandled::InputTooLarge`. Each new screen adds its bound here. The list is reviewed for a single combined bound before the
+against one `INPUT_SIZE` const) refuses with `Unhandled::InputTooLarge`. Each new screen adds its bound here.
+The check runs on surface data (each face's frame origin and radii, the quantities the screens
+bound), once where a body is created: forge-model tools, pattern copies after their transform,
+Unlinked, and import. **`boolean_preserves_InputSize`**: a result's faces carry operand surfaces
+with frames unchanged, so InputSize carries through every boolean by induction. Owner: curved Rust,
+with the list of every path by which a body reaches a boolean. The list is reviewed for a single combined bound before the
 theorem is closed. Outside these bounds the boolean refuses (an input out of scope); it never
 answers without a proof.
 
