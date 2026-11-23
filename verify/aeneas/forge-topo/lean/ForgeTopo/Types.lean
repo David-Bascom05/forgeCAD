@@ -20,18 +20,32 @@ set_option maxRecDepth 2048
 namespace forge_topo
 
 /-- Trait declaration: [forge_topo::topo::Topo]
-    Source: 'kernel/forge-topo/src/topo.rs', lines 10:0-17:1
+    Source: 'kernel/forge-topo/src/topo.rs', lines 10:0-34:1
     Visibility: public -/
 structure topo.Topo (Self : Type _) where
   n_vertices : Self → Result Std.Usize
   n_edges : Self → Result Std.Usize
   edge_alive : Self → Std.Usize → Result Bool
   edge_ends : Self → Std.Usize → Result (Std.Usize × Std.Usize)
+  edge_n_uses : Self → Std.Usize → Result Std.Usize
+  edge_use : Self → Std.Usize → Std.Usize → Result Std.Usize
+  n_coedges : Self → Result Std.Usize
+  coedge_edge : Self → Std.Usize → Result Std.Usize
+  coedge_loop : Self → Std.Usize → Result Std.Usize
+  n_loops : Self → Result Std.Usize
+  loop_first : Self → Std.Usize → Result Std.Usize
+  loop_len : Self → Std.Usize → Result Std.Usize
+  loop_face : Self → Std.Usize → Result Std.Usize
+  n_faces : Self → Result Std.Usize
+  face_alive : Self → Std.Usize → Result Bool
+  face_n_loops : Self → Std.Usize → Result Std.Usize
+  face_loop : Self → Std.Usize → Std.Usize → Result Std.Usize
 
 /-- Trait declaration: [forge_topo::topo::Sink]
-    Source: 'kernel/forge-topo/src/topo.rs', lines 20:0-22:1
+    Source: 'kernel/forge-topo/src/topo.rs', lines 37:0-42:1
     Visibility: public -/
 structure topo.Sink (Self : Type _) where
   stray : Self → Std.Usize → Result Self
+  back_link : Self → Std.U8 → Std.Usize → Result Self
 
 end forge_topo

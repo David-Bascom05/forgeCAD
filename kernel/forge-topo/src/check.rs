@@ -483,88 +483,12 @@ fn check_known(body: &Body, known: &Known) -> Vec<Problem> {
     out
 }
 
-/// Whether coedge `c` is one of loop `lp`'s.
-fn in_loop(lp: &crate::body::Loop, c: CoedgeId) -> bool {
-    let n = lp.coedges().len() as u32;
-    n > 0 && (lp.coedge(0).0..lp.coedge(0).0 + n).contains(&c.0)
-}
-
 /// The links between entities (`WF` of verify/forge-topo-check/lean/TopoCheck/Spec.lean), and that
 /// every id is in range: each live face's loops are its own; each loop of a live face is listed by
 /// it once, and its coedges name it and are uses of their (live) edges; each live edge's uses
 /// are coedges of it in such loops, and its ends are vertices.
 fn check_links(body: &Body, out: &mut Vec<Problem>) {
-    let (nv, ne, nc, nl, nf) = (
-        body.vertices.len(),
-        body.edges.len(),
-        body.coedges.len(),
-        body.loops.len(),
-        body.faces.len(),
-    );
-    let mut listed = vec![0u32; nl];
-    for f in body.face_ids() {
-        let mut ok = true;
-        for &l in body.face(f).loops.iter() {
-            if l.index() >= nl || body.loops[l.index()].face != f {
-                ok = false;
-            } else {
-                listed[l.index()] += 1;
-            }
-        }
-        if !ok {
-            out.push(Problem::BackLink {
-                what: "face",
-                id: f.0,
-            });
-        }
-    }
-    for (i, e) in body.edges.iter().enumerate() {
-        if !e.alive {
-            continue;
-        }
-        let ok = e.start.index() < nv
-            && e.end.index() < nv
-            && e.coedges.iter().all(|&c| {
-                c.index() < nc && {
-                    let co = &body.coedges[c.index()];
-                    co.edge.index() == i
-                        && co.lp.index() < nl
-                        && listed[co.lp.index()] == 1
-                        && in_loop(&body.loops[co.lp.index()], c)
-                }
-            });
-        if !ok {
-            out.push(Problem::BackLink {
-                what: "edge",
-                id: i as u32,
-            });
-        }
-    }
-    for (i, lp) in body.loops.iter().enumerate() {
-        let f = lp.face.index();
-        // left over from an in-place edit (a dead face's, or one `remove_loop` took off): no part
-        // of the body, left for `compact`
-        if f < nf && (!body.faces[f].alive || listed[i] == 0) {
-            continue;
-        }
-        let ok = f < nf
-            && listed[i] == 1
-            && lp.coedges().all(|c| {
-                c.index() < nc && {
-                    let co = &body.coedges[c.index()];
-                    co.lp.index() == i
-                        && co.edge.index() < ne
-                        && body.edges[co.edge.index()].alive
-                        && body.edges[co.edge.index()].coedges.contains(&c)
-                }
-            });
-        if !ok {
-            out.push(Problem::BackLink {
-                what: "loop",
-                id: i as u32,
-            });
-        }
-    }
+    crate::topo::links(&View::of(body), out);
 }
 
 /// The shells: each lists its faces once, each live face is in the one shell it names, the faces
@@ -650,6 +574,15 @@ impl crate::topo::Sink for Vec<Problem> {
     fn stray(&mut self, v: usize) {
         self.push(Problem::StrayVertex { vertex: VertexId(v as u32) });
     }
+    #[inline]
+    fn back_link(&mut self, what: u8, id: usize) {
+        let what = match what {
+            0 => "face",
+            1 => "edge",
+            _ => "loop",
+        };
+        self.push(Problem::BackLink { what, id: id as u32 });
+    }
 }
 
 /// What `topo`'s tests read of a body: its arrays as slices, whose lengths the compiler keeps in
@@ -657,11 +590,20 @@ impl crate::topo::Sink for Vec<Problem> {
 pub struct View<'a> {
     nv: usize,
     edges: &'a [crate::body::Edge],
+    coedges: &'a [crate::body::Coedge],
+    loops: &'a [crate::body::Loop],
+    faces: &'a [crate::body::Face],
 }
 
 impl<'a> View<'a> {
     pub fn of(body: &'a Body) -> View<'a> {
-        View { nv: body.vertices.len(), edges: &body.edges }
+        View {
+            nv: body.vertices.len(),
+            edges: &body.edges,
+            coedges: &body.coedges,
+            loops: &body.loops,
+            faces: &body.faces,
+        }
     }
 }
 
@@ -682,6 +624,58 @@ impl crate::topo::Topo for View<'_> {
     fn edge_ends(&self, e: usize) -> (usize, usize) {
         let e = &self.edges[e];
         (e.start.index(), e.end.index())
+    }
+    #[inline]
+    fn edge_n_uses(&self, e: usize) -> usize {
+        self.edges[e].coedges.len()
+    }
+    #[inline]
+    fn edge_use(&self, e: usize, i: usize) -> usize {
+        self.edges[e].coedges[i].index()
+    }
+    #[inline]
+    fn n_coedges(&self) -> usize {
+        self.coedges.len()
+    }
+    #[inline]
+    fn coedge_edge(&self, c: usize) -> usize {
+        self.coedges[c].edge.index()
+    }
+    #[inline]
+    fn coedge_loop(&self, c: usize) -> usize {
+        self.coedges[c].lp.index()
+    }
+    #[inline]
+    fn n_loops(&self) -> usize {
+        self.loops.len()
+    }
+    #[inline]
+    fn loop_first(&self, l: usize) -> usize {
+        self.loops[l].span().0 as usize
+    }
+    #[inline]
+    fn loop_len(&self, l: usize) -> usize {
+        self.loops[l].span().1 as usize
+    }
+    #[inline]
+    fn loop_face(&self, l: usize) -> usize {
+        self.loops[l].face.index()
+    }
+    #[inline]
+    fn n_faces(&self) -> usize {
+        self.faces.len()
+    }
+    #[inline]
+    fn face_alive(&self, f: usize) -> bool {
+        self.faces[f].alive
+    }
+    #[inline]
+    fn face_n_loops(&self, f: usize) -> usize {
+        self.faces[f].loops.len()
+    }
+    #[inline]
+    fn face_loop(&self, f: usize, i: usize) -> usize {
+        self.faces[f].loops[i].index()
     }
 }
 

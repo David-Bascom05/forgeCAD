@@ -82,6 +82,10 @@ impl Loop {
             end: self.first + self.len,
         }
     }
+    /// The loop's first coedge's index and its count (as stored: `check` tests them).
+    pub fn span(&self) -> (u32, u32) {
+        (self.first, self.len)
+    }
     /// The loop's `i`th coedge.
     pub fn coedge(&self, i: usize) -> CoedgeId {
         assert!(i < self.len as usize);
