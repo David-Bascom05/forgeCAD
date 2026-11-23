@@ -105,11 +105,11 @@ theorem above_sound {x q_t sc : F64} {X Qt δ : ℚ} (hx : x.isFinite) (hq : q_t
   constructor
   · intro h0; rw [h0, _root_.sub_zero] at hd; exact lt_irrefl _ hd
   · constructor
-    · intro h; by_contra hn; push_neg at hn
+    · intro h; by_contra hn; push Not at hn
       rw [abs_of_nonpos hn] at hd
       have := (abs_lt.mp hd).1
       nlinarith [neg_abs_le (sub x q_t).val, le_abs_self (sub x q_t).val]
-    · intro h; by_contra hn; push_neg at hn
+    · intro h; by_contra hn; push Not at hn
       rw [abs_of_pos h] at hd
       have := (abs_lt.mp hd).2
       linarith
@@ -175,12 +175,12 @@ theorem d0_close {q_s q_t a_s a_t b_s b_t sc : F64} {Qs Qt As At Bs Bt δ : ℚ}
     -- signs of the unrounded differences follow the rounded ones
     have sa : (0 < fa ↔ 0 < a_t.val - q_t.val) := by
       constructor
-      · intro h; by_contra hn; push_neg at hn
+      · intro h; by_contra hn; push Not at hn
         rw [abs_of_nonpos hn] at ra; have := (abs_le.mp ra).2; nlinarith
       · intro h; rw [abs_of_pos h] at ra; have := (abs_le.mp ra).1; nlinarith
     have sb : (0 < fb ↔ 0 < b_t.val - q_t.val) := by
       constructor
-      · intro h; by_contra hn; push_neg at hn
+      · intro h; by_contra hn; push Not at hn
         rw [abs_of_nonpos hn] at rb; have := (abs_le.mp rb).2; nlinarith
       · intro h; rw [abs_of_pos h] at rb; have := (abs_le.mp rb).1; nlinarith
     have hsum : |b_t.val - a_t.val| = |b_t.val - q_t.val| + |a_t.val - q_t.val| := by
@@ -288,5 +288,90 @@ theorem d0_close {q_s q_t a_s a_t b_s b_t sc : F64} {Qs Qt As At Bs Bt δ : ℚ}
   rw [E12_val, abs_of_nonneg (by positivity : (0 : ℚ) ≤ 4951760157141521 / 2 ^ 92 * mg)] at em
   have hE := (abs_le.mp em).1
   linarith
+
+/-- From `|d − D| < |d|`: `D ≠ 0` with the sign of `d`. -/
+lemma sign_close_d {d D : ℚ} (h : |d - D| < |d|) : D ≠ 0 ∧ (0 < D ↔ 0 < d) := by
+  constructor
+  · intro h0; rw [h0, _root_.sub_zero] at h; exact lt_irrefl _ h
+  · constructor
+    · intro hD; by_contra hn; push Not at hn
+      rw [abs_of_nonpos hn] at h; have := (abs_lt.mp h).1; linarith [neg_abs_le (d - D)]
+    · intro hd; by_contra hn; push Not at hn
+      rw [abs_of_pos hd] at h; have := (abs_lt.mp h).2; linarith
+
+/-- **Item 4.** When `crosses_f` answers, its answer is the exact `crosses` of the exact points. -/
+theorem crosses_f_sound {q_s q_t a_s a_t b_s b_t sc : F64} {Qs Qt As At Bs Bt δ : ℚ} {c : Bool}
+    (hqs : q_s.isFinite) (hqt : q_t.isFinite) (has : a_s.isFinite) (hat : a_t.isFinite)
+    (hbs : b_s.isFinite) (hbt : b_t.isFinite) (hs : sc.isFinite) (hS : 1 ≤ sc.val)
+    (bqs : |q_s.val| ≤ sc.val) (bqt : |q_t.val| ≤ sc.val) (bas : |a_s.val| ≤ sc.val) (bat : |a_t.val| ≤ sc.val)
+    (bbs : |b_s.val| ≤ sc.val) (bbt : |b_t.val| ≤ sc.val)
+    (eqs : |q_s.val - Qs| ≤ δ) (eqt : |q_t.val - Qt| ≤ δ) (eas : |a_s.val - As| ≤ δ) (eat : |a_t.val - At| ≤ δ)
+    (ebs : |b_s.val - Bs| ≤ δ) (ebt : |b_t.val - Bt| ≤ δ) (hδ : δ ≤ 2 / 10 ^ 13 * sc.val)
+    (hfa : (sub a_t q_t).isFinite) (hfb : (sub b_t q_t).isFinite) (hft : (mul E12 sc).isFinite)
+    (hfd : (d0F q_s q_t a_s a_t b_s b_t).isFinite) (hfm : (mul E12 (magX q_s q_t a_s a_t b_s b_t sc)).isFinite)
+    (h : crossesF q_s q_t a_s a_t b_s b_t sc = some c) :
+    crossesQ Qs Qt As At Bs Bt = c := by
+  unfold crossesF aboveF at h
+  by_cases ha : (mul E12 sc).val < |(sub a_t q_t).val|
+  swap; · simp [ha] at h
+  by_cases hb : (mul E12 sc).val < |(sub b_t q_t).val|
+  swap; · simp [ha, hb] at h
+  simp only [ha, hb, ↓reduceIte] at h
+  obtain ⟨A0, Aiff⟩ := above_sound hat hqt hs hS bat bqt eat eqt hδ hfa hft ha
+  obtain ⟨B0, Biff⟩ := above_sound hbt hqt hs hS bbt bqt ebt eqt hδ hfb hft hb
+  unfold crossesQ
+  by_cases hab : decide (0 < (sub a_t q_t).val) = decide (0 < (sub b_t q_t).val)
+  · simp only [hab, ↓reduceIte, Option.some.injEq] at h
+    subst h
+    have : decide (0 < At - Qt) = decide (0 < Bt - Qt) := by
+      simp only [decide_eq_decide] at hab ⊢; rw [Aiff, Biff]; exact hab
+    simp only [this, ↓reduceIte]
+  · simp only [hab, ↓reduceIte] at h
+    have hne : (0 < (sub a_t q_t).val) ↔ ¬ (0 < (sub b_t q_t).val) := by
+      simp only [decide_eq_decide] at hab; tauto
+    have hexne : ¬ (decide (0 < At - Qt) = decide (0 < Bt - Qt)) := by
+      simp only [decide_eq_decide]; rw [Aiff, Biff]; simpa [decide_eq_decide] using hab
+    by_cases hd : (mul E12 (magX q_s q_t a_s a_t b_s b_t sc)).val < |(d0F q_s q_t a_s a_t b_s b_t).val|
+    swap; · simp [hd] at h
+    simp only [hd, ↓reduceIte, Option.some.injEq] at h
+    subst h
+    have cl := d0_close hqs hqt has hat hbs hbt hs hS bqs bqt bas bat bbs bbt eqs eqt eas eat ebs ebt hδ
+      hfa hfb hft ha hb hne hfd hfm
+    obtain ⟨D0, Diff⟩ := sign_close_d (lt_of_le_of_lt cl hd)
+    simp only [hexne, ↓reduceIte]
+    -- the exact signs
+    have sD : sgnQ ((Bs - As) * (Qt - At) - (Qs - As) * (Bt - At)) ≠ 0 := by
+      unfold sgnQ
+      rcases lt_trichotomy ((Bs - As) * (Qt - At) - (Qs - As) * (Bt - At)) 0 with h1 | h1 | h1
+      · rw [if_neg (by linarith), if_pos h1]; decide
+      · exact absurd h1 D0
+      · rw [if_pos h1]; decide
+    simp only [sD, ne_eq, not_false_eq_true, ↓reduceIte]
+    by_cases hbp : 0 < (sub b_t q_t).val
+    · have hap : ¬ 0 < (sub a_t q_t).val := fun h => (hne.mp h) hbp
+      have h1 : 0 < Bt - Qt := Biff.mpr hbp
+      have h2 : At - Qt < 0 := lt_of_le_of_ne (not_lt.mp (mt Aiff.mp hap)) A0
+      have hz : sgnQ (Bt - At) = 1 := by unfold sgnQ; rw [if_pos (by linarith)]
+      rw [hz]
+      by_cases hdp : 0 < (Bs - As) * (Qt - At) - (Qs - As) * (Bt - At)
+      · have : sgnQ ((Bs - As) * (Qt - At) - (Qs - As) * (Bt - At)) = 1 := by unfold sgnQ; rw [if_pos hdp]
+        rw [this]; simp [Diff.mp hdp, hbp]
+      · have hn : (Bs - As) * (Qt - At) - (Qs - As) * (Bt - At) < 0 := lt_of_le_of_ne (not_lt.mp hdp) D0
+        have : sgnQ ((Bs - As) * (Qt - At) - (Qs - As) * (Bt - At)) = -1 := by
+          unfold sgnQ; rw [if_neg hdp, if_pos hn]
+        rw [this]; simp [mt Diff.mpr hdp, hbp]
+    · have hap : 0 < (sub a_t q_t).val := by by_contra hn; exact hn (hne.mpr hbp)
+      have h1 : 0 < At - Qt := Aiff.mpr hap
+      have h2 : Bt - Qt < 0 := lt_of_le_of_ne (not_lt.mp (mt Biff.mp hbp)) B0
+      have hz : sgnQ (Bt - At) = -1 := by
+        unfold sgnQ; rw [if_neg (by linarith), if_pos (by linarith)]
+      rw [hz]
+      by_cases hdp : 0 < (Bs - As) * (Qt - At) - (Qs - As) * (Bt - At)
+      · have : sgnQ ((Bs - As) * (Qt - At) - (Qs - As) * (Bt - At)) = 1 := by unfold sgnQ; rw [if_pos hdp]
+        rw [this]; simp [Diff.mp hdp, hbp]
+      · have hn : (Bs - As) * (Qt - At) - (Qs - As) * (Bt - At) < 0 := lt_of_le_of_ne (not_lt.mp hdp) D0
+        have : sgnQ ((Bs - As) * (Qt - At) - (Qs - As) * (Bt - At)) = -1 := by
+          unfold sgnQ; rw [if_neg hdp, if_pos hn]
+        rw [this]; simp [mt Diff.mpr hdp, hbp]
 
 end IEEE754.Screen
