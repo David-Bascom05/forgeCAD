@@ -6,10 +6,10 @@
 use super::dialog::{DIALOG_W, FIELD_AT, dropdown, heading, pick_row, text_toggles, toggle_row};
 use super::fg::FgAct;
 use super::fgtool::{FgTool, SlotKind as K};
-use super::theme::{mono, sans, semi};
+use super::theme::{medium, mono, sans, semi};
 use super::{Shell, panel};
 use crate::shell::placed::Placed;
-use egui::{Align2, Color32, Rect, Sense, Stroke, pos2, vec2};
+use egui::{Align2, Rect, Sense, Stroke, pos2, vec2};
 use forge_lang::values::Dim;
 
 /// What a param is called in the dialog: Inventor's word for it.
@@ -37,6 +37,7 @@ pub fn param_label(kind: &str, name: &str) -> &'static str {
         "cbore_depth" => "C'bore Depth",
         "csink_d" => "C'sink Dia",
         "csink_angle" => "C'sink Angle",
+        "size" if kind == "cornerplate" => "Leg",
         "size" => "Height",
         "wrap" => "Wrap Radius",
         "pitch" => "Pitch",
@@ -45,6 +46,12 @@ pub fn param_label(kind: &str, name: &str) -> &'static str {
         "r_start" => "Start Radius",
         "r_end" => "End Radius",
         "k" => "K-Factor",
+        "gap" => "Gap",
+        "dx" => "Offset X",
+        "dy" => "Offset Y",
+        "turn" => "Turn",
+        "corner_gap" => "Gap There",
+        "corner_cut" => "Corner Cut",
         _ => "Value",
     }
 }
@@ -57,6 +64,16 @@ fn needs(kind: &str, param: &str) -> Option<&'static str> {
     }
 }
 
+/// The words and values a form asks for only once a slot of theirs has picks: a weldment's
+/// own corner (kind and gap) once its nodes are picked.
+fn shown_only_with_picks(tool: &FgTool) -> Vec<&'static str> {
+    let picked = |label: &str| tool.slots.iter().any(|s| s.label == label && !s.picks.is_empty());
+    match tool.kind {
+        "members" if !picked("Corner Points") => vec!["corner_at", "corner_gap"],
+        _ => vec![],
+    }
+}
+
 fn word_label(w: &str) -> &'static str {
     match w {
         "text" => "Text",
@@ -66,6 +83,9 @@ fn word_label(w: &str) -> &'static str {
         "spec" => "Thread",
         "length" => "Length",
         "file" => "File",
+        "section" => "Section",
+        "align" => "Align",
+        "corner_at" => "Corner There",
         _ => "Value",
     }
 }
@@ -125,6 +145,10 @@ pub fn title(kind: &str) -> &'static str {
         "flange" => "Flange",
         "cutout" => "Cutout",
         "unfold" => "Unfold",
+        "members" => "Structural Members",
+        "endtrim" => "End Trim",
+        "endcap" => "End Cap",
+        "cornerplate" => "Corner Plate",
         _ => "Feature",
     }
 }
@@ -145,6 +169,7 @@ pub fn tool_icon(kind: &str) -> &'static str {
         "facefillet" => "fillet",
         "movebody" => "move",
         "copybody" => "copybody",
+        "members" => "member",
         k => panel::icon(k),
     }
 }
@@ -267,7 +292,7 @@ fn choices_for(fg: &super::fg::FgPanel, kind: K) -> Vec<String> {
             K::Point => out.extend(sk.points.iter().filter(|p| !p.ends_with(".points")).cloned()),
             K::Dir => out.extend(sk.lines.iter().map(|l| format!("{l}.dir"))),
             K::Axis | K::RevAxis => out.extend(sk.lines.iter().cloned()),
-            K::Plane | K::UpTo => out.push(sk.id.clone()),
+            K::Plane | K::UpTo | K::TrimTo => out.push(sk.id.clone()),
             _ => {}
         }
     }
@@ -277,6 +302,11 @@ fn choices_for(fg: &super::fg::FgPanel, kind: K) -> Vec<String> {
             out.extend(of_kind(&["workplane", "ucs"]));
         }
         K::UpTo => out.extend(of_kind(&["workplane"])),
+        K::Member | K::Members => out.extend(of_kind(&["member"])),
+        K::TrimTo => {
+            out.extend(["xy", "xz", "yz"].map(String::from));
+            out.extend(of_kind(&["workplane", "member"]));
+        }
         K::Axis | K::RevAxis => {
             // a revolve turns about the origin's axes too
             if kind == K::RevAxis {
@@ -365,17 +395,7 @@ impl Shell {
             self.fg = Some(fg);
             return;
         };
-        let frame = egui::Frame::new()
-            .fill(t.surface)
-            .stroke(Stroke::new(1.0, t.line))
-            .corner_radius(6)
-            .shadow(egui::Shadow {
-                offset: [0, 4],
-                blur: 16,
-                spread: 0,
-                color: Color32::from_black_alpha(90),
-            })
-            .inner_margin(12);
+        let frame = super::theme::panel_frame(&t);
         let v = self.view_rect;
         let mut places: Vec<(String, Rect)> = Vec::new();
         let mut asked = Asked::Nothing;
@@ -453,7 +473,7 @@ impl Shell {
             .frame(frame)
             .constrain_to(super::dialog_area(ctx))
             .show(ctx, |ui| {
-                ui.label(egui::RichText::new(format!("Edit Occurrence {}", e.occ)).font(semi(15.0)));
+                ui.label(egui::RichText::new(format!("Edit Occurrence {}", e.occ)).font(semi(14.0)));
                 ui.label(
                     egui::RichText::new(format!("of {}: empty fields take the default", e.component))
                         .font(sans(12.0))
@@ -528,7 +548,7 @@ impl Shell {
             pos2(head.left() + 32.0, head.center().y),
             Align2::LEFT_CENTER,
             head_text,
-            semi(15.0),
+            semi(14.0),
             t.ink,
         );
         // an edit keeps its name: what reads it reads it by that name (the browser renames)
@@ -638,7 +658,8 @@ impl Shell {
             }
         }
         let options = tool.options.clone();
-        for (w, text) in &mut tool.words {
+        let hide = shown_only_with_picks(tool);
+        for (w, text) in tool.words.iter_mut().filter(|w| !hide.contains(&w.0)) {
             match options.iter().find(|o| o.0 == *w) {
                 Some((_, items)) if !items.is_empty() => {
                     let rows: Vec<(String, String, bool)> =
@@ -679,7 +700,11 @@ impl Shell {
                 places,
             );
         };
-        for p in tool.params.iter_mut().filter(|p| needs(kind, p.name).is_none()) {
+        for p in tool
+            .params
+            .iter_mut()
+            .filter(|p| needs(kind, p.name).is_none() && !hide.contains(&p.name))
+        {
             row(ui, p, places);
         }
         for (f, on) in &mut tool.flags {
@@ -748,27 +773,30 @@ impl Shell {
                 t.raised
             } else if ok {
                 if resp.hovered() {
-                    t.on.gamma_multiply(1.2)
+                    t.accent.gamma_multiply(1.15)
                 } else {
-                    t.on
+                    t.accent
                 }
             } else if resp.hovered() {
                 t.hover
             } else {
                 t.raised
             };
-            ui.painter().rect_filled(r, 4.0, fill);
-            ui.painter()
-                .rect_stroke(r, 4.0, Stroke::new(1.0, t.line), egui::StrokeKind::Inside);
+            let r1 = super::theme::R1;
+            ui.painter().rect_filled(r, r1, fill);
+            if !(ok && !held) {
+                ui.painter()
+                    .rect_stroke(r, r1, Stroke::new(1.0, t.line), egui::StrokeKind::Inside);
+            }
             ui.painter().text(
                 r.center(),
                 Align2::CENTER_CENTER,
                 word,
-                sans(13.0),
+                if ok && !held { medium(13.0) } else { sans(13.0) },
                 if held {
                     t.ink2
                 } else if ok {
-                    t.on_ink
+                    egui::Color32::WHITE
                 } else {
                     t.ink
                 },
@@ -805,7 +833,7 @@ pub fn hole_fits() -> Vec<String> {
 pub fn offer_lists(t: &mut FgTool, dir: Option<&std::path::Path>) {
     let beside = |exts: &[&str]| -> Vec<String> {
         let mut v: Vec<String> = dir
-            .and_then(|d| std::fs::read_dir(d).ok())
+            .and_then(|d| forge_dirs::fs::read_dir(d).ok())
             .into_iter()
             .flatten()
             .filter_map(|e| e.ok()?.file_name().into_string().ok())
@@ -824,4 +852,8 @@ pub fn offer_lists(t: &mut FgTool, dir: Option<&std::path::Path>) {
     t.offer("screw", screws.clone());
     t.offer("spec", screws);
     t.offer("fit", hole_fits());
+    // a weldment's section from the library, where its pierce point sits, a picked node's corner
+    t.offer("section", forge_lang::weld::designations());
+    t.offer("align", super::fgtool::ALIGNS.map(String::from).to_vec());
+    t.offer("corner_at", super::fgtool::CORNERS.map(String::from).to_vec());
 }

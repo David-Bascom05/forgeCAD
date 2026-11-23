@@ -12,11 +12,11 @@ use std::time::Duration;
 
 /// Makes `dir` (and its parents) and closes it to other users where the platform allows.
 pub fn private_dir(dir: &Path) -> io::Result<()> {
-    std::fs::create_dir_all(dir)?;
+    forge_dirs::fs::create_dir_all(dir)?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700))?;
+        forge_dirs::fs::set_permissions(dir, forge_dirs::fs::Permissions::from_mode(0o700))?;
     }
     Ok(())
 }
@@ -26,7 +26,7 @@ pub fn private_file(path: &Path) -> io::Result<()> {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))?;
+        forge_dirs::fs::set_permissions(path, forge_dirs::fs::Permissions::from_mode(0o600))?;
     }
     #[cfg(not(unix))]
     let _ = path;
@@ -53,6 +53,13 @@ impl Listener {
     /// Listens at `path`, its folder already private. A stale path left by a dead listener is
     /// replaced; one a live listener answers at is an error (`AddrInUse`).
     pub fn bind(path: &Path) -> io::Result<Listener> {
+        // WASI (the browser's build, the wasm test suite) listens on nothing: refused, typed
+        if cfg!(target_os = "wasi") {
+            return Err(io::Error::new(
+                io::ErrorKind::Unsupported,
+                "no local connections under WASI",
+            ));
+        }
         if path.exists() {
             if connect(path).is_ok() {
                 return Err(io::Error::new(
@@ -60,7 +67,7 @@ impl Listener {
                     "a listener is already active",
                 ));
             }
-            std::fs::remove_file(path)?;
+            forge_dirs::fs::remove_file(path)?;
         }
         #[cfg(unix)]
         {
@@ -75,8 +82,8 @@ impl Listener {
             let port = inner.local_addr()?.port();
             // written whole then renamed in, so a client never reads half a file
             let tmp = path.with_extension("tmp");
-            std::fs::write(&tmp, format!("{port} {token}\n"))?;
-            std::fs::rename(&tmp, path)?;
+            forge_dirs::fs::write(&tmp, format!("{port} {token}\n"))?;
+            forge_dirs::fs::rename(&tmp, path)?;
             Ok(Listener { inner, token })
         }
     }
@@ -122,6 +129,12 @@ impl Listener {
 
 /// Connects to the listener at `path`.
 pub fn connect(path: &Path) -> io::Result<Stream> {
+    if cfg!(target_os = "wasi") {
+        return Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "no local connections under WASI",
+        ));
+    }
     #[cfg(unix)]
     {
         Ok(Stream {
@@ -130,7 +143,7 @@ pub fn connect(path: &Path) -> io::Result<Stream> {
     }
     #[cfg(not(unix))]
     {
-        let text = std::fs::read_to_string(path)?;
+        let text = forge_dirs::fs::read_to_string(path)?;
         let mut it = text.split_whitespace();
         let (Some(port), Some(token)) = (it.next(), it.next()) else {
             return Err(io::Error::new(
@@ -160,7 +173,7 @@ fn token() -> String {
                 .duration_since(std::time::UNIX_EPOCH)
                 .map_or(0, |d| d.as_nanos()),
         );
-        h.write_u32(std::process::id());
+        h.write_u32(forge_dirs::process_id());
         out.push_str(&format!("{:016x}", h.finish()));
     }
     out
@@ -213,11 +226,29 @@ impl Write for &Stream {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(not(target_os = "wasi"))]
     use std::io::{BufRead, BufReader};
 
+    /// Under WASI there are no local connections: both ends refuse, with no thread or pid.
+    #[cfg(target_os = "wasi")]
+    #[test]
+    fn wasi_refuses_both_ends() {
+        let p = std::path::Path::new("/tmp/forge-ipc-wasi.sock");
+        assert_eq!(
+            Listener::bind(p).err().map(|e| e.kind()),
+            Some(io::ErrorKind::Unsupported)
+        );
+        assert_eq!(
+            connect(p).err().map(|e| e.kind()),
+            Some(io::ErrorKind::Unsupported)
+        );
+    }
+
+    // a thread and a socket: native only
+    #[cfg(not(target_os = "wasi"))]
     #[test]
     fn a_line_goes_both_ways_and_a_live_path_is_not_taken_over() {
-        let dir = std::env::temp_dir().join(format!("forge-ipc-{}", std::process::id()));
+        let dir = forge_dirs::temp_dir().join(format!("forge-ipc-{}", forge_dirs::process_id()));
         private_dir(&dir).unwrap();
         let path = dir.join("t.sock");
         let l = Listener::bind(&path).unwrap();

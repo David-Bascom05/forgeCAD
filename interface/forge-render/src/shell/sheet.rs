@@ -39,11 +39,17 @@ pub enum SheetCmd {
     Folded,
     ExportDxf,
     BendTable,
+    /// The press-brake simulation of the part's bends.
+    BendSim,
     /// What the flat view draws over the blank.
     ShowExtents,
     ShowBends,
     ShowTangents,
     ShowTools,
+    /// The vendor window: pick, edit, import and export vendor profiles.
+    Vendor,
+    /// The DFM panel: the part against its vendor.
+    Dfm,
 }
 
 /// The feature kinds the sheet metal dialogs make, by the call each writes.
@@ -110,8 +116,11 @@ pub fn icon(c: SheetCmd) -> &'static str {
         SheetCmd::Folded => "folded",
         SheetCmd::ExportDxf => "dxf",
         SheetCmd::BendTable => "bendtable",
+        SheetCmd::BendSim => "bendtable",
         SheetCmd::Defaults => "smdefaults",
         SheetCmd::Rules => "params",
+        SheetCmd::Vendor => "folder",
+        SheetCmd::Dfm => "check",
         _ => "smface",
     }
 }
@@ -1771,6 +1780,8 @@ pub struct SheetUi {
     pub rules_open: Option<NewRule>,
     pub dxf_open: Option<DxfChoice>,
     pub bend_table: bool,
+    /// The bend simulator's panel, when open.
+    pub bend_sim: Option<Box<super::bendsim::BendSimUi>>,
     /// The flat view's overlays.
     pub extents: bool,
     pub bend_lines: bool,
@@ -1783,6 +1794,8 @@ pub struct SheetUi {
     /// The tree asked to edit this feature.
     pub edit_req: Option<String>,
     pub out: Vec<SheetAct>,
+    /// Vendor profiles and the DFM panel (`vendorui.rs`).
+    pub vendor: super::vendorui::VendorUi,
 }
 
 /// What the sheet metal chrome asks the host for.
@@ -1860,8 +1873,18 @@ impl SheetUi {
                 self.dxf_open = Some(DxfChoice::new(&s.id, path));
             }
             SheetCmd::BendTable => self.bend_table = !self.bend_table,
+            SheetCmd::BendSim => {
+                self.bend_sim = match self.bend_sim {
+                    Some(_) => None,
+                    None => Some(Box::new(super::bendsim::BendSimUi::open(
+                        &fg.source, &fg.path, "std-eu",
+                    ))),
+                }
+            }
             SheetCmd::ShowExtents => self.extents = !self.extents,
             SheetCmd::ShowBends => self.bend_lines = !self.bend_lines,
+            SheetCmd::Vendor => self.vendor.open = !self.vendor.open,
+            SheetCmd::Dfm => self.vendor.dfm_open = !self.vendor.dfm_open,
             SheetCmd::ShowTangents => self.tangents = !self.tangents,
             SheetCmd::ShowTools => self.tool_marks = !self.tool_marks,
             SheetCmd::NewPart => {}

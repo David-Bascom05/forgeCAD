@@ -65,6 +65,7 @@ pub(super) fn scope(s: &Shell) -> &'static str {
             SHEET_TAB => "sheet",
             FLAT_TAB => "flat",
             THERMO_TAB => "thermo",
+            super::super::WELD_TAB => "weld",
             _ => "tools",
         }
     }
@@ -89,6 +90,9 @@ pub(in crate::shell) fn key_of(s: &Shell, id: &str) -> Option<String> {
 fn why(s: &Shell, scope: &str, name: &str) -> String {
     if let Some(w) = why_off(name) {
         return w.to_string();
+    }
+    if s.no_document() && scope != "thermo" {
+        return "open or create a part first (File > New, or Open)".into();
     }
     match scope {
         "sketch" if s.sketch.is_none() => {
@@ -227,7 +231,17 @@ mod tests {
     fn every_ribbon_tool_on_every_tab_has_its_own_tip() {
         let mut s = Shell::default();
         let mut missing = vec![];
-        for tab in [0, 1, 2, 3, 4, SHEET_TAB, FLAT_TAB, THERMO_TAB] {
+        for tab in [
+            0,
+            1,
+            2,
+            3,
+            4,
+            SHEET_TAB,
+            FLAT_TAB,
+            THERMO_TAB,
+            super::super::super::WELD_TAB,
+        ] {
             s.tab = tab;
             let scope = scope(&s);
             let names: Vec<&str> = if tab == 1 {

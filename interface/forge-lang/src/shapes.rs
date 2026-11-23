@@ -121,8 +121,8 @@ fn names_arg(a: &Args, k: &'static str) -> R<Vec<Name>> {
     Ok(faces_arg(a, k)?.map(|f| f.names.clone()).unwrap_or_default())
 }
 
-/// A sweep's or coil's end (`upto:`): a face set, a work plane or a sketch's plane (`.fc`'s
-/// `to PLANE`); None when not given (or unknown after an earlier failure).
+/// A sweep's or coil's end (`upto:`): a face set, a work plane or a sketch's plane;
+/// None when not given (or unknown after an earlier failure).
 fn end_arg(ev: &Eval, a: &Args, k: &'static str) -> R<Option<Target>> {
     match a.opt(k) {
         None | Some(Value::Unresolved) => Ok(None),
@@ -153,7 +153,7 @@ fn target(ev: &Eval, f: &Faces) -> Target {
 
 /// The sketch entities a path value names, in order: an entity, a loop (rect, poly, path ..), or
 /// a list of them (from any sketches: a path in 3D).
-fn path_ents(v: Value, span: Span, out: &mut Vec<(Rc<RefCell<Sk>>, EntityId)>) -> R<()> {
+pub(crate) fn path_ents(v: Value, span: Span, out: &mut Vec<(Rc<RefCell<Sk>>, EntityId)>) -> R<()> {
     match v {
         Value::List(xs) => {
             for x in xs.iter() {

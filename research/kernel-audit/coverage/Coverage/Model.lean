@@ -447,7 +447,7 @@ def classifySpecs (p : Pat) (sg : List (Face × Face × V3)) (fo : List (Face ×
 where
   dedupCls (l : List Cls) : List Cls := l.foldl (fun acc x => if acc.contains x then acc else acc ++ [x]) []
 
-/-! ## Step 6: keep, the four-use test, the result (boolean.rs:1715–1737, 560–590) -/
+/-! ## Step 6: keep, the four-use test, the result (boolean.rs:1735–1749, 560–590) -/
 
 /-- An oriented boundary 2-cell: the cell and whether its outward normal is +axis. -/
 abbrev Bdry := V3 × Bool
@@ -543,7 +543,7 @@ def kernel (p : Pat) (fl : Flags := {}) (sv : Bool := false) : Outcome :=
   | .error .untouchedOnOther => .unsupported
   | .error .zeroThickness => .zeroThickness
   | .ok cls =>
-    -- an edge four kept faces meet at (1724–1737)
+    -- an edge four kept faces meet at (1739–1749)
     let keptSpecs := (ss.zip cls).filter fun (s, c) => (keepOf p.op s.face.body c).isSome
     let four := allCells1.any fun e =>
       (keptSpecs.filter fun (s, _) => uses p sg fo s e).length > 2

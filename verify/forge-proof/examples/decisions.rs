@@ -53,7 +53,7 @@ fn bench_dir() -> String {
 }
 
 fn font_dir() -> std::path::PathBuf {
-    let dir = std::env::temp_dir().join(format!("forge-decisions-{}", std::process::id()));
+    let dir = forge_dirs::temp_dir().join(format!("forge-decisions-{}", forge_dirs::process_id()));
     std::fs::create_dir_all(&dir).expect("temp dir");
     std::fs::write(dir.join(forge_lang::bench::FONT), forge_lang::bench::font_bytes()).expect("font");
     dir

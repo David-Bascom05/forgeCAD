@@ -9,6 +9,8 @@ pub mod asmdrag;
 pub mod asmglyph;
 pub mod asmpart;
 pub mod asmtools;
+mod banner;
+pub mod bendsim;
 pub mod content;
 pub mod dialog;
 pub mod docs;
@@ -21,6 +23,7 @@ pub mod dwgdoc;
 mod dwgdoc_edit_ui;
 mod dwgdoc_ui;
 pub mod dwgprops;
+mod empty;
 pub mod fg;
 pub mod fgasm;
 pub mod fgdialog;
@@ -49,15 +52,17 @@ pub mod thermo;
 pub mod thermo_material;
 pub mod thermo_ui;
 mod tree;
+pub mod vendorui;
 pub mod versions;
 mod visual_style;
 pub mod voice;
+pub mod weld_ui;
 
 pub use crate::nav::NavTool;
 use crate::render::VisualStyle;
 use crate::shell::placed::Placed;
 use egui::{Align2, Color32, CornerRadius, Rect, Sense, Stroke, StrokeKind, Ui, pos2, vec2};
-use theme::{Theme, medium, mono, sans, semi};
+use theme::{Theme, mono, sans, semi};
 
 pub const TABS: [&str; 5] = ["3D Model", "Sketch", "Inspect", "View", "Manage"];
 /// A sheet metal part's own tabs: shown first, Inventor's way; the flat pattern's in its place.
@@ -70,6 +75,8 @@ pub const THERMO_TAB: usize = 7;
 pub const ASM_TAB: usize = 8;
 /// An assembly's Harness tab: after Assemble.
 pub const HARNESS_TAB: usize = 9;
+/// A part's Weldments tab: structural members, their ends and plates, the cut list.
+pub const WELD_TAB: usize = 10;
 
 const TITLE_H: f32 = 36.0;
 const TABS_H: f32 = 34.0;
@@ -185,6 +192,8 @@ pub enum Action {
     Doc(docs::DocCmd),
     /// Where an untitled document is to be saved: the host's file dialog, then `Gui::save_as`.
     SaveAs,
+    /// File > Export STL / 3MF / OBJ: the host's file dialog, then `fg::export_mesh`.
+    ExportMesh(forge_lang::meshfile::Format),
     /// A ground or shadow switch of the View tab, flipped.
     Look(crate::look::Toggle),
 }
@@ -216,6 +225,8 @@ pub enum FgCmd {
     ContentCenter,
     /// Show All of the joints' and constraints' glyphs in the view (else only those called for).
     Relationships,
+    /// The Weldments tab's Cut List panel, up or down.
+    CutList,
 }
 
 /// What the view shows, for the buttons that reflect it.
@@ -462,6 +473,7 @@ impl Shell {
             FgCmd::Thermo(c) => fg.thermo_command(c),
             FgCmd::Harness(c) => fg.harness_command(c),
             FgCmd::Parameters => fg.params_open = !fg.params_open,
+            FgCmd::CutList => fg.cutlist_open = !fg.cutlist_open,
             FgCmd::Interference => {
                 if let Some(a) = &mut fg.asm {
                     a.interference = !a.interference;
@@ -715,6 +727,10 @@ impl Shell {
             p.image(tex, self.view_rect, whole, Color32::WHITE);
         }
         self.cube_words(ui, ppp);
+        // nothing open: where to start
+        if self.fg.is_none() && self.cube_place.is_none() {
+            self.empty_state(ui);
+        }
         self.title_bar(ui, s.width());
         self.shortcuts(&ctx);
         self.escape_one_level(&ctx);
@@ -740,7 +756,9 @@ impl Shell {
         self.content_window(&ctx);
         self.fg_params_window(&ctx);
         self.fg_issues_window(&ctx);
+        self.cutlist_window(&ctx);
         self.sheet_ui(&ctx);
+        self.build_banner(ui);
         self.view_toolbar(&ctx);
         self.sketch_ui(&ctx);
         self.mode_bar(&ctx);
@@ -769,7 +787,7 @@ impl Shell {
                 continue;
             }
             let ink = if l.hovered { t.on_ink } else { t.ink };
-            let g = ui.fonts_mut(|f| f.layout_no_wrap(l.text.to_string(), medium(size), ink));
+            let g = ui.fonts_mut(|f| f.layout_no_wrap(l.text.to_string(), semi(size), ink));
             let mid = g.mesh_bounds.center();
             let colour = ink.gamma_multiply(l.alpha);
             let mut mesh = egui::Mesh::with_texture(egui::TextureId::default());
@@ -952,6 +970,7 @@ impl Shell {
                 FLAT_TAB => &"Flat Pattern",
                 ASM_TAB => &"Assemble",
                 HARNESS_TAB => &"Harness",
+                WELD_TAB => &"Weldments",
                 k => &TABS[k],
             };
             let on = k == self.tab;
@@ -975,7 +994,7 @@ impl Shell {
             if on {
                 p.rect_filled(r, up, t.raised);
                 p.rect_stroke(r, up, Stroke::new(1.0, t.line), StrokeKind::Inside);
-                p.rect_filled(Rect::from_min_size(r.min, vec2(w, 2.0)), 0.0, t.focus);
+                p.rect_filled(Rect::from_min_size(r.min, vec2(w, 2.0)), 0.0, t.accent);
             } else if resp.hovered() {
                 p.rect_filled(r, up, t.hover);
             }
@@ -999,7 +1018,7 @@ impl Shell {
         } else if fg && self.sheet.env {
             vec![SHEET_TAB, 0, 1, ASM_TAB, 2, 3, 4]
         } else if self.fg.is_some() {
-            vec![0, 1, ASM_TAB, HARNESS_TAB, THERMO_TAB, 2, 3, 4]
+            vec![0, 1, ASM_TAB, WELD_TAB, HARNESS_TAB, THERMO_TAB, 2, 3, 4]
         } else {
             vec![0, 1, THERMO_TAB, 2, 3, 4]
         }
@@ -1028,6 +1047,14 @@ impl Shell {
             self.asm_tree(ui, tree);
         } else if self.fg.is_some() {
             self.fg_tree(ui, tree);
+        } else {
+            p.text(
+                pos2(tree.left() + theme::S3, tree.top() + theme::S3),
+                Align2::LEFT_TOP,
+                "No document open",
+                theme::small(),
+                t.ink2,
+            );
         }
         self.agent_drag(ui);
     }
@@ -1111,6 +1138,7 @@ impl Shell {
         // a Forge file's issues a click away (an assembly's timings on hover): its checks, a
         // shop's rules, each with its fixes, in the Issues window
         let asm = self.is_asm();
+        let units = self.units.to_string();
         if let Some(fg) = &mut self.fg {
             if let Some(a) = &fg.asm
                 && !a.timings.is_empty()
@@ -1125,20 +1153,15 @@ impl Shell {
                 fg::plural(warnings, "warning")
             );
             let g = ui.fonts_mut(|f| f.layout_no_wrap(text.clone(), sans(12.0), Color32::WHITE));
-            let right = s.width()
-                - 10.0
-                - ui.fonts_mut(|f| f.layout_no_wrap(format!("| {}", self.units), mono(12.0), Color32::WHITE))
-                    .size()
-                    .x
-                - 12.0;
+            let right = Self::units_chip(&units, ui, &p, st) - theme::S2;
             let r = Rect::from_min_max(
                 pos2(right - g.size().x - 22.0, st.top() + 2.0),
                 pos2(right, st.bottom() - 2.0),
             );
             let resp = ui.interact(r, ui.scope_id().with("status-issues"), Sense::click());
-            if resp.hovered() || fg.issues_list {
-                p.rect_filled(r, 3.0, Color32::from_white_alpha(28));
-            }
+            // a chip at rest too, so it reads as the button it is
+            let lit = resp.hovered() || fg.issues_list;
+            p.rect_filled(r, theme::R1, Color32::from_white_alpha(if lit { 32 } else { 14 }));
             let ink = if errors > 0 {
                 t.error
             } else if warnings > 0 {
@@ -1164,22 +1187,26 @@ impl Shell {
             if resp.clicked() {
                 fg.issues_list = !fg.issues_list;
             }
-            p.text(
-                pos2(s.width() - 10.0, st.center().y),
-                Align2::RIGHT_CENTER,
-                format!("| {}", self.units),
-                mono(12.0),
-                Color32::WHITE,
-            );
             return;
         }
-        p.text(
-            pos2(s.width() - 10.0, st.center().y),
-            Align2::RIGHT_CENTER,
-            format!("| {}", self.units),
-            mono(12.0),
+        Self::units_chip(&units, ui, &p, st);
+    }
+
+    /// The document's length unit at the status bar's right end, as a chip; where it starts.
+    fn units_chip(units: &str, ui: &Ui, p: &egui::Painter, st: Rect) -> f32 {
+        let g = ui.fonts_mut(|f| f.layout_no_wrap(units.to_string(), mono(11.0), Color32::WHITE));
+        let pad = theme::S1 + 2.0;
+        let chip = Rect::from_min_max(
+            pos2(st.right() - theme::S2 - g.size().x - 2.0 * pad, st.top() + 3.0),
+            pos2(st.right() - theme::S2, st.bottom() - 3.0),
+        );
+        p.rect_filled(chip, theme::R1, Color32::from_white_alpha(20));
+        p.galley(
+            pos2(chip.left() + pad, chip.center().y - g.size().y * 0.5),
+            g,
             Color32::WHITE,
         );
+        chip.left()
     }
 
     /// Esc backs out one level, wherever one is: never two, and never none.
@@ -1258,13 +1285,11 @@ impl Shell {
             .fixed_pos(pos2(v.center().x, v.top() + 10.0))
             .order(egui::Order::Foreground)
             .show_sizing(ctx, |ui| {
-                egui::Frame::NONE
-                    .fill(t.surface)
-                    .stroke(Stroke::new(1.0, t.line))
-                    .corner_radius(4.0)
-                    .inner_margin(vec2(10.0, 6.0))
+                theme::panel_frame(&t)
+                    .inner_margin(vec2(theme::S3, 6.0))
                     .show(ui, |ui| {
                         ui.horizontal(|ui| {
+                            ui.spacing_mut().item_spacing.x = theme::S1 + 2.0;
                             ui.label(egui::RichText::new(text).font(sans(13.0)).color(t.ink));
                             ui.add_space(8.0);
                             if let Some(f) = finish {
@@ -1425,6 +1450,17 @@ impl Shell {
             // a Forge file is written when asked (Ctrl+S too)
             items.push(("Save", model_open.then_some(Action::Fg(FgCmd::Save))));
             items.push(("New Drawing...", model_open.then_some(Action::NewDrawing)));
+            // the part's mesh for printing and viewers: written natively, beside the part
+            if cfg!(not(target_arch = "wasm32")) {
+                use forge_lang::meshfile::Format;
+                for (label, f) in [
+                    ("Export STL...", Format::Stl),
+                    ("Export 3MF...", Format::ThreeMf),
+                    ("Export OBJ...", Format::Obj),
+                ] {
+                    items.push((label, model_open.then_some(Action::ExportMesh(f))));
+                }
+            }
             if self.drawing.is_some() {
                 items.push(("Close Drawing", Some(Action::CloseDrawing)));
             }

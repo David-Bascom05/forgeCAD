@@ -20,8 +20,14 @@ path = "src/main.rs"
 name = "forge-app"
 path = "src/bin/forge_app.rs"
 
+[[bin]]
+name = "forge-parity"
+path = "src/bin/forge_parity.rs"
+
 [dependencies]
 forge-dirs = { path = "../../kernel/forge-dirs" }
+# the kernel's scoped threads: the threaded browser build gives them its Web Workers
+forge-par = { path = "../../kernel/forge-par" }
 wgpu = { version = "=30.0.1", default-features = false, features = ["std", "parking_lot", "wgsl", "vulkan", "webgpu"] }
 winit = { version = "=0.30.13", default-features = false, features = ["rwh_06", "wayland", "wayland-dlopen", "x11"] }
 egui = { version = "=0.37.0", default-features = false }
@@ -44,27 +50,35 @@ forge-thermo = { path = "../../kernel/forge-thermo" }
 # in the browser's tree already, through forge-lang: its plain math (a mass's principal axes)
 forge-topo = { path = "../../kernel/forge-topo" }
 
-# the kernel builds meshes natively; the browser loads them (see README)
-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-rfd = { version = "=0.17.2", default-features = false, features = ["xdg-portal", "pollster"] }
-egui-winit = { version = "=0.37.0", default-features = false, features = ["wayland", "x11", "smithay-clipboard"] }
+# the kernel, meshing and image files: the same on both targets (the browser builds parts itself)
 forge-mesh = { path = "../../kernel/forge-mesh" }
 forge-geom = { path = "../../kernel/forge-geom" }
 forge-sheet = { path = "../../kernel/forge-sheet" }
+forge-brake = { path = "../../kernel/forge-brake" }
+forge-vendor = { path = "../../kernel/forge-vendor" }
 forge-step = { path = "../../kernel/forge-step" }
-# the Agent tab's OpenAI-compatible endpoints, and their keys in the Secret Service
 png = "=0.18.1"
-ureq = { version = "=3.5.0", default-features = false, features = ["rustls"] }
-keyring-core = "=1.0.1"
 # a background image's file (zune: MIT OR Apache-2.0 OR Zlib), already in the lock
 zune-jpeg = { version = "=0.5.15", default-features = false, features = ["std"] }
 zune-core = { version = "=0.5.3", default-features = false, features = ["std"] }
+
+# the desktop's own: file dialogs, egui on a window, the Agent tab's OpenAI-compatible endpoints
+# and their keys in the Secret Service
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+rfd = { version = "=0.17.2", default-features = false, features = ["xdg-portal", "pollster"] }
+egui-winit = { version = "=0.37.0", default-features = false, features = ["wayland", "x11", "smithay-clipboard"] }
+ureq = { version = "=3.5.0", default-features = false, features = ["rustls"] }
+keyring-core = "=1.0.1"
 
 # already in wgpu's tree on this target: only the entry point names them
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen = "=0.2.130"
 wasm-bindgen-futures = "=0.4.80"
 js-sys = "=0.3.107"
+# the clock (std's Instant panics in a browser), already in winit's tree
+web-time = "=1.1.0"
+# the page: its storage, fetch, workers (already in wgpu's tree)
+web-sys = { version = "=0.3.107", features = ["Window", "Storage", "console", "Navigator", "Clipboard"] }
 
 [lints.rust]
 unsafe_code = "forbid"
@@ -73,7 +87,7 @@ unsafe_code = "forbid"
 opt-level = 2
 
 # the agent's API keys in each platform's own keyring
-[target.'cfg(not(any(target_os = "macos", windows)))'.dependencies]
+[target.'cfg(not(any(target_os = "macos", windows, target_arch = "wasm32")))'.dependencies]
 zbus-secret-service-keyring-store = { version = "=1.0.1", features = ["crypto-rust"] }
 [target.'cfg(target_os = "macos")'.dependencies]
 apple-native-keyring-store = { version = "=1.0.2", features = ["keychain"] }

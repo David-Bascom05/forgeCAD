@@ -16,7 +16,7 @@ fn doc() -> DwgDoc {
         "{}/../../kernel/forge-dwg/tests/data/mix_2018.dwg",
         env!("CARGO_MANIFEST_DIR")
     );
-    let bytes = std::fs::read(path).expect("the test drawing");
+    let bytes = forge_dirs::fs::read(path).expect("the test drawing");
     let mut d = DwgDoc::from_bytes(None, "mix_2018.dwg", &bytes).expect("read");
     d.fit(egui::vec2(1600.0, 900.0));
     let s = d.view.expect("fitted").scale;
@@ -102,7 +102,7 @@ fn undo_all(d: &mut DwgDoc, orig: &forge_dwg::file::Drawing) {
 fn save_check(d: &DwgDoc, name: &str) -> forge_dwg::file::Drawing {
     let bytes = d.bytes().expect("written");
     if let Ok(dir) = std::env::var("FORGE_DWG_EDIT_OUT") {
-        std::fs::write(format!("{dir}/{name}.dwg"), &bytes).expect("kept");
+        forge_dirs::fs::write(format!("{dir}/{name}.dwg"), &bytes).expect("kept");
     }
     forge_dwg::file::read(&bytes).expect("read back")
 }
@@ -726,7 +726,7 @@ fn edit_timings() {
     let ms = |t: std::time::Instant| t.elapsed().as_secs_f64() * 1e3;
     let mut rows: Vec<(String, f64)> = vec![];
     let t = std::time::Instant::now();
-    let bytes = std::fs::read(&path).unwrap();
+    let bytes = forge_dirs::fs::read(&path).unwrap();
     let mut d = DwgDoc::from_bytes(None, "big.dwg", &bytes).unwrap();
     rows.push(("open (read + scene + GPU buffers)".into(), ms(t)));
     d.fit(egui::vec2(1600.0, 900.0));

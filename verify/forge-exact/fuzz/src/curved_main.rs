@@ -31,7 +31,16 @@ fn quadric_pair(name: &str) -> bool {
 }
 
 fn lang_kinds() -> u64 {
-    let names = ["extrude", "revolve", "ball", "hole", "pattern", "workplane", "param", "sketch"];
+    let names = [
+        "extrude",
+        "revolve",
+        "ball",
+        "hole",
+        "pattern",
+        "workplane",
+        "param",
+        "sketch",
+    ];
     forge_lang::fuzz::MAKERS
         .iter()
         .enumerate()
@@ -75,7 +84,11 @@ fn cases(sources: &[String], seeds: u64, lang: u64) -> Vec<Case> {
             if name.starts_with("plane_plane") {
                 continue;
             }
-            let (whole, band) = if quadric_pair(&name) { ("degen", "band") } else { ("torus", "torusband") };
+            let (whole, band) = if quadric_pair(&name) {
+                ("degen", "band")
+            } else {
+                ("torus", "torusband")
+            };
             if on(whole) {
                 out.push(adv(name.clone(), part.clone()));
             }
@@ -199,10 +212,19 @@ fn main() {
                 }
                 let c = &cs[i];
                 let t = std::time::Instant::now();
-                let judged = forge_exact_fuzz::curved::with_ids(c.ids.clone(), || judge_curved(&mut reference, &c.part, &rule));
+                let judged = forge_exact_fuzz::curved::with_ids(c.ids.clone(), || {
+                    judge_curved(&mut reference, &c.part, &rule)
+                });
                 for (path, class, ans) in judged {
                     let note = ans.and_then(|a| a.notes.first().cloned()).unwrap_or_default();
-                    tx.send(Judged { name: c.name.clone(), path, class, case: i, note }).expect("send");
+                    tx.send(Judged {
+                        name: c.name.clone(),
+                        path,
+                        class,
+                        case: i,
+                        note,
+                    })
+                    .expect("send");
                 }
                 eprintln!("{} ({:.1}s)", c.name, t.elapsed().as_secs_f64());
             }
@@ -259,7 +281,9 @@ fn main() {
     let mut scope: BTreeMap<String, usize> = BTreeMap::new();
     for j in &all {
         if let Class::Scope(s) = &j.class {
-            *scope.entry(s.split(':').next_back().unwrap_or("").trim().to_string()).or_default() += 1;
+            *scope
+                .entry(s.split(':').next_back().unwrap_or("").trim().to_string())
+                .or_default() += 1;
         }
     }
     for (s, n) in scope {

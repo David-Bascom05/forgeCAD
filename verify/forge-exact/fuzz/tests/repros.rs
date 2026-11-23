@@ -226,13 +226,15 @@ fn near_tolerance_45_chained_walls_are_one() {
 }
 
 /// boxes meets/overlaps/overlaps subtract: B touches A's x = 10 face from outside, so A is left
-/// as it was (V8 E12 F6). The kernel's body, valid and of the right volume, keeps the contact
-/// rectangle imprinted as a seventh face (V10 E15 F7). 1444 of the 6591 box patterns, and the
-/// near_tolerance unmerged cases, are this: one surface left as several faces. Site:
-/// `general` (forge-bool boolean.rs:557): no pass dissolves an edge between two faces of one
-/// carrier after `apply`.
+/// as it was (V8 E12 F6). The kernel's body kept the contact rectangle imprinted as a seventh
+/// face (V10 E15 F7): 1444 of the 6591 box patterns, and the near_tolerance unmerged cases, were
+/// this. Fixed: `forge_bool::boolean` hands its result out unified, and unify's same-surface test
+/// is the boolean's own (`ssi::coincident`).
 #[test]
-#[ignore = "exact reference (snap): a touching boolean leaves its contact imprinted as an extra face"]
+#[cfg_attr(
+    not(feature = "reference"),
+    ignore = "asks the Lean reference: lake build in verify/forge-exact, then cargo test -p forge-exact-fuzz --features reference"
+)]
 fn touching_subtract_leaves_no_imprint() {
     pair_agrees_snap(
         [[0.0, 10.0], [0.0, 20.0], [0.0, 20.0]],
@@ -437,7 +439,8 @@ fn ball_centred_on_a_rim_builds() {
 /// A degenerate pair with its tool moved by `delta` LINEARs along axis `axis` (0, 1, 2): the
 /// curved band (exact-curved's `band` source).
 fn band_curved(name: &str, axis: usize, delta: f64) -> Part {
-    let d = [forge_math::Vec3::X, forge_math::Vec3::Y, forge_math::Vec3::Z][axis] * (delta * forge_math::tol::LINEAR);
+    let d = [forge_math::Vec3::X, forge_math::Vec3::Y, forge_math::Vec3::Z][axis]
+        * (delta * forge_math::tol::LINEAR);
     forge_exact_fuzz::curved::tool_moved(&degenerate_curved(name), d).expect("a movable tool")
 }
 
@@ -492,7 +495,11 @@ fn band_ball_on_an_edge_splits() {
 #[test]
 #[ignore = "exact curved reference: HoleOutside on a cylinder nudged off an inside tangency"]
 fn band_tangent_inside_cylinder_holes() {
-    agrees_curved(&band_curved("cylinder_cylinder/perpendicular_tangent_inside/Add", 1, -0.9));
+    agrees_curved(&band_curved(
+        "cylinder_cylinder/perpendicular_tangent_inside/Add",
+        1,
+        -0.9,
+    ));
 }
 
 /// Cone apexes on a face that lies on the nappe's axis-normal plane, and two cones sharing an

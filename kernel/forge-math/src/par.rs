@@ -1,8 +1,19 @@
 //! Independent work on all cores: items taken one at a time (their costs differ), answers in
 //! item order, so a result never depends on which thread made it.
 
-/// The threads to use: `FORGECAD_THREADS` if set, else the cores there are.
+/// The scoped threads every parallel path of the kernel runs on: std's, or a host's (`forge_par`).
+pub use forge_par::{Scope, ScopedJoinHandle, scope, spawner};
+
+/// The threads to use: a host's spawner's count where one is installed (one on a thread that may
+/// not wait); else `FORGECAD_THREADS` if set, else the cores there are (one on wasm).
 pub fn threads() -> usize {
+    if let Some(sp) = forge_par::spawner() {
+        return if (sp.can_block)() {
+            (sp.threads)().max(1)
+        } else {
+            1
+        };
+    }
     if cfg!(target_family = "wasm") {
         return 1;
     }
@@ -20,7 +31,7 @@ pub fn map<T: Send>(n: usize, f: impl Fn(usize) -> T + Sync) -> Vec<T> {
         return (0..n).map(f).collect();
     }
     let next = std::sync::atomic::AtomicUsize::new(0);
-    let mut got: Vec<(usize, T)> = std::thread::scope(|s| {
+    let mut got: Vec<(usize, T)> = scope(|s| {
         let hs: Vec<_> = (0..threads)
             .map(|_| {
                 let (f, next) = (&f, &next);

@@ -13,40 +13,36 @@ pub mod nav;
 pub mod origin;
 pub mod overlay;
 pub mod palette;
+pub mod parity;
+pub mod plat;
 pub mod render;
 pub mod scene;
 pub mod shell;
 pub mod viewcube;
 pub mod viewer;
 
-#[cfg(not(target_arch = "wasm32"))]
 pub mod agent;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod app;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod asmshot;
-#[cfg(not(target_arch = "wasm32"))]
 pub mod cache;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod dragbench;
-#[cfg(not(target_arch = "wasm32"))]
 pub mod fg;
-#[cfg(not(target_arch = "wasm32"))]
 pub mod gui;
-#[cfg(not(target_arch = "wasm32"))]
 pub mod live;
-#[cfg(not(target_arch = "wasm32"))]
 pub mod load;
-#[cfg(not(target_arch = "wasm32"))]
 pub mod measure;
 pub mod snaps;
-#[cfg(not(target_arch = "wasm32"))]
 pub mod speech;
-#[cfg(not(target_arch = "wasm32"))]
 pub mod tess;
-#[cfg(not(target_arch = "wasm32"))]
 pub mod thermo_view;
 #[cfg(target_arch = "wasm32")]
 mod web;
 #[cfg(target_arch = "wasm32")]
+mod webapp;
+#[cfg(target_arch = "wasm32")]
 mod webdwg;
+#[cfg(target_arch = "wasm32")]
+mod webinput;

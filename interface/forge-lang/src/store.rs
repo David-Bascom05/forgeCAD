@@ -49,17 +49,17 @@ pub fn get(kind: &str, key: u128) -> Option<Vec<u8>> {
 
 fn get_in(root: &Path, kind: &str, key: u128) -> Option<Vec<u8>> {
     let path = path_in(root, kind, key);
-    let data = std::fs::read(&path).ok()?;
+    let data = forge_dirs::fs::read(&path).ok()?;
     match open(&data, key) {
         Some(body) => {
             // read lately: kept longest
-            if let Ok(f) = std::fs::File::options().append(true).open(&path) {
-                let _ = f.set_modified(std::time::SystemTime::now());
+            if let Ok(f) = forge_dirs::fs::File::options().append(true).open(&path) {
+                let _ = f.set_modified(forge_math::clock::system_now());
             }
             Some(body.to_vec())
         }
         None => {
-            let _ = std::fs::remove_file(&path);
+            let _ = forge_dirs::fs::remove_file(&path);
             None
         }
     }
@@ -78,7 +78,7 @@ fn open(data: &[u8], key: u128) -> Option<&[u8]> {
 /// Every whole, matching entry of `kind`, by key; the bad ones removed.
 pub fn all(kind: &str) -> Vec<(u128, Vec<u8>)> {
     let Some(root) = root() else { return vec![] };
-    let Ok(rd) = std::fs::read_dir(root.join(kind)) else {
+    let Ok(rd) = forge_dirs::fs::read_dir(root.join(kind)) else {
         return vec![];
     };
     let mut out: Vec<(u128, Vec<u8>)> = rd
@@ -93,7 +93,7 @@ pub fn all(kind: &str) -> Vec<(u128, Vec<u8>)> {
 /// Drops the entry under `key`.
 pub fn forget(kind: &str, key: u128) {
     if let Some(root) = root() {
-        let _ = std::fs::remove_file(path_in(&root, kind, key));
+        let _ = forge_dirs::fs::remove_file(path_in(&root, kind, key));
     }
 }
 
@@ -110,7 +110,7 @@ pub fn put(kind: &str, key: u128, bytes: &[u8]) {
 fn put_in(root: &Path, kind: &str, key: u128, bytes: &[u8]) {
     let path = path_in(root, kind, key);
     let Some(dir) = path.parent() else { return };
-    let _ = std::fs::create_dir_all(dir);
+    let _ = forge_dirs::fs::create_dir_all(dir);
     let mut data = Vec::with_capacity(HEAD + bytes.len());
     data.extend_from_slice(MAGIC);
     data.extend_from_slice(&key.to_le_bytes());
@@ -119,9 +119,9 @@ fn put_in(root: &Path, kind: &str, key: u128, bytes: &[u8]) {
     data.extend_from_slice(&hash128(bytes).to_le_bytes());
     data.extend_from_slice(bytes);
     // written whole, then moved into place: a reader never sees half an entry
-    let tmp = path.with_extension(format!("{}.tmp", std::process::id()));
-    if std::fs::write(&tmp, &data).is_err() || std::fs::rename(&tmp, &path).is_err() {
-        let _ = std::fs::remove_file(&tmp);
+    let tmp = path.with_extension(format!("{}.tmp", forge_dirs::process_id()));
+    if forge_dirs::fs::write(&tmp, &data).is_err() || forge_dirs::fs::rename(&tmp, &path).is_err() {
+        let _ = forge_dirs::fs::remove_file(&tmp);
     }
 }
 
@@ -136,17 +136,21 @@ fn limit() -> u64 {
 /// Removes the least lately used entries until the whole is under three quarters of `limit`,
 /// once it is over it.
 fn trim(root: &Path, limit: u64) {
-    let mut all: Vec<(std::time::SystemTime, u64, PathBuf)> = Vec::new();
-    let Ok(kinds) = std::fs::read_dir(root) else {
+    let mut all: Vec<(forge_math::clock::SystemTime, u64, PathBuf)> = Vec::new();
+    let Ok(kinds) = forge_dirs::fs::read_dir(root) else {
         return;
     };
     for k in kinds.flatten() {
-        let Ok(files) = std::fs::read_dir(k.path()) else {
+        let Ok(files) = forge_dirs::fs::read_dir(k.path()) else {
             continue;
         };
         for f in files.flatten() {
             if let Ok(m) = f.metadata() {
-                all.push((m.modified().unwrap_or(std::time::UNIX_EPOCH), m.len(), f.path()));
+                all.push((
+                    m.modified().unwrap_or(forge_math::clock::UNIX_EPOCH),
+                    m.len(),
+                    f.path(),
+                ));
             }
         }
     }
@@ -159,7 +163,7 @@ fn trim(root: &Path, limit: u64) {
         if total <= limit / 4 * 3 {
             break;
         }
-        if std::fs::remove_file(&p).is_ok() {
+        if forge_dirs::fs::remove_file(&p).is_ok() {
             total -= len;
         }
     }
@@ -238,8 +242,8 @@ mod tests {
     use super::*;
 
     fn scratch(name: &str) -> PathBuf {
-        let d = std::env::temp_dir().join(format!("forge-store-{name}-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&d);
+        let d = forge_dirs::temp_dir().join(format!("forge-store-{name}-{}", forge_dirs::process_id()));
+        let _ = forge_dirs::fs::remove_dir_all(&d);
         d
     }
 
@@ -250,7 +254,7 @@ mod tests {
         assert_eq!(get_in(&d, "t", 7).as_deref(), Some(&b"seven"[..]));
         assert_eq!(get_in(&d, "t", 8), None);
         assert_eq!(get_in(&d, "u", 7), None);
-        let _ = std::fs::remove_dir_all(&d);
+        let _ = forge_dirs::fs::remove_dir_all(&d);
     }
 
     #[test]
@@ -258,23 +262,23 @@ mod tests {
         let d = scratch("bad");
         put_in(&d, "t", 1, b"some bytes");
         let p = path_in(&d, "t", 1);
-        let mut data = std::fs::read(&p).unwrap();
+        let mut data = forge_dirs::fs::read(&p).unwrap();
         let last = data.len() - 1;
         data[last] ^= 1;
-        std::fs::write(&p, &data).unwrap();
+        forge_dirs::fs::write(&p, &data).unwrap();
         assert_eq!(get_in(&d, "t", 1), None);
         assert!(!p.exists(), "a bad entry is removed");
         // cut short
         put_in(&d, "t", 2, b"some bytes");
         let p = path_in(&d, "t", 2);
-        let data = std::fs::read(&p).unwrap();
-        std::fs::write(&p, &data[..data.len() - 3]).unwrap();
+        let data = forge_dirs::fs::read(&p).unwrap();
+        forge_dirs::fs::write(&p, &data[..data.len() - 3]).unwrap();
         assert_eq!(get_in(&d, "t", 2), None);
         // another file moved under this key
         put_in(&d, "t", 3, b"three");
-        std::fs::copy(path_in(&d, "t", 3), path_in(&d, "t", 4)).unwrap();
+        forge_dirs::fs::copy(path_in(&d, "t", 3), path_in(&d, "t", 4)).unwrap();
         assert_eq!(get_in(&d, "t", 4), None);
-        let _ = std::fs::remove_dir_all(&d);
+        let _ = forge_dirs::fs::remove_dir_all(&d);
     }
 
     #[test]
@@ -282,8 +286,8 @@ mod tests {
         let d = scratch("trim");
         for k in 0..8u128 {
             put_in(&d, "t", k, &[0u8; 1000]);
-            let t = std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_000_000 + k as u64);
-            let f = std::fs::File::options()
+            let t = forge_math::clock::UNIX_EPOCH + std::time::Duration::from_secs(1_000_000 + k as u64);
+            let f = forge_dirs::fs::File::options()
                 .append(true)
                 .open(path_in(&d, "t", k))
                 .unwrap();
@@ -292,7 +296,7 @@ mod tests {
         trim(&d, 4 * 1100);
         let left: Vec<u128> = (0..8).filter(|k| get_in(&d, "t", *k).is_some()).collect();
         assert_eq!(left, vec![5, 6, 7]);
-        let _ = std::fs::remove_dir_all(&d);
+        let _ = forge_dirs::fs::remove_dir_all(&d);
     }
 
     #[test]
