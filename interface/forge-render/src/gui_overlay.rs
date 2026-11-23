@@ -209,7 +209,9 @@ impl Gui {
         let (c, r) = v.scene.bounds();
         let (cam, size, px) = (&v.nav.camera, v.size, self.pixels_per_point);
         let ink = {
-            let i = self.shell.theme.ink2;
+            // on a light view the secondary ink is too near the background to read at a grid's alpha
+            let th = self.shell.theme;
+            let i = if th.dark { th.ink2 } else { th.ink };
             crate::viewcube::rgb((i.r() as u32) << 16 | (i.g() as u32) << 8 | i.b() as u32)
         };
         if o.grid {

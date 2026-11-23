@@ -59,7 +59,7 @@ pub use crate::nav::NavTool;
 use crate::render::VisualStyle;
 use crate::shell::placed::Placed;
 use egui::{Align2, Color32, CornerRadius, Rect, Sense, Stroke, StrokeKind, Ui, pos2, vec2};
-use theme::{Theme, medium, mono, sans, semi};
+use theme::{Theme, mono, sans, semi};
 
 pub const TABS: [&str; 5] = ["3D Model", "Sketch", "Inspect", "View", "Manage"];
 /// A sheet metal part's own tabs: shown first, Inventor's way; the flat pattern's in its place.
@@ -776,7 +776,7 @@ impl Shell {
                 continue;
             }
             let ink = if l.hovered { t.on_ink } else { t.ink };
-            let g = ui.fonts_mut(|f| f.layout_no_wrap(l.text.to_string(), medium(size), ink));
+            let g = ui.fonts_mut(|f| f.layout_no_wrap(l.text.to_string(), semi(size), ink));
             let mid = g.mesh_bounds.center();
             let colour = ink.gamma_multiply(l.alpha);
             let mut mesh = egui::Mesh::with_texture(egui::TextureId::default());

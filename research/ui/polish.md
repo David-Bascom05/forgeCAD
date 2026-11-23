@@ -178,3 +178,12 @@ Before/after pairs share names in `before/` and `after/`.
 Known, not from this work: `cargo clippy --lib --target wasm32-unknown-unknown` fails at
 `errno` before reaching forge-render, through `zbus-secret-service-keyring-store` (not gated to
 native targets in Cargo.toml). The same happens on the base branch.
+
+### Last pass: light theme, view cube, grid (`view-before-after.png`: before left, after right)
+- **Light theme:** the warm greys are now cool, matching the blues: `ink` #1A1F26, `ink2`
+  #545C66 (6.4:1 on `raised`), `line` #D5DAE1; the view cube's light palette follows.
+- **View cube:** the face words are semibold, not medium. Their size stays at `LABEL_EM` (BOTTOM
+  must fit on a face). The ring was already faint at rest (18 %).
+- **Grid:** minor lines at 15 %, every fifth at 38 % and 1.5× wide (was 14 % / 30 % / 1.25×),
+  and the whole grid fades out over its outer 30 % instead of ending at a hard square. On a light
+  view it is drawn in `ink` rather than `ink2`, which was too near the background to read.
