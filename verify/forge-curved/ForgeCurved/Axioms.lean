@@ -94,3 +94,5 @@ import ForgeCurved
 #print axioms ForgeCurved.off_transverse2
 #print axioms ForgeCurved.off_noTriple
 #print axioms ForgeCurved.slab_regular
+#print axioms ForgeCurved.slab_find
+#print axioms ForgeCurved.facet_meets_plane

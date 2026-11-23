@@ -24,3 +24,5 @@ import ForgeCurved.SweepBound
 import ForgeCurved.RealModel
 import ForgeCurved.QTransverse
 import ForgeCurved.QEvents
+import ForgeCurved.QSlabs
+import ForgeCurved.QFacet
