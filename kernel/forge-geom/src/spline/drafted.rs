@@ -237,7 +237,9 @@ impl Procedural for Drafted {
     fn curve_uv(&self, c: &ProcCurve) -> Option<(Point2, Vec2)> {
         let any = c.as_any()?;
         let v = if let Some(s) = any.downcast_ref::<Section>() {
-            (Arc::ptr_eq(&s.c, &self.c) && s.frame == self.frame && s.w == (s.v - self.v0) * self.lean)
+            ((Arc::ptr_eq(&s.c, &self.c) || *s.c == *self.c)
+                && s.frame == self.frame
+                && s.w == (s.v - self.v0) * self.lean)
                 .then_some(s.v)?
         } else {
             let s = any.downcast_ref::<SplineCurve>()?;
