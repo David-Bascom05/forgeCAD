@@ -72,13 +72,20 @@ None for the core itself. What remains is the frontier optimisation:
      ledger of the region's samples, `sampleLedger ps ss (regionX ps X In)` (`local_exact`), and
      `local_correct` is (c′) for it (`DecideOnce/SampleLocal.lean`).
 
-   Open:
-   - **`LocalCompat`**, the named hypothesis of `local_exact` and `local_correct`: each body's
-     membership is constant on the local arrangement's full cells inside the region. It needs a
-     localized Jordan–Brouwer, since far face planes may cut a region cell. Owned by dol-jordan.
-   - (proven) the region's facts for the six walls: `wall_region` (each cell wholly in or out of R°),
-     `wall_up` (closed upward), and R° open (`allPos` of the inward walls). `local_correct_walls` is
-     `local_correct` with these discharged.
-   - (proven) `SamplesIn` for the local arrangement's sampler (`samplesIn_of` from
-     `sampler_covers`). `local_correct_sampler` is (c′) for the local ledger the sampler builds, with
-     **`LocalCompat` its only hypothesis**.
+   - (proven) `LocalCompat`, the localized Jordan–Brouwer (group dol-jordan):
+     - `Jordan.contains_const_local`: ray parity is constant along a segment that meets no face, or
+       only faces whose box it stays outside;
+     - `local_compat`: compatibility for near/far B-reps.
+   - (proven) the six walls' region facts (`wall_region`, `wall_up`, R° open), and `SamplesIn` for
+     the local arrangement's sampler (`samplesIn_of`, from `sampler_covers`).
+
+   **Closed:** `local_correct_final hnz ws hws (h : LocalInput ps ss ws) rule`
+   (`DecideOnce/LocalFinal.lean`) is (c′) for the local ledger the sampler builds. It has no hypothesis
+   beyond the input's domain:
+   - carriers with nonzero normals;
+   - valid wall indices;
+   - closed flat B-reps whose faces are near (plane a carrier) or far (a nonzero normal, and the
+     region outside the face's box).
+
+   With F1, F2 and `split_at_region`, this proves the whole of §3a except the stitching (F3), which
+   is the bridge's own obligation.

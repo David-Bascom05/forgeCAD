@@ -15,6 +15,9 @@ import ForgeExact.DecideOnce.Sampler
 import ForgeExact.DecideOnce.Frontier
 import ForgeExact.DecideOnce.Local
 import ForgeExact.DecideOnce.SampleLocal
+import ForgeExact.JordanLocal
+import ForgeExact.DecideOnce.LocalJordan
+import ForgeExact.DecideOnce.LocalFinal
 
 /-!
 # Only the standard axioms
@@ -100,6 +103,11 @@ elab "#standard_axioms " ids:ident* : command => do
   ForgeExact.Jordan.pierced_eq
   ForgeExact.Jordan.contains_eq
   ForgeExact.Jordan.contains_const
+  ForgeExact.Jordan.chi_out
+  ForgeExact.Jordan.face_rise
+  ForgeExact.Jordan.face_level'
+  ForgeExact.Jordan.contains_eq'
+  ForgeExact.Jordan.contains_const_local
   ForgeExact.DecideOnce.brep_compat
   ForgeExact.DecideOnce.Ledger.coverageK
   ForgeExact.DecideOnce.Ledger.collapse_local
@@ -151,3 +159,7 @@ elab "#standard_axioms " ids:ident* : command => do
   ForgeExact.DecideOnce.Sample.wall_up
   ForgeExact.DecideOnce.Sample.local_correct_walls
   ForgeExact.DecideOnce.Sample.local_correct_sampler
+  ForgeExact.DecideOnce.covCell_conv
+  ForgeExact.DecideOnce.local_compat
+  ForgeExact.DecideOnce.Sample.localCompat_of
+  ForgeExact.DecideOnce.Sample.local_correct_final

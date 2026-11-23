@@ -18,4 +18,7 @@ import ForgeExact.DecideOnce.Sampler
 import ForgeExact.DecideOnce.Frontier
 import ForgeExact.DecideOnce.Local
 import ForgeExact.DecideOnce.SampleLocal
+import ForgeExact.JordanLocal
+import ForgeExact.DecideOnce.LocalJordan
+import ForgeExact.DecideOnce.LocalFinal
 import ForgeExact.Axioms
