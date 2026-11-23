@@ -928,4 +928,182 @@ theorem motion_code_spec (n : ℕ) (a : Axes) (hx : a.x.val < n) (hy : a.y.val <
             simpa [hcy] using hc
           simp only [hc', ite_false, WP.spec_ok]
 
+/-! ## Arcs -/
+
+/-- The spec's plane axes and centre words. -/
+def specPlane (n : ℕ) (A : ForgeMachine.Axes n) (plane : ℕ) (b : ForgeMachine.Block n) :
+    Fin n × Fin n × Option ℤ × Option ℤ :=
+  if plane = 17 then (A.x, A.y, b.i, b.j)
+  else if plane = 18 then (A.z, A.x, b.k, b.i)
+  else (A.y, A.z, b.j, b.k)
+
+theorem plane_axes_spec (n : ℕ) (a : Axes) (hx : a.x.val < n) (hy : a.y.val < n) (hz : a.z.val < n)
+    (plane : Std.U32) (blk : Block) :
+    plane_axes a plane blk ⦃ t => ∃ (h1 : t.1.val < n) (h2 : t.2.1.val < n),
+      specPlane n (AX n a hx hy hz) plane.val (BA n blk) = (⟨t.1.val, h1⟩, ⟨t.2.1.val, h2⟩, iv t.2.2.1, iv t.2.2.2) ∧
+      (t.2.2.1 = blk.i ∨ t.2.2.1 = blk.j ∨ t.2.2.1 = blk.k) ∧ (t.2.2.2 = blk.i ∨ t.2.2.2 = blk.j ∨ t.2.2.2 = blk.k) ⦄ := by
+  unfold plane_axes specPlane
+  split
+  · rename_i h; have : plane.val = 17 := by rw [h]; rfl
+    simp only [WP.spec_ok, this, ite_true]
+    exact ⟨hx, hy, rfl, by simp, by simp⟩
+  · rename_i h; have : plane.val ≠ 17 := fun e => h (UScalar.eq_of_val_eq (by simp [e]))
+    simp only [this, ite_false]
+    split
+    · rename_i h'; have : plane.val = 18 := by rw [h']; rfl
+      simp only [WP.spec_ok, this, ite_true]
+      exact ⟨hz, hx, rfl, by simp, by simp⟩
+    · rename_i h'; have : plane.val ≠ 18 := fun e => h' (UScalar.eq_of_val_eq (by simp [e]))
+      simp only [WP.spec_ok, this, ite_false]
+      exact ⟨hy, hz, rfl, by simp, by simp⟩
+
+theorem from_residual_err {T : Type} (e : Refuse) :
+    core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual T
+      (core.convert.FromSame Refuse) (.Err e) = ok (.Err e) := by
+  simp [core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual]
+
+theorem at_P (n : ℕ) (v : alloc.vec.Vec (Option Std.I64)) (k : Usize) (hk : k.val < n) (o : Option Std.I64)
+    (ho : o = (alloc.vec.Vec.deref v).val.getD k.val none) : P n v.val ⟨k.val, hk⟩ = iv o := by
+  rw [ho]; simp [P, alloc.vec.Vec.deref]
+
+theorem i64_eq_iff (a b : Std.I64) : a = b ↔ a.val = b.val :=
+  ⟨fun h => by rw [h], fun h => by scalar_tac⟩
+
+theorem u32_eq2 (g : Std.U32) : (g.val = 2) ↔ g = 2#u32 :=
+  ⟨fun h => by scalar_tac, fun h => by rw [h]; rfl⟩
+
+theorem arc_spec (n : ℕ) (a : Axes) (hx : a.x.val < n) (hy : a.y.val < n) (hz : a.z.val < n)
+    (st s2 : State) (blk : Block) (dst : alloc.vec.Vec (Option Std.I64)) (g : Std.U32)
+    (hsp : ∀ o ∈ st.pos.val, BdO o) (hi : BdO blk.i) (hj : BdO blk.j) (hk : BdO blk.k)
+    (hdl : dst.val.length < Usize.max) :
+    arc a st blk s2 dst g ⦃ r =>
+      match r with
+      | .Ok (es, s3) => ForgeMachine.arcStep (AX n a hx hy hz) (SA n st) (SA n s2) (BA n blk) (P n dst.val) g.val =
+          some (es.val.map (E n), SA n s3) ∧ s3 = { s2 with pos := dst }
+      | .Err _ => ForgeMachine.arcStep (AX n a hx hy hz) (SA n st) (SA n s2) (BA n blk) (P n dst.val) g.val = none ⦄ := by
+  unfold arc
+  step with plane_axes_spec n a hx hy hz s2.plane blk as ⟨pa, pb, wa, wb, h1, h2, hsp', hwa, hwb⟩
+  have hspec : ForgeMachine.arcStep (AX n a hx hy hz) (SA n st) (SA n s2) (BA n blk) (P n dst.val) g.val =
+      match (SA n st).pos ⟨pa.val, h1⟩, (SA n st).pos ⟨pb.val, h2⟩, P n dst.val ⟨pa.val, h1⟩,
+          P n dst.val ⟨pb.val, h2⟩, (SA n s2).feed with
+      | some sa, some sb, some ea, some eb, some f =>
+        let full := decide (ea = sa) && decide (eb = sb)
+        let c? : Option ForgeMachine.Centre := match (BA n blk).r, iv wa, iv wb with
+          | some r, none, none => if r = 0 ∨ full then none else some (.r r)
+          | some _, _, _ => none
+          | none, none, none => none
+          | none, ia, ib => some (.abs (sa + ia.getD 0) (sb + ib.getD 0))
+        match c? with
+        | none => none
+        | some c => some ([.arc (P n dst.val) (SA n s2).plane c (g.val = 2) full f], { SA n s2 with pos := P n dst.val })
+      | _, _, _, _, _ => none := by
+    unfold ForgeMachine.arcStep
+    rw [show (if (SA n s2).plane = 17 then ((AX n a hx hy hz).x, (AX n a hx hy hz).y, (BA n blk).i, (BA n blk).j)
+        else if (SA n s2).plane = 18 then ((AX n a hx hy hz).z, (AX n a hx hy hz).x, (BA n blk).k, (BA n blk).i)
+        else ((AX n a hx hy hz).y, (AX n a hx hy hz).z, (BA n blk).j, (BA n blk).k)) =
+        specPlane n (AX n a hx hy hz) s2.plane.val (BA n blk) from rfl, hsp']
+    rfl
+  rw [hspec]
+  have hwab : BdO wa ∧ BdO wb := by
+    constructor
+    · rcases hwa with h | h | h <;> rw [h] <;> assumption
+    · rcases hwb with h | h | h <;> rw [h] <;> assumption
+  step with at_spec (alloc.vec.Vec.deref st.pos) pa as ⟨o, ho⟩
+  step with at_spec (alloc.vec.Vec.deref st.pos) pb as ⟨o1, ho1⟩
+  step with at_spec (alloc.vec.Vec.deref dst) pa as ⟨o2, ho2⟩
+  step with at_spec (alloc.vec.Vec.deref dst) pb as ⟨o3, ho3⟩
+  rw [show (SA n st).pos ⟨pa.val, h1⟩ = P n st.pos.val ⟨pa.val, h1⟩ from rfl,
+    show (SA n st).pos ⟨pb.val, h2⟩ = P n st.pos.val ⟨pb.val, h2⟩ from rfl,
+    at_P n st.pos pa h1 o ho, at_P n st.pos pb h2 o1 ho1, at_P n dst pa h1 o2 ho2, at_P n dst pb h2 o3 ho3,
+    show (SA n s2).feed = iv s2.feed from rfl]
+  have hob : BdO o := by
+    intro v hv; rw [ho] at hv; simp [alloc.vec.Vec.deref, List.getD_eq_getElem?_getD] at hv
+    cases hq : st.pos.val[pa.val]? with
+    | none => simp [hq] at hv
+    | some w => simp [hq] at hv; subst hv; exact hsp _ (List.mem_of_getElem? hq) v rfl
+  have hob1 : BdO o1 := by
+    intro v hv; rw [ho1] at hv; simp [alloc.vec.Vec.deref, List.getD_eq_getElem?_getD] at hv
+    cases hq : st.pos.val[pb.val]? with
+    | none => simp [hq] at hv
+    | some w => simp [hq] at hv; subst hv; exact hsp _ (List.mem_of_getElem? hq) v rfl
+  cases o with
+  | none => simp [iv]
+  | some sa =>
+  cases o1 with
+  | none => simp [iv]
+  | some sb =>
+  cases o2 with
+  | none => simp [iv]
+  | some ea =>
+  cases o3 with
+  | none => simp [iv]
+  | some eb =>
+  cases hf : s2.feed with
+  | none => simp [iv]
+  | some f =>
+  simp only [iv, Option.map_some]
+  have hfull : (if ea = sa then ok (decide (eb = sb)) else ok false : Result Bool) =
+      ok (decide (ea.val = sa.val) && decide (eb.val = sb.val)) := by
+    by_cases e1 : ea = sa
+    · have := (i64_eq_iff ea sa).mp e1; simp [e1, this, i64_eq_iff]
+    · have : ¬ ea.val = sa.val := fun h => e1 ((i64_eq_iff ea sa).mpr h); simp [e1, this]
+  rw [hfull, bind_ok]
+  have hsa := hob sa rfl; have hsb := hob1 sb rfl
+  have ⟨hwa', hwb'⟩ := hwab
+  simp only [Bd] at hsa hsb
+  cases hr : blk.r with
+  | some r1 =>
+    cases wa with
+    | some _ => simp [BA, iv, hr, from_residual_err, core.result.Result.Insts.CoreOpsTry.branch]
+    | none =>
+    cases wb with
+    | some _ => simp [BA, iv, hr, from_residual_err, core.result.Result.Insts.CoreOpsTry.branch]
+    | none =>
+    simp only [BA, iv, hr, Option.map]
+    by_cases h0 : r1 = 0#i64
+    · have : r1.val = 0 := by rw [h0]; rfl
+      simp [h0, this, from_residual_err, core.result.Result.Insts.CoreOpsTry.branch]
+    · have : ¬ r1.val = 0 := fun h => h0 (by scalar_tac)
+      by_cases hfu : (decide (ea.val = sa.val) && decide (eb.val = sb.val)) = true
+      · simp [h0, this, hfu, from_residual_err, core.result.Result.Insts.CoreOpsTry.branch]
+      · simp only [h0, this, hfu, ite_false, false_or, Bool.false_eq_true, core.result.Result.Insts.CoreOpsTry.branch, bind_ok]
+        step with copy_spec (alloc.vec.Vec.deref dst) (by simpa [alloc.vec.Vec.deref] using hdl) as ⟨v, hv⟩
+        step with one_spec as ⟨v1, hv1⟩
+        simp [hv1, SA, E, hv, alloc.vec.Vec.deref, iv, hf, C, u32_eq2]
+  | none =>
+    simp only [BA, iv, hr, Option.map]
+    cases wa with
+    | none =>
+      cases wb with
+      | none => simp [from_residual_err, core.result.Result.Insts.CoreOpsTry.branch]
+      | some j =>
+        have hj' := hwb' j rfl; simp only [Bd] at hj'
+        simp only [or0_eq, Option.getD, bind_ok]
+        step as ⟨i1, hi1⟩
+        step as ⟨i2, hi2⟩
+        simp only [core.result.Result.Insts.CoreOpsTry.branch, bind_ok]
+        step with copy_spec (alloc.vec.Vec.deref dst) (by simpa [alloc.vec.Vec.deref] using hdl) as ⟨v, hv⟩
+        step with one_spec as ⟨v1, hv1⟩
+        simp [hv1, SA, E, hv, alloc.vec.Vec.deref, iv, hf, C, u32_eq2, hi1, hi2]
+    | some i =>
+      have hi' := hwa' i rfl; simp only [Bd] at hi'
+      cases wb with
+      | none =>
+        simp only [or0_eq, Option.getD, bind_ok]
+        step as ⟨i1, hi1⟩
+        step as ⟨i2, hi2⟩
+        simp only [core.result.Result.Insts.CoreOpsTry.branch, bind_ok]
+        step with copy_spec (alloc.vec.Vec.deref dst) (by simpa [alloc.vec.Vec.deref] using hdl) as ⟨v, hv⟩
+        step with one_spec as ⟨v1, hv1⟩
+        simp [hv1, SA, E, hv, alloc.vec.Vec.deref, iv, hf, C, u32_eq2, hi1, hi2]
+      | some j =>
+        have hj' := hwb' j rfl; simp only [Bd] at hj'
+        simp only [or0_eq, Option.getD, bind_ok]
+        step as ⟨i1, hi1⟩
+        step as ⟨i2, hi2⟩
+        simp only [core.result.Result.Insts.CoreOpsTry.branch, bind_ok]
+        step with copy_spec (alloc.vec.Vec.deref dst) (by simpa [alloc.vec.Vec.deref] using hdl) as ⟨v, hv⟩
+        step with one_spec as ⟨v1, hv1⟩
+        simp [hv1, SA, E, hv, alloc.vec.Vec.deref, iv, hf, C, u32_eq2, hi1, hi2]
+
 end forge_machine_core
