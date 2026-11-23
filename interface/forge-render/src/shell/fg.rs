@@ -365,6 +365,9 @@ pub struct FgPanel {
     pub picked: Option<Result<String, super::fgtool::ToolError>>,
     /// The Parameters dialog is up.
     pub params_open: bool,
+    /// The weldments' cut list, as the last build had it; its panel up.
+    pub cutlist: super::weld_ui::CutList,
+    pub cutlist_open: bool,
     /// The Issues window is up, over the status bar.
     pub issues_list: bool,
     /// Edit Occurrence: a placed component call's args.
@@ -1210,6 +1213,10 @@ impl Shell {
                 SlotKind::Points if is_sketch => Ok(format!("{k}.points")),
                 SlotKind::RevAxis if made("workaxis") => Ok(k.clone()),
                 SlotKind::Feature | SlotKind::Features if !is_sketch => Ok(k.clone()),
+                // a weldment's member, by its own row (`frame[2]`)
+                SlotKind::Member | SlotKind::Members if work == "member" => Ok(k.clone()),
+                // an end trimmed to a sketch's or work plane's plane, a member or a body
+                SlotKind::TrimTo => Ok(k.clone()),
                 _ => Err(ToolError::WrongPick {
                     slot: tool.slots[tool.active].label,
                     what: if is_sketch { "sketch" } else { "feature" },

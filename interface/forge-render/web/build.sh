@@ -4,7 +4,8 @@
 # serve it with `forgecad web DIR --app OUT` (the files of DIR on that machine), or any static
 # server (the files kept in the browser). Open it in a WebGPU browser: index.html says what it
 # takes. NO_MESHES=1 leaves out the viewer's prebuilt bench meshes (which need a native build).
-# THREADS=1 also builds the threaded artifact into OUT/threads (see below).
+# THREADS=1 also builds the threaded artifact into OUT/threads (see below); THREADS=only builds
+# that and the page's files without the default wasm (the GitHub CI builds the two at once).
 set -e
 out=$1
 # where cargo puts this workspace's builds, as cargo says (CARGO_TARGET_DIR, a target-dir in a
@@ -16,9 +17,11 @@ else
   target=$(printf '%s' "$meta" | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p')
 fi
 [ -n "$target" ] || { echo "build.sh: cargo metadata gave no target directory" >&2; exit 1; }
-cargo build --lib --release --target wasm32-unknown-unknown
 mkdir -p "$out"
-wasm-bindgen --target web --no-typescript --out-dir "$out" "$target/wasm32-unknown-unknown/release/forge_render.wasm"
+if [ "$THREADS" != only ]; then
+  cargo build --lib --release --target wasm32-unknown-unknown
+  wasm-bindgen --target web --no-typescript --out-dir "$out" "$target/wasm32-unknown-unknown/release/forge_render.wasm"
+fi
 cp web/index.html web/app.js web/storage.js web/zip.js "$out/"
 # the examples, for a new browser project: the files a part reads, not the pictures and notes
 rm -rf "$out/examples"

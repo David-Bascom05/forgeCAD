@@ -207,6 +207,8 @@ pub fn thicken(body: &Body, faces: &[Name], lo: f64, hi: f64, feature: u64) -> R
     let mut edges = vec![false; out.edges.len()];
     solve_e.iter().for_each(|e| edges[e.index()] = true);
     rebuild_some(&mut out, &verts, &edges).map_err(ThickenError::Rebuild)?;
+    // faces apart from each other thicken into slabs apart: a shell each
+    out.rebuild_shells();
     let problems = check_against(&out, &base);
     if !problems.is_empty() {
         return Err(ThickenError::Invalid(problems));

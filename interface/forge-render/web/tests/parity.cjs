@@ -3,6 +3,8 @@
 //   node web/tests/parity.cjs OUT [--examples N]   (OUT: web/build.sh's output, served here)
 // A hang fails fast: a file whose build takes longer than PARITY_FILE_MS (30 s) or a whole run
 // longer than PARITY_RUN_MS (10 min) stops the test, saying the file and the worker pool's state.
+// PARITY_SHARD=I/N (I from 0) tests every N-th file from the I-th, so N runs of I = 0..N-1 test
+// each file once between them (the CI runs them at once).
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -12,6 +14,10 @@ const t = require("./lib.cjs");
   const app = path.resolve(process.argv[2] ?? "web/out");
   const k = process.argv.indexOf("--examples");
   const most = k > 0 ? Number(process.argv[k + 1]) : Infinity;
+  const [shard, shards] = (process.env.PARITY_SHARD ?? "0/1").split("/").map(Number);
+  assert.ok(Number.isInteger(shard) && Number.isInteger(shards) && shard >= 0 && shard < shards,
+    `PARITY_SHARD=${process.env.PARITY_SHARD}: I/N with 0 <= I < N`);
+  const mine = (_, i) => i % shards === shard;
   const dir = t.tmpdir("parity");
   const { url, proc } = await t.serve(dir, app);
   const b = await t.browser();
@@ -46,11 +52,14 @@ const t = require("./lib.cjs");
     const pageFiles = await p.evaluate(() => window.forgecad.fc.bench_load("/bench"));
     const examples = fs.readFileSync(path.join(app, "examples/list.txt"), "utf8").trim().split("\n")
       .filter((f) => f.endsWith(".fg")).slice(0, most);
-    Object.assign(nat, t.native(examples.map((f) => path.join(t.repo, "examples", f))));
-    const pairs = [
+    const all = [
       ...pageFiles.map((f) => [f, path.join(benchDir, path.basename(f))]),
       ...examples.map((f) => [`/project/examples/${f}`, path.join(t.repo, "examples", f)]),
     ];
+    const pairs = all.filter(mine);
+    const rest = pairs.map(([, nf]) => nf).filter((nf) => !(nf in nat));
+    if (rest.length) Object.assign(nat, t.native(rest));
+    if (shards > 1) console.log(`# shard ${shard}/${shards}: ${pairs.length} of ${all.length} files`);
     for (const [pf, nf] of pairs) {
       stage = `${pf} in the page`;
       const t0 = Date.now();

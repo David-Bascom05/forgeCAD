@@ -214,6 +214,8 @@ pub struct Built {
     /// The worker's time for it: the build, and the mesh.
     pub build_ms: f64,
     pub mesh_ms: f64,
+    /// The weldments' cut list, when this build has one to say (none: the last one stands).
+    pub cutlist: Option<crate::shell::weld_ui::CutList>,
     /// The exact bodies and iProperties behind it, for Measure and the physical properties.
     pub inspect: Option<Arc<crate::gui::gui_inspect::InspectData>>,
     /// The last build's mesh of the same file (nothing it read has changed), shown while this
@@ -805,6 +807,45 @@ type Builder = (
 static BUILDERS: std::sync::Mutex<Vec<Builder>> = std::sync::Mutex::new(Vec::new());
 
 /// Stops the build threads this thread's documents started, and waits for each.
+/// File > Export STL / 3MF / OBJ: the part's text built afresh (an assembly with its parts' bodies)
+/// and its mesh written to `out` at the default tolerances; what to say in the status bar.
+pub fn export_mesh(
+    src: &str,
+    part: Option<&str>,
+    out: &std::path::Path,
+    f: forge_lang::meshfile::Format,
+) -> Result<String, String> {
+    use forge_lang::meshfile;
+    let dir = part.and_then(|p| std::path::Path::new(p).parent().map(std::path::Path::to_path_buf));
+    let opts = forge_lang::Options {
+        dir: dir.clone(),
+        render: true,
+        ..forge_lang::Options::default()
+    };
+    let (run, _) = forge_lang::run(src, opts, Cache::default());
+    let name = part
+        .or(out.to_str())
+        .and_then(|p| std::path::Path::new(p).file_stem())
+        .map_or_else(|| "part".into(), |s| s.to_string_lossy().into_owned());
+    let e = meshfile::export(&run, &name, dir.as_deref(), &meshfile::Options::new(f))?;
+    std::fs::write(out, &e.bytes).map_err(|e| format!("{}: {e}", out.display()))?;
+    let file = out
+        .file_name()
+        .map_or_else(String::new, |n| n.to_string_lossy().into_owned());
+    Ok(if e.watertight() && e.manifold() {
+        format!(
+            "Exported {file}: {} objects, {} triangles, watertight and manifold",
+            e.checks.len(),
+            e.triangles()
+        )
+    } else {
+        format!(
+            "Exported {file}: {} triangles, but not closed and manifold: check it before printing",
+            e.triangles()
+        )
+    })
+}
+
 pub fn stop_builders() {
     let me = std::thread::current().id();
     let mine: Vec<Builder> = {
@@ -1031,6 +1072,7 @@ impl Worker {
                 inspect: asm.as_ref().map(|a| a.inspect.clone()),
                 preview: false,
                 checked: true,
+                cutlist: None,
                 asm,
                 build_ms,
                 mesh_ms,
@@ -1112,6 +1154,7 @@ impl Worker {
                 inspect: None,
                 preview: true,
                 checked: false,
+                cutlist: None,
             };
             if !self.send(Msg::Built(Box::new(shown))) {
                 return false;
@@ -1254,6 +1297,7 @@ impl Worker {
                 })),
                 preview: false,
                 checked: checks,
+                cutlist: Some(crate::shell::weld_ui::CutList::of(&run.welds)),
             };
             if !self.send(Msg::Built(Box::new(built))) {
                 return false;

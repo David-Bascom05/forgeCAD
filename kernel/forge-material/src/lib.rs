@@ -736,7 +736,7 @@ mod tests {
     #[cfg(not(target_family = "wasm"))]
     #[test]
     fn a_project_library_comes_before_forgecad_and_saves_in_place() {
-        let d = std::env::temp_dir().join(format!("forge-material-{}", std::process::id()));
+        let d = forge_dirs::temp_dir().join(format!("forge-material-{}", forge_dirs::process_id()));
         let file = project_dir(&d).join("project.toml");
         let mut m = find("ABS").unwrap().clone();
         m.name = "ABS black".into();

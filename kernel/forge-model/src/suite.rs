@@ -1207,13 +1207,7 @@ pub fn text() -> Part {
     };
     let mut hole = d(1.5, 150.0);
     hole.reverse();
-    let hole: Vec<Seg> = hole
-        .into_iter()
-        .map(|s| match s {
-            Seg::Line(a, b) => Seg::Line(b, a),
-            Seg::Quad(a, c, b) => Seg::Quad(b, c, a),
-        })
-        .collect();
+    let hole: Vec<Seg> = hole.into_iter().map(|s| s.reversed()).collect();
     let glyphs = [
         ('I', TestGlyph::bar(100.0, 0.0, 200.0, 700.0, 300.0)),
         ('O', square_ring()),

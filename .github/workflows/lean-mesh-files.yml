@@ -1,0 +1,36 @@
+# The mesh files' Lean claims (verify/forge-mesh-files/lean): binary STL, OBJ and the 3MF model
+# part read back as written. `lake build` on the pinned toolchain (core Lean only, no Mathlib),
+# then the axiom check: a `sorry`, `native_decide` or any axiom past propext, Classical.choice
+# and Quot.sound fails the job.
+name: lean-mesh-files
+
+on:
+  push:
+    branches: [main]
+    paths: ["verify/forge-mesh-files/**", "kernel/forge-mesh/src/**",
+            ".github/workflows/lean-mesh-files.yml"]
+  pull_request:
+    paths: ["verify/forge-mesh-files/**", "kernel/forge-mesh/src/**",
+            ".github/workflows/lean-mesh-files.yml"]
+  workflow_dispatch:
+
+jobs:
+  proofs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: verify/forge-mesh-files/lean
+    steps:
+      - uses: actions/checkout@v4
+      - name: elan and the pinned toolchain
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -o elan-init.sh
+          sh elan-init.sh -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+          "$HOME/.elan/bin/elan" toolchain install "$(cat lean-toolchain)"
+      - name: build and axioms
+        run: |
+          lake build
+          lake env lean Axioms.lean | tee axioms.txt
+          ! grep -E "sorryAx|ofReduceBool" axioms.txt

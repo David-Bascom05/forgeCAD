@@ -1,0 +1,23 @@
+shared t = 2
+shared r = 2
+shared k = ratio(0.4)
+param plan.L = 40
+param plan.W = 60
+param up.h = 30
+param blank.gap = 30
+param win.cx = 15
+param win.cy = 30
+param win.mx = 25
+param win.b = 4
+
+sketch plan(on: xy) {
+  outline = rect(corner: (0, 0), size: (L, W))
+}
+base = sheet(plan, t: t, r: r, bend: kfactor(k))
+up = flange(base.edge(plan.outline[1]), height: h, measure: "inner")
+sketch win(on: base.top) {
+  e = ellipse(center: (cx, cy), major: (mx, cy), b: b)
+}
+cut = cutout(win, wall: base)
+blank = unfold(base, on: offset(base.bottom, gap))
+expect valid
