@@ -872,6 +872,330 @@ theorem wf_loop2_spec (l : Ledger) (nf nv : Usize) (hnf : nf.val = nfacets l) (h
         cases this
   · exact ⟨hv, h⟩
 
+
+/-! ### Loops 3–6: rooms, pieces, witnesses, every facet a piece -/
+
+def RoomsTo (l : Ledger) (k : Nat) : Prop := ∀ f, f < k →
+  (l.facet_rooms.val.getD f (0#u32, 0#u32)).1 ≠ (l.facet_rooms.val.getD f (0#u32, 0#u32)).2 ∧
+  (l.facet_rooms.val.getD f (0#u32, 0#u32)).1.val < l.n_rooms.val ∧
+  (l.facet_rooms.val.getD f (0#u32, 0#u32)).2.val < l.n_rooms.val
+
+theorem wf_loop3_spec (l : Ledger) (nf : Usize) (ok0 ok : Bool) (f : Usize)
+    (hpre : ok0 = true → l.facet_rooms.val.length = nf.val) (hf : f.val ≤ nf.val)
+    (h : ok = true ↔ ok0 = true ∧ RoomsTo l f.val) :
+    ledger_wf_loop3 l.n_rooms l.facet_rooms nf ok f ⦃ r => r = true ↔ ok0 = true ∧ RoomsTo l nf.val ⦄ := by
+  unfold ledger_wf_loop3
+  apply loop.spec_decr_nat (fun (q : Bool × Usize) => nf.val + 1 - q.2.val)
+    (fun q => q.2.val ≤ nf.val ∧ (q.1 = true ↔ ok0 = true ∧ RoomsTo l q.2.val))
+  · rintro ⟨o, j⟩ ⟨hj, ho⟩
+    unfold ledger_wf_loop3.body
+    simp only at hj ho ⊢
+    split
+    · rename_i hot
+      have hok := ho.mp hot
+      split
+      · rename_i hlt
+        have hjl : j.val < l.facet_rooms.val.length := by rw [hpre hok.1]; scalar_tac
+        step as ⟨p, m, hpm⟩
+        have hg : l.facet_rooms.val.getD j.val (0#u32, 0#u32) = (p, m) := by
+          rw [List.getD_eq_getElem?_getD, List.getElem?_eq_getElem hjl]; simp [hpm]
+        have key : ∀ (o' : Bool), (o' = true ↔ (p ≠ m ∧ p.val < l.n_rooms.val ∧ m.val < l.n_rooms.val)) →
+            ∀ (j1 : Usize), j1.val = j.val + 1 →
+            (o' = true ↔ ok0 = true ∧ RoomsTo l j1.val) := by
+          intro o' ho' j1 hj1
+          rw [hj1, ho']
+          constructor
+          · intro hp
+            refine ⟨hok.1, fun a ha => ?_⟩
+            rcases Nat.lt_or_ge a j.val with h3 | h3
+            · exact hok.2 a h3
+            · have : a = j.val := by omega
+              subst this; rw [hg]; exact hp
+          · rintro ⟨_, hp⟩
+            have := hp j.val (by omega); rw [hg] at this; exact this
+        split
+        · rename_i hne
+          have hne' : p ≠ m := by simpa using hne
+          split
+          · rename_i hpl
+            step as ⟨j1, hj1⟩
+            refine ⟨by scalar_tac, key _ ⟨fun h => ⟨hne', by scalar_tac, by simp at h; scalar_tac⟩,
+              fun h => by simp; scalar_tac⟩ j1 (by scalar_tac), by scalar_tac⟩
+          · rename_i hpl
+            step as ⟨j1, hj1⟩
+            refine ⟨by scalar_tac, key _ ⟨(fun h => by cases h), fun h => absurd (by scalar_tac) hpl⟩ j1
+              (by scalar_tac), by scalar_tac⟩
+        · rename_i hne
+          step as ⟨j1, hj1⟩
+          refine ⟨by scalar_tac, key _ ⟨(fun h => by cases h), fun h => absurd (UScalar.eq_of_val_eq (by simpa using hne)) h.1⟩ j1
+            (by scalar_tac), by scalar_tac⟩
+      · rename_i hge
+        simp only [WP.spec_ok]
+        have : j.val = nf.val := by scalar_tac
+        simp only [this] at ho; exact ho
+    · rename_i hof
+      simp only [WP.spec_ok]
+      have : o = false := by simpa using hof
+      rw [this] at ho ⊢
+      constructor
+      · intro h; cases h
+      · intro h2; exfalso
+        have := ho.mpr ⟨h2.1, fun a ha => h2.2 a (by omega)⟩
+        cases this
+  · exact ⟨hf, h⟩
+
+def InsideTo (l : Ledger) (k : Nat) : Prop := ∀ j, j < k →
+  ((l.inside.val.getD j default).1 : U32).val < l.n_rooms.val ∧ ((l.inside.val.getD j default).2 : U32).val < l.nb.val
+
+theorem wf_loop5_spec (l : Ledger) (ok0 ok : Bool) (k : Usize) (hk : k.val ≤ l.inside.val.length)
+    (h : ok = true ↔ ok0 = true ∧ InsideTo l k.val) :
+    ledger_wf_loop5 l.nb l.n_rooms l.inside ok k ⦃ r => r = true ↔ ok0 = true ∧ InsideTo l l.inside.val.length ⦄ := by
+  unfold ledger_wf_loop5
+  apply loop.spec_decr_nat (fun (q : Bool × Usize) => l.inside.val.length + 1 - q.2.val)
+    (fun q => q.2.val ≤ l.inside.val.length ∧ (q.1 = true ↔ ok0 = true ∧ InsideTo l q.2.val))
+  · rintro ⟨o, j⟩ ⟨hj, ho⟩
+    unfold ledger_wf_loop5.body
+    simp only at hj ho ⊢
+    split
+    · rename_i hot
+      have hok := ho.mp hot
+      split
+      · rename_i hlt
+        have hjl : j.val < l.inside.val.length := by scalar_tac
+        step as ⟨r, b, hrb⟩
+        have hg : l.inside.val.getD j.val default = (r, b) := by
+          rw [List.getD_eq_getElem?_getD, List.getElem?_eq_getElem hjl]; simp [hrb]
+        have key : ∀ (o' : Bool), (o' = true ↔ ((r : U32).val < l.n_rooms.val ∧ (b : U32).val < l.nb.val)) →
+            ∀ (j1 : Usize), j1.val = j.val + 1 →
+            (o' = true ↔ ok0 = true ∧ InsideTo l j1.val) := by
+          intro o' ho' j1 hj1
+          rw [hj1, ho']
+          constructor
+          · intro hp
+            refine ⟨hok.1, fun a ha => ?_⟩
+            rcases Nat.lt_or_ge a j.val with h3 | h3
+            · exact hok.2 a h3
+            · have : a = j.val := by omega
+              subst this; rw [hg]; exact hp
+          · rintro ⟨_, hp⟩
+            have := hp j.val (by omega); rw [hg] at this; exact this
+        split
+        · rename_i hrl
+          step as ⟨j1, hj1⟩
+          refine ⟨by scalar_tac, key _ ⟨fun h => ⟨by scalar_tac, by simp at h; scalar_tac⟩,
+            fun h => by simp; scalar_tac⟩ j1 (by scalar_tac), by scalar_tac⟩
+        · rename_i hrl
+          step as ⟨j1, hj1⟩
+          refine ⟨by scalar_tac, key _ ⟨(fun h => by cases h), fun h => absurd (by scalar_tac) hrl⟩ j1
+            (by scalar_tac), by scalar_tac⟩
+      · rename_i hge
+        simp only [WP.spec_ok]
+        have : j.val = l.inside.val.length := by scalar_tac
+        simp only [this] at ho; exact ho
+    · rename_i hof
+      simp only [WP.spec_ok]
+      have : o = false := by simpa using hof
+      rw [this] at ho ⊢
+      constructor
+      · intro h; cases h
+      · intro h2; exfalso
+        have := ho.mpr ⟨h2.1, fun a ha => h2.2 a (by omega)⟩
+        cases this
+  · exact ⟨hk, h⟩
+
+
+def PiecesTo (l : Ledger) (k : Nat) : Prop := ∀ j, j < k →
+  pcF l j < nfacets l ∧ pfF l j < l.face_body.val.length ∧
+  l.face_class.val.getD (pfF l j) 0#u32 = l.facet_class.val.getD (pcF l j) 0#u32
+
+def MarkedTo (l : Ledger) (ip : List Bool) (k : Nat) : Prop :=
+  ∀ f, f < nfacets l → (ip.getD f false = true ↔ ∃ j, j < k ∧ pcF l j = f)
+
+theorem wf_loop4_spec (l : Ledger) (ok0 ok : Bool) (ip : alloc.vec.Vec Bool) (k : Usize)
+    (hpre : ok0 = true → l.face_class.val.length = l.face_body.val.length)
+    (hk : k.val ≤ l.pieces.val.length) (hipl : ip.val.length = nfacets l)
+    (h : ok = true ↔ ok0 = true ∧ PiecesTo l k.val) (hm : ok = true → MarkedTo l ip.val k.val) :
+    ledger_wf_loop4 l.face_body l.face_class l.facet_class l.pieces (alloc.vec.Vec.len l.facet_class) ok ip k
+      ⦃ r => (r.1 = true ↔ ok0 = true ∧ PiecesTo l l.pieces.val.length) ∧ r.2.val.length = nfacets l ∧
+        (r.1 = true → MarkedTo l r.2.val l.pieces.val.length) ⦄ := by
+  have hsm : True := trivial
+  unfold ledger_wf_loop4
+  apply loop.spec_decr_nat (fun (q : Bool × alloc.vec.Vec Bool × Usize) => l.pieces.val.length + 1 - q.2.2.val)
+    (fun q => q.2.2.val ≤ l.pieces.val.length ∧ q.2.1.val.length = nfacets l ∧
+      (q.1 = true ↔ ok0 = true ∧ PiecesTo l q.2.2.val) ∧ (q.1 = true → MarkedTo l q.2.1.val q.2.2.val))
+  · rintro ⟨o, ipc, j⟩ ⟨hj, hipc, ho, hmo⟩
+    unfold ledger_wf_loop4.body
+    simp only at hj hipc ho hmo ⊢
+    split
+    · rename_i hot
+      have hok := ho.mp hot
+      have hmk := hmo hot
+      split
+      · rename_i hlt
+        have hjl : j.val < l.pieces.val.length := by scalar_tac
+        step as ⟨c, g, hcg⟩
+        have hg : l.pieces.val.getD j.val default = (c, g) := by
+          rw [List.getD_eq_getElem?_getD, List.getElem?_eq_getElem hjl]; simp [hcg]
+        have hpc : pcF l j.val = (c : U32).val := by unfold pcF; rw [hg]
+        have hpf : pfF l j.val = (g : U32).val := by unfold pfF; rw [hg]
+        -- the result: ok2 decides the piece's checks
+        have key : ∀ (o' : Bool), (o' = true ↔ (pcF l j.val < nfacets l ∧ pfF l j.val < l.face_body.val.length ∧
+              l.face_class.val.getD (pfF l j.val) 0#u32 = l.facet_class.val.getD (pcF l j.val) 0#u32)) →
+            ∀ (ip1 : alloc.vec.Vec Bool), ip1.val.length = nfacets l →
+            (o' = true → MarkedTo l ip1.val (j.val + 1)) →
+            ∀ (j1 : Usize), j1.val = j.val + 1 →
+            j1.val ≤ l.pieces.val.length ∧ ip1.val.length = nfacets l ∧
+            (o' = true ↔ ok0 = true ∧ PiecesTo l j1.val) ∧ (o' = true → MarkedTo l ip1.val j1.val) := by
+          intro o' ho' ip1 hl1 hm1 j1 hj1
+          refine ⟨by omega, hl1, ?_, by rw [hj1]; exact hm1⟩
+          rw [hj1, ho']
+          constructor
+          · intro hp
+            refine ⟨hok.1, fun a ha => ?_⟩
+            rcases Nat.lt_or_ge a j.val with h3 | h3
+            · exact hok.2 a h3
+            · have : a = j.val := by omega
+              subst this; exact hp
+          · rintro ⟨_, hp⟩; exact hp j.val (by omega)
+        have hfl := hpre hok.1
+        -- marking `c` keeps MarkedTo, one more piece
+        have hmark : ∀ (ip1 : alloc.vec.Vec Bool), (c : U32).val < nfacets l →
+            ip1.val = ipc.val.set (c : U32).val true → MarkedTo l ip1.val (j.val + 1) := by
+          intro ip1 hc hip1 f hf
+          rw [hip1]
+          by_cases e : f = (c : U32).val
+          · subst e
+            rw [List.getD_eq_getElem?_getD, List.getElem?_set_self (by omega)]
+            simp only [Option.getD_some, true_iff]
+            exact ⟨j.val, by omega, hpc⟩
+          · rw [List.getD_eq_getElem?_getD, List.getElem?_set_ne (Ne.symm e), ← List.getD_eq_getElem?_getD,
+              hmk f hf]
+            constructor
+            · rintro ⟨a, ha, h1⟩; exact ⟨a, by omega, h1⟩
+            · rintro ⟨a, ha, h1⟩
+              refine ⟨a, ?_, h1⟩
+              rcases Nat.lt_succ_iff_lt_or_eq.mp ha with h | h
+              · exact h
+              · exfalso; apply e; rw [← h1, h, hpc]
+        step as ⟨i1, hi1⟩
+        have hi1v : i1.val = (c : U32).val := by scalar_tac
+        split
+        · rename_i hc1
+          have hcl : (c : U32).val < nfacets l := by rw [← hi1v]; simpa [nfacets] using hc1
+          step as ⟨i2, hi2⟩
+          have hi2v : i2.val = (g : U32).val := by scalar_tac
+          split
+          · rename_i hg1
+            have hgl : (g : U32).val < l.face_body.val.length := by rw [← hi2v]; scalar_tac
+            step as ⟨i4, hi4⟩
+            have hi4v : i4.val = (g : U32).val := by scalar_tac
+            step as ⟨i5, hi5⟩
+            step as ⟨i6, hi6⟩
+            have hi6v : i6.val = (c : U32).val := by scalar_tac
+            step as ⟨i7, hi7⟩
+            have heq : (i5 = i7) ↔ l.face_class.val.getD (pfF l j.val) 0#u32 = l.facet_class.val.getD (pcF l j.val) 0#u32 := by
+              rw [hpf, hpc, List.getD_eq_getElem?_getD, List.getElem?_eq_getElem (by omega), Option.getD_some,
+                List.getD_eq_getElem?_getD, List.getElem?_eq_getElem (by simp [nfacets] at hcl; omega), Option.getD_some,
+                hi5, hi7]
+              simp only [hi4v, hi6v]
+              exact Iff.rfl
+            have ho' : (decide (i5 = i7) = true) ↔ (pcF l j.val < nfacets l ∧ pfF l j.val < l.face_body.val.length ∧
+                l.face_class.val.getD (pfF l j.val) 0#u32 = l.facet_class.val.getD (pcF l j.val) 0#u32) := by
+              rw [decide_eq_true_eq, heq, hpc, hpf]; simp [hcl, hgl]
+            split
+            · rename_i hd
+              step as ⟨i2', hi2'⟩
+              have hi2'v : i2'.val = (c : U32).val := by scalar_tac
+              step as ⟨x0, _, hbk⟩
+              obtain ⟨x1, bk⟩ := x0
+              simp only at hbk ⊢
+              step as ⟨j1, hj1⟩
+              have := key _ ho' (bk true) (by rw [hbk]; simp [hipc]) (fun _ => hmark _ hcl (by rw [hbk, alloc.vec.Vec.set_val_eq, hi2'v]))
+                j1 (by scalar_tac)
+              obtain ⟨a1, a2, a3, a4⟩ := this
+              exact ⟨a1, a2, a3, a4, by scalar_tac⟩
+            · rename_i hd
+              step as ⟨j1, hj1⟩
+              have := key _ ho' ipc hipc (fun h => absurd h hd) j1 (by scalar_tac)
+              obtain ⟨a1, a2, a3, a4⟩ := this
+              exact ⟨a1, a2, a3, a4, by scalar_tac⟩
+          · rename_i hg1
+            simp only [Std.bind_ok, Bool.false_eq_true, ite_false]
+            step as ⟨j1, hj1⟩
+            have := key false ⟨(fun h => by cases h), fun h => absurd (by have := h.2.1; rw [hpf, ← hi2v] at this; scalar_tac) hg1⟩
+              ipc hipc (fun h => by cases h) j1 (by scalar_tac)
+            obtain ⟨a1, a2, a3, a4⟩ := this
+            exact ⟨a1, a2, a3, a4, by scalar_tac⟩
+        · rename_i hc1
+          simp only [Std.bind_ok, Bool.false_eq_true, ite_false]
+          step as ⟨j1, hj1⟩
+          have := key false ⟨(fun h => by cases h), fun h => absurd (by have := h.1; rw [hpc, ← hi1v] at this; simp [nfacets] at this; scalar_tac) hc1⟩
+            ipc hipc (fun h => by cases h) j1 (by scalar_tac)
+          obtain ⟨a1, a2, a3, a4⟩ := this
+          exact ⟨a1, a2, a3, a4, by scalar_tac⟩
+      · rename_i hge
+        simp only [WP.spec_ok]
+        have : j.val = l.pieces.val.length := by scalar_tac
+        simp only [this] at ho hmo; exact ⟨ho, hipc, hmo⟩
+    · rename_i hof
+      simp only [WP.spec_ok]
+      have : o = false := by simpa using hof
+      subst this
+      refine ⟨⟨(fun h => by cases h), fun h2 => ?_⟩, hipc, (fun h => by cases h)⟩
+      exfalso
+      have := ho.mpr ⟨h2.1, fun a ha => h2.2 a (by omega)⟩
+      cases this
+  · exact ⟨hk, hipl, h, hm⟩
+
+
+theorem wf_loop6_spec (nf : Usize) (ip : alloc.vec.Vec Bool) (ok0 ok : Bool) (f : Usize)
+    (hpre : ok0 = true → ip.val.length = nf.val) (hf : f.val ≤ nf.val)
+    (h : ok = true ↔ ok0 = true ∧ ∀ g, g < f.val → ip.val.getD g false = true) :
+    ledger_wf_loop6 nf ok ip f ⦃ r => r = true ↔ ok0 = true ∧ ∀ g, g < nf.val → ip.val.getD g false = true ⦄ := by
+  unfold ledger_wf_loop6
+  apply loop.spec_decr_nat (fun (q : Bool × Usize) => nf.val + 1 - q.2.val)
+    (fun q => q.2.val ≤ nf.val ∧ (q.1 = true ↔ ok0 = true ∧ ∀ g, g < q.2.val → ip.val.getD g false = true))
+  · rintro ⟨o, j⟩ ⟨hj, ho⟩
+    unfold ledger_wf_loop6.body
+    simp only at hj ho ⊢
+    split
+    · rename_i hot
+      have hok := ho.mp hot
+      split
+      · rename_i hlt
+        have hjl : j.val < ip.val.length := by rw [hpre hok.1]; scalar_tac
+        step as ⟨b, hb⟩
+        step as ⟨j1, hj1⟩
+        have hj1v : j1.val = j.val + 1 := by scalar_tac
+        have hjn : j.val < nf.val := by scalar_tac
+        refine ⟨by omega, ?_, by omega⟩
+        have hg : ip.val.getD j.val false = b := by
+          rw [List.getD_eq_getElem?_getD, List.getElem?_eq_getElem hjl, Option.getD_some, hb]
+        rw [hj1v]
+        constructor
+        · intro hbt
+          refine ⟨hok.1, fun a ha => ?_⟩
+          rcases Nat.lt_or_ge a j.val with h3 | h3
+          · exact hok.2 a h3
+          · have : a = j.val := by omega
+            subst this; rw [hg]; exact hbt
+        · rintro ⟨_, hp⟩
+          have := hp j.val (by omega); rw [hg] at this; exact this
+      · rename_i hge
+        simp only [WP.spec_ok]
+        have : j.val = nf.val := by scalar_tac
+        simp only [this] at ho; exact ho
+    · rename_i hof
+      simp only [WP.spec_ok]
+      have : o = false := by simpa using hof
+      subst this
+      constructor
+      · intro h; cases h
+      · intro h2; exfalso
+        have := ho.mpr ⟨h2.1, fun a ha => h2.2 a (by omega)⟩
+        cases this
+  · exact ⟨hf, h⟩
+
 end inc
 
 end forge_bool_core

@@ -173,3 +173,7 @@ import ForgeBoolCore.RefineUnify
 #print axioms forge_bool_core.inc.wf_loop1_spec
 #print axioms forge_bool_core.inc.wf_loop2_sec_spec
 #print axioms forge_bool_core.inc.wf_loop2_spec
+#print axioms forge_bool_core.inc.wf_loop3_spec
+#print axioms forge_bool_core.inc.wf_loop4_spec
+#print axioms forge_bool_core.inc.wf_loop5_spec
+#print axioms forge_bool_core.inc.wf_loop6_spec
