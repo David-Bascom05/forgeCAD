@@ -66,3 +66,4 @@ import ForgeCurved
 #print axioms ForgeCurved.cylPlane_localConn
 #print axioms ForgeCurved.tangent_edgeLocal
 #print axioms ForgeCurved.tangent_refused
+#print axioms ForgeCurved.coaxial_localConn

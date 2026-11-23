@@ -15,3 +15,4 @@ import ForgeCurved.FaceModel
 import ForgeCurved.ContactModel
 import ForgeCurved.Bridge1
 import ForgeCurved.TangentRefusal
+import ForgeCurved.CoaxialContact
