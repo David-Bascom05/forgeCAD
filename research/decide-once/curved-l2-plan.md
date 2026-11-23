@@ -373,7 +373,7 @@ the guards).
   |---|---|---|
   | box − cylinder | 28/52/26 | 176 s |
   | plate with a hole | 28/52/26 | 179 s |
-  | sphere ∩ box | 48/86/36 | 76 s |
+  | sphere ∩ box | 104/180/80 (three centre seams, 30e33e4; 48/86/36 with `x = 0` alone) | ~6 min |
   | cone | 8/12/6 | 41 s |
   | seamed cylinder | 12/20/10 | 45 s |
 
@@ -381,3 +381,22 @@ the guards).
   `curved-guards` executable.
 - This branch no longer merges dol-curved's: that branch now carries the decide-once kernel's
   changes. The Lean is read from it directly.
+
+- **1m (30e33e4 mirrored, e2e612f/97484e0).** Sphere seams `x = o.x`, `y = o.y`, `z = o.z`
+  (production `seams_of`). Reference QEnum (`PtD`, `enum_triple`, `PtD::cov`, `crit_triples`,
+  `enum_samples`; `vert_samples = tri ++ crit_triples`) and (U) (`samples_of_f`, `zero_idxs`,
+  `u_triple`, `vert_one_at`). The sphere cut by `y = 0`, `z = 0` is refused.
+  **Fixed by the Lean's exactness proof (51320f0, d131885):** `qledger` runs (U) in the sampling
+  frame, as `l.verts.all(vert_one_at(in_frame(f, qs)))`, after `split_ok` and `sides_ok`; the edge and
+  vertex filters stay as written. `propose_triple_xs` (fallback `vert_xs3`) and the tilted-first
+  frame order are assumed by the proofs: keep both.
+- **1n (stage (c) part 1, 1f03c26, dc5d5fd).** `read_trims` (every operand edge with its two faces,
+  classes, end vertices, closed flag) and `cert_vertices` (each trim vertex on three carrier
+  classes: three planes by Cramer, else `propose_triple` in the world frame then `frames()`; float
+  boxes mapped back by `frame_point`, matched to the stored point within its tol).
+- **Stage (b) part 2, the interfaces (dol-curved, 2026-11-23; dol-curved proves L1, L2 with the
+  route-(iii) face builder):** (L1) between consecutive roots of D the real branches of `R = 0`
+  keep their y-order; (L2) the star lemma, under: one event inside the box, the separator planes
+  clear on `[x_l, x_r]`, at most one curve point per box. Y_e a superset with rational separators;
+  the z-strip guard for mirrored points; `Skip::Budget` when no shear separates; per-strip counts
+  from the face crossings, never assumed 2-in/2-out.
