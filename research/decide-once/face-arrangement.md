@@ -501,6 +501,41 @@ worth doing for curved: the same cells, and the Tier-1 separators move into the 
      floats or threads). Code outside it is proven through what it hands the core;
   3. send the step's statement and commit for review before it is relied on.
 
+## 3b′. Owner rulings for both booleans (2026-11-23, later): prove the original
+
+"Prove the original bool, fix its bugs, and fall back to the proven one." "Prove the original
+implementation first." "Even the slow fallback should still be as fast as we can get it."
+
+1. **Today's code is the base.** It stays as it is wherever it is provable. Proofs target the
+   original functions (via Aeneas on the real code), not a parallel rewrite. Where A8 or curved wrap
+   a function, the proof is of the original plus its screen.
+2. **Guess steps become proven screens.** LINEAR snapping, the touch, the strays and pinched
+   heuristics, and the retry and re-snap ladders are each replaced by an f64 screen, proven via the
+   IEEE model, that answers *decided* or *undecided*.
+3. **Undecided goes exact for that question only.** Never to the whole exact reference, and never
+   to a whole-boolean switch of path.
+4. **If exact can't decide either, the boolean refuses** with a typed error. A wrong answer is never
+   allowed.
+5. **The exact references are fuzz oracles only.**
+6. **The exact per-question fallback is held to the speed rule too.** Provable speed steps on it are
+   welcome, with the proof growing alongside.
+7. **Order:** first prove today's code as it stands (pair loop, `Index`/`face_box`, `trim`,
+   `split_face`, `classify`, the meet chains), with only the guess steps swapped for screens. Only
+   then the exact fallback's speed work and further optimisations.
+
+**Review of the plans against this ruling (Lean coordinator).** These assume a whole-boolean
+fallback, and must change to per-question exact plus a typed refusal:
+
+| where | what it assumes now | under the ruling |
+|---|---|---|
+| decide_once.rs `Skip` (`NotFlat`, `Ambiguous`, `Wide`) | the whole boolean leaves decide-once for the old path | each undecided question goes to its exact test; refuse if exact can't decide. `NotFlat` is scope, not a question: it routes by input kind, before any decision |
+| §3c keys/held (decide-once, 41afccb) | `vertex_at` failing near the region skips the whole boolean (`Skip::Ambiguous`) | the exact vertex for that meet only |
+| curved-brep-route.md §0.6 and §4 (`Uncertified`, `Budget`, `Tangent`, `NoSeed`) | counted skips, then the old path runs | per-question exact (exact vertex, exact second-order order, exact ray), then a typed refusal. `OutOfScope` routes by kind; `Inconsistent` is already a refusal (invalid input) |
+| today's boolean.rs retry and re-snap ladders | rerun the boolean with other tolerances | removed: a screen per question, exact for that question |
+
+Not affected: the A8 core proofs (`IncCoreSpec`, `EndToEndF`). The core decides nothing
+numerically. The checker/oracle rule of §3b stands.
+
 ## 3c. The builder's speed steps as built (face_fast.rs), each with its correctness statement
 
 The builder is `kernel/forge-bool/src/decide_once/face_fast.rs`, outside forge-bool-core. It is
@@ -516,8 +551,8 @@ housing). Each step below is a statement for R3 to cover. f64 screens are proven
 | line identity | Two points of line L = C∩K, both on a class h that crosses L (`crosses_line_sound`, else the exact d·n_h ≠ 0), are one point, so their order along L is 0. |
 | crossing | Edge (a, b) of a face on plane P meets plane K strictly between its ends iff side_K(a)·side_K(b) < 0, and the point is meet(C, K, across). An edge with an end on K adds that end. No other edge meets K. |
 | dependence | Three normals, each along one axis (one nonzero f64 component, so the exact Dy has one nonzero), are dependent iff two share an axis. Otherwise the exact det n_a·(n_b×n_c) decides. |
-| touch | A face whose box, grown by 4·LINEAR, misses plane K (`touches`, contract pending) has no vertex on K and no edge across K. So it adds no point to line C∩K and contains no point of it. This rests on the bridge's "a face's exact polygon is within a few LINEAR of its kernel box" (as in_face_q already does). |
-| bodies | Faces of one solid meet only along their common edges (the inputs are valid solids). So a stretch of C∩K inside a C face and a K face of the same body lies on that C face's boundary, which is a boundary segment already. Only different-body pairs need cutting. |
+| touch | A face's box is the hull of its vertices' shadows, each widened by its proven bound, so it holds the exact polygon; a class box is the hull of its faces'. A face whose box misses plane K has no vertex on K and no edge across K, so it adds no point to line C∩K and contains no point of it. No kernel-box premise (41afccb). |
+| bodies | Hypothesis `ValidSolid` (stated in §3c on decide-once's branch, coplanar adjacent faces included), for the snapped exact polygons: faces of one solid meet only along their common edges. So a stretch of C∩K inside a C face and a K face of the same body lies on that C face's boundary. Only different-body pairs need cutting. Source: the producing features' postcondition. forge_topo::check covers part of it in debug. |
 | whole plane | A plane whose faces are all of one body, each strictly inside the box (boxes grown by 4·LINEAR plus 1e-9 relative), with no near face of another body whose box meets both the plane and its faces' box, has its faces as its facets: one facet per face, holders {that face}. |
 | covered | A window of C∩K lying on one of C's boundary segments on the same line repeats that segment, so it is not added. |
 | inside cache | Face F's inside answer is constant on a run of windows that touch none of F's points (endpoints, crossings, ends on the line), because F's boundary meets the line only there. A face with an unlisted crossing (`always`: across far, across K, or a dependent meet) is retested every window. |
