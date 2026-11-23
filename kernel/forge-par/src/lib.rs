@@ -107,6 +107,14 @@ where
     F: for<'scope> FnOnce(&Scope<'scope, 'env>) -> T,
 {
     let Some(sp) = spawner() else {
+        // WASI (wasip1) starts no threads: every spawn runs here, in order, as on a host thread
+        // that may not wait (results do not depend on the thread count)
+        if cfg!(target_os = "wasi") {
+            return f(&Scope {
+                how: How::Inline,
+                _scope: PhantomData,
+            });
+        }
         return std::thread::scope(|s| {
             f(&Scope {
                 how: How::Std(s),

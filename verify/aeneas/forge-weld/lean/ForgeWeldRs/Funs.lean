@@ -187,7 +187,7 @@ def section.support_loop_loop.body
             else ok best1
           ok (w2, fl3, wa2, angled2)
       else ok (w, best1, wa, angled)
-    let i2 ← lift (Std.Usize.wrapping_add i 1#usize)
+    let i2 ← i + 1#usize
     ok (cont (w1, best2, wa1, angled1, i2))
   else ok (done best)
 
