@@ -32,8 +32,9 @@ This file is the target of the aeneas session's abstraction function. It maps th
   vertices, by index, and the same senses), and each entity lies within `δ` of its counterpart:
   regions and curves in two-sided distance, vertices in distance.
 * `exactOf δ b`: the canonical exact counterpart. It has the same carriers and senses, each vertex
-  is the unique exact meet of its carriers in its δ-ball (otherwise `none`, a typed refusal), and
-  each edge and region is the exact meet near the stored one. `exactOf_refines` gives
+  is the unique exact meet of its carriers in its δ-ball, and each edge's meet is connected in its
+  δ-tube (`EdgeIsolated`); otherwise `none`, a typed refusal. Each edge and region is the exact
+  meet near the stored one. `exactOf_refines` gives
   `Refines δ b (exactOf δ b)`.
 * `ValidSolid δ b := ∃ bs, exactOf δ b = some bs ∧ ValidExact bs`, and
   `⟦b⟧ := denoteExact (exactOf δ b)` (`denote`, `denote_spec`, `denote_refines`).
@@ -270,6 +271,12 @@ noncomputable def exactVert (δ : ℝ) (b : BodyModel E) (u : Nat) (p₀ : E) : 
 def edgeMeet (δ : ℝ) (b : BodyModel E) (i : Nat) (e : EdgeModel E) : Set E :=
   {p | (∀ f ∈ b.faces, IncE f i → f.carrier p = 0) ∧ ∃ q ∈ e.curve, dist p q ≤ δ}
 
+/-- **The edge is isolated in its tube**: the meet near the stored curve is connected, so no other
+branch of the carriers' meet enters the δ-tube. Otherwise `exactOf` is `none`: the same "input
+undecided" refusal as a non-unique vertex. -/
+def EdgeIsolated (δ : ℝ) (b : BodyModel E) (i : Nat) (e : EdgeModel E) : Prop :=
+  IsPreconnected (edgeMeet δ b i e)
+
 /-- The exact edges a face's loops use. -/
 def faceEdges (δ : ℝ) (b : BodyModel E) (f : FaceModel E) : Set E :=
   ⋃ i, ⋃ (_ : IncE f i), ⋃ e ∈ b.edges[i]?, edgeMeet δ b i e
@@ -303,7 +310,8 @@ def exactFace (δ : ℝ) (b : BodyModel E) (f : FaceModel E) : FaceModel E where
 open Classical in
 /-- **The canonical exact counterpart.** -/
 noncomputable def exactOf (δ : ℝ) (b : BodyModel E) : Option (BodyModel E) :=
-  if ∀ u (h : u < b.verts.length), (exactVert δ b u b.verts[u]).isSome then
+  if (∀ u (h : u < b.verts.length), (exactVert δ b u b.verts[u]).isSome) ∧
+      ∀ i (h : i < b.edges.length), EdgeIsolated δ b i b.edges[i] then
     some { faces := b.faces.map (exactFace δ b)
            edges := b.edges.mapIdx fun i e => { curve := edgeMeet δ b i e, ends := e.ends }
            verts := b.verts.mapIdx fun u p => (exactVert δ b u p).getD p }
@@ -325,6 +333,7 @@ theorem exactOf_refines {δ : ℝ} {b bs : BodyModel E} (h : exactOf δ b = some
   unfold exactOf at h
   split at h
   · rename_i hall
+    obtain ⟨hall, -⟩ := hall
     cases h
     refine ⟨by simp, by simp, by simp, fun i hi => ?_, fun i hi => ?_, fun u hu => ?_⟩
     · simp only [List.getElem_map, exactFace]
@@ -345,6 +354,14 @@ noncomputable def denote (δ : ℝ) (b : BodyModel E) : Set E :=
   match exactOf δ b with
   | some bs => denoteExact bs
   | none => ∅
+
+/-- A counterpart's edges are isolated in their tubes. -/
+theorem exactOf_isolated {δ : ℝ} {b bs : BodyModel E} (h : exactOf δ b = some bs) :
+    ∀ i (hi : i < b.edges.length), EdgeIsolated δ b i b.edges[i] := by
+  unfold exactOf at h
+  split at h
+  · rename_i hall; exact hall.2
+  · cases h
 
 theorem denote_spec {δ : ℝ} {b bs : BodyModel E} (h : exactOf δ b = some bs) :
     denote δ b = denoteExact bs := by
