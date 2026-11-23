@@ -621,26 +621,30 @@ fine facets round the edge map to one face facet. Two remedies:
   reaches the cell from), with (e)/(v) a bijection onto wings. `around` then counts sheets, and the
   tangent-cylinder union shows 4 and is refused.
 
-**Settled with the coordinator (face-arrangement.md at 9453b06f): W1.** W2 fails at vertices. A
-pinched facet, reaching a vertex in two sectors but listed once in `vert_facets`, can merge fan
-classes that the reference keeps apart, and so hide a non-manifold vertex. Mending that needs wing
-ids, which are facets in all but name.
+**Settled with the coordinator (face-arrangement.md at ad97832a): W2 with sectors.** This
+supersedes the W1 reply of 9453b06f. Plain W2 fails at vertices: a pinched facet, reaching a vertex
+in two sectors but listed once, can merge fan classes and hide a non-manifold vertex. So:
+- `edge_facets[e]` lists a facet once per wing, at most twice (`LedgerWF` checks it);
+- `vert_sectors[v]` lists `(facet, bounding edge a, bounding edge b)` per sector, replacing
+  `vert_facets`. A facet may appear in several sectors;
+- `fanRel` joins two sectors at `v` that share a bounding edge.
 
-With W1, the interface, the core, `LedgerWF`'s no-repeat rows and the around/bad_vert proofs are
-unchanged:
-- unify re-joins the cut pieces;
-- a seam edge has one face round it, so it is never an output edge;
-- `Refines`' star bijections (e)/(v) are exactly the no-wings condition.
+(e) is a bijection onto wings. (v) is a surjection from fine facets onto sectors, whose fibres
+are connected through fine edges with τ = none. Flat convex facets have multiplicity 1 and one
+sector per facet per vertex.
 
-The builder detects a wing when a facet's boundary loop runs along an edge both ways, or visits a
-vertex twice. Wings occur in flat too: a wedge touching a plate along a line, or an apex on a plate.
+**The curved builder's sectors.**
+- **Transversal vertices and cone apexes.** The cyclic order of the arcs round `v` on surface j is
+  decided exactly from their tangents `±(∇q_j × ∇q_k)(v)` at the certified vertex sample (QVert):
+  angle comparison by half-plane and cross product against a fixed direction, each a `Num.sign`
+  at `α`. Consecutive arcs bound a sector, and its facet is a lookup.
+- **Tangential vertices** (two arcs tangent at `v`). The order is read on the link instead. Take
+  a certified isolating box round `v` (trace phase B; exact-curved decides the touch). The arcs'
+  crossings with its faces are edge samples (`proposeEdgeAny`, complete by
+  `proposeEdgeAny_complete`). The order along `j ∩ ∂Q` gives the sectors.
+- No box within budget: `Skip::Budget`, counted.
 
-**For curved, the cut is a piece of a Tier-0 seam** (§2.3's table), which lies in the reference
-arrangement as A8 requires:
-- the plane holding a contact line or contact circle;
-- the axial plane;
-- the nappe plane at an apex;
-- a plane through a crossing node.
+The obligation on the curved side is completeness of the arcs at `v`.
 
 **2. Cells: fewer than flat's ratio, and the separators leave the runtime.** The carrier ledger
 pays more than flat's ~300 cells, because every seam (and Tier 1's CAD) splits space everywhere.
