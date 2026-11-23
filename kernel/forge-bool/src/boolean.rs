@@ -644,6 +644,20 @@ fn general(target: &mut Body, b: &Body, op: Op) -> R<()> {
     let (loops, verts) = (target.loops.len(), target.vertices.len());
     let touched = touched_old(&plan);
     apply(target, b, &plan);
+    decided!(for &f in &plan.involved {
+        if let Err(what) = crate::classify::cache_ok(target, f) {
+            crate::decisions::site(
+                match what {
+                    "entry order" => "G9 stale query: entry order",
+                    "entries" => "G9 stale query: entries",
+                    "boxes" => "G9 stale query: boxes",
+                    "reach above fresh" => "G9 stale query: reach above fresh",
+                    _ => "G9 stale query: reach below fresh",
+                },
+                1,
+            );
+        }
+    });
     let pinch = pinched_new(target, loops, verts).or_else(|| pinched_old(target, &touched));
     target.joins.extend(&b.joins);
     target.joins.pieces.extend_from_slice(&plan.wholes);

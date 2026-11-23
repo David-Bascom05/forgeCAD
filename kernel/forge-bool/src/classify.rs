@@ -258,6 +258,47 @@ pub fn drop_query_loops(body: &mut Body, f: FaceId, gone: &[forge_topo::LoopId])
     }
 }
 
+/// CacheOK (old-path-statements.md §G, G9): face `f`'s kept point-in-face index answers as one
+/// built now would. Its live entries (GONE skipped, as every reader skips them) are a fresh index's,
+/// in order, with their boxes, and its reach is the fresh one's (the bands only prune). The error
+/// names what differs. A face with no kept index, or one shared with a copy, is OK.
+#[cfg(any(debug_assertions, feature = "decisions"))]
+pub(crate) fn cache_ok(body: &Body, f: FaceId) -> Result<(), &'static str> {
+    let face = body.face(f);
+    let Some(q) = face.query.get() else { return Ok(()) };
+    let Some(info) = q.downcast_ref::<FaceInfo>() else {
+        return Ok(());
+    };
+    let mut reach = tol::LINEAR;
+    let mut fresh = Vec::new();
+    for &l in &face.loops {
+        for c in body.lp(l).coedges() {
+            let (e, b) = edge_entry(body, c);
+            fresh.push((c, b));
+            reach = reach.max(e);
+        }
+    }
+    let live: Vec<_> = info.edges.iter().filter(|e| e.0 != GONE).collect();
+    let mut ids: Vec<_> = live.iter().map(|e| e.0).collect();
+    let mut want: Vec<_> = fresh.iter().map(|e| e.0).collect();
+    if ids != want {
+        ids.sort_unstable();
+        want.sort_unstable();
+        return Err(if ids == want { "entry order" } else { "entries" });
+    }
+    if live.iter().zip(&fresh).any(|(a, b)| a.1 != b.1) {
+        return Err("boxes");
+    }
+    if info.reach != reach {
+        return Err(if info.reach > reach {
+            "reach above fresh"
+        } else {
+            "reach below fresh"
+        });
+    }
+    Ok(())
+}
+
 /// Face `f` gained the loop `lp` in place: its kept index (if any) takes the loop's edges.
 pub fn extend_query(body: &mut Body, f: FaceId, lp: forge_topo::LoopId) {
     let entries: Vec<_> = body.lp(lp).coedges().map(|c| (c, edge_entry(body, c))).collect();
