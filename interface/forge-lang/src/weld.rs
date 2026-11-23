@@ -1483,3 +1483,9 @@ pub fn json(w: &Welds) -> Json {
         ),
     ])
 }
+
+/// Every section designation the library holds, in its families' order: what a section picker
+/// offers (forge_weld::designations, for callers that don't link forge-weld themselves).
+pub fn designations() -> Vec<String> {
+    forge_weld::designations()
+}

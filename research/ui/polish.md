@@ -83,8 +83,11 @@ the same words repeat in the status bar.
 the shortcut hint ("Esc to cancel").
 
 ### 11. 3D view details
-- The origin axes draw through the part (`02`: the blue Z line crosses the boss). Draw them
-  depth-tested, or faded where hidden, as the grid already is.
+- ~~The origin axes draw through the part.~~ **Withdrawn: wrong.** They are depth-tested
+  (`origin::tris` into the `world` list, drawn with the depth test and no depth write). In `02`
+  the blue Z line starts at the boss's top centre, where the axis leaves the solid, and runs
+  up in front of the part; inside the plate and the boss it's hidden, and it shows again below
+  the part (`axis-depth.png`, a 2× crop).
 - The view cube's face words are ~7 px and low contrast in dark; the cube ring is heavier than
   the cube itself.
 - The grid is the same weight as model edges at this zoom; major/minor lines unweighted.
@@ -170,7 +173,7 @@ Before/after pairs share names in `before/` and `after/`.
 | 8 | Status bar | done: units chip, the issues chip always a chip |
 | 12 | Document tabs | done: sans 12, the accent rule on top of the active tab |
 | 9 | Browser | the flag dot has a tooltip. The widths stay apart on purpose: an assembly's rows carry a detail column ("Body base", counts) a part's don't; a filter for a part's browser is a feature, not polish |
-| 11 | Axes through the part | left: the renderer draws what's behind the part dimly on purpose (`Overlay::behind`); a render decision for the owner |
+| 11 | Axes through the part | no change needed: the axes were already depth-tested; the audit misread the part of the Z axis above the part (in front of it) as showing through. `axis-depth.png` |
 | 1b | Ribbon with no document | done: tools that need a part are drawn off, their tooltip "open or create a part first"; New, Open, Settings and Thermoform's tab stay on (`tests/no_document.rs`) |
 | 10 | Mode prompt contrast | no change needed: the grey in `before/05` was the bar's fade-in caught mid-way; `after/05` is the settled frame |
 | 13 | Measure's selection colours | no change needed: "Selection 1/2" are the view's amber and green for the first and second selection |
@@ -178,3 +181,12 @@ Before/after pairs share names in `before/` and `after/`.
 Known, not from this work: `cargo clippy --lib --target wasm32-unknown-unknown` fails at
 `errno` before reaching forge-render, through `zbus-secret-service-keyring-store` (not gated to
 native targets in Cargo.toml). The same happens on the base branch.
+
+### Last pass: light theme, view cube, grid (`view-before-after.png`: before left, after right)
+- **Light theme:** the warm greys are now cool, matching the blues: `ink` #1A1F26, `ink2`
+  #545C66 (6.4:1 on `raised`), `line` #D5DAE1; the view cube's light palette follows.
+- **View cube:** the face words are semibold, not medium. Their size stays at `LABEL_EM` (BOTTOM
+  must fit on a face). The ring was already faint at rest (18 %).
+- **Grid:** minor lines at 15 %, every fifth at 38 % and 1.5× wide (was 14 % / 30 % / 1.25×),
+  and the whole grid fades out over its outer 30 % instead of ending at a hard square. On a light
+  view it is drawn in `ink` rather than `ink2`, which was too near the background to read.

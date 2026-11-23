@@ -136,6 +136,8 @@ pub struct Built {
     /// The worker's time for it: the build, and the mesh.
     pub build_ms: f64,
     pub mesh_ms: f64,
+    /// The weldments' cut list, when this build has one to say (none: the last one stands).
+    pub cutlist: Option<crate::shell::weld_ui::CutList>,
     /// The exact bodies and iProperties behind it, for Measure and the physical properties.
     pub inspect: Option<Arc<crate::gui::gui_inspect::InspectData>>,
     /// The last build's mesh of the same file (nothing it read has changed), shown while this
@@ -953,6 +955,7 @@ impl Worker {
                 inspect: asm.as_ref().map(|a| a.inspect.clone()),
                 preview: false,
                 checked: true,
+                cutlist: None,
                 asm,
                 build_ms,
                 mesh_ms,
@@ -1043,6 +1046,7 @@ impl Worker {
                 inspect: None,
                 preview: true,
                 checked: false,
+                cutlist: None,
             };
             if !self.send(Msg::Built(Box::new(shown))) {
                 return false;
@@ -1194,6 +1198,7 @@ impl Worker {
                 })),
                 preview: false,
                 checked: checks,
+                cutlist: Some(crate::shell::weld_ui::CutList::of(&run.welds)),
             };
             if !self.send(Msg::Built(Box::new(built))) {
                 return false;

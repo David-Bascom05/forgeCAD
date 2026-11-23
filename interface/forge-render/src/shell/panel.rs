@@ -57,6 +57,10 @@ pub fn icon(kind: &str) -> &'static str {
         "move" | "movebody" | "copybody" => "move",
         "text" => "text",
         "split" | "splitface" => "split",
+        "member" | "members" => "member",
+        "endtrim" | "end_trim" => "endtrim",
+        "endcap" | "end_cap" => "endcap",
+        "cornerplate" | "corner_plate" => "cornerplate",
         k if super::sheet::is_sheet_kind(k) => {
             super::sheet::icon(super::sheet::cmd_of_kind(k).expect("a sheet kind"))
         }
@@ -80,9 +84,38 @@ mod tests {
     fn every_kind_has_an_icon_on_file() {
         let all = include_str!("icons.txt");
         let kinds = [
-            "extrude", "revolve", "ball", "sweep", "loft", "coil", "rib", "hole", "fillet", "chamfer",
-            "shell", "draft", "thread", "pattern", "sketch", "plane", "axis", "point", "ucs", "offset",
-            "thicken", "delete", "replace", "combine", "move", "text", "split", "unknown",
+            "extrude",
+            "revolve",
+            "ball",
+            "sweep",
+            "loft",
+            "coil",
+            "rib",
+            "hole",
+            "fillet",
+            "chamfer",
+            "shell",
+            "draft",
+            "thread",
+            "pattern",
+            "sketch",
+            "plane",
+            "axis",
+            "point",
+            "ucs",
+            "offset",
+            "thicken",
+            "delete",
+            "replace",
+            "combine",
+            "move",
+            "text",
+            "split",
+            "member",
+            "end_trim",
+            "end_cap",
+            "corner_plate",
+            "unknown",
         ];
         for k in kinds {
             let name = icon(k);

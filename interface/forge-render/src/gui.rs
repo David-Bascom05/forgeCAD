@@ -2245,6 +2245,9 @@ impl Gui {
                 p.feats = b.feats;
                 p.params = b.params;
                 p.issues = b.issues;
+                if let Some(c) = b.cutlist {
+                    p.cutlist = c;
+                }
                 if p.selected.as_ref().is_some_and(|k| {
                     !p.feats.iter().any(|f| {
                         f.id == *k || f.id.starts_with(&format!("{k}.")) || f.id.starts_with(&format!("{k}["))
@@ -3213,6 +3216,7 @@ impl Gui {
             },
             (K::RevAxis, "origin axis") => text,
             (K::UpTo, "face" | "origin plane") => text,
+            (K::TrimTo, "face" | "origin plane") => text,
             (K::SheetEdge, "edge") => {
                 let k = edge.expect("an edge") as usize;
                 a.as_ref()
