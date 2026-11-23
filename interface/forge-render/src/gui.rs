@@ -1480,6 +1480,7 @@ impl Gui {
                 marks: &marks,
                 world: &world,
                 behind: &behind,
+                solid: &[],
             };
             // a wall or draft map shows its colours as the legend has them: no occlusion over it
             let ao = v.renderer.ao;

@@ -463,7 +463,9 @@ pub fn run(src: &str, dir: &Path) -> Cam {
                     }
                     let a = cam.named(args, &local)?;
                     // a clock only when asked: a browser page has none std can read
-                    let t0 = std::env::var("FORGE_CAM_TIME").is_ok().then(std::time::Instant::now);
+                    let t0 = std::env::var("FORGE_CAM_TIME")
+                        .is_ok()
+                        .then(std::time::Instant::now);
                     let v = cam.call(name, fname, &a, dir)?;
                     if let Some(t0) = t0 {
                         eprintln!("{name}: {:?}", t0.elapsed());
@@ -687,7 +689,8 @@ impl Cam {
             "part" => {
                 let file = get_str(a, "#0", None)?;
                 let path = dir.join(&file);
-                let src = forge_dirs::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+                let src =
+                    forge_dirs::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
                 let (run, _) = forge_lang::run(&src, forge_lang::Options::default(), Default::default());
                 let holes = holes::hole_view(&src, forge_lang::Options::default());
                 if !run.ok() {
@@ -2968,7 +2971,9 @@ impl Cam {
                 .clone()
                 .unwrap_or_else(|| forge_cam::stock::InProcess::new(s.stock.min, s.stock.max));
             let faces_of = |ip: &forge_cam::stock::InProcess| {
-                let t0 = std::env::var("FORGE_CAM_DEBUG").is_ok().then(std::time::Instant::now);
+                let t0 = std::env::var("FORGE_CAM_DEBUG")
+                    .is_ok()
+                    .then(std::time::Instant::now);
                 let r = ip.faces();
                 if let Some(t0) = t0 {
                     eprintln!(
