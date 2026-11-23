@@ -12655,7 +12655,7 @@ def stitch.turn_row_loop
     (lo, hi)
 
 /-- [forge_bool_core::stitch::turn_row]:
-    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 97:0-109:1 -/
+    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 97:0-113:1 -/
 def stitch.turn_row
   (t : stitch.Turns) (grp : Std.U32) (p : Std.U32) : Result Std.U32 := do
   let hi := alloc.vec.Vec.len t.keys
@@ -12675,7 +12675,7 @@ def stitch.turn_row
   else ok stitch.NONE
 
 /-- [forge_bool_core::stitch::by_start]: loop body 0:
-    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 115:4-118:5 -/
+    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 119:4-122:5 -/
 @[rust_loop_body]
 def stitch.by_start_loop.body
   (segs : Slice stitch.Seg) (v : alloc.vec.Vec (Std.U32 × Std.U32 × Std.U32))
@@ -12694,7 +12694,7 @@ def stitch.by_start_loop.body
   else ok (done v)
 
 /-- [forge_bool_core::stitch::by_start]: loop 0:
-    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 115:4-118:5 -/
+    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 119:4-122:5 -/
 @[rust_loop]
 def stitch.by_start_loop
   (segs : Slice stitch.Seg) (v : alloc.vec.Vec (Std.U32 × Std.U32 × Std.U32))
@@ -12706,7 +12706,7 @@ def stitch.by_start_loop
     (v, i)
 
 /-- [forge_bool_core::stitch::by_start]:
-    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 112:0-121:1 -/
+    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 116:0-125:1 -/
 def stitch.by_start
   (segs : Slice stitch.Seg) :
   Result (alloc.vec.Vec (Std.U32 × Std.U32 × Std.U32))
@@ -12717,7 +12717,7 @@ def stitch.by_start
   sort.sort_triples v1
 
 /-- [forge_bool_core::stitch::first_at]: loop body 0:
-    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 126:4-134:5 -/
+    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 130:4-138:5 -/
 @[rust_loop_body]
 def stitch.first_at_loop.body
   (starts : Slice (Std.U32 × Std.U32 × Std.U32)) (grp : Std.U32)
@@ -12746,7 +12746,7 @@ def stitch.first_at_loop.body
   else ok (done lo)
 
 /-- [forge_bool_core::stitch::first_at]: loop 0:
-    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 126:4-134:5 -/
+    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 130:4-138:5 -/
 @[rust_loop]
 def stitch.first_at_loop
   (starts : Slice (Std.U32 × Std.U32 × Std.U32)) (grp : Std.U32)
@@ -12758,7 +12758,7 @@ def stitch.first_at_loop
     (lo, hi)
 
 /-- [forge_bool_core::stitch::first_at]:
-    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 124:0-136:1 -/
+    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 128:0-140:1 -/
 def stitch.first_at
   (starts : Slice (Std.U32 × Std.U32 × Std.U32)) (grp : Std.U32)
   (a : Std.U32) :
@@ -12768,7 +12768,7 @@ def stitch.first_at
   stitch.first_at_loop starts grp a 0#usize hi
 
 /-- [forge_bool_core::stitch::next_seg]: loop body 0:
-    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 147:4-153:5 -/
+    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 151:4-157:5 -/
 @[rust_loop_body]
 def stitch.next_seg_loop0.body
   (starts : Slice (Std.U32 × Std.U32 × Std.U32)) (used : Slice Bool)
@@ -12799,7 +12799,7 @@ def stitch.next_seg_loop0.body
   else ok (done (count, «only»))
 
 /-- [forge_bool_core::stitch::next_seg]: loop 0:
-    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 147:4-153:5 -/
+    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 151:4-157:5 -/
 @[rust_loop]
 def stitch.next_seg_loop0
   (starts : Slice (Std.U32 × Std.U32 × Std.U32)) (used : Slice Bool)
@@ -12813,7 +12813,7 @@ def stitch.next_seg_loop0
     (count, «only», k)
 
 /-- [forge_bool_core::stitch::next_seg]: loop body 1:
-    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 166:4-171:5 -/
+    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 173:4-178:5 -/
 @[rust_loop_body]
 def stitch.next_seg_loop1.body
   (v : alloc.vec.Vec Std.U32) (cur : Std.U32) (s : Std.Usize) (len : Std.Usize)
@@ -12841,7 +12841,7 @@ def stitch.next_seg_loop1.body
   else ok (done pos)
 
 /-- [forge_bool_core::stitch::next_seg]: loop 1:
-    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 166:4-171:5 -/
+    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 173:4-178:5 -/
 @[rust_loop]
 def stitch.next_seg_loop1
   (v : alloc.vec.Vec Std.U32) (cur : Std.U32) (s : Std.Usize) (len : Std.Usize)
@@ -12853,7 +12853,7 @@ def stitch.next_seg_loop1
     (pos, i)
 
 /-- [forge_bool_core::stitch::next_seg]: loop body 2:
-    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 178:4-184:5 -/
+    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 185:4-191:5 -/
 @[rust_loop_body]
 def stitch.next_seg_loop2.body
   (segs : Slice stitch.Seg) (used : Slice Bool) (v : alloc.vec.Vec Std.U32)
@@ -12893,7 +12893,7 @@ def stitch.next_seg_loop2.body
   else ok (done pick)
 
 /-- [forge_bool_core::stitch::next_seg]: loop 2:
-    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 178:4-184:5 -/
+    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 185:4-191:5 -/
 @[rust_loop]
 def stitch.next_seg_loop2
   (segs : Slice stitch.Seg) (used : Slice Bool) (v : alloc.vec.Vec Std.U32)
@@ -12907,7 +12907,7 @@ def stitch.next_seg_loop2
     (pick, step)
 
 /-- [forge_bool_core::stitch::next_seg]:
-    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 141:0-186:1 -/
+    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 145:0-193:1 -/
 def stitch.next_seg
   (segs : Slice stitch.Seg) (starts : Slice (Std.U32 × Std.U32 × Std.U32))
   (used : Slice Bool) (turns : stitch.Turns) (cur : Std.U32) :
@@ -12947,7 +12947,7 @@ def stitch.next_seg
           stitch.NONE 1#usize
 
 /-- [forge_bool_core::stitch::chain]: loop body 1:
-    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 207:12-217:13
+    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 215:12-225:13
     Visibility: public -/
 @[rust_loop_body]
 def stitch.chain_loop0_loop0.body
@@ -12986,7 +12986,7 @@ def stitch.chain_loop0_loop0.body
   else ok (done (used, ok1, lp))
 
 /-- [forge_bool_core::stitch::chain]: loop 1:
-    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 207:12-217:13
+    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 215:12-225:13
     Visibility: public -/
 @[rust_loop]
 def stitch.chain_loop0_loop0
@@ -13002,7 +13002,7 @@ def stitch.chain_loop0_loop0
     (used, ok1, lp, cur, steps)
 
 /-- [forge_bool_core::stitch::chain]: loop body 0:
-    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 198:4-223:5
+    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 206:4-231:5
     Visibility: public -/
 @[rust_loop_body]
 def stitch.chain_loop0.body
@@ -13045,7 +13045,7 @@ def stitch.chain_loop0.body
   else ok (done (loops, ok1))
 
 /-- [forge_bool_core::stitch::chain]: loop 0:
-    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 198:4-223:5
+    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 206:4-231:5
     Visibility: public -/
 @[rust_loop]
 def stitch.chain_loop0
@@ -13061,7 +13061,7 @@ def stitch.chain_loop0
     (used, loops, ok1, s0)
 
 /-- [forge_bool_core::stitch::chain]:
-    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 191:0-225:1
+    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 199:0-233:1
     Visibility: public -/
 def stitch.chain
   (segs : Slice stitch.Seg) (turns : stitch.Turns) :
@@ -13078,7 +13078,7 @@ def stitch.chain
   else ok none
 
 /-- [forge_bool_core::stitch::{impl core::clone::Clone for forge_bool_core::stitch::FaceOut}::clone]:
-    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 229:9-229:14
+    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 237:9-237:14
     Visibility: public -/
 def stitch.FaceOut.Insts.CoreCloneClone.clone
   (self : stitch.FaceOut) : Result stitch.FaceOut := do
@@ -13088,14 +13088,14 @@ def stitch.FaceOut.Insts.CoreCloneClone.clone
   ok { grp := i, src := i1, loops := v }
 
 /-- Trait implementation: [forge_bool_core::stitch::{impl core::clone::Clone for forge_bool_core::stitch::FaceOut}]
-    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 229:9-229:14 -/
+    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 237:9-237:14 -/
 @[reducible]
 def stitch.FaceOut.Insts.CoreCloneClone : core.clone.Clone stitch.FaceOut := {
   clone := stitch.FaceOut.Insts.CoreCloneClone.clone
 }
 
 /-- [forge_bool_core::stitch::{impl core::fmt::Debug for forge_bool_core::stitch::FaceOut}::fmt]:
-    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 229:16-229:21
+    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 237:16-237:21
     Visibility: public -/
 def stitch.FaceOut.Insts.CoreFmtDebug.fmt
   (self : stitch.FaceOut) (f : core.fmt.Formatter) :
@@ -13110,21 +13110,21 @@ def stitch.FaceOut.Insts.CoreFmtDebug.fmt
     "grp") dyn (toStr "src") dyn1 (toStr "loops") dyn2
 
 /-- Trait implementation: [forge_bool_core::stitch::{impl core::fmt::Debug for forge_bool_core::stitch::FaceOut}]
-    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 229:16-229:21 -/
+    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 237:16-237:21 -/
 @[reducible]
 def stitch.FaceOut.Insts.CoreFmtDebug : core.fmt.Debug stitch.FaceOut := {
   fmt := stitch.FaceOut.Insts.CoreFmtDebug.fmt
 }
 
 /-- Trait implementation: [forge_bool_core::stitch::{impl core::marker::StructuralPartialEq for forge_bool_core::stitch::FaceOut}]
-    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 229:23-229:32 -/
+    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 237:23-237:32 -/
 @[reducible]
 def stitch.FaceOut.Insts.CoreMarkerStructuralPartialEq :
   core.marker.StructuralPartialEq stitch.FaceOut := {
 }
 
 /-- [forge_bool_core::stitch::{impl core::cmp::PartialEq<forge_bool_core::stitch::FaceOut> for forge_bool_core::stitch::FaceOut}::eq]:
-    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 229:23-229:32
+    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 237:23-237:32
     Visibility: public -/
 def stitch.FaceOut.Insts.CoreCmpPartialEqFaceOut.eq
   (self : stitch.FaceOut) (other : stitch.FaceOut) : Result Bool := do
@@ -13138,7 +13138,7 @@ def stitch.FaceOut.Insts.CoreCmpPartialEqFaceOut.eq
   else ok false
 
 /-- Trait implementation: [forge_bool_core::stitch::{impl core::cmp::PartialEq<forge_bool_core::stitch::FaceOut> for forge_bool_core::stitch::FaceOut}]
-    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 229:23-229:32 -/
+    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 237:23-237:32 -/
 @[reducible]
 impl_def stitch.FaceOut.Insts.CoreCmpPartialEqFaceOut : core.cmp.PartialEq
   stitch.FaceOut stitch.FaceOut := {
@@ -13148,14 +13148,14 @@ impl_def stitch.FaceOut.Insts.CoreCmpPartialEqFaceOut : core.cmp.PartialEq
 }
 
 /-- [forge_bool_core::stitch::{impl core::cmp::Eq for forge_bool_core::stitch::FaceOut}::assert_fields_are_eq]:
-    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 229:34-229:36
+    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 237:34-237:36
     Visibility: public -/
 def stitch.FaceOut.Insts.CoreCmpEq.assert_fields_are_eq
   (self : stitch.FaceOut) : Result Unit := do
   ok ()
 
 /-- Trait implementation: [forge_bool_core::stitch::{impl core::cmp::Eq for forge_bool_core::stitch::FaceOut}]
-    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 229:34-229:36 -/
+    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 237:34-237:36 -/
 @[reducible]
 def stitch.FaceOut.Insts.CoreCmpEq : core.cmp.Eq stitch.FaceOut := {
   partialEqInst := stitch.FaceOut.Insts.CoreCmpPartialEqFaceOut
@@ -13163,7 +13163,7 @@ def stitch.FaceOut.Insts.CoreCmpEq : core.cmp.Eq stitch.FaceOut := {
 }
 
 /-- [forge_bool_core::stitch::faces]: loop body 0:
-    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 247:4-259:5
+    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 256:4-268:5
     Visibility: public -/
 @[rust_loop_body]
 def stitch.faces_loop0.body
@@ -13201,7 +13201,7 @@ def stitch.faces_loop0.body
   else ok (done (face_of, out))
 
 /-- [forge_bool_core::stitch::faces]: loop 0:
-    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 247:4-259:5
+    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 256:4-268:5
     Visibility: public -/
 @[rust_loop]
 def stitch.faces_loop0
@@ -13216,7 +13216,7 @@ def stitch.faces_loop0
     (face_of, out, l)
 
 /-- [forge_bool_core::stitch::faces]: loop body 1:
-    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 262:4-276:5
+    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 271:4-285:5
     Visibility: public -/
 @[rust_loop_body]
 def stitch.faces_loop1.body
@@ -13287,7 +13287,7 @@ def stitch.faces_loop1.body
   else ok (done (out, ok1))
 
 /-- [forge_bool_core::stitch::faces]: loop 1:
-    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 262:4-276:5
+    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 271:4-285:5
     Visibility: public -/
 @[rust_loop]
 def stitch.faces_loop1
@@ -13302,7 +13302,7 @@ def stitch.faces_loop1
     (out, ok1, l)
 
 /-- [forge_bool_core::stitch::faces]: loop body 2:
-    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 283:4-286:5
+    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 292:4-295:5
     Visibility: public -/
 @[rust_loop_body]
 def stitch.faces_loop2.body
@@ -13327,7 +13327,7 @@ def stitch.faces_loop2.body
   else ok (done keys)
 
 /-- [forge_bool_core::stitch::faces]: loop 2:
-    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 283:4-286:5
+    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 292:4-295:5
     Visibility: public -/
 @[rust_loop]
 def stitch.faces_loop2
@@ -13340,7 +13340,7 @@ def stitch.faces_loop2
     (keys, f)
 
 /-- [forge_bool_core::stitch::faces]: loop body 3:
-    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 290:4-293:5
+    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 299:4-302:5
     Visibility: public -/
 @[rust_loop_body]
 def stitch.faces_loop3.body
@@ -13367,7 +13367,7 @@ def stitch.faces_loop3.body
   else ok (done sorted)
 
 /-- [forge_bool_core::stitch::faces]: loop 3:
-    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 290:4-293:5
+    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 299:4-302:5
     Visibility: public -/
 @[rust_loop]
 def stitch.faces_loop3
@@ -13381,7 +13381,7 @@ def stitch.faces_loop3
     (sorted, k)
 
 /-- [forge_bool_core::stitch::faces]:
-    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 241:0-295:1
+    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 250:0-304:1
     Visibility: public -/
 def stitch.faces
   (grp : Slice Std.U32) (src : Slice Std.U32) (outer : Slice Bool)

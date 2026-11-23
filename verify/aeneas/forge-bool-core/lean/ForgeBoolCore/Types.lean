@@ -308,7 +308,7 @@ structure stitch.Turns where
   ends : inc.Csr
 
 /-- [forge_bool_core::stitch::FaceOut]
-    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 230:0-234:1
+    Source: 'kernel/forge-bool-core/src/stitch.rs', lines 238:0-242:1
     Visibility: public -/
 structure stitch.FaceOut where
   grp : Std.U32

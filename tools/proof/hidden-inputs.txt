@@ -196,7 +196,7 @@ speed (lazy field or constant table)  @ forge-bool/src/classify.rs|lazy|simple: 
 no-output (Fx-hashed: a fixed hasher, the same order every run; lookups and sets)  @ forge-bool/src/decide_once.rs|hash-order|by_cov: HashMap<(u64, u64), u32>,
 speed (lazy field or constant table)  @ forge-bool/src/decide_once.rs|lazy|let mid = std::cell::OnceCell::new();
 speed (lazy field or constant table)  @ forge-bool/src/decide_once.rs|lazy|mid: std::cell::OnceCell<HPoint>,
-speed (lazy field or constant table: a loop's exact points, made once when first asked)  @ forge-bool/src/decide_once.rs|lazy|Ld { pf, ph: std::cell::OnceCell::new() }
+speed (lazy field or constant table: a loop's exact points, made once when first asked)  @ forge-bool/src/decide_once.rs|lazy|ph: std::cell::OnceCell::new(),
 speed (lazy field or constant table: a loop's exact points, made once when first asked)  @ forge-bool/src/decide_once.rs|lazy|let me: std::cell::OnceCell<HPoint> = std::cell::OnceCell::new();
 speed (lazy field or constant table: a loop's exact points, made once when first asked)  @ forge-bool/src/decide_once.rs|lazy|ph: std::cell::OnceCell<Vec<HPoint>>,
 speed (a counter of skipped booleans, for the gate's report; never read by an op)  @ forge-bool/src/decide_once.rs|atomic|pub static SKIP_WIDE: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);

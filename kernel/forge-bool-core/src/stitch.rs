@@ -195,6 +195,7 @@ fn next_seg(segs: &[Seg], starts: &[(u32, u32, u32)], used: &[bool], turns: &Tur
 /// Stage 2, the chain: the segments as closed loops, each a list of segment ids in order. A loop
 /// starts at the least unused segment and follows `next_seg` until it closes. None: a segment has
 /// no successor or a loop does not close within all the segments (a ledger the bridge got wrong).
+#[allow(clippy::vec_init_then_push)] // (no vec![x]: see below)
 pub fn chain(segs: &[Seg], turns: &Turns) -> Option<Vec<Vec<u32>>> {
     let n = segs.len();
     let starts = by_start(segs);
@@ -245,6 +246,7 @@ pub struct FaceOut {
 /// outer loop of its group, decided by the bridge). Each outer loop makes a face, its holes after
 /// it in loop order; the faces in order of their least input face, then of their outer loop. None:
 /// a hole with no holder, or a holder that is not an outer loop.
+#[allow(clippy::vec_init_then_push)] // (no vec![x]: see below)
 pub fn faces(grp: &[u32], src: &[u32], outer: &[bool], holder: &[u32]) -> Option<Vec<FaceOut>> {
     let n = grp.len();
     // the face of each outer loop
