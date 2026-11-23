@@ -40,6 +40,11 @@ pub enum DraftError {
     },
     Rebuild(RebuildError),
     Invalid(Vec<Problem>),
+    /// A tapered extrude's offset sections stop bounding a region `at` this height from the
+    /// sketch (`TaperError::WallsCross`): its walls would cross.
+    WallsCross {
+        at: f64,
+    },
 }
 
 /// Tilts `faces` so each makes `angle` with the pull direction, `neutral`'s z, keeping where it

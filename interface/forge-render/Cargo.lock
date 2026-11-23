@@ -1064,6 +1064,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-brake"
+version = "0.1.0"
+dependencies = [
+ "forge-math",
+ "forge-ops",
+ "forge-sheet",
+]
+
+[[package]]
 name = "forge-dirs"
 version = "0.1.0"
 
@@ -1144,6 +1153,7 @@ dependencies = [
  "forge-agent",
  "forge-asm",
  "forge-bool",
+ "forge-brake",
  "forge-dirs",
  "forge-draw",
  "forge-font",
@@ -1162,6 +1172,8 @@ dependencies = [
  "forge-thermo",
  "forge-topo",
  "forge-units",
+ "forge-vendor",
+ "forge-weld",
 ]
 
 [[package]]
@@ -1176,6 +1188,7 @@ name = "forge-math"
 version = "0.1.0"
 dependencies = [
  "forge-alloc",
+ "forge-par",
 ]
 
 [[package]]
@@ -1183,6 +1196,7 @@ name = "forge-mesh"
 version = "0.1.0"
 dependencies = [
  "forge-geom",
+ "forge-git",
  "forge-math",
  "forge-topo",
 ]
@@ -1211,6 +1225,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-par"
+version = "0.1.0"
+
+[[package]]
 name = "forge-render"
 version = "0.1.0"
 dependencies = [
@@ -1219,6 +1237,7 @@ dependencies = [
  "egui-wgpu",
  "egui-winit",
  "forge-agent",
+ "forge-brake",
  "forge-dirs",
  "forge-draw",
  "forge-dwg",
@@ -1232,11 +1251,13 @@ dependencies = [
  "forge-mesh",
  "forge-model",
  "forge-ops",
+ "forge-par",
  "forge-sheet",
  "forge-sketch",
  "forge-step",
  "forge-thermo",
  "forge-topo",
+ "forge-vendor",
  "js-sys",
  "keyring-core",
  "png",
@@ -1308,6 +1329,23 @@ dependencies = [
 [[package]]
 name = "forge-units"
 version = "0.1.0"
+
+[[package]]
+name = "forge-vendor"
+version = "0.1.0"
+dependencies = [
+ "forge-dirs",
+ "forge-material",
+ "forge-sheet",
+]
+
+[[package]]
+name = "forge-weld"
+version = "0.1.0"
+dependencies = [
+ "forge-math",
+ "forge-ops",
+]
 
 [[package]]
 name = "futures-core"

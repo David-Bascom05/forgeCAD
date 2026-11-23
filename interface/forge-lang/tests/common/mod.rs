@@ -7,7 +7,7 @@ use forge_lang::{Measure, Options, Run};
 
 /// The part built, a scratch folder beside it holding the bench font (`text(..)` parts read it).
 pub fn run(src: &str) -> (Run, Cache) {
-    let dir = std::env::temp_dir().join(format!("forge-lang-tests-{}", std::process::id()));
+    let dir = forge_dirs::temp_dir().join(format!("forge-lang-tests-{}", forge_dirs::process_id()));
     std::fs::create_dir_all(&dir).expect("temp dir");
     let font = dir.join(forge_lang::bench::FONT);
     if !font.exists() {

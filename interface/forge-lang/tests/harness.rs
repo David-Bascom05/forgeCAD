@@ -422,8 +422,14 @@ fn the_example_rebuilds_in_milliseconds() {
     // the work, not the clock (a loaded machine moves the time, printed for a person): the whole
     // document again, parts loaded, solved, the harness routed, from the last run's cache, so no
     // part file is built again
-    let (c, w) = (&cold.asm.as_ref().unwrap().timings, &warm.asm.as_ref().unwrap().timings);
-    eprintln!("robot: warm rebuild {ms:.1} ms; part files built cold {}, warm {}", c.built, w.built);
+    let (c, w) = (
+        &cold.asm.as_ref().unwrap().timings,
+        &warm.asm.as_ref().unwrap().timings,
+    );
+    eprintln!(
+        "robot: warm rebuild {ms:.1} ms; part files built cold {}, warm {}",
+        c.built, w.built
+    );
     assert!(c.built > 0, "{c:?}");
     assert_eq!(w.built, 0, "{w:?}");
 }

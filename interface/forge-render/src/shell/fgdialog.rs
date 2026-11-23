@@ -37,6 +37,7 @@ pub fn param_label(kind: &str, name: &str) -> &'static str {
         "cbore_depth" => "C'bore Depth",
         "csink_d" => "C'sink Dia",
         "csink_angle" => "C'sink Angle",
+        "size" if kind == "cornerplate" => "Leg",
         "size" => "Height",
         "wrap" => "Wrap Radius",
         "pitch" => "Pitch",
@@ -45,6 +46,12 @@ pub fn param_label(kind: &str, name: &str) -> &'static str {
         "r_start" => "Start Radius",
         "r_end" => "End Radius",
         "k" => "K-Factor",
+        "gap" => "Gap",
+        "dx" => "Offset X",
+        "dy" => "Offset Y",
+        "turn" => "Turn",
+        "corner_gap" => "Gap There",
+        "corner_cut" => "Corner Cut",
         _ => "Value",
     }
 }
@@ -57,6 +64,16 @@ fn needs(kind: &str, param: &str) -> Option<&'static str> {
     }
 }
 
+/// The words and values a form asks for only once a slot of theirs has picks: a weldment's
+/// own corner (kind and gap) once its nodes are picked.
+fn shown_only_with_picks(tool: &FgTool) -> Vec<&'static str> {
+    let picked = |label: &str| tool.slots.iter().any(|s| s.label == label && !s.picks.is_empty());
+    match tool.kind {
+        "members" if !picked("Corner Points") => vec!["corner_at", "corner_gap"],
+        _ => vec![],
+    }
+}
+
 fn word_label(w: &str) -> &'static str {
     match w {
         "text" => "Text",
@@ -66,6 +83,9 @@ fn word_label(w: &str) -> &'static str {
         "spec" => "Thread",
         "length" => "Length",
         "file" => "File",
+        "section" => "Section",
+        "align" => "Align",
+        "corner_at" => "Corner There",
         _ => "Value",
     }
 }
@@ -125,6 +145,10 @@ pub fn title(kind: &str) -> &'static str {
         "flange" => "Flange",
         "cutout" => "Cutout",
         "unfold" => "Unfold",
+        "members" => "Structural Members",
+        "endtrim" => "End Trim",
+        "endcap" => "End Cap",
+        "cornerplate" => "Corner Plate",
         _ => "Feature",
     }
 }
@@ -145,6 +169,7 @@ pub fn tool_icon(kind: &str) -> &'static str {
         "facefillet" => "fillet",
         "movebody" => "move",
         "copybody" => "copybody",
+        "members" => "member",
         k => panel::icon(k),
     }
 }
@@ -267,7 +292,7 @@ fn choices_for(fg: &super::fg::FgPanel, kind: K) -> Vec<String> {
             K::Point => out.extend(sk.points.iter().filter(|p| !p.ends_with(".points")).cloned()),
             K::Dir => out.extend(sk.lines.iter().map(|l| format!("{l}.dir"))),
             K::Axis | K::RevAxis => out.extend(sk.lines.iter().cloned()),
-            K::Plane | K::UpTo => out.push(sk.id.clone()),
+            K::Plane | K::UpTo | K::TrimTo => out.push(sk.id.clone()),
             _ => {}
         }
     }
@@ -277,6 +302,11 @@ fn choices_for(fg: &super::fg::FgPanel, kind: K) -> Vec<String> {
             out.extend(of_kind(&["workplane", "ucs"]));
         }
         K::UpTo => out.extend(of_kind(&["workplane"])),
+        K::Member | K::Members => out.extend(of_kind(&["member"])),
+        K::TrimTo => {
+            out.extend(["xy", "xz", "yz"].map(String::from));
+            out.extend(of_kind(&["workplane", "member"]));
+        }
         K::Axis | K::RevAxis => {
             // a revolve turns about the origin's axes too
             if kind == K::RevAxis {
@@ -628,7 +658,8 @@ impl Shell {
             }
         }
         let options = tool.options.clone();
-        for (w, text) in &mut tool.words {
+        let hide = shown_only_with_picks(tool);
+        for (w, text) in tool.words.iter_mut().filter(|w| !hide.contains(&w.0)) {
             match options.iter().find(|o| o.0 == *w) {
                 Some((_, items)) if !items.is_empty() => {
                     let rows: Vec<(String, String, bool)> =
@@ -669,7 +700,11 @@ impl Shell {
                 places,
             );
         };
-        for p in tool.params.iter_mut().filter(|p| needs(kind, p.name).is_none()) {
+        for p in tool
+            .params
+            .iter_mut()
+            .filter(|p| needs(kind, p.name).is_none() && !hide.contains(&p.name))
+        {
             row(ui, p, places);
         }
         for (f, on) in &mut tool.flags {
@@ -817,4 +852,8 @@ pub fn offer_lists(t: &mut FgTool, dir: Option<&std::path::Path>) {
     t.offer("screw", screws.clone());
     t.offer("spec", screws);
     t.offer("fit", hole_fits());
+    // a weldment's section from the library, where its pierce point sits, a picked node's corner
+    t.offer("section", forge_lang::weld::designations());
+    t.offer("align", super::fgtool::ALIGNS.map(String::from).to_vec());
+    t.offer("corner_at", super::fgtool::CORNERS.map(String::from).to_vec());
 }

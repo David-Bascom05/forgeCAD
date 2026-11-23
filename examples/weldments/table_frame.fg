@@ -1,0 +1,33 @@
+# A welded table frame: a rectangle of SHS 40 rails on four SHS 40 legs, feet capped, a corner
+# plate under each front corner. One layout in 3D: the top rectangle and the legs from two
+# upright sketches; at each corner three members meet, and the rule decides: the leg (ranked
+# first) runs up flush with the rails' tops, the rails butt to it.
+shared W = 1200
+shared D = 600
+shared H = 720
+shared sec = "SHS 40x40x3"
+shared t_foot = 5
+shared t_plate = 5
+shared leg_plate = 90
+shared plate_cut = 10
+
+sketch top(on: xy) {
+  r = rect(corner: (0, 0), size: (W, D))
+  front = line((0, 0), (W, 0), construction: true)
+  back = line((0, D), (W, D), construction: true)
+}
+sketch fl(on: rotate(top.plane, about: top.front, by: 90deg)) {
+  a = line((0, 0), (0, -H))
+  b = line((W, 0), (W, -H))
+}
+sketch bl(on: rotate(top.plane, about: top.back, by: 90deg)) {
+  a = line((0, 0), (0, -H))
+  b = line((W, 0), (W, -H))
+}
+fr = members([top.r, fl.a, fl.b, bl.a, bl.b], section: sec, corner: "butt", rank: [4, 5, 6, 7])
+foot = end_cap(fr[4], end: "end", t: t_foot)
+foot2 = end_cap(fr[5], end: "end", t: t_foot)
+foot3 = end_cap(fr[6], end: "end", t: t_foot)
+foot4 = end_cap(fr[7], end: "end", t: t_foot)
+brace = corner_plate(fr[0], fr[4], size: leg_plate, t: t_plate, chamfer: plate_cut)
+brace2 = corner_plate(fr[0], fr[5], size: leg_plate, t: t_plate, chamfer: plate_cut)

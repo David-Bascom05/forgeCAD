@@ -256,6 +256,12 @@ pub(crate) enum Close {
 }
 
 /// A built form's profile: the near skin's chain and the far skin's, piece by piece from the rim
+/// The radius of a form's rim on a sheet `t` thick: where its wall leaves the sheet (None for a
+/// shape the builder refuses).
+pub fn rim_radius(shape: &FormShape, t: f64) -> Option<f64> {
+    Profile::of(shape, t).ok().map(|p| p.r1)
+}
+
 /// inwards (each far piece the near one's offset by t), and how they close.
 #[derive(Clone, Debug)]
 pub(crate) struct Profile {

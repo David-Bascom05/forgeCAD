@@ -760,3 +760,57 @@ fn through_a_sharp_turn_the_fit_never_crosses_itself_where_the_chord_fit_did() {
     assert!((da.0 * db.1 - da.1 * db.0).abs() > 1.0, "a crossing, not a touch");
     assert!(!simple(&c));
 }
+
+/// The offset of a section folds exactly where the wall reaches a radius of curvature: in the
+/// section (a wavy wall's bump, radius 175/32 at the middle point) and about the axis (a waisted
+/// cup's circles closing up), decided within a part in a million either side; and with weights (a
+/// round arc, radius 10).
+#[test]
+fn offset_folds_at_its_radius() {
+    let wavy = Spline::through(
+        &pts(&[
+            (30.0, 60.0),
+            (22.0, 45.0),
+            (30.0, 30.0),
+            (22.0, 15.0),
+            (30.0, 0.0),
+        ]),
+        None,
+        None,
+    )
+    .unwrap();
+    let bump = 175.0 / 32.0;
+    let b = wavy.breaks()[2];
+    let q = wavy.deriv(b);
+    let l = q.d1.length();
+    let k = (q.d1.x * q.d2.y - q.d1.y * q.d2.x) / (l * l * l);
+    assert!((1.0 / k + bump).abs() < 1e-12, "{}", 1.0 / k);
+    let dom = wavy.domain();
+    assert_eq!(wavy.offset_fold(bump * (1.0 - 1e-6), dom), None);
+    let t = wavy
+        .offset_fold(bump * (1.0 + 1e-6), dom)
+        .expect("folds at the bump");
+    assert!((t - b).abs() < 1e-3, "{t}");
+    // the other way the bumps are hollows and nothing folds this side of the circles closing
+    assert_eq!(wavy.offset_fold(-6.0, dom), None);
+    let cup = Spline::through(&pts(&[(30.0, 60.0), (12.0, 30.0), (20.0, 0.0)]), None, None).unwrap();
+    // (where x + d y' / |C'| first reaches zero, worked out apart at 30 digits)
+    let closes = 11.7582990712012;
+    assert_eq!(cup.offset_fold(closes * (1.0 - 1e-6), cup.domain()), None);
+    assert!(cup.offset_fold(closes * (1.0 + 1e-6), cup.domain()).is_some());
+    assert_eq!(cup.offset_fold(-20.0, cup.domain()), None);
+    let arc = Spline::ellipse(
+        Point3::new(40.0, 30.0, 0.0),
+        Vec3::new(10.0, 0.0, 0.0),
+        Vec3::new(0.0, 10.0, 0.0),
+        -1.5,
+        3.0,
+    )
+    .unwrap();
+    assert!(arc.rational());
+    let dom = arc.domain();
+    // (turning left, k = 1 / 10: towards its centre is against the normal)
+    assert_eq!(arc.offset_fold(-10.0 * (1.0 - 1e-6), dom), None);
+    assert!(arc.offset_fold(-10.0 * (1.0 + 1e-6), dom).is_some());
+    assert_eq!(arc.offset_fold(25.0, dom), None);
+}

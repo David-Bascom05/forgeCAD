@@ -8,7 +8,7 @@ use crate::{
     Combine, Edit, Feature, History, RegenError, SHORT_RUN, Tool, cut_root, modifies, modify, op_of,
     part_shape, starts, tools,
 };
-use forge_bool::{BoolError, Op, Shape, boolean, boolean_into, nary_with};
+use forge_bool::{BoolError, Op, Shape, boolean_into, nary_with};
 use forge_geom::{Cylinder, Plane, Surface};
 use forge_math::{Box3, Frame, Point2, Point3, Vec3, tol};
 use forge_ops::{Profile, ProfileLoop, Segment, extrude};
@@ -41,6 +41,8 @@ pub enum BodyFeature {
     SplitFace { faces: Vec<Name>, by: Cutter },
     /// Moves bodies rigidly, the steps in order, or (`copy`) makes a moved copy of one body.
     Move { steps: Vec<Step>, copy: bool },
+    /// A weldment member's end trimmed by bodies or other members' envelopes (weld.rs).
+    Trim(crate::weld::Trim),
 }
 
 /// Which bodies a feature acts on, by the features that made them.
@@ -105,6 +107,10 @@ pub enum BodyError {
         name: Name,
     },
     Unsupported(&'static str),
+    /// An end trim would leave the member in this many pieces.
+    Pieces {
+        pieces: usize,
+    },
 }
 
 /// Whether a history makes or works on more than one body.
@@ -122,6 +128,8 @@ fn op(f: &Feature) -> Option<Combine> {
         Feature::Extrude { op, .. } | Feature::Revolve { op, .. } | Feature::Ball { op, .. } => Some(*op),
         Feature::Edit(Edit::Thicken { op, .. }) => Some(*op),
         Feature::Import(t) => Some(t.op),
+        Feature::Member(_) => Some(Combine::New),
+        Feature::Regions(r) => Some(r.op),
         _ => crate::swept::op(f),
     }
 }
@@ -674,7 +682,7 @@ fn salted(n: Name, why: &str, id: u64) -> Name {
 }
 
 /// The id a boolean of the feature of id `id` names what it makes after (`n`: which of several).
-fn bool_id(id: u64, n: u64) -> u64 {
+pub(crate) fn bool_id(id: u64, n: u64) -> u64 {
     (id + 1_000_000) | (n << 40)
 }
 
@@ -776,7 +784,8 @@ fn body_feature(
                     solids[k].body.clone()
                 }
                 .into_canonical();
-                body = boolean(&body, &tool, op_of(*op), bool_id(me, n as u64)).map_err(boolean_err(i))?;
+                body = crate::combined(&body, &tool, op_of(*op), bool_id(me, n as u64))
+                    .map_err(boolean_err(i))?;
             }
             solids[t].body = body;
             if !keep {
@@ -798,7 +807,7 @@ fn body_feature(
                     (Op::Subtract, Op::Intersect)
                 };
                 let piece = |op: Op, h: &Body, n: u64| -> Result<Body, RegenError> {
-                    let b = boolean(&body, h, op, bool_id(me, n)).map_err(boolean_err(i))?;
+                    let b = crate::combined(&body, h, op, bool_id(me, n)).map_err(boolean_err(i))?;
                     if b.face_ids().next().is_none() {
                         return Err(bad(BodyError::Misses));
                     }
@@ -835,6 +844,24 @@ fn body_feature(
                 solids[k].body =
                     crate::splitface::split(&solids[k].body.compact(), &mine, &surface, me).map_err(&bad)?;
             }
+        }
+        BodyFeature::Trim(t) => {
+            let k = find(solids, t.member, i)?;
+            let mut owned = Vec::new();
+            for (n, tool) in t.tools.iter().enumerate() {
+                owned.push(match tool {
+                    crate::weld::TrimTool::Body(id) => {
+                        let j = find(solids, *id, i)?;
+                        solids[j].body.clone().into_canonical()
+                    }
+                    crate::weld::TrimTool::Envelope(m) => {
+                        crate::weld::uncut(m, i, crate::weld::cut_id(me, 300 + n))?
+                    }
+                });
+            }
+            let refs: Vec<&Body> = owned.iter().collect();
+            let body = solids[k].body.clone().into_canonical();
+            solids[k].body = crate::weld::trimmed(t, &body, &refs, i, me)?;
         }
         BodyFeature::Move { steps, copy } => {
             let m = motion(steps);
@@ -907,7 +934,7 @@ fn cutter(plain: History<'_>, i: usize, by: &Cutter) -> Result<Surface, RegenErr
 
 /// A solid bounded by `s` holding all of box `b` on one side of it, and whether that side is
 /// the plus one (where the surface's normal points).
-fn half(s: &Surface, b: &Box3, (i, id): (usize, u64)) -> Result<(Body, bool), RegenError> {
+pub(crate) fn half(s: &Surface, b: &Box3, (i, id): (usize, u64)) -> Result<(Body, bool), RegenError> {
     let ee = |error| RegenError::Extrude { feature: i, error };
     // an empty body has an empty box: nothing for the cutter to miss or cross
     if !b.diagonal().is_finite() {
@@ -1058,7 +1085,7 @@ fn build_each(plain: History<'_>, start: usize, threads: usize) -> Result<Vec<Ve
         return Ok(out);
     }
     let chunk = n.div_ceil(threads);
-    let built: Vec<Result<Vec<Vec<Tool>>, RegenError>> = std::thread::scope(|s| {
+    let built: Vec<Result<Vec<Vec<Tool>>, RegenError>> = forge_math::par::scope(|s| {
         let hs: Vec<_> = (start..plain.len())
             .step_by(chunk)
             .map(|a| {

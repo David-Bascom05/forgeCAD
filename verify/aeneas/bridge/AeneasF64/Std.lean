@@ -34,6 +34,9 @@ def core.f64.F64.NAN : Result F64 := ok IEEE754.FP.nan
 def core.f64.F64.abs (x : F64) : Result F64 := ok (IEEE754.FP.abs x)
 /-- `x.sqrt()`: correctly rounded (IEEE 754 requires it; `IEEE754.FP.sqrt_eq_round`) -/
 def core.f64.F64.sqrt (x : F64) : Result F64 := ok (IEEE754.FP.sqrt x)
+/-- The same, as Charon names it when it comes from `std` (a method called through `std`, as
+`Vec2::length` does): one function. -/
+def std.f64.F64.sqrt (x : F64) : Result F64 := ok (IEEE754.FP.sqrt x)
 /-- `x.is_nan()` -/
 def core.f64.F64.is_nan (x : F64) : Result Bool := ok x.isNaN
 /-- `x.is_finite()` -/

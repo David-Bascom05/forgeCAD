@@ -6,7 +6,7 @@
 //! part's own faces.
 
 use crate::Side;
-use forge_bool::{BoolError, Index, Op, Where, boolean};
+use forge_bool::{BoolError, Index, Op, Where};
 use forge_math::{Box3, Frame, Point2, Point3, Vec2, dmath, tol};
 use forge_ops::{DraftError, ExtrudeError, Profile, ProfileLoop, Segment, draft, extrude};
 use forge_topo::{Body, EdgeId, Name, ShellId, VertexId};
@@ -286,7 +286,7 @@ pub(crate) fn rib(body: &Body, r: &Rib, id: u64) -> Result<Body, RibError> {
         let p = to3(mid) + fill * 1e-3 + pl.z() * ((lo + hi) / 2.0);
         (tool, p)
     };
-    let mut rest = boolean(&tool, body, Op::Subtract, id + 2_000_000).map_err(RibError::Boolean)?;
+    let mut rest = crate::combined(&tool, body, Op::Subtract, id + 2_000_000).map_err(RibError::Boolean)?;
     rest.rebuild_shells();
     let lump = (0..rest.shells.len() as u32)
         .map(|s| shell_body(&rest, ShellId(s)))
@@ -296,5 +296,5 @@ pub(crate) fn rib(body: &Body, r: &Rib, id: u64) -> Result<Body, RibError> {
     if !inside(&lb, &bound.grow(margin)) {
         return Err(RibError::RunsOff);
     }
-    boolean(body, &lump, Op::Union, id + 3_000_000).map_err(RibError::Boolean)
+    crate::combined(body, &lump, Op::Union, id + 3_000_000).map_err(RibError::Boolean)
 }

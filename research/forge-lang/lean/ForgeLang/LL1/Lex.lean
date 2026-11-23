@@ -8,8 +8,9 @@ trivia between tokens), so:
 * `lex_lossless`: the pieces, in order, are the input: whitespace and comments are kept, nothing
   is dropped or invented (with `LL1.lossless` this is the byte-identical-edit claim).
 * `word_maximal`: a name or keyword is never followed by a name byte (maximal munch).
-* `num_literal`: a literal of the shape SetParam writes (sign, digits, fraction, exponent, unit)
-  lexes back as exactly one number token, whatever follows that cannot continue a number.
+* `num_literal`: a literal of the shape SetParam writes (sign, digits, fraction, exponent, unit:
+  none, `mm`, `deg` or `in`) lexes back as exactly one number token, whatever follows that cannot
+  continue a number.
 * `reparse_lex`: an edit of one plain number (the same sign) and of the trivia after it on its
   line, as `syntax::reparse_number` takes it, lexes to the same pieces before the number, the new
   number, trivia, and then the same pieces as before, each moved by the change in length. Where
@@ -37,6 +38,9 @@ def DOT : Nat := 46
 
 inductive Unit where
   | none | mm | deg
+  /-- `in`: inches, a length, written right after the number (`0.063in`); `5 in OCC`, with a
+  space, is a number and the keyword. -/
+  | inch
   deriving DecidableEq, Repr
 
 inductive Kind where
@@ -101,7 +105,8 @@ def floatOk (t : Bytes) : Bool :=
               !s.isEmpty && s.all isDigit
 
 def unitOf (u : Bytes) : Option Unit :=
-  if u = [] then some .none else if u = [109, 109] then some .mm else if u = [100, 101, 103] then some .deg else none
+  if u = [] then some .none else if u = [109, 109] then some .mm else if u = [100, 101, 103] then some .deg
+  else if u = [105, 110] then some .inch else none
 
 /-- The first operator of `ops` the input starts with, and its index. -/
 def opAt : Nat → List Bytes → Bytes → Option (Nat × Bytes)
@@ -374,6 +379,7 @@ def unitText : Unit → Bytes
   | .none => []
   | .mm => [109, 109]
   | .deg => [100, 101, 103]
+  | .inch => [105, 110]
 
 def Lit.mant (l : Lit) : Bytes := l.int ++ (match l.frac with | some f => DOT :: f | none => [])
 def Lit.expPart (l : Lit) : Bytes :=
@@ -437,6 +443,7 @@ theorem unit_head (u : Unit) (r : Bytes) (hr : Stops r) :
   | none => have := hr c (by simpa [unitText] using hc); exact ⟨this.1, this.2.2⟩
   | mm => simp [unitText] at hc; subst hc; decide
   | deg => simp [unitText] at hc; subst hc; decide
+  | inch => simp [unitText] at hc; subst hc; decide
 
 theorem exp_scan {l : Lit} (hl : l.Ok) (Y : Bytes) (hY : ∀ c ∈ Y.head?, isDigit c = false) (hYe : ∀ c ∈ Y.head?, c ≠ 69 ∧ c ≠ 101) :
     exponent (l.expPart ++ Y) = (l.expPart, Y) := by

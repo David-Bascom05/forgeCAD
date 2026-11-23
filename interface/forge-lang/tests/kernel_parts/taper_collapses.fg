@@ -1,7 +1,8 @@
-# A hexagonal pit 0.5 deep whose walls taper 80 deg: they meet 0.36 down (0.5 tan 80 deg is
-# past the hexagon's inradius 1.73), so the tool collapses. The cut builds an invalid body
-# (EdgeDegenerate) where a clean refusal is due; at 70 deg the walls do not meet and it builds.
-# Restated from a CADFS part (00713562, a 0.2 deep hexagon at 85 deg) that fails the same way.
+# A hexagonal pit 0.5 deep whose walls taper 80 deg: they meet sqrt 3 / tan 80 deg = 0.305 down
+# (0.5 tan 80 deg is past the hexagon's inradius 1.73), so the pit is the hexagonal pyramid they
+# make, 1.0579 mm3, as a square's is. It built an invalid body (EdgeDegenerate); at 70 deg the
+# walls do not meet. Restated from a CADFS part (00713562, a 0.2 deep hexagon at 85 deg) that
+# failed the same way.
 param base.w = 20
 param plate.t = 4
 sketch base(on: xy) {

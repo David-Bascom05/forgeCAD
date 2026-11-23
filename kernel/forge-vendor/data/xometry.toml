@@ -1,0 +1,236 @@
+# Xometry, restated from its public sheet metal and laser cutting pages (read 2026-11-22). Not an
+# official profile and not endorsed by Xometry. Verify with the vendor before ordering.
+# PARTIAL: Xometry publishes no bend radius or K by material (its design guide PDF is behind a
+# form); a bent sheet must give r: and bend: itself. Rules are multiples of the thickness (MT).
+# Sources and choices: research/sheet-metal/vendors/xometry.md
+format = 1
+id = "xometry"
+name = "Xometry"
+source = "https://www.xometry.com/capabilities/sheet-cutting/metal-laser-cutting/ ; https://www.xometry.com/capabilities/sheet-metal-fabrication/ ; https://www.xometry.com/sheet-cutting/standard-sheet-sizes/ ; https://www.xometry.com/manufacturing-standards/"
+taken = "2026-11-22"
+units = "in"
+note = "Partial: feature rules as multiples of thickness from Xometry's laser cutting and fabrication pages, thicknesses from its standard sheet sizes. No bend radii or K. Hems go to a manual quote. Not official. Verify with the vendor before ordering."
+operations = ["laser", "waterjet", "punch", "bend", "hardware", "countersink", "powder_coat", "deburr"]
+
+[limits]
+max_flat = [60, 120]         # blank size 5 ft x 10 ft (the bending page says 10 ft x 20 ft)
+
+[tolerance]
+bend_angle = "+/-1 deg"
+edge_to_bend = "+/-0.015 in"
+bend_to_hole = "+/-0.015 in"
+cut = "+/-0.010 in feature edge to edge on one surface"
+
+[rules]
+hole_to_edge = "min(2t, 0.125)"
+min_web = "min(6t, 0.125)"   # hole to hole
+min_slot = "max(0.040, 1t)"
+min_hole = "0.5t"            # minimum feature size
+hole_to_bend = "6t"          # bend edge to hole
+relief = { width = "max(0.010, 1t)" }
+
+[[material]]
+name = "5052-H32 aluminum"
+aliases = ["5052", "5052-H32", "aluminum 5052"]
+library = "5052-H32"
+
+[[material.stock]]
+t = 0.02
+
+[[material.stock]]
+t = 0.025
+
+[[material.stock]]
+t = 0.032
+
+[[material.stock]]
+t = 0.04
+
+[[material.stock]]
+t = 0.05
+
+[[material.stock]]
+t = 0.063
+
+[[material.stock]]
+t = 0.08
+
+[[material.stock]]
+t = 0.09
+
+[[material.stock]]
+t = 0.1
+
+[[material.stock]]
+t = 0.125
+
+[[material.stock]]
+t = 0.16
+
+[[material.stock]]
+t = 0.188
+
+[[material.stock]]
+t = 0.25
+
+[[material.stock]]
+t = 0.375
+
+[[material.stock]]
+t = 0.5
+
+[[material]]
+name = "6061-T6 aluminum"
+aliases = ["6061", "6061-T6", "aluminum 6061"]
+library = "6061-T6"
+
+[[material.stock]]
+t = 0.016
+
+[[material.stock]]
+t = 0.02
+
+[[material.stock]]
+t = 0.025
+
+[[material.stock]]
+t = 0.032
+
+[[material.stock]]
+t = 0.04
+
+[[material.stock]]
+t = 0.05
+
+[[material.stock]]
+t = 0.063
+
+[[material.stock]]
+t = 0.08
+
+[[material.stock]]
+t = 0.09
+
+[[material.stock]]
+t = 0.1
+
+[[material.stock]]
+t = 0.125
+
+[[material.stock]]
+t = 0.16
+
+[[material.stock]]
+t = 0.19
+
+[[material.stock]]
+t = 0.25
+
+[[material.stock]]
+t = 0.313
+
+[[material.stock]]
+t = 0.375
+
+[[material.stock]]
+t = 0.5
+
+[[material.stock]]
+t = 0.625
+
+[[material.stock]]
+t = 0.75
+
+[[material.stock]]
+t = 0.875
+
+[[material.stock]]
+t = 1
+
+[[material]]
+name = "A366/1008 steel"
+aliases = ["1008", "A366", "1008 CR", "mild steel", "steel"]
+library = "1008 cold rolled"
+
+[[material.stock]]
+t = 0.024
+
+[[material.stock]]
+t = 0.03
+
+[[material.stock]]
+t = 0.036
+
+[[material.stock]]
+t = 0.048
+
+[[material.stock]]
+t = 0.06
+
+[[material.stock]]
+t = 0.075
+
+[[material.stock]]
+t = 0.09
+
+[[material.stock]]
+t = 0.105
+
+[[material.stock]]
+t = 0.125
+
+[[material]]
+name = "304 stainless"
+aliases = ["304", "304 SS", "304 stainless steel"]
+library = "304 annealed"
+
+[[material.stock]]
+t = 0.018
+
+[[material.stock]]
+t = 0.024
+
+[[material.stock]]
+t = 0.03
+
+[[material.stock]]
+t = 0.036
+
+[[material.stock]]
+t = 0.048
+
+[[material.stock]]
+t = 0.06
+
+[[material.stock]]
+t = 0.075
+
+[[material.stock]]
+t = 0.105
+
+[[material.stock]]
+t = 0.12
+
+[[material.stock]]
+t = 0.188
+
+[[material.stock]]
+t = 0.25
+
+[[material.stock]]
+t = 0.313
+
+[[material.stock]]
+t = 0.375
+
+[[material.stock]]
+t = 0.5
+
+[[material.stock]]
+t = 0.625
+
+[[material.stock]]
+t = 0.75
+
+[[material.stock]]
+t = 1

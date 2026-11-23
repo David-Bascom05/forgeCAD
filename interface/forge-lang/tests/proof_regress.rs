@@ -531,7 +531,9 @@ fn a_fan_out_of_components_runs_out_of_fuel() {
     // the work, not the clock (a loaded machine moves the time, printed for a person): of the
     // 10^7 components the tree asks for, the run made the budget's and stopped there
     assert!(
-        r.errors.iter().any(|e| matches!(e, forge_lang::error::Error::Fuel { budget, .. }
+        r.errors
+            .iter()
+            .any(|e| matches!(e, forge_lang::error::Error::Fuel { budget, .. }
             if *budget == forge_lang::eval::TOTAL_COMPONENTS)),
         "{:?}",
         kinds(&r)

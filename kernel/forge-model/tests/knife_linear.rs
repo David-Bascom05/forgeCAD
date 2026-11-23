@@ -58,7 +58,10 @@ fn steps(n: usize, bodies: bool) -> u64 {
     part.regenerate_solids_ids(Some(ids)).expect("sequential");
     part.regenerate_nary_solids_ids(1, Some(ids)).expect("n-ary");
     let stats = forge_bool::decisions::take();
-    stats.rungs.get("feature stepped").map_or(0, |r| r.outcomes.iter().sum())
+    stats
+        .rungs
+        .get("feature stepped")
+        .map_or(0, |r| r.outcomes.iter().sum())
 }
 
 #[test]

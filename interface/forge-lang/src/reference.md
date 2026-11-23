@@ -28,7 +28,7 @@ expect volume = 11966 +- 0.1%
 `#` starts a comment. A comment line `# units in` (or `cm`, `m`, `ft`, `mm`) is the part's
 own unit for people: the app shows lengths and takes bare numbers typed in it, converting to mm as
 it writes them; the text's numbers stay mm and nothing builds from the line. `#~ID ` starts a line
-`Suppress {id}` took out of the build (`#~ID< `, `#~ID> `: one it put on a line of its own). Numbers: `12`, `0.5`, `1e3`, with a unit `mm` or `deg`. A minus sign
+`Suppress {id}` took out of the build (`#~ID< `, `#~ID> `: one it put on a line of its own). Numbers: `12`, `0.5`, `1e3`, with a unit `mm`, `in` or `deg` written right after the digits. `in` is inches, a length, 25.4 mm exactly (`0.063in` is 1.6002 mm). A unit is the letters glued to the number, so `5in` is always a number in inches; `5 in OCC`, with a space, is a number and the keyword `in` (proved: LexUnits.lean). A minus sign
 directly before a digit, where no value precedes it, is part of the number (`-1`, `(-1, 2)`);
 `a -1` and `a - 1` subtract. Strings: `"M6"`. Names: letters, digits, `_`. Keywords: `shared param
 fn for in if else return expect and or not true false sketch path at component` (`at:` is still a keyword
@@ -168,6 +168,33 @@ hole touches its outline is the kernel's `ZeroThickness`, saying where; a cut wh
 outside the part builds). A loop that crosses or touches itself, or two loops crossing or
 overlapping, is `SketchProfile` naming the two entities; a knife edge (a line leaving tangent
 along the arc it came on) is not a crossing.
+
+Text in a sketch:
+
+```
+label = text(STRING | [LINE, ..], at: (x, y), size: s, font: "Open Sans", bold: false, italic: false,
+             align: "left"|"center"|"right", angle: A)
+raised = extrude(top.label, h)        every glyph region; cut(top.label, d) engraves
+raised.side(top.label[k])             the walls of the k-th drawn character (blanks draw nothing)
+raised.end  raised.start              every glyph's cap
+```
+
+The glyphs are drawn exactly as the font holds them, fixed in the sketch: a line stays a line, a
+TrueType quadratic is a degree-2 control spline on its three points, a CFF cubic a degree-3 one on
+its four. `size` is the em; the baseline starts at `at` (aligned by the line's advance), turned by
+`angle`; a list of strings, `text(["FIRST", "SECOND"], ..)`, sets each line the font's
+ascender − descender + line gap below the one before (a string holds no line break).
+`font:` is a shipped family (Open Sans 1.10: Regular, Bold; Source Sans 3:
+Regular, CFF outlines; SIL OFL 1.1) or a .ttf/.otf file beside the part, which is its one face
+(`bold`/`italic` must be its own). The text's regions are only its own glyphs' (whatever else
+the sketch draws): each outside contour with the counters inside it as holes, which loop lies
+inside which decided exactly. Glyph contours that cross or touch (some fonts' accented
+composites, neighbours kerned into each other) are `SketchProfile`, never joined. A missing
+glyph, family or style, or nothing drawn, is `Text` (`NoGlyph`, `NoFamily`, `NoStyle`, `Empty`).
+Names: segment s of contour c of the n-th `ch` of the string is `label.ch#n.c.s`, so a glyph's
+faces keep their names while other characters come and go, and when the text moves, turns or
+resizes; the extrude of several regions names each region's caps by its outline's least
+segment. `next` and `upto` do not take several regions (`NotWith`).
 
 A loop value (rect, slot, hull, poly, path) indexes its segments: `o[2]`, `o.segs`. Entity
 members: points `x y`; lines `a b dir`; arcs `center a b`; circles `center`; arcs and circles `axis` (through
@@ -582,11 +609,12 @@ blank = unfold(base, on: offset(base.bottom, gap))
 
 ```
 sheet(PROFILE, t: T, r: R, bend: RULE, shop: SHOP, corner: CORNER, material: "NAME",
-      finish: "raw"|"powder_coat")
+      finish: "raw"|"powder_coat", vendor: "ID")
     the base wall: PROFILE's outline and holes. r and bend may come from the shop's stock of
     thickness t instead, and so does the default relief. corner: what corners get (default
     circular_relief(), just clear of both bends). material: the stock's name for the DXF's
-    part note. Its own dims: thickness, radius, k.
+    part note. vendor: a vendor profile's shop, material: then one of its materials (Vendor
+    profiles). Its own dims: thickness, radius, k.
 flange(EDGE, height: H, angle: A = 90deg, side: "up"|"down" = "up",
        measure: "inner"|"outer" = "outer", r: R, relief: RELIEF,
        position: "inside"|"outside"|"bend_outside" = "inside")
@@ -720,6 +748,7 @@ relief_rule(shape: "rect"|"obround"|"tear", width: Z, depth: Z,
       it is taken (the relief widened past the edge). A relief asked for smaller than the rule's
       is the violation ReliefUndersized, with SetArg fixes to the rule's size.
 shop([STOCK, ..], kerf: K)
+vendor("ID", material: "NAME")    a vendor profile's shop for one of its materials (Vendor profiles)
 ```
 
 ```
@@ -795,6 +824,188 @@ folded body as STEP AP214 in OUT (any flat pattern left out) and each unfold's f
 OUT-<unfold>.step; for an assembly, its structure (one product per part, one use per instance,
 placed by the solve). `fg run --json` lists each sheet: thickness, radius, rule, and each bend's flange, angle, radius,
 allowance and setback.
+
+## Weldments
+
+Structural members along the segments of a layout: each segment a member, a standard or sketched
+section carried along it (an extrusion along a line, a revolve along an arc), cut on planes where
+members meet, each its own body. Exact: lines, arcs and planes; the cut list from the section.
+
+```
+shared W = 600
+shared D = 400
+shared H = 700
+sketch lay(on: xy) {
+  r = rect(corner: (0, 0), size: (W, D))
+  base = line((0, 0), (W, 0), construction: true)
+}
+top = members(lay.r, section: "SHS 40x40x3", corner: "miter", gap: 0.5)
+sketch side(on: rotate(lay.plane, about: lay.base, by: 90deg)) {
+  post = line((W / 2, 0), (W / 2, -H))
+}
+legs = members(side.post, section: "SHS 40x40x3")
+seat = end_trim(legs[0], to: top[0])
+foot = end_cap(legs[0], end: "end", t: 5)
+brace = corner_plate(top[0], top[1], size: 80, t: 5, chamfer: 10)
+```
+
+```
+members(LAYOUT, section: "SHS 40x40x3" | LOOP, align: "center", offset: (dx, dy), turn: A,
+        mirror: false, corner: "miter"|"butt", gap: G, corners: [(POINT, CORNER, G), ..],
+        rank: [k, ..])
+    one member per segment of LAYOUT (a sketch line, arc, loop or path, or a list of them from
+    any sketches: a layout in 3D), open or closed; member k is F[k], in the layout's order, a
+    feature and a body of its own (bodies:, of:, union, fillet, hole and export take it).
+end_trim(MEMBERS, to: FACE | WORKPLANE | SKETCH | MEMBER | BODY, gap: G, end: "start"|"end")
+    the member's end nearer the target cut: on a plane (gap short of it; the cut list follows),
+    or coped to a member's outline carried along its path (a round tube's saddle) or to a body,
+    the part of it beyond the member's middle; leaving the member in pieces is BodyError Pieces.
+    gap with a body or member is NotWith.
+end_cap(MEMBER, end: "start"|"end" = "end", t: T)
+    a plate of the section's outline, T thick, outside a square end: its own body
+    (CapOnSlantEnd on an end cut on the slant or coped).
+corner_plate(A, B, size: S, t: T, chamfer: C)
+    a triangular plate where members A and B meet at an angle, in the plane of their paths, T
+    thick about it: its corner where their inside faces meet, its legs S along each, the corner
+    cut back C (NoCorner where they share no node, or run in line).
+```
+
+- The member's frame: z along the path, y the layout sketch's normal, x = y × z (the path's left
+  in its sketch; inward round a counter-clockwise loop). The section's x and y are those.
+  `align` puts the section's pierce point on the path: `center` (its box's middle; the default
+  for the library), `centroid` (exact), `origin` (a sketched section's own origin, its default),
+  `top`, `bottom`, `left`, `right`, `top_left`, `top_right`, `bottom_left`, `bottom_right` (of
+  its box); `offset` moves the section from there; `turn` turns it about the path; `mirror`
+  flips its x.
+- Sections (`forge_weld::library`, sizes restated from the European tables): `SHS a x a x t`
+  and `RHS h x b x t` (EN 10219 cold-formed; corner radii outer 2t, inner t to t = 6; 2.5t,
+  1.5t to 10; 3t, 2t over; RHS stands on its longer side), `CHS d x t`, `L a x b x t` (EN
+  10056, root and toe radii; `L 50x5` for equal legs), `UPE n`, `IPE n` (EN 10365, parallel
+  flanges, root radii), `FB w x t`. An unknown designation is `UnknownSize`, with SetArg fixes to
+  the nearest sizes of its family. A sketched section is lines and arcs (`SectionCurve`
+  otherwise).
+- The rule at a node (where segment ends meet, or an end lies on another segment's middle): the
+  members there are ranked, members passing through first, then those in `rank`, then the rest
+  in layout order. The first two, if both end there, meet by the node's corner (`corners` sets
+  it at a node by its point): `miter` cuts both on the plane bisecting their directions, each
+  `gap / 2` back; `butt` runs the first on to the plane touching the second's outline on its
+  far side and stops the second on the plane touching the first's outline on its own side, `gap`
+  off it. Two meeting in line meet square. Every other member is butted to each member ranked
+  before it. A touching plane is the outline's support square to the member's axis: a box
+  section's face, a round one's tangent plane (`end_trim` to a member copes it instead).
+  Refusals: `ButtParallel`, `MiterTooSharp` (members folding back), `CrossingMembers` (two
+  passing through one node), `CutAlongMember`, `MemberCutAway` (the end cuts meet inside it),
+  `ArcTooTight` (an arc no larger than the section, or an end cut more than a quarter turn
+  round it), `MembersOverlap` (an arc member curving into another: such pairs are intersected;
+  straight members are kept apart by their cut planes by construction).
+- Anchors: `F[k].start`, `F[k].end`, a member's end faces (its cut planes' or the section's);
+  `F[k].top`, `.bottom`, `.left`, `.right`, the flat sides of its outline facing the section's +y,
+  -y, +x, -x (a plane to sketch a hole on: `sketch hs(on: top[0].top) { .. }`).
+- The cut list: `fg query F cutlist` (and `cutlist` in `fg run --json`): identical members on
+  one row (section, cut length, overall length and the cuts at each end, either way round):
+  `qty`, `members`, `length` (along the path between the end cuts), `overall` (long point to
+  long point along a straight member: exact from the section's outline), for an arc member its
+  `radius` and `arc` (degrees turned between the end cuts), each end's cuts (`angle` off square,
+  degrees, and `toward`: the direction in the section's x, y of the long point), copes by
+  target; then the plates (`end_cap`, `corner_plate`): thickness, area, the members they are on.
+## Vendor profiles
+
+A vendor profile is a fabricator's sheet-metal capabilities as a saved file: the materials it
+offers, each stocked thickness with the inside radii it tools, its bend rule (K, a K table, or the
+deduction at 90deg) and its minimum distances, its process limits, the operations it does, the
+hardware it presses in, and the tolerances it quotes, with where the data came from and when.
+Every field is optional: a rule a profile leaves out is not checked.
+
+```
+sheet(PROFILE, t: 0.063in, vendor: "sendcutsend", material: "5052-H32 aluminum")
+shared fab = vendor("fabworks", material: "304")     # a shop, for sheet(.., shop: fab)
+```
+
+With `vendor:`, `material:` names one of the vendor's materials (name or alias, case and
+punctuation ignored); its `library` name (forge-material) gives the mass, and the drawing's note
+the vendor's own name. `r:` and `bend:` default from the vendor's stock of thickness `t`, so the
+flat develops by the vendor's K and radius. Precedence: an `r:` or `bend:` written on the sheet
+wins over the vendor's stock (a radius it does not tool is then RadiusNotTooled in the report), and
+`shop:` with `vendor:` on one sheet is refused (BadValue: one or the other); a stock is `t` to within 0.005 mm (0.063 in is
+1.6002 mm, written 1.6mm). Refused, with the options listed and fixes: `UnknownVendor` (SetArg to the
+nearest ids), `VendorMaterial` (the materials offered; SetArg), `VendorThickness` (the stocked
+thicknesses in mm and inches with gauges; SetParam on `t` to the nearest). A vendor that states no
+bend rule for a stock it bends (a partial profile) leaves `r:` and `bend:` to the sheet
+(MissingArg). `0.063in` is 1.6002 mm exactly.
+
+Built in, each restated from the vendor's public design pages, read 2026-11-22 (jlc 2026-11-23), its sources in the
+file and in research/sheet-metal/vendors/. Not the vendors' own, not endorsed by them: verify with
+the vendor before ordering.
+
+```
+sendcutsend   per stock: radius, K, deduction, die width (hole and edge to bend: half of it,
+              from the bend's centre), minimum flange, relief depth; limits; PEM nuts. 6061 cut only
+fabworks      per stock: measured K and radius, minimum flange, distortion zone, angle and bend
+              length limits, minimum feature. 6061, 7075 cut only
+oshcut        partial: per-stock minimum hole, channel and wall; no bend data published as text
+xometry       partial: rules as multiples of t; thicknesses; no bend data published as text
+jlc           partial (JLCCNC, read 2026-11-23): minimum bending edge and hole to bending edge per
+              thickness, minimum hole max(0.5t, 1), hole spacing, tolerances, press-in hardware;
+              no K or inside radius published
+```
+
+Profiles are searched in the project's `vendors/*.toml` beside the file, then the user's
+`<config>/forgecad/vendors/*.toml` (Linux `~/.config/forgecad/vendors`), then the built-in ones;
+an id found first wins. `forgecad vendor new myshop --from sendcutsend` copies one to edit;
+`import F` saves a file into the user's folder, `export ID -o F` writes one out.
+
+The file (format 1), a TOML subset; lengths in its `units` ("in" or "mm"), angles in degrees:
+
+```
+format = 1
+id = "acme"   name = "Acme"   source = "https://.."   taken = "2026-11-22"   units = "in"
+note = ".."   kerf = 0.006
+operations = ["laser", "waterjet", "bend", "hem", "punch", "form", "hardware", "countersink",
+              "tap", "powder_coat", "deburr"]          # left out: not stated, not checked
+[limits]      max_flat = [44, 68]  max_flat_bent = [30, 44]  max_flat_coated = [30, 36]
+              min_flat = [0.25, 0.375]  min_flat_bent = [0.375, 1.5]  max_bend_length = 44
+              max_box_flange = 3  box_flange_when = "hardware"  bend_angles = [0, 130]
+[tolerance]   cut = "+/-0.005"  bend_angle = "+/-1 deg"   # quoted, shown in the report
+[rules]       LEN rules for every stock; a material's and then a stock's own override them
+[[material]]  name  aliases  library  hardness (HRB)  not = ["bend"]  note  + rules
+[[material.stock]]  t  gauge  radius = [R, ..]  k | ktable = [[r/t, K], ..] |
+              bend_deduction = [BD at 90deg, one per radius]  not  note  + rules
+[[hardware]]  kind (nut|stud|standoff)  size  code  sheet = [MIN, MAX]  hole  edge
+              max_hardness  materials = [..]
+tooling = "std-eu"  or  [tooling] ..   the press brake's, for the bend simulator (forge-brake's
+              keys: base, punches, dies, press, clearance, self_clearance, springback; lengths in
+              the file's units, angles in degrees), kept as written
+```
+
+Rules: `min_flange` (to the outside, the outer virtual sharp, as fabricators quote it),
+`hole_to_bend`, `hole_to_edge`, `bend_to_edge`, `min_hole`, `min_slot`, `min_web`, `bend_from`
+("tangent" line, default, or "centre" line of the bend zone), `bend_angles`, `max_bend_length`,
+`relief = { shape, width, depth, corner_gap }`. A LEN is a number or text: `"2.5t + r + 0.02"`,
+`"min(2t, 0.125)"`, `"max(1t, 0.030)"` (t the thickness, r the bend's radius). A key the format
+does not have is refused (a misspelt rule is never silently unchecked), and so is a format other
+than 1.
+
+`fg query F dfm` (and the `query` tool with `sel: "dfm"`) checks each sheet against its vendor or
+its shop: the shop rules above (FlangeTooShort, HoleNearBend, HoleNearEdge, HoleTooSmall,
+SlotTooNarrow, RadiusNotTooled, ThicknessNotStocked, FlatTooLarge, PartTooSmall, BendTooLong,
+BendAngleOutOfRange, BoxFlangeTooTall, ReliefUndersized, CutCrossesBend, the hardware rules) and
+
+```
+BendNearEdge          an edge of the blank in front of a bend (a notch's side, an outline jog)
+                      nearer than bend_to_edge; the flange's own far edge is min_flange's
+WebTooNarrow          material narrower than min_web: between two holes, or a neck of the
+                      outline (two edges facing each other square across material)
+OperationNotOffered   a bend, hem, turret hit, form or pressed-in part the vendor does not do
+                      (or does not do in this stock)
+```
+
+Each is measured exactly on the flat's lines and arcs and the B-rep. The report gives, per sheet,
+the vendor (id, name, material, source, taken, tolerances, "Verify with the vendor before
+ordering."), the rules and limits its stock is held to, the operations offered, and each
+violation: `rule`, `severity`, `text`, `feature` and `line`, `measured` against `limit` (`sense`
+min or max; mm, degrees for an angle), `location` (`anchor` and the `faces` it names as handles,
+`flat` points in the flat pattern's coordinates, `at` on the folded part), its `data` and `fixes`.
+Refusals that kept the part from building (VendorThickness, ..) are listed under `refused`.
 
 ## iProperties and materials
 
@@ -1309,7 +1520,24 @@ tabs [of OCC] [t MAX]          thin flat runs (two planar faces facing apart, at
                                thickness, centre, normal, area, their holes
 unfold                         whether each sheet unfolds to one blank, its size, and the
                                warnings (FlatOverlap, FlatTouch, SheetSplit) that would stop it
+cutlist                        the weldment's cut list: identical members on one row (section,
+                               qty, length, overall, each end's cut angles, copes), then plates
+bendsim [tooling T] [vendor V] [sequence S] [sheet NAME] [uts MPA]
+                               the sheet bent on a press brake (CLI: --tooling --vendor --sequence):
+                               a bend order, punch, die, orientation and backgauge stop per bend,
+                               every check through each bend's motion (tool and self clearance,
+                               minimum flange, V, angles, radius, stroke, open height, bed,
+                               segments, force), each failure's rule, value, limit, part anchor,
+                               tool and place; infeasible: each bend's blocking checks; fixes
+dfm                            each sheet against its vendor or shop: every violation with its
+                               rule, measured value, limit and location (Vendor profiles)
 ```
+
+`bendsim`: T is a standard tooling set (`std-eu`, `std-us`) or a `.json` tooling file; V a vendor
+file whose `tooling` names one; S the bends in order by flange name or number (left out, searched).
+Schema `forgecad.bendsim/1`, the tooling file's fields and every rule: docs/bendsim.md. Errors:
+`NoSheet`, `NoSuchTooling`, `NoSuchBend`, `BadSequence`, `HemNotSimulated` (hems are not
+simulated), `NotBuilt` (with the build's own error as `cause`).
 
 Names are stable: a face's anchor text where the part's anchors name it, else its handle
 (`@f..`); a hole its wall's anchor text (`#k` where that names several), else `hole[k]`; in an
@@ -1328,4 +1556,6 @@ fg serve                    JSON lines {"cmd":"run","file":F}: stages kept, so a
                             only from the first feature that changed
 fg reference
 fg query FILE QUERY.. [--json]
+forgecad vendor list | show ID | export ID [-o F] | import F | new ID [--from ID] [--name N] |
+                check F [--json]      sheet-metal vendor profiles (Vendor profiles)
 ```
