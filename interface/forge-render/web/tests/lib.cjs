@@ -103,21 +103,46 @@ function differs(a, b) {
 }
 
 /// The app's frame (offscreen mode): {width, height, rgba}, and how many colours it has.
+/// The app's next frame (offscreen mode), looked at in the page (a frame is megabytes: carried
+/// out as numbers it took minutes): {width, height, colours, changed} (bytes changed from the
+/// frame read before it, -1 for the first), and its RGBA only when $FORGE_WEB_SHOTS asks to keep
+/// pictures.
 async function pixels(p) {
-  const r = await p.evaluate(async () => {
+  const keep = !!process.env.FORGE_WEB_SHOTS;
+  const r = await p.evaluate(async (keep) => {
     const f = await window.forgecad.pixels();
-    return f && { width: f.width, height: f.height, rgba: Array.from(f.rgba) };
-  });
+    if (!f) return null;
+    const rgba = f.rgba;
+    const colours = new Set();
+    for (let i = 0; i < rgba.length; i += 4 * 7) colours.add((rgba[i] << 16) | (rgba[i + 1] << 8) | rgba[i + 2]);
+    const last = window.forge_last_frame;
+    let changed = -1;
+    if (last && last.length === rgba.length) {
+      changed = 0;
+      for (let i = 0; i < rgba.length; i++) if (rgba[i] !== last[i]) changed++;
+    }
+    window.forge_last_frame = rgba;
+    let b64 = null;
+    if (keep) {
+      let s = "";
+      for (let i = 0; i < rgba.length; i += 0x8000) s += String.fromCharCode(...rgba.subarray(i, i + 0x8000));
+      b64 = btoa(s);
+    }
+    return { width: f.width, height: f.height, colours: colours.size, changed, b64 };
+  }, keep);
   if (!r) throw new Error("the frame didn't read back");
-  const rgba = Uint8Array.from(r.rgba);
-  const colours = new Set();
-  for (let i = 0; i < rgba.length; i += 4 * 7) colours.add((rgba[i] << 16) | (rgba[i + 1] << 8) | rgba[i + 2]);
-  return { width: r.width, height: r.height, rgba, colours: colours.size };
+  return { ...r, rgba: r.b64 && Uint8Array.from(Buffer.from(r.b64, "base64")) };
+}
+
+/// Frames drawn after the state `st` was read: waits for `n` more (a change on screen is drawn).
+async function frames(p, st, n = 2) {
+  return until(p, (s) => s.frames >= st.frames + n, `${n} frames drawn`);
 }
 
 /// Where the tests keep what the app drew: $FORGE_WEB_SHOTS, else the system's temp folder.
 function shot(name, f) {
-  const dir = process.env.FORGE_WEB_SHOTS ?? require("node:os").tmpdir();
+  if (!f.rgba) return "not kept: FORGE_WEB_SHOTS=DIR keeps it";
+  const dir = process.env.FORGE_WEB_SHOTS;
   fs.mkdirSync(dir, { recursive: true });
   const at = path.join(dir, name);
   fs.writeFileSync(at, require("./png.cjs")(f.width, f.height, f.rgba));
@@ -128,4 +153,4 @@ function tmpdir(tag) {
   return fs.mkdtempSync(path.join(require("node:os").tmpdir(), `forgecad-${tag}-`));
 }
 
-module.exports = { repo, bins, browser, page, check, until, loaded, serve, native, differs, tmpdir, pixels, shot, SAME };
+module.exports = { repo, bins, browser, page, check, until, loaded, frames, serve, native, differs, tmpdir, pixels, shot, SAME };

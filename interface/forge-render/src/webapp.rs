@@ -61,6 +61,8 @@ thread_local! {
     static WAKE: RefCell<Option<EventLoopProxy<Msg>>> = const { RefCell::new(None) };
     /// The app's state as the page reads it (`app_state`), made after each frame.
     static STATE: RefCell<String> = RefCell::new("{\"ready\":false}".into());
+    /// Frames drawn.
+    static FRAMES: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
     /// When the app's first frame was drawn (`performance.now()`, ms from the page's start).
     static FIRST_FRAME: std::cell::Cell<f64> = const { std::cell::Cell::new(0.0) };
     /// The page's own changes are not echoed back to it.
@@ -337,6 +339,7 @@ impl Host {
             (None, None) => return,
         };
         self.frames += 1;
+        FRAMES.with(|f| f.set(self.frames));
         if self.frames == 1 {
             FIRST_FRAME.with(|f| f.set(perf_now()));
         }
@@ -623,6 +626,8 @@ fn state_json(g: &Gui, canvas: Json) -> String {
     Json::obj(vec![
         ("ready", true.into()),
         ("first_frame_ms", num(FIRST_FRAME.with(|f| f.get()))),
+        // frames drawn so far: a test waits on this, not on pictures, for a change to be drawn
+        ("frames", num(FRAMES.with(|f| f.get()) as f64)),
         ("canvas", canvas),
         (
             "path",
