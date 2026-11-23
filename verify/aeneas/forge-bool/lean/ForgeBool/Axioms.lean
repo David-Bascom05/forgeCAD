@@ -3,6 +3,7 @@ Copyright (c) 2026 ForgeCAD contributors. Released under the Mozilla Public Lice
 -/
 import Lean
 import ForgeBool.Funs
+import ForgeBool.D2Flat
 
 /-!
 # No axiom in forge-bool's translation
@@ -26,3 +27,6 @@ elab "#standard_axioms " ids:ident* : command => do
 #standard_axioms
   forge_bool.ssi.surfaces_in forge_bool.ssi.closed_or_flush forge_bool.ssi.closed_form
   forge_bool.ssi.nearly_flush forge_bool.ssi.turned_flush forge_bool.ssi.spread_apart
+  forge_bool.d2.plane_plane_only forge_bool.d2.nearly_flush_planes_only
+  forge_bool.d2.spindle_in_planes forge_bool.d2.closed_or_flush_planes_only
+  forge_bool.d2.surfaces_in_planes
