@@ -54,7 +54,7 @@ jobs:
         working-directory: verify/sheet
         run: |
           lake build 2>&1 | tee build.txt
-          ! grep -E "declaration uses 'sorry'|sorryAx|ofReduceBool" build.txt
+          ! grep -E "declaration uses [\`']sorry|sorryAx|ofReduceBool" build.txt
       - name: the kernel against the Lean model
         # Every sheet part in the repository, seeded random strips and the trims' region cases:
         # what forge-sheet publishes is judged by `lake exe sheet-oracle`, and the committed

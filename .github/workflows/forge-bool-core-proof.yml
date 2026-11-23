@@ -75,7 +75,7 @@ jobs:
         run: |
           bad=$(grep "depends on axioms" build.log | grep -v -E "\[(propext(, Classical\.choice)?(, Quot\.sound)?|propext, Quot\.sound|)\]" || true)
           if [ -n "$bad" ]; then echo "::error::non-standard axioms:"; echo "$bad"; exit 1; fi
-          if grep -q "sorryAx\|declaration uses 'sorry'" build.log; then echo "::error::sorry"; exit 1; fi
+          if grep -q "sorryAx\|declaration uses [\`']sorry" build.log; then echo "::error::sorry"; exit 1; fi
           grep -q "'forge_bool_core.end_to_end_proof' depends on axioms" build.log \
             || { echo "::error::end_to_end_proof missing from the axiom report"; exit 1; }
 

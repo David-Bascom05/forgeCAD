@@ -58,7 +58,7 @@ jobs:
         run: |
           lake build 2>&1 | tee build.log
           grep -q "Build completed successfully" build.log
-          if grep -q "declaration uses 'sorry'" build.log; then echo "::error::sorry"; exit 1; fi
+          if grep -q "declaration uses [\`']sorry" build.log; then echo "::error::sorry"; exit 1; fi
 
       - name: the axiom report
         working-directory: verify/forge-bool-fallback

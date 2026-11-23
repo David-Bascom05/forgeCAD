@@ -57,7 +57,7 @@ jobs:
         working-directory: verify/forge-curved
         run: |
           lake env lean ForgeCurved/Axioms.lean 2>&1 | tee axioms.log
-          if grep -q "sorryAx\|declaration uses 'sorry'" build.log axioms.log; then echo "::error::sorry"; exit 1; fi
+          if grep -q "sorryAx\|declaration uses [\`']sorry" build.log axioms.log; then echo "::error::sorry"; exit 1; fi
           bad=$(grep "depends on axioms" axioms.log | grep -v -E "\[(propext(, Classical\.choice)?(, Quot\.sound)?|propext, Quot\.sound|)\]" || true)
           if [ -n "$bad" ]; then echo "::error::non-standard axioms:"; echo "$bad"; exit 1; fi
           grep -q "'ForgeCurved.xNonManifold_iff_top' depends on axioms" axioms.log \
