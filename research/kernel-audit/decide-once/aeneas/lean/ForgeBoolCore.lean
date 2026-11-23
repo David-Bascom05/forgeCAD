@@ -48,3 +48,4 @@ import ForgeBoolCore.IncRead
 import ForgeBoolCore.IncSpecs
 import ForgeBoolCore.RefineIncTables
 import ForgeBoolCore.RefineIncSplit
+import ForgeBoolCore.RefineIncRooms
