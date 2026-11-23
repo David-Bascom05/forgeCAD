@@ -1,0 +1,59 @@
+# CAM's L1 (verify/forge-cam): G1–G6 of research/cam/design.md §5.2, the ρ-monotonicity lemma
+# the 2.5D closed-form checker rests on, and the checker's soundness for prism faces and planar
+# moves. Lean v4.36.0 with Mathlib v4.36.0, whose build comes from its cache (`lake exe cache
+# get`). A theorem that no longer checks, a `sorry`, `native_decide`, or any axiom past propext,
+# Classical.choice and Quot.sound fails the job. Kept apart from lean.yml so the jobs never edit
+# one file.
+name: forge-cam
+
+on:
+  push:
+    branches: [main]
+    paths: ["verify/forge-cam/**", ".github/workflows/forge-cam.yml"]
+  pull_request:
+    paths: ["verify/forge-cam/**", ".github/workflows/forge-cam.yml"]
+  workflow_dispatch:
+
+jobs:
+  proofs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: verify/forge-cam
+    steps:
+      - uses: actions/checkout@v4
+      - name: toolchain cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.elan
+          key: elan-${{ runner.os }}-${{ hashFiles('verify/forge-cam/lean-toolchain') }}
+      - name: Mathlib cache
+        uses: actions/cache@v4
+        with:
+          path: verify/forge-cam/.lake/packages
+          key: lake-mathlib-${{ runner.os }}-${{ hashFiles('verify/forge-cam/lakefile.toml', 'verify/forge-cam/lake-manifest.json') }}
+      - name: elan, the toolchain, Mathlib's build
+        run: |
+          if [ ! -x "$HOME/.elan/bin/elan" ]; then
+            curl -sSfL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -o elan-init.sh
+            sh elan-init.sh -y --default-toolchain none
+          fi
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+          "$HOME/.elan/bin/elan" toolchain install "$(cat lean-toolchain)"
+          "$HOME/.elan/bin/lake" exe cache get
+      - name: the proofs
+        run: |
+          ! grep -rnE "\bsorry\b|native_decide|^\s*axiom\b" --include=*.lean ForgeCam ForgeCam.lean
+          lake build
+      - name: the axioms
+        run: |
+          lake env lean Axioms.lean | tee axioms.txt
+          ! grep -E "sorryAx|ofReduceBool" axioms.txt
+          # every theorem listed, each on the standard axioms (or fewer)
+          test "$(grep -c 'depends on axioms' axioms.txt)" -eq "$(grep -c '^#print axioms' Axioms.lean)"
+          ! grep 'depends on axioms' axioms.txt | grep -vE '\[(propext|Classical.choice|Quot.sound)(, (propext|Classical.choice|Quot.sound))*\]$'
+      - name: the ℚ oracle answers known cases
+        run: |
+          lake env lean --run Oracle.lean < tests/oracle.in > oracle.got
+          diff oracle.got tests/oracle.out

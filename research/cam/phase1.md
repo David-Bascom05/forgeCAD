@@ -42,9 +42,16 @@ and bolt-hole rapids into stock nobody had cleared (both now test cases with typ
 
 ## Levels (PROOF-STANDARD.md)
 
-- L1: **not yet**. G1–G6 are stated in prose (design.md §5.2, the module docs); the Lean files
-  wait for a Lean toolchain here. The one new lemma the 2.5D checker rests on: the signed distance
-  of a body {ρ ≤ w(z)} is non-decreasing in ρ at fixed z (proof sketch in tool.rs / slab.rs).
+- L1: **verify/forge-cam** (branch claude/repo-review-mbdrlj-cam-lean, CI forge-cam.yml).
+  Lean and Mathlib, standard axioms, no sorry. Proven:
+  - `sd_hyp_mono`, the lemma the 2.5D checker rests on;
+  - the closed form's verdicts imply G1–G3 for prism faces and planar moves (Prism.lean);
+  - G4 (the lower half from G1; the leftover exact, per z band);
+  - G5 for 3-axis lines and arcs, with an exact ℚ check equal to the spec;
+  - G6, the modal round trip with quantisation. This one found the printer bug below.
+
+  Stated hypotheses: `TopAbove` (the tool reaches above the set) and the frontier lying in the
+  checked faces. The 2D candidate analysis of slab::dist stays a hypothesis (L2/L3).
 - L2: the offset and boolean decisions are exact (exact reals to the BFMSS bound).
 - L3: not claimed.
 - L4: forge-cam-geom is in the Aeneas style (no dependencies, loops) but not translated.
@@ -60,7 +67,10 @@ notch's sharp inside corners (no end mill reaches them).
 
 ## Gaps, in order
 
-1. Lean L1 for G1–G6 and the monotonicity lemma (needs the toolchain).
+1. forge-post's printer (155e2f2) commits the motion mode before it drops a null move. A null feed
+   after a rapid, then a plunge, prints the plunge without G1, and the control runs it as G0.
+   `round_trip` refuses such a program; the Lean model proves the fixed order
+   (verify/forge-cam Post.lean, `faulty_counterexample`). The fix belongs to the CAM session.
 2. G4 (leftover) is checked: per z band, the final stock less the part's section grown by tol,
    exactly (booleans); the flange has none, a facing-only program lists its regions. The
    reasons (tool radius, reach) are not yet classified: every region says "uncut".
