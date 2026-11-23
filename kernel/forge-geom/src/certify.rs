@@ -3631,6 +3631,108 @@ mod tests {
         }
     }
 
+    /// INTERIM (L4 for the orchestration: research/PROOF-STANDARD.md, a differential test with a
+    /// committed digest where Aeneas cannot take the code). The trace in the charts (`param_trace`:
+    /// the walk, the joins, the points, the octree) against the independent path, the march and its
+    /// certificate: on random analytic pairs, wherever the march certifies and the charts answer,
+    /// the same curves (as many, as many closed, every point of each within the other's sag of its
+    /// chain). And every outcome and chain point, to the bit, in one digest: a change to the charts'
+    /// output shows here before anywhere else.
+    #[test]
+    fn the_charts_agree_with_the_certified_march_interim() {
+        use crate::surface::{Cone, Plane};
+        use forge_math::rng::Rng;
+        let mut r = Rng::new(11);
+        let frame = |r: &mut Rng| {
+            let o = Point3::new(r.range(-3.0, 3.0), r.range(-3.0, 3.0), r.range(-3.0, 3.0));
+            let z = if r.bool() {
+                [Vec3::X, Vec3::Y, Vec3::Z][r.below(3)]
+            } else {
+                Vec3::new(r.range(-1.0, 1.0), r.range(-1.0, 1.0), r.range(-1.0, 1.0))
+            };
+            Frame::from_z(o, z.normalize().unwrap_or(UnitVec3::Z))
+        };
+        let surface = |kind: usize, r: &mut Rng| {
+            let f = frame(r);
+            match kind {
+                0 => Surface::Plane(Plane { frame: f }),
+                1 => Surface::Sphere(Sphere {
+                    frame: f,
+                    radius: r.range(1.0, 6.0),
+                }),
+                2 => Surface::Cylinder(Cylinder {
+                    frame: f,
+                    radius: r.range(1.0, 5.0),
+                }),
+                3 => Surface::Cone(Cone::new(f, r.range(1.0, 4.0), r.range(0.2, 1.0)).expect("cone")),
+                _ => {
+                    let minor = r.range(0.8, 2.5);
+                    Surface::Torus(Torus {
+                        frame: f,
+                        major: minor + r.range(0.5, 4.0),
+                        minor,
+                    })
+                }
+            }
+        };
+        let near = |p: Point3, cs: &[IntCurve]| {
+            cs.iter().any(|c| {
+                let n = c.pts.len();
+                let segs = if c.closed { n } else { n - 1 };
+                (0..segs).any(|i| {
+                    let (a, b) = (c.pts[i], c.pts[(i + 1) % n]);
+                    let d = b - a;
+                    let t = ((p - a).dot(d) / d.dot(d).max(1e-300)).clamp(0.0, 1.0);
+                    p.distance(a + d * t) <= c.sag + 1e-6
+                })
+            })
+        };
+        let reg = region(8.0);
+        let mut h = forge_math::hash::BitHasher::default();
+        let (mut charted, mut compared) = (0, 0);
+        for _ in 0..120 {
+            let (i, j) = (r.below(5), 1 + r.below(4));
+            let (i, j) = (i.min(j), i.max(j));
+            let (a, b) = (surface(i, &mut r), surface(j, &mut r));
+            let Some(ours) = param_trace(&a, &b, reg) else {
+                h.u64(u64::MAX);
+                continue;
+            };
+            charted += 1;
+            h.u64(ours.len() as u64);
+            for c in &ours {
+                h.u64(c.closed as u64);
+                for &p in &c.pts {
+                    h.p3(p);
+                }
+            }
+            let Some(marched) = crate::intcurve::trace_marched(&a, &b, reg, 1.0) else {
+                continue;
+            };
+            if certify(&a, &b, reg, &marched).is_err() {
+                continue;
+            }
+            compared += 1;
+            let closed = |cs: &[IntCurve]| cs.iter().filter(|c| c.closed).count();
+            assert_eq!(ours.len(), marched.len(), "{a:?} {b:?}");
+            assert_eq!(closed(&ours), closed(&marched), "{a:?} {b:?}");
+            for (x, y) in [(&ours, &marched), (&marched, &ours)] {
+                for c in x.iter() {
+                    for &p in &c.pts {
+                        assert!(!reg.contains(p) || near(p, y), "{p:?}: {a:?} {b:?}");
+                    }
+                }
+            }
+        }
+        assert!(charted >= 60 && compared >= 60, "{charted} {compared}");
+        // (the same on native and wasm32-wasip1)
+        assert_eq!(
+            h.finish(),
+            0x8a53_6139_e558_819c,
+            "{charted} charted, {compared} compared"
+        );
+    }
+
     /// halve's one-widening against exact de Casteljau: integers near 2^60, whose float sums round,
     /// halved in i128 scaled by 2^8 (every average of them is then an integer).
     #[test]
