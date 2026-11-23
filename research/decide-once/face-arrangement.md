@@ -6,10 +6,12 @@ to the master for sign-off. No proof work starts until it is signed off. The cur
 (`forge_bool_core`, `end_to_end_proof`) stays shipped-ready behind the switch, and nothing is
 deleted.
 
-Why: research/booleans/small-booleans.md §5. The spec's cells are the sign classes of the whole
-*plane* arrangement, about 300 per boolean on coplanar seq. Arrangement, ledger and core scale with
-that count (≈4.6M of ≈10M per boolean). A *face* arrangement splits a face only where another face
-actually crosses it, about 40 cells. Only that change gets under the old path's 3.0M.
+Why: research/booleans/small-booleans.md §5, corrected in §3a below. The spec's cells are the
+sign classes of the whole *plane* arrangement. `arrange` builds about 300 section cells per
+boolean on coplanar seq, most of which never become pieces, and the ledger holds about 231 cells.
+A *face* arrangement cuts a face only where another face crosses it. That is about 10× less
+arrangement work and about 1.5× fewer ledger cells (§1a), and it removes covector scans from the
+core.
 
 ## 0. The proposal in one paragraph
 
@@ -341,7 +343,7 @@ So the v2 Aeneas proof is about **6.5–7k lines**, against 15k today. The Lean 
 theorem's unify part (classes through fibres), about 800–1000 of the 3.5k. Everything else is a
 port or a table read.
 
-The Rust core v2 should shrink from about 1.1k lines to about 0.7k. Per boolean, at ~40 cells, the
+The Rust core v2 should shrink from about 1.1k lines to about 0.7k. Per boolean, at about 150 cells, the
 core should cost well under the 0.6M budget. Every lookup is O(1) or a Csr row; nothing hashes or
 sorts covectors.
 
