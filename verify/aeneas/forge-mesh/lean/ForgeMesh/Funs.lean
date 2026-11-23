@@ -67,7 +67,7 @@ def alloc.vec.Vec.Insts.CoreDefaultDefault (T : Type _) : core.default.Default
 }
 
 /-- [forge_math::predicates::EPS]
-    Source: 'kernel/forge-math/src/predicates.rs', lines 10:0-10:14
+    Source: 'kernel/forge-math/src/predicates.rs', lines 28:0-28:14
     Name pattern: [forge_math::predicates::EPS] -/
 @[global_simps, irreducible, rust_const "forge_math::predicates::EPS"]
 def forge_math.predicates.EPS : Result F64 := do
@@ -75,7 +75,7 @@ def forge_math.predicates.EPS : Result F64 := do
   ok (F64.Ops.mul fl (F64.Ops.ofBits 4602678819172646912))
 
 /-- [forge_math::predicates::ICC_BOUND]
-    Source: 'kernel/forge-math/src/predicates.rs', lines 13:0-13:20
+    Source: 'kernel/forge-math/src/predicates.rs', lines 31:0-31:20
     Name pattern: [forge_math::predicates::ICC_BOUND] -/
 @[global_simps, irreducible, rust_const "forge_math::predicates::ICC_BOUND"]
 def forge_math.predicates.ICC_BOUND : Result F64 := do
@@ -85,7 +85,7 @@ def forge_math.predicates.ICC_BOUND : Result F64 := do
   ok (F64.Ops.mul fl2 fl)
 
 /-- [forge_math::predicates::certainly_in_circle]:
-    Source: 'kernel/forge-math/src/predicates.rs', lines 342:0-342:78
+    Source: 'kernel/forge-math/src/predicates.rs', lines 646:0-646:78
     Name pattern: [forge_math::predicates::certainly_in_circle]
     Visibility: public -/
 @[rust_fun "forge_math::predicates::certainly_in_circle"]
