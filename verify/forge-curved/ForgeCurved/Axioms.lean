@@ -153,3 +153,5 @@ import ForgeCurved
 #print axioms ForgeCurved.BodyModel.denote_refines
 #print axioms ForgeCurved.BodyModel.bounds_unique
 #print axioms ForgeCurved.BodyModel.exactOf_isolated
+#print axioms ForgeCurved.VertexScreen.localGood_of_screen
+#print axioms ForgeCurved.VertexScreen.det3_independent
