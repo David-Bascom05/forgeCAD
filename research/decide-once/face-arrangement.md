@@ -444,6 +444,18 @@ needs three more things, beside A8:
 - about 0.4M from constants, for example witnesses fused into the builder's clipping and no
   HashMaps in the bridge.
 
+Measured today (decide-once Rust, plane-ledger-cells.md, e529a4f), per boolean on the proven v1
+core:
+
+| | coplanar | upto | housing |
+|---|---|---|---|
+| total | 6.0M | 5.5M | 2.2M |
+| fill | 4.0M | 4.15M | 1.57M |
+| core | 1.64M | 1.03M | |
+| write | 1.0M | 0.14M | |
+
+Of the plane cells `arrange` makes, only 10–15% become facets.
+
 Housing and upto have the same phases, with fewer facets (15 and 20). They are 1 and 4 booleans, so
 they move their gate lines only slightly. Coplanar is the line that decides it.
 
