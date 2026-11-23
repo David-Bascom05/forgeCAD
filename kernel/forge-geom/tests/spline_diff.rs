@@ -45,7 +45,7 @@ fn ex(x: f64) -> String {
 }
 
 fn push_pieces(line: &mut String, s: &Spline, with_count: bool) {
-    let (breaks, pts) = s.homogeneous();
+    let (breaks, pts) = s.breaks_homogeneous();
     line.push_str(" |");
     if with_count {
         write!(line, " {}", breaks.len() - 1).unwrap();

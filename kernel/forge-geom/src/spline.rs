@@ -504,12 +504,12 @@ impl Spline {
         let any = weights.iter().any(|&w| w != 1.0);
         (p, knots, pts, any.then_some(weights))
     }
-    /// Degree, breaks, and each piece's points in turn as x y z w (each its own, not times w).
     /// The degree and every piece's control points as stored: homogeneous (x w, y w, z w, w),
     /// degree + 1 per piece, unrounded.
     pub fn homogeneous(&self) -> (usize, &[H]) {
         (self.degree, &self.pts)
     }
+    /// Degree, breaks, and each piece's points in turn as x y z w (each its own, not times w).
     pub fn bezier_data(&self) -> (usize, Vec<f64>, Vec<H>) {
         let pts = self
             .pts
@@ -520,7 +520,7 @@ impl Spline {
     }
     /// The breaks and the homogeneous Bezier points as held, (x w, y w, z w, w), degree + 1 a
     /// piece: what the specification's oracle checks (tests/spline_diff.rs).
-    pub fn homogeneous(&self) -> (&[f64], &[[f64; 4]]) {
+    pub fn breaks_homogeneous(&self) -> (&[f64], &[[f64; 4]]) {
         (&self.breaks, &self.pts)
     }
     pub(crate) fn row(&self, i: usize) -> &[H] {
