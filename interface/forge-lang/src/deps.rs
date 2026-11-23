@@ -439,9 +439,14 @@ mod tests {
         std::fs::create_dir_all(&out).unwrap();
         std::fs::write(out.join("secret.fg"), "shared s = 1\n").unwrap();
         let link = root.join("link.fg");
+        // a link where the system makes one (unix); elsewhere (wasm, Windows without the right)
+        // there is none, and a name with nothing there must be refused all the same
+        #[cfg(unix)]
         if std::fs::symlink_metadata(&link).is_err() {
             std::os::unix::fs::symlink(out.join("secret.fg"), &link).unwrap();
         }
+        #[cfg(not(unix))]
+        let _ = &link;
         (root, out)
     }
 
@@ -473,6 +478,8 @@ mod tests {
         let (got, d) = located(&root, "link.fg");
         assert_eq!(got, None);
         assert!(!read_any(&d), "{d:?}");
+        // the link was seen, as there, not followed
+        #[cfg(unix)]
         assert_eq!(d.0.get(&root.join("link.fg")), Some(&Seen::There));
     }
 
