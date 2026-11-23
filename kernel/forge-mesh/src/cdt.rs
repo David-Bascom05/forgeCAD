@@ -383,31 +383,49 @@ impl Mesh {
 
     fn find_edge_counted(&self, a: u32, b: u32, steps: &mut u64) -> Option<(u32, usize)> {
         let start = self.vtri[a as usize];
+        let mut found = None;
+        // the search is over: found, a lost, or the fan closed
+        let mut done = false;
         // counter-clockwise around a (across a -> v[pv]); a super-triangle corner's fan ends at
         // the hull, so the rest of it is searched clockwise (across a -> v[nx])
-        for ccw in [true, false] {
+        let mut pass = 0;
+        while !done && pass < 2 {
+            let ccw = pass == 0;
             let mut t = start;
-            for _ in 0..self.tris.len() {
+            let mut on = true;
+            let mut k = 0;
+            while on && k < self.tris.len() {
                 *steps += 1;
                 let tt = self.tris[t as usize];
-                let ia = slot(tt.v, a)?;
-                if tt.v[nx(ia)] == b {
-                    return Some((t, pv(ia)));
+                match slot(tt.v, a) {
+                    None => done = true,
+                    Some(ia) => {
+                        if tt.v[nx(ia)] == b {
+                            found = Some((t, pv(ia)));
+                            done = true;
+                        } else {
+                            t = if ccw { tt.n[nx(ia)] } else { tt.n[pv(ia)] };
+                            if t == start {
+                                done = true;
+                            } else if t == NONE {
+                                on = false;
+                            }
+                        }
+                    }
                 }
-                t = if ccw { tt.n[nx(ia)] } else { tt.n[pv(ia)] };
-                if t == start {
-                    return None;
-                }
-                if t == NONE {
-                    break;
-                }
+                on = on && !done;
+                k += 1;
             }
+            pass += 1;
         }
-        None
+        found
     }
 
     fn has_edge(&self, a: u32, b: u32) -> Option<(u32, usize)> {
-        self.find_edge(a, b).or_else(|| self.find_edge(b, a))
+        match self.find_edge(a, b) {
+            Some(e) => Some(e),
+            None => self.find_edge(b, a),
+        }
     }
 
     fn insert_constraint(&mut self, a: u32, b: u32, ext: impl Fn(u32) -> u32) -> Result<(), CdtError> {
