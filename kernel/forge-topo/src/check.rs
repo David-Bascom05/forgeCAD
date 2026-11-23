@@ -921,39 +921,13 @@ pub fn certify(body: &Body) -> Vec<Problem> {
 }
 
 fn check_shell_euler(body: &Body, out: &mut Vec<Problem>) {
-    // the distinct edges and vertices of each shell, counted by stamping each with the shell
-    // (the same counts as sorting and dedup, without the sorts)
-    let mut edge_at = vec![u32::MAX; body.edges.len()];
-    let mut vert_at = vec![u32::MAX; body.vertices.len()];
-    for (si, shell) in body.shells.iter().enumerate() {
-        let stamp = si as u32;
-        let (mut f, mut l, mut e, mut v) = (0i64, 0i64, 0i64, 0i64);
-        for &face in &shell.faces {
-            f += 1;
-            for &lp in &body.face(face).loops {
-                l += 1;
-                for c in body.lp(lp).coedges() {
-                    let ed = body.coedge(c).edge;
-                    if edge_at[ed.index()] != stamp {
-                        edge_at[ed.index()] = stamp;
-                        e += 1;
-                    }
-                    for x in [body.edge(ed).start, body.edge(ed).end] {
-                        if vert_at[x.index()] != stamp {
-                            vert_at[x.index()] = stamp;
-                            v += 1;
-                        }
-                    }
-                }
-            }
-        }
-        let value = v - e + 2 * f - l;
-        if value % 2 != 0 || value > 2 {
-            out.push(Problem::ShellEuler {
-                shell: crate::body::ShellId(si as u32),
-                value,
-            });
-        }
+    crate::topo_euler::shell_euler(&ShellView::of(body), out);
+}
+
+impl crate::topo_euler::EulerSink for Vec<Problem> {
+    #[inline]
+    fn shell_euler(&mut self, s: usize, value: i64) {
+        self.push(Problem::ShellEuler { shell: crate::body::ShellId(s as u32), value });
     }
 }
 
