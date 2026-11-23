@@ -36,8 +36,8 @@
 //! `break`, no `return` inside a loop, no `Ordering`, `while` loops over indices.
 
 use forge_alg::{
-    Coef, Num, Poly, Q, eqv, gcd, is_zero_p, padd, pdiv, pmul, pneg, ppow, propose_sqfree, pscale, pshift_up,
-    psub, roots_of, xgcd,
+    Coef, Num, Poly, Q, between, eqv, gcd, is_zero_p, padd, pdiv, pmul, pneg, ppow, propose_sqfree, pscale,
+    pshift_up, psub, roots_of, xgcd,
 };
 use forge_bool_core::Sgn;
 use forge_math::Interval;
@@ -2708,6 +2708,189 @@ pub fn pair_curve(qj: &Quadric, qk: &Quadric) -> Result<PairCurve, Skip> {
 }
 
 // =============================================================================================
+// The builder, stage (b) part 2: the branches matched at each event (curved-l2-plan.md §4, L1, L2)
+// =============================================================================================
+
+/// One point of the curve over an event, with the branches that end at it: `left` indexes the
+/// slab before the event (`slabs[e]`), `right` the slab after it (`slabs[e + 1]`), each in the
+/// slab's `y`-order. One left and one right is a pass-through; anything else is a node (a
+/// turning point, a tangency, a crossing).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Node {
+    pub left: Vec<usize>,
+    pub right: Vec<usize>,
+}
+
+/// The plane `y = s`.
+fn plane_y_at(s: &Q) -> Quadric {
+    Quadric {
+        ly: Q::one(),
+        c: s.neg(),
+        ..Quadric::default()
+    }
+}
+
+/// The plane `z = s`.
+fn plane_z_at(s: &Q) -> Quadric {
+    Quadric {
+        lz: Q::one(),
+        c: s.neg(),
+        ..Quadric::default()
+    }
+}
+
+/// Rational separators between consecutive candidates, in order.
+fn separators(cands: &[Num]) -> Option<Vec<Q>> {
+    let s = sort_nums(cands)?;
+    let mut out: Vec<Q> = Vec::with_capacity(s.len().saturating_sub(1));
+    let mut i = 0;
+    while i + 1 < s.len() {
+        out.push(between(&s[i], &s[i + 1])?);
+        i += 1;
+    }
+    Some(out)
+}
+
+/// `[x_l, x_r]` round the event `e` inside `(c_l, c_r)`, clear of every separator plane: the
+/// curve's crossings with each plane (`vert_xs_plane`, complete) are all outside it. `None`:
+/// a crossing over `e` itself, a plane holding the curve, or fuel.
+fn clear_box(a: &Quadric, b: &Quadric, sep: &[Quadric], e: &Num, c_l: &Q, c_r: &Q) -> Option<(Q, Q)> {
+    let mut lo = Num::Rat(c_l.clone());
+    let mut hi = Num::Rat(c_r.clone());
+    let mut ok = true;
+    let mut i = 0;
+    while ok && i < sep.len() {
+        match vert_xs_plane(a, b, &sep[i], ROOT_FUEL) {
+            Some(xs) => {
+                let mut k = 0;
+                while ok && k < xs.len() {
+                    match Num::cmp(SIGN_FUEL, &xs[k], e) {
+                        // an undecided comparison with the bound so far fails: taking either
+                        // could leave a crossing inside the box
+                        Some(c) if c < 0 => match Num::cmp(SIGN_FUEL, &xs[k], &lo) {
+                            Some(d) if d > 0 => lo = xs[k].clone(),
+                            Some(_) => {}
+                            None => ok = false,
+                        },
+                        Some(c) if c > 0 => match Num::cmp(SIGN_FUEL, &xs[k], &hi) {
+                            Some(d) if d < 0 => hi = xs[k].clone(),
+                            Some(_) => {}
+                            None => ok = false,
+                        },
+                        _ => ok = false,
+                    }
+                    k += 1;
+                }
+            }
+            None => ok = false,
+        }
+        i += 1;
+    }
+    if !ok {
+        return None;
+    }
+    Some((between(&lo, e)?, between(e, &hi)?))
+}
+
+/// The strip of `y` among the separators (their count below it); `None` on a separator.
+fn y_strip(s: &ESample, sep: &[Q]) -> Option<usize> {
+    let mut n = 0;
+    let mut ok = true;
+    let mut i = 0;
+    while ok && i < sep.len() {
+        let c = s.y.cmp_rat(&sep[i]);
+        ok = c != 0;
+        if c > 0 {
+            n += 1;
+        }
+        i += 1;
+    }
+    if ok { Some(n) } else { None }
+}
+
+/// The strip of the sample's `z = −N(α)/D(α)`: `z − τ` has the sign of `−(N + τD)·D` at `α`.
+fn z_strip(s: &ESample, sep: &[Q]) -> Option<usize> {
+    let t = tighten(&s.y);
+    let sd = sign_at2(&s.y, &t, &s.d, SIGN_FUEL)?;
+    let mut n = 0;
+    let mut ok = sd != 0;
+    let mut i = 0;
+    while ok && i < sep.len() {
+        let g = pneg(&padd(&s.n, &pscale(&sep[i], &s.d)));
+        match sign_at2(&s.y, &t, &g, SIGN_FUEL) {
+            Some(sg) => {
+                ok = sg != 0;
+                if sg * sd > 0 {
+                    n += 1;
+                }
+            }
+            None => ok = false,
+        }
+        i += 1;
+    }
+    if ok { Some(n) } else { None }
+}
+
+/// The samples of `a ∩ b` on the plane `x = c`, sorted by `y`, with their boxes.
+fn boxed_samples(a: &Quadric, b: &Quadric, c: &Q, ys: &[Q], zs: &[Q]) -> Option<Vec<(usize, usize)>> {
+    let es = sorted_by_y(propose_edge_any(a, b, c, ROOT_FUEL)?)?;
+    let mut out: Vec<(usize, usize)> = Vec::with_capacity(es.len());
+    let mut i = 0;
+    while i < es.len() {
+        out.push((y_strip(&es[i], ys)?, z_strip(&es[i], zs)?));
+        i += 1;
+    }
+    Some(out)
+}
+
+/// **The nodes over event `k`** of a curve sampled in-frame (`a`, `b`): candidates `Y_e`, `Z_e`
+/// (`fiber_ys` of the `(x, y)` and `(x, z)` projections, supersets), rational separators between
+/// them, so each box `[x_l, x_r] × strip_y × strip_z` holds at most one curve point over `e`;
+/// `[x_l, x_r]` clear of every separator plane (L2's hypotheses). The branch samples on `x_l`
+/// and `x_r` are the slabs' branches in order (L1: the count must agree); each goes to its box,
+/// and the branches of one box end at its one point (L2). `None`: a step undecided.
+pub fn event_nodes(a: &Quadric, b: &Quadric, pc: &PairCurve, k: usize) -> Option<Vec<Node>> {
+    let e = &pc.events[k];
+    let yc = fiber_ys(&proj_r(a, b), e)?;
+    let zc = fiber_ys(&proj_r(&a.swap_yz(), &b.swap_yz()), e)?;
+    let ys = separators(&yc)?;
+    let zs = separators(&zc)?;
+    let mut planes: Vec<Quadric> = ys.iter().map(plane_y_at).collect();
+    planes.extend(zs.iter().map(plane_z_at));
+    let (xl, xr) = clear_box(a, b, &planes, e, &pc.planes[k], &pc.planes[k + 1])?;
+    let lb = boxed_samples(a, b, &xl, &ys, &zs)?;
+    let rb = boxed_samples(a, b, &xr, &ys, &zs)?;
+    if lb.len() != pc.slabs[k].len() || rb.len() != pc.slabs[k + 1].len() {
+        return None;
+    }
+    let mut keys: Vec<(usize, usize)> = lb.iter().chain(rb.iter()).copied().collect();
+    keys.sort_unstable();
+    keys.dedup();
+    let mut out: Vec<Node> = Vec::with_capacity(keys.len());
+    let mut i = 0;
+    while i < keys.len() {
+        out.push(Node {
+            left: (0..lb.len()).filter(|&j| lb[j] == keys[i]).collect(),
+            right: (0..rb.len()).filter(|&j| rb[j] == keys[i]).collect(),
+        });
+        i += 1;
+    }
+    Some(out)
+}
+
+/// The nodes over every event of a curve, in its frame.
+pub fn curve_nodes(qj: &Quadric, qk: &Quadric, pc: &PairCurve) -> Option<Vec<Vec<Node>>> {
+    let (a, b) = (in_frame(&pc.frame, qj), in_frame(&pc.frame, qk));
+    let mut out: Vec<Vec<Node>> = Vec::with_capacity(pc.events.len());
+    let mut k = 0;
+    while k < pc.events.len() {
+        out.push(event_nodes(&a, &b, pc, k)?);
+        k += 1;
+    }
+    Some(out)
+}
+
+// =============================================================================================
 // The builder, stage (c) part 1: trims (curved-brep-route.md §1, the build order's first step)
 // =============================================================================================
 
@@ -3073,6 +3256,67 @@ mod tests {
         }
     }
     // QEdge.lean's #guard data
+    /// Stage (b) part 2: the nodes at a curve's events. Branches meeting over an event share a
+    /// node; a pass-through has one branch each side.
+    #[test]
+    fn stage_b_nodes() {
+        let summary = |qj: &Quadric, qk: &Quadric| -> Vec<Vec<(usize, usize)>> {
+            let pc = pair_curve(qj, qk).unwrap();
+            let ns = curve_nodes(qj, qk, &pc).unwrap();
+            // every branch of every slab is in exactly one node on each side it touches
+            let mut k = 0;
+            while k < ns.len() {
+                let mut l: Vec<usize> = ns[k].iter().flat_map(|n| n.left.clone()).collect();
+                let mut r: Vec<usize> = ns[k].iter().flat_map(|n| n.right.clone()).collect();
+                l.sort_unstable();
+                r.sort_unstable();
+                assert_eq!(l, (0..pc.slabs[k].len()).collect::<Vec<_>>());
+                assert_eq!(r, (0..pc.slabs[k + 1].len()).collect::<Vec<_>>());
+                k += 1;
+            }
+            ns.iter()
+                .map(|e| {
+                    let mut v: Vec<(usize, usize)> = e
+                        .iter()
+                        .map(|n| (n.left.len(), n.right.len()))
+                        .filter(|c| *c != (1, 1))
+                        .collect();
+                    v.sort_unstable();
+                    v
+                })
+                .filter(|v| !v.is_empty())
+                .collect()
+        };
+        // the unit circle in z = 0: two turning points
+        let t0 = std::time::Instant::now();
+        assert_eq!(summary(&sphere1(), &plane_z()), vec![vec![(0, 2)], vec![(2, 0)]]);
+        eprintln!("TIME circle {:?}", t0.elapsed());
+        // x² + y² = 1 against x² + z² = 1: two ellipses crossing at (±1, 0, 0), four branches
+        // ending at each
+        let cy = quad([1, 1, 0, 0, 0, 0, 0, 0, 0, -1]);
+        let cz = quad([1, 0, 1, 0, 0, 0, 0, 0, 0, -1]);
+        // (sampled in a tilted frame, where the crossings are not the turning points)
+        let t0 = std::time::Instant::now();
+        let s = summary(&cy, &cz);
+        eprintln!("TIME steinmetz {:?}", t0.elapsed());
+        assert_eq!(s.iter().filter(|e| e.contains(&(2, 2))).count(), 2, "{s:?}");
+        assert_eq!(
+            s.iter()
+                .filter(|e| e.contains(&(0, 2)) || e.contains(&(2, 0)))
+                .count(),
+            4,
+            "{s:?}"
+        );
+        // Viviani: the sphere of radius 2 against (x − 1)² + y² = 1, a figure eight crossing
+        // itself at (2, 0, 0)
+        let s2 = quad([1, 1, 1, 0, 0, 0, 0, 0, 0, -4]);
+        let c1 = quad([1, 1, 0, 0, 0, 0, -2, 0, 0, 0]);
+        let t0 = std::time::Instant::now();
+        let v = summary(&s2, &c1);
+        eprintln!("TIME viviani {:?}", t0.elapsed());
+        assert!(v.iter().any(|e| e.contains(&(2, 2))), "{v:?}");
+    }
+
     fn sphere1() -> Quadric {
         quad([1, 1, 1, 0, 0, 0, 0, 0, 0, -1])
     }
