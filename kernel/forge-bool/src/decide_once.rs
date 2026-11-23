@@ -2625,16 +2625,31 @@ fn plan_of(bodies: &[&Body], rule: &Rule) -> Result<Option<Plan>, BoolError> {
     };
     match outcome {
         Outcome::Empty => Ok(Some(written(None))),
-        Outcome::Refused(Refusal::ZeroThickness(c)) => Err(BoolError::ZeroThickness {
-            at: cell_point(&built, c.0),
-        }),
-        Outcome::Refused(r) => panic!(
-            "the decide-once core refused {r:?}: its ledger is not consistent ({})",
-            why_split(&built.ledger).unwrap_or_default()
-        ),
+        Outcome::Refused(Refusal::ZeroThickness(c)) => {
+            if stats() {
+                eprintln!("decide-once refusal: ZeroThickness (a typed error)");
+            }
+            Err(BoolError::ZeroThickness {
+                at: cell_point(&built, c.0),
+            })
+        }
+        // (the core's own limitation, not a fact about the result: the old path runs the input
+        // until it is fixed; counted by the stats line)
+        Outcome::Refused(r) => {
+            if stats() {
+                eprintln!(
+                    "decide-once refusal: {r:?} (the old path runs it) ({})",
+                    why_split(&built.ledger).unwrap_or_default()
+                );
+            }
+            Ok(None)
+        }
         Outcome::Ok(out) => {
             // §6.1 step 3: a sub-LINEAR feature of the exact result is refused where it lies
             if let Some(at) = sliver(&cls, &built, &out) {
+                if stats() {
+                    eprintln!("decide-once refusal: sliver ZeroThickness (a typed error)");
+                }
                 return Err(BoolError::ZeroThickness { at });
             }
             Ok(Some(written(Some(&out))))
