@@ -176,6 +176,30 @@ theorem inOpen_iff {a b q : V3} (h : a ≠ b) (hq : onKey (key a b) q) :
     apply onKey_eq hq hon
     rw [coord_add, coord_smul, coord_sub]; grind
 
+/-- Every point `a + μ (b - a)` is on the segment's line. -/
+theorem onKey_lerp {a b : V3} (h : a ≠ b) (μ : Rat) : onKey (key a b) (a + μ * (b - a)) := by
+  obtain ⟨ha, hb⟩ := onKey_ends h
+  unfold onKey
+  have ea : a = (key a b).o + coord (key a b).k a * (key a b).d := ha
+  have eb : b = (key a b).o + coord (key a b).k b * (key a b).d := hb
+  apply v3_ext_coord; intro k
+  have e1 := congrArg (coord k) ea; have e2 := congrArg (coord k) eb
+  simp only [coord_add, coord_smul, coord_sub] at e1 e2 ⊢
+  have e3 : coord (key a b).k a + μ * (coord (key a b).k b - coord (key a b).k a) =
+    coord (key a b).k a + μ * (coord (key a b).k b - coord (key a b).k a) := rfl
+  grind
+
+theorem inOpen_onKey {a b q : V3} (h : a ≠ b) (hq : inOpen a b q) : onKey (key a b) q := by
+  obtain ⟨μ, -, -, rfl⟩ := hq; exact onKey_lerp h μ
+
+/-- The direction of the line `a b` is `b - a` scaled by a nonzero number. -/
+theorem key_d {a b : V3} (h : a ≠ b) : ∃ s : Rat, s ≠ 0 ∧ (key a b).d = s * (b - a) := by
+  have hne := lead_ne (b - a) (sub_ne_zero_of_ne h)
+  refine ⟨1 / coord (lead (b - a)) (b - a), ?_, rfl⟩
+  intro h0
+  have := Rat.div_mul_cancel (a := 1) hne
+  rw [h0] at this; simp at this
+
 /-! ## The test -/
 
 /-- Every non-degenerate segment's two (line, end) pairs. -/
