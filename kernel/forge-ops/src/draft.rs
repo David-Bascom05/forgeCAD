@@ -223,9 +223,15 @@ pub(crate) fn drafted(
             let outward = if same_sense { 1.0 } else { -1.0 };
             let lean = -sigma.signum() * outward * sa / ca;
             let d = p.domain();
-            forge_geom::spline::Drafted::new(*f, e.section_arc().clone(), forge_math::Interval::new(d.v.lo, d.v.hi), v0, lean)
-                .map(|w| w.surface())
-                .ok_or(DraftError::NoExactSurface { face: name })
+            forge_geom::spline::Drafted::new(
+                *f,
+                e.section_arc().clone(),
+                forge_math::Interval::new(d.v.lo, d.v.hi),
+                v0,
+                lean,
+            )
+            .map(|w| w.surface())
+            .ok_or(DraftError::NoExactSurface { face: name })
         }
         _ => Err(DraftError::NoExactSurface { face: name }),
     }
