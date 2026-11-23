@@ -130,3 +130,7 @@ import ForgeCurved
 #print axioms ForgeCurved.planes_off
 #print axioms ForgeCurved.nonvert_edge
 #print axioms ForgeCurved.twozero_sampled
+#print axioms ForgeCurved.onTriple
+#print axioms ForgeCurved.vert_sampled
+#print axioms ForgeCurved.facet_not_point
+#print axioms ForgeCurved.two_not_point

@@ -46,3 +46,5 @@ import ForgeCurved.QPairChart
 import ForgeCurved.QEdgeCross
 import ForgeCurved.QEdgesSub
 import ForgeCurved.QEdgesSup
+import ForgeCurved.QOnTriple
+import ForgeCurved.QFields
