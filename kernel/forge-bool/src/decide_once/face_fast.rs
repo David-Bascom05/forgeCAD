@@ -37,6 +37,8 @@ struct Pt {
     f: [f64; 3],
     e: f64,
     ex: OnceCell<HPoint>,
+    /// the last two sides worked out: (class + 1, side), 0 for none
+    memo: Cell<[(u32, i8); 2]>,
 }
 
 /// A class line `C ∩ K`: its direction exactly and in f64, with `|a_i b_j| + |a_j b_i|` per
@@ -45,6 +47,9 @@ struct Line {
     d: DyV3,
     f: [f64; 3],
     ab: [f64; 3],
+    /// classes known to hold the line (its two, and any found so), and known not to
+    holds: Cell<u128>,
+    across: Cell<u128>,
 }
 
 /// Screen tallies: (decided in f64, went exact), per kind.
@@ -80,6 +85,8 @@ struct Ctx<'a> {
     /// per near face, its coedges' ends as point ids: `fe_pt[fe_start[g]..fe_start[g + 1]]`
     fe_start: Vec<u32>,
     fe_pt: Vec<(u32, u32)>,
+    /// per face, a bound on its points' coordinates (its box's, and a margin)
+    fscale: Vec<f64>,
 }
 
 fn bump(t: &Cell<Tally>, f: impl FnOnce(&mut Tally)) {
@@ -128,6 +135,7 @@ impl<'a> Ctx<'a> {
             f,
             e,
             ex: OnceCell::new(),
+            memo: Cell::new([(0, 0); 2]),
         });
         self.by_in[b][v.index()] = id;
         id
@@ -199,6 +207,7 @@ impl<'a> Ctx<'a> {
                     f,
                     e,
                     ex,
+                    memo: Cell::new([(0, 0); 2]),
                 });
                 self.p.len() as u32 - 1
             }
@@ -213,6 +222,20 @@ impl<'a> Ctx<'a> {
         if pt.on >> k & 1 == 1 {
             return 0;
         }
+        let m = pt.memo.get();
+        if m[0].0 == k + 1 {
+            return m[0].1 as i32;
+        }
+        if m[1].0 == k + 1 {
+            return m[1].1 as i32;
+        }
+        let x = self.side_of(k, i);
+        pt.memo.set([(k + 1, x as i8), m[0]]);
+        x
+    }
+
+    fn side_of(&self, k: u32, i: u32) -> i32 {
+        let pt = &self.p[i as usize];
         let pff = &self.cpf[k as usize];
         let e = pff.n[0] * pt.f[0] + pff.n[1] * pt.f[1] + pff.n[2] * pt.f[2] - pff.c;
         let mag = pff.n[0].abs() * pt.f[0].abs()
@@ -249,15 +272,31 @@ impl<'a> Ctx<'a> {
             (x[2] * y[0]).abs() + (x[0] * y[2]).abs(),
             (x[0] * y[1]).abs() + (x[1] * y[0]).abs(),
         ];
-        Line { d, f, ab }
+        Line {
+            d,
+            f,
+            ab,
+            holds: Cell::new((1u128 << c) | (1u128 << k)),
+            across: Cell::new(0),
+        }
     }
 
     /// The sign of `(p_i − p_j) · d` along line `l`.
+    /// (Both points on the line.)
     fn along(&self, i: u32, j: u32, l: &Line) -> i32 {
         if i == j {
             return 0;
         }
         let (p, q) = (&self.p[i as usize], &self.p[j as usize]);
+        // two points of the line on one plane across it are its one point there
+        let mut common = p.on & q.on & !l.holds.get();
+        while common != 0 {
+            let h = common.trailing_zeros();
+            common &= common - 1;
+            if self.crosses_line(l, h) {
+                return 0;
+            }
+        }
         let mut v = 0.0;
         let mut b = 0.0;
         for k in 0..3 {
@@ -276,6 +315,31 @@ impl<'a> Ctx<'a> {
         pd.sub(&qd).signum() * hp.w.signum() * hq.w.signum()
     }
 
+    /// Class `h` is not parallel to line `l` (meets it in one point).
+    fn crosses_line(&self, l: &Line, h: u32) -> bool {
+        let bit = 1u128 << h;
+        if l.across.get() & bit != 0 {
+            return true;
+        }
+        if l.holds.get() & bit != 0 {
+            return false;
+        }
+        let n = &self.cpf[h as usize].n;
+        let v = l.f[0] * n[0] + l.f[1] * n[1] + l.f[2] * n[2];
+        let b = 1e-13 * (l.ab[0] * n[0].abs() + l.ab[1] * n[1].abs() + l.ab[2] * n[2].abs());
+        let across = if v.abs() > b {
+            true
+        } else {
+            !l.d.dot(&self.cls.planes[h as usize].n).is_zero()
+        };
+        if across {
+            l.across.set(l.across.get() | bit);
+        } else {
+            l.holds.set(l.holds.get() | bit);
+        }
+        across
+    }
+
     /// The same point.
     fn same(&self, i: u32, j: u32) -> bool {
         if i == j {
@@ -284,6 +348,27 @@ impl<'a> Ctx<'a> {
         let (p, q) = (&self.p[i as usize], &self.p[j as usize]);
         if p.key == q.key {
             return true;
+        }
+        // both on the current plane and on two more classes meeting it in a point (the meets
+        // table knows the pairs it has met): one point
+        let c = self.mc;
+        let common = p.on & q.on;
+        if c != NONE && common >> c & 1 == 1 {
+            let nc = self.cpf.len();
+            let mut rest = common & !(1u128 << c);
+            while rest != 0 {
+                let a = rest.trailing_zeros();
+                rest &= rest - 1;
+                let mut more = rest;
+                while more != 0 {
+                    let b = more.trailing_zeros();
+                    more &= more - 1;
+                    let m = self.mtab[a as usize * nc + b as usize];
+                    if m != NONE && m != NONE - 1 {
+                        return true;
+                    }
+                }
+            }
         }
         let tol = (p.e + q.e) * (1.0 + 1e-12) + 1e-300;
         if (0..3).any(|k| (p.f[k] - q.f[k]).abs() > tol) {
@@ -345,8 +430,15 @@ impl<'a> Ctx<'a> {
         let (s, t) = if ds > dt { (t, s) } else { (s, t) };
         let q: OnceCell<HPoint> = OnceCell::new();
         let mut n = 0;
+        // (an edge plainly above or below the ray is passed over: `crosses_f`'s answer, false,
+        // with its margin at a scale no smaller than its own)
+        let tol = 1e-12 * (1.0 + m3(&qf).max(self.fscale[g]));
+        let (lo, hi) = (qf[t] - tol, qf[t] + tol);
         for &(ia, ib) in &self.fe_pt[self.fe_start[g] as usize..self.fe_start[g + 1] as usize] {
             let (fa, fb) = (&self.p[ia as usize].f, &self.p[ib as usize].f);
+            if (fa[t] > hi && fb[t] > hi) || (fa[t] < lo && fb[t] < lo) {
+                continue;
+            }
             let c = match crosses_f(qf, *fa, *fb, s, t) {
                 Some(c) => {
                     bump(&self.t, |x| x.cross.0 += 1);
@@ -460,13 +552,27 @@ pub(crate) fn counts(
         pts,
         snapped,
         cpf: cls.planes.iter().map(plane_f).collect(),
-        p: Vec::with_capacity(256),
+        p: Vec::with_capacity(4 * fs.len() + 256),
         by_in: pts.iter().map(|p| vec![NONE; p.f.borrow().len()]).collect(),
         mc: NONE,
         mtab: vec![NONE; cls.planes.len() * cls.planes.len()],
         mtouched: Vec::with_capacity(256),
         t: Cell::new(Tally::default()),
-        fax: snapped.iter().map(|p| axis_of_f(&plane_f(p)).0).collect(),
+        fax: snapped
+            .iter()
+            .enumerate()
+            .map(|(g, p)| {
+                if cls.of_face[g] != NONE {
+                    axis_of_f(&plane_f(p)).0
+                } else {
+                    0
+                }
+            })
+            .collect(),
+        fscale: fs
+            .iter()
+            .map(|f| (0..3).fold(0.0f64, |m, k| m.max(f.lo[k].abs()).max(f.hi[k].abs())) + 1.0)
+            .collect(),
         fe_start: Vec::new(),
         fe_pt: Vec::with_capacity(fe.len()),
     };
@@ -527,6 +633,27 @@ pub(crate) fn counts(
                     continue;
                 }
             }
+            // the faces of C whose box meets K, and of K whose box meets C: no other face of
+            // either has a point on the line (the polygon is within a few LINEAR of its box)
+            let mut rel: u128 = 0;
+            for (pos, &f) in on[c].iter().enumerate() {
+                if touches(&fs[f], &cx.cpf[k as usize], g) {
+                    rel |= 1u128 << pos;
+                }
+            }
+            if rel == 0 {
+                continue;
+            }
+            if !wall {
+                for (pos, &h) in on[k as usize].iter().enumerate() {
+                    if touches(&fs[h], &cx.cpf[c], g) {
+                        rel |= 1u128 << (64 + pos);
+                    }
+                }
+                if rel >> 64 == 0 {
+                    continue;
+                }
+            }
             let ln = cx.line(c32, k);
             if ln.d.x.is_zero() && ln.d.y.is_zero() && ln.d.z.is_zero() {
                 continue; // parallel
@@ -545,9 +672,12 @@ pub(crate) fn counts(
                                cx: &mut Ctx| {
                 for (pos, &f) in faces.iter().enumerate() {
                     let bit = 1u128 << (off + pos as u32);
-                    let b = fs[f].body;
-                    for &(va, vb, across) in edges_of(f) {
-                        let (ia, ib) = (cx.add_in(b, va), cx.add_in(b, vb));
+                    if rel & bit == 0 {
+                        continue;
+                    }
+                    let base = fe_start[f] as usize;
+                    for (j, &(_, _, across)) in edges_of(f).iter().enumerate() {
+                        let (ia, ib) = cx.fe_pt[base + j];
                         // (the face's vertices are on its own plane; on the line when on the other)
                         let (sa, sb) = (cx.side(other, ia), cx.side(other, ib));
                         if sa == 0 && cx.side(own, ia) == 0 {
@@ -595,6 +725,9 @@ pub(crate) fn counts(
             let (mut known, mut ins): (u128, u128) = (0, 0);
             let inside =
                 |a: u32, b: u32, adj: u128, bit: u128, g: usize, known: &mut u128, ins: &mut u128| -> bool {
+                    if rel & bit == 0 {
+                        return false;
+                    }
                     if adj & bit != 0 || always & bit != 0 {
                         *known &= !bit;
                         return cx.mid_in(a, b, g);
@@ -683,6 +816,20 @@ pub(crate) fn counts(
         nfacet += nf;
     }
     Some(((nseg, nvert, nfacet), cx.t.get()))
+}
+
+/// Face `f`'s box (grown by `g`) meets plane `p`, in f64 with a margin for its rounding.
+fn touches(f: &In, p: &PlaneF, g: f64) -> bool {
+    let mut v = -p.c;
+    let mut r = 0.0;
+    let mut m = p.c.abs();
+    for k in 0..3 {
+        let (mid, half) = (0.5 * (f.lo[k] + f.hi[k]), 0.5 * (f.hi[k] - f.lo[k]) + g);
+        v += p.n[k] * mid;
+        r += p.n[k].abs() * half;
+        m += (p.n[k] * mid).abs() + p.n[k].abs() * half;
+    }
+    v.abs() <= r + 1e-12 * m
 }
 
 fn sort_along(cx: &Ctx, ps: &mut [(u32, u128)], ln: &Line) {
@@ -921,6 +1068,34 @@ fn plane(cx: &Ctx, c: u32, segs: &[Seg], xs: &[(u32, u32, u32)]) -> (usize, usiz
     let ccw: Vec<bool> = (0..ncy)
         .map(|i| {
             let cy = cycle(i);
+            // the signed area, screened: positive exactly for a bounded face's outer walk
+            let f0 = &cx.p[pid(from(cy[0])) as usize];
+            let (mut a2, mut mag, mut emax) = (0.0f64, 0.0f64, f0.e);
+            let (mut x0, mut y0) = (0.0f64, 0.0f64);
+            for (j, &h) in cy.iter().enumerate() {
+                let p = &cx.p[pid(to(h)) as usize];
+                emax = emax.max(p.e);
+                let (x1, y1) = (p.f[s] - f0.f[s], p.f[t] - f0.f[t]);
+                if j + 1 < cy.len() {
+                    a2 += x0 * y1 - x1 * y0;
+                    mag += (x0 * y1).abs() + (x1 * y0).abs();
+                }
+                (x0, y0) = (x1, y1);
+            }
+            let e = 2.0 * emax * (1.0 + 1e-12);
+            let mut ext = 0.0f64;
+            for &h in cy {
+                let p = &cx.p[pid(from(h)) as usize];
+                ext += (p.f[s] - f0.f[s]).abs() + (p.f[t] - f0.f[t]).abs();
+            }
+            let bound = 4.0 * e * ext
+                + 2.0 * cy.len() as f64 * e * e
+                + (cy.len() as f64 + 2.0) * 2.0 * f64::EPSILON * mag;
+            if a2.abs() > bound {
+                bump(&cx.t, |x| x.orient.0 += 1);
+                return (if flip { -a2 } else { a2 }) > 0.0;
+            }
+            bump(&cx.t, |x| x.orient.1 += 1);
             let k = (0..cy.len())
                 .min_by(|&x, &y| {
                     let (p, q) = (pid(from(cy[x])), pid(from(cy[y])));
