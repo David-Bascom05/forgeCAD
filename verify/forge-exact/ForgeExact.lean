@@ -23,4 +23,6 @@ import ForgeExact.DecideOnce.LocalJordan
 import ForgeExact.DecideOnce.LocalFinal
 import ForgeExact.DecideOnce.IncCore
 import ForgeExact.DecideOnce.CoreInc
+import ForgeExact.DecideOnce.Refines
+import ForgeExact.DecideOnce.Simulation
 import ForgeExact.Axioms
