@@ -460,3 +460,106 @@ the tN run started (strace `clone3`).
 - n-ary: 167/167;
 - tests pass: forge-math, forge-model lib, forge-lang `kernel_determinism`, forge-ops fillet;
 - clippy `-D warnings`: clean on the five crates.
+
+### Fastest wins, round 2: the three small n-ary lines
+
+The master asked for this on 2026-11-23: apply the candidate rule now, re-measure the three and
+the wins, and ship if the three come out level or better.
+
+**What was tried, on this 4-vCPU VM (paired medians, 15 rounds):**
+- **The mean-item rule** (`HELPERS_ITEM` = 20 µs), alone: it did not help. The helpers that hurt
+  are at stages whose items cost well over 20 µs: the n-ary pair loop, and the `split_face` jobs
+  (`Result<Vec<Vec<Vec<(usize, bool)>>>>`). The rule stays, as a floor.
+- **Raising `HELPERS_FOR` from 2 to 5 ms:** coplanar became level and patterns came within noise,
+  but hole-grid stayed at 1.14.
+- **A never-spawn build at tN:** hole-grid came out level (1.025). So its loss is helpers, not
+  thread-count-dependent paths.
+- One caveat on this test: a copied target directory (`cp -r`) gets new file times, so cargo
+  rebuilt nothing and the first never-spawn run tested the old binary. It was redone with the
+  sources touched.
+- **The likely cause:** answers made in a helper's allocator arena and freed on the calling thread
+  (glibc cross-arena frees), plus the helpers' cold arenas and pages, at stages whose items
+  allocate heavily. No projection of work left captures that.
+
+**The rule shipped:** `THREADED_AFTER_PAIRS` = 20 ms. An n-ary boolean that has run for less than
+20 ms by the end of its pairs stage takes its later stages on one thread. Small all-planar regens
+take about 15–25 ms in all. The winners spend far longer in their (curved) pairs. The answers are
+the same either way: the bits checks below cover this.
+
+**Constants now:**
+- `HELPERS_AFTER` = 200 µs;
+- `HELPERS_FOR` = 5 ms, with one helper per 5 ms of projected work left;
+- `HELPERS_ITEM` = 20 µs;
+- `THREADED_AFTER_PAIRS` = 20 ms.
+
+The pair loop's own 5 ms constant equals the global one now, so it was removed.
+
+**Re-measured** (median of 15 paired rounds; build at this commit's code):
+
+| Line | t1 ms | tN ms | tN/t1 | A/A | Helpers |
+|---|---|---|---|---|---|
+| regen1 coplanar nary16 | 23.9 | 24.7 | 1.002 | 0.973 | 0 |
+| regen1 patterns nary16 | 21.0 | 21.5 | 1.027 | 0.991 | 0 |
+| regen1 hole-grid nary16 | 18.1 | 18.4 | 1.023 | 0.995 | 3 |
+| regen1 shaft nary16 | 67.6 | 49.9 | 0.735 | 0.998 | 15 |
+| regen1 mixed nary16 | 220.5 | 115.8 | 0.525 | 0.983 | 16 |
+| regen1 torture nary16 | 21.0 | 22.2 | 1.046 | 0.991 | 1 |
+| regen1 housing nary16 | 26.0 | 25.3 | 1.028 | 1.040 | 0 |
+| regen1 plate nary16 | 21.6 | 22.3 | 1.029 | 0.982 | 0 |
+| benchparts cli valve | 75.3 | 63.7 | 0.804 | 0.976 | 3 |
+| benchparts cli frame | 110.9 | 99.0 | 0.855 | 1.009 | 5 |
+| benchparts cli jack | 95.6 | 82.1 | 0.892 | 0.961 | 3 |
+| benchparts cli conrod | 32.2 | 26.7 | 0.844 | 0.908 | 3 |
+| benchparts cli gearbox | 83.2 | 75.9 | 0.951 | 0.974 | 3 |
+| benchparts cli volute | 160.1 | 146.2 | 0.911 | 0.979 | 5 |
+| benchparts run frame nary4 | 113.2 | 105.4 | 0.919 | 0.981 | 2 |
+| benchparts run gearbox nary4 | 87.4 | 86.7 | 0.996 | 0.962 | 3 |
+| benchparts run jack nary4 | 69.3 | 67.5 | 0.956 | 0.977 | 4 |
+
+**Reading it:**
+- **The three are level:** coplanar 1.002, patterns 1.027, hole-grid 1.023.
+- **The lines with no helper** sit at 1.00–1.03: torture, housing and plate run the same serial
+  work at t1 and tN, and this run's A/A spans 0.91–1.04.
+- **The wins are kept:**
+  - mixed n-ary 0.53, shaft n-ary 0.74;
+  - cli: valve 0.80, conrod 0.84, frame 0.86, jack 0.89, volute 0.91, gearbox 0.95;
+  - frame nary4 0.92, jack nary4 0.96.
+- Some cli wins are smaller than in round 1 (valve 0.64 → 0.80), because fewer helpers start at
+  5 ms. That is the price of no losses. The latency gate can tune it on real hardware.
+
+**Gates on this commit:**
+- bits: 84/84 identical at `FORGECAD_THREADS` = 1, 2, 4 and 16;
+- wasm bits: identical;
+- reliability: verdicts identical to base;
+- `FUZZ_SEEDS=150` suite: 150/150; n-ary: 167/167;
+- tests pass: forge-math, forge-model lib, forge-lang `kernel_determinism`;
+- clippy `-D warnings`: clean.
+
+## S1–S3 as measured (bool-speed, exact callgrind, switch off, 2026-11-23)
+
+| | Commit | Coplanar seq | Notes |
+|---|---|---|---|
+| base | 9e78b28 | 208.84M | |
+| S1 `across` memo | 4aadd7c | `across` 8.77M → 3.94M | Only 56% of calls repeat within a boolean; the other 8,677 are distinct (side, coedge) pairs. The memo first cloned the `Surface` (+1.47M in trim's self); it now returns `&Surface`. |
+| S2 scratch reuse | 6b51d5f | −2.10% cumulative | −0.95M in malloc and from_iter at those sites: all there was |
+| S3 packed sorts | baec170 | **−6.10% cumulative** | The derived `(VKey, VKey)` Ord compare was about 10.4M. S3 was underestimated, and is the biggest of the three. |
+| plus `line_in_range` inline array | 7813f52 | 194.05M (**−7.08%**) | `line_plane` −1.47M, `IntoIter<LineHit>` −0.72M |
+
+All 97/97 gate lines are below base, with bits identical. My estimates were S1 −6 to −8M, S2
+−8 to −12M and S3 −5 to −7M on the line; the actuals were about −3.4M, −1M and −5.7M at those
+functions, plus S3's whole-line −60.7M summed over all lines.
+
+**What S4 is now (S4′, agreed with bool-speed).**
+- **Not a piece flood:** `classify_specs` already floods pieces.
+- **What S4′ does:** it decides a curve stretch's in/out from the previous stretch plus the cut
+  between them, in place of `point_in_face` at the stretch's samples. That is trim's closure#55
+  and imprint's samples, about 22M flat inclusive.
+- **When it applies:** only when the cut is a single transversal crossing of one edge of face k,
+  at an interior point of that edge, Crossing not Touch, not along, with the sign certified above
+  its error bound, and with the previous stretch sampled or itself decided from a sampled one.
+  Otherwise it samples as today.
+- **Proof statement:** a segment crossing exactly one boundary edge of a polygon transversally,
+  at an interior point of that edge, has endpoints of opposite membership. That is
+  `JordanLocal.contains_const_local` on each side of the crossing, plus the single-crossing flip.
+- **Shipping condition:** zero disagreements, from the debug mode that samples every stretch, on
+  the gate, fuzz and repros.
