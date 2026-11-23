@@ -248,6 +248,7 @@ impl Host {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
             view_formats: &[],
         });
+        let scope = device.push_error_scope(wgpu::ErrorFilter::Validation);
         let view = texture.create_view(&Default::default());
         let ppp = self.window.scale_factor() as f32;
         let raw = self.input.raw((width, height), ppp, now_ms() / 1000.0);
@@ -277,6 +278,12 @@ impl Host {
             },
         );
         self.gui.queue().submit([enc.finish()]);
+        let failed = scope.pop();
+        wasm_bindgen_futures::spawn_local(async move {
+            if let Some(e) = failed.await {
+                say(&format!("forge-app: the frame's read back: {e}"));
+            }
+        });
         let bgra = matches!(
             format,
             wgpu::TextureFormat::Bgra8Unorm | wgpu::TextureFormat::Bgra8UnormSrgb
