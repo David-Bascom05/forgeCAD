@@ -214,3 +214,33 @@ transfers to curved:
 
 The flat A8 is the place to prove the scheme and measure it. The curved path is where the time
 goes.
+
+### 6.5 Update: rod/flat split and allocation counts (bool-speed, dhat and exact callgrind, 2026-11-23)
+
+- **The old path costs 1.16M per flat boolean, not 1.28M.**
+  - With the switch on, the 80 rod booleans alone cost the old path 119.7M, 1.50M each.
+  - So the 70 flat booleans cost 200.6M − 119.7M = 80.9M on the old path.
+  - **The target is 1.16M.** The 0.92M budget is 21% under it. That leaves room for the bottom-up
+    figures to be off by 1.6×, rather than 1.8×.
+- **Allocations** (valgrind dhat, attributed to the innermost phase function):
+
+  | | Blocks per boolean | Bytes per boolean |
+  |---|---|---|
+  | decide-once, per flat boolean (bool-speed 5baa8be) | ≈4,990 | 1.43 MB |
+  | old path, mean over its 150 booleans | ≈1,150 | 0.19 MB |
+
+  Decide-once's split, as blocks / bytes over the 70 booleans:
+
+  | Phase | Blocks | Bytes |
+  |---|---|---|
+  | core | 101.8k | 4.2 MB |
+  | arrangement | 93.6k | 16.1 MB |
+  | fill outside the named phases (mostly `CellTab::id_of`) | 65.2k | 39.6 MB |
+  | ledger | 64.3k | 36.1 MB |
+  | write | 24.5k | 4.7 MB |
+
+  The largest sites are vertices, inputs (three sites), `build_ledger`, snap and `CellTab::id_of`.
+- **New pass line for rule 3** (one reused arena): R4 is measured at **≤1,000 allocated blocks per
+  flat boolean**. That is the old path's order, about 5× under today. Every listed site is one that
+  A8 deletes (covector interning, `Vec<Sgn>` per cell and per vertex) or rule 1 shrinks (inputs and
+  snap restricted to near faces).
