@@ -4,6 +4,7 @@
 //! - `def`: the machine-definition format (kinematic tree, spindles, turrets, changer, mounts,
 //!   collision bodies) and its structural validation.
 //! - `library`: the built-in generic machines (VMC, trunnion 5-axis, lathe, mill-turn).
+pub mod collide;
 pub mod def;
 pub mod gcode;
 pub mod kin;

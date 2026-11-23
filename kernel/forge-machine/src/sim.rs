@@ -154,12 +154,14 @@ pub enum Path {
     /// q(s) = q0 + s (q1 − q0).
     Line,
     /// Joints a and b about (ca, cb), from angle a0 swept by `sweep` radians (+ counter-clockwise
-    /// in (a, b)), radius r; every other joint linear in s.
+    /// in (a, b)); the radius goes linearly from r (the start's) to r1 (the end's: they differ by
+    /// the end's rounding, which a control interpolates); every other joint linear in s.
     Arc {
         a: usize,
         b: usize,
         c: [f64; 2],
         r: f64,
+        r1: f64,
         a0: f64,
         sweep: f64,
     },
@@ -198,21 +200,15 @@ impl Segment {
             b,
             c,
             r,
+            r1,
             a0,
             sweep,
         } = &self.path
         {
             let (sn, cs) = dmath::sin_cos(a0 + s * sweep);
-            q[*a] = c[0] + r * cs;
-            q[*b] = c[1] + r * sn;
-            if s == 0.0 {
-                q[*a] = self.q0[*a];
-                q[*b] = self.q0[*b];
-            }
-            if s == 1.0 {
-                q[*a] = self.q1[*a];
-                q[*b] = self.q1[*b];
-            }
+            let rs = r + s * (r1 - r);
+            q[*a] = c[0] + rs * cs;
+            q[*b] = c[1] + rs * sn;
         }
         q
     }
@@ -498,6 +494,7 @@ pub fn simulate_blocks(blocks: &[Block], s: &Setup) -> Result<Timeline, SimError
                     b: jb,
                     c: [ca, cb],
                     r,
+                    r1: r_end,
                     a0,
                     sweep,
                 };
@@ -778,6 +775,7 @@ fn check_arc_range(s: &Setup, seg: &Segment, tl: &mut Timeline) {
         b,
         c,
         r,
+        r1,
         a0,
         sweep,
     } = &seg.path
@@ -797,8 +795,9 @@ fn check_arc_range(s: &Setup, seg: &Segment, tl: &mut Timeline) {
                 _ => (-1.0, 0.0),
             };
             let mut q = seg.q0.clone();
-            q[*a] = c[0] + r * cv;
-            q[*b] = c[1] + r * sv;
+            let rs = r.max(*r1);
+            q[*a] = c[0] + rs * cv;
+            q[*b] = c[1] + rs * sv;
             for j in [*a, *b] {
                 let jt = &s.def.joints[j];
                 if q[j] < jt.range[0] - 1e-9 || q[j] > jt.range[1] + 1e-9 {
@@ -837,8 +836,11 @@ fn feed_seg(
     let mut travel: Vec<f64> = (0..n).map(|j| (q1[j] - q0[j]).abs()).collect();
     let mut length_lin_sq = 0.0;
     let mut length_rot_sq = 0.0;
-    if let Path::Arc { a, b, r, sweep, .. } = &path {
-        let arc = r * sweep.abs();
+    if let Path::Arc {
+        a, b, r, r1, sweep, ..
+    } = &path
+    {
+        let arc = r.max(*r1) * sweep.abs();
         // a per-joint bound: a joint's travel along an arc is at most the arc length
         travel[*a] = arc;
         travel[*b] = arc;
