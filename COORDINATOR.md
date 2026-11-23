@@ -242,3 +242,25 @@ diffed against the PR head, touches only files that cannot affect what the PR's 
 disjoint research/ or examples of crates the PR doesn't touch). Kernel-touching PRs keep the full rule.
 Merged: #31 (dee3b0d0), #14 (940ba39d), #15 (ee512a7c), #16 (2953130b). #32 updated → 73342d50, CI running.
 #33: full workspace test passed (FALLBACK, 2206/0 failed at 8655b848); needs update-branch + CI.
+
+## 10. Workers added later (cloud coordinator)
+- CAM-UI session_01WJtawySQLKzpnK7g6t2CVB; CAM-SIM session_01WJtawyn7zd9gKZdPzHRCgQ (listed in §8)
+- MACHINE-LIB-A (Haas, Tormach, Hurco, Fadal; now real tool/holder/collet library) session_01WJtawyyoT43CAnAu4XnE9P
+- MACHINE-LIB-B (industrial machines; now post dialects) session_01WJtawycAi3RSnznUMrGpJE
+- MACHINE-LIB-C (prosumer/hobby/Swiss + Taiwanese/Korean job-shop) session_01WJtawvUaxqFt9zG8dZq2pV
+- MACHINE-BUILDER (custom machines + shared library-builder UI/CLI) session_01WJtawxzwPxyVa8T89FuUER
+- URDF (export + robot editor) session_01WJtawweJtJyywYtq1m68FH
+- WORKHOLDING (kernel/forge-workholding, real products first, soft jaws etc.) session_01WJtawz4GamJmXtW7gNNCqN
+- ENVIRONMENTS (Environments tab / environment framework in forge-render) session_01WJtawyAbKnCzfjrk8XLyUr
+- RENDER-STUDIO (PBR path tracer, appearances, HDRI) session_01WJtawz369LCQvS1hpKDMaJ
+David's standing directions added today: prove code instead of runtime checks (keep checks only for
+input-dependent answers; checkers become test oracles + on-demand); real data only (openly published,
+cited per value, no sign-ups, no UA spoofing, unknown = UNKNOWN; unknown rates held high so time bounds
+stay sound, limit checks report "not checked"); machine vendors' own tooling/workholding first; custom
+machines/tools/workholding via a shared library builder; URDF linked to the assembly but overridable;
+merge sensibly (merge trains: one PR/CI run per batch; see §9).
+Merged: train 1 = PR #38 (e8150caa). Train 2 = PR #40 (CAM-CORE 1, CAM-MACHINE, CAM-TURN, fallback-coverage,
+forge-topo #39) in CI. Train 3 candidates: #13, #20, #41 (cam/ui), cam/sim, #42, ci/axioms-strict, machine
+library stacks (machines/fadal→haas-2, industrial-b, vendor-c; union sweep-diff digest lines), post/haas-audit,
+CAM-CORE stack to cam/sym-ties, cam-turn follow-up, spine-euler, curved-sites-pif/absorb, TRANSLATE 1 + B1,
+urdf-export, machines/builder, posts/dialects.
