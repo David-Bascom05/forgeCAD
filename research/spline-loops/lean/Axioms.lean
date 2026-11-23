@@ -22,3 +22,16 @@ open SplineSpec
 #print axioms nb_continuous
 #print axioms iter_curveOn
 #print axioms curve_smooth
+-- The oracle's answers are proofs: a control spline's Bernstein coefficients are the span's
+-- polynomial; pieces within e at their points are within e; the intervals enclose; the
+-- through-spline's slopes and pieces are where the oracle says.
+#print axioms span_bernstein
+#print axioms bern_close
+#print axioms Oracle.in_add
+#print axioms Oracle.in_mul
+#print axioms Oracle.in_div
+#print axioms Oracle.in_sqrt
+#print axioms Oracle.in_far
+#print axioms Oracle.rows_in
+#print axioms Oracle.residual_in
+#print axioms Oracle.through_cert

@@ -54,7 +54,7 @@ def parseNum (s : String) : Option Rat :=
 /-- Outward rounding to a multiple of 2^-PREC, to keep interval endpoints small. -/
 def PREC : Nat := 160
 def down (x : Rat) : Rat := ((x * ((2 ^ PREC : Nat) : Rat)).floor : Rat) / ((2 ^ PREC : Nat) : Rat)
-def up (x : Rat) : Rat := ((x * ((2 ^ PREC : Nat) : Rat)).ceil : Rat) / ((2 ^ PREC : Nat) : Rat)
+def up (x : Rat) : Rat := -(down (-x))
 
 /-- A closed interval of rationals; `ok = false` once a division met zero. -/
 structure RI where
@@ -154,6 +154,16 @@ def bernsteinOf (p : Nat) (f : Array Rat) : Option (Array Rat) :=
     (Array.range (p + 1)).map fun (l : Nat) => (binom p l : Rat) * s ^ l * (1 - s) ^ (p - l)
   solve V f
 
+/-- `Σ c_l C(p,l) s^l (1-s)^(p-l)`: what `span_bernstein` (SplineSpec/Cert.lean) takes. -/
+def bernEval (p : Nat) (c : Array Rat) (s : Rat) : Rat :=
+  (List.range (p + 1)).foldl (fun acc l => acc + c[l]! * (binom p l : Rat) * s ^ l * (1 - s) ^ (p - l)) 0
+
+/-- The coefficients, checked at the p + 1 points rather than trusted from the solver: with this,
+`span_bernstein` makes them the span's polynomial everywhere. -/
+def bernsteinChecked (p : Nat) (f : Array Rat) : Option (Array Rat) := do
+  let c ← bernsteinOf p f
+  if (List.range (p + 1)).all fun k => bernEval p c ((k : Rat) / (p : Rat)) == f[k]! then pure c else none
+
 /-! ## Reading a line -/
 
 structure Reader where
@@ -217,12 +227,12 @@ def checkControl (r : Reader) : Except String (Rat × Rat) := do
     let h := U (j + 1) - U j
     let ts := (Array.range (p + 1)).map fun (i : Nat) => a + h * ((i : Rat) / (p : Rat))
     let W := fun i => at! w i
-    let some wb := bernsteinOf p (ts.map fun t => weightOn U p n j W t) | throw "weight basis"
+    let some wb := bernsteinChecked p (ts.map fun t => weightOn U p n j W t) | throw "weight basis"
     for c in [0:4] do
       let coef ← if c = 3 then pure wb else
         if c < d then
           let Pc := fun i => at! P (i * d + c)
-          match bernsteinOf p (ts.map fun t => homOn U p n j W Pc t) with
+          match bernsteinChecked p (ts.map fun t => homOn U p n j W Pc t) with
           | some x => pure x
           | none => throw "basis"
         else pure ((Array.range (p + 1)).map fun _ => (0 : Rat))
