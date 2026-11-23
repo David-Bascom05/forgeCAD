@@ -1454,12 +1454,33 @@ pub(crate) fn finish(
     proto.split_fans();
     proto.outer_first();
     let mut body = proto.into_body();
+    if laid_out_in_a_speck(&body) {
+        return Err("a face laid out over a span of its parameters below 2^-433".into());
+    }
     record_deviations(&mut body, stats);
     let agree = measures_agree(&body);
     drop(budget);
     let (unverified, mass) = agree?;
     body.unverified = unverified;
     Ok((body, mass))
+}
+
+/// Whether a face's parameter loops, drawn as finely as `forge_topo::check` draws them, hold a
+/// coordinate that is not 0 but below 2^-433 in size: a surface's frame 1e308 from its face
+/// lays the face out over a span of 1e-308. The predicates' filters (`orient2d`'s debug
+/// precondition, `forge_math::predicates::check_filter`) hold for coordinates that are 0 or at
+/// least 2^-433: their differences are multiples of 2^-485, so each product of two is exact,
+/// and a nonzero sum of such products times the filter's bound (about 1.5 * 2^-52) is at least
+/// 2^-1022, normal. This covers the loops' points only, not every point projected into them.
+fn laid_out_in_a_speck(body: &Body) -> bool {
+    // 2^-433, exactly
+    const SPECK: f64 = f64::from_bits(((1023 - 433) as u64) << 52);
+    let tiny = |x: f64| x != 0.0 && x.abs() < SPECK;
+    body.face_ids().any(|f| {
+        forge_topo::uv::face_uv_loops_with(body, f, |e| 8 * forge_topo::uv::default_segments(e))
+            .iter()
+            .any(|l| l.points.iter().any(|p| tiny(p.x) || tiny(p.y)))
+    })
 }
 
 /// Reads a whole file. Parts that cannot be read become refusals; the others are returned.

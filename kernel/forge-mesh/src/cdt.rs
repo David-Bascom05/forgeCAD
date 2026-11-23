@@ -1451,12 +1451,15 @@ fn within<R: Refine + ?Sized>(
     let c = Point2::new(0.5 * (lo.x + hi.x), 0.5 * (lo.y + hi.y));
     let m = 100.0 * size;
     // the super triangle must hold every point with room to spare: a box far from the origin
-    // against its size (a file's number) rounds that room away, and its corners to infinity
+    // against its size (a file's number) rounds that room away, and its corners to infinity;
+    // and its corners must lie within the predicates' RANGE (a line's edge from 1e308 put one
+    // at 6e291). Its corners are (s0, s2), (s1, s2) and (c.x, s3), c.x between s0 and s1.
     let (s0, s1) = (c.x - m, c.x + m);
     let (s2, s3) = (c.y - m, c.y + m);
     if !(s0.is_finite() && s1.is_finite() && s2.is_finite() && s3.is_finite())
         || !(s0 < lo.x - size && s1 > hi.x + size && s2 < lo.y - size && s3 > hi.y + size)
         || most(c.x.abs(), c.y.abs()) > 1e12 * size
+        || most(most(s0.abs(), s1.abs()), most(s2.abs(), s3.abs())) > RANGE
     {
         return Err(CdtError::Internal(Fault::FarFromOrigin));
     }
