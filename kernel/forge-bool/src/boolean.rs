@@ -2904,7 +2904,12 @@ fn trim_in(
                 };
                 for (h, grazing) in hits.into_iter().flat_map(|h| {
                     let grazing = h.contact != Contact::Crossing;
-                    let near = crossings_near(&curve, range, across, h);
+                    // a crossing is its own (as crossings_near gives it) without a list; a grazing
+                    // root the crossings found near it
+                    let (one, near) = match grazing {
+                        false => (Some(h), Vec::new()),
+                        true => (None, crossings_near(&curve, range, across, h)),
+                    };
                     decided!(if grazing {
                         let pair = [(bodies[0], faces[0]), (bodies[1], faces[1])];
                         log::contact(pair, body, e, h.point, 0, "curve_surface: a touching root");
@@ -2927,7 +2932,7 @@ fn trim_in(
                         })
                     };
                     let touch = (grazing && near.is_empty() && (corner() || touch_inside(&h))).then_some(h);
-                    near.into_iter().chain(touch).map(move |x| (x, grazing))
+                    one.into_iter().chain(near).chain(touch).map(move |x| (x, grazing))
                 }) {
                     // off the other face no piece of the curve starts here: cutting the edge would
                     // only split it where nothing meets it (and not its coincident twin). Its box
@@ -5515,6 +5520,7 @@ struct SplitScratch {
     by_start: Vec<(u64, usize)>,
     dirs: Vec<[std::cell::Cell<Option<Vec2>>; 2]>,
     used: Vec<bool>,
+    walked: Vec<usize>,
 }
 
 thread_local! {
@@ -5532,7 +5538,13 @@ fn split_face_in(
     gone: &dyn Fn((usize, bool)) -> Option<bool>,
     s: &mut SplitScratch,
 ) -> R<Split> {
-    let SplitScratch { half, by_start, dirs, used } = s;
+    let SplitScratch {
+        half,
+        by_start,
+        dirs,
+        used,
+        walked,
+    } = s;
     half.clear();
     half.extend(boundary.iter().flatten().copied());
     for &p in new_edges {
@@ -5585,18 +5597,20 @@ fn split_face_in(
     };
     used.clear();
     used.resize(half.len(), false);
-    let mut cycles: Vec<Vec<usize>> = Vec::new();
+    // the cycles, one after another in `walked`, cycle k ending at `ends[k]`
+    walked.clear();
+    let mut ends: Vec<usize> = Vec::new();
     for s in 0..half.len() {
         if used[s] {
             continue;
         }
-        let mut cyc = Vec::new();
+        let from = walked.len();
         let mut i = s;
         while !used[i] {
             used[i] = true;
-            cyc.push(i);
+            walked.push(i);
             i = next(i)?;
-            if cyc.len() > half.len() {
+            if walked.len() - from > half.len() {
                 return Err(BoolError::lost(Lost::SplitOpen {
                     face: FaceRef::of(body, f),
                 }));
@@ -5616,7 +5630,7 @@ fn split_face_in(
                     } else {
                         (pc.end, pc.start)
                     };
-                    let mark = if cyc.contains(&k) { "*" } else { " " };
+                    let mark = if walked[from..].contains(&k) { "*" } else { " " };
                     eprintln!(
                         "  {mark}half {k}: piece {p} {a:?} -> {b:?} seg {:?} mid {:?}",
                         pc.seg,
@@ -5628,8 +5642,12 @@ fn split_face_in(
                 face: FaceRef::of(body, f),
             }));
         }
-        cycles.push(cyc);
+        ends.push(walked.len());
     }
+    let walked = &*walked;
+    let cycles: Vec<&[usize]> = (0..ends.len())
+        .map(|k| &walked[if k == 0 { 0 } else { ends[k - 1] }..ends[k]])
+        .collect();
     let face = body.face(f);
     let nb = boundary.iter().map(|l| l.len()).sum::<usize>();
     let outer_len = if outer {
@@ -5640,13 +5658,13 @@ fn split_face_in(
     // on a plane, a cycle made only of original boundary is an original loop, untouched:
     // its orientation is known (the first loop is the outer one) and it needs no outline
     let planar = matches!(face.surface, Surface::Plane(_));
-    let untouched = |cyc: &Vec<usize>| planar && cyc.iter().all(|&i| i < nb);
+    let untouched = |cyc: &[usize]| planar && cyc.iter().all(|&i| i < nb);
     if let Surface::Plane(pl) = &face.surface {
         let walks: Vec<Walk> = cycles
             .iter()
             .map(|cyc| cyc.iter().map(|&i| half[i]).collect())
             .collect();
-        let kind = |k: usize| match untouched(&cycles[k]) {
+        let kind = |k: usize| match untouched(cycles[k]) {
             true if cycles[k][0] < outer_len => Some(Cycle::Outer),
             true => Some(Cycle::Hole),
             false => None,
@@ -5697,7 +5715,7 @@ fn split_face_in(
         }
         let mut pts = pts.unwrap_or_else(|| {
             let mut samples = Vec::new();
-            for &i in cyc {
+            for &i in cyc.iter() {
                 piece_samples(&pieces[half[i].0], half[i].1, &mut samples);
             }
             // pole-aware drawing
