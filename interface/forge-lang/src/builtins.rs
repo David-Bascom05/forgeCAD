@@ -1918,42 +1918,19 @@ fn extrude(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Val
 /// `extrude(PATH | PROFILE, d | sym(d) | two(f, b), surface: true)`: a sheet, a body of its own.
 /// With `thin: t, side:` instead, that sheet thickened (as `thicken` does) into a wall t thick,
 /// which adds (or cuts) as an extrude does.
-/// A sheet's chains. A list of loops (closed sketch loops and circles) gives each loop as a closed
-/// chain, a tube with its front outside; a whole sketch gives the loops of its region. Anything
-/// else is a path, one chain end to end.
+/// A sheet's chains: a whole sketch gives the loops of its region; anything else is read end to
+/// end, a chain ending where it closes (a loop, a circle, each contour of a text's glyph), each a
+/// tube with its front outside.
 fn sheet_chains_of(
     ev: &Eval,
     v: Value,
     span: Span,
 ) -> R<(Rc<RefCell<Sk>>, Vec<crate::shapes::Chain>)> {
-    let a_loop = |x: &Value| {
-        matches!(x, Value::Ent(e) if !e.loop_segs.is_empty() || e.kind == EntKind::Circle)
-    };
-    let loops: Vec<Value> = match v {
-        Value::Sketch(_) => {
-            let (sk, p, _) = profile_of(ev, v, span)?;
-            return Ok((sk, p.loops.into_iter().map(|l| l.segments).collect()));
-        }
-        Value::List(xs) if xs.len() > 1 && xs.iter().all(a_loop) => xs.to_vec(),
-        v => vec![v],
-    };
-    let mut sk: Option<Rc<RefCell<Sk>>> = None;
-    let mut chains = Vec::with_capacity(loops.len());
-    for l in loops {
-        let (s, c) = crate::shapes::chain_of(l, span)?;
-        if let Some(here) = &sk
-            && !Rc::ptr_eq(here, &s)
-        {
-            return Err(Error::OtherSketch {
-                span,
-                sketch: s.borrow().id.clone(),
-                here: here.borrow().id.clone(),
-            });
-        }
-        chains.push(c);
-        sk = Some(s);
+    if let Value::Sketch(_) = v {
+        let (sk, p, _) = profile_of(ev, v, span)?;
+        return Ok((sk, p.loops.into_iter().map(|l| l.segments).collect()));
     }
-    Ok((sk.expect("one loop at least"), chains))
+    crate::shapes::chains_of(v, span)
 }
 
 fn extrude_sheet(ev: &mut Eval, name: &'static str, a: &Args, id: String, span: Span) -> R<Value> {

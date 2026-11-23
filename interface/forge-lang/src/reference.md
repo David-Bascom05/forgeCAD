@@ -249,10 +249,10 @@ revolve(PATH | PROFILE, axis: LINE | AXIS, angle: A | sym(A) | two(A, B), surfac
   a body of its own named by the feature. PATH is what a sweep takes (a sketch line, arc, spline or
   circle, a `path` block, or a list of them end to end, all of one sketch). A closed loop gives a tube
   with no caps.
-- PROFILE is a closed loop (a `rect`, `circle`, polygon or closed `path`), a list of loops, or a
-  whole sketch. Each loop is a tube of its own, whatever else the sketch draws: a list of loops is
-  not one path end to end. A whole sketch gives the loops of its one region, and a sketch with an
-  open chain has none (`SketchProfile`), so name its loops instead.
+- The pieces are read end to end, and a chain ends where it closes on its own start: so a closed
+  loop (a `rect`, `circle`, polygon or closed `path`), a list of loops, or each contour of a text's
+  glyph is a tube of its own, whatever else the sketch draws. A whole sketch gives the loops of its
+  one region, and a sketch with an open chain has none (`SketchProfile`), so name its loops instead.
 - The sheet's front (its faces' outward side) is the right of the chain walked with the sketch's
   normal toward you. That is outside a loop, which is turned counter-clockwise first: each loop's
   own outside, a hole's too, so `thin: t, side: "out"` on a plate and its bore thickens the bore

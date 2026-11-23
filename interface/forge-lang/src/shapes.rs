@@ -1536,18 +1536,24 @@ pub(crate) type Chain = Vec<(Segment, u64)>;
 
 /// A sheet's chain: the entities of one sketch end to end, each turned to run on from the one
 /// before (`path_of`'s rule), in that sketch's plane, named as a profile names its segments.
-pub(crate) fn chain_of(v: Value, span: Span) -> R<(Rc<RefCell<Sk>>, Chain)> {
-    let mut ents = vec![];
-    match v {
-        Value::Ent(e) if e.loop_segs.is_empty() && e.kind == EntKind::Circle => {
-            ents.push((e.sk.clone(), e.id))
+pub(crate) fn chains_of(v: Value, span: Span) -> R<(Rc<RefCell<Sk>>, Vec<Chain>)> {
+    // a path's pieces, with circles (whole loops) anywhere among them
+    fn ents_of(v: Value, span: Span, out: &mut Vec<(Rc<RefCell<Sk>>, EntityId)>) -> R<()> {
+        match v {
+            Value::Ent(e) if e.loop_segs.is_empty() && e.kind == EntKind::Circle => {
+                out.push((e.sk.clone(), e.id));
+                Ok(())
+            }
+            Value::List(xs) => xs.iter().try_for_each(|x| ents_of(x.clone(), span, out)),
+            v => path_ents(v, span, out),
         }
-        v => path_ents(v, span, &mut ents)?,
     }
+    let mut ents = vec![];
+    ents_of(v, span, &mut ents)?;
     let Some(sk) = ents.first().map(|e| e.0.clone()) else {
         return Err(Error::EmptySelection { span });
     };
-    // a sheet's chain lies in one sketch's plane
+    // a sheet's chains lie in one sketch's plane
     if let Some(e) = ents.iter().find(|e| !Rc::ptr_eq(&e.0, &sk)) {
         return Err(Error::OtherSketch {
             span,
@@ -1557,24 +1563,41 @@ pub(crate) fn chain_of(v: Value, span: Span) -> R<(Rc<RefCell<Sk>>, Chain)> {
     }
     let s = sk.borrow();
     let at = |p: Point2| Point3::new(p.x, p.y, 0.0);
-    let mut pieces: Vec<((Segment, u64), Point3, Point3)> = ents
+    let pieces: Vec<((Segment, u64), Point3, Point3)> = ents
         .iter()
         .map(|(_, id)| {
             let (g, a, b) = plane_piece(&s, *id);
             ((g, s.seg_id(*id)), at(a), at(b))
         })
         .collect();
-    if pieces.len() > 1 {
-        let (a, b) = (pieces[0].1, pieces[0].2);
-        let (c, d) = (pieces[1].1, pieces[1].2);
-        let end_meets = b.distance(c) <= MEET || b.distance(d) <= MEET;
-        let start_meets = a.distance(c) <= MEET || a.distance(d) <= MEET;
-        if !end_meets && start_meets {
-            let (p, a, b) = pieces.remove(0);
-            pieces.insert(0, ((p.0.reversed(), p.1), b, a));
+    drop(s);
+    // end to end, each piece turned to meet the one before; a chain ends where it closes on its
+    // own start (a loop, a circle, each contour of a glyph), and the next piece starts another
+    let ends: Vec<(Point3, Point3)> = pieces.iter().map(|p| (p.1, p.2)).collect();
+    let meets = |x: Point3, y: Point3| x.distance(y) <= MEET;
+    let mut chains = vec![];
+    let mut out: Chain = vec![];
+    let (mut start, mut here) = (None::<Point3>, None::<Point3>);
+    for (k, ((g, id), a, b)) in pieces.into_iter().enumerate() {
+        let forward = match here {
+            Some(x) if meets(x, a) => true,
+            Some(x) if meets(x, b) => false,
+            Some(_) => return Err(Error::PathGap { span, index: k }),
+            // a chain's first piece: turned only if its start, not its end, meets the next
+            None => match ends.get(k + 1) {
+                Some(&(c, d)) => meets(b, c) || meets(b, d) || !(meets(a, c) || meets(a, d)),
+                None => true,
+            },
+        };
+        let (g, from, to) = if forward { (g, a, b) } else { (g.reversed(), b, a) };
+        let from = *start.get_or_insert(from);
+        out.push((g, id));
+        here = Some(to);
+        if k + 1 < ends.len() && meets(from, to) {
+            chains.push(std::mem::take(&mut out));
+            (start, here) = (None, None);
         }
     }
-    let chain = chain(pieces, |(g, id): (Segment, u64)| (g.reversed(), id), span)?;
-    drop(s);
-    Ok((sk, chain))
+    chains.push(out);
+    Ok((sk, chains))
 }
