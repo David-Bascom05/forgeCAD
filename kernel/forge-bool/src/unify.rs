@@ -89,6 +89,11 @@ pub fn unify(body: &mut Body) {
     }
 }
 
+use forge_topo::Name;
+
+/// (each one left, its new name, the least of its pieces' own), (each piece's name, its group)
+type Renamed = (Vec<(u32, Name, Name)>, Vec<(Name, u32)>);
+
 /// Names each face or edge joined here after what its pieces came from, so the sequential
 /// regen (which splits faces and edges the n-ary one never does) and the n-ary one name a joined
 /// entity alike: a face takes the least of its pieces' wholes (a piece's whole if a boolean split
@@ -97,9 +102,6 @@ pub fn unify(body: &mut Body) {
 /// would take leaves each the least of its pieces' own. Every piece's name is kept as an alias of
 /// the whole's. `faces` and `edges` are (gone, went into) pairs, in the order joined.
 fn rename_wholes(body: &mut Body, faces: &[(u32, u32)], edges: &[(u32, u32)]) {
-    use forge_topo::Name;
-    // (each one left, its new name, the least of its pieces' own), (each piece's name, its group)
-    type Renamed = (Vec<(u32, Name, Name)>, Vec<(Name, u32)>);
     if faces.is_empty() && edges.is_empty() {
         return;
     }
@@ -149,72 +151,6 @@ fn rename_wholes(body: &mut Body, faces: &[(u32, u32)], edges: &[(u32, u32)]) {
     };
     // per entity joined into: (the one left, its name, whether a piece had a whole), worked out
     // over the pairs and their roots; then the pieces' names to the one left's as aliases
-    let rename = |pairs: &[(u32, u32)],
-                  n: usize,
-                  name: &dyn Fn(u32) -> Name,
-                  other: &dyn Fn(u32) -> Option<Name>,
-                  alive: &dyn Fn(u32) -> bool|
-     -> Renamed {
-        const NONE: u32 = u32::MAX;
-        let mut parent = vec![NONE; n];
-        for &(gone, kept) in pairs {
-            parent[gone as usize] = kept;
-        }
-        let root = |mut x: u32| {
-            while parent[x as usize] != NONE {
-                x = parent[x as usize];
-            }
-            x
-        };
-        // (root, least whole-or-own name, least own name, any whole)
-        let mut slot = vec![NONE; n];
-        let mut gs: Vec<(u32, Name, Name, bool)> = Vec::new();
-        let mut members: Vec<(Name, u32)> = Vec::with_capacity(pairs.len());
-        let mut add = |r: u32, m: Name, gs: &mut Vec<(u32, Name, Name, bool)>| {
-            let w = whole(m);
-            let k = &mut slot[r as usize];
-            if *k == NONE {
-                *k = gs.len() as u32;
-                gs.push((r, Name(u64::MAX), Name(u64::MAX), false));
-            }
-            let g = &mut gs[*k as usize];
-            g.1 = g.1.min(w.unwrap_or(m));
-            g.2 = g.2.min(m);
-            g.3 |= w.is_some();
-            *k
-        };
-        for &(gone, kept) in pairs {
-            let r = root(kept);
-            let k = add(r, name(gone), &mut gs);
-            members.push((name(gone), k));
-        }
-        for k in 0..gs.len() {
-            let r = gs[k].0;
-            add(r, name(r), &mut gs);
-            members.push((name(r), k as u32));
-        }
-        let mut to: Vec<(u32, Name, Name)> = gs
-            .iter()
-            .map(|&(r, w, own, any)| (r, if any { w } else { other(r).unwrap_or(w) }, own))
-            .collect();
-        // a name two would take, or one a live entity left alone holds: each keeps the least of
-        // its own
-        let mut taken: Vec<Name> = to.iter().map(|t| t.1).collect();
-        taken.sort_unstable();
-        let twice: Vec<Name> = taken.windows(2).filter(|w| w[0] == w[1]).map(|w| w[0]).collect();
-        let mut held: Vec<Name> = (0..n as u32)
-            .filter(|&x| slot[x as usize] == NONE && alive(x))
-            .map(name)
-            .filter(|m| taken.binary_search(m).is_ok())
-            .collect();
-        held.sort_unstable();
-        for t in &mut to {
-            if twice.binary_search(&t.1).is_ok() || held.binary_search(&t.1).is_ok() {
-                t.1 = t.2;
-            }
-        }
-        (to, members)
-    };
     let apply = |body: &mut Body, (to, members): Renamed, faces: bool| {
         let aliases = members.iter().map(|&(n, k)| (n, to[k as usize].1));
         body.joins.aliases.extend(aliases.filter(|a| a.0 != a.1));
@@ -228,9 +164,10 @@ fn rename_wholes(body: &mut Body, faces: &[(u32, u32)], edges: &[(u32, u32)]) {
     let r = rename(
         faces,
         body.faces.len(),
-        &|f| body.faces[f as usize].name,
-        &|_| None,
-        &|f| body.faces[f as usize].alive,
+        |f| body.faces[f as usize].name,
+        |_| None,
+        |f| body.faces[f as usize].alive,
+        &whole,
     );
     apply(body, r, true);
     // an edge named from its faces takes their new names
@@ -244,11 +181,92 @@ fn rename_wholes(body: &mut Body, faces: &[(u32, u32)], edges: &[(u32, u32)]) {
     let r = rename(
         edges,
         body.edges.len(),
-        &|e| body.edges[e as usize].name,
-        &sides,
-        &|e| body.edges[e as usize].alive,
+        |e| body.edges[e as usize].name,
+        sides,
+        |e| body.edges[e as usize].alive,
+        &whole,
     );
     apply(body, r, false);
+}
+
+/// `rename_wholes`' work for faces or for edges: `pairs` the (gone, went into) pairs, `n` how
+/// many entities there are, `name`, `other` (a name from elsewhere, for a group no piece of which
+/// had a whole) and `alive` read from the body, `whole` a name's whole.
+fn rename<N, O, A>(
+    pairs: &[(u32, u32)],
+    n: usize,
+    name: N,
+    other: O,
+    alive: A,
+    whole: &dyn Fn(Name) -> Option<Name>,
+) -> Renamed
+where
+    N: Fn(u32) -> Name,
+    O: Fn(u32) -> Option<Name>,
+    A: Fn(u32) -> bool,
+{
+    const NONE: u32 = u32::MAX;
+    let mut parent = vec![NONE; n];
+    for &(gone, kept) in pairs {
+        parent[gone as usize] = kept;
+    }
+    let root = |mut x: u32| {
+        while parent[x as usize] != NONE {
+            x = parent[x as usize];
+        }
+        x
+    };
+    // (root, least whole-or-own name, least own name, any whole)
+    let mut slot = vec![NONE; n];
+    let mut gs: Vec<(u32, Name, Name, bool)> = Vec::new();
+    let mut members: Vec<(Name, u32)> = Vec::with_capacity(pairs.len());
+    let mut add = |r: u32, m: Name, gs: &mut Vec<(u32, Name, Name, bool)>| {
+        let w = whole(m);
+        let k = &mut slot[r as usize];
+        if *k == NONE {
+            *k = gs.len() as u32;
+            gs.push((r, Name(u64::MAX), Name(u64::MAX), false));
+        }
+        let g = &mut gs[*k as usize];
+        g.1 = g.1.min(w.unwrap_or(m));
+        g.2 = g.2.min(m);
+        g.3 |= w.is_some();
+        *k
+    };
+    for &(gone, kept) in pairs {
+        let r = root(kept);
+        let k = add(r, name(gone), &mut gs);
+        members.push((name(gone), k));
+    }
+    for k in 0..gs.len() {
+        let r = gs[k].0;
+        add(r, name(r), &mut gs);
+        members.push((name(r), k as u32));
+    }
+    let mut to: Vec<(u32, Name, Name)> = gs
+        .iter()
+        .map(|&(r, w, own, any)| (r, if any { w } else { other(r).unwrap_or(w) }, own))
+        .collect();
+    // a name two would take, or one a live entity left alone holds: each keeps the least of
+    // its own
+    let mut taken: Vec<Name> = to.iter().map(|t| t.1).collect();
+    taken.sort_unstable();
+    let twice: Vec<Name> = taken.windows(2).filter(|w| w[0] == w[1]).map(|w| w[0]).collect();
+    // (a bit of each name taken, asked first: most entities' names are none of them)
+    let bit = |m: Name| 1u64 << (m.0 & 63);
+    let bits = taken.iter().fold(0u64, |b, &m| b | bit(m));
+    let mut held: Vec<Name> = (0..n as u32)
+        .filter(|&x| slot[x as usize] == NONE && bits & bit(name(x)) != 0 && alive(x))
+        .map(&name)
+        .filter(|m| taken.binary_search(m).is_ok())
+        .collect();
+    held.sort_unstable();
+    for t in &mut to {
+        if twice.binary_search(&t.1).is_ok() || held.binary_search(&t.1).is_ok() {
+            t.1 = t.2;
+        }
+    }
+    (to, members)
 }
 
 /// Whether live edge `e` lies between two faces on one surface, facing the same way (`keys` as
@@ -393,6 +411,8 @@ struct Work {
     made: Vec<(FaceId, Vec<CoedgeId>)>,
     /// The edges taken out.
     dropped: Vec<EdgeId>,
+    /// Each face that has taken another in.
+    grown: Vec<bool>,
 }
 
 const MADE: u32 = 1 << 31;
@@ -404,6 +424,7 @@ impl Work {
             loops: vec![None; body.loops.len()],
             made: Vec::new(),
             dropped: Vec::new(),
+            grown: vec![false; body.faces.len()],
         }
     }
 
@@ -509,8 +530,8 @@ fn remove_edge(body: &mut Body, w: &mut Work, e: EdgeId) -> Option<(FaceId, Face
         body.dead += 1;
         return Some((fa, fa));
     }
-    // (asked again of the faces now on either side: one may be a merge, keeping one surface)
-    if !same_surface(body, fa, fb) {
+    // (asked again of the faces now on either side where one is a merge, keeping one surface)
+    if (w.grown[fa.index()] || w.grown[fb.index()]) && !same_surface(body, fa, fb) {
         return None;
     }
     let sb = w.get(body, lb).clone();
@@ -610,6 +631,7 @@ fn remove_edge(body: &mut Body, w: &mut Work, e: EdgeId) -> Option<(FaceId, Face
     w.get(body, lg).clear();
     body.faces[gone.index()].alive = false;
     body.dead += 1;
+    w.grown[keep.index()] = true;
     Some((keep, gone))
 }
 
@@ -776,7 +798,7 @@ fn join(body: &mut Body, c: CoedgeId, n: CoedgeId) -> bool {
     // two traces of where the same two surfaces meet (the pieces two booleans traced apart):
     // one branch through v, whose chains are spliced there
     let traced = match (&x1.curve, &x2.curve) {
-        (Curve::Intersection(a), Curve::Intersection(b)) => a != b,
+        (Curve::Intersection(a), Curve::Intersection(b)) => !std::sync::Arc::ptr_eq(a, b),
         _ => false,
     };
     // on one line or circle (cheap tests first; the walk round v and the evaluation settle it)
