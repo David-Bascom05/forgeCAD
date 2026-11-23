@@ -860,6 +860,7 @@ impl Fast {
 
     // ---- expressions ------------------------------------------------------------------------
 
+    #[inline]
     pub(super) fn expr(&mut self, fk: u64) -> F<Expr> {
         self.deeper()?;
         let e = self.expr_in(fk)?;

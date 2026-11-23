@@ -122,6 +122,8 @@ fn every_case_found_ends_in_a_value_or_a_typed_error_in_its_time() {
             }
         }
     }
+    // the quiet hook would swallow the assertions' own words
+    drop(std::panic::take_hook());
     assert!(n > 0, "no cases found");
     assert!(bad.is_empty(), "{}", bad.join("\n"));
 }
@@ -131,7 +133,7 @@ fn every_case_found_ends_in_a_value_or_a_typed_error_in_its_time() {
 #[test]
 fn every_target_has_seeds_in_the_repository() {
     for &(name, t) in forge_read_fuzz::TARGETS {
-        if matches!(t, Target::Shx | Target::Brep) {
+        if t == Target::Shx {
             continue;
         }
         let s = forge_read_fuzz::seeds(t, &[root()], 512 << 10);

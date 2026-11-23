@@ -1208,6 +1208,15 @@ fn tessellate_face(
         global.iter().map(|&g| Some(mesh.positions[g as usize])).collect();
     if let Some(g) = &grid {
         node_index = g.place(surface, mesh);
+        // a staircase runs over placed nodes only; on a file's face it can reach one that is not
+        if g.cycles
+            .borrow()
+            .iter()
+            .flatten()
+            .any(|&(i, j)| node_index.get(g.id(i, j)).is_none_or(|&x| x == u32::MAX))
+        {
+            return Err(CdtError::Internal("a grid's staircase off its placed nodes"));
+        }
         for cycle in g.cycles.borrow().iter() {
             known.extend(
                 cycle

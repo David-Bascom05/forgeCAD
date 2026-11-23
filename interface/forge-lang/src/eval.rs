@@ -1624,6 +1624,7 @@ impl<'s> Eval<'s> {
 
     // ---- expressions -------------------------------------------------------------------------
 
+    #[inline(always)]
     pub fn expr(&mut self, e: &Expr) -> R<Value> {
         // the parser bounds one expression's depth; calls nest them, so the evaluation's own
         // depth is held too (the stack is the limit, and a file can ask for any depth)
@@ -1640,20 +1641,18 @@ impl<'s> Eval<'s> {
         self.nest -= 1;
         // no part has such a number: refused where it arises, before the kernel sees it
         // (NaN is past every bound: `is_finite` first)
-        let most = if let Ok(Value::Num(n)) = &r
-            && n.dim == Dim::Angle
-        {
-            MAX_ANGLE
-        } else {
-            MAX_MAGNITUDE
-        };
-        if let Ok(Value::Num(n)) = &r
-            && (!n.v.is_finite() || n.v.abs() > most)
-        {
-            return Err(Error::TooLarge {
-                span: e.span,
-                value: n.v,
-            });
+        if let Ok(Value::Num(n)) = &r {
+            let most = if n.dim == Dim::Angle {
+                MAX_ANGLE
+            } else {
+                MAX_MAGNITUDE
+            };
+            if !n.v.is_finite() || n.v.abs() > most {
+                return Err(Error::TooLarge {
+                    span: e.span,
+                    value: n.v,
+                });
+            }
         }
         r
     }

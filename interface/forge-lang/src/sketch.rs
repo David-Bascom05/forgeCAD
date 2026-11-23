@@ -570,11 +570,21 @@ impl Sk {
     /// `seg_id` for every entity at once: a lookup built once (`seg_id` searches the entities,
     /// and a profile of every segment of a large sketch was quadratic).
     fn seg_ids(&self) -> impl Fn(EntityId) -> u64 + '_ {
+        // (a small sketch searches, as `seg_id` does: the map costs more than it saves there)
         let mut by: std::collections::HashMap<EntityId, &str> = std::collections::HashMap::new();
-        for x in &self.ents {
-            by.entry(x.0).or_insert(x.1.as_str());
+        if self.ents.len() > 64 {
+            for x in &self.ents {
+                by.entry(x.0).or_insert(x.1.as_str());
+            }
         }
-        move |e| self.seg_id_of(by.get(&e).copied().unwrap_or("?"))
+        move |e| {
+            let name = if by.is_empty() {
+                self.ents.iter().find(|x| x.0 == e).map_or("?", |x| x.1.as_str())
+            } else {
+                by.get(&e).copied().unwrap_or("?")
+            };
+            self.seg_id_of(name)
+        }
     }
 
     fn seg_id_of(&self, name: &str) -> u64 {

@@ -139,7 +139,17 @@ fn chain_loops(open: &[(Segment, EntityId)]) -> Result<Vec<ProfileLoop>, Extract
             (p.y / tol::LINEAR).floor() as i64,
         )
     };
+    let small = open.len() <= 64;
     let mut node_of = |p: Point2| -> usize {
+        if small {
+            return match nodes.iter().position(|q| q.distance(p) <= tol::LINEAR) {
+                Some(i) => i,
+                None => {
+                    nodes.push(p);
+                    nodes.len() - 1
+                }
+            };
+        }
         let (i, j) = cell(p);
         let mut best: Option<usize> = None;
         for a in i.saturating_sub(1)..=i.saturating_add(1) {
@@ -461,44 +471,14 @@ fn check_crossings(loops: &[ProfileLoop]) -> Result<(), ExtractError> {
     let mut meets_itself: Vec<Option<(u64, u64)>> = vec![None; loops.len()];
     // only segments whose boxes come within a margin can meet: a sweep finds those pairs (every
     // pair was quadratic), then they are judged in the order every pair was
-    let boxes: Vec<[f64; 4]> = all
-        .iter()
-        .map(|(s, ..)| {
-            let pts = s.samples(16);
-            // the samples' box, grown by the longest step between them: a curve strays from its
-            // chords by less than that
-            let gap = pts.windows(2).map(|w| w[0].distance(w[1])).fold(0.0, f64::max);
-            let g = gap + 1e-3;
-            let mut b = [f64::INFINITY, f64::INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY];
-            for p in &pts {
-                b = [b[0].min(p.x), b[1].min(p.y), b[2].max(p.x), b[3].max(p.y)];
-            }
-            [b[0] - g, b[1] - g, b[2] + g, b[3] + g]
-        })
-        .collect();
-    let mut order: Vec<usize> = (0..all.len()).collect();
-    order.sort_by(|&a, &b| boxes[a][0].total_cmp(&boxes[b][0]));
-    let mut pairs: Vec<(usize, usize)> = Vec::new();
-    for (k, &a) in order.iter().enumerate() {
-        for &b in &order[k + 1..] {
-            if boxes[b][0] > boxes[a][2] {
-                break;
-            }
-            // a box with no finite extent is kept with every one: judged as before
-            let apart = boxes[b][1] > boxes[a][3] || boxes[a][1] > boxes[b][3];
-            if !apart || boxes[a].iter().chain(&boxes[b]).any(|v| !v.is_finite()) {
-                pairs.push((a.min(b), a.max(b)));
-            }
-        }
-    }
-    let unbounded: Vec<usize> = (0..all.len())
-        .filter(|&i| boxes[i].iter().any(|v| !v.is_finite()))
-        .collect();
-    for &u in &unbounded {
-        pairs.extend((0..all.len()).filter(|&o| o != u).map(|o| (u.min(o), u.max(o))));
-    }
-    pairs.sort_unstable();
-    pairs.dedup();
+    let pairs = if all.len() <= 64 {
+        // few: every pair, as before (the boxes cost more than they save)
+        (0..all.len())
+            .flat_map(|i| (i + 1..all.len()).map(move |j| (i, j)))
+            .collect()
+    } else {
+        crossing_candidates(&all)
+    };
     for (i, j) in pairs {
         {
             let (si, sj) = (&all[i].0, &all[j].0);
@@ -542,6 +522,50 @@ fn check_crossings(loops: &[ProfileLoop]) -> Result<(), ExtractError> {
         }
     }
     Ok(())
+}
+
+/// The pairs of segments whose boxes come within a margin, in the order every pair is judged:
+/// only those can meet.
+fn crossing_candidates(all: &[(Segment, u64, usize)]) -> Vec<(usize, usize)> {
+    let boxes: Vec<[f64; 4]> = all
+        .iter()
+        .map(|(s, ..)| {
+            let pts = s.samples(16);
+            // the samples' box, grown by the longest step between them: a curve strays from its
+            // chords by less than that
+            let gap = pts.windows(2).map(|w| w[0].distance(w[1])).fold(0.0, f64::max);
+            let g = gap + 1e-3;
+            let mut b = [f64::INFINITY, f64::INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY];
+            for p in &pts {
+                b = [b[0].min(p.x), b[1].min(p.y), b[2].max(p.x), b[3].max(p.y)];
+            }
+            [b[0] - g, b[1] - g, b[2] + g, b[3] + g]
+        })
+        .collect();
+    let mut order: Vec<usize> = (0..all.len()).collect();
+    order.sort_by(|&a, &b| boxes[a][0].total_cmp(&boxes[b][0]));
+    let mut pairs: Vec<(usize, usize)> = Vec::new();
+    for (k, &a) in order.iter().enumerate() {
+        for &b in &order[k + 1..] {
+            if boxes[b][0] > boxes[a][2] {
+                break;
+            }
+            // a box with no finite extent is kept with every one: judged as before
+            let apart = boxes[b][1] > boxes[a][3] || boxes[a][1] > boxes[b][3];
+            if !apart || boxes[a].iter().chain(&boxes[b]).any(|v| !v.is_finite()) {
+                pairs.push((a.min(b), a.max(b)));
+            }
+        }
+    }
+    let unbounded: Vec<usize> = (0..all.len())
+        .filter(|&i| boxes[i].iter().any(|v| !v.is_finite()))
+        .collect();
+    for &u in &unbounded {
+        pairs.extend((0..all.len()).filter(|&o| o != u).map(|o| (u.min(o), u.max(o))));
+    }
+    pairs.sort_unstable();
+    pairs.dedup();
+    pairs
 }
 
 /// Whether two shapes of different loops cross at `p`, where they meet: through each other at an

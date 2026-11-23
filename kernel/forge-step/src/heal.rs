@@ -229,6 +229,24 @@ impl Proto {
         }
         let (i, t) = self.find_on_loop(&l, &s, dir, at)?;
         let e = l[i].0;
+        let v0 = self.edges[e].start;
+        // a seam already ends at the closed edge's vertex (the face on its other side was joined
+        // first): moving it would leave that seam's end off the rim, so the edge is cut there instead
+        let pinned = self.edges[e].end == v0
+            && self
+                .edges
+                .iter()
+                .enumerate()
+                .any(|(k, x)| k != e && (x.start == v0 || x.end == v0));
+        if pinned {
+            let range = self.edges[e].range;
+            let w = range.width();
+            let t = range.lo + (t - range.lo).rem_euclid(w);
+            if t - range.lo <= 1e-12 * w.max(1.0) || range.hi - t <= 1e-12 * w.max(1.0) {
+                return Some(v0);
+            }
+            return Some(self.split_edge(e, t));
+        }
         if self.edges[e].start == self.edges[e].end {
             // a closed edge has its one vertex moved here
             let range = self.edges[e].range;
@@ -476,6 +494,46 @@ impl Proto {
                 && let Some(v) = self.pick_vertex_on(f, a, dir, mid)
             {
                 return v;
+            }
+        }
+        // where edges of either rim run along the surface's lines: a seam must keep clear of them
+        let mut blocked: Vec<f64> = Vec::new();
+        for l in [a, b] {
+            for &u in &self.faces[f].loops[l] {
+                let e = &self.edges[u.0];
+                let (x, y) = (param(self, e.start), param(self, e.end));
+                if e.start != e.end && same(x, y) {
+                    blocked.push(x);
+                }
+            }
+        }
+        if !blocked.is_empty() {
+            // the point of the rim furthest round from all of them, the rim's edges sampled
+            let gap = |at: f64| {
+                blocked
+                    .iter()
+                    .map(|&x| {
+                        let r = (at - x) / period;
+                        ((r - r.round()) * period).abs()
+                    })
+                    .fold(f64::INFINITY, f64::min)
+            };
+            let mut best: Option<(usize, f64, f64)> = None;
+            for &u in &rim {
+                let e = &self.edges[u.0];
+                for k in 1..16 {
+                    let t = e.range.lo + e.range.width() * f64::from(k) / 16.0;
+                    let q = s.project(e.curve.eval(t));
+                    let g = gap(if dir == 0 { q.x } else { q.y });
+                    if best.is_none_or(|b| g > b.2) {
+                        best = Some((u.0, t, g));
+                    }
+                }
+            }
+            if let Some((e, t, g)) = best
+                && g > 1e-3 * period
+            {
+                return self.split_edge(e, t);
             }
         }
         // the edge that moves furthest round, cut at its middle

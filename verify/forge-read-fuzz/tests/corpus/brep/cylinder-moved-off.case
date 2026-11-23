@@ -1,0 +1,6 @@
+# A cylinder's frame moved 1e6 along: its edges far off it, a constraint walk crossing the mesh many
+# times over with nothing to stop it. The walk now checks the file's budget.
+from: verify/forge-read-fuzz/seeds/strike.brep
+replace: \n2 12.92 -3.48 20 0 0 -1 0 1 0 1 -0 0 3.48\n
+with: \n2 12.92 -3.48 1000000 0 0 -1 0 1 0 1 -0 0 3.48\n
+max-ms: 15000

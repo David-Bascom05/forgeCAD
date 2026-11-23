@@ -1406,6 +1406,19 @@ pub(crate) fn finish(
     if proto.faces.is_empty() {
         return Err("a solid with no faces".into());
     }
+    // an edge runs at most once round a closed curve, over a finite range (a file's range of
+    // many turns made a check sample it 65536 times over itself, and every pair of those crossed)
+    for e in &proto.edges {
+        let r = e.range;
+        if !(r.lo.is_finite() && r.hi.is_finite()) {
+            return Err("an edge's range is not finite".into());
+        }
+        if let Some(p) = e.curve.domain().period
+            && r.width() > p * (1.0 + 1e-9)
+        {
+            return Err("an edge runs more than once round its curve".into());
+        }
+    }
     // a face goes along an edge at most once each way (a seam: once each way); loops that repeat
     // an edge are no boundary, and meshing them cut the repeats finer until memory ran out
     for f in &proto.faces {

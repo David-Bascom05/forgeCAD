@@ -134,6 +134,8 @@ pub fn mutate(f: Format, seed: &[u8], other: &[u8], r: &mut Rng) -> Vec<u8> {
         } else {
             byte_edit(&mut b, other, r);
         }
+        // edits on edits can grow a mutant without end: at most 64 MB
+        b.truncate(64 << 20);
     }
     b
 }

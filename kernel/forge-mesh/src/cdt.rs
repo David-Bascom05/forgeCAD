@@ -75,7 +75,8 @@ struct Mesh {
     stack: Vec<(u32, usize)>,
     /// The constraint the last `insert_constraint` to fail ran into.
     hit: (u32, u32),
-    /// Triangles `locate` has stepped through, for the reading of a file's budget.
+    /// Triangles `locate` has stepped through and edges `legalize` has looked at, for the reading
+    /// of a file's budget.
     walked: u64,
 }
 
@@ -317,6 +318,8 @@ impl Mesh {
         stack.clear();
         stack.extend_from_slice(start);
         while let Some((t, i)) = stack.pop() {
+            // the flips are counted with the walks: in a file's sliver of a face they cascade
+            self.walked += 1;
             let tt = self.tris[t as usize];
             let u = tt.n[i];
             if u == NONE || tt.c[i] {
@@ -419,7 +422,13 @@ impl Mesh {
             return Err(CdtError::Internal("no start wedge"));
         };
 
+        let mut steps = 0u32;
         loop {
+            // a file's tangled fan can make one walk cross the mesh many times over
+            steps = steps.wrapping_add(1);
+            if steps.is_multiple_of(64) && forge_geom::budget::over() {
+                return Err(CdtError::Internal("the boundary would take too long"));
+            }
             let (tc, ic) = self
                 .find_edge(right, left)
                 .ok_or(CdtError::Internal("walk lost edge"))?;
@@ -430,6 +439,10 @@ impl Mesh {
             }
             crossed.push_back((left, right));
             let u = self.tris[tc as usize].n[ic];
+            // past the hull: only where the boundary's own points lie outside it (a file's)
+            if u == NONE {
+                return Err(CdtError::Internal("a constraint runs off the hull"));
+            }
             let uu = self.tris[u as usize];
             let j = (0..3)
                 .find(|&k| uu.n[k] == tc)
@@ -632,9 +645,10 @@ impl Mesh {
             .locate(p)
             .ok_or(CdtError::Internal("point location failed"))?;
         // each point's walk is counted: on a file's face whose edges are far from its surface the
-        // walks grow with the mesh, and such a face took minutes
-        if self.walked > 4096 {
-            forge_geom::budget::spend_many(std::mem::take(&mut self.walked));
+        // walks grow with the mesh, and such a face took minutes. A step is some 5 ns against a
+        // spline evaluation's 200 to 500, the budget's unit: sixteen to one
+        if self.walked > 1 << 16 {
+            forge_geom::budget::spend_many(std::mem::take(&mut self.walked) / 16);
             if forge_geom::budget::over() {
                 return Err(CdtError::Internal("the face would take too long"));
             }
