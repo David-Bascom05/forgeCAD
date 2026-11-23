@@ -414,12 +414,14 @@ no-output (test code)  @ forge-par/src/tests.rs|static|static MAY_WAIT: Cell<boo
 no-output (test code)  @ forge-par/src/tests.rs|thread_local|thread_local! {
 no-output (test code)  @ forge-par/src/tests.rs|threads|std::thread::spawn(j);
 no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-sheet/src/build.rs|float|let size = (bx.x.width().powi(2) + bx.y.width().powi(2) + bx.z.width().powi(2)).sqrt();  x 3
+no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-sheet/src/build.rs|float|let size = (raw.x.width().powi(2) + raw.y.width().powi(2) + raw.z.width().powi(2)).sqrt();
 no-output (no iteration order reaches an output; audit)  @ forge-sheet/src/build.rs|hash-order|let index: HashMap<(usize, usize), usize> = sides.iter().enumerate().map(|(k, s)| (*s, k)).collect();
 no-output (no iteration order reaches an output; audit)  @ forge-sheet/src/build.rs|hash-order|let joined: std::collections::HashSet<(usize, usize)> = self
 no-output (no iteration order reaches an output; audit)  @ forge-sheet/src/build.rs|hash-order|let mut count: HashMap<u64, usize> = HashMap::new();
 no-output (no iteration order reaches an output; audit)  @ forge-sheet/src/build.rs|hash-order|let mut rails: HashMap<usize, EdgeId> = HashMap::new();
 no-output (no iteration order reaches an output; audit)  @ forge-sheet/src/build.rs|hash-order|let mut tedges: HashMap<(usize, usize), [EdgeId; 2]> = HashMap::new();
 no-output (no iteration order reaches an output; audit)  @ forge-sheet/src/build.rs|hash-order|twin: HashMap<(usize, usize), (usize, usize)>,
+no-output (lookup only: contains_key, never iterated)  @ forge-sheet/src/build.rs|hash-order|fn untwinned(loops: &[LoopData], twin: &HashMap<(usize, usize), (usize, usize)>) -> Option<(usize, usize)> {
 no-output (a count of the checks' questions; tests read it, no op does)  @ forge-sheet/src/build.rs|static|static ASKED: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
 no-output (a count of the checks' questions; tests read it, no op does)  @ forge-sheet/src/build.rs|thread_local|thread_local! {
 no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-sheet/src/form.rs|float|+ (hi.powi(3) - lo.powi(3)) / 3.0 * (dmath::sin(s1) - dmath::sin(s0))
