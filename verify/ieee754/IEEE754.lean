@@ -29,6 +29,7 @@ import IEEE754.Screen.Interior
 import IEEE754.Screen.Face
 import IEEE754.Screen.FaceB
 import IEEE754.Screen.FaceArea
+import IEEE754.Screen.Coincide
 import IEEE754.Interval.Sin
 import IEEE754.Exact.Big
 import IEEE754.Exact.QHenrici

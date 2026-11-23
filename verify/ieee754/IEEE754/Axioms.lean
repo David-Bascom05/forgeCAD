@@ -21,6 +21,7 @@ import IEEE754.Screen.Interior
 import IEEE754.Screen.Face
 import IEEE754.Screen.FaceB
 import IEEE754.Screen.FaceArea
+import IEEE754.Screen.Coincide
 import IEEE754.Interval.Sin
 import IEEE754.Exact.Big
 import IEEE754.Exact.QHenrici
@@ -117,6 +118,9 @@ elab "#standard_axioms " ids:ident* : command => do
   IEEE754.Screen.orient_e IEEE754.Screen.orient_sound IEEE754.Screen.pt_diff_close IEEE754.Screen.esum_le
   IEEE754.Screen.angle_sound IEEE754.Screen.wall_close IEEE754.Screen.wall_lo IEEE754.Screen.wall_hi
   IEEE754.Screen.touches_sound IEEE754.Screen.fold_err IEEE754.Screen.area_sound
+  IEEE754.Screen.mul_err IEEE754.Screen.cross_sound IEEE754.Screen.diff_sound IEEE754.Screen.centre_sound
+  IEEE754.Screen.dot_err IEEE754.Screen.plane_dist_sound IEEE754.Screen.offp_comp IEEE754.Screen.sumsq_le
+  IEEE754.Screen.offp_sound IEEE754.Screen.offp_margin
   -- Interval sin/cos
   IEEE754.Interval.below_round IEEE754.Interval.above_round IEEE754.Interval.crit_counted
   IEEE754.Interval.sin_encloses IEEE754.Interval.cos_encloses
