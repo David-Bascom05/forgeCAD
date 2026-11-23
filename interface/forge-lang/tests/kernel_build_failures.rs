@@ -700,9 +700,11 @@ gone = cut(sc, -10, bodies: \"all\")
     assert!((v - 800.0).abs() < 1e-6, "{v}");
 }
 
-/// A boss near a rod's end whose fillet runs off over the rim and back: the rim is split, the
-/// blend cuts the cap across the stretch that goes, and the wall's loop runs on through the rim's
-/// closed vertex (volume agrees with OCCT to 1e-5).
+/// A boss near a rod's end whose fillet runs off over the rim and back (the pipe set's p00010).
+/// Notched by the cap carried on, the round kept fill under the cap that a ball resting on the rim
+/// and the boss takes away (label_body: 11 points over, OCCT agreeing at each; the volume alone
+/// was within 1e-5 of OCCT's). The round resting on the rim there (the cliff) does not stand, so
+/// it is refused, not notched.
 #[test]
 fn fillet_runs_over_a_rim_and_back() {
     let src = r#"sketch o(on: xy) {
@@ -727,9 +729,8 @@ sketch s5(on: plane(at: d2.p, normal: axis(o.p, d3.p), x: axis(o.p, d4.p))) {
 extrude2 = extrude(s5, 35.7306)
 round = fillet(edges(between: (extrude1, extrude2), crease: "concave"), 2.13853177)
 "#;
-    builds(src);
-    let v = mass(src);
-    assert!((v - 58260.8).abs() < 2.0, "{v}");
+    let e = refusal(src);
+    assert!(e.contains("Overflow"), "{e}");
 }
 
 /// Taking every wall of a disc leaves its ends bounding nothing: refused, not a body of faces with

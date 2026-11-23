@@ -159,12 +159,18 @@ fn boss_rim(b: &Body, e: EdgeId) -> bool {
 fn a_round_over_a_boss_end_leaves_no_seam_spur() {
     let features = boss();
     let (before, names) = picked(&features, boss_rim);
-    for r in [2.3, 0.2] {
+    let round = |r: f64| {
         let mut f = features.clone();
         f.push(fillet(names.clone(), r));
-        let after = Part { features: f }.regenerate().expect("the boss's rim rounds");
-        assert_eq!(check(&after), vec![], "r {r}");
-        let added = volume(&after) - volume(&before);
-        assert!(added > 0.0, "r {r}: {added}");
-    }
+        Part { features: f }.regenerate()
+    };
+    let after = round(0.2).expect("the boss's rim rounds");
+    assert_eq!(check(&after), vec![], "r 0.2");
+    let added = volume(&after) - volume(&before);
+    assert!(added > 0.0, "r 0.2: {added}");
+    // at 2.3 the spring runs over the boss's far end and back: notched by the end carried on, the
+    // round kept fill a ball resting on the end's rim and the block takes away (label_body: 32
+    // points over), and the round resting on the rim does not stand, so it is refused
+    let refused = round(2.3).expect_err("refused, not notched");
+    assert!(format!("{refused:?}").contains("Overflow"), "{refused:?}");
 }

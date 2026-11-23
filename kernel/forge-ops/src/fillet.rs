@@ -568,8 +568,7 @@ fn fillet_picked(body: &Body, edges: &[FilletEdge], opts: &FilletOptions, featur
     let mut first = None;
     for _ in 0..4 {
         let on = work.as_ref().unwrap_or(body);
-        let notched = std::cell::Cell::new(false);
-        match fillet_on_noting(on, edges, opts, feature, Some(&notched)) {
+        match fillet_on(on, edges, opts, feature) {
             // the edge split in two, ids before it standing, its middle lies between the pieces
             Err(FilletError::SplitFirst { edge, at }) => {
                 let mut b = if on.dead > 0 { on.compact() } else { on.clone() };
@@ -579,12 +578,6 @@ fn fillet_picked(body: &Body, edges: &[FilletEdge], opts: &FilletOptions, featur
             Err(e) => {
                 first = Some(first.unwrap_or(e));
                 break;
-            }
-            // a closed round notched where its spring runs over a rim and back: the round
-            // resting on the rim there instead, where it stands (the closing's shape), from the
-            // body as it came (not with a rim a notch split first)
-            Ok(done) if !opts.cliff && notched.get() => {
-                return Ok(fillet_cliff::retry(body, edges, opts, feature).unwrap_or(done));
             }
             ok => return ok,
         }
@@ -859,19 +852,7 @@ fn move_seam(b: &mut Body, f: FaceId) -> Option<()> {
     Some(())
 }
 
-/// `fillet_on`, and whether a closed concave round's spring was notched over a rim and back,
-/// told by setting `notched_out`.
 fn fillet_on(body: &Body, edges: &[FilletEdge], opts: &FilletOptions, feature: u64) -> R<Body> {
-    fillet_on_noting(body, edges, opts, feature, None)
-}
-
-fn fillet_on_noting(
-    body: &Body,
-    edges: &[FilletEdge],
-    opts: &FilletOptions,
-    feature: u64,
-    notched_out: Option<&std::cell::Cell<bool>>,
-) -> R<Body> {
     if body.dead > 0 && (!opts.starts.is_empty() || !opts.setbacks.is_empty()) {
         // the options name this body's entities
         return Err(FilletError::NotAnEdge {
@@ -1090,7 +1071,6 @@ fn fillet_on_noting(
             b.pivots = pivots;
             b.opening = opts.walk;
             b.cliff_rims = cliff_rims;
-            b.notched = notched_out;
             return b.build();
         }
         for (e, u) in splits {
@@ -2845,7 +2825,7 @@ const BLEND_TESTS: u32 = 100;
 type UvLoops = Vec<forge_topo::uv::UvLoop>;
 
 #[derive(Clone)]
-struct Builder<'n> {
+struct Builder {
     body: Body,
     rolled: Vec<Rolled>,
     root: Name,
@@ -2902,8 +2882,6 @@ struct Builder<'n> {
     /// Pieces of rims a closed round's ball rests on all along (`fillet_cliff`): its spring there
     /// takes the piece's place.
     cliff_rims: BTreeSet<EdgeId>,
-    /// Set where a closed concave round's spring was notched over a rim and back (`excursions`).
-    notched: Option<&'n std::cell::Cell<bool>>,
     /// Walks may pass over short blends whose far vertices would otherwise close first.
     opening: bool,
     /// An edge whose blend ran out beside a tangent chain going on unpicked.
@@ -2935,8 +2913,8 @@ struct Pivot {
     sections: [Option<EdgeId>; 2],
 }
 
-impl<'n> Builder<'n> {
-    fn new(body: Body, rolled: Vec<Rolled>, root: Name) -> Builder<'n> {
+impl Builder {
+    fn new(body: Body, rolled: Vec<Rolled>, root: Name) -> Builder {
         let which = rolled.iter().enumerate().map(|(i, r)| (r.edge, i)).collect();
         let mut pos = vec![0u32; body.coedges.len()];
         for l in body.loop_ids() {
@@ -2973,7 +2951,6 @@ impl<'n> Builder<'n> {
             gone_blends: BTreeSet::new(),
             rim_sides: BTreeSet::new(),
             cliff_rims: BTreeSet::new(),
-            notched: None,
             opening: false,
             free_end: None,
             free_ends: false,
@@ -6046,14 +6023,11 @@ impl<'n> Builder<'n> {
                     return Err(FilletError::Overflow { edge: e });
                 } else {
                     let trips = self.excursions(i, side, Interval::new(t0, t1))?;
-                    // a closed concave round's spring off over a rim and back: notched here,
-                    // which a cliff may round as the ball rolls
-                    if !trips.is_empty()
-                        && closed
-                        && !self.rolled[i].convex
-                        && let Some(n) = self.notched
-                    {
-                        n.set(true);
+                    // a closed concave round's spring off over a rim and back: notched by the face
+                    // beyond carried on, it keeps fill a ball resting on the rim takes away (the
+                    // closing's shape is the cliff's, which the retries build)
+                    if !trips.is_empty() && closed && !self.rolled[i].convex {
+                        return Err(FilletError::Overflow { edge: e });
                     }
                     trips
                 };
