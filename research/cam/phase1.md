@@ -84,7 +84,17 @@ notch's sharp inside corners (no end mill reaches them).
    the hole less the section; before, the island was ignored and the pocket refused as a
    gouge). Slot certification is slow (3.5 s for two slots, ~148k B&B cells: gap 5).
 4. Declared removals Δ (deburr, chamfer and thread milling where the model lacks the geometry).
-5. Speed: a grid over face boxes and shared distances (−40% instructions); the 10⁵-move line at
-   2.7 s is above the 1 s target; next, an f64 filter with a proven error bound.
+5. Speed (measured 2026-11-23 on the cloud VM, 4 cores): the checker is not the bottleneck.
+   cam_gonogo 10⁵ moves 0.50 s (5.0 µs/move, one thread), cam_product (ops::certify_fixtured)
+   10⁵ moves 0.56 s: the 1 s target is met, so the f64 filter is not needed for it (it would
+   add a proof obligation for no target). End to end, 95–99% of every example's time was the
+   exact reals' escalation (Nat::isqrt/divrem/mul under offset and boolean ties, e.g. the
+   tangent line–arc joints of a slot's ends). cam/checker-speed: isqrt seeded from the isqrt of
+   its top half (same result: Newton from any upper bound ends at ⌊√n⌋), each face's arc gaps
+   worked out once, and ramps (lines moving in xy and z) get the closed form on their segment
+   swept over their heights (only its Clear is kept, certified_clear with heights in an
+   interval; else the B&B as before). flange 1.31 → 0.64 s, bracket 3.41 → 2.20 s, slot_plate
+   7.56 → 1.38 s; programs byte-identical, verdicts identical. Next: the exact offset's ties
+   (tangent joints decided structurally instead of at the BFMSS bound), Nat::mul (schoolbook).
 6. G5 (axis limits) is not checked yet; G4 uses tol where it should use δ + ε (leave).
 7. The Manufacture workspace in the app (UI session): the reply above is its data contract.

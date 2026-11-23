@@ -75,6 +75,10 @@ pub struct Face {
     pub id: u32,
     /// Its form as a prism along z, when it has one (slab.rs).
     pub prism: Option<crate::slab::Prism>,
+    /// The trim's pieces' end gaps (`arc_gap`; 0 for a line), worked out once by `Face::new`
+    /// for `holds`: the same values `TrimRef` would work out on each call; with the pieces they
+    /// were worked out for (the fields are public: a trim changed since is not taken as these).
+    tgaps: (Vec<TSeg>, Vec<f64>),
 }
 
 /// A planar face's trim: closed polygons and arcs in (p, q), as f64 polylines whose arcs are
@@ -186,8 +190,20 @@ impl Face {
             bbox,
             id,
             prism: None,
+            tgaps: (vec![], vec![]),
         };
         f.prism = crate::slab::Prism::of(&f);
+        if let Some(t) = &f.trim {
+            f.tgaps.0 = t.segs.clone();
+            f.tgaps.1 = t
+                .segs
+                .iter()
+                .map(|sg| match *sg {
+                    TSeg::Line { .. } => 0.0,
+                    TSeg::Arc { a, b, c, r, .. } => arc_gap(a, b, c, r),
+                })
+                .collect();
+        }
         f
     }
 
@@ -206,7 +222,13 @@ impl Face {
                 }
             }
             Some(t) => {
-                let s = t.classify(p, q);
+                // the gaps worked out once (if the trim was changed since: worked out here)
+                let gaps = if self.tgaps.0 == t.segs {
+                    Some(&self.tgaps.1[..])
+                } else {
+                    None
+                };
+                let s = TrimRef { segs: &t.segs, gaps }.classify(p, q);
                 if s == 1 && !in_box { 0 } else { s }
             }
         }
@@ -957,6 +979,26 @@ pub fn certify_shared(
             return (Verdict::Hit { d, p, q, s, at }, n);
         }
         return (v, n);
+    }
+    // a ramp (a line that moves in z and in xy) against a prism face: the closed form for its xy
+    // segment swept over every height it passes (a superset of the move). Only `Clear` proves
+    // anything about the move itself (certified_clear, the tip's heights in that range); any
+    // other verdict goes on to the general path below, as if this were not tried
+    if let (Move::Line { a, b }, Some(pr)) = (mv, f.prism.as_ref())
+        && a[2] != b[2]
+        && (a[0] != b[0] || a[1] != b[1])
+    {
+        let sec = crate::slab::Sec::Seg {
+            a: [a[0], a[1]],
+            b: [b[0], b[1]],
+        };
+        let zt = Ival::new(a[2].min(b[2]), a[2].max(b[2]));
+        let (v, n) = crate::slab::certify_path(body, f, pr, &sec, zt, limit, res, budget, &mut None);
+        if let Verdict::Clear { .. } = v {
+            return (v, n);
+        }
+        let (v, m) = certify_bb(body, f, mv, limit, res, budget);
+        return (v, n + m);
     }
     // a plane with a horizontal direction, or a cone with a vertical axis: a clearance proven by
     // symmetry (shadow.rs) where it can be, else the branch and bound decides

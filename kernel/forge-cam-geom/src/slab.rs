@@ -842,6 +842,25 @@ pub fn certify_shared(
     shared: &mut Option<(Ival, f64)>,
 ) -> (Verdict, usize) {
     let (path, zt) = path_sec(pl);
+    certify_path(body, f, pr, &path, zt, limit, res, budget, shared)
+}
+
+/// The verdict for a tool tip whose xy runs along `path` and whose height is, at every instant,
+/// in `zt` (a planar move: its one height; a helix or a ramp: the range it sweeps, a superset:
+/// then only `Clear` is a proof about the move, by `certified_clear` with the heights in Zt).
+#[allow(clippy::too_many_arguments)]
+pub fn certify_path(
+    body: &Body,
+    f: &Face,
+    pr: &Prism,
+    path: &Sec,
+    zt: Ival,
+    limit: f64,
+    res: f64,
+    budget: usize,
+    shared: &mut Option<(Ival, f64)>,
+) -> (Verdict, usize) {
+    let path = *path;
     let (lim_clear, lim_hit) = (limit + f.mu, limit - f.mu);
     let (d, dz) = match pr {
         Prism::Flat {
