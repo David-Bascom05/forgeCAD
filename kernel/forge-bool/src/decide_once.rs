@@ -1672,11 +1672,10 @@ fn interior_f(cls: &Classes, pf: &[PlaneF], c: usize, a: usize, m: [f64; 3], fc:
         return None;
     }
     let mut undecided = false;
-    for k in 0..cls.planes.len() {
+    for (k, pk) in pf.iter().enumerate().take(cls.planes.len()) {
         if k == c {
             continue;
         }
-        let pk = &pf[k];
         let v = pk.n[0] * p[0] + pk.n[1] * p[1] + pk.n[2] * p[2] - pk.c;
         let mag =
             pk.n[0].abs() * p[0].abs() + pk.n[1].abs() * p[1].abs() + pk.n[2].abs() * p[2].abs() + pk.c.abs();
