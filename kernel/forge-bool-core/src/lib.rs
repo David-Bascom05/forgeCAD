@@ -70,6 +70,15 @@ pub struct Ledger {
     pub verts: Vec<CellId>,
 }
 
+/// §6.1 step 3's two tables, decided once per side cell by the bridge (stage 4b, `Metric.lean`).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct MetricLedger {
+    /// Side cells thinner than LINEAR (inradius under LINEAR/2).
+    pub thin: Vec<CellId>,
+    /// Side cells every facet of which is a piece.
+    pub enclosed: Vec<CellId>,
+}
+
 /// An op as a pointwise rule on the membership vector: `m(i)` is "in body `i`".
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Rule {
@@ -621,20 +630,21 @@ fn edges_between(l: &Ledger, ext: &Ext, is_edge: &[bool], v: u32, z: &[usize], p
     out
 }
 
-/// **The core**: one pass, no retries (`ForgeExact.DecideOnce.core`).
-pub fn core(l: &Ledger, rule: &Rule) -> Outcome {
+/// **The core**: one pass, no retries (`ForgeExact.DecideOnce.coreM`: `core` with the metric
+/// stage, which is the identity when `m.thin` is empty).
+pub fn core(l: &Ledger, rule: &Rule, m: &MetricLedger) -> Outcome {
     let mut ext = new_ext(l);
     // 1–2. split and imprint
     if !split_ok(l, &ext) {
         Outcome::Refused(Refusal::SplitCrossed)
     } else {
         let s = split(l, &mut ext);
-        classify_on(l, &ext, &s, rule)
+        classify_on(l, &ext, &s, rule, m)
     }
 }
 
 /// Stage 3's check, then 4–8.
-fn classify_on(l: &Ledger, ext: &Ext, s: &Split, rule: &Rule) -> Outcome {
+fn classify_on(l: &Ledger, ext: &Ext, s: &Split, rule: &Rule, mt: &MetricLedger) -> Outcome {
     // 3. classify: flood plus witness
     let memb = membership(l, ext, s);
     let nb = l.nb as usize;
@@ -653,12 +663,12 @@ fn classify_on(l: &Ledger, ext: &Ext, s: &Split, rule: &Rule) -> Outcome {
     if !ok {
         Outcome::Refused(Refusal::InconsistentClassification)
     } else {
-        keep_on(l, ext, s, rule, &memb)
+        keep_on(l, ext, s, rule, &memb, mt)
     }
 }
 
 /// Stages 4–8.
-fn keep_on(l: &Ledger, ext: &Ext, s: &Split, rule: &Rule, memb: &[Vec<bool>]) -> Outcome {
+fn keep_on(l: &Ledger, ext: &Ext, s: &Split, rule: &Rule, memb: &[Vec<bool>], mt: &MetricLedger) -> Outcome {
     let nb = l.nb as usize;
     // 4. keep, tabled once per tope
     let mut keep = Vec::new();
@@ -673,6 +683,139 @@ fn keep_on(l: &Ledger, ext: &Ext, s: &Split, rule: &Rule, memb: &[Vec<bool>]) ->
         keep.push(apply_rule(rule, &m));
         t += 1;
     }
+    // 4b. collapse the sub-LINEAR features
+    let bad = collapse(l, ext, s, &mut keep, mt);
+    if bad != NONE {
+        Outcome::Refused(Refusal::ZeroThickness(CellId(bad)))
+    } else {
+        core_k(l, ext, s, &keep)
+    }
+}
+
+/// Stage 4b (`Ledger.collapse`): the thin side cells fall into features (classes under "the two
+/// sides of a facet"); a feature's rim is the cells that are not thin beside it. If every
+/// feature's rim is kept alike and every cell of it is enclosed, each thin cell takes its rim's
+/// first cell's keep (its own if the rim is empty), in `keep`; and NONE is returned. Else the
+/// first thin cell, in tope order, whose feature is not so (its id).
+fn collapse(l: &Ledger, ext: &Ext, s: &Split, keep: &mut [bool], mt: &MetricLedger) -> u32 {
+    let nt = s.topes.len();
+    let n = ncells(l, ext);
+    let mut is_thin = vec![false; nt];
+    let mut is_enc = vec![false; nt];
+    let mut any = false;
+    let mut k = 0;
+    while k < mt.thin.len() {
+        let c = mt.thin[k].0 as usize;
+        if c < n && s.tope_pos[c] != NONE {
+            is_thin[s.tope_pos[c] as usize] = true;
+            any = true;
+        }
+        k += 1;
+    }
+    let mut bad = NONE;
+    if any {
+        let mut k = 0;
+        while k < mt.enclosed.len() {
+            let c = mt.enclosed[k].0 as usize;
+            if c < n && s.tope_pos[c] != NONE {
+                is_enc[s.tope_pos[c] as usize] = true;
+            }
+            k += 1;
+        }
+        // the features: thin cells joined across a facet, rooted at their first in tope order
+        let mut uf = Uf::new(nt);
+        let mut k = 0;
+        while k < s.facets.len() {
+            let p = s.tope_pos[s.plus[k] as usize] as usize;
+            let q = s.tope_pos[s.minus[k] as usize] as usize;
+            if is_thin[p] && is_thin[q] {
+                uf.union(p, q);
+            }
+            k += 1;
+        }
+        // each feature's rim (by root), and whether every cell of it is enclosed
+        let mut rim: Vec<Vec<u32>> = vec![Vec::new(); nt];
+        let mut all_enc = vec![true; nt];
+        let mut t = 0;
+        while t < nt {
+            if is_thin[t] && !is_enc[t] {
+                let r = uf.find(t);
+                all_enc[r] = false;
+            }
+            t += 1;
+        }
+        let mut k = 0;
+        while k < s.facets.len() {
+            let p = s.tope_pos[s.plus[k] as usize] as usize;
+            let q = s.tope_pos[s.minus[k] as usize] as usize;
+            if is_thin[p] && !is_thin[q] {
+                let r = uf.find(p);
+                rim[r].push(q as u32);
+            }
+            if is_thin[q] && !is_thin[p] {
+                let r = uf.find(q);
+                rim[r].push(p as u32);
+            }
+            k += 1;
+        }
+        let mut t = 0;
+        while t < nt {
+            if rim[t].len() > 1 {
+                sort::sort_u32(&mut rim[t]);
+                let mut d: Vec<u32> = Vec::new();
+                let mut j = 0;
+                while j < rim[t].len() {
+                    if d.is_empty() || d[d.len() - 1] != rim[t][j] {
+                        d.push(rim[t][j]);
+                    }
+                    j += 1;
+                }
+                rim[t] = d;
+            }
+            t += 1;
+        }
+        // the first thin cell whose feature cannot be collapsed
+        let mut t = 0;
+        while bad == NONE && t < nt {
+            if is_thin[t] {
+                let r = uf.find(t);
+                let rm = &rim[r];
+                let first = if rm.is_empty() {
+                    keep[t]
+                } else {
+                    keep[rm[0] as usize]
+                };
+                let mut uniform = true;
+                let mut j = 0;
+                while uniform && j < rm.len() {
+                    uniform = keep[rm[j] as usize] == first;
+                    j += 1;
+                }
+                if !(uniform && all_enc[r]) {
+                    bad = s.topes[t];
+                }
+            }
+            t += 1;
+        }
+        if bad == NONE {
+            let old = keep.to_vec();
+            let mut t = 0;
+            while t < nt {
+                if is_thin[t] {
+                    let r = uf.find(t);
+                    if !rim[r].is_empty() {
+                        keep[t] = old[rim[r][0] as usize];
+                    }
+                }
+                t += 1;
+            }
+        }
+    }
+    bad
+}
+
+/// Stages 5–8 on a keep table (`Ledger.coreK`).
+fn core_k(l: &Ledger, ext: &Ext, s: &Split, keep: &[bool]) -> Outcome {
     // 5. assemble
     let mut a = Assembled {
         result: Vec::new(),

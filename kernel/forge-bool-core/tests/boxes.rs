@@ -2,7 +2,9 @@
 //! Rungs.lean, against the Rust core: the six retry rungs' flat instances and the corner, edge and
 //! face touches. The Lean evaluates the same ledgers at build time; the answers must agree.
 
-use forge_bool_core::{BodyId, CellId, FaceId, Ledger, Outcome, Refusal, Rule, Sgn, core, witnesses};
+use forge_bool_core::{
+    BodyId, CellId, FaceId, Ledger, MetricLedger, Outcome, Refusal, Rule, Sgn, core, witnesses,
+};
 
 type D = (i64, i64, i64);
 
@@ -235,7 +237,7 @@ fn summary(l: &Ledger, o: Outcome) -> Summary {
 
 fn run(k: i64, boxes: &[BoxN], rule: Rule) -> Summary {
     let l = box_ledger(k, boxes);
-    summary(&l, core(&l, &rule))
+    summary(&l, core(&l, &rule, &MetricLedger::default()))
 }
 
 const T: (i64, i64, i64) = (0, 0, 0);
@@ -342,7 +344,10 @@ fn witnesses_suffice() {
     let ws = witnesses(&l);
     assert!(!ws.is_empty());
     l.inside.retain(|p| ws.contains(p));
-    assert_eq!(core(&full, &Rule::Diff), core(&l, &Rule::Diff));
+    assert_eq!(
+        core(&full, &Rule::Diff, &MetricLedger::default()),
+        core(&l, &Rule::Diff, &MetricLedger::default())
+    );
 }
 
 /// Every Allen pattern of two boxes on a 4-step grid, under the three ops: never a split or
@@ -365,4 +370,33 @@ fn box_pairs_never_retry() {
         }
     }
     assert_eq!(n, 512 * 3);
+}
+
+/// The metric ledger (stage 4b) on Rungs.lean's two features, with the Lean's answers.
+fn run_m(k: i64, boxes: &[BoxN], rule: Rule, thin: D) -> Summary {
+    let l = box_ledger(k, boxes);
+    let c = cov(k, thin);
+    let id = CellId(
+        l.cells
+            .iter()
+            .position(|x| *x == c)
+            .expect("the thin cell is a side cell") as u32,
+    );
+    let m = MetricLedger {
+        thin: vec![id],
+        enclosed: vec![id],
+    };
+    summary(&l, core(&l, &rule, &m))
+}
+
+#[test]
+fn collapse_fills_an_enclosed_void_and_refuses_a_fin() {
+    let block = [bx(T, (3, 3, 3)), bx((1, 1, 1), (2, 2, 2))];
+    assert_eq!(run_m(3, &block, Rule::Diff, (3, 3, 3)), Summary::Ok(6, 54, 12, 8));
+    assert_eq!(run(3, &block, Rule::Diff), Summary::Ok(12, 60, 24, 16));
+    let fin = [bx(T, (3, 1, 1)), bx((1, 0, 1), (2, 1, 2))];
+    assert_eq!(
+        run_m(3, &fin, Rule::Union, (3, 1, 3)),
+        Summary::Zero(cov(3, (3, 1, 3)))
+    );
 }

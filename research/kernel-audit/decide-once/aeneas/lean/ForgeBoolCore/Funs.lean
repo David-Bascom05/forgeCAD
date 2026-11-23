@@ -354,7 +354,7 @@ def index.Index.new
   ok { order := order2 }
 
 /-- [forge_bool_core::NONE]
-    Source: 'src/lib.rs', lines 135:0-135:27 -/
+    Source: 'src/lib.rs', lines 144:0-144:27 -/
 @[global_simps, irreducible] def NONE : Std.U32 := core.num.U32.MAX
 
 /-- [forge_bool_core::index::{forge_bool_core::index::Index}::find]: loop body 0:
@@ -1103,8 +1103,106 @@ def Ledger.Insts.CoreCmpEq : core.cmp.Eq Ledger := {
   assert_fields_are_eq := Ledger.Insts.CoreCmpEq.assert_fields_are_eq
 }
 
-/-- [forge_bool_core::{impl core::clone::Clone for forge_bool_core::Rule}::clone]:
+/-- [forge_bool_core::{impl core::clone::Clone for forge_bool_core::MetricLedger}::clone]:
     Source: 'src/lib.rs', lines 74:9-74:14
+    Visibility: public -/
+def MetricLedger.Insts.CoreCloneClone.clone
+  (self : MetricLedger) : Result MetricLedger := do
+  let v ← alloc.vec.CloneVec.clone CellId.Insts.CoreCloneClone self.thin
+  let v1 ← alloc.vec.CloneVec.clone CellId.Insts.CoreCloneClone self.enclosed
+  ok { thin := v, enclosed := v1 }
+
+/-- Trait implementation: [forge_bool_core::{impl core::clone::Clone for forge_bool_core::MetricLedger}]
+    Source: 'src/lib.rs', lines 74:9-74:14 -/
+@[reducible]
+def MetricLedger.Insts.CoreCloneClone : core.clone.Clone MetricLedger := {
+  clone := MetricLedger.Insts.CoreCloneClone.clone
+}
+
+/-- [forge_bool_core::{impl core::fmt::Debug for forge_bool_core::MetricLedger}::fmt]:
+    Source: 'src/lib.rs', lines 74:16-74:21
+    Visibility: public -/
+def MetricLedger.Insts.CoreFmtDebug.fmt
+  (self : MetricLedger) (f : core.fmt.Formatter) :
+  Result ((core.result.Result Unit core.fmt.Error) × core.fmt.Formatter)
+  := do
+  let dyn := Dyn.mk _ (core.fmt.DebugVec CellId.Insts.CoreFmtDebug) self.thin
+  let dyn1 :=
+    Dyn.mk _ (core.fmt.DebugShared (core.fmt.DebugVec
+      CellId.Insts.CoreFmtDebug)) self.enclosed
+  core.fmt.Formatter.debug_struct_field2_finish f (toStr "MetricLedger") (toStr
+    "thin") dyn (toStr "enclosed") dyn1
+
+/-- Trait implementation: [forge_bool_core::{impl core::fmt::Debug for forge_bool_core::MetricLedger}]
+    Source: 'src/lib.rs', lines 74:16-74:21 -/
+@[reducible]
+def MetricLedger.Insts.CoreFmtDebug : core.fmt.Debug MetricLedger := {
+  fmt := MetricLedger.Insts.CoreFmtDebug.fmt
+}
+
+/-- [forge_bool_core::{impl core::default::Default for forge_bool_core::MetricLedger}::default]:
+    Source: 'src/lib.rs', lines 74:23-74:30
+    Visibility: public -/
+def MetricLedger.Insts.CoreDefaultDefault.default : Result MetricLedger := do
+  let v ← alloc.vec.Vec.Insts.CoreDefaultDefault.default CellId
+  ok { thin := v, enclosed := v }
+
+/-- Trait implementation: [forge_bool_core::{impl core::default::Default for forge_bool_core::MetricLedger}]
+    Source: 'src/lib.rs', lines 74:23-74:30 -/
+@[reducible]
+def MetricLedger.Insts.CoreDefaultDefault : core.default.Default MetricLedger
+  := {
+  default := MetricLedger.Insts.CoreDefaultDefault.default
+}
+
+/-- Trait implementation: [forge_bool_core::{impl core::marker::StructuralPartialEq for forge_bool_core::MetricLedger}]
+    Source: 'src/lib.rs', lines 74:32-74:41 -/
+@[reducible]
+def MetricLedger.Insts.CoreMarkerStructuralPartialEq :
+  core.marker.StructuralPartialEq MetricLedger := {
+}
+
+/-- [forge_bool_core::{impl core::cmp::PartialEq<forge_bool_core::MetricLedger> for forge_bool_core::MetricLedger}::eq]:
+    Source: 'src/lib.rs', lines 74:32-74:41
+    Visibility: public -/
+def MetricLedger.Insts.CoreCmpPartialEqMetricLedger.eq
+  (self : MetricLedger) (other : MetricLedger) : Result Bool := do
+  let b ←
+    alloc.vec.partial_eq.PartialEqVec.eq CellId.Insts.CoreCmpPartialEqCellId
+      self.thin other.thin
+  if b
+  then
+    alloc.vec.partial_eq.PartialEqVec.eq CellId.Insts.CoreCmpPartialEqCellId
+      self.enclosed other.enclosed
+  else ok false
+
+/-- Trait implementation: [forge_bool_core::{impl core::cmp::PartialEq<forge_bool_core::MetricLedger> for forge_bool_core::MetricLedger}]
+    Source: 'src/lib.rs', lines 74:32-74:41 -/
+@[reducible]
+impl_def MetricLedger.Insts.CoreCmpPartialEqMetricLedger : core.cmp.PartialEq
+  MetricLedger MetricLedger := {
+  eq := MetricLedger.Insts.CoreCmpPartialEqMetricLedger.eq
+  ne := core.cmp.PartialEq.ne.trait_default
+    MetricLedger.Insts.CoreCmpPartialEqMetricLedger
+}
+
+/-- [forge_bool_core::{impl core::cmp::Eq for forge_bool_core::MetricLedger}::assert_fields_are_eq]:
+    Source: 'src/lib.rs', lines 74:43-74:45
+    Visibility: public -/
+def MetricLedger.Insts.CoreCmpEq.assert_fields_are_eq
+  (self : MetricLedger) : Result Unit := do
+  ok ()
+
+/-- Trait implementation: [forge_bool_core::{impl core::cmp::Eq for forge_bool_core::MetricLedger}]
+    Source: 'src/lib.rs', lines 74:43-74:45 -/
+@[reducible]
+def MetricLedger.Insts.CoreCmpEq : core.cmp.Eq MetricLedger := {
+  partialEqInst := MetricLedger.Insts.CoreCmpPartialEqMetricLedger
+  assert_fields_are_eq := MetricLedger.Insts.CoreCmpEq.assert_fields_are_eq
+}
+
+/-- [forge_bool_core::{impl core::clone::Clone for forge_bool_core::Rule}::clone]:
+    Source: 'src/lib.rs', lines 83:9-83:14
     Visibility: public -/
 def Rule.Insts.CoreCloneClone.clone (self : Rule) : Result Rule := do
   match self with
@@ -1116,14 +1214,14 @@ def Rule.Insts.CoreCloneClone.clone (self : Rule) : Result Rule := do
     ok (Rule.Table v)
 
 /-- Trait implementation: [forge_bool_core::{impl core::clone::Clone for forge_bool_core::Rule}]
-    Source: 'src/lib.rs', lines 74:9-74:14 -/
+    Source: 'src/lib.rs', lines 83:9-83:14 -/
 @[reducible]
 def Rule.Insts.CoreCloneClone : core.clone.Clone Rule := {
   clone := Rule.Insts.CoreCloneClone.clone
 }
 
 /-- [forge_bool_core::{impl core::fmt::Debug for forge_bool_core::Rule}::fmt]:
-    Source: 'src/lib.rs', lines 74:16-74:21
+    Source: 'src/lib.rs', lines 83:16-83:21
     Visibility: public -/
 def Rule.Insts.CoreFmtDebug.fmt
   (self : Rule) (f : core.fmt.Formatter) :
@@ -1140,21 +1238,21 @@ def Rule.Insts.CoreFmtDebug.fmt
     core.fmt.Formatter.debug_tuple_field1_finish f (toStr "Table") __self_01
 
 /-- Trait implementation: [forge_bool_core::{impl core::fmt::Debug for forge_bool_core::Rule}]
-    Source: 'src/lib.rs', lines 74:16-74:21 -/
+    Source: 'src/lib.rs', lines 83:16-83:21 -/
 @[reducible]
 def Rule.Insts.CoreFmtDebug : core.fmt.Debug Rule := {
   fmt := Rule.Insts.CoreFmtDebug.fmt
 }
 
 /-- Trait implementation: [forge_bool_core::{impl core::marker::StructuralPartialEq for forge_bool_core::Rule}]
-    Source: 'src/lib.rs', lines 74:23-74:32 -/
+    Source: 'src/lib.rs', lines 83:23-83:32 -/
 @[reducible]
 def Rule.Insts.CoreMarkerStructuralPartialEq : core.marker.StructuralPartialEq
   Rule := {
 }
 
 /-- [forge_bool_core::{impl core::cmp::PartialEq<forge_bool_core::Rule> for forge_bool_core::Rule}::eq]:
-    Source: 'src/lib.rs', lines 74:23-74:32
+    Source: 'src/lib.rs', lines 83:23-83:32
     Visibility: public -/
 def Rule.Insts.CoreCmpPartialEqRule.eq
   (self : Rule) (other : Rule) : Result Bool := do
@@ -1177,7 +1275,7 @@ def Rule.Insts.CoreCmpPartialEqRule.eq
   else ok false
 
 /-- Trait implementation: [forge_bool_core::{impl core::cmp::PartialEq<forge_bool_core::Rule> for forge_bool_core::Rule}]
-    Source: 'src/lib.rs', lines 74:23-74:32 -/
+    Source: 'src/lib.rs', lines 83:23-83:32 -/
 @[reducible]
 impl_def Rule.Insts.CoreCmpPartialEqRule : core.cmp.PartialEq Rule Rule := {
   eq := Rule.Insts.CoreCmpPartialEqRule.eq
@@ -1185,13 +1283,13 @@ impl_def Rule.Insts.CoreCmpPartialEqRule : core.cmp.PartialEq Rule Rule := {
 }
 
 /-- [forge_bool_core::{impl core::cmp::Eq for forge_bool_core::Rule}::assert_fields_are_eq]:
-    Source: 'src/lib.rs', lines 74:34-74:36
+    Source: 'src/lib.rs', lines 83:34-83:36
     Visibility: public -/
 def Rule.Insts.CoreCmpEq.assert_fields_are_eq (self : Rule) : Result Unit := do
   ok ()
 
 /-- Trait implementation: [forge_bool_core::{impl core::cmp::Eq for forge_bool_core::Rule}]
-    Source: 'src/lib.rs', lines 74:34-74:36 -/
+    Source: 'src/lib.rs', lines 83:34-83:36 -/
 @[reducible]
 def Rule.Insts.CoreCmpEq : core.cmp.Eq Rule := {
   partialEqInst := Rule.Insts.CoreCmpPartialEqRule
@@ -1199,7 +1297,7 @@ def Rule.Insts.CoreCmpEq : core.cmp.Eq Rule := {
 }
 
 /-- [forge_bool_core::{impl core::clone::Clone for forge_bool_core::OutFace}::clone]:
-    Source: 'src/lib.rs', lines 87:9-87:14
+    Source: 'src/lib.rs', lines 96:9-96:14
     Visibility: public -/
 def OutFace.Insts.CoreCloneClone.clone (self : OutFace) : Result OutFace := do
   let v ← alloc.vec.CloneVec.clone CellId.Insts.CoreCloneClone self.facets
@@ -1209,14 +1307,14 @@ def OutFace.Insts.CoreCloneClone.clone (self : OutFace) : Result OutFace := do
   ok { facets := v, plane := i, orient := s, origin := fi }
 
 /-- Trait implementation: [forge_bool_core::{impl core::clone::Clone for forge_bool_core::OutFace}]
-    Source: 'src/lib.rs', lines 87:9-87:14 -/
+    Source: 'src/lib.rs', lines 96:9-96:14 -/
 @[reducible]
 def OutFace.Insts.CoreCloneClone : core.clone.Clone OutFace := {
   clone := OutFace.Insts.CoreCloneClone.clone
 }
 
 /-- [forge_bool_core::{impl core::fmt::Debug for forge_bool_core::OutFace}::fmt]:
-    Source: 'src/lib.rs', lines 87:16-87:21
+    Source: 'src/lib.rs', lines 96:16-96:21
     Visibility: public -/
 def OutFace.Insts.CoreFmtDebug.fmt
   (self : OutFace) (f : core.fmt.Formatter) :
@@ -1232,21 +1330,21 @@ def OutFace.Insts.CoreFmtDebug.fmt
     dyn3
 
 /-- Trait implementation: [forge_bool_core::{impl core::fmt::Debug for forge_bool_core::OutFace}]
-    Source: 'src/lib.rs', lines 87:16-87:21 -/
+    Source: 'src/lib.rs', lines 96:16-96:21 -/
 @[reducible]
 def OutFace.Insts.CoreFmtDebug : core.fmt.Debug OutFace := {
   fmt := OutFace.Insts.CoreFmtDebug.fmt
 }
 
 /-- Trait implementation: [forge_bool_core::{impl core::marker::StructuralPartialEq for forge_bool_core::OutFace}]
-    Source: 'src/lib.rs', lines 87:23-87:32 -/
+    Source: 'src/lib.rs', lines 96:23-96:32 -/
 @[reducible]
 def OutFace.Insts.CoreMarkerStructuralPartialEq :
   core.marker.StructuralPartialEq OutFace := {
 }
 
 /-- [forge_bool_core::{impl core::cmp::PartialEq<forge_bool_core::OutFace> for forge_bool_core::OutFace}::eq]:
-    Source: 'src/lib.rs', lines 87:23-87:32
+    Source: 'src/lib.rs', lines 96:23-96:32
     Visibility: public -/
 def OutFace.Insts.CoreCmpPartialEqOutFace.eq
   (self : OutFace) (other : OutFace) : Result Bool := do
@@ -1265,7 +1363,7 @@ def OutFace.Insts.CoreCmpPartialEqOutFace.eq
   else ok false
 
 /-- Trait implementation: [forge_bool_core::{impl core::cmp::PartialEq<forge_bool_core::OutFace> for forge_bool_core::OutFace}]
-    Source: 'src/lib.rs', lines 87:23-87:32 -/
+    Source: 'src/lib.rs', lines 96:23-96:32 -/
 @[reducible]
 impl_def OutFace.Insts.CoreCmpPartialEqOutFace : core.cmp.PartialEq OutFace
   OutFace := {
@@ -1275,14 +1373,14 @@ impl_def OutFace.Insts.CoreCmpPartialEqOutFace : core.cmp.PartialEq OutFace
 }
 
 /-- [forge_bool_core::{impl core::cmp::Eq for forge_bool_core::OutFace}::assert_fields_are_eq]:
-    Source: 'src/lib.rs', lines 87:34-87:36
+    Source: 'src/lib.rs', lines 96:34-96:36
     Visibility: public -/
 def OutFace.Insts.CoreCmpEq.assert_fields_are_eq
   (self : OutFace) : Result Unit := do
   ok ()
 
 /-- Trait implementation: [forge_bool_core::{impl core::cmp::Eq for forge_bool_core::OutFace}]
-    Source: 'src/lib.rs', lines 87:34-87:36 -/
+    Source: 'src/lib.rs', lines 96:34-96:36 -/
 @[reducible]
 def OutFace.Insts.CoreCmpEq : core.cmp.Eq OutFace := {
   partialEqInst := OutFace.Insts.CoreCmpPartialEqOutFace
@@ -1290,7 +1388,7 @@ def OutFace.Insts.CoreCmpEq : core.cmp.Eq OutFace := {
 }
 
 /-- [forge_bool_core::{impl core::clone::Clone for forge_bool_core::OutEdge}::clone]:
-    Source: 'src/lib.rs', lines 100:9-100:14
+    Source: 'src/lib.rs', lines 109:9-109:14
     Visibility: public -/
 def OutEdge.Insts.CoreCloneClone.clone (self : OutEdge) : Result OutEdge := do
   let v ← alloc.vec.CloneVec.clone CellId.Insts.CoreCloneClone self.cells
@@ -1298,14 +1396,14 @@ def OutEdge.Insts.CoreCloneClone.clone (self : OutEdge) : Result OutEdge := do
   ok { cells := v, faces := v1 }
 
 /-- Trait implementation: [forge_bool_core::{impl core::clone::Clone for forge_bool_core::OutEdge}]
-    Source: 'src/lib.rs', lines 100:9-100:14 -/
+    Source: 'src/lib.rs', lines 109:9-109:14 -/
 @[reducible]
 def OutEdge.Insts.CoreCloneClone : core.clone.Clone OutEdge := {
   clone := OutEdge.Insts.CoreCloneClone.clone
 }
 
 /-- [forge_bool_core::{impl core::fmt::Debug for forge_bool_core::OutEdge}::fmt]:
-    Source: 'src/lib.rs', lines 100:16-100:21
+    Source: 'src/lib.rs', lines 109:16-109:21
     Visibility: public -/
 def OutEdge.Insts.CoreFmtDebug.fmt
   (self : OutEdge) (f : core.fmt.Formatter) :
@@ -1319,21 +1417,21 @@ def OutEdge.Insts.CoreFmtDebug.fmt
     "cells") dyn (toStr "faces") dyn1
 
 /-- Trait implementation: [forge_bool_core::{impl core::fmt::Debug for forge_bool_core::OutEdge}]
-    Source: 'src/lib.rs', lines 100:16-100:21 -/
+    Source: 'src/lib.rs', lines 109:16-109:21 -/
 @[reducible]
 def OutEdge.Insts.CoreFmtDebug : core.fmt.Debug OutEdge := {
   fmt := OutEdge.Insts.CoreFmtDebug.fmt
 }
 
 /-- Trait implementation: [forge_bool_core::{impl core::marker::StructuralPartialEq for forge_bool_core::OutEdge}]
-    Source: 'src/lib.rs', lines 100:23-100:32 -/
+    Source: 'src/lib.rs', lines 109:23-109:32 -/
 @[reducible]
 def OutEdge.Insts.CoreMarkerStructuralPartialEq :
   core.marker.StructuralPartialEq OutEdge := {
 }
 
 /-- [forge_bool_core::{impl core::cmp::PartialEq<forge_bool_core::OutEdge> for forge_bool_core::OutEdge}::eq]:
-    Source: 'src/lib.rs', lines 100:23-100:32
+    Source: 'src/lib.rs', lines 109:23-109:32
     Visibility: public -/
 def OutEdge.Insts.CoreCmpPartialEqOutEdge.eq
   (self : OutEdge) (other : OutEdge) : Result Bool := do
@@ -1347,7 +1445,7 @@ def OutEdge.Insts.CoreCmpPartialEqOutEdge.eq
   else ok false
 
 /-- Trait implementation: [forge_bool_core::{impl core::cmp::PartialEq<forge_bool_core::OutEdge> for forge_bool_core::OutEdge}]
-    Source: 'src/lib.rs', lines 100:23-100:32 -/
+    Source: 'src/lib.rs', lines 109:23-109:32 -/
 @[reducible]
 impl_def OutEdge.Insts.CoreCmpPartialEqOutEdge : core.cmp.PartialEq OutEdge
   OutEdge := {
@@ -1357,14 +1455,14 @@ impl_def OutEdge.Insts.CoreCmpPartialEqOutEdge : core.cmp.PartialEq OutEdge
 }
 
 /-- [forge_bool_core::{impl core::cmp::Eq for forge_bool_core::OutEdge}::assert_fields_are_eq]:
-    Source: 'src/lib.rs', lines 100:34-100:36
+    Source: 'src/lib.rs', lines 109:34-109:36
     Visibility: public -/
 def OutEdge.Insts.CoreCmpEq.assert_fields_are_eq
   (self : OutEdge) : Result Unit := do
   ok ()
 
 /-- Trait implementation: [forge_bool_core::{impl core::cmp::Eq for forge_bool_core::OutEdge}]
-    Source: 'src/lib.rs', lines 100:34-100:36 -/
+    Source: 'src/lib.rs', lines 109:34-109:36 -/
 @[reducible]
 def OutEdge.Insts.CoreCmpEq : core.cmp.Eq OutEdge := {
   partialEqInst := OutEdge.Insts.CoreCmpPartialEqOutEdge
@@ -1372,7 +1470,7 @@ def OutEdge.Insts.CoreCmpEq : core.cmp.Eq OutEdge := {
 }
 
 /-- [forge_bool_core::{impl core::clone::Clone for forge_bool_core::Body}::clone]:
-    Source: 'src/lib.rs', lines 110:9-110:14
+    Source: 'src/lib.rs', lines 119:9-119:14
     Visibility: public -/
 def Body.Insts.CoreCloneClone.clone (self : Body) : Result Body := do
   let v ← alloc.vec.CloneVec.clone OutFace.Insts.CoreCloneClone self.faces
@@ -1381,14 +1479,14 @@ def Body.Insts.CoreCloneClone.clone (self : Body) : Result Body := do
   ok { faces := v, edges := v1, verts := v2 }
 
 /-- Trait implementation: [forge_bool_core::{impl core::clone::Clone for forge_bool_core::Body}]
-    Source: 'src/lib.rs', lines 110:9-110:14 -/
+    Source: 'src/lib.rs', lines 119:9-119:14 -/
 @[reducible]
 def Body.Insts.CoreCloneClone : core.clone.Clone Body := {
   clone := Body.Insts.CoreCloneClone.clone
 }
 
 /-- [forge_bool_core::{impl core::fmt::Debug for forge_bool_core::Body}::fmt]:
-    Source: 'src/lib.rs', lines 110:16-110:21
+    Source: 'src/lib.rs', lines 119:16-119:21
     Visibility: public -/
 def Body.Insts.CoreFmtDebug.fmt
   (self : Body) (f : core.fmt.Formatter) :
@@ -1404,21 +1502,21 @@ def Body.Insts.CoreFmtDebug.fmt
     "faces") dyn (toStr "edges") dyn1 (toStr "verts") dyn2
 
 /-- Trait implementation: [forge_bool_core::{impl core::fmt::Debug for forge_bool_core::Body}]
-    Source: 'src/lib.rs', lines 110:16-110:21 -/
+    Source: 'src/lib.rs', lines 119:16-119:21 -/
 @[reducible]
 def Body.Insts.CoreFmtDebug : core.fmt.Debug Body := {
   fmt := Body.Insts.CoreFmtDebug.fmt
 }
 
 /-- Trait implementation: [forge_bool_core::{impl core::marker::StructuralPartialEq for forge_bool_core::Body}]
-    Source: 'src/lib.rs', lines 110:23-110:32 -/
+    Source: 'src/lib.rs', lines 119:23-119:32 -/
 @[reducible]
 def Body.Insts.CoreMarkerStructuralPartialEq : core.marker.StructuralPartialEq
   Body := {
 }
 
 /-- [forge_bool_core::{impl core::cmp::PartialEq<forge_bool_core::Body> for forge_bool_core::Body}::eq]:
-    Source: 'src/lib.rs', lines 110:23-110:32
+    Source: 'src/lib.rs', lines 119:23-119:32
     Visibility: public -/
 def Body.Insts.CoreCmpPartialEqBody.eq
   (self : Body) (other : Body) : Result Bool := do
@@ -1438,7 +1536,7 @@ def Body.Insts.CoreCmpPartialEqBody.eq
   else ok false
 
 /-- Trait implementation: [forge_bool_core::{impl core::cmp::PartialEq<forge_bool_core::Body> for forge_bool_core::Body}]
-    Source: 'src/lib.rs', lines 110:23-110:32 -/
+    Source: 'src/lib.rs', lines 119:23-119:32 -/
 @[reducible]
 impl_def Body.Insts.CoreCmpPartialEqBody : core.cmp.PartialEq Body Body := {
   eq := Body.Insts.CoreCmpPartialEqBody.eq
@@ -1446,13 +1544,13 @@ impl_def Body.Insts.CoreCmpPartialEqBody : core.cmp.PartialEq Body Body := {
 }
 
 /-- [forge_bool_core::{impl core::cmp::Eq for forge_bool_core::Body}::assert_fields_are_eq]:
-    Source: 'src/lib.rs', lines 110:34-110:36
+    Source: 'src/lib.rs', lines 119:34-119:36
     Visibility: public -/
 def Body.Insts.CoreCmpEq.assert_fields_are_eq (self : Body) : Result Unit := do
   ok ()
 
 /-- Trait implementation: [forge_bool_core::{impl core::cmp::Eq for forge_bool_core::Body}]
-    Source: 'src/lib.rs', lines 110:34-110:36 -/
+    Source: 'src/lib.rs', lines 119:34-119:36 -/
 @[reducible]
 def Body.Insts.CoreCmpEq : core.cmp.Eq Body := {
   partialEqInst := Body.Insts.CoreCmpPartialEqBody
@@ -1460,27 +1558,27 @@ def Body.Insts.CoreCmpEq : core.cmp.Eq Body := {
 }
 
 /-- [forge_bool_core::{impl core::clone::Clone for forge_bool_core::Refusal}::clone]:
-    Source: 'src/lib.rs', lines 119:9-119:14
+    Source: 'src/lib.rs', lines 128:9-128:14
     Visibility: public -/
 def Refusal.Insts.CoreCloneClone.clone (self : Refusal) : Result Refusal := do
   ok self
 
 /-- Trait implementation: [forge_bool_core::{impl core::clone::Clone for forge_bool_core::Refusal}]
-    Source: 'src/lib.rs', lines 119:9-119:14 -/
+    Source: 'src/lib.rs', lines 128:9-128:14 -/
 @[reducible]
 def Refusal.Insts.CoreCloneClone : core.clone.Clone Refusal := {
   clone := Refusal.Insts.CoreCloneClone.clone
 }
 
 /-- Trait implementation: [forge_bool_core::{impl core::marker::Copy for forge_bool_core::Refusal}]
-    Source: 'src/lib.rs', lines 119:16-119:20 -/
+    Source: 'src/lib.rs', lines 128:16-128:20 -/
 @[reducible]
 def Refusal.Insts.CoreMarkerCopy : core.marker.Copy Refusal := {
   cloneInst := Refusal.Insts.CoreCloneClone
 }
 
 /-- [forge_bool_core::{impl core::fmt::Debug for forge_bool_core::Refusal}::fmt]:
-    Source: 'src/lib.rs', lines 119:22-119:27
+    Source: 'src/lib.rs', lines 128:22-128:27
     Visibility: public -/
 def Refusal.Insts.CoreFmtDebug.fmt
   (self : Refusal) (f : core.fmt.Formatter) :
@@ -1498,21 +1596,21 @@ def Refusal.Insts.CoreFmtDebug.fmt
       __self_01
 
 /-- Trait implementation: [forge_bool_core::{impl core::fmt::Debug for forge_bool_core::Refusal}]
-    Source: 'src/lib.rs', lines 119:22-119:27 -/
+    Source: 'src/lib.rs', lines 128:22-128:27 -/
 @[reducible]
 def Refusal.Insts.CoreFmtDebug : core.fmt.Debug Refusal := {
   fmt := Refusal.Insts.CoreFmtDebug.fmt
 }
 
 /-- Trait implementation: [forge_bool_core::{impl core::marker::StructuralPartialEq for forge_bool_core::Refusal}]
-    Source: 'src/lib.rs', lines 119:29-119:38 -/
+    Source: 'src/lib.rs', lines 128:29-128:38 -/
 @[reducible]
 def Refusal.Insts.CoreMarkerStructuralPartialEq :
   core.marker.StructuralPartialEq Refusal := {
 }
 
 /-- [forge_bool_core::{impl core::cmp::PartialEq<forge_bool_core::Refusal> for forge_bool_core::Refusal}::eq]:
-    Source: 'src/lib.rs', lines 119:29-119:38
+    Source: 'src/lib.rs', lines 128:29-128:38
     Visibility: public -/
 def Refusal.Insts.CoreCmpPartialEqRefusal.eq
   (self : Refusal) (other : Refusal) : Result Bool := do
@@ -1532,7 +1630,7 @@ def Refusal.Insts.CoreCmpPartialEqRefusal.eq
   else ok false
 
 /-- Trait implementation: [forge_bool_core::{impl core::cmp::PartialEq<forge_bool_core::Refusal> for forge_bool_core::Refusal}]
-    Source: 'src/lib.rs', lines 119:29-119:38 -/
+    Source: 'src/lib.rs', lines 128:29-128:38 -/
 @[reducible]
 impl_def Refusal.Insts.CoreCmpPartialEqRefusal : core.cmp.PartialEq Refusal
   Refusal := {
@@ -1542,14 +1640,14 @@ impl_def Refusal.Insts.CoreCmpPartialEqRefusal : core.cmp.PartialEq Refusal
 }
 
 /-- [forge_bool_core::{impl core::cmp::Eq for forge_bool_core::Refusal}::assert_fields_are_eq]:
-    Source: 'src/lib.rs', lines 119:40-119:42
+    Source: 'src/lib.rs', lines 128:40-128:42
     Visibility: public -/
 def Refusal.Insts.CoreCmpEq.assert_fields_are_eq
   (self : Refusal) : Result Unit := do
   ok ()
 
 /-- Trait implementation: [forge_bool_core::{impl core::cmp::Eq for forge_bool_core::Refusal}]
-    Source: 'src/lib.rs', lines 119:40-119:42 -/
+    Source: 'src/lib.rs', lines 128:40-128:42 -/
 @[reducible]
 def Refusal.Insts.CoreCmpEq : core.cmp.Eq Refusal := {
   partialEqInst := Refusal.Insts.CoreCmpPartialEqRefusal
@@ -1557,7 +1655,7 @@ def Refusal.Insts.CoreCmpEq : core.cmp.Eq Refusal := {
 }
 
 /-- [forge_bool_core::{impl core::clone::Clone for forge_bool_core::Outcome}::clone]:
-    Source: 'src/lib.rs', lines 128:9-128:14
+    Source: 'src/lib.rs', lines 137:9-137:14
     Visibility: public -/
 def Outcome.Insts.CoreCloneClone.clone (self : Outcome) : Result Outcome := do
   match self with
@@ -1570,14 +1668,14 @@ def Outcome.Insts.CoreCloneClone.clone (self : Outcome) : Result Outcome := do
     ok (Outcome.Refused r)
 
 /-- Trait implementation: [forge_bool_core::{impl core::clone::Clone for forge_bool_core::Outcome}]
-    Source: 'src/lib.rs', lines 128:9-128:14 -/
+    Source: 'src/lib.rs', lines 137:9-137:14 -/
 @[reducible]
 def Outcome.Insts.CoreCloneClone : core.clone.Clone Outcome := {
   clone := Outcome.Insts.CoreCloneClone.clone
 }
 
 /-- [forge_bool_core::{impl core::fmt::Debug for forge_bool_core::Outcome}::fmt]:
-    Source: 'src/lib.rs', lines 128:16-128:21
+    Source: 'src/lib.rs', lines 137:16-137:21
     Visibility: public -/
 def Outcome.Insts.CoreFmtDebug.fmt
   (self : Outcome) (f : core.fmt.Formatter) :
@@ -1595,21 +1693,21 @@ def Outcome.Insts.CoreFmtDebug.fmt
     core.fmt.Formatter.debug_tuple_field1_finish f (toStr "Refused") __self_01
 
 /-- Trait implementation: [forge_bool_core::{impl core::fmt::Debug for forge_bool_core::Outcome}]
-    Source: 'src/lib.rs', lines 128:16-128:21 -/
+    Source: 'src/lib.rs', lines 137:16-137:21 -/
 @[reducible]
 def Outcome.Insts.CoreFmtDebug : core.fmt.Debug Outcome := {
   fmt := Outcome.Insts.CoreFmtDebug.fmt
 }
 
 /-- Trait implementation: [forge_bool_core::{impl core::marker::StructuralPartialEq for forge_bool_core::Outcome}]
-    Source: 'src/lib.rs', lines 128:23-128:32 -/
+    Source: 'src/lib.rs', lines 137:23-137:32 -/
 @[reducible]
 def Outcome.Insts.CoreMarkerStructuralPartialEq :
   core.marker.StructuralPartialEq Outcome := {
 }
 
 /-- [forge_bool_core::{impl core::cmp::PartialEq<forge_bool_core::Outcome> for forge_bool_core::Outcome}::eq]:
-    Source: 'src/lib.rs', lines 128:23-128:32
+    Source: 'src/lib.rs', lines 137:23-137:32
     Visibility: public -/
 def Outcome.Insts.CoreCmpPartialEqOutcome.eq
   (self : Outcome) (other : Outcome) : Result Bool := do
@@ -1634,7 +1732,7 @@ def Outcome.Insts.CoreCmpPartialEqOutcome.eq
   else ok false
 
 /-- Trait implementation: [forge_bool_core::{impl core::cmp::PartialEq<forge_bool_core::Outcome> for forge_bool_core::Outcome}]
-    Source: 'src/lib.rs', lines 128:23-128:32 -/
+    Source: 'src/lib.rs', lines 137:23-137:32 -/
 @[reducible]
 impl_def Outcome.Insts.CoreCmpPartialEqOutcome : core.cmp.PartialEq Outcome
   Outcome := {
@@ -1644,14 +1742,14 @@ impl_def Outcome.Insts.CoreCmpPartialEqOutcome : core.cmp.PartialEq Outcome
 }
 
 /-- [forge_bool_core::{impl core::cmp::Eq for forge_bool_core::Outcome}::assert_fields_are_eq]:
-    Source: 'src/lib.rs', lines 128:34-128:36
+    Source: 'src/lib.rs', lines 137:34-137:36
     Visibility: public -/
 def Outcome.Insts.CoreCmpEq.assert_fields_are_eq
   (self : Outcome) : Result Unit := do
   ok ()
 
 /-- Trait implementation: [forge_bool_core::{impl core::cmp::Eq for forge_bool_core::Outcome}]
-    Source: 'src/lib.rs', lines 128:34-128:36 -/
+    Source: 'src/lib.rs', lines 137:34-137:36 -/
 @[reducible]
 def Outcome.Insts.CoreCmpEq : core.cmp.Eq Outcome := {
   partialEqInst := Outcome.Insts.CoreCmpPartialEqOutcome
@@ -1659,11 +1757,11 @@ def Outcome.Insts.CoreCmpEq : core.cmp.Eq Outcome := {
 }
 
 /-- [forge_bool_core::ENUM_ZEROS]
-    Source: 'src/lib.rs', lines 138:0-138:29 -/
+    Source: 'src/lib.rs', lines 147:0-147:29 -/
 @[global_simps, irreducible] def ENUM_ZEROS : Std.Usize := 12#usize
 
 /-- [forge_bool_core::zero_idx]: loop body 0:
-    Source: 'src/lib.rs', lines 1:0-145:5
+    Source: 'src/lib.rs', lines 1:0-154:5
     Visibility: public -/
 @[rust_loop_body]
 def zero_idx_loop.body
@@ -1684,7 +1782,7 @@ def zero_idx_loop.body
   else ok (done i)
 
 /-- [forge_bool_core::zero_idx]: loop 0:
-    Source: 'src/lib.rs', lines 1:0-145:5
+    Source: 'src/lib.rs', lines 1:0-154:5
     Visibility: public -/
 @[rust_loop]
 def zero_idx_loop (x : Slice Sgn) (i : Std.Usize) : Result Std.Usize := do
@@ -1693,14 +1791,14 @@ def zero_idx_loop (x : Slice Sgn) (i : Std.Usize) : Result Std.Usize := do
     i
 
 /-- [forge_bool_core::zero_idx]:
-    Source: 'src/lib.rs', lines 141:0-147:1
+    Source: 'src/lib.rs', lines 150:0-156:1
     Visibility: public -/
 @[reducible]
 def zero_idx (x : Slice Sgn) : Result Std.Usize := do
   zero_idx_loop x 0#usize
 
 /-- [forge_bool_core::is_facet]: loop body 0:
-    Source: 'src/lib.rs', lines 153:4-158:5
+    Source: 'src/lib.rs', lines 162:4-167:5
     Visibility: public -/
 @[rust_loop_body]
 def is_facet_loop.body
@@ -1720,7 +1818,7 @@ def is_facet_loop.body
   else ok (done n)
 
 /-- [forge_bool_core::is_facet]: loop 0:
-    Source: 'src/lib.rs', lines 153:4-158:5
+    Source: 'src/lib.rs', lines 162:4-167:5
     Visibility: public -/
 @[rust_loop]
 def is_facet_loop
@@ -1730,14 +1828,14 @@ def is_facet_loop
     (n, i)
 
 /-- [forge_bool_core::is_facet]:
-    Source: 'src/lib.rs', lines 150:0-160:1
+    Source: 'src/lib.rs', lines 159:0-169:1
     Visibility: public -/
 def is_facet (x : Slice Sgn) : Result Bool := do
   let n ← is_facet_loop x 0#usize 0#usize
   ok (n = 1#usize)
 
 /-- [forge_bool_core::le]: loop body 0:
-    Source: 'src/lib.rs', lines 1:0-169:5
+    Source: 'src/lib.rs', lines 1:0-178:5
     Visibility: public -/
 @[rust_loop_body]
 def le_loop.body
@@ -1764,7 +1862,7 @@ def le_loop.body
   else ok (done ok1)
 
 /-- [forge_bool_core::le]: loop 0:
-    Source: 'src/lib.rs', lines 1:0-169:5
+    Source: 'src/lib.rs', lines 1:0-178:5
     Visibility: public -/
 @[rust_loop]
 def le_loop
@@ -1776,7 +1874,7 @@ def le_loop
     (ok1, i)
 
 /-- [forge_bool_core::le]:
-    Source: 'src/lib.rs', lines 163:0-171:1
+    Source: 'src/lib.rs', lines 172:0-180:1
     Visibility: public -/
 def le (x : Slice Sgn) (y : Slice Sgn) : Result Bool := do
   let i := Slice.len x
@@ -1784,7 +1882,7 @@ def le (x : Slice Sgn) (y : Slice Sgn) : Result Bool := do
   le_loop x y (i = i1) 0#usize
 
 /-- [forge_bool_core::with_set]:
-    Source: 'src/lib.rs', lines 174:0-180:1 -/
+    Source: 'src/lib.rs', lines 183:0-189:1 -/
 def with_set
   (x : Slice Sgn) (i : Std.Usize) (s : Sgn) : Result (alloc.vec.Vec Sgn) := do
   let v ← alloc.slice.Slice.to_vec Sgn.Insts.CoreCloneClone x
@@ -1797,7 +1895,7 @@ def with_set
   else ok v
 
 /-- [forge_bool_core::zeros]: loop body 0:
-    Source: 'src/lib.rs', lines 186:4-191:5 -/
+    Source: 'src/lib.rs', lines 195:4-200:5 -/
 @[rust_loop_body]
 def zeros_loop.body
   (x : Slice Sgn) (z : alloc.vec.Vec Std.Usize) (i : Std.Usize) :
@@ -1817,7 +1915,7 @@ def zeros_loop.body
   else ok (done z)
 
 /-- [forge_bool_core::zeros]: loop 0:
-    Source: 'src/lib.rs', lines 186:4-191:5 -/
+    Source: 'src/lib.rs', lines 195:4-200:5 -/
 @[rust_loop]
 def zeros_loop
   (x : Slice Sgn) (z : alloc.vec.Vec Std.Usize) (i : Std.Usize) :
@@ -1828,20 +1926,20 @@ def zeros_loop
     (z, i)
 
 /-- [forge_bool_core::zeros]:
-    Source: 'src/lib.rs', lines 183:0-193:1 -/
+    Source: 'src/lib.rs', lines 192:0-202:1 -/
 @[reducible]
 def zeros (x : Slice Sgn) : Result (alloc.vec.Vec Std.Usize) := do
   zeros_loop x (alloc.vec.Vec.new Std.Usize) 0#usize
 
 /-- [forge_bool_core::new_ext]:
-    Source: 'src/lib.rs', lines 202:0-207:1 -/
+    Source: 'src/lib.rs', lines 211:0-216:1 -/
 def new_ext (l : Ledger) : Result Ext := do
   let s := alloc.vec.Vec.deref l.cells
   let i ← index.Index.new s
   ok { index := i, extra := (alloc.vec.Vec.new (alloc.vec.Vec Sgn)) }
 
 /-- [forge_bool_core::cov]:
-    Source: 'src/lib.rs', lines 210:0-217:1 -/
+    Source: 'src/lib.rs', lines 219:0-226:1 -/
 def cov (l : Ledger) (ext : Ext) (id : Std.U32) : Result (Slice Sgn) := do
   let n := alloc.vec.Vec.len l.cells
   let i ← lift (UScalar.cast .Usize id)
@@ -1861,14 +1959,14 @@ def cov (l : Ledger) (ext : Ext) (id : Std.U32) : Result (Slice Sgn) := do
     ok (alloc.vec.Vec.deref v)
 
 /-- [forge_bool_core::ncells]:
-    Source: 'src/lib.rs', lines 219:0-221:1 -/
+    Source: 'src/lib.rs', lines 228:0-230:1 -/
 def ncells (l : Ledger) (ext : Ext) : Result Std.Usize := do
   let i := alloc.vec.Vec.len l.cells
   let i1 := alloc.vec.Vec.len ext.extra
   i + i1
 
 /-- [forge_bool_core::same_cov]: loop body 0:
-    Source: 'src/lib.rs', lines 1:0-230:5 -/
+    Source: 'src/lib.rs', lines 1:0-239:5 -/
 @[rust_loop_body]
 def same_cov_loop.body
   (a : Slice Sgn) (b : Slice Sgn) (same : Bool) (i : Std.Usize) :
@@ -1888,7 +1986,7 @@ def same_cov_loop.body
   else ok (done same)
 
 /-- [forge_bool_core::same_cov]: loop 0:
-    Source: 'src/lib.rs', lines 1:0-230:5 -/
+    Source: 'src/lib.rs', lines 1:0-239:5 -/
 @[rust_loop]
 def same_cov_loop
   (a : Slice Sgn) (b : Slice Sgn) (same : Bool) (i : Std.Usize) :
@@ -1899,14 +1997,14 @@ def same_cov_loop
     (same, i)
 
 /-- [forge_bool_core::same_cov]:
-    Source: 'src/lib.rs', lines 224:0-232:1 -/
+    Source: 'src/lib.rs', lines 233:0-241:1 -/
 def same_cov (a : Slice Sgn) (b : Slice Sgn) : Result Bool := do
   let i := Slice.len a
   let i1 := Slice.len b
   same_cov_loop a b (i = i1) 0#usize
 
 /-- [forge_bool_core::find]: loop body 0:
-    Source: 'src/lib.rs', lines 1:0-243:5 -/
+    Source: 'src/lib.rs', lines 1:0-252:5 -/
 @[rust_loop_body]
 def find_loop.body
   (v : alloc.vec.Vec (alloc.vec.Vec Sgn))
@@ -1938,7 +2036,7 @@ def find_loop.body
   else ok (done f)
 
 /-- [forge_bool_core::find]: loop 0:
-    Source: 'src/lib.rs', lines 1:0-243:5 -/
+    Source: 'src/lib.rs', lines 1:0-252:5 -/
 @[rust_loop]
 def find_loop
   (v : alloc.vec.Vec (alloc.vec.Vec Sgn))
@@ -1951,14 +2049,14 @@ def find_loop
     (f, i)
 
 /-- [forge_bool_core::find]:
-    Source: 'src/lib.rs', lines 235:0-245:1 -/
+    Source: 'src/lib.rs', lines 244:0-254:1 -/
 def find (l : Ledger) (ext : Ext) (key : Slice Sgn) : Result Std.U32 := do
   let s := alloc.vec.Vec.deref l.cells
   let f ← index.Index.find ext.index s key
   find_loop l.cells ext.extra key f 0#usize
 
 /-- [forge_bool_core::intern]:
-    Source: 'src/lib.rs', lines 248:0-256:1 -/
+    Source: 'src/lib.rs', lines 257:0-265:1 -/
 def intern
   (l : Ledger) (ext : Ext) (key : alloc.vec.Vec Sgn) :
   Result (Std.U32 × Ext)
@@ -1975,7 +2073,7 @@ def intern
     ok (f1, { ext with extra := v })
 
 /-- [forge_bool_core::body_of]:
-    Source: 'src/lib.rs', lines 259:0-265:1 -/
+    Source: 'src/lib.rs', lines 268:0-274:1 -/
 def body_of (l : Ledger) (f : FaceId) : Result Std.U32 := do
   let i ← lift (UScalar.cast .Usize f)
   let i1 := alloc.vec.Vec.len l.face_body
@@ -1987,7 +2085,7 @@ def body_of (l : Ledger) (f : FaceId) : Result Std.U32 := do
   else ok 0#u32
 
 /-- [forge_bool_core::cls_of]:
-    Source: 'src/lib.rs', lines 268:0-274:1 -/
+    Source: 'src/lib.rs', lines 277:0-283:1 -/
 def cls_of (l : Ledger) (f : FaceId) : Result Std.U32 := do
   let i ← lift (UScalar.cast .Usize f)
   let i1 := alloc.vec.Vec.len l.face_class
@@ -2184,7 +2282,7 @@ def sort.sort_triples
     sort.sort_triples_loop0 n src src 1#usize
 
 /-- [forge_bool_core::split_ok]: loop body 0:
-    Source: 'src/lib.rs', lines 1:0-310:5 -/
+    Source: 'src/lib.rs', lines 1:0-319:5 -/
 @[rust_loop_body]
 def split_ok_loop0.body
   (l : Ledger) (ext : Ext) (ok1 : Bool)
@@ -2229,7 +2327,7 @@ def split_ok_loop0.body
   else ok (done (ok1, triples))
 
 /-- [forge_bool_core::split_ok]: loop 0:
-    Source: 'src/lib.rs', lines 1:0-310:5 -/
+    Source: 'src/lib.rs', lines 1:0-319:5 -/
 @[rust_loop]
 def split_ok_loop0
   (l : Ledger) (ext : Ext) (ok1 : Bool)
@@ -2241,7 +2339,7 @@ def split_ok_loop0
     (ok1, triples, k)
 
 /-- [forge_bool_core::split_ok]: loop body 1:
-    Source: 'src/lib.rs', lines 1:0-320:5 -/
+    Source: 'src/lib.rs', lines 1:0-329:5 -/
 @[rust_loop_body]
 def split_ok_loop1.body
   (triples : alloc.vec.Vec (Std.U32 × Std.U32 × Std.U32)) (ok1 : Bool)
@@ -2272,7 +2370,7 @@ def split_ok_loop1.body
   else ok (done ok1)
 
 /-- [forge_bool_core::split_ok]: loop 1:
-    Source: 'src/lib.rs', lines 1:0-320:5 -/
+    Source: 'src/lib.rs', lines 1:0-329:5 -/
 @[rust_loop]
 def split_ok_loop1
   (ok1 : Bool) (triples : alloc.vec.Vec (Std.U32 × Std.U32 × Std.U32))
@@ -2284,7 +2382,7 @@ def split_ok_loop1
     (ok1, k)
 
 /-- [forge_bool_core::split_ok]:
-    Source: 'src/lib.rs', lines 295:0-322:1 -/
+    Source: 'src/lib.rs', lines 304:0-331:1 -/
 def split_ok (l : Ledger) (ext : Ext) : Result Bool := do
   let (ok1, triples) ←
     split_ok_loop0 l ext true (alloc.vec.Vec.new (Std.U32 × Std.U32 ×
@@ -2295,7 +2393,7 @@ def split_ok (l : Ledger) (ext : Ext) : Result Bool := do
   split_ok_loop1 ok1 triples1 1#usize
 
 /-- [forge_bool_core::split]: loop body 0:
-    Source: 'src/lib.rs', lines 329:4-336:5 -/
+    Source: 'src/lib.rs', lines 338:4-345:5 -/
 @[rust_loop_body]
 def split_loop0.body
   (l : Ledger) (first_face : alloc.vec.Vec Std.U32)
@@ -2336,7 +2434,7 @@ def split_loop0.body
       l.edges, l.verts, first_face, facets))
 
 /-- [forge_bool_core::split]: loop 0:
-    Source: 'src/lib.rs', lines 329:4-336:5 -/
+    Source: 'src/lib.rs', lines 338:4-345:5 -/
 @[rust_loop]
 def split_loop0
   (l : Ledger) (first_face : alloc.vec.Vec Std.U32)
@@ -2353,7 +2451,7 @@ def split_loop0
     (first_face, facets, k)
 
 /-- [forge_bool_core::split]: loop body 1:
-    Source: 'src/lib.rs', lines 340:4-346:5 -/
+    Source: 'src/lib.rs', lines 349:4-355:5 -/
 @[rust_loop_body]
 def split_loop1.body
   (i : Std.U32) (v : alloc.vec.Vec BodyId) (v1 : alloc.vec.Vec Std.U32)
@@ -2423,7 +2521,7 @@ def split_loop1.body
   else ok (done (ext, plus, minus))
 
 /-- [forge_bool_core::split]: loop 1:
-    Source: 'src/lib.rs', lines 340:4-346:5 -/
+    Source: 'src/lib.rs', lines 349:4-355:5 -/
 @[rust_loop]
 def split_loop1
   (i : Std.U32) (v : alloc.vec.Vec BodyId) (v1 : alloc.vec.Vec Std.U32)
@@ -2441,7 +2539,7 @@ def split_loop1
     (ext, plus, minus, i1)
 
 /-- [forge_bool_core::split]: loop body 2:
-    Source: 'src/lib.rs', lines 350:4-362:5 -/
+    Source: 'src/lib.rs', lines 359:4-371:5 -/
 @[rust_loop_body]
 def split_loop2.body
   (facets : alloc.vec.Vec Std.U32) (plus : alloc.vec.Vec Std.U32)
@@ -2500,7 +2598,7 @@ def split_loop2.body
   else ok (done (tope_pos, topes))
 
 /-- [forge_bool_core::split]: loop 2:
-    Source: 'src/lib.rs', lines 350:4-362:5 -/
+    Source: 'src/lib.rs', lines 359:4-371:5 -/
 @[rust_loop]
 def split_loop2
   (facets : alloc.vec.Vec Std.U32) (plus : alloc.vec.Vec Std.U32)
@@ -2514,7 +2612,7 @@ def split_loop2
     (tope_pos, topes, i)
 
 /-- [forge_bool_core::split]: loop body 3:
-    Source: 'src/lib.rs', lines 365:4-368:5 -/
+    Source: 'src/lib.rs', lines 374:4-377:5 -/
 @[rust_loop_body]
 def split_loop3.body
   (facets : alloc.vec.Vec Std.U32) (facet_pos : alloc.vec.Vec Std.U32)
@@ -2539,7 +2637,7 @@ def split_loop3.body
   else ok (done facet_pos)
 
 /-- [forge_bool_core::split]: loop 3:
-    Source: 'src/lib.rs', lines 365:4-368:5 -/
+    Source: 'src/lib.rs', lines 374:4-377:5 -/
 @[rust_loop]
 def split_loop3
   (facets : alloc.vec.Vec Std.U32) (facet_pos : alloc.vec.Vec Std.U32)
@@ -2551,7 +2649,7 @@ def split_loop3
     (facet_pos, i)
 
 /-- [forge_bool_core::split]: loop body 4:
-    Source: 'src/lib.rs', lines 371:4-379:5 -/
+    Source: 'src/lib.rs', lines 380:4-388:5 -/
 @[rust_loop_body]
 def split_loop4.body
   (i : Std.U32) (v : alloc.vec.Vec BodyId) (v1 : alloc.vec.Vec Std.U32)
@@ -2606,7 +2704,7 @@ def split_loop4.body
   else ok (done piece_of)
 
 /-- [forge_bool_core::split]: loop 4:
-    Source: 'src/lib.rs', lines 371:4-379:5 -/
+    Source: 'src/lib.rs', lines 380:4-388:5 -/
 @[rust_loop]
 def split_loop4
   (i : Std.U32) (v : alloc.vec.Vec BodyId) (v1 : alloc.vec.Vec Std.U32)
@@ -2623,7 +2721,7 @@ def split_loop4
     (piece_of, k)
 
 /-- [forge_bool_core::split]:
-    Source: 'src/lib.rs', lines 324:0-389:1 -/
+    Source: 'src/lib.rs', lines 333:0-398:1 -/
 def split (l : Ledger) (ext : Ext) : Result (Split × Ext) := do
   let n ← ncells l ext
   let first_face ← alloc.vec.from_elem core.clone.CloneU32 NONE n
@@ -2788,7 +2886,7 @@ def union_find.Uf.new (n : Std.Usize) : Result union_find.Uf := do
   ok { parent := parent1 }
 
 /-- [forge_bool_core::flood]: loop body 0:
-    Source: 'src/lib.rs', lines 396:4-403:5 -/
+    Source: 'src/lib.rs', lines 405:4-412:5 -/
 @[rust_loop_body]
 def flood_loop.body
   (v : alloc.vec.Vec Std.U32) (v1 : alloc.vec.Vec Std.U32)
@@ -2832,7 +2930,7 @@ def flood_loop.body
   else ok (done uf)
 
 /-- [forge_bool_core::flood]: loop 0:
-    Source: 'src/lib.rs', lines 396:4-403:5 -/
+    Source: 'src/lib.rs', lines 405:4-412:5 -/
 @[rust_loop]
 def flood_loop
   (v : alloc.vec.Vec Std.U32) (v1 : alloc.vec.Vec Std.U32)
@@ -2846,14 +2944,14 @@ def flood_loop
     (uf, k)
 
 /-- [forge_bool_core::flood]:
-    Source: 'src/lib.rs', lines 393:0-405:1 -/
+    Source: 'src/lib.rs', lines 402:0-414:1 -/
 def flood (s : Split) (i : Std.Usize) : Result union_find.Uf := do
   let i1 := alloc.vec.Vec.len s.topes
   let uf ← union_find.Uf.new i1
   flood_loop s.facets s.plus s.minus s.tope_pos s.piece_of i uf 0#usize
 
 /-- [forge_bool_core::witnesses]: loop body 1:
-    Source: 'src/lib.rs', lines 419:12-424:13
+    Source: 'src/lib.rs', lines 428:12-433:13
     Visibility: public -/
 @[rust_loop_body]
 def witnesses_loop0_loop0.body
@@ -2886,7 +2984,7 @@ def witnesses_loop0_loop0.body
       s.first_face, s.piece_of))
 
 /-- [forge_bool_core::witnesses]: loop 1:
-    Source: 'src/lib.rs', lines 419:12-424:13
+    Source: 'src/lib.rs', lines 428:12-433:13
     Visibility: public -/
 @[rust_loop]
 def witnesses_loop0_loop0
@@ -2902,7 +3000,7 @@ def witnesses_loop0_loop0
     (out, uf, t)
 
 /-- [forge_bool_core::witnesses]: loop body 0:
-    Source: 'src/lib.rs', lines 416:8-426:9
+    Source: 'src/lib.rs', lines 425:8-435:9
     Visibility: public -/
 @[rust_loop_body]
 def witnesses_loop0.body
@@ -2931,7 +3029,7 @@ def witnesses_loop0.body
   else ok (done out)
 
 /-- [forge_bool_core::witnesses]: loop 0:
-    Source: 'src/lib.rs', lines 416:8-426:9
+    Source: 'src/lib.rs', lines 425:8-435:9
     Visibility: public -/
 @[rust_loop]
 def witnesses_loop0
@@ -2944,7 +3042,7 @@ def witnesses_loop0
     (out, s, i)
 
 /-- [forge_bool_core::witnesses]:
-    Source: 'src/lib.rs', lines 410:0-429:1
+    Source: 'src/lib.rs', lines 419:0-438:1
     Visibility: public -/
 def witnesses (l : Ledger) : Result (alloc.vec.Vec (CellId × BodyId)) := do
   let ext ← new_ext l
@@ -2956,7 +3054,7 @@ def witnesses (l : Ledger) : Result (alloc.vec.Vec (CellId × BodyId)) := do
   else ok (alloc.vec.Vec.new (CellId × BodyId))
 
 /-- [forge_bool_core::membership]: loop body 0:
-    Source: 'src/lib.rs', lines 1:0-443:5 -/
+    Source: 'src/lib.rs', lines 1:0-452:5 -/
 @[rust_loop_body]
 def membership_loop0.body
   (i : Std.U32) (v : alloc.vec.Vec BodyId) (v1 : alloc.vec.Vec Std.U32)
@@ -3011,7 +3109,7 @@ def membership_loop0.body
   else ok (done inside)
 
 /-- [forge_bool_core::membership]: loop 0:
-    Source: 'src/lib.rs', lines 1:0-443:5 -/
+    Source: 'src/lib.rs', lines 1:0-452:5 -/
 @[rust_loop]
 def membership_loop0
   (i : Std.U32) (v : alloc.vec.Vec BodyId) (v1 : alloc.vec.Vec Std.U32)
@@ -3028,7 +3126,7 @@ def membership_loop0
     (inside, k)
 
 /-- [forge_bool_core::membership]: loop body 2:
-    Source: 'src/lib.rs', lines 450:8-454:9 -/
+    Source: 'src/lib.rs', lines 459:8-463:9 -/
 @[rust_loop_body]
 def membership_loop1_loop0.body
   (s : Split) (inside : alloc.vec.Vec (alloc.vec.Vec Bool)) (i : Std.Usize)
@@ -3060,7 +3158,7 @@ def membership_loop1_loop0.body
       s.piece_of, row))
 
 /-- [forge_bool_core::membership]: loop 2:
-    Source: 'src/lib.rs', lines 450:8-454:9 -/
+    Source: 'src/lib.rs', lines 459:8-463:9 -/
 @[rust_loop]
 def membership_loop1_loop0
   (s : Split) (inside : alloc.vec.Vec (alloc.vec.Vec Bool)) (i : Std.Usize)
@@ -3075,7 +3173,7 @@ def membership_loop1_loop0
     (uf, row, t)
 
 /-- [forge_bool_core::membership]: loop body 1:
-    Source: 'src/lib.rs', lines 446:4-457:5 -/
+    Source: 'src/lib.rs', lines 455:4-466:5 -/
 @[rust_loop_body]
 def membership_loop1.body
   (nb : Std.Usize) (inside : alloc.vec.Vec (alloc.vec.Vec Bool)) (s : Split)
@@ -3103,7 +3201,7 @@ def membership_loop1.body
   else ok (done memb)
 
 /-- [forge_bool_core::membership]: loop 1:
-    Source: 'src/lib.rs', lines 446:4-457:5 -/
+    Source: 'src/lib.rs', lines 455:4-466:5 -/
 @[rust_loop]
 def membership_loop1
   (s : Split) (nb : Std.Usize) (inside : alloc.vec.Vec (alloc.vec.Vec Bool))
@@ -3115,7 +3213,7 @@ def membership_loop1
     (s, memb, i)
 
 /-- [forge_bool_core::membership]:
-    Source: 'src/lib.rs', lines 432:0-459:1 -/
+    Source: 'src/lib.rs', lines 441:0-468:1 -/
 def membership
   (l : Ledger) (ext : Ext) (s : Split) :
   Result (alloc.vec.Vec (alloc.vec.Vec Bool))
@@ -3132,7 +3230,7 @@ def membership
     0#usize
 
 /-- [forge_bool_core::apply_rule]: loop body 0:
-    Source: 'src/lib.rs', lines 466:4-471:5 -/
+    Source: 'src/lib.rs', lines 475:4-480:5 -/
 @[rust_loop_body]
 def apply_rule_loop0.body
   (m : Slice Bool) (ins : Std.Usize) (i : Std.Usize) :
@@ -3150,7 +3248,7 @@ def apply_rule_loop0.body
   else ok (done ins)
 
 /-- [forge_bool_core::apply_rule]: loop 0:
-    Source: 'src/lib.rs', lines 466:4-471:5 -/
+    Source: 'src/lib.rs', lines 475:4-480:5 -/
 @[rust_loop]
 def apply_rule_loop0
   (m : Slice Bool) (ins : Std.Usize) (i : Std.Usize) : Result Std.Usize := do
@@ -3159,7 +3257,7 @@ def apply_rule_loop0
     (ins, i)
 
 /-- [forge_bool_core::apply_rule]: loop body 1:
-    Source: 'src/lib.rs', lines 480:12-489:13 -/
+    Source: 'src/lib.rs', lines 489:12-498:13 -/
 @[rust_loop_body]
 def apply_rule_loop1.body
   (m : Slice Bool) (row : Std.Usize) (fits : Bool) (i : Std.Usize) :
@@ -3186,7 +3284,7 @@ def apply_rule_loop1.body
   else ok (done (row, fits))
 
 /-- [forge_bool_core::apply_rule]: loop 1:
-    Source: 'src/lib.rs', lines 480:12-489:13 -/
+    Source: 'src/lib.rs', lines 489:12-498:13 -/
 @[rust_loop]
 def apply_rule_loop1
   (m : Slice Bool) (row : Std.Usize) (fits : Bool) (i : Std.Usize) :
@@ -3197,7 +3295,7 @@ def apply_rule_loop1
     (row, fits, i)
 
 /-- [forge_bool_core::apply_rule]:
-    Source: 'src/lib.rs', lines 462:0-493:1 -/
+    Source: 'src/lib.rs', lines 471:0-502:1 -/
 def apply_rule (rule : Rule) (m : Slice Bool) : Result Bool := do
   let ins ← apply_rule_loop0 m 0#usize 0#usize
   match rule with
@@ -3383,7 +3481,7 @@ def sort.sort_u32
     sort.sort_u32_loop0 n src src 1#usize
 
 /-- [forge_bool_core::around_enum]: loop body 2:
-    Source: 'src/lib.rs', lines 537:12-545:13 -/
+    Source: 'src/lib.rs', lines 546:12-554:13 -/
 @[rust_loop_body]
 def around_enum_loop0_loop0_loop0.body
   (z : Slice Std.Usize) (k : Std.Usize) (keep : Std.Usize) (m : Std.U32)
@@ -3422,7 +3520,7 @@ def around_enum_loop0_loop0_loop0.body
   else ok (done buf)
 
 /-- [forge_bool_core::around_enum]: loop 2:
-    Source: 'src/lib.rs', lines 537:12-545:13 -/
+    Source: 'src/lib.rs', lines 546:12-554:13 -/
 @[rust_loop]
 def around_enum_loop0_loop0_loop0
   (z : Slice Std.Usize) (buf : alloc.vec.Vec Sgn) (k : Std.Usize)
@@ -3435,7 +3533,7 @@ def around_enum_loop0_loop0_loop0
     (buf, bit, j)
 
 /-- [forge_bool_core::around_enum]: loop body 1:
-    Source: 'src/lib.rs', lines 1:0-551:9 -/
+    Source: 'src/lib.rs', lines 1:0-560:9 -/
 @[rust_loop_body]
 def around_enum_loop0_loop0.body
   (l : Ledger) (ext : Ext) (z : Slice Std.Usize) (k : Std.Usize)
@@ -3475,7 +3573,7 @@ def around_enum_loop0_loop0.body
   else ok (done (a, out, buf))
 
 /-- [forge_bool_core::around_enum]: loop 1:
-    Source: 'src/lib.rs', lines 1:0-551:9 -/
+    Source: 'src/lib.rs', lines 1:0-560:9 -/
 @[rust_loop]
 def around_enum_loop0_loop0
   (l : Ledger) (ext : Ext) (a : Assembled) (z : Slice Std.Usize)
@@ -3489,7 +3587,7 @@ def around_enum_loop0_loop0
     (a, out, buf, m)
 
 /-- [forge_bool_core::around_enum]: loop body 0:
-    Source: 'src/lib.rs', lines 1:0-553:5 -/
+    Source: 'src/lib.rs', lines 1:0-562:5 -/
 @[rust_loop_body]
 def around_enum_loop0.body
   (l : Ledger) (ext : Ext) (z : Slice Std.Usize) (k : Std.Usize)
@@ -3509,7 +3607,7 @@ def around_enum_loop0.body
   else ok (done out)
 
 /-- [forge_bool_core::around_enum]: loop 0:
-    Source: 'src/lib.rs', lines 1:0-553:5 -/
+    Source: 'src/lib.rs', lines 1:0-562:5 -/
 @[rust_loop]
 def around_enum_loop0
   (l : Ledger) (ext : Ext) (a : Assembled) (z : Slice Std.Usize)
@@ -3523,7 +3621,7 @@ def around_enum_loop0
     (a, out, buf, keep)
 
 /-- [forge_bool_core::around_enum]:
-    Source: 'src/lib.rs', lines 527:0-555:1 -/
+    Source: 'src/lib.rs', lines 536:0-564:1 -/
 def around_enum
   (l : Ledger) (ext : Ext) (a : Assembled) (xc : Slice Sgn)
   (z : Slice Std.Usize) (out : alloc.vec.Vec Std.U32) :
@@ -3535,7 +3633,7 @@ def around_enum
   sort.sort_u32 out1
 
 /-- [forge_bool_core::around]: loop body 0:
-    Source: 'src/lib.rs', lines 514:8-519:9 -/
+    Source: 'src/lib.rs', lines 523:8-528:9 -/
 @[rust_loop_body]
 def around_loop.body
   (l : Ledger) (ext : Ext) (a : Assembled) (xc : Slice Sgn)
@@ -3562,7 +3660,7 @@ def around_loop.body
   else ok (done out)
 
 /-- [forge_bool_core::around]: loop 0:
-    Source: 'src/lib.rs', lines 514:8-519:9 -/
+    Source: 'src/lib.rs', lines 523:8-528:9 -/
 @[rust_loop]
 def around_loop
   (l : Ledger) (ext : Ext) (a : Assembled) (xc : Slice Sgn)
@@ -3574,7 +3672,7 @@ def around_loop
     (out, p)
 
 /-- [forge_bool_core::around]:
-    Source: 'src/lib.rs', lines 508:0-524:1 -/
+    Source: 'src/lib.rs', lines 517:0-533:1 -/
 def around
   (l : Ledger) (ext : Ext) (a : Assembled) (x : Std.U32) :
   Result (alloc.vec.Vec Std.U32)
@@ -3589,7 +3687,7 @@ def around
     around_enum l ext a xc s (alloc.vec.Vec.new Std.U32)
 
 /-- [forge_bool_core::between]: loop body 0:
-    Source: 'src/lib.rs', lines 564:4-569:5 -/
+    Source: 'src/lib.rs', lines 573:4-578:5 -/
 @[rust_loop_body]
 def between_loop0.body
   (z : Slice Std.Usize) (zp : Std.Usize) (others : alloc.vec.Vec Std.Usize)
@@ -3610,7 +3708,7 @@ def between_loop0.body
   else ok (done others)
 
 /-- [forge_bool_core::between]: loop 0:
-    Source: 'src/lib.rs', lines 564:4-569:5 -/
+    Source: 'src/lib.rs', lines 573:4-578:5 -/
 @[rust_loop]
 def between_loop0
   (z : Slice Std.Usize) (zp : Std.Usize) (others : alloc.vec.Vec Std.Usize)
@@ -3622,7 +3720,7 @@ def between_loop0
     (others, j)
 
 /-- [forge_bool_core::between]: loop body 2:
-    Source: 'src/lib.rs', lines 577:8-584:9 -/
+    Source: 'src/lib.rs', lines 586:8-593:9 -/
 @[rust_loop_body]
 def between_loop1_loop0.body
   (pc : Slice Sgn) (others : alloc.vec.Vec Std.Usize) (k : Std.Usize)
@@ -3654,7 +3752,7 @@ def between_loop1_loop0.body
   else ok (done buf)
 
 /-- [forge_bool_core::between]: loop 2:
-    Source: 'src/lib.rs', lines 577:8-584:9 -/
+    Source: 'src/lib.rs', lines 586:8-593:9 -/
 @[rust_loop]
 def between_loop1_loop0
   (pc : Slice Sgn) (others : alloc.vec.Vec Std.Usize) (k : Std.Usize)
@@ -3666,7 +3764,7 @@ def between_loop1_loop0
     (buf, j)
 
 /-- [forge_bool_core::between]: loop body 1:
-    Source: 'src/lib.rs', lines 575:4-590:5 -/
+    Source: 'src/lib.rs', lines 584:4-599:5 -/
 @[rust_loop_body]
 def between_loop1.body
   (l : Ledger) (ext : Ext) (pc : Slice Sgn) (others : alloc.vec.Vec Std.Usize)
@@ -3688,7 +3786,7 @@ def between_loop1.body
   else ok (done out)
 
 /-- [forge_bool_core::between]: loop 1:
-    Source: 'src/lib.rs', lines 575:4-590:5 -/
+    Source: 'src/lib.rs', lines 584:4-599:5 -/
 @[rust_loop]
 def between_loop1
   (l : Ledger) (ext : Ext) (pc : Slice Sgn) (others : alloc.vec.Vec Std.Usize)
@@ -3702,7 +3800,7 @@ def between_loop1
     (out, buf, m)
 
 /-- [forge_bool_core::between]:
-    Source: 'src/lib.rs', lines 559:0-592:1 -/
+    Source: 'src/lib.rs', lines 568:0-601:1 -/
 def between
   (l : Ledger) (ext : Ext) (z : Slice Std.Usize) (phi : Std.U32) :
   Result (alloc.vec.Vec Std.U32)
@@ -3716,7 +3814,7 @@ def between
   between_loop1 l ext pc others (alloc.vec.Vec.new Std.U32) k combos buf 1#u32
 
 /-- [forge_bool_core::edges_between]: loop body 0:
-    Source: 'src/lib.rs', lines 1:0-606:9 -/
+    Source: 'src/lib.rs', lines 1:0-615:9 -/
 @[rust_loop_body]
 def edges_between_loop0.body
   (l : Ledger) (ext : Ext) (is_edge : Slice Bool) (vc : Slice Sgn)
@@ -3751,7 +3849,7 @@ def edges_between_loop0.body
   else ok (done out)
 
 /-- [forge_bool_core::edges_between]: loop 0:
-    Source: 'src/lib.rs', lines 1:0-606:9 -/
+    Source: 'src/lib.rs', lines 1:0-615:9 -/
 @[rust_loop]
 def edges_between_loop0
   (l : Ledger) (ext : Ext) (is_edge : Slice Bool) (out : alloc.vec.Vec Std.U32)
@@ -3763,7 +3861,7 @@ def edges_between_loop0
     (out, e)
 
 /-- [forge_bool_core::edges_between]: loop body 1:
-    Source: 'src/lib.rs', lines 610:8-615:9 -/
+    Source: 'src/lib.rs', lines 619:8-624:9 -/
 @[rust_loop_body]
 def edges_between_loop1.body
   (is_edge : Slice Bool) (bs : alloc.vec.Vec Std.U32)
@@ -3786,7 +3884,7 @@ def edges_between_loop1.body
   else ok (done out)
 
 /-- [forge_bool_core::edges_between]: loop 1:
-    Source: 'src/lib.rs', lines 610:8-615:9 -/
+    Source: 'src/lib.rs', lines 619:8-624:9 -/
 @[rust_loop]
 def edges_between_loop1
   (is_edge : Slice Bool) (out : alloc.vec.Vec Std.U32)
@@ -3798,7 +3896,7 @@ def edges_between_loop1
     (out, i)
 
 /-- [forge_bool_core::edges_between]:
-    Source: 'src/lib.rs', lines 595:0-622:1 -/
+    Source: 'src/lib.rs', lines 604:0-631:1 -/
 def edges_between
   (l : Ledger) (ext : Ext) (is_edge : Slice Bool) (v : Std.U32)
   (z : Slice Std.Usize) (phi : Std.U32) :
@@ -3821,7 +3919,7 @@ def edges_between
     else ok out
 
 /-- [forge_bool_core::has]: loop body 0:
-    Source: 'src/lib.rs', lines 1:0-782:5 -/
+    Source: 'src/lib.rs', lines 1:0-925:5 -/
 @[rust_loop_body]
 def has_loop.body
   (xs : Slice Std.U32) (x : Std.U32) (found : Bool) (i : Std.Usize) :
@@ -3839,7 +3937,7 @@ def has_loop.body
     else ok (done found)
 
 /-- [forge_bool_core::has]: loop 0:
-    Source: 'src/lib.rs', lines 1:0-782:5 -/
+    Source: 'src/lib.rs', lines 1:0-925:5 -/
 @[rust_loop]
 def has_loop
   (xs : Slice Std.U32) (x : Std.U32) (found : Bool) (i : Std.Usize) :
@@ -3850,13 +3948,13 @@ def has_loop
     (found, i)
 
 /-- [forge_bool_core::has]:
-    Source: 'src/lib.rs', lines 776:0-784:1 -/
+    Source: 'src/lib.rs', lines 919:0-927:1 -/
 @[reducible]
 def has (xs : Slice Std.U32) (x : Std.U32) : Result Bool := do
   has_loop xs x false 0#usize
 
 /-- [forge_bool_core::same_set]: loop body 0:
-    Source: 'src/lib.rs', lines 1:0-808:5 -/
+    Source: 'src/lib.rs', lines 1:0-951:5 -/
 @[rust_loop_body]
 def same_set_loop0.body
   (a : Slice Std.U32) (b : Slice Std.U32) (same : Bool) (i : Std.Usize) :
@@ -3875,7 +3973,7 @@ def same_set_loop0.body
   else ok (done same)
 
 /-- [forge_bool_core::same_set]: loop 0:
-    Source: 'src/lib.rs', lines 1:0-808:5 -/
+    Source: 'src/lib.rs', lines 1:0-951:5 -/
 @[rust_loop]
 def same_set_loop0
   (a : Slice Std.U32) (b : Slice Std.U32) (same : Bool) (i : Std.Usize) :
@@ -3886,7 +3984,7 @@ def same_set_loop0
     (same, i)
 
 /-- [forge_bool_core::same_set]: loop body 1:
-    Source: 'src/lib.rs', lines 1:0-813:5 -/
+    Source: 'src/lib.rs', lines 1:0-956:5 -/
 @[rust_loop_body]
 def same_set_loop1.body
   (a : Slice Std.U32) (b : Slice Std.U32) (same : Bool) (i : Std.Usize) :
@@ -3905,7 +4003,7 @@ def same_set_loop1.body
   else ok (done same)
 
 /-- [forge_bool_core::same_set]: loop 1:
-    Source: 'src/lib.rs', lines 1:0-813:5 -/
+    Source: 'src/lib.rs', lines 1:0-956:5 -/
 @[rust_loop]
 def same_set_loop1
   (a : Slice Std.U32) (b : Slice Std.U32) (same : Bool) (i : Std.Usize) :
@@ -3916,13 +4014,13 @@ def same_set_loop1
     (same, i)
 
 /-- [forge_bool_core::same_set]:
-    Source: 'src/lib.rs', lines 802:0-815:1 -/
+    Source: 'src/lib.rs', lines 945:0-958:1 -/
 def same_set (a : Slice Std.U32) (b : Slice Std.U32) : Result Bool := do
   let same ← same_set_loop0 a b true 0#usize
   same_set_loop1 a b same 0#usize
 
 /-- [forge_bool_core::faces_at]: loop body 0:
-    Source: 'src/lib.rs', lines 791:4-797:5 -/
+    Source: 'src/lib.rs', lines 934:4-940:5 -/
 @[rust_loop_body]
 def faces_at_loop.body
   (face_of : Slice Std.U32) (ar : Slice Std.U32) (out : alloc.vec.Vec Std.U32)
@@ -3946,7 +4044,7 @@ def faces_at_loop.body
   else ok (done out)
 
 /-- [forge_bool_core::faces_at]: loop 0:
-    Source: 'src/lib.rs', lines 791:4-797:5 -/
+    Source: 'src/lib.rs', lines 934:4-940:5 -/
 @[rust_loop]
 def faces_at_loop
   (face_of : Slice Std.U32) (ar : Slice Std.U32) (out : alloc.vec.Vec Std.U32)
@@ -3958,7 +4056,7 @@ def faces_at_loop
     (out, j)
 
 /-- [forge_bool_core::faces_at]:
-    Source: 'src/lib.rs', lines 788:0-799:1 -/
+    Source: 'src/lib.rs', lines 931:0-942:1 -/
 @[reducible]
 def faces_at
   (face_of : Slice Std.U32) (ar : Slice Std.U32) :
@@ -3967,7 +4065,7 @@ def faces_at
   faces_at_loop face_of ar (alloc.vec.Vec.new Std.U32) 0#usize
 
 /-- [forge_bool_core::unify]: loop body 2:
-    Source: 'src/lib.rs', lines 1:0-844:13 -/
+    Source: 'src/lib.rs', lines 1:0-987:13 -/
 @[rust_loop_body]
 def unify_loop0_loop0_loop0.body
   (l : Ledger) (ext : Ext) (v : alloc.vec.Vec Std.U32) (v1 : alloc.vec.Vec Sgn)
@@ -4010,7 +4108,7 @@ def unify_loop0_loop0_loop0.body
   else ok (done join)
 
 /-- [forge_bool_core::unify]: loop 2:
-    Source: 'src/lib.rs', lines 1:0-844:13 -/
+    Source: 'src/lib.rs', lines 1:0-987:13 -/
 @[rust_loop]
 def unify_loop0_loop0_loop0
   (l : Ledger) (ext : Ext) (v : alloc.vec.Vec Std.U32) (v1 : alloc.vec.Vec Sgn)
@@ -4023,7 +4121,7 @@ def unify_loop0_loop0_loop0
     (join, q)
 
 /-- [forge_bool_core::unify]: loop body 1:
-    Source: 'src/lib.rs', lines 1:0-846:9 -/
+    Source: 'src/lib.rs', lines 1:0-989:9 -/
 @[rust_loop_body]
 def unify_loop0_loop0.body
   (l : Ledger) (ext : Ext) (v : alloc.vec.Vec Std.U32) (v1 : alloc.vec.Vec Sgn)
@@ -4040,7 +4138,7 @@ def unify_loop0_loop0.body
   else ok (done join)
 
 /-- [forge_bool_core::unify]: loop 1:
-    Source: 'src/lib.rs', lines 1:0-846:9 -/
+    Source: 'src/lib.rs', lines 1:0-989:9 -/
 @[rust_loop]
 def unify_loop0_loop0
   (l : Ledger) (ext : Ext) (v : alloc.vec.Vec Std.U32) (v1 : alloc.vec.Vec Sgn)
@@ -4052,7 +4150,7 @@ def unify_loop0_loop0
     (join, p)
 
 /-- [forge_bool_core::unify]: loop body 0:
-    Source: 'src/lib.rs', lines 1:0-848:5 -/
+    Source: 'src/lib.rs', lines 1:0-991:5 -/
 @[rust_loop_body]
 def unify_loop0.body
   (l : Ledger) (ext : Ext) (v : alloc.vec.Vec Std.U32) (v1 : alloc.vec.Vec Sgn)
@@ -4070,7 +4168,7 @@ def unify_loop0.body
   else ok (done join)
 
 /-- [forge_bool_core::unify]: loop 0:
-    Source: 'src/lib.rs', lines 1:0-848:5 -/
+    Source: 'src/lib.rs', lines 1:0-991:5 -/
 @[rust_loop]
 def unify_loop0
   (l : Ledger) (ext : Ext) (v : alloc.vec.Vec Std.U32) (v1 : alloc.vec.Vec Sgn)
@@ -4083,7 +4181,7 @@ def unify_loop0
     (join, k)
 
 /-- [forge_bool_core::unify]: loop body 3:
-    Source: 'src/lib.rs', lines 854:4-872:5 -/
+    Source: 'src/lib.rs', lines 997:4-1015:5 -/
 @[rust_loop_body]
 def unify_loop1.body
   (l : Ledger) (ext : Ext) (v : alloc.vec.Vec Std.U32) (v1 : alloc.vec.Vec Sgn)
@@ -4170,7 +4268,7 @@ def unify_loop1.body
   else ok (done (face_of, faces, heads))
 
 /-- [forge_bool_core::unify]: loop 3:
-    Source: 'src/lib.rs', lines 854:4-872:5 -/
+    Source: 'src/lib.rs', lines 997:4-1015:5 -/
 @[rust_loop]
 def unify_loop1
   (l : Ledger) (ext : Ext) (s : Split) (v : alloc.vec.Vec Std.U32)
@@ -4186,7 +4284,7 @@ def unify_loop1
     (s, join, face_of, faces, heads, p)
 
 /-- [forge_bool_core::unify]: loop body 4:
-    Source: 'src/lib.rs', lines 876:4-879:5 -/
+    Source: 'src/lib.rs', lines 1019:4-1022:5 -/
 @[rust_loop_body]
 def unify_loop2.body
   (around_e : Slice (alloc.vec.Vec Std.U32)) (face_of : alloc.vec.Vec Std.U32)
@@ -4207,7 +4305,7 @@ def unify_loop2.body
   else ok (done at_e)
 
 /-- [forge_bool_core::unify]: loop 4:
-    Source: 'src/lib.rs', lines 876:4-879:5 -/
+    Source: 'src/lib.rs', lines 1019:4-1022:5 -/
 @[rust_loop]
 def unify_loop2
   (around_e : Slice (alloc.vec.Vec Std.U32)) (face_of : alloc.vec.Vec Std.U32)
@@ -4219,7 +4317,7 @@ def unify_loop2
     (at_e, k)
 
 /-- [forge_bool_core::unify]: loop body 5:
-    Source: 'src/lib.rs', lines 882:4-885:5 -/
+    Source: 'src/lib.rs', lines 1025:4-1028:5 -/
 @[rust_loop_body]
 def unify_loop3.body
   (around_v : Slice (alloc.vec.Vec Std.U32)) (face_of : alloc.vec.Vec Std.U32)
@@ -4240,7 +4338,7 @@ def unify_loop3.body
   else ok (done at_v)
 
 /-- [forge_bool_core::unify]: loop 5:
-    Source: 'src/lib.rs', lines 882:4-885:5 -/
+    Source: 'src/lib.rs', lines 1025:4-1028:5 -/
 @[rust_loop]
 def unify_loop3
   (around_v : Slice (alloc.vec.Vec Std.U32)) (face_of : alloc.vec.Vec Std.U32)
@@ -4252,7 +4350,7 @@ def unify_loop3
     (at_v, k)
 
 /-- [forge_bool_core::unify]: loop body 6:
-    Source: 'src/lib.rs', lines 890:4-896:5 -/
+    Source: 'src/lib.rs', lines 1033:4-1039:5 -/
 @[rust_loop_body]
 def unify_loop4.body
   (v : alloc.vec.Vec CellId) (at_v : alloc.vec.Vec (alloc.vec.Vec Std.U32))
@@ -4287,7 +4385,7 @@ def unify_loop4.body
   else ok (done (verts, is_out_v))
 
 /-- [forge_bool_core::unify]: loop 6:
-    Source: 'src/lib.rs', lines 890:4-896:5 -/
+    Source: 'src/lib.rs', lines 1033:4-1039:5 -/
 @[rust_loop]
 def unify_loop4
   (v : alloc.vec.Vec CellId) (at_v : alloc.vec.Vec (alloc.vec.Vec Std.U32))
@@ -4301,7 +4399,7 @@ def unify_loop4
     (verts, is_out_v, k)
 
 /-- [forge_bool_core::unify]: loop body 7:
-    Source: 'src/lib.rs', lines 901:4-907:5 -/
+    Source: 'src/lib.rs', lines 1044:4-1050:5 -/
 @[rust_loop_body]
 def unify_loop5.body
   (v : alloc.vec.Vec CellId) (at_e : alloc.vec.Vec (alloc.vec.Vec Std.U32))
@@ -4339,7 +4437,7 @@ def unify_loop5.body
   else ok (done (ecs, ec_pos))
 
 /-- [forge_bool_core::unify]: loop 7:
-    Source: 'src/lib.rs', lines 901:4-907:5 -/
+    Source: 'src/lib.rs', lines 1044:4-1050:5 -/
 @[rust_loop]
 def unify_loop5
   (v : alloc.vec.Vec CellId) (at_e : alloc.vec.Vec (alloc.vec.Vec Std.U32))
@@ -4352,7 +4450,7 @@ def unify_loop5
     (ecs, ec_pos, k)
 
 /-- [forge_bool_core::unify]: loop body 10:
-    Source: 'src/lib.rs', lines 1:0-927:17 -/
+    Source: 'src/lib.rs', lines 1:0-1070:17 -/
 @[rust_loop_body]
 def unify_loop6_loop0_loop0.body
   (ec_pos : alloc.vec.Vec Std.U32) (es : alloc.vec.Vec Std.U32)
@@ -4384,7 +4482,7 @@ def unify_loop6_loop0_loop0.body
   else ok (done round)
 
 /-- [forge_bool_core::unify]: loop 10:
-    Source: 'src/lib.rs', lines 1:0-927:17 -/
+    Source: 'src/lib.rs', lines 1:0-1070:17 -/
 @[rust_loop]
 def unify_loop6_loop0_loop0
   (ec_pos : alloc.vec.Vec Std.U32) (round : alloc.vec.Vec Std.U32)
@@ -4396,7 +4494,7 @@ def unify_loop6_loop0_loop0
     (round, q)
 
 /-- [forge_bool_core::unify]: loop body 9:
-    Source: 'src/lib.rs', lines 1:0-929:13 -/
+    Source: 'src/lib.rs', lines 1:0-1072:13 -/
 @[rust_loop_body]
 def unify_loop6_loop0.body
   (i : Std.U32) (v : alloc.vec.Vec BodyId) (v1 : alloc.vec.Vec Std.U32)
@@ -4437,7 +4535,7 @@ def unify_loop6_loop0.body
   else ok (done round)
 
 /-- [forge_bool_core::unify]: loop 9:
-    Source: 'src/lib.rs', lines 1:0-929:13 -/
+    Source: 'src/lib.rs', lines 1:0-1072:13 -/
 @[rust_loop]
 def unify_loop6_loop0
   (i : Std.U32) (v : alloc.vec.Vec BodyId) (v1 : alloc.vec.Vec Std.U32)
@@ -4456,7 +4554,7 @@ def unify_loop6_loop0
     (round, j)
 
 /-- [forge_bool_core::unify]: loop body 12:
-    Source: 'src/lib.rs', lines 933:16-939:17 -/
+    Source: 'src/lib.rs', lines 1076:16-1082:17 -/
 @[rust_loop_body]
 def unify_loop6_loop1_loop0.body
   (at_e : alloc.vec.Vec (alloc.vec.Vec Std.U32))
@@ -4498,7 +4596,7 @@ def unify_loop6_loop1_loop0.body
   else ok (done erel)
 
 /-- [forge_bool_core::unify]: loop 12:
-    Source: 'src/lib.rs', lines 933:16-939:17 -/
+    Source: 'src/lib.rs', lines 1076:16-1082:17 -/
 @[rust_loop]
 def unify_loop6_loop1_loop0
   (at_e : alloc.vec.Vec (alloc.vec.Vec Std.U32))
@@ -4511,7 +4609,7 @@ def unify_loop6_loop1_loop0
     (erel, q)
 
 /-- [forge_bool_core::unify]: loop body 11:
-    Source: 'src/lib.rs', lines 931:12-941:13 -/
+    Source: 'src/lib.rs', lines 1074:12-1084:13 -/
 @[rust_loop_body]
 def unify_loop6_loop1.body
   (at_e : alloc.vec.Vec (alloc.vec.Vec Std.U32))
@@ -4529,7 +4627,7 @@ def unify_loop6_loop1.body
   else ok (done erel)
 
 /-- [forge_bool_core::unify]: loop 11:
-    Source: 'src/lib.rs', lines 931:12-941:13 -/
+    Source: 'src/lib.rs', lines 1074:12-1084:13 -/
 @[rust_loop]
 def unify_loop6_loop1
   (at_e : alloc.vec.Vec (alloc.vec.Vec Std.U32))
@@ -4542,7 +4640,7 @@ def unify_loop6_loop1
     (erel, p)
 
 /-- [forge_bool_core::unify]: loop body 8:
-    Source: 'src/lib.rs', lines 1:0-944:5 -/
+    Source: 'src/lib.rs', lines 1:0-1087:5 -/
 @[rust_loop_body]
 def unify_loop6.body
   (i : Std.U32) (v : alloc.vec.Vec BodyId) (v1 : alloc.vec.Vec Std.U32)
@@ -4591,7 +4689,7 @@ def unify_loop6.body
   else ok (done erel)
 
 /-- [forge_bool_core::unify]: loop 8:
-    Source: 'src/lib.rs', lines 1:0-944:5 -/
+    Source: 'src/lib.rs', lines 1:0-1087:5 -/
 @[rust_loop]
 def unify_loop6
   (i : Std.U32) (v : alloc.vec.Vec BodyId) (v1 : alloc.vec.Vec Std.U32)
@@ -4611,7 +4709,7 @@ def unify_loop6
     (erel, k)
 
 /-- [forge_bool_core::unify]: loop body 14:
-    Source: 'src/lib.rs', lines 955:12-958:13 -/
+    Source: 'src/lib.rs', lines 1098:12-1101:13 -/
 @[rust_loop_body]
 def unify_loop7_loop0.body
   (heads : alloc.vec.Vec Std.U32) (fs : alloc.vec.Vec Std.U32)
@@ -4634,7 +4732,7 @@ def unify_loop7_loop0.body
   else ok (done fcs)
 
 /-- [forge_bool_core::unify]: loop 14:
-    Source: 'src/lib.rs', lines 955:12-958:13 -/
+    Source: 'src/lib.rs', lines 1098:12-1101:13 -/
 @[rust_loop]
 def unify_loop7_loop0
   (heads : alloc.vec.Vec Std.U32) (fs : alloc.vec.Vec Std.U32)
@@ -4646,7 +4744,7 @@ def unify_loop7_loop0
     (fcs, q)
 
 /-- [forge_bool_core::unify]: loop body 13:
-    Source: 'src/lib.rs', lines 948:4-968:5 -/
+    Source: 'src/lib.rs', lines 1091:4-1111:5 -/
 @[rust_loop_body]
 def unify_loop7.body
   (v : alloc.vec.Vec CellId) (heads : alloc.vec.Vec Std.U32)
@@ -4722,7 +4820,7 @@ def unify_loop7.body
   else ok (done edges)
 
 /-- [forge_bool_core::unify]: loop 13:
-    Source: 'src/lib.rs', lines 948:4-968:5 -/
+    Source: 'src/lib.rs', lines 1091:4-1111:5 -/
 @[rust_loop]
 def unify_loop7
   (v : alloc.vec.Vec CellId) (heads : alloc.vec.Vec Std.U32)
@@ -4738,7 +4836,7 @@ def unify_loop7
     (erel, edges, edge_of, p)
 
 /-- [forge_bool_core::unify]:
-    Source: 'src/lib.rs', lines 818:0-970:1 -/
+    Source: 'src/lib.rs', lines 961:0-1113:1 -/
 def unify
   (l : Ledger) (ext : Ext) (s : Split) (a : Assembled) (is_edge : Slice Bool)
   (around_e : Slice (alloc.vec.Vec Std.U32))
@@ -4780,7 +4878,7 @@ def unify
   ok { faces, edges, verts }
 
 /-- [forge_bool_core::bad_vert]: loop body 2:
-    Source: 'src/lib.rs', lines 1:0-756:13 -/
+    Source: 'src/lib.rs', lines 1:0-899:13 -/
 @[rust_loop_body]
 def bad_vert_loop0_loop0_loop0.body
   (seen : alloc.vec.Vec (Std.U32 × Std.U32)) (es : alloc.vec.Vec Std.U32)
@@ -4807,7 +4905,7 @@ def bad_vert_loop0_loop0_loop0.body
   else ok (done found)
 
 /-- [forge_bool_core::bad_vert]: loop 2:
-    Source: 'src/lib.rs', lines 1:0-756:13 -/
+    Source: 'src/lib.rs', lines 1:0-899:13 -/
 @[rust_loop]
 def bad_vert_loop0_loop0_loop0
   (seen : alloc.vec.Vec (Std.U32 × Std.U32)) (es : alloc.vec.Vec Std.U32)
@@ -4819,7 +4917,7 @@ def bad_vert_loop0_loop0_loop0
     (found, r)
 
 /-- [forge_bool_core::bad_vert]: loop body 1:
-    Source: 'src/lib.rs', lines 1:0-763:9 -/
+    Source: 'src/lib.rs', lines 1:0-906:9 -/
 @[rust_loop_body]
 def bad_vert_loop0_loop0.body
   (j : Std.Usize) (es : alloc.vec.Vec Std.U32) (uf : union_find.Uf)
@@ -4851,7 +4949,7 @@ def bad_vert_loop0_loop0.body
   else ok (done (uf, seen))
 
 /-- [forge_bool_core::bad_vert]: loop 1:
-    Source: 'src/lib.rs', lines 1:0-763:9 -/
+    Source: 'src/lib.rs', lines 1:0-906:9 -/
 @[rust_loop]
 def bad_vert_loop0_loop0
   (uf : union_find.Uf) (seen : alloc.vec.Vec (Std.U32 × Std.U32))
@@ -4863,7 +4961,7 @@ def bad_vert_loop0_loop0
     (uf, seen, q)
 
 /-- [forge_bool_core::bad_vert]: loop body 0:
-    Source: 'src/lib.rs', lines 1:0-765:5 -/
+    Source: 'src/lib.rs', lines 1:0-908:5 -/
 @[rust_loop_body]
 def bad_vert_loop0.body
   (l : Ledger) (ext : Ext) (a : Assembled) (is_edge : Slice Bool) (v : Std.U32)
@@ -4888,7 +4986,7 @@ def bad_vert_loop0.body
   else ok (done uf)
 
 /-- [forge_bool_core::bad_vert]: loop 0:
-    Source: 'src/lib.rs', lines 1:0-765:5 -/
+    Source: 'src/lib.rs', lines 1:0-908:5 -/
 @[rust_loop]
 def bad_vert_loop0
   (l : Ledger) (ext : Ext) (a : Assembled) (is_edge : Slice Bool) (v : Std.U32)
@@ -4902,7 +5000,7 @@ def bad_vert_loop0
     (uf, seen, j)
 
 /-- [forge_bool_core::bad_vert]: loop body 3:
-    Source: 'src/lib.rs', lines 1:0-771:5 -/
+    Source: 'src/lib.rs', lines 1:0-914:5 -/
 @[rust_loop_body]
 def bad_vert_loop1.body
   (ar : Slice Std.U32) (uf : union_find.Uf) (bad : Bool) (j : Std.Usize) :
@@ -4921,7 +5019,7 @@ def bad_vert_loop1.body
     else ok (done bad)
 
 /-- [forge_bool_core::bad_vert]: loop 3:
-    Source: 'src/lib.rs', lines 1:0-771:5 -/
+    Source: 'src/lib.rs', lines 1:0-914:5 -/
 @[rust_loop]
 def bad_vert_loop1
   (ar : Slice Std.U32) (uf : union_find.Uf) (bad : Bool) (j : Std.Usize) :
@@ -4932,7 +5030,7 @@ def bad_vert_loop1
     (uf, bad, j)
 
 /-- [forge_bool_core::bad_vert]:
-    Source: 'src/lib.rs', lines 738:0-773:1 -/
+    Source: 'src/lib.rs', lines 881:0-916:1 -/
 def bad_vert
   (l : Ledger) (ext : Ext) (a : Assembled) (is_edge : Slice Bool) (v : Std.U32)
   (ar : Slice Std.U32) :
@@ -4947,161 +5045,102 @@ def bad_vert
       Std.U32)) 0#usize
   bad_vert_loop1 ar uf1 false 1#usize
 
-/-- [forge_bool_core::keep_on]: loop body 1:
-    Source: 'src/lib.rs', lines 669:8-672:9 -/
+/-- [forge_bool_core::core_k]: loop body 0:
+    Source: 'src/lib.rs', lines 826:4-835:5 -/
 @[rust_loop_body]
-def keep_on_loop0_loop0.body
-  (memb : Slice (alloc.vec.Vec Bool)) (nb : Std.Usize) (t : Std.Usize)
-  (m : alloc.vec.Vec Bool) (i : Std.Usize) :
-  Result (ControlFlow ((alloc.vec.Vec Bool) × Std.Usize) (alloc.vec.Vec Bool))
-  := do
-  if i < nb
-  then
-    let v ← Slice.index_usize memb i
-    let b ←
-      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Bool) v t
-    let m1 ← alloc.vec.Vec.push m b
-    let i1 ← i + 1#usize
-    ok (cont (m1, i1))
-  else ok (done m)
-
-/-- [forge_bool_core::keep_on]: loop 1:
-    Source: 'src/lib.rs', lines 669:8-672:9 -/
-@[rust_loop]
-def keep_on_loop0_loop0
-  (memb : Slice (alloc.vec.Vec Bool)) (nb : Std.Usize) (t : Std.Usize)
-  (m : alloc.vec.Vec Bool) (i : Std.Usize) :
-  Result (alloc.vec.Vec Bool)
-  := do
-  loop
-    (fun (m1, i1) => keep_on_loop0_loop0.body memb nb t m1 i1)
-    (m, i)
-
-/-- [forge_bool_core::keep_on]: loop body 0:
-    Source: 'src/lib.rs', lines 666:4-675:5 -/
-@[rust_loop_body]
-def keep_on_loop0.body
-  (s : Split) (rule : Rule) (memb : Slice (alloc.vec.Vec Bool))
-  (nb : Std.Usize) (keep : alloc.vec.Vec Bool) (t : Std.Usize) :
-  Result (ControlFlow ((alloc.vec.Vec Bool) × Std.Usize) ((alloc.vec.Vec
-    Std.U32) × (alloc.vec.Vec Std.U32) × (alloc.vec.Vec Std.U32) ×
-    (alloc.vec.Vec Std.U32) × (alloc.vec.Vec Std.U32) × (alloc.vec.Vec
-    Std.U32) × (alloc.vec.Vec (alloc.vec.Vec Bool)) × (alloc.vec.Vec Bool)))
-  := do
-  let i := alloc.vec.Vec.len s.topes
-  if t < i
-  then
-    let m ← keep_on_loop0_loop0 memb nb t (alloc.vec.Vec.new Bool) 0#usize
-    let s1 := alloc.vec.Vec.deref m
-    let b ← apply_rule rule s1
-    let keep1 ← alloc.vec.Vec.push keep b
-    let t1 ← t + 1#usize
-    ok (cont (keep1, t1))
-  else
-    ok (done (s.facets, s.plus, s.minus, s.topes, s.tope_pos, s.first_face,
-      s.piece_of, keep))
-
-/-- [forge_bool_core::keep_on]: loop 0:
-    Source: 'src/lib.rs', lines 666:4-675:5 -/
-@[rust_loop]
-def keep_on_loop0
-  (s : Split) (rule : Rule) (memb : Slice (alloc.vec.Vec Bool))
-  (nb : Std.Usize) (keep : alloc.vec.Vec Bool) (t : Std.Usize) :
-  Result ((alloc.vec.Vec Std.U32) × (alloc.vec.Vec Std.U32) × (alloc.vec.Vec
-    Std.U32) × (alloc.vec.Vec Std.U32) × (alloc.vec.Vec Std.U32) ×
-    (alloc.vec.Vec Std.U32) × (alloc.vec.Vec (alloc.vec.Vec Bool)) ×
-    (alloc.vec.Vec Bool))
-  := do
-  loop
-    (fun (keep1, t1) => keep_on_loop0.body s rule memb nb keep1 t1)
-    (keep, t)
-
-/-- [forge_bool_core::keep_on]: loop body 2:
-    Source: 'src/lib.rs', lines 683:4-692:5 -/
-@[rust_loop_body]
-def keep_on_loop1.body
-  (v : alloc.vec.Vec Std.U32) (v1 : alloc.vec.Vec Std.U32)
-  (v2 : alloc.vec.Vec Std.U32) (v3 : alloc.vec.Vec Std.U32)
-  (keep : alloc.vec.Vec Bool) (v4 : alloc.vec.Vec Std.U32)
-  (v5 : alloc.vec.Vec Sgn) (v6 : alloc.vec.Vec Std.U32) (k : Std.Usize) :
+def core_k_loop0.body
+  (s : Split) (keep : Slice Bool) (v : alloc.vec.Vec Std.U32)
+  (v1 : alloc.vec.Vec Sgn) (v2 : alloc.vec.Vec Std.U32) (k : Std.Usize) :
   Result (ControlFlow ((alloc.vec.Vec Std.U32) × (alloc.vec.Vec Sgn) ×
     (alloc.vec.Vec Std.U32) × Std.Usize) ((alloc.vec.Vec Std.U32) ×
+    (alloc.vec.Vec Std.U32) × (alloc.vec.Vec Std.U32) × (alloc.vec.Vec
+    Std.U32) × (alloc.vec.Vec Std.U32) × (alloc.vec.Vec Std.U32) ×
+    (alloc.vec.Vec (alloc.vec.Vec Bool)) × (alloc.vec.Vec Std.U32) ×
     (alloc.vec.Vec Sgn) × (alloc.vec.Vec Std.U32)))
   := do
-  let i := alloc.vec.Vec.len v
+  let i := alloc.vec.Vec.len s.facets
   if k < i
   then
     let i1 ←
-      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32) v1 k
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32)
+        s.plus k
     let i2 ← lift (UScalar.cast .Usize i1)
     let i3 ←
-      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32) v3 i2
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32)
+        s.tope_pos i2
     let i4 ← lift (UScalar.cast .Usize i3)
-    let kp ←
-      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Bool) keep i4
+    let kp ← Slice.index_usize keep i4
     let i5 ←
-      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32) v2 k
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32)
+        s.minus k
     let i6 ← lift (UScalar.cast .Usize i5)
     let i7 ←
-      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32) v3 i6
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32)
+        s.tope_pos i6
     let i8 ← lift (UScalar.cast .Usize i7)
-    let km ←
-      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Bool) keep i8
-    let (v7, v8, v9) ←
+    let km ← Slice.index_usize keep i8
+    let (v3, v4, v5) ←
       if kp != km
       then
         do
-        let i9 := alloc.vec.Vec.len v4
+        let i9 := alloc.vec.Vec.len v
         let i10 ←
-          alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32) v
-            k
+          alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32)
+            s.facets k
         let i11 ← lift (UScalar.cast .Usize i10)
         let (_, index_mut_back) ←
           alloc.vec.Vec.index_mut (core.slice.index.SliceIndexUsizeSlice
-            Std.U32) v6 i11
+            Std.U32) v2 i11
         let i12 ← lift (UScalar.cast .U32 i9)
-        let v10 ← alloc.vec.Vec.push v4 i10
+        let v6 ← alloc.vec.Vec.push v i10
         if km
         then
-          let v11 ← alloc.vec.Vec.push v5 Sgn.Pos
-          let v12 := index_mut_back i12
-          ok (v10, v11, v12)
+          let v7 ← alloc.vec.Vec.push v1 Sgn.Pos
+          let v8 := index_mut_back i12
+          ok (v6, v7, v8)
         else
-          let v11 ← alloc.vec.Vec.push v5 Sgn.Neg
-          let v12 := index_mut_back i12
-          ok (v10, v11, v12)
-      else ok (v4, v5, v6)
+          let v7 ← alloc.vec.Vec.push v1 Sgn.Neg
+          let v8 := index_mut_back i12
+          ok (v6, v7, v8)
+      else ok (v, v1, v2)
     let k1 ← k + 1#usize
-    ok (cont (v7, v8, v9, k1))
-  else ok (done (v4, v5, v6))
+    ok (cont (v3, v4, v5, k1))
+  else
+    ok (done (s.facets, s.plus, s.minus, s.topes, s.tope_pos, s.first_face,
+      s.piece_of, v, v1, v2))
 
-/-- [forge_bool_core::keep_on]: loop 2:
-    Source: 'src/lib.rs', lines 683:4-692:5 -/
+/-- [forge_bool_core::core_k]: loop 0:
+    Source: 'src/lib.rs', lines 826:4-835:5 -/
 @[rust_loop]
-def keep_on_loop1
-  (v : alloc.vec.Vec Std.U32) (v1 : alloc.vec.Vec Std.U32)
-  (v2 : alloc.vec.Vec Std.U32) (v3 : alloc.vec.Vec Std.U32)
-  (keep : alloc.vec.Vec Bool) (v4 : alloc.vec.Vec Std.U32)
-  (v5 : alloc.vec.Vec Sgn) (v6 : alloc.vec.Vec Std.U32) (k : Std.Usize) :
-  Result ((alloc.vec.Vec Std.U32) × (alloc.vec.Vec Sgn) × (alloc.vec.Vec
-    Std.U32))
+def core_k_loop0
+  (s : Split) (keep : Slice Bool) (v : alloc.vec.Vec Std.U32)
+  (v1 : alloc.vec.Vec Sgn) (v2 : alloc.vec.Vec Std.U32) (k : Std.Usize) :
+  Result ((alloc.vec.Vec Std.U32) × (alloc.vec.Vec Std.U32) × (alloc.vec.Vec
+    Std.U32) × (alloc.vec.Vec Std.U32) × (alloc.vec.Vec Std.U32) ×
+    (alloc.vec.Vec Std.U32) × (alloc.vec.Vec (alloc.vec.Vec Bool)) ×
+    (alloc.vec.Vec Std.U32) × (alloc.vec.Vec Sgn) × (alloc.vec.Vec Std.U32))
   := do
   loop
-    (fun (v7, v8, v9, k1) => keep_on_loop1.body v v1 v2 v3 keep v7 v8 v9 k1)
-    (v4, v5, v6, k)
+    (fun (v3, v4, v5, k1) => core_k_loop0.body s keep v3 v4 v5 k1)
+    (v, v1, v2, k)
 
-/-- [forge_bool_core::keep_on]: loop body 3:
-    Source: 'src/lib.rs', lines 696:4-702:5 -/
+/-- [forge_bool_core::core_k]: loop body 1:
+    Source: 'src/lib.rs', lines 839:4-845:5 -/
 @[rust_loop_body]
-def keep_on_loop2.body
-  (v : alloc.vec.Vec CellId) (is_edge : alloc.vec.Vec Bool) (k : Std.Usize) :
-  Result (ControlFlow ((alloc.vec.Vec Bool) × Std.Usize) (alloc.vec.Vec Bool))
+def core_k_loop1.body
+  (l : Ledger) (is_edge : alloc.vec.Vec Bool) (k : Std.Usize) :
+  Result (ControlFlow ((alloc.vec.Vec Bool) × Std.Usize) (Std.U32 ×
+    (alloc.vec.Vec BodyId) × (alloc.vec.Vec Std.U32) × (alloc.vec.Vec
+    (alloc.vec.Vec Sgn)) × (alloc.vec.Vec (CellId × FaceId)) ×
+    (alloc.vec.Vec (CellId × BodyId)) × (alloc.vec.Vec CellId) ×
+    (alloc.vec.Vec CellId) × (alloc.vec.Vec Bool)))
   := do
-  let i := alloc.vec.Vec.len v
+  let i := alloc.vec.Vec.len l.edges
   if k < i
   then
     let ci ←
-      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice CellId) v k
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice CellId)
+        l.edges k
     let i1 ← lift (UScalar.cast .Usize ci)
     let i2 := alloc.vec.Vec.len is_edge
     let is_edge1 ←
@@ -5116,23 +5155,28 @@ def keep_on_loop2.body
       else ok is_edge
     let k1 ← k + 1#usize
     ok (cont (is_edge1, k1))
-  else ok (done is_edge)
+  else
+    ok (done (l.nb, l.face_body, l.face_class, l.cells, l.pieces, l.inside,
+      l.edges, l.verts, is_edge))
 
-/-- [forge_bool_core::keep_on]: loop 3:
-    Source: 'src/lib.rs', lines 696:4-702:5 -/
+/-- [forge_bool_core::core_k]: loop 1:
+    Source: 'src/lib.rs', lines 839:4-845:5 -/
 @[rust_loop]
-def keep_on_loop2
-  (v : alloc.vec.Vec CellId) (is_edge : alloc.vec.Vec Bool) (k : Std.Usize) :
-  Result (alloc.vec.Vec Bool)
+def core_k_loop1
+  (l : Ledger) (is_edge : alloc.vec.Vec Bool) (k : Std.Usize) :
+  Result (Std.U32 × (alloc.vec.Vec BodyId) × (alloc.vec.Vec Std.U32) ×
+    (alloc.vec.Vec (alloc.vec.Vec Sgn)) × (alloc.vec.Vec (CellId × FaceId))
+    × (alloc.vec.Vec (CellId × BodyId)) × (alloc.vec.Vec CellId) ×
+    (alloc.vec.Vec CellId) × (alloc.vec.Vec Bool))
   := do
   loop
-    (fun (is_edge1, k1) => keep_on_loop2.body v is_edge1 k1)
+    (fun (is_edge1, k1) => core_k_loop1.body l is_edge1 k1)
     (is_edge, k)
 
-/-- [forge_bool_core::keep_on]: loop body 4:
-    Source: 'src/lib.rs', lines 1:0-714:5 -/
+/-- [forge_bool_core::core_k]: loop body 2:
+    Source: 'src/lib.rs', lines 1:0-857:5 -/
 @[rust_loop_body]
-def keep_on_loop3.body
+def core_k_loop2.body
   (i : Std.U32) (v : alloc.vec.Vec BodyId) (v1 : alloc.vec.Vec Std.U32)
   (v2 : alloc.vec.Vec (alloc.vec.Vec Sgn))
   (v3 : alloc.vec.Vec (CellId × FaceId))
@@ -5172,10 +5216,10 @@ def keep_on_loop3.body
     else ok (done (bad, around_e))
   else ok (done (bad, around_e))
 
-/-- [forge_bool_core::keep_on]: loop 4:
-    Source: 'src/lib.rs', lines 1:0-714:5 -/
+/-- [forge_bool_core::core_k]: loop 2:
+    Source: 'src/lib.rs', lines 1:0-857:5 -/
 @[rust_loop]
-def keep_on_loop3
+def core_k_loop2
   (i : Std.U32) (v : alloc.vec.Vec BodyId) (v1 : alloc.vec.Vec Std.U32)
   (v2 : alloc.vec.Vec (alloc.vec.Vec Sgn))
   (v3 : alloc.vec.Vec (CellId × FaceId))
@@ -5186,14 +5230,14 @@ def keep_on_loop3
   Result (Std.U32 × (alloc.vec.Vec (alloc.vec.Vec Std.U32)))
   := do
   loop
-    (fun (bad1, around_e1, k1) => keep_on_loop3.body i v v1 v2 v3 v4 v5 v6 ext
+    (fun (bad1, around_e1, k1) => core_k_loop2.body i v v1 v2 v3 v4 v5 v6 ext
       v7 v8 v9 bad1 around_e1 k1)
     (bad, around_e, k)
 
-/-- [forge_bool_core::keep_on]: loop body 5:
-    Source: 'src/lib.rs', lines 1:0-725:5 -/
+/-- [forge_bool_core::core_k]: loop body 3:
+    Source: 'src/lib.rs', lines 1:0-868:5 -/
 @[rust_loop_body]
-def keep_on_loop4.body
+def core_k_loop3.body
   (i : Std.U32) (v : alloc.vec.Vec BodyId) (v1 : alloc.vec.Vec Std.U32)
   (v2 : alloc.vec.Vec (alloc.vec.Vec Sgn))
   (v3 : alloc.vec.Vec (CellId × FaceId))
@@ -5247,10 +5291,10 @@ def keep_on_loop4.body
     else ok (done (bad, around_v))
   else ok (done (bad, around_v))
 
-/-- [forge_bool_core::keep_on]: loop 5:
-    Source: 'src/lib.rs', lines 1:0-725:5 -/
+/-- [forge_bool_core::core_k]: loop 3:
+    Source: 'src/lib.rs', lines 1:0-868:5 -/
 @[rust_loop]
-def keep_on_loop4
+def core_k_loop3
   (i : Std.U32) (v : alloc.vec.Vec BodyId) (v1 : alloc.vec.Vec Std.U32)
   (v2 : alloc.vec.Vec (alloc.vec.Vec Sgn))
   (v3 : alloc.vec.Vec (CellId × FaceId))
@@ -5262,36 +5306,31 @@ def keep_on_loop4
   Result (Std.U32 × (alloc.vec.Vec (alloc.vec.Vec Std.U32)))
   := do
   loop
-    (fun (bad1, around_v1, k1) => keep_on_loop4.body i v v1 v2 v3 v4 v5 v6 ext
+    (fun (bad1, around_v1, k1) => core_k_loop3.body i v v1 v2 v3 v4 v5 v6 ext
       v7 v8 v9 is_edge bad1 around_v1 k1)
     (bad, around_v, k)
 
-/-- [forge_bool_core::keep_on]:
-    Source: 'src/lib.rs', lines 661:0-735:1 -/
-def keep_on
-  (l : Ledger) (ext : Ext) (s : Split) (rule : Rule)
-  (memb : Slice (alloc.vec.Vec Bool)) :
+/-- [forge_bool_core::core_k]:
+    Source: 'src/lib.rs', lines 818:0-878:1 -/
+def core_k
+  (l : Ledger) (ext : Ext) (s : Split) (keep : Slice Bool) :
   Result Outcome
   := do
-  let nb ← lift (UScalar.cast .Usize l.nb)
-  let (v, v1, v2, v3, v4, v5, v6, keep) ←
-    keep_on_loop0 s rule memb nb (alloc.vec.Vec.new Bool) 0#usize
   let i ← ncells l ext
-  let v7 ← alloc.vec.from_elem core.clone.CloneU32 NONE i
-  let (v8, v9, v10) ←
-    keep_on_loop1 v v1 v2 v4 keep (alloc.vec.Vec.new Std.U32)
-      (alloc.vec.Vec.new Sgn) v7 0#usize
+  let v ← alloc.vec.from_elem core.clone.CloneU32 NONE i
+  let (v1, v2, v3, v4, v5, v6, v7, v8, v9, v10) ←
+    core_k_loop0 s keep (alloc.vec.Vec.new Std.U32) (alloc.vec.Vec.new Sgn) v
+      0#usize
   let i1 ← ncells l ext
   let is_edge ← alloc.vec.from_elem core.clone.CloneBool false i1
-  let is_edge1 ← keep_on_loop2 l.edges is_edge 0#usize
+  let (i2, v11, v12, v13, v14, v15, v16, v17, is_edge1) ←
+    core_k_loop1 l is_edge 0#usize
   let (bad, around_e) ←
-    keep_on_loop3 l.nb l.face_body l.face_class l.cells l.pieces l.inside
-      l.edges l.verts ext v8 v9 v10 NONE (alloc.vec.Vec.new (alloc.vec.Vec
-      Std.U32)) 0#usize
+    core_k_loop2 i2 v11 v12 v13 v14 v15 v16 v17 ext v8 v9 v10 NONE
+      (alloc.vec.Vec.new (alloc.vec.Vec Std.U32)) 0#usize
   let (bad1, around_v) ←
-    keep_on_loop4 l.nb l.face_body l.face_class l.cells l.pieces l.inside
-      l.edges l.verts ext v8 v9 v10 is_edge1 bad (alloc.vec.Vec.new
-      (alloc.vec.Vec Std.U32)) 0#usize
+    core_k_loop3 i2 v11 v12 v13 v14 v15 v16 v17 ext v8 v9 v10 is_edge1 bad
+      (alloc.vec.Vec.new (alloc.vec.Vec Std.U32)) 0#usize
   if bad1 != NONE
   then ok (Outcome.Refused (Refusal.ZeroThickness bad1))
   else
@@ -5303,20 +5342,725 @@ def keep_on
       let s2 := alloc.vec.Vec.deref around_e
       let s3 := alloc.vec.Vec.deref around_v
       let b1 ←
-        unify l ext
+        unify
           {
-            facets := v,
-            plus := v1,
-            minus := v2,
-            topes := v3,
-            tope_pos := v4,
-            first_face := v5,
-            piece_of := v6
+            nb := i2,
+            face_body := v11,
+            face_class := v12,
+            cells := v13,
+            pieces := v14,
+            inside := v15,
+            edges := v16,
+            verts := v17
+          } ext
+          {
+            facets := v1,
+            plus := v2,
+            minus := v3,
+            topes := v4,
+            tope_pos := v5,
+            first_face := v6,
+            piece_of := v7
           } { result := v8, orient := v9, rpos := v10 } s1 s2 s3
       ok (Outcome.Ok b1)
 
+/-- [forge_bool_core::collapse]: loop body 0:
+    Source: 'src/lib.rs', lines 1:0-714:5 -/
+@[rust_loop_body]
+def collapse_loop0.body
+  (v : alloc.vec.Vec Std.U32) (mt : MetricLedger) (n : Std.Usize)
+  (is_thin : alloc.vec.Vec Bool) (any : Bool) (k : Std.Usize) :
+  Result (ControlFlow ((alloc.vec.Vec Bool) × Bool × Std.Usize)
+    ((alloc.vec.Vec CellId) × (alloc.vec.Vec Bool) × Bool))
+  := do
+  let i := alloc.vec.Vec.len mt.thin
+  if k < i
+  then
+    let ci ←
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice CellId)
+        mt.thin k
+    let c ← lift (UScalar.cast .Usize ci)
+    let (is_thin1, any1) ←
+      if c < n
+      then
+        do
+        let i1 ←
+          alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32) v
+            c
+        if i1 != NONE
+        then
+          let i2 ← lift (UScalar.cast .Usize i1)
+          let (_, index_mut_back) ←
+            alloc.vec.Vec.index_mut (core.slice.index.SliceIndexUsizeSlice
+              Bool) is_thin i2
+          let is_thin2 := index_mut_back true
+          ok (is_thin2, true)
+        else ok (is_thin, any)
+      else ok (is_thin, any)
+    let k1 ← k + 1#usize
+    ok (cont (is_thin1, any1, k1))
+  else ok (done (mt.enclosed, is_thin, any))
+
+/-- [forge_bool_core::collapse]: loop 0:
+    Source: 'src/lib.rs', lines 1:0-714:5 -/
+@[rust_loop]
+def collapse_loop0
+  (v : alloc.vec.Vec Std.U32) (mt : MetricLedger) (n : Std.Usize)
+  (is_thin : alloc.vec.Vec Bool) (any : Bool) (k : Std.Usize) :
+  Result ((alloc.vec.Vec CellId) × (alloc.vec.Vec Bool) × Bool)
+  := do
+  loop
+    (fun (is_thin1, any1, k1) => collapse_loop0.body v mt n is_thin1 any1 k1)
+    (is_thin, any, k)
+
+/-- [forge_bool_core::collapse]: loop body 1:
+    Source: 'src/lib.rs', lines 1:0-724:9 -/
+@[rust_loop_body]
+def collapse_loop1.body
+  (v : alloc.vec.Vec Std.U32) (v1 : alloc.vec.Vec CellId) (n : Std.Usize)
+  (is_enc : alloc.vec.Vec Bool) (k : Std.Usize) :
+  Result (ControlFlow ((alloc.vec.Vec Bool) × Std.Usize) (alloc.vec.Vec Bool))
+  := do
+  let i := alloc.vec.Vec.len v1
+  if k < i
+  then
+    let ci ←
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice CellId) v1 k
+    let c ← lift (UScalar.cast .Usize ci)
+    let is_enc1 ←
+      if c < n
+      then
+        do
+        let i1 ←
+          alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32) v
+            c
+        if i1 != NONE
+        then
+          let i2 ← lift (UScalar.cast .Usize i1)
+          let (_, index_mut_back) ←
+            alloc.vec.Vec.index_mut (core.slice.index.SliceIndexUsizeSlice
+              Bool) is_enc i2
+          ok (index_mut_back true)
+        else ok is_enc
+      else ok is_enc
+    let k1 ← k + 1#usize
+    ok (cont (is_enc1, k1))
+  else ok (done is_enc)
+
+/-- [forge_bool_core::collapse]: loop 1:
+    Source: 'src/lib.rs', lines 1:0-724:9 -/
+@[rust_loop]
+def collapse_loop1
+  (v : alloc.vec.Vec Std.U32) (v1 : alloc.vec.Vec CellId) (n : Std.Usize)
+  (is_enc : alloc.vec.Vec Bool) (k : Std.Usize) :
+  Result (alloc.vec.Vec Bool)
+  := do
+  loop
+    (fun (is_enc1, k1) => collapse_loop1.body v v1 n is_enc1 k1)
+    (is_enc, k)
+
+/-- [forge_bool_core::collapse]: loop body 2:
+    Source: 'src/lib.rs', lines 1:0-735:9 -/
+@[rust_loop_body]
+def collapse_loop2.body
+  (v : alloc.vec.Vec Std.U32) (v1 : alloc.vec.Vec Std.U32)
+  (v2 : alloc.vec.Vec Std.U32) (v3 : alloc.vec.Vec Std.U32)
+  (is_thin : alloc.vec.Vec Bool) (uf : union_find.Uf) (k : Std.Usize) :
+  Result (ControlFlow (union_find.Uf × Std.Usize) union_find.Uf)
+  := do
+  let i := alloc.vec.Vec.len v
+  if k < i
+  then
+    let i1 ←
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32) v1 k
+    let i2 ← lift (UScalar.cast .Usize i1)
+    let i3 ←
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32) v3 i2
+    let p ← lift (UScalar.cast .Usize i3)
+    let i4 ←
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32) v2 k
+    let i5 ← lift (UScalar.cast .Usize i4)
+    let i6 ←
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32) v3 i5
+    let q ← lift (UScalar.cast .Usize i6)
+    let b ←
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Bool) is_thin
+        p
+    let uf1 ←
+      if b
+      then
+        do
+        let b1 ←
+          alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Bool)
+            is_thin q
+        if b1
+        then union_find.Uf.union uf p q
+        else ok uf
+      else ok uf
+    let k1 ← k + 1#usize
+    ok (cont (uf1, k1))
+  else ok (done uf)
+
+/-- [forge_bool_core::collapse]: loop 2:
+    Source: 'src/lib.rs', lines 1:0-735:9 -/
+@[rust_loop]
+def collapse_loop2
+  (v : alloc.vec.Vec Std.U32) (v1 : alloc.vec.Vec Std.U32)
+  (v2 : alloc.vec.Vec Std.U32) (v3 : alloc.vec.Vec Std.U32)
+  (is_thin : alloc.vec.Vec Bool) (uf : union_find.Uf) (k : Std.Usize) :
+  Result union_find.Uf
+  := do
+  loop
+    (fun (uf1, k1) => collapse_loop2.body v v1 v2 v3 is_thin uf1 k1)
+    (uf, k)
+
+/-- [forge_bool_core::collapse]: loop body 3:
+    Source: 'src/lib.rs', lines 1:0-746:9 -/
+@[rust_loop_body]
+def collapse_loop3.body
+  (nt : Std.Usize) (is_thin : alloc.vec.Vec Bool) (is_enc : alloc.vec.Vec Bool)
+  (uf : union_find.Uf) (all_enc : alloc.vec.Vec Bool) (t : Std.Usize) :
+  Result (ControlFlow (union_find.Uf × (alloc.vec.Vec Bool) × Std.Usize)
+    (union_find.Uf × (alloc.vec.Vec Bool)))
+  := do
+  if t < nt
+  then
+    let b ←
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Bool) is_thin
+        t
+    let (uf1, all_enc1) ←
+      if b
+      then
+        do
+        let b1 ←
+          alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Bool)
+            is_enc t
+        if b1
+        then ok (uf, all_enc)
+        else
+          let (r, uf2) ← union_find.Uf.find uf t
+          let (_, index_mut_back) ←
+            alloc.vec.Vec.index_mut (core.slice.index.SliceIndexUsizeSlice
+              Bool) all_enc r
+          let all_enc2 := index_mut_back false
+          ok (uf2, all_enc2)
+      else ok (uf, all_enc)
+    let t1 ← t + 1#usize
+    ok (cont (uf1, all_enc1, t1))
+  else ok (done (uf, all_enc))
+
+/-- [forge_bool_core::collapse]: loop 3:
+    Source: 'src/lib.rs', lines 1:0-746:9 -/
+@[rust_loop]
+def collapse_loop3
+  (nt : Std.Usize) (is_thin : alloc.vec.Vec Bool) (is_enc : alloc.vec.Vec Bool)
+  (uf : union_find.Uf) (all_enc : alloc.vec.Vec Bool) (t : Std.Usize) :
+  Result (union_find.Uf × (alloc.vec.Vec Bool))
+  := do
+  loop
+    (fun (uf1, all_enc1, t1) => collapse_loop3.body nt is_thin is_enc uf1
+      all_enc1 t1)
+    (uf, all_enc, t)
+
+/-- [forge_bool_core::collapse]: loop body 4:
+    Source: 'src/lib.rs', lines 1:0-760:9 -/
+@[rust_loop_body]
+def collapse_loop4.body
+  (v : alloc.vec.Vec Std.U32) (v1 : alloc.vec.Vec Std.U32)
+  (v2 : alloc.vec.Vec Std.U32) (v3 : alloc.vec.Vec Std.U32)
+  (is_thin : alloc.vec.Vec Bool) (uf : union_find.Uf)
+  (rim : alloc.vec.Vec (alloc.vec.Vec Std.U32)) (k : Std.Usize) :
+  Result (ControlFlow (union_find.Uf × (alloc.vec.Vec (alloc.vec.Vec Std.U32))
+    × Std.Usize) (union_find.Uf × (alloc.vec.Vec (alloc.vec.Vec Std.U32))))
+  := do
+  let i := alloc.vec.Vec.len v
+  if k < i
+  then
+    let i1 ←
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32) v1 k
+    let i2 ← lift (UScalar.cast .Usize i1)
+    let i3 ←
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32) v3 i2
+    let p ← lift (UScalar.cast .Usize i3)
+    let i4 ←
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32) v2 k
+    let i5 ← lift (UScalar.cast .Usize i4)
+    let i6 ←
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32) v3 i5
+    let q ← lift (UScalar.cast .Usize i6)
+    let b ←
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Bool) is_thin
+        p
+    let (uf1, rim1) ←
+      if b
+      then
+        do
+        let b1 ←
+          alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Bool)
+            is_thin q
+        if b1
+        then ok (uf, rim)
+        else
+          let (r, uf2) ← union_find.Uf.find uf p
+          let (v4, index_mut_back) ←
+            alloc.vec.Vec.index_mut (core.slice.index.SliceIndexUsizeSlice
+              (alloc.vec.Vec Std.U32)) rim r
+          let i7 ← lift (UScalar.cast .U32 q)
+          let v5 ← alloc.vec.Vec.push v4 i7
+          let rim2 := index_mut_back v5
+          ok (uf2, rim2)
+      else ok (uf, rim)
+    let b1 ←
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Bool) is_thin
+        q
+    let (uf2, rim2) ←
+      if b1
+      then
+        if b
+        then ok (uf1, rim1)
+        else
+          do
+          let (r, uf3) ← union_find.Uf.find uf1 q
+          let (v4, index_mut_back) ←
+            alloc.vec.Vec.index_mut (core.slice.index.SliceIndexUsizeSlice
+              (alloc.vec.Vec Std.U32)) rim1 r
+          let i7 ← lift (UScalar.cast .U32 p)
+          let v5 ← alloc.vec.Vec.push v4 i7
+          let rim3 := index_mut_back v5
+          ok (uf3, rim3)
+      else ok (uf1, rim1)
+    let k1 ← k + 1#usize
+    ok (cont (uf2, rim2, k1))
+  else ok (done (uf, rim))
+
+/-- [forge_bool_core::collapse]: loop 4:
+    Source: 'src/lib.rs', lines 1:0-760:9 -/
+@[rust_loop]
+def collapse_loop4
+  (v : alloc.vec.Vec Std.U32) (v1 : alloc.vec.Vec Std.U32)
+  (v2 : alloc.vec.Vec Std.U32) (v3 : alloc.vec.Vec Std.U32)
+  (is_thin : alloc.vec.Vec Bool) (uf : union_find.Uf)
+  (rim : alloc.vec.Vec (alloc.vec.Vec Std.U32)) (k : Std.Usize) :
+  Result (union_find.Uf × (alloc.vec.Vec (alloc.vec.Vec Std.U32)))
+  := do
+  loop
+    (fun (uf1, rim1, k1) => collapse_loop4.body v v1 v2 v3 is_thin uf1 rim1 k1)
+    (uf, rim, k)
+
+/-- [forge_bool_core::collapse]: loop body 6:
+    Source: 'src/lib.rs', lines 767:16-772:17 -/
+@[rust_loop_body]
+def collapse_loop5_loop0.body
+  (rim : alloc.vec.Vec (alloc.vec.Vec Std.U32)) (t : Std.Usize)
+  (d : alloc.vec.Vec Std.U32) (j : Std.Usize) :
+  Result (ControlFlow ((alloc.vec.Vec Std.U32) × Std.Usize) (alloc.vec.Vec
+    Std.U32))
+  := do
+  let v ←
+    alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice (alloc.vec.Vec
+      Std.U32)) rim t
+  let i := alloc.vec.Vec.len v
+  if j < i
+  then
+    let b ← alloc.vec.Vec.is_empty d
+    let d1 ←
+      if b
+      then
+        do
+        let i1 ←
+          alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32) v
+            j
+        alloc.vec.Vec.push d i1
+      else
+        do
+        let i1 := alloc.vec.Vec.len d
+        let i2 ← i1 - 1#usize
+        let i3 ←
+          alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32) d
+            i2
+        let i4 ←
+          alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32) v
+            j
+        if i3 != i4
+        then
+          let i5 ←
+            alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32)
+              v j
+          alloc.vec.Vec.push d i5
+        else ok d
+    let j1 ← j + 1#usize
+    ok (cont (d1, j1))
+  else ok (done d)
+
+/-- [forge_bool_core::collapse]: loop 6:
+    Source: 'src/lib.rs', lines 767:16-772:17 -/
+@[rust_loop]
+def collapse_loop5_loop0
+  (rim : alloc.vec.Vec (alloc.vec.Vec Std.U32)) (t : Std.Usize)
+  (d : alloc.vec.Vec Std.U32) (j : Std.Usize) :
+  Result (alloc.vec.Vec Std.U32)
+  := do
+  loop
+    (fun (d1, j1) => collapse_loop5_loop0.body rim t d1 j1)
+    (d, j)
+
+/-- [forge_bool_core::collapse]: loop body 5:
+    Source: 'src/lib.rs', lines 762:8-776:9 -/
+@[rust_loop_body]
+def collapse_loop5.body
+  (nt : Std.Usize) (rim : alloc.vec.Vec (alloc.vec.Vec Std.U32))
+  (t : Std.Usize) :
+  Result (ControlFlow ((alloc.vec.Vec (alloc.vec.Vec Std.U32)) × Std.Usize)
+    (alloc.vec.Vec (alloc.vec.Vec Std.U32)))
+  := do
+  if t < nt
+  then
+    let v ←
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice (alloc.vec.Vec
+        Std.U32)) rim t
+    let i := alloc.vec.Vec.len v
+    if i > 1#usize
+    then
+      let (v1, index_mut_back) ←
+        alloc.vec.Vec.index_mut (core.slice.index.SliceIndexUsizeSlice
+          (alloc.vec.Vec Std.U32)) rim t
+      let v2 ← sort.sort_u32 v1
+      let rim1 := index_mut_back v2
+      let d ← collapse_loop5_loop0 rim1 t (alloc.vec.Vec.new Std.U32) 0#usize
+      let (_, index_mut_back1) ←
+        alloc.vec.Vec.index_mut (core.slice.index.SliceIndexUsizeSlice
+          (alloc.vec.Vec Std.U32)) rim1 t
+      let t1 ← t + 1#usize
+      let rim2 := index_mut_back1 d
+      ok (cont (rim2, t1))
+    else let t1 ← t + 1#usize
+         ok (cont (rim, t1))
+  else ok (done rim)
+
+/-- [forge_bool_core::collapse]: loop 5:
+    Source: 'src/lib.rs', lines 762:8-776:9 -/
+@[rust_loop]
+def collapse_loop5
+  (nt : Std.Usize) (rim : alloc.vec.Vec (alloc.vec.Vec Std.U32))
+  (t : Std.Usize) :
+  Result (alloc.vec.Vec (alloc.vec.Vec Std.U32))
+  := do
+  loop
+    (fun (rim1, t1) => collapse_loop5.body nt rim1 t1)
+    (rim, t)
+
+/-- [forge_bool_core::collapse]: loop body 8:
+    Source: 'src/lib.rs', lines 1:0-793:17 -/
+@[rust_loop_body]
+def collapse_loop6_loop0.body
+  (keep : Slice Bool) (rm : alloc.vec.Vec Std.U32) (first : Bool)
+  (uniform : Bool) (j : Std.Usize) :
+  Result (ControlFlow (Bool × Std.Usize) Bool)
+  := do
+  if uniform
+  then
+    let i := alloc.vec.Vec.len rm
+    if j < i
+    then
+      let i1 ←
+        alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32) rm
+          j
+      let i2 ← lift (UScalar.cast .Usize i1)
+      let b ← Slice.index_usize keep i2
+      let j1 ← j + 1#usize
+      ok (cont (b = first, j1))
+    else ok (done uniform)
+  else ok (done uniform)
+
+/-- [forge_bool_core::collapse]: loop 8:
+    Source: 'src/lib.rs', lines 1:0-793:17 -/
+@[rust_loop]
+def collapse_loop6_loop0
+  (keep : Slice Bool) (rm : alloc.vec.Vec Std.U32) (first : Bool)
+  (uniform : Bool) (j : Std.Usize) :
+  Result Bool
+  := do
+  loop
+    (fun (uniform1, j1) => collapse_loop6_loop0.body keep rm first uniform1 j1)
+    (uniform, j)
+
+/-- [forge_bool_core::collapse]: loop body 7:
+    Source: 'src/lib.rs', lines 1:0-799:9 -/
+@[rust_loop_body]
+def collapse_loop6.body
+  (v : alloc.vec.Vec Std.U32) (keep : Slice Bool) (nt : Std.Usize)
+  (is_thin : alloc.vec.Vec Bool) (rim : alloc.vec.Vec (alloc.vec.Vec Std.U32))
+  (all_enc : alloc.vec.Vec Bool) (bad : Std.U32) (uf : union_find.Uf)
+  (t : Std.Usize) :
+  Result (ControlFlow (Std.U32 × union_find.Uf × Std.Usize) (Std.U32 ×
+    union_find.Uf))
+  := do
+  if bad = NONE
+  then
+    if t < nt
+    then
+      let b ←
+        alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Bool)
+          is_thin t
+      if b
+      then
+        let (r, uf1) ← union_find.Uf.find uf t
+        let rm ←
+          alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice
+            (alloc.vec.Vec Std.U32)) rim r
+        let b1 ← alloc.vec.Vec.is_empty rm
+        let first ←
+          if b1
+          then Slice.index_usize keep t
+          else
+            do
+            let i ←
+              alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice
+                Std.U32) rm 0#usize
+            let i1 ← lift (UScalar.cast .Usize i)
+            Slice.index_usize keep i1
+        let uniform ← collapse_loop6_loop0 keep rm first true 0#usize
+        let bad1 ←
+          if uniform
+          then
+            do
+            let b2 ←
+              alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Bool)
+                all_enc r
+            if b2
+            then ok bad
+            else
+              alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice
+                Std.U32) v t
+          else
+            alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32)
+              v t
+        let t1 ← t + 1#usize
+        ok (cont (bad1, uf1, t1))
+      else let t1 ← t + 1#usize
+           ok (cont (bad, uf, t1))
+    else ok (done (bad, uf))
+  else ok (done (bad, uf))
+
+/-- [forge_bool_core::collapse]: loop 7:
+    Source: 'src/lib.rs', lines 1:0-799:9 -/
+@[rust_loop]
+def collapse_loop6
+  (v : alloc.vec.Vec Std.U32) (keep : Slice Bool) (nt : Std.Usize)
+  (is_thin : alloc.vec.Vec Bool) (bad : Std.U32) (uf : union_find.Uf)
+  (rim : alloc.vec.Vec (alloc.vec.Vec Std.U32)) (all_enc : alloc.vec.Vec Bool)
+  (t : Std.Usize) :
+  Result (Std.U32 × union_find.Uf)
+  := do
+  loop
+    (fun (bad1, uf1, t1) => collapse_loop6.body v keep nt is_thin rim all_enc
+      bad1 uf1 t1)
+    (bad, uf, t)
+
+/-- [forge_bool_core::collapse]: loop body 9:
+    Source: 'src/lib.rs', lines 803:12-811:13 -/
+@[rust_loop_body]
+def collapse_loop7.body
+  (nt : Std.Usize) (is_thin : alloc.vec.Vec Bool)
+  (rim : alloc.vec.Vec (alloc.vec.Vec Std.U32)) (old : alloc.vec.Vec Bool)
+  (keep : Slice Bool) (uf : union_find.Uf) (t : Std.Usize) :
+  Result (ControlFlow ((Slice Bool) × union_find.Uf × Std.Usize) (Slice
+    Bool))
+  := do
+  if t < nt
+  then
+    let b ←
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Bool) is_thin
+        t
+    let (keep1, uf1) ←
+      if b
+      then
+        do
+        let (r, uf2) ← union_find.Uf.find uf t
+        let v ←
+          alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice
+            (alloc.vec.Vec Std.U32)) rim r
+        let b1 ← alloc.vec.Vec.is_empty v
+        let s ←
+          if b1
+          then ok keep
+          else
+            do
+            let i ←
+              alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice
+                Std.U32) v 0#usize
+            let i1 ← lift (UScalar.cast .Usize i)
+            let b2 ←
+              alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Bool)
+                old i1
+            Slice.update keep t b2
+        ok (s, uf2)
+      else ok (keep, uf)
+    let t1 ← t + 1#usize
+    ok (cont (keep1, uf1, t1))
+  else ok (done keep)
+
+/-- [forge_bool_core::collapse]: loop 9:
+    Source: 'src/lib.rs', lines 803:12-811:13 -/
+@[rust_loop]
+def collapse_loop7
+  (keep : Slice Bool) (nt : Std.Usize) (is_thin : alloc.vec.Vec Bool)
+  (uf : union_find.Uf) (rim : alloc.vec.Vec (alloc.vec.Vec Std.U32))
+  (old : alloc.vec.Vec Bool) (t : Std.Usize) :
+  Result (Slice Bool)
+  := do
+  loop
+    (fun (keep1, uf1, t1) => collapse_loop7.body nt is_thin rim old keep1 uf1
+      t1)
+    (keep, uf, t)
+
+/-- [forge_bool_core::collapse]:
+    Source: 'src/lib.rs', lines 700:0-815:1 -/
+def collapse
+  (l : Ledger) (ext : Ext) (s : Split) (keep : Slice Bool) (mt : MetricLedger)
+  :
+  Result (Std.U32 × (Slice Bool))
+  := do
+  let nt := alloc.vec.Vec.len s.topes
+  let n ← ncells l ext
+  let is_thin ← alloc.vec.from_elem core.clone.CloneBool false nt
+  let (v, is_thin1, any) ←
+    collapse_loop0 s.tope_pos mt n is_thin false 0#usize
+  if any
+  then
+    let is_enc ← collapse_loop1 s.tope_pos v n is_thin 0#usize
+    let uf ← union_find.Uf.new nt
+    let uf1 ←
+      collapse_loop2 s.facets s.plus s.minus s.tope_pos is_thin1 uf 0#usize
+    let rim ←
+      alloc.vec.from_elem (core.clone.CloneallocvecVec core.clone.CloneU32)
+        (alloc.vec.Vec.new Std.U32) nt
+    let all_enc ← alloc.vec.from_elem core.clone.CloneBool true nt
+    let (uf2, all_enc1) ←
+      collapse_loop3 nt is_thin1 is_enc uf1 all_enc 0#usize
+    let (uf3, rim1) ←
+      collapse_loop4 s.facets s.plus s.minus s.tope_pos is_thin1 uf2 rim
+        0#usize
+    let rim2 ← collapse_loop5 nt rim1 0#usize
+    let (bad, uf4) ←
+      collapse_loop6 s.topes keep nt is_thin1 NONE uf3 rim2 all_enc1 0#usize
+    if bad = NONE
+    then
+      let old ← alloc.slice.Slice.to_vec core.clone.CloneBool keep
+      let keep1 ← collapse_loop7 keep nt is_thin1 uf4 rim2 old 0#usize
+      ok (bad, keep1)
+    else ok (bad, keep)
+  else ok (NONE, keep)
+
+/-- [forge_bool_core::keep_on]: loop body 1:
+    Source: 'src/lib.rs', lines 679:8-682:9 -/
+@[rust_loop_body]
+def keep_on_loop0_loop0.body
+  (memb : Slice (alloc.vec.Vec Bool)) (nb : Std.Usize) (t : Std.Usize)
+  (m : alloc.vec.Vec Bool) (i : Std.Usize) :
+  Result (ControlFlow ((alloc.vec.Vec Bool) × Std.Usize) (alloc.vec.Vec Bool))
+  := do
+  if i < nb
+  then
+    let v ← Slice.index_usize memb i
+    let b ←
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Bool) v t
+    let m1 ← alloc.vec.Vec.push m b
+    let i1 ← i + 1#usize
+    ok (cont (m1, i1))
+  else ok (done m)
+
+/-- [forge_bool_core::keep_on]: loop 1:
+    Source: 'src/lib.rs', lines 679:8-682:9 -/
+@[rust_loop]
+def keep_on_loop0_loop0
+  (memb : Slice (alloc.vec.Vec Bool)) (nb : Std.Usize) (t : Std.Usize)
+  (m : alloc.vec.Vec Bool) (i : Std.Usize) :
+  Result (alloc.vec.Vec Bool)
+  := do
+  loop
+    (fun (m1, i1) => keep_on_loop0_loop0.body memb nb t m1 i1)
+    (m, i)
+
+/-- [forge_bool_core::keep_on]: loop body 0:
+    Source: 'src/lib.rs', lines 676:4-685:5 -/
+@[rust_loop_body]
+def keep_on_loop0.body
+  (s : Split) (rule : Rule) (memb : Slice (alloc.vec.Vec Bool))
+  (nb : Std.Usize) (keep : alloc.vec.Vec Bool) (t : Std.Usize) :
+  Result (ControlFlow ((alloc.vec.Vec Bool) × Std.Usize) ((alloc.vec.Vec
+    Std.U32) × (alloc.vec.Vec Std.U32) × (alloc.vec.Vec Std.U32) ×
+    (alloc.vec.Vec Std.U32) × (alloc.vec.Vec Std.U32) × (alloc.vec.Vec
+    Std.U32) × (alloc.vec.Vec (alloc.vec.Vec Bool)) × (alloc.vec.Vec Bool)))
+  := do
+  let i := alloc.vec.Vec.len s.topes
+  if t < i
+  then
+    let m ← keep_on_loop0_loop0 memb nb t (alloc.vec.Vec.new Bool) 0#usize
+    let s1 := alloc.vec.Vec.deref m
+    let b ← apply_rule rule s1
+    let keep1 ← alloc.vec.Vec.push keep b
+    let t1 ← t + 1#usize
+    ok (cont (keep1, t1))
+  else
+    ok (done (s.facets, s.plus, s.minus, s.topes, s.tope_pos, s.first_face,
+      s.piece_of, keep))
+
+/-- [forge_bool_core::keep_on]: loop 0:
+    Source: 'src/lib.rs', lines 676:4-685:5 -/
+@[rust_loop]
+def keep_on_loop0
+  (s : Split) (rule : Rule) (memb : Slice (alloc.vec.Vec Bool))
+  (nb : Std.Usize) (keep : alloc.vec.Vec Bool) (t : Std.Usize) :
+  Result ((alloc.vec.Vec Std.U32) × (alloc.vec.Vec Std.U32) × (alloc.vec.Vec
+    Std.U32) × (alloc.vec.Vec Std.U32) × (alloc.vec.Vec Std.U32) ×
+    (alloc.vec.Vec Std.U32) × (alloc.vec.Vec (alloc.vec.Vec Bool)) ×
+    (alloc.vec.Vec Bool))
+  := do
+  loop
+    (fun (keep1, t1) => keep_on_loop0.body s rule memb nb keep1 t1)
+    (keep, t)
+
+/-- [forge_bool_core::keep_on]:
+    Source: 'src/lib.rs', lines 671:0-693:1 -/
+def keep_on
+  (l : Ledger) (ext : Ext) (s : Split) (rule : Rule)
+  (memb : Slice (alloc.vec.Vec Bool)) (mt : MetricLedger) :
+  Result Outcome
+  := do
+  let nb ← lift (UScalar.cast .Usize l.nb)
+  let (v, v1, v2, v3, v4, v5, v6, keep) ←
+    keep_on_loop0 s rule memb nb (alloc.vec.Vec.new Bool) 0#usize
+  let (s1, deref_mut_back) ← lift (alloc.vec.Vec.deref_mut keep)
+  let (bad, s2) ←
+    collapse l ext
+      {
+        facets := v,
+        plus := v1,
+        minus := v2,
+        topes := v3,
+        tope_pos := v4,
+        first_face := v5,
+        piece_of := v6
+      } s1 mt
+  if bad != NONE
+  then ok (Outcome.Refused (Refusal.ZeroThickness bad))
+  else
+    let keep1 := deref_mut_back s2
+    let s3 := alloc.vec.Vec.deref keep1
+    core_k l ext
+      {
+        facets := v,
+        plus := v1,
+        minus := v2,
+        topes := v3,
+        tope_pos := v4,
+        first_face := v5,
+        piece_of := v6
+      } s3
+
 /-- [forge_bool_core::classify_on]: loop body 1:
-    Source: 'src/lib.rs', lines 1:0-650:9 -/
+    Source: 'src/lib.rs', lines 1:0-660:9 -/
 @[rust_loop_body]
 def classify_on_loop0_loop0.body
   (v : alloc.vec.Vec (alloc.vec.Vec Bool))
@@ -5354,7 +6098,7 @@ def classify_on_loop0_loop0.body
   else ok (done ok1)
 
 /-- [forge_bool_core::classify_on]: loop 1:
-    Source: 'src/lib.rs', lines 1:0-650:9 -/
+    Source: 'src/lib.rs', lines 1:0-660:9 -/
 @[rust_loop]
 def classify_on_loop0_loop0
   (v : alloc.vec.Vec (alloc.vec.Vec Bool))
@@ -5367,7 +6111,7 @@ def classify_on_loop0_loop0
     (ok1, i)
 
 /-- [forge_bool_core::classify_on]: loop body 0:
-    Source: 'src/lib.rs', lines 1:0-652:5 -/
+    Source: 'src/lib.rs', lines 1:0-662:5 -/
 @[rust_loop_body]
 def classify_on_loop0.body
   (s : Split) (memb : alloc.vec.Vec (alloc.vec.Vec Bool)) (nb : Std.Usize)
@@ -5402,7 +6146,7 @@ def classify_on_loop0.body
   else ok (done (s, ok1))
 
 /-- [forge_bool_core::classify_on]: loop 0:
-    Source: 'src/lib.rs', lines 1:0-652:5 -/
+    Source: 'src/lib.rs', lines 1:0-662:5 -/
 @[rust_loop]
 def classify_on_loop0
   (s : Split) (memb : alloc.vec.Vec (alloc.vec.Vec Bool)) (nb : Std.Usize)
@@ -5414,26 +6158,28 @@ def classify_on_loop0
     (ok1, k)
 
 /-- [forge_bool_core::classify_on]:
-    Source: 'src/lib.rs', lines 637:0-658:1 -/
+    Source: 'src/lib.rs', lines 647:0-668:1 -/
 def classify_on
-  (l : Ledger) (ext : Ext) (s : Split) (rule : Rule) : Result Outcome := do
+  (l : Ledger) (ext : Ext) (s : Split) (rule : Rule) (mt : MetricLedger) :
+  Result Outcome
+  := do
   let memb ← membership l ext s
   let nb ← lift (UScalar.cast .Usize l.nb)
   let (s1, ok1) ← classify_on_loop0 s memb nb true 0#usize
   if ok1
   then let s2 := alloc.vec.Vec.deref memb
-       keep_on l ext s1 rule s2
+       keep_on l ext s1 rule s2 mt
   else ok (Outcome.Refused Refusal.InconsistentClassification)
 
 /-- [forge_bool_core::core]:
-    Source: 'src/lib.rs', lines 625:0-634:1
+    Source: 'src/lib.rs', lines 635:0-644:1
     Visibility: public -/
-def core (l : Ledger) (rule : Rule) : Result Outcome := do
+def core (l : Ledger) (rule : Rule) (m : MetricLedger) : Result Outcome := do
   let ext ← new_ext l
   let b ← split_ok l ext
   if b
   then let (s, ext1) ← split l ext
-       classify_on l ext1 s rule
+       classify_on l ext1 s rule m
   else ok (Outcome.Refused Refusal.SplitCrossed)
 
 end forge_bool_core

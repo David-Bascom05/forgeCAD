@@ -1478,7 +1478,7 @@ fn witness_inside(
 /// The ledger and the core's answer for a boolean of flat bodies (for tests and the comparison).
 pub fn decide(bodies: &[&Body], rule: &Rule) -> Result<Decided, Skip> {
     let (_, _, _, _, built, _) = fill(bodies, rule)?;
-    let outcome = core::core(&built.ledger, rule);
+    let outcome = core::core(&built.ledger, rule, &core::MetricLedger::default());
     Ok(Decided {
         ledger: built.ledger,
         outcome,
@@ -1529,7 +1529,7 @@ pub fn nary(bodies: &[&Body], rule: &Rule) -> Result<Option<Body>, BoolError> {
         Ok(x) => x,
         Err(_) => return Ok(None),
     };
-    let outcome = core::core(&built.ledger, rule);
+    let outcome = core::core(&built.ledger, rule, &core::MetricLedger::default());
     if std::env::var_os("FORGE_DECIDE_STATS").is_some() {
         eprintln!(
             "decide-once: {} bodies, {} faces ({} near), {} classes, {} cells, {} pieces, {} edges, {} verts, {} witnesses",
