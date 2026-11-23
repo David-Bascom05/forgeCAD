@@ -19,4 +19,5 @@ import IEEE754.Dmath.SinCos
 import IEEE754.Dmath.AtanPoly
 import IEEE754.Dmath.AtanEval
 import IEEE754.Dmath.AtanFacts
+import IEEE754.Dmath.AtanErr
 import IEEE754.Axioms

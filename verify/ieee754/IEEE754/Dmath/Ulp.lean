@@ -59,4 +59,34 @@ lemma subU {a b : F64} (ha : a.isFinite) (hb : b.isFinite) {A B ea eb MA MB E : 
     h3 (by rw [abs_neg]; exact h4) hM hk hk8 hE
   rwa [← sub_eq_add_neg] at this
 
+/-! ## One operation, bounded by the exact result -/
+
+lemma add_ulp {a b : F64} (ha : a.isFinite) (hb : b.isFinite) {k : ℤ} (h : |a.val + b.val| < 2 ^ k)
+    (hk : -1021 ≤ k) (hk8 : (2 : ℚ) ^ k ≤ 16) :
+    (add a b).isFinite ∧ |(add a b).val - (a.val + b.val)| ≤ 2 ^ (k - 54) := by
+  rw [add_eq_round ha hb]
+  have hf := fin_of_le_one (zs := a.sign && b.sign) (le_trans h.le hk8)
+  exact ⟨hf, round_ulp hf h hk⟩
+
+lemma sub_ulp {a b : F64} (ha : a.isFinite) (hb : b.isFinite) {k : ℤ} (h : |a.val - b.val| < 2 ^ k)
+    (hk : -1021 ≤ k) (hk8 : (2 : ℚ) ^ k ≤ 16) :
+    (sub a b).isFinite ∧ |(sub a b).val - (a.val - b.val)| ≤ 2 ^ (k - 54) := by
+  rw [sub_eq_round ha hb]
+  have hf := fin_of_le_one (zs := a.sign && !b.sign) (le_trans h.le hk8)
+  exact ⟨hf, round_ulp hf h hk⟩
+
+lemma mul_ulp {a b : F64} (ha : a.isFinite) (hb : b.isFinite) {k : ℤ} (h : |a.val * b.val| < 2 ^ k)
+    (hk : -1021 ≤ k) (hk8 : (2 : ℚ) ^ k ≤ 16) :
+    (mul a b).isFinite ∧ |(mul a b).val - a.val * b.val| ≤ 2 ^ (k - 54) := by
+  rw [mul_eq_round ha hb]
+  have hf := fin_of_le_one (zs := a.sign ^^ b.sign) (le_trans h.le hk8)
+  exact ⟨hf, round_ulp hf h hk⟩
+
+lemma div_ulp {a b : F64} (ha : a.isFinite) (hb : b.isFinite) (hb0 : b.val ≠ 0) {k : ℤ}
+    (h : |a.val / b.val| < 2 ^ k) (hk : -1021 ≤ k) (hk8 : (2 : ℚ) ^ k ≤ 16) :
+    (div a b).isFinite ∧ |(div a b).val - a.val / b.val| ≤ 2 ^ (k - 54) := by
+  rw [div_eq_round ha hb hb0]
+  have hf := fin_of_le_one (zs := a.sign ^^ b.sign) (le_trans h.le hk8)
+  exact ⟨hf, round_ulp hf h hk⟩
+
 end IEEE754.Dmath

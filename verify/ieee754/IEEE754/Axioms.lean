@@ -11,6 +11,7 @@ import IEEE754.Dmath.SinCos
 import IEEE754.Dmath.AtanPoly
 import IEEE754.Dmath.AtanEval
 import IEEE754.Dmath.AtanFacts
+import IEEE754.Dmath.AtanErr
 
 /-!
 # Only the standard axioms
@@ -75,3 +76,6 @@ elab "#standard_axioms " ids:ident* : command => do
   IEEE754.Dmath.atanPoly_eval IEEE754.Dmath.arctan_lip IEEE754.Dmath.arctan_lip_m IEEE754.Dmath.red0 IEEE754.Dmath.red1
   IEEE754.Dmath.red2 IEEE754.Dmath.red3 IEEE754.Dmath.c_half IEEE754.Dmath.c_quarter IEEE754.Dmath.c_threehalf
   IEEE754.Dmath.c_pio2 IEEE754.Dmath.c_pi IEEE754.Dmath.c_PI IEEE754.Dmath.c_FRAC_PI_2
+  IEEE754.Dmath.add_ulp IEEE754.Dmath.sub_ulp IEEE754.Dmath.mul_ulp IEEE754.Dmath.div_ulp
+  IEEE754.Dmath.reduced_err IEEE754.Dmath.red_t0 IEEE754.Dmath.red_t1 IEEE754.Dmath.red_t2 IEEE754.Dmath.red_t3
+  IEEE754.Dmath.big_err IEEE754.Dmath.small_err IEEE754.Dmath.tiny_err IEEE754.Dmath.atan_err
