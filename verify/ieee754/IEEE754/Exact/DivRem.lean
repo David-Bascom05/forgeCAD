@@ -249,4 +249,271 @@ theorem Step.corr_spec {P V U v1 v2 Vl u0 u1 u2 Ul : ℕ} (h : Step P V U v1 v2 
       · push Not at ht
         exact (ht (by omega)).1.le
 
+/-! ## Knuth D: multiply-subtract and add back, on the window `u[j..=j+n]` -/
+
+/-- The window's value. -/
+def win (u : ℕ → ℕ) (j k : ℕ) : ℕ := valF (fun i => u (j + i)) k
+
+/-- `u[i+j] −= qhat·v[i]` with carry and borrow, its first `i` steps: `(u, carry, borrow)`. -/
+def msRun (u v : ℕ → ℕ) (j qhat : ℕ) : ℕ → (ℕ → ℕ) × ℕ × ℕ
+  | 0 => (u, 0, 0)
+  | i + 1 =>
+    let r := msRun u v j qhat i
+    let p := qhat * v i + r.2.1
+    let sb := ovs (r.1 (i + j)) (p % B)
+    let tb := ovs sb.1 r.2.2
+    (Function.update r.1 (i + j) tb.1, p / B, sb.2 + tb.2)
+
+lemma msRun_spec {u v : ℕ → ℕ} {j n qhat : ℕ} (hu : ∀ i ≤ n, u (j + i) < B) (hv : Limbs v n)
+    (hq : qhat ≤ B) :
+    ∀ i ≤ n, win u j i + B ^ i * ((msRun u v j qhat i).2.1 + (msRun u v j qhat i).2.2) =
+        win (msRun u v j qhat i).1 j i + qhat * valF v i ∧
+      (msRun u v j qhat i).2.1 < B ∧ (msRun u v j qhat i).2.2 ≤ 1 ∧
+      (∀ m, m < j ∨ j + i ≤ m → (msRun u v j qhat i).1 m = u m) ∧
+      (∀ k < i, (msRun u v j qhat i).1 (j + k) < B) ∧
+      (∀ k < i, qhat * v k + (msRun u v j qhat k).2.1 < B * B) := by
+  intro i hi
+  induction i with
+  | zero => simp [msRun, win, valF]
+  | succ i ih =>
+    obtain ⟨e, cB, b1, keep, lim, pB⟩ := ih (by omega)
+    simp only [msRun]
+    generalize hr : msRun u v j qhat i = r at e cB b1 keep lim pB
+    have hvi : v i < B := hv i (by omega)
+    have hp : qhat * v i + r.2.1 < B * B := by
+      have : qhat * v i ≤ B * (B - 1) := Nat.mul_le_mul hq (by omega)
+      have : B * (B - 1) + B = B * B := by rw [Nat.mul_sub, mul_one]; have : B ≤ B * B := Nat.le_mul_of_pos_left _ (by norm_num); omega
+      omega
+    have hui : r.1 (i + j) < B := by rw [keep (i + j) (Or.inr (by omega))]; exact hu i (by omega) |> fun h => by rwa [add_comm] at h
+    obtain ⟨t2, tc, teq⟩ := ovs2 hui (Nat.mod_lt _ (by norm_num) : (qhat * v i + r.2.1) % B < B) b1
+    have hdm := Nat.div_add_mod (qhat * v i + r.2.1) B
+    refine ⟨?_, Nat.div_lt_of_lt_mul hp, tc, ?_, ?_, ?_⟩
+    · have hw1 : win u j (i + 1) = win u j i + u (j + i) * B ^ i := valF_succ _ _
+      have hw2 : win (Function.update r.1 (i + j) (ovs (ovs (r.1 (i + j)) ((qhat * v i + r.2.1) % B)).1 r.2.2).1) j (i + 1) =
+          win r.1 j i + (ovs (ovs (r.1 (i + j)) ((qhat * v i + r.2.1) % B)).1 r.2.2).1 * B ^ i := by
+        unfold win; rw [valF_succ]; simp only [show j + i = i + j by ring, Function.update_self]
+        congr 1
+        exact valF_congr (fun k hk => by rw [Function.update_of_ne (by omega)])
+      have hu' : u (j + i) = r.1 (i + j) := by rw [keep (i + j) (Or.inr (by omega)), add_comm]
+      rw [hw1, hw2, valF_succ, hu', pow_succ]
+      zify at e teq hdm ⊢
+      linear_combination e + (B : ℤ) ^ i * teq + (B : ℤ) ^ i * hdm
+    · intro m hm
+      rw [Function.update_of_ne (by omega)]; exact keep m (by omega)
+    · intro k hk
+      rcases Nat.lt_succ_iff_lt_or_eq.mp hk with h | h
+      · rw [Function.update_of_ne (by omega)]; exact lim k h
+      · subst h; rw [show j + k = k + j by ring, Function.update_self]; exact t2
+    · intro k hk
+      rcases Nat.lt_succ_iff_lt_or_eq.mp hk with h | h
+      · exact pB k h
+      · subst h; rw [hr]; exact hp
+
+/-- Multiply-subtract with its top limb: `(u, borrowed)`. -/
+def msStep (u v : ℕ → ℕ) (j n qhat : ℕ) : (ℕ → ℕ) × ℕ :=
+  let r := msRun u v j qhat n
+  let sb := ovs (r.1 (j + n)) r.2.1
+  let tb := ovs sb.1 r.2.2
+  (Function.update r.1 (j + n) tb.1, sb.2 + tb.2)
+
+lemma win_update_top {w : ℕ → ℕ} {j n x : ℕ} :
+    win (Function.update w (j + n) x) j (n + 1) = win w j n + x * B ^ n := by
+  unfold win; rw [valF_succ]; simp only [Function.update_self]
+  congr 1; exact valF_congr (fun k hk => by rw [Function.update_of_ne (by omega)])
+
+lemma msStep_spec {u v : ℕ → ℕ} {j n qhat : ℕ} (hu : ∀ i ≤ n, u (j + i) < B) (hv : Limbs v n)
+    (hq : qhat ≤ B) :
+    win u j (n + 1) + B ^ (n + 1) * (msStep u v j n qhat).2 = win (msStep u v j n qhat).1 j (n + 1) + qhat * valF v n ∧
+      (msStep u v j n qhat).2 ≤ 1 ∧ (∀ i ≤ n, (msStep u v j n qhat).1 (j + i) < B) ∧
+      (∀ m, m < j ∨ j + n < m → (msStep u v j n qhat).1 m = u m) := by
+  obtain ⟨e, cB, b1, keep, lim, -⟩ := msRun_spec hu hv hq n le_rfl
+  unfold msStep; simp only
+  generalize hr : msRun u v j qhat n = r at e cB b1 keep lim
+  have htop : r.1 (j + n) = u (j + n) := keep _ (Or.inr le_rfl)
+  obtain ⟨t2, tc, teq⟩ := ovs2 (show r.1 (j + n) < B by rw [htop]; exact hu n le_rfl) cB b1
+  refine ⟨?_, tc, ?_, ?_⟩
+  · rw [win_update_top]
+    have hw : win u j (n + 1) = win u j n + u (j + n) * B ^ n := valF_succ _ _
+    rw [hw, ← htop, pow_succ]
+    zify at e teq ⊢
+    linear_combination e + (B : ℤ) ^ n * teq
+  · intro i hi
+    rcases Nat.lt_succ_iff_lt_or_eq.mp (Nat.lt_succ_of_le hi) with h | h
+    · rw [Function.update_of_ne (by omega)]; exact lim i h
+    · subst h; rw [Function.update_self]; exact t2
+  · intro m hm
+    rw [Function.update_of_ne (by omega)]; exact keep m (by omega)
+
+/-- Add `v` back to the window, its first `i` steps: `(u, carry)`. -/
+def abRun (u v : ℕ → ℕ) (j : ℕ) : ℕ → (ℕ → ℕ) × ℕ
+  | 0 => (u, 0)
+  | i + 1 =>
+    let r := abRun u v j i
+    let sc := ov (r.1 (i + j)) (v i)
+    let tc := ov sc.1 r.2
+    (Function.update r.1 (i + j) tc.1, sc.2 + tc.2)
+
+/-- Add back with the top limb's `wrapping_add`. -/
+def abStep (u v : ℕ → ℕ) (j n : ℕ) : ℕ → ℕ :=
+  let r := abRun u v j n
+  Function.update r.1 (j + n) ((r.1 (j + n) + r.2) % B)
+
+lemma abRun_spec {u v : ℕ → ℕ} {j n : ℕ} (hu : ∀ i ≤ n, u (j + i) < B) (hv : Limbs v n) :
+    ∀ i ≤ n, win u j i + valF v i = win (abRun u v j i).1 j i + B ^ i * (abRun u v j i).2 ∧
+      (abRun u v j i).2 ≤ 1 ∧ (∀ m, m < j ∨ j + i ≤ m → (abRun u v j i).1 m = u m) ∧
+      (∀ k < i, (abRun u v j i).1 (j + k) < B) := by
+  intro i hi
+  induction i with
+  | zero => simp [abRun, win, valF]
+  | succ i ih =>
+    obtain ⟨e, c1, keep, lim⟩ := ih (by omega)
+    simp only [abRun]
+    generalize hr : abRun u v j i = r at e c1 keep lim
+    have hui : r.1 (i + j) < B := by rw [keep (i + j) (Or.inr (by omega)), add_comm]; exact hu i (by omega)
+    obtain ⟨t2, tc, teq⟩ := ov2 hui (hv i (by omega)) c1
+    refine ⟨?_, tc, ?_, ?_⟩
+    · have hw1 : win u j (i + 1) = win u j i + u (j + i) * B ^ i := valF_succ _ _
+      have hw2 : win (Function.update r.1 (i + j) (ov (ov (r.1 (i + j)) (v i)).1 r.2).1) j (i + 1) =
+          win r.1 j i + (ov (ov (r.1 (i + j)) (v i)).1 r.2).1 * B ^ i := by
+        unfold win; rw [valF_succ]; simp only [show j + i = i + j by ring, Function.update_self]
+        congr 1
+        exact valF_congr (fun k hk => by rw [Function.update_of_ne (by omega)])
+      have hu' : u (j + i) = r.1 (i + j) := by rw [keep (i + j) (Or.inr (by omega)), add_comm]
+      rw [hw1, hw2, valF_succ, hu', pow_succ]
+      zify at e teq ⊢
+      linear_combination e - (B : ℤ) ^ i * teq
+    · intro m hm
+      rw [Function.update_of_ne (by omega)]; exact keep m (by omega)
+    · intro k hk
+      rcases Nat.lt_succ_iff_lt_or_eq.mp hk with h | h
+      · rw [Function.update_of_ne (by omega)]; exact lim k h
+      · subst h; rw [show j + k = k + j by ring, Function.update_self]; exact t2
+
+lemma abStep_spec {u v : ℕ → ℕ} {j n : ℕ} (hu : ∀ i ≤ n, u (j + i) < B) (hv : Limbs v n) :
+    ∃ o ≤ 1, win u j (n + 1) + valF v n = win (abStep u v j n) j (n + 1) + B ^ (n + 1) * o ∧
+      (∀ i ≤ n, abStep u v j n (j + i) < B) ∧ (∀ m, m < j ∨ j + n < m → abStep u v j n m = u m) := by
+  obtain ⟨e, c1, keep, lim⟩ := abRun_spec hu hv n le_rfl
+  unfold abStep; simp only
+  generalize hr : abRun u v j n = r at e c1 keep lim
+  have htop : r.1 (j + n) = u (j + n) := keep _ (Or.inr le_rfl)
+  have hdm := Nat.div_add_mod (r.1 (j + n) + r.2) B
+  have hlt : r.1 (j + n) + r.2 < 2 * B := by rw [htop]; have := hu n le_rfl; omega
+  refine ⟨(r.1 (j + n) + r.2) / B, by
+    have : (r.1 (j + n) + r.2) / B < 2 := Nat.div_lt_of_lt_mul (by linarith); omega, ?_, ?_, ?_⟩
+  · rw [win_update_top]
+    have hw : win u j (n + 1) = win u j n + u (j + n) * B ^ n := valF_succ _ _
+    rw [hw, ← htop, pow_succ]
+    zify at e hdm ⊢
+    linear_combination e - (B : ℤ) ^ n * hdm
+  · intro i hi
+    rcases Nat.lt_succ_iff_lt_or_eq.mp (Nat.lt_succ_of_le hi) with h | h
+    · rw [Function.update_of_ne (by omega)]; exact lim i h
+    · subst h; rw [Function.update_self]; exact Nat.mod_lt _ (by norm_num)
+  · intro m hm
+    rw [Function.update_of_ne (by omega)]; exact keep m (by omega)
+
+/-! ## Knuth D: one digit -/
+
+/-- Step `j` of algorithm D: the estimate, its correction, multiply-subtract, and the add-back
+if that borrowed. Returns the window and the digit `q[j]`. -/
+def dStep (u v : ℕ → ℕ) (n j : ℕ) : (ℕ → ℕ) × ℕ :=
+  let num := u (j + n) * B + u (j + n - 1)
+  let qr := corr (v (n - 1)) (v (n - 2)) (u (j + n - 2)) (num / v (n - 1)) (num % v (n - 1))
+  let ms := msStep u v j n qr.1
+  if ms.2 ≠ 0 then (abStep ms.1 v j n, qr.1 - 1) else (ms.1, qr.1)
+
+lemma dStep_eq (u v : ℕ → ℕ) (n j : ℕ) : dStep u v n j =
+    if (msStep u v j n (corr (v (n - 1)) (v (n - 2)) (u (j + n - 2)) ((u (j + n) * B + u (j + n - 1)) / v (n - 1)) ((u (j + n) * B + u (j + n - 1)) % v (n - 1))).1).2 ≠ 0 then (abStep (msStep u v j n (corr (v (n - 1)) (v (n - 2)) (u (j + n - 2)) ((u (j + n) * B + u (j + n - 1)) / v (n - 1)) ((u (j + n) * B + u (j + n - 1)) % v (n - 1))).1).1 v j n, (corr (v (n - 1)) (v (n - 2)) (u (j + n - 2)) ((u (j + n) * B + u (j + n - 1)) / v (n - 1)) ((u (j + n) * B + u (j + n - 1)) % v (n - 1))).1 - 1)
+    else ((msStep u v j n (corr (v (n - 1)) (v (n - 2)) (u (j + n - 2)) ((u (j + n) * B + u (j + n - 1)) / v (n - 1)) ((u (j + n) * B + u (j + n - 1)) % v (n - 1))).1).1, (corr (v (n - 1)) (v (n - 2)) (u (j + n - 2)) ((u (j + n) * B + u (j + n - 1)) / v (n - 1)) ((u (j + n) * B + u (j + n - 1)) % v (n - 1))).1) := rfl
+
+/-- The two top limbs and the rest. -/
+lemma valF_top2 (w : ℕ → ℕ) (n : ℕ) (hn : 2 ≤ n) :
+    valF w n = w (n - 1) * B * B ^ (n - 2) + w (n - 2) * B ^ (n - 2) + valF w (n - 2) := by
+  obtain ⟨k, rfl⟩ : ∃ k, n = k + 2 := ⟨n - 2, by omega⟩
+  simp only [show k + 2 - 1 = k + 1 by omega, show k + 2 - 2 = k by omega]
+  rw [show k + 2 = (k + 1) + 1 by ring, valF_succ, valF_succ, pow_succ]; ring
+
+set_option maxHeartbeats 1000000 in
+/-- **One digit of algorithm D.** With `v` normalised (`2·v[n−1] ≥ B`, `n ≥ 2`) and the window
+`U = u[j..=j+n]` under `B·V`, the step gives `U = q[j]·V + U'` with `U' < V` and `q[j] < B`.
+Only the window changes. -/
+theorem dStep_spec {u v : ℕ → ℕ} {n j : ℕ} (hn : 2 ≤ n) (hv : Limbs v n) (hv1 : B ≤ 2 * v (n - 1))
+    (hu : ∀ i ≤ n, u (j + i) < B) (hUV : win u j (n + 1) < B * valF v n) :
+    win u j (n + 1) = (dStep u v n j).2 * valF v n + win (dStep u v n j).1 j (n + 1) ∧
+      win (dStep u v n j).1 j (n + 1) < valF v n ∧ (dStep u v n j).2 < B ∧
+      (∀ i ≤ n, (dStep u v n j).1 (j + i) < B) ∧ (∀ m, m < j ∨ j + n < m → (dStep u v n j).1 m = u m) := by
+  -- the step's setting
+  have hU : win u j (n + 1) = u (j + n) * B * B * B ^ (n - 2) + u (j + n - 1) * B * B ^ (n - 2) +
+      u (j + n - 2) * B ^ (n - 2) + win u j (n - 2) := by
+    unfold win
+    have h1 := valF_top2 (fun i => u (j + i)) (n + 1) (by omega)
+    have h2 : valF (fun i => u (j + i)) (n - 1) = valF (fun i => u (j + i)) (n - 2) + u (j + (n - 2)) * B ^ (n - 2) := by
+      rw [show n - 1 = (n - 2) + 1 by omega, valF_succ]
+    have h3 : B ^ (n - 1) = B ^ (n - 2) * B := by rw [show n - 1 = (n - 2) + 1 by omega, pow_succ]
+    simp only [show n + 1 - 1 = n by omega, show n + 1 - 2 = n - 1 by omega] at h1
+    rw [h1, h2, h3]
+    simp only [show j + (n - 1) = j + n - 1 by omega, show j + (n - 2) = j + n - 2 by omega]
+    ring
+  have st : Step (B ^ (n - 2)) (valF v n) (win u j (n + 1)) (v (n - 1)) (v (n - 2)) (valF v (n - 2))
+      (u (j + n)) (u (j + n - 1)) (u (j + n - 2)) (win u j (n - 2)) :=
+    { hP := by positivity
+      hV := valF_top2 v n hn
+      hVl := valF_lt (fun i hi => hv i (by omega))
+      hv1 := hv _ (by omega)
+      hv1n := hv1
+      hv2 := hv _ (by omega)
+      hU := hU
+      hUl := valF_lt (fun i hi => by have := hu i (by omega); exact this)
+      hu1 := by have := hu (n - 1) (by omega); rwa [show j + (n - 1) = j + n - 1 by omega] at this
+      hu2 := by have := hu (n - 2) (by omega); rwa [show j + (n - 2) = j + n - 2 by omega] at this
+      hUV := hUV }
+  have hVp := st.Vpos
+  have hqB := st.q_lt
+  obtain ⟨cr, cq, cq1, cB⟩ := st.corr_spec _ _ (Nat.mod_add_div' _ _) st.q_le_qhat st.qhat_le
+  rw [dStep_eq]
+  generalize hqr : corr (v (n - 1)) (v (n - 2)) (u (j + n - 2)) ((u (j + n) * B + u (j + n - 1)) / v (n - 1))
+    ((u (j + n) * B + u (j + n - 1)) % v (n - 1)) = qr at cr cq cq1 cB
+  obtain ⟨me, mf, mlim, mkeep⟩ := msStep_spec hu hv cB
+  generalize hms : msStep u v j n qr.1 = ms at me mf mlim mkeep
+  have hW1 : win ms.1 j (n + 1) < B ^ (n + 1) := valF_lt (fun i hi => mlim i (by omega))
+  have hdm := Nat.div_add_mod' (win u j (n + 1)) (valF v n)
+  have hmod := Nat.mod_lt (win u j (n + 1)) hVp
+  have hqV : win u j (n + 1) / valF v n * valF v n ≤ win u j (n + 1) := Nat.div_mul_le_self (win u j (n + 1)) (valF v n)
+  have hsucc : win u j (n + 1) < win u j (n + 1) / valF v n * valF v n + valF v n := by
+    have := Nat.lt_mul_div_succ (win u j (n + 1)) hVp
+    rw [Nat.mul_succ, mul_comm] at this; exact this
+  generalize win u j (n + 1) / valF v n = q at hqB cq cq1 hdm hqV hsucc ⊢
+  generalize win u j (n + 1) % valF v n = rm at hdm hmod
+  split_ifs with hf
+  · -- it borrowed: `qhat = q + 1`, and the add-back restores `U − qV`
+    have hf1 : ms.2 = 1 := by omega
+    rw [hf1, mul_one] at me
+    obtain ⟨o, ho, ae, alim, akeep⟩ := abStep_spec mlim hv
+    have hW2 : win (abStep ms.1 v j n) j (n + 1) < B ^ (n + 1) := valF_lt (fun i hi => alim i (by omega))
+    have hgt : q < qr.1 := by
+      by_contra hc; push Not at hc
+      have : qr.1 * (valF v n) ≤ q * (valF v n) := Nat.mul_le_mul_right _ hc
+      omega
+    have hq1 : qr.1 = q + 1 := by omega
+    rw [hq1, Nat.add_mul, one_mul] at me
+    rw [show qr.1 - 1 = q by omega]
+    generalize B ^ (n + 1) = Bn at me hW1 hW2 ae
+    have ho1 : o = 1 := by
+      rcases Nat.le_one_iff_eq_zero_or_eq_one.mp ho with h | h
+      · subst h; omega
+      · exact h
+    subst ho1
+    refine ⟨by dsimp only; omega, by dsimp only; omega, by dsimp only; omega, alim, fun m hm => by dsimp only; rw [akeep m hm, mkeep m hm]⟩
+  · -- no borrow: `qhat = q`
+    have hf0 : ms.2 = 0 := by push Not at hf; exact hf
+    rw [hf0, mul_zero, add_zero] at me
+    have hle : qr.1 ≤ q := by
+      by_contra hc; push Not at hc
+      have : (q + 1) * (valF v n) ≤ qr.1 * (valF v n) := Nat.mul_le_mul_right _ hc
+      rw [Nat.add_mul, one_mul] at this
+      omega
+    have hq : qr.1 = q := le_antisymm hle cq
+    rw [hq] at me ⊢
+    refine ⟨by dsimp only; omega, by dsimp only; omega, by dsimp only; omega, mlim, mkeep⟩
+
 end IEEE754.Exact
