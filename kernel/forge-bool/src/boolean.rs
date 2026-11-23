@@ -2267,27 +2267,52 @@ pub(crate) fn local_class<T: PartialEq>(
     class: impl Fn(Point3) -> Option<T>,
 ) -> Option<T> {
     let face = body.face(f);
-    let n = body.face_normal(f, face.surface.project(p))?;
-    let dirs: Vec<Vec3> = match dir {
-        Some(d) => {
-            let w = n.cross(d).normalize()?.get();
-            vec![w, -w]
+    let uv = face.surface.project(p);
+    // the face's points round p a step out: across the tangent plane where the face has a normal
+    // at p; where it has none (a cone's apex, a ball's pole: the surface's u degenerates there)
+    // and p is an isolated touch, out along v at four turns of u, the face's own rays from p
+    let around: Box<dyn Fn(f64) -> Vec<Point3>> = match (body.face_normal(f, uv), dir) {
+        (Some(n), _) => {
+            let dirs: Vec<Vec3> = match dir {
+                Some(d) => {
+                    let w = n.cross(d).normalize()?.get();
+                    vec![w, -w]
+                }
+                None => {
+                    // turned off the frame's axes, so no probe runs along a seam to a pole
+                    let fr = Frame::from_z(p, n);
+                    let (sn, cs) = dmath::sin_cos(0.3719);
+                    let x = fr.x().get() * cs + fr.y().get() * sn;
+                    let y = n.cross(x);
+                    vec![x, -x, y, -y]
+                }
+            };
+            let s = &face.surface;
+            Box::new(move |step| dirs.iter().map(|&w| s.eval(s.project(p + w * step))).collect())
         }
-        None => {
-            // turned off the frame's axes, so no probe runs along a seam to a pole
-            let fr = Frame::from_z(p, n);
-            let (sn, cs) = dmath::sin_cos(0.3719);
-            let x = fr.x().get() * cs + fr.y().get() * sn;
-            let y = n.cross(x);
-            vec![x, -x, y, -y]
+        (None, None) => {
+            let d = face.surface.deriv(uv);
+            let dv = d.dv.length();
+            if d.du.length() > tol::LINEAR || dv <= tol::LINEAR {
+                return None;
+            }
+            let s = &face.surface;
+            Box::new(move |step| {
+                (0..4)
+                    .flat_map(|k| {
+                        let u = uv.x + 0.3719 + dmath::FRAC_PI_2 * k as f64;
+                        [1.0, -1.0].map(|sg| s.eval(Point2::new(u, uv.y + sg * step / dv)))
+                    })
+                    .collect()
+            })
         }
+        (None, Some(_)) => return None,
     };
     let mut step = 1e-3;
     while step < 0.3 {
         let mut got: Option<T> = None;
         let mut undecided = false;
-        for &w in &dirs {
-            let q = face.surface.eval(face.surface.project(p + w * step));
+        for q in around(step) {
             // the face, or one beside it on the same surface (a ball's other half)
             let on_face = own.point_in_face(f, q) == Where::Inside
                 || body.faces_where(|b| b.contains(q)).any(|g| {
@@ -5117,9 +5142,16 @@ pub(crate) fn uv_dir(body: &Body, f: FaceId, p: &Piece, forward: bool, at_end: b
         // parameter plane is (its normal du x dv, taken a hair off the pole)
         let v = face.surface.domain().v;
         let step = if uv.y > 0.5 * (v.lo + v.hi) { -1e-6 } else { 1e-6 } * (v.hi - v.lo);
+        let off = Point2::new(uv.x, uv.y + step);
+        // (`normal` refuses where |du| is under LINEAR, as it is that hair off the pole of a ball
+        // of radius under about 3 mm: du x dv itself there, which `normal` is elsewhere)
         let n = face
             .surface
-            .normal(Point2::new(uv.x, uv.y + step))
+            .normal(off)
+            .or_else(|| {
+                let d = face.surface.deriv(off);
+                d.du.cross(d.dv).normalize()
+            })
             .ok_or_else(|| {
                 BoolError::unhandled(Unhandled::SplitThroughSingular {
                     face: FaceRef::of(body, f),
