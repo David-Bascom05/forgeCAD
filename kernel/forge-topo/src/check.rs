@@ -426,21 +426,30 @@ fn quiet_loops(a: &Body, f: FaceId, b: &Body, o: FaceId) -> Option<(Vec<bool>, B
 }
 
 fn check_known(body: &Body, known: &Known) -> Vec<Problem> {
+    // every sheet rule is asked only of a body with sheet faces: a solid's check is compiled as it
+    // was, with none of them in it
+    if body.has_sheet() {
+        check_known_as::<true>(body, known)
+    } else {
+        check_known_as::<false>(body, known)
+    }
+}
+
+/// `check_known`, of a body with sheet faces (`S`) or without.
+fn check_known_as<const S: bool>(body: &Body, known: &Known) -> Vec<Problem> {
     let mut out = Vec::new();
-    // (every sheet rule below is asked only of a body with sheet faces: a solid's check is as it was)
-    let sheets = body.has_sheet();
-    check_edges(body, sheets, &mut out);
+    check_edges::<S>(body, &mut out);
     check_loops(body, &mut out);
     check_geometry(body, known, &mut out);
     out.extend(stray_edges(body));
     if out.is_empty() {
         check_sides(body, known, &mut out);
     }
-    if out.is_empty() && body.shells.len() > 1 && !sheets {
+    if out.is_empty() && body.shells.len() > 1 && !S {
         check_shells(body, known, &mut out);
     }
     // a sheet has no material for shells to overlap in: the solid shells alone, if two or more
-    if out.is_empty() && sheets {
+    if S && out.is_empty() {
         let mut solid = body.clone();
         for f in 0..solid.faces.len() {
             if solid.faces[f].sheet {
@@ -462,14 +471,14 @@ fn check_known(body: &Body, known: &Known) -> Vec<Problem> {
         }
     }
     check_names(body, &mut out);
-    check_euler(body, sheets, &mut out);
+    check_euler::<S>(body, &mut out);
     // per shell and per vertex only once every edge has its two uses and every loop closes
     if !out
         .iter()
         .any(|p| matches!(p, Problem::EdgeUses { .. } | Problem::LoopBroken { .. }))
     {
-        check_shell_euler(body, sheets, &mut out);
-        check_fans(body, sheets, &mut out);
+        check_shell_euler::<S>(body, &mut out);
+        check_fans::<S>(body, &mut out);
     }
     out
 }
@@ -681,7 +690,7 @@ pub fn certify(body: &Body) -> Vec<Problem> {
     out
 }
 
-fn check_shell_euler(body: &Body, sheets: bool, out: &mut Vec<Problem>) {
+fn check_shell_euler<const S: bool>(body: &Body, out: &mut Vec<Problem>) {
     for (si, shell) in body.shells.iter().enumerate() {
         let (mut f, mut l) = (0i64, 0i64);
         let (mut edges, mut verts) = (Vec::new(), Vec::new());
@@ -702,7 +711,7 @@ fn check_shell_euler(body: &Body, sheets: bool, out: &mut Vec<Problem>) {
         verts.dedup();
         // a sheet's shell of genus g with B boundary cycles: 2 - 2g - B
         let value = verts.len() as i64 - edges.len() as i64 + 2 * f - l
-            + if sheets && body.face(shell.faces[0]).sheet {
+            + if S && body.face(shell.faces[0]).sheet {
                 boundaries(body, &edges)
             } else {
                 0
@@ -718,15 +727,20 @@ fn check_shell_euler(body: &Body, sheets: bool, out: &mut Vec<Problem>) {
 
 /// Round each vertex, coedge to coedge: from one leaving it, back along its loop to the one
 /// arriving, then across to that one's partner, which leaves it again. One cycle is one fan.
-fn check_fans(body: &Body, sheets: bool, out: &mut Vec<Problem>) {
+fn check_fans<const S: bool>(body: &Body, out: &mut Vec<Problem>) {
     let mut prev = Vec::new();
-    for (v, cs) in body.leaving().iter_mut().enumerate() {
-        if sheets {
+    let mut sorted = Vec::new();
+    for (v, cs) in body.leaving().iter().enumerate() {
+        let cs: &[CoedgeId] = if S {
             // a fan at a boundary vertex is a chain, from the coedge leaving along the boundary (the
             // one no step reaches) to the one arriving: walked from there it is one fan, and a second
             // boundary use leaving the vertex starts a second (a bow tie)
-            cs.sort_by_key(|&c| body.edge(body.coedge(c).edge).coedges.len() != 1);
-        }
+            sorted.clone_from(cs);
+            sorted.sort_by_key(|&c: &CoedgeId| body.edge(body.coedge(c).edge).coedges.len() != 1);
+            &sorted
+        } else {
+            cs
+        };
         let fans = body.fans(cs, &mut prev);
         if fans.len() > 1 {
             out.push(Problem::VertexFans {
@@ -737,12 +751,12 @@ fn check_fans(body: &Body, sheets: bool, out: &mut Vec<Problem>) {
     }
 }
 
-fn check_edges(body: &Body, sheets: bool, out: &mut Vec<Problem>) {
+fn check_edges<const S: bool>(body: &Body, out: &mut Vec<Problem>) {
     for e in body.edge_ids() {
         let edge = body.edge(e);
         let sheet = |k: usize| body.face(body.coedge_face(edge.coedges[k])).sheet;
         // on a sheet, an edge used once is on its boundary
-        let boundary = sheets && edge.coedges.len() == 1 && sheet(0);
+        let boundary = S && edge.coedges.len() == 1 && sheet(0);
         if edge.coedges.len() != 2 && !boundary {
             out.push(Problem::EdgeUses {
                 edge: e,
@@ -755,7 +769,7 @@ fn check_edges(body: &Body, sheets: bool, out: &mut Vec<Problem>) {
             if a.forward == b.forward {
                 out.push(Problem::EdgeUsesSameWay { edge: e });
             }
-            if sheets && sheet(0) != sheet(1) {
+            if S && sheet(0) != sheet(1) {
                 out.push(Problem::SheetMeetsSolid { edge: e });
             }
         }
@@ -1258,13 +1272,13 @@ fn check_names(body: &Body, out: &mut Vec<Problem>) {
     }
 }
 
-fn check_euler(body: &Body, sheets: bool, out: &mut Vec<Problem>) {
+fn check_euler<const S: bool>(body: &Body, out: &mut Vec<Problem>) {
     let v = body.vertices.len() as i64;
     let e = body.edges.len() as i64;
     let f = body.faces.len() as i64;
     let l = body.loops.len() as i64;
     let mut value = v - e + 2 * f - l;
-    if sheets {
+    if S {
         let all: Vec<EdgeId> = body.edge_ids().collect();
         value += boundaries(body, &all);
     }

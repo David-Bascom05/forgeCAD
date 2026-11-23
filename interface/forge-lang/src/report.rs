@@ -244,8 +244,8 @@ pub fn json(run: &Run, src: &str) -> Json {
     if let Some(m) = &run.measure {
         f.push((
             "part",
-            Json::obj(
-                vec![
+            Json::obj({
+                let mut part = vec![
                     ("volume", m.volume.into()),
                     ("area", m.area.into()),
                     (
@@ -256,13 +256,6 @@ pub fn json(run: &Run, src: &str) -> Json {
                     ("edges", m.edges.into()),
                     ("bodies", m.bodies.into()),
                     ("valid", (m.problems == 0).into()),
-                ]
-                .into_iter()
-                // the sheets' area apart, where the part has sheets: volume and area are the solids'
-                .chain(sheet_area(run).map(|a| ("sheet_area", a.into())))
-                // the bodies that are sheets, by the features that made them
-                .chain(sheet_bodies(run).map(|ids| ("sheets", ids)))
-                .chain([
                     (
                         "problems",
                         Json::Arr(
@@ -280,9 +273,19 @@ pub fn json(run: &Run, src: &str) -> Json {
                         ),
                     ),
                     ("bbox", Json::Arr(m.bbox.iter().map(|x| Json::Num(*x)).collect())),
-                ])
-                .collect::<Vec<_>>(),
-            ),
+                ];
+                // where the part has sheets, after `valid`: the sheets' area apart (volume and
+                // area are the solids'), and the bodies that are sheets, by the features that
+                // made them
+                if let Some(a) = sheet_area(run) {
+                    part.insert(7, ("sheet_area", a.into()));
+                }
+                if let Some(ids) = sheet_bodies(run) {
+                    let at = part.len() - 2;
+                    part.insert(at, ("sheets", ids));
+                }
+                part
+            }),
         ));
     }
     // the document's drawing blocks, listed, not drawn (`fg run F.fg --drawing ID` draws one)
