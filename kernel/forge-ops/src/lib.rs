@@ -19,6 +19,7 @@ mod skin;
 pub mod strip;
 pub mod sweep;
 pub mod taper;
+mod taper_events;
 pub mod thicken;
 mod wavefront;
 
