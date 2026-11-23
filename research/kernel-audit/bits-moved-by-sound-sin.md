@@ -89,3 +89,79 @@ a pair is traced on a hair-larger region and its chain points move.
 | valve | nary | valid/valid | 302983.826206 | 302983.826206 | +0.000e+00 (+0.0e+00) | 46241.231219 | 46241.231219 | +0.000e+00 (+0.0e+00) | 206/206 | snapped region |
 | volute | seq | valid/valid | 802763.643266 | 802763.643188 | -7.800e-05 (-9.7e-11) | 263254.076255 | 263254.076255 | +0.000e+00 (+0.0e+00) | 70/70 | sound boxes + snapped region |
 | volute | nary | valid/valid | 802763.643266 | 802763.643188 | -7.800e-05 (-9.7e-11) | 263254.076255 | 263254.076255 | +0.000e+00 (+0.0e+00) | 70/70 | sound boxes + snapped region |
+
+## Against main, after the merge (3bd27beb against origin/main ec328182)
+
+The merge session asked for a per-line check that the 52 lines move by rounding only: topology,
+volume and verdicts unchanged. Both builds printed every body's validity, its vertex, edge and
+face counts, and every vertex point and edge range to the bit. That is `bits points` and
+`benchparts points`, a temporary mode added by `research/kernel-audit/bits-points-patch.py`. It
+is not committed: `benchparts` is a gate binary, and the mode's code would shift its counts.
+
+**Result.**
+- **Topology and verdicts.** In all 52, the same single body is valid on both builds, with equal
+  vertex, edge and face counts. Every regeneration succeeds on both.
+- **Vertices.** Points move by at most 1.06e-12 mm (volute), except one vertex in frame nary,
+  which moves 1.70e-10 mm. That is about 10^4 ulps of its coordinates, and far below LINEAR.
+  Most vertices do not move at all.
+- **Edge ranges** move by up to 8.5e-7 (shaft seq). This is a parameter, not geometry. The range
+  ends sit at vertices that moved by 1e-10 mm or less, so on a line or a circle the range could
+  move only by rounding. The edges that move are traced curves, whose parameter runs along their
+  chain points, and those points moved (§ above: the snapped region and the sound boxes).
+- **Volumes and areas** are as in the table above, against the branch base: within 3e-8
+  relative, frame's being the mesh.
+
+| part | path | main: valid V E F | head: valid V E F | vertices moved | max vertex move (mm) | max edge-range move |
+|---|---|---|---|---|---|---|
+| plate | seq | valid 937 1398 510 | valid 937 1398 510 | 19 of 937 | 1.45e-13 | 1.86e-07 |
+| plate | nary | valid 1045 1540 544 | valid 1045 1540 544 | 7 of 1045 | 2.64e-13 | 1.92e-07 |
+| shaft | seq | valid 1351 2026 664 | valid 1351 2026 664 | 359 of 1351 | 1.46e-13 | 8.48e-07 |
+| shaft | nary | valid 1553 2262 697 | valid 1553 2262 697 | 235 of 1553 | 7.22e-13 | 2.86e-07 |
+| housing | seq | valid 1132 1698 648 | valid 1132 1698 648 | 9 of 1132 | 1.52e-14 | 5.51e-08 |
+| housing | nary | valid 1287 1886 681 | valid 1287 1886 681 | 5 of 1287 | 8.75e-14 | 6.55e-08 |
+| mixed | seq | valid 1574 2297 743 | valid 1574 2297 743 | 503 of 1574 | 7.52e-13 | 2.72e-07 |
+| mixed | nary | valid 1574 2297 743 | valid 1574 2297 743 | 344 of 1574 | 7.38e-13 | 2.07e-07 |
+| sweep | seq | valid 43 66 27 | valid 43 66 27 | 2 of 43 | 2.25e-14 | 6.12e-08 |
+| sweep | nary | valid 50 80 34 | valid 50 80 34 | 2 of 50 | 2.25e-14 | 6.12e-08 |
+| coil | seq | valid 58 90 37 | valid 58 90 37 | 8 of 58 | 1.36e-14 | 1.20e-08 |
+| coil | nary | valid 58 90 37 | valid 58 90 37 | 8 of 58 | 1.36e-14 | 1.20e-08 |
+| loft | seq | valid 38 60 27 | valid 38 60 27 | 4 of 38 | 7.32e-15 | 1.76e-08 |
+| loft | nary | valid 38 60 27 | valid 38 60 27 | 4 of 38 | 7.32e-15 | 1.76e-08 |
+| torture-2 | seq | valid 228 371 164 | valid 228 371 164 | 0 of 228 | 0.00e+00 | 3.03e-08 |
+| torture-2 | nary | valid 231 374 164 | valid 231 374 164 | 0 of 231 | 0.00e+00 | 2.79e-08 |
+| torture | seq | valid 937 1398 510 | valid 937 1398 510 | 19 of 937 | 1.45e-13 | 1.86e-07 |
+| torture | nary | valid 1045 1540 544 | valid 1045 1540 544 | 7 of 1045 | 2.64e-13 | 1.92e-07 |
+| fuzz1 | seq | valid 440 652 253 | valid 440 652 253 | 30 of 440 | 2.63e-13 | 9.49e-08 |
+| fuzz1 | nary | valid 509 727 259 | valid 509 727 259 | 25 of 509 | 3.71e-14 | 9.49e-08 |
+| fuzz2 | seq | valid 545 811 306 | valid 545 811 306 | 85 of 545 | 2.72e-13 | 1.47e-07 |
+| fuzz2 | nary | valid 637 906 309 | valid 637 906 309 | 71 of 637 | 1.91e-13 | 1.40e-07 |
+| fuzz3 | seq | valid 680 1016 356 | valid 680 1016 356 | 67 of 680 | 1.14e-13 | 7.06e-08 |
+| fuzz3 | nary | valid 818 1157 359 | valid 818 1157 359 | 59 of 818 | 5.89e-13 | 7.48e-08 |
+| fuzz4 | seq | valid 613 924 344 | valid 613 924 344 | 37 of 613 | 4.27e-13 | 4.69e-08 |
+| fuzz4 | nary | valid 757 1077 352 | valid 757 1077 352 | 45 of 757 | 4.55e-14 | 3.71e-08 |
+| fuzz5 | seq | valid 643 965 366 | valid 643 965 366 | 12 of 643 | 1.43e-14 | 3.31e-08 |
+| fuzz5 | nary | valid 743 1068 369 | valid 743 1068 369 | 10 of 743 | 1.71e-14 | 3.31e-08 |
+| fuzz6 | seq | valid 495 738 297 | valid 495 738 297 | 20 of 495 | 5.08e-13 | 4.28e-08 |
+| fuzz6 | nary | valid 593 843 304 | valid 593 843 304 | 20 of 593 | 4.26e-14 | 1.78e-07 |
+| fuzz7 | seq | valid 517 768 304 | valid 517 768 304 | 19 of 517 | 1.28e-14 | 5.36e-08 |
+| fuzz7 | nary | valid 584 839 308 | valid 584 839 308 | 13 of 584 | 1.46e-14 | 3.25e-08 |
+| fuzz8 | seq | valid 481 716 289 | valid 481 716 289 | 11 of 481 | 2.95e-14 | 2.88e-08 |
+| fuzz8 | nary | valid 550 794 298 | valid 550 794 298 | 10 of 550 | 2.95e-14 | 2.33e-08 |
+| fuzz9 | seq | valid 722 1081 383 | valid 722 1081 383 | 68 of 722 | 8.70e-14 | 5.87e-08 |
+| fuzz9 | nary | valid 890 1251 385 | valid 890 1251 385 | 52 of 890 | 6.89e-13 | 1.16e-07 |
+| fuzz10 | seq | valid 709 1058 382 | valid 709 1058 382 | 48 of 709 | 3.04e-14 | 1.15e-07 |
+| fuzz10 | nary | valid 849 1202 386 | valid 849 1202 386 | 48 of 849 | 3.04e-14 | 6.25e-08 |
+| crank | seq | valid 203 314 119 | valid 203 314 119 | 9 of 203 | 3.14e-14 | 7.07e-08 |
+| crank | nary | valid 203 314 119 | valid 203 314 119 | 9 of 203 | 3.07e-14 | 2.53e-08 |
+| frame | seq | valid 325 505 178 | valid 325 505 178 | 35 of 325 | 8.10e-14 | 1.07e-07 |
+| frame | nary | valid 352 536 182 | valid 352 536 182 | 39 of 352 | 1.70e-10 | 6.27e-08 |
+| heatsink | seq | valid 756 1168 438 | valid 756 1168 438 | 2 of 756 | 8.88e-16 | 2.83e-08 |
+| heatsink | nary | valid 758 1170 438 | valid 758 1170 438 | 3 of 758 | 8.88e-16 | 2.83e-08 |
+| jack | seq | valid 626 940 333 | valid 626 940 333 | 4 of 626 | 2.77e-14 | 3.02e-08 |
+| jack | nary | valid 684 1000 335 | valid 684 1000 335 | 8 of 684 | 7.14e-14 | 3.02e-08 |
+| manifold | seq | valid 121 192 78 | valid 121 192 78 | 9 of 121 | 1.42e-14 | 1.25e-08 |
+| manifold | nary | valid 142 221 86 | valid 142 221 86 | 9 of 142 | 1.42e-14 | 1.25e-08 |
+| valve | seq | valid 343 524 204 | valid 343 524 204 | 1 of 343 | 5.33e-15 | 1.26e-08 |
+| valve | nary | valid 353 536 206 | valid 353 536 206 | 0 of 353 | 0.00e+00 | 1.23e-08 |
+| volute | seq | valid 101 165 70 | valid 101 165 70 | 22 of 101 | 1.06e-12 | 3.99e-08 |
+| volute | nary | valid 101 165 70 | valid 101 165 70 | 22 of 101 | 1.06e-12 | 3.99e-08 |
