@@ -290,6 +290,143 @@ pub fn faces(grp: &[u32], src: &[u32], outer: &[bool], holder: &[u32]) -> Option
     Some(sorted)
 }
 
+/// Stage 4a, the corners: of each point `0..npts`, whether it is a vertex of the result: three or
+/// more final faces round it. `pf`: (point, final face) of every loop segment's start, sorted, no
+/// repeats; `extra[p]`: the faces round `p` the loops do not show (body 0's far faces kept round
+/// an input vertex, counted by the bridge), added where the loops show fewer than three.
+pub fn corners(npts: usize, pf: &[(u32, u32)], extra: &[u32]) -> Vec<bool> {
+    let mut round = vec![0u32; npts];
+    let mut i = 0;
+    while i < pf.len() {
+        round[pf[i].0 as usize] += 1;
+        i += 1;
+    }
+    let mut out = vec![false; npts];
+    let mut p = 0;
+    while p < npts {
+        let mut n = round[p];
+        if n < 3 {
+            n += extra[p];
+        }
+        out[p] = n >= 3;
+        p += 1;
+    }
+    out
+}
+
+/// A run of a loop: from point `a` to point `b`, the stretch between two cuts; `keep`: the whole
+/// of a kept edge of body 0 it is (NONE: none).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Run {
+    pub a: u32,
+    pub b: u32,
+    pub keep: u32,
+}
+
+/// Stage 4b, the runs: each loop of `loops` (its segments' start points in order, and per
+/// segment `keep`, the kept edge it is or NONE, parallel to `loops.ids`) cut at its corners
+/// (`corner`) and either side of a kept edge. A loop's runs start at its first cut and keep the
+/// loop's order; row `l` of the answer's `start` is loop `l`'s. None: a loop with no cut (a loop
+/// with no corner and no kept edge, which the ledger does not make).
+pub fn runs(loops: &Csr, keep: &[u32], corner: &[bool]) -> Option<(Vec<u32>, Vec<Run>)> {
+    let nl = loops.start.len().saturating_sub(1);
+    let mut start: Vec<u32> = Vec::with_capacity(nl + 1);
+    let mut out: Vec<Run> = Vec::new();
+    let mut ok = true;
+    let mut l = 0;
+    while ok && l < nl {
+        start.push(out.len() as u32);
+        let (s, e) = (loops.start[l] as usize, loops.start[l + 1] as usize);
+        let n = e - s;
+        // a cut before segment k: a corner at its start, or a kept edge on either side
+        let mut first = n;
+        let mut k = 0;
+        while first == n && k < n {
+            if cut_at(loops, keep, corner, s, n, k) {
+                first = k;
+            }
+            k += 1;
+        }
+        if n == 0 || first == n {
+            ok = false;
+        } else {
+            let mut j = 0;
+            while j < n {
+                let k = (first + j) % n;
+                let b = loops.ids[s + (k + 1) % n];
+                if j == 0 || cut_at(loops, keep, corner, s, n, k) {
+                    out.push(Run {
+                        a: loops.ids[s + k],
+                        b,
+                        keep: keep[s + k],
+                    });
+                } else {
+                    let last = out.len() - 1;
+                    out[last].b = b;
+                }
+                j += 1;
+            }
+        }
+        l += 1;
+    }
+    start.push(out.len() as u32);
+    if ok { Some((start, out)) } else { None }
+}
+
+/// Whether a loop (its segments `s..s + n` of `loops`) is cut before its segment `k`.
+fn cut_at(loops: &Csr, keep: &[u32], corner: &[bool], s: usize, n: usize, k: usize) -> bool {
+    corner[loops.ids[s + k] as usize] || keep[s + k] != NONE || keep[s + (k + n - 1) % n] != NONE
+}
+
+/// The edges of `edges`: each one's key (least end, other end), sorted, and its two (final face,
+/// run).
+pub type Edges = (Vec<(u32, u32)>, Vec<[(u32, u32); 2]>);
+
+/// Stage 4c, the edges: the runs that are no kept edge (`runs`, row `l` of `start` loop `l`, of
+/// final face `face_of[l]`) by their ends either way round: per edge its key (least end, other
+/// end), sorted, and its two (final face, run). None: an edge with other than two runs (two runs
+/// of one pair of ends in a face pair, or one alone: a ledger the bridge got wrong).
+pub fn edges(start: &[u32], runs: &[Run], face_of: &[u32]) -> Option<Edges> {
+    // (least end, other end, run) of every run not kept, sorted; the run's face by its loop
+    let mut by_ends: Vec<(u32, u32, u32)> = Vec::new();
+    let mut run_face = vec![NONE; runs.len()];
+    let nl = start.len().saturating_sub(1);
+    let mut l = 0;
+    while l < nl {
+        let mut r = start[l] as usize;
+        while r < start[l + 1] as usize {
+            run_face[r] = face_of[l];
+            if runs[r].keep == NONE {
+                let (a, b) = (runs[r].a, runs[r].b);
+                let (lo, hi) = if a <= b { (a, b) } else { (b, a) };
+                by_ends.push((lo, hi, r as u32));
+            }
+            r += 1;
+        }
+        l += 1;
+    }
+    sort_triples(&mut by_ends);
+    let mut keys: Vec<(u32, u32)> = Vec::new();
+    let mut pairs: Vec<[(u32, u32); 2]> = Vec::new();
+    let mut ok = true;
+    let mut k = 0;
+    while ok && k < by_ends.len() {
+        let mut j = k + 1;
+        while j < by_ends.len() && by_ends[j].0 == by_ends[k].0 && by_ends[j].1 == by_ends[k].1 {
+            j += 1;
+        }
+        if j - k != 2 {
+            ok = false;
+        } else {
+            let (r0, r1) = (by_ends[k].2, by_ends[k + 1].2);
+            keys.push((by_ends[k].0, by_ends[k].1));
+            pairs.push([(run_face[r0 as usize], r0), (run_face[r1 as usize], r1)]);
+        }
+        k = j;
+    }
+    if ok { Some((keys, pairs)) } else { None }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -367,6 +504,49 @@ mod tests {
             },
         };
         assert_eq!(chain(&segs, &turns).expect("closes"), vec![vec![0, 1, 2, 3], vec![4, 5, 6, 7]]);
+    }
+
+    #[test]
+    fn corners_count_the_faces_round_a_point_and_the_ones_the_bridge_adds() {
+        // point 0 has faces 0 1 2; point 1 faces 0 1, and one more the loops do not show; 2: one
+        let pf = [(0, 0), (0, 1), (0, 2), (1, 0), (1, 1), (2, 0)];
+        assert_eq!(corners(3, &pf, &[0, 1, 1]), vec![true, true, false]);
+        assert_eq!(corners(3, &pf, &[0, 0, 0]), vec![true, false, false]);
+    }
+
+    #[test]
+    fn a_loop_is_cut_at_its_corners_and_beside_kept_edges_and_runs_pair_into_edges() {
+        // two final faces sharing the run 2 -> 0 (a square 0 1 2 3 cut by its diagonal: face 0
+        // the loop 0 1 2, face 1 the loop 2 3 0, as point ids); corners 0 and 2 only
+        let loops = Csr {
+            start: vec![0, 3, 6],
+            ids: vec![0, 1, 2, 2, 3, 0],
+        };
+        let keep = [NONE; 6];
+        let corner = [true, false, true, false];
+        let (start, rs) = runs(&loops, &keep, &corner).expect("cut");
+        assert_eq!(start, vec![0, 2, 4]);
+        let r = |a, b| Run { a, b, keep: NONE };
+        assert_eq!(rs, vec![r(0, 2), r(2, 0), r(2, 0), r(0, 2)]);
+        // every run has ends 0 and 2: four runs on one pair of ends, refused
+        assert_eq!(edges(&start, &rs, &[0, 1]), None);
+        // a lens of two faces, each one run either way between 0 and 2: one edge, its two runs
+        let (keys, pairs) = edges(&[0, 1, 2], &[r(0, 2), r(2, 0)], &[0, 1]).expect("two runs");
+        assert_eq!(keys, vec![(0, 2)]);
+        assert_eq!(pairs, vec![[(0, 0), (1, 1)]]);
+    }
+
+    #[test]
+    fn a_kept_edge_is_a_run_of_its_own_and_not_an_edge_and_a_loop_with_no_cut_is_refused() {
+        // a triangle 0 1 2 with its first side kept (edge 9), no corners
+        let loops = Csr {
+            start: vec![0, 3],
+            ids: vec![0, 1, 2],
+        };
+        let (start, rs) = runs(&loops, &[9, NONE, NONE], &[false; 3]).expect("cut by the kept edge");
+        assert_eq!(start, vec![0, 2]);
+        assert_eq!(rs, vec![Run { a: 0, b: 1, keep: 9 }, Run { a: 1, b: 0, keep: NONE }]);
+        assert_eq!(runs(&loops, &[NONE; 3], &[false; 3]), None);
     }
 
     #[test]

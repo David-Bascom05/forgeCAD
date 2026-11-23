@@ -3363,91 +3363,65 @@ fn build_body(w: &Wr, fins: &[Fin], kept: &[Kept], core_srcs: &[Vec<usize>], pla
     pf.dedup();
     let mut pts: Vec<PK> = Vec::new();
     let mut start: Vec<u32> = Vec::new();
-    for (i, &(k, _)) in pf.iter().enumerate() {
+    // (point index, final face) of each, as `stitch::corners` takes them
+    let mut pf_ids: Vec<(u32, u32)> = Vec::with_capacity(pf.len());
+    for (i, &(k, fi)) in pf.iter().enumerate() {
         if pts.last() != Some(&k) {
             pts.push(k);
             start.push(i as u32);
         }
+        pf_ids.push((pts.len() as u32 - 1, fi));
     }
     start.push(pf.len() as u32);
     let at = |k: PK| pts.binary_search(&k).ok();
-    // a vertex: three or more faces round it, body 0's kept faces counted
-    let mut vert = vec![false; pts.len()];
-    for (i, &k) in pts.iter().enumerate() {
-        let mut n = (start[i + 1] - start[i]) as usize;
-        if let (PK::Orig(v), true) = (k, n < 3 && keep_far) {
-            n += w.pts[0]
-                .round(v)
-                .iter()
-                .filter(|&&g| !w.reg.near[g as usize])
-                .count();
-        }
-        vert[i] = n >= 3;
-    }
-    // runs: each loop cut at its vertices, and either side of a kept edge; ends as point indices
-    struct Run {
-        a: u32,
-        b: u32,
-        keep: Option<(EdgeId, bool)>,
-    }
-    // per loop: its runs, or None for a kept loop
-    let mut face_runs: Vec<Vec<Option<Vec<Run>>>> = Vec::with_capacity(fins.len());
-    // (edge key, final face) of every run that is not a kept edge
-    let mut ef: Vec<((u32, u32), u32)> = Vec::new();
+    // a vertex: three or more faces round it, body 0's kept faces counted (the far ones round an
+    // input vertex of body 0, which the loops do not show, counted here)
+    // (asked only where the loops show fewer than three: `corners` adds it only there)
+    let extra: Vec<u32> = (0..pts.len())
+        .map(|i| match (pts[i], keep_far && start[i + 1] - start[i] < 3) {
+            (PK::Orig(v), true) => w.pts[0].round(v).iter().filter(|&&g| !w.reg.near[g as usize]).count() as u32,
+            _ => 0,
+        })
+        .collect();
+    let vert = core::stitch::corners(pts.len(), &pf_ids, &extra);
+    // runs: each loop cut at its vertices, and either side of a kept edge (stitch::runs), its
+    // ends as point indices; the kept edges by their place in `keeps`
+    let mut keeps: Vec<(EdgeId, bool)> = Vec::new();
+    let mut loops = core::v2::Csr::default();
+    let mut keep_of: Vec<u32> = Vec::new();
+    let mut face_of: Vec<u32> = Vec::new();
+    // per final face, per loop: its row of the runs, or None for a kept loop
+    let mut face_rows: Vec<Vec<Option<usize>>> = Vec::with_capacity(fins.len());
     for (fi, f) in fins.iter().enumerate() {
-        let mut lruns = Vec::with_capacity(f.loops.len());
+        let mut rows = Vec::with_capacity(f.loops.len());
         for lp in &f.loops {
             let Lp::New(lp) = lp else {
-                lruns.push(None);
+                rows.push(None);
                 continue;
             };
-            let n = lp.len();
-            let ia: Vec<u32> = lp
-                .iter()
-                .map(|s| at(s.a).map(|i| i as u32))
-                .collect::<Option<_>>()?;
-            let cut =
-                |k: usize| vert[ia[k] as usize] || lp[k].keep.is_some() || lp[(k + n - 1) % n].keep.is_some();
-            let first = (0..n).find(|&k| cut(k))?;
-            let mut runs: Vec<Run> = Vec::new();
-            for j in 0..n {
-                let k = (first + j) % n;
-                let b = ia[(k + 1) % n];
-                if j == 0 || cut(k) {
-                    runs.push(Run {
-                        a: ia[k],
-                        b,
-                        keep: lp[k].keep,
-                    });
-                } else {
-                    runs.last_mut().unwrap().b = b;
-                }
+            rows.push(Some(face_of.len()));
+            loops.start.push(loops.ids.len() as u32);
+            for sg in lp {
+                loops.ids.push(at(sg.a)? as u32);
+                keep_of.push(match sg.keep {
+                    None => NONE,
+                    Some(k) => match keeps.iter().position(|&x| x == k) {
+                        Some(j) => j as u32,
+                        None => {
+                            keeps.push(k);
+                            keeps.len() as u32 - 1
+                        }
+                    },
+                });
             }
-            for r in &runs {
-                if r.keep.is_none() {
-                    ef.push(((r.a.min(r.b), r.a.max(r.b)), fi as u32));
-                }
-            }
-            lruns.push(Some(runs));
+            face_of.push(fi as u32);
         }
-        face_runs.push(lruns);
+        face_rows.push(rows);
     }
-    // each edge between exactly two final faces
-    ef.sort_unstable();
-    let mut keys: Vec<(u32, u32)> = Vec::new();
-    let mut kstart: Vec<u32> = Vec::new();
-    for (i, &(k, _)) in ef.iter().enumerate() {
-        if keys.last() != Some(&k) {
-            keys.push(k);
-            kstart.push(i as u32);
-        }
-    }
-    kstart.push(ef.len() as u32);
-    for i in 0..keys.len() {
-        if kstart[i + 1] - kstart[i] != 2 {
-            return None;
-        }
-    }
+    loops.start.push(loops.ids.len() as u32);
+    let (rstart, runs) = core::stitch::runs(&loops, &keep_of, &vert)?;
+    // each edge between exactly two final faces (stitch::edges)
+    let (keys, pairs) = core::stitch::edges(&rstart, &runs, &face_of)?;
     // names, by unify's rule (unify.rs, rename_wholes), so a face is named alike on both paths:
     // - an input face in one final face keeps its name; one split over several gives each a
     //   piece of its name, recorded as that name's piece (joins.pieces);
@@ -3708,17 +3682,19 @@ fn build_body(w: &Wr, fins: &[Fin], kept: &[Kept], core_srcs: &[Vec<usize>], pla
             surface: bodies[fs[src].body].face(fs[src].face).surface.clone(),
             same_sense: along == (o > 0),
             name: fnames[fi],
-            loops: Vec::with_capacity(face_runs[fi].len()),
+            loops: Vec::with_capacity(face_rows[fi].len()),
         };
-        for (li, runs) in face_runs[fi].iter().enumerate() {
-            let Some(runs) = runs else {
+        for (li, row) in face_rows[fi].iter().enumerate() {
+            let Some(row) = *row else {
                 let Lp::Kept(i) = f.loops[li] else { unreachable!() };
                 nf.loops.push(NewLoop::Kept(kept[i].lp));
                 continue;
             };
-            let mut uses = Vec::with_capacity(runs.len());
-            for r in runs {
-                if let Some((e, fw)) = r.keep {
+            let lruns = &runs[rstart[row] as usize..rstart[row + 1] as usize];
+            let mut uses = Vec::with_capacity(lruns.len());
+            for r in lruns {
+                if r.keep != NONE {
+                    let (e, fw) = keeps[r.keep as usize];
                     uses.push((ERef::Old(e), fw));
                     continue;
                 }
@@ -3731,9 +3707,7 @@ fn build_body(w: &Wr, fins: &[Fin], kept: &[Kept], core_srcs: &[Vec<usize>], pla
                     let name = match oe.binary_search_by_key(&key, |x| x.0) {
                         Ok(j) => oe[j].2,
                         Err(_) => {
-                            let names: Vec<Name> = (kstart[ki]..kstart[ki + 1])
-                                .map(|j| fnames[ef[j as usize].1 as usize])
-                                .collect();
+                            let names: Vec<Name> = pairs[ki].iter().map(|&(fi, _)| fnames[fi as usize]).collect();
                             Name::NONE.with_str("decide-once edge").with_set(&names)
                         }
                     };
