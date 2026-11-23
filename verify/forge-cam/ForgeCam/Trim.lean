@@ -813,7 +813,7 @@ theorem clearFace_region {Z : Set ℝ} {w : ℝ → ℝ} {γ : ℝ → P} (hγ :
   exact hD p hp s hs y hy
 
 
-/-! ### The stored ends: slab's lo − 2·gap (CAM 0b56c1e) -/
+/-! ### The stored ends: slab's lo − 2·gap (CAM 3a388e5) -/
 
 theorem inSector_scale {ua ub e : P} {ka kb : ℝ} (hka : 0 < ka) (hkb : 0 < kb) :
     inSector (sc ka ua) (sc kb ub) e ↔ inSector ua ub e := by
@@ -954,7 +954,7 @@ theorem segArcLo_shift (a d c ua ub : P) {r ka kb g : ℝ} (hd : 0 < nsq d) (hka
         Real.sq_sqrt (sq_nonneg (√(nsq (pt a d (footT a d c) - c)) - r))])
   · exact hbase
 
-/-- **A line move against a trim arc piece, as slab computes it (0b56c1e)**: with the stored
+/-- **A line move against a trim arc piece, as slab computes it (3a388e5)**: with the stored
 ends (off the circle by at most g), max(0, √lo − 2g) bounds the distance from every point of
 the segment to every point of the piece (its circle's arc and both radial pieces). -/
 theorem segArc_trim (a d c ea eb : P) {r g : ℝ} (hd : 0 < nsq d)
@@ -1171,7 +1171,7 @@ theorem onCircle_data {c ea eb : P} {r g : ℝ} (hok : (Piece.arc c ea eb r g).o
       d2_onCircle hb]; exact hgb
   · ext v; simp only [DistArc.arc, mem_ofPred_eq, inSector_scale hka hkb]
 
-/-- **An arc move against a trim arc piece, as slab computes it (0b56c1e).** Both arcs are given
+/-- **An arc move against a trim arc piece, as slab computes it (3a388e5).** Both arcs are given
 by their stored ends (the move's within g1 of its circle, the trim's within g2).
 max(0, √lo − 2·g1 − 2·g2) bounds the distance from every point of the move's arc to every
 point of the trim piece (its circle's arc and both radial pieces). -/

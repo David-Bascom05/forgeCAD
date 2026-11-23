@@ -127,11 +127,14 @@ are covered.
 ## Still to do when asked
 
 1. Done: `dist_region` and the point-in-trim test (Trim.lean).
-   - The stored-ends mismatch is fixed by CAM in 0b56c1e: lo − 2·arc_gap per arc piece,
+   - The stored-ends mismatch is fixed by CAM in 3a388e5: lo − 2·arc_gap per arc piece,
      outward-rounded and clamped at 0, for trims and for cylinder walls.
    - The perturbation lemma is proven. `segArcLo_shift` and `arcArcLo_shift` show that ends moved
      along their rays by ≤ g change √lo by ≤ g. `segArc_trim` and `arcArc_trim` give slab's
      bound against the full trim piece (circle arc plus radial pieces).
+   - CAM's regression test is 5b97845 (slab::gap_tests): ends 1e-3 off the circle, 2000 points; it
+     fails without the 2·gap and passes with it. Commit b2195f5's message names the fix 0b56c1e;
+     it is 3a388e5.
 2. An executable ℚ(√d) form of the arc candidates, if the L6 tests want one.
 3. Not yet asked for: the character level of G-code (digits and templates), canned-cycle
    expansion in the G6 model, L5 for the checker's intervals, and L4 (Aeneas).

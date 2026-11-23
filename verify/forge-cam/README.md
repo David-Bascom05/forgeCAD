@@ -31,7 +31,7 @@ lake exe cache get && lake build && lake env lean Axioms.lean
 - `distRegion_lower`: with the start classified outside and the frontier in the pieces, a piece bound is a region bound.
 - `arcPiece_lower`: an arc's circle-part bound less the gap bounds its radial pieces.
 - `clearFace_region` closes ClearFace (i) for flat faces.
-- The stored ends (CAM 0b56c1e): `segArcLo_shift` and `arcArcLo_shift` show that moving an arc's ends along their rays by at most g raises √lo by at most g. So `segArc_trim` and `arcArc_trim`: slab's max(0, √lo − 2g per arc) bounds the distance to the trim piece, radial pieces included. |
+- The stored ends (CAM 3a388e5): `segArcLo_shift` and `arcArcLo_shift` show that moving an arc's ends along their rays by at most g raises √lo by at most g. So `segArc_trim` and `arcArc_trim`: slab's max(0, √lo − 2g per arc) bounds the distance to the trim piece, radial pieces included. |
 | ForgeCam/Machine.lean | G5 for 3-axis. `G5_line_iff`: a line move is within travel iff its ends are. `G5_arc`: an arc or helix is within travel if its circle's box is. `lineOkQ_iff`: the ℚ Bool check equals the ℝ spec. |
 | ForgeCam/Post.lean | G6 for forge-post's motion subset. The printer is modal: G only on a mode change, an axis only when it changes, F only when the feed changes, and a null move is dropped. **`round_trip`**: `read (print p) = normalize (motions p)`. `G6` adds quantisation, with error ≤ ½·10^−d (`roundEven_isQuant`, ties to even). **`faulty_counterexample`**: the printer as of 155e2f2 reads a plunge back as a rapid. Arc semantics: `arcFull_agrees` (the meant `full` equals the control's reading on every posted arc, as forge-post 4bfe2a2 compares), `arc2_safe` (with X, Y compared, a posted arc read as a full circle was planned as a full turn or more than a half turn) and `arc3_unsafe` (with all three compared, as in 0a4c189, a short helical arc is read as a full helical turn). |
 
@@ -69,7 +69,7 @@ For one face, slab.rs answers `Clear { lower }` when two things hold:
   arc–arc (DistArc); flat regions (Trim). There are two stated conditions.
   - The even-odd rule (`EvenOdd`): the trim region's meaning, a Jordan-curve fact.
   - Arc ends: none needed beyond Piece.ok. Stored ends off the circle are covered by slab's
-    lo − 2·gap (0b56c1e), proven in `segArc_trim` and `arcArc_trim`.
+    lo − 2·gap (3a388e5), proven in `segArc_trim` and `arcArc_trim`.
 - The arc forms have no ℚ executable: they need ℚ(√d).
 - The interval arithmetic (L5) and the B&B checker for non-prism faces.
 - The character level of G-code text: words to digits, and the dialect's templates.
