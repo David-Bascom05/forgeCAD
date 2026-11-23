@@ -18,9 +18,7 @@
 #                           after ~2M instructions), so this mode builds the same source for
 #                           x86-64-v2 (RUSTFLAGS, its own target dir: target/callgrind), which
 #                           valgrind runs whole. The normal build is untouched; the counts measure
-#                           the same kernel code, compiled without AVX. The count is exact
-#                           (tools/speed/exact.sh: fixed HashMap seeds, one core, forge-lang's
-#                           kernel hash pinned), so any line that moves moved for a reason.
+#                           the same kernel code, compiled without AVX.
 # Unset, perf is used when it counts instructions:u and callgrind otherwise. The callgrind gate
 # takes ~20 min on 4 busy cores. GATE_REPS=3 keeps the least of 3 counts, for a line near 0.5%.
 #
@@ -48,8 +46,6 @@ set -e
 dir=$(dirname "$0")
 perf=${PERF:-perf}
 counter=${GATE_COUNTER:-}
-[ "${GATE_EXACT:-}" = 1 ] && counter=callgrind
-feat=${GATE_FEATURES:-}
 if [ -z "$counter" ]; then
   if "$perf" stat -x, -e instructions:u true 2>&1 >/dev/null | grep -q '^[0-9][0-9]*,'; then
     counter=perf
@@ -72,7 +68,7 @@ case $counter in
     vgonly=
     count1() {
       if [ "$exact" = 1 ]; then
-        (cd / && env -i PATH=/usr/bin:/bin HOME=/tmp FORGECAD_CACHE=off LD_PRELOAD="$bin/fixedrandom.so" \
+        (cd / && env -i PATH=/usr/bin:/bin HOME=/tmp LD_PRELOAD="$bin/fixedrandom.so" \
           FORGE_BENCH_PARTS="$bin/parts" taskset -c "${GATE_CPU:-0}" setarch -R \
           valgrind --fair-sched=yes --tool=callgrind --cache-sim=no --callgrind-out-file=/dev/null $vgonly "$@")
       else
@@ -96,20 +92,9 @@ count() {
   echo "$best"
 }
 echo "counter: $counter (baseline $baseline)"
-if [ -n "$feat" ]; then
-  # target/callgrind-on (as phases.sh builds it), or target/perf-on
-  tag=$(echo "$feat" | tr -c 'a-z0-9\n' -)
-  [ "$feat" = forge-bool/decide_once ] && tag=on
-  if [ "$counter" = callgrind ]; then target="$target-$tag"; else target="$target/perf-$tag"; fi
-  fflag="--features $feat"
-else
-  fflag=
-fi
 export CARGO_TARGET_DIR="$target"
-# callgrind's count is exact (tools/speed/exact.sh): the same code counts the same
-if [ "$counter" = callgrind ]; then exact_dir=$target; . "$dir/exact.sh"; fi
-cargo build -q --release -p forge-model --example regen1 --example bits $fflag
-cargo build -q --release -p forge-lang --example benchparts $fflag
+cargo build -q --release -p forge-model --example regen1 --example bits
+cargo build -q --release -p forge-lang --example benchparts
 bin="$target/release/examples"
 if [ "$counter" = callgrind ] && [ "$exact" = 1 ]; then
   # (the binaries at a path of one length whatever the checkout, and the fixed getrandom)

@@ -13,9 +13,5 @@ forge-par = { path = "../forge-par" }
 [target.'cfg(target_family = "wasm")'.dependencies]
 forge-alloc = { path = "../forge-alloc" }
 
-[features]
-# exact dyadic arithmetic (src/exact.rs), for forge-bool's decide_once; off, not compiled at all
-exact = []
-
 [lints]
 workspace = true

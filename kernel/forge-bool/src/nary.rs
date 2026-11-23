@@ -2785,13 +2785,11 @@ fn nary_body(
         let ls = &regs[ri].loops;
         (a.0 + ls.len(), a.1 + ls.iter().map(Vec::len).sum::<usize>())
     });
-    // (with room: the in-place boolean of the next feature grows it without a copy)
-    let room = forge_topo::body::room;
-    out.faces.reserve_exact(room(kept.len()));
-    out.loops.reserve_exact(room(loops));
-    out.coedges.reserve_exact(room(uses));
-    out.edges.reserve_exact(room(uses / 2));
-    out.vertices.reserve_exact(room(uses / 2));
+    out.faces.reserve_exact(kept.len());
+    out.loops.reserve_exact(loops);
+    out.coedges.reserve_exact(uses);
+    out.edges.reserve_exact(uses / 2);
+    out.vertices.reserve_exact(uses / 2);
     for t in tools {
         out.joins.extend(&t.joins);
     }

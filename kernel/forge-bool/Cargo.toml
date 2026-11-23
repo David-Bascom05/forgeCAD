@@ -18,10 +18,7 @@ forge-bool-core = { path = "../forge-bool-core", optional = true }
 decisions = ["forge-geom/decisions", "forge-topo/decisions"]
 # the decide-once flat-face boolean (src/decide_once.rs over forge-bool-core): flat booleans go
 # through the ledger and the combinatorial core; off by default, the old path unchanged
-decide_once = ["dep:forge-bool-core", "forge-math/exact"]
-# measurement only: run A8's face builder (src/decide_once/face_builder.rs) in release too, beside
-# the plane ledger, its answer dropped, so its instructions and allocations can be counted
-a8_builder = ["decide_once"]
+decide_once = ["dep:forge-bool-core"]
 
 [dev-dependencies]
 forge-ops = { path = "../forge-ops" }

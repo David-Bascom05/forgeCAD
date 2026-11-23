@@ -48,6 +48,11 @@ The parts:
   I recommend F1. It is what "today's code, proven" can mean. Then ValidSolid R holds for `Rexact`,
   and for R itself when δ is below the body's own feature size, which is checked or refused.
 
+  **Ruled (the master, 2026-11-23): F1**, faithful within a proven δ ("we can use floating point").
+  Inputs are read the same way: `ValidSolid b := ∃ b*, Refines_δ b b* ∧ ∃ S, Bounds b* S`, and
+  `⟦b⟧ := ⟦b*⟧`. `Bounds` is dol-curved's (ForgeCurved/BodyModel.lean, 30c0577b): exact, on the exact
+  counterpart.
+
 ## D. The chain of contracts (boolean.rs `general`, as written)
 
 Each step names its function, its contract, and what it hands the next. Composition: D1–D5 build
@@ -76,14 +81,14 @@ definitions (`keep`, `coreI`) are reused as the spec of D6–D8.
 
 | # | site | why it doesn't compose | what the swap needs |
 |---|---|---|---|
-| G1 | the output geometry is f64 | `⟦R⟧ = reg(..)` is false as equality | an owner decision: F1 (recommended) or F2 |
+| G1 | the output geometry is f64 | `⟦R⟧ = reg(..)` is false as equality | **ruled F1**: `Refines_δ R R*` and `⟦R*⟧ = reg(..)` |
 | G2 | **the retry ladder**: `plan` → `plan_retried` → `plan_fenced`, rerunning `plan_once` under the thread-local flags `CAREFUL`, `ABSORB_HAIR_ROOTS` (a forge-geom global), `CHORDS`, `NO_RUN_ON`, `FENCES` after an `Internal` error | a function's meaning depends on global flags set by a failed earlier run, so no one contract holds; the rungs pick between readings of a near-tangent case | each rung's question (hair root: two crossings or one touch; chord or curve; run-on; fence) becomes a screen plus an exact test at that site, in one pass; the ladder goes |
 | G3 | `RETRIED` plus `forge_topo::check` on the result → `Lost::RetryInvalid` | a post-hoc partial check (forge_topo::check is not full ValidSolid, see decide-once's note) decides Ok or refuse, so an Ok after a retry is unproven | goes with G2 |
 | G4 | **`UNDECIDED`** (thread-local): a touch with no local class continues, then `undecided_touch` refuses only if `forge_topo::check` finds `FaceWrongSide` | a guess plus a post-hoc partial check; a wrong Ok passes if the check misses it | D3: an exact local class at the touch, then `Undecided` refusal |
 | G5 | `ODD` (thread-local), set inside `plan_once` and read by `plan_fenced` | hidden state between runs | goes with G2 |
 | G6 | `pinched_new` / `pinched_old` after `apply` | a post-hoc detector on the built body, not a contract on the exact result | D9's statement: a pinch in R iff the exact result is non-manifold there. Provable if it reads only exact combinatorics; check whether it uses tolerances |
 | G7 | `refuse_strays` (`stray_edges_from`) | a post-hoc check on f64 curves straying from their chains; under F1 it is the δ check | becomes F1's proven δ bound per edge, or a refusal with a true reason |
-| G8 | **`imprint::mode()`** from env `FORGE_IMPRINT` (a static): `on` runs `imprint::column`, a second algorithm; `check` runs both and panics on a difference | the boolean's algorithm depends on an environment variable | the theorem covers the default (`off`); `column` either gets its own D-chain or is fixed off in release. A master decision |
+| G8 | **`imprint::mode()`** from env `FORGE_IMPRINT` (a static): `on` runs `imprint::column`, a second algorithm; `check` runs both and panics on a difference | the boolean's algorithm depends on an environment variable | **ruled: a hidden input.** Release runs the default path only; `column` is out of the theorem's scope. Fix: a compile-time feature or removal, with nothing read from env in release |
 | G9 | `SCRATCH` (thread-local) reused across booleans; `Face::query` (`FaceInfo`) kept across booleans and patched by `extend_query`/`drop_query_loops` | caches that outlive a call: a stale cache is a wrong answer | an invariant `CacheOK b` (the cached FaceInfo equals the one built fresh), preserved by every edit; a hypothesis of each D-step, proven for apply |
 | G10 | `nary`'s `Batch` (a trait object: GPU or CPU) and its threads | an external verdict source; parallel order | `Batch` sound when decided (a hypothesis on the impl; CpuBatch proven); results merged in a fixed order |
 | G11 | the many `LINEAR` / `RIM` tolerance tests (`on_edge`, `settle`, `tolerant_cuts`, `grown_tols`, `holds_edge`, `rolls_off`, `through_smooth_edge`, …) | each is a guess unless it is a proven screen | each becomes a screen plus exact; listed per function as the aeneas table arrives |
@@ -120,7 +125,9 @@ Needed:
 
 This layer is the first piece of Lean, before any refinement proof. It is shared with the curved
 plan. **Owners (the master, 2026-11-23):** aeneas does (1), as part of the Charon fix. dol-curved
-does (2) and (3).
+does (2) and (3): ForgeCurved/BodyModel.lean (30c0577b) has `FaceModel`, `BodyModel`, `Bounds`,
+`ValidSolid`, `denote` and the bridge. Asked of it (review, 2026-11-23): uniqueness of `S`,
+`Refines_δ` with b*, and edges and vertices with their incidences (for F1 and the names).
 
 ## 1. classify.rs
 
