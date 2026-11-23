@@ -1,4 +1,4 @@
-# Real CAD programs at scale: CADFS and DeepCAD, judged part by part
+# Real CAD programs at scale: CADFS, DeepCAD and Fusion 360 Gallery, judged part by part
 
 Each part is a real modelling history translated to `.fg`, built by our kernel, and held to its own source STEP by
 the truth rule (truth.md): OCCT's Gauss–Kronrod volume, the area that goes with it, uncertain where OCCT's measures
@@ -17,10 +17,7 @@ archive, measured and deleted.
 |---|---|---|---|---|
 | CADFS | huggingface.co/datasets/VladPyatov/CADFS: `dataset/featurescript_fp.zip`, `raw/sketch_raw.zip` (downloaded), `dataset/step.zip` (by range), `misc/unique_models.json` | commit dd76a9b891a6921815fd13c0452afb2d61e5f833; sha256 f6c644f3… (fp), 37c91489… (sketch_raw), 42c79eae… (step) | CC-BY-4.0 (the dataset card). The models come from ABC (Onshape), whose models' copyright stays with their creators | research; aggregate results and ids |
 | DeepCAD | www.cs.columbia.edu/cg/deepcad/data.tar (`cad_json`); its STEP: ABC's, from CADFS's `raw/step_abc.zip` (by range) | data.tar etag c66f741-5c8dfdc23c228, cad_json.tar.gz sha256 5caea634…; step_abc sha256 3b92c861… | DeepCAD: MIT (code and processed data). ABC: research use, the models' copyright with their creators under Onshape's terms; CADFS redistributes ABC's STEP under CC-BY-4.0 | research; aggregate results and ids |
-
-Fusion 360 Gallery's reconstruction set is not used: its licence (non-commercial research only, binding a for-profit
-employer) rules it out, by the owner's decision of 2026-11-23. A first shard was started and stopped; its results
-were deleted. `scale.py` keeps no Fusion corpus.
+| Fusion 360 Gallery, reconstruction | fusion-360-gallery-dataset.s3.us-west-2.amazonaws.com/reconstruction/r1.0.1/r1.0.1.zip (by range: each design's .json and its final .step) | r1.0.1, etag e7b0f6dd…-123 | Fusion 360 Gallery Dataset License (in the archive, updated 11/2021): "only for non-commercial research purposes"; no redistribution; no re-association of a model with its creator | **test-only, not redistributed, owner-approved 2026-11-23**: streamed and cached outside the repo; only verdicts, causes and synthetic repros (our own numbers) are committed, never its files or excerpts |
 
 ## Method
 
@@ -28,7 +25,7 @@ were deleted. `scale.py` keeps no Fusion corpus.
 
 - **Ids.** Each corpus's ids are sorted and cut into fixed shards: shard k of S is `ids[k::S]`. CADFS: the 382,609 of
   `unique_models.json` that have a program, a sketch record and a STEP, S = 200, so shard 0 is the sample
-  coverage.md ran. DeepCAD: the 196,088 programs that have an ABC STEP, S = 200.
+  coverage.md ran. DeepCAD: the 196,088 programs that have an ABC STEP, S = 200. Fusion: its 8,625 designs, S = 10.
 - **One part.** Its files are fetched into a fresh directory; it is translated (`cadfs.py`, or `deepcad.py` over
   `../fusion.py`), judged (`judge`), and, if it built, its STEP is fetched and measured (`step_truth.measure`, in the
   OCCT interpreter); one line goes to the shard's `results.jsonl`; the directory goes. Each step is its own process
