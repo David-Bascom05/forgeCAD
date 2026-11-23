@@ -434,7 +434,14 @@ impl Session {
             });
         let asks = matches!(
             what,
-            "holes" | "section" | "aligned" | "gap" | "interference" | "frame" | "cutlist" | "bendsim"
+            "holes"
+                | "section"
+                | "aligned"
+                | "gap"
+                | "interference"
+                | "frame"
+                | "cutlist"
+                | "bendsim"
                 | "dfm"
         ) || (what == "faces"
             && !of_feature

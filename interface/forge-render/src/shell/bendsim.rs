@@ -189,22 +189,22 @@ pub fn body(ui: &mut egui::Ui, st: &mut BendSimUi) {
     );
     let n = plan.steps.len();
     ui.horizontal(|ui| {
-        if ui.button("⏮").clicked() {
+        if ui.button("First").clicked() {
             st.step = 0;
             st.t = 0.0;
         }
-        if ui.button("◀").clicked() && st.step > 0 {
+        if ui.button("Back").clicked() && st.step > 0 {
             st.step -= 1;
             st.t = 0.0;
         }
-        if ui.button(if st.playing { "⏸" } else { "▶" }).clicked() {
+        if ui.button(if st.playing { "Pause" } else { "Play" }).clicked() {
             st.playing = !st.playing;
             if st.playing && st.t >= 1.0 && st.step + 1 >= n {
                 st.step = 0;
                 st.t = 0.0;
             }
         }
-        if ui.button("▶|").clicked() && st.step + 1 < n {
+        if ui.button("Next").clicked() && st.step + 1 < n {
             st.step += 1;
             st.t = 0.0;
         }

@@ -37,11 +37,24 @@ fn solid(line: &str) -> Field {
     let y = z.cross(x);
     if let Some(ci) = t.iter().position(|&w| w == "circle") {
         let c = o + x * num(ci + 1) + y * num(ci + 2);
-        Field::Rod { o: c, d: z, h, radius: num(ci + 3) }
+        Field::Rod {
+            o: c,
+            d: z,
+            h,
+            radius: num(ci + 3),
+        }
     } else {
         let ri = at("rect");
         let c = o + x * num(ri + 1) + y * num(ri + 2);
-        Field::Block { o: c, x, y, z, w: num(ri + 3), l: num(ri + 4), h }
+        Field::Block {
+            o: c,
+            x,
+            y,
+            z,
+            w: num(ri + 3),
+            l: num(ri + 4),
+            h,
+        }
     }
 }
 
@@ -53,7 +66,7 @@ fn winding(m: &forge_mesh::mesh::TriMesh, p: Point3) -> f64 {
         let (la, lb, lc) = (a.length(), b.length(), c.length());
         let num = a.dot(b.cross(c));
         let den = la * lb * lc + a.dot(b) * lc + b.dot(c) * la + c.dot(a) * lb;
-        w += 2.0 * num.atan2(den);
+        w += 2.0 * forge_math::dmath::atan2(num, den);
     }
     w / (4.0 * std::f64::consts::PI)
 }
@@ -98,14 +111,24 @@ fn main() {
     let (fc, fg, id) = (&a[1], &a[2], &a[3]);
     let n: usize = a.get(4).and_then(|s| s.parse().ok()).unwrap_or(200_000);
     let fc_src = std::fs::read_to_string(format!("{fc}/{id}.fc")).expect("the .fc part");
-    let lines: Vec<&str> = fc_src.lines().filter(|l| !l.starts_with('#') && !l.trim().is_empty()).collect();
+    let lines: Vec<&str> = fc_src
+        .lines()
+        .filter(|l| !l.starts_with('#') && !l.trim().is_empty())
+        .collect();
     let body = Field::Union(vec![solid(lines[0]), solid(lines[1])]);
     let r: f64 = lines[2].split_whitespace().nth(1).expect("r").parse().expect("r");
     let src = std::fs::read_to_string(format!("{fg}/{id}.fg")).expect("the .fg part");
-    let keep = src.lines().position(|l| l.starts_with("round = ")).expect("a round");
+    let keep = src
+        .lines()
+        .position(|l| l.starts_with("round = "))
+        .expect("a round");
     let src: String = src.lines().take(keep + 1).map(|l| format!("{l}\n")).collect();
     let m = forge_lang::fuzz::build(&src);
-    let k = m.features.iter().position(|f| matches!(f, Feature::Fillet { .. })).expect("a fillet");
+    let k = m
+        .features
+        .iter()
+        .position(|f| matches!(f, Feature::Fillet { .. }))
+        .expect("a fillet");
     let s = m.body_after(k).expect("the body before");
     let after = m.body_after(k + 1).expect("the result");
     let old: BTreeSet<_> = s.face_ids().map(|f| s.face(f).name).collect();
@@ -113,7 +136,10 @@ fn main() {
     let mesh = [1e-3, 3e-3, 1e-2]
         .iter()
         .find_map(|&c| {
-            let q = Quality { chord: c, max_angle: 0.05 };
+            let q = Quality {
+                chord: c,
+                max_angle: 0.05,
+            };
             match tessellate(&after, &q) {
                 Ok(m) => Some(m),
                 Err(e) => {
@@ -128,7 +154,10 @@ fn main() {
         let e = forge_step::export(&after, &forge_step::Options::default()).expect("a STEP file");
         std::fs::write(format!("{dir}/{id}.step"), e.text).unwrap();
     }
-    let (va, vb) = (forge_topo::mass::mass(&after).unwrap().volume, forge_topo::mass::mass(&s).unwrap().volume);
+    let (va, vb) = (
+        forge_topo::mass::mass(&after).unwrap().volume,
+        forge_topo::mass::mass(&s).unwrap().volume,
+    );
     println!(
         "{id}: r {r}  result {va:.4} (mesh {:.4}, open edges {})  before {vb:.4}  added {:.4}  triangles {}",
         mesh.volume(),
@@ -151,7 +180,13 @@ fn main() {
     let (mut inside, mut lost) = (0usize, 0usize);
     let mut extra: Vec<Point3> = a[5..]
         .chunks(3)
-        .map(|c| Point3::new(c[0].parse().unwrap(), c[1].parse().unwrap(), c[2].parse().unwrap()))
+        .map(|c| {
+            Point3::new(
+                c[0].parse().unwrap(),
+                c[1].parse().unwrap(),
+                c[2].parse().unwrap(),
+            )
+        })
         .collect();
     // PTS=FILE: points as `x y z [kind]` lines (label_pipe's DUMP), judged like the given ones
     if let Ok(f) = std::env::var("PTS") {
@@ -177,12 +212,19 @@ fn main() {
         }
     }
     if let Ok(dir) = std::env::var("OUT") {
-        let t: String = extra.iter().map(|x| format!("{} {} {}\n", x.x, x.y, x.z)).collect();
+        let t: String = extra
+            .iter()
+            .map(|x| format!("{} {} {}\n", x.x, x.y, x.z))
+            .collect();
         std::fs::write(format!("{dir}/{id}.pts"), t).unwrap();
     }
     println!("sampled {n}: {inside} certified body points, {lost} that Index puts outside the result");
     for (i, x) in extra.iter().enumerate() {
-        let w = if mesh.triangles.is_empty() { f64::NAN } else { winding(&mesh, *x) };
+        let w = if mesh.triangles.is_empty() {
+            f64::NAN
+        } else {
+            winding(&mesh, *x)
+        };
         let (mut best, mut bf) = (f64::INFINITY, 0u32);
         for (t, &f) in mesh.triangles.iter().zip(&mesh.face_of) {
             let [p, q, c] = t.map(|i| mesh.positions[i as usize]);
@@ -196,7 +238,9 @@ fn main() {
         println!(
             "{} ({:.4}, {:.4}, {:.4})  sd_body {:.4}  Index before {:?}  Index after {:?}  winding {:.4}  nearest face {} ({}, {:?}) at {:.4}",
             if i < given { "given " } else { "found " },
-            x.x, x.y, x.z,
+            x.x,
+            x.y,
+            x.z,
             body.sd(*x),
             sx.classify(*x),
             ix.classify(*x),
