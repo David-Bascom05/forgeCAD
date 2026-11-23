@@ -12,12 +12,14 @@
 //! |---|---|---|
 //! | `QLine` | QLine.lean | `along_line`, `cov_on`: the exact covector of a point on a rational line |
 //! | `QSep` | QSep.lean | the Tier-0 seams from a face's frame, and their classes |
-//! | `QEdge` | QEdge.lean | edge samples on a plane `x = c`, their on-curve and Bezout certificates, `edge_cov`; the untrusted proposer |
-//! | `QVert` | QVert.lean | vertex samples and `vert_cov` (the checker; the proposer is next) |
+//! | `QEdge` | QEdge.lean | edge samples on a plane `x = c`, their on-curve and Bezout certificates, `edge_cov` |
+//! | `QPropose` | QPropose.lean | `elim`, `mk_edge`, `propose_edge` (complete, by `roots_of`), the shear |
+//! | `QVert` | QVert.lean | vertex samples, `vert_cov`, and `bezout3` (completeness); the proposer is next |
 //! | `QForm` | QForm.lean | `SForm` and `on_cov`: a body's sign formula on a covector |
 //!
-//! Still to come, in the plan's order: `QSweep` (critical values and walls), `QSample` (the
-//! sampler), `QLedger` (the ledger for `forge_bool_core`), then the write.
+//! Root isolation is `forge_math::exact::alg::roots_of` (RootCover.lean): complete by a checked
+//! cover, or `None`. Still to come: the vertex proposer, the cell enumerator (Tier 1 is being
+//! redesigned by dol-curved, curved-design.md §2.3), `QSample`, `QLedger`, then the write.
 //!
 //! **Numbers.** Exact arithmetic is `forge_math::exact::alg` (rationals and `Num` over the one
 //! bignum, `Big`). Every untrusted step (resultants, root isolation, cofactors) produces a
@@ -35,9 +37,7 @@
 
 use forge_bool_core::Sgn;
 use forge_math::Interval;
-use forge_math::exact::alg::{
-    Num, Poly, Q, eqv, is_zero_p, padd, pdiv, pmul, pneg, pscale, psub, real_roots, sqfree, trim,
-};
+use forge_math::exact::alg::{Num, Poly, Q, eqv, is_zero_p, padd, pmul, pneg, pscale, psub, roots_of};
 
 /// Why a boolean is not decided here, and goes to the old path, counted.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -756,66 +756,9 @@ pub fn edge_cov(qs: &[Quadric], e: &ESample, fuel: usize) -> Option<Vec<Sgn>> {
     if ok { Some(out) } else { None }
 }
 
-/// `Alg.BPoly`: a polynomial in `z` with coefficients in `ℚ[y]`.
+/// `Alg.BPoly`: a polynomial in `z` with coefficients in `ℚ[y]` (`YPoly`'s zero is `[]`, as the
+/// list instance of `Coef`).
 pub type BPoly = Vec<Poly>;
-
-/// `padd` over `ℚ[y]` coefficients.
-pub fn bpadd(p: &[Poly], q: &[Poly]) -> BPoly {
-    let n = if p.len() >= q.len() { p.len() } else { q.len() };
-    let mut out: BPoly = Vec::with_capacity(n);
-    let mut i = 0;
-    while i < n {
-        if i < p.len() && i < q.len() {
-            out.push(padd(&p[i], &q[i]));
-        } else if i < p.len() {
-            out.push(p[i].clone());
-        } else {
-            out.push(q[i].clone());
-        }
-        i += 1;
-    }
-    out
-}
-
-/// `pneg` over `ℚ[y]` coefficients.
-pub fn bpneg(p: &[Poly]) -> BPoly {
-    let mut out: BPoly = Vec::with_capacity(p.len());
-    let mut i = 0;
-    while i < p.len() {
-        out.push(pneg(&p[i]));
-        i += 1;
-    }
-    out
-}
-
-/// `pscale` over `ℚ[y]` coefficients.
-pub fn bpscale(c: &[Q], p: &[Poly]) -> BPoly {
-    let mut out: BPoly = Vec::with_capacity(p.len());
-    let mut i = 0;
-    while i < p.len() {
-        out.push(pmul(c, &p[i]));
-        i += 1;
-    }
-    out
-}
-
-/// `pmul` over `ℚ[y]` coefficients (zero is the empty polynomial, as `YPoly`'s).
-pub fn bpmul(p: &[Poly], q: &[Poly]) -> BPoly {
-    let mut r: BPoly = Vec::new();
-    let mut i = p.len();
-    while i > 0 {
-        i -= 1;
-        let mut sh: BPoly = Vec::with_capacity(r.len() + 1);
-        sh.push(Vec::new());
-        let mut k = 0;
-        while k < r.len() {
-            sh.push(r[k].clone());
-            k += 1;
-        }
-        r = bpadd(&bpscale(&p[i], q), &sh);
-    }
-    r
-}
 
 /// `bzero`: every coefficient of every coefficient is zero.
 pub fn bzero(s: &[Poly]) -> bool {
@@ -834,101 +777,138 @@ pub fn restr_b(q: &Quadric, c: &Q) -> BPoly {
     vec![a0, a1, a2]
 }
 
+/// `liftY R`: a polynomial in `y` as a bivariate constant.
+pub fn lift_y(r: &[Q]) -> BPoly {
+    vec![r.to_vec()]
+}
+
 /// **`bezout`**: the certificate `A q_j + B q_k = R` on `x = c` (`bezout_spec`: every crossing of
 /// the curve with the plane is a root of `R`).
 pub fn bezout(qj: &Quadric, qk: &Quadric, c: &Q, a: &[Poly], b: &[Poly], r: &[Q]) -> bool {
-    let s = bpadd(&bpmul(a, &restr_b(qj, c)), &bpmul(b, &restr_b(qk, c)));
-    bzero(&bpadd(&s, &bpneg(&[r.to_vec()])))
+    bzero(&psub(
+        &padd(&pmul(a, &restr_b(qj, c)), &pmul(b, &restr_b(qk, c))),
+        &lift_y(r),
+    ))
 }
 
-/// The crossings of the curve `q_j = q_k = 0` with the plane `x = c`, certified: every sample
-/// passes `on_curve` and `d_ok`, and the Bezout certificate `(A, B)` makes the list complete.
-#[derive(Clone, Debug)]
-pub struct EdgeCut {
-    pub samples: Vec<ESample>,
-    pub a: BPoly,
-    pub b: BPoly,
+// =============================================================================================
+// QPropose.lean: the edge proposer, complete, and the shear
+// =============================================================================================
+
+/// `Elim`: the elimination data for `q_j`, `q_k` on `x = c`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Elim {
     pub r: Poly,
+    pub n: Poly,
+    pub d: Poly,
+    pub u: BPoly,
+    pub v: BPoly,
 }
 
-/// **The edge proposer** (untrusted, then checked): eliminates `z` from `q_j|ₓ₌c`, `q_k|ₓ₌c`.
-///
-/// With `f = a₀ + a₁z + a₂z²`, `g = b₀ + b₁z + b₂z²` (`a₂ = q_j.zz`, `b₂ = q_k.zz` constants),
-/// `D = b₂a₁ − a₂b₁` and `N = b₂a₀ − a₂b₀` give `b₂f − a₂g = Dz + N`, the first subresultant;
-/// the resultant is `Res = N² + D(a₁b₀ − a₀b₁)`, and `homog q_j = a₂ Res`, `homog q_k = b₂ Res`.
-/// With `M = a₂Dz − a₂N + a₁D`, `a₂ Res = (D² − b₂M) f + a₂M g` is the Bezout identity (and
-/// symmetrically with `j`, `k` swapped when `a₂ = 0`).
-///
-/// `R` is `Res` made monic; a non-square-free `Res` (a tangency on the plane) is not proposed
-/// here, nor is a root with `D(α) = 0`: both answer [`Skip::Uncertified`], one decided rule.
-pub fn propose_edge(qj: &Quadric, qk: &Quadric, c: &Q) -> Result<EdgeCut, Skip> {
+/// `elim qj qk c`: the resultant `R`, the subresultant `D z + N`, and the Bezout cofactors.
+pub fn elim(qj: &Quadric, qk: &Quadric, c: &Q) -> Elim {
     let (a0, a1, a2) = restr(qj, c);
     let (b0, b1, b2) = restr(qk, c);
-    let swap = a2[0].is_zero();
-    if swap && b2[0].is_zero() {
-        return Err(Skip::Uncertified("edge: both quadrics linear in z on the plane"));
+    let x = psub(&pmul(&a2, &b0), &pmul(&a0, &b2));
+    let y = psub(&pmul(&a2, &b1), &pmul(&a1, &b2));
+    let z = psub(&pmul(&a1, &b0), &pmul(&a0, &b1));
+    let u0 = padd(
+        &psub(
+            &psub(&pmul(&a0, &pmul(&b2, &b2)), &pmul(&a1, &pmul(&b1, &b2))),
+            &pmul(&a2, &pmul(&b0, &b2)),
+        ),
+        &pmul(&a2, &pmul(&b1, &b1)),
+    );
+    let u1 = padd(&pneg(&pmul(&a1, &pmul(&b2, &b2))), &pmul(&a2, &pmul(&b1, &b2)));
+    let v0 = padd(
+        &psub(
+            &padd(&pneg(&pmul(&a0, &pmul(&a2, &b2))), &pmul(&a1, &pmul(&a1, &b2))),
+            &pmul(&a1, &pmul(&a2, &b1)),
+        ),
+        &pmul(&a2, &pmul(&a2, &b0)),
+    );
+    let v1 = psub(&pmul(&a1, &pmul(&a2, &b2)), &pmul(&a2, &pmul(&a2, &b1)));
+    Elim {
+        r: psub(&pmul(&x, &x), &pmul(&y, &z)),
+        n: psub(&pmul(&b2, &a0), &pmul(&a2, &b0)),
+        d: psub(&pmul(&b2, &a1), &pmul(&a2, &b1)),
+        u: vec![u0, u1],
+        v: vec![v0, v1],
     }
-    // (f, g) = (q_j, q_k), or swapped so that f's z² coefficient is nonzero
-    let (f0, f1, f2, g0, g1, g2) = if swap {
-        (&b0, &b1, &b2, &a0, &a1, &a2)
+}
+
+/// `mkEdge`: the sample for the root `n` (quotients `a₂`, `b₂`: `homog q_j = a₂ R`).
+pub fn mk_edge(qj: &Quadric, qk: &Quadric, c: &Q, e: &Elim, n: &Num) -> ESample {
+    ESample {
+        c: c.clone(),
+        r: e.r.clone(),
+        n: e.n.clone(),
+        d: e.d.clone(),
+        y: n.clone(),
+        qj: restr(qj, c).2,
+        qk: restr(qk, c).2,
+    }
+}
+
+/// **`proposeEdge qj qk c fuel`**: every crossing of `q_j = q_k = 0` with `x = c`, each
+/// certified (`bezout`, `rootsOf`, `onCurve`, `dOk`), or `None` (`Skip::Budget`).
+/// `proposeEdge_complete`: every crossing is a proposed sample's point.
+pub fn propose_edge(qj: &Quadric, qk: &Quadric, c: &Q, fuel: usize) -> Option<Vec<ESample>> {
+    let e = elim(qj, qk, c);
+    if !bezout(qj, qk, c, &e.u, &e.v, &e.r) {
+        None
     } else {
-        (&a0, &a1, &a2, &b0, &b1, &b2)
-    };
-    let d = trim(&psub(&pmul(g2, f1), &pmul(f2, g1)));
-    let n = trim(&psub(&pmul(g2, f0), &pmul(f2, g0)));
-    let res = trim(&padd(
-        &pmul(&n, &n),
-        &pmul(&d, &psub(&pmul(f1, g0), &pmul(f0, g1))),
-    ));
-    if res.is_empty() {
-        return Err(Skip::Uncertified("edge: the resultant vanishes"));
-    }
-    let r = sqfree(&res);
-    if r.len() != res.len() {
-        return Err(Skip::Uncertified("edge: the resultant is not square-free"));
-    }
-    let lc = res[res.len() - 1].clone();
-    // M = a2 D z − a2 N + a1 D, as a polynomial in z over Q[y]
-    let m: BPoly = vec![psub(&pmul(f1, &d), &pmul(f2, &n)), pmul(f2, &d)];
-    let fz2 = f2[0].clone();
-    let inv = Q::one().div(&fz2.mul(&lc));
-    // A' = (D² − g2 M) / (a2 lc), B' = M / lc, for f and g
-    let af = bpscale(&[inv], &bpadd(&[pmul(&d, &d)], &bpneg(&bpscale(g2, &m))));
-    let bg = bpscale(&[Q::one().div(&lc)], &m);
-    let (a, b) = if swap { (bg, af) } else { (af, bg) };
-    if !bezout(qj, qk, c, &a, &b, &r) {
-        return Err(Skip::Uncertified("edge: the Bezout certificate fails"));
-    }
-    let hj = homog(qj, c, &n, &d);
-    let hk = homog(qk, c, &n, &d);
-    let qjq = pdiv(&hj, &r);
-    let qkq = pdiv(&hk, &r);
-    let roots = real_roots(&r, ROOT_FUEL);
-    let mut samples: Vec<ESample> = Vec::with_capacity(roots.len());
-    let mut err: Option<Skip> = None;
-    let mut i = 0;
-    while err.is_none() && i < roots.len() {
-        let e = ESample {
-            c: c.clone(),
-            r: r.clone(),
-            n: n.clone(),
-            d: d.clone(),
-            y: roots[i].clone(),
-            qj: qjq.clone(),
-            qk: qkq.clone(),
-        };
-        if !e.on_curve(qj, qk) {
-            err = Some(Skip::Uncertified("edge: the on-curve certificate fails"));
-        } else if !e.d_ok(SIGN_FUEL) {
-            err = Some(Skip::Uncertified("edge: D vanishes at a root"));
-        } else {
-            samples.push(e);
+        match roots_of(&e.r, fuel) {
+            None => None,
+            Some(ns) => {
+                let mut es: Vec<ESample> = Vec::with_capacity(ns.len());
+                let mut ok = true;
+                let mut i = 0;
+                while i < ns.len() {
+                    let s = mk_edge(qj, qk, c, &e, &ns[i]);
+                    ok = ok && s.on_curve(qj, qk) && s.d_ok(SIGN_FUEL);
+                    es.push(s);
+                    i += 1;
+                }
+                if ok { Some(es) } else { None }
+            }
         }
-        i += 1;
     }
-    match err {
-        Some(s) => Err(s),
-        None => Ok(EdgeCut { samples, a, b, r }),
+}
+
+/// `shears`: the generic projections tried, in order; the decided rule is the first `λ` for
+/// which every proposal of the boolean succeeds, and past the list `Skip::Budget`.
+pub fn shears() -> Vec<Q> {
+    vec![
+        Q::from_i64(0),
+        Q::from_i64(1),
+        Q::from_i64(2),
+        Q::from_i64(3),
+        Q::from_i64(-1),
+        Q::one().div(&Q::from_i64(2)),
+        Q::from_i64(5),
+        Q::from_i64(-3),
+        Q::from_i64(7),
+        Q::one().div(&Q::from_i64(3)),
+    ]
+}
+
+impl Quadric {
+    /// `Quadric.shear l`: `q(x, y + λz, z)` (`shear_ev`).
+    pub fn shear(&self, l: &Q) -> Quadric {
+        let two = Q::from_i64(2);
+        Quadric {
+            xx: self.xx.clone(),
+            yy: self.yy.clone(),
+            zz: self.zz.add(&l.mul(l).mul(&self.yy)).add(&l.mul(&self.yz)),
+            xy: self.xy.clone(),
+            xz: self.xz.add(&l.mul(&self.xy)),
+            yz: self.yz.add(&two.mul(l).mul(&self.yy)),
+            lx: self.lx.clone(),
+            ly: self.ly.clone(),
+            lz: self.lz.add(&l.mul(&self.ly)),
+            c: self.c.clone(),
+        }
     }
 }
 
@@ -1017,6 +997,59 @@ pub fn vert_cov(qs: &[Quadric], v: &VSample, fuel: usize) -> Option<Vec<Sgn>> {
         i += 1;
     }
     if ok { Some(out) } else { None }
+}
+
+/// `TPoly`: a polynomial in `z` over `ℚ[x][y]` (`ZC` is a `BPoly` whose inner variable is `x`).
+pub type TPoly = Vec<BPoly>;
+
+/// `restrT q`: `q` as a polynomial in `z` over `ℚ[x][y]`.
+pub fn restr_t(q: &Quadric) -> TPoly {
+    vec![
+        vec![
+            vec![q.c.clone(), q.lx.clone(), q.xx.clone()],
+            vec![q.ly.clone(), q.xy.clone()],
+            vec![q.yy.clone()],
+        ],
+        vec![vec![q.lz.clone(), q.xz.clone()], vec![q.yz.clone()]],
+        vec![vec![q.zz.clone()]],
+    ]
+}
+
+/// `liftR R`: a polynomial in `x` as a trivariate constant.
+pub fn lift_r(r: &[Q]) -> TPoly {
+    vec![vec![r.to_vec()]]
+}
+
+/// `tzero`: every coefficient is zero.
+pub fn tzero(t: &[BPoly]) -> bool {
+    let mut ok = true;
+    let mut i = 0;
+    while ok && i < t.len() {
+        ok = bzero(&t[i]);
+        i += 1;
+    }
+    ok
+}
+
+/// **`bezout3`**: the certificate `A q_a + B q_b + C q_c = R(x)` (`bezout3_spec`: every common
+/// zero of the three has its `x` a root of `R`).
+#[allow(clippy::too_many_arguments)]
+pub fn bezout3(
+    qa: &Quadric,
+    qb: &Quadric,
+    qc: &Quadric,
+    a: &[BPoly],
+    b: &[BPoly],
+    c: &[BPoly],
+    r: &[Q],
+) -> bool {
+    tzero(&psub(
+        &padd(
+            &padd(&pmul(a, &restr_t(qa)), &pmul(b, &restr_t(qb))),
+            &pmul(c, &restr_t(qc)),
+        ),
+        &lift_r(r),
+    ))
 }
 
 // =============================================================================================
@@ -1157,45 +1190,70 @@ mod tests {
         );
     }
 
-    /// The proposer on the unit sphere and the plane z = 0, cut by x = 0 and by x = 1/3.
+    /// QPropose.lean's #guards, and the covectors of what it proposes.
     #[test]
-    fn propose_sphere_circle() {
-        let cut = propose_edge(&sphere1(), &plane_z(), &qi(0)).unwrap();
-        assert_eq!(cut.samples.len(), 2);
+    fn qpropose_guards() {
+        let es = propose_edge(&sphere1(), &plane_z(), &qi(0), 30).unwrap();
+        assert_eq!(es.len(), 2);
         let mut i = 0;
-        while i < cut.samples.len() {
-            let e = &cut.samples[i];
-            assert!(e.on_curve(&sphere1(), &plane_z()) && e.d_ok(SIGN_FUEL));
-            let cov = edge_cov(&[sphere1(), plane_z()], e, SIGN_FUEL).unwrap();
-            assert_eq!(cov, vec![Sgn::Zero, Sgn::Zero]);
+        while i < es.len() {
+            assert_eq!(
+                edge_cov(&[sphere1(), plane_z()], &es[i], SIGN_FUEL),
+                Some(vec![Sgn::Zero, Sgn::Zero])
+            );
             i += 1;
         }
-        // x = 1/3: y = ±√(8/9), irrational, isolated; the sides of y = 1/2 are − and +
-        let cut = propose_edge(&sphere1(), &plane_z(), &q(1, 3)).unwrap();
-        assert_eq!(cut.samples.len(), 2);
-        let s0 = edge_cov(&[plane_yh()], &cut.samples[0], SIGN_FUEL).unwrap();
-        let s1 = edge_cov(&[plane_yh()], &cut.samples[1], SIGN_FUEL).unwrap();
-        assert!(s0 != s1);
-        // a tilted cylinder against a sphere: transversal, four crossings on x = 0
-        let cyl = QFace {
-            solid: 0,
-            index: 0,
-            kind: Kind::Cyl,
-            o: V3::new(q(1, 4), qi(0), qi(0)),
-            z: V3::new(qi(0), qi(1), qi(1)),
-            r: q(1, 2),
-            s: qi(0),
-            c: qi(0),
-        }
-        .quadric();
-        let cut = propose_edge(&sphere1(), &cyl, &qi(0)).unwrap();
-        assert!(!cut.samples.is_empty());
+        // the cylinder x² + z² = 1/4: unsheared, two crossings share a y, refused
+        let cyl_y = Quadric {
+            xx: qi(1),
+            zz: qi(1),
+            c: q(-1, 4),
+            ..Quadric::default()
+        };
+        assert!(propose_edge(&sphere1(), &cyl_y, &qi(0), 30).is_none());
+        let l = qi(1);
+        let (s1, c1) = (sphere1().shear(&l), cyl_y.shear(&l));
+        let es = propose_edge(&s1, &c1, &qi(0), 30).unwrap();
+        assert_eq!(es.len(), 4);
         let mut i = 0;
-        while i < cut.samples.len() {
-            let cov = edge_cov(&[sphere1(), cyl.clone()], &cut.samples[i], SIGN_FUEL).unwrap();
-            assert_eq!(cov, vec![Sgn::Zero, Sgn::Zero]);
+        while i < es.len() {
+            assert_eq!(
+                edge_cov(&[s1.clone(), c1.clone()], &es[i], SIGN_FUEL),
+                Some(vec![Sgn::Zero, Sgn::Zero])
+            );
             i += 1;
         }
+        // x = 1/3 on the sphere and z = 0: y = ±√(8/9), sides of y = 1/2 differ
+        let es = propose_edge(&sphere1(), &plane_z(), &q(1, 3), 30).unwrap();
+        assert_eq!(es.len(), 2);
+        assert!(edge_cov(&[plane_yh()], &es[0], SIGN_FUEL) != edge_cov(&[plane_yh()], &es[1], SIGN_FUEL));
+    }
+
+    /// QVert.lean's bezout3 #guard: x² − 1 = 1·sphere + (−y)·y + (−z)·z.
+    #[test]
+    fn qvert_bezout3() {
+        let plane_y0 = quad([0, 0, 0, 0, 0, 0, 0, 1, 0, 0]);
+        let a: TPoly = vec![vec![poly_i(&[1])]];
+        let b: TPoly = vec![vec![Vec::new(), poly_i(&[-1])]];
+        let c: TPoly = vec![vec![], vec![poly_i(&[-1])]];
+        assert!(bezout3(
+            &sphere1(),
+            &plane_y0,
+            &plane_z(),
+            &a,
+            &b,
+            &c,
+            &poly_i(&[-1, 0, 1])
+        ));
+        assert!(!bezout3(
+            &sphere1(),
+            &plane_y0,
+            &plane_z(),
+            &a,
+            &b,
+            &c,
+            &poly_i(&[-2, 0, 1])
+        ));
     }
 
     /// QLine: the covector along a line through the unit sphere.
@@ -1376,18 +1434,18 @@ mod digest {
             let mut j = i + 1;
             while j < qs.len() {
                 let c = q(g.next(), 8);
-                let s = match propose_edge(&qs[i], &qs[j], &c) {
-                    Ok(cut) => {
-                        let mut t = format!("{}:", cut.samples.len());
+                let s = match propose_edge(&qs[i], &qs[j], &c, ROOT_FUEL) {
+                    Some(es) => {
+                        let mut t = format!("{}:", es.len());
                         let mut k = 0;
-                        while k < cut.samples.len() {
-                            let cov = edge_cov(&qs, &cut.samples[k], SIGN_FUEL);
-                            t = format!("{t}{:?}{:?};", cut.samples[k].y, cov);
+                        while k < es.len() {
+                            let cov = edge_cov(&qs, &es[k], SIGN_FUEL);
+                            t = format!("{t}{:?}{:?};", es[k].y, cov);
                             k += 1;
                         }
                         t
                     }
-                    Err(e) => format!("{e:?}"),
+                    None => "none".to_string(),
                 };
                 h = fnv(h, &s);
                 j += 1;
@@ -1404,7 +1462,7 @@ mod digest {
                 p.push(Q::from_i64(g.next()));
                 t += 1;
             }
-            let rs = real_roots(&sqfree(&p), ROOT_FUEL);
+            let rs = roots_of(&p, ROOT_FUEL);
             h = fnv(h, &format!("{rs:?}"));
             k += 1;
         }
@@ -1412,5 +1470,5 @@ mod digest {
         assert_eq!(h, DIGEST, "the exact path's digest changed: {h:#018x}");
     }
 
-    const DIGEST: u64 = 0xdfc8694f40ec8244;
+    const DIGEST: u64 = 0x3a7aacb84adadac1;
 }

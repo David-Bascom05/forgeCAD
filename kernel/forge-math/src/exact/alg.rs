@@ -1,7 +1,9 @@
 //! Exact rationals, rational polynomials and real algebraic numbers over [`Big`]: the Rust side
-//! of verify/forge-exact's `ForgeExact.Alg` (Poly.lean, Model.lean, Real.lean) and the parts of
-//! `ForgeExact.QRef.Decide` the curved decide-once bridge calls (`realRoots`, `between`,
-//! `simplest`, `rootBound`).
+//! of verify/forge-exact's `ForgeExact.Alg` (Poly.lean, Model.lean, Real.lean), the parts of
+//! `ForgeExact.QRef.Decide` the curved decide-once bridge calls (`between`, `simplest`,
+//! `rootBound`), and `DecideOnce/RootCover.lean` (`rootsOf`: roots complete by certificate).
+//! `QRef.realRoots` is deliberately not mirrored: it drops an interval still being split when
+//! its fuel runs out, so it can lose roots silently.
 //!
 //! **One to one with the Lean.** Every function here is the Lean definition of the same name
 //! (snake-cased), written so that its result is the Lean's on every input, list lengths included:
@@ -12,7 +14,7 @@
 //! **What is proven, and where.** The checks (`iso_ok`, `Num::sign`, `Num::cmp_rat`, `Num::cmp`,
 //! `eqv`) are the ones `sign_spec`, `cmpRat_spec`, `cmp_spec` and `eqv_spec` are about: spent fuel
 //! answers `None`, never a wrong sign. The proposers (`divmod`, `xgcd`, `gcd`, `sqfree`,
-//! `real_roots`) are untrusted, as in the Lean: whatever they return is checked before a decision
+//! `split_gap`, `ray_bound`, `propose_sqfree`) are untrusted, as in the Lean: whatever they return is checked before a decision
 //! rests on it. L4 for this module is **interim** (design D6): a differential test against the
 //! Lean L2; the blocker is Aeneas and bignum arithmetic.
 //!
@@ -369,17 +371,64 @@ pub fn qsgn(c: &Q) -> i32 {
 // Polynomials (Alg/Poly.lean): coefficient lists, constant term first
 // ---------------------------------------------------------------------------------------------
 
+/// A coefficient ring for the list polynomials: `Q`, and lists of a coefficient ring (so
+/// `Vec<Q>` is Lean's `Poly`, `Vec<Vec<Q>>` its `BPoly` over `YPoly`, and `Vec<Vec<Vec<Q>>>` its
+/// `TPoly` over `ZC`). The list instance's zero is `[]` and its one `[1]`, as `YPoly`'s and `ZC`'s.
+pub trait Coef: Clone {
+    fn c_zero() -> Self;
+    fn c_one() -> Self;
+    fn c_add(&self, o: &Self) -> Self;
+    fn c_mul(&self, o: &Self) -> Self;
+    fn c_neg(&self) -> Self;
+}
+
+impl Coef for Q {
+    fn c_zero() -> Q {
+        Q::zero()
+    }
+    fn c_one() -> Q {
+        Q::one()
+    }
+    fn c_add(&self, o: &Q) -> Q {
+        self.add(o)
+    }
+    fn c_mul(&self, o: &Q) -> Q {
+        self.mul(o)
+    }
+    fn c_neg(&self) -> Q {
+        self.neg()
+    }
+}
+
+impl<T: Coef> Coef for Vec<T> {
+    fn c_zero() -> Vec<T> {
+        Vec::new()
+    }
+    fn c_one() -> Vec<T> {
+        vec![T::c_one()]
+    }
+    fn c_add(&self, o: &Vec<T>) -> Vec<T> {
+        padd(self, o)
+    }
+    fn c_mul(&self, o: &Vec<T>) -> Vec<T> {
+        pmul(self, o)
+    }
+    fn c_neg(&self) -> Vec<T> {
+        pneg(self)
+    }
+}
+
 /// A rational polynomial, `p[0] + p[1] x + …` (Lean's `Poly := List Rat`).
 pub type Poly = Vec<Q>;
 
 /// `padd`: coefficientwise, the longer list's tail kept.
-pub fn padd(p: &[Q], q: &[Q]) -> Poly {
+pub fn padd<T: Coef>(p: &[T], q: &[T]) -> Vec<T> {
     let n = if p.len() >= q.len() { p.len() } else { q.len() };
-    let mut out: Poly = Vec::with_capacity(n);
+    let mut out: Vec<T> = Vec::with_capacity(n);
     let mut i = 0;
     while i < n {
         if i < p.len() && i < q.len() {
-            out.push(p[i].add(&q[i]));
+            out.push(p[i].c_add(&q[i]));
         } else if i < p.len() {
             out.push(p[i].clone());
         } else {
@@ -390,41 +439,41 @@ pub fn padd(p: &[Q], q: &[Q]) -> Poly {
     out
 }
 
-/// `pscale c p`.
-pub fn pscale(c: &Q, p: &[Q]) -> Poly {
-    let mut out: Poly = Vec::with_capacity(p.len());
+/// `pscale c p = p.map (c * ·)`.
+pub fn pscale<T: Coef>(c: &T, p: &[T]) -> Vec<T> {
+    let mut out: Vec<T> = Vec::with_capacity(p.len());
     let mut i = 0;
     while i < p.len() {
-        out.push(c.mul(&p[i]));
+        out.push(c.c_mul(&p[i]));
         i += 1;
     }
     out
 }
 
 /// `pneg p`.
-pub fn pneg(p: &[Q]) -> Poly {
-    let mut out: Poly = Vec::with_capacity(p.len());
+pub fn pneg<T: Coef>(p: &[T]) -> Vec<T> {
+    let mut out: Vec<T> = Vec::with_capacity(p.len());
     let mut i = 0;
     while i < p.len() {
-        out.push(p[i].neg());
+        out.push(p[i].c_neg());
         i += 1;
     }
     out
 }
 
 /// `psub p q = padd p (pneg q)`.
-pub fn psub(p: &[Q], q: &[Q]) -> Poly {
+pub fn psub<T: Coef>(p: &[T], q: &[T]) -> Vec<T> {
     padd(p, &pneg(q))
 }
 
 /// `pmul`: `[] * q = []`, `(a :: p) * q = padd (a q) (0 :: p q)`, unfolded from the back.
-pub fn pmul(p: &[Q], q: &[Q]) -> Poly {
-    let mut r: Poly = Vec::new();
+pub fn pmul<T: Coef>(p: &[T], q: &[T]) -> Vec<T> {
+    let mut r: Vec<T> = Vec::new();
     let mut i = p.len();
     while i > 0 {
         i -= 1;
-        let mut sh: Poly = Vec::with_capacity(r.len() + 1);
-        sh.push(Q::zero());
+        let mut sh: Vec<T> = Vec::with_capacity(r.len() + 1);
+        sh.push(T::c_zero());
         let mut k = 0;
         while k < r.len() {
             sh.push(r[k].clone());
@@ -436,11 +485,11 @@ pub fn pmul(p: &[Q], q: &[Q]) -> Poly {
 }
 
 /// `pshiftUp k p`: `k` zeros, then `p`.
-pub fn pshift_up(k: usize, p: &[Q]) -> Poly {
-    let mut out: Poly = Vec::with_capacity(k + p.len());
+pub fn pshift_up<T: Coef>(k: usize, p: &[T]) -> Vec<T> {
+    let mut out: Vec<T> = Vec::with_capacity(k + p.len());
     let mut i = 0;
     while i < k {
-        out.push(Q::zero());
+        out.push(T::c_zero());
         i += 1;
     }
     let mut j = 0;
@@ -452,8 +501,8 @@ pub fn pshift_up(k: usize, p: &[Q]) -> Poly {
 }
 
 /// `ppow p k`.
-pub fn ppow(p: &[Q], k: usize) -> Poly {
-    let mut r: Poly = vec![Q::one()];
+pub fn ppow<T: Coef>(p: &[T], k: usize) -> Vec<T> {
+    let mut r: Vec<T> = vec![T::c_one()];
     let mut i = 0;
     while i < k {
         r = pmul(p, &r);
@@ -463,8 +512,8 @@ pub fn ppow(p: &[Q], k: usize) -> Poly {
 }
 
 /// `pcomp p q = p (q x)`, Horner: `foldr (fun c acc => padd [c] (pmul q acc)) []`.
-pub fn pcomp(p: &[Q], q: &[Q]) -> Poly {
-    let mut acc: Poly = Vec::new();
+pub fn pcomp<T: Coef>(p: &[T], q: &[T]) -> Vec<T> {
+    let mut acc: Vec<T> = Vec::new();
     let mut i = p.len();
     while i > 0 {
         i -= 1;
@@ -985,94 +1034,185 @@ pub fn root_bound(p: &[Q]) -> Q {
     }
 }
 
-/// `ratSqrt?`: the square root of a rational, if it is rational.
-pub fn rat_sqrt(q: &Q) -> Option<Q> {
-    if q.signum() < 0 {
+// ---------------------------------------------------------------------------------------------
+// DecideOnce/RootCover.lean: a certified cover of a polynomial's real roots
+// ---------------------------------------------------------------------------------------------
+
+/// `gapOk`: the gap `(a, b)` is root-free or isolates one root.
+pub fn gap_ok(p: &[Q], a: &Q, b: &Q) -> bool {
+    a.lt(b)
+        && (no_pos_root(&moebius(a, b, p))
+            || Iso {
+                p: p.to_vec(),
+                a: a.clone(),
+                b: b.clone(),
+            }
+            .ok())
+}
+
+/// `gapsOk p t0 ts`: every gap of the breakpoints `t0 :: ts` checks.
+pub fn gaps_ok(p: &[Q], t0: &Q, ts: &[Q]) -> bool {
+    let mut ok = true;
+    let mut a = t0.clone();
+    let mut i = 0;
+    while ok && i < ts.len() {
+        ok = gap_ok(p, &a, &ts[i]);
+        a = ts[i].clone();
+        i += 1;
+    }
+    ok
+}
+
+/// `lastOf t0 ts`.
+pub fn last_of(t0: &Q, ts: &[Q]) -> Q {
+    if ts.is_empty() {
+        t0.clone()
+    } else {
+        ts[ts.len() - 1].clone()
+    }
+}
+
+/// **`coverOk`**: both rays root-free (Descartes on `p(t₀ − s)` and `p(tₘ + s)`), every gap
+/// certified. `cover_complete`: then every root of `p` is in `cover_roots`.
+pub fn cover_ok(p: &[Q], t0: &Q, ts: &[Q]) -> bool {
+    no_pos_root(&pcomp(p, &[t0.clone(), Q::from_i64(-1)]))
+        && no_pos_root(&pcomp(p, &[last_of(t0, ts), Q::one()]))
+        && gaps_ok(p, t0, ts)
+}
+
+/// `gapRoots`: each gap that is not root-free, as its isolated root.
+pub fn gap_roots(p: &[Q], t0: &Q, ts: &[Q]) -> Vec<Num> {
+    let mut out: Vec<Num> = Vec::new();
+    let mut a = t0.clone();
+    let mut i = 0;
+    while i < ts.len() {
+        if !no_pos_root(&moebius(&a, &ts[i], p)) {
+            out.push(Num::Iso(Iso {
+                p: p.to_vec(),
+                a: a.clone(),
+                b: ts[i].clone(),
+            }));
+        }
+        a = ts[i].clone();
+        i += 1;
+    }
+    out
+}
+
+/// `coverRoots`: the breakpoints where `p` vanishes, then the gaps' isolated roots.
+pub fn cover_roots(p: &[Q], t0: &Q, ts: &[Q]) -> Vec<Num> {
+    let mut out: Vec<Num> = Vec::new();
+    if ev(p, t0).is_zero() {
+        out.push(Num::Rat(t0.clone()));
+    }
+    let mut i = 0;
+    while i < ts.len() {
+        if ev(p, &ts[i]).is_zero() {
+            out.push(Num::Rat(ts[i].clone()));
+        }
+        i += 1;
+    }
+    let g = gap_roots(p, t0, ts);
+    let mut j = 0;
+    while j < g.len() {
+        out.push(g[j].clone());
+        j += 1;
+    }
+    out
+}
+
+/// `splitGap p n a b`: split `(a, b)` until every gap checks; the interior breakpoints, in order
+/// (untrusted).
+pub fn split_gap(p: &[Q], n: usize, a: &Q, b: &Q) -> Option<Vec<Q>> {
+    if gap_ok(p, a, b) {
+        Some(Vec::new())
+    } else if n == 0 {
         None
     } else {
-        let sn = isqrt_big(&q.n);
-        let sd = isqrt_big(&q.d);
-        if bcmp(&sn.mul(&sn), &q.n) == 0 && bcmp(&sd.mul(&sd), &q.d) == 0 {
-            Some(Q::ratio(&sn, &sd))
-        } else {
-            None
+        let m = a.mid(b);
+        match (split_gap(p, n - 1, a, &m), split_gap(p, n - 1, &m, b)) {
+            (Some(l), Some(r)) => {
+                let mut out = l;
+                out.push(m);
+                let mut i = 0;
+                while i < r.len() {
+                    out.push(r[i].clone());
+                    i += 1;
+                }
+                Some(out)
+            }
+            _ => None,
         }
     }
 }
 
-/// The isolation fuel's work cap (`realRoots`' `for _ in [0:4000]`).
-pub const REAL_ROOTS_STEPS: usize = 4000;
-
-/// `realRoots p fuel`: the real roots of `p` (assumed square-free), each isolated or rational,
-/// in the Lean's order. Untrusted: every `Iso` returned has passed `Iso::ok`.
-pub fn real_roots(p0: &[Q], fuel: usize) -> Vec<Num> {
-    let p = trim(p0);
-    let mut out: Vec<Num> = Vec::new();
-    let dg = deg(&p);
-    if dg == 0 {
-        return out;
-    }
-    if dg == 1 {
-        out.push(Num::Rat(p[0].neg().div(&p[1])));
-        return out;
-    }
-    if dg == 2 {
-        let (c, b, a) = (p[0].clone(), p[1].clone(), p[2].clone());
-        let disc = b.mul(&b).sub(&Q::from_i64(4).mul(&a).mul(&c));
-        if disc.signum() < 0 {
-            return out;
+/// `rayBound p n B`: the bound doubled until both rays check (untrusted).
+pub fn ray_bound(p: &[Q], n: usize, b0: &Q) -> Option<Q> {
+    let mut b = b0.clone();
+    let mut k = n;
+    let mut out: Option<Q> = None;
+    while out.is_none() && k > 0 {
+        if no_pos_root(&pcomp(p, &[b.neg(), Q::from_i64(-1)]))
+            && no_pos_root(&pcomp(p, &[b.clone(), Q::one()]))
+        {
+            out = Some(b.clone());
+        } else {
+            b = Q::from_i64(2).mul(&b);
         }
-        let a2 = Q::from_i64(2).mul(&a);
-        if disc.is_zero() {
-            out.push(Num::Rat(b.neg().div(&a2)));
-            return out;
-        }
-        if let Some(r) = rat_sqrt(&disc) {
-            out.push(Num::Rat(b.neg().sub(&r).div(&a2)));
-            out.push(Num::Rat(b.neg().add(&r).div(&a2)));
-            return out;
-        }
-    }
-    let bnd = root_bound(&p);
-    // the stack, top last (Lean's list head)
-    let mut stack: Vec<(Q, Q, usize)> = vec![(bnd.neg(), bnd.clone(), 0)];
-    if ev(&p, &bnd.neg()).is_zero() {
-        out.push(Num::Rat(bnd.neg()));
-    }
-    if ev(&p, &bnd).is_zero() {
-        out.push(Num::Rat(bnd.clone()));
-    }
-    let mut it = 0;
-    while it < REAL_ROOTS_STEPS && !stack.is_empty() {
-        let (a, b, d) = stack.pop().unwrap_or((Q::zero(), Q::zero(), 0));
-        let tr = moebius(&a, &b, &p);
-        if !no_pos_root(&tr) {
-            let iso = Iso {
-                p: p.clone(),
-                a: a.clone(),
-                b: b.clone(),
-            };
-            if one_pos_root(&tr) && iso.ok() {
-                let w = b.sub(&a).div(&Q::from_i64(8));
-                let s = simplest(&a.add(&w), &b.sub(&w));
-                if a.lt(&s) && s.lt(&b) && ev(&p, &s).is_zero() {
-                    out.push(Num::Rat(s));
-                } else {
-                    out.push(Num::Iso(iso));
-                }
-            } else if d < fuel {
-                let m = a.mid(&b);
-                if ev(&p, &m).is_zero() {
-                    out.push(Num::Rat(m.clone()));
-                }
-                // Lean pushes (a, m) then (m, b) at the head: (a, m) is taken first
-                stack.push((m.clone(), b, d + 1));
-                stack.push((a, m, d + 1));
-            }
-        }
-        it += 1;
+        k -= 1;
     }
     out
+}
+
+/// `proposeCover p fuel`: a cover `(t₀, ts)`, checked by `cover_ok`, or `None`.
+pub fn propose_cover(p: &[Q], fuel: usize) -> Option<(Q, Vec<Q>)> {
+    match ray_bound(p, fuel, &root_bound(p)) {
+        None => None,
+        Some(b) => match split_gap(p, fuel, &b.neg(), &b) {
+            None => None,
+            Some(mid) => {
+                let mut ts = mid;
+                ts.push(b.clone());
+                if cover_ok(p, &b.neg(), &ts) {
+                    Some((b.neg(), ts))
+                } else {
+                    None
+                }
+            }
+        },
+    }
+}
+
+/// `certifiedRoots p fuel`: the roots of a square-free `p`, complete by certificate, or `None`.
+pub fn certified_roots(p: &[Q], fuel: usize) -> Option<Vec<Num>> {
+    propose_cover(p, fuel).map(|c| cover_roots(p, &c.0, &c.1))
+}
+
+/// `sqfreeOk p sp k w h`: `sp^k = p w` and `p = sp h` (`sqfree_roots`: the same roots).
+pub fn sqfree_ok(p: &[Q], sp: &[Q], k: usize, w: &[Q], h: &[Q]) -> bool {
+    eqv(&ppow(sp, k), &pmul(p, w)) && eqv(p, &pmul(sp, h))
+}
+
+/// `proposeSqfree p`: the square-free part, with its certificate checked, or `None`.
+pub fn propose_sqfree(p: &[Q]) -> Option<Poly> {
+    let sp = sqfree(p);
+    let k = deg(p) + 1;
+    let w = pdiv(&ppow(&sp, k), p);
+    let h = pdiv(p, &sp);
+    if sqfree_ok(p, &sp, k, &w, &h) {
+        Some(sp)
+    } else {
+        None
+    }
+}
+
+/// **`rootsOf p fuel`**: the real roots of any polynomial, complete by certificate
+/// (`rootsOf_complete`), or `None` (the bridge's `Skip::Budget`).
+pub fn roots_of(p: &[Q], fuel: usize) -> Option<Vec<Num>> {
+    match propose_sqfree(p) {
+        None => None,
+        Some(sp) => certified_roots(&sp, fuel),
+    }
 }
 
 /// `between n m`: a rational strictly between two numbers known to be in order, or `None`.
@@ -1146,11 +1286,14 @@ mod tests {
     fn roots_and_signs() {
         // x² − 2: two irrational roots, isolated
         let p = poly_i(&[-2, 0, 1]);
-        let rs = real_roots(&poly_i(&[-2, 0, 0, 1]), 60);
-        assert_eq!(rs.len(), 1); // x³ − 2
-        // the quadratic case finds no rational root and falls through to isolation, as the Lean
-        assert_eq!(real_roots(&p, 60).len(), 2);
-        let r3 = real_roots(&pmul(&p, &poly_i(&[-3, 1])), 60);
+        // RootCover.lean's #guards
+        let n = |v: Option<Vec<Num>>| v.map(|l| l.len());
+        assert_eq!(n(roots_of(&poly_i(&[2, -3, 0, 1]), 30)), Some(2));
+        assert_eq!(n(certified_roots(&poly_i(&[-1, 0, 1]), 30)), Some(2));
+        assert_eq!(n(certified_roots(&poly_i(&[0, -2, 0, 1]), 30)), Some(3));
+        assert_eq!(n(certified_roots(&poly_i(&[1, 0, 1]), 30)), Some(0));
+        assert_eq!(n(roots_of(&poly_i(&[-2, 0, 0, 1]), 60)), Some(1));
+        let r3 = roots_of(&pmul(&p, &poly_i(&[-3, 1])), 60).unwrap();
         assert_eq!(r3.len(), 3);
         let mut i = 0;
         while i < r3.len() {

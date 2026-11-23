@@ -138,13 +138,19 @@ code).
 `Skip` has `OutOfDomain`, `Uncertified`, `Ambiguous` and `Budget`. Fuel: `SIGN_FUEL = 200`,
 `ROOT_FUEL = 60` (§2), and `REAL_ROOTS_STEPS = 4000` (the Lean's loop bound).
 
-**The edge proposer** (untrusted; every output checked by `bezout`, `on_curve`, `d_ok`). On
-`x = c`, with `f = a₀ + a₁z + a₂z²` and `g = b₀ + b₁z + b₂z²`: `D = b₂a₁ − a₂b₁`,
-`N = b₂a₀ − a₂b₀` (so `b₂f − a₂g = Dz + N`), `Res = N² + D(a₁b₀ − a₀b₁)`. Then
-`homog q_j = a₂ Res` and `homog q_k = b₂ Res` identically, and with `M = a₂Dz − a₂N + a₁D`,
-`a₂ Res = (D² − b₂M) f + a₂M g` is the Bezout certificate (j and k swapped when `a₂ = 0`).
-Decided refusals, all `Uncertified`: both `zz = 0`; `Res ≡ 0`; `Res` not square-free (a
-tangency on the sweep plane); `D(α) = 0` at a root.
+**Milestone 1b: RootCover and QPropose mirrored** (after the master's correction).
+- `QRef.realRoots` is no longer mirrored. It drops an interval still being split when its fuel
+  runs out, so it can lose roots silently.
+- Roots now come from `alg::roots_of`, a mirror of RootCover.lean (`propose_sqfree`, checked both
+  ways, then `certified_roots`, checked by `cover_ok`). Its answer is complete or `None`.
+- `propose_edge` is QPropose.lean's, with the same `elim` (`R`, `N`, `D`, and the cofactors
+  `U`, `V`), `mk_edge` (quotients `a₂`, `b₂`) and checks (`bezout`, `on_curve`, `d_ok`). Its
+  answer is complete (`proposeEdge_complete`) or `None`, which the bridge counts as
+  `Skip::Budget`.
+- `Quadric::shear` and `shears()` mirror the shear rule.
+- `bezout3` and `restr_t` mirror QVert's completeness check.
+- The polynomial operations are generic over a coefficient ring (`alg::Coef`: `Q`, and lists of
+  a `Coef`), so `Poly`, `BPoly` and `TPoly` share one `padd`/`pmul`, as the Lean's do.
 
 **Float filters** (`FILTERS` in the module, for the IEEE session):
 - `sign_filter_iv`: Horner in `forge_math::Interval` (one ulp outward per operation), with each
@@ -161,21 +167,19 @@ tangency on the sweep plane); `D(α) = 0` at a root.
   oracle. Then `covOn_spec` and the like hold for it unchanged.
 
 **L6 / interim L4.** `digest::exact_digest` hashes the exact path's outputs over a fixed family
-(66 quadric pairs × a sweep plane: samples, roots and covectors over 12 carriers; 40 random
-cubics and quartics isolated). The constant is committed, and the test passes natively and on
+(66 quadric pairs × a sweep plane: `propose_edge`'s samples and their covectors over 12
+carriers; `roots_of` on 40 random cubics and quartics). The constant is committed, and the test passes natively and on
 wasm32-wasip1 (native = wasm). The differential against exact-curved's QRef families waits for
 QSample/QLedger; it needs `lake` here (not installed in this container).
 
-**Found on the way, for the Lean side (dol-curved):**
-1. `ESample.R` must be the polynomial whose roots are isolated, so the Rust takes `R = monic Res`
-   and refuses a non-square-free `Res`. Tangent crossings need a cover lemma (`R ∣ sqf^k`, checked)
-   to isolate `sqfree R` instead.
-2. `ESample` fixes the sweep plane as `x = c` and eliminates `z`; two quadrics with `zz = 0` (both
-   linear in `z` on the plane) are refused. The Tier-1 direction `d` of design §2.3 needs either a
-   rotated frame (rational, by the Pythagorean quadruple) or the `ESample` generalised to `d·x = c`.
+**Found on the way, for the Lean side (dol-curved):** a rule for the filter's sign (above). The
+non-square-free gap of milestone 1 is closed by RootCover's `proposeSqfree`. Tier 1's parallel
+walls are withdrawn (design §2.3, 57b537a), and the Rust builds none of Tier 1 until the
+replacement is agreed.
 
-**Cost, measured** (release, the digest family): the 66 edge proposals take 143 ms, about 2 ms
-each, and the 150-odd covectors over 12 carriers take 42 ms. Of that, 76% is `gcd` normalising
+**Cost, measured** (release, the digest family, milestone 1): the 66 edge proposals took 143 ms,
+about 2 ms each, and the 150-odd covectors over 12 carriers took 42 ms. With RootCover the whole
+digest test runs in 0.36 s. Of that, 76% is `gcd` normalising
 rationals, done through `Big`'s public API (Euclid with a float-estimated quotient, corrected
 exactly). The fix is in `Big`: a `divmod` and a `gcd` (or an inline-word accessor). They are
 asked of the decide-once Rust session, which owns it.
