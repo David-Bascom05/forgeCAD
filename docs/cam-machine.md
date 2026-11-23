@@ -108,5 +108,63 @@ the second rotary carried by the first); lathes have a diameter X, mills a lengt
 ## Simulation (posted G-code)
 
 `forge-machine` reads the posted text itself, not the toolpath it came from, and drives the joints
-with it (see the crate docs). That is the check Fusion's simulation skips: Fusion simulates the
-toolpath before the post.
+with it. That is the check Fusion's simulation skips: Fusion simulates the toolpath before the
+post.
+
+```
+forgecad machine list                       the machines (built in, then cam/machines/*.toml)
+forgecad machine SETUP.toml [--json]        run a setup: exit 0 ok, 1 refused, 2 error
+```
+
+The reply (`forgecad.machine/1`): the timeline (`forgecad.machine-sim/1`: every segment's line,
+kind, start, `t_min` and `t_stop`, end joints, tool; marks for tool changes, turret indexes,
+dwells, spindle and coolant; violations: overtravel including an arc's extremes, feed clamps,
+unknown tools, rpm out of range, pockets), the collisions, the rapids into material, the tool
+pieces into material, the removal summary, and what is claimed.
+
+| part | what it is |
+|---|---|
+| interpreter (gcode.rs) | words to control events in exact integers; agrees with forge-post's reader on its subset (L6, 240 programs × 4 dialects); its Lean spec refines forge-cam's post model, so posted programs do the planned motion (verify/forge-machine, L1) |
+| kinematics (kin.rs) | joint values to link placements, dmath rotations (exact at multiples of 90°), and the same over intervals |
+| timing (sim.rs) | `t_min` a lower bound (feed and axis limits; G95 with G96 integrated exactly on lines, the clamp's bound on arcs); `t_stop` exact stops with trapezoidal acceleration, an estimate |
+| collision (collide.rs) | every pair of bodies on different links through every segment: interval poses and separating-axis lower bounds prove Clear; a penetration witness gives Hit; otherwise Near (refused) |
+| removal (removal.rs) | a height map (milling, tool on the part's +Z) or a radius map (turning) at grid nodes, in floating point: rapids into material and tool pieces (shank, holder) into material, with the stock as cut so far |
+
+Native and wasm32 give the same bits (tests/bits.rs).
+
+## Setup files
+
+```toml
+[setup]
+machine = "generic-vmc3"
+dialect = "fanuc"          # a forge-post dialect, or NAME.toml beside the setup
+program = "op1.nc"         # beside the setup
+step = 0.5                 # removal grid, mm (optional: 1)
+start_tool = 1             # the tool in the spindle at the start (optional)
+# optional: channel = 1, tool_mount, part_mount, dogleg = false, feed_combined = true
+
+[[setup.wcs]]              # per axis letter: the joint value at word 0
+n = 54
+z = -500
+
+[[setup.tool]]
+t = 1
+tip = [0, 0, -100]         # gauge point to tip, home pose
+body = [5, 0, 30, 20, 30, 100]   # (radius, from, to) from the tip; the first is the cutting part
+mill = [5, 0]              # radius, corner (or nose = [rn, dr, dz] for an insert)
+h = 100                    # its length register (mills)
+
+[[setup.geo]]              # lathe offset registers, per letter (T0101 → n = 1)
+n = 1
+x = 120
+
+[[setup.stock]]            # a box in the part frame, or bar = [r0, z0, z1]
+min = [-50, -40, 0]
+max = [50, 40, 10]
+
+[[setup.fixture]]          # boxes, part frame
+min = [-60, -50, -20]
+max = [60, -40, 5]
+```
+
+Examples: examples/machine (a slot, the same with a crash at N130, a faced and turned bar).

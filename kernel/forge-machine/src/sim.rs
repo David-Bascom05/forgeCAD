@@ -345,6 +345,8 @@ pub fn simulate_blocks(blocks: &[Block], s: &Setup) -> Result<Timeline, SimError
     let mut tool = s.start_tool;
     let mut spindle: Option<(i64, bool)> = None;
     let mut rpm_clamp: Option<i64> = None;
+    // G96 in force: (surface speed m/min, rpm cap)
+    let mut css_now: Option<(f64, f64)> = None;
     let length_letter = def
         .length_joint
         .as_ref()
@@ -422,6 +424,7 @@ pub fn simulate_blocks(blocks: &[Block], s: &Setup) -> Result<Timeline, SimError
                     q_to_f(*f, fk),
                     *mode,
                     spindle,
+                    css_now,
                     t,
                     tool,
                     &mut tl,
@@ -520,6 +523,7 @@ pub fn simulate_blocks(blocks: &[Block], s: &Setup) -> Result<Timeline, SimError
                     q_to_f(*f, fk),
                     *mode,
                     spindle,
+                    css_now,
                     t,
                     tool,
                     &mut tl,
@@ -632,6 +636,15 @@ pub fn simulate_blocks(blocks: &[Block], s: &Setup) -> Result<Timeline, SimError
                 };
             }
             Ev::Spindle { s: sp, cw, css } => {
+                css_now = if *css {
+                    let cap = rpm_clamp
+                        .map(|c| c as f64)
+                        .or(def.spindles.first().map(|sd| sd.rpm[1]))
+                        .unwrap_or(f64::INFINITY);
+                    Some((*sp as f64, cap))
+                } else {
+                    None
+                };
                 let rpm = if *css {
                     // the clamp bounds it; the true rpm follows the radius, so check the clamp
                     rpm_clamp.unwrap_or(i64::MAX)
@@ -663,6 +676,7 @@ pub fn simulate_blocks(blocks: &[Block], s: &Setup) -> Result<Timeline, SimError
             }
             Ev::SpindleStop => {
                 spindle = None;
+                css_now = None;
                 mark(&mut tl, t, Happening::SpindleStop);
             }
             Ev::Clamp(c) => rpm_clamp = Some(*c),
@@ -705,7 +719,7 @@ fn rapid(
             let v = def.joints[j].rapid / 60.0;
             tmin = tmin.max(d / v);
             match def.joints[j].accel {
-                Some(acc) => tstop = tstop.max(d * trap(v / d, acc / d)),
+                Some(acc) => tstop = tstop.max(trap(v / d, acc / d)),
                 None => {
                     tl.accel_missing = true;
                     tstop = tstop.max(d / v);
@@ -837,6 +851,7 @@ fn feed_seg(
     f: f64,
     mode: FeedMode,
     spindle: Option<(i64, bool)>,
+    css: Option<(f64, f64)>,
     t0: f64,
     tool: Option<u32>,
     tl: &mut Timeline,
@@ -881,17 +896,52 @@ fn feed_seg(
             if len == 0.0 { 0.0 } else { len / f }
         }
         FeedMode::PerRev => {
-            let rpm = match spindle {
-                Some((r, _)) if r > 0 => r as f64,
-                _ => {
+            let len = (length_lin_sq + length_rot_sq).sqrt();
+            match (spindle, css) {
+                (None, _) => {
                     return Err(SimError::At {
                         line: ln,
                         what: "G95 feed with the spindle stopped".into(),
                     });
                 }
-            };
-            let len = (length_lin_sq + length_rot_sq).sqrt();
-            len / (f * rpm)
+                (Some(_), Some((v, clamp))) => {
+                    // G96: rpm = min(clamp, 1000 v / (2π r)) at the tip's radius r; the time is
+                    // len/f · ∫ 1/rpm ds = len/f · ∫ max(1/clamp, r(s)/k) ds, k = 1000 v / 2π
+                    let k = 1000.0 * v / dmath::TAU;
+                    let c = 1.0 / clamp;
+                    let ends = tool.and_then(|t| Some((s.tip_in_part(q0, t)?.0, s.tip_in_part(q1, t)?.0)));
+                    let per_rev = match (&path, ends) {
+                        (Path::Line, Some((a, b))) if a[1] == 0.0 && b[1] == 0.0 => {
+                            // r(s) = |α + βs|, exact: piecewise linear between the breakpoints
+                            let (al, be) = (a[0], b[0] - a[0]);
+                            let mut cuts = vec![0.0, 1.0];
+                            if be != 0.0 {
+                                for x in [0.0, c * k, -c * k] {
+                                    let u = (x - al) / be;
+                                    if u > 0.0 && u < 1.0 {
+                                        cuts.push(u);
+                                    }
+                                }
+                            }
+                            cuts.sort_by(f64::total_cmp);
+                            let h = |u: f64| c.max((al + be * u).abs() / k);
+                            cuts.windows(2)
+                                .map(|w| (w[1] - w[0]) * 0.5 * (h(w[0]) + h(w[1])))
+                                .sum::<f64>()
+                        }
+                        // elsewhere a bound: never faster than the clamp
+                        _ => c,
+                    };
+                    len / f * per_rev
+                }
+                (Some((r, _)), None) if r > 0 => len / (f * r as f64),
+                (Some(_), None) => {
+                    return Err(SimError::At {
+                        line: ln,
+                        what: "G95 feed at S0".into(),
+                    });
+                }
+            }
         }
     };
     let mut tmin = minutes * 60.0;

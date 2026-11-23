@@ -49,6 +49,17 @@ pub struct RapidCut {
     pub at: V3,
 }
 
+/// A non-cutting piece of the tool (shank, holder: `SimTool::body[piece]`, piece ≥ 1) reaching
+/// into material left so far.
+#[derive(Clone, Debug, PartialEq)]
+pub struct HolderHit {
+    pub line: usize,
+    pub segment: usize,
+    pub piece: usize,
+    pub depth: f64,
+    pub at: V3,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct HeightMap {
     pub x0: f64,
@@ -78,6 +89,7 @@ impl HeightMap {
 pub struct MillResult {
     pub map: HeightMap,
     pub rapid_cuts: Vec<RapidCut>,
+    pub holder_hits: Vec<HolderHit>,
     /// Per segment, the volume it removed (node heights × step²).
     pub removed: Vec<f64>,
     /// Seconds (t_min) of feed moves that removed nothing.
@@ -197,6 +209,7 @@ pub fn mill(s: &Setup, tl: &Timeline, min: V3, max: V3, step: f64) -> Result<Mil
         z: vec![max[2]; nx * ny],
     };
     let mut rapid_cuts = Vec::new();
+    let mut holder_hits = Vec::new();
     let mut removed = vec![0.0; tl.segments.len()];
     let mut air = 0.0;
     for (si, seg) in tl.segments.iter().enumerate() {
@@ -225,6 +238,8 @@ pub fn mill(s: &Setup, tl: &Timeline, min: V3, max: V3, step: f64) -> Result<Mil
             lo = [lo[0] - step, lo[1] - step];
             hi = [hi[0] + step, hi[1] + step];
         }
+        // the widest piece decides the cells to visit
+        let reach = tool.body.iter().map(|p| p.0).fold(r, f64::max);
         let lowest = a[2].min(b[2]);
         if lowest >= map.top {
             if seg.kind != SegKind::Rapid {
@@ -232,10 +247,11 @@ pub fn mill(s: &Setup, tl: &Timeline, min: V3, max: V3, step: f64) -> Result<Mil
             }
             continue;
         }
-        let i0 = (((lo[0] - r - map.x0) / step).floor().max(0.0)) as usize;
-        let i1 = (((hi[0] + r - map.x0) / step).ceil().max(0.0) as usize).min(nx - 1);
-        let j0 = (((lo[1] - r - map.y0) / step).floor().max(0.0)) as usize;
-        let j1 = (((hi[1] + r - map.y0) / step).ceil().max(0.0) as usize).min(ny - 1);
+        let i0 = (((lo[0] - reach - map.x0) / step).floor().max(0.0)) as usize;
+        let i1 = (((hi[0] + reach - map.x0) / step).ceil().max(0.0) as usize).min(nx - 1);
+        let j0 = (((lo[1] - reach - map.y0) / step).floor().max(0.0)) as usize;
+        let j1 = (((hi[1] + reach - map.y0) / step).ceil().max(0.0) as usize).min(ny - 1);
+        let mut holder: Option<HolderHit> = None;
         let mut vol = 0.0;
         let mut worst: Option<(f64, V3)> = None;
         for j in j0..=j1.min(ny - 1) {
@@ -256,7 +272,7 @@ pub fn mill(s: &Setup, tl: &Timeline, min: V3, max: V3, step: f64) -> Result<Mil
                 let low = match seg.path {
                     Path::Line => match within([a[0], a[1]], [b[0], b[1]], [x, y], r) {
                         Some((s0, s1)) => convex_min(&env, s0, s1),
-                        None => continue,
+                        None => f64::INFINITY,
                     },
                     Path::Arc { sweep, .. } => {
                         let n = ((sweep.abs() / (dmath::PI / 4.0)).ceil() as usize).max(1) * 64;
@@ -264,6 +280,35 @@ pub fn mill(s: &Setup, tl: &Timeline, min: V3, max: V3, step: f64) -> Result<Mil
                     }
                 };
                 let new = low.max(map.bottom);
+                // each non-cutting piece: a flat-bottomed cylinder `from` above the tip
+                let after = new.min(cur);
+                for (pi, (pr, from, _)) in tool.body.iter().enumerate().skip(1) {
+                    let penv = |u: f64| -> f64 {
+                        let c = p(u);
+                        let d = ((x - c[0]).powi(2) + (y - c[1]).powi(2)).sqrt();
+                        if d <= *pr { c[2] + from } else { f64::INFINITY }
+                    };
+                    let plow = match seg.path {
+                        Path::Line => match within([a[0], a[1]], [b[0], b[1]], [x, y], *pr) {
+                            Some((s0, s1)) => penv(s0).min(penv(s1)),
+                            None => f64::INFINITY,
+                        },
+                        Path::Arc { sweep, .. } => sampled_min(
+                            &penv,
+                            ((sweep.abs() / (dmath::PI / 4.0)).ceil() as usize).max(1) * 64,
+                        ),
+                    };
+                    let dz = after - plow;
+                    if dz > 1e-6 && holder.as_ref().is_none_or(|h| dz > h.depth) {
+                        holder = Some(HolderHit {
+                            line: seg.line,
+                            segment: si,
+                            piece: pi,
+                            depth: dz,
+                            at: [x, y, plow],
+                        });
+                    }
+                }
                 if new < cur {
                     let dz = cur - new;
                     vol += dz * step * step;
@@ -275,6 +320,7 @@ pub fn mill(s: &Setup, tl: &Timeline, min: V3, max: V3, step: f64) -> Result<Mil
             }
         }
         removed[si] = vol;
+        holder_hits.extend(holder);
         if vol == 0.0 && seg.kind != SegKind::Rapid {
             air += seg.t_min;
         }
@@ -290,6 +336,7 @@ pub fn mill(s: &Setup, tl: &Timeline, min: V3, max: V3, step: f64) -> Result<Mil
     Ok(MillResult {
         map,
         rapid_cuts,
+        holder_hits,
         removed,
         air_feed_s: air,
     })
@@ -317,6 +364,7 @@ impl RadiusMap {
 pub struct TurnResult {
     pub map: RadiusMap,
     pub rapid_cuts: Vec<RapidCut>,
+    pub holder_hits: Vec<HolderHit>,
     pub removed: Vec<f64>,
 }
 
@@ -344,6 +392,7 @@ pub fn turn(
         r0,
     };
     let mut rapid_cuts = Vec::new();
+    let mut holder_hits = Vec::new();
     let mut removed = vec![0.0; tl.segments.len()];
     for (si, seg) in tl.segments.iter().enumerate() {
         let Some(t) = seg.tool else { continue };
@@ -440,10 +489,38 @@ pub fn turn(
                 at,
             });
         }
+        // each non-cutting piece, radial from the tip: material above `tip_r + from` within ±r
+        // of the tip's z touches it (sampled along the move: 33 points)
+        let mut hit: Option<HolderHit> = None;
+        for k in 0..=32 {
+            let (tip, _) = s.tip_in_part(&seg.at(k as f64 / 32.0), t).unwrap();
+            let tr = (tip[0] * tip[0] + tip[1] * tip[1]).sqrt();
+            for (pi, (pr, from, _)) in tool.body.iter().enumerate().skip(1) {
+                let (zl, zh) = (tip[2] - pr, tip[2] + pr);
+                for i in 0..n {
+                    let z = map.z(i);
+                    if z < zl || z > zh {
+                        continue;
+                    }
+                    let d = map.r[i] - (tr + from);
+                    if d > 1e-6 && hit.as_ref().is_none_or(|h| d > h.depth) {
+                        hit = Some(HolderHit {
+                            line: seg.line,
+                            segment: si,
+                            piece: pi,
+                            depth: d,
+                            at: [tr + from, 0.0, z],
+                        });
+                    }
+                }
+            }
+        }
+        holder_hits.extend(hit);
     }
     Ok(TurnResult {
         map,
         rapid_cuts,
+        holder_hits,
         removed,
     })
 }

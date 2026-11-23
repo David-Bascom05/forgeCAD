@@ -114,6 +114,14 @@ impl Control {
         })
     }
 
+    /// A built-in forge-post dialect's text by name.
+    pub fn dialect_src(name: &str) -> Option<&'static str> {
+        forge_post::DIALECTS
+            .iter()
+            .find(|(n, _)| *n == name)
+            .map(|(_, s)| *s)
+    }
+
     /// For a built-in forge-post dialect by name.
     pub fn for_dialect(def: &crate::def::MachineDef, dialect: &str, channel: u8) -> Result<Control, String> {
         let src = forge_post::DIALECTS

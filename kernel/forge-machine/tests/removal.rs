@@ -119,3 +119,26 @@ fn a_turned_diameter_and_a_face() {
         }
     }
 }
+
+#[test]
+fn a_holder_into_the_pocket_wall_is_found() {
+    let m = builtin().remove(0);
+    let mut s = vmc_setup(&m, 5.0, 0.0);
+    // flutes 15 long, then a 12 mm radius holder: a 20 mm deep slot puts the holder 5 mm into
+    // the walls
+    s.tools[0].body = vec![(5.0, 0.0, 15.0), (12.0, 15.0, 100.0)];
+    let prog = "G43 H1\nG0 X-10. Y15. Z30.\nZ-10.\nG1 X60. F500.\nG0 Z30.\n";
+    let tl = sim::simulate(prog, &s).unwrap();
+    let r = removal::mill(&s, &tl, [0.0, 0.0, -20.0], [50.0, 30.0, 10.0], 0.5).unwrap();
+    // the plunge is beside the stock (x = −10, the cutter reaches x = −5): no rapid cut
+    assert!(r.rapid_cuts.is_empty(), "{:?}", r.rapid_cuts);
+    let h: Vec<_> = r.holder_hits.iter().filter(|h| h.line == 4).collect();
+    assert_eq!(h.len(), 1, "{:?}", r.holder_hits);
+    // the walls stand at 10 (top), the holder's face at −10 + 15 = 5
+    assert!((h[0].depth - 5.0).abs() < 1e-12, "{:?}", h[0]);
+    // a 5 mm deep slot: the holder stays above the top
+    let prog = "G43 H1\nG0 X-10. Y15. Z30.\nZ5.\nG1 X60. F500.\nG0 Z30.\n";
+    let tl = sim::simulate(prog, &s).unwrap();
+    let r = removal::mill(&s, &tl, [0.0, 0.0, -20.0], [50.0, 30.0, 10.0], 0.5).unwrap();
+    assert!(r.holder_hits.is_empty(), "{:?}", r.holder_hits);
+}

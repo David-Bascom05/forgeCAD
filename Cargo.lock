@@ -125,6 +125,7 @@ dependencies = [
  "forge-geom",
  "forge-import",
  "forge-lang",
+ "forge-machine-lang",
  "forge-material",
  "forge-math",
  "forge-mesh",

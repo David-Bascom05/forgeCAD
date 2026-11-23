@@ -94,3 +94,280 @@ pub fn check_parts(def: &MachineDef, dir: &Path, tol: f64) -> Result<Vec<PartChe
     }
     Ok(out)
 }
+
+/// What `forgecad machine SETUP.toml` answers.
+pub struct Outcome {
+    /// No violation, no contact, no rapid into material.
+    pub ok: bool,
+    pub text: String,
+    /// `forgecad.machine/1`.
+    pub json: String,
+}
+
+fn jstr(s: &str) -> String {
+    let mut o = String::from("\"");
+    for c in s.chars() {
+        match c {
+            '"' => o.push_str("\\\""),
+            '\\' => o.push_str("\\\\"),
+            '\n' => o.push_str("\\n"),
+            c if (c as u32) < 0x20 => o.push_str(&format!("\\u{:04x}", c as u32)),
+            c => o.push(c),
+        }
+    }
+    o.push('"');
+    o
+}
+
+fn jnum(x: f64) -> String {
+    if x.is_finite() {
+        format!("{x:?}")
+    } else {
+        "null".into()
+    }
+}
+
+/// Machines: the built-in set, under the project's `cam/machines/*.toml` beside the setup.
+pub fn library(dir: &Path) -> Result<forge_machine::library::Library, String> {
+    let mut lib = forge_machine::library::Library::with_builtin();
+    let mdir = dir.join("cam").join("machines");
+    if let Ok(rd) = std::fs::read_dir(&mdir) {
+        let mut files: Vec<(String, String)> = Vec::new();
+        let mut paths: Vec<_> = rd
+            .filter_map(|e| e.ok())
+            .map(|e| e.path())
+            .filter(|p| p.extension().is_some_and(|x| x == "toml"))
+            .collect();
+        paths.sort();
+        for p in paths {
+            files.push((
+                p.display().to_string(),
+                std::fs::read_to_string(&p).map_err(|e| format!("{}: {e}", p.display()))?,
+            ));
+        }
+        lib.add_level(&files).map_err(|e| e.to_string())?;
+    }
+    Ok(lib)
+}
+
+/// Runs a setup file: the program on the machine, its timeline, collisions and removal.
+pub fn run_setup(path: &Path) -> Result<Outcome, String> {
+    use forge_machine::collide::{self, Verdict};
+    use forge_machine::removal;
+    use forge_machine::setup::{SetupSpec, Stock};
+    let dir = path.parent().map(Path::to_path_buf).unwrap_or_default();
+    let src = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let spec = SetupSpec::parse(&src).map_err(|e| format!("{}: {e}", path.display()))?;
+    let lib = library(&dir)?;
+    let def = lib.get(&spec.machine).map_err(|e| e.to_string())?;
+    // a dialect file beside the setup wins over a built-in of the same name
+    let dfile = dir.join(format!("{}.toml", spec.dialect));
+    let dsrc = match std::fs::read_to_string(&dfile) {
+        Ok(s) => s,
+        Err(_) => forge_machine::gcode::Control::dialect_src(&spec.dialect)
+            .ok_or_else(|| {
+                format!(
+                    "no dialect `{}` (built in: fanuc haas linuxcnc grbl; or {})",
+                    spec.dialect,
+                    dfile.display()
+                )
+            })?
+            .to_string(),
+    };
+    let setup = spec.build(def, &dsrc).map_err(|e| e.to_string())?;
+    let ppath = dir.join(&spec.program);
+    let prog = std::fs::read_to_string(&ppath).map_err(|e| format!("{}: {e}", ppath.display()))?;
+    let tl = forge_machine::sim::simulate(&prog, &setup).map_err(|e| format!("{}: {e}", ppath.display()))?;
+    // the stock: by the removal model (as cut so far) where it applies; otherwise the interval
+    // check against the stock as first given
+    let all_work = spec.work_bodies(&setup);
+    let fixtures: Vec<_> = all_work
+        .iter()
+        .filter(|b| b.role != collide::Role::Stock)
+        .cloned()
+        .collect();
+    let hh = |hs: &[removal::HolderHit]| -> Vec<removal::HolderHit> { hs.to_vec() };
+    let (rem_json, rapid_cuts, holder_hits, rem_text, modelled) = match &spec.stock {
+        Some(Stock::Box { min, max }) => match removal::mill(&setup, &tl, *min, *max, spec.step) {
+            Ok(r) => (
+                format!(
+                    "{{\"kind\":\"height_map\",\"step\":{},\"volume\":{},\"removed\":{},\"air_feed_s\":{}}}",
+                    jnum(spec.step),
+                    jnum(r.map.volume()),
+                    jnum(r.removed.iter().sum()),
+                    jnum(r.air_feed_s)
+                ),
+                r.rapid_cuts.clone(),
+                hh(&r.holder_hits),
+                format!(
+                    "removal: {:.0} mm³ removed, {:.1} s of feed in air",
+                    r.removed.iter().sum::<f64>(),
+                    r.air_feed_s
+                ),
+                true,
+            ),
+            Err(e) => (
+                format!(
+                    "{{\"kind\":\"not_modelled\",\"why\":{}}}",
+                    jstr(&format!("{e:?}"))
+                ),
+                Vec::new(),
+                Vec::new(),
+                format!("removal: not modelled ({e:?}); the stock as first given is checked instead"),
+                false,
+            ),
+        },
+        Some(Stock::Bar { r0, z0, z1 }) => match removal::turn(&setup, &tl, *r0, *z0, *z1, spec.step) {
+            Ok(r) => (
+                format!(
+                    "{{\"kind\":\"radius_map\",\"step\":{},\"volume\":{},\"removed\":{}}}",
+                    jnum(spec.step),
+                    jnum(r.map.volume()),
+                    jnum(r.removed.iter().sum())
+                ),
+                r.rapid_cuts.clone(),
+                hh(&r.holder_hits),
+                format!("removal: {:.0} mm³ removed", r.removed.iter().sum::<f64>()),
+                true,
+            ),
+            Err(e) => (
+                format!(
+                    "{{\"kind\":\"not_modelled\",\"why\":{}}}",
+                    jstr(&format!("{e:?}"))
+                ),
+                Vec::new(),
+                Vec::new(),
+                format!("removal: not modelled ({e:?}); the stock as first given is checked instead"),
+                false,
+            ),
+        },
+        None => (
+            "null".into(),
+            Vec::new(),
+            Vec::new(),
+            "removal: no stock given".into(),
+            false,
+        ),
+    };
+    let col = collide::check(&setup, &tl, if modelled { &fixtures } else { &all_work });
+    let ok = tl.violations.is_empty()
+        && col.contacts.is_empty()
+        && rapid_cuts.is_empty()
+        && holder_hits.is_empty();
+    let mut text = format!(
+        "{} on {} ({}): {} segments, {:.1} s at least, {:.1} s with exact stops{}\n",
+        spec.program,
+        def.name,
+        spec.dialect,
+        tl.segments.len(),
+        tl.t_min,
+        tl.t_stop,
+        if tl.accel_missing {
+            " (some joint has no accel: estimate = bound there)"
+        } else {
+            ""
+        }
+    );
+    for v in &tl.violations {
+        text.push_str(&format!("violation: {v:?}\n"));
+    }
+    for c in &col.contacts {
+        let what = match &c.verdict {
+            Verdict::Hit { witness, .. } => {
+                format!("HIT at ({:.3}, {:.3}, {:.3})", witness[0], witness[1], witness[2])
+            }
+            Verdict::Near { gap_lo, .. } => format!(
+                "not proven clear (gap ≥ {gap_lo:.3} mm shown, clearance {} mm)",
+                def.clearance
+            ),
+            Verdict::Clear => "clear".into(),
+        };
+        text.push_str(&format!("line {}: {} / {}: {what}\n", c.line, c.a, c.b));
+    }
+    for r in &rapid_cuts {
+        text.push_str(&format!(
+            "line {}: rapid into material, {:.3} mm deep at ({:.3}, {:.3}, {:.3})\n",
+            r.line, r.depth, r.at[0], r.at[1], r.at[2]
+        ));
+    }
+    for h in &holder_hits {
+        text.push_str(&format!(
+            "line {}: tool piece {} into material, {:.3} mm at ({:.3}, {:.3}, {:.3})\n",
+            h.line, h.piece, h.depth, h.at[0], h.at[1], h.at[2]
+        ));
+    }
+    text.push_str(&format!(
+        "collision: {} pairs × segments checked, {} spans\n{rem_text}\n",
+        col.pairs_checked, col.spans
+    ));
+    text.push_str(if ok { "ok\n" } else { "REFUSED\n" });
+    let contacts: Vec<String> = col
+        .contacts
+        .iter()
+        .map(|c| {
+            let v = match &c.verdict {
+                Verdict::Hit { s, witness } => format!(
+                    "\"hit\",\"s\":{},\"at\":[{},{},{}]",
+                    jnum(*s),
+                    jnum(witness[0]),
+                    jnum(witness[1]),
+                    jnum(witness[2])
+                ),
+                Verdict::Near { s0, s1, gap_lo } => format!(
+                    "\"near\",\"s0\":{},\"s1\":{},\"gap_lo\":{}",
+                    jnum(*s0),
+                    jnum(*s1),
+                    jnum(*gap_lo)
+                ),
+                Verdict::Clear => "\"clear\"".into(),
+            };
+            format!(
+                "{{\"line\":{},\"segment\":{},\"a\":{},\"b\":{},\"verdict\":{v}}}",
+                c.line,
+                c.segment,
+                jstr(&c.a),
+                jstr(&c.b)
+            )
+        })
+        .collect();
+    let rcs: Vec<String> = rapid_cuts
+        .iter()
+        .map(|r| {
+            format!(
+                "{{\"line\":{},\"depth\":{},\"at\":[{},{},{}]}}",
+                r.line,
+                jnum(r.depth),
+                jnum(r.at[0]),
+                jnum(r.at[1]),
+                jnum(r.at[2])
+            )
+        })
+        .collect();
+    let hhs: Vec<String> = holder_hits
+        .iter()
+        .map(|h| {
+            format!(
+                "{{\"line\":{},\"piece\":{},\"depth\":{},\"at\":[{},{},{}]}}",
+                h.line,
+                h.piece,
+                jnum(h.depth),
+                jnum(h.at[0]),
+                jnum(h.at[1]),
+                jnum(h.at[2])
+            )
+        })
+        .collect();
+    let json = format!(
+        "{{\"format\":\"forgecad.machine/1\",\"ok\":{ok},\"machine\":{},\"program\":{},\"timeline\":{},\"collisions\":[{}],\"rapid_cuts\":[{}],\"holder_hits\":[{}],\"removal\":{rem_json},\"claims\":{}}}",
+        jstr(&def.name),
+        jstr(&spec.program),
+        forge_machine::sim::timeline_json(&tl),
+        contacts.join(","),
+        rcs.join(","),
+        hhs.join(","),
+        jstr(
+            "Proven: every pair of bodies on different links (machine envelopes, the tool's cylinders, the fixture; the stock as first given only where removal is not modelled) keeps the machine's clearance on every reported-clear segment, from interval poses (forge-math's interval contracts). Hits carry a witness point found in floating point. Times: t_min is a lower bound under the feed and axis limits; t_stop an exact-stop estimate. Removal heights, rapids into material and tool pieces into material are floating-point simulation at the grid nodes with the stock as cut so far, not a proof. Not claimed: the control's own interpolation, look-ahead or tolerances; machine fidelity beyond the envelopes."
+        )
+    );
+    Ok(Outcome { ok, text, json })
+}

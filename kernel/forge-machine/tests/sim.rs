@@ -140,9 +140,14 @@ fn lathe_diameter_and_turret() {
             .iter()
             .any(|m| matches!(m.what, Happening::Index { station: 1, .. }))
     );
-    // per rev: the css rpm is unknown to time it, so G95 uses the S word as rpm (200 here): 22 mm
-    // at 0.2 mm/rev and 200 rpm
-    assert!((tl.segments[1].t_min - 22.0 / 0.2 / 200.0 * 60.0).abs() < 1e-9);
+    // G96 S200 at radius 25: rpm = 1000·200/(2π·25) ≈ 1273, under the 3000 clamp; 22 mm at
+    // 0.2 mm/rev
+    let rpm = 1000.0 * 200.0 / (forge_math::dmath::TAU * 25.0);
+    assert!(
+        (tl.segments[1].t_min - 22.0 / 0.2 / rpm * 60.0).abs() < 1e-9,
+        "{}",
+        tl.segments[1].t_min
+    );
 }
 
 #[test]
@@ -160,4 +165,50 @@ fn trunnion_tilts() {
     assert!((tl.segments.last().unwrap().t_min - 2.0).abs() < 1e-12);
     let j = sim::timeline_json(&tl);
     assert!(j.starts_with("{\"format\":\"forgecad.machine-sim/1\""));
+}
+
+#[test]
+fn rapid_time_bound_and_exact_stop() {
+    let m = vmc();
+    let s = vmc_setup(&m);
+    // a 45 mm rapid on X alone: 500 mm/s, 3000 mm/s²: t_min = 0.09 s; with exact stops the
+    // trapezoid never reaches 500 mm/s (45 < 500²/3000), so 2·√(45/3000)
+    let tl = sim::simulate("G0 X0 Y0 Z0\nX45.\n", &s).unwrap();
+    let sg = tl.segments.last().unwrap();
+    assert!((sg.t_min - 0.09).abs() < 1e-15);
+    assert!(
+        (sg.t_stop - 2.0 * (45.0f64 / 3000.0).sqrt()).abs() < 1e-12,
+        "{}",
+        sg.t_stop
+    );
+}
+
+#[test]
+fn css_facing_to_the_axis_meets_the_clamp() {
+    let m = builtin().remove(2);
+    let d = "[dialect]\nname = \"t\"\ndecimals = 3\nfeed_decimals = 3\ndwell = \"G04 P{ms}\"\n";
+    let mut s = Setup::new(&m, Control::for_machine(&m, d, 1).unwrap()).unwrap();
+    s.wcs = vec![(54, vec![100.0, -120.0])];
+    s.tools = vec![SimTool {
+        t: 1,
+        name: "OD".into(),
+        tip: [-120.0, 0.0, 10.0],
+        body: vec![(6.0, 0.0, 30.0)],
+        cut: Cut::Nose {
+            rn: 0.8,
+            centre: [0.8, 0.8],
+        },
+    }];
+    s.geo = vec![(1, vec![-10.0, 120.0])];
+    // face from radius 30 to the axis at 0.2 mm/rev, V = 200 m/min, clamp 2000 rpm
+    let tl = sim::simulate("T0101\nG50 S2000\nG96 S200 M03\nG0 X60. Z0\nG95 G1 X0 F0.2\n", &s).unwrap();
+    let k = 1000.0 * 200.0 / forge_math::dmath::TAU;
+    let rc = k / 2000.0; // the radius below which the clamp holds
+    // ∫ over r from 0 to 30 of max(1/2000, r/k) dr / 0.2, in minutes
+    let want = (rc / 2000.0 + (30.0f64.powi(2) - rc * rc) / (2.0 * k)) / 0.2 * 60.0;
+    assert!(
+        (tl.segments.last().unwrap().t_min - want).abs() < 1e-9,
+        "{} vs {want}",
+        tl.segments.last().unwrap().t_min
+    );
 }
