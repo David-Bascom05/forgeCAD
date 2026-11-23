@@ -39,7 +39,7 @@ theorem facet_meets_plane {qs : List Quad.Quadric} {fuel : ℕ} {E : List Num}
     (hXb : X[bi]? = some Sgn.neg) {j : ℕ} (hj : j < (qs.map qR).length)
     (hXj : X[j]? = some Sgn.zero) (hXo : ∀ m, m ≠ j → X[m]? ≠ some Sgn.zero)
     {p : R3} (hp : covCellK (qs.map qR) X p) (hoff : OffEvents E p) :
-    ∃ c ∈ planesOf E, ∃ p' : R3, covCellK (qs.map qR) X p' ∧ p'.1 = c := by
+    ∃ c ∈ planesOf E, ∃ p' : R3, covCellK (qs.map qR) X p' ∧ p'.1 = c ∧ OffEvents E p' := by
   obtain ⟨c, hc, a, b, hat, htb, hac, hcb, hout⟩ := slab_find (eventsOf_sep h) (eventsOf_den h)
     (t := p.1) hoff
   have hfree : ∀ z ∈ Slab ℓx a b, OffEvents E z := by
@@ -54,6 +54,8 @@ theorem facet_meets_plane {qs : List Quad.Quadric} {fuel : ℕ} {E : List Num}
     exact qR_contDiff q
   obtain ⟨p', hp', hl⟩ := crossesAll_facets_bounded finrank_R3 hC ht1 ht2 hbi hB h3 X hXb hj hXj hXo
     ⟨p, ⟨by simpa [ℓx] using hat, by simpa [ℓx] using htb⟩, hp⟩ c hac hcb
-  exact ⟨c, hc, p', hp', by simpa [ℓx] using hl⟩
+  have hl' : p'.1 = c := by simpa [ℓx] using hl
+  exact ⟨c, hc, p', hp', hl', hfree p' ⟨by rw [show ℓx p' = p'.1 from rfl, hl']; exact hac,
+    by rw [show ℓx p' = p'.1 from rfl, hl']; exact hcb⟩⟩
 
 end ForgeCurved
