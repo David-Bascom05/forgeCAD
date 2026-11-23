@@ -178,9 +178,11 @@ samples=${raw:-$work/raw}
 : > "$samples"
 one() { # one SIDE ROUND PART THREADS: one round's samples, labelled
   seed=$2
+  # (--skip and the draw list are the bench parts' ops: a kernel line keeps its kseq and nary)
   sk=$skipops
   if [ -z "$heavy" ] && ! echo " $draw_parts " | grep -q " $3 "; then sk="$sk,draw"; fi
   skipenv=${sk:+LATBENCH_SKIP=$sk}
+  case $3 in k-*|cam) skipenv= ;; esac
   if [ "$3" = cam ]; then
     run "$1" "$4" exec "$work/$1/cam_gonogo"
   elif [ "${3#k-}" != "$3" ]; then
