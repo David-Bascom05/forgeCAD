@@ -623,3 +623,30 @@ the earlier features left inside the solid (carried on). The census list of 15 i
 worker). Each is to be classified (cliff, carried, or roll) by `cliffcheck.py` before a rule is
 proposed.
 
+
+**The 15, classified (2026-11-23).** For each fillet: `fillet-spec supports` on its feature, then
+Onshape's STEP truth (CADFS rev dd76a9b, `cadfs/raw/step_abc.zip`), checked by `cliffcheck.py`. For
+each picked edge it takes the truth cylinder of radius r along that edge and measures its axis
+against the carried support planes and the faces' line rims, each less r. `feet` says whether the
+ball tangent to both carried planes, at the edge's middle, has its feet on the body.
+
+| class | what the truth shows | convex edges | concave edges |
+|---|---|---|---|
+| tangent to both | both planes at 0, both feet on | 00761058 (1), 00958346 (4) | 00153157 (2), 00321679 (2), 00366714 (2), 00761058 (1) |
+| **carried** | both planes at 0, **neither** foot on the body | 00402272 (4) | — |
+| **cliff** | one plane at 0, the ball 0.12–0.33 through the other carried plane, its axis at r from a rim (to 1e-4) | 00196819 (2), 00684321 (4) | 00924177 (4) |
+| **roll** | one plane at 0, the other crossed or 9.4 clear, no rim at r: tangent to a neighbour | 00196819 (2, a second cylinder on the same edges), 00958346 (4) | 00476278 (11), 00685754 (2) |
+| one plane, other support curved | the plane at 0; the curved support is not measured by the tool | 00318570 (1), 00366714 (2), 00607956 | 00607956 |
+| no radius-r surface near the edges | the truth is B-spline where the translation has 322 (00123784) or 1136 (00154651) facets | 00123784, 00154651 | — |
+
+Every convex plane–plane edge fits one predicate, decided by where the feet land:
+- **both feet on**: the ordinary round;
+- **one foot on**: rule (a)'s event where the other spring leaves its face. A sharp rim gives a
+  cliff (00196819, 00684321) and a smooth neighbour gives a roll (00958346);
+- **no foot on**: the carried planes, rule (c) (00402272).
+
+So the carried round is what Onshape does when the ball can rest on neither face. One edge breaks the
+middle-of-edge test: 00684321 has one edge with both feet on at its middle that is still a cliff. The
+cliff happens elsewhere along that edge, so the predicate has to be decided along the whole edge
+(P3 on the springs), not at one sample. 00123784 and 00154651 can't be classified this way, because
+their translations facet a B-spline body.
