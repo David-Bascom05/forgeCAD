@@ -165,7 +165,15 @@ pub fn offset(rg: &Region, r: f64) -> Result<(Vec<OLoop>, Stats), OffsetError> {
             let sp = subs[k];
             let m = cx.mark();
             let q = arr::rep_point(&mut cx, &sp, sp.s, sp.e);
-            let ok = far_enough(&mut cx, &ex, q, rr, r2, pc.tag);
+            // a corner arc's point is exactly r from its vertex (rep_point puts it on the
+            // circle: the vertex plus r times a unit vector), the end of the two elements
+            // that meet there
+            let centre = if pc.tag >= ne {
+                Some(ex.elems[(pc.tag - ne) as usize].piece.e)
+            } else {
+                None
+            };
+            let ok = far_enough(&mut cx, &ex, q, rr, r2, pc.tag, centre);
             cx.release(m);
             if ok && !duplicate(&mut cx, &kept, &sp) {
                 kept.push(sp);
@@ -180,7 +188,7 @@ pub fn offset(rg: &Region, r: f64) -> Result<(Vec<OLoop>, Stats), OffsetError> {
     let mut k = 0;
     while k < points.len() {
         let q = points[k];
-        if !on_kept(&mut cx, &kept, q) && far_enough(&mut cx, &ex, q, rr, r2, u32::MAX) {
+        if !on_kept(&mut cx, &kept, q) && far_enough(&mut cx, &ex, q, rr, r2, u32::MAX, None) {
             let p = p2(cx.approx(q.x), cx.approx(q.y));
             out.push(OLoop {
                 segs: vec![Seg::Line { a: p, b: p }],
@@ -423,12 +431,15 @@ fn dedup_same(cx: &mut Ctx, pts: &mut Vec<Pt>) {
 
 /// d(q, e) ≥ r for every boundary element e but `skip` (the one that made the piece, whose
 /// distance is r by construction).
-fn far_enough(cx: &mut Ctx, ex: &Exact, q: Pt, r: R, r2: R, skip: u32) -> bool {
+/// Whether q is at least r from every boundary element but `skip` (the one that made the piece).
+/// `centre`: a point q is known to lie exactly r from (a corner arc's vertex): an element end
+/// that is that very point is r away by construction, not decided (it would be a tie).
+fn far_enough(cx: &mut Ctx, ex: &Exact, q: Pt, r: R, r2: R, skip: u32, centre: Option<Pt>) -> bool {
     let mut i = 0;
     while i < ex.elems.len() {
         if i as u32 != skip {
             let m = cx.mark();
-            let ok = elem_far(cx, &ex.elems[i], q, r, r2);
+            let ok = elem_far(cx, &ex.elems[i], q, r, r2, centre);
             cx.release(m);
             if !ok {
                 return false;
@@ -439,7 +450,9 @@ fn far_enough(cx: &mut Ctx, ex: &Exact, q: Pt, r: R, r2: R, skip: u32) -> bool {
     true
 }
 
-fn elem_far(cx: &mut Ctx, e: &Elem, q: Pt, r: R, r2: R) -> bool {
+fn elem_far(cx: &mut Ctx, e: &Elem, q: Pt, r: R, r2: R, centre: Option<Pt>) -> bool {
+    // q's distance from an end that is `centre`: exactly r
+    let at_r = |x: Pt| centre == Some(x);
     // the cheap reject: the box of the element grown by r misses q
     let (x0, y0, x1, y1) = arr::piece_box(cx, &e.piece);
     let (qx, qy, rv) = (cx.iv(q.x), cx.iv(q.y), cx.iv(r));
@@ -456,10 +469,16 @@ fn elem_far(cx: &mut Ctx, e: &Elem, q: Pt, r: R, r2: R) -> bool {
             let v = arr::sub(cx, q, p);
             let t = arr::dot(cx, v, d);
             if cx.sign(t) != Ordering::Greater {
+                if at_r(p) {
+                    return true;
+                }
                 let n = arr::norm2(cx, v);
                 return ge(cx, n, r2);
             }
             if cx.cmp(t, dd) != Ordering::Less {
+                if at_r(e.piece.e) {
+                    return true;
+                }
                 let w = arr::sub(cx, q, e.piece.e);
                 let n = arr::norm2(cx, w);
                 return ge(cx, n, r2);
@@ -488,9 +507,15 @@ fn elem_far(cx: &mut Ctx, e: &Elem, q: Pt, r: R, r2: R) -> bool {
                 let d2 = cx.sqr(dlt);
                 return ge(cx, d2, r2);
             }
-            let (ws, we) = (arr::sub(cx, q, e.piece.s), arr::sub(cx, q, e.piece.e));
-            let (ns, ne) = (arr::norm2(cx, ws), arr::norm2(cx, we));
-            ge(cx, ns, r2) && ge(cx, ne, r2)
+            let far = |cx: &mut Ctx, x: Pt| {
+                if at_r(x) {
+                    return true;
+                }
+                let w = arr::sub(cx, q, x);
+                let n = arr::norm2(cx, w);
+                ge(cx, n, r2)
+            };
+            far(cx, e.piece.s) && far(cx, e.piece.e)
         }
     }
 }
