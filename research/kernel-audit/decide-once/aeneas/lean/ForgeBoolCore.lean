@@ -53,3 +53,4 @@ import ForgeBoolCore.RefineIncFlood
 import ForgeBoolCore.HeadBridgeI
 import ForgeBoolCore.RefineIncMemb
 import ForgeBoolCore.RefineIncClassify
+import ForgeBoolCore.RefineIncAssemble
