@@ -1,0 +1,26 @@
+# A 3-axis job on the generic VMC: a slot across a block. vmc_crash.toml runs the same setup with
+# a rapid at Z5 through uncut material (N130), which the simulation refuses.
+[setup]
+machine = "generic-vmc3"
+dialect = "fanuc"
+program = "vmc_crash.nc"
+step = 0.5
+start_tool = 1
+
+[[setup.wcs]]
+n = 54
+x = 0
+y = 0
+z = -500             # WCS Z0 on the table top: tip = 500 + Z + wcs_z with H = the tool's length
+
+[[setup.tool]]
+t = 1
+name = "flat 10, 100 gauge"
+tip = [0, 0, -100]
+body = [5, 0, 30, 8, 30, 60, 20, 60, 100]
+mill = [5, 0]
+h = 100
+
+[[setup.stock]]
+min = [-50, -40, 0]
+max = [50, 40, 10]

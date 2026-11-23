@@ -41,6 +41,38 @@ fn nary_matches_sequential_on_fuzz() {
     });
 }
 
+/// `fuzz_keep`: histories with a large tool kept (an intersect) now and then, so the n-ary pass
+/// has an `Intersect` among its tools (research/coverage-2026-11-23 found none in the corpus).
+/// Seeds whose sequential regen builds: the n-ary one, at one thread and at four, the same solid.
+#[test]
+fn nary_matches_sequential_with_intersects() {
+    suite::each(&[1, 2, 4, 8], |&seed| {
+        let part = suite::fuzz_keep(seed, 80);
+        let seq = part.regenerate().expect("sequential regen");
+        for threads in [1, 4] {
+            let nary = part.regenerate_nary(threads).expect("n-ary regen");
+            assert!(
+                forge_topo::check(&nary).is_empty(),
+                "seed {seed}, {threads} threads"
+            );
+            assert_eq!(
+                nary.face_ids().count(),
+                seq.face_ids().count(),
+                "seed {seed}, {threads} threads"
+            );
+            let mass = |b| forge_topo::mass::mass(b).expect("mass properties");
+            let (a, b) = (mass(&seq), mass(&nary));
+            let bound = a.err[0] + b.err[0] + 1e-12 * a.volume;
+            assert!(
+                (a.volume - b.volume).abs() <= bound,
+                "seed {seed}, {threads} threads: volume {} vs {} (bound {bound})",
+                a.volume,
+                b.volume
+            );
+        }
+    });
+}
+
 /// Cut points at x = 0.0 and x = -0.0 fell in two slabs of the vertex clustering that compared
 /// equal but sorted apart, so two of them that are one vertex stayed two: an open shell.
 #[test]

@@ -1,0 +1,59 @@
+# Generic machines: placeholders in our own numbers, not any maker's model.
+
+[[machine]]
+name = "generic-vmc3"
+kind = "vmc3"
+control = "fanuc"
+rpm = [100, 12000]
+curve_rpm = [0, 1500, 12000]
+curve_kw = [0, 11, 11]
+max_feed = 10000
+coolants = ["flood", "mist", "air"]
+source = "forgecad generic; placeholders, not a real machine"
+
+[[machine.joint]]
+name = "X"
+axis = [1, 0, 0]
+range = [-300, 300]
+rapid = 30000
+
+[[machine.joint]]
+name = "Y"
+axis = [0, 1, 0]
+range = [-200, 200]
+rapid = 30000
+
+[[machine.joint]]
+name = "Z"
+axis = [0, 0, 1]
+range = [-400, 0]
+rapid = 24000
+
+[[machine]]
+name = "generic-router"
+kind = "vmc3"
+control = "grbl"
+rpm = [8000, 24000]
+curve_rpm = [8000, 24000]
+curve_kw = [1.5, 2.2]
+max_feed = 5000
+coolants = ["air"]
+source = "forgecad generic hobby router; placeholders"
+
+[[machine.joint]]
+name = "X"
+axis = [1, 0, 0]
+range = [0, 600]
+rapid = 5000
+
+[[machine.joint]]
+name = "Y"
+axis = [0, 1, 0]
+range = [0, 400]
+rapid = 5000
+
+[[machine.joint]]
+name = "Z"
+axis = [0, 0, 1]
+range = [-100, 0]
+rapid = 2000

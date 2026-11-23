@@ -1,13 +1,12 @@
-{"fillets": 576, "first": {"right": 474, "wrong": 33, "refused": 45, "unjudged": 24}, "final": {"right": 507, "refused": 45, "unjudged": 24}, "overruled": {"OCCT's fillet is ours": 33}, "parts": 352, "parts_final": {"right": 286, "refused": 45, "unjudged": 21}}
 0111d71e.Body 16 right right 
 0111d71e.Body 17 right right 
 0111d71e.Body 18 right right 
 01521ec4.Fillet001 5 right right 
 01521ec4.Fillet001 6 right right 
 01cdfa9f.Body 5 right right 
-01cdfa9f.Body 6 wrong right OCCT's fillet is ours
+01cdfa9f.Body 6 right right 
 02dd381d.Body 10 right right 
-02dd381d.Body 14 wrong right OCCT's fillet is ours
+02dd381d.Body 14 right right 
 02dd381d.Body 9 right right 
 04ef5b5d.Body001 17 right right 
 04ef5b5d.Body001 18 refused refused 
@@ -95,7 +94,7 @@
 23d638ba.Body001 9 right right 
 24f87f6e.Body005 6 right right 
 26938cbf.Body 5 right right 
-26938cbf.Body 6 wrong right OCCT's fillet is ours
+26938cbf.Body 6 right right 
 2825c0f5.Body 12 right right 
 2825c0f5.Body 13 right right 
 2825c0f5.Fillet001 12 right right 
@@ -105,7 +104,7 @@
 29cc7acf.Fillet001 5 right right 
 29cc7acf.Fillet001 6 right right 
 2a4d097f.Body 5 right right 
-2a4d097f.Body 6 wrong right OCCT's fillet is ours
+2a4d097f.Body 6 right right 
 2ae5ecde.Body 13 right right 
 2ae5ecde.Body 7 right right 
 2c9f14d9.Body 13 right right 
@@ -127,7 +126,7 @@
 36c448e1.Fillet001 6 right right 
 37e6cc6f.Body 22 right right 
 389f7f45.Body 5 right right 
-389f7f45.Body 6 wrong right OCCT's fillet is ours
+389f7f45.Body 6 right right 
 39cbb020.Fillet 8 right right 
 3a55873e.Body005 11 right right 
 3a55873e.Body006 10 right right 
@@ -154,11 +153,11 @@
 3b8ff666.Body 22 right right 
 3baec861.Body 9 right right 
 3ecfda4b.Body 6 right right 
-3ecfda4b.Body 7 wrong right OCCT's fillet is ours
+3ecfda4b.Body 7 right right 
 4118b762.Fillet 6 right right 
 43507cbc.Body 16 right right 
 43507cbc.Body 5 right right 
-43507cbc.Body 6 wrong right OCCT's fillet is ours
+43507cbc.Body 6 right right 
 4350839c.Body003 5 right right 
 43e53138.Body 10 right right 
 43e53138.Body 5 right right 
@@ -184,7 +183,7 @@
 452fdb3a.Body031 7 right right 
 452fdb3a.Body032 10 right right 
 452fdb3a.Body032 7 right right 
-47000b9e.Pocket 8 wrong right OCCT's fillet is ours
+47000b9e.Pocket 8 right right 
 494a47b8.FilletBody 5 right right 
 49d94503.Body019 11 right right 
 49d94503.Body021 7 refused refused 
@@ -213,7 +212,7 @@
 500bc3a1.Body 6 right right 
 509b36de.Fillet 10 right right 
 51a91a0c.Body 5 right right 
-51a91a0c.Body 6 wrong right OCCT's fillet is ours
+51a91a0c.Body 6 right right 
 528ba1ce.Fillet001 5 right right 
 528ba1ce.Fillet001 6 right right 
 53f14b72.Fillet001 5 right right 
@@ -258,12 +257,12 @@
 60acb481.Fillet001 5 right right 
 60acb481.Fillet001 6 right right 
 62559e81.Body 22 right right 
-6341568b.Body 13 wrong right OCCT's fillet is ours
+6341568b.Body 13 right right 
 6341568b.Body 14 right right 
 6341568b.Body 9 right right 
 63cefced.Body 15 right right 
 63cefced.Body 5 right right 
-63cefced.Body 6 wrong right OCCT's fillet is ours
+63cefced.Body 6 right right 
 652b3bb9.Body 9 right right 
 65b02888.Fillet 5 right right 
 66344020.Body001 9 right right 
@@ -286,17 +285,17 @@
 71e4605c.Fillet 5 right right 
 72789208.Body019 5 right right 
 72789208.Body020 5 right right 
-72789208.Body021 5 wrong right OCCT's fillet is ours
-72789208.Body022 5 wrong right OCCT's fillet is ours
+72789208.Body021 5 right right 
+72789208.Body022 5 right right 
 727f6aff.Body 32 right right 
 737af83f.Fillet 5 unjudged unjudged 
-758792f7.Fillet 10 wrong right OCCT's fillet is ours
+758792f7.Fillet 10 right right 
 76c31814.Fillet001 5 right right 
 76c31814.Fillet001 6 right right 
 7870f9f1.Body 8 right right 
 7966880d.Body 22 right right 
 7a8c35d6.Body 5 right right 
-7a8c35d6.Body 6 wrong right OCCT's fillet is ours
+7a8c35d6.Body 6 right right 
 7d271655.Body 5 right right 
 7e8bd857.Fillet 10 right right 
 7ffc95c8.Body001 9 right right 
@@ -378,7 +377,7 @@
 9665b2ce.Chamfer 60 right right 
 9665b2ce.Chamfer 61 unjudged unjudged 
 9665b2ce.Chamfer 62 right right 
-9665b2ce.Chamfer 63 wrong right OCCT's fillet is ours
+9665b2ce.Chamfer 63 right right 
 969d1f1f.Body 22 right right 
 983d3178.Body 13 right right 
 983d3178.Body 16 right right 
@@ -440,9 +439,9 @@ a61d63b1.Fillet001 15 right right
 a61d63b1.Fillet001 16 right right 
 a629e9ad.Fillet001 5 right right 
 a629e9ad.Fillet001 6 right right 
-a6488b18.Fillet 10 wrong right OCCT's fillet is ours
+a6488b18.Fillet 10 right right 
 a66929c7.Body 5 right right 
-a66929c7.Body 6 wrong right OCCT's fillet is ours
+a66929c7.Body 6 right right 
 a74b4d29.Fillet 10 right right 
 a912f189.Body 5 unjudged unjudged 
 a9b003ed.Fillet 5 right right 
@@ -455,7 +454,7 @@ b3a16627.Fillet001 5 right right
 b3a16627.Fillet001 6 right right 
 b546372d.Fillet 5 right right 
 b584eb42.Body 5 right right 
-b584eb42.Body 6 wrong right OCCT's fillet is ours
+b584eb42.Body 6 right right 
 b58d87f0.Body 9 right right 
 b58d87f0.Body001 11 right right 
 b58d87f0.Body002 9 right right 
@@ -469,7 +468,7 @@ b9150994.Body 22 right right
 b9e6ff5f.Body 10 right right 
 b9e6ff5f.Body 12 right right 
 b9e6ff5f.Body 5 right right 
-b9e6ff5f.Body 6 wrong right OCCT's fillet is ours
+b9e6ff5f.Body 6 right right 
 bcba8774.Body 10 right right 
 bcba8774.Body 11 right right 
 bcba8774.Body 12 right right 
@@ -480,10 +479,10 @@ c106d15f.Body 13 right right
 c106d15f.Body001 10 right right 
 c3a5c413.Body 5 right right 
 c43d4b4b.Body 18 right right 
-c43d4b4b.Body 19 wrong right OCCT's fillet is ours
+c43d4b4b.Body 19 right right 
 c43d4b4b.Body 6 right right 
 c494f851.Body 5 right right 
-c494f851.Body 6 wrong right OCCT's fillet is ours
+c494f851.Body 6 right right 
 c4ae9236.Body 7 right right 
 c4ae9236.Body 8 refused refused 
 c5a10350.Body 5 right right 
@@ -497,13 +496,13 @@ c5ce4e98.Body008 7 unjudged unjudged
 c5ce4e98.Body008 8 right right 
 c66b715f.Fillet001 5 right right 
 c66b715f.Fillet001 6 right right 
-c8751d52.Body 24 wrong right OCCT's fillet is ours
+c8751d52.Body 24 right right 
 c8751d52.Body 25 right right 
 c8751d52.Body 26 unjudged unjudged 
 c8751d52.Body 27 right right 
 c8751d52.Body 28 right right 
 ca961362.Body 12 right right 
-ca961362.Body 13 wrong right OCCT's fillet is ours
+ca961362.Body 13 right right 
 cae9641a.Body 5 right right 
 cae9641a.Body001 19 right right 
 cae9641a.Body002 19 right right 
@@ -515,10 +514,10 @@ cb1c37ca.Body 63 right right
 cc517816.Fillet001 5 right right 
 cc517816.Fillet001 6 right right 
 cd9e12b0.Body 5 right right 
-cd9e12b0.Body 6 wrong right OCCT's fillet is ours
+cd9e12b0.Body 6 right right 
 cd9e12b0.Body 7 right right 
 ceefa4bb.Body 5 right right 
-ceefa4bb.Body 6 wrong right OCCT's fillet is ours
+ceefa4bb.Body 6 right right 
 cf655043.Fillet004 10 right right 
 d45d0db3.Body 11 right right 
 d45d0db3.Body 30 refused refused 
@@ -526,7 +525,7 @@ d45d0db3.Body008 5 right right
 d45d0db3.Body009 8 right right 
 d45d0db3.Body009 9 right right 
 d48b57ec.Body 18 right right 
-d48b57ec.Body 19 wrong right OCCT's fillet is ours
+d48b57ec.Body 19 right right 
 d6929c4a.Fillet001 5 right right 
 d6929c4a.Fillet001 6 right right 
 d791a738.Body125 17 right right 
@@ -549,19 +548,19 @@ e162f6bc.Body 43 right right
 e66e20ea.Fillet 5 unjudged unjudged 
 e779e047.Fillet 5 right right 
 e78120dc.Body 5 right right 
-e78120dc.Body 6 wrong right OCCT's fillet is ours
+e78120dc.Body 6 right right 
 e7f90626.Body 10 right right 
 e7f90626.Body 12 right right 
 e7f90626.Body 5 right right 
-e7f90626.Body 6 wrong right OCCT's fillet is ours
+e7f90626.Body 6 right right 
 e7fe9f34.Body 12 right right 
-e7fe9f34.Body 13 wrong right OCCT's fillet is ours
+e7fe9f34.Body 13 right right 
 eb2c51a2.Fillet001 5 right right 
 eb2c51a2.Fillet001 6 right right 
 ef0a48fc.Body001 10 unjudged unjudged 
 f04f6805.Body 25 right right 
 f2582bfc.Body 18 right right 
-f2582bfc.Body 22 wrong right OCCT's fillet is ours
+f2582bfc.Body 22 right right 
 f2582bfc.Body 28 right right 
 f2582bfc.Body 29 right right 
 f2582bfc.Body 30 right right 
@@ -569,8 +568,8 @@ f2582bfc.Body 31 right right
 f2582bfc.Body 32 right right 
 f38decc9.Body019 5 right right 
 f38decc9.Body020 5 right right 
-f38decc9.Body021 5 wrong right OCCT's fillet is ours
-f38decc9.Body022 5 wrong right OCCT's fillet is ours
+f38decc9.Body021 5 right right 
+f38decc9.Body022 5 right right 
 f4ef2978.Body003 5 right right 
 f4ef2978.Body004 5 right right 
 f884216e.Body 7 right right 
