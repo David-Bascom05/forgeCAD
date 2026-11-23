@@ -307,3 +307,26 @@ every bit is unchanged.
   `[sphere, y = 0, z = 0]` the events are `(−1, −1), (1, 1)` and the planes `−2, 0, 2`.
 - QSample.lean and QLedger.lean are covector-specific, and paused per the A8 retarget. Whether to
   mirror them as the L6 reference executable is asked of the master.
+
+**Milestone 1j: the executable L2 reference** (the master: mirror QSample and QLedger as the L6
+reference, kept out of the production path). `kernel/forge-bool/src/decide_once_curved_ref.rs`,
+compiled only for tests and under the new `curved_reference` feature (fuzzing), never reached from
+`boolean.rs`. It holds:
+- QSweep's event assembly, moved here from the bridge;
+- QSample (`y_turn`, `turns_on`, `edges_on`, `line_samples`, `edge_sample`, `plane_samples`,
+  `num_y_q`, `num_z_q`, `vert_sample`, `triple_samples`, `vert_samples`, `samples_at`,
+  `samples_of`);
+- QLedger (`cov_le`, `zero_idx`, `is_facet`, `plus`, `minus`, `dedup`, `RefLedger` as Lean's
+  `Ledger` with `facets`, `topes` and `split_ok`, `form_of`, `curved_ledger`, `sides_ok`,
+  `qledger`);
+- QArc (`swap_xy`, `swap_xz`, `Axis`, `axis_perm`, `face_crossings`, `box_faces`,
+  `box_crossings`, `face_cov`).
+
+Every Lean `#guard` is a test and agrees. For `[sphere, y = 0, z = 0]`, the samples give 27
+distinct covectors, one of them the vertex `(0, 0, 0)`. With body `lit 0 neg`, the ledger has 4
+facets, 4 edges and 1 vertex. The unit circle against the box `[−1/2, 3/2] × [−1/2, 1/2]²` crosses
+the faces `[2, 0, 2, 2, 0, 0]` times, all with `λ = 0`.
+
+**`Big` merged** (d3d3f6e): forge-math's `exact` is now the decide-once branch's `S/M/L` `Big`
+(33b461f), with `divrem` and `gcd` ported onto its 64-bit limbs. On it the three-quadric vertex
+takes 31 ms and 0.27 G instructions.

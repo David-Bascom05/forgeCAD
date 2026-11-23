@@ -22,6 +22,9 @@ decide_once = ["dep:forge-bool-core", "forge-math/exact"]
 # the decide-once boolean for quadric carriers (src/decide_once_curved.rs, research/decide-once/
 # curved-design.md): off by default; not yet reached from boolean.rs, so on or off the old path runs
 decide_once_curved = ["dep:forge-bool-core", "forge-math/exact"]
+# the curved L2 reference (src/decide_once_curved_ref.rs), executable, for the L6 differential:
+# tests and fuzzing only, never the production path
+curved_reference = ["decide_once_curved"]
 
 [dev-dependencies]
 forge-ops = { path = "../forge-ops" }

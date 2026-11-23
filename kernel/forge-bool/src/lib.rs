@@ -17,6 +17,8 @@ pub mod classify;
 pub mod decide_once;
 #[cfg(feature = "decide_once_curved")]
 pub mod decide_once_curved;
+#[cfg(all(feature = "decide_once_curved", any(test, feature = "curved_reference")))]
+pub mod decide_once_curved_ref;
 #[cfg(feature = "decisions")]
 pub mod decisions;
 pub mod imprint;
