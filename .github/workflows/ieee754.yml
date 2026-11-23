@@ -54,7 +54,8 @@ jobs:
       - name: prebuilt Mathlib
         if: ${{ github.event_name != 'push' || steps.restore.outputs.cache-hit != 'true' }}
         working-directory: verify/ieee754
-        run: lake exe cache get
+        run: |
+          for i in 1 2 3; do lake exe cache get && break; [ "$i" = 3 ] && exit 1; sleep 15; done  # Mathlib's server drops downloads now and then
       - name: the proofs and the executable
         if: ${{ github.event_name != 'push' || steps.restore.outputs.cache-hit != 'true' }}
         working-directory: verify/ieee754
@@ -99,7 +100,7 @@ jobs:
         if: ${{ github.event_name != 'push' || steps.restore.outputs.cache-hit != 'true' }}
         working-directory: research/kernel-audit/float-verification/lean
         run: |
-          lake exe cache get
+          for i in 1 2 3; do lake exe cache get && break; [ "$i" = 3 ] && exit 1; sleep 15; done  # Mathlib's server drops downloads now and then
           lake build
       - name: the translated copy equals the kernel's predicates
         if: ${{ github.event_name != 'push' }}

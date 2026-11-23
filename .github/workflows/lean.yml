@@ -134,7 +134,7 @@ jobs:
           fi
           echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
           "$HOME/.elan/bin/elan" toolchain install "$(cat lean-toolchain)"
-          "$HOME/.elan/bin/lake" exe cache get
+          for i in 1 2 3; do "$HOME/.elan/bin/lake" exe cache get && break; [ "$i" = 3 ] && exit 1; sleep 15; done  # Mathlib's server drops downloads now and then
       - name: build
         if: ${{ github.event_name != 'push' || steps.restore.outputs.cache-hit != 'true' }}
         working-directory: ${{ matrix.dir }}

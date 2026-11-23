@@ -118,7 +118,7 @@ jobs:
         working-directory: ${{ matrix.dir }}
         run: |
           echo "== ${{ matrix.dir }}"
-          lake exe cache get
+          for i in 1 2 3; do lake exe cache get && break; [ "$i" = 3 ] && exit 1; sleep 15; done  # Mathlib's server drops downloads now and then
           lake build
       - name: save the Lake build (main only, even when a check failed)
         if: ${{ always() && steps.lake.outcome == 'success' && steps.restore.outputs.cache-hit != 'true' && github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
