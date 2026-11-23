@@ -50,8 +50,9 @@ fn split(c: &[H], s: f64) -> (Vec<H>, Vec<H>) {
     right[n - 1] = w[n - 1];
     for r in 1..n {
         for j in 0..n - r {
-            for k in 0..3 {
-                w[j][k] += (w[j + 1][k] - w[j][k]) * s;
+            let (lo, hi) = w.split_at_mut(j + 1);
+            for (x, y) in lo[j].iter_mut().zip(hi[0]) {
+                *x += (y - *x) * s;
             }
         }
         left.push(w[0]);
@@ -160,7 +161,7 @@ fn one_to_one(c: &[H]) -> bool {
     let p = c.len() - 1;
     let mut legs = Vec2::new(0.0, 0.0);
     for k in 0..p {
-        legs = legs + (pt(&c[k + 1]) - pt(&c[k]));
+        legs += pt(&c[k + 1]) - pt(&c[k]);
     }
     let dirs = [pt(&c[p]) - pt(&c[0]), legs];
     let da: Vec<H> = (0..p)
