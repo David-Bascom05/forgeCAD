@@ -7,6 +7,7 @@ import ForgeExact.DecideOnce.Ledger
 import ForgeExact.DecideOnce.CoreInc
 import ForgeExact.DecideOnce.Simulation
 import ForgeExact.DecideOnce.RoomConst
+import ForgeExact.DecideOnce.MetricI
 import ForgeExact.DecideOnce.Nef
 import ForgeExact.DecideOnce.Rungs
 import ForgeExact.Jordan
@@ -175,3 +176,7 @@ elab "#standard_axioms " ids:ident* : command => do
   ForgeExact.DecideOnce.IncLedger.coreI_zeroThickness_iff
   ForgeExact.DecideOnce.room_const
   ForgeExact.DecideOnce.room_const_all
+  ForgeExact.DecideOnce.IncLedger.collapse_idem
+  ForgeExact.DecideOnce.IncLedger.collapse_subset
+  ForgeExact.DecideOnce.IncLedger.collapse_refuse
+  ForgeExact.DecideOnce.Refines.collapse_exact_off_thin
