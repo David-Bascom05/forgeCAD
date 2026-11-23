@@ -24,7 +24,10 @@ for `EndToEndCurved`. That project builds in about 2 minutes on the shared Mathl
 | Separators | `SepRule.separators`, `FaithfulAll.listed`, `faithful_of_rule` | the D3 rule as one function; `Tier0Sound` and `LemmaD` stated; both together give faithful cells whichever tier the rule takes |
 | Local | `LocalGood`, **`faithfulAll_of_local`**, `faithfulAll_of_local'` | R2–R5 are local: continuous carriers, R1, R3 and a local picture at every point (small neighbourhoods meet each cell above the point's in a connected set; each realised one comes near) give `FaithfulAll` |
 | Transversal | `TransversalAt`, `transversal_chart`, `localGood'_of_transversal`, **`faithfulAll_of_transversal`** | at a point where the gradients of the `C¹` carriers through it are jointly onto, the inverse function theorem makes the cells near it convex orthant faces; so for transversal carriers `FaithfulAll` is R1 alone |
-| Tier0 | `Tier0Spec`, `tier0Sound_of_spec`, **`qRule_tier0Sound`** | a Tier-0 check is sound once it certifies transversality and R1 of the seamed arrangement; for Q1 nothing else is needed |
+| Faces | `FacesLinked`, `NoClosedPiece`, **`connected_of_faces`**, **`cellsConnected_of_faces`**, `noClosedPiece_full` | R1 without a Jordan theorem: only "at most one component" is needed, since the sides of a curve have different covectors. A cell whose proper faces are connected and linked by incidence, and which has no closed piece, is connected (local connectivity carries one component along every face). Induction on the zeros gives R1. Full cells of ℝ³ have no closed piece |
+| Strata | `zeroLocus`, **`noClosedPiece_of_locus`** | a closed piece of a cell is clopen in its zero locus, so it suffices that every component of the locus meets another carrier |
+| Linked | `linkedB`, **`facesLinked_of_linkedB`** | `FacesLinked` decided by graph search on the enumerator's list of realised covectors |
+| Tier0 | `Tier0Spec`, `qRule_tier0Sound`, `Tier0Data`, `tier0B`, **`qRule_tier0Sound_of_data`** | a Tier-0 check is sound once it certifies transversality and R1; R1 follows from `tier0B` (every realised cell is a point or has linked faces) on `Tier0Data`: the realised list with its covering theorem, transversality, the point cells, and the locus condition |
 
 **R5, the vertex wing condition** (`Faithful.vwing`, added to Curved.lean by dol-curved at 1abc5b0
 for this theorem): R4 at vertices. Without it, a facet whose boundary walk passes a vertex
@@ -42,9 +45,10 @@ covector count is wrong.
 
 ## Open (in the order of the task)
 
-- **`Tier0Sound`**: reduced to `Tier0Spec` (`qRule_tier0Sound`): the check must certify
-  transversality (an algebraic fact, dol-curved's side) and R1 (every realised cell connected,
-  the Jordan part). Non-transversal points (cone apex, tangent contact lines) need a local model
+- **`Tier0Sound`**: reduced to the combinatorial check `tier0B` on `Tier0Data`
+  (`qRule_tier0Sound_of_data`). What is left is the enumerator's facts: covering of the realised
+  list, transversality (algebraic), single-point vertex cells, and that every curve or surface
+  component of a lower cell's zero locus meets another carrier. Non-transversal points (cone apex, tangent contact lines) need a local model
   (`LocalGood`) in place of the chart; until then a check requiring transversality sends them to
   Tier 1.
 - **`Tier0Sound`** (R1) and **`LemmaD`**, i.e. R1, R2, R4 and R5 for the seamed (or walled) quadric

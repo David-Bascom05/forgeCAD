@@ -28,3 +28,11 @@ import ForgeCurved
 #print axioms ForgeCurved.faithfulAll_of_transversal
 #print axioms ForgeCurved.tier0Sound_of_spec
 #print axioms ForgeCurved.qRule_tier0Sound
+#print axioms ForgeCurved.connected_of_faces
+#print axioms ForgeCurved.cellsConnected_of_faces
+#print axioms ForgeCurved.noClosedPiece_full
+#print axioms ForgeCurved.noClosedPiece_of_locus
+#print axioms ForgeCurved.tier0Spec_of_faces
+#print axioms ForgeCurved.facesLinked_of_linkedB
+#print axioms ForgeCurved.tier0FaceSpec_of_check
+#print axioms ForgeCurved.qRule_tier0Sound_of_data
