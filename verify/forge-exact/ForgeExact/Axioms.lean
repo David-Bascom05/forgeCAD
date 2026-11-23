@@ -11,6 +11,7 @@ import ForgeExact.DecideOnce.BRep
 import ForgeExact.DecideOnce.Witness
 import ForgeExact.DecideOnce.BoxesExact
 import ForgeExact.DecideOnce.Sample
+import ForgeExact.DecideOnce.Sampler
 
 /-!
 # Only the standard axioms
@@ -125,3 +126,11 @@ elab "#standard_axioms " ids:ident* : command => do
   ForgeExact.DecideOnce.Sample.sample_exact
   ForgeExact.DecideOnce.Sample.samples_of_covers
   ForgeExact.DecideOnce.Sample.sample_correct
+  ForgeExact.DecideOnce.Sampler.cand1_ok
+  ForgeExact.DecideOnce.Sampler.emb
+  ForgeExact.DecideOnce.Sampler.cover2
+  ForgeExact.DecideOnce.Sampler.lift_proj
+  ForgeExact.DecideOnce.Sampler.coef_ev
+  ForgeExact.DecideOnce.Sampler.sampler_covers
+  ForgeExact.DecideOnce.Sampler.flat_exact
+  ForgeExact.DecideOnce.Sampler.flat_correct

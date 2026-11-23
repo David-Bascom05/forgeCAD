@@ -308,8 +308,10 @@ snapped geometry's (carriers `ps`, solids `A`); hypotheses listed in §6. Then:
   - *edge / vertex*: the samples' cells of rank 2 / 3 (`IsEdge`, `IsVert`, decided exactly) below a
     facet.
 
-  `sample_correct` is then (c) for every flat input. Each `ok` body is the exact regularised boolean
-  of the reference's solids, with its faces exactly the boundary facets. The zero-thickness refusal
+  `sample_correct` is then (c) for every flat input. With the complete sampler (`Sampler.lean`,
+  `sampler_covers`), `flat_correct` states it with no hypothesis on the samples. Each `ok` body is
+  the exact regularised boolean of the reference's solids, with its faces exactly the boundary
+  facets. The zero-thickness refusal
   is exactly `XNonManifold`. Checked by `#guard` on boxes given as B-reps: a cube is 6 / 12 / 8,
   two cubes face to face give one box, and two cubes along an edge are refused.
 
@@ -390,18 +392,26 @@ cell; face to face → one box, 6 / 12 / 8 (exact-comparison.md's "contact left 
 5. **`pieceReal`** (each piece is a cell with a point). Proven for the box generator (`box_pieceReal`). **Proven for every flat input** (`s_pieceReal`: each piece is a sample's cell). The bridge's: a cell with no point is
    never listed.
 
-6. **`Samples`** (open): the bridge's sample points must hit every realised facet some body flips
-   across, and every realised edge and vertex cell below one. `Covers` (a point in every cell
-   lying in a carrier) suffices. This is the one hypothesis left for flat inputs. It is a statement
-   about the arrangement and the sample list, not about the solids or any decision. Proving it for
-   a sampler means proving that the sampler enumerates every cell of a plane arrangement in ℚ³.
-   Every sign vector the arrangement realises has to be met. That needs realisability theory:
-   - Fourier–Motzkin, or a sweep in which the cells in a slab between critical coordinates keep
-     their sign vectors;
-   - a separate development, not a consequence of the core.
+6. ~~**`Samples`**~~ **proven** (`DecideOnce/Sampler.lean`, `sampler_covers`). The executable
+   sampler `sampler ps` hits every cell lying in a carrier (`Covers`), so `flat_exact` and
+   `flat_correct` make `Exact` and (c) theorems for every flat input. The only hypotheses are
+   nonzero carrier normals and `FlatInput`. The route is a slab sweep, one carrier at a time:
+   - *1D* (`cand1_ok`): the candidates are the roots, each root ± 1, each root's midpoint with the
+     next root above (`minAbove`), and 0. For every `t`, one candidate is on the same side of every
+     root;
+   - *2D* (`cover2`): on a carrier, every other carrier is a line `α + β u + γ v` (`coef`, `coef_ev`).
+     Take the 1D candidates of the critical `u` (`crit`: vertical lines' roots, and crossings of
+     non-vertical lines). Between two critical values the lines keep their order (`aff_same`), so
+     a point's place among the lines carries to the sampled vertical line (`emb`). There, the 1D
+     candidates of the lines' heights (`hts`) give a sample with every sign;
+   - *3D*: each carrier is a graph over two coordinates, solved for the first of z, y, x that its
+     normal has (`lift`, `proj`, `lift_proj`).
 
-   Of §6's obligations for flat inputs, only `Samples` remains. The others are discharged by
-   `sample_exact`: `boundary`, `complete`, `edges`, `verts`, `pieceReal`, `witness`, `compat`.
+   Any superset of the sampler's points also works, since `Covers` is monotone in the samples. A
+   bridge may sort or deduplicate.
+
+   For flat inputs, nothing in §6 remains a hypothesis: `flat_correct` holds for every closed
+   flat-faced B-rep on carriers with nonzero normals.
 
 What the theorems do not claim:
 - That each output face is a disc, or the body's Euler characteristic: `Valid` is local
@@ -450,4 +460,5 @@ What the theorems do not claim:
 | `DecideOnce/Metric.lean` | §6.1 step 3: the metric ledger, `collapse`, `coreM`, `coverageM` |
 | `DecideOnce/Witness.lean` | the witness ray: `side_point`, `witness_of_samples` |
 | `DecideOnce/Sample.lean` | the ledger from samples for flat B-reps: `flip_iff`, `sample_exact`, `sample_correct` |
+| `DecideOnce/Sampler.lean` | the complete sampler: `cand1_ok`, `cover2`, `sampler_covers`, `flat_exact`, `flat_correct` |
 | `DecideOnce/BoxesExact.lean` | `Exact` for every box family: `box_exact`, `box_correct`, `box_refused_iff` |
