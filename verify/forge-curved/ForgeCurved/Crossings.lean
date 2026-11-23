@@ -107,4 +107,27 @@ theorem crossings_of_cover {f f' : ℝ → ℝ} (p : ℕ → ℝ) (k : ℕ → B
         · exact List.mem_append_right _ (by
             rw [List.mem_singleton]; exact huniq t ⟨(not_le.mp htn).le, ht.2⟩ h0)
 
+/-- **Nesting from a certified cover.** Along `γ` from an anchor in the region `R`, if `R`'s
+frontier meets the path only on the trim carrier `c`, and near each such point `R` is one side of
+`c` (the trim's orientation), then the end is in `R` iff the number of crossing pieces is even. -/
+theorem nesting_of_cover {X : Type} [TopologicalSpace X] {R : Set X} {γ : ℝ → X} {c : X → ℝ}
+    {f' : ℝ → ℝ} (p : ℕ → ℝ) (k : ℕ → Bool) (n : ℕ) (hp : ∀ i < n, p i < p (i + 1))
+    (hab : p 0 ≤ p n) (hγ : ContinuousOn γ (Icc (p 0) (p n)))
+    (hf0 : c (γ (p 0)) ≠ 0)
+    (hk : ∀ i < n, if k i then CrossPiece (fun s => c (γ s)) f' (p i) (p (i + 1))
+      else ConstPiece (fun s => c (γ s)) (p i) (p (i + 1)))
+    (hfr : ∀ t ∈ Icc (p 0) (p n), γ t ∈ frontier R → c (γ t) = 0)
+    (hside : ∀ t ∈ Icc (p 0) (p n), c (γ t) = 0 → ∃ pos : Bool, ∃ W ∈ 𝓝 (γ t),
+      ∀ z ∈ W, (z ∈ R ↔ if pos then 0 < c z else c z < 0))
+    (ha : γ (p 0) ∈ R) :
+    (γ (p n) ∈ R ↔ Even ((List.range n).filter k).length) := by
+  obtain ⟨ts, hs, hl, hin, hall⟩ := crossings_of_cover (f := fun s => c (γ s)) (f' := f') p k hf0 n hp hk
+  rw [← hl]
+  refine Nesting.anchored ts hab hγ hs (fun t ht => ⟨(hin t ht).1, (hin t ht).2.1⟩)
+    (fun t ht hnt hfrt => hnt (hall t ht (hfr t ht hfrt))) (fun t ht => ?_) ha
+  obtain ⟨h1, h2, h0, hd, hne⟩ := hin t ht
+  have htI : t ∈ Icc (p 0) (p n) := ⟨h1.le, h2.le⟩
+  obtain ⟨pos, W, hW, hR⟩ := hside t htI h0
+  exact Nesting.flip_of_transversal pos (hγ.continuousAt (Icc_mem_nhds h1 h2)) hW hR hd hne h0
+
 end ForgeCurved.Crossings
