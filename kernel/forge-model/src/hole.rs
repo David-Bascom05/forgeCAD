@@ -493,7 +493,8 @@ pub(crate) fn sized_through(features: crate::History<'_>, i: usize) -> bool {
 /// sound and cheap rather than tight: the hull of the vertices and the curved edges' boxes (kept
 /// ones, else a circle's or ellipse's whole box, else `Curve::bbox` over the range), which holds every plane, cylinder, cone and ruled face (a straight line through any of
 /// their points meets the boundary on both sides), with a sphere's or torus's whole box for the
-/// faces that can bulge past their edges, and the face's own box for any other procedural face.
+/// faces that can bulge past their edges, and any other procedural face's surface box over its
+/// whole domain (its face box where that is not finite).
 pub(crate) fn body_box(b: &forge_topo::Body) -> Box3 {
     use forge_geom::{Curve, Surface};
     // every edge's ends: so a line edge adds nothing more
@@ -523,7 +524,20 @@ pub(crate) fn body_box(b: &forge_topo::Body) -> Box3 {
             Surface::Sphere(s) => bx = bx.hull(&Box3::from_point(s.frame.origin).grow(s.radius)),
             Surface::Torus(t) => bx = bx.hull(&Box3::from_point(t.frame.origin).grow(t.major + t.minor)),
             Surface::Procedural(pr) if pr.v_degree() == Some(1) => {}
-            Surface::Procedural(_) => bx = bx.hull(&b.face_box(forge_topo::FaceId(k as u32))),
+            // the surface's own box over its whole domain, not over a sampled uv region of the
+            // face (research/ops-spec/outer-box.md): sound wherever the kind's `bbox` is
+            Surface::Procedural(pr) => {
+                let d = pr.domain();
+                let whole = pr.bbox(forge_math::Box2::new(d.u.interval(), d.v.interval()));
+                let finite = [whole.x, whole.y, whole.z]
+                    .iter()
+                    .all(|i| i.lo.is_finite() && i.hi.is_finite());
+                bx = bx.hull(&if finite {
+                    whole
+                } else {
+                    b.face_box(forge_topo::FaceId(k as u32))
+                })
+            }
             _ => {}
         }
     }

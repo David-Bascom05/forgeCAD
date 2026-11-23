@@ -56,7 +56,7 @@ These procedural surfaces have a sound `bbox` over a uv box:
 The rule: an input is used as an outer bound only where it is proven. Where it is not proven, the
 through tool takes a coarser input that is proven.
 
-1. **Faces.** For a non-ruled procedural face, use the surface's sound `bbox` over its **whole
+1. **Faces** (done). For a non-ruled procedural face, use the surface's sound `bbox` over its **whole
    domain**, not over a sampled uv region.
    - That is sound wherever the surface's `bbox` is: Skinned, Spun, Nurbs, HolePatch.
    - It is looser, and a looser box changes no cut (H1). So item 2 leaves the path.
