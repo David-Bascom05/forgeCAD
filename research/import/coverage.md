@@ -25,8 +25,8 @@ measure are given beside them where they differ.
 | set | parts | untranslated before | after | match (1e-4) before | after | uncertain after | match after, old measure |
 |---|---:|---:|---:|---:|---:|---:|---:|
 | FreeCAD library, bodies | 677 | 130 | 39 | 394 | 570 | 20 | 523 |
-| CADFS, all parts | 1914 | 640 | 597 | 1108 | 1135 | 4 | 1121 |
-| CADFS, parts with a fillet | 476 | 238 | 225 | 164 | 166 | 1 | 167 |
+| CADFS, all parts | 1914 | 640 | 595 | 1108 | 1136 | 4 | 1122 |
+| CADFS, parts with a fillet | 476 | 238 | 223 | 164 | 167 | 1 | 168 |
 | WHUCAD, 1 in 7 with a fillet | 319 | 35 | 29 | (1e-3: STEPs staged for the newly built only) | 0 new | | |
 
 No part got worse on any set through the importers: no match was lost, and nothing that built before stopped
@@ -329,13 +329,13 @@ All 1914 sampled parts:
 
 | class | before | after |
 |---|---:|---:|
-| match | 1108 | 1135 |
+| match | 1108 | 1136 |
 | mismatch | 69 | 69 |
 | uncertain | 3 | 4 |
-| refused | 85 | 97 |
+| refused | 85 | 98 |
 | fail | 8 | 11 |
 | timeout | 1 | 1 |
-| untranslated | 640 | 597 |
+| untranslated | 640 | 595 |
 
 **Draft on an extrude (24 → 0 under that name).** Onshape's extrude draft is Forge's `taper:`, on a depth. Its sign
 was read from the STEP: with the pull-direction flag set, Onshape narrows the extrude as Forge's positive taper does
@@ -420,6 +420,27 @@ has remain, and a choice those leave open stays unresolved further on. Such part
 A full sweep of all 1914 parts, against the one before, moves only these six. One part moves within its class:
 00035608, a mismatch, comes nearer, from 1.6e-1 to 3.7e-5 in volume (1.5e-4 in area). It too had a stale entity
 there, which had sent its query down a fallback.
+
+**A fillet's own faces and edges (12 → 0 under "of an unknown feature"; 10 still stop on them).** A BLEND_FACE
+query names the round's face along one rounded edge, and a BLEND_EDGE names where that face meets another
+(`blendedInto`). When the reader writes a fillet, it now keeps the samples of the edges it rounds and the faces that
+were there before. On a later query:
+- the rounded edge is the one the query's `blendedFrom` edge names;
+- its face is the one, of the faces the fillet made, lying nearest that edge (by its samples' mean distance), and
+  clearly nearest, at half the next one's distance or less;
+- the BLEND_EDGE is what that face shares with the `blendedInto` faces.
+
+| part | after |
+|---|---|
+| 00582591 | match: 1.8e-13 |
+| 00026369 | refused: `Fillet NoBlend` |
+| 00339994 | sketch text, further on |
+| 00079785, 00608424, 00770496 | BLEND_FACE with no edge it came from (its `blendedFrom` empty) |
+| 00310838, 00531768 | no face of the round clearly nearest the edge |
+| 00259389, 00834324 | no edge into the face, or not one rounded edge |
+| 00632978, 00756896 | the blend of a feature the reader does not record (not a fillet) |
+
+A full sweep of all 1914 parts moves only these, and no volume.
 
 ### What still stops CADFS
 

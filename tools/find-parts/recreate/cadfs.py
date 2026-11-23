@@ -233,6 +233,21 @@ class LoftRail:
         return out
 
 
+class Blended:
+    """A fillet's own faces or edges, by handle on the part as built: what a BLEND_FACE or BLEND_EDGE query names."""
+
+    def __init__(self, faces, edges=None):
+        self.faces, self.edges = set(faces), edges
+
+    def faces_in(self, st):
+        return self.faces & {f["h"] for f in st.get("faces", [])}
+
+    def edges_in(self, st):
+        if self.edges is not None:
+            return self.edges & {e["h"] for e in st.get("edges", [])}
+        return {e["h"] for e in st.get("edges", []) if self.faces & set(e["f"])}
+
+
 def picks(c):
     """Does this carrier hold a loft's wall or rail, which go by what they touch and have no distance?"""
     if isinstance(c, Any):
@@ -344,6 +359,7 @@ class Tr:
         self.current = None  # the body the next unscoped line acts on
         self.alias = {}
         self.used = set()
+        self.blends = {}  # fillet feature id: what its rounded edges parted and the faces it made (blend_carrier)
         self.sketch_ents = {}
         self.plain = {}
         self.imprint_off = set()
@@ -378,6 +394,44 @@ class Tr:
             raise KernelStop(str(x))
         except NoName as x:
             raise Unresolved(str(x))
+
+    def blend_carrier(self, base, kind, m, env):
+        """A fillet's face from one of its rounded edges (BLEND_FACE), or where that face meets another (BLEND_EDGE),
+        on the part as built: the rounded edge is the one the query's `blendedFrom` edge names, its face the new face
+        that touches both faces the edge parted, and the edge the one that face shares with `blendedInto`."""
+        b = self.blends[base]
+        st = self.state()
+        if b["made"] is None:
+            b["made"] = {g["h"] for g in st.get("faces", [])} - b["old"]
+        froms = [self.deref(x, env) for x in (m.get("blendedFrom") or [])]
+        froms = [x for x in froms if isinstance(x, fs.Call) and len(x[1]) > 2 and x[1][2] == ("name", "EDGE")]
+        if len(froms) != 1:
+            raise Unresolved(f"{kind}: not one edge it came from")
+        c = self.carrier(froms[0], env)
+        rounded = [ps for ps, _ in b["edges"] if all(c.dist(tuple(p)) <= TOL for p in ps)]
+        if len(rounded) != 1:
+            raise Unresolved(f"{kind}: not one rounded edge")
+        # the round's face along that edge: of the faces the fillet made, the one lying nearest the edge it replaced
+        # (its samples' mean distance to the face's), and clearly nearer than any other
+        by_h = {g["h"]: g for g in st.get("faces", [])}
+        def near(h):
+            fp = [tuple(q) for q in by_h[h]["p"]]
+            return sum(min(math.dist(tuple(p), q) for q in fp) for p in rounded[0]) / len(rounded[0])
+        ds = sorted((near(h), h) for h in b["made"] if h in by_h)
+        if not ds or (len(ds) > 1 and ds[1][0] < 2 * ds[0][0]):
+            raise Unresolved(f"{kind}: not one face of the round")
+        faces = {ds[0][1]}
+        if kind == "BLEND_FACE":
+            return Blended(faces)
+        intos = m.get("blendedInto") or []
+        intos = intos if isinstance(intos, list) else [intos]
+        into = set()
+        for q in intos:
+            into |= on_faces(self.carrier(q, env), st)
+        edges = {e["h"] for e in st.get("edges", []) if faces & set(e["f"]) and into & set(e["f"])}
+        if not edges:
+            raise Unresolved("BLEND_EDGE: no edge into the face")
+        return Blended(faces, edges)
 
     def sketch(self, f):
         if any(e["kind"] == "skEllipticalArc" for e in f["ents"]):
@@ -540,6 +594,8 @@ class Tr:
             if kind == "SPLIT" and m.get("disambiguationData"):
                 c.split_pick = True
             return c
+        if base in self.blends and kind in ("BLEND_FACE", "BLEND_EDGE"):
+            return self.blend_carrier(base, kind, m, env)
         rec = self.solid.get(base)
         if rec is None:
             raise Unresolved(f"{kind} of an unknown feature")
@@ -1491,7 +1547,16 @@ class Tr:
         if a.get("isVariable") is True or "vertexSettings" in a or "crossSection" in a or "filletType" in a:
             raise Unsupported("a variable or conic fillet")
         hs = self.edges_for(qunion(a["entities"]), env, a.get("tangentPropagation") is True)
+        before = self.state()
         self.lines.append(St("fillet", size=num(self.val(a["radius"])), sel=self.select("edges", hs)))
+        # what later queries on the fillet's own faces and edges are read against: the faces it made, and the faces
+        # each rounded edge parted, with that edge's samples
+        old = {g["h"] for g in before.get("faces", [])}
+        self.blends[f["id"]] = {
+            "edges": [(e["p"], set(e["f"])) for e in before.get("edges", []) if e["h"] in hs],
+            "made": None,
+            "old": old,
+        }
 
     def chamfer(self, f):
         a, env = f["args"], f["env"]
