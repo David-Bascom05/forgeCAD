@@ -8,3 +8,5 @@ constant, not an axiom: what the theorems need of it is their hypothesis `Orient
 #print axioms ForgeSketch.le_max
 #print axioms ForgeSketch.line_spec
 #print axioms ForgeSketch.line_int
+#print axioms ForgeSketch.mid_err
+#print axioms ForgeSketch.proj_err
