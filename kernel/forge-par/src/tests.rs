@@ -50,6 +50,8 @@ fn borrows_are_never_outlived_by_a_closure_left_unjoined() {
 }
 
 #[test]
+// a panic caught on purpose: under WASI a panic aborts
+#[cfg(not(target_os = "wasi"))]
 fn a_panicking_closure_joins_everything_before_the_scope_returns() {
     hooked();
     let done: Vec<AtomicBool> = (0..8).map(|_| AtomicBool::new(false)).collect();
@@ -72,6 +74,8 @@ fn a_panicking_closure_joins_everything_before_the_scope_returns() {
 }
 
 #[test]
+// a panic caught on purpose: under WASI a panic aborts
+#[cfg(not(target_os = "wasi"))]
 fn a_panic_in_the_scope_itself_still_waits_for_its_closures() {
     hooked();
     let done = AtomicBool::new(false);
@@ -89,6 +93,8 @@ fn a_panic_in_the_scope_itself_still_waits_for_its_closures() {
 }
 
 #[test]
+// a panic caught on purpose: under WASI a panic aborts
+#[cfg(not(target_os = "wasi"))]
 fn a_joined_panic_is_the_joiners_not_the_scopes() {
     hooked();
     let got = scope(|s| s.spawn(|| -> u8 { panic!("mine") }).join().is_err());
