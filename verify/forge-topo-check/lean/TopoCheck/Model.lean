@@ -259,16 +259,17 @@ def bad (s : Nat) : Bool :=
 def nbrs (f : Nat) : List Nat :=
   (b.faceLoops f).flatMap fun l => (b.loopCoedges l).flatMap fun c => (b.ed (b.co c).edge).uses.map b.faceOf
 
-/-- check.rs's flood: pop a face, push its unseen neighbours. -/
+/-- check.rs's flood: pop a face, push its unseen neighbours (each once). -/
 def flood : Nat → List Nat → List Nat → List Nat
   | 0, seen, _ => seen
   | _ + 1, seen, [] => seen
   | n + 1, seen, f :: st =>
-    let new := (b.nbrs f).filter (· ∉ seen)
+    let new := ((b.nbrs f).filter (· ∉ seen)).eraseDups
     flood n (seen ++ new) (new ++ st)
 
-/-- Enough pops for every push. -/
-def floodFuel : Nat := ((List.range b.faces.size).map fun f => (b.nbrs f).length).sum + 2
+/-- Enough pops for every push: each face is pushed at most once, the first on the stack to
+start (`flood_closed`). -/
+def floodFuel : Nat := b.faces.size + 1
 
 def reached (s : Nat) : List Nat :=
   let h := (b.shellList s).headD 0

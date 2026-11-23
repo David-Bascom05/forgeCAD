@@ -10,6 +10,11 @@ repository.workspace = true
 name = "fg"
 path = "src/bin/fg.rs"
 
+[features]
+# the imprint's run-time mode (forge-bool's `imprint_column`, off in shipped builds): only then has a
+# kept stage a switch to be keyed with (tests/kept_switches.rs)
+imprint_column = ["forge-model/imprint_column"]
+
 [dependencies]
 forge-dirs = { path = "../../kernel/forge-dirs" }
 forge-math = { path = "../../kernel/forge-math" }
