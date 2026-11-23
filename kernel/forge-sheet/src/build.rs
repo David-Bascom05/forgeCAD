@@ -2241,14 +2241,19 @@ impl<'a> Strips<'a> {
                 }
             }
         }
-        // no clash: walls meeting without passing into each other (an edge along a face at a
-        // corner) are faces of one solid touching, which no valid solid has
+        // no clash: strips meeting without passing into each other past the limit (an edge
+        // along a face at a corner, a zone grazing a wall) are faces of one solid touching, which
+        // no valid solid has. Every pair not joined by design, a wall or a zone against a wall:
+        // a point of one's boundary within the tolerance of the other's material is a touch, so
+        // a zone passing into a wall at all is a clash (past the limit) or a touch (short of it),
+        // never neither
         for a in 0..ns {
             for b in 0..ns {
+                let loose = self.loose.contains(&(a, b)) || self.loose.contains(&(b, a));
                 if a == b
                     || joined[a * ns + b]
+                    || loose
                     || !boxes[a].grow(TOL).overlaps(&boxes[b])
-                    || !matches!(self.strips[a].folded, Geo::Plane(_))
                     || !matches!(self.strips[b].folded, Geo::Plane(_))
                 {
                     continue;
@@ -2266,13 +2271,16 @@ impl<'a> Strips<'a> {
         Ok(())
     }
 
-    /// A point of plane strip `a`'s boundary edges (both skins, and the rails through the sheet)
-    /// within `TOL` of plane strip `b`'s material, if one is: halving, a part dropped once its box
+    /// A point of strip `a`'s boundary edges (both skins, and the rails through the sheet)
+    /// within `TOL` of strip `b`'s material, if one is: halving, a part dropped once its box
     /// cannot reach `b` or its middle is farther than the box is wide (distance is 1-Lipschitz).
+    /// `b` is a wall; `a` a wall or a zone, whose lines fold to lines, circles or helices, each
+    /// within a closed-form sag of its chord, so every line is judged by chords exactly.
     fn touch(&self, a: usize, b: usize, flat_b: (Point2, Point2)) -> Option<Point3> {
         asked();
         let t = self.t;
         let geo = self.strips[a].folded;
+
         // a curve halved while its box may reach b and its middle is near enough; a piece whose
         // chord is within TOL / 2 of it is judged by its chord, exactly
         let search = |box_of: &dyn Fn(Interval) -> forge_math::Box3,
@@ -2307,13 +2315,21 @@ impl<'a> Strips<'a> {
         };
         for ld in self.loops.iter().filter(|l| l.strip == a) {
             for bd in &ld.bounds {
-                let sag = |u: Interval| match bd.piece {
-                    Piece::Line { .. } => 0.0,
-                    Piece::Arc { r, t0, t1, .. } => {
+                let sag = |u: Interval| match (geo, &bd.piece) {
+                    // folded round a zone's axis a line is a line, a circle or a helix: off its
+                    // chord at most as a circle of its turn, rho (1 - cos(turn / 2))
+                    (Geo::Round { rho0, sigma, rn, .. }, &Piece::Line { a: p, b: q }) => {
+                        let half = 0.5 * ((q.x - p.x) * u.width()).abs() / rn;
+                        let rho = rho0.max(rho0 + sigma * t);
+                        rho * (1.0 - dmath::cos(half.min(dmath::PI)))
+                    }
+                    (Geo::Round { .. }, _) => f64::INFINITY,
+                    (_, Piece::Line { .. }) => 0.0,
+                    (_, &Piece::Arc { r, t0, t1, .. }) => {
                         let half = 0.5 * (t1 - t0).abs() * u.width();
                         r * (1.0 - dmath::cos(half.min(dmath::PI)))
                     }
-                    Piece::Spline { .. } => f64::INFINITY,
+                    (_, Piece::Spline { .. }) => f64::INFINITY,
                 };
                 for w in [0.0, t] {
                     if let Some(p) = search(

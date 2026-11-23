@@ -936,14 +936,11 @@ fn fuzz_curved_edges_skimming_a_wall() {
             ]);
             s.cut(gid, cut).unwrap();
             match build(&s, Map::Folded) {
+                // whatever passes in at all is a clash or a touch: no band builds
                 Ok(b) => {
-                    assert!(depth <= 2.0 * limit, "seed {seed}: {depth} deep, built");
-                    if depth < 0.0 {
-                        checked(&b);
-                        clear += 1;
-                    } else {
-                        between += 1;
-                    }
+                    assert!(depth < 0.0, "seed {seed}: {depth} deep, built");
+                    checked(&b);
+                    clear += 1;
                 }
                 Err(SheetError::FoldedClash { at, .. }) => {
                     assert!(depth > 0.0, "seed {seed}: refused {depth} clear, at {at:?}");
@@ -955,7 +952,10 @@ fn fuzz_curved_edges_skimming_a_wall() {
                 }
                 // within tolerance of the base, neither in nor clear: an edge on a face
                 Err(SheetError::FoldedTouch { .. }) => {
-                    assert!(depth.abs() <= 2.0 * limit, "seed {seed}: touch at {depth}");
+                    assert!(
+                        depth >= -limit && depth <= 2.0 * limit,
+                        "seed {seed}: touch at {depth}"
+                    );
                     between += 1;
                 }
                 Err(e) => panic!("seed {seed} depth {depth}: {e:?}"),
