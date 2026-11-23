@@ -6,3 +6,4 @@ import Winding2d.Witness
 import Winding2d.Polygon
 import Winding2d.Sides
 import Winding2d.Jump
+import Winding2d.Vertex
