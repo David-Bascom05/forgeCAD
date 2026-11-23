@@ -1471,6 +1471,8 @@ fn regen_text(e: &forge_model::RegenError) -> String {
         G::NotClosed { what, .. } => format!("{what} is gone, so the part is no closed solid"),
         G::MissingEdge { name, .. } => format!("the part has no edge {name:?}"),
         G::Bodies { count } => format!("the part ends as {count} bodies, not one"),
+        // an edit's own error says why ("thicken: rebuild: vertex"), not the wrapper's name
+        G::Edit { error, .. } => words(error),
         _ => words(e),
     }
 }
