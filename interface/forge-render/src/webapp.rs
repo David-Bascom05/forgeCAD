@@ -529,6 +529,8 @@ fn state_json(g: &Gui) -> String {
         ("done", doc.map_or(Json::Null, |s| num(s.done as f64))),
         ("dirty", doc.is_some_and(|s| s.dirty()).into()),
         ("status", g.shell.status.clone().into()),
+        // the last build's time in the worker, ms
+        ("build_ms", doc.map_or(Json::Null, |s| num(s.build_ms))),
         ("built", built.unwrap_or(Json::Null)),
     ])
     .to_string()
