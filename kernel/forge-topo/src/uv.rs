@@ -185,7 +185,11 @@ fn draw(body: &Body, face: FaceId, mut raw: Vec<Point2>) -> (Vec<Point2>, Vec<us
     {
         let want_ccw = body.face(face).same_sense;
         let count = 3usize.pow(runs.len() as u32 - 1);
-        let mut best_score = f64::INFINITY;
+        // the least area; where shifts leave it as it is (a run whose two ends are on one pole's
+        // line moves along it at no cost in area: equal to rounding), the shortest walk along the
+        // singular lines, as a loop's walk there covers no stretch of one twice
+        let mut best_score = (f64::INFINITY, f64::INFINITY);
+        let on_pole = |a: Point2, b: Point2| a.y == b.y && surface.singular(a) && surface.singular(b);
         for combo in 0..count {
             let mut c = combo;
             let mut pts: Vec<(Point2, usize)> = runs[0].clone();
@@ -200,8 +204,16 @@ fn draw(body: &Body, face: FaceId, mut raw: Vec<Point2>) -> (Vec<Point2>, Vec<us
             pts.extend(tail.iter().copied());
             let poly: Vec<Point2> = pts.iter().map(|q| q.0).collect();
             let area = signed_area(&poly);
-            if (area > 0.0) == want_ccw && area.abs() < best_score {
-                best_score = area.abs();
+            let walk: f64 = (0..poly.len())
+                .map(|k| (poly[k], poly[(k + 1) % poly.len()]))
+                .filter(|&(a, b)| on_pole(a, b))
+                .map(|(a, b)| (b.x - a.x).abs())
+                .sum();
+            let tie = 1e-9 * area.abs();
+            let better =
+                area.abs() < best_score.0 - tie || (area.abs() <= best_score.0 + tie && walk < best_score.1);
+            if (area > 0.0) == want_ccw && better {
+                best_score = (area.abs(), walk);
                 best = pts;
             }
         }

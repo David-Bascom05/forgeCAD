@@ -65,3 +65,43 @@ fn a_thin_skewed_groove_cuts_a_plate() {
         "{got:?} where {want}"
     );
 }
+
+/// A cylinder r 40 whose end edge is rounded r 40, so the end closes to a ball's pole, cut by a bar
+/// a quadrant of whose corner runs along the axis through the pole (the scale-programs session's
+/// classify-fillet-cut.fg, from 3 CADFS parts). The bar's top face meets the ball in a great circle
+/// half of which is the ball's seam meridian: the trim dropped the whole circle as along the seam,
+/// so the notch's other side had no edge (InconsistentClassification); a curve now goes as along a
+/// seam only where it runs along it all its length. The notch's loop then passes the pole twice, and
+/// the check drew it with a period shift that walks the pole's line back over itself (each shift had
+/// the same area to rounding): FaceWrongSide, refused as a touch. The shortest walk along the
+/// singular lines now breaks the tie. Exact volume.
+#[test]
+fn a_bar_cut_through_a_rounded_ends_pole_builds() {
+    let (v, built) = judge_built(include_str!("kernel_parts/classify-fillet-cut.fg"));
+    assert!(matches!(v, Verdict::Ok), "{v:?}");
+    // the bar takes y in [-24, 0], z in [-17, 0] from x = 40 - sqrt(1600 - y² - z²) to 80
+    let n = 400;
+    let (hy, hz) = (24.0 / n as f64, 17.0 / n as f64);
+    let w = |i: usize| {
+        if i == 0 || i == n {
+            1.0
+        } else if i % 2 == 1 {
+            4.0
+        } else {
+            2.0
+        }
+    };
+    let mut taken = 0.0;
+    for i in 0..=n {
+        for j in 0..=n {
+            let (y, z) = (-24.0 + i as f64 * hy, -17.0 + j as f64 * hz);
+            taken += w(i) * w(j) * (40.0 + (1600.0 - y * y - z * z).sqrt());
+        }
+    }
+    taken *= hy * hz / 9.0;
+    let pi = std::f64::consts::PI;
+    let want = pi * 1600.0 * 40.0 + 2.0 / 3.0 * pi * 64000.0 - taken;
+    let body = built.expect("built").body().expect("a body");
+    let got = forge_topo::mass::mass(&body).expect("measures").volume;
+    assert!((got - want).abs() < 1e-6 * want, "{got} where {want}");
+}

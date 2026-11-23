@@ -2367,6 +2367,19 @@ fn touches_along(body: &Body, e: EdgeId, range: Interval, other: &Body, into: Fa
     })
 }
 
+/// Whether `curve` over `range` lies along edge `e` all its length: within the edge's tolerance of
+/// it at eight points spread over the range.
+#[cold]
+#[inline(never)]
+fn along_whole(body: &Body, e: EdgeId, curve: &Curve, range: Interval) -> bool {
+    let edge = body.edge(e);
+    let reach = edge.tol.max(tol::LINEAR);
+    (0..8).all(|i| {
+        let p = curve.eval(range.lo + range.width() * (i as f64 + 0.5) / 8.0);
+        edge.curve.eval(edge.curve.closest(p, edge.range)).distance(p) <= reach
+    })
+}
+
 /// Whether `curve` passes the middle of edge `e`, not just an end.
 #[cold]
 fn runs_along(body: &Body, e: EdgeId, curve: &Curve, range: Interval) -> bool {
@@ -3003,7 +3016,13 @@ pub(crate) fn trim(
                 }
             }
         }
-        if along.iter().any(|a| a.2) {
+        // along a seam the curve adds no edge, where it runs along it all its length (the seam's
+        // two sides are one face); a curve that only shares a stretch with a seam (a sphere's great
+        // circle half of which is its seam meridian) crosses the face off it like any other
+        if along
+            .iter()
+            .any(|&(k, e, seam)| seam && along_whole(bodies[k], e, &curve, range))
+        {
             return Ok(());
         }
     }
