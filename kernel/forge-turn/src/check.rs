@@ -2,23 +2,19 @@
 //!
 //! The obstacle H is a region of the half-plane (the part's half-profile, the in-process stock,
 //! the chuck's envelope), given by its boundary pieces. A body of the tool (insert.rs) is, slab by
-//! slab, inside (K ⊕ B_r') × [a, b] in depth; its image under π, moved by the reference point's
-//! translation g(s) along a segment, lies in
+//! slab, inside (K ⊕ B_r') × [a, b] in depth; its image, moved by the reference point's translation
+//! g(s) along a segment, lies in
 //!
-//!   Z ⊕ B_r',  Z = K ⊕ [0, e]·ρ̂ ⊕ [g(0), g(1)]
+//!   Z ⊕ B_r',  Z = K ⊕ [0, e]·x̂ ⊕ [g(0), g(1)] = conv(P),
 //!
-//! (insert.rs: e bounds the smear of depth b at the slab's least x). Z is convex. Its boundary is
-//! inside a union of segments: each edge of K translated by the four corners of the
-//! parallelogram [0, e]·ρ̂ ⊕ [0, m], and each vertex of K swept along either generator from the
-//! other's two ends. So when ∂H misses Z,
-//!
-//!   dist(Z ⊕ B_r', H) ≥ min over those segments σ and the pieces f of ∂H of dist(σ, f) − r',
-//!
-//! each dist(σ, f) bounded below by slab::dist (proven: Dist2.lean, DistArc.lean; arcs strictly
-//! under a half turn, ends off the circle by a gap counted twice, Trim.lean). ∂H misses Z when
-//! that minimum is positive and no loop of ∂H lies inside Z (its box is not inside Z's box); then
-//! Z is inside H or outside it whole, and one point of it decides which, exactly
-//! (region::inside_loop).
+//! P the core's vertices moved to the parallelogram's four corners (insert.rs: e bounds the smear
+//! of depth b at the slab's least |x|). For each piece f of the obstacle's boundary near Z, any
+//! axis w gives dist(Z, f) ≥ (min over conv f of w·y − max over P of w·p) / |w| (Turn.lean
+//! `sep_axis_hull`): the axes tried are the direction from f to the nearest point of P, the
+//! normals of K's edges and of the generators, and f's own normal. When every piece is at least
+//! zl > 0 from Z, Z is outside the obstacle or inside it whole (`clear_of_frontier`: Z is convex),
+//! and one point of it decides which, exactly (region::inside_loop); then
+//! dist(Z ⊕ B_r', H) ≥ zl − r' (`turn_clear_ball`).
 //!
 //! The half-profile's segment on the axis is no boundary of the part (the part goes on across
 //! the axis), so the checks are made in the full section: Hf = H ∪ mirror(H). With σ(x, y, z) =
@@ -32,13 +28,13 @@
 //! off the circle, plus the difference of the radii at its two ends (a control's arc between
 //! ends at unequal radii stays between them: a hypothesis on the control, H.arc), of the chord.
 //!
-//! Every f64 sum that places a segment end rounds: the bound subtracts a rounding allowance
+//! Every f64 sum that places a point of P rounds: the bound subtracts a rounding allowance
 //! (twice the ulp of the largest coordinate per addition, on both axes).
 use crate::insert::Body;
 use forge_cam_geom::ival::Ival;
 use forge_cam_geom::real::Ctx;
 use forge_cam_geom::region::{self, Exact, Region, Seg};
-use forge_cam_geom::slab::{Sec, dist};
+use forge_cam_geom::slab::Sec;
 use forge_math::dmath;
 
 /// One piece of an obstacle's boundary: the curve, its end gap (0 for a segment), its box.
@@ -384,53 +380,38 @@ fn round_allow(m: f64, k: f64) -> f64 {
     1.5 * k * u
 }
 
-/// The least of dist(σ, f) − 2·gap_f over the boundary segments σ of Z (given by base point p0,
-/// generators g1, g2, core K) and the obstacle's pieces near Z. `cut`: pieces whose box gap from
-/// Z's box is at least this are skipped (their distance is at least the box gap).
-fn zono_lower(
-    core: &[[f64; 2]],
-    p0: [f64; 2],
-    g1: [f64; 2],
-    g2: [f64; 2],
-    obs: &Obstacle,
-    cut: f64,
-    zbox: &[f64; 4],
-) -> f64 {
+/// The least distance from Z = conv(P) to the obstacle's pieces near it, by separating axes:
+/// for a piece f and any axis w, dist(Z, f) ≥ (min_{y ∈ conv f} w·y − max_{p ∈ P} w·p) / |w|
+/// (Turn.lean `sep_axis_hull`), the max over P being the max over conv(P), the min over a piece
+/// its min over its convex hull. The axes tried: the direction from the piece to the point of P
+/// nearest it (f64; any axis is sound), the normals of K's edges and of the two generators, and
+/// the piece's own normal. Z = K ⊕ [0, g₁] ⊕ [0, g₂] + p₀ is conv(P), P = the core's vertices
+/// moved by p₀ and the parallelogram's four corners. `cut`: pieces whose box gap is at least
+/// this are skipped (their distance is at least the box gap). A piece whose bound stays at 0
+/// gives 0 (its distance not proven positive).
+fn sat_lower(core: &[[f64; 2]], p0: [f64; 2], g1: [f64; 2], g2: [f64; 2], obs: &Obstacle, cut: f64, zbox: &[f64; 4]) -> f64 {
     let n = core.len();
     let corners = [[0.0, 0.0], g1, g2, [g1[0] + g2[0], g1[1] + g2[1]]];
-    let pt = |k: [f64; 2], t: [f64; 2]| [p0[0] + k[0] + t[0], p0[1] + k[1] + t[1]];
-    let mut segs: Vec<Sec> = Vec::with_capacity(8 * n);
+    let mut pts: Vec<[f64; 2]> = Vec::with_capacity(4 * n);
+    for k in core {
+        for t in corners {
+            pts.push([p0[0] + k[0] + t[0], p0[1] + k[1] + t[1]]);
+        }
+    }
+    // the axes every piece shares: K's edge normals and the generators' (both senses)
+    let mut axes: Vec<[f64; 2]> = Vec::with_capacity(n + 4);
     for i in 0..n {
         let (u, v) = (core[i], core[(i + 1) % n]);
-        for t in corners {
-            segs.push(Sec::Seg {
-                a: pt(u, t),
-                b: pt(v, t),
-            });
+        let d = [v[0] - u[0], v[1] - u[1]];
+        if d != [0.0, 0.0] {
+            axes.push([d[1], -d[0]]);
+            axes.push([-d[1], d[0]]);
         }
-        if g1 != [0.0, 0.0] {
-            segs.push(Sec::Seg {
-                a: pt(u, [0.0, 0.0]),
-                b: pt(u, g1),
-            });
-            if g2 != [0.0, 0.0] {
-                segs.push(Sec::Seg {
-                    a: pt(u, g2),
-                    b: pt(u, corners[3]),
-                });
-            }
-        }
-        if g2 != [0.0, 0.0] {
-            segs.push(Sec::Seg {
-                a: pt(u, [0.0, 0.0]),
-                b: pt(u, g2),
-            });
-            if g1 != [0.0, 0.0] {
-                segs.push(Sec::Seg {
-                    a: pt(u, g1),
-                    b: pt(u, corners[3]),
-                });
-            }
+    }
+    for g in [g1, g2] {
+        if g != [0.0, 0.0] {
+            axes.push([g[1], -g[0]]);
+            axes.push([-g[1], g[0]]);
         }
     }
     let mut best = f64::INFINITY;
@@ -439,51 +420,163 @@ fn zono_lower(
         if bg >= cut || bg >= best {
             continue;
         }
-        for s in &segs {
-            let d = seg_dist(s, &f.sec);
-            let lo = ip(d.lo).sub(ip(2.0 * f.gap)).lo;
-            if lo < best {
-                best = lo;
+        let mut piece_best = piece_gap(&pts, &axes, &f.sec, f.gap, cut);
+        // a concave arc's hull reaches over what it faces: if the whole arc is not separated,
+        // its sub-arcs are (their hulls lie within their sagitta of the arc), the least of them
+        if piece_best < cut
+            && let Sec::Arc { c, r, a, b, ccw } = f.sec
+        {
+            let ang = |p: [f64; 2]| dmath::atan2(p[1] - c[1], p[0] - c[0]);
+            let (t0, mut t1) = (ang(a), ang(b));
+            if ccw {
+                while t1 <= t0 {
+                    t1 += dmath::TAU;
+                }
+            } else {
+                while t1 >= t0 {
+                    t1 -= dmath::TAU;
+                }
+            }
+            let mut k = 4;
+            while k <= 64 {
+                let mut sub_min = f64::INFINITY;
+                let mut prev = a;
+                for i in 1..=k {
+                    let p = if i == k {
+                        b
+                    } else {
+                        let t = t0 + (t1 - t0) * i as f64 / k as f64;
+                        [c[0] + r * dmath::cos(t), c[1] + r * dmath::sin(t)]
+                    };
+                    let g = len2(sub(prev, c)).sub(ip(r)).abs().hi.max(len2(sub(p, c)).sub(ip(r)).abs().hi);
+                    let sec = Sec::Arc { c, r, a: prev, b: p, ccw };
+                    sub_min = sub_min.min(piece_gap(&pts, &axes, &sec, f.gap.max(g), cut));
+                    prev = p;
+                    if sub_min <= piece_best {
+                        break;
+                    }
+                }
+                piece_best = piece_best.max(sub_min);
+                if piece_best >= cut {
+                    break;
+                }
+                k *= 4;
+            }
+        }
+        if piece_best < best {
+            best = piece_best;
+        }
+    }
+    best
+}
+
+/// The best separating-axis gap of one piece from conv(P): the direction from P's nearest point
+/// toward the piece, the piece's own normal (a segment), and the shared axes.
+fn piece_gap(pts: &[[f64; 2]], axes: &[[f64; 2]], sec: &Sec, gap: f64, cut: f64) -> f64 {
+    let mut own: [[f64; 2]; 3] = [[0.0, 0.0]; 3];
+    let mut no = 0;
+    if let Sec::Seg { a, b } = *sec {
+        let d = [b[0] - a[0], b[1] - a[1]];
+        if d != [0.0, 0.0] {
+            own[0] = [d[1], -d[0]];
+            own[1] = [-d[1], d[0]];
+            no = 2;
+        }
+    }
+    let mut near = (f64::INFINITY, [0.0, 0.0]);
+    for p in pts {
+        let q = approx_nearest(sec, *p);
+        let d2 = (p[0] - q[0]).powi(2) + (p[1] - q[1]).powi(2);
+        if d2 < near.0 {
+            // from Z toward the piece: the axis along which the piece lies beyond Z
+            near = (d2, [q[0] - p[0], q[1] - p[1]]);
+        }
+    }
+    if near.1 != [0.0, 0.0] {
+        own[no] = near.1;
+        no += 1;
+    }
+    let mut best = 0.0f64;
+    for w in own[..no].iter().chain(axes.iter()) {
+        let g = axis_gap(pts, sec, gap, *w);
+        if g > best {
+            best = g;
+            if best >= cut {
+                break;
             }
         }
     }
     best
 }
 
-/// slab::dist, and for two segments also the separating-axis bound: the projections onto a
-/// unit axis are 1-Lipschitz, so the gap between the two segments' projections onto either one's
-/// direction or normal bounds their distance below (slab::dist's crossing test cannot part two
-/// collinear segments).
-fn seg_dist(s: &Sec, t: &Sec) -> Ival {
-    let d = dist(s, t);
-    if d.lo > 0.0 {
-        return d;
-    }
-    if let (Sec::Seg { a, b }, Sec::Seg { a: c, b: e }) = (*s, *t) {
-        let mut best = d.lo;
-        for (p, q) in [(a, b), (c, e)] {
-            let u = sub(q, p);
-            let l = len2(u);
-            if !(l.lo > 0.0) {
-                continue;
-            }
-            for w in [u, [u[1].neg(), u[0]]] {
-                let pr = |x: [f64; 2]| {
-                    let v = sub(x, p);
-                    v[0].mul(w[0]).add(v[1].mul(w[1])).div(l)
-                };
-                let (s0, s1, t0, t1) = (pr(a), pr(b), pr(c), pr(e));
-                let (slo, shi) = (s0.lo.min(s1.lo), s0.hi.max(s1.hi));
-                let (tlo, thi) = (t0.lo.min(t1.lo), t0.hi.max(t1.hi));
-                let gap = ip(tlo).sub(ip(shi)).lo.max(ip(slo).sub(ip(thi)).lo);
-                if gap > best {
-                    best = gap;
-                }
-            }
+/// A point of the piece near p (f64, for choosing an axis only).
+fn approx_nearest(s: &Sec, p: [f64; 2]) -> [f64; 2] {
+    match *s {
+        Sec::Seg { a, b } => {
+            let d = [b[0] - a[0], b[1] - a[1]];
+            let dd = d[0] * d[0] + d[1] * d[1];
+            let t = if dd > 0.0 {
+                (((p[0] - a[0]) * d[0] + (p[1] - a[1]) * d[1]) / dd).clamp(0.0, 1.0)
+            } else {
+                0.0
+            };
+            [a[0] + t * d[0], a[1] + t * d[1]]
         }
-        return Ival { lo: best, hi: d.hi };
+        Sec::Arc { c, r, a, b, ccw } => {
+            let v = [p[0] - c[0], p[1] - c[1]];
+            let l = (v[0] * v[0] + v[1] * v[1]).sqrt();
+            if l > 0.0 && sector(c, a, b, ccw, [ip(v[0]), ip(v[1])]) > 0 {
+                return [c[0] + r * v[0] / l, c[1] + r * v[1] / l];
+            }
+            let da = (p[0] - a[0]).powi(2) + (p[1] - a[1]).powi(2);
+            let db = (p[0] - b[0]).powi(2) + (p[1] - b[1]).powi(2);
+            if da <= db { a } else { b }
+        }
     }
-    d
+}
+
+/// 1 if the direction d (from the centre) is surely inside the arc's sector, -1 surely outside,
+/// 0 unknown (arcs under a half turn).
+fn sector(c: [f64; 2], a: [f64; 2], b: [f64; 2], ccw: bool, d: [Ival; 2]) -> i32 {
+    let (ua, ub) = (sub(a, c), sub(b, c));
+    let cr = |u: [Ival; 2], v: [Ival; 2]| u[0].mul(v[1]).sub(u[1].mul(v[0]));
+    let (c1, c2) = if ccw { (cr(ua, d), cr(d, ub)) } else { (cr(d, ua), cr(ub, d)) };
+    if c1.lo >= 0.0 && c2.lo >= 0.0 {
+        1
+    } else if c1.hi < 0.0 || c2.hi < 0.0 {
+        -1
+    } else {
+        0
+    }
+}
+
+/// (min over the piece's convex hull of w·y − max over P of w·p) / |w|, rounded down; ≤ 0 when
+/// the axis does not separate. An arc's ends off its circle by `gap` count twice, as slab::dist
+/// takes them.
+fn axis_gap(pts: &[[f64; 2]], s: &Sec, gap: f64, w: [f64; 2]) -> f64 {
+    let wi = [ip(w[0]), ip(w[1])];
+    let dot = |p: [f64; 2]| wi[0].mul(ip(p[0])).add(wi[1].mul(ip(p[1])));
+    let mut pmax = f64::NEG_INFINITY;
+    for p in pts {
+        pmax = pmax.max(dot(*p).hi);
+    }
+    let wl = len2(wi);
+    let fmin = match *s {
+        Sec::Seg { a, b } => dot(a).lo.min(dot(b).lo),
+        Sec::Arc { c, r, a, b, ccw } => {
+            let mut m = dot(a).lo.min(dot(b).lo);
+            // the arc's point in direction −w, if it may be in the sector
+            if sector(c, a, b, ccw, [wi[0].neg(), wi[1].neg()]) >= 0 {
+                m = m.min(dot(c).sub(ip(r).mul(wl)).lo);
+            }
+            ip(m).sub(ip(2.0 * gap).mul(wl)).lo
+        }
+    };
+    let num = ip(fmin).sub(ip(pmax)).lo;
+    if !(num > 0.0) {
+        return 0.0;
+    }
+    ip(num).div(wl).lo.max(0.0)
 }
 
 fn box_gap(a: &[f64; 4], b: &[f64; 4]) -> f64 {
@@ -568,18 +661,14 @@ fn body_line(body: &Body, a: [f64; 2], b: [f64; 2], obs: &mut Obstacle, need: f6
             }
             let need_core = need + rj;
             let cut = ip(need_core).add(ip(obs.mu)).add(ip(1.0)).hi;
-            let raw = zono_lower(core, a, g1, mg, obs, cut, &zbox);
+            let raw = sat_lower(core, a, g1, mg, obs, cut, &zbox);
             let allow = round_allow(coords + e, 3.0);
             let zl = ip(raw).sub(ip(allow)).sub(ip(obs.mu)).lo;
             if zl <= 0.0 {
                 return Verdict::Undecided { lower: zl - rj };
             }
-            // ∂Hf misses Z: no loop of ∂Hf inside Z
-            for lb in &obs.loop_boxes {
-                if lb[0] >= zbox[0] && lb[1] >= zbox[1] && lb[2] <= zbox[2] && lb[3] <= zbox[3] {
-                    return Verdict::Undecided { lower: 0.0 };
-                }
-            }
+            // every piece of ∂Hf misses Z (each at least zl > 0 from it), so by
+            // clear_of_frontier one point decides whether Z is outside Hf
             // and Z is outside Hf: one point of it (the core's first vertex at the start: in
             // every slab's Z on both sides, and at least zl from ∂Hf)
             if !checked_point {

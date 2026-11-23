@@ -17,17 +17,19 @@ half-profile. forge-turn's checker works in the plane:
   frontier pieces of Hf all keep `c > 0` from Z, with one point of Z outside Hf, keeps `c` from
   all of Hf; its r-neighbourhood keeps `c − r` (`turn_clear_ball`).
 
+* `sep_axis_hull`: the swept core Z is the convex hull of finitely many points P; for each
+  boundary piece f of the obstacle and any axis w, the gap between max over P and min over f of
+  w·_ bounds dist(Z, f) — check.rs's only distance bound, so no enumeration of Z's boundary.
+
 Hypotheses this file does not discharge (research/cam/turning.md lists them):
-* `ZonoBoundary`: the boundary of K ⊕ [0, g₁] ⊕ [0, g₂] (K a convex polygon) lies in the
-  segments check.rs enumerates (edges of K at the four corners of the parallelogram, vertices
-  swept along each generator from the other's ends). Stated, not proven here.
-* The lower bounds of slab::dist on those segments: proven (Dist2.lean, DistArc.lean, Trim.lean);
-  the separating-axis bound forge-turn adds is `sep_axis` below.
 * H.arc: a control's arc between ends at unequal radii stays between the radii.
+* The obstacle's pieces cover its frontier (the half-profile's construction), and Z = conv P
+  (K = conv of its vertices; then `zono_eq_hull`).
 -/
 import ForgeCam.SignedDist
 
 open Metric Set Real
+open scoped Pointwise
 
 set_option linter.unusedSectionVars false
 
@@ -153,6 +155,40 @@ theorem sep_axis (w : ℝ × ℝ) (hw : w.1 ^ 2 + w.2 ^ 2 = 1) (p q : ℝ × ℝ
     ((p.1 - q.1) * w.1 + (p.2 - q.2) * w.2) ^ 2 ≤ d2 p q := by
   unfold d2
   nlinarith [sq_nonneg ((p.1 - q.1) * w.2 - (p.2 - q.2) * w.1)]
+
+/-- The dot product with an axis w. -/
+def wdot (w p : ℝ × ℝ) : ℝ := w.1 * p.1 + w.2 * p.2
+
+/-- The separating axis between hulls (check.rs `sat_lower`): if every point of P has w·p ≤ M
+and every point of F has m ≤ w·y, with M ≤ m, then every point of conv P and every point of
+conv F are at least (m − M)/|w| apart: (m − M)² ≤ |w|² · d2. The max of a linear map over a hull
+is its max over the points (a half-plane is convex). -/
+theorem sep_axis_hull {P F : Set (ℝ × ℝ)} {w : ℝ × ℝ} {M m : ℝ} (hMm : M ≤ m)
+    (hP : ∀ p ∈ P, wdot w p ≤ M) (hF : ∀ y ∈ F, m ≤ wdot w y) :
+    ∀ z ∈ convexHull ℝ P, ∀ y ∈ convexHull ℝ F, (m - M) ^ 2 ≤ (w.1 ^ 2 + w.2 ^ 2) * d2 z y := by
+  have lin : IsLinearMap ℝ (fun z : ℝ × ℝ => wdot w z) := by
+    constructor
+    · intro a b; unfold wdot; simp only [Prod.fst_add, Prod.snd_add]; ring
+    · intro c a; unfold wdot; simp only [Prod.smul_fst, Prod.smul_snd, smul_eq_mul]; ring
+  have hullP : convexHull ℝ P ⊆ {z | wdot w z ≤ M} :=
+    convexHull_min (fun p hp => hP p hp) (convex_halfSpace_le lin M)
+  have hullF : convexHull ℝ F ⊆ {z | m ≤ wdot w z} :=
+    convexHull_min (fun y hy => hF y hy) (convex_halfSpace_ge lin m)
+  intro z hz y hy
+  have h1 : wdot w z ≤ M := hullP hz
+  have h2 : m ≤ wdot w y := hullF hy
+  have h3 : 0 ≤ m - M := by linarith
+  have h4 : m - M ≤ wdot w y - wdot w z := by linarith
+  have cs : (wdot w y - wdot w z) ^ 2 ≤ (w.1 ^ 2 + w.2 ^ 2) * d2 z y := by
+    unfold wdot d2
+    nlinarith [sq_nonneg (w.1 * (y.2 - z.2) - w.2 * (y.1 - z.1))]
+  nlinarith [h3, h4, cs, mul_self_le_mul_self h3 h4]
+
+/-- The swept core is the hull of finitely many points (check.rs builds P so): conv V ⊕ [0, g₁] ⊕
+[0, g₂] = conv (V + {0, g₁} + {0, g₂}). -/
+theorem zono_eq_hull (V : Set (ℝ × ℝ)) (g1 g2 : ℝ × ℝ) :
+    convexHull ℝ V + segment ℝ 0 g1 + segment ℝ 0 g2 = convexHull ℝ (V + {0, g1} + {0, g2}) := by
+  rw [convexHull_add, convexHull_add, convexHull_pair, convexHull_pair]
 
 section assembly
 

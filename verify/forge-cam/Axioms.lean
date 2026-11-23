@@ -99,3 +99,5 @@ import ForgeCam
 #print axioms ForgeCam.Turn.sep_axis
 #print axioms ForgeCam.Turn.turn_clear
 #print axioms ForgeCam.Turn.turn_clear_ball
+#print axioms ForgeCam.Turn.sep_axis_hull
+#print axioms ForgeCam.Turn.zono_eq_hull

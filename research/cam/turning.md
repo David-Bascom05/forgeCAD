@@ -11,7 +11,7 @@ part-off, drill on centre; insert and holder libraries (ISO insert codes). All 2
 | half-profile | profile.rs | a body of revolution about z lowered to its (ρ, z) region, exact in kind: planes ⟂ z, cylinders, cones, spheres and tori about z (seams skipped; a torus or sphere arc's side from the face's uv range). Anything else (flats, cross holes, keyways, faces about another axis) refused by kind, `NotTurned`, with the face. |
 | inserts and holders | insert.rs, data/turning.toml | ISO 1832 insert codes (C D V T S R shapes, clearance letter, IC series, thickness, nose radius) and ISO 5608 external holders (P/S clamping, styles A B D F G J K L N S T V, right hand, shank, length). Grooving and part-off blades, 60° thread inserts, drills on the centre line. Generic library (verify with the vendor). |
 | tool model | insert.rs | every body is K ⊕ B_r (K a convex core); below the centre height the outline shrinks by the clearance angle; holder head (a seat inset 0.5 under the insert, relieved like it) and shank. |
-| certified checker | check.rs | 2D, exact in kind: the swept core (a zonotope K ⊕ [0, e]·x̂ ⊕ [a, b]) against the obstacle's pieces by slab::dist (proven) and a separating-axis bound; containment by `clear_of_frontier`; the full section H ∪ mirror(H); arcs as chords with the sagitta; witnesses (Hit) only at real points of the tool. |
+| certified checker | check.rs | 2D, exact in kind: the swept core Z = K ⊕ [0, e]·x̂ ⊕ [a, b] = conv(P) against each obstacle piece by separating axes (the gap between P's and the piece's projections, proven: `sep_axis_hull`); a concave arc not separated whole is split into sub-arcs; containment by `clear_of_frontier`; the full section H ∪ mirror(H); arc moves as chords with the sagitta; witnesses (Hit) only at real points of the tool. |
 | ops | ops.rs | face (to the centre line), rough (axial passes, G71-like, expanded, at every ap and every cylinder of the grown part), finish (the exact offset H ⊕ B_{r_ε + leave}: nose-radius compensation, posted as the imaginary tip with G40), groove (plunges, walls exact), part-off (past the centre), thread (ISO metric 60°, radial infeed of equal chip area, a declared removal Δ), drill on the centre line (pecking). |
 | in-process stock | ops.rs | the bar less what each cut provably cleared (the hull of outline points along each cut, inside the swept outline; a finishing cut's corners sampled to within 5e-4 of their disc), by exact booleans; a removal that would not round to a valid region is left out (the stock stays a superset) and counted. |
 | certify | ops.rs | G1 (cutter from P ⊕ B_leave, P ∖ Δ for a thread), G2 (every body from the chuck's envelope by the fixture clearance), G3 (every body on a rapid, the non-cutting ones on every cut, from the stock; trailing bodies piece by piece where needed), G5 (the tip within the travel when given), G4 (leftover = final stock less P ⊕ B_tol, less Δ, listed). |
@@ -20,7 +20,7 @@ part-off, drill on centre; insert and holder libraries (ISO insert codes). All 2
 ## The example
 
 A stepped shaft from a 32 mm bar (tests/job.rs): face, rough (CNMG 120408 in PCLNR), finish
-(DNMG 150404 in PDJNR), thread M20 x 1.5, part off: 624 checks, certified, 0.36 s release;
+(DNMG 150404 in PDJNR), thread M20 x 1.5, part off: 624 checks, certified, 0.28 s release;
 posted in all three dialects, read back exactly, the posted path certified again. The leftover
 lists one region, classified exactly: it lies within the finishing nose's 0.4 mm of the part
 (the sharp inside corner at the shoulder no nose of that radius reaches).
@@ -47,18 +47,13 @@ What the checks caught while the examples were written (each now a test, tests/r
 
 ## Levels (PROOF-STANDARD.md)
 
-- L1 (Turn.lean, 12 theorems, standard axioms): π is 1-Lipschitz (`pi_lipschitz`,
+- L1 (Turn.lean, 14 theorems, standard axioms): π is 1-Lipschitz (`pi_lipschitz`,
   `turn_clear3`): a clearance in the half-plane is one in space; the smear bound (`smear_le`,
   `smear_anti`, `abs_le_rho`); the full section (`fold_clear`, `fold_sigma`, `sigma_mem`); the
-  separating-axis bound (`sep_axis`); the assembly through `clear_of_frontier` (`turn_clear`,
-  `turn_clear_ball`). slab::dist's lower bounds are proven already (Dist2, DistArc, Trim).
+  checker's one distance bound, a separating axis between hulls (`sep_axis_hull`, `sep_axis`),
+  with the swept core a hull of finitely many points (`zono_eq_hull`); the assembly through
+  `clear_of_frontier` (`turn_clear`, `turn_clear_ball`).
 - Hypotheses, open (not proven, not assumed true elsewhere):
-  - **T.zono**: the boundary of K ⊕ [0, g₁] ⊕ [0, g₂] (K a convex polygon) lies in the segments
-    check.rs enumerates (edges of K at the parallelogram's four corners; vertices swept along
-    each generator from the other's two ends). Proof route: a supporting line's maximisers on a
-    Minkowski sum are sums of the summands' maximisers (faces).
-  - **T.loops**: each loop of ∂Hf is connected and lies outside Z when its box is not inside
-    Z's box (the box test in body_line) — the topological step to f ∉ Z.
   - **H.arc** (the control): an arc block whose ends lie at unequal radii (quantisation) moves
     between those radii. Checked by adding the difference to the clearance; a property of the
     control, not of our code.
@@ -66,6 +61,11 @@ What the checks caught while the examples were written (each now a test, tests/r
     generic holders are supersets restated from catalogue dimensions.
   - **T.cut**: what a cutter's outline sweeps at depth 0 is removed (the definition of cutting
     used by G4 and the stock, as in milling).
+  - **T.pieces**: the obstacle's pieces cover its frontier (the half-profile's construction from
+    the B-rep's meridians; the region is validated exactly).
+- Closed while building: the checker first enumerated the swept core's boundary as segments
+  (needing T.zono, that boundary lies in them, and T.loops, a box test for loops inside Z);
+  it now uses separating axes only, which `sep_axis_hull` proves, so both are gone.
 - L2: the profile offsets and stock booleans are exact (forge-cam-geom); the checker is
   certified-interval.
 - L5: the checker's intervals round outward (forge-cam-geom ival.rs); not tied to verify/ieee754.
@@ -73,7 +73,8 @@ What the checks caught while the examples were written (each now a test, tests/r
 
 ## Gaps, in order
 
-1. Lean: T.zono and T.loops (above).
+1. Lean: L5 (the checker's outward rounding against verify/ieee754), and an executable ℚ
+   oracle for `axis_gap` (L6).
 2. ID work: boring bars, internal grooving and threading, left-hand tools (the holder decoder
    refuses them by name today).
 3. The .fg surface: lathe setups and ops in the `machining` document (interface), and
