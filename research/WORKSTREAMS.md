@@ -62,7 +62,7 @@ Owner priorities that paused or narrowed streams (2026-11-23):
 | Point classification (index) | `fix-index` | ebf6504 | research/kernel-audit/index-fix-per-line.txt; waits for a merge batch |
 | .fg speed vs .fc | `speed` | 43c39aa | Ended; reparse work |
 | Fillet spec | `fillet-spec` | fc90a16 | Fillet obstacle definition was an owner decision; idle |
-| Boolean prior art | `bool-research` | baa5b47 | research/booleans/ (prior-art.md, small-booleans.md, a8-review.md) |
+| Boolean prior art + threading (W1) | `bool-research` | ce11e8f | Stopped. Kernel commits 6c20812, a78da45, 1a25c1a (threads capped at cores, adaptive helpers, n-ary under 20 ms after pairs runs on one thread) in the merge queue; rest is docs in research/booleans/ (prior-art.md, small-booleans.md, a8-review.md). Restarted only if the latency gate flags a THREADS HURT line |
 | Certificate checker | `certify` | 901f15dd | Ended. Lean-proven boolean certificate checker (verify/forge-certify) with a Rust harness crate; kernel hooks behind forge-bool's `certify` feature (off by default, byte-identical to base); CI and on-demand only. verify/forge-certify is its own Cargo workspace (outside the root, like verify/forge-exact) with its own CI job, so the workspace test gate tests the shipped, certify-off kernel. Resume: verify/forge-certify/DESIGN.md §9 |
 | Weldments, vendors, bendsim, mesh export | `weldments`/`weld-spec`, `sheet-vendors`, `bendsim`, `mesh-export` | 8249f49/efe7379, fd5f5e2, 1d04882, 4e36762 | In main (PR #6, ec328182) |
 
