@@ -49,3 +49,4 @@ import ForgeBoolCore.IncSpecs
 import ForgeBoolCore.RefineIncTables
 import ForgeBoolCore.RefineIncSplit
 import ForgeBoolCore.RefineIncRooms
+import ForgeBoolCore.RefineIncFlood

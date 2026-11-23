@@ -1,4 +1,4 @@
-import ForgeBoolCore.RefineIncRooms
+import ForgeBoolCore.RefineIncFlood
 import ForgeBoolCore.Specs
 import ForgeBoolCore.Refine
 import ForgeBoolCore.RefineUF
@@ -139,3 +139,4 @@ import ForgeBoolCore.RefineUnify
 #print axioms forge_bool_core.inc.split_loop1_spec
 #print axioms forge_bool_core.inc.split_loop0_spec
 #print axioms forge_bool_core.inc.split_spec
+#print axioms forge_bool_core.inc.flood_spec

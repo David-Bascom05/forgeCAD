@@ -31,4 +31,5 @@ Points to agree within each group:
 |---|---|---|
 | T | done: `rows_spec`, `row_spec` (`ledger_wf`'s equivalence is still to do) | RefineIncTables.lean |
 | S | done: `body_of_spec`, `cls_of_spec`, `split_ok_spec` (`= splitOk`), `split_spec` (`SplitOK`: piece table = `isPieceOf`, `rooms` = `(toLF l).rooms`, `room_pos` inverts it) | RefineIncTables, RefineIncSplit, RefineIncRooms |
-| C, K, U, E | to do | |
+| C | started: `flood_spec` (UInv of the non-piece crossings, by room position) | RefineIncFlood.lean |
+| K, U, E | to do | |
