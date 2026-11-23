@@ -33,3 +33,8 @@ import ForgeCurved
 #print axioms ForgeCurved.faithfulAll_of_transversal
 #print axioms ForgeCurved.tier0Sound_of_spec
 #print axioms ForgeCurved.qRule_tier0Sound
+#print axioms ForgeCurved.FaceLocal.frontier_of_bd
+#print axioms ForgeCurved.FaceLocal.bd_of_frontier
+#print axioms ForgeCurved.FaceLocal.edge_iff
+#print axioms ForgeCurved.FaceLocal.vert_iff
+#print axioms ForgeCurved.FaceLocal.xNonManifoldF_iff_top

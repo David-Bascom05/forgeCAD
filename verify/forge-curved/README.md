@@ -27,6 +27,7 @@ for `EndToEndCurved`. That project builds in about 2 minutes on the shared Mathl
 | Local | `LocalGood`, **`faithfulAll_of_local`**, `faithfulAll_of_local'` | R2–R5 are local: continuous carriers, R1, R3 and a local picture at every point (small neighbourhoods meet each cell above the point's in a connected set; each realised one comes near) give `FaithfulAll` |
 | Transversal | `TransversalAt`, `transversal_chart`, `localGood'_of_transversal`, **`faithfulAll_of_transversal`** | at a point where the gradients of the `C¹` carriers through it are jointly onto, the inverse function theorem makes the cells near it convex orthant faces; so for transversal carriers `FaithfulAll` is R1 alone |
 | Tier0 | `Tier0Spec`, `tier0Sound_of_spec`, **`qRule_tier0Sound`** | a Tier-0 check is sound once it certifies transversality and R1 of the seamed arrangement; for Q1 nothing else is needed |
+| FaceLocal | `frontier_of_bd`, `bd_of_frontier`, `edge_iff`, `vert_iff`, **`xNonManifoldF_iff_top`** | **route B**: over the face ledger (A8, W2 wings and sectors), the core's refusal (a row with three boundary wings, or boundary sectors in two fan classes) is the result's topological non-manifoldness, given the builder's local obligations `Obligations` (F5 `SideLocal`; F1–F4 `EdgeLocal`, `VertLocal`). No carriers, no `Faithful`, no R1 |
 
 **R5, the vertex wing condition** (`Faithful.vwing`, added to Curved.lean by dol-curved at 1abc5b0
 for this theorem): R4 at vertices. Without it, a facet whose boundary walk passes a vertex
@@ -44,11 +45,14 @@ covector count is wrong.
 
 ## Open
 
-- **Which route gives the end-to-end `Faithful`** (decision pending with the master, 2026-11-23):
-  - Route A: Faithful on the carrier reference, as `Tier0Sound` + `LemmaD`.
-  - Route B: restate `xNonManifold_iff_top` over the face ledger (A8) with local row obligations
-    F1–F5. Here R1 is not needed: `xNonManifold_iff_top` never uses it.
-  - q1 recommends B.
+- **Route B is adopted** (master, 2026-11-23). `xNonManifoldF_iff_top` (FaceLocal) states the
+  end-to-end topological reading over the face ledger. What remains are the builder obligations
+  `Obligations`:
+  - F1, F2, F4 (`EdgeLocal`, `VertLocal`): the tier0 session;
+  - F5 (`SideLocal`, room floods): the LemmaD session.
+
+  The route A items below (`Tier0Sound`, `LemmaD`, R1) are paused: the end-to-end path no
+  longer needs them.
 - **`Tier0Sound`**: reduced to `Tier0Spec` (`qRule_tier0Sound`). The check must certify two things:
   - transversality: an algebraic fact, on dol-curved's side;
   - R1: every realised cell connected. This is the Jordan part.

@@ -5,3 +5,4 @@ import ForgeCurved.Separators
 import ForgeCurved.WallsCounter
 import ForgeCurved.DelineablePoly
 import ForgeCurved.Tier0
+import ForgeCurved.FaceLocal
