@@ -123,6 +123,23 @@ fn draw(body: &Body, face: FaceId, mut raw: Vec<Point2>) -> (Vec<Point2>, Vec<us
         for i in 1..n {
             raw[i] = unwrap_in(&domain, raw[i], raw[i - 1]);
         }
+        // a face's only loop bounds a disc: it winds no turn round the surface's period. Where
+        // the unwrapping left it winding (a step of half a period, a tie, taken the long way),
+        // the steps from the most nearly half a turn on are taken the other way round
+        if let Some(period) = domain.u.period
+            && n > 1
+            && body.face(face).loops.len() == 1
+        {
+            let back = unwrap_in(&domain, raw[0], raw[n - 1]).x - raw[0].x;
+            let turns = (back / period).round();
+            if turns != 0.0 {
+                let step = |i: usize| (raw[i].x - raw[i - 1].x).abs();
+                let at = (1..n).fold(1, |b, i| if step(i) > step(b) { i } else { b });
+                for p in &mut raw[at..] {
+                    p.x -= turns * period;
+                }
+            }
+        }
         return (raw, (0..n).collect());
     }
     let singular: Vec<bool> = raw.iter().map(|&uv| surface.singular(uv)).collect();
