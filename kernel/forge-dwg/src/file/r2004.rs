@@ -94,8 +94,9 @@ pub fn decompress(src: &[u8], size: usize) -> R<Vec<u8>> {
         Ok(b)
     };
     let literal_len = |p: &mut usize| -> R<usize> {
+        // no byte left: no literal (and no terminator: see below)
         let Some(&b) = src.get(*p) else {
-            return bad("compressed data ends early");
+            return Ok(0);
         };
         if b & 0xF0 != 0 {
             return Ok(0);
@@ -148,6 +149,11 @@ pub fn decompress(src: &[u8], size: usize) -> R<Vec<u8>> {
     let n = literal_len(&mut p)?;
     copy_lit(&mut p, n, &mut out)?;
     loop {
+        // the data may end at an opcode with no terminator: LibreDWG's writer (LibreCAD's DWG)
+        // ends a page so, and LibreDWG reads it
+        if p == src.len() {
+            break;
+        }
         let op = byte(&mut p)?;
         let (count, offset, lit) = match op {
             0x11 => break,
@@ -520,6 +526,24 @@ mod compress_tests {
         let d = decompress(&c, src.len()).unwrap();
         assert_eq!(&d[..src.len()], src, "{} bytes", src.len());
         assert!(d.len() <= src.len().max(4));
+    }
+
+    /// A page ended at an opcode without its 0x11 terminator reads the same.
+    #[test]
+    fn a_page_with_no_terminator_reads() {
+        let src: Vec<u8> = (0..3000u32)
+            .map(|k| (k * 7 % 251) as u8)
+            .chain([9u8; 400])
+            .collect();
+        let c = compress(&src);
+        assert_eq!(c.last(), Some(&0x11));
+        let d = decompress(&c[..c.len() - 1], src.len()).unwrap();
+        assert_eq!(&d[..src.len()], &src[..]);
+        // cut anywhere else, it is still refused
+        // cut inside an instruction, it does not come back the same
+        assert!(
+            decompress(&c[..c.len() - 2], src.len()).map_or(true, |d| d.get(..src.len()) != Some(&src[..]))
+        );
     }
 
     #[test]

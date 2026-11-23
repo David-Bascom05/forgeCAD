@@ -505,6 +505,21 @@ pub fn read_header(sec: &[u8], ver: Version, maint: u8) -> R<Header> {
     if crc16(0xC0C1, &sec[16..at + size]) != u16::from_le_bytes([c[0], c[1]]) {
         return bad("header: CRC");
     }
+    // R2010+ files of a later maintenance release give the size's high word before the bits;
+    // some writers give it whatever their maintenance number (LibreCAD's: 0, then the bits, both
+    // counted in the size): a zero word followed by a size in bits the data can hold is that
+    let word = |k: usize| {
+        data.get(k..k + 4)
+            .map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]) as usize)
+    };
+    let data = match (word(0), word(4)) {
+        (Some(0), Some(bits))
+            if ver >= R2007 && !has_hi_size(ver, maint) && bits > 0 && bits <= (data.len() - 4) * 8 =>
+        {
+            &data[4..]
+        }
+        _ => data,
+    };
     let mut r = if ver >= R2007 {
         // the size in bits of data and strings, counted from itself; the handles after it
         let bits = u32::from_le_bytes([data[0], data[1], data[2], data[3]]) as usize;
@@ -536,8 +551,11 @@ pub fn read_header(sec: &[u8], ver: Version, maint: u8) -> R<Header> {
         header_io(&mut h, &mut r)?;
     }
     if ver >= R2007 {
+        // four shorts after the handles; a writer that ends the handle stream before them
+        // (LibreCAD's) puts them at the end of the data instead
+        let in_data = r.hdl.p >= r.hdl.d.len() * 8 && r.data_end.saturating_sub(r.data.p) >= 8;
         for t in &mut h.tail {
-            *t = r.hdl.bs()?;
+            *t = if in_data { r.data.bs()? } else { r.hdl.bs()? };
         }
     }
     Ok(h)
