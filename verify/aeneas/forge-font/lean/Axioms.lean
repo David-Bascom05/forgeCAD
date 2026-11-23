@@ -10,3 +10,6 @@ theorem's axioms; none may be `sorryAx` or `Lean.ofReduceBool`. -/
 #print axioms ForgeFont.loop1_spec
 #print axioms ForgeFont.contour_spec
 #print axioms ForgeFont.contour_closes
+#print axioms ForgeFont.coords_spec
+#print axioms ForgeFont.read_simple_spec
+#print axioms ForgeFont.contour_of_read
