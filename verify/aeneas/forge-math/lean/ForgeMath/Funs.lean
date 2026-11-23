@@ -31,6 +31,18 @@ def F64.Insts.CoreCloneClone : core.clone.Clone F64 := {
   clone := F64.Insts.CoreCloneClone.clone
 }
 
+/-- Trait implementation: [core::iter::traits::accum::{impl core::iter::traits::accum::Sum<&'a f64> for f64}]
+    Source: '/rustc/library/core/src/iter/traits/accum.rs', lines 183:8-183:35; this code is generated from a macro invocation at: '/rustc/library/core/src/iter/traits/accum.rs', lines 208:0-208:39
+    Name pattern: [core::iter::traits::accum::Sum<f64, &'a f64>] -/
+@[reducible, rust_trait_impl "core::iter::traits::accum::Sum<f64, &'a f64>"]
+def F64.Insts.CoreIterTraitsAccumSumSharedAF64 : core.iter.traits.accum.Sum F64
+  F64 := {
+  sum := fun {I : Type} (iteratorIteratorPSharedF64Inst :
+    core.iter.traits.iterator.Iterator I F64) =>
+    F64.Insts.CoreIterTraitsAccumSumSharedAF64.sum
+    iteratorIteratorPSharedF64Inst
+}
+
 /-- Trait implementation: [core::marker::{impl core::marker::Copy for f64}]
     Source: '/rustc/library/core/src/marker.rs', lines 57:25-57:62; this code is generated from a macro invocation at: '/rustc/library/core/src/marker.rs', lines 471:0-481:1
     Name pattern: [core::marker::Copy<f64>] -/
@@ -133,6 +145,25 @@ def predicates.two_product (a : F64) (b : F64) : Result (F64 × F64) := do
   let fl5 ← lift (F64.Ops.mul alo blo)
   let fl6 ← lift (F64.Ops.sub fl5 err)
   ok (x, fl6)
+
+/-- [forge_math::predicates::estimate]:
+    Source: 'kernel/forge-math/src/predicates.rs', lines 309:0-317:1 -/
+def predicates.estimate (e : Slice F64) : Result F64 := do
+  let o ← core.slice.Slice.last e
+  let o1 ← core.option.OptionShared0T.copied F64.Insts.CoreMarkerCopy o
+  let top ← lift (core.option.Option.unwrap_or o1 (F64.Ops.ofBits 0))
+  let i ← core.slice.Slice.iter e
+  let sum ←
+    core.iter.traits.iterator.Iterator.sum.default
+      (core.iter.traits.iterator.IteratorSliceIter F64)
+      F64.Insts.CoreIterTraitsAccumSumSharedAF64 i
+  if (F64.Ops.gt sum (F64.Ops.ofBits 0)) = (F64.Ops.gt top (F64.Ops.ofBits 0))
+  then
+    if (F64.Ops.lt sum (F64.Ops.ofBits 0)) = (F64.Ops.lt top (F64.Ops.ofBits
+      0))
+    then ok sum
+    else ok top
+  else ok top
 
 /-- [forge_math::predicates::cross_exact]:
     Source: 'kernel/forge-math/src/predicates.rs', lines 385:0-389:1 -/

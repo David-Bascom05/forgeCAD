@@ -4,4 +4,5 @@ Copyright (c) 2026 ForgeCAD contributors. Released under the Mozilla Public Lice
 import ForgeMath.Funs
 import ForgeMath.Refine
 import ForgeMath.Predicates
+import ForgeMath.Estimate
 import ForgeMath.Axioms

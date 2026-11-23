@@ -90,7 +90,7 @@ dest=$dir/lean/$PKG
 missing=0
 while read -r n; do
   [ -n "$n" ] || continue
-  if ! { cat "$dest/FunsExternal.lean" "$dest/TypesExternal.lean" "$root/verify/aeneas/bridge/AeneasF64/Std.lean" 2>/dev/null || true; } \
+  if ! { cat "$dest/FunsExternal.lean" "$dest/TypesExternal.lean" "$root"/verify/aeneas/bridge/AeneasF64/*.lean 2>/dev/null || true; } \
       | awk '$1 == "def" || $1 == "opaque" || $1 == "abbrev" { print $2 }' | grep -qxF "$n"; then
     echo "$crate: opaque $n has no definition (FunsExternal.lean, TypesExternal.lean or the bridge)" >&2
     missing=1

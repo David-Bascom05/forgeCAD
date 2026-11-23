@@ -7,8 +7,9 @@ import ForgeMath.Types
 /-!
 # The opaque functions of forge-math's translation (FunsExternal_Template.lean)
 
-The `f64` functions (`abs`, `is_nan`, `EPSILON`, `clone`) come from the float bridge,
-`verify/aeneas/bridge/AeneasF64/Std.lean`. The rest are here:
+The `f64` functions (`abs`, `is_nan`, `EPSILON`, `clone`, `Sum for f64`) and the std functions
+Aeneas leaves out (`last`, `copied`, `Iterator::sum`) come from the bridge,
+`verify/aeneas/bridge/AeneasF64/{Std,Core}.lean`. The rest are here:
 - the iterator adaptor, and the functions that `translate.conf` keeps opaque, are Lean
   `opaque` constants. An `opaque` constant has no axiom and no definition a proof can see, so a
   theorem whose computation reached one could say nothing about its result. The theorems here are
@@ -38,7 +39,6 @@ opaque predicates.scale_into : Slice F64 → F64 → Slice F64 → Result (Std.U
 opaque predicates.orient2d_big : vec.Point2 → vec.Point2 → vec.Point2 → Result F64 :=
   fun _ _ _ => fail .panic
 opaque predicates.dot3_big : vec.Vec3 → vec.Vec3 → Result F64 := fun _ _ => fail .panic
-opaque predicates.estimate : Slice F64 → Result F64 := fun _ => fail .panic
 opaque predicates.exact_diffs {N : Std.Usize} : Array (F64 × F64) N → Result (Option (Array F64 N)) :=
   fun _ => fail .panic
 opaque predicates.incircle : vec.Point2 → vec.Point2 → vec.Point2 → vec.Point2 → Result F64 :=

@@ -26,6 +26,28 @@ open forge_math
 @[rust_fun "core::clone::impls::{core::clone::Clone<f64>}::clone"]
 axiom F64.Insts.CoreCloneClone.clone : F64 → Result F64
 
+/-- [core::iter::traits::accum::{impl core::iter::traits::accum::Sum<&'a f64> for f64}::sum]:
+    Source: '/rustc/library/core/src/iter/traits/accum.rs', lines 184:12-184:63; this code is generated from a macro invocation at: '/rustc/library/core/src/iter/traits/accum.rs', lines 208:0-208:39
+    Name pattern: [core::iter::traits::accum::{core::iter::traits::accum::Sum<f64, &'a f64>}::sum]
+    Visibility: public -/
+@[rust_fun
+  "core::iter::traits::accum::{core::iter::traits::accum::Sum<f64, &'a f64>}::sum"]
+axiom F64.Insts.CoreIterTraitsAccumSumSharedAF64.sum
+  {I : Type _} (iteratorIteratorISharedAF64Inst :
+  core.iter.traits.iterator.Iterator I F64) :
+  I → Result F64
+
+/-- [core::iter::traits::iterator::Iterator::sum]:
+    Source: '/rustc/library/core/src/iter/traits/iterator.rs', lines 3689:4-3692:35
+    Name pattern: [core::iter::traits::iterator::Iterator::sum]
+    Visibility: public -/
+@[trait_default, rust_fun "core::iter::traits::iterator::Iterator::sum"]
+axiom core.iter.traits.iterator.Iterator.sum.default
+  {Self : Type _} {S : Type _} {Clause0_Item : Type _} (IteratorInst :
+  core.iter.traits.iterator.Iterator Self Clause0_Item) (accumSumInst :
+  core.iter.traits.accum.Sum S Clause0_Item) :
+  Self → Result S
+
 /-- [core::f64::{f64}::EPSILON]
     Source: '/rustc/library/core/src/num/f64.rs', lines 441:4-441:26
     Name pattern: [core::f64::{f64}::EPSILON]
@@ -46,6 +68,15 @@ axiom core.f64.F64.is_nan : F64 → Result Bool
     Visibility: public -/
 @[rust_fun "core::f64::{f64}::abs"] axiom core.f64.F64.abs : F64 → Result F64
 
+/-- [core::option::{core::option::Option<&'_0 T>}::copied]:
+    Source: '/rustc/library/core/src/option.rs', lines 2135:4-2137:16
+    Name pattern: [core::option::{core::option::Option<&'0 @T>}::copied]
+    Visibility: public -/
+@[rust_fun "core::option::{core::option::Option<&'0 @T>}::copied"]
+axiom core.option.OptionShared0T.copied
+  {T : Type _} (markerCopyInst : core.marker.Copy T) :
+  Option T → Result (Option T)
+
 /-- [core::slice::iter::{impl core::iter::traits::collect::IntoIterator<&'a mut T, core::slice::iter::IterMut<'a, T>> for &'a mut [T]}::into_iter]:
     Source: '/rustc/library/core/src/slice/iter.rs', lines 33:4-33:40
     Name pattern: [core::slice::iter::{core::iter::traits::collect::IntoIterator<&'a mut [@T], &'a mut @T, core::slice::iter::IterMut<'a, @T>>}::into_iter]
@@ -57,13 +88,16 @@ axiom MutASlice.Insts.CoreIterTraitsCollectIntoIteratorMutATIterMut.into_iter
   Slice T → Result ((core.slice.iter.IterMut T) × (core.slice.iter.IterMut T
     → Slice T))
 
+/-- [core::slice::{[T]}::last]:
+    Source: '/rustc/library/core/src/slice/mod.rs', lines 283:4-283:42
+    Name pattern: [core::slice::{[@T]}::last]
+    Visibility: public -/
+@[rust_fun "core::slice::{[@T]}::last"]
+axiom core.slice.Slice.last {T : Type _} : Slice T → Result (Option T)
+
 /-- [forge_math::predicates::cross_big]:
     Source: 'kernel/forge-math/src/predicates.rs', lines 264:0-270:1 -/
 axiom predicates.cross_big : F64 → F64 → F64 → F64 → Result F64
-
-/-- [forge_math::predicates::estimate]:
-    Source: 'kernel/forge-math/src/predicates.rs', lines 309:0-317:1 -/
-axiom predicates.estimate : Slice F64 → Result F64
 
 /-- [forge_math::predicates::sum_into]:
     Source: 'kernel/forge-math/src/predicates.rs', lines 321:0-350:1 -/
