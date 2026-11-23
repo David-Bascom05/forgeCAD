@@ -246,7 +246,7 @@ fn typed_errors() {
 #[test]
 fn a_short_flange_gets_a_fix_that_clears_the_die() {
     // only a V32 die: a 12 mm flange's leg does not reach its shoulder
-    let dir = std::env::temp_dir().join(format!("forgecad-bendsim-{}", std::process::id()));
+    let dir = forge_dirs::temp_dir().join(format!("forgecad-bendsim-{}", forge_dirs::process_id()));
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(
         dir.join("wide.json"),
@@ -390,7 +390,7 @@ fn a_vendors_tooling_narrows_the_choice() {
 fn findings_in_the_dfm_item_shape() {
     use forge_lang::bendsim::{items, simulate_sheet};
     let (r, _) = forge_lang::run(&ell(12.0), forge_lang::Options::default(), Default::default());
-    let dir = std::env::temp_dir().join(format!("forgecad-bendsim-items-{}", std::process::id()));
+    let dir = forge_dirs::temp_dir().join(format!("forgecad-bendsim-items-{}", forge_dirs::process_id()));
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(
         dir.join("wide.json"),
