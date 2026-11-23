@@ -38,6 +38,7 @@ forge-draw = { path = "../../kernel/forge-draw" }
 
 [dev-dependencies]
 forge-dwg = { path = "../../kernel/forge-dwg" }
+forge-refold = { path = "../../verify/forge-refold" }
 
 [lints]
 workspace = true

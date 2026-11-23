@@ -258,7 +258,7 @@ fn dxf_round_trip_against_a_reader() {
         match (r, w) {
             (Curve2::Arc { c, r, start, sweep }, Curve2::Arc { c: c2, r: r2, .. }) => {
                 assert_eq!((c, r), (c2, r2));
-                if sweep.abs() >= dmath::TAU * (1.0 - 1e-12) {
+                if sweep.abs() >= dmath::TAU {
                     continue;
                 }
                 let (a, b) = w.ends();
@@ -288,7 +288,7 @@ fn dxf_round_trip_against_a_reader() {
             assert!(x.ends().1.distance(y.ends().0) < 1e-9, "{x:?} then {y:?}");
         }
     }
-    // the outer contour and five holes (the hole across the bend, the blob, the window ... )
+    // the outer contour and three holes
     assert_eq!(pat.contours.len(), 4, "outline, hole, blob, window");
     // area times thickness is the flat body's volume
     let area: f64 = pat.contours.iter().flatten().map(area_term).sum::<f64>().abs();

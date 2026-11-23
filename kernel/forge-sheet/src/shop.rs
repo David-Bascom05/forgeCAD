@@ -38,6 +38,11 @@ pub enum RuleError {
     TableOrder { row: usize },
     /// The rule gave an allowance that is not positive.
     Allowance { ba: f64 },
+    /// Allowance table row `row` puts the neutral layer outside the material: its K is `k`, not
+    /// in [0, 1] (K = (BA / angle - R) / t). Every row is checked: BA linear in angle between rows
+    /// keeps K in [0, 1] where every row has it (verify/sheet's Rules.lean), so no interpolated
+    /// allowance can leave the material.
+    RowK { row: usize, k: f64 },
 }
 
 /// A sheet's thickness is a stock's to this (mm): far under any gauge step, over the rounding of
@@ -64,6 +69,12 @@ impl BendRule {
                 angle * (radius + checked_k(k)? * t)
             }
             BendRule::Allowance(rows) => {
+                for (row, r) in rows.iter().enumerate() {
+                    let k = (r.ba / r.angle - r.radius) / t;
+                    if !(0.0..=1.0).contains(&k) {
+                        return Err(RuleError::RowK { row, k });
+                    }
+                }
                 let mine: Vec<(f64, f64)> = rows
                     .iter()
                     .filter(|r| (r.radius - radius).abs() <= RADIUS_MATCH)
@@ -412,5 +423,29 @@ mod tests {
                 nearest: 2.0
             })
         );
+    }
+
+    #[test]
+    fn an_allowance_row_off_the_material_is_refused_by_row() {
+        // K of a row is (BA / angle - R) / t: row 1 has (6 / 2 - 2) / 2 = 0.5, row 2 (2 / 1 - 2.5)
+        // / 2 = -0.25 (the neutral layer above the inside skin): refused, naming row 2, whatever
+        // angle is asked (an interpolated BA between good rows is good)
+        let row = |radius, angle, ba| AllowanceRow { radius, angle, ba };
+        let bad = BendRule::Allowance(vec![row(2.0, 1.0, 3.0), row(2.0, 2.0, 6.0), row(2.5, 1.0, 2.0)]);
+        for angle in [1.0, 1.5, 2.0] {
+            assert_eq!(
+                bad.allowance(2.0, 2.0, angle),
+                Err(RuleError::RowK { row: 2, k: -0.25 })
+            );
+        }
+        // past the back skin: K = (12 / 2 - 2) / 2 = 2
+        let far = BendRule::Allowance(vec![row(2.0, 2.0, 12.0)]);
+        assert_eq!(
+            far.allowance(2.0, 2.0, 2.0),
+            Err(RuleError::RowK { row: 0, k: 2.0 })
+        );
+        // the edges of the material are in it
+        let edges = BendRule::Allowance(vec![row(2.0, 1.0, 2.0), row(2.0, 2.0, 8.0)]);
+        assert_eq!(edges.allowance(2.0, 2.0, 1.5), Ok(5.0));
     }
 }
