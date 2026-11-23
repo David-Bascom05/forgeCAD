@@ -197,8 +197,9 @@ theorem d0_close {q_s q_t a_s a_t b_s b_t sc : F64} {Qs Qt As At Bs Bt δ : ℚ}
         have h2 := sb.mp (by by_contra hb; exact h (hne.mpr hb))
         rw [abs_of_pos h2, abs_of_neg h1, abs_of_pos (by linarith)]; ring
     have lv : (1 - ε) * |b_t.val - a_t.val| ≤ |v2| := by
-      have := abs_sub_abs_le_abs_sub (b_t.val - a_t.val) v2
-      rw [abs_sub_comm] at this; nlinarith
+      have h1 := abs_sub_abs_le_abs_sub (b_t.val - a_t.val) v2
+      have h2 : |(b_t.val - a_t.val) - v2| = |v2 - (b_t.val - a_t.val)| := abs_sub_comm _ _
+      linarith
     nlinarith
   -- the products
   have bl1 := bil cu1 cv1
@@ -254,36 +255,38 @@ theorem d0_close {q_s q_t a_s a_t b_s b_t sc : F64} {Qs Qt As At Bs Bt δ : ℚ}
   have fs2 := (isFinite_of_add fsum).1
   have fs1 := (isFinite_of_add fs2).1
   have g1 := add_lo (by simpa using fu1) (by simpa using fu2) fs1 (by simp only [FP.abs_val]; positivity)
-  have g2 := add_lo fs1 (by simpa using fv1) fs2 (by simp only [FP.abs_val]; nlinarith)
-  have g3 := add_lo fs2 (by simpa using fv2) fsum (by simp only [FP.abs_val]; nlinarith)
-  simp only [FP.abs_val] at g1 g2 g3
+  simp only [FP.abs_val] at g1
+  have g2 := add_lo fs1 (by simpa using fv1) fs2 (by simp only [FP.abs_val]; linarith)
+  simp only [FP.abs_val] at g2
+  have g3 := add_lo fs2 (by simpa using fv2) fsum (by simp only [FP.abs_val]; linarith)
+  simp only [FP.abs_val] at g3
   set sm := (add (add (add (sub b_s a_s).abs (sub q_s a_s).abs) (sub q_t a_t).abs) (sub b_t a_t).abs).val
-  have hsm : (1 - 3 * ε) * (|u1| + |u2| + |v1| + |v2|) ≤ sm := by nlinarith
-  have mm := mul_rel fsum hs fmag
-  have hsm0 : 0 ≤ sm := le_trans (by nlinarith) hsm
-  rw [abs_of_nonneg (mul_nonneg hsm0 hS0)] at mm
-  set mg := (mul (add (add (add (sub b_s a_s).abs (sub q_s a_s).abs) (sub q_t a_t).abs) (sub b_t a_t).abs) sc).val
-  have hmg : (1 - ε) * (sm * S) - η ≤ mg := by have := (abs_le.mp mm).1; linarith
-  have em := mul_rel fE fmag hfm
-  rw [E12_val] at em
-  have hη := η_pos; have hηs := η_small
-  have hmg0 : 0 ≤ mg := by
-    have : 0 ≤ sm * S := mul_nonneg hsm0 hS0
-    by_contra hn; push_neg at hn
-    -- a negative rounding of a nonnegative product is impossible beyond `η`
-    have := (abs_le.mp mm).1
+  set s2 := (add (add (sub b_s a_s).abs (sub q_s a_s).abs) (sub q_t a_t).abs).val
+  set s1 := (add (sub b_s a_s).abs (sub q_s a_s).abs).val
+  have hs1 : 0 ≤ s1 := by linarith
+  have hs2 : 0 ≤ s2 := by linarith
+  have hsm : (1 - 3 * ε) * (|u1| + |u2| + |v1| + |v2|) ≤ sm := by
+    have : (1 - ε) * ((1 - ε) * (|u1| + |u2|) + |v1|) ≤ (1 - ε) * (s1 + |v1|) :=
+      mul_le_mul_of_nonneg_left (by linarith) (by norm_num)
+    have : (1 - ε) * ((1 - ε) * ((1 - ε) * (|u1| + |u2|) + |v1|) + |v2|) ≤ (1 - ε) * (s2 + |v2|) :=
+      mul_le_mul_of_nonneg_left (by linarith) (by norm_num)
     nlinarith
-  rw [abs_of_nonneg (by positivity : (0 : ℚ) ≤ 4951760157141521 / 2 ^ 92 * mg)] at em
-  have hE : (1 - ε) * (4951760157141521 / 2 ^ 92 * mg) - η ≤ (mul E12 (mul (add (add (add (sub b_s a_s).abs
-      (sub q_s a_s).abs) (sub q_t a_t).abs) (sub b_t a_t).abs) sc)).val := by
-    have := (abs_le.mp em).1; linarith
+  have hsm0 : 0 ≤ sm := le_trans (by nlinarith) hsm
   have hsmS : (1 - 3 * ε) * (|u1| * S + |u2| * S + |v1| * S + |v2| * S) ≤ sm * S := by
     have := mul_le_mul_of_nonneg_right hsm hS0; linarith
   have hA : (195 / 100) * (1 / 10 ^ 12) ≤ |v2| * S := by nlinarith
-  have hη2 : η ≤ 1 / 10 ^ 40 * (|v2| * S) := by nlinarith
-  have : 0 ≤ |u1| * S := by positivity
-  have : 0 ≤ |u2| * S := by positivity
-  have : 0 ≤ |v1| * S := by positivity
-  nlinarith
+  have hη := η_pos; have hηs := η_small
+  have pu1 : 0 ≤ |u1| * S := by positivity
+  have pu2 : 0 ≤ |u2| * S := by positivity
+  have pv1 : 0 ≤ |v1| * S := by positivity
+  have mm := mul_rel fsum hs fmag
+  rw [abs_of_nonneg (mul_nonneg hsm0 hS0)] at mm
+  set mg := (mul (add (add (add (sub b_s a_s).abs (sub q_s a_s).abs) (sub q_t a_t).abs) (sub b_t a_t).abs) sc).val
+  have hmg : (1 - ε) * (sm * S) - η ≤ mg := by have := (abs_le.mp mm).1; linarith
+  have hmg0 : 0 ≤ mg := by linarith
+  have em := mul_rel fE fmag hfm
+  rw [E12_val, abs_of_nonneg (by positivity : (0 : ℚ) ≤ 4951760157141521 / 2 ^ 92 * mg)] at em
+  have hE := (abs_le.mp em).1
+  linarith
 
 end IEEE754.Screen
