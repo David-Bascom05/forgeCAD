@@ -279,6 +279,30 @@ fn or0(w: Option<i64>) -> i64 {
     }
 }
 
+/// A modal word, or the state's value without one.
+fn or_word(w: Option<i64>, d: Option<i64>) -> Option<i64> {
+    match w {
+        Some(v) => Some(v),
+        None => d,
+    }
+}
+
+/// A modal flag, or the state's value without one.
+fn or_bool(w: Option<bool>, d: bool) -> bool {
+    match w {
+        Some(v) => v,
+        None => d,
+    }
+}
+
+/// A modal plane, or the state's plane without one.
+fn or_plane(w: Option<u32>, d: u32) -> u32 {
+    match w {
+        Some(v) => v,
+        None => d,
+    }
+}
+
 /// Whether a word is there.
 fn has(w: Option<i64>) -> bool {
     match w {
@@ -426,22 +450,10 @@ fn arc(
 
 /// One block: its events and the state after it.
 pub fn step(a: &Axes, pc: i64, lift: i64, st: &State, b: &Block) -> Result<(Vec<Ev>, State), Refuse> {
-    let feed = match b.f {
-        Some(f) => Some(f),
-        None => st.feed,
-    };
-    let absolute = match b.absolute {
-        Some(v) => v,
-        None => st.absolute,
-    };
-    let ri = match b.retract_initial {
-        Some(v) => v,
-        None => st.retract_initial,
-    };
-    let plane = match b.plane {
-        Some(p) => p,
-        None => st.plane,
-    };
+    let feed = or_word(b.f, st.feed);
+    let absolute = or_bool(b.absolute, st.absolute);
+    let ri = or_bool(b.retract_initial, st.retract_initial);
+    let plane = or_plane(b.plane, st.plane);
     let s1 = State {
         pos: copy(&st.pos),
         absolute,

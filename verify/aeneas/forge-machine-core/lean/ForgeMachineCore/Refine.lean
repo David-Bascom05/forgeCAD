@@ -1106,4 +1106,247 @@ theorem arc_spec (n : ℕ) (a : Axes) (hx : a.x.val < n) (hy : a.y.val < n) (hz 
         step with one_spec as ⟨v1, hv1⟩
         simp [hv1, SA, E, hv, alloc.vec.Vec.deref, iv, hf, C, u32_eq2, hi1, hi2]
 
+theorem BdO_getD (l : List (Option Std.I64)) (h : ∀ o ∈ l, BdO o) (k : ℕ) : BdO (l.getD k none) := by
+  intro v hv
+  rw [List.getD_eq_getElem?_getD] at hv
+  cases hq : l[k]? with
+  | none => simp [hq] at hv
+  | some w => simp [hq] at hv; subst hv; exact h _ (List.mem_of_getElem? hq) v rfl
+
+theorem or_word_eq (w d : Option Std.I64) : or_word w d = ok (w.or d) := by unfold or_word; cases w <;> rfl
+theorem or_bool_eq (w : Option Bool) (d : Bool) : or_bool w d = ok (w.getD d) := by unfold or_bool; cases w <;> rfl
+theorem or_plane_eq (w : Option Std.U32) (d : Std.U32) : or_plane w d = ok (w.getD d) := by
+  unfold or_plane; cases w <;> rfl
+
+theorem P_of_lv (n : ℕ) (v : List (Option Std.I64)) (L : List (Option ℤ)) (h : lv v = L) :
+    P n v = fun k => L.getD k.val none := by
+  funext k; rw [P_eq, h]
+
+theorem iv_or (w d : Option Std.I64) : iv (w.or d) = (iv w).or (iv d) := by cases w <;> rfl
+
+theorem plane_getD (w : Option Std.U32) (d : Std.U32) : (w.getD d).val = (w.map (·.val)).getD d.val := by
+  cases w <;> rfl
+
+theorem anyAx_eq (n : ℕ) (v : List (Option Std.I64)) (hv : v.length = n) :
+    ((List.finRange n).any fun k => (P n v k).isSome) = v.any (·.isSome) := by
+  subst hv
+  apply Bool.eq_iff_iff.mpr
+  simp only [List.any_eq_true, List.mem_finRange, true_and, P, iv]
+  constructor
+  · rintro ⟨k, hk⟩
+    refine ⟨v[k.val], List.getElem_mem k.isLt, ?_⟩
+    simpa [List.getD_eq_getElem?_getD, List.getElem?_eq_getElem k.isLt] using hk
+  · rintro ⟨o, ho, hs⟩
+    obtain ⟨i, hi, rfl⟩ := List.getElem_of_mem ho
+    exact ⟨⟨i, hi⟩, by simpa [List.getD_eq_getElem?_getD, List.getElem?_eq_getElem hi] using hs⟩
+
+theorem map_val_finRange (n : ℕ) : (List.finRange n).map Fin.val = List.range n := by
+  apply List.ext_getElem <;> simp
+
+theorem homeAxes_fin (n : ℕ) (v via : List (Option Std.I64)) (axes : List Std.Usize)
+    (hv : v.length = n) (ha : axes.map (·.val) = homeAxes v via n) :
+    axes.filterMap (fun u => if h : u.val < n then some (⟨u.val, h⟩ : Fin n) else none) =
+      (List.finRange n).filter fun k => (P n v k).isSome := by
+  apply List.map_injective_iff.mpr Fin.val_injective
+  have hlt : ∀ u ∈ axes, u.val < n := by
+    intro u hu
+    have : u.val ∈ homeAxes v via n := by rw [← ha]; exact List.mem_map_of_mem hu
+    simp [homeAxes] at this; exact this.1
+  rw [List.map_filterMap]
+  have e1 : axes.filterMap (fun u => Option.map Fin.val (if h : u.val < n then some (⟨u.val, h⟩ : Fin n) else none)) =
+      axes.map (·.val) := by
+    rw [List.filterMap_eq_map_iff_forall_eq_some]
+    intro u hu; simp [hlt u hu]
+  rw [e1, ha, homeAxes]
+  have hq : (fun k : Fin n => (P n v k).isSome) = (fun i => (v.getD i none).isSome) ∘ Fin.val := by
+    funext k; simp [P, iv]
+  rw [hq, ← List.filter_map, map_val_finRange]
+
+theorem homePos_P (n : ℕ) (v via : List (Option Std.I64)) (hn : via.length = n) :
+    P n (homePos v via via.length) = fun k => if (P n v k).isSome then none else P n via k := by
+  funext k
+  have hk : k.val < via.length := by omega
+  simp only [P, homePos, List.getD_eq_getElem?_getD, List.getElem?_map, List.getElem?_range hk,
+    Option.map_some, Option.getD_some]
+  split <;> simp_all [iv]
+
+theorem lv_length (v : List (Option Std.I64)) : (lv v).length = v.length := by simp [lv]
+
+theorem u0 : ((0#32#uscalar : Std.U32).val) = 0 := rfl
+theorem u1 : ((1#32#uscalar : Std.U32).val) = 1 := rfl
+theorem u80 : ((80#32#uscalar : Std.U32).val) = 80 := rfl
+
+theorem step_spec (n : ℕ) (a : Axes) (hx : a.x.val < n) (hy : a.y.val < n) (hz : a.z.val < n)
+    (pc lift : Std.I64) (st : State) (b : Block) (hn : n < 2 ^ 16)
+    (hpos : st.pos.val.length = n) (hax : b.ax.val.length = n)
+    (hsp : ∀ o ∈ st.pos.val, BdO o) (hbx : ∀ o ∈ b.ax.val, BdO o)
+    (hi : BdO b.i) (hj : BdO b.j) (hk : BdO b.k) (hr : BdO b.r) (hq : BdO b.q)
+    (hcyc : CycOK st.cyc) (hpc : Bd pc.val) (hlift : Bd lift.val) :
+    step a pc lift st b ⦃ r =>
+      match r with
+      | .Ok (es, st') => ForgeMachine.step (AX n a hx hy hz) pc.val lift.val (SA n st) (BA n b) =
+          some (es.val.map (E n), SA n st')
+      | .Err _ => ForgeMachine.step (AX n a hx hy hz) pc.val lift.val (SA n st) (BA n b) = none ⦄ := by
+  unfold step
+  simp only [or_word_eq, or_bool_eq, or_plane_eq, bind_ok]
+  step with copy_spec (alloc.vec.Vec.deref st.pos) (by simp [alloc.vec.Vec.deref, hpos]; scalar_tac) as ⟨v, hv⟩
+  step with step_loop0_spec b.ax as ⟨any, hany⟩
+  have hsp' : ∀ o ∈ (alloc.vec.Vec.deref st.pos).val, BdO o := by simpa [alloc.vec.Vec.deref] using hsp
+  have hbx' : ∀ o ∈ (alloc.vec.Vec.deref b.ax).val, BdO o := by simpa [alloc.vec.Vec.deref] using hbx
+  have hpl : (alloc.vec.Vec.deref st.pos).val.length < Usize.max := by
+    simp [alloc.vec.Vec.deref, hpos]; scalar_tac
+  have hT := target_rel n (b.absolute.getD st.absolute) st.pos.val b.ax.val hpos
+  have ht : (BA n b).t = none := rfl
+  by_cases hh : b.home
+  · dsimp only [ForgeMachine.step, BA, SA]
+    simp only [hh, ite_true]
+    step with target_spec (b.absolute.getD st.absolute) (alloc.vec.Vec.deref st.pos) (alloc.vec.Vec.deref b.ax)
+      hpl hsp' hbx' as ⟨r, hres⟩
+    rw [show Option.getD b.absolute st.absolute = b.absolute.getD st.absolute from rfl, hT]
+    cases r with
+    | Err e =>
+      simp [alloc.vec.Vec.deref] at hres
+      simp only [core.result.Result.Insts.CoreOpsTry.branch, bind_ok, from_residual_err, WP.spec_ok]
+      simp [hres]
+    | Ok val =>
+      simp [alloc.vec.Vec.deref] at hres
+      obtain ⟨hv1, hv2⟩ := hres
+      have hnot : (tList (b.absolute.getD st.absolute) (lv st.pos.val) (lv b.ax.val)).any (·.2) = false := by
+        simpa [List.all_eq_true, List.any_eq_false] using hv2
+      have hvl : val.val.length = n := by
+        have := congrArg List.length hv1; simp [lv_length, tList_length, hpos] at this; omega
+      simp only [core.result.Result.Insts.CoreOpsTry.branch, bind_ok, hnot, Bool.false_eq_true, ite_false]
+      step with step_loop1_spec b.ax val (by omega) (alloc.vec.Vec.with_capacity (Option Std.I64) val.len) (by rfl) as ⟨axes, pos1, ha, hp⟩
+      have hPv := P_of_lv n val.val _ hv1
+      have hfa := homeAxes_fin n b.ax.val val.val axes.val hax (by rw [ha, hvl])
+      split
+      · rename_i h0
+        have : axes.val = [] := by have := congrArg (·.val) h0; simpa using this
+        rw [this] at hfa
+        have hz : (List.finRange n).filter (fun k => (P n b.ax.val k).isSome) = [] := by rw [← hfa]; rfl
+        simp only [WP.spec_ok]
+        split
+        · trivial
+        · contradiction
+      · rename_i h0
+        have : axes.val ≠ [] := by
+          intro e; apply h0; apply UScalar.eq_of_val_eq; simp [alloc.vec.Vec.len, e]
+        step with one_spec as ⟨v1, hv1'⟩
+        have hne : (List.finRange n).filter (fun k => (P n b.ax.val k).isSome) ≠ [] := by
+          rw [← hfa]; intro e
+          rw [List.filterMap_eq_nil_iff] at e
+          obtain ⟨u, t, hu⟩ := List.exists_cons_of_ne_nil this
+          have hm : u ∈ axes.val := by rw [hu]; simp
+          have : u.val ∈ homeAxes b.ax.val val.val val.val.length := by rw [← ha]; exact List.mem_map_of_mem hm
+          simp only [homeAxes, List.mem_filter, List.mem_range] at this
+          have hlt : u.val < n := hvl ▸ this.1
+          have := e u hm; simp [hlt] at this
+        split
+        · contradiction
+        simp only [ hv1', List.map_cons, List.map_nil, E, hfa, hPv, Option.some.injEq]
+        rw [hp, homePos_P n _ _ hvl, hPv, plane_getD, iv_or]
+  · have hh' : (BA n b).home = false := by simp [BA, hh]
+    simp only [ForgeMachine.step, ht]
+    simp only [hh, hh', Bool.false_eq_true, ite_false]
+    let s1 : State := State.mk v (b.absolute.getD st.absolute) st.mode (b.plane.getD st.plane)
+      (b.f.or st.feed) (b.retract_initial.getD st.retract_initial) st.cyc
+    step with motion_code_spec n a hx hy hz st st s1 b hpos hax hcyc (BdO_getD b.ax.val hbx a.z.val) hr hq
+      as ⟨r, hres⟩
+    have hs1 : SA n s1 = { SA n st with feed := (BA n b).f.or (SA n st).feed, absolute := (BA n b).absolute.getD (SA n st).absolute, retractInitial := (BA n b).retractInitial.getD (SA n st).retractInitial, plane := (BA n b).plane.getD (SA n st).plane } := by
+      have hvv : v.val = st.pos.val := by simpa [alloc.vec.Vec.deref] using hv
+      simp only [SA, BA, s1, hvv, iv_or, plane_getD]
+    rw [← hs1]
+    cases r with
+    | Err e =>
+      rw [hres]
+      simp only [core.result.Result.Insts.CoreOpsTry.branch, bind_ok, from_residual_err, WP.spec_ok]
+    | Ok val =>
+      obtain ⟨hm, hvp, hvf, hva, hvpl, hvri, hvc⟩ := hres
+      simp only [core.result.Result.Insts.CoreOpsTry.branch, bind_ok]
+      rw [hm]
+      dsimp only [BA, SA]
+      simp only [anyAx_eq n _ hax]
+      subst hany
+      cases hA : (b.ax.val.any fun x => x.isSome) with
+      | false => simp [alloc.vec.Vec.new]
+      | true =>
+      simp only [Bool.true_eq_false, ite_false, ite_true]
+      step with target_spec (b.absolute.getD st.absolute) (alloc.vec.Vec.deref st.pos) (alloc.vec.Vec.deref b.ax)
+        hpl hsp' hbx' as ⟨r1, hres1⟩
+      rw [hT]
+      cases r1 with
+      | Err e =>
+        simp [alloc.vec.Vec.deref] at hres1
+        simp [hres1, from_residual_err]
+      | Ok val1 =>
+      simp [alloc.vec.Vec.deref] at hres1
+      obtain ⟨hv1, hv2⟩ := hres1
+      have hnot : (tList (b.absolute.getD st.absolute) (lv st.pos.val) (lv b.ax.val)).any (·.2) = false := by
+        simpa [List.all_eq_true, List.any_eq_false] using hv2
+      have hvl : val1.val.length = n := by
+        have := congrArg List.length hv1; simp [lv_length, tList_length, hpos] at this; omega
+      have hPv := P_of_lv n val1.val _ hv1
+      simp only [hnot, Bool.false_eq_true, ite_false]
+      rw [← hPv]
+      have hPk : ∀ k : Fin n, (List.map (fun x => x.1) (tList (b.absolute.getD st.absolute) (lv st.pos.val)
+          (lv b.ax.val))).getD k.val none = P n val1.val k := by intro k; rw [hPv]
+      simp only [hPk]
+      have hdl : val1.val.length < Usize.max := by rw [hvl]; scalar_tac
+      cases hmo : val.mode with
+      | none => simp
+      | some g =>
+      cases hcy : val.cyc with
+      | none =>
+        simp only [Option.map]
+        split
+        · step with copy_spec (alloc.vec.Vec.deref val1) (by simpa [alloc.vec.Vec.deref] using hdl) as ⟨w, hw⟩
+          step with one_spec as ⟨w1, hw1⟩
+          have hwv : w.val = val1.val := by simpa [alloc.vec.Vec.deref] using hw
+          simp only [u0, hw1, List.map_cons, List.map_nil, E, hwv, SA, hmo, hcy, Option.map]
+        · cases hfo : b.f.or st.feed with
+          | none =>
+            have : (iv b.f).or (iv st.feed) = none := by rw [← iv_or, hfo]; rfl
+            simp only [u1, this,
+              core.result.Result.Insts.CoreOpsTry.branch, bind_ok, WP.spec_ok]
+          | some f =>
+            simp only
+            step with copy_spec (alloc.vec.Vec.deref val1) (by simpa [alloc.vec.Vec.deref] using hdl) as ⟨w, hw⟩
+            step with one_spec as ⟨w1, hw1⟩
+            have hwv : w.val = val1.val := by simpa [alloc.vec.Vec.deref] using hw
+            have : (iv b.f).or (iv st.feed) = some f.val := by rw [← iv_or, hfo]; rfl
+            simp only [u1, this, Option.map, hw1, List.map_cons, List.map_nil, E, hwv, SA, hmo, hcy]
+        · rename_i hn0 hn1
+          have g0 : g.val ≠ 0 := fun e => hn0 (UScalar.eq_of_val_eq (by rw [e, u0]))
+          have g1 : g.val ≠ 1 := fun e => hn1 (UScalar.eq_of_val_eq (by rw [e, u1]))
+          simp only [bind_ok]
+          step with is_arc_spec g as ⟨b1, hb1⟩
+          split
+          · rename_i hb
+            have g23 : g.val = 2 ∨ g.val = 3 := by simpa [hb1] using hb
+            apply WP.spec_mono (arc_spec n a hx hy hz st val b val1 g hsp hi hj hk hdl)
+            intro r hr
+            cases r with
+            | Ok p =>
+              obtain ⟨es, s3⟩ := p
+              obtain ⟨hr1, _⟩ := hr
+              simp only [SA, BA, hmo, hcy, Option.map] at hr1
+              simp only
+              split
+              · exact hr1
+              · contradiction
+            | Err e =>
+              simp only [SA, BA, hmo, hcy, Option.map] at hr
+              simp only
+              split
+              · exact hr
+              · contradiction
+          · rename_i hb
+            have g23 : ¬ (g.val = 2 ∨ g.val = 3) := by simpa [hb1] using hb
+            simp only [WP.spec_ok]
+            split
+            · contradiction
+            · rfl
+      | some c =>
+        sorry
+
 end forge_machine_core

@@ -337,29 +337,51 @@ def or0 (w : Option Std.I64) : Result Std.I64 := do
   | none => ok 0#i64
   | some v => ok v
 
-/-- [forge_machine_core::has]:
+/-- [forge_machine_core::or_word]:
     Source: 'kernel/forge-machine-core/src/lib.rs', lines 283:0-288:1 -/
+def or_word
+  (w : Option Std.I64) (d : Option Std.I64) : Result (Option Std.I64) := do
+  match w with
+  | none => ok d
+  | some _ => ok w
+
+/-- [forge_machine_core::or_bool]:
+    Source: 'kernel/forge-machine-core/src/lib.rs', lines 291:0-296:1 -/
+def or_bool (w : Option Bool) (d : Bool) : Result Bool := do
+  match w with
+  | none => ok d
+  | some v => ok v
+
+/-- [forge_machine_core::or_plane]:
+    Source: 'kernel/forge-machine-core/src/lib.rs', lines 299:0-304:1 -/
+def or_plane (w : Option Std.U32) (d : Std.U32) : Result Std.U32 := do
+  match w with
+  | none => ok d
+  | some v => ok v
+
+/-- [forge_machine_core::has]:
+    Source: 'kernel/forge-machine-core/src/lib.rs', lines 307:0-312:1 -/
 def has (w : Option Std.I64) : Result Bool := do
   match w with
   | none => ok false
   | some _ => ok true
 
 /-- [forge_machine_core::has_g]:
-    Source: 'kernel/forge-machine-core/src/lib.rs', lines 291:0-296:1 -/
+    Source: 'kernel/forge-machine-core/src/lib.rs', lines 315:0-320:1 -/
 def has_g (g : Option Std.U32) : Result Bool := do
   match g with
   | none => ok false
   | some _ => ok true
 
 /-- [forge_machine_core::any_word]:
-    Source: 'kernel/forge-machine-core/src/lib.rs', lines 299:0-304:1 -/
+    Source: 'kernel/forge-machine-core/src/lib.rs', lines 323:0-328:1 -/
 def any_word (any : Bool) (w : Option Std.I64) : Result Bool := do
   match w with
   | none => ok any
   | some _ => ok true
 
 /-- [forge_machine_core::word]:
-    Source: 'kernel/forge-machine-core/src/lib.rs', lines 306:0-308:1 -/
+    Source: 'kernel/forge-machine-core/src/lib.rs', lines 330:0-332:1 -/
 def word
   (ax : Slice (Option Std.I64)) (k : Std.Usize) : Result (Option Std.I64) := do
   let i := Slice.len ax
@@ -368,7 +390,7 @@ def word
   else ok none
 
 /-- [forge_machine_core::at]:
-    Source: 'kernel/forge-machine-core/src/lib.rs', lines 310:0-312:1 -/
+    Source: 'kernel/forge-machine-core/src/lib.rs', lines 334:0-336:1 -/
 def «at»
   (p : Slice (Option Std.I64)) (k : Std.Usize) : Result (Option Std.I64) := do
   let i := Slice.len p
@@ -377,7 +399,7 @@ def «at»
   else ok none
 
 /-- [forge_machine_core::motion_code]:
-    Source: 'kernel/forge-machine-core/src/lib.rs', lines 315:0-370:1 -/
+    Source: 'kernel/forge-machine-core/src/lib.rs', lines 339:0-394:1 -/
 def motion_code
   (a : Axes) (st : State) (b : Block) (s1 : State) :
   Result (core.result.Result State Refuse)
@@ -436,7 +458,7 @@ def motion_code
         else ok (core.result.Result.Err Refuse.UnknownMotion)
 
 /-- [forge_machine_core::plane_axes]:
-    Source: 'kernel/forge-machine-core/src/lib.rs', lines 373:0-381:1 -/
+    Source: 'kernel/forge-machine-core/src/lib.rs', lines 397:0-405:1 -/
 def plane_axes
   (a : Axes) (plane : Std.U32) (b : Block) :
   Result (Std.Usize × Std.Usize × (Option Std.I64) × (Option Std.I64))
@@ -449,7 +471,7 @@ def plane_axes
     else ok (a.y, a.z, b.j, b.k)
 
 /-- [forge_machine_core::arc]:
-    Source: 'kernel/forge-machine-core/src/lib.rs', lines 383:0-425:1 -/
+    Source: 'kernel/forge-machine-core/src/lib.rs', lines 407:0-449:1 -/
 def arc
   (a : Axes) (st : State) (b : Block) (s2 : State)
   (dst : alloc.vec.Vec (Option Std.I64)) (g : Std.U32) :
@@ -529,7 +551,7 @@ def arc
                 residual
 
 /-- [forge_machine_core::step]: loop body 0:
-    Source: 'kernel/forge-machine-core/src/lib.rs', lines 456:4-459:5
+    Source: 'kernel/forge-machine-core/src/lib.rs', lines 468:4-471:5
     Visibility: public -/
 @[rust_loop_body]
 def step_loop0.body
@@ -548,7 +570,7 @@ def step_loop0.body
   else ok (done any)
 
 /-- [forge_machine_core::step]: loop 0:
-    Source: 'kernel/forge-machine-core/src/lib.rs', lines 456:4-459:5
+    Source: 'kernel/forge-machine-core/src/lib.rs', lines 468:4-471:5
     Visibility: public -/
 @[rust_loop]
 def step_loop0
@@ -560,7 +582,7 @@ def step_loop0
     (any, k)
 
 /-- [forge_machine_core::step]: loop body 1:
-    Source: 'kernel/forge-machine-core/src/lib.rs', lines 465:8-473:9
+    Source: 'kernel/forge-machine-core/src/lib.rs', lines 477:8-485:9
     Visibility: public -/
 @[rust_loop_body]
 def step_loop1.body
@@ -596,7 +618,7 @@ def step_loop1.body
   else ok (done (axes, pos))
 
 /-- [forge_machine_core::step]: loop 1:
-    Source: 'kernel/forge-machine-core/src/lib.rs', lines 465:8-473:9
+    Source: 'kernel/forge-machine-core/src/lib.rs', lines 477:8-485:9
     Visibility: public -/
 @[rust_loop]
 def step_loop1
@@ -610,34 +632,22 @@ def step_loop1
     (axes, pos, k)
 
 /-- [forge_machine_core::step]:
-    Source: 'kernel/forge-machine-core/src/lib.rs', lines 428:0-514:1
+    Source: 'kernel/forge-machine-core/src/lib.rs', lines 452:0-526:1
     Visibility: public -/
 def step
   (a : Axes) (pc : Std.I64) (lift : Std.I64) (st : State) (b : Block) :
   Result (core.result.Result ((alloc.vec.Vec Ev) × State) Refuse)
   := do
-  let (st1, o, feed) ←
-    match b.f with
-    | none => ok (st, none, st.feed)
-    | some _ => ok (st, b.f, b.f)
-  let (st2, o1, absolute) ←
-    match b.absolute with
-    | none => ok (st1, none, st1.absolute)
-    | some v => ok (st1, b.absolute, v)
-  let (st3, o2, ri) ←
-    match b.retract_initial with
-    | none => ok (st2, none, st2.retract_initial)
-    | some v => ok (st2, b.retract_initial, v)
-  let (st4, o3, plane) ←
-    match b.plane with
-    | none => ok (st3, none, st3.plane)
-    | some p => ok (st3, b.plane, p)
-  let s := alloc.vec.Vec.deref st4.pos
+  let feed ← or_word b.f st.feed
+  let absolute ← or_bool b.absolute st.absolute
+  let ri ← or_bool b.retract_initial st.retract_initial
+  let plane ← or_plane b.plane st.plane
+  let s := alloc.vec.Vec.deref st.pos
   let v ← copy s
   let any ← step_loop0 b.ax false 0#usize
   if b.home
   then
-    let s1 := alloc.vec.Vec.deref st4.pos
+    let s1 := alloc.vec.Vec.deref st.pos
     let s2 := alloc.vec.Vec.deref b.ax
     let r ← target absolute s1 s2
     let cf ← core.result.Result.Insts.CoreOpsTry.branch r
@@ -653,22 +663,20 @@ def step
       else
         let v1 ← one (Ev.Home val axes)
         ok (core.result.Result.Ok (v1,
-          { st4 with pos := pos1, absolute, plane, feed, retract_initial := ri
-          }))
+          { st with pos := pos1, absolute, plane, feed, retract_initial := ri }))
     | core.ops.control_flow.ControlFlow.Break residual =>
       core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
         ((alloc.vec.Vec Ev) × State) (core.convert.FromSame Refuse) residual
   else
     let r ←
-      motion_code a st4
-        { b with absolute := o1, retract_initial := o2, plane := o3, f := o }
-        { st4 with pos := v, absolute, plane, feed, retract_initial := ri }
+      motion_code a st b
+        { st with pos := v, absolute, plane, feed, retract_initial := ri }
     let cf ← core.result.Result.Insts.CoreOpsTry.branch r
     match cf with
     | core.ops.control_flow.ControlFlow.Continue val =>
       if any
       then
-        let s1 := alloc.vec.Vec.deref st4.pos
+        let s1 := alloc.vec.Vec.deref st.pos
         let s2 := alloc.vec.Vec.deref b.ax
         let r1 ← target absolute s1 s2
         let cf1 ← core.result.Result.Insts.CoreOpsTry.branch r1
@@ -696,41 +704,32 @@ def step
               | _ =>
                 let b1 ← is_arc g
                 if b1
-                then
-                  arc a st4
-                    {
-                      b
-                        with
-                        absolute := o1,
-                        retract_initial := o2,
-                        plane := o3,
-                        f := o
-                    } val val1 g
+                then arc a st b val val1 g
                 else ok (core.result.Result.Err Refuse.NoMotion)
             | some c =>
               match g with
               | 80#uscalar =>
                 let s3 := alloc.vec.Vec.deref b.ax
-                let o4 ← word s3 a.z
-                let b1 ← has o4
+                let o ← word s3 a.z
+                let b1 ← has o
                 if b1
                 then
                   let b2 ← has_g b.g
                   if b2
                   then
                     let s4 := alloc.vec.Vec.deref val1
-                    let o5 ← «at» s4 a.x
+                    let o1 ← «at» s4 a.x
                     let s5 := alloc.vec.Vec.deref val1
-                    let o6 ← «at» s5 a.y
-                    let s6 := alloc.vec.Vec.deref st4.pos
-                    let o7 ← «at» s6 a.z
-                    match o5 with
+                    let o2 ← «at» s5 a.y
+                    let s6 := alloc.vec.Vec.deref st.pos
+                    let o3 ← «at» s6 a.z
+                    match o1 with
                     | none => ok (core.result.Result.Err Refuse.HoleUnknown)
                     | some x =>
-                      match o6 with
+                      match o2 with
                       | none => ok (core.result.Result.Err Refuse.HoleUnknown)
                       | some y =>
-                        match o7 with
+                        match o3 with
                         | none =>
                           ok (core.result.Result.Err Refuse.HoleUnknown)
                         | some cur =>
@@ -751,18 +750,18 @@ def step
                   else ok (core.result.Result.Err Refuse.CycleZRepeat)
                 else
                   let s4 := alloc.vec.Vec.deref val1
-                  let o5 ← «at» s4 a.x
+                  let o1 ← «at» s4 a.x
                   let s5 := alloc.vec.Vec.deref val1
-                  let o6 ← «at» s5 a.y
-                  let s6 := alloc.vec.Vec.deref st4.pos
-                  let o7 ← «at» s6 a.z
-                  match o5 with
+                  let o2 ← «at» s5 a.y
+                  let s6 := alloc.vec.Vec.deref st.pos
+                  let o3 ← «at» s6 a.z
+                  match o1 with
                   | none => ok (core.result.Result.Err Refuse.HoleUnknown)
                   | some x =>
-                    match o6 with
+                    match o2 with
                     | none => ok (core.result.Result.Err Refuse.HoleUnknown)
                     | some y =>
-                      match o7 with
+                      match o3 with
                       | none => ok (core.result.Result.Err Refuse.HoleUnknown)
                       | some cur =>
                         match feed with
@@ -797,16 +796,7 @@ def step
                 | _ =>
                   let b1 ← is_arc g
                   if b1
-                  then
-                    arc a st4
-                      {
-                        b
-                          with
-                          absolute := o1,
-                          retract_initial := o2,
-                          plane := o3,
-                          f := o
-                      } val val1 g
+                  then arc a st b val val1 g
                   else ok (core.result.Result.Err Refuse.NoMotion)
         | core.ops.control_flow.ControlFlow.Break residual =>
           core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
