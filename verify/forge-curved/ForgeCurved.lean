@@ -4,6 +4,9 @@ import ForgeCurved.Sides
 import ForgeCurved.Separators
 import ForgeCurved.WallsCounter
 import ForgeCurved.DelineablePoly
+import ForgeCurved.Sweep
+import ForgeCurved.CAD
+import ForgeCurved.CADLevels
 import ForgeCurved.Tier0
 import ForgeCurved.FaceLocal
 import ForgeCurved.Strata
@@ -13,3 +16,7 @@ import ForgeCurved.Diagonal
 import ForgeCurved.PlateHole
 import ForgeCurved.FaceModel
 import ForgeCurved.ContactModel
+import ForgeCurved.Rooms
+import ForgeCurved.FacetSides
+import ForgeCurved.SweepCross
+import ForgeCurved.SweepFacet
