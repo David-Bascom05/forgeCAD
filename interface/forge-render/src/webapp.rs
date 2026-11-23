@@ -64,11 +64,44 @@ thread_local! {
 }
 
 fn wake() {
-    WAKE.with(|w| {
-        if let Some(p) = &*w.borrow() {
+    let here = WAKE.with(|w| {
+        w.borrow().as_ref().map(|p| {
             let _ = p.send_event(Msg::Wake);
-        }
+        })
     });
+    // a worker's thread (the threaded build): the page is told through the worker's messages
+    #[cfg(target_feature = "atomics")]
+    if here.is_none() && !on_page() {
+        wake_page();
+    }
+    #[cfg(not(target_feature = "atomics"))]
+    let _ = here;
+}
+
+#[cfg(target_feature = "atomics")]
+#[wasm_bindgen]
+extern "C" {
+    /// The worker's (web/worker.js): a message to the page, which wakes the app.
+    #[wasm_bindgen(js_namespace = globalThis, js_name = forge_wake_page)]
+    fn wake_page();
+}
+
+/// The threads the page's machine has (`navigator.hardwareConcurrency`, in a worker too), at
+/// most 8, as natively.
+#[cfg(target_feature = "atomics")]
+fn hardware_threads() -> usize {
+    let n = js_sys::Reflect::get(&js_sys::global(), &"navigator".into())
+        .and_then(|nav| js_sys::Reflect::get(&nav, &"hardwareConcurrency".into()))
+        .ok()
+        .and_then(|v| v.as_f64())
+        .unwrap_or(1.0);
+    (n as usize).clamp(1, 8)
+}
+
+/// The page's: a worker said its thread has news (the threaded build).
+#[wasm_bindgen]
+pub fn app_wake() {
+    wake();
 }
 
 enum Msg {
@@ -76,14 +109,18 @@ enum Msg {
     Wake,
 }
 
-/// The canvas, its surface and the app on it.
+/// The canvas, its surface and the app on it. Offscreen (`?offscreen=WxH`: where a WebGPU canvas
+/// can't show, a headless browser's software adapter) there is no surface: frames are drawn to a
+/// texture, and the canvas only takes the input.
 struct Host {
     /// Kept for the page's life: the browser ends a dropped instance's callbacks (a buffer's
     /// mapping among them).
     _instance: wgpu::Instance,
     window: Arc<Window>,
-    surface: wgpu::Surface<'static>,
+    surface: Option<wgpu::Surface<'static>>,
     config: wgpu::SurfaceConfiguration,
+    /// Offscreen, what the frames are drawn to.
+    target: Option<wgpu::Texture>,
     gui: Gui,
     input: Input,
     frames: u64,
@@ -96,30 +133,63 @@ struct App {
     host: Option<Box<Host>>,
     started: bool,
     first: Option<String>,
+    offscreen: Option<(u32, u32)>,
 }
 
-async fn open_host(window: Arc<Window>, first: Option<String>) -> Result<Host, String> {
+async fn open_host(
+    window: Arc<Window>,
+    first: Option<String>,
+    offscreen: Option<(u32, u32)>,
+) -> Result<Host, String> {
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
         backends: wgpu::Backends::BROWSER_WEBGPU,
         ..wgpu::InstanceDescriptor::new_without_display_handle()
     });
-    let surface = instance
-        .create_surface(window.clone())
-        .map_err(|e| e.to_string())?;
-    let (device, queue, adapter) = open_device(&instance, Some(&surface)).await?;
+    let surface = match offscreen {
+        Some(_) => None,
+        None => Some(
+            instance
+                .create_surface(window.clone())
+                .map_err(|e| e.to_string())?,
+        ),
+    };
+    let (device, queue, adapter) = open_device(&instance, surface.as_ref()).await?;
     let info = adapter.get_info();
     say(&format!(
         "forge-app: {} {:?} {}",
         info.name, info.device_type, info.backend
     ));
     let size = window.inner_size();
-    let mut config = surface
-        .get_default_config(&adapter, size.width.max(320), size.height.max(240))
-        .ok_or("no surface format")?;
-    // the chrome blends in sRGB, as on the desktop
-    config.format = config.format.remove_srgb_suffix();
-    surface.configure(&device, &config);
-    device.set_device_lost_callback(|why, msg| say(&format!("forge-app: the GPU device was lost ({why:?}): {msg}")));
+    let (config, target) = match (&surface, offscreen) {
+        (Some(surface), _) => {
+            let mut config = surface
+                .get_default_config(&adapter, size.width.max(320), size.height.max(240))
+                .ok_or("no surface format")?;
+            // the chrome blends in sRGB, as on the desktop
+            config.format = config.format.remove_srgb_suffix();
+            surface.configure(&device, &config);
+            (config, None)
+        }
+        (None, size) => {
+            let (width, height) = size.unwrap_or((1280, 800));
+            let config = wgpu::SurfaceConfiguration {
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+                format: wgpu::TextureFormat::Rgba8Unorm,
+                width,
+                height,
+                present_mode: wgpu::PresentMode::Fifo,
+                desired_maximum_frame_latency: 2,
+                alpha_mode: wgpu::CompositeAlphaMode::Auto,
+                color_space: wgpu::SurfaceColorSpace::Auto,
+                view_formats: vec![],
+            };
+            let target = offscreen_texture(&device, &config);
+            (config, Some(target))
+        }
+    };
+    device.set_device_lost_callback(|why, msg| {
+        say(&format!("forge-app: the GPU device was lost ({why:?}): {msg}"))
+    });
     let scale = window.scale_factor() as f32;
     let mut gui = Gui::new(device, queue, info, config.format, Arc::new(wake), scale);
     gui.load_settings();
@@ -131,6 +201,7 @@ async fn open_host(window: Arc<Window>, first: Option<String>) -> Result<Host, S
         window,
         surface,
         config,
+        target,
         gui,
         input: Input::default(),
         frames: 0,
@@ -138,25 +209,53 @@ async fn open_host(window: Arc<Window>, first: Option<String>) -> Result<Host, S
     })
 }
 
+fn offscreen_texture(device: &wgpu::Device, c: &wgpu::SurfaceConfiguration) -> wgpu::Texture {
+    device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("offscreen window"),
+        size: wgpu::Extent3d {
+            width: c.width,
+            height: c.height,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: c.format,
+        usage: c.usage,
+        view_formats: &[],
+    })
+}
+
 impl Host {
     fn draw(&mut self) {
         use wgpu::CurrentSurfaceTexture as T;
-        let frame = match self.surface.get_current_texture() {
-            T::Success(f) | T::Suboptimal(f) => f,
-            T::Outdated | T::Lost => {
-                self.surface.configure(&self.gui.device(), &self.config);
-                self.window.request_redraw();
-                return;
-            }
-            _ => return,
-        };
-        let view = frame.texture.create_view(&Default::default());
         let ppp = self.window.scale_factor() as f32;
         let size = (self.config.width, self.config.height);
-        let raw = self.input.raw(size, ppp, now_ms() / 1000.0);
-        let out = self.gui.frame(raw, &view, size);
-        self.window.pre_present_notify();
-        self.gui.queue().present(frame);
+        let out = match (&self.surface, &self.target) {
+            (Some(surface), _) => {
+                let frame = match surface.get_current_texture() {
+                    T::Success(f) | T::Suboptimal(f) => f,
+                    T::Outdated | T::Lost => {
+                        surface.configure(&self.gui.device(), &self.config);
+                        self.window.request_redraw();
+                        return;
+                    }
+                    _ => return,
+                };
+                let view = frame.texture.create_view(&Default::default());
+                let raw = self.input.raw(size, ppp, now_ms() / 1000.0);
+                let out = self.gui.frame(raw, &view, size);
+                self.window.pre_present_notify();
+                self.gui.queue().present(frame);
+                out
+            }
+            (None, Some(t)) => {
+                let view = t.create_view(&Default::default());
+                let raw = self.input.raw(size, ppp, now_ms() / 1000.0);
+                self.gui.frame(raw, &view, size)
+            }
+            (None, None) => return,
+        };
         self.frames += 1;
         if self.frames == 2 {
             say("forge-app: drawn in the canvas");
@@ -212,6 +311,7 @@ impl Host {
     }
 
     fn take_inbox(&mut self) {
+        pass_on();
         for a in INBOX.with(|b| std::mem::take(&mut *b.borrow_mut())) {
             match a {
                 Ask::Open(p) => self.gui.open(&p),
@@ -345,9 +445,9 @@ impl ApplicationHandler<Msg> for App {
             .with_append(true);
         let window = Arc::new(on_loop.create_window(attrs).expect("a canvas"));
         let proxy = self.proxy.clone();
-        let first = self.first.take();
+        let (first, offscreen) = (self.first.take(), self.offscreen);
         wasm_bindgen_futures::spawn_local(async move {
-            match open_host(window, first).await {
+            match open_host(window, first, offscreen).await {
                 Ok(h) => {
                     let _ = proxy.send_event(Msg::Ready(Box::new(h)));
                 }
@@ -375,9 +475,11 @@ impl ApplicationHandler<Msg> for App {
                 return;
             }
             WindowEvent::Resized(s) if s.width > 0 && s.height > 0 => {
-                h.config.width = s.width;
-                h.config.height = s.height;
-                h.surface.configure(&h.gui.device(), &h.config);
+                if let Some(surface) = &h.surface {
+                    h.config.width = s.width;
+                    h.config.height = s.height;
+                    surface.configure(&h.gui.device(), &h.config);
+                }
                 h.window.request_redraw();
                 return;
             }
@@ -439,6 +541,8 @@ fn state_json(g: &Gui) -> String {
         ("done", doc.map_or(Json::Null, |s| num(s.done as f64))),
         ("dirty", doc.is_some_and(|s| s.dirty()).into()),
         ("status", g.shell.status.clone().into()),
+        // the last build's time in the worker, ms
+        ("build_ms", doc.map_or(Json::Null, |s| num(s.build_ms))),
         ("built", built.unwrap_or(Json::Null)),
     ])
     .to_string()
@@ -449,21 +553,59 @@ fn panic_hook() {
     std::panic::set_hook(Box::new(|p| console_error(&format!("forge-app panicked: {p}"))));
 }
 
+/// Changes made on a worker's thread (the threaded build), for the page's thread to pass on.
+type Pending = Vec<(String, Option<Vec<u8>>)>;
+static PENDING: std::sync::Mutex<Pending> = std::sync::Mutex::new(Vec::new());
+
+thread_local! {
+    /// Set on the page's own thread by `app_init` (a worker's thread never calls it).
+    static PAGE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Whether this is the page's own thread.
+fn on_page() -> bool {
+    PAGE.with(|p| p.get())
+}
+
+/// The changes made on other threads, to the page, in order.
+fn pass_on() {
+    let all = std::mem::take(&mut *crate::plat::lock(&PENDING));
+    for (p, b) in all {
+        page_changed(&p, b.map(|b| Uint8Array::from(&b[..])));
+    }
+}
+
 /// The filesystem's changes to the page, but not those it made itself.
 fn tell_page(path: &std::path::Path, c: forge_dirs::fs::mem::Change<'_>) {
     if LOADING.with(|l| *l.borrow()) {
         return;
     }
-    let p = path.to_string_lossy();
-    match c {
-        forge_dirs::fs::mem::Change::Wrote(b) => page_changed(&p, Some(Uint8Array::from(b))),
-        forge_dirs::fs::mem::Change::Removed => page_changed(&p, None),
+    let p = path.to_string_lossy().into_owned();
+    let bytes = match c {
+        forge_dirs::fs::mem::Change::Wrote(b) => Some(b),
+        forge_dirs::fs::mem::Change::Removed => None,
+    };
+    if on_page() {
+        pass_on();
+        page_changed(&p, bytes.map(Uint8Array::from));
+    } else {
+        crate::plat::lock(&PENDING).push((p, bytes.map(<[u8]>::to_vec)));
+        wake();
     }
 }
 
 /// Set up once before anything else: the clock, the panic hook, the filesystem's hook.
 #[wasm_bindgen]
 pub fn app_init() {
+    PAGE.with(|p| p.set(true));
+    // the threaded build: the kernel's parallel paths (n-ary booleans, `forge_math::par`) on Web
+    // Workers too; on the page's thread, which may not wait, each runs where it is spawned
+    #[cfg(target_feature = "atomics")]
+    forge_par::set_spawner(forge_par::Spawner {
+        spawn: crate::plat::threads::spawn,
+        can_block: || !on_page(),
+        threads: hardware_threads,
+    });
     panic_hook();
     forge_math::clock::set(perf_now, date_now);
     forge_dirs::fs::mem::set_hook(Some(tell_page));
@@ -471,7 +613,12 @@ pub fn app_init() {
 
 /// Starts the app on a canvas appended to the page, with `path` open if given.
 #[wasm_bindgen]
-pub fn start_app(path: Option<String>) -> Result<(), JsValue> {
+/// `offscreen`: "WxH", no WebGPU canvas (see `Host`).
+pub fn start_app(path: Option<String>, offscreen: Option<String>) -> Result<(), JsValue> {
+    let offscreen = offscreen.and_then(|s| {
+        let (w, h) = s.split_once('x')?;
+        Some((w.parse().ok()?, h.parse().ok()?))
+    });
     app_init();
     let on_loop = EventLoop::with_user_event().build().map_err(|e| e.to_string())?;
     let proxy = on_loop.create_proxy();
@@ -481,6 +628,7 @@ pub fn start_app(path: Option<String>) -> Result<(), JsValue> {
         host: None,
         started: false,
         first: path,
+        offscreen,
     });
     Ok(())
 }
@@ -568,6 +716,34 @@ pub fn fs_list(prefix: &str) -> js_sys::Array {
 pub fn build_json(path: &str) -> String {
     app_init();
     crate::parity::build_report(path)
+}
+
+/// Builds handed to a worker (`build_start`), by number, and their reports once done.
+static BUILDS: std::sync::Mutex<Vec<(u32, Option<String>)>> = std::sync::Mutex::new(Vec::new());
+static NEXT_BUILD: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(1);
+
+/// `build_json` on a worker's thread (the threaded build: the kernel's parallel paths on more
+/// workers; the single-threaded build: at once): its number, for `build_result`.
+#[wasm_bindgen]
+pub fn build_start(path: String) -> u32 {
+    app_init();
+    let id = NEXT_BUILD.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    crate::plat::lock(&BUILDS).push((id, None));
+    crate::plat::spawn("forge-build", move || {
+        let r = crate::parity::build_report(&path);
+        if let Some(b) = crate::plat::lock(&BUILDS).iter_mut().find(|b| b.0 == id) {
+            b.1 = Some(r);
+        }
+    });
+    id
+}
+
+/// Build `id`'s report once it is done (then forgotten), else undefined.
+#[wasm_bindgen]
+pub fn build_result(id: u32) -> Option<String> {
+    let mut all = crate::plat::lock(&BUILDS);
+    let k = all.iter().position(|b| b.0 == id && b.1.is_some())?;
+    all.swap_remove(k).1
 }
 
 /// The bench parts (and their font) written into `dir`; their paths.

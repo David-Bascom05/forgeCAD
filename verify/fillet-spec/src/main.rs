@@ -20,7 +20,11 @@ fn d(x: f64) -> String {
     let neg = bits >> 63 == 1;
     let exp = ((bits >> 52) & 0x7ff) as i64;
     let frac = bits & ((1u64 << 52) - 1);
-    let (mut m, mut e) = if exp == 0 { (frac, -1074) } else { (frac | (1u64 << 52), exp - 1075) };
+    let (mut m, mut e) = if exp == 0 {
+        (frac, -1074)
+    } else {
+        (frac | (1u64 << 52), exp - 1075)
+    };
     while m & 1 == 0 {
         m >>= 1;
         e += 1;
@@ -37,7 +41,12 @@ fn v(q: Vec3) -> String {
 }
 
 fn frame(f: &Frame) -> String {
-    format!("\"o\":{},\"z\":{},\"x\":{}", p(f.origin), v(f.z().get()), v(f.x().get()))
+    format!(
+        "\"o\":{},\"z\":{},\"x\":{}",
+        p(f.origin),
+        v(f.z().get()),
+        v(f.x().get())
+    )
 }
 
 fn surf(s: &Surface) -> String {
@@ -64,7 +73,11 @@ fn surf(s: &Surface) -> String {
 
 fn spine(c: &Curve) -> String {
     match c {
-        Curve::Line(l) => format!("{{\"t\":\"line\",\"o\":{},\"d\":{}}}", p(l.origin), v(l.dir.get())),
+        Curve::Line(l) => format!(
+            "{{\"t\":\"line\",\"o\":{},\"d\":{}}}",
+            p(l.origin),
+            v(l.dir.get())
+        ),
         Curve::Circle(k) => format!("{{\"t\":\"circle\",{},\"r\":{}}}", frame(&k.frame), d(k.radius)),
         _ => "{\"t\":\"other\"}".into(),
     }
@@ -72,7 +85,12 @@ fn spine(c: &Curve) -> String {
 
 /// One edge rolled alone at radius r, as a JSON line.
 fn line(src: &str, body: &Body, e: EdgeId, r: f64) -> String {
-    let mut out = format!("{{\"src\":\"{}\",\"edge\":{},\"r\":{}", src.replace('"', "'"), e.index(), d(r));
+    let mut out = format!(
+        "{{\"src\":\"{}\",\"edge\":{},\"r\":{}",
+        src.replace('"', "'"),
+        e.index(),
+        d(r)
+    );
     match forge_ops::fillet::edge_blend(body, e, r) {
         Err(err) => {
             let _ = write!(out, ",\"refused\":\"{err:?}\"}}");
@@ -171,7 +189,9 @@ fn probe_edge(body: &Body, idx: &forge_bool::classify::Index, e: EdgeId, r: f64)
         for &f in &faces {
             let s = &body.face(f).surface;
             let uv = s.project(d.p);
-            let Some(n) = body.face_normal(f, uv) else { continue };
+            let Some(n) = body.face_normal(f, uv) else {
+                continue;
+            };
             let n = n.get();
             ns.push(n);
             // normal curvature across the edge, in the face, against its outward normal
@@ -211,7 +231,8 @@ fn probe_edge(body: &Body, idx: &forge_bool::classify::Index, e: EdgeId, r: f64)
             let z = 1.0 - 2.0 * (j as f64 + 0.5) / 240.0;
             let a = j as f64 * 2.399_963_229_728_653;
             let q = (1.0 - z * z).max(0.0).sqrt();
-            let p = c + Vec3::new(q * a.cos(), q * a.sin(), z) * (0.99 * r);
+            let p =
+                c + Vec3::new(q * forge_math::dmath::cos(a), q * forge_math::dmath::sin(a), z) * (0.99 * r);
             let wrong = match idx.classify(p) {
                 Where::Inside => convex != Some(true),
                 Where::Outside => convex == Some(true),
@@ -230,7 +251,11 @@ fn probe_edge(body: &Body, idx: &forge_bool::classify::Index, e: EdgeId, r: f64)
         "{{\"edge\":{},\"r\":{r},\"convex\":{:?},\"focal_min\":{},\"ball_blocked\":{blocked},\"of\":{samples},\"worst_out_of_240\":{worst_out},\"rolled\":\"{}\"}}",
         e.index(),
         convex,
-        if focal_min.is_finite() { format!("{focal_min:.4}") } else { "null".into() },
+        if focal_min.is_finite() {
+            format!("{focal_min:.4}")
+        } else {
+            "null".into()
+        },
         match &rolled {
             Ok(_) => "ok".to_string(),
             Err(err) => format!("{err:?}"),
@@ -240,16 +265,24 @@ fn probe_edge(body: &Body, idx: &forge_bool::classify::Index, e: EdgeId, r: f64)
 
 fn probe(files: &[String]) {
     for f in files {
-        let Ok(src) = std::fs::read_to_string(f) else { continue };
+        let Ok(src) = std::fs::read_to_string(f) else {
+            continue;
+        };
         let m = forge_lang::fuzz::build_with(&src, opts());
         for k in 0..m.features.len() {
-            let forge_model::Feature::Fillet { edges, .. } = &m.features[k] else { continue };
+            let forge_model::Feature::Fillet { edges, .. } = &m.features[k] else {
+                continue;
+            };
             let Some(body) = m.body_after(k) else { continue };
             let body = if body.dead > 0 { body.compact() } else { body };
             let idx = forge_bool::classify::Index::new(&body);
             for (name, radius) in edges {
-                let forge_ops::Radius::Constant(r) = radius else { continue };
-                let Some(e) = body.edge_by_name(*name) else { continue };
+                let forge_ops::Radius::Constant(r) = radius else {
+                    continue;
+                };
+                let Some(e) = body.edge_by_name(*name) else {
+                    continue;
+                };
                 println!("{}#{k} {}", f, probe_edge(&body, &idx, e, *r));
             }
         }
@@ -260,14 +293,22 @@ fn probe(files: &[String]) {
 /// edges of the body before).
 fn mids(files: &[String]) {
     for f in files {
-        let Ok(src) = std::fs::read_to_string(f) else { continue };
+        let Ok(src) = std::fs::read_to_string(f) else {
+            continue;
+        };
         let m = forge_lang::fuzz::build_with(&src, opts());
         for k in 0..m.features.len() {
-            let forge_model::Feature::Fillet { edges, .. } = &m.features[k] else { continue };
+            let forge_model::Feature::Fillet { edges, .. } = &m.features[k] else {
+                continue;
+            };
             let Some(body) = m.body_after(k) else { continue };
             for (name, radius) in edges {
-                let forge_ops::Radius::Constant(r) = radius else { continue };
-                let Some(e) = body.edge_by_name(*name) else { continue };
+                let forge_ops::Radius::Constant(r) = radius else {
+                    continue;
+                };
+                let Some(e) = body.edge_by_name(*name) else {
+                    continue;
+                };
                 let x = body.edge(e);
                 let q = x.curve.eval(x.range.mid());
                 println!("{k} {r} {} {} {}", q.x, q.y, q.z);
@@ -280,16 +321,24 @@ fn mids(files: &[String]) {
 /// from the nearest spine point, against r (below r: the point is in a free ball, so air by the
 /// closing), and whether the blend surface's own projection of the point lies at distance r from it.
 fn near(f: &str, pts: &str) {
-    let Ok(src) = std::fs::read_to_string(f) else { return };
+    let Ok(src) = std::fs::read_to_string(f) else {
+        return;
+    };
     let m = forge_lang::fuzz::build_with(&src, opts());
     let mut blends = Vec::new();
     for k in 0..m.features.len() {
-        let forge_model::Feature::Fillet { edges, .. } = &m.features[k] else { continue };
+        let forge_model::Feature::Fillet { edges, .. } = &m.features[k] else {
+            continue;
+        };
         let Some(body) = m.body_after(k) else { continue };
         let body = if body.dead > 0 { body.compact() } else { body };
         for (name, radius) in edges {
-            let forge_ops::Radius::Constant(r) = radius else { continue };
-            let Some(e) = body.edge_by_name(*name) else { continue };
+            let forge_ops::Radius::Constant(r) = radius else {
+                continue;
+            };
+            let Some(e) = body.edge_by_name(*name) else {
+                continue;
+            };
             if let Ok((b, _, _)) = forge_ops::fillet::edge_blend(&body, e, *r) {
                 blends.push((b, *r));
             }
@@ -297,7 +346,11 @@ fn near(f: &str, pts: &str) {
     }
     use forge_geom::SurfaceGeom;
     for l in std::fs::read_to_string(pts).unwrap_or_default().lines() {
-        let v: Vec<f64> = l.split_whitespace().take(3).filter_map(|x| x.parse().ok()).collect();
+        let v: Vec<f64> = l
+            .split_whitespace()
+            .take(3)
+            .filter_map(|x| x.parse().ok())
+            .collect();
         if v.len() != 3 {
             continue;
         }
@@ -309,14 +362,25 @@ fn near(f: &str, pts: &str) {
             // inside the cap: the direction to p lies on the short arc between the feet
             let (fa, fb) = b.feet(t);
             let ang = |u: Vec3, w: Vec3| {
-                let (Some(u), Some(w)) = (u.normalize(), w.normalize()) else { return f64::NAN };
-                u.dot(w).clamp(-1.0, 1.0).acos()
+                let (Some(u), Some(w)) = (u.normalize(), w.normalize()) else {
+                    return f64::NAN;
+                };
+                forge_math::dmath::acos(u.dot(w).clamp(-1.0, 1.0))
             };
             let (a1, a2, a12) = (ang(p - c, fa - c), ang(p - c, fb - c), ang(fa - c, fb - c));
             println!(
                 "{:.4} {:.4} {:.4}  |p-c| - r = {:+.3e}  surf(q): |q-c(q)| - r = {:+.3e}  cap excess {:+.3e} rad (to a {:.4}, to b {:.4}, arc {:.4})  centre off a {:+.3e} off b {:+.3e}",
-                p.x, p.y, p.z, p.distance(c) - r, q.distance(b.spine.eval(spine_closest(&b.spine, q))) - r,
-                a1 + a2 - a12, a1, a2, a12, b.a.distance(c) - r, b.b.distance(c) - r
+                p.x,
+                p.y,
+                p.z,
+                p.distance(c) - r,
+                q.distance(b.spine.eval(spine_closest(&b.spine, q))) - r,
+                a1 + a2 - a12,
+                a1,
+                a2,
+                a12,
+                b.a.distance(c) - r,
+                b.b.distance(c) - r
             );
         }
     }
@@ -329,7 +393,9 @@ fn onboth(files: &[String]) {
     use std::sync::atomic::Ordering;
     let mut total = 0;
     for f in files {
-        let Ok(src) = std::fs::read_to_string(f) else { continue };
+        let Ok(src) = std::fs::read_to_string(f) else {
+            continue;
+        };
         let before = forge_geom::blend::ON_BOTH_FAILS.load(Ordering::Relaxed);
         let m = forge_lang::fuzz::build_with(&src, opts());
         let in_build = forge_geom::blend::ON_BOTH_FAILS.load(Ordering::Relaxed) - before;
@@ -337,7 +403,9 @@ fn onboth(files: &[String]) {
             println!("{f}: {in_build} in the part's own build");
         }
         for k in 0..m.features.len() {
-            let forge_model::Feature::Fillet { edges, .. } = &m.features[k] else { continue };
+            let forge_model::Feature::Fillet { edges, .. } = &m.features[k] else {
+                continue;
+            };
             let Some(body) = m.body_after(k) else { continue };
             let body = if body.dead > 0 { body.compact() } else { body };
             let r = edges.iter().find_map(|(_, x)| match x {
@@ -391,12 +459,19 @@ fn onboth(files: &[String]) {
 /// result and the truth.
 fn score(f: &str) {
     use forge_bool::classify::{Index, Where};
-    let Ok(src) = std::fs::read_to_string(f) else { return };
-    let m = forge_lang::fuzz::build_with(&src, opts());
-    let Some(k) = (0..m.features.len()).rev().find(|&k| matches!(m.features[k], forge_model::Feature::Fillet { .. })) else {
+    let Ok(src) = std::fs::read_to_string(f) else {
         return;
     };
-    let forge_model::Feature::Fillet { edges, .. } = &m.features[k] else { return };
+    let m = forge_lang::fuzz::build_with(&src, opts());
+    let Some(k) = (0..m.features.len())
+        .rev()
+        .find(|&k| matches!(m.features[k], forge_model::Feature::Fillet { .. }))
+    else {
+        return;
+    };
+    let forge_model::Feature::Fillet { edges, .. } = &m.features[k] else {
+        return;
+    };
     let Some(before) = m.body_after(k) else { return };
     let before = if before.dead > 0 { before.compact() } else { before };
     let idx = Index::new(&before);
@@ -405,8 +480,12 @@ fn score(f: &str) {
     // picked edges: (edge, r, convex, pokes)
     let mut picks = Vec::new();
     for (name, radius) in edges {
-        let forge_ops::Radius::Constant(r) = radius else { continue };
-        let Some(e) = before.edge_by_name(*name) else { continue };
+        let forge_ops::Radius::Constant(r) = radius else {
+            continue;
+        };
+        let Some(e) = before.edge_by_name(*name) else {
+            continue;
+        };
         let convex = forge_ops::fillet::fillet_kind(&before, e) == Some(true);
         let mut pokes = false;
         if convex && let Ok((b, _, _)) = forge_ops::fillet::edge_blend(&before, e, *r) {
@@ -419,7 +498,10 @@ fn score(f: &str) {
                     let z = 1.0 - 2.0 * (j as f64 + 0.5) / n as f64;
                     let a = j as f64 * 2.399_963_229_728_653;
                     let q = (1.0 - z * z).max(0.0).sqrt();
-                    outside(c + Vec3::new(q * a.cos(), q * a.sin(), z) * (k * r))
+                    outside(
+                        c + Vec3::new(q * forge_math::dmath::cos(a), q * forge_math::dmath::sin(a), z)
+                            * (k * r),
+                    )
                 })
                 .count()
                 >= need;
@@ -440,7 +522,11 @@ fn score(f: &str) {
     };
     // a ball of radius r about c misses the body before (sampled: its centre and 60 sphere points)
     // SCORE_STRICT: 400 points on the sphere and on shells at 0.5 r and 0.8 r
-    let n: usize = if std::env::var_os("SCORE_STRICT").is_some() { 400 } else { 60 };
+    let n: usize = if std::env::var_os("SCORE_STRICT").is_some() {
+        400
+    } else {
+        60
+    };
     let shells: &[f64] = if n > 60 { &[1.0, 0.8, 0.5] } else { &[1.0] };
     let free = |c: Point3, r: f64| {
         outside(c)
@@ -449,7 +535,10 @@ fn score(f: &str) {
                     let z = 1.0 - 2.0 * (j as f64 + 0.5) / n as f64;
                     let a = j as f64 * 2.399_963_229_728_653;
                     let q = (1.0 - z * z).max(0.0).sqrt();
-                    outside(c + Vec3::new(q * a.cos(), q * a.sin(), z) * (r * k))
+                    outside(
+                        c + Vec3::new(q * forge_math::dmath::cos(a), q * forge_math::dmath::sin(a), z)
+                            * (r * k),
+                    )
                 })
             })
     };
@@ -469,8 +558,16 @@ fn score(f: &str) {
             };
             println!(
                 "{{\"x\":{},\"y\":{},\"z\":{},\"before\":\"{}\",\"convex\":{convex},\"pokes\":{pokes},\"covered\":{covered},\"r\":{r}}}",
-                p.x, p.y, p.z,
-                if bin { "in" } else if bout { "out" } else { "on" }
+                p.x,
+                p.y,
+                p.z,
+                if bin {
+                    "in"
+                } else if bout {
+                    "out"
+                } else {
+                    "on"
+                }
             );
         }
     }
@@ -480,7 +577,9 @@ fn score(f: &str) {
 /// direction, its radius and kind, and its two faces' surfaces (for comparing a truth's blend
 /// cylinder against the carried supports). One JSON line per edge.
 fn supports(f: &str, k: usize) {
-    let Ok(src) = std::fs::read_to_string(f) else { return };
+    let Ok(src) = std::fs::read_to_string(f) else {
+        return;
+    };
     let m = forge_lang::fuzz::build_with(&src, opts());
     let Some(forge_model::Feature::Fillet { edges, .. }) = m.features.get(k) else {
         eprintln!("feature {k} is no fillet ({} features)", m.features.len());
@@ -489,8 +588,12 @@ fn supports(f: &str, k: usize) {
     let Some(body) = m.body_after(k) else { return };
     let body = if body.dead > 0 { body.compact() } else { body };
     for (name, radius) in edges {
-        let forge_ops::Radius::Constant(r) = radius else { continue };
-        let Some(e) = body.edge_by_name(*name) else { continue };
+        let forge_ops::Radius::Constant(r) = radius else {
+            continue;
+        };
+        let Some(e) = body.edge_by_name(*name) else {
+            continue;
+        };
         let x = body.edge(e);
         let d = x.curve.deriv(x.range.mid());
         let faces: Vec<String> = x
@@ -498,7 +601,11 @@ fn supports(f: &str, k: usize) {
             .iter()
             .map(|&c| {
                 let fid = body.coedge_face(c);
-                format!("{{\"s\":{},\"sense\":{}}}", surf(&body.face(fid).surface), body.face(fid).same_sense)
+                format!(
+                    "{{\"s\":{},\"sense\":{}}}",
+                    surf(&body.face(fid).surface),
+                    body.face(fid).same_sense
+                )
             })
             .collect();
         // the ball tangent to both carried planes at the edge's middle: are its feet on the body?
@@ -575,8 +682,12 @@ fn parts(files: &[String]) {
             let Some(body) = m.body_after(k) else { continue };
             let body = if body.dead > 0 { body.compact() } else { body };
             for (name, radius) in edges {
-                let forge_ops::Radius::Constant(r) = radius else { continue };
-                let Some(e) = body.edge_by_name(*name) else { continue };
+                let forge_ops::Radius::Constant(r) = radius else {
+                    continue;
+                };
+                let Some(e) = body.edge_by_name(*name) else {
+                    continue;
+                };
                 println!("{}", line(&format!("{f}#{k}"), &body, e, *r));
             }
         }
@@ -605,7 +716,9 @@ fn random_part(g: &mut Rng) -> String {
     let n = 3 + (g.next() % 4) as usize;
     let rad = g.grid(30.0, 50.0);
     // a convex polygon: angles in order round the circle, radii varying a little
-    let mut angles: Vec<f64> = (0..n).map(|i| (i as f64 + g.grid(0.0, 0.6)) * 360.0 / n as f64).collect();
+    let mut angles: Vec<f64> = (0..n)
+        .map(|i| (i as f64 + g.grid(0.0, 0.6)) * 360.0 / n as f64)
+        .collect();
     angles.sort_by(f64::total_cmp);
     let mut s = String::new();
     let _ = writeln!(s, "shared t = {}", g.grid(8.0, 20.0));
@@ -618,7 +731,9 @@ fn random_part(g: &mut Rng) -> String {
     }
     let _ = writeln!(s, "shared pr = {rad}");
     let _ = writeln!(s, "sketch plan(on: xy) {{");
-    let pts: Vec<String> = (0..n).map(|i| format!("(pr * cos(pa{i}), pr * sin(pa{i}))")).collect();
+    let pts: Vec<String> = (0..n)
+        .map(|i| format!("(pr * cos(pa{i}), pr * sin(pa{i}))"))
+        .collect();
     let _ = writeln!(s, "  outline = poly([{}], closed: true)", pts.join(", "));
     let _ = writeln!(s, "}}");
     let _ = writeln!(s, "base = extrude(plan, t)");

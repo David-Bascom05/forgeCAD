@@ -67,6 +67,11 @@ pub(crate) fn sort_u32(v: &mut Vec<u32>) {
     *v = src;
 }
 
+/// `a ≤ b` lexicographically, field by field.
+fn le3(a: (u32, u32, u32), b: (u32, u32, u32)) -> bool {
+    a.0 < b.0 || (a.0 == b.0 && (a.1 < b.1 || (a.1 == b.1 && a.2 <= b.2)))
+}
+
 /// Ascending lexicographically, stable.
 pub(crate) fn sort_triples(v: &mut Vec<(u32, u32, u32)>) {
     let n = v.len();
@@ -83,7 +88,7 @@ pub(crate) fn sort_triples(v: &mut Vec<(u32, u32, u32)>) {
             let hi = if lo + 2 * width < n { lo + 2 * width } else { n };
             let (mut i, mut j, mut k) = (lo, mid, lo);
             while k < hi {
-                if i < mid && (j >= hi || src[i] <= src[j]) {
+                if i < mid && (j >= hi || le3(src[i], src[j])) {
                     dst[k] = src[i];
                     i += 1;
                 } else {

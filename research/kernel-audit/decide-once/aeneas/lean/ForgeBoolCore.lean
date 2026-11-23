@@ -20,4 +20,15 @@ import ForgeBoolCore.RefineSortU32
 import ForgeBoolCore.EnumModel
 import ForgeBoolCore.RefineAround
 import ForgeBoolCore.RefineTouch
+import ForgeBoolCore.RefineBetween
+import ForgeBoolCore.RefineFan
 import ForgeBoolCore.Axioms
+import ForgeBoolCore.Specs
+import ForgeBoolCore.BridgeResult
+import ForgeBoolCore.BridgeTouch
+import ForgeBoolCore.RefineCore
+import ForgeBoolCore.Encode
+import ForgeBoolCore.EndToEnd
+import ForgeBoolCore.Integrate
+import ForgeBoolCore.RefineSplitOk
+import ForgeBoolCore.RefineCollapse

@@ -117,7 +117,7 @@ theorem resIds_nodup (s : Split) (keep : List Bool) (hnd : (s.facets.val.map (·
     exact this
   · exact List.Nodup.filter _ List.nodup_range
 
-theorem keep_res_spec (s : Split) (keep : alloc.vec.Vec Bool) (N : Nat)
+theorem keep_res_spec (s : Split) (keep : Slice Bool) (N : Nat)
     (hwf : SplitWF s 0) (hnd : (s.facets.val.map (·.val)).Nodup)
     (hFN : ∀ x ∈ s.facets.val, x.val < N) (hsmall : s.facets.val.length < U32.max)
     (hkl : s.topes.val.length ≤ keep.val.length)
@@ -125,16 +125,18 @@ theorem keep_res_spec (s : Split) (keep : alloc.vec.Vec Bool) (N : Nat)
     (hk : k.val ≤ s.facets.val.length)
     (hinv : TInv RP.val R.val (resIds s keep.val k.val) N ∧
       O.val = (resIdx s keep.val k.val).map (orientOf s keep.val)) :
-    keep_on_loop1 s.facets s.plus s.minus s.tope_pos keep R O RP k ⦃ r =>
-      TInv r.2.2.val r.1.val (resIds s keep.val s.facets.val.length) N ∧
-      r.2.1.val = (resIdx s keep.val s.facets.val.length).map (orientOf s keep.val) ⦄ := by
-  unfold keep_on_loop1
+    core_k_loop0 s keep R O RP k ⦃ r =>
+      r.1 = s.facets ∧ r.2.1 = s.plus ∧ r.2.2.1 = s.minus ∧ r.2.2.2.1 = s.topes ∧ r.2.2.2.2.1 = s.tope_pos ∧
+      r.2.2.2.2.2.1 = s.first_face ∧ r.2.2.2.2.2.2.1 = s.piece_of ∧
+      TInv r.2.2.2.2.2.2.2.2.2.val r.2.2.2.2.2.2.2.1.val (resIds s keep.val s.facets.val.length) N ∧
+      r.2.2.2.2.2.2.2.2.1.val = (resIdx s keep.val s.facets.val.length).map (orientOf s keep.val) ⦄ := by
+  unfold core_k_loop0
   apply loop.spec_decr_nat
     (fun (q : alloc.vec.Vec U32 × alloc.vec.Vec Sgn × alloc.vec.Vec U32 × Usize) => s.facets.val.length - q.2.2.2.val)
     (fun q => q.2.2.2.val ≤ s.facets.val.length ∧ TInv q.2.2.1.val q.1.val (resIds s keep.val q.2.2.2.val) N ∧
       q.2.1.val = (resIdx s keep.val q.2.2.2.val).map (orientOf s keep.val))
   · rintro ⟨R0, O0, RP0, j⟩ ⟨hj, hti, ho⟩
-    unfold keep_on_loop1.body
+    unfold core_k_loop0.body
     simp only at hj hti ho ⊢
     split
     · rename_i hlt
@@ -227,7 +229,7 @@ theorem keep_res_spec (s : Split) (keep : alloc.vec.Vec Bool) (N : Nat)
     · rename_i hge
       simp only [WP.spec_ok]
       have : j.val = s.facets.val.length := by scalar_tac
-      rw [← this]; exact ⟨hti, ho⟩
+      rw [← this]; exact ⟨trivial, trivial, trivial, trivial, trivial, trivial, trivial, hti, ho⟩
   · exact ⟨hk, hinv⟩
 
 end forge_bool_core

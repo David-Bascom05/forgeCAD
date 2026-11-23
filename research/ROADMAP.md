@@ -26,6 +26,20 @@ bits. Work happens on session branches `claude/repo-review-mbdrlj-*`, is merged 
    (research/fillets/general-method.md), on the proven boolean. Judged by the fillet oracle and the
    census.
 
+CAM (owner, 2026-11-23: "start on cam"):
+- The research is in research/cam/ (README.md and the notes). Fusion is the reference for workflow and breadth. ForgeCAD's edge is that every toolpath is proven gouge- and collision-free against the exact part, or refused with a fix.
+- The design record is research/cam/design.md, kept current by the CAM session (branch suffix `cam`).
+- Phase 0: exact 2D offsets plus the certified tool–part checker (forge-cam-geom, Aeneas style). This is the risk, and a go/no-go on speed.
+- Phase 1: usable 2.5D:
+  - libraries (tools/holders, machines, materials with feeds and speeds) in our own TOML, with a Fusion tool-JSON import;
+  - setups and stock;
+  - face, contour, pocket, slot, chamfer, drill cycles, bore, thread mill and engrave;
+  - exact stock simulation;
+  - posts for Fanuc, Haas, LinuxCNC and GRBL, with round-trip;
+  - setup sheets, a .fg `machining` document, schema forgecad.cam/1, CLI, MCP and a Manufacture workspace;
+  - machining from design intent: holes and threads from the history.
+- Later: adaptive (after counsel reviews research/cam/patents.md), 3-axis, 3+2, turning and 5-axis.
+
 Decisions:
 - Non-manifold boolean results are refused (ZeroThickness, naming where the bodies touch), as
   mainstream mechanical CAD does; not represented (2026-11-22).

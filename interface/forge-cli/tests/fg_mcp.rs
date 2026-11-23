@@ -103,7 +103,7 @@ impl Drop for Server {
 }
 
 fn scratch(name: &str) -> PathBuf {
-    let d = std::env::temp_dir().join(format!("forgecad-fg-{name}-{}", std::process::id()));
+    let d = forge_dirs::temp_dir().join(format!("forgecad-fg-{name}-{}", forge_dirs::process_id()));
     std::fs::create_dir_all(&d).unwrap();
     std::fs::canonicalize(d).unwrap()
 }
@@ -287,7 +287,7 @@ fn serve_keeps_the_stages_and_refuses_files_outside_the_root() {
     assert_eq!(check.get("rebuilt").and_then(Json::num), Some(0.0));
     assert!(check.get("part").is_none());
     // outside the root
-    let out = std::env::temp_dir().join(format!("forgecad-fg-outside-{}.fg", std::process::id()));
+    let out = forge_dirs::temp_dir().join(format!("forgecad-fg-outside-{}.fg", forge_dirs::process_id()));
     std::fs::write(&out, PLATE).unwrap();
     let r = m.ask("build", Json::obj(vec![("file", out.to_str().unwrap().into())]));
     assert_eq!(r.get("ok"), Some(&Json::Bool(false)));
@@ -625,5 +625,60 @@ fn an_edit_against_a_version_the_file_has_moved_on_from_is_refused() {
         .unwrap();
     let text = String::from_utf8_lossy(&out.stdout);
     assert!(out.status.success() && text.starts_with("6 found"), "{text}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_sheet_part_is_bend_simulated_over_mcp_and_the_cli() {
+    let dir = scratch("bendsim");
+    let file = dir.join("l.fg");
+    std::fs::copy(
+        concat!(env!("CARGO_MANIFEST_DIR"), "/../forge-lang/parts/sheet/l.fg"),
+        &file,
+    )
+    .unwrap();
+    let f = file.to_str().unwrap();
+    let mut m = Server::start("mcp", &dir);
+    let _ = m.ask("initialize", Json::obj(vec![]));
+    let (err, j, _) = m.tool(
+        "query",
+        vec![
+            ("file", f.into()),
+            ("sel", "bendsim".into()),
+            ("tooling", "std-us".into()),
+        ],
+    );
+    assert!(!err, "{j}");
+    assert_eq!(s(&j, "schema"), "forgecad.bendsim/1");
+    assert_eq!(s(&j, "tooling"), "std-us");
+    assert_eq!(j.get("feasible"), Some(&Json::Bool(true)), "{j}");
+    assert!(!arr(&j, "steps").is_empty());
+    // a bend that is not there: typed, with the bends it could be
+    let (err, j, _) = m.tool(
+        "query",
+        vec![
+            ("file", f.into()),
+            ("sel", "bendsim".into()),
+            ("sequence", "nope".into()),
+        ],
+    );
+    assert!(err, "{j}");
+    // the CLI's flags
+    let out = Command::new(env!("CARGO_BIN_EXE_forgecad"))
+        .args([
+            "query",
+            f,
+            "bendsim",
+            "--tooling",
+            "std-eu",
+            "--sequence",
+            "1",
+            "--json",
+        ])
+        .output()
+        .unwrap();
+    let j = Json::parse(String::from_utf8_lossy(&out.stdout).trim()).unwrap();
+    assert_eq!(s(&j, "tooling"), "std-eu");
+    assert_eq!(arr(&j, "sequence").len(), 1);
     let _ = std::fs::remove_dir_all(&dir);
 }

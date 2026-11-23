@@ -33,7 +33,7 @@ fn names() -> Vec<String> {
 /// A folder with the block font in it, for the parts' text.
 fn font_dir() -> std::path::PathBuf {
     // (one name for every run, not one by process id: a count must not depend on the id's digits)
-    let dir = std::env::temp_dir().join("forge-benchparts");
+    let dir = forge_dirs::temp_dir().join("forge-benchparts");
     std::fs::create_dir_all(&dir).expect("temp dir");
     std::fs::write(dir.join(forge_lang::bench::FONT), forge_lang::bench::font_bytes()).expect("font");
     dir

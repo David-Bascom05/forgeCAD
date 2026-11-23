@@ -14,6 +14,9 @@ import ForgeExact.DecideOnce.Sample
 import ForgeExact.DecideOnce.Sampler
 import ForgeExact.Alg.Sum
 import ForgeExact.Quad.Cert
+import ForgeExact.DecideOnce.Frontier
+import ForgeExact.DecideOnce.Local
+import ForgeExact.QRef.Octree
 
 /-!
 # Only the standard axioms
@@ -136,6 +139,14 @@ elab "#standard_axioms " ids:ident* : command => do
   ForgeExact.DecideOnce.Sampler.sampler_covers
   ForgeExact.DecideOnce.Sampler.flat_exact
   ForgeExact.DecideOnce.Sampler.flat_correct
+  ForgeExact.DecideOnce.Frontier.reg_local
+  ForgeExact.DecideOnce.Frontier.far_unchanged
+  ForgeExact.DecideOnce.Frontier.frontier_local
+  ForgeExact.DecideOnce.Frontier.split_at_region
+  ForgeExact.DecideOnce.result_iff_in
+  ForgeExact.DecideOnce.reg_in
+  ForgeExact.DecideOnce.zeroThickness_iff_in
+  ForgeExact.DecideOnce.correct_ok_in
   ForgeExact.Alg.noPosRoot_spec
   ForgeExact.Alg.onePosRoot_spec
   ForgeExact.Alg.moebius_unique
@@ -162,3 +173,9 @@ elab "#standard_axioms " ids:ident* : command => do
   ForgeExact.Quad.member_box
   ForgeExact.Quad.pairCheck_spec
   ForgeExact.Quad.empty_of_patterns
+  ForgeExact.QRef.BF.eval3_sound
+  ForgeExact.QRef.BF.allFalse_sound
+  ForgeExact.QRef.reg_off_wall
+  ForgeExact.QRef.in_box
+  ForgeExact.QRef.out_box
+  ForgeExact.QRef.empty_of_leaves

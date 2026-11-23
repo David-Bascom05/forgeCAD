@@ -1,5 +1,6 @@
 import Std.Data.HashMap
 import ForgeExact.QRef.Faces
+import ForgeExact.QRef.BF
 
 /-!
 # The curved reference: the boolean of solids bounded by planes and quadrics, decided exactly
@@ -59,7 +60,17 @@ structure Arr where
   solids : Array (String × Array Lit)
   /-- each carrier: the faces on it (solid, face) -/
   faces : Array (Array (Nat × Nat))
+  /-- the history as one formula over the carriers' signs -/
+  bf : BF
   deriving Inhabited
+
+/-- The history as a formula (`ForgeExact.combine`: new and add unite, cut takes away, keep
+intersects; a solid is the conjunction of its literals). -/
+def historyBF (solids : Array (String × Array Lit)) : BF :=
+  solids.foldl (fun r (op, lits) =>
+    let inS := lits.foldl (fun acc l => BF.and acc (BF.lit l.idx l.pos)) BF.tt
+    if op == "cut" then BF.and r (BF.not inS) else if op == "keep" then BF.and r inS else BF.or r inS)
+    BF.ff
 
 def addQ (qs : Array Quadric) (q : Quadric) : Array Quadric × Lit :=
   let (c, s) := canon q
@@ -88,60 +99,21 @@ def arrOf (solids : Array QSolid) : Arr := Id.run do
         lits := lits.push l2
       | none => pure ()
     out := out.push (s.op, lits)
-  return ⟨qs, out, faces⟩
+  return ⟨qs, out, faces, historyBF out⟩
 
-/-- The history on a sign pattern (`ForgeExact.combine`: new and add unite, cut takes away, keep
-intersects). -/
-def Arr.keptOn (A : Arr) (σ : Nat → Bool) : Bool :=
-  A.solids.foldl (fun r (op, lits) =>
-    let inS := lits.all fun l => σ l.idx == l.pos
-    if op == "cut" then r && !inS else if op == "keep" then r && inS else r || inS) false
+/-- The history on a sign pattern. -/
+def Arr.keptOn (A : Arr) (σ : Nat → Bool) : Bool := A.bf.eval2 σ
 
-/-! ## Three-valued classification over a box -/
+/-- Kleene's value over a box's signs (`BF.eval3_sound`). -/
+def Arr.keptK (A : Arr) (sg : Array Int) : Option Bool := A.bf.eval3 fun k => sg.getD k 0
 
-/-- Kleene: `some b` decided, `none` unknown. -/
-def Arr.keptK (A : Arr) (sg : Array Int) : Option Bool :=
-  let and3 : Option Bool → Option Bool → Option Bool := fun a b =>
-    match a, b with
-    | some false, _ => some false
-    | _, some false => some false
-    | some true, some true => some true
-    | _, _ => none
-  let or3 : Option Bool → Option Bool → Option Bool := fun a b =>
-    match a, b with
-    | some true, _ => some true
-    | _, some true => some true
-    | some false, some false => some false
-    | _, _ => none
-  let not3 : Option Bool → Option Bool := fun a => a.map (!·)
-  A.solids.foldl (fun r (op, lits) =>
-    let inS := lits.foldl (fun acc l =>
-      let s := sg[l.idx]!
-      and3 acc (if s == 0 then none else some ((s > 0) == l.pos))) (some true)
-    if op == "cut" then and3 r (not3 inS) else if op == "keep" then and3 r inS else or3 r inS)
-    (some false)
-
-/-- An exclusion: no point has quadric `i` of sign `si` and `j` of sign `sj`. -/
-structure Excl where
-  i : Nat
-  si : Bool
-  j : Nat
-  sj : Bool
-  deriving Inhabited, BEq
-
-/-- Every pattern of the undecided quadrics allowed by the exclusions: does any keep? `none` past
-the enumeration cap. -/
-def Arr.anyKept (A : Arr) (sg : Array Int) (ex : Array Excl) : Option Bool := Id.run do
-  let und := (Array.range sg.size).filter fun i => sg[i]! == 0
-  if und.size > 12 then return none
-  for m in [0:2 ^ und.size] do
-    let σ : Nat → Bool := fun i =>
-      match und.findIdx? (· == i) with
-      | some k => (m >>> k) % 2 == 1
-      | none => sg[i]! > 0
-    let allowed := ex.all fun e => !(σ e.i == e.si && σ e.j == e.sj)
-    if allowed && A.keptOn σ then return some true
-  return some false
+/-- Every pattern of the undecided quadrics allowed by the exclusions: does any keep? `some
+false` only if none does (`BF.allFalse_sound`); `none` past the enumeration cap. -/
+def Arr.anyKept (A : Arr) (sg : Array Int) (ex : Array Excl) : Option Bool :=
+  let und := ((Array.range sg.size).filter fun i => sg[i]! == 0).toList
+  if und.length > 12 then none
+  else if BF.allFalse A.bf ex.toList und (fun i => decide (sg.getD i 0 > 0)) then some false
+  else some true
 
 /-! ## The octree -/
 
@@ -788,7 +760,18 @@ def contactAt (A : Arr) (i j : Nat) (t : Rat) : Option Contact := Id.run do
     let D : V3 := ⟨v2[0]! - w * v1[0]!, v2[1]! - w * v1[1]!, v2[2]! - w * v1[2]!⟩
     let gi := alongLine qi P D
     let ls := others.map fun k => (k, alongLine A.qs[k]! P D)
-    let rootsOthers := ls.foldl (fun acc (_, g) => acc ++ realRoots g) #[]
+    let rootsOthers0 := ls.foldl (fun acc (_, g) => acc ++ realRoots g) #[]
+    -- along a contact line the transversal form S(w, w) and the cross term S(D, w), with
+    -- w = ∇q_i(P + sD) × D, are polynomials in s (degree 2 and 1): their roots join the
+    -- subdivision, so the test at one point of an interval holds on all of it
+    let n0 := qi.grad P
+    let n1 := (qi.grad (P + D)) - n0
+    let w0 := n0.cross D
+    let w1 := n1.cross D
+    let ww : Poly := [bil M w0 w0, 2 * bil M w0 w1, bil M w1 w1]
+    let dw : Poly := [bil M D w0, bil M D w1]
+    let rootsOthers := if Poly.isZero gi then rootsOthers0 ++ realRoots (Poly.sqfree ww) ++ realRoots dw
+      else rootsOthers0
     if Poly.isZero gi then
       -- a contact line: each interval between the other quadrics' roots
       match sortNums rootsOthers with
@@ -904,8 +887,8 @@ def components (pts : Array (Float × Float × Float)) (ang : Float) : Nat := Id
 
 /-- The result at a cone's apex lying on other surfaces: its tangent cone there (first order:
 the cone's own quadratic form, the other surfaces' gradients), sampled over the sphere of
-directions with exact signs; non-manifold if the kept or the dropped directions fall apart.
-(Probed: the directions are samples, the signs at each exact.) -/
+directions with exact signs; flagged if the kept or the dropped directions fall apart.
+Sampled, so it never decides a verdict: a flag makes it ambiguous. -/
 def apexCheck (A : Arr) (solids : Array QSolid) : Array String := Id.run do
   let mut out : Array String := #[]
   let dirs := sphereDirs 3000
@@ -1006,72 +989,77 @@ def convergents (x : Float) : Array Rat := Id.run do
     y := 1 / frac
   return out
 
-/-- A float 4×4 solve by Gaussian elimination with partial pivoting (`none` if singular). -/
-def fsolve (m : Array (Array Float)) (b : Array Float) : Option (Array Float) := Id.run do
-  let mut a := (Array.range 4).map fun i => m[i]!.push b[i]!
-  for k in [0:4] do
-    let mut p := k
-    for r in [k + 1:4] do
-      if a[r]![k]!.abs > a[p]![k]!.abs then p := r
-    if a[p]![k]! == 0 then return none
-    let t := a[p]!
-    a := (a.set! p a[k]!).set! k t
-    for r in [k + 1:4] do
-      let f := a[r]![k]! / a[k]![k]!
-      a := a.set! r ((Array.range 5).map fun c => a[r]![c]! - f * a[k]![c]!)
-  let mut x : Array Float := Array.replicate 4 0
-  for kk in [0:4] do
-    let k := 3 - kk
-    let mut sacc := a[k]![4]!
-    for c in [k + 1:4] do sacc := sacc - a[k]![c]! * x[c]!
-    x := x.set! k (sacc / a[k]![k]!)
-  return some x
+/-- A float `k×k` solve by Gaussian elimination with partial pivoting, and the determinant. -/
+def fsolveN (m : Array (Array Float)) (b : Array Float) : Float × Option (Array Float) := Id.run do
+  let k := m.size
+  let mut a := (Array.range k).map fun i => m[i]!.push b[i]!
+  let mut det : Float := 1
+  for c in [0:k] do
+    let mut p := c
+    for r in [c + 1:k] do
+      if a[r]![c]!.abs > a[p]![c]!.abs then p := r
+    if a[p]![c]! == 0 then return (0, none)
+    if p != c then
+      let t := a[p]!
+      a := (a.set! p a[c]!).set! c t
+      det := -det
+    det := det * a[c]![c]!
+    for r in [c + 1:k] do
+      let f := a[r]![c]! / a[c]![c]!
+      a := a.set! r ((Array.range (k + 1)).map fun cc => a[r]![cc]! - f * a[c]![cc]!)
+  let mut x : Array Float := Array.replicate k 0
+  for kk in [0:k] do
+    let r := k - 1 - kk
+    let mut sacc := a[r]![k]!
+    for c in [r + 1:k] do sacc := sacc - a[r]![c]! * x[c]!
+    x := x.set! r (sacc / a[r]![r]!)
+  return (det, some x)
 
 /-- Two quadrics that come within `l` of touching without an exact contact: a near-double root
-`t` of the pencil's determinant (a local minimum of its magnitude, tiny against its scale), the
-point the near-singular member's null vector gives, and that point within `l` of both surfaces
-and inside both faces' boxes (grown by `l`). Floating point: it only flags. -/
+`t` of the pencil's determinant (on the complement of their common null space: a local minimum of
+its magnitude, tiny against its scale), the point the near-singular member's null vector gives,
+within `l` of both surfaces (to first order; an apex is no touch) and inside the faces' boxes
+grown by `l`. Floating point: it only flags. -/
 def nearTouch (A : Arr) (boxes : Array Box) (l : Float) (i j : Nat) : Option String := Id.run do
   let qi := A.qs[i]!
   let qj := A.qs[j]!
-  let fi := (Quadric.mat qi).map (·.map qf)
-  let fj := (Quadric.mat qj).map (·.map qf)
-  let member := fun (t : Float) => (Array.range 4).map fun r => (Array.range 4).map fun c => fi[r]![c]! + t * fj[r]![c]!
-  let fdet := fun (m : Array (Array Float)) =>
-    let sub := fun (r c : Nat) => m[r]![c]!
-    -- Laplace along the first row of 3×3 minors
-    let d3 := fun (a b c d e f g h i : Float) => a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g)
-    sub 0 0 * d3 (sub 1 1) (sub 1 2) (sub 1 3) (sub 2 1) (sub 2 2) (sub 2 3) (sub 3 1) (sub 3 2) (sub 3 3)
-    - sub 0 1 * d3 (sub 1 0) (sub 1 2) (sub 1 3) (sub 2 0) (sub 2 2) (sub 2 3) (sub 3 0) (sub 3 2) (sub 3 3)
-    + sub 0 2 * d3 (sub 1 0) (sub 1 1) (sub 1 3) (sub 2 0) (sub 2 1) (sub 2 3) (sub 3 0) (sub 3 1) (sub 3 3)
-    - sub 0 3 * d3 (sub 1 0) (sub 1 1) (sub 1 2) (sub 2 0) (sub 2 1) (sub 2 2) (sub 3 0) (sub 3 1) (sub 3 2)
+  let ai := Quadric.mat qi
+  let aj := Quadric.mat qj
+  let (common, piv) := nullSpaceP (ai ++ aj)
+  let ix : Array Nat := if common.isEmpty then #[0, 1, 2, 3] else piv
+  if !ix.contains 3 then return none
+  let fi := (ai.sub ix).map (·.map qf)
+  let fj := (aj.sub ix).map (·.map qf)
+  let k := ix.size
+  let member := fun (t : Float) => (Array.range k).map fun r => (Array.range k).map fun c => fi[r]![c]! + t * fj[r]![c]!
   let norm := fun (m : Array (Array Float)) => m.foldl (fun a r => r.foldl (fun a v => a + v.abs) a) 0
-  let rel := fun (t : Float) => let m := member t; (fdet m).abs / (Float.pow (norm m) 4 + 1e-300)
-  let n := 3000
+  let rhs : Array Float := (Array.range k).map fun r => 0.31 + 0.17 * r.toFloat
+  let rel := fun (t : Float) => let m := member t; (fsolveN m rhs).1.abs / (Float.pow (norm m) k.toFloat + 1e-300)
+  let n := 600
   let pi := 3.141592653589793
-  let at_ := fun (k : Nat) => Float.tan (-pi / 2 + pi * (k.toFloat + 0.5) / n.toFloat)
+  let at_ := fun (q : Nat) => Float.tan (-pi / 2 + pi * (q.toFloat + 0.5) / n.toFloat)
+  let rs := (Array.range n).map fun q => rel (at_ q)
+  -- a pencil whose determinant vanishes throughout is degenerate: nothing to see here
+  if rs.all (· < 1e-14) then return none
   let fb := boxes.map fun b => ((qf b.lo.x, qf b.lo.y, qf b.lo.z), (qf b.hi.x, qf b.hi.y, qf b.hi.z))
-  for k in [1:n - 1] do
-    let (t0, t1, t2) := (at_ (k - 1), at_ k, at_ (k + 1))
-    let (r0, r1, r2) := (rel t0, rel t1, rel t2)
-    if !(r1 ≤ r0 && r1 ≤ r2) then continue
-    -- golden-section refinement of the minimum
-    let mut a := t0
-    let mut b := t2
-    for _ in [0:80] do
+  for q in [1:n - 1] do
+    let (r0, r1, r2) := (rs[q - 1]!, rs[q]!, rs[q + 1]!)
+    if !(r1 ≤ r0 && r1 ≤ r2) || r1 > 1e-4 then continue
+    let mut a := at_ (q - 1)
+    let mut b := at_ (q + 1)
+    for _ in [0:60] do
       let m1 := a + (b - a) * 0.381966
       let m2 := a + (b - a) * 0.618034
       if rel m1 < rel m2 then b := m2 else a := m1
     let t := (a + b) / 2
     if rel t > 1e-13 then continue
-    -- the near-null vector, by one step of inverse iteration
-    let m := member t
-    let some v := fsolve m #[0.31, -0.57, 0.73, 0.19] | continue
-    if v[3]!.abs < 1e-300 then continue
-    let p : V3 := ⟨0, 0, 0⟩
-    let (px, py, pz) := (v[0]! / v[3]!, v[1]! / v[3]!, v[2]! / v[3]!)
-    let _ := p
-    -- the distance to each surface, to first order; a singular point (an apex) is no touch
+    let (_, some v) := fsolveN (member t) rhs | continue
+    let w := v[ix.size - 1]!
+    if w.abs < 1e-300 then continue
+    let coord := fun (c : Nat) => match ix.findIdx? (· == c) with
+      | some r => v[r]! / w
+      | none => 0
+    let (px, py, pz) := (coord 0, coord 1, coord 2)
     let dist := fun (q : Quadric) =>
       let f := FQ.of q
       let val := f.xx * px * px + f.yy * py * py + f.zz * pz * pz + f.xy * px * py + f.xz * px * pz +
@@ -1083,7 +1071,6 @@ def nearTouch (A : Arr) (boxes : Array Box) (l : Float) (i j : Nat) : Option Str
       let scale := (f.lx.abs + f.ly.abs + f.lz.abs + (f.xx.abs + f.yy.abs + f.zz.abs) * (px.abs + py.abs + pz.abs + 1))
       if g < 1e-6 * scale then 1e300 else val.abs / g
     if dist qi > l || dist qj > l then continue
-    -- inside the hull of all the faces on either carrier
     let near := fb.any fun ((lx, ly, lz), (hx, hy, hz)) =>
       lx - l ≤ px && px ≤ hx + l && ly - l ≤ py && py ≤ hy + l && lz - l ≤ pz && pz ≤ hz + l
     if near then

@@ -14,6 +14,13 @@ import ForgeBoolCore.RefineZeros
 import ForgeBoolCore.RefineSortU32
 import ForgeBoolCore.RefineAround
 import ForgeBoolCore.RefineTouch
+import ForgeBoolCore.RefineBetween
+import ForgeBoolCore.RefineFan
+import ForgeBoolCore.BridgeTouch
+import ForgeBoolCore.EndToEnd
+import ForgeBoolCore.Integrate
+import ForgeBoolCore.RefineSplitOk
+import ForgeBoolCore.RefineCollapse
 /-! The refinement lemmas use the standard axioms only. -/
 #print axioms forge_bool_core.zero_idx_spec
 #print axioms forge_bool_core.is_facet_spec
@@ -69,3 +76,36 @@ import ForgeBoolCore.RefineTouch
 #print axioms forge_bool_core.around_spec
 #print axioms forge_bool_core.is_edge_spec
 #print axioms forge_bool_core.edge_scan_spec
+#print axioms forge_bool_core.between_iff
+#print axioms forge_bool_core.between_spec
+#print axioms forge_bool_core.edges_between_spec
+#print axioms forge_bool_core.fan_classes
+#print axioms forge_bool_core.bad_vert_spec
+#print axioms forge_bool_core.vert_scan_spec
+-- group R: the bridges from positions and ids to covectors
+#print axioms forge_bool_core.R_result_eq
+#print axioms forge_bool_core.R_orient_eq
+#print axioms forge_bool_core.R_resOK_of
+#print axioms forge_bool_core.result_bridge_proof
+#print axioms forge_bool_core.around_bridge_proof
+#print axioms forge_bool_core.bad_edge_bridge_proof
+#print axioms forge_bool_core.bad_vert_bridge_proof
+#print axioms forge_bool_core.new_ext_spec_proof
+#print axioms forge_bool_core.core_k_spec_of
+#print axioms forge_bool_core.classify_on_spec_of
+#print axioms forge_bool_core.core_spec_of
+#print axioms forge_bool_core.end_to_end
+#print axioms forge_bool_core.encode_spec_proof
+#print axioms forge_bool_core.end_to_end_encode
+#print axioms forge_bool_core.end_to_end_SKU
+-- group S: split_ok
+#print axioms forge_bool_core.s_le3_spec
+#print axioms forge_bool_core.s_sort_triples_spec
+#print axioms forge_bool_core.s_adj_iff
+#print axioms forge_bool_core.s_loop0_spec
+#print axioms forge_bool_core.s_loop1_spec
+#print axioms forge_bool_core.split_ok_spec_proof
+#print axioms forge_bool_core.end_to_end_KU
+#print axioms forge_bool_core.collapse_spec_proof
+#print axioms forge_bool_core.K.collapse_eq
+#print axioms forge_bool_core.end_to_end_U

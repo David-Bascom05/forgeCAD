@@ -97,6 +97,22 @@ pub struct Cut {
     pub crosses_bend: bool,
 }
 
+/// How a bend zone ends, where a wall's edge meets the mold line off square. Each zone end is
+/// decided once, from the walls' own points on their tangent lines (where each wall's boundary
+/// leaves its tangent line): on square walls both give the joint's rectangle.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum EndCondition {
+    /// Square to the bend line, at the mold line's end: a wall whose edge runs past the zone's end
+    /// is relieved (its `Relief` rule), and a zone that runs past a wall's end has a free edge
+    /// there along that wall's tangent line.
+    #[default]
+    Normal,
+    /// The straight segment, on the flat, from one wall's point on its tangent line to the
+    /// other's: the walls' edges continued across the bend (a wrapped line folded). Where a wall's
+    /// edge runs past the mold line's end, the zone ends square there as `Normal`.
+    Aligned,
+}
+
 /// The id bit of a corner round's arc in a wall's outline.
 pub const ROUND_ID: u64 = 1 << 62;
 
@@ -119,6 +135,8 @@ pub struct Sheet {
     pub rule: crate::relief::ReliefRule,
     /// What a corner not listed in `corners` gets, overriding the rule's for this sheet.
     pub corner_default: Option<CornerKind>,
+    /// How each bend zone ends where a wall's edge meets its mold line off square.
+    pub bend_ends: EndCondition,
     /// Powder coated: the shop's coated size limit applies, not the raw one.
     pub coated: bool,
     /// Turret hits, each with its cuts among `cuts` (`crate::punch`).
@@ -177,6 +195,7 @@ impl Sheet {
             reliefs: Vec::new(),
             rule: crate::relief::ReliefRule::default(),
             corner_default: None,
+            bend_ends: EndCondition::Normal,
             coated: false,
             punches: Vec::new(),
             forms: Vec::new(),
@@ -241,8 +260,9 @@ impl Sheet {
                 }
                 let (u, w) = (u * (1.0 / lu), w * (1.0 / lw));
                 let (c, d) = (u.cross(w), u.dot(w));
-                // convex only: the outline runs counter-clockwise
-                if c <= 1e-9 {
+                // convex only (the outline runs counter-clockwise): a corner within the tolerance
+                // of straight over its shorter side is no corner
+                if c * lu.min(lw) <= tol::LINEAR {
                     continue;
                 }
                 let turn = dmath::atan2(c, d);
