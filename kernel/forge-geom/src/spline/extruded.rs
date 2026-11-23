@@ -40,11 +40,22 @@ pub(super) fn foot(c: &Spline, ext: Interval, q: Point3, near: Option<f64>) -> (
 }
 
 /// How far past each end a section may be carried and stay regular: its end pieces' polynomials
-/// continued (as the spline spec's `spanOf` continues them), up to the whole end piece's width,
-/// else the largest of a half, a quarter, .. of it that stays regular. An offset's mitre at a sharp
-/// corner of two such sections lies past their ends, as far as the offset over the tangent of half
-/// the corner's angle.
+/// continued (as the spline spec's `spanOf` continues them), the largest of a quarter, an eighth,
+/// .. of the end piece's width that stays regular (`carried_by` with `QUARTER`).
 pub(super) fn carried(c: &Spline) -> Option<Interval> {
+    carried_by(c, &QUARTER)
+}
+
+/// The fractions of the end piece a section is carried by, the first that stays regular: up to a
+/// quarter, as every surface on a section is carried.
+const QUARTER: [f64; 4] = [0.25, 0.125, 0.0625, 0.03125];
+/// Up to the whole end piece: an offset's (`Extruded::carried_whole`). Its mitre at a sharp corner
+/// of two sections lies past their ends, as far as the offset over the tangent of half the
+/// corner's angle.
+const WHOLE: [f64; 6] = [1.0, 0.5, 0.25, 0.125, 0.0625, 0.03125];
+
+/// `carried`, by these fractions of the end piece, the largest first.
+fn carried_by(c: &Spline, ks: &[f64]) -> Option<Interval> {
     let d = c.domain();
     if !c.regular_over(d) {
         return None;
@@ -52,7 +63,7 @@ pub(super) fn carried(c: &Spline) -> Option<Interval> {
     let b = c.breaks();
     let n = c.pieces();
     let (h0, h1) = (b[1] - b[0], b[n] - b[n - 1]);
-    for k in [1.0, 0.5, 0.25, 0.125, 0.0625, 0.03125] {
+    for &k in ks {
         let e = Interval::new(d.lo - k * h0, d.hi + k * h1);
         if c.regular_over(e) {
             return Some(e);
@@ -129,6 +140,17 @@ impl Extruded {
     }
     pub fn reach(&self) -> Interval {
         self.ext
+    }
+    /// The same wall carried past its section's ends up to the whole end piece (as far as it stays
+    /// regular), for an offset of it: the same surface over the domain, with more of its end
+    /// pieces' polynomials past it.
+    pub fn carried_whole(&self) -> Option<Extruded> {
+        let ext = carried_by(&self.c, &WHOLE)?;
+        let mut s = self.clone();
+        s.id = fresh_id();
+        s.ext = ext;
+        s.whole = s.c.bbox(ext);
+        Some(s)
     }
     /// The wall reflected, `frame` being the mirror image of its frame with y negated: the section
     /// has its y negated and runs the other way, so the natural normal is the old one reflected.

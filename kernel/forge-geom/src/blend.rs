@@ -91,8 +91,18 @@ impl Offset {
         if min_radius <= -d + tol::MIN_LENGTH {
             return None;
         }
+        // a spline wall's offset stands off it carried past its ends up to the whole end piece,
+        // where a mitre with its neighbour's offset may lie
+        let base = match base
+            .as_any()
+            .and_then(|a| a.downcast_ref::<crate::spline::Extruded>())
+            .and_then(|e| e.carried_whole())
+        {
+            Some(e) => Proc(Arc::new(e)),
+            None => base.clone(),
+        };
         Some(Surface::Procedural(Proc(Arc::new(Offset {
-            base: base.clone(),
+            base,
             d,
             id: fresh_id(),
         }))))

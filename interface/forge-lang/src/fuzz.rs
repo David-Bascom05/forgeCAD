@@ -1929,13 +1929,24 @@ fn thicken(g: &mut G) -> Option<Vec<String>> {
 fn chain_rows(g: &mut G, s: f64, sk: &str) -> (Vec<String>, String) {
     if !g.one_in(3) {
         let rows = g.loops(s);
-        let mut names: Vec<&str> = if rows[0].starts_with("o = ") { vec!["o"] } else { vec!["l", "a"] };
+        let mut names: Vec<&str> = if rows[0].starts_with("o = ") {
+            vec!["o"]
+        } else {
+            vec!["l", "a"]
+        };
         if rows.len() > names.len() && rows.last().is_some_and(|r| r.starts_with("c = ")) {
             names.push("c");
         }
         let arg = match names[..] {
             [one] => format!("{sk}.{one}"),
-            _ => format!("[{}]", names.iter().map(|x| format!("{sk}.{x}")).collect::<Vec<_>>().join(", ")),
+            _ => format!(
+                "[{}]",
+                names
+                    .iter()
+                    .map(|x| format!("{sk}.{x}"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
         };
         return (rows, arg);
     }
@@ -1975,7 +1986,13 @@ fn sheet(g: &mut G) -> Option<Vec<String>> {
     let (mut rows, arg) = chain_rows(g, s, &sk);
     let call = if g.one_in(4) {
         // turned about an axis clear of the chain
-        rows.push(format!("ax = line(({}, {}), ({}, {}))", n(-s), n(-1.5 * s), n(s), n(-1.5 * s)));
+        rows.push(format!(
+            "ax = line(({}, {}), ({}, {}))",
+            n(-s),
+            n(-1.5 * s),
+            n(s),
+            n(-1.5 * s)
+        ));
         let angle = 30 + 30 * g.r.below(11);
         format!("revolve({arg}, axis: {sk}.ax, angle: {angle}deg, surface: true)")
     } else {

@@ -2007,11 +2007,7 @@ fn extrude(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Val
 /// A sheet's chains: a whole sketch gives the loops of its region; anything else is read end to
 /// end, a chain ending where it closes (a loop, a circle, each contour of a text's glyph), each a
 /// tube with its front outside.
-fn sheet_chains_of(
-    ev: &Eval,
-    v: Value,
-    span: Span,
-) -> R<(Rc<RefCell<Sk>>, Vec<crate::shapes::Chain>)> {
+fn sheet_chains_of(ev: &Eval, v: Value, span: Span) -> R<(Rc<RefCell<Sk>>, Vec<crate::shapes::Chain>)> {
     if let Value::Sketch(_) = v {
         let (sk, p, _) = profile_of(ev, v, span)?;
         return Ok((sk, p.loops.into_iter().map(|l| l.segments).collect()));

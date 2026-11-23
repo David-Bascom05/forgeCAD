@@ -107,5 +107,8 @@ a = extrude(s.p, h, thin: {t}, side: \"{side}\")
         m.volume
     };
     let (out, inn, both) = (volume("1", "out"), volume("1", "in"), volume("2", "both"));
-    assert!((out + inn - both).abs() <= 1e-12 * both, "{out} + {inn} != {both}");
+    assert!(
+        (out + inn - both).abs() <= 1e-12 * both,
+        "{out} + {inn} != {both}"
+    );
 }
