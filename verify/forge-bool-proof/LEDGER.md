@@ -49,10 +49,11 @@ seams, and the curved screens S3/S4).
 | B.types | the translated `Body`, `Face`, `Loop`, `Coedge`, `Edge`, `Vertex`, `Surface`, `Curve` | TRANSLATE | open | verify/aeneas/forge-bool |
 | B.abs | `abs : Body → BodyModel`, the abstraction function | TRANSLATE (def), SPINE (use) | open | — |
 | T.model | forge-topo `check` returning no problem ⇒ `Valid` (L1/L3) | SPINE | proven | verify/forge-topo-check/lean `check_sound` |
-| T.strays | `topo::strays` refines `checkStrays` (L4) | SPINE | proven on rebase-fundamentals | `forge_topo.strays_refines` |
-| T.links | `topo::links` refines `checkLinks` (L4) | SPINE | proven on rebase-fundamentals | `forge_topo.links_refines` |
-| T.shells | `topo_shell::shell_faces` refines `checkShellFaces` (L4) | SPINE | proven on rebase-fundamentals | `forge_topo.shell_faces_refines` |
-| T.edges | `topo_edges::edges`, `loops` refine `checkEdges`, `checkLoops` (L4) | SPINE | proven on rebase-fundamentals | `forge_topo.edges_refines`, `loops_refines` |
+| T.strays | `topo::strays` refines `checkStrays` (L4) | SPINE | proven (overflow-checked translation) | `forge_topo.strays_refines` |
+| T.links | `topo::links` refines `checkLinks` (L4) | SPINE | proven (overflow-checked translation) | `forge_topo.links_refines` |
+| T.shells | `topo_shell::shell_faces` refines `checkShellFaces` (L4) | SPINE | proven (overflow-checked translation) | `forge_topo.shell_faces_refines` |
+| T.edges | `topo_edges::edges`, `loops` refine `checkEdges`, `checkLoops` (L4) | SPINE | proven (overflow-checked translation) | `forge_topo.edges_refines`, `loops_refines` |
+| T.ovf | the five forge-topo functions above, translated overflow-checked: no `usize`/`u32` overflow (Checked.lean) | SPINE | proven | verify/aeneas/forge-topo/lean (`usize_add_wspec`, `usize_sub_wspec`, the `_refines` theorems) |
 | T.euler | `check_shell_euler` (stamped distinct count = eraseDups) | SPINE | open | — |
 | T.fans | `check_fans` (corner table as an opaque view method) | SPINE | open | — |
 | T.all | `check_known`'s combinatorial part composed (`Model.check`) | SPINE | open | — |

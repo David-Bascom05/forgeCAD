@@ -955,7 +955,7 @@ theorem uses_mark_spec (R : ShellReads SI t b) (H : Sound b) (f0 : Nat) (s : Usi
           step*
           rw [hb2, hc2]
           have := fin (st.set sq (UScalar.cast .U32 g)) (by simp [alloc.vec.Vec.set_val_eq, hlt2'])
-          exact this
+          subst_vars; exact this
         · rename_i hlt2
           have hlt2' : ¬ sq.val < st.val.length := by simpa using hlt2
           have hpl : st.val.length < Usize.max := by
@@ -968,11 +968,11 @@ theorem uses_mark_spec (R : ShellReads SI t b) (H : Sound b) (f0 : Nat) (s : Usi
           step with alloc.vec.Vec.push_spec st (UScalar.cast .U32 g) hpl as ⟨st3, hst3⟩
           step*
           rw [hb2]
-          exact fin st3 (by rw [hst3, if_neg hlt2'])
+          subst_vars; exact fin st3 (by rw [hst3, if_neg hlt2'])
       · rename_i heq
         have hmk : sn.val[g.val]! = σ := by
           simp only [bne_iff_ne, ne_eq, Decidable.not_not] at heq; rw [← hx', heq]
-        step*
+        step*; subst_vars
         have hw' := hw _ rfl
         refine ⟨by rw [hw']; omega, Dj, hm, ?_, hacc, by rw [hw']; omega⟩
         intro j' hj'
@@ -1079,20 +1079,26 @@ theorem loops_mark_spec (R : ShellReads SI t b) (H : Sound b) (f0 : Nat) (s : Us
       have ⟨hln, hlf, hl1⟩ := H.loops f.val hf l.val hlm
       step with R.base.loop_first l hln as ⟨fs, hfs⟩
       step with R.base.loop_len l hln as ⟨len, hlen⟩
-      have hend : (fs.wrapping_add len).val = (b.lo l.val).first + (b.lo l.val).len := by
-        rw [Usize.wrapping_add_val_eq, hfs, hlen]; apply Nat.mod_eq_of_lt
+      have hlt64 : fs.val + len.val < 2 ^ UScalarTy.Usize.numBits := by
+        rw [hfs, hlen]
         by_cases h0 : (b.lo l.val).len = 0
-        · have := fs.hBounds; rw [h0, Nat.add_zero, ← hfs]; simp only [UScalar.size]; exact this
+        · have := fs.hBounds; rw [h0, Nat.add_zero, ← hfs]; simpa [UScalar.size] using this
         · have hm' : (b.lo l.val).first + ((b.lo l.val).len - 1) ∈ b.loopCoedges l.val := by
             rw [mem_loopCoedges]; omega
           have := (H.coedges l.val hln hl1 _ hm').1
           obtain ⟨n, hn⟩ := WP.spec_exists R.base.nc
           have hb := n.hBounds
-          simp only [UScalar.size]; omega
-      simp only [lift, Std.bind_ok]
+          omega
+      have hend : (fs.wrapping_add len).val = (b.lo l.val).first + (b.lo l.val).len := by
+        rw [Usize.wrapping_add_val_eq, ← hfs, ← hlen]; apply Nat.mod_eq_of_lt
+        simp only [UScalar.size]; exact hlt64
+      step with usize_add_wspec fs len (usize_le_max_of_lt _ hlt64) as ⟨fe, hfe⟩
+      subst hfe
       have hcm := coedges_mark_spec SI t b R H f0 s σ hσ f.val hf l.val hlm fs (fs.wrapping_add len) hfs hend
         sn st sq Di
       step with hcm as ⟨sn2, st2, sq2, D2, hm2, hall, hacc2⟩
+      step with usize_add_wspec i 1#usize (succ_le_max i nlf hlt') as ⟨i1, hi1⟩
+      subst hi1
       have hw : (i.wrapping_add 1#usize).val = i.val + 1 := succ_val i nlf hlt'
       refine ⟨by omega, D2, mono_trans b σ _ _ _ hm hm2, ?_, by omega, by omega⟩
       intro i' hi' c hc u hu
@@ -1169,7 +1175,8 @@ theorem pop_loop_spec (R : ShellReads SI t b) (H : Sound b) (f0 : Nat) (s : Usiz
       have hpos' : 0 < sq.val := by scalar_tac
       have hsub : (sq.wrapping_sub 1#usize).val = sq.val - 1 := sub_val sq 1#usize (by
         have : (1#usize).val = 1 := rfl; omega)
-      simp only [lift, Std.bind_ok]
+      step with usize_sub_wspec sq 1#usize (by have : (1#usize).val = 1 := rfl; omega) as ⟨sp1, hsp1⟩
+      subst hsp1
       have Dq' : DFS b f0 σ none sn st ((sq.val - 1) + 1) := by
         rw [Nat.sub_add_cancel hpos']; exact Dq
       have Dp := dfs_pop b f0 σ sn st (sq.val - 1) Dq'
@@ -1182,6 +1189,7 @@ theorem pop_loop_spec (R : ShellReads SI t b) (H : Sound b) (f0 : Nat) (s : Usiz
       have hfv : (UScalar.cast .Usize x).val = (st.val[sq.val - 1]!).val := by rw [castUsize_val, hx']
       have hon := (Dq.on (sq.val - 1) (by omega))
       have hfn : (UScalar.cast .Usize x).val < b.faces.size := by rw [hfv]; exact hon.1
+      simp only [lift, Std.bind_ok]
       step with R.base.face_n_loops (UScalar.cast .Usize x) hfn as ⟨nlf, hnlf⟩
       have Dp' : DFS b f0 σ (some (UScalar.cast .Usize x).val) sn st (sq.wrapping_sub 1#usize).val := by
         rw [hfv, hsub]; exact Dp
@@ -1225,7 +1233,9 @@ theorem joined_spec (R : ShellReads SI t b) (s : Usize) (hs : s.val < b.shells.s
         have hfb : f.val < seen.val.length := by rw [hl]; exact hin _ hfm
         step as ⟨x, hx⟩
         have hx' : x = seen.val[f.val]! := by rw [hx, getElem!_pos]
-        simp only [lift, Std.bind_ok, ← hσ, WP.spec_ok]
+        simp only [lift, Std.bind_ok, ← hσ]
+        step with usize_add_wspec i 1#usize (succ_le_max i n hlt') as ⟨i1, hi1⟩
+        subst hi1
         have hw : (i.wrapping_add 1#usize).val = i.val + 1 := succ_val i n hlt'
         refine ⟨by omega, ?_, by omega⟩
         rw [hw, all_take_succ _ _ _ hi, ← hj, hjt, Bool.true_and, ← hf, hx']
@@ -1424,14 +1434,16 @@ theorem flood_shells_spec {S : Type} (SK : topo.Sink S) (P : S → List Problem)
           · left; rw [h, hσv]; omega
         split
         · rename_i hj
-          step*
+          step with usize_add_wspec s 1#usize (succ_le_max s ns hlt') as ⟨s1, hs1⟩
+          subst hs1
           have hw1 : (s.wrapping_add 1#usize).val = s.val + 1 := succ_val s ns hlt'
           rw [hw1]
           refine ⟨by omega, D2.len, hW3, D2.stack_le, ?_, by omega⟩
           apply hacc; rw [hdis, hj]; simp
         · rename_i hj
           step with hS.2 o s as ⟨o1, ho1⟩
-          step*
+          step with usize_add_wspec s 1#usize (succ_le_max s ns hlt') as ⟨s1, hs1⟩
+          subst hs1
           have hw1 : (s.wrapping_add 1#usize).val = s.val + 1 := succ_val s ns hlt'
           rw [hw1]
           refine ⟨by omega, D2.len, hW3, D2.stack_le, ?_, by omega⟩
@@ -1466,7 +1478,9 @@ theorem shell_faces_refines {S : Type} (SK : topo.Sink S) (P : S → List Proble
     have := succ_lt_usize b.shells.size hns32
     have h1 : (1#usize).val = 1 := rfl
     simp only [UScalar.size, h1]; exact this
-  simp only [lift, Std.bind_ok]
+  step with usize_add_wspec ns 1#usize (usize_le_max_of_lt _ (by
+    have := succ_lt_usize b.shells.size hns32; have h1 : (1#usize).val = 1 := rfl; omega)) as ⟨ns1, hns1⟩
+  subst hns1
   step as ⟨bad, hbad⟩
   step as ⟨listed, hlisted⟩
   have hb0 : BadS b 0 false bad := by

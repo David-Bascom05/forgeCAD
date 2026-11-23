@@ -79,6 +79,20 @@ theorem usize_add_one (x : Usize) (h : x.val < Usize.max) :
     x - y ⦃ z => z = Std.Usize.wrapping_sub x y ⦄ := by
   rw [usize_sub_eq x y h]; simp [lift]
 
+theorem usize_le_max_of_lt (n : Nat) (h : n < 2 ^ UScalarTy.Usize.numBits) : n ≤ Usize.max := by
+  have : Usize.max = 2 ^ UScalarTy.Usize.numBits - 1 := by rw [Usize.max_def, Usize.numBits_def]
+  omega
+
+theorem succ_le_max (x y : Usize) (h : x.val < y.val) : x.val + (1#usize).val ≤ Usize.max := by
+  have := y.hBounds
+  have : (1#usize).val = 1 := rfl
+  have := usize_le_max_of_lt (x.val + 1) (by omega)
+  omega
+
+theorem le_max_of_lt_val (y : Usize) (k : Nat) (h : k < y.val) : k ≤ Usize.max := by
+  have := y.hBounds
+  exact usize_le_max_of_lt k (by omega)
+
 attribute [-step] Usize.add_spec U32.add_spec Usize.sub_spec
 
 end forge_topo

@@ -51,6 +51,12 @@ append exactly `Body.checkEdges` and `Body.checkLoops`. `check_edges`'s one geom
 edge's curve degenerate: floats) is the view's `edge_degenerate`, taken as given: the problem it
 adds is not one the model decides.
 
+The translation is overflow-checked (translate.sh's default): each `+` and `-` the code makes on
+a count is Aeneas's checked op, which fails on overflow. `lean/ForgeTopo/Checked.lean` steps
+through them as the wrapping ops (`usize_add_wspec`, `u32_add_wspec`, `usize_sub_wspec`) once the
+proof shows the bound (counts below `usize::MAX`, from the view's hypotheses), so `ok` in each
+theorem above also says: no overflow.
+
 `lean/ForgeTopo/Axioms.lean` fails the build if a theorem uses more than `propext`,
 `Classical.choice` and `Quot.sound`.
 

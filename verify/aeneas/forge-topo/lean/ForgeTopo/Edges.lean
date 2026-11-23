@@ -119,7 +119,9 @@ theorem edges_refines {S : Type} (SK : topo.Sink S) (P : S → List Problem) (hS
           | [x] => rw [hu] at hn; simp at hn; omega
           | x :: y :: z :: w => rw [hu] at hn; simp at hn; omega
       · intro o' ho'
-        simp only [lift, Std.bind_ok, WP.spec_ok]
+        step with usize_add_wspec e 1#usize (succ_le_max e ne hlt') as ⟨e1', he1'⟩
+        subst he1'
+        try simp only [WP.spec_ok]
         rw [hw]
         exact ⟨by omega, hacc o' ho', by omega⟩
     · rename_i hlt
@@ -189,7 +191,8 @@ theorem broken_spec {S : Type} (SK : topo.Sink S) (P : S → List Problem) (hS :
         intro k hk; rw [Usize.wrapping_add_val_eq]; apply Nat.mod_eq_of_lt
         obtain ⟨m, hm⟩ := WP.spec_exists R.base.nc
         have := m.hBounds; simp only [UScalar.size]; omega
-      simp only [lift, Std.bind_ok]
+      step with usize_add_wspec i 1#usize (succ_le_max i n hlt') as ⟨i1', hi1'⟩
+      subst hi1'
       have hj : ∀ j : Usize, j.val = (i.val + 1) % n.val →
           (first.wrapping_add j).val = first.val + (i.val + 1) % n.val ∧
             first.val + (i.val + 1) % n.val < b.coedges.size ∧
@@ -208,8 +211,13 @@ theorem broken_spec {S : Type} (SK : topo.Sink S) (P : S → List Problem) (hS :
       · intro j hjv
         have ⟨hjw, hjn, hje⟩ := hj j hjv
         have hiw := hadd i hci.1
+        obtain ⟨m, hm⟩ := WP.spec_exists R.base.nc
+        step with usize_add_wspec first i (le_max_of_lt_val m _ (by have := m.hBounds; omega)) as ⟨i2', hi2'⟩
+        subst hi2'
         step with coedge_end_spec EI t b R (first.wrapping_add i) (by rw [hiw]; exact hci.1)
           (by rw [hiw]; exact hci.2) as ⟨v1, hv1⟩
+        step with usize_add_wspec first j (le_max_of_lt_val m _ (by rw [hjv]; omega)) as ⟨i4', hi4'⟩
+        subst hi4'
         step with coedge_start_spec EI t b R (first.wrapping_add j) (by rw [hjw]; exact hjn)
           (by rw [hjw]; exact hje) as ⟨v2, hv2⟩
         have hacc : ∀ o', P o' = P o ++ (if b.stop (first.val + i.val) != b.start (first.val + (i.val + 1) % n.val)
@@ -281,7 +289,9 @@ theorem loops_refines {S : Type} (SK : topo.Sink S) (P : S → List Problem) (hS
               exact h0 (UScalar.eq_of_val_eq h)
             simp only [WP.spec_ok]; rw [he]; simp
         · intro o' ho'
-          simp only [lift, Std.bind_ok, WP.spec_ok]
+          step with usize_add_wspec f 1#usize (succ_le_max f nf hlt') as ⟨f1', hf1'⟩
+          subst hf1'
+          try simp only [WP.spec_ok]
           rw [hw]
           refine ⟨by omega, ?_, by omega⟩
           rw [ho', filterMap_range_succ, ho, List.append_assoc]
@@ -318,7 +328,9 @@ theorem loops_refines {S : Type} (SK : topo.Sink S) (P : S → List Problem) (hS
         · rename_i h0
           have h0' : (b.lo l.val).len = 0 := by rw [← hn, h0]; rfl
           step with hS.2.2.2.2.1 o l as ⟨o2, ho2⟩
-          simp only [lift, Std.bind_ok, WP.spec_ok]
+          step with usize_add_wspec l 1#usize (succ_le_max l nl hlt') as ⟨l1', hl1'⟩
+          subst hl1'
+          try simp only [WP.spec_ok]
           rw [hw]
           refine ⟨by omega, hacc o2 ?_, by omega⟩
           rw [ho2]; unfold loopProbs; simp [h0']
@@ -326,7 +338,9 @@ theorem loops_refines {S : Type} (SK : topo.Sink S) (P : S → List Problem) (hS
           have h0' : (b.lo l.val).len ≠ 0 := by
             intro h; apply h0; apply UScalar.eq_of_val_eq; rw [hn, h]; rfl
           step with broken_spec EI t b SK P hS R l first n hl hfirst hn o as ⟨o2, ho2⟩
-          simp only [lift, Std.bind_ok, WP.spec_ok]
+          step with usize_add_wspec l 1#usize (succ_le_max l nl hlt') as ⟨l1', hl1'⟩
+          subst hl1'
+          try simp only [WP.spec_ok]
           rw [hw]
           refine ⟨by omega, hacc o2 ?_, by omega⟩
           rw [ho2]; unfold loopProbs

@@ -683,12 +683,12 @@ macro "finish_loop" v:term : tactic => `(tactic| (
   step with loop_coedges_spec TI t b R ne l first len hne hl hfirst hlen $v hfit as ⟨ok2, hok2⟩
   split
   · rename_i hok2t
-    step with usize_add_wspec l 1#usize (by scalar_tac) as ⟨l1, hl1⟩
+    step with usize_add_wspec l 1#usize hl1b as ⟨l1, hl1⟩
     refine ⟨by rw [hw l1 hl1]; omega, ?_, by rw [hw l1 hl1]; omega⟩
     rw [hw l1 hl1]; apply hacc; rw [hskip, ← hval, ← hok2, hok2t]; simp
   · rename_i hok2t
     step with hS o 2#u8 l as ⟨o1, ho1⟩
-    step with usize_add_wspec l 1#usize (by scalar_tac) as ⟨l1, hl1⟩
+    step with usize_add_wspec l 1#usize hl1b as ⟨l1, hl1⟩
     refine ⟨by rw [hw l1 hl1]; omega, ?_, by rw [hw l1 hl1]; omega⟩
     rw [hw l1 hl1]; apply hacc; rw [ho1, hskip, ← hval, ← hok2]
     simp only [Bool.not_eq_true] at hok2t; simp [hok2t]))
@@ -711,6 +711,7 @@ theorem loop_pass_spec {S : Type} (SI : topo.Sink S) (P : S → List Problem) (h
     split
     · rename_i hlt
       have hlt' : l.val < nl.val := by scalar_tac
+      have hl1b : l.val + (1#usize).val ≤ Usize.max := by scalar_tac
       have hl : l.val < b.loops.size := by omega
       have hlb : l.val < listed.val.length := by rw [hk.1]; exact hl
       have hacc : ∀ o', P o' = P o ++ (if b.loopSkip l.val || b.loopOk l.val then none
@@ -733,7 +734,7 @@ theorem loop_pass_spec {S : Type} (SI : topo.Sink S) (P : S → List Problem) (h
         · rename_i hx0
           have h0 : b.listed l.val = 0 := by
             rw [← kept_zero b listed hk l.val hl, ← hx']; simp at hx0; rw [hx0]; rfl
-          step with usize_add_wspec l 1#usize (by scalar_tac) as ⟨l1, hl1⟩
+          step with usize_add_wspec l 1#usize hl1b as ⟨l1, hl1⟩
           refine ⟨by rw [hw l1 hl1]; omega, ?_, by rw [hw l1 hl1]; omega⟩
           rw [hw l1 hl1]; apply hacc
           have : b.loopSkip l.val = true := by simp [Body.loopSkip, hfl, h0]
