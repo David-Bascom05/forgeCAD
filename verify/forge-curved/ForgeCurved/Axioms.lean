@@ -17,3 +17,7 @@ import ForgeCurved
 #print axioms ForgeCurved.curved_correct
 #print axioms ForgeCurved.curved_correct_top
 #print axioms forge_bool_core.end_to_end_curved
+#print axioms ForgeCurved.sides_of_fderiv
+#print axioms ForgeCurved.sides_of_seamed
+#print axioms ForgeCurved.quadric_sides
+#print axioms ForgeCurved.faithful_of_rule
