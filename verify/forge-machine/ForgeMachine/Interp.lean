@@ -132,6 +132,44 @@ def hole {n : ℕ} (A : Axes n) (base : Pos n) (c : Cyc) (cur back pc lift : ℤ
         (if c.g = 85 ∨ c.g = 84 then [.feed (at_ c.r) f] else [])
   [.rapid (at_ cur), .rapid (at_ c.r)] ++ cut ++ [.rapid (at_ back)]
 
+/-- The motion-code group of a block: the state after it, before any move (`none`: refused). `σ1`
+is the state with the block's feed, distance, retract and plane words taken. -/
+def motionCode {n : ℕ} (A : Axes n) (σ σ1 : State n) (b : Block n) : Option (State n) :=
+  match b.g with
+  | none => some σ1
+  | some g =>
+    if g ≤ 3 then some { σ1 with mode := some g, cyc := none }
+    else if g = 80 then some { σ1 with mode := none, cyc := none }
+    else if g = 81 ∨ g = 82 ∨ g = 83 ∨ g = 84 ∨ g = 85 ∨ g = 73 then
+      match b.ax A.z, b.r, σ.pos A.z with
+      | some z, some r, some init =>
+        if σ1.plane = 17 ∧ σ1.absolute ∧ z ≤ r ∧ r ≤ init ∧ 0 ≤ b.q.getD 0 then
+          some { σ1 with mode := some 80, cyc := some ⟨g, z, r, b.q.getD 0, b.p.getD 0, init⟩ }
+        else none
+      | _, _, _ => none
+    else none
+
+/-- An arc (G2, G3) from `σ`'s position to `dst` in `σ2`'s plane. -/
+def arcStep {n : ℕ} (A : Axes n) (σ σ2 : State n) (b : Block n) (dst : Pos n) (g : ℕ) :
+    Option (List (Ev n) × State n) :=
+  -- the plane's axes and centre words: G17 X Y (I J), G18 Z X (K I), G19 Y Z (J K)
+  let (pa, pb, wa, wb) :=
+    if σ2.plane = 17 then (A.x, A.y, b.i, b.j)
+    else if σ2.plane = 18 then (A.z, A.x, b.k, b.i)
+    else (A.y, A.z, b.j, b.k)
+  match σ.pos pa, σ.pos pb, dst pa, dst pb, σ2.feed with
+  | some sa, some sb, some ea, some eb, some f =>
+    let full := decide (ea = sa) && decide (eb = sb)
+    let c? : Option Centre := match b.r, wa, wb with
+      | some r, none, none => if r = 0 ∨ full then none else some (.r r)
+      | some _, _, _ => none
+      | none, none, none => none
+      | none, ia, ib => some (.abs (sa + ia.getD 0) (sb + ib.getD 0))
+    match c? with
+    | none => none
+    | some c => some ([.arc dst σ2.plane c (g = 2) full f], { σ2 with pos := dst })
+  | _, _, _, _, _ => none
+
 /-- One block. `none` is the interpreter's refusal. -/
 def step {n : ℕ} (A : Axes n) (pc lift : ℤ) (σ : State n) (b : Block n) :
     Option (List (Ev n) × State n) :=
@@ -153,22 +191,7 @@ def step {n : ℕ} (A : Axes n) (pc lift : ℤ) (σ : State n) (b : Block n) :
       if axes = [] then none
       else some ([.home via axes], { σ1 with pos := fun k => if (b.ax k).isSome then none else via k })
   else
-  -- the motion code
-  let σ2? : Option (State n) :=
-    match b.g with
-    | none => some σ1
-    | some g =>
-      if g ≤ 3 then some { σ1 with mode := some g, cyc := none }
-      else if g = 80 then some { σ1 with mode := none, cyc := none }
-      else if g = 81 ∨ g = 82 ∨ g = 83 ∨ g = 84 ∨ g = 85 ∨ g = 73 then
-        match b.ax A.z, b.r, σ.pos A.z with
-        | some z, some r, some init =>
-          if plane = 17 ∧ absolute ∧ z ≤ r ∧ r ≤ init ∧ 0 ≤ b.q.getD 0 then
-            some { σ1 with mode := some 80, cyc := some ⟨g, z, r, b.q.getD 0, b.p.getD 0, init⟩ }
-          else none
-        | _, _, _ => none
-      else none
-  match σ2? with
+  match motionCode A σ σ1 b with
   | none => none
   | some σ2 =>
   if anyAx = false then some ([], σ2) else
@@ -190,25 +213,7 @@ def step {n : ℕ} (A : Axes n) (pc lift : ℤ) (σ : State n) (b : Block n) :
     | some f => some ([.feed dst f], { σ2 with pos := dst })
     | none => none
   | some g, _ =>
-    if g = 2 ∨ g = 3 then
-      -- the plane's axes and centre words: G17 X Y (I J), G18 Z X (K I), G19 Y Z (J K)
-      let (pa, pb, wa, wb) :=
-        if plane = 17 then (A.x, A.y, b.i, b.j)
-        else if plane = 18 then (A.z, A.x, b.k, b.i)
-        else (A.y, A.z, b.j, b.k)
-      match σ.pos pa, σ.pos pb, dst pa, dst pb, feed with
-      | some sa, some sb, some ea, some eb, some f =>
-        let full := decide (ea = sa) && decide (eb = sb)
-        let c? : Option Centre := match b.r, wa, wb with
-          | some r, none, none => if r = 0 ∨ full then none else some (.r r)
-          | some _, _, _ => none
-          | none, none, none => none
-          | none, ia, ib => some (.abs (sa + ia.getD 0) (sb + ib.getD 0))
-        match c? with
-        | none => none
-        | some c => some ([.arc dst plane c (g = 2) full f], { σ2 with pos := dst })
-      | _, _, _, _, _ => none
-    else none
+    if g = 2 ∨ g = 3 then arcStep A σ σ2 b dst g else none
   | none, _ => none
 
 def runFrom {n : ℕ} (A : Axes n) (pc lift : ℤ) : State n → List (Block n) → Option (List (Ev n))
@@ -461,12 +466,12 @@ theorem step_refines (pc lift : ℤ) (st : ForgeCam.Post.State) (σ : State 3)
       simp only [Option.isSome_none, Bool.or_false] at hany
       rcases g with _ | g0
       · refine ⟨[], { pos := pos, mode := mode, feed := f.or st.feed, retractInitial := ri }, ?_, rfl, ?_⟩
-        · simp only [step, embed] at hany ⊢
+        · simp only [step, embed, motionCode] at hany ⊢
           simp [hany]
         · constructor <;> simp_all
       · have hg := hw g0 rfl
         refine ⟨[], { pos := pos, mode := some g0, feed := f.or st.feed, retractInitial := ri }, ?_, rfl, ?_⟩
-        · simp only [step, embed] at hany ⊢
+        · simp only [step, embed, motionCode] at hany ⊢
           simp [hany, hg]
         · constructor <;> simp_all
     · have hany' : ((List.finRange 3).any fun k =>
@@ -505,11 +510,11 @@ theorem step_refines (pc lift : ℤ) (st : ForgeCam.Post.State) (σ : State 3)
         · rcases g with _ | g0
           · have hmd : mode = some 0 := hgm
             subst hmd
-            simp only [step, embed] at hany' htarget ⊢
+            simp only [step, embed, motionCode, arcStep] at hany' htarget ⊢
             simp [hany', htarget, xyz]
           · have : g0 = 0 := by simpa using hgm
             subst this
-            simp only [step, embed] at hany' htarget ⊢
+            simp only [step, embed, motionCode, arcStep] at hany' htarget ⊢
             simp [hany', htarget, xyz]
         · simp [forget, hd0, hd1, hd2]
         · constructor <;> simp_all
@@ -523,11 +528,11 @@ theorem step_refines (pc lift : ℤ) (st : ForgeCam.Post.State) (σ : State 3)
         · rcases g with _ | g0
           · have hmd : mode = some 1 := hgm
             subst hmd
-            simp only [step, embed] at hany' htarget ⊢
+            simp only [step, embed, motionCode, arcStep] at hany' htarget ⊢
             simp [hany', htarget, xyz, hf1]
           · have : g0 = 1 := by simpa using hgm
             subst this
-            simp only [step, embed] at hany' htarget ⊢
+            simp only [step, embed, motionCode, arcStep] at hany' htarget ⊢
             simp [hany', htarget, xyz, hf1]
         · simp [forget, hd0, hd1, hd2]
         · constructor <;> simp_all
@@ -551,11 +556,11 @@ theorem step_refines (pc lift : ℤ) (st : ForgeCam.Post.State) (σ : State 3)
         · rcases g with _ | g0
           · have hmd : mode = some 2 := hgm
             subst hmd
-            simp only [step, embed] at hany' htarget ⊢
+            simp only [step, embed, motionCode, arcStep] at hany' htarget ⊢
             simp [hany', htarget, xyz, hf1, hpx, hpy, hd0, hd1]
           · have : g0 = 2 := by simpa using hgm
             subst this
-            simp only [step, embed] at hany' htarget ⊢
+            simp only [step, embed, motionCode, arcStep] at hany' htarget ⊢
             simp [hany', htarget, xyz, hf1, hpx, hpy, hd0, hd1]
         · simp [forget, hd0, hd1, hd2]
         · constructor <;> simp_all
@@ -579,11 +584,11 @@ theorem step_refines (pc lift : ℤ) (st : ForgeCam.Post.State) (σ : State 3)
         · rcases g with _ | g0
           · have hmd : mode = some 3 := hgm
             subst hmd
-            simp only [step, embed] at hany' htarget ⊢
+            simp only [step, embed, motionCode, arcStep] at hany' htarget ⊢
             simp [hany', htarget, xyz, hf1, hpx, hpy, hd0, hd1]
           · have : g0 = 3 := by simpa using hgm
             subst this
-            simp only [step, embed] at hany' htarget ⊢
+            simp only [step, embed, motionCode, arcStep] at hany' htarget ⊢
             simp [hany', htarget, xyz, hf1, hpx, hpy, hd0, hd1]
         · simp [forget, hd0, hd1, hd2]
         · constructor <;> simp_all

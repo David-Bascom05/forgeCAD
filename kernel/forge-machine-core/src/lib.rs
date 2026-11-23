@@ -10,7 +10,7 @@
 
 #![forbid(unsafe_code)]
 // The Aeneas style (research/aeneas/STYLE.md) writes some things the long way.
-#![allow(clippy::vec_init_then_push, clippy::redundant_pattern_matching, clippy::len_zero, clippy::manual_unwrap_or_default)]
+#![allow(clippy::vec_init_then_push, clippy::redundant_pattern_matching, clippy::len_zero, clippy::manual_unwrap_or_default, clippy::manual_unwrap_or)]
 
 /// Which axis (index into a position) is X, Y and Z.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -271,6 +271,14 @@ pub fn hole(
     out.push(Ev::Rapid(put(a, base, x, y, back)));
 }
 
+/// A word's value, or 0 without one.
+fn or0(w: Option<i64>) -> i64 {
+    match w {
+        Some(v) => v,
+        None => 0,
+    }
+}
+
 /// Whether a word is there.
 fn has(w: Option<i64>) -> bool {
     match w {
@@ -329,14 +337,8 @@ fn motion_code(a: &Axes, st: &State, b: &Block, s1: State) -> Result<State, Refu
                         (_, None, _) => Err(Refuse::CycleNoR),
                         (_, _, None) => Err(Refuse::CycleUnknownHeight),
                         (Some(z), Some(r), Some(init)) => {
-                            let q = match b.q {
-                                Some(q) => q,
-                                None => 0,
-                            };
-                            let dwell = match b.p {
-                                Some(p) => p,
-                                None => 0,
-                            };
+                            let q = or0(b.q);
+                            let dwell = or0(b.p);
                             if !s1.absolute {
                                 Err(Refuse::CycleIncremental)
                             } else if z > r || r > init {
@@ -409,14 +411,8 @@ fn arc(
                 (Some(_), _, _) => Err(Refuse::ArcRAndCentre),
                 (None, None, None) => Err(Refuse::ArcNoCentre),
                 (None, ia, ib) => {
-                    let i = match ia {
-                        Some(v) => v,
-                        None => 0,
-                    };
-                    let j = match ib {
-                        Some(v) => v,
-                        None => 0,
-                    };
+                    let i = or0(ia);
+                    let j = or0(ib);
                     Ok(Centre::Abs(sa + i, sb + j))
                 }
             }?;

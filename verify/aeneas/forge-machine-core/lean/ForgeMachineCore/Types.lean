@@ -19,7 +19,7 @@ set_option maxRecDepth 2048
 namespace forge_machine_core
 
 /-- [forge_machine_core::Axes]
-    Source: 'kernel/forge-machine-core/src/lib.rs', lines 15:0-19:1
+    Source: 'kernel/forge-machine-core/src/lib.rs', lines 17:0-21:1
     Visibility: public -/
 structure Axes where
   x : Std.Usize
@@ -27,7 +27,7 @@ structure Axes where
   z : Std.Usize
 
 /-- [forge_machine_core::Centre]
-    Source: 'kernel/forge-machine-core/src/lib.rs', lines 24:0-27:1
+    Source: 'kernel/forge-machine-core/src/lib.rs', lines 26:0-29:1
     Visibility: public -/
 @[discriminant isize]
 inductive Centre where
@@ -35,7 +35,7 @@ inductive Centre where
 | R : Std.I64 → Centre
 
 /-- [forge_machine_core::Block]
-    Source: 'kernel/forge-machine-core/src/lib.rs', lines 31:0-52:1
+    Source: 'kernel/forge-machine-core/src/lib.rs', lines 33:0-54:1
     Visibility: public -/
 structure Block where
   g : Option Std.U32
@@ -53,7 +53,7 @@ structure Block where
   f : Option Std.I64
 
 /-- [forge_machine_core::Cyc]
-    Source: 'kernel/forge-machine-core/src/lib.rs', lines 55:0-63:1
+    Source: 'kernel/forge-machine-core/src/lib.rs', lines 57:0-65:1
     Visibility: public -/
 structure Cyc where
   g : Std.U32
@@ -64,7 +64,7 @@ structure Cyc where
   initial : Std.I64
 
 /-- [forge_machine_core::State]
-    Source: 'kernel/forge-machine-core/src/lib.rs', lines 67:0-76:1
+    Source: 'kernel/forge-machine-core/src/lib.rs', lines 69:0-78:1
     Visibility: public -/
 structure State where
   pos : alloc.vec.Vec (Option Std.I64)
@@ -76,7 +76,7 @@ structure State where
   cyc : Option Cyc
 
 /-- [forge_machine_core::Ev]
-    Source: 'kernel/forge-machine-core/src/lib.rs', lines 79:0-88:1
+    Source: 'kernel/forge-machine-core/src/lib.rs', lines 81:0-90:1
     Visibility: public -/
 @[discriminant isize]
 inductive Ev where
@@ -94,7 +94,7 @@ inductive Ev where
 | Dwell : Std.I64 → Ev
 
 /-- [forge_machine_core::Refuse]
-    Source: 'kernel/forge-machine-core/src/lib.rs', lines 92:0-123:1
+    Source: 'kernel/forge-machine-core/src/lib.rs', lines 94:0-125:1
     Visibility: public -/
 @[discriminant isize]
 inductive Refuse where

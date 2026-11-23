@@ -725,4 +725,207 @@ theorem step_loop0_spec (v : alloc.vec.Vec (Option Std.I64)) :
       rw [ha, this, List.take_length]
   · simp
 
+theorem has_eq (w : Option Std.I64) : has w = ok w.isSome := by unfold has; cases w <;> rfl
+theorem has_g_eq (g : Option Std.U32) : has_g g = ok g.isSome := by unfold has_g; cases g <;> rfl
+
+/-- G28's homed axes and the position after it. -/
+def homeAxes (v via : List (Option Std.I64)) (k : ℕ) : List ℕ :=
+  (List.range k).filter fun i => (v.getD i none).isSome
+def homePos (v via : List (Option Std.I64)) (k : ℕ) : List (Option Std.I64) :=
+  (List.range k).map fun i => if (v.getD i none).isSome then none else via.getD i none
+
+theorem step_loop1_spec (v via : alloc.vec.Vec (Option Std.I64)) (hl : via.val.length < 2 ^ 16)
+    (pos0 : alloc.vec.Vec (Option Std.I64)) (hp0 : pos0.val = []) :
+    step_loop1 v via (alloc.vec.Vec.new Std.Usize) pos0 0#usize ⦃ r =>
+      r.1.val.map (·.val) = homeAxes v.val via.val via.val.length ∧
+      r.2.val = homePos v.val via.val via.val.length ⦄ := by
+  unfold step_loop1
+  apply loop.spec_decr_nat
+    (fun (q : alloc.vec.Vec Std.Usize × alloc.vec.Vec (Option Std.I64) × Usize) => via.val.length - q.2.2.val)
+    (fun q => q.2.2.val ≤ via.val.length ∧ q.1.val.map (·.val) = homeAxes v.val via.val q.2.2.val ∧
+      q.2.1.val = homePos v.val via.val q.2.2.val)
+  · rintro ⟨axes, pos, k⟩ ⟨hk, ha, hp⟩
+    unfold step_loop1.body
+    simp only at hk ha hp ⊢
+    split
+    · rename_i h
+      have hkl : k.val < via.val.length := by scalar_tac
+      step with word_spec (alloc.vec.Vec.deref v) k as ⟨o, ho⟩
+      rw [has_eq, bind_ok]
+      have hlenA : axes.val.length ≤ k.val := by
+        have := congrArg List.length ha; simp [homeAxes] at this
+        have := List.length_filter_le (fun i => (v.val.getD i none).isSome) (List.range k.val)
+        simp at this; omega
+      have hlenP : pos.val.length = k.val := by rw [hp]; simp [homePos]
+      split
+      · rename_i hs
+        step with alloc.vec.Vec.push_spec axes k (by scalar_tac) as ⟨a2, ha2⟩
+        step with alloc.vec.Vec.push_spec pos none (by scalar_tac) as ⟨p2, hp2⟩
+        step as ⟨k1, hk1⟩
+        refine ⟨by scalar_tac, ?_, ?_, by scalar_tac⟩
+        · rw [ha2, hk1, List.map_append, ha]
+          simp only [homeAxes, List.range_succ, List.filter_append]
+          rw [ho] at hs
+          have hs' : (v.val[k.val]?.getD none).isSome = true := by
+            simpa [alloc.vec.Vec.deref, List.getD_eq_getElem?_getD] using hs
+          simp [hs']
+        · rw [hp2, hk1, hp]
+          simp only [homePos, List.range_succ, List.map_append]
+          rw [ho] at hs
+          have hs' : (v.val[k.val]?.getD none).isSome = true := by
+            simpa [alloc.vec.Vec.deref, List.getD_eq_getElem?_getD] using hs
+          simp [hs']
+      · rename_i hs
+        step with alloc.vec.Vec.index_usize_spec via k (by scalar_tac) as ⟨o1, ho1⟩
+        step with alloc.vec.Vec.push_spec pos o1 (by scalar_tac) as ⟨p2, hp2⟩
+        step as ⟨k1, hk1⟩
+        refine ⟨by scalar_tac, ?_, ?_, by scalar_tac⟩
+        · rw [hk1, ha]
+          simp only [homeAxes, List.range_succ, List.filter_append]
+          rw [ho] at hs
+          have hs' : (v.val[k.val]?.getD none).isSome = false := by
+            simpa [alloc.vec.Vec.deref, List.getD_eq_getElem?_getD] using hs
+          simp [hs']
+        · rw [hp2, hk1, hp]
+          simp only [homePos, List.range_succ, List.map_append]
+          rw [ho] at hs
+          have hs' : (v.val[k.val]?.getD none).isSome = false := by
+            simpa [alloc.vec.Vec.deref, List.getD_eq_getElem?_getD] using hs
+          simp [hs', ho1, List.getElem?_eq_getElem hkl]
+    · simp only [WP.spec_ok]
+      have : k.val = via.val.length := by scalar_tac
+      rw [← this]; exact ⟨ha, hp⟩
+  · simp [homeAxes, homePos, hp0]
+
+/-! ## The motion-code group -/
+
+theorem or0_eq (w : Option Std.I64) : or0 w = ok (w.getD 0#i64) := by unfold or0; cases w <;> rfl
+
+/-- The translation's state as the spec's. -/
+def SA (n : ℕ) (s : State) : ForgeMachine.State n :=
+  { pos := P n s.pos.val, absolute := s.absolute, mode := s.mode.map (·.val), plane := s.plane.val,
+    feed := iv s.feed, retractInitial := s.retract_initial, cyc := s.cyc.map CY }
+
+/-- The translation's block as the spec's (no T: the shell handles tools). -/
+def BA (n : ℕ) (b : Block) : ForgeMachine.Block n :=
+  { g := b.g.map (·.val), absolute := b.absolute, retractInitial := b.retract_initial,
+    plane := b.plane.map (·.val), home := b.home, ax := P n b.ax.val, i := iv b.i, j := iv b.j,
+    k := iv b.k, r := iv b.r, q := iv b.q, p := iv b.p, f := iv b.f, t := none }
+
+/-- A cycle the hole can run: bottom at or under R, its numbers bounded. -/
+def CycOK (c : Option Cyc) : Prop :=
+  ∀ y, c = some y → y.z.val ≤ y.r.val ∧ Bd y.z.val ∧ Bd y.r.val ∧ Bd y.q.val
+
+theorem P_getD (n : ℕ) (v : List (Option Std.I64)) (k : Usize) (hk : k.val < n) :
+    P n v ⟨k.val, hk⟩ = iv (v.getD k.val none) := rfl
+
+theorem motion_code_spec (n : ℕ) (a : Axes) (hx : a.x.val < n) (hy : a.y.val < n) (hz : a.z.val < n)
+    (st b s1 : State) (blk : Block) (hpos : st.pos.val.length = n) (hax : blk.ax.val.length = n)
+    (hcyc : CycOK s1.cyc) (hzb : ∀ v, blk.ax.val.getD a.z.val none = some v → Bd v.val)
+    (hrb : BdO blk.r) (hqb : BdO blk.q) :
+    motion_code a st blk s1 ⦃ r =>
+      match r with
+      | .Ok s2 => ForgeMachine.motionCode (AX n a hx hy hz) (SA n st) (SA n s1) (BA n blk) = some (SA n s2) ∧
+          s2.pos = s1.pos ∧ s2.feed = s1.feed ∧ s2.absolute = s1.absolute ∧ s2.plane = s1.plane ∧
+          s2.retract_initial = s1.retract_initial ∧ CycOK s2.cyc
+      | .Err _ => ForgeMachine.motionCode (AX n a hx hy hz) (SA n st) (SA n s1) (BA n blk) = none ⦄ := by
+  unfold motion_code ForgeMachine.motionCode
+  cases hg : blk.g with
+  | none => simp [BA, hg, hcyc]
+  | some g =>
+    simp only [BA, hg, Option.map_some]
+    split
+    · rename_i h3
+      have : g.val ≤ 3 := by scalar_tac
+      simp only [WP.spec_ok, this, ite_true, Option.some.injEq]
+      refine ⟨by simp [SA], trivial, trivial, trivial, trivial, trivial, by simp [CycOK]⟩
+    · rename_i h3
+      have h3' : ¬ g.val ≤ 3 := by scalar_tac
+      simp only [h3', ite_false]
+      split
+      · rename_i h80
+        have : g.val = 80 := by rw [h80]; rfl
+        simp only [WP.spec_ok, this, ite_true, Option.some.injEq]
+        refine ⟨by simp [SA], trivial, trivial, trivial, trivial, trivial, by simp [CycOK]⟩
+      · rename_i h80
+        have h80' : g.val ≠ 80 := fun e => h80 (UScalar.eq_of_val_eq (by simp [e]))
+        simp only [h80', ite_false]
+        step with is_cycle_spec g as ⟨cy, hcy⟩
+        split
+        · rename_i hc
+          have hc' : g.val = 81 ∨ g.val = 82 ∨ g.val = 83 ∨ g.val = 84 ∨ g.val = 85 ∨ g.val = 73 := by
+            simpa [hcy] using hc
+          simp only [hc', ite_true]
+          have hzP : ∀ o, o = (alloc.vec.Vec.deref blk.ax).val.getD a.z.val none →
+              P n blk.ax.val ⟨a.z.val, hz⟩ = iv o := by intro o ho; rw [ho]; simp [P, alloc.vec.Vec.deref]
+          have hiP : ∀ o, o = (alloc.vec.Vec.deref st.pos).val.getD a.z.val none →
+              P n st.pos.val ⟨a.z.val, hz⟩ = iv o := by intro o ho; rw [ho]; simp [P, alloc.vec.Vec.deref]
+          split
+          · rename_i hpl
+            have hpl' : s1.plane.val ≠ 17 := by
+              intro e
+              have : s1.plane = 17#u32 := UScalar.eq_of_val_eq (by simp [e])
+              simp [this] at hpl
+            simp only [WP.spec_ok, AX]
+            split <;> simp_all [SA]
+          · rename_i hpl
+            have hpl' : s1.plane.val = 17 := by simpa [bne] using hpl
+            step with word_spec (alloc.vec.Vec.deref blk.ax) a.z as ⟨o, ho⟩
+            step with at_spec (alloc.vec.Vec.deref st.pos) a.z as ⟨o1, ho1⟩
+            simp only [AX]
+            rw [show (SA n st).pos ⟨a.z.val, hz⟩ = P n st.pos.val ⟨a.z.val, hz⟩ from rfl, hzP o ho, hiP o1 ho1]
+            have hzb' : BdO o := by
+              intro v hv; apply hzb v; rw [← hv, ho]; simp [alloc.vec.Vec.deref]
+            cases o with
+            | none => simp [iv]
+            | some z =>
+              cases hr : blk.r with
+              | none => simp [iv]
+              | some r =>
+                cases o1 with
+                | none => simp [iv]
+                | some init =>
+                  simp only [or0_eq, bind_ok]
+                  have hqb' : Bd (blk.q.getD 0#i64).val := by
+                    cases hbq : blk.q with
+                    | none => simp [Bd]
+                    | some q1 => exact hqb q1 hbq
+                  have hqg : (iv blk.q).getD 0 = (blk.q.getD 0#i64).val := by cases blk.q <;> rfl
+                  have hpg : (iv blk.p).getD 0 = (blk.p.getD 0#i64).val := by cases blk.p <;> rfl
+                  simp only [iv, Option.map_some] at hqg hpg ⊢
+                  simp only [hqg, hpg]
+                  generalize blk.q.getD 0#i64 = q at hqb' ⊢
+                  generalize blk.p.getD 0#i64 = pp
+                  have hrb' := hrb r hr
+                  have hzb'' := hzb' z rfl
+                  by_cases habs : s1.absolute
+                  · simp only [habs, ite_true]
+                    by_cases h1 : z.val > r.val
+                    · have : z > r := by scalar_tac
+                      simp only [this, ite_true, WP.spec_ok]
+                      simp [SA, hpl', habs]; omega
+                    · have : ¬ z > r := by scalar_tac
+                      simp only [this, ite_false]
+                      by_cases h2 : r.val > init.val
+                      · have : r > init := by scalar_tac
+                        simp only [this, ite_true, WP.spec_ok]
+                        simp [SA, hpl', habs]; omega
+                      · have : ¬ r > init := by scalar_tac
+                        simp only [this, ite_false]
+                        by_cases h3 : q.val < 0
+                        · have : q < 0#i64 := by scalar_tac
+                          simp only [this, ite_true, WP.spec_ok]
+                          simp [SA, hpl', habs]; omega
+                        · have : ¬ q < 0#i64 := by scalar_tac
+                          simp only [this, ite_false, WP.spec_ok]
+                          refine ⟨?_, trivial, trivial, trivial, trivial, trivial, ?_⟩
+                          · simp [SA, hpl', habs, CY]; omega
+                          · intro y hy; simp at hy; subst hy; exact ⟨by simp only; omega, hzb'', hrb', hqb'⟩
+                  · simp only [habs, Bool.false_eq_true, ite_false, WP.spec_ok]
+                    simp [SA, habs]
+        · rename_i hc
+          have hc' : ¬ (g.val = 81 ∨ g.val = 82 ∨ g.val = 83 ∨ g.val = 84 ∨ g.val = 85 ∨ g.val = 73) := by
+            simpa [hcy] using hc
+          simp only [hc', ite_false, WP.spec_ok]
+
 end forge_machine_core

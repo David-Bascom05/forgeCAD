@@ -20,7 +20,7 @@ set_option maxRecDepth 2048
 namespace forge_machine_core
 
 /-- [forge_machine_core::copy]: loop body 0:
-    Source: 'kernel/forge-machine-core/src/lib.rs', lines 129:4-133:5
+    Source: 'kernel/forge-machine-core/src/lib.rs', lines 131:4-135:5
     Visibility: public -/
 @[rust_loop_body]
 def copy_loop.body
@@ -39,7 +39,7 @@ def copy_loop.body
   else ok (done out)
 
 /-- [forge_machine_core::copy]: loop 0:
-    Source: 'kernel/forge-machine-core/src/lib.rs', lines 129:4-133:5
+    Source: 'kernel/forge-machine-core/src/lib.rs', lines 131:4-135:5
     Visibility: public -/
 @[rust_loop]
 def copy_loop
@@ -52,7 +52,7 @@ def copy_loop
     (out, k)
 
 /-- [forge_machine_core::copy]:
-    Source: 'kernel/forge-machine-core/src/lib.rs', lines 126:0-135:1
+    Source: 'kernel/forge-machine-core/src/lib.rs', lines 128:0-137:1
     Visibility: public -/
 def copy
   (p : Slice (Option Std.I64)) : Result (alloc.vec.Vec (Option Std.I64)) := do
@@ -61,13 +61,13 @@ def copy
   copy_loop p out 0#usize
 
 /-- [forge_machine_core::one]:
-    Source: 'kernel/forge-machine-core/src/lib.rs', lines 138:0-142:1
+    Source: 'kernel/forge-machine-core/src/lib.rs', lines 140:0-144:1
     Visibility: public -/
 def one (e : Ev) : Result (alloc.vec.Vec Ev) := do
   alloc.vec.Vec.push (alloc.vec.Vec.new Ev) e
 
 /-- [forge_machine_core::target_one]:
-    Source: 'kernel/forge-machine-core/src/lib.rs', lines 145:0-159:1
+    Source: 'kernel/forge-machine-core/src/lib.rs', lines 147:0-161:1
     Visibility: public -/
 def target_one
   (absolute : Bool) (p : Option Std.I64) (w : Option Std.I64) :
@@ -85,7 +85,7 @@ def target_one
                   ok (some i, false)
 
 /-- [forge_machine_core::target]: loop body 0:
-    Source: 'kernel/forge-machine-core/src/lib.rs', lines 167:4-176:5
+    Source: 'kernel/forge-machine-core/src/lib.rs', lines 169:4-178:5
     Visibility: public -/
 @[rust_loop_body]
 def target_loop.body
@@ -113,7 +113,7 @@ def target_loop.body
   else ok (done (out, bad))
 
 /-- [forge_machine_core::target]: loop 0:
-    Source: 'kernel/forge-machine-core/src/lib.rs', lines 167:4-176:5
+    Source: 'kernel/forge-machine-core/src/lib.rs', lines 169:4-178:5
     Visibility: public -/
 @[rust_loop]
 def target_loop
@@ -127,7 +127,7 @@ def target_loop
     (out, bad, k)
 
 /-- [forge_machine_core::target]:
-    Source: 'kernel/forge-machine-core/src/lib.rs', lines 163:0-182:1
+    Source: 'kernel/forge-machine-core/src/lib.rs', lines 165:0-184:1
     Visibility: public -/
 def target
   (absolute : Bool) (pos : Slice (Option Std.I64))
@@ -142,7 +142,7 @@ def target
   else ok (core.result.Result.Ok out1)
 
 /-- [forge_machine_core::put]: loop body 0:
-    Source: 'kernel/forge-machine-core/src/lib.rs', lines 188:4-200:5
+    Source: 'kernel/forge-machine-core/src/lib.rs', lines 190:4-202:5
     Visibility: public -/
 @[rust_loop_body]
 def put_loop.body
@@ -169,7 +169,7 @@ def put_loop.body
   else ok (done out)
 
 /-- [forge_machine_core::put]: loop 0:
-    Source: 'kernel/forge-machine-core/src/lib.rs', lines 188:4-200:5
+    Source: 'kernel/forge-machine-core/src/lib.rs', lines 190:4-202:5
     Visibility: public -/
 @[rust_loop]
 def put_loop
@@ -182,7 +182,7 @@ def put_loop
     (out, k)
 
 /-- [forge_machine_core::put]:
-    Source: 'kernel/forge-machine-core/src/lib.rs', lines 185:0-202:1
+    Source: 'kernel/forge-machine-core/src/lib.rs', lines 187:0-204:1
     Visibility: public -/
 def put
   (a : Axes) (p : Slice (Option Std.I64)) (x : Std.I64) (y : Std.I64)
@@ -194,7 +194,7 @@ def put
   put_loop a p x y h out 0#usize
 
 /-- [forge_machine_core::is_arc]:
-    Source: 'kernel/forge-machine-core/src/lib.rs', lines 205:0-207:1
+    Source: 'kernel/forge-machine-core/src/lib.rs', lines 207:0-209:1
     Visibility: public -/
 def is_arc (g : Std.U32) : Result Bool := do
   if g = 2#u32
@@ -202,7 +202,7 @@ def is_arc (g : Std.U32) : Result Bool := do
   else ok (g = 3#u32)
 
 /-- [forge_machine_core::is_cycle]:
-    Source: 'kernel/forge-machine-core/src/lib.rs', lines 210:0-212:1
+    Source: 'kernel/forge-machine-core/src/lib.rs', lines 212:0-214:1
     Visibility: public -/
 def is_cycle (g : Std.U32) : Result Bool := do
   if g = 81#u32
@@ -221,7 +221,7 @@ def is_cycle (g : Std.U32) : Result Bool := do
              else ok (g = 73#u32)
 
 /-- [forge_machine_core::is_peck]:
-    Source: 'kernel/forge-machine-core/src/lib.rs', lines 215:0-217:1
+    Source: 'kernel/forge-machine-core/src/lib.rs', lines 217:0-219:1
     Visibility: public -/
 def is_peck (g : Std.U32) : Result Bool := do
   if g = 83#u32
@@ -229,7 +229,7 @@ def is_peck (g : Std.U32) : Result Bool := do
   else ok (g = 73#u32)
 
 /-- [forge_machine_core::feeds_out]:
-    Source: 'kernel/forge-machine-core/src/lib.rs', lines 220:0-222:1
+    Source: 'kernel/forge-machine-core/src/lib.rs', lines 222:0-224:1
     Visibility: public -/
 def feeds_out (g : Std.U32) : Result Bool := do
   if g = 85#u32
@@ -237,7 +237,7 @@ def feeds_out (g : Std.U32) : Result Bool := do
   else ok (g = 84#u32)
 
 /-- [forge_machine_core::hole]: loop body 0:
-    Source: 'kernel/forge-machine-core/src/lib.rs', lines 246:12-258:13
+    Source: 'kernel/forge-machine-core/src/lib.rs', lines 248:12-260:13
     Visibility: public -/
 @[rust_loop_body]
 def hole_loop.body
@@ -273,7 +273,7 @@ def hole_loop.body
   else ok (done out)
 
 /-- [forge_machine_core::hole]: loop 0:
-    Source: 'kernel/forge-machine-core/src/lib.rs', lines 246:12-258:13
+    Source: 'kernel/forge-machine-core/src/lib.rs', lines 248:12-260:13
     Visibility: public -/
 @[rust_loop]
 def hole_loop
@@ -288,7 +288,7 @@ def hole_loop
     (out, depth1)
 
 /-- [forge_machine_core::hole]:
-    Source: 'kernel/forge-machine-core/src/lib.rs', lines 227:0-270:1
+    Source: 'kernel/forge-machine-core/src/lib.rs', lines 229:0-272:1
     Visibility: public -/
 def hole
   (a : Axes) (base : Slice (Option Std.I64)) (c : Cyc) (cur : Std.I64)
@@ -330,29 +330,36 @@ def hole
     let v3 ← put a base x y back
     alloc.vec.Vec.push out5 (Ev.Rapid v3)
 
+/-- [forge_machine_core::or0]:
+    Source: 'kernel/forge-machine-core/src/lib.rs', lines 275:0-280:1 -/
+def or0 (w : Option Std.I64) : Result Std.I64 := do
+  match w with
+  | none => ok 0#i64
+  | some v => ok v
+
 /-- [forge_machine_core::has]:
-    Source: 'kernel/forge-machine-core/src/lib.rs', lines 273:0-278:1 -/
+    Source: 'kernel/forge-machine-core/src/lib.rs', lines 283:0-288:1 -/
 def has (w : Option Std.I64) : Result Bool := do
   match w with
   | none => ok false
   | some _ => ok true
 
 /-- [forge_machine_core::has_g]:
-    Source: 'kernel/forge-machine-core/src/lib.rs', lines 281:0-286:1 -/
+    Source: 'kernel/forge-machine-core/src/lib.rs', lines 291:0-296:1 -/
 def has_g (g : Option Std.U32) : Result Bool := do
   match g with
   | none => ok false
   | some _ => ok true
 
 /-- [forge_machine_core::any_word]:
-    Source: 'kernel/forge-machine-core/src/lib.rs', lines 289:0-294:1 -/
+    Source: 'kernel/forge-machine-core/src/lib.rs', lines 299:0-304:1 -/
 def any_word (any : Bool) (w : Option Std.I64) : Result Bool := do
   match w with
   | none => ok any
   | some _ => ok true
 
 /-- [forge_machine_core::word]:
-    Source: 'kernel/forge-machine-core/src/lib.rs', lines 296:0-298:1 -/
+    Source: 'kernel/forge-machine-core/src/lib.rs', lines 306:0-308:1 -/
 def word
   (ax : Slice (Option Std.I64)) (k : Std.Usize) : Result (Option Std.I64) := do
   let i := Slice.len ax
@@ -361,7 +368,7 @@ def word
   else ok none
 
 /-- [forge_machine_core::at]:
-    Source: 'kernel/forge-machine-core/src/lib.rs', lines 300:0-302:1 -/
+    Source: 'kernel/forge-machine-core/src/lib.rs', lines 310:0-312:1 -/
 def «at»
   (p : Slice (Option Std.I64)) (k : Std.Usize) : Result (Option Std.I64) := do
   let i := Slice.len p
@@ -370,7 +377,7 @@ def «at»
   else ok none
 
 /-- [forge_machine_core::motion_code]:
-    Source: 'kernel/forge-machine-core/src/lib.rs', lines 305:0-366:1 -/
+    Source: 'kernel/forge-machine-core/src/lib.rs', lines 315:0-370:1 -/
 def motion_code
   (a : Axes) (st : State) (b : Block) (s1 : State) :
   Result (core.result.Result State Refuse)
@@ -403,14 +410,8 @@ def motion_code
                 match o1 with
                 | none => ok (core.result.Result.Err Refuse.CycleUnknownHeight)
                 | some init =>
-                  let q ←
-                    match b.q with
-                    | none => ok 0#i64
-                    | some q1 => ok q1
-                  let dwell ←
-                    match b.p with
-                    | none => ok 0#i64
-                    | some p => ok p
+                  let q ← or0 b.q
+                  let dwell ← or0 b.p
                   if s1.absolute
                   then
                     if z > r
@@ -435,7 +436,7 @@ def motion_code
         else ok (core.result.Result.Err Refuse.UnknownMotion)
 
 /-- [forge_machine_core::plane_axes]:
-    Source: 'kernel/forge-machine-core/src/lib.rs', lines 369:0-377:1 -/
+    Source: 'kernel/forge-machine-core/src/lib.rs', lines 373:0-381:1 -/
 def plane_axes
   (a : Axes) (plane : Std.U32) (b : Block) :
   Result (Std.Usize × Std.Usize × (Option Std.I64) × (Option Std.I64))
@@ -448,7 +449,7 @@ def plane_axes
     else ok (a.y, a.z, b.j, b.k)
 
 /-- [forge_machine_core::arc]:
-    Source: 'kernel/forge-machine-core/src/lib.rs', lines 379:0-427:1 -/
+    Source: 'kernel/forge-machine-core/src/lib.rs', lines 383:0-425:1 -/
 def arc
   (a : Axes) (st : State) (b : Block) (s2 : State)
   (dst : alloc.vec.Vec (Option Std.I64)) (g : Std.U32) :
@@ -488,20 +489,20 @@ def arc
                 | none =>
                   match wb with
                   | none => ok (core.result.Result.Err Refuse.ArcNoCentre)
-                  | some v =>
+                  | some _ =>
                     do
-                    let i ← sa + 0#i64
-                    let i1 ← sb + v
-                    ok (core.result.Result.Ok (Centre.Abs i i1))
-                | some v =>
+                    let i ← or0 none
+                    let j ← or0 wb
+                    let i1 ← sa + i
+                    let i2 ← sb + j
+                    ok (core.result.Result.Ok (Centre.Abs i1 i2))
+                | some _ =>
                   do
-                  let v1 ←
-                    match wb with
-                    | none => ok 0#i64
-                    | some v2 => ok v2
-                  let i ← sa + v
-                  let i1 ← sb + v1
-                  ok (core.result.Result.Ok (Centre.Abs i i1))
+                  let i ← or0 wa
+                  let j ← or0 wb
+                  let i1 ← sa + i
+                  let i2 ← sb + j
+                  ok (core.result.Result.Ok (Centre.Abs i1 i2))
               | some r1 =>
                 match wa with
                 | none =>
@@ -528,7 +529,7 @@ def arc
                 residual
 
 /-- [forge_machine_core::step]: loop body 0:
-    Source: 'kernel/forge-machine-core/src/lib.rs', lines 458:4-461:5
+    Source: 'kernel/forge-machine-core/src/lib.rs', lines 456:4-459:5
     Visibility: public -/
 @[rust_loop_body]
 def step_loop0.body
@@ -547,7 +548,7 @@ def step_loop0.body
   else ok (done any)
 
 /-- [forge_machine_core::step]: loop 0:
-    Source: 'kernel/forge-machine-core/src/lib.rs', lines 458:4-461:5
+    Source: 'kernel/forge-machine-core/src/lib.rs', lines 456:4-459:5
     Visibility: public -/
 @[rust_loop]
 def step_loop0
@@ -559,7 +560,7 @@ def step_loop0
     (any, k)
 
 /-- [forge_machine_core::step]: loop body 1:
-    Source: 'kernel/forge-machine-core/src/lib.rs', lines 467:8-475:9
+    Source: 'kernel/forge-machine-core/src/lib.rs', lines 465:8-473:9
     Visibility: public -/
 @[rust_loop_body]
 def step_loop1.body
@@ -595,7 +596,7 @@ def step_loop1.body
   else ok (done (axes, pos))
 
 /-- [forge_machine_core::step]: loop 1:
-    Source: 'kernel/forge-machine-core/src/lib.rs', lines 467:8-475:9
+    Source: 'kernel/forge-machine-core/src/lib.rs', lines 465:8-473:9
     Visibility: public -/
 @[rust_loop]
 def step_loop1
@@ -609,7 +610,7 @@ def step_loop1
     (axes, pos, k)
 
 /-- [forge_machine_core::step]:
-    Source: 'kernel/forge-machine-core/src/lib.rs', lines 430:0-516:1
+    Source: 'kernel/forge-machine-core/src/lib.rs', lines 428:0-514:1
     Visibility: public -/
 def step
   (a : Axes) (pc : Std.I64) (lift : Std.I64) (st : State) (b : Block) :
