@@ -44,3 +44,12 @@ the build fails on `sorryAx` or any axiom past `propext`, `Classical.choice` and
   ForgeExact.Ops.DraftCone.cone_eq_frustum
   ForgeExact.Ops.DraftCone.neutral_circle
   ForgeExact.Ops.DraftCone.apex_free_iff
+  ForgeExact.Ops.ChamferCorner.Corner.D_pos
+  ForgeExact.Ops.ChamferCorner.Corner.meet_on_planes
+  ForgeExact.Ops.ChamferCorner.Corner.meet_unique
+  ForgeExact.Ops.ChamferCorner.Corner.contact_on_planes
+  ForgeExact.Ops.ChamferCorner.Corner.kept_eq_bracket
+  ForgeExact.Ops.ChamferCorner.Corner.point_iff_kept
+  ForgeExact.Ops.ChamferCorner.Corner.point_row
+  ForgeExact.Ops.ChamferCorner.Corner.patch_row
+  ForgeExact.Ops.ChamferCorner.Corner.equal_is_point
