@@ -31,6 +31,7 @@ fn wall() -> Feature {
             (l((20.0, 30.0), (20.0, 50.0)), 2),
         ]],
         how: SheetHow::Extrude { lo: -2.0, hi: 8.0 },
+        thin: None,
     }))
 }
 
@@ -123,7 +124,71 @@ fn a_revolved_sheet_from_an_angle() {
             from: 1.0,
             angle: 2.0,
         },
+        thin: None,
     }))]);
     let a = sheet_area(&s[0].body).unwrap().0;
     assert!((a - 5.0 * 2.0 * 4.0).abs() < 1e-9, "{a}");
+}
+
+#[test]
+fn a_thin_wall_joins_the_part() {
+    let l = |a: (f64, f64), b: (f64, f64)| Segment::Line {
+        a: Point2::new(a.0, a.1),
+        b: Point2::new(b.0, b.1),
+    };
+    // an L of wall 2 thick, out (its corner's outside squared), 10 high, on a 10 x 10 x 10 block
+    let wall = Feature::Sheet(Box::new(Sheet {
+        plane: Frame::WORLD,
+        chains: vec![vec![
+            (l((0.0, 10.0), (10.0, 10.0)), 1),
+            (l((10.0, 10.0), (10.0, 20.0)), 2),
+        ]],
+        how: SheetHow::Extrude { lo: 0.0, hi: 10.0 },
+        thin: Some(forge_model::sheets::Thin {
+            lo: -2.0,
+            hi: 0.0,
+            op: Combine::Add,
+        }),
+    }));
+    let part = Part {
+        features: vec![block(Point3::ORIGIN, 10.0, 10.0, 10.0, Combine::New), wall],
+    };
+    let b = part.regenerate().expect("builds");
+    assert!(check(&b).is_empty(), "{:?}", check(&b));
+    // in (the left of the chain): 20 long less the inner corner, 2 thick, 10 high
+    let v = mass(&b).unwrap().volume;
+    assert!((v - (1000.0 + 10.0 * (2.0 * 20.0 - 4.0))).abs() < 1e-9, "{v}");
+}
+
+#[test]
+fn a_sheet_thickened_joins_the_solid_or_is_a_body() {
+    use forge_model::{Edit, Side};
+    let s = Part {
+        features: vec![block(Point3::ORIGIN, 10.0, 10.0, 10.0, Combine::New), wall()],
+    }
+    .regenerate_solids()
+    .unwrap();
+    let faces: Vec<forge_topo::Name> = {
+        let b = &s.iter().find(|x| x.body.is_sheet()).unwrap().body;
+        b.face_ids().map(|f| b.face(f).name).collect()
+    };
+    for (op, bodies, vol) in [
+        (Combine::Add, 2, 1000.0 + 10.0 * (40.0 + 1.0)),
+        (Combine::New, 3, 1000.0 + 10.0 * (40.0 + 1.0)),
+    ] {
+        let s = both(vec![
+            block(Point3::ORIGIN, 10.0, 10.0, 10.0, Combine::New),
+            wall(),
+            Feature::Edit(Edit::Thicken {
+                faces: faces.clone(),
+                thickness: 1.0,
+                side: Side::Pos,
+                op,
+            }),
+        ]);
+        assert_eq!(s.len(), bodies);
+        let v: f64 = s.iter().map(|x| mass(&x.body).unwrap().volume).sum();
+        assert!((v - vol).abs() < 1e-9, "{op:?} {v}");
+        assert!(s.iter().any(|x| x.body.is_sheet()));
+    }
 }

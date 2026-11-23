@@ -190,7 +190,9 @@ fn a_sheet_has_no_volume_and_check_keeps_solids_closed() {
         (line((40.0, 0.0), (40.0, 25.0)), 2),
     ];
     let mut b = extrude_sheet(&Frame::WORLD, &[chain], 10.0, 7).unwrap();
-    assert!(mass(&b).is_err());
+    let m = mass(&b).unwrap();
+    assert_eq!((m.volume, m.area), (0.0, 0.0));
+    assert!((m.sheet_area - 650.0).abs() < 1e-9);
     // the same topology called a solid: its boundary edges are each used once, not twice
     for f in &mut b.faces {
         f.sheet = false;
@@ -282,5 +284,131 @@ mod revolved {
         .unwrap();
         valid(&b);
         assert!((area(&b) - dmath::PI * 32.0).abs() < 1e-9, "{}", area(&b));
+    }
+}
+
+mod thickened {
+    use super::*;
+    use forge_ops::thicken;
+
+    fn solid(b: &Body) -> f64 {
+        let p = check(b);
+        assert!(p.is_empty(), "{p:?}");
+        assert!(!b.has_sheet());
+        mass(b).unwrap().volume
+    }
+
+    fn faces(b: &Body) -> Vec<forge_topo::Name> {
+        b.face_ids().map(|f| b.face(f).name).collect()
+    }
+
+    #[test]
+    fn an_l_wall_mitred_at_its_corner() {
+        let chain = vec![
+            (line((0.0, 0.0), (40.0, 0.0)), 1),
+            (line((40.0, 0.0), (40.0, 25.0)), 2),
+        ];
+        let s = extrude_sheet(&Frame::WORLD, &[chain], 10.0, 7).unwrap();
+        let t = 2.0;
+        // out: the front (right of the chain), the corner's outside squared off
+        let v = solid(&thicken(&s, &faces(&s), 0.0, t, 8).unwrap());
+        assert!((v - 10.0 * (65.0 * t + t * t)).abs() < 1e-9, "{v}");
+        let v = solid(&thicken(&s, &faces(&s), -t, 0.0, 8).unwrap());
+        assert!((v - 10.0 * (65.0 * t - t * t)).abs() < 1e-9, "{v}");
+        let v = solid(&thicken(&s, &faces(&s), -t / 2.0, t / 2.0, 8).unwrap());
+        assert!((v - 10.0 * 65.0 * t).abs() < 1e-9, "{v}");
+    }
+
+    #[test]
+    fn a_closed_square_is_a_tube() {
+        let sq = vec![
+            (line((0.0, 0.0), (10.0, 0.0)), 1),
+            (line((10.0, 0.0), (10.0, 10.0)), 2),
+            (line((10.0, 10.0), (0.0, 10.0)), 3),
+            (line((0.0, 10.0), (0.0, 0.0)), 4),
+        ];
+        let s = extrude_sheet(&Frame::WORLD, &[sq], 5.0, 1).unwrap();
+        let v = solid(&thicken(&s, &faces(&s), 0.0, 1.0, 2).unwrap());
+        assert!((v - 5.0 * (144.0 - 100.0)).abs() < 1e-9, "{v}");
+        let v = solid(&thicken(&s, &faces(&s), -1.0, 0.0, 2).unwrap());
+        assert!((v - 5.0 * (100.0 - 64.0)).abs() < 1e-9, "{v}");
+    }
+
+    #[test]
+    fn a_spline_wall_both_ways_is_its_length_times_t() {
+        // offsets t/2 either side of a plane curve bound t times its length exactly (the curvature
+        // terms of the two sides cancel), so the wall's volume is h t L
+        let sp = PlaneSpline::through(
+            vec![
+                Point2::new(0.0, 0.0),
+                Point2::new(8.0, 3.0),
+                Point2::new(16.0, -2.0),
+                Point2::new(24.0, 4.0),
+            ],
+            None,
+            None,
+        )
+        .unwrap();
+        let d = sp.c.domain();
+        let (g, w) = (
+            [
+                -0.906179845938664,
+                -0.538469310105683,
+                0.0,
+                0.538469310105683,
+                0.906179845938664,
+            ],
+            [
+                0.236926885056189,
+                0.478628670499366,
+                0.568888888888889,
+                0.478628670499366,
+                0.236926885056189,
+            ],
+        );
+        let n = 4000;
+        let hh = d.width() / n as f64;
+        let len: f64 = (0..n)
+            .map(|k| {
+                let m = d.lo + hh * (k as f64 + 0.5);
+                (0..5)
+                    .map(|i| w[i] * 0.5 * hh * sp.c.deriv(m + 0.5 * hh * g[i]).d1.length())
+                    .sum::<f64>()
+            })
+            .sum();
+        let s = extrude_sheet(&Frame::WORLD, &[vec![(Segment::Spline(Arc::new(sp)), 1)]], 5.0, 1).unwrap();
+        let t = 0.5;
+        let v = solid(&thicken(&s, &faces(&s), -t / 2.0, t / 2.0, 2).unwrap());
+        assert!((v - 5.0 * t * len).abs() < 1e-7 * v, "{v} {}", 5.0 * t * len);
+        // one side: still valid, and between the two (the curve bends both ways)
+        let out = solid(&thicken(&s, &faces(&s), 0.0, t, 2).unwrap());
+        let inn = solid(&thicken(&s, &faces(&s), -t, 0.0, 2).unwrap());
+        assert!((out + inn - 2.0 * 5.0 * t * len).abs() < 1e-7 * v, "{out} {inn}");
+    }
+
+    #[test]
+    fn arcs_offset_to_arcs() {
+        // a line then a quarter arc tangent to it: the wall t thick, out and in
+        let chain = vec![
+            (line((0.0, 0.0), (10.0, 0.0)), 1),
+            (
+                Segment::Arc {
+                    center: Point2::new(10.0, 5.0),
+                    radius: 5.0,
+                    start: -dmath::PI / 2.0,
+                    sweep: dmath::PI / 2.0,
+                },
+                2,
+            ),
+        ];
+        let s = extrude_sheet(&Frame::WORLD, &[chain], 3.0, 1).unwrap();
+        let t = 1.0;
+        let len = 10.0 + 5.0 * dmath::PI / 2.0;
+        // outward of a ccw arc is away from its centre: the ring there is (r + t/2) wide on average
+        let v = solid(&thicken(&s, &faces(&s), 0.0, t, 2).unwrap());
+        let want = 3.0 * (10.0 * t + dmath::PI / 4.0 * ((5.0 + t) * (5.0 + t) - 25.0));
+        assert!((v - want).abs() < 1e-8, "{v} {want}");
+        let v = solid(&thicken(&s, &faces(&s), -t / 2.0, t / 2.0, 2).unwrap());
+        assert!((v - 3.0 * len * t).abs() < 1e-8, "{v}");
     }
 }

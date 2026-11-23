@@ -115,7 +115,7 @@ pub enum BodyError {
 pub fn multi(features: &[Feature]) -> bool {
     features
         .iter()
-        .any(|f| matches!(f, Feature::Body(_) | Feature::Sheet(_)))
+        .any(|f| matches!(f, Feature::Body(_)) || matches!(f, Feature::Sheet(s) if s.thin.is_none()))
         || features
             .iter()
             .filter(|f| op(f) == Some(Combine::New))
@@ -128,6 +128,7 @@ fn op(f: &Feature) -> Option<Combine> {
         Feature::Extrude { op, .. } | Feature::Revolve { op, .. } | Feature::Ball { op, .. } => Some(*op),
         Feature::Edit(Edit::Thicken { op, .. }) => Some(*op),
         Feature::Import(t) => Some(t.op),
+        Feature::Sheet(s) => Some(crate::sheets::op(s)),
         _ => crate::swept::op(f),
     }
 }
@@ -539,12 +540,13 @@ fn named_targets(
     p: Option<&Pick>,
     names: &[Name],
     i: usize,
+    sheets_ok: bool,
 ) -> Result<Vec<usize>, RegenError> {
     if p.is_none() {
         let on: Vec<usize> = (0..solids.len())
             .filter(|&k| names.iter().any(|&n| holds(&solids[k].body, n)))
             .collect();
-        if let Some(&k) = on.iter().find(|&&k| solids[k].body.is_sheet()) {
+        if let Some(&k) = on.iter().find(|&&k| !sheets_ok && solids[k].body.is_sheet()) {
             return Err(RegenError::Body {
                 feature: i,
                 error: BodyError::OnSheet { id: solids[k].id },
@@ -603,7 +605,9 @@ fn modify_on(
             .find(|&&n| !on.iter().any(|&k| holds(&solids[k].body, n)))
             .copied()
     };
-    let mut on = named_targets(solids, p, &all, i)?;
+    // a thicken may name a sheet's faces: its slab joins the current solid (or is a body)
+    let thicken = matches!(f, Feature::Edit(Edit::Thicken { .. }));
+    let mut on = named_targets(solids, p, &all, i, thicken)?;
     let finishing: Vec<usize> = match missing(solids, &on) {
         Some(_) => (0..solids.len()).collect(),
         None => on.clone(),
@@ -616,7 +620,7 @@ fn modify_on(
             crate::finish_canonical(b)
         };
     }
-    on = named_targets(solids, p, &all, i)?;
+    on = named_targets(solids, p, &all, i, thicken)?;
     // a name on no body this feature works on is an error, never a step left out
     if let Some(name) = missing(solids, &on) {
         return Err(RegenError::MissingEdge { feature: i, name });
@@ -630,6 +634,38 @@ fn modify_on(
         };
         // on every body picked, none of the names on this one: nothing to do here
         if crate::names_nothing(&g) && !crate::names_nothing(f) {
+            continue;
+        }
+        if let Feature::Edit(Edit::Thicken {
+            faces,
+            thickness,
+            side,
+            op: top,
+        }) = &*g
+            && solids[k].body.is_sheet()
+        {
+            let slab = Feature::Edit(Edit::Thicken {
+                faces: faces.clone(),
+                thickness: *thickness,
+                side: *side,
+                op: Combine::New,
+            });
+            let slab = modify(plain, &slab, i, &solids[k].body, threads)?;
+            match targets(&ids(solids), &sheets(solids), None, i) {
+                Ok(t) if *top != Combine::New => {
+                    let shape = part_shape(&slab);
+                    let tool = (slab, *top, shape);
+                    let t = t[0];
+                    let body = std::mem::take(&mut solids[t].body);
+                    solids[t].body = add_tools(body, &[tool], (i, plain.id(i)), None)?;
+                }
+                // with no solid yet, an added slab is the first
+                Err(RegenError::NothingToCombine { .. }) if *top == Combine::Add => {
+                    new.push(Solid { id: i, body: slab })
+                }
+                Err(e) => return Err(e),
+                Ok(_) => new.push(Solid { id: i, body: slab }),
+            }
             continue;
         }
         let out = modify(plain, &g, i, &solids[k].body, threads)?;
@@ -861,7 +897,7 @@ fn body_feature(
                     return Err(bad(BodyError::NoFace { name: n }));
                 }
             }
-            for k in named_targets(solids, p, faces, i)? {
+            for k in named_targets(solids, p, faces, i, false)? {
                 let mine: Vec<Name> = faces
                     .iter()
                     .copied()

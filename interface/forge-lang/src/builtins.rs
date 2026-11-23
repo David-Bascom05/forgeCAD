@@ -1677,7 +1677,7 @@ fn extrude(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Val
         ev,
         name,
         &[
-            "profile", "d", "taper", "new", "along", "flip", "bodies", "surface",
+            "profile", "d", "taper", "new", "along", "flip", "bodies", "surface", "thin", "side",
         ],
         args,
         span,
@@ -1685,8 +1685,16 @@ fn extrude(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Val
     if a.poisoned() {
         return Ok(Value::Unresolved);
     }
-    if a.flag("surface")? {
+    if a.flag("surface")? || a.opt("thin").is_some() {
         return extrude_sheet(ev, name, &a, id, span);
+    }
+    if a.opt("side").is_some() {
+        return Err(Error::NotWith {
+            span: a.span("side"),
+            func: name,
+            arg: "side",
+            with: "no thin (a side is the side a thin wall is thickened to)",
+        });
     }
     let (sk, profile, segs) = profile_of(ev, a.req("profile")?, a.span("profile"))?;
     if a.opt("taper").is_some() {
@@ -1908,18 +1916,38 @@ fn extrude(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Val
 }
 
 /// `extrude(PATH | PROFILE, d | sym(d) | two(f, b), surface: true)`: a sheet, a body of its own.
+/// With `thin: t, side:` instead, that sheet thickened (as `thicken` does) into a wall t thick,
+/// which adds (or cuts) as an extrude does.
 fn extrude_sheet(ev: &mut Eval, name: &'static str, a: &Args, id: String, span: Span) -> R<Value> {
-    for arg in ["taper", "new", "along", "flip", "bodies"] {
+    let thin = a.opt("thin").is_some();
+    if thin && a.flag("surface")? {
+        return Err(Error::NotWith {
+            span: a.span("thin"),
+            func: name,
+            arg: "thin",
+            with: "surface (a thin wall is a solid)",
+        });
+    }
+    let only: &[&'static str] = if thin {
+        &["taper", "along", "flip"]
+    } else {
+        &["taper", "new", "along", "flip", "bodies", "side"]
+    };
+    for &arg in only {
         if a.opt(arg).is_some() {
             return Err(Error::NotWith {
                 span: a.span(arg),
                 func: name,
                 arg,
-                with: "surface (a sheet is a body of its own, made along the normal)",
+                with: if thin {
+                    "thin (a wall runs along the normal, a set distance)"
+                } else {
+                    "surface (a sheet is a body of its own, made along the normal)"
+                },
             });
         }
     }
-    if name != "extrude" {
+    if name != "extrude" && !thin {
         return Err(Error::NotWith {
             span: a.span("surface"),
             func: name,
@@ -1973,15 +2001,47 @@ fn extrude_sheet(ev: &mut Eval, name: &'static str, a: &Args, id: String, span: 
         }
     };
     let plane = sk.borrow().frame;
+    let thin = match a.num("thin", LEN)? {
+        None => None,
+        Some(t) => {
+            positive(&t, a.span("thin"), "a wall's thickness")?;
+            dims.push(dim("thin", &t));
+            let (lo, hi) = match crate::shapes::side_word(a)? {
+                forge_model::Side::Pos => (0.0, t.v),
+                forge_model::Side::Neg => (-t.v, 0.0),
+                forge_model::Side::Both => (-t.v / 2.0, t.v / 2.0),
+            };
+            let op = match name {
+                "cut" => Combine::Cut,
+                "intersect" => Combine::Keep,
+                _ if a.flag("new")? || !has_solid(ev) => Combine::New,
+                _ => Combine::Add,
+            };
+            Some(forge_model::sheets::Thin { lo, hi, op })
+        }
+    };
+    // a cut runs into the material, against the normal
+    let (lo, hi) = if name == "cut" { (-hi, -lo) } else { (lo, hi) };
     let f = Feature::Sheet(Box::new(forge_model::sheets::Sheet {
         plane,
         chains: vec![chain],
         how: forge_model::sheets::SheetHow::Extrude { lo, hi },
+        thin,
     }));
-    let (idx, hid) = ev.push_feature(&id, "sheet", f, span, dims)?;
+    let kind = match (thin.is_some(), name) {
+        (false, _) => "sheet",
+        (true, "cut") => "cut",
+        (true, _) => "extrude",
+    };
+    let f = if thin.is_some() {
+        crate::bodies::wrap_in(ev, a, f)?
+    } else {
+        f
+    };
+    let (idx, hid) = ev.push_feature(&id, kind, f, span, dims)?;
     Ok(Value::Feature(Rc::new(Feat {
         id,
-        kind: "sheet",
+        kind,
         idx,
         hid,
         shape: None,
@@ -2164,6 +2224,7 @@ fn revolve_sheet(ev: &mut Eval, a: &Args, id: String, span: Span) -> R<Value> {
             from,
             angle,
         },
+        thin: None,
     }));
     let (idx, hid) = ev.push_feature(&id, "sheet", f, span, dims)?;
     let (wa, wb) = {

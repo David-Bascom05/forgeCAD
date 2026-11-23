@@ -1,0 +1,24 @@
+# Sheets: surfaces with no material, each a body of its own. The part's volume and area are its
+# solids'; the sheets' area is reported apart.
+shared L = 40
+shared W = 30
+shared t = 6
+shared h = 20
+shared gap = 10
+param walls.r = 10
+param shade.a = 90deg
+
+sketch plan(on: xy) {
+  outline = rect(corner: (0, 0), size: (L, W))
+}
+base = extrude(plan.outline, t)
+sketch walls(on: plan.plane) {                      # open chains: a sketch of their own
+  path wall(start: (0, W + gap)) {
+    line(to: (L, W + gap))
+    tarc(to: (L + r, W + gap + r))
+  }
+  rim = line((0, -gap), (L, -gap))
+}
+skin = extrude(walls.wall, h, surface: true)        # a sheet: one face per piece of the chain
+shade = revolve(walls.rim, axis: X, angle: a, surface: true)
+boss = extrude(plan.outline, sym(t))                # joins the base, never a sheet

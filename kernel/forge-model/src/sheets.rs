@@ -15,6 +15,16 @@ pub struct Sheet {
     /// Segments end to end, each chain open or closed.
     pub chains: Vec<Vec<(Segment, u64)>>,
     pub how: SheetHow,
+    /// A thin wall instead: the sheet thickened from `lo` to `hi` along its front's normal
+    /// (`forge_ops::thicken`, the one way a thin feature is made), combined with the part as `op`.
+    pub thin: Option<Thin>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Thin {
+    pub lo: f64,
+    pub hi: f64,
+    pub op: crate::Combine,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -27,9 +37,28 @@ pub enum SheetHow {
 
 /// The sheet, as the one tool its feature gives: a new body.
 pub(crate) fn tool(i: usize, id: u64, s: &Sheet, build: bool) -> Result<Tool, RegenError> {
-    let body = if build { make(i, id, s)? } else { Body::new() };
+    let mut body = if build { make(i, id, s)? } else { Body::new() };
+    let op = match s.thin {
+        None => crate::Combine::New,
+        Some(t) => {
+            if build {
+                let faces: Vec<forge_topo::Name> = body.face_ids().map(|f| body.face(f).name).collect();
+                body =
+                    forge_ops::thicken(&body, &faces, t.lo, t.hi, id).map_err(|error| RegenError::Edit {
+                        feature: i,
+                        error: crate::EditError::Thicken(error),
+                    })?;
+            }
+            t.op
+        }
+    };
     let shape = crate::part_shape(&body);
-    Ok((body, crate::Combine::New, shape))
+    Ok((body, op, shape))
+}
+
+/// The op a sheet feature combines with: a new body for a sheet, else its thin wall's.
+pub(crate) fn op(s: &Sheet) -> crate::Combine {
+    s.thin.map_or(crate::Combine::New, |t| t.op)
 }
 
 fn make(i: usize, id: u64, s: &Sheet) -> Result<Body, RegenError> {

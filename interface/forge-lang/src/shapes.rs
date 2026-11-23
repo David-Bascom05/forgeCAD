@@ -1126,7 +1126,7 @@ fn direct(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Valu
     Ok(feat(id, name, idx, hid, None))
 }
 
-fn side_word(a: &Args) -> R<Side> {
+pub(crate) fn side_word(a: &Args) -> R<Side> {
     Ok(match word(a, "side", &["out", "in", "both"])? {
         Some("in") => Side::Neg,
         Some("both") => Side::Both,
@@ -1544,9 +1544,13 @@ pub(crate) fn chain_of(v: Value, span: Span) -> R<(Rc<RefCell<Sk>>, Vec<(Segment
     let Some(sk) = ents.first().map(|e| e.0.clone()) else {
         return Err(Error::EmptySelection { span });
     };
-    // a sheet's chain lies in one sketch's plane: a piece of another does not run on from it
-    if let Some(index) = ents.iter().position(|e| !Rc::ptr_eq(&e.0, &sk)) {
-        return Err(Error::PathGap { span, index });
+    // a sheet's chain lies in one sketch's plane
+    if let Some(e) = ents.iter().find(|e| !Rc::ptr_eq(&e.0, &sk)) {
+        return Err(Error::OtherSketch {
+            span,
+            sketch: e.0.borrow().id.clone(),
+            here: sk.borrow().id.clone(),
+        });
     }
     let s = sk.borrow();
     let at = |p: Point2| Point3::new(p.x, p.y, 0.0);

@@ -1,0 +1,22 @@
+# Thin walls: a chain thickened to a wall t thick, out (its front: the right of the chain), in,
+# or both, the corners mitred. The same thicken a sheet takes.
+shared L = 40
+shared W = 25
+shared h = 10
+shared t = 2
+param tray.r = 5
+
+sketch plan(on: xy) {
+  path wall(start: (0, 0)) {
+    line(to: (L, 0))
+    line(to: (L, W))
+  }
+}
+fence = extrude(plan.wall, h, thin: t, side: "out")      # 10 x (65 t + t^2)
+sketch tray(on: plan.plane) {
+  path lip(start: (0, W + 2 * h)) {
+    line(to: (L - r, W + 2 * h))
+    tarc(to: (L, W + 2 * h + r))
+  }
+}
+rim = extrude(tray.lip, sym(h), thin: t, side: "both", new: true)

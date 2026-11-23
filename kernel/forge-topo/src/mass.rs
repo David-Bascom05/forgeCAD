@@ -71,13 +71,11 @@ impl std::fmt::Display for MassError {
     }
 }
 
-/// A solid's mass properties. A sheet has no volume: `NO_VOLUME` (its area is `sheet_area`).
+/// A body's mass properties: its solids'. A body of sheets alone has none: volume, area and
+/// moments 0, its centroid (undefined) the origin, and `sheet_area` its area.
 pub fn mass(body: &Body) -> Result<MassProps, MassError> {
     mass_rel(body, REL)
 }
-
-/// Why a sheet's `mass` is refused.
-pub const NO_VOLUME: &str = "a sheet has no volume";
 
 /// A sheet's area and its error bound: its faces' areas summed in face order, each as `mass`
 /// integrates it.
@@ -137,12 +135,6 @@ pub fn face_area(body: &Body, f: FaceId) -> Result<f64, MassError> {
 }
 
 pub fn mass_rel(body: &Body, rel: f64) -> Result<MassProps, MassError> {
-    if body.is_sheet() {
-        return Err(MassError {
-            face: FaceId(0),
-            why: NO_VOLUME,
-        });
-    }
     // moments about a point inside the part keep the cancellation small
     let n = body.vertices.len().max(1) as f64;
     let c = body
@@ -189,6 +181,23 @@ pub fn mass_rel(body: &Body, rel: f64) -> Result<MassProps, MassError> {
             });
         }
         faces.push((f, v[10]));
+    }
+    if body.is_sheet() {
+        return Ok(MassProps {
+            volume: 0.0,
+            area: 0.0,
+            centroid: Point3::ORIGIN,
+            inertia: [[0.0; 3]; 3],
+            principal: [0.0; 3],
+            axes: [
+                Vec3::new(1.0, 0.0, 0.0),
+                Vec3::new(0.0, 1.0, 0.0),
+                Vec3::new(0.0, 0.0, 1.0),
+            ],
+            err: [0.0; 4],
+            faces,
+            sheet_area,
+        });
     }
     let vol = t[0];
     // shells may overlap (`extrude new`), so their volumes add up past one box round them all: each
