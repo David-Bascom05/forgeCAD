@@ -1,50 +1,25 @@
-//! The lint of a tapered extrude whose outline closes before its depth (forge-ops `closes_at`):
-//! one pass over the built features after the run, out of eval.rs, which builds every feature,
-//! as only a taper asks for it.
+//! The lint of a tapered extrude whose outline closes before its depth (forge-ops `closes_at`),
+//! asked by the extrude builtin where it makes a taper and nowhere else: a part with no taper
+//! runs none of it.
 use crate::error::{Error, Literal, Warning};
-use crate::eval::{Dimension, Eval, Status};
+use crate::eval::Dimension;
 use crate::syntax::Span;
 use crate::values;
 
-/// The run's lints for its tapers that close before their depth.
-pub(crate) fn lint(ev: &mut Eval) {
-    // (a part with no taper pays this test alone)
-    if ev.tapers == 0 {
-        return;
-    }
-    let tapered = |f: &forge_model::Feature| {
-        matches!(
-            f,
-            forge_model::Feature::Extrude {
-                extent: forge_model::Extent::Tapered { .. },
-                ..
-            }
-        )
-    };
-    let found: Vec<Warning> = ev
-        .feats
-        .iter()
-        .filter(|f| f.status == Status::Ok && ev.b.features.get(f.idx).is_some_and(tapered))
-        .filter_map(|f| closes(&ev.b.features[f.idx], &f.dims, f.span, &f.id))
-        .collect();
-    ev.warnings.extend(found);
-}
-
-/// The lint for `feature` (built, its arguments' `dims`), if its outline closes before its depth:
-/// with the depth's param set to where it closes, or the taper's to the largest angle that
-/// reaches the depth, where params drive them.
+/// The lint for a tapered extrude of `profile` by `distance` at `angle` (its arguments' `dims`), if
+/// its outline closes before its depth: with the depth's param set to where it closes, or the
+/// taper's to the largest angle that reaches the depth, where params drive them.
 #[cold]
 #[inline(never)]
-fn closes(feature: &forge_model::Feature, dims: &[Dimension], span: Span, id: &str) -> Option<Warning> {
-    let forge_model::Feature::Extrude {
-        profile,
-        extent: forge_model::Extent::Tapered { distance, angle },
-        ..
-    } = feature
-    else {
-        return None;
-    };
-    let at = forge_ops::taper::closes_at(profile, *distance, *angle)?;
+pub(crate) fn closes(
+    profile: &forge_ops::Profile,
+    distance: f64,
+    angle: f64,
+    dims: &[Dimension],
+    span: Span,
+    id: &str,
+) -> Option<Warning> {
+    let at = forge_ops::taper::closes_at(profile, distance, angle)?;
     let depth = distance.abs();
     let driven = |what: &str| {
         dims.iter()
