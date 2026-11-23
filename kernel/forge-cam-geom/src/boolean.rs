@@ -196,11 +196,13 @@ pub fn boolean(a: &Region, b: &Region, op: Op) -> Result<Vec<OLoop>, OffsetError
     crate::offset::link(&mut cx, &kept)
 }
 
-/// The loops as a region (each loop's pieces as given).
+/// The loops as a region (each loop's pieces as given). A loop that is one point is left out:
+/// a region is its area, and a point has none.
 pub fn region_of(loops: &[OLoop]) -> Region {
     Region {
         loops: loops
             .iter()
+            .filter(|l| !(l.segs.len() == 1 && matches!(l.segs[0], region::Seg::Line { a, b } if a == b)))
             .map(|l| region::Loop { segs: l.segs.clone() })
             .collect(),
     }

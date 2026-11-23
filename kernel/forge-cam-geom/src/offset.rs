@@ -29,8 +29,9 @@ use crate::real::{Ctx, R};
 use crate::region::{self, Elem, Exact, P2, Region, RegionError, Seg, p2};
 use std::cmp::Ordering;
 
-/// One closed loop of the offset, in f64 (each end the nearest f64 to the exact point, shared
-/// bit for bit between neighbours). A loop of one zero-length line is an isolated point of C.
+/// One closed loop of the offset, in f64: each end the exact point rounded to the grid `GRID`
+/// (shared bit for bit between neighbours), arcs' centres too. A loop of one zero-length line
+/// is an isolated point of C.
 #[derive(Clone, Debug, PartialEq)]
 pub struct OLoop {
     pub segs: Vec<Seg>,
@@ -98,6 +99,37 @@ pub fn offset(rg: &Region, r: f64) -> Result<(Vec<OLoop>, Stats), OffsetError> {
     let mut st = Stats::default();
     let (raw, points) = raw_pieces(&mut cx, &ex, rr, r2);
     st.raw = raw.len();
+    // a corner arc touches the two pieces it joins at their shared end, and only there (a line
+    // tangent to a circle; two circles tangent at that point, their centres apart): those
+    // junctions are recorded as they are, never solved for
+    let ne = ex.elems.len() as u32;
+    let mut by_tag: Vec<Option<usize>> = vec![None; ex.elems.len()];
+    let mut k = 0;
+    while k < raw.len() {
+        if raw[k].tag < ne {
+            by_tag[raw[k].tag as usize] = Some(k);
+        }
+        k += 1;
+    }
+    let mut joined: Vec<(usize, usize)> = Vec::new();
+    let mut k = 0;
+    while k < raw.len() {
+        if raw[k].tag >= ne {
+            let vi = (raw[k].tag - ne) as usize;
+            let nx = next_in_loop(&ex, vi);
+            if let Some(a) = by_tag[vi]
+                && raw[a].e == raw[k].s
+            {
+                joined.push((a.min(k), a.max(k)));
+            }
+            if let Some(b) = by_tag[nx]
+                && raw[b].s == raw[k].e
+            {
+                joined.push((b.min(k), b.max(k)));
+            }
+        }
+        k += 1;
+    }
     // events
     let n = raw.len();
     let mut on: Vec<Vec<Pt>> = vec![Vec::new(); n];
@@ -105,6 +137,13 @@ pub fn offset(rg: &Region, r: f64) -> Result<(Vec<OLoop>, Stats), OffsetError> {
     while i < n {
         let mut j = i + 1;
         while j < n {
+            if joined.contains(&(i, j)) {
+                let v = if raw[i].e == raw[j].s { raw[i].e } else { raw[i].s };
+                on[i].push(v);
+                on[j].push(v);
+                j += 1;
+                continue;
+            }
             let (mut a, mut b) = (Vec::new(), Vec::new());
             arr::meet(&mut cx, &raw[i], &raw[j], &mut a, &mut b);
             on[i].append(&mut a);
@@ -181,6 +220,19 @@ fn on_kept(cx: &mut Ctx, kept: &[Piece], q: Pt) -> bool {
     false
 }
 
+/// The element after `i` in its loop.
+fn next_in_loop(ex: &Exact, i: usize) -> usize {
+    let mut l = 0;
+    while l < ex.loops.len() {
+        let (a, b) = ex.loops[l];
+        if i >= a && i < b {
+            return if i + 1 == b { a } else { i + 1 };
+        }
+        l += 1;
+    }
+    i
+}
+
 /// The raw pieces, and the points arcs collapse to.
 fn raw_pieces(cx: &mut Ctx, ex: &Exact, r: R, r2: R) -> (Vec<Piece>, Vec<Pt>) {
     let mut out = Vec::new();
@@ -190,13 +242,15 @@ fn raw_pieces(cx: &mut Ctx, ex: &Exact, r: R, r2: R) -> (Vec<Piece>, Vec<Pt>) {
         let e = ex.elems[i];
         let tag = i as u32;
         match e.piece.curve {
-            Curve::Line { p, d, dd } => {
+            Curve::Line { d, dd, .. } => {
                 let len = cx.sqrt(dd);
                 let k = cx.div(r, len);
                 let pp = arr::perp(cx, d);
                 let off = arr::scale(cx, pp, k);
-                let p1 = arr::add(cx, p, off);
-                let e1 = arr::add(cx, p1, d);
+                // both ends as vertex + normal: the same expressions the corner arcs and the
+                // neighbours' ends are built from, so the pieces' junctions are shared exactly
+                let p1 = arr::add(cx, e.piece.s, off);
+                let e1 = arr::add(cx, e.piece.e, off);
                 out.push(Piece {
                     curve: Curve::Line { p: p1, d, dd },
                     s: p1,
@@ -209,13 +263,16 @@ fn raw_pieces(cx: &mut Ctx, ex: &Exact, r: R, r2: R) -> (Vec<Piece>, Vec<Pt>) {
                 let nr = if ccw { cx.sub(rad, r) } else { cx.add(rad, r) };
                 match cx.sign(nr) {
                     Ordering::Greater => {
-                        let k = cx.div(nr, rad);
-                        let vs = arr::sub(cx, e.piece.s, c);
-                        let ve = arr::sub(cx, e.piece.e, c);
-                        let os = arr::scale(cx, vs, k);
-                        let oe = arr::scale(cx, ve, k);
-                        let s = arr::add(cx, c, os);
-                        let en = if e.piece.full { s } else { arr::add(cx, c, oe) };
+                        // x + r n(x) = c + (x − c)(rad ∓ r)/rad: written from the vertex, like
+                        // the corner arcs' ends
+                        let ns = unit_normal(cx, &e, false, r);
+                        let s = arr::add(cx, e.piece.s, ns);
+                        let en = if e.piece.full {
+                            s
+                        } else {
+                            let ne = unit_normal(cx, &e, true, r);
+                            arr::add(cx, e.piece.e, ne)
+                        };
                         let q = cx.sqr(nr);
                         out.push(Piece {
                             curve: Curve::Circle {
@@ -596,13 +653,28 @@ fn curvature_sign_and_rad(p: &Piece) -> (i32, Option<R>) {
     }
 }
 
+/// The grid every output vertex and centre is rounded to: 2⁻³² mm (about 2.3·10⁻¹⁰ mm). One
+/// rule for every region the exact core gives out. It is far below any face's mu (≥ 10⁻⁹), so a
+/// clearance or a cleared void stated on it holds against the exact one; and it keeps the
+/// regions an op hands to the next one free of the sub-ulp slivers and subnormal coordinates
+/// that exact work on rounded inputs leaves (each such literal adds about a thousand bits to the
+/// separation bound of every sign it takes part in). Coincident points become one literal.
+pub const GRID: f64 = 1.0 / 4294967296.0;
+
+/// x rounded to the grid (exact in f64 for |x| < 2²⁰ mm; ties to even, as IEEE rounds).
+pub fn on_grid(x: f64) -> f64 {
+    let k = x / GRID;
+    let r = k.round_ties_even();
+    r * GRID
+}
+
 fn to_loop(cx: &mut Ctx, kept: &[Piece], chain: &[usize]) -> OLoop {
-    // each loop vertex's f64, once
+    // each loop vertex's grid point, once
     let mut verts: Vec<P2> = Vec::with_capacity(chain.len());
     let mut i = 0;
     while i < chain.len() {
         let s = kept[chain[i]].s;
-        verts.push(p2(cx.approx(s.x), cx.approx(s.y)));
+        verts.push(p2(on_grid(cx.approx(s.x)), on_grid(cx.approx(s.y))));
         i += 1;
     }
     let mut segs = Vec::with_capacity(chain.len());
@@ -616,7 +688,7 @@ fn to_loop(cx: &mut Ctx, kept: &[Piece], chain: &[usize]) -> OLoop {
             Curve::Circle { c, ccw, .. } => Seg::Arc {
                 a,
                 b,
-                c: p2(cx.approx(c.x), cx.approx(c.y)),
+                c: p2(on_grid(cx.approx(c.x)), on_grid(cx.approx(c.y))),
                 ccw,
             },
         };
@@ -627,6 +699,21 @@ fn to_loop(cx: &mut Ctx, kept: &[Piece], chain: &[usize]) -> OLoop {
     // dropped: its neighbours share that vertex, so the loop stays closed, and the region moves
     // by less than the rounding of its vertices; kept, it would read as a full circle or a
     // zero-length line. A loop that rounds to one point stays one (an isolated point).
+    // a loop within a few grid cells is below the grid: it is the point it shrinks to (as a
+    // region it has no area; as tool centres, a plunge there clears the tool's disk)
+    let (mut x0, mut y0, mut x1, mut y1) = (f64::INFINITY, f64::INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY);
+    for v in &verts {
+        x0 = x0.min(v.x);
+        y0 = y0.min(v.y);
+        x1 = x1.max(v.x);
+        y1 = y1.max(v.y);
+    }
+    let full = segs.len() == 1 && matches!(segs[0], Seg::Arc { .. });
+    if !full && x1 - x0 <= 4.0 * GRID && y1 - y0 <= 4.0 * GRID {
+        return OLoop {
+            segs: vec![Seg::Line { a: verts[0], b: verts[0] }],
+        };
+    }
     if segs.len() > 1 {
         let all = segs.clone();
         segs.retain(|s| match *s {

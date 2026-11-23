@@ -1,0 +1,26 @@
+machining
+# bracket.fg in two setups. op1: in the vise, gripping 4 mm of the stock, face the top, clear
+# around the outline down to 5.5 and bore the hole. jaws: soft jaws cut to the outline as op1
+# leaves it, 6 mm deep, by the tool that will cut them (a relief at each corner the tool cannot
+# reach). opj: the jaws, closed in the vise, pocketed. op2: the part turned over into the jaws,
+# the rest of the outline cleared down to just above them.
+shared tol = 0.01
+
+f    = part("bracket.fg", group: "N")
+m    = machine("generic-vmc3")
+t1   = tool("flat-10", t: 1, stickout: 32, holder: "bt40-er32")
+t2   = tool("flat-6", t: 2, stickout: 26, holder: "bt40-er32")
+op1  = setup(f, machine: m, stock: box(margin: (3, 3, 2)), origin: "top-corner", tol: tol, fixture: vise("generic-vise-150", across: "x", clamp: 4))
+skim = facing(op1, tool: t1, to: 14, step: 1)
+side = clear(op1, tool: t1, from: 14, to: 5.5, step: 3, stepover: 4)
+bore = pocket(op1, f.bore_h, tool: t2, stepover: 1.5, step: 3)
+p1   = program(op1, post: "fanuc", number: 2001)
+
+jaws = soft_jaw(vise("generic-vise-150", across: "y"), blank: "soft-al-150", from: op1, grip: 6, fit: 0.02, tool: t2, relief: "corners")
+opj  = setup(jaws, machine: m, origin: "top-center", tol: tol)
+cutj = pocket(opj, tool: t2, from: 6, to: 0, stepover: 2.5, step: 2)
+pj   = program(opj, post: "fanuc", number: 2002)
+
+op2  = setup(f, from: op1, machine: m, origin: "top-corner", tol: tol, fixture: jaws)
+rest = clear(op2, tool: t1, from: 14, to: 7.5, step: 3, stepover: 4)
+p2   = program(op2, post: "fanuc", number: 2003)

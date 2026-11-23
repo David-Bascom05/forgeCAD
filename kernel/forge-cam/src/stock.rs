@@ -20,6 +20,36 @@ pub struct InProcess {
     pub max: [f64; 3],
     /// (region, floor): cleared from the floor up.
     pub voids: Vec<(Region, f64)>,
+    /// (region, ceiling): cleared from below up to the ceiling: what an earlier setup cleared,
+    /// with the part turned over since.
+    pub under: Vec<(Region, f64)>,
+}
+
+/// A region mirrored in y (y ↦ −y), its loops reversed so the inside stays on the left.
+pub fn mirror_y(r: &Region) -> Region {
+    let m = |p: forge_cam_geom::region::P2| p2(p.x, -p.y);
+    Region {
+        loops: r
+            .loops
+            .iter()
+            .map(|l| Loop {
+                segs: l
+                    .segs
+                    .iter()
+                    .rev()
+                    .map(|s| match *s {
+                        Seg::Line { a, b } => Seg::Line { a: m(b), b: m(a) },
+                        Seg::Arc { a, b, c, ccw } => Seg::Arc {
+                            a: m(b),
+                            b: m(a),
+                            c: m(c),
+                            ccw,
+                        },
+                    })
+                    .collect(),
+            })
+            .collect(),
+    }
 }
 
 fn rect(a: [f64; 3], b: [f64; 3]) -> Region {
@@ -83,6 +113,18 @@ impl InProcess {
             min,
             max,
             voids: vec![],
+            under: vec![],
+        }
+    }
+
+    /// The stock turned over about x like the part (lower::turned): (x, y, z) ↦ (x, −y, h − z).
+    /// What was cleared from a floor up is now cleared from below up to h − floor.
+    pub fn turned(&self, h: f64) -> InProcess {
+        InProcess {
+            min: [self.min[0], -self.max[1], h - self.max[2]],
+            max: [self.max[0], -self.min[1], h - self.min[2]],
+            voids: self.under.iter().map(|(r, c)| (mirror_y(r), h - c)).collect(),
+            under: self.voids.iter().map(|(r, f)| (mirror_y(r), h - f)).collect(),
         }
     }
 
@@ -107,14 +149,18 @@ impl InProcess {
     /// The material's xy region in the band just above height z (None: no material).
     pub fn material(&self, z: f64) -> Result<Option<Region>, String> {
         let mut m = rect(self.min, self.max);
-        for (v, floor) in &self.voids {
-            if *floor <= z {
-                let d = boolean(&m, v, Op::Diff).map_err(|e| format!("{e:?}"))?;
-                if d.is_empty() {
-                    return Ok(None);
+        let below = self.under.iter().filter(|(_, c)| z < *c);
+        for (v, _) in self.voids.iter().filter(|(_, f)| *f <= z).chain(below) {
+            let d = boolean(&m, v, Op::Diff).map_err(|e| {
+                if std::env::var("FORGE_CAM_DEBUG").is_ok() {
+                    eprintln!("material at {z}: {e:?}\n m = {:?}\n v = {:?}", m.loops, v.loops);
                 }
-                m = region_of(&d);
+                format!("{e:?}")
+            })?;
+            if d.is_empty() {
+                return Ok(None);
             }
+            m = region_of(&d);
         }
         Ok(Some(m))
     }
@@ -122,7 +168,7 @@ impl InProcess {
     /// The heights where the stock's section changes.
     pub fn levels(&self) -> Vec<f64> {
         let mut zs: Vec<f64> = vec![self.min[2], self.max[2]];
-        for (_, f) in &self.voids {
+        for (_, f) in self.voids.iter().chain(&self.under) {
             if *f > self.min[2] && *f < self.max[2] {
                 zs.push(*f);
             }
@@ -136,7 +182,7 @@ impl InProcess {
     pub fn faces(&self) -> Result<Vec<Face>, String> {
         let mu = 1e-9 * (1.0 + self.max[0].abs().max(self.max[1].abs()).max(self.max[2].abs()));
         let mut zs: Vec<f64> = vec![self.min[2], self.max[2]];
-        for (_, f) in &self.voids {
+        for (_, f) in self.voids.iter().chain(&self.under) {
             if *f > self.min[2] && *f < self.max[2] {
                 zs.push(*f);
             }
@@ -149,18 +195,25 @@ impl InProcess {
         for k in 0..zs.len() - 1 {
             let (z0, z1) = (zs[k], zs[k + 1]);
             let m = self.material(z0)?;
-            // the horizontal face at z0: material below that ends here, or material above that
-            // starts here (the box's bottom)
+            // the horizontal faces at z0: material below that ends here, and material above that
+            // starts here (the box's bottom, or over a void from below)
             let exposed = match (&below, &m) {
-                (None, Some(m)) => Some(m.clone()),
-                (Some(b), Some(m)) => boolean(b, m, Op::Diff)
-                    .ok()
-                    .filter(|d| !d.is_empty())
-                    .map(|d| region_of(&d)),
-                (Some(b), None) => Some(b.clone()),
-                (None, None) => None,
+                (None, Some(m)) => vec![m.clone()],
+                (Some(b), Some(m)) => {
+                    let mut v = vec![];
+                    for (x, y) in [(b, m), (m, b)] {
+                        match boolean(x, y, Op::Diff) {
+                            Ok(d) if d.is_empty() => {}
+                            Ok(d) => v.push(region_of(&d)),
+                            Err(e) => return Err(format!("{e:?}")),
+                        }
+                    }
+                    v
+                }
+                (Some(b), None) => vec![b.clone()],
+                (None, None) => vec![],
             };
-            if let Some(e) = exposed {
+            for e in exposed {
                 faces.push(flat(&e, z0, mu, id));
                 id += 1;
             }

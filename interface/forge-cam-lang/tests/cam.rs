@@ -205,3 +205,85 @@ fn what_the_jaws_hold_is_left_over_by_name() {
     assert!(j.contains("\"why\":\"held by fixture\"") && j.contains("\"jaw_top\":5"), "{j}");
     assert!(cam.sheet().contains("Held in the vise"));
 }
+
+fn bracket(dir: &Path, edit: &dyn Fn(String) -> String) -> forge_cam_lang::Cam {
+    let src = std::fs::read_to_string(dir.join("bracket_cam.fg")).unwrap();
+    forge_cam_lang::run(&edit(src), dir)
+}
+
+fn fixture_json(cam: &forge_cam_lang::Cam, setup: &str) -> String {
+    let mut j = String::new();
+    cam.json().write(&mut j);
+    let at = j.find(&format!("\"name\":\"{setup}\"")).unwrap();
+    let f = at + j[at..].find("\"fixture\"").unwrap();
+    j[f..f + j[f..].find("\"heights\"").unwrap()].to_string()
+}
+
+#[test]
+fn soft_jaws_hold_the_part_turned_over() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    let cam = bracket(&dir, &|s| s);
+    assert!(
+        cam.ok,
+        "{:?} {:?}",
+        cam.errors,
+        cam.ops.iter().map(|o| (&o.name, &o.refusal)).collect::<Vec<_>>()
+    );
+    assert_eq!(cam.programs.len(), 3);
+    assert!(cam.programs.iter().all(|p| p.error.is_none() && p.round_trip));
+    // the jaws are cut in their own setup, and op2's ops are checked against them
+    let rest = cam.ops.iter().find(|o| o.name == "rest").unwrap();
+    assert!(rest.status == "built" && rest.pairs > 0);
+    assert!(fixture_json(&cam, "op2").contains("soft jaw"));
+    // G4 at the chain's end: op1 is continued by op2; the jaws are cut clean; what is left is
+    // the notch's two sharp inside corners, which no end mill reaches
+    assert!(cam.leftover_done);
+    // setups in order: op1, opj, op2
+    assert!(cam.leftover.iter().all(|l| l.setup == 2), "{:?}", cam.leftover);
+    for l in &cam.leftover {
+        assert_eq!(l.boxes.len(), 2);
+        for b in &l.boxes {
+            // in the notch (x 28..42, y −45..−38 turned over), each about a corner
+            assert!(b[0] > 27.0 && b[2] < 43.0 && b[1] > -49.0 && b[3] < -37.0, "{b:?}");
+        }
+    }
+}
+
+#[test]
+fn soft_jaws_follow_the_part() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    // a wider notch in a copy of the part: the jaws' pocket is cut to the new outline
+    let tmp = std::env::temp_dir().join(format!("forge-cam-jaws-{}", std::process::id()));
+    std::fs::create_dir_all(&tmp).unwrap();
+    let part = std::fs::read_to_string(dir.join("bracket.fg")).unwrap();
+    std::fs::write(tmp.join("bracket.fg"), part.replace("shared notch = 14", "shared notch = 20")).unwrap();
+    std::fs::copy(dir.join("bracket_cam.fg"), tmp.join("bracket_cam.fg")).unwrap();
+    let before = bracket(&dir, &|s| s);
+    let after = bracket(&tmp, &|s| s);
+    let _ = std::fs::remove_dir_all(&tmp);
+    assert!(after.ok, "{:?} {:?}", after.errors, after.ops.iter().map(|o| (&o.name, &o.refusal)).collect::<Vec<_>>());
+    // the jaws' pocket follows the outline: the op that cuts it changes
+    let cut = |c: &forge_cam_lang::Cam| c.ops.iter().find(|o| o.name == "cutj").unwrap().length_cut;
+    assert!((cut(&before) - cut(&after)).abs() > 1.0);
+}
+
+#[test]
+fn soft_jaws_refuse_what_cannot_seat() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    // no reliefs: the jaw tool's radius rounds the pocket's corners, and the part's sharp ones
+    // do not go in
+    let cam = bracket(&dir, &|s| s.replace(", relief: \"corners\"", ""));
+    assert!(
+        cam.errors.iter().any(|e| e.contains("does not seat") && e.contains("relief")),
+        "{:?}",
+        cam.errors
+    );
+    // a grip as deep as the part
+    let cam = bracket(&dir, &|s| s.replace("grip: 6", "grip: 14"));
+    assert!(cam.errors.iter().any(|e| e.contains("grip depth")), "{:?}", cam.errors);
+    // a hole is drilled from the side it opens on, not from the turned setup
+    let cam = bracket(&dir, &|s| s + "late = drill(op2, f.bore_h, plan: \"auto\")\n");
+    let late = cam.ops.iter().find(|o| o.name == "late").unwrap();
+    assert_eq!(late.status, "refused");
+    assert!(late.refusal.as_deref().unwrap().contains("side it opens on"), "{:?}", late.refusal);
+}

@@ -333,3 +333,92 @@ fn revolve(
     }
     Ok(())
 }
+
+/// The part turned over about the x axis, for a second setup: (x, y, z) ↦ (x, −y, h − z), with
+/// `h` = its lowest plus its highest z so it keeps its height range. A proper rotation, so
+/// every face keeps its side; the parameters are renamed so that the lowering's conventions
+/// (planes' u × v outward, walls' u horizontal with v up, revolved faces about +z) still hold:
+/// - planes: o' = T(o), u' = −R u, v' = −R v over (−p, −q): T(o + p u + q v);
+/// - cylinders, cones and tori: x' = R x, y' = −R y, ax' = −R ax over (−p, −q) (the rational
+///   half-angle map is odd, so t ↦ −t mirrors the angle), a cone's k' = −k, a torus's
+///   middle tube angle mirrored (sm' = −sm).
+///
+/// R negates y and z, exactly; h − z rounds once, by which every face's mu grows.
+pub fn turned(faces: &[Face], h: f64) -> Result<Vec<Face>, LowerError> {
+    let r = |v: V3| [v[0], -v[1], -v[2]];
+    let n = |v: V3| [-v[0], v[1], v[2]];
+    let t = |o: V3| [o[0], -o[1], h - o[2]];
+    let neg = |i: Ival| Ival::new(-i.hi, -i.lo);
+    let mut out = Vec::with_capacity(faces.len());
+    for (k, f) in faces.iter().enumerate() {
+        let surf = match f.surf {
+            Surf::Plane { o, u, v } => Surf::Plane {
+                o: t(o),
+                u: n(u),
+                v: n(v),
+            },
+            Surf::Cyl { o, x, y, ax, r: rr } => Surf::Cyl {
+                o: t(o),
+                x: r(x),
+                y: n(y),
+                ax: n(ax),
+                r: rr,
+            },
+            Surf::Cone { o, x, y, ax, r0, k } => Surf::Cone {
+                o: t(o),
+                x: r(x),
+                y: n(y),
+                ax: n(ax),
+                r0,
+                k: -k,
+            },
+            Surf::Torus {
+                o,
+                x,
+                y,
+                ax,
+                big,
+                r: rr,
+                cm,
+                sm,
+            } => Surf::Torus {
+                o: t(o),
+                x: r(x),
+                y: n(y),
+                ax: n(ax),
+                big,
+                r: rr,
+                cm,
+                sm: -sm,
+            },
+            Surf::Sphere { .. } => {
+                return Err(LowerError::Unsupported {
+                    face: k,
+                    why: "a sphere is not turned over in this phase".into(),
+                });
+            }
+        };
+        let trim = f.trim.as_ref().map(|tr| Trim {
+            segs: tr
+                .segs
+                .iter()
+                .map(|s| match *s {
+                    TSeg::Line { a, b } => TSeg::Line {
+                        a: [-a[0], -a[1]],
+                        b: [-b[0], -b[1]],
+                    },
+                    TSeg::Arc { a, b, c, r, ccw } => TSeg::Arc {
+                        a: [-a[0], -a[1]],
+                        b: [-b[0], -b[1]],
+                        c: [-c[0], -c[1]],
+                        r,
+                        ccw,
+                    },
+                })
+                .collect(),
+        });
+        let mu = f.mu + 4.0 * f64::EPSILON * (h.abs() + f.bbox[2].lo.abs().max(f.bbox[2].hi.abs()));
+        out.push(Face::new(surf, neg(f.p), neg(f.q), trim, mu, f.id));
+    }
+    Ok(out)
+}

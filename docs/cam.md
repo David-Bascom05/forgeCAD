@@ -42,8 +42,9 @@ prog  = program(op1, post: "fanuc", number: 1001)
 | `part(FILE, group:)` | a part file beside the document; `group` (default `N`) picks the cutting data |
 | `machine(NAME)` | from the library (`generic-vmc3`, `generic-router`, or the project's) |
 | `tool(ID, t:, stickout:, holder:)` | a library tool, its T number, stick-out (tip to holder nose), holder |
-| `setup(PART, machine:, stock:, origin:, wcs:, tol:, clearance:, clear:, retract:, fixture:)` | `stock: box(margin: (x, y, z))` or `box(min:, max:)`; `origin: "top-center"`, `"top-corner"` or `(x, y, z)` in the part's frame; heights above the stock top |
+| `setup(PART, machine:, stock:, origin:, wcs:, tol:, clearance:, clear:, retract:, fixture:, from:)` | `stock: box(margin: (x, y, z))` or `box(min:, max:)`; `origin: "top-center"`, `"top-corner"` or `(x, y, z)` in the part's frame; heights above the stock top; `from: SETUP`: the part turned over about x, starting from the stock that setup provably left (turned) |
 | `vise(NAME, across:, clamp:, parallel:, clearance:)` | a library vise (`generic-vise-150`, `generic-vise-100`) closed on the stock along `across` (`"x"` or `"y"`), gripping `clamp` mm of it, on parallels `parallel` wide (default 6); `clearance` default 1 |
+| `soft_jaw(vise(NAME, across:), blank:, from: SETUP, grip:, fit:, tool:, relief: "corners", min_contact:)` | soft jaws cut to what `from:` left, turned over, `grip` deep: the pocket is the opening of that outline by `tool`'s radius, grown by `fit` (default 0.02), with a relief of radius r + fit at each corner if asked. Refused unless what `from:` left seats in the pocket (exactly), the seat is at least `min_contact` mm² (default a quarter of the largest section), the blank keeps 3 mm of wall and the part stands more than the fixture clearance above the jaws. The value is a part (the jaws closed, pocketed: `setup(jaws, ..)` cuts them, held by the vise) and a fixture (`setup(f, from: op1, fixture: jaws)`) |
 | `facing(SETUP, tool:, to:, step:)` | zig-zag over the stock down to `to` |
 | `clear(SETUP, tool:, from:, to:, step:, stepover:, leave:)` | everything between the stock outline and the part's section, as offset passes |
 | `contour(SETUP, tool:, side:, from:, to:, step:, leave:)` | the part's outline (`side: "outside"`) or its holes (`"inside"`) at the section |
@@ -55,9 +56,15 @@ prog  = program(op1, post: "fanuc", number: 1001)
 Holes are read from the part's history (`hole(d:, depth:, thread:, ...)`), never recognised from
 the shape: `f.bolts` is the `bolts` hole feature with its diameter, depth, thread and fit.
 
+Two setups and soft jaws (examples/machined/bracket_cam.fg): op1 holds the stock in a vise and cuts
+the top and the outline down to just above the jaws; `soft_jaw(.., from: op1)` makes jaws to what
+op1 left; `opj` cuts the jaws' pocket; op2 holds the part turned over in them and cuts the rest.
+Edit the part and every step follows: the jaws are recomputed from the new outline.
+
 ## Libraries
 
-Built in: generic tools, conservative holders, generic machines and per-group cutting data, all
+Built in: generic tools, conservative holders, generic machines, generic vises and soft-jaw blanks
+(`[[vise]]`, `[[jaw_blank]]`, kernel/forge-tooling/data/fixtures.toml) and per-group cutting data, all
 our own numbers, marked "verify with the vendor". A project adds its own in `cam/*.toml` beside
 the document (formats: research/cam/libraries-tools.md §5). A Fusion tool library converts with
 `forge_cam_import::fusion` (interface/forge-cam-import): our TOML, read back before it is written.
@@ -79,7 +86,8 @@ ops[]      name, kind (facing|clear|contour|pocket|drill), setup, status (built|
            leftover {status}, refusal | null
 blocking[] {op, why}      fixes[] {op, fix}      suggestions[] {kind: NeedTool, op, why}
 programs[] {name, post, lines, round_trip, error | null}
-leftover   {computed, rule, regions[] {setup, z, boxes, why (uncut | held by fixture)}}
+leftover   {computed, rule, regions[] {setup, z, boxes, why (uncut | held by fixture)}}: decided at the
+           end of each chain of setups (a setup another continues with `from:` hands its stock on)
 scope      what is proven and what is not
 ```
 
