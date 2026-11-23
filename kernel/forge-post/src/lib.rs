@@ -712,7 +712,10 @@ pub fn print(p: &QProgram, d: &Dialect) -> Result<String, PostError> {
                 if code.is_empty() {
                     return Err(PostError::Unsupported {
                         what: format!("coolant {c:?}"),
-                        fix: "choose a coolant the machine has (flood, mist) or none".into(),
+                        fix: format!(
+                            "the {} dialect has no `{key}`: choose a coolant it posts, or none",
+                            d.s("name")
+                        ),
                     });
                 }
                 w.emit(code);

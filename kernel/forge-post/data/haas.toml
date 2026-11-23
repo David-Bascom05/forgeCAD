@@ -25,7 +25,9 @@ wcs_count = 6
 arc = "ijk"
 retract_home = ["G91 G28 Z0.", "G90"]
 coolant_flood = "M08"
-coolant_mist = "M07"
+# no coolant_mist: no Haas M-code list shows M07 (HFO Mill Programming manual rev 04-2014: M08/M09,
+# M88/M89, M83/M84; Gerotech NGC training: M73/M74 tool air blast, M83/M84 auto air gun), so mist
+# is refused rather than posted as an unsupported code (research/cam/machines/haas-dialect-audit.md)
 coolant_through = "M88"
 coolant_through_off = "M89"
 coolant_off = "M09"

@@ -349,3 +349,26 @@ fn round_trip_compares_what_the_control_executes() {
     let e = round_trip(&q, &d).unwrap_err();
     assert!(e.contains("differs"), "{e}");
 }
+
+/// Haas (research/cam/machines/haas-dialect-audit.md): dwell P in whole milliseconds (a P with a
+/// decimal point would be seconds on Haas), through-tool coolant M88/M89, and mist refused: no
+/// Haas M-code list has M07.
+#[test]
+fn haas_dwell_coolant_and_no_mist() {
+    let h = Dialect::get("haas").unwrap();
+    let mut p = prog(false);
+    p.recs.push(Rec::Dwell(0.5));
+    p.recs.push(Rec::Coolant(Coolant::Through));
+    p.recs.push(Rec::Coolant(Coolant::Off));
+    let txt = print(&quantize(&p, &h).unwrap(), &h).unwrap();
+    assert!(txt.contains("G04 P500\n"), "{txt}");
+    assert!(txt.contains("M88\n"), "{txt}");
+    p.recs.push(Rec::Coolant(Coolant::Mist));
+    match print(&quantize(&p, &h).unwrap(), &h) {
+        Err(PostError::Unsupported { what, fix }) => {
+            assert_eq!(what, "coolant Mist");
+            assert!(fix.contains("haas") && fix.contains("coolant_mist"), "{fix}");
+        }
+        r => panic!("{r:?}"),
+    }
+}
