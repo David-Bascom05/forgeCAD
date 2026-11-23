@@ -23,6 +23,9 @@ open SplineSpec
 #print axioms nb_continuous
 #print axioms iter_curveOn
 #print axioms curve_smooth
+-- T6: knot insertion leaves the curve unchanged.
+#print axioms insert_basis
+#print axioms insert_curve
 -- The oracle's answers are proofs: a control spline's Bernstein coefficients are the span's
 -- polynomial; pieces within e at their points are within e; the intervals enclose; the
 -- through-spline's slopes and pieces are where the oracle says.
