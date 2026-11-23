@@ -782,7 +782,8 @@ fn offset_folds_at_its_radius() {
     let bump = 175.0 / 32.0;
     let b = wavy.breaks()[2];
     let q = wavy.deriv(b);
-    let k = (q.d1.x * q.d2.y - q.d1.y * q.d2.x) / q.d1.length().powi(3);
+    let l = q.d1.length();
+    let k = (q.d1.x * q.d2.y - q.d1.y * q.d2.x) / (l * l * l);
     assert!((1.0 / k + bump).abs() < 1e-12, "{}", 1.0 / k);
     let dom = wavy.domain();
     assert_eq!(wavy.offset_fold(bump * (1.0 - 1e-6), dom), None);

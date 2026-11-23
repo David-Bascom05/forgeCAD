@@ -2,7 +2,7 @@
 //! (offset, tilted, newly inserted): each vertex is solved onto every surface around it, each
 //! edge is the exact intersection of its two faces' surfaces between its new vertices.
 
-use forge_geom::blend::{Offset, OffsetLine};
+use forge_geom::blend::OffsetLine;
 use forge_geom::curve::{CurveDeriv, ProcCurve, ProceduralCurve};
 use forge_geom::intcurve::{IntCurve, refine, trace};
 use forge_geom::intersect::{SurfaceSurface, plane_surface};
@@ -500,19 +500,6 @@ fn fit(c: &Curve, ps: Point3, pe: Point3, closed: bool) -> Option<Interval> {
     (t1 > t0).then_some(Interval::new(t0, t1))
 }
 
-/// Where `a` and `b` are one surface offset alike (one surface's two faces, each moved by the same
-/// distance), the edge `oc` of that surface moved with them, if there is a closed form for it.
-fn offset_image(a: &Surface, b: &Surface, oc: &Curve) -> Option<Curve> {
-    let (Surface::Procedural(pa), Surface::Procedural(pb), Curve::Procedural(c)) = (a, b, oc) else {
-        return None;
-    };
-    let ((ba, da), (bb, db)) = (Offset::parts(pa)?, Offset::parts(pb)?);
-    if ba != bb || da != db {
-        return None;
-    }
-    OffsetLine::curve(pa, c)
-}
-
 /// The new curve of an edge between surfaces `a` and `b`, running from `ps` to `pe`, picked
 /// from the intersection's branches as the one nearest the old edge `oc` over `or`.
 #[allow(clippy::too_many_arguments)]
@@ -582,7 +569,7 @@ fn edge_curve(
     }
     // two faces of one surface offset alike coincide: no intersection says where the edge between
     // them went, and it went with the offset (a spline wall's seam, turned or swept)
-    if let Some(image) = offset_image(a, b, oc) {
+    if let Some(image) = OffsetLine::between(a, b, oc) {
         let r = fit(&image, ps, pe, closed)?;
         return on_both(&image, r, a, b).then_some((image, r));
     }

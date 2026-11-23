@@ -298,40 +298,56 @@ impl Offset {
 /// edge between two faces of one surface, both offset alike, is this curve (two coincident surfaces
 /// meet nowhere in particular). For a spline turned about an axis and one of its sections, it is
 /// that section's exact offset curve in its half plane.
-#[derive(Debug)]
 pub struct OffsetLine {
-    /// The offset surface (an `Offset`).
+    /// The offset surface, and the offset it is (its base and distance) to evaluate.
     s: Proc,
+    off: Offset,
     o: Point2,
     dir: Vec2,
     /// The curve on the base: its parameter, and the bounds on its speed.
     under: crate::spline::SplineCurve,
-    d: f64,
+}
+
+impl std::fmt::Debug for OffsetLine {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "OffsetLine {} at {:?} + {:?} t", self.off.d, self.o, self.dir)
+    }
 }
 
 impl OffsetLine {
     /// The curve `c` of `s`'s base moved with `s`, or None where `s` is no offset, `c` no spline
     /// or the base has no closed form for where `c` lies on it.
     pub fn curve(s: &Proc, c: &ProcCurve) -> Option<Curve> {
-        let (base, d) = Offset::parts(s)?;
+        let o = s.as_any()?.downcast_ref::<Offset>()?;
         let under = c.as_any()?.downcast_ref::<crate::spline::SplineCurve>()?.clone();
-        let (o, dir) = base.curve_uv(c)?;
+        let (at, dir) = o.base.curve_uv(c)?;
         Some(Curve::Procedural(ProcCurve(Arc::new(OffsetLine {
             s: s.clone(),
-            o,
+            off: Offset {
+                base: o.base.clone(),
+                d: o.d,
+                id: o.id,
+            },
+            o: at,
             dir,
             under,
-            d,
         }))))
+    }
+    /// Where `a` and `b` are one surface offset alike (one surface's two faces, each moved by the
+    /// same distance), their edge `oc` on that surface moved with them, if there is a closed form
+    /// for it: two coincident surfaces meet nowhere in particular.
+    pub fn between(a: &Surface, b: &Surface, oc: &Curve) -> Option<Curve> {
+        let (Surface::Procedural(pa), Surface::Procedural(pb), Curve::Procedural(c)) = (a, b, oc) else {
+            return None;
+        };
+        let ((ba, da), (bb, db)) = (Offset::parts(pa)?, Offset::parts(pb)?);
+        if ba != bb || da != db {
+            return None;
+        }
+        OffsetLine::curve(pa, c)
     }
     fn uv(&self, t: f64) -> Point2 {
         Point2::new(self.o.x + self.dir.x * t, self.o.y + self.dir.y * t)
-    }
-    fn offset(&self) -> &Offset {
-        self.s
-            .as_any()
-            .and_then(|a| a.downcast_ref::<Offset>())
-            .expect("made on an offset")
     }
     /// Over `range`: the most of |C'| + |d| |C''| / |C'| on the spline C under the curve, which
     /// bounds this one's speed (|q'| = |C'| |1 + d k| with |k| <= |C''| / |C'|^2), the least of
@@ -342,7 +358,7 @@ impl OffsetLine {
         let [c1, c2, _] = c.derivative_bounds(range);
         let low = c.deriv(range.mid()).d1.length() - c2 * 0.5 * range.width();
         if low > 0.0 {
-            return c1 + self.d.abs() * c2 / low;
+            return c1 + self.off.d.abs() * c2 / low;
         }
         if depth == 0 {
             return f64::INFINITY;
@@ -357,10 +373,10 @@ impl OffsetLine {
 
 impl ProceduralCurve for OffsetLine {
     fn point(&self, t: f64) -> Point3 {
-        self.offset().place(self.uv(t))
+        self.off.place(self.uv(t))
     }
     fn deriv1(&self, t: f64) -> (Point3, Vec3) {
-        let (p, du, dv) = self.offset().first(self.uv(t));
+        let (p, du, dv) = self.off.first(self.uv(t));
         (p, du * self.dir.x + dv * self.dir.y)
     }
     fn deriv(&self, t: f64) -> CurveDeriv {
@@ -412,17 +428,21 @@ impl ProceduralCurve for OffsetLine {
         self.s.bbox(uv)
     }
     fn transformed(&self, f: &Frame) -> ProcCurve {
-        let s = self.s.transformed(f);
         let c = &self.under;
         ProcCurve(Arc::new(OffsetLine {
-            s,
+            s: self.s.transformed(f),
+            // (the same moved base the moved offset stands off: one composition, the same bits)
+            off: Offset {
+                base: self.off.base.transformed(f),
+                d: self.off.d,
+                id: fresh_id(),
+            },
             o: self.o,
             dir: self.dir,
             under: crate::spline::SplineCurve {
                 c: Arc::new(c.c.mapped(|p| f.point_to_world(p))),
                 dom: c.dom,
             },
-            d: self.d,
         }))
     }
     fn speed_bound(&self, range: Interval) -> f64 {

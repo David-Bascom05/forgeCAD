@@ -18,7 +18,7 @@ const FINEST: f64 = 1.0 / (1u64 << 36) as f64;
 
 /// A Bernstein polynomial over [0, 1], and with each coefficient the size of the terms summed to
 /// make it, which bounds its rounding.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 struct Poly {
     c: Vec<f64>,
     m: Vec<f64>,
