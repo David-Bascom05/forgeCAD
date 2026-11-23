@@ -3695,6 +3695,9 @@ fn cutout(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
     let mut cut_ids = vec![];
     let st = &mut ev.sheets.list[si];
     for l in &loops {
+        // a closed spline or ellipse whole, not in the pieces a solid's profile cuts it into
+        let whole = sk.borrow().whole_curve(l);
+        let l = whole.as_ref().unwrap_or(l);
         let lp = carried(l, &from, &on_skin).ok_or_else(|| Error::BadValue {
             span: a.span("profile"),
             what: "a spline carried onto the wall",

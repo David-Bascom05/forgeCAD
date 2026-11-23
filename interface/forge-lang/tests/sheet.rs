@@ -377,7 +377,8 @@ fn dxf_reads_back_as_the_flat() {
     // the spline part writes its window as NURBS
     let r = clean("spline");
     let ents = entities(&r.sheets[0].dxf().expect("a pattern"));
-    assert!(ents.iter().any(|e| e.0 == "SPLINE" && e.1 == "CUT"));
+    // one closed spline, one source, one SPLINE (not the halves a solid's profile cuts it in)
+    assert_eq!(ents.iter().filter(|e| e.0 == "SPLINE" && e.1 == "CUT").count(), 1);
 }
 
 // ---- K, anchors, edits -------------------------------------------------------------------------
@@ -1523,7 +1524,7 @@ fn a_shallow_arc_window_is_not_the_blank() {
 
 #[test]
 fn an_ellipse_window_is_exact_nurbs_on_the_flat() {
-    // the ellipse's halves come out as rational quadratic splines, closed, inside the blank
+    // the ellipse comes out as one rational quadratic spline, closed, inside the blank
     let r = probe("ell");
     assert!(r.warnings.is_empty());
     let pat = r.sheets[0].pattern().expect("a pattern");
@@ -1533,6 +1534,8 @@ fn an_ellipse_window_is_exact_nurbs_on_the_flat() {
         .map(|k| &pat.contours[k])
         .collect();
     assert_eq!(window.len(), 1);
+    // the whole ellipse, one curve closing on itself
+    assert_eq!(window[0].len(), 1, "{:?}", window[0]);
     assert!(window[0].iter().all(|c| matches!(
         c,
         forge_sheet::Curve2::Spline {
