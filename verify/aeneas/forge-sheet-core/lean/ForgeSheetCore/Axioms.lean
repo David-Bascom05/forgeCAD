@@ -1,6 +1,7 @@
 import Lean
 import ForgeSheetCore.RefineClasses
 import ForgeSheetCore.RefineOwner
+import ForgeSheetCore.RefineChain
 
 /-! Only the standard axioms: each listed theorem about the translated Rust rests on `propext`,
 `Classical.choice` and `Quot.sound` alone (a `sorry` or `native_decide` fails the build). -/
@@ -19,3 +20,4 @@ elab "#standard_axioms " ids:ident* : command => do
   forge_sheet_core.find_spec forge_sheet_core.union_spec forge_sheet_core.new_spec
   forge_sheet_core.loop0_spec forge_sheet_core.loop1_spec forge_sheet_core.classes_spec
   forge_sheet_core.classList_iff forge_sheet_core.inner_spec forge_sheet_core.owner_spec
+  forge_sheet_core.fo_block forge_sheet_core.in_block forge_sheet_core.loop0_chain_spec
