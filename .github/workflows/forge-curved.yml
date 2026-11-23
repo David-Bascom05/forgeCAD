@@ -40,6 +40,7 @@ jobs:
         id: lake
         run: python3 tools/ci/lake-cache.py forge-curved verify/forge-curved
       - name: Lake build (restored; Lake rebuilds what changed)
+        id: restore
         uses: actions/cache/restore@v4
         with:
           path: ${{ steps.lake.outputs.paths }}
@@ -48,12 +49,15 @@ jobs:
             ${{ steps.lake.outputs.prefix }}
             ${{ steps.lake.outputs.any }}
       - name: the proofs
+        if: ${{ github.event_name != 'push' || steps.restore.outputs.cache-hit != 'true' }}
         working-directory: verify/forge-curved
         run: |
-          lake exe cache get
+          for i in 1 2 3; do lake exe cache get && break; [ "$i" = 3 ] && exit 1; sleep 15; done  # Mathlib's server drops downloads now and then
           lake build 2>&1 | tee build.log
+          if [ "$GITHUB_EVENT_NAME" = push ]; then exit 0; fi  # main: the build above is what is saved; the checks below ran on the pull request
           grep -q "Build completed successfully" build.log
       - name: the axiom report
+        if: ${{ github.event_name != 'push' }}
         working-directory: verify/forge-curved
         run: |
           lake env lean ForgeCurved/Axioms.lean 2>&1 | tee axioms.log
@@ -63,7 +67,7 @@ jobs:
           grep -q "'ForgeCurved.xNonManifold_iff_top' depends on axioms" axioms.log \
             || { echo "::error::xNonManifold_iff_top missing from the axiom report"; exit 1; }
       - name: save the Lake build (main only, even when a check failed)
-        if: ${{ always() && steps.lake.outcome == 'success' && github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+        if: ${{ always() && steps.lake.outcome == 'success' && steps.restore.outputs.cache-hit != 'true' && github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
         uses: actions/cache/save@v4
         with:
           path: ${{ steps.lake.outputs.paths }}
