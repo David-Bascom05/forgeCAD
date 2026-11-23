@@ -31,3 +31,4 @@ import ForgeBoolCore.Encode
 import ForgeBoolCore.EndToEnd
 import ForgeBoolCore.Integrate
 import ForgeBoolCore.RefineSplitOk
+import ForgeBoolCore.RefineCollapse
