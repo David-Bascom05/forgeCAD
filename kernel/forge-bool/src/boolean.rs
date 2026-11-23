@@ -1839,17 +1839,19 @@ fn plan_once_in(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
 
     // pieces of the two bodies' edges with the same ends along the same curve (coincident walls
     // meeting a face at one line) are one edge: B's copy gives way to A's
-    let mut by_ends: Vec<((VKey, VKey), usize)> = pieces
+    let mut by_ends: Vec<((u64, u64), usize)> = pieces
         .iter()
         .enumerate()
         .filter(|(_, pc)| pc.side == Some(0))
-        .map(|(i, pc)| ((pc.start.min(pc.end), pc.start.max(pc.end)), i))
+        .map(|(i, pc)| ((pc.start.min(pc.end).packed(), pc.start.max(pc.end).packed()), i))
         .collect();
-    by_ends.sort();
+    // (keys packed in VKey's order; the piece index breaks every tie, so unstable is stable)
+    by_ends.sort_unstable();
+    debug_assert!(by_ends.windows(2).all(|w| w[0] < w[1]));
     let mut canon: Vec<(usize, bool)> = (0..pieces.len()).map(|p| (p, false)).collect();
     let mut shared: Vec<usize> = Vec::new();
     for (p, pc) in pieces.iter().enumerate().filter(|(_, pc)| pc.side == Some(1)) {
-        let key = (pc.start.min(pc.end), pc.start.max(pc.end));
+        let key = (pc.start.min(pc.end).packed(), pc.start.max(pc.end).packed());
         let from = by_ends.partition_point(|x| x.0 < key);
         let mid = pc.curve.eval(pc.range.mid());
         for &(_, a) in by_ends[from..].iter().take_while(|x| x.0 == key) {
@@ -5128,7 +5130,7 @@ fn uv_chord(body: &Body, f: FaceId, p: &Piece, forward: bool, at_end: bool) -> O
 fn tied(
     pieces: &[Piece],
     half: &[(usize, bool)],
-    out: &[(VKey, usize)],
+    out: &[(u64, usize)],
     i: usize,
     theta: Vec2,
     (c, j): (Vec2, usize),
@@ -5490,7 +5492,7 @@ pub(crate) fn split_face(
 #[derive(Default)]
 struct SplitScratch {
     half: Vec<(usize, bool)>,
-    by_start: Vec<(VKey, usize)>,
+    by_start: Vec<(u64, usize)>,
     dirs: Vec<[std::cell::Cell<Option<Vec2>>; 2]>,
     used: Vec<bool>,
 }
@@ -5521,8 +5523,10 @@ fn split_face_in(
     let end_of = |h: (usize, bool)| if h.1 { pieces[h.0].end } else { pieces[h.0].start };
     // half-edges by start vertex, for finding the ways on from a vertex
     by_start.clear();
-    by_start.extend((0..half.len()).map(|j| (start_of(half[j]), j)));
-    by_start.sort();
+    by_start.extend((0..half.len()).map(|j| (start_of(half[j]).packed(), j)));
+    // (keys packed in VKey's order; the half-edge index breaks every tie, so unstable is stable)
+    by_start.sort_unstable();
+    debug_assert!(by_start.windows(2).all(|w| w[0] < w[1]));
     let (half, by_start) = (&*half, &*by_start);
     // each half-edge's direction at its start and at its end, worked out once (a vertex where m
     // ways meet is passed m times)
@@ -5539,7 +5543,7 @@ fn split_face_in(
         Ok(d)
     };
     let next = |i: usize| -> R<usize> {
-        let v = end_of(half[i]);
+        let v = end_of(half[i]).packed();
         let from = by_start.partition_point(|&(k, _)| k < v);
         let out = &by_start[from..from + by_start[from..].partition_point(|&(k, _)| k == v)];
         // one way on (always so at a pole, where u is undefined): no angles needed
