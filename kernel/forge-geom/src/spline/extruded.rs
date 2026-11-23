@@ -1,6 +1,8 @@
 //! A spline swept straight: S(u, v) = F(C(u) + v z), C a curve in the frame's xy plane. The implicit
 //! value is the signed distance to C in that plane, whatever the height.
 
+mod scale;
+
 use super::{Spline, SplineCurve};
 use crate::screw::{fresh_id, normal_turn, remembered};
 use crate::surface::{Domain2, Proc, Procedural, ShapeBounds, SurfDeriv, Surface};
@@ -322,19 +324,6 @@ impl Procedural for Extruded {
         s.id = fresh_id();
         s.frame = f.compose(&self.frame);
         Proc(Arc::new(s))
-    }
-    // the section's control points scaled in the frame (about its origin), the frame's origin
-    // scaled about c, the heights times k: the wall over k C(u) at height k v is the image
-    fn scaled(&self, c: Point3, k: f64) -> Option<Proc> {
-        let mut s = self.clone();
-        s.id = fresh_id();
-        s.frame = crate::similar::frame(&self.frame, c, k);
-        s.c = Arc::new(self.c.scaled_about(Point3::ORIGIN, k));
-        s.height = Interval::new(self.height.lo * k, self.height.hi * k);
-        s.whole = crate::similar::boxed(self.whole, Point3::ORIGIN, k);
-        s.radius = self.radius * k;
-        s.speed = self.speed * k;
-        Some(Proc(Arc::new(s)))
     }
     fn uv_scale(&self) -> (f64, f64) {
         (self.speed.max(tol::LINEAR), 1.0)

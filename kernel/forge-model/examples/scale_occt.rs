@@ -55,7 +55,7 @@ fn main() {
                 }
                 for q in seeds {
                     let on0 = f0.surface.eval(f0.surface.project(q));
-                    let img = forge_geom::similar::point(on0, CENTRE, k);
+                    let img = forge_topo::similar::point(on0, CENTRE, k);
                     let uv: Point2 = f1.surface.project(img);
                     let on1 = f1.surface.eval(uv);
                     pts.push(format!("[{},{}]", p3(on1), analytic));

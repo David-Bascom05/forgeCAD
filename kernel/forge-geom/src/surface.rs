@@ -278,11 +278,6 @@ pub trait Procedural: Send + Sync + std::fmt::Debug {
         self.implicit(p).abs() <= r
     }
     fn transformed(&self, f: &Frame) -> Proc;
-    /// The surface scaled by `k` (> 0) about `c` from its own data (a spline's control points),
-    /// where the kind has such a form; None leaves it to `similar::Grown`, the exact image.
-    fn scaled(&self, _c: Point3, _k: f64) -> Option<Proc> {
-        None
-    }
     /// Lengths on the surface per unit of u and of v, roughly (for meshing).
     fn uv_scale(&self) -> (f64, f64) {
         (1.0, 1.0)

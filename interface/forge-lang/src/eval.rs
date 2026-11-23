@@ -361,6 +361,9 @@ pub struct Eval<'s> {
     /// Each kernel name (`history_id`) made so far, and the feature (in `feats`) that made it
     /// first: two ids with one kernel name are refused (HistoryId.lean: `checked_distinct`).
     hids: HashMap<u64, usize, std::hash::BuildHasherDefault<NameHasher>>,
+    /// The bodies `delete` removed: the feature (its place in the history) that made each, and
+    /// the id of the delete. A name read after that is `Deleted`.
+    pub deleted: Vec<(usize, String)>,
     pub errors: Vec<Error>,
     pub warnings: Vec<Warning>,
     ctx: Ctx,
@@ -483,6 +486,7 @@ impl<'s> Eval<'s> {
             feats: vec![],
             ids: HashMap::default(),
             hids: HashMap::default(),
+            deleted: Vec::new(),
             errors: vec![],
             warnings: vec![],
             ctx: Ctx::default(),
@@ -1463,6 +1467,24 @@ impl<'s> Eval<'s> {
         p.read.get_or_init(|| driving(&p.value, &p.key, span)).clone()
     }
 
+    /// A feature value, or one a list or map holds, whose body a `delete` removed: `Deleted`.
+    pub fn not_deleted(&self, v: &Value, span: Span) -> R<()> {
+        match v {
+            Value::Feature(f) => match self.deleted.iter().find(|d| d.0 == f.idx) {
+                Some((_, by)) => Err(crate::feat_error::FeatError::Deleted {
+                    span,
+                    id: f.id.clone(),
+                    by: by.clone(),
+                }
+                .into()),
+                None => Ok(()),
+            },
+            Value::List(xs) => xs.iter().try_for_each(|x| self.not_deleted(x, span)),
+            Value::Map(m) => m.iter().try_for_each(|x| self.not_deleted(&x.1, span)),
+            _ => Ok(()),
+        }
+    }
+
     fn lookup(&mut self, name: &str, span: Span) -> R<Value> {
         // loop variables, arguments and sketch entities first, then this feature's own params,
         // then top-level names, then shared params
@@ -1599,7 +1621,13 @@ impl<'s> Eval<'s> {
             })),
             ExprKind::Str(s) => Ok(Value::Str(s.as_str().into())),
             ExprKind::Bool(b) => Ok(Value::Bool(*b)),
-            ExprKind::Name(n) => self.lookup(n, e.span),
+            ExprKind::Name(n) => {
+                let v = self.lookup(n, e.span)?;
+                if !self.deleted.is_empty() {
+                    self.not_deleted(&v, e.span)?;
+                }
+                Ok(v)
+            }
             ExprKind::List(xs) => {
                 let v: Vec<Value> = xs.iter().map(|x| self.expr(x)).collect::<R<_>>()?;
                 Ok(Value::List(Rc::new(v)))

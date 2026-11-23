@@ -167,3 +167,10 @@ open ForgeLang ForgeLang.Counter
 #print axioms Builtins.scale_conservative
 #print axioms Builtins.scale_refuses_only_its_binding
 #print axioms Builtins.scale_not_keyword
+#print axioms Builtins.delete_conservative
+#print axioms Builtins.delete_not_keyword
+#print axioms Builtins.remove_gone
+#print axioms Builtins.remove_keeps
+#print axioms Builtins.remove_order
+#print axioms Builtins.remove_refuses
+#print axioms Builtins.remove_leaves_one

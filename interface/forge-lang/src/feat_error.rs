@@ -53,6 +53,8 @@ pub enum FeatError {
     NoOwner { span: Span },
     /// A feature that makes no body, where a body is needed.
     NotABody { span: Span, id: String },
+    /// A body a `delete` removed, named after it: it is no longer in the part.
+    Deleted { span: Span, id: String, by: String },
     /// A general curve projected with no `approx:`: no sketch entity holds its image exactly.
     NeedsApprox { span: Span },
     /// Geometry with no image a sketch can hold (an axis not seen end-on ..): the reason.
@@ -108,6 +110,7 @@ impl FeatError {
             | Unnamed { span, .. }
             | NoOwner { span }
             | NotABody { span, .. }
+            | Deleted { span, .. }
             | NeedsApprox { span }
             | NoImage { span, .. }
             | File { span, .. } => *span,
@@ -127,6 +130,7 @@ impl FeatError {
             Unnamed { .. } => "Unnamed",
             NoOwner { .. } => "NoOwner",
             NotABody { .. } => "NotABody",
+            Deleted { .. } => "Deleted",
             NeedsApprox { .. } => "NeedsApprox",
             NoImage { .. } => "NoImage",
             File { .. } => "File",
@@ -166,6 +170,7 @@ impl FeatError {
             }
             NoOwner { .. } => "no earlier feature's own solid holds this face, edge or vertex".into(),
             NotABody { id, .. } => format!("{id} makes no body"),
+            Deleted { id, by, .. } => format!("{id} was deleted by {by}: its body is no longer in the part"),
             NeedsApprox { .. } => {
                 "a general curve has no exact image in a sketch: give approx: (a tolerance) to fit a spline within it".into()
             }
@@ -208,6 +213,7 @@ impl FeatError {
             Unnamed { sketch, .. } => vec![("sketch", s(sketch))],
             NoOwner { .. } => vec![],
             NotABody { id, .. } => vec![("id", s(id))],
+            Deleted { id, by, .. } => vec![("id", s(id)), ("by", s(by))],
             NeedsApprox { .. } => vec![],
             NoImage { why, .. } => vec![("why", s(why))],
             File { file, problem, .. } => vec![

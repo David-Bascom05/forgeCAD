@@ -1308,6 +1308,9 @@ def build(features, opts, trace=None):
                     bodies[t][1] = minus if minus is not None else plus
                     if f["keep"] == "both":
                         bodies.append([f["i"], plus])
+            elif k == "delete":
+                gone = set(f["bodies"])
+                bodies[:] = [b for b in bodies if b[0] not in gone]
             elif k == "move":
                 on = picked_bodies(f)
                 if f["copy"]:

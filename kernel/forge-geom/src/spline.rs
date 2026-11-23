@@ -1647,12 +1647,6 @@ impl ProceduralCurve for SplineCurve {
             dom: self.dom,
         }))
     }
-    fn scaled(&self, c: Point3, k: f64) -> Option<ProcCurve> {
-        Some(ProcCurve(Arc::new(SplineCurve {
-            c: Arc::new(self.c.scaled_about(c, k)),
-            dom: self.dom,
-        })))
-    }
     fn speed_bound(&self, range: Interval) -> f64 {
         self.c.derivative_bounds(range)[0]
     }

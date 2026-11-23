@@ -41,6 +41,9 @@ pub enum BodyFeature {
     SplitFace { faces: Vec<Name>, by: Cutter },
     /// Moves bodies rigidly, the steps in order, or (`copy`) makes a moved copy of one body.
     Move { steps: Vec<Step>, copy: bool },
+    /// Removes the bodies the features named made from the part. Each must be there, and one body
+    /// at least must be left; a later feature naming a deleted body is NoBody.
+    Delete { bodies: Vec<usize> },
 }
 
 /// Which bodies a feature acts on, by the features that made them.
@@ -114,6 +117,8 @@ pub enum BodyError {
     Unsupported(&'static str),
     /// A scale's factor is not finite and > 0, or its centre not finite.
     Scale(forge_topo::similar::ScaleError),
+    /// A delete would leave the part no body.
+    DeletesAll,
 }
 
 /// Whether a history makes or works on more than one body.
@@ -200,13 +205,13 @@ impl Piece {
     pub(crate) fn point(&self, p: Point3) -> Point3 {
         match *self {
             Piece::Rigid(f) => f.point_to_world(p),
-            Piece::Scale { about, k } => forge_geom::similar::point(p, about, k),
+            Piece::Scale { about, k } => forge_topo::similar::point(p, about, k),
         }
     }
     pub(crate) fn bbox(&self, b: &Box3) -> Box3 {
         match *self {
             Piece::Rigid(f) => Motion::Rigid(f).bbox(b),
-            Piece::Scale { about, k } => forge_geom::similar::boxed(*b, about, k),
+            Piece::Scale { about, k } => forge_topo::similar::boxed(*b, about, k),
         }
     }
 }
@@ -934,6 +939,17 @@ fn body_feature(
                 solids[k].body =
                     crate::splitface::split(&solids[k].body.compact(), &mine, &surface, me).map_err(&bad)?;
             }
+        }
+        BodyFeature::Delete { bodies } => {
+            for &id in bodies {
+                if !solids.iter().any(|s| s.id == id) {
+                    return Err(bad(BodyError::NoBody { id }));
+                }
+            }
+            if solids.iter().all(|s| bodies.contains(&s.id)) {
+                return Err(bad(BodyError::DeletesAll));
+            }
+            solids.retain(|s| !bodies.contains(&s.id));
         }
         BodyFeature::Move { steps, copy } => {
             let ps = pieces(steps);

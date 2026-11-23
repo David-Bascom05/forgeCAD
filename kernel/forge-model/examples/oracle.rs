@@ -755,6 +755,10 @@ fn export(features: History<'_>, i: usize, before: Option<&Before>) -> Result<St
             )),
             // the solid stays the same
             BodyFeature::SplitFace { .. } => Ok(Step::Nothing),
+            BodyFeature::Delete { bodies } => json(format!(
+                "{{\"kind\":\"delete\",\"bodies\":[{}]}}",
+                bodies.iter().map(|b| b.to_string()).collect::<Vec<_>>().join(",")
+            )),
             BodyFeature::Move { steps, copy } => json(format!(
                 "{{\"kind\":\"move\",\"m\":[{}],\"copy\":{copy}}}",
                 body_motion(steps).map(p3).join(",")
@@ -1572,6 +1576,7 @@ mod tests {
                 BodyFeature::Split { .. } => "split",
                 BodyFeature::SplitFace { .. } => "splitface",
                 BodyFeature::Move { .. } => "movebody",
+                BodyFeature::Delete { .. } => "delete",
             },
         }
     }

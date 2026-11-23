@@ -259,6 +259,32 @@ pub fn move_body(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) ->
     Ok(feat(id, name, idx, hid, None))
 }
 
+/// `delete(BODIES)`: the bodies those features made removed from the part. A name of one read
+/// after is `Deleted`; the kernel refuses a delete that would leave no body.
+pub fn delete(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Value> {
+    not_in_sketch(ev, name, span)?;
+    let id = ev.take_id(name, span)?;
+    let a = Args::bind(ev, name, &["of"], args, span)?;
+    if a.poisoned() {
+        return Ok(Value::Unresolved);
+    }
+    let mut of = body_ids(a.req("of")?, a.span("of"))?;
+    if of.is_empty() {
+        return Err(FeatError::NotOne {
+            span: a.span("of"),
+            what: "the bodies deleted",
+            count: 0,
+        }
+        .into());
+    }
+    of.sort_unstable();
+    of.dedup();
+    let f = Feature::Body(Box::new(BodyFeature::Delete { bodies: of.clone() }));
+    let (idx, hid) = ev.push_feature(&id, name, f, span, vec![])?;
+    ev.deleted.extend(of.into_iter().map(|k| (k, id.clone())));
+    Ok(feat(id, name, idx, hid, None))
+}
+
 /// `slide(along: DIR, by: L)`, `spin(about: AXIS, by: A)`, `place(PLANE)` (world to its frame),
 /// `scale(about: POINT, by: k)` (uniformly, k a finite ratio > 0: a similarity, the body's faces
 /// and names kept).

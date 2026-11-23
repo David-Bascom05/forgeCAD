@@ -450,13 +450,15 @@ combine(TARGET, tools: BODIES, op: "add"|"cut"|"keep", keep: false)
 split(by: WORKPLANE | FACE | PLANE | LINE | ARC | CIRCLE, keep: "both"|"plus"|"minus")
 splitface(faces: FACES, by: ..)       faces split where the cutter crosses them
 copybody(of: BODY, moves: [MOTION..])    movebody(of: BODIES, moves: [MOTION..])
+delete(BODIES)                           the bodies removed from the part
 MOTION: slide(along: DIR, by: d) | spin(about: AXIS, by: A) | place(on: PLANE)
       | scale(about: POINT, by: ratio(k))
 ```
 
 `scale` grows (k > 1) or shrinks (k < 1) the bodies uniformly about the point, k a finite ratio
 (`ratio(1.5)`, or a count) more than 0: the same faces, edges and names, every length times k, volume times k³. Motions apply
-in order. `keep: true` leaves the tools. A split keeping both makes the cutter's normal side a new body; a
+in order. `delete` removes bodies (the features that made them); a name of one read after it is
+the error Deleted, and a delete that would leave no body is refused. `keep: true` leaves the tools. A split keeping both makes the cutter's normal side a new body; a
 sketch line, arc or circle cuts swept along its plane's normal. `intersect` with `tools:` joins
 bodies; without, it is the extrude.
 

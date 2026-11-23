@@ -124,11 +124,6 @@ pub trait ProceduralCurve: Send + Sync + std::fmt::Debug {
     /// A box guaranteed to contain the curve over `range`.
     fn bbox(&self, range: Interval) -> Box3;
     fn transformed(&self, f: &Frame) -> ProcCurve;
-    /// The curve scaled by `k` (> 0) about `c` from its own data, over the same parameters, where
-    /// the kind has such a form; None leaves it to `similar::Grown`, the exact image.
-    fn scaled(&self, _c: Point3, _k: f64) -> Option<ProcCurve> {
-        None
-    }
     /// A bound on the speed |d/dt| over `range` (for subdivision searches).
     fn speed_bound(&self, range: Interval) -> f64;
     /// Chords that draw `range` within `chord` of the curve (equal parameter steps).
