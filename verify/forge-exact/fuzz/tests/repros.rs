@@ -487,3 +487,27 @@ fn band_hairs_through_faces_agree() {
         agrees_curved(&forge_model::adversarial::canonical(&moved));
     }
 }
+
+/// Known, kept until curved decide-once covers rims: a whole circle of tangency within 0.9·LINEAR,
+/// a rim lying on the other surface (a ball's equator on a cylinder's top rim; a cylinder's wall on
+/// another's from inside; a cone's rim on a face). The flood crosses the rim as though it were not
+/// on the other body, and the union or cut is left open (NotClosed) where the reference gives a
+/// solid. (perpendicular_tangent_inside was HoleOutside before the closed form kept its tips.)
+#[test]
+#[ignore = "exact curved reference: a rim within 0.9·LINEAR of the other surface leaves the body open (NotClosed)"]
+fn band_rims_within_tolerance_close() {
+    let (y, z) = (forge_math::Vec3::Y, forge_math::Vec3::Z);
+    for (name, d) in [
+        ("cylinder_sphere/dome_on_cap/Add", z * -0.9),
+        ("cylinder_sphere/dome_on_cap/Keep", z * -0.9),
+        ("cylinder_cylinder/perpendicular_tangent_inside/Add", y * -0.9),
+        ("plane_cone/base_on_top/Add", z * -0.9),
+        ("plane_cone/countersink_rim_in_top/Cut", z * 0.9),
+        ("plane_cone/countersink_rim_in_top/Keep", z * 0.9),
+    ] {
+        let part = degenerate_curved(name);
+        let moved =
+            forge_exact_fuzz::curved::tool_moved(&part, d * forge_math::tol::LINEAR).expect("a moved tool");
+        agrees_curved(&forge_model::adversarial::canonical(&moved));
+    }
+}
