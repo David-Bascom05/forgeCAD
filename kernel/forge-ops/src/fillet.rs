@@ -1770,7 +1770,9 @@ fn local(body: &Body, e: EdgeId, r: f64, t: f64) -> R<Local> {
 
 /// The blend the kernel rolls for edge `e` alone at constant radius `r` (no other edges, no ends
 /// resolved): the blend, its two springs (on the edge's first and second face) and whether the edge
-/// is convex. For the fillet spec's differential test (verify/fillet-spec); the kernel never calls it.
+/// is convex. For the fillet spec's differential test (verify/fillet-spec), behind the `spec-probe`
+/// feature so no kernel build has a second caller of `roll`.
+#[cfg(feature = "spec-probe")]
 pub fn edge_blend(body: &Body, e: EdgeId, r: f64) -> R<(Blend, [Curve; 2], bool)> {
     let rolled = roll(body, e, r, Name::NONE, (false, false))?;
     Ok((rolled.blend, rolled.springs, rolled.convex))

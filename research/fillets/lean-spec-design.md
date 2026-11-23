@@ -220,3 +220,51 @@ and tori they depend on `CurvedC`.
   callgrind gate. The baseline was saved on 1abd5bc in a separate worktree. App/edit/cli and regen1
   must be ≤ base, and native and wasm32-wasip1 bit-identical.
 - Each changed answer is listed per part, with its reason.
+
+## 8. Status (2026-11-23)
+
+**Proven** (verify/forge-exact/ForgeExact/Fillet; standard axioms only, checked in `Fillet/Axioms.lean`,
+built by forge-exact.yml's `lake build`):
+
+| file | theorems |
+|---|---|
+| `Closing.lean` | `closing_extensive`, `closing_mono`, `closing_idem`, `opening_sub`, `cut_eq_fill`, `closing_local` (O2) |
+| `PlanePlane.lean` | `free_iff`, `closing_iff` (the closing of a concave dihedral edge in closed form), `q_eq_cyl` (its boundary is the cylinder of radius r about the crease), `spring₁`, `g1_spring₁`, `near_crease` (the differential test's bound) |
+| `Revolve.lean` | `free_rev`, `closing_rev`: a solid of revolution closes as its meridian does (fields with square roots) |
+| `RevCorner.lean` | `boss_closing` (torus, major ρ₀ + r), `hole_closing` (torus, major ρ₀ − r: ring, spindle, or at r = ρ₀ the sphere), `pivot_sphere`, `hole_too_large` (past ρ₀ the hole closes: TooLarge's bound) |
+| `Conic.lean` | `conic_circle` (the conic is the ball iff 2w² = 1 + cos α), `conic_tangent` (G1 for every w) |
+| `Overflow.lean` | `quadNonneg_spec` (a quadratic ≥ 0 on an interval, decided exactly), `clear_sphere` (a line crease's ball clears a sphere or vertex generator iff that decision holds) |
+
+Not yet: the coaxial cone/sphere/torus pairs as theorems (the checker classifies them by the same
+meridian argument, `closing_rev` plus the meridian's plane–plane or plane–circle corner),
+`no_analytic`, the vertex table (O3, O5, O6), `fillet_eq_regBool` against `CurvedC`, and the
+overflow decision on circle creases and against cylinder generators.
+
+**Differential test** (`verify/fillet-spec` → `fillet-check`):
+- 81 blends from the 22 example parts with fillets, 795 from 40 random parts (prisms, bosses, holes,
+  cones), and 98 from the 15 speed-gate parts.
+- Every geometric check passed at δ = 1e-9 mm: radius, axis, centres on both offsets, and springs on
+  their faces at r from their centres.
+- The one disagreement was the kind. 57 blends with a circle spine of radius ≤ r were procedural pipes;
+  the spec gives a torus (a spindle torus). This is now fixed in `Blend::new`.
+- The checker flags a centre moved by 1e-6 in every one of 20 tampered lines.
+- Native and wasm32-wasip1 dumps are byte-identical.
+
+**Kernel changes**:
+1. `forge-geom/src/blend.rs`: a circle spine of radius in (MIN_LENGTH, r + LINEAR] gives
+   `Torus { major, minor: r }` (a spindle) when the section arc misses the tube's innermost point.
+   Otherwise it stays the Pipe, as before; that case was never met in the test data.
+2. `forge-thermo/src/scale.rs`: a spindle torus scales to a spindle torus. Before, `Torus::new`
+   refused it and the shrink-scaled mould lost those faces silently.
+3. `forge-ops`: `fillet::edge_blend`, behind the feature `spec-probe` (the harness's probe).
+
+**Changed answers** (examples, base 1abd5bc against this branch). Every other example is identical.
+
+| part | before | after | why |
+|---|---|---|---|
+| thermoform/cover.fg | 83 faces, 204 edges | 79 faces, 192 edges; volume and area unchanged | the four corner rounds are spindle tori now; the skin's corner cone faces, split in two near the foot before, are one face each |
+| thermoform/shell_cover.fg | 81 faces, 198 edges | 77 faces, 186 edges; volume and area unchanged | the same |
+
+**Blocked**: the census dataset (`~/forgecad-data`) is not on this machine, so the census's "wrong"
+fillets are not re-judged yet. `fillet-spec parts F.fg ..` piped into `fillet-check` judges any part's
+blends by the spec. Judging whole results by the spec (Tier A) is the next tool.

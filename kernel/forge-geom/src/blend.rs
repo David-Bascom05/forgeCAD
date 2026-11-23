@@ -637,6 +637,8 @@ const RAIL_STEP: f64 = 2.0;
 /// point of the section nearest the axis: then a spindle torus's used sheet (the tube on the centre
 /// circle's side of the axis) holds the whole blend.
 #[allow(clippy::too_many_arguments)]
+#[cold]
+#[inline(never)]
 fn off_axis_arc(k: &Circle, a: &Surface, b: &Surface, da: f64, db: f64, r: f64, spine: &Curve, near: Point3) -> bool {
     let c = spine.eval(spine_closest(spine, near));
     let z = k.frame.z().get();
@@ -682,12 +684,14 @@ impl Blend {
                     radius,
                 })
             }
-            // a circle spine of any radius past MIN_LENGTH gives a torus (the fillet spec's
-            // hole_closing): a spindle one too, when the section arc keeps to its used sheet
-            Curve::Circle(k)
-                if k.radius > radius + tol::LINEAR
-                    || (k.radius > tol::MIN_LENGTH && off_axis_arc(k, a, b, da, db, radius, &spine, near)) =>
-            {
+            Curve::Circle(k) if k.radius > radius + tol::LINEAR => Surface::Torus(Torus {
+                frame: k.frame,
+                major: k.radius,
+                minor: radius,
+            }),
+            // a circle spine within the ball's radius of its axis gives a spindle torus (the fillet
+            // spec's hole_closing), when the section arc keeps to its used sheet
+            Curve::Circle(k) if k.radius > tol::MIN_LENGTH && off_axis_arc(k, a, b, da, db, radius, &spine, near) => {
                 Surface::Torus(Torus {
                     frame: k.frame,
                     major: k.radius,

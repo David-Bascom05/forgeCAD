@@ -10,7 +10,7 @@ repository.workspace = true
 forge-math = { path = "../../kernel/forge-math" }
 forge-geom = { path = "../../kernel/forge-geom" }
 forge-topo = { path = "../../kernel/forge-topo" }
-forge-ops = { path = "../../kernel/forge-ops" }
+forge-ops = { path = "../../kernel/forge-ops", features = ["spec-probe"] }
 forge-model = { path = "../../kernel/forge-model" }
 forge-lang = { path = "../../interface/forge-lang" }
 

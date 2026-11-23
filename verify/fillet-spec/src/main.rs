@@ -107,13 +107,26 @@ fn blend(body: &Body, e: EdgeId, b: &Blend, springs: &[Curve; 2]) -> String {
     )
 }
 
+/// The fuzz harness's options without its font directory (which needs a temp dir, which WASI has
+/// not): these parts use no text, and the same source builds the same on native and wasm.
+fn opts() -> forge_lang::Options {
+    forge_lang::Options {
+        dir: None,
+        checks: false,
+        overlap: false,
+        expects: false,
+        meshes: false,
+        ..forge_lang::Options::default()
+    }
+}
+
 fn parts(files: &[String]) {
     for f in files {
         let Ok(src) = std::fs::read_to_string(f) else {
             eprintln!("{f}: unreadable");
             continue;
         };
-        let m = forge_lang::fuzz::build(&src);
+        let m = forge_lang::fuzz::build_with(&src, opts());
         for k in 0..m.features.len().min(m.built()) {
             let forge_model::Feature::Fillet { edges, .. } = &m.features[k] else {
                 continue;
@@ -181,7 +194,7 @@ fn random(n: usize, seed: u64) {
     let mut g = Rng(seed);
     for i in 0..n {
         let src = random_part(&mut g);
-        let m = forge_lang::fuzz::build(&src);
+        let m = forge_lang::fuzz::build_with(&src, opts());
         let Some(body) = m.body() else {
             eprintln!("random {seed}/{i}: did not build: {:?}", m.error());
             continue;

@@ -13,3 +13,7 @@ forge-topo = { path = "../forge-topo" }
 
 [lints]
 workspace = true
+
+[features]
+# forge_ops::fillet::edge_blend, the fillet spec's probe (verify/fillet-spec)
+spec-probe = []

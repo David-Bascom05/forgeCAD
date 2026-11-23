@@ -284,7 +284,12 @@ impl Args {
         self.vals.iter().any(|v| matches!(v.1.0, Value::Unresolved))
     }
     fn get(&self, k: &str) -> Option<&(Value, Span)> {
-        self.vals.iter().find(|x| x.0 == k).map(|x| &x.1)
+        // the length and first byte first: most names differ there, and libc's memcmp is not called
+        let first = k.as_bytes().first();
+        self.vals
+            .iter()
+            .find(|x| x.0.len() == k.len() && x.0.as_bytes().first() == first && x.0 == k)
+            .map(|x| &x.1)
     }
     pub fn opt(&self, k: &str) -> Option<Value> {
         self.get(k).map(|v| v.0.clone())
