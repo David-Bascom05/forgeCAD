@@ -1,6 +1,7 @@
 import Tess.Sag
 import Tess.Cone
 import Tess.Interp
+import Tess.Torus
 
 /-- info: 'Sag.mid_nearest' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in #print axioms Sag.mid_nearest
@@ -32,3 +33,11 @@ import Tess.Interp
 #guard_msgs in #print axioms Sag.node_le
 /-- info: 'Sag.interp_remainder' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in #print axioms Sag.interp_remainder
+/-- info: 'Sag.shadow_derivs' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in #print axioms Sag.shadow_derivs
+/-- info: 'Sag.shadow_third_le' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in #print axioms Sag.shadow_third_le
+/-- info: 'Sag.F_sag' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in #print axioms Sag.F_sag
+/-- info: 'Sag.stray_bound' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in #print axioms Sag.stray_bound
