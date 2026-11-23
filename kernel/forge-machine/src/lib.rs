@@ -5,6 +5,8 @@
 //!   collision bodies) and its structural validation.
 //! - `library`: the built-in generic machines (VMC, trunnion 5-axis, lathe, mill-turn).
 pub mod def;
+pub mod gcode;
+pub mod kin;
 pub mod library;
 
 pub use def::{DefError, Kind, MachineDef};
