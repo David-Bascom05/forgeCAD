@@ -1104,3 +1104,38 @@ bore = hole(at: spot.c, d: d, depth: thru, flip: true)
         plate_and_rib - column
     );
 }
+
+/// A through hole goes through a tapered boss. `hole::reach` gave a tapered (and a slanted)
+/// extrude no box at all, so this hole ran 7 mm, through the plate only, and stopped at the
+/// boss's foot. Exact: the plate, the boss's frustum (radius 10 narrowing by 30 tan 2°), less the
+/// hole's 36 mm column.
+#[test]
+fn thru_hole_goes_through_a_tapered_boss() {
+    let src = "shared L = 80
+shared W = 30
+shared t = 6
+param top.r = 10
+param boss.h = 30
+param boss.a = 2deg
+param bore.d = 5
+sketch plan(on: xy) {
+  outline = rect(corner: (0, 0), size: (L, W))
+}
+base = extrude(plan, t)
+sketch top(on: base.end) {
+  c = circle((L / 2, W / 2), r)
+}
+boss = extrude(top.c, h, taper: a)
+sketch spot(on: xy) {
+  p = pt(L / 2, W / 2)
+}
+bore = hole(at: spot.p, d: d, depth: thru, flip: true)
+";
+    let (b, v) = body(src);
+    assert!(forge_topo::check(&b).is_empty(), "{:?}", forge_topo::check(&b));
+    let (r0, h) = (10.0f64, 30.0f64);
+    let r1 = r0 - h * dmath::sin(2f64.to_radians()) / dmath::cos(2f64.to_radians());
+    let boss = dmath::PI * h / 3.0 * (r0 * r0 + r0 * r1 + r1 * r1);
+    let exact = 80.0 * 30.0 * 6.0 + boss - dmath::PI * 2.5 * 2.5 * 36.0;
+    assert!((v - exact).abs() < 1e-6, "volume {v}, through the boss {exact}");
+}
