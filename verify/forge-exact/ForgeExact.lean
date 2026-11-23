@@ -36,6 +36,7 @@ import ForgeExact.DecideOnce.QLedger
 import ForgeExact.DecideOnce.QArc
 import ForgeExact.DecideOnce.QBound
 import ForgeExact.DecideOnce.QCover
+import ForgeExact.DecideOnce.QGuards
 import ForgeExact.DecideOnce.QVertPlane
 import ForgeExact.DecideOnce.QVert3
 import ForgeExact.DecideOnce.SampleLocal

@@ -1,6 +1,6 @@
 name = "forgeexact"
 version = "0.1.0"
-defaultTargets = ["ForgeExact", "forge-exact"]
+defaultTargets = ["ForgeExact", "forge-exact", "curved-guards"]
 
 [leanOptions]
 relaxedAutoImplicit = false
@@ -16,3 +16,9 @@ name = "ForgeExact"
 [[lean_exe]]
 name = "forge-exact"
 root = "Main"
+
+# Non-vacuity of `curved_exact`: the representative curved inputs are certified (compiled; the
+# interpreted #guard of all five takes minutes).
+[[lean_exe]]
+name = "curved-guards"
+root = "CurvedGuards"
