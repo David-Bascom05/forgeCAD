@@ -631,9 +631,18 @@ fn verdict(ui: &mut Ui, st: &CamSimUi, t: &crate::shell::theme::Theme) {
     if let Some(mv) = st.sim.machine() {
         let n = mv.markers.len();
         let (c, s) = if n == 0 {
-            (t.success, format!("Posted code on {}: no collision or limit", mv.run.def.name))
+            (
+                t.success,
+                format!("Posted code on {}: no collision or limit", mv.run.def.name),
+            )
         } else {
-            (t.error, format!("Posted code on {}: {n} issues (collisions, limits)", mv.run.def.name))
+            (
+                t.error,
+                format!(
+                    "Posted code on {}: {n} issues (collisions, limits)",
+                    mv.run.def.name
+                ),
+            )
         };
         ui.colored_label(c, s);
     }

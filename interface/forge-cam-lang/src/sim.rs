@@ -105,7 +105,8 @@ pub struct MachineRun {
 impl MachineRun {
     /// The forge-machine setup (it borrows the definition).
     pub fn setup(&self) -> forge_machine::sim::Setup<'_> {
-        let mut s = forge_machine::sim::Setup::new(&self.def, self.control.clone()).expect("made once already");
+        let mut s =
+            forge_machine::sim::Setup::new(&self.def, self.control.clone()).expect("made once already");
         s.wcs = vec![(54, self.wcs.clone())];
         s.tools = self.tools.clone();
         s.h = self.h.clone();
@@ -270,7 +271,10 @@ impl Cam {
                 work.push(collide::part_body(
                     &setup,
                     &name,
-                    &[forge_machine::def::Prim::Box { min: mv(a), max: mv(b) }],
+                    &[forge_machine::def::Prim::Box {
+                        min: mv(a),
+                        max: mv(b),
+                    }],
                     collide::Role::Fixture,
                 ));
             }
