@@ -465,10 +465,18 @@ pub fn boolean_into(target: &mut Body, b: &Body, op: Op, _feature: u64) -> R<()>
     // target does from one boolean to the next: a face's drawing is the cost of the check)
     #[cfg(debug_assertions)]
     let before = target.clone();
+    // (measurement only: the operands' sizes and the old path's wall-clock, curved-cost-estimate.md)
+    #[cfg(feature = "decide_once_curved")]
+    let stats_in = crate::decide_once_curved::stats_on().then(|| (target.clone(), std::time::Instant::now()));
     if !imprinted(target, b, || std::borrow::Cow::Borrowed(b), op) {
         let first = target.edges.len();
         general(target, b, op)?;
         refuse_strays(target, first)?;
+    }
+    #[cfg(feature = "decide_once_curved")]
+    if let Some((a0, t0)) = stats_in {
+        let ns = t0.elapsed().as_nanos();
+        eprintln!("{}", crate::decide_once_curved::stats_line(&a0, b, ns));
     }
     #[cfg(debug_assertions)]
     faces_survive(&before, b, op, target);

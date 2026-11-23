@@ -3191,6 +3191,71 @@ pub fn cert_vertices(
 }
 
 // =============================================================================================
+// Measurement only: FORGE_CURVED_STATS (curved-cost-estimate.md)
+// =============================================================================================
+
+/// FORGE_CURVED_STATS set: per boolean, the sizes the route-(iii) builder's cost depends on, and
+/// the old path's wall-clock, to stderr. Read once.
+pub fn stats_on() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var_os("FORGE_CURVED_STATS").is_some())
+}
+
+/// One stats line: faces and edges of each operand, curved faces, near face pairs (different
+/// bodies, boxes within LINEAR) split plane–plane / plane–curved / curved–curved, and the
+/// edges of faces in a near pair.
+pub fn stats_line(a: &forge_topo::Body, b: &forge_topo::Body, nanos: u128) -> String {
+    let fs = match read_faces(&[a, b]) {
+        Ok(fs) => fs,
+        Err(e) => return format!("curved-stats skip {e:?} ns {nanos}"),
+    };
+    let (cls, _) = carrier_classes(&fs);
+    let near = near_pairs(&fs, &cls);
+    let curved = |i: usize| fs[i].q.kind != Kind::Plane;
+    let (mut pp, mut pc, mut cc) = (0, 0, 0);
+    let mut touched = vec![false; fs.len()];
+    for &(i, j) in &near {
+        if fs[i].body == fs[j].body {
+            continue;
+        }
+        touched[i] = true;
+        touched[j] = true;
+        match (curved(i), curved(j)) {
+            (false, false) => pp += 1,
+            (true, true) => cc += 1,
+            _ => pc += 1,
+        }
+    }
+    let nc = (0..fs.len()).filter(|&i| curved(i)).count();
+    let mut near_edges = 0;
+    for (i, t) in touched.iter().enumerate() {
+        if *t {
+            let body = if fs[i].body == 0 { a } else { b };
+            near_edges += body
+                .face(fs[i].face)
+                .loops
+                .iter()
+                .map(|l| body.lp(*l).coedges().count())
+                .sum::<usize>();
+        }
+    }
+    format!(
+        "curved-stats faces {} {} edges {} {} curved {} near pp {} pc {} cc {} near_faces {} near_edges {} ns {}",
+        a.face_ids().count(),
+        b.face_ids().count(),
+        a.edge_ids().count(),
+        b.edge_ids().count(),
+        nc,
+        pp,
+        pc,
+        cc,
+        touched.iter().filter(|t| **t).count(),
+        near_edges,
+        nanos
+    )
+}
+
+// =============================================================================================
 // QForm.lean: a body's sign formula
 // =============================================================================================
 
