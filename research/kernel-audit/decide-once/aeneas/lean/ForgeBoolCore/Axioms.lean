@@ -14,6 +14,7 @@ import ForgeBoolCore.RefineZeros
 import ForgeBoolCore.RefineSortU32
 import ForgeBoolCore.RefineAround
 import ForgeBoolCore.RefineTouch
+import ForgeBoolCore.RefineBetween
 /-! The refinement lemmas use the standard axioms only. -/
 #print axioms forge_bool_core.zero_idx_spec
 #print axioms forge_bool_core.is_facet_spec
@@ -69,3 +70,6 @@ import ForgeBoolCore.RefineTouch
 #print axioms forge_bool_core.around_spec
 #print axioms forge_bool_core.is_edge_spec
 #print axioms forge_bool_core.edge_scan_spec
+#print axioms forge_bool_core.between_iff
+#print axioms forge_bool_core.between_spec
+#print axioms forge_bool_core.edges_between_spec
