@@ -1,0 +1,72 @@
+# The old path, proven as written: statements, per function
+
+Owner decisions (face-arrangement.md §3b′, c5ecf9be):
+- prove today's flat boolean (boolean.rs, classify.rs, imprint.rs, nary.rs) as written, via Aeneas;
+- each guess step becomes a proven per-question screen, answering *decided* or *undecided*;
+- an undecided question goes to the exact code for that question only, and a question exact can't
+  decide either is a typed refusal.
+
+This page states what each function must be proven to do, in the order the aeneas session
+translates them. Each statement is a refinement: the translated function, read through an
+abstraction of its inputs, equals or soundly approximates a Lean definition over ℝ. Statements are
+written before the translation lands, so the proofs can start as soon as it elaborates.
+
+## 0. The missing layer: a Lean model of a `forge_topo::Body`
+
+Every statement below is about a `Body`. The repository has **no Lean model of one**: the decide-once
+models (`ForgeExact.DecideOnce`) are over ledgers, and forge-topo is not translated.
+
+Needed:
+1. **The translated types.** Aeneas's `Body`, `Face`, `Loop`, `Coedge`, `Edge` and `Vertex`, with
+   `Surface` and `Curve` as translated enums, and the `Proc`/`ProcCurve` arms opaque (the aeneas
+   session's markers).
+2. **An abstraction `⟦b⟧ : Set ℝ³`, the solid a body bounds,** plus `⟦f⟧ : Set ℝ³` for each face: its
+   surface's points inside its trimming loops. These are defined only under a validity predicate,
+   `ValidSolid b`: faces meet only along common edges, the loops are closed and properly nested, and
+   the shell is closed and oriented.
+3. **The bridge to dol-curved's F-series.** F1–F6 work over an abstract arrangement `G` with rooms and
+   facets. `⟦b⟧` should be a union of rooms of the arrangement of the body's own faces, so F5/F6 apply
+   to it unchanged.
+
+This layer is the first piece of Lean, before any refinement proof. It is shared with the curved
+plan.
+
+## 1. classify.rs
+
+| function | statement |
+|---|---|
+| `face_box(b, f)` | For a live face, `⟦f⟧ ⊆ face_box b f` (with the box closed). For a removed face, the box is empty. |
+| `Index::new(b)` | `ix.bbox ⊇ ⋃ live f, face_box b f`. Both branches (faces_box when there are more than 64 faces, else the fold of hulls) give such a box. |
+| `Index::face_box`, `boxes` | Equal to `face_box b f` (live) or `EMPTY` (removed), whether cached or not. The `OnceLock` changes cost only. |
+| `coedges_meeting(f, bx)` | Every coedge of f whose edge's box meets bx is in the result, and only those (the bands select a superset, then filter). |
+| `point_in_face(f, p)`, for p within LINEAR of f's surface | `Inside ⇒` p's foot on the surface is in `⟦f⟧` and farther than the tolerance from its boundary. `Outside ⇒` the foot is not in `⟦f⟧`. `On ⇒` the foot is within the tolerance of ∂f. **Today the result is a guess wherever an f64 parity or a `sag_bound` decides it** (see flags). |
+| `classify(p)` | `Inside ⇒ p ∈ interior ⟦b⟧`; `Outside ⇒ p ∉ ⟦b⟧`; `On ⇒ dist(p, ∂⟦b⟧) ≤ LINEAR`. |
+
+**Flags (guess steps in classify.rs, for the IEEE screens):**
+1. **`classify` returns `On` when every ray in `RAYS` is degenerate** (`OnSurface`, `Touching`, or a
+   hit with `point_in_face = On`). So `On` means both "near the boundary" and "undecided", and the
+   `On ⇒ near ∂` statement is false there. Under the ruling, the undecided case must go to an exact
+   ray test for this point, or become a typed refusal; it must not be `On`.
+2. **`On` by `surface.distance(p) ≤ LINEAR`, then `point_in_face ≠ Outside`.** This is a tolerance
+   band, not a fact. Either the statement keeps the tolerance (`On` means within LINEAR, which callers
+   must then treat as such), or it becomes a screen plus an exact on-face test. This is the main
+   modelling decision for classify. It needs the owner or master, because callers (trim, split_face,
+   classify_specs) act on `On`.
+3. **The `t > LINEAR` filter on ray hits** drops a crossing within LINEAR of p. That is sound only
+   when p is not On, which step 1 established within tolerance only.
+4. **`line_surface` hits and `Contact::Touching`** are f64 decisions; each needs a screen with an exact
+   fallback for that hit.
+5. **`point_in_face`'s `Simple` closed forms, `sag_bound`, the `sphere_nearest` pole rule, and
+   `other_turn_inside`** are all f64 decisions. Each needs its own screen statement.
+6. **Translation constructs (not a refactor request, input for the aeneas session):**
+   - `Face::query: Cached<Arc<dyn Any>>` read through `downcast_ref::<FaceInfo>()` in `info`;
+   - `OnceLock` in `Index::boxes`, `FaceInfo::drawn` and `simple`;
+   - the `Box<dyn Iterator>` in `edges_near`.
+   If Aeneas can't take one of these once the tooling is fixed, it goes to the master, named exactly.
+
+## 2. Next, as the translations land
+
+These follow the aeneas session's order: ssi (`surfaces_in`, `plane_meet`, `crossings_near`,
+`meet_region`) and unify; imprint (`meet`); boolean (the pair loop `plan_once_in`, `trim`,
+`split_face`, `classify_specs`, `touches`, `touched`/`pinched`); then nary (`meet3`). Their
+statements are written here when the aeneas table for each arrives.
