@@ -15,21 +15,29 @@ at 1e-4. No dataset file is in the repository.
 "Before" is the tree this branch started from; "after" is this branch. Both runs used the same kernel. The tables
 come from `research/import/tally.py`.
 
+Every count here is under the truth rule (research/import/truth.md), adopted after the first passes. A source's volume
+is OCCT's Gauss–Kronrod one, and a source whose measures disagree is "uncertain", counted neither way. Both columns are
+judged against the same re-measured truths: the source shapes are the same before and after. The counts under the old
+measure are given beside them where they differ.
+
 ## Headline
 
-| set | parts | untranslated before | after | match (1e-4) before | after |
-|---|---:|---:|---:|---:|---:|
-| FreeCAD library, bodies | 677 | 130 | 44 | 394 | 520 |
-| CADFS, all parts | 1914 | 640 | 612 | 1099 | 1114 |
-| CADFS, parts with a fillet | 476 | 238 | 227 | 164 | 167 |
-| WHUCAD, 1 in 7 with a fillet | 319 | 35 | 29 | (1e-3: STEPs staged for the newly built only) | 0 new |
+| set | parts | untranslated before | after | match (1e-4) before | after | uncertain after | match after, old measure |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| FreeCAD library, bodies | 677 | 130 | 39 | 394 | 570 | 20 | 523 |
+| CADFS, all parts | 1914 | 640 | 612 | 1108 | 1126 | 3 | 1114 |
+| CADFS, parts with a fillet | 476 | 238 | 227 | 164 | 167 | 0 | 167 |
+| WHUCAD, 1 in 7 with a fillet | 319 | 35 | 29 | (1e-3: STEPs staged for the newly built only) | 0 new | | |
 
-No part got worse on any set: no match was lost, and nothing that built before stopped building.
+No part got worse on any set through the importers: no match was lost, and nothing that built before stopped
+building. One match was lost to the rule itself. 5ab390cb.Body001 is an exact ellipse pad; both its volumes agree,
+but its two areas do not (6e-5), so it is uncertain.
 
 The first pass took on the four biggest FreeCAD causes and CADFS's extrude draft. A second pass took on causes that
 need only importer work: FreeCAD's Thickness, a mirror plane on a feature's face, a pattern axis on a feature's edge,
 CADFS's extrude up to a curved face, and WHUCAD's splines. A third pass writes sketch ellipses and elliptical arcs
-exactly, and reads FreeCAD's pad or pocket up to a face.
+exactly, reads FreeCAD's pad or pocket up to a face, takes a profile that is a binder or a feature's edge or
+face, and reads CADFS's elliptical arcs.
 
 In the first pass FreeCAD's matches rose by 112, and only 30 of those were newly translated parts:
 - 30 refused before and match now;
@@ -41,11 +49,12 @@ Both come from writing sketch splines exactly.
 
 | class | before | after |
 |---|---:|---:|
-| match | 394 | 520 |
-| mismatch | 95 | 79 |
-| refused | 53 | 29 |
-| fail | 5 | 5 |
-| untranslated | 130 | 44 |
+| match | 394 | 570 |
+| mismatch | 95 | 12 |
+| uncertain | 0 | 20 |
+| refused | 53 | 30 |
+| fail | 5 | 6 |
+| untranslated | 130 | 39 |
 
 ### The causes this pass took on
 
@@ -184,13 +193,14 @@ V = block - hole - 2(1 - π/4)r²(L + 2πx̄), with L the ellipse's perimeter: 5
 |---|---|---|
 | Forge's kernel | 53545.663021377 | 1.3e-13 |
 | OCCT's fillet, measured as the truth tools do | 53545.683154 | 3.8e-7 |
-| OCCT's fillet, measured with a precision of 1e-9 | 53545.662982 | 7e-10 |
+| OCCT's fillet, measured with a precision of 1e-9 | 53545.663563 | 1.0e-8 |
+| OCCT's fillet, Gauss–Kronrod (1e-9) | 53545.662984 | 7.0e-10 |
 
 The default measure is not wrong everywhere, and the precise one is not right everywhere. On 5ab390cb.Body001 (an
 ellipse 20 by 15 padded 0.4, exactly π·20·15·0.4 = 376.991118) the default is exact, while the precise call gives
 376.990968 and moves the area by 6e-5. OCCT's Gauss–Kronrod integrator (`VolumePropertiesGK`, 1e-9, spans on) is a
 third, independent measure. It agrees with the right one in all three cases above: 376.991118, 26028.8318 (82d7764f,
-ours 5e-8 off), 53545.663 (my part).
+ours 5e-8 off), 53545.663 (my part, 7e-10).
 
 **This reaches beyond ellipses.** Of the 79 FreeCAD bodies counted as mismatches, the two OCCT measures of the
 stored shape disagree by over 1e-5 on 68. Against the precise one, 48 of the 79 are within 1e-4. They are mostly 5
@@ -198,11 +208,27 @@ bodies of one model (Body020, 024, 027, 028, 031) copied in 11 files, off by 1.0
 measure and by 1e-7 to 4e-6 under the precise one. On the other 20 where they disagree, the default is the nearer to
 ours (Body030 and 033 of that model, and c106d15f.Body): there the precise measure is off by up to 1.2e-2. The CADFS STEP truths are measured in the same way.
 
-None of this changes the counts above: they keep the truth as it was measured. Choosing, part by part, whichever
-measure agrees with ours would be no test, so a re-measure has to fix its rule first. The rule proposed is the
-Gauss–Kronrod volume for every truth, and the default and precise areas where their volumes agree with it; a truth
-whose measures disagree beyond the tolerance is reported as uncertain, not counted either way. It is for the owner to
-adopt.
+Choosing, part by part, whichever measure agrees with ours would be no test, so the rule was fixed first, and the
+owner adopted it (research/import/truth.md). Both sets were then re-measured with the truth tools themselves. The
+importers' output was the same in both runs, built for built and volume for volume; only the truths moved.
+
+| set | class | old measure | the rule |
+|---|---|---:|---:|
+| FreeCAD | match | 520 | 567 |
+| FreeCAD | mismatch | 79 | 12 |
+| FreeCAD | uncertain | | 20 |
+| CADFS | match | 1114 | 1126 |
+| CADFS | mismatch | 83 | 68 |
+| CADFS | uncertain | | 3 |
+
+(FreeCAD here is before the profile pass below, which adds 3 matches.)
+
+- **FreeCAD:** 48 mismatches become matches, 19 become uncertain, and 1 match becomes uncertain.
+  - The 19 are Body030 and Body033 of one model, copied in 10 files. Their default volume is 1.3e-4 from the
+    Gauss–Kronrod one and their precise volume 1.2e-2, so neither agrees.
+  - The 1 is 5ab390cb.Body001.
+- **CADFS:** 12 mismatches become matches and 3 become uncertain (00027022, 00294728, 00659354). The fillet subset is
+  unchanged.
 
 ### Up to a face (FreeCAD, 5 → 0)
 
@@ -216,14 +242,45 @@ would take it, but no body here has one to check it by.
 |---|---|
 | 758792f7.Pocket003, 77b19abc.Body, 859a5a2f.Body, b2f17299.Body, 16233ee2.Body | match: 1.9e-12, 2.6e-10, 2.6e-10, 5.2e-11 (area 1.4e-9), 8.3e-16 |
 
-The Rust reader writes 77b19abc's two-sided pocket otherwise (moved to its back end, one depth, as the kernel
-refuses that cut two-sided). It is the same prism, 8e-9 from the Python reader's, and both match.
+**No kernel gap in a two-sided pocket.** The Rust reader used to write a two-sided pocket as one depth from its back
+end, a workaround its comment put down to the kernel refusing a two-sided cut. Nothing here reproduces that refusal.
+A block cut by `two(a, b)` with every sign, from its face and from a sketch inside the material, builds, and so does
+77b19abc's pocket written either way. The workaround is gone, and both readers now write `two(..)`. A new test of
+my own (a pocket of type 4 with Lengths 6 and 1) holds the result to its volume.
 
-### What still stops FreeCAD (44 bodies)
+77b19abc still differs between the readers by 8e-9, and both match. The cause is earlier, at t4: two near-half-circle
+arcs whose centres the two readers refit 7.6e-6 apart (by a half circle the ends barely fix the centre).
+
+### A profile that is a binder, or an edge or face of a feature (FreeCAD, 7 → 0 under that name)
+
+A pad or pocket's profile can be a ShapeBinder, or one edge or face of a feature (`Pocket027` `Edge200`, `Fillet006`
+`Face4`). Its wires are read from the stored shape, as a Draft object's already were. The plane it lies in comes from
+those wires: through their first sample, with x towards the farthest sample. Such a profile has no side of its own, so
+the way it cuts is the feature's stored Direction, turned by Reversed. That reading was measured, not assumed:
+1833f02f's Pocket028 is the one such feature stored reversed, and it cuts only that way. A profile without a stored
+Direction stays unsupported.
+
+| part | after |
+|---|---|
+| 1833f02f.Body008, 1fe89907.Body, d45d0db3.Body007 | match: 1.3e-12, 4.2e-16, 1.9e-12 |
+| 1833f02f.Body009 | refused by the Python reader's file (`Fillet Overflow`); the Rust reader's builds and matches to 6e-10 (below) |
+| 1833f02f.Body023 | **fail**: `Boolean Internal(RetryInvalid)` at the pocket from `Edge200` |
+| b709cdfa.Body | untranslated: a pocket from a face with no Direction stored |
+| d45d0db3.Body016 | untranslated: a blend along a spline, past the profile |
+
+**Two kernel findings from these.**
+
+- 1833f02f.Body023's pocket (a circle of radius 2 cut 15 along the stored direction, through about 2.1 of material)
+  is a judge fail, `Internal(RetryInvalid)`. It is not yet reduced to a part of my own.
+- 1833f02f.Body009's fillet builds from the Rust reader's file and is refused (`Overflow`) from the Python reader's.
+  The two files have the same edges and the same radius (2.2), and the part before the fillet has the same volume to
+  1.6e-12. They differ only in how the sketch's numbers are written: ten decimals in Rust, every digit in Python. A
+  fillet decision this sensitive to the last digits is the kernel's. It is not yet reduced either.
+
+### What still stops FreeCAD (39 bodies)
 
 | cause | bodies | `.fg` feature it maps to, or what is missing |
 |---|---:|---|
-| a profile not from a sketch | 7 | importer: Draft-workbench and binder wires as profiles (they read as stored wires) |
 | a chain through PartDesign::FeaturePython | 4 | scripted features: no form, and they are never run |
 | an empty body | 4 | nothing to make |
 | a Part tree through / chain through Part::Loft, Part::Sweep, Part::Fillet, Part::FeaturePython | 7 | `loft`, `sweep` and `fillet` exist; importer: the Part workbench forms |
@@ -239,6 +296,8 @@ refuses that cut two-sided). It is the same prism, 8e-9 from the Python reader's
 | an unequal chamfer | 1 | `chamfer(.., d2:, face:)` exists; importer |
 | sketch of over 400 curves | 1 | the importer's own cap |
 | other references (an edge no selection names 2, no edge where the base's edge lies 1, no face where the base's face lies 1, a pattern of a feature outside the chain 1) | 5 | importer |
+| a pad from a shape with no direction stored | 1 | importer: a face profile's way, where the feature stored none |
+| a blend along a spline | 1 | importer: a spline written as a polyline under a fillet (past a binder profile) |
 
 ## CADFS
 
@@ -246,8 +305,9 @@ All 1914 sampled parts:
 
 | class | before | after |
 |---|---:|---:|
-| match | 1099 | 1114 |
-| mismatch | 81 | 83 |
+| match | 1108 | 1126 |
+| mismatch | 69 | 68 |
+| uncertain | 3 | 3 |
 | refused | 85 | 93 |
 | fail | 8 | 11 |
 | timeout | 1 | 1 |
@@ -429,8 +489,8 @@ its parts stay lint-free. New tests in interface/forge-import/tests/fcstd.rs use
 built and its volume worked out by hand: a rational spline side, an edge stored in pieces (both picked; one alone),
 a draft, a helix pipe whose binder holds a different helix from the helix's own properties, a fillet outside a
 body on a `Part::Extrusion`, and a periodic spline (its poles wrapped, its volume checked against the closed uniform
-cubic's own area), two elliptical arcs of opposite normals around an elliptical hole, and a pocket up to a face with
-an Offset.
+cubic's own area), two elliptical arcs of opposite normals around an elliptical hole, a pocket up to a face with
+an Offset, a two-sided pocket, and a pocket whose profile is a face of the pad.
 
 ## Reproduce
 

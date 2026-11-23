@@ -31,6 +31,7 @@ TOL = 2e-3
 HERE = os.path.dirname(os.path.abspath(__file__))
 SOLID = {"PartDesign::Pad", "PartDesign::Pocket", "PartDesign::Revolution", "PartDesign::Groove", "PartDesign::Fillet", "PartDesign::Chamfer", "PartDesign::Mirrored", "PartDesign::PolarPattern", "PartDesign::LinearPattern", "PartDesign::Hole", "PartDesign::Loft", "PartDesign::Pipe", "PartDesign::AdditiveLoft", "PartDesign::AdditivePipe", "PartDesign::SubtractiveLoft", "PartDesign::SubtractivePipe", "PartDesign::Draft", "PartDesign::Thickness", "PartDesign::MultiTransform", "PartDesign::Scaled", "PartDesign::AdditiveBox", "PartDesign::AdditiveCylinder", "PartDesign::Boolean", "PartDesign::Helix", "PartDesign::AdditiveHelix", "PartDesign::SubtractiveHelix", "PartDesign::FeatureBase", "PartDesign::SubtractiveBox", "PartDesign::SubtractiveCylinder", "PartDesign::AdditiveSphere", "PartDesign::SubtractiveSphere", "PartDesign::AdditiveCone", "PartDesign::SubtractiveCone", "PartDesign::AdditiveTorus", "PartDesign::SubtractiveTorus", "PartDesign::AdditivePrism", "PartDesign::SubtractivePrism", "PartDesign::AdditiveWedge", "PartDesign::SubtractiveWedge", "PartDesign::AdditiveEllipsoid", "PartDesign::SubtractiveEllipsoid", "Part::Revolution", "Part::Extrusion", "Part::Box", "Part::Cylinder", "Part::Cut", "Part::Fuse", "Part::Common", "Part::MultiFuse", "Part::MultiCommon", "Part::Sphere"}
 TRANSFORMS = {"PartDesign::PolarPattern", "PartDesign::LinearPattern", "PartDesign::Mirrored"}
+SHAPED = {"PartDesign::ShapeBinder"}  # a profile read from its stored wires, placed by their plane
 FLAT = {"Sketcher::SketchObject", "Part::Part2DObjectPython"}  # what a pad's profile can be; only a sketch has rows, the rest a stored shape
 NEEDS = {"PartDesign::Thickness", "PartDesign::Draft", "PartDesign::AdditivePipe", "PartDesign::SubtractivePipe", "PartDesign::FeatureBase", "Part::Cut", "Part::Fuse", "Part::Common", "Part::MultiFuse", "Part::MultiCommon", "Part::Sphere", "PartDesign::Hole", "PartDesign::MultiTransform", "PartDesign::AdditiveBox", "PartDesign::SubtractiveBox", "PartDesign::AdditiveCylinder", "PartDesign::SubtractiveCylinder", "Part::Revolution", "Part::Extrusion", "Part::Box", "Part::Cylinder", "PartDesign::Pad", "PartDesign::Pocket", "PartDesign::Revolution", "PartDesign::Groove", "PartDesign::Fillet", "PartDesign::Chamfer", "PartDesign::Mirrored", "PartDesign::PolarPattern", "PartDesign::LinearPattern"}
 
@@ -406,10 +407,52 @@ class Tr:
         except NoName as x:
             raise Unresolved(str(x))
 
-    def profile_ents(self, sk, fr):
+    def profile_sub(self, name, sk):
+        """The one edge or face of a feature a profile is (FreeCAD's Profile naming a solid's Face4 or Edge18), or None
+        where the profile is an object of its own."""
+        if self.doc.types.get(sk) not in SOLID:
+            return None
+        subs = [x for x in self.doc.subs(name, "Profile") if x]
+        if len(subs) != 1 or not subs[0].startswith(("Face", "Edge")):
+            raise Unsupported("a profile not from a sketch")
+        return subs[0]
+
+    def stored_wires(self, sk, sub):
+        """A shape profile's wires as fcstd_truth reads them: a binder's or a Draft object's own, or a feature's edge or
+        face."""
+        t = self.truth.get(sk, {})
+        ws = t.get("subwires", {}).get(sub) if sub is not None else t.get("wires")
+        if ws is None:
+            raise Unresolved("a profile whose stored wires would not read")
+        return ws
+
+    def profile_frame(self, sk, sub):
+        """Where a profile lies: a sketch's or a Draft object's placement; for a binder or a feature's edge or face, the
+        plane its wires lie in, from their first sample, its x along the farthest sample (the way the profile faces is
+        the feature's stored Direction, read by pad)."""
+        if self.doc.types.get(sk) in FLAT:
+            return Frame(self.doc.placement(sk))
+        ps = [tuple(q) for w in self.stored_wires(sk, sub) for e in w for q in e["p"]]
+        o = ps[0]
+        p1 = max(ps, key=lambda q: math.dist(q, o))
+        x = unit(add(p1, o, -1))
+        off = lambda q: add(add(q, o, -1), x, -dot(add(q, o, -1), x))
+        p2 = max(ps, key=lambda q: math.sqrt(dot(off(q), off(q))))
+        size = math.dist(p1, o)
+        if size < 1e-9 or math.sqrt(dot(off(p2), off(p2))) < 1e-6 * size:
+            raise Unsupported("a profile that is not flat")
+        y = unit(off(p2))
+        n = (x[1] * y[2] - x[2] * y[1], x[2] * y[0] - x[0] * y[2], x[0] * y[1] - x[1] * y[0])
+        if any(abs(dot(add(q, o, -1), n)) > 1e-7 * max(size, 1.0) for q in ps):
+            raise Unsupported("a profile that is not flat")
+        fr = Frame.__new__(Frame)
+        fr.o, fr.x, fr.y, fr.n = o, x, y, n
+        return fr
+
+    def profile_ents(self, sk, fr, sub=None):
         if self.doc.types.get(sk) == "Sketcher::SketchObject":
             return sketch_ents(self.doc, sk)
-        ws = self.truth.get(sk, {}).get("wires")
+        ws = self.stored_wires(sk, sub) if self.doc.types.get(sk) not in FLAT else self.truth.get(sk, {}).get("wires")
         if ws is None:
             raise Unresolved("a profile whose stored wires would not read")
         # a stored shape placed only by its own location, which is the profile's placement: its own coordinates are the sketch's
@@ -435,11 +478,13 @@ class Tr:
 
     def profile(self, name, op, make, flip, frame_z, sk=None):
         """The sketch's regions, each a statement: `make` holds the statement's kind and its own fields."""
+        own = sk is None
         sk = sk or self.doc.link(name, "Profile")
-        if self.doc.types.get(sk) not in FLAT:
+        sub = self.profile_sub(name, sk) if own else None
+        if self.doc.types.get(sk) not in FLAT | SHAPED and sub is None:
             raise Unsupported("a profile not from a sketch")
-        fr = Frame(self.doc.placement(sk))
-        ents = self.profile_ents(sk, fr)
+        fr = self.profile_frame(sk, sub)
+        ents = self.profile_ents(sk, fr, sub)
         wires = closed_wires(ents)
         wired = {i for w in wires for i in w}
         a = Arrangement(ents)
@@ -472,21 +517,28 @@ class Tr:
         if abs(d.flt(name, "Offset")) > 1e-12 and d.integer(name, "Type") != 3:
             raise Unsupported("a pad with Offset")
         sk = d.link(name, "Profile")
-        if d.types.get(sk) not in FLAT:
+        sub = self.profile_sub(name, sk)
+        if d.types.get(sk) not in FLAT | SHAPED and sub is None:
             raise Unsupported("a profile not from a sketch")
-        n = Frame(d.placement(sk)).n
+        n = self.profile_frame(sk, sub).n
         rev = d.boolean(name, "Reversed")
         down = cut != rev  # a pocket runs against the sketch normal
         z = tuple(-x for x in n) if down else n
         stored = d.prop(name, "Direction")
         if d.types.get(sk) != "Sketcher::SketchObject" and stored is not None and stored.find("PropertyVector") is not None:
-            # a shape's plane may face either way; the feature records which way it went, or 1 1 1 if it never wrote it
+            # a shape's plane may face either way; the feature records which way it went before Reversed turns it
+            # (1833f02f's Pocket028, the one so stored and reversed, cuts only so), or 1 1 1 if it never wrote it
             e = stored.find("PropertyVector")
             v = tuple(float(e.get(k)) for k in ("valueX", "valueY", "valueZ"))
             l = math.sqrt(dot(v, v))
             if l > 0 and abs(abs(dot(v, n)) / l - 1) < 1e-9:
-                down = dot(v, n) < 0
+                down = (dot(v, n) < 0) != rev
                 z = tuple(-x for x in n) if down else n
+            elif d.types.get(sk) not in FLAT:
+                # a binder's or a feature's face has no side of its own: only the stored direction says which way
+                raise Unsupported("a pad from a shape with no direction stored")
+        elif d.types.get(sk) not in FLAT:
+            raise Unsupported("a pad from a shape with no direction stored")
         t, L, L2 = d.integer(name, "Type"), d.flt(name, "Length"), d.flt(name, "Length2")
         mid = d.boolean(name, "Midplane")
         along = None
@@ -1418,11 +1470,15 @@ def main():
             tip = chain[-1]
             want = {"shapes": {tip: doc.shape_file(tip)}, "subs": {}, "wires": []}
             members = tree_members(doc, chain)
+            want["subwires"] = {}
             for c in members:
                 sk = doc.link(c, "Profile")
-                if doc.types.get(sk) == "Part::Part2DObjectPython":
+                if doc.types.get(sk) in ("Part::Part2DObjectPython", "PartDesign::ShapeBinder"):
                     want["shapes"][sk] = doc.shape_file(sk)
                     want["wires"].append(sk)
+                elif doc.types.get(sk) in SOLID and doc.subs(c, "Profile"):
+                    want["shapes"][sk] = doc.shape_file(sk)
+                    want["subwires"].setdefault(sk, []).extend(x for x in doc.subs(c, "Profile") if x)
             for c in members:
                 if doc.types[c] in ("PartDesign::AdditivePipe", "PartDesign::SubtractivePipe"):
                     sp = doc.link(c, "Spine")

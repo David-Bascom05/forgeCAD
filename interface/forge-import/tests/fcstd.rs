@@ -1416,6 +1416,80 @@ fn a_thickness_inwards_is_a_shell_open_at_its_face() {
     near(m.volume, 24000.0 - 58.0 * 38.0 * 9.0, "volume", &fg);
 }
 
+/// A pocket whose profile is a face of the pad (its stored Face1, a 20 by 20 square on the top):
+/// the profile lies in that face's plane, and the stored Direction says which way it cuts.
+#[test]
+fn a_pocket_from_a_face_of_a_feature_cuts_its_wires() {
+    let square = vec![
+        ((-10.0, -10.0, 10.0), (10.0, -10.0, 10.0)),
+        ((10.0, -10.0, 10.0), (10.0, 10.0, 10.0)),
+        ((10.0, 10.0, 10.0), (-10.0, 10.0, 10.0)),
+        ((-10.0, 10.0, 10.0), (-10.0, -10.0, 10.0)),
+    ];
+    let faces = shapes_brep(&[], &[square]);
+    let mut base = pad("Pad", "", "Sketch", 10.0, &[]);
+    base.2.retain(|(k, _)| *k != "Shape");
+    base.2.push(("Shape", "<Part file=\"Faces.brp\"/>".into()));
+    let d = doc(&[
+        body("Pocket", &["Sketch", "Pad", "Pocket"]),
+        sketch("Sketch", place(0.0), rect()),
+        base,
+        (
+            "Pocket",
+            "PartDesign::Pocket",
+            vec![
+                ("BaseFeature", "<Link value=\"Pad\"/>".into()),
+                (
+                    "Profile",
+                    "<LinkSub value=\"Pad\"><Sub value=\"Face1\"/></LinkSub>".into(),
+                ),
+                ("Type", "<Integer value=\"0\"/>".into()),
+                ("Length", "<Float value=\"4\"/>".into()),
+                (
+                    "Direction",
+                    "<PropertyVector valueX=\"0\" valueY=\"0\" valueZ=\"-1\"/>".into(),
+                ),
+                ("Shape", "<Part file=\"PadShape.brp\"/>".into()),
+            ],
+        ),
+    ]);
+    let b = translate(&with_shapes(&d, &[("Faces.brp", &faces)]))
+        .expect("reads")
+        .remove(0);
+    assert_eq!(b.status(), "translated", "{:?}", b.fail);
+    let fg = b.fg.expect("a part file");
+    near(built(&fg).volume, 24000.0 - 20.0 * 20.0 * 4.0, "volume", &fg);
+}
+
+/// A two-sided pocket (type 4) from the top of a 10-high pad: Length 6 into the material and
+/// Length2 1 back out into the air, so it cuts 6 deep.
+#[test]
+fn a_two_sided_pocket_cuts_its_lengths_each_way() {
+    let d = doc(&[
+        body("Pocket", &["Sketch", "Pad", "Hole", "Pocket"]),
+        sketch("Sketch", place(0.0), rect()),
+        pad("Pad", "", "Sketch", 10.0, &[]),
+        square("Hole", 10.0, -2.0, -2.0),
+        (
+            "Pocket",
+            "PartDesign::Pocket",
+            vec![
+                ("BaseFeature", "<Link value=\"Pad\"/>".into()),
+                ("Profile", "<LinkSub value=\"Hole\"/>".into()),
+                ("Type", "<Integer value=\"4\"/>".into()),
+                ("Length", "<Float value=\"6\"/>".into()),
+                ("Length2", "<Float value=\"1\"/>".into()),
+                ("Shape", "<Part file=\"PadShape.brp\"/>".into()),
+            ],
+        ),
+    ]);
+    let b = translate(&with_shapes(&d, &[])).expect("reads").remove(0);
+    assert_eq!(b.status(), "translated", "{:?}", b.fail);
+    let fg = b.fg.expect("a part file");
+    assert!(fg.contains("two(d, back)"), "{fg}");
+    near(built(&fg).volume, 24000.0 - 4.0 * 4.0 * 6.0, "volume", &fg);
+}
+
 /// A pocket up to a face of its base (the pad's bottom, read from the pad's stored shape), stopped
 /// short of it by an Offset of -3: FreeCAD moves the face along the pocket's way, so it cuts 7 of
 /// the 10.

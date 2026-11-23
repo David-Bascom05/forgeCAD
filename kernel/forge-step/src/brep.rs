@@ -1379,9 +1379,14 @@ impl<'a> BrepTopo<'a> {
     /// Every wire and its edges, each use (TopExp_Explorer, nothing merged).
     /// One budget of visits and of edges for all of them: many wires over one big shape share it.
     pub fn wires(&self) -> Option<Vec<Vec<Used>>> {
+        self.wires_of(self.root()?)
+    }
+
+    /// The wires of one shape (a face) and their edges, as `wires` gives the whole shape's.
+    pub fn wires_of(&self, s: Used) -> Option<Vec<Vec<Used>>> {
         let mut budget = 4 * MAX_FACES;
         let mut ws = vec![];
-        self.walk(self.root()?, "Wi", &mut ws, &mut budget, 0)?;
+        self.walk(s, "Wi", &mut ws, &mut budget, 0)?;
         let mut left = MAX_FACES;
         ws.into_iter()
             .map(|w| {

@@ -77,6 +77,8 @@ const TRANSFORMS: &[&str] = &[
 ];
 /// What a pad's profile can be; only a sketch has rows, the rest a stored shape.
 const FLAT: &[&str] = &["Sketcher::SketchObject", "Part::Part2DObjectPython"];
+/// A profile read from its stored wires and placed by their plane.
+const SHAPED: &[&str] = &["PartDesign::ShapeBinder"];
 const NEEDS: &[&str] = &[
     "PartDesign::Thickness",
     "PartDesign::Draft",
@@ -750,6 +752,8 @@ struct Stored {
     /// A profile's wires: each edge's kind and 97 samples, and the same in the shape's own
     /// coordinates where only its root location places it.
     wires: Option<Vec<Vec<Sampled>>>,
+    /// The wires of the edges or faces a profile names (`Edge18`, `Face4`).
+    subwires: HashMap<String, Vec<Vec<Sampled>>>,
     /// The root location, rows of a 3x4 matrix.
     root: Option<[[f64; 4]; 3]>,
     /// Its vertices' box, where it holds a solid.
@@ -766,6 +770,7 @@ fn stored(
     shapes: &[(String, Option<String>)],
     subs: &BTreeMap<String, Vec<String>>,
     wires: &[String],
+    subwires: &BTreeMap<String, Vec<String>>,
 ) -> Option<HashMap<String, Stored>> {
     let mut out = HashMap::new();
     for (name, file) in shapes {
@@ -777,18 +782,41 @@ fn stored(
             continue;
         };
         r.vbox = t.vertex_box();
-        if wires.contains(name) {
-            let mut ws = vec![];
-            for w in t.wires()? {
+        let sampled = |ws: Vec<Vec<forge_step::Used>>| -> Option<Vec<Vec<Sampled>>> {
+            let mut out = vec![];
+            for w in ws {
                 let mut es = vec![];
                 for e in w {
                     let local = t.local_sample(e, 96).map(|l| l.into_iter().map(p3).collect());
                     es.push((t.kind(e), t.sample(e, 96)?.into_iter().map(p3).collect(), local));
                 }
-                ws.push(es);
+                out.push(es);
             }
-            r.wires = Some(ws);
+            Some(out)
+        };
+        if wires.contains(name) {
+            r.wires = Some(sampled(t.wires()?)?);
             r.root = t.root_matrix();
+        }
+        if let Some(ss) = subwires.get(name).filter(|s| !s.is_empty()) {
+            // a profile that is an edge or a face of a feature: its wires, as `wires` gives a shape's
+            let (em, fm) = (t.edges()?, t.faces()?);
+            let pick = |m: &[forge_step::Used], s: &str| -> Option<forge_step::Used> {
+                let i: i64 = s.parse().ok()?;
+                (i >= 1 && i as usize <= m.len()).then(|| m[i as usize - 1])
+            };
+            for s in ss {
+                let ws = if let Some(n) = s.strip_prefix("Face") {
+                    pick(&fm, n).and_then(|f| t.wires_of(f))
+                } else if let Some(n) = s.strip_prefix("Edge") {
+                    pick(&em, n).map(|e| vec![vec![e]])
+                } else {
+                    None
+                };
+                if let Some(ws) = ws.and_then(sampled) {
+                    r.subwires.insert(s.clone(), ws);
+                }
+            }
         }
         if let Some(ss) = subs.get(name).filter(|s| !s.is_empty()) {
             let em = t.edges()?;
@@ -1674,18 +1702,99 @@ impl Tr<'_, '_, '_> {
         if k == 0 { lab.into() } else { format!("{lab}x{k}") }
     }
 
-    fn profile_ents(&mut self, sk: &str, fr: &Frame) -> Result<Vec<Ent>, Fail> {
+    /// The one edge or face of a feature a profile is (FreeCAD's Profile naming a solid's Face4 or
+    /// Edge18), or None where the profile is an object of its own.
+    fn profile_sub(&self, name: &str, sk: &str) -> Result<Option<String>, Fail> {
+        if !is(SOLID, self.doc.ty(sk)) {
+            return Ok(None);
+        }
+        let subs: Vec<String> = self
+            .doc
+            .subs(name, "Profile")?
+            .into_iter()
+            .filter(|x| !x.is_empty())
+            .collect();
+        match &subs[..] {
+            [s] if s.starts_with("Face") || s.starts_with("Edge") => Ok(Some(s.clone())),
+            _ => unsupported("a profile not from a sketch"),
+        }
+    }
+
+    /// A shape profile's wires as stored: a binder's or a Draft object's own, or a feature's edge
+    /// or face.
+    fn stored_wires(&self, sk: &str, sub: Option<&str>) -> Result<&Vec<Vec<Sampled>>, Fail> {
+        let t = self.truth.get(sk);
+        let ws = match sub {
+            Some(s) => t.and_then(|t| t.subwires.get(s)),
+            None => t.and_then(|t| t.wires.as_ref()),
+        };
+        ws.ok_or_else(|| Fail::Unresolved("a profile whose stored wires would not read".into()))
+    }
+
+    /// Where a profile lies: a sketch's or a Draft object's placement; for a binder or a feature's
+    /// edge or face, the plane its wires lie in, from their first sample, its x along the farthest
+    /// sample (the way the profile faces is the feature's stored Direction, read by pad).
+    fn profile_frame(&self, sk: &str, sub: Option<&str>) -> Result<Frame, Fail> {
+        if is(FLAT, self.doc.ty(sk)) {
+            return Ok(Frame::new(self.doc.placement(sk)?));
+        }
+        let ps: Vec<V3> = self
+            .stored_wires(sk, sub)?
+            .iter()
+            .flatten()
+            .flat_map(|e| e.1.iter().copied())
+            .collect();
+        let Some(&o) = ps.first() else {
+            return unsupported("a profile that is not flat");
+        };
+        let far = |f: &dyn Fn(V3) -> f64| {
+            ps.iter()
+                .copied()
+                .fold((o, -1.0), |b, q| if f(q) > b.1 { (q, f(q)) } else { b })
+        };
+        let (p1, size) = far(&|q| py::dist3(q, o));
+        let Some(x) = py::unit(add(p1, o, -1.0)) else {
+            return unsupported("a profile that is not flat");
+        };
+        let off = |q: V3| {
+            let d = add(q, o, -1.0);
+            add(d, x, -dot(d, x))
+        };
+        let (p2, h) = far(&|q| dot(off(q), off(q)).sqrt());
+        if size < 1e-9 || h < 1e-6 * size {
+            return unsupported("a profile that is not flat");
+        }
+        let Some(y) = py::unit(off(p2)) else {
+            return unsupported("a profile that is not flat");
+        };
+        let n = py::cross(x, y);
+        if ps
+            .iter()
+            .any(|&q| dot(add(q, o, -1.0), n).abs() > 1e-7 * pmax(size, 1.0))
+        {
+            return unsupported("a profile that is not flat");
+        }
+        Ok(Frame { o, x, y, n })
+    }
+
+    fn profile_ents(&mut self, sk: &str, fr: &Frame, sub: Option<&str>) -> Result<Vec<Ent>, Fail> {
         if self.doc.ty(sk) == Some("Sketcher::SketchObject") {
             return sketch_ents(self.doc, sk);
         }
-        let Some(ws) = self.truth.get(sk).and_then(|s| s.wires.as_ref()) else {
+        let ws = if is(FLAT, self.doc.ty(sk)) {
+            self.truth.get(sk).and_then(|s| s.wires.as_ref())
+        } else {
+            self.stored_wires(sk, sub).ok()
+        };
+        let Some(ws) = ws else {
             return Err(Fail::Unresolved(
                 "a profile whose stored wires would not read".into(),
             ));
         };
+        let ws = ws.clone();
         // a stored shape placed only by its own location, which is the profile's placement: its
         // own coordinates are the sketch's
-        let local = self.truth[sk].root.is_some_and(|m| {
+        let local = self.truth[sk].root.filter(|_| sub.is_none()).is_some_and(|m| {
             let cols = [fr.x, fr.y, fr.n, fr.o];
             (0..3).all(|i| {
                 (0..4).all(|j| {
@@ -1697,7 +1806,7 @@ impl Tr<'_, '_, '_> {
         }) && ws.iter().flatten().all(|e| e.2.is_some());
         let mut ents = vec![];
         let mut approx = false;
-        for w in ws {
+        for w in &ws {
             for (k, p, l) in w {
                 let uv: Vec<V2> = match l {
                     Some(l) if local => l.iter().map(|q| (q.0, q.1)).collect(),
@@ -1746,15 +1855,19 @@ impl Tr<'_, '_, '_> {
     /// the ids made.
     fn profile(&mut self, name: &str, lab: &str, make: Make, sk: Option<&str>) -> Result<Vec<String>, Fail> {
         let d = self.doc;
-        let sk = match sk {
-            Some(s) if !s.is_empty() => s.to_string(),
-            _ => d.link(name, "Profile")?,
+        let (sk, sub) = match sk {
+            Some(s) if !s.is_empty() => (s.to_string(), None),
+            _ => {
+                let s = d.link(name, "Profile")?;
+                let sub = self.profile_sub(name, &s)?;
+                (s, sub)
+            }
         };
-        if !is(FLAT, d.ty(&sk)) {
+        if !is(FLAT, d.ty(&sk)) && !is(SHAPED, d.ty(&sk)) && sub.is_none() {
             return unsupported("a profile not from a sketch");
         }
-        let fr = Frame::new(d.placement(&sk)?);
-        let ents = self.profile_ents(&sk, &fr)?;
+        let fr = self.profile_frame(&sk, sub.as_deref())?;
+        let ents = self.profile_ents(&sk, &fr, sub.as_deref())?;
         let wires = closed_wires(&ents);
         let wired: HashSet<usize> = wires.iter().flatten().copied().collect();
         let a = Arrangement::new(&ents)?;
@@ -1802,22 +1915,6 @@ impl Tr<'_, '_, '_> {
                 return bug("a coil about a zero axis");
             };
             axis = Some((o, k));
-        }
-        let mut make = make;
-        if let Make::Extrude {
-            cut: true,
-            ext: Ext::Two(f, b),
-            travel,
-        } = make
-        {
-            // Forge's two-sided extent runs a cut's way only as lengths along the normal, which the
-            // kernel refuses: the same prism, cut from where its back end lies
-            world_of = Box::new(move |q: V2| add(fr.world(q.0, q.1), travel, -b));
-            make = Make::Extrude {
-                cut: true,
-                ext: Ext::D(f + b),
-                travel,
-            };
         }
         let (cut, travel) = match &make {
             Make::Extrude { cut, travel, .. } => (*cut, *travel),
@@ -1974,10 +2071,11 @@ impl Tr<'_, '_, '_> {
             return unsupported("a pad with Offset");
         }
         let sk = d.link(name, "Profile")?;
-        if !is(FLAT, d.ty(&sk)) {
+        let sub = self.profile_sub(name, &sk)?;
+        if !is(FLAT, d.ty(&sk)) && !is(SHAPED, d.ty(&sk)) && sub.is_none() {
             return unsupported("a profile not from a sketch");
         }
-        let n = Frame::new(d.placement(&sk)?).n;
+        let n = self.profile_frame(&sk, sub.as_deref())?.n;
         let rev = d.boolean(name, "Reversed")?;
         let mut down = cut != rev; // a pocket runs against the sketch normal
         let mut z = if down { neg(n) } else { n };
@@ -1985,14 +2083,21 @@ impl Tr<'_, '_, '_> {
         if d.ty(&sk) != Some("Sketcher::SketchObject")
             && let Some(e) = stored
         {
-            // a shape's plane may face either way; the feature records which way it went, or 1 1 1
-            // if it never wrote it
+            // a shape's plane may face either way; the feature records which way it went before
+            // Reversed turns it (1833f02f's Pocket028, the one so stored and reversed, cuts only
+            // so), or 1 1 1 if it never wrote it
             let v = vector(e)?;
             let l = dot(v, v).sqrt();
             if l > 0.0 && ((dot(v, n).abs() / l) - 1.0).abs() < 1e-9 {
-                down = dot(v, n) < 0.0;
+                down = (dot(v, n) < 0.0) != rev;
                 z = if down { neg(n) } else { n };
+            } else if !is(FLAT, d.ty(&sk)) {
+                // a binder's or a feature's face has no side of its own: only the stored
+                // direction says which way
+                return unsupported("a pad from a shape with no direction stored");
             }
+        } else if !is(FLAT, d.ty(&sk)) {
+            return unsupported("a pad from a shape with no direction stored");
         }
         let t = d.integer(name, "Type", 0)?;
         let (mut l, mut l2) = (d.flt(name, "Length", 0.0)?, d.flt(name, "Length2", 0.0)?);
@@ -3326,6 +3431,7 @@ fn body_of(doc: &Doc, b: &str) -> Body {
         };
         let mut subs: BTreeMap<String, Vec<String>> = BTreeMap::new();
         let mut wires = vec![];
+        let mut subwires: BTreeMap<String, Vec<String>> = BTreeMap::new();
         let members = tree_members(doc, &chain)?;
         for c in &members {
             let sp = doc.link(c, "Spine")?;
@@ -3338,9 +3444,22 @@ fn body_of(doc: &Doc, b: &str) -> Body {
                 wires.push(sp);
             }
             let sk = doc.link(c, "Profile")?;
-            if doc.ty(&sk) == Some("Part::Part2DObjectPython") {
+            if matches!(
+                doc.ty(&sk),
+                Some("Part::Part2DObjectPython" | "PartDesign::ShapeBinder")
+            ) {
                 put(&sk, doc.shape_file(&sk)?);
                 wires.push(sk);
+            } else if is(SOLID, doc.ty(&sk)) {
+                let s: Vec<String> = doc
+                    .subs(c, "Profile")?
+                    .into_iter()
+                    .filter(|x| !x.is_empty())
+                    .collect();
+                if !s.is_empty() {
+                    put(&sk, doc.shape_file(&sk)?);
+                    subwires.entry(sk).or_default().extend(s);
+                }
             }
         }
         for c in &members {
@@ -3401,7 +3520,7 @@ fn body_of(doc: &Doc, b: &str) -> Body {
                 subs.entry(base).or_default().extend(s);
             }
         }
-        let Some(truth) = stored(doc.zip, &shapes, &subs, &wires) else {
+        let Some(truth) = stored(doc.zip, &shapes, &subs, &wires, &subwires) else {
             return Err(Fail::Unresolved("the stored shapes would not read".into()));
         };
         let t = tr.insert(Tr {
