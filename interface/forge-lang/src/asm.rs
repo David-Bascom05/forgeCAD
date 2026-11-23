@@ -6839,6 +6839,13 @@ fn infile_load_in(
     }
     let mut out = empty_load(key);
     out.hash = content_hash(&format!("{key}\n{}", ev.src));
+    // what its solids are made from: the document's text and the component's key (never 0, the
+    // ident of nothing: the checker keeps exact volumes by ident, so two in-file components of
+    // two documents at one pose were one pair to it)
+    out.ident = crate::store::key("part", |h| {
+        h.str(key);
+        h.str(&ev.src);
+    });
     match (inst.source, comp) {
         (Source::Inline, Some(k)) => {
             let mut comps = std::mem::take(&mut ev.comps);
