@@ -62,7 +62,7 @@ crank seq 976bc3073ec4169c
 crank nary 27a8876ac9d665db
 frame seq cd39b6fa56da21e5
 frame nary 10448ae06d45a4c4
-gearbox seq e368bb3cfdfe8839
+gearbox seq b51485e523559879
 gearbox nary fc45dd2ba1ebdac2
 guard seq 45496418722abee5
 guard nary 7541098a4199ed4d
