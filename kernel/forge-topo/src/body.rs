@@ -1086,6 +1086,21 @@ impl Body {
         e.coedges.iter().copied().find(|&o| o != c)
     }
 
+    /// The face's outward normal at its point `p`: `face_normal` there, and at a ball's pole,
+    /// where the chart is singular (du = 0) but the sphere is not, its geometric normal
+    /// (p - c) / r. None only where the surface itself has no tangent plane (a cone's apex).
+    pub fn face_normal_at(&self, f: FaceId, p: Point3) -> Option<UnitVec3> {
+        let face = self.face(f);
+        if let Some(n) = self.face_normal(f, face.surface.project(p)) {
+            return Some(n);
+        }
+        let Surface::Sphere(s) = &face.surface else {
+            return None;
+        };
+        let n = (p - s.frame.origin).normalize()?;
+        Some(if face.same_sense { n } else { -n })
+    }
+
     /// The face's outward normal at surface parameters `uv`.
     pub fn face_normal(&self, f: FaceId, uv: Point2) -> Option<UnitVec3> {
         let face = self.face(f);

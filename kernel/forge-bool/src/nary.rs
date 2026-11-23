@@ -1160,7 +1160,36 @@ fn nary_body(
                 t.sides, t.faces, t.at
             );
         }
+        // at a cone's apex the face's sheet is its generators, decided in closed form against
+        // every other tool; one that cannot be read there is refused at the point, never guessed
+        let mut sheets = [None; 2];
+        if t.dir.is_none() {
+            for k in 0..2 {
+                let (sd, f) = (t.sides[k], t.faces[k]);
+                let Some(sheet) = crate::apex::apex_sheet(tools[sd], f, t.at) else {
+                    continue;
+                };
+                let refuse = BoolError::ZeroThickness { at: t.at };
+                let sheet = sheet.ok_or(refuse.clone())?;
+                let mut inner = vec![false; n];
+                inner[sd] = true;
+                for j in (0..n).filter(|&j| j != sd) {
+                    match crate::apex::where_sheet(tools[j], &index[j], t.at, &sheet) {
+                        Some(Where::Inside) => inner[j] = true,
+                        Some(_) => {}
+                        None => return Err(refuse),
+                    }
+                }
+                let mut outer = inner.clone();
+                outer[sd] = false;
+                sheets[k] =
+                    Some(in_result(ops, &inner, any_intersect) != in_result(ops, &outer, any_intersect));
+            }
+        }
         let kept = [0, 1].map(|k| {
+            if let Some(w) = sheets[k] {
+                return Some(w);
+            }
             let (sd, f) = (t.sides[k], t.faces[k]);
             local_class(tools[sd], &index[sd], f, t.at, t.dir, |q| kept_at(sd, q))
         });

@@ -11,6 +11,7 @@ macro_rules! decided {
     };
 }
 
+mod apex;
 pub mod boolean;
 pub mod classify;
 #[cfg(feature = "decisions")]

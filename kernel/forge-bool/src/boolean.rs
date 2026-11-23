@@ -1162,7 +1162,26 @@ fn plan_once_in(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
 
     // where the solids touch, both sides kept would be material meeting itself
     for t in &touching {
+        // at a cone's apex the face's sheet is its generators, decided in closed form; one that
+        // cannot be read there is refused at the point, never guessed
+        let mut sheets = [None; 2];
+        if t.dir.is_none() {
+            for side in 0..2 {
+                match crate::apex::apex_sheet(bodies[side], t.faces[side], t.at) {
+                    None => {}
+                    Some(sheet) => {
+                        let w = sheet.and_then(|sh| {
+                            crate::apex::where_sheet(bodies[1 - side], &index[1 - side], t.at, &sh)
+                        });
+                        sheets[side] = Some(w.ok_or(BoolError::ZeroThickness { at: t.at })?);
+                    }
+                }
+            }
+        }
         let near = |side: Side| {
+            if let Some(w) = sheets[side] {
+                return Some(w);
+            }
             let (body, f) = (bodies[side], t.faces[side]);
             local_class(body, &index[side], f, t.at, t.dir, |q| {
                 match index[1 - side].classify(q) {
@@ -2201,10 +2220,7 @@ pub(crate) fn touches(
 /// over in the result): each ends where the other starts and one skin runs on tangent across the
 /// touch, with material all on its one side. Only faces facing apart have material meeting itself.
 pub(crate) fn flows_on(bodies: [&Body; 2], faces: [FaceId; 2], at: Point3, flip: bool) -> bool {
-    let normal = |k: usize| {
-        let s = &bodies[k].face(faces[k]).surface;
-        bodies[k].face_normal(faces[k], s.project(at))
-    };
+    let normal = |k: usize| bodies[k].face_normal_at(faces[k], at);
     match (normal(0), normal(1)) {
         (Some(x), Some(y)) => (x.dot(y.get()) > 0.0) != flip,
         _ => false,
@@ -2217,8 +2233,7 @@ pub(crate) fn flows_on(bodies: [&Body; 2], faces: [FaceId; 2], at: Point3, flip:
 /// meet there and nowhere near. `any`: a union, where either solid's inside is material.
 #[cold]
 pub(crate) fn crack_tip(bodies: [&Body; 2], index: [&Index; 2], t: &Touch, any: bool) -> bool {
-    let s = &bodies[0].face(t.faces[0]).surface;
-    let Some(n) = bodies[0].face_normal(t.faces[0], s.project(t.at)) else {
+    let Some(n) = bodies[0].face_normal_at(t.faces[0], t.at) else {
         return false;
     };
     let dirs: Vec<Vec3> = match t.dir {
@@ -2267,52 +2282,28 @@ pub(crate) fn local_class<T: PartialEq>(
     class: impl Fn(Point3) -> Option<T>,
 ) -> Option<T> {
     let face = body.face(f);
-    let uv = face.surface.project(p);
-    // the face's points round p a step out: across the tangent plane where the face has a normal
-    // at p; where it has none (a cone's apex, a ball's pole: the surface's u degenerates there)
-    // and p is an isolated touch, out along v at four turns of u, the face's own rays from p
-    let around: Box<dyn Fn(f64) -> Vec<Point3>> = match (body.face_normal(f, uv), dir) {
-        (Some(n), _) => {
-            let dirs: Vec<Vec3> = match dir {
-                Some(d) => {
-                    let w = n.cross(d).normalize()?.get();
-                    vec![w, -w]
-                }
-                None => {
-                    // turned off the frame's axes, so no probe runs along a seam to a pole
-                    let fr = Frame::from_z(p, n);
-                    let (sn, cs) = dmath::sin_cos(0.3719);
-                    let x = fr.x().get() * cs + fr.y().get() * sn;
-                    let y = n.cross(x);
-                    vec![x, -x, y, -y]
-                }
-            };
-            let s = &face.surface;
-            Box::new(move |step| dirs.iter().map(|&w| s.eval(s.project(p + w * step))).collect())
+    // (a ball's pole has its geometric normal; a cone's apex none: `apex_sheet` decides there)
+    let n = body.face_normal_at(f, p)?;
+    let dirs: Vec<Vec3> = match dir {
+        Some(d) => {
+            let w = n.cross(d).normalize()?.get();
+            vec![w, -w]
         }
-        (None, None) => {
-            let d = face.surface.deriv(uv);
-            let dv = d.dv.length();
-            if d.du.length() > tol::LINEAR || dv <= tol::LINEAR {
-                return None;
-            }
-            let s = &face.surface;
-            Box::new(move |step| {
-                (0..4)
-                    .flat_map(|k| {
-                        let u = uv.x + 0.3719 + dmath::FRAC_PI_2 * k as f64;
-                        [1.0, -1.0].map(|sg| s.eval(Point2::new(u, uv.y + sg * step / dv)))
-                    })
-                    .collect()
-            })
+        None => {
+            // turned off the frame's axes, so no probe runs along a seam to a pole
+            let fr = Frame::from_z(p, n);
+            let (sn, cs) = dmath::sin_cos(0.3719);
+            let x = fr.x().get() * cs + fr.y().get() * sn;
+            let y = n.cross(x);
+            vec![x, -x, y, -y]
         }
-        (None, Some(_)) => return None,
     };
     let mut step = 1e-3;
     while step < 0.3 {
         let mut got: Option<T> = None;
         let mut undecided = false;
-        for q in around(step) {
+        for &w in &dirs {
+            let q = face.surface.eval(face.surface.project(p + w * step));
             // the face, or one beside it on the same surface (a ball's other half)
             let on_face = own.point_in_face(f, q) == Where::Inside
                 || body.faces_where(|b| b.contains(q)).any(|g| {
@@ -2996,8 +2987,19 @@ pub(crate) fn trim(
                     bodies[1 - k].face(into).surface.distance(q) <= tol::LINEAR
                 };
                 let straight = matches!(edge.curve, Curve::Line(_));
+                // in closed form where there is one: a stretch that only meets the surface at
+                // points (a rim tangent to a crown twice) is not on it, wherever samples land
+                let lies = || match curve_surface(
+                    &edge.curve,
+                    Interval::new(w[0], w[1]),
+                    &bodies[1 - k].face(into).surface,
+                ) {
+                    CurveSurface::Hits(_) => false,
+                    CurveSurface::OnSurface => true,
+                    CurveSurface::Overlap => on_it(0.25) && on_it(0.75),
+                };
                 if index[1 - k].point_in_face(into, m) != Where::Inside
-                    || !(straight || on_it(0.25) && on_it(0.75))
+                    || !(straight || on_it(0.25) && on_it(0.75) && lies())
                 {
                     continue;
                 }
