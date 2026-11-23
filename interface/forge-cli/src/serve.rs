@@ -22,7 +22,10 @@ const TOOLS: [Tool; 14] = [
         "cam",
         "Run a machining document (.fg starting with `machining`): every op's path certified against the exact part (gouge, holder, rapids) or refused with the check and a fix; reply forgecad.cam/1. what=sheet: the setup sheet",
         1,
-        &[("file", "path to a machining .fg"), ("what", "sheet: the setup sheet instead of the program")],
+        &[
+            ("file", "path to a machining .fg"),
+            ("what", "sheet: the setup sheet instead of the program"),
+        ],
     ),
     (
         "query",

@@ -36,7 +36,9 @@ use std::path::{Path, PathBuf};
 /// Whether a source is a machining document.
 pub fn is_machining(src: &str) -> bool {
     match syntax::parse(src) {
-        Ok(p) => matches!(p.first().map(|s| &s.kind), Some(StmtKind::Expr(Expr { kind: ExprKind::Name(n), .. })) if n == "machining"),
+        Ok(p) => {
+            matches!(p.first().map(|s| &s.kind), Some(StmtKind::Expr(Expr { kind: ExprKind::Name(n), .. })) if n == "machining")
+        }
         Err(_) => false,
     }
 }
@@ -146,10 +148,15 @@ impl Cam {
             ExprKind::Num(x, _) => V::Num(*x),
             ExprKind::Str(s) => V::Str(s.clone()),
             ExprKind::Name(n) => env.get(n).cloned().ok_or_else(|| format!("unknown name `{n}`"))?,
-            ExprKind::Tuple(xs) | ExprKind::List(xs) => V::Tuple(xs.iter().map(|x| self.eval(x, env)).collect::<Result<_, _>>()?),
+            ExprKind::Tuple(xs) | ExprKind::List(xs) => {
+                V::Tuple(xs.iter().map(|x| self.eval(x, env)).collect::<Result<_, _>>()?)
+            }
             ExprKind::Neg(x) => V::Num(-num(&self.eval(x, env)?).ok_or("`-` of a non-number")?),
             ExprKind::Bin(op, a, b) => {
-                let (a, b) = (num(&self.eval(a, env)?).ok_or("arithmetic on a non-number")?, num(&self.eval(b, env)?).ok_or("arithmetic on a non-number")?);
+                let (a, b) = (
+                    num(&self.eval(a, env)?).ok_or("arithmetic on a non-number")?,
+                    num(&self.eval(b, env)?).ok_or("arithmetic on a non-number")?,
+                );
                 V::Num(match op {
                     syntax::BinOp::Add => a + b,
                     syntax::BinOp::Sub => a - b,
@@ -164,7 +171,10 @@ impl Cam {
                         V::Holes(i, name.clone())
                     } else {
                         let have: Vec<&str> = self.parts[i].holes.iter().map(|h| h.name.as_str()).collect();
-                        return Err(format!("the part has no hole feature `{name}` (it has: {})", have.join(", ")));
+                        return Err(format!(
+                            "the part has no hole feature `{name}` (it has: {})",
+                            have.join(", ")
+                        ));
                     }
                 }
                 _ => return Err(format!("`.{name}` of something that is not a part")),
@@ -178,12 +188,17 @@ impl Cam {
                     if let Some(m) = named.get("margin").and_then(tuple3) {
                         return Ok(V::Stock(StockSpec::Margin(m)));
                     }
-                    if let (Some(lo), Some(hi)) = (named.get("min").and_then(tuple3), named.get("max").and_then(tuple3)) {
+                    if let (Some(lo), Some(hi)) = (
+                        named.get("min").and_then(tuple3),
+                        named.get("max").and_then(tuple3),
+                    ) {
                         return Ok(V::Stock(StockSpec::Box { min: lo, max: hi }));
                     }
                     return Err("box(margin: (x, y, z)) or box(min: (..), max: (..))".into());
                 }
-                return Err(format!("`{fname}` is a statement's built-in here: give it its own name"));
+                return Err(format!(
+                    "`{fname}` is a statement's built-in here: give it its own name"
+                ));
             }
             _ => return Err("an expression a machining document does not take".into()),
         })
@@ -219,13 +234,25 @@ fn get_str(m: &BTreeMap<String, V>, k: &str, default: Option<&str>) -> Result<St
     match m.get(k) {
         Some(V::Str(x)) => Ok(x.clone()),
         Some(_) => Err(format!("`{k}` must be a string")),
-        None => default.map(str::to_string).ok_or_else(|| format!("missing `{k}:`")),
+        None => default
+            .map(str::to_string)
+            .ok_or_else(|| format!("missing `{k}:`")),
     }
 }
 
 /// Runs a machining document (its file's directory finds the part).
 pub fn run(src: &str, dir: &Path) -> Cam {
-    let mut cam = Cam { ok: true, errors: vec![], warnings: vec![], parts: vec![], tools: vec![], setups: vec![], ops: vec![], programs: vec![], lib: Library::builtin() };
+    let mut cam = Cam {
+        ok: true,
+        errors: vec![],
+        warnings: vec![],
+        parts: vec![],
+        tools: vec![],
+        setups: vec![],
+        ops: vec![],
+        programs: vec![],
+        lib: Library::builtin(),
+    };
     let prog = match syntax::parse(src) {
         Ok(p) => p,
         Err(e) => {
@@ -236,13 +263,17 @@ pub fn run(src: &str, dir: &Path) -> Cam {
     };
     if !is_machining(src) {
         cam.ok = false;
-        cam.errors.push("not a machining document: its first statement must be `machining`".into());
+        cam.errors
+            .push("not a machining document: its first statement must be `machining`".into());
         return cam;
     }
     // a project library beside the document
     let proj = dir.join("cam");
     if let Ok(rd) = std::fs::read_dir(&proj) {
-        let mut files: Vec<PathBuf> = rd.filter_map(|e| e.ok().map(|e| e.path())).filter(|p| p.extension().is_some_and(|x| x == "toml")).collect();
+        let mut files: Vec<PathBuf> = rd
+            .filter_map(|e| e.ok().map(|e| e.path()))
+            .filter(|p| p.extension().is_some_and(|x| x == "toml"))
+            .collect();
         files.sort();
         for f in files {
             if let Ok(s) = std::fs::read_to_string(&f)
@@ -263,7 +294,11 @@ pub fn run(src: &str, dir: &Path) -> Cam {
                     env.insert(name.clone(), v);
                 }
                 StmtKind::Param { owner, name, value } => {
-                    let o = owner.iter().map(|s| format!("{s:?}")).collect::<Vec<_>>().join(".");
+                    let o = owner
+                        .iter()
+                        .map(|s| format!("{s:?}"))
+                        .collect::<Vec<_>>()
+                        .join(".");
                     let o = o.trim_matches('"').to_string();
                     params.entry(o).or_default().insert(name.clone(), value.clone());
                 }
@@ -273,7 +308,9 @@ pub fn run(src: &str, dir: &Path) -> Cam {
                         env.insert(name.clone(), v);
                         return Ok(());
                     };
-                    let ExprKind::Name(fname) = &f.kind else { return Err("a call of a non-built-in".into()) };
+                    let ExprKind::Name(fname) = &f.kind else {
+                        return Err("a call of a non-built-in".into());
+                    };
                     // the statement's own params, by their short names
                     let mut local = env.clone();
                     for (owner, ps) in &params {
@@ -299,7 +336,8 @@ pub fn run(src: &str, dir: &Path) -> Cam {
         })();
         if let Err(e) = r {
             cam.ok = false;
-            cam.errors.push(format!("line {}: {e}", line_of(src, st.span.lo as usize)));
+            cam.errors
+                .push(format!("line {}: {e}", line_of(src, st.span.lo as usize)));
         }
     }
     if cam.ops.iter().any(|o| o.status != "built") || cam.programs.iter().any(|p| p.error.is_some()) {
@@ -321,10 +359,14 @@ impl Cam {
                 let src = std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
                 let (run, _) = crate::run(&src, crate::Options::default(), Default::default());
                 if !run.ok() {
-                    return Err(format!("the part `{file}` does not build: {:?}", run.errors.first()));
+                    return Err(format!(
+                        "the part `{file}` does not build: {:?}",
+                        run.errors.first()
+                    ));
                 }
                 let body = run.body.ok_or("the part has no body")?;
-                let faces = forge_cam::lower::lower(&body).map_err(|e| format!("the part is outside this phase's CAM domain: {e:?}"))?;
+                let faces = forge_cam::lower::lower(&body)
+                    .map_err(|e| format!("the part is outside this phase's CAM domain: {e:?}"))?;
                 let mut lo = [f64::INFINITY; 3];
                 let mut hi = [f64::NEG_INFINITY; 3];
                 for fc in &faces {
@@ -333,7 +375,13 @@ impl Cam {
                         hi[k] = hi[k].max(fc.bbox[k].hi - fc.mu);
                     }
                 }
-                self.parts.push(PartIn { file, faces, holes: run.holes, bbox: (lo, hi), group: get_str(a, "group", Some("N"))? });
+                self.parts.push(PartIn {
+                    file,
+                    faces,
+                    holes: run.holes,
+                    bbox: (lo, hi),
+                    group: get_str(a, "group", Some("N"))?,
+                });
                 Ok(V::Part(self.parts.len() - 1))
             }
             "machine" => {
@@ -350,8 +398,16 @@ impl Cam {
                     Some(V::Str(h)) => Some(self.lib.holder(h).map_err(|e| e.to_string())?.clone()),
                     _ => None,
                 };
-                let shape = t.shape(stickout, holder.as_ref()).map_err(|e| format!("tool `{id}`: {e:?}"))?;
-                self.tools.push(ToolUse { t: tn, tool: t, holder: holder.map(|h| h.id), stickout, shape });
+                let shape = t
+                    .shape(stickout, holder.as_ref())
+                    .map_err(|e| format!("tool `{id}`: {e:?}"))?;
+                self.tools.push(ToolUse {
+                    t: tn,
+                    tool: t,
+                    holder: holder.map(|h| h.id),
+                    stickout,
+                    shape,
+                });
                 Ok(V::Tool(self.tools.len() - 1))
             }
             "setup" => {
@@ -365,16 +421,28 @@ impl Cam {
                 };
                 let (plo, phi) = self.parts[part].bbox;
                 let stock = match a.get("stock") {
-                    Some(V::Stock(StockSpec::Margin(m))) => Stock { min: [plo[0] - m[0], plo[1] - m[1], plo[2]], max: [phi[0] + m[0], phi[1] + m[1], phi[2] + m[2]] },
+                    Some(V::Stock(StockSpec::Margin(m))) => Stock {
+                        min: [plo[0] - m[0], plo[1] - m[1], plo[2]],
+                        max: [phi[0] + m[0], phi[1] + m[1], phi[2] + m[2]],
+                    },
                     Some(V::Stock(StockSpec::Box { min, max })) => Stock { min: *min, max: *max },
                     None => Stock { min: plo, max: phi },
                     _ => return Err("stock: box(..)".into()),
                 };
                 let origin = match a.get("origin") {
-                    Some(V::Str(s)) if s == "top-center" => [0.5 * (stock.min[0] + stock.max[0]), 0.5 * (stock.min[1] + stock.max[1]), stock.max[2]],
+                    Some(V::Str(s)) if s == "top-center" => [
+                        0.5 * (stock.min[0] + stock.max[0]),
+                        0.5 * (stock.min[1] + stock.max[1]),
+                        stock.max[2],
+                    ],
                     Some(V::Str(s)) if s == "top-corner" => [stock.min[0], stock.min[1], stock.max[2]],
-                    Some(v) => tuple3(v).ok_or("origin: \"top-center\", \"top-corner\" or (x, y, z) in the part's frame")?,
-                    None => [0.5 * (stock.min[0] + stock.max[0]), 0.5 * (stock.min[1] + stock.max[1]), stock.max[2]],
+                    Some(v) => tuple3(v)
+                        .ok_or("origin: \"top-center\", \"top-corner\" or (x, y, z) in the part's frame")?,
+                    None => [
+                        0.5 * (stock.min[0] + stock.max[0]),
+                        0.5 * (stock.min[1] + stock.max[1]),
+                        stock.max[2],
+                    ],
                 };
                 let clear = stock.max[2] + get_num(a, "clear", Some(10.0))?;
                 let retract = stock.max[2] + get_num(a, "retract", Some(3.0))?;
@@ -396,18 +464,27 @@ impl Cam {
             "program" => {
                 let su: Vec<usize> = match a.get("#0") {
                     Some(V::Setup(i)) => vec![*i],
-                    Some(V::Tuple(t)) => t.iter().filter_map(|v| if let V::Setup(i) = v { Some(*i) } else { None }).collect(),
+                    Some(V::Tuple(t)) => t
+                        .iter()
+                        .filter_map(|v| if let V::Setup(i) = v { Some(*i) } else { None })
+                        .collect(),
                     _ => return Err("program(SETUP or [SETUPS], post: \"fanuc\", number: N)".into()),
                 };
                 let post = get_str(a, "post", None).or_else(|_| -> Result<String, String> {
-                    Ok(self.lib.machine(&self.setups[su[0]].machine).map(|m| m.control.clone()).unwrap_or_else(|_| "fanuc".into()))
+                    Ok(self
+                        .lib
+                        .machine(&self.setups[su[0]].machine)
+                        .map(|m| m.control.clone())
+                        .unwrap_or_else(|_| "fanuc".into()))
                 })?;
                 let number = get_num(a, "number", Some(1000.0))? as u32;
                 let out = self.post(name, &su, &post, number);
                 self.programs.push(out);
                 Ok(V::Num(0.0))
             }
-            _ => Err(format!("`{f}` is not a machining built-in (part, machine, tool, setup, facing, contour, pocket, drill, program, box)")),
+            _ => Err(format!(
+                "`{f}` is not a machining built-in (part, machine, tool, setup, facing, contour, pocket, drill, program, box)"
+            )),
         }
     }
 
@@ -416,7 +493,14 @@ impl Cam {
         let m = self.lib.machine(&self.setups[su].machine).ok()?;
         Some(feeds::feeds(
             g,
-            &feeds::Cut { d: t.tool.dc, flutes: t.tool.nof.max(1), ball: t.tool.kind == Kind::Ball, carbide: t.tool.material == "carbide", ap, ae },
+            &feeds::Cut {
+                d: t.tool.dc,
+                flutes: t.tool.nof.max(1),
+                ball: t.tool.kind == Kind::Ball,
+                carbide: t.tool.material == "carbide",
+                ap,
+                ae,
+            },
             m.rpm,
         ))
     }
@@ -492,18 +576,43 @@ impl Cam {
                         let bottom = get_num(a, "to", None)?;
                         let zmid = 0.5 * (top + bottom);
                         let r = 0.5 * d;
-                        let sec = forge_cam::section::section(&part.faces, zmid, 1e-5).map_err(|e| format!("the part's section at z = {zmid}: {e:?}"))?;
+                        let sec = forge_cam::section::section(&part.faces, zmid, 1e-5)
+                            .map_err(|e| format!("the part's section at z = {zmid}: {e:?}"))?;
                         let islands = outer_or_inner(&sec, true)?;
                         let g = r;
-                        let (x0, y0, x1, y1) = (s.stock.min[0] - g, s.stock.min[1] - g, s.stock.max[0] + g, s.stock.max[1] + g);
+                        let (x0, y0, x1, y1) = (
+                            s.stock.min[0] - g,
+                            s.stock.min[1] - g,
+                            s.stock.max[0] + g,
+                            s.stock.max[1] + g,
+                        );
                         let (pa, pb, pc, pd) = (p2(x0, y0), p2(x1, y0), p2(x1, y1), p2(x0, y1));
-                        let mut loops = vec![Loop { segs: vec![Seg::Line { a: pa, b: pb }, Seg::Line { a: pb, b: pc }, Seg::Line { a: pc, b: pd }, Seg::Line { a: pd, b: pa }] }];
+                        let mut loops = vec![Loop {
+                            segs: vec![
+                                Seg::Line { a: pa, b: pb },
+                                Seg::Line { a: pb, b: pc },
+                                Seg::Line { a: pc, b: pd },
+                                Seg::Line { a: pd, b: pa },
+                            ],
+                        }];
                         for l in &islands.loops {
                             loops.push(l.reversed());
                         }
                         let rg = Region { loops };
                         let stepover = get_num(a, "stepover", Some(0.4 * d))?;
-                        let p = ops::pocket(&rg, t, ti, h, top, bottom, step, stepover, get_num(a, "leave", Some(0.0))?, (vf, vp)).map_err(|e| format!("{e:?}"))?;
+                        let p = ops::pocket(
+                            &rg,
+                            t,
+                            ti,
+                            h,
+                            top,
+                            bottom,
+                            step,
+                            stepover,
+                            get_num(a, "leave", Some(0.0))?,
+                            (vf, vp),
+                        )
+                        .map_err(|e| format!("{e:?}"))?;
                         if stepover <= r {
                             if let Some(o) = opening(&rg, r) {
                                 voids.push((Some(o), bottom));
@@ -517,22 +626,34 @@ impl Cam {
                         let side = get_str(a, "side", Some("outside"))?;
                         let leave = get_num(a, "leave", Some(0.0))?;
                         let zmid = 0.5 * (top + bottom);
-                        let sec = forge_cam::section::section(&part.faces, zmid, 1e-5).map_err(|e| format!("the part's section at z = {zmid}: {e:?}"))?;
+                        let sec = forge_cam::section::section(&part.faces, zmid, 1e-5)
+                            .map_err(|e| format!("the part's section at z = {zmid}: {e:?}"))?;
                         let rg = outer_or_inner(&sec, side == "outside")?;
                         if side == "outside" {
                             // the band the loop sweeps is cleared
                             let r = 0.5 * d;
                             if let Ok((c, _)) = forge_cam_geom::offset::offset(&rg, -(r + leave)) {
                                 let cr = forge_cam_geom::boolean::region_of(&c);
-                                if let (Ok((outer, _)), Ok((inner, _))) = (forge_cam_geom::offset::offset(&cr, -r), forge_cam_geom::offset::offset(&cr, r)) {
-                                    if let Ok(band) = forge_cam_geom::boolean::boolean(&forge_cam_geom::boolean::region_of(&outer), &forge_cam_geom::boolean::region_of(&inner), forge_cam_geom::boolean::Op::Diff) {
+                                if let (Ok((outer, _)), Ok((inner, _))) = (
+                                    forge_cam_geom::offset::offset(&cr, -r),
+                                    forge_cam_geom::offset::offset(&cr, r),
+                                ) {
+                                    if let Ok(band) = forge_cam_geom::boolean::boolean(
+                                        &forge_cam_geom::boolean::region_of(&outer),
+                                        &forge_cam_geom::boolean::region_of(&inner),
+                                        forge_cam_geom::boolean::Op::Diff,
+                                    ) {
                                         voids.push((Some(forge_cam_geom::boolean::region_of(&band)), bottom));
                                     }
                                 }
                             }
-                            ops::contour(&rg, t, ti, h, top, bottom, step, leave, true, (vf, vp)).map(|p| vec![p]).map_err(|e| format!("{e:?}"))
+                            ops::contour(&rg, t, ti, h, top, bottom, step, leave, true, (vf, vp))
+                                .map(|p| vec![p])
+                                .map_err(|e| format!("{e:?}"))
                         } else {
-                            ops::contour(&rg, t, ti, h, top, bottom, step, leave, false, (vf, vp)).map(|p| vec![p]).map_err(|e| format!("{e:?}"))
+                            ops::contour(&rg, t, ti, h, top, bottom, step, leave, false, (vf, vp))
+                                .map(|p| vec![p])
+                                .map_err(|e| format!("{e:?}"))
                         }
                     }
                     _ => {
@@ -541,21 +662,51 @@ impl Cam {
                             Some(V::Holes(p, n)) => (*p, n.clone()),
                             _ => return Err("pocket(SETUP, PART.HOLE, tool: ..)".into()),
                         };
-                        let hole = self.parts[pi].holes.iter().find(|x| x.name == hn).unwrap().clone();
+                        let hole = self.parts[pi]
+                            .holes
+                            .iter()
+                            .find(|x| x.name == hn)
+                            .unwrap()
+                            .clone();
                         if hole.dir != [0.0, 0.0, -1.0] {
-                            return Err(format!("the hole `{hn}` is not drilled along −z: it needs its own setup"));
+                            return Err(format!(
+                                "the hole `{hn}` is not drilled along −z: it needs its own setup"
+                            ));
                         }
                         let stepover = get_num(a, "stepover", Some(0.4 * d))?;
                         let mut paths = vec![];
                         for p in &hole.places {
                             let r = 0.5 * hole.d;
                             let st = p2(p[0] + r, p[1]);
-                            let rg = Region { loops: vec![Loop { segs: vec![Seg::Arc { a: st, b: st, c: p2(p[0], p[1]), ccw: true }] }] };
+                            let rg = Region {
+                                loops: vec![Loop {
+                                    segs: vec![Seg::Arc {
+                                        a: st,
+                                        b: st,
+                                        c: p2(p[0], p[1]),
+                                        ccw: true,
+                                    }],
+                                }],
+                            };
                             let bottom = match hole.depth {
                                 Some(dd) => p[2] - dd,
                                 None => self.parts[pi].bbox.0[2] - 0.5,
                             };
-                            paths.push(ops::pocket(&rg, t, ti, h, p[2], bottom, step, stepover, get_num(a, "leave", Some(0.0))?, (vf, vp)).map_err(|e| format!("{e:?}"))?);
+                            paths.push(
+                                ops::pocket(
+                                    &rg,
+                                    t,
+                                    ti,
+                                    h,
+                                    p[2],
+                                    bottom,
+                                    step,
+                                    stepover,
+                                    get_num(a, "leave", Some(0.0))?,
+                                    (vf, vp),
+                                )
+                                .map_err(|e| format!("{e:?}"))?,
+                            );
                             if stepover <= 0.5 * d {
                                 if let Some(o) = opening(&rg, 0.5 * d) {
                                     voids.push((Some(o), bottom));
@@ -588,14 +739,27 @@ impl Cam {
     }
 
     /// The hole plan from the feature: spot, then drill (peck past 3 D), then tap if threaded.
-    fn plan_holes(&mut self, su: usize, a: &BTreeMap<String, V>, out: &mut OpOut, voids: &mut Vec<(Option<Region>, f64)>) -> Result<Vec<OpPath>, String> {
+    fn plan_holes(
+        &mut self,
+        su: usize,
+        a: &BTreeMap<String, V>,
+        out: &mut OpOut,
+        voids: &mut Vec<(Option<Region>, f64)>,
+    ) -> Result<Vec<OpPath>, String> {
         let (pi, hn) = match a.get("#1") {
             Some(V::Holes(p, n)) => (*p, n.clone()),
             _ => return Err("drill(SETUP, PART.HOLE, plan: \"auto\")".into()),
         };
-        let hole = self.parts[pi].holes.iter().find(|x| x.name == hn).unwrap().clone();
+        let hole = self.parts[pi]
+            .holes
+            .iter()
+            .find(|x| x.name == hn)
+            .unwrap()
+            .clone();
         if hole.dir != [0.0, 0.0, -1.0] {
-            return Err(format!("the hole `{hn}` is not drilled along −z: it needs its own setup"));
+            return Err(format!(
+                "the hole `{hn}` is not drilled along −z: it needs its own setup"
+            ));
         }
         let through = hole.depth.is_none();
         let depth = match hole.depth {
@@ -607,16 +771,38 @@ impl Cam {
             Some((major, pitch)) => major - pitch,
             None => hole.d,
         };
-        let find = |lib: &Library, k: Kind, d: f64| lib.tools.iter().find(|t| t.kind == k && (t.dc - d).abs() < 1e-9).cloned();
-        let drill = find(&self.lib, Kind::Drill, (drill_d * 100.0).round() / 100.0).or_else(|| find(&self.lib, Kind::Drill, drill_d));
-        let Some(drill) = drill else {
-            out.fix = Some(format!("add a drill of {drill_d} mm to the project's cam/*.tools.toml"));
-            return Err(format!("NeedTool: no {drill_d} mm drill in the library for `{hn}`"));
+        let find = |lib: &Library, k: Kind, d: f64| {
+            lib.tools
+                .iter()
+                .find(|t| t.kind == k && (t.dc - d).abs() < 1e-9)
+                .cloned()
         };
-        let spot = self.lib.tools.iter().find(|t| t.kind == Kind::Spot && t.dc >= drill_d).cloned();
+        let drill = find(&self.lib, Kind::Drill, (drill_d * 100.0).round() / 100.0)
+            .or_else(|| find(&self.lib, Kind::Drill, drill_d));
+        let Some(drill) = drill else {
+            out.fix = Some(format!(
+                "add a drill of {drill_d} mm to the project's cam/*.tools.toml"
+            ));
+            return Err(format!(
+                "NeedTool: no {drill_d} mm drill in the library for `{hn}`"
+            ));
+        };
+        let spot = self
+            .lib
+            .tools
+            .iter()
+            .find(|t| t.kind == Kind::Spot && t.dc >= drill_d)
+            .cloned();
         let tap = match hole.thread {
             Some((major, pitch)) => {
-                let t = self.lib.tools.iter().find(|t| t.kind == Kind::Tap && (t.dc - major).abs() < 1e-9 && (t.tp - pitch).abs() < 1e-9).cloned();
+                let t = self
+                    .lib
+                    .tools
+                    .iter()
+                    .find(|t| {
+                        t.kind == Kind::Tap && (t.dc - major).abs() < 1e-9 && (t.tp - pitch).abs() < 1e-9
+                    })
+                    .cloned();
                 if t.is_none() {
                     out.fix = Some(format!("add a tap M{major}x{pitch}"));
                     return Err(format!("NeedTool: no tap {major} x {pitch} for `{hn}`"));
@@ -634,13 +820,22 @@ impl Cam {
             let holder = this.lib.holder("bt40-er32").ok().cloned();
             let stick = t.lcf + 10.0;
             let shape = t.shape(stick, holder.as_ref()).map_err(|e| format!("{e:?}"))?;
-            this.tools.push(ToolUse { t: n, tool: t, holder: holder.map(|h| h.id), stickout: stick, shape });
+            this.tools.push(ToolUse {
+                t: n,
+                tool: t,
+                holder: holder.map(|h| h.id),
+                stickout: stick,
+                shape,
+            });
             Ok(this.tools.len() - 1)
         };
         if let Some(sp) = spot {
             let ti = add(self, sp, base_t)?;
             let t = &self.tools[ti];
-            let f = self.feeds_for(su, t, t.tool.dc, 1.0).map(|x| 0.3 * x.vf).unwrap_or(100.0);
+            let f = self
+                .feeds_for(su, t, t.tool.dc, 1.0)
+                .map(|x| 0.3 * x.vf)
+                .unwrap_or(100.0);
             // a 90° spot to just under the drill's radius: the chamfer ring the drill centres in
             let dspot = 0.45 * drill_d / (0.5 * t.tool.angle).to_radians().tan().max(1e-9);
             let mut p = ops::holes(&hole.places, CycleKind::Drill, t, ti, h, 0.0, 0.0, f);
@@ -655,23 +850,66 @@ impl Cam {
         let ti = add(self, drill, base_t + 1)?;
         let t = &self.tools[ti];
         let peck = depth > 3.0 * t.tool.dc;
-        let f = self.feeds_for(su, t, t.tool.dc, t.tool.dc).map(|x| 0.1 * x.vf.min(2000.0)).unwrap_or(100.0);
+        let f = self
+            .feeds_for(su, t, t.tool.dc, t.tool.dc)
+            .map(|x| 0.1 * x.vf.min(2000.0))
+            .unwrap_or(100.0);
         let kind = if peck { CycleKind::Peck } else { CycleKind::Drill };
-        paths.push(ops::holes(&hole.places, kind, t, ti, h, depth, if peck { t.tool.dc } else { 0.0 }, f));
+        paths.push(ops::holes(
+            &hole.places,
+            kind,
+            t,
+            ti,
+            h,
+            depth,
+            if peck { t.tool.dc } else { 0.0 },
+            f,
+        ));
         // each hole's circle is cleared down to where the full diameter reaches
         for p in &hole.places {
             let r = 0.5 * t.tool.dc;
             let st = p2(p[0] + r, p[1]);
-            voids.push((Some(Region { loops: vec![Loop { segs: vec![Seg::Arc { a: st, b: st, c: p2(p[0], p[1]), ccw: true }] }] }), p[2] - depth));
+            voids.push((
+                Some(Region {
+                    loops: vec![Loop {
+                        segs: vec![Seg::Arc {
+                            a: st,
+                            b: st,
+                            c: p2(p[0], p[1]),
+                            ccw: true,
+                        }],
+                    }],
+                }),
+                p[2] - depth,
+            ));
         }
-        plan.push(format!("{} {} {}{}", if peck { "peck" } else { "drill" }, t.tool.id, if through { "through" } else { "to depth" }, if peck { format!(", q {}", t.tool.dc) } else { String::new() }));
+        plan.push(format!(
+            "{} {} {}{}",
+            if peck { "peck" } else { "drill" },
+            t.tool.id,
+            if through { "through" } else { "to depth" },
+            if peck {
+                format!(", q {}", t.tool.dc)
+            } else {
+                String::new()
+            }
+        ));
         out.tool = Some(ti);
         if let Some(tp) = tap {
             let ti = add(self, tp, base_t + 2)?;
             let t = &self.tools[ti];
             let rpm = 300.0;
             let f = t.tool.tp * rpm;
-            let mut p = ops::holes(&hole.places, CycleKind::Tap, t, ti, h, depth.min(hole.depth.unwrap_or(depth)), 0.0, f);
+            let mut p = ops::holes(
+                &hole.places,
+                CycleKind::Tap,
+                t,
+                ti,
+                h,
+                depth.min(hole.depth.unwrap_or(depth)),
+                0.0,
+                f,
+            );
             p.rpm = rpm;
             paths.push(p);
             plan.push(format!("tap {} (pitch {}) at {rpm} rpm", t.tool.id, t.tool.tp));
@@ -702,11 +940,19 @@ fn outer_or_inner(sec: &Region, outer: bool) -> Result<Region, String> {
     for l in 0..sec.loops.len() {
         let ccw = forge_cam_geom::region::loop_ccw(&mut cx, &ex, l);
         if ccw == outer {
-            loops.push(if outer { sec.loops[l].clone() } else { sec.loops[l].reversed() });
+            loops.push(if outer {
+                sec.loops[l].clone()
+            } else {
+                sec.loops[l].reversed()
+            });
         }
     }
     if loops.is_empty() {
-        return Err(if outer { "no outer boundary at that height".into() } else { "no inner boundary (hole) at that height".into() });
+        return Err(if outer {
+            "no outer boundary at that height".into()
+        } else {
+            "no inner boundary (hole) at that height".into()
+        });
     }
     Ok(Region { loops })
 }
@@ -714,7 +960,14 @@ fn outer_or_inner(sec: &Region, outer: bool) -> Result<Region, String> {
 impl Cam {
     /// Posts the setups' ops, reads the text back, and certifies the path the text means.
     fn post(&mut self, name: &str, setups: &[usize], post: &str, number: u32) -> ProgramOut {
-        let mut po = ProgramOut { name: name.into(), post: post.into(), text: None, lines: 0, error: None, round_trip: false };
+        let mut po = ProgramOut {
+            name: name.into(),
+            post: post.into(),
+            text: None,
+            lines: 0,
+            error: None,
+            round_trip: false,
+        };
         let d = match forge_post::Dialect::get(post) {
             Ok(d) => d,
             Err(e) => {
@@ -726,7 +979,9 @@ impl Cam {
         let mut current_tool: Option<u32> = None;
         // each op's records, and which records are whose
         let mut spans: Vec<(usize, usize, usize, usize)> = vec![];
-        let op_ids: Vec<usize> = (0..self.ops.len()).filter(|&i| setups.contains(&self.ops[i].setup) && !self.ops[i].paths.is_empty()).collect();
+        let op_ids: Vec<usize> = (0..self.ops.len())
+            .filter(|&i| setups.contains(&self.ops[i].setup) && !self.ops[i].paths.is_empty())
+            .collect();
         for &oi in &op_ids {
             let op = &self.ops[oi];
             let s = &self.setups[op.setup];
@@ -745,10 +1000,18 @@ impl Cam {
                         recs.push(Rec::SpindleStop);
                         recs.push(Rec::Coolant(forge_post::Coolant::Off));
                     }
-                    recs.push(Rec::ToolChange { t: t.t, h: t.t, name: t.tool.id.clone() });
+                    recs.push(Rec::ToolChange {
+                        t: t.t,
+                        h: t.t,
+                        name: t.tool.id.clone(),
+                    });
                     current_tool = Some(t.t);
                 }
-                let rpm = if p.rpm > 0.0 { p.rpm } else { op.feeds.map(|f| f.rpm).unwrap_or(3000.0) };
+                let rpm = if p.rpm > 0.0 {
+                    p.rpm
+                } else {
+                    op.feeds.map(|f| f.rpm).unwrap_or(3000.0)
+                };
                 recs.push(Rec::Spindle { rpm, cw: true });
                 recs.push(Rec::Coolant(p.coolant));
                 recs.push(Rec::Rapid(w(p.start)));
@@ -756,8 +1019,31 @@ impl Cam {
                     recs.push(match *m {
                         PMove::Rapid { to } => Rec::Rapid(w(to)),
                         PMove::Line { to, f, .. } => Rec::Line(w(to), f),
-                        PMove::Arc { to, c, cw, f } => Rec::Arc { to: w(to), c: [c[0] - o[0], c[1] - o[1]], cw, f },
-                        PMove::Cycle { kind, holes, z, r, clear, q, dwell, f } => Rec::Cycle { kind, holes: vec![[holes[0] - o[0], holes[1] - o[1]]], z: z - o[2], r: r - o[2], clear: clear - o[2], q, dwell, f },
+                        PMove::Arc { to, c, cw, f } => Rec::Arc {
+                            to: w(to),
+                            c: [c[0] - o[0], c[1] - o[1]],
+                            cw,
+                            f,
+                        },
+                        PMove::Cycle {
+                            kind,
+                            holes,
+                            z,
+                            r,
+                            clear,
+                            q,
+                            dwell,
+                            f,
+                        } => Rec::Cycle {
+                            kind,
+                            holes: vec![[holes[0] - o[0], holes[1] - o[1]]],
+                            z: z - o[2],
+                            r: r - o[2],
+                            clear: clear - o[2],
+                            q,
+                            dwell,
+                            f,
+                        },
                     });
                 }
                 spans.push((oi, pi, start, recs.len()));
@@ -765,14 +1051,25 @@ impl Cam {
         }
         for &oi in &op_ids {
             let op = &mut self.ops[oi];
-            (op.moves, op.pairs, op.cells, op.length_cut, op.length_rapid, op.time_s) = (0, 0, 0, 0.0, 0.0, 0.0);
+            (
+                op.moves,
+                op.pairs,
+                op.cells,
+                op.length_cut,
+                op.length_rapid,
+                op.time_s,
+            ) = (0, 0, 0, 0.0, 0.0, 0.0);
         }
         recs.push(Rec::SpindleStop);
         recs.push(Rec::Coolant(forge_post::Coolant::Off));
         if post != "grbl" {
             recs.push(Rec::Home);
         }
-        let program = forge_post::Program { number, title: name.into(), recs };
+        let program = forge_post::Program {
+            number,
+            title: name.into(),
+            recs,
+        };
         let q = match forge_post::quantize(&program, &d) {
             Ok(q) => q,
             Err(e) => {
@@ -798,9 +1095,21 @@ impl Cam {
         for (oi, pi, a, b) in spans {
             let s = &self.setups[self.ops[oi].setup];
             let o = s.origin;
-            let sub = forge_post::QProgram { number: 0, title: String::new(), recs: q.recs[a..b].to_vec(), decimals: d.decimals, feed_decimals: d.feed_decimals };
+            let sub = forge_post::QProgram {
+                number: 0,
+                title: String::new(),
+                recs: q.recs[a..b].to_vec(),
+                decimals: d.decimals,
+                feed_decimals: d.feed_decimals,
+            };
             let ms = forge_post::motions(&sub);
-            let back = |p: [i64; 3]| [p[0] as f64 / scale + o[0], p[1] as f64 / scale + o[1], p[2] as f64 / scale + o[2]];
+            let back = |p: [i64; 3]| {
+                [
+                    p[0] as f64 / scale + o[0],
+                    p[1] as f64 / scale + o[1],
+                    p[2] as f64 / scale + o[2],
+                ]
+            };
             let path = &self.ops[oi].paths[pi];
             let mut moves = vec![];
             let mut start: Option<[f64; 3]> = None;
@@ -815,9 +1124,16 @@ impl Cam {
                         if start.is_none() {
                             start = Some(t);
                         }
-                        let r = ((at[0] - (c[0] as f64 / scale + o[0])).powi(2) + (at[1] - (c[1] as f64 / scale + o[1])).powi(2)).sqrt();
+                        let r = ((at[0] - (c[0] as f64 / scale + o[0])).powi(2)
+                            + (at[1] - (c[1] as f64 / scale + o[1])).powi(2))
+                        .sqrt();
                         lc += r * 0.5 * std::f64::consts::PI;
-                        moves.push(PMove::Arc { to: t, c: [c[0] as f64 / scale + o[0], c[1] as f64 / scale + o[1]], cw: *cw, f: *f as f64 / fscale });
+                        moves.push(PMove::Arc {
+                            to: t,
+                            c: [c[0] as f64 / scale + o[0], c[1] as f64 / scale + o[1]],
+                            cw: *cw,
+                            f: *f as f64 / fscale,
+                        });
                         at = t;
                         continue;
                     }
@@ -838,12 +1154,40 @@ impl Cam {
                 }
                 // a feed move straight down is a plunge; a rapid straight back up its column, from
                 // where a plunge ended, retraces positions already checked: a link
-                let ph = if ph == Phase::Cut && to[0] == at[0] && to[1] == at[1] && to[2] < at[2] { Phase::Plunge } else { ph };
-                let ph = if ph == Phase::Rapid && to[0] == at[0] && to[1] == at[1] && to[2] > at[2] && matches!(moves.last(), Some(PMove::Line { phase: Phase::Plunge, .. })) { Phase::Link } else { ph };
-                moves.push(if ph == Phase::Rapid { PMove::Rapid { to } } else { PMove::Line { to, f, phase: ph } });
+                let ph = if ph == Phase::Cut && to[0] == at[0] && to[1] == at[1] && to[2] < at[2] {
+                    Phase::Plunge
+                } else {
+                    ph
+                };
+                let ph = if ph == Phase::Rapid
+                    && to[0] == at[0]
+                    && to[1] == at[1]
+                    && to[2] > at[2]
+                    && matches!(
+                        moves.last(),
+                        Some(PMove::Line {
+                            phase: Phase::Plunge,
+                            ..
+                        })
+                    ) {
+                    Phase::Link
+                } else {
+                    ph
+                };
+                moves.push(if ph == Phase::Rapid {
+                    PMove::Rapid { to }
+                } else {
+                    PMove::Line { to, f, phase: ph }
+                });
                 at = to;
             }
-            let posted = OpPath { tool: path.tool, start: start.unwrap_or(path.start), moves, rpm: path.rpm, coolant: path.coolant };
+            let posted = OpPath {
+                tool: path.tool,
+                start: start.unwrap_or(path.start),
+                moves,
+                rpm: path.rpm,
+                coolant: path.coolant,
+            };
             let tool = self.tools[path.tool].clone();
             let part = &self.parts[s.part];
             let stock_faces = match self.ops[oi].stock_before.as_ref().map(|ip| ip.faces()) {
@@ -863,7 +1207,10 @@ impl Cam {
             if !sum.clear && op.status == "built" {
                 op.status = "refused";
                 let c = &op.checks[0];
-                op.refusal = Some(format!("{} {} at move {} ({}): {} vs {} on {}", c.rule, c.verdict, c.move_index, c.phase, c.value, c.limit, c.other));
+                op.refusal = Some(format!(
+                    "{} {} at move {} ({}): {} vs {} on {}",
+                    c.rule, c.verdict, c.move_index, c.phase, c.value, c.limit, c.other
+                ));
                 op.fix = Some(match c.rule {
                     "holder_collision" if c.other.starts_with("stock") => "SetArg tool: a tool whose flutes reach the depth (lcf above the stock top), or clear the stock above first".into(),
                     "holder_collision" => "SetArg stickout: a longer stick-out, or a smaller holder".into(),
@@ -872,7 +1219,11 @@ impl Cam {
                 });
             }
         }
-        if self.ops.iter().any(|o| setups.contains(&o.setup) && o.status != "built") {
+        if self
+            .ops
+            .iter()
+            .any(|o| setups.contains(&o.setup) && o.status != "built")
+        {
             po.error = Some("an operation was refused: the program is not released".into());
             po.text = None;
         }
@@ -891,11 +1242,31 @@ impl Cam {
                     ("name", Json::Str(s.name.clone())),
                     ("part", Json::Str(self.parts[s.part].file.clone())),
                     ("machine", Json::Str(s.machine.clone())),
-                    ("wcs", Json::obj(vec![("origin", v3(s.origin)), ("axes", Json::Str("part".into())), ("offset", n(s.wcs as f64))])),
-                    ("stock", Json::obj(vec![("kind", Json::Str("box".into())), ("min", v3(s.stock.min)), ("max", v3(s.stock.max))])),
+                    (
+                        "wcs",
+                        Json::obj(vec![
+                            ("origin", v3(s.origin)),
+                            ("axes", Json::Str("part".into())),
+                            ("offset", n(s.wcs as f64)),
+                        ]),
+                    ),
+                    (
+                        "stock",
+                        Json::obj(vec![
+                            ("kind", Json::Str("box".into())),
+                            ("min", v3(s.stock.min)),
+                            ("max", v3(s.stock.max)),
+                        ]),
+                    ),
                     ("tol", n(s.tol)),
                     ("clearance", n(s.clearance)),
-                    ("heights", Json::obj(vec![("clear", n(s.heights.clear)), ("retract", n(s.heights.retract))])),
+                    (
+                        "heights",
+                        Json::obj(vec![
+                            ("clear", n(s.heights.clear)),
+                            ("retract", n(s.heights.retract)),
+                        ]),
+                    ),
                 ])
             })
             .collect();
@@ -915,7 +1286,16 @@ impl Cam {
                         ("stickout", n(t.stickout)),
                     ])
                 });
-                let feeds = o.feeds.map(|f| Json::obj(vec![("rpm", n(f.rpm)), ("vc", n(f.vc)), ("fz", n(f.fz)), ("hex", n(f.hex)), ("f", n(f.vf)), ("power_kw", n(f.power))]));
+                let feeds = o.feeds.map(|f| {
+                    Json::obj(vec![
+                        ("rpm", n(f.rpm)),
+                        ("vc", n(f.vc)),
+                        ("fz", n(f.fz)),
+                        ("hex", n(f.hex)),
+                        ("f", n(f.vf)),
+                        ("power_kw", n(f.power)),
+                    ])
+                });
                 let checks: Vec<Json> = o
                     .checks
                     .iter()
@@ -937,12 +1317,27 @@ impl Cam {
                     .collect();
                 let summary = Json::obj(vec![
                     ("rule", Json::Str("gouge, holder_collision, rapid_clear".into())),
-                    ("verdict", Json::Str(if o.status == "built" { "pass" } else { "fail" }.into())),
+                    (
+                        "verdict",
+                        Json::Str(if o.status == "built" { "pass" } else { "fail" }.into()),
+                    ),
                     ("certified", true.into()),
                     ("pairs", n(o.pairs as f64)),
                     ("cells", n(o.cells as f64)),
-                    ("least_cutter_distance", if o.least.is_finite() { n(o.least) } else { Json::Null }),
-                    ("against", Json::Str("the path the posted text means (round trip), not the unrounded one".into())),
+                    (
+                        "least_cutter_distance",
+                        if o.least.is_finite() {
+                            n(o.least)
+                        } else {
+                            Json::Null
+                        },
+                    ),
+                    (
+                        "against",
+                        Json::Str(
+                            "the path the posted text means (round trip), not the unrounded one".into(),
+                        ),
+                    ),
                 ]);
                 Json::obj(vec![
                     ("name", Json::Str(o.name.clone())),
@@ -950,27 +1345,67 @@ impl Cam {
                     ("setup", Json::Str(self.setups[o.setup].name.clone())),
                     ("status", Json::Str(o.status.into())),
                     ("tool", tool.unwrap_or(Json::Null)),
-                    ("plan", Json::Arr(o.plan.iter().map(|s| Json::Str(s.clone())).collect())),
+                    (
+                        "plan",
+                        Json::Arr(o.plan.iter().map(|s| Json::Str(s.clone())).collect()),
+                    ),
                     ("feeds", feeds.unwrap_or(Json::Null)),
-                    ("path", Json::obj(vec![("moves", n(o.moves as f64)), ("length_cut", n(o.length_cut)), ("length_rapid", n(o.length_rapid)), ("time_s", n(o.time_s))])),
+                    (
+                        "path",
+                        Json::obj(vec![
+                            ("moves", n(o.moves as f64)),
+                            ("length_cut", n(o.length_cut)),
+                            ("length_rapid", n(o.length_rapid)),
+                            ("time_s", n(o.time_s)),
+                        ]),
+                    ),
                     ("certificate", summary),
                     ("checks", Json::Arr(checks)),
-                    ("leftover", Json::obj(vec![("status", Json::Str("not computed in this phase (G4 pending)".into()))])),
+                    (
+                        "leftover",
+                        Json::obj(vec![(
+                            "status",
+                            Json::Str("not computed in this phase (G4 pending)".into()),
+                        )]),
+                    ),
                     ("refusal", o.refusal.clone().map(Json::Str).unwrap_or(Json::Null)),
                 ])
             })
             .collect();
-        let blocking: Vec<Json> = self.ops.iter().filter(|o| o.status != "built").map(|o| Json::obj(vec![("op", Json::Str(o.name.clone())), ("why", Json::Str(o.refusal.clone().unwrap_or_default()))])).collect();
+        let blocking: Vec<Json> = self
+            .ops
+            .iter()
+            .filter(|o| o.status != "built")
+            .map(|o| {
+                Json::obj(vec![
+                    ("op", Json::Str(o.name.clone())),
+                    ("why", Json::Str(o.refusal.clone().unwrap_or_default())),
+                ])
+            })
+            .collect();
         let fixes: Vec<Json> = self
             .ops
             .iter()
-            .filter_map(|o| o.fix.as_ref().map(|f| Json::obj(vec![("op", Json::Str(o.name.clone())), ("fix", Json::Str(f.clone()))])))
+            .filter_map(|o| {
+                o.fix.as_ref().map(|f| {
+                    Json::obj(vec![
+                        ("op", Json::Str(o.name.clone())),
+                        ("fix", Json::Str(f.clone())),
+                    ])
+                })
+            })
             .collect();
         let suggestions: Vec<Json> = self
             .ops
             .iter()
             .filter(|o| o.refusal.as_ref().is_some_and(|r| r.starts_with("NeedTool")))
-            .map(|o| Json::obj(vec![("kind", Json::Str("NeedTool".into())), ("op", Json::Str(o.name.clone())), ("why", Json::Str(o.refusal.clone().unwrap()))]))
+            .map(|o| {
+                Json::obj(vec![
+                    ("kind", Json::Str("NeedTool".into())),
+                    ("op", Json::Str(o.name.clone())),
+                    ("why", Json::Str(o.refusal.clone().unwrap())),
+                ])
+            })
             .collect();
         let programs = self
             .programs
@@ -1006,7 +1441,9 @@ impl Cam {
     /// The setup sheet, as HTML.
     pub fn sheet(&self) -> String {
         let esc = |s: &str| s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;");
-        let mut h = String::from("<!DOCTYPE html>\n<html><head><meta charset=\"utf-8\"><title>Setup sheet</title><style>body{font-family:sans-serif;margin:2em}table{border-collapse:collapse;margin:1em 0}td,th{border:1px solid #999;padding:4px 8px;text-align:left}th{background:#eee}.refused{color:#a00}</style></head><body>\n<h1>Setup sheet</h1>\n");
+        let mut h = String::from(
+            "<!DOCTYPE html>\n<html><head><meta charset=\"utf-8\"><title>Setup sheet</title><style>body{font-family:sans-serif;margin:2em}table{border-collapse:collapse;margin:1em 0}td,th{border:1px solid #999;padding:4px 8px;text-align:left}th{background:#eee}.refused{color:#a00}</style></head><body>\n<h1>Setup sheet</h1>\n",
+        );
         for s in &self.setups {
             h.push_str(&format!(
                 "<h2>Setup {}</h2>\n<p>Part <b>{}</b> on <b>{}</b>. WCS G{} at ({:.3}, {:.3}, {:.3}) of the part's frame. Stock box {:.2} × {:.2} × {:.2} mm. Tolerance {} mm; clearance {} mm; clear height {:.2}, retract {:.2} (part frame).</p>\n",
@@ -1042,7 +1479,10 @@ impl Cam {
         }
         h.push_str("</table>\n<h2>Operations</h2>\n<table><tr><th>op</th><th>kind</th><th>tool</th><th>rpm</th><th>feed</th><th>moves</th><th>cut mm</th><th>time</th><th>certificate</th></tr>\n");
         for o in &self.ops {
-            let t = o.tool.map(|i| format!("T{} {}", self.tools[i].t, self.tools[i].tool.id)).unwrap_or_default();
+            let t = o
+                .tool
+                .map(|i| format!("T{} {}", self.tools[i].t, self.tools[i].tool.id))
+                .unwrap_or_default();
             h.push_str(&format!(
                 "<tr class=\"{}\"><td>{}</td><td>{}{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{:.0}</td><td>{:.0} s</td><td>{}</td></tr>\n",
                 if o.status == "built" { "" } else { "refused" },
@@ -1064,6 +1504,8 @@ impl Cam {
 
     /// The first program's text, if released.
     pub fn program_text(&self) -> Option<(&str, &str)> {
-        self.programs.iter().find_map(|p| p.text.as_deref().map(|t| (t, p.post.as_str())))
+        self.programs
+            .iter()
+            .find_map(|p| p.text.as_deref().map(|t| (t, p.post.as_str())))
     }
 }

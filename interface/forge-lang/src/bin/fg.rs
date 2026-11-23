@@ -609,7 +609,10 @@ fn cam_cmd(file: &str, rest: &[String]) -> ExitCode {
             return ExitCode::from(2);
         }
     };
-    let dir = std::path::Path::new(file).parent().map(|p| p.to_path_buf()).unwrap_or_default();
+    let dir = std::path::Path::new(file)
+        .parent()
+        .map(|p| p.to_path_buf())
+        .unwrap_or_default();
     let cam = forge_lang::cam::run(&src, &dir);
     let arg = |f: &str| rest.iter().position(|a| a == f).and_then(|i| rest.get(i + 1));
     if let Some(out) = arg("-o") {
@@ -646,14 +649,30 @@ fn cam_cmd(file: &str, rest: &[String]) -> ExitCode {
                 o.moves,
                 o.length_cut,
                 o.time_s,
-                if o.status == "built" { format!("certified ({} checks)", o.pairs) } else { o.refusal.clone().unwrap_or_default() }
+                if o.status == "built" {
+                    format!("certified ({} checks)", o.pairs)
+                } else {
+                    o.refusal.clone().unwrap_or_default()
+                }
             );
         }
         for p in &cam.programs {
-            println!("program {} ({}): {}", p.name, p.post, match &p.error { None => format!("{} lines, round trip exact", p.lines), Some(e) => e.clone() });
+            println!(
+                "program {} ({}): {}",
+                p.name,
+                p.post,
+                match &p.error {
+                    None => format!("{} lines, round trip exact", p.lines),
+                    Some(e) => e.clone(),
+                }
+            );
         }
     }
-    if cam.ok { ExitCode::SUCCESS } else { ExitCode::from(1) }
+    if cam.ok {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::from(1)
+    }
 }
 
 fn main() -> ExitCode {

@@ -243,7 +243,11 @@ impl Session {
                 o.kind,
                 o.status,
                 o.moves,
-                if o.status == "built" { "certified".to_string() } else { o.refusal.clone().unwrap_or_default() }
+                if o.status == "built" {
+                    "certified".to_string()
+                } else {
+                    o.refusal.clone().unwrap_or_default()
+                }
             ));
         }
         let file = if a.words.first().is_some_and(|w| w == "sheet") {
@@ -251,7 +255,12 @@ impl Session {
         } else {
             cam.program_text().map(|(t, _)| t.as_bytes().to_vec())
         };
-        Ok(Reply { ok: cam.ok, text, json: cam.json(), png: file })
+        Ok(Reply {
+            ok: cam.ok,
+            text,
+            json: cam.json(),
+            png: file,
+        })
     }
 
     fn body(run: &Run) -> Result<&Body, String> {
