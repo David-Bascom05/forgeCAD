@@ -428,7 +428,7 @@ taper/00026 refused_ok
 taper/00027 agree
 taper/00028 refused_ok
 taper/00029 refused_ok
-taper/00030 refused_valid
+taper/00030 agree
 taper/00031 agree
 taper/00032 refused_ok
 taper/00033 agree
@@ -454,7 +454,7 @@ taper/00052 agree
 taper/00053 agree
 taper/00054 refused_ok
 taper/00055 agree
-taper/00056 refused_valid
+taper/00056 agree
 taper/00057 agree
 taper/00058 agree
 taper/00059 agree
@@ -465,7 +465,7 @@ taper/00063 refused_ok
 taper/00064 agree
 taper/00065 agree
 taper/00066 agree
-taper/00067 refused_valid
+taper/00067 agree
 taper/00068 refused_ok
 taper/00069 refused_ok
 taper/00070 refused_ok
@@ -552,7 +552,7 @@ taper/00150 agree
 taper/00151 refused_ok
 taper/00152 agree
 taper/00153 refused_ok
-taper/00154 refused_valid
+taper/00154 agree
 taper/00155 agree
 taper/00156 agree
 taper/00157 refused_ok
@@ -566,7 +566,7 @@ taper/00164 refused_ok
 taper/00165 refused_ok
 taper/00166 agree
 taper/00167 agree
-taper/00168 refused_valid
+taper/00168 agree
 taper/00169 refused_ok
 taper/00170 agree
 taper/00171 refused_ok
@@ -647,16 +647,16 @@ taper/00245 agree
 taper/00246 agree
 taper/00247 agree
 taper/00248 agree
-taper/00249 refused_valid
+taper/00249 agree
 taper/00250 agree
-taper/00251 refused_valid
+taper/00251 agree
 taper/00252 agree
 taper/00253 agree
-taper/00254 refused_valid
+taper/00254 agree
 taper/00255 refused_ok
 taper/00256 agree
 taper/00257 agree
-taper/00258 refused_valid
+taper/00258 agree
 taper/00259 refused_ok
 taper/00260 refused_ok
 taper/00261 agree
@@ -696,7 +696,7 @@ taper/00294 agree
 taper/00295 agree
 taper/00296 agree
 taper/00297 refused_ok
-taper/00298 refused_valid
+taper/00298 agree
 taper/00299 refused_ok
 verify/forge-coverage/parts/corner_touch.fg#1 agree
 verify/forge-coverage/parts/corner_touch.fg#3 agree
