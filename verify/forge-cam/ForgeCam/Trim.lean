@@ -812,6 +812,397 @@ theorem clearFace_region {Z : Set ℝ} {w : ℝ → ℝ} {γ : ℝ → P} (hγ :
   obtain ⟨p, hp, hy⟩ := mem_iUnion₂.mp hy
   exact hD p hp s hs y hy
 
+
+/-! ### The stored ends: slab's lo − 2·gap (CAM 0b56c1e) -/
+
+theorem inSector_scale {ua ub e : P} {ka kb : ℝ} (hka : 0 < ka) (hkb : 0 < kb) :
+    inSector (sc ka ua) (sc kb ub) e ↔ inSector ua ub e := by
+  have e1 : cross (sc ka ua) e = ka * cross ua e := by simp only [cross, sc]; ring
+  have e2 : cross e (sc kb ub) = kb * cross e ub := by simp only [cross, sc]; ring
+  simp only [inSector, e1, e2]
+  constructor
+  · rintro ⟨h1, h2⟩
+    exact ⟨nonneg_of_mul_nonneg_right (by linarith) hka, nonneg_of_mul_nonneg_right (by linarith) hkb⟩
+  · rintro ⟨h1, h2⟩; exact ⟨mul_nonneg hka.le h1, mul_nonneg hkb.le h2⟩
+
+/-- The distance from a stored end to its circle point is its gap. -/
+theorem d2_onCircle {c e : P} {r : ℝ} (he : 0 < nsq (e - c)) :
+    d2 e (onCircle c e r) = |√(nsq (e - c)) - r| := by
+  set Lc := √(nsq (e - c)) with hLd
+  have hL0 : 0 < Lc := Real.sqrt_pos.mpr he
+  have hL2 : Lc ^ 2 = nsq (e - c) := Real.sq_sqrt he.le
+  simp only [d2, onCircle, sc, Prod.fst_add, Prod.snd_add, ← hLd]
+  rw [← Real.sqrt_sq_eq_abs]; congr 1
+  have : (e.1 - (c.1 + r / Lc * (e - c).1)) ^ 2 + (e.2 - (c.2 + r / Lc * (e - c).2)) ^ 2 =
+      (1 - r / Lc) ^ 2 * nsq (e - c) := by
+    simp only [nsq, dot, Prod.fst_sub, Prod.snd_sub]; ring
+  rw [this, ← hL2]; field_simp
+
+theorem dist_sqrt (x y : P) : √(nsq (x - y)) = d2 y x := (d2_eq_sqrt y x).symm
+
+/-- (√y + g)² is monotone in y ≥ 0. -/
+theorem sqg_mono {y y' g : ℝ} (hy : 0 ≤ y) (hg : 0 ≤ g) (h : y ≤ y') :
+    (√y + g) ^ 2 ≤ (√y' + g) ^ 2 := by
+  have := Real.sqrt_le_sqrt h
+  nlinarith [Real.sqrt_nonneg y, Real.sqrt_nonneg y']
+
+theorem le_sqg_of_sqrt {x y g : ℝ} (hx : 0 ≤ x) (h : √x ≤ √y + g) : x ≤ (√y + g) ^ 2 := by
+  have := Real.sq_sqrt hx
+  nlinarith [Real.sqrt_nonneg x]
+
+theorem min_sqg {x1 x2 y1 y2 g : ℝ} (hy1 : 0 ≤ y1) (hy2 : 0 ≤ y2) (hg : 0 ≤ g)
+    (h1 : x1 ≤ (√y1 + g) ^ 2) (h2 : x2 ≤ (√y2 + g) ^ 2) :
+    min x1 x2 ≤ (√(min y1 y2) + g) ^ 2 := by
+  rcases le_total y1 y2 with h | h
+  · rw [min_eq_left h]; exact (min_le_left _ _).trans h1
+  · rw [min_eq_right h]; exact (min_le_right _ _).trans h2
+
+theorem ptSegSq_nonneg (q a d : P) : 0 ≤ ptSegSq q a d := by
+  unfold ptSegSq; simp only; split_ifs
+  · exact nsq_nonneg _
+  · exact nsq_nonneg _
+  · exact div_nonneg (sq_nonneg _) (nsq_nonneg _)
+
+/-- A point–segment candidate moves by at most how far its point moves. -/
+theorem ptSegSq_shift (q q' a d : P) (hd : 0 < nsq d) :
+    ptSegSq q a d ≤ (√(ptSegSq q' a d) + d2 q q') ^ 2 := by
+  obtain ⟨τ, h0, h1, he⟩ := ptSegSq_attained q' a d hd
+  have hle := ptSegSq_le q a d hd h0 h1
+  apply le_sqg_of_sqrt (ptSegSq_nonneg q a d)
+  calc √(ptSegSq q a d) ≤ √(nsq (q - pt a d τ)) := Real.sqrt_le_sqrt hle
+    _ = d2 (pt a d τ) q := dist_sqrt _ _
+    _ ≤ d2 (pt a d τ) q' + d2 q' q := d2_triangle _ _ _
+    _ = √(ptSegSq q' a d) + d2 q q' := by rw [← he, dist_sqrt, d2_comm q' q]
+
+theorem ptArcSq_nonneg (q c ua ub : P) (r : ℝ) : 0 ≤ ptArcSq q c ua ub r := by
+  unfold ptArcSq; split_ifs
+  · positivity
+  · exact le_min (nsq_nonneg _) (nsq_nonneg _)
+
+/-- A point–arc candidate with the arc's ends moved along their rays by at most g. -/
+theorem ptArcSq_shift (q c ua ub : P) {r ka kb g : ℝ} (hka : 0 < ka) (hkb : 0 < kb) (hg : 0 ≤ g)
+    (hA : d2 (c + ua) (c + sc ka ua) ≤ g) (hB : d2 (c + ub) (c + sc kb ub) ≤ g) :
+    ptArcSq q c ua ub r ≤ (√(ptArcSq q c (sc ka ua) (sc kb ub) r) + g) ^ 2 := by
+  classical
+  unfold ptArcSq
+  rw [show inSector (sc ka ua) (sc kb ub) (q - c) ↔ inSector ua ub (q - c) from
+    inSector_scale hka hkb]
+  split_ifs with hs
+  · have h0 : 0 ≤ (√(nsq (q - c)) - r) ^ 2 := sq_nonneg _
+    nlinarith [Real.sqrt_nonneg ((√(nsq (q - c)) - r) ^ 2), Real.sq_sqrt h0]
+  · have hA' : nsq (q - (c + ua)) ≤ (√(nsq (q - (c + sc ka ua))) + g) ^ 2 := by
+      apply le_sqg_of_sqrt (nsq_nonneg _)
+      rw [dist_sqrt, dist_sqrt]
+      calc d2 (c + ua) q ≤ d2 (c + ua) (c + sc ka ua) + d2 (c + sc ka ua) q := d2_triangle _ _ _
+        _ ≤ g + d2 (c + sc ka ua) q := by linarith
+        _ = d2 (c + sc ka ua) q + g := by ring
+    have hB' : nsq (q - (c + ub)) ≤ (√(nsq (q - (c + sc kb ub))) + g) ^ 2 := by
+      apply le_sqg_of_sqrt (nsq_nonneg _)
+      rw [dist_sqrt, dist_sqrt]
+      calc d2 (c + ub) q ≤ d2 (c + ub) (c + sc kb ub) + d2 (c + sc kb ub) q := d2_triangle _ _ _
+        _ ≤ g + d2 (c + sc kb ub) q := by linarith
+        _ = d2 (c + sc kb ub) q + g := by ring
+    exact min_sqg (nsq_nonneg _) (nsq_nonneg _) hg hA' hB'
+
+theorem ptSegSq_shift' {q q' a d : P} {g : ℝ} (hd : 0 < nsq d) (hq : d2 q q' ≤ g) :
+    ptSegSq q a d ≤ (√(ptSegSq q' a d) + g) ^ 2 :=
+  (ptSegSq_shift q q' a d hd).trans (by
+    have := Real.sqrt_nonneg (ptSegSq q' a d)
+    have := d2_nonneg q q'
+    nlinarith)
+
+theorem sqrt_le_of_le_sqg {x y g : ℝ} (hy : 0 ≤ y) (hg : 0 ≤ g) (h : x ≤ (√y + g) ^ 2) :
+    √x ≤ √y + g := by
+  calc √x ≤ √((√y + g) ^ 2) := Real.sqrt_le_sqrt h
+    _ = √y + g := Real.sqrt_sq (by positivity)
+
+theorem segArcBase_nonneg (a d c ua ub : P) (r : ℝ) : 0 ≤ segArcBase a d c ua ub r :=
+  le_min (le_min (ptArcSq_nonneg _ _ _ _ _) (ptArcSq_nonneg _ _ _ _ _))
+    (le_min (ptSegSq_nonneg _ _ _) (ptSegSq_nonneg _ _ _))
+
+theorem segArcLo_nonneg (a d c ua ub : P) (r : ℝ) : 0 ≤ segArcLo a d c ua ub r := by
+  unfold segArcLo; split_ifs
+  · exact le_rfl
+  · exact le_min (segArcBase_nonneg _ _ _ _ _ _) (sq_nonneg _)
+  · exact segArcBase_nonneg _ _ _ _ _ _
+
+/-- **slab's segment–arc lo with the stored ends is at most g above the one with the ends on the
+circle** (the ends moved along their rays by at most g): √lo_stored ≤ √lo_on + g. -/
+theorem segArcLo_shift (a d c ua ub : P) {r ka kb g : ℝ} (hd : 0 < nsq d) (hka : 0 < ka)
+    (hkb : 0 < kb) (hg : 0 ≤ g)
+    (hA : d2 (c + ua) (c + sc ka ua) ≤ g) (hB : d2 (c + ub) (c + sc kb ub) ≤ g) :
+    √(segArcLo a d c ua ub r) ≤ √(segArcLo a d c (sc ka ua) (sc kb ub) r) + g := by
+  classical
+  have hsec : ∀ e, inSector (sc ka ua) (sc kb ub) e ↔ inSector ua ub e :=
+    fun e => inSector_scale hka hkb
+  have hbase : segArcBase a d c ua ub r ≤
+      (√(segArcBase a d c (sc ka ua) (sc kb ub) r) + g) ^ 2 := by
+    unfold segArcBase
+    exact min_sqg (le_min (ptArcSq_nonneg _ _ _ _ _) (ptArcSq_nonneg _ _ _ _ _))
+      (le_min (ptSegSq_nonneg _ _ _) (ptSegSq_nonneg _ _ _)) hg
+      (min_sqg (ptArcSq_nonneg _ _ _ _ _) (ptArcSq_nonneg _ _ _ _ _) hg
+        (ptArcSq_shift _ c ua ub hka hkb hg hA hB) (ptArcSq_shift _ c ua ub hka hkb hg hA hB))
+      (min_sqg (ptSegSq_nonneg _ _ _) (ptSegSq_nonneg _ _ _) hg
+        (ptSegSq_shift' hd hA) (ptSegSq_shift' hd hB))
+  refine sqrt_le_of_le_sqg (segArcLo_nonneg _ _ _ _ _ _) hg ?_
+  unfold segArcLo
+  simp only [hsec]
+  split_ifs
+  · positivity
+  · exact min_sqg (segArcBase_nonneg _ _ _ _ _ _) (sq_nonneg _) hg hbase
+      (by nlinarith [Real.sqrt_nonneg ((√(nsq (pt a d (footT a d c) - c)) - r) ^ 2),
+        Real.sq_sqrt (sq_nonneg (√(nsq (pt a d (footT a d c) - c)) - r))])
+  · exact hbase
+
+/-- **A line move against a trim arc piece, as slab computes it (0b56c1e)**: with the stored
+ends (off the circle by at most g), max(0, √lo − 2g) bounds the distance from every point of
+the segment to every point of the piece (its circle's arc and both radial pieces). -/
+theorem segArc_trim (a d c ea eb : P) {r g : ℝ} (hd : 0 < nsq d)
+    (hok : (Piece.arc c ea eb r g).ok) {τ : ℝ} (hτ0 : 0 ≤ τ) (hτ1 : τ ≤ 1) :
+    ∀ y ∈ (Piece.arc c ea eb r g).pts,
+      max 0 (√(segArcLo a d c (ea - c) (eb - c) r) - 2 * g) ≤ d2 y (pt a d τ) := by
+  obtain ⟨hr, ha, hb, hga, hgb, hab⟩ := hok
+  have hg0 : 0 ≤ g := (abs_nonneg _).trans hga
+  set ka := r / √(nsq (ea - c))
+  set kb := r / √(nsq (eb - c))
+  have hka : 0 < ka := div_pos hr (Real.sqrt_pos.mpr ha)
+  have hkb : 0 < kb := div_pos hr (Real.sqrt_pos.mpr hb)
+  have hAo : c + sc ka (ea - c) = onCircle c ea r := rfl
+  have hBo : c + sc kb (eb - c) = onCircle c eb r := rfl
+  have hA : d2 (c + (ea - c)) (c + sc ka (ea - c)) ≤ g := by
+    rw [hAo, show c + (ea - c) = ea by abel, d2_onCircle ha]; exact hga
+  have hB : d2 (c + (eb - c)) (c + sc kb (eb - c)) ≤ g := by
+    rw [hBo, show c + (eb - c) = eb by abel, d2_onCircle hb]; exact hgb
+  have hshift := segArcLo_shift a d c (ea - c) (eb - c) (r := r) hd hka hkb hg0 hA hB
+  -- the on-circle arc is the same set, its ends on the circle
+  have hua : nsq (sc ka (ea - c)) = r ^ 2 := by
+    have := onCircle_nsq (c := c) (e := ea) hr.le ha; rwa [onCircle_sub] at this
+  have hub : nsq (sc kb (eb - c)) = r ^ 2 := by
+    have := onCircle_nsq (c := c) (e := eb) hr.le hb; rwa [onCircle_sub] at this
+  have hab' : 0 < cross (sc ka (ea - c)) (sc kb (eb - c)) := by
+    have : cross (sc ka (ea - c)) (sc kb (eb - c)) = ka * kb * cross (ea - c) (eb - c) := by
+      simp only [cross, sc]; ring
+    rw [this]; exact mul_pos (mul_pos hka hkb) hab
+  have harc : DistArc.arc c (sc ka (ea - c)) (sc kb (eb - c)) r = DistArc.arc c (ea - c) (eb - c) r := by
+    ext v; simp only [DistArc.arc, mem_setOf_eq, inSector_scale hka hkb]
+  -- the circle's arc: √lo_on ≤ its distance
+  have hcirc : ∀ v ∈ DistArc.arc c (ea - c) (eb - c) r,
+      √(segArcLo a d c (ea - c) (eb - c) r) - g ≤ d2 v (pt a d τ) := by
+    intro v hv
+    rw [← harc] at hv
+    have := segArcLo_le a d c (sc ka (ea - c)) (sc kb (eb - c)) hd hr hua hub hab' hτ0 hτ1 hv
+    have h2 : √(segArcLo a d c (sc ka (ea - c)) (sc kb (eb - c)) r) ≤ d2 v (pt a d τ) := by
+      rw [d2_eq_sqrt]; exact Real.sqrt_le_sqrt this
+    linarith
+  intro y hy
+  have := arcPiece_lower (x := pt a d τ) ⟨hr, ha, hb, hga, hgb, hab⟩ hcirc y hy
+  exact max_le (d2_nonneg _ _) (by linarith)
+
+
+/-- The point–arc candidate is attained, for an arc whose ends are on the circle. -/
+theorem ptArcSq_attained (q c ua ub : P) {r : ℝ} (hr : 0 < r) (hua : nsq ua = r ^ 2)
+    (hub : nsq ub = r ^ 2) (hab : 0 < cross ua ub) :
+    ∃ v ∈ DistArc.arc c ua ub r, nsq (q - v) = ptArcSq q c ua ub r := by
+  classical
+  have hA : c + ua ∈ DistArc.arc c ua ub r :=
+    ⟨by simp [hua], by rw [add_sub_cancel_left]; exact le_of_eq (by simp only [cross]; ring), by
+      rw [add_sub_cancel_left]; exact hab.le⟩
+  have hB : c + ub ∈ DistArc.arc c ua ub r :=
+    ⟨by simp [hub], by rw [add_sub_cancel_left]; exact hab.le, by
+      rw [add_sub_cancel_left]; exact le_of_eq (by simp only [cross]; ring)⟩
+  unfold ptArcSq
+  split_ifs with hs
+  · rcases (nsq_nonneg (q - c)).eq_or_lt with h0 | h0
+    · -- q is the centre: every point is at r
+      refine ⟨c + ua, hA, ?_⟩
+      have hq : q - c = 0 := nsq_eq_zero h0.symm
+      have : q - (c + ua) = -ua := by
+        have : q = c := sub_eq_zero.mp hq
+        rw [this]; abel
+      rw [this, ← h0, Real.sqrt_zero]
+      simp only [nsq, dot, Prod.fst_neg, Prod.snd_neg] at hua ⊢; nlinarith
+    · -- the radial point
+      set L := √(nsq (q - c))
+      have hL0 : 0 < L := Real.sqrt_pos.mpr h0
+      have hL2 : L ^ 2 = nsq (q - c) := Real.sq_sqrt h0.le
+      refine ⟨c + sc (r / L) (q - c), ⟨?_, ?_⟩, ?_⟩
+      · rw [add_sub_cancel_left]
+        have : nsq (sc (r / L) (q - c)) = (r / L) ^ 2 * nsq (q - c) := by
+          simp only [nsq, dot, sc]; ring
+        rw [this, ← hL2]; field_simp
+      · rw [add_sub_cancel_left]; exact inSector_sc' (div_pos hr hL0) hs
+      · have : q - (c + sc (r / L) (q - c)) = sc (1 - r / L) (q - c) := by
+          ext <;> simp [sc] <;> ring
+        rw [this]
+        have : nsq (sc (1 - r / L) (q - c)) = (1 - r / L) ^ 2 * nsq (q - c) := by
+          simp only [nsq, dot, sc]; ring
+        rw [this, ← hL2]; field_simp
+  · rcases le_total (nsq (q - (c + ua))) (nsq (q - (c + ub))) with h | h
+    · exact ⟨c + ua, hA, (min_eq_left h).symm⟩
+    · exact ⟨c + ub, hB, (min_eq_right h).symm⟩
+
+/-- So it moves by at most how far its point moves. -/
+theorem ptArcSq_lip (q q' c ua ub : P) {r : ℝ} (hr : 0 < r) (hua : nsq ua = r ^ 2)
+    (hub : nsq ub = r ^ 2) (hab : 0 < cross ua ub) :
+    √(ptArcSq q c ua ub r) ≤ √(ptArcSq q' c ua ub r) + d2 q q' := by
+  obtain ⟨v, hv, he⟩ := ptArcSq_attained q' c ua ub hr hua hub hab
+  have hle := ptArcSq_le q c ua ub hr hua hub hab hv
+  calc √(ptArcSq q c ua ub r) ≤ √(nsq (q - v)) := Real.sqrt_le_sqrt hle
+    _ = d2 v q := dist_sqrt _ _
+    _ ≤ d2 v q' + d2 q' q := d2_triangle _ _ _
+    _ = √(ptArcSq q' c ua ub r) + d2 q q' := by rw [← he, dist_sqrt, d2_comm q' q]
+
+theorem arcArcBase_nonneg (c1 ua1 ub1 : P) (r1 : ℝ) (c2 ua2 ub2 : P) (r2 : ℝ) :
+    0 ≤ arcArcBase c1 ua1 ub1 r1 c2 ua2 ub2 r2 :=
+  le_min (le_min (ptArcSq_nonneg _ _ _ _ _) (ptArcSq_nonneg _ _ _ _ _))
+    (le_min (ptArcSq_nonneg _ _ _ _ _) (ptArcSq_nonneg _ _ _ _ _))
+
+/-- A candidate with both its point and its arc's ends moved. -/
+theorem ptArcSq_shift2 {q q' c ua ub : P} {r ka kb g1 g2 : ℝ} (hr : 0 < r) (hka : 0 < ka)
+    (hkb : 0 < kb) (hg2 : 0 ≤ g2)
+    (hua : nsq (sc ka ua) = r ^ 2) (hub : nsq (sc kb ub) = r ^ 2)
+    (hab : 0 < cross (sc ka ua) (sc kb ub))
+    (hA : d2 (c + ua) (c + sc ka ua) ≤ g2) (hB : d2 (c + ub) (c + sc kb ub) ≤ g2)
+    (hq : d2 q q' ≤ g1) :
+    ptArcSq q c ua ub r ≤ (√(ptArcSq q' c (sc ka ua) (sc kb ub) r) + (g1 + g2)) ^ 2 := by
+  have h1 := sqrt_le_of_le_sqg (ptArcSq_nonneg _ _ _ _ _) hg2 (ptArcSq_shift q c ua ub (r := r) hka hkb hg2 hA hB)
+  have h2 := ptArcSq_lip q q' c (sc ka ua) (sc kb ub) hr hua hub hab
+  apply le_sqg_of_sqrt (ptArcSq_nonneg _ _ _ _ _)
+  linarith
+
+theorem arcArcLo_nonneg (c1 ua1 ub1 : P) (r1 : ℝ) (c2 ua2 ub2 : P) (r2 : ℝ) :
+    0 ≤ arcArcLo c1 ua1 ub1 r1 c2 ua2 ub2 r2 := by
+  unfold arcArcLo; split_ifs
+  · exact le_min (arcArcBase_nonneg _ _ _ _ _ _ _ _) (sq_nonneg _)
+  · exact le_rfl
+  · refine le_min (arcArcBase_nonneg _ _ _ _ _ _ _ _) ?_
+    unfold lineCand
+    refine le_min (le_min ?_ ?_) (le_min ?_ ?_) <;> split_ifs <;>
+      first | exact sq_nonneg _ | exact arcArcBase_nonneg _ _ _ _ _ _ _ _
+
+/-- **slab's arc–arc lo with both arcs' stored ends is at most g1 + g2 above the on-circle
+one.** -/
+theorem arcArcLo_shift (c1 ua1 ub1 : P) {r1 : ℝ} (c2 ua2 ub2 : P) {r2 : ℝ}
+    {k1a k1b k2a k2b g1 g2 : ℝ} (hr1 : 0 < r1) (hr2 : 0 < r2)
+    (h1a : 0 < k1a) (h1b : 0 < k1b) (h2a : 0 < k2a) (h2b : 0 < k2b) (hg1 : 0 ≤ g1) (hg2 : 0 ≤ g2)
+    (hu1 : nsq (sc k1a ua1) = r1 ^ 2) (hv1 : nsq (sc k1b ub1) = r1 ^ 2)
+    (hab1 : 0 < cross (sc k1a ua1) (sc k1b ub1))
+    (hu2 : nsq (sc k2a ua2) = r2 ^ 2) (hv2 : nsq (sc k2b ub2) = r2 ^ 2)
+    (hab2 : 0 < cross (sc k2a ua2) (sc k2b ub2))
+    (hA1 : d2 (c1 + ua1) (c1 + sc k1a ua1) ≤ g1) (hB1 : d2 (c1 + ub1) (c1 + sc k1b ub1) ≤ g1)
+    (hA2 : d2 (c2 + ua2) (c2 + sc k2a ua2) ≤ g2) (hB2 : d2 (c2 + ub2) (c2 + sc k2b ub2) ≤ g2) :
+    √(arcArcLo c1 ua1 ub1 r1 c2 ua2 ub2 r2) ≤
+      √(arcArcLo c1 (sc k1a ua1) (sc k1b ub1) r1 c2 (sc k2a ua2) (sc k2b ub2) r2) + (g1 + g2) := by
+  classical
+  have hg : 0 ≤ g1 + g2 := by linarith
+  have hs1 : ∀ e, inSector (sc k1a ua1) (sc k1b ub1) e ↔ inSector ua1 ub1 e :=
+    fun e => inSector_scale h1a h1b
+  have hs2 : ∀ e, inSector (sc k2a ua2) (sc k2b ub2) e ↔ inSector ua2 ub2 e :=
+    fun e => inSector_scale h2a h2b
+  have harc1 : DistArc.arc c1 (sc k1a ua1) (sc k1b ub1) r1 = DistArc.arc c1 ua1 ub1 r1 := by
+    ext v; simp only [DistArc.arc, mem_ofPred_eq, hs1]
+  have harc2 : DistArc.arc c2 (sc k2a ua2) (sc k2b ub2) r2 = DistArc.arc c2 ua2 ub2 r2 := by
+    ext v; simp only [DistArc.arc, mem_ofPred_eq, hs2]
+  have hbase : arcArcBase c1 ua1 ub1 r1 c2 ua2 ub2 r2 ≤
+      (√(arcArcBase c1 (sc k1a ua1) (sc k1b ub1) r1 c2 (sc k2a ua2) (sc k2b ub2) r2) + (g1 + g2)) ^ 2 := by
+    unfold arcArcBase
+    have e1 : ptArcSq (c2 + ua2) c1 ua1 ub1 r1 ≤
+        (√(ptArcSq (c2 + sc k2a ua2) c1 (sc k1a ua1) (sc k1b ub1) r1) + (g1 + g2)) ^ 2 := by
+      have := ptArcSq_shift2 (g1 := g2) (g2 := g1) hr1 h1a h1b hg1 hu1 hv1 hab1 hA1 hB1 hA2
+      rwa [add_comm g2 g1] at this
+    have e2 : ptArcSq (c2 + ub2) c1 ua1 ub1 r1 ≤
+        (√(ptArcSq (c2 + sc k2b ub2) c1 (sc k1a ua1) (sc k1b ub1) r1) + (g1 + g2)) ^ 2 := by
+      have := ptArcSq_shift2 (g1 := g2) (g2 := g1) hr1 h1a h1b hg1 hu1 hv1 hab1 hA1 hB1 hB2
+      rwa [add_comm g2 g1] at this
+    exact min_sqg (le_min (ptArcSq_nonneg _ _ _ _ _) (ptArcSq_nonneg _ _ _ _ _))
+      (le_min (ptArcSq_nonneg _ _ _ _ _) (ptArcSq_nonneg _ _ _ _ _)) hg
+      (min_sqg (ptArcSq_nonneg _ _ _ _ _) (ptArcSq_nonneg _ _ _ _ _) hg
+        (ptArcSq_shift2 hr2 h2a h2b hg2 hu2 hv2 hab2 hA2 hB2 hA1)
+        (ptArcSq_shift2 hr2 h2a h2b hg2 hu2 hv2 hab2 hA2 hB2 hB1))
+      (min_sqg (ptArcSq_nonneg _ _ _ _ _) (ptArcSq_nonneg _ _ _ _ _) hg e1 e2)
+  have hlc : ∀ s1 s2, lineCand c1 ua1 ub1 r1 c2 ua2 ub2 r2 s1 s2 ≤
+      (√(lineCand c1 (sc k1a ua1) (sc k1b ub1) r1 c2 (sc k2a ua2) (sc k2b ub2) r2 s1 s2) +
+        (g1 + g2)) ^ 2 := by
+    intro s1 s2
+    unfold lineCand
+    simp only [hs1, hs2]
+    split_ifs
+    · nlinarith [Real.sqrt_nonneg ((√(nsq (c2 - c1)) + s2 * r2 - s1 * r1) ^ 2),
+        Real.sq_sqrt (sq_nonneg (√(nsq (c2 - c1)) + s2 * r2 - s1 * r1))]
+    · exact hbase
+  have hlcn : ∀ s1 s2, 0 ≤ lineCand c1 (sc k1a ua1) (sc k1b ub1) r1 c2 (sc k2a ua2) (sc k2b ub2) r2 s1 s2 := by
+    intro s1 s2; unfold lineCand; split_ifs
+    · exact sq_nonneg _
+    · exact arcArcBase_nonneg _ _ _ _ _ _ _ _
+  refine sqrt_le_of_le_sqg (arcArcLo_nonneg _ _ _ _ _ _ _ _) hg ?_
+  unfold arcArcLo
+  rw [harc1, harc2]
+  split_ifs
+  · exact min_sqg (arcArcBase_nonneg _ _ _ _ _ _ _ _) (sq_nonneg _) hg hbase
+      (by nlinarith [Real.sqrt_nonneg ((r1 - r2) ^ 2), Real.sq_sqrt (sq_nonneg (r1 - r2))])
+  · positivity
+  · exact min_sqg (arcArcBase_nonneg _ _ _ _ _ _ _ _)
+      (le_min (le_min (hlcn _ _) (hlcn _ _)) (le_min (hlcn _ _) (hlcn _ _))) hg hbase
+      (min_sqg (le_min (hlcn _ _) (hlcn _ _)) (le_min (hlcn _ _) (hlcn _ _)) hg
+        (min_sqg (hlcn _ _) (hlcn _ _) hg (hlc _ _) (hlc _ _))
+        (min_sqg (hlcn _ _) (hlcn _ _) hg (hlc _ _) (hlc _ _)))
+
+
+/-- The on-circle data of a trim arc piece: its ends moved onto the circle. -/
+theorem onCircle_data {c ea eb : P} {r g : ℝ} (hok : (Piece.arc c ea eb r g).ok) :
+    let ka := r / √(nsq (ea - c)); let kb := r / √(nsq (eb - c))
+    0 < ka ∧ 0 < kb ∧ nsq (sc ka (ea - c)) = r ^ 2 ∧ nsq (sc kb (eb - c)) = r ^ 2 ∧
+      0 < cross (sc ka (ea - c)) (sc kb (eb - c)) ∧
+      d2 (c + (ea - c)) (c + sc ka (ea - c)) ≤ g ∧ d2 (c + (eb - c)) (c + sc kb (eb - c)) ≤ g ∧
+      DistArc.arc c (sc ka (ea - c)) (sc kb (eb - c)) r = DistArc.arc c (ea - c) (eb - c) r := by
+  obtain ⟨hr, ha, hb, hga, hgb, hab⟩ := hok
+  intro ka kb
+  have hka : 0 < ka := div_pos hr (Real.sqrt_pos.mpr ha)
+  have hkb : 0 < kb := div_pos hr (Real.sqrt_pos.mpr hb)
+  refine ⟨hka, hkb, ?_, ?_, ?_, ?_, ?_, ?_⟩
+  · have := onCircle_nsq (c := c) (e := ea) hr.le ha; rwa [onCircle_sub] at this
+  · have := onCircle_nsq (c := c) (e := eb) hr.le hb; rwa [onCircle_sub] at this
+  · have : cross (sc ka (ea - c)) (sc kb (eb - c)) = ka * kb * cross (ea - c) (eb - c) := by
+      simp only [cross, sc]; ring
+    rw [this]; exact mul_pos (mul_pos hka hkb) hab
+  · rw [show c + sc ka (ea - c) = onCircle c ea r from rfl, show c + (ea - c) = ea by abel,
+      d2_onCircle ha]; exact hga
+  · rw [show c + sc kb (eb - c) = onCircle c eb r from rfl, show c + (eb - c) = eb by abel,
+      d2_onCircle hb]; exact hgb
+  · ext v; simp only [DistArc.arc, mem_ofPred_eq, inSector_scale hka hkb]
+
+/-- **An arc move against a trim arc piece, as slab computes it (0b56c1e).** Both arcs are given
+by their stored ends (the move's within g1 of its circle, the trim's within g2).
+max(0, √lo − 2·g1 − 2·g2) bounds the distance from every point of the move's arc to every
+point of the trim piece (its circle's arc and both radial pieces). -/
+theorem arcArc_trim (c1 e1a e1b : P) {r1 g1 : ℝ} (c2 e2a e2b : P) {r2 g2 : ℝ}
+    (hok1 : (Piece.arc c1 e1a e1b r1 g1).ok) (hok2 : (Piece.arc c2 e2a e2b r2 g2).ok)
+    {x : P} (hx : x ∈ DistArc.arc c1 (e1a - c1) (e1b - c1) r1) :
+    ∀ y ∈ (Piece.arc c2 e2a e2b r2 g2).pts,
+      max 0 (√(arcArcLo c1 (e1a - c1) (e1b - c1) r1 c2 (e2a - c2) (e2b - c2) r2) - 2 * g1 - 2 * g2)
+        ≤ d2 y x := by
+  have hr1 : 0 < r1 := hok1.1
+  have hr2 : 0 < r2 := hok2.1
+  have hg1 : 0 ≤ g1 := (abs_nonneg _).trans hok1.2.2.2.1
+  have hg2 : 0 ≤ g2 := (abs_nonneg _).trans hok2.2.2.2.1
+  obtain ⟨h1a, h1b, hu1, hv1, hab1, hA1, hB1, harc1⟩ := onCircle_data hok1
+  obtain ⟨h2a, h2b, hu2, hv2, hab2, hA2, hB2, harc2⟩ := onCircle_data hok2
+  have hshift := arcArcLo_shift c1 (e1a - c1) (e1b - c1) c2 (e2a - c2) (e2b - c2) hr1 hr2
+    h1a h1b h2a h2b hg1 hg2 hu1 hv1 hab1 hu2 hv2 hab2 hA1 hB1 hA2 hB2
+  have hcirc : ∀ v ∈ DistArc.arc c2 (e2a - c2) (e2b - c2) r2,
+      √(arcArcLo c1 (e1a - c1) (e1b - c1) r1 c2 (e2a - c2) (e2b - c2) r2) - g1 - g2 ≤
+        d2 v x := by
+    intro v hv
+    have hx' := hx; rw [← harc1] at hx'
+    have hv' := hv; rw [← harc2] at hv'
+    have := arcArcLo_le c1 _ _ c2 _ _ hr1 hr2 hu1 hv1 hab1 hu2 hv2 hab2 hx' hv'
+    have h2 := Real.sqrt_le_sqrt this
+    rw [show √(nsq (x - v)) = d2 v x from dist_sqrt x v] at h2
+    linarith
+  intro y hy
+  have := arcPiece_lower (x := x) hok2 hcirc y hy
+  exact max_le (d2_nonneg _ _) (by linarith)
+
 end
 
 end ForgeCam.Trim

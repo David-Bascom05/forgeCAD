@@ -67,3 +67,8 @@ import ForgeCam
 #print axioms ForgeCam.Trim.distRegion_lower
 #print axioms ForgeCam.Trim.arcPiece_lower
 #print axioms ForgeCam.Trim.clearFace_region
+#print axioms ForgeCam.Trim.segArcLo_shift
+#print axioms ForgeCam.Trim.segArc_trim
+#print axioms ForgeCam.Trim.ptArcSq_attained
+#print axioms ForgeCam.Trim.arcArcLo_shift
+#print axioms ForgeCam.Trim.arcArc_trim
