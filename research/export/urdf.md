@@ -57,8 +57,11 @@ axis motions, so M⁻¹ is too).
 - URDF prismatic needs limits. A translation with no forge limit is refused
   (`UnlimitedTranslation`, joint and freedom named) unless `travel MM` is given (±MM, the
   user's choice, listed in the notes).
-- `<limit effort velocity>` are required by URDF; forgeCAD has no actuator data, so they are
-  written as given by `effort N velocity V`, else 0 with a warning.
+- `<limit effort velocity>` are required by URDF and forgeCAD has no actuator data: they are
+  given by `effort N velocity V` (all joints) or `effort J N velocity J V` (one joint, by its
+  forge or URDF name). A moving joint with neither is refused (`MissingLimits`, the joints named):
+  0 is not a known value, and planners read velocity 0 as "cannot move". `placeholder-limits`
+  (opt-in) writes 0 with a `PLACEHOLDER` comment on each such joint and a warning.
 - Ball limits have no URDF form: refused (`BallLimits`).
 - A driven joint (`turn: open`) is a joint like any other; its drive is the export pose.
 - Relations → `<mimic joint multiplier offset>` on the follower's URDF joint: multiplier =

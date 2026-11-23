@@ -104,7 +104,15 @@ fn export(d: &Path, src: &str, words: &[&str]) -> (Run, Result<Exported, UrdfErr
         .map(|e| format!("{} {}", e.kind(), e.text()))
         .collect();
     assert!(errs.is_empty(), "{errs:?}");
-    let words: Vec<String> = words.iter().map(|w| w.to_string()).collect();
+    // effort and velocity given unless the test is about them (they are refused when missing)
+    let mut words: Vec<String> = words.iter().map(|w| w.to_string()).collect();
+    if !words
+        .iter()
+        .any(|w| w == "effort" || w == "velocity" || w == "placeholder-limits" || w == "none")
+    {
+        words.extend(["effort", "1", "velocity", "1"].map(String::from));
+    }
+    words.retain(|w| w != "none");
     let o = urdf::Options::parse(&words).expect("options");
     let e = urdf::export(&run, "robot", Some(d), &o);
     (run, e)
@@ -566,7 +574,7 @@ fn a_joint_written_from_the_ground_side_is_turned_round() {
     let (e, robot) = ok("arm-rev", &run, e);
     let j1 = robot.all("joint").next().expect("j1");
     assert_eq!(j1.kid("axis").expect("axis").attr("xyz"), "0 0 -1");
-    assert!(!e.warnings.is_empty(), "effort and velocity unknown is said");
+    assert!(e.warnings.is_empty(), "{:?}", e.warnings);
 }
 
 #[test]
@@ -810,7 +818,10 @@ fn the_export_is_the_same_bytes_every_time() {
 fn the_examples_export() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../examples");
     for (file, words) in [
-        ("unified/hinged_box.fg", vec!["urdf"]),
+        (
+            "unified/hinged_box.fg",
+            vec!["urdf", "effort", "2", "velocity", "1"],
+        ),
         ("robot/arm2.fg", vec!["urdf", "effort", "5", "velocity", "1"]),
     ] {
         let p = root.join(file);
@@ -831,7 +842,59 @@ fn the_export_is_the_same_bytes_native_and_wasm() {
     let h = forge_math::hash::hash128(&e.zip);
     assert_eq!(
         format!("{h:032x}"),
-        "4766d5d6d09f25626c8cf99beb0ba36d",
+        "354cd852f1711853fec00f0b70ba2b42",
         "the arm's URDF ZIP"
+    );
+}
+
+#[test]
+fn effort_and_velocity_are_never_zero_unless_asked() {
+    let d = project("actuation");
+    // none given: refused, the joints named, with their fixes
+    let (_, e) = export(&d, ARM, &["urdf", "none"]);
+    match &e {
+        Err(err @ UrdfError::MissingLimits { joints }) => {
+            assert_eq!(joints, &["j1", "j2"]);
+            let f = err.fixes();
+            assert_eq!(f[0], "effort N velocity V");
+            assert!(f.contains(&"effort j1 N velocity j1 V".to_string()));
+            assert_eq!(f.last().map(String::as_str), Some("placeholder-limits"));
+        }
+        other => panic!("{other:?}"),
+    }
+    // one joint's own, the other still missing: refused for that one only
+    let (_, e) = export(&d, ARM, &["urdf", "effort", "j1", "3", "velocity", "j1", "0.5"]);
+    assert!(
+        matches!(&e, Err(UrdfError::MissingLimits { joints }) if joints == &["j2"]),
+        "{e:?}"
+    );
+    // per joint over the export's
+    let (run, e) = export(
+        &d,
+        ARM,
+        &[
+            "urdf", "effort", "4", "velocity", "1", "effort", "j1", "3", "velocity", "j1", "0.5",
+        ],
+    );
+    let (_, robot) = ok("actuation-per-joint", &run, e);
+    let lim = |n: &str| {
+        let j = robot.all("joint").find(|j| j.attr("name") == n).expect("joint");
+        let l = j.kid("limit").expect("limit");
+        (l.attr("effort").to_string(), l.attr("velocity").to_string())
+    };
+    assert_eq!(lim("j1"), ("3".to_string(), "0.5".to_string()));
+    assert_eq!(lim("j2"), ("4".to_string(), "1".to_string()));
+    // the opt-in: 0, each joint marked, and said
+    let (run, e) = export(&d, ARM, &["urdf", "placeholder-limits"]);
+    let (e, _) = ok("actuation-placeholder", &run, e);
+    assert_eq!(
+        e.urdf.matches("PLACEHOLDER: effort and velocity unknown").count(),
+        2
+    );
+    assert!(e.urdf.contains("effort=\"0\" velocity=\"0\""));
+    assert!(
+        e.warnings.iter().any(|w| w.contains("placeholder")),
+        "{:?}",
+        e.warnings
     );
 }

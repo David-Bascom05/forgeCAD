@@ -173,9 +173,14 @@ pub struct Options {
     pub tol: f64,
     pub angle: f64,
     /// `<limit effort velocity>` for every moving joint: URDF requires them, forgeCAD has no
-    /// actuator data. None: 0, with a warning.
+    /// actuator data. Each joint's own (by forge joint or URDF joint name), else these; a joint
+    /// with neither is refused (`MissingLimits`) unless `placeholder`.
     pub effort: Option<f64>,
     pub velocity: Option<f64>,
+    pub effort_of: BTreeMap<String, f64>,
+    pub velocity_of: BTreeMap<String, f64>,
+    /// Write 0 where effort or velocity is unknown, each such joint marked a placeholder.
+    pub placeholder: bool,
     /// ± this travel (mm) for a translation with no limit; None: such a joint is refused.
     pub travel: Option<f64>,
     /// Joints (or loose constraints) left out, to open closed loops.
@@ -192,6 +197,9 @@ impl Default for Options {
             angle: m.angle,
             effort: None,
             velocity: None,
+            effort_of: BTreeMap::new(),
+            velocity_of: BTreeMap::new(),
+            placeholder: false,
             travel: None,
             cut: vec![],
             package: None,
@@ -200,7 +208,8 @@ impl Default for Options {
 }
 
 impl Options {
-    /// `urdf [tol MM] [angle DEG] [effort N] [velocity V] [travel MM] [cut J].. [package NAME]`.
+    /// `urdf [tol MM] [angle DEG] [effort [J] N].. [velocity [J] V].. [placeholder-limits]
+    /// [travel MM] [cut J].. [package NAME]`.
     pub fn parse(words: &[String]) -> Result<Options, String> {
         let mut o = Options::default();
         let mut it = words.iter().skip_while(|w| *w == "urdf");
@@ -213,14 +222,26 @@ impl Options {
             match w.as_str() {
                 "tol" => o.tol = num(it.next(), "tol")?,
                 "angle" => o.angle = num(it.next(), "angle")?,
-                "effort" => o.effort = Some(num(it.next(), "effort")?),
-                "velocity" => o.velocity = Some(num(it.next(), "velocity")?),
+                "effort" | "velocity" => {
+                    let first = it.next().ok_or(format!("{w} takes [JOINT] N"))?;
+                    let (joint, v) = match first.parse::<f64>() {
+                        Ok(_) => (None, num(Some(first), w)?),
+                        Err(_) => (Some(first.clone()), num(it.next(), w)?),
+                    };
+                    match (w.as_str(), joint) {
+                        ("effort", None) => o.effort = Some(v),
+                        ("effort", Some(j)) => _ = o.effort_of.insert(j, v),
+                        (_, None) => o.velocity = Some(v),
+                        (_, Some(j)) => _ = o.velocity_of.insert(j, v),
+                    }
+                }
+                "placeholder-limits" | "--placeholder-limits" => o.placeholder = true,
                 "travel" => o.travel = Some(num(it.next(), "travel")?),
                 "cut" => o.cut.push(it.next().ok_or("cut takes a joint's name")?.clone()),
                 "package" => o.package = Some(it.next().ok_or("package takes a ROS package name")?.clone()),
                 _ => {
                     return Err(format!(
-                        "export urdf: unknown word '{w}' (tol MM, angle DEG, effort N, velocity V, travel MM, cut JOINT, package NAME)"
+                        "export urdf: unknown word '{w}' (tol MM, angle DEG, effort [J] N, velocity [J] V, placeholder-limits, travel MM, cut JOINT, package NAME)"
                     ));
                 }
             }
@@ -240,6 +261,11 @@ pub enum UrdfError {
     UnlimitedTranslation {
         joint: String,
         freedom: Freedom,
+    },
+    /// Moving joints with no effort or velocity given: URDF needs both, and 0 reads as "cannot
+    /// move" to a planner.
+    MissingLimits {
+        joints: Vec<String>,
     },
     /// A ball's rotation has no values, so no limits URDF could carry.
     BallLimits {
@@ -274,6 +300,7 @@ impl UrdfError {
             UrdfError::NotBuilt(_) => "NotBuilt",
             UrdfError::NoMaterial(_) => "NoMaterial",
             UrdfError::UnlimitedTranslation { .. } => "UnlimitedTranslation",
+            UrdfError::MissingLimits { .. } => "MissingLimits",
             UrdfError::BallLimits { .. } => "BallLimits",
             UrdfError::ClosedLoop { .. } => "ClosedLoop",
             UrdfError::LooseConstraint { .. } => "LooseConstraint",
@@ -295,6 +322,10 @@ impl UrdfError {
             UrdfError::UnlimitedTranslation { joint, freedom } => format!(
                 "joint {joint}'s {} has no limit, and a URDF prismatic joint needs one: give the joint a limit, or export with `travel MM`",
                 freedom.name()
+            ),
+            UrdfError::MissingLimits { joints } => format!(
+                "no effort or velocity for {} (URDF needs both; forgeCAD has no actuator data, and 0 reads as cannot move): export with `effort N velocity V`, per joint `effort J N velocity J V`, or `placeholder-limits` to write 0 marked as placeholders",
+                joints.join(" ")
             ),
             UrdfError::BallLimits { joint } => {
                 format!("ball joint {joint} has limits, which URDF cannot carry")
@@ -320,6 +351,15 @@ impl UrdfError {
             UrdfError::ClosedLoop { joints } => joints.iter().map(|j| format!("cut {j}")).collect(),
             UrdfError::LooseConstraint { id, .. } => vec![format!("cut {id}")],
             UrdfError::UnlimitedTranslation { .. } => vec!["travel MM".into()],
+            UrdfError::MissingLimits { joints } => {
+                let mut f: Vec<String> = joints
+                    .iter()
+                    .map(|j| format!("effort {j} N velocity {j} V"))
+                    .collect();
+                f.insert(0, "effort N velocity V".into());
+                f.push("placeholder-limits".into());
+                f
+            }
             _ => vec![],
         }
     }
@@ -782,11 +822,19 @@ pub fn export(run: &Run, name: &str, dir: Option<&Path>, o: &Options) -> Result<
         Some(asm) => assembly(run, asm, o, &mut ex)?,
         None => (vec![part(run, name, dir, o, &mut ex)?], vec![]),
     };
-    if joints.iter().any(|j| j.limit.is_some()) && (o.effort.is_none() || o.velocity.is_none()) {
-        ex.warnings.push(
-            "effort and velocity unknown (forgeCAD has no actuator data): written as 0 where not given; export with `effort N velocity V`"
-                .into(),
-        );
+    let missing: Vec<String> = joints
+        .iter()
+        .filter(|j| has_limit(j) && (actuation(o, j).0.is_none() || actuation(o, j).1.is_none()))
+        .map(|j| j.name.clone())
+        .collect();
+    if !missing.is_empty() {
+        if !o.placeholder {
+            return Err(UrdfError::MissingLimits { joints: missing });
+        }
+        ex.warnings.push(format!(
+            "effort or velocity unknown for {}: written as 0, each marked a placeholder (planners read velocity 0 as cannot move)",
+            missing.join(" ")
+        ));
     }
     ex.urdf = write(&robot, &links, &joints, o, &ex);
     let mut members: Vec<(&str, &[u8])> = vec![];
@@ -1470,6 +1518,20 @@ fn measure(f: Freedom, rel: &Frame) -> f64 {
     }
 }
 
+/// A joint that writes `<limit>`: every moving single-axis joint.
+fn has_limit(j: &Wj) -> bool {
+    j.limit.is_some() || j.kind == "continuous"
+}
+
+/// A joint's effort and velocity: its own (by its forge joint, then its URDF name), else the
+/// export's.
+fn actuation(o: &Options, j: &Wj) -> (Option<f64>, Option<f64>) {
+    let pick = |of: &BTreeMap<String, f64>, all: Option<f64>| {
+        of.get(&j.of).or_else(|| of.get(&j.name)).copied().or(all)
+    };
+    (pick(&o.effort_of, o.effort), pick(&o.velocity_of, o.velocity))
+}
+
 // ---- the XML ----------------------------------------------------------------------------------
 
 fn write(robot: &str, links: &[Wl], joints: &[Wj], o: &Options, ex: &Exported) -> String {
@@ -1493,7 +1555,6 @@ fn write(robot: &str, links: &[Wl], joints: &[Wj], o: &Options, ex: &Exported) -
         let _ = writeln!(s, "<!-- {} -->", comment(&format!("note: {n}")));
     }
     let _ = writeln!(s, "<robot name=\"{}\">", attr(robot));
-    let (effort, velocity) = (o.effort.unwrap_or(0.0), o.velocity.unwrap_or(0.0));
     for l in links {
         let _ = writeln!(s, "  <link name=\"{}\">", attr(&l.name));
         if let Some(i) = &l.inertial {
@@ -1546,6 +1607,14 @@ fn write(robot: &str, links: &[Wl], joints: &[Wj], o: &Options, ex: &Exported) -
         if let Some(a) = j.axis {
             let _ = writeln!(s, "    <axis xyz=\"{}\"/>", nums(&a));
         }
+        let (effort, velocity) = actuation(o, j);
+        if has_limit(j) && (effort.is_none() || velocity.is_none()) {
+            let _ = writeln!(
+                s,
+                "    <!-- PLACEHOLDER: effort and velocity unknown, written as 0; not real limits -->"
+            );
+        }
+        let (effort, velocity) = (effort.unwrap_or(0.0), velocity.unwrap_or(0.0));
         match (j.kind, j.limit) {
             (_, Some((lo, hi))) => {
                 let _ = writeln!(

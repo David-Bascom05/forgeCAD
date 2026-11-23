@@ -347,10 +347,12 @@ fn command(cmd: &str, argv: &[String]) -> ExitCode {
                     a.words.push(v.clone());
                 }
             }
+            // `export F urdf`'s opt-in: 0 for unknown effort and velocity, marked as placeholders
+            "--placeholder-limits" => a.words.push("placeholder-limits".into()),
             "-o" => out = it.next().cloned(),
             w if w.starts_with("--") => {
                 eprintln!(
-                    "unknown option {w} (--json --labels --px --at --base -o; bendsim: --vendor --tooling --sequence --sheet --uts)"
+                    "unknown option {w} (--json --labels --px --at --base -o; bendsim: --vendor --tooling --sequence --sheet --uts; urdf: --placeholder-limits)"
                 );
                 return ExitCode::from(2);
             }
