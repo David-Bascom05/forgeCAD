@@ -10,6 +10,8 @@
 #   PKG=ForgeMath                  the Lean library (lean/PKG/...)
 #   CHARON_ARGS=(--start-from forge_math::predicates::orient2d --opaque ...)
 #                                  Charon's item selection; the defaults are --preset=aeneas
+#   BRIDGE=none                    a crate with no f64: Types.lean does not import the float
+#                                  bridge (AeneasF64), and its lakefile requires Aeneas directly
 # The crate is built as release (`cargo --release`) with overflow checks on: `#[cfg(debug_assertions)]`
 # checks are not part of the shipped code, so not of the translation either; and integer overflow
 # is a failure, so a theorem that a function returns `ok` also proves the shipped build, which
@@ -44,6 +46,7 @@ dir=$root/verify/aeneas/$crate
 conf=$dir/translate.conf
 [ -f "$conf" ] || { echo "no $conf" >&2; exit 2; }
 PKG=
+BRIDGE=
 CHARON_ARGS=()
 # shellcheck source=/dev/null
 . "$conf"
@@ -76,7 +79,9 @@ for f in Types Funs FunsExternal_Template TypesExternal_Template; do
       -e "s/^import [A-Za-z_]*\.\(Types\|Funs\|FunsExternal\|TypesExternal\)$/import $PKG.\1/" \
       "$work/out/$f.lean" > "$work/gen/$f.lean"
 done
-sed -i 's/^import Aeneas$/import Aeneas\nimport AeneasF64/' "$work/gen/Types.lean"
+if [ "$BRIDGE" != none ]; then
+  sed -i 's/^import Aeneas$/import Aeneas\nimport AeneasF64/' "$work/gen/Types.lean"
+fi
 
 # The opaque functions Aeneas wants, against what FunsExternal.lean defines.
 # (an axiom's name is on its own line, or on the line after a bare `axiom`)
@@ -91,7 +96,9 @@ dest=$dir/lean/$PKG
 missing=0
 while read -r n; do
   [ -n "$n" ] || continue
-  if ! { cat "$dest/FunsExternal.lean" "$dest/TypesExternal.lean" "$root"/verify/aeneas/bridge/AeneasF64/*.lean 2>/dev/null || true; } \
+  bridge_files=("$root"/verify/aeneas/bridge/AeneasF64/*.lean)
+  [ "$BRIDGE" != none ] || bridge_files=()
+  if ! { cat "$dest/FunsExternal.lean" "$dest/TypesExternal.lean" "${bridge_files[@]}" 2>/dev/null || true; } \
       | awk '$1 == "def" || $1 == "opaque" || $1 == "abbrev" { print $2 }' | grep -qxF "$n"; then
     echo "$crate: opaque $n has no definition (FunsExternal.lean, TypesExternal.lean or the bridge)" >&2
     missing=1
