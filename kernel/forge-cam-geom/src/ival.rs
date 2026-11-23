@@ -51,6 +51,7 @@ fn max4(a: f64, b: f64, c: f64, d: f64) -> f64 {
 
 impl Ival {
     /// An exact point (any f64 is an exact real).
+    #[inline]
     pub fn pt(x: f64) -> Ival {
         Ival { lo: x, hi: x }
     }
@@ -64,6 +65,7 @@ impl Ival {
         }
         Ival { lo, hi }
     }
+    #[inline]
     pub fn add(self, o: Ival) -> Ival {
         let lo = if self.lo == f64::NEG_INFINITY || o.lo == f64::NEG_INFINITY {
             f64::NEG_INFINITY
@@ -77,12 +79,15 @@ impl Ival {
         };
         Ival::fix(lo, hi)
     }
+    #[inline]
     pub fn neg(self) -> Ival {
         Ival { lo: -self.hi, hi: -self.lo }
     }
+    #[inline]
     pub fn sub(self, o: Ival) -> Ival {
         self.add(o.neg())
     }
+    #[inline]
     pub fn mul(self, o: Ival) -> Ival {
         if self.lo == self.hi && o.lo == o.hi {
             let p = self.lo * o.lo;
@@ -98,10 +103,12 @@ impl Ival {
         }
         Ival::fix(down(min4(a, b, c, d)), up(max4(a, b, c, d)))
     }
+    #[inline]
     pub fn scale(self, k: f64) -> Ival {
         self.mul(Ival::pt(k))
     }
     /// The square, which is never negative.
+    #[inline]
     pub fn sqr(self) -> Ival {
         let (a, b) = (self.lo.abs(), self.hi.abs());
         let (mut m, mut x) = if a < b { (a, b) } else { (b, a) };
@@ -114,6 +121,7 @@ impl Ival {
         let lo = if m == 0.0 { 0.0 } else { down(m * m).max(0.0) };
         Ival::fix(lo, up(x * x))
     }
+    #[inline]
     pub fn div(self, o: Ival) -> Ival {
         if o.lo <= 0.0 && o.hi >= 0.0 {
             return WHOLE;
@@ -126,23 +134,27 @@ impl Ival {
     }
     /// The square root of the non-negative part (the argument is non-negative by construction
     /// wherever this is called on an exact value).
+    #[inline]
     pub fn sqrt(self) -> Ival {
         let lo = if self.lo <= 0.0 { 0.0 } else { down(self.lo.sqrt()).max(0.0) };
         let hi = if self.hi < 0.0 { 0.0 } else { up(self.hi.sqrt()) };
         Ival::fix(lo, hi)
     }
+    #[inline]
     pub fn min(self, o: Ival) -> Ival {
         Ival {
             lo: if self.lo < o.lo { self.lo } else { o.lo },
             hi: if self.hi < o.hi { self.hi } else { o.hi },
         }
     }
+    #[inline]
     pub fn max(self, o: Ival) -> Ival {
         Ival {
             lo: if self.lo > o.lo { self.lo } else { o.lo },
             hi: if self.hi > o.hi { self.hi } else { o.hi },
         }
     }
+    #[inline]
     pub fn abs(self) -> Ival {
         if self.lo >= 0.0 {
             self
@@ -152,22 +164,26 @@ impl Ival {
             Ival { lo: 0.0, hi: if -self.lo > self.hi { -self.lo } else { self.hi } }
         }
     }
+    #[inline]
     pub fn hull(self, o: Ival) -> Ival {
         Ival {
             lo: if self.lo < o.lo { self.lo } else { o.lo },
             hi: if self.hi > o.hi { self.hi } else { o.hi },
         }
     }
+    #[inline]
     pub fn mid(self) -> f64 {
         if self.lo == f64::NEG_INFINITY || self.hi == f64::INFINITY {
             return 0.0;
         }
         0.5 * self.lo + 0.5 * self.hi
     }
+    #[inline]
     pub fn width(self) -> f64 {
         up(self.hi - self.lo)
     }
     /// -1, 0 (undecided: zero inside) or 1.
+    #[inline]
     pub fn sign(self) -> i32 {
         if self.lo > 0.0 {
             1
