@@ -17,6 +17,19 @@ A feature meets the standard when it has all six.
 | L5 | **Its floating-point predicates are proven** against verify/ieee754, under stated preconditions that debug builds check. | orient2d, cross_sign, dot3, incircle; TwoSum and TwoProduct |
 | L6 | **A differential check against L2 on fuzz and real corpora,** judged stage by stage, in CI. | forge-exact-fuzz, repros, and the box family |
 
+## Proving the actual code (the owner, 2026-11-23)
+
+"Use the Rust-to-Lean (Aeneas) wherever possible to prove that code is right."
+
+- L4 is done by Aeneas, translating the real Rust and proving it refines the proven algorithm, wherever that can be made to work.
+- A hand-written Lean model plus a differential test counts only while Aeneas can't take the code yet, and is marked interim with the blocker named.
+- Writing new kernel code in the style Aeneas accepts (research/aeneas/STYLE.md) is the default, as long as bits and speed stay identical.
+- The aeneas session (branch suffix `aeneas`) owns:
+  - the toolchain;
+  - the float bridge to verify/ieee754;
+  - a CI check that the translations are current;
+  - the per-module survey (research/aeneas/SURVEY.md) that names each module's L4 target.
+
 ## Features
 
 Each row says who owns it, which levels it has, and what is next. The levels are counted from what
