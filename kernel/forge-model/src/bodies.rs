@@ -417,12 +417,11 @@ fn apply_once(
         _ => {}
     }
     // a through tool past faces the history does not bound is sized by the bodies as they stand
-    let plain = if i > 0 && crate::hole::needs_base(plain, i) {
-        plain.with_base(i - 1, solids_box(&solids))
-    } else {
-        plain
-    };
-    let ts = tools(plain, i, true)?;
+    let given = (i > 0 && crate::hole::needs_base(plain, i)).then(|| crate::Given {
+        base: Some((i - 1, solids_box(&solids))),
+        reach: None,
+    });
+    let ts = crate::tools_given(plain, i, true, given.as_ref())?;
     // parameters and sketches make nothing
     if ts.is_empty() {
         return Ok(solids);
@@ -1161,11 +1160,11 @@ fn nary_pass(features: History<'_>, threads: usize) -> Result<Vec<Solid>, RegenE
         let p = pick(&picks, i);
         let mut ts = std::mem::take(&mut built[i]);
         if crate::hole::needs_base(plain, i) {
-            let h = match base {
-                Some((at, b)) => plain.with_base(at, b),
-                None => plain,
-            };
-            ts = tools(h, i, true)?;
+            let given = base.map(|b| crate::Given {
+                base: Some(b),
+                reach: None,
+            });
+            ts = crate::tools_given(plain, i, true, given.as_ref())?;
         }
         if starts(f) {
             runs.push(Run {

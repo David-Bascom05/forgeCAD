@@ -440,24 +440,43 @@ pub(crate) fn unbounded(f: &Feature) -> bool {
     }
 }
 
-/// A feature whose tool is sized by `reach`: a through hole, a through extrude, a thread (on a
-/// through hole, its full length).
+/// A feature whose tool is sized by `reach`: a through hole, a through extrude. (A thread on a
+/// through hole takes its full length from the hole's own step, `thread::hole_depth`.)
 pub(crate) fn thru_consumer(f: &Feature) -> bool {
     match f {
         Feature::Hole(h) => matches!(h.end, End::Through),
         Feature::Extrude { extent, .. } => matches!(extent, Extent::Through(_) | Extent::ThroughAlong { .. }),
-        Feature::Thread(_) => true,
         _ => false,
     }
 }
 
-/// Whether feature `i`'s tool needs the part's box as built (`History::with_base`).
+/// Whether feature `i`'s tool needs the part's box as built (`Given::base`).
+#[inline]
 pub(crate) fn needs_base(features: crate::History<'_>, i: usize) -> bool {
+    // most features are none of these: a test of the kind, inline, and no more
+    match &features[i] {
+        Feature::Hole(h) if matches!(h.end, End::Through) => {}
+        Feature::Extrude {
+            extent: Extent::Through(_) | Extent::ThroughAlong { .. },
+            ..
+        } => {}
+        Feature::Pattern {
+            of: Source::Features(_),
+            ..
+        } => {}
+        _ => return false,
+    }
+    needs_base_cold(features, i)
+}
+
+#[cold]
+#[inline(never)]
+fn needs_base_cold(features: crate::History<'_>, i: usize) -> bool {
     sized_through(features, i) && features[..i].iter().any(unbounded)
 }
 
 /// Feature `i` makes a tool sized by `reach`: a through tool, or a pattern copying one.
-fn sized_through(features: crate::History<'_>, i: usize) -> bool {
+pub(crate) fn sized_through(features: crate::History<'_>, i: usize) -> bool {
     match &features[i] {
         Feature::Pattern {
             of: Source::Features(src),
@@ -518,12 +537,12 @@ fn rib_reach(b: &Box3, r: &crate::rib::Rib) -> Box3 {
 }
 
 /// A box holding all the material `features` can make, to size through holes by.
-pub(crate) fn reach(features: crate::History<'_>) -> Box3 {
-    if let Some(b) = features.given_reach() {
+pub(crate) fn reach(features: crate::History<'_>, given: Option<&crate::Given>) -> Box3 {
+    if let Some(b) = given.and_then(|g| g.reach) {
         return b;
     }
     // past a feature the history does not bound, the part as the regen built it does
-    let (from, mut b) = match features.base() {
+    let (from, mut b) = match given.and_then(|g| g.base) {
         Some((at, bx)) if at < features.len() && features[..=at].iter().any(unbounded) => (at + 1, bx),
         _ => (0, Box3::EMPTY),
     };

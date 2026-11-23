@@ -64,27 +64,26 @@ pub use work::{AxisBy, Datum, PlaneBy, PointBy, Ref, UcsBy, Work, WorkError};
 pub struct History<'a> {
     features: &'a [Feature],
     ids: Option<&'a [u64]>,
-    /// A box holding the part as the regen built it after feature `.0`: where the history alone
-    /// bounds the part no longer (faces moved, offset or drafted: `hole::reach`), a through tool
-    /// after it is sized from this.
-    base: Option<(usize, forge_math::Box3)>,
-    /// The box through tools are sized by, given: a pattern's copy of a through hole is sized by
-    /// the part as it stands at the pattern, not at the hole it copies (`hole::reach`).
-    reach: Option<forge_math::Box3>,
 }
 
+/// What a regen hands the through tools it builds past the history (`hole::reach`).
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Given {
+    /// A box holding the part as the regen built it after feature `.0`: where the history alone
+    /// bounds the part no longer (faces moved, offset or drafted), a through tool after it is
+    /// sized from this.
+    pub(crate) base: Option<(usize, forge_math::Box3)>,
+    /// The box through tools are sized by: a pattern's copy of a through hole is sized by the
+    /// part as it stands at the pattern, not at the hole it copies.
+    pub(crate) reach: Option<forge_math::Box3>,
+}
 impl<'a> History<'a> {
     /// `ids`, one per feature, nonzero and distinct; None: each feature's place from 1.
     pub fn new(features: &'a [Feature], ids: Option<&'a [u64]>) -> History<'a> {
         if let Some(ids) = ids {
             assert_eq!(ids.len(), features.len(), "one id per feature");
         }
-        History {
-            features,
-            ids,
-            base: None,
-            reach: None,
-        }
+        History { features, ids }
     }
 
     /// The id feature `i`'s names derive from.
@@ -97,35 +96,7 @@ impl<'a> History<'a> {
         History {
             features: &self.features[..n],
             ids: self.ids.map(|ids| &ids[..n]),
-            base: self.base.filter(|b| b.0 < n),
-            reach: self.reach,
         }
-    }
-
-    /// The same history with through tools sized by `b`.
-    pub(crate) fn with_reach(&self, b: forge_math::Box3) -> History<'a> {
-        History {
-            reach: Some(b),
-            ..*self
-        }
-    }
-
-    /// The box through tools are sized by, if given.
-    pub(crate) fn given_reach(&self) -> Option<forge_math::Box3> {
-        self.reach
-    }
-
-    /// The same history with the part's box after feature `at` (as built).
-    pub(crate) fn with_base(&self, at: usize, b: forge_math::Box3) -> History<'a> {
-        History {
-            base: Some((at, b)),
-            ..*self
-        }
-    }
-
-    /// The box of the part after a feature, if the regen gave one.
-    pub(crate) fn base(&self) -> Option<(usize, forge_math::Box3)> {
-        self.base
     }
 
     /// The same ids on `features`, one for each of these (a copy with some rewritten).
@@ -133,12 +104,7 @@ impl<'a> History<'a> {
     where
         'a: 'b,
     {
-        History {
-            features,
-            ids: self.ids,
-            base: self.base,
-            reach: self.reach,
-        }
+        History::new(features, self.ids)
     }
 }
 
@@ -417,7 +383,7 @@ impl Part {
             Some(m) if m >= start => m + 1,
             _ => start,
         };
-        let built = build_tools(self.history(), start, 1, false)?;
+        let built = build_tools(self.history(), start, 1, false, None)?;
         let ops = built.iter().skip(1).map(|t| op_of(t.1)).collect();
         Ok((built.into_iter().map(|t| t.2).collect(), ops))
     }
@@ -619,8 +585,6 @@ pub fn step(features: History<'_>, i: usize, body: Option<Body>) -> Result<Optio
                 History {
                     features: &fs,
                     ids: features.ids,
-                    base: None,
-                    reach: None,
                 },
                 i,
                 so_far,
@@ -670,8 +634,6 @@ fn careful(
                     History {
                         features: &fs,
                         ids: features.ids,
-                        base: None,
-                        reach: None,
                     },
                     i,
                     body,
@@ -699,8 +661,6 @@ fn in_turn(features: History<'_>) -> Result<Option<Body>, RegenError> {
                     plain(History {
                         features: &all,
                         ids: features.ids,
-                        base: None,
-                        reach: None,
                     })
                 })
                 .map_err(|_| e)
@@ -715,8 +675,6 @@ pub(crate) fn rebuilt_blunted(features: History<'_>, i: usize) -> Option<Result<
     let h = History {
         features: &all,
         ids: features.ids,
-        base: None,
-        reach: None,
     };
     Some((0..=i).try_fold(None, |b, k| step_plain(h, k, b)))
 }
@@ -913,11 +871,43 @@ fn connected_through(body: &Body, ix: &forge_bool::Index<'_>, p: forge_math::Poi
     true
 }
 
+#[inline(always)]
 fn step_on(
+    features: History<'_>,
+    i: usize,
+    body: Option<Body>,
+    finished: Option<&Body>,
+) -> Result<Option<Body>, RegenError> {
+    // a through tool past faces the history does not bound is sized by the part as it stands
+    if i > 0 && body.is_some() && hole::needs_base(features, i) {
+        return step_on_based(features, i, body, finished);
+    }
+    step_on_plain(features, i, body, finished, None)
+}
+
+#[cold]
+#[inline(never)]
+fn step_on_based(
+    features: History<'_>,
+    i: usize,
+    body: Option<Body>,
+    finished: Option<&Body>,
+) -> Result<Option<Body>, RegenError> {
+    let given = Given {
+        base: body.as_ref().map(|b| (i - 1, hole::body_box(b))),
+        reach: None,
+    };
+    step_on_plain(features, i, body, finished, Some(&given))
+}
+
+// (inlined into each caller, as `step_on` was: the body is not moved through a call)
+#[inline(always)]
+fn step_on_plain(
     features: History<'_>,
     i: usize,
     mut body: Option<Body>,
     finished: Option<&Body>,
+    given: Option<&Given>,
 ) -> Result<Option<Body>, RegenError> {
     let f = &features[i];
     let id = features.id(i);
@@ -938,12 +928,9 @@ fn step_on(
         return Ok(Some(b));
     }
     let err = |error| RegenError::Boolean { feature: i, error };
-    // a through tool past faces the history does not bound is sized by the part as it stands
-    let features = match &body {
-        Some(b) if i > 0 && hole::needs_base(features, i) => features.with_base(i - 1, hole::body_box(b)),
-        _ => features,
-    };
-    if let Some((tool, op)) = unlinked(features, i)
+    // (a through tool sized by what the regen gives takes the general path)
+    if given.is_none()
+        && let Some((tool, op)) = unlinked(features, i)
         && let Some(mut b) = body.take()
     {
         boolean_unlinked(&mut b, tool, op_of(op)).map_err(err)?;
@@ -952,7 +939,7 @@ fn step_on(
         }
         return Ok(Some(b));
     }
-    let mut tools = tools(features, i, true)?;
+    let mut tools = tools_given(features, i, true, given)?;
     if starts(f) {
         let b = tools.swap_remove(0).0;
         if trace::on() {
@@ -1112,8 +1099,9 @@ fn build_tools(
     from: usize,
     threads: usize,
     build: bool,
+    given: Option<&Given>,
 ) -> Result<Vec<Tool>, RegenError> {
-    Ok(distinct(build_each(features, from, threads, build)?))
+    Ok(distinct(build_each(features, from, threads, build, given)?))
 }
 
 /// `tools` without a tool equal to an earlier one combined the same way with only tools
@@ -1165,11 +1153,12 @@ fn build_each(
     from: usize,
     threads: usize,
     build: bool,
+    given: Option<&Given>,
 ) -> Result<Vec<Tool>, RegenError> {
     let some = |r: std::ops::Range<usize>| -> Result<Vec<Tool>, RegenError> {
         let mut out = Vec::new();
         for i in r {
-            out.extend(tools(features, i, build)?);
+            out.extend(tools_given(features, i, build, given)?);
         }
         Ok(out)
     };
@@ -1428,12 +1417,13 @@ fn nary_run(
             body = modified()?;
         }
         // through tools past faces the history does not bound are sized by the part as modified
-        let features = if (m + 1..features.len()).any(|k| hole::needs_base(features, k)) {
-            features.with_base(m, hole::body_box(&body))
-        } else {
-            features
-        };
-        let built = build_tools(features, m + 1, threads, true)?;
+        let given = (features[..=m].iter().any(hole::unbounded)
+            && (m + 1..features.len()).any(|k| hole::sized_through(features, k)))
+        .then(|| Given {
+            base: Some((m, hole::body_box(&body))),
+            reach: None,
+        });
+        let built = build_tools(features, m + 1, threads, true, given.as_ref())?;
         if may_empty(&body, &built) {
             return one_at_a_time(features);
         }
@@ -1461,7 +1451,7 @@ fn nary_run(
             return Ok(b);
         }
     }
-    let built = build_tools(features, start, threads, true)?;
+    let built = build_tools(features, start, threads, true, None)?;
     if built.len() > 1 && may_empty(&built[0].0, &built[1..]) {
         return one_at_a_time(features);
     }
@@ -2028,11 +2018,21 @@ fn unlinked(features: History<'_>, i: usize) -> Option<(forge_topo::Unlinked, Co
 
 /// The tools feature `i` makes: one, or a pattern's copies (each named after its place).
 fn tools(features: History<'_>, i: usize, build: bool) -> Result<Vec<Tool>, RegenError> {
+    tools_given(features, i, build, None)
+}
+
+/// `tools`, through tools sized by what the regen gives (`hole::reach`).
+fn tools_given(
+    features: History<'_>,
+    i: usize,
+    build: bool,
+    given: Option<&Given>,
+) -> Result<Vec<Tool>, RegenError> {
     match &features[i] {
         Feature::Hole(h) => {
             let (h, up, next) = extent::hole_end(features, i, h)?;
             let cut = h
-                .revolve(&hole::reach(features.upto(i)))
+                .revolve(&hole::reach(features.upto(i), given))
                 .map_err(|error| RegenError::Hole { feature: i, error })?;
             let base = tool(i, features.id(i), &cut, build)?;
             let names = upto::names(&base.0);
@@ -2077,13 +2077,16 @@ fn tools(features: History<'_>, i: usize, build: bool) -> Result<Vec<Tool>, Rege
             let here = reached
                 .iter()
                 .any(|&s| hole::thru_consumer(&features[s]))
-                .then(|| hole::reach(features.upto(i)));
+                .then(|| Given {
+                    base: given.and_then(|g| g.base),
+                    reach: Some(hole::reach(features.upto(i), given)),
+                });
             for s in reached {
-                let h = match here {
-                    Some(r) if hole::thru_consumer(&features[s]) => features.with_reach(r),
-                    _ => features,
+                let g = match &here {
+                    Some(g) if hole::thru_consumer(&features[s]) => Some(g),
+                    _ => None,
                 };
-                base.extend(tools(h, s, build)?);
+                base.extend(tools_given(features, s, build, g)?);
             }
             // a sketch or a parameter makes nothing to copy: refused, not a pattern left out
             if base.is_empty() {
@@ -2102,15 +2105,16 @@ fn tools(features: History<'_>, i: usize, build: bool) -> Result<Vec<Tool>, Rege
             Ok(out)
         }
         Feature::Extrude { .. } | Feature::Revolve { .. } => {
-            let (t, names, next) = match extent::resolve(features, i)? {
+            // the tool's own face names are read only to check what reaches the next face
+            let (t, names, next) = match extent::resolve_given(features, i, given)? {
                 extent::Resolved::Plain(f, next) => {
                     let t = tool(i, features.id(i), &f, build)?;
-                    let names = upto::names(&t.0);
+                    let names = (build && next.is_some()).then(|| upto::names(&t.0));
                     (t, names, next)
                 }
                 extent::Resolved::UpTo(f, u) => {
                     let base = tool(i, features.id(i), &f, build)?;
-                    let names = upto::names(&base.0);
+                    let names = (build && u.next.is_some()).then(|| upto::names(&base.0));
                     (
                         upto::build(i, features.id(i), base, &u.plan, &u.start, u.far, build)?,
                         names,
@@ -2118,7 +2122,7 @@ fn tools(features: History<'_>, i: usize, build: bool) -> Result<Vec<Tool>, Rege
                     )
                 }
             };
-            if let (true, Some(m)) = (build, next) {
+            if let (true, Some(m), Some(names)) = (build, next, names) {
                 // what reaches the next face: backwards, the tool's start cap (its end is where the
                 // line's frame is)
                 let back = matches!(

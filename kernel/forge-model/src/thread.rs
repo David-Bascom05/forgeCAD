@@ -311,7 +311,7 @@ fn hole_depth(features: History<'_>, k: usize, h: &Hole) -> Result<Option<f64>, 
     Ok(match (h.end, up) {
         (crate::End::Depth(d), None) => Some(d),
         (crate::End::Through, _) => {
-            let reach = crate::hole::reach(features.upto(k));
+            let reach = crate::hole::reach(features.upto(k), None);
             let z = h.at.z();
             let (mut lo, mut hi) = (0.0f64, 0.0f64);
             for c in crate::pattern::corners(&reach) {

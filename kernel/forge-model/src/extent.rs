@@ -370,11 +370,12 @@ fn through_range(
     at: &forge_math::Frame,
     toward: Toward,
     op: crate::Combine,
+    given: Option<&crate::Given>,
 ) -> Result<(f64, f64), RegenError> {
     if matches!(op, crate::Combine::New | crate::Combine::Add) {
         return Err(bad(i)(ExtentError::ThroughJoins));
     }
-    let reach = hole::reach(features.upto(i));
+    let reach = hole::reach(features.upto(i), given);
     let (mut lo, mut hi) = (0.0f64, 0.0f64);
     if !reach.is_empty() {
         for c in corners(&reach) {
@@ -392,6 +393,15 @@ fn through_range(
 /// Feature `i` (an extrude or revolve with any extent) as the plain extrude or revolve it
 /// comes to: a distance from a moved sketch, or an angle from a turned one.
 pub(crate) fn resolve<'a>(features: History<'a>, i: usize) -> Result<Resolved<'a>, RegenError> {
+    resolve_given(features, i, None)
+}
+
+/// `resolve`, a through extent sized by what the regen gives (`hole::reach`).
+pub(crate) fn resolve_given<'a>(
+    features: History<'a>,
+    i: usize,
+    given: Option<&crate::Given>,
+) -> Result<Resolved<'a>, RegenError> {
     let err = bad(i);
     match &features[i] {
         Feature::Extrude {
@@ -407,7 +417,7 @@ pub(crate) fn resolve<'a>(features: History<'a>, i: usize) -> Result<Resolved<'a
             extent: Extent::ThroughAlong { toward, dir },
             op,
         } => {
-            let (lo, hi) = through_range(features, i, &profile.plane, *toward, *op)?;
+            let (lo, hi) = through_range(features, i, &profile.plane, *toward, *op, given)?;
             Ok(Resolved::Plain(
                 Cow::Owned(Feature::Extrude {
                     profile: profile.clone(),
@@ -427,7 +437,7 @@ pub(crate) fn resolve<'a>(features: History<'a>, i: usize) -> Result<Resolved<'a
             let (lo, hi) = match *extent {
                 Extent::Symmetric(d) => (-d / 2.0, d / 2.0),
                 Extent::TwoSided { forward, back } => (-back, forward),
-                Extent::Through(toward) => through_range(features, i, &at, toward, *op)?,
+                Extent::Through(toward) => through_range(features, i, &at, toward, *op, given)?,
                 Extent::To { target, offset } => {
                     let s = surface(features, i, &target)?;
                     match square(&s, &at) {
