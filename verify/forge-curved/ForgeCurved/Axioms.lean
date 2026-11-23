@@ -69,3 +69,6 @@ import ForgeCurved
 #print axioms ForgeCurved.Sweep.chart
 #print axioms ForgeCurved.Sweep.component_crosses
 #print axioms ForgeCurved.Sweep.crossesAll_edges_of_transverse
+#print axioms ForgeCurved.Sweep.aux_functional
+#print axioms ForgeCurved.Sweep.sheet
+#print axioms ForgeCurved.Sweep.crossesAll_facets_of_transverse

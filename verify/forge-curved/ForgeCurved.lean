@@ -15,3 +15,4 @@ import ForgeCurved.ConeModel
 import ForgeCurved.Rooms
 import ForgeCurved.FacetSides
 import ForgeCurved.SweepCross
+import ForgeCurved.SweepFacet
