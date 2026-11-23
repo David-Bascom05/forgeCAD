@@ -794,3 +794,125 @@ for nm, slug, x, y, z, tab, iface, rpm, pockets, kg in [
         rpm=[100, rpm], iface=iface, tmax=(250, 80), changer=(pockets, 0.1, kg), coolants=("flood",),
         nose_r=100 if big else 80, head=(440, 560) if big else (360, 480), tt=80 if big else 60, rapid_src=False,
         hmin_status="unknown", D_pub=False, cites=cites))
+
+# ---- Akira-Seiki (akiraseiki.com; AKIRA Mi:845 control, Fanuc G-code compatible per the maker)
+AKV = "https://www.akiraseiki.com/vertical-machining-center-v/vmc-v3xp.html"
+AKS = "https://www.akiraseiki.com/vertical-machining-center-jr-sr/vmc-sr3-xp.html"
+TWO = "the cell holds two unlabelled rows (probably V then XP); the lower held"
+for nm, url, x, y, z, tab, nt, col, rpm, rap, feed, pockets, tool, pw, amb in [
+    ("akira-seiki-sr3-xp", AKS, 762, 430, 460, (910, 380), (75, 535), 435, 11000, {"X": 36000, "Y": 36000, "Z": 30000},
+     {"X": 12000, "Y": 12000, "Z": 10000}, 20, (250, 75), "15 HP peak", False),
+    ("akira-seiki-v3", AKV, 815, 540, 560, (950, 480), (75, 635), 550, 10000, {"X": 40000, "Y": 40000, "Z": 25000},
+     {"X": 10000, "Y": 10000, "Z": 10000}, 28, (250, 65), "30 HP peak (XP 35 HP)", True),
+    ("akira-seiki-v4", AKV.replace("v3xp", "v4xp"), 1050, 540, 560, (1200, 480), (75, 635), 550, 10000,
+     {"X": 40000, "Y": 40000, "Z": 25000}, {"X": 10000, "Y": 10000, "Z": 10000}, 28, (250, 65), "30 HP peak (XP 35 HP)", True),
+    ("akira-seiki-v5", AKV.replace("v3xp", "v5xp"), 1300, 540, 560, (1450, 480), (75, 595), 550, 10000,
+     {"X": 40000, "Y": 40000, "Z": 25000}, {"X": 10000, "Y": 10000, "Z": 10000}, 28, (250, 65), "30 HP peak (XP 35 HP)", True),
+]:
+    cites = {}
+    for a in "XYZ":
+        cites[f"joint.{a}.rapid"] = (est(TWO, source=url, value=f"rapid {rap[a] / 1000:g} m/min") if amb
+                                     else pub(url, f"rapid {rap[a] / 1000:g} m/min"))
+        cites[f"joint.{a}.max_feed"] = (est(TWO, source=url, value=f"cutting feed {feed[a] / 1000:g} m/min") if amb
+                                        else pub(url, f"cutting feed {feed[a] / 1000:g} m/min"))
+    cites.update({
+        "spindle.S1.rpm": [pub(url, f"max {rpm} rpm" + (" (V; XP 12,000)" if amb else "")), unk(RPM_MIN_UNK.format(v=100))],
+        "spindle.S1.max": pub(url, f"max tool {tool[1]} mm dia, {tool[0]} mm long"),
+        "spindle.S1.interface": pub(url, "BT40"),
+        "changer.pockets": pub(url, f"{pockets}T arm"),
+        "changer.change_s": est("tool-to-tool 2.2 s (60 Hz) held; chip-to-chip unpublished (shorter keeps t_min a "
+                                "lower bound)", source=url, value="tool-to-tool 2.2 s"),
+        "changer.max_tool_kg": pub(url, "max tool weight 7 kg"),
+        "machine.control": pub(url, "AKIRA Mi:845, Fanuc G-code compatible (fanuc dialect held)"),
+        "machine.power": pub(url, pw + "; no curve published"),
+    })
+    MACHINES.append(vmc3(
+        "akira-seiki", nm, "fanuc", url, NOTE + "; AKIRA Mi:845 control (Fanuc G-code compatible per the maker)",
+        tx=x, ty=y, tz=z, hmin=nt[0], hmax=nt[1], D=col, table=tab, rapid=rap, feed=feed, rpm=[100, rpm],
+        iface="BT40", tmax=tool, changer=(pockets, 2.2, 7), coolants=("flood", "air"), nose_r=75, head=(340, 480),
+        tt=60, rapid_src=False, D_pub=f"spindle centre to column cover {col} mm", cites=cites))
+
+AKL = "https://www.akiraseiki.com/turning-center-sl-2-axis-turing/turning-center-{}.html"
+for nm, slug, swing, tl, ch, rpm, xt, zt, st, idx in [
+    ("akira-seiki-sl20", "sl15", 450, 330, 6, 6000, 165, 350, 10, 0.5),
+    ("akira-seiki-sl25", "sl15", 530, 400, 8, 5000, 210, 435, 12, 0.35),
+    ("akira-seiki-sl30", "sl30", 600, 600, 8, 4500, 240, 610, 12, 0.35)]:
+    url = AKL.format(slug)
+    MACHINES.append(lathe(
+        "akira-seiki", nm, "fanuc", url, NOTE + "; AKIRA Mi:845 control (Fanuc G-code compatible per the maker)",
+        xt=xt, zt=zt, swing=swing, centres=tl, rpm=[50, rpm], iface=f"{ch} in chuck", rapid=36000, feed=36000,
+        chuck_r=ch * IN / 2, chuck_l=90, stations=st, index_s=idx, turret_r=150, hs=250,
+        chuck_pub=(url, f"{ch} in chuck"),
+        cites={"joint.X.range": pub(url, f"X travel {xt} mm (printed as a sum)"),
+               "joint.Z.range": pub(url, f"Z travel {zt} mm"),
+               **{f"joint.{a}.rapid": pub(url, "rapid 36 m/min") for a in "XZ"},
+               **{f"joint.{a}.max_feed": unk(FEED_UNK) for a in "XZ"},
+               "spindle.main.rpm": [pub(url, f"max {rpm} rpm"), unk(RPM_MIN_UNK.format(v=50))],
+               "spindle.main.max": pub(url, f"swing over bed {swing} mm; max cutting length {tl} mm"),
+               "turret.T1.stations": pub(url, f"{st} stations"),
+               "turret.T1.index_s": pub(url, f"index {idx} s (neighbour)"),
+               "machine.control": pub(url, "AKIRA Mi:845")}))
+
+# ---- Kafo (VMC catalog PDF 2023.02, p.10; control by option, fanuc held)
+KF = "https://www.kafo.com.tw/upload/product/product/02/KAFO_Vertical%20Machining%20Center_2023.02.pdf"
+for nm, x, y, z, tab, nt, col, rap, c2c in [
+    ("kafo-cv-8", 860, 520, 480, (1000, 520), (100, 580), 580, 36000, 4.4),
+    ("kafo-cv-9a", 900, 600, 600, (1000, 600), (100, 700), 669, 48000, 4.5),
+    ("kafo-cv-11a", 1100, 600, 600, (1200, 600), (100, 700), 669, 48000, 4.5),
+    ("kafo-cv-12a", 1270, 650, 650, (1350, 650), (100, 750), 740, 48000, 4.5)]:
+    cites = {**{f"joint.{a}.rapid": pub(KF, f"rapid {rap / 1000:g} m/min (p.10)") for a in "XYZ"},
+             **{f"joint.{a}.max_feed": pub(KF, "cutting feed 10 m/min (p.10)") for a in "XYZ"},
+             "spindle.S1.rpm": [pub(KF, "direct 10,000 rpm standard (p.10)"), unk(RPM_MIN_UNK.format(v=100))],
+             "spindle.S1.max": pub(KF, "max tool 75 mm dia (adjacent full), 300 mm long (p.10)"),
+             "spindle.S1.interface": pub(KF, "#40"),
+             "changer.pockets": pub(KF, "24 tools (p.10)"),
+             "changer.change_s": pub(KF, f"chip to chip {c2c} s (p.10)"),
+             "changer.max_tool_kg": pub(KF, "max tool weight 7 kg (p.10)"),
+             "machine.control": pub(KF, "FANUC / MITSUBISHI / SIEMENS / HEIDENHAIN (fanuc held)")}
+    MACHINES.append(vmc3(
+        "kafo", nm, "fanuc", KF, NOTE + "; control by option (Fanuc / Mitsubishi / Siemens / Heidenhain), fanuc held",
+        tx=x, ty=y, tz=z, hmin=nt[0], hmax=nt[1], D=col, table=tab, rapid=rap, feed=10000, rpm=[100, 10000],
+        iface="40 taper", tmax=(300, 75), changer=(24, c2c, 7), coolants=("flood", "air"), nose_r=75,
+        head=(340, 480), tt=60, rapid_src=False,
+        D_pub=f"spindle centre to the Z-axis track surface {col} mm (taken as the column face)", cites=cites))
+
+# ---- Feeler (feeler.com series pages: summary tables only)
+FV = "https://www.feeler.com/vertical-machining-center/vmp-series"
+for nm, x, y, z, tab, rap, pockets in [
+    ("feeler-vmp-23", 580, 420, 510, (650, 420), {"X": 36000, "Y": 36000, "Z": 36000}, 18),
+    ("feeler-vmp-30", 760, 420, 510, (890, 420), {"X": 36000, "Y": 36000, "Z": 36000}, 18),
+    ("feeler-vmp-32", 820, 520, 505, (950, 520), {"X": 40000, "Y": 40000, "Z": 30000}, 22),
+    ("feeler-vmp-40", 1020, 520, 505, (1150, 520), {"X": 40000, "Y": 40000, "Z": 30000}, 22)]:
+    cites = {**{f"joint.{a}.rapid": pub(FV, f"rapid {rap[a] / 1000:g} m/min") for a in "XYZ"},
+             **{f"joint.{a}.max_feed": unk(FEED_UNK) for a in "XYZ"},
+             "spindle.S1.rpm": [pub(FV, "10,000 rpm"), unk(RPM_MIN_UNK.format(v=100))],
+             "spindle.S1.max": unk("tool limits unpublished; 250 x 80 mm ours"),
+             "spindle.S1.interface": pub(FV, "No.40"),
+             "changer.pockets": pub(FV, f"{pockets} tools"),
+             "changer.change_s": unk(CHG_UNK),
+             "changer.max_tool_kg": unk("max tool weight unpublished; 7 kg held (40 taper class)"),
+             "machine.control": unk("control not stated; recorded as \"unknown\"")}
+    MACHINES.append(vmc3(
+        "feeler", nm, "unknown", FV, NOTE + "; the series page gives a summary table only",
+        tx=x, ty=y, tz=z, hmin=5, hmax=z + 5, D=y / 2 + tab[1] / 2 + 50, table=tab, rapid=rap, feed=rap,
+        rpm=[100, 10000], iface="No.40", tmax=(250, 80), changer=(pockets, 0.1, 7), coolants=("flood",), nose_r=80,
+        head=(360, 480), tt=60, rapid_src=False, hmin_status="unknown", D_pub=False, cites=cites))
+
+FL = "https://www.feeler.com/cnc-lathe/ftc-series"
+for nm, ch, turn, tl, xt, zt, rpm, rap, st in [("feeler-ftc-10", 6, 240, 255, 140, 290, 6000, 24000, 10),
+                                               ("feeler-ftc-20", 8, 350, 343, 200, 380, 4500, 24000, 8),
+                                               ("feeler-ftc-30", 10, 450, 621, 250, 670, 3500, 20000, 8)]:
+    MACHINES.append(lathe(
+        "feeler", nm, "unknown", FL, NOTE + "; the series page gives a summary table only; control not stated",
+        xt=xt, zt=zt, swing=turn, centres=tl, rpm=[50, rpm], iface=f"{ch} in chuck", rapid=rap, feed=rap,
+        chuck_r=ch * IN / 2, chuck_l=90, stations=st, index_s=0.1, turret_r=150, hs=250,
+        chuck_pub=(FL, f"{ch} in chuck"),
+        cites={"joint.X.range": pub(FL, f"X travel {xt} mm (printed as a sum)"),
+               "joint.Z.range": pub(FL, f"Z travel {zt} mm"),
+               **{f"joint.{a}.rapid": pub(FL, f"rapid {rap / 1000:g} m/min") for a in "XZ"},
+               **{f"joint.{a}.max_feed": unk(FEED_UNK) for a in "XZ"},
+               "spindle.main.rpm": [pub(FL, f"max {rpm} rpm"), unk(RPM_MIN_UNK.format(v=50))],
+               "spindle.main.max": pub(FL, f"max turning dia {turn} mm (swing over bed unpublished), length {tl} mm"),
+               "turret.T1.stations": pub(FL, f"{st} stations"),
+               "turret.T1.index_s": unk("index time unpublished; 0.1 s held so t_min stays a lower bound"),
+               "machine.control": unk("control not stated; recorded as \"unknown\"")}))

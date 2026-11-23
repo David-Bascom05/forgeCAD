@@ -204,7 +204,8 @@ def vmc3(vendor, name, control, src, note, *, tx, ty, tz, hmin, hmax, D, table, 
     m.cite("body.saddle", "estimate", basis="unpublished; a block under the table inside its y extent; size ours")
     m.cite("body.bed", "estimate", basis="unpublished; a slab under the saddle's travel; size ours, inside the published footprint")
     if D_pub:
-        m.cite("body.column", "estimate", src, value=f"spindle centre to column {D} mm",
+        m.cite("body.column", "estimate", src,
+               value=D_pub if isinstance(D_pub, str) else f"spindle centre to column {D:g} mm",
                basis=f"column face placed at the published spindle-to-column distance; width, depth ({cd} mm) and "
                "height ours")
     else:

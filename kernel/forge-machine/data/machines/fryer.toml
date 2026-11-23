@@ -939,7 +939,7 @@ path = "body.column"
 status = "estimate"
 source = "https://www.fryermachine.com/pdf/FRYER_Catalog.pdf"
 taken = "2026-11-23"
-value = "spindle centre to column 584.1999999999999 mm"
+value = "spindle centre to column 584.2 mm"
 basis = "column face placed at the published spindle-to-column distance; width, depth (300 mm) and height ours"
 
 [[machine.cite]]
