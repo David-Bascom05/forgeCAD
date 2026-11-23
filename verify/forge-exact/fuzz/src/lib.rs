@@ -240,6 +240,30 @@ impl Reference {
         Reference { child, input, output }
     }
 
+    /// The reference's raw answer line, or why there is none.
+    pub fn ask_raw(&mut self, line: &str) -> Result<String, String> {
+        let secs = std::env::var("FORGE_EXACT_TIMEOUT")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(120u64);
+        writeln!(self.input, "{line}").map_err(|e| format!("stdin: {e}"))?;
+        self.input.flush().map_err(|e| format!("flush: {e}"))?;
+        match self.output.recv_timeout(std::time::Duration::from_secs(secs)) {
+            Ok(out) => {
+                if std::env::var_os("FORGE_EXACT_TRACE").is_some() {
+                    eprintln!("> {line}\n< {out}");
+                }
+                Ok(out)
+            }
+            Err(_) => {
+                let _ = self.child.kill();
+                let _ = self.child.wait();
+                *self = Reference::start();
+                Err(format!("the reference took over {secs} s"))
+            }
+        }
+    }
+
     pub fn ask(&mut self, line: &str) -> Answer {
         let secs = std::env::var("FORGE_EXACT_TIMEOUT")
             .ok()
@@ -794,5 +818,6 @@ pub fn judge(reference: &mut Reference, case: &Case, ulp_seeds: &[u64]) -> Vec<J
     out
 }
 
+pub mod curved;
 pub mod pairs;
 pub mod shrink;
