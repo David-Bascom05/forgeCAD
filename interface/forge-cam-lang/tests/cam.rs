@@ -287,3 +287,15 @@ fn soft_jaws_refuse_what_cannot_seat() {
     assert_eq!(late.status, "refused");
     assert!(late.refusal.as_deref().unwrap().contains("side it opens on"), "{:?}", late.refusal);
 }
+
+#[test]
+fn soft_jaws_need_the_top_faced() {
+    // op1 not faced to the part's top: the stock above it would sit in the jaws below the seat
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    let cam = bracket(&dir, &|s| s.replace("skim = facing(op1, tool: t1, to: 14, step: 1)\n", ""));
+    assert!(
+        cam.errors.iter().any(|e| e.contains("above the part's top") && e.contains("facing")),
+        "{:?}",
+        cam.errors
+    );
+}

@@ -926,6 +926,57 @@ impl Cam {
             v.clearance,
         )
         .map_err(|e| format!("soft_jaw: {e}"))?;
+        // nothing the earlier setup left above the part's top may lie in the blank: turned over,
+        // it would be inside the jaws below the seat, where the part could not go down
+        // (softJaw_needs_grip)
+        {
+            let ip = &self.setups[k].ip;
+            let top_k = h - seat;
+            let b = sj.block;
+            let blank = forge_cam_geom::region::Region {
+                loops: vec![forge_cam_geom::region::Loop {
+                    segs: {
+                        let pt = |x: f64, y: f64| forge_cam_geom::region::p2(x, y);
+                        let (a, bb, c, d) = (
+                            pt(b.min[0], b.min[1]),
+                            pt(b.max[0], b.min[1]),
+                            pt(b.max[0], b.max[1]),
+                            pt(b.min[0], b.max[1]),
+                        );
+                        vec![
+                            Seg::Line { a, b: bb },
+                            Seg::Line { a: bb, b: c },
+                            Seg::Line { a: c, b: d },
+                            Seg::Line { a: d, b: a },
+                        ]
+                    },
+                }],
+            };
+            let mut zs: Vec<f64> = ip.levels().into_iter().filter(|z| *z >= top_k).collect();
+            zs.insert(0, top_k);
+            zs.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            zs.dedup();
+            for w in zs.windows(2) {
+                let zm = 0.5 * (w[0] + w[1]);
+                let m = ip
+                    .material(zm)
+                    .map_err(|e| format!("soft_jaw: the stock {} left: {e}", self.setups[k].name))?;
+                if let Some(m) = m {
+                    let inside = forge_cam_geom::boolean::boolean(
+                        &forge_cam::stock::mirror_y(&m),
+                        &blank,
+                        forge_cam_geom::boolean::Op::Inter,
+                    )
+                    .map_err(|e| format!("soft_jaw: {e:?}"))?;
+                    if !inside.is_empty() {
+                        return Err(format!(
+                            "soft_jaw: `{}` leaves stock above the part's top (z {:.3} to {:.3}, its frame), which would sit in the jaws below the seat: face it to z {top_k:.3} in `{}` (facing(.., to: {top_k:.3}))",
+                            self.setups[k].name, w[0], w[1], self.setups[k].name
+                        ));
+                    }
+                }
+            }
+        }
         let largest = band.iter().map(forge_cam::fixture::area).fold(0.0, f64::max);
         let min_contact = get_num(a, "min_contact", Some(0.25 * largest))?;
         if sj.contact < min_contact {
@@ -1650,7 +1701,7 @@ impl Cam {
                 let (to, ph, f) = match m {
                     forge_post::Motion::Rapid(p) => (back(*p), Phase::Rapid, 0.0),
                     forge_post::Motion::Feed(p, f) => (back(*p), Phase::Cut, *f as f64 / fscale),
-                    forge_post::Motion::Arc { to, c, cw, f } => {
+                    forge_post::Motion::Arc { to, c, cw, f, .. } => {
                         let t = back(*to);
                         if start.is_none() {
                             start = Some(t);

@@ -235,11 +235,13 @@ pub enum QRec {
     Coolant(Coolant),
     Rapid([Q; 3]),
     Line([Q; 3], Q),
+    /// `full`: the arc is meant as a whole turn (its end's X and Y are its start's).
     Arc {
         to: [Q; 3],
         c: [Q; 2],
         cw: bool,
         f: Q,
+        full: bool,
     },
     Cycle {
         kind: CycleKind,
@@ -260,7 +262,15 @@ pub enum QRec {
 pub enum Motion {
     Rapid([Q; 3]),
     Feed([Q; 3], Q),
-    Arc { to: [Q; 3], c: [Q; 2], cw: bool, f: Q },
+    /// `full`: a whole turn (helical if Z moves). A control decides it from X and Y alone:
+    /// an arc block whose end's X and Y are its start's is a full circle.
+    Arc {
+        to: [Q; 3],
+        c: [Q; 2],
+        cw: bool,
+        f: Q,
+        full: bool,
+    },
     Dwell(Q),
     Tool(u32),
     Spindle(Q, bool),
@@ -373,19 +383,27 @@ pub fn quantize(p: &Program, d: &Dialect) -> Result<QProgram, PostError> {
             Rec::Cycle { .. } => at = None,
             _ => {}
         }
-        // an arc whose end rounds onto its start would read back as a full circle: when it is
-        // less than a half turn it is a vanishing arc (its chord under the quantum), and it is
-        // written as the null move it rounds to; a full circle (end equal to start) stays one
-        if let (Rec::Arc { to, c, cw, f }, Some(s)) = (r, from)
-            && *to != s
-            && q3(*to)? == q3(s)?
-        {
-            // less than a half turn: the end is on the turning side of the start (or on its line)
-            let cross = (s[0] - c[0]) * (to[1] - c[1]) - (s[1] - c[1]) * (to[0] - c[0]);
-            let short = if *cw { cross <= 0.0 } else { cross >= 0.0 };
-            if short {
-                out.push(QRec::Line(q3(*to)?, quant(*f, fk)?));
-                continue;
+        // a control reads an arc block whose end's X and Y are its start's as a full circle
+        // (a full helix if Z moves). An arc meant as less than a whole turn whose end's X and Y
+        // round onto its start's: under a half turn it is a vanishing arc (its chord under the
+        // quantum), written as the line it rounds to (a G1, with its Z); over a half turn it is
+        // a whole turn but for less than the quantum, and is one. An arc whose X and Y end where
+        // they start is a whole turn as meant.
+        let mut full = false;
+        if let (Rec::Arc { to, c, cw, f }, Some(s)) = (r, from) {
+            let xy_same = to[0] == s[0] && to[1] == s[1];
+            let q_same = quant(to[0], k)? == quant(s[0], k)? && quant(to[1], k)? == quant(s[1], k)?;
+            if xy_same {
+                full = true;
+            } else if q_same {
+                // less than a half turn: the end is on the turning side of the start (or on its line)
+                let cross = (s[0] - c[0]) * (to[1] - c[1]) - (s[1] - c[1]) * (to[0] - c[0]);
+                let short = if *cw { cross <= 0.0 } else { cross >= 0.0 };
+                if short {
+                    out.push(QRec::Line(q3(*to)?, quant(*f, fk)?));
+                    continue;
+                }
+                full = true;
             }
         }
         out.push(match r {
@@ -409,6 +427,7 @@ pub fn quantize(p: &Program, d: &Dialect) -> Result<QProgram, PostError> {
                 c: [quant(c[0], k)?, quant(c[1], k)?],
                 cw: *cw,
                 f: quant(*f, fk)?,
+                full,
             },
             Rec::Cycle {
                 kind,
@@ -522,11 +541,12 @@ pub fn motions(p: &QProgram) -> Vec<Motion> {
             QRec::Coolant(c) => out.push(Motion::Coolant(*c)),
             QRec::Rapid(v) => out.push(Motion::Rapid(*v)),
             QRec::Line(v, f) => out.push(Motion::Feed(*v, *f)),
-            QRec::Arc { to, c, cw, f } => out.push(Motion::Arc {
+            QRec::Arc { to, c, cw, f, full } => out.push(Motion::Arc {
                 to: *to,
                 c: *c,
                 cw: *cw,
                 f: *f,
+                full: *full,
             }),
             QRec::Cycle {
                 kind,
@@ -724,7 +744,7 @@ pub fn print(p: &QProgram, d: &Dialect) -> Result<String, PostError> {
                     w.emit(&ws.join(" "));
                 }
             }
-            QRec::Arc { to, c, cw, f } => {
+            QRec::Arc { to, c, cw, f, .. } => {
                 let (sx, sy) = match (pos[0], pos[1]) {
                     (Some(x), Some(y)) => (x, y),
                     _ => {
@@ -1201,6 +1221,8 @@ pub fn read(text_: &str, d: &Dialect) -> Result<Vec<Motion>, ReadError> {
                     c: [sx + i, sy + j],
                     cw: g == 2,
                     f: feed,
+                    // as a control decides it
+                    full: p[0] == sx && p[1] == sy,
                 });
             }
             _ => {

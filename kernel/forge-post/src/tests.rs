@@ -213,3 +213,64 @@ fn a_vanishing_arc_is_not_a_full_circle() {
     };
     assert!(quantize(&p, &d).unwrap().recs.iter().any(|r| matches!(r, QRec::Arc { .. })));
 }
+
+#[test]
+fn a_vanishing_helix_piece_is_not_a_full_helix() {
+    // found by the Lean model (7a47f6a): X and Y round onto the start while Z moves; a control
+    // decides a full circle from X and Y alone, so the old rule (all three equal) posted a 360°
+    // helix in place of a 0.0002 mm piece
+    for (name, _) in DIALECTS {
+        let d = Dialect::get(name).unwrap();
+        let s = [5.0, 0.0, 0.0];
+        let to = [5.0 - 1e-9, 0.00004, -0.5];
+        let p = Program {
+            number: 1,
+            title: "t".into(),
+            recs: vec![
+                Rec::ToolChange { t: 1, h: 1, name: "x".into() },
+                Rec::Rapid([5.0, 0.0, 5.0]),
+                Rec::Line(s, 100.0),
+                Rec::Arc { to, c: [0.0, 0.0], cw: false, f: 100.0 },
+                Rec::Line([6.0, 0.0, -0.5], 100.0),
+            ],
+        };
+        let q = quantize(&p, &d).unwrap();
+        assert!(!q.recs.iter().any(|r| matches!(r, QRec::Arc { .. })), "{name}: {:?}", q.recs);
+        let (txt, back) = round_trip(&q, &d).unwrap_or_else(|e| panic!("{name}: {e}"));
+        assert!(!txt.split_whitespace().any(|w| w == "G2" || w == "G3"), "{name}: {txt}");
+        assert!(back.iter().any(|m| matches!(m, Motion::Feed(p, _) if p[2] < 0)), "{name}");
+        // a whole helical turn, meant, stays one
+        let p = Program {
+            number: 1,
+            title: "t".into(),
+            recs: vec![
+                Rec::ToolChange { t: 1, h: 1, name: "x".into() },
+                Rec::Rapid([5.0, 0.0, 5.0]),
+                Rec::Line(s, 100.0),
+                Rec::Arc { to: [5.0, 0.0, -0.5], c: [0.0, 0.0], cw: false, f: 100.0 },
+            ],
+        };
+        let q = quantize(&p, &d).unwrap();
+        let (_, back) = round_trip(&q, &d).unwrap_or_else(|e| panic!("{name}: {e}"));
+        assert!(back.iter().any(|m| matches!(m, Motion::Arc { full: true, .. })), "{name}");
+    }
+}
+
+#[test]
+fn round_trip_compares_what_the_control_executes() {
+    // an arc meant as a part of a turn whose X and Y nevertheless print equal is a full circle
+    // to the control: the round trip refuses it (by motion, not by text)
+    let d = Dialect::get("fanuc").unwrap();
+    let q = QProgram {
+        number: 1,
+        title: "t".into(),
+        recs: vec![
+            QRec::Rapid([5000, 0, 0]),
+            QRec::Arc { to: [5000, 0, -500], c: [0, 0], cw: false, f: 1000, full: false },
+        ],
+        decimals: d.decimals,
+        feed_decimals: d.feed_decimals,
+    };
+    let e = round_trip(&q, &d).unwrap_err();
+    assert!(e.contains("differs"), "{e}");
+}
