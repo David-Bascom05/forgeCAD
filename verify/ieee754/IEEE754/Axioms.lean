@@ -28,6 +28,7 @@ import IEEE754.Exact.DivRem2
 import IEEE754.Exact.Gcd
 import IEEE754.Exact.QBig
 import IEEE754.Exact.QF64
+import IEEE754.Interval.Horner
 import IEEE754.Expansion
 import IEEE754.ExpansionSum
 
@@ -119,6 +120,8 @@ elab "#standard_axioms " ids:ident* : command => do
   -- Interval sin/cos
   IEEE754.Interval.below_round IEEE754.Interval.above_round IEEE754.Interval.crit_counted
   IEEE754.Interval.sin_encloses IEEE754.Interval.cos_encloses
+  IEEE754.Interval.ivAdd_encl IEEE754.Interval.ivMul_encl IEEE754.Interval.mul_corners IEEE754.Interval.horner_encl
+  IEEE754.Interval.sign_filter_sound IEEE754.Interval.enclose_encl
   -- div.rs gcd
   IEEE754.Exact.Gcd.tz_or IEEE754.Exact.Gcd.stein_spec IEEE754.Exact.Gcd.gcdU128_spec IEEE754.Exact.Gcd.gcdU128_le
   IEEE754.Exact.Gcd.step_inv IEEE754.Exact.Gcd.step_bounds IEEE754.Exact.Gcd.run_brk IEEE754.Exact.Gcd.mediant
