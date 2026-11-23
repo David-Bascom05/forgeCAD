@@ -1,0 +1,10 @@
+# A gripper finger: a small block that slides along its x on the forearm's tip.
+shared s = 12
+properties(part_number: "ARM-FINGER", description: "gripper finger", material: "6061-T6")
+
+sketch plan(on: xy) {
+  outline = rect(corner: (-s / 2, -s / 2), size: (s, s))
+  o = pt(-s / 2, 0)
+}
+block = extrude(plan, s)
+glide = anchor(plane(at: plan.o, normal: plan.outline[0].dir, x: plan.plane.normal))
