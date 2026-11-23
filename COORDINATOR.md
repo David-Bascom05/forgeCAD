@@ -1,0 +1,209 @@
+# forgeCAD coordinator handoff (2026-11-23, from the laptop session)
+
+You are taking over as David's MAIN coordinating agent for forgeCAD (this repo, David-Bascom05/forgeCAD:
+his personal Rust CAD kernel with Lean proofs; keep it out of any work systems: no Linear/Slack/Notion).
+Until now a Claude Code session on his laptop ran this. It hands over because heavy work must not run
+on the laptop. You run in a cloud VM: run the workers here (subagents in this VM, or further
+`claude --cloud` sessions if available), keep the merge queue moving, and report to David.
+This file lives on branch coord/handoff only: never merge it to main.
+
+## 1. David's rules (all standing)
+- **Proofs**: prove the SHIPPED boolean (kernel/forge-bool) end to end: `boolean_correct`
+  (research/decide-once/old-path-statements.md §E/§D/§G; ledger verify/forge-bool-proof/LEDGER.md;
+  research/PROOF-STANDARD.md). His words: "start agents on proving what needs to get proven. If they find
+  something that is actually wrong, fix it. The fallback should trigger only when there are large gaps
+  in existing proofs, and if possible we should be able to prove the fallback is not even needed. Use what
+  existing agents have already done in branches." A8 decide-once = fallback only (2.6x slower), ideally
+  proven unreachable.
+- **Curved code**: "prove curve code, find bugs or gaps, and see how useful it is to close the gaps
+  (obv fix bugs)".
+- **No assuming**: "we should be careful assuming like that. if it is easy to close gaps in a provable way
+  do it." Anything not settled by a proof or the exact reference is UNKNOWN (measured margins, "fired 0
+  times", "rounding artifact" are evidence, not verdicts). Hypotheses stay hyp/open in the ledger, never
+  proven. Easy provable gaps: close directly. Hard or speed-costly gaps: bring to David with numbers.
+- **Speed**: "verify that speed (instructions) stay the same or better before we merge bug fixes (fight to
+  get speed back if we are noticeably worse)". Accepted noise band (he said "accept it"): exact callgrind
+  gate (tools/speed/gate.sh, GATE_COUNTER=callgrind, exact mode), main and branch counted on the SAME
+  machine with the same valgrind; each strict line (regen1 synthetic parts; bench app/edit/cli) ≤ +0.03%
+  over main and the strict-line total ≤ +0.03%; bench seq/nary1 lines diagnostic. Checker:
+  tools/speed/band.py (on branch proof/forge-topo; copy below in §7). gate.sh's exact mode runs valgrind
+  under `env -i PATH=/usr/bin:/bin`, so valgrind must be at /usr/bin/valgrind. Applies to every NEW PR
+  (bug fixes, gap closures, refactors). Code-layout noise moves every line ~±0.03% for any binary change.
+- **Kernel values**: analytic geometry only (no NURBS unless the data is one), every op ms (<10 ms goal,
+  100 ms max), robustness; native = wasm32 bit-identical; no proofs at runtime (preconditions debug-only).
+- **bits.txt** (tools/speed/bits.txt) changes only for a judged bug fix (exact reference / proof /
+  invalid topology) or David's explicit OK.
+- **CAM**: no adaptive / constant-engagement clearing until patent counsel (research/cam/design.md §8).
+- **CI**: the older PRs (#13–#22, from the earlier round) merge on CI alone; NEW work (agents' PRs) also
+  needs the band result in the PR.
+- **Merging**: only YOU merge, one PR at a time, and only a PR whose head already contains current main
+  (update the branch via `gh api -X PUT repos/David-Bascom05/forgeCAD/pulls/N/update-branch` and wait for its
+  CI) with every CI run on that head green. That way CI tested exactly the tree that lands. Merge commits
+  (`gh pr merge N --merge`). Never force-push others' branches; resolve conflicts with merge commits.
+- **Workspace**: since #29, Cargo.toml `members` names the Rust crates under verify/ explicitly; Lean-only
+  verify/ dirs need no entry; a new Rust crate under verify/ must be added to members.
+- Commits end with "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"; PR bodies end with
+  "🤖 Generated with [Claude Code](https://claude.com/claude-code)".
+
+## 2. Merge queue (state at handoff, main = db5c0759)
+In order; each: bring up to date with main, wait for CI, merge.
+1. **#31** ci/main-cache-only (push-to-main runs only refresh caches; checks run on the PR). Jumps the line.
+2. **#15** CAM code, **#16** CAM Lean (stacked on #15), **#14** fillet census — all three just updated to
+   main db5c0759 (old PRs: CI only).
+3. **#32** proof/curved-sites (curved-sites 1; band passed vs 103dfb8b; kernel unchanged since).
+4. **#19** sketch text: its Lean heartbeat failure was just fixed (cbed8d09; aeneas run in progress).
+5. **#33** proof/fix-torus-loops: seed-295 wrong-Ok fix (band passed vs 1c48925d; full workspace test run
+   still pending — run it).
+6. **#25** proof/spine-bodymodel, **#26** proof/spine-lean (stacked; #26 needs origin/main merged and
+   LEDGER rows of all agents kept), **#27** proof/flat-sites (G14; append conflicts in ForgeCurved.lean /
+   Axioms.lean after #26: keep both).
+7. Older PRs needing real merge work (MERGE worker, §4.6): **#13** (WIP on branch merge13-wip), **#20**,
+   **#21**, **#18**, **#22**.
+CI facts: #30 made Lean jobs restore main's caches (warm since 20:33 UTC). wasm (~21 min) is the long pole
+for Rust PRs. A push to a PR cancels its older runs (#23). Don't cancel main runs (cache saves).
+GitHub free-tier concurrent-job limit: don't start CI on many PRs at once.
+
+## 3. Bugs found so far
+- **Confirmed**: fuzz seed 295 f69 cylinder×torus loop lost (wrong Ok) → #33 interim (not provably
+  complete); forge-git wasm usize overflow (#13, fixed); CAM wasm temp-dir tests (#15, fixed).
+- **Not bugs**: fuzz24 (certifier artifact), G14 box-only accept (proven harmless).
+- **Open**: G9 cache staleness (two mechanisms found by reading; corpus count pending); fuzz55 f21 G4
+  UNDECIDED reachable, exact verdict open; TRANSLATE's possible plane_plane soundness issue beyond ~1e6 from
+  q's origin vs InputSize 1.6e7 (check with the exact reference).
+
+## 4. Workers to run (each was mid-task; full handoffs below). Restart each from its branch.
+Shared VM setup: rustup stable + wasm32-wasip1 + node; elan (Lean v4.36.0) + `lake exe cache get`
+(Mathlib); tools/aeneas/setup.sh for Charon/Aeneas (pins inside; OCaml via opam); python3.12 (forge-lang
+core_diff); valgrind at /usr/bin. Charon/Aeneas on boolean.rs needs >12 GB RAM.
+
+### 4.1 SPINE (statements, ledger, forge-topo)
+- #24 merged (plan + LEDGER). #25 = proof/spine-bodymodel @789ae988. #26 = proof/spine-lean @6ba798a9
+  (verify/forge-bool-proof: Statement, Contracts (9-step Pipeline, D1–D9, ArrOK, ClassAt, keepRule,
+  BoundsFaces, ApplyPost), Compose, KeepRule (keepRuleBd_proof, boolean_correct_of_steps), Bridge
+  (readInPlace, ShapeR, BooleanCorrectR, booleanCorrectR_of_steps); workflow forge-bool-proof.yml).
+  Needs main merged (keep all agents' LEDGER rows; take main's Cargo.toml, drop its exclude entry).
+- proof/forge-topo @209ddb2e WIP (no PR): forge-topo topo.rs/topo_shell.rs/topo_edges.rs (check_strays,
+  links, shell_faces, edges, loops via Topo/ShellTopo/EdgeTopo views + Sink), check.rs View/ShellView,
+  verify/aeneas/forge-topo (translation + refinements), verify/forge-topo-check/lean Flood.lean;
+  PROOF-STANDARD "The speed rule" + tools/speed/band.py. With OVERFLOW_CHECKS=false all 5 refinements
+  built; with checks ON `translate.sh forge-topo --check` passes (61 defs, 0 opaque) but proofs: Strays
+  builds; Links fixes unbuilt (pass bounds explicitly: `step with usize_add_wspec e 1#usize (by scalar_tac)
+  as …`); Checked.lean usize_sub_eq omega fix unbuilt; ShellFaces/Edges never built vs checked. If it won't
+  close: OVERFLOW_CHECKS=false (commented line in verify/aeneas/forge-topo/translate.conf), keep T.ovf an
+  open GAP, say so in the PR. Then gate (no valid numbers yet; keep vector sizes as old code), tests, wasm,
+  PR (David approved landing it once gates pass).
+- Then: D8.math (BoundsFaces for apply's output; FaceLocal.frontier_iff_bd etc. exist); T.euler, T.fans,
+  T.all (rebase-fundamentals research/fundamentals/RESUME.md); D5.zone.
+- Ledger (SPINE): proven E.comp, E.seq, E.R, D7.math, D8.derived, E.fb composition, D0 composition,
+  B.model/F1/rooms, B.clusters/phi, S3, S4. Stated E, E.ref, D1–D9, D0, G1. Open E.names, E.size,
+  D5.zone, D7.table, D8.math, T.ovf, T.euler, T.fans, T.all, T.valid. Hyp H.fin.
+- Gotchas: forge-bool-proof packagesDir ../forge-curved/.lake/packages (cache get there first); forge-topo
+  Lean uses ../../../forge-mass/lean/.lake/packages; Aeneas Result is an ITree (WP specs).
+
+### 4.2 TRANSLATE (Aeneas L4)
+- proof/translate @4eb03060 (main 103dfb8b merged): tools/aeneas from the aeneas branch + pre-pass
+  `lower_loop_exits` (aeneas-robust.patch); setup.sh patch-set hash; translate.sh `DEPS=(…)` per-crate
+  chaining, FORGE_KEEP; survey-modules.sh env vars. Old 5 translations byte-identical. New: forge-math +
+  vec/frame/interval/tol; verify/aeneas/forge-geom (plane_surface, plane_plane, planes_coincident,
+  spindle_in); verify/aeneas/forge-bool (ssi::surfaces_in, closed_or_flush, closed_form, nearly_flush,
+  turned_flush, spread_apart). Bridge additions (f64 min/max with opaque F64.zeroTie, next_up/down, ceil,
+  rem_euclid, …). ssi.rs rewrites (same float ops/order). research/aeneas/forge-bool.md + fn_survey.py.
+- Next: gates (clippy, tests, wasm, exact fuzz, band — ssi rewrites must be in band) → PR "TRANSLATE 1";
+  D2 proof (D2Flat.lean WIP: spindle_in Plane Plane = ok false (unfold, rw any's equation twice); then
+  surfaces_in never reaches searched; F1 for plane_plane); POSSIBLE FINDING: plane_plane Empty/Coincident
+  decided at q.frame.origin with ANGULAR 1e-11/LINEAR 1e-5, sound only within ~1e6 — check with the
+  exact reference; forge-topo types under DEPS (Cached --opaque; coordinate with SPINE's forge-topo
+  translation); classify.rs for FLAT-SITES (info opaque); after FALLBACK's flags PR: plan_once_in pair
+  loop, trim, crossings_near, meet_region (Charon OOM: --start-from per function group; split the three
+  giants into named steps = E.shape's Pipeline steps); imprint/nary Not_found: OCAMLRUNPARAM=b.
+- Gotchas: Charon sees only optimized MIR of other crates (include types only; translate deps under
+  DEPS); another crate's const = opaque Result global, bind in FunsExternal; regenerate dependency
+  FunsExternal_Template when sources move; slice patterns need source rewrites.
+- L4 gap rows: L4.proc, L4.intcurve, L4.cached, L4.searched, L4.geomcurved, L4.big, L4.zero (hyp by
+  design); easy close: Array.map length check.
+
+### 4.3 FLAT-SITES (classify / point_in_face)
+- No flat bugs (exact-fuzz agree 463, wrong 0). #27 G14. Branches: proof/flat-sites-size @f56b4fd8
+  (debug-only InputSize check; ready once band measured; ledger E.size.rs GAP (release) — David picks:
+  creation-path checks or release refusal); proof/flat-sites-pif-at @21a6e127 (point_in_face_at with a
+  `near` hook, separate #[inline(never)]; CURVED-SITES builds on it — gate + PR first); proof/flat-sites-
+  onplane @b55858ef (classify On requires exact on_plane; measure cost); proof/flat-sites-g13 @5f0e901e
+  (face_point own-face check; recover cost if over band); proof/flat-sites-1a @46b486c5 (Lean FlatSites/:
+  Where, G15, OnPlane, G13; stacked on #26+#27; PR after #26; drop "rounding artifact" wording);
+  proof/flat-sites-probes (tools only, not for merge).
+- Next: gate + PR pif-at, size, onplane, g13; 1a after #26; D5 proof (needs TRANSLATE's imprint/
+  place_cuts/split_face); ranked gaps #2 (36 pattern-copy points UNKNOWN; exact key fix only if
+  speed-neutral), #4 ray branch (hard), #5 flat G11 (provenance proofs).
+- Gotchas: never wrap point_in_face_past (inlining +0.13%); cfg-out debug-only code entirely.
+
+### 4.4 FALLBACK (G2–G10, A8)
+- #28 merged (verify/forge-bool-fallback). #33 open (seed 295). proof/fallback @0d7b91f7 flags PR NOT
+  opened: OVER BAND (patterns seq +0.31%, coplanar seq +0.28%, torture/plate +0.19%; total +0.023%);
+  callgrind: trim_in SELF +674k, point_in_face_past SELF +232k (inlining shift). Try: drop `let rung =
+  tried.rung;` in trim_in and read tried.rung.X at each use; trim_in #[inline(never)]; compare
+  regen1 patterns seq profiles. proof/g9-cache-wip @639a3296 (WIP): cache_ok check + G9 fix
+  (recompute reach when a dropped edge's sag ≥ reach; clear query of a rotated face) — measure first.
+- Next after flags: G10 (MemberSound leaf IEEE screens open); A8 as fallback (invert: today's path
+  first, A8 only on Internal/undecided from ORIGINAL inputs; port by cherry-pick from
+  claude/repo-review-mbdrlj-decide-once, never merge); blockers edge-name parity
+  (research/booleans/bool-speed-open.md item 2) and random_programs fuzz (item 6); unreachability proof
+  (fuzz55 f21 G4 exact verdict open).
+- Counters: `cargo build --release -p forge-model --example regen1 --features decisions`;
+  FORGE_DECISIONS_SITES=1 (TRACE=1 for rungs); results suite 17 + fuzz 1–300: all rungs/ODD/pinches/
+  strays/D9/D3 0; G4 2 (fuzz55); verdict 3 2,447.
+
+### 4.5 CURVED-SITES (curved sites, #7 certifier)
+- #32 open. proof/curved-sites-absorb @24dd8472 WIP (fix-curved + exact-curved absorbed; 29 bits lines
+  change; V/E/F identical etc. — that judges nothing: attribute each to a fix-curved commit with
+  evidence (bisect) or bring to David). Don't delete fix-curved/fix-touch/exact-curved yet.
+- Next: #1 point_in_face curved callers on pif-at (9 near-misses; #[cold]); absorb PR; #7 runtime
+  (Krawczyk certifier: 477 Certified / 2 Undecided / 0 Missed / 90 cone hosts; median 2.6 ms/call → +0.3 s
+  on mixed, ~1000× over band; try centred-form provable sample spacing, per-pair certificate cache,
+  cheaper grid; Missed → add the event; only Undecided → typed refusal; if nothing fits: option (c)
+  test-and-log, M.ct UNKNOWN — David decides); cone hosts M.cone; #3 B:2910 (η_trace bound); #4
+  place_cuts provenance keys. For David: C.slid, 16 quartic separations, 36 unkeyed coincidences.
+- Run: regen1 with `--features decisions`, FORGE_DECISIONS_DUMP=1; curved_one example (`locate`).
+
+### 4.6 MERGE (older PRs)
+- #13: merge13-wip @deb88039 (conflicts resolved: forge-lang lib.rs, cdt.rs Aeneas-style + #13 checks
+  + Fault variants, tessellate.rs budget, nurbs.rs = main; hidden-inputs entries). test-wasm.sh FAILS on
+  forge-read-fuzz corpus: (1) brep/line-edge-from-far-away.case → cdt.rs:1486 debug in_range on
+  super-triangle corners (fix: FarFromOrigin also refuses out-of-range corners); (2)
+  brep/cylinder-at-1e-308.case → predicates.rs:89 orient2d product underflow (find caller with a
+  backtrace; option: refuse nonzero coords below 2^-485). Then merge current main (Cargo: add
+  verify/forge-read-fuzz to members), gates, bits, push to #13's branch.
+- Then #20 (hidden-inputs union; add verify/forge-certify to members), #21 (forge-math interval.rs keep
+  both; CURVED's meet_cert uses Interval), #18 (aeneas-robust.patch keep both; TRANSLATE also changes
+  tools/aeneas), #22 (regenerate the forge-weld translations).
+
+### 4.7 CAM (new, David asked: "at least through 3-axis surfacing and turning, with simulation and
+modeling of full machines")
+After #15/#16 merge. Four workers: CAM-CORE (phase-1 gaps in research/cam/phase1.md: G4 leftover
+classification, slot/chamfer/engrave/islands/helical ramps, checker speed f64 filter with proven bound,
+G5 runtime limits, close verify/forge-cam RESUME.md hypotheses, keep shared types stable); CAM-3AXIS
+(phase 3: closed-form drop/push cutter for analytic surfaces, certified B&B for tori/sweeps/splines,
+z-level (not adaptive), parallel, waterline, scallop, pencil/rest, 3D in-process stock, Lean L1);
+CAM-TURN (phase 5: lathe setup, facing/profile/groove/part/thread/drill, exact nose-radius comp, insert
+library, lathe posts, G1–G6); CAM-MACHINE (research/cam/machines.md machine-definition format FIRST —
+VMC, trunnion 5-axis, lathe, mill-turn — machine library as real parts, posted-G-code simulation against
+kinematics (closes Fusion's gap), collision of all bodies through the motion, material removal, Lean
+spec of the interpreter, timeline output). Read research/cam/*.md and verify/forge-cam/RESUME.md first.
+
+## 5. Waiting on David
+- #7 runtime rule for the certified Poly4 event search (options a/c/d with numbers).
+- E.size release guarantee (creation-path checks vs release refusal).
+- curved-sites-absorb bits changes that can't be tied to a judged fix.
+- Hard curved gaps (C.slid tangent roots, quartic separations).
+- Pending: a code-coverage report of the corpus (~/Documents/forgecad-coverage-2026-11-23.md on the
+  laptop; the laptop session will push it to this branch as research/coverage-2026-11-23.md when done).
+
+## 6. Pitfalls learnt today
+- Agent `isolation: "remote"` silently ran locally on the laptop; check `hostname` in every worker.
+- GitHub won't run pull_request CI on a conflicting PR. Stale digests (verify/forge-exact/fuzz/tests/
+  sweep-diff.digest) and Aeneas translations (translation-fresh) are common CI failures: regenerate.
+- Keep each worker's scratch files private; never use generic names in shared dirs.
+
+## 7. tools/speed/band.py (copy)
+See branch proof/forge-topo, or: strict lines = regen1 parts (torture plate shaft housing coplanar patterns
+mixed hole-grid tour upto upto-flat) and bench app/edit/cli; fail if any strict line > +0.03% over base or
+the strict sum > +0.03%; bench seq/nary1 diagnostic.
