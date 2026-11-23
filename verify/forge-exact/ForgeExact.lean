@@ -57,4 +57,7 @@ import ForgeExact.DecideOnce.Simulation
 import ForgeExact.DecideOnce.RoomConst
 import ForgeExact.DecideOnce.MetricI
 import ForgeExact.DecideOnce.CoverageI
+import ForgeExact.QRef.Run
 import ForgeExact.Axioms
+import ForgeExact.Fillet
+import ForgeExact.Ops.Axioms

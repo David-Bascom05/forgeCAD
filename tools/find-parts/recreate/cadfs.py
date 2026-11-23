@@ -21,11 +21,17 @@ import tempfile
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import fs
 import sketch2d
-from fgw import NoName, Prog, St, Stop, Topo, loop_segs
-from sketch2d import Arrangement, Unsupported, curve_dist, meets
+from fgw import NoName, Prog, St, Stop, Topo, loop_segs, neg
+from sketch2d import Arrangement, Unsupported, carrier_dist, curve_dist, meets
 
 TOL = 2e-4  # mm: a sample this close lies on its carrier
 SIDE = 1  # TD weight +1: the region on this side of the entity (+1 left)
+TEXT = "text"  # a text sketch's regions: every glyph of each of its texts
+# Onshape's sketch text fonts (fontName) the shipped ones set exactly: family, bold, italic
+TEXT_FONTS = {
+    "OpenSans-Regular.ttf": ("Open Sans", False, False),
+    "OpenSans-Bold.ttf": ("Open Sans", True, False),
+}
 SUPPORTED = {"sweep", "loft", "sketch", "extrude", "revolve", "fillet", "chamfer", "shell", "cPlane", "cPoint", "assignVariable", "hole", "mirror", "circularPattern", "transform", "booleanBodies"}
 PLANES = {"Front": ((0.0, -1.0, 0.0), (1.0, 0.0, 0.0)), "Top": ((0.0, 0.0, 1.0), (1.0, 0.0, 0.0)), "Right": ((1.0, 0.0, 0.0), (0.0, 1.0, 0.0))}
 
@@ -143,7 +149,7 @@ class Swept:
 
     def dist(self, p):
         u, v, w = self.fr.uvw(p)
-        d = curve_dist(self.piece, (u, v))
+        d = carrier_dist(self.piece, (u, v))
         out = 0.0
         if self.lo is not None and w < self.lo:
             out = self.lo - w
@@ -166,7 +172,7 @@ class Turned:
         r = math.hypot(dx - s * self.d2[0], dy - s * self.d2[1])
         r = math.hypot(r, w)
         e = (-self.d2[1], self.d2[0])
-        return min(curve_dist(self.piece, (self.a2[0] + s * self.d2[0] + k * r * e[0], self.a2[1] + s * self.d2[1] + k * r * e[1])) for k in (1, -1))
+        return min(carrier_dist(self.piece, (self.a2[0] + s * self.d2[0] + k * r * e[0], self.a2[1] + s * self.d2[1] + k * r * e[1])) for k in (1, -1))
 
 
 class Any:
@@ -345,6 +351,8 @@ class Tr:
         self.alias = {}
         self.used = set()
         self.sketch_ents = {}
+        self.texts = {}  # sketch id: (each text's row, or why it can't be one; whether other curves are drawn too)
+        self.last_record = {}
         self.plain = {}
         self.imprint_off = set()
         self.copies = {}
@@ -380,16 +388,67 @@ class Tr:
             raise Unresolved(str(x))
 
     def sketch(self, f):
-        a = Arrangement(f["ents"])
-        fr = self.frame_of(f, a)
+        # sketch text is set by the kernel (a `text` row), not drawn here: the arrangement holds the rest
+        texts = [e for e in f["ents"] if e["kind"] == "skText" and not e.get("construction")]
+        a = Arrangement([e for e in f["ents"] if e["kind"] != "skText"])
+        guess = {}
+        for k, v in f["env"].items():
+            if k.startswith("initialGuess") and isinstance(v, dict):
+                guess.update(v)
+        # a text's place: the records' texts of its string whose corner its initial guess (rounded) is beside
+        near = []
+        for e in texts:
+            g = guess.get(e["id"])
+            if not (isinstance(g, list) and len(g) >= 2 and all(isinstance(x, float) for x in g[:2])):
+                continue
+            for rs in self.raw.get("sketches", []):
+                for r in rs.get("entities", []):
+                    c = r.get("lowerLeftCornerPosition2d")
+                    if r.get("textString") == e.get("text") and c and math.hypot(c["x"] - g[0], c["y"] - g[1]) < 5e-5:
+                        near.append((c["x"], c["y"]))
+        fr = self.frame_of(f, a, near)
         self.sk[f["id"]] = (a, fr)
         self.sketch_ents[f["id"]] = f["ents"]
+        if texts:
+            self.texts[f["id"]] = (self.text_rows(texts, self.last_record), bool(a.pieces))
         if a.approx:
             self.notes.add("approx")
 
-    def frame_of(self, f, a):
+    def text_rows(self, texts, record):
+        """Each sketch text as a `text` row: Onshape's solved box (its lower left the pen's start on the baseline, its
+        height 0.72 of the em, along its baseline's direction) and its font by name, or why it can't be one."""
+        raw = [e for e in record.get("entities", []) if e.get("sketchEntityType") == "skText" and not e.get("isConstruction")]
+        rows = []
+        for e in texts:
+            same = [r for r in raw if r.get("textString") == e.get("text")]
+            if len(same) != 1:
+                rows.append(Unresolved("sketch text not in the sketch's record" if not same else "sketch texts alike"))
+                continue
+            r = same[0]
+            font = TEXT_FONTS.get(e.get("fontName"))
+            txt = e["text"].rstrip("\n")
+            if font is None:
+                rows.append(Unsupported("sketch text in font " + str(e.get("fontName"))))
+            elif "\n" in txt:
+                rows.append(Unsupported("sketch text of several lines"))
+            elif '"' in txt:
+                rows.append(Unsupported("sketch text holding a quote mark"))
+            elif not txt.strip():
+                rows.append(None)
+            else:
+                d, c = r["baselineDirection2d"], r["lowerLeftCornerPosition2d"]
+                ang = math.degrees(math.atan2(d["y"], d["x"]))
+                fam, bold, italic = font
+                row = f'text("{txt}", at: ({num(c["x"] * 1000)}, {num(c["y"] * 1000)}), size: {num(r["height"] * 1000 / 0.72)}, font: "{fam}"'
+                row += ", bold: true" if bold else ""
+                row += ", italic: true" if italic else ""
+                row += f", angle: {num(ang)}deg" if abs(ang) > 1e-12 else ""
+                rows.append(row + ")")
+        return rows
+
+    def frame_of(self, f, a, extra=()):
         # the dataset's record: the unused sketch sharing most of these points and radii, the first if tied
-        ours = set()
+        ours = {(round(p[0] * 1000, 3), round(p[1] * 1000, 3)) for p in extra}
         for e in a.every.values():
             for q in (e.a, e.b, e.c):
                 if q is not None:
@@ -433,6 +492,7 @@ class Tr:
         if best is None or "sketchMatrix" not in self.raw["sketches"][best]:
             raise Unresolved("no sketch record")
         self.used.add(best)
+        self.last_record = self.raw["sketches"][best]
         return Frame(self.raw["sketches"][best]["sketchMatrix"])
 
     # queries as carriers
@@ -704,6 +764,17 @@ class Tr:
                 fid = q[1][0][1]
                 if fid not in self.sk:
                     raise Unresolved("a region of an unread sketch")
+                if fid in self.texts:
+                    rows, mixed = self.texts[fid]
+                    if mixed:
+                        raise Unsupported("sketch text beside other curves")
+                    if not (len(q[1]) > 1 and q[1][1] is True):
+                        raise Unsupported("sketch text's regions with its counters filled")
+                    for r in rows:
+                        if isinstance(r, Exception):
+                            raise r
+                    by.setdefault(fid, []).append(TEXT)
+                    continue
                 a = self.sk[fid][0]
                 # a spline in no region: the sampled curves may have missed a crossing, and the regions are then not the
                 # sketch's (00409237 cut a third of what it should)
@@ -763,7 +834,7 @@ class Tr:
         if not ents:
             return hit
         c = self.carrier(q, env)
-        hs = {h for e in st["edges"] if set(e["f"]) & hit and all(c.dist(p) <= TOL and any(curve_dist(g[3], g[2].uvw(p)[:2]) <= TOL for g in ents) for p in e["p"]) for h in set(e["f"]) & hit}
+        hs = {h for e in st["edges"] if set(e["f"]) & hit and all(c.dist(p) <= TOL and any(carrier_dist(g[3], g[2].uvw(p)[:2]) <= TOL for g in ents) for p in e["p"]) for h in set(e["f"]) & hit}
         return hs or hit
 
     def edge_ent(self, e, fr):
@@ -992,6 +1063,9 @@ class Tr:
     def emit_solid(self, kind, op, make, frame, by, flip, fid_out=None):
         """Each region a statement of `kind` on `frame` (origin, normal, x), `make` its own fields."""
         for fid, regs in by.items():
+            if TEXT in regs:
+                self.emit_text(kind, op, make, frame, fid, flip, fid_out)
+                continue
             a = self.sk[fid][0]
             for pi, prof in enumerate(a.merged(sorted(set(regs)))):
                 loops = [self.loop_segs(a, lp, flip) for lp in prof]
@@ -1015,6 +1089,37 @@ class Tr:
                     self.lines.append(St("combine", word="add", target=self.current, tools=joined, keep=False))
                     self.alias.update((b, self.current) for b in joined)
                     self.bodies -= len(joined)
+
+    def emit_text(self, kind, op, make, frame, fid, flip, fid_out):
+        """A text sketch's texts, each an extrude of all its glyphs' regions (`sk.r0`). The text is never mirrored: a
+        sketch the extrude turns over (flip) keeps its frame and runs the other way."""
+        if kind != "extrude":
+            raise Unsupported("sketch text in a " + kind)
+        if flip:
+            o, n, x = frame
+            frame = (o, tuple(neg(t) for t in n), x)
+            e = make["ext"]
+            other = {"fwd": "back", "back": "fwd", "both": "both"}
+            if e[0] == "d":
+                e = ("d", neg(e[1]))
+            elif e[0] == "two":
+                e = ("two", e[2], e[1])
+            elif e[0] in ("thru", "next"):
+                e = (e[0], other[e[1]])
+            make = dict(make, ext=e)
+        for row in self.texts[fid][0]:
+            if row is None:
+                continue
+            st = St(kind, frame=frame, loops=[[row]], member="r0", **make)
+            joined = self.run_into(st) if op == "add" and self.bodies > 1 else []
+            label, this, scope = self.solid_line("new" if op == "add" and self.bodies > 1 else op, set(), fid_out)
+            st.label, st.op, st.scope = label or None, this, scope
+            self.lines.append(st)
+            self.notes.add("text")
+            if joined:
+                self.lines.append(St("combine", word="add", target=self.current, tools=joined, keep=False))
+                self.alias.update((b, self.current) for b in joined)
+                self.bodies -= len(joined)
 
     def mass_of(self, lines):
         """Volume and area of these statements as a part, summed over its bodies; None if they don't build."""
@@ -1045,9 +1150,13 @@ class Tr:
 
     def extrude(self, f):
         a, env = f["args"], f["env"]
-        for k in ("hasDraft", "hasSecondDirectionDraft"):
-            if a.get(k) is True:
-                raise Unsupported("draft on an extrude")
+        if a.get("hasSecondDirectionDraft") is True:
+            raise Unsupported("draft on an extrude's second direction")
+        taper = None
+        if a.get("hasDraft") is True:
+            # Forge's taper narrows the extrude for a positive angle, as Onshape's does with its pull direction flag set,
+            # and widens it without (measured on the pilot: both ways match the STEP to 1e-12). The value is in degrees
+            taper = num(self.val(a["draftAngle"]) * (1 if a.get("draftPullDirection") is True else -1))
         b = a.get("bodyType")
         if isinstance(b, tuple) and "SOLID" not in b[1]:
             raise Unsupported("a thin or surface extrude")
@@ -1100,9 +1209,19 @@ class Tr:
             elif bound == "UP_TO_NEXT":
                 head = ("next", "fwd")
             elif bound == "UP_TO_SURFACE":
-                c = self.carrier(single(a.get("endBoundEntityFace"), env), env)
+                q = single(a.get("endBoundEntityFace"), env)
+                c = self.carrier(q, env)
                 if not isinstance(c, OnPlane):
-                    raise Unsupported("up to a curved face")
+                    # Forge runs up to the faces themselves: `upto(FACES)`, named on the part as built
+                    if second or a.get("hasOffset") is True or taper is not None:
+                        raise Unsupported("up to a curved face, with an offset, a draft or a second direction")
+                    hs = self.faces_for([q], env)
+                    if not hs:
+                        raise Unresolved("no face on the carrier: up-to face")
+                    head = ("upto", self.select("faces", hs))
+                    self.solid[f["id"]] = {"kind": "extrude", "frame": fr, "lo": 0.0, "hi": None}
+                    self.emit_solid("extrude", op, {"ext": head}, frame, {fid: by[fid]}, opp, fid_out=f["id"])
+                    continue
                 w = dot(add(c.o, fr.o, -1), fr.n) * sgn
                 dn = abs(dot(c.n, fr.n))
                 if dn < 1 - 1e-9:
@@ -1115,7 +1234,12 @@ class Tr:
                 raise Unsupported("extrude bound " + bound)
             # lo, hi along the extrude's direction; records measure along the sketch normal
             self.solid[f["id"]] = {"kind": "extrude", "frame": fr, "lo": None if lo is None else lo * sgn, "hi": None if hi is None else hi * sgn}
-            self.emit_solid("extrude", op, {"ext": head}, frame, {fid: by[fid]}, opp, fid_out=f["id"])
+            make = {"ext": head}
+            if taper is not None:
+                if head[0] != "d" or second:
+                    raise Unsupported("draft on an extrude not to a depth")
+                make["taper"] = taper
+            self.emit_solid("extrude", op, make, frame, {fid: by[fid]}, opp, fid_out=f["id"])
 
     def revolve(self, f):
         a, env = f["args"], f["env"]
@@ -1214,77 +1338,10 @@ class Tr:
         return out
 
     def chain(self, pieces):
-        """Pieces joined end to end, turned to run one way; the closed flag. Unsupported if they branch or part."""
-        if len(pieces) == 1:
-            return pieces[:], is_ring(pieces[0])
-        left = pieces[1:]
-        run = [pieces[0]]
-        while left:
-            for i, p in enumerate(left):
-                if near3(run[-1].b, p.a):
-                    run.append(p)
-                elif near3(run[-1].b, p.b):
-                    run.append(p.rev())
-                elif near3(run[0].a, p.b):
-                    run.insert(0, p)
-                elif near3(run[0].a, p.a):
-                    run.insert(0, p.rev())
-                else:
-                    continue
-                del left[i]
-                break
-            else:
-                raise Unsupported("a path in separate pieces")
-        return run, near3(run[0].a, run[-1].b)
+        return chain_pieces(pieces)
 
     def path_from(self, run, closed, fr, near):
-        """Where the profile's plane crosses the path square to it: the path to sweep along from there, or two when
-        the crossing is inside the path. `near`, a point of the profile, picks among crossings."""
-        hits = []
-        for k, p in enumerate(run):
-            off = lambda q: dot(add(q, fr.o, -1), fr.n)
-            if p.c is None:
-                den = off(p.b) - off(p.a)
-                if abs(den) > 1e-12:
-                    t = -off(p.a) / den
-                    if -1e-9 <= t <= 1 + 1e-9:
-                        hits.append((k, min(max(t, 0.0), 1.0), add(p.a, add(p.b, p.a, -1), t), p.tangent(p.a)))
-                continue
-            r0 = add(p.a, p.c, -1)
-            at = lambda w: add(p.c, turned(r0, p.z, w))
-            n = 32
-            vals = [off(at(p.sweep * i / n)) for i in range(n + 1)]
-            if abs(dot(p.z, fr.n)) < 1e-6 and abs(off(p.c)) < 1e-4:
-                # the radius lies in the plane, twice a turn
-                th = math.atan2(-dot(r0, fr.n), dot(cross(p.z, r0), fr.n))
-                for w in (th + j * math.pi for j in range(-3, 4)):
-                    t = w / p.sweep
-                    if -1e-9 <= t <= 1 + 1e-9:
-                        q = at(w)
-                        hits.append((k, min(max(t, 0.0), 1.0), q, p.tangent(q)))
-            elif min(vals) < 0 < max(vals):
-                hits.append((k, 0.0, p.a, p.z))  # meets the plane, not square to it
-        square = [h for h in hits if math.sqrt(dot(cross(h[3], fr.n), cross(h[3], fr.n))) < 1e-6]
-        if not square:
-            raise Unsupported("a profile not square to its path" if hits else "a profile off its path")
-        k, t, _, _ = min(square, key=lambda h: math.dist(h[2], near))
-        p = run[k]
-        after = ([part(p, t, 1)] if t < 1 - 1e-9 else []) + run[k + 1:]
-        first = [part(p, t, 0)] if t > 1e-9 else []
-        if closed:
-            # a closed path has no cap to end on: both ways round from the profile, meeting at the far side
-            whole = after + run[:k] + first
-            half = sum(math.dist(x.a, x.b) if x.c is None else abs(x.sweep) * math.dist(x.a, x.c) for x in whole) / 2
-            out = []
-            for i, x in enumerate(whole):
-                l = math.dist(x.a, x.b) if x.c is None else abs(x.sweep) * math.dist(x.a, x.c)
-                if l >= half - 1e-9:
-                    out = whole[:i] + [part(x, half / l, 0)]
-                    tail = ([part(x, half / l, 1)] if half / l < 1 - 1e-9 else []) + whole[i + 1:]
-                    return [out, [y.rev() for y in reversed(tail)]]
-                half -= l
-        before = [x.rev() for x in reversed(run[:k] + first)]
-        return [x for x in (after, before) if x]
+        return path_from(run, closed, fr, near)
 
     def sweep(self, f):
         a, env = f["args"], f["env"]
@@ -1702,6 +1759,80 @@ class Tr:
                 getattr(self, f["op"])(f)
         if not self.lines:
             raise Unsupported("no solid feature")
+
+
+def chain_pieces(pieces):
+    """Pieces joined end to end, turned to run one way; the closed flag. Unsupported if they branch or part."""
+    if len(pieces) == 1:
+        return pieces[:], is_ring(pieces[0])
+    left = pieces[1:]
+    run = [pieces[0]]
+    while left:
+        for i, p in enumerate(left):
+            if near3(run[-1].b, p.a):
+                run.append(p)
+            elif near3(run[-1].b, p.b):
+                run.append(p.rev())
+            elif near3(run[0].a, p.b):
+                run.insert(0, p)
+            elif near3(run[0].a, p.a):
+                run.insert(0, p.rev())
+            else:
+                continue
+            del left[i]
+            break
+        else:
+            raise Unsupported("a path in separate pieces")
+    return run, near3(run[0].a, run[-1].b)
+
+def path_from(run, closed, fr, near):
+    """Where the profile's plane crosses the path square to it: the path to sweep along from there, or two when
+    the crossing is inside the path. `near`, a point of the profile, picks among crossings."""
+    hits = []
+    for k, p in enumerate(run):
+        off = lambda q: dot(add(q, fr.o, -1), fr.n)
+        if p.c is None:
+            den = off(p.b) - off(p.a)
+            if abs(den) > 1e-12:
+                t = -off(p.a) / den
+                if -1e-9 <= t <= 1 + 1e-9:
+                    hits.append((k, min(max(t, 0.0), 1.0), add(p.a, add(p.b, p.a, -1), t), p.tangent(p.a)))
+            continue
+        r0 = add(p.a, p.c, -1)
+        at = lambda w: add(p.c, turned(r0, p.z, w))
+        n = 32
+        vals = [off(at(p.sweep * i / n)) for i in range(n + 1)]
+        if abs(dot(p.z, fr.n)) < 1e-6 and abs(off(p.c)) < 1e-4:
+            # the radius lies in the plane, twice a turn
+            th = math.atan2(-dot(r0, fr.n), dot(cross(p.z, r0), fr.n))
+            for w in (th + j * math.pi for j in range(-3, 4)):
+                t = w / p.sweep
+                if -1e-9 <= t <= 1 + 1e-9:
+                    q = at(w)
+                    hits.append((k, min(max(t, 0.0), 1.0), q, p.tangent(q)))
+        elif min(vals) < 0 < max(vals):
+            hits.append((k, 0.0, p.a, p.z))  # meets the plane, not square to it
+    square = [h for h in hits if math.sqrt(dot(cross(h[3], fr.n), cross(h[3], fr.n))) < 1e-6]
+    if not square:
+        raise Unsupported("a profile not square to its path" if hits else "a profile off its path")
+    k, t, _, _ = min(square, key=lambda h: math.dist(h[2], near))
+    p = run[k]
+    after = ([part(p, t, 1)] if t < 1 - 1e-9 else []) + run[k + 1:]
+    first = [part(p, t, 0)] if t > 1e-9 else []
+    if closed:
+        # a closed path has no cap to end on: both ways round from the profile, meeting at the far side
+        whole = after + run[:k] + first
+        half = sum(math.dist(x.a, x.b) if x.c is None else abs(x.sweep) * math.dist(x.a, x.c) for x in whole) / 2
+        out = []
+        for i, x in enumerate(whole):
+            l = math.dist(x.a, x.b) if x.c is None else abs(x.sweep) * math.dist(x.a, x.c)
+            if l >= half - 1e-9:
+                out = whole[:i] + [part(x, half / l, 0)]
+                tail = ([part(x, half / l, 1)] if half / l < 1 - 1e-9 else []) + whole[i + 1:]
+                return [out, [y.rev() for y in reversed(tail)]]
+            half -= l
+    before = [x.rev() for x in reversed(run[:k] + first)]
+    return [x for x in (after, before) if x]
 
 
 def near3(a, b):

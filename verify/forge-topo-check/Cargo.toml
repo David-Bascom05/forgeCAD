@@ -1,0 +1,17 @@
+[package]
+name = "forge-topo-check"
+description = "forge_topo::check's combinatorial part against its Lean model (lean/), and what check takes as given"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+forge-math = { path = "../../kernel/forge-math" }
+forge-geom = { path = "../../kernel/forge-geom" }
+forge-topo = { path = "../../kernel/forge-topo" }
+forge-ops = { path = "../../kernel/forge-ops" }
+forge-model = { path = "../../kernel/forge-model" }
+
+[lints]
+workspace = true

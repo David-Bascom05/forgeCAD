@@ -2,8 +2,7 @@
 //! eight lines, four holes, a slot of two lines and two arcs, dimensioned by params.
 //!   sketchbench [CASE] [N]   N: only that many calls of the one case named (for counting
 //!                            instructions)
-//! (The .fc sketch's horizontal and vertical distances have no word in the language: those
-//! points are placed by their coordinates here.)
+//! (The points are placed by their coordinates here, not by horizontal and vertical distances.)
 use std::time::Instant;
 
 const PARAMS: &str = "shared w = 80\nshared h = 50\nshared wall = 2\nshared r = wall * 2 + 1\nshared d = sqrt(w ^ 2 + h ^ 2) / 4\n";

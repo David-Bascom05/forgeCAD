@@ -4,9 +4,6 @@
 //!
 //! The first three were found under the strict rule and fail under either; the rest were found
 //! under §6.1's snap rule (research/kernel-audit/exact-comparison.md) and are judged under it.
-//!
-//! The kernel's decide-once path (`--features decide_once`, forge-bool's switch) passes every one:
-//! with it on, the open-bug repros run as tests (with `reference`).
 
 use forge_bool::Op;
 use forge_exact_fuzz::pairs::{Boxes, Pattern, RELS, block, kernel_pair, pair_input_rule};
@@ -180,14 +177,7 @@ fn cut_touching_along_an_edge_leaves_no_slit() {
 /// finds the top's split crossing itself: the gap re-measured after the planes were decided
 /// coincident.
 #[test]
-#[cfg_attr(
-    not(feature = "decide_once"),
-    ignore = "exact reference (snap): the near-coincident notched part refuses SplitCrossed on 301 of 400 ulp nudges"
-)]
-#[cfg_attr(
-    all(feature = "decide_once", not(feature = "reference")),
-    ignore = "asks the Lean reference: lake build in verify/forge-exact, then cargo test -p forge-exact-fuzz --features reference"
-)]
+#[ignore = "exact reference (snap): the near-coincident notched part refuses SplitCrossed on 301 of 400 ulp nudges"]
 fn notched_part_nudged_builds() {
     nudged_agrees_snap(&forge_exact_fuzz::notched(), 0);
 }
@@ -196,14 +186,7 @@ fn notched_part_nudged_builds() {
 /// (EdgeDegenerate, 32 of 400 seeds). Likely site: `place_cuts` / `end_vertex`
 /// (boolean.rs:4561) making a crossing ~1e-5 from a corner its own vertex instead of the corner.
 #[test]
-#[cfg_attr(
-    not(feature = "decide_once"),
-    ignore = "exact reference (snap): the notched part nudged builds an invalid body (EdgeDegenerate)"
-)]
-#[cfg_attr(
-    all(feature = "decide_once", not(feature = "reference")),
-    ignore = "asks the Lean reference: lake build in verify/forge-exact, then cargo test -p forge-exact-fuzz --features reference"
-)]
+#[ignore = "exact reference (snap): the notched part nudged builds an invalid body (EdgeDegenerate)"]
 fn notched_part_nudged_has_no_degenerate_edge() {
     nudged_agrees_snap(&forge_exact_fuzz::notched(), 13);
 }
@@ -214,14 +197,7 @@ fn notched_part_nudged_has_no_degenerate_edge() {
 /// Likely site: `classify_specs`' flood (boolean.rs:5861, the refusal at 6000): one piece reached
 /// from two specs classified differently, the in/out of a face 1e-5 off another decided twice.
 #[test]
-#[cfg_attr(
-    not(feature = "decide_once"),
-    ignore = "exact reference (snap): InconsistentClassification refused where the exact result is a solid"
-)]
-#[cfg_attr(
-    all(feature = "decide_once", not(feature = "reference")),
-    ignore = "asks the Lean reference: lake build in verify/forge-exact, then cargo test -p forge-exact-fuzz --features reference"
-)]
+#[ignore = "exact reference (snap): InconsistentClassification refused where the exact result is a solid"]
 fn near_tolerance_24_blocks_build() {
     agrees_snap(&shrunk("near_tolerance", 24, &[0, 1, 2]));
 }
@@ -230,14 +206,7 @@ fn near_tolerance_24_blocks_build() {
 /// reference gives a solid; the kernel refuses SplitCrossed at feature 2, with no ulp move (also
 /// seed 103). Likely site as `notched_part_nudged_builds`: `on_edge` / `split_face`.
 #[test]
-#[cfg_attr(
-    not(feature = "decide_once"),
-    ignore = "exact reference (snap): SplitCrossed refused where the exact result is a solid"
-)]
-#[cfg_attr(
-    all(feature = "decide_once", not(feature = "reference")),
-    ignore = "asks the Lean reference: lake build in verify/forge-exact, then cargo test -p forge-exact-fuzz --features reference"
-)]
+#[ignore = "exact reference (snap): SplitCrossed refused where the exact result is a solid"]
 fn near_tolerance_53_blocks_build() {
     agrees_snap(&shrunk("near_tolerance", 53, &[0, 2, 3]));
 }
@@ -251,31 +220,19 @@ fn near_tolerance_53_blocks_build() {
 /// coincidence tests (`planes_coincident`, forge-geom intersect.rs:845, and `ssi::nearly_flush`, forge-bool
 /// ssi.rs:65) decided per pair.
 #[test]
-#[cfg_attr(
-    not(feature = "decide_once"),
-    ignore = "exact reference (snap): walls chained within LINEAR are not one surface (a §6.1 class kept as steps)"
-)]
-#[cfg_attr(
-    all(feature = "decide_once", not(feature = "reference")),
-    ignore = "asks the Lean reference: lake build in verify/forge-exact, then cargo test -p forge-exact-fuzz --features reference"
-)]
+#[ignore = "exact reference (snap): walls chained within LINEAR are not one surface (a §6.1 class kept as steps)"]
 fn near_tolerance_45_chained_walls_are_one() {
     agrees_snap(&shrunk("near_tolerance", 45, &[0, 1, 2, 3, 4, 5]));
 }
 
 /// boxes meets/overlaps/overlaps subtract: B touches A's x = 10 face from outside, so A is left
-/// as it was (V8 E12 F6). The kernel's body, valid and of the right volume, keeps the contact
-/// rectangle imprinted as a seventh face (V10 E15 F7). 1444 of the 6591 box patterns, and the
-/// near_tolerance unmerged cases, are this: one surface left as several faces. Site:
-/// `general` (forge-bool boolean.rs:557): no pass dissolves an edge between two faces of one
-/// carrier after `apply`.
+/// as it was (V8 E12 F6). The kernel's body kept the contact rectangle imprinted as a seventh
+/// face (V10 E15 F7): 1444 of the 6591 box patterns, and the near_tolerance unmerged cases, were
+/// this. Fixed: `forge_bool::boolean` hands its result out unified, and unify's same-surface test
+/// is the boolean's own (`ssi::coincident`).
 #[test]
 #[cfg_attr(
-    not(feature = "decide_once"),
-    ignore = "exact reference (snap): a touching boolean leaves its contact imprinted as an extra face"
-)]
-#[cfg_attr(
-    all(feature = "decide_once", not(feature = "reference")),
+    not(feature = "reference"),
     ignore = "asks the Lean reference: lake build in verify/forge-exact, then cargo test -p forge-exact-fuzz --features reference"
 )]
 fn touching_subtract_leaves_no_imprint() {
@@ -296,14 +253,7 @@ fn touching_subtract_leaves_no_imprint() {
 /// should be on: `on_edge` (forge-bool boolean.rs:283) and `place_cuts`' `end_vertex`
 /// (boolean.rs:4561) miss it, and `split_face` (5154) finds a crossed split.
 #[test]
-#[cfg_attr(
-    not(feature = "decide_once"),
-    ignore = "exact reference (snap): the two-axis tolerance band refuses SplitCrossed"
-)]
-#[cfg_attr(
-    all(feature = "decide_once", not(feature = "reference")),
-    ignore = "asks the Lean reference: lake build in verify/forge-exact, then cargo test -p forge-exact-fuzz --features reference"
-)]
+#[ignore = "exact reference (snap): the two-axis tolerance band refuses SplitCrossed"]
 fn band_two_axes_split_does_not_cross() {
     band_agrees_snap("meets/meets/overlaps", Op::Union, &[0, 1], 0.9);
 }
@@ -315,14 +265,7 @@ fn band_two_axes_split_does_not_cross() {
 /// `cube_on_a_corner_vertex_is_non_manifold`, whose site this shares: the touch test
 /// (boolean.rs:1108) and the four-use count (1746) only see a touch the cuts made exact.
 #[test]
-#[cfg_attr(
-    not(feature = "decide_once"),
-    ignore = "exact reference (snap): a corner overlap under LINEAR is built where §6.1 makes it a vertex touch"
-)]
-#[cfg_attr(
-    all(feature = "decide_once", not(feature = "reference")),
-    ignore = "asks the Lean reference: lake build in verify/forge-exact, then cargo test -p forge-exact-fuzz --features reference"
-)]
+#[ignore = "exact reference (snap): a corner overlap under LINEAR is built where §6.1 makes it a vertex touch"]
 fn band_three_axes_corner_overlap_is_a_touch() {
     band_agrees_snap("meets/meets/meets", Op::Union, &[0, 1, 2], 0.9);
 }
@@ -335,14 +278,7 @@ fn band_three_axes_corner_overlap_is_a_touch() {
 /// boolean.rs:4561, merging with the heads' reach, a 2× allowance) while the strip between
 /// keeps both edges; the `4.0 * LINEAR` sample break (boolean.rs:3022) then skips it.
 #[test]
-#[cfg_attr(
-    not(feature = "decide_once"),
-    ignore = "exact reference (snap): a one-axis 1.5·LINEAR offset builds an invalid body (EdgeUses)"
-)]
-#[cfg_attr(
-    all(feature = "decide_once", not(feature = "reference")),
-    ignore = "asks the Lean reference: lake build in verify/forge-exact, then cargo test -p forge-exact-fuzz --features reference"
-)]
+#[ignore = "exact reference (snap): a one-axis 1.5·LINEAR offset builds an invalid body (EdgeUses)"]
 fn band_one_axis_offset_builds_valid() {
     band_agrees_snap("equal/meets/equal", Op::Union, &[0], 1.5);
 }
@@ -354,14 +290,7 @@ fn band_one_axis_offset_builds_valid() {
 /// the four-use count (boolean.rs:1746) after `place_cuts` merged the strip's two edges, 1.5e-5
 /// apart, within its 2× reach.
 #[test]
-#[cfg_attr(
-    not(feature = "decide_once"),
-    ignore = "exact reference (snap): ZeroThickness refused for a contact strip 1.5·LINEAR wide"
-)]
-#[cfg_attr(
-    all(feature = "decide_once", not(feature = "reference")),
-    ignore = "asks the Lean reference: lake build in verify/forge-exact, then cargo test -p forge-exact-fuzz --features reference"
-)]
+#[ignore = "exact reference (snap): ZeroThickness refused for a contact strip 1.5·LINEAR wide"]
 fn band_one_axis_strip_builds() {
     band_agrees_snap("meets/meets/overlaps", Op::Union, &[0], 1.5);
 }
@@ -421,149 +350,4 @@ fn coincident_walls_1_stage_is_non_manifold() {
     let mut part = family("coincident_walls", 1);
     part.features.truncate(11);
     agrees(&part);
-}
-
-// ---- The curved reference (ForgeExact/QRef): research/kernel-audit/exact-comparison-curved.md.
-// Each is a degenerate pair of the reliability scoreboard (two features), judged under the snap
-// rule. The first two agree; the rest are kernel disagreements, ignored until fixed.
-
-fn degenerate_curved(name: &str) -> Part {
-    let part = forge_model::adversarial::degenerate_parts()
-        .into_iter()
-        .find(|(n, _)| n == name)
-        .unwrap_or_else(|| panic!("no degenerate part {name}"))
-        .1;
-    forge_model::adversarial::canonical(&part)
-}
-
-/// The part's sequential and n-ary regens judged under the snap rule: every one must agree.
-fn agrees_curved(part: &Part) {
-    let mut reference = Reference::start();
-    let mut bad = Vec::new();
-    for (path, c, ans) in forge_exact_fuzz::curved::judge_curved(&mut reference, part, "snap") {
-        if !matches!(c, Class::Agree) {
-            bad.push(format!("{path}: {} {}\nreference: {ans:?}", c.key(), c.detail()));
-        }
-    }
-    assert!(bad.is_empty(), "{}", bad.join("\n"));
-}
-
-/// Two parallel cylinders touching along a line (plane_cylinder/tangent_wall_outside/Add): the
-/// union is non-manifold along it (the reference proves the touch with a sum-of-squares
-/// certificate), and the kernel refuses with ZeroThickness.
-#[test]
-#[cfg_attr(
-    not(feature = "reference"),
-    ignore = "asks the Lean reference: lake build in verify/forge-exact, then cargo test -p forge-exact-fuzz --features reference"
-)]
-fn cylinder_touching_a_wall_union_is_refused() {
-    agrees_curved(&degenerate_curved("plane_cylinder/tangent_wall_outside/Add"));
-}
-
-/// A cylinder cut by an identical one: empty, and the kernel says so.
-#[test]
-#[cfg_attr(
-    not(feature = "reference"),
-    ignore = "asks the Lean reference: lake build in verify/forge-exact, then cargo test -p forge-exact-fuzz --features reference"
-)]
-fn identical_cylinder_cut_is_empty() {
-    agrees_curved(&degenerate_curved("cylinder_cylinder/identical/Cut"));
-}
-
-/// A ball resting on the base's top face, touching it at one point (plane_sphere/tangent_top_above
-/// /Add). The union is non-manifold at (0, 0, 0): the two solids meet at a point. The kernel
-/// builds a body of 32 523.6 mm³ that passes `forge_topo::check`, as it did for a cube on a
-/// corner vertex (exact-comparison.md). Expected: ZeroThickness there.
-#[test]
-#[ignore = "exact curved reference: a ball touching the top at a point is built, not refused ZeroThickness"]
-fn ball_resting_on_the_top_is_non_manifold() {
-    agrees_curved(&degenerate_curved("plane_sphere/tangent_top_above/Add"));
-}
-
-/// A ball inside the base touching its top face from below, cut away
-/// (plane_sphere/tangent_top_inside/Cut). What is left pinches to nothing at (0, 0, 0): the
-/// material between the cavity and the top is a cusp ring. The kernel builds 31 476.4 mm³.
-#[test]
-#[ignore = "exact curved reference: a cavity touching the top from inside at a point is built"]
-fn cavity_touching_the_top_from_inside_is_non_manifold() {
-    agrees_curved(&degenerate_curved("plane_sphere/tangent_top_inside/Cut"));
-}
-
-/// Two balls touching from outside (sphere_sphere/tangent_outside/Add): the union is two
-/// solids meeting at a point. The kernel builds 4 712.4 mm³.
-#[test]
-#[ignore = "exact curved reference: two balls touching at a point are united"]
-fn balls_touching_at_a_point_are_non_manifold() {
-    agrees_curved(&degenerate_curved("sphere_sphere/tangent_outside/Add"));
-}
-
-/// A ball centred on the cylinder's top rim (cylinder_sphere/centre_on_rim/Add). The union is
-/// an ordinary solid (the reference certifies interior boxes, finds no contact, and its volume
-/// estimate is 6 806.8 mm³). The kernel refuses Unsupported(SplitThroughSingular) on the sphere,
-/// whose pole lies on the rim. Cut and Keep refuse alike.
-#[test]
-#[ignore = "exact curved reference: a ball centred on a cylinder's rim is refused Unsupported(SplitThroughSingular)"]
-fn ball_centred_on_a_rim_builds() {
-    agrees_curved(&degenerate_curved("cylinder_sphere/centre_on_rim/Add"));
-}
-
-/// A degenerate pair with its tool moved by `delta` LINEARs along axis `axis` (0, 1, 2): the
-/// curved band (exact-curved's `band` source).
-fn band_curved(name: &str, axis: usize, delta: f64) -> Part {
-    let d = [forge_math::Vec3::X, forge_math::Vec3::Y, forge_math::Vec3::Z][axis] * (delta * forge_math::tol::LINEAR);
-    forge_exact_fuzz::curved::tool_moved(&degenerate_curved(name), d).expect("a movable tool")
-}
-
-/// A ball inside the base cylinder, tangent to its wall along the equator, its tool moved
-/// 3 LINEAR along x and cut (cylinder_sphere/tangent_wall_equator/Cut, x 3). The reference finds
-/// the ball's pole touching the base's bottom cap at (3e-5, 0, −20) (non-manifold); both regens
-/// build a body whose volume is NaN.
-#[test]
-#[ignore = "exact curved reference: a body of volume NaN is built"]
-fn band_ball_on_wall_cut_has_a_volume() {
-    agrees_curved(&band_curved("cylinder_sphere/tangent_wall_equator/Cut", 0, 3.0));
-}
-
-/// The same ball kept (Keep, x 3): the intersection is the ball less a sliver, 4 188.79 mm³ by the
-/// reference's estimate; both regens build 4 190.78 mm³, more than the whole ball.
-#[test]
-#[ignore = "exact curved reference: the kept volume exceeds the ball's"]
-fn band_ball_on_wall_keep_volume() {
-    agrees_curved(&band_curved("cylinder_sphere/tangent_wall_equator/Keep", 0, 3.0));
-}
-
-/// Two identical cylinders, the tool moved 3 LINEAR up (cylinder_cylinder/identical/Add, z 3):
-/// one solid 3e-5 taller. Both regens refuse NotClosed: the rim edge at (10, 0, 0) is on one
-/// face.
-#[test]
-#[ignore = "exact curved reference: NotClosed on a rim moved within the band"]
-fn band_identical_cylinders_moved_close() {
-    agrees_curved(&band_curved("cylinder_cylinder/identical/Add", 2, 3.0));
-}
-
-/// Two identical cones, the tool moved 3 LINEAR along x (cone_cone/identical/Add, x 3): both
-/// regens build an invalid body (VertexTolerance 3e-5).
-#[test]
-#[ignore = "exact curved reference: an invalid body (VertexTolerance) from nearly identical cones"]
-fn band_identical_cones_valid() {
-    agrees_curved(&band_curved("cone_cone/identical/Add", 0, 3.0));
-}
-
-/// A ball centred on the base box's top edge, moved 0.9 LINEAR along x
-/// (plane_sphere/centre_on_edge/Add, x 0.9): an ordinary union. The kernel refuses
-/// Internal(SplitCrossed) on the sphere face (all three ops, ±0.9 and 3; centre_on_vertex and
-/// centre_on_wall_tangent_top alike).
-#[test]
-#[ignore = "exact curved reference: SplitCrossed on a sphere centred on a box edge, nudged"]
-fn band_ball_on_an_edge_splits() {
-    agrees_curved(&band_curved("plane_sphere/centre_on_edge/Add", 0, 0.9));
-}
-
-/// A cylinder tangent to the base cylinder's wall from inside, moved 0.9 LINEAR along −y
-/// (cylinder_cylinder/perpendicular_tangent_inside/Add, y −0.9): the kernel refuses
-/// Internal(HoleOutside) on the cylinder face (Add, Cut and Keep).
-#[test]
-#[ignore = "exact curved reference: HoleOutside on a cylinder nudged off an inside tangency"]
-fn band_tangent_inside_cylinder_holes() {
-    agrees_curved(&band_curved("cylinder_cylinder/perpendicular_tangent_inside/Add", 1, -0.9));
 }

@@ -34,7 +34,16 @@ fn quadric_pair(name: &str) -> bool {
 }
 
 fn lang_kinds() -> u64 {
-    let names = ["extrude", "revolve", "ball", "hole", "pattern", "workplane", "param", "sketch"];
+    let names = [
+        "extrude",
+        "revolve",
+        "ball",
+        "hole",
+        "pattern",
+        "workplane",
+        "param",
+        "sketch",
+    ];
     forge_lang::fuzz::MAKERS
         .iter()
         .enumerate()
@@ -65,14 +74,19 @@ fn adv(name: String, part: Part) -> Case {
 const BAND: [f64; 3] = [0.9, -0.9, 3.0];
 
 fn cases(sources: &[String], seeds: u64, lang: u64) -> Vec<Case> {
-    let on = |s: &str| sources.is_empty() && s != "band" && s != "torusband" || sources.iter().any(|x| x == s);
+    let on =
+        |s: &str| sources.is_empty() && s != "band" && s != "torusband" || sources.iter().any(|x| x == s);
     let mut out = Vec::new();
     if on("degen") || on("band") || on("torus") || on("torusband") {
         for (name, part) in forge_model::adversarial::degenerate_parts() {
             if name.starts_with("plane_plane") {
                 continue;
             }
-            let (whole, band) = if quadric_pair(&name) { ("degen", "band") } else { ("torus", "torusband") };
+            let (whole, band) = if quadric_pair(&name) {
+                ("degen", "band")
+            } else {
+                ("torus", "torusband")
+            };
             if on(whole) {
                 out.push(adv(name.clone(), part.clone()));
             }
@@ -170,9 +184,20 @@ fn main() {
                 let c = &cs[i];
                 let t = std::time::Instant::now();
                 for (path, class, ans) in judge_curved(&mut reference, &c.part, &rule) {
-                    let oracle = ans.as_ref().filter(|_| path == "sequential").and_then(oracle_class);
+                    let oracle = ans
+                        .as_ref()
+                        .filter(|_| path == "sequential")
+                        .and_then(oracle_class);
                     let note = ans.and_then(|a| a.notes.first().cloned()).unwrap_or_default();
-                    tx.send(Judged { name: c.name.clone(), path, class, case: i, note, oracle }).expect("send");
+                    tx.send(Judged {
+                        name: c.name.clone(),
+                        path,
+                        class,
+                        case: i,
+                        note,
+                        oracle,
+                    })
+                    .expect("send");
                 }
                 eprintln!("{} ({:.1}s)", c.name, t.elapsed().as_secs_f64());
             }
@@ -229,7 +254,9 @@ fn main() {
     let mut scope: BTreeMap<String, usize> = BTreeMap::new();
     for j in &all {
         if let Class::Scope(s) = &j.class {
-            *scope.entry(s.split(':').next_back().unwrap_or("").trim().to_string()).or_default() += 1;
+            *scope
+                .entry(s.split(':').next_back().unwrap_or("").trim().to_string())
+                .or_default() += 1;
         }
     }
     for (s, n) in scope {

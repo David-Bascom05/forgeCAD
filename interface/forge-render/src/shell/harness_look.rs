@@ -185,7 +185,7 @@ pub fn cross_section(p: &Painter, t: &Theme, r: Rect, s: &Section, callouts: boo
         pos2(wx_out + 17.0, wy),
         Align2::LEFT_CENTER,
         format!("wall {}", super::fg::short((wall * 100.0).round() / 100.0)),
-        mono(10.5),
+        mono(11.0),
         ink,
     );
 }
@@ -209,7 +209,7 @@ pub fn header(ui: &mut Ui, t: &Theme, s: &Section, title: &str, sub: &str, pills
         t.ink,
     );
     // the spec line wraps (two lines at most), the pills go under it
-    let mut job = egui::text::LayoutJob::simple(sub.to_string(), sans(12.5), t.ink2, r.right() - 14.0 - x);
+    let mut job = egui::text::LayoutJob::simple(sub.to_string(), sans(13.0), t.ink2, r.right() - 14.0 - x);
     job.wrap.max_rows = 2;
     let g = ui.fonts_mut(|f| f.layout_job(job));
     let sub_h = g.size().y;
@@ -217,7 +217,7 @@ pub fn header(ui: &mut Ui, t: &Theme, s: &Section, title: &str, sub: &str, pills
     let mut px = x;
     let mut py = r.top() + 52.0 + sub_h + 20.0;
     for pl in pills.iter().filter(|x| !x.is_empty()) {
-        let g = p.layout_no_wrap(pl.clone(), medium(10.5), t.on_ink);
+        let g = p.layout_no_wrap(pl.clone(), medium(11.0), t.on_ink);
         if px + g.size().x + 20.0 > r.right() - 10.0 {
             px = x;
             py += 24.0;
@@ -242,7 +242,7 @@ pub fn field(ui: &mut Ui, t: &Theme, label: &str, h: f32) -> Rect {
         pos2(r.left() + 16.0, r.center().y),
         Align2::LEFT_CENTER,
         label,
-        sans(12.5),
+        sans(13.0),
         t.ink2,
     );
     Rect::from_min_max(
@@ -259,14 +259,14 @@ pub fn value_row(ui: &mut Ui, t: &Theme, label: &str, value: &str, unit: &str, c
     let font = if value.parse::<f64>().is_ok() || value.contains('›') {
         mono(12.0)
     } else {
-        sans(12.5)
+        sans(13.0)
     };
     let g = p.layout_no_wrap(value.to_string(), font, t.ink);
     let gw = g.size().x;
     p.galley(pos2(r.left(), r.center().y - g.size().y / 2.0), g, t.ink);
     let mut x = r.left() + gw + 5.0;
     if !unit.is_empty() {
-        let u = p.layout_no_wrap(unit.to_string(), sans(11.5), t.ink2);
+        let u = p.layout_no_wrap(unit.to_string(), sans(12.0), t.ink2);
         let uw = u.size().x;
         p.galley(pos2(x, r.center().y - u.size().y / 2.0), u, t.ink2);
         x += uw + 8.0;
@@ -304,7 +304,7 @@ pub fn edit_row(
             pos2(r.right() - 50.0, r.center().y),
             Align2::LEFT_CENTER,
             unit,
-            sans(11.5),
+            sans(12.0),
             t.ink2,
         );
     }
@@ -833,7 +833,7 @@ fn wire_type_body(
                                 pos2(r.right() - 8.0, r.center().y),
                                 Align2::RIGHT_CENTER,
                                 format!("= {now}"),
-                                mono(11.5),
+                                mono(12.0),
                                 t.ink2,
                             );
                         }
@@ -941,7 +941,7 @@ fn library_body(
     let cy = bar.top() + 62.0;
     for w in &words {
         let on = chips.contains(w);
-        let g = p.layout_no_wrap(w.clone(), medium(11.5), if on { t.on_ink } else { t.ink2 });
+        let g = p.layout_no_wrap(w.clone(), medium(12.0), if on { t.on_ink } else { t.ink2 });
         let cr = Rect::from_min_size(pos2(x, cy - 12.0), vec2(g.size().x + 22.0, 24.0));
         let resp = ui.interact(cr, ui.scope_id().with(("chip", w)), Sense::click());
         p.rect_filled(
@@ -978,7 +978,7 @@ fn library_body(
             cr.center(),
             Align2::CENTER_CENTER,
             "Clear",
-            sans(11.5),
+            sans(12.0),
             if resp.hovered() { t.ink } else { t.ink2 },
         );
         if resp.clicked() {
@@ -1059,7 +1059,7 @@ fn library_body(
                     Align2::LEFT_CENTER
                 },
                 name.to_uppercase(),
-                semi(10.5),
+                semi(11.0),
                 ink,
             );
             if col == k {
@@ -1112,7 +1112,7 @@ fn library_body(
                         Rect::from_center_size(pos2(sw.left() + 12.0, rr.center().y), vec2(24.0, 24.0));
                     let sec = Section::of(&|k: &str| r.get(k), "", &r.name);
                     cross_section(&p, t, mini, &sec, false);
-                    clipped(ui, cell(1), &r.name, medium(12.5), t.ink, &format!("lib-n{i}"));
+                    clipped(ui, cell(1), &r.name, medium(13.0), t.ink, &format!("lib-n{i}"));
                     let gauge = if !r.get("awg").is_empty() {
                         format!("{} AWG", r.get("awg"))
                     } else if !r.get("mm2").is_empty() {
@@ -1152,7 +1152,7 @@ fn library_body(
                             pos2(cell(5).right(), rr.center().y),
                             Align2::RIGHT_CENTER,
                             &od,
-                            mono(11.5),
+                            mono(12.0),
                             t.ink,
                         );
                     }
@@ -1273,7 +1273,7 @@ fn library_body(
                 pos2(pv.right() - 16.0, pv.bottom() - 14.0),
                 Align2::RIGHT_CENTER,
                 from,
-                mono(10.5),
+                mono(11.0),
                 t.ink2,
             );
         }
@@ -1282,7 +1282,7 @@ fn library_body(
                 pv.center(),
                 Align2::CENTER_CENTER,
                 format!("{} wire types", shown.len()),
-                sans(12.5),
+                sans(13.0),
                 t.ink2,
             );
         }
@@ -1401,7 +1401,7 @@ fn wire_body(ui: &mut Ui, t: &Theme, d: &mut Dialog, hs: &[HarnessOut], places: 
                     card.left_top() + vec2(12.0, 14.0),
                     Align2::LEFT_CENTER,
                     label.to_uppercase(),
-                    semi(10.5),
+                    semi(11.0),
                     t.ink2,
                 );
                 let pins: Vec<String> = conns
@@ -1454,7 +1454,7 @@ fn wire_body(ui: &mut Ui, t: &Theme, d: &mut Dialog, hs: &[HarnessOut], places: 
                 if pins.is_empty() {
                     pui.add(
                         egui::TextEdit::singleline(pin)
-                            .font(mono(12.5))
+                            .font(mono(13.0))
                             .desired_width(pr.width())
                             .margin(vec2(7.0, 5.0)),
                     );
@@ -1494,7 +1494,7 @@ fn wire_body(ui: &mut Ui, t: &Theme, d: &mut Dialog, hs: &[HarnessOut], places: 
                     card.left_bottom() + vec2(12.0, -14.0),
                     Align2::LEFT_CENTER,
                     face,
-                    mono(10.5),
+                    mono(11.0),
                     t.ink2,
                 );
                 let at = format!("{c}.{pin}");
@@ -1515,7 +1515,7 @@ fn wire_body(ui: &mut Ui, t: &Theme, d: &mut Dialog, hs: &[HarnessOut], places: 
                 .map(|x| format!("{}    {}", x.name, line_of(&|k: &str| bare(x.get(k)))))
                 .unwrap_or_else(|| ty.clone());
             let rr = egui::ComboBox::from_id_salt("harness-wire-type")
-                .selected_text(egui::RichText::new(shown).font(sans(12.5)))
+                .selected_text(egui::RichText::new(shown).font(sans(13.0)))
                 .width(r.width())
                 .show_ui(&mut tui, |ui| {
                     for x in &ho.types {
@@ -1538,14 +1538,14 @@ fn wire_body(ui: &mut Ui, t: &Theme, d: &mut Dialog, hs: &[HarnessOut], places: 
                             pos2(row.left() + 34.0, row.center().y),
                             Align2::LEFT_CENTER,
                             &x.name,
-                            medium(12.5),
+                            medium(13.0),
                             t.ink,
                         );
                         ui.painter().text(
                             pos2(row.left() + 90.0, row.center().y),
                             Align2::LEFT_CENTER,
                             line_of(&|k: &str| bare(x.get(k))),
-                            sans(11.5),
+                            sans(12.0),
                             t.ink2,
                         );
                         if resp.clicked() {
