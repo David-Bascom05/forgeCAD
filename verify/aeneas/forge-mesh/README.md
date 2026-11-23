@@ -46,8 +46,18 @@ tools/aeneas/translate.sh forge-mesh      # Types.lean, Funs.lean, the templates
 cd verify/aeneas/forge-mesh/lean && lake build
 ```
 
-## Next
+## The statements (`lean/ForgeMesh/Spec.lean`)
 
-The statements of research's tessellation plan (M1/M2, with fix-mesh-asm): refinement ends or
-refuses typed (`Unsettled`, `TooFine`); every constraint edge is an edge of the result; the
-triangles are counter-clockwise, interior-disjoint, and cover the even-odd region of the loops.
+Props about the translated `cdt.within` with `ROUNDS`, over exact ℚ geometry, taking the
+predicates at their contract (`OrientSound`: orient2d sign-exact; `InCircleSound`:
+certainly_in_circle true only when d is inside) for points within `RANGE`, and a `Total`
+refinement:
+- `Ends` (T): it returns `ok` (never fails, panics, overflows or diverges): a triangulation, or
+  a typed refusal; unless `as_far`, a triangulation returned is settled (else `Unsettled` or
+  `TooFine`).
+- `Correct` (C, P): for a boundary that is not tangled, a triangulation returned is `Good`: the
+  input points come first; every triangle is counter-clockwise; every loop edge is an edge of
+  some triangle; no two triangles overlap; and a point on no loop edge is in a triangle exactly
+  when a ray from it crosses an odd number of loop edges.
+They are the boundary proposed to fix-mesh-asm (the tessellation plan's M1/M2: what a settled
+refinement means for the chord is theirs). The proofs are next.
