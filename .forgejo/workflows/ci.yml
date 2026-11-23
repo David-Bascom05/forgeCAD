@@ -215,3 +215,7 @@ jobs:
         run: |
           "$HOME/occt/bin/python" -u tools/occt/oracle.py parts.json --jobs 4 --timeout 150 \
             --show 0 --gate --known tools/occt/known.txt
+      - name: sheets and thin walls against OpenCascade (any disagreement fails)
+        run: |
+          cargo build --release -p forge-lang --example fgmeasure
+          "$HOME/occt/bin/python" -I -u tools/occt/sheets.py --measure target/release/examples/fgmeasure
