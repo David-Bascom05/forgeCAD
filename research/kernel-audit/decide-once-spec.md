@@ -182,6 +182,101 @@ are local to each edge and vertex. The Lean's lists stand for arena vectors and 
 by rounds) for a union–find: the Rust should use a union–find and index maps, and is proven equal
 by the classes being the same sets (`cls_spec`), not by the same steps.
 
+## 3a. The local ledger: the region and its frontier (2026-11-23)
+
+**Why.** §3 splits each face at every carrier crossing it. In a sequential history the target
+grows, and its big faces carry every earlier tool's walls through them. On `coplanar` (a plate
+gaining ~100 coplanar bosses, one boolean each) the ledger reaches 7 360 pieces and 40 000 cells
+by step 30, every boolean rebuilds all of it, and the regen takes 230 s against the old path's
+0.1 s. The op changes nothing far from its tools, so the ledger is built over a region round them.
+Everything outside passes through. The core is unchanged: the region is a decision of the bridge,
+made once and stated here so that (b) and (c) carry over.
+
+**The region** (decided once per boolean, from the inputs alone):
+- Body 0 is the target; bodies `1 .. nb` are the tools. `B` = the hull of the tools' boxes (their
+  kernel vertices), and `R` = `B` grown by `G` on every side. `G` is the least power of two
+  ≥ 8·LINEAR such that no wall of `R` (the six axis planes `x = R.lo.x`, …) is, as a point set, a
+  carrier of any face of any input. If one is, `G` doubles, deterministically. So the walls are
+  dyadic and are never carriers.
+- **Applicability.** The rule must give `ρ(∅) = false`: outside every tool, the result is body 0
+  if `ρ(e₀)` (union, difference, a history of adds and cuts from body 0), and empty if not
+  (intersection). Otherwise, and also if the snap (§2.1, decided over **all** faces of all
+  inputs) moves any face whose box does not meet `R`, the region is everything (`R = ⊤`). That is
+  §3 as before, not a fallback to another path.
+- **Near and far.** A face is *near* if its box meets the closed `R`, else *far*. Every tool face
+  is near.
+
+**The local arrangement.** The classes are:
+- the snapped carriers of the near faces (§2.1, distinct point sets);
+- the six walls, as six classes of their own (`walls`), carrying no face.
+
+Cells, covectors and every table of §2 are over these classes, and the bridge lists only cells in
+the closed region: every wall sign `inside` or `zero`. Then:
+- `pieces`: the facets of the near faces that lie in the **open** region (every wall sign strict).
+- `edges`, `verts`: the cells of dimension 1 and 0 round the pieces that lie in the **open**
+  region. The *frontier* is the cells of the closed region with a zero on a wall. Frontier cells
+  are not listed, so the touch rule and unify never look at them.
+- `inside`: as in §3 stage 3. The ray (or the oriented-face decider of §6) runs against the
+  whole input bodies, far faces included.
+- `thin`, `enclosed` (stage 4b): as before, for side cells in the open region.
+
+The core (§3, stages 1–8) runs unchanged on this ledger. Its faces are the result's facets in the
+open region, joined by `joinRel`. A face of the core whose facets reach a wall is *open* there:
+its boundary along the wall is frontier edge cells, which are not in `edges`.
+
+**Why the frontier needs no decision.** Every tool lies in the open box `B`, and `B` is at least
+`G` ≥ 8·LINEAR inside every wall. So within `G` of `∂R` the pointwise result equals body 0
+(or is empty). With §6.1's snap this holds to within `K·LINEAR`, and `G > K·LINEAR` with room to
+spare. Hence:
+- (F1) **Far unchanged.** Outside the open region the result is body 0's set (or empty), so every
+  far face, and every near face's part outside `R`, is a face piece of the result as it was:
+  `result \ R° = body₀ \ R°` (or `∅`). This holds pointwise for any `ρ` with `ρ(∅) = false`, by
+  the tools ⊂ `B`.
+- (F2) **The frontier is manifold.** A frontier cell's neighbourhood is body 0's, and body 0 is a
+  valid solid. So no edge or vertex on `∂R` is non-manifold in the result. `ZeroThickness` can
+  only be at a non-frontier cell of the open region, which the core checks.
+- (F3) **Stitching is local and exact.** A near face's edges that cross a wall cross it where
+  their own two faces' planes meet the wall. Both faces are near, so both planes are classes, and
+  the crossing is a vertex cell of the local arrangement: the same exact point from both sides.
+
+**The write** (the bridge, after the core): the result body is written fresh from three sources:
+- far faces, copied with their surface, sense, name and the kernel's own vertex points (unchanged
+  geometry, so their bits are kept);
+- each near face's part outside `R`: its loop edges clipped to the outside of the open box at
+  their exact wall crossings (F3);
+- the core's faces.
+
+The final faces are the connected regions of their union. On each class plane and orientation,
+the boundary segments are pooled, and every segment lying on a wall appears twice, once from each
+side (F1), so it cancels. The remaining segments are chained into loops. Then:
+- **Faces from loops.** Outer loops (positive area about the outward normal) take the holes they
+  contain.
+- **Names.** A final face is named by the least-named input face among its contributing far
+  faces, near-face remainders and the core faces' `origin`, with §3's piece rule when several
+  final faces come from one input face.
+- **Edges and vertices.** An edge is a maximal straight run between one pair of final faces; a
+  vertex is where three or more final faces meet. Points where a run crosses a wall are not
+  vertices.
+
+**What must be proven (extending (b) and (c)).**
+- (b′) For a consistent local ledger, the core ends in `empty`, `ok b` with `Valid b` **away from
+  the walls**, or a stated `ZeroThickness` at a non-frontier cell. This is (b) as it stands: the
+  frontier cells are not in `edges`/`verts`, and `Valid` is over the listed cells.
+- (c′) `Exact` over the local arrangement, for points of the open region: a facet in `R°` is in the
+  result iff it is an exact boundary facet of the regularised boolean, and `ZeroThickness` at a
+  cell of `R°` iff the exact result is non-manifold there. This is (c), with the arrangement of
+  the near carriers and the walls, restricted to `R°`. `compat` holds per cell of that
+  arrangement, because the far carriers do not meet `R°`: a far face's box is disjoint from `R`.
+- (F1) as a lemma: for `ρ(∅) = false` and the tools' solids inside `B ⊂ R°`,
+  `reg(ρ(A₀, …)) \ R° = A₀ \ R°` if `ρ(e₀)`, else `∅`.
+- Global: the regularised boolean is the union of (c′)'s part in `R°` and (F1)'s part outside, and
+  the result is manifold iff it is so in `R°` (F2). The write's stitching is the bridge's
+  obligation (F3). It is checked by `forge_topo::check` and by the exact comparison, not proven.
+
+**Cost.** Pieces come only from near faces, split only by near carriers and the walls. On
+`coplanar` that is the tool, the plate top, and the few earlier bosses whose boxes meet the
+region. Far faces cost one copy each.
+
 ## 4. The interface (for the Rust and for Aeneas)
 
 A crate of its own (say `forge-decide`), depending on nothing numeric:
@@ -429,6 +524,12 @@ What the theorems do not claim:
   *every* carrier crossing it. Unify re-merges, so the faces are the same; the Rust must follow
   the spec (all carriers) for Aeneas equality.
 - Curved surfaces (stage 2), and the bridge's float predicates (README §8.2).
+
+- **The local ledger (§3a).** The witness answers are decided against the whole bodies (rays
+  past far faces too), and a side cell beside one of a body's own faces takes that face's
+  orientation: inside iff on its inner side. For a closed, valid body this is what ray parity
+  says (Jordan.lean's per-cell constancy plus the face's orientation). The write's stitching
+  (F3) is not proven: `forge_topo::check` and the exact comparison check it.
 
 ## 7. The open bug classes of exact-comparison.md
 
