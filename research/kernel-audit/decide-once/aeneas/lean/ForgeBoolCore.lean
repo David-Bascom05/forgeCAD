@@ -19,4 +19,5 @@ import ForgeBoolCore.RefineZeros
 import ForgeBoolCore.RefineSortU32
 import ForgeBoolCore.EnumModel
 import ForgeBoolCore.RefineAround
+import ForgeBoolCore.RefineTouch
 import ForgeBoolCore.Axioms
