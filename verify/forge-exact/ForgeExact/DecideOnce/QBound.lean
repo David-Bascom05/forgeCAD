@@ -376,6 +376,24 @@ section Model
 variable {K : Type} [Field K] [LE K] [LT K] [Std.IsLinearOrder K] [Std.LawfulOrderLT K]
   [OrderedRing K] (M : Model K) [DecidableRel (α := K) (· < ·)]
 
+/-- **A certified body lies strictly inside `B`.** -/
+theorem qledgerB_inside {qs : List Quadric} {forms : List SForm} {R2 : Rat} {L : Ledger}
+    (h : qledgerB qs forms R2 = some L) {i : Nat} (hi : i < forms.length) {p : PK K}
+    (hp : (formOf forms i).den (carriersOf M qs) p) : Quadric.evK M (sphereR R2) p < 0 := by
+  unfold qledgerB at h
+  simp only [Option.bind_eq_bind, Option.bind_eq_some_iff] at h
+  obtain ⟨certs, hc, h⟩ := h
+  split at h
+  · cases h
+  rename_i hok
+  simp only [Bool.not_eq_true', Bool.not_eq_false, List.all_eq_true] at hok
+  have hlen : certs.length = forms.length := mapM_length hc
+  have hF : formOf forms i = forms[i] := by simp [formOf, List.getD_eq_getElem?_getD, hi]
+  have hcert : certOk qs forms[i] R2 certs[i] = true :=
+    hok (forms[i], certs[i]) (List.mem_iff_getElem.mpr ⟨i, by simp [hlen, hi], by simp⟩)
+  rw [hF] at hp
+  exact certOk_inside M hcert hp
+
 /-- **The bounded bodies are the bodies.** With `B` appended, a certified body's set is unchanged
 by "inside `B`": the ledger's bodies are the input's. -/
 theorem qledgerB_bodies {qs : List Quadric} {forms : List SForm} {R2 : Rat} {L : Ledger}
@@ -416,6 +434,16 @@ theorem qledgerB_bodies {qs : List Quadric} {forms : List SForm} {R2 : Rat} {L :
       simp [hn, this]
 
 end Model
+
+theorem qledgerB_parts {qs : List Quadric} {forms : List SForm} {R2 : Rat} {L : Ledger}
+    (h : qledgerB qs forms R2 = some L) :
+    qledger (qs ++ [sphereR R2]) (boundForms qs.length forms) = some L := by
+  unfold qledgerB at h
+  simp only [Option.bind_eq_bind, Option.bind_eq_some_iff] at h
+  obtain ⟨certs, -, h⟩ := h
+  split at h
+  · cases h
+  · exact h
 
 -- the unit box, bounded: still 6 faces, 12 edges, 8 vertices (B adds none round them)
 #guard (qledgerB unitBox [unitBoxF] 4).map (fun L => (L.facets.length, L.edges.length,

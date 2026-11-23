@@ -287,6 +287,8 @@ elab "#standard_axioms " ids:ident* : command => do
   ForgeExact.DecideOnce.Curved.faceCov_realised
   ForgeExact.DecideOnce.Curved.certOk_inside
   ForgeExact.DecideOnce.Curved.qledgerB_bodies
+  ForgeExact.DecideOnce.Curved.qledgerB_inside
+  ForgeExact.DecideOnce.Curved.SForm.onCov_set_ge
   ForgeExact.DecideOnce.Curved.sing_const
   ForgeExact.DecideOnce.Curved.sing_unique
   ForgeExact.DecideOnce.Curved.singOk_spec

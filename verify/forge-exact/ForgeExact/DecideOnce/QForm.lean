@@ -85,6 +85,25 @@ theorem den_cell {cs : List (Carrier P K)} {T : Cov} {x : P} (hx : covCellK cs T
     F.den cs x ↔ F.onCov T = true := by
   rw [den_iff]; unfold covCellK at hx; rw [hx]
 
+/-- A formula does not read the coordinates past its bound. -/
+theorem onCov_set_ge {n : Nat} : ∀ (F : SForm), F.Below n → ∀ (X : Cov) (k : Nat) (s : Sgn),
+    n ≤ k → F.onCov (X.set k s) = F.onCov X
+  | lit j s', h, X, k, s, hk => by
+    simp only [Below] at h
+    simp only [onCov]
+    rw [List.getElem?_set_ne (by omega)]
+  | tt, _, _, _, _, _ => rfl
+  | ff, _, _, _, _, _ => rfl
+  | and a b, h, X, k, s, hk => by
+    simp only [Below] at h
+    simp only [onCov, onCov_set_ge a h.1 X k s hk, onCov_set_ge b h.2 X k s hk]
+  | or a b, h, X, k, s, hk => by
+    simp only [Below] at h
+    simp only [onCov, onCov_set_ge a h.1 X k s hk, onCov_set_ge b h.2 X k s hk]
+  | not a, h, X, k, s, hk => by
+    simp only [Below] at h
+    simp only [onCov, onCov_set_ge a h X k s hk]
+
 theorem den_append (cs seps : List (Carrier P K)) (x : P) :
     ∀ F : SForm, F.Below cs.length → (F.den (cs ++ seps) x ↔ F.den cs x)
   | lit j s, h => by

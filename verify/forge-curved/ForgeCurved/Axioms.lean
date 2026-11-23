@@ -121,3 +121,5 @@ import ForgeCurved
 #print axioms ForgeCurved.spherePlane_vertLocal
 #print axioms ForgeCurved.spherePlane_bad_iff
 #print axioms ForgeCurved.wallND_q
+#print axioms ForgeCurved.facet_sides
+#print axioms ForgeCurved.qledgerB_complete
