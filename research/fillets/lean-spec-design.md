@@ -486,3 +486,9 @@ its radius. Results:
 - 4 × 40 random parts: 0.
 
 The rest of the census is staged next, and run the same way.
+
+**Speed.** The exact callgrind gate on c217ce1 passes: every line ≤ base, bits identical, the
+user-facing lines −14 093 178 instructions in all. Without the check, LLVM inlined `sheet::side` into
+`meet::intersect`'s `on_nappes` count. It is kept out of line, and `on_nappes` makes two direct checks
+in place of an array per point.
+
