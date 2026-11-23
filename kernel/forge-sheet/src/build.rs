@@ -2178,9 +2178,13 @@ impl<'a> Strips<'a> {
     /// a's faces (planes, cylinders, ruled walls), so its greatest over a's boundary is on a's
     /// edges: each edge at both skins, and each rail. Each is cut in halves while a rigorous box of
     /// the half (the piece's own box, or the wrapped curve's) can still reach past the limit into
-    /// b's thickness and meet b's region; a box under half the limit across is decided at its
-    /// middle, stepped ten tolerances into a's own material (so walls ending flush along one line
-    /// still find each other). Depth is 1-Lipschitz, so no point deeper than 1.5 limits is missed.
+    /// b's thickness and meet b's region. Points are taken stepped one tolerance into a's own
+    /// material (so walls ending flush along one line still find each other: the step is the
+    /// tolerance itself, well under the limit, so a flush edge on a face is depth ~TOL, clear). A
+    /// box is decided where its middle is past the limit (a clash) or its middle's depth and its
+    /// size together cannot reach the limit (depth is 1-Lipschitz: clear); else it is halved, and
+    /// one halving cannot narrow is FoldedUndecided. No band: every depth past the limit is found
+    /// or refused.
     fn clash(&self) -> Result<(), SheetError> {
         let t = self.t;
         let limit = 10.0 * TOL;
@@ -2248,7 +2252,7 @@ impl<'a> Strips<'a> {
                         }
                         let inset = |u: f64| {
                             let d = bd.piece.tangent(u);
-                            bd.piece.at(u) + Vec2::new(-d.y, d.x) * (10.0 * TOL / d.length().max(1e-300))
+                            bd.piece.at(u) + Vec2::new(-d.y, d.x) * (TOL / d.length().max(1e-300))
                         };
                         // straight against a plane wall, decided exactly over each chord (a
                         // curve's widened by how far it bows): only what may enter is halved
@@ -2256,7 +2260,7 @@ impl<'a> Strips<'a> {
                             (Geo::Plane(_), Piece::Line { .. }) => Some(0.0),
                             (Geo::Plane(_), Piece::Arc { r, t0, t1, .. }) => {
                                 let half = (0.5 * (t1 - t0).abs() * u.width()).min(dmath::PI);
-                                Some((r + 10.0 * TOL) * (1.0 - dmath::cos(half)))
+                                Some((r + TOL) * (1.0 - dmath::cos(half)))
                             }
                             _ => None,
                         };
@@ -2760,7 +2764,7 @@ impl<'a> Strips<'a> {
             for bd in &ld.bounds {
                 let inset = |u: f64| {
                     let d = bd.piece.tangent(u);
-                    bd.piece.at(u) + Vec2::new(-d.y, d.x) * (10.0 * TOL / d.length().max(1e-300))
+                    bd.piece.at(u) + Vec2::new(-d.y, d.x) * (TOL / d.length().max(1e-300))
                 };
                 for w in [0.0, t] {
                     run(&mut best, &|u| piece_box(geo, &bd.piece, w, u), &|u| {
@@ -2997,11 +3001,43 @@ fn hunt_by(
             }
             if size <= 0.5 * limit {
                 let Some(p) = point(u.mid()) else { continue };
-                if let Some(d) = depth(p)
+                let d = depth(p);
+                if let Some(d) = d
                     && d > limit
                 {
                     return Ok(Some((p, d)));
                 }
+                // clear where no point of the box can pass the limit (1-Lipschitz); else halved
+                if d.is_none_or(|d| d + size <= limit) {
+                    continue;
+                }
+                if level >= 48 {
+                    // a stretch under 2^-48 of the curve's parameter: its points are the computed
+                    // ones at its ends and middle to rounding, and the box's size is its padding
+                    // (TOL), not the curve's. Bound its depth by theirs and their spread
+                    let ends = [point(u.lo), Some(p), point(u.hi)];
+                    let pts: Vec<Point3> = ends.iter().flatten().copied().collect();
+                    let spread = pts
+                        .iter()
+                        .flat_map(|a| pts.iter().map(move |b| a.distance(*b)))
+                        .fold(0.0, f64::max);
+                    let most = pts.iter().map(|&q| depth(q).unwrap_or(0.0)).fold(0.0, f64::max);
+                    if most > limit {
+                        let at = pts
+                            .iter()
+                            .copied()
+                            .max_by(|a, b| depth(*a).unwrap_or(0.0).total_cmp(&depth(*b).unwrap_or(0.0)))
+                            .unwrap_or(p);
+                        return Ok(Some((at, most)));
+                    }
+                    if most + spread <= limit {
+                        continue;
+                    }
+                    return Err(p);
+                }
+                let m = u.mid();
+                stack.push((Interval::new(u.lo, m), level + 1));
+                stack.push((Interval::new(m, u.hi), level + 1));
                 continue;
             }
             let m = u.mid();
