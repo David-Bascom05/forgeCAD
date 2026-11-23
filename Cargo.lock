@@ -62,6 +62,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-brake"
+version = "0.1.0"
+dependencies = [
+ "forge-math",
+ "forge-ops",
+ "forge-sheet",
+]
+
+[[package]]
 name = "forge-cli"
 version = "0.1.0"
 dependencies = [
