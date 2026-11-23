@@ -12,14 +12,14 @@ const THIN: &str = include_str!("../../../examples/surfaces/thin.fg");
 fn the_example_measures_its_solids_and_its_sheets_apart() {
     let r = run(EXAMPLE);
     assert!(r.errors.is_empty(), "{:?}", r.errors);
-    let m = r.measure.expect("measured");
+    let m = r.measure.as_ref().expect("measured");
     assert_eq!(m.problems, 0);
     // the base with the boss through it: 40 x 30 x (6 + 3)
     assert!((m.volume - 10800.0).abs() < 1e-9, "{}", m.volume);
     let pi = std::f64::consts::PI;
     // the wall: 40 then a quarter of r 10, 20 high; the shade: a quarter turn of 40 at r 10
     let want = 20.0 * (40.0 + 5.0 * pi) + 40.0 * 5.0 * pi;
-    let got = m.mass.expect("mass").sheet_area;
+    let got = forge_lang::report::sheet_area(&r).expect("sheets");
     assert!((got - want).abs() < 1e-9 * want, "{got} {want}");
     let sheets: Vec<bool> = r.solids.iter().map(|s| s.sheet).collect();
     assert_eq!(sheets.iter().filter(|&&s| s).count(), 2, "{sheets:?}");
@@ -29,7 +29,7 @@ fn the_example_measures_its_solids_and_its_sheets_apart() {
 fn thin_walls_are_solids_mitred_at_their_corners() {
     let r = run(THIN);
     assert!(r.errors.is_empty(), "{:?}", r.errors);
-    let m = r.measure.expect("measured");
+    let m = r.measure.as_ref().expect("measured");
     let pi = std::f64::consts::PI;
     let (t, h, l, w, rr) = (2.0, 10.0, 40.0, 25.0, 5.0);
     let want = h * ((l + w) * t + t * t) + h * t * ((l - rr) + rr * pi / 2.0);
@@ -51,4 +51,64 @@ fn refusals() {
         let e = format!("{:?}", r.errors);
         assert!(e.contains(word), "{tail}: {e}");
     }
+}
+
+#[test]
+fn a_list_of_loops_is_a_tube_each_whatever_else_the_sketch_draws() {
+    // the rect and the circle are tubes of their own, each thickened to its outside; the open
+    // lines beside them leave them be
+    let r = run(r#"shared t = 1
+shared h = 5
+sketch s(on: xy) {
+  plate = rect(corner: (0, 0), size: (40, 30))
+  bore = circle((20, 15), 6)
+  l = line((50, 0), (60, 10))
+  ax = line((-10, 0), (-10, 10))
+}
+a = extrude(s.plate, h, surface: true)
+b = extrude([s.plate, s.bore], h, thin: t, side: "out")
+c = revolve(s.bore, axis: s.ax, angle: 90deg, surface: true)
+"#);
+    assert!(r.errors.is_empty(), "{:?}", r.errors);
+    let m = r.measure.as_ref().expect("measured");
+    assert_eq!(m.problems, 0);
+    let pi = std::f64::consts::PI;
+    let want = 5.0 * (42.0 * 32.0 - 40.0 * 30.0 + pi * (49.0 - 36.0));
+    assert!((m.volume - want).abs() < 1e-9 * want, "{} {want}", m.volume);
+    let want = 140.0 * 5.0 + 2.0 * pi * 6.0 * 30.0 * pi / 2.0;
+    let got = forge_lang::report::sheet_area(&r).expect("sheets");
+    assert!((got - want).abs() < 1e-9 * want, "{got} {want}");
+}
+
+#[test]
+fn a_mitre_past_two_splines_ends_is_their_end_pieces_continued() {
+    // two splines meeting at a sharp apex: thickened out, the mitre there lies past both ends
+    // (refused as Invalid while the sections were carried a quarter of their end piece); the
+    // sides add up, the wall t thick both ways being t/2 out and t/2 in
+    let part = |t: &str, side: &str| {
+        format!(
+            "shared h = 5
+sketch s(on: xy) {{
+  path p(start: (0, 0)) {{
+    line(to: (10, 0))
+    spline(through: [(8.5, 5)], to: (5, 12), tangent: false)
+    spline(through: [(1.5, 5)], to: (0, 0), tangent: false)
+  }}
+}}
+a = extrude(s.p, h, thin: {t}, side: \"{side}\")
+"
+        )
+    };
+    let volume = |t: &str, side: &str| {
+        let r = run(&part(t, side));
+        assert!(r.errors.is_empty(), "{t} {side}: {:?}", r.errors);
+        let m = r.measure.as_ref().expect("measured");
+        assert_eq!(m.problems, 0, "{t} {side}");
+        m.volume
+    };
+    let (out, inn, both) = (volume("1", "out"), volume("1", "in"), volume("2", "both"));
+    assert!(
+        (out + inn - both).abs() <= 1e-12 * both,
+        "{out} + {inn} != {both}"
+    );
 }

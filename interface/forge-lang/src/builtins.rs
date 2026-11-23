@@ -2008,6 +2008,17 @@ fn extrude(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Val
 /// `extrude(PATH | PROFILE, d | sym(d) | two(f, b), surface: true)`: a sheet, a body of its own.
 /// With `thin: t, side:` instead, that sheet thickened (as `thicken` does) into a wall t thick,
 /// which adds (or cuts) as an extrude does.
+/// A sheet's chains: a whole sketch gives the loops of its region; anything else is read end to
+/// end, a chain ending where it closes (a loop, a circle, each contour of a text's glyph), each a
+/// tube with its front outside.
+fn sheet_chains_of(ev: &Eval, v: Value, span: Span) -> R<(Rc<RefCell<Sk>>, Vec<crate::shapes::Chain>)> {
+    if let Value::Sketch(_) = v {
+        let (sk, p, _) = profile_of(ev, v, span)?;
+        return Ok((sk, p.loops.into_iter().map(|l| l.segments).collect()));
+    }
+    crate::shapes::chains_of(v, span)
+}
+
 fn extrude_sheet(ev: &mut Eval, name: &'static str, a: &Args, id: String, span: Span) -> R<Value> {
     let thin = a.opt("thin").is_some();
     if thin && a.flag("surface")? {
@@ -2045,7 +2056,7 @@ fn extrude_sheet(ev: &mut Eval, name: &'static str, a: &Args, id: String, span: 
             with: "a cut or intersect (a sheet holds no material to take away)",
         });
     }
-    let (sk, chain) = crate::shapes::chain_of(a.req("profile")?, a.span("profile"))?;
+    let (sk, chains) = sheet_chains_of(ev, a.req("profile")?, a.span("profile"))?;
     let len = |n: &Num, what: &'static str| num_of(Value::Num(n.clone()), LEN, a.span("d"), what);
     let mut dims = vec![];
     let (lo, hi) = match a.req("d")? {
@@ -2114,7 +2125,7 @@ fn extrude_sheet(ev: &mut Eval, name: &'static str, a: &Args, id: String, span: 
     let (lo, hi) = if name == "cut" { (-hi, -lo) } else { (lo, hi) };
     let f = Feature::Sheet(Box::new(forge_model::sheets::Sheet {
         plane,
-        chains: vec![chain],
+        chains,
         how: forge_model::sheets::SheetHow::Extrude { lo, hi },
         thin,
     }));
@@ -2239,7 +2250,7 @@ fn revolve_sheet(ev: &mut Eval, a: &Args, id: String, span: Span) -> R<Value> {
             });
         }
     }
-    let (sk, chain) = crate::shapes::chain_of(a.req("profile")?, a.span("profile"))?;
+    let (sk, chains) = sheet_chains_of(ev, a.req("profile")?, a.span("profile"))?;
     let (pa, pb) = match a.req("axis")? {
         Value::Ent(ax) => {
             if !Rc::ptr_eq(&ax.sk, &sk) || ax.kind != EntKind::Line {
@@ -2305,7 +2316,7 @@ fn revolve_sheet(ev: &mut Eval, a: &Args, id: String, span: Span) -> R<Value> {
     let plane = sk.borrow().frame;
     let f = Feature::Sheet(Box::new(forge_model::sheets::Sheet {
         plane,
-        chains: vec![chain],
+        chains,
         how: forge_model::sheets::SheetHow::Revolve {
             axis: Axis2 {
                 origin: pa,

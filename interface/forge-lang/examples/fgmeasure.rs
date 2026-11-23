@@ -10,12 +10,13 @@ fn main() {
         .iter()
         .map(|e| format!("{e:?}").replace('"', "'"))
         .collect();
+    let sheet_area = forge_lang::report::sheet_area(&run).unwrap_or(0.0);
     match run.measure {
         Some(m) => println!(
             "{{\"volume\":{:e},\"area\":{:e},\"sheet_area\":{:e},\"valid\":{},\"errors\":{:?}}}",
             m.volume,
             m.area,
-            m.mass.as_ref().map_or(0.0, |x| x.sheet_area),
+            sheet_area,
             m.problems == 0,
             errors
         ),

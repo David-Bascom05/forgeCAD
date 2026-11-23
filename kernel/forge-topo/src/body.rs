@@ -227,6 +227,10 @@ impl Joins {
 /// is on its boundary.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Body {
+    /// Some face may be a sheet's (`Face::sheet`): set with the first sheet face made, carried by
+    /// appending and compacting, never read off the topology. A solid never has it, so its checks
+    /// pass every sheet rule over without looking at a face.
+    pub sheets: bool,
     /// Faces (and edges) removed by in-place edits and not yet compacted away.
     pub dead: usize,
     /// What `forge_bool::unify` must know beyond the entities: merged names and kept edges.
@@ -280,15 +284,19 @@ impl Body {
 
     /// Whether the body is a sheet: it has faces, all of them sheet faces.
     pub fn is_sheet(&self) -> bool {
+        if !self.sheets {
+            return false;
+        }
         let mut live = self.faces.iter().filter(|f| f.alive).peekable();
         live.peek().is_some() && live.all(|f| f.sheet)
     }
     /// Whether any live face is a sheet's.
     pub fn has_sheet(&self) -> bool {
-        self.faces.iter().any(|f| f.alive && f.sheet)
+        self.sheets && self.faces.iter().any(|f| f.alive && f.sheet)
     }
     /// Makes every face a sheet's: for what makes a sheet, once its faces are made.
     pub fn mark_sheet(&mut self) {
+        self.sheets = true;
         for f in &mut self.faces {
             f.sheet = true;
         }
@@ -502,6 +510,7 @@ impl Body {
         let mut emap = vec![NONE; self.edges.len()];
         let mut smap = vec![NONE; groups];
         let mut out = Body {
+            sheets: self.sheets,
             dead: 0,
             joins: std::mem::take(&mut self.joins),
             vertices: Vec::with_capacity(self.vertices.len()),
@@ -605,8 +614,9 @@ impl Body {
             let face = self.face(f);
             let shell = *smap[group[f.index()]].get_or_insert_with(|| out.add_shell());
             let nf = out.add_face(shell, face.surface.clone(), face.same_sense, face.name);
-            if face.sheet {
+            if self.sheets && face.sheet {
                 out.faces[nf.index()].sheet = true;
+                out.sheets = true;
             }
             if let Some(b) = face.bbox.get() {
                 out.faces[nf.index()].bbox.set(*b);
@@ -772,6 +782,7 @@ impl Body {
             faces: x.faces.iter().map(|k| FaceId(k.0 + f)).collect(),
         }));
         self.dead += other.dead;
+        self.sheets |= other.sheets;
         self.joins.extend(&other.joins);
     }
 
@@ -993,6 +1004,36 @@ impl Body {
         if closes.iter().all(|x| x.1.is_empty()) {
             return fans;
         }
+        // the corners are geometry: walk by them only where they close each leaving coedge with
+        // a distinct use arriving at v, so the walk permutes the coedges leaving v (one fan by
+        // them is then one disc); else loop order's fans stand
+        let before = |c: CoedgeId| {
+            let f = self.coedge_face(c);
+            closes
+                .iter()
+                .filter(|x| x.0 == f)
+                .flat_map(|x| x.1.iter())
+                .find(|x| x.0 == c)
+                .map_or_else(
+                    || {
+                        let lp = self.lp(self.coedge(c).lp);
+                        let n = lp.coedges().len();
+                        let i = (c.0 - lp.coedge(0).0) as usize;
+                        lp.coedge((i + n - 1) % n)
+                    },
+                    |x| x.1,
+                )
+        };
+        let mut into: Vec<CoedgeId> = from.iter().map(|&c| before(c)).collect();
+        let arrive = into.iter().all(|&a| {
+            a.index() < self.coedges.len()
+                && self.coedge_end(a) == v
+                && self.edge(self.coedge(a).edge).coedges.contains(&a)
+        });
+        into.sort_unstable();
+        if !arrive || into.windows(2).any(|w| w[0] == w[1]) {
+            return fans;
+        }
         self.fans_by(from, prev, Some(&closes))
     }
 
@@ -1097,9 +1138,21 @@ impl Body {
             .filter(|&&c| self.coedge_start(c) == v)
             .filter_map(|&c| {
                 let a = angle(c, true);
+                // the other use of its own edge (a seam's) leaves the same way: it closes the
+                // corner only after a whole turn, never before another edge
+                let own = self.coedge(c).edge;
                 arriving
                     .iter()
-                    .map(|&(x, b)| (x, (b - a).rem_euclid(tau)))
+                    .map(|&(x, b)| {
+                        (
+                            x,
+                            if self.coedge(x).edge == own {
+                                tau
+                            } else {
+                                (b - a).rem_euclid(tau)
+                            },
+                        )
+                    })
                     .filter(|x| x.0 != c)
                     .min_by(|x, y| x.1.total_cmp(&y.1))
                     .map(|x| (c, x.0))

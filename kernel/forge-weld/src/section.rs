@@ -362,6 +362,67 @@ impl Section {
         })
     }
 
+    /// Whether a point is material: inside the outline and outside every hole (crossings of a ray
+    /// along +x with the loops, counted; lines and arcs exactly).
+    pub fn contains(&self, p: Point2) -> bool {
+        // each piece's crossings of the ray, counted half-open in y (an end at the ray's height
+        // counts with the piece going up from it), so a ray through a corner counts it once
+        let mut inside = false;
+        let mut cross = |a: Point2, b: Point2, x_at: &dyn Fn() -> f64| {
+            if (a.y > p.y) != (b.y > p.y) && x_at() > p.x {
+                inside = !inside;
+            }
+        };
+        for seg in self.loops.iter().flatten() {
+            if let Some((c, r, st, sw)) = arc_of(seg) {
+                // the arc in pieces monotone in y: cut where it turns (straight up or down); each
+                // piece's ends taken exactly (the arc's own ends, and c ± r at a turn), never
+                // recomputed from an angle
+                let (lo, hi) = if sw >= 0.0 { (st, st + sw) } else { (st + sw, st) };
+                let (plo, phi) = if sw >= 0.0 {
+                    (seg.start(), seg.end())
+                } else {
+                    (seg.end(), seg.start())
+                };
+                let q = dmath::FRAC_PI_2;
+                let mut pts = vec![(lo, plo)];
+                let mut k = ((lo - q) / dmath::PI).ceil();
+                while q + k * dmath::PI < hi {
+                    let up = (k as i64).rem_euclid(2) == 0;
+                    pts.push((
+                        q + k * dmath::PI,
+                        Point2::new(c.x, if up { c.y + r } else { c.y - r }),
+                    ));
+                    k += 1.0;
+                }
+                pts.push((hi, phi));
+                for w in pts.windows(2) {
+                    let ((a0, pa), (a1, pb)) = (w[0], w[1]);
+                    cross(pa, pb, &|| {
+                        // the one point of this piece at height p.y: the piece lies on one side of
+                        // the vertical through c
+                        let dy = (p.y - c.y).clamp(-r, r);
+                        let dx = (r * r - dy * dy).max(0.0).sqrt();
+                        if dmath::cos((a0 + a1) / 2.0) >= 0.0 {
+                            c.x + dx
+                        } else {
+                            c.x - dx
+                        }
+                    });
+                }
+            } else {
+                let (a, b) = (seg.start(), seg.end());
+                cross(a, b, &|| a.x + (p.y - a.y) * (b.x - a.x) / (b.y - a.y));
+            }
+        }
+        inside
+    }
+
+    /// Whether a point is in the closure of the material: material, or within `eps` of a loop.
+    pub fn in_closure(&self, p: Point2, eps: f64) -> bool {
+        self.contains(p) || self.loops.iter().flatten().any(|s| near_piece(s, p, eps))
+    }
+
     /// Its outline alone: the solid the member fills (its envelope).
     pub fn outline(&self) -> Section {
         Section {
@@ -429,19 +490,10 @@ impl Section {
     /// How far the outline reaches along `w`: the largest p . w over the section (exact: the
     /// loops' ends, and each arc's farthest point where `w` points into its sweep).
     pub fn support(&self, w: Vec2) -> f64 {
-        let mut best = f64::NEG_INFINITY;
-        let wl = w.length();
-        let wa = dmath::atan2(w.y, w.x);
-        for s in self.loops.first().into_iter().flatten() {
-            best = best.max(s.start().to_vec().dot(w)).max(s.end().to_vec().dot(w));
-            if let Some((c, r, st, sw)) = arc_of(s)
-                && wl > 0.0
-                && on_arc(wa, st, sw)
-            {
-                best = best.max(c.to_vec().dot(w) + r * wl);
-            }
+        match self.loops.first() {
+            Some(l) => support_loop(l, w),
+            None => f64::NEG_INFINITY,
         }
-        best
     }
 
     /// The largest distance of the section from its origin (its bounding radius).
@@ -511,6 +563,19 @@ impl Section {
     }
 }
 
+/// Whether `p` is within `eps` of a loop's piece.
+fn near_piece(s: &Segment, p: Point2, eps: f64) -> bool {
+    if let Some((c, r, st, sw)) = arc_of(s) {
+        let d = p - c;
+        let l = d.length();
+        return (l - r).abs() <= eps && (l == 0.0 || on_arc(dmath::atan2(d.y, d.x), st, sw));
+    }
+    let (a, b) = (s.start(), s.end());
+    let ab = b - a;
+    let t = ((p - a).dot(ab) / ab.dot(ab).max(f64::MIN_POSITIVE)).clamp(0.0, 1.0);
+    (a + ab * t).distance(p) <= eps
+}
+
 fn loop_area(l: &[Segment]) -> f64 {
     l.iter().map(|s| moments(s).0).sum()
 }
@@ -532,8 +597,48 @@ fn moments(s: &Segment) -> (f64, f64, f64) {
         let my = 0.5 * (-r * c.y * c.y * (c1 - c0) + 2.0 * r * r * c.y * isin2 + r * r * r * isin3);
         return (a, mx, my);
     }
-    let (p, q) = (s.start(), s.end());
-    // along the line: 1/2 \int x^2 dy = dy (px^2 + px qx + qx^2) / 6, and alike for y
+    line_moments(s.start(), s.end())
+}
+
+/// The larger of two values, by comparison (`best` unless `v` is greater; never NaN from a NaN
+/// `v`). f64::max is not used here: its choice between -0 and +0 is the platform's.
+pub fn top(best: f64, v: f64) -> f64 {
+    if v > best { v } else { best }
+}
+
+/// How far a loop reaches along `w`: the largest p . w over its pieces' ends, and over each arc's
+/// farthest point where `w` points into its sweep. (Plain loops, for the Rust-to-Lean
+/// translation: verify/aeneas/forge-weld.)
+pub fn support_loop(l: &[Segment], w: Vec2) -> f64 {
+    let mut best = f64::NEG_INFINITY;
+    let wl = w.length();
+    // w's angle, found at the first arc (a loop of lines never needs it)
+    let mut wa = 0.0;
+    let mut angled = false;
+    let mut i = 0;
+    while i < l.len() {
+        let s = &l[i];
+        best = top(top(best, s.start().to_vec().dot(w)), s.end().to_vec().dot(w));
+        if wl > 0.0
+            && let Some((c, r, st, sw)) = arc_of(s)
+        {
+            if !angled {
+                wa = dmath::atan2(w.y, w.x);
+                angled = true;
+            }
+            if on_arc(wa, st, sw) {
+                best = top(best, c.to_vec().dot(w) + r * wl);
+            }
+        }
+        i += 1;
+    }
+    best
+}
+
+/// A straight piece's share of the area and first moments (x, y), by Green's theorem: along
+/// the line, 1/2 \oint (x dy - y dx) = (px qy - qx py) / 2, 1/2 \int x^2 dy = dy (px^2 + px qx +
+/// qx^2) / 6, and alike for y.
+pub fn line_moments(p: Point2, q: Point2) -> (f64, f64, f64) {
     let cr = p.x * q.y - q.x * p.y;
     let (dx, dy) = (q.x - p.x, q.y - p.y);
     (
@@ -621,6 +726,58 @@ mod tests {
         let c = s.centroid();
         near(c.x, x / a, 1e-5);
         near(c.y, y / a, 1e-5);
+    }
+
+    /// Points on rows through every corner (the ray passing corners) and between: the exact test
+    /// agrees with a fine polygon of the loops wherever the point is clear of them.
+    #[test]
+    fn contains_through_corners() {
+        for d in [
+            "SHS 40x40x3",
+            "CHS 48.3x3.2",
+            "IPE 200",
+            "L 60x40x5",
+            "UPE 100",
+            "RHS 60x40x3",
+        ] {
+            let s = crate::lookup(d).unwrap();
+            let poly: Vec<Vec<Point2>> = s
+                .loops
+                .iter()
+                .map(|l| {
+                    l.iter()
+                        .flat_map(|g| {
+                            let v = g.samples(400);
+                            v[..v.len() - 1].to_vec()
+                        })
+                        .collect()
+                })
+                .collect();
+            let odd = |p: Point2| {
+                let mut c = false;
+                for l in &poly {
+                    for i in 0..l.len() {
+                        let (a, b) = (l[i], l[(i + 1) % l.len()]);
+                        if (a.y > p.y) != (b.y > p.y) && a.x + (p.y - a.y) * (b.x - a.x) / (b.y - a.y) > p.x {
+                            c = !c;
+                        }
+                    }
+                }
+                c
+            };
+            let near = |p: Point2| s.loops.iter().flatten().any(|g| near_piece(g, p, 0.05));
+            let (lo, hi) = s.bbox();
+            let mut ys: Vec<f64> = s.loops.iter().flatten().map(|g| g.start().y).collect();
+            ys.extend((0..=40).map(|k| lo.y + (hi.y - lo.y) * k as f64 / 40.0));
+            for &y in &ys {
+                for k in 0..=80 {
+                    let p = Point2::new(lo.x - 1.0 + (hi.x - lo.x + 2.0) * k as f64 / 80.0, y);
+                    if !near(p) {
+                        assert_eq!(s.contains(p), odd(p), "{d} at {p:?}");
+                    }
+                }
+            }
+        }
     }
 
     #[test]

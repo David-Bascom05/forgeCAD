@@ -32,7 +32,7 @@ fn show(name: &str, b: &Body) {
         b.faces.len(),
         m.volume.to_bits(),
         m.area.to_bits(),
-        m.sheet_area.to_bits(),
+        forge_topo::mass::sheet_area(b).expect("measured").0.to_bits(),
         hash(b)
     );
 }

@@ -137,6 +137,17 @@ impl Gui {
                 });
             }
         }
+        // the DFM panel's chosen violation, over the rest
+        if let Some((anchor, _, _)) = self.shell.sheet.vendor.lit() {
+            for &face in a.role_faces.get(anchor).into_iter().flatten() {
+                out.retain(|c| c.face != face);
+                out.push(FaceColour {
+                    placement: 0,
+                    face,
+                    rgba: crate::shell::vendorui::LIT,
+                });
+            }
+        }
         out
     }
 

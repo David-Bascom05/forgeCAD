@@ -705,9 +705,21 @@ pub fn cutting(m: &MemberSpec, cuts: &[Vec<Cut>; 2]) -> Cutting {
 }
 
 /// The farthest the kept member reaches along `d` at its end (`hi`), or the least at its start,
-/// over the whole section and every cut there: max (or min) over x of the min (or max) over the
-/// cuts of their crossings. Exact: the optimum is where one cut alone is extreme (its support
-/// point), or on the line in the section where two cuts' crossings are equal, at the outline.
+/// over the whole section and every cut there: max (or min) over the section of the min (or max)
+/// over the cuts of their crossings.
+///
+/// Exact. Each cut's crossing is linear in the section point, so the reach is concave
+/// piecewise linear (convex at the start), and over the section (a region bounded by lines and
+/// arcs, holes and all) its optimum is attained at one of:
+/// - a corner of any loop (an end of a piece);
+/// - a point of an arc where one cut's crossing is extreme along it (its point farthest in that
+///   cut's direction): where one cut alone is the active one on an arc;
+/// - where two cuts' crossings are equal (a ridge line) and the ridge meets a loop;
+/// - where three cuts' crossings are equal (an apex), if that point is material.
+///
+/// A linear piece's optimum over a cell is at the cell's corners or, on an arc, at its tangent
+/// point; the cells' corners are the loops' corners, the ridges' meetings with the loops and the
+/// apexes. Every candidate is evaluated with all the cuts.
 fn extreme(m: &MemberSpec, a: Point3, d: Vec3, cuts: &[Cut], x: Vec3, y: Vec3, hi: bool) -> Option<f64> {
     if cuts.is_empty() {
         return None;
@@ -731,52 +743,75 @@ fn extreme(m: &MemberSpec, a: Point3, d: Vec3, cuts: &[Cut], x: Vec3, y: Vec3, h
         }
     };
     let sign = if hi { 1.0 } else { -1.0 };
+    let sec = &m.section;
+    // The arrangement (research/weld-lean PolyMax.lean): the lines of the section's straight
+    // sides and the cuts' ridge lines (each `a0 + au u + av v = 0`), and the circles of its arcs.
+    // Over each cell of it the reach is linear, so its optimum over the section is at a cell's
+    // corner (two of these meeting) or, on an arc, at a cut's farthest point; every such point in
+    // the closure of the section is a candidate, and every candidate there is a limit of material
+    // points (`face_sound`): the optimum is the best candidate.
+    let mut lines: Vec<(f64, f64, f64)> = Vec::new();
+    let mut circles: Vec<(forge_math::Point2, f64)> = Vec::new();
     let mut cands: Vec<(f64, f64)> = Vec::new();
-    // a cut alone: its extreme over the outline in the direction it grows (or falls)
-    for l in &lin {
-        let w = Vec2::new(sign * l.1, sign * l.2);
-        if let Some(p) = support_point(&m.section, w) {
-            cands.push(p);
+    for seg in sec.loops.iter().flatten() {
+        let (p, q) = (seg.start(), seg.end());
+        cands.push((p.x, p.y));
+        cands.push((q.x, q.y));
+        if let Some((c, r, st, sw)) = arc_params(seg) {
+            circles.push((c, r));
+            for l in &lin {
+                let w = Vec2::new(sign * l.1, sign * l.2);
+                let wl = w.length();
+                if wl > 0.0 && on_arc(dmath::atan2(w.y, w.x), st, sw) {
+                    let t = c + w * (r / wl);
+                    cands.push((t.x, t.y));
+                }
+            }
+        } else {
+            // the side's line: (q - p) x (point - p) = 0
+            let (dx, dy) = (q.x - p.x, q.y - p.y);
+            lines.push((dy * p.x - dx * p.y, -dy, dx));
         }
     }
-    // two cuts equal: their difference is zero along a line in the section; the reach along it
-    // is linear, so the optimum is at its meetings with the outline
     for i in 0..lin.len() {
         for j in i + 1..lin.len() {
-            let (a0, au, av) = (lin[i].0 - lin[j].0, lin[i].1 - lin[j].1, lin[i].2 - lin[j].2);
-            cands.extend(line_meets(&m.section, a0, au, av));
+            lines.push((lin[i].0 - lin[j].0, lin[i].1 - lin[j].1, lin[i].2 - lin[j].2));
         }
     }
+    let mut meets: Vec<(f64, f64)> = Vec::new();
+    for i in 0..lines.len() {
+        for j in i + 1..lines.len() {
+            let ((b1, u1, v1), (b2, u2, v2)) = (lines[i], lines[j]);
+            let det = u1 * v2 - u2 * v1;
+            if det.abs()
+                > 1e-15
+                    * ((u1 * u1 + v1 * v1) * (u2 * u2 + v2 * v2))
+                        .sqrt()
+                        .max(f64::MIN_POSITIVE)
+            {
+                meets.push(((-b1 * v2 + b2 * v1) / det, (-u1 * b2 + u2 * b1) / det));
+            }
+        }
+        for &(c, r) in &circles {
+            meets.extend(line_circle(lines[i], c, r));
+        }
+    }
+    for i in 0..circles.len() {
+        for j in i + 1..circles.len() {
+            meets.extend(circle_circle(circles[i], circles[j]));
+        }
+    }
+    let eps = 1e-9 * (1.0 + sec.radius());
+    cands.extend(
+        meets
+            .into_iter()
+            .filter(|&(u, v)| sec.in_closure(forge_math::Point2::new(u, v), eps)),
+    );
     let best = cands
         .into_iter()
         .map(|(u, v)| sign * at(u, v))
         .fold(f64::NEG_INFINITY, f64::max);
     Some(sign * best)
-}
-
-/// A point of the outline farthest along `w` (where the support is attained).
-fn support_point(s: &Section, w: Vec2) -> Option<(f64, f64)> {
-    let mut best: Option<(f64, (f64, f64))> = None;
-    let mut take = |p: forge_math::Point2| {
-        let v = p.to_vec().dot(w);
-        if best.is_none_or(|b| v > b.0) {
-            best = Some((v, (p.x, p.y)));
-        }
-    };
-    let wl = w.length();
-    for seg in s.loops.first()? {
-        take(seg.start());
-        take(seg.end());
-        if let Some((c, r, st, sw)) = arc_params(seg)
-            && wl > 0.0
-        {
-            let wa = dmath::atan2(w.y, w.x);
-            if on_arc(wa, st, sw) {
-                take(c + w * (r / wl));
-            }
-        }
-    }
-    best.map(|b| b.1)
 }
 
 fn arc_params(s: &forge_ops::Segment) -> Option<(forge_math::Point2, f64, f64, f64)> {
@@ -803,48 +838,49 @@ fn on_arc(a: f64, start: f64, sweep: f64) -> bool {
     (a - lo).rem_euclid(dmath::TAU) <= w
 }
 
-/// Where the line a0 + au u + av v = 0 meets the outline.
-fn line_meets(s: &Section, a0: f64, au: f64, av: f64) -> Vec<(f64, f64)> {
-    let mut out = Vec::new();
-    let g = |p: forge_math::Point2| a0 + au * p.x + av * p.y;
-    for seg in s.loops.first().into_iter().flatten() {
-        if let Some((c, r, st, sw)) = arc_params(seg) {
-            // the line's distance from the centre, and the chord it cuts
-            let nl = (au * au + av * av).sqrt();
-            if nl == 0.0 {
-                continue;
-            }
-            let dist = g(c) / nl;
-            if dist.abs() > r {
-                continue;
-            }
-            let nrm = Vec2::new(au, av) / nl;
-            let foot = c - nrm * dist;
-            let half = (r * r - dist * dist).max(0.0).sqrt();
-            for k in [-1.0, 1.0] {
-                let p = foot + nrm.perp() * (k * half);
-                if on_arc(dmath::atan2(p.y - c.y, p.x - c.x), st, sw) {
-                    out.push((p.x, p.y));
-                }
-            }
-        } else {
-            let (p, q) = (seg.start(), seg.end());
-            let (gp, gq) = (g(p), g(q));
-            if gp == gq {
-                if gp == 0.0 {
-                    out.push((p.x, p.y));
-                    out.push((q.x, q.y));
-                }
-                continue;
-            }
-            let t = gp / (gp - gq);
-            if (0.0..=1.0).contains(&t) {
-                let m = p.lerp(q, t);
-                out.push((m.x, m.y));
-            }
-        }
+/// Where the line `a0 + au u + av v = 0` meets the circle about `c` of radius `r`.
+fn line_circle((a0, au, av): (f64, f64, f64), c: forge_math::Point2, r: f64) -> Vec<(f64, f64)> {
+    let nl = (au * au + av * av).sqrt();
+    if nl == 0.0 {
+        return vec![];
     }
-    out
+    let dist = (a0 + au * c.x + av * c.y) / nl;
+    if dist.abs() > r {
+        return vec![];
+    }
+    let n = Vec2::new(au, av) / nl;
+    let foot = c - n * dist;
+    let half = (r * r - dist * dist).max(0.0).sqrt();
+    [-1.0, 1.0]
+        .into_iter()
+        .map(|k| {
+            let p = foot + n.perp() * (k * half);
+            (p.x, p.y)
+        })
+        .collect()
+}
+
+/// Where two circles meet.
+fn circle_circle(
+    (c1, r1): (forge_math::Point2, f64),
+    (c2, r2): (forge_math::Point2, f64),
+) -> Vec<(f64, f64)> {
+    let d = c2 - c1;
+    let dl = d.length();
+    if dl == 0.0 || dl > r1 + r2 || dl < (r1 - r2).abs() {
+        return vec![];
+    }
+    let a = (r1 * r1 - r2 * r2 + dl * dl) / (2.0 * dl);
+    let h = (r1 * r1 - a * a).max(0.0).sqrt();
+    let n = d / dl;
+    let m = c1 + n * a;
+    [-1.0, 1.0]
+        .into_iter()
+        .map(|k| {
+            let p = m + n.perp() * (k * h);
+            (p.x, p.y)
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -863,6 +899,97 @@ mod tests {
                     toward: None,
                 }],
             ],
+        }
+    }
+
+    /// A straight member along +x from the origin, 500 long, up +z, its end cut by `normals`
+    /// through `at` (each keeping what lies against its normal).
+    fn ended(section: Section, at: Point3, normals: &[Vec3]) -> (MemberSpec, [Vec<Cut>; 2]) {
+        let m = MemberSpec {
+            path: Path::Line {
+                a: Point3::new(0.0, 0.0, 0.0),
+                b: Point3::new(500.0, 0.0, 0.0),
+            },
+            up: UnitVec3::Z,
+            section,
+        };
+        let cuts = normals
+            .iter()
+            .map(|n| Cut {
+                point: at,
+                normal: n.normalize().expect("a normal"),
+            })
+            .collect();
+        (m, [vec![], cuts])
+    }
+
+    /// The reach over the material by brute force: the section sampled on a fine grid.
+    fn sampled(m: &MemberSpec, cuts: &[Cut]) -> f64 {
+        let (lo, hi) = m.section.bbox();
+        let (x, y, _) = m.axes(0.0);
+        let n = 600;
+        let mut best = f64::NEG_INFINITY;
+        for i in 0..=n {
+            for j in 0..=n {
+                let u = lo.x + (hi.x - lo.x) * i as f64 / n as f64;
+                let v = lo.y + (hi.y - lo.y) * j as f64 / n as f64;
+                if !m.section.contains(forge_math::Point2::new(u, v)) {
+                    continue;
+                }
+                let off = x * u + y * v;
+                let r = cuts
+                    .iter()
+                    .map(|c| crossing(Point3::new(0.0, 0.0, 0.0), Vec3::new(1.0, 0.0, 0.0), c, off))
+                    .fold(f64::INFINITY, f64::min);
+                best = best.max(r);
+            }
+        }
+        best
+    }
+
+    /// Several cuts at one end: the long point is the max over the material of the min of the
+    /// cuts' crossings, wherever it lies: a support point, a ridge on a loop, an arc's tangent
+    /// point, a corner, or an apex of three cuts (here at the middle of a hollow section, where
+    /// there is no material: the optimum is on the hole's edge).
+    #[test]
+    fn several_cuts_at_one_end() {
+        let at = Point3::new(500.0, 0.0, 0.0);
+        let three = [
+            Vec3::new(1.0, 0.0, 0.6),
+            Vec3::new(1.0, 0.52, -0.3),
+            Vec3::new(1.0, -0.52, -0.3),
+        ];
+        let sections = [
+            crate::lookup("SHS 40x40x3").unwrap(),
+            crate::lookup("CHS 48.3x3.2").unwrap(),
+            crate::lookup("IPE 200").unwrap(),
+            crate::lookup("L 60x40x5").unwrap(),
+            crate::lookup("UPE 100").unwrap(),
+        ];
+        for s in sections {
+            for normals in [
+                &three[..2],
+                &three[..],
+                &[three[0], three[2], Vec3::new(1.0, 0.2, 0.1)][..],
+            ] {
+                let (m, cuts) = ended(s.clone(), at, normals);
+                let c = cutting(&m, &cuts);
+                let exact = c.overall.expect("straight");
+                let brute = sampled(&m, &cuts[1]);
+                // the grid's spacing times the reach's steepest slope bounds the sampling's shortfall
+                let (lo, hi) = s.bbox();
+                let h = ((hi.x - lo.x).max(hi.y - lo.y)) / 600.0;
+                assert!(
+                    exact >= brute - 1e-9,
+                    "{}: exact {exact} below a material point's {brute}",
+                    s.name
+                );
+                assert!(
+                    exact - brute <= 3.0 * h,
+                    "{}: exact {exact}, sampled {brute}",
+                    s.name
+                );
+            }
         }
     }
 

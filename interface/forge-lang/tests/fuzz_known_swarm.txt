@@ -1,0 +1,8 @@
+# Failures the sheet and thin swarm (fuzz.rs `sheet_and_thin_programs`) meets that are the
+# kernel's own: each shrunk program has no sheet and no thin wall, or the same part with the thin
+# wall drawn as its profile fails the same on main (44de597). Like fuzz_known.txt, a line matches
+# any failure whose kind holds it, and the list only shrinks.
+Internal(SplitCrossed  # a boolean: a hole into a blend, a pattern's copies, a cut ring through a moved copy
+Internal(InconsistentClassification  # a boolean: a revolve into a filleted block
+invalid DuplicateName  # a fillet of a revolved and cut block's edges
+a face would take too many points  # a long upto extrude's cylinder, meshed at the suite's chord

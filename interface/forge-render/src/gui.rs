@@ -2120,7 +2120,7 @@ impl Headless {
 impl Gui {
     /// Opens a Forge (.fg) part: its worker builds it at once, and keeps its stages warm after.
     fn open_fg(&mut self, path: &str) -> bool {
-        let gpu = (self.device.clone(), self.queue.clone(), self.adapter.clone());
+        let gpu = crate::fg::gpu_of(&self.device, &self.queue, &self.adapter);
         let waker = self.waker.clone();
         let waker: Arc<dyn Fn() + Send + Sync> = Arc::new(move || waker());
         match crate::fg::Session::open(path, Some(gpu), waker) {
@@ -2392,7 +2392,10 @@ impl Gui {
                     });
                 }
             }
-            if let Some((renderer, scene)) = b.view {
+            if let Some((renderer, scene)) = b
+                .view
+                .map(|v| crate::fg::view_on(v, &self.device, &self.queue, &self.adapter))
+            {
                 if let Some(v) = &self.view
                     && b.asm.is_some()
                 {
@@ -3081,6 +3084,26 @@ impl Gui {
         }
         if self.fg_asm.is_some() && self.asm_tools_frame() {
             return;
+        }
+        // a sketch goes on a planar face: a click that caught one of its edges or corners (a slot's
+        // rim, an emboss's letters) means the planar face it was on, the one turned to the eye
+        if self.shell.sketch_pick
+            && self.fg_asm.is_none()
+            && let Some(v) = &self.view
+            && v.nav.clicks != v.clicks
+            && let Some(&(pl, e)) = v.nav.selected.last()
+            && !matches!(e, Entity::Face(_))
+            && let Some(a) = self.fg_anchors.as_deref()
+            && let Some(f) = self.face_at(pl, e, v.nav.last_click_at, |f| {
+                a.faces
+                    .get(f as usize)
+                    .and_then(|n| n.as_ref())
+                    .is_some_and(|n| a.planes.contains_key(&format!("{n}.plane")))
+            })
+            && let Some(v) = &mut self.view
+            && let Some(s) = v.nav.selected.last_mut()
+        {
+            s.1 = f;
         }
         let Some(v) = &mut self.view else { return };
         if v.nav.clicks == v.clicks {

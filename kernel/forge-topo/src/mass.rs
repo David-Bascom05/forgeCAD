@@ -52,11 +52,8 @@ pub struct MassProps {
     pub axes: [Vec3; 3],
     /// Error bounds: volume, area, centroid (distance), inertia (largest entry).
     pub err: [f64; 4],
-    /// Each face's area.
+    /// Each face's area (a sheet face's too: it takes no part in the rest, `sheet_area`).
     pub faces: Vec<(FaceId, f64)>,
-    /// The area of the body's sheet faces (`Face::sheet`), which take no part in the rest: a part's
-    /// volume, area and moments are its solids'.
-    pub sheet_area: f64,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -71,14 +68,14 @@ impl std::fmt::Display for MassError {
     }
 }
 
-/// A body's mass properties: its solids'. A body of sheets alone has none: volume, area and
-/// moments 0, its centroid (undefined) the origin, and `sheet_area` its area.
+/// A body's mass properties: its solids' (a sheet face's area is in `faces`, and nowhere else). A
+/// body of sheets alone has none: volume, area and moments 0, its centroid (undefined) the origin.
 pub fn mass(body: &Body) -> Result<MassProps, MassError> {
     mass_rel(body, REL)
 }
 
-/// A sheet's area and its error bound: its faces' areas summed in face order, each as `mass`
-/// integrates it.
+/// The area of a body's sheet faces and its error bound: their areas summed in face order, each as
+/// `mass` integrates it (0 for a solid).
 pub fn sheet_area(body: &Body) -> Result<(f64, f64), MassError> {
     let n = body.vertices.len().max(1) as f64;
     let c = body
@@ -90,7 +87,7 @@ pub fn sheet_area(body: &Body) -> Result<(f64, f64), MassError> {
         .fold(forge_math::Box3::EMPTY, |b, f| b.hull(&body.face_box(f)))
         .diagonal();
     let (mut a, mut e) = (0.0, 0.0);
-    for f in body.face_ids() {
+    for f in body.face_ids().filter(|&f| body.sheets && body.face(f).sheet) {
         let (v, err) = face_integrals(body, f, c, size, REL).map_err(|why| MassError { face: f, why })?;
         a += v[10];
         e += err[10];
@@ -158,11 +155,11 @@ pub fn mass_rel(body: &Body, rel: f64) -> Result<MassProps, MassError> {
     } else {
         Box::new((0..ids.len()).map(one))
     };
-    let (mut sheet_area, mut sheet_faces) = (0.0, 0);
+    let mut sheet_faces = 0;
+    let mut abs = [0.0; NF];
     for (&f, got) in ids.iter().zip(each) {
         let (v, er) = got.map_err(|why| MassError { face: f, why })?;
-        if body.face(f).sheet {
-            sheet_area += v[10];
+        if body.sheets && body.face(f).sheet {
             sheet_faces += 1;
             faces.push((f, v[10]));
             continue;
@@ -170,6 +167,7 @@ pub fn mass_rel(body: &Body, rel: f64) -> Result<MassProps, MassError> {
         for k in 0..NF {
             t[k] += v[k];
             e[k] += er[k];
+            abs[k] += v[k].abs();
         }
         if er[0] > loosest.1 {
             loosest = (f, er[0]);
@@ -197,8 +195,17 @@ pub fn mass_rel(body: &Body, rel: f64) -> Result<MassProps, MassError> {
             ],
             err: [0.0; 4],
             faces,
-            sheet_area,
         });
+    }
+    // the face sum's own rounding: within γn Σ|v| of the exact sum of the faces' values, n faces
+    // summed (a sheet's are not), γn = nu / (1 - nu), u = 2^-53
+    // (verify/forge-mass/lean/ForgeMass/Rounding.lean `face_sum_err`)
+    let nu = (ids.len() - sheet_faces) as f64 * (0.5 * f64::EPSILON);
+    if nu < 1.0 {
+        let gamma = nu / (1.0 - nu);
+        for k in 0..NF {
+            e[k] += gamma * abs[k];
+        }
     }
     let vol = t[0];
     // shells may overlap (`extrude new`), so their volumes add up past one box round them all: each
@@ -252,8 +259,13 @@ pub fn mass_rel(body: &Body, rel: f64) -> Result<MassProps, MassError> {
         std::array::from_fn(|i| std::array::from_fn(|j| if i == j { tr - s(i, i) } else { -s(i, j) }));
     let (principal, axes) = eigen(inertia);
     let gl = g.length();
+    // the bounds verify/forge-mass/lean/ForgeMass/Errors.lean proves: the centroid's distance takes
+    // the first moments' errors as a vector (`centroid_bound`), each second moment its own error
+    // to second order (`inertia_entry_bound`), both over the volume's least |vol| - e0
     let em = e[1].abs().max(e[2]).max(e[3]);
+    let en = (e[1] * e[1] + e[2] * e[2] + e[3] * e[3]).sqrt();
     let es = e[4..10].iter().fold(0.0f64, |a, &x| a.max(x));
+    let least = vol.abs() - e[0];
     Ok(MassProps {
         volume: vol,
         area: t[10],
@@ -264,11 +276,18 @@ pub fn mass_rel(body: &Body, rel: f64) -> Result<MassProps, MassError> {
         err: [
             e[0],
             e[10],
-            (em + gl * e[0]) / vol.abs(),
-            2.0 * (es + 2.0 * gl * em + gl * gl * e[0]),
+            if least > 0.0 {
+                (en + gl * e[0]) / least
+            } else {
+                f64::INFINITY
+            },
+            if least > 0.0 {
+                2.0 * (es + 2.0 * gl * em + gl * gl * e[0] + (em + gl * e[0]) * (em + gl * e[0]) / least)
+            } else {
+                f64::INFINITY
+            },
         ],
         faces,
-        sheet_area,
     })
 }
 

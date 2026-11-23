@@ -74,6 +74,8 @@ pub const MAKERS: &[Maker] = makers![
     "copybody" 1 copybody,
     "thread" 1 thread,
     "text" 1 text,
+    "sheet" 1 sheet,
+    "thin" 1 thin,
 ];
 
 /// The seeds the tests run. (Not 0: its last statement, a thread cut into a block of many faces,
@@ -1919,6 +1921,125 @@ fn thicken(g: &mut G) -> Option<Vec<String>> {
     )])
 }
 
+/// A chain for a sheet or a thin wall, in a sketch of size `s`: its rows and the argument naming it
+/// in sketch `sk`. One of `loops`' loops (a rect, a rounded one, a circle, a polygon, a line closed
+/// by an arc), now and then with a circle beside it, or an open path of one to three lines, each
+/// turn under 75 degrees (no path that turns back across itself), the last now and then a
+/// tangent arc.
+fn chain_rows(g: &mut G, s: f64, sk: &str) -> (Vec<String>, String) {
+    if !g.one_in(3) {
+        let rows = g.loops(s);
+        let mut names: Vec<&str> = if rows[0].starts_with("o = ") {
+            vec!["o"]
+        } else {
+            vec!["l", "a"]
+        };
+        if rows.len() > names.len() && rows.last().is_some_and(|r| r.starts_with("c = ")) {
+            names.push("c");
+        }
+        let arg = match names[..] {
+            [one] => format!("{sk}.{one}"),
+            _ => format!(
+                "[{}]",
+                names
+                    .iter()
+                    .map(|x| format!("{sk}.{x}"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+        };
+        return (rows, arg);
+    }
+    let h = s / 2.0;
+    let mut rows = vec![format!("path w(start: ({}, 0)) {{", n(-h))];
+    let (mut x, mut y, mut a) = (-h, 0.0, 0.0f64);
+    let k = 1 + g.r.below(3);
+    for i in 0..k {
+        if i > 0 {
+            a += dmath::TAU * g.range(-75.0, 75.0) / 360.0;
+        }
+        let len = s * g.range(0.3, 0.6);
+        let (sa, ca) = dmath::sin_cos(a);
+        (x, y) = (x + len * ca, y + len * sa);
+        rows.push(format!("  line(to: ({}, {}))", n(x), n(y)));
+    }
+    if g.one_in(3) {
+        // a quarter turn or so, to the left or right of the last line
+        let turn = if g.one_in(2) { 1.0 } else { -1.0 };
+        let r = s * g.range(0.1, 0.3);
+        let (sa, ca) = dmath::sin_cos(a);
+        let (ex, ey) = (x + r * ca - turn * r * sa, y + r * sa + turn * r * ca);
+        rows.push(format!("  tarc(to: ({}, {}))", n(ex), n(ey)));
+    }
+    rows.push("}".to_string());
+    (rows, format!("{sk}.w"))
+}
+
+fn sheet(g: &mut G) -> Option<Vec<String>> {
+    // a surface beside the part: its own body, which nothing after acts on as a solid
+    let (at, nrm) = g.spot();
+    let s = g.size(0.04, 0.3);
+    let z = g.tilt(nrm);
+    let on = g.plane(at, z, None);
+    let l = g.label();
+    let sk = format!("S{}", &l[1..]);
+    let (mut rows, arg) = chain_rows(g, s, &sk);
+    let call = if g.one_in(4) {
+        // turned about an axis clear of the chain
+        rows.push(format!(
+            "ax = line(({}, {}), ({}, {}))",
+            n(-s),
+            n(-1.5 * s),
+            n(s),
+            n(-1.5 * s)
+        ));
+        let angle = 30 + 30 * g.r.below(11);
+        format!("revolve({arg}, axis: {sk}.ax, angle: {angle}deg, surface: true)")
+    } else {
+        let d = g.size(0.03, 0.25);
+        let ext = match g.r.below(4) {
+            0 => format!("sym({})", n(d)),
+            1 => format!("two({}, {})", n(d), n(d * g.range(0.2, 1.0))),
+            _ => n(d),
+        };
+        format!("extrude({arg}, {ext}, surface: true)")
+    };
+    g.made(&l, "sheet", false, true);
+    Some(vec![sketch_block(&sk, &on, &rows), format!("{l} = {call}")])
+}
+
+fn thin(g: &mut G) -> Option<Vec<String>> {
+    // a wall t thick about a chain: added, cut or a new body, as an extrude is
+    let op = match g.r.below(6) {
+        0 => "new",
+        1 | 2 => "cut",
+        _ => "add",
+    };
+    let (at, nrm) = g.spot();
+    let s = g.size(0.04, 0.3);
+    let d = g.size(0.03, 0.25);
+    let t = g.size(0.005, 0.03);
+    // an add sunk a little going out, a cut sketched above the face going in
+    let (start, dir) = if op == "cut" {
+        (at + nrm * g.range(0.0, 0.5), -nrm)
+    } else {
+        (at - nrm * g.range(0.0, 0.5), nrm)
+    };
+    let z = g.tilt(dir);
+    let on = g.plane(start, if op == "cut" { -z } else { z }, None);
+    let l = g.label();
+    let sk = format!("S{}", &l[1..]);
+    let (rows, arg) = chain_rows(g, s, &sk);
+    let side = ["", ", side: \"in\"", ", side: \"both\""][g.r.below(3)];
+    let call = match op {
+        "cut" => format!("cut({arg}, {}, thin: {}{side})", n(d), n(t)),
+        "new" => format!("extrude({arg}, {}, thin: {}{side}, new: true)", n(d), n(t)),
+        _ => format!("extrude({arg}, {}, thin: {}{side})", n(d), n(t)),
+    };
+    g.made(&l, "extrude", true, op == "new");
+    Some(vec![sketch_block(&sk, &on, &rows), format!("{l} = {call}")])
+}
+
 fn delete_faces(g: &mut G) -> Option<Vec<String>> {
     // a hole, boss or pocket made by one earlier statement, or a blend strip
     let ls = g.solids();
@@ -2656,8 +2777,8 @@ pub fn feature_kind(f: &Feature) -> &'static str {
         Feature::Regions(_) => "extrude",
         Feature::Import(_) => "import",
         Feature::Body(_) => "body",
-        Feature::Member(_) => "member",
         Feature::Sheet(_) => "sheet",
+        Feature::Member(_) => "member",
     }
 }
 
@@ -2682,7 +2803,29 @@ fn lineage(asked: &[(String, crate::anchors::Asked)]) -> HashMap<Name, Vec<usize
 /// Grows a program of up to `len` statement groups from `seed`. A group the kernel refuses, or
 /// fails on, is dropped and the program goes on from the part before it.
 pub fn run(seed: u64, len: usize) -> Run {
-    run_kinds(seed, len, u64::MAX)
+    run_kinds(seed, len, kinds_but(SWARM_ONLY))
+}
+
+/// Kinds `run` leaves out, drawn only by a swarm that names them (`run_kinds`): kinds added after
+/// the seeds' programs were set, which drawn among all would make every seed's program another.
+pub const SWARM_ONLY: &[&str] = &["sheet", "thin"];
+
+/// The `run_kinds` mask of every kind but these.
+pub fn kinds_but(names: &[&str]) -> u64 {
+    MAKERS
+        .iter()
+        .enumerate()
+        .filter(|(_, m)| !names.contains(&m.name))
+        .fold(0, |k, (i, _)| k | 1 << (i % 64))
+}
+
+/// The `run_kinds` mask of these kinds alone.
+pub fn kinds_of(names: &[&str]) -> u64 {
+    MAKERS
+        .iter()
+        .enumerate()
+        .filter(|(_, m)| names.contains(&m.name))
+        .fold(0, |k, (i, _)| k | 1 << (i % 64))
 }
 
 /// `run` drawing only the kinds whose bit in `kinds` is set (of MAKERS, in order; empty counts as

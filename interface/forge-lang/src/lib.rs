@@ -7,11 +7,13 @@
 pub mod anchors;
 pub mod asm;
 pub mod bench;
+pub mod bendsim;
 pub mod bodies;
 pub mod build;
 pub mod builtins;
 pub mod compare;
 pub mod deps;
+pub mod dfm;
 pub mod drawing;
 pub mod edit;
 pub mod edit_ops;
@@ -54,6 +56,7 @@ pub mod units;
 pub mod uses;
 pub mod validity;
 pub mod values;
+pub mod vendor;
 pub mod verts;
 pub mod vtools;
 pub mod weld;
@@ -437,14 +440,23 @@ fn sum_masses(ms: &[forge_topo::mass::MassProps]) -> forge_topo::mass::MassProps
         axes,
         err,
         faces: vec![],
-        sheet_area: ms.iter().map(|m| m.sheet_area).sum(),
     }
 }
 
-fn run_once(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
+fn run_once(src: &str, opts: Options, mut cache: Cache) -> (Run, Cache) {
     let t0 = Instant::now();
     let mut timings = Timings::default();
-    let prog = syntax::parse(src);
+    // the run before's tree, patched where only a number changed (an edit of one dimension)
+    let prog = match cache.parsed.take() {
+        Some((was, mut prog)) => {
+            if syntax::reparse_number(&was, &mut prog, src) {
+                Ok(prog)
+            } else {
+                syntax::parse(src)
+            }
+        }
+        None => syntax::parse(src),
+    };
     timings.parse_ms = t0.elapsed().as_secs_f64() * 1e3;
     let prog = match prog {
         Ok(p) => p,
@@ -499,6 +511,7 @@ fn run_once(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
     });
     // a harness file is evaluated where an assembly places it, with the occurrences it is given
     let placed_only = harness::header(&prog).map(|(names, _)| names);
+    let keep_tree = placed_only.is_none();
     let prog = match &placed_only {
         Some(names) => {
             harness::placed_only(&mut ev, prog[0].span, names);
@@ -557,7 +570,7 @@ fn run_once(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
             || -> Option<Vec<_>> { each.then(|| solids.iter().map(|x| mass(&x.2).ok()).collect()) };
         // under a budget (spent on this thread), or with one thread to run on, one after another
         let (w, e, o) = if forge_geom::budget::left() == u64::MAX && forge_math::par::threads() > 1 {
-            std::thread::scope(|s| {
+            forge_math::par::scope(|s| {
                 let w = whole.map(|b| s.spawn(move || mass(b)));
                 let bx = boxed.map(|b| s.spawn(move || tightbox::tight_box(b)));
                 let o: Vec<_> = owed.iter().map(|x| s.spawn(move || mass(&x.2).ok())).collect();
@@ -689,7 +702,11 @@ fn run_once(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
     run.components = asm::components(&ev);
     run.body_chains = chains;
     asm::keep_comp_caches(&mut ev);
-    (run, ev.b.into_cache())
+    let mut cache = ev.b.into_cache();
+    if keep_tree {
+        cache.parsed = Some((src.to_string(), prog));
+    }
+    (run, cache)
 }
 
 /// Where a run may read files: under the session's root if one is given (`fg serve`, MCP), else
@@ -776,7 +793,7 @@ pub fn sketch_view(src: &str, id: &str, opts: Options) -> Option<SketchView> {
 }
 
 /// A scoped thread's answer, its panic carried on.
-fn joined<T>(h: std::thread::ScopedJoinHandle<'_, T>) -> T {
+fn joined<T>(h: forge_math::par::ScopedJoinHandle<'_, T>) -> T {
     h.join().unwrap_or_else(|p| std::panic::resume_unwind(p))
 }
 
@@ -864,10 +881,11 @@ fn expect(ev: &mut Eval, s: &syntax::Stmt, m: &Measure) -> Option<ExpectResult> 
         }
         return Some(ExpectResult { metric, measured, ok });
     };
+    let inch = |x: f64, u: syntax::Unit| if u == syntax::Unit::In { x * 25.4 } else { x };
     let lit = |e: &syntax::Expr| match e.kind {
-        ExprKind::Num(x, _) => Some(x),
+        ExprKind::Num(x, u) => Some(inch(x, u)),
         ExprKind::Neg(ref a) => match a.kind {
-            ExprKind::Num(x, _) => Some(-x),
+            ExprKind::Num(x, u) => Some(-inch(x, u)),
             _ => None,
         },
         _ => None,

@@ -25,6 +25,17 @@ Line references are to `kernel/forge-topo/src/{body,check}.rs` on claude/repo-re
   (`boundaries`: the connected pieces of the graph its one-use edges make on their vertices).
 * `open_at` and the gate in `check_known` are as before, with `EdgeUses` now not raised for a
   sheet's boundary.
+* The route is chosen once: `check_known` calls `check_known_as::<true>` when `has_sheet`, else
+  `check_known_as::<false>`, and each sheet rule is guarded by the const `S`. So the `false`
+  instance is the solid check with no sheet branch in it (`check_fans` walks `leaving` unsorted),
+  and `SolidRouteUnchanged` below is a statement about that instance. For an Aeneas translation
+  (L4), the two instances are two functions; the model's `checkS` with `hasSheet = false` is
+  `check_known_as::<false>`.
+
+Written against `TopoCheck.Model` as of 3d17b13. Fundamentals has since moved it (25cb295: `fshell`,
+`checkLinks`, `checkShellFaces`, `checkStrays`, and `check_sound` without `WF`); `checkS` must take
+those passes as `check` does when this file is built against it. Not built here: no Lean toolchain
+in this container, and installing one was refused.
 -/
 
 namespace TopoCheck.Body
@@ -151,5 +162,10 @@ For each sheet in `kernel/forge-ops/tests/sheet.rs` and `kernel/forge-model/test
 * a face's sense flipped: `edgeUsesSameWay` on each of its two-use edges;
 * the sheet's marks cleared (a solid with a missing face): `edgeUses e 1` on every boundary edge;
 * one face's mark cleared in a sheet: `SheetMeetsSolid` on its two-use edges, `edgeUses` on its
-  boundary ones.
+  boundary ones;
+* one face meeting a boundary vertex twice (fundamentals' case for the corner table's guard: a
+  sheet face whose loop passes the same boundary vertex at two corners, as a slit square does at
+  the slit's root). If the guard rejects the table, `Body::fans` falls back to loop-order fans and
+  the boundary-first sort decides: a valid sheet must still give one fan there, and a bow tie
+  `vertexFans 2`.
 -/

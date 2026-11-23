@@ -194,7 +194,7 @@ fn a_sheet_has_no_volume_and_check_keeps_solids_closed() {
     let mut b = extrude_sheet(&Frame::WORLD, &[chain], 10.0, 7).unwrap();
     let m = mass(&b).unwrap();
     assert_eq!((m.volume, m.area), (0.0, 0.0));
-    assert!((m.sheet_area - 650.0).abs() < 1e-9);
+    assert!((area(&b) - 650.0).abs() < 1e-9);
     // the same topology called a solid: its boundary edges are each used once, not twice
     for f in &mut b.faces {
         f.sheet = false;
@@ -424,4 +424,135 @@ mod thickened {
         let v = solid(&thicken(&s, &faces(&s), -t / 2.0, t / 2.0, 2).unwrap());
         assert!((v - 3.0 * len * t).abs() < 1e-8, "{v}");
     }
+}
+
+/// A planar sheet on z = 0 made by hand: its vertices, and each face a loop of vertex indices,
+/// counter-clockwise seen from +z unless `flip` names it (then turned over, its front down). An
+/// edge is shared by its two ends; a loop may use one edge twice (a slit).
+fn hand_sheet(pts: &[(f64, f64)], faces: &[&[usize]], flip: &[usize]) -> Body {
+    use forge_geom::{Curve, Line, Plane, Surface};
+    use forge_math::{Interval, Point3};
+    use forge_topo::{EdgeId, Name};
+    let mut b = Body::new();
+    let vs: Vec<_> = pts
+        .iter()
+        .enumerate()
+        .map(|(i, &(x, y))| b.add_vertex(Point3::new(x, y, 0.0), Name::NONE.with(i as u64)))
+        .collect();
+    let at = |i: usize| Point3::new(pts[i].0, pts[i].1, 0.0);
+    let mut edges: Vec<((usize, usize), EdgeId)> = vec![];
+    let shell = b.add_shell();
+    for (fi, f) in faces.iter().enumerate() {
+        let up = !flip.contains(&fi);
+        let face = b.add_face(
+            shell,
+            Surface::Plane(Plane::new(Frame::WORLD)),
+            up,
+            Name::NONE.with(100 + fi as u64),
+        );
+        let order: Vec<usize> = if up {
+            f.to_vec()
+        } else {
+            f.iter().rev().copied().collect()
+        };
+        let mut uses = vec![];
+        for k in 0..order.len() {
+            let (p, q) = (order[k], order[(k + 1) % order.len()]);
+            let key = (p.min(q), p.max(q));
+            let e = match edges.iter().find(|x| x.0 == key) {
+                Some(x) => x.1,
+                None => {
+                    let line = Line::through(at(key.0), at(key.1)).expect("apart");
+                    let len = at(key.0).distance(at(key.1));
+                    let e = b.add_edge(
+                        Curve::Line(line),
+                        Interval::new(0.0, len),
+                        vs[key.0],
+                        vs[key.1],
+                        Name::NONE.with(1000 + edges.len() as u64),
+                    );
+                    edges.push((key, e));
+                    e
+                }
+            };
+            uses.push((e, p == key.0));
+        }
+        b.add_loop(face, &uses);
+    }
+    b.mark_sheet();
+    b
+}
+
+#[test]
+fn a_slit_squares_root_is_one_fan() {
+    // one face meeting a boundary vertex twice: the slit's root M on the bottom edge, its loop
+    // A M S M B C D (the slit M S used both ways); one boundary cycle, V - E + 2F - L + B = 2
+    let b = hand_sheet(
+        &[
+            (0.0, 0.0),
+            (5.0, 0.0),
+            (5.0, 5.0),
+            (10.0, 0.0),
+            (10.0, 10.0),
+            (0.0, 10.0),
+        ],
+        &[&[0, 1, 2, 1, 3, 4, 5]],
+        &[],
+    );
+    // valid: one fan at M, walked from its boundary use
+    valid(&b);
+}
+
+#[test]
+fn sheet_mutants_are_refused_by_name() {
+    let two = [
+        (0.0, 0.0),
+        (5.0, 0.0),
+        (10.0, 0.0),
+        (10.0, 5.0),
+        (5.0, 5.0),
+        (0.0, 5.0),
+    ];
+    let faces: [&[usize]; 2] = [&[0, 1, 4, 5], &[1, 2, 3, 4]];
+    // two squares side by side: a valid sheet
+    valid(&hand_sheet(&two, &faces, &[]));
+    // a bow tie: two triangles at one vertex, two fans there
+    let bow = hand_sheet(
+        &[(0.0, 0.0), (4.0, 0.0), (2.0, 2.0), (4.0, 4.0), (0.0, 4.0)],
+        &[&[0, 1, 2], &[2, 3, 4]],
+        &[],
+    );
+    let p = check(&bow);
+    assert!(
+        p.iter().any(|p| matches!(p, Problem::VertexFans { fans: 2, .. })),
+        "{p:?}"
+    );
+    // one face turned over: its shared edge used the same way by both
+    let p = check(&hand_sheet(&two, &faces, &[1]));
+    assert!(
+        p.iter().any(|p| matches!(p, Problem::EdgeUsesSameWay { .. })),
+        "{p:?}"
+    );
+    // one face's mark cleared: a solid face meets a sheet's at the shared edge, and its own
+    // boundary edges are a solid's edges used once
+    let mut half = hand_sheet(&two, &faces, &[]);
+    half.faces[1].sheet = false;
+    let p = check(&half);
+    assert!(
+        p.iter().any(|p| matches!(p, Problem::SheetMeetsSolid { .. })),
+        "{p:?}"
+    );
+    assert!(
+        p.iter().any(|p| matches!(p, Problem::EdgeUses { uses: 1, .. })),
+        "{p:?}"
+    );
+    // every mark cleared: a solid missing its other faces, refused as one
+    let mut none = hand_sheet(&two, &faces, &[]);
+    none.faces.iter_mut().for_each(|f| f.sheet = false);
+    none.sheets = false;
+    let p = check(&none);
+    assert!(
+        p.iter().any(|p| matches!(p, Problem::EdgeUses { uses: 1, .. })),
+        "{p:?}"
+    );
 }

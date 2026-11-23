@@ -1121,7 +1121,7 @@ impl Error {
         match self {
             Syntax(s) => match s {
                 SyntaxError::BadNumber { .. } => "a malformed number".into(),
-                SyntaxError::UnknownUnit { .. } => "unknown unit (mm, deg)".into(),
+                SyntaxError::UnknownUnit { .. } => "unknown unit (mm, in, deg)".into(),
                 SyntaxError::OpenString { .. } => "a string not closed".into(),
                 SyntaxError::BadChar { .. } => "a character Forge does not use".into(),
                 SyntaxError::Expected { what, .. } => format!("expected {what}"),
@@ -1511,6 +1511,8 @@ fn regen_text(e: &forge_model::RegenError) -> String {
         G::NotClosed { what, .. } => format!("{what} is gone, so the part is no closed solid"),
         G::MissingEdge { name, .. } => format!("the part has no edge {name:?}"),
         G::Bodies { count } => format!("the part ends as {count} bodies, not one"),
+        // an edit's own error says why ("thicken: rebuild: vertex"), not the wrapper's name
+        G::Edit { error, .. } => words(error),
         G::Body {
             error: forge_model::BodyError::Pieces { pieces },
             ..

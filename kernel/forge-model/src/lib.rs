@@ -194,11 +194,11 @@ pub enum Feature {
     Work(Work),
     /// A feature on chosen bodies, or one that combines, splits or moves bodies (bodies.rs).
     Body(Box<BodyFeature>),
+    /// A sheet: a sketch's chains extruded or revolved into a surface body of its own (sheets.rs).
+    Sheet(Box<sheets::Sheet>),
     /// A weldment member: a section along a line or an arc, cut at its ends, a body of its own
     /// (weld.rs).
     Member(Box<weld::Member>),
-    /// A sheet: a sketch's chains extruded or revolved into a surface body of its own (sheets.rs).
-    Sheet(Box<sheets::Sheet>),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -966,9 +966,15 @@ pub fn tool_shapes(features: History<'_>, i: usize) -> Result<Vec<(Shape, Combin
 /// pass never sees the part in between, where the feature-by-feature regen refuses an empty
 /// one however later tools add to it; such histories are rebuilt feature by feature instead.
 fn may_empty(first: &Body, tools: &[Tool]) -> bool {
+    // (each live face's box, in id order: a loop over the faces, not their ids' iterator)
     let bx = |b: &Body| {
-        b.face_ids()
-            .fold(forge_math::Box3::EMPTY, |a, f| a.hull(&b.face_box(f)))
+        let mut a = forge_math::Box3::EMPTY;
+        for (k, f) in b.faces.iter().enumerate() {
+            if f.alive {
+                a = a.hull(&b.face_box(forge_topo::FaceId(k as u32)));
+            }
+        }
+        a
     };
     let holds = |a: &forge_math::Box3, b: &forge_math::Box3| {
         let h = a.grow(forge_math::tol::LINEAR);
@@ -1019,16 +1025,18 @@ pub(crate) fn not_empty(b: Body, i: usize) -> Result<Body, RegenError> {
 
 /// Whether a feature makes a new body.
 fn starts(f: &Feature) -> bool {
-    matches!(
-        f,
-        Feature::Extrude { op: Combine::New, .. }
-            | Feature::Revolve { op: Combine::New, .. }
-            | Feature::Ball { op: Combine::New, .. }
-    ) || swept::op(f) == Some(Combine::New)
-        || matches!(f, Feature::Import(t) if t.op == Combine::New)
-        || matches!(f, Feature::Member(_))
-        || matches!(f, Feature::Regions(r) if r.op == Combine::New)
-        || matches!(f, Feature::Sheet(s) if sheets::op(s) == Combine::New)
+    // one match: an extrude, revolve, ball, import or region set says by its own op, a sheet by
+    // its (a new body unless it is a thin wall), a member always; the rest as `swept::op` says
+    match f {
+        Feature::Extrude { op, .. } | Feature::Revolve { op, .. } | Feature::Ball { op, .. } => {
+            *op == Combine::New
+        }
+        Feature::Import(t) => t.op == Combine::New,
+        Feature::Regions(r) => r.op == Combine::New,
+        Feature::Sheet(s) => sheets::op(s) == Combine::New,
+        Feature::Member(_) => true,
+        _ => swept::op(f) == Some(Combine::New),
+    }
 }
 
 /// Whether a feature changes the part as a whole, rather than making tools to combine with it.
@@ -1141,7 +1149,7 @@ fn build_each(
     // next face against a plain extrude), so fixed chunks left threads idle
     let next = std::sync::atomic::AtomicUsize::new(from);
     type Built = (usize, Result<Vec<Tool>, RegenError>);
-    let done: Vec<Vec<Built>> = std::thread::scope(|s| {
+    let done: Vec<Vec<Built>> = forge_math::par::scope(|s| {
         let hs: Vec<_> = (0..threads.min(n))
             .map(|_| {
                 s.spawn(|| {
@@ -1453,6 +1461,15 @@ fn nary_run(
     .map_err(err)
 }
 
+/// `a` combined with `b` as the regen goes on from it: the boolean's pieces left as they are
+/// (`boolean_into`), compacted. `forge_bool::boolean` hands its result out joined; the regen
+/// joins once, when it hands the part out (`finish`), so every path combines the same pieces.
+pub(crate) fn combined(a: &Body, b: &Body, op: Op, feature: u64) -> Result<Body, BoolError> {
+    let mut out = a.clone();
+    boolean_into(&mut out, b, op, feature)?;
+    Ok(out.into_compact())
+}
+
 /// The part as regeneration hands it out: faces on one surface and edges on one curve joined
 /// (`forge_bool::unify`), compacted. `step` leaves this to its caller, so the next step builds
 /// on the pieces the n-ary regen also sees.
@@ -1545,14 +1562,13 @@ fn threaded_shell(
     }
     let mut plain = body.clone();
     for r in &rings {
-        plain =
-            forge_bool::boolean(&plain, r, if outward { Op::Union } else { Op::Subtract }, id).map_err(be)?;
+        plain = combined(&plain, r, if outward { Op::Union } else { Op::Subtract }, id).map_err(be)?;
     }
     let Some(solid) = forge_ops::offset_solid(&plain, thickness, outward, open, id).map_err(e)? else {
         return shell(body, thickness, outward, open, id).map_err(e);
     };
     let (a, b) = if outward { (&solid, body) } else { (body, &solid) };
-    let out = forge_bool::boolean(a, b, Op::Subtract, id).map_err(be)?;
+    let out = combined(a, b, Op::Subtract, id).map_err(be)?;
     // the solid taken lies wholly in the one it is taken from: else a wall ran through the skin
     let volume = |b: &Body| forge_topo::mass::mass(b).map_or(f64::NAN, |m| m.volume);
     let (va, vb, v) = (volume(a), volume(b), volume(&out));
@@ -1932,8 +1948,8 @@ fn overlapping_rounds(body: &Body, want: &[FilletEdge], opts: &FilletOptions, id
         };
         let cut = fillet_with(body, &pick(true), opts, id).ok()?;
         let fill = fillet_with(body, &pick(false), opts, id).ok()?;
-        let taken = forge_bool::boolean(body, &cut, forge_bool::Op::Subtract, id).ok()?;
-        let done = forge_bool::boolean(&fill, &taken, forge_bool::Op::Subtract, id).ok()?;
+        let taken = combined(body, &cut, forge_bool::Op::Subtract, id).ok()?;
+        let done = combined(&fill, &taken, forge_bool::Op::Subtract, id).ok()?;
         return (forge_topo::check(&done).is_empty() && !face_turned(body, &done)).then_some(done);
     }
     let op = if kinds[0] == Some(true) {
@@ -1945,7 +1961,7 @@ fn overlapping_rounds(body: &Body, want: &[FilletEdge], opts: &FilletOptions, id
     for (edges, _) in &groups {
         let round = fillet_with(body, edges, opts, id).ok()?;
         done = Some(match done {
-            Some(d) => forge_bool::boolean(&d, &round, op, id).ok()?,
+            Some(d) => combined(&d, &round, op, id).ok()?,
             None => round,
         });
     }
@@ -2090,8 +2106,8 @@ fn tools(features: History<'_>, i: usize, build: bool) -> Result<Vec<Tool>, Rege
         Feature::Text(_) => text::tools(features, i),
         Feature::Regions(_) => regions::tools(features, i, build),
         Feature::Import(_) => import::tools(features, i),
-        Feature::Member(m) => Ok(vec![weld::tool(m, i, features.id(i), build)?]),
         Feature::Sheet(s) => Ok(vec![sheets::tool(i, features.id(i), s, build)?]),
+        Feature::Member(m) => Ok(vec![weld::tool(m, i, features.id(i), build)?]),
         f => Ok(vec![tool(i, features.id(i), f, build)?]),
     }
 }
@@ -2170,7 +2186,7 @@ fn tool(i: usize, id: u64, f: &Feature, build: bool) -> Result<Tool, RegenError>
             b = if k == 0 {
                 s
             } else {
-                forge_bool::boolean(&b, &s, Op::Union, (id + 1_000_000) | ((k as u64) << 40))
+                combined(&b, &s, Op::Union, (id + 1_000_000) | ((k as u64) << 40))
                     .map_err(|error| RegenError::Boolean { feature: i, error })?
             };
         }

@@ -8,7 +8,7 @@ use crate::{
     Combine, Edit, Feature, History, RegenError, SHORT_RUN, Tool, cut_root, modifies, modify, op_of,
     part_shape, starts, tools,
 };
-use forge_bool::{BoolError, Op, Shape, boolean, boolean_into, nary_with};
+use forge_bool::{BoolError, Op, Shape, boolean_into, nary_with};
 use forge_geom::{Cylinder, Plane, Surface};
 use forge_math::{Box3, Frame, Point2, Point3, Vec3, tol};
 use forge_ops::{Profile, ProfileLoop, Segment, extrude};
@@ -119,7 +119,8 @@ pub enum BodyError {
 
 /// Whether a history makes or works on more than one body.
 pub fn multi(features: &[Feature]) -> bool {
-    // one pass: a body feature or a sheet (a body of its own) anywhere, or a second new body
+    // one pass: a body feature or a sheet (a body of its own) anywhere, or a second new body (each
+    // feature's op as `op` reads it, so every kind that makes a body counts)
     let mut new = false;
     for f in features {
         if matches!(f, Feature::Body(_) | Feature::Sheet(_)) {
@@ -140,9 +141,9 @@ fn op(f: &Feature) -> Option<Combine> {
         Feature::Extrude { op, .. } | Feature::Revolve { op, .. } | Feature::Ball { op, .. } => Some(*op),
         Feature::Edit(Edit::Thicken { op, .. }) => Some(*op),
         Feature::Import(t) => Some(t.op),
+        Feature::Sheet(s) => Some(crate::sheets::op(s)),
         Feature::Member(_) => Some(Combine::New),
         Feature::Regions(r) => Some(r.op),
-        Feature::Sheet(s) => Some(crate::sheets::op(s)),
         _ => crate::swept::op(f),
     }
 }
@@ -861,7 +862,8 @@ fn body_feature(
                     solids[k].body.clone()
                 }
                 .into_canonical();
-                body = boolean(&body, &tool, op_of(*op), bool_id(me, n as u64)).map_err(boolean_err(i))?;
+                body = crate::combined(&body, &tool, op_of(*op), bool_id(me, n as u64))
+                    .map_err(boolean_err(i))?;
             }
             solids[t].body = body;
             if !keep {
@@ -883,7 +885,7 @@ fn body_feature(
                     (Op::Subtract, Op::Intersect)
                 };
                 let piece = |op: Op, h: &Body, n: u64| -> Result<Body, RegenError> {
-                    let b = boolean(&body, h, op, bool_id(me, n)).map_err(boolean_err(i))?;
+                    let b = crate::combined(&body, h, op, bool_id(me, n)).map_err(boolean_err(i))?;
                     if b.face_ids().next().is_none() {
                         return Err(bad(BodyError::Misses));
                     }
@@ -948,11 +950,19 @@ fn body_feature(
                 let [k] = on[..] else {
                     return Err(bad(BodyError::NotOne));
                 };
-                let body = moved(&solids[k].body.compact(), &m, |n| salted(n, "copy", me)).map_err(pe)?;
+                let mut body = moved(&solids[k].body.compact(), &m, |n| salted(n, "copy", me)).map_err(pe)?;
+                // (a moved copy of a sheet is a sheet)
+                if solids[k].body.is_sheet() {
+                    body.mark_sheet();
+                }
                 solids.push(Solid { id: i, body });
             } else {
                 for k in on {
+                    let sheet = solids[k].body.is_sheet();
                     solids[k].body = moved(&solids[k].body.compact(), &m, |n| n).map_err(pe)?;
+                    if sheet {
+                        solids[k].body.mark_sheet();
+                    }
                 }
             }
         }
@@ -1162,7 +1172,7 @@ fn build_each(plain: History<'_>, start: usize, threads: usize) -> Result<Vec<Ve
         return Ok(out);
     }
     let chunk = n.div_ceil(threads);
-    let built: Vec<Result<Vec<Vec<Tool>>, RegenError>> = std::thread::scope(|s| {
+    let built: Vec<Result<Vec<Vec<Tool>>, RegenError>> = forge_math::par::scope(|s| {
         let hs: Vec<_> = (start..plain.len())
             .step_by(chunk)
             .map(|a| {

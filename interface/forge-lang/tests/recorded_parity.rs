@@ -41,9 +41,11 @@ const RECORDED: &[(&str, f64, f64, usize, usize)] = &[
     ),
     (
         "extrude 20 along 1 0 1 rect 0 0 40 30\nextrude sym 10 along 1 0 1 at 0 0 20 circle 20 15 5\nextrude cut two 2 4 along 1 0 1 at 0 0 20 circle 8 8 3\nextrude cut thru along 1 0 1 circle 25 15 3\n",
-        24560.77428866578,
-        6014.321433980047,
-        13,
+        // the through cut runs through the slanted base (it ran 1 mm while `hole::reach` gave
+        // slanted extrudes no box: 537.212 = 9π (20 − 1) more is cut, and its floor is gone)
+        24023.56194490192,
+        6393.27531416459,
+        12,
         30,
     ),
     (
