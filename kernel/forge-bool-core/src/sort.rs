@@ -1,6 +1,38 @@
 //! Merge sorts written out as loops (no closures), for Aeneas.
 
-use crate::row::{Row, row_cmp};
+use crate::Sgn;
+
+pub(crate) fn rank(s: Sgn) -> u8 {
+    match s {
+        Sgn::Neg => 0,
+        Sgn::Zero => 1,
+        Sgn::Pos => 2,
+    }
+}
+
+/// Lexicographic order on covectors: -1, 0 or 1.
+pub(crate) fn cmp_cov(a: &[Sgn], b: &[Sgn]) -> i8 {
+    let mut o: i8 = 0;
+    let mut i = 0;
+    while o == 0 && i < a.len() && i < b.len() {
+        let (x, y) = (rank(a[i]), rank(b[i]));
+        if x < y {
+            o = -1;
+        } else if y < x {
+            o = 1;
+        }
+        i += 1;
+    }
+    if o != 0 {
+        o
+    } else if a.len() < b.len() {
+        -1
+    } else if b.len() < a.len() {
+        1
+    } else {
+        0
+    }
+}
 
 /// Ascending, stable.
 pub(crate) fn sort_u32(v: &mut Vec<u32>) {
@@ -74,7 +106,7 @@ pub(crate) fn sort_triples(v: &mut Vec<(u32, u32, u32)>) {
 }
 
 /// Ids ascending by their covectors (ties by id), stable.
-pub(crate) fn sort_by_cov(v: &mut Vec<u32>, cells: &[Row]) {
+pub(crate) fn sort_by_cov(v: &mut Vec<u32>, cells: &[Vec<Sgn>]) {
     let n = v.len();
     if n < 2 {
         return;
@@ -90,7 +122,7 @@ pub(crate) fn sort_by_cov(v: &mut Vec<u32>, cells: &[Row]) {
             let (mut i, mut j, mut k) = (lo, mid, lo);
             while k < hi {
                 let take_left =
-                    i < mid && (j >= hi || row_cmp(cells[src[i] as usize], cells[src[j] as usize]) != 1);
+                    i < mid && (j >= hi || cmp_cov(&cells[src[i] as usize], &cells[src[j] as usize]) != 1);
                 if take_left {
                     dst[k] = src[i];
                     i += 1;
