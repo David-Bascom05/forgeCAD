@@ -295,7 +295,7 @@ more than about a second per op natively, the plan keeps the certificate as a ba
 ## 7b. Fixtures, soft jaws and declared removals (2026-11-23, the owner's requirements)
 
 **G2, corrected.** For every instant s of every piece (cut, plunge, link, rapid):
-(g(s)·(T ∪ N)) ∩ (F(s) ⊕ B_c) = ∅, with c > 0 the setup's fixture clearance (default 1 mm). The
+g(s)·(T ∪ N) stays out of the open c-neighbourhood of the fixture, {x : dist(x, F(s)) < c} (the open form, the master's decision 2026-11-23: a graze at exactly c is allowed; Lean: G2, G2open_of_closedForm, 31a7900), with c > 0 the setup's fixture clearance (default 1 mm). The
 cutter is kept off the vise as strictly as the holder; G1 protects the part, G2 the fixture.
 Together with the stock: (g(s)·N) ∩ int S(s) = ∅ (N clear of the in-process stock; a shank no
 wider than the cutter is held to the cutter's rule, §8), and G3 on rapids.
@@ -333,6 +333,8 @@ claude/repo-review-mbdrlj-cam-lean):
 - prism faces and planar or vertical moves: Clear{lower} when D ≤ |σ − γ(s)| for all σ, s (D the
   low end of slab::dist) and lower ≤ sdRZ(D, h − z_t) over H − z_t (z_t an interval for a vertical
   move), each lowered face within mu of the true one, the claim being lower − mu;
+- G2: fixture_collision at limit = fclear (Clear iff lower ≥ fclear + mu) proves the open form
+  exactly;
 - G1–G3 from faces need one point of the moved tool outside the set: the tool's top above every
   face checked (ops::certify checks it on every move, else `containment` undecided);
 - G4 as S_end ⊆ (P' ⊕ B_{δ+ε_out}) ∪ L, L listed; G6 as read(print q) = normalize(motions q) with

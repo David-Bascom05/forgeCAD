@@ -128,6 +128,8 @@ pub struct OpOut {
     pub time_s: f64,
     pub least: f64,
     pub plan: Vec<String>,
+    /// The stock it is asked to leave on the part (δ).
+    pub leave: f64,
     /// The stock this op starts from (G2, G3 are checked against it).
     stock_before: Option<forge_cam::stock::InProcess>,
     /// What the op provably clears: (region, or the whole box; its final floor).
@@ -476,6 +478,19 @@ impl Cam {
                 continue;
             }
             let part = &self.parts[s.part];
+            // G4 grows the part by δ + ε: the stock the chain's ops were asked to leave (the
+            // most of them), and the tolerance
+            let mut chain = vec![si];
+            while let Some(k) = self.setups[*chain.last().unwrap()].from {
+                chain.push(k);
+            }
+            let delta = self
+                .ops
+                .iter()
+                .filter(|o| chain.contains(&o.setup))
+                .map(|o| o.leave)
+                .fold(0.0, f64::max);
+            let grow = delta + s.tol;
             let mut zs = s.ip.levels();
             for f in &part.faces {
                 if let Some(forge_cam_geom::slab::Prism::Flat { z, .. }) = &f.prism {
@@ -487,7 +502,8 @@ impl Cam {
             }
             zs.retain(|z| *z >= s.ip.min[2] && *z <= s.ip.max[2]);
             zs.sort_by(|a, b| a.partial_cmp(b).unwrap());
-            zs.dedup_by(|a, b| (*a - *b).abs() < 1e-9);
+            // exact: a band ends at the jaws' top exactly, so none straddles it
+            zs.dedup();
             for w in zs.windows(2) {
                 let zm = 0.5 * (w[0] + w[1]);
                 let Ok(Some(mat)) = s.ip.material(zm) else {
@@ -496,8 +512,43 @@ impl Cam {
                     }
                     continue;
                 };
-                let left = match forge_cam::section::section(&part.faces, zm, 1e-5) {
-                    Ok(sec) => match forge_cam_geom::offset::offset(&sec, -s.tol) {
+                // the part's section for this band, and how far it may be grown. Its own, by
+                // δ + ε; or, where it has none (outside the part's heights) or none can be taken
+                // (a band thinner than the section's resolution at a face), a section at z′ just
+                // past either end, by √((δ + ε)² − dz²), dz the band's farthest height from z′: a
+                // point within that of (x, y, z′) ∈ P is within δ + ε of P (P ⊕ B is
+                // three-dimensional), whatever z′ is
+                let e = 0.5 * grow;
+                let mut tries = vec![(zm, grow)];
+                for zp in [w[0] - e, w[1] + e] {
+                    let dz = (zp - w[0]).abs().max((zp - w[1]).abs());
+                    let g2 = grow * grow - dz * dz;
+                    if g2 > 0.0 {
+                        tries.push((zp, (g2.sqrt() * (1.0 - 1e-12)).max(0.0)));
+                    }
+                }
+                let mut found = None;
+                let mut failed = false;
+                for (zp, g) in tries {
+                    match forge_cam::section::section(&part.faces, zp, 1e-5) {
+                        Ok(sec) => {
+                            if std::env::var("FORGE_CAM_DEBUG").is_ok() {
+                                eprintln!("G4 band {w:?}: section at {zp}, grown {g}");
+                            }
+                            found = Some((sec, g));
+                            break;
+                        }
+                        Err(forge_cam::section::SectionError::Empty) => {}
+                        Err(e) => {
+                            if std::env::var("FORGE_CAM_DEBUG").is_ok() {
+                                eprintln!("G4 at z {zp}: section {e:?}");
+                            }
+                            failed = true;
+                        }
+                    }
+                }
+                let left = match found {
+                    Some((sec, g)) => match forge_cam_geom::offset::offset(&sec, -g) {
                         Ok((grown, _)) => forge_cam_geom::boolean::boolean(
                             &mat,
                             &forge_cam_geom::boolean::region_of(&grown),
@@ -505,17 +556,22 @@ impl Cam {
                         ),
                         Err(e) => Err(e),
                     },
-                    // no part at this height: all the material is left over
-                    Err(forge_cam::section::SectionError::Empty) => Ok(mat
+                    None if failed => {
+                        all_ok = false;
+                        continue;
+                    }
+                    // no part at or near this height: all the material is left over
+                    None => Ok(mat
                         .loops
                         .iter()
                         .map(|l| forge_cam_geom::offset::OLoop { segs: l.segs.clone() })
                         .collect()),
-                    Err(_) => {
-                        all_ok = false;
-                        continue;
-                    }
                 };
+                if let Err(e) = &left
+                    && std::env::var("FORGE_CAM_DEBUG").is_ok()
+                {
+                    eprintln!("G4 band {w:?}: {e:?}");
+                }
                 match left {
                     Ok(ls) if !ls.is_empty() => {
                         let boxes = ls
@@ -539,7 +595,7 @@ impl Cam {
                         // held by the fixture: under the jaws' top, and within the fixture's
                         // clearance of one of its pieces (where no tool may go)
                         let held = |b: &[f64; 4]| match &s.fixture {
-                            Some(f) if w[1] <= f.jaw_top + 1e-9 => f.boxes().iter().any(|(_, lo, hi)| {
+                            Some(f) if w[1] <= f.jaw_top => f.boxes().iter().any(|(_, lo, hi)| {
                                 let c = f.clearance;
                                 b[0] <= hi[0] + c
                                     && b[2] >= lo[0] - c
@@ -941,6 +997,7 @@ impl Cam {
             time_s: 0.0,
             least: f64::INFINITY,
             plan: vec![],
+            leave: get_num(a, "leave", Some(0.0))?,
             stock_before: Some(s.ip.clone()),
             voids: vec![],
         };
@@ -2066,7 +2123,7 @@ impl Cam {
                 "leftover",
                 Json::obj(vec![
                     ("computed", self.leftover_done.into()),
-                    ("rule", Json::Str("G4: final stock ⊆ (part ⊕ B_tol) ∪ these regions, by z band".into())),
+                    ("rule", Json::Str("G4: final stock ⊆ (part ⊕ B_{leave + tol}) ∪ these regions, by z band".into())),
                     (
                         "regions",
                         Json::Arr(

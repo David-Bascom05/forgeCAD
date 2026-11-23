@@ -57,7 +57,8 @@ fn merge_arcs(lp: Vec<Seg>) -> Vec<Seg> {
 pub fn section(faces: &[Face], z: f64, mu: f64) -> Result<Region, SectionError> {
     let mut pieces: Vec<Seg> = Vec::new();
     for f in faces {
-        if f.bbox[2].hi < z || f.bbox[2].lo > z {
+        // a face within mu of the height counts (a flat face there is refused below)
+        if f.bbox[2].hi < z - mu || f.bbox[2].lo > z + mu {
             continue;
         }
         match &f.prism {
