@@ -877,4 +877,264 @@ theorem face_rise (f : Face) (w w' : V3) (hw : w.z < w'.z)
               grind)]
           exact xorL_false _
 
+/-! ## One face, a level move across its plane -/
+
+theorem chi_lvl (f : Face) (w w' : V3) (hz : w.z = w'.z) (hy : w.y < w'.y)
+    (hgp : ∀ e ∈ edgesF f, GPH w w' e.1 e.2) :
+    (chiE f w ^^ chiE f w') = xorL ((edgesF f).map fun e => crossH w w' e.1 e.2) := by
+  unfold chiE
+  have per : ∀ e ∈ edgesF f, (crossE w e.1 e.2 ^^ crossE w' e.1 e.2) = crossH w w' e.1 e.2 :=
+    fun e he => seg_level w w' e.1 e.2 hz hy (hgp e he).a1 (hgp e he).b1 (hgp e he).d2
+  rw [← xorL_map_xor (edgesF f) (fun e => crossE w e.1 e.2) (fun e => crossE w' e.1 e.2)]
+  exact xorL_congr per
+
+def yr (w a b : V3) : Rat := (ptv a b (f1 w a b).root).y
+
+theorem crossH_iff (w w' a b : V3) : crossH w w' a b = true ↔
+    (f1 w a b).α * (f1 w a b).γ < 0 ∧ w.y < yr w a b ∧ yr w a b < w'.y := by
+  unfold crossH yr; rw [decide_eq_true_iff]
+
+theorem f1_lvl {w m : V3} (h : m.z = w.z) (a b : V3) : f1 m a b = f1 w a b := by simp [f1, h]
+
+theorem eH_nx (f : Face) (hnx : f.plane.n.x ≠ 0) (w w' : V3) (hz : w.z = w'.z) (hy : w.y < w'.y)
+    (hD : f.plane.eval w ≠ f.plane.eval w') (e : V3 × V3)
+    (hfe : f.plane.eval e.1 = 0 ∧ f.plane.eval e.2 = 0) :
+    eH w w' e = (crossH w w' e.1 e.2 && decide (0 < (yr w e.1 e.2 - (crossPt f.plane w w').y) *
+      ((f.plane.eval w - f.plane.eval w') * f.plane.n.x))) := by
+  unfold eH
+  cases hc : crossH w w' e.1 e.2
+  · rfl
+  · obtain ⟨l0, l1, hy', hz'⟩ := over_H w w' e.1 e.2 hz hy hc
+    have hE := plane_zero f.plane e.1 e.2 (f1 w e.1 e.2).root hfe.1 hfe.2
+    simp only [Bool.true_and]
+    rw [Bool.eq_iff_iff, decide_eq_true_iff, decide_eq_true_iff,
+      split_x f.plane hnx w w' _ _ hD hE hy' hz']
+    have hyr : yr w e.1 e.2 - (crossPt f.plane w w').y =
+        (lamH w w' e.1 e.2 - crossL f.plane w w') * (w'.y - w.y) := by
+      unfold yr crossPt; rw [← hy']; simp only [ptv]; grind
+    rw [hyr, show (lamH w w' e.1 e.2 - crossL f.plane w w') * (w'.y - w.y) *
+        ((f.plane.eval w - f.plane.eval w') * f.plane.n.x) = (w'.y - w.y) *
+        ((lamH w w' e.1 e.2 - crossL f.plane w w') * ((f.plane.eval w - f.plane.eval w') * f.plane.n.x))
+        by grind, mul_pos_iff_left (k := w'.y - w.y) (by grind)]
+
+theorem d0_out_lvl (f : Face) (hflat : ∀ e ∈ edgesF f, f.plane.eval e.1 = 0 ∧ f.plane.eval e.2 = 0)
+    (hnx : f.plane.n.x ≠ 0) {m : V3} (hm : f.plane.eval m = 0) (hout : OutBox f m) {e : V3 × V3}
+    (he : e ∈ edgesF f) (hs : (e.1.z - m.z) * (e.2.z - m.z) < 0) : d0 m e.1 e.2 ≠ 0 :=
+  d0_out f hflat hnx hm hout he (st_of_strict hs)
+
+theorem face_level' (f : Face) (w w' : V3) (hz : w.z = w'.z) (hy : w.y < w'.y)
+    (hflat : ∀ e ∈ edgesF f, f.plane.eval e.1 = 0 ∧ f.plane.eval e.2 = 0)
+    (hgp : ∀ e ∈ edgesF f, GPH w w' e.1 e.2) (hp : Pass f w w') :
+    (piercedE f w ^^ piercedE f w') = xorL ((edgesF f).map (eH w w')) := by
+  rcases hp with hs | ⟨hn, h0, h0'⟩ | ⟨hD, hs, hout⟩
+  · exact face_level f w w' hz hy hflat hs hgp
+  · have p1 : piercedE f w = false := by unfold piercedE; rw [ahead_def, h0]; simp
+    have p2 : piercedE f w' = false := by unfold piercedE; rw [ahead_def, h0']; simp
+    rw [p1, p2]
+    symm
+    rw [xorL_congr (g := fun _ => false) (fun e he => by
+      by_cases hnx : f.plane.n.x = 0
+      · exfalso
+        have hny : f.plane.n.y = 0 := by
+          simp only [Plane.eval, V3.dot, hnx] at h0 h0'
+          rw [← hz] at h0'
+          exact mul_cancel (k := w'.y - w.y) (by grind) (by grind)
+        have hnz : f.plane.n.z ≠ 0 := fun h => hn (by cases hN : f.plane.n; simp_all)
+        have ha := (hflat e he).1
+        simp only [Plane.eval, V3.dot, hnx, hny] at ha h0
+        exact (hgp e he).a1 (mul_cancel hnz (by grind))
+      · unfold eH
+        cases hc : crossH w w' e.1 e.2
+        · rfl
+        · obtain ⟨_, _, hy', hz'⟩ := over_H w w' e.1 e.2 hz hy hc
+          have hE := plane_zero f.plane e.1 e.2 (f1 w e.1 e.2).root (hflat e he).1 (hflat e he).2
+          have hB : f.plane.eval (ptv w w' (lamH w w' e.1 e.2)) = 0 := by rw [eval_ptv, h0, h0']; grind
+          have := plane_x_eq f.plane hnx hB hE hy' hz'
+          rw [this]; simp)]
+    exact xorL_false _
+  · have hl := crossL_facts f.plane w w' hD hs
+    have hmz : (crossPt f.plane w w').z = w.z := by unfold crossPt; simp only [ptv]; rw [← hz]; grind
+    by_cases hnx : f.plane.n.x = 0
+    · have p1 : piercedE f w = false := by unfold piercedE; rw [ahead_def, hnx]; simp
+      have p2 : piercedE f w' = false := by unfold piercedE; rw [ahead_def, hnx]; simp
+      rw [p1, p2]
+      have hyz := n_yz hnx hD
+      obtain ⟨k, hk, hb⟩ := hout
+      have hover : ∀ e ∈ edgesF f, crossH w w' e.1 e.2 = true →
+          eH w w' e = decide ((crossPt f.plane w w').x < (ptv e.1 e.2 (f1 w e.1 e.2).root).x) ∧
+          (ptv e.1 e.2 (f1 w e.1 e.2).root).y = (crossPt f.plane w w').y ∧
+          (ptv e.1 e.2 (f1 w e.1 e.2).root).z = (crossPt f.plane w w').z ∧
+          k.dot (ptv e.1 e.2 (f1 w e.1 e.2).root) < k.dot (crossPt f.plane w w') := by
+        intro e he hc
+        obtain ⟨_, _, hy', hz'⟩ := over_H w w' e.1 e.2 hz hy hc
+        have hE := plane_zero f.plane e.1 e.2 (f1 w e.1 e.2).root (hflat e he).1 (hflat e he).2
+        have hlam := split_vert f.plane hnx w w' _ _ hD hE hy' hz'
+        have hc' := (crossH_iff w w' e.1 e.2).mp hc
+        have hr := Aff.roots _ ((mul_neg_iff _ _ (by intro h0; rw [h0] at hc'; grind)
+          (by intro h0; rw [h0] at hc'; grind)).mp hc'.1)
+        have hb' : Below f k (ptv w w' (lamH w w' e.1 e.2)) := by unfold crossPt at hb; rw [← hlam] at hb; exact hb
+        unfold eH crossPt; rw [← hlam, hc, Bool.true_and]
+        exact ⟨rfl, hy'.symm, hz'.symm, below_ptv hb' he (Rat.le_of_lt hr.1) (Rat.le_of_lt hr.2)⟩
+      simp only [axes6, List.mem_cons, List.mem_nil_iff, or_false] at hk
+      rcases hk with rfl | rfl | rfl | rfl | rfl | rfl
+      · rw [xorL_congr (g := fun _ => false) (fun e he => by
+          cases hc : crossH w w' e.1 e.2
+          · unfold eH; rw [hc]; rfl
+          · have := hover e he hc; rw [this.1]; simp only [V3.dot] at this
+            simp only [decide_eq_false_iff_not]; grind)]
+        exact (xorL_false _).symm
+      · rw [xorL_congr (g := fun e => crossH w w' e.1 e.2) (fun e he => by
+          cases hc : crossH w w' e.1 e.2
+          · unfold eH; rw [hc]; rfl
+          · have := hover e he hc; rw [this.1]; simp only [V3.dot] at this
+            simp only [decide_eq_true_iff]; grind)]
+        rw [← chi_lvl f w w' hz hy hgp, chi_vert f hflat hnx hyz, chi_vert f hflat hnx hyz]
+      all_goals
+        rw [xorL_congr (g := fun _ => false) (fun e he => by
+          cases hc : crossH w w' e.1 e.2
+          · unfold eH; rw [hc]; rfl
+          · have := hover e he hc; simp only [V3.dot] at this; grind)]
+        exact (xorL_false _).symm
+    · generalize hL : crossL f.plane w w' = l at hl
+      have hM : crossPt f.plane w w' = ptv w w' l := by unfold crossPt; rw [hL]
+      have hm0 : f.plane.eval (ptv w w' l) = 0 := hM ▸ hl.2.2.1
+      have hout' : OutBox f (ptv w w' l) := hM ▸ hout
+      have hchim : chiE f (ptv w w' l) = false := chi_out f hflat hnx _ hm0 hout'
+      rw [hM] at hmz
+      have he := fun e (he : e ∈ edgesF f) => eH_nx f hnx w w' hz hy hD e (hflat e he)
+      rw [hM] at he
+      have hdy : 0 < w'.y - w.y := by grind
+      have hmy : (ptv w w' l).y = w.y + l * (w'.y - w.y) := by simp only [ptv]
+      rcases ne_cases (show (f.plane.eval w - f.plane.eval w') * f.plane.n.x ≠ 0 from
+          fun h => by rcases Rat.mul_eq_zero.mp h with h | h; exact hD (by grind); exact hnx h) with hK | hK
+      · rw [term_neg f hflat hnx w w' hD hs hout hK]
+        by_cases hl0 : l = 0
+        · subst hl0
+          rw [ptv_zero] at hchim hmy
+          rw [hchim]; symm
+          rw [xorL_congr (g := fun _ => false) (fun e he' => by
+            rw [he e he']
+            cases hc : crossH w w' e.1 e.2
+            · rfl
+            · have := (crossH_iff _ _ _ _).mp hc
+              simp only [Bool.true_and, decide_eq_false_iff_not]; intro h
+              rw [ptv_zero, Rat.mul_comm, mul_pos_iff_neg hK] at h; grind)]
+          exact xorL_false _
+        · have hgp' : ∀ e ∈ edgesF f, GPH w (ptv w w' l) e.1 e.2 := fun e he' =>
+            ⟨(hgp e he').a1, (hgp e he').b1, fun h => d0_out_lvl f hflat hnx hm0 hout' he' (by rw [hmz]; exact h)⟩
+          have hlt : w.y < (ptv w w' l).y := by
+            rw [hmy]; have := Rat.mul_pos (by grind : (0:Rat) < l) hdy; grind
+          rw [← Bool.xor_false (chiE f w), ← hchim, chi_lvl f w _ hmz.symm hlt hgp']
+          apply xorL_congr; intro e he'
+          symm
+          rw [he e he']
+          apply Bool.eq_iff_iff.mpr
+          rw [Bool.and_eq_true, decide_eq_true_iff, crossH_iff, crossH_iff]
+          have hle : (ptv w w' l).y ≤ w'.y := by
+            rw [hmy]; have := Rat.mul_le_mul_of_nonneg_left hl.2.1 (Rat.le_of_lt hdy); grind
+          constructor
+          · rintro ⟨hc, hpos⟩
+            refine ⟨hc.1, hc.2.1, ?_⟩
+            apply Classical.byContradiction; intro hn
+            have := Rat.mul_nonneg (by grind : (0:Rat) ≤ yr w e.1 e.2 - (ptv w w' l).y)
+              (by grind : (0:Rat) ≤ -((f.plane.eval w - f.plane.eval w') * f.plane.n.x))
+            grind
+          · rintro ⟨h1, h2, h3⟩
+            have := Rat.mul_pos (by grind : (0:Rat) < -(yr w e.1 e.2 - (ptv w w' l).y))
+              (by grind : (0:Rat) < -((f.plane.eval w - f.plane.eval w') * f.plane.n.x))
+            exact ⟨⟨h1, h2, by grind⟩, by grind⟩
+      · rw [term_pos f hflat hnx w w' hD hs hout hK]
+        by_cases hl1 : l = 1
+        · subst hl1
+          rw [ptv_one] at hchim hmy
+          rw [hchim]; symm
+          rw [xorL_congr (g := fun _ => false) (fun e he' => by
+            rw [he e he']
+            cases hc : crossH w w' e.1 e.2
+            · rfl
+            · have := (crossH_iff _ _ _ _).mp hc
+              simp only [Bool.true_and, decide_eq_false_iff_not]; intro h
+              rw [ptv_one, Rat.mul_comm, mul_pos_iff_left hK] at h; grind)]
+          exact xorL_false _
+        · have hgp' : ∀ e ∈ edgesF f, GPH (ptv w w' l) w' e.1 e.2 := fun e he' =>
+            ⟨by rw [hmz]; exact (hgp e he').a1, by rw [hmz]; exact (hgp e he').b1,
+              fun h => (hgp e he').d2 (by rw [hmz] at h; exact h)⟩
+          have hlt : (ptv w w' l).y < w'.y := by
+            rw [hmy]; have := Rat.mul_pos (by grind : (0:Rat) < 1 - l) hdy; grind
+          rw [← Bool.false_xor (chiE f w'), ← hchim, chi_lvl f _ w' (by rw [hmz, hz]) hlt hgp']
+          apply xorL_congr; intro e he'
+          symm
+          rw [he e he']
+          apply Bool.eq_iff_iff.mpr
+          rw [Bool.and_eq_true, decide_eq_true_iff, crossH_iff, crossH_iff]
+          have hf1 := f1_lvl hmz e.1 e.2
+          have hyr : yr (ptv w w' l) e.1 e.2 = yr w e.1 e.2 := by unfold yr; rw [hf1]
+          rw [hf1, hyr]
+          have hge : w.y ≤ (ptv w w' l).y := by
+            rw [hmy]; have := Rat.mul_nonneg hl.1 (Rat.le_of_lt hdy); grind
+          constructor
+          · rintro ⟨hc, hpos⟩
+            refine ⟨hc.1, ?_, hc.2.2⟩
+            apply Classical.byContradiction; intro hn
+            have := Rat.mul_nonneg (by grind : (0:Rat) ≤ -(yr w e.1 e.2 - (ptv w w' l).y)) (Rat.le_of_lt hK)
+            grind
+          · rintro ⟨h1, h2, h3⟩
+            have := Rat.mul_pos (by grind : (0:Rat) < yr w e.1 e.2 - (ptv w w' l).y) hK
+            exact ⟨⟨h1, by grind, h3⟩, by grind⟩
+
+/-! ## One face, a move along +x -/
+
+theorem chiE_yz (f : Face) {q q' : V3} (hy : q.y = q'.y) (hz : q.z = q'.z) : chiE f q = chiE f q' := by
+  unfold chiE
+  apply xorL_congr
+  intro e _
+  simp only [crossE, d0, hy, hz]
+  try rfl
+
+theorem face_x (f : Face) (w w' : V3) (hy : w.y = w'.y) (hz : w.z = w'.z)
+    (hflat : ∀ e ∈ edgesF f, f.plane.eval e.1 = 0 ∧ f.plane.eval e.2 = 0) (hp : Pass f w w') :
+    piercedE f w = piercedE f w' := by
+  have hchi := chiE_yz f hy hz
+  rcases hp with hs | ⟨_, h0, h0'⟩ | ⟨hD, hs, hout⟩
+  · have hahead : aheadB f w = aheadB f w' := by
+      unfold aheadB; exact decide_eq_decide.mpr (ahead_same _ _ _ hs)
+    simp only [piercedE, hchi, hahead]
+  · unfold piercedE; rw [ahead_def, ahead_def, h0, h0']; simp
+  · by_cases hnx : f.plane.n.x = 0
+    · unfold piercedE; rw [ahead_def, ahead_def, hnx]; simp
+    · have hl := crossL_facts f.plane w w' hD hs
+      have hm := chi_out f hflat hnx _ hl.2.2.1 hout
+      have : chiE f (crossPt f.plane w w') = chiE f w :=
+        chiE_yz f (by unfold crossPt; simp only [ptv]; rw [← hy]; grind)
+          (by unfold crossPt; simp only [ptv]; rw [← hz]; grind)
+      unfold piercedE; rw [← hchi, ← this, hm]; simp
+
+/-! ## The moves, across planes -/
+
+theorem move_rise' (S : Solid) (hflat : FacesFlat S) (hcl : Closed S) (w w' : V3) (hw : w.z < w'.z)
+    (hp : ∀ f ∈ facesL S, Pass f w w')
+    (hgp : ∀ f ∈ facesL S, ∀ e ∈ edgesF f, GP w w' e.1 e.2) :
+    containsE S w = containsE S w' := by
+  apply xorL_eq_of_xor
+  unfold containsE
+  rw [← xorL_map_xor, xorL_congr fun f hf => face_rise f w w' hw (hflat f hf) (hgp f hf) (hp f hf),
+    ← xorL_flatMap]
+  exact xor_even (e3 w w') (e3_symm w w') _ _ (Nat.le_refl _) hcl
+
+theorem move_level' (S : Solid) (hflat : FacesFlat S) (hcl : Closed S) (w w' : V3)
+    (hz : w.z = w'.z) (hy : w.y < w'.y) (hp : ∀ f ∈ facesL S, Pass f w w')
+    (hgp : ∀ f ∈ facesL S, ∀ e ∈ edgesF f, GPH w w' e.1 e.2) :
+    containsE S w = containsE S w' := by
+  apply xorL_eq_of_xor
+  unfold containsE
+  rw [← xorL_map_xor, xorL_congr fun f hf => face_level' f w w' hz hy (hflat f hf) (hgp f hf) (hp f hf),
+    ← xorL_flatMap]
+  exact xor_even (eH w w') (eH_symm w w') _ _ (Nat.le_refl _) hcl
+
+theorem move_x' (S : Solid) (hflat : FacesFlat S) (w w' : V3) (hy : w.y = w'.y) (hz : w.z = w'.z)
+    (hp : ∀ f ∈ facesL S, Pass f w w') :
+    containsE S w = containsE S w' := by
+  unfold containsE
+  exact xorL_congr fun f hf => face_x f w w' hy hz (hflat f hf) (hp f hf)
+
 end ForgeExact.Jordan
