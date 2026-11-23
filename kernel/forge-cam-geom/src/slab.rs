@@ -158,8 +158,21 @@ fn and3(a: i32, b: i32) -> i32 {
     }
 }
 
+fn degenerate(s: &Sec) -> Option<[f64; 2]> {
+    match *s {
+        Sec::Seg { a, b } if a == b => Some(a),
+        _ => None,
+    }
+}
+
 /// The least distance between two section curves.
 pub fn dist(s: &Sec, t: &Sec) -> Ival {
+    if let Some(q) = degenerate(s) {
+        return pt_sec(q, t);
+    }
+    if let Some(q) = degenerate(t) {
+        return pt_sec(q, s);
+    }
     let mut cs: Vec<Cand> = Vec::new();
     let (sa, sb) = ends(s);
     let (ta, tb) = ends(t);
@@ -355,8 +368,23 @@ impl Prism {
                 }
                 // vertical, u horizontal and v along ±z, over a rectangular trim
                 if u[2] == 0.0 && v[0] == 0.0 && v[1] == 0.0 && (v[2] == 1.0 || v[2] == -1.0) && rectangular(f) {
-                    let (p0, p1) = (f.p.lo, f.p.hi);
-                    let (q0, q1) = (o[2] + v[2] * f.q.lo, o[2] + v[2] * f.q.hi);
+                    // the trim's own corners (the vertices), not the padded box
+                    let (mut p0, mut p1, mut q0, mut q1) = (f.p.lo, f.p.hi, f.q.lo, f.q.hi);
+                    if let Some(t) = &f.trim {
+                        let (mut a0, mut a1, mut b0, mut b1) = (f64::INFINITY, f64::NEG_INFINITY, f64::INFINITY, f64::NEG_INFINITY);
+                        for sg in &t.segs {
+                            if let TSeg::Line { a, b } = *sg {
+                                for pt in [a, b] {
+                                    a0 = a0.min(pt[0]);
+                                    a1 = a1.max(pt[0]);
+                                    b0 = b0.min(pt[1]);
+                                    b1 = b1.max(pt[1]);
+                                }
+                            }
+                        }
+                        (p0, p1, q0, q1) = (a0, a1, b0, b1);
+                    }
+                    let (q0, q1) = (o[2] + v[2] * q0, o[2] + v[2] * q1);
                     let a = [o[0] + p0 * u[0], o[1] + p0 * u[1]];
                     let b = [o[0] + p1 * u[0], o[1] + p1 * u[1]];
                     return Some(Prism::Wall { sec: Sec::Seg { a, b }, z0: q0.min(q1), z1: q0.max(q1) });
@@ -405,10 +433,12 @@ fn rectangular(f: &Face) -> bool {
     }
 }
 
-fn path_sec(pl: &Planar) -> (Sec, f64) {
+/// The path's xy curve and the tip's height range.
+fn path_sec(pl: &Planar) -> (Sec, Ival) {
     match *pl {
-        Planar::Line { a, b, z } => (Sec::Seg { a, b }, z),
-        Planar::Arc { c, r, a, b, ccw, z } => (Sec::Arc { c, r, a, b, ccw }, z),
+        Planar::Line { a, b, z } => (Sec::Seg { a, b }, Ival::pt(z)),
+        Planar::Arc { c, r, a, b, ccw, z } => (Sec::Arc { c, r, a, b, ccw }, Ival::pt(z)),
+        Planar::Vertical { p, z0, z1 } => (Sec::Seg { a: p, b: p }, Ival::new(z0, z1)),
     }
 }
 
@@ -449,7 +479,7 @@ pub fn certify(body: &Body, f: &Face, pr: &Prism, pl: &Planar, limit: f64, res: 
     let (lim_clear, lim_hit) = (limit + f.mu, limit - f.mu);
     let (d, dz) = match pr {
         Prism::Flat { z, region, boxes } => {
-            let dz = Ival::pt(*z).sub(Ival::pt(zt));
+            let dz = Ival::pt(*z).sub(zt);
             // the face is wholly beyond the body's heights by more than the limit: no distance
             // needed (sd at ρ = 0 is already a lower bound for every ρ)
             let lb0 = body.sd_rz(Ival::pt(0.0), dz).lo;
@@ -459,7 +489,7 @@ pub fn certify(body: &Body, f: &Face, pr: &Prism, pl: &Planar, limit: f64, res: 
             let cutoff = Ival::pt(body.rmax).add(Ival::pt(limit.abs())).add(Ival::pt(f.mu)).hi;
             (dist_region(&path, region, boxes, cutoff), dz)
         }
-        Prism::Wall { sec, z0, z1 } => (dist(&path, sec), Ival::new(Ival::pt(*z0).sub(Ival::pt(zt)).lo, Ival::pt(*z1).sub(Ival::pt(zt)).hi)),
+        Prism::Wall { sec, z0, z1 } => (dist(&path, sec), Ival::new(Ival::pt(*z0).sub(zt).lo, Ival::pt(*z1).sub(zt).hi)),
     };
     // the one-dimensional search over the height offset Δ
     let lo_rho = Ival::pt(d.lo);

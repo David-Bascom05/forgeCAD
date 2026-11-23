@@ -53,7 +53,10 @@ fn closed_form_never_contradicts_the_branch_and_bound() {
         assert!(f.prism.is_some(), "case {case}");
         // a move passing near it at a random height
         let z = g.r(-6.0, 4.0);
-        let mv = if case % 2 == 0 {
+        let mv = if case % 5 == 4 {
+            let (x, y) = (g.r(-12.0, 12.0), g.r(-9.0, 9.0));
+            Move::Line { a: [x, y, z + 4.0], b: [x, y, z - 3.0] }
+        } else if case % 2 == 0 {
             let a = [g.r(-12.0, 12.0), g.r(-9.0, 9.0), z];
             let b = [a[0] + g.r(-6.0, 6.0), a[1] + g.r(-6.0, 6.0), z];
             Move::Line { a, b }

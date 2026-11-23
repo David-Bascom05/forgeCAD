@@ -10,6 +10,7 @@ pub mod bench;
 pub mod bodies;
 pub mod build;
 pub mod builtins;
+pub mod cam;
 pub mod compare;
 pub mod deps;
 pub mod drawing;
@@ -267,6 +268,8 @@ pub struct Run {
     pub thermos: Vec<thermo::ThermoOut>,
     /// The threads left unmodelled (`Options::cosmetic_threads`), in the part's frame.
     pub threads: Vec<holes::Cosmetic>,
+    /// The hole features, as CAM plans them (`holes::hole_infos`).
+    pub holes: Vec<holes::HoleInfo>,
     /// Where each solid is in `body`: its faces and edges.
     pub solids: Vec<build::Span>,
     /// The stage `body` is (`build::Stage::id`): equal ids, the very same body.
@@ -460,6 +463,7 @@ fn run_once(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
                     sheets: vec![],
                     thermos: vec![],
                     threads: vec![],
+                    holes: vec![],
                     solids: vec![],
                     stage: 0,
                     asm: None,
@@ -624,6 +628,7 @@ fn run_once(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
         vec![]
     };
     let (rebuilt, reused) = (ev.b.rebuilt, ev.b.reused);
+    let holes = holes::hole_infos(&ev);
     let run = Run {
         errors: std::mem::take(&mut ev.errors),
         warnings: std::mem::take(&mut ev.warnings),
@@ -641,6 +646,7 @@ fn run_once(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
         sheets: sheet::outputs(&ev),
         thermos: std::mem::take(&mut ev.thermos),
         threads: std::mem::take(&mut ev.threads),
+        holes,
         solids: if built_all {
             ev.b.stages.last().map_or(vec![], |s| s.spans().to_vec())
         } else {

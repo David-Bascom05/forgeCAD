@@ -1,0 +1,16 @@
+machining
+# DWG-901 bearing flange (flange.fg) on a generic 3-axis VMC, one setup from the top: face the
+# stock, profile the plate, bore the boss from its hole feature, and drill the bolt circle from its
+# hole feature (the plan comes from the history: d 6.6 through).
+shared tol = 0.01
+
+f    = part("flange.fg", group: "N")
+m    = machine("generic-vmc3")
+t1   = tool("flat-10", t: 1, stickout: 32, holder: "bt40-er32")
+t2   = tool("flat-6", t: 2, stickout: 26, holder: "bt40-er32")
+op1  = setup(f, machine: m, stock: box(margin: (3, 3, 2)), origin: "top-center", tol: tol)
+skim = facing(op1, tool: t1, to: 18, step: 1)
+prof = contour(op1, tool: t1, side: "outside", from: 12, to: -0.5, step: 4)
+bore = pocket(op1, f.bore_h, tool: t2, stepover: 2.5, step: 3)
+bolts = drill(op1, f.bolts, plan: "auto")
+prog = program(op1, post: "fanuc", number: 1001)

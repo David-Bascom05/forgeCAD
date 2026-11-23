@@ -11,6 +11,8 @@ forge-cam-geom = { path = "../forge-cam-geom" }
 forge-math = { path = "../forge-math" }
 forge-geom = { path = "../forge-geom" }
 forge-topo = { path = "../forge-topo" }
+forge-tooling = { path = "../forge-tooling" }
+forge-post = { path = "../forge-post" }
 
 [lints]
 workspace = true

@@ -353,7 +353,9 @@ fn cell_sd(body: &Body, f: &Face, mv: &Move, c: &Cell) -> Ival {
 /// The signed distance over the cell, and each parameter's smear (how much of the enclosure's
 /// width it accounts for: |∂(ρ², z)| times its width), which picks what to split.
 fn cell_eval(body: &Body, f: &Face, mv: &Move, c: &Cell) -> (Ival, [f64; 3]) {
-    if let Some(pl) = mv.planar() {
+    if let Some(pl) = mv.planar()
+        && !matches!(pl, Planar::Vertical { .. })
+    {
         return cell_eval_planar(body, f, &pl, c);
     }
     let x = [c.p, c.q, c.s];
@@ -399,6 +401,8 @@ fn cell_eval(body: &Body, f: &Face, mv: &Move, c: &Cell) -> (Ival, [f64; 3]) {
 #[derive(Clone, Copy, Debug)]
 pub enum Planar {
     Line { a: [f64; 2], b: [f64; 2], z: f64 },
+    /// A vertical move: the tip at one xy, its height from z0 to z1 (either order).
+    Vertical { p: [f64; 2], z0: f64, z1: f64 },
     Arc { c: [f64; 2], r: f64, a: [f64; 2], b: [f64; 2], ccw: bool, z: f64 },
 }
 
@@ -411,6 +415,8 @@ impl Move {
             Move::Line { a, b } => {
                 if a[2] == b[2] {
                     Some(Planar::Line { a: [a[0], a[1]], b: [b[0], b[1]], z: a[2] })
+                } else if a[0] == b[0] && a[1] == b[1] {
+                    Some(Planar::Vertical { p: [a[0], a[1]], z0: a[2], z1: b[2] })
                 } else {
                     None
                 }
@@ -488,6 +494,7 @@ fn cell_eval_planar(body: &Body, f: &Face, pl: &Planar, c: &Cell) -> (Ival, [f64
     let mv = |d: D, at: Ival| if point { at } else { mean_value(&d, at, x) };
     let (zp, z_at) = match *pl {
         Planar::Line { z, .. } | Planar::Arc { z, .. } => (z, z),
+        Planar::Vertical { .. } => unreachable!("vertical moves take the general cells"),
     };
     let _ = zp;
     let zb = mv(y[2].sub(D::c(z_at)), yc[2].sub(Ival::pt(z_at)));
@@ -519,6 +526,7 @@ fn cell_eval_planar(body: &Body, f: &Face, pl: &Planar, c: &Cell) -> (Ival, [f64
                 }
             }
         }
+        Planar::Vertical { .. } => unreachable!(),
         Planar::Arc { c: cc, r, a, b, ccw, .. } => {
             let (vx, vy) = (y[0].sub(D::c(cc[0])), y[1].sub(D::c(cc[1])));
             let (vxc, vyc) = (yc[0].sub(Ival::pt(cc[0])), yc[1].sub(Ival::pt(cc[1])));
@@ -633,7 +641,7 @@ pub fn certify(body: &Body, f: &Face, mv: &Move, limit: f64, res: f64, budget: u
 pub fn certify_bb(body: &Body, f: &Face, mv: &Move, limit: f64, res: f64, budget: usize) -> (Verdict, usize) {
     let lim_clear = limit + f.mu;
     let lim_hit = limit - f.mu;
-    let s0 = if mv.planar().is_some() { Ival::pt(0.5) } else { Ival::new(0.0, 1.0) };
+    let s0 = if matches!(mv.planar(), Some(Planar::Line { .. } | Planar::Arc { .. })) { Ival::pt(0.5) } else { Ival::new(0.0, 1.0) };
     let root = Cell { p: f.p, q: f.q, s: s0 };
     let mut heap = Heap { v: Vec::new() };
     heap.push(cell_sd(body, f, mv, &root).lo, root);
@@ -668,7 +676,7 @@ pub fn certify_bb(body: &Body, f: &Face, mv: &Move, limit: f64, res: f64, budget
             if f.holds(Ival::pt(pm), Ival::pt(qm)) == 1 {
                 let w = cell_sd(body, f, mv, &Cell { p: Ival::pt(pm), q: Ival::pt(qm), s: c.s });
                 let img = f.surf.eval(c.p, c.q);
-                let mvd = if mv.planar().is_some() { 0.0 } else { diam(&mv.at(c.s)) };
+                let mvd = if matches!(mv.planar(), Some(Planar::Line { .. } | Planar::Arc { .. })) { 0.0 } else { diam(&mv.at(c.s)) };
                 let lip = Ival::pt(w.lo).sub(Ival::pt(diam(&img))).sub(Ival::pt(mvd)).lo;
                 if lip > sd.lo {
                     sd = Ival { lo: lip, hi: sd.hi };
@@ -687,7 +695,7 @@ pub fn certify_bb(body: &Body, f: &Face, mv: &Move, limit: f64, res: f64, budget
             let w = cell_sd(body, f, mv, &Cell { p: Ival::pt(pm), q: Ival::pt(qm), s: Ival::pt(sm) });
             if w.hi < lim_hit {
                 let y = f.surf.eval(Ival::pt(pm), Ival::pt(qm));
-                let sm = if mv.planar().is_some() { mv.nearest_s([y[0].mid(), y[1].mid()]) } else { sm };
+                let sm = if matches!(mv.planar(), Some(Planar::Line { .. } | Planar::Arc { .. })) { mv.nearest_s([y[0].mid(), y[1].mid()]) } else { sm };
                 return (Verdict::Hit { d: w.hi + f.mu, p: pm, q: qm, s: sm, at: [y[0].mid(), y[1].mid(), y[2].mid()] }, spent);
             }
         }

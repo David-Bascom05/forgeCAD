@@ -599,6 +599,63 @@ fn harness_cmd(file: &str, args: &[String]) -> ExitCode {
     ExitCode::SUCCESS
 }
 
+/// `fg cam F [--json] [-o PROGRAM] [--sheet HTML]`: runs a machining document; the reply is
+/// `forgecad.cam/1`; the program is written only when every op is certified.
+fn cam_cmd(file: &str, rest: &[String]) -> ExitCode {
+    let src = match std::fs::read_to_string(file) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("{file}: {e}");
+            return ExitCode::from(2);
+        }
+    };
+    let dir = std::path::Path::new(file).parent().map(|p| p.to_path_buf()).unwrap_or_default();
+    let cam = forge_lang::cam::run(&src, &dir);
+    let arg = |f: &str| rest.iter().position(|a| a == f).and_then(|i| rest.get(i + 1));
+    if let Some(out) = arg("-o") {
+        match cam.program_text() {
+            Some((t, _)) => {
+                if let Err(e) = std::fs::write(out, t) {
+                    eprintln!("{out}: {e}");
+                    return ExitCode::from(2);
+                }
+            }
+            None => eprintln!("no program written: not every op is certified"),
+        }
+    }
+    if let Some(out) = arg("--sheet")
+        && let Err(e) = std::fs::write(out, cam.sheet())
+    {
+        eprintln!("{out}: {e}");
+        return ExitCode::from(2);
+    }
+    if rest.iter().any(|a| a == "--json") {
+        let mut s = String::new();
+        cam.json().write(&mut s);
+        println!("{s}");
+    } else {
+        for e in &cam.errors {
+            println!("error: {e}");
+        }
+        for o in &cam.ops {
+            println!(
+                "{:<8} {:<8} {:<8} {:>6} moves {:>8.0} mm cut {:>6.0} s  {}",
+                o.name,
+                o.kind,
+                o.status,
+                o.moves,
+                o.length_cut,
+                o.time_s,
+                if o.status == "built" { format!("certified ({} checks)", o.pairs) } else { o.refusal.clone().unwrap_or_default() }
+            );
+        }
+        for p in &cam.programs {
+            println!("program {} ({}): {}", p.name, p.post, match &p.error { None => format!("{} lines, round trip exact", p.lines), Some(e) => e.clone() });
+        }
+    }
+    if cam.ok { ExitCode::SUCCESS } else { ExitCode::from(1) }
+}
+
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     match args.first().map(String::as_str) {
@@ -606,6 +663,7 @@ fn main() -> ExitCode {
         Some("check") if args.len() >= 2 => run_file(&args[1], &args[2..], false),
         Some("view") if args.len() >= 2 => view_file(&args[1], &args[2..]),
         Some("std") => std_cmd(&args[1..]),
+        Some("cam") if args.len() >= 2 => cam_cmd(&args[1], &args[2..]),
         Some("harness") if args.len() >= 2 => harness_cmd(&args[1], &args[2..]),
         Some("reference") => {
             print!("{}", forge_lang::REFERENCE);
