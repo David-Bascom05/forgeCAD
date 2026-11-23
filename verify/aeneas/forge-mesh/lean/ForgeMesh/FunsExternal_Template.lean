@@ -169,7 +169,7 @@ axiom forge_geom.budget.spend_many : Std.U64 → Result Unit
 axiom forge_geom.budget.over : Result Bool
 
 /-- [forge_math::predicates::orient2d]:
-    Source: 'kernel/forge-math/src/predicates.rs', lines 151:0-151:55
+    Source: 'kernel/forge-math/src/predicates.rs', lines 405:0-405:55
     Name pattern: [forge_math::predicates::orient2d]
     Visibility: public -/
 @[rust_fun "forge_math::predicates::orient2d"]

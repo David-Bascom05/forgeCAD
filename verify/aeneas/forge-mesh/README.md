@@ -39,8 +39,8 @@ in debug builds only, that every point its predicates see is within `RANGE` = 2^
 
 ## Building
 
-Needs the -aeneas branch's toolchain, bridge and forge-math translation (`tools/aeneas`,
-`verify/aeneas/bridge`, `verify/aeneas/forge-math`):
+With the toolchain (`tools/aeneas/setup.sh`), in this tree (the bridge and forge-math's
+translation beside it):
 ```
 tools/aeneas/translate.sh forge-mesh      # Types.lean, Funs.lean, the templates
 cd verify/aeneas/forge-mesh/lean && lake build

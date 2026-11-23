@@ -18,7 +18,7 @@ Everything here is a definition: no axiom. The `f64` constants and functions (`I
   `Default for Vec`, `mem::take`, `f64 == f64`) are written as std documents them, over the
   library's list model of `Vec`.
 - `forge_geom::budget::{over, spend_many}` (a thread-local work counter, the shell's) and the
-  `Debug` of a `str` are Lean `opaque` constants: no definition a proof can see, so a theorem
+  `Debug` of a `str` and of an `f64` are Lean `opaque` constants: no definition a proof can see, so a theorem
   about the CDT holds whatever the budget answers.
 - `cdt::triangulate`, the one shell that names a `dyn Refine`, is kept opaque by translate.conf.
 
@@ -42,6 +42,12 @@ def forge_math.predicates.orient2d (a b c : forge_math.vec.Point2) : Result F64 
 /-! ## std -/
 
 def F64.Insts.CoreCmpPartialEqF64.eq (a b : F64) : Result Bool := ok (F64.Ops.eq a b)
+
+/-- `Debug for f64` (reached from the derived `Debug` of `Need` and `CdtError`): formatting,
+which no theorem about the CDT reads. -/
+opaque F64.Insts.CoreFmtDebug.fmt :
+    F64 → core.fmt.Formatter → Result ((core.result.Result Unit core.fmt.Error) × core.fmt.Formatter) :=
+  fun _ f => ok (.Ok (), f)
 
 opaque Str.Insts.CoreFmtDebug.fmt :
     Str → core.fmt.Formatter → Result ((core.result.Result Unit core.fmt.Error) × core.fmt.Formatter) :=

@@ -60,6 +60,10 @@ older points that a later round skips was asked in the round it was made. The pr
 
 ## Integration
 
+Since the merge with main (2026-11-23): it builds in-tree against main's bridge and forge-math
+translation (`tools/aeneas/translate.sh --all --check` up to date, `lake build` with the axioms
+check). What follows is how it stood before that.
+
 The Lean package builds only with -aeneas's `tools/aeneas`, `verify/aeneas/bridge` and
 `verify/aeneas/forge-math` beside it (`lakefile.toml` requires `../../forge-math/lean`).
 Every build here was checked in an -aeneas worktree. -aeneas's kernel/forge-math/src/predicates.rs
