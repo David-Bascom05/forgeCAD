@@ -12,7 +12,7 @@
 #                                                   same as each other and as bits.txt
 # opts:  --rounds N   rounds per side (default 12): each a fresh process per part and threads
 #        --reps K     most timed reps of an op in a round (default 30; at least 3, then until
-#                     they took LATBENCH_BUDGET s, default 0.5), after one warm-up rep
+#                     they took LATBENCH_BUDGET s, default 0.1 here), after one warm-up rep
 #        --parts "a b .."  (default: every parts/bench/*.fg)
 #        --threads "t1 tN" (default both): t1 = FORGECAD_THREADS=1 on one pinned core; tN = every
 #                     core, FORGECAD_THREADS unset (what a user gets); tK = FORGECAD_THREADS=K on
@@ -47,7 +47,8 @@
 set -e
 dir=$(cd "$(dirname "$0")" && pwd)
 root=$PWD
-rounds=12
+rounds=40
+confirm=40
 reps=30
 parts=
 threads="t1 tN"
@@ -72,6 +73,7 @@ while [ $# -gt 0 ]; do
     --raw) raw=$2; shift ;;
     --heavy) heavy=1 ;;
     --skip) skipops=$2; shift ;;
+    --confirm) confirm=$2; shift ;;
     --kparts) kparts=$2; shift ;;
     -o) out=$2; shift ;;
     *) echo "latency.sh: unknown argument $1" >&2; exit 64 ;;
@@ -138,7 +140,8 @@ run() {
   fi
   # shellcheck disable=SC2086
   (cd / && env -i PATH=/usr/local/bin:/usr/bin:/bin HOME=/tmp FORGECAD_CACHE=off \
-    FORGE_BENCH_PARTS="$work/parts" $tenv $lay $extra $pin $norand "$work/$side/latbench" "$@")
+    LATBENCH_BUDGET=${LATBENCH_BUDGET:-0.1} FORGE_BENCH_PARTS="$work/parts" $tenv $lay $extra $pin \
+    $norand "$work/$side/latbench" "$@")
 }
 
 if [ "$mode" = bits ]; then
@@ -197,16 +200,20 @@ for k in $kparts; do list="$list k-$k"; done
 echo "latency: warm-up pass" >&2
 for p in $list; do for s in $sides; do one "$s" 0 "$p" tN; done; done
 : > "$samples"
-start=$(date +%s)
-for r in $(seq "$rounds"); do
-  if [ $((r % 2)) = 1 ]; then order=$sides; else order=$(echo "$sides" | awk '{for(i=NF;i>0;i--)printf "%s ",$i}'); fi
-  for p in $list; do
-    for t in $threads; do
-      for s in $order; do one "$s" "$r" "$p" "$t"; done
+# rounds R0+1 .. R0+N over the parts LIST at each of $threads, base and head back to back
+rounds_over() { # R0 N LIST
+  start=$(date +%s)
+  for r in $(seq $(($1 + 1)) $(($1 + $2))); do
+    if [ $((r % 2)) = 1 ]; then order=$sides; else order=$(echo "$sides" | awk '{for(i=NF;i>0;i--)printf "%s ",$i}'); fi
+    for p in $3; do
+      for t in $threads; do
+        for s in $order; do one "$s" "$r" "$p" "$t" < /dev/null; done
+      done
     done
+    echo "latency: round $((r - $1))/$2 ($(( $(date +%s) - start )) s)" >&2
   done
-  echo "latency: round $r/$rounds ($(( $(date +%s) - start )) s)" >&2
-done
+}
+rounds_over 0 "$rounds" "$list"
 
 report() {
   echo "# latency.sh $mode: head ${head:-$(git rev-parse --short HEAD)$(git diff --quiet || echo +dirty)}${HEAD_FEATURES:+ [$HEAD_FEATURES]}${base:+, base $base}${BASE_FEATURES:+ [$BASE_FEATURES]}"
@@ -214,7 +221,29 @@ report() {
     "threads: t1 = 1 on core $core, tN = $ncpu (all cores, FORGECAD_THREADS unset)"
   [ -n "${HEAD_ENV:-}" ] && echo "# HEAD_ENV=$HEAD_ENV"
   [ -n "${BASE_ENV:-}" ] && echo "# BASE_ENV=$BASE_ENV"
-  if [ "$mode" = compare ]; then python3 "$dir/latstat.py" compare "$samples"; else python3 "$dir/latstat.py" record "$samples"; fi
+  if [ "$mode" = compare ]; then
+    python3 "$dir/latstat.py" compare "$samples" --flags "$work/flags" || st=$?
+    # confirmation: the flagged lines' parts again, at the flagged thread settings, in fresh
+    # rounds; a verdict stands only if these rounds give it again (decided on them alone)
+    if [ -s "$work/flags" ] && [ "$confirm" -gt 0 ]; then
+      awk '$1=="R"{t[$2]=t[$2]" "$3} $1=="H"{t[$2]=t[$2]" t1 tN"} END{for(p in t)print p, t[p]}' \
+        "$work/flags" > "$work/items"
+      echo
+      echo "# confirmation: $confirm fresh rounds of the flagged lines' parts; only these verdicts stand"
+      : > "$work/raw2"
+      samples=$work/raw2
+      while read -r p ts; do
+        threads=$(echo "$ts" | tr ' ' '\n' | sort -u | tr '\n' ' ')
+        rounds_over 1000 "$confirm" "$p"
+      done < "$work/items"
+      [ -n "$raw" ] && cp "$work/raw2" "$raw.confirm"
+      st=0
+      python3 "$dir/latstat.py" compare "$work/raw2" --only "$work/flags" || st=$?
+    fi
+    return ${st:-0}
+  else
+    python3 "$dir/latstat.py" record "$samples"
+  fi
 }
 status=0
 if [ -n "$out" ]; then report > "$out" || status=$?; cat "$out"; else report || status=$?; fi

@@ -12,8 +12,9 @@ least of its reps for wall and run time (the noise of a shared machine, other te
 only ever adds time, so the least rep is the steadiest estimate of the op's own time), and
 the mean of its reps for CPU (which comes in 10 ms ticks: the mean is their total, to the tick).
 Rounds of base and head were run back to back (ABAB, the order flipped each round), so they are
-paired: per line the statistic is the median of head/base over the pairs, with a percentile
-bootstrap CI (resampling pairs) and a Wilcoxon signed-rank p.
+paired: per line the statistic is the Hodges-Lehmann centre of the pairs' log ratios
+head/base, with the signed-rank CI (distribution-free; a bootstrap of the median undercovers at
+these sizes) and the Wilcoxon signed-rank p.
 
 compare: a metric is `slower` when its CI lies wholly above 1, its estimate is over 1 + th, and
 p < 1 - conf (both tests agree, and the effect is past the threshold). REGRESSED: wall slower
@@ -21,20 +22,20 @@ p < 1 - conf (both tests agree, and the effect is past the threshold). REGRESSED
 IMPROVED: the mirror, on wall. `cpu+`/`cpu-`: CPU (user+sys, every thread) past cpu-th, a
 warning, not a failure. THREADS HURT: on one side, a line whose all-cores rounds are slower than
 its one-thread rounds of the same round (the same test, on wall): fastest wins, so the default
-must not lose to one thread. Exit 1 when any line REGRESSED, or THREADS HURT on head but not on
-base (one on base too is listed, `(base too)`, a warning).
+must not lose to one thread. It is this change's when head's tN/t1 is also worse than base's,
+paired by round (the same test on the difference); else it is listed `(base too)`, a warning.
+Exit 1 when any line REGRESSED or a THREADS HURT is this change's. --flags F writes those
+lines; --only F limits the verdicts to them (latency.sh's confirmation run: fresh rounds).
 
 record: per line the median over rounds and its bootstrap CI, the CPU median, per part and op
 the speed-up at all cores (t1 wall / tN wall, information, never a pass) and CPU per wall second
 (the cores kept busy), and the THREADS HURT lines.
 """
 import math
-import random
 import statistics
 import sys
 from collections import defaultdict
 
-B = 5000
 WALL, CPU, RUN = 0, 1, 2
 
 
@@ -65,14 +66,6 @@ def quantile(xs, q):
     return xs[lo] + (xs[hi] - xs[lo]) * (i - lo)
 
 
-def boot_median(xs, conf, rng):
-    """Percentile bootstrap CI of the median of xs."""
-    n = len(xs)
-    meds = [statistics.median(rng.choices(xs, k=n)) for _ in range(B)]
-    a = (1 - conf) / 2
-    return quantile(meds, a), quantile(meds, 1 - a)
-
-
 def wilcoxon(d):
     """Two-sided Wilcoxon signed-rank p of the differences d (zeros dropped): exact for n <= 20
     without ties, else the normal approximation with tie correction."""
@@ -96,12 +89,9 @@ def wilcoxon(d):
         i = j + 1
     w = sum(r for r, x in zip(ranks, d) if x > 0)
     mean = n * (n + 1) / 4
-    if n <= 20 and ties == 0:
+    if n <= 80 and ties == 0:
         # exact: the distribution of the positive rank sum over 2^n sign choices
-        counts = [1] + [0] * (n * (n + 1) // 2)
-        for k in range(1, n + 1):
-            for s in range(len(counts) - 1, k - 1, -1):
-                counts[s] += counts[s - k]
+        counts = signed_rank_counts(n)
         lo = sum(counts[: int(math.floor(min(w, 2 * mean - w))) + 1])
         return min(1.0, 2 * lo / 2 ** n)
     var = n * (n + 1) * (2 * n + 1) / 24 - ties / 48
@@ -109,23 +99,64 @@ def wilcoxon(d):
     return math.erfc(z / math.sqrt(2))
 
 
-class Test:
-    """Paired rounds a -> b of one metric: the median ratio b/a, its CI, the signed-rank p."""
+def signed_rank_counts(n):
+    """counts[w]: the number of the 2^n sign choices whose positive rank sum is w."""
+    counts = [1] + [0] * (n * (n + 1) // 2)
+    for k in range(1, n + 1):
+        for s in range(len(counts) - 1, k - 1, -1):
+            counts[s] += counts[s - k]
+    return counts
 
-    def __init__(self, a, b, m, rng, conf):
-        ks = sorted(k for k in set(a) & set(b) if a[k][m] > 0 and b[k][m] > 0)
-        self.n = len(ks)
-        if not ks:
+
+def hodges_lehmann(d, conf):
+    """The Hodges-Lehmann estimate of d's centre (the median of its Walsh averages) and the
+    distribution-free CI that inverts the signed-rank test (exact for n <= 80, else normal):
+    its coverage holds for any symmetric noise, at about 95% of the mean's efficiency under
+    normal noise and far more under heavy tails, where the median's bootstrap undercovers."""
+    n = len(d)
+    walsh = sorted((d[i] + d[j]) / 2 for i in range(n) for j in range(i, n))
+    big_n = len(walsh)
+    est = statistics.median(walsh)
+    a = (1 - conf) / 2
+    if n <= 80:
+        counts = signed_rank_counts(n)
+        total = 2 ** n
+        c, acc = -1, 0
+        while acc + counts[c + 1] <= a * total:
+            c += 1
+            acc += counts[c]
+        c = max(c, 0)  # (too few rounds for the level: the widest interval there is)
+    else:
+        z = statistics.NormalDist().inv_cdf(1 - a)
+        c = max(0, int(math.floor(big_n / 2 - z * math.sqrt(n * (n + 1) * (2 * n + 1) / 24))))
+    return est, walsh[c], walsh[big_n - 1 - c]
+
+
+class Test:
+    """Paired log ratios: the centre (Hodges-Lehmann), its signed-rank CI and p, as ratios."""
+
+    def __init__(self, lr, conf, a=0.0, b=0.0):
+        self.n = len(lr)
+        self.a, self.b = a, b
+        if self.n == 0:
             return
-        lr = [math.log(b[k][m] / a[k][m]) for k in ks]
-        self.est = math.exp(statistics.median(lr))
-        self.lo, self.hi = (math.exp(x) for x in boot_median(lr, conf, rng))
+        e, lo, hi = hodges_lehmann(lr, conf)
+        self.est, self.lo, self.hi = math.exp(e), math.exp(lo), math.exp(hi)
         self.p = wilcoxon(lr)
-        self.a = statistics.median(a[k][m] for k in ks)
-        self.b = statistics.median(b[k][m] for k in ks)
+
+    @staticmethod
+    def of(a, b, m, conf):
+        """Rounds a -> b ({round: values}) of metric m."""
+        ks = sorted(k for k in set(a) & set(b) if a[k][m] > 0 and b[k][m] > 0)
+        lr = [math.log(b[k][m] / a[k][m]) for k in ks]
+        if not ks:
+            return Test([], conf)
+        return Test(lr, conf, statistics.median(a[k][m] for k in ks),
+                    statistics.median(b[k][m] for k in ks))
 
     def verdict(self, th, alpha):
-        """1 slower, -1 faster, 0 neither."""
+        """1 slower, -1 faster, 0 neither (the CI wholly past 1, the estimate past the
+        threshold, p under alpha)."""
         if self.n == 0:
             return 0
         if self.lo > 1 and self.est > 1 + th and self.p < alpha:
@@ -145,16 +176,27 @@ def side(r, s):
     return {k: v for (x, k), v in r.items() if x == s}
 
 
-def threads_hurt(rounds, s, th, conf, rng):
+def threads_hurt(rounds, s, th, conf):
     """Lines (part, op) where all cores is slower than one thread on side s: {(part, op): Test}."""
     out = {}
     for (part, thr, op), r in rounds.items():
         if thr != "tN" or (part, "t1", op) not in rounds:
             continue
-        t = Test(side(rounds[(part, "t1", op)], s), side(r, s), WALL, rng, conf)
+        t = Test.of(side(rounds[(part, "t1", op)], s), side(r, s), WALL, conf)
         if t.verdict(th, 1 - conf) == 1:
             out[(part, op)] = t
     return out
+
+
+def worse_threads(rounds, part, op, th, conf):
+    """Whether head's tN/t1 is worse than base's, paired by round (a difference of
+    differences): a THREADS HURT that this change made, or made worse."""
+    t1, tn = rounds.get((part, "t1", op), {}), rounds.get((part, "tN", op), {})
+    ks = [k for (s, k) in tn if s == "head"
+          and all((x, k) in d for x in ("base", "head") for d in (t1, tn))]
+    lr = [math.log(tn[("head", k)][WALL] / t1[("head", k)][WALL])
+          - math.log(tn[("base", k)][WALL] / t1[("base", k)][WALL]) for k in ks]
+    return Test(lr, conf).verdict(th, 1 - conf) == 1
 
 
 def print_hurt(hurt, known=()):
@@ -164,13 +206,17 @@ def print_hurt(hurt, known=()):
               f" ({t.a / 1e6:.2f} -> {t.b / 1e6:.2f} ms){tag}")
 
 
-def compare(path, wall_th, cpu_th, conf):
+def compare(path, wall_th, cpu_th, conf, only=None, flags=None):
+    """only: a set of lines ("R part thr op", "H part op") the verdicts are limited to (a
+    confirmation run: fresh rounds of what an earlier run flagged); flags: a file to write the
+    flagged lines to, in that form."""
     alpha = 1 - conf
-    rng = random.Random(1)
     rounds = load(path)
+    flagged = []
     bad = 0
     counts = defaultdict(int)
-    print(f"# head/base per line: median over paired rounds, {conf:.0%} bootstrap CI, Wilcoxon p")
+    print(f"# head/base per line: Hodges-Lehmann centre of the paired log ratios, its {conf:.0%}"
+          " signed-rank CI, Wilcoxon p")
     print(f"# REGRESSED: CI wholly > 1, estimate > {1 + wall_th:.3f}, p < {alpha:.3f}, in wall"
           f" (or in run time at t1); cpu+: the same for CPU past {1 + cpu_th:.3f} (warning)")
     print(f"{'part':11} {'thr':3} {'op':5} {'n':>3} {'base ms':>9} {'head ms':>9}"
@@ -180,15 +226,18 @@ def compare(path, wall_th, cpu_th, conf):
         part, thr, op = key
         r = rounds[key]
         b, h = side(r, "base"), side(r, "head")
-        w = Test(b, h, WALL, rng, conf)
+        w = Test.of(b, h, WALL, conf)
         if w.n == 0:
             continue
-        c = Test(b, h, CPU, rng, conf)
-        u = Test(b, h, RUN, rng, conf) if thr == "t1" else Test({}, {}, RUN, rng, conf)
+        c = Test.of(b, h, CPU, conf)
+        u = Test.of(b, h, RUN, conf) if thr == "t1" else Test([], conf)
         v = []
         wv, uv = w.verdict(wall_th, alpha), u.verdict(wall_th, alpha)
+        if only is not None and f"R {part} {thr} {op}" not in only:
+            wv = uv = min(wv, 0)
         if wv == 1 or uv == 1:
             v.append("REGRESSED" + ("" if wv == 1 else " (run)"))
+            flagged.append(f"R {part} {thr} {op}")
             bad += 1
         elif wv == -1:
             v.append("IMPROVED")
@@ -201,10 +250,15 @@ def compare(path, wall_th, cpu_th, conf):
               f" {w.pct()} {w.p:7.4f}  {u.pct()}  {c.pct()}  {' '.join(v)}")
     # fastest wins: on head, all cores must not be slower than one thread; a line that is so on
     # base too is listed but does not fail this change
-    hb = threads_hurt(rounds, "base", wall_th, conf, rng)
-    hh = threads_hurt(rounds, "head", wall_th, conf, rng)
+    # (a line hurts "on base too" unless head's tN/t1 is worse than base's, paired by round: one
+    # side's verdict alone flips with noise from run to run)
+    hh = threads_hurt(rounds, "head", wall_th, conf)
+    hb = {k for k in hh if not worse_threads(rounds, k[0], k[1], wall_th, conf)}
+    if only is not None:
+        hb |= {k for k in hh if f"H {k[0]} {k[1]}" not in only}
     print_hurt(hh, hb)
     new = [k for k in hh if k not in hb]
+    flagged += [f"H {p} {o}" for p, o in new]
     if new:
         counts["THREADS HURT (new)"] += len(new)
         bad += len(new)
@@ -212,14 +266,16 @@ def compare(path, wall_th, cpu_th, conf):
     if old:
         counts["threads hurt (base too)"] += len(old)
     print("summary: " + (", ".join(f"{k} {n}" for k, n in sorted(counts.items())) or "no change"))
+    if flags:
+        with open(flags, "w") as f:
+            f.write("".join(x + "\n" for x in flagged))
     return 1 if bad else 0
 
 
 def record(path):
-    rng = random.Random(1)
     rounds = load(path)
     print("# per line: median of rounds (one process each; a round's value is its least rep),")
-    print("# 95% bootstrap CI, CPU median; speedup = t1 wall / tN wall (information, never a")
+    print("# 95% Hodges-Lehmann CI of the centre, CPU median; speedup = t1 wall / tN wall (information, never a")
     print("# pass); busy = CPU / wall at tN (cores kept busy)")
     print(f"{'part':11} {'thr':3} {'op':5} {'n':>3} {'wall ms':>10} {'CI ms':>21} {'cpu ms':>10}")
     med = {}
@@ -229,7 +285,7 @@ def record(path):
         vals = list(side(rounds[key], s).values())
         w = [x[WALL] / 1e6 for x in vals]
         c = [x[CPU] / 1e6 for x in vals]
-        lo, hi = boot_median(w, 0.95, rng)
+        _, lo, hi = hodges_lehmann(w, 0.95) if len(w) > 1 else (0, w[0], w[0])
         med[key] = (statistics.median(w), statistics.median(c))
         print(f"{part:11} {thr:3} {op:5} {len(w):3} {med[key][0]:10.2f}"
               f" [{lo:9.2f},{hi:9.2f}] {med[key][1]:10.2f}")
@@ -239,7 +295,7 @@ def record(path):
         if thr == "tN" and (part, "t1", op) in med:
             print(f"{part:11} {op:5} {med[(part, 't1', op)][0] / w:8.2f} {c / w:6.2f}")
     print()
-    hurt = threads_hurt(rounds, s, 0.01, 0.99, rng)
+    hurt = threads_hurt(rounds, s, 0.01, 0.99)
     print_hurt(hurt)
     print(f"threads hurt: {len(hurt)} lines (all cores slower than one thread, paired rounds, 99%)")
     return 0
@@ -250,11 +306,15 @@ def main():
     if len(a) < 2 or a[0] not in ("compare", "record"):
         print(__doc__)
         return 64
-    opt = {"--wall-th": 0.01, "--cpu-th": 0.03, "--conf": 0.99}
+    opt = {"--wall-th": "0.01", "--cpu-th": "0.03", "--conf": "0.99", "--only": None, "--flags": None}
     for i in range(2, len(a) - 1, 2):
-        opt[a[i]] = float(a[i + 1])
+        opt[a[i]] = a[i + 1]
     if a[0] == "compare":
-        return compare(a[1], opt["--wall-th"], opt["--cpu-th"], opt["--conf"])
+        only = None
+        if opt["--only"]:
+            only = {x.strip() for x in open(opt["--only"]) if x.strip()}
+        return compare(a[1], float(opt["--wall-th"]), float(opt["--cpu-th"]),
+                       float(opt["--conf"]), only, opt["--flags"])
     return record(a[1])
 
 
