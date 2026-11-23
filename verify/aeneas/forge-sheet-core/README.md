@@ -59,7 +59,13 @@ Proven (no `sorry`; `lean/ForgeSheetCore/Axioms.lean` checks the standard axioms
   (`Nonoverlapping`), kept by Grow-Expansion (`grow_nonoverlapping`, Theorem 10) and by dropping
   components (zero elimination), and the sign of an expansion is its topmost nonzero
   component's (`NO_sign`). ExpansionInst.lean instantiates it (`expansionTheory`), so
-  `disc_exact` holds with no assumption beyond the domain. `line_gap` is next, on the same pieces.
+  `disc_exact` holds with no assumption beyond the domain.
+- `line_gap_exact` (LineGapExact.lean; filter RefineLineGap.lean): exact.rs `line_gap`, the shipped
+  `sign(orient(a, b, c)² − l²|b − a|²)`, on the same domain and with no further assumption. The
+  filter branch is Filter16's `line_gap_filter_sound` with every rounding on the grid
+  (`line_gap_filter`). The exact branch is the refinement specs and `line_model`, whose sums and
+  products (`add_gen`, `mul_gen`: any grid down to `2⁻¹⁰⁷⁴`, up to `2¹¹` components; `o·o` has up
+  to 512) are exact, finite and on the grid.
 - under them: the least-root union–find (`new_spec`, `find_spec`, `union_spec`), ported from the
   decide-once core's proofs (research/kernel-audit/decide-once/aeneas: the same `union_find.rs`),
   with every `+= 1` (overflow-checked in the canonical translation) shown not to overflow.
