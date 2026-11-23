@@ -183,8 +183,7 @@ no-output (constant tables or print switches)  @ forge-bool/src/boolean.rs|stati
 speed (buffers, stats)  @ forge-bool/src/boolean.rs|static|static PHASES: std::cell::RefCell<[u64; 7]> = const { std::cell::RefCell::new([0; 7]) };
 no-output (reset at op entry, boolean.rs:539-540, 910)  @ forge-bool/src/boolean.rs|static|static RETRIED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 speed (buffers, stats)  @ forge-bool/src/boolean.rs|static|static SCRATCH: std::cell::RefCell<Scratch> = std::cell::RefCell::default();
-speed (buffers: split_face's lists, cleared before each use; bool-speed S2)  @ forge-bool/src/boolean.rs|static|static SPLIT: std::cell::Cell<SplitScratch> = std::cell::Cell::new(SplitScratch::default());
-no-output (the retry flags, Held-scoped to one boolean; SCRATCH and SPLIT speed; PHASES stats)  @ forge-bool/src/boolean.rs|thread_local|thread_local! {  x 4
+no-output (the retry flags, Held-scoped to one boolean; SCRATCH and SPLIT speed; PHASES stats)  @ forge-bool/src/boolean.rs|thread_local|thread_local! {  x 3
 speed (lazy field or constant table)  @ forge-bool/src/classify.rs|lazy|boxes: std::sync::OnceLock::new(),
 speed (lazy field or constant table)  @ forge-bool/src/classify.rs|lazy|boxes: std::sync::OnceLock<Vec<Box3>>,
 speed (lazy field or constant table)  @ forge-bool/src/classify.rs|lazy|drawn: std::sync::OnceLock::new(),
@@ -206,13 +205,12 @@ speed (lazy field or constant table)  @ forge-bool/src/imprint.rs|lazy|static CU
 no-output (constant tables or print switches)  @ forge-bool/src/imprint.rs|static|static CUT: std::sync::OnceLock<Name> = std::sync::OnceLock::new();  x 2
 keyed (the imprint's mode is in forge_model::switches, part of the session's step key and its prefix reuse; kept_switches)  @ forge-bool/src/imprint.rs|static|static MODE: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(u8::MAX);
 speed (stats counter)  @ forge-bool/src/imprint.rs|static|static TAKEN: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
-no-output (work index, counter or stop flag)  @ forge-bool/src/nary.rs|atomic|let next = AtomicUsize::new(0);
 no-output (work index, counter or stop flag)  @ forge-bool/src/nary.rs|atomic|static PICK: AtomicUsize = AtomicUsize::new(0);
 no-output (work index, counter or stop flag)  @ forge-bool/src/nary.rs|atomic|use std::sync::atomic::{AtomicUsize, Ordering};
+speed (picks how many threads run the work, never what an item computes: answers in item order; bits identical at 1, 2, 4 and 16 threads, W1)  @ forge-bool/src/nary.rs|clock|let born = forge_math::clock::Instant::now();
 speed (timing stats; a clock that picks a path is must-fix 5)  @ forge-bool/src/nary.rs|clock|let merge_start = forge_math::clock::Instant::now();
 speed (timing stats; a clock that picks a path is must-fix 5)  @ forge-bool/src/nary.rs|clock|let mut clock = forge_math::clock::Instant::now();
 speed (timing stats; a clock that picks a path is must-fix 5)  @ forge-bool/src/nary.rs|clock|let now = forge_math::clock::Instant::now();
-speed (timing stats; a clock that picks a path is must-fix 5)  @ forge-bool/src/nary.rs|clock|let start = forge_math::clock::Instant::now();
 speed (timing stats; a clock that picks a path is must-fix 5)  @ forge-bool/src/nary.rs|clock|let t = forge_math::clock::Instant::now();
 speed (timing stats; a clock that picks a path is must-fix 5)  @ forge-bool/src/nary.rs|clock|let t0 = forge_math::clock::Instant::now();
 no-output (prints only)  @ forge-bool/src/nary.rs|env|*ON.get_or_init(|| std::env::var_os("FORGE_NARY").is_some())
@@ -231,7 +229,6 @@ speed (buffers, stats)  @ forge-bool/src/nary.rs|static|static PHASES: std::cell
 speed (stats counter)  @ forge-bool/src/nary.rs|static|static PICK: AtomicUsize = AtomicUsize::new(0);
 no-output (constant tables or print switches)  @ forge-bool/src/nary.rs|static|static REG: std::sync::OnceLock<Option<usize>> = std::sync::OnceLock::new();
 speed (stats counter)  @ forge-bool/src/nary.rs|thread_local|thread_local! {
-no-output (results and errors put back in index order)  @ forge-bool/src/nary.rs|threads|let parts: Vec<Vec<(usize, T)>> = forge_math::par::scope(|s| {
 no-output (no iteration order reaches an output; audit)  @ forge-bool/src/ssi.rs|hash-order|std::collections::HashMap<
 speed (cache answering a function of its own key)  @ forge-bool/src/ssi.rs|static|static MET: std::cell::RefCell<Mets> = std::cell::RefCell::new(Default::default());
 speed (cache answering a function of its own key)  @ forge-bool/src/ssi.rs|static|static MET_MOST: std::cell::Cell<usize> = const { std::cell::Cell::new(4096) };
@@ -324,9 +321,13 @@ no-output (the clock itself: timings only, the browser host sets its source)  @ 
 no-output (the clock itself: timings only, the browser host sets its source)  @ forge-math/src/clock.rs|lazy|static CLOCKS: OnceLock<(fn() -> f64, fn() -> f64)> = OnceLock::new();
 no-output (the clock itself: timings only, the browser host sets its source)  @ forge-math/src/clock.rs|lazy|use std::sync::OnceLock;
 no-output (the clock itself: timings only, the browser host sets its source)  @ forge-math/src/clock.rs|static|static CLOCKS: OnceLock<(fn() -> f64, fn() -> f64)> = OnceLock::new();
-no-output (forge_math::par: answers in item order, each a function of its item; the thread count only splits the work)  @ forge-math/src/par.rs|atomic|let next = std::sync::atomic::AtomicUsize::new(0);
+no-output (forge_math::par: answers in item order, each a function of its item; the thread count only splits the work)  @ forge-math/src/par.rs|atomic|let next = AtomicUsize::new(0);
+no-output (forge_math::par: answers in item order, each a function of its item; the thread count only splits the work)  @ forge-math/src/par.rs|atomic|use std::sync::atomic::{AtomicUsize, Ordering};
+speed (picks how many threads run the work, never what an item computes: answers in item order; bits identical at 1, 2, 4 and 16 threads, W1)  @ forge-math/src/par.rs|clock|let start = crate::clock::Instant::now();
 no-output (forge_math::par: answers in item order, each a function of its item; the thread count only splits the work)  @ forge-math/src/par.rs|env|std::env::var("FORGECAD_THREADS")
-no-output (forge_math::par: answers in item order, each a function of its item; the thread count only splits the work)  @ forge-math/src/par.rs|threads|.unwrap_or_else(|| std::thread::available_parallelism().map_or(1, |n| n.get()))
+no-output (forge_math::par: answers in item order, each a function of its item; the thread count only splits the work)  @ forge-math/src/par.rs|lazy|static CORES: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
+no-output (forge_math::par: answers in item order, each a function of its item; the thread count only splits the work)  @ forge-math/src/par.rs|static|static CORES: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
+no-output (forge_math::par: answers in item order, each a function of its item; the thread count only splits the work)  @ forge-math/src/par.rs|threads|*CORES.get_or_init(|| std::thread::available_parallelism().map_or(1, |n| n.get()))
 no-output (prints only)  @ forge-math/src/trace.rs|clock|Span(name, on().then(Instant::now))
 no-output (prints only)  @ forge-math/src/trace.rs|env|*ON.get_or_init(|| std::env::var_os("FORGECAD_TRACE").is_some())
 no-output (prints only)  @ forge-math/src/trace.rs|lazy|static ON: OnceLock<bool> = OnceLock::new();
@@ -337,16 +338,13 @@ no-output (no iteration order reaches an output; audit)  @ forge-mesh/src/tessel
 no-output (no iteration order reaches an output; audit)  @ forge-model/src/bodies.rs|hash-order|fn split_off(mut b: Body, taken: &HashSet<Name>, salt: impl Fn(Name) -> Name) -> Body {
 no-output (no iteration order reaches an output; audit)  @ forge-model/src/bodies.rs|hash-order|let taken: HashSet<Name> = all_names(&below).collect();
 no-output (no iteration order reaches an output; audit)  @ forge-model/src/bodies.rs|hash-order|let wholes: HashSet<Name> = taken.iter().map(|n| n.whole()).collect();
-no-output (results and errors put back in index order)  @ forge-model/src/bodies.rs|threads|let built: Vec<Result<Vec<Vec<Tool>>, RegenError>> = forge_math::par::scope(|s| {
-no-output (work index, counter or stop flag)  @ forge-model/src/lib.rs|atomic|let next = std::sync::atomic::AtomicUsize::new(from);
-speed (lazy field or constant table)  @ forge-model/src/lib.rs|lazy|let index = std::cell::OnceCell::new();
-speed (a counter, stats only)  @ forge-model/src/lib.rs|static|static NAME_FALLBACKS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
-speed (a counter, stats only)  @ forge-model/src/lib.rs|thread_local|thread_local! {
-no-output (results and errors put back in index order)  @ forge-model/src/lib.rs|threads|let done: Vec<Vec<Built>> = std::thread::scope(|s| {
 no-output (W3: a stop flag; the helper builds tools in item order and the steps take them in order)  @ forge-model/src/lib.rs|atomic|let stop = std::sync::atomic::AtomicBool::new(false);
 speed (W3: the clock decides only which thread builds a tool, never what it is; tools are functions of the history)  @ forge-model/src/lib.rs|clock|let start = forge_math::clock::Instant::now();
 speed (W3: the clock decides only which thread builds a tool, never what it is; tools are functions of the history)  @ forge-model/src/lib.rs|clock|let t = (!starts(&h[i])).then(forge_math::clock::Instant::now);
-no-output (W3: tools built ahead in item order, taken by the steps in order; errors met at the same step; bits identical at 1, 2, 4, 16 threads)  @ forge-model/src/lib.rs|threads|std::thread::scope(|s| {
+speed (lazy field or constant table)  @ forge-model/src/lib.rs|lazy|let index = std::cell::OnceCell::new();
+speed (a counter, stats only)  @ forge-model/src/lib.rs|static|static NAME_FALLBACKS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+speed (a counter, stats only)  @ forge-model/src/lib.rs|thread_local|thread_local! {
+no-output (W3: the helper builds tools in item order and the steps take them in order)  @ forge-model/src/lib.rs|threads|forge_math::par::scope(|s| {
 no-output (looked up by key, never iterated)  @ forge-model/src/names.rs|hash-order|let mut built: std::collections::HashMap<(usize, usize), Option<std::sync::Arc<Body>>> =
 no-output (no iteration order reaches an output; audit)  @ forge-model/src/splitface.rs|hash-order|leave: &HashMap<VertexId, Use>,
 no-output (no iteration order reaches an output; audit)  @ forge-model/src/splitface.rs|hash-order|let mut cuts: HashMap<EdgeId, Vec<(f64, VertexId)>> = HashMap::new();
@@ -389,10 +387,8 @@ no-output (no iteration order reaches an output; audit)  @ forge-ops/src/direct.
 no-output (no iteration order reaches an output; audit)  @ forge-ops/src/direct.rs|hash-order|let mut sub: HashMap<EdgeId, Option<(EdgeId, bool)>> = HashMap::new();
 no-output (no iteration order reaches an output; audit)  @ forge-ops/src/direct.rs|hash-order|let mut used: HashSet<Name> = out.edge_ids().map(|e| out.edge(e).name).collect();
 no-output (no iteration order reaches an output; audit)  @ forge-ops/src/direct.rs|hash-order|let mut used: HashSet<Name> = out.vertices.iter().map(|v| v.name).collect();
-no-output (work index, counter or stop flag)  @ forge-ops/src/fillet.rs|atomic|let next = std::sync::atomic::AtomicUsize::new(0);
 no-output (each fillet_with starts its own walk budget and restores its caller's, unwinding too; a_fillet_starts_with_its_own_walk_budget_and_leaves_its_callers)  @ forge-ops/src/fillet.rs|static|static WALK_LEFT: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
 no-output (each fillet_with starts its own walk budget and restores its caller's, unwinding too; a_fillet_starts_with_its_own_walk_budget_and_leaves_its_callers)  @ forge-ops/src/fillet.rs|thread_local|thread_local! {
-no-output (results and errors put back in index order)  @ forge-ops/src/fillet.rs|threads|let parts: Vec<Vec<(usize, T)>> = forge_math::par::scope(|s| {
 speed (lazy field or constant table)  @ forge-ops/src/selfx.rs|lazy|let loops: Vec<OnceCell<Vec<UvLoop>>> = vec![OnceCell::new(); n];
 speed (lazy field or constant table)  @ forge-ops/src/selfx.rs|lazy|let pieces: Vec<OnceCell<Vec<Box3>>> = vec![OnceCell::new(); n];
 speed (lazy field or constant table)  @ forge-ops/src/selfx.rs|lazy|let verts: Vec<OnceCell<Vec<VertexId>>> = vec![OnceCell::new(); n];
@@ -423,9 +419,9 @@ no-output (no iteration order reaches an output; audit)  @ forge-sheet/src/build
 no-output (no iteration order reaches an output; audit)  @ forge-sheet/src/build.rs|hash-order|twin: HashMap<(usize, usize), (usize, usize)>,
 no-output (a count of the checks' questions; tests read it, no op does)  @ forge-sheet/src/build.rs|static|static ASKED: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
 no-output (a count of the checks' questions; tests read it, no op does)  @ forge-sheet/src/build.rs|thread_local|thread_local! {
-no-output (looked up only, never iterated; audit)  @ forge-sheet/src/region.rs|hash-order|let mut along: std::collections::HashSet<(u32, u32), std::hash::BuildHasherDefault<Mix>> =
 no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-sheet/src/form.rs|float|+ (hi.powi(3) - lo.powi(3)) / 3.0 * (dmath::sin(s1) - dmath::sin(s0))
 no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-sheet/src/form.rs|float|let r = (near(l.x, self.c.x).powi(2) + near(l.y, self.c.y).powi(2)).sqrt();
+no-output (looked up only, never iterated; audit)  @ forge-sheet/src/region.rs|hash-order|let mut along: std::collections::HashSet<(u32, u32), std::hash::BuildHasherDefault<Mix>> =
 no-output (no iteration order reaches an output; audit)  @ forge-sheet/src/region.rs|hash-order|type Map<K, V> = HashMap<K, V, std::hash::BuildHasherDefault<Mix>>;
 no-output (FFI buffer or a local identity of one object)  @ forge-sheet/src/region.rs|pointer|let x_is_spline = matches!(x, Piece::Spline { s: q, .. } if Arc::ptr_eq(q, s));
 no-output (test code)  @ forge-thermo/src/bench.rs|env|let path = format!("{}/data/benchmarks/{name}.csv", env!("CARGO_MANIFEST_DIR"));
