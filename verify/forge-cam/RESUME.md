@@ -115,6 +115,15 @@ are covered.
   (CAM's message named it 6e3fa7c; the branch has it as 815d10e.) The interval guard suffices: no
   exact orient2d is needed (the master, 2026-11-23).
 
+## Helix moves and the trim fix (CAM 787239e)
+
+- `Move::Helix` (ramps) is already covered. `certified_clear` takes any xy curve γ and tip heights
+  ζ(s) in a set Zt. A helix is γ an arc and ζ linear in [z0, z1], so `HeightsIn ζ (Icc z0 z1)`.
+  The checker's Δ search over H − [z0, z1] is ClearFace (ii) with that Zt.
+- The trim fix bears on `dist_region` (item 1 below). Trims are now closed exactly: a trim arc is
+  its circle's arc of radius r plus radial pieces to its stored ends. The model of `dist_region`
+  should take that definition of the region.
+
 ## Still to do when asked
 
 1. `dist_region` (flat faces): the box cutoff and the trim's inside test (`Trim::classify`).
