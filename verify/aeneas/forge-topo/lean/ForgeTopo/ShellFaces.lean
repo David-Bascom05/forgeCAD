@@ -847,21 +847,32 @@ theorem dfs_push (b : Body) (f0 : Nat) (σ : U32) (f : Nat) (seen stack : alloc.
     have := D.cur_ok f' hf'
     exact ⟨this.1, hmono _ this.1 this.2.1, this.2.2⟩
 
-/-- Stamps only grow. -/
+/-- Stamps only grow, and only `σ` is written. -/
 def Mono (b : Body) (σ : U32) (seen seen' : alloc.vec.Vec U32) : Prop :=
-  ∀ y < b.faces.size, seen.val[y]! = σ → seen'.val[y]! = σ
+  (∀ y < b.faces.size, seen.val[y]! = σ → seen'.val[y]! = σ) ∧
+  (∀ y < b.faces.size, seen'.val[y]! = seen.val[y]! ∨ seen'.val[y]! = σ)
 
 theorem mono_trans (b : Body) (σ : U32) (a c d : alloc.vec.Vec U32) (h1 : Mono b σ a c) (h2 : Mono b σ c d) :
-    Mono b σ a d := fun y hy h => h2 y hy (h1 y hy h)
+    Mono b σ a d := by
+  refine ⟨fun y hy h => h2.1 y hy (h1.1 y hy h), fun y hy => ?_⟩
+  rcases h2.2 y hy with h | h
+  · rw [h]; exact h1.2 y hy
+  · right; exact h
 
-theorem mono_refl (b : Body) (σ : U32) (a : alloc.vec.Vec U32) : Mono b σ a a := fun _ _ h => h
+theorem mono_refl (b : Body) (σ : U32) (a : alloc.vec.Vec U32) : Mono b σ a a :=
+  ⟨fun _ _ h => h, fun _ _ => Or.inl rfl⟩
 
 theorem mono_set (b : Body) (σ : U32) (a : alloc.vec.Vec U32) (g : Usize) (hl : a.val.length = b.faces.size) :
     Mono b σ a (a.set g σ) := by
-  intro y hy h
-  simp only [alloc.vec.Vec.set_val_eq]
-  rw [getElem!_set _ _ _ _ (by rw [hl]; exact hy)]
-  split <;> simp_all
+  refine ⟨fun y hy h => ?_, fun y hy => ?_⟩
+  · simp only [alloc.vec.Vec.set_val_eq]
+    rw [getElem!_set _ _ _ _ (by rw [hl]; exact hy)]
+    split <;> simp_all
+  · simp only [alloc.vec.Vec.set_val_eq]
+    rw [getElem!_set _ _ _ _ (by rw [hl]; exact hy)]
+    split
+    · right; rfl
+    · left; rfl
 
 theorem uses_mark_spec (R : ShellReads SI t b) (H : Sound b) (f0 : Nat) (s : Usize) (σ : U32)
     (hσ : σ = UScalar.cast .U32 s) (f : Nat) (e nu : Usize) (he : e.val < b.edges.size)
@@ -869,16 +880,18 @@ theorem uses_mark_spec (R : ShellReads SI t b) (H : Sound b) (f0 : Nat) (s : Usi
     (seen stack : alloc.vec.Vec U32) (sp : Usize) (D : DFS b f0 σ (some f) seen stack sp.val) :
     topo_shell.shell_faces_loop5_loop0_loop0_loop0_loop0 SI t seen stack s sp e nu 0#usize ⦃ r =>
       DFS b f0 σ (some f) r.1 r.2.1 r.2.2.val ∧ Mono b σ seen r.1 ∧
-        ∀ u ∈ (b.ed e.val).uses, r.1.val[b.faceOf u]! = σ ⦄ := by
+        (∀ u ∈ (b.ed e.val).uses, r.1.val[b.faceOf u]! = σ) ∧
+        r.2.2.val + unm b σ r.1 = sp.val + unm b σ seen ⦄ := by
   have hN := nbrs_lt b H
   have hnf32 := R.nf_le
   unfold topo_shell.shell_faces_loop5_loop0_loop0_loop0_loop0
   apply loop.spec_decr_nat
     (fun (y : alloc.vec.Vec U32 × alloc.vec.Vec U32 × Usize × Usize) => nu.val - y.2.2.2.val)
     (fun y => y.2.2.2.val ≤ nu.val ∧ DFS b f0 σ (some f) y.1 y.2.1 y.2.2.1.val ∧ Mono b σ seen y.1 ∧
-      ∀ j < y.2.2.2.val, y.1.val[b.faceOf (b.ed e.val).uses[j]!]! = σ)
-  · rintro ⟨sn, st, sq, j⟩ ⟨hle, Dj, hm, hdone⟩
-    simp only at hle Dj hm hdone ⊢
+      (∀ j < y.2.2.2.val, y.1.val[b.faceOf (b.ed e.val).uses[j]!]! = σ) ∧
+      y.2.2.1.val + unm b σ y.1 = sp.val + unm b σ seen)
+  · rintro ⟨sn, st, sq, j⟩ ⟨hle, Dj, hm, hdone, hacc⟩
+    simp only at hle Dj hm hdone hacc ⊢
     unfold topo_shell.shell_faces_loop5_loop0_loop0_loop0_loop0.body
     split
     · rename_i hlt
@@ -916,12 +929,14 @@ theorem uses_mark_spec (R : ShellReads SI t b) (H : Sound b) (f0 : Nat) (s : Usi
             (j.wrapping_add 1#usize).val ≤ nu.val ∧
             DFS b f0 σ (some f) (sn.set g σ) st' (sq.wrapping_add 1#usize).val ∧ Mono b σ seen (sn.set g σ) ∧
             (∀ j' < (j.wrapping_add 1#usize).val, (sn.set g σ).val[b.faceOf (b.ed e.val).uses[j']!]! = σ) ∧
+            (sq.wrapping_add 1#usize).val + unm b σ (sn.set g σ) = sp.val + unm b σ seen ∧
             nu.val - (j.wrapping_add 1#usize).val < nu.val - j.val := by
           intro st' hst'
           have hw' := hw _ rfl
           have D' := dfs_push b f0 σ f sn st sq Dj g hgf hgn hun' st' hst' hgle hN
           rw [hw2]
-          refine ⟨by omega, D', mono_trans b σ _ _ _ hm (mono_set b σ sn g Dj.len), ?_, by omega⟩
+          have hum := unm_mark b σ sn g hgf Dj.len hun'
+          refine ⟨by omega, D', mono_trans b σ _ _ _ hm (mono_set b σ sn g Dj.len), ?_, by omega, by omega⟩
           intro j' hj'
           rw [hw'] at hj'
           by_cases hjj : j' = j.val
@@ -930,7 +945,7 @@ theorem uses_mark_spec (R : ShellReads SI t b) (H : Sound b) (f0 : Nat) (s : Usi
           · have hj'' : j' < (b.ed e.val).uses.length := by omega
             have hm' : (b.ed e.val).uses[j']! ∈ (b.ed e.val).uses := by
               rw [getElem!_pos (b.ed e.val).uses j' hj'']; exact List.getElem_mem hj''
-            exact mono_set b σ sn g Dj.len _ (H.uses e.val he _ hm').2.2 (hdone j' (by omega))
+            exact (mono_set b σ sn g Dj.len).1 _ (H.uses e.val he _ hm').2.2 (hdone j' (by omega))
         split
         · rename_i hlt2
           have hlt2' : sq.val < st.val.length := by simpa using hlt2
@@ -959,7 +974,7 @@ theorem uses_mark_spec (R : ShellReads SI t b) (H : Sound b) (f0 : Nat) (s : Usi
           simp only [bne_iff_ne, ne_eq, Decidable.not_not] at heq; rw [← hx', heq]
         step*
         have hw' := hw _ rfl
-        refine ⟨by rw [hw']; omega, Dj, hm, ?_, by rw [hw']; omega⟩
+        refine ⟨by rw [hw']; omega, Dj, hm, ?_, hacc, by rw [hw']; omega⟩
         intro j' hj'
         rw [hw'] at hj'
         by_cases hjj : j' = j.val
@@ -968,10 +983,518 @@ theorem uses_mark_spec (R : ShellReads SI t b) (H : Sound b) (f0 : Nat) (s : Usi
     · rename_i hlt
       have hj : j.val = (b.ed e.val).uses.length := by scalar_tac
       simp only [WP.spec_ok]
-      refine ⟨Dj, hm, fun u hu => ?_⟩
+      refine ⟨Dj, hm, fun u hu => ?_, hacc⟩
       obtain ⟨k, hk, rfl⟩ := List.getElem_of_mem hu
       have := hdone k (by omega)
       rwa [getElem!_pos (b.ed e.val).uses k hk] at this
-  · exact ⟨by simp, D, mono_refl b σ seen, by simp⟩
+  · exact ⟨by simp, D, mono_refl b σ seen, by simp, rfl⟩
+
+theorem mem_loopCoedges (l c : Nat) :
+    c ∈ b.loopCoedges l ↔ (b.lo l).first ≤ c ∧ c < (b.lo l).first + (b.lo l).len := by
+  unfold Body.loopCoedges; rw [List.mem_map]; simp only [List.mem_range]
+  constructor
+  · rintro ⟨k, hk, rfl⟩; omega
+  · rintro ⟨h1, h2⟩; exact ⟨c - (b.lo l).first, by omega, by omega⟩
+
+theorem coedges_mark_spec (R : ShellReads SI t b) (H : Sound b) (f0 : Nat) (s : Usize) (σ : U32)
+    (hσ : σ = UScalar.cast .U32 s) (f : Nat) (hf : f < b.faces.size) (l : Nat) (hl : l ∈ b.faceLoops f)
+    (c0 en : Usize) (hc0 : c0.val = (b.lo l).first) (hen : en.val = (b.lo l).first + (b.lo l).len)
+    (seen stack : alloc.vec.Vec U32) (sp : Usize) (D : DFS b f0 σ (some f) seen stack sp.val) :
+    topo_shell.shell_faces_loop5_loop0_loop0_loop0 SI t seen stack s sp en c0 ⦃ r =>
+      DFS b f0 σ (some f) r.1 r.2.1 r.2.2.val ∧ Mono b σ seen r.1 ∧
+        (∀ c ∈ b.loopCoedges l, ∀ u ∈ (b.ed (b.co c).edge).uses, r.1.val[b.faceOf u]! = σ) ∧
+        r.2.2.val + unm b σ r.1 = sp.val + unm b σ seen ⦄ := by
+  have ⟨hln, hlf, hl1⟩ := H.loops f hf l hl
+  unfold topo_shell.shell_faces_loop5_loop0_loop0_loop0
+  apply loop.spec_decr_nat
+    (fun (y : alloc.vec.Vec U32 × alloc.vec.Vec U32 × Usize × Usize) => en.val - y.2.2.2.val)
+    (fun y => c0.val ≤ y.2.2.2.val ∧ y.2.2.2.val ≤ en.val ∧ DFS b f0 σ (some f) y.1 y.2.1 y.2.2.1.val ∧
+      Mono b σ seen y.1 ∧ (∀ c, c0.val ≤ c → c < y.2.2.2.val → ∀ u ∈ (b.ed (b.co c).edge).uses, y.1.val[b.faceOf u]! = σ) ∧
+      y.2.2.1.val + unm b σ y.1 = sp.val + unm b σ seen)
+  · rintro ⟨sn, st, sq, c⟩ ⟨h0, hle, Dc, hm, hdone, hacc⟩
+    simp only at h0 hle Dc hm hdone hacc ⊢
+    unfold topo_shell.shell_faces_loop5_loop0_loop0_loop0.body
+    split
+    · rename_i hlt
+      have hlt' : c.val < en.val := by scalar_tac
+      have hcm : c.val ∈ b.loopCoedges l := by rw [mem_loopCoedges]; omega
+      have ⟨hcn, hce, hcu⟩ := H.coedges l hln hl1 c.val hcm
+      have hw : ∀ c1 : Usize, c1 = c.wrapping_add 1#usize → c1.val = c.val + 1 := by
+        intro c1 h; rw [h, Usize.wrapping_add_val_eq]; apply Nat.mod_eq_of_lt
+        obtain ⟨n, hn⟩ := WP.spec_exists R.base.nc
+        have hb := n.hBounds
+        have h1 : (1#usize).val = 1 := rfl
+        simp only [UScalar.size]; omega
+      step with R.base.coedge_edge c hcn as ⟨e, he⟩
+      have he' : e.val < b.edges.size := by rw [he]; exact hce
+      step with R.base.edge_n_uses e he' as ⟨nu, hnu⟩
+      have hnb : ∀ u ∈ (b.ed e.val).uses, b.faceOf u ∈ b.nbrs f := by
+        intro u hu
+        unfold Body.nbrs
+        simp only [List.mem_flatMap, List.mem_map]
+        exact ⟨l, hl, c.val, hcm, u, by rw [← he]; exact hu, rfl⟩
+      step with uses_mark_spec SI t b R H f0 s σ hσ f e nu he' hnu hnb sn st sq Dc as ⟨sn2, st2, sq2, D2, hm2, hall, hacc2⟩
+      step as ⟨c1, hc1⟩
+      have hw1 := hw c1 hc1
+      refine ⟨by rw [hw1]; omega, by rw [hw1]; omega, D2, mono_trans b σ _ _ _ hm hm2, ?_, by omega, by rw [hw1]; omega⟩
+      intro c' hc'0 hc'1 u hu
+      rw [hw1] at hc'1
+      by_cases hcc : c' = c.val
+      · subst hcc; rw [he] at hall; exact hall u hu
+      · have hc'm : c' ∈ b.loopCoedges l := by rw [mem_loopCoedges]; omega
+        have ⟨_, hce', hcu'⟩ := H.coedges l hln hl1 c' hc'm
+        exact hm2.1 _ (H.uses _ hce' u hu).2.2 (hdone c' hc'0 (by omega) u hu)
+    · rename_i hlt
+      have hc : c.val = en.val := by scalar_tac
+      simp only [WP.spec_ok]
+      refine ⟨Dc, hm, fun c' hc' u hu => ?_, hacc⟩
+      rw [mem_loopCoedges] at hc'
+      exact hdone c' (by omega) (by omega) u hu
+  · exact ⟨le_refl _, by rw [hc0, hen]; omega, D, mono_refl b σ seen, fun c h1 h2 => absurd h1 (by simp at h2 ⊢; omega), rfl⟩
+
+theorem loops_mark_spec (R : ShellReads SI t b) (H : Sound b) (f0 : Nat) (s : Usize) (σ : U32)
+    (hσ : σ = UScalar.cast .U32 s) (f : Usize) (hf : f.val < b.faces.size) (nlf : Usize)
+    (hnlf : nlf.val = (b.faceLoops f.val).length)
+    (seen stack : alloc.vec.Vec U32) (sp : Usize) (D : DFS b f0 σ (some f.val) seen stack sp.val) :
+    topo_shell.shell_faces_loop5_loop0_loop0 SI t seen stack s sp f nlf 0#usize ⦃ r =>
+      DFS b f0 σ (some f.val) r.1 r.2.1 r.2.2.val ∧ Mono b σ seen r.1 ∧
+        (∀ y ∈ b.nbrs f.val, r.1.val[y]! = σ) ∧ r.2.2.val + unm b σ r.1 = sp.val + unm b σ seen ⦄ := by
+  have hN := nbrs_lt b H
+  unfold topo_shell.shell_faces_loop5_loop0_loop0
+  apply loop.spec_decr_nat
+    (fun (y : alloc.vec.Vec U32 × alloc.vec.Vec U32 × Usize × Usize) => nlf.val - y.2.2.2.val)
+    (fun y => y.2.2.2.val ≤ nlf.val ∧ DFS b f0 σ (some f.val) y.1 y.2.1 y.2.2.1.val ∧ Mono b σ seen y.1 ∧
+      (∀ i < y.2.2.2.val, ∀ c ∈ b.loopCoedges (b.faceLoops f.val)[i]!, ∀ u ∈ (b.ed (b.co c).edge).uses,
+        y.1.val[b.faceOf u]! = σ) ∧ y.2.2.1.val + unm b σ y.1 = sp.val + unm b σ seen)
+  · rintro ⟨sn, st, sq, i⟩ ⟨hle, Di, hm, hdone, hacc⟩
+    simp only at hle Di hm hdone hacc ⊢
+    unfold topo_shell.shell_faces_loop5_loop0_loop0.body
+    split
+    · rename_i hlt
+      have hlt' : i.val < nlf.val := by scalar_tac
+      have hi : i.val < (b.faceLoops f.val).length := by omega
+      step with R.base.face_loop f i hf hi as ⟨l, hl⟩
+      have hlm : l.val ∈ b.faceLoops f.val := by
+        rw [hl, getElem!_pos (b.faceLoops f.val) i.val hi]; exact List.getElem_mem hi
+      have ⟨hln, hlf, hl1⟩ := H.loops f.val hf l.val hlm
+      step with R.base.loop_first l hln as ⟨fs, hfs⟩
+      step with R.base.loop_len l hln as ⟨len, hlen⟩
+      have hend : (fs.wrapping_add len).val = (b.lo l.val).first + (b.lo l.val).len := by
+        rw [Usize.wrapping_add_val_eq, hfs, hlen]; apply Nat.mod_eq_of_lt
+        by_cases h0 : (b.lo l.val).len = 0
+        · have := fs.hBounds; rw [h0, Nat.add_zero, ← hfs]; simp only [UScalar.size]; exact this
+        · have hm' : (b.lo l.val).first + ((b.lo l.val).len - 1) ∈ b.loopCoedges l.val := by
+            rw [mem_loopCoedges]; omega
+          have := (H.coedges l.val hln hl1 _ hm').1
+          obtain ⟨n, hn⟩ := WP.spec_exists R.base.nc
+          have hb := n.hBounds
+          simp only [UScalar.size]; omega
+      simp only [lift, Std.bind_ok]
+      have hcm := coedges_mark_spec SI t b R H f0 s σ hσ f.val hf l.val hlm fs (fs.wrapping_add len) hfs hend
+        sn st sq Di
+      step with hcm as ⟨sn2, st2, sq2, D2, hm2, hall, hacc2⟩
+      have hw : (i.wrapping_add 1#usize).val = i.val + 1 := succ_val i nlf hlt'
+      refine ⟨by omega, D2, mono_trans b σ _ _ _ hm hm2, ?_, by omega, by omega⟩
+      intro i' hi' c hc u hu
+      rw [hw] at hi'
+      by_cases hii : i' = i.val
+      · subst hii; rw [← hl] at hc; exact hall c hc u hu
+      · have hi'' : i' < (b.faceLoops f.val).length := by omega
+        have hlm' : (b.faceLoops f.val)[i']! ∈ b.faceLoops f.val := by
+          rw [getElem!_pos (b.faceLoops f.val) i' hi'']; exact List.getElem_mem hi''
+        have ⟨hln', _, hl1'⟩ := H.loops f.val hf _ hlm'
+        have ⟨_, hce, _⟩ := H.coedges _ hln' hl1' c hc
+        exact hm2.1 _ (H.uses _ hce u hu).2.2 (hdone i' (by omega) c hc u hu)
+    · rename_i hlt
+      have hi : i.val = (b.faceLoops f.val).length := by scalar_tac
+      simp only [WP.spec_ok]
+      refine ⟨Di, hm, fun y hy => ?_, hacc⟩
+      unfold Body.nbrs at hy
+      simp only [List.mem_flatMap, List.mem_map] at hy
+      obtain ⟨l, hl, c, hc, u, hu, rfl⟩ := hy
+      obtain ⟨k, hk, rfl⟩ := List.getElem_of_mem hl
+      have := hdone k (by omega) c (by rw [getElem!_pos _ k hk]; exact hc) u hu
+      exact this
+  · exact ⟨by simp, D, mono_refl b σ seen, fun i h => absurd h (by simp), rfl⟩
+
+theorem unm_mono (b : Body) (σ : U32) (a c : alloc.vec.Vec U32) (h : Mono b σ a c) : unm b σ c ≤ unm b σ a := by
+  unfold unm
+  apply List.countP_mono_left
+  intro g hg h1
+  simp only [bne_iff_ne, ne_eq] at h1 ⊢
+  intro h2; exact h1 (h.1 g (List.mem_range.1 hg) h2)
+
+theorem dfs_pop (b : Body) (f0 : Nat) (σ : U32) (seen stack : alloc.vec.Vec U32) (sp : Nat)
+    (D : DFS b f0 σ none seen stack (sp + 1)) :
+    DFS b f0 σ (some (stack.val[sp]!).val) seen stack sp := by
+  have hon := D.on sp (by omega)
+  refine ⟨D.len, D.reach, by have := D.sp_le; omega, D.stack_le, fun j hj => D.on j (by omega), ?_, by have := D.count; omega, ?_⟩
+  · intro g hg h
+    rcases D.done g hg h with ⟨j, hj, hjg⟩ | hc | hall
+    · by_cases hjs : j = sp
+      · subst hjs; right; left; rw [hjg]
+      · left; exact ⟨j, by omega, hjg⟩
+    · simp at hc
+    · right; right; exact hall
+  · intro f hf
+    simp only [Option.some.injEq] at hf
+    subst hf
+    exact ⟨hon.1, hon.2, D.reach _ hon.1 hon.2⟩
+
+theorem dfs_close (b : Body) (f0 : Nat) (σ : U32) (f : Nat) (seen stack : alloc.vec.Vec U32) (sp : Nat)
+    (D : DFS b f0 σ (some f) seen stack sp) (hall : ∀ y ∈ b.nbrs f, seen.val[y]! = σ) :
+    DFS b f0 σ none seen stack sp := by
+  refine ⟨D.len, D.reach, D.sp_le, D.stack_le, D.on, ?_, D.count, by simp⟩
+  intro g hg h
+  rcases D.done g hg h with hj | hc | hn
+  · left; exact hj
+  · simp only [Option.some.injEq] at hc; subst hc; right; right; exact hall
+  · right; right; exact hn
+
+theorem pop_loop_spec (R : ShellReads SI t b) (H : Sound b) (f0 : Nat) (s : Usize) (σ : U32)
+    (hσ : σ = UScalar.cast .U32 s) (seen stack : alloc.vec.Vec U32) (sp : Usize)
+    (D : DFS b f0 σ none seen stack sp.val) :
+    topo_shell.shell_faces_loop5_loop0 SI t seen stack s sp ⦃ r =>
+      DFS b f0 σ none r.1 r.2 0 ∧ Mono b σ seen r.1 ⦄ := by
+  unfold topo_shell.shell_faces_loop5_loop0
+  apply loop.spec_decr_nat
+    (fun (y : alloc.vec.Vec U32 × alloc.vec.Vec U32 × Usize) =>
+      unm b σ y.1 * (b.faces.size + 1) + y.2.2.val)
+    (fun y => DFS b f0 σ none y.1 y.2.1 y.2.2.val ∧ Mono b σ seen y.1)
+  · rintro ⟨sn, st, sq⟩ ⟨Dq, hm⟩
+    simp only at Dq hm ⊢
+    unfold topo_shell.shell_faces_loop5_loop0.body
+    split
+    · rename_i hpos
+      have hpos' : 0 < sq.val := by scalar_tac
+      have hsub : (sq.wrapping_sub 1#usize).val = sq.val - 1 := sub_val sq 1#usize (by
+        have : (1#usize).val = 1 := rfl; omega)
+      simp only [lift, Std.bind_ok]
+      have Dq' : DFS b f0 σ none sn st ((sq.val - 1) + 1) := by
+        rw [Nat.sub_add_cancel hpos']; exact Dq
+      have Dp := dfs_pop b f0 σ sn st (sq.val - 1) Dq'
+      have hspb : (sq.wrapping_sub 1#usize).val < st.val.length := by
+        rw [hsub]; have := Dq.sp_le; omega
+      step as ⟨x, hx⟩
+      have hx' : x = st.val[sq.val - 1]! := by
+        have : x = st.val[(sq.wrapping_sub 1#usize).val]! := by rw [hx, getElem!_pos]
+        rw [hsub] at this; exact this
+      have hfv : (UScalar.cast .Usize x).val = (st.val[sq.val - 1]!).val := by rw [castUsize_val, hx']
+      have hon := (Dq.on (sq.val - 1) (by omega))
+      have hfn : (UScalar.cast .Usize x).val < b.faces.size := by rw [hfv]; exact hon.1
+      step with R.base.face_n_loops (UScalar.cast .Usize x) hfn as ⟨nlf, hnlf⟩
+      have Dp' : DFS b f0 σ (some (UScalar.cast .Usize x).val) sn st (sq.wrapping_sub 1#usize).val := by
+        rw [hfv, hsub]; exact Dp
+      step with loops_mark_spec SI t b R H f0 s σ hσ (UScalar.cast .Usize x) hfn nlf hnlf sn st
+        (sq.wrapping_sub 1#usize) Dp' as ⟨sn2, st2, sq2, D2, hm2, hall, hacc⟩
+      step*
+      have hmono := unm_mono b σ _ _ hm2
+      have hcnt := D2.count
+      refine ⟨dfs_close b f0 σ _ sn2 st2 sq2.val D2 hall, mono_trans b σ _ _ _ hm hm2, ?_⟩
+      rw [hsub] at hacc
+      obtain ⟨d, hd⟩ : ∃ d, unm b σ sn = unm b σ sn2 + d := ⟨_, (Nat.add_sub_cancel' hmono).symm⟩
+      rw [hd, Nat.add_mul]
+      have : d ≤ d * (b.faces.size + 1) := Nat.le_mul_of_pos_right d (by omega)
+      omega
+    · rename_i hpos
+      have h0 : sq.val = 0 := by scalar_tac
+      simp only [WP.spec_ok]
+      rw [← h0]; exact ⟨Dq, hm⟩
+  · exact ⟨D, mono_refl b σ seen⟩
+
+theorem joined_spec (R : ShellReads SI t b) (s : Usize) (hs : s.val < b.shells.size) (σ : U32)
+    (hσ : σ = UScalar.cast .U32 s) (seen : alloc.vec.Vec U32) (hl : seen.val.length = b.faces.size)
+    (hin : ∀ f ∈ b.shellList s.val, f < b.faces.size) (n : Usize) (hn : n.val = (b.shellList s.val).length) :
+    topo_shell.shell_faces_loop5_loop1 SI t seen s n true 0#usize ⦃ r =>
+      r = (b.shellList s.val).all (fun f => decide (seen.val[f]! = σ)) ⦄ := by
+  unfold topo_shell.shell_faces_loop5_loop1
+  apply loop.spec_decr_nat (fun (y : Bool × Usize) => n.val - y.2.val)
+    (fun y => y.2.val ≤ n.val ∧ y.1 = ((b.shellList s.val).take y.2.val).all (fun f => decide (seen.val[f]! = σ)))
+  · rintro ⟨jn, i⟩ ⟨hle, hj⟩
+    simp only at hle hj ⊢
+    unfold topo_shell.shell_faces_loop5_loop1.body
+    split
+    · rename_i hjt
+      split
+      · rename_i hlt
+        have hlt' : i.val < n.val := by scalar_tac
+        have hi : i.val < (b.shellList s.val).length := by omega
+        step with R.shell_face s i hs hi as ⟨f, hf⟩
+        have hfm : f.val ∈ b.shellList s.val := by
+          rw [hf, getElem!_pos (b.shellList s.val) i.val hi]; exact List.getElem_mem hi
+        have hfb : f.val < seen.val.length := by rw [hl]; exact hin _ hfm
+        step as ⟨x, hx⟩
+        have hx' : x = seen.val[f.val]! := by rw [hx, getElem!_pos]
+        simp only [lift, Std.bind_ok, ← hσ, WP.spec_ok]
+        have hw : (i.wrapping_add 1#usize).val = i.val + 1 := succ_val i n hlt'
+        refine ⟨by omega, ?_, by omega⟩
+        rw [hw, all_take_succ _ _ _ hi, ← hj, hjt, Bool.true_and, ← hf, hx']
+      · rename_i hlt
+        have hi : i.val = (b.shellList s.val).length := by scalar_tac
+        simp only [WP.spec_ok]
+        rw [hj, hi, List.take_length]
+    · rename_i hjt
+      simp only [WP.spec_ok]
+      simp only [Bool.not_eq_true] at hjt
+      rw [hjt] at hj
+      rw [hjt, ← List.take_append_drop i.val (b.shellList s.val), List.all_append, ← hj]; rfl
+  · exact ⟨by simp, by simp⟩
+
+theorem reach_lt (H : Sound b) (f0 : Nat) (h0 : f0 < b.faces.size) :
+    ∀ x, b.Reach f0 x → x < b.faces.size := by
+  intro x hx
+  induction hx with
+  | refl => exact h0
+  | step _ hy _ => exact nbrs_lt b H _ _ hy
+
+theorem reach_marked (H : Sound b) (f0 : Nat) (h0 : f0 < b.faces.size) (σ : U32) (seen : alloc.vec.Vec U32)
+    (hf0 : seen.val[f0]! = σ) (hc : ∀ g < b.faces.size, seen.val[g]! = σ → ∀ y ∈ b.nbrs g, seen.val[y]! = σ) :
+    ∀ x, b.Reach f0 x → seen.val[x]! = σ := by
+  intro x hx
+  induction hx with
+  | refl => exact hf0
+  | step hr hy ih => exact hc _ (reach_lt b H f0 h0 _ hr) ih _ hy
+
+/-- The model's second list: the sound shells not joined. -/
+def discon (b : Body) (s : Nat) : Option Problem :=
+  if !b.bad s && !((b.shellList s).all fun f => f ∈ b.reached s) then some (Problem.shellDisconnected s) else none
+
+theorem flood_shells_spec {S : Type} (SK : topo.Sink S) (P : S → List Problem) (hS : AppendsS SK P)
+    (R : ShellReads SI t b) (H : Sound b) (ns : Usize) (hns : ns.val = b.shells.size)
+    (bad : alloc.vec.Vec Bool) (hbl : bad.val.length = b.shells.size + 1)
+    (hb : ∀ s ≤ b.shells.size, bad.val[s]! = b.bad s)
+    (seen : alloc.vec.Vec U32) (hsl : seen.val.length = b.faces.size)
+    (hmax : ∀ g < b.faces.size, seen.val[g]! = core.num.U32.MAX) (out : S) :
+    topo_shell.shell_faces_loop5 SI SK t out ns bad seen (alloc.vec.Vec.new U32) 0#usize ⦃ r =>
+      P r = P out ++ (List.range b.shells.size).filterMap (discon b) ⦄ := by
+  have hN := nbrs_lt b H
+  have hns32 := R.ns_lt
+  have hnf32 := R.nf_le
+  unfold topo_shell.shell_faces_loop5
+  apply loop.spec_decr_nat
+    (fun (y : S × alloc.vec.Vec U32 × alloc.vec.Vec U32 × Usize) => ns.val - y.2.2.2.val)
+    (fun y => y.2.2.2.val ≤ ns.val ∧ y.2.1.val.length = b.faces.size ∧
+      (∀ g < b.faces.size, (y.2.1.val[g]!).val < y.2.2.2.val ∨ y.2.1.val[g]! = core.num.U32.MAX) ∧
+      y.2.2.1.val.length ≤ b.faces.size ∧
+      P y.1 = P out ++ (List.range y.2.2.2.val).filterMap (discon b))
+  · rintro ⟨o, sn, st, s⟩ ⟨hle, hlen, hst, hstl, ho⟩
+    simp only at hle hlen hst hstl ho ⊢
+    unfold topo_shell.shell_faces_loop5.body
+    split
+    · rename_i hlt
+      have hlt' : s.val < ns.val := by scalar_tac
+      have hs : s.val < b.shells.size := by omega
+      have hw : (s.wrapping_add 1#usize).val = s.val + 1 := succ_val s ns hlt'
+      have hacc : ∀ o', P o' = P o ++ (discon b s.val).toList →
+          P o' = P out ++ (List.range (s.val + 1)).filterMap (discon b) := by
+        intro o' h; rw [h, filterMap_range_succ, ho, List.append_assoc]
+      have hsb : s.val < bad.val.length := by omega
+      step as ⟨x, hx⟩
+      have hx' : x = b.bad s.val := by rw [hx, ← hb s.val (by omega), getElem!_pos]
+      split
+      · rename_i hbad
+        step as ⟨s1, hs1⟩
+        have hw : s1.val = s.val + 1 := by rw [hs1]; exact succ_val s ns hlt'
+        refine ⟨by rw [hw]; omega, hlen, fun g hg => ?_, hstl, ?_, by rw [hw]; omega⟩
+        · rw [hw]; rcases hst g hg with h | h
+          · left; omega
+          · right; exact h
+        · rw [hw]; apply hacc
+          have : discon b s.val = none := by
+            have hbt : b.bad s.val = true := by rw [← hx']; exact hbad
+            simp [discon, hbt]
+          rw [this]; simp
+      · rename_i hbad
+        have hbad' : b.bad s.val = false := by rw [← hx']; simpa using hbad
+        have hb1 : bad1 b s.val = false := by
+          have := bad_eq b s.val; rw [hbad'] at this; simp at this; exact this.1
+        have hb1' : ((b.shellList s.val).isEmpty || (b.shellList s.val).any (badEntry b s.val)) = false := by
+          unfold bad1 at hb1; rw [decide_eq_true hs, Bool.true_and] at hb1; exact hb1
+        rw [Bool.or_eq_false_iff] at hb1'
+        have hne : b.shellList s.val ≠ [] := by
+          intro h; rw [h] at hb1'; simp at hb1'
+        have hin : ∀ f ∈ b.shellList s.val, f < b.faces.size ∧ b.faceShell f = s.val := by
+          intro f hf
+          have := List.any_eq_false.1 hb1'.2 f hf
+          unfold badEntry at this
+          simp only [Bool.not_eq_true', Bool.not_eq_false', Bool.and_eq_true, decide_eq_true_eq,
+            beq_iff_eq] at this
+          simpa using this
+        have hl0 : 0 < (b.shellList s.val).length := List.length_pos_iff.2 hne
+        step with R.shell_face s 0#usize hs (by simpa using hl0) as ⟨f0, hf0⟩
+        have hf0m : f0.val ∈ b.shellList s.val := by
+          rw [hf0]; rw [getElem!_pos (b.shellList s.val) _ hl0]; exact List.getElem_mem hl0
+        have hf0n : f0.val < b.faces.size := (hin _ hf0m).1
+        simp only [alloc.vec.Vec.is_empty, Std.bind_ok]
+        apply WP.spec_bind (Pₘ := fun st1 : alloc.vec.Vec U32 => st1.val[0]! = UScalar.cast .U32 f0 ∧
+          1 ≤ st1.val.length ∧ st1.val.length ≤ b.faces.size)
+        · split
+          · rename_i hemp
+            have hemp' : st.val.length = 0 := by simpa using hemp
+            simp only [lift, Std.bind_ok]
+            have hpl : st.val.length < Usize.max := by
+              rw [hemp']; rcases Usize.bounds_eq with h | h <;> rw [h] <;> simp [U32.max_eq, U64.max_eq]
+            apply WP.spec_mono (alloc.vec.Vec.push_spec st (UScalar.cast .U32 f0) hpl)
+            intro st1 hst1v
+            rw [hst1v, List.length_eq_zero_iff.1 hemp']
+            refine ⟨rfl, by simp, by simp; omega⟩
+          · rename_i hemp
+            have hemp' : 0 < st.val.length := by
+              have : ¬ st.val.length = 0 := by simpa using hemp
+              omega
+            step*
+            rw [index_mut_back_post, i_post]
+            simp only [alloc.vec.Vec.set_val_eq, List.length_set]
+            refine ⟨?_, hemp', hstl⟩
+            rw [getElem!_set _ _ _ _ hemp']; rfl
+        intro st1 hst1
+        have hσv : (UScalar.cast .U32 s).val = s.val := cast32_val s (by omega)
+        have hfresh : ∀ g < b.faces.size, sn.val[g]! ≠ UScalar.cast .U32 s := by
+          intro g hg h
+          have := congrArg UScalar.val h
+          rw [hσv] at this
+          rcases hst g hg with h1 | h1
+          · omega
+          · rw [h1, max_val] at this; omega
+        have hf0b : f0.val < sn.val.length := by rw [hlen]; exact hf0n
+        step as ⟨i0, back, hb1, hb2⟩
+        try simp only [lift, Std.bind_ok]
+        try rw [hb2]
+        have hset : ∀ g < b.faces.size, (sn.set f0 (UScalar.cast .U32 s)).val[g]! =
+            if g = f0.val then UScalar.cast .U32 s else sn.val[g]! := by
+          intro g hg; simp only [alloc.vec.Vec.set_val_eq]; rw [getElem!_set _ _ _ _ (by rw [hlen]; exact hg)]
+        have hcount := unm_mark b (UScalar.cast .U32 s) sn f0 hf0n hlen (hfresh _ hf0n)
+        have hunm : unm b (UScalar.cast .U32 s) sn ≤ b.faces.size := by
+          unfold unm; exact (List.countP_le_length).trans (by simp)
+        have D0 : DFS b f0.val (UScalar.cast .U32 s) none (sn.set f0 (UScalar.cast .U32 s)) st1 (1#usize).val := by
+          have h1 : (1#usize).val = 1 := rfl
+          rw [h1]
+          refine ⟨by simp [alloc.vec.Vec.set_val_eq, hlen], ?_, hst1.2.1, hst1.2.2, ?_, ?_, by omega, by simp⟩
+          · intro g hg h
+            rw [hset g hg] at h
+            split at h
+            · rename_i hgf; subst hgf; exact TopoCheck.Body.Reach.refl
+            · exact absurd h (hfresh g hg)
+          · intro j hj
+            have : j = 0 := by omega
+            subst this
+            rw [hst1.1, cast32_val f0 (by omega)]
+            exact ⟨hf0n, by rw [hset _ hf0n, if_pos rfl]⟩
+          · intro g hg h
+            rw [hset g hg] at h
+            split at h
+            · rename_i hgf; left; exact ⟨0, by omega, by rw [hst1.1, cast32_val f0 (by omega), hgf]⟩
+            · exact absurd h (hfresh g hg)
+        step with pop_loop_spec SI t b R H f0.val s (UScalar.cast .U32 s) rfl _ st1 1#usize D0 as ⟨sn2, st2, D2, hm2⟩
+        step with R.shell_n_faces s hs as ⟨n, hn⟩
+        have hin' : ∀ f ∈ b.shellList s.val, f < b.faces.size := fun f hf => (hin f hf).1
+        step with joined_spec SI t b R s hs (UScalar.cast .U32 s) rfl sn2 D2.len hin' n hn as ⟨jn, hjn⟩
+        have hclosed : ∀ g < b.faces.size, sn2.val[g]! = UScalar.cast .U32 s →
+            ∀ y ∈ b.nbrs g, sn2.val[y]! = UScalar.cast .U32 s := by
+          intro g hg h
+          rcases D2.done g hg h with ⟨j, hj, _⟩ | hc | hall
+          · omega
+          · simp at hc
+          · exact hall
+        have hf0m2 : sn2.val[f0.val]! = UScalar.cast .U32 s :=
+          hm2.1 _ hf0n (by rw [hset _ hf0n, if_pos rfl])
+        have hhead : (b.shellList s.val).headD 0 = f0.val := by
+          rw [hf0]; cases hl : b.shellList s.val with
+          | nil => exact absurd hl hne
+          | cons a t => simp
+        have hjall : jn = (b.shellList s.val).all (fun f => decide (f ∈ b.reached s.val)) := by
+          rw [hjn, Bool.eq_iff_iff, List.all_eq_true, List.all_eq_true]
+          apply forall_congr'; intro f; apply imp_congr_right; intro hf
+          have hfn := hin' f hf
+          rw [decide_eq_true_iff, decide_eq_true_iff, TopoCheck.Body.reached_iff b hN s.val
+            (by rw [hhead]; exact hf0n) f, hhead]
+          constructor
+          · intro h; exact D2.reach f hfn h
+          · intro h; exact reach_marked b H f0.val hf0n _ sn2 hf0m2 hclosed f h
+        have hdis : discon b s.val = if jn then none else some (Problem.shellDisconnected s.val) := by
+          unfold discon; rw [hbad', hjall]; cases (b.shellList s.val).all (fun f => decide (f ∈ b.reached s.val)) <;> simp
+        have hW3 : ∀ g < b.faces.size, (sn2.val[g]!).val < s.val + 1 ∨ sn2.val[g]! = core.num.U32.MAX := by
+          intro g hg
+          rcases hm2.2 g hg with h | h
+          · rw [h, hset g hg]; split
+            · left; rw [hσv]; omega
+            · rcases hst g hg with h1 | h1
+              · left; omega
+              · right; exact h1
+          · left; rw [h, hσv]; omega
+        split
+        · rename_i hj
+          step*
+          have hw1 : (s.wrapping_add 1#usize).val = s.val + 1 := succ_val s ns hlt'
+          rw [hw1]
+          refine ⟨by omega, D2.len, hW3, D2.stack_le, ?_, by omega⟩
+          apply hacc; rw [hdis, hj]; simp
+        · rename_i hj
+          step with hS.2 o s as ⟨o1, ho1⟩
+          step*
+          have hw1 : (s.wrapping_add 1#usize).val = s.val + 1 := succ_val s ns hlt'
+          rw [hw1]
+          refine ⟨by omega, D2.len, hW3, D2.stack_le, ?_, by omega⟩
+          apply hacc; rw [ho1, hdis]; simp only [Bool.not_eq_true] at hj; rw [hj]; simp
+    · rename_i hlt
+      have : s.val = ns.val := by scalar_tac
+      simp only [WP.spec_ok]
+      rw [ho, this, hns]
+  · refine ⟨by simp, hsl, fun g hg => Or.inr (hmax g hg), by simp, by simp⟩
+
+/-! ## The whole of `shell_faces` -/
+
+/-- **The shipped `check_shell_faces` refines the model.** For a body whose links are sound (as
+`check_known` runs it: only once `check_links` found nothing), any `ShellTopo` view that reads it
+(`ShellReads`, as check.rs's `ShellView` does) and any sink that appends what it is handed, the
+translated Rust `shell_faces` terminates without panic or overflow and appends exactly
+`Model.checkShellFaces`. -/
+theorem shell_faces_refines {S : Type} (SK : topo.Sink S) (P : S → List Problem) (hS : AppendsS SK P)
+    (R : ShellReads SI t b) (hL : b.checkLinks = []) (out : S) :
+    topo_shell.shell_faces SI SK t out ⦃ r => P r = P out ++ b.checkShellFaces ⦄ := by
+  have H := sound_of b hL
+  have hns32 := R.ns_lt
+  unfold topo_shell.shell_faces
+  have rns := R.ns
+  have rnf := R.base.nf
+  have rne := R.base.ne
+  step with rns as ⟨ns, hns⟩
+  step with rnf as ⟨nf, hnf⟩
+  step with rne as ⟨ne, hne⟩
+  have hw : (ns.wrapping_add 1#usize).val = b.shells.size + 1 := by
+    rw [Usize.wrapping_add_val_eq, hns]; apply Nat.mod_eq_of_lt
+    have := succ_lt_usize b.shells.size hns32
+    have h1 : (1#usize).val = 1 := rfl
+    simp only [UScalar.size, h1]; exact this
+  simp only [lift, Std.bind_ok]
+  step as ⟨bad, hbad⟩
+  step as ⟨listed, hlisted⟩
+  have hb0 : BadS b 0 false bad := by
+    refine ⟨by rw [hbad]; simp [hw], fun s hs => ?_⟩
+    rw [hbad]; simp [hw]
+  have hk0 : KeptS b 0 0 listed := by
+    refine ⟨by rw [hlisted]; simp [hnf], fun f hf => ?_⟩
+    rw [hlisted]; simp [preS, hnf, hf]
+  step with shell_pass_spec SI t b R ns nf hns hnf bad listed hb0 hk0 as ⟨bad1, listed1, hb1, hk1⟩
+  have hbt0 : BadT b 0 0 bad1 := by
+    refine ⟨hb1.1, fun s hs => ?_⟩
+    rw [hb1.2 s hs]
+    by_cases h : s < b.shells.size
+    · simp [h, badF, badE]
+    · have : s = b.shells.size := by omega
+      subst this; simp [forge_topo.bad1, badF, badE]
+  step with face_listed_spec SI t b R ns nf hns hnf listed1 hk1 bad1 hbt0 as ⟨bad2, hb2⟩
+  step with edge_split_spec SI t b R H ns ne hns hne bad2 hb2 as ⟨bad3, hb3⟩
+  step with emit_bad_spec b SK P hS ns hns hns32 bad3 hb3 out as ⟨out1, ho1⟩
+  step with fill_spec nf listed1 (by rw [hk1.1, hnf]) as ⟨seen, hsl, hmax⟩
+  have hbb : ∀ s ≤ b.shells.size, bad3.val[s]! = b.bad s := by
+    intro s hs; rw [hb3.2 s hs, bad_eq]
+  have hsl' : seen.val.length = b.faces.size := by rw [hsl, hnf]
+  have hmax' : ∀ g < b.faces.size, seen.val[g]! = core.num.U32.MAX := by
+    intro g hg; exact hmax g (by rw [hnf]; exact hg)
+  apply WP.spec_mono (flood_shells_spec SI t b SK P hS R H ns hns bad3 hb3.1 hbb seen hsl' hmax' out1)
+  intro r hr
+  rw [hr, ho1, Body.checkShellFaces, List.append_assoc]
+  rfl
 
 end forge_topo

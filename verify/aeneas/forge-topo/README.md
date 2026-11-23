@@ -13,6 +13,7 @@ shipped code for each test moved here.
 |---|---|---|---|
 | stray vertices (`check_strays`) | `topo::strays` | `forge_topo.strays_refines` | L4 |
 | back-links (`check_links`) | `topo::links` | `forge_topo.links_refines` | L4 |
+| shells (`check_shell_faces`) | `topo_shell::shell_faces` | `forge_topo.shell_faces_refines` | L4 |
 
 `strays_refines`: for any `Topo` instance whose counts and edge ends are the model body's, and
 any `Sink` that appends the problem it is handed, the translated `strays` returns (no panic, no
@@ -30,6 +31,17 @@ having appended exactly `Body.checkLinks`. On the way: the face pass's `listed` 
 (`edge_pass_spec`), the loop pass `loopSkip || loopOk` (`loop_pass_spec`; a run of coedges past
 the array fails `loopOk` too, `all_coOk_unfit`).
 
+`shell_faces_refines` (`lean/ForgeTopo/ShellFaces.lean`): for a body whose links are sound
+(`checkLinks = []`, as `check_known` runs it), any instance that `ShellReads` it (as `Reads`, and
+the shells and each face's shell; shell ids below `u32::MAX`, the flood's mark for none, face ids
+u32) and any sink that appends what it is handed, the translated `shell_faces` returns ok having
+appended exactly `Body.checkShellFaces`. The three passes compute the model's `bad`
+(`shell_pass_spec`, `face_listed_spec`, `edge_split_spec`); the flood is a depth-first search
+whose invariant (`DFS`: what is stamped is reachable, the stack holds stamped faces, a stamped
+face off the stack has its neighbours stamped, stack plus unstamped bounded by the faces) gives,
+once the stack is empty, stamped = reachable; the model's flood reaches exactly that too
+(`verify/forge-topo-check/lean/TopoCheck/Flood.lean`, `reached_iff`).
+
 `lean/ForgeTopo/Axioms.lean` fails the build if a theorem uses more than `propext`,
 `Classical.choice` and `Quot.sound`.
 
@@ -37,6 +49,5 @@ Build: `cd lean && lake build` (shares Mathlib and Aeneas's library with
 `verify/forge-mass/lean/.lake/packages`; the f64 bridge `verify/aeneas/bridge` is required but
 unused, the topology has no floats).
 
-Next: the shell tests (`check_shell_faces`: listing, flood), then the edge-use and loop-closure
-tests, the shell Euler counts and the fans move to `topo.rs` the same way, until `check`'s whole
-topological part is translated.
+Next: the edge-use and loop-closure tests, the shell Euler counts and the fans move to `topo.rs`
+the same way, until `check`'s whole topological part is translated.
