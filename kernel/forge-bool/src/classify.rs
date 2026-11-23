@@ -534,22 +534,29 @@ impl<'a> Index<'a> {
         // nearest boundary point, exactly
         let mut best: Option<(f64, forge_topo::CoedgeId, f64)> = None;
         let mut near: Vec<u32> = Vec::new();
-        let candidates: Box<dyn Iterator<Item = &(forge_topo::CoedgeId, Box3)>> = match &info.bands {
-            Some(bands) => {
-                bands.near(p, info.reach, &mut near);
-                Box::new(near.iter().map(|&i| &info.edges[i as usize]))
-            }
-            None => Box::new(info.edges.iter()),
-        };
-        for &(c, ref b) in candidates {
+        // each candidate in turn (the band rows round p, or every use), the nearest kept
+        let mut try_one = |&(c, ref b): &(forge_topo::CoedgeId, Box3)| {
             if c == GONE || box_distance(b, p) > info.reach.min(best.map_or(f64::INFINITY, |x| x.0)) {
-                continue;
+                return;
             }
             let e = body.edge(body.coedge(c).edge);
             let t = e.curve.closest(p, e.range);
             let d = e.curve.eval(t).distance(p);
             if best.is_none_or(|b| d < b.0) {
                 best = Some((d, c, t));
+            }
+        };
+        match &info.bands {
+            Some(bands) => {
+                bands.near(p, info.reach, &mut near);
+                for &i in &near {
+                    try_one(&info.edges[i as usize]);
+                }
+            }
+            None => {
+                for x in &info.edges {
+                    try_one(x);
+                }
             }
         }
         if let Some((d, c, t)) = best {
@@ -707,15 +714,15 @@ impl<'a> Index<'a> {
 /// the face keeps bands).
 pub(crate) fn edges_near(body: &Body, f: FaceId, bx: &Box3, out: &mut Vec<forge_topo::CoedgeId>) {
     let info = info(body, f);
-    let mut near: Vec<u32> = Vec::new();
-    let all: Box<dyn Iterator<Item = &(forge_topo::CoedgeId, Box3)>> = match &info.bands {
+    let keep = |e: &(forge_topo::CoedgeId, Box3)| e.0 != GONE && e.1.overlaps(bx);
+    match &info.bands {
         Some(bands) => {
+            let mut near: Vec<u32> = Vec::new();
             bands.near(bx.center(), bx.diagonal() / 2.0, &mut near);
-            Box::new(near.iter().map(|&i| &info.edges[i as usize]))
+            out.extend(near.iter().map(|&i| &info.edges[i as usize]).filter(|e| keep(e)).map(|e| e.0));
         }
-        None => Box::new(info.edges.iter()),
-    };
-    out.extend(all.filter(|e| e.0 != GONE && e.1.overlaps(bx)).map(|e| e.0));
+        None => out.extend(info.edges.iter().filter(|e| keep(e)).map(|e| e.0)),
+    }
 }
 
 /// Whether point `p` of planar face `f`'s plane lies inside the face: ray parity over its
