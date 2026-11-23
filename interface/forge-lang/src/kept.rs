@@ -59,9 +59,9 @@ mod tests {
 
     fn dir(tag: &str, files: &[(&str, &str)]) -> PathBuf {
         let d = std::env::temp_dir().join(format!("forge-kept-{tag}-{}", std::process::id()));
-        std::fs::create_dir_all(&d).expect("temp dir");
+        forge_dirs::fs::create_dir_all(&d).expect("temp dir");
         for (name, text) in files {
-            std::fs::write(d.join(name), text).expect("write");
+            forge_dirs::fs::write(d.join(name), text).expect("write");
         }
         d
     }
@@ -69,7 +69,7 @@ mod tests {
     /// The report of a fresh run, and what it read.
     fn fresh(d: &Path, src: &str) -> (String, Deps) {
         let place = d.join("part.fg");
-        std::fs::write(&place, src).expect("write");
+        forge_dirs::fs::write(&place, src).expect("write");
         watched(&place, src, || {
             let opts = Options {
                 dir: Some(d.to_path_buf()),
@@ -126,11 +126,11 @@ mod tests {
         let d = dir("defs", &[("lib.fg", USED)]);
         let (_, from) = fresh(&d, PART);
         assert!(from.current());
-        std::fs::write(d.join("lib.fg"), USED.replace("2 * x", "3 * x")).expect("write");
+        forge_dirs::fs::write(d.join("lib.fg"), USED.replace("2 * x", "3 * x")).expect("write");
         assert!(!from.current(), "the used file's function changed");
         let (now, _) = fresh(&d, PART);
         let (was, _) = {
-            std::fs::write(d.join("lib.fg"), USED).expect("write");
+            forge_dirs::fs::write(d.join("lib.fg"), USED).expect("write");
             fresh(&d, PART)
         };
         assert_ne!(now, was, "the function's body changes the result");
@@ -141,9 +141,9 @@ mod tests {
     fn a_read_shared_value_is_part_of_what_is_checked() {
         let d = dir("shared", &[("lib.fg", USED)]);
         let (_, from) = fresh(&d, PART);
-        std::fs::write(d.join("lib.fg"), USED.replace("t = 2", "t = 3")).expect("write");
+        forge_dirs::fs::write(d.join("lib.fg"), USED.replace("t = 2", "t = 3")).expect("write");
         assert!(!from.current(), "the used file's shared value changed");
-        std::fs::write(d.join("lib.fg"), USED).expect("write");
+        forge_dirs::fs::write(d.join("lib.fg"), USED).expect("write");
         assert!(from.current());
     }
 

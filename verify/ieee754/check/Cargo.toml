@@ -1,0 +1,13 @@
+[package]
+name = "ieee754-check"
+version = "0.1.0"
+edition = "2024"
+license = "MPL-2.0"
+publish = false
+description = "Compares the Lean IEEE 754 model's executable with this CPU's f64/f32, bit for bit"
+
+# Its own workspace: not part of the ForgeCAD build.
+[workspace]
+
+[profile.release]
+debug = false

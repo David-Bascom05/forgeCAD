@@ -67,10 +67,10 @@ fn number(j: &Json, key: &str) -> u64 {
     j.get(key).and_then(Json::num).unwrap_or(0.0) as u64
 }
 fn read(path: &Path, max: u64) -> Result<Json, String> {
-    if std::fs::metadata(path).map_err(|e| e.to_string())?.len() > max {
+    if forge_dirs::fs::metadata(path).map_err(|e| e.to_string())?.len() > max {
         return Err("Conversation is too large".into());
     }
-    Json::parse(&std::fs::read_to_string(path).map_err(|e| e.to_string())?).map_err(|e| e.to_string())
+    Json::parse(&forge_dirs::fs::read_to_string(path).map_err(|e| e.to_string())?).map_err(|e| e.to_string())
 }
 fn private_dir(path: &Path) -> Result<(), String> {
     forge_agent::ipc::private_dir(path).map_err(|e| e.to_string())
@@ -96,7 +96,7 @@ impl Conversation {
         Ok(Self {
             id: format!(
                 "{stamp:x}-{:x}-{:x}",
-                std::process::id(),
+                forge_dirs::process_id(),
                 NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
             ),
             project: canonical(project)?,
@@ -187,7 +187,7 @@ impl Conversation {
 
 pub fn list(base: &Path, project: &Path) -> Result<Vec<Summary>, String> {
     let dir = folder(base, project)?;
-    let entries = match std::fs::read_dir(dir) {
+    let entries = match forge_dirs::fs::read_dir(dir) {
         Ok(e) => e,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(vec![]),
         Err(e) => return Err(e.to_string()),
@@ -390,7 +390,7 @@ pub fn import_codex_from(
         if depth > 5 {
             return;
         }
-        let Ok(entries) = std::fs::read_dir(dir) else {
+        let Ok(entries) = forge_dirs::fs::read_dir(dir) else {
             return;
         };
         for entry in entries.filter_map(Result::ok) {
@@ -412,7 +412,7 @@ pub fn import_codex_from(
     scan(sessions, &mut paths, 0);
     let mut imported = 0;
     for path in paths {
-        let Ok(file) = std::fs::File::open(&path) else {
+        let Ok(file) = forge_dirs::fs::File::open(&path) else {
             continue;
         };
         let mut lines = BufReader::new(file.take(128 << 20)).lines();
@@ -495,7 +495,7 @@ pub fn import_codex_from(
         chat.session = Some(id.clone());
         chat.entries = entries;
         chat.interrupted = interrupted;
-        chat.updated = std::fs::metadata(&path)
+        chat.updated = forge_dirs::fs::metadata(&path)
             .and_then(|m| m.modified())
             .ok()
             .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())

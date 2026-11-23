@@ -1,8 +1,8 @@
 //! Where the time goes, on stderr when `FORGECAD_TRACE` is set: `let _t = trace::span("hlr scene");`
 //! prints the span's name and milliseconds when it ends.
 
+use crate::clock::Instant;
 use std::sync::OnceLock;
-use std::time::Instant;
 
 pub fn on() -> bool {
     static ON: OnceLock<bool> = OnceLock::new();

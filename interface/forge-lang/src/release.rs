@@ -155,7 +155,7 @@ pub fn records(h: &History, path: Option<&str>) -> Result<Vec<Record>, String> {
 
 /// The newest released revision of a file on disk, if its folder keeps history and it has one.
 pub fn revision_of(file: &Path) -> Option<String> {
-    if !file.is_file() {
+    if !forge_dirs::fs::is_file(file) {
         return None;
     }
     let h = crate::pins::history(file.parent()?)?;
@@ -212,7 +212,7 @@ fn release_dir(h: &History, folder: &str, rev: &str) -> PathBuf {
 }
 
 fn write_all(dir: &Path, files: &[File]) -> Result<(), String> {
-    std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    forge_dirs::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
     for (_, name, data) in files {
         let p = dir.join(name);
         let mut l = forge_git::fsutil::Lock::take(&p).map_err(|e| e.to_string())?;

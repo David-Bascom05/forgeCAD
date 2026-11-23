@@ -300,7 +300,7 @@ impl Gui {
                             j.get("restored").and_then(|x| x.str()).unwrap_or("")
                         );
                         if self.vers_is_open(&f)
-                            && let Ok(t) = std::fs::read_to_string(&f)
+                            && let Ok(t) = forge_dirs::fs::read_to_string(&f)
                             && let Some(s) = &mut self.fg
                         {
                             s.reload(t);
@@ -388,7 +388,7 @@ impl Gui {
         } else {
             "Comparing".into()
         };
-        std::thread::spawn(move || {
+        crate::plat::spawn("forge-job", move || {
             let _ = tx.send(build(f, a, b, single));
             waker();
         });

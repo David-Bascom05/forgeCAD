@@ -553,7 +553,7 @@ impl Shell {
                         for c in choices {
                             let sel = picked.contains(&c);
                             let r = ui.add(
-                                egui::Button::new(egui::RichText::new(&c).font(mono(10.0)))
+                                egui::Button::new(egui::RichText::new(&c).font(mono(11.0)))
                                     .small()
                                     .selected(sel),
                             );
@@ -771,7 +771,7 @@ impl Shell {
                     r.center_bottom() - vec2(0.0, 8.0),
                     Align2::CENTER_CENTER,
                     tl.about,
-                    sans(10.0),
+                    sans(11.0),
                     t.ink2,
                 );
                 places.push(("sheet:preview".into(), r));
@@ -992,7 +992,7 @@ impl Shell {
                         for (n, text) in &existing {
                             ui.label(egui::RichText::new(n).font(medium(12.0)).color(t.ink));
                             ui.add(
-                                egui::Label::new(egui::RichText::new(text).font(mono(10.0)).color(t.ink2))
+                                egui::Label::new(egui::RichText::new(text).font(mono(11.0)).color(t.ink2))
                                     .wrap(),
                             );
                         }
@@ -1307,7 +1307,7 @@ impl Shell {
                         [c - vec2(0.0, 6.0), c + vec2(0.0, 6.0)],
                         Stroke::new(1.2, t.focus),
                     );
-                    p.text(c + vec2(7.0, 7.0), Align2::LEFT_TOP, id, mono(10.0), t.focus);
+                    p.text(c + vec2(7.0, 7.0), Align2::LEFT_TOP, id, mono(11.0), t.focus);
                 }
             }
         }
