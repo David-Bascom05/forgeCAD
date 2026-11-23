@@ -97,3 +97,13 @@ fn place_then_inverse() {
     let id = then(inverse(a), a);
     assert!(id.ox.abs() < 1e-12 && id.oy.abs() < 1e-12 && (id.xx - 1.0).abs() < 1e-12 && id.xy.abs() < 1e-12);
 }
+
+#[test]
+fn joint_frame() {
+    use forge_sheet_core::place::joint;
+    let (j, la) = joint(1.0, 2.0, 4.0, 6.0);
+    assert_eq!(la, 5.0);
+    // right((3, 4) / 5) = (0.8, -0.6)
+    assert!((j.xx - 0.8).abs() < 1e-15 && (j.xy + 0.6).abs() < 1e-15);
+    assert_eq!((j.ox, j.oy), (1.0, 2.0));
+}

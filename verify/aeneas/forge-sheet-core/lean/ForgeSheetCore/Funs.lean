@@ -2,6 +2,7 @@
 -- [forge_sheet_core]: function definitions
 import Aeneas
 import ForgeSheetCore.Types
+import ForgeSheetCore.FunsExternal
 open Aeneas Aeneas.Std Result ControlFlow Error
 set_option linter.dupNamespace false
 set_option linter.hashCommand false
@@ -16,6 +17,9 @@ set_option maxHeartbeats 1000000
 
 /- You can set the `maxRecDepth` value with the `-max-recdepth` CLI option -/
 set_option maxRecDepth 2048
+
+/- You can remove the following line by using the CLI option `-all-computable`: -/
+noncomputable section
 
 namespace forge_sheet_core
 
@@ -693,5 +697,26 @@ def place.inverse (m : place.Place) : Result place.Place := do
   let (ox, oy) ← place.local m (F64.Ops.ofBits 0) (F64.Ops.ofBits 0)
   let fl ← lift (F64.Ops.neg m.xy)
   ok { m with ox, oy, xy := fl }
+
+/-- [forge_sheet_core::place::joint]:
+    Source: 'kernel/forge-sheet-core/src/place.rs', lines 54:0-70:1
+    Visibility: public -/
+def place.joint
+  (p0x : F64) (p0y : F64) (p1x : F64) (p1y : F64) :
+  Result (place.Place × F64)
+  := do
+  let ex ← lift (F64.Ops.sub p0x p1x)
+  let ey ← lift (F64.Ops.sub p0y p1y)
+  let fl ← lift (F64.Ops.mul ex ex)
+  let fl1 ← lift (F64.Ops.mul ey ey)
+  let fl2 ← lift (F64.Ops.add fl fl1)
+  let la ← std.f64.F64.sqrt fl2
+  let k ← lift (F64.Ops.div (F64.Ops.ofBits 4607182418800017408) la)
+  let fl3 ← lift (F64.Ops.sub p1x p0x)
+  let vx ← lift (F64.Ops.mul fl3 k)
+  let fl4 ← lift (F64.Ops.sub p1y p0y)
+  let vy ← lift (F64.Ops.mul fl4 k)
+  let fl5 ← lift (F64.Ops.neg vx)
+  ok ({ ox := p0x, oy := p0y, xx := vy, xy := fl5 }, la)
 
 end forge_sheet_core
