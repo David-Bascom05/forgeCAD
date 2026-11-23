@@ -70,7 +70,7 @@ fn read_back(path: &Path) -> (usize, f64) {
         e => panic!("{e:?}"),
     };
     for c in &checks {
-        assert!(c.watertight(), "{}: {c:?}", path.display());
+        assert!(c.watertight() && c.manifold(), "{}: {c:?}", path.display());
     }
     (checks.len(), checks.iter().map(|c| c.volume).sum())
 }
@@ -87,10 +87,13 @@ fn every_format(name: &str) {
         let out = dir.join(format!("{name}.{fmt}"));
         let j = export(&part, &words, &out);
         assert_eq!(j.get("watertight"), Some(&Json::Bool(true)), "{name} {fmt}: {j}");
+        assert_eq!(j.get("manifold"), Some(&Json::Bool(true)), "{name} {fmt}: {j}");
         let obs = objects(&j);
         for o in &obs {
             assert_eq!(o.get("watertight"), Some(&Json::Bool(true)), "{name}: {o}");
             assert_eq!(num(o, "open_edges"), 0.0);
+            assert_eq!(o.get("manifold"), Some(&Json::Bool(true)), "{name}: {o}");
+            assert_eq!(num(o, "pinched_vertices"), 0.0);
         }
         // within the chord tolerance of the surface everywhere: within area x tol of the volume
         let area: f64 = obs.iter().map(|o| num(o, "area")).sum();

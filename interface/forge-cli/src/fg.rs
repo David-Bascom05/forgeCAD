@@ -705,6 +705,8 @@ impl Session {
                     ("vertices", c.vertices.into()),
                     ("watertight", c.watertight().into()),
                     ("open_edges", c.open_edges.into()),
+                    ("manifold", c.manifold().into()),
+                    ("pinched_vertices", c.pinched.into()),
                     ("volume", Json::Num(c.volume)),
                     ("area", Json::Num(c.area)),
                 ];
@@ -714,15 +716,16 @@ impl Session {
                 Json::obj(f)
             })
             .collect();
-        let watertight = e.watertight();
+        let (watertight, manifold) = (e.watertight(), e.manifold());
         let fmt = o.format.ext();
         let mut text = format!(
-            "{} {fmt}: {} objects, {} triangles, {} bytes, tol {} mm, angle {} deg, volume {}{}",
+            "{}{} {fmt}: {} objects, {} triangles, {} bytes, tol {} mm, angle {} deg, volume {}{}",
             if watertight {
                 "watertight"
             } else {
                 "NOT watertight"
             },
+            if manifold { ", manifold" } else { ", NOT manifold" },
             e.checks.len(),
             e.triangles(),
             e.bytes.len(),
@@ -731,21 +734,21 @@ impl Session {
             forge_agent::short(e.volume()),
             exact.map_or(String::new(), |v| format!(" (exact {})", forge_agent::short(v))),
         );
-        if !watertight {
+        if !watertight || !manifold {
             let bad: Vec<String> = e
                 .scene
                 .items
                 .iter()
                 .zip(&e.checks)
-                .filter(|(_, c)| !c.watertight())
+                .filter(|(_, c)| !c.watertight() || !c.manifold())
                 .map(|(it, c)| {
                     format!(
-                        "{} ({} open edges)",
-                        e.scene.objects[it.object].name, c.open_edges
+                        "{} ({} open edges, {} pinched vertices)",
+                        e.scene.objects[it.object].name, c.open_edges, c.pinched
                     )
                 })
                 .collect();
-            text += &format!("; open: {}", bad.join(", "));
+            text += &format!("; not closed or not manifold: {}", bad.join(", "));
         }
         let mut j = vec![
             ("ok", true.into()),
@@ -755,6 +758,7 @@ impl Session {
             ("tol", Json::Num(o.tol)),
             ("angle", Json::Num(o.angle)),
             ("watertight", watertight.into()),
+            ("manifold", manifold.into()),
             ("triangles", e.triangles().into()),
             ("volume", Json::Num(e.volume())),
             ("objects", Json::Arr(objects)),

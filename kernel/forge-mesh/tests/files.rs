@@ -86,7 +86,7 @@ fn every_object_is_closed_manifold_and_faces_out() {
             let objs = objects(n, &b, &q, true);
             assert_eq!(objs.len(), 1, "{n}: one piece");
             let c = objs[0].check();
-            assert!(c.watertight(), "{n}: {c:?}");
+            assert!(c.watertight() && c.manifold(), "{n}: {c:?}");
             assert_eq!(c.degenerate, 0, "{n}");
             // normals: one per corner, each facing the way its triangle does
             let o = &objs[0];

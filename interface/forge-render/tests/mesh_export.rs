@@ -28,7 +28,10 @@ fn export_writes_a_closed_mesh_of_a_part_and_an_assembly() {
         for f in [Format::Stl, Format::ThreeMf, Format::Obj] {
             let out = dir.join(format!("x.{}", f.ext()));
             let said = forge_render::fg::export_mesh(&src, path.to_str(), &out, f).unwrap();
-            assert!(said.contains("watertight") && !said.contains("not"), "{said}");
+            assert!(
+                said.contains("watertight and manifold") && !said.contains("not"),
+                "{said}"
+            );
             let bytes = std::fs::read(&out).unwrap();
             let checks: Vec<forge_mesh::MeshCheck> = match f {
                 Format::ThreeMf => forge_mesh::read_3mf(&bytes).unwrap().checks(),

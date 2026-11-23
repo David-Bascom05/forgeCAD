@@ -6,7 +6,9 @@
 //!
 //! The mesh is the kernel's (`forge_mesh::tessellate`): each B-rep edge cut once and shared by
 //! the faces on either side, so every object is closed, manifold and consistently oriented by
-//! construction. Each object is checked all the same, and the reply says so.
+//! construction. Each object is checked all the same: closed and oriented (no open edge), facing
+//! out (positive volume), and manifold (one fan of triangles round every vertex), and the reply
+//! says which.
 
 use crate::Run;
 use forge_mesh::scene::{Item, Material, Object, Scene, Solids, frame_matrix};
@@ -154,6 +156,10 @@ pub struct Exported {
 impl Exported {
     pub fn watertight(&self) -> bool {
         self.checks.iter().all(MeshCheck::watertight)
+    }
+
+    pub fn manifold(&self) -> bool {
+        self.checks.iter().all(MeshCheck::manifold)
     }
 
     pub fn triangles(&self) -> usize {

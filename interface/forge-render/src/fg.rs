@@ -751,15 +751,15 @@ pub fn export_mesh(
     let file = out
         .file_name()
         .map_or_else(String::new, |n| n.to_string_lossy().into_owned());
-    Ok(if e.watertight() {
+    Ok(if e.watertight() && e.manifold() {
         format!(
-            "Exported {file}: {} objects, {} triangles, watertight",
+            "Exported {file}: {} objects, {} triangles, watertight and manifold",
             e.checks.len(),
             e.triangles()
         )
     } else {
         format!(
-            "Exported {file}: {} triangles, but not watertight: check it before printing",
+            "Exported {file}: {} triangles, but not closed and manifold: check it before printing",
             e.triangles()
         )
     })

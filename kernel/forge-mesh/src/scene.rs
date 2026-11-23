@@ -81,22 +81,32 @@ fn det(m: &[f64; 12]) -> f64 {
         + m[2] * (m[3] * m[7] - m[4] * m[6])
 }
 
-/// What a mesh is, checked: closed, manifold and consistently oriented when `open_edges` is 0;
-/// facing out when `volume` is positive.
+/// What a mesh is, checked: closed and consistently oriented when `open_edges` is 0, a manifold
+/// surface when `pinched` is 0 as well, facing out when `volume` is positive.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct MeshCheck {
     pub triangles: usize,
     pub vertices: usize,
     /// Directed edges not matched by exactly one opposite edge.
     pub open_edges: usize,
+    /// Vertices where the surface pinches (more than one fan of triangles round them).
+    pub pinched: usize,
     pub degenerate: usize,
     pub volume: f64,
     pub area: f64,
 }
 
 impl MeshCheck {
+    /// Closed, consistently oriented and facing out: no open edge, at least a tetrahedron's
+    /// triangles, positive volume. Says nothing of pinches (`manifold`).
     pub fn watertight(&self) -> bool {
         self.open_edges == 0 && self.triangles >= 4 && self.volume > 0.0
+    }
+
+    /// A manifold surface: every edge between exactly two triangles (`open_edges`) and one fan of
+    /// triangles round every vertex (`pinched`).
+    pub fn manifold(&self) -> bool {
+        self.open_edges == 0 && self.pinched == 0
     }
 }
 
@@ -116,6 +126,7 @@ impl Object {
             triangles: m.triangles.len(),
             vertices: m.positions.len(),
             open_edges: m.open_edges().len(),
+            pinched: m.pinched_vertices().len(),
             degenerate: m.degenerate_triangles(0.0),
             volume: m.volume(),
             area: m.area(),
@@ -382,6 +393,38 @@ pub fn weld(name: &str, corners: &[[Point3; 3]]) -> Object {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn tetra(o: Point3) -> Object {
+        let p = |x: f64, y: f64, z: f64| Point3::new(o.x + x, o.y + y, o.z + z);
+        Object {
+            positions: vec![
+                p(0.0, 0.0, 0.0),
+                p(1.0, 0.0, 0.0),
+                p(0.0, 1.0, 0.0),
+                p(0.0, 0.0, 1.0),
+            ],
+            triangles: vec![[0, 2, 1], [0, 1, 3], [1, 2, 3], [0, 3, 2]],
+            ..Object::default()
+        }
+    }
+
+    #[test]
+    fn a_pinch_is_closed_but_not_manifold() {
+        let one = tetra(Point3::ORIGIN).check();
+        assert!(one.watertight() && one.manifold(), "{one:?}");
+        // a second tetrahedron below the first, sharing only its vertex 0
+        let mut two = tetra(Point3::ORIGIN);
+        let b = tetra(Point3::ORIGIN)
+            .transformed(&[-1.0, 0.0, 0.0, 0.0, -1.0, 0.0, 0.0, 0.0, -1.0, 0.0, 0.0, 0.0]);
+        two.positions.extend(&b.positions[1..]);
+        let map = |i: u32| if i == 0 { 0 } else { i + 3 };
+        two.triangles.extend(b.triangles.iter().map(|t| t.map(map)));
+        let c = two.check();
+        assert_eq!(c.open_edges, 0, "no open edge sees it");
+        assert!(c.watertight());
+        assert_eq!(c.pinched, 1);
+        assert!(!c.manifold());
+    }
 
     #[test]
     fn numbers() {
