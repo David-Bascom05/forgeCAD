@@ -339,12 +339,18 @@ fn tool_box(f: &Feature) -> Box3 {
 /// `adds`, hulled into `b`: the common features (an extrude, revolve or ball) without a list.
 fn add_into(features: crate::History<'_>, i: usize, b: &mut Box3) {
     match &features[i] {
-        Feature::Ball { op, .. } if matches!(op, Combine::New | Combine::Add) => {
-            *b = b.hull(&tool_box(&features[i]))
+        Feature::Ball {
+            op: Combine::New | Combine::Add,
+            ..
+        } => *b = b.hull(&tool_box(&features[i])),
+        Feature::Extrude {
+            op: Combine::New | Combine::Add,
+            ..
         }
-        Feature::Extrude { op, .. } | Feature::Revolve { op, .. }
-            if matches!(op, Combine::New | Combine::Add) =>
-        {
+        | Feature::Revolve {
+            op: Combine::New | Combine::Add,
+            ..
+        } => {
             // a part it cannot be built is no part of the reach (the build of feature i, from
             // the same `resolve`, fails the same way, so no later feature is built)
             match crate::extent::resolve(features, i) {
