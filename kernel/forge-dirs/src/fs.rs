@@ -203,11 +203,13 @@ pub mod mem {
 
     pub fn read(p: impl AsRef<Path>) -> io::Result<Vec<u8>> {
         let p = norm(p.as_ref());
-        match tree().nodes.get(&p) {
-            Some(Node::File { bytes, .. }) => Ok(bytes.as_ref().clone()),
+        // the bytes copied with the tree let go: a read holds it no longer than a lookup
+        let got = match tree().nodes.get(&p) {
+            Some(Node::File { bytes, .. }) => Ok(bytes.clone()),
             Some(Node::Dir) => Err(io::Error::new(io::ErrorKind::IsADirectory, "a directory")),
             None => Err(not_found(&p)),
-        }
+        };
+        got.map(|b| b.as_ref().clone())
     }
 
     pub fn read_to_string(p: impl AsRef<Path>) -> io::Result<String> {

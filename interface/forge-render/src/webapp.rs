@@ -281,17 +281,23 @@ impl Host {
             format,
             wgpu::TextureFormat::Bgra8Unorm | wgpu::TextureFormat::Bgra8UnormSrgb
         );
-        let b = buffer.clone();
-        buffer.slice(..).map_async(wgpu::MapMode::Read, move |r| {
-            if let Err(e) = r {
-                say(&format!("forge-app: the frame's pixels didn't map: {e}"));
-                let _ = f.call1(&JsValue::NULL, &JsValue::NULL);
-                return;
-            }
-            let Ok(data) = b.slice(..).get_mapped_range() else {
-                say("forge-app: the frame's pixels didn't map");
-                let _ = f.call1(&JsValue::NULL, &JsValue::NULL);
-                return;
+        // the texture and the buffer kept till the copy is read (a dropped one is destroyed)
+        wasm_bindgen_futures::spawn_local(async move {
+            let _texture = texture;
+            let mut go = None;
+            let promise = js_sys::Promise::new(&mut |resolve, _| go = Some(resolve));
+            let resolve = go.expect("a promise runs this at once");
+            buffer.slice(..).map_async(wgpu::MapMode::Read, move |r| {
+                let _ = resolve.call1(&JsValue::NULL, &JsValue::from_bool(r.is_ok()));
+            });
+            let mapped = wasm_bindgen_futures::JsFuture::from(promise).await;
+            let data = match (mapped, buffer.slice(..).get_mapped_range()) {
+                (Ok(ok), Ok(data)) if ok.as_bool() == Some(true) => data,
+                _ => {
+                    say("forge-app: the frame's pixels didn't map");
+                    let _ = f.call1(&JsValue::NULL, &JsValue::NULL);
+                    return;
+                }
             };
             let mut rgba = Vec::with_capacity((width * height * 4) as usize);
             for y in 0..height as usize {
