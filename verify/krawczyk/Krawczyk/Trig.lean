@@ -126,4 +126,26 @@ theorem crit_enclosed (a b m lo hi pl ph : ℝ) (hlo : lo < π) (hhi : π < hi)
       exact ⟨le_trans (min_le_right _ _) h1, le_trans h2 (le_max_left _ _)⟩
   exact ⟨by linarith [hin.2, hbetween.1], by linarith [hin.1, hbetween.2]⟩
 
+/-- The kernel's critical-point test in the form it is computed: k + half counts when it lies in
+[qa, qb], qa at most a's quotients by both floats either side of π, qb at least b's. An extreme
+m·π inside [a, b] always has qa ≤ m ≤ qb, so it is never missed. -/
+theorem crit_quotients (a b m lo hi qa qb : ℝ) (hlo : 0 < lo) (hlo' : lo < π) (hhi : π < hi)
+    (hqa : qa ≤ min (a / lo) (a / hi)) (hqb : max (b / lo) (b / hi) ≤ qb)
+    (hin : m * π ∈ Icc a b) : qa ≤ m ∧ m ≤ qb := by
+  have hpi : 0 < π := pi_pos
+  have hm1 : a / π ≤ m := by rw [div_le_iff₀ hpi]; exact hin.1
+  have hm2 : m ≤ b / π := by rw [le_div_iff₀ hpi]; exact hin.2
+  -- a / π lies between a / hi and a / lo, whatever a's sign
+  have between (x : ℝ) : min (x / lo) (x / hi) ≤ x / π ∧ x / π ≤ max (x / lo) (x / hi) := by
+    have h1 : 1 / hi < 1 / π := one_div_lt_one_div_of_lt hpi hhi
+    have h2 : 1 / π < 1 / lo := one_div_lt_one_div_of_lt hlo hlo'
+    have e : ∀ y : ℝ, x / y = x * (1 / y) := fun y => by ring
+    rw [e lo, e hi, e π]
+    rcases le_total 0 x with hx | hx
+    · exact ⟨le_trans (min_le_right _ _) (mul_le_mul_of_nonneg_left h1.le hx),
+        le_trans (mul_le_mul_of_nonneg_left h2.le hx) (le_max_left _ _)⟩
+    · exact ⟨le_trans (min_le_left _ _) (mul_le_mul_of_nonpos_left h2.le hx),
+        le_trans (mul_le_mul_of_nonpos_left h1.le hx) (le_max_right _ _)⟩
+  exact ⟨le_trans hqa (le_trans (between a).1 hm1), le_trans hm2 (le_trans (between b).2 hqb)⟩
+
 end Krawczyk

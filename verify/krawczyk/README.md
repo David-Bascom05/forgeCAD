@@ -15,7 +15,7 @@
 
 - `sin_le_ends`, `ends_le_sin`: sin on [a, b] stays between its end values, unless a maximum (k + ½)π with k even lies inside (for the upper bound) or a minimum with k odd does (for the lower). The proof uses the extreme value theorem and Fermat's theorem.
 - `cos_le_ends`, `ends_le_cos`: the same for cos at kπ.
-- `crit_enclosed`: the kernel's outward enclosure [m·PI, m·PI_UP] holds m·π, so it never misses an extreme.
+- `crit_enclosed`, `crit_quotients`: the kernel's outward test (now the quotient form, k + ½ between a/PI, a/PI_UP and b/PI, b/PI_UP rounded out) never misses an extreme.
 
 The endpoint values are dmath's, within an absolute 2^-52 for |x| ≤ 2048. That bound is proven on verify/ieee754's model (`Dmath.sin_err`, `Dmath.cos_err`, IEEE branch), and forge-math's `trig_within_the_contract` measures it against a double-double reference (worst 8.4e-17).
 
