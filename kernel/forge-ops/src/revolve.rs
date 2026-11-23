@@ -170,28 +170,26 @@ struct SegInfo {
     forward: bool,
 }
 
-/// A pole's tolerance: as far as its edges' ends and its faces' surfaces lie from it, at least
-/// LINEAR. A profile's arc may end a little short of the axis point the line gives, and the
-/// surfaces of revolution have their poles on the axis itself; nothing else needs more, and a
-/// wider ball would hide geometry once a boolean leaves only a stub of an edge ending there (a
-/// cone's apex 3·LINEAR through a face: its last ruling 3.4e-5 long).
+/// A pole's tolerance: as far as its edges' ends lie from it, at least LINEAR. A profile's arc may
+/// end a little short of the axis point the line gives; the surfaces of revolution have their
+/// poles on the axis, within LINEAR of a point `on_axis` takes for one. Nothing else needs more,
+/// and a wider ball would hide geometry once a boolean leaves only a stub of an edge ending there
+/// (a cone's apex 3·LINEAR through a face: its last ruling 3.4e-5 long).
 fn pole_tolerances(body: &mut Body, poles: &[VertexId]) {
-    for &v in poles {
-        let at = body.vertex(v).point;
-        let mut need = 0.0f64;
-        for e in body.edge_ids() {
-            let edge = body.edge(e);
-            for (end, t) in [(edge.start, edge.range.lo), (edge.end, edge.range.hi)] {
-                if end != v {
-                    continue;
-                }
-                need = need.max(at.distance(edge.curve.eval(t)));
-                for &c in &edge.coedges {
-                    need = need.max(body.face(body.coedge_face(c)).surface.distance(at));
-                }
+    if poles.is_empty() {
+        return;
+    }
+    let mut need = vec![tol::LINEAR; poles.len()];
+    for e in body.edge_ids() {
+        let edge = body.edge(e);
+        for (end, t) in [(edge.start, edge.range.lo), (edge.end, edge.range.hi)] {
+            if let Some(k) = poles.iter().position(|&v| v == end) {
+                need[k] = need[k].max(body.vertex(end).point.distance(edge.curve.eval(t)));
             }
         }
-        body.vertices[v.0 as usize].tol = need.max(tol::LINEAR);
+    }
+    for (&v, n) in poles.iter().zip(need) {
+        body.vertices[v.0 as usize].tol = n;
     }
 }
 
