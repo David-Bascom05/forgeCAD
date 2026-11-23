@@ -146,12 +146,12 @@ surfaces are again planes, cylinders, cones, spheres and tori, so they need noth
   estimate gave 23 314, and the kernel's 22 974.22 matches an independent integral. It now
   uses two pieces per breakpoint interval, about 20 s a case; that case's error is 0.4 and its
   reported error 1.1.
-- **Torus pairs: 74 agree, 0 wrong, 16 ambiguous.** The ambiguous ones:
-  - Keep cases whose result is empty, which the octree cannot prove without the touches'
-    exclusions;
-  - cones with tori: coaxial cones are not in the meridian test, and apexes on a torus are
+- **Torus pairs: 82 agree, 0 wrong, 8 ambiguous.** The touches' exclusions also prove the empty
+  Keep cases. The ambiguous ones:
+  - six cones with tori: coaxial cones are not in the meridian test, and apexes on a torus are
     not decided;
-  - standing_tangent_top_inside, a support point inside the box's top.
+  - standing_tangent_top_inside, Add and Keep: a plane tangent at the inner equator, a saddle
+    contact.
 
 ### What is proven, and what is not (PROOF-STANDARD levels)
 
@@ -172,16 +172,18 @@ surfaces are again planes, cylinders, cones, spheres and tori, so they need noth
 | source | agree | wrong | refused | ambiguous | out of scope |
 |---|--:|--:|--:|--:|--:|
 | degenerate pairs (279: plane/cylinder/cone/sphere × configs × Add/Cut/Keep) | 240 | 19 | 3 | 17 | 0 |
-| torus pairs (93: plane/cylinder/cone/sphere/torus with a torus × configs × Add/Cut/Keep) | 74 | 0 | 0 | 16 | 3 |
-| scoreboard families (36 × 4 seeds, convex-quadric sub-histories) | 86 | 4 | 0 | 5 | 21 |
+| torus pairs (93: plane/cylinder/cone/sphere/torus with a torus × configs × Add/Cut/Keep) | 82 | 0 | 0 | 8 | 3 |
+| scoreboard families (36 × 4 seeds, convex sub-histories, 30 s reference timeout) | 95 | 6 | 0 | 7 | 28 |
 | forge_lang programs (300, extrude/revolve/ball/hole/pattern, convex-quadric sub-history) | 200 | 0 | 0 | 0 | 100 |
 | curved band (279 pairs × tool moved ±0.9, 3 LINEAR on x, y, z = 2 511) | 2 191 | 50 | 102 | 168 | 0 |
 
 The sequential and n-ary paths agree with each other except in the band (n-ary 2 206 / 50 / 87 /
-168). The families and lang rows are from the run before the sampled apex check stopped deciding
-verdicts; one family "wrong" (degen_cone_sphere/2, an apex contact) is ambiguous under the final
-rules. Out of scope:
-- 90 cases where the reference took over 30 s (many-carrier family parts; the octree's rational
+168). The degenerate, torus and family rows are from the final reference: the exact apex test,
+the touches, and complete root finding. The families' out-of-scope cases are 15 with
+procedural faces and 13 where the reference took over 30 s, per path (30 and 26 path-cases).
+The lang row is from the run before the sampled apex check stopped deciding verdicts. Its out
+of scope:
+- 90 cases where the reference took over 30 s (many-carrier parts; the octree's rational
   arithmetic is the cost);
 - 82 where the history combines before any part exists;
 - 40 with several bodies;
@@ -267,4 +269,4 @@ Owner: the fix-curved session.
   apex) is undecided. Two cones sharing the apex and the quadric are decided (§3).
 - Edge-on-surface contacts (the base_rim_on_wall gap) stay undecided.
 - Speed: 90 family cases took over 30 s.
-- The families and lang rows predate the apex fix (the degenerate pairs were rerun).
+- The lang row predates the apex fix and the complete root finding.
