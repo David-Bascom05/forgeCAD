@@ -142,3 +142,5 @@ import ForgeCurved
 #print axioms ForgeCurved.F6.f6
 #print axioms ForgeCurved.grad_cyl
 #print axioms ForgeCurved.grad_cone
+#print axioms ForgeCurved.Nesting.anchored
+#print axioms ForgeCurved.Nesting.flip_of_transversal
