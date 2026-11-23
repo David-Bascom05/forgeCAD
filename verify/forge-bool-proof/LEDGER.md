@@ -85,7 +85,12 @@ verify/forge-bool-proof/ForgeBoolProof/<file>.
 | D7.math | `KeepRuleBd`: on exact classes, `keepRule` picks each boundary facet of the kept rooms once (a coplanar piece once, as A's) | SPINE | proven | KeepRule.lean `keepRuleBd_proof` (`facet_rooms`, `table` by `decide`) |
 | D7.table | `keep_of` computes `keepRule` (the table in Contracts.lean is the spec; if boolean.rs's table differs, it changes here with a reason) | SPINE | open | — |
 | D8.derived | the rest of `Bounds` for the result: the closure of the kept rooms is closed, regular, bounded, with its frontier on the arrangement's faces | SPINE | proven | Compose.lean `bounds_of_faces`, `frontier_res_sub` |
-| D8.math | the assembly boundary lemma: from `KeptIsBd` and the faces `apply` writes (the kept facets, oriented to the kept rooms), `BoundsFaces` holds; it is what D8's proof reduces to once `apply`'s output is read as faces | SPINE | open | — |
+| D8.math | the assembly boundary lemma: from `KeptIsBd` and the faces `apply` writes (`WritesKept`: the result's face points are the closure of the kept facets), `BoundsFaces` | SPINE | proven for `frontier_on` and `faces_sub`, given D5.thin; the other three fields are D8.formula, D8.orient, D8.seeded | Assembly.lean `boundsFaces_boundary`, `boundsFaces_of_writes` |
+| D8.writes | `apply`'s output read as faces is `WritesKept` (its face points = closure of the kept regions' facets) | SPINE | open | Assembly.lean `WritesKept` |
+| D8.formula | `BoundsFaces.local_formula` for the result's zones (Φ_u) | SPINE | open | — |
+| D8.orient | `BoundsFaces.oriented`: each lone point of a result face has the kept rooms on its inside side | SPINE | open | — |
+| D8.seeded | `Seeded` of the result's faces | SPINE | open | — |
+| D5.thin | the arrangement's face points off the facets (edges, vertices) have empty interior and do not cut small neighbourhoods (`Thin`) | SPINE (stmt), FLAT-SITES/CURVED-SITES (proof with D5) | open | Assembly.lean `Thin` |
 | Dn | `nary_with` | D1–D9 over n tools, the op fold as keep; `Batch` sound when decided | FALLBACK (G10) | open | — |
 
 ## §1a. The exact `On` (classify.rs)

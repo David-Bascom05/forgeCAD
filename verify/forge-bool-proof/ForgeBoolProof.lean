@@ -3,3 +3,4 @@ import ForgeBoolProof.Contracts
 import ForgeBoolProof.Compose
 import ForgeBoolProof.KeepRule
 import ForgeBoolProof.Bridge
+import ForgeBoolProof.Assembly
