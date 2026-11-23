@@ -17,7 +17,12 @@ import ForgeBoolCore.RefineAround
 import ForgeBoolCore.RefineTouch
 import ForgeBoolCore.RefineBetween
 import ForgeBoolCore.RefineFan
+import ForgeBoolCore.BridgeTouch
 import ForgeBoolCore.EndToEnd
+import ForgeBoolCore.Integrate
+import ForgeBoolCore.RefineSplitOk
+import ForgeBoolCore.RefineCollapse
+import ForgeBoolCore.RefineUnify
 /-! The refinement lemmas use the standard axioms only. -/
 #print axioms forge_bool_core.zero_idx_spec
 #print axioms forge_bool_core.is_facet_spec
@@ -33,6 +38,11 @@ import ForgeBoolCore.EndToEnd
 #print axioms forge_bool_core.cmp_cov_spec
 #print axioms forge_bool_core.index_find_spec
 #print axioms forge_bool_core.sort_by_cov_spec
+#print axioms forge_bool_core.h_sort_hashed_spec
+#print axioms forge_bool_core.hash_cov_spec
+#print axioms forge_bool_core.same_spec
+#print axioms forge_bool_core.hash_table_spec
+#print axioms forge_bool_core.find_h_spec
 #print axioms forge_bool_core.index_new_spec
 #print axioms forge_bool_core.cov_spec
 #print axioms forge_bool_core.cells_find_spec
@@ -79,6 +89,14 @@ import ForgeBoolCore.EndToEnd
 #print axioms forge_bool_core.fan_classes
 #print axioms forge_bool_core.bad_vert_spec
 #print axioms forge_bool_core.vert_scan_spec
+-- group R: the bridges from positions and ids to covectors
+#print axioms forge_bool_core.R_result_eq
+#print axioms forge_bool_core.R_orient_eq
+#print axioms forge_bool_core.R_resOK_of
+#print axioms forge_bool_core.result_bridge_proof
+#print axioms forge_bool_core.around_bridge_proof
+#print axioms forge_bool_core.bad_edge_bridge_proof
+#print axioms forge_bool_core.bad_vert_bridge_proof
 #print axioms forge_bool_core.new_ext_spec_proof
 #print axioms forge_bool_core.core_k_spec_of
 #print axioms forge_bool_core.classify_on_spec_of
@@ -86,3 +104,26 @@ import ForgeBoolCore.EndToEnd
 #print axioms forge_bool_core.end_to_end
 #print axioms forge_bool_core.encode_spec_proof
 #print axioms forge_bool_core.end_to_end_encode
+#print axioms forge_bool_core.end_to_end_SKU
+-- group S: split_ok
+#print axioms forge_bool_core.s_le3_spec
+#print axioms forge_bool_core.s_sort_triples_spec
+#print axioms forge_bool_core.s_adj_iff
+#print axioms forge_bool_core.s_loop0_spec
+#print axioms forge_bool_core.s_loop1_spec
+#print axioms forge_bool_core.split_ok_spec_proof
+#print axioms forge_bool_core.end_to_end_KU
+#print axioms forge_bool_core.collapse_spec_proof
+#print axioms forge_bool_core.K.collapse_eq
+#print axioms forge_bool_core.end_to_end_U
+#print axioms forge_bool_core.has_spec
+#print axioms forge_bool_core.same_set_spec
+#print axioms forge_bool_core.faces_at_spec
+#print axioms forge_bool_core.u_join_spec
+#print axioms forge_bool_core.u_faces_loop_spec
+#print axioms forge_bool_core.u_erel_spec
+#print axioms forge_bool_core.u_edges_loop_spec
+#print axioms forge_bool_core.unify_spec'
+#print axioms forge_bool_core.unify_spec_proof
+#print axioms forge_bool_core.end_to_end_proof
+#print axioms forge_bool_core.end_to_end_encode_proof

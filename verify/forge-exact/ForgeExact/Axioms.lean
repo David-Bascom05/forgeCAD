@@ -4,6 +4,11 @@ import ForgeExact.Flat
 import ForgeExact.SnapSym
 import ForgeExact.RefFacts
 import ForgeExact.DecideOnce.Ledger
+import ForgeExact.DecideOnce.CoreInc
+import ForgeExact.DecideOnce.Simulation
+import ForgeExact.DecideOnce.RoomConst
+import ForgeExact.DecideOnce.MetricI
+import ForgeExact.DecideOnce.CoverageI
 import ForgeExact.DecideOnce.Nef
 import ForgeExact.DecideOnce.Rungs
 import ForgeExact.Jordan
@@ -12,6 +17,12 @@ import ForgeExact.DecideOnce.Witness
 import ForgeExact.DecideOnce.BoxesExact
 import ForgeExact.DecideOnce.Sample
 import ForgeExact.DecideOnce.Sampler
+import ForgeExact.DecideOnce.Frontier
+import ForgeExact.DecideOnce.Local
+import ForgeExact.DecideOnce.SampleLocal
+import ForgeExact.JordanLocal
+import ForgeExact.DecideOnce.LocalJordan
+import ForgeExact.DecideOnce.LocalFinal
 
 /-!
 # Only the standard axioms
@@ -97,6 +108,11 @@ elab "#standard_axioms " ids:ident* : command => do
   ForgeExact.Jordan.pierced_eq
   ForgeExact.Jordan.contains_eq
   ForgeExact.Jordan.contains_const
+  ForgeExact.Jordan.chi_out
+  ForgeExact.Jordan.face_rise
+  ForgeExact.Jordan.face_level'
+  ForgeExact.Jordan.contains_eq'
+  ForgeExact.Jordan.contains_const_local
   ForgeExact.DecideOnce.brep_compat
   ForgeExact.DecideOnce.Ledger.coverageK
   ForgeExact.DecideOnce.Ledger.collapse_local
@@ -134,3 +150,36 @@ elab "#standard_axioms " ids:ident* : command => do
   ForgeExact.DecideOnce.Sampler.sampler_covers
   ForgeExact.DecideOnce.Sampler.flat_exact
   ForgeExact.DecideOnce.Sampler.flat_correct
+  ForgeExact.DecideOnce.Frontier.reg_local
+  ForgeExact.DecideOnce.Frontier.far_unchanged
+  ForgeExact.DecideOnce.Frontier.frontier_local
+  ForgeExact.DecideOnce.Frontier.split_at_region
+  ForgeExact.DecideOnce.result_iff_in
+  ForgeExact.DecideOnce.reg_in
+  ForgeExact.DecideOnce.zeroThickness_iff_in
+  ForgeExact.DecideOnce.correct_ok_in
+  ForgeExact.DecideOnce.Sample.local_exact
+  ForgeExact.DecideOnce.Sample.local_correct
+  ForgeExact.DecideOnce.Sample.wall_region
+  ForgeExact.DecideOnce.Sample.wall_up
+  ForgeExact.DecideOnce.Sample.local_correct_walls
+  ForgeExact.DecideOnce.Sample.local_correct_sampler
+  ForgeExact.DecideOnce.covCell_conv
+  ForgeExact.DecideOnce.local_compat
+  ForgeExact.DecideOnce.Sample.localCompat_of
+  ForgeExact.DecideOnce.Sample.local_correct_final
+  ForgeExact.DecideOnce.Frontier.stitch_reg
+  ForgeExact.DecideOnce.cls_map
+  ForgeExact.DecideOnce.Ledger.core_inc
+  ForgeExact.DecideOnce.core_refines
+  ForgeExact.DecideOnce.coreK_refines
+  ForgeExact.DecideOnce.flat_refines
+  ForgeExact.DecideOnce.IncLedger.coreI_zeroThickness_iff
+  ForgeExact.DecideOnce.room_const
+  ForgeExact.DecideOnce.room_const_all
+  ForgeExact.DecideOnce.IncLedger.collapse_idem
+  ForgeExact.DecideOnce.IncLedger.collapse_subset
+  ForgeExact.DecideOnce.IncLedger.collapse_refuse
+  ForgeExact.DecideOnce.Refines.collapse_exact_off_thin
+  ForgeExact.DecideOnce.IncLedger.coverageKI
+  ForgeExact.DecideOnce.IncLedger.coverageMI

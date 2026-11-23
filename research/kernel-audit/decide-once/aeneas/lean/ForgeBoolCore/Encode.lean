@@ -179,7 +179,7 @@ theorem cells_read {L : ForgeExact.DecideOnce.Ledger} (h : LFits L) :
   apply List.map_congr_left; intro X hX
   simp only [Function.comp, id]; rw [vec_val (by simpa using allC_width h X hX), map_toS_ofS]
 
-theorem encode_wf {L : ForgeExact.DecideOnce.Ledger} (h : LFits L) : LedgerWF (encode L) := by
+theorem encode_wf {L : ForgeExact.DecideOnce.Ledger} (h : LFits L) (hnd : L.edges.Nodup) : LedgerWF (encode L) := by
   have hsz := h.size
   have hsmall := allC_small h
   have hlen := allC_length (L := L)
@@ -188,7 +188,7 @@ theorem encode_wf {L : ForgeExact.DecideOnce.Ledger} (h : LFits L) : LedgerWF (e
     rw [hcl, u32_val (by have := idOf_lt hX; omega)]; exact idOf_lt hX
   obtain ⟨hps, hins⟩ := h.ids
   have hUs := u32_le_usize
-  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
   · show 0 < (u32 L.nb).val; rw [u32_val h.nb.2]; exact h.nb.1
   · have hinj : ((encode L).cells.val.map (·.val)) = (allC L).map (fun X => X.map ofS) := by
       rw [cells_encode h, List.map_map]
@@ -219,6 +219,16 @@ theorem encode_wf {L : ForgeExact.DecideOnce.Ledger} (h : LFits L) : LedgerWF (e
     rw [this, List.mem_map] at he
     obtain ⟨X, hX, rfl⟩ := he
     exact hidlt _ (mem_allC.mpr (Or.inr (Or.inr (Or.inr (Or.inl hX)))))
+  · have : (encode L).edges.val = L.edges.map fun X => (u32 (idOf L X) : CellId) := vec_val (by simp; omega)
+    unfold idsOf; rw [this, List.map_map]
+    have he1 : ∀ X ∈ L.edges, X ∈ allC L := fun X hX => mem_allC.mpr (Or.inr (Or.inr (Or.inr (Or.inl hX))))
+    apply List.Nodup.map_on _ hnd
+    intro X hX Y hY hXY
+    simp only [Function.comp] at hXY
+    rw [u32_val (by have := idOf_lt (he1 X hX); omega), u32_val (by have := idOf_lt (he1 Y hY); omega)] at hXY
+    have e1 : (allC L)[idOf L X]'(idOf_lt (he1 X hX)) = X := List.getElem_idxOf _
+    have e2 : (allC L)[idOf L Y]'(idOf_lt (he1 Y hY)) = Y := List.getElem_idxOf _
+    rw [← e1, ← e2]; simp only [hXY]
   · intro e he
     have : (encode L).verts.val = L.verts.map fun X => (u32 (idOf L X) : CellId) := vec_val (by simp; omega)
     rw [this, List.mem_map] at he
@@ -242,6 +252,6 @@ theorem encode_sides {L : ForgeExact.DecideOnce.Ledger} (h : LFits L) : SidesLis
   rw [cells_read h]
   exact ⟨mem_allC.mpr (Or.inr (Or.inl ⟨φ, hφ, Or.inl rfl⟩)), mem_allC.mpr (Or.inr (Or.inl ⟨φ, hφ, Or.inr rfl⟩))⟩
 
-theorem encode_spec_proof : EncodeSpec := fun L h => ⟨encode L, toL_encode h, encode_wf h, encode_sides h⟩
+theorem encode_spec_proof : EncodeSpec := fun L h hnd => ⟨encode L, toL_encode h, encode_wf h hnd, encode_sides h⟩
 
 end forge_bool_core

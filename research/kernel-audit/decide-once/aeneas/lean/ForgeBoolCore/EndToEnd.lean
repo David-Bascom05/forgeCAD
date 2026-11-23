@@ -72,7 +72,9 @@ theorem end_to_end_encode (hS : SplitOkSpec) (hK : CollapseSpec) (hU : UnifySpec
   have hL := toL_encode hfit
   have hnb : (encode (sampleLedger ps ss (sampler ps))).nb.val = (sampleLedger ps ss (sampler ps)).nb := by
     have := congrArg ForgeExact.DecideOnce.Ledger.nb hL; simpa [toL] using this
-  have := end_to_end hS hK hU hR hE hV ps ss hnz hi _ r hL (encode_wf hfit)
+  -- the sampler's edges are a `dedup`: distinct by construction
+  have hnd : (sampleLedger ps ss (sampler ps)).edges.Nodup := ForgeExact.DecideOnce.nodup_dedup _
+  have := end_to_end hS hK hU hR hE hV ps ss hnz hi _ r hL (encode_wf hfit hnd)
   rw [hnb] at this
   exact this
 

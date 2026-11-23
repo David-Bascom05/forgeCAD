@@ -139,7 +139,7 @@ theorem enum_buf_spec (z : Slice Usize) (k keep : Usize) (m : U32) (B0 : List Sg
   · exact ⟨hj, hbit, hbl, hb⟩
 
 /-- What `around` reads from the assembled result: distinct cell ids, their positions in `rpos`, and
-facets (one zero each) of one width. -/
+facets (one zero each). `W` is unused (kept so signatures stay put). -/
 structure ResOK (l : Ledger) (ext : Ext) (a : Assembled) (W : Nat) : Prop where
   nodup : (a.result.val.map (·.val)).Nodup
   lt : ∀ r ∈ a.result.val, r.val < (allCells l ext).length
@@ -147,7 +147,6 @@ structure ResOK (l : Ledger) (ext : Ext) (a : Assembled) (W : Nat) : Prop where
   rlen : a.rpos.val.length = (allCells l ext).length
   rpos : ∀ c, c < (allCells l ext).length → (a.rpos.val.getD c NONE).val =
     if c ∈ a.result.val.map (·.val) then (a.result.val.map (·.val)).idxOf c else U32.max
-  width : ∀ r ∈ a.result.val, (covAt l ext r.val).length = W
   facet : ∀ r ∈ a.result.val, (covAt l ext r.val).count .Zero = 1
 
 /-- The result cell at position `p`. -/

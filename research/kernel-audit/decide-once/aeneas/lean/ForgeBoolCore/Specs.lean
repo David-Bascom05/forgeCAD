@@ -84,6 +84,8 @@ structure LedgerWF (l : Ledger) : Prop where
   pieces : ∀ q ∈ pcs l, q.1 < l.cells.val.length ∧ q.2 < U32.max
   inside : InsideWF l
   edges : ∀ e ∈ l.edges.val, (e : U32).val < l.cells.val.length
+  /-- the edge cells are distinct (`unify`'s edge positions need it) -/
+  edges_nodup : (idsOf l.edges).Nodup
   verts : ∀ v ∈ l.verts.val, (v : U32).val < l.cells.val.length
   /-- cells, plus the at most two new sides per piece, stay below `u32::MAX` (= `NONE`) -/
   room : l.cells.val.length + 2 * l.pieces.val.length + 1 < U32.max
@@ -114,6 +116,8 @@ def MarksEdges (l : Ledger) (ext : Ext) (isE : List Bool) : Prop :=
 /-- The state after `split` on a well-formed ledger, which every later stage is given. -/
 structure AfterSplit (l : Ledger) (e0 : Ext) (s : Split) (ext : Ext) : Prop where
   wf : LedgerWF l
+  /-- `split_ok` passed (the core splits only then): every piece cell is a facet of its face's class -/
+  ok : (toL l).splitOk = true
   ext0 : ExtOK l e0
   extra0 : e0.extra.val = []
   split : SplitOK l e0 s ext
@@ -253,6 +257,6 @@ structure LFits (L : ForgeExact.DecideOnce.Ledger) : Prop where
 /-- A Lean ledger within the limits, every facet's sides among its cells, has a Rust ledger reading
 as it. (Its cells: the distinct covectors of pieces, sides, inside, edges and verts.) -/
 def EncodeSpec : Prop :=
-  ∀ (L : ForgeExact.DecideOnce.Ledger), LFits L → ∃ l : Ledger, toL l = L ∧ LedgerWF l ∧ SidesListed l
+  ∀ (L : ForgeExact.DecideOnce.Ledger), LFits L → L.edges.Nodup → ∃ l : Ledger, toL l = L ∧ LedgerWF l ∧ SidesListed l
 
 end forge_bool_core

@@ -13,8 +13,8 @@ theorem new_ext_spec_proof : NewExtSpec := by
   unfold new_ext
   have hl : (alloc.vec.Vec.deref l.cells).val.length = l.cells.val.length := by simp [alloc.vec.Vec.deref]
   step with index_new_spec (alloc.vec.Vec.deref l.cells) (by rw [hl]; have := hw.room; omega)
-    (by rw [hl]; have := hw.sort_room; omega) as ⟨ix, hix⟩
-  refine ⟨⟨hix, ?_, ?_⟩, rfl⟩
+    (by rw [hl]; have := hw.sort_room; omega) as ⟨ix, hix, hhs⟩
+  refine ⟨⟨hix, hhs, ?_, ?_⟩, rfl⟩
   · simpa [allCells] using hw.cells_nodup
   · simp [allCells]; have := hw.room; omega
 
@@ -260,7 +260,7 @@ theorem core_spec_of (hS : SplitOkSpec) (hCl : ClassifyOnSpec) : CoreSpec := by
     rw [← hb, hbt]
     simp only [Bool.not_true, Bool.false_eq_true, ite_false]
     step with split_spec l e0 hok0 hw.pieces (by rw [hlen0]; exact hw.room) as ⟨s, ext, hsp⟩
-    apply WP.spec_mono (hCl l e0 s ext r m ⟨hw, hok0, hx0, hsp⟩ hm)
+    apply WP.spec_mono (hCl l e0 s ext r m ⟨hw, by rw [← hb, hbt], hok0, hx0, hsp⟩ hm)
     intro o ho
     exact ⟨ext, hsp.ext, ho⟩
   · rename_i hbf
