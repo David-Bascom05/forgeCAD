@@ -119,7 +119,7 @@ fn random_programs() {
     }
     eprintln!("kind (tried, built): {kinds:?}");
     // every maker drawn, and every one built at least once over the seeds
-    for m in MAKERS {
+    for m in MAKERS.iter().filter(|m| !fuzz::SWARM_ONLY.contains(&m.name)) {
         let (tried, built) = kinds.get(m.name).copied().unwrap_or_default();
         assert!(tried > 0 && built > 0, "{}: tried {tried}, built {built}", m.name);
     }
@@ -151,6 +151,70 @@ fn random_programs() {
     assert!(
         gone.is_empty(),
         "no seed fails as these any more: remove them from fuzz_known.txt\n{}",
+        gone.join("\n")
+    );
+}
+
+/// Sheets and thin walls among the kinds that make and change solids and move bodies (a swarm of
+/// its own, so the seeds' programs in `random_programs` stay what they were): every statement
+/// builds valid or is refused with a clear error, and every finished part's bodies, sheets too,
+/// mesh as they should and regenerate the same n-ary.
+#[test]
+#[cfg_attr(target_family = "wasm", ignore = "a kernel panic aborts the wasm run")]
+fn sheet_and_thin_programs() {
+    forge_topo::check::check_against_both_ways(true);
+    let known: Vec<&str> = include_str!("fuzz_known_swarm.txt")
+        .lines()
+        .map(|l| l.split(" #").next().unwrap_or("").trim())
+        .filter(|l| !l.is_empty() && !l.starts_with('#'))
+        .collect();
+    let mask = fuzz::kinds_of(&[
+        "extrude", "revolve", "fillet", "chamfer", "hole", "pattern", "thicken", "movebody", "copybody",
+        "sheet", "thin",
+    ]);
+    let mut kinds: BTreeMap<&str, (usize, usize)> = BTreeMap::new();
+    let mut new = Vec::new();
+    let mut seen = vec![false; known.len()];
+    for &seed in &SEEDS {
+        let r = fuzz::run_kinds(seed, LEN, mask);
+        for (k, why) in &r.tried {
+            let e = kinds.entry(k).or_default();
+            e.0 += 1;
+            e.1 += why.is_none() as usize;
+        }
+        for (what, src) in &r.fails {
+            let mut hit = false;
+            for (i, k) in known.iter().enumerate() {
+                if what.contains(k) {
+                    seen[i] = true;
+                    hit = true;
+                }
+            }
+            if !hit {
+                new.push(format!("seed {seed}: {what}\n{src}"));
+            }
+        }
+    }
+    eprintln!("kind (tried, built): {kinds:?}");
+    for k in fuzz::SWARM_ONLY {
+        let (tried, built) = kinds.get(k).copied().unwrap_or_default();
+        assert!(tried > 0 && built > 0, "{k}: tried {tried}, built {built}");
+    }
+    assert!(
+        new.is_empty(),
+        "{} failures of a kind not in fuzz_known_swarm.txt:\n{}",
+        new.len(),
+        new.join("\n")
+    );
+    let gone: Vec<&str> = known
+        .iter()
+        .zip(&seen)
+        .filter(|(_, s)| !**s)
+        .map(|(k, _)| *k)
+        .collect();
+    assert!(
+        gone.is_empty(),
+        "no seed fails as these any more: remove them from fuzz_known_swarm.txt\n{}",
         gone.join("\n")
     );
 }
