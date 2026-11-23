@@ -621,26 +621,33 @@ fine facets round the edge map to one face facet. Two remedies:
   reaches the cell from), with (e)/(v) a bijection onto wings. `around` then counts sheets, and the
   tangent-cylinder union shows 4 and is refused.
 
-**Settled with the coordinator (face-arrangement.md at 9453b06f): W1.** W2 fails at vertices. A
-pinched facet, reaching a vertex in two sectors but listed once in `vert_facets`, can merge fan
-classes that the reference keeps apart, and so hide a non-manifold vertex. Mending that needs wing
-ids, which are facets in all but name.
+**Settled, final (face-arrangement.md at ad97832a; confirmed by the master): W2 with sectors;
+cutting allowed.** This supersedes the W1 reply of 9453b06f. A builder that cuts along seams just
+produces rows of multiplicity 1 and one sector per facet, which is a valid W2 ledger. So curved
+chooses per case: cut along a Tier-0 seam piece where one is natural, emit two wings or several
+sectors where not (tangent cylinders). Plain W2 fails at vertices: a pinched facet, reaching a vertex
+in two sectors but listed once, can merge fan classes and hide a non-manifold vertex. So:
+- `edge_facets[e]` lists a facet once per wing, at most twice (`LedgerWF` checks it);
+- `vert_sectors[v]` lists `(facet, bounding edge a, bounding edge b)` per sector, replacing
+  `vert_facets`. A facet may appear in several sectors;
+- `fanRel` joins two sectors at `v` that share a bounding edge.
 
-With W1, the interface, the core, `LedgerWF`'s no-repeat rows and the around/bad_vert proofs are
-unchanged:
-- unify re-joins the cut pieces;
-- a seam edge has one face round it, so it is never an output edge;
-- `Refines`' star bijections (e)/(v) are exactly the no-wings condition.
+(e) is a bijection onto wings. (v) is a surjection from fine facets onto sectors, whose fibres
+are connected through fine edges with τ = none. Flat convex facets have multiplicity 1 and one
+sector per facet per vertex.
 
-The builder detects a wing when a facet's boundary loop runs along an edge both ways, or visits a
-vertex twice. Wings occur in flat too: a wedge touching a plate along a line, or an apex on a plate.
+**The curved builder's sectors.**
+- **Transversal vertices and cone apexes.** The cyclic order of the arcs round `v` on surface j is
+  decided exactly from their tangents `±(∇q_j × ∇q_k)(v)` at the certified vertex sample (QVert):
+  angle comparison by half-plane and cross product against a fixed direction, each a `Num.sign`
+  at `α`. Consecutive arcs bound a sector, and its facet is a lookup.
+- **Tangential vertices** (two arcs tangent at `v`). The order is read on the link instead. Take
+  a certified isolating box round `v` (trace phase B; exact-curved decides the touch). The arcs'
+  crossings with its faces are edge samples (`proposeEdgeAny`, complete by
+  `proposeEdgeAny_complete`). The order along `j ∩ ∂Q` gives the sectors.
+- No box within budget: `Skip::Budget`, counted.
 
-**For curved, the cut is a piece of a Tier-0 seam** (§2.3's table), which lies in the reference
-arrangement as A8 requires:
-- the plane holding a contact line or contact circle;
-- the axial plane;
-- the nappe plane at an apex;
-- a plane through a crossing node.
+The obligation on the curved side is completeness of the arcs at `v`.
 
 **2. Cells: fewer than flat's ratio, and the separators leave the runtime.** The carrier ledger
 pays more than flat's ~300 cells, because every seam (and Tier 1's CAD) splits space everywhere.
@@ -675,7 +682,48 @@ The coordinator (9453b06f) answered:
 - Route (b) would be a new L1 for the face ledger, not a corollary of `Refines`, which transfers
   facts from the reference and not to it. It may still be cheaper than Lemma D on the CAD.
 
-It is open, with q1 and the master (face-arrangement.md §5).
+q1 answered (2026-11-23), recommending route (b). Manifold.lean's use of `Faithful` is local
+and never uses R1. On the face ledger, five local obligations replace R1–R5:
+- **F1, row soundness**: everything in `row(x)` has `x` in its closure.
+- **F2, row completeness**: a neighbourhood of `x` has its sheet points in row facets, and at
+  vertices its edge points in row edges.
+- **F3, separation**: facets are disjoint and relatively open in their union; likewise edges
+  within edges ∪ facets.
+- **F4, wings**: small neighbourhoods meet each row facet in exactly its listed wings, one
+  component per wing. This replaces R4/R5, and is the wing decision made into a statement.
+- **F5, sides**: facet points lie in the closure of both rooms. Rooms are open, connected and
+  disjoint from the faces, so membership is constant per room. This replaces R3.
+
+No global Jordan is needed. Estimate:
+- **(b)** ≈ 1–1.5k lines of generic Lean, plus M-sized builder obligations;
+- **(a)** (Tier0Sound and `cad_R1`) ≈ 8–15k lines.
+
+**Ruled by the master (2026-11-23): route (b) approved.** The reference needs only `ExactK`
+(done, CorrectK.lean). The Tier-1 CAD stays out of the runtime and off the theorem's path; §2.3
+remains as the agreed design of a proof-only reference, should it ever be wanted.
+
+The obligations are now split:
+- Tier0 session: F1, F2 and F4;
+- LemmaD session: F5, plus the delineability lemmas (Sweep.lean, for `qsampler_covers`);
+- q1: the generic face-ledger theorem.
+
+**Wings, final (the master):** W2 with sectors, cutting allowed, as recorded above (9ad6336).
+
+**The generic theorem is done (q1, 6484f71 on `dol-curved-q1`):** `xNonManifoldF_iff_top`,
+ForgeCurved/FaceLocal.lean, standard axioms only. F4 reads, per wing (`EdgeLocal`) and per
+sector (`VertLocal`): the labelled piece reaches the point, is one connected piece in arbitrarily
+small neighbourhoods, and labels are locally constant. A facet cut along a reference seam is just
+more facets with one wing each.
+
+**A note for the record on Tier-0 seams (tier0 session, 2026-11-23).** One axial plane per axis
+does not make the seam's own cells connected:
+- on a cylinder, the seam plane meets it in two lines `x = ±R` with one covector;
+- on a cone, it meets each nappe in two rays.
+
+So Tier0Sound would fail for every cylinder and cone. The fix, should Tier 0 ever return to the
+theorem's path, is a second axial seam per axis, through the axis with normal `z × (z × e)`
+(`x = 0` and `y = 0` for the axis `z`). Under route B the reference needs only `ExactK`, whose
+`IsEdgeK` asks no connectedness, so QSep is unchanged for now.
 
 **4. Effect on the work in flight.**
 - L2 (this branch: QLine, QEdge, QVert, RootCover, QPropose) is the reference's executable and

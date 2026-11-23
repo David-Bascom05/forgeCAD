@@ -34,9 +34,9 @@ structure Elim where
   U : BPoly
   V : BPoly
 
-def elim (qj qk : Quadric) (c : Rat) : Elim :=
-  let a := restr qj c
-  let b := restr qk c
+/-- The elimination of two quadratics `a₀ + a₁z + a₂z²`, `b₀ + b₁z + b₂z²` with coefficients in
+`ℚ[y]`, given as coefficient triples. -/
+def elimT (a b : Poly × Poly × Poly) : Elim :=
   let (a0, a1, a2) := a
   let (b0, b1, b2) := b
   let m := fun (p q : Poly) => pmul p q
@@ -52,6 +52,8 @@ def elim (qj qk : Quadric) (c : Rat) : Elim :=
     D := psub (m b2 a1) (m a2 b1)
     U := [⟨u0⟩, ⟨u1⟩]
     V := [⟨v0⟩, ⟨v1⟩] }
+
+def elim (qj qk : Quadric) (c : Rat) : Elim := elimT (restr qj c) (restr qk c)
 
 /-- The sample for the root `n`. -/
 def mkEdge (qj qk : Quadric) (c : Rat) (E : Elim) (n : Num) : ESample :=
@@ -70,14 +72,26 @@ section Model
 variable {K : Type} [Field K] [LE K] [LT K] [Std.IsLinearOrder K] [Std.LawfulOrderLT K]
   [OrderedRing K] (M : Model K)
 
+/-- `b₂ A − a₂ B = D z + N` for coefficient triples. -/
+theorem linT (a b : Poly × Poly × Poly) (y z : K) :
+    M.ev b.2.2 y * (M.ev a.1 y + z * (M.ev a.2.1 y + z * M.ev a.2.2 y)) -
+      M.ev a.2.2 y * (M.ev b.1 y + z * (M.ev b.2.1 y + z * M.ev b.2.2 y)) =
+    M.ev (elimT a b).D y * z + M.ev (elimT a b).N y := by
+  obtain ⟨a0, a1, a2⟩ := a
+  obtain ⟨b0, b1, b2⟩ := b
+  simp only [elimT, Model.ev, eval_psub, eval_pmul]
+  grind
+
 /-- `b₂ q_j − a₂ q_k = D z + N` on the plane. -/
 theorem lin_ev (qj qk : Quadric) (c : Rat) (y z : K) :
     M.ev (restr qk c).2.2 y * Quadric.evK M qj (M.q c, y, z) -
       M.ev (restr qj c).2.2 y * Quadric.evK M qk (M.q c, y, z) =
     M.ev (elim qj qk c).D y * z + M.ev (elim qj qk c).N y := by
   rw [← restrB_ev, ← restrB_ev]
-  simp only [elim, restrB, restr, evalWith_cons, evalWith_nil, yHom, Model.ev, eval_psub,
-    eval_pmul]
+  have h := linT M (restr qj c) (restr qk c) y z
+  simp only [restrB, evalWith_cons, evalWith_nil, yHom, elim] at h ⊢
+  rw [← h]
+  simp only [Model.ev]
   grind
 
 /-- **Every crossing is a proposed sample's point.** -/

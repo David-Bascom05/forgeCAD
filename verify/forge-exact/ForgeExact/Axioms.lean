@@ -26,6 +26,8 @@ import ForgeExact.DecideOnce.QEdge
 import ForgeExact.DecideOnce.QVert
 import ForgeExact.DecideOnce.RootCover
 import ForgeExact.DecideOnce.QPropose
+import ForgeExact.DecideOnce.QSweep
+import ForgeExact.DecideOnce.QVertPlane
 import ForgeExact.DecideOnce.SampleLocal
 import ForgeExact.JordanLocal
 import ForgeExact.DecideOnce.LocalJordan
@@ -221,6 +223,17 @@ elab "#standard_axioms " ids:ident* : command => do
   ForgeExact.DecideOnce.Curved.covWith_spec
   ForgeExact.DecideOnce.Curved.signF_sound
   ForgeExact.DecideOnce.Curved.covOn_exact_sound
+  ForgeExact.DecideOnce.Curved.critQ_ev
+  ForgeExact.DecideOnce.Curved.gradPlaneY_ev
+  ForgeExact.DecideOnce.Curved.gradPlaneZ_ev
+  ForgeExact.DecideOnce.Curved.dyK_grad
+  ForgeExact.DecideOnce.Curved.dzK_grad
+  ForgeExact.DecideOnce.Curved.linT
+  ForgeExact.DecideOnce.Curved.substZ_ev
+  ForgeExact.DecideOnce.Curved.proposeVertPlane_complete
+  ForgeExact.DecideOnce.Curved.swapYZ_ev
+  ForgeExact.DecideOnce.Curved.gcd_cover
+  ForgeExact.DecideOnce.Curved.proposeVertPlaneAny_complete
   ForgeExact.DecideOnce.Sample.local_exact
   ForgeExact.DecideOnce.Sample.local_correct
   ForgeExact.DecideOnce.Sample.wall_region
