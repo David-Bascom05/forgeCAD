@@ -21,3 +21,8 @@ import ForgeCurved
 #print axioms ForgeCurved.sides_of_seamed
 #print axioms ForgeCurved.quadric_sides
 #print axioms ForgeCurved.faithful_of_rule
+#print axioms ForgeCurved.WallsCounter.parallel_walls_not_faithful
+#print axioms ForgeCurved.WallsCounter.lemmaD_parallel_walls_false
+#print axioms ForgeCurved.Delineable.local_graphs
+#print axioms ForgeCurved.Delineable.delineable
+#print axioms ForgeCurved.Delineable.delineable_poly
