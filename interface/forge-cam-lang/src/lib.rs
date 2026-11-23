@@ -40,6 +40,12 @@ use std::path::{Path, PathBuf};
 #[doc(hidden)]
 pub static FULL_STOCK: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
+/// The peck retract and chip-break lift (mm) the posted cycles are read with: the controls'
+/// usual values by default; tests/peck.rs sets others to show the verdicts do not depend on them.
+#[doc(hidden)]
+pub static CYCLE_PARAMS: std::sync::Mutex<(f64, f64)> =
+    std::sync::Mutex::new((forge_post::PECK_CLEAR, forge_post::CHIP_LIFT));
+
 /// Whether a source is a machining document.
 pub fn is_machining(src: &str) -> bool {
     match syntax::parse(src) {
@@ -3284,7 +3290,10 @@ impl Cam {
                 decimals: d.decimals,
                 feed_decimals: d.feed_decimals,
             };
-            let ms = forge_post::motions(&sub);
+            // the control's peck retract and chip-break lift: the posted program does not fix
+            // them; the path is certified so that any value in [0, the depth already drilled]
+            // gives the same verdicts (CYCLE_PARAMS: tests/peck.rs)
+            let ms = forge_post::motions_with(&sub, *CYCLE_PARAMS.lock().unwrap_or_else(|e| e.into_inner()));
             // G5's runtime half: what the text commands the spindle and the feed, as read back
             let runtime = self.runtime_limits(oi, &ms, d.feed_decimals);
             let back = |p: [i64; 3]| {
@@ -3298,6 +3307,7 @@ impl Cam {
             let mut moves = vec![];
             let mut start: Option<[f64; 3]> = None;
             let (mut lc, mut lr, mut time) = (0.0, 0.0, 0.0);
+            let mut column: Option<([f64; 2], f64, f64)> = None;
             let mut at = [0.0; 3];
             for m in &ms {
                 let (to, ph, f) = match m {
@@ -3336,6 +3346,7 @@ impl Cam {
                             f: *f as f64 / fscale,
                         });
                         at = t;
+                        column = None;
                         continue;
                     }
                     _ => continue,
@@ -3374,6 +3385,35 @@ impl Cam {
                     Phase::Link
                 } else {
                     ph
+                };
+                // a rapid straight down within the span of this column the tool has already
+                // been through at this xy (a peck cycle's re-entry): it passes only where it has
+                // been, each such place checked already (by a rapid's stricter limits, or swept
+                // by the cutter), so it is a link, checked as the feed there is (the same limits).
+                // So the verdicts are the same for any peck retract or chip-break lift in [0, the
+                // depth drilled]
+                let ph = if ph == Phase::Rapid
+                    && to[0] == at[0]
+                    && to[1] == at[1]
+                    && to[2] < at[2]
+                    && column
+                        .is_some_and(|(xy, low, high)| xy == [to[0], to[1]] && to[2] >= low && at[2] <= high)
+                {
+                    Phase::Link
+                } else {
+                    ph
+                };
+                // the span of the column through the current xy the tool has passed (reset when
+                // the xy changes: the move arriving there gives its end only)
+                column = if to[0] == at[0] && to[1] == at[1] {
+                    match column {
+                        Some((xy, l, h)) if xy == [to[0], to[1]] => {
+                            Some((xy, l.min(to[2]).min(at[2]), h.max(to[2]).max(at[2])))
+                        }
+                        _ => Some(([to[0], to[1]], to[2].min(at[2]), to[2].max(at[2]))),
+                    }
+                } else {
+                    Some(([to[0], to[1]], to[2], to[2]))
                 };
                 moves.push(if ph == Phase::Rapid {
                     PMove::Rapid { to }
