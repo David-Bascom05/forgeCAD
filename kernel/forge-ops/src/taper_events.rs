@@ -38,7 +38,7 @@ impl Lin<'_> {
         let mut at = Vec::with_capacity(n);
         let mut vel = Vec::with_capacity(n);
         for i in 0..n {
-            let (a, b) = (&cyc(&segs, i + n - 1).0, &cyc(&segs, i).0);
+            let (a, b) = (&cyc(segs, i + n - 1).0, &cyc(segs, i).0);
             let (ta, tb) = (unit(ends_dir(a).1), unit(ends_dir(b).0));
             let c = ta.x * tb.y - ta.y * tb.x;
             let w = if c.abs() < 1e-7 && ta.dot(tb) > 0.0 {
@@ -66,7 +66,7 @@ impl Lin<'_> {
 
     /// An arc's (or a circle's) centre and radius at offset `d`, and the radius's rate.
     fn round(&self, i: usize, sign: f64) -> Option<(Point2, f64, f64)> {
-        match cyc(&self.segs, i).0 {
+        match cyc(self.segs, i).0 {
             Segment::Arc {
                 center,
                 radius,
@@ -80,7 +80,7 @@ impl Lin<'_> {
 
     /// Whether direction `v` from an arc's centre lies within its sweep (a circle: always).
     fn within(&self, i: usize, v: Vec2) -> bool {
-        match cyc(&self.segs, i).0 {
+        match cyc(self.segs, i).0 {
             Segment::Arc { start, sweep, .. } => {
                 let a = dmath::atan2(v.y, v.x);
                 let (lo, hi) = (start.min(start + sweep), start.max(start + sweep));
@@ -143,7 +143,7 @@ pub(crate) fn first_event(p: &Profile, sign: f64, reach: f64) -> Option<Option<(
         let n = l.segs.len();
         let mut rs = Vec::with_capacity(n);
         for i in 0..n {
-            let r = match cyc(&l.segs, i).0 {
+            let r = match cyc(l.segs, i).0 {
                 Segment::Line { a, b } => {
                     let u = unit(b - a);
                     let len0 = (b - a).dot(u);
@@ -193,7 +193,7 @@ pub(crate) fn first_event(p: &Profile, sign: f64, reach: f64) -> Option<Option<(
             let nb = b.segs.len();
             for j in 0..nb {
                 let adjacent = |k: usize| la == lb && (k == j || k == (j + 1) % nb);
-                match cyc(&b.segs, j).0 {
+                match cyc(b.segs, j).0 {
                     Segment::Line { a: s0, b: s1 } => {
                         let u = unit(s1 - s0);
                         let nrm = u.perp();

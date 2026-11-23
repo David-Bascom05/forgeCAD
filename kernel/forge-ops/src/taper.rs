@@ -866,7 +866,7 @@ pub(crate) fn curved_event(p: &Profile, sign: f64, reach: f64) -> Option<Option<
         }
         let mut js = Vec::with_capacity(n);
         for i in 0..n {
-            let (a, b) = (&cyc(&segs, i + n - 1).0, &cyc(&segs, i).0);
+            let (a, b) = (&cyc(segs, i + n - 1).0, &cyc(segs, i).0);
             let (ta, tb) = (unit(ends_dir(a).1), unit(ends_dir(b).0));
             let at = b.start();
             let c = ta.x * tb.y - ta.y * tb.x;
@@ -929,10 +929,10 @@ pub(crate) fn curved_event(p: &Profile, sign: f64, reach: f64) -> Option<Option<
             }
         }
         for i in 0..n {
-            let (a, b) = (&cyc(&js, i), &cyc(&js, i + 1));
-            match cyc(&segs, i).0 {
+            let (a, b) = (&cyc(js, i), &cyc(js, i + 1));
+            match cyc(segs, i).0 {
                 Segment::Line { .. } => {
-                    let c = line(&cyc(&segs, i).0)?;
+                    let c = line(&cyc(segs, i).0)?;
                     // (b - a) . u
                     let (pa, wa) = a.along(Point2::new(0.0, 0.0), c.u);
                     let (pb, wb) = b.along(Point2::new(0.0, 0.0), c.u);
@@ -940,11 +940,11 @@ pub(crate) fn curved_event(p: &Profile, sign: f64, reach: f64) -> Option<Option<
                     least(&mut edge, radical_roots(&len, (-wa, &a.r), (wb, &b.r), reach));
                 }
                 _ => {
-                    let (_, r0, dr) = round(&cyc(&segs, i).0)?;
+                    let (_, r0, dr) = round(&cyc(segs, i).0)?;
                     least(&mut edge, least_root(0.0, dr, r0, reach).into_iter().collect());
                     if n > 1 {
                         // its sweep running out: its start reaching the next side's carrier
-                        if let Some(cb) = line(&cyc(&segs, i + 1).0) {
+                        if let Some(cb) = line(&cyc(segs, i + 1).0) {
                             let (g, w) = a.along(cb.a, cb.n);
                             let g = padd(&g, &[0.0, -sign]);
                             for d in radical_roots(&g, (w, &a.r), (0.0, &[]), reach) {
@@ -962,14 +962,14 @@ pub(crate) fn curved_event(p: &Profile, sign: f64, reach: f64) -> Option<Option<
     let mut cross = lost;
     // the arc's sweep from its start joint to `q`, against its whole sweep, at δ
     let on_arc = |segs: &[(Segment, u64)], js: &[Joint], j: usize, q: Point2, d: f64| -> bool {
-        let Segment::Arc { center, sweep, .. } = cyc(&segs, j).0 else {
+        let Segment::Arc { center, sweep, .. } = cyc(segs, j).0 else {
             return true;
         };
         let ang = |x: Point2| dmath::atan2(x.y - center.y, x.x - center.x);
         let k = if sweep > 0.0 { 1.0 } else { -1.0 };
         let turn = |from: f64, to: f64| (k * (to - from)).rem_euclid(dmath::TAU);
-        let a0 = ang(cyc(&js, j).at(d));
-        let whole = turn(a0, ang(cyc(&js, j + 1).at(d)));
+        let a0 = ang(cyc(js, j).at(d));
+        let whole = turn(a0, ang(cyc(js, j + 1).at(d)));
         let t = turn(a0, ang(q));
         t <= whole + 1e-9 || t >= dmath::TAU - 1e-9
     };
@@ -979,19 +979,19 @@ pub(crate) fn curved_event(p: &Profile, sign: f64, reach: f64) -> Option<Option<
             let nb = sb.len();
             for j in 0..nb {
                 let near = |k: usize| la == lb && (k == j || k == (j + 1) % nb);
-                if let Some(c) = line(&cyc(&sb, j).0) {
-                    let len = |d: f64| (cyc(&jb, j + 1).at(d) - cyc(&jb, j).at(d)).dot(c.u);
+                if let Some(c) = line(&cyc(sb, j).0) {
+                    let len = |d: f64| (cyc(jb, j + 1).at(d) - cyc(jb, j).at(d)).dot(c.u);
                     for k in (0..na).filter(|&k| !near(k) && na > 1) {
-                        let (g, w) = cyc(&ja, k).along(c.a, c.n);
+                        let (g, w) = cyc(ja, k).along(c.a, c.n);
                         let g = padd(&g, &[0.0, -sign]);
                         if forge_math::poly::eval(&g, 0.0)
-                            + w * forge_math::poly::eval(&cyc(&ja, k).r, 0.0).max(0.0).sqrt()
+                            + w * forge_math::poly::eval(&cyc(ja, k).r, 0.0).max(0.0).sqrt()
                             == 0.0
                         {
                             continue;
                         }
-                        for d in radical_roots(&g, (w, &cyc(&ja, k).r), (0.0, &[]), reach) {
-                            let f = (cyc(&ja, k).at(d) - cyc(&jb, j).at(d)).dot(c.u);
+                        for d in radical_roots(&g, (w, &cyc(ja, k).r), (0.0, &[]), reach) {
+                            let f = (cyc(ja, k).at(d) - cyc(jb, j).at(d)).dot(c.u);
                             let l = len(d);
                             let e = 1e-9 * l.abs().max(1.0);
                             if f >= -e && f <= l + e && !(same(d) && (f <= e || f >= l - e)) {
@@ -1000,7 +1000,7 @@ pub(crate) fn curved_event(p: &Profile, sign: f64, reach: f64) -> Option<Option<
                         }
                     }
                     for i in (0..na).filter(|&i| !adjacent_seg(la, lb, i, j, na)) {
-                        let Some((cc, r0, dr)) = round(&cyc(&sa, i).0) else {
+                        let Some((cc, r0, dr)) = round(&cyc(sa, i).0) else {
                             continue;
                         };
                         let e0 = (cc - c.a).dot(c.n);
@@ -1008,17 +1008,17 @@ pub(crate) fn curved_event(p: &Profile, sign: f64, reach: f64) -> Option<Option<
                             if let Some(d) = least_root(0.0, -sign - side * dr, e0 - side * r0, reach) {
                                 let e = e0 - sign * d;
                                 let foot = cc - c.n * e;
-                                let f = (foot - cyc(&jb, j).at(d)).dot(c.u);
+                                let f = (foot - cyc(jb, j).at(d)).dot(c.u);
                                 if f >= 0.0 && f <= len(d) && on_arc(sa, ja, i, foot, d) && !same(d) {
                                     cross = cross.min(d);
                                 }
                             }
                         }
                     }
-                } else if let Some((cc, r0, dr)) = round(&cyc(&sb, j).0) {
+                } else if let Some((cc, r0, dr)) = round(&cyc(sb, j).0) {
                     for k in (0..na).filter(|&k| !near(k) && na > 1) {
                         // |J - c|² - ρ² = A + B w, w² = r
-                        let jk = &cyc(&ja, k);
+                        let jk = &cyc(ja, k);
                         let px = padd(&jk.p[0], &[-cc.x]);
                         let py = padd(&jk.p[1], &[-cc.y]);
                         let rho = [r0, dr];
@@ -1060,7 +1060,7 @@ pub(crate) fn curved_event(p: &Profile, sign: f64, reach: f64) -> Option<Option<
                         if (la, i) >= (lb, j) || adjacent_seg(la, lb, i, j, na) {
                             continue;
                         }
-                        let Some((c2, r2, dr2)) = round(&cyc(&sa, i).0) else {
+                        let Some((c2, r2, dr2)) = round(&cyc(sa, i).0) else {
                             continue;
                         };
                         let dist = (c2 - cc).length();
