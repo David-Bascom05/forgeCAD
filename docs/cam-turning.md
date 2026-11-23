@@ -40,6 +40,7 @@ spheres and tori about it. Any other face (a flat, a cross hole) is refused by n
 | `turn_face(op, tool:, to: Z, step:)` | face from the bar's front to Z, the nose centre to the centre line |
 | `turn_rough(op, tool:, leave:, step:, to: Z, top:)` | axial passes at every `step` and at every diameter of the part, down to the part grown by the nose radius and `leave`, or to Z |
 | `turn_finish(op, tool:, leave: 0, to: Z)` | the profile, the nose centre on the exact offset of the part by the nose radius (compensation done exactly; posted as the imaginary tip with G40) |
+| `bore_rough(op, tool:, leave:, step:, to: Z, from: D)` | boring: the drilled hole (diameter D) opened outward in axial passes down to the bore grown by the nose radius and `leave`, or to Z; `turn_finish` with a boring tool then finishes the bore |
 | `turn_groove(op, tool:, from: Z0, to: Z1, r: R)` | a groove between Z0 and Z1 to radius R, by plunges |
 | `turn_thread(op, tool:, d:, pitch:, from:, to:, passes: 8)` | an ISO metric external thread (60°), radial infeed of equal chip area; the thread is a declared removal (the part shows the major diameter) |
 | `part_off(op, tool:, at: Z)` | the blade's side on the part's back face at Z, through the centre |
@@ -48,7 +49,7 @@ spheres and tori about it. Any other face (a flat, a cross hole) is refused by n
 
 The built-in tools: `od-rough-cnmg` (CNMG120408 in PCLNR2525M12), `od-finish-dnmg` (DNMG150404 in
 PDJNR2525M15), `od-profile-vbmt` (VBMT160404 in SVJBR2525M16), `groove-3`, `part-3`,
-`thread-60`, `drill-8`. Inserts and holders are decoded from their ISO codes; holder heads are
+`thread-60`, `drill-8`, `drill-26`, and for bores `id-bore-ccmt` (CCMT09T304 in S20R-SCLCR09: a Ø20 bar; its body is checked as the cylinder it is). Inserts and holders are decoded from their ISO codes; holder heads are
 generic: verify with the vendor. The built-in machine: `generic-lathe` (CAM-MACHINE's generic
 2-axis lathe; placeholders, not a real machine).
 

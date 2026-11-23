@@ -47,11 +47,13 @@ What the checks caught while the examples were written (each now a test, tests/r
 
 ## Levels (PROOF-STANDARD.md)
 
-- L1 (Turn.lean, 14 theorems, standard axioms): π is 1-Lipschitz (`pi_lipschitz`,
+- L1 (Turn.lean, 16 theorems, standard axioms): π is 1-Lipschitz (`pi_lipschitz`,
   `turn_clear3`): a clearance in the half-plane is one in space; the smear bound (`smear_le`,
   `smear_anti`, `abs_le_rho`); the full section (`fold_clear`, `fold_sigma`, `sigma_mem`); the
   checker's one distance bound, a separating axis between hulls (`sep_axis_hull`, `sep_axis`),
-  with the swept core a hull of finitely many points (`zono_eq_hull`); the assembly through
+  with the swept core a hull of finitely many points (`zono_eq_hull`); the smear vertex by
+  vertex (`smear_hull`, Jensen) and a slab shrunk past the nose radius (`eroded_gap`); the
+  assembly through
   `clear_of_frontier` (`turn_clear`, `turn_clear_ball`).
 - Hypotheses, open (not proven, not assumed true elsewhere):
   - **H.arc** (the control): an arc block whose ends lie at unequal radii (quantisation) moves
@@ -75,8 +77,10 @@ What the checks caught while the examples were written (each now a test, tests/r
 
 1. Lean: L5 (the checker's outward rounding against verify/ieee754), and an executable ℚ
    oracle for `axis_gap` (L6).
-2. ID work: boring bars, internal grooving and threading, left-hand tools (the holder decoder
-   refuses them by name today).
+2. ID work: boring is built (ISO 6261 bars decoded; the bar a cylinder whose σ-image is an
+   exact rectangle per move; `bore_rough`, `finish` inside; a bush bored from a Ø26 drilled hole
+   with an S20 bar certifies, a hole too small for the bar is refused). Left: internal grooving
+   and threading, left-hand tools (refused by name today).
 3. Done: the .fg surface (interface/forge-turn-lang, docs/cam-turning.md; forge-cli sends a
    turning document there by one branch on `is_turning`, no change to forge-cam-lang), and the
    machine in CAM-MACHINE's format (machine.rs reads it; data/machines-lathe.toml is a copy of

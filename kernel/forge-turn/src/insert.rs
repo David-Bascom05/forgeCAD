@@ -43,6 +43,17 @@ pub struct Body {
     /// A solid of revolution about the spindle axis (a drill on the centre line): its section is
     /// its own image under π, no smear.
     pub on_axis: bool,
+    /// A cylinder along z (a boring bar's shank): its axis `dx` from the reference point in x, at
+    /// centre height, radius `r`, from z0 to z1 relative to the reference point. Its σ-image is
+    /// a rectangle the checker works out per move (check.rs); the core is not used.
+    pub cyl: Option<Cyl>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Cyl {
+    pub dx: f64,
+    pub r: f64,
+    pub z: [f64; 2],
 }
 
 /// What the tool does.
@@ -58,6 +69,9 @@ pub enum Kind {
     Thread,
     /// A drill on the centre line.
     Drill,
+    /// ID turning and facing with a boring bar (right hand: it feeds toward the chuck, −z, and
+    /// out, +ρ); the insert points to +ρ.
+    Bore,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -433,6 +447,7 @@ pub fn turning_tool(
         depth: [0.0, ins.thickness],
         relief,
         on_axis: false,
+        cyl: None,
     };
     // the holder: its head holds the insert's far corners and the shank's front, the shank runs
     // out along +ρ for its length, b wide along z, h deep below centre height. The nose is f from
@@ -475,6 +490,7 @@ pub fn turning_tool(
         depth: [ins.thickness, hol.h],
         relief,
         on_axis: false,
+        cyl: None,
     };
     let shank_body = Body {
         name: "shank".into(),
@@ -484,6 +500,7 @@ pub fn turning_tool(
         depth: [0.0, hol.h],
         relief: 0.0,
         on_axis: false,
+        cyl: None,
     };
     Ok(TurnTool {
         id: id.into(),
@@ -501,6 +518,153 @@ pub fn turning_tool(
         f: 0.2,
         ap: 2.0,
         source: "decoded from the ISO codes; holder head and f generic: verify with the vendor".into(),
+    })
+}
+
+/// An ISO 6261 boring bar, decoded: shank diameter, length, insert shape, style (κr), hand.
+#[derive(Clone, Debug, PartialEq)]
+pub struct BarSpec {
+    pub d: f64,
+    pub length: f64,
+    pub shape: char,
+    pub kapr: f64,
+}
+
+/// `S20R-SCLCR09`, `A16R-SDUCR07`: shank material and diameter, length letter, then clamping,
+/// insert shape, style, clearance, hand, edge length.
+pub fn decode_bar(code: &str) -> Result<BarSpec, ToolError> {
+    let c = code.trim();
+    let (head, tail) = c
+        .split_once('-')
+        .ok_or_else(|| code_err(code, "an ISO 6261 bar code has a dash (e.g. S20R-SCLCR09)"))?;
+    let h: Vec<char> = head.chars().collect();
+    if h.len() < 4 || !matches!(h[0], 'S' | 'A' | 'E' | 'C') {
+        return Err(code_err(
+            code,
+            "shank: a material letter (S A E C), a diameter, a length letter",
+        ));
+    }
+    let d: f64 = h[1..h.len() - 1]
+        .iter()
+        .collect::<String>()
+        .parse()
+        .map_err(|_| code_err(code, "the shank diameter"))?;
+    let length = match h[h.len() - 1] {
+        'H' => 100.0,
+        'K' => 125.0,
+        'M' => 150.0,
+        'P' => 170.0,
+        'Q' => 180.0,
+        'R' => 200.0,
+        'S' => 250.0,
+        'T' => 300.0,
+        x => return Err(code_err(code, format!("length letter `{x}` not known"))),
+    };
+    let t: Vec<char> = tail.chars().collect();
+    if t.len() < 5 {
+        return Err(code_err(
+            code,
+            "after the dash: clamping, shape, style, clearance, hand",
+        ));
+    }
+    if !matches!(t[0], 'S' | 'P') {
+        return Err(code_err(
+            code,
+            "only screw (S) and lever (P) clamping: a top clamp stands above the rake face",
+        ));
+    }
+    let kapr = match t[2] {
+        'L' => 95.0,
+        'J' => 93.0,
+        'U' => 93.0,
+        'F' => 90.0,
+        'Q' => 107.5,
+        x => return Err(code_err(code, format!("bar style `{x}` not known (L J U F Q)"))),
+    };
+    if t[4] != 'R' {
+        return Err(code_err(code, "only right-hand (R) bars in this phase"));
+    }
+    Ok(BarSpec {
+        d,
+        length,
+        shape: t[1],
+        kapr,
+    })
+}
+
+/// A boring tool: an insert in a right-hand boring bar. The insert is the OD tool's mirrored
+/// across the reference point (it points to +ρ, its edges at 180° − φ); the bar is a cylinder
+/// along z, its axis f − r_ε toward the axis from the nose centre (f = D/2 + 3, generic, as
+/// catalogues give for S16–S25 bars: verify with the vendor), from the nose's lowest point for
+/// its length (the head and seat under the insert lie inside its cylinder). The insert's
+/// clearance under the edge is its own plus a generic 6° inclination in the bar.
+pub fn boring_tool(id: &str, insert: &str, bar: &str, seat_deg: Option<f64>) -> Result<TurnTool, ToolError> {
+    let ins = decode_insert(insert)?;
+    let b = decode_bar(bar)?;
+    if ins.shape != b.shape {
+        return Err(code_err(
+            bar,
+            format!("the bar takes `{}` inserts, not `{}`", b.shape, ins.shape),
+        ));
+    }
+    // boring bars incline the insert for radial clearance under the edge: generic 6°
+    let clear_deg = seat_deg.unwrap_or(6.0);
+    let phi1 = b.kapr - 90.0;
+    let phi2 = phi1 + ins.eps;
+    let re = ins.re;
+    let ls = ins.l - 2.0 * re / tan(0.5 * ins.eps.to_radians()).max(1e-9);
+    let (d1, d2) = (dir(phi1), dir(phi2));
+    let od = match ins.shape {
+        'T' => vec![[0.0, 0.0], sc(d1, ls), sc(d2, ls)],
+        _ => {
+            let a = sc(d1, ls);
+            let bb = sc(d2, ls);
+            vec![[0.0, 0.0], a, add(a, bb), bb]
+        }
+    };
+    let core: Vec<[f64; 2]> = od.iter().map(|p| [-p[0], p[1]]).collect();
+    let relief = tan((ins.clearance + clear_deg).max(0.0).to_radians());
+    let f = 0.5 * b.d + 3.0;
+    let insert_body = Body {
+        name: "insert".into(),
+        cutter: true,
+        core: ccw(core),
+        r: re,
+        depth: [0.0, ins.thickness],
+        relief,
+        on_axis: false,
+        cyl: None,
+    };
+    let bar_body = Body {
+        name: "bar".into(),
+        cutter: false,
+        core: vec![[0.0, 0.0]],
+        r: 0.0,
+        depth: [0.0, 0.0],
+        relief: 0.0,
+        on_axis: false,
+        cyl: Some(Cyl {
+            dx: -(f - re),
+            r: 0.5 * b.d,
+            z: [-re, b.length],
+        }),
+    };
+    Ok(TurnTool {
+        id: id.into(),
+        kind: Kind::Bore,
+        code: insert.into(),
+        re,
+        edges: [180.0 - phi1, 180.0 - phi2],
+        l: ins.l,
+        width: b.d,
+        pitch: [0.0, 0.0],
+        tip: [re, -re],
+        tip_number: 2,
+        bodies: vec![insert_body, bar_body],
+        vc: 180.0,
+        f: 0.15,
+        ap: 1.0,
+        source: "decoded from the ISO codes; bar f and seat generic: verify with the vendor".into(),
     })
 }
 
@@ -540,6 +704,7 @@ pub fn groove_tool(
         depth: [0.0, 3.0],
         relief: tan(7f64.to_radians()),
         on_axis: false,
+        cyl: None,
     };
     let holder = Body {
         name: "blade holder".into(),
@@ -554,6 +719,7 @@ pub fn groove_tool(
         depth: [0.0, h],
         relief: 0.0,
         on_axis: false,
+        cyl: None,
     };
     Ok(TurnTool {
         id: id.into(),
@@ -592,6 +758,7 @@ pub fn thread_tool(id: &str, rt: f64, pitch: [f64; 2], h: f64) -> Result<TurnToo
         depth: [0.0, 3.5],
         relief: tan(8f64.to_radians()),
         on_axis: false,
+        cyl: None,
     };
     let holder = Body {
         name: "thread holder".into(),
@@ -606,6 +773,7 @@ pub fn thread_tool(id: &str, rt: f64, pitch: [f64; 2], h: f64) -> Result<TurnToo
         depth: [0.0, h],
         relief: 0.0,
         on_axis: false,
+        cyl: None,
     };
     Ok(TurnTool {
         id: id.into(),
@@ -631,25 +799,32 @@ pub fn drill_tool(id: &str, d: f64, point_deg: f64, flute: f64, shank: f64) -> R
     let r = 0.5 * d;
     let tip_h = r / tan(0.5 * point_deg.to_radians());
     let sr = 0.5 * shank;
-    let core = vec![
-        [0.0, 0.0],
-        [r, tip_h],
-        [r, flute],
-        [sr.max(r), flute],
-        [sr.max(r), flute + 60.0],
-        [-sr.max(r), flute + 60.0],
-        [-sr.max(r), flute],
-        [-r, flute],
-        [-r, tip_h],
-    ];
-    let body = Body {
+    // the cutting part: the point and the fluted cylinder (convex); the shank above it its own
+    // body (a hull of both would invent material between them, wider than the flutes)
+    let flutes = Body {
         name: "drill".into(),
         cutter: true,
-        core: ccw(hull(core)),
+        core: ccw(vec![[0.0, 0.0], [r, tip_h], [r, flute], [-r, flute], [-r, tip_h]]),
         r: 0.0,
         depth: [0.0, 0.0],
         relief: 0.0,
         on_axis: true,
+        cyl: None,
+    };
+    let shank_body = Body {
+        name: "drill shank".into(),
+        cutter: false,
+        core: ccw(vec![
+            [-sr, flute],
+            [sr, flute],
+            [sr, flute + 60.0],
+            [-sr, flute + 60.0],
+        ]),
+        r: 0.0,
+        depth: [0.0, 0.0],
+        relief: 0.0,
+        on_axis: true,
+        cyl: None,
     };
     Ok(TurnTool {
         id: id.into(),
@@ -662,7 +837,7 @@ pub fn drill_tool(id: &str, d: f64, point_deg: f64, flute: f64, shank: f64) -> R
         pitch: [0.0, 0.0],
         tip: [0.0, 0.0],
         tip_number: 0,
-        bodies: vec![body],
+        bodies: vec![flutes, shank_body],
         vc: 25.0,
         f: 0.1,
         ap: 0.0,
@@ -753,6 +928,17 @@ fn from_table(r: &Table) -> Result<TurnTool, ToolError> {
                 toml::num(r, "shank").unwrap_or(25.0),
             )?
         }
+        "bore" => {
+            let ins = toml::text(r, "insert").ok_or(ToolError::Missing {
+                record: rec.clone(),
+                field: "insert",
+            })?;
+            let bar = toml::text(r, "bar").ok_or(ToolError::Missing {
+                record: rec.clone(),
+                field: "bar",
+            })?;
+            boring_tool(&id, ins, bar, toml::num(r, "seat_clearance"))?
+        }
         "drill" => drill_tool(
             &id,
             need("diameter")?,
@@ -763,7 +949,7 @@ fn from_table(r: &Table) -> Result<TurnTool, ToolError> {
         x => {
             return Err(ToolError::Bad {
                 record: rec,
-                why: format!("kind `{x}`: turn, groove, part, thread or drill"),
+                why: format!("kind `{x}`: turn, bore, groove, part, thread or drill"),
             });
         }
     };

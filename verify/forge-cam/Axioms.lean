@@ -101,3 +101,5 @@ import ForgeCam
 #print axioms ForgeCam.Turn.turn_clear_ball
 #print axioms ForgeCam.Turn.sep_axis_hull
 #print axioms ForgeCam.Turn.zono_eq_hull
+#print axioms ForgeCam.Turn.smear_hull
+#print axioms ForgeCam.Turn.eroded_gap

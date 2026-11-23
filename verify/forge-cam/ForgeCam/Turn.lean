@@ -13,6 +13,10 @@ half-profile. forge-turn's checker works in the plane:
   against Hf = H ∪ mirror(H) (check.rs `Obstacle::of`).
 * `sigma_mem`: σ(x, y) = sign(x)·ρ(x, y) moves a section point outward from the axis by at most
   the smear, on its own side: σ(B) ⊆ (Z₊ ∪ Z₋) ⊕ B_r.
+* `smear_hull`, `eroded_gap`: the smear vertex by vertex (it is convex in x, so by Jensen the
+  smeared swept core lies in the hull of the swept vertices and their own smears), and a slab
+  shrunk past the nose radius (the core eroded by e: every axis gap gains e, the smear taken e
+  nearer the axis).
 * `turn_clear`: the assembly, by `clear_of_frontier`: a connected swept set Z (convex) whose
   frontier pieces of Hf all keep `c > 0` from Z, with one point of Z outside Hf, keeps `c` from
   all of Hf; its r-neighbourhood keeps `c − r` (`turn_clear_ball`).
@@ -189,6 +193,107 @@ theorem sep_axis_hull {P F : Set (ℝ × ℝ)} {w : ℝ × ℝ} {M m : ℝ} (hMm
 theorem zono_eq_hull (V : Set (ℝ × ℝ)) (g1 g2 : ℝ × ℝ) :
     convexHull ℝ V + segment ℝ 0 g1 + segment ℝ 0 g2 = convexHull ℝ (V + {0, g1} + {0, g2}) := by
   rw [convexHull_add, convexHull_add, convexHull_pair, convexHull_pair]
+
+/-- The smear, vertex by vertex (check.rs `body_line`): g convex and nonnegative (the smear
+√(x² + b²) − x of depth b, convex in x), every point z of conv V moved out along x by any
+δ ∈ [0, g(z.1)] stays in the hull of the vertices and the vertices moved out by their own g. -/
+theorem smear_hull {V : Set (ℝ × ℝ)} {g : ℝ → ℝ} (hg : ConvexOn ℝ univ g) (hg0 : ∀ x, 0 ≤ g x) :
+    ∀ z ∈ convexHull ℝ V, ∀ δ, 0 ≤ δ → δ ≤ g z.1 →
+      z + (δ, 0) ∈ convexHull ℝ (V ∪ (fun v => v + (g v.1, (0 : ℝ))) '' V) := by
+  set H := convexHull ℝ (V ∪ (fun v => v + (g v.1, (0 : ℝ))) '' V)
+  -- the points every smear of which stays in H: a convex set holding V
+  let S : Set (ℝ × ℝ) := {z | ∀ δ, 0 ≤ δ → δ ≤ g z.1 → z + (δ, 0) ∈ H}
+  have hV : V ⊆ S := by
+    intro v hv δ h0 h1
+    have hA : v ∈ H := subset_convexHull ℝ _ (Or.inl hv)
+    have hB : v + (g v.1, (0 : ℝ)) ∈ H := subset_convexHull ℝ _ (Or.inr ⟨v, hv, rfl⟩)
+    rcases eq_or_lt_of_le (hg0 v.1) with hz | hpos
+    · have : δ = 0 := by linarith
+      subst this
+      simpa only [Prod.mk_zero_zero, add_zero] using hA
+    · -- v + δ e₁ = (1 − t)·v + t·(v + g e₁), t = δ / g
+      have ht0 : 0 ≤ δ / g v.1 := div_nonneg h0 hpos.le
+      have ht1 : δ / g v.1 ≤ 1 := (div_le_one hpos).mpr h1
+      have := (convex_convexHull ℝ _) hA hB (by linarith : 0 ≤ 1 - δ / g v.1) ht0 (by ring)
+      convert this using 1
+      ext <;> simp [Prod.smul_mk, smul_eq_mul] <;> field_simp <;> ring
+  have hS : Convex ℝ S := by
+    intro x hx y hy a b ha hb hab δ h0 h1
+    -- g at the combination is at most the combination of g's
+    have hgc : g (a • x + b • y).1 ≤ a * g x.1 + b * g y.1 := by
+      have := hg.2 (mem_univ x.1) (mem_univ y.1) ha hb hab
+      simpa [smul_eq_mul] using this
+    set D := a * g x.1 + b * g y.1 with hD
+    rcases eq_or_lt_of_le (add_nonneg (mul_nonneg ha (hg0 x.1)) (mul_nonneg hb (hg0 y.1))) with hz | hpos
+    · have : δ = 0 := by
+        have : δ ≤ 0 := by
+          calc δ ≤ g (a • x + b • y).1 := h1
+            _ ≤ D := hgc
+            _ = 0 := hz.symm
+        linarith
+      subst this
+      have hx0 := hx 0 le_rfl (hg0 _)
+      have hy0 := hy 0 le_rfl (hg0 _)
+      have := (convex_convexHull ℝ _) hx0 hy0 ha hb hab
+      simpa only [Prod.mk_zero_zero, add_zero] using this
+    · -- δ = a·(g x · δ/D) + b·(g y · δ/D), each share within its own g
+      set k := δ / D
+      have hk0 : 0 ≤ k := div_nonneg h0 hpos.le
+      have hk1 : k ≤ 1 := (div_le_one hpos).mpr (le_trans h1 hgc)
+      have hxs := hx (g x.1 * k) (mul_nonneg (hg0 _) hk0) (by nlinarith [hg0 x.1])
+      have hys := hy (g y.1 * k) (mul_nonneg (hg0 _) hk0) (by nlinarith [hg0 y.1])
+      have := (convex_convexHull ℝ _) hxs hys ha hb hab
+      convert this using 1
+      have hδ : δ = D * k := by rw [mul_div_cancel₀ _ hpos.ne']
+      ext <;> simp [Prod.smul_mk, smul_eq_mul] <;> rw [hδ, hD] <;> ring
+  exact convexHull_min hV hS
+
+/-- The eroded section's axis bound (check.rs `axis_gap`'s `ero`): p has the disc of radius e
+about it in K; every point q of K has w·q ≤ M and, with the smear taken e nearer the axis,
+w·q + w.1·g(q.1 − e) ≤ M (g antitone: the smear falls as x grows). Then p moved
+out by any δ ≤ g(p.1) has w·_ ≤ M − e·|w|: every axis gap gains e. -/
+theorem eroded_gap {K : Set (ℝ × ℝ)} {g : ℝ → ℝ} {w p : ℝ × ℝ} {M e δ : ℝ} (he : 0 ≤ e)
+    (hg : Antitone g) (hw : w ≠ 0)
+    (hball : ∀ u, d2 u p ≤ e ^ 2 → u ∈ K)
+    (hK : ∀ q ∈ K, wdot w q ≤ M) (hKs : ∀ q ∈ K, wdot w q + w.1 * g (q.1 - e) ≤ M)
+    (hδ0 : 0 ≤ δ) (hδ : δ ≤ g p.1) :
+    wdot w (p + (δ, 0)) + e * √(w.1 ^ 2 + w.2 ^ 2) ≤ M := by
+  set L := √(w.1 ^ 2 + w.2 ^ 2) with hL
+  have hpos : 0 < w.1 ^ 2 + w.2 ^ 2 := by
+    rcases w with ⟨w1, w2⟩
+    by_contra h
+    have h1 : w1 = 0 := by nlinarith [sq_nonneg w1, sq_nonneg w2]
+    have h2 : w2 = 0 := by nlinarith [sq_nonneg w1, sq_nonneg w2]
+    exact hw (by simp [h1, h2])
+  have hLpos : 0 < L := sqrt_pos.mpr hpos
+  have hLsq : L ^ 2 = w.1 ^ 2 + w.2 ^ 2 := sq_sqrt hpos.le
+  -- q = p + e·w/|w| is in K
+  set q : ℝ × ℝ := (p.1 + e * w.1 / L, p.2 + e * w.2 / L)
+  have hq : q ∈ K := by
+    apply hball
+    unfold d2; simp only [q]
+    have : (e * w.1 / L) ^ 2 + (e * w.2 / L) ^ 2 = e ^ 2 := by
+      rw [div_pow, div_pow, ← add_div, mul_pow, mul_pow, ← mul_add, ← hLsq]
+      field_simp
+    nlinarith [this]
+  have hwq : wdot w q = wdot w p + e * L := by
+    unfold wdot; simp only [q]; field_simp
+    linear_combination (-e) * hLsq
+  have hq1 : q.1 - e ≤ p.1 := by
+    simp only [q]
+    have : w.1 ≤ L := by
+      rw [hL]; exact le_sqrt_of_sq_le (by nlinarith [sq_nonneg w.2])
+    have : e * w.1 / L ≤ e := by
+      rw [div_le_iff₀ hLpos]; nlinarith
+    linarith
+  have hgg : δ ≤ g (q.1 - e) := le_trans hδ (hg hq1)
+  unfold wdot at *
+  simp only [Prod.fst_add, Prod.snd_add, add_zero] at *
+  rcases le_or_gt 0 w.1 with h1 | h1
+  · have := hKs q hq
+    nlinarith [mul_le_mul_of_nonneg_left hgg h1]
+  · have := hK q hq
+    nlinarith [mul_nonneg_of_nonpos_of_nonpos h1.le (by linarith : -δ ≤ 0)]
 
 section assembly
 

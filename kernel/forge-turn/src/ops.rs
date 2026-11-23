@@ -389,6 +389,90 @@ pub fn rough(
     })
 }
 
+/// Boring, rough: a hole of radius r0 (drilled) opened outward in axial passes at every ap and
+/// at every bore diameter of the part, each down to the part grown by the nose radius and leave
+/// (from inside), or to z_lo, retracting at 45° toward the axis.
+pub fn bore_rough(
+    s: &Setup,
+    tool: &TurnTool,
+    t: u32,
+    leave: f64,
+    ap: f64,
+    z_lo: f64,
+    z_top: f64,
+    r0: f64,
+) -> Result<OpPath, OpError> {
+    if !(leave >= 0.0) {
+        return Err(OpError::Geometry(format!(
+            "a leave of {leave}: below the part (G1 holds the cutter from P ⊕ B_leave, leave ≥ 0)"
+        )));
+    }
+    if tool.kind != Kind::Bore {
+        return Err(OpError::Tool(format!(
+            "boring needs a boring bar, not `{}`",
+            tool.id
+        )));
+    }
+    let re = tool.re;
+    let c = grown(s, re + leave)?;
+    let z_start = z_top + APPROACH + re;
+    let x_in = (r0 - APPROACH).max(0.0);
+    let start = [x_in, z_start];
+    let mut steps = vec![Step::Rapid(start)];
+    let mut xs: Vec<f64> = Vec::new();
+    let mut k = 1;
+    loop {
+        let x = r0 + ap * k as f64 - re;
+        if x + re >= s.part.bbox[2] {
+            break;
+        }
+        xs.push(x);
+        k += 1;
+    }
+    for sg in &c.segs {
+        if let Seg::Line { a, b } = *sg
+            && a.x == b.x
+            && a.x + re > r0 + 1e-6
+            && a.x + re < s.part.bbox[2]
+        {
+            xs.push(a.x - 1e-7 * (1.0 + a.x.abs()));
+        }
+    }
+    xs.sort_by(|a, b| a.total_cmp(b));
+    xs.dedup_by(|a, b| (*a - *b).abs() < 1e-6);
+    for x in xs {
+        let mut zs = Vec::new();
+        for sg in &c.segs {
+            meet_vertical(sg, x, &mut zs);
+        }
+        let hit = zs
+            .iter()
+            .copied()
+            .filter(|z| *z < z_start)
+            .fold(f64::NEG_INFINITY, f64::max);
+        let z_end = hit.max(z_lo);
+        if z_end >= z_top {
+            continue;
+        }
+        steps.push(Step::Rapid([x, z_start]));
+        steps.push(Step::Feed([x, z_end]));
+        steps.push(Step::Feed([x - RETRACT, z_end + RETRACT]));
+        steps.push(Step::Rapid([x - RETRACT, z_start]));
+    }
+    steps.push(Step::Rapid(start));
+    Ok(OpPath {
+        name: format!("rough bore, leave {leave}"),
+        tool: tool.clone(),
+        t,
+        spindle: css(tool),
+        f: tool.f,
+        leave,
+        start,
+        steps,
+        removal: None,
+    })
+}
+
 /// Splits a piece at parameter points where it crosses z = z0, keeping the part above (or the
 /// whole piece if it does not cross). Returns the kept piece and whether it ended at the line.
 fn clip_above(s: &Seg, z0: f64) -> Option<(Seg, bool)> {
@@ -446,21 +530,37 @@ pub fn finish(s: &Setup, tool: &TurnTool, t: u32, leave: f64, z_lo: f64) -> Resu
             "a leave of {leave}: below the part (G1 holds the cutter from P ⊕ B_leave, leave ≥ 0)"
         )));
     }
-    if tool.kind != Kind::Turn {
+    if !matches!(tool.kind, Kind::Turn | Kind::Bore) {
         return Err(OpError::Tool(format!(
-            "finishing needs a turning tool, not `{}`",
+            "finishing needs a turning tool or a boring bar, not `{}`",
             tool.id
         )));
     }
+    let inside = tool.kind == Kind::Bore;
     let re = tool.re;
-    let c = grown(s, re + leave)?.reversed();
-    let x0 = s.part.bbox[0].max(0.0);
-    // the start: the piece crossing ρ = x0 going +ρ at the top
+    // outside: clockwise round the grown part from over the front face at its least radius;
+    // inside (a bore): counter-clockwise from over the front face, just outside the bore's mouth
+    let c = if inside {
+        grown(s, re + leave)?
+    } else {
+        grown(s, re + leave)?.reversed()
+    };
+    let x0 = if inside {
+        let (lo, hi) = (s.part.bbox[0], s.part.bbox[2]);
+        lo + (0.5 * (hi - lo)).min(1.0)
+    } else {
+        s.part.bbox[0].max(0.0)
+    };
     let n = c.segs.len();
     let mut start_at = None;
     for (i, sg) in c.segs.iter().enumerate() {
         let (a, b) = (sg.start(), sg.end());
-        if a.x <= x0 && b.x > x0 && a.y > s.part.bbox[3] {
+        let crosses = if inside {
+            a.x >= x0 && b.x < x0
+        } else {
+            a.x <= x0 && b.x > x0
+        };
+        if crosses && a.y > s.part.bbox[3] {
             start_at = Some(i);
             break;
         }
@@ -519,12 +619,18 @@ pub fn finish(s: &Setup, tool: &TurnTool, t: u32, leave: f64, z_lo: f64) -> Resu
         }
     }
     let last = steps.last().unwrap().to();
-    steps.push(Step::Feed([last[0] + RETRACT, last[1] + RETRACT]));
-    let out = [s.bar_r + APPROACH + re, last[1] + RETRACT];
-    steps.push(Step::Rapid(out));
-    steps.push(Step::Rapid([out[0], start[1]]));
+    if inside {
+        // toward the axis, then straight up out of the bore
+        steps.push(Step::Feed([last[0] - RETRACT, last[1] + RETRACT]));
+        steps.push(Step::Rapid([last[0] - RETRACT, start[1]]));
+    } else {
+        steps.push(Step::Feed([last[0] + RETRACT, last[1] + RETRACT]));
+        let out = [s.bar_r + APPROACH + re, last[1] + RETRACT];
+        steps.push(Step::Rapid(out));
+        steps.push(Step::Rapid([out[0], start[1]]));
+    }
     Ok(OpPath {
-        name: format!("finish OD, leave {leave}"),
+        name: format!("finish {}, leave {leave}", if inside { "bore" } else { "OD" }),
         tool: tool.clone(),
         t,
         spindle: css(tool),
@@ -881,10 +987,11 @@ fn outline_points(b: &Body, p: [f64; 2], less: f64, dense: bool, out: &mut Vec<[
             while t2 < t1 {
                 t2 += std::f64::consts::TAU;
             }
-            // for a finishing cut (leave 0), the cutting corners (the core's least x) densely
+            // for a finishing cut (leave 0), the cutting corners (the core's least x, and the
+            // reference vertex: a boring nose) densely
             // enough that the polygon falls short of the disc by under SAMPLE_GAP, so the stock
             // model leaves no sliver on the finished surface; elsewhere three directions
-            let m = if dense && k[i][0] == xmin {
+            let m = if dense && (k[i][0] == xmin || k[i] == [0.0, 0.0]) {
                 let step = 2.0 * dmath::acos_clamped(1.0 - SAMPLE_GAP / rr.max(SAMPLE_GAP));
                 (((t2 - t1) / step).ceil() as usize).clamp(2, 64)
             } else {
@@ -1322,7 +1429,7 @@ pub fn certify(s: &Setup, ops: &[OpPath], posted: Option<&[Vec<PMove>]>) -> Resu
     // (plus tol) is a corner no finishing nose reaches, decided exactly
     let re_fin = ops
         .iter()
-        .filter(|o| o.tool.kind == Kind::Turn && o.leave == 0.0)
+        .filter(|o| matches!(o.tool.kind, Kind::Turn | Kind::Bore) && o.leave == 0.0)
         .map(|o| o.tool.re)
         .fold(f64::INFINITY, f64::min);
     let re_fin = if re_fin.is_finite() { re_fin } else { 0.0 };

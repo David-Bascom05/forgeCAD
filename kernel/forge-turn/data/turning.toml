@@ -29,6 +29,15 @@ f = 0.08
 ap = 0.5
 
 [[lathe_tool]]
+id = "id-bore-ccmt"
+kind = "bore"
+insert = "CCMT09T304"
+bar = "S20R-SCLCR09"
+vc = 180.0
+f = 0.12
+ap = 1.0
+
+[[lathe_tool]]
 id = "groove-3"
 kind = "groove"
 width = 3.0
@@ -61,3 +70,14 @@ point = 118.0
 flute = 50.0
 vc = 25.0
 f = 0.12
+
+[[lathe_tool]]
+id = "drill-26"
+kind = "drill"
+diameter = 26.0
+point = 140.0
+flute = 60.0
+shank_diameter = 32.0
+vc = 150.0
+f = 0.08
+source = "a generic indexable drill (U-drill): verify with the vendor"

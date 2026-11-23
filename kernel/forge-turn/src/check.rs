@@ -422,13 +422,22 @@ fn sat_lower(
             axes.push([-g[1], g[0]]);
         }
     }
+    sat_pts(&pts, &axes, obs, cut, zbox, 0.0)
+}
+
+/// The separating-axis lower bound for Z = conv(pts) against the obstacle's pieces near it (see
+/// `sat_lower`), with the axes every piece shares given.
+/// `ero`: the set is not conv(pts) but its points eroded by ero (each has a disc of radius ero
+/// in conv(pts), or in the hull its smear came from): every axis gap gains ero (Turn.lean
+/// `eroded_gap`).
+fn sat_pts(pts: &[[f64; 2]], axes: &[[f64; 2]], obs: &Obstacle, cut: f64, zbox: &[f64; 4], ero: f64) -> f64 {
     let mut best = f64::INFINITY;
     for f in &obs.pieces {
         let bg = box_gap(zbox, &f.bx);
         if bg >= cut || bg >= best {
             continue;
         }
-        let mut piece_best = piece_gap(&pts, &axes, &f.sec, f.gap, cut);
+        let mut piece_best = piece_gap(pts, axes, &f.sec, f.gap, cut, ero);
         // a concave arc's hull reaches over what it faces: if the whole arc is not separated,
         // its sub-arcs are (their hulls lie within their sagitta of the arc), the least of them
         if piece_best < cut
@@ -468,7 +477,7 @@ fn sat_lower(
                         b: p,
                         ccw,
                     };
-                    sub_min = sub_min.min(piece_gap(&pts, &axes, &sec, f.gap.max(g), cut));
+                    sub_min = sub_min.min(piece_gap(pts, axes, &sec, f.gap.max(g), cut, ero));
                     prev = p;
                     if sub_min <= piece_best {
                         break;
@@ -490,7 +499,7 @@ fn sat_lower(
 
 /// The best separating-axis gap of one piece from conv(P): the direction from P's nearest point
 /// toward the piece, the piece's own normal (a segment), and the shared axes.
-fn piece_gap(pts: &[[f64; 2]], axes: &[[f64; 2]], sec: &Sec, gap: f64, cut: f64) -> f64 {
+fn piece_gap(pts: &[[f64; 2]], axes: &[[f64; 2]], sec: &Sec, gap: f64, cut: f64, ero: f64) -> f64 {
     let mut own: [[f64; 2]; 3] = [[0.0, 0.0]; 3];
     let mut no = 0;
     if let Sec::Seg { a, b } = *sec {
@@ -516,7 +525,7 @@ fn piece_gap(pts: &[[f64; 2]], axes: &[[f64; 2]], sec: &Sec, gap: f64, cut: f64)
     }
     let mut best = 0.0f64;
     for w in own[..no].iter().chain(axes.iter()) {
-        let g = axis_gap(pts, sec, gap, *w);
+        let g = axis_gap(pts, sec, gap, *w, ero);
         if g > best {
             best = g;
             if best >= cut {
@@ -575,7 +584,7 @@ fn sector(c: [f64; 2], a: [f64; 2], b: [f64; 2], ccw: bool, d: [Ival; 2]) -> i32
 /// (min over the piece's convex hull of w·y − max over P of w·p) / |w|, rounded down; ≤ 0 when
 /// the axis does not separate. An arc's ends off its circle by `gap` count twice, as slab::dist
 /// takes them.
-fn axis_gap(pts: &[[f64; 2]], s: &Sec, gap: f64, w: [f64; 2]) -> f64 {
+fn axis_gap(pts: &[[f64; 2]], s: &Sec, gap: f64, w: [f64; 2], ero: f64) -> f64 {
     let wi = [ip(w[0]), ip(w[1])];
     let dot = |p: [f64; 2]| wi[0].mul(ip(p[0])).add(wi[1].mul(ip(p[1])));
     let mut pmax = f64::NEG_INFINITY;
@@ -595,10 +604,11 @@ fn axis_gap(pts: &[[f64; 2]], s: &Sec, gap: f64, w: [f64; 2]) -> f64 {
         }
     };
     let num = ip(fmin).sub(ip(pmax)).lo;
-    if !(num > 0.0) {
+    let g = ip(num).div(wl).add(ip(ero)).lo;
+    if !(g > 0.0) {
         return 0.0;
     }
-    ip(num).div(wl).lo.max(0.0)
+    g
 }
 
 fn box_gap(a: &[f64; 4], b: &[f64; 4]) -> f64 {
@@ -607,21 +617,108 @@ fn box_gap(a: &[f64; 4], b: &[f64; 4]) -> f64 {
     ip(gx).sqr().add(ip(gy).sqr()).sqrt().lo
 }
 
-fn core_box(core: &[[f64; 2]], p: [f64; 2]) -> [f64; 4] {
-    let mut b = [f64::INFINITY, f64::INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY];
-    for k in core {
-        let q = [p[0] + k[0], p[1] + k[1]];
-        merge(&mut b, [q[0], q[1], q[0], q[1]]);
+/// A point of K ⊖ B_e (every point within e of it in K): K's first vertex moved along its
+/// bisector by e / sin(θ/2), proven e from every edge line in outward-rounded arithmetic (else
+/// None). For e = 0, the vertex itself.
+fn inner_point(core: &[[f64; 2]], e: f64) -> Option<[f64; 2]> {
+    if e == 0.0 {
+        return Some(core[0]);
     }
-    b
+    let n = core.len();
+    if n < 3 {
+        return None;
+    }
+    let (p, v, q) = (core[n - 1], core[0], core[1]);
+    let unit = |d: [f64; 2]| {
+        let l = (d[0] * d[0] + d[1] * d[1]).sqrt();
+        [d[0] / l, d[1] / l]
+    };
+    let u1 = unit([v[0] - p[0], v[1] - p[1]]);
+    let u2 = unit([q[0] - v[0], q[1] - v[1]]);
+    // inward normals of a counter-clockwise polygon: the edge directions turned left
+    let (n1, n2) = ([-u1[1], u1[0]], [-u2[1], u2[0]]);
+    let k = 1.0 + n1[0] * n2[0] + n1[1] * n2[1];
+    if !(k > 1e-9) {
+        return None;
+    }
+    // a little past the vertex the bisector names, so rounding cannot leave it short
+    let f = e * (1.0 + 1e-6) / k;
+    let c = [v[0] + f * (n1[0] + n2[0]), v[1] + f * (n1[1] + n2[1])];
+    for i in 0..n {
+        let (a, b) = (core[i], core[(i + 1) % n]);
+        let d = sub(b, a);
+        let w = sub(c, a);
+        let dist = d[0].mul(w[1]).sub(d[1].mul(w[0])).div(len2(d));
+        if !(dist.lo >= e) {
+            return None;
+        }
+    }
+    Some(c)
 }
 
 /// The number of depth slabs a body is cut into (more: a tighter smear bound).
 pub const SLABS: usize = 6;
 
+/// The σ-image of a disc in the xy plane, centre (xc, 0), radius r, along x: σ sends a point to
+/// sign(x)·√(x² + y²), so the image is [xc − r, xc + r] when the disc misses x = 0, and reaches
+/// −√(r² − xc²) (xc ≥ 0) or +√(r² − xc²) (xc < 0) across it. Rounded outward.
+fn disc_image(xc: f64, r: f64) -> (f64, f64) {
+    let lo = ip(xc).sub(ip(r)).lo;
+    let hi = ip(xc).add(ip(r)).hi;
+    if xc.abs() >= r {
+        return (lo, hi);
+    }
+    let h = ip(r).sqr().sub(ip(xc).sqr()).max(ip(0.0)).sqrt();
+    if xc >= 0.0 {
+        (lo.min(-h.hi), hi)
+    } else {
+        (lo, hi.max(h.hi))
+    }
+}
+
+/// A cylinder along z moving with the reference point from a to b: its axis runs over [xa, xb]
+/// at centre height, so its σ-image lies in [min lo, max hi] × [z range] (each end's disc image,
+/// and the disc centred on the axis, (−r, r), when the axis crosses x = 0): a static rectangle,
+/// checked as a core with no move and no smear.
+fn cyl_line(c: crate::insert::Cyl, a: [f64; 2], b: [f64; 2], obs: &mut Obstacle, need: f64) -> Verdict {
+    let (xa, xb) = (ip(a[0]).add(ip(c.dx)), ip(b[0]).add(ip(c.dx)));
+    let mut lo = f64::INFINITY;
+    let mut hi = f64::NEG_INFINITY;
+    for x in [xa.lo, xa.hi, xb.lo, xb.hi] {
+        let (l, h) = disc_image(x, c.r);
+        lo = lo.min(l);
+        hi = hi.max(h);
+    }
+    if xa.lo.min(xb.lo) <= 0.0 && xa.hi.max(xb.hi) >= 0.0 {
+        lo = lo.min(-c.r);
+        hi = hi.max(c.r);
+    }
+    let z0 = ip(a[1].min(b[1])).add(ip(c.z[0])).lo;
+    let z1 = ip(a[1].max(b[1])).add(ip(c.z[1])).hi;
+    let core = [[lo, z0], [hi, z0], [hi, z1], [lo, z1]];
+    let zbox = [lo, z0, hi, z1];
+    let cut = ip(need).add(ip(obs.mu)).add(ip(1.0)).hi;
+    let raw = sat_lower(&core, [0.0, 0.0], [0.0, 0.0], [0.0, 0.0], obs, cut, &zbox);
+    let zl = ip(raw).sub(ip(obs.mu)).lo;
+    if zl <= 0.0 {
+        return Verdict::Undecided { lower: zl };
+    }
+    // every piece misses the rectangle: one corner decides whether it is outside
+    if obs.inside_off(core[0], 0.5 * zl) {
+        return Verdict::Undecided { lower: -zl };
+    }
+    if zl < need {
+        return Verdict::Undecided { lower: zl };
+    }
+    Verdict::Clear { lower: zl }
+}
+
 /// The clearance of one body moving along a straight move: the least distance proven, over the
 /// body's slabs (`need`: what must be proven, for the early exit).
 fn body_line(body: &Body, a: [f64; 2], b: [f64; 2], obs: &mut Obstacle, need: f64, slabs: usize) -> Verdict {
+    if let Some(c) = body.cyl {
+        return cyl_line(c, a, b, obs, need);
+    }
     let mut coords = 0.0f64;
     for k in &body.core {
         coords = coords.max(k[0].abs()).max(k[1].abs());
@@ -655,36 +752,64 @@ fn body_line(body: &Body, a: [f64; 2], b: [f64; 2], obs: &mut Obstacle, need: f6
             } else {
                 d0 + (d1 - d0) * (j + 1) as f64 / n as f64
             };
-            // the slab's radius: the outline shrunk by its relief at the slab's top
-            let rj = if body.relief > 0.0 {
-                ip(body.r).sub(ip(top - d0).mul(ip(body.relief))).hi.max(0.0)
+            // the slab's radius: the outline shrunk by its relief at the slab's top. Shrunk past
+            // r, the section is the core itself eroded by the excess `ero`: each of its points
+            // has a disc of radius ero inside K, so it is ero further from anything outside K's
+            // smeared hull — that hull taken with the smear ero nearer the axis (the disc's
+            // points sit up to ero further out, where the smear is smaller: Turn.lean
+            // `eroded_clear`)
+            let (rj, ero) = if body.relief > 0.0 {
+                let shrink = ip(top - d0).mul(ip(body.relief));
+                let rj = ip(body.r).sub(shrink).hi.max(0.0);
+                (rj, shrink.sub(ip(body.r)).lo.max(0.0))
             } else {
-                body.r
+                (body.r, 0.0)
             };
-            // the smear: √(xm² + bot²) − xm at the least |x| of the slab's section (0 when it
-            // reaches the axis)
-            let e = if body.on_axis || bot == 0.0 {
-                0.0
-            } else {
-                let xm = if reach_neg {
-                    0.0
-                } else {
-                    ip(a[0].min(b[0])).add(ip(xmin_core)).sub(ip(rj)).lo.max(0.0)
-                };
-                ip(xm).sqr().add(ip(bot).sqr()).sqrt().sub(ip(xm)).hi
-            };
-            let g1 = [side * e, 0.0];
-            let mut zbox = core_box(core, a);
-            merge(&mut zbox, core_box(core, b));
-            if side > 0.0 {
-                zbox[2] = ip(zbox[2]).add(ip(e)).hi;
-            } else {
-                zbox[0] = ip(zbox[0]).sub(ip(e)).lo;
+            // the smear, vertex by vertex: σ moves a section point at x (on this side) out by at
+            // most g(x) = √(x² + bot²) − x, convex in x, so the smeared swept core lies in the
+            // hull of each swept vertex and that vertex moved out by its own g (Turn.lean
+            // `smear_hull`, by Jensen)
+            let mut pts: Vec<[f64; 2]> = Vec::with_capacity(4 * core.len());
+            let mut emax = 0.0f64;
+            for v in core {
+                for t in [a, b] {
+                    let base = [t[0] + v[0], t[1] + v[1]];
+                    pts.push(base);
+                    if !(body.on_axis || bot == 0.0) {
+                        let x = ip(side).mul(ip(base[0])).sub(ip(ero));
+                        let g = x.sqr().add(ip(bot).sqr()).sqrt().sub(x).hi.max(0.0);
+                        emax = emax.max(g);
+                        let sx = ip(base[0]).add(ip(side * g));
+                        // rounded outward, away from the axis on this side
+                        pts.push([if side > 0.0 { sx.hi } else { sx.lo }, base[1]]);
+                    }
+                }
             }
+            let mut zbox = [f64::INFINITY, f64::INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY];
+            for p in &pts {
+                merge(&mut zbox, [p[0], p[1], p[0], p[1]]);
+            }
+            let mut axes: Vec<[f64; 2]> = Vec::with_capacity(core.len() * 2 + 4);
+            for i in 0..core.len() {
+                let (u, v) = (core[i], core[(i + 1) % core.len()]);
+                let d = [v[0] - u[0], v[1] - u[1]];
+                if d != [0.0, 0.0] {
+                    axes.push([d[1], -d[0]]);
+                    axes.push([-d[1], d[0]]);
+                }
+            }
+            if mg != [0.0, 0.0] {
+                axes.push([mg[1], -mg[0]]);
+                axes.push([-mg[1], mg[0]]);
+            }
+            axes.push([0.0, 1.0]);
+            axes.push([0.0, -1.0]);
             let need_core = need + rj;
             let cut = ip(need_core).add(ip(obs.mu)).add(ip(1.0)).hi;
-            let raw = sat_lower(core, a, g1, mg, obs, cut, &zbox);
-            let allow = round_allow(coords + e, 3.0);
+            let raw = sat_pts(&pts, &axes, obs, cut, &zbox, ero);
+            // each point a sum of two coordinates, and a smeared one a third (rounded, and the
+            // smeared point taken at its rounded value: within an ulp of its bound's)
+            let allow = round_allow(coords + emax, 3.0);
             let zl = ip(raw).sub(ip(allow)).sub(ip(obs.mu)).lo;
             if zl <= 0.0 {
                 return Verdict::Undecided { lower: zl - rj };
@@ -693,8 +818,11 @@ fn body_line(body: &Body, a: [f64; 2], b: [f64; 2], obs: &mut Obstacle, need: f6
             // clear_of_frontier one point decides whether Z is outside Hf
             // and Z is outside Hf: one point of it (the core's first vertex at the start: in
             // every slab's Z on both sides, and at least zl from ∂Hf)
-            if !checked_point {
-                let q = [a[0] + core[0][0], a[1] + core[0][1]];
+            if !checked_point || ero > 0.0 {
+                let q = match inner_point(core, ero) {
+                    Some(k) => [a[0] + k[0], a[1] + k[1]],
+                    None => return Verdict::Undecided { lower: zl - rj },
+                };
                 if obs.inside_off(q, 0.5 * zl) {
                     // inside by at least zl: a real point of the tool when it is at depth 0 on
                     // the x ≥ 0 side (σ is the identity there, and dist to Hf is dist to H)
@@ -720,7 +848,7 @@ fn body_line(body: &Body, a: [f64; 2], b: [f64; 2], obs: &mut Obstacle, need: f6
 /// the obstacle with an upper bound on dist(q, H) − r below need, or inside it by a proven
 /// positive depth.
 fn witness(body: &Body, a: [f64; 2], b: [f64; 2], obs: &mut Obstacle, need: f64) -> Option<Verdict> {
-    if body.depth[0] != 0.0 || body.core.is_empty() {
+    if body.depth[0] != 0.0 || body.core.is_empty() || body.cyl.is_some() {
         return None;
     }
     let pts: Vec<[f64; 2]> = [a, b]
@@ -766,7 +894,11 @@ pub fn clearance(body: &Body, mv: &Move, obs: &mut Obstacle, need: f64) -> Verdi
                     return h;
                 }
                 // a finer depth cut tightens the smear bound
-                return body_line(body, a, b, obs, need, 4 * SLABS);
+                let v = body_line(body, a, b, obs, need, 4 * SLABS);
+                if let Verdict::Undecided { .. } = v {
+                    return body_line(body, a, b, obs, need, 16 * SLABS);
+                }
+                return v;
             }
             v
         }

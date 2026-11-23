@@ -20,7 +20,8 @@
 //! prog  = lathe_program(op1, post: "fanuc-lathe", number: 1)
 //! ```
 //!
-//! Also `turn_groove(op, tool:, from:, to:, r:)`, `turn_thread(op, tool:, d:, pitch:, from:,
+//! Also `bore_rough(op, tool:, leave:, step:, to:, from: D)` (D the drilled hole's diameter; then
+//! `turn_finish` with a boring tool finishes the bore), `turn_groove(op, tool:, from:, to:, r:)`, `turn_thread(op, tool:, d:, pitch:, from:,
 //! to:, passes:)`, `part_off(op, tool:, at:)`, `turn_drill(op, tool:, to:, peck:)`. Every op is
 //! posted, read back (the round trip), and the path the text means is what is certified
 //! (forge_turn::ops::certify). The reply is `forgecad.cam/1` with `"process": "turning"`.
@@ -305,6 +306,23 @@ impl TurnCam {
                     top,
                 );
                 op(self, "rough", r, si)
+            }
+            "bore_rough" => {
+                let si = self.setup_of(a)?;
+                let (t, st) = self.tool_of(a)?;
+                let s = &self.setups[si].1;
+                let top = num(a, "top", Some(s.part.bbox[3]))?;
+                let r = ops::bore_rough(
+                    s,
+                    &t,
+                    st,
+                    num(a, "leave", Some(0.3))?,
+                    num(a, "step", Some(t.ap))?,
+                    num(a, "to", None)?,
+                    top,
+                    0.5 * num(a, "from", None)?,
+                );
+                op(self, "bore rough", r, si)
             }
             "turn_finish" => {
                 let si = self.setup_of(a)?;
