@@ -8,8 +8,9 @@ pub use std::time::Instant;
 pub use web_time::Instant;
 
 /// Runs `f` off the caller's thread where there are threads: natively a named thread; in the
-/// browser (one thread, no shared memory) right away, before this returns. A job's result goes
-/// back through a channel either way, so the caller reads it the same.
+/// threaded browser build a Web Worker on the page's memory (`threads`); in the single-threaded
+/// browser build right away, before this returns. A job's result goes back through a channel
+/// either way, so the caller reads it the same.
 pub fn spawn(name: &str, f: impl FnOnce() + Send + 'static) {
     #[cfg(not(target_arch = "wasm32"))]
     {
@@ -18,10 +19,107 @@ pub fn spawn(name: &str, f: impl FnOnce() + Send + 'static) {
             .spawn(f)
             .expect("a thread");
     }
-    #[cfg(target_arch = "wasm32")]
+    #[cfg(all(target_arch = "wasm32", target_feature = "atomics"))]
+    {
+        let _ = name;
+        threads::spawn(Box::new(f));
+    }
+    #[cfg(all(target_arch = "wasm32", not(target_feature = "atomics")))]
     {
         let _ = name;
         f();
+    }
+}
+
+/// A lock taken. Natively (and single-threaded) std's; in the threaded browser build it spins on
+/// `try_lock` and never waits: the page's main thread may not block (`memory.atomic.wait` traps
+/// there), and the locks shared with a worker are held for a few instructions.
+pub fn lock<T>(m: &std::sync::Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+    #[cfg(all(target_arch = "wasm32", target_feature = "atomics"))]
+    loop {
+        match m.try_lock() {
+            Ok(g) => return g,
+            Err(std::sync::TryLockError::Poisoned(e)) => return e.into_inner(),
+            Err(std::sync::TryLockError::WouldBlock) => std::hint::spin_loop(),
+        }
+    }
+    #[cfg(not(all(target_arch = "wasm32", target_feature = "atomics")))]
+    m.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+/// The threaded browser build's threads: a job handed to a new Web Worker (web/worker.js) that
+/// instantiates this same module on the page's shared memory and runs it (`worker_run`).
+#[cfg(all(target_arch = "wasm32", target_feature = "atomics"))]
+pub mod threads {
+    use std::collections::VecDeque;
+    use std::sync::{Condvar, Mutex};
+    use wasm_bindgen::prelude::*;
+
+    type Job = Box<dyn FnOnce() + Send>;
+
+    /// The jobs waiting, how many workers wait for one, and the wakes handed out: a job pushed
+    /// either reserves a waiting worker (a wake) or starts a new one, so a job that waits for
+    /// jobs it spawned (a scope) always has a worker for them.
+    struct Pool {
+        jobs: VecDeque<Job>,
+        idle: usize,
+        wakes: usize,
+    }
+
+    static POOL: Mutex<Pool> = Mutex::new(Pool {
+        jobs: VecDeque::new(),
+        idle: 0,
+        wakes: 0,
+    });
+    static READY: Condvar = Condvar::new();
+
+    #[wasm_bindgen]
+    extern "C" {
+        /// The page's (and each worker's): a Web Worker on the shared memory, into the pool
+        /// (web/threads.js, worker.js).
+        #[wasm_bindgen(js_namespace = globalThis, js_name = forge_thread)]
+        fn js_thread(module: JsValue, memory: JsValue, id: u32);
+    }
+
+    /// A job for the pool's workers. Never waits: the page's main thread calls it.
+    pub fn spawn(f: Job) {
+        let new_worker = {
+            let mut p = super::lock(&POOL);
+            p.jobs.push_back(f);
+            if p.idle > 0 {
+                p.idle -= 1;
+                p.wakes += 1;
+                READY.notify_one();
+                false
+            } else {
+                true
+            }
+        };
+        if new_worker {
+            js_thread(wasm_bindgen::module(), wasm_bindgen::memory(), 0);
+        }
+    }
+
+    /// A worker's life: the pool's jobs, one after another, waiting between them (a worker may).
+    #[wasm_bindgen]
+    pub fn worker_run(_id: u32) {
+        let mut p = POOL.lock().unwrap_or_else(|e| e.into_inner());
+        loop {
+            if let Some(job) = p.jobs.pop_front() {
+                drop(p);
+                job();
+                p = POOL.lock().unwrap_or_else(|e| e.into_inner());
+                continue;
+            }
+            p.idle += 1;
+            loop {
+                p = READY.wait(p).unwrap_or_else(|e| e.into_inner());
+                if p.wakes > 0 {
+                    p.wakes -= 1;
+                    break;
+                }
+            }
+        }
     }
 }
 
@@ -114,11 +212,11 @@ pub mod web {
 /// each `send` runs it on what waits, before returning.
 pub struct Server<J> {
     tx: std::sync::mpsc::Sender<J>,
-    #[cfg(target_arch = "wasm32")]
+    #[cfg(all(target_arch = "wasm32", not(target_feature = "atomics")))]
     run: std::rc::Rc<std::cell::RefCell<ServerRun<J>>>,
 }
 
-#[cfg(target_arch = "wasm32")]
+#[cfg(all(target_arch = "wasm32", not(target_feature = "atomics")))]
 type ServerRun<J> = (
     std::sync::mpsc::Receiver<J>,
     Box<dyn FnMut(J, &std::sync::mpsc::Receiver<J>) -> bool>,
@@ -130,21 +228,18 @@ pub fn serve<J: Send + 'static>(
     #[allow(unused_mut)] mut f: impl FnMut(J, &std::sync::mpsc::Receiver<J>) -> bool + Send + 'static,
 ) -> Server<J> {
     let (tx, rx) = std::sync::mpsc::channel::<J>();
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(not(all(target_arch = "wasm32", not(target_feature = "atomics"))))]
     {
-        std::thread::Builder::new()
-            .name(name.into())
-            .spawn(move || {
-                while let Ok(j) = rx.recv() {
-                    if !f(j, &rx) {
-                        return;
-                    }
+        spawn(name, move || {
+            while let Ok(j) = rx.recv() {
+                if !f(j, &rx) {
+                    return;
                 }
-            })
-            .expect("a thread");
+            }
+        });
         Server { tx }
     }
-    #[cfg(target_arch = "wasm32")]
+    #[cfg(all(target_arch = "wasm32", not(target_feature = "atomics")))]
     {
         let _ = name;
         Server {
@@ -160,7 +255,7 @@ impl<J> Server<J> {
         if self.tx.send(j).is_err() {
             return false;
         }
-        #[cfg(target_arch = "wasm32")]
+        #[cfg(all(target_arch = "wasm32", not(target_feature = "atomics")))]
         {
             // a send from inside the worker's own run is taken by that run
             let Ok(mut r) = self.run.try_borrow_mut() else {

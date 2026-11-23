@@ -548,7 +548,7 @@ fn font_dir() -> std::path::PathBuf {
                 .expect("clock");
             std::path::PathBuf::from("/tmp").join(format!("forge-lang-wired-{}", t.as_nanos()))
         } else {
-            std::env::temp_dir().join(format!("forge-lang-wired-{}", std::process::id()))
+            forge_dirs::temp_dir().join(format!("forge-lang-wired-{}", forge_dirs::process_id()))
         };
         std::fs::create_dir_all(&d).expect("temp dir");
         std::fs::write(d.join("block.ttf"), forge_lang::bench::font_bytes()).expect("font");

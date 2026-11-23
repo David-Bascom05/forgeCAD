@@ -500,3 +500,59 @@ fn trim_to_bend_parts_the_zones_by_a_kerf() {
         }
     }
 }
+
+#[test]
+fn tear_corners_part_the_zones_up_and_down() {
+    // a tear: a kerf slit along the bisector of the zones' inner lines through where they cross,
+    // the later flange trimmed past the other zone's footprint. On the box (90 degrees, both
+    // senses) and on corners of 75 and 120 degrees: folded and flat valid, no flat overlap, the
+    // corner reported as a tear
+    let tear = Some(CornerKind::Tear);
+    let mut cases: Vec<(String, Sheet)> = vec![];
+    for th in [90.0f64, -90.0] {
+        cases.push((format!("box {th}"), boxed_at(tear, th.to_radians())));
+    }
+    for deg in [75.0f64, 120.0] {
+        for th in [90.0f64, -90.0] {
+            let g = Gauge {
+                thickness: T,
+                radius: R,
+                rule: BendRule::K(K),
+            };
+            let a = (180.0 - deg).to_radians();
+            let v2 = Point2::new(60.0, 0.0) + forge_math::Vec2::new(dmath::cos(a), dmath::sin(a)) * 40.0;
+            let pts = [(0.0, 0.0), (60.0, 0.0), (v2.x, v2.y), (0.0, v2.y)];
+            let n = pts.len();
+            let lp = ProfileLoop::new(
+                (0..n)
+                    .map(|i| {
+                        let (p, q) = (pts[i], pts[(i + 1) % n]);
+                        (
+                            Segment::Line {
+                                a: Point2::new(p.0, p.1),
+                                b: Point2::new(q.0, q.1),
+                            },
+                            i as u64,
+                        )
+                    })
+                    .collect(),
+            );
+            let (mut s, base) = Sheet::face(FeatureId(9), g, Frame::WORLD, &[lp]).unwrap();
+            s.corner_default = tear;
+            s.flange(base, 0, th.to_radians(), H).unwrap();
+            s.flange(base, 1, th.to_radians(), H).unwrap();
+            cases.push((format!("{deg} {th}"), s));
+        }
+    }
+    for (name, s) in &cases {
+        for map in [Map::Folded, Map::Flat] {
+            let b = build_with(s, map).unwrap_or_else(|e| panic!("{name} {map:?}: {e:?}"));
+            let p = forge_topo::check::check(&b.body);
+            assert!(p.is_empty(), "{name} {map:?}: {p:?}");
+            assert!(
+                b.corners.iter().any(|c| c.kind == CornerKind::Tear),
+                "{name}: a tear made"
+            );
+        }
+    }
+}

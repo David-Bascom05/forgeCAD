@@ -554,7 +554,7 @@ fn a_misspelt_name_is_respelt() {
 #[test]
 fn a_round_too_big_gets_the_largest_that_builds() {
     let src = format!("{BLOCK}param round.r = 25\nround = fillet(edges(of: base.end), r)\n");
-    let dir = std::env::temp_dir();
+    let dir = forge_dirs::temp_dir();
     let opts = forge_lang::Options {
         dir: Some(dir),
         fit_sizes: true,

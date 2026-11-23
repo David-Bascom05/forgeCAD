@@ -41,6 +41,32 @@ impl Curve2 {
             Curve2::Spline { points, .. } => (points[0], points[points.len() - 1]),
         }
     }
+
+    /// x dy - y dx over the curve, halved: its share of a closed loop's signed area. Lines and
+    /// arcs in closed form; splines by `Spline::area_term` (Gauss, exact without weights).
+    pub fn area_term(&self) -> f64 {
+        match self {
+            Curve2::Line { a, b } => 0.5 * (a.x * b.y - a.y * b.x),
+            Curve2::Arc { c, r, sweep, .. } => {
+                let (p, q) = self.ends();
+                // the chord's share seen from the centre, and the sector's r² sweep / 2
+                0.5 * (c.x * (q.y - p.y) - c.y * (q.x - p.x)) + 0.5 * r * r * sweep
+            }
+            Curve2::Spline {
+                degree,
+                knots,
+                points,
+                weights,
+            } => {
+                let pts: Vec<forge_math::Point3> = points
+                    .iter()
+                    .map(|q| forge_math::Point3::new(q.x, q.y, 0.0))
+                    .collect();
+                forge_geom::spline::Spline::from_nurbs(*degree, knots, &pts, weights.as_deref())
+                    .map_or(0.0, |s| s.area_term())
+            }
+        }
+    }
 }
 
 /// A bend's line on the flat: the middle of its zone, from one end of the mold line to the other.
@@ -130,16 +156,12 @@ pub fn dxf_layered(p: &Pattern, part: Option<&str>, layers: &DxfLayers) -> Strin
     write_dxf(p, part, layers)
 }
 
-/// The contour holding the rest: the one whose box is largest.
+/// The contour holding the rest: the one that runs counter-clockwise, its signed area positive.
+/// The loops are oriented (the blank counter-clockwise, its holes clockwise) and the sheet is one
+/// piece, so exactly one loop is positive; its size plays no part.
 pub fn outer_contour(p: &Pattern) -> Option<usize> {
-    let area = |c: &Vec<Curve2>| {
-        let (lo, hi) = bounds(&Pattern {
-            contours: vec![c.clone()],
-            ..Pattern::default()
-        });
-        (hi.x - lo.x) * (hi.y - lo.y)
-    };
-    (0..p.contours.len()).max_by(|&a, &b| area(&p.contours[a]).total_cmp(&area(&p.contours[b])))
+    let area = |c: &Vec<Curve2>| c.iter().map(Curve2::area_term).sum::<f64>();
+    (0..p.contours.len()).find(|&k| area(&p.contours[k]) > 0.0)
 }
 
 /// A bend zone's tangent lines on the flat: its centre line moved half the allowance each way.
@@ -571,7 +593,7 @@ impl Dxf {
                 }
             }
             Curve2::Arc { c, r, start, sweep } => {
-                let whole = sweep.abs() >= dmath::TAU * (1.0 - 1e-12);
+                let whole = is_whole_turn(*sweep);
                 self.head(if whole { "CIRCLE" } else { "ARC" }, layer, owner);
                 self.pair(100, "AcDbCircle");
                 for (k, v) in [(10, c.x), (20, c.y), (30, 0.0), (40, *r)] {
@@ -625,8 +647,15 @@ impl Dxf {
     }
 }
 
-/// The corners of a box round the pattern's contours (arcs by their circles, splines by their
-/// control points: never inside the curves).
+/// An arc that is a whole circle: a contour of one arc, which `Strips::pattern` gives a sweep of
+/// exactly a turn (by topology: one arc closing on itself), so the writers need no tolerance.
+fn is_whole_turn(sweep: f64) -> bool {
+    sweep.abs() >= dmath::TAU
+}
+
+/// The corners of a box round the pattern's contours: lines and arcs exactly (an arc by its ends
+/// and the axis extremes its sweep passes), splines by their control points (never inside the
+/// curve).
 fn bounds(p: &Pattern) -> (Point2, Point2) {
     let mut lo = Point2::new(f64::INFINITY, f64::INFINITY);
     let mut hi = Point2::new(f64::NEG_INFINITY, f64::NEG_INFINITY);
@@ -634,15 +663,32 @@ fn bounds(p: &Pattern) -> (Point2, Point2) {
         lo = Point2::new(lo.x.min(q.x), lo.y.min(q.y));
         hi = Point2::new(hi.x.max(q.x), hi.y.max(q.y));
     };
-    for c in p.contours.iter().flatten() {
-        match c {
+    for curve in p.contours.iter().flatten() {
+        match curve {
             Curve2::Line { a, b } => {
                 add(*a);
                 add(*b);
             }
-            Curve2::Arc { c, r, .. } => {
-                add(Point2::new(c.x - r, c.y - r));
-                add(Point2::new(c.x + r, c.y + r));
+            Curve2::Arc { c, r, start, sweep } => {
+                // its ends, and each axis extreme its sweep passes
+                let (a, b) = curve.ends();
+                add(a);
+                add(b);
+                let (lo, hi) = if *sweep >= 0.0 {
+                    (*start, start + sweep)
+                } else {
+                    (start + sweep, *start)
+                };
+                for (k, q) in [(c.x + r, c.y), (c.x, c.y + r), (c.x - r, c.y), (c.x, c.y - r)]
+                    .into_iter()
+                    .enumerate()
+                {
+                    let at = k as f64 * dmath::PI / 2.0;
+                    let m = ((lo - at) / dmath::TAU).ceil();
+                    if at + m * dmath::TAU <= hi {
+                        add(Point2::new(q.0, q.1));
+                    }
+                }
             }
             Curve2::Spline { points, .. } => points.iter().for_each(|q| add(*q)),
         }
@@ -697,7 +743,7 @@ pub fn dwg_layered(p: &Pattern, part: Option<&str>, l: &DxfLayers) -> Vec<u8> {
         let shape = match c {
             Curve2::Line { a, b } => Shape::Line { a: pt(*a), b: pt(*b) },
             Curve2::Arc { c, r, start, sweep } => {
-                if sweep.abs() >= dmath::TAU * (1.0 - 1e-12) {
+                if is_whole_turn(*sweep) {
                     Shape::Circle { c: pt(*c), r: *r }
                 } else {
                     let (lo, hi) = if *sweep > 0.0 {

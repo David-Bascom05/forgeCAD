@@ -35,6 +35,8 @@ pub fn build_report(path: &str) -> String {
     };
     let (run, _) = forge_lang::run(&src, opts, Default::default());
     let mut f = vec![
+        // the threads the kernel's parallel paths had (more than one only on a thread that may wait)
+        ("threads", num(forge_math::par::threads() as f64)),
         ("ok", run.ok().into()),
         (
             "errors",

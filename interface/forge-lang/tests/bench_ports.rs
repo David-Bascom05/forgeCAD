@@ -16,7 +16,7 @@ fn font_dir() -> std::path::PathBuf {
                 .expect("clock");
             std::path::PathBuf::from("/tmp").join(format!("forge-lang-bench-{}", t.as_nanos()))
         } else {
-            std::env::temp_dir().join(format!("forge-lang-bench-{}", std::process::id()))
+            forge_dirs::temp_dir().join(format!("forge-lang-bench-{}", forge_dirs::process_id()))
         };
         std::fs::create_dir_all(&d).expect("temp dir");
         std::fs::write(d.join(forge_lang::bench::FONT), forge_lang::bench::font_bytes()).expect("font");
@@ -85,9 +85,12 @@ fn bracket() {
     parity("bracket", (230513.20997850536, 37, 88, 1));
 }
 
+// crank, gearbox and frame: the original's edges less the redundant vertices unify now joins
+// (two pieces of one ellipse meeting across its start: 1 in crank, 6 in gearbox; two traces of
+// one branch: 2 in frame)
 #[test]
 fn crank() {
-    parity("crank", (116672.18051036284, 119, 315, 1));
+    parity("crank", (116672.18051036284, 119, 314, 1));
 }
 
 #[test]
@@ -97,7 +100,7 @@ fn jack() {
 
 #[test]
 fn gearbox() {
-    parity("gearbox", (999983.0686296044, 211, 605, 1));
+    parity("gearbox", (999983.0686296044, 211, 599, 1));
 }
 
 #[test]
@@ -107,7 +110,7 @@ fn guard() {
 
 #[test]
 fn frame() {
-    parity("frame", (422204.6047341148, 178, 507, 1));
+    parity("frame", (422204.6047341148, 178, 505, 1));
 }
 
 #[test]

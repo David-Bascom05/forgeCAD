@@ -393,7 +393,7 @@ fn through_range(
 /// Feature `i` (an extrude or revolve with any extent) as the plain extrude or revolve it
 /// comes to: a distance from a moved sketch, or an angle from a turned one.
 pub(crate) fn resolve<'a>(features: History<'a>, i: usize) -> Result<Resolved<'a>, RegenError> {
-    resolve_given(features, i, None)
+    resolve_with(features, i, &features.features[i], None)
 }
 
 /// `resolve`, a through extent sized by what the regen gives (`hole::reach`).
@@ -402,8 +402,28 @@ pub(crate) fn resolve_given<'a>(
     i: usize,
     given: Option<&crate::Given>,
 ) -> Result<Resolved<'a>, RegenError> {
+    resolve_with(features, i, &features.features[i], given)
+}
+
+/// `resolve`, of `f` standing in feature `i`'s place in the history (one region of a
+/// `Feature::Regions`, as its plain extrude).
+pub(crate) fn resolve_as<'a>(
+    features: History<'a>,
+    i: usize,
+    f: &'a Feature,
+) -> Result<Resolved<'a>, RegenError> {
+    resolve_with(features, i, f, None)
+}
+
+/// `resolve_as` with `resolve_given`'s sizing of a through extent.
+fn resolve_with<'a>(
+    features: History<'a>,
+    i: usize,
+    f: &'a Feature,
+    given: Option<&crate::Given>,
+) -> Result<Resolved<'a>, RegenError> {
     let err = bad(i);
-    match &features[i] {
+    match f {
         Feature::Extrude {
             extent: Extent::Distance(_) | Extent::Tapered { .. } | Extent::Along { .. },
             ..
@@ -411,7 +431,7 @@ pub(crate) fn resolve_given<'a>(
         | Feature::Revolve {
             extent: Turn::Angle(_),
             ..
-        } => Ok(Resolved::Plain(Cow::Borrowed(&features.features[i]), None)),
+        } => Ok(Resolved::Plain(Cow::Borrowed(f), None)),
         Feature::Extrude {
             profile,
             extent: Extent::ThroughAlong { toward, dir },
