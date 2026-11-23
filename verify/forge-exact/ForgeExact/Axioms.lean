@@ -14,6 +14,7 @@ import ForgeExact.DecideOnce.Sample
 import ForgeExact.DecideOnce.Sampler
 import ForgeExact.DecideOnce.Frontier
 import ForgeExact.DecideOnce.Local
+import ForgeExact.DecideOnce.SampleLocal
 
 /-!
 # Only the standard axioms
@@ -144,3 +145,5 @@ elab "#standard_axioms " ids:ident* : command => do
   ForgeExact.DecideOnce.reg_in
   ForgeExact.DecideOnce.zeroThickness_iff_in
   ForgeExact.DecideOnce.correct_ok_in
+  ForgeExact.DecideOnce.Sample.local_exact
+  ForgeExact.DecideOnce.Sample.local_correct

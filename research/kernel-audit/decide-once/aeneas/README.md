@@ -67,11 +67,19 @@ None for the core itself. What remains is the frontier optimisation:
    - F1: `far_unchanged`;
    - F2: `frontier_local`;
    - the global split: `split_at_region` (`DecideOnce/Frontier.lean`);
-   - (c′) in the open region for any ledger satisfying `ExactIn` (`DecideOnce/Local.lean`).
+   - (c′) in the open region for any ledger satisfying `ExactIn` (`DecideOnce/Local.lean`);
+   - every `ExactIn` clause but compatibility, for the bridge's local ledger: it is the sampler's
+     ledger of the region's samples, `sampleLedger ps ss (regionX ps X In)` (`local_exact`), and
+     `local_correct` is (c′) for it (`DecideOnce/SampleLocal.lean`).
 
    Open:
-   - **`LocalCompat`**, the named hypothesis that every `ExactIn` theorem carries: each body's
+   - **`LocalCompat`**, the named hypothesis of `local_exact` and `local_correct`: each body's
      membership is constant on the local arrangement's full cells inside the region. It needs a
-     localized Jordan–Brouwer, since far face planes may cut a region cell.
-   - the remaining `ExactIn` clauses for the bridge's local ledger, i.e. the sampler's lemmas
-     restricted to the region.
+     localized Jordan–Brouwer, since far face planes may cut a region cell. Owned by dol-jordan.
+   - The region's facts for the six walls, stated as hypotheses of `local_exact`. Their proof is pure
+     sign algebra on the wall planes:
+     - `U` (open R°) is open;
+     - each cell lies wholly in or out of it;
+     - region cells are closed upward under `≤`.
+   - `SamplesIn`: the bridge's samples hit every region cell the boundary needs. This is the local
+     form of `Samples`, which the global sampler (`sampler_covers`) discharges.
