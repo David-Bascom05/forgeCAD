@@ -1185,7 +1185,22 @@ fn plan_once_in(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
 
     // where the solids touch, both sides kept would be material meeting itself
     for t in &touching {
+        // at a cone's apex the face's sheet is its generators, decided in closed form; one that
+        // cannot be read there is refused at the point, never guessed
+        let sheets = if t.dir.is_none()
+            && t.faces
+                .iter()
+                .enumerate()
+                .any(|(k, &f)| crate::apex::is_cone(bodies[k], f))
+        {
+            crate::apex::sheets_at(bodies, [&index[0], &index[1]], t)?
+        } else {
+            [None; 2]
+        };
         let near = |side: Side| {
+            if let Some(w) = sheets[side] {
+                return Some(w);
+            }
             let (body, f) = (bodies[side], t.faces[side]);
             local_class(body, &index[side], f, t.at, t.dir, |q| {
                 match index[1 - side].classify(q) {
@@ -2224,10 +2239,7 @@ pub(crate) fn touches(
 /// over in the result): each ends where the other starts and one skin runs on tangent across the
 /// touch, with material all on its one side. Only faces facing apart have material meeting itself.
 pub(crate) fn flows_on(bodies: [&Body; 2], faces: [FaceId; 2], at: Point3, flip: bool) -> bool {
-    let normal = |k: usize| {
-        let s = &bodies[k].face(faces[k]).surface;
-        bodies[k].face_normal(faces[k], s.project(at))
-    };
+    let normal = |k: usize| bodies[k].face_normal_at(faces[k], at);
     match (normal(0), normal(1)) {
         (Some(x), Some(y)) => (x.dot(y.get()) > 0.0) != flip,
         _ => false,
@@ -2240,8 +2252,7 @@ pub(crate) fn flows_on(bodies: [&Body; 2], faces: [FaceId; 2], at: Point3, flip:
 /// meet there and nowhere near. `any`: a union, where either solid's inside is material.
 #[cold]
 pub(crate) fn crack_tip(bodies: [&Body; 2], index: [&Index; 2], t: &Touch, any: bool) -> bool {
-    let s = &bodies[0].face(t.faces[0]).surface;
-    let Some(n) = bodies[0].face_normal(t.faces[0], s.project(t.at)) else {
+    let Some(n) = bodies[0].face_normal_at(t.faces[0], t.at) else {
         return false;
     };
     let dirs: Vec<Vec3> = match t.dir {
@@ -2290,7 +2301,8 @@ pub(crate) fn local_class<T: PartialEq>(
     class: impl Fn(Point3) -> Option<T>,
 ) -> Option<T> {
     let face = body.face(f);
-    let n = body.face_normal(f, face.surface.project(p))?;
+    // (a ball's pole has its geometric normal; a cone's apex none: `apex_sheet` decides there)
+    let n = body.face_normal_at(f, p)?;
     let dirs: Vec<Vec3> = match dir {
         Some(d) => {
             let w = n.cross(d).normalize()?.get();
@@ -3016,8 +3028,19 @@ pub(crate) fn trim(
                     bodies[1 - k].face(into).surface.distance(q) <= tol::LINEAR
                 };
                 let straight = matches!(edge.curve, Curve::Line(_));
+                // in closed form where there is one: a stretch that only meets the surface at
+                // points (a rim tangent to a crown twice) is not on it, wherever samples land
+                let lies = || match curve_surface(
+                    &edge.curve,
+                    Interval::new(w[0], w[1]),
+                    &bodies[1 - k].face(into).surface,
+                ) {
+                    CurveSurface::Hits(_) => false,
+                    CurveSurface::OnSurface => true,
+                    CurveSurface::Overlap => on_it(0.25) && on_it(0.75),
+                };
                 if index[1 - k].point_in_face(into, m) != Where::Inside
-                    || !(straight || on_it(0.25) && on_it(0.75))
+                    || !(straight || on_it(0.25) && on_it(0.75) && lies())
                 {
                     continue;
                 }
@@ -5194,29 +5217,37 @@ pub(crate) fn uv_dir(body: &Body, f: FaceId, p: &Piece, forward: bool, at_end: b
     let face = body.face(f);
     let uv = face.surface.project(d.p);
     let sd = face.surface.deriv(uv);
-    if let Surface::Cone(_) = face.surface
-        && sd.du.dot(sd.du) <= 1e-18 * sd.dv.dot(sd.dv)
-    {
-        // an apex has no tangent plane: its rulings are told by their u
-        return round_point(face, p, t, uv, forward != at_end);
-    }
-    if sd.du.dot(sd.du) <= 1e-18 * sd.dv.dot(sd.dv) {
-        let (e1, e2) = pole_frame(&face.surface, uv).ok_or_else(|| {
-            BoolError::unhandled(Unhandled::SplitThroughSingular {
-                face: FaceRef::of(body, f),
-            })
-        })?;
-        let (a, b) = (dir.dot(e1), dir.dot(e2));
-        return Ok(Vec2::new(if face.same_sense { a } else { -a }, b));
+    let (uu, uv2, vv) = (sd.du.dot(sd.du), sd.du.dot(sd.dv), sd.dv.dot(sd.dv));
+    // where u degenerates (an apex, a pole): one test, the rest off the common path
+    if uu <= 1e-18 * vv {
+        return singular_way(body, f, p, t, uv, dir, forward != at_end);
     }
     // least squares for (a, b) with a du + b dv = dir
-    let (uu, uv2, vv) = (sd.du.dot(sd.du), sd.du.dot(sd.dv), sd.dv.dot(sd.dv));
     let (ru, rv) = (sd.du.dot(dir), sd.dv.dot(dir));
     let Some((a, b)) = forge_math::linalg::solve2(uu, uv2, uv2, vv, ru, rv) else {
         return round_point(face, p, t, uv, forward != at_end);
     };
     let a = if face.same_sense { a } else { -a };
     Ok(Vec2::new(a, b))
+}
+
+/// `uv_dir` where u degenerates, at `uv`: a cone's apex has no tangent plane, so its rulings are
+/// told by their u (`round_point`); at a pole u says nothing, so the ways are told apart in the
+/// tangent plane (`pole_frame`).
+#[cold]
+#[inline(never)]
+fn singular_way(body: &Body, f: FaceId, p: &Piece, t: f64, uv: Point2, dir: Vec3, from_lo: bool) -> R<Vec2> {
+    let face = body.face(f);
+    if let Surface::Cone(_) = face.surface {
+        return round_point(face, p, t, uv, from_lo);
+    }
+    let (e1, e2) = pole_frame(&face.surface, uv).ok_or_else(|| {
+        BoolError::unhandled(Unhandled::SplitThroughSingular {
+            face: FaceRef::of(body, f),
+        })
+    })?;
+    let (a, b) = (dir.dot(e1), dir.dot(e2));
+    Ok(Vec2::new(if face.same_sense { a } else { -a }, b))
 }
 
 /// At a pole u says nothing: the ways are told apart in the tangent plane, turned as the

@@ -354,7 +354,7 @@ fn coincident_walls_1_stage_is_non_manifold() {
 
 // ---- The curved reference (ForgeExact/QRef): research/kernel-audit/exact-comparison-curved.md.
 // Each is a degenerate pair of the reliability scoreboard (two features), judged under the snap
-// rule. The first two agree; the rest are kernel disagreements, ignored until fixed.
+// rule. All agree now; the ball repros were kernel disagreements until the pole and apex rule.
 
 fn degenerate_curved(name: &str) -> Part {
     let part = forge_model::adversarial::degenerate_parts()
@@ -401,37 +401,35 @@ fn identical_cylinder_cut_is_empty() {
 
 /// A ball resting on the base's top face, touching it at one point (plane_sphere/tangent_top_above
 /// /Add). The union is non-manifold at (0, 0, 0): the two solids meet at a point. The kernel
-/// builds a body of 32 523.6 mm³ that passes `forge_topo::check`, as it did for a cube on a
-/// corner vertex (exact-comparison.md). Expected: ZeroThickness there.
+/// built a body of 32 523.6 mm³ that passed `forge_topo::check`, as it did for a cube on a
+/// corner vertex (exact-comparison.md): the ball's pole had no normal, so the touch went
+/// undecided. Now ZeroThickness there.
 #[test]
-#[ignore = "exact curved reference: a ball touching the top at a point is built, not refused ZeroThickness"]
 fn ball_resting_on_the_top_is_non_manifold() {
     agrees_curved(&degenerate_curved("plane_sphere/tangent_top_above/Add"));
 }
 
 /// A ball inside the base touching its top face from below, cut away
 /// (plane_sphere/tangent_top_inside/Cut). What is left pinches to nothing at (0, 0, 0): the
-/// material between the cavity and the top is a cusp ring. The kernel builds 31 476.4 mm³.
+/// material between the cavity and the top is a cusp ring. The kernel built 31 476.4 mm³; now
+/// ZeroThickness.
 #[test]
-#[ignore = "exact curved reference: a cavity touching the top from inside at a point is built"]
 fn cavity_touching_the_top_from_inside_is_non_manifold() {
     agrees_curved(&degenerate_curved("plane_sphere/tangent_top_inside/Cut"));
 }
 
 /// Two balls touching from outside (sphere_sphere/tangent_outside/Add): the union is two
-/// solids meeting at a point. The kernel builds 4 712.4 mm³.
+/// solids meeting at a point. The kernel built 4 712.4 mm³; now ZeroThickness.
 #[test]
-#[ignore = "exact curved reference: two balls touching at a point are united"]
 fn balls_touching_at_a_point_are_non_manifold() {
     agrees_curved(&degenerate_curved("sphere_sphere/tangent_outside/Add"));
 }
 
 /// A ball centred on the cylinder's top rim (cylinder_sphere/centre_on_rim/Add). The union is
 /// an ordinary solid (the reference certifies interior boxes, finds no contact, and its volume
-/// estimate is 6 806.8 mm³). The kernel refuses Unsupported(SplitThroughSingular) on the sphere,
-/// whose pole lies on the rim. Cut and Keep refuse alike.
+/// estimate is 6 806.8 mm³). The kernel refused Unsupported(SplitThroughSingular) on the sphere,
+/// whose pole lies on the rim (a hair off it, `normal` refused for a ball this small); it builds.
 #[test]
-#[ignore = "exact curved reference: a ball centred on a cylinder's rim is refused Unsupported(SplitThroughSingular)"]
 fn ball_centred_on_a_rim_builds() {
     agrees_curved(&degenerate_curved("cylinder_sphere/centre_on_rim/Add"));
 }
@@ -558,6 +556,36 @@ bowl = ball(top.c, r, cut: true)
     agrees_curved(&part);
 }
 
+/// Cone apexes touching another solid at the point, united: two solids meeting there, decided
+/// non-manifold exactly by the reference (`apexDecide`, curved-l2-proofs.md §3). The kernel built
+/// each (the apex had no normal, so the touch went undecided); its apex sheet now decides them in
+/// closed form and refuses ZeroThickness. On a box's vertex and edge, a cylinder's wall, another
+/// cone's wall, and a ball's pole on the apex.
+#[test]
+fn cone_apex_on_a_box_vertex_is_non_manifold() {
+    agrees_curved(&degenerate_curved("plane_cone/apex_on_vertex/Add"));
+}
+
+#[test]
+fn cone_apex_on_a_box_edge_is_non_manifold() {
+    agrees_curved(&degenerate_curved("plane_cone/apex_on_edge/Add"));
+}
+
+#[test]
+fn cone_apex_on_a_cylinder_wall_is_non_manifold() {
+    agrees_curved(&degenerate_curved("cylinder_cone/apex_on_wall/Add"));
+}
+
+#[test]
+fn cone_apex_on_a_cone_is_non_manifold() {
+    agrees_curved(&degenerate_curved("cone_cone/apex_on_surface/Add"));
+}
+
+#[test]
+fn ball_pole_on_a_cone_apex_is_non_manifold() {
+    agrees_curved(&degenerate_curved("cone_sphere/pole_on_apex/Add"));
+}
+
 /// A degenerate pair with its tool moved by `delta` LINEARs along axis `axis` (0, 1, 2): the
 /// curved band (exact-curved's `band` source).
 fn band_curved(name: &str, axis: usize, delta: f64) -> Part {
@@ -609,6 +637,24 @@ fn band_identical_cones_valid() {
 #[ignore = "exact curved reference: SplitCrossed on a sphere centred on a box edge, nudged"]
 fn band_ball_on_an_edge_splits() {
     agrees_curved(&band_curved("plane_sphere/centre_on_edge/Add", 0, 0.9));
+}
+
+/// A ball centred on the base's wall, its top on the top face's edge, moved 0.9 LINEAR along −x
+/// and cut (plane_sphere/centre_on_wall_tangent_top/Cut, x −0.9): the reference finds the ball's
+/// top touching the top face at (19.999991, 0, 0), 0.9 LINEAR inside its edge, and calls it
+/// non-manifold; the kernel builds once the SplitCrossed is fixed (fix-curved 19e1b6c). The touch
+/// is within LINEAR of the wall, so the ball's sheet there straddles it and the touch rule leaves
+/// it undecided; the x +0.9 mirror, alike within tolerance, the reference calls a solid, and y ±0.9
+/// ambiguous (on an edge of a third). Decided by the tolerant-edge rule of curved decide-once,
+/// with the rim tangencies; both paths alike.
+#[test]
+#[ignore = "curved decide-once: a point touch within LINEAR of a third solid's edge (tolerant-edge rule)"]
+fn band_ball_touching_the_top_beside_its_edge_is_non_manifold() {
+    agrees_curved(&band_curved(
+        "plane_sphere/centre_on_wall_tangent_top/Cut",
+        0,
+        -0.9,
+    ));
 }
 
 /// A cylinder tangent to the base cylinder's wall from inside, moved 0.9 LINEAR along −y
