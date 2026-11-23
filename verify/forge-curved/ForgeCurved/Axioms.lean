@@ -57,3 +57,6 @@ import ForgeCurved
 #print axioms ForgeCurved.FaceLocal.edgeLocal_of_model
 #print axioms ForgeCurved.FaceLocal.vertLocal_of_model
 #print axioms ForgeCurved.FaceLocal.xNonManifoldF_iff_top_of_models
+#print axioms ForgeCurved.graphCell_preconnected
+#print axioms ForgeCurved.localConn_of_contact
+#print axioms ForgeCurved.tangentPair_localConn
