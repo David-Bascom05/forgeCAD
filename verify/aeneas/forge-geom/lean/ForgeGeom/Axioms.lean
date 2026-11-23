@@ -28,5 +28,5 @@ elab "#standard_axioms " ids:ident* : command => do
   ForgeGeom.decasteljau_spec ForgeGeom.arr_ext16 ForgeGeom.levelArr_of
   ForgeGeom.vset_get ForgeGeom.sweep_spec ForgeGeom.back_spec ForgeGeom.tridiagonal_spec
   ForgeGeom.count_spec ForgeGeom.lerps_spec ForgeGeom.clone_H ForgeGeom.efs_spec
-  ForgeGeom.insert_knot_spec
+  ForgeGeom.insert_knot_spec ForgeGeom.insQ_get
   SplineFP.lerp_err_M SplineFP.dc_step

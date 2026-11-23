@@ -131,7 +131,7 @@ Fixtures were migrated with `closed: true` and still give the same bits.
 
 ## Status (built)
 
-Lean, `research/spline-loops/lean` (`lake build`; `Axioms.lean` and `CheckAxioms.lean`: 488 theorems, standard axioms
+Lean, `research/spline-loops/lean` (`lake build`; `Axioms.lean` and `CheckAxioms.lean`: 496 theorems, standard axioms
 only, no sorry):
 
 | file | what |
@@ -143,7 +143,7 @@ only, no sorry):
 | `Basis.lean` | T1, T2, T5: `nb_sum_one`, `nb_nonneg`, `eval_between` (convex hull), `clamped_start`, `clamped_end` |
 | `Deriv.lean` | T3: `hasDerivAt_nb`, `hasDerivAt_curve`, `hasDerivAt_rational` |
 | `Continuity.lean` | T4: `curve_smooth` (C^(p-k) at a knot of multiplicity k) |
-| `Insert.lean` | T6: `insert_basis`, `insert_curve` (Boehm insertion leaves the curve unchanged) |
+| `Insert.lean` | T6: `insert_basis`, `insert_curve` (Boehm insertion leaves the curve unchanged); `kernelPoles_eq` (`insert_knot`'s pole formula is `insPoles` when m ≤ p, as in `from_nurbs`) |
 | `Thomas.lean` | the kernel's tridiagonal solve, line by line in exact arithmetic: `pivot_ne`, `thomas_solves` |
 | `Cyclic.lean` | the periodic solve (Sherman–Morrison on the plain one): `sm_solves`, `sm_den_ne`, `cyclic_solves`, `two_solves` |
 | `Simple.lean` | what the exact self-intersection test relies on: `apart_of_boxes`, `cone_sep`, `injective_of_dir_deriv_pos`, `bern_pos_off_start` |
@@ -163,14 +163,16 @@ The shipped Rust, `verify/aeneas/forge-geom` (Charon and Aeneas on `kernel/forge
   `thomas_solves` proves is the one that ships.
 - `insert_knot_spec`: `spline::insert_knot` returns `ok` whenever its indices are in range. The knots it returns have k
   after the span. The poles are the binary64 Boehm insertion: the first poles kept, the lerps by
-  `(k - U[i]) / (U[i+p] - U[i])` in between, and the rest shifted.
+  `(k - U[i]) / (U[i+p] - U[i])` in between, and the rest shifted. `insQ_get` gives that list position by position as
+  `SplineSpec.kernelPoles` in binary64, and `kernelPoles_eq` proves that formula is Boehm's in exact arithmetic. So
+  T6 is a theorem about the shipped insertion, up to its rounding.
 
 To make the translation possible, the de Casteljau and back-substitution loops became plain `while` loops. So did
 `insert_knot`'s span search and multiplicity count: one pass over the sorted knots now replaces `partition_point` and
 `filter().count()`. The bits are the same, and the callgrind gate is below base on every line.
 
-Not yet: Aeneas on `through`/`through_ends`/`from_nurbs` (iterator chains and closures to rewrite first); the theorem
-that `insQ` is `SplineSpec.insPoles` in exact arithmetic;
+Not yet: Aeneas on `through`/`through_ends`/`from_nurbs` (iterator chains and closures to rewrite first); a binary64
+bound on the insertion's lerps (the de Casteljau `lerp_err_M` applies to each one);
 a binary64 bound for the Thomas solve; the crossing certificate's margin in Lean (it only decides which refusal is given).
 
 Differential test, `kernel/forge-geom/tests/spline_diff.rs`: 698 curves, all within the curve's scale over 2^30 of the

@@ -221,4 +221,46 @@ theorem insert_curve (u : ℕ → ℝ) (hu : Monotone u) (s : ℕ) (x : ℝ) (h0
   congr 1
   refine sum_congr rfl fun i _ => by ring
 
+/-! ## `insert_knot`'s poles are Boehm's
+
+The kernel's `insert_knot` (kernel/forge-geom/src/spline.rs, proven of the translation in
+verify/aeneas/forge-geom `insert_knot_spec`) keeps poles up to `s - p`, then lerps
+`P_(i-1) + (P_i - P_(i-1)) a_i` for `i` up to `s - m`, with `a_i = (x - u_i) / (u_(i+p) - u_i)`
+(0 if that denominator is not positive), and then shifts the rest by one. Here `m` is x's
+multiplicity, so `u_i = x` for `s - m < i ≤ s`. In exact arithmetic that is `insPoles` at every
+position (`kernelPoles_eq`), so `insert_curve` holds of it. In `from_nurbs`, `m ≤ p`: a knot is
+inserted only while its multiplicity is below `p + 1`.
+-/
+
+/-- `insert_knot`'s poles, as a function of the position. -/
+noncomputable def kernelPoles (u : ℕ → ℝ) (s : ℕ) (x : ℝ) (p m : ℕ) (P : ℕ → ℝ) (i : ℕ) : ℝ :=
+  if i ≤ s - p then P i
+  else if i ≤ s - m then
+    P (i - 1) + (P i - P (i - 1)) *
+      (if 0 < u (i + p) - u i then (x - u i) / (u (i + p) - u i) else 0)
+  else P (i - 1)
+
+theorem kernelPoles_eq (u : ℕ → ℝ) (hu : Monotone u) (s : ℕ) (x : ℝ) (h0 : u s ≤ x)
+    (h1 : x < u (s + 1)) (p m : ℕ) (hps : p ≤ s) (hmp : m ≤ p)
+    (hmult : ∀ i, s - m < i → i ≤ s → u i = x) (P : ℕ → ℝ) (i : ℕ) :
+    kernelPoles u s x p m P i = insPoles u s x p P i := by
+  unfold kernelPoles insPoles alpha
+  by_cases ha : i ≤ s - p
+  · simp only [ha, if_true, show i + p ≤ s by omega]; ring
+  · simp only [ha, if_false, show ¬ i + p ≤ s by omega]
+    by_cases hb : i ≤ s - m
+    · simp only [hb, if_true, show ¬ s + 1 ≤ i by omega]
+      -- the span [u_i, u_(i+p)] holds [u_s, u_(s+1)), so it is not empty
+      have hlt : u i < u (i + p) := by
+        have := hu (show i ≤ s by omega)
+        have := hu (show s + 1 ≤ i + p by omega)
+        linarith
+      simp only [sub_pos.2 hlt, if_true, show ¬ (s + 1 ≤ i) by omega, ite_false]; ring
+    · simp only [hb, if_false]
+      by_cases hc : s + 1 ≤ i
+      · simp only [hc, if_true]; ring
+      · simp only [hc, if_false]
+        rw [hmult i (by omega) (by omega)]
+        simp
+
 end SplineSpec

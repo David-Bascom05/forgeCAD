@@ -266,4 +266,37 @@ theorem insert_knot_spec (u : alloc.vec.Vec F64) (p : alloc.vec.Vec H) (degree :
     simp only [insQ, ← hsp, ← le_post1, List.append_assoc]
     rw [show i7.val = s.val - mult.val by scalar_tac]
 
+/-- **`insQ` position by position**: pole i is `P[i]` up to `s - p`, `newPt i` (the lerp) up to
+`s - m`, and `P[i-1]` after. This is `SplineSpec.kernelPoles` with each operation the binary64
+one, and `SplineSpec.kernelPoles_eq` proves that formula is Boehm's `insPoles` in exact
+arithmetic. -/
+theorem insQ_get (U : List F64) (P : List H) (d : ℕ) (k : F64)
+    (hmp : multCount U k ≤ d) (hd : d ≤ spanK U P k)
+    (htake : spanK U P k - d + 1 ≤ P.length) (i : ℕ) (hi : i < P.length + 1) :
+    (insQ U P d k)[i]! =
+      if i ≤ spanK U P k - d then P[i]!
+      else if i ≤ spanK U P k - multCount U k then newPt U P d k i
+      else P[i - 1]! := by
+  simp only [insQ]
+  generalize spanK U P k = s at *
+  generalize multCount U k = m at *
+  have hl1 : (P.take (s - d + 1)).length = s - d + 1 := by simp; omega
+  have hl2 : ((List.range' (s - d + 1) (s - m + 1 - (s - d + 1))).map (newPt U P d k)).length
+      = d - m := by simp; omega
+  simp only [List.getElem!_eq_getElem?_getD, List.append_assoc]
+  by_cases ha : i ≤ s - d
+  · rw [List.getElem?_append_left (by omega)]
+    simp [ha, List.getElem?_take, show i < s - d + 1 by omega]
+  · rw [List.getElem?_append_right (by omega), hl1]
+    simp only [ha, ite_false]
+    by_cases hb : i ≤ s - m
+    · rw [List.getElem?_append_left (by omega)]
+      simp only [hb, ite_true, List.getElem?_map]
+      rw [List.getElem?_range' (by omega)]
+      simp only [Option.map_some, Option.getD_some]
+      congr 1; omega
+    · rw [List.getElem?_append_right (by omega), hl2]
+      simp only [hb, ite_false, List.getElem?_drop]
+      congr 2; omega
+
 end ForgeGeom
