@@ -56,8 +56,18 @@ enum V {
     Setup(usize),
     Holes(usize, String),
     Stock(StockSpec),
+    Vise(ViseSpec),
     #[allow(dead_code)]
     Op(usize),
+}
+
+#[derive(Clone, Debug)]
+struct ViseSpec {
+    name: String,
+    axis: usize,
+    clamp: f64,
+    parallel: f64,
+    clearance: f64,
 }
 
 #[derive(Clone, Debug)]
@@ -86,6 +96,8 @@ struct SetupIn {
     heights: Heights,
     /// The in-process stock as the ops so far left it.
     ip: forge_cam::stock::InProcess,
+    /// The workholding, if the setup names one.
+    fixture: Option<forge_cam::fixture::Fixture>,
 }
 
 /// One operation, as made and as checked.
@@ -133,6 +145,9 @@ pub struct Leftover {
     pub z1: f64,
     /// Each left-over region's box, xmin ymin xmax ymax.
     pub boxes: Vec<[f64; 4]>,
+    /// "held by fixture" (the band is within the jaws' grip: no op of this setup may reach it)
+    /// or "uncut".
+    pub why: &'static str,
 }
 
 pub struct Cam {
@@ -213,6 +228,26 @@ impl Cam {
                         return Ok(V::Stock(StockSpec::Box { min: lo, max: hi }));
                     }
                     return Err("box(margin: (x, y, z)) or box(min: (..), max: (..))".into());
+                }
+                if fname == "vise" {
+                    let a = self.named(args, env)?;
+                    let name = match a.get("#0") {
+                        Some(V::Str(s)) => s.clone(),
+                        _ => return Err("vise(\"NAME\", across: \"x\", clamp: MM, parallel: MM, clearance: MM)".into()),
+                    };
+                    self.lib.vise(&name).map_err(|e| format!("{e:?}"))?;
+                    let axis = match get_str(&a, "across", Some("x"))?.as_str() {
+                        "x" => 0,
+                        "y" => 1,
+                        o => return Err(format!("across: \"x\" or \"y\" (the jaws close along it), not `{o}`")),
+                    };
+                    return Ok(V::Vise(ViseSpec {
+                        name,
+                        axis,
+                        clamp: get_num(&a, "clamp", None)?,
+                        parallel: get_num(&a, "parallel", Some(6.0))?,
+                        clearance: get_num(&a, "clearance", Some(1.0))?,
+                    }));
                 }
                 return Err(format!(
                     "`{fname}` is a statement's built-in here: give it its own name"
@@ -398,6 +433,9 @@ impl Cam {
                     zs.push(*z);
                 }
             }
+            if let Some(f) = &s.fixture {
+                zs.push(f.jaw_top);
+            }
             zs.retain(|z| *z >= s.ip.min[2] && *z <= s.ip.max[2]);
             zs.sort_by(|a, b| a.partial_cmp(b).unwrap());
             zs.dedup_by(|a, b| (*a - *b).abs() < 1e-9);
@@ -449,6 +487,10 @@ impl Cam {
                             z0: w[0],
                             z1: w[1],
                             boxes,
+                            why: match &s.fixture {
+                                Some(f) if w[1] <= f.jaw_top + 1e-9 => "held by fixture",
+                                _ => "uncut",
+                            },
                         });
                     }
                     Ok(_) => {}
@@ -553,6 +595,24 @@ impl Cam {
                         stock.max[2],
                     ],
                 };
+                let fixture = match a.get("fixture") {
+                    None => None,
+                    Some(V::Vise(v)) => {
+                        let l = self.lib.vise(&v.name).map_err(|e| format!("{e:?}"))?;
+                        let size = forge_cam::fixture::ViseSize {
+                            jaw_width: l.jaw_width,
+                            jaw_height: l.jaw_height,
+                            jaw_thickness: l.jaw_thickness,
+                            max_opening: l.max_opening,
+                            bed_depth: l.bed_depth,
+                        };
+                        Some(
+                            forge_cam::fixture::vise(&v.name, size, &stock, v.axis, v.clamp, v.parallel, v.clearance)
+                                .map_err(|e| format!("fixture: {e}"))?,
+                        )
+                    }
+                    Some(_) => return Err("fixture: vise(\"NAME\", across:, clamp:)".into()),
+                };
                 let clear = stock.max[2] + get_num(a, "clear", Some(10.0))?;
                 let retract = stock.max[2] + get_num(a, "retract", Some(3.0))?;
                 self.setups.push(SetupIn {
@@ -566,6 +626,7 @@ impl Cam {
                     clearance: get_num(a, "clearance", Some(0.1))?,
                     heights: Heights { clear, retract },
                     ip: forge_cam::stock::InProcess::new(stock.min, stock.max),
+                    fixture,
                 });
                 Ok(V::Setup(self.setups.len() - 1))
             }
@@ -1407,7 +1468,38 @@ impl Cam {
                     stages.iter().map(|s| (s.0, s.1.len())).collect::<Vec<_>>()
                 );
             }
-            let sum = ops::certify_staged(&posted, &tool, &part.faces, &stages, s.tol, s.clearance);
+            let (ffaces, fclear) = match &s.fixture {
+                Some(f) => (f.faces(), f.clearance),
+                None => (vec![], 0.0),
+            };
+            let mut sum =
+                ops::certify_fixtured(&posted, &tool, &part.faces, &stages, &ffaces, fclear, s.tol, s.clearance);
+            if let Some(f) = &s.fixture {
+                for c in &mut sum.checks {
+                    if c.rule == "fixture_collision"
+                        && let Some(id) = c.other.strip_prefix("fixture face ").and_then(|x| x.parse().ok())
+                        && let Some(p) = f.piece_of(id)
+                    {
+                        c.other = format!("{} ({p})", c.other);
+                    }
+                }
+            }
+            // the lowest the tool's tip goes in a move that met the fixture
+            let ends: Vec<[f64; 3]> = std::iter::once(posted.start)
+                .chain(posted.moves.iter().scan(posted.start, |at, m| {
+                    match *m {
+                        PMove::Rapid { to } | PMove::Line { to, .. } | PMove::Arc { to, .. } => *at = to,
+                        PMove::Cycle { .. } => {}
+                    }
+                    Some(*at)
+                }))
+                .collect();
+            let low_fix = sum
+                .checks
+                .iter()
+                .filter(|c| c.rule == "fixture_collision")
+                .filter_map(|c| Some(ends.get(c.move_index)?[2].min(ends.get(c.move_index + 1)?[2])))
+                .fold(f64::INFINITY, f64::min);
             let op = &mut self.ops[oi];
             op.moves += posted.moves.len();
             op.pairs += sum.pairs;
@@ -1425,6 +1517,23 @@ impl Cam {
                     c.rule, c.verdict, c.move_index, c.phase, c.value, c.limit, c.other
                 ));
                 op.fix = Some(match c.rule {
+                    "fixture_collision" => {
+                        let f = s.fixture.as_ref().expect("a fixture check has a fixture");
+                        let seat = s.stock.min[2];
+                        let clamp = f.jaw_top - seat;
+                        let fit = low_fix - f.clearance - seat;
+                        if low_fix.is_finite() && low_fix < f.jaw_top + f.clearance && fit > 0.0 {
+                            format!(
+                                "SetArg clamp: grip at most {fit:.2} mm (now {clamp:.2}): raise the stock in the vise; or leave below z = {:.2} to a second setup; or SetArg leave",
+                                f.jaw_top + f.clearance
+                            )
+                        } else {
+                            format!(
+                                "the cut reaches the jaws (top z = {:.2}): split the setup (machine this in a second setup, the part turned over), or SetArg clear: a higher clearance height for the rapids",
+                                f.jaw_top
+                            )
+                        }
+                    }
                     "holder_collision" if c.other.starts_with("stock") => "SetArg tool: a tool whose flutes reach the depth (lcf above the stock top), or clear the stock above first".into(),
                     "holder_collision" => "SetArg stickout: a longer stick-out, or a smaller holder".into(),
                     "rapid_clear" => "SetArg clear: a higher clearance height".into(),
@@ -1473,6 +1582,35 @@ impl Cam {
                     ),
                     ("tol", n(s.tol)),
                     ("clearance", n(s.clearance)),
+                    (
+                        "fixture",
+                        match &s.fixture {
+                            None => Json::Null,
+                            Some(f) => Json::obj(vec![
+                                ("kind", Json::Str("vise".into())),
+                                ("name", Json::Str(f.name.clone())),
+                                ("across", Json::Str(if f.axis == 0 { "x" } else { "y" }.into())),
+                                ("jaw_top", n(f.jaw_top)),
+                                ("clamp", n(f.jaw_top - s.stock.min[2])),
+                                ("clearance", n(f.clearance)),
+                                (
+                                    "pieces",
+                                    Json::Arr(
+                                        f.pieces
+                                            .iter()
+                                            .map(|(k, b)| {
+                                                Json::obj(vec![
+                                                    ("name", Json::Str(k.clone())),
+                                                    ("min", v3(b.min)),
+                                                    ("max", v3(b.max)),
+                                                ])
+                                            })
+                                            .collect(),
+                                    ),
+                                ),
+                            ]),
+                        },
+                    ),
                     (
                         "heights",
                         Json::obj(vec![
@@ -1659,7 +1797,7 @@ impl Cam {
                                         ("setup", Json::Str(self.setups[l.setup].name.clone())),
                                         ("z", Json::Arr(vec![Json::Num(l.z0), Json::Num(l.z1)])),
                                         ("boxes", Json::Arr(l.boxes.iter().map(|b| Json::Arr(b.iter().map(|x| Json::Num(*x)).collect())).collect())),
-                                        ("why", Json::Str("uncut".into())),
+                                        ("why", Json::Str(l.why.into())),
                                     ])
                                 })
                                 .collect(),
@@ -1669,7 +1807,7 @@ impl Cam {
             ),
             (
                 "scope",
-                Json::Str("Proven: the cutter, shank and holder clear the exact part (within tol for the cutter on cuts), rapids clear part and stock, on the posted path. Not claimed: cutting physics, the machine's fidelity, the true in-process stock beyond the proven-cleared voids.".into()),
+                Json::Str("Proven: the cutter, shank and holder clear the exact part (within tol for the cutter on cuts), rapids clear part and stock, and every body of the tool keeps the fixture's clearance from the fixture as modelled (a placed vise's boxes), on the posted path. Not claimed: cutting physics, the machine's fidelity, the true in-process stock beyond the proven-cleared voids.".into()),
             ),
         ])
     }
@@ -1698,6 +1836,16 @@ impl Cam {
                 s.heights.clear,
                 s.heights.retract
             ));
+            if let Some(f) = &s.fixture {
+                h.push_str(&format!(
+                    "<p>Held in the vise <b>{}</b>, jaws closed along {}, gripping {:.2} mm of the stock (jaw top z = {:.2}, part frame), on parallels; every move keeps {} mm from the vise as modelled. Measure the vise before trusting the clearance.</p>\n",
+                    esc(&f.name),
+                    if f.axis == 0 { "x" } else { "y" },
+                    f.jaw_top - s.stock.min[2],
+                    f.jaw_top,
+                    f.clearance
+                ));
+            }
         }
         h.push_str("<h2>Tools</h2>\n<table><tr><th>T</th><th>tool</th><th>type</th><th>D</th><th>flutes</th><th>holder</th><th>stick-out</th><th>source</th></tr>\n");
         for t in &self.tools {

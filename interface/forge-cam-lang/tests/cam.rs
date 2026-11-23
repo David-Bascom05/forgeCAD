@@ -118,3 +118,90 @@ fn a_pocket_of_every_hole_of_the_section() {
     assert_eq!(o.paths.len(), 5, "{:?}", o.refusal);
     assert_eq!(o.status, "built", "{:?}", o.checks);
 }
+
+fn vised(clamp: f64, body: &str) -> String {
+    format!(
+        "machining\nf = part(\"flange.fg\", group: \"N\")\nm = machine(\"generic-vmc3\")\nt1 = tool(\"flat-10\", t: 1, stickout: 32, holder: \"bt40-er32\")\nop1 = setup(f, machine: m, stock: box(margin: (3, 3, 2)), origin: \"top-center\", tol: 0.01, fixture: vise(\"generic-vise-150\", across: \"x\", clamp: {clamp}, parallel: 6, clearance: 1))\n{body}prog = program(op1, post: \"fanuc\")\n"
+    )
+}
+
+#[test]
+fn the_vise_is_checked_by_its_clearance() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    // clearing the plate's top down to z 12 runs out to the stock's faces, where the jaws are:
+    // jaws to z 10.9 keep the 1 mm clearance under the cutter's tip, jaws to 11.1 do not
+    let body = "skim = facing(op1, tool: t1, to: 18, step: 1)\ntop = clear(op1, tool: t1, from: 18, to: 12, step: 3, stepover: 4)\n";
+    let cam = forge_cam_lang::run(&vised(10.9, body), &dir);
+    assert!(
+        cam.ok,
+        "{:?} {:?}",
+        cam.errors,
+        cam.ops.iter().map(|o| (&o.name, &o.refusal)).collect::<Vec<_>>()
+    );
+    let cam = forge_cam_lang::run(&vised(11.1, body), &dir);
+    assert!(!cam.ok);
+    let o = cam.ops.iter().find(|o| o.name == "top").unwrap();
+    assert_eq!(o.status, "refused");
+    let c = o.checks.iter().find(|c| c.rule == "fixture_collision").expect("a fixture check");
+    assert!(c.other.contains("jaw"), "{}", c.other);
+    let fix = o.fix.as_deref().unwrap();
+    assert!(fix.starts_with("SetArg clamp: grip at most 11.00"), "{fix}");
+    assert!(cam.program_text().is_none());
+    // the facing passes overhang the stock: with the jaws gripping its full height, they would
+    // cut the jaws
+    let cam = forge_cam_lang::run(&vised(20.0, "skim = facing(op1, tool: t1, to: 18, step: 1)\n"), &dir);
+    assert!(!cam.ok);
+    assert!(cam.ops[0].checks.iter().any(|c| c.rule == "fixture_collision"));
+    // the profile goes through the plate: the jaws hold what it would cut; split the setup
+    let cam = forge_cam_lang::run(
+        &vised(
+            5.0,
+            "skim = facing(op1, tool: t1, to: 18, step: 1)\ntop = clear(op1, tool: t1, from: 18, to: 12, step: 3, stepover: 4)\nprof = contour(op1, tool: t1, side: \"outside\", from: 12, to: -0.5, step: 4)\n",
+        ),
+        &dir,
+    );
+    let o = cam.ops.iter().find(|o| o.name == "prof").unwrap();
+    assert_eq!(o.status, "refused");
+    assert!(o.fix.as_deref().unwrap().contains("second setup"), "{:?}", o.fix);
+    // a clamp deeper than the stock is refused at the setup
+    let cam = forge_cam_lang::run(&vised(25.0, ""), &dir);
+    assert!(cam.errors.iter().any(|e| e.contains("clamp depth")), "{:?}", cam.errors);
+}
+
+#[test]
+fn rapids_across_the_jaws_keep_the_clearance() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    // jaws flush with the stock's top; the bore's rapids at 0.5 above it come within 1 mm
+    let doc = |retract: f64| {
+        format!(
+            "machining\nf = part(\"flange.fg\", group: \"N\")\nm = machine(\"generic-vmc3\")\nt1 = tool(\"flat-10\", t: 1, stickout: 32, holder: \"bt40-er32\")\nop1 = setup(f, machine: m, stock: box(margin: (3, 3, 2)), origin: \"top-center\", tol: 0.01, clear: {retract}, retract: {retract}, fixture: vise(\"generic-vise-150\", across: \"x\", clamp: 20, clearance: 1))\nskim = facing(op1, tool: t1, to: 19.95, step: 1)\nprog = program(op1, post: \"fanuc\")\n"
+        )
+    };
+    let cam = forge_cam_lang::run(&doc(0.5), &dir);
+    assert!(!cam.ok);
+    assert!(
+        cam.ops[0].checks.iter().any(|c| c.rule == "fixture_collision" && c.phase == "rapid"),
+        "{:?}",
+        cam.ops[0].checks
+    );
+}
+
+#[test]
+fn what_the_jaws_hold_is_left_over_by_name() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    let cam = forge_cam_lang::run(
+        &vised(
+            5.0,
+            "skim = facing(op1, tool: t1, to: 18, step: 1)\ntop = clear(op1, tool: t1, from: 18, to: 12, step: 3, stepover: 4)\nprof = contour(op1, tool: t1, side: \"outside\", from: 12, to: 6.5, step: 3)\n",
+        ),
+        &dir,
+    );
+    assert!(cam.ok, "{:?}", cam.ops.iter().map(|o| (&o.name, &o.refusal)).collect::<Vec<_>>());
+    assert!(cam.leftover_done);
+    assert!(cam.leftover.iter().any(|l| l.why == "held by fixture" && l.z1 <= 5.0));
+    assert!(cam.leftover.iter().all(|l| l.why == "uncut" || l.z1 <= 5.0));
+    let mut j = String::new();
+    cam.json().write(&mut j);
+    assert!(j.contains("\"why\":\"held by fixture\"") && j.contains("\"jaw_top\":5"), "{j}");
+    assert!(cam.sheet().contains("Held in the vise"));
+}

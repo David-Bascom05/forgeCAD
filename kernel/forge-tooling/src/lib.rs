@@ -526,6 +526,83 @@ pub struct Library {
     pub assemblies: Vec<Assembly>,
     pub machines: Vec<Machine>,
     pub cutting: Vec<feeds::Group>,
+    pub vises: Vec<Vise>,
+    pub jaw_blanks: Vec<JawBlank>,
+}
+
+/// A machine vise, generic: two jaws that close along the clamp axis on the stock, and a bed
+/// (parallels) the stock sits on. All in mm.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Vise {
+    pub name: String,
+    /// Along the jaw face (across the clamp axis).
+    pub jaw_width: f64,
+    /// From the bed (the stock's seat) to the jaw top.
+    pub jaw_height: f64,
+    /// Through the jaw, along the clamp axis.
+    pub jaw_thickness: f64,
+    pub max_opening: f64,
+    /// The bed's depth below the stock's seat (modelled as one block between the jaws).
+    pub bed_depth: f64,
+    pub source: String,
+}
+
+/// A soft-jaw blank: a block machined to grip one part's outline.
+#[derive(Clone, Debug, PartialEq)]
+pub struct JawBlank {
+    pub name: String,
+    pub width: f64,
+    pub height: f64,
+    pub thickness: f64,
+    pub material: String,
+    pub source: String,
+    pub note: String,
+}
+
+impl Vise {
+    pub fn from_table(t: &Table) -> Result<Vise, LibError> {
+        let name = text(t, "name")
+            .ok_or_else(|| LibError::Missing {
+                record: "[[vise]]".into(),
+                field: "name",
+                fix: "give `name`".into(),
+            })?
+            .to_string();
+        let rec = format!("vise `{name}`");
+        let p = |k: &'static str| need(t, &rec, k).and_then(|v| positive(&rec, k, v));
+        Ok(Vise {
+            jaw_width: p("jaw_width")?,
+            jaw_height: p("jaw_height")?,
+            jaw_thickness: p("jaw_thickness")?,
+            max_opening: p("max_opening")?,
+            bed_depth: p("bed_depth")?,
+            source: text(t, "source").unwrap_or("").to_string(),
+            name,
+        })
+    }
+}
+
+impl JawBlank {
+    pub fn from_table(t: &Table) -> Result<JawBlank, LibError> {
+        let name = text(t, "name")
+            .ok_or_else(|| LibError::Missing {
+                record: "[[jaw_blank]]".into(),
+                field: "name",
+                fix: "give `name`".into(),
+            })?
+            .to_string();
+        let rec = format!("jaw blank `{name}`");
+        let p = |k: &'static str| need(t, &rec, k).and_then(|v| positive(&rec, k, v));
+        Ok(JawBlank {
+            width: p("width")?,
+            height: p("height")?,
+            thickness: p("thickness")?,
+            material: text(t, "material").unwrap_or("").to_string(),
+            source: text(t, "source").unwrap_or("").to_string(),
+            note: text(t, "note").unwrap_or("").to_string(),
+            name,
+        })
+    }
 }
 
 impl Library {
@@ -572,6 +649,12 @@ impl Library {
         for r in tables(&t, "group") {
             self.cutting.push(feeds::Group::from_table(r)?);
         }
+        for r in tables(&t, "vise") {
+            self.vises.push(Vise::from_table(r)?);
+        }
+        for r in tables(&t, "jaw_blank") {
+            self.jaw_blanks.push(JawBlank::from_table(r)?);
+        }
         Ok(())
     }
 
@@ -614,6 +697,26 @@ impl Library {
                 near: near(name, self.machines.iter().map(|t| t.name.as_str())),
             })
     }
+    pub fn vise(&self, name: &str) -> Result<&Vise, LibError> {
+        self.vises
+            .iter()
+            .find(|t| t.name == name)
+            .ok_or_else(|| LibError::Unknown {
+                kind: "vise",
+                name: name.to_string(),
+                near: near(name, self.vises.iter().map(|t| t.name.as_str())),
+            })
+    }
+    pub fn jaw_blank(&self, name: &str) -> Result<&JawBlank, LibError> {
+        self.jaw_blanks
+            .iter()
+            .find(|t| t.name == name)
+            .ok_or_else(|| LibError::Unknown {
+                kind: "jaw blank",
+                name: name.to_string(),
+                near: near(name, self.jaw_blanks.iter().map(|t| t.name.as_str())),
+            })
+    }
     pub fn group(&self, g: &str) -> Option<&feeds::Group> {
         self.cutting.iter().find(|x| x.group == g || x.name == g)
     }
@@ -640,7 +743,8 @@ fn edit_distance(a: &str, b: &str) -> usize {
     prev[b.len()]
 }
 
-pub const BUILTIN: [(&str, &str); 4] = [
+pub const BUILTIN: [(&str, &str); 5] = [
+    ("builtin/fixtures.toml", include_str!("../data/fixtures.toml")),
     ("builtin/tools.toml", include_str!("../data/tools.toml")),
     ("builtin/holders.toml", include_str!("../data/holders.toml")),
     ("builtin/machines.toml", include_str!("../data/machines.toml")),

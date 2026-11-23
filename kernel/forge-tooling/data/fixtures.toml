@@ -1,0 +1,39 @@
+# Generic workholding: our own round numbers for a common class of machine vise and soft-jaw
+# blank, not any maker's model. Sizes vary by maker: verify with the vendor before ordering, and
+# measure the vise on the table before trusting a clearance.
+
+[[vise]]
+name = "generic-vise-150"
+jaw_width = 150
+jaw_height = 50
+jaw_thickness = 20
+max_opening = 160
+bed_depth = 20
+source = "forgecad generic (2026-11-23): a 150 mm class machine vise; verify with the vendor"
+
+[[vise]]
+name = "generic-vise-100"
+jaw_width = 100
+jaw_height = 32
+jaw_thickness = 16
+max_opening = 100
+bed_depth = 15
+source = "forgecad generic (2026-11-23): a 100 mm class machine vise; verify with the vendor"
+
+[[jaw_blank]]
+name = "soft-al-150"
+width = 150
+height = 50
+thickness = 38
+material = "aluminium 6061"
+source = "forgecad generic (2026-11-23): a blank for a 150 mm class vise"
+note = "verify with the vendor before ordering"
+
+[[jaw_blank]]
+name = "soft-al-100"
+width = 100
+height = 32
+thickness = 25
+material = "aluminium 6061"
+source = "forgecad generic (2026-11-23): a blank for a 100 mm class vise"
+note = "verify with the vendor before ordering"

@@ -5,7 +5,9 @@ names a part, a machine, tools, setups and operations. Every toolpath it makes i
 text, read back, and the path the text means is **certified** against the exact part:
 - **gouge**: the cutter stays within `tol` of the part on cuts;
 - **holder_collision**: the shank and holder keep `clearance` from the part and the stock;
-- **rapid_clear**: rapids keep `clearance` from the part and the stock.
+- **rapid_clear**: rapids keep `clearance` from the part and the stock;
+- **fixture_collision**: every body of the tool, the cutter too, keeps the fixture's clearance
+  (default 1 mm) from the vise, on every move.
 
 An operation whose checks are not all proven is **refused**, with the check that failed, where,
 and a fix. A program is written only when every operation in it is certified.
@@ -40,7 +42,8 @@ prog  = program(op1, post: "fanuc", number: 1001)
 | `part(FILE, group:)` | a part file beside the document; `group` (default `N`) picks the cutting data |
 | `machine(NAME)` | from the library (`generic-vmc3`, `generic-router`, or the project's) |
 | `tool(ID, t:, stickout:, holder:)` | a library tool, its T number, stick-out (tip to holder nose), holder |
-| `setup(PART, machine:, stock:, origin:, wcs:, tol:, clearance:, clear:, retract:)` | `stock: box(margin: (x, y, z))` or `box(min:, max:)`; `origin: "top-center"`, `"top-corner"` or `(x, y, z)` in the part's frame; heights above the stock top |
+| `setup(PART, machine:, stock:, origin:, wcs:, tol:, clearance:, clear:, retract:, fixture:)` | `stock: box(margin: (x, y, z))` or `box(min:, max:)`; `origin: "top-center"`, `"top-corner"` or `(x, y, z)` in the part's frame; heights above the stock top |
+| `vise(NAME, across:, clamp:, parallel:, clearance:)` | a library vise (`generic-vise-150`, `generic-vise-100`) closed on the stock along `across` (`"x"` or `"y"`), gripping `clamp` mm of it, on parallels `parallel` wide (default 6); `clearance` default 1 |
 | `facing(SETUP, tool:, to:, step:)` | zig-zag over the stock down to `to` |
 | `clear(SETUP, tool:, from:, to:, step:, stepover:, leave:)` | everything between the stock outline and the part's section, as offset passes |
 | `contour(SETUP, tool:, side:, from:, to:, step:, leave:)` | the part's outline (`side: "outside"`) or its holes (`"inside"`) at the section |
@@ -64,7 +67,8 @@ the document (formats: research/cam/libraries-tools.md §5). A Fusion tool libra
 ```
 ok, schema: "forgecad.cam/1", errors[], warnings[],
 setups[]   name, part, machine, wcs {origin, axes, offset}, stock {kind, min, max}, tol, clearance,
-           heights {clear, retract}
+           heights {clear, retract}, fixture {kind, name, across, jaw_top, clamp, clearance,
+           pieces[] {name, min, max}} | null
 ops[]      name, kind (facing|clear|contour|pocket|drill), setup, status (built|refused),
            tool {id, T, H, type, d, holder, stickout} | null, plan[] (hole plans),
            feeds {rpm, vc, fz, hex, f, power_kw} | null,
@@ -75,6 +79,7 @@ ops[]      name, kind (facing|clear|contour|pocket|drill), setup, status (built|
            leftover {status}, refusal | null
 blocking[] {op, why}      fixes[] {op, fix}      suggestions[] {kind: NeedTool, op, why}
 programs[] {name, post, lines, round_trip, error | null}
+leftover   {computed, rule, regions[] {setup, z, boxes, why (uncut | held by fixture)}}
 scope      what is proven and what is not
 ```
 

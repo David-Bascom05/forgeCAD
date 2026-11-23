@@ -284,6 +284,22 @@ pub fn certify_staged(
     tol: f64,
     clearance: f64,
 ) -> CheckSummary {
+    certify_fixtured(p, tool, part, stages, &[], 0.0, tol, clearance)
+}
+
+/// `certify_staged` with a fixture: every body of the tool (cutter included), on every piece of
+/// the path, keeps the fixture clearance `fclear` from the fixture's faces (G2, corrected).
+#[allow(clippy::too_many_arguments)]
+pub fn certify_fixtured(
+    p: &OpPath,
+    tool: &ToolUse,
+    part: &[Face],
+    stages: &[(usize, Vec<Face>)],
+    fixture: &[Face],
+    fclear: f64,
+    tol: f64,
+    clearance: f64,
+) -> CheckSummary {
     let mut sum = CheckSummary {
         clear: true,
         least: f64::INFINITY,
@@ -291,13 +307,14 @@ pub fn certify_staged(
     };
     let pad = clearance.max(0.0) + 1e-6;
     let pgrid = check::Grid::new(part, pad);
+    let fgrid = check::Grid::new(fixture, fclear.max(0.0) + 1e-6);
     let sgrids: Vec<check::Grid> = stages.iter().map(|s| check::Grid::new(&s.1, pad)).collect();
     let mut cand: Vec<u32> = Vec::new();
     // the one point outside: the tool's top (an axis point of a body) is above every face it is
     // checked against, at every instant (G1-G3 need one point of the moved tool outside the set,
     // the faces' distances do the rest)
     let mut zmax = f64::NEG_INFINITY;
-    for f in part.iter().chain(stages.iter().flat_map(|s| s.1.iter())) {
+    for f in part.iter().chain(stages.iter().flat_map(|s| s.1.iter())).chain(fixture.iter()) {
         zmax = zmax.max(f.bbox[2].hi);
     }
     let top = tool.shape.top();
@@ -335,7 +352,10 @@ pub fn certify_staged(
         for b in &tool.shape.bodies {
             let sb = check::swept_box_body(m, b);
             // the part: the cutter may touch it within tol on a cut; nothing else may touch it
-            for (faces, what, grid) in [(part, "part", &pgrid), (stock, "stock", sgrid)] {
+            for (faces, what, grid) in [(part, "part", &pgrid), (stock, "stock", sgrid), (fixture, "fixture", &fgrid)] {
+                if faces.is_empty() {
+                    continue;
+                }
                 if what == "stock" && !(b.part == Part::NonCutting || *phase == Phase::Rapid) {
                     // the cutter cuts the stock: that is the point
                     continue;
@@ -344,7 +364,9 @@ pub fn certify_staged(
                 // the cutter's rule (within tol), never to a clearance it cannot have; the holder
                 // and any wider shank keep the clearance
                 let narrow = b.part == Part::NonCutting && b.rmax <= cutter_r;
-                let limit = if (b.part == Part::Cutter && what == "part" || narrow) && *phase != Phase::Rapid
+                let limit = if what == "fixture" {
+                    fclear
+                } else if (b.part == Part::Cutter && what == "part" || narrow) && *phase != Phase::Rapid
                 {
                     -tol
                 } else {
@@ -360,6 +382,7 @@ pub fn certify_staged(
                     let (v, n) = check::certify(b, f, m, limit, tol / 4.0, 200_000);
                     sum.cells += n;
                     let rule = match (b.part, *phase, what) {
+                        (_, _, "fixture") => "fixture_collision",
                         (_, Phase::Rapid, _) => "rapid_clear",
                         (Part::Cutter, _, "part") => "gouge",
                         _ => "holder_collision",
