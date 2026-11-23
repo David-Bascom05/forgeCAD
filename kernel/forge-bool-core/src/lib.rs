@@ -917,7 +917,7 @@ fn bad_vert(l: &Ledger, ext: &Ext, a: &Assembled, is_edge: &[bool], v: u32, ar: 
 }
 
 /// `u32` in a list.
-fn has(xs: &[u32], x: u32) -> bool {
+pub(crate) fn has(xs: &[u32], x: u32) -> bool {
     let mut found = false;
     let mut i = 0;
     while !found && i < xs.len() {
@@ -929,7 +929,7 @@ fn has(xs: &[u32], x: u32) -> bool {
 
 /// `dedup (around x).map key`: the faces round a cell, as face numbers, in the order their facets
 /// come in the result.
-fn faces_at(face_of: &[u32], ar: &[u32]) -> Vec<u32> {
+pub(crate) fn faces_at(face_of: &[u32], ar: &[u32]) -> Vec<u32> {
     let mut out: Vec<u32> = Vec::new();
     let mut j = 0;
     while j < ar.len() {
@@ -943,7 +943,7 @@ fn faces_at(face_of: &[u32], ar: &[u32]) -> Vec<u32> {
 }
 
 /// `sameSet` on two face lists.
-fn same_set(a: &[u32], b: &[u32]) -> bool {
+pub(crate) fn same_set(a: &[u32], b: &[u32]) -> bool {
     let mut same = true;
     let mut i = 0;
     while same && i < a.len() {

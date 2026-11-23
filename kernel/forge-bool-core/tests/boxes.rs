@@ -622,7 +622,13 @@ fn v2_ledger_wf() {
     let mut l = good.clone();
     l.pieces.clear();
     assert!(!ledger_wf(&l), "every facet a piece");
-    let mut l = good;
+    let mut l = good.clone();
     l.vert_sectors.sec[0].b = 5;
     assert!(!ledger_wf(&l), "a sector's edges at its vert");
+    let mut l = good;
+    l.vert_sectors.sec.push(Sector { facet: 0, a: 0, b: 0 });
+    l.vert_sectors.start = vec![0, 2];
+    assert!(!ledger_wf(&l), "a sector once per vert");
+    // (the size bounds, face ids and sectors below u32::MAX and facets * bodies within usize,
+    // need tables of 2^32 entries to fail; they are checked, not tested)
 }
