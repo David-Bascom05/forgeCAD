@@ -21,6 +21,7 @@
 
 mod index;
 mod sort;
+pub mod stitch;
 mod union_find;
 pub mod v2;
 
