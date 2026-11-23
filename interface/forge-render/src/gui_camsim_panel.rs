@@ -627,6 +627,16 @@ fn verdict(ui: &mut Ui, st: &CamSimUi, t: &crate::shell::theme::Theme) {
         (t.success, format!("Certified ({})", cam.certification()))
     };
     ui.colored_label(c, s);
+    // the posted code on the machine: its own result, beside the toolpath's certificate
+    if let Some(mv) = st.sim.machine() {
+        let n = mv.markers.len();
+        let (c, s) = if n == 0 {
+            (t.success, format!("Posted code on {}: no collision or limit", mv.run.def.name))
+        } else {
+            (t.error, format!("Posted code on {}: {n} issues (collisions, limits)", mv.run.def.name))
+        };
+        ui.colored_label(c, s);
+    }
     for e in &cam.errors {
         ui.colored_label(t.error, e);
     }
