@@ -160,6 +160,9 @@ pub struct ProgramOut {
     pub round_trip: bool,
 }
 
+/// A leftover's boxes, why, radius and lowest tip (as `Leftover` holds them).
+type Reason = (Vec<[f64; 4]>, &'static str, Option<f64>, Option<f64>);
+
 /// G4 for one setup: in each height band, the final stock less the part grown by the
 /// tolerance: what is left. Empty bands are omitted.
 #[derive(Clone, Debug)]
@@ -699,8 +702,7 @@ impl Cam {
                         let (hl, ul): (Vec<_>, Vec<_>) = ls
                             .into_iter()
                             .partition(|l| held(&bx(std::slice::from_ref(l))[0]));
-                        let mut out: Vec<(Vec<[f64; 4]>, &'static str, Option<f64>, Option<f64>)> =
-                            vec![(bx(&hl), "held by fixture", None, None)];
+                        let mut out: Vec<Reason> = vec![(bx(&hl), "held by fixture", None, None)];
                         if below.is_some_and(|d| w[1] <= d) {
                             out.push((bx(&ul), "below every tool tip", None, below));
                         } else {
@@ -2538,7 +2540,7 @@ fn tool_radius_split(
     use forge_cam_geom::boolean::{Op, boolean, region_of};
     use forge_cam_geom::offset::offset;
     const M: f64 = 1e-6;
-    if !(r > 2.0 * M) {
+    if r.is_nan() || r <= 2.0 * M {
         return None;
     }
     let g = 2.0 * r + 1.0;
@@ -2560,7 +2562,7 @@ fn tool_radius_split(
     let segs: Vec<Seg> = c.iter().flat_map(|l| l.segs.iter().copied()).collect();
     for sg in &segs {
         let rv = sg.reversed();
-        if segs.iter().any(|t| *t == rv) {
+        if segs.contains(&rv) {
             return None;
         }
     }
