@@ -531,11 +531,11 @@ pub fn project_dir(doc_dir: &Path) -> PathBuf {
 fn read_plain(p: &Path) -> Option<String> {
     use std::io::Read;
     const MAX: u64 = 4 << 20;
-    let m = std::fs::metadata(p).ok()?;
+    let m = forge_dirs::fs::metadata(p).ok()?;
     if !m.is_file() || m.len() > MAX {
         return None;
     }
-    let mut o = std::fs::OpenOptions::new();
+    let mut o = forge_dirs::fs::OpenOptions::new();
     o.read(true);
     #[cfg(target_os = "linux")]
     {
@@ -552,7 +552,7 @@ fn read_plain(p: &Path) -> Option<String> {
 }
 
 fn toml_files(dir: &Path) -> Vec<PathBuf> {
-    let mut out: Vec<PathBuf> = std::fs::read_dir(dir)
+    let mut out: Vec<PathBuf> = forge_dirs::fs::read_dir(dir)
         .map(|r| {
             r.filter_map(|e| e.ok().map(|e| e.path()))
                 .filter(|p| p.extension().is_some_and(|x| x == "toml"))
@@ -620,7 +620,7 @@ impl Libraries {
                 .unwrap_or_default()
                 .into_iter()
                 .map(|f| {
-                    let bytes = std::fs::read(&f).ok();
+                    let bytes = forge_dirs::fs::read(&f).ok();
                     (f, bytes)
                 })
                 .collect::<Vec<_>>()
@@ -664,7 +664,7 @@ impl Libraries {
 /// Writes `m` into a library file: replacing the record of the same name, or added at the end
 /// (the file made if it isn't there). `old`: the name it had, if it was renamed.
 pub fn save(file: &Path, m: &Material, old: Option<&str>) -> Result<(), String> {
-    let text = std::fs::read_to_string(file).unwrap_or_default();
+    let text = forge_dirs::fs::read_to_string(file).unwrap_or_default();
     let mut list = parse(&text).map_err(|e| format!("{}:{}: {}", file.display(), e.line, e.why))?;
     let n = [norm(&m.name), old.map(norm).unwrap_or_default()];
     match list.iter_mut().find(|x| n.contains(&norm(&x.name))) {
@@ -676,7 +676,7 @@ pub fn save(file: &Path, m: &Material, old: Option<&str>) -> Result<(), String> 
 
 /// Takes the record named `name` out of a library file.
 pub fn remove(file: &Path, name: &str) -> Result<(), String> {
-    let text = std::fs::read_to_string(file).map_err(|e| e.to_string())?;
+    let text = forge_dirs::fs::read_to_string(file).map_err(|e| e.to_string())?;
     let mut list = parse(&text).map_err(|e| format!("{}:{}: {}", file.display(), e.line, e.why))?;
     list.retain(|x| norm(&x.name) != norm(name));
     write(file, &list)
@@ -685,14 +685,14 @@ pub fn remove(file: &Path, name: &str) -> Result<(), String> {
 /// A library file of these records.
 pub fn write(file: &Path, list: &[Material]) -> Result<(), String> {
     if let Some(d) = file.parent() {
-        std::fs::create_dir_all(d).map_err(|e| e.to_string())?;
+        forge_dirs::fs::create_dir_all(d).map_err(|e| e.to_string())?;
     }
     let body: Vec<String> = list.iter().map(Material::to_toml).collect();
     let text = format!(
         "# ForgeCAD materials (forge-material's format)\n\n{}",
         body.join("\n")
     );
-    std::fs::write(file, text).map_err(|e| e.to_string())
+    forge_dirs::fs::write(file, text).map_err(|e| e.to_string())
 }
 
 #[cfg(test)]
@@ -736,7 +736,7 @@ mod tests {
     #[cfg(not(target_family = "wasm"))]
     #[test]
     fn a_project_library_comes_before_forgecad_and_saves_in_place() {
-        let d = std::env::temp_dir().join(format!("forge-material-{}", std::process::id()));
+        let d = forge_dirs::temp_dir().join(format!("forge-material-{}", forge_dirs::process_id()));
         let file = project_dir(&d).join("project.toml");
         let mut m = find("ABS").unwrap().clone();
         m.name = "ABS black".into();
@@ -757,7 +757,7 @@ mod tests {
         );
         remove(&file, "ABS black").unwrap();
         assert!(Libraries::load(Some(&d)).find("ABS black").is_none());
-        let _ = std::fs::remove_file(&file);
+        let _ = forge_dirs::fs::remove_file(&file);
     }
 
     #[test]

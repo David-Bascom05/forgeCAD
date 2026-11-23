@@ -29,4 +29,11 @@ import ForgeExact.DecideOnce.RoomConst
 import ForgeExact.DecideOnce.MetricI
 import ForgeExact.DecideOnce.CoverageI
 import ForgeExact.DecideOnce.FloodCorrect
+import ForgeExact.Alg.Sum
+import ForgeExact.Alg.Examples
+import ForgeExact.Quad.Cert
+import ForgeExact.QRef.Run
+import ForgeExact.QRef.Octree
 import ForgeExact.Axioms
+import ForgeExact.Fillet
+import ForgeExact.Ops.Axioms

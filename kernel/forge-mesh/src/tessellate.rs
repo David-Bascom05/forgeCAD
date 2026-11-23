@@ -1416,7 +1416,15 @@ enum Layout {
 }
 
 impl Layout {
+    /// The point the triangulation sees. A coordinate below `2^-200` in magnitude is noise for
+    /// zero (far below LINEAR): it becomes exactly 0, so the exact predicates' products of such
+    /// noise cannot underflow (forge_math::predicates' precondition, `product_exact`).
     fn put(self, uv: Point2) -> Point2 {
+        let p = self.place(uv);
+        Point2::new(snap_zero(p.x), snap_zero(p.y))
+    }
+
+    fn place(self, uv: Point2) -> Point2 {
         match self {
             Layout::Scaled(su, sv) => Point2::new(uv.x * su, uv.y * sv),
             Layout::Unrolled {
@@ -1447,6 +1455,13 @@ impl Layout {
             ),
         }
     }
+}
+
+/// `x`, or exactly 0 when `|x| < 2^-200`.
+#[inline]
+fn snap_zero(x: f64) -> f64 {
+    const NOISE: f64 = f64::from_bits((1023 - 200) << 52);
+    if x.abs() < NOISE { 0.0 } else { x }
 }
 
 /// Whether `x` lies further than `c` from the surface about `uv`, where it is expected near.

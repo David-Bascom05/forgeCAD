@@ -12,8 +12,9 @@ The Rust harness moved from verify/forge-exact (now the spec's Lean project) to
 verify/forge-coverage.
 
 Open:
-- G5: the flush-ended tilt's second strip at 0.01°–0.15°. Wants a forge-model draft repro and a
-  pinned site.
+- G5 is pinned (G5a: imprint stretch samples 4227–4244; G5b: nearly_flush's NEAR cap ssi.rs:66).
+  A real 0.1°/0.05° draft hits both (parts/drafted_lid.fg, tests/g5.rs). The fix is assigned
+  elsewhere.
 - Extract `clear_step` (coverage.md §6.2) to make G3/G4's edge a theorem on the code.
 - Regenerate tools/reliability/baseline.txt. Its point-touch rows are stale.
 

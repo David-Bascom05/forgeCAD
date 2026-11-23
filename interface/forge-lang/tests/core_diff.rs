@@ -61,7 +61,7 @@ fn refactors_agree_with_the_core_calculus() {
 /// `build::history_id` against the Lean equation (research/forge-lang/lean/ForgeLang/HistoryId.lean:
 /// `historyId`, FNV-1a then `(h >> 1) | 1`). `historyId_collides` proves the value below for both
 /// names: two legal feature names with one kernel name, which a run refuses (`HistoryIdClash`,
-/// `checked_distinct`; fc_parity.rs `a_history_id_clash_is_refused`).
+/// `checked_distinct`; recorded_parity.rs `a_history_id_clash_is_refused`).
 #[test]
 fn history_id_is_the_lean_equation() {
     use forge_lang::build::history_id;

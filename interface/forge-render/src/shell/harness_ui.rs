@@ -935,10 +935,10 @@ impl Shell {
                     // a harness file: the ops written there (the assembly reads it again)
                     (Ok((ops, _)), Some(f)) => {
                         let file = fg.beside(&f);
-                        let text = std::fs::read_to_string(&file).unwrap_or_default();
+                        let text = forge_dirs::fs::read_to_string(&file).unwrap_or_default();
                         match forge_lang::edit::apply_all_checked(&text, &ops) {
                             Ok(new) => {
-                                let _ = std::fs::write(&file, new);
+                                let _ = forge_dirs::fs::write(&file, new);
                                 false
                             }
                             Err(e) => {
@@ -956,7 +956,7 @@ impl Shell {
             (Dialog::Export { h, path, done }, true) => {
                 let file = fg.beside(path);
                 *done = Some(match hs.get(*h) {
-                    Some(ho) => std::fs::write(&file, forge_lang::harness::export_csv(ho))
+                    Some(ho) => forge_dirs::fs::write(&file, forge_lang::harness::export_csv(ho))
                         .map(|_| file.to_string_lossy().to_string())
                         .map_err(|e| e.to_string()),
                     None => Err("no harness".into()),
@@ -1023,9 +1023,9 @@ fn import_preview(
     path: &str,
 ) -> Result<(Vec<Op>, Diff), String> {
     let ho = hs.get(h).ok_or("no harness")?;
-    let csv = std::fs::read_to_string(fg.beside(path)).map_err(|e| format!("{path}: {e}"))?;
+    let csv = forge_dirs::fs::read_to_string(fg.beside(path)).map_err(|e| format!("{path}: {e}"))?;
     let text = match &ho.file {
-        Some(f) => std::fs::read_to_string(fg.beside(f)).map_err(|e| format!("{f}: {e}"))?,
+        Some(f) => forge_dirs::fs::read_to_string(fg.beside(f)).map_err(|e| format!("{f}: {e}"))?,
         None => source.to_string(),
     };
     forge_lang::harness::import(&text, &ho.id, &csv, Some(ho))

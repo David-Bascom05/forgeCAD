@@ -59,7 +59,7 @@ impl Gui {
                     h.exe = Some(exe.clone());
                     let (tx, rx) = channel();
                     let waker = self.waker.clone();
-                    std::thread::spawn(move || {
+                    crate::plat::spawn("speech-check", move || {
                         let _ = tx.send(check(&exe));
                         waker();
                     });

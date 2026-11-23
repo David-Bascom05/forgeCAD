@@ -29,12 +29,12 @@ fn read(file: &str) -> Result<String, String> {
     if file.starts_with(forge_lang::stdparts::KEY) {
         return forge_lang::stdparts::text_of(file).ok_or(format!("{file}: no such standard part"));
     }
-    std::fs::read_to_string(file).map_err(|e| format!("{file}: {e}"))
+    forge_dirs::fs::read_to_string(file).map_err(|e| format!("{file}: {e}"))
 }
 
 /// The directory a part file is in: where the files it reads are found.
 fn dir_of(file: &str) -> Option<std::path::PathBuf> {
-    std::fs::canonicalize(file)
+    forge_dirs::fs::canonicalize(file)
         .ok()?
         .parent()
         .map(|d| d.to_path_buf())
@@ -87,7 +87,7 @@ impl Output {
         let mut stderr = self.stderr;
         let mut code = self.code;
         for (path, bytes, must) in &self.files {
-            if let Err(e) = std::fs::write(path, bytes) {
+            if let Err(e) = forge_dirs::fs::write(path, bytes) {
                 stderr.push_str(&format!("{path}: {e}\n"));
                 if *must {
                     code = code.max(1);
@@ -257,7 +257,8 @@ fn run_file(file: &str, args: &[String], build: bool) -> ExitCode {
         return o.emit();
     }
     // the same file, text, arguments and everything it read: the last run's output
-    let place = std::fs::canonicalize(file).map_or_else(|_| file.to_string(), |p| p.to_string_lossy().into());
+    let place =
+        forge_dirs::fs::canonicalize(file).map_or_else(|_| file.to_string(), |p| p.to_string_lossy().into());
     let key = forge_lang::kept::run_key(&place, &src, args);
     if let Some(o) =
         forge_lang::kept::fetch("fg-run", key).and_then(|b| Output::load(&mut forge_lang::store::In(&b)))
@@ -331,7 +332,7 @@ fn put_prints(j: &mut Json, run: &forge_lang::Run, art: &str, out: &str) {
         return;
     };
     // an image's top row is the trim's far edge, seen from above
-    let image = std::fs::read(art)
+    let image = forge_dirs::fs::read(art)
         .ok()
         .and_then(|b| forge_lang::thermo::Image::from_ppm(&b))
         .map(|i| i.flipped());
@@ -363,7 +364,7 @@ fn put_prints(j: &mut Json, run: &forge_lang::Run, art: &str, out: &str) {
             rgb: p.rgb.clone(),
         }
         .flipped();
-        let done = std::fs::write(&file, img.to_ppm());
+        let done = forge_dirs::fs::write(&file, img.to_ppm());
         f.push((
             "print".into(),
             Json::obj(vec![
@@ -406,7 +407,7 @@ fn put_fields(j: &mut Json, run: &forge_lang::Run, out: &str) {
         } else {
             out.to_string()
         };
-        match std::fs::write(&file, o.field_csv()) {
+        match forge_dirs::fs::write(&file, o.field_csv()) {
             Ok(()) => field.push(("csv".into(), file.as_str().into())),
             Err(e) => field.push(("error".into(), e.to_string().into())),
         }
@@ -452,13 +453,13 @@ fn view_file(file: &str, args: &[String]) -> ExitCode {
     ));
     let pages = forge_lang::drawing::look::pages(&looks);
     if let Some(out) = opt(args, "--pdf")
-        && let Err(e) = std::fs::write(out, forge_draw::pdf::pdf(&pages))
+        && let Err(e) = forge_dirs::fs::write(out, forge_draw::pdf::pdf(&pages))
     {
         eprintln!("{out}: {e}");
     }
     if let Some(out) = opt(args, "--svg")
         && let Some(p) = pages.first()
-        && let Err(e) = std::fs::write(out, forge_draw::svg::svg(p))
+        && let Err(e) = forge_dirs::fs::write(out, forge_draw::svg::svg(p))
     {
         eprintln!("{out}: {e}");
     }
@@ -498,7 +499,7 @@ fn harness_cmd(file: &str, args: &[String]) -> ExitCode {
         let csv = forge_lang::harness::export_csv(h);
         if out == "-" {
             print!("{csv}");
-        } else if let Err(e) = std::fs::write(out, csv) {
+        } else if let Err(e) = forge_dirs::fs::write(out, csv) {
             eprintln!("{out}: {e}");
             return ExitCode::from(2);
         }
@@ -508,7 +509,7 @@ fn harness_cmd(file: &str, args: &[String]) -> ExitCode {
         let csv = forge_lang::harness::bom_csv(h);
         if out == "-" {
             print!("{csv}");
-        } else if let Err(e) = std::fs::write(out, csv) {
+        } else if let Err(e) = forge_dirs::fs::write(out, csv) {
             eprintln!("{out}: {e}");
             return ExitCode::from(2);
         }
@@ -582,7 +583,7 @@ fn harness_cmd(file: &str, args: &[String]) -> ExitCode {
     if flag(args, "--apply") && !ops.is_empty() {
         match edit::apply_all_checked(&text, &ops) {
             Ok(new) => {
-                if let Err(e) = std::fs::write(&target, new) {
+                if let Err(e) = forge_dirs::fs::write(&target, new) {
                     eprintln!("{target}: {e}");
                     return ExitCode::from(2);
                 }
@@ -675,7 +676,7 @@ fn main() -> ExitCode {
                 };
                 return match done {
                     Ok(new) => {
-                        if let Err(e) = std::fs::write(file, &new) {
+                        if let Err(e) = forge_dirs::fs::write(file, &new) {
                             eprintln!("{file}: {e}");
                             return ExitCode::from(2);
                         }
@@ -696,7 +697,7 @@ fn main() -> ExitCode {
                 let doc = std::path::Path::new(file);
                 return match forge_lang::refactor::run_on_disk(Some(doc), None, &src, &r) {
                     Ok(w) => {
-                        if let Err(e) = std::fs::write(file, &w.doc) {
+                        if let Err(e) = forge_dirs::fs::write(file, &w.doc) {
                             eprintln!("{file}: {e}");
                             return ExitCode::from(2);
                         }
@@ -877,7 +878,7 @@ fn std_cmd(args: &[String]) -> ExitCode {
             let g = generate(&spec).expect("checked");
             match opt(args, "-o") {
                 Some(out) => {
-                    if let Err(e) = std::fs::write(out, &g.text) {
+                    if let Err(e) = forge_dirs::fs::write(out, &g.text) {
                         eprintln!("{out}: {e}");
                         return ExitCode::from(2);
                     }

@@ -1,0 +1,32 @@
+shared t = 2
+shared r = 2
+shared k = ratio(0.4)
+param plan.L = 40
+param plan.W = 60
+param up.h = 30
+param blank.gap = 30
+param win.cx = 15
+param win.cy = -470
+param win.x0 = 10
+param win.x1 = 20
+param win.y0 = 25
+param win.y1 = 30
+
+sketch plan(on: xy) {
+  outline = rect(corner: (0, 0), size: (L, W))
+}
+base = sheet(plan, t: t, r: r, bend: kfactor(k))
+up = flange(base.edge(plan.outline[1]), height: h, measure: "inner")
+sketch win(on: base.top) {
+  p0 = pt(x0, y0)
+  p1 = pt(x1, y0)
+  p2 = pt(x1, y1)
+  p3 = pt(x0, y1)
+  a = arc(center: (cx, cy), from: p1, to: p0, cw: false)
+  l1 = line(p1, p2)
+  l2 = line(p2, p3)
+  l3 = line(p3, p0)
+}
+window = cutout(win, wall: base)
+blank = unfold(base, on: offset(base.bottom, gap))
+expect valid

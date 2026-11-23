@@ -157,6 +157,9 @@ impl Procedural for Offset {
     fn under(&self) -> Option<&Proc> {
         Some(&self.base)
     }
+    fn as_any(&self) -> Option<&dyn std::any::Any> {
+        Some(self)
+    }
     fn kind(&self) -> &'static str {
         "offset"
     }
@@ -278,6 +281,184 @@ impl Procedural for Offset {
     }
     fn mesh_radius(&self) -> f64 {
         (self.base.mesh_radius() + self.d).max(10.0 * tol::MIN_LENGTH)
+    }
+}
+
+impl Offset {
+    /// `s` as an offset: the surface it stands off and by how much.
+    pub fn parts(s: &Proc) -> Option<(&Proc, f64)> {
+        let o = s.as_any()?.downcast_ref::<Offset>()?;
+        Some((&o.base, o.d))
+    }
+}
+
+/// A spline lying on an offset's base along a straight line of the base's parameters, moved with
+/// the offset: at the spline's t, the offset's point at `o + dir t`. Exact as the offset is (its
+/// point and first derivative are the base's point and Weingarten-moved derivatives there), so the
+/// edge between two faces of one surface, both offset alike, is this curve (two coincident surfaces
+/// meet nowhere in particular). For a spline turned about an axis and one of its sections, it is
+/// that section's exact offset curve in its half plane.
+pub struct OffsetLine {
+    /// The offset surface, and the offset it is (its base and distance) to evaluate.
+    s: Proc,
+    off: Offset,
+    o: Point2,
+    dir: Vec2,
+    /// The curve on the base: its parameter, and the bounds on its speed.
+    under: crate::spline::SplineCurve,
+}
+
+impl std::fmt::Debug for OffsetLine {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "OffsetLine {} at {:?} + {:?} t", self.off.d, self.o, self.dir)
+    }
+}
+
+impl OffsetLine {
+    /// The curve `c` of `s`'s base moved with `s`, or None where `s` is no offset, `c` no spline
+    /// or the base has no closed form for where `c` lies on it.
+    pub fn curve(s: &Proc, c: &ProcCurve) -> Option<Curve> {
+        let o = s.as_any()?.downcast_ref::<Offset>()?;
+        let under = c.as_any()?.downcast_ref::<crate::spline::SplineCurve>()?.clone();
+        let (at, dir) = o.base.curve_uv(c)?;
+        Some(Curve::Procedural(ProcCurve(Arc::new(OffsetLine {
+            s: s.clone(),
+            off: Offset {
+                base: o.base.clone(),
+                d: o.d,
+                id: o.id,
+            },
+            o: at,
+            dir,
+            under,
+        }))))
+    }
+    /// Where `a` and `b` are one surface offset alike (one surface's two faces, each moved by the
+    /// same distance), their edge `oc` on that surface moved with them, if there is a closed form
+    /// for it: two coincident surfaces meet nowhere in particular.
+    pub fn between(a: &Surface, b: &Surface, oc: &Curve) -> Option<Curve> {
+        let (Surface::Procedural(pa), Surface::Procedural(pb), Curve::Procedural(c)) = (a, b, oc) else {
+            return None;
+        };
+        let ((ba, da), (bb, db)) = (Offset::parts(pa)?, Offset::parts(pb)?);
+        if ba != bb || da != db {
+            return None;
+        }
+        OffsetLine::curve(pa, c)
+    }
+    fn uv(&self, t: f64) -> Point2 {
+        Point2::new(self.o.x + self.dir.x * t, self.o.y + self.dir.y * t)
+    }
+    /// Over `range`: the most of |C'| + |d| |C''| / |C'| on the spline C under the curve, which
+    /// bounds this one's speed (|q'| = |C'| |1 + d k| with |k| <= |C''| / |C'|^2), the least of
+    /// |C'| from |C'(mid)| less |C''|'s bound times the half width, halving until that is
+    /// positive (it is for a regular spline). Infinite where 2^20 halvings do not get there.
+    fn bound(&self, range: Interval, depth: u32) -> f64 {
+        let c = &self.under.c;
+        let [c1, c2, _] = c.derivative_bounds(range);
+        let low = c.deriv(range.mid()).d1.length() - c2 * 0.5 * range.width();
+        if low > 0.0 {
+            return c1 + self.off.d.abs() * c2 / low;
+        }
+        if depth == 0 {
+            return f64::INFINITY;
+        }
+        let (a, b) = (
+            Interval::new(range.lo, range.mid()),
+            Interval::new(range.mid(), range.hi),
+        );
+        self.bound(a, depth - 1).max(self.bound(b, depth - 1))
+    }
+}
+
+impl ProceduralCurve for OffsetLine {
+    fn point(&self, t: f64) -> Point3 {
+        self.off.place(self.uv(t))
+    }
+    fn deriv1(&self, t: f64) -> (Point3, Vec3) {
+        let (p, du, dv) = self.off.first(self.uv(t));
+        (p, du * self.dir.x + dv * self.dir.y)
+    }
+    fn deriv(&self, t: f64) -> CurveDeriv {
+        let d = self.s.deriv(self.uv(t));
+        let (a, b) = (self.dir.x, self.dir.y);
+        CurveDeriv {
+            p: d.p,
+            d1: d.du * a + d.dv * b,
+            d2: d.duu * (a * a) + d.duv * (2.0 * a * b) + d.dvv * (b * b),
+        }
+    }
+    fn exact_d1(&self) -> bool {
+        true
+    }
+    fn on_surface(&self, t: f64) -> Option<(Surface, Point2, Vec2)> {
+        Some((Surface::Procedural(self.s.clone()), self.uv(t), self.dir))
+    }
+    fn domain(&self) -> Domain1 {
+        self.under.domain()
+    }
+    /// The base's foot of p, read along the line, then Newton on the curve itself.
+    fn closest(&self, p: Point3, range: Interval) -> f64 {
+        let uv = self.s.project(p);
+        let len2 = self.dir.x * self.dir.x + self.dir.y * self.dir.y;
+        let mut t = (((uv.x - self.o.x) * self.dir.x + (uv.y - self.o.y) * self.dir.y) / len2)
+            .clamp(range.lo, range.hi);
+        for _ in 0..30 {
+            let d = self.deriv(t);
+            let g = (d.p - p).dot(d.d1);
+            let h = d.d1.dot(d.d1) + (d.p - p).dot(d.d2);
+            if h <= 0.0 {
+                break;
+            }
+            let next = (t - g / h).clamp(range.lo, range.hi);
+            let done = (next - t).abs() <= 1e-14 * (1.0 + t.abs());
+            t = next;
+            if done {
+                break;
+            }
+        }
+        t
+    }
+    fn bbox(&self, range: Interval) -> Box3 {
+        let (a, b) = (self.uv(range.lo), self.uv(range.hi));
+        let uv = Box2::new(
+            Interval::new(a.x.min(b.x), a.x.max(b.x)),
+            Interval::new(a.y.min(b.y), a.y.max(b.y)),
+        );
+        self.s.bbox(uv)
+    }
+    fn transformed(&self, f: &Frame) -> ProcCurve {
+        let c = &self.under;
+        ProcCurve(Arc::new(OffsetLine {
+            s: self.s.transformed(f),
+            // (the same moved base the moved offset stands off: one composition, the same bits)
+            off: Offset {
+                base: self.off.base.transformed(f),
+                d: self.off.d,
+                id: fresh_id(),
+            },
+            o: self.o,
+            dir: self.dir,
+            under: crate::spline::SplineCurve {
+                c: Arc::new(c.c.mapped(|p| f.point_to_world(p))),
+                dom: c.dom,
+            },
+        }))
+    }
+    fn speed_bound(&self, range: Interval) -> f64 {
+        self.bound(range, 20)
+    }
+    /// The spline's own count, times how much faster this one runs at most.
+    fn segments(&self, range: Interval, chord: f64) -> usize {
+        let n = self.under.segments(range, chord);
+        let k = self.speed_bound(range) / self.under.speed_bound(range).max(f64::MIN_POSITIVE);
+        if !k.is_finite() {
+            return n;
+        }
+        n * (k.ceil() as usize).max(1)
+    }
+    fn kinks(&self, range: Interval) -> Vec<f64> {
+        self.under.kinks(range)
     }
 }
 

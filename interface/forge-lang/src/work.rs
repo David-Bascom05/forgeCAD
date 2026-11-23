@@ -156,7 +156,7 @@ pub fn work(ev: &mut Eval, name: &'static str, args: &[crate::syntax::Arg], span
     };
     let (idx, _) = ev.push_feature(&id, "work", f, span, dims)?;
     let datum = if ev.b.building {
-        forge_model::work::datum(ev.b.history(), idx).map_err(|error| crate::error::Error::Build {
+        ev.b.take_datum(idx).map_err(|error| crate::error::Error::Build {
             span,
             id: id.clone(),
             error,

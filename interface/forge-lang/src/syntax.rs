@@ -47,6 +47,9 @@ pub enum Unit {
     None,
     Mm,
     Deg,
+    /// Inches, written right after the digits (`0.063in`): a length, 25.4 mm exactly. `5 in OCC`,
+    /// with a space, is a number and the keyword (Lex.lean, LexUnits.lean).
+    In,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -217,6 +220,68 @@ pub fn lex_lossless(src: &str) -> Result<(Vec<Tok>, Vec<Trivia>), Error> {
     Ok((toks, trivia))
 }
 
+/// Each byte's class for the lexer's loops: a name's byte (letter, digit, `_`), a space (` `,
+/// tab, carriage return), a digit.
+const NAME_BYTE: u8 = 1;
+const SPACE_BYTE: u8 = 2;
+const DIGIT_BYTE: u8 = 4;
+const CLASS: [u8; 256] = {
+    let mut c = [0u8; 256];
+    let mut k = 0;
+    while k < 256 {
+        let b = k as u8;
+        if b.is_ascii_alphanumeric() || b == b'_' {
+            c[k] |= NAME_BYTE;
+        }
+        if b == b' ' || b == b'\t' || b == b'\r' {
+            c[k] |= SPACE_BYTE;
+        }
+        if b.is_ascii_digit() {
+            c[k] |= DIGIT_BYTE;
+        }
+        k += 1;
+    }
+    c
+};
+fn is(b: &[u8], i: usize, class: u8) -> bool {
+    b.get(i).is_some_and(|&x| CLASS[x as usize] & class != 0)
+}
+
+/// A number written as up to 15 digits with at most one `.` and no exponent (`-` before it
+/// allowed): its value, the same bits `str::parse` gives. The digits make an integer below 2^53
+/// and their place a power of ten up to 10^15, both exact in an f64, so the one division rounds
+/// correctly, as the parse does. Anything else: None (and the parse).
+fn plain_number(text: &str) -> Option<f64> {
+    const TEN: [f64; 16] = [
+        1e0, 1e1, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8, 1e9, 1e10, 1e11, 1e12, 1e13, 1e14, 1e15,
+    ];
+    let (neg, b) = match text.as_bytes() {
+        [b'-', rest @ ..] => (true, rest),
+        b => (false, b),
+    };
+    let (mut m, mut digits, mut frac, mut dot) = (0u64, 0usize, 0usize, false);
+    for &c in b {
+        if c == b'.' {
+            if dot {
+                return None;
+            }
+            dot = true;
+            continue;
+        }
+        if !c.is_ascii_digit() || digits == 15 {
+            return None;
+        }
+        m = m * 10 + (c - b'0') as u64;
+        digits += 1;
+        frac += dot as usize;
+    }
+    if digits == 0 {
+        return None;
+    }
+    let v = m as f64 / TEN[frac];
+    Some(if neg { -v } else { v })
+}
+
 /// Lexes, and writes each token's terminal of grammar.ll1 to `la`.
 fn lex_into<const KEEP: bool>(
     src: &str,
@@ -254,7 +319,7 @@ fn lex_into<const KEEP: bool>(
         }
         if c == b' ' || c == b'\t' || c == b'\r' {
             let s = i;
-            while i < b.len() && matches!(b[i], b' ' | b'\t' | b'\r') {
+            while is(b, i, SPACE_BYTE) {
                 i += 1;
             }
             keep(TriviaKind::Space, s, i);
@@ -262,9 +327,8 @@ fn lex_into<const KEEP: bool>(
         }
         if c == b'#' {
             let s = i;
-            while i < b.len() && b[i] != b'\n' {
-                i += 1;
-            }
+            // (a comment runs to the line's end: found as the text's search for a byte finds it)
+            i = src[i..].find('\n').map_or(b.len(), |k| i + k);
             keep(TriviaKind::Comment, s, i);
             continue;
         }
@@ -280,7 +344,7 @@ fn lex_into<const KEEP: bool>(
             if neg {
                 i += 1;
             }
-            while i < b.len() && (b[i].is_ascii_digit() || (b[i] == b'.' && b.get(i + 1) != Some(&b'.'))) {
+            while is(b, i, DIGIT_BYTE) || (i < b.len() && b[i] == b'.' && b.get(i + 1) != Some(&b'.')) {
                 i += 1;
             }
             if i < b.len()
@@ -294,11 +358,14 @@ fn lex_into<const KEEP: bool>(
                 }
             }
             let text = &src[s..i];
-            let v: f64 = text.parse().map_err(|_| {
-                Error::Syntax(SyntaxError::BadNumber {
-                    span: Span::new(s, i),
-                })
-            })?;
+            let v: f64 = match plain_number(text) {
+                Some(v) => v,
+                None => text.parse().map_err(|_| {
+                    Error::Syntax(SyntaxError::BadNumber {
+                        span: Span::new(s, i),
+                    })
+                })?,
+            };
             let u0 = i;
             while i < b.len() && b[i].is_ascii_alphabetic() {
                 i += 1;
@@ -307,6 +374,7 @@ fn lex_into<const KEEP: bool>(
                 "" => Unit::None,
                 "mm" => Unit::Mm,
                 "deg" => Unit::Deg,
+                "in" => Unit::In,
                 _ => {
                     return Err(Error::Syntax(SyntaxError::UnknownUnit {
                         span: Span::new(u0, i),
@@ -322,7 +390,7 @@ fn lex_into<const KEEP: bool>(
         }
         if c.is_ascii_alphabetic() || c == b'_' {
             let s = i;
-            while i < b.len() && (b[i].is_ascii_alphanumeric() || b[i] == b'_') {
+            while is(b, i, NAME_BYTE) {
                 i += 1;
             }
             let w = &src[s..i];
@@ -515,7 +583,8 @@ pub enum StmtKind {
     Fn {
         name: String,
         params: Vec<FnParam>,
-        body: Vec<Stmt>,
+        /// (shared, not copied, by the function a definition makes)
+        body: std::rc::Rc<Vec<Stmt>>,
     },
     For {
         vars: Vec<String>,
@@ -1014,7 +1083,7 @@ impl Parser {
                 stmt!(StmtKind::Fn {
                     name: self.text(b + 1),
                     params,
-                    body: list!(self, b + 5, V::Stmts),
+                    body: std::rc::Rc::new(list!(self, b + 5, V::Stmts)),
                 })
             }
             P::StmtFor => {
@@ -1813,19 +1882,23 @@ fn reserved_in(toks: &[Tok]) -> Option<Error> {
     })
 }
 
-/// The program in `src`: read in one pass (`fast`) where it parses, else by the table parser,
-/// which says what is wrong (the two give the same tree for every text that parses: tests/
-/// parse_diff.rs).
+/// The program in `src`, read in one pass (`fast`): the table-driven parser's answer, tree or
+/// error, for every text (tests/parse_diff.rs).
 pub fn parse(src: &str) -> R<Vec<Stmt>> {
     let mut la = Vec::new();
     let toks = lex_into::<false>(src, &mut Vec::new(), &mut la)?;
-    // (a text the one-pass parser takes has no reserved word as a name: it takes `at` only as
-    // an argument's key and an expect's clause, which `name_uses` passes over; one it refuses
-    // goes to `parse_table`, which looks for them first)
-    if let Some(stmts) = fast::parse(toks) {
-        return Ok(stmts);
+    fast::parse(toks, la)
+}
+
+/// A reserved word used as a name, as `parse_table` looks for it before it parses.
+fn reserved_tok(toks: &[Tok]) -> Option<Error> {
+    if RESERVED
+        .iter()
+        .any(|w| toks.iter().any(|t| t.kind == TokKind::Kw(w)))
+    {
+        return reserved_in(toks);
     }
-    parse_table(src)
+    None
 }
 
 /// `parse` by the table-driven parser alone.
@@ -1855,9 +1928,8 @@ pub fn walk<'s>(stmts: &'s [Stmt], f: &mut dyn FnMut(&'s Stmt)) {
     for s in stmts {
         f(s);
         match &s.kind {
-            StmtKind::Fn { body, .. } | StmtKind::For { body, .. } | StmtKind::Block { body, .. } => {
-                walk(body, f)
-            }
+            StmtKind::Fn { body, .. } => walk(body, f),
+            StmtKind::For { body, .. } | StmtKind::Block { body, .. } => walk(body, f),
             StmtKind::If { then, other, .. } => {
                 walk(then, f);
                 if let Some(o) = other {
@@ -1865,6 +1937,362 @@ pub fn walk<'s>(stmts: &'s [Stmt], f: &mut dyn FnMut(&'s Stmt)) {
                 }
             }
             _ => {}
+        }
+    }
+}
+
+/// `prog`, the tree `parse` gave `old`, made the tree it gives `new`, where the two texts differ
+/// only within one number written plainly (digits, maybe a fraction, maybe a unit, its sign
+/// unchanged) that is an expression of its own, and maybe in the spaces and comment after it on
+/// its line: that number's value set, and every span from its end on moved by the change in
+/// length. False, `prog` untouched, where the change is anything else; `parse` it then. What the
+/// edit of one dimension makes, from a slider or `SetParam`, or a line written out again.
+pub fn reparse_number(old: &str, prog: &mut [Stmt], new: &str) -> bool {
+    let (a, b) = (old.as_bytes(), new.as_bytes());
+    if a == b {
+        return true;
+    }
+    let p = a.iter().zip(b).take_while(|(x, y)| x == y).count();
+    let room = a.len().min(b.len()) - p;
+    let q = a
+        .iter()
+        .rev()
+        .zip(b.iter().rev())
+        .take(room)
+        .take_while(|(x, y)| x == y)
+        .count();
+    // the number expression whose literal the change starts in (or right after)
+    let Some(at) = number_at(prog, p as u32) else {
+        return false;
+    };
+    let (lo, hi) = (at.lo as usize, at.hi as usize);
+    // a plain number's length from `s[at..]`: `-`, digits, a fraction, a unit
+    let lit = |s: &[u8], at: usize| {
+        let mut i = at;
+        if s.get(i) == Some(&b'-') {
+            i += 1;
+        }
+        let d0 = i;
+        while s.get(i).is_some_and(|c| c.is_ascii_digit()) {
+            i += 1;
+        }
+        if i == d0 {
+            return None;
+        }
+        if s.get(i) == Some(&b'.') {
+            let f0 = i + 1;
+            i = f0;
+            while s.get(i).is_some_and(|c| c.is_ascii_digit()) {
+                i += 1;
+            }
+            if i == f0 {
+                return None;
+            }
+        }
+        for u in [&b"mm"[..], &b"deg"[..]] {
+            if s[i..].starts_with(u) {
+                i += u.len();
+                break;
+            }
+        }
+        // nothing after it that a number could run into
+        if s.get(i)
+            .is_some_and(|c| c.is_ascii_alphanumeric() || *c == b'_' || *c == b'.')
+        {
+            return None;
+        }
+        Some(i)
+    };
+    // spaces, and maybe a comment, to the line's end: no token
+    let trivia = |s: &[u8]| {
+        let k = s.iter().position(|c| *c == b'#').unwrap_or(s.len());
+        s[..k].iter().all(|c| matches!(c, b' ' | b'\t' | b'\r')) && !s.contains(&b'\n')
+    };
+    let Some(old_hi) = lit(a, lo) else { return false };
+    let Some(new_hi) = lit(b, lo) else { return false };
+    if old_hi != hi || (a[lo] == b'-') != (b[lo] == b'-') {
+        return false;
+    }
+    // the change ends within the literal, or in the trivia after it
+    let (old_end, new_end) = ((a.len() - q).max(hi), (b.len() - q).max(new_hi));
+    if new_end as i64 - old_end as i64 != b.len() as i64 - a.len() as i64
+        || !trivia(&a[hi..old_end])
+        || !trivia(&b[new_hi..new_end])
+        // a comment begun or ended in the change moves what follows it in or out of the text
+        || a[hi..old_end].contains(&b'#') != b[new_hi..new_end].contains(&b'#')
+    {
+        return false;
+    }
+    let (v, u) = match lex(&new[lo..new_hi]).as_deref() {
+        Ok(
+            [
+                Tok {
+                    kind: TokKind::Num(v, u),
+                    ..
+                },
+                Tok {
+                    kind: TokKind::Eof, ..
+                },
+            ],
+        ) => (*v, *u),
+        _ => return false,
+    };
+    let (d, d_lit) = (b.len() as i64 - a.len() as i64, new_hi as i64 - hi as i64);
+    let hi32 = hi as u32;
+    // a span's end at the literal's end moves with the literal; anything after it, and a start
+    // there (the next token's), with the whole change (nothing lies in the trivia between)
+    let shift = |s: &mut Span| {
+        let by = |x: u32, end: bool| match x.cmp(&hi32) {
+            std::cmp::Ordering::Less => x,
+            std::cmp::Ordering::Equal if end => (x as i64 + d_lit) as u32,
+            _ => (x as i64 + d) as u32,
+        };
+        s.lo = by(s.lo, false);
+        s.hi = by(s.hi, true);
+    };
+    // (an expression reaches `set` with its span moved already)
+    let moved = Span {
+        lo: at.lo,
+        hi: new_hi as u32,
+    };
+    let mut set = |e: &mut Expr| {
+        if e.span == moved && matches!(e.kind, ExprKind::Num(..)) {
+            e.kind = ExprKind::Num(v, u);
+        }
+    };
+    spans_mut(prog, &mut |s| shift(s), &mut set);
+    true
+}
+
+/// The span of the number expression whose literal holds `at` (or ends there).
+fn number_at(prog: &[Stmt], at: u32) -> Option<Span> {
+    let mut found = None;
+    walk_exprs(prog, &mut |e| {
+        if found.is_none() && matches!(e.kind, ExprKind::Num(..)) && e.span.lo <= at && at <= e.span.hi {
+            found = Some(e.span);
+        }
+    });
+    found
+}
+
+/// Every expression of `stmts`, nested ones too.
+fn walk_exprs<'s>(stmts: &'s [Stmt], f: &mut dyn FnMut(&'s Expr)) {
+    fn expr<'s>(e: &'s Expr, f: &mut dyn FnMut(&'s Expr)) {
+        f(e);
+        match &e.kind {
+            ExprKind::List(xs) | ExprKind::Tuple(xs) => xs.iter().for_each(|x| expr(x, f)),
+            ExprKind::Map(xs) => xs.iter().for_each(|x| expr(&x.1, f)),
+            ExprKind::Comp { item, iter, cond, .. } => {
+                expr(item, f);
+                expr(iter, f);
+                if let Some(c) = cond {
+                    expr(c, f);
+                }
+            }
+            ExprKind::Range { lo, hi, .. } => {
+                expr(lo, f);
+                expr(hi, f);
+            }
+            ExprKind::Bin(_, a, b) | ExprKind::Index(a, b) => {
+                expr(a, f);
+                expr(b, f);
+            }
+            ExprKind::Neg(a) | ExprKind::Not(a) | ExprKind::Attr(a, _) => expr(a, f),
+            ExprKind::Call(c, args) => {
+                expr(c, f);
+                args.iter().for_each(|a| expr(&a.value, f));
+            }
+            ExprKind::If { cond, then, other } => {
+                expr(cond, f);
+                expr(then, f);
+                expr(other, f);
+            }
+            ExprKind::Num(..) | ExprKind::Str(_) | ExprKind::Bool(_) | ExprKind::Name(_) => {}
+        }
+    }
+    walk(stmts, &mut |s| match &s.kind {
+        StmtKind::Shared { value, .. }
+        | StmtKind::Param { value, .. }
+        | StmtKind::Assign { value, .. }
+        | StmtKind::Expr(value)
+        | StmtKind::Return(value) => expr(value, f),
+        StmtKind::Fn { params, .. } => params
+            .iter()
+            .filter_map(|p| p.default.as_ref())
+            .for_each(|d| expr(d, f)),
+        StmtKind::For { iter, .. } => expr(iter, f),
+        StmtKind::If { cond, .. } => expr(cond, f),
+        StmtKind::Block { args, .. } => args.iter().for_each(|a| expr(&a.value, f)),
+        StmtKind::Expect { args, cmp, at, .. } => {
+            args.iter().for_each(|a| expr(a, f));
+            if let Some((_, v, tol)) = cmp {
+                expr(v, f);
+                if let Some((t, _)) = tol {
+                    expr(t, f);
+                }
+            }
+            at.iter().for_each(|(_, v)| expr(v, f));
+        }
+    });
+}
+
+/// Every span of `stmts` handed to `span`, and every expression to `expr` (after its span).
+fn spans_mut(stmts: &mut [Stmt], span: &mut dyn FnMut(&mut Span), ex: &mut dyn FnMut(&mut Expr)) {
+    fn expr(e: &mut Expr, span: &mut dyn FnMut(&mut Span), ex: &mut dyn FnMut(&mut Expr)) {
+        span(&mut e.span);
+        ex(e);
+        match &mut e.kind {
+            ExprKind::List(xs) | ExprKind::Tuple(xs) => xs.iter_mut().for_each(|x| expr(x, span, ex)),
+            ExprKind::Map(xs) => xs.iter_mut().for_each(|x| expr(&mut x.1, span, ex)),
+            ExprKind::Comp { item, iter, cond, .. } => {
+                expr(item, span, ex);
+                expr(iter, span, ex);
+                if let Some(c) = cond {
+                    expr(c, span, ex);
+                }
+            }
+            ExprKind::Range { lo, hi, .. } => {
+                expr(lo, span, ex);
+                expr(hi, span, ex);
+            }
+            ExprKind::Bin(_, a, b) | ExprKind::Index(a, b) => {
+                expr(a, span, ex);
+                expr(b, span, ex);
+            }
+            ExprKind::Neg(a) | ExprKind::Not(a) | ExprKind::Attr(a, _) => expr(a, span, ex),
+            ExprKind::Call(c, args) => {
+                expr(c, span, ex);
+                for a in args {
+                    if let Some((_, s)) = &mut a.name {
+                        span(s);
+                    }
+                    expr(&mut a.value, span, ex);
+                }
+            }
+            ExprKind::If { cond, then, other } => {
+                expr(cond, span, ex);
+                expr(then, span, ex);
+                expr(other, span, ex);
+            }
+            ExprKind::Num(..) | ExprKind::Str(_) | ExprKind::Bool(_) | ExprKind::Name(_) => {}
+        }
+    }
+    for s in stmts {
+        span(&mut s.span);
+        span(&mut s.full);
+        match &mut s.kind {
+            StmtKind::Shared { value, .. }
+            | StmtKind::Param { value, .. }
+            | StmtKind::Assign { value, .. }
+            | StmtKind::Expr(value)
+            | StmtKind::Return(value) => expr(value, span, ex),
+            StmtKind::Fn { params, body, .. } => {
+                for p in params.iter_mut() {
+                    if let Some(d) = &mut p.default {
+                        expr(d, span, ex);
+                    }
+                }
+                spans_mut(std::rc::Rc::make_mut(body).as_mut_slice(), span, ex);
+            }
+            StmtKind::For { iter, body, .. } => {
+                expr(iter, span, ex);
+                spans_mut(body, span, ex);
+            }
+            StmtKind::If { cond, then, other } => {
+                expr(cond, span, ex);
+                spans_mut(then, span, ex);
+                if let Some(o) = other {
+                    spans_mut(o, span, ex);
+                }
+            }
+            StmtKind::Block { args, body, .. } => {
+                for a in args {
+                    if let Some((_, s)) = &mut a.name {
+                        span(s);
+                    }
+                    expr(&mut a.value, span, ex);
+                }
+                spans_mut(body, span, ex);
+            }
+            StmtKind::Expect { args, cmp, at, .. } => {
+                args.iter_mut().for_each(|a| expr(a, span, ex));
+                if let Some((_, v, tol)) = cmp {
+                    expr(v, span, ex);
+                    if let Some((t, _)) = tol {
+                        expr(t, span, ex);
+                    }
+                }
+                at.iter_mut().for_each(|(_, v)| expr(v, span, ex));
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod plain_number_tests {
+    /// `plain_number` is `str::parse` to the bit wherever it answers, on numbers of up to 16
+    /// digits, a dot anywhere or none, signed or not; and it answers for every one of up to 15.
+    #[test]
+    fn plain_numbers_are_the_parse() {
+        let mut x = 0x9e37_79b9_7f4a_7c15u64;
+        let mut next = || {
+            x ^= x << 13;
+            x ^= x >> 7;
+            x ^= x << 17;
+            x
+        };
+        let mut answered = 0;
+        for k in 0..400_000 {
+            let n = 1 + (next() % 16) as usize;
+            let mut t = String::new();
+            if k % 3 == 0 {
+                t.push('-');
+            }
+            for j in 0..n {
+                // leading zeros, and runs of nines and zeros, often
+                let d = match next() % 4 {
+                    0 => 0,
+                    1 => 9,
+                    _ => next() % 10,
+                };
+                t.push((b'0' + d as u8) as char);
+                if j + 1 < n && next() % (n as u64 + 1) == 0 && !t.contains('.') {
+                    t.push('.');
+                }
+            }
+            if k % 7 == 0 && !t.contains('.') {
+                t.push('.');
+            }
+            let want: f64 = t.parse().expect("a number");
+            match super::plain_number(&t) {
+                Some(v) => {
+                    assert_eq!(v.to_bits(), want.to_bits(), "{t}");
+                    answered += 1;
+                }
+                None => assert!(n > 15, "{t} not answered"),
+            }
+        }
+        assert!(answered > 300_000, "{answered}");
+        for t in [
+            "0",
+            "-0",
+            "7.",
+            "0.5",
+            "1.25",
+            "90",
+            "2.5",
+            "123456789012345",
+            "0.00000000000001",
+        ] {
+            let want: f64 = t.parse().expect("a number");
+            assert_eq!(
+                super::plain_number(t).map(f64::to_bits),
+                Some(want.to_bits()),
+                "{t}"
+            );
+        }
+        for t in ["1e3", "1.2.3", "", "-", "1234567890123456"] {
+            assert_eq!(super::plain_number(t), None, "{t}");
         }
     }
 }

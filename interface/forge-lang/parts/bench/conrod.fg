@@ -1,6 +1,5 @@
 # Connecting rod, forged steel, 150 mm centres: an I-beam shank between a 52 mm big end split
 # on its centre line and a 24 mm small end, rod bolts tapped M9x1 into the bosses.
-# Hand port of tools/bench-parts/conrod.fc.
 
 shared c = 150                 # centres
 shared rb = 31                 # big end radius

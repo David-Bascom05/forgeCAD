@@ -21,7 +21,7 @@ fn forgecad(args: &[&str]) -> (bool, String) {
 }
 
 fn example(name: &str) -> String {
-    let d = std::env::temp_dir().join(format!("forgecad-agents-md-{name}-{}", std::process::id()));
+    let d = forge_dirs::temp_dir().join(format!("forgecad-agents-md-{name}-{}", forge_dirs::process_id()));
     std::fs::create_dir_all(&d).unwrap();
     let f = d.join("e.fg");
     std::fs::write(&f, blocks()[0]).unwrap();

@@ -313,6 +313,41 @@ fn groups(s: &Shell) -> Vec<Group> {
         action: fg_open.then_some(Action::NewFeature(kind)),
         on: false,
     };
+    // a part's Weldments tab: members from a sketch's lines, their ends and plates, the cut list
+    if s.tab == super::WELD_TAB {
+        let cut_open = s.fg.as_ref().is_some_and(|f| f.cutlist_open);
+        return vec![
+            g(
+                "Sketch",
+                vec![go("Start Sketch", "sketch", Action::StartSketch, s.sketch_pick)],
+                vec![],
+            ),
+            g("Structure", vec![fg_new("Members", "member", "members")], vec![]),
+            g(
+                "Ends",
+                vec![],
+                vec![
+                    fg_new("End Trim", "endtrim", "endtrim"),
+                    fg_new("End Cap", "endcap", "endcap"),
+                ],
+            ),
+            g(
+                "Plates",
+                vec![fg_new("Corner Plate", "cornerplate", "cornerplate")],
+                vec![],
+            ),
+            g(
+                "Report",
+                vec![Tool {
+                    name: "Cut List",
+                    icon: "cutlist",
+                    action: fg_open.then_some(Action::Fg(FgCmd::CutList)),
+                    on: cut_open,
+                }],
+                vec![],
+            ),
+        ];
+    }
     match s.tab {
         0 => vec![
             g(
@@ -679,12 +714,38 @@ impl Shell {
         }
     }
 
+    /// Nothing open: no part, drawing or DWG.
+    pub(super) fn no_document(&self) -> bool {
+        self.fg.is_none() && self.drawing.is_none() && self.dwgdoc.is_none()
+    }
+
+    /// A tool that does nothing without a document is drawn off then, its tooltip saying why;
+    /// what makes or opens one, Settings, and Thermoform's own tab stay on.
+    fn needs_document(&self, tool: &Tool) -> bool {
+        self.no_document()
+            && tool.action.is_some()
+            && self.tab != super::THERMO_TAB
+            && !matches!(tool.name, "Settings" | "Open" | "New" | "New Sheet Metal")
+    }
+
     pub(super) fn tool_response(
         &mut self,
         ui: &mut Ui,
         tool: &Tool,
         r: Rect,
     ) -> (egui::Color32, egui::Response) {
+        let off;
+        let tool = if self.needs_document(tool) {
+            off = Tool {
+                name: tool.name,
+                icon: tool.icon,
+                action: None,
+                on: false,
+            };
+            &off
+        } else {
+            tool
+        };
         let t = self.theme;
         let sense = if tool.action.is_some() {
             Sense::click()
