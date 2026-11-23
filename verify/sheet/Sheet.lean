@@ -6,6 +6,7 @@ import Sheet.Region
 import Sheet.BranchBound
 import Sheet.Build
 import Sheet.Float
+import Sheet.Exact
 import Sheet.Trig
 import Sheet.Checker
 import Sheet.Oracle
