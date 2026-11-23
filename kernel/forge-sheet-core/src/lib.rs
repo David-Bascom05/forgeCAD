@@ -29,8 +29,9 @@ pub fn classes(n: usize, pairs: &[(u32, u32)]) -> Vec<u32> {
     let mut uf = Uf::new(n);
     let mut k = 0;
     while k < pairs.len() {
-        let (a, b) = pairs[k];
-        uf.union(a as usize, b as usize);
+        let a = pairs[k].0 as usize;
+        let b = pairs[k].1 as usize;
+        uf.union(a, b);
         k += 1;
     }
     let mut number: Vec<u32> = Vec::with_capacity(n);
