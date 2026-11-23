@@ -134,3 +134,5 @@ import ForgeCurved
 #print axioms ForgeCurved.vert_sampled
 #print axioms ForgeCurved.facet_not_point
 #print axioms ForgeCurved.two_not_point
+#print axioms ForgeCurved.edges_frame
+#print axioms ForgeCurved.verts_frame

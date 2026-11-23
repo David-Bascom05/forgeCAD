@@ -48,3 +48,4 @@ import ForgeCurved.QEdgesSub
 import ForgeCurved.QEdgesSup
 import ForgeCurved.QOnTriple
 import ForgeCurved.QFields
+import ForgeCurved.QEdgesVerts
