@@ -428,3 +428,30 @@ Under this rule, refusals are typed by what the spec lacks:
 - `Undecided`: a predicate whose sign is not certified.
 
 Any other refusal is a kernel gap.
+
+### The obstacle, scored (2026-11-23, provisional)
+
+As the master asked, decided empirically: each candidate rule is scored against the data's truth.
+A precision first: on p00010 the rolling ball itself stays outside the body. The fill shrinks
+because another free ball, resting over the rim, covers part of it. So each rule says which solid's
+closing gives the fill near the pick ("fill = the closing fill of the obstacle O"):
+
+- (a) O = the two supports carried on, for both kinds (the owner's first form);
+- (b) O = the body's own material (concave) or air (convex) in the Voronoi cells of the supports and
+  their edge-neighbours, for both kinds;
+- (d) convex picks by (a), concave picks by (b): a concave fill is limited by every free ball of the
+  local body, and a convex cut is the shadow of the ball touching its two faces.
+
+| witness | (a) | (b) | (d) |
+|---|---|---|---|
+| CADFS 00154651, the crescent: Onshape rounds all four cap edges at r 2 (its STEP has 4 rational B-spline and 3 toroidal faces among 15) | agree | disagree: the far wall borders the start face, so it refuses | agree |
+| the census's 63 thin-wall convex rounds (STEP truth or OCCT rounds them) | agree | disagree where the far face borders a support | agree |
+| pipe set p00010, p00133, p00164, OCCT (concave) | disagree | agree | agree |
+| the pipe set's 161 right parts | agree | agree | agree |
+
+Only (d) fits every witness. The fillet session's oracle converged on the same rule independently
+(`label_body`: local for convex picks, the closing of the body's air for concave ones).
+
+The concave column holds three OCCT witnesses and no STEP truth yet. The systematic score is the
+census, run under each rule. Until then, L1's obstacle is provisional. What holds under every
+candidate stays proven: `local_eq_closing`, and the closing theorems of §8.
