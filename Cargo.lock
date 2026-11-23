@@ -316,6 +316,7 @@ dependencies = [
  "forge-math",
  "forge-mesh",
  "forge-ops",
+ "forge-sheetops",
  "forge-sketch",
  "forge-topo",
 ]
@@ -379,6 +380,16 @@ name = "forge-sheet-core"
 version = "0.1.0"
 dependencies = [
  "forge-math",
+]
+
+[[package]]
+name = "forge-sheetops"
+version = "0.1.0"
+dependencies = [
+ "forge-geom",
+ "forge-math",
+ "forge-ops",
+ "forge-topo",
 ]
 
 [[package]]
