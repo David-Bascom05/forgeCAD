@@ -862,3 +862,401 @@ fn a_fillet_on_one_copy_of_a_pattern_names_that_copys_edge() {
     near(m.centroid[0], want_x, "centroid x", &fg);
     assert!(m.centroid[1] > 0.0, "{fg}");
 }
+
+type P3 = (f64, f64, f64);
+
+/// A stored shape of plain straight edges and planar faces (each face its own edges), as a
+/// compound. Edges come first in the file's order, then faces: `EdgeN` and `FaceN` count each.
+fn shapes_brep(edges: &[(P3, P3)], faces: &[Vec<(P3, P3)>]) -> String {
+    brep_of(edges, faces, false)
+}
+
+/// The same, the plain edges in one wire (as a helix's shape holds them).
+fn wire_brep(edges: &[(P3, P3)]) -> String {
+    brep_of(edges, &[], true)
+}
+
+fn brep_of(edges: &[(P3, P3)], faces: &[Vec<(P3, P3)>], wired: bool) -> String {
+    let mut curves = vec![];
+    let mut shapes: Vec<(String, Vec<(char, usize)>)> = vec![];
+    let mut edge = |shapes: &mut Vec<(String, Vec<(char, usize)>)>, a: P3, b: P3| -> usize {
+        let d = (b.0 - a.0, b.1 - a.1, b.2 - a.2);
+        let l = (d.0 * d.0 + d.1 * d.1 + d.2 * d.2).sqrt();
+        curves.push(format!(
+            "1 {} {} {} {} {} {}",
+            a.0,
+            a.1,
+            a.2,
+            d.0 / l,
+            d.1 / l,
+            d.2 / l
+        ));
+        let c = curves.len();
+        for p in [a, b] {
+            shapes.push((
+                format!("Ve\n1e-07\n{} {} {}\n0 0\n\n0101101", p.0, p.1, p.2),
+                vec![],
+            ));
+        }
+        let n = shapes.len();
+        shapes.push((
+            format!("Ed\n 1e-07 1 1 0\n1  {c} 0 0 {l}\n0\n\n0101000"),
+            vec![('+', n - 2), ('-', n - 1)],
+        ));
+        shapes.len() - 1
+    };
+    let mut top = vec![];
+    for &(a, b) in edges {
+        top.push(edge(&mut shapes, a, b));
+    }
+    if wired {
+        shapes.push(("Wi\n\n0101100".into(), top.iter().map(|&e| ('+', e)).collect()));
+        top = vec![shapes.len() - 1];
+    }
+    let mut surfaces = vec![];
+    for f in faces {
+        let es: Vec<usize> = f.iter().map(|&(a, b)| edge(&mut shapes, a, b)).collect();
+        shapes.push(("Wi\n\n0101100".into(), es.iter().map(|&e| ('+', e)).collect()));
+        surfaces.push("1 0 0 0 0 0 1 1 0 0 -0 1 0".to_string());
+        let w = shapes.len() - 1;
+        shapes.push((
+            format!("Fa\n0  1e-07 {} 0\n\n0111000", surfaces.len()),
+            vec![('+', w)],
+        ));
+        top.push(shapes.len() - 1);
+    }
+    shapes.push(("Co\n\n1100000".into(), top.iter().map(|&s| ('+', s)).collect()));
+    // a shape's number counts from the end of the list
+    let n = shapes.len();
+    let body: String = shapes
+        .iter()
+        .map(|(h, kids)| {
+            let ks: String = kids.iter().map(|(o, k)| format!("{o}{} 0 ", n - k)).collect();
+            format!("{h}\n{ks}*\n")
+        })
+        .collect();
+    format!(
+        "DBRep_DrawableShape\n\nCASCADE Topology V1, (c) Matra-Datavision\nLocations 0\nCurve2ds 0\nCurves {}\n{}\nPolygon3D 0\nPolygonOnTriangulations 0\nSurfaces {}\n{}\nTriangulations 0\n\nTShapes {n}\n{body}\n+1 0\n",
+        curves.len(),
+        curves.join("\n"),
+        surfaces.len(),
+        surfaces.join("\n")
+    )
+}
+
+/// The document with its stored shapes.
+fn with_shapes(d: &str, extra: &[(&str, &str)]) -> Vec<u8> {
+    let mut members = vec![("Document.xml", d), ("PadShape.brp", EDGE)];
+    members.extend_from_slice(extra);
+    zip(&members)
+}
+
+/// The cubic B-spline's knots and poles here are written as they are, so the side is exact: its
+/// weights too. The area under a rational curve, by Gauss on many spans.
+#[test]
+fn a_pad_with_a_spline_side_writes_the_spline_exactly() {
+    let poles = [(40.0, 10.0), (28.0, 22.0), (12.0, 22.0), (0.0, 10.0)];
+    let ws = [1.0, 2.0, 2.0, 1.0];
+    let pole: String = poles
+        .iter()
+        .zip(ws)
+        .map(|(p, w)| format!("<Pole X=\"{}\" Y=\"{}\" Z=\"0\" Weight=\"{w}\"/>", p.0, p.1))
+        .collect();
+    let spline = format!(
+        "<Geometry type=\"Part::GeomBSplineCurve\"><BSplineCurve PolesCount=\"4\" KnotsCount=\"2\" Degree=\"3\" IsPeriodic=\"0\">{pole}<Knot Value=\"0\" Mult=\"4\"/><Knot Value=\"1\" Mult=\"4\"/></BSplineCurve><Construction value=\"0\"/></Geometry>"
+    );
+    let g = format!(
+        "<GeometryList count=\"4\">{}{}{spline}{}</GeometryList>",
+        line((0.0, 0.0), (40.0, 0.0), 0),
+        line((40.0, 0.0), (40.0, 10.0), 0),
+        line((0.0, 10.0), (0.0, 0.0), 0)
+    );
+    let d = doc(&[
+        body("Pad", &["Sketch", "Pad"]),
+        sketch("Sketch", place(0.0), g),
+        pad("Pad", "", "Sketch", 5.0, &[]),
+    ]);
+    let bodies = translate(&with_shapes(&d, &[])).expect("reads");
+    assert_eq!(bodies[0].status(), "translated", "{:?}", bodies[0].fail);
+    assert!(!bodies[0].approx);
+    let fg = bodies[0].fg.clone().expect("a part file");
+    assert!(fg.contains("degree: sd2, knots: sk2, weights: sw2)"), "{fg}");
+    assert!(
+        fg.contains("param t0_sk.sw2 = [ratio(1), ratio(2), ratio(2), ratio(1)]"),
+        "{fg}"
+    );
+    // the bump over y = 10: the integral of (y - 10) dx along the curve, from x = 40 to 0
+    let at = |t: f64| {
+        let b = [
+            (1.0 - t).powi(3),
+            3.0 * t * (1.0 - t).powi(2),
+            3.0 * t * t * (1.0 - t),
+            t.powi(3),
+        ];
+        let w: f64 = (0..4).map(|i| b[i] * ws[i]).sum();
+        let x: f64 = (0..4).map(|i| b[i] * ws[i] * poles[i].0).sum::<f64>() / w;
+        let y: f64 = (0..4).map(|i| b[i] * ws[i] * poles[i].1).sum::<f64>() / w;
+        (x, y)
+    };
+    let (n, h) = (400, 1e-7);
+    let g3 = [
+        (-0.774_596_669_241_483_4, 5.0 / 9.0),
+        (0.0, 8.0 / 9.0),
+        (0.774_596_669_241_483_4, 5.0 / 9.0),
+    ];
+    let mut bump = 0.0;
+    for k in 0..n {
+        let (a, b) = (k as f64 / n as f64, (k + 1) as f64 / n as f64);
+        for (z, w) in g3 {
+            let t = (a + b) / 2.0 + z * (b - a) / 2.0;
+            let dx = (at(t + h).0 - at(t - h).0) / (2.0 * h);
+            bump -= w * (b - a) / 2.0 * (at(t).1 - 10.0) * dx;
+        }
+    }
+    let m = built(&fg);
+    near(m.volume, 5.0 * (400.0 + bump), "volume", &fg);
+}
+
+/// A pad's front top edge, which the stored shape holds as two: a short piece from the left end
+/// none of our edge's middle samples lies on, and the rest. Both picked, the fillet rounds our
+/// one edge; the short piece alone would round more than FreeCAD did, so it stays unresolved.
+#[test]
+fn a_fillet_on_an_edge_the_stored_shape_holds_in_pieces() {
+    let pieces = shapes_brep(
+        &[
+            ((-30.0, -20.0, 10.0), (-26.0, -20.0, 10.0)),
+            ((-26.0, -20.0, 10.0), (30.0, -20.0, 10.0)),
+        ],
+        &[],
+    );
+    let run = |subs: &str| {
+        let d = doc(&[
+            body("Fillet", &["Sketch", "Pad", "Fillet"]),
+            sketch("Sketch", place(0.0), rect()),
+            (
+                "Pad",
+                "PartDesign::Pad",
+                vec![
+                    ("BaseFeature", "<Link value=\"\"/>".into()),
+                    ("Profile", "<LinkSub value=\"Sketch\"/>".into()),
+                    ("Length", "<Float value=\"10\"/>".into()),
+                    ("Shape", "<Part file=\"Pieces.brp\"/>".into()),
+                ],
+            ),
+            (
+                "Fillet",
+                "PartDesign::Fillet",
+                vec![
+                    ("BaseFeature", "<Link value=\"Pad\"/>".into()),
+                    ("Base", format!("<LinkSub value=\"Pad\">{subs}</LinkSub>")),
+                    ("Radius", "<Float value=\"2\"/>".into()),
+                    ("Shape", "<Part file=\"PadShape.brp\"/>".into()),
+                ],
+            ),
+        ]);
+        translate(&with_shapes(&d, &[("Pieces.brp", &pieces)]))
+            .expect("reads")
+            .remove(0)
+    };
+    let b = run("<Sub value=\"Edge1\"/><Sub value=\"Edge2\"/>");
+    assert_eq!(b.status(), "translated", "{:?}", b.fail);
+    let fg = b.fg.expect("a part file");
+    assert!(
+        fg.contains("t1 = fillet(edges(between: (t0.end, t0.side(t0_sk.l0))), r)"),
+        "{fg}"
+    );
+    let m = built(&fg);
+    near(m.volume, 24000.0 - (4.0 - PI) * 60.0, "volume", &fg);
+    let b = run("<Sub value=\"Edge1\"/>");
+    assert_eq!(b.status(), "untranslated");
+    assert!(
+        b.fail
+            .as_ref()
+            .is_some_and(|f| f.why() == "no edge where the base's edge lies"),
+        "{:?}",
+        b.fail
+    );
+}
+
+/// A pad's front wall drafted 5 degrees about the bottom face, pulled along that face's outward
+/// normal (down), as FreeCAD's library parts measured it: the wall leans out going up, so the
+/// part gains a wedge 60 long of legs 10 and 10 tan 5 degrees.
+#[test]
+fn a_draft_tilts_its_faces_about_the_neutral_face() {
+    let (x0, x1, y0, y1, z1) = (-30.0, 30.0, -20.0, 20.0, 10.0);
+    let front = vec![
+        ((x0, y0, 0.0), (x1, y0, 0.0)),
+        ((x1, y0, 0.0), (x1, y0, z1)),
+        ((x1, y0, z1), (x0, y0, z1)),
+        ((x0, y0, z1), (x0, y0, 0.0)),
+    ];
+    let bottom = vec![
+        ((x0, y0, 0.0), (x1, y0, 0.0)),
+        ((x1, y0, 0.0), (x1, y1, 0.0)),
+        ((x1, y1, 0.0), (x0, y1, 0.0)),
+        ((x0, y1, 0.0), (x0, y0, 0.0)),
+    ];
+    let faces = shapes_brep(&[], &[front, bottom]);
+    let d = doc(&[
+        body("Draft", &["Sketch", "Pad", "Draft"]),
+        sketch("Sketch", place(0.0), rect()),
+        (
+            "Pad",
+            "PartDesign::Pad",
+            vec![
+                ("BaseFeature", "<Link value=\"\"/>".into()),
+                ("Profile", "<LinkSub value=\"Sketch\"/>".into()),
+                ("Length", "<Float value=\"10\"/>".into()),
+                ("Shape", "<Part file=\"Faces.brp\"/>".into()),
+            ],
+        ),
+        (
+            "Draft",
+            "PartDesign::Draft",
+            vec![
+                ("BaseFeature", "<Link value=\"Pad\"/>".into()),
+                (
+                    "Base",
+                    "<LinkSub value=\"Pad\"><Sub value=\"Face1\"/></LinkSub>".into(),
+                ),
+                (
+                    "NeutralPlane",
+                    "<LinkSub value=\"Pad\"><Sub value=\"Face2\"/></LinkSub>".into(),
+                ),
+                ("PullDirection", "<LinkSub value=\"\"/>".into()),
+                ("Angle", "<Float value=\"5\"/>".into()),
+                ("Reversed", "<Bool value=\"false\"/>".into()),
+                ("Shape", "<Part file=\"PadShape.brp\"/>".into()),
+            ],
+        ),
+    ]);
+    let b = translate(&with_shapes(&d, &[("Faces.brp", &faces)]))
+        .expect("reads")
+        .remove(0);
+    assert_eq!(b.status(), "translated", "{:?}", b.fail);
+    let fg = b.fg.expect("a part file");
+    assert!(fg.contains("= draft("), "{fg}");
+    let m = built(&fg);
+    let (sn, cs) = forge_math::dmath::sin_cos(5.0 * PI / 180.0);
+    let t = sn / cs;
+    near(m.volume, 24000.0 + 60.0 * 10.0 * 10.0 * t / 2.0, "volume", &fg);
+}
+
+/// A square wound along a helix (a shape binder of a Part helix, as FreeCAD's thread parts hold
+/// it), Frenet: a coil about the helix's axis. Four turns of a 2 by 2 square whose middle runs 10
+/// from the axis sweep four times its revolve: 4 x 2 pi 10 x 4.
+#[test]
+fn a_pipe_along_a_helix_is_a_coil() {
+    let s = 0.5f64.sqrt();
+    let square = geo(&[
+        line((9.0, 0.0), (11.0, 0.0), 0),
+        line((11.0, 0.0), (11.0, 2.0), 0),
+        line((11.0, 2.0), (9.0, 2.0), 0),
+        line((9.0, 2.0), (9.0, 0.0), 0),
+    ]);
+    let d = doc(&[
+        body("Pipe", &["Sketch", "Binder", "Pipe"]),
+        // on the XZ plane: sketch x along X, sketch y along Z
+        sketch("Sketch", placed((0.0, 0.0, 0.0), (s, 0.0, 0.0, s)), square),
+        (
+            "Helix",
+            "Part::Helix",
+            vec![
+                ("Placement", place(0.0)),
+                ("Pitch", "<Float value=\"5\"/>".into()),
+                ("Height", "<Float value=\"24\"/>".into()),
+                ("Radius", "<Float value=\"10\"/>".into()),
+                ("Angle", "<Float value=\"0\"/>".into()),
+                ("LocalCoord", "<Integer value=\"0\"/>".into()),
+                ("Style", "<Integer value=\"1\"/>".into()),
+            ],
+        ),
+        (
+            "Binder",
+            "PartDesign::ShapeBinder",
+            vec![
+                ("Placement", place(0.0)),
+                (
+                    "Support",
+                    "<LinkSubList count=\"1\"><Link obj=\"Helix\" sub=\"\"/></LinkSubList>".into(),
+                ),
+                ("Shape", "<Part file=\"Helix.brp\"/>".into()),
+            ],
+        ),
+        (
+            "Pipe",
+            "PartDesign::AdditivePipe",
+            vec![
+                ("BaseFeature", "<Link value=\"\"/>".into()),
+                ("Profile", "<LinkSub value=\"Sketch\"/>".into()),
+                ("Spine", "<LinkSub value=\"Binder\"/>".into()),
+                ("Mode", "<Integer value=\"2\"/>".into()),
+                ("Sections", "<LinkList count=\"0\"></LinkList>".into()),
+                ("Shape", "<Part file=\"PadShape.brp\"/>".into()),
+            ],
+        ),
+    ]);
+    // what the binder holds: the helix as it was bound, here 4 turns of pitch 5 (the helix's own
+    // properties could have been edited since), as short chords
+    let at = |i: usize| {
+        let a = i as f64 * PI / 20.0;
+        let (sn, cs) = forge_math::dmath::sin_cos(a);
+        (10.0 * cs, 10.0 * sn, 5.0 * a / (2.0 * PI))
+    };
+    let chords: Vec<(P3, P3)> = (0..160).map(|i| (at(i), at(i + 1))).collect();
+    let helix = wire_brep(&chords);
+    let b = translate(&with_shapes(&d, &[("Helix.brp", &helix)]))
+        .expect("reads")
+        .remove(0);
+    assert_eq!(b.status(), "translated", "{:?}", b.fail);
+    let fg = b.fg.expect("a part file");
+    assert!(
+        fg.contains("coil(t0_sk, axis: t0_sk.ax, pitch: pitch, height: h)"),
+        "{fg}"
+    );
+    assert!(fg.contains("param t0.pitch = 5\nparam t0.h = 20\n"), "{fg}");
+    let m = built(&fg);
+    near(m.volume, 4.0 * 2.0 * PI * 10.0 * 4.0, "volume", &fg);
+}
+
+/// A Part workbench extrusion as older files hold it (Dir's length the distance, no LengthFwd),
+/// its front top edge rounded by a fillet outside any body: the fillet's Base is its base.
+#[test]
+fn a_fillet_outside_a_body_rounds_a_part_extrusion() {
+    let d = doc(&[
+        sketch("Sketch", place(0.0), rect()),
+        (
+            "Extrude",
+            "Part::Extrusion",
+            vec![
+                ("Base", "<Link value=\"Sketch\"/>".into()),
+                ("Dir", v(0.0, 0.0, 10.0)),
+                ("Solid", "<Bool value=\"true\"/>".into()),
+                ("TaperAngle", "<Float value=\"0\"/>".into()),
+                ("Placement", place(0.0)),
+                ("Shape", "<Part file=\"PadShape.brp\"/>".into()),
+            ],
+        ),
+        (
+            "Fillet",
+            "PartDesign::Fillet",
+            vec![
+                ("BaseFeature", "<Link value=\"\"/>".into()),
+                (
+                    "Base",
+                    "<LinkSub value=\"Extrude\"><Sub value=\"Edge1\"/></LinkSub>".into(),
+                ),
+                ("Radius", "<Float value=\"2\"/>".into()),
+                ("Shape", "<Part file=\"FilletShape.brp\"/>".into()),
+            ],
+        ),
+    ]);
+    let bodies = translate(&file(d)).expect("reads");
+    let b = bodies
+        .iter()
+        .find(|b| b.fg.as_ref().is_some_and(|f| f.contains("fillet(")))
+        .expect("the fillet's part");
+    let fg = b.fg.clone().expect("a part file");
+    let m = built(&fg);
+    near(m.volume, 24000.0 - (4.0 - PI) * 60.0, "volume", &fg);
+}

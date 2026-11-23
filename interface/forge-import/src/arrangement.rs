@@ -6,6 +6,7 @@
 use crate::Fail;
 use crate::py::{self, PI, TAU, V2, dist2 as dist, pmax, pmin, pmod};
 use std::collections::{BTreeSet, HashMap};
+use std::rc::Rc;
 
 /// Points this close are one point (mm).
 pub const EPS: f64 = 1e-5;
@@ -14,10 +15,39 @@ pub const SAG: f64 = 2e-3;
 
 #[derive(Clone, Debug)]
 pub enum Shape {
-    Line { start: V2, end: V2 },
-    Circle { center: V2, radius: f64 },
-    Arc { start: V2, mid: V2, end: V2 },
-    Poly { points: Vec<V2> },
+    Line {
+        start: V2,
+        end: V2,
+    },
+    Circle {
+        center: V2,
+        radius: f64,
+    },
+    Arc {
+        start: V2,
+        mid: V2,
+        end: V2,
+    },
+    Poly {
+        points: Vec<V2>,
+    },
+    /// A clamped NURBS: `points` sample it for the arrangement, and a piece that is the whole of
+    /// it is written exactly.
+    Nurbs {
+        points: Vec<V2>,
+        nurbs: Rc<Nurbs>,
+    },
+}
+
+/// A clamped, non-periodic NURBS in a sketch's plane: Forge's `spline(.., degree:, knots:,
+/// weights:)`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Nurbs {
+    pub degree: usize,
+    pub poles: Vec<V2>,
+    /// The full knot vector: poles + degree + 1 of them.
+    pub knots: Vec<f64>,
+    pub weights: Vec<f64>,
 }
 
 #[derive(Clone, Debug)]
@@ -50,6 +80,8 @@ pub struct Piece {
     pub others: Vec<(usize, bool)>,
     pub va: usize,
     pub vb: usize,
+    /// The NURBS this piece is the whole of, if it is.
+    pub src: Option<Rc<Nurbs>>,
 }
 
 fn sub(a: V2, b: V2) -> V2 {
@@ -70,6 +102,7 @@ impl Piece {
             others: vec![],
             va: 0,
             vb: 0,
+            src: None,
         }
     }
 
@@ -201,6 +234,10 @@ fn entities(ents: &[Ent]) -> (Vec<Piece>, bool) {
                 approx = approx || !e.construction;
                 Piece::poly(k, points.clone())
             }
+            Shape::Nurbs { points, nurbs } => Piece {
+                src: Some(nurbs.clone()),
+                ..Piece::poly(k, points.clone())
+            },
         };
         if !e.construction {
             out.push(p);
@@ -478,6 +515,9 @@ fn split(p: &Piece, pts: &[V2]) -> Vec<Piece> {
             }
             if cur.len() > 1 {
                 out.push(Piece::poly(p.ent, cur));
+            }
+            if let [one] = &mut out[..] {
+                one.src = p.src.clone();
             }
             out
         }

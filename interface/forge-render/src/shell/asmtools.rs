@@ -1633,7 +1633,7 @@ impl Shell {
                 }
             }
             p.circle_filled(o, 7.0, ink);
-            p.text(o, Align2::CENTER_CENTER, label, semi(10.0), Color32::WHITE);
+            p.text(o, Align2::CENTER_CENTER, label, semi(11.0), Color32::WHITE);
         };
         for (k, pk) in f.picks.iter().enumerate() {
             if let Some(fr) = pk.as_ref().and_then(|x| x.world) {

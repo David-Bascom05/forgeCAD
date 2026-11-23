@@ -176,7 +176,7 @@ impl Shell {
         use egui::{Align2, Sense, Stroke, StrokeKind, pos2, vec2};
         let t = self.theme;
         let p = ui.painter().with_clip_rect(r);
-        let font = super::theme::mono(12.0);
+        let font = super::theme::small();
         let widths: Vec<f32> = self
             .doc_tabs
             .iter()
@@ -226,13 +226,23 @@ impl Shell {
             } else {
                 t.surface
             };
-            p.rect_filled(tab, 3.0, fill);
-            p.rect_stroke(
-                tab,
-                3.0,
-                Stroke::new(1.0, if active { t.accent } else { t.line }),
-                StrokeKind::Inside,
-            );
+            let r1 = super::theme::R1;
+            p.rect_filled(tab, r1, fill);
+            p.rect_stroke(tab, r1, Stroke::new(1.0, t.line), StrokeKind::Inside);
+            // the one up: the ribbon's chosen-tab rule along its top
+            if active {
+                let top = egui::Rect::from_min_size(tab.min, vec2(tab.width(), 2.0));
+                p.rect_filled(
+                    top,
+                    egui::CornerRadius {
+                        nw: r1,
+                        ne: r1,
+                        sw: 0,
+                        se: 0,
+                    },
+                    t.accent,
+                );
+            }
             let icon = match d.kind {
                 DocKind::Part => "part",
                 DocKind::Assembly => "subasm",

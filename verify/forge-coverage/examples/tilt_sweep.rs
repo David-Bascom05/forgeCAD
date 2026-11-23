@@ -64,7 +64,11 @@ fn main() {
     let mut bad = 0;
     let mut runs = 0;
     for fam in &fams {
-        for op in [Op::Union, Op::Subtract, Op::Intersect] {
+        let ops = std::env::var("OPS").unwrap_or_default();
+        for op in [Op::Union, Op::Subtract, Op::Intersect]
+            .into_iter()
+            .filter(|o| ops.is_empty() || ops.contains(forge_coverage::op_name(*o)))
+        {
             let mut line = Vec::new();
             for &th in &thetas {
                 let ((ab, ap), (bb, bp)) = family(fam, th);
