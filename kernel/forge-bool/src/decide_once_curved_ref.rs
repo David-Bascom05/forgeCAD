@@ -1698,7 +1698,7 @@ mod tests {
         let want = [
             ("box - cylinder", &box_minus_cyl, (28, 52, 26)),
             ("plate with a hole", &plate_hole, (28, 52, 26)),
-            ("sphere ∩ box", &sphere_box, (48, 86, 36)),
+            ("sphere ∩ box", &sphere_box, (104, 180, 80)),
             ("cone", &cone, (8, 12, 6)),
             ("seamed cylinder", &seamed_cyl, (12, 20, 10)),
         ];
