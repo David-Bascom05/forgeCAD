@@ -1059,3 +1059,48 @@ fn a_taper_that_collapses_is_refused_cleanly() {
     let (v, _) = judge_built(include_str!("kernel_parts/taper_collapses.fg"));
     assert!(matches!(v, Verdict::Refused(_)), "{v:?}");
 }
+
+/// A through hole goes through a rib that stands above the rest of the part. The box a through
+/// hole is sized by (`hole::reach`) left ribs out, so this hole ran 7 mm, through the plate only,
+/// and stopped 1 mm into the rib (research/ops-spec/design.md §2, H1: a finite depth is exact iff
+/// it clears the part). The column it removes is exact: the disc under the tent's ridge,
+/// 40·π·R² − (34/30)·(4R³/3) with R = 2.5.
+#[test]
+fn thru_hole_goes_through_a_rib_above_the_part() {
+    let src = "shared L = 80
+shared W = 30
+shared t = 6
+param web.w = 8
+param bore.d = 5
+param tent.y = -15
+param tent.x0 = 10
+param tent.xm = 40
+param tent.x1 = 70
+param tent.top = 40
+sketch plan(on: xy) {
+  outline = rect(corner: (0, 0), size: (L, W))
+}
+base = extrude(plan, t)
+sketch tent(on: offset(xz, y)) {
+  path a(start: (x0, t)) {
+    line(to: (xm, top))
+    line(to: (x1, t))
+  }
+}
+web = rib(tent.a, w, flip: true)
+sketch spot(on: xy) {
+  c = pt(L / 2, W / 2)
+}
+bore = hole(at: spot.c, d: d, depth: thru, flip: true)
+";
+    let (b, v) = body(src);
+    assert!(forge_topo::check(&b).is_empty(), "{:?}", forge_topo::check(&b));
+    let r: f64 = 2.5;
+    let plate_and_rib = 80.0 * 30.0 * 6.0 + 60.0 * 34.0 / 2.0 * 8.0;
+    let column = 40.0 * dmath::PI * r * r - 34.0 / 30.0 * (4.0 * r * r * r / 3.0);
+    assert!(
+        (v - (plate_and_rib - column)).abs() < 1e-6,
+        "volume {v}, through the rib {}",
+        plate_and_rib - column
+    );
+}

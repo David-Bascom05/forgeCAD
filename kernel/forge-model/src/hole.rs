@@ -339,6 +339,49 @@ fn adds(features: crate::History<'_>, i: usize) -> Vec<Box3> {
     }
 }
 
+/// A box holding the part after rib `r` is added to a part inside `b`.
+///
+/// Every point of the rib's lump lies on a segment from a point within `t` of the path's plane
+/// region (inside the path's box grown by `t`) to the part or to the path: the wall is the region
+/// between the path and the part, thickened across the plane (or, for a web, the thickened path
+/// run along the normal to the part). So it lies in the hull of `b` and the path's box, grown by
+/// the thickness, the taper and the millimetre `rib` allows (rib.rs, `margin`); boxes are convex.
+/// The path's box is taken from whole circles for arcs, not from samples, so it holds the path.
+fn rib_reach(b: &Box3, r: &crate::rib::Rib) -> Box3 {
+    let pl = &r.plane;
+    let mut path = Box3::EMPTY;
+    for s in &r.path {
+        let pts: Vec<Point2> = match s {
+            Segment::Line { a, b } => vec![*a, *b],
+            Segment::Arc { center, radius, .. } | Segment::Circle { center, radius, .. } => {
+                let (c, q) = (*center, radius.abs());
+                vec![
+                    Point2::new(c.x - q, c.y - q),
+                    Point2::new(c.x + q, c.y - q),
+                    Point2::new(c.x - q, c.y + q),
+                    Point2::new(c.x + q, c.y + q),
+                ]
+            }
+            // a rib refuses these (`BadPath`): it adds nothing
+            Segment::Spline(_) => vec![],
+        };
+        for p in pts {
+            path = path.hull(&Box3::from_point(pl.plane_point(p)));
+        }
+    }
+    let bound = b.hull(&path);
+    if bound.is_empty() {
+        return bound;
+    }
+    let t = r.thickness.abs();
+    let taper = if (0.0..dmath::FRAC_PI_2).contains(&r.draft) {
+        bound.diagonal() * dmath::sin(r.draft) / dmath::cos(r.draft)
+    } else {
+        0.0
+    };
+    bound.grow(t + taper + 1.0)
+}
+
 /// A box holding all the material `features` can make, to size through holes by.
 pub(crate) fn reach(features: crate::History<'_>) -> Box3 {
     let mut b = Box3::EMPTY;
@@ -358,6 +401,7 @@ pub(crate) fn reach(features: crate::History<'_>) -> Box3 {
             Feature::Edit(crate::Edit::Thicken { thickness, .. }) if !b.is_empty() => {
                 b = b.grow(thickness.abs())
             }
+            Feature::Edit(crate::Edit::Rib(r)) => b = rib_reach(&b, r),
             Feature::Pattern {
                 of: Source::Body,
                 layout,
