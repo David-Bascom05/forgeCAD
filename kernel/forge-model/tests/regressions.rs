@@ -4029,3 +4029,21 @@ fn cones_apex_to_apex_within_tolerance_meet_at_a_point() {
         }
     }
 }
+
+/// Two identical balls 3·LINEAR apart, joined: the circle they meet in passes 1.5·LINEAR from the
+/// poles of both, leaving stubs of meridian 1.5e-5 long there. A loop's sample within tolerance of
+/// a sphere's axis is singular (its u says nothing) but was drawn at its own v, a hair below the
+/// pole's line: the jump in u there cut across the meridian into the pole (LoopsCross), on a body
+/// whose volume is exact. It is drawn at the pole.
+#[test]
+fn identical_balls_a_hair_apart_join_valid() {
+    use forge_math::dmath::PI;
+    let (r, d) = (10.0, 3.0 * forge_math::tol::LINEAR);
+    let want = 2.0 * 4.0 / 3.0 * PI * r * r * r - PI * (4.0 * r + d) * (2.0 * r - d) * (2.0 * r - d) / 12.0;
+    for b in degenerate_moved("sphere_sphere/identical/Add", forge_math::Vec3::X * 3.0) {
+        let b = b.expect("regenerates");
+        assert!(forge_topo::check(&b).is_empty(), "{:?}", forge_topo::check(&b));
+        let v = forge_topo::mass::mass(&b).expect("measures").volume;
+        assert!((v - want).abs() <= 1e-6, "{v} where {want}");
+    }
+}

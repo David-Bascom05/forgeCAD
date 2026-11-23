@@ -150,8 +150,13 @@ fn draw(body: &Body, face: FaceId, mut raw: Vec<Point2>) -> (Vec<Point2>, Vec<us
         let i = (start + k) % n;
         if singular[i] {
             let before = prev.expect("loop starts at a regular sample");
-            // (a spindle torus's v is periodic: the pole is where the run has got to)
-            let y = unwrap_in(&domain, raw[i], before).y;
+            // (a spindle torus's v is periodic: the pole is where the run has got to; a sphere's
+            // sample within tolerance of its axis is at its pole, drawn there on the pole's line,
+            // so a jump in u at it runs along the edge of the parameter plane)
+            let y = match surface {
+                forge_geom::Surface::Sphere(_) => dmath::FRAC_PI_2.copysign(raw[i].y),
+                _ => unwrap_in(&domain, raw[i], before).y,
+            };
             runs.last_mut()
                 .expect("at least one run")
                 .push((Point2::new(before.x, y), i));
