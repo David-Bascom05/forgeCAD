@@ -1,4 +1,4 @@
-# The hull subdivision's rounding margin (winding.rs `bezier`): it does not cover the rounding
+# The hull subdivision's rounding margin (winding.rs `bezier`): it did not cover the rounding (fixed)
 
 Found while setting up the L5 proof (the hull subdivision's rounding bound against
 verify/ieee754).
@@ -50,3 +50,17 @@ With the fix, the L5 bound is provable. Each level adds at most ε·big0 per coo
 halving is exact, and the projection adds ε relative error and divides the carried error by
 `wmin`. One hypothesis remains: no subnormal intermediate (ieee754's `round_abs_err`; the
 subnormal range needs an absolute term `m` does not have).
+
+## Status
+
+The fix is applied: `bezier` takes `big0`, the largest coordinate of the levels above, and sizes
+`m` by `max(big, big0)`. With it, the bound is provable on verify/ieee754.
+- Each de Casteljau level adds at most one rounding of a sum and one of a halving.
+  verify/aeneas/forge-sketch's `mid_err` proves it: E + 2⁻⁵³|result| + 2⁻⁵⁴|sum| + 2⁻¹⁰⁷⁴, at
+  most 2⁻⁵² · big0 per level outside the subnormal range.
+- A cubic's split is 3 such levels, against the 4·ε·big0 per depth that `m` allows.
+- The projection adds one rounding and the carried error over `wmin` (`proj_err`). The `+2` in
+  `(depth+2)` covers it.
+
+The induction over the depth is not written: by the owner's ruling, L5 here stops at the note
+and the two per-level lemmas.
