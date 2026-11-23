@@ -28,3 +28,7 @@ open ForgeWeld
 #print axioms Extreme.face_sound
 #print axioms Extreme.box_bounded
 #print axioms Extreme.lineCand_of
+#print axioms Arc.sqrt_denotes
+#print axioms Arc.circle_le
+#print axioms Arc.circle_attained
+#print axioms Arc.arcReach_spec

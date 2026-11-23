@@ -27,4 +27,10 @@ Classical.choice, Quot.sound).
   (every such point is a limit of section points). So the long point is the best candidate among
   the meetings of the edge lines and ridge lines in the section's closure: what `extreme` computes.
 
+- `ForgeWeld/ArcSupport.lean` (L2 for arcs, step 1), on the exact-curved session's certified
+  algebraic numbers (verify/forge-exact/ForgeExact/Alg, its Poly, Model, Real and Sum taken as
+  they are): `sqrt_denotes`, `circle_le` and `circle_attained` (an arc's farthest point in a
+  direction, Cauchy–Schwarz over any model of the reals), `arcReach_spec` (its reach
+  `w·c + r|w|` as an exact algebraic number).
+
 Not yet: arc members and arc sides of sections (ℚ(√·), the L2 step), L2–L6.
