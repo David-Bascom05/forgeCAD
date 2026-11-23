@@ -1300,6 +1300,7 @@ dependencies = [
  "forge-sketch",
  "forge-step",
  "forge-thermo",
+ "forge-tooling",
  "forge-topo",
  "forge-vendor",
  "js-sys",

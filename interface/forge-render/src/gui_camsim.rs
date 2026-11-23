@@ -2,127 +2,92 @@
 //! a view of its own with no part scene: everything is drawn from the simulation), played on
 //! each frame, its geometry made for the view. The chrome is `gui_camsim_panel.rs`.
 
-use super::{Gui, Loaded, name_of, view_camera};
+use super::Gui;
 use crate::camsim::Sim;
 use crate::camsim::draw::{self, Eye, PathShow, StockColour};
 use crate::gui_camsim_panel::{CamSimUi, PartShow};
 use crate::origin::WorldVert;
-use crate::render::{self, Renderer, part_info};
-use crate::scene::{Placement, Scene};
 
 impl Gui {
-    /// Opens a machining document: runs it (its parts beside it), and shows its simulation.
-    pub(super) fn open_camsim(&mut self, path: &str) -> bool {
-        let src = match forge_dirs::fs::read_to_string(path) {
-            Ok(s) => s,
-            Err(e) => {
-                self.shell.status = format!("{path}: {e}");
-                return false;
-            }
-        };
-        let dir = std::path::Path::new(path)
-            .parent()
-            .map(std::path::Path::to_path_buf)
-            .unwrap_or_default();
-        let sim = Sim::open(&src, &dir);
-        let name = name_of(path);
-        self.shell.status = if sim.cam.ok {
-            format!(
-                "{name}: {} ops, {}",
-                sim.tl.ops.len(),
-                crate::camsim::timeline::clock(sim.tl.total)
-            )
-        } else {
-            format!(
-                "{name}: {}",
-                sim.cam
-                    .errors
-                    .first()
-                    .cloned()
-                    .unwrap_or_else(|| "not certified".into())
-            )
-        };
-        // the view: an empty scene (the simulation draws everything as world triangles)
-        let parts = vec![crate::mesh::PartMesh::empty()];
-        let scene = Scene::new(&part_info(&parts), vec![Placement::at(0, [0.0; 3])]);
-        let renderer = Renderer::new(
-            self.device.clone(),
-            self.queue.clone(),
-            self.adapter.clone(),
-            render::OFFSCREEN,
-            (16, 16),
-            &parts,
-            &scene,
-        );
-        self.fg = None;
-        self.shell.fg = None;
-        self.shell.camsim = Some(Box::new(CamSimUi::new(sim, path)));
-        self.show_loaded(Loaded {
-            file: None,
-            name: name.clone(),
-            empty: false,
-            scene,
-            renderer,
-        });
-        self.camsim_fit();
-        self.shell.name = name;
-        true
-    }
-
-    /// The view fitted to what the setups' stocks hold.
-    fn camsim_fit(&mut self) {
-        let Some(st) = self.shell.camsim.as_deref() else {
+    /// The workspace's document simulated off the window's thread whenever its run is new; a
+    /// finished one taken in (keeping the time shown), the workspace's focus followed.
+    fn camsim_follow(&mut self) {
+        let Some(w) = &self.shell.cam else {
+            self.shell.camsim = None;
             return;
         };
-        let (mut lo, mut hi) = ([f32::INFINITY; 3], [f32::NEG_INFINITY; 3]);
-        for s in &st.sim.setups {
-            for k in 0..3 {
-                lo[k] = lo[k].min(s.stock.min[k] as f32);
-                hi[k] = hi[k].max(s.stock.max[k] as f32);
+        let job = &mut self.shell.camsim_job;
+        // a finished simulation
+        let done = job.slot.lock().unwrap_or_else(|e| e.into_inner()).take();
+        if let Some((text, sim)) = done {
+            job.running = None;
+            let mut ui = CamSimUi::new(sim, &w.path);
+            ui.src = text;
+            if let Some(old) = self.shell.camsim.as_deref() {
+                // the user's choices and the time carry over a regeneration
+                ui.rapids = old.rapids;
+                ui.played_only = old.played_only;
+                ui.stock = old.stock;
+                ui.colour = old.colour;
+                ui.part = old.part;
+                ui.tool = old.tool;
+                ui.fixture = old.fixture;
+                ui.follow = old.follow;
+                ui.path_width = old.path_width;
+                ui.tab = old.tab;
+                ui.folded = old.folded;
+                ui.speed = old.speed;
+                ui.jump(old.t);
+            } else {
+                // the workspace shows the part itself
+                ui.part = if self.fg.is_some() { PartShow::Hidden } else { PartShow::Ghost };
+            }
+            self.shell.camsim = Some(Box::new(ui));
+            self.shell.camsim_job.focus = None;
+            if let Some(v) = &mut self.view {
+                v.dirty = true;
             }
         }
-        if lo[0].is_finite()
-            && let Some(v) = &mut self.view
+        let Some(w) = &self.shell.cam else { return };
+        // the workspace has a run of text the simulation is not of: simulate it
+        if let Some(run) = &w.run {
+            let have = self.shell.camsim.as_deref().map(|s| s.src.as_str());
+            let job = &mut self.shell.camsim_job;
+            if have != Some(run.text.as_str()) && job.running.as_deref() != Some(run.text.as_str()) {
+                let (text, dir) = (run.text.clone(), w.dir.clone());
+                job.running = Some(text.clone());
+                let slot = job.slot.clone();
+                let waker = self.waker.clone();
+                crate::plat::spawn("forge-camsim", move || {
+                    let sim = Sim::open(&text, &dir);
+                    *slot.lock().unwrap_or_else(|e| e.into_inner()) = Some((text, sim));
+                    waker();
+                });
+            }
+        }
+        // the workspace's focus, when it changes
+        let f = w.focus().clone();
+        if self.shell.camsim_job.focus.as_ref() != Some(&f)
+            && let Some(st) = self.shell.camsim.as_deref_mut()
         {
-            let c = [0, 1, 2].map(|k| 0.5 * (lo[k] + hi[k]));
-            let r =
-                0.5 * ((hi[0] - lo[0]).powi(2) + (hi[1] - lo[1]).powi(2) + (hi[2] - lo[2]).powi(2)).sqrt();
-            v.nav.camera = view_camera(c, r * 1.25, self.shell.view.parallel, v.size);
-            v.nav.home_view = Some(v.nav.camera);
-            v.dirty = true;
+            st.take_focus(&f);
+            self.shell.camsim_job.focus = Some(f);
+            if let Some(v) = &mut self.view {
+                v.dirty = true;
+            }
         }
     }
 
-    /// Runs the open machining document again (its files changed), keeping the time shown.
+    /// Simulates the document again (its files changed), keeping the time shown.
     pub fn camsim_reload(&mut self) {
-        let Some(st) = self.shell.camsim.as_deref() else {
-            return;
-        };
-        let (path, t) = (st.path.clone(), st.t);
-        let src = match forge_dirs::fs::read_to_string(&path) {
-            Ok(s) => s,
-            Err(_) => return,
-        };
-        let dir = std::path::Path::new(&path)
-            .parent()
-            .map(std::path::Path::to_path_buf)
-            .unwrap_or_default();
-        let sim = Sim::open(&src, &dir);
-        let had = st.sim.setups.len();
-        let mut ui = CamSimUi::new(sim, &path);
-        ui.jump(t);
-        self.shell.status = String::new();
-        self.shell.camsim = Some(Box::new(ui));
-        if had == 0 {
-            self.camsim_fit();
-        }
-        if let Some(v) = &mut self.view {
-            v.dirty = true;
+        if let Some(st) = self.shell.camsim.as_deref_mut() {
+            st.src.clear();
         }
     }
 
     /// Plays the simulation on; true while it moves.
     pub(super) fn camsim_tick(&mut self) -> bool {
+        self.camsim_follow();
         let Some(st) = self.shell.camsim.as_deref_mut() else {
             return false;
         };

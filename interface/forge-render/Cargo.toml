@@ -57,11 +57,13 @@ forge-sheet = { path = "../../kernel/forge-sheet" }
 forge-brake = { path = "../../kernel/forge-brake" }
 forge-vendor = { path = "../../kernel/forge-vendor" }
 forge-step = { path = "../../kernel/forge-step" }
-# CAM: the machining document's run, its tools' profiles (the toolpath and stock simulation)
+# the Manufacture workspace: the machining document's run (forgecad.cam/1), its libraries and posts
 forge-cam-lang = { path = "../forge-cam-lang" }
-forge-cam = { path = "../../kernel/forge-cam" }
-forge-cam-geom = { path = "../../kernel/forge-cam-geom" }
+forge-tooling = { path = "../../kernel/forge-tooling" }
 forge-post = { path = "../../kernel/forge-post" }
+forge-cam = { path = "../../kernel/forge-cam" }
+# the tools' revolved profiles (the simulation's tool and stock)
+forge-cam-geom = { path = "../../kernel/forge-cam-geom" }
 png = "=0.18.1"
 # a background image's file (zune: MIT OR Apache-2.0 OR Zlib), already in the lock
 zune-jpeg = { version = "=0.5.15", default-features = false, features = ["std"] }

@@ -13,6 +13,25 @@ use crate::camsim::{Marker, Sim};
 use crate::shell::Shell;
 use egui::{Align2, Color32, FontId, Pos2, Rect, Sense, Stroke, Ui, pos2, vec2};
 
+/// A simulation made off the window's thread from the workspace's document: the text it is for
+/// and the result; and the workspace's focus last taken.
+#[derive(Default)]
+pub struct SimJob {
+    pub slot: std::sync::Arc<std::sync::Mutex<Option<(String, Sim)>>>,
+    /// The text being simulated now.
+    pub running: Option<String>,
+    pub focus: Option<crate::shell::cam::Focus>,
+}
+
+/// Where the playback is, for the workspace's browser to highlight (op by name, as the
+/// workspace names them; the move of the posted path; the time).
+#[derive(Clone, Debug, PartialEq)]
+pub struct SimCursor {
+    pub op: String,
+    pub move_index: usize,
+    pub t: f64,
+}
+
 /// How the part is shown.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PartShow {
@@ -34,6 +53,8 @@ pub enum Tab {
 pub struct CamSimUi {
     pub sim: Sim,
     pub path: String,
+    /// The document text it was made from.
+    pub src: String,
     /// The time shown, seconds into the program.
     pub t: f64,
     pub playing: bool,
@@ -72,6 +93,7 @@ impl CamSimUi {
         CamSimUi {
             sim,
             path: path.into(),
+            src: String::new(),
             t: 0.0,
             playing: false,
             speed: 10.0,
@@ -152,6 +174,59 @@ impl CamSimUi {
         self.scroll_to = self.sim.tl.seg_at(self.t);
     }
 
+    /// Where the playback is (`SimCursor`).
+    pub fn cursor(&self) -> Option<SimCursor> {
+        let i = self.sim.tl.seg_at(self.t)?;
+        let g = self.sim.tl.segs[i];
+        Some(SimCursor {
+            op: self.sim.tl.ops[g.op as usize].name.clone(),
+            move_index: g.mv as usize,
+            t: self.t,
+        })
+    }
+
+    /// Takes the workspace's focus: its setup or op shown (and only it, if asked), a check
+    /// located, the stock after an op.
+    pub fn take_focus(&mut self, f: &crate::shell::cam::Focus) {
+        let op_of = |name: &str| self.sim.tl.ops.iter().position(|o| o.name == name);
+        let setup_of = |name: &str| self.sim.setups.iter().position(|s| s.name == name);
+        let op = f.op.as_deref().and_then(op_of);
+        let setup = f.setup.as_deref().and_then(setup_of);
+        for (k, o) in self.sim.tl.ops.iter().enumerate() {
+            self.show_ops[k] = match (op, setup) {
+                (Some(i), _) if f.only_selected => k == i,
+                (_, Some(s)) => o.setup == s,
+                _ => true,
+            };
+        }
+        if let Some(l) = &f.locate
+            && let Some(i) = op_of(&l.op)
+        {
+            // the witness is in the setup's WCS: the part's frame less the origin
+            let o = self.sim.setups.get(self.sim.tl.ops[i].setup).map_or([0.0; 3], |s| s.origin);
+            let at = [l.at[0] + o[0], l.at[1] + o[1], l.at[2] + o[2]];
+            let paths = self.sim.cam.sim_paths(i).len();
+            let best = (0..paths)
+                .filter_map(|p| self.sim.tl.locate(i, p, l.mov, 0.5))
+                .min_by(|a, b| {
+                    let d = |t: f64| {
+                        let q = self.sim.tl.pos(t).map_or([f64::INFINITY; 3], |x| x.0);
+                        (0..3).map(|k| (q[k] - at[k]).powi(2)).sum::<f64>()
+                    };
+                    d(*a).total_cmp(&d(*b))
+                })
+                .or_else(|| self.sim.tl.nearest(i, at));
+            if let Some(t) = best {
+                self.jump(t);
+            }
+        } else if let Some(i) = f.stock_at.as_deref().and_then(op_of) {
+            let t = self.sim.tl.ops[i].t1;
+            self.jump(t);
+        } else if let Some(i) = op {
+            self.select_op(i);
+        }
+    }
+
     /// The tool playing now: its index and its tip.
     pub fn tool_now(&self) -> Option<(usize, [f64; 3], usize)> {
         let (p, i) = self.sim.tl.pos(self.t)?;
@@ -190,6 +265,10 @@ const PANEL_W: f32 = 312.0;
 impl Shell {
     /// The simulation's timeline and panel, over the view; true if a machining document is open.
     pub fn camsim_ui(&mut self, ctx: &egui::Context) -> bool {
+        // the Manufacture tab's: elsewhere the document's other tabs are left alone
+        if self.tab != crate::shell::CAM_TAB {
+            return false;
+        }
         let Some(mut st) = self.camsim.take() else {
             return false;
         };
