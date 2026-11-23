@@ -23,6 +23,7 @@ const t = require("./lib.cjs");
   let stage = "starting";
   let page = null;
   let slowest = [0, ""];
+  let memory = "?";
   // the whole run's cap: a stage that never ends (the native run, the page's load) is said too
   const cap = setTimeout(async () => {
     const pool = page ? await page.evaluate(() => window.forgecad?.fc?.pool_state?.()).catch((e) => `unread: ${e.message}`) : null;
@@ -82,13 +83,15 @@ const t = require("./lib.cjs");
         console.log(`ok - ${path.relative(t.repo, nf)}: ${got.ok ? `${got.faces} faces` : "refused alike"}`);
       }
     }
+    // the memory's size at the end (the threaded build's 4 GiB is the most it may have)
+    memory = JSON.parse(await p.evaluate(() => window.forgecad.fc.pool_state())).memory_mib;
   } finally {
     clearTimeout(cap);
     await b.close();
     proc.kill();
     fs.rmSync(dir, { recursive: true, force: true });
   }
-  console.log(`${n - bad} of ${n} the same (the kernel's parallel paths on up to ${widest} threads; slowest ${slowest[1]}, ${(slowest[0] / 1000).toFixed(1)} s)`);
+  console.log(`${n - bad} of ${n} the same (the kernel's parallel paths on up to ${widest} threads; slowest ${slowest[1]}, ${(slowest[0] / 1000).toFixed(1)} s; memory ${memory} MiB)`);
   if (process.env.THREADED) assert.ok(widest > 1, "the threaded build's kernel ran on one thread");
   assert.equal(bad, 0);
 })().catch((e) => {

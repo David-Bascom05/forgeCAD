@@ -420,7 +420,12 @@ mod global {
     use core::cell::UnsafeCell;
     use core::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 
+    /// The small blocks' heaps; past them, one more for every block from `BIG` up, shared by
+    /// every thread (few, and merged back as one heap merges them: split eight ways, a large
+    /// block found no heap with room for it while the memory free in all of them would have).
     const HEAPS: usize = 8;
+    const BIG_HEAP: usize = HEAPS;
+    const BIG: usize = 64 << 10;
     const PAGE: usize = 65536;
 
     struct Shard {
@@ -429,7 +434,7 @@ mod global {
     }
 
     struct Alloc {
-        shards: [Shard; HEAPS],
+        shards: [Shard; HEAPS + 1],
         /// Each 64 KiB page's heap (the memory's whole 4 GiB): set when a heap grows into it,
         /// before any block of it is handed out.
         owner: [AtomicU8; 1 << 16],
@@ -445,7 +450,7 @@ mod global {
                 held: AtomicBool::new(false),
                 heap: UnsafeCell::new(Heap::new()),
             }
-        }; HEAPS],
+        }; HEAPS + 1],
         owner: [const { AtomicU8::new(0) }; 1 << 16],
     };
 
@@ -546,7 +551,21 @@ mod global {
 
     unsafe impl GlobalAlloc for Alloc {
         unsafe fn alloc(&self, l: Layout) -> *mut u8 {
-            self.fresh(|h, g| unsafe { h.alloc(l.size(), l.align(), &mut |b| g(b)) })
+            let f = |h: &mut Heap, g: &mut dyn FnMut(usize) -> Option<(usize, usize)>| unsafe {
+                h.alloc(l.size(), l.align(), &mut |b| g(b))
+            };
+            if l.size() < BIG && l.align() <= 16 {
+                return self.fresh(f);
+            }
+            let s = &self.shards[BIG_HEAP];
+            s.take();
+            let p = f(s.heap(), &mut |b| grow(BIG_HEAP, b));
+            s.give();
+            if !p.is_null() {
+                return p;
+            }
+            // the memory's end reached: whatever the small blocks' heaps have free
+            self.fresh(f)
         }
 
         #[inline(never)]
@@ -557,12 +576,20 @@ mod global {
         }
 
         unsafe fn realloc(&self, p: *mut u8, l: Layout, new: usize) -> *mut u8 {
-            // in place in its own heap if it can be; else a new block anywhere, and this one freed
-            let s = self.owner_of(p);
-            let q = unsafe { s.heap().realloc(p, l.size(), l.align(), new, &mut |_| None) };
-            s.give();
-            if !q.is_null() {
-                return q;
+            // in its own heap if it stays the size that heap keeps (in place, or moved within it;
+            // the big blocks' heap may grow for it), else a new block, and this one freed
+            let k = self.owner[p as usize / PAGE].load(Ordering::Acquire) as usize;
+            if (k == BIG_HEAP) == (new >= BIG) {
+                let s = self.owner_of(p);
+                let q = unsafe {
+                    s.heap().realloc(p, l.size(), l.align(), new, &mut |b| {
+                        if k == BIG_HEAP { grow(k, b) } else { None }
+                    })
+                };
+                s.give();
+                if !q.is_null() {
+                    return q;
+                }
             }
             let q = unsafe { self.alloc(Layout::from_size_align_unchecked(new, l.align())) };
             if !q.is_null() {
