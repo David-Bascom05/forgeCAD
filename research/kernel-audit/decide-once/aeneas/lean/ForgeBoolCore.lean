@@ -24,4 +24,10 @@ import ForgeBoolCore.RefineBetween
 import ForgeBoolCore.RefineFan
 import ForgeBoolCore.Axioms
 import ForgeBoolCore.Specs
+import ForgeBoolCore.BridgeResult
+import ForgeBoolCore.BridgeTouch
+import ForgeBoolCore.RefineCore
+import ForgeBoolCore.Encode
+import ForgeBoolCore.EndToEnd
+import ForgeBoolCore.Integrate
 import ForgeBoolCore.RefineSplitOk
