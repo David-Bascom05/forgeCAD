@@ -17,7 +17,8 @@ gives each live face:
 is exactly the faces, and at each face point off the other faces the face is oriented (F6's
 `Oriented`). **`ValidSolid b`** is `∃ S, Bounds b S`, and **`⟦b⟧`** is such an `S`.
 `forge_topo::check` and the producing feature's validity supply `ValidSolid`, which is a
-hypothesis here, as the route's F6 takes it.
+hypothesis here, as the route's F6 takes it. A stored body goes through an exact
+counterpart (`ValidSolidVia`, `denoteVia`, at the end).
 
 **The bridge (c)**, for any arrangement `G` (F5's `FacetData`) whose face set contains `b`'s faces,
 with connected rooms:
@@ -130,5 +131,29 @@ theorem f6_hyps {b : BodyModel E} (hv : ValidSolid b) (hsub : Faces b ⊆ FacesG
 theorem oriented_denote {b : BodyModel E} (hv : ValidSolid b) {f : FaceModel E} (hf : f ∈ b.faces)
     {y : E} (hy : Alone b f y) : Oriented f.carrier (denote b) f.sense y :=
   (bounds_denote hv).oriented f hf y hy
+
+/-! ## Stored bodies: through an exact counterpart (the master's ruling, 2026-11-23)
+
+A stored body's shared edges may meet only to within LINEAR in f64. It is related to an exact
+counterpart `b*` by `Refines_δ b b*`: one-to-one cell structure, each entity within a proven `δ`.
+`Bounds` stays exact and applies to `b*`. The relation is a parameter here, until the aeneas
+session and the coordinator fix its definition (G1 = F1, faithful within δ). -/
+
+/-- **A valid stored body**: it refines an exact valid solid. -/
+def ValidSolidVia (Refines : BodyModel E → BodyModel E → Prop) (b : BodyModel E) : Prop :=
+  ∃ bs, Refines b bs ∧ ValidSolid bs
+
+open Classical in
+/-- **`⟦b⟧` for a stored body**: its exact counterpart's solid. -/
+noncomputable def denoteVia (Refines : BodyModel E → BodyModel E → Prop) (b : BodyModel E) : Set E :=
+  if h : ValidSolidVia Refines b then denote (Classical.choose h) else ∅
+
+/-- The counterpart behind `⟦b⟧`: an exact valid solid that `b` refines, whose solid is `⟦b⟧`.
+F5/F6 and the bridge above apply to it. -/
+theorem denoteVia_spec {Refines : BodyModel E → BodyModel E → Prop} {b : BodyModel E}
+    (h : ValidSolidVia Refines b) :
+    ∃ bs, Refines b bs ∧ ValidSolid bs ∧ denoteVia Refines b = denote bs := by
+  refine ⟨Classical.choose h, (Classical.choose_spec h).1, (Classical.choose_spec h).2, ?_⟩
+  unfold denoteVia; rw [dif_pos h]
 
 end ForgeCurved.BodyModel
