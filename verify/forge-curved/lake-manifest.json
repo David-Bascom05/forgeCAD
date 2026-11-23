@@ -6,7 +6,7 @@
    "name": "forgeboolcore",
    "manifestFile": "lake-manifest.json",
    "inherited": false,
-   "dir": "../../research/kernel-audit/decide-once/aeneas/lean",
+   "dir": "../aeneas/forge-bool-core/lean",
    "copy": false,
    "configFile": "lakefile.toml"},
   {"type": "path",

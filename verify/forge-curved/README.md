@@ -7,7 +7,7 @@ in forge-exact (core Lean, over `Alg`).
 
 Build: `lake exe cache get && lake build`. Axiom report: `lake env lean ForgeCurved/Axioms.lean`,
 checked in CI by .github/workflows/forge-curved.yml. Standard axioms only, no `sorry`. The
-package also requires the aeneas lean project (research/kernel-audit/decide-once/aeneas/lean),
+package also requires the aeneas lean project (verify/aeneas/forge-bool-core/lean),
 for `EndToEndCurved`. That project builds in about 2 minutes on the shared Mathlib cache.
 
 ## Proven
