@@ -1966,16 +1966,8 @@ impl<'s> Eval<'s> {
                         max: 1,
                     });
                 };
-                let ev = self.expr(&a.value)?;
-                let Value::Ent(e) = ev else {
-                    return Err(Error::WrongType {
-                        span: a.value.span,
-                        what: "side(entity)",
-                        want: Ty::Entity,
-                        found: ev.ty(),
-                    });
-                };
-                return crate::builtins::side(self, feat, &e, span);
+                let v = self.expr(&a.value)?;
+                return crate::builtins::side_of(self, feat, v, span);
             }
         }
         let fv = self.expr(f)?;
@@ -2642,7 +2634,7 @@ pub fn arith(op: BinOp, x: &Value, y: &Value, span: Span, sa: Span, sb: Span) ->
         (Value::Verts(a), Value::Verts(b)) if op == BinOp::Sub => Ok(Value::Verts(Rc::new(
             a.iter().copied().filter(|n| !b.contains(n)).collect(),
         ))),
-        // the first set less what the second holds (`.fc` picked one of several by place)
+        // the first set less what the second holds
         (Value::Faces(a), Value::Faces(b)) if op == BinOp::Sub => Ok(Value::Faces(Rc::new(Faces {
             names: a.names.iter().copied().filter(|n| !b.names.contains(n)).collect(),
             owner: a.owner.clone(),

@@ -1,7 +1,7 @@
 //! A Forge part's sketches in the view while a tool's selection takes sketch geometry: each
 //! sketch drawn on its plane where the part has it, what the selection can take lit under the
 //! pointer, and a click taking it (a profile by its loop or by pointing inside it, a line for an
-//! axis or a path, a point for a hole), as `.fc`'s sketches in the view were picked.
+//! axis or a path, a point for a hole).
 
 use super::Shell;
 use super::fgtool::SlotKind as K;

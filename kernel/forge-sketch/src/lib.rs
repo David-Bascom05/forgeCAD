@@ -9,8 +9,9 @@ pub mod profile;
 pub mod project;
 pub mod sketch;
 pub mod solve;
+mod winding;
 
-pub use profile::{ExtractError, profiles};
+pub use profile::{ExtractError, profiles, profiles_among, profiles_in_groups};
 pub use sketch::{Constraint, ConstraintId, Entity, EntityId, Sketch, SketchError};
 pub use solve::{Analysis, SolveReport, Status};
 

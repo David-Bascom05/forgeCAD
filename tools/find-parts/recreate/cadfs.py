@@ -21,11 +21,17 @@ import tempfile
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import fs
 import sketch2d
-from fgw import NoName, Prog, St, Stop, Topo, loop_segs
+from fgw import NoName, Prog, St, Stop, Topo, loop_segs, neg
 from sketch2d import Arrangement, Unsupported, carrier_dist, curve_dist, meets
 
 TOL = 2e-4  # mm: a sample this close lies on its carrier
 SIDE = 1  # TD weight +1: the region on this side of the entity (+1 left)
+TEXT = "text"  # a text sketch's regions: every glyph of each of its texts
+# Onshape's sketch text fonts (fontName) the shipped ones set exactly: family, bold, italic
+TEXT_FONTS = {
+    "OpenSans-Regular.ttf": ("Open Sans", False, False),
+    "OpenSans-Bold.ttf": ("Open Sans", True, False),
+}
 SUPPORTED = {"sweep", "loft", "sketch", "extrude", "revolve", "fillet", "chamfer", "shell", "cPlane", "cPoint", "assignVariable", "hole", "mirror", "circularPattern", "transform", "booleanBodies"}
 PLANES = {"Front": ((0.0, -1.0, 0.0), (1.0, 0.0, 0.0)), "Top": ((0.0, 0.0, 1.0), (1.0, 0.0, 0.0)), "Right": ((1.0, 0.0, 0.0), (0.0, 1.0, 0.0))}
 
@@ -361,6 +367,8 @@ class Tr:
         self.used = set()
         self.blends = {}  # fillet feature id: what its rounded edges parted and the faces it made (blend_carrier)
         self.sketch_ents = {}
+        self.texts = {}  # sketch id: (each text's row, or why it can't be one; whether other curves are drawn too)
+        self.last_record = {}
         self.plain = {}
         self.imprint_off = set()
         self.copies = {}
@@ -434,18 +442,38 @@ class Tr:
         return Blended(faces, edges)
 
     def sketch(self, f):
+        # sketch text is set by the kernel (a `text` row), not drawn here: the arrangement holds the rest
+        texts = [e for e in f["ents"] if e["kind"] == "skText" and not e.get("construction")]
         if any(e["kind"] == "skEllipticalArc" for e in f["ents"]):
             # the program's record of an elliptical arc holds no geometry: the solved curve is the sketch record's
             k, ents = self.arcs_from_record(f["ents"])
-            a = Arrangement(ents)
+            a = Arrangement([e for e in ents if e["kind"] != "skText"])
             self.used.add(k)
+            self.last_record = self.raw["sketches"][k]
             fr = Frame(self.raw["sketches"][k]["sketchMatrix"])
             f = dict(f, ents=ents)
         else:
-            a = Arrangement(f["ents"])
-            fr = self.frame_of(f, a)
+            a = Arrangement([e for e in f["ents"] if e["kind"] != "skText"])
+            guess = {}
+            for k, v in f["env"].items():
+                if k.startswith("initialGuess") and isinstance(v, dict):
+                    guess.update(v)
+            # a text's place: the records' texts of its string whose corner its initial guess (rounded) is beside
+            near = []
+            for e in texts:
+                g = guess.get(e["id"])
+                if not (isinstance(g, list) and len(g) >= 2 and all(isinstance(x, float) for x in g[:2])):
+                    continue
+                for rs in self.raw.get("sketches", []):
+                    for r in rs.get("entities", []):
+                        c = r.get("lowerLeftCornerPosition2d")
+                        if r.get("textString") == e.get("text") and c and math.hypot(c["x"] - g[0], c["y"] - g[1]) < 5e-5:
+                            near.append((c["x"], c["y"]))
+            fr = self.frame_of(f, a, near)
         self.sk[f["id"]] = (a, fr)
         self.sketch_ents[f["id"]] = f["ents"]
+        if texts:
+            self.texts[f["id"]] = (self.text_rows(texts, self.last_record), bool(a.pieces))
         if a.approx:
             self.notes.add("approx")
 
@@ -481,9 +509,41 @@ class Tr:
                 out.append(e)
         return k, out
 
-    def frame_of(self, f, a):
+    def text_rows(self, texts, record):
+        """Each sketch text as a `text` row: Onshape's solved box (its lower left the pen's start on the baseline, its
+        height 0.72 of the em, along its baseline's direction) and its font by name, or why it can't be one."""
+        raw = [e for e in record.get("entities", []) if e.get("sketchEntityType") == "skText" and not e.get("isConstruction")]
+        rows = []
+        for e in texts:
+            same = [r for r in raw if r.get("textString") == e.get("text")]
+            if len(same) != 1:
+                rows.append(Unresolved("sketch text not in the sketch's record" if not same else "sketch texts alike"))
+                continue
+            r = same[0]
+            font = TEXT_FONTS.get(e.get("fontName"))
+            txt = e["text"].rstrip("\n")
+            if font is None:
+                rows.append(Unsupported("sketch text in font " + str(e.get("fontName"))))
+            elif "\n" in txt:
+                rows.append(Unsupported("sketch text of several lines"))
+            elif '"' in txt:
+                rows.append(Unsupported("sketch text holding a quote mark"))
+            elif not txt.strip():
+                rows.append(None)
+            else:
+                d, c = r["baselineDirection2d"], r["lowerLeftCornerPosition2d"]
+                ang = math.degrees(math.atan2(d["y"], d["x"]))
+                fam, bold, italic = font
+                row = f'text("{txt}", at: ({num(c["x"] * 1000)}, {num(c["y"] * 1000)}), size: {num(r["height"] * 1000 / 0.72)}, font: "{fam}"'
+                row += ", bold: true" if bold else ""
+                row += ", italic: true" if italic else ""
+                row += f", angle: {num(ang)}deg" if abs(ang) > 1e-12 else ""
+                rows.append(row + ")")
+        return rows
+
+    def frame_of(self, f, a, extra=()):
         # the dataset's record: the unused sketch sharing most of these points and radii, the first if tied
-        ours = set()
+        ours = {(round(p[0] * 1000, 3), round(p[1] * 1000, 3)) for p in extra}
         for e in a.every.values():
             for q in (e.a, e.b, e.c):
                 if q is not None:
@@ -527,6 +587,7 @@ class Tr:
         if best is None or "sketchMatrix" not in self.raw["sketches"][best]:
             raise Unresolved("no sketch record")
         self.used.add(best)
+        self.last_record = self.raw["sketches"][best]
         return Frame(self.raw["sketches"][best]["sketchMatrix"])
 
     # queries as carriers
@@ -813,6 +874,17 @@ class Tr:
                 fid = q[1][0][1]
                 if fid not in self.sk:
                     raise Unresolved("a region of an unread sketch")
+                if fid in self.texts:
+                    rows, mixed = self.texts[fid]
+                    if mixed:
+                        raise Unsupported("sketch text beside other curves")
+                    if not (len(q[1]) > 1 and q[1][1] is True):
+                        raise Unsupported("sketch text's regions with its counters filled")
+                    for r in rows:
+                        if isinstance(r, Exception):
+                            raise r
+                    by.setdefault(fid, []).append(TEXT)
+                    continue
                 a = self.sk[fid][0]
                 # a spline in no region: the sampled curves may have missed a crossing, and the regions are then not the
                 # sketch's (00409237 cut a third of what it should)
@@ -1101,6 +1173,9 @@ class Tr:
     def emit_solid(self, kind, op, make, frame, by, flip, fid_out=None):
         """Each region a statement of `kind` on `frame` (origin, normal, x), `make` its own fields."""
         for fid, regs in by.items():
+            if TEXT in regs:
+                self.emit_text(kind, op, make, frame, fid, flip, fid_out)
+                continue
             a = self.sk[fid][0]
             for pi, prof in enumerate(a.merged(sorted(set(regs)))):
                 loops = [self.loop_segs(a, lp, flip) for lp in prof]
@@ -1124,6 +1199,37 @@ class Tr:
                     self.lines.append(St("combine", word="add", target=self.current, tools=joined, keep=False))
                     self.alias.update((b, self.current) for b in joined)
                     self.bodies -= len(joined)
+
+    def emit_text(self, kind, op, make, frame, fid, flip, fid_out):
+        """A text sketch's texts, each an extrude of all its glyphs' regions (`sk.r0`). The text is never mirrored: a
+        sketch the extrude turns over (flip) keeps its frame and runs the other way."""
+        if kind != "extrude":
+            raise Unsupported("sketch text in a " + kind)
+        if flip:
+            o, n, x = frame
+            frame = (o, tuple(neg(t) for t in n), x)
+            e = make["ext"]
+            other = {"fwd": "back", "back": "fwd", "both": "both"}
+            if e[0] == "d":
+                e = ("d", neg(e[1]))
+            elif e[0] == "two":
+                e = ("two", e[2], e[1])
+            elif e[0] in ("thru", "next"):
+                e = (e[0], other[e[1]])
+            make = dict(make, ext=e)
+        for row in self.texts[fid][0]:
+            if row is None:
+                continue
+            st = St(kind, frame=frame, loops=[[row]], member="r0", **make)
+            joined = self.run_into(st) if op == "add" and self.bodies > 1 else []
+            label, this, scope = self.solid_line("new" if op == "add" and self.bodies > 1 else op, set(), fid_out)
+            st.label, st.op, st.scope = label or None, this, scope
+            self.lines.append(st)
+            self.notes.add("text")
+            if joined:
+                self.lines.append(St("combine", word="add", target=self.current, tools=joined, keep=False))
+                self.alias.update((b, self.current) for b in joined)
+                self.bodies -= len(joined)
 
     def mass_of(self, lines):
         """Volume and area of these statements as a part, summed over its bodies; None if they don't build."""

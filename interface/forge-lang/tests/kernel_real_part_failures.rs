@@ -1,4 +1,4 @@
-//! Kernel failures the real-part benchmarks (tools/bench-parts) ran into, each shrunk to the
+//! Kernel failures the bench parts (parts/bench) ran into, each shrunk to the
 //! features that fail and written as a Forge part. Ignored until fixed: each builds valid when
 //! its failure is gone. The bench parts carry a TODO naming the test where they work round it.
 mod common;
@@ -1478,17 +1478,10 @@ rim = fillet(edges(between: (h.wall, blk.end)), 1.22)
 
 /// A chamfer naming an edge as only the sequential regen names it (a long n-ary run with text):
 /// the n-ary regen rebuilds feature by feature, the same solid, and the fallback is counted
-/// (the naming gap of docs/naming.md, history seed 27). The `.fc` lines it was found as, and the
-/// Forge part built to the same solid.
+/// (the naming gap of docs/naming.md, history seed 27): a rounded block, a revolved cut, raised
+/// text, a turn and the chamfer, held to its recorded volume and faces.
 #[test]
 fn nary_takes_the_sequential_regen_for_a_name_and_counts_it() {
-    let fc = "\
-L0: extrude 32.31 rrect 0 0 99.32 87.16 13.8
-L1: revolve cut sym 82.88 xz at 49.66 20.05 35 axis 0 0 0 -1 circle 26.29 -8.46 9.57
-L7: text add \"DO\" font \"block.ttf\" 25.81 3.44 z -1 0 0 at 0 63.47 16.16
-L8: movebody rot 47.94 49.8 9.69 0 0 1 -23.29
-L18: chamfer 3.22 ang 49.43 face (faces near 47.06 43.41 32.31) (edges near 16.16 9.26 32.31)
-";
     let fg = r#"
 XZ = plane(at: xy.origin, normal: xz.normal, x: yz.normal)
 sketch plan(on: xy) {
@@ -1513,18 +1506,17 @@ mark = text("DO", font: "block.ttf", size: 25.81, depth: 3.44, on: plane(at: at_
 turned = movebody(of: base, moves: [spin(about: axis(pivot.p, pivot_up.p), by: -23.29deg)])
 edge = chamfer(edges(between: (base.end, base.side(plan.outline[1])), longer: 20), 3.22, angle: 49.43deg, face: base.end)
 "#;
-    // the same solid as the .fc lines built (recorded from the retired engine, the bench font)
-    let _ = fc;
-    const FC_VOLUME: f64 = 265637.1116111694;
-    const FC_FACES: usize = 48;
+    // the solid recorded for this part (the bench font)
+    const RECORDED_VOLUME: f64 = 265637.1116111694;
+    const RECORDED_FACES: usize = 48;
     let m = common::holds(fg);
     assert!(
-        (m.volume - FC_VOLUME).abs() <= 1e-7 * FC_VOLUME,
+        (m.volume - RECORDED_VOLUME).abs() <= 1e-7 * RECORDED_VOLUME,
         "{} {}",
         m.volume,
-        FC_VOLUME
+        RECORDED_VOLUME
     );
-    assert_eq!(m.faces, FC_FACES);
+    assert_eq!(m.faces, RECORDED_FACES);
     let (part, ids) = history(fg);
     let before = forge_model::nary_name_fallbacks();
     let nary = part
