@@ -417,8 +417,10 @@ enum Apart {
 /// (research/sweep-spec DESIGN.md §3.3). The solid is the union of its pieces, a prism per line
 /// and a solid of revolution per arc; it runs into itself exactly where two pieces that are not
 /// neighbours share a point (neighbours share only their common section: `TooTight` keeps each
-/// bend's section clear of its axis). A pair whose boxes (the piece's path, grown by the
-/// profile's reach) are apart shares nothing; any other pair is intersected by the boolean.
+/// bend's section clear of its axis). A pair whose boxes (the piece's path, grown by the profile's
+/// reach) or whose capsules (round the piece's path: its segment, or an arc's chords grown by
+/// their sagitta, each grown by the reach) are apart shares nothing; any other pair is
+/// intersected by the boolean.
 fn pieces_apart(profile: &Profile, path: &[PathSeg], stretches: &[Stretch], id: u64) -> Result<(), Apart> {
     let n = path.len();
     if n < 3 {
@@ -429,6 +431,33 @@ fn pieces_apart(profile: &Profile, path: &[PathSeg], stretches: &[Stretch], id: 
         .iter()
         .map(|s| path_box(std::slice::from_ref(s)).grow(reach))
         .collect();
+    // each piece lies within capsules round its path: a line's own segment, an arc's chords of
+    // eighths with their sagitta, each grown by the profile's reach
+    let capsules: Vec<Vec<(Point3, Point3, f64)>> = path
+        .iter()
+        .map(|s| match *s {
+            PathSeg::Line { a, b } => vec![(a, b, reach)],
+            PathSeg::Arc { circle, start, sweep } => {
+                let m = 8;
+                let step = sweep / m as f64;
+                let sag = circle.radius * (1.0 - dmath::cos(0.5 * step));
+                (0..m)
+                    .map(|k| {
+                        let t = start + step * k as f64;
+                        (circle.eval(t), circle.eval(t + step), reach + sag)
+                    })
+                    .collect()
+            }
+            PathSeg::Spline(_) => Vec::new(),
+        })
+        .collect();
+    let clear = |i: usize, j: usize| {
+        capsules[i].iter().all(|&(a, b, r)| {
+            capsules[j]
+                .iter()
+                .all(|&(c, d, q)| segment_distance(a, b, c, d) > r + q)
+        })
+    };
     let mut solids: Vec<Option<Body>> = vec![None; n];
     let mut solid = |k: usize| -> Option<Body> {
         if solids[k].is_none() {
@@ -473,7 +502,7 @@ fn pieces_apart(profile: &Profile, path: &[PathSeg], stretches: &[Stretch], id: 
     };
     for i in 0..n {
         for j in i + 2..n {
-            if !boxes[i].overlaps(&boxes[j]) {
+            if !boxes[i].overlaps(&boxes[j]) || clear(i, j) {
                 continue;
             }
             let (Some(a), Some(b)) = (solid(i), solid(j)) else {
@@ -488,6 +517,43 @@ fn pieces_apart(profile: &Profile, path: &[PathSeg], stretches: &[Stretch], id: 
         }
     }
     Ok(())
+}
+
+/// The least distance between segments `ab` and `cd`, less a part in 1e9 of their size so that
+/// rounding keeps it a lower bound: the closest pair of parameters, clamped (Ericson, Real-Time
+/// Collision Detection, 5.1.9).
+fn segment_distance(a: Point3, b: Point3, c: Point3, d: Point3) -> f64 {
+    let (d1, d2, r) = (b - a, d - c, a - c);
+    let (aa, ee, f) = (d1.dot(d1), d2.dot(d2), d2.dot(r));
+    let (s, t) = if aa <= 0.0 && ee <= 0.0 {
+        (0.0, 0.0)
+    } else if aa <= 0.0 {
+        (0.0, (f / ee).clamp(0.0, 1.0))
+    } else {
+        let cc = d1.dot(r);
+        if ee <= 0.0 {
+            ((-cc / aa).clamp(0.0, 1.0), 0.0)
+        } else {
+            let bb = d1.dot(d2);
+            let den = aa * ee - bb * bb;
+            let mut s = if den > 0.0 {
+                ((bb * f - cc * ee) / den).clamp(0.0, 1.0)
+            } else {
+                0.0
+            };
+            let mut t = (bb * s + f) / ee;
+            if t < 0.0 {
+                t = 0.0;
+                s = (-cc / aa).clamp(0.0, 1.0);
+            } else if t > 1.0 {
+                t = 1.0;
+                s = ((bb - cc) / aa).clamp(0.0, 1.0);
+            }
+            (s, t)
+        }
+    };
+    let gap = ((a + d1 * s) - (c + d2 * t)).length();
+    gap - 1e-9 * (aa.sqrt() + ee.sqrt() + r.length())
 }
 
 /// A sweep's solid: its stretches' prisms and solids of revolution, together.
