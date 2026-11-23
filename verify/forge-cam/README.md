@@ -16,6 +16,7 @@ lake exe cache get && lake build && lake env lean Axioms.lean
 | ForgeCam/Prism.lean | **The closed-form checker's soundness**: prism faces {σ ∈ S, h ∈ H}; planar or vertical moves (tip at (γ(s), ζ(s)), ζ(s) ∈ Zt; γ any curve). `clearFace_sound` covers one face. `Certified` packages what the checker establishes for one body against one closed set: its top is above the set, and each face lies within μ of a lowered face answered with lower ≥ c + μ. `certified_clear` turns that into clearance, and `hyp_preconnected` shows the tool bodies are connected. `G1_of_closedForm`, `G2_of_closedForm` (the corrected G2, T and N against the fixture at c' > c) and `G3_of_closedForm` give the obligations. |
 | ForgeCam/Fixture.lean | Soft jaws: `jaw = blank ∖ ((H ⊕ B_k) ∩ slab)`. `jaw_seat` proves the held body misses the jaw, for any k, provided H meets the blank only inside the grip slab. `jaw_seat_needs_slab` shows that proviso is needed. |
 | ForgeCam/Pocket.lean | **Pocket coverage** (`passes_cover`): offset passes at depths r + k·s from the original boundary, with 0 < s ≤ r, put every point of the opening R ∘ B_r within r of a pass. This is the void stock.rs assumes. |
+| ForgeCam/Dist2.lean | **slab::dist's segment–segment candidates, exact** (over any ordered field, so they run over ℚ). `ptSegSq_le` / `ptSegSq_attained`: the end-or-perpendicular candidate is the least squared distance from a point to a segment. `segSegLo_le`: the low end (the four end-to-segment candidates if apart, else 0) is a lower bound for every pair of points. `segSegLo_attained`: when the segments are apart, it is attained. `clearFace_segSeg`: for a segment move against a wall over a segment, hypothesis (i) of `ClearFace` is proven, not assumed. |
 | ForgeCam/Machine.lean | G5 for 3-axis. `G5_line_iff`: a line move is within travel iff its ends are. `G5_arc`: an arc or helix is within travel if its circle's box is. `lineOkQ_iff`: the ℚ Bool check equals the ℝ spec. |
 | ForgeCam/Post.lean | G6 for forge-post's motion subset. The printer is modal: G only on a mode change, an axis only when it changes, F only when the feed changes, and a null move is dropped. **`round_trip`**: `read (print p) = normalize (motions p)`. `G6` adds quantisation, with error ≤ ½·10^−d (`roundEven_isQuant`, ties to even). **`faulty_counterexample`**: the printer as of 155e2f2 reads a plunge back as a rapid. |
 
@@ -42,8 +43,8 @@ For one face, slab.rs answers `Clear { lower }` when two things hold:
 
 ## Not covered yet
 
-- The 2D candidate analysis of `slab::dist` (that D's interval holds the true least distance)
-  is L2/L3 work. Here it is the hypothesis (i) above.
+- `slab::dist` for pairs with an arc (segment–arc, arc–arc), and for flat regions
+  (`dist_region`): these are still hypothesis (i) above. Segment–segment is proven (Dist2.lean).
 - The interval arithmetic (L5) and the B&B checker for non-prism faces.
 - The character level of G-code text: words to digits, and the dialect's templates.
 - The Aeneas translation of forge-cam-geom and forge-post (L4).

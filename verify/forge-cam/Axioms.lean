@@ -27,3 +27,10 @@ import ForgeCam
 #print axioms ForgeCam.jaw_seat
 #print axioms ForgeCam.jaw_seat_interior
 #print axioms ForgeCam.Pocket.passes_cover
+#print axioms ForgeCam.Dist2.ptSegSq_le
+#print axioms ForgeCam.Dist2.ptSegSq_attained
+#print axioms ForgeCam.Dist2.min4_le_of_disjoint
+#print axioms ForgeCam.Dist2.segSegLo_le
+#print axioms ForgeCam.Dist2.segSegLo_attained
+#print axioms ForgeCam.Dist2.segSeg_D
+#print axioms ForgeCam.Dist2.clearFace_segSeg
