@@ -463,6 +463,10 @@ fn pow2(k: i32) -> f64 {
 
 /// `a / b` as an f64 (for output only).
 pub fn ratio_f64(a: &Dy, b: &Dy) -> f64 {
+    // (zero is +0.0, whatever the sign of `b`: one f64 per value)
+    if a.is_zero() {
+        return 0.0;
+    }
     let (ta, sa) = a.m.top64();
     let (tb, sb) = b.m.top64();
     let q = ta as f64 / tb as f64;
@@ -761,6 +765,13 @@ mod tests {
             assert_eq!(x.mul(&y), Big::S(a as i128 * b as i128));
             assert_eq!(p.signum(), (a.signum() * a.signum() * b.signum()) as i32);
         }
+    }
+
+    #[test]
+    fn zero_is_positive_zero() {
+        let z = ratio_f64(&Dy::zero(), &Dy::from_i64(-3));
+        assert!(z == 0.0 && z.is_sign_positive());
+        assert!(Dy::zero().to_f64().is_sign_positive());
     }
 
     #[test]

@@ -1,0 +1,79 @@
+sketch S0(on: xy) {
+  o = rect(corner: (0, 0), size: (97.81, 38.36))
+}
+L0 = extrude(S0, 28.15)
+sketch H0(on: offset(xy, -25.900000000000002)) {
+  p0 = pt(89.9, -35.3)
+}
+sketch H1(on: offset(xy, 0)) {
+  p0 = pt(0, 0)
+}
+L1 = workpoint(at: verts(extreme: axis(H1.p0, H0.p0)))
+shared len0 = 9.38
+sketch H2(on: offset(xy, 0)) {
+  p0 = pt(0, 0)
+  p1 = pt(46, -89)
+}
+L2 = pattern(whole: true, layout: lin(along: axis(H2.p0, H2.p1), n: 2, step: 19.87))
+sketch H3(on: offset(xy, 28.15)) {
+  p0 = pt(84.31, 5.26)
+}
+L3 = hole(at: H3.p0, on: plane(at: H3.p0, normal: Z), screw: "M10", fit: "close", depth: 19.26, point: 118deg)
+sketch H4(on: offset(xy, 28.3)) {
+  p0 = pt(18.68, 2.99)
+}
+sketch S4(on: plane(at: H4.p0, normal: Z)) {
+  l = line((-16.25, 0), (16.25, 0))
+  a = arc(center: (0, 0), from: (16.25, 0), to: (-16.25, 0))
+}
+L4 = cut(S4, 5.27)
+sketch H5(on: offset(xy, -6.2)) {
+  p0 = pt(28.299999999999997, -95.7)
+}
+sketch H6(on: offset(xy, 0)) {
+  p0 = pt(0, 0)
+}
+sketch H7(on: offset(xy, 25.29)) {
+  p0 = pt(58.03, -17.49)
+}
+sketch S5(on: plane(at: H7.p0, normal: axis(H6.p0, H5.p0))) {
+  o = rect(corner: (-18.37, -11.02), size: (36.74, 22.05))
+}
+L5 = extrude(S5, 5.12, new: true)
+sketch H8(on: offset(xy, 0.8)) {
+  p0 = pt(53.47, 10.35)
+}
+L6 = workplane(on: plane(at: H8.p0, normal: -Z))
+L7 = replace_face(faces(of: L2, shape: "plane", extreme: -Z), with: L6)
+sketch H9(on: offset(xy, 30.31)) {
+  p0 = pt(76.45, -15.01)
+}
+sketch S8(on: plane(at: H9.p0, normal: -Y, x: X)) {
+  o = circle((11.71, 0), 1.15)
+  ax = line((0, 0), (0, 1), construction: true)
+}
+L8 = coil(S8.o, axis: S8.ax, pitch: 4.52, height: 5.63, left: true)
+sketch H10(on: offset(xy, 0.72)) {
+  p0 = pt(49.85, 32.56)
+}
+sketch S9(on: plane(at: H10.p0, normal: -Z)) {
+  o = hull(disc((-8.06, -2.3599999999999994), 6.18), disc((8.06, -2.3599999999999994), 6.18), disc((8.06, 2.370000000000001), 6.18), disc((-8.06, 2.370000000000001), 6.18))
+  c = circle((0, 1.42), 3.42)
+}
+L9 = cut(S9, 29.15)
+sketch H11(on: offset(xy, 14.48)) {
+  p0 = pt(99.36, 18.4)
+}
+L10 = ball(H11.p0, 7.58)
+sketch H12(on: offset(xy, 0)) {
+  p0 = pt(0, 0)
+  p1 = pt(97, 22)
+}
+L11 = pattern(whole: true, layout: lin(along: axis(H12.p0, H12.p1), n: 2, step: 16.97))
+sketch H13(on: offset(xy, 4.95)) {
+  p0 = pt(8.46, -8.83)
+}
+sketch S13(on: plane(at: H13.p0, normal: -X)) {
+  o = rect(corner: (-8.23, -4.94), size: (16.46, 9.88))
+}
+L13 = cut(S13, 6.49)
