@@ -78,6 +78,8 @@ def enclosedL (l : Ledger) (m : MetricLedger) : List Cov := m.enclosed.val.map f
 
 /-- A well-formed Rust ledger: distinct cells, ids in range, and room for every id below `NONE`. -/
 structure LedgerWF (l : Ledger) : Prop where
+  /-- at least the target body -/
+  nb_pos : 0 < l.nb.val
   cells_nodup : (l.cells.val.map (·.val)).Nodup
   pieces : ∀ q ∈ pcs l, q.1 < l.cells.val.length ∧ q.2 < U32.max
   inside : InsideWF l
@@ -85,6 +87,9 @@ structure LedgerWF (l : Ledger) : Prop where
   verts : ∀ v ∈ l.verts.val, (v : U32).val < l.cells.val.length
   /-- cells, plus the at most two new sides per piece, stay below `u32::MAX` (= `NONE`) -/
   room : l.cells.val.length + 2 * l.pieces.val.length + 1 < U32.max
+  lists : l.edges.val.length < U32.max ∧ l.verts.val.length < U32.max
+  /-- the merge sorts' scratch (`3·n`) fits `usize` -/
+  sort_room : 3 * (l.cells.val.length + 2 * l.pieces.val.length + 1) ≤ Usize.max
 
 /-- Every facet's two sides are cells of the ledger (the bridge's precondition): then the core
 adds no cell of its own, and every id it returns is a ledger cell. -/
@@ -201,11 +206,17 @@ def ClassifyOnSpec : Prop :=
         | .ok kt' => (toL l).coreK kt' ⦄
 
 /-- **The core refines the Lean core with the metric ledger.** The outcome is read through the
-core's own `Ext`; with `SidesListed` that `Ext` adds no cell. -/
+core's own `Ext` (its cells are the ledger's, then any side the ledger lacked). -/
 def CoreSpec : Prop :=
   ∀ (l : Ledger) (r : Rule) (m : MetricLedger), LedgerWF l → MetricWF l m →
-    core l r m ⦃ o => ∃ ext, ExtOK l ext ∧ (SidesListed l → ext.extra.val = []) ∧
+    core l r m ⦃ o => ∃ ext, ExtOK l ext ∧
       outcomeL l ext o = (toL l).coreM (ruleL l.nb.val r) (thinL l m) (enclosedL l m) ⦄
+
+/-- With every side listed, `split` adds no cell, so every id the core returns is a ledger cell
+(optional: the bridge's reading of ids; `EndToEnd` reads through `covE` and does not need it). -/
+def NoExtraSpec : Prop :=
+  ∀ (l : Ledger) (e0 : Ext), LedgerWF l → ExtOK l e0 → e0.extra.val = [] → SidesListed l →
+    split l e0 ⦃ r => r.2.extra.val = [] ⦄
 
 open ForgeExact ForgeExact.DecideOnce ForgeExact.DecideOnce.Sample ForgeExact.DecideOnce.Sampler ForgeExact.Ref in
 /-- **End to end.** On a Rust ledger that reads as the sampler's ledger of a flat input, with no
@@ -215,7 +226,7 @@ its faces are exactly the boundary facets, and its kept cells' union is `reg` of
 def EndToEnd : Prop :=
   ∀ (ps : List Plane) (ss : List Solid) (hnz : ∀ p ∈ ps, p.n ≠ ⟨0, 0, 0⟩) (hi : FlatInput ps ss)
     (l : forge_bool_core.Ledger) (r : forge_bool_core.Rule),
-    toL l = sampleLedger ps ss (sampler ps) → LedgerWF l → SidesListed l →
+    toL l = sampleLedger ps ss (sampler ps) → LedgerWF l →
     core l r ⟨alloc.vec.Vec.new CellId, alloc.vec.Vec.new CellId⟩ ⦃ o => ∃ ext,
       (∀ b, outcomeL l ext o = .ok b →
         ForgeExact.DecideOnce.Valid (sampleLedger ps ss (sampler ps))

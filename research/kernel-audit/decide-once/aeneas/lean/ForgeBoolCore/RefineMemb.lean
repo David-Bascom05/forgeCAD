@@ -282,7 +282,9 @@ theorem memb_eq (l : Ledger) (e0 : Ext) (s : Split) (e : Ext) (hok0 : ExtOK l e0
 theorem membership_spec (l : Ledger) (e0 : Ext) (s : Split) (e : Ext) (hok0 : ExtOK l e0)
     (hs : SplitOK l e0 s e) (hpc : ∀ q ∈ pcs l, q.1 < l.cells.val.length) (hiw : InsideWF l)
     (hroom : 2 * s.facets.val.length < U32.max) :
-    membership l e s ⦃ m => m.val.length = l.nb.val ∧ ∀ b, b < l.nb.val → ∀ t (ht : t < s.topes.val.length),
+    membership l e s ⦃ m => m.val.length = l.nb.val ∧
+      (∀ b, b < l.nb.val → (m.val.getD b default).val.length = s.topes.val.length) ∧
+      ∀ b, b < l.nb.val → ∀ t (ht : t < s.topes.val.length),
       (m.val.getD b default).val.getD t false =
         (toL l).memb b ((toL l).topes[t]'(by rw [← topes_toL l e0 s e hok0 hs hpc]; simpa using ht)) ⦄ := by
   unfold membership
@@ -315,7 +317,9 @@ theorem membership_spec (l : Ledger) (e0 : Ext) (s : Split) (e : Ext) (hok0 : Ex
     (fun b hb => hPOr b (by omega)) htn (fun b hb => splitWF_of l e0 s e hs hroom (by omega))
     (alloc.vec.Vec.new (alloc.vec.Vec Bool)) 0#usize (by simp) ⟨by simp, fun b hb => by simp at hb⟩)
   rintro m ⟨hml, hmr⟩
-  refine ⟨by omega, fun b hb t ht => ?_⟩
+  refine ⟨by omega, fun b hb => ?_, fun b hb t ht => ?_⟩
+  · obtain ⟨R, _, hRe⟩ := hmr b (by omega)
+    rw [hRe]; simp
   obtain ⟨R, hR, hRe⟩ := hmr b (by omega)
   rw [hRe, List.getD_eq_getElem?_getD, List.getElem?_map, List.getElem?_range ht]
   simp only [Option.map_some, Option.getD_some]
