@@ -20,7 +20,7 @@ set_option maxRecDepth 2048
 namespace forge_topo
 
 /-- [forge_topo::topo::strays]: loop body 0:
-    Source: 'kernel/forge-topo/src/topo.rs', lines 50:4-59:5
+    Source: 'kernel/forge-topo/src/topo.rs', lines 54:4-63:5
     Visibility: public -/
 @[rust_loop_body]
 def topo.strays_loop0.body
@@ -54,7 +54,7 @@ def topo.strays_loop0.body
   else ok (done used)
 
 /-- [forge_topo::topo::strays]: loop 0:
-    Source: 'kernel/forge-topo/src/topo.rs', lines 50:4-59:5
+    Source: 'kernel/forge-topo/src/topo.rs', lines 54:4-63:5
     Visibility: public -/
 @[rust_loop]
 def topo.strays_loop0
@@ -67,7 +67,7 @@ def topo.strays_loop0
     (used, e)
 
 /-- [forge_topo::topo::strays]: loop body 1:
-    Source: 'kernel/forge-topo/src/topo.rs', lines 61:4-66:5
+    Source: 'kernel/forge-topo/src/topo.rs', lines 65:4-70:5
     Visibility: public -/
 @[rust_loop_body]
 def topo.strays_loop1.body
@@ -87,7 +87,7 @@ def topo.strays_loop1.body
   else ok (done out)
 
 /-- [forge_topo::topo::strays]: loop 1:
-    Source: 'kernel/forge-topo/src/topo.rs', lines 61:4-66:5
+    Source: 'kernel/forge-topo/src/topo.rs', lines 65:4-70:5
     Visibility: public -/
 @[rust_loop]
 def topo.strays_loop1
@@ -100,7 +100,7 @@ def topo.strays_loop1
     (out, v)
 
 /-- [forge_topo::topo::strays]:
-    Source: 'kernel/forge-topo/src/topo.rs', lines 45:0-67:1
+    Source: 'kernel/forge-topo/src/topo.rs', lines 49:0-71:1
     Visibility: public -/
 def topo.strays
   {T : Type _} {S : Type _} (TopoInst : topo.Topo T) (SinkInst : topo.Sink S)
@@ -114,7 +114,7 @@ def topo.strays
   topo.strays_loop1 SinkInst out nv used1 0#usize
 
 /-- [forge_topo::topo::uses]: loop body 0:
-    Source: 'kernel/forge-topo/src/topo.rs', lines 73:4-80:1 -/
+    Source: 'kernel/forge-topo/src/topo.rs', lines 77:4-84:1 -/
 @[rust_loop_body]
 def topo.uses_loop.body
   {T : Type _} (TopoInst : topo.Topo T) (t : T) (e : Std.Usize) (c : Std.Usize)
@@ -131,7 +131,7 @@ def topo.uses_loop.body
   else ok (done false)
 
 /-- [forge_topo::topo::uses]: loop 0:
-    Source: 'kernel/forge-topo/src/topo.rs', lines 73:4-80:1 -/
+    Source: 'kernel/forge-topo/src/topo.rs', lines 77:4-84:1 -/
 @[rust_loop]
 def topo.uses_loop
   {T : Type _} (TopoInst : topo.Topo T) (t : T) (e : Std.Usize) (c : Std.Usize)
@@ -143,7 +143,7 @@ def topo.uses_loop
     i
 
 /-- [forge_topo::topo::uses]:
-    Source: 'kernel/forge-topo/src/topo.rs', lines 70:0-80:1 -/
+    Source: 'kernel/forge-topo/src/topo.rs', lines 74:0-84:1 -/
 def topo.uses
   {T : Type _} (TopoInst : topo.Topo T) (t : T) (e : Std.Usize) (c : Std.Usize)
   :
@@ -153,7 +153,7 @@ def topo.uses
   topo.uses_loop TopoInst t e c n 0#usize
 
 /-- [forge_topo::topo::links]: loop body 1:
-    Source: 'kernel/forge-topo/src/topo.rs', lines 101:12-109:13
+    Source: 'kernel/forge-topo/src/topo.rs', lines 105:12-113:13
     Visibility: public -/
 @[rust_loop_body]
 def topo.links_loop0_loop0.body
@@ -194,7 +194,7 @@ def topo.links_loop0_loop0.body
   else ok (done (listed, ok1))
 
 /-- [forge_topo::topo::links]: loop 1:
-    Source: 'kernel/forge-topo/src/topo.rs', lines 101:12-109:13
+    Source: 'kernel/forge-topo/src/topo.rs', lines 105:12-113:13
     Visibility: public -/
 @[rust_loop]
 def topo.links_loop0_loop0
@@ -209,7 +209,7 @@ def topo.links_loop0_loop0
     (listed, ok1, i)
 
 /-- [forge_topo::topo::links]: loop body 0:
-    Source: 'kernel/forge-topo/src/topo.rs', lines 96:4-115:5
+    Source: 'kernel/forge-topo/src/topo.rs', lines 100:4-119:5
     Visibility: public -/
 @[rust_loop_body]
 def topo.links_loop0.body
@@ -238,7 +238,7 @@ def topo.links_loop0.body
   else ok (done (out, listed))
 
 /-- [forge_topo::topo::links]: loop 0:
-    Source: 'kernel/forge-topo/src/topo.rs', lines 96:4-115:5
+    Source: 'kernel/forge-topo/src/topo.rs', lines 100:4-119:5
     Visibility: public -/
 @[rust_loop]
 def topo.links_loop0
@@ -253,7 +253,7 @@ def topo.links_loop0
     (out, listed, f)
 
 /-- [forge_topo::topo::links]: loop body 3:
-    Source: 'kernel/forge-topo/src/topo.rs', lines 123:12-133:13
+    Source: 'kernel/forge-topo/src/topo.rs', lines 127:12-137:13
     Visibility: public -/
 @[rust_loop_body]
 def topo.links_loop1_loop0.body
@@ -299,7 +299,7 @@ def topo.links_loop1_loop0.body
   else ok (done ok1)
 
 /-- [forge_topo::topo::links]: loop 3:
-    Source: 'kernel/forge-topo/src/topo.rs', lines 123:12-133:13
+    Source: 'kernel/forge-topo/src/topo.rs', lines 127:12-137:13
     Visibility: public -/
 @[rust_loop]
 def topo.links_loop1_loop0
@@ -314,7 +314,7 @@ def topo.links_loop1_loop0
     (ok1, i)
 
 /-- [forge_topo::topo::links]: loop body 2:
-    Source: 'kernel/forge-topo/src/topo.rs', lines 117:4-139:5
+    Source: 'kernel/forge-topo/src/topo.rs', lines 121:4-143:5
     Visibility: public -/
 @[rust_loop_body]
 def topo.links_loop1.body
@@ -345,7 +345,7 @@ def topo.links_loop1.body
   else ok (done out)
 
 /-- [forge_topo::topo::links]: loop 2:
-    Source: 'kernel/forge-topo/src/topo.rs', lines 117:4-139:5
+    Source: 'kernel/forge-topo/src/topo.rs', lines 121:4-143:5
     Visibility: public -/
 @[rust_loop]
 def topo.links_loop1
@@ -360,7 +360,7 @@ def topo.links_loop1
     (out, e)
 
 /-- [forge_topo::topo::links]: loop body 5:
-    Source: 'kernel/forge-topo/src/topo.rs', lines 152:12-159:13
+    Source: 'kernel/forge-topo/src/topo.rs', lines 156:12-163:13
     Visibility: public -/
 @[rust_loop_body]
 def topo.links_loop2_loop0.body
@@ -394,7 +394,7 @@ def topo.links_loop2_loop0.body
   else ok (done ok1)
 
 /-- [forge_topo::topo::links]: loop 5:
-    Source: 'kernel/forge-topo/src/topo.rs', lines 152:12-159:13
+    Source: 'kernel/forge-topo/src/topo.rs', lines 156:12-163:13
     Visibility: public -/
 @[rust_loop]
 def topo.links_loop2_loop0
@@ -409,7 +409,7 @@ def topo.links_loop2_loop0
     (ok1, i)
 
 /-- [forge_topo::topo::links]: loop body 4:
-    Source: 'kernel/forge-topo/src/topo.rs', lines 141:4-165:5
+    Source: 'kernel/forge-topo/src/topo.rs', lines 145:4-169:5
     Visibility: public -/
 @[rust_loop_body]
 def topo.links_loop2.body
@@ -468,7 +468,7 @@ def topo.links_loop2.body
   else ok (done out)
 
 /-- [forge_topo::topo::links]: loop 4:
-    Source: 'kernel/forge-topo/src/topo.rs', lines 141:4-165:5
+    Source: 'kernel/forge-topo/src/topo.rs', lines 145:4-169:5
     Visibility: public -/
 @[rust_loop]
 def topo.links_loop2
@@ -483,7 +483,7 @@ def topo.links_loop2
     (out, l)
 
 /-- [forge_topo::topo::links]:
-    Source: 'kernel/forge-topo/src/topo.rs', lines 87:0-166:1
+    Source: 'kernel/forge-topo/src/topo.rs', lines 91:0-170:1
     Visibility: public -/
 def topo.links
   {T : Type _} {S : Type _} (TopoInst : topo.Topo T) (SinkInst : topo.Sink S)
@@ -501,5 +501,672 @@ def topo.links
   let out2 ←
     topo.links_loop1 TopoInst SinkInst t out1 nv ne nc nl listed1 0#usize
   topo.links_loop2 TopoInst SinkInst t out2 ne nc nl nf listed1 0#usize
+
+/-- [forge_topo::topo_shell::coedge_face]:
+    Source: 'kernel/forge-topo/src/topo_shell.rs', lines 19:0-21:1 -/
+def topo_shell.coedge_face
+  {T : Type _} (topoTopoInst : topo.Topo T) (t : T) (c : Std.Usize) :
+  Result Std.Usize
+  := do
+  let i ← topoTopoInst.coedge_loop t c
+  topoTopoInst.loop_face t i
+
+/-- [forge_topo::topo_shell::shell_faces]: loop body 1:
+    Source: 'kernel/forge-topo/src/topo_shell.rs', lines 42:8-50:9
+    Visibility: public -/
+@[rust_loop_body]
+def topo_shell.shell_faces_loop0_loop0.body
+  {T : Type _} (ShellTopoInst : topo_shell.ShellTopo T) (t : T)
+  (nf : Std.Usize) (s : Std.Usize) (n : Std.Usize) (bad : alloc.vec.Vec Bool)
+  (listed : alloc.vec.Vec Std.U32) (i : Std.Usize) :
+  Result (ControlFlow ((alloc.vec.Vec Bool) × (alloc.vec.Vec Std.U32) ×
+    Std.Usize) ((alloc.vec.Vec Bool) × (alloc.vec.Vec Std.U32)))
+  := do
+  if i < n
+  then
+    let f ← ShellTopoInst.shell_face t s i
+    let (bad1, listed1) ←
+      if f >= nf
+      then
+        do
+        let (_, index_mut_back) ←
+          alloc.vec.Vec.index_mut (core.slice.index.SliceIndexUsizeSlice Bool)
+            bad s
+        let bad2 := index_mut_back true
+        ok (bad2, listed)
+      else
+        do
+        let b ← ShellTopoInst.topoTopoInst.face_alive t f
+        if b
+        then
+          let i1 ← ShellTopoInst.face_shell t f
+          if i1 != s
+          then
+            let (_, index_mut_back) ←
+              alloc.vec.Vec.index_mut (core.slice.index.SliceIndexUsizeSlice
+                Bool) bad s
+            let bad2 := index_mut_back true
+            ok (bad2, listed)
+          else
+            let i2 ←
+              alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice
+                Std.U32) listed f
+            let v ←
+              if i2 < 2#u32
+              then
+                do
+                let (i3, index_mut_back) ←
+                  alloc.vec.Vec.index_mut
+                    (core.slice.index.SliceIndexUsizeSlice Std.U32) listed f
+                let i4 ← lift (Std.U32.wrapping_add i3 1#u32)
+                ok (index_mut_back i4)
+              else ok listed
+            ok (bad, v)
+        else
+          let (_, index_mut_back) ←
+            alloc.vec.Vec.index_mut (core.slice.index.SliceIndexUsizeSlice
+              Bool) bad s
+          let bad2 := index_mut_back true
+          ok (bad2, listed)
+    let i1 ← lift (Std.Usize.wrapping_add i 1#usize)
+    ok (cont (bad1, listed1, i1))
+  else ok (done (bad, listed))
+
+/-- [forge_topo::topo_shell::shell_faces]: loop 1:
+    Source: 'kernel/forge-topo/src/topo_shell.rs', lines 42:8-50:9
+    Visibility: public -/
+@[rust_loop]
+def topo_shell.shell_faces_loop0_loop0
+  {T : Type _} (ShellTopoInst : topo_shell.ShellTopo T) (t : T)
+  (nf : Std.Usize) (bad : alloc.vec.Vec Bool) (listed : alloc.vec.Vec Std.U32)
+  (s : Std.Usize) (n : Std.Usize) (i : Std.Usize) :
+  Result ((alloc.vec.Vec Bool) × (alloc.vec.Vec Std.U32))
+  := do
+  loop
+    (fun (bad1, listed1, i1) => topo_shell.shell_faces_loop0_loop0.body
+      ShellTopoInst t nf s n bad1 listed1 i1)
+    (bad, listed, i)
+
+/-- [forge_topo::topo_shell::shell_faces]: loop body 0:
+    Source: 'kernel/forge-topo/src/topo_shell.rs', lines 36:4-52:5
+    Visibility: public -/
+@[rust_loop_body]
+def topo_shell.shell_faces_loop0.body
+  {T : Type _} (ShellTopoInst : topo_shell.ShellTopo T) (t : T)
+  (ns : Std.Usize) (nf : Std.Usize) (bad : alloc.vec.Vec Bool)
+  (listed : alloc.vec.Vec Std.U32) (s : Std.Usize) :
+  Result (ControlFlow ((alloc.vec.Vec Bool) × (alloc.vec.Vec Std.U32) ×
+    Std.Usize) ((alloc.vec.Vec Bool) × (alloc.vec.Vec Std.U32)))
+  := do
+  if s < ns
+  then
+    let n ← ShellTopoInst.shell_n_faces t s
+    let bad1 ←
+      if n = 0#usize
+      then
+        do
+        let (_, index_mut_back) ←
+          alloc.vec.Vec.index_mut (core.slice.index.SliceIndexUsizeSlice Bool)
+            bad s
+        ok (index_mut_back true)
+      else ok bad
+    let (bad2, listed1) ←
+      topo_shell.shell_faces_loop0_loop0 ShellTopoInst t nf bad1 listed s n
+        0#usize
+    let s1 ← lift (Std.Usize.wrapping_add s 1#usize)
+    ok (cont (bad2, listed1, s1))
+  else ok (done (bad, listed))
+
+/-- [forge_topo::topo_shell::shell_faces]: loop 0:
+    Source: 'kernel/forge-topo/src/topo_shell.rs', lines 36:4-52:5
+    Visibility: public -/
+@[rust_loop]
+def topo_shell.shell_faces_loop0
+  {T : Type _} (ShellTopoInst : topo_shell.ShellTopo T) (t : T)
+  (ns : Std.Usize) (nf : Std.Usize) (bad : alloc.vec.Vec Bool)
+  (listed : alloc.vec.Vec Std.U32) (s : Std.Usize) :
+  Result ((alloc.vec.Vec Bool) × (alloc.vec.Vec Std.U32))
+  := do
+  loop
+    (fun (bad1, listed1, s1) => topo_shell.shell_faces_loop0.body ShellTopoInst
+      t ns nf bad1 listed1 s1)
+    (bad, listed, s)
+
+/-- [forge_topo::topo_shell::shell_faces]: loop body 2:
+    Source: 'kernel/forge-topo/src/topo_shell.rs', lines 54:4-60:5
+    Visibility: public -/
+@[rust_loop_body]
+def topo_shell.shell_faces_loop1.body
+  {T : Type _} (ShellTopoInst : topo_shell.ShellTopo T) (t : T)
+  (ns : Std.Usize) (nf : Std.Usize) (listed : alloc.vec.Vec Std.U32)
+  (bad : alloc.vec.Vec Bool) (f : Std.Usize) :
+  Result (ControlFlow ((alloc.vec.Vec Bool) × Std.Usize) (alloc.vec.Vec Bool))
+  := do
+  if f < nf
+  then
+    let b ← ShellTopoInst.topoTopoInst.face_alive t f
+    let bad1 ←
+      if b
+      then
+        do
+        let i ←
+          alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32)
+            listed f
+        if i != 1#u32
+        then
+          let «at» ← ShellTopoInst.face_shell t f
+          let at1 ← if «at» < ns
+                      then ok «at»
+                      else ok ns
+          let (_, index_mut_back) ←
+            alloc.vec.Vec.index_mut (core.slice.index.SliceIndexUsizeSlice
+              Bool) bad at1
+          ok (index_mut_back true)
+        else ok bad
+      else ok bad
+    let f1 ← lift (Std.Usize.wrapping_add f 1#usize)
+    ok (cont (bad1, f1))
+  else ok (done bad)
+
+/-- [forge_topo::topo_shell::shell_faces]: loop 2:
+    Source: 'kernel/forge-topo/src/topo_shell.rs', lines 54:4-60:5
+    Visibility: public -/
+@[rust_loop]
+def topo_shell.shell_faces_loop1
+  {T : Type _} (ShellTopoInst : topo_shell.ShellTopo T) (t : T)
+  (ns : Std.Usize) (nf : Std.Usize) (bad : alloc.vec.Vec Bool)
+  (listed : alloc.vec.Vec Std.U32) (f : Std.Usize) :
+  Result (alloc.vec.Vec Bool)
+  := do
+  loop
+    (fun (bad1, f1) => topo_shell.shell_faces_loop1.body ShellTopoInst t ns nf
+      listed bad1 f1)
+    (bad, f)
+
+/-- [forge_topo::topo_shell::shell_faces]: loop body 4:
+    Source: 'kernel/forge-topo/src/topo_shell.rs', lines 70:16-73:17
+    Visibility: public -/
+@[rust_loop_body]
+def topo_shell.shell_faces_loop2_loop0.body
+  {T : Type _} (ShellTopoInst : topo_shell.ShellTopo T) (t : T) (e : Std.Usize)
+  (n : Std.Usize) (s0 : Std.Usize) (split : Bool) (i : Std.Usize) :
+  Result (ControlFlow (Bool × Std.Usize) Bool)
+  := do
+  if split
+  then ok (done split)
+  else
+    if i < n
+    then
+      let i1 ← ShellTopoInst.topoTopoInst.edge_use t e i
+      let i2 ← topo_shell.coedge_face ShellTopoInst.topoTopoInst t i1
+      let i3 ← ShellTopoInst.face_shell t i2
+      let i4 ← lift (Std.Usize.wrapping_add i 1#usize)
+      ok (cont (i3 != s0, i4))
+    else ok (done split)
+
+/-- [forge_topo::topo_shell::shell_faces]: loop 4:
+    Source: 'kernel/forge-topo/src/topo_shell.rs', lines 70:16-73:17
+    Visibility: public -/
+@[rust_loop]
+def topo_shell.shell_faces_loop2_loop0
+  {T : Type _} (ShellTopoInst : topo_shell.ShellTopo T) (t : T) (e : Std.Usize)
+  (n : Std.Usize) (s0 : Std.Usize) (split : Bool) (i : Std.Usize) :
+  Result Bool
+  := do
+  loop
+    (fun (split1, i1) => topo_shell.shell_faces_loop2_loop0.body ShellTopoInst
+      t e n s0 split1 i1)
+    (split, i)
+
+/-- [forge_topo::topo_shell::shell_faces]: loop body 3:
+    Source: 'kernel/forge-topo/src/topo_shell.rs', lines 62:4-80:5
+    Visibility: public -/
+@[rust_loop_body]
+def topo_shell.shell_faces_loop2.body
+  {T : Type _} (ShellTopoInst : topo_shell.ShellTopo T) (t : T)
+  (ns : Std.Usize) (ne : Std.Usize) (bad : alloc.vec.Vec Bool) (e : Std.Usize)
+  :
+  Result (ControlFlow ((alloc.vec.Vec Bool) × Std.Usize) (alloc.vec.Vec Bool))
+  := do
+  if e < ne
+  then
+    let b ← ShellTopoInst.topoTopoInst.edge_alive t e
+    if b
+    then
+      let n ← ShellTopoInst.topoTopoInst.edge_n_uses t e
+      if n > 0#usize
+      then
+        let i ← ShellTopoInst.topoTopoInst.edge_use t e 0#usize
+        let i1 ← topo_shell.coedge_face ShellTopoInst.topoTopoInst t i
+        let s0 ← ShellTopoInst.face_shell t i1
+        let split ←
+          topo_shell.shell_faces_loop2_loop0 ShellTopoInst t e n s0 false
+            1#usize
+        let bad1 ←
+          if split
+          then
+            do
+            let s01 ← if s0 < ns
+                        then ok s0
+                        else ok ns
+            let (_, index_mut_back) ←
+              alloc.vec.Vec.index_mut (core.slice.index.SliceIndexUsizeSlice
+                Bool) bad s01
+            ok (index_mut_back true)
+          else ok bad
+        let e1 ← lift (Std.Usize.wrapping_add e 1#usize)
+        ok (cont (bad1, e1))
+      else
+        let e1 ← lift (Std.Usize.wrapping_add e 1#usize)
+        ok (cont (bad, e1))
+    else let e1 ← lift (Std.Usize.wrapping_add e 1#usize)
+         ok (cont (bad, e1))
+  else ok (done bad)
+
+/-- [forge_topo::topo_shell::shell_faces]: loop 3:
+    Source: 'kernel/forge-topo/src/topo_shell.rs', lines 62:4-80:5
+    Visibility: public -/
+@[rust_loop]
+def topo_shell.shell_faces_loop2
+  {T : Type _} (ShellTopoInst : topo_shell.ShellTopo T) (t : T)
+  (ns : Std.Usize) (ne : Std.Usize) (bad : alloc.vec.Vec Bool) (e : Std.Usize)
+  :
+  Result (alloc.vec.Vec Bool)
+  := do
+  loop
+    (fun (bad1, e1) => topo_shell.shell_faces_loop2.body ShellTopoInst t ns ne
+      bad1 e1)
+    (bad, e)
+
+/-- [forge_topo::topo_shell::shell_faces]: loop body 5:
+    Source: 'kernel/forge-topo/src/topo_shell.rs', lines 82:4-87:5
+    Visibility: public -/
+@[rust_loop_body]
+def topo_shell.shell_faces_loop3.body
+  {S : Type _} (topoSinkInst : topo.Sink S) (ns : Std.Usize)
+  (bad : alloc.vec.Vec Bool) (out : S) (s : Std.Usize) :
+  Result (ControlFlow (S × Std.Usize) S)
+  := do
+  if s <= ns
+  then
+    let b ←
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Bool) bad s
+    let out1 ← if b
+                 then topoSinkInst.shell_faces out s
+                 else ok out
+    let s1 ← lift (Std.Usize.wrapping_add s 1#usize)
+    ok (cont (out1, s1))
+  else ok (done out)
+
+/-- [forge_topo::topo_shell::shell_faces]: loop 5:
+    Source: 'kernel/forge-topo/src/topo_shell.rs', lines 82:4-87:5
+    Visibility: public -/
+@[rust_loop]
+def topo_shell.shell_faces_loop3
+  {S : Type _} (topoSinkInst : topo.Sink S) (out : S) (ns : Std.Usize)
+  (bad : alloc.vec.Vec Bool) (s : Std.Usize) :
+  Result S
+  := do
+  loop
+    (fun (out1, s1) => topo_shell.shell_faces_loop3.body topoSinkInst ns bad
+      out1 s1)
+    (out, s)
+
+/-- [forge_topo::topo_shell::shell_faces]: loop body 6:
+    Source: 'kernel/forge-topo/src/topo_shell.rs', lines 94:4-97:5
+    Visibility: public -/
+@[rust_loop_body]
+def topo_shell.shell_faces_loop4.body
+  (nf : Std.Usize) (seen : alloc.vec.Vec Std.U32) (k : Std.Usize) :
+  Result (ControlFlow ((alloc.vec.Vec Std.U32) × Std.Usize) (alloc.vec.Vec
+    Std.U32))
+  := do
+  if k < nf
+  then
+    let (_, index_mut_back) ←
+      alloc.vec.Vec.index_mut (core.slice.index.SliceIndexUsizeSlice Std.U32)
+        seen k
+    let k1 ← lift (Std.Usize.wrapping_add k 1#usize)
+    let seen1 := index_mut_back core.num.U32.MAX
+    ok (cont (seen1, k1))
+  else ok (done seen)
+
+/-- [forge_topo::topo_shell::shell_faces]: loop 6:
+    Source: 'kernel/forge-topo/src/topo_shell.rs', lines 94:4-97:5
+    Visibility: public -/
+@[rust_loop]
+def topo_shell.shell_faces_loop4
+  (nf : Std.Usize) (seen : alloc.vec.Vec Std.U32) (k : Std.Usize) :
+  Result (alloc.vec.Vec Std.U32)
+  := do
+  loop
+    (fun (seen1, k1) => topo_shell.shell_faces_loop4.body nf seen1 k1)
+    (seen, k)
+
+/-- [forge_topo::topo_shell::shell_faces]: loop body 11:
+    Source: 'kernel/forge-topo/src/topo_shell.rs', lines 124:24-136:25
+    Visibility: public -/
+@[rust_loop_body]
+def topo_shell.shell_faces_loop5_loop0_loop0_loop0_loop0.body
+  {T : Type _} (ShellTopoInst : topo_shell.ShellTopo T) (t : T) (s : Std.Usize)
+  (e : Std.Usize) (nu : Std.Usize) (seen : alloc.vec.Vec Std.U32)
+  (stack : alloc.vec.Vec Std.U32) (sp : Std.Usize) (j : Std.Usize) :
+  Result (ControlFlow ((alloc.vec.Vec Std.U32) × (alloc.vec.Vec Std.U32) ×
+    Std.Usize × Std.Usize) ((alloc.vec.Vec Std.U32) × (alloc.vec.Vec Std.U32)
+    × Std.Usize))
+  := do
+  if j < nu
+  then
+    let i ← ShellTopoInst.topoTopoInst.edge_use t e j
+    let g ← topo_shell.coedge_face ShellTopoInst.topoTopoInst t i
+    let i1 ←
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32) seen
+        g
+    let i2 ← lift (UScalar.cast .U32 s)
+    let (seen1, stack1, sp1) ←
+      if i1 != i2
+      then
+        do
+        let (_, index_mut_back) ←
+          alloc.vec.Vec.index_mut (core.slice.index.SliceIndexUsizeSlice
+            Std.U32) seen g
+        let i3 ← lift (UScalar.cast .U32 s)
+        let i4 := alloc.vec.Vec.len stack
+        let (seen2, stack2) ←
+          if sp < i4
+          then
+            do
+            let (_, index_mut_back1) ←
+              alloc.vec.Vec.index_mut (core.slice.index.SliceIndexUsizeSlice
+                Std.U32) stack sp
+            let i5 ← lift (UScalar.cast .U32 g)
+            let stack3 := index_mut_back1 i5
+            let seen3 := index_mut_back i3
+            ok (seen3, stack3)
+          else
+            do
+            let i5 ← lift (UScalar.cast .U32 g)
+            let stack3 ← alloc.vec.Vec.push stack i5
+            let seen3 := index_mut_back i3
+            ok (seen3, stack3)
+        let sp2 ← lift (Std.Usize.wrapping_add sp 1#usize)
+        ok (seen2, stack2, sp2)
+      else ok (seen, stack, sp)
+    let j1 ← lift (Std.Usize.wrapping_add j 1#usize)
+    ok (cont (seen1, stack1, sp1, j1))
+  else ok (done (seen, stack, sp))
+
+/-- [forge_topo::topo_shell::shell_faces]: loop 11:
+    Source: 'kernel/forge-topo/src/topo_shell.rs', lines 124:24-136:25
+    Visibility: public -/
+@[rust_loop]
+def topo_shell.shell_faces_loop5_loop0_loop0_loop0_loop0
+  {T : Type _} (ShellTopoInst : topo_shell.ShellTopo T) (t : T)
+  (seen : alloc.vec.Vec Std.U32) (stack : alloc.vec.Vec Std.U32)
+  (s : Std.Usize) (sp : Std.Usize) (e : Std.Usize) (nu : Std.Usize)
+  (j : Std.Usize) :
+  Result ((alloc.vec.Vec Std.U32) × (alloc.vec.Vec Std.U32) × Std.Usize)
+  := do
+  loop
+    (fun (seen1, stack1, sp1, j1) =>
+      topo_shell.shell_faces_loop5_loop0_loop0_loop0_loop0.body ShellTopoInst t
+      s e nu seen1 stack1 sp1 j1)
+    (seen, stack, sp, j)
+
+/-- [forge_topo::topo_shell::shell_faces]: loop body 10:
+    Source: 'kernel/forge-topo/src/topo_shell.rs', lines 120:20-138:21
+    Visibility: public -/
+@[rust_loop_body]
+def topo_shell.shell_faces_loop5_loop0_loop0_loop0.body
+  {T : Type _} (ShellTopoInst : topo_shell.ShellTopo T) (t : T) (s : Std.Usize)
+  («end» : Std.Usize) (seen : alloc.vec.Vec Std.U32)
+  (stack : alloc.vec.Vec Std.U32) (sp : Std.Usize) (c : Std.Usize) :
+  Result (ControlFlow ((alloc.vec.Vec Std.U32) × (alloc.vec.Vec Std.U32) ×
+    Std.Usize × Std.Usize) ((alloc.vec.Vec Std.U32) × (alloc.vec.Vec Std.U32)
+    × Std.Usize))
+  := do
+  if c < «end»
+  then
+    let e ← ShellTopoInst.topoTopoInst.coedge_edge t c
+    let nu ← ShellTopoInst.topoTopoInst.edge_n_uses t e
+    let (seen1, stack1, sp1) ←
+      topo_shell.shell_faces_loop5_loop0_loop0_loop0_loop0 ShellTopoInst t seen
+        stack s sp e nu 0#usize
+    let c1 ← lift (Std.Usize.wrapping_add c 1#usize)
+    ok (cont (seen1, stack1, sp1, c1))
+  else ok (done (seen, stack, sp))
+
+/-- [forge_topo::topo_shell::shell_faces]: loop 10:
+    Source: 'kernel/forge-topo/src/topo_shell.rs', lines 120:20-138:21
+    Visibility: public -/
+@[rust_loop]
+def topo_shell.shell_faces_loop5_loop0_loop0_loop0
+  {T : Type _} (ShellTopoInst : topo_shell.ShellTopo T) (t : T)
+  (seen : alloc.vec.Vec Std.U32) (stack : alloc.vec.Vec Std.U32)
+  (s : Std.Usize) (sp : Std.Usize) («end» : Std.Usize) (c : Std.Usize) :
+  Result ((alloc.vec.Vec Std.U32) × (alloc.vec.Vec Std.U32) × Std.Usize)
+  := do
+  loop
+    (fun (seen1, stack1, sp1, c1) =>
+      topo_shell.shell_faces_loop5_loop0_loop0_loop0.body ShellTopoInst t s
+      «end» seen1 stack1 sp1 c1)
+    (seen, stack, sp, c)
+
+/-- [forge_topo::topo_shell::shell_faces]: loop body 9:
+    Source: 'kernel/forge-topo/src/topo_shell.rs', lines 116:16-140:17
+    Visibility: public -/
+@[rust_loop_body]
+def topo_shell.shell_faces_loop5_loop0_loop0.body
+  {T : Type _} (ShellTopoInst : topo_shell.ShellTopo T) (t : T) (s : Std.Usize)
+  (f : Std.Usize) (nlf : Std.Usize) (seen : alloc.vec.Vec Std.U32)
+  (stack : alloc.vec.Vec Std.U32) (sp : Std.Usize) (i : Std.Usize) :
+  Result (ControlFlow ((alloc.vec.Vec Std.U32) × (alloc.vec.Vec Std.U32) ×
+    Std.Usize × Std.Usize) ((alloc.vec.Vec Std.U32) × (alloc.vec.Vec Std.U32)
+    × Std.Usize))
+  := do
+  if i < nlf
+  then
+    let l ← ShellTopoInst.topoTopoInst.face_loop t f i
+    let i1 ← ShellTopoInst.topoTopoInst.loop_first t l
+    let i2 ← ShellTopoInst.topoTopoInst.loop_len t l
+    let «end» ← lift (Std.Usize.wrapping_add i1 i2)
+    let (seen1, stack1, sp1) ←
+      topo_shell.shell_faces_loop5_loop0_loop0_loop0 ShellTopoInst t seen stack
+        s sp «end» i1
+    let i3 ← lift (Std.Usize.wrapping_add i 1#usize)
+    ok (cont (seen1, stack1, sp1, i3))
+  else ok (done (seen, stack, sp))
+
+/-- [forge_topo::topo_shell::shell_faces]: loop 9:
+    Source: 'kernel/forge-topo/src/topo_shell.rs', lines 116:16-140:17
+    Visibility: public -/
+@[rust_loop]
+def topo_shell.shell_faces_loop5_loop0_loop0
+  {T : Type _} (ShellTopoInst : topo_shell.ShellTopo T) (t : T)
+  (seen : alloc.vec.Vec Std.U32) (stack : alloc.vec.Vec Std.U32)
+  (s : Std.Usize) (sp : Std.Usize) (f : Std.Usize) (nlf : Std.Usize)
+  (i : Std.Usize) :
+  Result ((alloc.vec.Vec Std.U32) × (alloc.vec.Vec Std.U32) × Std.Usize)
+  := do
+  loop
+    (fun (seen1, stack1, sp1, i1) =>
+      topo_shell.shell_faces_loop5_loop0_loop0.body ShellTopoInst t s f nlf
+      seen1 stack1 sp1 i1)
+    (seen, stack, sp, i)
+
+/-- [forge_topo::topo_shell::shell_faces]: loop body 8:
+    Source: 'kernel/forge-topo/src/topo_shell.rs', lines 111:12-141:13
+    Visibility: public -/
+@[rust_loop_body]
+def topo_shell.shell_faces_loop5_loop0.body
+  {T : Type _} (ShellTopoInst : topo_shell.ShellTopo T) (t : T) (s : Std.Usize)
+  (seen : alloc.vec.Vec Std.U32) (stack : alloc.vec.Vec Std.U32)
+  (sp : Std.Usize) :
+  Result (ControlFlow ((alloc.vec.Vec Std.U32) × (alloc.vec.Vec Std.U32) ×
+    Std.Usize) ((alloc.vec.Vec Std.U32) × (alloc.vec.Vec Std.U32)))
+  := do
+  if sp > 0#usize
+  then
+    let sp1 ← lift (Std.Usize.wrapping_sub sp 1#usize)
+    let i ←
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32) stack
+        sp1
+    let f ← lift (UScalar.cast .Usize i)
+    let nlf ← ShellTopoInst.topoTopoInst.face_n_loops t f
+    let (seen1, stack1, sp2) ←
+      topo_shell.shell_faces_loop5_loop0_loop0 ShellTopoInst t seen stack s sp1
+        f nlf 0#usize
+    ok (cont (seen1, stack1, sp2))
+  else ok (done (seen, stack))
+
+/-- [forge_topo::topo_shell::shell_faces]: loop 8:
+    Source: 'kernel/forge-topo/src/topo_shell.rs', lines 111:12-141:13
+    Visibility: public -/
+@[rust_loop]
+def topo_shell.shell_faces_loop5_loop0
+  {T : Type _} (ShellTopoInst : topo_shell.ShellTopo T) (t : T)
+  (seen : alloc.vec.Vec Std.U32) (stack : alloc.vec.Vec Std.U32)
+  (s : Std.Usize) (sp : Std.Usize) :
+  Result ((alloc.vec.Vec Std.U32) × (alloc.vec.Vec Std.U32))
+  := do
+  loop
+    (fun (seen1, stack1, sp1) => topo_shell.shell_faces_loop5_loop0.body
+      ShellTopoInst t s seen1 stack1 sp1)
+    (seen, stack, sp)
+
+/-- [forge_topo::topo_shell::shell_faces]: loop body 12:
+    Source: 'kernel/forge-topo/src/topo_shell.rs', lines 145:12-148:13
+    Visibility: public -/
+@[rust_loop_body]
+def topo_shell.shell_faces_loop5_loop1.body
+  {T : Type _} (ShellTopoInst : topo_shell.ShellTopo T) (t : T)
+  (seen : alloc.vec.Vec Std.U32) (s : Std.Usize) (n : Std.Usize)
+  (joined : Bool) (i : Std.Usize) :
+  Result (ControlFlow (Bool × Std.Usize) Bool)
+  := do
+  if joined
+  then
+    if i < n
+    then
+      let i1 ← ShellTopoInst.shell_face t s i
+      let i2 ←
+        alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32)
+          seen i1
+      let i3 ← lift (UScalar.cast .U32 s)
+      let i4 ← lift (Std.Usize.wrapping_add i 1#usize)
+      ok (cont (i2 = i3, i4))
+    else ok (done joined)
+  else ok (done joined)
+
+/-- [forge_topo::topo_shell::shell_faces]: loop 12:
+    Source: 'kernel/forge-topo/src/topo_shell.rs', lines 145:12-148:13
+    Visibility: public -/
+@[rust_loop]
+def topo_shell.shell_faces_loop5_loop1
+  {T : Type _} (ShellTopoInst : topo_shell.ShellTopo T) (t : T)
+  (seen : alloc.vec.Vec Std.U32) (s : Std.Usize) (n : Std.Usize)
+  (joined : Bool) (i : Std.Usize) :
+  Result Bool
+  := do
+  loop
+    (fun (joined1, i1) => topo_shell.shell_faces_loop5_loop1.body ShellTopoInst
+      t seen s n joined1 i1)
+    (joined, i)
+
+/-- [forge_topo::topo_shell::shell_faces]: loop body 7:
+    Source: 'kernel/forge-topo/src/topo_shell.rs', lines 101:4-154:5
+    Visibility: public -/
+@[rust_loop_body]
+def topo_shell.shell_faces_loop5.body
+  {T : Type _} {S : Type _} (ShellTopoInst : topo_shell.ShellTopo T)
+  (topoSinkInst : topo.Sink S) (t : T) (ns : Std.Usize)
+  (bad : alloc.vec.Vec Bool) (out : S) (seen : alloc.vec.Vec Std.U32)
+  (stack : alloc.vec.Vec Std.U32) (s : Std.Usize) :
+  Result (ControlFlow (S × (alloc.vec.Vec Std.U32) × (alloc.vec.Vec Std.U32)
+    × Std.Usize) S)
+  := do
+  if s < ns
+  then
+    let b ←
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Bool) bad s
+    if b
+    then
+      let s1 ← lift (Std.Usize.wrapping_add s 1#usize)
+      ok (cont (out, seen, stack, s1))
+    else
+      let f0 ← ShellTopoInst.shell_face t s 0#usize
+      let b1 ← alloc.vec.Vec.is_empty stack
+      let stack1 ←
+        if b1
+        then
+          do
+          let i ← lift (UScalar.cast .U32 f0)
+          alloc.vec.Vec.push stack i
+        else
+          do
+          let (_, index_mut_back) ←
+            alloc.vec.Vec.index_mut (core.slice.index.SliceIndexUsizeSlice
+              Std.U32) stack 0#usize
+          let i ← lift (UScalar.cast .U32 f0)
+          ok (index_mut_back i)
+      let (_, index_mut_back) ←
+        alloc.vec.Vec.index_mut (core.slice.index.SliceIndexUsizeSlice Std.U32)
+          seen f0
+      let i ← lift (UScalar.cast .U32 s)
+      let seen1 := index_mut_back i
+      let (seen2, stack2) ←
+        topo_shell.shell_faces_loop5_loop0 ShellTopoInst t seen1 stack1 s
+          1#usize
+      let n ← ShellTopoInst.shell_n_faces t s
+      let joined ←
+        topo_shell.shell_faces_loop5_loop1 ShellTopoInst t seen2 s n true
+          0#usize
+      let out1 ←
+        if joined
+        then ok out
+        else topoSinkInst.shell_disconnected out s
+      let s1 ← lift (Std.Usize.wrapping_add s 1#usize)
+      ok (cont (out1, seen2, stack2, s1))
+  else ok (done out)
+
+/-- [forge_topo::topo_shell::shell_faces]: loop 7:
+    Source: 'kernel/forge-topo/src/topo_shell.rs', lines 101:4-154:5
+    Visibility: public -/
+@[rust_loop]
+def topo_shell.shell_faces_loop5
+  {T : Type _} {S : Type _} (ShellTopoInst : topo_shell.ShellTopo T)
+  (topoSinkInst : topo.Sink S) (t : T) (out : S) (ns : Std.Usize)
+  (bad : alloc.vec.Vec Bool) (seen : alloc.vec.Vec Std.U32)
+  (stack : alloc.vec.Vec Std.U32) (s : Std.Usize) :
+  Result S
+  := do
+  loop
+    (fun (out1, seen1, stack1, s1) => topo_shell.shell_faces_loop5.body
+      ShellTopoInst topoSinkInst t ns bad out1 seen1 stack1 s1)
+    (out, seen, stack, s)
+
+/-- [forge_topo::topo_shell::shell_faces]:
+    Source: 'kernel/forge-topo/src/topo_shell.rs', lines 28:0-155:1
+    Visibility: public -/
+def topo_shell.shell_faces
+  {T : Type _} {S : Type _} (ShellTopoInst : topo_shell.ShellTopo T)
+  (topoSinkInst : topo.Sink S) (t : T) (out : S) :
+  Result S
+  := do
+  let ns ← ShellTopoInst.n_shells t
+  let nf ← ShellTopoInst.topoTopoInst.n_faces t
+  let ne ← ShellTopoInst.topoTopoInst.n_edges t
+  let i ← lift (Std.Usize.wrapping_add ns 1#usize)
+  let bad ← alloc.vec.from_elem core.clone.CloneBool false i
+  let listed ← alloc.vec.from_elem core.clone.CloneU32 0#u32 nf
+  let (bad1, listed1) ←
+    topo_shell.shell_faces_loop0 ShellTopoInst t ns nf bad listed 0#usize
+  let bad2 ←
+    topo_shell.shell_faces_loop1 ShellTopoInst t ns nf bad1 listed1 0#usize
+  let bad3 ← topo_shell.shell_faces_loop2 ShellTopoInst t ns ne bad2 0#usize
+  let out1 ← topo_shell.shell_faces_loop3 topoSinkInst out ns bad3 0#usize
+  let seen ← topo_shell.shell_faces_loop4 nf listed1 0#usize
+  topo_shell.shell_faces_loop5 ShellTopoInst topoSinkInst t out1 ns bad3 seen
+    (alloc.vec.Vec.new Std.U32) 0#usize
 
 end forge_topo

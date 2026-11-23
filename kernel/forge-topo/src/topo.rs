@@ -39,6 +39,10 @@ pub trait Sink {
     fn stray(&mut self, v: usize);
     /// The links of face (`what` 0), edge (1) or loop (2) `id` are broken.
     fn back_link(&mut self, what: u8, id: usize);
+    /// Shell `s` (or, `s` the shell count, a shell out of range) lists its faces wrongly.
+    fn shell_faces(&mut self, s: usize);
+    /// Shell `s`'s faces are not all joined through edges.
+    fn shell_disconnected(&mut self, s: usize);
 }
 
 /// `check_strays`: the vertices no edge (live or left over) starts or ends at, in order.

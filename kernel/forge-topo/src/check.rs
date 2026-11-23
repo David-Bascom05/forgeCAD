@@ -495,72 +495,7 @@ fn check_links(body: &Body, out: &mut Vec<Problem>) {
 /// at an edge share a shell, and a shell's faces are joined through its edges. A shell at fault
 /// is named once; `shells.len()` names a face whose shell is out of range.
 fn check_shell_faces(body: &Body, out: &mut Vec<Problem>) {
-    let (ns, nf) = (body.shells.len(), body.faces.len());
-    let mut bad = vec![false; ns + 1];
-    let mut listed = vec![0u32; nf];
-    for (s, sh) in body.shells.iter().enumerate() {
-        if sh.faces.is_empty() {
-            bad[s] = true;
-        }
-        for &f in &sh.faces {
-            if f.index() >= nf || !body.faces[f.index()].alive || body.faces[f.index()].shell.index() != s {
-                bad[s] = true;
-            } else {
-                listed[f.index()] += 1;
-            }
-        }
-    }
-    let at = |f: FaceId| body.face(f).shell.index().min(ns);
-    for f in body.face_ids() {
-        if listed[f.index()] != 1 {
-            bad[at(f)] = true;
-        }
-    }
-    for e in body.edge_ids() {
-        let uses = &body.edge(e).coedges;
-        if let Some(&c0) = uses.first() {
-            let s0 = body.face(body.coedge_face(c0)).shell;
-            if uses.iter().any(|&c| body.face(body.coedge_face(c)).shell != s0) {
-                bad[at(body.coedge_face(c0))] = true;
-            }
-        }
-    }
-    for (s, &b) in bad.iter().enumerate() {
-        if b {
-            out.push(Problem::ShellFaces {
-                shell: ShellId(s as u32),
-            });
-        }
-    }
-    // joined: every face of a sound shell reached from its first through edges (`seen` holds the
-    // shell a face was last reached from, so each shell's flood is its own)
-    let mut seen = vec![usize::MAX; nf];
-    let mut stack = Vec::new();
-    for (s, sh) in body.shells.iter().enumerate() {
-        if bad[s] {
-            continue;
-        }
-        stack.push(sh.faces[0]);
-        seen[sh.faces[0].index()] = s;
-        while let Some(f) = stack.pop() {
-            for &l in body.face(f).loops.iter() {
-                for c in body.lp(l).coedges() {
-                    for &u in body.edge(body.coedge(c).edge).coedges.iter() {
-                        let g = body.coedge_face(u);
-                        if seen[g.index()] != s {
-                            seen[g.index()] = s;
-                            stack.push(g);
-                        }
-                    }
-                }
-            }
-        }
-        if sh.faces.iter().any(|f| seen[f.index()] != s) {
-            out.push(Problem::ShellDisconnected {
-                shell: ShellId(s as u32),
-            });
-        }
-    }
+    crate::topo_shell::shell_faces(&ShellView::of(body), out);
 }
 
 /// Every vertex is an end of an edge (a dead edge's ends are left over from an in-place edit,
@@ -573,6 +508,14 @@ impl crate::topo::Sink for Vec<Problem> {
     #[inline]
     fn stray(&mut self, v: usize) {
         self.push(Problem::StrayVertex { vertex: VertexId(v as u32) });
+    }
+    #[inline]
+    fn shell_faces(&mut self, s: usize) {
+        self.push(Problem::ShellFaces { shell: ShellId(s as u32) });
+    }
+    #[inline]
+    fn shell_disconnected(&mut self, s: usize) {
+        self.push(Problem::ShellDisconnected { shell: ShellId(s as u32) });
     }
     #[inline]
     fn back_link(&mut self, what: u8, id: usize) {
@@ -676,6 +619,111 @@ impl crate::topo::Topo for View<'_> {
     #[inline]
     fn face_loop(&self, f: usize, i: usize) -> usize {
         self.faces[f].loops[i].index()
+    }
+}
+
+/// `View` and the shells, for `topo::shell_faces` (a type of its own, so `View`, and the code of
+/// the tests that read only it, are as they were).
+pub struct ShellView<'a> {
+    view: View<'a>,
+    shells: &'a [crate::body::Shell],
+    /// The faces again, for their shells (through `view` the shell tests measure slower).
+    face_shells: &'a [crate::body::Face],
+}
+
+impl<'a> ShellView<'a> {
+    pub fn of(body: &'a Body) -> ShellView<'a> {
+        ShellView { view: View::of(body), shells: &body.shells, face_shells: &body.faces }
+    }
+}
+
+impl crate::topo::Topo for ShellView<'_> {
+    #[inline]
+    fn n_vertices(&self) -> usize {
+        self.view.n_vertices()
+    }
+    #[inline]
+    fn n_edges(&self) -> usize {
+        self.view.n_edges()
+    }
+    #[inline]
+    fn edge_alive(&self, e: usize) -> bool {
+        self.view.edge_alive(e)
+    }
+    #[inline]
+    fn edge_ends(&self, e: usize) -> (usize, usize) {
+        self.view.edge_ends(e)
+    }
+    #[inline]
+    fn edge_n_uses(&self, e: usize) -> usize {
+        self.view.edge_n_uses(e)
+    }
+    #[inline]
+    fn edge_use(&self, e: usize, i: usize) -> usize {
+        self.view.edge_use(e, i)
+    }
+    #[inline]
+    fn n_coedges(&self) -> usize {
+        self.view.n_coedges()
+    }
+    #[inline]
+    fn coedge_edge(&self, c: usize) -> usize {
+        self.view.coedge_edge(c)
+    }
+    #[inline]
+    fn coedge_loop(&self, c: usize) -> usize {
+        self.view.coedge_loop(c)
+    }
+    #[inline]
+    fn n_loops(&self) -> usize {
+        self.view.n_loops()
+    }
+    #[inline]
+    fn loop_first(&self, l: usize) -> usize {
+        self.view.loop_first(l)
+    }
+    #[inline]
+    fn loop_len(&self, l: usize) -> usize {
+        self.view.loop_len(l)
+    }
+    #[inline]
+    fn loop_face(&self, l: usize) -> usize {
+        self.view.loop_face(l)
+    }
+    #[inline]
+    fn n_faces(&self) -> usize {
+        self.view.n_faces()
+    }
+    #[inline]
+    fn face_alive(&self, f: usize) -> bool {
+        self.view.face_alive(f)
+    }
+    #[inline]
+    fn face_n_loops(&self, f: usize) -> usize {
+        self.view.face_n_loops(f)
+    }
+    #[inline]
+    fn face_loop(&self, f: usize, i: usize) -> usize {
+        self.view.face_loop(f, i)
+    }
+}
+
+impl crate::topo_shell::ShellTopo for ShellView<'_> {
+    #[inline]
+    fn face_shell(&self, f: usize) -> usize {
+        self.face_shells[f].shell.index()
+    }
+    #[inline]
+    fn n_shells(&self) -> usize {
+        self.shells.len()
+    }
+    #[inline]
+    fn shell_n_faces(&self, s: usize) -> usize {
+        self.shells[s].faces.len()
+    }
+    #[inline]
+    fn shell_face(&self, s: usize, i: usize) -> usize {
+        self.shells[s].faces[i].index()
     }
 }
 
