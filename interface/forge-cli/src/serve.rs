@@ -61,6 +61,23 @@ const TOOLS: [Tool; 14] = [
         ],
     ),
     (
+        "export",
+        "The part as a file: stl 3mf obj (meshes; tol MM, angle DEG, ascii, normals, faces, flat), step ap214 ap242 (tol MM), dxf dwg [SHEET]",
+        2,
+        &[
+            ("file", "path to a .fg part"),
+            ("format", "stl|3mf|obj|step|ap214|ap242|dxf|dwg"),
+            (
+                "options",
+                "e.g. \"tol 0.05 angle 10\", \"ascii\" (STL), \"normals faces\" (OBJ), \"flat\" (an assembly's 3MF)",
+            ),
+            (
+                "out",
+                "a path under the root to write (writable sessions); else the file comes back inline",
+            ),
+        ],
+    ),
+    (
         "edit",
         "Change a .fg part by typed ops (as errors' fixes give them), all applied or none; replies with the build's typed report",
         2,
@@ -180,6 +197,13 @@ fn args(p: &Json) -> Args {
             a.words.push(k.into());
             a.words.push(v);
         }
+    }
+    // export's format, then its options as words; plain STEP is no word
+    if let Some(f) = s("format").filter(|f| f != "step") {
+        a.words.push(f);
+    }
+    if let Some(o) = s("options") {
+        a.words.extend(o.split_whitespace().map(str::to_string));
     }
     if let Some(t) = s("topic") {
         a.file = t;
@@ -356,7 +380,66 @@ fn call(forge: &mut fg::Session, name: &str, p: &Json) -> Reply {
             png: None,
         };
     }
-    forge.run(name, &a, p)
+    let mut r = forge.run(name, &a, p);
+    if name == "export"
+        && r.ok
+        && let Some(out) = p.get("out").and_then(Json::str)
+    {
+        write_out(&mut r, out);
+    }
+    r
+}
+
+/// An export written to `out` under the session's root, not sent back: refused in a read-only
+/// session or outside the root.
+fn write_out(r: &mut Reply, out: &str) {
+    let refuse = |r: &mut Reply, msg: String| {
+        r.ok = false;
+        r.png = None;
+        r.text = format!("error: {msg}");
+        r.json = Json::obj(vec![("ok", false.into()), ("error", msg.into())]);
+    };
+    let Some((root, writable)) = FENCE.get() else {
+        return refuse(r, "no session root".into());
+    };
+    if !writable {
+        return refuse(
+            r,
+            "export out writes: the session is read-only (serve --writable)".into(),
+        );
+    }
+    let path = root.join(out);
+    let inside = path
+        .parent()
+        .and_then(|d| std::fs::canonicalize(d).ok())
+        .is_some_and(|d| d.starts_with(root))
+        && path.file_name().is_some();
+    if !inside {
+        return refuse(r, format!("{out} is outside the session's root"));
+    }
+    let Some(bytes) = r.png.take() else { return };
+    if let Err(e) = std::fs::write(&path, &bytes) {
+        return refuse(r, format!("{out}: {e}"));
+    }
+    if let Json::Obj(f) = &mut r.json {
+        f.push(("wrote".into(), out.into()));
+    }
+    r.text = format!("wrote {out} {}", r.text);
+}
+
+/// What an export's bytes are, for an MCP client.
+fn mime(r: &Reply) -> String {
+    r.json
+        .get("mime")
+        .and_then(Json::str)
+        .map(str::to_string)
+        .unwrap_or_else(|| {
+            if r.json.get("sheet").is_some() {
+                "application/octet-stream".into()
+            } else {
+                "model/step".into()
+            }
+        })
 }
 
 fn answer(forge: &mut fg::Session, req: &Json, mcp: bool) -> Option<Json> {
@@ -401,11 +484,37 @@ fn answer(forge: &mut fg::Session, req: &Json, mcp: bool) -> Option<Json> {
             let r = call(forge, name, &arguments);
             let mut content = Vec::new();
             if let Some(png) = &r.png {
-                content.push(Json::obj(vec![
-                    ("type", "image".into()),
-                    ("data", b64(png).into()),
-                    ("mimeType", "image/png".into()),
-                ]));
+                if name == "export" {
+                    // a file, not a picture: an embedded resource
+                    let ext = r
+                        .json
+                        .get("format")
+                        .or_else(|| arguments.get("format"))
+                        .and_then(Json::str)
+                        .filter(|f| !matches!(*f, "ap214" | "ap242"))
+                        .unwrap_or("step");
+                    let file = arguments.get("file").and_then(Json::str).unwrap_or("part");
+                    let stem = std::path::Path::new(file)
+                        .file_stem()
+                        .map_or_else(|| "part".into(), |s| s.to_string_lossy().into_owned());
+                    content.push(Json::obj(vec![
+                        ("type", "resource".into()),
+                        (
+                            "resource",
+                            Json::obj(vec![
+                                ("uri", format!("forgecad:///{stem}.{ext}").into()),
+                                ("mimeType", mime(&r).into()),
+                                ("blob", b64(png).into()),
+                            ]),
+                        ),
+                    ]));
+                } else {
+                    content.push(Json::obj(vec![
+                        ("type", "image".into()),
+                        ("data", b64(png).into()),
+                        ("mimeType", "image/png".into()),
+                    ]));
+                }
             }
             // a reply is its typed record: errors, warnings and fixes as data; help is prose
             let text = if name == "help" {

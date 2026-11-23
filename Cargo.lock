@@ -75,9 +75,11 @@ name = "forge-cli"
 version = "0.1.0"
 dependencies = [
  "forge-agent",
+ "forge-dirs",
  "forge-geom",
  "forge-import",
  "forge-lang",
+ "forge-material",
  "forge-math",
  "forge-mesh",
  "forge-model",
@@ -264,6 +266,7 @@ name = "forge-mesh"
 version = "0.1.0"
 dependencies = [
  "forge-geom",
+ "forge-git",
  "forge-math",
  "forge-ops",
  "forge-topo",
@@ -285,6 +288,7 @@ name = "forge-model"
 version = "0.1.0"
 dependencies = [
  "forge-bool",
+ "forge-dirs",
  "forge-font",
  "forge-geom",
  "forge-gpu",
@@ -315,6 +319,7 @@ version = "0.1.0"
 dependencies = [
  "forge-agent",
  "forge-bool",
+ "forge-dirs",
  "forge-geom",
  "forge-import",
  "forge-lang",

@@ -6945,6 +6945,8 @@ mod bent_edge_tests {
 mod held_tests {
     use super::*;
 
+    // catches the panic it causes: under WASI a panic aborts (no unwinding), so native only
+    #[cfg(not(target_os = "wasi"))]
     #[test]
     fn a_retry_flag_is_cleared_when_its_boolean_panics() {
         for k in [

@@ -574,9 +574,15 @@ impl Session {
         })
     }
 
-    /// STEP of the part, or `dxf [SHEET]`: a sheet's flat pattern. The text goes in the reply's
-    /// bytes.
+    /// STEP of the part, `stl|3mf|obj` its mesh (`export_mesh`), or `dxf [SHEET]`: a sheet's flat
+    /// pattern. The file goes in the reply's bytes.
     fn export(&mut self, a: &Args) -> Result<Reply, String> {
+        if a.words
+            .first()
+            .is_some_and(|w| forge_lang::meshfile::Format::of(w).is_some())
+        {
+            return self.export_mesh(a);
+        }
         let (run, _) = self.built(&a.file)?;
         if let Some(fmt) = a.words.first().filter(|w| *w == "dxf" || *w == "dwg") {
             let dwg = fmt == "dwg";
@@ -634,7 +640,7 @@ impl Session {
                 }
                 _ => {
                     return Err(format!(
-                        "export: unknown word '{w}' (ap214 ap242 tol MM, or dxf [SHEET])"
+                        "export: unknown word '{w}' (ap214 ap242 tol MM; stl 3mf obj; or dxf [SHEET])"
                     ));
                 }
             }
@@ -654,6 +660,118 @@ impl Session {
                 ("edges", e.edges.into()),
             ]),
             png: Some(e.text.into_bytes()),
+        })
+    }
+
+    /// `stl|3mf|obj [tol MM] [angle DEG] [ascii] [normals] [faces] [flat]`: the part's mesh, one
+    /// object per solid (an assembly's: per part, placed at each occurrence), each checked closed,
+    /// manifold and facing out.
+    fn export_mesh(&mut self, a: &Args) -> Result<Reply, String> {
+        use forge_lang::meshfile;
+        let o = meshfile::Options::parse(&a.words)?;
+        let (mut run, src) = self.built(&a.file)?;
+        let path = self.path(&a.file)?;
+        let dir = path.parent().map(Path::to_path_buf);
+        // an assembly's parts' bodies are kept only when asked for
+        if run.asm.is_some() {
+            let opts = Options {
+                dir: dir.clone(),
+                root: self.root.clone(),
+                render: true,
+                ..Options::default()
+            };
+            run = forge_lang::run(&src, opts, Default::default()).0;
+        }
+        let name = Path::new(&a.file)
+            .file_stem()
+            .map_or_else(|| "part".into(), |n| n.to_string_lossy().into_owned());
+        let e = meshfile::export(&run, &name, dir.as_deref(), &o)?;
+        // an assembly's measure is its own solids', not its parts'
+        let exact = run
+            .measure
+            .as_ref()
+            .filter(|_| run.asm.is_none())
+            .map(|m| m.volume);
+        let objects: Vec<Json> = e
+            .scene
+            .items
+            .iter()
+            .zip(&e.checks)
+            .map(|(it, c)| {
+                let ob = &e.scene.objects[it.object];
+                let name = if it.name.is_empty() { &ob.name } else { &it.name };
+                let mut f = vec![
+                    ("name", name.as_str().into()),
+                    ("triangles", c.triangles.into()),
+                    ("vertices", c.vertices.into()),
+                    ("watertight", c.watertight().into()),
+                    ("open_edges", c.open_edges.into()),
+                    ("manifold", c.manifold().into()),
+                    ("pinched_vertices", c.pinched.into()),
+                    ("volume", Json::Num(c.volume)),
+                    ("area", Json::Num(c.area)),
+                ];
+                if let Some(m) = ob.material.and_then(|m| e.scene.materials.get(m)) {
+                    f.push(("material", m.name.as_str().into()));
+                }
+                Json::obj(f)
+            })
+            .collect();
+        let (watertight, manifold) = (e.watertight(), e.manifold());
+        let fmt = o.format.ext();
+        let mut text = format!(
+            "{}{} {fmt}: {} objects, {} triangles, {} bytes, tol {} mm, angle {} deg, volume {}{}",
+            if watertight {
+                "watertight"
+            } else {
+                "NOT watertight"
+            },
+            if manifold { ", manifold" } else { ", NOT manifold" },
+            e.checks.len(),
+            e.triangles(),
+            e.bytes.len(),
+            o.tol,
+            o.angle,
+            forge_agent::short(e.volume()),
+            exact.map_or(String::new(), |v| format!(" (exact {})", forge_agent::short(v))),
+        );
+        if !watertight || !manifold {
+            let bad: Vec<String> = e
+                .scene
+                .items
+                .iter()
+                .zip(&e.checks)
+                .filter(|(_, c)| !c.watertight() || !c.manifold())
+                .map(|(it, c)| {
+                    format!(
+                        "{} ({} open edges, {} pinched vertices)",
+                        e.scene.objects[it.object].name, c.open_edges, c.pinched
+                    )
+                })
+                .collect();
+            text += &format!("; not closed or not manifold: {}", bad.join(", "));
+        }
+        let mut j = vec![
+            ("ok", true.into()),
+            ("format", fmt.into()),
+            ("mime", o.format.mime().into()),
+            ("bytes", e.bytes.len().into()),
+            ("tol", Json::Num(o.tol)),
+            ("angle", Json::Num(o.angle)),
+            ("watertight", watertight.into()),
+            ("manifold", manifold.into()),
+            ("triangles", e.triangles().into()),
+            ("volume", Json::Num(e.volume())),
+            ("objects", Json::Arr(objects)),
+        ];
+        if let Some(v) = exact {
+            j.push(("exact_volume", Json::Num(v)));
+        }
+        Ok(Reply {
+            ok: true,
+            text,
+            json: Json::obj(j),
+            png: Some(e.bytes),
         })
     }
 
@@ -867,7 +985,7 @@ mod tests {
                 .expect("clock");
             (PathBuf::from("/tmp"), t.as_nanos() as u64)
         } else {
-            (std::env::temp_dir(), std::process::id() as u64)
+            (forge_dirs::temp_dir(), forge_dirs::process_id() as u64)
         };
         let d = base.join(format!("forgecad-fg-unit-{id}"));
         std::fs::create_dir_all(&d).expect("temp dir");

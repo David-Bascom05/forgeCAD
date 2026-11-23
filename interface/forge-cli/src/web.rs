@@ -582,7 +582,7 @@ fn put(p: &Path, bytes: &[u8]) -> std::io::Result<()> {
         ".{}.forgecad-web-{}",
         p.file_name()
             .map_or_else(Default::default, |n| n.to_string_lossy()),
-        std::process::id()
+        forge_dirs::process_id()
     ));
     std::fs::write(&tmp, bytes)?;
     std::fs::rename(&tmp, p).inspect_err(|_| {
@@ -713,7 +713,8 @@ fn static_file(c: &Config, path: &str) -> Response {
     }
 }
 
-#[cfg(test)]
+// a TCP server and its clients: WASI listens on nothing, so native only
+#[cfg(all(test, not(target_os = "wasi")))]
 mod tests {
     use super::*;
 
@@ -792,7 +793,7 @@ mod tests {
     fn started(token: Option<&str>, writable: bool) -> (SocketAddr, PathBuf) {
         static N: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
         let n = N.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-        let d = std::env::temp_dir().join(format!("forgecad-web-{}-{n}", std::process::id()));
+        let d = forge_dirs::temp_dir().join(format!("forgecad-web-{}-{n}", forge_dirs::process_id()));
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(d.join("sub")).unwrap();
         std::fs::write(d.join("part.fg"), "shared t = 2\n").unwrap();
@@ -905,7 +906,7 @@ mod tests {
         let outside = root
             .parent()
             .unwrap()
-            .join(format!("forgecad-web-outside-{}", std::process::id()));
+            .join(format!("forgecad-web-outside-{}", forge_dirs::process_id()));
         std::fs::write(&outside, "private").unwrap();
         for p in [
             "/api/files/..%2Fsecret",
@@ -1013,7 +1014,7 @@ mod tests {
 
     #[test]
     fn a_non_loopback_bind_makes_a_token() {
-        let d = std::env::temp_dir();
+        let d = forge_dirs::temp_dir();
         let c = parse(&[
             d.to_string_lossy().into_owned(),
             "--bind".into(),

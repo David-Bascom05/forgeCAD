@@ -192,6 +192,8 @@ pub enum Action {
     Doc(docs::DocCmd),
     /// Where an untitled document is to be saved: the host's file dialog, then `Gui::save_as`.
     SaveAs,
+    /// File > Export STL / 3MF / OBJ: the host's file dialog, then `fg::export_mesh`.
+    ExportMesh(forge_lang::meshfile::Format),
     /// A ground or shadow switch of the View tab, flipped.
     Look(crate::look::Toggle),
 }
@@ -1448,6 +1450,17 @@ impl Shell {
             // a Forge file is written when asked (Ctrl+S too)
             items.push(("Save", model_open.then_some(Action::Fg(FgCmd::Save))));
             items.push(("New Drawing...", model_open.then_some(Action::NewDrawing)));
+            // the part's mesh for printing and viewers: written natively, beside the part
+            if cfg!(not(target_arch = "wasm32")) {
+                use forge_lang::meshfile::Format;
+                for (label, f) in [
+                    ("Export STL...", Format::Stl),
+                    ("Export 3MF...", Format::ThreeMf),
+                    ("Export OBJ...", Format::Obj),
+                ] {
+                    items.push((label, model_open.then_some(Action::ExportMesh(f))));
+                }
+            }
             if self.drawing.is_some() {
                 items.push(("Close Drawing", Some(Action::CloseDrawing)));
             }

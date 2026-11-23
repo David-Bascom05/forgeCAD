@@ -58,6 +58,10 @@ query F bendsim [--tooling T] [--vendor V] [--sequence 3,1,2]
 measure F REF [REF] | mass | wall [exact]
 render F [VIEW] [--labels SEL] [--px N] [-o F.png]
 export F [ap214|ap242] [tol MM] [-o F.step] | dxf [SHEET] | dwg [SHEET]
+export F stl|3mf|obj [tol MM] [angle DEG] [ascii] [normals] [faces] [flat] [-o F.3mf]
+                            meshes: an object per solid (an assembly's: per part, a 3MF item
+                            per occurrence; flat: one each), tol 0.01 mm, angle 15 deg by
+                            default; each checked closed and facing out (`watertight`), `manifold`
 help forge
 ```
 SEL: `faces|edges|verts`, then filters: plane cyl cone .. | line circle | convex concave |

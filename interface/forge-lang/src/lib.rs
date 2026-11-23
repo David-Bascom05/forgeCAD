@@ -29,6 +29,7 @@ pub mod harness;
 pub mod holes;
 pub mod kept;
 pub mod media;
+pub mod meshfile;
 pub mod par;
 pub mod patterns;
 pub mod pins;
