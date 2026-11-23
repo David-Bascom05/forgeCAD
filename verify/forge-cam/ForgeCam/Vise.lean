@@ -5,11 +5,10 @@ its six faces, which are prism faces (two flat, four walls over segments). So th
 `Certified`'s face hypothesis with μ = 0. ops::certify_fixtured checks every body of the tool
 (the cutter included) against those faces at the fixture clearance, so the corrected G2 holds.
 
-Two readings of "clear by c":
-- forge-cam's verdict is `Clear` when lower ≥ fclear + μ, which gives distance ≥ c. That keeps the
-  tool out of the open grown fixture {x | dist(x, F) < c} (`G2open_of_closedForm`).
-- The closed F ⊕ B_c of design.md §7b needs a margin: certify at some c' > c
-  (`G2_of_closedForm`). The difference is the tool grazing at exactly c.
+G2 is the open form (the master's decision, 2026-11-23): the tool stays out of
+{x | dist(x, F) < c}. forge-cam's `Clear` (lower ≥ fclear + μ) gives exactly that
+(`G2open_of_closedForm`). The closed F ⊕ B_c would need a margin, certifying at some c' > c
+(`G2closed_of_closedForm`).
 
 The held bands (G4): a band wholly below the jaws' top is all "held by fixture" (`held_band`). A
 band that straddles the top splits there (`band_split`); forge-cam reports such a band whole as
@@ -109,17 +108,13 @@ theorem frontier_fixture_faces (bs : List ((Fin 3 → ℝ) × (Fin 3 → ℝ))) 
   obtain ⟨k, hk⟩ := mem_iUnion.mp (frontier_box_subset _ _ hfb)
   exact ⟨(n, k), f, hk, by simp⟩
 
-/-- G2 with the open grown fixture: what forge-cam's `Clear` (lower ≥ fclear + μ) gives. -/
-def G2open (T N : Set E3) (S F : ℝ → Set E3) (g : ℝ → E3 → E3) (c : ℝ) : Prop :=
-  ∀ s ∈ I01, Disjoint (g s '' (T ∪ N)) (thickening c (F s)) ∧ Disjoint (g s '' N) (interior (S s))
-
 theorem disjoint_thickening_of_clear {X A : Set E3} {c : ℝ}
     (h : ∀ x ∈ X, ∀ y ∈ A, c ≤ dist x y) : Disjoint X (thickening c A) :=
   Set.disjoint_left.mpr fun x hx hxA => by
     obtain ⟨y, hy, hd⟩ := mem_thickening_iff.mp hxA
     linarith [h x hx y hy]
 
-/-- **G2 as forge-cam certifies it.** T and N each certified against the fixture at exactly the
+/-- **G2, as forge-cam certifies it.** T and N each certified against the fixture at exactly the
 clearance c > 0 (ops::certify_fixtured's `fixture_collision`), and N against the stock before
 the piece at c₀ > 0: the whole tool misses the open c-neighbourhood of the fixture. -/
 theorem G2open_of_closedForm {Zc Zn : Set ℝ} {wc wn : ℝ → ℝ} (hZc : Zc.OrdConnected)
@@ -129,7 +124,7 @@ theorem G2open_of_closedForm {Zc Zn : Set ℝ} {wc wn : ℝ → ℝ} (hZc : Zc.O
     {S₀ Fx : Set E3} {S F : ℝ → Set E3} (hS : ∀ s, S s ⊆ S₀) (hF : ∀ s, F s ⊆ Fx)
     (hTF : Certified Zc wc γ Zt Fx c) (hNF : Certified Zn wn γ Zt Fx c)
     (hNS : Certified Zn wn γ Zt S₀ c₀) :
-    G2open (hyp Zc wc) (hyp Zn wn) S F (move γ ζ) c := by
+    G2 (hyp Zc wc) (hyp Zn wn) S F (move γ ζ) c := by
   intro s hs
   have hT : Disjoint (move γ ζ s '' hyp Zc wc) (thickening c Fx) :=
     disjoint_thickening_of_clear (certified_clear hZc hwc hζ hc hTF s hs)

@@ -25,10 +25,14 @@ def swept (X : Set E3) (g : ℝ → E3 → E3) : Set E3 := ⋃ s ∈ I01, g s ''
 def G1 (T P : Set E3) (g : ℝ → E3 → E3) (δ εin : ℝ) : Prop :=
   ∀ s ∈ I01, ∀ x ∈ g s '' T, ∀ y ∈ P, δ - εin ≤ dist x y
 
-/-- **G2 (corrected, design.md §7b)**: on every piece kind, the whole tool T ∪ N misses the
-fixture grown by its clearance c, F(s) ⊕ B_c; and the non-cutting part never meets the stock's
-interior. -/
+/-- **G2 (corrected, design.md §7b; the open form, the master's decision 2026-11-23)**: on every
+piece kind, the whole tool T ∪ N stays out of the open c-neighbourhood of the fixture,
+{x | dist(x, F(s)) < c}; and the non-cutting part never meets the stock's interior. -/
 def G2 (T N : Set E3) (S F : ℝ → Set E3) (g : ℝ → E3 → E3) (c : ℝ) : Prop :=
+  ∀ s ∈ I01, Disjoint (g s '' (T ∪ N)) (thickening c (F s)) ∧ Disjoint (g s '' N) (interior (S s))
+
+/-- The stronger closed form: out of F(s) ⊕ B_c itself (no graze at exactly c). -/
+def G2closed (T N : Set E3) (S F : ℝ → Set E3) (g : ℝ → E3 → E3) (c : ℝ) : Prop :=
   ∀ s ∈ I01, Disjoint (g s '' (T ∪ N)) (cthickening c (F s)) ∧ Disjoint (g s '' N) (interior (S s))
 
 /-- **G3, no cutting on a non-cutting move** (rapids and links). -/

@@ -1,8 +1,8 @@
 /-
 Soft jaws (design.md §7b). A jaw is its blank less the pocket: the held body H grown by the
 clearance k, cut to the grip slab (the depths down to grip_depth). In a setup that uses the jaws
-they are the fixture F, and the corrected G2 applies to them unchanged (ForgeCam/Prism.lean,
-`G2_of_closedForm`). Cutting the jaws is an ordinary setup (the blank as stock, the vise as F),
+they are the fixture F, and the corrected G2 applies to them unchanged (ForgeCam/Vise.lean,
+`G2open_of_closedForm`). Cutting the jaws is an ordinary setup (the blank as stock, the vise as F),
 so G1–G5 cover it with no new theorem.
 -/
 import ForgeCam.Spec

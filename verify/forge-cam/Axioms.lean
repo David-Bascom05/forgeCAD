@@ -8,7 +8,7 @@ import ForgeCam
 #print axioms ForgeCam.certified_clear
 #print axioms ForgeCam.sd_le_sd_add_dist
 #print axioms ForgeCam.G1_of_closedForm
-#print axioms ForgeCam.G2_of_closedForm
+#print axioms ForgeCam.G2closed_of_closedForm
 #print axioms ForgeCam.G3_of_closedForm
 #print axioms ForgeCam.G4_lower
 #print axioms ForgeCam.G4_part

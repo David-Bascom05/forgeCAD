@@ -20,7 +20,7 @@ Expect about 2 min with the Mathlib cache. Post.lean's `step` takes about 45 s.
 | the lemma the 2.5D checker rests on | `sd_hyp_mono`, `sd_hyp_eq_sdRZ` | Hypograph |
 | clearance from faces | `clear_of_frontier`, `sd_le_sd_add_dist` (sd is 1-Lipschitz, for μ), `hyp_preconnected`, `clearFace_sound`, `certified_clear` | SignedDist, Prism |
 | G1, no gouge | `G1_of_closedForm`; declared removals `G1_target_iff` (P' = P ∖ Δ) | Prism, Spec |
-| G2, corrected (§7b): T ∪ N misses F ⊕ B_c, N misses int S | `G2_of_closedForm` | Prism |
+| G2, corrected (§7b, open form): T ∪ N out of the open c-neighbourhood of F, N misses int S | `G2open_of_closedForm` (Vise); `G2closed_of_closedForm` with a margin (Prism) | Vise, Prism |
 | G3, rapids | `G3_of_closedForm` | Prism |
 | G4, the result | `G4_lower`, `G4_part`, `G4_upper` (the leftover is exact), `leftover_slice` (per z band), `G4_held` (held by fixture, or uncut) | Spec |
 | G5, machine limits (3-axis) | `G5_line_iff`, `G5_arc`, `lineOkQ_iff` (the ℚ check equals the spec) | Machine |
@@ -52,7 +52,7 @@ ForgeCam/Vise.lean adds 7 theorems (41 in all).
 - The fixture model, a union of boxes, meets `Certified`'s face hypothesis with μ = 0.
 - forge-cam's `fixture_collision` (every body, the cutter included, at limit = fclear,
   Clear iff lower ≥ fclear + μ) gives G2 for the open c-neighbourhood (`G2open_of_closedForm`).
-  The closed F ⊕ B_c of §7b needs certifying at c' > c.
+  This open form is G2 (the master's decision); the closed form needs c' > c.
 - `held_band`: a band with z1 ≤ jaw_top is held. forge-cam labels a straddling band "uncut" whole,
   and allows a 1e-9 slack; `band_split` gives the exact split.
 - The G6 counterexamples round-trip on all four dialects at 0a4c189 (checked in Rust).
@@ -67,5 +67,8 @@ ForgeCam/Vise.lean adds 7 theorems (41 in all).
    `Certified` holds for them.
 2. If 2.5D contours with arcs are in active use: segment–arc in Dist2 (over ℝ, or ℚ(√d) for an
    executable form), then arc–arc.
-3. Not yet asked for: the character level of G-code (digits and templates), canned-cycle
+3. G6: arc semantics (the master asked for them on resume). A quantised arc whose start = end
+   is a full circle to the control, so the model must give arcs their swept motion and prove
+   that a posted arc is never a vanishing one read as a circle.
+4. Not yet asked for: the character level of G-code (digits and templates), canned-cycle
    expansion in the G6 model, L5 for the checker's intervals, and L4 (Aeneas).

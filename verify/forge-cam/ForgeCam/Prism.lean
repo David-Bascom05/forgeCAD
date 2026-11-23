@@ -197,19 +197,20 @@ theorem G1_of_closedForm {Z : Set ℝ} {w : ℝ → ℝ} (hZ : Z.OrdConnected)
   · exact hle.trans dist_nonneg
   · exact certified_clear hZ hw hζ hpos h s hs x hx y hy
 
-/-- **G2 (corrected, design.md §7b) from the closed form.** Both the cutter T and the
+/-- **The closed form of G2 from the closed form, with a margin** (the spec's G2 is the open form,
+`G2open_of_closedForm` in ForgeCam/Vise.lean). Both the cutter T and the
 non-cutting part N are certified against the fixture's closed hull Fx (every F s ⊆ Fx) at some
 c' > c, so the whole tool misses F ⊕ B_c; N is certified against the stock S₀ as it stood
 before the piece (every S s ⊆ S₀) at some c₀ > 0. It holds on every piece kind: the move is
 any planar or vertical one. -/
-theorem G2_of_closedForm {Zc Zn : Set ℝ} {wc wn : ℝ → ℝ} (hZc : Zc.OrdConnected)
+theorem G2closed_of_closedForm {Zc Zn : Set ℝ} {wc wn : ℝ → ℝ} (hZc : Zc.OrdConnected)
     (hwc : ∀ z ∈ Zc, 0 ≤ wc z) (hZn : Zn.OrdConnected) (hwn : ∀ z ∈ Zn, 0 ≤ wn z)
     {γ : ℝ → ℝ × ℝ} {ζ : ℝ → ℝ} {Zt : Set ℝ} (hζ : HeightsIn ζ Zt)
     {c c' c₀ : ℝ} (hcc : c < c') (hc' : 0 < c') (hc₀ : 0 < c₀)
     {S₀ Fx : Set E3} {S F : ℝ → Set E3} (hS : ∀ s, S s ⊆ S₀) (hF : ∀ s, F s ⊆ Fx)
     (hTF : Certified Zc wc γ Zt Fx c') (hNF : Certified Zn wn γ Zt Fx c')
     (hNS : Certified Zn wn γ Zt S₀ c₀) :
-    G2 (hyp Zc wc) (hyp Zn wn) S F (move γ ζ) c := by
+    G2closed (hyp Zc wc) (hyp Zn wn) S F (move γ ζ) c := by
   intro s hs
   have h1 := certified_clear hZc hwc hζ hc' hTF s hs
   have hT : Disjoint (move γ ζ s '' hyp Zc wc) (cthickening c Fx) :=
