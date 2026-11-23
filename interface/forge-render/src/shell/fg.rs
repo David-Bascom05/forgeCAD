@@ -1552,8 +1552,14 @@ impl Shell {
                         .show(ui, |ui| {
                             ui.label(egui::RichText::new(word).font(medium(11.0)).color(colour));
                         });
+                    // where it is, when a statement says it (an assembly's solve says none)
+                    let at = if is.line == 0 {
+                        is.kind.clone()
+                    } else {
+                        format!("{} · line {}:{}", is.kind, is.line, is.col)
+                    };
                     ui.label(
-                        egui::RichText::new(format!("{} · line {}:{}", is.kind, is.line, is.col))
+                        egui::RichText::new(at)
                             .font(super::theme::caption())
                             .color(t.ink2),
                     );

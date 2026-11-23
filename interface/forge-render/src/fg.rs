@@ -617,7 +617,34 @@ pub fn rows(run: &Run, src: &str) -> (Vec<FeatRow>, Vec<ParamRow>, Vec<Issue>) {
             asm: None,
         });
     }
+    // an assembly's loops the solve couldn't rank clearly: their freedom may change with a
+    // small move (no line of its own: the solve's, not a statement's)
+    if let Some(a) = &run.asm {
+        issues.extend(a.near_singular.iter().map(near_singular));
+    }
     (feats, params, issues)
+}
+
+/// A near-singular loop block as an Issues row.
+pub fn near_singular(n: &forge_lang::asm::NearSingular) -> Issue {
+    let who = if n.instances.is_empty() {
+        "a loop".to_string()
+    } else {
+        n.instances.join(", ")
+    };
+    Issue {
+        severity: Severity::Warning,
+        kind: "NearSingular".into(),
+        text: format!(
+            "{who}: near-singular: the solve couldn't tell this loop's rank clearly ({} counted, at most {}; {} free), so a small move may change how it moves",
+            n.rank, n.generic_rank, n.mobility
+        ),
+        line: 0,
+        col: 0,
+        fixes: vec![],
+        feature: None,
+        asm: None,
+    }
 }
 
 /// What the worker sends: a build (its rows, and a delta of the faces it changed), the faces of

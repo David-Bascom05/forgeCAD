@@ -3237,6 +3237,19 @@ pub struct JointOut {
     pub limits: Vec<(&'static str, f64, f64)>,
 }
 
+/// A loop block the solve could not rank clearly: near a singular configuration (a singular value
+/// between the floor and `rank::GAP` times it), so its freedom may change with a small move.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct NearSingular {
+    /// The instances the block moves, by name.
+    pub instances: Vec<String>,
+    /// The rank counted at the solution, and the most any configuration of the block could pass.
+    pub rank: usize,
+    pub generic_rank: usize,
+    /// Its unknowns less its rank.
+    pub mobility: usize,
+}
+
 /// What an assembly run gives besides its typed notes.
 #[derive(Clone, Debug, Default)]
 pub struct AsmOut {
@@ -3247,6 +3260,8 @@ pub struct AsmOut {
     /// Each part occurrence (through subassemblies), its file and pose.
     pub occurrences: Vec<(String, String, Frame)>,
     pub joints: Vec<JointOut>,
+    /// The loop blocks whose rank wasn't clear at the solution (`BlockReport::rank_clear`).
+    pub near_singular: Vec<NearSingular>,
     pub mobility: usize,
     pub interferences: usize,
     pub intended: usize,
@@ -4348,6 +4363,21 @@ pub fn finish(
         ..AsmOut::default()
     };
     structure(&d, "", &dir, &fence, &subs, 0, &mut out.insts, &mut out.links);
+    out.near_singular = sol
+        .blocks
+        .iter()
+        .filter(|b| !b.rank_clear)
+        .map(|b| NearSingular {
+            instances: b
+                .instances
+                .iter()
+                .filter_map(|i| names.inst.get(&i.0).map(|n| n.0.clone()))
+                .collect(),
+            rank: b.rank,
+            generic_rank: b.generic_rank,
+            mobility: b.mobility,
+        })
+        .collect();
     out.sources = d.insts.iter().map(|i| (i.id.clone(), i.source)).collect();
     out.evals = d
         .insts
