@@ -6,6 +6,7 @@
 
 use forge_cam::ops::{OpPath, PMove, Phase};
 use forge_cam_lang::Cam;
+use forge_math::dmath;
 
 /// mm/min a rapid is timed at (forge-cam-lang's `time_s` takes the same).
 pub const RAPID: f64 = 10_000.0;
@@ -83,7 +84,7 @@ impl Seg {
             ],
             Some(ar) => {
                 let t = ar.a0 + ar.sweep * u;
-                [ar.c[0] + ar.r * t.cos(), ar.c[1] + ar.r * t.sin(), z]
+                [ar.c[0] + ar.r * dmath::cos(t), ar.c[1] + ar.r * dmath::sin(t), z]
             }
         }
     }
@@ -179,8 +180,8 @@ pub fn push_path(op: u32, path: u32, p: &OpPath, segs: &mut Vec<Seg>, mut t: f64
             }
             PMove::Arc { to, c, cw, f } => {
                 let r = ((at[0] - c[0]).powi(2) + (at[1] - c[1]).powi(2)).sqrt();
-                let a0 = (at[1] - c[1]).atan2(at[0] - c[0]);
-                let mut a1 = (to[1] - c[1]).atan2(to[0] - c[0]);
+                let a0 = dmath::atan2(at[1] - c[1], at[0] - c[0]);
+                let mut a1 = dmath::atan2(to[1] - c[1], to[0] - c[0]);
                 let tau = std::f64::consts::TAU;
                 // as the checker reads it: the same end is a whole turn
                 if cw {

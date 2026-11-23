@@ -375,6 +375,8 @@ pub struct Shell {
     pub new_drawing: Option<drawing::NewDrawing>,
     /// A DWG file is open: AutoCAD's layout instead of the model's (`dwgdoc.rs`).
     pub dwgdoc: Option<dwgdoc::DwgDoc>,
+    /// A machining document's toolpath and stock simulation (`gui_camsim_panel.rs`).
+    pub camsim: Option<Box<crate::gui_camsim_panel::CamSimUi>>,
     /// What's set in Settings, and its window.
     pub settings: settings::Settings,
     pub prefs: settings::Window,
@@ -436,6 +438,7 @@ impl Default for Shell {
             drawing: None,
             new_drawing: None,
             dwgdoc: None,
+            camsim: None,
             settings: Default::default(),
             prefs: Default::default(),
             agent: Default::default(),
@@ -741,6 +744,7 @@ impl Shell {
         self.docs_and_status(ui, s, bottom);
         self.navbar(&ctx);
         self.window_ui(&ctx);
+        self.camsim_ui(&ctx);
         // a dialog holds its numbers while it's up; a sketch has its own
         if self.fg.as_ref().is_some_and(|p| p.tool.is_none()) && self.sketch.is_none() {
             self.fg_dim_ui(&ctx);

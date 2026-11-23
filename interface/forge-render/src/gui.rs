@@ -24,6 +24,8 @@ pub mod gui_apptools;
 mod gui_asm;
 #[path = "gui_asmdrag.rs"]
 mod gui_asmdrag;
+#[path = "gui_camsim.rs"]
+pub mod gui_camsim;
 #[path = "gui_docs.rs"]
 pub mod gui_docs;
 #[path = "gui_explode.rs"]
@@ -376,6 +378,7 @@ impl Gui {
     /// Opens a part into the active document, in the background: the window never waits on the
     /// kernel. A bench part's name opens its Forge port. False if nothing could be opened.
     fn load(&mut self, path: &str) -> bool {
+        self.shell.camsim = None;
         // a DWG file: AutoCAD's layout, its own tab
         if is_dwg(path) {
             match crate::shell::dwgdoc::DwgDoc::open(path) {
@@ -399,6 +402,12 @@ impl Gui {
                 }
             }
             return true;
+        }
+        // a machining document opens in its simulation
+        if path.ends_with(".fg")
+            && forge_dirs::fs::read_to_string(path).is_ok_and(|s| forge_cam_lang::is_machining(&s))
+        {
+            return self.open_camsim(path);
         }
         if path.ends_with(".fg") {
             return self.open_fg(path);
@@ -1238,7 +1247,7 @@ impl Gui {
         self.take_speech();
         self.take_extras(false);
         times.events = now_ms() - t0;
-        let mut animating = false;
+        let mut animating = self.camsim_tick();
         if let Some(v) = &mut self.view {
             if v.nav.tick(now_ms()) {
                 v.dirty = true;
@@ -1434,6 +1443,10 @@ impl Gui {
                     world.extend(local);
                 }
             }
+            let solid = match self.shell.camsim.as_deref_mut() {
+                Some(st) => gui_camsim::geometry(st, &v.nav.camera, v.size, &mut world),
+                None => vec![],
+            };
             let behind = extra_behind;
             let marks = {
                 let quiet = self
@@ -1480,7 +1493,7 @@ impl Gui {
                 marks: &marks,
                 world: &world,
                 behind: &behind,
-                solid: &[],
+                solid: &solid,
             };
             // a wall or draft map shows its colours as the legend has them: no occlusion over it
             let ao = v.renderer.ao;

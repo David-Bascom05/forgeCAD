@@ -32,6 +32,7 @@ pub mod cache;
 pub mod dragbench;
 pub mod fg;
 pub mod gui;
+pub mod gui_camsim_panel;
 pub mod live;
 pub mod load;
 pub mod measure;

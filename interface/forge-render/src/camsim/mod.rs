@@ -136,8 +136,11 @@ impl Sim {
 
     /// A setup's stock box as a fresh grid.
     fn blank(&self, s: usize, cells: usize) -> ZMap {
-        let st = self.setups[s].stock;
-        ZMap::new(st.min, st.max, cells)
+        match self.setups.get(s) {
+            Some(su) => ZMap::new(su.stock.min, su.stock.max, cells),
+            // a run with no setup (it stopped at an error): nothing to cut
+            None => ZMap::new([0.0; 3], [1.0, 1.0, 0.0], 1),
+        }
     }
 
     fn setup_of_seg(&self, i: usize) -> usize {
@@ -190,7 +193,8 @@ impl Sim {
                 play.cur.cut(&g, 0.0, 1.0, c);
             }
             play.done += 1;
-            if play.done % play.every == 0 && !play.checkpoints.iter().any(|(d, _)| *d == play.done) {
+            if play.done.is_multiple_of(play.every) && !play.checkpoints.iter().any(|(d, _)| *d == play.done)
+            {
                 play.checkpoints.push((play.done, play.cur.clone()));
                 play.checkpoints.sort_by_key(|c| c.0);
             }

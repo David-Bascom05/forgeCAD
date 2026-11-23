@@ -8,6 +8,7 @@ use super::zmap::{Compare, PartMap, ZMap, compare};
 use crate::origin::WorldVert;
 use crate::viewcube::rgb;
 use forge_cam_geom::tool::{PSeg, Part, Shape};
+use forge_math::dmath;
 
 /// The simulation's colours (forgeCAD's own; linear).
 pub mod look {
@@ -357,8 +358,8 @@ pub fn tool(shape: &Shape, p: [f64; 3], fail: bool, out: &mut Vec<WorldVert>) {
                     prof.push(b);
                 }
                 PSeg::Arc { a, b, c, r, ccw } => {
-                    let a0 = (a[1] - c[1]).atan2(a[0] - c[0]);
-                    let mut a1 = (b[1] - c[1]).atan2(b[0] - c[0]);
+                    let a0 = dmath::atan2(a[1] - c[1], a[0] - c[0]);
+                    let mut a1 = dmath::atan2(b[1] - c[1], b[0] - c[0]);
                     let tau = std::f64::consts::TAU;
                     if ccw {
                         while a1 < a0 {
@@ -377,7 +378,7 @@ pub fn tool(shape: &Shape, p: [f64; 3], fail: bool, out: &mut Vec<WorldVert>) {
                         prof.push(if k == 8 {
                             b
                         } else {
-                            [c[0] + r * t.cos(), c[1] + r * t.sin()]
+                            [c[0] + r * dmath::cos(t), c[1] + r * dmath::sin(t)]
                         });
                     }
                 }
@@ -399,13 +400,17 @@ pub fn tool(shape: &Shape, p: [f64; 3], fail: bool, out: &mut Vec<WorldVert>) {
                 );
                 let at = |q: [f64; 2], t: f64| -> [f32; 3] {
                     [
-                        (p[0] + q[0] * t.cos()) as f32,
-                        (p[1] + q[0] * t.sin()) as f32,
+                        (p[0] + q[0] * dmath::cos(t)) as f32,
+                        (p[1] + q[0] * dmath::sin(t)) as f32,
                         (p[2] + q[1]) as f32,
                     ]
                 };
                 let tm = 0.5 * (t0 + t1);
-                let n = [(nr * tm.cos()) as f32, (nr * tm.sin()) as f32, nz as f32];
+                let n = [
+                    (nr * dmath::cos(tm)) as f32,
+                    (nr * dmath::sin(tm)) as f32,
+                    nz as f32,
+                ];
                 quad(
                     [at(q0, t0), at(q0, t1), at(q1, t1), at(q1, t0)],
                     shade(base, n),

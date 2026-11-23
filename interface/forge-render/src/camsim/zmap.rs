@@ -10,6 +10,7 @@
 
 use super::timeline::Seg;
 use forge_cam_geom::tool::{PSeg, Part, Shape};
+use forge_math::dmath;
 
 /// The cutter's lower envelope: the lowest height of its cutting body above the tip at each
 /// radius, sampled every `dr`, up to `r`.
@@ -53,8 +54,8 @@ impl Cutter {
                     PSeg::Line { a, b } => pts.push((a, b)),
                     PSeg::Arc { a, b, c, r: rr, ccw } => {
                         // as a fine polyline
-                        let a0 = (a[1] - c[1]).atan2(a[0] - c[0]);
-                        let mut a1 = (b[1] - c[1]).atan2(b[0] - c[0]);
+                        let a0 = dmath::atan2(a[1] - c[1], a[0] - c[0]);
+                        let mut a1 = dmath::atan2(b[1] - c[1], b[0] - c[0]);
                         let tau = std::f64::consts::TAU;
                         if ccw {
                             while a1 < a0 {
@@ -72,7 +73,7 @@ impl Cutter {
                             let q = if k == n {
                                 b
                             } else {
-                                [c[0] + rr * t.cos(), c[1] + rr * t.sin()]
+                                [c[0] + rr * dmath::cos(t), c[1] + rr * dmath::sin(t)]
                             };
                             pts.push((prev, q));
                             prev = q;
@@ -286,14 +287,14 @@ impl ZMap {
                         if rho > rr || rho < ar.r - r {
                             continue;
                         }
-                        let th = vy.atan2(vx);
+                        let th = dmath::atan2(vy, vx);
                         let off = (th - lo_a).rem_euclid(tau);
                         let d = if off <= sw {
                             (rho - ar.r).abs()
                         } else {
                             let e = |t: f64| {
-                                ((c[0] - ar.c[0] - ar.r * t.cos()).powi(2)
-                                    + (c[1] - ar.c[1] - ar.r * t.sin()).powi(2))
+                                ((c[0] - ar.c[0] - ar.r * dmath::cos(t)).powi(2)
+                                    + (c[1] - ar.c[1] - ar.r * dmath::sin(t)).powi(2))
                                 .sqrt()
                             };
                             e(lo_a).min(e(lo_a + sw))
