@@ -312,6 +312,11 @@ pub(crate) fn split(cx: &mut Ctx, pc: &Piece, pts: &mut Vec<Pt>) -> Vec<Piece> {
         base.s = pts[0];
         base.e = pts[0];
         arr::sort_along(cx, &base, pts);
+        // a point met twice (three curves through one point) splits once
+        dedup_same(cx, pts);
+        while pts.len() > 1 && arr::same(cx, pts[pts.len() - 1], pts[0]) {
+            pts.pop();
+        }
         let mut k = 0;
         while k < pts.len() {
             let a = pts[k];
@@ -333,6 +338,8 @@ pub(crate) fn split(cx: &mut Ctx, pc: &Piece, pts: &mut Vec<Pt>) -> Vec<Piece> {
     }
     all.push(pc.e);
     arr::sort_along(cx, pc, &mut all);
+    // no piece of zero length: a split point exactly at an end, or met twice, splits once
+    dedup_same(cx, &mut all);
     let mut k = 0;
     while k + 1 < all.len() {
         let mut sp = *pc;
@@ -342,6 +349,19 @@ pub(crate) fn split(cx: &mut Ctx, pc: &Piece, pts: &mut Vec<Pt>) -> Vec<Piece> {
         k += 1;
     }
     out
+}
+
+/// Drops each point exactly equal to the one before it (the points sorted along a curve).
+fn dedup_same(cx: &mut Ctx, pts: &mut Vec<Pt>) {
+    let mut out: Vec<Pt> = Vec::with_capacity(pts.len());
+    let mut k = 0;
+    while k < pts.len() {
+        if out.is_empty() || !arr::same(cx, out[out.len() - 1], pts[k]) {
+            out.push(pts[k]);
+        }
+        k += 1;
+    }
+    *pts = out;
 }
 
 /// d(q, e) ≥ r for every boundary element e but `skip` (the one that made the piece, whose
@@ -602,6 +622,20 @@ fn to_loop(cx: &mut Ctx, kept: &[Piece], chain: &[usize]) -> OLoop {
         };
         segs.push(sg);
         i += 1;
+    }
+    // a piece whose two ends round to one f64 point (an arc of radius near zero, a sliver) is
+    // dropped: its neighbours share that vertex, so the loop stays closed, and the region moves
+    // by less than the rounding of its vertices; kept, it would read as a full circle or a
+    // zero-length line. A loop that rounds to one point stays one (an isolated point).
+    if segs.len() > 1 {
+        let all = segs.clone();
+        segs.retain(|s| match *s {
+            Seg::Line { a, b } | Seg::Arc { a, b, .. } => a != b,
+        });
+        if segs.is_empty() {
+            let a = all[0].start();
+            segs.push(Seg::Line { a, b: a });
+        }
     }
     OLoop { segs }
 }

@@ -364,7 +364,30 @@ pub fn quantize(p: &Program, d: &Dialect) -> Result<QProgram, PostError> {
         Ok([quant(v[0], k)?, quant(v[1], k)?, quant(v[2], k)?])
     };
     let mut out = Vec::new();
+    // where the tool is, as the program states it (an arc's start)
+    let mut at: Option<[f64; 3]> = None;
     for r in &p.recs {
+        let from = at;
+        match r {
+            Rec::Rapid(v) | Rec::Line(v, _) | Rec::Arc { to: v, .. } => at = Some(*v),
+            Rec::Cycle { .. } => at = None,
+            _ => {}
+        }
+        // an arc whose end rounds onto its start would read back as a full circle: when it is
+        // less than a half turn it is a vanishing arc (its chord under the quantum), and it is
+        // written as the null move it rounds to; a full circle (end equal to start) stays one
+        if let (Rec::Arc { to, c, cw, f }, Some(s)) = (r, from)
+            && *to != s
+            && q3(*to)? == q3(s)?
+        {
+            // less than a half turn: the end is on the turning side of the start (or on its line)
+            let cross = (s[0] - c[0]) * (to[1] - c[1]) - (s[1] - c[1]) * (to[0] - c[0]);
+            let short = if *cw { cross <= 0.0 } else { cross >= 0.0 };
+            if short {
+                out.push(QRec::Line(q3(*to)?, quant(*f, fk)?));
+                continue;
+            }
+        }
         out.push(match r {
             Rec::Comment(s) => QRec::Comment(s.clone()),
             Rec::Wcs(n) => QRec::Wcs(*n),

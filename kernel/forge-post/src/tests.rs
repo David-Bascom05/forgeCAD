@@ -174,6 +174,42 @@ fn a_dropped_null_move_leaves_no_mode_behind() {
             }
             let q = quantize(&Program { number: 1, title: "t".into(), recs }, &d).unwrap();
             round_trip(&q, &d).unwrap_or_else(|e| panic!("{name} {null_rapid}: {e}"));
+            // the plunge to z −3 reads back as a feed, never a rapid
+            let txt = print(&q, &d).unwrap();
+            let back = read(&txt, &d).unwrap();
+            let plunge = back
+                .iter()
+                .find(|m| matches!(m, Motion::Feed(p, _) | Motion::Rapid(p) if p[2] < 0))
+                .expect("the plunge");
+            assert!(matches!(plunge, Motion::Feed(..)), "{name} {null_rapid}: {plunge:?}\n{txt}");
         }
     }
+}
+
+#[test]
+fn a_vanishing_arc_is_not_a_full_circle() {
+    // an arc of 1e-13 rad: its end rounds onto its start; G-code would read a full circle
+    let d = Dialect::get("fanuc").unwrap();
+    let s = [73.0, 34.0, 1.0];
+    let to = [73.00000000000004, 33.999999999999964, 1.0];
+    let p = Program {
+        number: 1,
+        title: "t".into(),
+        recs: vec![
+            Rec::Rapid(s),
+            Rec::Arc { to, c: [70.0, 30.0], cw: true, f: 500.0 },
+            Rec::Line([80.0, 34.0, 1.0], 500.0),
+        ],
+    };
+    let q = quantize(&p, &d).unwrap();
+    assert!(!q.recs.iter().any(|r| matches!(r, QRec::Arc { .. })), "{:?}", q.recs);
+    let txt = print(&q, &d).unwrap();
+    assert!(!txt.split_whitespace().any(|w| w == "G2" || w == "G3"), "{txt}");
+    // a full circle stays one
+    let p = Program {
+        number: 1,
+        title: "t".into(),
+        recs: vec![Rec::Rapid(s), Rec::Arc { to: s, c: [70.0, 30.0], cw: true, f: 500.0 }],
+    };
+    assert!(quantize(&p, &d).unwrap().recs.iter().any(|r| matches!(r, QRec::Arc { .. })));
 }
