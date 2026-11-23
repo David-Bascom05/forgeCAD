@@ -155,3 +155,66 @@ fn suite_parts_mesh_closed() {
         assert!(m.volume() > 0.0, "{name}");
     }
 }
+
+/// A sweep along lines and arcs runs into itself exactly where two pieces that are not neighbours
+/// share a point, decided by the pieces themselves (research/sweep-spec DESIGN.md §3.3): a path
+/// turning back across its first leg is refused; a U-turn whose legs pass 0.06 apart, their
+/// boxes overlapping, builds.
+#[test]
+fn a_sweep_into_itself_is_refused_and_one_just_clear_builds() {
+    use forge_model::{Combine, Feature, History, PathEnds, RegenError, Sweep};
+    use forge_ops::SweepError;
+    let path = |bend: f64, sweep: f64, last: (Point3, Point3)| {
+        vec![
+            PathSeg::Line {
+                a: Point3::ORIGIN,
+                b: Point3::new(0.0, 0.0, 10.0),
+            },
+            PathSeg::Arc {
+                circle: Circle {
+                    frame: Frame::from_zx(Point3::new(bend, 0.0, 10.0), UnitVec3::Y, -Vec3::X)
+                        .expect("square axes"),
+                    radius: bend,
+                },
+                start: 0.0,
+                sweep,
+            },
+            PathSeg::Line { a: last.0, b: last.1 },
+        ]
+    };
+    let pipe = Profile {
+        plane: Frame::WORLD,
+        loops: vec![Profile::circle(Point2::ORIGIN, 2.0, 0)],
+    };
+    let tool = |path: Vec<PathSeg>| {
+        let f = vec![Feature::Sweep(Box::new(Sweep {
+            profile: pipe.clone(),
+            path,
+            ends: PathEnds::Path,
+            op: Combine::New,
+        }))];
+        forge_model::feature_tools(History::new(&f, None), 0)
+    };
+    // three quarters round, then back across the first leg
+    let back = path(
+        3.0,
+        3.0 * dmath::FRAC_PI_2,
+        (Point3::new(3.0, 0.0, 7.0), Point3::new(-5.0, 0.0, 7.0)),
+    );
+    assert!(matches!(
+        tool(back),
+        Err(RegenError::Sweep {
+            error: SweepError::SelfIntersecting,
+            ..
+        })
+    ));
+    // a U-turn of radius 2.03 with a tube of radius 2: the legs 0.06 apart
+    let b = 2.03;
+    let u = path(
+        b,
+        dmath::PI,
+        (Point3::new(2.0 * b, 0.0, 10.0), Point3::new(2.0 * b, 0.0, 0.0)),
+    );
+    let t = tool(u).expect("clear of itself");
+    volume(&t[0].0);
+}

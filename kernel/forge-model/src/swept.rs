@@ -9,7 +9,7 @@ use forge_geom::screw::Section;
 use forge_math::{Box3, Point2, Point3, UnitVec3, Vec3, dmath, tol};
 use forge_ops::{
     Axis2, Handed, LoftGuides, LoftKind, PathSeg, Profile, Stretch, Winding, coil, coil_motion,
-    loft_and_bounds, loft_bounds, sweep, sweep_stretches,
+    loft_and_bounds, loft_bounds, sweep, sweep_stretches, sweep_unchecked,
 };
 use forge_topo::Body;
 
@@ -228,7 +228,15 @@ fn build_tool(features: History<'_>, i: usize, build: bool) -> Result<Tool, Rege
             };
             let (prepared, stretches) = sweep_stretches(&profile, &path).map_err(err)?;
             let shape = sweep_shape(&prepared, &stretches);
-            let body = if build {
+            let body = if build && path.iter().all(|p| !matches!(p, PathSeg::Spline(_))) {
+                let body = sweep_unchecked(&profile, &path, id).map_err(err)?;
+                pieces_apart(&prepared, &path, &stretches, id).map_err(|e| match e {
+                    Apart::Meet => err(forge_ops::SweepError::SelfIntersecting),
+                    Apart::Boolean(error) => RegenError::Boolean { feature: i, error },
+                })?;
+                body
+            } else if build {
+                // a spline's piece has no closed form: the sampled test (DESIGN.md §3.3)
                 sweep(&profile, &path, id).map_err(err)?
             } else {
                 Body::new()
@@ -398,6 +406,88 @@ fn profile_reach(profile: &Profile, at: Point3) -> f64 {
         .fold(0.0, f64::max)
         // a chord of 16 samples sags at most r (1 - cos(pi/16)) < r / 50
         * 1.02
+}
+
+enum Apart {
+    Meet,
+    Boolean(forge_bool::BoolError),
+}
+
+/// Whether a path of lines and arcs keeps its swept solid clear of itself, decided once
+/// (research/sweep-spec DESIGN.md §3.3). The solid is the union of its pieces, a prism per line
+/// and a solid of revolution per arc; it runs into itself exactly where two pieces that are not
+/// neighbours share a point (neighbours share only their common section: `TooTight` keeps each
+/// bend's section clear of its axis). A pair whose boxes (the piece's path, grown by the
+/// profile's reach) are apart shares nothing; any other pair is intersected by the boolean.
+fn pieces_apart(profile: &Profile, path: &[PathSeg], stretches: &[Stretch], id: u64) -> Result<(), Apart> {
+    let n = path.len();
+    if n < 3 {
+        return Ok(());
+    }
+    let reach = profile_reach(profile, profile.plane.origin);
+    let boxes: Vec<Box3> = path
+        .iter()
+        .map(|s| path_box(std::slice::from_ref(s)).grow(reach))
+        .collect();
+    let mut solids: Vec<Option<Body>> = vec![None; n];
+    let mut solid = |k: usize| -> Option<Body> {
+        if solids[k].is_none() {
+            // (the sweep's profile splits a circle in two under one id: the piece's own ids, here
+            // only to name its throwaway faces, are numbered afresh)
+            let at = |plane: forge_math::Frame| {
+                let mut k = 0u64;
+                Profile {
+                    plane,
+                    loops: profile
+                        .loops
+                        .iter()
+                        .map(|l| forge_ops::ProfileLoop {
+                            segments: l
+                                .segments
+                                .iter()
+                                .map(|(s, _)| {
+                                    k += 1;
+                                    (s.clone(), k)
+                                })
+                                .collect(),
+                        })
+                        .collect(),
+                }
+            };
+            solids[k] = match stretches[k] {
+                Stretch::Straight { plane, length } => forge_ops::extrude(&at(plane), length, id).ok(),
+                Stretch::Bend { plane, axis, angle } => {
+                    let in_plane =
+                        |v: Vec3| forge_math::Vec2::new(v.dot(plane.x().get()), v.dot(plane.y().get()));
+                    let o = in_plane(axis.origin - plane.origin);
+                    let a2 = Axis2 {
+                        origin: Point2::new(o.x, o.y),
+                        dir: in_plane(axis.z().get()),
+                    };
+                    forge_ops::revolve(&at(plane), a2, angle, id).ok()
+                }
+                Stretch::Along { .. } => None,
+            };
+        }
+        solids[k].clone()
+    };
+    for i in 0..n {
+        for j in i + 2..n {
+            if !boxes[i].overlaps(&boxes[j]) {
+                continue;
+            }
+            let (Some(a), Some(b)) = (solid(i), solid(j)) else {
+                // a piece that will not build alone (the swept body was made, so its section is
+                // sound): say they meet rather than guess
+                return Err(Apart::Meet);
+            };
+            let both = forge_bool::boolean(&a, &b, Op::Intersect, id ^ 0x5e1f).map_err(Apart::Boolean)?;
+            if both.face_ids().next().is_some() {
+                return Err(Apart::Meet);
+            }
+        }
+    }
+    Ok(())
 }
 
 /// A sweep's solid: its stretches' prisms and solids of revolution, together.
