@@ -39,7 +39,11 @@ pub(super) fn foot(c: &Spline, ext: Interval, q: Point3, near: Option<f64>) -> (
     (t, along, n)
 }
 
-/// How far past each end a section may be carried and stay regular.
+/// How far past each end a section may be carried and stay regular: its end pieces' polynomials
+/// continued (as the spline spec's `spanOf` continues them), up to the whole end piece's width,
+/// else the largest of a half, a quarter, .. of it that stays regular. An offset's mitre at a sharp
+/// corner of two such sections lies past their ends, as far as the offset over the tangent of half
+/// the corner's angle.
 pub(super) fn carried(c: &Spline) -> Option<Interval> {
     let d = c.domain();
     if !c.regular_over(d) {
@@ -48,7 +52,7 @@ pub(super) fn carried(c: &Spline) -> Option<Interval> {
     let b = c.breaks();
     let n = c.pieces();
     let (h0, h1) = (b[1] - b[0], b[n] - b[n - 1]);
-    for k in [0.25, 0.125, 0.0625, 0.03125] {
+    for k in [1.0, 0.5, 0.25, 0.125, 0.0625, 0.03125] {
         let e = Interval::new(d.lo - k * h0, d.hi + k * h1);
         if c.regular_over(e) {
             return Some(e);

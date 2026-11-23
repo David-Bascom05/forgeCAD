@@ -79,3 +79,33 @@ c = revolve(s.bore, axis: s.ax, angle: 90deg, surface: true)
     let got = forge_lang::report::sheet_area(&r).expect("sheets");
     assert!((got - want).abs() < 1e-9 * want, "{got} {want}");
 }
+
+#[test]
+fn a_mitre_past_two_splines_ends_is_their_end_pieces_continued() {
+    // two splines meeting at a sharp apex: thickened out, the mitre there lies past both ends
+    // (refused as Invalid while the sections were carried a quarter of their end piece); the
+    // sides add up, the wall t thick both ways being t/2 out and t/2 in
+    let part = |t: &str, side: &str| {
+        format!(
+            "shared h = 5
+sketch s(on: xy) {{
+  path p(start: (0, 0)) {{
+    line(to: (10, 0))
+    spline(through: [(8.5, 5)], to: (5, 12), tangent: false)
+    spline(through: [(1.5, 5)], to: (0, 0), tangent: false)
+  }}
+}}
+a = extrude(s.p, h, thin: {t}, side: \"{side}\")
+"
+        )
+    };
+    let volume = |t: &str, side: &str| {
+        let r = run(&part(t, side));
+        assert!(r.errors.is_empty(), "{t} {side}: {:?}", r.errors);
+        let m = r.measure.as_ref().expect("measured");
+        assert_eq!(m.problems, 0, "{t} {side}");
+        m.volume
+    };
+    let (out, inn, both) = (volume("1", "out"), volume("1", "in"), volume("2", "both"));
+    assert!((out + inn - both).abs() <= 1e-12 * both, "{out} + {inn} != {both}");
+}
