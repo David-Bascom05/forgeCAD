@@ -109,9 +109,10 @@ are covered.
 - `Prism::of` refuses walls not strictly under a half turn (they go to the B&B).
 - `slab::dist` debug-asserts every arc is strictly under a half turn, with the sign set by
   `ccw`.
-- Residual (L5): those tests take the cross product's sign in f64. A plain f64 sign is not an
-  exact sign near cross = 0, so it should go through the exact `orient2d` or interval predicate
-  when the checker's L5 is done.
+- Its sign is exact since 815d10e: `Prism::of`'s guard and the assertion take cross(a − c, b − c)
+  as an outward-rounded interval. A wall gets the closed form only if lo > 0 (ccw) or hi < 0
+  (cw); otherwise it goes to the B&B. The guard can err only toward the general path. Done.
+  (CAM's message named it 6e3fa7c; the branch has it as 815d10e.)
 
 ## Still to do when asked
 
