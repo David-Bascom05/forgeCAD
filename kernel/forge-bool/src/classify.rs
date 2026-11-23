@@ -165,6 +165,9 @@ impl Simple {
     }
 
     /// Where `p`, on the face's surface, lies; None near the boundary.
+    // (inline(always): point_in_face_past and point_in_face_at both call it; out of line it costs
+    // the hot path, coplanar seq +0.11%)
+    #[inline(always)]
     fn place(self, p: Point3) -> Option<Where> {
         let m = SIMPLE_MARGIN;
         match self {
@@ -660,6 +663,60 @@ impl<'a> Index<'a> {
         } else {
             Where::Outside
         }
+    }
+
+    /// As `point_in_face`, with the nearest-edge decision handed to `near` first: where `p` is
+    /// within its nearest edge's reach (the only place `near` is called, and only where no closed
+    /// form has placed it), `near(c, t, d)` with the boundary use `c`, the parameter `t` of the
+    /// edge's nearest point and the f64 distance `d` may answer for the caller's exact point
+    /// (`Some`), or leave `point_in_face` to decide (`None`). Out of line and apart from
+    /// `point_in_face_past`, whose code it leaves as it was: the nearest edge is found twice only
+    /// on this path.
+    #[inline(never)]
+    pub fn point_in_face_at(
+        &self,
+        f: FaceId,
+        p: Point3,
+        near: &dyn Fn(forge_topo::CoedgeId, f64, f64) -> Option<Where>,
+    ) -> Where {
+        let body = self.body;
+        let info = self.info(f);
+        if info
+            .simple
+            .get_or_init(|| Simple::of(body, f))
+            .and_then(|s| s.place(p))
+            .is_none()
+        {
+            // the nearest boundary point, as point_in_face_past finds it
+            let mut best: Option<(f64, forge_topo::CoedgeId, f64)> = None;
+            for &(c, ref b) in &info.edges {
+                if c == GONE || box_distance(b, p) > info.reach.min(best.map_or(f64::INFINITY, |x| x.0)) {
+                    continue;
+                }
+                let e = body.edge(body.coedge(c).edge);
+                let t = e.curve.closest(p, e.range);
+                let d = e.curve.eval(t).distance(p);
+                if best.is_none_or(|b| d < b.0) {
+                    best = Some((d, c, t));
+                }
+            }
+            if let Some((d, c, t)) = best {
+                let e = body.edge(body.coedge(c).edge);
+                let reach = if t <= e.range.lo {
+                    body.vertex(e.start).tol
+                } else if t >= e.range.hi {
+                    body.vertex(e.end).tol
+                } else {
+                    tol::LINEAR
+                };
+                if d <= reach
+                    && let Some(w) = near(c, t, d)
+                {
+                    return w;
+                }
+            }
+        }
+        self.point_in_face(f, p)
     }
 
     /// Inside, outside or on the solid.
@@ -1531,6 +1588,65 @@ mod tests {
         assert_eq!(ix.classify(Point3::new(5.0, 5.0, 5.0)), Where::On);
         assert_eq!(ix.classify(Point3::new(10.0, 20.0, 5.0)), Where::On);
         assert_eq!(ix.classify(Point3::new(5.0, 5.0, 2.5)), Where::Inside);
+    }
+
+    /// `point_in_face_at` with a hook that declines is `point_in_face`; a hook that answers is
+    /// asked only within its nearest edge's reach, and its answer is the result.
+    #[test]
+    fn point_in_face_at_hook() {
+        let plate = Profile::rectangle(Point2::ORIGIN, 20.0, 20.0, 0);
+        let bodies = [
+            extrude(
+                &Profile {
+                    plane: Frame::WORLD,
+                    loops: vec![plate, Profile::circle(Point2::new(10.0, 10.0), 4.0, 10)],
+                },
+                5.0,
+                1,
+            )
+            .unwrap(),
+            revolve(
+                &Profile {
+                    plane: Frame::WORLD,
+                    loops: vec![Profile::circle(Point2::new(10.0, 0.0), 3.0, 0)],
+                },
+                Y,
+                dmath::TAU,
+                1,
+            )
+            .unwrap(),
+        ];
+        let mut asked = 0;
+        for b in &bodies {
+            let ix = Index::new(b);
+            for f in b.face_ids() {
+                for e in b.edge_ids() {
+                    let e = b.edge(e);
+                    for i in 0..=16 {
+                        let t = e.range.lo + (e.range.hi - e.range.lo) * i as f64 / 16.0;
+                        let q = e.curve.eval(t);
+                        for o in [0.0, 1e-9, -1e-7, 1e-3, -0.5] {
+                            let p = Point3::new(q.x + o, q.y - o, q.z + 0.5 * o);
+                            let want = ix.point_in_face(f, p);
+                            assert_eq!(ix.point_in_face_at(f, p, &|_, _, _| None), want, "{p:?}");
+                            let calls = std::cell::Cell::new(0);
+                            let got = ix.point_in_face_at(f, p, &|_, _, d| {
+                                assert!(d.is_finite() && d >= 0.0, "{d}");
+                                calls.set(calls.get() + 1);
+                                Some(Where::Inside)
+                            });
+                            if calls.get() > 0 {
+                                assert_eq!(got, Where::Inside);
+                                asked += 1;
+                            } else {
+                                assert_eq!(got, want, "{p:?}");
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        assert!(asked > 0);
     }
 }
 

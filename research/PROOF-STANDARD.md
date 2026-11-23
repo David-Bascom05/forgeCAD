@@ -73,7 +73,7 @@ has been reported to the master.
 | Weldments | weldments | — | L1 (members are extrudes and half-spaces) |
 | Assemblies and interference | fix-mesh-asm | — | L1 (one classification from the boolean) |
 | STEP import / export | import-robust | — | L1 (round-trip) |
-| CAM (toolpaths, stock, posts) | cam | — | L1: G1–G6 of research/cam (no gouge, holder/rapids clear, stock within tolerance, limits, post round-trip) |
+| CAM (toolpaths, stock, posts) | cam, cam-lean | L1 (verify/forge-cam: G1–G6; the 2.5D closed form ⇒ G1–G3 for prism faces, its slab::dist candidates and trims sound), L2 (G5; segment–segment ℚ oracle), L6 (oracle harness, 2000 cases) | L5 (the checker's intervals), L4 (Aeneas), L1 for the B&B's non-prism faces |
 | Mesh export | mesh-export | closed / oriented / manifold check | L1 via tessellation |
 
 A branch that adds or changes a feature says which levels it keeps or adds. Merges are judged

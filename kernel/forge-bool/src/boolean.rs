@@ -445,6 +445,8 @@ pub(crate) enum Class {
 /// (`boolean_into` leaves that to its caller, who may go on combining: the regen unifies once,
 /// when it hands the part out.)
 pub fn boolean(a: &Body, b: &Body, op: Op, feature: u64) -> R<Body> {
+    #[cfg(debug_assertions)]
+    crate::size::debug_check(&[a, b]);
     // flat faces: the part read by reference and the result written fresh, with no copy first
     #[cfg(feature = "decide_once")]
     if let Some(r) = crate::decide_once::boolean(a, b, op)? {
@@ -461,6 +463,8 @@ pub fn boolean(a: &Body, b: &Body, op: Op, feature: u64) -> R<Body> {
 /// as tombstones until `Body::compact`. Names do not depend on `_feature`: what the boolean makes
 /// is named by what meets there, as the n-ary boolean names it.
 pub fn boolean_into(target: &mut Body, b: &Body, op: Op, _feature: u64) -> R<()> {
+    #[cfg(debug_assertions)]
+    crate::size::debug_check(&[target, b]);
     #[cfg(feature = "decide_once")]
     if let Some(r) = crate::decide_once::boolean(target, b, op)? {
         *target = r;
@@ -472,8 +476,9 @@ pub fn boolean_into(target: &mut Body, b: &Body, op: Op, _feature: u64) -> R<()>
     let before = target.clone();
     if !imprinted(target, b, || std::borrow::Cow::Borrowed(b), op) {
         let first = target.edges.len();
-        general(target, b, op)?;
-        refuse_strays(target, first)?;
+        let r = general(target, b, op).and_then(|()| refuse_strays(target, first));
+        decided!(crate::decisions::end("seq", &r));
+        r?;
     }
     #[cfg(debug_assertions)]
     faces_survive(&before, b, op, target);
@@ -507,6 +512,7 @@ pub(crate) fn refuse_strays(body: &Body, first: usize) -> R<()> {
     let strays = forge_topo::check::stray_edges_from(body, first);
     for p in strays {
         if let Problem::EdgeOffFace { face, .. } | Problem::LoopsCross { face } = p {
+            decided!(crate::decisions::site("G7 refuse_strays refused", 1));
             return Err(BoolError::lost(Lost::SplitCrossed {
                 face: FaceRef::of(body, face),
             }));
@@ -571,6 +577,8 @@ fn survivors(a: &Body, b: &Body, op: Op, r: &Body) -> Option<String> {
 /// `boolean_into` with the tool as its entities (`forge_ops::extrude_unlinked`): the Body is
 /// built only if the general boolean has to run.
 pub fn boolean_unlinked(target: &mut Body, b: forge_topo::Unlinked, op: Op) -> R<()> {
+    #[cfg(debug_assertions)]
+    crate::size::debug_check(&[target, &b.clone().into_body()]);
     #[cfg(feature = "decide_once")]
     if crate::decide_once::flat(target) {
         let tool = b.clone().into_body();
@@ -583,8 +591,9 @@ pub fn boolean_unlinked(target: &mut Body, b: forge_topo::Unlinked, op: Op) -> R
         return Ok(());
     }
     let first = target.edges.len();
-    general(target, &b.into_body(), op)?;
-    refuse_strays(target, first)
+    let r = general(target, &b.into_body(), op).and_then(|()| refuse_strays(target, first));
+    decided!(crate::decisions::end("seq", &r));
+    r
 }
 
 /// Whether the local-imprint path did the boolean (the mode lets it run and it covers the tool);
@@ -634,10 +643,9 @@ fn imprinted<'b, S: crate::imprint::Src>(
 }
 
 fn general(target: &mut Body, b: &Body, op: Op) -> R<()> {
-    UNDECIDED.with(|u| u.set(None));
-    RETRIED.with(|r| r.set(false));
+    let mut tried = Tried::default();
     let mut scratch = SCRATCH.with(|s| s.take());
-    let plan = plan(target, b, op, &mut scratch)?;
+    let plan = plan(target, b, op, &mut scratch, &mut tried)?;
     let mut clock = phases_on().then(forge_math::clock::Instant::now);
     let (loops, verts) = (target.loops.len(), target.vertices.len());
     let touched = touched_old(&plan);
@@ -654,23 +662,27 @@ fn general(target: &mut Body, b: &Body, op: Op) -> R<()> {
     lap(&mut clock, 6);
     scratch.keep(plan);
     SCRATCH.with(|s| s.replace(scratch));
+    decided!(crate::decisions::site(
+        "G6 pinched_new/pinched_old refused",
+        pinch.is_some() as u64
+    ));
     if let Some(at) = pinch {
         return Err(BoolError::ZeroThickness { at });
     }
-    undecided_touch(target)?;
+    undecided_touch(target, tried.undecided)?;
     // what such a way made is not taken on trust: it is the case most likely to have gone wrong
     #[cfg(feature = "decisions")]
     let valid = |b: &Body| crate::decisions::checked(|| forge_topo::check(b).is_empty());
     #[cfg(not(feature = "decisions"))]
     let valid = |b: &Body| forge_topo::check(b).is_empty();
-    if RETRIED.with(|r| r.get()) && !valid(&target.compact()) {
+    if tried.retried && !valid(&target.compact()) {
         decided!(crate::decisions::rung(
             "RETRIED result check",
             crate::decisions::Outcome::Internal
         ));
         return Err(BoolError::lost(Lost::RetryInvalid));
     }
-    decided!(if RETRIED.with(|r| r.get()) {
+    decided!(if tried.retried {
         crate::decisions::rung("RETRIED result check", crate::decisions::Outcome::Ok);
     });
     Ok(())
@@ -678,13 +690,18 @@ fn general(target: &mut Body, b: &Body, op: Op) -> R<()> {
 
 /// A touch nothing could judge that left a face on its wrong side (ulps off the sound case): refused
 /// where it lies, as the closed-solid count sees no fault in it.
-pub(crate) fn undecided_touch(body: &Body) -> R<()> {
-    match UNDECIDED.with(|u| u.take()) {
+pub(crate) fn undecided_touch(body: &Body, undecided: Option<Point3>) -> R<()> {
+    decided!(crate::decisions::site(
+        "G4 UNDECIDED touch, checked",
+        undecided.is_some() as u64
+    ));
+    match undecided {
         Some(at)
             if forge_topo::check(body)
                 .iter()
                 .any(|p| matches!(p, forge_topo::Problem::FaceWrongSide { .. })) =>
         {
+            decided!(crate::decisions::site("G4 UNDECIDED touch, refused", 1));
             Err(BoolError::ZeroThickness { at })
         }
         _ => Ok(()),
@@ -987,53 +1004,86 @@ fn lap(t: &mut Option<forge_math::clock::Instant>, k: usize) {
     }
 }
 
-thread_local! {
-    /// Springs a closed curve crossed an odd number of times are looked at again by their fences.
-    static FENCES: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
-    static CHORDS: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+/// One try of the retry ladder (research/decide-once/old-path-statements.md §G, G2): how
+/// `plan_once` reads the near-tangent cases it can read two ways. Handed down to every reader as
+/// an argument, so a try is a function of its inputs and its rung alone; the first try, and every
+/// n-ary boolean, is `PLAIN`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct Rung {
+    /// The dearer care that lost way asks for, on one more try. A torus's box in a pair's region
+    /// held to the tube: a box as tall as the ring is wide sets the tracer's cells too coarse for a
+    /// small hole's lobes on the tube. And a curve's hit on a spring's fence moved onto the spring.
+    pub(crate) careful: bool,
+    /// What floods one way across a tool's edge hovering within tolerance of a face and the other
+    /// way along it wants the curve under that edge, however close: an edge of its own.
+    pub(crate) chords: bool,
     /// A line along a straight edge crosses it where the surfaces say: the retry when the two are a
     /// tolerance apart and running them together leaves a stub of nothing.
-    static NO_RUN_ON: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
-    /// A point touch in this boolean that nothing could judge.
-    pub(crate) static UNDECIDED: std::cell::Cell<Option<Point3>> = const { std::cell::Cell::new(None) };
-    /// The dearer care that lost way asks for, on one more try. A torus's box in a pair's region held
-    /// to the tube: a box as tall as the ring is wide sets the tracer's cells too coarse for a small
-    /// hole's lobes on the tube. And a curve's hit on a spring's fence moved onto the spring.
-    static CAREFUL: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
-    /// This plan took a dear way round: it lost its way once, or an edge held by no surface was crossed.
-    static RETRIED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
-    /// A closed curve crossed springs an odd number of times in this plan.
-    static ODD: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    pub(crate) no_run_on: bool,
+    /// Springs a closed curve crossed an odd number of times are looked at again by their fences.
+    pub(crate) fences: bool,
+    /// A conic's two roots a hair apart become one touch (forge-geom's ABSORB_HAIR_ROOTS, set for
+    /// this try alone, as forge-geom reads it).
+    pub(crate) absorb: bool,
 }
 
-/// A retry flag held for as long as this lives, cleared when it goes, unwinding too: a boolean that
-/// panics leaves the next one on its thread as it found it.
-struct Held(&'static std::thread::LocalKey<std::cell::Cell<bool>>);
+impl Rung {
+    pub(crate) const PLAIN: Rung = Rung {
+        careful: false,
+        chords: false,
+        no_run_on: false,
+        fences: false,
+        absorb: false,
+    };
+}
 
-impl Held {
-    fn set(k: &'static std::thread::LocalKey<std::cell::Cell<bool>>, on: bool) -> Held {
-        k.with(|c| c.set(on));
-        Held(k)
+/// What the tries of one boolean saw, read by the ladder and the checks after it (§G, G3–G5): kept
+/// by the caller across the tries, as the thread-locals it replaces were.
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct Tried {
+    /// The rung the try running now reads (set by `plan_once_in`; `PLAIN` in the n-ary boolean):
+    /// carried here so `trim` takes one argument for both.
+    pub(crate) rung: Rung,
+    /// A try took a dear way round: it lost its way once, or an edge held by no surface was crossed.
+    pub(crate) retried: bool,
+    /// A closed curve crossed springs an odd number of times in this try (cleared by each fenced try).
+    pub(crate) odd: bool,
+    /// A point touch in a try that nothing could judge (the last).
+    pub(crate) undecided: Option<Point3>,
+}
+
+/// forge-geom's ABSORB_HAIR_ROOTS held on for as long as this lives, cleared when it goes,
+/// unwinding too: a boolean that panics leaves the next one on its thread as it found it.
+struct Absorbing;
+
+impl Absorbing {
+    fn on(on: bool) -> Option<Absorbing> {
+        on.then(|| {
+            forge_geom::intersect::ABSORB_HAIR_ROOTS.with(|c| c.set(true));
+            Absorbing
+        })
     }
 }
 
-impl Drop for Held {
+impl Drop for Absorbing {
     fn drop(&mut self) {
-        self.0.with(|c| c.set(false));
+        forge_geom::intersect::ABSORB_HAIR_ROOTS.with(|c| c.set(false));
     }
 }
 
-fn plan(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
+fn plan(a: &Body, b: &Body, op: Op, scratch: &mut Scratch, tried: &mut Tried) -> R<Plan> {
     let curved = |x: &Body| {
         x.face_ids()
             .any(|f| matches!(x.face(f).surface, Surface::Torus(_) | Surface::Procedural(_)))
     };
-    match plan_retried(a, b, op, scratch) {
+    match plan_retried(a, b, op, scratch, Rung::PLAIN, tried) {
         Err(BoolError::Internal(w)) if curved(a) || curved(b) => {
-            RETRIED.with(|r| r.set(true));
-            let careful = Held::set(&CAREFUL, true);
-            let r = plan_retried(a, b, op, scratch);
-            drop(careful);
+            tried.retried = true;
+            let careful = Rung {
+                careful: true,
+                ..Rung::PLAIN
+            };
+            let r = plan_retried(a, b, op, scratch, careful, tried);
             decided!(log::rung("CAREFUL", &r));
             r.map_err(|e| match e {
                 BoolError::Internal(_) => BoolError::Internal(w),
@@ -1045,8 +1095,8 @@ fn plan(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
 }
 
 /// `plan_once`; lost its way, once more with the slow search for shallow crossings of springs.
-fn plan_retried(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
-    match plan_fenced(a, b, op, scratch) {
+fn plan_retried(a: &Body, b: &Body, op: Op, scratch: &mut Scratch, rung: Rung, tried: &mut Tried) -> R<Plan> {
+    match plan_fenced(a, b, op, scratch, rung, tried) {
         // what floods one way across a tool's edge hovering within tolerance of a face and the other
         // way along it wants the curve under that edge, however close: an edge of its own (chords).
         // A conic a hair past tangent is either two crossings or one touch: the other reading (absorb)
@@ -1056,15 +1106,21 @@ fn plan_retried(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
                 Lost::InconsistentClassification { .. } | Lost::SplitCrossed { .. }
             ) =>
         {
-            RETRIED.with(|r| r.set(true));
+            tried.retried = true;
             let crossed = matches!(*w, Lost::SplitCrossed { .. });
             for (absorb, chords) in [(crossed, !crossed), (!crossed, crossed)] {
-                let held = (
-                    Held::set(&forge_geom::intersect::ABSORB_HAIR_ROOTS, absorb),
-                    Held::set(&CHORDS, chords),
+                let r = plan_fenced(
+                    a,
+                    b,
+                    op,
+                    scratch,
+                    Rung {
+                        absorb,
+                        chords,
+                        ..rung
+                    },
+                    tried,
                 );
-                let r = plan_fenced(a, b, op, scratch);
-                drop(held);
                 decided!(log::rung(if absorb { "ABSORB_HAIR_ROOTS" } else { "CHORDS" }, &r));
                 if !matches!(r, Err(BoolError::Internal(_))) {
                     return r;
@@ -1073,9 +1129,11 @@ fn plan_retried(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
             if !crossed {
                 return Err(BoolError::Internal(w));
             }
-            let held = Held::set(&NO_RUN_ON, true);
-            let r = plan_fenced(a, b, op, scratch);
-            drop(held);
+            let no_run_on = Rung {
+                no_run_on: true,
+                ..rung
+            };
+            let r = plan_fenced(a, b, op, scratch, no_run_on, tried);
             decided!(log::rung("NO_RUN_ON", &r));
             r.map_err(|e| match e {
                 BoolError::Internal(_) => BoolError::Internal(w),
@@ -1086,13 +1144,12 @@ fn plan_retried(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
     }
 }
 
-fn plan_fenced(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
-    ODD.with(|o| o.set(false));
-    match plan_once(a, b, op, scratch) {
-        Err(BoolError::Internal(w)) if ODD.with(|o| o.get()) => {
-            let held = Held::set(&FENCES, true);
-            let r = plan_once(a, b, op, scratch);
-            drop(held);
+fn plan_fenced(a: &Body, b: &Body, op: Op, scratch: &mut Scratch, rung: Rung, tried: &mut Tried) -> R<Plan> {
+    tried.odd = false;
+    match plan_once(a, b, op, scratch, rung, tried) {
+        Err(BoolError::Internal(w)) if tried.odd => {
+            let fenced = Rung { fences: true, ..rung };
+            let r = plan_once(a, b, op, scratch, fenced, tried);
             decided!(log::rung("FENCES", &r));
             r.map_err(|e| match e {
                 BoolError::Internal(_) => BoolError::Internal(w),
@@ -1105,9 +1162,9 @@ fn plan_fenced(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
 
 /// `plan_once_in` under the decision log: one try's decisions checked when it ends.
 #[cfg(feature = "decisions")]
-fn plan_once(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
-    let scope = crate::decisions::scope("sequential", log::mode());
-    let r = plan_once_in(a, b, op, scratch);
+fn plan_once(a: &Body, b: &Body, op: Op, scratch: &mut Scratch, rung: Rung, tried: &mut Tried) -> R<Plan> {
+    let scope = crate::decisions::scope("sequential", log::mode(rung));
+    let r = plan_once_in(a, b, op, scratch, rung, tried);
     scope.outcome(crate::decisions::Outcome::of(&r));
     r
 }
@@ -1115,7 +1172,10 @@ fn plan_once(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
 #[cfg(not(feature = "decisions"))]
 use self::plan_once_in as plan_once;
 
-fn plan_once_in(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
+fn plan_once_in(a: &Body, b: &Body, op: Op, scratch: &mut Scratch, rung: Rung, tried: &mut Tried) -> R<Plan> {
+    // forge-geom reads its hair-root choice from its own flag: on for this try alone
+    let _absorbing = Absorbing::on(rung.absorb);
+    tried.rung = rung;
     let mut clock = phases_on().then(forge_math::clock::Instant::now);
     let bodies = [a, b];
     let index = [Index::new(a), Index::new(b)];
@@ -1152,7 +1212,7 @@ fn plan_once_in(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
                 continue;
             }
             let region = overlap(&ba, &b_boxes[fb.index()]).grow(tol::LINEAR);
-            let found = ssi::surfaces_in(sa, sb, meet_region(&ba, &b_boxes[fb.index()], sa, sb));
+            let found = ssi::surfaces_in(sa, sb, meet_region(&ba, &b_boxes[fb.index()], sa, sb, rung));
             decided!(log::coincident(
                 a,
                 fa,
@@ -1180,7 +1240,7 @@ fn plan_once_in(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
                         index[0].point_in_face(fa, p) == Where::Outside
                             || index[1].point_in_face(fb, p) == Where::Outside
                     };
-                    let box_ = meet_region(&ba, &b_boxes[fb.index()], sa, sb);
+                    let box_ = meet_region(&ba, &b_boxes[fb.index()], sa, sb, rung);
                     match ssi::past_stalls(sa, sb, box_, off) {
                         Some(cs) => cs,
                         None => {
@@ -1221,6 +1281,7 @@ fn plan_once_in(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
                     &mut imprints,
                     &mut touching,
                     Some(&mut scratch.across),
+                    tried,
                 )?;
             }
         }
@@ -1228,6 +1289,10 @@ fn plan_once_in(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
     rank_pairs(&mut segs, &bodies);
 
     // where the solids touch, both sides kept would be material meeting itself
+    decided!(crate::decisions::site(
+        "D3 touch listed (seq)",
+        touching.len() as u64
+    ));
     for t in &touching {
         let near = |side: Side| {
             let (body, f) = (bodies[side], t.faces[side]);
@@ -1252,7 +1317,8 @@ fn plan_once_in(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
             // cut at the point by a third surface, so round it nothing says: mostly a sound vertex
             // (two balls on a top meet in a cycle of four faces), checked once built
             if t.dir.is_none() {
-                UNDECIDED.with(|u| u.set(Some(t.at)));
+                decided!(crate::decisions::site("G4 UNDECIDED set (seq)", 1));
+                tried.undecided = Some(t.at);
             }
             continue;
         };
@@ -1269,6 +1335,7 @@ fn plan_once_in(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
             && !flows_on([a, b], t.faces, t.at, op == Op::Subtract)
             && !crack_tip([a, b], [&index[0], &index[1]], t, op == Op::Union)
         {
+            decided!(crate::decisions::site("D3 touch refused (seq)", 1));
             return Err(BoolError::ZeroThickness { at: t.at });
         }
     }
@@ -1920,6 +1987,10 @@ fn plan_once_in(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
         for &(p, _) in specs[i].loops.iter().flatten() {
             uses[p] = uses[p].saturating_add(1);
             if uses[p] > 2 {
+                decided!(crate::decisions::site(
+                    "D9 edge of >2 kept faces refused (seq)",
+                    1
+                ));
                 let pc = &pieces[p];
                 return Err(BoolError::ZeroThickness {
                     at: pc.curve.eval(pc.range.mid()),
@@ -2501,13 +2572,17 @@ pub(crate) fn trim(
     touching: &mut Vec<Touch>,
     // (the plain boolean's: its two bodies' surfaces across their edges, kept per boolean)
     mut memo: Option<&mut AcrossMemo>,
+    tried: &mut Tried,
 ) -> R<()> {
     // the curve's cuts by parameter: a list kept with the memo and reused
-    let mut ts = memo
-        .as_deref_mut()
-        .map(|m| std::mem::take(&mut m.ts))
-        .unwrap_or_default();
-    ts.clear();
+    let mut t = Trimming {
+        ts: memo
+            .as_deref_mut()
+            .map(|m| std::mem::take(&mut m.ts))
+            .unwrap_or_default(),
+        tried: *tried,
+    };
+    t.ts.clear();
     let r = trim_in(
         bodies,
         index,
@@ -2521,12 +2596,20 @@ pub(crate) fn trim(
         imprints,
         touching,
         memo.as_deref_mut(),
-        &mut ts,
+        &mut t,
     );
+    *tried = t.tried;
     if let Some(m) = memo {
-        m.ts = ts;
+        m.ts = t.ts;
     }
     r
+}
+
+/// What `trim_in` works in besides its pair: the curve's cuts by parameter and the tries' record,
+/// behind one pointer (one argument fewer to hold through its loops).
+struct Trimming {
+    ts: Vec<(f64, usize)>,
+    tried: Tried,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -2543,8 +2626,10 @@ fn trim_in(
     imprints: &mut Vec<Imprint>,
     touching: &mut Vec<Touch>,
     mut memo: Option<&mut AcrossMemo>,
-    ts: &mut Vec<(f64, usize)>,
+    t: &mut Trimming,
 ) -> R<()> {
+    let Trimming { ts, tried } = t;
+    let rung = tried.rung;
     let domain = curve.domain();
     let closed = domain.period.is_some();
     let period = domain.period.unwrap_or(0.0);
@@ -2619,10 +2704,19 @@ fn trim_in(
                     && let Some(hits) = plane_meet(pl, &curve, range, &edge.curve)
                 {
                     for h in hits {
+                        #[cfg(feature = "decisions")]
+                        crate::edge_screen::log(
+                            body,
+                            e,
+                            h.point,
+                            crate::edge_screen::Made::OwnCarrier,
+                            "own",
+                        );
                         if let Some((s, tol)) = on_edge(body, e, h.point) {
+                            // (the box alone may keep a cut off the other face: harmless, G14.lean)
                             let other = index[1 - k].face_box(faces[1 - k]);
                             if other.grow(tol::LINEAR).contains(h.point)
-                                && ((other.contains(h.point) && !CAREFUL.with(|c| c.get()))
+                                && ((other.contains(h.point) && !rung.careful)
                                     || index[1 - k].point_in_face(faces[1 - k], h.point) != Where::Outside)
                             {
                                 ts.push((h.t, cuts.len()));
@@ -2724,7 +2818,7 @@ fn trim_in(
                         }
                     }
                 } else if bends {
-                    RETRIED.with(|r| r.set(true));
+                    tried.retried = true;
                     decided!(crate::decisions::rung(
                         "bends: an edge no surface holds (RETRIED, no retry)",
                         crate::decisions::Outcome::Unknown
@@ -2737,6 +2831,7 @@ fn trim_in(
                         e,
                         (&curve, range, across),
                         &hairs,
+                        rung,
                     ))
                 };
                 decided!({
@@ -2757,7 +2852,7 @@ fn trim_in(
                                 log::on_surface(body, v, ob, of, dist <= vx.tol, dist, vx.tol, site);
                             }
                         }
-                        let runs = !hit || (!NO_RUN_ON.with(|c| c.get()) && sine <= 1e-6 && ends);
+                        let runs = !hit || (!rung.no_run_on && sine <= 1e-6 && ends);
                         let site = if hit {
                             "trim run-on: line along a straight edge"
                         } else {
@@ -2777,7 +2872,7 @@ fn trim_in(
                 // surfaces round off: a hair of tilt puts the crossing anywhere along them
                 let hits = match found {
                     CurveSurface::Hits(h)
-                        if NO_RUN_ON.with(|c| c.get())
+                        if rung.no_run_on
                             || !matches!((&curve, &edge.curve), (Curve::Line(a), Curve::Line(b))
                                 if a.dir.get().cross(b.dir.get()).length() <= 1e-6)
                             || ![edge.start, edge.end].into_iter().all(|v| {
@@ -2908,7 +3003,7 @@ fn trim_in(
                     // root the crossings found near it
                     let (one, near) = match grazing {
                         false => (Some(h), Vec::new()),
-                        true => (None, crossings_near(&curve, range, across, h)),
+                        true => (None, crossings_near(&curve, range, across, h, rung)),
                     };
                     decided!(if grazing {
                         let pair = [(bodies[0], faces[0]), (bodies[1], faces[1])];
@@ -2940,10 +3035,20 @@ fn trim_in(
                     // off the other face no piece of the curve starts here: cutting the edge would
                     // only split it where nothing meets it (and not its coincident twin). Its box
                     // says so cheaply; a grazing crossing, or one within two tolerances of the
-                    // box's side (where a face's own boundary lies), is checked exactly
+                    // box's side (where a face's own boundary lies), is checked exactly. (A cut the
+                    // box keeps off the other face is harmless: it lies on this face's boundary, so
+                    // only in stretches that are dropped; verify/forge-curved/ForgeCurved/G14.lean)
                     let other = index[1 - k].face_box(faces[1 - k]);
+                    #[cfg(feature = "decisions")]
+                    crate::edge_screen::log(
+                        body,
+                        e,
+                        h.point,
+                        crate::edge_screen::Made::Across(&body.face(f).surface, &across),
+                        "across",
+                    );
                     let on = on_edge(body, e, h.point).map(|o| (o, h)).or_else(|| {
-                        if !CAREFUL.with(|c| c.get()) || !body.edge_box(e).grow(0.2).contains(h.point) {
+                        if !rung.careful || !body.edge_box(e).grow(0.2).contains(h.point) {
                             return None;
                         }
                         let h = onto_spring(&curve, range, edge, h)?;
@@ -2951,7 +3056,7 @@ fn trim_in(
                     });
                     if let Some(((s, tol), h)) = on
                         && other.grow(tol::LINEAR).contains(h.point)
-                        && ((!(grazing || !other.contains(h.point)) && !CAREFUL.with(|c| c.get()))
+                        && ((!(grazing || !other.contains(h.point)) && !rung.careful)
                             || index[1 - k].point_in_face(faces[1 - k], h.point) != Where::Outside)
                     {
                         ts.push((h.t, cuts.len()));
@@ -2961,7 +3066,7 @@ fn trim_in(
                             s,
                             point: h.point,
                             tol,
-                            touch: (grazing && !CHORDS.with(|c| c.get())) || branches[1],
+                            touch: (grazing && !rung.chords) || branches[1],
                         });
                     }
                 }
@@ -3031,10 +3136,11 @@ fn trim_in(
         }
         at.len() % 2 == 1
     };
-    if closed && !fenced.is_empty() && !FENCES.with(|f| f.get()) && fenced.iter().any(|x| odd(x.0)) {
-        ODD.with(|o| o.set(true));
+    if closed && !fenced.is_empty() && !rung.fences && fenced.iter().any(|x| odd(x.0)) {
+        decided!(crate::decisions::site("G5 ODD set", 1));
+        tried.odd = true;
     }
-    if closed && FENCES.with(|f| f.get()) && fenced.iter().any(|x| odd(x.0)) {
+    if closed && rung.fences && fenced.iter().any(|x| odd(x.0)) {
         for &(k, e) in &fenced {
             let (body, side) = (bodies[k], sides[k]);
             let Curve::Procedural(pc) = &body.edge(e).curve else {
@@ -3204,7 +3310,7 @@ fn trim_in(
     let pairs = match curve {
         Curve::Line(_) => 0,
         // (not when the retry wants that edge along the first)
-        _ if CHORDS.with(|c| c.get()) => 0,
+        _ if rung.chords => 0,
         _ if closed => ts.len(),
         _ => ts.len().saturating_sub(1),
     };
@@ -3394,7 +3500,7 @@ fn trim_in(
                 // an edge it crosses only to run within tolerance of it (a chord of a hair) is
                 // one it lies along
                 let hair = || {
-                    !CHORDS.with(|c| c.get())
+                    !rung.chords
                         && curve.eval(t0).distance(p).min(curve.eval(t1).distance(p)) > 4.0 * tol::LINEAR
                         && past.iter().any(|&e| on_edge(bodies[k], e, p).is_some())
                 };
@@ -4827,14 +4933,20 @@ fn touch_params(c: &Curve, range: Interval, s: [&Surface; 2]) -> Vec<f64> {
 
 /// A crossing hit as it is; a touching one replaced by the crossings found where the surface's
 /// distance changes sign within a small window around it (none if it truly only touches).
-pub(crate) fn crossings_near(curve: &Curve, range: Interval, s: &Surface, h: CurveHit) -> Vec<CurveHit> {
+pub(crate) fn crossings_near(
+    curve: &Curve,
+    range: Interval,
+    s: &Surface,
+    h: CurveHit,
+    rung: Rung,
+) -> Vec<CurveHit> {
     if h.contact == Contact::Crossing {
         return vec![h];
     }
     let g = |t: f64| s.implicit(curve.eval(t));
     // out to where the curve has left the tolerance on both sides, when the retry wants those crossings
     let mut w = 1e-2 * range.width().min(1.0);
-    while CHORDS.with(|c| c.get())
+    while rung.chords
         && w < 0.25 * range.width()
         && (g((h.t - w).max(range.lo)).abs() <= 2.0 * tol::LINEAR
             || g((h.t + w).min(range.hi)).abs() <= 2.0 * tol::LINEAR)
@@ -4869,7 +4981,7 @@ pub(crate) fn crossings_near(curve: &Curve, range: Interval, s: &Surface, h: Cur
             }
             let t = 0.5 * (lo + hi);
             // in and out again by less than a tolerance: still a touch, but the retry wants those
-            if !out.is_empty() && deep <= tol::LINEAR && !CHORDS.with(|c| c.get()) {
+            if !out.is_empty() && deep <= tol::LINEAR && !rung.chords {
                 out.pop();
             } else {
                 out.push(CurveHit {
@@ -6994,12 +7106,10 @@ pub(crate) fn half_chord(piece: &Piece) -> f64 {
 /// The box a pair's meet is sought in: the face boxes' overlap, but the box of the whole torus where a
 /// face is a piece of one (its tight box only says whether the pair can meet; marching a meet
 /// clipped to it costs more pieces).
-pub(crate) fn meet_region(ba: &Box3, bb: &Box3, sa: &Surface, sb: &Surface) -> Box3 {
+pub(crate) fn meet_region(ba: &Box3, bb: &Box3, sa: &Surface, sb: &Surface, rung: Rung) -> Box3 {
     let whole = |s: &Surface, b: &Box3| match s {
         // (a lemon's major is negative)
-        Surface::Torus(t) if !CAREFUL.with(|c| c.get()) => {
-            Box3::from_point(t.frame.origin).grow(t.major.abs() + t.minor)
-        }
+        Surface::Torus(t) if !rung.careful => Box3::from_point(t.frame.origin).grow(t.major.abs() + t.minor),
         // its tube's circle, across the axis only, and the tube round it
         Surface::Torus(t) => {
             let z = t.frame.z().get();
@@ -7172,20 +7282,13 @@ mod held_tests {
     #[cfg(not(target_os = "wasi"))]
     #[test]
     fn a_retry_flag_is_cleared_when_its_boolean_panics() {
-        for k in [
-            &CAREFUL,
-            &CHORDS,
-            &NO_RUN_ON,
-            &FENCES,
-            &forge_geom::intersect::ABSORB_HAIR_ROOTS,
-        ] {
-            let r = std::panic::catch_unwind(|| {
-                let _h = Held::set(k, true);
-                panic!("a boolean lost its way");
-            });
-            assert!(r.is_err());
-            assert!(!k.with(|c| c.get()));
-        }
+        let r = std::panic::catch_unwind(|| {
+            let _h = Absorbing::on(true);
+            assert!(forge_geom::intersect::ABSORB_HAIR_ROOTS.with(|c| c.get()));
+            panic!("a boolean lost its way");
+        });
+        assert!(r.is_err());
+        assert!(!forge_geom::intersect::ABSORB_HAIR_ROOTS.with(|c| c.get()));
     }
 }
 
@@ -7198,16 +7301,13 @@ pub(crate) mod log {
     use std::panic::Location;
 
     /// The retry flags a plan runs under.
-    pub(crate) fn mode() -> String {
+    pub(crate) fn mode(rung: Rung) -> String {
         let flags = [
-            ("CAREFUL", CAREFUL.with(|c| c.get())),
-            ("CHORDS", CHORDS.with(|c| c.get())),
-            ("NO_RUN_ON", NO_RUN_ON.with(|c| c.get())),
-            ("FENCES", FENCES.with(|c| c.get())),
-            (
-                "ABSORB_HAIR_ROOTS",
-                forge_geom::intersect::ABSORB_HAIR_ROOTS.with(|c| c.get()),
-            ),
+            ("CAREFUL", rung.careful),
+            ("CHORDS", rung.chords),
+            ("NO_RUN_ON", rung.no_run_on),
+            ("FENCES", rung.fences),
+            ("ABSORB_HAIR_ROOTS", rung.absorb),
         ];
         let on: Vec<&str> = flags.iter().filter(|f| f.1).map(|f| f.0).collect();
         if on.is_empty() {
@@ -7356,6 +7456,9 @@ pub(crate) mod log {
     /// coincident is recorded only for planes nearly flush (within the band).
     pub(crate) fn coincident(a: &Body, fa: FaceId, b: &Body, fb: FaceId, yes: bool, site: &'static str) {
         let (sa, sb) = (&a.face(fa).surface, &b.face(fb).surface);
+        if yes {
+            crate::carrier_key::log(sa, sb, site);
+        }
         let gap = plane_gap(sa, sb);
         if !yes && !gap.is_some_and(|(sine, off)| sine <= 1e-3 && off <= BAND) {
             return;
@@ -7453,6 +7556,7 @@ pub(crate) mod log {
         e: EdgeId,
         (curve, range, across): (&Curve, Interval, &Surface),
         hairs: &[forge_geom::intersect::hair_log::Hair],
+        rung: Rung,
     ) {
         for h in hairs {
             let key = d::pair_and(
@@ -7476,7 +7580,7 @@ pub(crate) mod log {
                 point: h.point,
                 contact: Contact::Touching,
             };
-            let n = match crossings_near(curve, range, across, hit).len() {
+            let n = match crossings_near(curve, range, across, hit, rung).len() {
                 0 => 0,
                 n if n % 2 == 1 => 1,
                 _ => 2,
