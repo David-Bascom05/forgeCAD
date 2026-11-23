@@ -180,24 +180,53 @@ that axis. So the zero count at any point stays ≈ (surfaces through it) + 2, f
 - every 3-cell's wedges (round its edges, in their exact cyclic order) are wedge-connected. This
   test is conservative: a spherical shell fails it, and the check then sends the input to Tier 1.
 
-**Tier 1: sweep walls**, only if the check fails:
-- **The direction.** A fixed direction `d` with rational length (a Pythagorean quadruple such as
-  (2, 3, 6)/7, so that sphere poles are rational), the first in a fixed list that is parallel to
-  no plane normal and no axis.
-- **Events**, all algebraic, isolated by `Alg.Num`:
-  - the d-critical points of every surface piece in the region (sphere poles, hyperboloid saddles);
-  - the d-critical points of every curve (the QSIC turning points);
-  - vertices and singular points.
-- **Walls.** Planes `d·x = c` at a rational `c` between each pair of consecutive event values,
-  by `cand1`'s midpoint rule (`Sampler.minAbove`). Walls are parallel, so no point has two. Each
-  open slab holds at most one event value.
-- **The proof obligation is Lemma D:** in a slab with at most one event, with the seams in place,
-  every 2-cell on every quadric is an open disc and every 1-cell an open arc, and R1–R5 hold. For
-  quadrics this is short Morse theory: the level sets of `d·x` on a quadric are conics, and there
-  is one critical point of each kind.
+**Tier 1, withdrawn (2026-11-23): parallel walls are not enough.** The first version of Tier 1
+put planes `d·x = c` at rational midpoints between d-events. Its Lemma D is false. The LemmaD
+session's counterexample is in the Q1 domain:
+- a plate `z = 0` with a hole `x² + y² = 1`, its seam `y = 0`, and `d ∝ (2, 3, 6)`;
+- the cell {z = 0, outside, y > 0} in a slab next to an event has two components with one
+  covector;
+- an event-free slab fails too: a level circle crossing another carrier four times.
 
-"Tier 1 iff the Tier-0 check fails" is one decided rule, not a retry: both tiers are proven to
-give `Faithful`, and the answer does not depend on the tier. That independence is the
+The reason: within a slab, two sectors can carry the same signs. A plane wall can separate them
+only along d. Two branches of one curve can swap the order of roots along a fibre and swap it
+back, so the sectors before the first swap and after the second agree on every sign.
+
+**Tier 1 (proposed, 2026-11-23; to be agreed with the LemmaD session): a cylindrical algebraic
+decomposition with Thom closure.** It is used only if the Tier-0 check fails. Fix rational
+directions: `u` (the fibres), `w` (the base's fibres), and `d` (level 1), mutually orthogonal and
+generic (the first triple in a fixed list for which every leading coefficient below is a nonzero
+constant). The separators are polynomial carriers that carry no face:
+1. **Fibre closure (level 3).** For every quadric carrier `q`, its polar plane `∂_u q = 0` (a plane,
+   since `q` is quadratic; `∂²_u q` is a constant). Every carrier's restriction to a `u`-line is
+   then in a family closed under `d/ds`. By **Thom's lemma**, every sign condition on such a
+   family is an interval or a point of the line.
+2. **Projection (level 2).** For the family `F` = carriers ∪ polar planes, as polynomials in the
+   `u`-coordinate `s` with coefficients in `ℚ[t, r]` (`t = d·x`, `r = w·x`): every `Disc_s(f)` and
+   `Res_s(f, g)`. These are cylinders along `u`, of degree ≤ 4 in `(t, r)`. Add their closure
+   under `∂_r`.
+3. **Sections (level 1).** The roots in `t` of `Disc_r(b)`, `Res_r(b, b′)` and the leading
+   coefficients, over the level-2 family `B`: algebraic event values `e_k`. The walls are the
+   planes `t = e_k` **at the events**, not between them. They have algebraic constants, and
+   their sign at a sample is `Alg.Num.cmp` (`cmp_spec`).
+
+**Lemma D (restated).**
+- **R1, a theorem.** Every nonempty sign class of carriers ∪ separators is connected. Over an
+  event-free slab `e_k < t < e_{k+1}`, `B` is delineable along `r`, and by induction `F` is
+  delineable along `u` over each base cell. The fibre sign conditions are intervals (Thom), so each
+  sign class is a section or sector over a connected base cell, hence connected. The cells inside
+  the event planes `t = e_k` are the same construction one dimension down.
+- **R2–R5 are not automatic in a CAD** (the frontier condition can fail). Tier 1 therefore runs the
+  Tier-0 graph check on its own arrangement. If it passes, `Faithful`; if not, `Skip::Tier1`, to
+  the old path, counted. That is still one decided rule (D3): seams; if their check fails, the
+  CAD; if its check fails, skip.
+
+Cost: degree-4 cylinders and level-1 polynomials of degree up to 16 make Tier 1 expensive. It runs
+only when the Tier-0 check fails, and every gate line it touches must still be measured (D5).
+The earlier claim that "Tier 1 adds W walls, about W·S arcs" (§3) is withdrawn with it.
+
+"Tier 1 iff the Tier-0 check fails" is one decided rule, not a retry: each tier gives `Faithful`
+or a counted skip, and the answer does not depend on the tier. That independence is the
 **separator-invariance theorem**, `sep_invariant`: adding a carrier that carries no face changes
 neither the regularised result nor the outcome kind. It also leaves `unify`'s output unchanged
 (faces, edges and vertices as point sets), because:
@@ -372,7 +401,16 @@ sound because a refinement's covectors restrict to the old ones.
    the reliability scoreboard (985 parts) no worse.
 5. **Speed**: tools/speed/gate.sh shows no REGRESSED line with the feature on, and the bits are
    identical wherever the curved path is skipped. Flat inputs never reach the curved bridge.
-6. **Skips** (`Uncertified`, `OutOfDomain`, `Ambiguous`) run the old path, counted in the report.
+6. **Skips** (`Uncertified`, `OutOfDomain`, `Ambiguous`, `Budget`, `Tier1`) run the old path,
+   counted in the report.
+7. **The tier counts** (the master, 2026-11-23). On the exact-curved quadric families and on the
+   corpus, report:
+   - how often Tier 0 passes;
+   - how often Tier 1 runs, and how often it then skips;
+   - Tier 1's cost on the gate lines it touches.
+
+   Tier 1 may not make any gate line slower. If it would, those inputs skip (`Skip::Tier1`) rather
+   than run it.
    A skip is decided from the inputs alone, so it is one rule.
 
 ## 4. Phases
