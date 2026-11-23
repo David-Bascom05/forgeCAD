@@ -245,7 +245,12 @@ pub fn ast_rename(prog: &mut [Stmt], from: &str, to: &str) {
                     ex(c, from, to);
                 }
             }
-            ExprKind::Range { lo, hi, .. } | ExprKind::Bin(_, lo, hi) | ExprKind::Index(lo, hi) => {
+            ExprKind::Bin(..) => {
+                let (l, rights) = crate::syntax::bin_chain_mut(e).expect("a binary operation");
+                ex(l, from, to);
+                rights.into_iter().for_each(|r| ex(r, from, to));
+            }
+            ExprKind::Range { lo, hi, .. } | ExprKind::Index(lo, hi) => {
                 ex(lo, from, to);
                 ex(hi, from, to);
             }

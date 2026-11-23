@@ -806,9 +806,12 @@ impl<'s> Eval<'s> {
                 go(self, lo, true);
                 go(self, hi, true);
             }
-            ExprKind::Bin(_, a, b) => {
-                go(self, a, count);
-                go(self, b, count);
+            ExprKind::Bin(..) => {
+                let (l, rights) = syntax::bin_chain(e).expect("a binary operation");
+                go(self, l, count);
+                for r in rights {
+                    go(self, r, count);
+                }
             }
             ExprKind::Neg(a) | ExprKind::Not(a) => go(self, a, count),
             ExprKind::Call(f, args) => {
@@ -904,7 +907,12 @@ impl<'s> Eval<'s> {
                 }
                 ExprKind::List(xs) | ExprKind::Tuple(xs) => xs.iter().for_each(|x| called(x, out)),
                 ExprKind::Map(xs) => xs.iter().for_each(|x| called(&x.1, out)),
-                ExprKind::Bin(_, a, b) | ExprKind::Index(a, b) => {
+                ExprKind::Bin(..) => {
+                    let (l, rights) = syntax::bin_chain(e).expect("a binary operation");
+                    called(l, out);
+                    rights.into_iter().for_each(|r| called(r, out));
+                }
+                ExprKind::Index(a, b) => {
                     called(a, out);
                     called(b, out);
                 }
@@ -1852,16 +1860,31 @@ impl<'s> Eval<'s> {
                 }),
             };
         }
-        let x = self.expr(a)?;
-        let y = self.expr(b)?;
-        if matches!(
-            op,
-            BinOp::Eq | BinOp::Ne | BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge
-        ) {
-            self.observe_value(&x);
-            self.observe_value(&y);
+        // a chain on the left (`a + b + c + ...`, as written: left-nested) taken in a loop, not a
+        // frame each: one of thousands of terms (a fillet's edges joined) would overrun the stack.
+        // The same order as the recursion: the leftmost first, then each right operand, applied
+        // (a lone `a + b` allocates nothing)
+        let mut chain: Vec<(BinOp, &Expr, &Expr, Span)> = Vec::new();
+        let mut left = a;
+        while let ExprKind::Bin(o, l, r) = &left.kind
+            && !matches!(o, BinOp::And | BinOp::Or)
+        {
+            chain.push((*o, l, r, left.span));
+            left = l;
         }
-        arith(op, &x, &y, span, a.span, b.span)
+        let mut x = self.expr(left)?;
+        for &(op, a, b, span) in chain.iter().rev().chain(std::iter::once(&(op, a, b, span))) {
+            let y = self.expr(b)?;
+            if matches!(
+                op,
+                BinOp::Eq | BinOp::Ne | BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge
+            ) {
+                self.observe_value(&x);
+                self.observe_value(&y);
+            }
+            x = arith(op, &x, &y, span, a.span, b.span)?;
+        }
+        Ok(x)
     }
 
     /// `P[k]` where P is a pattern or a hole: P and k, for an anchor on that copy or place.
@@ -2713,7 +2736,12 @@ fn locals_of<'a>(stmts: &'a [Stmt], top: bool, out: &mut Vec<(&'a str, Span)>) {
             }
             ExprKind::List(xs) | ExprKind::Tuple(xs) => xs.iter().for_each(|x| comp(x, out)),
             ExprKind::Map(xs) => xs.iter().for_each(|x| comp(&x.1, out)),
-            ExprKind::Bin(_, a, b) | ExprKind::Index(a, b) | ExprKind::Range { lo: a, hi: b, .. } => {
+            ExprKind::Bin(..) => {
+                let (l, rights) = syntax::bin_chain(e).expect("a binary operation");
+                comp(l, out);
+                rights.into_iter().for_each(|r| comp(r, out));
+            }
+            ExprKind::Index(a, b) | ExprKind::Range { lo: a, hi: b, .. } => {
                 comp(a, out);
                 comp(b, out);
             }

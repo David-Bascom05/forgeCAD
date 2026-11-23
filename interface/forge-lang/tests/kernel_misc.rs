@@ -1120,3 +1120,39 @@ f = chamfer(edges(between: (b.side(s.o), b.start)) + edges(between: (b.end, b.si
     assert!((v - want).abs() <= 1e-6 * want, "{v} against {want}");
     assert!(kernel_util::refusal(&disc(5.0)).contains("TooLarge"));
 }
+
+/// A fillet whose edges are thousands of `edges(...)` terms joined by `+` (CADFS 00154651 joins
+/// 1,136, one line of 55,460 characters), built on a thread of 1 MiB, as wasm and small-stack
+/// workers run: the evaluator, the lints, the edits and the tree's drop each took a frame per term
+/// of the left-nested chain, and overran the stack (the census's 2 MiB worker aborted). Each walks
+/// the chain in a loop now. A long chain of numbers in a param likewise.
+#[test]
+fn a_chain_of_thousands_of_terms_runs_on_a_small_stack() {
+    let terms = vec!["edges(between: (b.end, b.side(s.o)))"; 30_000].join(" + ");
+    let fillet = format!(
+        "shared r = 0.5\nsketch s(on: xy) {{\n  o = circle((0, 0), 10)\n}}\nb = extrude(s, 2)\nf = fillet({terms}, r)\n"
+    );
+    let ones = vec!["1"; 30_000].join(" + ");
+    let sum = format!(
+        "shared n = {ones}\nsketch s(on: xy) {{\n  o = circle((0, 0), n / 3000)\n}}\nb = extrude(s, 2)\n"
+    );
+    let run = std::thread::Builder::new()
+        .stack_size(1 << 20)
+        .spawn(move || {
+            let (r, _) = common::run(&fillet);
+            assert!(r.errors.is_empty() && r.body.is_some(), "{:?}", r.errors);
+            let prog = forge_lang::syntax::parse(&fillet).expect("parses");
+            forge_lang::edit_ops::apply_rename(&fillet, "f", "g").expect("renames");
+            forge_lang::edit_ops::apply_set_arg(&fillet, &prog, "b", "depth", "3").expect("sets");
+            assert_eq!(forge_lang::edit::strip(&prog).len(), prog.len());
+            let (r, _) = common::run(&sum);
+            assert!(r.errors.is_empty(), "{:?}", r.errors);
+            let v = forge_topo::mass::mass(&r.body.expect("a disc"))
+                .expect("a mass")
+                .volume;
+            let want = std::f64::consts::PI * 100.0 * 2.0;
+            assert!((v - want).abs() <= 1e-9 * want, "{v} against {want}");
+        })
+        .expect("a thread");
+    run.join().expect("runs on 1 MiB");
+}

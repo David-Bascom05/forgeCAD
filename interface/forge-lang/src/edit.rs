@@ -71,7 +71,12 @@ fn names_expr<'e>(e: &'e Expr, f: &mut dyn FnMut(&'e Expr)) {
                 names_expr(c, f);
             }
         }
-        ExprKind::Range { lo, hi, .. } | ExprKind::Bin(_, lo, hi) | ExprKind::Index(lo, hi) => {
+        ExprKind::Bin(..) => {
+            let (l, rights) = syntax::bin_chain(e).expect("a binary operation");
+            names_expr(l, f);
+            rights.into_iter().for_each(|r| names_expr(r, f));
+        }
+        ExprKind::Range { lo, hi, .. } | ExprKind::Index(lo, hi) => {
             names_expr(lo, f);
             names_expr(hi, f);
         }
@@ -227,7 +232,12 @@ fn members_read(e: &Expr, id: &str, out: &mut BTreeSet<String>) {
                 sub(c);
             }
         }
-        ExprKind::Range { lo, hi, .. } | ExprKind::Bin(_, lo, hi) | ExprKind::Index(lo, hi) => {
+        ExprKind::Bin(..) => {
+            let (l, rights) = syntax::bin_chain(e).expect("a binary operation");
+            sub(l);
+            rights.into_iter().for_each(sub);
+        }
+        ExprKind::Range { lo, hi, .. } | ExprKind::Index(lo, hi) => {
             sub(lo);
             sub(hi);
         }
@@ -1075,7 +1085,12 @@ fn replace_num(s: &mut Stmt, at: Span, name: &str, found: &mut Option<(f64, Unit
                     ex(c, at, name, found);
                 }
             }
-            ExprKind::Range { lo, hi, .. } | ExprKind::Bin(_, lo, hi) | ExprKind::Index(lo, hi) => {
+            ExprKind::Bin(..) => {
+                let (l, rights) = syntax::bin_chain_mut(e).expect("a binary operation");
+                ex(l, at, name, found);
+                rights.into_iter().for_each(|r| ex(r, at, name, found));
+            }
+            ExprKind::Range { lo, hi, .. } | ExprKind::Index(lo, hi) => {
                 ex(lo, at, name, found);
                 ex(hi, at, name, found);
             }
@@ -1143,7 +1158,24 @@ pub fn strip(prog: &[Stmt]) -> Vec<Stmt> {
                 hi: b(hi),
                 inclusive: *inclusive,
             },
-            ExprKind::Bin(o, x, y) => ExprKind::Bin(*o, b(x), b(y)),
+            // a left chain rebuilt in a loop, not a frame a term
+            ExprKind::Bin(..) => {
+                let mut chain = Vec::new();
+                let mut left = e;
+                while let ExprKind::Bin(o, l, r) = &left.kind {
+                    chain.push((*o, r));
+                    left = l;
+                }
+                let mut acc = ex(left);
+                while let Some((o, r)) = chain.pop() {
+                    let kind = ExprKind::Bin(o, Box::new(acc), b(r));
+                    acc = Expr {
+                        kind,
+                        span: Span::default(),
+                    };
+                }
+                std::mem::replace(&mut acc.kind, ExprKind::Bool(false))
+            }
             ExprKind::Neg(a) => ExprKind::Neg(b(a)),
             ExprKind::Not(a) => ExprKind::Not(b(a)),
             ExprKind::Call(f, args) => ExprKind::Call(

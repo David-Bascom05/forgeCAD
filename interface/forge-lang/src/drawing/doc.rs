@@ -750,25 +750,36 @@ impl Reader<'_> {
                 Val::Num(x) => Val::Num(-x),
                 v => return Err(self.bad_op(&v, e.span)),
             },
-            ExprKind::Bin(op, a, b) => {
-                let (x, y) = (self.expr(a)?, self.expr(b)?);
-                match (op, &x, &y) {
-                    (BinOp::Add, Val::Num(p), Val::Num(q)) => Val::Num(p + q),
-                    (BinOp::Sub, Val::Num(p), Val::Num(q)) => Val::Num(p - q),
-                    (BinOp::Mul, Val::Num(p), Val::Num(q)) => Val::Num(p * q),
-                    (BinOp::Div, Val::Num(p), Val::Num(q)) if *q != 0.0 => Val::Num(p / q),
-                    (BinOp::Add, Val::List(p), Val::List(q)) if p.len() == q.len() => Val::List(
-                        p.iter()
-                            .zip(q)
-                            .map(|(a, b)| match (a, b) {
-                                (Val::Num(a), Val::Num(b)) => Ok(Val::Num(a + b)),
-                                _ => Err(self.bad_op(a, e.span)),
-                            })
-                            .collect::<R<_>>()?,
-                    ),
-                    (BinOp::Add, Val::Str(p), Val::Str(q)) => Val::Str(format!("{p}{q}")),
-                    _ => return Err(self.bad_op(&x, e.span)),
+            // a left chain folded in a loop, not a frame a term
+            ExprKind::Bin(..) => {
+                let mut chain = Vec::new();
+                let mut left = e;
+                while let ExprKind::Bin(op, l, r) = &left.kind {
+                    chain.push((op, r, left.span));
+                    left = l;
                 }
+                let mut x = self.expr(left)?;
+                while let Some((op, b, span)) = chain.pop() {
+                    let y = self.expr(b)?;
+                    x = match (op, &x, &y) {
+                        (BinOp::Add, Val::Num(p), Val::Num(q)) => Val::Num(p + q),
+                        (BinOp::Sub, Val::Num(p), Val::Num(q)) => Val::Num(p - q),
+                        (BinOp::Mul, Val::Num(p), Val::Num(q)) => Val::Num(p * q),
+                        (BinOp::Div, Val::Num(p), Val::Num(q)) if *q != 0.0 => Val::Num(p / q),
+                        (BinOp::Add, Val::List(p), Val::List(q)) if p.len() == q.len() => Val::List(
+                            p.iter()
+                                .zip(q)
+                                .map(|(a, b)| match (a, b) {
+                                    (Val::Num(a), Val::Num(b)) => Ok(Val::Num(a + b)),
+                                    _ => Err(self.bad_op(a, span)),
+                                })
+                                .collect::<R<_>>()?,
+                        ),
+                        (BinOp::Add, Val::Str(p), Val::Str(q)) => Val::Str(format!("{p}{q}")),
+                        _ => return Err(self.bad_op(&x, span)),
+                    };
+                }
+                x
             }
             ExprKind::Attr(base, member) => {
                 let v = self.expr(base)?;

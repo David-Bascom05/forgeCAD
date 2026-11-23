@@ -535,6 +535,27 @@ pub struct Expr {
     pub span: Span,
 }
 
+/// A left-nested chain of binary operators taken apart in a loop: dropped by the derived glue, a
+/// chain of thousands of terms (a fillet's edges joined) would take a frame each.
+impl Drop for Expr {
+    fn drop(&mut self) {
+        let leaf = || ExprKind::Bool(false);
+        // (only a chain: a lone `a + b` drops as it would)
+        let mut next = match &mut self.kind {
+            ExprKind::Bin(_, l, _) if matches!(l.kind, ExprKind::Bin(..)) => {
+                Some(std::mem::replace(&mut l.kind, leaf()))
+            }
+            _ => return,
+        };
+        while let Some(mut kind) = next {
+            next = match &mut kind {
+                ExprKind::Bin(_, l, _) => Some(std::mem::replace(&mut l.kind, leaf())),
+                _ => None,
+            };
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct Arg {
     pub name: Option<(String, Span)>,
@@ -1224,10 +1245,11 @@ impl Parser {
                 V::Args(args)
             }
             P::StmtExpr => {
-                let e = self.expr(b);
+                let mut e = self.expr(b);
                 stmt!(match self.take(b + 1) {
                     V::Expr(value) => {
-                        let ExprKind::Name(name) = e.kind else {
+                        let ExprKind::Name(name) = std::mem::replace(&mut e.kind, ExprKind::Bool(false))
+                        else {
                             unreachable!("checked as `=` was taken")
                         };
                         StmtKind::Assign { name, value }
@@ -1366,10 +1388,10 @@ impl Parser {
                 value: self.expr(b + 2),
             }),
             P::ArgExpr => {
-                let e = self.expr(b);
+                let mut e = self.expr(b);
                 V::Arg(match self.take(b + 1) {
                     V::Expr(value) => {
-                        let ExprKind::Name(n) = e.kind else {
+                        let ExprKind::Name(n) = std::mem::replace(&mut e.kind, ExprKind::Bool(false)) else {
                             unreachable!("checked as `:` was taken")
                         };
                         Arg {
@@ -1935,6 +1957,44 @@ pub fn walk<'s>(stmts: &'s [Stmt], f: &mut dyn FnMut(&'s Stmt)) {
             _ => {}
         }
     }
+}
+
+/// A left-nested chain of binary operators (`a + b + c + ...`, as `+` and its kind parse): its
+/// leftmost operand and the right operands in order, None if `e` is no binary operation. A walk
+/// that takes them in a loop keeps a chain of thousands of terms (a fillet's edges joined) off the
+/// stack, in the order recursion would take them. A lone `a + b` allocates nothing.
+pub fn bin_chain(e: &Expr) -> Option<(&Expr, Rights<&Expr>)> {
+    let ExprKind::Bin(_, l, r) = &e.kind else {
+        return None;
+    };
+    let mut inner: Vec<&Expr> = Vec::new();
+    let mut left: &Expr = l;
+    while let ExprKind::Bin(_, l, r) = &left.kind {
+        inner.push(r);
+        left = l;
+    }
+    Some((left, inner.into_iter().rev().chain(std::iter::once(&**r))))
+}
+
+/// A chain's right operands in order: the inner ones (found outermost first, so reversed), then
+/// the outermost.
+pub type Rights<T> = std::iter::Chain<std::iter::Rev<std::vec::IntoIter<T>>, std::iter::Once<T>>;
+
+/// `bin_chain`, mutably.
+pub fn bin_chain_mut(e: &mut Expr) -> Option<(&mut Expr, Rights<&mut Expr>)> {
+    let ExprKind::Bin(_, l, r) = &mut e.kind else {
+        return None;
+    };
+    let mut inner: Vec<&mut Expr> = Vec::new();
+    let mut left: &mut Expr = l;
+    while matches!(left.kind, ExprKind::Bin(..)) {
+        let ExprKind::Bin(_, l, r) = &mut left.kind else {
+            unreachable!("matched as a binary operation")
+        };
+        inner.push(r);
+        left = l;
+    }
+    Some((left, inner.into_iter().rev().chain(std::iter::once(&mut **r))))
 }
 
 #[cfg(test)]

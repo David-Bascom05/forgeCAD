@@ -305,7 +305,12 @@ fn reads_otherwise(e: &Expr, name: &str) -> bool {
                 go(c)
             }
         }
-        ExprKind::Range { lo, hi, .. } | ExprKind::Bin(_, lo, hi) | ExprKind::Index(lo, hi) => {
+        ExprKind::Bin(..) => {
+            let (l, rights) = crate::syntax::bin_chain(e).expect("a binary operation");
+            go(l);
+            rights.into_iter().for_each(go)
+        }
+        ExprKind::Range { lo, hi, .. } | ExprKind::Index(lo, hi) => {
             go(lo);
             go(hi)
         }
@@ -787,7 +792,12 @@ fn attr_chains(e: &Expr, out: &mut Vec<Vec<String>>) {
                 go(c)
             }
         }
-        ExprKind::Range { lo, hi, .. } | ExprKind::Bin(_, lo, hi) | ExprKind::Index(lo, hi) => {
+        ExprKind::Bin(..) => {
+            let (l, rights) = crate::syntax::bin_chain(e).expect("a binary operation");
+            go(l);
+            rights.into_iter().for_each(go)
+        }
+        ExprKind::Range { lo, hi, .. } | ExprKind::Index(lo, hi) => {
             go(lo);
             go(hi)
         }

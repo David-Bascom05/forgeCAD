@@ -540,11 +540,11 @@ impl Fast {
                 }
             }
             _ => {
-                let e = self.expr(after(P::StmtExpr, 0, fk))?;
+                let mut e = self.expr(after(P::StmtExpr, 0, fk))?;
                 let fk = after(P::StmtExpr, 1, fk);
                 if self.pick(ASSIGNTAIL, fk)? == P::AssigntailAssign {
                     // (checked as the rule is picked: `enter`)
-                    let ExprKind::Name(name) = e.kind else {
+                    let ExprKind::Name(name) = std::mem::replace(&mut e.kind, ExprKind::Bool(false)) else {
                         return Err(Box::new(Error::Syntax(SyntaxError::AssignToNonName {
                             span: e.span,
                         })));
@@ -812,11 +812,11 @@ impl Fast {
                     }
                 }
                 _ => {
-                    let e = self.expr(after(P::ArgExpr, 0, ak))?;
+                    let mut e = self.expr(after(P::ArgExpr, 0, ak))?;
                     let kk = after(P::ArgExpr, 1, ak);
                     if self.pick(ARGKW, kk)? == P::ArgkwColon {
                         // (checked as the rule is picked: `enter`)
-                        let ExprKind::Name(n) = e.kind else {
+                        let ExprKind::Name(n) = std::mem::replace(&mut e.kind, ExprKind::Bool(false)) else {
                             return Err(Box::new(Error::Syntax(SyntaxError::KeywordNotName {
                                 span: e.span,
                             })));
