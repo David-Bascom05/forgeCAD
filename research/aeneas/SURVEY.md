@@ -1,5 +1,11 @@
 # What of the kernel Aeneas can take, and what it takes to get the rest
 
+> **Status, 2026-11-23: closed.** The owner de-prioritised proving the whole kernel
+> (research/PROOF-STANDARD.md, "Proving the actual code"). This page is written up as it stood.
+> Modules it did not run module by module are **not surveyed, by the owner's priority**. The
+> topology-core proposal (§ "The main proposal") is **deferred**, not approved. The opaque markers
+> stay usable in a translate.conf.
+
 Every `kernel/*` module (268 files, about 200,000 lines) was put through Charon and Aeneas as the
 code is today (aeneas `2e3d448` + `tools/aeneas/patches`, charon `9e193f0`, release build with
 overflow checks), and the output through Lean against Aeneas's library and the float bridge.

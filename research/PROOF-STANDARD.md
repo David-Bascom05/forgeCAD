@@ -30,6 +30,14 @@ A feature meets the standard when it has all six.
   - a CI check that the translations are current;
   - the per-module survey (research/aeneas/SURVEY.md) that names each module's L4 target.
 
+The owner, 2026-11-23: "De-prio proving the whole kernel. Only worth on this for the features that
+are being worked on, don't just keep going through all of the kernel."
+
+- So L4 is only for code an active feature is changing or depends on directly. Everything else stays
+  untranslated unless a feature session asks for it.
+- The survey stays as written (closed 2026-11-23); what it did not reach is not surveyed, by this
+  priority.
+
 ## No proofs at runtime for what is proven (the owner, 2026-11-23)
 
 "If we have proven all cases of a thing, and you are REALLY SURE, then we should not need to do a proof in runtime."
