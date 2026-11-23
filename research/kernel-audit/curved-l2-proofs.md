@@ -26,6 +26,19 @@ new/add take the union of tools, cut and keep only remove.
 
 ## 1. The octree (`QRef.octree`, `Arr.keptK`, `Arr.anyKept`)
 
+**Now in Lean** (ForgeExact/QRef/BF.lean, Octree.lean; in Axioms.lean). The executable's
+history is a formula `BF`. `keptOn`, `keptK` and `anyKept` are `BF.eval2`, `BF.eval3` and
+`BF.allFalse`, so the theorems are about the code that runs:
+- Lemma 1.1 is `BF.eval3_sound`;
+- the enumeration in 1.5 is `BF.allFalse_sound`;
+- 1.2 and 1.3 are `in_box` and `out_box`, at points off the wall;
+- 1.5 is `empty_of_leaves`, with the cover as a hypothesis;
+- `member_off_wall` for the history is `reg_off_wall`.
+
+What stays by hand: that the octree's leaves tile the root cube (it halves boxes), and
+assumption B.
+
+
 The octree splits the root cube into eight closed children, level by level. Each box `B` (centre
 `c`, half-width `h`) gets signs `s_k = boxSign q_k c h ∈ {1, −1, 0}`. By `boxSign_spec`,
 `s_k = 1` gives `q_k > 0` on all of `B`, `s_k = −1` gives `q_k < 0`, and `0` gives nothing.

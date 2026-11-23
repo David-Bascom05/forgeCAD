@@ -1,5 +1,6 @@
 import Std.Data.HashMap
 import ForgeExact.QRef.Faces
+import ForgeExact.QRef.BF
 
 /-!
 # The curved reference: the boolean of solids bounded by planes and quadrics, decided exactly
@@ -59,7 +60,17 @@ structure Arr where
   solids : Array (String × Array Lit)
   /-- each carrier: the faces on it (solid, face) -/
   faces : Array (Array (Nat × Nat))
+  /-- the history as one formula over the carriers' signs -/
+  bf : BF
   deriving Inhabited
+
+/-- The history as a formula (`ForgeExact.combine`: new and add unite, cut takes away, keep
+intersects; a solid is the conjunction of its literals). -/
+def historyBF (solids : Array (String × Array Lit)) : BF :=
+  solids.foldl (fun r (op, lits) =>
+    let inS := lits.foldl (fun acc l => BF.and acc (BF.lit l.idx l.pos)) BF.tt
+    if op == "cut" then BF.and r (BF.not inS) else if op == "keep" then BF.and r inS else BF.or r inS)
+    BF.ff
 
 def addQ (qs : Array Quadric) (q : Quadric) : Array Quadric × Lit :=
   let (c, s) := canon q
@@ -88,60 +99,21 @@ def arrOf (solids : Array QSolid) : Arr := Id.run do
         lits := lits.push l2
       | none => pure ()
     out := out.push (s.op, lits)
-  return ⟨qs, out, faces⟩
+  return ⟨qs, out, faces, historyBF out⟩
 
-/-- The history on a sign pattern (`ForgeExact.combine`: new and add unite, cut takes away, keep
-intersects). -/
-def Arr.keptOn (A : Arr) (σ : Nat → Bool) : Bool :=
-  A.solids.foldl (fun r (op, lits) =>
-    let inS := lits.all fun l => σ l.idx == l.pos
-    if op == "cut" then r && !inS else if op == "keep" then r && inS else r || inS) false
+/-- The history on a sign pattern. -/
+def Arr.keptOn (A : Arr) (σ : Nat → Bool) : Bool := A.bf.eval2 σ
 
-/-! ## Three-valued classification over a box -/
+/-- Kleene's value over a box's signs (`BF.eval3_sound`). -/
+def Arr.keptK (A : Arr) (sg : Array Int) : Option Bool := A.bf.eval3 fun k => sg.getD k 0
 
-/-- Kleene: `some b` decided, `none` unknown. -/
-def Arr.keptK (A : Arr) (sg : Array Int) : Option Bool :=
-  let and3 : Option Bool → Option Bool → Option Bool := fun a b =>
-    match a, b with
-    | some false, _ => some false
-    | _, some false => some false
-    | some true, some true => some true
-    | _, _ => none
-  let or3 : Option Bool → Option Bool → Option Bool := fun a b =>
-    match a, b with
-    | some true, _ => some true
-    | _, some true => some true
-    | some false, some false => some false
-    | _, _ => none
-  let not3 : Option Bool → Option Bool := fun a => a.map (!·)
-  A.solids.foldl (fun r (op, lits) =>
-    let inS := lits.foldl (fun acc l =>
-      let s := sg[l.idx]!
-      and3 acc (if s == 0 then none else some ((s > 0) == l.pos))) (some true)
-    if op == "cut" then and3 r (not3 inS) else if op == "keep" then and3 r inS else or3 r inS)
-    (some false)
-
-/-- An exclusion: no point has quadric `i` of sign `si` and `j` of sign `sj`. -/
-structure Excl where
-  i : Nat
-  si : Bool
-  j : Nat
-  sj : Bool
-  deriving Inhabited, BEq
-
-/-- Every pattern of the undecided quadrics allowed by the exclusions: does any keep? `none` past
-the enumeration cap. -/
-def Arr.anyKept (A : Arr) (sg : Array Int) (ex : Array Excl) : Option Bool := Id.run do
-  let und := (Array.range sg.size).filter fun i => sg[i]! == 0
-  if und.size > 12 then return none
-  for m in [0:2 ^ und.size] do
-    let σ : Nat → Bool := fun i =>
-      match und.findIdx? (· == i) with
-      | some k => (m >>> k) % 2 == 1
-      | none => sg[i]! > 0
-    let allowed := ex.all fun e => !(σ e.i == e.si && σ e.j == e.sj)
-    if allowed && A.keptOn σ then return some true
-  return some false
+/-- Every pattern of the undecided quadrics allowed by the exclusions: does any keep? `some
+false` only if none does (`BF.allFalse_sound`); `none` past the enumeration cap. -/
+def Arr.anyKept (A : Arr) (sg : Array Int) (ex : Array Excl) : Option Bool :=
+  let und := ((Array.range sg.size).filter fun i => sg[i]! == 0).toList
+  if und.length > 12 then none
+  else if BF.allFalse A.bf ex.toList und (fun i => decide (sg.getD i 0 > 0)) then some false
+  else some true
 
 /-! ## The octree -/
 
