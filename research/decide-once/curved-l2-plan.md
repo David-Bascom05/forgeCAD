@@ -256,3 +256,12 @@ mirror; untrusted, checked by `bezout3` twice, a gcd identity, `roots_of`, `on_v
 - Two unit spheres (centres 0 and (1/2, 1/3, 1/5)) and the z-cylinder of radius 3/4 at
   (1/4, 1/8): `R_A` of degree 8, 4 vertices, every covector `(0, 0, 0)`. It takes 352 ms in
   release, through `Big`'s public API.
+
+**Milestone 1f: the plane vertices mirror QVertPlane.lean (4279e5d).** `subst_z_q`, `plane_z_of`,
+`on_plane`, `mk_vert_p`, `quot_p`, `propose_vert_plane (qa, qb, P)` and
+`propose_vert_plane_any` (the exchange, with `on_vert`/`d_ok` rerun on the originals) replace
+the 1d draft. `VSample::swap_back`, `Quadric::swap_yz` and `gcd_ok` mirror the Lean, `elim_of` is
+renamed `elim_t` (QPropose's `elimT`), and `propose_vert3` checks its gcd by `gcd_ok`. All the
+`#guard`s are tests, and so is kind (c): the sphere with `∂_y`, which has `lz = 0` and goes through
+the exchange, and `∂_z`. **Sizes** on the three-quadric test: `R_A` has degree 8, with
+coefficients up to 93 bits; `A`, `B`, `C` hold 569 rationals of at most 84 bits.

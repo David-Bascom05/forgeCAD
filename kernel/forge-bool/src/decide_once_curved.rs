@@ -809,12 +809,12 @@ pub struct Elim {
 
 /// `elim qj qk c`: the resultant `R`, the subresultant `D z + N`, and the Bezout cofactors.
 pub fn elim(qj: &Quadric, qk: &Quadric, c: &Q) -> Elim {
-    elim_of(&restr(qj, c), &restr(qk, c))
+    elim_t(&restr(qj, c), &restr(qk, c))
 }
 
-/// `elim` on two restrictions `f = a₀ + a₁t + a₂t²`, `g = b₀ + b₁t + b₂t²` with coefficients in
+/// `elimT`: `elim` on two restrictions `f = a₀ + a₁t + a₂t²`, `g = b₀ + b₁t + b₂t²` with coefficients in
 /// `ℚ[s]`: the resultant in `t`, the subresultant `D t + N`, and the cofactors `U f + V g = R`.
-pub fn elim_of(a: &(Poly, Poly, Poly), b: &(Poly, Poly, Poly)) -> Elim {
+pub fn elim_t(a: &(Poly, Poly, Poly), b: &(Poly, Poly, Poly)) -> Elim {
     let e = elim_gen(a, b);
     Elim {
         r: e.r,
@@ -1156,26 +1156,109 @@ pub fn bezout3(
 }
 
 // =============================================================================================
-// The vertex proposer, one plane and two quadrics (untrusted; checked by `bezout3`, `roots_of`,
-// `on_vert`, `d_ok`). Drafted here for dol-curved's Lean `proposeVert`.
+// QVertPlane.lean: the vertex proposer for a plane and two quadrics
 // =============================================================================================
 
-/// The elimination data for a vertex: `R(x)`, `y = −N_y/D_y`, `z = −N_z/D_z`, and the cofactors
-/// `A q_a + B q_b + C P = R` (`bezout3`).
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ElimV {
-    pub r: Poly,
-    pub ny: Poly,
-    pub dy: Poly,
-    pub nz: Poly,
-    pub dz: Poly,
-    pub a: TPoly,
-    pub b: TPoly,
-    pub c: TPoly,
+/// `substZ q α₀ α₁ α₂`: `q(x, y, α₀ + α₁x + α₂y)` as coefficients in `y` over `ℚ[x]`.
+pub fn subst_z_q(q: &Quadric, a0: &Q, a1: &Q, a2: &Q) -> (Poly, Poly, Poly) {
+    let two = Q::from_i64(2);
+    (
+        vec![
+            q.zz.mul(a0).mul(a0).add(&q.lz.mul(a0)).add(&q.c),
+            two.mul(&q.zz)
+                .mul(a0)
+                .mul(a1)
+                .add(&q.xz.mul(a0))
+                .add(&q.lx)
+                .add(&q.lz.mul(a1)),
+            q.xx.add(&q.zz.mul(a1).mul(a1)).add(&q.xz.mul(a1)),
+        ],
+        vec![
+            two.mul(&q.zz)
+                .mul(a2)
+                .mul(a0)
+                .add(&q.yz.mul(a0))
+                .add(&q.ly)
+                .add(&q.lz.mul(a2)),
+            q.xy.add(&two.mul(&q.zz).mul(a2).mul(a1))
+                .add(&q.xz.mul(a2))
+                .add(&q.yz.mul(a1)),
+        ],
+        vec![q.yy.add(&q.zz.mul(a2).mul(a2)).add(&q.yz.mul(a2))],
+    )
+}
+
+/// `planeZOf P`: the plane's `z = α₀ + α₁x + α₂y`.
+pub fn plane_z_of(p: &Quadric) -> (Q, Q, Q) {
+    (p.c.neg().div(&p.lz), p.lx.neg().div(&p.lz), p.ly.neg().div(&p.lz))
+}
+
+/// `onPlane q P`.
+pub fn on_plane(q: &Quadric, p: &Quadric) -> (Poly, Poly, Poly) {
+    let (a0, a1, a2) = plane_z_of(p);
+    subst_z_q(q, &a0, &a1, &a2)
+}
+
+/// `mkVertP qa qb P E n`: `y = −N/D`, `z` from the plane.
+pub fn mk_vert_p(qa: &Quadric, qb: &Quadric, p: &Quadric, e: &Elim, n: &Num) -> VSample {
+    let x: Poly = vec![Q::zero(), Q::one()];
+    let nz = padd(
+        &psub(&pscale(&p.lx, &pmul(&x, &e.d)), &pscale(&p.ly, &e.n)),
+        &pscale(&p.c, &e.d),
+    );
+    let dz = pscale(&p.lz, &e.d);
+    VSample {
+        r: e.r.clone(),
+        ny: e.n.clone(),
+        dy: e.d.clone(),
+        nz: nz.clone(),
+        dz: dz.clone(),
+        x: n.clone(),
+        qa: pdiv(&homog3(qa, &e.n, &e.d, &nz, &dz), &e.r),
+        qb: pdiv(&homog3(qb, &e.n, &e.d, &nz, &dz), &e.r),
+        qc: Vec::new(),
+    }
+}
+
+/// `quotP q P`: `q = K P + f`, `K = k₀ + k₁z` over `ℚ[x][y]` (checked through `bezout3`).
+pub fn quot_p(q: &Quadric, p: &Quadric) -> TPoly {
+    let t = restr_t(q);
+    let inv: Poly = vec![Q::one().div(&p.lz)];
+    let p0: BPoly = vec![vec![p.c.clone(), p.lx.clone()], vec![p.ly.clone()]];
+    let k1 = pscale(&inv, &t[2]);
+    let k0 = pscale(&inv, &psub(&t[1], &pmul(&k1, &p0)));
+    vec![k0, k1]
+}
+
+/// **`proposeVertPlane qa qb P fuel`**: every vertex of the plane `P` and the quadrics, each
+/// certified, or `None` (`proposeVertPlane_complete`). `A = U`, `B = V`,
+/// `C = −(U K_a + V K_b)`.
+pub fn propose_vert_plane(qa: &Quadric, qb: &Quadric, p: &Quadric, fuel: usize) -> Option<Vec<VSample>> {
+    if p.lz.is_zero() {
+        return None;
+    }
+    let e = elim_t(&on_plane(qa, p), &on_plane(qb, p));
+    let a: TPoly = vec![e.u.clone()];
+    let b: TPoly = vec![e.v.clone()];
+    let c = pneg(&padd(&pmul(&a, &quot_p(qa, p)), &pmul(&b, &quot_p(qb, p))));
+    if !bezout3(qa, qb, p, &a, &b, &c, &e.r) {
+        return None;
+    }
+    let ns = roots_of(&e.r, fuel)?;
+    let mut vs: Vec<VSample> = Vec::with_capacity(ns.len());
+    let mut ok = true;
+    let mut i = 0;
+    while i < ns.len() {
+        let v = mk_vert_p(qa, qb, p, &e, &ns[i]);
+        ok = ok && v.on_vert(qa, qb, p) && v.d_ok(SIGN_FUEL);
+        vs.push(v);
+        i += 1;
+    }
+    if ok { Some(vs) } else { None }
 }
 
 impl Quadric {
-    /// `q(x, z, y)`: the roles of `y` and `z` exchanged.
+    /// `Quadric.swapYZ`: `q(x, z, y)` (`swapYZ_ev`).
     pub fn swap_yz(&self) -> Quadric {
         Quadric {
             xx: self.xx.clone(),
@@ -1192,54 +1275,50 @@ impl Quadric {
     }
 }
 
-/// A polynomial in `z` over `ℚ[x][y]` with `y` and `z` exchanged.
-pub fn tswap_yz(t: &[BPoly]) -> TPoly {
-    let mut ny = 0;
-    let mut k = 0;
-    while k < t.len() {
-        if t[k].len() > ny {
-            ny = t[k].len();
+impl VSample {
+    /// `VSample.swapBack`: a sample of the exchanged problem, read back.
+    pub fn swap_back(&self) -> VSample {
+        VSample {
+            r: self.r.clone(),
+            ny: self.nz.clone(),
+            dy: self.dz.clone(),
+            nz: self.ny.clone(),
+            dz: self.dy.clone(),
+            x: self.x.clone(),
+            qa: self.qa.clone(),
+            qb: self.qb.clone(),
+            qc: self.qc.clone(),
         }
-        k += 1;
     }
-    let mut out: TPoly = Vec::with_capacity(ny);
-    let mut j = 0;
-    while j < ny {
-        let mut row: BPoly = Vec::with_capacity(t.len());
-        let mut k2 = 0;
-        while k2 < t.len() {
-            if j < t[k2].len() {
-                row.push(t[k2][j].clone());
-            } else {
-                row.push(Vec::new());
-            }
-            k2 += 1;
-        }
-        out.push(row);
-        j += 1;
-    }
-    out
 }
 
-/// `t(x, y, Z(x, y))` for `t` a polynomial in `z` over `ℚ[x][y]` and `Z` a polynomial in `y`
-/// over `ℚ[x]`: Horner in `z`.
-pub fn subst_z(t: &[BPoly], zl: &[Poly]) -> BPoly {
-    let mut acc: BPoly = Vec::new();
-    let mut i = t.len();
-    while i > 0 {
-        i -= 1;
-        acc = padd(&t[i], &pmul(zl, &acc));
+/// **`proposeVertPlaneAny`**: `lz ≠ 0` directly; else `ly ≠ 0` through the exchange, every
+/// `on_vert` and `d_ok` rerun on the original quadrics; else `None`
+/// (`proposeVertPlaneAny_complete`).
+pub fn propose_vert_plane_any(qa: &Quadric, qb: &Quadric, p: &Quadric, fuel: usize) -> Option<Vec<VSample>> {
+    if !p.lz.is_zero() {
+        propose_vert_plane(qa, qb, p, fuel)
+    } else if !p.ly.is_zero() {
+        let vs = propose_vert_plane(&qa.swap_yz(), &qb.swap_yz(), &p.swap_yz(), fuel)?;
+        let mut ws: Vec<VSample> = Vec::with_capacity(vs.len());
+        let mut ok = true;
+        let mut i = 0;
+        while i < vs.len() {
+            let w = vs[i].swap_back();
+            ok = ok && w.on_vert(qa, qb, p) && w.d_ok(SIGN_FUEL);
+            ws.push(w);
+            i += 1;
+        }
+        if ok { Some(ws) } else { None }
+    } else {
+        None
     }
-    acc
 }
 
-/// The quotient `K` of a quadric `t = t₀ + t₁z + t₂z²` by `P = p₀ + n_z z`, with `inv = 1/n_z`:
-/// `k₁ = t₂/n_z`, `k₀ = (t₁ − k₁p₀)/n_z`, so `t = K P + (t₀ − k₀p₀)`.
-fn quot_plane(t: &[BPoly], p0: &[Poly], inv: &Q) -> TPoly {
-    let sc: Poly = vec![inv.clone()];
-    let k1 = pscale(&sc, &t[2]);
-    let k0 = pscale(&sc, &psub(&t[1], &pmul(&k1, p0)));
-    vec![k0, k1]
+/// `gcdOk G s t R_A R_B`: `G = s R_A + t R_B` (`gcd_cover`: a common root of `R_A` and `R_B` is
+/// a root of `G`).
+pub fn gcd_ok(g: &[Q], s: &[Q], t: &[Q], ra: &[Q], rb: &[Q]) -> bool {
+    eqv(g, &padd(&pmul(s, ra), &pmul(t, rb)))
 }
 
 /// Trailing zero coefficients dropped.
@@ -1249,141 +1328,6 @@ fn btrim(b: &[Poly]) -> BPoly {
         n -= 1;
     }
     b[..n].to_vec()
-}
-
-fn coef_or_empty(b: &[Poly], i: usize) -> Poly {
-    if i < b.len() { b[i].clone() } else { Vec::new() }
-}
-
-/// `elimVert` for a plane with `n.z ≠ 0`: `z = (c − n.x x − n.y y)/n.z` substituted, the two
-/// conics eliminated in `y` (`elim_of`), and the cofactors lifted through the quotients by `P`:
-/// `q = K P + f` (division in `z` by `P`, whose `z` coefficient is the constant `n.z`), so
-/// `R = U f_a + V f_b = U q_a + V q_b − (U K_a + V K_b) P`.
-fn elim_vert_z(pl: &Plane, qa: &Quadric, qb: &Quadric) -> Option<ElimV> {
-    let nzc = pl.n.z.clone();
-    if nzc.is_zero() {
-        None
-    } else {
-        let inv = Q::one().div(&nzc);
-        // Z(x, y) = c/nz − (nx/nz) x − (ny/nz) y, as a polynomial in y over Q[x]
-        let zl: BPoly = vec![
-            vec![pl.c.mul(&inv), pl.n.x.neg().mul(&inv)],
-            vec![pl.n.y.neg().mul(&inv)],
-        ];
-        let ta = restr_t(qa);
-        let tb = restr_t(qb);
-        let fa = btrim(&subst_z(&ta, &zl));
-        let fb = btrim(&subst_z(&tb, &zl));
-        if fa.len() > 3 || fb.len() > 3 {
-            None
-        } else {
-            let a3 = (
-                coef_or_empty(&fa, 0),
-                coef_or_empty(&fa, 1),
-                coef_or_empty(&fa, 2),
-            );
-            let b3 = (
-                coef_or_empty(&fb, 0),
-                coef_or_empty(&fb, 1),
-                coef_or_empty(&fb, 2),
-            );
-            let e = elim_of(&a3, &b3);
-            // P = p0 + nz z, p0 = nx x + ny y − c (the plane's quadric)
-            let p0 = restr_t(&pl.quadric())[0].clone();
-            let ka = quot_plane(&ta, &p0, &inv);
-            let kb = quot_plane(&tb, &p0, &inv);
-            let u: TPoly = vec![e.u.clone()];
-            let v: TPoly = vec![e.v.clone()];
-            let c = pneg(&padd(&pmul(&u, &ka), &pmul(&v, &kb)));
-            // z = [(c − nx x) D + ny N] / (nz D)
-            let cx: Poly = vec![pl.c.clone(), pl.n.x.neg()];
-            let nz_p = pneg(&padd(&pmul(&cx, &e.d), &pscale(&pl.n.y, &e.n)));
-            let dz_p = pscale(&nzc, &e.d);
-            Some(ElimV {
-                r: e.r,
-                ny: e.n,
-                dy: e.d,
-                nz: nz_p,
-                dz: dz_p,
-                a: u,
-                b: v,
-                c,
-            })
-        }
-    }
-}
-
-/// **`elimVert`**: a plane with `n.z ≠ 0` directly; with `n.z = 0 ≠ n.y`, the same with `y` and
-/// `z` exchanged and mapped back; a plane `x = const` is not proposed (the shear rule).
-pub fn elim_vert(pl: &Plane, qa: &Quadric, qb: &Quadric) -> Option<ElimV> {
-    if !pl.n.z.is_zero() {
-        elim_vert_z(pl, qa, qb)
-    } else if !pl.n.y.is_zero() {
-        let sp = Plane {
-            n: V3::new(pl.n.x.clone(), pl.n.z.clone(), pl.n.y.clone()),
-            c: pl.c.clone(),
-        };
-        match elim_vert_z(&sp, &qa.swap_yz(), &qb.swap_yz()) {
-            None => None,
-            Some(e) => Some(ElimV {
-                r: e.r,
-                ny: e.nz,
-                dy: e.dz,
-                nz: e.ny,
-                dz: e.dy,
-                a: tswap_yz(&e.a),
-                b: tswap_yz(&e.b),
-                c: tswap_yz(&e.c),
-            }),
-        }
-    } else {
-        None
-    }
-}
-
-/// **`proposeVert`**: every common point of the plane and the two quadrics, each certified, or
-/// `None` (`Skip::Budget`). Checked on the inputs as given: `bezout3` (completeness), `roots_of`
-/// (every root of `R`), and per sample `on_vert` and `d_ok`.
-pub fn propose_vert(pl: &Plane, qa: &Quadric, qb: &Quadric, fuel: usize) -> Option<Vec<VSample>> {
-    let pq = pl.quadric();
-    match elim_vert(pl, qa, qb) {
-        None => None,
-        Some(e) => {
-            if !bezout3(qa, qb, &pq, &e.a, &e.b, &e.c, &e.r) {
-                None
-            } else {
-                match roots_of(&e.r, fuel) {
-                    None => None,
-                    Some(ns) => {
-                        let ha = homog3(qa, &e.ny, &e.dy, &e.nz, &e.dz);
-                        let hb = homog3(qb, &e.ny, &e.dy, &e.nz, &e.dz);
-                        let hc = homog3(&pq, &e.ny, &e.dy, &e.nz, &e.dz);
-                        let (wa, wb, wc) = (pdiv(&ha, &e.r), pdiv(&hb, &e.r), pdiv(&hc, &e.r));
-                        let mut vs: Vec<VSample> = Vec::with_capacity(ns.len());
-                        let mut ok = true;
-                        let mut i = 0;
-                        while i < ns.len() {
-                            let v = VSample {
-                                r: e.r.clone(),
-                                ny: e.ny.clone(),
-                                dy: e.dy.clone(),
-                                nz: e.nz.clone(),
-                                dz: e.dz.clone(),
-                                x: ns[i].clone(),
-                                qa: wa.clone(),
-                                qb: wb.clone(),
-                                qc: wc.clone(),
-                            };
-                            ok = ok && v.on_vert(qa, qb, &pq) && v.d_ok(SIGN_FUEL);
-                            vs.push(v);
-                            i += 1;
-                        }
-                        if ok { Some(vs) } else { None }
-                    }
-                }
-            }
-        }
-    }
 }
 
 // =============================================================================================
@@ -1589,7 +1533,7 @@ pub fn propose_vert3(qa: &Quadric, qb: &Quadric, qc: &Quadric, fuel: usize) -> O
     }
     let cb = cb?;
     let (g, u, v) = forge_math::exact::alg::xgcd(&ca_.r, &cb.r);
-    if !eqv(&g, &padd(&pmul(&u, &ca_.r), &pmul(&v, &cb.r))) {
+    if !gcd_ok(&g, &u, &v, &ca_.r, &cb.r) {
         return None;
     }
     if is_zero_p(&g) {
@@ -1846,16 +1790,24 @@ mod tests {
         ));
     }
 
-    /// The vertex proposer: a plane and two quadrics, directly and with y, z exchanged.
+    /// QVertPlane.lean's #guards, and the covectors of what is proposed.
     #[test]
-    fn propose_vert_plane() {
+    fn qvertplane_guards() {
         let plane_y0 = quad([0, 0, 0, 0, 0, 0, 0, 1, 0, 0]);
-        let pz = Plane {
-            n: V3::new(qi(0), qi(0), qi(1)),
-            c: qi(0),
+        let tilt = Quadric {
+            lx: qi(1),
+            ly: qi(1),
+            lz: qi(2),
+            c: q(-1, 2),
+            ..Quadric::default()
         };
-        // the plane z = 0, the sphere and y = 0: (±1, 0, 0)
-        let vs = propose_vert(&pz, &sphere1(), &plane_y0, 30).unwrap();
+        let cyl_z = Quadric {
+            xx: qi(1),
+            yy: qi(1),
+            c: q(-1, 4),
+            ..Quadric::default()
+        };
+        let vs = propose_vert_plane(&sphere1(), &plane_y0, &plane_z(), 30).unwrap();
         assert_eq!(vs.len(), 2);
         let mut i = 0;
         while i < vs.len() {
@@ -1865,53 +1817,36 @@ mod tests {
             );
             i += 1;
         }
-        // a tilted plane x + y + 2z = 1/2, the sphere and a cylinder along z: generic
-        let tilt = Plane {
-            n: V3::new(qi(1), qi(1), qi(2)),
-            c: q(1, 2),
-        };
-        let cyl = QFace {
-            solid: 0,
-            index: 0,
-            kind: Kind::Cyl,
-            o: V3::new(q(1, 4), q(1, 8), qi(0)),
-            z: V3::new(qi(0), qi(0), qi(1)),
-            r: q(3, 4),
-            s: qi(0),
-            c: qi(0),
-        }
-        .quadric();
-        let vs = propose_vert(&tilt, &sphere1(), &cyl, 60).unwrap();
-        assert!(!vs.is_empty());
+        let vs = propose_vert_plane(&sphere1(), &cyl_z, &tilt, 30).unwrap();
         let mut i = 0;
         while i < vs.len() {
             assert_eq!(
-                vert_cov(&[sphere1(), cyl.clone(), tilt.quadric()], &vs[i], SIGN_FUEL),
+                vert_cov(&[sphere1(), cyl_z.clone(), tilt.clone()], &vs[i], SIGN_FUEL),
                 Some(vec![Sgn::Zero, Sgn::Zero, Sgn::Zero])
             );
             i += 1;
         }
-        // n.z = 0: the plane y = 1/2 (exchanged), the sphere and z = 0: (±√3/2, 1/2, 0)
-        let py = Plane {
-            n: V3::new(qi(0), qi(1), qi(0)),
-            c: q(1, 2),
-        };
-        let vs = propose_vert(&py, &sphere1(), &plane_z(), 30).unwrap();
+        assert!(propose_vert_plane(&sphere1(), &plane_z(), &plane_y0, 30).is_none());
+        let vs = propose_vert_plane_any(&sphere1(), &plane_z(), &plane_y0, 30).unwrap();
         assert_eq!(vs.len(), 2);
         let mut i = 0;
         while i < vs.len() {
             assert_eq!(
-                vert_cov(&[sphere1(), plane_z(), plane_yh()], &vs[i], SIGN_FUEL),
+                vert_cov(&[sphere1(), plane_z(), plane_y0.clone()], &vs[i], SIGN_FUEL),
                 Some(vec![Sgn::Zero, Sgn::Zero, Sgn::Zero])
             );
             i += 1;
         }
-        // x = const is not proposed (the shear rule takes it)
-        let px = Plane {
-            n: V3::new(qi(1), qi(0), qi(0)),
-            c: qi(0),
-        };
-        assert!(propose_vert(&px, &sphere1(), &plane_z(), 30).is_none());
+        // kind (c): the sphere with its partials ∂y = 2y (lz = 0, exchanged) and ∂z = 2z
+        let dy = quad([0, 0, 0, 0, 0, 0, 0, 2, 0, 0]);
+        let dz = quad([0, 0, 0, 0, 0, 0, 0, 0, 2, 0]);
+        assert_eq!(
+            propose_vert_plane_any(&sphere1(), &dz, &dy, 30).map(|v| v.len()),
+            Some(2)
+        );
+        // x = const: refused
+        let px = quad([0, 0, 0, 0, 0, 0, 1, 0, 0, 0]);
+        assert!(propose_vert_plane_any(&sphere1(), &plane_z(), &px, 30).is_none());
     }
 
     /// The three-quadric vertex proposer: two spheres and a cylinder.
@@ -1948,7 +1883,32 @@ mod tests {
         if std::env::var("VDBG").is_ok() {
             println!("{:?} in {:?}", vs.as_ref().map(|v| v.len()), t0.elapsed());
             if let Some(c) = chain(&s0, &s1, &cyl) {
-                println!("R_A degree {}", forge_math::exact::alg::deg(&c.r));
+                let mut n = 0;
+                let mut bits = 0;
+                let ts = [&c.a, &c.b, &c.c];
+                let mut i = 0;
+                while i < 3 {
+                    for b in ts[i].iter() {
+                        for p in b.iter() {
+                            for x in p.iter() {
+                                n += 1;
+                                bits = bits.max(x.n.bits().max(x.d.bits()));
+                            }
+                        }
+                    }
+                    i += 1;
+                }
+                let mut rb = 0;
+                for x in c.r.iter() {
+                    rb = rb.max(x.n.bits().max(x.d.bits()));
+                }
+                println!(
+                    "R_A degree {} (max {} bits); A, B, C: {} rationals, max {} bits",
+                    forge_math::exact::alg::deg(&c.r),
+                    rb,
+                    n,
+                    bits
+                );
             }
         }
         let vs = vs.unwrap();
