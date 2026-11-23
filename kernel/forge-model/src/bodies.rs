@@ -120,22 +120,13 @@ pub enum BodyError {
 /// Whether a history makes or works on more than one body.
 pub fn multi(features: &[Feature]) -> bool {
     // one pass: a body feature or a sheet (a body of its own) anywhere, or a second new body (each
-    // feature's op read as `op` reads it, in one match)
+    // feature's op as `op` reads it, so every kind that makes a body counts)
     let mut new = false;
     for f in features {
-        let made = match f {
-            Feature::Body(_) | Feature::Sheet(_) => return true,
-            Feature::Extrude { op, .. } | Feature::Revolve { op, .. } | Feature::Ball { op, .. } => {
-                *op == Combine::New
-            }
-            Feature::Edit(Edit::Thicken { op, .. }) => *op == Combine::New,
-            Feature::Import(t) => t.op == Combine::New,
-            Feature::Sweep(s) => s.op == Combine::New,
-            Feature::Coil(c) => c.op == Combine::New,
-            Feature::Loft(l) => l.op == Combine::New,
-            _ => false,
-        };
-        if made {
+        if matches!(f, Feature::Body(_) | Feature::Sheet(_)) {
+            return true;
+        }
+        if op(f) == Some(Combine::New) {
             if new {
                 return true;
             }
