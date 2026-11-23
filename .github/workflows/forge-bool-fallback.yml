@@ -1,0 +1,51 @@
+# The fallback's proofs (verify/forge-bool-fallback): the FALLBACK rows of the shipped boolean's
+# ledger (verify/forge-bool-proof/LEDGER.md), core Lean only.
+#   1. `lake build`, which fails on any broken lemma;
+#   2. the axiom report (Axioms.lean): every theorem listed shows only propext, Classical.choice
+#      and Quot.sound, never sorryAx.
+name: forge-bool-fallback
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "verify/forge-bool-fallback/**"
+      - ".github/workflows/forge-bool-fallback.yml"
+  pull_request:
+    paths:
+      - "verify/forge-bool-fallback/**"
+      - ".github/workflows/forge-bool-fallback.yml"
+  workflow_dispatch:
+
+jobs:
+  proofs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: elan and the pinned Lean
+        run: |
+          if [ ! -x "$HOME/.elan/bin/elan" ]; then
+            curl -sSfL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -o elan-init.sh
+            sh elan-init.sh -y --default-toolchain none
+          fi
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+          "$HOME/.elan/bin/elan" toolchain install "$(cat verify/forge-bool-fallback/lean-toolchain)"
+
+      - name: the proofs
+        working-directory: verify/forge-bool-fallback
+        run: |
+          lake build 2>&1 | tee build.log
+          grep -q "Build completed successfully" build.log
+          if grep -q "declaration uses 'sorry'" build.log; then echo "::error::sorry"; exit 1; fi
+
+      - name: the axiom report
+        working-directory: verify/forge-bool-fallback
+        run: |
+          lake env lean Axioms.lean | tee axioms.txt
+          n=$(grep -c -E "depends on axioms|does not depend on any axioms" axioms.txt)
+          [ "$n" -eq "$(grep -c '^#print axioms' Axioms.lean)" ] || { echo "::error::axiom report incomplete"; exit 1; }
+          bad=$(grep "depends on axioms" axioms.txt | grep -v -E "\[(propext)?(, )?(Classical\.choice)?(, )?(Quot\.sound)?\]" || true)
+          if [ -n "$bad" ]; then echo "::error::non-standard axioms:"; echo "$bad"; exit 1; fi
+          if grep -q "sorryAx" axioms.txt; then echo "::error::sorry"; exit 1; fi
