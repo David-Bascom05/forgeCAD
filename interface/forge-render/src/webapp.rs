@@ -71,7 +71,7 @@ fn wake() {
     });
     // a worker's thread (the threaded build): the page is told through the worker's messages
     #[cfg(target_feature = "atomics")]
-    if here.is_none() {
+    if here.is_none() && !on_page() {
         wake_page();
     }
     #[cfg(not(target_feature = "atomics"))]
@@ -545,9 +545,14 @@ fn panic_hook() {
 type Pending = Vec<(String, Option<Vec<u8>>)>;
 static PENDING: std::sync::Mutex<Pending> = std::sync::Mutex::new(Vec::new());
 
-/// Whether this is the page's own thread (the one the app's loop runs on).
+thread_local! {
+    /// Set on the page's own thread by `app_init` (a worker's thread never calls it).
+    static PAGE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Whether this is the page's own thread.
 fn on_page() -> bool {
-    WAKE.with(|w| w.borrow().is_some())
+    PAGE.with(|p| p.get())
 }
 
 /// The changes made on other threads, to the page, in order.
@@ -580,6 +585,7 @@ fn tell_page(path: &std::path::Path, c: forge_dirs::fs::mem::Change<'_>) {
 /// Set up once before anything else: the clock, the panic hook, the filesystem's hook.
 #[wasm_bindgen]
 pub fn app_init() {
+    PAGE.with(|p| p.set(true));
     panic_hook();
     forge_math::clock::set(perf_now, date_now);
     forge_dirs::fs::mem::set_hook(Some(tell_page));
