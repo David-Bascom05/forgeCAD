@@ -190,6 +190,78 @@ fn region_extent(a: &In, b: &In, l: f64) -> Option<Vec<DyV3>> {
     Some(corners(&lo, &hi))
 }
 
+/// `region_extent` screened in f64: `Some(None)` when the grown boxes plainly miss, `Some(Some(
+/// (lo, hi)))` (the extent, each bound within an ulp of the exact one) when they plainly overlap,
+/// None when the exact test decides (a gap or overlap within 1e-12 of the coordinates' size; the
+/// f64 bounds are each one rounding from the exact ones).
+fn region_f(a: &In, b: &In, l: f64) -> Option<Option<([f64; 3], [f64; 3])>> {
+    let (mut lo, mut hi) = ([0.0; 3], [0.0; 3]);
+    for k in 0..3 {
+        let (alo, ahi) = (a.lo[k] - l, a.hi[k] + l);
+        let (blo, bhi) = (b.lo[k] - l, b.hi[k] + l);
+        let (rlo, rhi) = (alo.max(blo), ahi.min(bhi));
+        if (rlo - rhi).abs() <= 1e-12 * (1.0 + rlo.abs() + rhi.abs()) {
+            return None;
+        }
+        if rlo > rhi {
+            return Some(None);
+        }
+        lo[k] = alo.min(blo);
+        hi[k] = ahi.max(bhi);
+    }
+    Some(Some((lo, hi)))
+}
+
+/// `near` screened in f64 at the corners of `[lo, hi]` (each within an ulp of the exact extent's):
+/// `Some` where every corner is plainly within, or one plainly past, `d` (the f64 value within
+/// 1e-12 of the terms' size of the exact one: the planes' normals are f64 exactly, their offsets
+/// one rounding off, and the corners an ulp; the margin covers a few roundings a hundredfold), else
+/// None.
+fn near_f(s: &PlaneF, t: &PlaneF, lo: [f64; 3], hi: [f64; 3], d: f64) -> Option<bool> {
+    let dot = |u: [f64; 3], v: [f64; 3]| u[0] * v[0] + u[1] * v[1] + u[2] * v[2];
+    let (ns2, nt2, nts) = (dot(s.n, s.n), dot(t.n, t.n), dot(t.n, s.n));
+    let r = d * nt2.sqrt() * ns2;
+    let mut all = true;
+    for x in [lo[0], hi[0]] {
+        for y in [lo[1], hi[1]] {
+            for z in [lo[2], hi[2]] {
+                let c = [x, y, z];
+                let ca = [x.abs(), y.abs(), z.abs()];
+                let na = |n: [f64; 3]| [n[0].abs(), n[1].abs(), n[2].abs()];
+                let sc = dot(s.n, c) - s.c;
+                let tc = dot(t.n, c) - t.c;
+                let e = tc * ns2 - sc * nts;
+                let m = (dot(na(t.n), ca) + t.c.abs()) * ns2 + (dot(na(s.n), ca) + s.c.abs()) * nts.abs();
+                let err = 1e-12 * m;
+                if e.abs() - err > r * (1.0 + 1e-12) {
+                    return Some(false);
+                }
+                if e.abs() + err >= r * (1.0 - 1e-12) {
+                    all = false;
+                }
+            }
+        }
+    }
+    all.then_some(true)
+}
+
+/// Are `a`'s and `b`'s planes tolerance-equal within `k`·LINEAR over their grown boxes: `None`
+/// when the boxes' region is empty, else whether each is `near` the other. f64 first, exact where
+/// the screens cannot tell.
+fn tol_eq(a: &In, b: &In, k: f64) -> Option<bool> {
+    let l = lin();
+    let d = l * k;
+    if let Some(r) = region_f(a, b, l) {
+        let (lo, hi) = r?;
+        if let (Some(x), Some(y)) = (near_f(&a.pf, &b.pf, lo, hi, d), near_f(&b.pf, &a.pf, lo, hi, d)) {
+            return Some(x && y);
+        }
+    }
+    let cs = region_extent(a, b, l)?;
+    let dd = Dy::from_f64(d);
+    Some(near(&a.plane, &b.plane, &cs, &dd) && near(&b.plane, &a.plane, &cs, &dd))
+}
+
 /// A plain union–find, root the least index.
 struct Uf(Vec<usize>);
 
@@ -242,8 +314,6 @@ fn plainly_apart(a: &In, b: &In, k: f64) -> bool {
 /// representative's index; or ambiguous past the spread cap.
 fn snap(fs: &[In]) -> Result<(Vec<DyPlane>, Vec<usize>), Skip> {
     let l = lin();
-    let ld = Dy::from_f64(l);
-    let cap = ld.scale2(1); // K = 2
     let n = fs.len();
     // candidate pairs: grown boxes overlapping in x (sweep), then the exact test
     let mut order: Vec<usize> = (0..n).collect();
@@ -258,18 +328,14 @@ fn snap(fs: &[In]) -> Result<(Vec<DyPlane>, Vec<usize>), Skip> {
             if plainly_apart(&fs[a], &fs[b], 1.0) {
                 continue;
             }
-            if let Some(cs) = region_extent(&fs[a], &fs[b], l) {
-                pairs.push((a, b, cs));
+            if tol_eq(&fs[a], &fs[b], 1.0) == Some(true) {
+                pairs.push((a, b));
             }
         }
     }
     let mut uf = Uf::new(n);
-    let mut eq = Vec::new();
-    for (a, b, cs) in &pairs {
-        if near(&fs[*a].plane, &fs[*b].plane, cs, &ld) && near(&fs[*b].plane, &fs[*a].plane, cs, &ld) {
-            uf.union(*a, *b);
-            eq.push((*a, *b));
-        }
+    for &(a, b) in &pairs {
+        uf.union(a, b);
     }
     // the spread cap: every pair of a class whose region is not empty within 2·LINEAR
     let mut members: HashMap<usize, Vec<usize>> = HashMap::default();
@@ -283,10 +349,7 @@ fn snap(fs: &[In]) -> Result<(Vec<DyPlane>, Vec<usize>), Skip> {
         }
         for (x, &a) in ms.iter().enumerate() {
             for &b in &ms[x + 1..] {
-                if let Some(cs) = region_extent(&fs[a], &fs[b], l)
-                    && !(near(&fs[a].plane, &fs[b].plane, &cs, &cap)
-                        && near(&fs[b].plane, &fs[a].plane, &cs, &cap))
-                {
+                if tol_eq(&fs[a], &fs[b], 2.0) == Some(false) {
                     return Err(Skip::Ambiguous(
                         "a class of tolerance-equal surfaces spreads past the cap",
                     ));
@@ -668,7 +731,7 @@ fn add_walls(cls: &mut Classes, lo: [f64; 3], hi: [f64; 3]) {
 struct Vx {
     /// its exact point, worked out when first needed (a piece's vertex, or a sign the f64 point
     /// cannot settle)
-    p: RefCell<Option<HPoint>>,
+    p: RefCell<Option<Box<HPoint>>>,
     /// the two planes (besides the section's) it is the meet of
     meet: (Pl, Pl),
     /// its f64 point and a bound on each coordinate's distance from the exact one
@@ -676,6 +739,14 @@ struct Vx {
     err: f64,
     /// where its covector starts in `Plane2::covs`, or NONE (a vertex on a wall)
     cov: u32,
+}
+
+/// A plane as one number (classes below walls), for keys.
+fn pl_code(p: Pl) -> u32 {
+    match p {
+        Pl::Class(k) => k,
+        Pl::Wall(w) => u32::MAX - 8 + w as u32,
+    }
 }
 
 /// A plane a polygon's edge lies on: a class, or a wall of the working box.
@@ -718,14 +789,14 @@ impl Plane2 {
 /// A vertex's exact point (memoised).
 fn exact_vx(x: &Vx, pc: &DyPlane, walls: &[DyPlane], cls: &Classes) -> HPoint {
     if let Some(h) = x.p.borrow().as_ref() {
-        return h.clone();
+        return (**h).clone();
     }
     let of = |p: Pl| match p {
         Pl::Class(k) => &cls.planes[k as usize],
         Pl::Wall(w) => &walls[w as usize],
     };
     let h = meet3(pc, of(x.meet.0), of(x.meet.1)).expect("a vertex is a meet of three planes");
-    *x.p.borrow_mut() = Some(h.clone());
+    *x.p.borrow_mut() = Some(Box::new(h.clone()));
     h
 }
 
@@ -848,7 +919,7 @@ struct Arr<'a> {
     wf: [PlaneF; 6],
     vx: Vec<Vx>,
     covs: Vec<Sgn>,
-    by_pair: HashMap<(Pl, Pl), u32>,
+    by_pair: HashMap<u64, u32>,
     /// covector hash → the first vertex with it; `next` chains the others with the same hash
     by_cov: HashMap<u64, u32>,
     next: Vec<u32>,
@@ -877,7 +948,12 @@ impl Arr<'_> {
     /// The vertex where planes `x` and `y` cross the section: an existing one with that pair, or
     /// (class vertices) that covector, else a new one.
     fn vertex(&mut self, x: Pl, y: Pl) -> u32 {
-        let key = if x <= y { (x, y) } else { (y, x) };
+        let (cx, cy) = (pl_code(x), pl_code(y));
+        let key = if cx <= cy {
+            (cx as u64) << 32 | cy as u64
+        } else {
+            (cy as u64) << 32 | cx as u64
+        };
         if let Some(&i) = self.by_pair.get(&key) {
             return i;
         }
@@ -898,7 +974,7 @@ impl Arr<'_> {
                     .expect("a polygon's edge crosses the plane splitting it");
                 x0.f = h.to_f64();
                 x0.err = 0.0;
-                x0.p = RefCell::new(Some(h));
+                x0.p = RefCell::new(Some(Box::new(h)));
             }
         }
         let id = match (x, y) {
@@ -985,6 +1061,20 @@ impl Arr<'_> {
             s.push(self.side(i, p));
         }
         let (p0, n0) = (pos.len(), neg.len());
+        // which pushed vertices lie on `p` (a crossing's new vertex does, by construction)
+        let (mut zp, mut zn) = (0u64, 0u64);
+        let (mut kp, mut kn) = (0u32, 0u32);
+        let mut zpv: Vec<bool> = Vec::new();
+        let mut znv: Vec<bool> = Vec::new();
+        let big = n > 30;
+        let mark = |z: &mut u64, zv: &mut Vec<bool>, k: &mut u32, on: bool| {
+            if big {
+                zv.push(on);
+            } else if on {
+                *z |= 1 << *k;
+            }
+            *k += 1;
+        };
         for k in 0..n {
             let (vi, line) = poly[k];
             let (fa, fb) = (s[k], s[(k + 1) % n]);
@@ -992,23 +1082,27 @@ impl Arr<'_> {
             // splitting plane runs along that plane when the part turns there
             if fa >= 0 {
                 pos.push((vi, line));
+                mark(&mut zp, &mut zpv, &mut kp, fa == 0);
             }
             if fa <= 0 {
                 neg.push((vi, line));
+                mark(&mut zn, &mut znv, &mut kn, fa == 0);
             }
             if (fa > 0 && fb < 0) || (fa < 0 && fb > 0) {
                 let w = self.vertex(line, p);
                 pos.push((w, line));
                 neg.push((w, line));
+                mark(&mut zp, &mut zpv, &mut kp, true);
+                mark(&mut zn, &mut znv, &mut kn, true);
             }
         }
         // the edge plane of each part's vertex is the plane the part runs on to its next vertex:
         // where a part's two consecutive vertices both lie on `p`, that edge is on `p`
-        for (part, from) in [(pos, p0), (neg, n0)] {
+        for (part, from, z, zv) in [(pos, p0, zp, &zpv), (neg, n0, zn, &znv)] {
             let m = part.len() - from;
+            let on = |k: usize| if big { zv[k] } else { z >> k & 1 == 1 };
             for k in 0..m {
-                let (i, j) = (part[from + k].0, part[from + (k + 1) % m].0);
-                if self.side(i, p) == 0 && self.side(j, p) == 0 {
+                if on(k) && on((k + 1) % m) {
                     part[from + k].1 = p;
                 }
             }
@@ -1088,6 +1182,9 @@ fn arrange(cls: &Classes, pf: &[PlaneF], c: u32, lo: [f64; 3], hi: [f64; 3]) -> 
             return done(ar, Vec::new(), Vec::new());
         }
     }
+    // the section clipped to the box: every cell lies in it, so a plane strictly to one side of
+    // all its vertices is to that side of every cell
+    let hull: Vec<u32> = poly.iter().map(|&(i, _)| i).collect();
     // the cells, flat, double-buffered
     let mut cs: Vec<u32> = vec![0, poly.len() as u32];
     let mut cv: Vec<(u32, Pl)> = poly;
@@ -1098,19 +1195,14 @@ fn arrange(cls: &Classes, pf: &[PlaneF], c: u32, lo: [f64; 3], hi: [f64; 3]) -> 
             continue;
         }
         let pj = Pl::Class(j);
-        // (a plane missing every cell leaves them all whole)
-        let mut any_pos = false;
-        let mut any_neg = false;
+        // (a plane missing the clipped section leaves every cell whole)
         let mut all_pos = true;
         let mut all_neg = true;
-        for &(i, _) in &cv {
+        for &i in &hull {
             let x = ar.side(i, pj);
-            any_pos |= x >= 0;
-            any_neg |= x <= 0;
             all_pos &= x > 0;
             all_neg &= x < 0;
         }
-        let _ = (any_pos, any_neg);
         if all_pos || all_neg {
             continue;
         }
