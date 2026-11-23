@@ -9,4 +9,6 @@ import ForgeBoolCore.RefineIndex
 import ForgeBoolCore.SortModel
 import ForgeBoolCore.RefineSort
 import ForgeBoolCore.RefineExt
+import ForgeBoolCore.DedupModel
+import ForgeBoolCore.RefineSplit
 import ForgeBoolCore.Axioms
