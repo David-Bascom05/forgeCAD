@@ -1,0 +1,502 @@
+{"file": "FreeCAD/data/examples/osifont-lgpl3fe.ttf", "verdict": "match", "why": ["922 code points"], "cps": 922}
+{"file": "FreeCAD/src/Gui/Fonts/URWGothic-Demi.ttf", "verdict": "match", "why": ["854 code points"], "cps": 854}
+{"file": "FreeCAD/src/Mod/TechDraw/Gui/Resources/fonts/Y14.5-2018.ttf", "verdict": "mismatch", "why": ["2 of 315 code points: box 2", "U+00F2: box [550, 720, 2208, 1596] vs [550, 709, 2208.0, 1596]"], "cps": 315}
+{"file": "FreeCAD/src/Mod/TechDraw/Gui/Resources/fonts/Y14.5-FreeCAD.ttf", "verdict": "mismatch", "why": ["2 of 315 code points: box 2", "U+00F2: box [700, 1003, 2816, 2121] vs [700, 989, 2816.0, 2121]"], "cps": 315}
+{"file": "FreeCAD/src/Mod/TechDraw/Gui/Resources/fonts/osifont-italic.ttf", "verdict": "match", "why": ["859 code points"], "cps": 859}
+{"file": "FreeCAD/src/Mod/TechDraw/Gui/Resources/fonts/osifont-lgpl3fe.ttf", "verdict": "match", "why": ["922 code points"], "cps": 922}
+{"file": "FreeCAD/tests/visual/fonts/NotoSans-Regular.ttf", "verdict": "match", "why": ["2840 code points"], "cps": 2840}
+{"file": "LibreCAD/librecad/support/fonts/opentype/amiri-1.003/Amiri-Regular.ttf", "verdict": "match", "why": ["1556 code points"], "cps": 1556}
+{"file": "cadquery/doc/_static/logo/Roboto_Font/Roboto-Bold.ttf", "verdict": "mismatch", "why": ["1 of 896 code points: box 1", "U+03C7: box [25, -432.8196721311475, 1098, 1098] vs [21, -432.8196721311475, 1094, 1098]"], "cps": 896}
+{"file": "cadquery/tests/testdata/OpenSans-Regular.ttf", "verdict": "match", "why": ["883 code points"], "cps": 883}
+{"file": "ezdxf/fonts/Noto/NotoSansSC-Regular.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "ezdxf/fonts/Open_Sans/OpenSans-Bold.ttf", "verdict": "match", "why": ["883 code points"], "cps": 883}
+{"file": "ezdxf/fonts/Open_Sans/OpenSans-BoldItalic.ttf", "verdict": "match", "why": ["883 code points"], "cps": 883}
+{"file": "ezdxf/fonts/Open_Sans/OpenSans-ExtraBold.ttf", "verdict": "mismatch", "why": ["1 of 883 code points: box 1", "U+2022: box [74, 387, 729, 1108] vs [74, 387, 729, 1133]"], "cps": 883}
+{"file": "ezdxf/fonts/Open_Sans/OpenSans-ExtraBoldItalic.ttf", "verdict": "mismatch", "why": ["1 of 883 code points: box 1", "U+2022: box [86, 389, 762, 1106] vs [86, 389, 762, 1133]"], "cps": 883}
+{"file": "ezdxf/fonts/Open_Sans/OpenSans-Italic.ttf", "verdict": "match", "why": ["883 code points"], "cps": 883}
+{"file": "ezdxf/fonts/Open_Sans/OpenSans-Light.ttf", "verdict": "match", "why": ["883 code points"], "cps": 883}
+{"file": "ezdxf/fonts/Open_Sans/OpenSans-LightItalic.ttf", "verdict": "match", "why": ["883 code points"], "cps": 883}
+{"file": "ezdxf/fonts/Open_Sans/OpenSans-Regular.ttf", "verdict": "match", "why": ["883 code points"], "cps": 883}
+{"file": "ezdxf/fonts/Open_Sans/OpenSans-SemiBold.ttf", "verdict": "match", "why": ["883 code points"], "cps": 883}
+{"file": "ezdxf/fonts/Open_Sans/OpenSans-SemiBoldItalic.ttf", "verdict": "match", "why": ["883 code points"], "cps": 883}
+{"file": "ezdxf/fonts/Open_Sans_Condensed/OpenSansCondensed-Bold.ttf", "verdict": "match", "why": ["883 code points"], "cps": 883}
+{"file": "ezdxf/fonts/Open_Sans_Condensed/OpenSansCondensed-Light.ttf", "verdict": "match", "why": ["883 code points"], "cps": 883}
+{"file": "ezdxf/fonts/Open_Sans_Condensed/OpenSansCondensed-LightItalic.ttf", "verdict": "match", "why": ["883 code points"], "cps": 883}
+{"file": "ezdxf/fonts/corrupt_fonts_for_testing/raises-exception.ttf", "verdict": "both-refused", "why": ["TTLibError: Not a TrueType or OpenType font (not enough data)"], "cps": 0}
+{"file": "ezdxf/fonts/dejavu-fonts-ttf-2.37/ttf/DejaVuMathTeXGyre.ttf", "verdict": "match", "why": ["1118 code points"], "cps": 1118}
+{"file": "ezdxf/fonts/dejavu-fonts-ttf-2.37/ttf/DejaVuSans-Bold.ttf", "verdict": "mismatch", "why": ["10 of 5366 code points: box 10", "U+0315: box [-182, 1262, 182, 1638] vs [-181, 1262, 183, 1638]"], "cps": 5366}
+{"file": "ezdxf/fonts/dejavu-fonts-ttf-2.37/ttf/DejaVuSans-BoldOblique.ttf", "verdict": "mismatch", "why": ["49 of 4819 code points: box 49", "U+0540: box [-39.161184210526315, -95, 1422, 1493] vs [-38.161184210526315, -95, 1423, 1493]"], "cps": 4819}
+{"file": "ezdxf/fonts/dejavu-fonts-ttf-2.37/ttf/DejaVuSans-ExtraLight.ttf", "verdict": "mismatch", "why": ["10 of 1986 code points: box 10", "U+0181: box [-97, 0, 1202, 1493.0481927710844] vs [-96, 0, 1203, 1493.0481927710844]"], "cps": 1986}
+{"file": "ezdxf/fonts/dejavu-fonts-ttf-2.37/ttf/DejaVuSans-Oblique.ttf", "verdict": "mismatch", "why": ["57 of 4819 code points: box 57", "U+0313: box [-674, 1218, -333, 1729] vs [-673, 1218, -332, 1729]"], "cps": 4819}
+{"file": "ezdxf/fonts/dejavu-fonts-ttf-2.37/ttf/DejaVuSans.ttf", "verdict": "mismatch", "why": ["22 of 5370 code points: box 22", "U+0307: box [-606, 1323, -422, 1556] vs [-606, 1147, -422, 1556]"], "cps": 5370}
+{"file": "ezdxf/fonts/dejavu-fonts-ttf-2.37/ttf/DejaVuSansCondensed-Bold.ttf", "verdict": "mismatch", "why": ["155 of 5366 code points: box 155", "U+2128: box [-10, -326, 1236, 1492] vs [-9, -326, 1237, 1492]"], "cps": 5366}
+{"file": "ezdxf/fonts/dejavu-fonts-ttf-2.37/ttf/DejaVuSansCondensed-BoldOblique.ttf", "verdict": "mismatch", "why": ["327 of 4819 code points: box 327", "U+A767: box [-150, -426, 1250, 1556] vs [-149, -426, 1251, 1556]"], "cps": 4819}
+{"file": "ezdxf/fonts/dejavu-fonts-ttf-2.37/ttf/DejaVuSansCondensed-Oblique.ttf", "verdict": "mismatch", "why": ["320 of 4819 code points: box 320", "U+A767: box [-157, -426, 1081, 1556] vs [-156, -426, 1082, 1556]"], "cps": 4819}
+{"file": "ezdxf/fonts/dejavu-fonts-ttf-2.37/ttf/DejaVuSansCondensed.ttf", "verdict": "mismatch", "why": ["169 of 5370 code points: box 169", "U+0181: box [-94, 0, 1224, 1493] vs [-93, 0, 1225, 1493]"], "cps": 5370}
+{"file": "ezdxf/fonts/dejavu-fonts-ttf-2.37/ttf/DejaVuSansMono-Bold.ttf", "verdict": "mismatch", "why": ["4 of 3260 code points: box 4", "U+0361: box [-242.43283582089552, 1506, 1476.3225, 1803.4464285714282] vs [-241.43283582089552, 1506, 1477.3225, 1803.4464285714287]"], "cps": 3260}
+{"file": "ezdxf/fonts/dejavu-fonts-ttf-2.37/ttf/DejaVuSansMono-BoldOblique.ttf", "verdict": "mismatch", "why": ["72 of 2682 code points: box 72", "U+01BD: box [-27, -440, 1173, 1120] vs [-26, -440, 1174, 1120]"], "cps": 2682}
+{"file": "ezdxf/fonts/dejavu-fonts-ttf-2.37/ttf/DejaVuSansMono-Oblique.ttf", "verdict": "mismatch", "why": ["56 of 2682 code points: box 56", "U+0418: box [-6, 0, 1239, 1493] vs [-5, 0, 1240, 1493]"], "cps": 2682}
+{"file": "ezdxf/fonts/dejavu-fonts-ttf-2.37/ttf/DejaVuSansMono.ttf", "verdict": "mismatch", "why": ["2 of 3259 code points: box 2", "U+0361: box [-236, 1520, 1470, 1847] vs [-235, 1520, 1471, 1847.0]"], "cps": 3259}
+{"file": "ezdxf/fonts/dejavu-fonts-ttf-2.37/ttf/DejaVuSerif-Bold.ttf", "verdict": "mismatch", "why": ["8 of 3321 code points: box 8", "U+033B: box [-799, -715, -226, -142] vs [-798, -715, -225, -142]"], "cps": 3321}
+{"file": "ezdxf/fonts/dejavu-fonts-ttf-2.37/ttf/DejaVuSerif-BoldItalic.ttf", "verdict": "mismatch", "why": ["154 of 3325 code points: box 153, contours 1", "U+01BD: box [-57, -416, 1317, 1063] vs [-56, -416, 1318, 1063]", "U+01E4: contours 1 vs 2"], "cps": 3325}
+{"file": "ezdxf/fonts/dejavu-fonts-ttf-2.37/ttf/DejaVuSerif-Italic.ttf", "verdict": "mismatch", "why": ["143 of 3325 code points: box 143", "U+0418: box [-32, 0, 1818, 1493] vs [-31, 0, 1819, 1493]"], "cps": 3325}
+{"file": "ezdxf/fonts/dejavu-fonts-ttf-2.37/ttf/DejaVuSerif.ttf", "verdict": "mismatch", "why": ["11 of 3339 code points: box 11", "U+0313: box [-633, 1242, -366.52906976744185, 1698] vs [-632, 1242, -365.52906976744185, 1698]"], "cps": 3339}
+{"file": "ezdxf/fonts/dejavu-fonts-ttf-2.37/ttf/DejaVuSerifCondensed-Bold.ttf", "verdict": "mismatch", "why": ["107 of 3321 code points: box 107", "U+00C5: box [-14, 0, 1451, 1901] vs [-13, 0, 1452, 1901]"], "cps": 3321}
+{"file": "ezdxf/fonts/dejavu-fonts-ttf-2.37/ttf/DejaVuSerifCondensed-BoldItalic.ttf", "verdict": "mismatch", "why": ["393 of 3325 code points: box 392, contours 1", "U+0418: box [-44, 0, 1789, 1493] vs [-43, 0, 1790, 1493]", "U+01E4: contours 1 vs 2"], "cps": 3325}
+{"file": "ezdxf/fonts/dejavu-fonts-ttf-2.37/ttf/DejaVuSerifCondensed-Italic.ttf", "verdict": "mismatch", "why": ["360 of 3325 code points: box 360", "U+0418: box [-29, 0, 1636, 1493] vs [-28, 0, 1637, 1493]"], "cps": 3325}
+{"file": "ezdxf/fonts/dejavu-fonts-ttf-2.37/ttf/DejaVuSerifCondensed.ttf", "verdict": "mismatch", "why": ["122 of 3339 code points: box 122", "U+00C5: box [-11, 0, 1349, 1901] vs [-10, 0, 1350, 1901]"], "cps": 3339}
+{"file": "ezdxf/fonts/liberation-fonts-ttf-2.1.1/LiberationMono-Bold.ttf", "verdict": "mismatch", "why": ["6 of 2288 code points: contours 6", "U+25D6: contours 1 vs 3"], "cps": 2288}
+{"file": "ezdxf/fonts/liberation-fonts-ttf-2.1.1/LiberationMono-BoldItalic.ttf", "verdict": "match", "why": ["2288 code points"], "cps": 2288}
+{"file": "ezdxf/fonts/liberation-fonts-ttf-2.1.1/LiberationMono-Italic.ttf", "verdict": "mismatch", "why": ["6 of 2288 code points: contours 6", "U+25D6: contours 1 vs 3"], "cps": 2288}
+{"file": "ezdxf/fonts/liberation-fonts-ttf-2.1.1/LiberationMono-Regular.ttf", "verdict": "mismatch", "why": ["1 of 2288 code points: box 1", "U+00A2: box [133, -61, 1094, 1381] vs [-52, -61, 1094, 1475]"], "cps": 2288}
+{"file": "ezdxf/fonts/liberation-fonts-ttf-2.1.1/LiberationSans-Bold.ttf", "verdict": "match", "why": ["2307 code points"], "cps": 2307}
+{"file": "ezdxf/fonts/liberation-fonts-ttf-2.1.1/LiberationSans-BoldItalic.ttf", "verdict": "match", "why": ["2307 code points"], "cps": 2307}
+{"file": "ezdxf/fonts/liberation-fonts-ttf-2.1.1/LiberationSans-Italic.ttf", "verdict": "mismatch", "why": ["1 of 2307 code points: contours 1", "U+25D5: contours 2 vs 3"], "cps": 2307}
+{"file": "ezdxf/fonts/liberation-fonts-ttf-2.1.1/LiberationSans-Regular.ttf", "verdict": "mismatch", "why": ["1 of 2307 code points: contours 1", "U+25D5: contours 2 vs 3"], "cps": 2307}
+{"file": "ezdxf/fonts/liberation-fonts-ttf-2.1.1/LiberationSerif-Bold.ttf", "verdict": "mismatch", "why": ["4 of 2308 code points: contours 4", "U+25D3: contours 2 vs 3"], "cps": 2308}
+{"file": "ezdxf/fonts/liberation-fonts-ttf-2.1.1/LiberationSerif-BoldItalic.ttf", "verdict": "match", "why": ["2309 code points"], "cps": 2309}
+{"file": "ezdxf/fonts/liberation-fonts-ttf-2.1.1/LiberationSerif-Italic.ttf", "verdict": "match", "why": ["2316 code points"], "cps": 2316}
+{"file": "ezdxf/fonts/liberation-fonts-ttf-2.1.1/LiberationSerif-Regular.ttf", "verdict": "match", "why": ["2308 code points"], "cps": 2308}
+{"file": "ezdxf/fonts/liberation-narrow-fonts-ttf-1.07.6/LiberationSansNarrow-Bold.ttf", "verdict": "match", "why": ["668 code points"], "cps": 668}
+{"file": "ezdxf/fonts/liberation-narrow-fonts-ttf-1.07.6/LiberationSansNarrow-BoldItalic.ttf", "verdict": "match", "why": ["668 code points"], "cps": 668}
+{"file": "ezdxf/fonts/liberation-narrow-fonts-ttf-1.07.6/LiberationSansNarrow-Italic.ttf", "verdict": "match", "why": ["668 code points"], "cps": 668}
+{"file": "ezdxf/fonts/liberation-narrow-fonts-ttf-1.07.6/LiberationSansNarrow-Regular.ttf", "verdict": "match", "why": ["668 code points"], "cps": 668}
+{"file": "gdal/doc/source/gdal_rtd/static/fonts/miriamlibre-bold-webfont.ttf", "verdict": "match", "why": ["237 code points"], "cps": 237}
+{"file": "gdal/doc/source/gdal_rtd/static/fonts/miriamlibre-regular-webfont.ttf", "verdict": "match", "why": ["237 code points"], "cps": 237}
+{"file": "gdal/doc/source/gdal_rtd/static/fonts/proximanova-light-webfont.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "gdal/doc/source/gdal_rtd/static/fonts/proximanova-light-webfont.ttf", "verdict": "match", "why": ["233 code points"], "cps": 233}
+{"file": "gdal/doc/source/gdal_rtd/static/fonts/proximanova-sbold-webfont.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "gdal/doc/source/gdal_rtd/static/fonts/proximanova-sbold-webfont.ttf", "verdict": "match", "why": ["233 code points"], "cps": 233}
+{"file": "gdal/doc/source/gdal_rtd/static/fonts/sintony-bold-webfont.ttf", "verdict": "match", "why": ["230 code points"], "cps": 230}
+{"file": "gdal/doc/source/gdal_rtd/static/fonts/sintony-regular-webfont.ttf", "verdict": "match", "why": ["230 code points"], "cps": 230}
+{"file": "gdal/doc/source/gdal_rtd/static/fonts/sourcecodepro-regular-webfont.ttf", "verdict": "match", "why": ["231 code points"], "cps": 231}
+{"file": "gfonts/apache/aclonica/Aclonica-Regular.ttf", "verdict": "match", "why": ["368 code points"], "cps": 368}
+{"file": "gfonts/apache/kranky/Kranky-Regular.ttf", "verdict": "match", "why": ["227 code points"], "cps": 227}
+{"file": "gfonts/apache/opensanshebrewcondensed/OpenSansHebrewCondensed-LightItalic.ttf", "verdict": "mismatch", "why": ["15 of 286 code points: box 15", "U+FB39: box [-31, 482, 369, 1290] vs [-30, 482, 370, 1290]"], "cps": 286}
+{"file": "gfonts/apache/yellowtail/Yellowtail-Regular.ttf", "verdict": "mismatch", "why": ["4 of 369 code points: box 4", "U+03BC: box [-235.5185185185185, -337, 926, 804] vs [-234.5185185185185, -337.0, 927, 804]"], "cps": 369}
+{"file": "gfonts/ofl/aboreto/Aboreto-Regular.ttf", "verdict": "match", "why": ["450 code points"], "cps": 450}
+{"file": "gfonts/ofl/akatab/Akatab-Bold.ttf", "verdict": "match", "why": ["425 code points"], "cps": 425}
+{"file": "gfonts/ofl/alegreyasanssc/AlegreyaSansSC-ExtraBold.ttf", "verdict": "match", "why": ["1235 code points"], "cps": 1235}
+{"file": "gfonts/ofl/almarai/Almarai-Light.ttf", "verdict": "match", "why": ["528 code points"], "cps": 528}
+{"file": "gfonts/ofl/amita/Amita-Regular.ttf", "verdict": "match", "why": ["557 code points"], "cps": 557}
+{"file": "gfonts/ofl/arizonia/Arizonia-Regular.ttf", "verdict": "match", "why": ["588 code points"], "cps": 588}
+{"file": "gfonts/ofl/asapcondensed/AsapCondensed-Black.ttf", "verdict": "match", "why": ["651 code points"], "cps": 651}
+{"file": "gfonts/ofl/asset/Asset-Regular.ttf", "verdict": "match", "why": ["517 code points"], "cps": 517}
+{"file": "gfonts/ofl/averiasanslibre/AveriaSansLibre-BoldItalic.ttf", "verdict": "match", "why": ["231 code points"], "cps": 231}
+{"file": "gfonts/ofl/b612mono/B612Mono-Regular.ttf", "verdict": "match", "why": ["589 code points"], "cps": 589}
+{"file": "gfonts/ofl/bakbakone/BakbakOne-Regular.ttf", "verdict": "match", "why": ["461 code points"], "cps": 461}
+{"file": "gfonts/ofl/barlow/Barlow-Bold.ttf", "verdict": "match", "why": ["525 code points"], "cps": 525}
+{"file": "gfonts/ofl/barlowcondensed/BarlowCondensed-ExtraBold.ttf", "verdict": "match", "why": ["525 code points"], "cps": 525}
+{"file": "gfonts/ofl/barlowsemicondensed/BarlowSemiCondensed-ExtraLight.ttf", "verdict": "match", "why": ["525 code points"], "cps": 525}
+{"file": "gfonts/ofl/battambang/Battambang-Black.ttf", "verdict": "match", "why": ["203 code points"], "cps": 203}
+{"file": "gfonts/ofl/bellota/Bellota-BoldItalic.ttf", "verdict": "match", "why": ["802 code points"], "cps": 802}
+{"file": "gfonts/ofl/betaniapatmosgdl/BetaniaPatmosGDL-Regular.ttf", "verdict": "match", "why": ["330 code points"], "cps": 330}
+{"file": "gfonts/ofl/bevietnampro/BeVietnamPro-Regular.ttf", "verdict": "match", "why": ["459 code points"], "cps": 459}
+{"file": "gfonts/ofl/biryani/Biryani-Regular.ttf", "verdict": "match", "why": ["475 code points"], "cps": 475}
+{"file": "gfonts/ofl/bizudpgothic/BIZUDPGothic-Bold.ttf", "verdict": "match", "why": ["11427 code points"], "cps": 11427}
+{"file": "gfonts/ofl/blinker/Blinker-SemiBold.ttf", "verdict": "match", "why": ["410 code points"], "cps": 410}
+{"file": "gfonts/ofl/bpmfhuninn/BpmfHuninn-Regular.ttf", "verdict": "match", "why": ["10296 code points"], "cps": 10296}
+{"file": "gfonts/ofl/bungeeinline/BungeeInline-Regular.ttf", "verdict": "match", "why": ["1082 code points"], "cps": 1082}
+{"file": "gfonts/ofl/caprasimo/Caprasimo-Regular.ttf", "verdict": "match", "why": ["248 code points"], "cps": 248}
+{"file": "gfonts/ofl/chakrapetch/ChakraPetch-MediumItalic.ttf", "verdict": "match", "why": ["725 code points"], "cps": 725}
+{"file": "gfonts/ofl/chathura/Chathura-Thin.ttf", "verdict": "match", "why": ["222 code points"], "cps": 222}
+{"file": "gfonts/ofl/comforterbrush/ComforterBrush-Regular.ttf", "verdict": "mismatch", "why": ["34 of 701 code points: contours 34", "U+011D: contours 5 vs 6"], "cps": 701}
+{"file": "gfonts/ofl/corben/Corben-Bold.ttf", "verdict": "mismatch", "why": ["3 of 380 code points: box 3", "U+0142: box [-39.785714285714285, 0, 1148.4516129032256, 1886] vs [-34.785714285714285, 0, 1153.4516129032259, 1886]"], "cps": 380}
+{"file": "gfonts/ofl/cormorantupright/CormorantUpright-Bold.ttf", "verdict": "match", "why": ["675 code points"], "cps": 675}
+{"file": "gfonts/ofl/coveredbyyourgrace/CoveredByYourGrace.ttf", "verdict": "match", "why": ["344 code points"], "cps": 344}
+{"file": "gfonts/ofl/daibannasil/DaiBannaSIL-Italic.ttf", "verdict": "match", "why": ["389 code points"], "cps": 389}
+{"file": "gfonts/ofl/decovaralpha/DecovarAlpha-VF.ttf", "verdict": "match", "why": ["92 code points"], "cps": 92}
+{"file": "gfonts/ofl/dmmono/DMMono-Light.ttf", "verdict": "match", "why": ["381 code points"], "cps": 381}
+{"file": "gfonts/ofl/elsie/Elsie-Black.ttf", "verdict": "match", "why": ["268 code points"], "cps": 268}
+{"file": "gfonts/ofl/encodesansexpanded/EncodeSansExpanded-Light.ttf", "verdict": "match", "why": ["687 code points"], "cps": 687}
+{"file": "gfonts/ofl/encodesanssemiexpanded/EncodeSansSemiExpanded-Medium.ttf", "verdict": "match", "why": ["687 code points"], "cps": 687}
+{"file": "gfonts/ofl/estonia/Estonia-Regular.ttf", "verdict": "mismatch", "why": ["3 of 597 code points: contours 3", "U+02BA: contours 2 vs 3"], "cps": 597}
+{"file": "gfonts/ofl/fahkwang/Fahkwang-MediumItalic.ttf", "verdict": "match", "why": ["725 code points"], "cps": 725}
+{"file": "gfonts/ofl/federant/Federant-Regular.ttf", "verdict": "match", "why": ["213 code points"], "cps": 213}
+{"file": "gfonts/ofl/firasans/FiraSans-Bold.ttf", "verdict": "match", "why": ["1686 code points"], "cps": 1686}
+{"file": "gfonts/ofl/firasanscondensed/FiraSansCondensed-ExtraBold.ttf", "verdict": "match", "why": ["1686 code points"], "cps": 1686}
+{"file": "gfonts/ofl/firasansextracondensed/FiraSansExtraCondensed-ExtraLight.ttf", "verdict": "match", "why": ["1686 code points"], "cps": 1686}
+{"file": "gfonts/ofl/flowcircular/FlowCircular-Regular.ttf", "verdict": "match", "why": ["765 code points"], "cps": 765}
+{"file": "gfonts/ofl/frijole/Frijole-Regular.ttf", "verdict": "match", "why": ["226 code points"], "cps": 226}
+{"file": "gfonts/ofl/galindo/Galindo-Regular.ttf", "verdict": "match", "why": ["367 code points"], "cps": 367}
+{"file": "gfonts/ofl/gentiumbookplus/GentiumBookPlus-Bold.ttf", "verdict": "match", "why": ["2731 code points"], "cps": 2731}
+{"file": "gfonts/ofl/gfsneohellenic/GFSNeohellenic.ttf", "verdict": "match", "why": ["1104 code points"], "cps": 1104}
+{"file": "gfonts/ofl/goldman/Goldman-Bold.ttf", "verdict": "match", "why": ["594 code points"], "cps": 594}
+{"file": "gfonts/ofl/goudybookletter1911/GoudyBookletter1911.ttf", "verdict": "match", "why": ["292 code points"], "cps": 292}
+{"file": "gfonts/ofl/gudea/Gudea-Italic.ttf", "verdict": "match", "why": ["291 code points"], "cps": 291}
+{"file": "gfonts/ofl/halant/Halant-Medium.ttf", "verdict": "mismatch", "why": ["27 of 339 code points: box 27", "U+0044: box [35, 48, 599, 670] vs [34, 48, 598.0, 670]"], "cps": 339}
+{"file": "gfonts/ofl/hindguntur/HindGuntur-Light.ttf", "verdict": "match", "why": ["409 code points"], "cps": 409}
+{"file": "gfonts/ofl/hindmysuru/HindMysuru-Light.ttf", "verdict": "match", "why": ["418 code points"], "cps": 418}
+{"file": "gfonts/ofl/ibmplexmono/IBMPlexMono-ThinItalic.ttf", "verdict": "match", "why": ["930 code points"], "cps": 930}
+{"file": "gfonts/ofl/ibmplexsanscondensed/IBMPlexSansCondensed-SemiBold.ttf", "verdict": "match", "why": ["604 code points"], "cps": 604}
+{"file": "gfonts/ofl/ibmplexsansjp/IBMPlexSansJP-Light.ttf", "verdict": "match", "why": ["8301 code points"], "cps": 8301}
+{"file": "gfonts/ofl/ibmplexsansthailooped/IBMPlexSansThaiLooped-ExtraLight.ttf", "verdict": "match", "why": ["451 code points"], "cps": 451}
+{"file": "gfonts/ofl/iceberg/Iceberg-Regular.ttf", "verdict": "match", "why": ["215 code points"], "cps": 215}
+{"file": "gfonts/ofl/imfellgreatprimersc/IMFeGPsc28P.ttf", "verdict": "match", "why": ["340 code points"], "cps": 340}
+{"file": "gfonts/ofl/inconsolata/static/Inconsolata-ExpandedExtraBold.ttf", "verdict": "match", "why": ["882 code points"], "cps": 882}
+{"file": "gfonts/ofl/inconsolata/static/Inconsolata-ExtraExpandedExtraLight.ttf", "verdict": "match", "why": ["882 code points"], "cps": 882}
+{"file": "gfonts/ofl/inconsolata/static/Inconsolata-SemiExpandedBlack.ttf", "verdict": "match", "why": ["882 code points"], "cps": 882}
+{"file": "gfonts/ofl/inconsolata/static/Inconsolata-UltraExpandedExtraBold.ttf", "verdict": "match", "why": ["882 code points"], "cps": 882}
+{"file": "gfonts/ofl/inriasans/InriaSans-Bold.ttf", "verdict": "match", "why": ["420 code points"], "cps": 420}
+{"file": "gfonts/ofl/iosevkacharon/IosevkaCharon-Regular.ttf", "verdict": "mismatch", "why": ["7 of 5016 code points: box 7", "U+2145: box [8, 0, 475.5454545454545, 735] vs [7, 0, 474.54545454545456, 735]"], "cps": 5016}
+{"file": "gfonts/ofl/jacquard24/Jacquard24-Regular.ttf", "verdict": "match", "why": ["331 code points"], "cps": 331}
+{"file": "gfonts/ofl/jersey25/Jersey25-Regular.ttf", "verdict": "match", "why": ["332 code points"], "cps": 332}
+{"file": "gfonts/ofl/judson/Judson-Regular.ttf", "verdict": "match", "why": ["852 code points"], "cps": 852}
+{"file": "gfonts/ofl/k2d/K2D-Thin.ttf", "verdict": "match", "why": ["725 code points"], "cps": 725}
+{"file": "gfonts/ofl/kalam/Kalam-Regular.ttf", "verdict": "match", "why": ["434 code points"], "cps": 434}
+{"file": "gfonts/ofl/kanit/Kanit-MediumItalic.ttf", "verdict": "match", "why": ["724 code points"], "cps": 724}
+{"file": "gfonts/ofl/karma/Karma-Medium.ttf", "verdict": "match", "why": ["490 code points"], "cps": 490}
+{"file": "gfonts/ofl/kenia/Kenia-Regular.ttf", "verdict": "match", "why": ["199 code points"], "cps": 199}
+{"file": "gfonts/ofl/kleeone/KleeOne-SemiBold.ttf", "verdict": "match", "why": ["9980 code points"], "cps": 9980}
+{"file": "gfonts/ofl/koho/KoHo-Light.ttf", "verdict": "match", "why": ["726 code points"], "cps": 726}
+{"file": "gfonts/ofl/kulimpark/KulimPark-ExtraLight.ttf", "verdict": "match", "why": ["385 code points"], "cps": 385}
+{"file": "gfonts/ofl/laila/Laila-SemiBold.ttf", "verdict": "mismatch", "why": ["5 of 337 code points: box 5", "U+0073: box [43, -10, 479, 527] vs [42, -10.0, 478, 527.0]"], "cps": 337}
+{"file": "gfonts/ofl/lato/Lato-Italic.ttf", "verdict": "match", "why": ["2164 code points"], "cps": 2164}
+{"file": "gfonts/ofl/libertinusserif/LibertinusSerif-SemiBold.ttf", "verdict": "mismatch", "why": ["186 of 2123 code points: box 186", "U+1F7D: box [37, -12, 700, 684] vs [74, -12, 737, 684]"], "cps": 2123}
+{"file": "gfonts/ofl/lisubosa/LisuBosa-BoldItalic.ttf", "verdict": "match", "why": ["339 code points"], "cps": 339}
+{"file": "gfonts/ofl/livvic/Livvic-BoldItalic.ttf", "verdict": "match", "why": ["675 code points"], "cps": 675}
+{"file": "gfonts/ofl/lohittamil/Lohit-Tamil.ttf", "verdict": "match", "why": ["134 code points"], "cps": 134}
+{"file": "gfonts/ofl/lusitana/Lusitana-Regular.ttf", "verdict": "mismatch", "why": ["3 of 209 code points: box 3", "U+2013: box [-4, 183, 512, 243] vs [-3.0, 183, 513, 243]"], "cps": 209}
+{"file": "gfonts/ofl/maitree/Maitree-Light.ttf", "verdict": "match", "why": ["727 code points"], "cps": 727}
+{"file": "gfonts/ofl/mandali/Mandali-Regular.ttf", "verdict": "match", "why": ["224 code points"], "cps": 224}
+{"file": "gfonts/ofl/martel/Martel-ExtraBold.ttf", "verdict": "match", "why": ["472 code points"], "cps": 472}
+{"file": "gfonts/ofl/mate/Mate-Regular.ttf", "verdict": "match", "why": ["403 code points"], "cps": 403}
+{"file": "gfonts/ofl/mirza/Mirza-Bold.ttf", "verdict": "mismatch", "why": ["32 of 945 code points: box 32", "U+007A: box [32, -8, 398, 429] vs [31, -8, 397, 429]"], "cps": 945}
+{"file": "gfonts/ofl/molengo/Molengo-Regular.ttf", "verdict": "match", "why": ["369 code points"], "cps": 369}
+{"file": "gfonts/ofl/montserratalternates/MontserratAlternates-BlackItalic.ttf", "verdict": "match", "why": ["967 code points"], "cps": 967}
+{"file": "gfonts/ofl/mplusrounded1c/MPLUSRounded1c-Black.ttf", "verdict": "mismatch", "why": ["4039 of 8174 code points: box 4039", "U+99F1: box [11.280000000000001, -100, 986.9142857142856, 828.5806451612902] vs [14.280000000000001, -100, 989.9142857142857, 828.5806451612904]"], "cps": 8174}
+{"file": "gfonts/ofl/mukta/Mukta-SemiBold.ttf", "verdict": "match", "why": ["652 code points"], "cps": 652}
+{"file": "gfonts/ofl/muktavaani/MuktaVaani-Regular.ttf", "verdict": "match", "why": ["570 code points"], "cps": 570}
+{"file": "gfonts/ofl/nanumgothic/NanumGothic-Regular.ttf", "verdict": "match", "why": ["11827 code points"], "cps": 11827}
+{"file": "gfonts/ofl/neuton/Neuton-ExtraLight.ttf", "verdict": "match", "why": ["226 code points"], "cps": 226}
+{"file": "gfonts/ofl/niramit/Niramit-Italic.ttf", "verdict": "match", "why": ["725 code points"], "cps": 725}
+{"file": "gfonts/ofl/nothingyoucoulddo/NothingYouCouldDo.ttf", "verdict": "mismatch", "why": ["6 of 310 code points: box 6", "U+00C6: box [-195.0625, -263.62068965517244, 1426.0, 694.6571428571428] vs [-194.0625, -263.62068965517244, 1427.0, 694.6571428571428]"], "cps": 310}
+{"file": "gfonts/ofl/notosanscoptic/NotoSansCoptic-Regular.ttf", "verdict": "match", "why": ["490 code points"], "cps": 490}
+{"file": "gfonts/ofl/notosanselbasan/NotoSansElbasan-Regular.ttf", "verdict": "match", "why": ["363 code points"], "cps": 363}
+{"file": "gfonts/ofl/notosanskhudawadi/NotoSansKhudawadi-Regular.ttf", "verdict": "match", "why": ["337 code points"], "cps": 337}
+{"file": "gfonts/ofl/notosansmayannumerals/NotoSansMayanNumerals-Regular.ttf", "verdict": "match", "why": ["335 code points"], "cps": 335}
+{"file": "gfonts/ofl/notosansmyanmarui/NotoSansMyanmarUI-Thin.ttf", "verdict": "match", "why": ["239 code points"], "cps": 239}
+{"file": "gfonts/ofl/notosanssiddham/NotoSansSiddham-Regular.ttf", "verdict": "match", "why": ["336 code points"], "cps": 336}
+{"file": "gfonts/ofl/notosanstakri/NotoSansTakri-Regular.ttf", "verdict": "match", "why": ["346 code points"], "cps": 346}
+{"file": "gfonts/ofl/notosanszanabazarsquare/NotoSansZanabazarSquare-Regular.ttf", "verdict": "match", "why": ["334 code points"], "cps": 334}
+{"file": "gfonts/ofl/notoserifolduyghur/NotoSerifOldUyghur-Regular.ttf", "verdict": "match", "why": ["325 code points"], "cps": 325}
+{"file": "gfonts/ofl/novamono/NovaMono.ttf", "verdict": "match", "why": ["1328 code points"], "cps": 1328}
+{"file": "gfonts/ofl/oldenburg/Oldenburg-Regular.ttf", "verdict": "match", "why": ["411 code points"], "cps": 411}
+{"file": "gfonts/ofl/originalsurfer/OriginalSurfer-Regular.ttf", "verdict": "match", "why": ["369 code points"], "cps": 369}
+{"file": "gfonts/ofl/oxygenmono/OxygenMono-Regular.ttf", "verdict": "match", "why": ["359 code points"], "cps": 359}
+{"file": "gfonts/ofl/parisienne/Parisienne-Regular.ttf", "verdict": "match", "why": ["368 code points"], "cps": 368}
+{"file": "gfonts/ofl/playball/Playball-Regular.ttf", "verdict": "match", "why": ["554 code points"], "cps": 554}
+{"file": "gfonts/ofl/playwriteatguides/PlaywriteATGuides-Italic.ttf", "verdict": "match", "why": ["486 code points"], "cps": 486}
+{"file": "gfonts/ofl/pompiere/Pompiere-Regular.ttf", "verdict": "mismatch", "why": ["1 of 260 code points: box 1", "U+0142: box [-26.50847457627119, -9, 449.03225806451616, 1767] vs [-25.508474576271187, -9.0, 450.03225806451616, 1767.0]"], "cps": 260}
+{"file": "gfonts/ofl/poppins/Poppins-SemiBoldItalic.ttf", "verdict": "match", "why": ["471 code points"], "cps": 471}
+{"file": "gfonts/ofl/prociono/Prociono-Regular.ttf", "verdict": "match", "why": ["313 code points"], "cps": 313}
+{"file": "gfonts/ofl/protestguerrilla/ProtestGuerrilla-Regular.ttf", "verdict": "match", "why": ["558 code points"], "cps": 558}
+{"file": "gfonts/ofl/ptsanscaption/PT_Sans-Caption-Web-Regular.ttf", "verdict": "match", "why": ["717 code points"], "cps": 717}
+{"file": "gfonts/ofl/quantico/Quantico-Bold.ttf", "verdict": "match", "why": ["258 code points"], "cps": 258}
+{"file": "gfonts/ofl/ramsina/Ramsina-Regular.ttf", "verdict": "match", "why": ["410 code points"], "cps": 410}
+{"file": "gfonts/ofl/redaction100/Redaction100-Bold.ttf", "verdict": "match", "why": ["386 code points"], "cps": 386}
+{"file": "gfonts/ofl/risque/Risque-Regular.ttf", "verdict": "match", "why": ["372 code points"], "cps": 372}
+{"file": "gfonts/ofl/rubikbubbles/RubikBubbles-Regular.ttf", "verdict": "match", "why": ["689 code points"], "cps": 689}
+{"file": "gfonts/ofl/rubikscribble/RubikScribble-Regular.ttf", "verdict": "mismatch", "why": ["16 of 689 code points: box 12, contours 4", "U+00C4: box [2.5, -21, 759, 948] vs [2.5, -21.0, 759.5, 948.0]", "U+04AE: contours 2 vs 3"], "cps": 689}
+{"file": "gfonts/ofl/sahitya/Sahitya-Bold.ttf", "verdict": "match", "why": ["507 code points"], "cps": 507}
+{"file": "gfonts/ofl/sairaextracondensed/SairaExtraCondensed-Regular.ttf", "verdict": "match", "why": ["608 code points"], "cps": 608}
+{"file": "gfonts/ofl/sansation/Sansation-Bold.ttf", "verdict": "match", "why": ["540 code points"], "cps": 540}
+{"file": "gfonts/ofl/sarabun/Sarabun-ExtraLight.ttf", "verdict": "match", "why": ["725 code points"], "cps": 725}
+{"file": "gfonts/ofl/sarpanch/Sarpanch-SemiBold.ttf", "verdict": "match", "why": ["430 code points"], "cps": 430}
+{"file": "gfonts/ofl/seaweedscript/SeaweedScript-Regular.ttf", "verdict": "match", "why": ["227 code points"], "cps": 227}
+{"file": "gfonts/ofl/share/Share-BoldItalic.ttf", "verdict": "match", "why": ["253 code points"], "cps": 253}
+{"file": "gfonts/ofl/shrikhand/Shrikhand-Regular.ttf", "verdict": "match", "why": ["421 code points"], "cps": 421}
+{"file": "gfonts/ofl/sirinstencil/SirinStencil-Regular.ttf", "verdict": "match", "why": ["213 code points"], "cps": 213}
+{"file": "gfonts/ofl/snowburstone/SnowburstOne-Regular.ttf", "verdict": "mismatch", "why": ["34 of 311 code points: box 34", "U+00A7: box [200.47972972972974, -219, 936, 1791] vs [241.47972972972974, -219, 977.0, 1791.0]"], "cps": 311}
+{"file": "gfonts/ofl/spacemono/SpaceMono-Regular.ttf", "verdict": "match", "why": ["624 code points"], "cps": 624}
+{"file": "gfonts/ofl/spectralsc/SpectralSC-ExtraBold.ttf", "verdict": "match", "why": ["878 code points"], "cps": 878}
+{"file": "gfonts/ofl/squarepeg/SquarePeg-Regular.ttf", "verdict": "match", "why": ["586 code points"], "cps": 586}
+{"file": "gfonts/ofl/stoke/Stoke-Light.ttf", "verdict": "mismatch", "why": ["2 of 411 code points: box 2", "U+2202: box [297.5076923076923, -24, 1300.8395061728395, 1685] vs [306.5076923076923, -24.0, 1309.8395061728395, 1685.0]"], "cps": 411}
+{"file": "gfonts/ofl/sura/Sura-Regular.ttf", "verdict": "match", "why": ["336 code points"], "cps": 336}
+{"file": "gfonts/ofl/tajawal/Tajawal-Black.ttf", "verdict": "match", "why": ["446 code points"], "cps": 446}
+{"file": "gfonts/ofl/taviraj/Taviraj-ExtraLight.ttf", "verdict": "match", "why": ["724 code points"], "cps": 724}
+{"file": "gfonts/ofl/tillana/Tillana-Medium.ttf", "verdict": "mismatch", "why": ["2 of 434 code points: box 2", "U+0030: box [60.076086956521735, -3, 551.9027777777778, 732.0095238095239] vs [59.076086956521735, -3, 550.9027777777778, 732.0095238095238]"], "cps": 434}
+{"file": "gfonts/ofl/tirodevanagarimarathi/TiroDevanagariMarathi-Regular.ttf", "verdict": "match", "why": ["481 code points"], "cps": 481}
+{"file": "gfonts/ofl/titilliumweb/TitilliumWeb-BoldItalic.ttf", "verdict": "match", "why": ["396 code points"], "cps": 396}
+{"file": "gfonts/ofl/tomorrow/Tomorrow-Medium.ttf", "verdict": "match", "why": ["562 code points"], "cps": 562}
+{"file": "gfonts/ofl/trirong/Trirong-Italic.ttf", "verdict": "match", "why": ["725 code points"], "cps": 725}
+{"file": "gfonts/ofl/tsukimirounded/TsukimiRounded-Regular.ttf", "verdict": "match", "why": ["477 code points"], "cps": 477}
+{"file": "gfonts/ofl/unifrakturmaguntia/UnifrakturMaguntia-Book.ttf", "verdict": "mismatch", "why": ["8 of 247 code points: box 8", "U+006F: box [-1.5135135135135136, -30.5, 796.2405063291139, 1047.5714285714284] vs [-0.5135135135135158, -30.5, 797.2405063291139, 1047.5714285714287]"], "cps": 247}
+{"file": "gfonts/ofl/vesperlibre/VesperLibre-Bold.ttf", "verdict": "match", "why": ["456 code points"], "cps": 456}
+{"file": "gfonts/ofl/vollkornsc/VollkornSC-Bold.ttf", "verdict": "match", "why": ["868 code points"], "cps": 868}
+{"file": "gfonts/ofl/yantramanav/Yantramanav-Thin.ttf", "verdict": "match", "why": ["451 code points"], "cps": 451}
+{"file": "gfonts/ofl/zenloop/ZenLoop-Italic.ttf", "verdict": "match", "why": ["239 code points"], "cps": 239}
+{"file": "gfonts/ofl/zillaslab/ZillaSlab-Medium.ttf", "verdict": "match", "why": ["513 code points"], "cps": 513}
+{"file": "source-code-pro/OTF/SourceCodePro-Black.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-code-pro/OTF/SourceCodePro-BlackIt.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-code-pro/OTF/SourceCodePro-Bold.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-code-pro/OTF/SourceCodePro-BoldIt.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-code-pro/OTF/SourceCodePro-ExtraLight.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-code-pro/OTF/SourceCodePro-ExtraLightIt.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-code-pro/OTF/SourceCodePro-It.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-code-pro/OTF/SourceCodePro-Light.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-code-pro/OTF/SourceCodePro-LightIt.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-code-pro/OTF/SourceCodePro-Medium.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-code-pro/OTF/SourceCodePro-MediumIt.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-code-pro/OTF/SourceCodePro-Regular.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-code-pro/OTF/SourceCodePro-Semibold.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-code-pro/OTF/SourceCodePro-SemiboldIt.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-code-pro/TTF/SourceCodePro-Black.ttf", "verdict": "match", "why": ["1330 code points"], "cps": 1330}
+{"file": "source-code-pro/TTF/SourceCodePro-BlackIt.ttf", "verdict": "match", "why": ["1081 code points"], "cps": 1081}
+{"file": "source-code-pro/TTF/SourceCodePro-Bold.ttf", "verdict": "match", "why": ["1330 code points"], "cps": 1330}
+{"file": "source-code-pro/TTF/SourceCodePro-BoldIt.ttf", "verdict": "match", "why": ["1081 code points"], "cps": 1081}
+{"file": "source-code-pro/TTF/SourceCodePro-ExtraLight.ttf", "verdict": "match", "why": ["1330 code points"], "cps": 1330}
+{"file": "source-code-pro/TTF/SourceCodePro-ExtraLightIt.ttf", "verdict": "match", "why": ["1081 code points"], "cps": 1081}
+{"file": "source-code-pro/TTF/SourceCodePro-It.ttf", "verdict": "match", "why": ["1081 code points"], "cps": 1081}
+{"file": "source-code-pro/TTF/SourceCodePro-Light.ttf", "verdict": "match", "why": ["1330 code points"], "cps": 1330}
+{"file": "source-code-pro/TTF/SourceCodePro-LightIt.ttf", "verdict": "match", "why": ["1081 code points"], "cps": 1081}
+{"file": "source-code-pro/TTF/SourceCodePro-Medium.ttf", "verdict": "match", "why": ["1330 code points"], "cps": 1330}
+{"file": "source-code-pro/TTF/SourceCodePro-MediumIt.ttf", "verdict": "match", "why": ["1081 code points"], "cps": 1081}
+{"file": "source-code-pro/TTF/SourceCodePro-Regular.ttf", "verdict": "match", "why": ["1330 code points"], "cps": 1330}
+{"file": "source-code-pro/TTF/SourceCodePro-Semibold.ttf", "verdict": "match", "why": ["1330 code points"], "cps": 1330}
+{"file": "source-code-pro/TTF/SourceCodePro-SemiboldIt.ttf", "verdict": "match", "why": ["1081 code points"], "cps": 1081}
+{"file": "source-code-pro/VF/SourceCodeVF-Italic.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-code-pro/VF/SourceCodeVF-Italic.ttf", "verdict": "match", "why": ["1080 code points"], "cps": 1080}
+{"file": "source-code-pro/VF/SourceCodeVF-Upright.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-code-pro/VF/SourceCodeVF-Upright.ttf", "verdict": "match", "why": ["1329 code points"], "cps": 1329}
+{"file": "source-sans/OTF/SourceSans3-Black.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-sans/OTF/SourceSans3-BlackIt.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-sans/OTF/SourceSans3-Bold.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-sans/OTF/SourceSans3-BoldIt.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-sans/OTF/SourceSans3-ExtraLight.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-sans/OTF/SourceSans3-ExtraLightIt.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-sans/OTF/SourceSans3-It.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-sans/OTF/SourceSans3-Light.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-sans/OTF/SourceSans3-LightIt.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-sans/OTF/SourceSans3-Medium.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-sans/OTF/SourceSans3-MediumIt.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-sans/OTF/SourceSans3-Regular.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-sans/OTF/SourceSans3-Semibold.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-sans/OTF/SourceSans3-SemiboldIt.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-sans/TTF/SourceSans3-Black.ttf", "verdict": "match", "why": ["1600 code points"], "cps": 1600}
+{"file": "source-sans/TTF/SourceSans3-BlackIt.ttf", "verdict": "match", "why": ["1600 code points"], "cps": 1600}
+{"file": "source-sans/TTF/SourceSans3-Bold.ttf", "verdict": "match", "why": ["1600 code points"], "cps": 1600}
+{"file": "source-sans/TTF/SourceSans3-BoldIt.ttf", "verdict": "match", "why": ["1600 code points"], "cps": 1600}
+{"file": "source-sans/TTF/SourceSans3-ExtraLight.ttf", "verdict": "match", "why": ["1600 code points"], "cps": 1600}
+{"file": "source-sans/TTF/SourceSans3-ExtraLightIt.ttf", "verdict": "match", "why": ["1600 code points"], "cps": 1600}
+{"file": "source-sans/TTF/SourceSans3-It.ttf", "verdict": "match", "why": ["1600 code points"], "cps": 1600}
+{"file": "source-sans/TTF/SourceSans3-Light.ttf", "verdict": "match", "why": ["1600 code points"], "cps": 1600}
+{"file": "source-sans/TTF/SourceSans3-LightIt.ttf", "verdict": "match", "why": ["1600 code points"], "cps": 1600}
+{"file": "source-sans/TTF/SourceSans3-Medium.ttf", "verdict": "match", "why": ["1600 code points"], "cps": 1600}
+{"file": "source-sans/TTF/SourceSans3-MediumIt.ttf", "verdict": "match", "why": ["1600 code points"], "cps": 1600}
+{"file": "source-sans/TTF/SourceSans3-Regular.ttf", "verdict": "match", "why": ["1600 code points"], "cps": 1600}
+{"file": "source-sans/TTF/SourceSans3-Semibold.ttf", "verdict": "match", "why": ["1600 code points"], "cps": 1600}
+{"file": "source-sans/TTF/SourceSans3-SemiboldIt.ttf", "verdict": "match", "why": ["1600 code points"], "cps": 1600}
+{"file": "source-sans/VF/SourceSans3VF-Italic.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-sans/VF/SourceSans3VF-Italic.ttf", "verdict": "match", "why": ["1601 code points"], "cps": 1601}
+{"file": "source-sans/VF/SourceSans3VF-Upright.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-sans/VF/SourceSans3VF-Upright.ttf", "verdict": "match", "why": ["1601 code points"], "cps": 1601}
+{"file": "source-serif/OTF/SourceSerif4-Black.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-serif/OTF/SourceSerif4-BlackIt.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-serif/OTF/SourceSerif4-Bold.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-serif/OTF/SourceSerif4-BoldIt.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-serif/OTF/SourceSerif4-ExtraLight.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-serif/OTF/SourceSerif4-ExtraLightIt.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-serif/OTF/SourceSerif4-It.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-serif/OTF/SourceSerif4-Light.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-serif/OTF/SourceSerif4-LightIt.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-serif/OTF/SourceSerif4-Regular.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-serif/OTF/SourceSerif4-Semibold.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-serif/OTF/SourceSerif4-SemiboldIt.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-serif/OTF/SourceSerif4Caption-Black.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-serif/OTF/SourceSerif4Caption-BlackIt.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-serif/OTF/SourceSerif4Caption-Bold.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-serif/OTF/SourceSerif4Caption-BoldIt.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-serif/OTF/SourceSerif4Caption-ExtraLight.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-serif/OTF/SourceSerif4Caption-ExtraLightIt.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-serif/OTF/SourceSerif4Caption-It.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-serif/OTF/SourceSerif4Caption-Light.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-serif/OTF/SourceSerif4Caption-LightIt.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-serif/OTF/SourceSerif4Caption-Regular.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-serif/OTF/SourceSerif4Caption-Semibold.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-serif/OTF/SourceSerif4Caption-SemiboldIt.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-serif/OTF/SourceSerif4Display-Black.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-serif/OTF/SourceSerif4Display-BlackIt.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-serif/OTF/SourceSerif4Display-Bold.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-serif/OTF/SourceSerif4Display-BoldIt.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-serif/OTF/SourceSerif4Display-ExtraLight.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-serif/OTF/SourceSerif4Display-ExtraLightIt.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-serif/OTF/SourceSerif4Display-It.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-serif/OTF/SourceSerif4Display-Light.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-serif/OTF/SourceSerif4Display-LightIt.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-serif/OTF/SourceSerif4Display-Regular.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-serif/OTF/SourceSerif4Display-Semibold.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-serif/OTF/SourceSerif4Display-SemiboldIt.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-serif/OTF/SourceSerif4SmText-Black.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-serif/OTF/SourceSerif4SmText-BlackIt.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-serif/OTF/SourceSerif4SmText-Bold.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-serif/OTF/SourceSerif4SmText-BoldIt.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-serif/OTF/SourceSerif4SmText-ExtraLight.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-serif/OTF/SourceSerif4SmText-ExtraLightIt.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-serif/OTF/SourceSerif4SmText-It.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-serif/OTF/SourceSerif4SmText-Light.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-serif/OTF/SourceSerif4SmText-LightIt.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-serif/OTF/SourceSerif4SmText-Regular.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-serif/OTF/SourceSerif4SmText-Semibold.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-serif/OTF/SourceSerif4SmText-SemiboldIt.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-serif/OTF/SourceSerif4Subhead-Black.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-serif/OTF/SourceSerif4Subhead-BlackIt.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-serif/OTF/SourceSerif4Subhead-Bold.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-serif/OTF/SourceSerif4Subhead-BoldIt.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-serif/OTF/SourceSerif4Subhead-ExtraLight.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-serif/OTF/SourceSerif4Subhead-ExtraLightIt.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-serif/OTF/SourceSerif4Subhead-It.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-serif/OTF/SourceSerif4Subhead-Light.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-serif/OTF/SourceSerif4Subhead-LightIt.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-serif/OTF/SourceSerif4Subhead-Regular.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-serif/OTF/SourceSerif4Subhead-Semibold.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-serif/OTF/SourceSerif4Subhead-SemiboldIt.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-serif/TTF/SourceSerif4-Black.ttf", "verdict": "match", "why": ["916 code points"], "cps": 916}
+{"file": "source-serif/TTF/SourceSerif4-BlackIt.ttf", "verdict": "match", "why": ["916 code points"], "cps": 916}
+{"file": "source-serif/TTF/SourceSerif4-Bold.ttf", "verdict": "match", "why": ["916 code points"], "cps": 916}
+{"file": "source-serif/TTF/SourceSerif4-BoldIt.ttf", "verdict": "match", "why": ["916 code points"], "cps": 916}
+{"file": "source-serif/TTF/SourceSerif4-ExtraLight.ttf", "verdict": "match", "why": ["916 code points"], "cps": 916}
+{"file": "source-serif/TTF/SourceSerif4-ExtraLightIt.ttf", "verdict": "match", "why": ["916 code points"], "cps": 916}
+{"file": "source-serif/TTF/SourceSerif4-It.ttf", "verdict": "match", "why": ["916 code points"], "cps": 916}
+{"file": "source-serif/TTF/SourceSerif4-Light.ttf", "verdict": "match", "why": ["916 code points"], "cps": 916}
+{"file": "source-serif/TTF/SourceSerif4-LightIt.ttf", "verdict": "match", "why": ["916 code points"], "cps": 916}
+{"file": "source-serif/TTF/SourceSerif4-Regular.ttf", "verdict": "match", "why": ["916 code points"], "cps": 916}
+{"file": "source-serif/TTF/SourceSerif4-Semibold.ttf", "verdict": "match", "why": ["916 code points"], "cps": 916}
+{"file": "source-serif/TTF/SourceSerif4-SemiboldIt.ttf", "verdict": "match", "why": ["916 code points"], "cps": 916}
+{"file": "source-serif/TTF/SourceSerif4Caption-Black.ttf", "verdict": "match", "why": ["916 code points"], "cps": 916}
+{"file": "source-serif/TTF/SourceSerif4Caption-BlackIt.ttf", "verdict": "match", "why": ["916 code points"], "cps": 916}
+{"file": "source-serif/TTF/SourceSerif4Caption-Bold.ttf", "verdict": "match", "why": ["916 code points"], "cps": 916}
+{"file": "source-serif/TTF/SourceSerif4Caption-BoldIt.ttf", "verdict": "match", "why": ["916 code points"], "cps": 916}
+{"file": "source-serif/TTF/SourceSerif4Caption-ExtraLight.ttf", "verdict": "match", "why": ["916 code points"], "cps": 916}
+{"file": "source-serif/TTF/SourceSerif4Caption-ExtraLightIt.ttf", "verdict": "match", "why": ["916 code points"], "cps": 916}
+{"file": "source-serif/TTF/SourceSerif4Caption-It.ttf", "verdict": "match", "why": ["916 code points"], "cps": 916}
+{"file": "source-serif/TTF/SourceSerif4Caption-Light.ttf", "verdict": "match", "why": ["916 code points"], "cps": 916}
+{"file": "source-serif/TTF/SourceSerif4Caption-LightIt.ttf", "verdict": "match", "why": ["916 code points"], "cps": 916}
+{"file": "source-serif/TTF/SourceSerif4Caption-Regular.ttf", "verdict": "match", "why": ["916 code points"], "cps": 916}
+{"file": "source-serif/TTF/SourceSerif4Caption-Semibold.ttf", "verdict": "match", "why": ["916 code points"], "cps": 916}
+{"file": "source-serif/TTF/SourceSerif4Caption-SemiboldIt.ttf", "verdict": "match", "why": ["916 code points"], "cps": 916}
+{"file": "source-serif/TTF/SourceSerif4Display-Black.ttf", "verdict": "match", "why": ["916 code points"], "cps": 916}
+{"file": "source-serif/TTF/SourceSerif4Display-BlackIt.ttf", "verdict": "match", "why": ["916 code points"], "cps": 916}
+{"file": "source-serif/TTF/SourceSerif4Display-Bold.ttf", "verdict": "match", "why": ["916 code points"], "cps": 916}
+{"file": "source-serif/TTF/SourceSerif4Display-BoldIt.ttf", "verdict": "match", "why": ["916 code points"], "cps": 916}
+{"file": "source-serif/TTF/SourceSerif4Display-ExtraLight.ttf", "verdict": "match", "why": ["916 code points"], "cps": 916}
+{"file": "source-serif/TTF/SourceSerif4Display-ExtraLightIt.ttf", "verdict": "match", "why": ["916 code points"], "cps": 916}
+{"file": "source-serif/TTF/SourceSerif4Display-It.ttf", "verdict": "match", "why": ["916 code points"], "cps": 916}
+{"file": "source-serif/TTF/SourceSerif4Display-Light.ttf", "verdict": "match", "why": ["916 code points"], "cps": 916}
+{"file": "source-serif/TTF/SourceSerif4Display-LightIt.ttf", "verdict": "match", "why": ["916 code points"], "cps": 916}
+{"file": "source-serif/TTF/SourceSerif4Display-Regular.ttf", "verdict": "match", "why": ["916 code points"], "cps": 916}
+{"file": "source-serif/TTF/SourceSerif4Display-Semibold.ttf", "verdict": "match", "why": ["916 code points"], "cps": 916}
+{"file": "source-serif/TTF/SourceSerif4Display-SemiboldIt.ttf", "verdict": "match", "why": ["916 code points"], "cps": 916}
+{"file": "source-serif/TTF/SourceSerif4SmText-Black.ttf", "verdict": "match", "why": ["916 code points"], "cps": 916}
+{"file": "source-serif/TTF/SourceSerif4SmText-BlackIt.ttf", "verdict": "match", "why": ["916 code points"], "cps": 916}
+{"file": "source-serif/TTF/SourceSerif4SmText-Bold.ttf", "verdict": "match", "why": ["916 code points"], "cps": 916}
+{"file": "source-serif/TTF/SourceSerif4SmText-BoldIt.ttf", "verdict": "match", "why": ["916 code points"], "cps": 916}
+{"file": "source-serif/TTF/SourceSerif4SmText-ExtraLight.ttf", "verdict": "match", "why": ["916 code points"], "cps": 916}
+{"file": "source-serif/TTF/SourceSerif4SmText-ExtraLightIt.ttf", "verdict": "match", "why": ["916 code points"], "cps": 916}
+{"file": "source-serif/TTF/SourceSerif4SmText-It.ttf", "verdict": "match", "why": ["916 code points"], "cps": 916}
+{"file": "source-serif/TTF/SourceSerif4SmText-Light.ttf", "verdict": "match", "why": ["916 code points"], "cps": 916}
+{"file": "source-serif/TTF/SourceSerif4SmText-LightIt.ttf", "verdict": "match", "why": ["916 code points"], "cps": 916}
+{"file": "source-serif/TTF/SourceSerif4SmText-Regular.ttf", "verdict": "match", "why": ["916 code points"], "cps": 916}
+{"file": "source-serif/TTF/SourceSerif4SmText-Semibold.ttf", "verdict": "match", "why": ["916 code points"], "cps": 916}
+{"file": "source-serif/TTF/SourceSerif4SmText-SemiboldIt.ttf", "verdict": "match", "why": ["916 code points"], "cps": 916}
+{"file": "source-serif/TTF/SourceSerif4Subhead-Black.ttf", "verdict": "match", "why": ["916 code points"], "cps": 916}
+{"file": "source-serif/TTF/SourceSerif4Subhead-BlackIt.ttf", "verdict": "match", "why": ["916 code points"], "cps": 916}
+{"file": "source-serif/TTF/SourceSerif4Subhead-Bold.ttf", "verdict": "match", "why": ["916 code points"], "cps": 916}
+{"file": "source-serif/TTF/SourceSerif4Subhead-BoldIt.ttf", "verdict": "match", "why": ["916 code points"], "cps": 916}
+{"file": "source-serif/TTF/SourceSerif4Subhead-ExtraLight.ttf", "verdict": "match", "why": ["916 code points"], "cps": 916}
+{"file": "source-serif/TTF/SourceSerif4Subhead-ExtraLightIt.ttf", "verdict": "match", "why": ["916 code points"], "cps": 916}
+{"file": "source-serif/TTF/SourceSerif4Subhead-It.ttf", "verdict": "match", "why": ["916 code points"], "cps": 916}
+{"file": "source-serif/TTF/SourceSerif4Subhead-Light.ttf", "verdict": "match", "why": ["916 code points"], "cps": 916}
+{"file": "source-serif/TTF/SourceSerif4Subhead-LightIt.ttf", "verdict": "match", "why": ["916 code points"], "cps": 916}
+{"file": "source-serif/TTF/SourceSerif4Subhead-Regular.ttf", "verdict": "match", "why": ["916 code points"], "cps": 916}
+{"file": "source-serif/TTF/SourceSerif4Subhead-Semibold.ttf", "verdict": "match", "why": ["916 code points"], "cps": 916}
+{"file": "source-serif/TTF/SourceSerif4Subhead-SemiboldIt.ttf", "verdict": "match", "why": ["916 code points"], "cps": 916}
+{"file": "source-serif/VAR/SourceSerif4Variable-Italic.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-serif/VAR/SourceSerif4Variable-Italic.ttf", "verdict": "match", "why": ["915 code points"], "cps": 915}
+{"file": "source-serif/VAR/SourceSerif4Variable-Roman.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "source-serif/VAR/SourceSerif4Variable-Roman.ttf", "verdict": "match", "why": ["915 code points"], "cps": 915}
+{"file": "text-rendering-tests/fonts/AdobeVFPrototype-Subset.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "text-rendering-tests/fonts/FDArrayTest257.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "text-rendering-tests/fonts/FDArrayTest65535.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "text-rendering-tests/fonts/NotoSansBalinese-Regular.ttf", "verdict": "match", "why": ["130 code points"], "cps": 130}
+{"file": "text-rendering-tests/fonts/NotoSansKannada-Regular.ttf", "verdict": "mismatch", "why": ["77 of 147 code points: box 77", "U+2014: box [82, 499, 1966, 659] vs [82, 0, 1966, 1130]"], "cps": 147}
+{"file": "text-rendering-tests/fonts/NotoSerifKannada-Regular.ttf", "verdict": "match", "why": ["148 code points"], "cps": 148}
+{"file": "text-rendering-tests/fonts/Selawik-variable.ttf", "verdict": "match", "why": ["361 code points"], "cps": 361}
+{"file": "text-rendering-tests/fonts/TestAATMort.ttf", "verdict": "match", "why": ["39 code points"], "cps": 39}
+{"file": "text-rendering-tests/fonts/TestAATMorx.ttf", "verdict": "match", "why": ["39 code points"], "cps": 39}
+{"file": "text-rendering-tests/fonts/TestAVAR.ttf", "verdict": "match", "why": ["1 code points"], "cps": 1}
+{"file": "text-rendering-tests/fonts/TestCFFThree.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "text-rendering-tests/fonts/TestCMAP13.ttf", "verdict": "refused", "why": ["Unsupported(\"no Unicode cmap of format 4 or 12\")"], "cps": 0}
+{"file": "text-rendering-tests/fonts/TestCMAP14.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "text-rendering-tests/fonts/TestCMAPMacTurkish.ttf", "verdict": "refused", "why": ["Unsupported(\"no Unicode cmap of format 4 or 12\")"], "cps": 0}
+{"file": "text-rendering-tests/fonts/TestCVARGVAROne.ttf", "verdict": "match", "why": ["4 code points"], "cps": 4}
+{"file": "text-rendering-tests/fonts/TestCVARGVARTwo.ttf", "verdict": "match", "why": ["4 code points"], "cps": 4}
+{"file": "text-rendering-tests/fonts/TestGLYFOne.ttf", "verdict": "match", "why": ["1 code points"], "cps": 1}
+{"file": "text-rendering-tests/fonts/TestGPOSFour.ttf", "verdict": "match", "why": ["2 code points"], "cps": 2}
+{"file": "text-rendering-tests/fonts/TestGPOSOne.ttf", "verdict": "match", "why": ["48 code points"], "cps": 48}
+{"file": "text-rendering-tests/fonts/TestGPOSThree.ttf", "verdict": "match", "why": ["5 code points"], "cps": 5}
+{"file": "text-rendering-tests/fonts/TestGPOSTwo.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "text-rendering-tests/fonts/TestGSUBOne.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "text-rendering-tests/fonts/TestGSUBThree.ttf", "verdict": "match", "why": ["3 code points"], "cps": 3}
+{"file": "text-rendering-tests/fonts/TestGVAR-Composite-0.ttf", "verdict": "match", "why": ["7 code points"], "cps": 7}
+{"file": "text-rendering-tests/fonts/TestGVAR-Composite-Missing.ttf", "verdict": "match", "why": ["7 code points"], "cps": 7}
+{"file": "text-rendering-tests/fonts/TestGVAREight.ttf", "verdict": "match", "why": ["6 code points"], "cps": 6}
+{"file": "text-rendering-tests/fonts/TestGVARFour.ttf", "verdict": "match", "why": ["2 code points"], "cps": 2}
+{"file": "text-rendering-tests/fonts/TestGVARNine.ttf", "verdict": "match", "why": ["53 code points"], "cps": 53}
+{"file": "text-rendering-tests/fonts/TestGVAROne.ttf", "verdict": "match", "why": ["13 code points"], "cps": 13}
+{"file": "text-rendering-tests/fonts/TestGVARThree.ttf", "verdict": "match", "why": ["13 code points"], "cps": 13}
+{"file": "text-rendering-tests/fonts/TestGVARTwo.ttf", "verdict": "match", "why": ["13 code points"], "cps": 13}
+{"file": "text-rendering-tests/fonts/TestHVAROne.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "text-rendering-tests/fonts/TestHVARTwo.ttf", "verdict": "match", "why": ["2 code points"], "cps": 2}
+{"file": "text-rendering-tests/fonts/TestKERNOne.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "text-rendering-tests/fonts/TestMORXEight.ttf", "verdict": "match", "why": ["7 code points"], "cps": 7}
+{"file": "text-rendering-tests/fonts/TestMORXEighteen.ttf", "verdict": "match", "why": ["6 code points"], "cps": 6}
+{"file": "text-rendering-tests/fonts/TestMORXEleven.ttf", "verdict": "match", "why": ["4 code points"], "cps": 4}
+{"file": "text-rendering-tests/fonts/TestMORXForty.ttf", "verdict": "match", "why": ["5 code points"], "cps": 5}
+{"file": "text-rendering-tests/fonts/TestMORXFour.ttf", "verdict": "match", "why": ["39 code points"], "cps": 39}
+{"file": "text-rendering-tests/fonts/TestMORXFourteen.ttf", "verdict": "match", "why": ["6 code points"], "cps": 6}
+{"file": "text-rendering-tests/fonts/TestMORXFourtyone.ttf", "verdict": "match", "why": ["4 code points"], "cps": 4}
+{"file": "text-rendering-tests/fonts/TestMORXNine.ttf", "verdict": "match", "why": ["4 code points"], "cps": 4}
+{"file": "text-rendering-tests/fonts/TestMORXOne.ttf", "verdict": "match", "why": ["4 code points"], "cps": 4}
+{"file": "text-rendering-tests/fonts/TestMORXSeventeen.ttf", "verdict": "match", "why": ["6 code points"], "cps": 6}
+{"file": "text-rendering-tests/fonts/TestMORXSixteen.ttf", "verdict": "match", "why": ["6 code points"], "cps": 6}
+{"file": "text-rendering-tests/fonts/TestMORXTen.ttf", "verdict": "match", "why": ["4 code points"], "cps": 4}
+{"file": "text-rendering-tests/fonts/TestMORXThirteen.ttf", "verdict": "match", "why": ["6 code points"], "cps": 6}
+{"file": "text-rendering-tests/fonts/TestMORXThirtyeight.ttf", "verdict": "match", "why": ["5 code points"], "cps": 5}
+{"file": "text-rendering-tests/fonts/TestMORXThirtyfive.ttf", "verdict": "match", "why": ["8 code points"], "cps": 8}
+{"file": "text-rendering-tests/fonts/TestMORXThirtyfour.ttf", "verdict": "match", "why": ["13 code points"], "cps": 13}
+{"file": "text-rendering-tests/fonts/TestMORXThirtynine.ttf", "verdict": "match", "why": ["5 code points"], "cps": 5}
+{"file": "text-rendering-tests/fonts/TestMORXThirtyone.ttf", "verdict": "match", "why": ["15 code points"], "cps": 15}
+{"file": "text-rendering-tests/fonts/TestMORXThirtyseven.ttf", "verdict": "match", "why": ["5 code points"], "cps": 5}
+{"file": "text-rendering-tests/fonts/TestMORXThirtysix.ttf", "verdict": "match", "why": ["6 code points"], "cps": 6}
+{"file": "text-rendering-tests/fonts/TestMORXThirtythree.ttf", "verdict": "match", "why": ["3 code points"], "cps": 3}
+{"file": "text-rendering-tests/fonts/TestMORXThirtytwo.ttf", "verdict": "match", "why": ["15 code points"], "cps": 15}
+{"file": "text-rendering-tests/fonts/TestMORXThree.ttf", "verdict": "match", "why": ["32 code points"], "cps": 32}
+{"file": "text-rendering-tests/fonts/TestMORXTwelve.ttf", "verdict": "match", "why": ["11 code points"], "cps": 11}
+{"file": "text-rendering-tests/fonts/TestMORXTwenty.ttf", "verdict": "match", "why": ["6 code points"], "cps": 6}
+{"file": "text-rendering-tests/fonts/TestMORXTwentyeight.ttf", "verdict": "match", "why": ["8 code points"], "cps": 8}
+{"file": "text-rendering-tests/fonts/TestMORXTwentyfive.ttf", "verdict": "match", "why": ["6 code points"], "cps": 6}
+{"file": "text-rendering-tests/fonts/TestMORXTwentyfour.ttf", "verdict": "match", "why": ["6 code points"], "cps": 6}
+{"file": "text-rendering-tests/fonts/TestMORXTwentynine.ttf", "verdict": "match", "why": ["15 code points"], "cps": 15}
+{"file": "text-rendering-tests/fonts/TestMORXTwentyone.ttf", "verdict": "match", "why": ["6 code points"], "cps": 6}
+{"file": "text-rendering-tests/fonts/TestMORXTwentyseven.ttf", "verdict": "match", "why": ["6 code points"], "cps": 6}
+{"file": "text-rendering-tests/fonts/TestMORXTwentysix.ttf", "verdict": "match", "why": ["6 code points"], "cps": 6}
+{"file": "text-rendering-tests/fonts/TestMORXTwentythree.ttf", "verdict": "match", "why": ["6 code points"], "cps": 6}
+{"file": "text-rendering-tests/fonts/TestMORXTwentytwo.ttf", "verdict": "match", "why": ["6 code points"], "cps": 6}
+{"file": "text-rendering-tests/fonts/TestMORXTwo.ttf", "verdict": "match", "why": ["39 code points"], "cps": 39}
+{"file": "text-rendering-tests/fonts/TestRVRN-CFF2.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "text-rendering-tests/fonts/TestRVRN.ttf", "verdict": "match", "why": ["15 code points"], "cps": 15}
+{"file": "text-rendering-tests/fonts/TestSFNTOne.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "text-rendering-tests/fonts/TestSFNTTwo.ttf", "verdict": "mismatch", "why": ["2 of 3 code points: contours 2", "U+0042: contours 8 vs 6"], "cps": 3}
+{"file": "text-rendering-tests/fonts/TestSVGgradientTransform.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "text-rendering-tests/fonts/TestSVGgzip.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "text-rendering-tests/fonts/TestSVGmultiGlyphs.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "text-rendering-tests/fonts/TestShapeAran.ttf", "verdict": "mismatch", "why": ["17 of 18 code points: box 17", "U+0642: box [58, -698, 1676, 1903] vs [58, -1179, 1676, 2048]"], "cps": 18}
+{"file": "text-rendering-tests/fonts/TestShapeEthi.ttf", "verdict": "match", "why": ["10 code points"], "cps": 10}
+{"file": "text-rendering-tests/fonts/TestShapeKndaV3.ttf", "verdict": "mismatch", "why": ["77 of 147 code points: box 77", "U+2014: box [82, 689, 1966, 849] vs [82, 190, 1966, 1320]"], "cps": 147}
+{"file": "text-rendering-tests/fonts/TestShapeLana.ttf", "verdict": "mismatch", "why": ["2 of 297 code points: box 2", "U+1A96: box [190, 0, 1124, 1936] vs [99, 0, 1033, 1936]"], "cps": 297}
+{"file": "text-rendering-tests/fonts/TestTRAKOne.ttf", "verdict": "match", "why": ["2 code points"], "cps": 2}
+{"file": "text-rendering-tests/fonts/TestVRTR-CID-Regular.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "text-rendering-tests/fonts/TestVRTR-Regular.otf", "verdict": "refused-cff", "why": ["CFF outlines"], "cps": 0}
+{"file": "text-rendering-tests/fonts/TestVRTR-TTF-Regular.ttf", "verdict": "match", "why": ["10 code points"], "cps": 10}
+{"file": "text-rendering-tests/fonts/Zycon.ttf", "verdict": "match", "why": ["6 code points"], "cps": 6}

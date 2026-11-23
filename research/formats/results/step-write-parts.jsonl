@@ -1,0 +1,230 @@
+{"file": "examples/demo/part_tools.fg", "verdict": "match", "why": ["dvol -7.74e-07 darea -2.55e-06 solids 1 vs 1"], "solids": 1}
+{"file": "examples/demo/sheet_tools.fg", "verdict": "match", "why": ["dvol 1.85e-07 darea -9.79e-07 solids 1 vs 1"], "solids": 1}
+{"file": "examples/harness/header.fg", "verdict": "match", "why": ["dvol 2.59e-05 darea 3.65e-05 solids 1 vs 1"], "solids": 1}
+{"file": "examples/harness/loom.fg", "verdict": "no-solid", "why": ["the part has no solid"]}
+{"file": "examples/harness/plate.fg", "verdict": "match", "why": ["dvol 6.95e-08 darea -2.81e-07 solids 1 vs 1"], "solids": 1}
+{"file": "examples/harness/robot.fg", "verdict": "no-solid", "why": ["the part has no solid"]}
+{"file": "examples/harness/robot_loom.fg", "verdict": "no-solid", "why": ["the part has no solid"]}
+{"file": "examples/machined/flange.fg", "verdict": "match", "why": ["dvol 2.30e-07 darea 1.04e-07 solids 1 vs 1"], "solids": 1}
+{"file": "examples/machined/flange_dwg.fg", "verdict": "not-exported", "why": ["the part did not build: UnknownName: unknown name drawing"]}
+{"file": "examples/rack18u/asm/carrier_kit.fg", "verdict": "no-solid", "why": ["the part has no solid"]}
+{"file": "examples/rack18u/asm/dummy_d01.fg", "verdict": "match", "why": ["dvol 5.28e-09 darea 4.88e-09 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/asm/dummy_d02.fg", "verdict": "match", "why": ["dvol 2.00e-09 darea -6.81e-08 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/asm/dummy_d04.fg", "verdict": "match", "why": ["dvol 4.11e-10 darea -2.46e-08 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/asm/order/build/RACK-101_post.fg", "verdict": "match", "why": ["dvol -1.89e-07 darea -1.64e-07 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/asm/order/build/RACK-111_carrier.fg", "verdict": "match", "why": ["dvol -1.78e-07 darea -4.75e-07 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/asm/order/build/RACK-121_base_pan.fg", "verdict": "match", "why": ["dvol -7.61e-09 darea -1.24e-08 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/asm/order/build/RACK-131_top_pan.fg", "verdict": "match", "why": ["dvol 2.96e-08 darea 4.00e-08 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/asm/order/build/RACK-141_side_panel.fg", "verdict": "match", "why": ["dvol -3.50e-09 darea -2.27e-08 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/asm/order/build/RACK-201_rail.fg", "verdict": "match", "why": ["dvol 3.64e-07 darea 2.22e-07 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/asm/order/build/RACK-301_door.fg", "verdict": "match", "why": ["dvol 6.17e-08 darea 1.88e-08 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/asm/order/build/RACK-311_hinge_bracket.fg", "verdict": "match", "why": ["dvol -5.48e-06 darea -8.40e-06 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/asm/order/build/RACK-312_strike.fg", "verdict": "match", "why": ["dvol 1.08e-05 darea -4.03e-06 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/asm/order/build/RACK-313_cam.fg", "verdict": "match", "why": ["dvol 5.15e-07 darea -1.12e-05 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/asm/order/build/RACK-321_latch_handle.fg", "verdict": "match", "why": ["dvol -1.88e-06 darea 8.24e-06 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/asm/order/build/RACK-322_latch_base.fg", "verdict": "match", "why": ["dvol -2.43e-07 darea 3.86e-06 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/asm/order/build/RACK-401_rack401_tray.fg", "verdict": "match", "why": ["dvol -1.53e-07 darea -4.45e-08 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/asm/post_kit.fg", "verdict": "no-solid", "why": ["the part has no solid"]}
+{"file": "examples/rack18u/asm/probes/bool_bracket_post.fg", "verdict": "no-solid", "why": ["the part has no solid"]}
+{"file": "examples/rack18u/asm/probes/unused_at_param.fg", "verdict": "no-solid", "why": ["the part has no solid"]}
+{"file": "examples/rack18u/asm/rack.fg", "verdict": "no-solid", "why": ["the part has no solid"]}
+{"file": "examples/rack18u/asm/rack_nopanels.fg", "verdict": "no-solid", "why": ["the part has no solid"]}
+{"file": "examples/rack18u/casters/ball_3969.fg", "verdict": "match", "why": ["dvol -7.00e-06 darea -7.81e-06 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/casters/ball_4763.fg", "verdict": "match", "why": ["dvol -1.04e-06 darea 4.18e-06 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/casters/bearing_608.fg", "verdict": "no-solid", "why": ["the part has no solid"]}
+{"file": "examples/rack18u/casters/bearing_inner.fg", "verdict": "match", "why": ["dvol 9.19e-07 darea -7.07e-07 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/casters/bearing_outer.fg", "verdict": "match", "why": ["dvol -2.13e-07 darea 1.95e-06 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/casters/cage_half.fg", "verdict": "match", "why": ["dvol 5.35e-05 darea 3.78e-06 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/casters/caster_lock.fg", "verdict": "no-solid", "why": ["the part has no solid"]}
+{"file": "examples/rack18u/casters/caster_plain.fg", "verdict": "no-solid", "why": ["the part has no solid"]}
+{"file": "examples/rack18u/casters/envelope_ref.fg", "verdict": "match", "why": ["dvol 1.49e-08 darea 2.98e-07 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/casters/floor_ref.fg", "verdict": "match", "why": ["dvol 1.94e-16 darea 0.00e+00 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/casters/hub.fg", "verdict": "match", "why": ["dvol 1.04e-07 darea 3.08e-06 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/casters/kingpin.fg", "verdict": "match", "why": ["dvol -1.62e-05 darea 8.99e-06 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/casters/lock_pin.fg", "verdict": "match", "why": ["dvol -2.17e-07 darea 2.25e-07 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/casters/lower_race.fg", "verdict": "match", "why": ["dvol -1.29e-05 darea 1.09e-05 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/casters/pan_standin.fg", "verdict": "match", "why": ["dvol 5.52e-09 darea -2.94e-08 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/casters/pedal.fg", "verdict": "match", "why": ["dvol 1.19e-06 darea 2.59e-06 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/casters/pedal_pin.fg", "verdict": "match", "why": ["dvol -6.74e-06 darea -1.41e-05 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/casters/plate.fg", "verdict": "match", "why": ["dvol -2.94e-06 darea -1.21e-06 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/casters/probes/rel.fg", "verdict": "not-exported", "why": ["the part did not build: BadRelation: m2 relates values of the wrong kinds"]}
+{"file": "examples/rack18u/casters/probes/relation_offset.fg", "verdict": "not-exported", "why": ["the part did not build: ExpectFailed: expect value: 0.5235987755982987 is not Eq 0"]}
+{"file": "examples/rack18u/casters/probes/rod.fg", "verdict": "match", "why": ["dvol -1.64e-06 darea -5.55e-07 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/casters/probes/sub_drive.fg", "verdict": "not-exported", "why": ["the part did not build: ExpectUnevaluable: expect x cannot be measured: at swivel_turn: this document has no param swivel_turn (a subassembly's drives are its o"]}
+{"file": "examples/rack18u/casters/probes/sub_fits.fg", "verdict": "no-solid", "why": ["the part has no solid"]}
+{"file": "examples/rack18u/casters/probes/sub_rigid.fg", "verdict": "not-exported", "why": ["the part did not build: Conflict: no pose meets all of ring_in (lock), ring_out (lock), wheel (drive turn); wheel is left out"]}
+{"file": "examples/rack18u/casters/seal.fg", "verdict": "match", "why": ["dvol 2.60e-06 darea -1.08e-06 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/casters/spacer.fg", "verdict": "match", "why": ["dvol -3.34e-07 darea -3.69e-05 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/casters/test.fg", "verdict": "no-solid", "why": ["the part has no solid"]}
+{"file": "examples/rack18u/casters/tread.fg", "verdict": "match", "why": ["dvol -6.18e-07 darea 1.45e-06 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/casters/yoke.fg", "verdict": "match", "why": ["dvol 9.61e-07 darea -5.78e-07 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/drawings/base_pan.fg", "verdict": "not-exported", "why": ["the part did not build: UnknownName: unknown name drawing"]}
+{"file": "examples/rack18u/drawings/door.fg", "verdict": "not-exported", "why": ["the part did not build: UnknownName: unknown name drawing"]}
+{"file": "examples/rack18u/drawings/post.fg", "verdict": "not-exported", "why": ["the part did not build: UnknownName: unknown name drawing"]}
+{"file": "examples/rack18u/drawings/rack_ga.fg", "verdict": "not-exported", "why": ["the part did not build: UnknownName: unknown name drawing"]}
+{"file": "examples/rack18u/fans/fan_120x25.fg", "verdict": "match", "why": ["dvol 2.53e-07 darea -1.51e-07 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/fans/fan_assy.fg", "verdict": "no-solid", "why": ["the part has no solid"]}
+{"file": "examples/rack18u/fans/guard_120.fg", "verdict": "match", "why": ["dvol -2.33e-06 darea 5.41e-06 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/fans/probes/fit_interference.fg", "verdict": "no-solid", "why": ["the part has no solid"]}
+{"file": "examples/rack18u/fans/probes/sub_clearance.fg", "verdict": "not-exported", "why": ["the part did not build: PartFile: ../standin/grille_gauge.fg: no such file"]}
+{"file": "examples/rack18u/fans/probes/sub_one_pin.fg", "verdict": "not-exported", "why": ["the part did not build: PartFile: ../standin/grille_gauge.fg: no such file"]}
+{"file": "examples/rack18u/fans/rack401_tray.fg", "verdict": "match", "why": ["dvol -1.53e-07 darea -4.45e-08 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/fans/standin/air_column.fg", "verdict": "match", "why": ["dvol -4.78e-09 darea -8.48e-07 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/fans/standin/top_pan_standin.fg", "verdict": "match", "why": ["dvol -2.93e-08 darea -4.37e-08 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/fans/test.fg", "verdict": "no-solid", "why": ["the part has no solid"]}
+{"file": "examples/rack18u/fans/test_air.fg", "verdict": "no-solid", "why": ["the part has no solid"]}
+{"file": "examples/rack18u/frame/base_pan.fg", "verdict": "match", "why": ["dvol 1.04e-08 darea -1.50e-08 solids 2 vs 2"], "solids": 2}
+{"file": "examples/rack18u/frame/carrier.fg", "verdict": "match", "why": ["dvol -1.78e-07 darea 9.22e-08 solids 2 vs 2"], "solids": 2}
+{"file": "examples/rack18u/frame/joints.fg", "verdict": "no-solid", "why": ["the part has no solid"]}
+{"file": "examples/rack18u/frame/post.fg", "verdict": "match", "why": ["dvol -8.39e-08 darea -7.69e-08 solids 2 vs 2"], "solids": 2}
+{"file": "examples/rack18u/frame/probes/box_corner.fg", "verdict": "match", "why": ["dvol -1.70e-07 darea 9.00e-08 solids 2 vs 2"], "solids": 2}
+{"file": "examples/rack18u/frame/probes/cube.fg", "verdict": "match", "why": ["dvol 2.17e-16 darea -2.31e-16 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/frame/rail.fg", "verdict": "match", "why": ["dvol -5.08e-08 darea 6.30e-08 solids 2 vs 2"], "solids": 2}
+{"file": "examples/rack18u/frame/test.fg", "verdict": "no-solid", "why": ["the part has no solid"]}
+{"file": "examples/rack18u/frame/top_pan.fg", "verdict": "match", "why": ["dvol 1.21e-08 darea -1.55e-08 solids 2 vs 2"], "solids": 2}
+{"file": "examples/rack18u/hw/ball_4.fg", "verdict": "match", "why": ["dvol -9.60e-06 darea -9.60e-06 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/hw/cage_nut_m6.fg", "verdict": "match", "why": ["dvol -6.98e-07 darea 1.29e-06 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/hw/iso10511_m4.fg", "verdict": "match", "why": ["dvol -4.85e-06 darea 3.16e-06 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/hw/iso10511_m5.fg", "verdict": "match", "why": ["dvol -3.75e-06 darea 1.35e-06 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/hw/iso10511_m6.fg", "verdict": "match", "why": ["dvol -2.15e-06 darea -5.32e-07 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/hw/iso10511_m8.fg", "verdict": "match", "why": ["dvol -1.29e-06 darea 6.65e-07 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/hw/iso4014_m8x55.fg", "verdict": "match", "why": ["dvol -4.45e-06 darea 6.43e-06 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/hw/iso4017_m8x20.fg", "verdict": "match", "why": ["dvol 1.93e-05 darea 1.90e-05 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/hw/iso7045_m4x35.fg", "verdict": "match", "why": ["dvol 9.62e-06 darea 1.36e-05 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/hw/iso7045_m4x40.fg", "verdict": "match", "why": ["dvol 1.57e-05 darea 2.40e-05 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/hw/iso7089_4.fg", "verdict": "match", "why": ["dvol -4.87e-06 darea -1.84e-07 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/hw/iso7089_5.fg", "verdict": "match", "why": ["dvol 3.20e-07 darea -2.06e-06 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/hw/iso7089_6.fg", "verdict": "match", "why": ["dvol 9.05e-07 darea -1.34e-06 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/hw/iso7089_8.fg", "verdict": "match", "why": ["dvol 9.58e-07 darea -5.99e-07 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/hw/iso7379_8x12_m6.fg", "verdict": "match", "why": ["dvol -6.26e-06 darea 2.44e-05 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/hw/iso7379_8x16_m6.fg", "verdict": "match", "why": ["dvol 1.63e-05 darea -3.33e-06 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/hw/iso7380_m4x25.fg", "verdict": "match", "why": ["dvol 3.58e-06 darea 2.86e-06 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/hw/iso7380_m5x10.fg", "verdict": "match", "why": ["dvol 4.17e-06 darea 5.30e-06 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/hw/iso7380_m5x12.fg", "verdict": "match", "why": ["dvol 1.14e-05 darea 1.52e-05 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/hw/iso7380_m6x10.fg", "verdict": "match", "why": ["dvol 1.31e-06 darea 1.68e-06 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/hw/iso7380_m6x12.fg", "verdict": "match", "why": ["dvol 5.24e-06 darea 4.22e-06 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/hw/latch_spacer_6x15.fg", "verdict": "match", "why": ["dvol 8.36e-07 darea 5.68e-07 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/hw/latch_spring_free.fg", "verdict": "match", "why": ["dvol 6.93e-05 darea 3.62e-05 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/hw/latch_spring_h7_49.fg", "verdict": "match", "why": ["dvol 6.93e-05 darea 3.63e-05 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/hw/latch_spring_h7_77.fg", "verdict": "match", "why": ["dvol 6.93e-05 darea 3.62e-05 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/hw/latch_spring_h8_17.fg", "verdict": "match", "why": ["dvol 6.93e-05 darea 3.48e-05 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/hw/nylon_spacer_8x14x8.fg", "verdict": "match", "why": ["dvol 7.40e-08 darea 5.39e-07 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/hw/pem_fh_m4_12.fg", "verdict": "match", "why": ["dvol 4.28e-06 darea 6.61e-06 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/hw/pem_fh_m6_20.fg", "verdict": "match", "why": ["dvol 8.69e-07 darea 7.40e-07 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/hw/pem_fh_m8_25.fg", "verdict": "match", "why": ["dvol 6.94e-06 darea 1.50e-06 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/hw/pem_s_m4_0_t2.fg", "verdict": "match", "why": ["dvol -6.74e-06 darea 9.90e-07 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/hw/pem_s_m6_0_t1.fg", "verdict": "match", "why": ["dvol -3.57e-06 darea 3.88e-06 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/hw/pem_s_m6_0_t2.fg", "verdict": "match", "why": ["dvol -3.57e-06 darea 3.88e-06 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/hw/pem_s_m6_0_t3.fg", "verdict": "match", "why": ["dvol -3.57e-06 darea 3.88e-06 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/hw/pem_ss_m5_0_t3.fg", "verdict": "match", "why": ["dvol -6.00e-06 darea 1.49e-06 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/hw/plastic_washer_m6.fg", "verdict": "match", "why": ["dvol -5.27e-06 darea -7.21e-07 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/hw/rack_screw_m6x16.fg", "verdict": "match", "why": ["dvol 1.08e-06 darea 1.56e-06 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/hw/shop.fg", "verdict": "match", "why": ["dvol -1.92e-06 darea 2.15e-06 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/hw/tests/bracket_post.fg", "verdict": "no-solid", "why": ["the part has no solid"]}
+{"file": "examples/rack18u/hw/tests/carrier_pan.fg", "verdict": "no-solid", "why": ["the part has no solid"]}
+{"file": "examples/rack18u/hw/tests/caster.fg", "verdict": "no-solid", "why": ["the part has no solid"]}
+{"file": "examples/rack18u/hw/tests/fan_screw.fg", "verdict": "no-solid", "why": ["the part has no solid"]}
+{"file": "examples/rack18u/hw/tests/hanger.fg", "verdict": "no-solid", "why": ["the part has no solid"]}
+{"file": "examples/rack18u/hw/tests/hinge_pin.fg", "verdict": "no-solid", "why": ["the part has no solid"]}
+{"file": "examples/rack18u/hw/tests/latch_base_stud.fg", "verdict": "no-solid", "why": ["the part has no solid"]}
+{"file": "examples/rack18u/hw/tests/latch_link.fg", "verdict": "no-solid", "why": ["the part has no solid"]}
+{"file": "examples/rack18u/hw/tests/latch_pivot.fg", "verdict": "no-solid", "why": ["the part has no solid"]}
+{"file": "examples/rack18u/hw/tests/panel_joint.fg", "verdict": "no-solid", "why": ["the part has no solid"]}
+{"file": "examples/rack18u/hw/tests/panel_post.fg", "verdict": "no-solid", "why": ["the part has no solid"]}
+{"file": "examples/rack18u/hw/tests/plates/base_pivot_t3.fg", "verdict": "match", "why": ["dvol -4.80e-07 darea 2.24e-05 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/hw/tests/plates/base_stud_t3.fg", "verdict": "match", "why": ["dvol -3.95e-06 darea -2.28e-06 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/hw/tests/plates/bracket_leg_t2.fg", "verdict": "match", "why": ["dvol 1.13e-05 darea 2.15e-05 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/hw/tests/plates/bracket_pin_t2.fg", "verdict": "match", "why": ["dvol -1.06e-05 darea -5.31e-06 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/hw/tests/plates/cam_link_t2.fg", "verdict": "match", "why": ["dvol 9.56e-06 darea 1.08e-05 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/hw/tests/plates/carrier_t2.fg", "verdict": "match", "why": ["dvol 3.06e-05 darea -7.72e-06 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/hw/tests/plates/caster_plate.fg", "verdict": "match", "why": ["dvol 1.39e-05 darea -9.68e-06 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/hw/tests/plates/door_latch_t1.fg", "verdict": "match", "why": ["dvol -4.82e-06 darea 4.82e-06 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/hw/tests/plates/door_return_t1.fg", "verdict": "match", "why": ["dvol 5.57e-07 darea -1.00e-05 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/hw/tests/plates/door_stud_t1.fg", "verdict": "match", "why": ["dvol 6.55e-07 darea 1.61e-05 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/hw/tests/plates/ear_3.fg", "verdict": "match", "why": ["dvol -1.80e-05 darea -2.06e-06 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/hw/tests/plates/fan_stack.fg", "verdict": "match", "why": ["dvol -3.31e-07 darea 6.63e-06 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/hw/tests/plates/handle_bore_t2.fg", "verdict": "match", "why": ["dvol -1.06e-05 darea -5.31e-06 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/hw/tests/plates/handle_link_t2.fg", "verdict": "match", "why": ["dvol 6.50e-08 darea 1.52e-05 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/hw/tests/plates/pan_caster_t3.fg", "verdict": "match", "why": ["dvol 9.54e-06 darea 2.17e-05 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/hw/tests/plates/pan_flange_t3.fg", "verdict": "match", "why": ["dvol 7.68e-06 darea 2.63e-06 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/hw/tests/plates/pan_floor_t3.fg", "verdict": "match", "why": ["dvol 7.68e-06 darea 2.63e-06 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/hw/tests/plates/pan_under_t3.fg", "verdict": "match", "why": ["dvol 3.35e-16 darea 0.00e+00 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/hw/tests/plates/panel_t1.fg", "verdict": "match", "why": ["dvol 9.47e-06 darea -2.40e-05 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/hw/tests/plates/post_m5_t3.fg", "verdict": "match", "why": ["dvol 1.56e-05 darea -3.65e-06 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/hw/tests/plates/post_m6_t3.fg", "verdict": "match", "why": ["dvol -4.80e-07 darea 2.24e-05 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/hw/tests/plates/post_stud_t3.fg", "verdict": "match", "why": ["dvol -4.37e-06 darea 1.06e-05 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/hw/tests/plates/rail_sq_t2.fg", "verdict": "match", "why": ["dvol -1.97e-05 darea -2.09e-05 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/hw/tests/plates/rail_web_t2.fg", "verdict": "match", "why": ["dvol 1.13e-05 darea 2.15e-05 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/hw/tests/plates/return_t1.fg", "verdict": "match", "why": ["dvol 9.47e-06 darea -2.40e-05 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/hw/tests/plates/top_pan_t3.fg", "verdict": "match", "why": ["dvol 6.85e-07 darea 1.41e-05 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/hw/tests/plates/tray_fan_t2.fg", "verdict": "match", "why": ["dvol 9.56e-06 darea 1.08e-05 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/hw/tests/plates/tray_hanger_t2.fg", "verdict": "match", "why": ["dvol 3.49e-06 darea -8.76e-06 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/hw/tests/post_pan.fg", "verdict": "no-solid", "why": ["the part has no solid"]}
+{"file": "examples/rack18u/hw/tests/rack_screw.fg", "verdict": "no-solid", "why": ["the part has no solid"]}
+{"file": "examples/rack18u/hw/tests/rail_carrier.fg", "verdict": "no-solid", "why": ["the part has no solid"]}
+{"file": "examples/rack18u/panels/cam.fg", "verdict": "match", "why": ["dvol 5.15e-07 darea 4.41e-06 solids 2 vs 2"], "solids": 2}
+{"file": "examples/rack18u/panels/door.fg", "verdict": "match", "why": ["dvol -2.53e-08 darea -7.02e-09 solids 2 vs 2"], "solids": 2}
+{"file": "examples/rack18u/panels/door_asm.fg", "verdict": "no-solid", "why": ["the part has no solid"]}
+{"file": "examples/rack18u/panels/hinge_bracket.fg", "verdict": "match", "why": ["dvol 2.77e-06 darea -1.42e-07 solids 2 vs 2"], "solids": 2}
+{"file": "examples/rack18u/panels/latch_base.fg", "verdict": "match", "why": ["dvol -1.41e-07 darea 8.54e-07 solids 2 vs 2"], "solids": 2}
+{"file": "examples/rack18u/panels/latch_handle.fg", "verdict": "match", "why": ["dvol -3.00e-06 darea 1.02e-06 solids 2 vs 2"], "solids": 2}
+{"file": "examples/rack18u/panels/latch_u.fg", "verdict": "no-solid", "why": ["the part has no solid"]}
+{"file": "examples/rack18u/panels/probes/cyl_sem.fg", "verdict": "no-solid", "why": ["the part has no solid"]}
+{"file": "examples/rack18u/panels/probes/flange_frame.fg", "verdict": "match", "why": ["dvol 3.56e-06 darea -1.41e-06 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/panels/probes/frame_read.fg", "verdict": "no-solid", "why": ["the part has no solid"]}
+{"file": "examples/rack18u/panels/probes/hole_near_bend_profile.fg", "verdict": "match", "why": ["dvol -5.15e-06 darea -3.93e-06 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/panels/probes/hole_near_bend_profile_only.fg", "verdict": "match", "why": ["dvol -3.86e-06 darea -3.14e-06 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/panels/probes/pem_overlaps_cutout.fg", "verdict": "match", "why": ["dvol -4.70e-06 darea 4.86e-06 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/panels/probes/post_probe.fg", "verdict": "not-exported", "why": ["the part did not build: PartFile: ../test_parts/_probe.fg: no such file"]}
+{"file": "examples/rack18u/panels/probes/strike_frames.fg", "verdict": "no-solid", "why": ["the part has no solid"]}
+{"file": "examples/rack18u/panels/probes/strike_probe.fg", "verdict": "match", "why": ["dvol -3.16e-08 darea -2.40e-08 solids 1 vs 1"], "solids": 1}
+{"file": "examples/rack18u/panels/side_panel.fg", "verdict": "match", "why": ["dvol 3.94e-09 darea -2.97e-08 solids 2 vs 2"], "solids": 2}
+{"file": "examples/rack18u/panels/strike.fg", "verdict": "match", "why": ["dvol -2.57e-08 darea -6.17e-07 solids 2 vs 2"], "solids": 2}
+{"file": "examples/rack18u/panels/test.fg", "verdict": "no-solid", "why": ["the part has no solid"]}
+{"file": "examples/rack18u/panels/test_parts/post_standin.fg", "verdict": "match", "why": ["dvol -1.52e-07 darea 8.96e-08 solids 1 vs 1"], "solids": 1}
+{"file": "examples/sheetmetal/load_tray.fg", "verdict": "match", "why": ["dvol 2.45e-07 darea -4.47e-07 solids 1 vs 1"], "solids": 1}
+{"file": "examples/sheetmetal/probes/tray_clash.fg", "verdict": "no-solid", "why": ["the part has no solid"]}
+{"file": "examples/sheetmetal/probes/tray_misread.fg", "verdict": "match", "why": ["dvol -2.36e-07 darea 1.38e-08 solids 1 vs 1"], "solids": 1}
+{"file": "examples/sheetmetal/probes/tray_misread_asm.fg", "verdict": "not-exported", "why": ["the part did not build: ExpectFailed: expect axis_offset: 70 is not Le 0.01"]}
+{"file": "examples/sheetmetal/rack_face.fg", "verdict": "match", "why": ["dvol 6.54e-07 darea 5.52e-07 solids 1 vs 1"], "solids": 1}
+{"file": "examples/sheetmetal/tray_asm.fg", "verdict": "no-solid", "why": ["the part has no solid"]}
+{"file": "examples/sheetmetal/vendor/bracket_src.fg", "verdict": "match", "why": ["dvol -1.63e-05 darea -4.81e-06 solids 1 vs 1"], "solids": 1}
+{"file": "examples/sheetmetal/vendor/vendor.fg", "verdict": "match", "why": ["dvol -1.63e-05 darea -4.81e-06 solids 1 vs 1"], "solids": 1}
+{"file": "examples/thermoform/cover.fg", "verdict": "match", "why": ["dvol 5.68e-08 darea -3.55e-07 solids 2 vs 2"], "solids": 2}
+{"file": "examples/thermoform/cup.fg", "verdict": "match", "why": ["dvol 6.12e-08 darea 1.26e-07 solids 2 vs 2"], "solids": 2}
+{"file": "examples/thermoform/shell_cover.fg", "verdict": "match", "why": ["dvol 8.42e-08 darea -2.10e-07 solids 2 vs 2"], "solids": 2}
+{"file": "examples/thermoform/snap_lid.fg", "verdict": "match", "why": ["dvol -9.79e-08 darea 7.09e-07 solids 2 vs 2"], "solids": 2}
+{"file": "examples/thermoform/tray.fg", "verdict": "match", "why": ["dvol 3.01e-08 darea -1.73e-07 solids 2 vs 2"], "solids": 2}
+{"file": "examples/thermoform/validation/atmani2020_cup.fg", "verdict": "match", "why": ["dvol -6.47e-08 darea 1.80e-10 solids 2 vs 2"], "solids": 2}
+{"file": "examples/thermoform/validation/atmani2020_cup_d51.fg", "verdict": "match", "why": ["dvol -2.13e-07 darea 3.15e-07 solids 2 vs 2"], "solids": 2}
+{"file": "examples/thermoform/validation/atmani2020_plugonly.fg", "verdict": "match", "why": ["dvol 8.17e-08 darea -3.90e-07 solids 2 vs 2"], "solids": 2}
+{"file": "examples/thermoform/validation/atmani2020_plugonly_cavity.fg", "verdict": "match", "why": ["dvol -2.92e-09 darea -4.70e-08 solids 2 vs 2"], "solids": 2}
+{"file": "examples/thermoform/validation/buntinx2014_tray25.fg", "verdict": "match", "why": ["dvol 8.41e-09 darea -1.17e-07 solids 2 vs 2"], "solids": 2}
+{"file": "examples/thermoform/validation/buntinx2014_tray50.fg", "verdict": "match", "why": ["dvol -3.34e-09 darea 4.85e-08 solids 2 vs 2"], "solids": 2}
+{"file": "examples/thermoform/validation/buntinx2014_tray50R5.fg", "verdict": "match", "why": ["dvol -3.22e-08 darea -8.30e-08 solids 2 vs 2"], "solids": 2}
+{"file": "examples/thermoform/validation/buntinx2014_tray75.fg", "verdict": "match", "why": ["dvol -3.74e-09 darea -2.84e-08 solids 2 vs 2"], "solids": 2}
+{"file": "examples/thermoform/validation/duarte2022_cone.fg", "verdict": "match", "why": ["dvol -4.78e-09 darea -9.45e-08 solids 2 vs 2"], "solids": 2}
+{"file": "examples/thermoform/validation/eksi2017_cone.fg", "verdict": "match", "why": ["dvol 2.66e-08 darea -1.46e-07 solids 2 vs 2"], "solids": 2}
+{"file": "examples/thermoform/validation/eksi2017_cylinder.fg", "verdict": "match", "why": ["dvol -1.35e-08 darea 8.23e-08 solids 2 vs 2"], "solids": 2}
+{"file": "examples/thermoform/validation/eksi2017_hemisphere.fg", "verdict": "match", "why": ["dvol 2.82e-08 darea -2.04e-08 solids 2 vs 2"], "solids": 2}
+{"file": "examples/thermoform/validation/eksi2017b_cone.fg", "verdict": "match", "why": ["dvol 1.81e-08 darea 2.66e-07 solids 2 vs 2"], "solids": 2}
+{"file": "examples/thermoform/validation/eksi2017b_hemisphere.fg", "verdict": "match", "why": ["dvol 1.24e-08 darea -1.28e-07 solids 2 vs 2"], "solids": 2}
+{"file": "examples/thermoform/validation/erchiqui2003_bubble.fg", "verdict": "match", "why": ["dvol 2.84e-08 darea 8.42e-08 solids 2 vs 2"], "solids": 2}
+{"file": "examples/thermoform/validation/erchiqui2020_bubble.fg", "verdict": "match", "why": ["dvol -1.90e-08 darea 1.69e-07 solids 2 vs 2"], "solids": 2}
+{"file": "examples/thermoform/validation/erdogan2014_box.fg", "verdict": "match", "why": ["dvol -4.81e-09 darea 4.58e-08 solids 2 vs 2"], "solids": 2}
+{"file": "examples/thermoform/validation/erdogan2014_cone.fg", "verdict": "match", "why": ["dvol -2.34e-09 darea -7.02e-08 solids 2 vs 2"], "solids": 2}
+{"file": "examples/thermoform/validation/erdogan2014_cylinder.fg", "verdict": "match", "why": ["dvol -2.98e-09 darea -5.48e-08 solids 2 vs 2"], "solids": 2}
+{"file": "examples/thermoform/validation/karabeyoglu2017_cone.fg", "verdict": "match", "why": ["dvol -2.34e-09 darea -7.02e-08 solids 2 vs 2"], "solids": 2}
+{"file": "examples/thermoform/validation/karabeyoglu2017_cylinder.fg", "verdict": "match", "why": ["dvol -5.18e-09 darea -4.76e-08 solids 2 vs 2"], "solids": 2}
+{"file": "examples/thermoform/validation/ref_corner_fill.fg", "verdict": "match", "why": ["dvol 8.85e-08 darea 1.31e-07 solids 2 vs 2"], "solids": 2}
+{"file": "examples/thermoform/validation/ref_inflation_mooney_rivlin.fg", "verdict": "match", "why": ["dvol 1.23e-08 darea -7.12e-09 solids 2 vs 2"], "solids": 2}
+{"file": "examples/thermoform/validation/ref_inflation_neohookean.fg", "verdict": "match", "why": ["dvol 1.23e-08 darea -7.12e-09 solids 2 vs 2"], "solids": 2}
+{"file": "examples/thermoform/validation/ref_inflation_ogden_abs.fg", "verdict": "match", "why": ["dvol 1.23e-08 darea -7.12e-09 solids 2 vs 2"], "solids": 2}
+{"file": "examples/thermoform/validation/ref_inflation_ogden_hips.fg", "verdict": "match", "why": ["dvol 1.23e-08 darea -7.12e-09 solids 2 vs 2"], "solids": 2}
+{"file": "examples/thermoform/validation/varedi2024_hemisphere.fg", "verdict": "match", "why": ["dvol 5.73e-09 darea -1.40e-08 solids 2 vs 2"], "solids": 2}
+{"file": "examples/unified/hinged_box.fg", "verdict": "match", "why": ["dvol 0.00e+00 darea 0.00e+00 solids 2 vs 2"], "solids": 2}
+{"file": "examples/unified/knob.fg", "verdict": "match", "why": ["dvol -9.19e-06 darea -1.85e-05 solids 1 vs 1"], "solids": 1}
+{"file": "examples/unified/knob_drawn.fg", "verdict": "match", "why": ["dvol -9.19e-06 darea -1.85e-05 solids 1 vs 1"], "solids": 1}
+{"file": "examples/unified/nested_boxes.fg", "verdict": "no-solid", "why": ["the part has no solid"]}
+{"file": "examples/unified/peg_board.fg", "verdict": "match", "why": ["dvol 4.98e-07 darea 1.72e-06 solids 1 vs 1"], "solids": 1}
+{"file": "examples/unified/peg_dwg.fg", "verdict": "not-exported", "why": ["the part did not build: UnknownName: unknown name drawing"]}

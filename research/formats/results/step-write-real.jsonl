@@ -1,0 +1,49 @@
+{"file": "FreeCAD/data/examples/Schenkel.stp", "verdict": "match", "why": ["dvol -3.94e-07 darea 2.14e-07"], "written": "0.0.step"}
+{"file": "FreeCAD/data/tests/ModelRefineTests/Y_Rod_Mount.brep", "verdict": "match", "why": ["dvol -1.20e-14 darea -5.72e-14"], "written": "1.0.step"}
+{"file": "FreeCAD/data/tests/ModelRefineTests/ZMotorMountscripted.brep", "verdict": "match", "why": ["dvol 3.84e-14 darea 3.70e-15"], "written": "2.0.step"}
+{"file": "FreeCAD/data/tests/ModelRefineTests/aox.brep", "verdict": "match", "why": ["dvol 4.05e-10 darea -3.01e-10"], "written": "3.0.step"}
+{"file": "FreeCAD/data/tests/ModelRefineTests/blocks144.brep", "verdict": "match", "why": ["dvol 2.91e-15 darea -3.45e-16"], "written": "4.0.step"}
+{"file": "FreeCAD/data/tests/ModelRefineTests/cylinder1.brep", "verdict": "match", "why": ["dvol 3.05e-15 darea 3.77e-16"], "written": "5.0.step"}
+{"file": "FreeCAD/data/tests/ModelRefineTests/cylinder3.brep", "verdict": "match", "why": ["dvol 3.02e-15 darea 5.32e-16"], "written": "6.0.step"}
+{"file": "FreeCAD/data/tests/ModelRefineTests/cylinder4.brep", "verdict": "match", "why": ["dvol 2.97e-15 darea 5.14e-16"], "written": "7.0.step"}
+{"file": "FreeCAD/data/tests/ModelRefineTests/cylinder5.brep", "verdict": "match", "why": ["dvol 2.75e-15 darea 3.97e-16"], "written": "8.0.step"}
+{"file": "FreeCAD/data/tests/ModelRefineTests/cylinder7_V2.brep", "verdict": "match", "why": ["dvol -1.88e-08 darea 1.09e-07"], "written": "9.0.step"}
+{"file": "FreeCAD/data/tests/ModelRefineTests/cylinder8.brep", "verdict": "match", "why": ["dvol 2.86e-15 darea 5.32e-16"], "written": "10.0.step"}
+{"file": "FreeCAD/data/tests/ModelRefineTests/cylinderSeam1.brep", "verdict": "match", "why": ["dvol 2.49e-15 darea 0.00e+00"], "written": "11.0.step"}
+{"file": "FreeCAD/data/tests/ModelRefineTests/cylinderSeam10.brep", "verdict": "uncertain", "why": [], "written": "12.0.step"}
+{"file": "FreeCAD/data/tests/ModelRefineTests/cylinderSeam2.brep", "verdict": "match", "why": ["dvol 2.85e-15 darea -2.31e-16"], "written": "13.0.step"}
+{"file": "FreeCAD/data/tests/ModelRefineTests/cylinderSeam3.brep", "verdict": "match", "why": ["dvol 1.65e-07 darea 6.23e-08"], "written": "14.0.step"}
+{"file": "FreeCAD/data/tests/ModelRefineTests/cylinderSeam4.brep", "verdict": "match", "why": ["dvol 1.92e-15 darea 4.11e-16"], "written": "15.0.step"}
+{"file": "FreeCAD/data/tests/ModelRefineTests/cylinderSeam5.brep", "verdict": "match", "why": ["dvol 2.88e-09 darea 5.27e-09"], "written": "16.0.step"}
+{"file": "FreeCAD/data/tests/ModelRefineTests/cylinderSeam6.brep", "verdict": "match", "why": ["dvol 1.96e-08 darea 1.16e-08"], "written": "17.0.step"}
+{"file": "FreeCAD/data/tests/ModelRefineTests/cylinderSeam8.brep", "verdict": "match", "why": ["dvol 2.01e-15 darea 2.07e-16"], "written": "18.0.step"}
+{"file": "FreeCAD/data/tests/ModelRefineTests/cylinderSeam9.brep", "verdict": "match", "why": ["dvol 2.36e-15 darea -5.79e-16"], "written": "19.0.step"}
+{"file": "FreeCAD/data/tests/ModelRefineTests/filletBox.brep", "verdict": "match", "why": ["dvol 4.02e-16 darea 0.00e+00"], "written": "20.0.step"}
+{"file": "FreeCAD/data/tests/ModelRefineTests/holesInFace2.brep", "verdict": "match", "why": ["dvol 0.00e+00 darea 0.00e+00"], "written": "21.0.step"}
+{"file": "FreeCAD/data/tests/ModelRefineTests/refine_breaks_cylinder.brep", "verdict": "match", "why": ["dvol -1.50e-08 darea 1.61e-08"], "written": "22.0.step"}
+{"file": "FreeCAD/data/tests/ModelRefineTests/shelf.brep", "verdict": "match", "why": ["dvol 8.60e-16 darea -1.86e-16"], "written": "23.0.step"}
+{"file": "FreeCAD/data/tests/ModelRefineTests/spline.brep", "verdict": "match", "why": ["dvol 8.32e-08 darea 7.90e-08"], "written": "24.0.step"}
+{"file": "FreeCAD/data/tests/Step/as1-ac-214.stp", "verdict": "match", "why": ["dvol 0.00e+00 darea 2.08e-16"], "written": "25.0.step"}
+{"file": "FreeCAD/data/tests/Step/as1-ac-214.stp", "verdict": "match", "why": ["dvol 3.00e-16 darea -1.48e-16"], "written": "25.1.step"}
+{"file": "FreeCAD/data/tests/Step/as1-ac-214.stp", "verdict": "match", "why": ["dvol 1.19e-15 darea -9.60e-16"], "written": "25.2.step"}
+{"file": "FreeCAD/data/tests/Step/as1-ac-214.stp", "verdict": "match", "why": ["dvol -1.71e-16 darea -1.52e-16"], "written": "25.3.step"}
+{"file": "FreeCAD/data/tests/Step/as1-ac-214.stp", "verdict": "match", "why": ["dvol 1.62e-15 darea -9.89e-16"], "written": "25.4.step"}
+{"file": "FreeCAD/data/tests/Step/as1-ac-214_small.stp", "verdict": "match", "why": ["dvol -3.35e-08 darea -7.90e-08"], "written": "26.0.step"}
+{"file": "FreeCAD/data/tests/Step/as1-ac-214_small.stp", "verdict": "match", "why": ["dvol 1.74e-15 darea -4.22e-16"], "written": "26.1.step"}
+{"file": "FreeCAD/data/tests/Step/as1-ac-214_small.stp", "verdict": "match", "why": ["dvol -2.92e-09 darea -9.45e-09"], "written": "26.2.step"}
+{"file": "FreeCAD/data/tests/Step/geometry_out.stp", "verdict": "not-read", "why": ["the file holds no solid"]}
+{"file": "FreeCAD/src/Mod/BIM/bimtests/test_roof_subtraction.brep", "verdict": "match", "why": ["dvol -1.40e-15 darea 2.22e-16"], "written": "28.0.step"}
+{"file": "FreeCAD/tests/src/Mod/Part/App/brepfiles/cylinder1.brep", "verdict": "match", "why": ["dvol 3.05e-15 darea 3.77e-16"], "written": "31.0.step"}
+{"file": "FreeCAD/tests/src/Mod/Part/App/brepfiles/helix1.brep", "verdict": "mismatch", "why": ["dvol -3.34e-02 darea -8.07e-03"], "written": "32.0.step"}
+{"file": "FreeCAD/tests/src/Mod/Part/App/brepfiles/unorientableSolid.brep", "verdict": "ref-refused", "why": ["0 solids"], "written": "33.0.step"}
+{"file": "cadquery/tests/testdata/red_cube_blue_cylinder.step", "verdict": "match", "why": ["dvol 2.32e-15 darea -1.21e-16"], "written": "34.0.step"}
+{"file": "cadquery/tests/testdata/red_cube_blue_cylinder.step", "verdict": "match", "why": ["dvol 4.55e-16 darea 0.00e+00"], "written": "34.1.step"}
+{"file": "libredwg/test/test-data/r11/ACEB10.stp", "verdict": "uncertain", "why": [], "written": "35.0.step"}
+{"file": "libredwg/test/test-data/r11/ACEB10.stp", "verdict": "match", "why": ["dvol -6.00e-08 darea 4.85e-07"], "written": "35.1.step"}
+{"file": "libredwg/test/test-data/r11/ACEB10.stp", "verdict": "match", "why": ["dvol -1.37e-09 darea 4.96e-11"], "written": "35.2.step"}
+{"file": "nist/nist-ftc-ctc-pmi-cad-models/NIST-FTC-CTC-PMI-CAD-models/CTC Definitions/nist_ctc_01_asme1_rd.stp", "verdict": "match", "why": ["dvol -6.10e-07 darea 1.49e-07"], "written": "36.0.step"}
+{"file": "nist/nist-ftc-ctc-pmi-cad-models/NIST-FTC-CTC-PMI-CAD-models/CTC Definitions/nist_ctc_02_asme1_rc.stp", "verdict": "match", "why": ["dvol -2.76e-07 darea 9.91e-07"], "written": "37.0.step"}
+{"file": "nist/nist-ftc-ctc-pmi-cad-models/NIST-FTC-CTC-PMI-CAD-models/CTC Definitions/nist_ctc_03_asme1_rc.stp", "verdict": "match", "why": ["dvol -4.19e-12 darea -9.84e-16"], "written": "38.0.step"}
+{"file": "nist/nist-ftc-ctc-pmi-cad-models/NIST-FTC-CTC-PMI-CAD-models/CTC Definitions/nist_ctc_04_asme1_rd.stp", "verdict": "match", "why": ["dvol -3.41e-10 darea 2.61e-09"], "written": "39.0.step"}
+{"file": "nist/nist-ftc-ctc-pmi-cad-models/NIST-FTC-CTC-PMI-CAD-models/CTC Definitions/nist_ctc_05_asme1_rd.stp", "verdict": "match", "why": ["dvol 7.05e-07 darea -3.03e-07"], "written": "40.0.step"}
+{"file": "nist/nist-ftc-ctc-pmi-cad-models/NIST-FTC-CTC-PMI-CAD-models/FTC Definitions/nist_ftc_06_asme1_rd.stp", "verdict": "no-mass", "why": ["face 89: the face's loops draw no region"], "written": "41.0.step"}

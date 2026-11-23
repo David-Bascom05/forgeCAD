@@ -1,0 +1,24 @@
+[package]
+name = "forge-formats"
+description = "Every reader and writer of a file format, on one real file: what it made of it, as one JSON line, for research/formats/judge.py to hold against an independent reader"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[[bin]]
+name = "formats-probe"
+path = "src/main.rs"
+
+[dependencies]
+forge-math = { path = "../../kernel/forge-math" }
+forge-topo = { path = "../../kernel/forge-topo" }
+forge-mesh = { path = "../../kernel/forge-mesh" }
+forge-step = { path = "../../kernel/forge-step" }
+forge-dwg = { path = "../../kernel/forge-dwg" }
+forge-font = { path = "../../kernel/forge-font" }
+forge-import = { path = "../../interface/forge-import" }
+
+[lints]
+workspace = true

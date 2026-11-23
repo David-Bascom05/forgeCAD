@@ -1,0 +1,180 @@
+{"file": "LibreCAD/librecad/src/lib/filters/tests/testdata/hatch/oda_hatch_deg_def_ac1032.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "LibreCAD/librecad/src/lib/filters/tests/testdata/large_radial.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "LibreCAD/librecad/src/lib/filters/tests/testdata/lc_current_layer_walls_ac1014.dwg", "verdict": "not-read", "why": ["not a DWG file this reads (AC1015..AC1032)"]}
+{"file": "LibreCAD/librecad/src/lib/filters/tests/testdata/lc_current_layer_walls_ac1032.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "LibreCAD/librecad/src/lib/filters/tests/testdata/lc_layer_flags_ac1012.dwg", "verdict": "not-read", "why": ["not a DWG file this reads (AC1015..AC1032)"]}
+{"file": "LibreCAD/librecad/src/lib/filters/tests/testdata/lc_layer_flags_ac1014.dwg", "verdict": "not-read", "why": ["not a DWG file this reads (AC1015..AC1032)"]}
+{"file": "LibreCAD/librecad/src/lib/filters/tests/testdata/lc_layer_off_ac1014.dwg", "verdict": "not-read", "why": ["not a DWG file this reads (AC1015..AC1032)"]}
+{"file": "LibreCAD/librecad/src/lib/filters/tests/testdata/lc_layer_off_ac1032.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "LibreCAD/librecad/src/lib/filters/tests/testdata/lc_multiline_attrib_ac1032.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "LibreCAD/librecad/src/lib/filters/tests/testdata/mpolygon/oda_ar_hbone_117_ac1032.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "LibreCAD/librecad/src/lib/filters/tests/testdata/mpolygon/oda_bulge_two_ac1015.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "LibreCAD/librecad/src/lib/filters/tests/testdata/mpolygon/oda_open_path_ac1032.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "LibreCAD/librecad/src/lib/filters/tests/testdata/mpolygon/oda_pattern30_ac1032.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "LibreCAD/librecad/src/lib/filters/tests/testdata/mpolygon/oda_pattern_ac1015.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "LibreCAD/librecad/src/lib/filters/tests/testdata/mpolygon/oda_pattern_ac1018.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "LibreCAD/librecad/src/lib/filters/tests/testdata/mpolygon/oda_solid_ac1015.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "LibreCAD/librecad/src/lib/filters/tests/testdata/mpolygon/oda_solid_ac1024.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "LibreCAD/librecad/src/lib/filters/tests/testdata/mpolygon/oda_three_loops_brick30_ac1032.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "LibreCAD/librecad/src/lib/filters/tests/testdata/mpolygon_solid.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "LibreCAD/librecad/src/lib/filters/tests/testdata/ordinary_enc_AC1015.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "LibreCAD/librecad/src/lib/filters/tests/testdata/ordinary_enc_AC1018.dwg", "verdict": "not-read", "why": ["compressed data ends early"]}
+{"file": "LibreCAD/librecad/src/lib/filters/tests/testdata/ordinary_enc_AC1021.dwg", "verdict": "not-read", "why": ["past the end"]}
+{"file": "LibreCAD/librecad/src/lib/filters/tests/testdata/ordinary_enc_AC1027.dwg", "verdict": "not-read", "why": ["compressed data ends early"]}
+{"file": "LibreCAD/librecad/src/lib/filters/tests/testdata/ordinary_enc_ac1027_ansi932.dwg", "verdict": "not-read", "why": ["compressed data ends early"]}
+{"file": "LibreCAD/librecad/src/lib/filters/tests/testdata/rtext_arctext.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "ezdxf/docs/graphics/dim_linear_tutorial.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "ezdxf/docs/graphics/dim_radial_tutorial.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "ezdxf/docs/graphics/dimstyle-vars.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "ezdxf/docs/graphics/dimtad-dimjust.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "ezdxf/tests/test_08_addons/807_1.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "gdal/autotest/ogr/data/cad/AC1018_signature.dwg", "verdict": "not-read", "why": ["a DWG file cut short in its first 0x15 bytes"]}
+{"file": "gdal/autotest/ogr/data/cad/Building_A_Floor_0_Mapwize.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "gdal/autotest/ogr/data/cad/attribs.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "gdal/autotest/ogr/data/cad/ellipse_r2000.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "gdal/autotest/ogr/data/cad/line_r2000.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "gdal/autotest/ogr/data/cad/point2d_r2000.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "gdal/autotest/ogr/data/cad/text_mtext_attdef_r2000.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "gdal/autotest/ogr/data/cad/triple_circles_r2000.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2000/Arc.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2000/Cone.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2000/Constraints.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2000/ConstructionLine.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2000/Donut.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2000/Ellipse.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2000/Helix.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2000/Leader.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2000/Line.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2000/Multiline.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2000/Point.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2000/PolyLine2D.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2000/PolyLine3D.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2000/Polygon.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2000/Polyline.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2000/RAY.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2000/Spline.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2000/TS1.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2000/Text.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2000/circle.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2000/entities-2d.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2000/entities-3d.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2004/Arc.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2004/Constraints.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2004/ConstructionLine.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2004/Donut.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2004/Ellipse.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2004/HatchG.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2004/Helix.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2004/Leader.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2004/Line.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2004/Multiline.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2004/Point.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2004/PolyLine3D.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2004/Polygon.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2004/Polyline.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2004/RAY.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2004/Spline.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2004/Surface.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2004/Text.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2004/Underlay.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2004/circle.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2004/material.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2007/ATMOS-DC22S.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2007/Arc.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2007/Constraints.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2007/ConstructionLine.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2007/Donut.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2007/Ellipse.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2007/Helix.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2007/Leader.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2007/Line.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2007/Multiline.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2007/Point.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2007/PolyLine3D.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2007/Polygon.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2007/Polyline.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2007/RAY.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2007/Spline.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2007/Text.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2007/block_acad2027.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2007/circle.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2010/Arc.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2010/Constraints.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2010/ConstructionLine.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2010/Donut.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2010/Ellipse.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2010/Helix.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2010/Leader.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2010/Line.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2010/Multiline.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2010/Point.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2010/PolyLine3D.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2010/Polygon.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2010/Polyline.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2010/RAY.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2010/Spline.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2010/Text.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2010/circle.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2010/gh209_1.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2013/Arc.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2013/Constraints.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2013/ConstructionLine.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2013/Donut.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2013/Ellipse.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2013/Helix.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2013/Leader.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2013/Line.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2013/Multiline.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2013/Point.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2013/PolyLine3D.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2013/Polygon.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2013/Polyline.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2013/RAY.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2013/Spline.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2013/Text.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2013/circle.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2013/gh109_1.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2013/gh44-error.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2018/Arc.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2018/Constraints.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2018/ConstructionLine.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2018/Donut.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2018/Dynblocks.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2018/Ellipse.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2018/Helix.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2018/Leader.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2018/Line.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2018/LiveSection1.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2018/Multiline.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2018/Point.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2018/PolyLine3D.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2018/Polygon.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2018/Polyline.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2018/RAY.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2018/Spline.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2018/Text.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/2018/circle.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/example_2000.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/example_2004.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/example_2007.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/example_2010.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/example_2013.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/example_2018.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/example_r13.dwg", "verdict": "not-read", "why": ["not a DWG file this reads (AC1015..AC1032)"]}
+{"file": "libredwg/test/test-data/example_r14.dwg", "verdict": "not-read", "why": ["not a DWG file this reads (AC1015..AC1032)"]}
+{"file": "libredwg/test/test-data/r1.4/entities.dwg", "verdict": "not-read", "why": ["not a DWG file this reads (AC1015..AC1032)"]}
+{"file": "libredwg/test/test-data/r10/entities.dwg", "verdict": "not-read", "why": ["not a DWG file this reads (AC1015..AC1032)"]}
+{"file": "libredwg/test/test-data/r10/tmp_line.dwg", "verdict": "not-read", "why": ["not a DWG file this reads (AC1015..AC1032)"]}
+{"file": "libredwg/test/test-data/r11/ACEB10.dwg", "verdict": "not-read", "why": ["not a DWG file this reads (AC1015..AC1032)"]}
+{"file": "libredwg/test/test-data/r11/entities-2d.dwg", "verdict": "not-read", "why": ["not a DWG file this reads (AC1015..AC1032)"]}
+{"file": "libredwg/test/test-data/r11/entities-3d.dwg", "verdict": "not-read", "why": ["not a DWG file this reads (AC1015..AC1032)"]}
+{"file": "libredwg/test/test-data/r14/Constraints.dwg", "verdict": "not-read", "why": ["not a DWG file this reads (AC1015..AC1032)"]}
+{"file": "libredwg/test/test-data/r14/Leader.dwg", "verdict": "not-read", "why": ["not a DWG file this reads (AC1015..AC1032)"]}
+{"file": "libredwg/test/test-data/r14/v.dwg", "verdict": "not-read", "why": ["not a DWG file this reads (AC1015..AC1032)"]}
+{"file": "libredwg/test/test-data/r2.10/block.dwg", "verdict": "not-read", "why": ["not a DWG file this reads (AC1015..AC1032)"]}
+{"file": "libredwg/test/test-data/r2.10/entities.dwg", "verdict": "not-read", "why": ["not a DWG file this reads (AC1015..AC1032)"]}
+{"file": "libredwg/test/test-data/r2.6/dim.dwg", "verdict": "not-read", "why": ["not a DWG file this reads (AC1015..AC1032)"]}
+{"file": "libredwg/test/test-data/r2.6/entities.dwg", "verdict": "not-read", "why": ["not a DWG file this reads (AC1015..AC1032)"]}
+{"file": "libredwg/test/test-data/r9/entities.dwg", "verdict": "not-read", "why": ["not a DWG file this reads (AC1015..AC1032)"]}
+{"file": "libredwg/test/test-data/sample_2000.dwg", "verdict": "match", "why": [], "ours_again": "match"}
+{"file": "libredwg/test/test-data/sample_2018.dwg", "verdict": "match", "why": [], "ours_again": "match"}

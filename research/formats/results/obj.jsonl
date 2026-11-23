@@ -1,0 +1,125 @@
+{"file": "assimp/test/models/OBJ/WusonOBJ.obj", "verdict": "match", "why": []}
+{"file": "assimp/test/models/OBJ/box.obj", "verdict": "match", "why": []}
+{"file": "assimp/test/models/OBJ/box_UTF16BE.obj", "verdict": "both-refused", "why": ["line 1 (byte 0): no faces"]}
+{"file": "assimp/test/models/OBJ/box_longline.obj", "verdict": "match", "why": []}
+{"file": "assimp/test/models/OBJ/box_mat_with_spaces.obj", "verdict": "match", "why": []}
+{"file": "assimp/test/models/OBJ/box_without_lineending.obj", "verdict": "match", "why": []}
+{"file": "assimp/test/models/OBJ/concave_polygon.obj", "verdict": "match", "why": []}
+{"file": "assimp/test/models/OBJ/cube_mtllib_after_g.obj", "verdict": "match", "why": []}
+{"file": "assimp/test/models/OBJ/cube_usemtl.obj", "verdict": "mismatch", "why": ["open edges 0 vs 20"]}
+{"file": "assimp/test/models/OBJ/cube_with_vertexcolors.obj", "verdict": "match", "why": []}
+{"file": "assimp/test/models/OBJ/cube_with_vertexcolors_uni.obj", "verdict": "match", "why": []}
+{"file": "assimp/test/models/OBJ/empty_mat.obj", "verdict": "match", "why": []}
+{"file": "assimp/test/models/OBJ/mtl_different_folder.obj", "verdict": "match", "why": []}
+{"file": "assimp/test/models/OBJ/multiple_spaces.obj", "verdict": "match", "why": []}
+{"file": "assimp/test/models/OBJ/number_formats.obj", "verdict": "refused", "why": ["line 11 (byte 107): a vertex needs three finite numbers"]}
+{"file": "assimp/test/models/OBJ/only_a_part_of_vertexcolors.obj", "verdict": "match", "why": []}
+{"file": "assimp/test/models/OBJ/point_cloud.obj", "verdict": "both-refused", "why": ["line 1 (byte 0): no faces"]}
+{"file": "assimp/test/models/OBJ/regr01.obj", "verdict": "ref-refused", "why": ["ModuleNotFoundError: No module named 'charset_normalizer'"]}
+{"file": "assimp/test/models/OBJ/regr_3429812.obj", "verdict": "match", "why": []}
+{"file": "assimp/test/models/OBJ/space_in_material_name.obj", "verdict": "match", "why": []}
+{"file": "assimp/test/models/OBJ/spider.obj", "verdict": "match", "why": []}
+{"file": "assimp/test/models/OBJ/testline.obj", "verdict": "both-refused", "why": ["line 1 (byte 0): no faces"]}
+{"file": "assimp/test/models/OBJ/testmixed.obj", "verdict": "match", "why": []}
+{"file": "assimp/test/models/OBJ/testpoints.obj", "verdict": "both-refused", "why": ["line 1 (byte 0): no faces"]}
+{"file": "common-3d-test-models/data/alligator.obj", "verdict": "match", "why": []}
+{"file": "common-3d-test-models/data/armadillo.obj", "verdict": "match", "why": []}
+{"file": "common-3d-test-models/data/beast.obj", "verdict": "match", "why": []}
+{"file": "common-3d-test-models/data/beetle-alt.obj", "verdict": "match", "why": []}
+{"file": "common-3d-test-models/data/beetle.obj", "verdict": "match", "why": []}
+{"file": "common-3d-test-models/data/bimba.obj", "verdict": "match", "why": []}
+{"file": "common-3d-test-models/data/cheburashka.obj", "verdict": "match", "why": []}
+{"file": "common-3d-test-models/data/cow.obj", "verdict": "match", "why": []}
+{"file": "common-3d-test-models/data/fandisk.obj", "verdict": "match", "why": []}
+{"file": "common-3d-test-models/data/happy.obj", "verdict": "match", "why": []}
+{"file": "common-3d-test-models/data/homer.obj", "verdict": "match", "why": []}
+{"file": "common-3d-test-models/data/horse.obj", "verdict": "match", "why": []}
+{"file": "common-3d-test-models/data/igea.obj", "verdict": "match", "why": []}
+{"file": "common-3d-test-models/data/lucy.obj", "verdict": "match", "why": []}
+{"file": "common-3d-test-models/data/max-planck.obj", "verdict": "match", "why": []}
+{"file": "common-3d-test-models/data/nefertiti.obj", "verdict": "match", "why": []}
+{"file": "common-3d-test-models/data/ogre.obj", "verdict": "match", "why": []}
+{"file": "common-3d-test-models/data/rocker-arm.obj", "verdict": "match", "why": []}
+{"file": "common-3d-test-models/data/spot.obj", "verdict": "match", "why": []}
+{"file": "common-3d-test-models/data/stanford-bunny.obj", "verdict": "match", "why": []}
+{"file": "common-3d-test-models/data/suzanne.obj", "verdict": "match", "why": []}
+{"file": "common-3d-test-models/data/teapot.obj", "verdict": "match", "why": []}
+{"file": "common-3d-test-models/data/woody.obj", "verdict": "match", "why": []}
+{"file": "common-3d-test-models/data/xyzrgb_dragon.obj", "verdict": "match", "why": []}
+{"file": "thingi10k/102815.obj", "verdict": "match", "why": []}
+{"file": "thingi10k/112965.obj", "verdict": "match", "why": []}
+{"file": "thingi10k/1258096.obj", "verdict": "match", "why": []}
+{"file": "thingi10k/131443.obj", "verdict": "mismatch", "why": ["open edges 3718 vs 23480"]}
+{"file": "thingi10k/162340.obj", "verdict": "match", "why": []}
+{"file": "thingi10k/242554.obj", "verdict": "match", "why": []}
+{"file": "thingi10k/243661.obj", "verdict": "match", "why": []}
+{"file": "thingi10k/275400.obj", "verdict": "match", "why": []}
+{"file": "thingi10k/285440.obj", "verdict": "match", "why": []}
+{"file": "thingi10k/293590.obj", "verdict": "match", "why": []}
+{"file": "thingi10k/298321.obj", "verdict": "match", "why": []}
+{"file": "thingi10k/298322.obj", "verdict": "match", "why": []}
+{"file": "thingi10k/298323.obj", "verdict": "match", "why": []}
+{"file": "thingi10k/364736.obj", "verdict": "match", "why": []}
+{"file": "thingi10k/372090.obj", "verdict": "match", "why": []}
+{"file": "thingi10k/376253.obj", "verdict": "match", "why": []}
+{"file": "thingi10k/384097.obj", "verdict": "match", "why": []}
+{"file": "thingi10k/444166.obj", "verdict": "match", "why": []}
+{"file": "thingi10k/447950.obj", "verdict": "match", "why": []}
+{"file": "thingi10k/495915.obj", "verdict": "match", "why": []}
+{"file": "thingi10k/59340.obj", "verdict": "match", "why": []}
+{"file": "thingi10k/613661.obj", "verdict": "match", "why": []}
+{"file": "thingi10k/613662.obj", "verdict": "match", "why": []}
+{"file": "thingi10k/613663.obj", "verdict": "match", "why": []}
+{"file": "thingi10k/613665.obj", "verdict": "match", "why": []}
+{"file": "thingi10k/613670.obj", "verdict": "match", "why": []}
+{"file": "thingi10k/613708.obj", "verdict": "match", "why": []}
+{"file": "thingi10k/622327.obj", "verdict": "match", "why": []}
+{"file": "thingi10k/64445.obj", "verdict": "mismatch", "why": ["open edges 7125 vs 26173"]}
+{"file": "thingi10k/64446.obj", "verdict": "mismatch", "why": ["open edges 7125 vs 26173"]}
+{"file": "thingi10k/665841.obj", "verdict": "match", "why": []}
+{"file": "thingi10k/73178.obj", "verdict": "match", "why": []}
+{"file": "thingi10k/73781.obj", "verdict": "mismatch", "why": ["open edges 1864 vs 7704"]}
+{"file": "thingi10k/75846.obj", "verdict": "mismatch", "why": ["open edges 4529 vs 8711"]}
+{"file": "thingi10k/76278.obj", "verdict": "mismatch", "why": ["open edges 2019 vs 3183"]}
+{"file": "thingi10k/81313.obj", "verdict": "both-refused", "why": ["line 1 (byte 0): no faces"]}
+{"file": "thingi10k/82541.obj", "verdict": "match", "why": []}
+{"file": "thingi10k/82675.obj", "verdict": "match", "why": []}
+{"file": "thingi10k/90089.obj", "verdict": "match", "why": []}
+{"file": "thingi10k/921798.obj", "verdict": "match", "why": []}
+{"file": "thingi10k/994785.obj", "verdict": "match", "why": []}
+{"file": "thingi10k/994786.obj", "verdict": "match", "why": []}
+{"file": "trimesh/models/box.obj", "verdict": "mismatch", "why": ["open edges 0 vs 12"]}
+{"file": "trimesh/models/capsule.obj", "verdict": "match", "why": []}
+{"file": "trimesh/models/chair_model.obj", "verdict": "mismatch", "why": ["open edges 19090 vs 11038"]}
+{"file": "trimesh/models/cube.OBJ", "verdict": "match", "why": []}
+{"file": "trimesh/models/cube_compressed.obj", "verdict": "match", "why": []}
+{"file": "trimesh/models/cubevt.obj", "verdict": "match", "why": []}
+{"file": "trimesh/models/empty.obj", "verdict": "both-refused", "why": ["line 1 (byte 0): no faces"]}
+{"file": "trimesh/models/emptyIO/obj_empty.obj", "verdict": "both-refused", "why": ["line 1 (byte 0): no faces"]}
+{"file": "trimesh/models/emptyIO/obj_points.obj", "verdict": "both-refused", "why": ["line 1 (byte 0): no faces"]}
+{"file": "trimesh/models/emptyIO/obj_wireframe.obj", "verdict": "both-refused", "why": ["line 1 (byte 0): no faces"]}
+{"file": "trimesh/models/face_in_group_name.obj", "verdict": "both-refused", "why": ["line 1 (byte 0): no faces"]}
+{"file": "trimesh/models/face_in_group_name_mid_file.obj", "verdict": "match", "why": []}
+{"file": "trimesh/models/fandisk.obj", "verdict": "match", "why": []}
+{"file": "trimesh/models/fuze.obj", "verdict": "match", "why": []}
+{"file": "trimesh/models/groups.obj", "verdict": "match", "why": []}
+{"file": "trimesh/models/ico4.obj", "verdict": "match", "why": []}
+{"file": "trimesh/models/ico4uv.obj", "verdict": "match", "why": []}
+{"file": "trimesh/models/jacked.obj", "verdict": "match", "why": []}
+{"file": "trimesh/models/joined_tetrahedra.obj", "verdict": "match", "why": []}
+{"file": "trimesh/models/nancolor.obj", "verdict": "match", "why": []}
+{"file": "trimesh/models/negative_indices.obj", "verdict": "ref-refused", "why": ["IndexError: index -8 is out of bounds for axis 0 with size 0"]}
+{"file": "trimesh/models/noimg.obj", "verdict": "match", "why": []}
+{"file": "trimesh/models/not_convex.obj", "verdict": "match", "why": []}
+{"file": "trimesh/models/notenoughindices.obj", "verdict": "refused", "why": ["line 9 (byte 159): a face of fewer than three corners"]}
+{"file": "trimesh/models/obj_with_no_face_in_chunk.obj", "verdict": "match", "why": []}
+{"file": "trimesh/models/polygonfaces.obj", "verdict": "match", "why": []}
+{"file": "trimesh/models/quadknot.obj", "verdict": "match", "why": []}
+{"file": "trimesh/models/rabbit.obj", "verdict": "match", "why": []}
+{"file": "trimesh/models/reference.obj", "verdict": "match", "why": []}
+{"file": "trimesh/models/singlevn.obj", "verdict": "match", "why": []}
+{"file": "trimesh/models/target.obj", "verdict": "match", "why": []}
+{"file": "trimesh/models/textured_tetrahedron.obj", "verdict": "match", "why": []}
+{"file": "trimesh/models/tube.obj", "verdict": "match", "why": []}
+{"file": "trimesh/models/two_objects.obj", "verdict": "match", "why": []}
+{"file": "trimesh/models/wallhole.obj", "verdict": "refused", "why": ["line 282 (byte 6551): \"\\\\\" is not a vertex index"]}

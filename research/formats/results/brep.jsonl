@@ -1,0 +1,134 @@
+{"file": "FreeCAD/data/examples/Schenkel.stp", "verdict": "match6", "why": ["dvol -4.00e-07 darea 2.23e-07 solids 1 vs 1"]}
+{"file": "FreeCAD/data/tests/ModelRefineTests/Y_Rod_Mount.brep", "verdict": "match6", "why": ["dvol 9.14e-15 darea -2.86e-15 solids 1 vs 1"]}
+{"file": "FreeCAD/data/tests/ModelRefineTests/ZMotorMountscripted.brep", "verdict": "match6", "why": ["dvol -1.64e-14 darea -8.22e-16 solids 1 vs 1"]}
+{"file": "FreeCAD/data/tests/ModelRefineTests/aox.brep", "verdict": "match6", "why": ["dvol 9.82e-12 darea -2.82e-16 solids 1 vs 1"]}
+{"file": "FreeCAD/data/tests/ModelRefineTests/blocks144.brep", "verdict": "match6", "why": ["dvol 1.36e-15 darea 0.00e+00 solids 1 vs 1"]}
+{"file": "FreeCAD/data/tests/ModelRefineTests/cylinder1.brep", "verdict": "match6", "why": ["dvol 2.60e-15 darea 3.77e-16 solids 1 vs 1"]}
+{"file": "FreeCAD/data/tests/ModelRefineTests/cylinder3.brep", "verdict": "match6", "why": ["dvol 2.41e-15 darea 5.32e-16 solids 1 vs 1"]}
+{"file": "FreeCAD/data/tests/ModelRefineTests/cylinder4.brep", "verdict": "match6", "why": ["dvol 2.34e-15 darea 5.14e-16 solids 1 vs 1"]}
+{"file": "FreeCAD/data/tests/ModelRefineTests/cylinder5.brep", "verdict": "match6", "why": ["dvol 2.44e-15 darea 3.97e-16 solids 1 vs 1"]}
+{"file": "FreeCAD/data/tests/ModelRefineTests/cylinder7_V2.brep", "verdict": "match6", "why": ["dvol -1.07e-11 darea 7.36e-11 solids 1 vs 1"]}
+{"file": "FreeCAD/data/tests/ModelRefineTests/cylinder8.brep", "verdict": "match6", "why": ["dvol 1.96e-15 darea 3.99e-16 solids 1 vs 1"]}
+{"file": "FreeCAD/data/tests/ModelRefineTests/cylinderSeam1.brep", "verdict": "match6", "why": ["dvol 3.39e-16 darea -2.46e-16 solids 1 vs 1"]}
+{"file": "FreeCAD/data/tests/ModelRefineTests/cylinderSeam10.brep", "verdict": "match6", "why": ["dvol -2.31e-09 darea -2.65e-09 solids 1 vs 1"]}
+{"file": "FreeCAD/data/tests/ModelRefineTests/cylinderSeam2.brep", "verdict": "match6", "why": ["dvol 2.48e-16 darea -3.46e-16 solids 1 vs 1"]}
+{"file": "FreeCAD/data/tests/ModelRefineTests/cylinderSeam3.brep", "verdict": "match6", "why": ["dvol -3.53e-12 darea -1.18e-11 solids 1 vs 1"]}
+{"file": "FreeCAD/data/tests/ModelRefineTests/cylinderSeam4.brep", "verdict": "match6", "why": ["dvol 7.92e-16 darea 0.00e+00 solids 1 vs 1"]}
+{"file": "FreeCAD/data/tests/ModelRefineTests/cylinderSeam5.brep", "verdict": "match6", "why": ["dvol 1.72e-10 darea -2.65e-10 solids 1 vs 1"]}
+{"file": "FreeCAD/data/tests/ModelRefineTests/cylinderSeam6.brep", "verdict": "match6", "why": ["dvol -4.04e-12 darea -3.12e-12 solids 1 vs 1"]}
+{"file": "FreeCAD/data/tests/ModelRefineTests/cylinderSeam8.brep", "verdict": "match6", "why": ["dvol 1.00e-15 darea 0.00e+00 solids 1 vs 1"]}
+{"file": "FreeCAD/data/tests/ModelRefineTests/cylinderSeam9.brep", "verdict": "match6", "why": ["dvol 2.14e-15 darea -5.79e-16 solids 1 vs 1"]}
+{"file": "FreeCAD/data/tests/ModelRefineTests/filletBox.brep", "verdict": "match6", "why": ["dvol 4.02e-16 darea 0.00e+00 solids 1 vs 1"]}
+{"file": "FreeCAD/data/tests/ModelRefineTests/holesInFace2.brep", "verdict": "match6", "why": ["dvol 0.00e+00 darea 0.00e+00 solids 1 vs 1"]}
+{"file": "FreeCAD/data/tests/ModelRefineTests/refine_breaks_cylinder.brep", "verdict": "match6", "why": ["dvol 9.54e-09 darea -3.24e-09 solids 1 vs 1"]}
+{"file": "FreeCAD/data/tests/ModelRefineTests/shelf.brep", "verdict": "match6", "why": ["dvol 1.43e-15 darea -1.86e-16 solids 1 vs 1"]}
+{"file": "FreeCAD/data/tests/ModelRefineTests/spline.brep", "verdict": "match6", "why": ["dvol 2.49e-10 darea 2.39e-10 solids 1 vs 1"]}
+{"file": "FreeCAD/data/tests/Step/as1-ac-214.stp", "verdict": "mismatch", "why": ["dvol -1.55e-01 darea -2.69e-01 solids 5 vs 18"]}
+{"file": "FreeCAD/data/tests/Step/as1-ac-214_small.stp", "verdict": "mismatch", "why": ["dvol -3.85e-02 darea -7.92e-02 solids 3 vs 5"]}
+{"file": "FreeCAD/data/tests/Step/geometry_out.stp", "verdict": "both-none", "why": ["OCCT: no solid"]}
+{"file": "FreeCAD/src/Mod/BIM/bimtests/test_roof_subtraction.brep", "verdict": "match6", "why": ["dvol 0.00e+00 darea 2.22e-16 solids 1 vs 1"]}
+{"file": "FreeCAD/src/Mod/BIM/geometry/human figure.brep", "verdict": "both-none", "why": ["OCCT: no solid"]}
+{"file": "FreeCAD/tests/src/Mod/Part/App/brepfiles/countersink_cone.brep", "verdict": "both-none", "why": ["OCCT: no solid"]}
+{"file": "FreeCAD/tests/src/Mod/Part/App/brepfiles/cylinder1.brep", "verdict": "match6", "why": ["dvol 2.60e-15 darea 3.77e-16 solids 1 vs 1"]}
+{"file": "FreeCAD/tests/src/Mod/Part/App/brepfiles/helix1.brep", "verdict": "invalid", "why": ["warned: its volume and area work out to 3.220520e1 and 2.163314e2, but drawn they come t"]}
+{"file": "FreeCAD/tests/src/Mod/Part/App/brepfiles/unorientableSolid.brep", "verdict": "invalid", "why": ["EdgeDegenerate"]}
+{"file": "cadquery/tests/testdata/red_cube_blue_cylinder.step", "verdict": "match6", "why": ["dvol 1.27e-15 darea 0.00e+00 solids 2 vs 2"]}
+{"file": "libredwg/test/test-data/r11/ACEB10.stp", "verdict": "mismatch", "why": ["dvol -1.88e-03 darea -2.01e-02 solids 3 vs 7"]}
+{"file": "nist/nist-ftc-ctc-pmi-cad-models/NIST-FTC-CTC-PMI-CAD-models/CTC Definitions/nist_ctc_01_asme1_rd.stp", "verdict": "match6", "why": ["dvol -6.09e-07 darea 1.49e-07 solids 1 vs 1"]}
+{"file": "nist/nist-ftc-ctc-pmi-cad-models/NIST-FTC-CTC-PMI-CAD-models/CTC Definitions/nist_ctc_02_asme1_rc.stp", "verdict": "match", "why": ["dvol -5.81e-06 darea -3.32e-07 solids 1 vs 1"]}
+{"file": "nist/nist-ftc-ctc-pmi-cad-models/NIST-FTC-CTC-PMI-CAD-models/CTC Definitions/nist_ctc_03_asme1_rc.stp", "verdict": "match6", "why": ["dvol 1.05e-09 darea -9.84e-16 solids 1 vs 1"]}
+{"file": "nist/nist-ftc-ctc-pmi-cad-models/NIST-FTC-CTC-PMI-CAD-models/CTC Definitions/nist_ctc_04_asme1_rd.stp", "verdict": "match6", "why": ["dvol -2.99e-10 darea -8.69e-10 solids 1 vs 1"]}
+{"file": "nist/nist-ftc-ctc-pmi-cad-models/NIST-FTC-CTC-PMI-CAD-models/CTC Definitions/nist_ctc_05_asme1_rd.stp", "verdict": "match6", "why": ["dvol 1.97e-07 darea -4.07e-07 solids 1 vs 1"]}
+{"file": "nist/nist-ftc-ctc-pmi-cad-models/NIST-FTC-CTC-PMI-CAD-models/FTC Definitions/nist_ftc_06_asme1_rd.stp", "verdict": "invalid", "why": ["warned: its volume cannot be worked out (the face's loops draw no region), so nothing it"]}
+{"file": "nist/nist-ftc-ctc-pmi-cad-models/NIST-FTC-CTC-PMI-CAD-models/FTC Definitions/nist_ftc_07_asme1_rd.stp", "verdict": "match", "why": ["dvol -2.98e-06 darea 4.34e-07 solids 1 vs 1"]}
+{"file": "nist/nist-ftc-ctc-pmi-cad-models/NIST-FTC-CTC-PMI-CAD-models/FTC Definitions/nist_ftc_08_asme1_rc.stp", "verdict": "match6", "why": ["dvol 1.30e-09 darea -1.46e-10 solids 1 vs 1"]}
+{"file": "nist/nist-ftc-ctc-pmi-cad-models/NIST-FTC-CTC-PMI-CAD-models/FTC Definitions/nist_ftc_09_asme1_rd.stp", "verdict": "match6", "why": ["dvol 5.91e-14 darea 1.37e-14 solids 1 vs 1"]}
+{"file": "nist/nist-ftc-ctc-pmi-cad-models/NIST-FTC-CTC-PMI-CAD-models/FTC Definitions/nist_ftc_10_asme1_rb.stp", "verdict": "match6", "why": ["dvol 3.13e-07 darea 3.64e-07 solids 1 vs 1"]}
+{"file": "nist/nist-ftc-ctc-pmi-cad-models/NIST-FTC-CTC-PMI-CAD-models/FTC Definitions/nist_ftc_11_asme1_rb.stp", "verdict": "match6", "why": ["dvol 1.77e-15 darea 6.65e-16 solids 1 vs 1"]}
+{"file": "nist/nist-pmi-step-files/NIST-PMI-STEP-Files/AP203 geometry only/nist_ctc_01_asme1_rd.stp", "verdict": "match6", "why": ["dvol -6.09e-07 darea 1.49e-07 solids 1 vs 1"]}
+{"file": "nist/nist-pmi-step-files/NIST-PMI-STEP-Files/AP203 geometry only/nist_ctc_02_asme1_rc.stp", "verdict": "match", "why": ["dvol -5.81e-06 darea -3.32e-07 solids 1 vs 1"]}
+{"file": "nist/nist-pmi-step-files/NIST-PMI-STEP-Files/AP203 geometry only/nist_ctc_03_asme1_rc.stp", "verdict": "match6", "why": ["dvol 1.05e-09 darea -9.84e-16 solids 1 vs 1"]}
+{"file": "nist/nist-pmi-step-files/NIST-PMI-STEP-Files/AP203 geometry only/nist_ctc_04_asme1_rd.stp", "verdict": "match6", "why": ["dvol -2.99e-10 darea -8.69e-10 solids 1 vs 1"]}
+{"file": "nist/nist-pmi-step-files/NIST-PMI-STEP-Files/AP203 geometry only/nist_ctc_05_asme1_rd.stp", "verdict": "match6", "why": ["dvol 1.97e-07 darea -4.07e-07 solids 1 vs 1"]}
+{"file": "nist/nist-pmi-step-files/NIST-PMI-STEP-Files/AP203 geometry only/nist_ftc_06_asme1_rd.stp", "verdict": "invalid", "why": ["warned: its volume cannot be worked out (the face's loops draw no region), so nothing it"]}
+{"file": "nist/nist-pmi-step-files/NIST-PMI-STEP-Files/AP203 geometry only/nist_ftc_07_asme1_rd.stp", "verdict": "match", "why": ["dvol -2.98e-06 darea 4.34e-07 solids 1 vs 1"]}
+{"file": "nist/nist-pmi-step-files/NIST-PMI-STEP-Files/AP203 geometry only/nist_ftc_08_asme1_rc.stp", "verdict": "match6", "why": ["dvol 1.30e-09 darea -1.46e-10 solids 1 vs 1"]}
+{"file": "nist/nist-pmi-step-files/NIST-PMI-STEP-Files/AP203 geometry only/nist_ftc_09_asme1_rd.stp", "verdict": "match6", "why": ["dvol 5.91e-14 darea 1.37e-14 solids 1 vs 1"]}
+{"file": "nist/nist-pmi-step-files/NIST-PMI-STEP-Files/AP203 geometry only/nist_ftc_10_asme1_rb.stp", "verdict": "match6", "why": ["dvol 3.13e-07 darea 3.64e-07 solids 1 vs 1"]}
+{"file": "nist/nist-pmi-step-files/NIST-PMI-STEP-Files/AP203 geometry only/nist_ftc_11_asme1_rb.stp", "verdict": "match6", "why": ["dvol 1.77e-15 darea 6.65e-16 solids 1 vs 1"]}
+{"file": "nist/nist-pmi-step-files/NIST-PMI-STEP-Files/AP203 with PMI/nist_ctc_01_asme1_ap203.stp", "verdict": "match6", "why": ["dvol -6.09e-07 darea 1.49e-07 solids 1 vs 1"]}
+{"file": "nist/nist-pmi-step-files/NIST-PMI-STEP-Files/AP203 with PMI/nist_ctc_02_asme1_ap203.stp", "verdict": "extra", "why": ["timeout"]}
+{"file": "nist/nist-pmi-step-files/NIST-PMI-STEP-Files/AP203 with PMI/nist_ctc_03_asme1_ap203.stp", "verdict": "match6", "why": ["dvol 1.05e-09 darea -9.84e-16 solids 1 vs 1"]}
+{"file": "nist/nist-pmi-step-files/NIST-PMI-STEP-Files/AP203 with PMI/nist_ctc_04_asme1_ap203.stp", "verdict": "match6", "why": ["dvol 3.19e-09 darea 5.21e-10 solids 1 vs 1"]}
+{"file": "nist/nist-pmi-step-files/NIST-PMI-STEP-Files/AP203 with PMI/nist_ctc_05_asme1_ap203.stp", "verdict": "match", "why": ["dvol -3.12e-06 darea -1.82e-06 solids 1 vs 1"]}
+{"file": "nist/nist-pmi-step-files/NIST-PMI-STEP-Files/nist_ctc_01_asme1_ap242-e1.stp", "verdict": "match6", "why": ["dvol -2.03e-07 darea -8.17e-08 solids 1 vs 1"]}
+{"file": "nist/nist-pmi-step-files/NIST-PMI-STEP-Files/nist_ctc_02_asme1_ap242-e2.stp", "verdict": "match6", "why": ["dvol 5.63e-08 darea -2.72e-07 solids 1 vs 1"]}
+{"file": "nist/nist-pmi-step-files/NIST-PMI-STEP-Files/nist_ctc_03_asme1_ap242-e2.stp", "verdict": "match6", "why": ["dvol -3.68e-15 darea 0.00e+00 solids 1 vs 1"]}
+{"file": "nist/nist-pmi-step-files/NIST-PMI-STEP-Files/nist_ctc_04_asme1_ap242-e1.stp", "verdict": "match6", "why": ["dvol -3.41e-07 darea -2.32e-07 solids 1 vs 1"]}
+{"file": "nist/nist-pmi-step-files/NIST-PMI-STEP-Files/nist_ctc_05_asme1_ap242-e1.stp", "verdict": "match", "why": ["dvol -1.23e-06 darea -1.04e-06 solids 1 vs 1"]}
+{"file": "nist/nist-pmi-step-files/NIST-PMI-STEP-Files/nist_ftc_06_asme1_ap242-e2.stp", "verdict": "match6", "why": ["dvol -2.48e-07 darea -6.21e-07 solids 1 vs 1"]}
+{"file": "nist/nist-pmi-step-files/NIST-PMI-STEP-Files/nist_ftc_07_asme1_ap242-e2.stp", "verdict": "match", "why": ["dvol 1.35e-06 darea 4.65e-07 solids 1 vs 1"]}
+{"file": "nist/nist-pmi-step-files/NIST-PMI-STEP-Files/nist_ftc_08_asme1_ap242-e1-tg.stp", "verdict": "refused", "why": ["the file holds no solid"]}
+{"file": "nist/nist-pmi-step-files/NIST-PMI-STEP-Files/nist_ftc_08_asme1_ap242-e2.stp", "verdict": "match6", "why": ["dvol 2.20e-15 darea -3.04e-16 solids 1 vs 1"]}
+{"file": "nist/nist-pmi-step-files/NIST-PMI-STEP-Files/nist_ftc_09_asme1_ap242-e1.stp", "verdict": "match6", "why": ["dvol -1.49e-15 darea 6.02e-16 solids 1 vs 1"]}
+{"file": "nist/nist-pmi-step-files/NIST-PMI-STEP-Files/nist_ftc_10_asme1_ap242-e2.stp", "verdict": "match", "why": ["dvol -1.43e-05 darea -5.94e-06 solids 1 vs 1"]}
+{"file": "nist/nist-pmi-step-files/NIST-PMI-STEP-Files/nist_ftc_11_asme1_ap242-e2.stp", "verdict": "match", "why": ["dvol -2.34e-07 darea -5.98e-06 solids 1 vs 1"]}
+{"file": "nist/nist-pmi-step-files/NIST-PMI-STEP-Files/nist_stc_06_asme1_ap242-e3.stp", "verdict": "match6", "why": ["dvol 2.74e-12 darea 1.38e-12 solids 1 vs 1"]}
+{"file": "nist/nist-pmi-step-files/NIST-PMI-STEP-Files/nist_stc_07_asme1_ap242-e3.stp", "verdict": "refused", "why": ["#2260 CARTESIAN_POINT: outside the 1 km model box"]}
+{"file": "nist/nist-pmi-step-files/NIST-PMI-STEP-Files/nist_stc_08_asme1_ap242-e3.stp", "verdict": "match6", "why": ["dvol -9.82e-09 darea 2.34e-09 solids 1 vs 1"]}
+{"file": "nist/nist-pmi-step-files/NIST-PMI-STEP-Files/nist_stc_09_asme1_ap242-e3.stp", "verdict": "match6", "why": ["dvol -8.32e-15 darea 0.00e+00 solids 1 vs 1"]}
+{"file": "nist/nist-pmi-step-files/NIST-PMI-STEP-Files/nist_stc_10_asme1_ap242-e2.stp", "verdict": "match", "why": ["dvol 2.77e-07 darea -4.04e-06 solids 1 vs 1"]}
+{"file": "occt/data/iges/bearing.iges", "verdict": "both-none", "why": ["OCCT: no solid"]}
+{"file": "occt/data/iges/hammer.iges", "verdict": "both-none", "why": ["OCCT: no solid"]}
+{"file": "occt/data/occ/Axis_of_bearing.brep", "verdict": "invalid", "why": ["FaceWrongSide"]}
+{"file": "occt/data/occ/Ball.brep", "verdict": "invalid", "why": ["FaceWrongSide"]}
+{"file": "occt/data/occ/Bottom.brep", "verdict": "refused", "why": ["#355 torus: radii 4.85186231577642 and 54.5114791761757"]}
+{"file": "occt/data/occ/CrankArm.brep", "verdict": "match6", "why": ["dvol -1.62e-08 darea -1.31e-08 solids 2 vs 2"]}
+{"file": "occt/data/occ/MAT.brep", "verdict": "both-none", "why": ["OCCT: no solid"]}
+{"file": "occt/data/occ/MODERN_Chair_1.brep", "verdict": "match6", "why": ["dvol 3.53e-12 darea 1.27e-12 solids 4 vs 4"]}
+{"file": "occt/data/occ/MODERN_Cooker_1.brep", "verdict": "match6", "why": ["dvol 1.29e-15 darea -1.98e-16 solids 3 vs 3"]}
+{"file": "occt/data/occ/MODERN_Cooker_1_opened.brep", "verdict": "match6", "why": ["dvol -6.56e-16 darea -1.64e-15 solids 2 vs 2"]}
+{"file": "occt/data/occ/MODERN_Exhaust_1.brep", "verdict": "match6", "why": ["dvol 3.06e-09 darea 6.88e-10 solids 3 vs 3"]}
+{"file": "occt/data/occ/MODERN_MVCooker_1.brep", "verdict": "match6", "why": ["dvol 1.01e-15 darea -1.88e-16 solids 1 vs 1"]}
+{"file": "occt/data/occ/MODERN_MVCooker_1_opened.brep", "verdict": "match6", "why": ["dvol 8.17e-13 darea 9.52e-14 solids 1 vs 1"]}
+{"file": "occt/data/occ/MODERN_Refrigerator_1.brep", "verdict": "match6", "why": ["dvol -1.57e-15 darea -5.97e-16 solids 2 vs 2"]}
+{"file": "occt/data/occ/MODERN_Refrigerator_1_opened.brep", "verdict": "match6", "why": ["dvol 4.84e-13 darea 3.77e-14 solids 4 vs 4"]}
+{"file": "occt/data/occ/MODERN_Sink_1.brep", "verdict": "mismatch", "why": ["dvol -1.07e-01 darea -2.22e-01 solids 2 vs 3"]}
+{"file": "occt/data/occ/MODERN_Sink_1_opened.brep", "verdict": "match6", "why": ["dvol 1.28e-16 darea -1.19e-16 solids 4 vs 4"]}
+{"file": "occt/data/occ/MODERN_Table_1.brep", "verdict": "match6", "why": ["dvol 3.42e-13 darea 3.01e-14 solids 1 vs 1"]}
+{"file": "occt/data/occ/Motor-c.brep", "verdict": "match6", "why": ["dvol 3.73e-10 darea 8.27e-10 solids 17 vs 17"]}
+{"file": "occt/data/occ/Pump_Nut.brep", "verdict": "match6", "why": ["dvol -3.47e-11 darea -1.82e-11 solids 1 vs 1"]}
+{"file": "occt/data/occ/Pump_TopCover.brep", "verdict": "match6", "why": ["dvol 2.21e-08 darea -1.42e-10 solids 1 vs 1"]}
+{"file": "occt/data/occ/Room.brep", "verdict": "both-none", "why": ["OCCT: no solid"]}
+{"file": "occt/data/occ/Top.brep", "verdict": "refused", "why": ["#922 torus: radii 0.009999990463256836 and 0.9900000095367432"]}
+{"file": "occt/data/occ/asahi.brep", "verdict": "both-none", "why": ["OCCT: no solid"]}
+{"file": "occt/data/occ/bottle.brep", "verdict": "match", "why": ["dvol -4.44e-04 darea -1.56e-05 solids 1 vs 1"]}
+{"file": "occt/data/occ/edge.brep", "verdict": "both-none", "why": ["OCCT: no solid"]}
+{"file": "occt/data/occ/face.brep", "verdict": "both-none", "why": ["OCCT: no solid"]}
+{"file": "occt/data/occ/face1.brep", "verdict": "both-none", "why": ["OCCT: no solid"]}
+{"file": "occt/data/occ/face2.brep", "verdict": "both-none", "why": ["OCCT: no solid"]}
+{"file": "occt/data/occ/fuse.brep", "verdict": "both-none", "why": ["OCCT: no solid"]}
+{"file": "occt/data/occ/hammer.brep", "verdict": "both-none", "why": ["OCCT: no solid"]}
+{"file": "occt/data/occ/mal_ecrou.brep", "verdict": "match6", "why": ["dvol 1.91e-15 darea 6.27e-16 solids 1 vs 1"]}
+{"file": "occt/data/occ/mal_tige.brep", "verdict": "match6", "why": ["dvol 2.24e-15 darea 0.00e+00 solids 1 vs 1"]}
+{"file": "occt/data/occ/mal_vis.brep", "verdict": "refused", "why": ["#15 torus: radii 10 and 10"]}
+{"file": "occt/data/occ/shell1.brep", "verdict": "both-none", "why": ["OCCT: no solid"]}
+{"file": "occt/data/occ/solid.brep", "verdict": "match6", "why": ["dvol 2.24e-15 darea 0.00e+00 solids 1 vs 1"]}
+{"file": "occt/data/occ/terrain.brep", "verdict": "both-none", "why": ["OCCT: no solid"]}
+{"file": "occt/data/occ/wedge_ok.brep", "verdict": "match6", "why": ["dvol 2.03e-16 darea 0.00e+00 solids 1 vs 1"]}
+{"file": "occt/data/occ/wing.brep", "verdict": "both-none", "why": ["OCCT: no solid"]}
+{"file": "occt/data/step/linkrods.step", "verdict": "match", "why": ["dvol -5.51e-06 darea -1.73e-06 solids 1 vs 1"]}
+{"file": "occt/data/step/screw.step", "verdict": "invalid", "why": ["FaceWrongSide"]}
+{"file": "pythonocc-demos/assets/models/11752.stp", "verdict": "match", "why": ["dvol -7.84e-06 darea 8.43e-08 solids 1 vs 1"]}
+{"file": "pythonocc-demos/assets/models/KR600_R2830-4.stp", "verdict": "invalid", "why": ["EdgeDegenerate,FaceWrongSide,LoopsCross,OuterNotFirst"]}
+{"file": "pythonocc-demos/assets/models/Motor-c.brep", "verdict": "match6", "why": ["dvol 3.73e-10 darea 8.27e-10 solids 17 vs 17"]}
+{"file": "pythonocc-demos/assets/models/RC_Buggy_2_front_suspension.stp", "verdict": "invalid", "why": ["EdgeUses,Euler,FaceWrongSide,LoopsCross"]}
+{"file": "pythonocc-demos/assets/models/Ventilator.stp", "verdict": "match", "why": ["dvol 3.47e-06 darea 3.66e-05 solids 1 vs 1"]}
+{"file": "pythonocc-demos/assets/models/as1-oc-214.stp", "verdict": "mismatch", "why": ["dvol -1.54e-01 darea -2.67e-01 solids 5 vs 18"]}
+{"file": "pythonocc-demos/assets/models/as1_pe_203.stp", "verdict": "mismatch", "why": ["dvol -1.55e-01 darea -2.69e-01 solids 5 vs 18"]}
+{"file": "pythonocc-demos/assets/models/curve_geom_plate.igs", "verdict": "both-none", "why": ["OCCT: no solid"]}
+{"file": "pythonocc-demos/assets/models/cylinder_head.brep", "verdict": "match6", "why": ["dvol -4.48e-07 darea -7.81e-07 solids 1 vs 1"]}
+{"file": "pythonocc-demos/assets/models/face_recognition_sample_part.stp", "verdict": "match6", "why": ["dvol 7.60e-16 darea 2.34e-16 solids 1 vs 1"]}
+{"file": "pythonocc-demos/assets/models/splinecage.stp", "verdict": "both-none", "why": ["OCCT: no solid"]}
+{"file": "pythonocc-demos/assets/models/surf114.igs", "verdict": "both-none", "why": ["OCCT: no solid"]}
+{"file": "pythonocc-demos/assets/models/wire.brep", "verdict": "both-none", "why": ["OCCT: no solid"]}

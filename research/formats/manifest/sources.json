@@ -1,0 +1,23 @@
+{
+  "test_suites": {"url": "https://github.com/3MFConsortium/test_suites", "commit": "f483d3beee069e7adbac125d1f7baa36b5b3e5bf", "licence": "BSD-2-Clause"},
+  "3mf-samples": {"url": "https://github.com/3MFConsortium/3mf-samples", "commit": "665e20dc4d7777fd4c9702bca86a2d4028440337", "licence": "BSD-2-Clause"},
+  "assimp": {"url": "https://github.com/assimp/assimp", "commit": "93fe5d82fb206e850a21809bf45800ae00b17fc7", "licence": "BSD-3-Clause (library); test models of mixed origin, used here unredistributed"},
+  "trimesh": {"url": "https://github.com/mikedh/trimesh", "commit": "28802bd988de46663ed599de475f72f3315f5d7c", "licence": "MIT (repository); models of mixed origin, used here unredistributed"},
+  "common-3d-test-models": {"url": "https://github.com/alecjacobson/common-3d-test-models", "commit": "8a4f8642acaf43f9cd7b67858a1502e1055ef202", "licence": "per model (its README); used here unredistributed"},
+  "thingi10k": {"url": "https://huggingface.co/datasets/Thingi10K/Thingi10K (raw_meshes/)", "commit": "2d5d3b2f3cd3711028ad75b12788c13b25559ec6", "licence": "per file (CC-BY, CC-BY-SA, CC-BY-NC, GPL, PD...: thingi10k.jsonl); used here unredistributed"},
+  "FreeCAD": {"url": "https://github.com/FreeCAD/FreeCAD", "commit": "908196946fc947024acdc99e7f3e837a9a91f9a3", "licence": "LGPL-2.1+ (repository)"},
+  "LibreCAD": {"url": "https://github.com/LibreCAD/LibreCAD", "commit": "954217a719f7fff1f54bdf4ee894a0e462e21934", "licence": "GPL-2.0 (repository)"},
+  "ezdxf": {"url": "https://github.com/mozman/ezdxf", "commit": "5204913d7598e75607dbe96669f05ff745c0d935", "licence": "MIT (repository); fonts under their own (OFL, Bitstream Vera/DejaVu, GPL+FE, KST32B licence)"},
+  "libredwg": {"url": "https://github.com/LibreDWG/libredwg", "commit": "31024e742712e08e6c8d04ba7a1b6883c2d94d9f", "licence": "GPL-3.0+ (repository)"},
+  "gdal": {"url": "https://github.com/OSGeo/gdal", "commit": "6d7a6388745ef760b68d3ea460d700f4be5479c4", "licence": "MIT (repository)"},
+  "cadquery": {"url": "https://github.com/CadQuery/cadquery", "commit": "9c83fd6afe088463fc126bce7467d1a9ba28b4dc", "licence": "Apache-2.0 (repository); Roboto under Apache-2.0"},
+  "occt": {"url": "https://github.com/Open-Cascade-SAS/OCCT (data/)", "commit": "4dbfdcc448c0b3e565488afcd626c84483172db9", "licence": "LGPL-2.1 with the OCCT exception"},
+  "pythonocc-demos": {"url": "https://github.com/tpaviot/pythonocc-demos", "commit": "0bbdf10e716222370ad300e4bb88994e7d9fb5cb", "licence": "LGPL-3.0 (repository)"},
+  "nist": {"url": "https://www.nist.gov/document/nist-pmi-step-files, /document/nist-ftc-ctc-pmi-cad-models, /document/nist-stc-pmi-v4", "commit": "zips sha256 8fa78429e6d8d9b0d7681d223b6aa9ec98c3772185c55b1a0e3679b21c181911, 17e14dbf207f447f16e0182a7eda5254ee19afff591dd409b8b510103dd05d10, bb4fb9939476542af6e90fd2616b4e897756916494a4c92f11404fc13dd1aba8", "licence": "NIST: 'can be used without any restrictions' (acknowledgement requested)"},
+  "abc": {"url": "https://archive.nyu.edu/rest/bitstreams/88598/retrieve (abc_0000_step_v00.7z)", "commit": "7z sha256 52e6dd1b6fa38e3cd99af59b662370829129540030975919c3e256dce6ad1dbe", "licence": "models' copyright their creators', Onshape Terms of Use 1.g.ii; used here unredistributed"},
+  "gfonts": {"url": "https://github.com/google/fonts", "commit": "06bfe0d62a98375cb09c942fa18e68bd32cff057", "licence": "per family: OFL-1.1, Apache-2.0, UFL"},
+  "source-sans": {"url": "https://github.com/adobe-fonts/source-sans", "commit": "87b37a2daaed80fcb8e8ccb0085c4d72ddade12e", "licence": "OFL-1.1"},
+  "source-serif": {"url": "https://github.com/adobe-fonts/source-serif", "commit": "80d3f8894c09c937bebfa9011247d2e1c79fd6f4", "licence": "OFL-1.1"},
+  "source-code-pro": {"url": "https://github.com/adobe-fonts/source-code-pro", "commit": "803b7e23ec97ae58b6232ea76519a76d428ba268", "licence": "OFL-1.1"},
+  "text-rendering-tests": {"url": "https://github.com/unicode-org/text-rendering-tests", "commit": "26cfb96d094befc3c8b08228577bf400b04b83a1", "licence": "Apache-2.0 / fonts OFL (per file)"}
+}

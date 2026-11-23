@@ -1,0 +1,5 @@
+{"file": "ezdxf/examples/ltypeshp.shx", "verdict": "match", "why": ["{}"], "shapes": 5}
+{"file": "ezdxf/fonts/strokefonts/azomix.shx", "verdict": "match", "why": ["{}"], "shapes": 7093}
+{"file": "ezdxf/fonts/strokefonts/azomix_i.shx", "verdict": "match", "why": ["{}"], "shapes": 7093}
+{"file": "ezdxf/fonts/strokefonts/iso3098.shx", "verdict": "match", "why": ["{}"], "shapes": 318}
+{"file": "ezdxf/fonts/strokefonts/kst32b.shx", "verdict": "match", "why": ["{}"], "shapes": 6721}

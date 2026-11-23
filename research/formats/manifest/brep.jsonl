@@ -1,0 +1,135 @@
+{"sources": {"FreeCAD": {"url": "https://github.com/FreeCAD/FreeCAD", "commit": "908196946fc947024acdc99e7f3e837a9a91f9a3", "licence": "LGPL-2.1+ (repository)"}, "cadquery": {"url": "https://github.com/CadQuery/cadquery", "commit": "9c83fd6afe088463fc126bce7467d1a9ba28b4dc", "licence": "Apache-2.0 (repository); Roboto under Apache-2.0"}, "libredwg": {"url": "https://github.com/LibreDWG/libredwg", "commit": "31024e742712e08e6c8d04ba7a1b6883c2d94d9f", "licence": "GPL-3.0+ (repository)"}, "nist": {"url": "https://www.nist.gov/document/nist-pmi-step-files, /document/nist-ftc-ctc-pmi-cad-models, /document/nist-stc-pmi-v4", "commit": "zips sha256 8fa78429e6d8d9b0d7681d223b6aa9ec98c3772185c55b1a0e3679b21c181911, 17e14dbf207f447f16e0182a7eda5254ee19afff591dd409b8b510103dd05d10, bb4fb9939476542af6e90fd2616b4e897756916494a4c92f11404fc13dd1aba8", "licence": "NIST: 'can be used without any restrictions' (acknowledgement requested)"}, "occt": {"url": "https://github.com/Open-Cascade-SAS/OCCT (data/)", "commit": "4dbfdcc448c0b3e565488afcd626c84483172db9", "licence": "LGPL-2.1 with the OCCT exception"}, "pythonocc-demos": {"url": "https://github.com/tpaviot/pythonocc-demos", "commit": "0bbdf10e716222370ad300e4bb88994e7d9fb5cb", "licence": "LGPL-3.0 (repository)"}}}
+{"source": "FreeCAD", "path": "data/examples/Schenkel.stp", "bytes": 590055, "sha256": "69df4cb83831b2e0b9e9d7a04c72c893c6dcc82f2c18c4dd2f3280144a6c8088"}
+{"source": "FreeCAD", "path": "data/tests/ModelRefineTests/Y_Rod_Mount.brep", "bytes": 231110, "sha256": "0bcba42a2586bd99d33f8c1027d961b8876d7c8318995f2505e1c58c156ca727"}
+{"source": "FreeCAD", "path": "data/tests/ModelRefineTests/ZMotorMountscripted.brep", "bytes": 358517, "sha256": "a3b5721469e2199776b7e0cc3ed773c9b03e2f2f41e8358b6af19f0cf83530ba"}
+{"source": "FreeCAD", "path": "data/tests/ModelRefineTests/aox.brep", "bytes": 292244, "sha256": "d229840106f1a4ef68c489d3a5ed99d4c4b55845a222550155ee333f1c46586e"}
+{"source": "FreeCAD", "path": "data/tests/ModelRefineTests/blocks144.brep", "bytes": 1028467, "sha256": "86142de1bd384f2c3a4f874783b85bdee2a3222b139e30b3d033a73dad67570a"}
+{"source": "FreeCAD", "path": "data/tests/ModelRefineTests/cylinder1.brep", "bytes": 11166, "sha256": "0b167ee0ffa6d587c411080cc32f2aaf44036fd40c85ca4161687e9e2af06dad"}
+{"source": "FreeCAD", "path": "data/tests/ModelRefineTests/cylinder3.brep", "bytes": 28899, "sha256": "176f6eead6b6c0dfa97e424e15a528863425acdff06428bcf6c23d666e6003ca"}
+{"source": "FreeCAD", "path": "data/tests/ModelRefineTests/cylinder4.brep", "bytes": 28492, "sha256": "400e217f4519a353a677cd1c29f0454980a9dc774427321317d0b3d0fba89230"}
+{"source": "FreeCAD", "path": "data/tests/ModelRefineTests/cylinder5.brep", "bytes": 28623, "sha256": "910eb3f4c45855dbcf26936d50d48d2486e849dec8bb16113bbbc0ca3ac8436a"}
+{"source": "FreeCAD", "path": "data/tests/ModelRefineTests/cylinder7_V2.brep", "bytes": 91147, "sha256": "8dae32253c0f3d764f6f12399378c545c77ac533c325810b6c8e006a7ecefaa9"}
+{"source": "FreeCAD", "path": "data/tests/ModelRefineTests/cylinder8.brep", "bytes": 43476, "sha256": "569e4fe71cd51ef22b5ad338f95f4c3ec743cb1c4e427dfbe7be49e8cc6df3eb"}
+{"source": "FreeCAD", "path": "data/tests/ModelRefineTests/cylinderSeam1.brep", "bytes": 10850, "sha256": "74e2a543bc651c9f5c173a9bce2737869f76e6aab6dbd6be7e8c4535e695d87b"}
+{"source": "FreeCAD", "path": "data/tests/ModelRefineTests/cylinderSeam10.brep", "bytes": 383921, "sha256": "02d7122d3c4decd371361372826c2a0008b55cd41ca4dd4d2fe13444b1501327"}
+{"source": "FreeCAD", "path": "data/tests/ModelRefineTests/cylinderSeam2.brep", "bytes": 23265, "sha256": "f90b9ab022c017d37c5c91213f4b9214d9b981d5b82cb96bb41d4f0ca85d6ba6"}
+{"source": "FreeCAD", "path": "data/tests/ModelRefineTests/cylinderSeam3.brep", "bytes": 45685, "sha256": "b0c34aa8b68db7d498f4fa79d8e05a61a2824c0f0d22efda424530495e86f202"}
+{"source": "FreeCAD", "path": "data/tests/ModelRefineTests/cylinderSeam4.brep", "bytes": 24118, "sha256": "7db6e4618acc16da83c55ea8b9757c260885b416dd52519eeff5a65cc7eb3809"}
+{"source": "FreeCAD", "path": "data/tests/ModelRefineTests/cylinderSeam5.brep", "bytes": 41208, "sha256": "99ab795805050d76d45f73f3bd44db2bcd3c208102087325aff509ad3fbae47e"}
+{"source": "FreeCAD", "path": "data/tests/ModelRefineTests/cylinderSeam6.brep", "bytes": 35407, "sha256": "40bd892656489a6f499a462263069a106f8943861a0efdea361fe9955986c2d6"}
+{"source": "FreeCAD", "path": "data/tests/ModelRefineTests/cylinderSeam8.brep", "bytes": 35655, "sha256": "4d17729f2f62f1e77aa7948bd930f82620f3ceb9cfeeda7d2ec7923c4fcfa11b"}
+{"source": "FreeCAD", "path": "data/tests/ModelRefineTests/cylinderSeam9.brep", "bytes": 57952, "sha256": "08239f88b1b2e480fe483990a68dc40aa20db01a1b2a25c07196c0ae432036b1"}
+{"source": "FreeCAD", "path": "data/tests/ModelRefineTests/filletBox.brep", "bytes": 19021, "sha256": "24b7e2782e3074e023cb8c2f855e0dd8e7aaa35cf6e8d4a898b469dfa800ba98"}
+{"source": "FreeCAD", "path": "data/tests/ModelRefineTests/holesInFace2.brep", "bytes": 36379, "sha256": "8adb3ce33cdd4309bd54184c93e66ec6d2140f9a9e028574486f30d57d44c52f"}
+{"source": "FreeCAD", "path": "data/tests/ModelRefineTests/refine_breaks_cylinder.brep", "bytes": 713535, "sha256": "0f8063013a2509be53b3bb8c02c415f41037d2f70a64142dffd1112c20b6c618"}
+{"source": "FreeCAD", "path": "data/tests/ModelRefineTests/shelf.brep", "bytes": 67177, "sha256": "dce3a968aac67455655337c90c67d72ad168388a19526559b95d05cb0084b239"}
+{"source": "FreeCAD", "path": "data/tests/ModelRefineTests/spline.brep", "bytes": 41764, "sha256": "6ffc7d3a1e0fd604089a79fe7d2d381f68a27825efe098812a728dbd9076a5b5"}
+{"source": "FreeCAD", "path": "data/tests/Step/as1-ac-214.stp", "bytes": 83424, "sha256": "1bb1a0e55dc4a0169e329529eb520596690f8745077c1bdd2f9fa41fa5a2aa95"}
+{"source": "FreeCAD", "path": "data/tests/Step/as1-ac-214_small.stp", "bytes": 86790, "sha256": "80c8ace7c72ed12d02ab45f8471528c192990781dbb6e4afe975058c6197ca45"}
+{"source": "FreeCAD", "path": "data/tests/Step/geometry_out.stp", "bytes": 2007, "sha256": "c5fd33cdab0577d41b85c0982e7f09a4a5095b7633f3c87b1e1ec3f8db396d03"}
+{"source": "FreeCAD", "path": "src/Mod/BIM/bimtests/test_roof_subtraction.brep", "bytes": 6599, "sha256": "d324c282ab63b518d54eba256d23894129b3a21f24f17dc01d67a882cc97f5ff"}
+{"source": "FreeCAD", "path": "src/Mod/BIM/geometry/human figure.brep", "bytes": 57933, "sha256": "fbbc68daaef84a34aab22e272f43a13758121b789521228f1c01442b41fde6a8"}
+{"source": "FreeCAD", "path": "tests/src/Mod/Part/App/brepfiles/countersink_cone.brep", "bytes": 8345, "sha256": "e738221e696711f14d0a911ef72f47151c9b70a5518633338d870450b3f88f43"}
+{"source": "FreeCAD", "path": "tests/src/Mod/Part/App/brepfiles/cylinder1.brep", "bytes": 11141, "sha256": "318543135bbd1f1f49c0ed48f246b91b462590fa35e08e68e0873e400880df08"}
+{"source": "FreeCAD", "path": "tests/src/Mod/Part/App/brepfiles/helix1.brep", "bytes": 42600, "sha256": "7d80559b6d52129b7e4eb641d1212fe14d5ff0f45d32f667c61a67b4c9bfa578"}
+{"source": "FreeCAD", "path": "tests/src/Mod/Part/App/brepfiles/unorientableSolid.brep", "bytes": 23355, "sha256": "71a4cd8be4411075d82ad965d1d554ca61d621f19b4202d22a61048363b83366"}
+{"source": "cadquery", "path": "tests/testdata/red_cube_blue_cylinder.step", "bytes": 18322, "sha256": "1fd5c7d9325bcfb9863365faf84554f89e7e7a5e86760a0fc8d5db00619d9ef5"}
+{"source": "libredwg", "path": "test/test-data/r11/ACEB10.stp", "bytes": 2477705, "sha256": "5044adf3acafe7441acd6e520cf03ca082c94596644ef74b875e539d64809442"}
+{"source": "nist", "path": "nist-ftc-ctc-pmi-cad-models/NIST-FTC-CTC-PMI-CAD-models/CTC Definitions/nist_ctc_01_asme1_rd.stp", "bytes": 235156, "sha256": "bd5a73c58880ba9093f8dc653c87f4224d6a795459e7fb64f6fdc22ba76a02d3"}
+{"source": "nist", "path": "nist-ftc-ctc-pmi-cad-models/NIST-FTC-CTC-PMI-CAD-models/CTC Definitions/nist_ctc_02_asme1_rc.stp", "bytes": 1154618, "sha256": "cd669778fbf9f11fa386a7fe8afe5a70513e3e17a5000e645d237dd4525d2775"}
+{"source": "nist", "path": "nist-ftc-ctc-pmi-cad-models/NIST-FTC-CTC-PMI-CAD-models/CTC Definitions/nist_ctc_03_asme1_rc.stp", "bytes": 252113, "sha256": "d4158ed46a3fb1d83c85cfec2e640bbaff8c28b2b39e1e66cb87fba9b7985af3"}
+{"source": "nist", "path": "nist-ftc-ctc-pmi-cad-models/NIST-FTC-CTC-PMI-CAD-models/CTC Definitions/nist_ctc_04_asme1_rd.stp", "bytes": 793056, "sha256": "f4f467dcf97e54ab2582ecd447d3bd55cd6a5590117a77889eacc1c4778917fe"}
+{"source": "nist", "path": "nist-ftc-ctc-pmi-cad-models/NIST-FTC-CTC-PMI-CAD-models/CTC Definitions/nist_ctc_05_asme1_rd.stp", "bytes": 326835, "sha256": "edc5bb91c00a0fe6d1c76439130f6deabfef851e910538e8f23daf5dfe70f9e7"}
+{"source": "nist", "path": "nist-ftc-ctc-pmi-cad-models/NIST-FTC-CTC-PMI-CAD-models/FTC Definitions/nist_ftc_06_asme1_rd.stp", "bytes": 222784, "sha256": "bf751dc227ead634776c4ef93fe6189109b62339bef57f83ad9dbfe2cd3f764b"}
+{"source": "nist", "path": "nist-ftc-ctc-pmi-cad-models/NIST-FTC-CTC-PMI-CAD-models/FTC Definitions/nist_ftc_07_asme1_rd.stp", "bytes": 402549, "sha256": "b0eecb1ee17386ec0785a90dcdde52d6a152991db33aec0c69c7e1bbd30d42fa"}
+{"source": "nist", "path": "nist-ftc-ctc-pmi-cad-models/NIST-FTC-CTC-PMI-CAD-models/FTC Definitions/nist_ftc_08_asme1_rc.stp", "bytes": 450747, "sha256": "c0c59faae620c5cf1d1f5eba025b4e8666625bd0a7658ecd5625d3a8badc9a7b"}
+{"source": "nist", "path": "nist-ftc-ctc-pmi-cad-models/NIST-FTC-CTC-PMI-CAD-models/FTC Definitions/nist_ftc_09_asme1_rd.stp", "bytes": 263934, "sha256": "d12866d3ab0fc260efd0f1a5c54af47950be513486f61f65513877045582afa8"}
+{"source": "nist", "path": "nist-ftc-ctc-pmi-cad-models/NIST-FTC-CTC-PMI-CAD-models/FTC Definitions/nist_ftc_10_asme1_rb.stp", "bytes": 323619, "sha256": "7ab61ea7d6412b2df3b9b75123544d15810fe6792bf5adf7c820e6fe9e136424"}
+{"source": "nist", "path": "nist-ftc-ctc-pmi-cad-models/NIST-FTC-CTC-PMI-CAD-models/FTC Definitions/nist_ftc_11_asme1_rb.stp", "bytes": 7652, "sha256": "d94ee0bed48f06e94621a03b6b088e16fac1bf70607f0d31dfbe87a17bb2ec7e"}
+{"source": "nist", "path": "nist-pmi-step-files/NIST-PMI-STEP-Files/AP203 geometry only/nist_ctc_01_asme1_rd.stp", "bytes": 235171, "sha256": "e081d518484d5c708c6729353237f94a7d97da2b74a10d60d4c0d146d67a5855"}
+{"source": "nist", "path": "nist-pmi-step-files/NIST-PMI-STEP-Files/AP203 geometry only/nist_ctc_02_asme1_rc.stp", "bytes": 1154600, "sha256": "e6df6d0ed68fd8a91bd3f8360c7047f2af3d61068b89050d84423fe8ddb93bcf"}
+{"source": "nist", "path": "nist-pmi-step-files/NIST-PMI-STEP-Files/AP203 geometry only/nist_ctc_03_asme1_rc.stp", "bytes": 252128, "sha256": "95a775b1acdbc34de11319cb83b4cf6c6fdd7de8cbfc4af2d0afe5d3565cfdf8"}
+{"source": "nist", "path": "nist-pmi-step-files/NIST-PMI-STEP-Files/AP203 geometry only/nist_ctc_04_asme1_rd.stp", "bytes": 793048, "sha256": "cdb59a085a3364941b881f96b511265a7cb5f6e94180c4426bdc3025481f405a"}
+{"source": "nist", "path": "nist-pmi-step-files/NIST-PMI-STEP-Files/AP203 geometry only/nist_ctc_05_asme1_rd.stp", "bytes": 326817, "sha256": "5140b8f41fa1d0a069ea978e28c92a597f47220d0a11e667b79ff5f7c7243b86"}
+{"source": "nist", "path": "nist-pmi-step-files/NIST-PMI-STEP-Files/AP203 geometry only/nist_ftc_06_asme1_rd.stp", "bytes": 222799, "sha256": "5e30f0903f9470c14a98e70395ca005fe90bcd3fb704c381a80a69958838f169"}
+{"source": "nist", "path": "nist-pmi-step-files/NIST-PMI-STEP-Files/AP203 geometry only/nist_ftc_07_asme1_rd.stp", "bytes": 402531, "sha256": "a0bc551656780b26d7a0ee1beedbc07d43f41efa092f74f3c2d8383417f04481"}
+{"source": "nist", "path": "nist-pmi-step-files/NIST-PMI-STEP-Files/AP203 geometry only/nist_ftc_08_asme1_rc.stp", "bytes": 450741, "sha256": "4b7011b0b86cf6301058aa954b76a9587d23478b6dee2660f4a80caf0dfe8b73"}
+{"source": "nist", "path": "nist-pmi-step-files/NIST-PMI-STEP-Files/AP203 geometry only/nist_ftc_09_asme1_rd.stp", "bytes": 263916, "sha256": "e29c09bd2d454601ff1a0d77c4c4ffaf2ed78eee71031ce49f7b7bb5a6d1d4e8"}
+{"source": "nist", "path": "nist-pmi-step-files/NIST-PMI-STEP-Files/AP203 geometry only/nist_ftc_10_asme1_rb.stp", "bytes": 323601, "sha256": "2bd726f9fe86aeb96ab517ce876e5696e7951310df5c4fbca36276d65879067b"}
+{"source": "nist", "path": "nist-pmi-step-files/NIST-PMI-STEP-Files/AP203 geometry only/nist_ftc_11_asme1_rb.stp", "bytes": 7634, "sha256": "a5abfea460499dc31bc812aca68917948a117565fea4f5a080e36eb32f39650d"}
+{"source": "nist", "path": "nist-pmi-step-files/NIST-PMI-STEP-Files/AP203 with PMI/nist_ctc_01_asme1_ap203.stp", "bytes": 1190836, "sha256": "a3058f47323c7e0e24249eeaa19939867e66b243058805f67cd1b93c41f6c806"}
+{"source": "nist", "path": "nist-pmi-step-files/NIST-PMI-STEP-Files/AP203 with PMI/nist_ctc_02_asme1_ap203.stp", "bytes": 3361535, "sha256": "ae0049980cb11cb224447e1738b499d8e1c79423782b7a8e8489a4d5316660cc"}
+{"source": "nist", "path": "nist-pmi-step-files/NIST-PMI-STEP-Files/AP203 with PMI/nist_ctc_03_asme1_ap203.stp", "bytes": 2020297, "sha256": "294444aadbe1b427013250cd07ece07d9e6b6c718ebd570622deccf5702178de"}
+{"source": "nist", "path": "nist-pmi-step-files/NIST-PMI-STEP-Files/AP203 with PMI/nist_ctc_04_asme1_ap203.stp", "bytes": 1388915, "sha256": "d6d8f9b3439bb334b85b5c94edd613c02ccea2694407d9e79588991b068f1ebf"}
+{"source": "nist", "path": "nist-pmi-step-files/NIST-PMI-STEP-Files/AP203 with PMI/nist_ctc_05_asme1_ap203.stp", "bytes": 1069563, "sha256": "9df8bf141d5e5b50856021b7c209dea93393dd5406bf0e85ccc70bb15f7d70a2"}
+{"source": "nist", "path": "nist-pmi-step-files/NIST-PMI-STEP-Files/nist_ctc_01_asme1_ap242-e1.stp", "bytes": 396445, "sha256": "85a5752da05f53c456ca3a9e038c90358e1d5a3141d1f0d6e5f0970f2356e821"}
+{"source": "nist", "path": "nist-pmi-step-files/NIST-PMI-STEP-Files/nist_ctc_02_asme1_ap242-e2.stp", "bytes": 1981342, "sha256": "99a0a2079ddeb64d05c2432cbe931fa17c89da60d8b0bcb0b11bd0ed94fa2e68"}
+{"source": "nist", "path": "nist-pmi-step-files/NIST-PMI-STEP-Files/nist_ctc_03_asme1_ap242-e2.stp", "bytes": 673846, "sha256": "196b665776e759282f80fc8fb27d7bceb995df77cf78b7ce48347535a4d6cb5f"}
+{"source": "nist", "path": "nist-pmi-step-files/NIST-PMI-STEP-Files/nist_ctc_04_asme1_ap242-e1.stp", "bytes": 1287291, "sha256": "20b43b54ce25d4ed17cff794084c406e831c687f5b62471d3371eef33669e355"}
+{"source": "nist", "path": "nist-pmi-step-files/NIST-PMI-STEP-Files/nist_ctc_05_asme1_ap242-e1.stp", "bytes": 878030, "sha256": "59bbc09a34621c03106e4c1b2a5bc909fdb67463117c16c4965ee7a6fe5c1521"}
+{"source": "nist", "path": "nist-pmi-step-files/NIST-PMI-STEP-Files/nist_ftc_06_asme1_ap242-e2.stp", "bytes": 1971192, "sha256": "b87afb7f25adc0d44d12e182209d50f0b085b533c0742fb8ffd58f4c87403447"}
+{"source": "nist", "path": "nist-pmi-step-files/NIST-PMI-STEP-Files/nist_ftc_07_asme1_ap242-e2.stp", "bytes": 1478375, "sha256": "aa8115c12e12a99cc439477cbfd222916f9ec629fbb3c9002b18e0c264c9a892"}
+{"source": "nist", "path": "nist-pmi-step-files/NIST-PMI-STEP-Files/nist_ftc_08_asme1_ap242-e1-tg.stp", "bytes": 2120356, "sha256": "841a9ac51a32fe25b872f283b0b8770c77fee4e34adc8499f88a6e1bafd8e578"}
+{"source": "nist", "path": "nist-pmi-step-files/NIST-PMI-STEP-Files/nist_ftc_08_asme1_ap242-e2.stp", "bytes": 4722264, "sha256": "7b9283b4288d152fd181d76c39285d7c79fbba34fda1e14a41ac4a983f6d68b3"}
+{"source": "nist", "path": "nist-pmi-step-files/NIST-PMI-STEP-Files/nist_ftc_09_asme1_ap242-e1.stp", "bytes": 6109836, "sha256": "f1215fe15a78085a9fa78dd81714caf774b59071be92580b04ebfdc19f52a1bd"}
+{"source": "nist", "path": "nist-pmi-step-files/NIST-PMI-STEP-Files/nist_ftc_10_asme1_ap242-e2.stp", "bytes": 1879881, "sha256": "9d7711f48e81831c5d1838fdac5c11c0de1aa9b61f3c1d67930a7638b3b25e69"}
+{"source": "nist", "path": "nist-pmi-step-files/NIST-PMI-STEP-Files/nist_ftc_11_asme1_ap242-e2.stp", "bytes": 1946454, "sha256": "20a92edf514ae0989d556f9c7b9f065aed741cfbb361b7fe4cb7938a1eb5c232"}
+{"source": "nist", "path": "nist-pmi-step-files/NIST-PMI-STEP-Files/nist_stc_06_asme1_ap242-e3.stp", "bytes": 1006401, "sha256": "71777c28da76da0e8a667e4cbe792d5f72c09b5c56440c9744d3d50ca96ecc8d"}
+{"source": "nist", "path": "nist-pmi-step-files/NIST-PMI-STEP-Files/nist_stc_07_asme1_ap242-e3.stp", "bytes": 1945387, "sha256": "2dddf9b8894bc241f7ffddf3dc4502baa3d49c374e8784039d14b86473d54832"}
+{"source": "nist", "path": "nist-pmi-step-files/NIST-PMI-STEP-Files/nist_stc_08_asme1_ap242-e3.stp", "bytes": 2251152, "sha256": "64f24b914910ce8e20c9e4bd59637b4fd155715c7c7b51689466534ed7db1442"}
+{"source": "nist", "path": "nist-pmi-step-files/NIST-PMI-STEP-Files/nist_stc_09_asme1_ap242-e3.stp", "bytes": 5287678, "sha256": "737423afcb223b87d92a4ea7646a97d8d55fb21cc24ba2fb72b952336bcf1fad"}
+{"source": "nist", "path": "nist-pmi-step-files/NIST-PMI-STEP-Files/nist_stc_10_asme1_ap242-e2.stp", "bytes": 4875056, "sha256": "fba4f46cab1ce1402362038036884631b4a41afe1c9efc5681d358c39db7ed5f"}
+{"source": "occt", "path": "data/iges/bearing.iges", "bytes": 1284903, "sha256": "e148b6f4240694049c8a2b894dc9f7c74113bb8991e5a12a5dead160fb9f0106"}
+{"source": "occt", "path": "data/iges/hammer.iges", "bytes": 1038825, "sha256": "b62fb4823e109737b56ba2fd18e2d10ecd988776cb16262d59f3e1784feb0a65"}
+{"source": "occt", "path": "data/occ/Axis_of_bearing.brep", "bytes": 1771510, "sha256": "98801b604f328c3633abdaf504a0fb7d0d0c3ef98bd403c2b2f267d6aa816ac0"}
+{"source": "occt", "path": "data/occ/Ball.brep", "bytes": 151078, "sha256": "d527b3b03ec168361c309aa8a2587858ec48cf4f544539f448421a47d10bacbe"}
+{"source": "occt", "path": "data/occ/Bottom.brep", "bytes": 3839135, "sha256": "fdf4a89e9a0287859d524e6abade702badd1b840b94876aaebf327ecb03e4588"}
+{"source": "occt", "path": "data/occ/CrankArm.brep", "bytes": 383605, "sha256": "7f9aec65e35f951a0eb06fdee44e6dc62245df51eb30e18a62d9f37ac8abd2a3"}
+{"source": "occt", "path": "data/occ/MAT.brep", "bytes": 188524, "sha256": "d12ca6257fa09e703902fbb9e093c43e8fe2bfb95759f7dd069d4bae5dd461c6"}
+{"source": "occt", "path": "data/occ/MODERN_Chair_1.brep", "bytes": 501090, "sha256": "15d011ce74e667ed7d9b7b906cd43bd8ee70af6b1d305a5ec6cdfef0cbc78919"}
+{"source": "occt", "path": "data/occ/MODERN_Cooker_1.brep", "bytes": 522953, "sha256": "e362980cf82c1f6ff28653e64d0d2d2072f40fceced550ba31cb4f4e5981e611"}
+{"source": "occt", "path": "data/occ/MODERN_Cooker_1_opened.brep", "bytes": 90437, "sha256": "ca827c4e184f827564a31f4576c86c0004b712d2b95cef2f3f77c4f9951a6be3"}
+{"source": "occt", "path": "data/occ/MODERN_Exhaust_1.brep", "bytes": 284199, "sha256": "ed2ce087aaef8e5ae6dea19cc0ddee072a8c6036ed9800a118487f49862ee02b"}
+{"source": "occt", "path": "data/occ/MODERN_MVCooker_1.brep", "bytes": 27679, "sha256": "a03a55413147abe00ed0fdea2ad7407c0a2b9a9cf2d31d37a2e466fc52cfd973"}
+{"source": "occt", "path": "data/occ/MODERN_MVCooker_1_opened.brep", "bytes": 36016, "sha256": "d39576d7a7f3985863300bcc72d8b811a37576a765919e09e0f3f56e480c5b6e"}
+{"source": "occt", "path": "data/occ/MODERN_Refrigerator_1.brep", "bytes": 30340, "sha256": "35071db6ad3e445916dd032dc64447d7c7f6bc3ff79bf678423e51c1476f4f72"}
+{"source": "occt", "path": "data/occ/MODERN_Refrigerator_1_opened.brep", "bytes": 287175, "sha256": "af726386f0ba0c8efdd68d87616435aacf487e2ed0dc49ffa22b98d298722625"}
+{"source": "occt", "path": "data/occ/MODERN_Sink_1.brep", "bytes": 1352763, "sha256": "504a4358260d5ddde44e0819b90165a0e8ebce9432292b448a13ed7b6e8f750f"}
+{"source": "occt", "path": "data/occ/MODERN_Sink_1_opened.brep", "bytes": 247287, "sha256": "bae1bfef6dceb5233b07e3d0386206af08f69e0c4939a5d1c563ec8edc497fb7"}
+{"source": "occt", "path": "data/occ/MODERN_Table_1.brep", "bytes": 105328, "sha256": "341e22f75df8ab2575ec8f734399bd093948b038ddea0d0c2fc87e1fb279e13e"}
+{"source": "occt", "path": "data/occ/Motor-c.brep", "bytes": 2584674, "sha256": "6a381db39565ddf78d1ae7162c2f839bc5886931d510dd0789a72be12a0b2d0b"}
+{"source": "occt", "path": "data/occ/Pump_Nut.brep", "bytes": 165298, "sha256": "0210ed0e678c1571620a5f87616a7ae65a36f1ea106d621cc77ec6af5c97e74f"}
+{"source": "occt", "path": "data/occ/Pump_TopCover.brep", "bytes": 144669, "sha256": "700c2ac9394b84b397fe5befad9250b935875a081babbaba474d590ceba6f4a0"}
+{"source": "occt", "path": "data/occ/Room.brep", "bytes": 4299, "sha256": "2beb6b3ddca821345d86eab6ff471d504fc15c789a25b85cc232a6faa0eeeb93"}
+{"source": "occt", "path": "data/occ/Top.brep", "bytes": 3514583, "sha256": "947641c949cd8c30aeaed5cdd16bcd1fb4487895ad2d906c947baecbb6381b8f"}
+{"source": "occt", "path": "data/occ/asahi.brep", "bytes": 832289, "sha256": "bd3990cfa4d8903a12cb653f3397e86938b0bcc9b2f8fbd9d84e55ad273bfb36"}
+{"source": "occt", "path": "data/occ/bottle.brep", "bytes": 401311, "sha256": "7b59eb71563f1a1908d0e717733dd4c4d4295fc52bf642cafb3e204ff790811b"}
+{"source": "occt", "path": "data/occ/edge.brep", "bytes": 20276, "sha256": "a4def25cf6e958981c52943f64b2facf981623b0df6dbb0cfc652d1e36babb41"}
+{"source": "occt", "path": "data/occ/face.brep", "bytes": 44384, "sha256": "8e624effe0b9ebd9539aa3b44edf7d5a0adc9028b1a488ca627cbd9e77f0e6c3"}
+{"source": "occt", "path": "data/occ/face1.brep", "bytes": 2214, "sha256": "e34924bbff0de48dac585c10d922bf2ddf5d25bf0255d60ebcd551a02b3c8e2e"}
+{"source": "occt", "path": "data/occ/face2.brep", "bytes": 53070, "sha256": "2c04d5e6e05ef28f166bd96b1c11efa7043d31b3099f22a69e90a2b3f303cb88"}
+{"source": "occt", "path": "data/occ/fuse.brep", "bytes": 49925, "sha256": "db095f5805a1cab963f0484a593023aa917bc6078a7147e3421863562fb0c85e"}
+{"source": "occt", "path": "data/occ/hammer.brep", "bytes": 546446, "sha256": "55915272003f8b635549736af03d0a863c2cc9d0986424a598782a700401bd61"}
+{"source": "occt", "path": "data/occ/mal_ecrou.brep", "bytes": 11374, "sha256": "e8a631e482c6ab4a769830717d27330cccf3c26b30bdecdc1f3b722b7e678ec0"}
+{"source": "occt", "path": "data/occ/mal_tige.brep", "bytes": 48752, "sha256": "440373145468ac24ebe2b3235238db2a2b7a79ca9921b271f1d26f2b23c13cb9"}
+{"source": "occt", "path": "data/occ/mal_vis.brep", "bytes": 40190, "sha256": "0f0578d52a088c18c1b58a56c79f9f2119d6b3c56d48a41809e4ccfe3ce280b9"}
+{"source": "occt", "path": "data/occ/shell1.brep", "bytes": 231837, "sha256": "de16fdb4405ee73fb8959e0b3d213699b92f0686a9b7301a9eab9934c5c224c3"}
+{"source": "occt", "path": "data/occ/solid.brep", "bytes": 48711, "sha256": "eb2a2f5d925baed309d569bc487c842fcbf52ee69fed2ed00efcfb561f10529c"}
+{"source": "occt", "path": "data/occ/terrain.brep", "bytes": 3468113, "sha256": "7eea9dba10e0ca436db231c92985532924ba36adce476425fcf8ff4d29b23f26"}
+{"source": "occt", "path": "data/occ/wedge_ok.brep", "bytes": 3112, "sha256": "6e0638e0be78e4c9e71c90db396f4a3fdc028757d8adad0374a775ee88671b13"}
+{"source": "occt", "path": "data/occ/wing.brep", "bytes": 10092, "sha256": "2786dfd69379385c3607846cb180c54bf585e4380060793f763b209a5245c087"}
+{"source": "occt", "path": "data/step/linkrods.step", "bytes": 1793282, "sha256": "3674e4b01ee0e983c81ed170f0574cda201ad08e0f7b46e05e4f4613400fd5f7"}
+{"source": "occt", "path": "data/step/screw.step", "bytes": 88552, "sha256": "4b3649a4f5c4f05c7a06a402a91fe2fd7e3cba1615520fbd8c62a62610ad3e69"}
+{"source": "pythonocc-demos", "path": "assets/models/11752.stp", "bytes": 1579363, "sha256": "c2748324a36018ff1d88cfb0a80946636f29431417b9f1052a0dfc13576b0d41"}
+{"source": "pythonocc-demos", "path": "assets/models/KR600_R2830-4.stp", "bytes": 12587505, "sha256": "8beb257cb915240f7012474c2dcfb55a820a343abde082faadeacfdbe93823ce"}
+{"source": "pythonocc-demos", "path": "assets/models/Motor-c.brep", "bytes": 2584674, "sha256": "6a381db39565ddf78d1ae7162c2f839bc5886931d510dd0789a72be12a0b2d0b"}
+{"source": "pythonocc-demos", "path": "assets/models/RC_Buggy_2_front_suspension.stp", "bytes": 15257496, "sha256": "7640da77c19d10c3373b15cbbf40c39755ab4047166aca6d5293cb3efb79ed8b"}
+{"source": "pythonocc-demos", "path": "assets/models/Ventilator.stp", "bytes": 2257591, "sha256": "19a11c6949aff4d003a4750d0d9f7e4ee21ab12401dfb07bd97350777266e4d5"}
+{"source": "pythonocc-demos", "path": "assets/models/as1-oc-214.stp", "bytes": 441968, "sha256": "038be659c54b16c9f3da8d7b2da7b63e3fd8879d3abe5b7826108336a7c0bae9"}
+{"source": "pythonocc-demos", "path": "assets/models/as1_pe_203.stp", "bytes": 139752, "sha256": "e14f7a52b3f0c53e36730c0f56654b01a17822f1b864dc6c42657223c54cafb6"}
+{"source": "pythonocc-demos", "path": "assets/models/curve_geom_plate.igs", "bytes": 7452, "sha256": "39004c2f27d5d48a08bacb9570c39fcf8e901569a6eadfacc54ab16a3df65ef6"}
+{"source": "pythonocc-demos", "path": "assets/models/cylinder_head.brep", "bytes": 8385356, "sha256": "a653f8b7e1af82c833191871bac8f803451693b55bae1284942a651aae6e0c60"}
+{"source": "pythonocc-demos", "path": "assets/models/face_recognition_sample_part.stp", "bytes": 36763, "sha256": "de7b8a513ae923cd11de2323e798ac084cc94f9aa7d7a2a8adab65fc592f8d0b"}
+{"source": "pythonocc-demos", "path": "assets/models/splinecage.stp", "bytes": 28886, "sha256": "e6d3c25c4a3777de1cb71c4988fc1a5cbb9fb5587e4085273d1844a479ddfe33"}
+{"source": "pythonocc-demos", "path": "assets/models/surf114.igs", "bytes": 135792, "sha256": "4f4861df35acf8ce2c61e6308fc32f6e39c3a207318436c193db1bbd6b7b26df"}
+{"source": "pythonocc-demos", "path": "assets/models/wire.brep", "bytes": 92904, "sha256": "9d0b5f7009ee434e272fdf14eb7f54d71d23d2c2ad09c5e5fa4abd845f5c4b28"}

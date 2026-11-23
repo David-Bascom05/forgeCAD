@@ -1,0 +1,69 @@
+{"file": "FreeCAD/src/Mod/Sketcher/SketcherTests/TestSketchCarbonCopyReverseMapping.FCStd", "verdict": "untranslated", "why": ["Unsupported(\"an empty body\")"], "body": "Body", "status": "untranslated"}
+{"file": "FreeCAD/src/Mod/Sketcher/SketcherTests/TestSketchCarbonCopyReverseMapping.FCStd", "verdict": "untranslated", "why": ["Unsupported(\"an empty body\")"], "body": "Body001", "status": "untranslated"}
+{"file": "FreeCAD/src/Mod/Part/parttests/TestTangentMode3-0.21.FCStd", "verdict": "untranslated", "why": ["Unsupported(\"feature AdditiveSphere\")"], "body": "Body", "status": "untranslated"}
+{"file": "FreeCAD/src/Mod/Fem/femtest/data/calculix/box_frequency.FCStd", "verdict": "no-body", "why": []}
+{"file": "FreeCAD/src/Mod/Fem/femtest/data/calculix/box.FCStd", "verdict": "no-body", "why": []}
+{"file": "FreeCAD/src/Mod/Fem/femtest/data/calculix/constraint_contact_solid_solid.FCStd", "verdict": "no-body", "why": []}
+{"file": "FreeCAD/src/Mod/Fem/femtest/data/calculix/thermomech_flow1D.FCStd", "verdict": "no-body", "why": []}
+{"file": "FreeCAD/src/Mod/Fem/femtest/data/calculix/box_static.FCStd", "verdict": "no-body", "why": []}
+{"file": "FreeCAD/src/Mod/Fem/femtest/data/calculix/constraint_contact_shell_shell.FCStd", "verdict": "no-body", "why": []}
+{"file": "FreeCAD/src/Mod/Fem/femtest/data/open/all_objects_de9b3fb438.FCStd", "verdict": "no-body", "why": []}
+{"file": "FreeCAD/src/Mod/PartDesign/PartDesignTests/Fixtures/InternalInvoluteGear_v0-20.FCStd", "verdict": "no-body", "why": []}
+{"file": "FreeCAD/src/Mod/PartDesign/PartDesignTests/Fixtures/InvoluteGear_v0-20.FCStd", "verdict": "no-body", "why": []}
+{"file": "FreeCAD/src/Mod/CAM/DemoParts/strange_part_with_holes.fcstd", "verdict": "stopped", "why": ["Stop(\"Build: t6: the kernel refused it: fillet\")"], "body": "Fillet002", "status": "stopped"}
+{"file": "FreeCAD/src/Mod/CAM/DemoParts/motor_mount_inch.fcstd", "verdict": "match", "why": ["dvol -8.18e-07 darea 6.56e-06"], "body": "Pocket001", "status": "translated"}
+{"file": "FreeCAD/src/Mod/CAM/DemoParts/hole_puzzle.fcstd", "verdict": "match", "why": ["dvol -1.26e-08 darea -4.16e-07"], "body": "Pocket006", "status": "translated"}
+{"file": "FreeCAD/src/Mod/CAM/DemoParts/hole_puzzle.fcstd", "verdict": "untranslated", "why": ["Unsupported(\"a chain through Part::Feature\")"], "body": "Chamfer005", "status": "untranslated"}
+{"file": "FreeCAD/src/Mod/CAM/Tools/Shape/keyway.fcstd", "verdict": "match", "why": ["dvol 9.37e-06 darea 1.46e-05"], "body": "Body", "status": "translated"}
+{"file": "FreeCAD/src/Mod/CAM/Tools/Shape/chamfer.fcstd", "verdict": "match", "why": ["dvol -3.83e-05 darea -2.78e-07"], "body": "Body", "status": "translated"}
+{"file": "FreeCAD/src/Mod/CAM/Tools/Shape/v-bit.fcstd", "verdict": "match", "why": ["dvol -2.36e-07 darea 2.85e-07"], "body": "Body", "status": "translated"}
+{"file": "FreeCAD/src/Mod/CAM/Tools/Shape/radius.fcstd", "verdict": "match", "why": ["dvol 1.31e-05 darea -8.47e-06"], "body": "Body", "status": "translated"}
+{"file": "FreeCAD/src/Mod/CAM/Tools/Shape/slittingsaw.fcstd", "verdict": "match", "why": ["dvol -8.41e-07 darea 2.00e-06"], "body": "Body", "status": "translated"}
+{"file": "FreeCAD/src/Mod/CAM/Tools/Shape/lollipop.fcstd", "verdict": "match", "why": ["dvol 2.92e-05 darea -5.46e-07"], "body": "Body", "status": "translated"}
+{"file": "FreeCAD/src/Mod/CAM/Tools/Shape/endmill.fcstd", "verdict": "match", "why": ["dvol 4.16e-07 darea -3.45e-07"], "body": "Body", "status": "translated"}
+{"file": "FreeCAD/src/Mod/CAM/Tools/Shape/ballend.fcstd", "verdict": "match", "why": ["dvol -1.57e-07 darea 4.78e-07"], "body": "Body", "status": "translated"}
+{"file": "FreeCAD/src/Mod/CAM/Tools/Shape/reamer.fcstd", "verdict": "match", "why": ["dvol 4.16e-07 darea -3.45e-07"], "body": "Body", "status": "translated"}
+{"file": "FreeCAD/src/Mod/CAM/Tools/Shape/bullnose.fcstd", "verdict": "match", "why": ["dvol -5.18e-07 darea 1.78e-07"], "body": "Body", "status": "translated"}
+{"file": "FreeCAD/src/Mod/CAM/Tools/Shape/dovetail.fcstd", "verdict": "match", "why": ["dvol -9.45e-06 darea 7.15e-06"], "body": "Body", "status": "translated"}
+{"file": "FreeCAD/src/Mod/CAM/Tools/Shape/thread-mill.fcstd", "verdict": "match", "why": ["dvol -6.22e-07 darea -3.15e-07"], "body": "Body", "status": "translated"}
+{"file": "FreeCAD/src/Mod/CAM/Tools/Shape/tap.fcstd", "verdict": "match", "why": ["dvol 1.72e-05 darea -4.78e-06"], "body": "Body", "status": "translated"}
+{"file": "FreeCAD/src/Mod/CAM/Tools/Shape/drill.fcstd", "verdict": "match", "why": ["dvol -1.32e-06 darea 4.27e-07"], "body": "Body", "status": "translated"}
+{"file": "FreeCAD/src/Mod/CAM/Tools/Shape/taperedballnose.fcstd", "verdict": "match", "why": ["dvol 3.42e-06 darea 4.15e-05"], "body": "Body", "status": "translated"}
+{"file": "FreeCAD/src/Mod/CAM/Tools/Shape/probe.fcstd", "verdict": "match", "why": ["dvol -2.02e-07 darea -1.29e-07"], "body": "Body", "status": "translated"}
+{"file": "FreeCAD/src/Mod/CAM/CAMTests/test_geomop.fcstd", "verdict": "match", "why": ["dvol 6.01e-07 darea 4.32e-06"], "body": "Body", "status": "translated"}
+{"file": "FreeCAD/src/Mod/CAM/CAMTests/test_geomop.fcstd", "verdict": "match", "why": ["dvol -3.67e-06 darea -3.67e-06"], "body": "Body002", "status": "translated"}
+{"file": "FreeCAD/src/Mod/CAM/CAMTests/test_geomop.fcstd", "verdict": "match", "why": ["dvol 1.52e-16 darea -2.67e-16"], "body": "Body003", "status": "translated"}
+{"file": "FreeCAD/src/Mod/CAM/CAMTests/test_geomop.fcstd", "verdict": "match", "why": ["dvol -1.20e-06 darea -2.97e-06"], "body": "Body004", "status": "translated"}
+{"file": "FreeCAD/src/Mod/CAM/CAMTests/test_geomop.fcstd", "verdict": "match", "why": ["dvol 2.34e-06 darea -2.97e-06"], "body": "Body005", "status": "translated"}
+{"file": "FreeCAD/src/Mod/CAM/CAMTests/test_geomop.fcstd", "verdict": "match", "why": ["dvol -3.67e-06 darea 1.34e-05"], "body": "Body006", "status": "translated"}
+{"file": "FreeCAD/src/Mod/CAM/CAMTests/test_geomop.fcstd", "verdict": "match", "why": ["dvol 2.34e-06 darea -2.97e-06"], "body": "Body007", "status": "translated"}
+{"file": "FreeCAD/src/Mod/CAM/CAMTests/test_adaptive.fcstd", "verdict": "no-body", "why": []}
+{"file": "FreeCAD/src/Mod/CAM/CAMTests/dressuptest.FCStd", "verdict": "no-body", "why": []}
+{"file": "FreeCAD/src/Mod/CAM/CAMTests/Fixtures/test_28534_truncated_pocket.FCStd", "verdict": "match", "why": ["dvol -1.18e-05 darea -4.64e-07"], "body": "Body013", "status": "translated"}
+{"file": "FreeCAD/src/Mod/CAM/CAMTests/Fixtures/test_17748_cam_profile.FCStd", "verdict": "match", "why": ["dvol 1.60e-16 darea -2.58e-16"], "body": "Body", "status": "translated"}
+{"file": "FreeCAD/src/Mod/CAM/CAMTests/Fixtures/OpHelix_v0-21.FCStd", "verdict": "no-body", "why": []}
+{"file": "FreeCAD/src/Mod/CAM/CAMTests/Tools/Shape/test-path-tool-bit-shape-00.fcstd", "verdict": "match", "why": ["dvol 4.16e-07 darea -3.45e-07"], "body": "Body", "status": "translated"}
+{"file": "FreeCAD/src/Mod/CAM/CAMTests/boxtest.fcstd", "verdict": "no-body", "why": []}
+{"file": "FreeCAD/src/Mod/CAM/CAMTests/test_holes00.fcstd", "verdict": "match", "why": ["dvol -1.96e-06 darea -7.69e-06"], "body": "Body", "status": "translated"}
+{"file": "FreeCAD/src/Mod/CAM/CAMTests/test_profile.fcstd", "verdict": "match", "why": ["dvol 5.59e-06 darea -2.47e-06"], "body": "Body", "status": "translated"}
+{"file": "FreeCAD/src/Mod/CAM/CAMTests/Drilling_1.FCStd", "verdict": "untranslated", "why": ["Unsupported(\"sketch curve GeomEllipse\")"], "body": "Body", "status": "untranslated"}
+{"file": "FreeCAD/src/Mod/BIM/bimtests/fixtures/FC_site_simple-102.FCStd", "verdict": "no-body", "why": []}
+{"file": "FreeCAD/src/Mod/BIM/bimtests/test_structure_column_flip_v1_0_v1_1.FCStd", "verdict": "no-body", "why": []}
+{"file": "FreeCAD/tests/src/Mod/PartDesign/App/TestModels/TwoLengthsPadCyclicExpr.FCStd", "verdict": "match", "why": ["dvol -1.06e-06 darea 2.34e-06"], "body": "Body", "status": "translated"}
+{"file": "FreeCAD/tests/src/Mod/PartDesign/App/TestModels/TwoLengthsPadWithExpression.FCStd", "verdict": "match", "why": ["dvol 2.34e-06 darea 7.47e-07"], "body": "Body", "status": "translated"}
+{"file": "FreeCAD/tests/src/Mod/PartDesign/App/TestModels/ModelFromV021.FCStd", "verdict": "match", "why": ["dvol -9.26e-07 darea 8.93e-06"], "body": "Body", "status": "translated"}
+{"file": "FreeCAD/tests/src/Mod/PartDesign/App/TestModels/TwoLengthsPadCrossObjectRef.FCStd", "verdict": "match", "why": ["dvol 4.52e-07 darea 3.05e-06"], "body": "Body", "status": "translated"}
+{"file": "FreeCAD/data/examples/ArchDetail.FCStd", "verdict": "no-body", "why": []}
+{"file": "FreeCAD/data/examples/FEMExample.FCStd", "verdict": "no-body", "why": []}
+{"file": "FreeCAD/data/examples/PartDesignExample.FCStd", "verdict": "mismatch", "why": ["dvol -3.60e-01 darea -1.79e-01"], "body": "Body", "status": "translated"}
+{"file": "FreeCAD/data/examples/draft_test_objects.FCStd", "verdict": "no-body", "why": []}
+{"file": "FreeCAD/data/examples/AssemblyExample.FCStd", "verdict": "no-body", "why": []}
+{"file": "FreeCAD/data/examples/EngineBlock.FCStd", "verdict": "no-body", "why": []}
+{"file": "FreeCAD/data/examples/BIMExample.FCStd", "verdict": "no-body", "why": []}
+{"file": "FreeCAD/data/tests/ProjectTest.FCStd", "verdict": "no-body", "why": []}
+{"file": "FreeCAD/data/tests/PadTest.fcstd", "verdict": "untranslated", "why": ["Unsupported(\"a pad or pocket of type 3\")"], "body": "Body", "status": "untranslated"}
+{"file": "FreeCAD/data/tests/PadTest.fcstd", "verdict": "untranslated", "why": ["Unsupported(\"a pad or pocket of type 3\")"], "body": "Pad002", "status": "untranslated"}
+{"file": "FreeCAD/data/tests/Crank.fcstd", "verdict": "no-body", "why": []}
+{"file": "FreeCAD/data/tests/TestVRMLTextures.FCStd", "verdict": "no-body", "why": []}
+{"file": "FreeCAD/data/tests/PocketTest.fcstd", "verdict": "untranslated", "why": ["Unsupported(\"a pad or pocket of type 3\")"], "body": "Body", "status": "untranslated"}
+{"file": "FreeCAD/data/tests/PocketTest.fcstd", "verdict": "untranslated", "why": ["Unsupported(\"a pad or pocket of type 3\")"], "body": "Pocket001", "status": "untranslated"}

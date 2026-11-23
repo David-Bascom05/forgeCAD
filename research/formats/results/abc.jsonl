@@ -1,0 +1,144 @@
+{"file": "abc/step/00000000/00000000_290a9120f9f249a7a05cfe9c_step_000.step", "verdict": "match6", "why": ["dvol 8.27e-09 darea -1.57e-08 solids 6 vs 6"]}
+{"file": "abc/step/00000040/00000040_c7d977f326364e35bb5b5d27_step_003.step", "verdict": "match6", "why": ["dvol -1.74e-09 darea 3.19e-09 solids 1 vs 1"]}
+{"file": "abc/step/00000080/00000080_ed3cecad25c64f7abea4cf64_step_000.step", "verdict": "match6", "why": ["dvol -3.86e-14 darea -3.93e-15 solids 2 vs 2"]}
+{"file": "abc/step/00000120/00000120_ce24e0cbec8e45c89735d148_step_012.step", "verdict": "uncertain", "why": ["OCCT's measures disagree"]}
+{"file": "abc/step/00000160/00000160_48a3f2e6f67a4aea9d6d097b_step_001.step", "verdict": "match6", "why": ["dvol -2.26e-08 darea -1.83e-08 solids 3 vs 3"]}
+{"file": "abc/step/00000200/00000200_826494e894454504b0971fd1_step_003.step", "verdict": "match", "why": ["dvol 4.68e-06 darea -2.75e-06 solids 3 vs 3"]}
+{"file": "abc/step/00000240/00000240_4829bc0645d6414d9b5cec31_step_003.step", "verdict": "match6", "why": ["dvol 1.04e-15 darea 0.00e+00 solids 2 vs 2"]}
+{"file": "abc/step/00000280/00000280_5a6ef3285b89452ea6b390e7_step_001.step", "verdict": "match6", "why": ["dvol 2.49e-15 darea 3.00e-13 solids 1 vs 1"]}
+{"file": "abc/step/00000320/00000320_3062bccff48e47a2b9de05e3_step_015.step", "verdict": "match6", "why": ["dvol 5.01e-09 darea 1.25e-08 solids 5 vs 5"]}
+{"file": "abc/step/00000360/00000360_9ee540a56d79451e8026e1e6_step_002.step", "verdict": "match6", "why": ["dvol -1.27e-15 darea 0.00e+00 solids 1 vs 1"]}
+{"file": "abc/step/00000400/00000400_2a4de304cbd9449ba073b442_step_004.step", "verdict": "match6", "why": ["dvol -2.51e-15 darea -1.89e-15 solids 1 vs 1"]}
+{"file": "abc/step/00000440/00000440_4d6f259c9e254f2fbb488ee5_step_002.step", "verdict": "invalid", "why": ["FaceWrongSide,LoopsCross"]}
+{"file": "abc/step/00000480/00000480_8b77ffd8df7a4ba49fc45436_step_000.step", "verdict": "match6", "why": ["dvol 1.63e-10 darea -1.44e-10 solids 4 vs 4"]}
+{"file": "abc/step/00000520/00000520_82f2644d30394938a9ef9525_step_000.step", "verdict": "uncertain", "why": ["OCCT's measures disagree"]}
+{"file": "abc/step/00000560/00000560_a8c377d195ab41d18e1ac79b_step_000.step", "verdict": "both-none", "why": ["OCCT: no solid"]}
+{"file": "abc/step/00000600/00000600_7fe894812c4244e18241aa08_step_006.step", "verdict": "match", "why": ["dvol 2.43e-06 darea -3.02e-06 solids 3 vs 3"]}
+{"file": "abc/step/00000640/00000640_30c513ac86c24ee48034cee7_step_000.step", "verdict": "match", "why": ["dvol 1.31e-08 darea 1.75e-06 solids 4 vs 4"]}
+{"file": "abc/step/00000680/00000680_8f2e76a944004d22926a04ae_step_013.step", "verdict": "match6", "why": ["dvol -3.01e-16 darea -2.46e-16 solids 10 vs 10"]}
+{"file": "abc/step/00000720/00000720_d30ece5d6b514d35bcdea27b_step_000.step", "verdict": "match", "why": ["dvol 1.40e-05 darea 6.35e-06 solids 2 vs 2"]}
+{"file": "abc/step/00000760/00000760_8ab50540e9804365a8717ec0_step_007.step", "verdict": "match6", "why": ["dvol -1.97e-10 darea -2.74e-08 solids 1 vs 1"]}
+{"file": "abc/step/00000800/00000800_ad6107d9fc994ccca38cc4e4_step_002.step", "verdict": "match6", "why": ["dvol 6.20e-13 darea -1.39e-16 solids 1 vs 1"]}
+{"file": "abc/step/00000840/00000840_2c1efcc32d094e9fb9e1a88e_step_000.step", "verdict": "match6", "why": ["dvol 2.38e-15 darea -1.88e-16 solids 1 vs 1"]}
+{"file": "abc/step/00000880/00000880_029c2575dd474650ba1b8d21_step_020.step", "verdict": "match6", "why": ["dvol 6.70e-16 darea -3.17e-16 solids 1 vs 1"]}
+{"file": "abc/step/00000920/00000920_cdcebf32644443b9812097ba_step_004.step", "verdict": "match6", "why": ["dvol 3.72e-07 darea 2.54e-07 solids 1 vs 1"]}
+{"file": "abc/step/00000960/00000960_56fafb97eff7460ba8c04210_step_000.step", "verdict": "match6", "why": ["dvol 4.28e-16 darea 0.00e+00 solids 1 vs 1"]}
+{"file": "abc/step/00001000/00001000_6962bc8aad2c4e27b046d5b4_step_002.step", "verdict": "match6", "why": ["dvol 7.78e-16 darea -2.36e-15 solids 1 vs 1"]}
+{"file": "abc/step/00001040/00001040_74c42207fa764831b03f7658_step_000.step", "verdict": "match6", "why": ["dvol 1.94e-15 darea -3.07e-16 solids 1 vs 1"]}
+{"file": "abc/step/00001080/00001080_573bc90f52ad4f6db224b182_step_003.step", "verdict": "match6", "why": ["dvol 1.43e-07 darea -4.37e-09 solids 2 vs 2"]}
+{"file": "abc/step/00001120/00001120_282a3bcf9f7447dda249c86e_step_000.step", "verdict": "match6", "why": ["dvol -2.96e-08 darea 2.79e-08 solids 7 vs 7"]}
+{"file": "abc/step/00001160/00001160_f112d6f3e0c644ae9de2a724_step_001.step", "verdict": "invalid", "why": ["FaceWrongSide"]}
+{"file": "abc/step/00001200/00001200_e44a0f9afbe84b918f789f0f_step_000.step", "verdict": "match6", "why": ["dvol 4.32e-08 darea -6.09e-07 solids 1 vs 1"]}
+{"file": "abc/step/00001240/00001240_96503b6a26c64074ad598927_step_002.step", "verdict": "match", "why": ["dvol -7.99e-06 darea -1.55e-07 solids 1 vs 1"]}
+{"file": "abc/step/00001280/00001280_b53ece83d8964b44bbf1f8ed_step_016.step", "verdict": "match6", "why": ["dvol 2.37e-15 darea 4.63e-16 solids 2 vs 2"]}
+{"file": "abc/step/00001320/00001320_6a5a7dbad03b4a57b33f2c0d_step_003.step", "verdict": "match6", "why": ["dvol -1.85e-15 darea -1.45e-15 solids 1 vs 1"]}
+{"file": "abc/step/00001360/00001360_2e314c6e080b40fcb6a6db96_step_003.step", "verdict": "match6", "why": ["dvol -2.45e-13 darea -3.80e-14 solids 1 vs 1"]}
+{"file": "abc/step/00001400/00001400_49414db2dd594dc6a3907cf3_step_003.step", "verdict": "match6", "why": ["dvol 1.31e-16 darea -3.67e-16 solids 1 vs 1"]}
+{"file": "abc/step/00001440/00001440_a45f6c99e2154f3b94955175_step_024.step", "verdict": "match6", "why": ["dvol 1.16e-07 darea -3.17e-07 solids 1 vs 1"]}
+{"file": "abc/step/00001480/00001480_a45f6c99e2154f3b94955175_step_064.step", "verdict": "match6", "why": ["dvol 1.88e-10 darea 1.62e-10 solids 1 vs 1"]}
+{"file": "abc/step/00001520/00001520_7079a898746d41ba8ae13d69_step_001.step", "verdict": "match6", "why": ["dvol 4.37e-11 darea 1.63e-11 solids 1 vs 1"]}
+{"file": "abc/step/00001560/00001560_b76a69da5d3445f9bf397a98_step_000.step", "verdict": "invalid", "why": ["warned: "]}
+{"file": "abc/step/00001600/00001600_c118664e9f6f4943855293fa_step_002.step", "verdict": "match6", "why": ["dvol 2.87e-11 darea 6.52e-11 solids 1 vs 1"]}
+{"file": "abc/step/00001640/00001640_39fd4b4ad90e4aa8be1e82fd_step_000.step", "verdict": "match6", "why": ["dvol -2.16e-16 darea -7.03e-16 solids 1 vs 1"]}
+{"file": "abc/step/00001680/00001680_de1d70dc0e3b4652b6cfce4f_step_007.step", "verdict": "match6", "why": ["dvol -1.84e-10 darea -1.10e-10 solids 1 vs 1"]}
+{"file": "abc/step/00001720/00001720_77a4002c4a374a36b640c728_step_001.step", "verdict": "match6", "why": ["dvol 2.31e-07 darea 8.94e-08 solids 1 vs 1"]}
+{"file": "abc/step/00001760/00001760_62eeb6999e5942b5b10829e9_step_000.step", "verdict": "both-none", "why": ["timeout"]}
+{"file": "abc/step/00001800/00001800_23e6efbdae254d48b914d347_step_018.step", "verdict": "match6", "why": ["dvol 1.71e-15 darea 4.69e-16 solids 1 vs 1"]}
+{"file": "abc/step/00001840/00001840_20d9a75d813046fe97ff87d3_step_008.step", "verdict": "match6", "why": ["dvol 7.68e-16 darea -1.86e-16 solids 2 vs 2"]}
+{"file": "abc/step/00001880/00001880_7dff003bccb549eca063340e_step_006.step", "verdict": "refused", "why": ["#972 MANIFOLD_SOLID_BREP: a closed spline surface face with one rim and no pole"]}
+{"file": "abc/step/00001920/00001920_74b74f0b649e4e95ad6bc367_step_000.step", "verdict": "match6", "why": ["dvol 1.17e-08 darea 7.38e-10 solids 1 vs 1"]}
+{"file": "abc/step/00001960/00001960_0b3d8bf2ff2d47d9a6f5fbf1_step_001.step", "verdict": "match6", "why": ["dvol 3.03e-07 darea 9.42e-08 solids 8 vs 8"]}
+{"file": "abc/step/00002000/00002000_b53d499a5d5c42dfade565bf_step_002.step", "verdict": "match6", "why": ["dvol -5.79e-14 darea -7.24e-14 solids 2 vs 2"]}
+{"file": "abc/step/00002040/00002040_f5f0cb8f8edf486a9023ef1d_step_014.step", "verdict": "match", "why": ["dvol -3.71e-06 darea -3.16e-08 solids 1 vs 1"]}
+{"file": "abc/step/00002080/00002080_a0ea791f94cb4f918ead8b67_step_000.step", "verdict": "match6", "why": ["dvol -2.88e-13 darea 6.74e-13 solids 6 vs 6"]}
+{"file": "abc/step/00002120/00002120_0b53f04f81494119be44d91c_step_004.step", "verdict": "match6", "why": ["dvol -6.10e-14 darea 1.00e-14 solids 1 vs 1"]}
+{"file": "abc/step/00002160/00002160_309ef7c857234216b9e03a99_step_000.step", "verdict": "match6", "why": ["dvol 6.51e-07 darea -1.30e-07 solids 2 vs 2"]}
+{"file": "abc/step/00002200/00002200_6553d5a5a37549379146953a_step_003.step", "verdict": "match6", "why": ["dvol 1.34e-10 darea 9.69e-10 solids 1 vs 1"]}
+{"file": "abc/step/00002240/00002240_9ce8f1afca4445c29d30e426_step_002.step", "verdict": "match6", "why": ["dvol 3.61e-16 darea 1.26e-16 solids 1 vs 1"]}
+{"file": "abc/step/00002280/00002280_d78016eb44004ecb82bdbaa7_step_005.step", "verdict": "match6", "why": ["dvol -2.00e-16 darea -9.28e-16 solids 1 vs 1"]}
+{"file": "abc/step/00002320/00002320_64e4518f808f4412939ae798_step_000.step", "verdict": "match6", "why": ["dvol 1.02e-15 darea 0.00e+00 solids 1 vs 1"]}
+{"file": "abc/step/00002360/00002360_470c2865307645c78ae7a0cb_step_003.step", "verdict": "match", "why": ["dvol -5.93e-05 darea -3.58e-05 solids 1 vs 1"]}
+{"file": "abc/step/00002400/00002400_bd39e2254a384d229836204e_step_000.step", "verdict": "match6", "why": ["dvol -6.74e-16 darea 0.00e+00 solids 14 vs 14"]}
+{"file": "abc/step/00002440/00002440_179a8df075c94d0596b1f20d_step_009.step", "verdict": "match6", "why": ["dvol 2.25e-15 darea 2.89e-16 solids 1 vs 1"]}
+{"file": "abc/step/00002480/00002480_6eda6b73d6ea4472bea05e8f_step_000.step", "verdict": "refused", "why": ["#715 OFFSET_SURFACE: this surface is not read yet"]}
+{"file": "abc/step/00002520/00002520_4cda48e8579349d6a4becfbf_step_010.step", "verdict": "match6", "why": ["dvol -4.41e-16 darea -1.76e-15 solids 1 vs 1"]}
+{"file": "abc/step/00002560/00002560_1242d6c2b7d1452294c6b6cb_step_000.step", "verdict": "match6", "why": ["dvol 4.45e-16 darea 0.00e+00 solids 5 vs 5"]}
+{"file": "abc/step/00002600/00002600_17d084b5a30b4352a8a27e6a_step_000.step", "verdict": "match6", "why": ["dvol 1.78e-16 darea -2.21e-15 solids 2 vs 2"]}
+{"file": "abc/step/00002640/00002640_37a2028bfe2c4f42a1c626a7_step_002.step", "verdict": "match", "why": ["dvol 1.57e-15 darea 2.82e-06 solids 2 vs 2"]}
+{"file": "abc/step/00002680/00002680_5e64117cf77b4072b9b1ab29_step_003.step", "verdict": "match6", "why": ["dvol 6.79e-16 darea 5.09e-16 solids 1 vs 1"]}
+{"file": "abc/step/00002720/00002720_98d8f78b1bb5495f9a193852_step_006.step", "verdict": "match6", "why": ["dvol -2.34e-11 darea 0.00e+00 solids 1 vs 1"]}
+{"file": "abc/step/00002760/00002760_af75bfffba064290821a87cf_step_016.step", "verdict": "uncertain", "why": ["OCCT's measures disagree"]}
+{"file": "abc/step/00002800/00002800_a13cab04d1224f3badc910a3_step_000.step", "verdict": "match6", "why": ["dvol 1.77e-15 darea -2.36e-16 solids 1 vs 1"]}
+{"file": "abc/step/00002840/00002840_b108e5f7e4f34918bd31b5de_step_000.step", "verdict": "match6", "why": ["dvol 1.42e-15 darea 0.00e+00 solids 1 vs 1"]}
+{"file": "abc/step/00002880/00002880_441b788f697449128e3c8032_step_013.step", "verdict": "match6", "why": ["dvol 5.13e-15 darea 0.00e+00 solids 1 vs 1"]}
+{"file": "abc/step/00002920/00002920_bc8a6e930c404316833d09a5_step_005.step", "verdict": "match6", "why": ["dvol 1.59e-15 darea 0.00e+00 solids 1 vs 1"]}
+{"file": "abc/step/00002960/00002960_1212f04812bc4821bfd87412_step_004.step", "verdict": "invalid", "why": ["warned: its volume and area work out to 9.100276e1 and 3.572270e2, but drawn they come t"]}
+{"file": "abc/step/00003000/00003000_908273af75b045f395baae81_step_000.step", "verdict": "match6", "why": ["dvol 5.89e-16 darea 1.43e-16 solids 1 vs 1"]}
+{"file": "abc/step/00003040/00003040_623a6f12d0724d62a351e2a1_step_027.step", "verdict": "invalid", "why": ["FaceWrongSide"]}
+{"file": "abc/step/00003080/00003080_a7d9266fc0a542148831dbb5_step_009.step", "verdict": "invalid", "why": ["FaceWrongSide"]}
+{"file": "abc/step/00003120/00003120_f35bdb5367a84efd896a44ea_step_000.step", "verdict": "match6", "why": ["dvol 4.55e-10 darea 8.36e-10 solids 2 vs 2"]}
+{"file": "abc/step/00003160/00003160_e0fba79a9cd74cf592b4d096_step_000.step", "verdict": "match6", "why": ["dvol -7.58e-16 darea -2.06e-16 solids 1 vs 1"]}
+{"file": "abc/step/00003200/00003200_7bec57689ee04fb4aecca452_step_005.step", "verdict": "match6", "why": ["dvol 0.00e+00 darea 0.00e+00 solids 1 vs 1"]}
+{"file": "abc/step/00003240/00003240_64bf0eb2d82b4b9aac59e530_step_004.step", "verdict": "match6", "why": ["dvol 3.72e-07 darea 2.54e-07 solids 1 vs 1"]}
+{"file": "abc/step/00003280/00003280_13b38eac38074606b2f26a3f_step_000.step", "verdict": "match6", "why": ["dvol -2.89e-16 darea -3.44e-16 solids 1 vs 1"]}
+{"file": "abc/step/00003320/00003320_0397a0a89fda483c9ea0eea7_step_008.step", "verdict": "uncertain", "why": ["OCCT's measures disagree"]}
+{"file": "abc/step/00003360/00003360_9b231e07646740d3aa893236_step_007.step", "verdict": "match6", "why": ["dvol 2.40e-15 darea 1.27e-16 solids 1 vs 1"]}
+{"file": "abc/step/00003400/00003400_a77cf5d003fc4ab09e843c54_step_002.step", "verdict": "match6", "why": ["dvol 3.38e-16 darea 3.21e-16 solids 1 vs 1"]}
+{"file": "abc/step/00003440/00003440_41db336d07d34605b95e17f8_step_003.step", "verdict": "match6", "why": ["dvol 2.81e-15 darea -2.03e-16 solids 118 vs 118"]}
+{"file": "abc/step/00003480/00003480_37ed448e82b3415f9849eaea_step_000.step", "verdict": "match6", "why": ["dvol -2.38e-14 darea -7.13e-15 solids 74 vs 74"]}
+{"file": "abc/step/00003520/00003520_64048da97a2042849e2d9929_step_000.step", "verdict": "match6", "why": ["dvol 1.17e-15 darea 7.44e-16 solids 13 vs 13"]}
+{"file": "abc/step/00003560/00003560_ff2ac654e0f743a9b08d1e45_step_000.step", "verdict": "match6", "why": ["dvol 5.88e-16 darea 0.00e+00 solids 1 vs 1"]}
+{"file": "abc/step/00003600/00003600_91c7ddd4bf4641c69db65d2b_step_000.step", "verdict": "match", "why": ["dvol -1.41e-11 darea -1.31e-06 solids 20 vs 20"]}
+{"file": "abc/step/00003640/00003640_809676ace5bb40fea5802468_step_000.step", "verdict": "match6", "why": ["dvol 9.31e-16 darea -2.35e-15 solids 1 vs 1"]}
+{"file": "abc/step/00003680/00003680_4d1a0f26323647d0a7d680d7_step_000.step", "verdict": "match6", "why": ["dvol 1.57e-16 darea -9.38e-16 solids 1 vs 1"]}
+{"file": "abc/step/00003720/00003720_0ed2796b6a8e4091af3f911a_step_001.step", "verdict": "match6", "why": ["dvol 2.03e-15 darea 0.00e+00 solids 1 vs 1"]}
+{"file": "abc/step/00003760/00003760_c37da4ec79554c27a9f3cf7b_step_000.step", "verdict": "match", "why": ["dvol 3.10e-06 darea -1.23e-05 solids 10 vs 10"]}
+{"file": "abc/step/00003800/00003800_d3f9fb68d2e74ccca87aa3bd_step_000.step", "verdict": "match6", "why": ["dvol 3.36e-12 darea 2.28e-12 solids 17 vs 17"]}
+{"file": "abc/step/00003840/00003840_442e41196093483f84a727a3_step_000.step", "verdict": "match6", "why": ["dvol -2.92e-14 darea -3.74e-16 solids 4 vs 4"]}
+{"file": "abc/step/00003880/00003880_29a72d867dcb4b8ca6aa51eb_step_008.step", "verdict": "match6", "why": ["dvol 6.63e-09 darea 4.91e-09 solids 2 vs 2"]}
+{"file": "abc/step/00003920/00003920_1f103ae876d64e4b88f94d77_step_010.step", "verdict": "match6", "why": ["dvol 5.06e-08 darea -2.96e-07 solids 1 vs 1"]}
+{"file": "abc/step/00003960/00003960_0ea41122faa643aebd0b25e8_step_000.step", "verdict": "match6", "why": ["dvol 7.57e-15 darea 3.92e-16 solids 1 vs 1"]}
+{"file": "abc/step/00004000/00004000_5379b20fa84f4fb0a8184e54_step_000.step", "verdict": "match6", "why": ["dvol 1.05e-09 darea 3.72e-10 solids 1 vs 1"]}
+{"file": "abc/step/00004040/00004040_f96ca2a2f3944d5a9fbedd0d_step_001.step", "verdict": "match6", "why": ["dvol 2.77e-16 darea -1.89e-16 solids 1 vs 1"]}
+{"file": "abc/step/00004080/00004080_00148dfafc154059b2f9646f_step_000.step", "verdict": "match6", "why": ["dvol 6.37e-08 darea -3.32e-09 solids 26 vs 26"]}
+{"file": "abc/step/00004120/00004120_d06a5c3a89af43dcb8f12e0d_step_007.step", "verdict": "match6", "why": ["dvol -5.12e-16 darea -2.43e-16 solids 1 vs 1"]}
+{"file": "abc/step/00004160/00004160_9f1e284869d94b29b871dd64_step_001.step", "verdict": "match6", "why": ["dvol 1.00e-15 darea -5.68e-16 solids 3 vs 3"]}
+{"file": "abc/step/00004200/00004200_ea354c3f1a934681a9a45f0a_step_000.step", "verdict": "match6", "why": ["dvol 1.27e-15 darea -1.01e-15 solids 1 vs 1"]}
+{"file": "abc/step/00004240/00004240_b69e6a79f73f4e4f94e0b432_step_000.step", "verdict": "match6", "why": ["dvol 9.80e-14 darea 5.42e-16 solids 1 vs 1"]}
+{"file": "abc/step/00004280/00004280_f69bf34d6f7e4eb887450aa2_step_006.step", "verdict": "match6", "why": ["dvol 2.48e-15 darea 4.26e-16 solids 1 vs 1"]}
+{"file": "abc/step/00004320/00004320_00e12f076c9f44728924a007_step_032.step", "verdict": "match6", "why": ["dvol 3.66e-16 darea -1.81e-16 solids 1 vs 1"]}
+{"file": "abc/step/00004360/00004360_c290684bc7264c05b2054a59_step_021.step", "verdict": "invalid", "why": ["FaceWrongSide,LoopsCross"]}
+{"file": "abc/step/00004400/00004400_a61d2e49b8de4a73a99e0d1e_step_000.step", "verdict": "match6", "why": ["dvol 6.85e-16 darea -2.68e-16 solids 1 vs 1"]}
+{"file": "abc/step/00004440/00004440_4284573ce2f548a39350c502_step_001.step", "verdict": "mismatch", "why": ["dvol 5.10e+00 darea 2.36e+00 solids 7 vs 6"]}
+{"file": "abc/step/00004480/00004480_f18ebc9adf1b48c3afba1b4c_step_001.step", "verdict": "match6", "why": ["dvol -4.38e-10 darea -9.43e-11 solids 1 vs 1"]}
+{"file": "abc/step/00004520/00004520_f15e692bdc8a447f9b5cd78d_step_000.step", "verdict": "match6", "why": ["dvol 4.31e-15 darea 2.57e-16 solids 1 vs 1"]}
+{"file": "abc/step/00004560/00004560_ffc1280d5afc47139d6c8549_step_004.step", "verdict": "match", "why": ["dvol -8.81e-05 darea -3.94e-06 solids 1 vs 1"]}
+{"file": "abc/step/00004600/00004600_976c446b3cc344ac89fb8425_step_004.step", "verdict": "match6", "why": ["dvol 9.85e-10 darea 2.48e-09 solids 1 vs 1"]}
+{"file": "abc/step/00004640/00004640_b65138ec4a0b4cfcb5abe830_step_000.step", "verdict": "match6", "why": ["dvol 4.17e-16 darea 0.00e+00 solids 1 vs 1"]}
+{"file": "abc/step/00004680/00004680_85142ff83bb34a21af797185_step_008.step", "verdict": "match6", "why": ["dvol 1.52e-16 darea -1.53e-16 solids 1 vs 1"]}
+{"file": "abc/step/00004720/00004720_9c428a57184f47ec9235ae67_step_000.step", "verdict": "uncertain", "why": ["OCCT's measures disagree"]}
+{"file": "abc/step/00004760/00004760_29ce3eb9259f4becb9a5e526_step_006.step", "verdict": "match6", "why": ["dvol 5.89e-10 darea 3.20e-11 solids 17 vs 17"]}
+{"file": "abc/step/00004800/00004800_29ce3eb9259f4becb9a5e526_step_046.step", "verdict": "match6", "why": ["dvol 2.85e-07 darea 2.03e-07 solids 1 vs 1"]}
+{"file": "abc/step/00004840/00004840_29ce3eb9259f4becb9a5e526_step_086.step", "verdict": "match6", "why": ["dvol -1.37e-13 darea -5.51e-14 solids 1 vs 1"]}
+{"file": "abc/step/00004880/00004880_29ce3eb9259f4becb9a5e526_step_126.step", "verdict": "uncertain", "why": ["OCCT's measures disagree"]}
+{"file": "abc/step/00004920/00004920_d4128676889e4fd98aaaf778_step_000.step", "verdict": "match6", "why": ["dvol 2.67e-15 darea 2.21e-16 solids 2 vs 2"]}
+{"file": "abc/step/00004960/00004960_d6f9da33017048c683ac514f_step_024.step", "verdict": "match6", "why": ["dvol 2.12e-15 darea 1.84e-16 solids 1 vs 1"]}
+{"file": "abc/step/00005000/00005000_8ffa5c93a158465cba4e8ba7_step_000.step", "verdict": "match6", "why": ["dvol -4.86e-12 darea -2.28e-12 solids 1 vs 1"]}
+{"file": "abc/step/00005040/00005040_51a7e299c47e4228b019c74b_step_006.step", "verdict": "match6", "why": ["dvol -1.34e-13 darea 4.44e-15 solids 1 vs 1"]}
+{"file": "abc/step/00005080/00005080_9a19028ec476443d95ce902a_step_000.step", "verdict": "match6", "why": ["dvol -1.40e-13 darea -7.77e-14 solids 1 vs 1"]}
+{"file": "abc/step/00005120/00005120_2f93d7d546874a78af87d50f_step_000.step", "verdict": "match6", "why": ["dvol -1.44e-08 darea -6.08e-09 solids 6 vs 6"]}
+{"file": "abc/step/00005160/00005160_e0ad136598ff4a6998c1cde0_step_001.step", "verdict": "match", "why": ["dvol 1.52e-06 darea 6.79e-07 solids 1 vs 1"]}
+{"file": "abc/step/00005200/00005200_e85b98fbe73143b9b7ce7b73_step_024.step", "verdict": "match6", "why": ["dvol 4.03e-16 darea -2.16e-16 solids 1 vs 1"]}
+{"file": "abc/step/00005240/00005240_eb25742ff998421e8ffd4d7b_step_007.step", "verdict": "match6", "why": ["dvol -5.57e-07 darea 5.69e-07 solids 1 vs 1"]}
+{"file": "abc/step/00005280/00005280_a8ded82a1fd74021ac459ffb_step_016.step", "verdict": "refused", "why": ["#424 MANIFOLD_SOLID_BREP: no place on the rim for a second meridian"]}
+{"file": "abc/step/00005320/00005320_9eb3b088ee874600bb384ad5_step_012.step", "verdict": "match6", "why": ["dvol 2.17e-15 darea 2.00e-16 solids 1 vs 1"]}
+{"file": "abc/step/00005360/00005360_264a4d4786e34d9898f87b2d_step_001.step", "verdict": "invalid", "why": ["FaceWrongSide"]}
+{"file": "abc/step/00005400/00005400_82e81ca0cde24645852f50f3_step_004.step", "verdict": "match6", "why": ["dvol 2.45e-15 darea 3.16e-16 solids 1 vs 1"]}
+{"file": "abc/step/00005440/00005440_cebc103115f442af95c50964_step_000.step", "verdict": "both-none", "why": ["OCCT: no solid"]}
+{"file": "abc/step/00005480/00005480_120e46e3915e4c2aae88364f_step_000.step", "verdict": "match6", "why": ["dvol -1.40e-12 darea -4.51e-14 solids 1 vs 1"]}
+{"file": "abc/step/00005520/00005520_94a393ff9de04717b724996d_step_003.step", "verdict": "match6", "why": ["dvol 4.65e-13 darea 2.85e-11 solids 8 vs 8"]}
+{"file": "abc/step/00005560/00005560_568290c5f4b34ea0aab6e852_step_000.step", "verdict": "match6", "why": ["dvol -2.34e-15 darea 0.00e+00 solids 1 vs 1"]}
+{"file": "abc/step/00005600/00005600_6aee4454242c414a977e783d_step_000.step", "verdict": "match6", "why": ["dvol 5.55e-16 darea -1.28e-16 solids 1 vs 1"]}
+{"file": "abc/step/00005640/00005640_b357e8687df34423a376a23f_step_011.step", "verdict": "extra", "why": ["timeout"]}
+{"file": "abc/step/00005680/00005680_03daf5da7d774e53944856ff_step_001.step", "verdict": "match6", "why": ["dvol 0.00e+00 darea -1.89e-16 solids 14 vs 14"]}
+{"file": "abc/step/00005720/00005720_725aa6b60a584d3a83287561_step_000.step", "verdict": "match6", "why": ["dvol 8.12e-08 darea -1.41e-07 solids 16 vs 16"]}

@@ -136,6 +136,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-formats"
+version = "0.1.0"
+dependencies = [
+ "forge-dwg",
+ "forge-font",
+ "forge-import",
+ "forge-math",
+ "forge-mesh",
+ "forge-step",
+ "forge-topo",
+]
+
+[[package]]
 name = "forge-geom"
 version = "0.1.0"
 dependencies = [

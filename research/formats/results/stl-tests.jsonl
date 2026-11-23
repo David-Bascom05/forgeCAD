@@ -1,0 +1,36 @@
+{"file": "assimp/test/models/STL/3DSMaxExport.STL", "verdict": "match", "why": []}
+{"file": "assimp/test/models/STL/Spider_ascii.stl", "verdict": "mismatch", "why": ["area 56.947580588890844 vs 56.94758136702873", "box [-3.114895, -4, -1.649329, 3.114895, 4, 1.649329] vs [-3.1148951053619385, -4.0, -1.6493289470672607, 3.1148951053619385, 4.0, 1.6493289470672607]"]}
+{"file": "assimp/test/models/STL/Spider_binary.stl", "verdict": "match", "why": []}
+{"file": "assimp/test/models/STL/Wuson.stl", "verdict": "match", "why": []}
+{"file": "assimp/test/models/STL/sphereWithHole.stl", "verdict": "mismatch", "why": ["area 27.41872096550755 vs 27.41872072826877"]}
+{"file": "assimp/test/models/STL/triangle.stl", "verdict": "match", "why": []}
+{"file": "assimp/test/models/STL/triangle_with_empty_solid.stl", "verdict": "match", "why": []}
+{"file": "assimp/test/models/STL/triangle_with_two_solids.stl", "verdict": "mismatch", "why": ["triangles 2 vs 1", "vertices 6 vs 3", "area 2.5 vs 2.0"]}
+{"file": "trimesh/models/1002_tray_bottom.STL", "verdict": "mismatch", "why": ["area 224414.72526479908 vs 224414.7291378213", "box [0, 0, -355.6, 355.6, 3.175, 0] vs [0.0, 0.0, -355.6000061035156, 355.6000061035156, 3.174999952316284, 0.0]", "volume 347865.89642825257 vs 347865.89739879855"]}
+{"file": "trimesh/models/20mm-xyz-cube.stl", "verdict": "match", "why": []}
+{"file": "trimesh/models/7_8ths_cube.stl", "verdict": "match", "why": []}
+{"file": "trimesh/models/ADIS16480.STL", "verdict": "mismatch", "why": ["area 0.007353442456924039 vs 0.007353442112588138", "box [-0.02237659, -0.006053113, -0.01918888, 0.02162341, 0.007946887, 0.02781112] vs [-0.022376589477062225, -0.006053112912923098, -0.019188880920410156, 0.021623410284519196, 0.00794688705354929, 0."]}
+{"file": "trimesh/models/angle_block.STL", "verdict": "match", "why": []}
+{"file": "trimesh/models/box.STL", "verdict": "match", "why": []}
+{"file": "trimesh/models/busted.STL", "verdict": "match", "why": []}
+{"file": "trimesh/models/counter.unitsmm.STL", "verdict": "match", "why": []}
+{"file": "trimesh/models/cylinder.stl", "verdict": "match", "why": []}
+{"file": "trimesh/models/empty.stl", "verdict": "both-refused", "why": ["line 1 (byte 0): no triangles"]}
+{"file": "trimesh/models/emptyIO/stl_empty_ascii.stl", "verdict": "both-refused", "why": ["line 1 (byte 0): no triangles"]}
+{"file": "trimesh/models/emptyIO/stl_empty_bin.stl", "verdict": "ref-refused", "why": ["no triangles"]}
+{"file": "trimesh/models/featuretype.STL", "verdict": "match", "why": []}
+{"file": "trimesh/models/idler_riser.STL", "verdict": "match", "why": []}
+{"file": "trimesh/models/large_block.STL", "verdict": "match", "why": []}
+{"file": "trimesh/models/large_block_obb.STL", "verdict": "match", "why": []}
+{"file": "trimesh/models/multibody.stl", "verdict": "mismatch", "why": ["triangles 32 vs 12", "vertices 20 vs 8", "area 0.3672389511999289 vs 0.08398205727188439"]}
+{"file": "trimesh/models/octagonal_pocket.stl", "verdict": "match", "why": []}
+{"file": "trimesh/models/origin_inside.STL", "verdict": "match", "why": []}
+{"file": "trimesh/models/plate_holes.STL", "verdict": "match", "why": []}
+{"file": "trimesh/models/round.stl", "verdict": "match", "why": []}
+{"file": "trimesh/models/shared.STL", "verdict": "match", "why": []}
+{"file": "trimesh/models/soup.stl", "verdict": "match", "why": []}
+{"file": "trimesh/models/teapot.stl", "verdict": "match", "why": []}
+{"file": "trimesh/models/torus.STL", "verdict": "match", "why": []}
+{"file": "trimesh/models/two_objects_mixed_case_names.stl", "verdict": "mismatch", "why": ["triangles 24 vs 12", "vertices 16 vs 8", "area 12 vs 5.999999999999999"]}
+{"file": "trimesh/models/unit_cube.STL", "verdict": "match", "why": []}
+{"file": "trimesh/models/unit_sphere.STL", "verdict": "match", "why": []}
