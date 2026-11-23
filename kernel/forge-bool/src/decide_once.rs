@@ -1110,11 +1110,15 @@ impl Arr<'_> {
         }
     }
     /// Split `poly` by `p` into (part with side ≥ 0, part with side ≤ 0), appended to `pos` and
-    /// `neg`; `s` is scratch.
+    /// `neg`; `s` is scratch. Unless `all`, `known` holds the sides of `p` at the vertices made
+    /// before this pass (those made in it lie on `p`).
+    #[allow(clippy::too_many_arguments)]
     fn split(
         &mut self,
         poly: &[(u32, Pl)],
         p: Pl,
+        known: &[i8],
+        all: bool,
         s: &mut Vec<i32>,
         pos: &mut Vec<(u32, Pl)>,
         neg: &mut Vec<(u32, Pl)>,
@@ -1122,7 +1126,13 @@ impl Arr<'_> {
         let n = poly.len();
         s.clear();
         for &(i, _) in poly {
-            s.push(self.side(i, p));
+            s.push(if all {
+                self.side(i, p)
+            } else if (i as usize) < known.len() {
+                known[i as usize] as i32
+            } else {
+                0
+            });
         }
         let (p0, n0) = (pos.len(), neg.len());
         // which pushed vertices lie on `p` (a crossing's new vertex does, by construction)
@@ -1241,7 +1251,7 @@ fn arrange(cls: &Classes, pf: &[PlaneF], c: u32, lo: [f64; 3], hi: [f64; 3]) -> 
     let mut s = Vec::new();
     for w in [Pl::Wall(4), Pl::Wall(5)] {
         let (mut p, mut n) = (Vec::new(), Vec::new());
-        ar.split(&poly, w, &mut s, &mut p, &mut n);
+        ar.split(&poly, w, &[], true, &mut s, &mut p, &mut n);
         poly = if w == Pl::Wall(4) { p } else { n };
         if poly.len() < 3 {
             return done(ar, Vec::new(), Vec::new());
@@ -1255,6 +1265,7 @@ fn arrange(cls: &Classes, pf: &[PlaneF], c: u32, lo: [f64; 3], hi: [f64; 3]) -> 
     let mut cv: Vec<(u32, Pl)> = poly;
     let (mut cs2, mut cv2): (Vec<u32>, Vec<(u32, Pl)>) = (Vec::new(), Vec::new());
     let (mut pp, mut nn) = (Vec::new(), Vec::new());
+    let mut sj: Vec<i8> = Vec::new();
     for j in 0..nc as u32 {
         if j == c {
             continue;
@@ -1271,6 +1282,11 @@ fn arrange(cls: &Classes, pf: &[PlaneF], c: u32, lo: [f64; 3], hi: [f64; 3]) -> 
         if all_pos || all_neg {
             continue;
         }
+        // the plane's side at every vertex so far, once
+        sj.clear();
+        for i in 0..ar.vx.len() as u32 {
+            sj.push(ar.side(i, pj) as i8);
+        }
         cs2.clear();
         cv2.clear();
         cs2.push(0);
@@ -1279,7 +1295,7 @@ fn arrange(cls: &Classes, pf: &[PlaneF], c: u32, lo: [f64; 3], hi: [f64; 3]) -> 
             // (a cell the plane does not cross stays whole)
             let (mut cp, mut cn) = (true, true);
             for &(i, _) in cl {
-                let x = ar.side(i, pj);
+                let x = sj[i as usize];
                 cp &= x > 0;
                 cn &= x < 0;
             }
@@ -1290,7 +1306,7 @@ fn arrange(cls: &Classes, pf: &[PlaneF], c: u32, lo: [f64; 3], hi: [f64; 3]) -> 
             }
             pp.clear();
             nn.clear();
-            ar.split(cl, pj, &mut s, &mut pp, &mut nn);
+            ar.split(cl, pj, &sj, false, &mut s, &mut pp, &mut nn);
             if pp.len() >= 3 {
                 cv2.extend_from_slice(&pp);
                 cs2.push(cv2.len() as u32);
