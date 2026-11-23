@@ -4,6 +4,7 @@ import ForgeExact.Flat
 import ForgeExact.SnapSym
 import ForgeExact.RefFacts
 import ForgeExact.DecideOnce.Ledger
+import ForgeExact.DecideOnce.CoreInc
 import ForgeExact.DecideOnce.Nef
 import ForgeExact.DecideOnce.Rungs
 import ForgeExact.Jordan
@@ -164,3 +165,5 @@ elab "#standard_axioms " ids:ident* : command => do
   ForgeExact.DecideOnce.Sample.localCompat_of
   ForgeExact.DecideOnce.Sample.local_correct_final
   ForgeExact.DecideOnce.Frontier.stitch_reg
+  ForgeExact.DecideOnce.cls_map
+  ForgeExact.DecideOnce.Ledger.core_inc
