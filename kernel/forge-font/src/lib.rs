@@ -935,11 +935,26 @@ mod tests {
         rec[2..4].copy_from_slice(&100i16.to_be_bytes());
         let font = Font::parse(testing::build_raw(1000, &[('A', rec, 300)], None)).unwrap();
         let g = font.glyph('A');
-        let xs: Vec<f64> = font.outline(g).unwrap().iter().flatten().flat_map(|s| s.points()).map(|p| p.x).collect();
-        let (lo, hi) = xs.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), &x| (a.min(x), b.max(x)));
+        let xs: Vec<f64> = font
+            .outline(g)
+            .unwrap()
+            .iter()
+            .flatten()
+            .flat_map(|s| s.points())
+            .map(|p| p.x)
+            .collect();
+        let (lo, hi) = xs.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), &x| {
+            (a.min(x), b.max(x))
+        });
         assert_eq!((lo, hi), (0.0, 100.0));
         let parts = font.outline_parts(g).unwrap();
-        assert!(parts.iter().flat_map(|(_, c)| c).flat_map(|s| s.points()).all(|p| p.x >= 0.0 && p.x <= 100.0));
+        assert!(
+            parts
+                .iter()
+                .flat_map(|(_, c)| c)
+                .flat_map(|s| s.points())
+                .all(|p| p.x >= 0.0 && p.x <= 100.0)
+        );
     }
 
     #[test]
