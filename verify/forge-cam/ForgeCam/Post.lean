@@ -351,4 +351,84 @@ theorem G6 (d e : ℕ) (plan : List PlanRec) (bs : List Block)
     ∀ x : ℚ, |((qc d x : ℤ) : ℚ) / 10 ^ d - x| ≤ 1 / (2 * 10 ^ d) :=
   ⟨round_trip _ bs h, fun x => quant_err (roundEven_isQuant d x)⟩
 
+/-! ### Arc semantics: the vanishing arc
+
+A control reads an arc whose end has the start's X and Y as a full circle (G17; a helix if Z
+moves). forge-post's quantiser (0a4c189) turns a *short* arc (less than a half turn, by the cross
+test) whose end rounds onto its start into a line. The question is what "onto its start" means:
+- the rule as written in 0a4c189 compares all three coordinates (`q3 to = q3 s`). A short helical
+  arc whose X, Y round onto the start while Z moves is kept, and the control cuts a full helical
+  turn (`arc3_unsafe`): a 0.0002 mm ramp piece becomes a 360° helix of the arc's radius;
+- comparing X and Y (`quantizeArc2`) is safe: a posted arc read as a full circle was planned as a
+  full turn, or as more than a half turn (`arc2_safe`). -/
+
+/-- The plan's end has the start's X and Y. -/
+def xyEq (a b : ℚ × ℚ × ℚ) : Prop := a.1 = b.1 ∧ a.2.1 = b.2.1
+
+instance (a b : ℚ × ℚ × ℚ) : Decidable (xyEq a b) := by unfold xyEq; infer_instance
+
+/-- X and Y round to the same digits. -/
+def q2eq (d : ℕ) (a b : ℚ × ℚ × ℚ) : Prop := qc d a.1 = qc d b.1 ∧ qc d a.2.1 = qc d b.2.1
+
+instance (d : ℕ) (a b : ℚ × ℚ × ℚ) : Decidable (q2eq d a b) := by unfold q2eq; infer_instance
+
+/-- forge-post's half-turn test: the end on the turning side of the start (or on its line). -/
+def shortArc (s dst : ℚ × ℚ × ℚ) (c : ℚ × ℚ) (cw : Bool) : Prop :=
+  let cr := (s.1 - c.1) * (dst.2.1 - c.2) - (s.2.1 - c.2) * (dst.1 - c.1)
+  if cw then cr ≤ 0 else 0 ≤ cr
+
+instance (s dst : ℚ × ℚ × ℚ) (c : ℚ × ℚ) (cw : Bool) : Decidable (shortArc s dst c cw) := by
+  unfold shortArc; infer_instance
+
+/-- The quantiser's arc rule at 0a4c189: all three coordinates compared. -/
+def quantizeArc3 (d e : ℕ) (s dst : ℚ × ℚ × ℚ) (c : ℚ × ℚ) (cw : Bool) (f : ℚ) : Rec :=
+  if dst ≠ s ∧ q3 d dst = q3 d s ∧ shortArc s dst c cw then .line (q3 d dst) (qc e f)
+  else .arc (q3 d dst) (qc d c.1, qc d c.2) cw (qc e f)
+
+/-- The safe rule: X and Y compared (the plane the control decides a full circle in). -/
+def quantizeArc2 (d e : ℕ) (s dst : ℚ × ℚ × ℚ) (c : ℚ × ℚ) (cw : Bool) (f : ℚ) : Rec :=
+  if ¬ xyEq dst s ∧ q2eq d dst s ∧ shortArc s dst c cw then .line (q3 d dst) (qc e f)
+  else .arc (q3 d dst) (qc d c.1, qc d c.2) cw (qc e f)
+
+/-- The control reads a posted record from `start` as a full circle. -/
+def readsFull (start : Q3) : Rec → Prop
+  | .arc dst _ _ _ => start.1 = dst.1 ∧ start.2.1 = dst.2.1
+  | _ => False
+
+/-- **The safe rule never turns a short arc into a full circle**: a posted arc the control reads
+as a full circle was planned as a full turn or as more than a half turn. -/
+theorem arc2_safe (d e : ℕ) (s dst : ℚ × ℚ × ℚ) (c : ℚ × ℚ) (cw : Bool) (f : ℚ)
+    (h : readsFull (q3 d s) (quantizeArc2 d e s dst c cw f)) :
+    xyEq dst s ∨ ¬ shortArc s dst c cw := by
+  unfold quantizeArc2 at h
+  split_ifs at h with hc
+  · exact h.elim
+  · by_contra hn
+    push Not at hn
+    apply hc
+    refine ⟨hn.1, ?_, hn.2⟩
+    simp only [readsFull, q3] at h
+    exact ⟨h.1.symm, h.2.symm⟩
+
+/-- **The rule at 0a4c189 is unsafe for helical arcs**: a short arc whose X, Y round onto its
+start while its Z rounds elsewhere is posted as an arc, and the control reads it as a full
+circle (a full helical turn). -/
+theorem arc3_unsafe (d e : ℕ) (s dst : ℚ × ℚ × ℚ) (c : ℚ × ℚ) (cw : Bool) (f : ℚ)
+    (hxy : q2eq d dst s) (hz : qc d dst.2.2 ≠ qc d s.2.2) :
+    readsFull (q3 d s) (quantizeArc3 d e s dst c cw f) := by
+  unfold quantizeArc3
+  rw [if_neg (fun h => hz (by have := h.2.1; simp only [q3, Prod.mk.injEq] at this; exact this.2.2))]
+  simp only [readsFull, q3]
+  exact ⟨hxy.1.symm, hxy.2.symm⟩
+
+-- The ramp piece found in forge-post at 99f39bf (fanuc, 3 digits): from (5, 0, 0), ccw about the
+-- origin to (5 − 2e-9, 0.0002, −0.5). Short, X and Y round onto the start, Z does not.
+#guard decide (shortArc (5, 0, 0) (5 - 2/1000000000, 2/10000, -1/2) (0, 0) false)
+#guard decide (q2eq 3 (5 - 2/1000000000, 2/10000, -1/2) (5, 0, 0))
+#guard decide (qc 3 (-1/2 : ℚ) ≠ qc 3 0)
+#guard quantizeArc3 3 1 (5, 0, 0) (5 - 2/1000000000, 2/10000, -1/2) (0, 0) false 100 ==
+  .arc (5000, 0, -500) (0, 0) false 1000
+#guard quantizeArc2 3 1 (5, 0, 0) (5 - 2/1000000000, 2/10000, -1/2) (0, 0) false 100 ==
+  .line (5000, 0, -500) 1000
+
 end ForgeCam.Post

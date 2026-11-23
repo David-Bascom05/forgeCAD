@@ -41,3 +41,8 @@ import ForgeCam
 #print axioms ForgeCam.held_band
 #print axioms ForgeCam.uncut_band
 #print axioms ForgeCam.band_split
+#print axioms ForgeCam.softJaw_seat
+#print axioms ForgeCam.softJaw_seat_interior
+#print axioms ForgeCam.softJaw_needs_grip
+#print axioms ForgeCam.Post.arc2_safe
+#print axioms ForgeCam.Post.arc3_unsafe

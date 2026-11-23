@@ -5,7 +5,7 @@ they are the fixture F, and the corrected G2 applies to them unchanged (ForgeCam
 `G2open_of_closedForm`). Cutting the jaws is an ordinary setup (the blank as stock, the vise as F),
 so G1–G5 cover it with no new theorem.
 -/
-import ForgeCam.Spec
+import ForgeCam.Prism
 
 open Metric Set
 
@@ -32,5 +32,58 @@ theorem jaw_seat_interior {blank H slab : Set E3} {k : ℝ} (hslab : H ∩ blank
 theorem jaw_seat_needs_slab {blank H slab : Set E3} {k : ℝ} {x : E3} (hx : x ∈ H)
     (hb : x ∈ blank) (hs : x ∉ slab) : ¬ Disjoint H (jaw blank H slab k) :=
   Set.not_disjoint_iff.mpr ⟨x, hx, hb, fun h => hs h.2⟩
+
+/-! ### The soft jaws as forge-cam cuts them (fixture.rs `soft_jaws`, 5b32f0a)
+
+The pocket is a prism: the region M (M = (G ⊖ r) ⊕ (r + fit), plus reliefs) cut from the jaws'
+top down to the seat. The held body H is the material the earlier setup left, turned over. The
+band [seat, top] is split at every flat face height of the part and every stock level, so within
+each sub-band H is a prism over one section G k. forge-cam refuses the jaws unless every G k ⊆ M
+(exact seating, `DoesNotSeat`). -/
+
+/-- The jaws: the blank less the pocket M × [seat, top]. -/
+def softJaw (blank : Set E3) (M : Set (ℝ × ℝ)) (seat top : ℝ) : Set E3 :=
+  blank \ prism M (Icc seat top)
+
+/-- **Seating, for forge-cam's soft jaws.** Within the grip, H is a stack of prisms over the
+sections G k at heights [z k, z (k+1)] inside [seat, top], each section inside the pocket's
+region M. If H meets the blank only within the grip heights, H meets no point of the jaws. -/
+theorem softJaw_seat {blank H : Set E3} {M : Set (ℝ × ℝ)} {seat top : ℝ} {n : ℕ}
+    (z : ℕ → ℝ) (G : ℕ → Set (ℝ × ℝ))
+    (hstack : ∀ p ∈ H, seat ≤ p 2 → p 2 ≤ top →
+      ∃ k < n, p ∈ prism (G k) (Icc (z k) (z (k + 1))))
+    (hband : ∀ k < n, seat ≤ z k ∧ z (k + 1) ≤ top)
+    (hseat : ∀ k < n, G k ⊆ M)
+    (hgrip : ∀ p ∈ H, p ∈ blank → seat ≤ p 2 ∧ p 2 ≤ top) :
+    Disjoint H (softJaw blank M seat top) := by
+  refine Set.disjoint_left.mpr fun p hp ⟨hb, hn⟩ => hn ?_
+  obtain ⟨h0, h1⟩ := hgrip p hp hb
+  obtain ⟨k, hk, hxy, hz⟩ := hstack p hp h0 h1
+  exact ⟨hseat k hk hxy, (hband k hk).1.trans hz.1, hz.2.trans (hband k hk).2⟩
+
+theorem softJaw_seat_interior {blank H : Set E3} {M : Set (ℝ × ℝ)} {seat top : ℝ} {n : ℕ}
+    (z : ℕ → ℝ) (G : ℕ → Set (ℝ × ℝ))
+    (hstack : ∀ p ∈ H, seat ≤ p 2 → p 2 ≤ top →
+      ∃ k < n, p ∈ prism (G k) (Icc (z k) (z (k + 1))))
+    (hband : ∀ k < n, seat ≤ z k ∧ z (k + 1) ≤ top)
+    (hseat : ∀ k < n, G k ⊆ M)
+    (hgrip : ∀ p ∈ H, p ∈ blank → seat ≤ p 2 ∧ p 2 ≤ top) :
+    Disjoint H (interior (softJaw blank M seat top)) :=
+  (softJaw_seat z G hstack hband hseat hgrip).mono_right interior_subset
+
+/-- The grip proviso is needed here too: held material inside the blank below the seat (top
+stock the earlier setup did not face off, turned over) is not seated. -/
+theorem softJaw_needs_grip {blank H : Set E3} {M : Set (ℝ × ℝ)} {seat top : ℝ} {p : E3}
+    (hp : p ∈ H) (hb : p ∈ blank) (hlow : p 2 < seat) :
+    ¬ Disjoint H (softJaw blank M seat top) :=
+  Set.not_disjoint_iff.mpr ⟨p, hp, hb, fun h => by linarith [h.2.1]⟩
+
+/-- The two models agree: forge-cam's pocket region holds the held body's sections grown by
+nothing more than M needs. If H's grip part is inside M × [seat, top], it is in the earlier model's
+(H ⊕ B_k) ∩ slab for any k (`jaw_seat`). -/
+theorem softJaw_subset_jaw {blank H : Set E3} {M : Set (ℝ × ℝ)} {seat top k : ℝ}
+    (hM : prism M (Icc seat top) ⊇ cthickening k H ∩ {p | seat ≤ p 2 ∧ p 2 ≤ top}) :
+    softJaw blank M seat top ⊆ jaw blank H {p | seat ≤ p 2 ∧ p 2 ≤ top} k :=
+  fun p ⟨hb, hn⟩ => ⟨hb, fun h => hn (hM h)⟩
 
 end ForgeCam

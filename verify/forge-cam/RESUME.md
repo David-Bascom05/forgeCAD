@@ -60,15 +60,30 @@ ForgeCam/Vise.lean adds 7 theorems (41 in all).
   outside the G6 model. The model treats arcs as records, so 0a4c189's refusal of them is
   untested by it.
 
+## Soft jaws (5b32f0a) and arc semantics: done
+
+- `softJaw_seat` covers forge-cam's model, the pocket M × [seat, top] with exact seating.
+  - Its grip proviso (held material inside the blank only within [seat, top]) is not checked by
+    `soft_jaw`. Stock the earlier setup left above the part's top would, turned over, sit below
+    the seat.
+  - `softJaw_needs_grip` shows that proviso is needed.
+- The three leftover mismatches, at 99f39bf:
+  - the straddling band is fixed (jaw_top is a breakpoint);
+  - the 1e-9 slack remains (it matches the breakpoints' dedup);
+  - G4 still grows by tol only, not δ + tol (phase1.md gap 6).
+  - New: "held" is now decided per loop by box overlap with a grown fixture piece, so a held
+    loop may hold points away from the fixture.
+- Arcs:
+  - `arc3_unsafe`: 0a4c189's vanishing-arc rule compares all three coordinates. A short
+    helical arc whose X, Y round onto the start is read as a full helical turn. Confirmed in
+    Rust at 99f39bf: `G3 X5. Y0. Z-0.5 I-5. J0.` from X5 Y0.
+  - `arc2_safe`: comparing X and Y is safe.
+
 ## Still to do when asked
 
-1. Soft jaws, when they land. Check that the seating check implements H ∩ blank ⊆ grip slab,
-   that the jaw faces lower to prism faces (the pockets' walls are arcs and segments), and that
-   `Certified` holds for them.
+1. Soft jaws' `Certified`: the pockets' walls are arcs and segments, so this needs segment–arc
+   (below) for walls over arcs.
 2. If 2.5D contours with arcs are in active use: segment–arc in Dist2 (over ℝ, or ℚ(√d) for an
    executable form), then arc–arc.
-3. G6: arc semantics (the master asked for them on resume). A quantised arc whose start = end
-   is a full circle to the control, so the model must give arcs their swept motion and prove
-   that a posted arc is never a vanishing one read as a circle.
-4. Not yet asked for: the character level of G-code (digits and templates), canned-cycle
+3. Not yet asked for: the character level of G-code (digits and templates), canned-cycle
    expansion in the G6 model, L5 for the checker's intervals, and L4 (Aeneas).
