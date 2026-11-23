@@ -15,4 +15,5 @@ import ForgeExact.DecideOnce.Witness
 import ForgeExact.DecideOnce.BoxesExact
 import ForgeExact.DecideOnce.Sample
 import ForgeExact.DecideOnce.Sampler
+import ForgeExact.DecideOnce.Frontier
 import ForgeExact.Axioms

@@ -12,6 +12,7 @@ import ForgeExact.DecideOnce.Witness
 import ForgeExact.DecideOnce.BoxesExact
 import ForgeExact.DecideOnce.Sample
 import ForgeExact.DecideOnce.Sampler
+import ForgeExact.DecideOnce.Frontier
 
 /-!
 # Only the standard axioms
@@ -134,3 +135,7 @@ elab "#standard_axioms " ids:ident* : command => do
   ForgeExact.DecideOnce.Sampler.sampler_covers
   ForgeExact.DecideOnce.Sampler.flat_exact
   ForgeExact.DecideOnce.Sampler.flat_correct
+  ForgeExact.DecideOnce.Frontier.reg_local
+  ForgeExact.DecideOnce.Frontier.far_unchanged
+  ForgeExact.DecideOnce.Frontier.frontier_local
+  ForgeExact.DecideOnce.Frontier.split_at_region
