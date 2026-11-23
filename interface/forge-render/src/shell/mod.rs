@@ -9,6 +9,7 @@ pub mod asmdrag;
 pub mod asmglyph;
 pub mod asmpart;
 pub mod asmtools;
+mod banner;
 pub mod content;
 pub mod dialog;
 pub mod docs;
@@ -746,6 +747,7 @@ impl Shell {
         self.fg_params_window(&ctx);
         self.fg_issues_window(&ctx);
         self.sheet_ui(&ctx);
+        self.build_banner(ui);
         self.view_toolbar(&ctx);
         self.sketch_ui(&ctx);
         self.mode_bar(&ctx);

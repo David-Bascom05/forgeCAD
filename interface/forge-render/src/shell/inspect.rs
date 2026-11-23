@@ -682,13 +682,13 @@ impl Shell {
                     ui.set_width(ui.spacing().slider_width);
                     ui.label(
                         egui::RichText::new(format!("{lo:.0} mm"))
-                            .font(sans(10.0))
+                            .font(sans(11.0))
                             .color(t.ink2),
                     );
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         ui.label(
                             egui::RichText::new(format!("{hi:.0} mm"))
-                                .font(sans(10.0))
+                                .font(sans(11.0))
                                 .color(t.ink2),
                         );
                     });
@@ -719,7 +719,7 @@ impl Shell {
                                 egui::Label::new(egui::RichText::new(what).font(sans(11.0)).color(t.ink2)),
                             );
                             ui.label(egui::RichText::new(value).font(mono(12.0)).color(t.ink));
-                            ui.label(egui::RichText::new(unit).font(sans(10.0)).color(t.ink2));
+                            ui.label(egui::RichText::new(unit).font(sans(11.0)).color(t.ink2));
                         });
                     };
                     let loops = format!(
@@ -1024,7 +1024,7 @@ impl Shell {
             pos2(r.left(), r.center().y),
             Align2::LEFT_CENTER,
             words,
-            sans(12.5),
+            sans(13.0),
             t.ink2,
         );
         let v = Rect::from_min_max(
@@ -1069,7 +1069,7 @@ impl Shell {
             pos2(tile.right() + 14.0, r.top() + 13.0),
             Align2::LEFT_CENTER,
             name,
-            semi(16.0),
+            semi(14.0),
             t.ink,
         );
         p.text(
@@ -1087,9 +1087,9 @@ impl Shell {
                 _ => d,
             }
         });
-        Self::info_row(ui, t, "Location", &dir, sans(12.5), t.ink);
+        Self::info_row(ui, t, "Location", &dir, sans(13.0), t.ink);
         if let Some(m) = &meta {
-            Self::info_row(ui, t, "Size", &size_words(m.len()), sans(12.5), t.ink);
+            Self::info_row(ui, t, "Size", &size_words(m.len()), sans(13.0), t.ink);
             for (words, at) in [
                 ("Created", m.created().ok()),
                 ("Modified", m.modified().ok()),
@@ -1121,18 +1121,18 @@ impl Shell {
                 capitalised(unit_words(units)),
                 unit_words(mass)
             ),
-            sans(12.5),
+            sans(13.0),
             t.ink,
         );
         if !contents.is_empty() {
-            Self::info_row(ui, t, "Contents", contents, sans(12.5), t.ink);
+            Self::info_row(ui, t, "Contents", contents, sans(13.0), t.ink);
         }
         let (state, ink) = if dirty {
             ("Unsaved changes", super::materials::amber(t))
         } else {
             ("Saved", t.ink)
         };
-        Self::info_row(ui, t, "State", state, sans(12.5), ink);
+        Self::info_row(ui, t, "State", state, sans(13.0), ink);
     }
 
     /// A property's text box: what's typed leaves as a SetProperty op when it loses focus.
@@ -1159,7 +1159,7 @@ impl Shell {
         } else {
             egui::TextEdit::singleline(text)
         };
-        let resp = ui.put(r, edit.font(sans(12.5)).margin(vec2(8.0, 5.0)).hint_text(hint));
+        let resp = ui.put(r, edit.font(sans(13.0)).margin(vec2(8.0, 5.0)).hint_text(hint));
         places.push((format!("iprops:{key}"), resp.rect));
         if resp.lost_focus() && *text != was {
             let v = text.trim();
@@ -1205,9 +1205,9 @@ impl Shell {
         if tab == Tab::Status {
             // what the part is, then its state and who signed it off when
             let number = doc.get("part_number").map_or(stem.clone(), str::to_string);
-            Self::info_row(ui, t, "Part Number", &number, sans(12.5), t.ink);
+            Self::info_row(ui, t, "Part Number", &number, sans(13.0), t.ink);
             if let Some(d) = doc.get("description") {
-                Self::info_row(ui, t, "Description", d, sans(12.5), t.ink);
+                Self::info_row(ui, t, "Description", d, sans(13.0), t.ink);
             }
             section(ui, t, "Status");
             let w = ui.available_width();
@@ -1216,7 +1216,7 @@ impl Shell {
                 pos2(r.left(), r.center().y),
                 Align2::LEFT_CENTER,
                 "Design State",
-                sans(12.5),
+                sans(13.0),
                 t.ink2,
             );
             let now = doc.get("design_state").unwrap_or("").to_string();
@@ -1245,7 +1245,7 @@ impl Shell {
             let date_x = r.right() - 4.0 - DATE_W;
             for (x, s) in [(by_x, "BY"), (date_x, "DATE")] {
                 ui.painter()
-                    .text(pos2(x, r.center().y), Align2::LEFT_CENTER, s, semi(10.0), t.ink2);
+                    .text(pos2(x, r.center().y), Align2::LEFT_CENTER, s, semi(11.0), t.ink2);
             }
             for (words, by, date) in [
                 ("Checked", "checked_by", "checked_date"),
@@ -1257,7 +1257,7 @@ impl Shell {
                     pos2(r.left(), r.center().y),
                     Align2::LEFT_CENTER,
                     words,
-                    sans(12.5),
+                    sans(13.0),
                     t.ink2,
                 );
                 let f = Rect::from_min_max(pos2(by_x, r.top() + 5.0), pos2(date_x - 10.0, r.bottom() - 5.0));
@@ -1278,7 +1278,7 @@ impl Shell {
                 pos2(r.left(), r.top() + 18.0),
                 Align2::LEFT_CENTER,
                 label(key),
-                sans(12.5),
+                sans(13.0),
                 t.ink2,
             );
             let f = Rect::from_min_max(
@@ -1305,7 +1305,7 @@ impl Shell {
         let (h, _) = ui.allocate_exact_size(vec2(w, 24.0), Sense::hover());
         for (x, s) in [(h.left() + 8.0, "NAME"), (h.left() + name_w + 12.0, "VALUE")] {
             ui.painter()
-                .text(pos2(x, h.center().y), Align2::LEFT_CENTER, s, semi(10.0), t.ink2);
+                .text(pos2(x, h.center().y), Align2::LEFT_CENTER, s, semi(11.0), t.ink2);
         }
         ui.painter()
             .hline(h.x_range(), h.bottom() - 0.5, Stroke::new(1.0, t.line));
@@ -1319,7 +1319,7 @@ impl Shell {
                 ui,
                 Rect::from_min_max(pos2(r.left() + 8.0, r.top()), pos2(r.left() + name_w, r.bottom())),
                 n,
-                medium(12.5),
+                medium(13.0),
                 t.ink,
                 n,
             );
@@ -1332,7 +1332,7 @@ impl Shell {
             let resp = ui.put(
                 f,
                 egui::TextEdit::singleline(text)
-                    .font(sans(12.5))
+                    .font(sans(13.0))
                     .margin(vec2(8.0, 5.0)),
             );
             places.push((format!("iprops:custom:value:{n}"), resp.rect));
@@ -1375,7 +1375,7 @@ impl Shell {
         let resp = ui.put(
             f,
             egui::TextEdit::singleline(&mut p.new_custom.0)
-                .font(sans(12.5))
+                .font(sans(13.0))
                 .margin(vec2(8.0, 5.0))
                 .hint_text("Name"),
         );
@@ -1387,7 +1387,7 @@ impl Shell {
         let resp = ui.put(
             f,
             egui::TextEdit::singleline(&mut p.new_custom.1)
-                .font(sans(12.5))
+                .font(sans(13.0))
                 .margin(vec2(8.0, 5.0))
                 .hint_text("Value"),
         );
@@ -1452,7 +1452,7 @@ impl Shell {
                 pos2(r.left(), r.center().y),
                 Align2::LEFT_CENTER,
                 "Material",
-                sans(12.5),
+                sans(13.0),
                 t.ink2,
             );
             let now = doc.material.clone().unwrap_or_default();
@@ -1547,13 +1547,13 @@ impl Shell {
                 pos2(r.left(), r.center().y),
                 Align2::LEFT_CENTER,
                 words,
-                sans(12.5),
+                sans(13.0),
                 t.ink2,
             );
             for (j, v) in vals.iter().enumerate() {
                 let at = pos2(r.left() + col(j), r.center().y);
                 let (s, ink) = v.map_or(("—".to_string(), t.ink2), |x| (fig(x), t.ink));
-                let g = p.layout_no_wrap(s, mono(12.5), ink);
+                let g = p.layout_no_wrap(s, mono(13.0), ink);
                 let cell = Rect::from_min_max(
                     at - vec2(g.size().x, g.size().y / 2.0),
                     at + vec2(0.0, g.size().y / 2.0),
@@ -1628,21 +1628,21 @@ impl Shell {
                     pos2(r.left(), r.center().y),
                     Align2::LEFT_CENTER,
                     &s.id,
-                    sans(12.5),
+                    sans(13.0),
                     t.ink,
                 );
                 pp.text(
                     pos2(r.left() + LABEL_W, r.center().y),
                     Align2::LEFT_CENTER,
                     s.material.as_deref().unwrap_or("None"),
-                    sans(12.5),
+                    sans(13.0),
                     if s.material.is_some() { t.ink } else { t.ink2 },
                 );
                 pp.text(
                     pos2(r.left() + col(0) + COL_W, r.center().y),
                     Align2::RIGHT_CENTER,
                     s.mass.map_or("—".into(), |m| format!("{} {mu}", fig(m * km))),
-                    mono(12.5),
+                    mono(13.0),
                     t.ink,
                 );
             }
@@ -1697,7 +1697,7 @@ impl Shell {
                 pos2(r.left() + cell(j), r.center().y),
                 Align2::RIGHT_CENTER,
                 *a,
-                semi(10.5),
+                semi(11.0),
                 t.ink2,
             );
         }
@@ -1707,13 +1707,13 @@ impl Shell {
                 pos2(r.left() + LABEL_W - 16.0, r.center().y),
                 Align2::RIGHT_CENTER,
                 *axis,
-                semi(10.5),
+                semi(11.0),
                 t.ink2,
             );
             for b in 0..3 {
                 let ink = if a == b { t.ink } else { t.ink2 };
                 let at = pos2(r.left() + cell(b), r.center().y);
-                let g = p.layout_no_wrap(fig(m[a][b] * k), mono(12.5), ink);
+                let g = p.layout_no_wrap(fig(m[a][b] * k), mono(13.0), ink);
                 let c = Rect::from_min_max(
                     at - vec2(g.size().x, g.size().y / 2.0),
                     at + vec2(0.0, g.size().y / 2.0),

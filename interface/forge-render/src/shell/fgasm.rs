@@ -2157,7 +2157,7 @@ impl Shell {
                 if !n.detail.is_empty() && room > 30.0 {
                     let mut d = n.detail.clone();
                     let wide = |s: &str, ui: &mut Ui| {
-                        ui.fonts_mut(|f| f.layout_no_wrap(s.to_string(), sans(10.0), t.ink2))
+                        ui.fonts_mut(|f| f.layout_no_wrap(s.to_string(), sans(11.0), t.ink2))
                             .size()
                             .x
                     };
@@ -2168,7 +2168,7 @@ impl Shell {
                         pos2(used + 10.0 + room, r.center().y),
                         Align2::RIGHT_CENTER,
                         d,
-                        sans(10.0),
+                        sans(11.0),
                         t.ink2,
                     );
                 }
@@ -2845,13 +2845,13 @@ impl Shell {
                         ui.set_width(ui.spacing().slider_width);
                         ui.label(
                             egui::RichText::new(format!("{}{unit}", short(lo)))
-                                .font(sans(10.0))
+                                .font(sans(11.0))
                                 .color(t.ink2),
                         );
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             ui.label(
                                 egui::RichText::new(format!("{}{unit}", short(hi)))
-                                    .font(sans(10.0))
+                                    .font(sans(11.0))
                                     .color(t.ink2),
                             );
                         });
@@ -2991,7 +2991,7 @@ impl Shell {
                             .max_height(220.0)
                             .show(ui, |ui| {
                                 for x in list.iter().take(400) {
-                                    ui.label(egui::RichText::new(x).font(mono(10.0)).color(t.ink2));
+                                    ui.label(egui::RichText::new(x).font(mono(11.0)).color(t.ink2));
                                 }
                             });
                     }
@@ -3137,7 +3137,7 @@ impl Shell {
                                             e.line,
                                             e.metric
                                         ))
-                                        .font(mono(10.0))
+                                        .font(mono(11.0))
                                         .color(if e.ok {
                                             t.ink2
                                         } else {
@@ -3196,7 +3196,7 @@ impl Shell {
                             .font(mono(12.0))
                             .color(t.ink),
                     );
-                    ui.label(egui::RichText::new("mm³").font(sans(10.0)).color(t.ink2));
+                    ui.label(egui::RichText::new("mm³").font(sans(11.0)).color(t.ink2));
                 });
                 super::measure_ui::coord_table(
                     ui,
@@ -3220,7 +3220,7 @@ impl Shell {
                         ui.vertical(|ui| {
                             for f in faces {
                                 let short = f.strip_prefix(&format!("{who}/")).unwrap_or(f);
-                                ui.label(egui::RichText::new(short).font(mono(10.0)).color(t.ink));
+                                ui.label(egui::RichText::new(short).font(mono(11.0)).color(t.ink));
                             }
                         });
                     });
@@ -3274,7 +3274,7 @@ impl Shell {
                                     );
                                     ui.label(
                                         egui::RichText::new(part_word(file))
-                                            .font(mono(10.0))
+                                            .font(mono(11.0))
                                             .color(t.ink2),
                                     );
                                     ui.end_row();

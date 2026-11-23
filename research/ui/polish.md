@@ -163,13 +163,15 @@ Before/after pairs share names in `before/` and `after/`.
 | 1 | Empty state | done: `shell/empty.rs`; "No document open" in the browser (`01-empty`). Ribbon tools that need a document: not yet |
 | 2 | Spacing | done in every panel that uses `dialog_head` (Measure, Issues, inspect windows, asm dialogs); the global default is left at 0 because the hand-laid chrome depends on it |
 | 3 | One accent | done: `accent` is the primary blue; the ribbon/side tab rules and the active document tab use it; the tool dialog's OK is primary |
-| 4 | Issues rows | done (`12-error-issues`); the in-view "build failed" banner: not yet |
-| 5 | Type scale | tokens in `theme.rs`; panels move to them as they're touched |
+| 4 | Issues rows, build-failed banner | done (`11-error`, `12-error-issues`): `shell/banner.rs` |
+| 5 | Type scale | done for sizes: every 10, 10.5, 11.5 and 12.5 folded onto 11/12/13; dialog titles semi 14, Settings' page heading semi 18 |
 | 6 | One panel frame | done: `theme::panel_frame` behind `fgasm::dialog_frame`, the tool dialog and the mode bar; title row 28 px with a hover on ✕ |
 | 7 | Settings | done: scrim, centred, "Neutral grey" (`08`, `09`) |
 | 8 | Status bar | done: units chip, the issues chip always a chip |
 | 12 | Document tabs | done: sans 12, the accent rule on top of the active tab |
-| 9, 10, 11, 13 | | not yet |
+| 9 | Browser | the change dot has a tooltip; one width and a filter in both: not yet |
+| 11 | Axes through the part | left: the renderer draws what's behind the part dimly on purpose (`Overlay::behind`); a render decision for the owner |
+| 10, 13 | | not yet |
 
 Known, not from this work: `cargo clippy --lib --target wasm32-unknown-unknown` fails at
 `errno` before reaching forge-render, through `zbus-secret-service-keyring-store` (not gated to

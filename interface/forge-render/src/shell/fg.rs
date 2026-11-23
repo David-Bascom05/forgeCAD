@@ -990,9 +990,7 @@ impl Shell {
                     let flag = fg.flag(&row.key);
                     let tint = match flag {
                         Some(Severity::Error) => Some(t.error),
-                        Some(Severity::Lint | Severity::Warning | Severity::Violation) => {
-                            Some(Color32::from_rgb(0xE0, 0xA0, 0x30))
-                        }
+                        Some(Severity::Lint | Severity::Warning | Severity::Violation) => Some(WARN),
                         None => None,
                     };
                     icons::draw(
@@ -1044,7 +1042,20 @@ impl Shell {
                         places.push((format!("fg:eye:{}", row.key), eye_rect(r)));
                     }
                     if let Some(c) = tint {
-                        p.circle_filled(pos2(r.right() - 4.0, r.top() + 6.0), 3.0, c);
+                        let at = pos2(r.right() - 4.0, r.top() + 6.0);
+                        p.circle_filled(at, 3.0, c);
+                        // what the dot means, on its own hover
+                        let why = if flag == Some(Severity::Error) {
+                            "An error here: the status bar's chip lists it"
+                        } else {
+                            "A warning here: the status bar's chip lists it"
+                        };
+                        ui.interact(
+                            Rect::from_center_size(at, vec2(10.0, 10.0)),
+                            ui.scope_id().with(("flag", &row.key)),
+                            Sense::hover(),
+                        )
+                        .on_hover_text(why);
                     }
                     let is_sketch = kind == Some("sketch");
                     // Start Sketch waiting for a plane: a sketch row is the one to edit

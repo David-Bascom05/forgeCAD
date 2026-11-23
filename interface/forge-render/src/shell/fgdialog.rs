@@ -443,7 +443,7 @@ impl Shell {
             .frame(frame)
             .constrain_to(super::dialog_area(ctx))
             .show(ctx, |ui| {
-                ui.label(egui::RichText::new(format!("Edit Occurrence {}", e.occ)).font(semi(15.0)));
+                ui.label(egui::RichText::new(format!("Edit Occurrence {}", e.occ)).font(semi(14.0)));
                 ui.label(
                     egui::RichText::new(format!("of {}: empty fields take the default", e.component))
                         .font(sans(12.0))
@@ -518,7 +518,7 @@ impl Shell {
             pos2(head.left() + 32.0, head.center().y),
             Align2::LEFT_CENTER,
             head_text,
-            semi(15.0),
+            semi(14.0),
             t.ink,
         );
         // an edit keeps its name: what reads it reads it by that name (the browser renames)

@@ -688,7 +688,7 @@ fn wide(
     key: String,
     places: &mut Vec<(String, Rect)>,
 ) -> bool {
-    let g = ui.painter().layout(text.to_string(), sans(12.5), t.ink, w - 48.0);
+    let g = ui.painter().layout(text.to_string(), sans(13.0), t.ink, w - 48.0);
     let (r, resp) = ui.allocate_exact_size(vec2(w, g.size().y + 14.0), Sense::click());
     let b = Rect::from_min_max(
         pos2(r.left() + 14.0, r.top() + 2.0),
@@ -994,7 +994,7 @@ pub(super) fn foot(
 }
 
 pub(super) fn note(ui: &mut Ui, text: &str, w: f32, ink: Color32) {
-    let g = ui.painter().layout(text.to_string(), sans(11.5), ink, w - 28.0);
+    let g = ui.painter().layout(text.to_string(), sans(12.0), ink, w - 28.0);
     let (r, _) = ui.allocate_exact_size(vec2(w, g.size().y + 4.0), Sense::hover());
     ui.painter().galley(r.min + vec2(14.0, 2.0), g, ink);
 }
@@ -1476,7 +1476,7 @@ impl Shell {
                         ui.add_space(14.0);
                         for (label, e) in pair {
                             let b =
-                                egui::Button::new(egui::RichText::new(label).font(sans(12.5)).color(t.ink))
+                                egui::Button::new(egui::RichText::new(label).font(sans(13.0)).color(t.ink))
                                     .fill(t.raised)
                                     .stroke(Stroke::new(1.0, t.line))
                                     .min_size(vec2((w - 34.0) / 2.0, 26.0));
@@ -1743,7 +1743,7 @@ impl Shell {
                                 k + 1,
                                 r.stages.get(k).copied().unwrap_or("")
                             ))
-                            .font(mono(11.5))
+                            .font(mono(12.0))
                             .color(t.ink2),
                         );
                     });
@@ -2362,7 +2362,7 @@ fn material_window(ctx: &egui::Context, t: &Theme, fg: &mut FgPanel, places: &mu
                         Some(d) => format!("Saves to {}", d.display()),
                         None => "No user library here".into(),
                     })
-                    .font(sans(11.5))
+                    .font(sans(12.0))
                     .color(t.ink2),
                 );
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
