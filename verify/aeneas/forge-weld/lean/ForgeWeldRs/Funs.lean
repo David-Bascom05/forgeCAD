@@ -71,7 +71,7 @@ def forge_math.vec.Point2.to_vec
   forge_math.vec.Vec2.new self.x self.y
 
 /-- [forge_ops::profile::{forge_ops::profile::Segment}::start]:
-    Source: 'kernel/forge-ops/src/profile.rs', lines 294:4-294:33
+    Source: 'kernel/forge-ops/src/profile.rs', lines 300:4-300:33
     Name pattern: [forge_ops::profile::{forge_ops::profile::Segment}::start]
     Visibility: public -/
 @[rust_fun "forge_ops::profile::{forge_ops::profile::Segment}::start"]
@@ -89,7 +89,7 @@ def forge_ops.profile.Segment.start
     forge_geom.spline.PlaneSpline.start ps
 
 /-- [forge_ops::profile::{forge_ops::profile::Segment}::end]:
-    Source: 'kernel/forge-ops/src/profile.rs', lines 307:4-307:31
+    Source: 'kernel/forge-ops/src/profile.rs', lines 313:4-313:31
     Name pattern: [forge_ops::profile::{forge_ops::profile::Segment}::end]
     Visibility: public -/
 @[rust_fun "forge_ops::profile::{forge_ops::profile::Segment}::end"]
