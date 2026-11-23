@@ -62,6 +62,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-cam-geom"
+version = "0.1.0"
+
+[[package]]
 name = "forge-cli"
 version = "0.1.0"
 dependencies = [
