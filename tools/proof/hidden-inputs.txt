@@ -178,7 +178,8 @@ speed (lazy field or constant table)  @ forge-bool/src/boolean.rs|lazy|static ON
 no-output (constant tables or print switches)  @ forge-bool/src/boolean.rs|static|static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();  x 3
 speed (buffers, stats)  @ forge-bool/src/boolean.rs|static|static PHASES: std::cell::RefCell<[u64; 7]> = const { std::cell::RefCell::new([0; 7]) };
 speed (buffers, stats)  @ forge-bool/src/boolean.rs|static|static SCRATCH: std::cell::RefCell<Scratch> = std::cell::RefCell::default();
-no-output (SCRATCH and SPLIT speed; PHASES stats; the retry flags are boolean::Rung arguments since G2)  @ forge-bool/src/boolean.rs|thread_local|thread_local! {  x 2
+speed (buffers: split_face's lists, cleared before each use; bool-speed S2)  @ forge-bool/src/boolean.rs|static|static SPLIT: std::cell::Cell<SplitScratch> = std::cell::Cell::new(SplitScratch::default());
+no-output (SCRATCH and SPLIT speed; PHASES stats; the retry flags are boolean::Rung arguments since G2)  @ forge-bool/src/boolean.rs|thread_local|thread_local! {  x 3
 speed (lazy field or constant table)  @ forge-bool/src/classify.rs|lazy|boxes: std::sync::OnceLock::new(),
 speed (lazy field or constant table)  @ forge-bool/src/classify.rs|lazy|boxes: std::sync::OnceLock<Vec<Box3>>,
 speed (lazy field or constant table)  @ forge-bool/src/classify.rs|lazy|drawn: std::sync::OnceLock::new(),

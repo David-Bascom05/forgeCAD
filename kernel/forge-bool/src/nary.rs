@@ -583,7 +583,6 @@ pub fn nary_with(
     let body = nary_body(tools, ops, shapes, batch, threads, root, &mut undecided);
     #[cfg(feature = "decisions")]
     scope.outcome(crate::decisions::Outcome::of(&body));
-    decided!(crate::decisions::end("n-ary body", &body));
     let out = body?;
     crate::boolean::undecided_touch(&out, undecided)?;
     crate::boolean::refuse_strays(&out, 0)?;
@@ -638,7 +637,6 @@ pub fn nary_with(
             }
         };
         if !one && out.fans(from, &mut prev).len() > 1 {
-            decided!(crate::decisions::site("G6 n-ary pinch refused", 1));
             return Err(BoolError::ZeroThickness {
                 at: out.vertex(VertexId(v as u32)).point,
             });
@@ -1032,6 +1030,7 @@ fn nary_body(
                         &mut out.segs,
                         &mut out.imprints,
                         &mut out.touching,
+                        None,
                         crate::boolean::Rung::PLAIN,
                         &mut crate::boolean::Tried::default(),
                     )?;
