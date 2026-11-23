@@ -260,6 +260,31 @@ impl Font {
         u16_at(&self.data, self.hmtx.0 + 4 * k).map_or(0.0, |a| a as f64)
     }
 
+    /// How far a glyf outline moves to sit where the font's metrics put it: hmtx's left side
+    /// bearing less the glyph's own xMin, as FreeType's phantom points (and fontTools) place it.
+    /// Zero for an empty glyph, or where either number is missing.
+    fn lsb_shift(&self, g: u16) -> f64 {
+        let Ok((a, b)) = self.glyph_range(g) else {
+            return 0.0;
+        };
+        if b < a + 10 {
+            return 0.0;
+        }
+        let k = g as usize;
+        let at = if k < self.metrics {
+            self.hmtx.0 + 4 * k + 2
+        } else {
+            self.hmtx.0 + 4 * self.metrics + 2 * (k - self.metrics)
+        };
+        if at + 2 > self.hmtx.0 + self.hmtx.1 {
+            return 0.0;
+        }
+        match (i16_at(&self.data, at), i16_at(&self.data, a + 2)) {
+            (Ok(lsb), Ok(xmin)) => lsb as f64 - xmin as f64,
+            _ => 0.0,
+        }
+    }
+
     /// The kerning between two glyphs set side by side, in font units.
     pub fn kerning(&self, left: u16, right: u16) -> f64 {
         self.kern
@@ -299,7 +324,7 @@ impl Font {
         self.outline_into(
             g,
             [1.0, 0.0, 0.0, 1.0],
-            (0.0, 0.0),
+            (self.lsb_shift(g), 0.0),
             &mut Vec::new(),
             &mut budget,
             &mut out,
@@ -320,7 +345,7 @@ impl Font {
         self.outline_into(
             g,
             [1.0, 0.0, 0.0, 1.0],
-            (0.0, 0.0),
+            (self.lsb_shift(g), 0.0),
             &mut Vec::new(),
             &mut budget,
             &mut out,
@@ -902,6 +927,21 @@ mod tests {
 
     /// A CFF font with subroutines, hints, flex and every short operator, truncated at every
     /// thirteenth byte and scrambled 400 ways: refused or read, never a panic, never long.
+    #[test]
+    fn placed_by_lsb_less_xmin() {
+        // a square at x 100..200 whose header says xMin 100, and hmtx's lsb 0: FreeType and
+        // fontTools draw it at 0..100 (the phantom point), and so must we
+        let mut rec = testing::simple(&testing::TestGlyph::bar(100.0, 0.0, 200.0, 100.0, 300.0));
+        rec[2..4].copy_from_slice(&100i16.to_be_bytes());
+        let font = Font::parse(testing::build_raw(1000, &[('A', rec, 300)], None)).unwrap();
+        let g = font.glyph('A');
+        let xs: Vec<f64> = font.outline(g).unwrap().iter().flatten().flat_map(|s| s.points()).map(|p| p.x).collect();
+        let (lo, hi) = xs.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), &x| (a.min(x), b.max(x)));
+        assert_eq!((lo, hi), (0.0, 100.0));
+        let parts = font.outline_parts(g).unwrap();
+        assert!(parts.iter().flat_map(|(_, c)| c).flat_map(|s| s.points()).all(|p| p.x >= 0.0 && p.x <= 100.0));
+    }
+
     #[test]
     fn corrupted_cff_never_panics() {
         use crate::testing::{build_cff_raw, charstring};
