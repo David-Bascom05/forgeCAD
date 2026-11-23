@@ -19,7 +19,6 @@ unproven contract is a `def … : Prop` in Lean, never a `sorry`.
 **Owners:** SPINE (§E, the composition, the body layer, forge-topo validity); TRANSLATE (the
 Aeneas translation of forge-bool and its types); FLAT-SITES (classify.rs, point_in_face, G1/§1a,
 G11 flat, G13–G15); FALLBACK (G2–G10, G12, A8 as the fallback, and the fallback being unneeded).
-Rows marked *proposed* have an owner the main session has not yet confirmed.
 
 ## E. The end-to-end theorem and its hypotheses
 
@@ -31,7 +30,7 @@ Rows marked *proposed* have an owner the main session has not yet confirmed.
 | E.ref | `RefusalTrue A B op e` per refusal kind (`ZeroThickness`, `Unhandled k`, `Undecided q`); `Internal` mapped or unreachable | SPINE (stmt), FALLBACK (`Internal`) | open | — |
 | E.names | `NamesOK`, per entity (D7) | SPINE (stmt) | open | — |
 | E.size | `InputSize A B`, and `boolean_preserves_InputSize` | SPINE | open | — |
-| E.size.rs | the `#[cold]` entry check refusing `Unhandled::InputTooLarge` | *proposed* FLAT-SITES | open | kernel/forge-bool |
+| E.size.rs | the `#[cold]` entry check refusing `Unhandled::InputTooLarge` | FLAT-SITES | open | kernel/forge-bool |
 | H.fin | `FaithfulInput δ A`: each stored region and curve within δ of its exact meet | hyp (producing feature) | hyp | BodyModel `exactOf_refines`'s `hface`, `hedge` |
 | H.abs | `FormulaOfTopology abs`: the Φ_u that `abs` reads equals the stored local cone | TRANSLATE | open | — |
 | H.batch | `Batch` sound when decided (CpuBatch proven; GPU impl a hypothesis) | FALLBACK | open | — |
@@ -63,13 +62,13 @@ Rows marked *proposed* have an owner the main session has not yet confirmed.
 |---|---|---|---|---|---|
 | D0 | `boolean` → clone, `boolean_into`, `into_compact` | compact keeps ⟦·⟧ and names; clone is the identity | SPINE | open | — |
 | D1 | `Index::new`, `face_box` | ⟦f⟧ ⊆ box f; boxes that miss ⇒ faces miss | FLAT-SITES | open | — |
-| D2 | `meet_region`, `ssi::surfaces_in`, `plane_meet`, `crossings_near` | every point of ⟦fa⟧ ∩ ⟦fb⟧ is on a returned curve (within δ, F1); closed-form miss = `Unhandled::NoClosedForm` | *proposed* TRANSLATE | open | — |
-| D3 | `touches`, `flows_on`, `crack_tip`, `local_class` | every contact listed with exact local classes; the non-manifold refusal is `RefusalTrue` | *proposed* FALLBACK (with G4) | open | — |
+| D2 | `meet_region`, `ssi::surfaces_in`, `plane_meet`, `crossings_near` | every point of ⟦fa⟧ ∩ ⟦fb⟧ is on a returned curve (within δ, F1); closed-form miss = `Unhandled::NoClosedForm` | TRANSLATE | open | — |
+| D3 | `touches`, `flows_on`, `crack_tip`, `local_class` | every contact listed with exact local classes; the non-manifold refusal is `RefusalTrue` | FALLBACK (with G4) | open | — |
 | D4 | `trim`, `rank_pairs` | segments = the D2 curves' pieces inside both faces, ends at exact meets; rank by an exact key | FLAT-SITES (with G14, G15) | open | — |
-| D5 | `imprint`, `share_cuts`, `place_cuts`, `edge_split`, `split_face`, `plane_split` | the regions are the arrangement's facets on f (`FacetData`) | *proposed* SPINE (statement), unassigned (proof) | open | `place_cuts`: research/kernel-audit/coverage/aeneas (proven, L4) |
+| D5 | `imprint`, `share_cuts`, `place_cuts`, `edge_split`, `split_face`, `plane_split` | the regions are the arrangement's facets on f (`FacetData`) | SPINE (statement), FLAT-SITES (proof, after §1a) | open | `place_cuts`: research/kernel-audit/coverage/aeneas (proven, L4) |
 | D6 | `classify_specs`, `interior_point`, `probe`, `Index::classify` (§1a), coplanar sense | each region's class is `whereR` of the other solid at the region | FLAT-SITES | open | — |
-| D7 | `keep_of`, `lean`, the naming functions | kept = facets separating a kept room from an unkept one; names by the rule | *proposed* SPINE (keep), unassigned (names) | open | — |
-| D8 | `apply`, `edge_split`, joins/splits, `sole_survivors` | R's exact counterpart: faces = the kept facets, `Bounds Rs (reg (opSet ⟦A⟧ ⟦B⟧))`, `WellFormed` | *proposed* SPINE | open | — |
+| D7 | `keep_of`, `lean`, the naming functions | kept = facets separating a kept room from an unkept one; names by the rule | SPINE (keep), FALLBACK (names, with A8's edge-name parity) | open | — |
+| D8 | `apply`, `edge_split`, joins/splits, `sole_survivors` | R's exact counterpart: faces = the kept facets, `Bounds Rs (reg (opSet ⟦A⟧ ⟦B⟧))`, `WellFormed` | SPINE | open | — |
 | D9 | `pinched_new`, `pinched_old`, `touched_old`, `undecided_touch`, `refuse_strays` | refuses iff the exact result is non-manifold there | FALLBACK (G6, G7) | open | — |
 | Dn | `nary_with` | D1–D9 over n tools, the op fold as keep; `Batch` sound when decided | FALLBACK (G10) | open | — |
 
@@ -99,7 +98,7 @@ Rows marked *proposed* have an owner the main session has not yet confirmed.
 | G9 | `SCRATCH`, cached `FaceInfo` (`CacheOK b`) | FALLBACK | open | — |
 | G10 | `nary`'s `Batch` and threads | FALLBACK | open | — |
 | G11 | flat `LINEAR`/`RIM` tolerance tests | FLAT-SITES | open | — |
-| G11c | curved `LINEAR`/`RIM` tolerance tests (curved-fallback-rates.md) | unassigned | open | — |
+| G11c | curved `LINEAR`/`RIM` tolerance tests (curved-fallback-rates.md) | none this round | open, deferred (curved) | — |
 | G12 | the `decide_once` feature becomes the fallback branch | FALLBACK | open | — |
 | G13 | `face_point`'s unchecked inward step | FLAT-SITES | open | — |
 | G14 | trim_in's box-only accept | FLAT-SITES | open | — |
