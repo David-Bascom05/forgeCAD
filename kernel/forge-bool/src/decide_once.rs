@@ -2004,6 +2004,10 @@ pub fn boolean(a: &Body, b: &Body, op: Op) -> Result<Option<Body>, BoolError> {
 /// touched (§3a's write as an edit). `Ok(false)` where the decide-once path does not apply, and
 /// `target` is as it was.
 pub fn boolean_in(target: &mut Body, b: &Body, op: Op) -> Result<bool, BoolError> {
+    // (the tool first: it is small, and a curved one skips before the part is read)
+    if !flat(b) {
+        return Ok(false);
+    }
     let Some(plan) = plan_of(&[&*target, b], &rule_of(op))? else {
         return Ok(false);
     };
@@ -2043,12 +2047,23 @@ pub fn history(tools: &[&Body], ops: &[Op]) -> Result<Option<Body>, BoolError> {
 
 /// Any number of flat bodies under one pointwise rule, in one call.
 pub fn nary(bodies: &[&Body], rule: &Rule) -> Result<Option<Body>, BoolError> {
+    if !bodies.iter().skip(1).all(|b| flat(b)) {
+        return Ok(None);
+    }
     let Some(plan) = plan_of(bodies, rule)? else {
         return Ok(None);
     };
     let mut b = bodies[0].clone();
     apply(&mut b, plan, &bodies[1..]);
     Ok(Some(if b.dead > 0 { b.into_compact() } else { b }))
+}
+
+/// FORGE_DECIDE_STATS set: each boolean's sizes, and why one skips, to stderr. Read once (a
+/// variable read scans the environment: per boolean it cost the parts decide-once never runs on
+/// ~0.2% of their instructions).
+fn stats() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var_os("FORGE_DECIDE_STATS").is_some())
 }
 
 /// The result of `bodies` under `rule` as an edit of body 0: `Ok(None)` where the decide-once
@@ -2060,14 +2075,14 @@ fn plan_of(bodies: &[&Body], rule: &Rule) -> Result<Option<Plan>, BoolError> {
     let (fs, snapped, cls, pts, built, reg) = match fill(bodies, rule) {
         Ok(x) => x,
         Err(e) => {
-            if std::env::var_os("FORGE_DECIDE_STATS").is_some() {
+            if stats() {
                 eprintln!("decide-once skip: {e:?}");
             }
             return Ok(None);
         }
     };
     let outcome = core::core(&built.ledger, rule, &core::MetricLedger::default());
-    if std::env::var_os("FORGE_DECIDE_STATS").is_some() {
+    if stats() {
         eprintln!(
             "decide-once: {} bodies, {} faces ({} near), {} classes, {} cells, {} pieces, {} edges, {} verts, {} witnesses",
             bodies.len(),
