@@ -22,18 +22,25 @@ G11 flat, G13–G15); FALLBACK (G2–G10, G12, A8 as the fallback, and the fallb
 (the curved guess sites: G11 on curved faces, coincidence, unify's curved decisions, poles and
 seams, and the curved screens S3/S4).
 
+**Where the gap is.** `boolean_correct_of_contracts` proves §E from the contracts D1–D9 and
+`KeepRuleBd`. So the end-to-end theorem is down to the rows below that are still open or stated.
+Each one is a per-function contract, the shape lemma, or a named hypothesis. A bare file name means
+verify/forge-bool-proof/ForgeBoolProof/<file>.
+
 ## E. The end-to-end theorem and its hypotheses
 
 | id | contract | owner | status | file / theorem |
 |---|---|---|---|---|
-| E | `boolean_correct`: Ok ⇒ ValidSolid ∧ Faithful (F1) ∧ NamesOK; Err ⇒ RefusalTrue | SPINE | open | verify/forge-bool-proof |
-| E.comp | the composition: D0–D9 (and Dn) ⇒ E | SPINE | open | verify/forge-bool-proof |
-| E.fb | the flat fallback branch: today's path refuses or is undecided ⇒ A8, then a typed refusal; A8 starts from the original inputs | FALLBACK | open | — |
-| E.ref | `RefusalTrue A B op e` per refusal kind (`ZeroThickness`, `Unhandled k`, `Undecided q`); `Internal` mapped or unreachable | SPINE (stmt), FALLBACK (`Internal`) | open | — |
-| E.names | `NamesOK`, per entity (D7) | SPINE (stmt) | open | — |
-| E.size | `InputSize A B`, and `boolean_preserves_InputSize` | SPINE | open | — |
+| E | `boolean_correct`: Ok ⇒ ValidSolid ∧ Faithful (F1) ∧ NamesOK; Err ⇒ RefusalTrue | SPINE | stated | Statement.lean `BooleanCorrect` |
+| E.comp | the composition: D1–D9 and `KeepRuleBd` ⇒ E, for `Pipeline.run` | SPINE | proven | Compose.lean `boolean_correct_of_contracts` (with `res_keepRoom`, `apply_correct`) |
+| E.shape | the translated `general` is `Pipeline.run` of its translated steps, with a `View` per stage (`boolean`'s clone/`into_compact` wrapper is D0) | TRANSLATE | open | — |
+| E.seq | sequential regen as a fold of booleans | SPINE | proven (given E and `boolean_preserves_InputSize`) | Compose.lean `seq_correct` |
+| E.fb | the flat fallback branch: today's path refuses or is undecided ⇒ A8, then a typed refusal; A8 starts from the original inputs | FALLBACK | composition proven (`TodayOK` + A8's `BooleanCorrect` ⇒ E); A8's `BooleanCorrect` open (rows A8.*) | Compose.lean `withFallback`, `fallback_correct` |
+| E.ref | `RefusalTrue A B op e` per refusal kind (`ZeroThickness`, `Unhandled k`, `Undecided q`); `Internal` mapped or unreachable | SPINE (stmt), FALLBACK (`Internal`) | stated (`internal` is never true; `unhandled`/`undecided` read through the declared `Scope`) | Statement.lean `RefusalTrue`, `ManifoldPt` |
+| E.names | `NamesOK`, per entity (D7) | SPINE (stmt), FALLBACK (naming fns) | open (a parameter `Names` of E; the per-entity statement is open) | — |
+| E.size | `InputSize A B`, and `boolean_preserves_InputSize` | SPINE | open (a parameter `Size` of E until the translated surface data exists; preservation is `seq_correct`'s `hsize`) | — |
 | E.size.rs | the `#[cold]` entry check refusing `Unhandled::InputTooLarge` | FLAT-SITES | open | kernel/forge-bool |
-| H.fin | `FaithfulInput δ A`: each stored region and curve within δ of its exact meet | hyp (producing feature) | hyp | BodyModel `exactOf_refines`'s `hface`, `hedge` |
+| H.fin | `FaithfulInput δ A`: each stored region and curve within δ of its exact meet | hyp (producing feature) | hyp | Statement.lean `Faithful`, in `Input` |
 | H.abs | `FormulaOfTopology abs`: the Φ_u that `abs` reads equals the stored local cone | TRANSLATE | open | — |
 | H.batch | `Batch` sound when decided (CpuBatch proven; GPU impl a hypothesis) | FALLBACK | open | — |
 
@@ -63,15 +70,19 @@ seams, and the curved screens S3/S4).
 | id | function(s) | contract | owner | status | file / theorem |
 |---|---|---|---|---|---|
 | D0 | `boolean` → clone, `boolean_into`, `into_compact` | compact keeps ⟦·⟧ and names; clone is the identity | SPINE | open | — |
-| D1 | `Index::new`, `face_box` | ⟦f⟧ ⊆ box f; boxes that miss ⇒ faces miss | FLAT-SITES | open | — |
-| D2 | `meet_region`, `ssi::surfaces_in`, `plane_meet`, `crossings_near` | every point of ⟦fa⟧ ∩ ⟦fb⟧ is on a returned curve (within δ, F1); closed-form miss = `Unhandled::NoClosedForm` | TRANSLATE | open | — |
-| D3 | `touches`, `flows_on`, `crack_tip`, `local_class` | every contact listed with exact local classes; the non-manifold refusal is `RefusalTrue` | FALLBACK (with G4) | open | — |
-| D4 | `trim`, `rank_pairs` | segments = the D2 curves' pieces inside both faces, ends at exact meets; rank by an exact key | FLAT-SITES (with G14, G15) | open | — |
-| D5 | `imprint`, `share_cuts`, `place_cuts`, `edge_split`, `split_face`, `plane_split` | the regions are the arrangement's facets on f (`FacetData`) | SPINE (statement), FLAT-SITES (proof, after §1a) | open | `place_cuts`: research/kernel-audit/coverage/aeneas (proven, L4) |
-| D6 | `classify_specs`, `interior_point`, `probe`, `Index::classify` (§1a), coplanar sense | each region's class is `whereR` of the other solid at the region | FLAT-SITES | open | — |
-| D7 | `keep_of`, `lean`, the naming functions | kept = facets separating a kept room from an unkept one; names by the rule | SPINE (keep), FALLBACK (names, with A8's edge-name parity) | open | — |
-| D8 | `apply`, `edge_split`, joins/splits, `sole_survivors` | R's exact counterpart: faces = the kept facets, `Bounds Rs (reg (opSet ⟦A⟧ ⟦B⟧))`, `WellFormed` | SPINE | open | — |
-| D9 | `pinched_new`, `pinched_old`, `touched_old`, `undecided_touch`, `refuse_strays` | refuses iff the exact result is non-manifold there | FALLBACK (G6, G7) | open | — |
+| D1 | `Index::new`, `face_box` | ⟦f⟧ ⊆ box f; boxes that miss ⇒ faces miss | FLAT-SITES | stated | Contracts.lean `D1`, `PairsOK` |
+| D2 | `meet_region`, `ssi::surfaces_in`, `plane_meet`, `crossings_near` | every point of ⟦fa⟧ ∩ ⟦fb⟧ is on a returned curve (within δ, F1); closed-form miss = `Unhandled::NoClosedForm` | TRANSLATE | stated | Contracts.lean `D2`, `CurvesOK` |
+| D3 | `touches`, `flows_on`, `crack_tip`, `local_class` | every contact listed with exact local classes; the non-manifold refusal is `RefusalTrue` | FALLBACK (with G4) | stated | Contracts.lean `D3`, `TouchesOK` |
+| D4 | `trim`, `rank_pairs` | segments = the D2 curves' pieces inside both faces, ends at exact meets; rank by an exact key | FLAT-SITES (with G14, G15) | stated | Contracts.lean `D4`, `SegsOK` |
+| D5 | `imprint`, `share_cuts`, `place_cuts`, `edge_split`, `split_face`, `plane_split` | the regions are the arrangement's facets on f (`FacetData`) | SPINE (statement), FLAT-SITES (proof, after §1a) | stated | Contracts.lean `D5`, `ArrOK`; `place_cuts`: research/kernel-audit/coverage/aeneas (proven, L4) |
+| D6 | `classify_specs`, `interior_point`, `probe`, `Index::classify` (§1a), coplanar sense | each region's class is `whereR` of the other solid at the region | FLAT-SITES | stated | Contracts.lean `D6`, `ClassesOK` |
+| D7 | `keep_of`, `lean`, the naming functions | kept = facets separating a kept room from an unkept one; names by the rule | SPINE (keep), FALLBACK (names, with A8's edge-name parity) | stated | Contracts.lean `D7`, `KeepOK` |
+| D8 | `apply`, `edge_split`, joins/splits, `sole_survivors` | R's exact counterpart: faces = the kept facets, `Bounds Rs (reg (opSet ⟦A⟧ ⟦B⟧))`, `WellFormed` | SPINE | stated | Contracts.lean `D8`, `ApplyPost` |
+| D9 | `pinched_new`, `pinched_old`, `touched_old`, `undecided_touch`, `refuse_strays` | refuses iff the exact result is non-manifold there | FALLBACK (G6, G7) | stated | Contracts.lean `D9` |
+| D5.zone | `ArrOK.on_frontier` inside vertex-cluster zones: a facet on a body's faces in a zone (micro-faces) is on that solid's frontier, or the contract changes there | SPINE | open (with the cluster ruling) | Contracts.lean `ArrOK.on_frontier` |
+| D7.math | `KeepRuleBd`: on exact classes, `keepRule` picks each boundary facet of the kept rooms once (F6 across pieces; a coplanar piece once, as A's) | SPINE | stated | Contracts.lean `KeepRuleBd` |
+| D7.table | `keep_of` computes `keepRule` (the table in Contracts.lean is the spec; if boolean.rs's table differs, it changes here with a reason) | SPINE | open | — |
+| D8.math | the assembly boundary lemma: a well-formed exact body whose faces are the kept boundary facets, oriented to the kept rooms, bounds `Res G keepRoom` (`FaceLocal.frontier_iff_bd`) | SPINE | open | — |
 | Dn | `nary_with` | D1–D9 over n tools, the op fold as keep; `Batch` sound when decided | FALLBACK (G10) | open | — |
 
 ## §1a. The exact `On` (classify.rs)
