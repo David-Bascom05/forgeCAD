@@ -173,6 +173,29 @@ thread_local! {
     static BUILT_MOST: std::cell::Cell<usize> = const { std::cell::Cell::new(64) };
 }
 
+/// What this thread keeps between regens (the tools built, their reach), handed whole to a
+/// thread that builds tools for it and back (`take_kept`, `put_kept`): both are memos of pure
+/// functions, so which thread holds them changes no answer, only how soon it comes.
+pub(crate) struct Kept {
+    built: Vec<(u64, String, Tool)>,
+    most: usize,
+    seen: Vec<(Feature, Option<Box3>)>,
+}
+
+pub(crate) fn take_kept() -> Kept {
+    Kept {
+        built: BUILT.with(|b| std::mem::take(&mut *b.borrow_mut())),
+        most: BUILT_MOST.with(|m| m.get()),
+        seen: SEEN.with(|s| std::mem::take(&mut *s.borrow_mut())),
+    }
+}
+
+pub(crate) fn put_kept(k: Kept) {
+    BUILT.with(|b| *b.borrow_mut() = k.built);
+    BUILT_MOST.with(|m| m.set(k.most));
+    SEEN.with(|s| *s.borrow_mut() = k.seen);
+}
+
 /// For tests: how many tools this thread keeps (0: none), and forgets those it has.
 pub fn tools_kept(most: usize) {
     BUILT_MOST.with(|m| m.set(most));

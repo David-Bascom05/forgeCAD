@@ -4,7 +4,7 @@
 use forge_geom::{Curve, CurveGeom, Surface, SurfaceGeom};
 use forge_math::{Point3, Vec3};
 use forge_topo::{Body, EdgeId, FaceId, Name, VertexId};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Ent {
@@ -29,9 +29,16 @@ pub struct View<'a> {
 /// (split by a later boolean) keeps the origin of the face it overlaps on the same surface.
 /// `copied` names the faces a pattern at `i` copied: their source's lineage, then `i`.
 pub fn lineage(body: &Body, prev: Option<(&Body, &Lineage)>, i: usize, copied: &Lineage) -> Lineage {
-    let mut out = HashMap::with_capacity(body.faces.len());
+    let mut out = BTreeMap::new();
+    let merges = prev.map(|(_, po)| merges(body, po)).unwrap_or_default();
     for f in body.face_ids() {
         let face = body.face(f);
+        if let Some((_, po)) = prev
+            && let Some(o) = merged(&merges, face.name, i, po)
+        {
+            out.insert(face.name, o);
+            continue;
+        }
         let o = prev.and_then(|(pb, po)| {
             po.get(&face.name)
                 .cloned()
@@ -50,6 +57,46 @@ pub fn lineage(body: &Body, prev: Option<(&Body, &Lineage)>, i: usize, copied: &
     out
 }
 
+/// The faces this step merged: (whole, piece) for each piece the body's joins give a whole
+/// (`Joins::aliases`) that was a face before (in `po`) and is none now, sorted (as forge-lang's
+/// `build::merges`).
+fn merges(body: &Body, po: &Lineage) -> Vec<(Name, Name)> {
+    if body.joins.aliases.is_empty() {
+        return Vec::new();
+    }
+    // (the body's own names: `face_by_name` would follow the alias to the whole)
+    let mut now: Vec<Name> = body.face_ids().map(|f| body.face(f).name).collect();
+    now.sort_unstable();
+    let mut out: Vec<(Name, Name)> = body
+        .joins
+        .aliases
+        .iter()
+        .filter(|&&(piece, whole)| piece != whole && po.contains_key(&piece) && now.binary_search(&piece).is_err())
+        .map(|&(piece, whole)| (whole, piece))
+        .collect();
+    out.sort_unstable();
+    out.dedup();
+    out
+}
+
+/// The origin of a face `whole` this step merged of faces before: every member's, its own (this
+/// feature's, `i`, if new) and each piece's; None if it merged nothing (as forge-lang's
+/// `build::merged`).
+fn merged(merges: &[(Name, Name)], whole: Name, i: usize, po: &Lineage) -> Option<Vec<usize>> {
+    let from = merges.partition_point(|m| m.0 < whole);
+    let pieces = &merges[from..from + merges[from..].partition_point(|m| m.0 == whole)];
+    if pieces.is_empty() {
+        return None;
+    }
+    let mut o: Vec<usize> = po.get(&whole).cloned().unwrap_or_else(|| vec![i]);
+    for &(_, piece) in pieces {
+        o.extend(po.get(&piece).into_iter().flatten().copied());
+    }
+    o.sort_unstable();
+    o.dedup();
+    Some(o)
+}
+
 /// The faces a pattern at `k` copied, from the part before it (`prev`, `po`): each new face is
 /// carried back by every copy's motion onto the surface of a source face `from` accepts, and
 /// gets that face's lineage and `k`. Geometric, so faces split by the copy still trace back.
@@ -66,7 +113,7 @@ pub fn copies(
         .face_ids()
         .filter(|&g| po.get(&prev.face(g).name).is_some_and(from))
         .collect();
-    let mut out = HashMap::new();
+    let mut out = BTreeMap::new();
     for f in body.face_ids() {
         let face = body.face(f);
         if po.contains_key(&face.name) {
@@ -92,7 +139,8 @@ pub fn copies(
 }
 
 /// Each face's making feature, then the patterns that copied it (by feature index).
-pub type Lineage = HashMap<Name, Vec<usize>>;
+/// (a BTreeMap: whoever iterates it gets names in order, not a hash's)
+pub type Lineage = BTreeMap<Name, Vec<usize>>;
 
 pub fn name(body: &Body, e: Ent) -> Name {
     match e {

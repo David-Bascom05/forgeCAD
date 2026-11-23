@@ -17,10 +17,21 @@ use std::borrow::Cow;
 use std::collections::HashSet;
 
 /// One body of a part: the feature (its place in the history) that made it, and its solid.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub struct Solid {
     pub id: usize,
     pub body: Body,
+}
+
+/// (a part's solids are copied for the next feature, which edits one in place: its arenas get
+/// room, so that edit's first new edge or face does not copy them again)
+impl Clone for Solid {
+    fn clone(&self) -> Solid {
+        Solid {
+            id: self.id,
+            body: self.body.clone_roomy(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -276,7 +287,7 @@ fn step_unchecked(
         // starts from the same body, so from the same body finished)
         let tried = match crate::blunted(features, i) {
             None => crate::step_plain_finished(features, i, body, finished),
-            Some(fs) => match crate::step_plain_finished(features, i, body.clone(), finished) {
+            Some(fs) => match crate::step_plain_finished(features, i, body.as_ref().map(Body::clone_roomy), finished) {
                 Err(e) if crate::lost_its_way(&e) => {
                     crate::step_plain_finished(History::new(&fs, features.ids), i, body, finished)
                         .map_err(|_| e)
@@ -320,22 +331,32 @@ fn step_unchecked(
 pub(crate) fn sequential(features: History<'_>) -> Result<Vec<Solid>, RegenError> {
     let (plain, picks) = strip(&features);
     let plain = features.on(&plain);
-    let mut solids = Vec::new();
-    for i in 0..plain.len() {
-        solids = match apply_once(plain, &picks, i, solids) {
-            Err(e) if crate::lost_its_way(&e) => {
-                return match careful(plain, &picks, 0, plain.len(), Vec::new()) {
-                    Ok(s) => finish(s),
-                    Err(_) => match all_blunted(features, features.len() - 1, features.len()) {
-                        Some(Ok(s)) => finish(s),
-                        _ => Err(e),
-                    },
-                };
-            }
-            r => r?,
-        };
+    // (each feature in turn; the tools of those ahead built by a helper, `crate::ahead`)
+    let apart = |i: usize| {
+        let f = &plain[i];
+        !modifies(f)
+            && !matches!(
+                f,
+                Feature::Plane(_)
+                    | Feature::Work(_)
+                    | Feature::Body(_)
+                    | Feature::Param(_)
+                    | Feature::Sketch(_)
+            )
+    };
+    let solids = crate::ahead(plain, &apart, Vec::new(), &mut |i, solids, made| {
+        apply_once_made(plain, &picks, i, solids, made)
+    });
+    match solids {
+        Err(e) if crate::lost_its_way(&e) => match careful(plain, &picks, 0, plain.len(), Vec::new()) {
+            Ok(s) => finish(s),
+            Err(_) => match all_blunted(features, features.len() - 1, features.len()) {
+                Some(Ok(s)) => finish(s),
+                _ => Err(e),
+            },
+        },
+        r => finish(r?),
     }
-    finish(solids)
 }
 
 fn finish(mut solids: Vec<Solid>) -> Result<Vec<Solid>, RegenError> {
@@ -388,7 +409,18 @@ fn apply_once(
     plain: History<'_>,
     picks: &[Option<&Pick>],
     i: usize,
+    solids: Vec<Solid>,
+) -> Result<Vec<Solid>, RegenError> {
+    apply_once_made(plain, picks, i, solids, None)
+}
+
+/// `apply_once` with feature `i`'s tools made already (`tools(plain, i, true)`, exactly), if `made`.
+fn apply_once_made(
+    plain: History<'_>,
+    picks: &[Option<&Pick>],
+    i: usize,
     mut solids: Vec<Solid>,
+    made: Option<Vec<Tool>>,
 ) -> Result<Vec<Solid>, RegenError> {
     let f = &plain[i];
     let p = pick(picks, i);
@@ -408,7 +440,10 @@ fn apply_once(
         }
         _ => {}
     }
-    let ts = tools(plain, i, true)?;
+    let ts = match made {
+        Some(ts) => ts,
+        None => tools(plain, i, true)?,
+    };
     // parameters and sketches make nothing
     if ts.is_empty() {
         return Ok(solids);
@@ -755,7 +790,7 @@ fn body_feature(
             let t = find(solids, *target, i)?;
             // both bodies finished parts: their arenas in order of name, so nothing the
             // booleans make follows the order they were built in (docs/naming.md, Arena order)
-            let mut body = solids[t].body.clone().into_canonical();
+            let mut body = solids[t].body.clone_roomy().into_canonical();
             for (n, &id) in tools.iter().enumerate() {
                 if id == *target {
                     return Err(bad(BodyError::SameBody { id }));

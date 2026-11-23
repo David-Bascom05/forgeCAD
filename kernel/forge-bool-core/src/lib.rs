@@ -22,6 +22,7 @@
 pub mod inc;
 mod index;
 mod sort;
+pub mod stitch;
 mod union_find;
 
 pub use index::Index;

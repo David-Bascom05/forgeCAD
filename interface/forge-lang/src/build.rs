@@ -59,7 +59,7 @@ impl Stage {
             // one solid: finished into the view itself; several: each finished once, kept for
             // what looks at them one by one (validity, each one's mass)
             let several = self.solids.len() > 1;
-            let mut alone = (!several).then(|| forge_model::finish(self.solids[0].body.clone()));
+            let mut alone = (!several).then(|| forge_model::finish(self.solids[0].body.clone_roomy()));
             let each: &[Body] = if several { self.finished() } else { &[] };
             for (k, s) in self.solids.iter().enumerate() {
                 let (f, e) = (all.faces.len() as u32, all.edges.len() as u32);
@@ -99,7 +99,7 @@ impl Stage {
         self.finished.get_or_init(|| {
             self.solids
                 .iter()
-                .map(|s| forge_model::finish(s.body.clone()))
+                .map(|s| forge_model::finish(s.body.clone_roomy()))
                 .collect()
         })
     }
@@ -764,8 +764,15 @@ impl std::hash::Hasher for NameMix {
 /// name lives; a new face on a face before's surface, overlapping it, is that face's.
 fn lineage(body: &Body, prev: Option<(&Body, &Lineage)>, i: usize) -> Lineage {
     let mut out = Lineage::with_capacity_and_hasher(body.faces.len(), Default::default());
+    let merges = prev.map(|(_, po)| merges(body, |n| po.contains_key(&n))).unwrap_or_default();
     for f in body.face_ids() {
         let face = body.face(f);
+        if let Some((_, po)) = prev
+            && let Some(o) = merged(&merges, face.name, i, |n| po.get(&n))
+        {
+            out.insert(face.name, o);
+            continue;
+        }
         let o = prev.and_then(|(pb, po)| {
             po.get(&face.name).cloned().or_else(|| {
                 // (the surfaces first: most differ, and a face's box is worked out only then)
@@ -779,6 +786,52 @@ fn lineage(body: &Body, prev: Option<(&Body, &Lineage)>, i: usize) -> Lineage {
         out.insert(face.name, o.unwrap_or_else(|| vec![i]));
     }
     out
+}
+
+/// The faces this step merged: (whole, piece) for each piece the body's joins give a whole
+/// (`Joins::aliases`) that was a face before (`was`) and is none now, sorted. A merge an earlier
+/// step made has its pieces gone before this one, so only this step's are found.
+pub(crate) fn merges(body: &Body, was: impl Fn(Name) -> bool) -> Vec<(Name, Name)> {
+    if body.joins.aliases.is_empty() {
+        return Vec::new();
+    }
+    // (the body's own names: `face_by_name` would follow the alias to the whole)
+    let mut now: Vec<Name> = body.face_ids().map(|f| body.face(f).name).collect();
+    now.sort_unstable();
+    let mut out: Vec<(Name, Name)> = body
+        .joins
+        .aliases
+        .iter()
+        .filter(|&&(piece, whole)| piece != whole && was(piece) && now.binary_search(&piece).is_err())
+        .map(|&(piece, whole)| (whole, piece))
+        .collect();
+    out.sort_unstable();
+    out.dedup();
+    out
+}
+
+/// The origin of a face `whole` this step merged of faces before (`merges`): every member's, its
+/// own (this feature's, `i`, if it is new) and each piece's; None if it merged nothing. A face
+/// joined of the part's face and a copy's (a whole-body pattern's coplanar bottoms) is both
+/// features' faces, as it is with the faces kept apart and joined only in the view.
+pub(crate) fn merged<'a>(
+    merges: &[(Name, Name)],
+    whole: Name,
+    i: usize,
+    before: impl Fn(Name) -> Option<&'a Vec<usize>>,
+) -> Option<Vec<usize>> {
+    let from = merges.partition_point(|m| m.0 < whole);
+    let pieces = &merges[from..from + merges[from..].partition_point(|m| m.0 == whole)];
+    if pieces.is_empty() {
+        return None;
+    }
+    let mut o: Vec<usize> = before(whole).cloned().unwrap_or_else(|| vec![i]);
+    for &(_, piece) in pieces {
+        o.extend(before(piece).into_iter().flatten().copied());
+    }
+    o.sort_unstable();
+    o.dedup();
+    Some(o)
 }
 
 /// A run before's stages, and the lineages worked out for them, by position.

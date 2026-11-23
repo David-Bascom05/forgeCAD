@@ -219,7 +219,7 @@ impl Joins {
 }
 
 /// A solid: one or more closed shells (an outer skin, plus inner ones for voids).
-#[derive(Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct Body {
     /// Faces (and edges) removed by in-place edits and not yet compacted away.
     pub dead: usize,
@@ -281,8 +281,11 @@ fn roomy<T: Clone>(v: &[T]) -> Vec<T> {
     out
 }
 
-impl Clone for Body {
-    fn clone(&self) -> Body {
+impl Body {
+    /// A clone whose arenas have room to grow (`room`): for a copy an in-place edit comes to next
+    /// (a part's solids, copied for the next feature), so its first new edge or face does not copy
+    /// the arena again.
+    pub fn clone_roomy(&self) -> Body {
         Body {
             dead: self.dead,
             joins: self.joins.clone(),
@@ -517,11 +520,11 @@ impl Body {
         let mut out = Body {
             dead: 0,
             joins: std::mem::take(&mut self.joins),
-            vertices: Vec::with_capacity(room(self.vertices.len())),
-            edges: Vec::with_capacity(room(self.edges.len())),
-            coedges: Vec::with_capacity(room(self.coedges.len())),
-            loops: Vec::with_capacity(room(self.loops.len())),
-            faces: Vec::with_capacity(room(self.faces.len())),
+            vertices: Vec::with_capacity(self.vertices.len()),
+            edges: Vec::with_capacity(self.edges.len()),
+            coedges: Vec::with_capacity(self.coedges.len()),
+            loops: Vec::with_capacity(self.loops.len()),
+            faces: Vec::with_capacity(self.faces.len()),
             shells: Vec::new(),
             hulls: Cached::default(),
             split: std::mem::take(&mut self.split),

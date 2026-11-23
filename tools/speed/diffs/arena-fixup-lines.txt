@@ -1,0 +1,57 @@
+# After the arena fix-up (headroom at the clone sites an in-place edit follows; Body's Clone derived,
+# compaction exact): exact switch-off gate against base, 94 of 97 lines lower, bits identical. The
+# three not lower, per function against base b3c08ee built at a same-length path (fndiff.py base head):
+# jack cli, volute cli: ours lower, glibc up (malloc paths under other block sizes); jack nary1 is
+# run - resolve: both lower (run -81k, resolve -199k), the difference up by 117k.
+
+== jack-cli
+  ours (kernel, std, forge-lang) -107421   glibc +233083   total +125662
+      -341180  ???:<alloc::vec::Vec<forge_topo::body::Edge> as core::clone::Clone>::clone [benchparts]
+      -147475  ???:<alloc::vec::Vec<forge_topo::body::Face> as core::clone::Clone>::clone [benchparts]
+      -122562  ???:<forge_topo::body::Body as core::clone::Clone>::clone [benchparts]
+        -8405  ./malloc/./malloc/arena.c:free
+       +21282  ./malloc/./malloc/malloc.c:unlink_chunk.isra.0 [libc.so.6]
+       +77103  ./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S:__memcpy_avx_unaligned_erms [libc.so.6]
+       +80990  ???:<forge_topo::body::Body>::clone_roomy [benchparts]
+      +125674  ./malloc/./malloc/malloc.c:_int_malloc [libc.so.6]
+      +143469  ???:<core::iter::adapters::cloned::Cloned<core::slice::iter::Iter<forge_topo::body::Face>> as core::iter::traits::iterat
+      +291753  ???:<core::iter::adapters::cloned::Cloned<core::slice::iter::Iter<forge_topo::body::Edge>> as core::iter::traits::iterat
+
+== volute-cli
+  ours (kernel, std, forge-lang) -141531   glibc +255536   total +114005
+      -403132  ???:<alloc::vec::Vec<forge_topo::body::Edge> as core::clone::Clone>::clone [benchparts]
+      -326587  ./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S:__memcpy_avx_unaligned_erms [libc.so.6]
+      -188320  ???:<alloc::vec::Vec<forge_topo::body::Face> as core::clone::Clone>::clone [benchparts]
+      -151226  ???:<forge_topo::body::Body as core::clone::Clone>::clone [benchparts]
+       +40726  ./malloc/./malloc/malloc.c:_int_free_merge_chunk [libc.so.6]
+      +100731  ???:<forge_topo::body::Body>::clone_roomy [benchparts]
+      +119904  ./malloc/./malloc/malloc.c:unlink_chunk.isra.0 [libc.so.6]
+      +185040  ???:<core::iter::adapters::cloned::Cloned<core::slice::iter::Iter<forge_topo::body::Face>> as core::iter::traits::iterat
+      +346071  ???:<core::iter::adapters::cloned::Cloned<core::slice::iter::Iter<forge_topo::body::Edge>> as core::iter::traits::iterat
+      +450575  ./malloc/./malloc/malloc.c:_int_malloc [libc.so.6]
+
+== jack-n
+  ours (kernel, std, forge-lang) -67416   glibc -14065   total -81481
+      -224248  ???:<alloc::vec::Vec<forge_topo::body::Edge> as core::clone::Clone>::clone [benchparts]
+       -96433  ???:<alloc::vec::Vec<forge_topo::body::Face> as core::clone::Clone>::clone [benchparts]
+       -80524  ???:<forge_topo::body::Body as core::clone::Clone>::clone [benchparts]
+       -13239  ./malloc/./malloc/malloc.c:_int_malloc [libc.so.6]
+        +2780  ???:<alloc::collections::btree::map::IntoIter<(forge_asm::model::DocId, u64), ()>>::dying_next [benchparts]
+        +3475  ./malloc/./malloc/malloc.c:malloc_consolidate [libc.so.6]
+       +16039  ./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S:__memcpy_avx_unaligned_erms [libc.so.6]
+       +53177  ???:<forge_topo::body::Body>::clone_roomy [benchparts]
+       +93832  ???:<core::iter::adapters::cloned::Cloned<core::slice::iter::Iter<forge_topo::body::Face>> as core::iter::traits::iterat
+      +191670  ???:<core::iter::adapters::cloned::Cloned<core::slice::iter::Iter<forge_topo::body::Edge>> as core::iter::traits::iterat
+
+== jack-r
+  ours (kernel, std, forge-lang) -67503   glibc -131424   total -198927
+      -224248  ???:<alloc::vec::Vec<forge_topo::body::Edge> as core::clone::Clone>::clone [benchparts]
+      -103315  ./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S:__memcpy_avx_unaligned_erms [libc.so.6]
+       -96433  ???:<alloc::vec::Vec<forge_topo::body::Face> as core::clone::Clone>::clone [benchparts]
+       -80524  ???:<forge_topo::body::Body as core::clone::Clone>::clone [benchparts]
+        +2679  ./malloc/./malloc/malloc.c:_int_free_maybe_consolidate [libc.so.6]
+        +2780  ???:<alloc::collections::btree::map::IntoIter<(forge_asm::model::DocId, u64), ()>>::dying_next [benchparts]
+        +5695  ./malloc/./malloc/malloc.c:_int_free_merge_chunk [libc.so.6]
+       +53177  ???:<forge_topo::body::Body>::clone_roomy [benchparts]
+       +93832  ???:<core::iter::adapters::cloned::Cloned<core::slice::iter::Iter<forge_topo::body::Face>> as core::iter::traits::iterat
+      +191670  ???:<core::iter::adapters::cloned::Cloned<core::slice::iter::Iter<forge_topo::body::Edge>> as core::iter::traits::iterat
