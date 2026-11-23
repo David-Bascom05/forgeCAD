@@ -27,7 +27,38 @@ use forge_math::exact::{Dy, DyPlane, DyV3, HPoint, meet3};
 use forge_math::{Interval, Point3};
 use forge_topo::{Body, EdgeId, FaceId, Name, VertexId};
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::hash::{BuildHasherDefault, Hasher};
+
+/// A fast, deterministic hasher for the bridge's keyed tables (covectors, ids).
+#[derive(Default)]
+pub(crate) struct Fx(u64);
+
+impl Hasher for Fx {
+    fn finish(&self) -> u64 {
+        self.0
+    }
+    fn write(&mut self, bytes: &[u8]) {
+        for &b in bytes {
+            self.0 = (self.0.rotate_left(5) ^ b as u64).wrapping_mul(0x51_7c_c1_b7_27_22_0a_95);
+        }
+    }
+    fn write_u8(&mut self, b: u8) {
+        self.0 = (self.0.rotate_left(5) ^ b as u64).wrapping_mul(0x51_7c_c1_b7_27_22_0a_95);
+    }
+    fn write_u32(&mut self, b: u32) {
+        self.0 = (self.0.rotate_left(5) ^ b as u64).wrapping_mul(0x51_7c_c1_b7_27_22_0a_95);
+    }
+    fn write_u64(&mut self, b: u64) {
+        self.0 = (self.0.rotate_left(5) ^ b).wrapping_mul(0x51_7c_c1_b7_27_22_0a_95);
+    }
+    fn write_usize(&mut self, b: usize) {
+        self.write_u64(b as u64);
+    }
+}
+
+type FxMap<K, V> = std::collections::HashMap<K, V, BuildHasherDefault<Fx>>;
+/// Every keyed table of the bridge: Fx-hashed, so fast and the same from run to run.
+type HashMap<K, V> = FxMap<K, V>;
 
 /// Why the bridge leaves a boolean to the old path.
 #[derive(Debug, Clone, PartialEq)]
@@ -243,7 +274,7 @@ fn snap(fs: &[In]) -> Result<(Vec<DyPlane>, Vec<usize>), Skip> {
         }
     }
     // the spread cap: every pair of a class whose region is not empty within 2·LINEAR
-    let mut members: HashMap<usize, Vec<usize>> = HashMap::new();
+    let mut members: HashMap<usize, Vec<usize>> = HashMap::default();
     for i in 0..n {
         let r = uf.find(i);
         members.entry(r).or_default().push(i);
@@ -293,7 +324,7 @@ fn vertices(bodies: &[&Body], fs: &[In], planes: &[DyPlane], reg: &Region) -> Re
             (0..3).all(|k| lo[k] - g <= q[k] && q[k] <= hi[k] + g)
         }
     };
-    let mut round: Vec<HashMap<VertexId, Vec<usize>>> = vec![HashMap::new(); bodies.len()];
+    let mut round: Vec<HashMap<VertexId, Vec<usize>>> = vec![HashMap::default(); bodies.len()];
     for (i, f) in fs.iter().enumerate() {
         for lp in &f.loops {
             for &v in lp {
@@ -307,8 +338,8 @@ fn vertices(bodies: &[&Body], fs: &[In], planes: &[DyPlane], reg: &Region) -> Re
     let mut out = Vec::new();
     for (k, rk) in round.into_iter().enumerate() {
         let pts = Pts {
-            exact: RefCell::new(HashMap::new()),
-            f: RefCell::new(HashMap::new()),
+            exact: RefCell::new(HashMap::default()),
+            f: RefCell::new(HashMap::default()),
             round: rk,
         };
         // the near faces' vertices in the region now, each checked (§6.1's ambiguity is decided
@@ -420,7 +451,7 @@ fn classes(snapped: &[DyPlane], reps: &[usize], near: &[bool]) -> Classes {
     let mut of_face = Vec::with_capacity(snapped.len());
     // by an f64 key first, so the exact comparison runs only against likely equals: one point set
     // gives keys at most one step apart in each component, so its neighbours are looked at too
-    let mut by_key: HashMap<(i64, i64, i64, i64), Vec<u32>> = HashMap::new();
+    let mut by_key: HashMap<(i64, i64, i64, i64), Vec<u32>> = HashMap::default();
     for (i, p) in snapped.iter().enumerate() {
         if !near[i] {
             of_face.push(NONE);
@@ -731,8 +762,8 @@ fn arrange(cls: &Classes, pf: &[PlaneF], c: u32, lo: [f64; 3], hi: [f64; 3]) -> 
     };
     let mut vx: Vec<Vx> = Vec::new();
     // a vertex by the two planes (besides c) it is the meet of, and class vertices by covector
-    let mut by_pair: HashMap<(Pl, Pl), u32> = HashMap::new();
-    let mut by_cov: HashMap<Vec<Sgn>, u32> = HashMap::new();
+    let mut by_pair: HashMap<(Pl, Pl), u32> = HashMap::default();
+    let mut by_cov: FxMap<Vec<Sgn>, u32> = FxMap::default();
     let mut vertex = |x: Pl, y: Pl, vx: &mut Vec<Vx>| -> u32 {
         let key = if x <= y { (x, y) } else { (y, x) };
         if let Some(&i) = by_pair.get(&key) {
@@ -864,6 +895,12 @@ fn arrange(cls: &Classes, pf: &[PlaneF], c: u32, lo: [f64; 3], hi: [f64; 3]) -> 
         }
         let mut next = Vec::with_capacity(cells.len() + 4);
         for cl in &cells {
+            // (a cell the plane does not cross stays whole)
+            let sides: Vec<i32> = cl.iter().map(|&(i, _)| side(&vx, i, pj)).collect();
+            if sides.iter().all(|&x| x > 0) || sides.iter().all(|&x| x < 0) {
+                next.push(cl.clone());
+                continue;
+            }
             let (p, n) = split(cl, pj, &mut vx);
             if p.len() >= 3 {
                 next.push(p);
@@ -1022,14 +1059,14 @@ struct Built {
     /// per facet: the input faces it is a piece of
     holders: HashMap<u32, Vec<usize>>,
     /// cell ids by covector
-    by: HashMap<Vec<Sgn>, u32>,
+    by: FxMap<Vec<Sgn>, u32>,
 }
 
 /// A table of cells by covector.
 #[derive(Default)]
 struct CellTab {
     cells: Vec<Vec<Sgn>>,
-    by: HashMap<Vec<Sgn>, u32>,
+    by: FxMap<Vec<Sgn>, u32>,
 }
 
 impl CellTab {
@@ -1075,17 +1112,17 @@ fn build_ledger(
     let on_wall = |cv: &[Sgn]| cls.walls.iter().any(|&w| cv[w as usize] == Sgn::Zero);
     let pf: Vec<PlaneF> = cls.planes.iter().map(plane_f).collect();
     let mut tab = CellTab::default();
-    let mut facet = HashMap::new();
-    let mut point = HashMap::new();
-    let mut ends = HashMap::new();
-    let mut side_of = HashMap::new();
-    let mut sides: HashMap<u32, Vec<(u32, i32)>> = HashMap::new();
-    let mut holders_of: HashMap<u32, Vec<usize>> = HashMap::new();
+    let mut facet = HashMap::default();
+    let mut point = HashMap::default();
+    let mut ends = HashMap::default();
+    let mut side_of = HashMap::default();
+    let mut sides: HashMap<u32, Vec<(u32, i32)>> = HashMap::default();
+    let mut holders_of: HashMap<u32, Vec<usize>> = HashMap::default();
     let mut pieces: Vec<(u32, u32)> = Vec::new(); // (face, cell)
     let mut edges: Vec<u32> = Vec::new();
     let mut verts: Vec<u32> = Vec::new();
-    let mut is_e: HashMap<u32, ()> = HashMap::new();
-    let mut is_v: HashMap<u32, ()> = HashMap::new();
+    let mut is_e: HashMap<u32, ()> = HashMap::default();
+    let mut is_v: HashMap<u32, ()> = HashMap::default();
     // the faces of each class, in arena order
     let mut on: Vec<Vec<usize>> = vec![Vec::new(); cls.planes.len()];
     for (i, &c) in cls.of_face.iter().enumerate() {
@@ -1101,14 +1138,10 @@ fn build_ledger(
         let mut lo = [f64::INFINITY; 3];
         let mut hi = [f64::NEG_INFINITY; 3];
         for &i in faces {
-            for lp in &fs[i].loops {
-                for v in lp {
-                    let p = pts[fs[i].body].pf(*v, snapped);
-                    for k in 0..3 {
-                        lo[k] = lo[k].min(p[k]);
-                        hi[k] = hi[k].max(p[k]);
-                    }
-                }
+            // (the kernel's box: the section's box is grown well past it below)
+            for k in 0..3 {
+                lo[k] = lo[k].min(fs[i].lo[k]);
+                hi[k] = hi[k].max(fs[i].hi[k]);
             }
         }
         for k in 0..3 {
@@ -1137,32 +1170,41 @@ fn build_ledger(
             if cell.iter().any(|&(i, _)| pl.vx[i as usize].cov.is_none()) {
                 continue;
             }
-            let mid = HPoint::mean(&[
-                &pl.vx[cell[0].0 as usize].p,
-                &pl.vx[cell[1].0 as usize].p,
-                &pl.vx[cell[2].0 as usize].p,
-            ]);
-            let midf = mid.to_f64();
-            let holders: Vec<usize> = faces
-                .iter()
-                .copied()
-                .filter(|&i| {
-                    // (a face's snapped polygon is within a few LINEAR of its kernel box)
-                    let g = 4.0 * lin() + 1e-9 * (1.0 + midf[0].abs() + midf[1].abs() + midf[2].abs());
-                    let f = &fs[i];
-                    (0..3).all(|k| f.lo[k] - g <= midf[k] && midf[k] <= f.hi[k] + g)
-                        && in_face(&mid, f, &pts[f.body], snapped, s, t)
-                })
-                .collect();
-            if holders.is_empty() {
-                continue;
-            }
             let covs: Vec<&Vec<Sgn>> = cell
                 .iter()
                 .map(|&(i, _)| pl.vx[i as usize].cov.as_ref().unwrap())
                 .collect();
             let fc = join(&covs);
             if !open(&fc) {
+                continue;
+            }
+            // the faces whose box holds the cell's middle (in f64, within a margin), and only then
+            // the exact middle and its parity
+            let (a0, a1, a2) = (
+                pl.vx[cell[0].0 as usize].f,
+                pl.vx[cell[1].0 as usize].f,
+                pl.vx[cell[2].0 as usize].f,
+            );
+            let midf = [0, 1, 2].map(|k| (a0[k] + a1[k] + a2[k]) / 3.0);
+            let g = 4.0 * lin() + 1e-9 * (1.0 + midf[0].abs() + midf[1].abs() + midf[2].abs());
+            let boxed: Vec<usize> = faces
+                .iter()
+                .copied()
+                .filter(|&i| (0..3).all(|k| fs[i].lo[k] - g <= midf[k] && midf[k] <= fs[i].hi[k] + g))
+                .collect();
+            if boxed.is_empty() {
+                continue;
+            }
+            let mid = HPoint::mean(&[
+                &pl.vx[cell[0].0 as usize].p,
+                &pl.vx[cell[1].0 as usize].p,
+                &pl.vx[cell[2].0 as usize].p,
+            ]);
+            let holders: Vec<usize> = boxed
+                .into_iter()
+                .filter(|&i| in_face(&mid, &fs[i], &pts[fs[i].body], snapped, s, t))
+                .collect();
+            if holders.is_empty() {
                 continue;
             }
             let id = tab.id(fc.clone());
@@ -1223,7 +1265,7 @@ fn build_ledger(
     // the facets' sides
     let mut facets_seen: Vec<u32> = pieces.iter().map(|p| p.1).collect();
     facets_seen.dedup();
-    let mut done: HashMap<u32, ()> = HashMap::new();
+    let mut done: HashMap<u32, ()> = HashMap::default();
     for &id in &facets_seen {
         if done.insert(id, ()).is_some() {
             continue;
@@ -1553,7 +1595,7 @@ pub fn nary(bodies: &[&Body], rule: &Rule) -> Result<Option<Body>, BoolError> {
         snapped: &snapped,
         reg: &reg,
         pf: cls.planes.iter().map(plane_f).collect(),
-        at: RefCell::new(HashMap::new()),
+        at: RefCell::new(HashMap::default()),
     };
     let written = |out: Option<&core::Body>| {
         write(&w, out).unwrap_or_else(|| panic!("decide-once: the result's segments do not close into loops"))
@@ -1579,7 +1621,7 @@ pub fn nary(bodies: &[&Body], rule: &Rule) -> Result<Option<Body>, BoolError> {
 
 /// Which of `splitOk`'s conditions a ledger breaks, in words (a bridge bug's report).
 fn why_split(l: &Ledger) -> Option<String> {
-    let mut seen: HashMap<(u32, u32), u32> = HashMap::new();
+    let mut seen: HashMap<(u32, u32), u32> = HashMap::default();
     for &(c, f) in &l.pieces {
         let x = &l.cells[c.0 as usize];
         let zeros: Vec<usize> = (0..x.len()).filter(|&k| x[k] == Sgn::Zero).collect();
@@ -1616,7 +1658,7 @@ fn sliver(cls: &Classes, b: &Built, out: &core::Body) -> Option<Point3> {
         Point3::new(p[0], p[1], p[2])
     };
     for e in &out.edges {
-        let mut count: HashMap<u32, u32> = HashMap::new();
+        let mut count: HashMap<u32, u32> = HashMap::default();
         for c in &e.cells {
             let (u, v) = b.ends[&c.0];
             *count.entry(u).or_default() += 1;
@@ -1631,7 +1673,7 @@ fn sliver(cls: &Classes, b: &Built, out: &core::Body) -> Option<Point3> {
     // each face's vertices and box
     let verts: Vec<(u32, Point3)> = out.verts.iter().map(|v| (v.0, pt(v.0))).collect();
     for f in &out.faces {
-        let mut on: HashMap<u32, ()> = HashMap::new();
+        let mut on: HashMap<u32, ()> = HashMap::default();
         let (mut lo, mut hi) = ([f64::INFINITY; 3], [f64::NEG_INFINITY; 3]);
         for c in &f.facets {
             for &v in &b.facet[&c.0].poly {
@@ -1884,7 +1926,7 @@ fn write(w: &Wr, out: Option<&core::Body>) -> Option<Body> {
     let on_wall = |cv: &[Sgn]| cls.walls.iter().any(|&x| cv[x as usize] == Sgn::Zero);
     let mut pools: std::collections::BTreeMap<Grp, Vec<Seg>> = std::collections::BTreeMap::new();
     // body 0's global face index by FaceId
-    let mut gidx: HashMap<FaceId, usize> = HashMap::new();
+    let mut gidx: HashMap<FaceId, usize> = HashMap::default();
     for (g, f) in fs.iter().enumerate() {
         if f.body == 0 {
             gidx.insert(f.face, g);
@@ -1986,7 +2028,7 @@ fn write(w: &Wr, out: Option<&core::Body>) -> Option<Body> {
     if let Some(out) = out {
         for f in &out.faces {
             let grp = Grp::Plane(f.plane, if f.orient == Sgn::Pos { 1 } else { -1 });
-            let mut count: HashMap<u32, u32> = HashMap::new();
+            let mut count: HashMap<u32, u32> = HashMap::default();
             let mut segs = Vec::new();
             for c in &f.facets {
                 let mut poly = built.facet[&c.0].poly.clone();
@@ -2137,12 +2179,12 @@ fn build_body(w: &Wr, fins: &[Fin]) -> Option<Body> {
         uf.union(fsx[0], fsx[1]);
     }
     // names
-    let mut per_src: HashMap<usize, u64> = HashMap::new();
+    let mut per_src: HashMap<usize, u64> = HashMap::default();
     for f in fins {
         *per_src.entry(f.src).or_default() += 1;
     }
-    let mut seen: HashMap<usize, u64> = HashMap::new();
-    let mut used: HashMap<Name, ()> = HashMap::new();
+    let mut seen: HashMap<usize, u64> = HashMap::default();
+    let mut used: HashMap<Name, ()> = HashMap::default();
     let mut fnames = Vec::new();
     for f in fins {
         let base = face_name(f.src);
@@ -2156,7 +2198,7 @@ fn build_body(w: &Wr, fins: &[Fin]) -> Option<Body> {
         fnames.push(unique(&mut used, name));
     }
     // the input's vertices by their place in the result, for points and names kept
-    let mut orig_v: HashMap<u32, (usize, VertexId)> = HashMap::new();
+    let mut orig_v: HashMap<u32, (usize, VertexId)> = HashMap::default();
     for (k, b) in bodies.iter().enumerate() {
         for (g, f) in fs.iter().enumerate() {
             if f.body != k || cls.of_face[g] == NONE {
@@ -2179,8 +2221,8 @@ fn build_body(w: &Wr, fins: &[Fin]) -> Option<Body> {
         let _ = b;
     }
     let mut body = Body::default();
-    let mut vid: HashMap<PK, VertexId> = HashMap::new();
-    let mut vused: HashMap<Name, ()> = HashMap::new();
+    let mut vid: HashMap<PK, VertexId> = HashMap::default();
+    let mut vused: HashMap<Name, ()> = HashMap::default();
     let mut vertex = |body: &mut Body, k: PK| -> VertexId {
         if let Some(&v) = vid.get(&k) {
             return v;
@@ -2209,7 +2251,7 @@ fn build_body(w: &Wr, fins: &[Fin]) -> Option<Body> {
         v
     };
     // the input's edges by their two vertices' places, for names kept
-    let placed: RefCell<HashMap<(usize, VertexId), Option<PK>>> = RefCell::new(HashMap::new());
+    let placed: RefCell<HashMap<(usize, VertexId), Option<PK>>> = RefCell::new(HashMap::default());
     let place = |b: usize, v: VertexId| -> Option<PK> {
         if let Some(&p) = placed.borrow().get(&(b, v)) {
             return p;
@@ -2224,7 +2266,7 @@ fn build_body(w: &Wr, fins: &[Fin]) -> Option<Body> {
         placed.borrow_mut().insert((b, v), p);
         p
     };
-    let mut orig_e: HashMap<(PK, PK), Name> = HashMap::new();
+    let mut orig_e: HashMap<(PK, PK), Name> = HashMap::default();
     let gof: HashMap<(usize, FaceId), usize> = fs
         .iter()
         .enumerate()
@@ -2246,9 +2288,9 @@ fn build_body(w: &Wr, fins: &[Fin]) -> Option<Body> {
             }
         }
     }
-    let mut shell_of: HashMap<usize, forge_topo::ShellId> = HashMap::new();
-    let mut eid: HashMap<(PK, PK), (EdgeId, PK)> = HashMap::new();
-    let mut eused: HashMap<Name, ()> = HashMap::new();
+    let mut shell_of: HashMap<usize, forge_topo::ShellId> = HashMap::default();
+    let mut eid: HashMap<(PK, PK), (EdgeId, PK)> = HashMap::default();
+    let mut eused: HashMap<Name, ()> = HashMap::default();
     for (fi, f) in fins.iter().enumerate() {
         let root = uf.find(fi);
         let shell = *shell_of.entry(root).or_insert_with(|| body.add_shell());
