@@ -1,3 +1,8 @@
+examples/conic/boss.fg#1 agree
+examples/conic/edge.fg#1 agree
+examples/conic/rim.fg#1 agree
+examples/conic/step.fg#1 agree
+examples/conic/wedge.fg#1 agree
 examples/demo/part_tools.fg#1 agree
 examples/harness/header.fg#1 agree
 examples/harness/plate.fg#1 agree
@@ -393,6 +398,9 @@ random/00196 agree
 random/00197 refused_ok
 random/00198 refused_ok
 random/00199 agree
+research/fillets/conic/repro/counterbore_wall.fg#11 agree
+research/fillets/conic/repro/counterbore_wall.fg#14 agree
+research/fillets/conic/repro/spring_touches_hole.fg#1 agree
 research/thread-math/stress/cross-hole-after.fg#1 agree
 research/thread-math/stress/cross-hole-before.fg#1 agree
 research/thread-math/stress/fine-long-int.fg#1 agree
