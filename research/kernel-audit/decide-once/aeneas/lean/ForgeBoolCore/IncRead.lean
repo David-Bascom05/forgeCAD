@@ -104,7 +104,8 @@ structure LedgerWF2 (l : Ledger) : Prop where
   inside : ∀ p ∈ l.inside.val, (p.1 : U32).val < l.n_rooms.val ∧ (p.2 : U32).val < l.nb.val
   every_piece : ∀ φ, φ < nfacets l → ∃ p ∈ l.pieces.val, (p.1 : U32).val = φ
   face_lists : l.face_class.val.length = l.face_body.val.length
-  small : nfacets l < U32.max ∧ l.n_rooms.val < U32.max ∧ l.pieces.val.length < U32.max
+  small : nfacets l < U32.max ∧ l.n_rooms.val < U32.max ∧ l.pieces.val.length < U32.max ∧
+    l.face_body.val.length < U32.max ∧ nfacets l * l.nb.val ≤ Usize.max
 
 /-- The facets of `toLF` are listed once each. -/
 theorem toLF_facets_nodup (l : Ledger) : (toLF l).facets.Nodup := by

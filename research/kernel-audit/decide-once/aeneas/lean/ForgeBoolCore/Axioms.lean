@@ -1,3 +1,4 @@
+import ForgeBoolCore.RefineIncSplit
 import ForgeBoolCore.Specs
 import ForgeBoolCore.Refine
 import ForgeBoolCore.RefineUF
@@ -127,3 +128,10 @@ import ForgeBoolCore.RefineUnify
 #print axioms forge_bool_core.unify_spec_proof
 #print axioms forge_bool_core.end_to_end_proof
 #print axioms forge_bool_core.end_to_end_encode_proof
+#print axioms forge_bool_core.inc.endToEndF_of
+#print axioms forge_bool_core.inc.rows_spec
+#print axioms forge_bool_core.inc.row_spec
+#print axioms forge_bool_core.inc.body_of_spec
+#print axioms forge_bool_core.inc.cls_of_spec
+#print axioms forge_bool_core.inc.splitOk_iff
+#print axioms forge_bool_core.inc.split_ok_spec
