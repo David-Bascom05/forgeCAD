@@ -295,3 +295,15 @@ is that `homog3` is built once per quadric, with `on_vert`'s identity checked on
 proposal, since every sample shares it. **Gate:** the `.text` of the speed gate's binaries
 (`regen1`, `bits`, `benchparts`) is byte-identical before and after, so every gate line and
 every bit is unchanged.
+
+**Milestone 1i: the second axial seam and the event assembly.**
+- `axis_plane2` (QSep.lean b626391, the master's decision) is mirrored: cylinders seam on
+  `[axis_plane, axis_plane2]`, cones on `[axis_plane, axis_plane2, nappe_plane]`.
+- QSweep.lean's event assembly (096b703) is mirrored: `grad_y`, `grad_z`, `aff_mul`, `qsub`,
+  `crit_q`, `grad_plane_y/z`, `is_plane_q`, `propose_triple` (the Lean's role order), `tri`,
+  `pairs`, `event_triples`, `is_const_q`, `det3_q`, `num_x_q`, `propose_triple_x`, `raw_events`,
+  `sort_nums` (QRef's), `separate`, `iso_ok_n`, `sep_ok`, `spread_e`, `check_events`,
+  `pick_events`, `events_of` and `planes_of`. The `#guard`s are tests: for
+  `[sphere, y = 0, z = 0]` the events are `(−1, −1), (1, 1)` and the planes `−2, 0, 2`.
+- QSample.lean and QLedger.lean are covector-specific, and paused per the A8 retarget. Whether to
+  mirror them as the L6 reference executable is asked of the master.
