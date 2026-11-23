@@ -302,6 +302,7 @@ def inLens (p : P) (a b c : P) (r : ℚ) (ccw : Bool) : Bool :=
 structure Loop where
   pts : List P
   arcs : List (Option (P × ℚ × Bool))
+  deriving DecidableEq
 
 /-- An edge's lens term: none for a line. -/
 def lensTerm (p : P) (ea : (P × P) × Option (P × ℚ × Bool)) : Bool :=
@@ -336,11 +337,13 @@ theorem inLoop_lines (p : P) (pts : List P) :
 structure Outer where
   loop : Loop
   rep : P
+  deriving DecidableEq
 
 /-- `O` is the owner of a hole whose representative vertex is `h` among `os`: it holds `h`, and
-every outer loop holding `h` holds `O`'s representative (it is innermost). -/
+every other outer loop holding `h` holds `O`'s representative (it is innermost; a loop is not
+asked about its own vertex, which is on its boundary). -/
 def isOwner (os : List Outer) (h : P) (O : Outer) : Bool :=
-  inLoop h O.loop && os.all fun O' => !inLoop h O'.loop || inLoop O.rep O'.loop
+  inLoop h O.loop && os.all fun O' => O' == O || !inLoop h O'.loop || inLoop O.rep O'.loop
 
 def owner (os : List Outer) (h : P) : Option Outer := os.find? (isOwner os h)
 
@@ -351,10 +354,20 @@ theorem owner_unique (os : List Outer) (h : P)
       O = O') :
     ∀ O ∈ os, ∀ O' ∈ os, isOwner os h O = true → isOwner os h O' = true → O = O' := by
   intro O hO O' hO' h1 h2
-  simp only [isOwner, Bool.and_eq_true, List.all_eq_true, Bool.or_eq_true, Bool.not_eq_true'] at h1 h2
-  have a := (h1.2 O' hO').resolve_left (by simp [h2.1])
-  have b := (h2.2 O hO).resolve_left (by simp [h1.1])
-  exact hanti O hO O' hO' a b
+  by_contra hne
+  simp only [isOwner, Bool.and_eq_true, List.all_eq_true, Bool.or_eq_true, Bool.not_eq_true',
+    beq_iff_eq] at h1 h2
+  have a : inLoop O.rep O'.loop = true := by
+    rcases h1.2 O' hO' with (e | e) | e
+    · exact absurd e.symm hne
+    · rw [h2.1] at e; cases e
+    · exact e
+  have b : inLoop O'.rep O.loop = true := by
+    rcases h2.2 O hO with (e | e) | e
+    · exact absurd e hne
+    · rw [h1.1] at e; cases e
+    · exact e
+  exact hne (hanti O hO O' hO' a b)
 
 theorem owner_spec (os : List Outer) (h : P) (O : Outer) (hw : owner os h = some O) :
     O ∈ os ∧ isOwner os h O = true :=

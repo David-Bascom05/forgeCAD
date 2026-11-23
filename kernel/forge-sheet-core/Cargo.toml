@@ -1,0 +1,15 @@
+[package]
+name = "forge-sheet-core"
+description = "forge-sheet's combinatorial core, written for Aeneas: vertex classes by one decided relation, chaining kept pieces into loops, a hole's owner (no floats)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+forge-math = { path = "../forge-math" }

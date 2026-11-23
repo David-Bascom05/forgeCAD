@@ -300,6 +300,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-sheet-core"
+version = "0.1.0"
+dependencies = [
+ "forge-math",
+]
+
+[[package]]
 name = "forge-sketch"
 version = "0.1.0"
 dependencies = [
