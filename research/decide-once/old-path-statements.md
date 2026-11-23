@@ -109,6 +109,13 @@ The parts:
     - (i) per-face canonical triples: the faces don't close;
     - (ii) decide-once's snap: it merges coincident planes, not concurrent ones;
     - (iii) f64 vertex points read exactly: the faces aren't planar.
+  **Restated for (iv): BodyModel.lean, bc5f25d3.**
+  - `vertCore` and `ClusterOK`; `exactOf = none` for invalid input only;
+  - `Refines δ` maps each vertex to its cluster, with `ends_on`;
+  - `Bounds` is split: `frontier_sub`, and `faces_sub` off the vertex zones;
+  - `ValidSolid δ b := ∃ bs, exactOf δ b = some bs ∧ EdgeIsolated ∧ ValidExact bs`.
+  Asked: the local formula Φ_u, with `⟦b⟧ ∩ zone u = {Φ_u on the exact carriers' signs}`. It is the
+  computable form of the exact test near a vertex.
   Done in BodyModel.lean, b66293ec (`exactOf`, `exactOf_refines`, `denote_spec`, `denote_refines`).
   Also asked: `exactOf = none` when a second branch of the meet enters an edge's δ-tube.
   `exactOf_refines` needs `hface` and `hedge` (each stored region and curve within δ of its exact
