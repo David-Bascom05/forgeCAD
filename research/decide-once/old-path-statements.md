@@ -209,12 +209,48 @@ Proof shape:
   for a ray in general position);
 - the exact ray test supplies the general position, or refuses.
 
-**One open point for decide-once Rust.** `point_in_face` is called today on f64 points that are only
-within LINEAR of f's surface (trim's curve samples, split_face's meets). `whereF` needs a point *on*
-the surface. The exact version needs those callers to pass the exact point (an exact meet, or a curve
-parameter with an exact evaluation). Otherwise the question must be restated, e.g. "the foot of p on
-f's surface", which itself needs an exact definition. This is where the callers' update gets its
-statement; it should be settled before the Rust changes.
+**The callers' points (settled with decide-once Rust, 2026-11-23).** About 40 call sites of
+`point_in_face` and `classify` in boolean.rs and nary.rs fall into two kinds:
+
+- **(A) Constructed points**, meant to be on a surface: a curve ∩ surface hit, a cut, or an edge's
+  `curve.eval(t)`. These are in trim_in, find, local_split, tolerant_cuts, through_smooth_edge,
+  nary_body's hit tests, and plan_once_in's NotAnalytic `off`.
+  - **The caller passes the exact point**: for flat faces, the meet of three carriers (the two faces'
+    planes and the edge's across plane), as its key. That point is on f's plane by construction.
+  - Obligations: `pt.toReal ∈ carrier f` (so `point_in_face_spec` applies), and the f64 point the
+    code also carries is within δ of it (F1).
+  - Curved hits are curved Rust's: an exact curve parameter or an exact evaluation, with the same
+    spec.
+- **(B) Probe points**, chosen to stand for a region: face_point and spare_probes in classify_specs,
+  survivors, crack_tip, local_class and its midpoints, touches, imprint, plan_once_in's probes, and
+  nary_body's.
+  - **Both `point_in_face` and `classify` take the foot**, the exact orthogonal projection of the
+    dyadic probe onto f's exact carrier:
+    ```lean
+    /-- The foot of `p` on the plane `n·x = d` (n, d exact rationals): a rational point. -/
+    def foot (n : ℚ³) (d : ℚ) (p : ℚ³) : ℚ³ := p - ((n ⬝ p - d) / (n ⬝ n)) • n
+    theorem foot_on : n ≠ 0 → n ⬝ foot n d p = d
+    ```
+  - Why `classify` takes the foot as well, and not the raw dyadic probe: the region's class is
+    constant on the region (D5/D6), but a raw probe sits off the face by rounding. Where the region
+    lies closer than that rounding to the other body's boundary, the raw probe can classify
+    differently from the region. The foot lies on the face exactly.
+  - The obligation, per probe site: **`foot p ∈ relInterior region`**, the region the probe stands
+    for. Then `whereR ⟦B⟧ (foot p)` and `whereF ⟦f⟧ (foot p)` are the region's class (D6).
+  - Curved faces: curved Rust defines the foot (or an exact on-surface point near p) per kind.
+- **The rule for both kinds:**
+  1. a screen decides In/Out/On-surface when it can;
+  2. otherwise the exact test at the exact point or the foot;
+  3. if every ray is degenerate, the exact ray test at that point;
+  4. if that can't decide either, a typed refusal.
+
+  Measured (flat-guess-site-rates.md, 4d260609): On ≤ 1e-12 and almost always exactly 0, and the
+  all-rays branch fired 0 times, so the exact path is rare.
+- **Rust plan:**
+  - exact companions: `classify_exact(ExactPt) → Result<Where, Refusal>` and
+    `point_in_face_at(f, ExactPt)`, where `ExactPt` is a key or a foot;
+  - callers move kind by kind, (A) first, in trim_in;
+  - the f64 signatures stay until every caller has moved.
 
 **Flags (guess steps in classify.rs, for the IEEE screens):**
 1. **`classify` returns `On` when every ray in `RAYS` is degenerate** (`OnSurface`, `Touching`, or a
