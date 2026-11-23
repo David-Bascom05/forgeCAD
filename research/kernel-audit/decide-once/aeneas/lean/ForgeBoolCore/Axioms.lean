@@ -16,6 +16,7 @@ import ForgeBoolCore.RefineAround
 import ForgeBoolCore.RefineTouch
 import ForgeBoolCore.RefineBetween
 import ForgeBoolCore.RefineFan
+import ForgeBoolCore.RefineSplitOk
 /-! The refinement lemmas use the standard axioms only. -/
 #print axioms forge_bool_core.zero_idx_spec
 #print axioms forge_bool_core.is_facet_spec
@@ -77,3 +78,9 @@ import ForgeBoolCore.RefineFan
 #print axioms forge_bool_core.fan_classes
 #print axioms forge_bool_core.bad_vert_spec
 #print axioms forge_bool_core.vert_scan_spec
+#print axioms forge_bool_core.s_le3_spec
+#print axioms forge_bool_core.s_sort_triples_spec
+#print axioms forge_bool_core.s_adj_iff
+#print axioms forge_bool_core.s_loop0_spec
+#print axioms forge_bool_core.s_loop1_spec
+#print axioms forge_bool_core.split_ok_spec_proof
