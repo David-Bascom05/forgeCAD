@@ -12,4 +12,5 @@ import IEEE754.Binary64
 import IEEE754.Computed
 import IEEE754.Nearest
 import IEEE754.TwoSum
+import IEEE754.TwoProduct
 import IEEE754.Axioms
