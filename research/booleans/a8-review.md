@@ -131,3 +131,86 @@ agree because the memberships are equal.
 - **Q5, curved.** The same floor appears there, and the scheme transfers, as the draft says. The
   one addition is that change 2's relational ρ matters more in curved: shells touching only along
   contact curves are common there.
+
+## 6. The ≤1.28M target: a bottom-up budget (2026-11-23)
+
+The master set the target on 2026-11-23: A8 costs at most the old path's **1.28M per flat
+boolean**, measured on coplanar, housing and upto.
+
+Two estimates bound where A8 lands:
+- **Top-down, about 1.65M** (face-arrangement-measure.md §6): today's phase costs, scaled by the
+  measured cell ratios. This assumes the bridge keeps today's constant factors (HashMaps, a `Vec`
+  per cell, all faces converted).
+- **Bottom-up, about 0.75M**: below, from per-operation costs measured on today's code (decide-once
+  Rust's profile) and the measured counts per coplanar boolean. Those counts are:
+  - ≈10 near faces, about 25 near face pairs of different bodies;
+  - 9.3 crossing segments;
+  - about 30 facets, 60–70 edges, about 40 verts and about 20 rooms.
+
+The gap between the two is constant factors, so the design must fix them as rules.
+
+### 6.1 Per-operation costs (measured today, or bounded from measurements)
+
+| Operation | Cost | Source |
+|---|---|---|
+| a filtered sign of a plane at a point | about 20–40 instructions | side_at's f64 path; 98% of signs stop there (decide-once Rust) |
+| a vertex with a full 16-sign covector | about 1.3k | decide-once Rust, `vertex()` |
+| a vertex as a carrier-triple key plus a filtered f64 point (no covector) | about 0.3–0.4k | `meet3`'s f64 shadow plus one bound check; exact only on failure (about 2%) |
+| an exact `meet3` or `side` (fallback) | about 2–5k | `Big::S`/`M` with no allocation (after b6a9dd4) |
+| one HashMap insert or lookup on a `Vec<Sgn>` key | about 150–300 | 16M of hashing for about 50k operations per run |
+| a ray parity against about 10 near faces | about 5–10k | `witness_inside` through `pierced` |
+
+### 6.2 Budget per flat boolean (coplanar)
+
+| Phase | Work | Bottom-up | **Budget** | Rule that makes it hold |
+|---|---|---|---|---|
+| inputs, region, snap | box scan of all faces (183 × about 50); planes, snap and points for near faces only | 0.08M | **0.12M** | R6: no exact `DyPlane` or vertex for a far face |
+| segments | 25 pairs: polygon-against-plane sides (about 6 vertices × 30), then 9.3 crossings clipped by both polygons (about 2k) | 0.03M | **0.06M** | filtered signs; exact only on failure |
+| per-face arrangement and seams | about 10 faces, 1–3 cuts each plus W2 sector seams; about 40 vertices as keyed `meet3` | 0.06M | **0.10M** | vertices keyed by a carrier triple in a dense table indexed by near-class id (at most about 32 classes per region), not a HashMap |
+| radial order and rooms | about 70 edges × 2–4 facets, one degree-2 filtered sign per comparison; union–find over about 60 facet-sides | 0.03M | **0.05M** | sort small rows in place |
+| witnesses (fused) | about 20 rooms. The rooms bounded by a piece of body *i* take membership from its orientation, as `witness_inside` does today; about 3–5 rays remain | 0.04M | **0.06M** | fused into the builder: rays reuse its per-face edge planes |
+| ledger (Csr) | about 150 cells, written into reused buffers | 0.02M | **0.04M** | one arena per boolean, cleared and not freed (thread-local), as EMBER and trueform keep their working sets |
+| core v2 | flood, keep, result, touch rule and unify over Csr rows: about 150 cells × degree about 3 × about 30 instructions, plus unify's classes | 0.10M | **0.25M** | Csr only; no sort or hash in the core (the coordinator's v2 already drops them) |
+| collapse (metric) | per room, about 20 inradius tests from the builder's facet loops | 0.02M | **0.04M** | |
+| write, in place | delete the target's near faces, add the result facets' loops, reuse the far topology untouched | 0.12M | **0.20M** | R5: edit like the old path's `apply` (0.06M); naming by the least face id over pieces |
+| **total** | | **≈0.50M** | **≈0.92M** | against the target of 1.28M |
+
+The coordinator's v2 core already drops sort and hash. The rules that must be in the design, not
+left to the implementation:
+1. **Near-only conversion (R6).** Far faces are never converted to exact form.
+2. **No HashMap in the bridge.** Keys are small integer tuples over near-class ids, so dense tables
+   or sorted arrays do. HashMaps today cost about 16M per run in hashing alone, plus their
+   allocations.
+3. **One reused arena per boolean.** Today, malloc and free are about 15% of all instructions.
+4. **Covector-free vertices.** A vertex is a carrier-triple key, with its point built exact only on
+   filter failure. A 16-sign row per vertex is 1.3k each today.
+5. **Witnesses fused into the builder,** with the orientation shortcut first.
+6. **The in-place write (R5).**
+
+With all six, the budget is 0.92M, 28% under the target. That leaves room for the bottom-up figures
+to be off by 1.8× (0.50M → 0.92M) and the target still holds. Without rules 2 and 3, the top-down
+1.65M is the realistic figure.
+
+### 6.3 How to check the budget before the full build
+
+1. **R4-early.** Once R3's builder exists, behind its debug coarsens check, callgrind its phases on
+   the three benches before the v2 core is proven. The budget's rows are the pass lines. Any row
+   more than 1.5× over its budget is fixed before the core work goes on.
+2. **Write first.** R5 can land and be measured on today's v1 path. It changes only `write`, and
+   the bits gate checks it.
+3. **Upto and housing** have 12 faces, so the inputs and write rows shrink and the builder rows
+   dominate. Their budget is the same per-boolean 1.28M, which they should clear easily (19.8 and
+   15 estimated facets).
+
+### 6.4 Priorities (the master's note)
+
+Real parts go through the curved path. On the gate, only 75 booleans (coplanar 70, upto 4,
+housing 1) reach the flat path. A8's main value for the product is therefore that its scheme
+transfers to curved:
+- the coarsening of a never-run carrier reference;
+- explicit incidence;
+- the relational rooms;
+- the six rules above.
+
+The flat A8 is the place to prove the scheme and measure it. The curved path is where the time
+goes.
