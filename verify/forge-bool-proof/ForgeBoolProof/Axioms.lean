@@ -21,3 +21,7 @@ import ForgeBoolProof
 #print axioms ForgeBoolProof.FlatSites.foot_self
 #print axioms ForgeBoolProof.FlatSites.G15.along_or_crossing
 #print axioms ForgeBoolProof.FlatSites.G15.on_middle_along
+#print axioms ForgeBoolProof.FlatSites.OnPlane.on_plane_iff
+#print axioms ForgeBoolProof.FlatSites.OnPlane.exact_of_no_error
+#print axioms ForgeBoolProof.FlatSites.G13.const_off_frontier
+#print axioms ForgeBoolProof.FlatSites.G13.where_const
