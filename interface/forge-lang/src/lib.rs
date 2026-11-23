@@ -52,6 +52,7 @@ pub mod validity;
 pub mod values;
 pub mod verts;
 pub mod vtools;
+pub mod weld;
 pub mod wired;
 pub mod work;
 
@@ -265,6 +266,8 @@ pub struct Run {
     pub sheets: Vec<sheet::SheetOut>,
     /// The part's thermoforms as built (`thermo.rs`).
     pub thermos: Vec<thermo::ThermoOut>,
+    /// The part's weldments: members, plates, for the cut list (`weld.rs`).
+    pub welds: weld::Welds,
     /// The threads left unmodelled (`Options::cosmetic_threads`), in the part's frame.
     pub threads: Vec<holes::Cosmetic>,
     /// Where each solid is in `body`: its faces and edges.
@@ -459,6 +462,7 @@ fn run_once(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
                     observed: Default::default(),
                     sheets: vec![],
                     thermos: vec![],
+                    welds: Default::default(),
                     threads: vec![],
                     solids: vec![],
                     stage: 0,
@@ -640,6 +644,7 @@ fn run_once(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
         observed: std::mem::take(&mut ev.observed),
         sheets: sheet::outputs(&ev),
         thermos: std::mem::take(&mut ev.thermos),
+        welds: std::mem::take(&mut ev.welds),
         threads: std::mem::take(&mut ev.threads),
         solids: if built_all {
             ev.b.stages.last().map_or(vec![], |s| s.spans().to_vec())

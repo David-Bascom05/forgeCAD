@@ -7,7 +7,12 @@ use forge_lang::{Measure, Options, Run};
 
 /// The part built, a scratch folder beside it holding the bench font (`text(..)` parts read it).
 pub fn run(src: &str) -> (Run, Cache) {
-    let dir = std::env::temp_dir().join(format!("forge-lang-tests-{}", std::process::id()));
+    // wasi has no temp_dir or pid; its runner opens the whole filesystem (as tests/wired.rs)
+    let dir = if cfg!(target_os = "wasi") {
+        std::path::PathBuf::from("/tmp").join("forge-lang-tests-wasi")
+    } else {
+        std::env::temp_dir().join(format!("forge-lang-tests-{}", std::process::id()))
+    };
     std::fs::create_dir_all(&dir).expect("temp dir");
     let font = dir.join(forge_lang::bench::FONT);
     if !font.exists() {

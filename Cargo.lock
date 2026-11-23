@@ -219,6 +219,7 @@ dependencies = [
  "forge-thermo",
  "forge-topo",
  "forge-units",
+ "forge-weld",
 ]
 
 [[package]]
@@ -344,6 +345,14 @@ dependencies = [
 [[package]]
 name = "forge-units"
 version = "0.1.0"
+
+[[package]]
+name = "forge-weld"
+version = "0.1.0"
+dependencies = [
+ "forge-math",
+ "forge-ops",
+]
 
 [[package]]
 name = "roxmltree"
