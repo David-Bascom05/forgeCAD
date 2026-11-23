@@ -25,6 +25,7 @@ import IEEE754.Exact.QHenrici
 import IEEE754.Exact.DivRem2
 import IEEE754.Exact.Gcd
 import IEEE754.Exact.QBig
+import IEEE754.Exact.QF64
 import IEEE754.Expansion
 import IEEE754.ExpansionSum
 
@@ -124,7 +125,8 @@ elab "#standard_axioms " ids:ident* : command => do
   IEEE754.Exact.QB.neg_tie IEEE754.Exact.QB.sub_tie IEEE754.Exact.QB.mul_tie IEEE754.Exact.QB.div_tie
   IEEE754.Exact.QB.inv_tie IEEE754.Exact.QB.cmp_tie IEEE754.Exact.QB.qadd_spec IEEE754.Exact.QB.qsub_spec
   IEEE754.Exact.QB.qmul_spec IEEE754.Exact.QB.ratio_spec' IEEE754.Exact.QB.floor_tie IEEE754.Exact.QB.ediv_eq_floor
-  IEEE754.Exact.QB.qmid_spec
+  IEEE754.Exact.QB.qmid_spec IEEE754.Exact.QB.qcmpF_int IEEE754.Exact.QB.cmpF_spec IEEE754.Exact.QB.lo_sound
+  IEEE754.Exact.QB.hi_sound
   -- exact.rs Big
   IEEE754.Exact.add_into_spec IEEE754.Exact.sub_into_spec IEEE754.Exact.mul_into_spec IEEE754.Exact.shl_into_spec
   IEEE754.Exact.trimLen_spec IEEE754.Exact.cmp_mag_spec IEEE754.Exact.Big.fromMag_spec IEEE754.Exact.Big.view_spec

@@ -33,6 +33,7 @@ import IEEE754.Exact.QHenrici
 import IEEE754.Exact.DivRem2
 import IEEE754.Exact.Gcd
 import IEEE754.Exact.QBig
+import IEEE754.Exact.QF64
 import IEEE754.Expansion
 import IEEE754.ExpansionSum
 import IEEE754.Axioms
