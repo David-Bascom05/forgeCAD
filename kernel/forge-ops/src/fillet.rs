@@ -136,9 +136,9 @@ pub enum FilletError {
     /// sphere, a corner patch, a pivot, a ball rolled on over the next face): a conic section has
     /// no such closure, so nothing exact stands there.
     ConicVertex { vertex: VertexId },
-    /// A conic fillet's section is not the same all along this edge's blend (its spine neither a
-    /// line nor a circle: not built yet), or the edge's ball rests where a conic has no
-    /// counterpart (on a rim, on a face beyond a smooth edge, across a face, with a varying radius).
+    /// A conic fillet's ball rests along this edge where a conic has no counterpart: on a rim, on
+    /// a face beyond a smooth edge, across a face, with a varying radius; or its faces fold back to
+    /// within a degree of each other, where the apex runs off and nothing bounds the section.
     ConicEdge { edge: EdgeId },
     /// The round was built and the result fails `forge_topo::check` here: no body rather than a
     /// wrong one. Mass and every later boolean on such a body are not to be trusted.
@@ -1172,8 +1172,16 @@ fn conic_of(body: &Body, ro: &Rolled, w: f64) -> R<Blend> {
             }
             Interval::new(lo, hi)
         }
-        Curve::Circle(_) => Interval::new(0.0, 1.0),
-        _ => return Err(err),
+        // the spine's stretch over the edge, and a quarter of it on past each end
+        spine => {
+            let x = body.edge(ro.edge);
+            let (a, c) = (x.curve.eval(x.range.lo), x.curve.eval(x.range.hi));
+            let (ta, tc) = (spine_closest(spine, a), spine_closest(spine, c));
+            let (lo, hi) = (ta.min(tc), ta.max(tc));
+            let more = 0.25 * (hi - lo);
+            let d = spine.domain();
+            Interval::new((lo - more).max(d.lo), (hi + more).min(d.hi))
+        }
     };
     ro.blend.with_conic(w, along).ok_or(err)
 }

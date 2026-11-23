@@ -236,16 +236,16 @@ apex where the faces' tangent planes meet in the section's plane, with middle we
 RHO / (1 - RHO). RHO is the shoulder ratio: the section crosses the line from the chord's middle
 to the apex RHO of the way along it. 0.5 is a parabola, below it an ellipse, above it a
 hyperbola; the circle is RHO = cos(phi/2) / (1 + cos(phi/2)), 0.4142 at a right angle. This is
-Onshape's conic fillet: its `radius` and `rho` are R and RHO. Exact where the section is the same
-all along: a straight edge (the conic swept straight), a circular edge between surfaces turned
-about one axis (the conic turned), tangent chains of those meeting in a shared section, mitres
-where two such blends meet beside a sharp edge (in the plane between them where one is the
-other's mirror image), and run-outs into end faces. Refused, typed, at the place, where no exact
+Onshape's conic fillet: its `radius` and `rho` are R and RHO. The surface is exact: on a
+straight edge the conic swept straight, on a circular edge between surfaces turned about one
+axis the conic turned, on any other edge (a post's root on a round bar) the conic carried along
+the ball's path in its section plane. Tangent chains meet in a shared conic section, two blends
+beside a sharp edge mitre (in the plane between them where one is the other's mirror image), and
+a blend runs out into the faces across its end. Refused, typed, at the place, where no exact
 conic stands: `ConicVertex` where the circular fillet would close a vertex with its ball (three
 blends at a corner, a pivot, a ball rolled on over the next face) or a setback is asked;
-`ConicEdge` where the section changes along the edge (an edge no line or circle: not built
-yet), a varying R, a ball resting on a rim, beyond a smooth edge or across a face; `BadValue`
-for RHO outside (0, 1).
+`ConicEdge` for a varying R, a ball resting on a rim, beyond a smooth edge or across a face, or
+faces folding back to within a degree of each other; `BadValue` for RHO outside (0, 1).
 
 PROFILE: a sketch with one region, or one of its loops or closed entities (`S.outline`, `S.c`).
 A negative depth runs the other way. `upto(SKETCH)` ends on the sketch's plane (an edit

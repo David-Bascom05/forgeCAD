@@ -496,7 +496,7 @@ fn a_corner_only_a_ball_closes_is_refused_at_its_vertex() {
 }
 
 #[test]
-fn a_section_that_changes_along_its_edge_is_refused_at_the_edge() {
+fn a_root_of_no_closed_form_carries_the_section_and_a_varying_radius_is_refused() {
     // a boss standing on a round bar: its root is a curve of no closed form, so the section
     // turns and changes along it
     let bar = {
@@ -536,8 +536,86 @@ fn a_section_that_changes_along_its_edge_is_refused_at_the_edge() {
         edge: root,
         radius: Radius::Constant(2.0),
     }];
-    let got = fillet_with(&b, &pick, &conic(0.5), 4);
-    assert!(matches!(got, Err(FilletError::ConicEdge { .. })), "{got:?}");
+    let v0 = volume(&b);
+    let done = fillet_with(&b, &pick, &conic(0.5), 4).expect("a conic carried along a traced root");
+    assert!(
+        forge_topo::check(&done).is_empty(),
+        "{:?}",
+        forge_topo::check(&done)
+    );
+    // every point of the conic face (and of the surface its mass is integrated on) lies on the
+    // section worked out here alone: the ball's centre c(phi) where the bar (radius 20 about x)
+    // and the post (8 about z) offset by 2 meet, its feet, their apex; the point in c's normal
+    // plane, on the conic l1^2 = 4 w^2 l0 l2 in barycentric coordinates of (foot, apex, foot)
+    let (a, bb, r, w) = (10.0f64, 22.0f64, 2.0f64, 1.0f64);
+    let centre = |phi: f64| {
+        let (sn, cs) = forge_math::dmath::sin_cos(phi);
+        Point3::new(a * cs, a * sn, (bb * bb - a * a * sn * sn).sqrt())
+    };
+    let d12 = |t: f64| {
+        let (sn, cs) = forge_math::dmath::sin_cos(t);
+        let z = (bb * bb - a * a * sn * sn).sqrt();
+        let dz = -a * a * sn * cs / z;
+        let ddz = -(a * a * (cs * cs - sn * sn) * z - a * a * sn * cs * dz) / (z * z);
+        (Vec3::new(-a * sn, a * cs, dz), Vec3::new(-a * cs, -a * sn, ddz))
+    };
+    let off_conic = |s: &forge_geom::Surface| -> f64 {
+        use forge_geom::SurfaceGeom;
+        let d = s.domain();
+        let mut worst: f64 = 0.0;
+        for i in 0..40 {
+            for j in 0..=10 {
+                let u = d.u.lo + (d.u.hi - d.u.lo) * i as f64 / 40.0;
+                let p = s.eval(forge_math::Point2::new(u, j as f64 / 10.0));
+                let mut phi = forge_math::dmath::atan2(p.y, p.x);
+                for _ in 0..30 {
+                    let (c1, c2) = d12(phi);
+                    let e = p - centre(phi);
+                    phi -= e.dot(c1) / (e.dot(c2) - c1.dot(c1));
+                }
+                let c = centre(phi);
+                let (sp, cp) = forge_math::dmath::sin_cos(phi);
+                let na = Vec3::new(cp, sp, 0.0);
+                let nb = Vec3::new(0.0, c.y, c.z).normalize().expect("off the axis").get();
+                let (fa, fb) = (c - na * r, c - nb * r);
+                let (ua, ub) = (fa - c, fb - c);
+                let apex = c + (ua + ub) / (1.0 + ua.dot(ub) / (r * r));
+                let (e1, e2, q) = (apex - fa, fb - fa, p - fa);
+                let (d11, d12, d22) = (e1.dot(e1), e1.dot(e2), e2.dot(e2));
+                let det = d11 * d22 - d12 * d12;
+                let l1 = (d22 * q.dot(e1) - d12 * q.dot(e2)) / det;
+                let l2 = (d11 * q.dot(e2) - d12 * q.dot(e1)) / det;
+                let l0 = 1.0 - l1 - l2;
+                let plane = (p - fa).dot(e1.cross(e2).normalize().expect("a triangle").get());
+                worst = worst
+                    .max((l1 * l1 - 4.0 * w * w * l0 * l2).abs())
+                    .max(plane.abs());
+            }
+        }
+        worst
+    };
+    let mut seen = 0;
+    for f in done.face_ids() {
+        let s = &done.face(f).surface;
+        let forge_geom::Surface::Procedural(p) = s else {
+            continue;
+        };
+        if p.kind() != "conic blend" {
+            continue;
+        }
+        seen += 1;
+        assert!(off_conic(s) <= 1e-12, "{}", off_conic(s));
+        let smooth = p.smooth().expect("a traced spine's smooth form");
+        assert!(off_conic(smooth) <= 1e-12, "{}", off_conic(smooth));
+    }
+    assert_eq!(seen, 1);
+    // the fill's volume: by quadrature over the exact sections, the swept area less the first
+    // moment against the path's turn (research/fillets/conic/occt_conic.py, post_fill_quadrature;
+    // OCCT's loft through 360 exact sections agrees to 5e-11)
+    let added = volume(&done) - v0;
+    let reference = 22.932_846_909_3;
+    eprintln!("traced root: added {added:.12}, quadrature {reference}");
+    assert!((added - reference).abs() <= 1e-9, "{added} against {reference}");
     // and a radius that varies, anywhere
     let b = block(40.0, 30.0, 20.0);
     let pick = [FilletEdge {
