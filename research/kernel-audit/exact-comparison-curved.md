@@ -173,6 +173,7 @@ surfaces are again planes, cylinders, cones, spheres and tori, so they need noth
 |---|--:|--:|--:|--:|--:|
 | degenerate pairs (279: plane/cylinder/cone/sphere × configs × Add/Cut/Keep) | 240 | 19 | 3 | 17 | 0 |
 | torus pairs (93: plane/cylinder/cone/sphere/torus with a torus × configs × Add/Cut/Keep) | 82 | 0 | 0 | 8 | 3 |
+| torus band (93 pairs × tool moved ±0.9, 3 LINEAR on x, y, z = 837) | 501 | 0 | 0 | 309 | 27 |
 | scoreboard families (36 × 4 seeds, convex sub-histories, 30 s reference timeout) | 95 | 6 | 0 | 7 | 28 |
 | forge_lang programs (300, extrude/revolve/ball/hole/pattern, convex-quadric sub-history) | 200 | 0 | 0 | 0 | 100 |
 | curved band (279 pairs × tool moved ±0.9, 3 LINEAR on x, y, z = 2 511) | 2 191 | 50 | 102 | 168 | 0 |
@@ -262,6 +263,10 @@ Owner: the fix-curved session.
 
 ## Still open in the reference
 
+- The torus band's 309 ambiguous: near-tangent configurations. Their surfaces come within
+  `1e-2` rad of parallel in an undecided box, and the reference stops there rather than chase
+  the near touch. It decides no near decision for tori yet (no sliver verdict). Its 27 out of
+  scope are the kernel's `Unsupported`: a whole circle touching the axis pinches the solid.
 - Torus touches still undecided: coaxial cones, a cone apex on a torus, non-axis-aligned tori,
   saddle tangencies (a plane or cylinder at the inner equator from the hole's side), and empty
   Keep results. Proving those empty needs the touches' exclusions in `anyKept`.
