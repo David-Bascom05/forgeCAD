@@ -616,7 +616,12 @@ fn posted_speeds_and_feeds_are_within_the_machine() {
     // the same limits as the generic VMC: released
     machine("[100, 12000]", "10000");
     let cam = forge_cam_lang::run(&src, &dir);
-    assert!(cam.ok, "{:?} {:?}", cam.errors, cam.ops.iter().map(|o| &o.refusal).collect::<Vec<_>>());
+    assert!(
+        cam.ok,
+        "{:?} {:?}",
+        cam.errors,
+        cam.ops.iter().map(|o| &o.refusal).collect::<Vec<_>>()
+    );
     // a feed limit under the profile's feed: refused by the posted F, with the limit
     machine("[100, 12000]", "1000");
     let cam = forge_cam_lang::run(&src, &dir);
@@ -639,6 +644,9 @@ fn posted_speeds_and_feeds_are_within_the_machine() {
         .flat_map(|o| o.checks.iter())
         .find(|c| c.rule == "machine_limit")
         .expect("a spindle speed under the range");
-    assert!(c.value == 3000.0 && c.limit == 5000.0 && c.other.starts_with("spindle"), "{c:?}");
+    assert!(
+        c.value == 3000.0 && c.limit == 5000.0 && c.other.starts_with("spindle"),
+        "{c:?}"
+    );
     std::fs::remove_dir_all(&dir).ok();
 }

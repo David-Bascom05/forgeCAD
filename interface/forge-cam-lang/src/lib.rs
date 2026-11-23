@@ -2748,31 +2748,35 @@ impl Cam {
         let fmax = Ival::pt(m.max_feed).mul(Ival::pt(fs)).lo;
         for (i, mo) in ms.iter().enumerate() {
             match *mo {
-                forge_post::Motion::Spindle(q, _) => {
-                    // |q| < 2^53: the integer is the f64
+                // |q| < 2^53: the integer is the f64
+                forge_post::Motion::Spindle(q, _)
+                    if q.unsigned_abs() >= 1 << 53
+                        || (q as f64) < m.rpm[0]
+                        || (q as f64) > m.rpm[1]
+                        || m.rpm[0].is_nan()
+                        || m.rpm[1].is_nan() =>
+                {
                     let n = q as f64;
-                    if !(q.unsigned_abs() < 1 << 53 && n >= m.rpm[0] && n <= m.rpm[1]) {
-                        return Some(fail(
-                            n,
-                            if n < m.rpm[0] { m.rpm[0] } else { m.rpm[1] },
-                            format!(
-                                "spindle S{q}: outside the machine's range {} to {} rpm",
-                                m.rpm[0], m.rpm[1]
-                            ),
-                            i,
-                        ));
-                    }
+                    return Some(fail(
+                        n,
+                        if n < m.rpm[0] { m.rpm[0] } else { m.rpm[1] },
+                        format!(
+                            "spindle S{q}: outside the machine's range {} to {} rpm",
+                            m.rpm[0], m.rpm[1]
+                        ),
+                        i,
+                    ));
                 }
-                forge_post::Motion::Feed(_, q) | forge_post::Motion::Arc { f: q, .. } => {
-                    if !(q.unsigned_abs() < 1 << 53 && (q as f64) <= fmax) {
-                        let v = q as f64 / fs;
-                        return Some(fail(
-                            v,
-                            m.max_feed,
-                            format!("feed F{v}: over the machine's feed limit {} mm/min", m.max_feed),
-                            i,
-                        ));
-                    }
+                forge_post::Motion::Feed(_, q) | forge_post::Motion::Arc { f: q, .. }
+                    if q.unsigned_abs() >= 1 << 53 || (q as f64) > fmax || fmax.is_nan() =>
+                {
+                    let v = q as f64 / fs;
+                    return Some(fail(
+                        v,
+                        m.max_feed,
+                        format!("feed F{v}: over the machine's feed limit {} mm/min", m.max_feed),
+                        i,
+                    ));
                 }
                 _ => {}
             }
