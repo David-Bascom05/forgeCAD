@@ -619,3 +619,30 @@ At head `1a25c1a`:
 3. **S4′ last, or not at all:** −2 to −5M at more risk. The debug both-ways check must also see
    through trim's de-dup of near cuts, which can hide a second crossing.
 4. **(c) `planar_parity`'s per-call setup:** measure first.
+
+### Shipped-path progress (bool-speed, exact gate, switch off, 2026-11-23)
+
+Coplanar seq at `9986780` is **174.47M against base 208.84M (−16.46%)**. Bits are identical and
+all 97/97 lines are below base; summed over the lines, −380.5M. The items since S3:
+
+| Commit | Change | Summed over the lines |
+|---|---|---|
+| | `line_in_range`: one hit built in place | −13.9M |
+| | S1b: the memo hands back `&Surface` | −5.1M |
+| c653ca2 | `planar_parity` and `plane_ray_crossings`: no per-edge `Vec`, no boxed iterator | −31.2M |
+| ef463f8 | `by_ends` sorts only A's pieces whose ends B has, when B is smaller | −8.2M |
+| a6a45e0 | imprint's per-edge lists reused | −29.4M (coplanar −8.5M) |
+| 542936b | crossing root without a list; split_face's cycles in one list | −65.4M |
+| 9986780 | `point_in_face_past` without a boxed iterator | −16.3M |
+
+dhat blocks on coplanar seq fell from 154k to 94k.
+
+**Rule (learned here): remove allocation churn first, then change algorithms.** On this path,
+small allocations in hot loops cost far more than their own instructions, through glibc's free-list
+work (`_int_free`, `malloc_consolidate`). The same effect made threads lose on small booleans
+(cross-arena frees, cold arenas). My first ranking put the algorithmic items (S1, S4) ahead of the
+allocation ones. The measurements reverse that: S3 and the allocation items together are about 4×
+the rest.
+
+**Next** (my call, given to bool-speed): (b) `past` via `bands.near` → (a) incremental `FaceInfo`,
+under the invariant above → S4′ last, or not at all.
