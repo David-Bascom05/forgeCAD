@@ -10,6 +10,7 @@ use crate::{Surface, Torus};
 use forge_math::{Point3, tol};
 
 /// R S at `p`: positive on the used sheet, negative on the other, 0 at an apex.
+#[inline(never)]
 pub fn side(t: &Torus, p: Point3) -> f64 {
     let q = t.frame.point_to_local(p).to_vec();
     t.major * (q.dot(q) + t.major * t.major - t.minor * t.minor)
