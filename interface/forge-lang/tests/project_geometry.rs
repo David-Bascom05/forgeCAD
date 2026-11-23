@@ -252,7 +252,7 @@ fn it_follows_an_edit_above() {
             "{PLANES}shared w = {w:?}\nsketch s(on: xy) {{\n  r = rect(corner: (0, 0), size: (w, 30))\n}}\nbase = extrude(s, 10)\ne = edges(between: (base.end, base.side(s.r[1])))\nsketch k(on: offset(XY, 30)) {{\n  j = project(e)\n}}\n"
         )
     };
-    let dir = std::env::temp_dir();
+    let dir = forge_dirs::temp_dir();
     let opts = || Options {
         dir: Some(dir.clone()),
         ..Options::default()

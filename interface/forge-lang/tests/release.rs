@@ -5,6 +5,7 @@
 
 use forge_lang::vtools;
 use std::path::PathBuf;
+#[cfg(not(target_os = "wasi"))]
 use std::process::Command;
 
 const PART: &str = "shared w = 40
@@ -16,7 +17,8 @@ base = extrude(plan, 10)
 ";
 
 fn project(name: &str) -> PathBuf {
-    let d = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("release-{name}-{}", std::process::id()));
+    let d = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+        .join(format!("release-{name}-{}", forge_dirs::process_id()));
     std::fs::create_dir_all(&d).unwrap();
     let d = std::fs::canonicalize(d).unwrap();
     let mut h = forge_history::History::turn_on(&d).unwrap();
@@ -33,6 +35,8 @@ fn call(tool: &str, args: &[&str]) -> forge_agent::json::Json {
         .expect("it answers")
 }
 
+// git itself checks the release, a process: WASI starts none, so native only
+#[cfg(not(target_os = "wasi"))]
 #[test]
 fn a_part_released_twice_and_regenerated() {
     let d = project("rel");

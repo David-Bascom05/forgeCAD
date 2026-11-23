@@ -356,6 +356,19 @@ fn dxf_reads_back_as_the_flat() {
         }
     }
     near("DXF area times t", flat(&r), 2.0 * area);
+    // each hole is one arc closing on itself, the one across the bend joined from its three
+    // strips by its source: a whole turn exactly
+    let pat = r.sheets[0].pattern().expect("a pattern");
+    let circles: Vec<f64> = pat
+        .contours
+        .iter()
+        .filter_map(|c| match &c[..] {
+            [forge_sheet::Curve2::Arc { sweep, .. }] => Some(*sweep),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(circles.len(), 3);
+    assert!(circles.iter().all(|s| s.abs() == dmath::TAU), "{circles:?}");
     // the bend line in the zone's middle, the joint's length long
     let b = ents.iter().find(|e| e.1 == "BEND").expect("a bend line");
     let ba = PI / 2.0 * (2.0 + 0.4 * 2.0);
@@ -364,7 +377,8 @@ fn dxf_reads_back_as_the_flat() {
     // the spline part writes its window as NURBS
     let r = clean("spline");
     let ents = entities(&r.sheets[0].dxf().expect("a pattern"));
-    assert!(ents.iter().any(|e| e.0 == "SPLINE" && e.1 == "CUT"));
+    // one closed spline, one source, one SPLINE (not the halves a solid's profile cuts it in)
+    assert_eq!(ents.iter().filter(|e| e.0 == "SPLINE" && e.1 == "CUT").count(), 1);
 }
 
 // ---- K, anchors, edits -------------------------------------------------------------------------
@@ -1440,4 +1454,149 @@ v = cutout(hs, wall: base)
         "{PLATE}{one}vs = pattern(of: v, layout: lin(along: hs.plane.normal, n: count(5), step: 8))\n"
     );
     assert_eq!(first_error(&s).kind(), "PatternOffWall");
+}
+
+// ---- the audit's flat-pattern probes (research/kernel-audit/audit2.md §2.3, §2.6) ---------------
+
+fn probe(name: &str) -> Run {
+    let path = format!("{}/tests/sheet_probes/{name}.fg", env!("CARGO_MANIFEST_DIR"));
+    let s = std::fs::read_to_string(&path).expect("probe file");
+    let r = run(&s);
+    assert!(
+        r.errors.is_empty(),
+        "{name}: {}",
+        forge_lang::report::text(&r, &s)
+    );
+    r
+}
+
+#[test]
+fn a_shallow_arc_window_is_not_the_blank() {
+    // a 10 x 5 window whose bottom is an R495 arc: its circle's box is 990 wide, the blank's 68
+    let r = probe("shallow");
+    let pat = r.sheets[0].pattern().expect("a pattern");
+    let outer = forge_sheet::pattern::outer_contour(&pat).expect("an outer contour");
+    let signed = |k: usize| pat.contours[k].iter().map(|c| c.area_term()).sum::<f64>();
+    assert!(signed(outer) > 0.0);
+    assert_eq!(
+        (0..pat.contours.len()).filter(|&k| signed(k) > 0.0).count(),
+        1,
+        "one loop runs counter-clockwise"
+    );
+    // the blank holds every other contour's ends
+    let (lo, hi) = pat.contours[outer].iter().fold(
+        (
+            (f64::INFINITY, f64::INFINITY),
+            (f64::NEG_INFINITY, f64::NEG_INFINITY),
+        ),
+        |(lo, hi), c| {
+            let (a, b) = c.ends();
+            (
+                (lo.0.min(a.x).min(b.x), lo.1.min(a.y).min(b.y)),
+                (hi.0.max(a.x).max(b.x), hi.1.max(a.y).max(b.y)),
+            )
+        },
+    );
+    for c in pat.contours.iter().flatten() {
+        let (a, _) = c.ends();
+        assert!(a.x >= lo.0 && a.x <= hi.0 && a.y >= lo.1 && a.y <= hi.1);
+    }
+    // the part's note sits just under the blank, not under the arc's whole circle
+    let ents = entities(&r.sheets[0].dxf().expect("a pattern"));
+    let note = ents
+        .iter()
+        .filter(|e| e.0 == "TEXT")
+        .map(|e| (num(&e.2, 10), num(&e.2, 20)))
+        .min_by(|a, b| a.1.total_cmp(&b.1))
+        .expect("the part note");
+    assert!(note.0 >= lo.0 - 1e-9 && note.1 >= lo.1 - 10.0, "note at {note:?}");
+    // split layers: the blank on the outer one, the window on the inner one
+    let layers = forge_sheet::DxfLayers {
+        outer: Some("OUTER".into()),
+        inner: Some("INNER".into()),
+        ..forge_sheet::DxfLayers::default()
+    };
+    let ents = entities(&r.sheets[0].dxf_with(&layers).expect("a pattern"));
+    let on = |l: &str| ents.iter().filter(|e| e.1 == l).count();
+    assert_eq!(on("OUTER"), pat.contours[outer].len());
+    assert!(ents.iter().any(|e| e.0 == "ARC" && e.1 == "INNER"));
+}
+
+#[test]
+fn an_ellipse_window_is_exact_nurbs_on_the_flat() {
+    // the ellipse comes out as one rational quadratic spline, closed, inside the blank
+    let r = probe("ell");
+    assert!(r.warnings.is_empty());
+    let pat = r.sheets[0].pattern().expect("a pattern");
+    let outer = forge_sheet::pattern::outer_contour(&pat).expect("an outer contour");
+    let window: Vec<&Vec<forge_sheet::Curve2>> = (0..pat.contours.len())
+        .filter(|&k| k != outer)
+        .map(|k| &pat.contours[k])
+        .collect();
+    assert_eq!(window.len(), 1);
+    // the whole ellipse, one curve closing on itself
+    assert_eq!(window[0].len(), 1, "{:?}", window[0]);
+    assert!(window[0].iter().all(|c| matches!(
+        c,
+        forge_sheet::Curve2::Spline {
+            weights: Some(_),
+            degree: 2,
+            ..
+        }
+    )));
+    for (k, x) in window[0].iter().enumerate() {
+        let y = &window[0][(k + 1) % window[0].len()];
+        assert!(x.ends().1.distance(y.ends().0) < 1e-12);
+    }
+    let area: f64 = window[0].iter().map(|c| c.area_term()).sum();
+    // a hole runs clockwise: an ellipse of semi-axes 10 and 4
+    assert!((area + PI * 10.0 * 4.0).abs() < 1e-9, "{area}");
+}
+
+#[test]
+fn every_sheet_part_refolds() {
+    // §2.0's refold check (forge_sheet::refold) on every sheet in the repository's parts and
+    // examples: each built sheet's flat refolds to its folded body, every condition holding
+    fn walk(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
+        let Ok(rd) = std::fs::read_dir(dir) else { return };
+        let mut es: Vec<_> = rd.filter_map(Result::ok).map(|e| e.path()).collect();
+        es.sort();
+        for p in es {
+            if p.is_dir() {
+                walk(&p, out);
+            } else if p.extension().is_some_and(|x| x == "fg") {
+                out.push(p);
+            }
+        }
+    }
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let mut files = vec![];
+    for d in [
+        "examples",
+        "interface/forge-lang/parts",
+        "interface/forge-lang/tests/sheet_probes",
+    ] {
+        walk(&root.join(d), &mut files);
+    }
+    let (mut sheets, mut bad) = (0, vec![]);
+    for f in &files {
+        let s = std::fs::read_to_string(f).expect("a part");
+        if !s.contains("sheet(") {
+            continue;
+        }
+        let opts = Options {
+            dir: f.parent().map(|p| p.to_path_buf()),
+            ..Options::default()
+        };
+        let r = forge_lang::run(&s, opts, Default::default()).0;
+        for out in &r.sheets {
+            match forge_refold::check(&out.sheet) {
+                Ok(_) => sheets += 1,
+                Err(forge_refold::RefoldError::Build(..)) => {}
+                Err(e) => bad.push(format!("{}: {e:?}", f.display())),
+            }
+        }
+    }
+    assert!(bad.is_empty(), "{}", bad.join("\n"));
+    assert!(sheets >= 40, "{sheets} sheets refolded");
 }

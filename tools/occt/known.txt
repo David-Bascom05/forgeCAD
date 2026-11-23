@@ -52,6 +52,10 @@
 #   bodies       each body its own OCCT shape: in (features on chosen bodies), combine (booleans),
 #                split (half space, or outside a cylinder or sphere), move and copy (the motion's
 #                map); split face changes no solid
+#   member       a weldment member: a prism (a line) or BRepPrimAPI_MakeRevol (an arc) of its
+#                section, run on past its ends, each cut a half space taken away (as split)
+#   trim         a member less, beyond the region's half space, each tool: a body, or a member's
+#                envelope built as a member
 # NONE cuts the part short there: both kernels build the history before it.
 shaft  # OCCT wrong: feature 61 (tilted r 2.6 hole) leaves it 868 mm^3 over; Monte Carlo 287322 +- 74 backs ours 287345
 shelled-hole-out  # OCCT wrong: a 2 mm outward shell closes the 1.5 mm hole, OCCT keeps a 0.5 mm one; ours is the closed form finishing_parts asserts

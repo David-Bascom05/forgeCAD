@@ -1,0 +1,18 @@
+# A cup: its wall a spline through three points, revolved, then shelled 0.5 with the top open.
+# The shell stops on Rebuild (an edge). The same cup with a straight wall, or a spline through its
+# two ends only, shells. CADFS 00316638 and WHUCAD 100000526 (revolved spline walls, shelled) stop
+# the same way; restated in round numbers.
+param cup.h = 60
+param cup.r = 30
+param cup.m = (-12, 30)
+param cup.f = (-20, 0)
+sketch cup(on: xz) {
+  l0 = line((0, 0), (0, h))
+  l1 = line((0, h), (-r, h))
+  s2 = spline([(-r, h), m, f], closed: false)
+  l3 = line(f, (0, 0))
+  ax = line((0, h), (0, 0), construction: true)
+}
+body = revolve(cup, axis: cup.ax)
+param skin.t = 0.5
+skin = shell(t, open: body.side(cup.l1))

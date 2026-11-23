@@ -232,7 +232,7 @@ impl Gui {
         d.title = name.clone();
         self.docs.push(d);
         self.active = self.docs.len() - 1;
-        let gpu = (self.device.clone(), self.queue.clone(), self.adapter.clone());
+        let gpu = crate::fg::gpu_of(&self.device, &self.queue, &self.adapter);
         let waker = self.waker.clone();
         let waker: Arc<dyn Fn() + Send + Sync> = Arc::new(move || waker());
         let s = crate::fg::Session::new(None, String::new(), Some(gpu), waker);
@@ -289,7 +289,7 @@ impl Gui {
     /// let go past the cap.
     fn came_up(&mut self) {
         let now = self.docs.iter().map(|d| d.used).max().unwrap_or(0) + 1;
-        let gpu = (self.device.clone(), self.queue.clone(), self.adapter.clone());
+        let gpu = crate::fg::gpu_of(&self.device, &self.queue, &self.adapter);
         let d = &mut self.docs[self.active];
         d.used = now;
         if std::mem::take(&mut d.evicted)
@@ -679,10 +679,10 @@ impl Gui {
         };
         let mut out: Vec<PathBuf> = vec![];
         if let Some(s) = fg {
-            out.extend(s.deps.lock().unwrap_or_else(|e| e.into_inner()).iter().cloned());
+            out.extend(crate::plat::lock(&s.deps).iter().cloned());
         }
         if let Some(d) = dwg {
-            out.extend(d.deps.lock().unwrap_or_else(|e| e.into_inner()).iter().cloned());
+            out.extend(crate::plat::lock(&d.deps).iter().cloned());
         }
         out
     }

@@ -1,0 +1,200 @@
+{"id": "p00000", "first": "right", "final": "right", "why": ""}
+{"id": "p00001", "first": "right", "final": "right", "why": ""}
+{"id": "p00002", "first": "right", "final": "right", "why": ""}
+{"id": "p00003", "first": "right", "final": "right", "why": ""}
+{"id": "p00004", "first": "right", "final": "right", "why": ""}
+{"id": "p00005", "first": "right", "final": "right", "why": ""}
+{"id": "p00006", "first": "wrong", "final": "right", "why": "Index misclassified every counted point (OCCT on the STEP, and mesh winding where the mesh builds)"}
+{"id": "p00007", "first": "unsure", "final": "right", "why": "Index misclassified every counted point (OCCT on the STEP, and mesh winding where the mesh builds)"}
+{"id": "p00008", "first": "right", "final": "right", "why": ""}
+{"id": "p00009", "first": "right", "final": "right", "why": ""}
+{"id": "p00010", "first": "wrong", "final": "wrong", "why": "Index confirmed by OCCT at the counted points; OCCT own fillet of the body before differs in volume by +1.3e-04 (ours - OCCT, relative)"}
+{"id": "p00011", "first": "right", "final": "right", "why": ""}
+{"id": "p00012", "first": "right", "final": "right", "why": ""}
+{"id": "p00013", "first": "right", "final": "right", "why": ""}
+{"id": "p00014", "first": "right", "final": "right", "why": ""}
+{"id": "p00015", "first": "refused", "final": "refused", "why": ""}
+{"id": "p00016", "first": "right", "final": "right", "why": ""}
+{"id": "p00017", "first": "refused", "final": "refused", "why": ""}
+{"id": "p00018", "first": "right", "final": "right", "why": ""}
+{"id": "p00019", "first": "right", "final": "right", "why": ""}
+{"id": "p00020", "first": "right", "final": "right", "why": ""}
+{"id": "p00021", "first": "right", "final": "right", "why": ""}
+{"id": "p00022", "first": "right", "final": "right", "why": ""}
+{"id": "p00023", "first": "wrong", "final": "right", "why": "Index misclassified every counted point (OCCT on the STEP, and mesh winding where the mesh builds)"}
+{"id": "p00024", "first": "refused", "final": "refused", "why": ""}
+{"id": "p00025", "first": "right", "final": "right", "why": ""}
+{"id": "p00026", "first": "right", "final": "right", "why": ""}
+{"id": "p00027", "first": "refused", "final": "refused", "why": ""}
+{"id": "p00028", "first": "right", "final": "right", "why": ""}
+{"id": "p00029", "first": "wrong", "final": "wrong", "why": "Index confirmed by OCCT at the counted points; OCCT own fillet of the body before differs in volume by +6.4e-06 (ours - OCCT, relative)"}
+{"id": "p00030", "first": "right", "final": "right", "why": ""}
+{"id": "p00031", "first": "right", "final": "right", "why": ""}
+{"id": "p00032", "first": "right", "final": "right", "why": ""}
+{"id": "p00033", "first": "right", "final": "right", "why": ""}
+{"id": "p00034", "first": "refused", "final": "refused", "why": ""}
+{"id": "p00035", "first": "right", "final": "right", "why": ""}
+{"id": "p00036", "first": "refused", "final": "refused", "why": ""}
+{"id": "p00037", "first": "right", "final": "right", "why": ""}
+{"id": "p00038", "first": "right", "final": "right", "why": ""}
+{"id": "p00039", "first": "right", "final": "right", "why": ""}
+{"id": "p00040", "first": "right", "final": "right", "why": ""}
+{"id": "p00041", "first": "right", "final": "right", "why": ""}
+{"id": "p00042", "first": "right", "final": "right", "why": ""}
+{"id": "p00043", "first": "right", "final": "right", "why": ""}
+{"id": "p00044", "first": "right", "final": "right", "why": ""}
+{"id": "p00045", "first": "right", "final": "right", "why": ""}
+{"id": "p00046", "first": "refused", "final": "refused", "why": ""}
+{"id": "p00047", "first": "right", "final": "right", "why": ""}
+{"id": "p00048", "first": "right", "final": "right", "why": ""}
+{"id": "p00049", "first": "right", "final": "right", "why": ""}
+{"id": "p00050", "first": "right", "final": "right", "why": ""}
+{"id": "p00051", "first": "right", "final": "right", "why": ""}
+{"id": "p00052", "first": "refused", "final": "refused", "why": ""}
+{"id": "p00053", "first": "right", "final": "right", "why": ""}
+{"id": "p00054", "first": "right", "final": "right", "why": ""}
+{"id": "p00055", "first": "right", "final": "right", "why": ""}
+{"id": "p00056", "first": "wrong", "final": "right", "why": "Index misclassified every counted point (OCCT on the STEP, and mesh winding where the mesh builds)"}
+{"id": "p00057", "first": "right", "final": "right", "why": ""}
+{"id": "p00058", "first": "right", "final": "right", "why": ""}
+{"id": "p00059", "first": "right", "final": "right", "why": ""}
+{"id": "p00060", "first": "right", "final": "right", "why": ""}
+{"id": "p00061", "first": "right", "final": "right", "why": ""}
+{"id": "p00062", "first": "refused", "final": "refused", "why": ""}
+{"id": "p00063", "first": "refused", "final": "refused", "why": ""}
+{"id": "p00064", "first": "right", "final": "right", "why": ""}
+{"id": "p00065", "first": "right", "final": "right", "why": ""}
+{"id": "p00066", "first": "right", "final": "right", "why": ""}
+{"id": "p00067", "first": "right", "final": "right", "why": ""}
+{"id": "p00068", "first": "refused", "final": "refused", "why": ""}
+{"id": "p00069", "first": "refused", "final": "refused", "why": ""}
+{"id": "p00070", "first": "right", "final": "right", "why": ""}
+{"id": "p00071", "first": "unsure", "final": "right", "why": "Index misclassified every counted point (OCCT on the STEP, and mesh winding where the mesh builds)"}
+{"id": "p00072", "first": "wrong", "final": "wrong", "why": "Index confirmed by OCCT at the counted points; OCCT own fillet of the body before differs in volume by +2.8e-07 (ours - OCCT, relative)"}
+{"id": "p00073", "first": "right", "final": "right", "why": ""}
+{"id": "p00074", "first": "right", "final": "right", "why": ""}
+{"id": "p00075", "first": "right", "final": "right", "why": ""}
+{"id": "p00076", "first": "right", "final": "right", "why": ""}
+{"id": "p00077", "first": "refused", "final": "refused", "why": ""}
+{"id": "p00078", "first": "right", "final": "right", "why": ""}
+{"id": "p00079", "first": "right", "final": "right", "why": ""}
+{"id": "p00080", "first": "wrong", "final": "right", "why": "Index misclassified every counted point (OCCT on the STEP, and mesh winding where the mesh builds)"}
+{"id": "p00081", "first": "right", "final": "right", "why": ""}
+{"id": "p00082", "first": "right", "final": "right", "why": ""}
+{"id": "p00083", "first": "right", "final": "right", "why": ""}
+{"id": "p00084", "first": "right", "final": "right", "why": ""}
+{"id": "p00085", "first": "right", "final": "right", "why": ""}
+{"id": "p00086", "first": "right", "final": "right", "why": ""}
+{"id": "p00087", "first": "right", "final": "right", "why": ""}
+{"id": "p00088", "first": "refused", "final": "refused", "why": ""}
+{"id": "p00089", "first": "right", "final": "right", "why": ""}
+{"id": "p00090", "first": "right", "final": "right", "why": ""}
+{"id": "p00091", "first": "right", "final": "right", "why": ""}
+{"id": "p00092", "first": "right", "final": "right", "why": ""}
+{"id": "p00093", "first": "right", "final": "right", "why": ""}
+{"id": "p00094", "first": "wrong", "final": "right", "why": "Index misclassified every counted point (OCCT on the STEP, and mesh winding where the mesh builds)"}
+{"id": "p00095", "first": "right", "final": "right", "why": ""}
+{"id": "p00096", "first": "right", "final": "right", "why": ""}
+{"id": "p00097", "first": "right", "final": "right", "why": ""}
+{"id": "p00098", "first": "right", "final": "right", "why": ""}
+{"id": "p00099", "first": "right", "final": "right", "why": ""}
+{"id": "p00100", "first": "right", "final": "right", "why": ""}
+{"id": "p00101", "first": "refused", "final": "refused", "why": ""}
+{"id": "p00102", "first": "right", "final": "right", "why": ""}
+{"id": "p00103", "first": "right", "final": "right", "why": ""}
+{"id": "p00104", "first": "refused", "final": "refused", "why": ""}
+{"id": "p00105", "first": "refused", "final": "refused", "why": ""}
+{"id": "p00106", "first": "right", "final": "right", "why": ""}
+{"id": "p00107", "first": "right", "final": "right", "why": ""}
+{"id": "p00108", "first": "refused", "final": "refused", "why": ""}
+{"id": "p00109", "first": "right", "final": "right", "why": ""}
+{"id": "p00110", "first": "right", "final": "right", "why": ""}
+{"id": "p00111", "first": "wrong", "final": "wrong", "why": "Index confirmed by OCCT at the counted points; OCCT own fillet of the body before differs in volume by -9.2e-06 (ours - OCCT, relative), OCCT result invalid"}
+{"id": "p00112", "first": "right", "final": "right", "why": ""}
+{"id": "p00113", "first": "right", "final": "right", "why": ""}
+{"id": "p00114", "first": "right", "final": "right", "why": ""}
+{"id": "p00115", "first": "refused", "final": "refused", "why": ""}
+{"id": "p00116", "first": "right", "final": "right", "why": ""}
+{"id": "p00117", "first": "right", "final": "right", "why": ""}
+{"id": "p00118", "first": "right", "final": "right", "why": ""}
+{"id": "p00119", "first": "refused", "final": "refused", "why": ""}
+{"id": "p00120", "first": "refused", "final": "refused", "why": ""}
+{"id": "p00121", "first": "right", "final": "right", "why": ""}
+{"id": "p00122", "first": "right", "final": "right", "why": ""}
+{"id": "p00123", "first": "right", "final": "right", "why": ""}
+{"id": "p00124", "first": "wrong", "final": "wrong", "why": "Index confirmed by OCCT at the counted points; OCCT own fillet of the body before differs in volume by -1.8e-05 (ours - OCCT, relative)"}
+{"id": "p00125", "first": "refused", "final": "refused", "why": ""}
+{"id": "p00126", "first": "right", "final": "right", "why": ""}
+{"id": "p00127", "first": "right", "final": "right", "why": ""}
+{"id": "p00128", "first": "wrong", "final": "right", "why": "Index misclassified every counted point (OCCT on the STEP, and mesh winding where the mesh builds)"}
+{"id": "p00129", "first": "right", "final": "right", "why": ""}
+{"id": "p00130", "first": "right", "final": "right", "why": ""}
+{"id": "p00131", "first": "right", "final": "right", "why": ""}
+{"id": "p00132", "first": "refused", "final": "refused", "why": ""}
+{"id": "p00133", "first": "wrong", "final": "wrong", "why": "Index confirmed by OCCT at the counted points; OCCT own fillet of the body before differs in volume by +5.4e-06 (ours - OCCT, relative)"}
+{"id": "p00134", "first": "right", "final": "right", "why": ""}
+{"id": "p00135", "first": "right", "final": "right", "why": ""}
+{"id": "p00136", "first": "right", "final": "right", "why": ""}
+{"id": "p00137", "first": "unsure", "final": "right", "why": "Index misclassified every counted point (OCCT on the STEP, and mesh winding where the mesh builds)"}
+{"id": "p00138", "first": "right", "final": "right", "why": ""}
+{"id": "p00139", "first": "right", "final": "right", "why": ""}
+{"id": "p00140", "first": "refused", "final": "refused", "why": ""}
+{"id": "p00141", "first": "right", "final": "right", "why": ""}
+{"id": "p00142", "first": "right", "final": "right", "why": ""}
+{"id": "p00143", "first": "right", "final": "right", "why": ""}
+{"id": "p00144", "first": "right", "final": "right", "why": ""}
+{"id": "p00145", "first": "right", "final": "right", "why": ""}
+{"id": "p00146", "first": "right", "final": "right", "why": ""}
+{"id": "p00147", "first": "right", "final": "right", "why": ""}
+{"id": "p00148", "first": "right", "final": "right", "why": ""}
+{"id": "p00149", "first": "right", "final": "right", "why": ""}
+{"id": "p00150", "first": "right", "final": "right", "why": ""}
+{"id": "p00151", "first": "refused", "final": "refused", "why": ""}
+{"id": "p00152", "first": "refused", "final": "refused", "why": ""}
+{"id": "p00153", "first": "right", "final": "right", "why": ""}
+{"id": "p00154", "first": "right", "final": "right", "why": ""}
+{"id": "p00155", "first": "right", "final": "right", "why": ""}
+{"id": "p00156", "first": "right", "final": "right", "why": ""}
+{"id": "p00157", "first": "right", "final": "right", "why": ""}
+{"id": "p00158", "first": "right", "final": "right", "why": ""}
+{"id": "p00159", "first": "right", "final": "right", "why": ""}
+{"id": "p00160", "first": "right", "final": "right", "why": ""}
+{"id": "p00161", "first": "right", "final": "right", "why": ""}
+{"id": "p00162", "first": "right", "final": "right", "why": ""}
+{"id": "p00163", "first": "right", "final": "right", "why": ""}
+{"id": "p00164", "first": "wrong", "final": "wrong", "why": "Index confirmed by OCCT at the counted points; OCCT own fillet of the body before differs in volume by +1.6e-07 (ours - OCCT, relative)"}
+{"id": "p00165", "first": "refused", "final": "refused", "why": ""}
+{"id": "p00166", "first": "right", "final": "right", "why": ""}
+{"id": "p00167", "first": "unsure", "final": "right", "why": "Index misclassified every counted point (OCCT on the STEP, and mesh winding where the mesh builds)"}
+{"id": "p00168", "first": "wrong", "final": "right", "why": "Index misclassified every counted point (OCCT on the STEP, and mesh winding where the mesh builds)"}
+{"id": "p00169", "first": "right", "final": "right", "why": ""}
+{"id": "p00170", "first": "wrong", "final": "right", "why": "Index misclassified every counted point (OCCT on the STEP, and mesh winding where the mesh builds)"}
+{"id": "p00171", "first": "refused", "final": "refused", "why": ""}
+{"id": "p00172", "first": "right", "final": "right", "why": ""}
+{"id": "p00173", "first": "right", "final": "right", "why": ""}
+{"id": "p00174", "first": "right", "final": "right", "why": ""}
+{"id": "p00175", "first": "right", "final": "right", "why": ""}
+{"id": "p00176", "first": "right", "final": "right", "why": ""}
+{"id": "p00177", "first": "right", "final": "right", "why": ""}
+{"id": "p00178", "first": "refused", "final": "refused", "why": ""}
+{"id": "p00179", "first": "right", "final": "right", "why": ""}
+{"id": "p00180", "first": "right", "final": "right", "why": ""}
+{"id": "p00181", "first": "right", "final": "right", "why": ""}
+{"id": "p00182", "first": "refused", "final": "refused", "why": ""}
+{"id": "p00183", "first": "right", "final": "right", "why": ""}
+{"id": "p00184", "first": "right", "final": "right", "why": ""}
+{"id": "p00185", "first": "right", "final": "right", "why": ""}
+{"id": "p00186", "first": "right", "final": "right", "why": ""}
+{"id": "p00187", "first": "right", "final": "right", "why": ""}
+{"id": "p00188", "first": "wrong", "final": "wrong", "why": "Index confirmed by OCCT at the counted points; no OCCT fillet (its STEP is OCCT-invalid; mixed convexity for label_body)"}
+{"id": "p00189", "first": "right", "final": "right", "why": ""}
+{"id": "p00190", "first": "unsure", "final": "right", "why": "Index misclassified every counted point (OCCT on the STEP, and mesh winding where the mesh builds)"}
+{"id": "p00191", "first": "right", "final": "right", "why": ""}
+{"id": "p00192", "first": "right", "final": "right", "why": ""}
+{"id": "p00193", "first": "right", "final": "right", "why": ""}
+{"id": "p00194", "first": "refused", "final": "refused", "why": ""}
+{"id": "p00195", "first": "right", "final": "right", "why": ""}
+{"id": "p00196", "first": "right", "final": "right", "why": ""}
+{"id": "p00197", "first": "right", "final": "right", "why": ""}
+{"id": "p00198", "first": "right", "final": "right", "why": ""}
+{"id": "p00199", "first": "wrong", "final": "right", "why": "Index misclassified every counted point (OCCT on the STEP, and mesh winding where the mesh builds)"}

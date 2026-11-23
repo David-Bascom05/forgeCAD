@@ -10,6 +10,8 @@ repository.workspace = true
 forge-math = { path = "../forge-math" }
 forge-geom = { path = "../forge-geom" }
 forge-topo = { path = "../forge-topo" }
+# DEFLATE for 3MF packages (zip members)
+forge-git = { path = "../forge-git" }
 
 [dev-dependencies]
 forge-ops = { path = "../forge-ops" }

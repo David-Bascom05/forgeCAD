@@ -64,7 +64,7 @@ fn main() {
     let written = std::cell::Cell::new(false);
     let opts = || {
         // (one name for every run, not one by process id: a count must not depend on its digits)
-        let dir = std::env::temp_dir().join("forge-fgcount");
+        let dir = forge_dirs::temp_dir().join("forge-fgcount");
         std::fs::create_dir_all(&dir).expect("temp dir");
         // (written once a run, as when the directory was new each run: the font's making is
         // counted once, as the reference counted it)
