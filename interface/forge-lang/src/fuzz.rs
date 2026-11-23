@@ -77,6 +77,8 @@ pub const MAKERS: &[Maker] = makers![
     // drawn by no weight (so the draw over the others is as it was): a movebody or copybody that
     // `scaled_here` picks becomes one, counted under this kind
     "scale" 0 scale,
+    // as "scale": drawn by no weight; a copybody `deleted_here` picks is followed by a delete
+    "delete" 0 delete,
 ];
 
 /// The seeds the tests run. (Not 0: its last statement, a thread cut into a block of many faces,
@@ -2164,9 +2166,42 @@ fn copybody(g: &mut G) -> Option<Vec<String>> {
     let b = g.pick(&bs)?;
     let m = motion(g)?;
     let m = scaled_here(g, m, false);
+    if deleted_here(g, false) {
+        return Some(copied_and_deleted(g, &b, &m));
+    }
     let l = g.label();
     g.made(&l, "copybody", false, true);
     Some(vec![format!("{l} = copybody(of: {b}, moves: [{m}])")])
+}
+
+/// Whether a copybody is followed by a delete of its copy: a hash of the statement's number, not a
+/// draw (as `scaled_here`), one in three (or every one, `always`).
+fn deleted_here(g: &G, always: bool) -> bool {
+    let h = (*g.label as u64 + 7).wrapping_mul(0xd6e8_feb8_6659_fd93);
+    always || (h ^ (h >> 31)).is_multiple_of(3)
+}
+
+/// A copy of a body made and then deleted: the part as it was, the copy's name no longer one to
+/// work on (so no later statement names it).
+fn copied_and_deleted(g: &mut G, b: &str, m: &str) -> Vec<String> {
+    let l = g.label();
+    g.made(&l, "copybody", false, false);
+    let d = g.label();
+    g.made(&d, "delete", false, false);
+    g.kind = Some("delete");
+    vec![
+        format!("{l} = copybody(of: {b}, moves: [{m}])"),
+        format!("{d} = delete({l})"),
+    ]
+}
+
+/// A body copied and the copy deleted (as `copied_and_deleted`).
+fn delete(g: &mut G) -> Option<Vec<String>> {
+    let bs = bodies(g);
+    let b = g.pick(&bs)?;
+    let m = motion(g)?;
+    let _ = deleted_here(g, true);
+    Some(copied_and_deleted(g, &b, &m))
 }
 
 /// A movebody or copybody made a scaled one: about the part box's centre (a sketch point) by a

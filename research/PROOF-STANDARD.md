@@ -46,6 +46,7 @@ has been reported to the master.
 | Validity check | fundamentals | L1 L3 (check_sound), L6 | L4 |
 | Mass properties | fundamentals | L1 (rules exact) | derived rounding, L4 |
 | Rigid transforms and patterns | fundamentals | L1 L3 | L4 |
+| Body delete (`delete`) | scale | L1 (BuiltinDelete.lean: remove_gone, remove_keeps, remove_order, remove_refuses, remove_leaves_one; delete_conservative) | L4 |
 | Uniform scale (`scale` motion) | scale | L1 (Similar.lean: reg of image = image of reg; volume k³, area k², centroid), L6 interim (OCCT gp_Trsf/GTrsf at 1e-9, every suite part) | L2 over ℚ, L4 |
 | Tessellation | fundamentals, fix-mesh-asm | L1 (closed, oriented; chord sag) | after fix-mesh-asm |
 | Sketch solver | fundamentals (item 5) | — | L1 |
