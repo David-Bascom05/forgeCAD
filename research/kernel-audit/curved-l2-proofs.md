@@ -26,6 +26,19 @@ new/add take the union of tools, cut and keep only remove.
 
 ## 1. The octree (`QRef.octree`, `Arr.keptK`, `Arr.anyKept`)
 
+**Now in Lean** (ForgeExact/QRef/BF.lean, Octree.lean; in Axioms.lean). The executable's
+history is a formula `BF`. `keptOn`, `keptK` and `anyKept` are `BF.eval2`, `BF.eval3` and
+`BF.allFalse`, so the theorems are about the code that runs:
+- Lemma 1.1 is `BF.eval3_sound`;
+- the enumeration in 1.5 is `BF.allFalse_sound`;
+- 1.2 and 1.3 are `in_box` and `out_box`, at points off the wall;
+- 1.5 is `empty_of_leaves`, with the cover as a hypothesis;
+- `member_off_wall` for the history is `reg_off_wall`.
+
+What stays by hand: that the octree's leaves tile the root cube (it halves boxes), and
+assumption B.
+
+
 The octree splits the root cube into eight closed children, level by level. Each box `B` (centre
 `c`, half-width `h`) gets signs `s_k = boxSign q_k c h ∈ {1, −1, 0}`. By `boxSign_spec`,
 `s_k = 1` gives `q_k > 0` on all of `B`, `s_k = −1` gives `q_k < 0`, and `0` gives nothing.
@@ -195,3 +208,67 @@ manifolds with boundary (standard real analysis and topology over ℝ; not forma
 assumption B. Next step: formalise 1.1–1.5 in Lean over `Quad`. They are combinatorial and use
 only the proven checkers. 2.1 is algebra. 2.2–2.4 need the IVT-level analysis that
 `Alg.Model` provides.
+
+## 3. Cone apexes (`QRef.apexDecide`)
+
+The executable takes the apex `p` exactly, as the cone quadric's singular point (its matrix's
+null vector). Let `C` be the tangent cone at `p`: the nappe about `a = s·z`, of half-angle
+`α = atan(s/c)`. Let `J` be the smooth surfaces through `p` other than the nappe's own plane,
+with gradients `g_j ≠ 0`.
+
+**Lemma 3.1 (separation).** `C̄ ∖ {0} ⊂ {σ g · d > 0}` iff `σ g·a > 0` and
+`(g·a)²(s² + c²) > s² |g|² |a|²`.
+
+*Proof.* The condition says the angle between `σg` and `a` is below `π/2 − α`: its cosine
+exceeds `sin α = s/√(s² + c²)`, squared. A direction in `C̄` makes an angle at most `α` with `a`,
+so its angle with `σg` is below `π/2`. Conversely, if the angle is at least `π/2 − α`, some
+generator of `C̄` makes an angle at least `π/2` with `σg`. ∎
+
+**Lemma 3.2.** If every `g_j` separates `C`, then on `C ∩ B(p, ε)`, for small `ε`:
+- every `q_j` has the sign `σ_j`;
+- the cone quadric has the sign of its quadratic part at `a`;
+- every quadric not through `p` has its sign at `p`.
+
+So `C` near `p` carries one pattern, `P_C`.
+
+*Proof.* On the compact link of `C̄`, `σ_j g_j·d ≥ c_j |d|` for some `c_j > 0` (Lemma 3.1).
+`q_j(p + d) = g_j·d + O(|d|²)`. The cone quadric is homogeneous of degree 2 about its singular
+point, so its sign at `p + d` is `Q(d)`'s, constant on `C`. Quadrics not through `p` keep their
+sign near `p` (`sign_nbhd`). ∎
+
+**Lemma 3.3.** Suppose `|J| ≤ 3` with independent normals. Then off `C̄`, near `p`, membership is
+`κ` with the cone quadric outside and the `J` signs those of the point's sector. Every one of
+the `2^{|J|}` sectors meets every neighbourhood of `p` off `C̄`.
+
+*Proof.* Independent normals: the surfaces cross transversally at `p`. By the implicit function
+theorem, a neighbourhood of `p` is homeomorphic to the linear model, the arrangement of the
+tangent planes, and every sign vector is realised by an open cone. `C̄` lies inside one sector
+(the separating one, `own`). Removing it leaves every other sector intact, and leaves `own`
+nonempty: `C̄` is a proper closed sub-cone of it. ∎
+
+**Theorem 3.4.** Let `kC = κ(P_C)`, `ownKept = κ(own sector, cone outside)`, and let `anyOther`
+and `allKept` range over the other sectors and over all sectors. The result is non-manifold at
+`p` iff `(kC ∧ ¬ownKept ∧ anyOther) ∨ (¬kC ∧ ownKept ∧ ¬allKept)`.
+
+*Proof.* By 3.2–3.3, near `p` the kept set is `(C if kC) ∪ (the kept sectors, less C̄)`, and its
+link at `p` is a union of spherical regions.
+- `kC` and `ownKept`: `C` lies inside a kept sector and changes nothing.
+- `¬kC` and `¬ownKept`: `C` lies inside a dropped sector and changes nothing.
+
+In both cases the apex adds no non-manifold point. The sectors' own structure at `p` is that of
+the other solids, judged by the other contacts.
+- `kC` and `¬ownKept`: the link is the cap of `C` together with the links of the kept sectors.
+  These are disjoint, since `C̄` lies inside the dropped sector `own`. With another sector kept
+  the link is disconnected, so not a disc: non-manifold. With none kept, the link is the cap
+  alone, a disc (the cone's own apex): manifold.
+- `¬kC` and `ownKept`: the link is the kept sectors' link with an open cap removed from the
+  interior of `own`'s. If every sector is kept, that is a sphere minus a cap, a disc: manifold.
+  Otherwise the kept sectors' link has nonempty boundary, and removing an interior cap leaves a
+  non-disc (an annulus when it was a disc): non-manifold. ∎
+
+Anything outside the lemmas' hypotheses is reported undecided, so the verdict is ambiguous:
+- a surface through `p` whose tangent plane cuts `C`;
+- a singular second surface;
+- more than three surfaces, or dependent normals.
+
+The sampled check (`apexCheck`) is no longer used.
