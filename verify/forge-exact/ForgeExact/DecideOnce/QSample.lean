@@ -1,4 +1,5 @@
 import ForgeExact.DecideOnce.QSing
+import ForgeExact.DecideOnce.QEnum
 
 /-!
 # Q1 L2: the samples (plan §2, module 5)
@@ -128,9 +129,19 @@ def tripleSamples (qs : List Quadric) (a b c : Quadric) : Option (List QS) :=
     else none
   else (proposeTriple a b c rootFuel).bind fun vs => vs.mapM (vertSample qs)
 
+/-- The pairs with their turning-point quadric: their common points are the curves' turns in `x`
+and the tangencies. -/
+def critTriples (qs : List Quadric) : List (Quadric × Quadric × Quadric) :=
+  (pairs qs).map fun p => (p.1, p.2, critQ p.1 p.2)
+
+/-- The vertex samples of a triple: one per common point (`enumTriple`). -/
+def enumSamples (qs : List Quadric) (t : Quadric × Quadric × Quadric) : Option (List QS) :=
+  (enumTriple t.1 t.2.1 t.2.2 rootFuel).bind fun ds => ds.mapM fun d => (d.cov qs).map (⟨.vert, ·⟩)
+
+/-- **The vertex samples**: every common point of three carriers, and every turn and tangency of
+two (`critTriples`). -/
 def vertSamples (qs : List Quadric) : Option (List QS) :=
-  ((tri qs).mapM fun (t : Quadric × Quadric × Quadric) => tripleSamples qs t.1 t.2.1 t.2.2).map
-    List.flatten
+  ((tri qs ++ critTriples qs).mapM (enumSamples qs)).map List.flatten
 
 /-- The rational events: the planes `x = e` a plane carrier `x = e` lies in, sampled too, since
 its cells lie in no other sweep plane. -/
@@ -179,10 +190,34 @@ keeps every rational line and curve direction out of the level planes; the proje
 separates two crossings of one sweep plane with one `y`. `none`:
 undecided in every frame (fuel, or a degenerate input the proposers do not cover). Never a wrong
 covector. -/
-def samplesOf (qs : List Quadric) : Option (List QS) :=
+def samplesOfF (qs : List Quadric) : Option (Frame × List QS) :=
   frames.findSome? fun f =>
     if frameOk (qs.map (inFrame f)) && singAll (qs.map (inFrame f)) then
-      samplesAt (qs.map (inFrame f)) else none
+      (samplesAt (qs.map (inFrame f))).map (f, ·) else none
+
+/-- The samples, without their frame. -/
+def samplesOf (qs : List Quadric) : Option (List QS) := (samplesOfF qs).map Prod.snd
+
+theorem samplesOfF_spec {qs : List Quadric} {f : Frame} {ss : List QS}
+    (h : samplesOfF qs = some (f, ss)) :
+    f ∈ frames ∧ frameOk (qs.map (inFrame f)) = true ∧ singAll (qs.map (inFrame f)) = true ∧
+      samplesAt (qs.map (inFrame f)) = some ss := by
+  unfold samplesOfF at h
+  obtain ⟨f', hf', hl⟩ := List.exists_of_findSome?_eq_some h
+  split at hl
+  · rename_i hc
+    simp only [Bool.and_eq_true] at hc
+    simp only [Option.map_eq_some_iff, Prod.mk.injEq] at hl
+    obtain ⟨ss', hss', rfl, rfl⟩ := hl
+    exact ⟨hf', hc.1, hc.2, hss'⟩
+  · cases hl
+
+theorem samplesOf_some {qs : List Quadric} {ss : List QS} (h : samplesOf qs = some ss) :
+    ∃ f, samplesOfF qs = some (f, ss) := by
+  unfold samplesOf at h
+  simp only [Option.map_eq_some_iff] at h
+  obtain ⟨⟨f, ss'⟩, h1, rfl⟩ := h
+  exact ⟨f, h1⟩
 
 /-! ## Every sample is realised -/
 
@@ -324,6 +359,18 @@ theorem tripleSamples_realised {qs : List Quadric} {a b c : Quadric} {ss : List 
     obtain ⟨v, -, hv⟩ := mapM_mem' hvs s hs
     exact vertSample_realised M hv
 
+theorem enumSamples_realised {qs : List Quadric} {t : Quadric × Quadric × Quadric}
+    {ss : List QS} (h : enumSamples qs t = some ss) : ∀ s ∈ ss, RealCov M qs s.cov := by
+  unfold enumSamples at h
+  simp only [Option.bind_eq_some_iff] at h
+  obtain ⟨ds, -, hds⟩ := h
+  intro s hs
+  obtain ⟨d, -, hd⟩ := mapM_mem' hds s hs
+  simp only [Option.map_eq_some_iff] at hd
+  obtain ⟨X, hX, rfl⟩ := hd
+  obtain ⟨p, hp⟩ := PtD.cov_at M hX
+  exact ⟨p, PtD.cov_spec M hX hp⟩
+
 theorem samplesAt_realised {qs : List Quadric} {ss : List QS} (h : samplesAt qs = some ss) :
     ∀ s ∈ ss, RealCov M qs s.cov := by
   unfold samplesAt at h
@@ -344,7 +391,7 @@ theorem samplesAt_realised {qs : List Quadric} {ss : List QS} (h : samplesAt qs 
     obtain ⟨ls, hls, rfl⟩ := hvs
     obtain ⟨l, hl, hs⟩ := List.mem_flatten.mp hs
     obtain ⟨t, -, ht⟩ := mapM_mem' hls l hl
-    exact tripleSamples_realised M ht s hs
+    exact enumSamples_realised M ht s hs
 
 /-- A covector realised for the sheared carriers is realised for the carriers. -/
 theorem shearX_ev (μ ν : Rat) (q : Quadric) (x y z : K) :
@@ -382,10 +429,8 @@ theorem realCov_shear {qs : List Quadric} {l : Rat} {X : Cov}
 /-- **Every sample's covector is realised**, in every model of the reals. -/
 theorem samplesOf_realised {qs : List Quadric} {ss : List QS} (h : samplesOf qs = some ss) :
     ∀ s ∈ ss, RealCov M qs s.cov := by
-  unfold samplesOf at h
-  obtain ⟨l, -, hl⟩ := List.exists_of_findSome?_eq_some h
-  split at hl
-  case isFalse => cases hl
+  obtain ⟨f, hf⟩ := samplesOf_some h
+  obtain ⟨-, -, -, hl⟩ := samplesOfF_spec hf
   intro s hs
   exact realCov_frame M (samplesAt_realised M hl s hs)
 

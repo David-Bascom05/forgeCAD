@@ -55,9 +55,10 @@ theorem qledger_samples {qs : List Quad.Quadric} {forms : List SForm} {L : Ledge
     ∃ ss, samplesOf qs = some ss ∧ L = curvedLedger qs.length forms ss := by
   unfold qledger at h
   simp only [Option.bind_eq_bind, Option.bind_eq_some_iff] at h
-  obtain ⟨ss, hss, h⟩ := h
+  obtain ⟨⟨f, ss⟩, hss, h⟩ := h
+  dsimp only at h
   split at h
-  · cases h; exact ⟨ss, hss, rfl⟩
+  · cases h; exact ⟨ss, by simp [samplesOf, hss], rfl⟩
   · cases h
 
 theorem sgn_at {cs : List (Carrier R3 ℝ)} {X : Cov} {x : R3} (hx : covCellK cs X x) {k : ℕ}

@@ -33,6 +33,7 @@ import ForgeExact.DecideOnce.RootCover
 import ForgeExact.DecideOnce.QPropose
 import ForgeExact.DecideOnce.QSweep
 import ForgeExact.DecideOnce.QSing
+import ForgeExact.DecideOnce.QEnum
 import ForgeExact.DecideOnce.QSample
 import ForgeExact.DecideOnce.QLedger
 import ForgeExact.DecideOnce.QArc
@@ -283,6 +284,11 @@ elab "#standard_axioms " ids:ident* : command => do
   ForgeExact.DecideOnce.Curved.qledger_witness
   ForgeExact.DecideOnce.Curved.qledger_boundary
   ForgeExact.DecideOnce.Curved.qledger_compat
+  ForgeExact.DecideOnce.Curved.PtD.at_unique
+  ForgeExact.DecideOnce.Curved.PtD.cov_spec
+  ForgeExact.DecideOnce.Curved.enumTriple_complete
+  ForgeExact.DecideOnce.Curved.vertOneAt_spec
+  ForgeExact.DecideOnce.Curved.enumSamples_realised
   ForgeExact.DecideOnce.Curved.perm_ev
   ForgeExact.DecideOnce.Curved.faceCrossings_complete
   ForgeExact.DecideOnce.Curved.boxCrossings_complete

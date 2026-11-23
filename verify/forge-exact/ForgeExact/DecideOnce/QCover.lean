@@ -171,12 +171,8 @@ theorem samplesAt_parts {qs : List Quadric} {ss : List QS} (h : samplesAt qs = s
 theorem samplesOf_frame {qs : List Quadric} {ss : List QS} (h : samplesOf qs = some ss) :
     ∃ f ∈ frames, frameOk (qs.map (inFrame f)) = true ∧ singAll (qs.map (inFrame f)) = true ∧
       samplesAt (qs.map (inFrame f)) = some ss := by
-  unfold samplesOf at h
-  obtain ⟨f, hf, hl⟩ := List.exists_of_findSome?_eq_some h
-  split at hl
-  · rename_i hc
-    simp only [Bool.and_eq_true] at hc
-    exact ⟨f, hf, hc.1, hc.2, hl⟩
-  · cases hl
+  obtain ⟨f, hf⟩ := samplesOf_some h
+  obtain ⟨h1, h2, h3, h4⟩ := samplesOfF_spec hf
+  exact ⟨f, h1, h2, h3, h4⟩
 
 end ForgeExact.DecideOnce.Curved

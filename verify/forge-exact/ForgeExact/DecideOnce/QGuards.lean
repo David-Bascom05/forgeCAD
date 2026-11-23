@@ -10,7 +10,7 @@ file shows the hypothesis is not vacuous. The representative curved inputs are c
 |---|---|---|
 | box − cylinder | the box `[−1, 1]³`, the cylinder `x² + y² = 1/4`, its two axial seams | box; cylinder capped by the box's `z` planes |
 | plate with a hole | the plate `[−1, 1]² × [0, 1/4]`, the cylinder, its seams | plate; capped cylinder |
-| sphere ∩ box | the box, the sphere of radius `3/2`, its seam `x = 0` | box; ball |
+| sphere ∩ box | the box, the sphere of radius `3/2`, its seams `x = 0`, `y = 0`, `z = 0` | box; ball |
 | cone | `x² + y² = z²`, its two axial seams, the nappe plane `z = 0`, the cap `z = 1` | the cone between `z = 0` and `z = 1` |
 | seamed cylinder | the cylinder, its seams, the caps `z = ±1` | the capped cylinder |
 
@@ -42,7 +42,7 @@ def plateHole : List Quadric × List SForm :=
   ([pl 1 0 0 1, pl 1 0 0 (-1), pl 0 1 0 1, pl 0 1 0 (-1), pl 0 0 1 0, pl 0 0 1 (-1/4)] ++ [cyl] ++
     seams, [boxF, cylCapF])
 def sphereBox : List Quadric × List SForm :=
-  (box ++ [⟨1, 1, 1, 0, 0, 0, 0, 0, 0, -9/4⟩, pl 1 0 0 0], [boxF, .lit 6 .neg])
+  (box ++ [⟨1, 1, 1, 0, 0, 0, 0, 0, 0, -9/4⟩, pl 1 0 0 0, pl 0 1 0 0, pl 0 0 1 0], [boxF, .lit 6 .neg])
 def cone : List Quadric × List SForm :=
   ([⟨1, 1, -1, 0, 0, 0, 0, 0, 0, 0⟩] ++ seams ++ [pl 0 0 1 0, pl 0 0 1 (-1)],
    [.and (.lit 0 .neg) (.and (.lit 3 .pos) (.lit 4 .neg))])

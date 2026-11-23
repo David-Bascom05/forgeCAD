@@ -31,6 +31,7 @@ import ForgeExact.DecideOnce.RootCover
 import ForgeExact.DecideOnce.QPropose
 import ForgeExact.DecideOnce.QSweep
 import ForgeExact.DecideOnce.QSing
+import ForgeExact.DecideOnce.QEnum
 import ForgeExact.DecideOnce.QSample
 import ForgeExact.DecideOnce.QLedger
 import ForgeExact.DecideOnce.QArc

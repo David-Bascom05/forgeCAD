@@ -11,7 +11,7 @@ Each curved face gets fixed separator planes, read off its stored frame exactly:
 | plane | none |
 | cylinder | `axisPlane o z`: through the axis `o + t z`, normal `z × e` with `e` the first coordinate axis not parallel to `z`; and `axisPlane2 o z`, normal `z × (z × e)`, orthogonal to it |
 | cone | both axial planes, and the **nappe plane** `s z·(p − o) + r c = 0` (`QFace.nappe`'s zero set), through the apex |
-| sphere | the plane `x = o.x` through the centre |
+| sphere | the three planes `x = o.x`, `y = o.y`, `z = o.z` through the centre |
 | torus | the axial plane, and the equatorial plane `z·(p − o) = 0` |
 
 Theorems:
@@ -143,6 +143,11 @@ theorem nappePlane_on (f : QFace) (hk : f.kind = .cone) (p : V3) :
 
 /-- The plane `x = o.x` through a sphere's centre. -/
 def centrePlane (o : V3) : Plane := ⟨⟨1, 0, 0⟩, o.x⟩
+/-- The planes `y = o.y` and `z = o.z` through it. Points mirrored in a plane through the centre
+share every other sign: the vertex certificate (U) refuses a sphere ∩ box seamed by `x = o.x`
+alone (its edges `x = y = ±1` meet the sphere twice, mirrored in `z`). -/
+def centrePlaneY (o : V3) : Plane := ⟨⟨0, 1, 0⟩, o.y⟩
+def centrePlaneZ (o : V3) : Plane := ⟨⟨0, 0, 1⟩, o.z⟩
 
 theorem centrePlane_on (o : V3) : (centrePlane o).eval o = 0 := by
   simp only [centrePlane, Plane.eval, V3.dot]; grind
@@ -159,7 +164,7 @@ def seamsOf (f : QFace) : List Plane :=
   | .plane => []
   | .cyl => [axisPlane f.o f.z, axisPlane2 f.o f.z]
   | .cone => [axisPlane f.o f.z, axisPlane2 f.o f.z, nappePlane f]
-  | .sphere => [centrePlane f.o]
+  | .sphere => [centrePlane f.o, centrePlaneY f.o, centrePlaneZ f.o]
   | .torus => [axisPlane f.o f.z, equatorPlane f.o f.z]
 
 /-- The seams of all faces, one per point set. -/
@@ -190,7 +195,7 @@ theorem seamsOf_nz {f : QFace} (hf : f.WF) : ∀ p ∈ seamsOf f, p.n ≠ ⟨0, 
     cases f.z
     simp only [V3.mk.injEq]
     exact fun a b c => ⟨a, b, c⟩
-  · simp [centrePlane]
+  · simp [centrePlane, centrePlaneY, centrePlaneZ]
   · refine ⟨axisPlane_nz (hz (by simp [hk])) _, ?_⟩
     exact hz (by simp [hk])
 

@@ -61,12 +61,36 @@ def curvedLedger (nc : Nat) (forms : List SForm) (ss : List QS) : Ledger :=
 def sidesOk (L : Ledger) (ss : List QS) : Bool :=
   L.facets.all fun φ => decide (φ.plus ∈ ss.map (·.cov)) && decide (φ.minus ∈ ss.map (·.cov))
 
+/-- A covector's zero positions. -/
+def zeroIdxs (X : Cov) : List Nat := (List.range X.length).filter fun i => X[i]? == some .zero
+
+def qnil : Quadric := ⟨0, 0, 0, 0, 0, 0, 0, 0, 0, 0⟩
+
+/-- The triple whose common points hold every point of the vertex candidate `v`: three of its
+zero carriers, or, with two zeros, the pair and its turning-point quadric. -/
+def uTriple (qs : List Quadric) (v : Cov) : Option (Quadric × Quadric × Quadric) :=
+  match zeroIdxs v with
+  | i :: j :: k :: _ => some (qs.getD i qnil, qs.getD j qnil, qs.getD k qnil)
+  | [i, j] => some (qs.getD i qnil, qs.getD j qnil, critQ (qs.getD i qnil) (qs.getD j qnil))
+  | _ => none
+
+/-- **(U), in the sampling frame**: the triple's complete list has a covector for every point, and exactly
+one carries `v`. -/
+def vertOneAt (qs : List Quadric) (v : Cov) : Bool :=
+  match uTriple qs v with
+  | some t => match enumTriple t.1 t.2.1 t.2.2 rootFuel with
+    | some ds => ds.all (fun d => (d.cov qs).isSome) &&
+        (ds.filter fun d => d.cov qs == some v).length == 1
+    | none => false
+  | none => false
+
 /-- **The curved ledger**, checked. `none`: a sample step undecided, a side unsampled, or the
-split unsound. Never a wrong ledger. -/
+split unsound, or a vertex candidate not certified one point (U). Never a wrong ledger. -/
 def qledger (qs : List Quadric) (forms : List SForm) : Option Ledger := do
-  let ss ← samplesOf qs
+  let (f, ss) ← samplesOfF qs
   let L := curvedLedger qs.length forms ss
-  if L.splitOk && sidesOk L ss then some L else none
+  if L.splitOk && sidesOk L ss && L.verts.all (vertOneAt (qs.map (inFrame f))) then some L
+  else none
 
 /-! ## The fields that follow from realisation -/
 
@@ -75,13 +99,15 @@ theorem qledger_spec' {qs : List Quadric} {forms : List SForm} {L : Ledger}
     ∃ ss, L = curvedLedger qs.length forms ss ∧ L.splitOk = true ∧ sidesOk L ss = true := by
   unfold qledger at h
   simp only [Option.bind_eq_bind, Option.bind_eq_some_iff] at h
-  obtain ⟨ss, -, h⟩ := h
+  obtain ⟨⟨f, ss⟩, -, h⟩ := h
+  dsimp only at h
   by_cases hc : ((curvedLedger qs.length forms ss).splitOk &&
-      sidesOk (curvedLedger qs.length forms ss) ss) = true
+      sidesOk (curvedLedger qs.length forms ss) ss &&
+      (curvedLedger qs.length forms ss).verts.all (vertOneAt (qs.map (inFrame f)))) = true
   · rw [if_pos hc] at h
     cases h
     simp only [Bool.and_eq_true] at hc
-    exact ⟨ss, rfl, hc.1, hc.2⟩
+    exact ⟨ss, rfl, hc.1.1, hc.1.2⟩
   · rw [if_neg hc] at h; cases h
 
 section Split
@@ -131,13 +157,16 @@ theorem qledger_spec {qs : List Quadric} {forms : List SForm} {L : Ledger}
       L.splitOk = true ∧ sidesOk L ss = true := by
   unfold qledger at h
   simp only [Option.bind_eq_bind, Option.bind_eq_some_iff] at h
-  obtain ⟨ss, hss, h⟩ := h
+  obtain ⟨⟨f, ss⟩, hss, h⟩ := h
+  dsimp only at h
   by_cases hc : ((curvedLedger qs.length forms ss).splitOk &&
-      sidesOk (curvedLedger qs.length forms ss) ss) = true
+      sidesOk (curvedLedger qs.length forms ss) ss &&
+      (curvedLedger qs.length forms ss).verts.all (vertOneAt (qs.map (inFrame f)))) = true
   · rw [if_pos hc] at h
     cases h
     simp only [Bool.and_eq_true] at hc
-    exact ⟨ss, samplesOf_realised M hss, rfl, hc.1, hc.2⟩
+    have hs : samplesOf qs = some ss := by simp [samplesOf, hss]
+    exact ⟨ss, samplesOf_realised M hs, rfl, hc.1.1, hc.1.2⟩
   · rw [if_neg hc] at h; cases h
 
 theorem realised_of_mem {qs : List Quadric} {ss : List QS} (hr : ∀ s ∈ ss, RealCov M qs s.cov)
@@ -290,6 +319,49 @@ theorem qledger_boundary (h : qledger qs forms = some L) :
     generalize (formOf forms j).onCov φ.minus = b
     cases a <;> cases b <;> decide
 
+theorem length_one_eq {α : Type} {l : List α} (h : l.length = 1) {a b : α} (ha : a ∈ l)
+    (hb : b ∈ l) : a = b := by
+  match l, h with
+  | [x], _ =>
+    simp only [List.mem_singleton] at ha hb
+    rw [ha, hb]
+
+/-- **(U) makes the vertex candidate one point**: two points with covector `v`, both common points
+of `v`'s triple, are equal. -/
+theorem vertOneAt_spec {qs : List Quadric} {v : Cov} (h : vertOneAt qs v = true) :
+    ∃ t, uTriple qs v = some t ∧ ∀ p p' : PK K,
+      Quadric.evK M t.1 p = 0 → Quadric.evK M t.2.1 p = 0 → Quadric.evK M t.2.2 p = 0 →
+      Quadric.evK M t.1 p' = 0 → Quadric.evK M t.2.1 p' = 0 → Quadric.evK M t.2.2 p' = 0 →
+      covOfK (qs.map fun q => Quadric.evK M q) p = v →
+      covOfK (qs.map fun q => Quadric.evK M q) p' = v → p = p' := by
+  unfold vertOneAt at h
+  split at h
+  · rename_i t ht
+    refine ⟨t, ht, ?_⟩
+    split at h
+    · rename_i ds hds
+      simp only [Bool.and_eq_true, List.all_eq_true, beq_iff_eq] at h
+      obtain ⟨hall, hlen⟩ := h
+      have pick : ∀ p : PK K, Quadric.evK M t.1 p = 0 → Quadric.evK M t.2.1 p = 0 →
+          Quadric.evK M t.2.2 p = 0 → covOfK (qs.map fun q => Quadric.evK M q) p = v →
+          ∃ d ∈ ds.filter (fun d => d.cov qs == some v), d.at M p := by
+        intro p h1 h2 h3 hv
+        obtain ⟨x, y, z⟩ := p
+        obtain ⟨d, hd, hat⟩ := enumTriple_complete M hds h1 h2 h3
+        obtain ⟨X, hX⟩ := Option.isSome_iff_exists.mp (hall d hd)
+        have := PtD.cov_spec M hX hat
+        rw [hv] at this
+        subst this
+        exact ⟨d, List.mem_filter.mpr ⟨hd, by simp [hX]⟩, hat⟩
+      intro p p' h1 h2 h3 h1' h2' h3' hv hv'
+      obtain ⟨d, hd, hat⟩ := pick p h1 h2 h3 hv
+      obtain ⟨d', hd', hat'⟩ := pick p' h1' h2' h3' hv'
+      have := length_one_eq hlen hd hd'
+      subst this
+      exact PtD.at_unique M hat hat'
+    · cases h
+  · cases h
+
 /-- The bodies are compatible with every cell (`qform_compat`). -/
 theorem qledger_compat (T : Cov) (i : Nat) :
     (covCellK (carriersOf M qs) T).Sub (bodiesOf M qs forms i) ∨
@@ -298,18 +370,9 @@ theorem qledger_compat (T : Cov) (i : Nat) :
 
 end Model
 
--- the unit sphere, cut by y = 0 and z = 0, as one body: "inside the sphere"
-def showCov (X : Cov) : String :=
-  String.ofList (X.map fun s => match s with | .neg => '-' | .zero => '0' | .pos => '+')
-
--- the unit sphere, cut by y = 0 and z = 0, as one body "inside the sphere": its 4 facets, 4 arcs
--- and the vertex covector of (±1, 0, 0)
-def sameSet (a b : List String) : Bool := a.length == b.length && a.all (b.contains ·)
-
-#guard (qledger [sphere1, planeY0, planeZ] [.lit 0 .neg]).map
-  (fun L => sameSet (L.facets.map showCov) ["0-+", "0--", "0++", "0+-"] &&
-    sameSet (L.edges.map showCov) ["00+", "00-", "0-0", "0+0"] &&
-    sameSet (L.verts.map showCov) ["000"]) = some true
+-- the unit sphere cut by y = 0 and z = 0 (not by its own seam): the covector (0, 0, 0) is two points,
+-- (±1, 0, 0), so the vertex certificate (U) refuses, as it must
+#guard (qledger [sphere1, planeY0, planeZ] [.lit 0 .neg]).isNone
 
 /-- A plane `a x + b y + c z + d = 0`. -/
 def planeQ (a b c d : Rat) : Quadric := ⟨0, 0, 0, 0, 0, 0, a, b, c, d⟩
