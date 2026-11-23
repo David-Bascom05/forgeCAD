@@ -21,10 +21,10 @@
 
 mod index;
 mod sort;
-mod uf;
+mod union_find;
 
 pub use index::Index;
-use uf::Uf;
+use union_find::Uf;
 
 /// A side of a carrier class: below it, on it, above it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -148,7 +148,7 @@ pub fn zero_idx(x: &[Sgn]) -> usize {
 
 /// `Cov.isFacet`: exactly one zero.
 pub fn is_facet(x: &[Sgn]) -> bool {
-    let mut n = 0;
+    let mut n: usize = 0;
     let mut i = 0;
     while i < x.len() {
         if x[i] == Sgn::Zero {
