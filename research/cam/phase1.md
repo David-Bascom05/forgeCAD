@@ -78,8 +78,11 @@ notch's sharp inside corners (no end mill reaches them).
 2. G4 (leftover) is checked: per z band, the final stock less the part's section grown by tol,
    exactly (booleans); the flange has none, a facing-only program lists its regions. The
    reasons (tool radius, reach) are not yet classified: every region says "uncut".
-3. Ops: slot, chamfer (deburr), thread milling, engraving, inside contours of pockets with
-   islands from the part; helical ramps (the B&B certifies them; generation is missing).
+3. Ops: done since this note: engraving, thread milling (declared Δ), edge_break (chamfer /
+   deburr), helical ramps in pockets. cam/pocket-islands: `slot` (end mill along centrelines,
+   ramped along the first line) and pockets of the section keep their islands (the region is
+   the hole less the section; before, the island was ignored and the pocket refused as a
+   gouge). Slot certification is slow (3.5 s for two slots, ~148k B&B cells: gap 5).
 4. Declared removals Δ (deburr, chamfer and thread milling where the model lacks the geometry).
 5. Speed: a grid over face boxes and shared distances (−40% instructions); the 10⁵-move line at
    2.7 s is above the 1 s target; next, an f64 filter with a proven error bound.

@@ -55,7 +55,8 @@ prog  = program(op1, post: "fanuc", number: 1001)
 | `clear(SETUP, tool:, from:, to:, step:, stepover:, leave:, ramp:)` | everything between the stock outline and the part's section, as offset passes |
 | `contour(SETUP, tool:, side:, from:, to:, step:, leave:)` | the part's outline (`side: "outside"`) or its holes (`"inside"`) at the section |
 | `pocket(SETUP, PART.HOLE, tool:, stepover:, step:, leave:, ramp:)` | a hole feature's circle, to its depth |
-| `pocket(SETUP, tool:, from:, to:, stepover:, step:, leave:, ramp:)` | every hole and slot of the part's section between the heights |
+| `pocket(SETUP, tool:, from:, to:, stepover:, step:, leave:, ramp:)` | every hole and slot of the part's section between the heights, each less the part's section there (islands standing in it, a boss in a well, are kept: examples/machined/well_island_cam.fg) |
+| `slot(SETUP, PART.SKETCH, tool:, depth:, step:, from:, ramp:)` | an end mill (flat or bull) along the sketch's lines, arcs and circles (not construction), on a plane facing +z, in levels down to `depth`: the groove the tool's width, modelled in the part (G1 against the part). `ramp: DEG` enters along each curve's first line, back and forth at that angle from the level above; else a plunge. The stock records each curve's band of the tool's radius as cleared (above the corner radius for a bull). examples/machined/slot_plate_cam.fg |
 | `engrave(SETUP, PART.SKETCH, tool:, depth:, step:, from:)` | the tool's tip along the sketch's lines, arcs and circles (not construction), on a plane facing +z, in levels down to `depth` below it. The groove must be in the model (G1 is checked against the part, never a blanket tolerance); the stock records each line's and circle's band of the tip's radius as cleared (a V tool clears more, so G4 may list the rest of the groove) |
 | `thread_mill(SETUP, PART.HOLE, tool:, length:)` | a hole's recorded thread (`thread:`, or `screw:` with `fit: "tap"`), the model not carrying it: declares a cosmetic thread Δ per place (the ring from the bore to the major diameter over `length`, default the depth less two pitches), listed in the op's `removals`, and is certified against P ∖ Δ (never a blanket tolerance). Down the bore, in to the radius, up a helix of the pitch (G3: right hand), out |
 | `drill(SETUP, PART.HOLE, plan: "auto")` | the plan from the hole feature: spot, drill (peck past 3 D), tap for a thread; `plan: "drill"` leaves the thread (to `thread_mill`) |
@@ -90,7 +91,7 @@ ok, schema: "forgecad.cam/1", certification (full | except G5 | refused), errors
 setups[]   name, part, machine, wcs {origin, axes, offset}, stock {kind, min, max}, tol, clearance, at,
            heights {clear, retract}, fixture {kind, name, across, jaw_top, clamp, clearance,
            pieces[] {name, min, max}} | null
-ops[]      name, kind (facing|clear|contour|pocket|drill|engrave|thread_mill), setup, status (built|refused),
+ops[]      name, kind (facing|clear|contour|pocket|drill|engrave|slot|thread_mill|edge_break), setup, status (built|refused),
            tool {id, T, H, type, d, holder, stickout} | null, plan[] (hole plans),
            feeds {rpm, vc, fz, hex, f, power_kw} | null,
            path {moves, length_cut, length_rapid, time_s},
@@ -114,5 +115,5 @@ minus what each op provably cleared (kernel/forge-cam/src/stock.rs), so it conta
 
 2.5D on parts whose faces are planes, and cylinders, cones and tori about z (others are refused by kind, typed):
 facing, clearing, contours, hole pockets and hole plans, with linking by retract. Not yet:
-adaptive clearing (patents first), 3-axis surfacing, 3+2, turning, 5-axis; slots, chamfer mills,
+adaptive clearing (patents first), 3-axis surfacing, 3+2, turning, 5-axis; chamfer mills,
 threads modelled as helicoidal faces (`thread(hole:)`): the lowering refuses them, so a modelled thread is milled as a declared Δ only when the model records it instead.

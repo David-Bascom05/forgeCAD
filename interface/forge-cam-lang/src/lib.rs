@@ -861,7 +861,7 @@ impl Cam {
                 });
                 Ok(V::Setup(self.setups.len() - 1))
             }
-            "facing" | "contour" | "pocket" | "clear" | "drill" | "engrave" | "thread_mill"
+            "facing" | "contour" | "pocket" | "clear" | "drill" | "engrave" | "slot" | "thread_mill"
             | "edge_break" => self.op(name, f, a),
             "soft_jaw" => self.soft_jaw(name, a),
             "program" => {
@@ -1105,14 +1105,40 @@ impl Cam {
         h: Heights,
         feed: (f64, f64),
         step: f64,
+        slot: bool,
         voids: &mut Vec<(Option<Region>, f64)>,
     ) -> Result<Vec<OpPath>, String> {
+        let what = if slot { "slot" } else { "engrave" };
         let (pi, sk) = match a.get("#1") {
             Some(V::Sketch(p, n)) if *p == self.setups[su].part => (*p, n.clone()),
             Some(V::Sketch(..)) => {
-                return Err("engrave: the sketch is on the part the other way up: engrave it in a setup that holds it so".into());
+                return Err(format!(
+                    "{what}: the sketch is on the part the other way up: cut it in a setup that holds it so"
+                ));
             }
-            _ => return Err("engrave(SETUP, PART.SKETCH, tool:, depth:)".into()),
+            _ => return Err(format!("{what}(SETUP, PART.SKETCH, tool:, depth:)")),
+        };
+        // a slot: an end mill along the sketch's curves, its whole width; the band of radius
+        // dc/2 about each curve is cleared from the corner radius above the floor up (a flat
+        // end's disk at its tip, a bull's above its corners)
+        let (tip, lift) = if slot {
+            match t.tool.kind {
+                Kind::Flat => (0.5 * t.tool.dc, 0.0),
+                Kind::Bull => (0.5 * t.tool.dc, t.tool.re.max(0.0)),
+                _ => return Err("slot: an end mill (flat or bull); a pointed tool engraves".into()),
+            }
+        } else {
+            (0.5 * t.tool.tip_d.max(0.0), 0.0)
+        };
+        // a ramped entry along each curve's first line, at this angle (degrees); else plunges
+        let ramp = match a.get("ramp") {
+            None => None,
+            Some(V::Num(x)) if slot && *x > 0.0 && *x <= 30.0 => Some(*x),
+            Some(_) => {
+                return Err(format!(
+                    "{what}: ramp: an angle in degrees, over 0 and at most 30 (slots only)"
+                ));
+            }
         };
         let part = &self.parts[pi];
         let opts = || forge_lang::Options {
@@ -1123,7 +1149,7 @@ impl Cam {
         // path is certified as posted)
         let ans = forge_lang::query::ask(&part.src, Some(part.pdir.clone()), None, &format!("frame {sk}"));
         if !ans.ok {
-            return Err(format!("engrave: {}", ans.text.trim()));
+            return Err(format!("{what}: {}", ans.text.trim()));
         }
         let v3 = |k: &str| -> Option<[f64; 3]> {
             let Json::Obj(fs) = &ans.json else { return None };
@@ -1135,12 +1161,12 @@ impl Cam {
         };
         let (o, x, y, z) = match (v3("origin"), v3("x"), v3("y"), v3("z")) {
             (Some(o), Some(x), Some(y), Some(z)) => (o, x, y, z),
-            _ => return Err("engrave: the sketch's frame".into()),
+            _ => return Err(format!("{what}: the sketch's frame")),
         };
         if (z[2] - 1.0).abs() > 1e-9 || z[0].abs() > 1e-9 || z[1].abs() > 1e-9 {
-            return Err("engrave: the sketch's plane must face +z in this setup".into());
+            return Err(format!("{what}: the sketch's plane must face +z in this setup"));
         }
-        let view = forge_lang::sketch_view(&part.src, &sk, opts()).ok_or("engrave: the sketch")?;
+        let view = forge_lang::sketch_view(&part.src, &sk, opts()).ok_or(format!("{what}: the sketch"))?;
         let s = &view.s;
         let w = |p: forge_math::Point2| [o[0] + x[0] * p.x + y[0] * p.y, o[1] + x[1] * p.x + y[1] * p.y];
         // each curve: its start, and its moves as (to, Some((centre, cw)) for an arc)
@@ -1148,7 +1174,6 @@ impl Cam {
         let mut curves: Vec<Piece> = vec![];
         // the sketch's handedness in the part's xy: x × y along +z keeps arcs' sense
         let flip = x[0] * y[1] - x[1] * y[0] < 0.0;
-        let tip = 0.5 * t.tool.tip_d.max(0.0);
         let mut bands: Vec<Region> = vec![];
         for id in s.entity_ids() {
             if s.is_construction(id) {
@@ -1222,27 +1247,72 @@ impl Cam {
         }
         if curves.is_empty() {
             return Err(format!(
-                "engrave: the sketch `{sk}` has no lines, arcs or circles to follow"
+                "{what}: the sketch `{sk}` has no lines, arcs or circles to follow"
             ));
         }
         let top = get_num(a, "from", Some(o[2]))?;
         let depth = get_num(a, "depth", None)?;
         // a NaN depth is refused too
         if depth.is_nan() || depth <= 0.0 {
-            return Err("engrave: depth > 0".into());
+            return Err(format!("{what}: depth > 0"));
         }
         let bottom = o[2] - depth;
         let mut mv = vec![];
+        let mut above = top;
         for z in ops::levels(top, bottom, step) {
             for (p0, ms) in &curves {
                 mv.push(PMove::Rapid {
                     to: [p0[0], p0[1], h.retract],
                 });
-                mv.push(PMove::Line {
-                    to: [p0[0], p0[1], z],
-                    f: feed.1,
-                    phase: Phase::Plunge,
-                });
+                // the first line's direction and length, for a ramp along it
+                let first_line = match ms.first() {
+                    Some((q, None)) => {
+                        let (dx, dy) = (q[0] - p0[0], q[1] - p0[1]);
+                        let len = (dx * dx + dy * dy).sqrt();
+                        if len > 0.0 { Some((*q, len)) } else { None }
+                    }
+                    _ => None,
+                };
+                match (ramp, first_line) {
+                    (Some(deg), Some((q, len))) => {
+                        // down to the level above (cleared there, or the top), then back and
+                        // forth along the line, descending at the angle, to the level, and back
+                        // to the curve's start at the level if the ramp ended at the far end
+                        mv.push(PMove::Line {
+                            to: [p0[0], p0[1], above],
+                            f: feed.1,
+                            phase: Phase::Plunge,
+                        });
+                        let (sa, ca) = forge_math::dmath::sin_cos(deg.to_radians());
+                        let run = (above - z) * ca / sa;
+                        let n = ((run / len - 1e-9).ceil().max(1.0)) as usize;
+                        for k in 1..=n {
+                            let zk = if k == n {
+                                z
+                            } else {
+                                above + (z - above) * k as f64 / n as f64
+                            };
+                            let p = if k % 2 == 1 { q } else { *p0 };
+                            mv.push(PMove::Line {
+                                to: [p[0], p[1], zk],
+                                f: feed.1,
+                                phase: Phase::Cut,
+                            });
+                        }
+                        if n % 2 == 1 {
+                            mv.push(PMove::Line {
+                                to: [p0[0], p0[1], z],
+                                f: feed.0,
+                                phase: Phase::Cut,
+                            });
+                        }
+                    }
+                    _ => mv.push(PMove::Line {
+                        to: [p0[0], p0[1], z],
+                        f: feed.1,
+                        phase: Phase::Plunge,
+                    }),
+                }
                 let mut at = *p0;
                 for (to, arc) in ms {
                     mv.push(match arc {
@@ -1266,6 +1336,7 @@ impl Cam {
                     phase: Phase::Link,
                 });
             }
+            above = z;
         }
         let first = curves[0].0;
         mv.push(PMove::Rapid {
@@ -1285,7 +1356,7 @@ impl Cam {
             }
         }
         if let Some(u) = u {
-            voids.push((Some(u), bottom));
+            voids.push((Some(u), bottom + lift));
         }
         Ok(vec![OpPath {
             tool: ti,
@@ -1922,6 +1993,7 @@ impl Cam {
                 "pocket" => "pocket",
                 "clear" => "clear",
                 "engrave" => "engrave",
+                "slot" => "slot",
                 "thread_mill" => "thread_mill",
                 "edge_break" => "edge_break",
                 _ => "drill",
@@ -1978,7 +2050,8 @@ impl Cam {
                 out.feeds = fd;
                 let h = s.heights;
                 match kind {
-                    "engrave" => self.engrave(su, a, t, ti, h, (vf, vp), step, &mut voids),
+                    "engrave" => self.engrave(su, a, t, ti, h, (vf, vp), step, false, &mut voids),
+                    "slot" => self.engrave(su, a, t, ti, h, (vf, vp), step, true, &mut voids),
                     "thread_mill" => self.thread_mill(su, a, t, ti, h, (vf, vp), &mut out, &mut voids),
                     "edge_break" => self.edge_break(su, a, t, ti, h, (vf, vp), &mut out),
                     "facing" => {
@@ -2129,9 +2202,21 @@ impl Cam {
                             let leave = get_num(a, "leave", Some(0.0))?;
                             let mut paths = vec![];
                             for l in &holes.loops {
-                                let rg = Region {
+                                // the hole's inside less the part's section there: the islands
+                                // standing in it (bosses) are kept out of the pocket, exactly
+                                let inside = Region {
                                     loops: vec![l.clone()],
                                 };
+                                let free = forge_cam_geom::boolean::boolean(
+                                    &inside,
+                                    &sec,
+                                    forge_cam_geom::boolean::Op::Diff,
+                                )
+                                .map_err(|e| format!("the pocket less its islands: {e:?}"))?;
+                                if free.is_empty() {
+                                    continue;
+                                }
+                                let rg = forge_cam_geom::boolean::region_of(&free);
                                 paths.push(
                                     ops::pocket(
                                         &rg,

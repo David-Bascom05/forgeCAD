@@ -588,3 +588,98 @@ fn edge_break_certifies_the_chamfer_and_refuses_what_it_cannot_cut() {
         assert!(b.fix.is_some(), "{why}: {:?}", b.refusal);
     }
 }
+
+/// A pocket of the section keeps the islands standing in it: well_island.fg's well has a boss in it, to
+/// the plate's top. The pocket's region is the well less the part's section, so the passes go
+/// round the boss (certified: no gouge), and G4 leaves only the well's four corners (a 6 mm
+/// tool) besides the stock outside the plate, which nothing here cuts.
+#[test]
+fn a_pocket_keeps_its_islands() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    let src = std::fs::read_to_string(dir.join("well_island_cam.fg")).unwrap();
+    let cam = forge_cam_lang::run(&src, &dir);
+    assert!(
+        cam.ok,
+        "{:?}",
+        cam.ops.iter().map(|o| (&o.name, &o.refusal)).collect::<Vec<_>>()
+    );
+    let well = cam.ops.iter().find(|o| o.name == "well").unwrap();
+    assert!(well.status == "built" && well.pairs > 0);
+    // the passes run on both sides of the boss (x 25 to 35) at its height
+    let xs: Vec<f64> = well.paths[0]
+        .moves
+        .iter()
+        .filter_map(|m| match m {
+            forge_cam::ops::PMove::Line { to, .. } | forge_cam::ops::PMove::Arc { to, .. }
+                if (to[1] - 20.0).abs() < 4.0 && to[2] < 12.0 =>
+            {
+                Some(to[0])
+            }
+            _ => None,
+        })
+        .collect();
+    assert!(
+        xs.iter().any(|x| *x < 25.0) && xs.iter().any(|x| *x > 35.0),
+        "{xs:?}"
+    );
+    assert!(cam.leftover_done);
+    let corners = [[8.0, 8.0], [52.0, 8.0], [52.0, 32.0], [8.0, 32.0]];
+    for l in cam.leftover.iter().filter(|l| l.z0 >= 6.0 - 1e-9) {
+        for b in &l.boxes {
+            // the stock's ring outside the plate, or a corner of the well
+            let ring = b[0] <= 0.0 && b[2] >= 60.0;
+            let corner = corners.iter().any(|c| {
+                (b[0] - c[0]).abs().min((b[2] - c[0]).abs()) < 1e-6
+                    && (b[1] - c[1]).abs().min((b[3] - c[1]).abs()) < 1e-6
+                    && b[2] - b[0] <= 6.0 + 1e-9
+            });
+            assert!(ring || corner, "{b:?}");
+        }
+    }
+}
+
+/// `slot`: an end mill along a sketch's centrelines, the modelled groove its width, ramped in
+/// along each line; certified (the cutter tangent to both walls within tol), and G4 finds the
+/// grooves cleared. A pointed tool is refused (that is engraving).
+#[test]
+fn slots_follow_their_centrelines() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    let src = std::fs::read_to_string(dir.join("slot_plate_cam.fg")).unwrap();
+    let cam = forge_cam_lang::run(&src, &dir);
+    assert!(
+        cam.ok,
+        "{:?}",
+        cam.ops.iter().map(|o| (&o.name, &o.refusal)).collect::<Vec<_>>()
+    );
+    let op = cam.ops.iter().find(|o| o.name == "slots").unwrap();
+    assert_eq!(op.kind, "slot");
+    // ramped: moves that descend while they travel along the line
+    let mut at = op.paths[0].start;
+    let mut ramps = 0;
+    for m in &op.paths[0].moves {
+        if let forge_cam::ops::PMove::Line { to, .. } = m {
+            if to[2] < at[2] && (to[0] != at[0] || to[1] != at[1]) {
+                ramps += 1;
+            }
+            at = *to;
+        } else if let forge_cam::ops::PMove::Rapid { to } | forge_cam::ops::PMove::Arc { to, .. } = m {
+            at = *to;
+        }
+    }
+    assert!(ramps >= 4, "{ramps}");
+    // the grooves are cleared: in their band nothing is left inside the plate
+    assert!(cam.leftover_done);
+    for l in cam.leftover.iter().filter(|l| l.z1 > 6.0 + 1e-9) {
+        for b in &l.boxes {
+            assert!(b[0] <= 0.0 && b[2] >= 60.0, "inside the plate: {b:?} in {l:?}");
+        }
+    }
+    // a pointed tool engraves; a slot takes an end mill
+    let cam = forge_cam_lang::run(&src.replace("tool(\"flat-6\"", "tool(\"chamfer-10-90\""), &dir);
+    let op = cam.ops.iter().find(|o| o.name == "slots").unwrap();
+    assert!(
+        op.refusal.as_deref().is_some_and(|r| r.contains("an end mill")),
+        "{:?}",
+        op.refusal
+    );
+}
