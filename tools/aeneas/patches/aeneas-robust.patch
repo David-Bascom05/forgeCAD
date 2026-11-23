@@ -83,6 +83,24 @@ index 52e846ba..7dddd073 100644
      Extract.extract_trait_impl ctx fmt ~is_rec trait_impl;
      EmitJson.record_trait_impl_if_enabled ctx trait_impl)
  
+diff --git a/src/extract/Extract.ml b/src/extract/Extract.ml
+index 6bdfabb7..f1477826 100644
+--- a/src/extract/Extract.ml
++++ b/src/extract/Extract.ml
+@@ -1186,9 +1186,10 @@ and extract_field_projector (span : Meta.span) (ctx : extraction_ctx)
+       let num_fields =
+         match proj.adt_id with
+         | TAdtId id -> (
+-            let d = TypeDeclId.Map.find id ctx.trans_types in
+-            match d.kind with
+-            | Struct fields -> Some (List.length fields)
++            (* forge: a projection of a type whose declaration was not translated (its group
++               failed, or it was cut by --opaque) is extracted as an ordinary projection *)
++            match TypeDeclId.Map.find_opt id ctx.trans_types with
++            | Some { kind = Struct fields; _ } -> Some (List.length fields)
+             | _ -> None)
+         | _ -> None
+       in
 diff --git a/src/pure/PureMicroPassesAnnots.ml b/src/pure/PureMicroPassesAnnots.ml
 index 8c63687e..b3db2c5d 100644
 --- a/src/pure/PureMicroPassesAnnots.ml
