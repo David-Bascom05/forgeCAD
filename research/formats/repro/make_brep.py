@@ -107,3 +107,23 @@ new = old.replace(pts[m.group(2)].group(2), ",".join(f"{x:.6f}" for x in far))
 text = text.replace(old, new)
 open(os.path.join(out, "far-line-origin.step"), "w").write(text)
 print(f"far-line-origin.step: box.step with LINE #{m.group(1)}'s origin moved 2 km along it: 1000 expected")
+
+# 4. a cylinder whose axis placement lies far along its axis (Onshape writes such): the same
+#    surface. A 5 by 20 cylinder, its CYLINDRICAL_SURFACE's origin moved 2 km along z
+from OCP.BRepPrimAPI import BRepPrimAPI_MakeCylinder
+
+cyl = BRepPrimAPI_MakeCylinder(5.0, 20.0).Shape()
+p = os.path.join(out, "cyl.step")
+step(cyl, p)
+text = open(p).read()
+m = re.search(r"#(\d+) = CYLINDRICAL_SURFACE\('',#(\d+),", text)
+ax = re.search(rf"#{m.group(2)} = AXIS2_PLACEMENT_3D\('',#(\d+),#(\d+),", text)
+pt = re.search(rf"#{ax.group(1)} = CARTESIAN_POINT\('',\(([^)]*)\)\)", text)
+d = [float(x) for x in re.search(rf"#{ax.group(2)} = DIRECTION\('',\(([^)]*)\)\)", text).group(1).split(",")]
+o = [float(x) for x in pt.group(1).split(",")]
+far = ",".join(f"{o[k] + 2e6 * d[k]:.6f}" for k in range(3))
+uses = len(re.findall(rf"#{ax.group(1)}[,)]", text))
+assert uses == 1, "the axis point is shared: moving it would move more than the axis"
+text = text.replace(pt.group(0), pt.group(0).replace(pt.group(1), far))
+open(os.path.join(out, "far-cylinder-axis.step"), "w").write(text)
+note("far-cylinder-axis.step", cyl, "cyl.step with its cylinder's axis origin moved 2 km along the axis: pi 25 20 expected")

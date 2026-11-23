@@ -289,6 +289,15 @@ impl<'a> Reader<'a> {
     }
 
     fn point(&self, id: u32) -> R<Point3> {
+        let p = self.point_anywhere(id)?;
+        if !forge_math::tol::in_model_box(p) {
+            return refuse(id, "CARTESIAN_POINT", "outside the 1 km model box");
+        }
+        Ok(p)
+    }
+
+    /// A point, wherever it lies: for a line's origin, which may lie anywhere along it.
+    fn point_anywhere(&self, id: u32) -> R<Point3> {
         let a = self.args_of(id, "CARTESIAN_POINT")?;
         let c = self.list(id, "CARTESIAN_POINT", a.get(1))?;
         if c.len() != 3 {
@@ -300,9 +309,6 @@ impl<'a> Reader<'a> {
             self.real(id, "CARTESIAN_POINT", c.get(1))? * m,
             self.real(id, "CARTESIAN_POINT", c.get(2))? * m,
         );
-        if !forge_math::tol::in_model_box(p) {
-            return refuse(id, "CARTESIAN_POINT", "outside the 1 km model box");
-        }
         Ok(p)
     }
 
@@ -324,8 +330,19 @@ impl<'a> Reader<'a> {
     }
 
     fn placement(&self, id: u32) -> R<Frame> {
+        self.placement_on(id, Free::Fixed)
+    }
+
+    /// A placement whose origin may be free: along its z axis (a cylinder's) or in its xy plane
+    /// (a plane's). Such an origin outside the model box is moved to the foot of the
+    /// perpendicular from the box's centre, as a LINE's origin is.
+    fn placement_on(&self, id: u32, free: Free) -> R<Frame> {
         let a = self.args_of(id, "AXIS2_PLACEMENT_3D")?;
-        let origin = self.point(self.reference(id, "AXIS2_PLACEMENT_3D", a.get(1))?)?;
+        let at = self.reference(id, "AXIS2_PLACEMENT_3D", a.get(1))?;
+        let origin = match free {
+            Free::Fixed => self.point(at)?,
+            _ => self.point_anywhere(at)?,
+        };
         let z = match a.get(2) {
             Some(Value::Ref(r)) => Some(self.direction(*r)?),
             _ => None,
@@ -345,6 +362,11 @@ impl<'a> Reader<'a> {
                     Vec3::X
                 }
             }
+        };
+        let origin = match free {
+            Free::Fixed => origin,
+            Free::AlongZ => rebased(at, origin, z)?,
+            Free::InPlane => rebased_in_plane(at, origin, z)?,
         };
         Ok(Frame::from_zx(origin, z, hint).unwrap_or_else(|| Frame::from_z(origin, z)))
     }
@@ -529,10 +551,12 @@ impl<'a> Reader<'a> {
         match name {
             "LINE" => {
                 let a = self.args_of(id, "LINE")?;
-                let origin = self.point(self.reference(id, "LINE", a.get(1))?)?;
+                let at = self.reference(id, "LINE", a.get(1))?;
+                let far = self.point_anywhere(at)?;
                 let v = self.reference(id, "LINE", a.get(2))?;
                 let va = self.args_of(v, "VECTOR")?;
                 let dir = self.direction(self.reference(v, "VECTOR", va.get(1))?)?;
+                let origin = rebased(at, far, dir)?;
                 Ok(Curve::Line(Line { origin, dir }))
             }
             "CIRCLE" => {
@@ -626,12 +650,12 @@ impl<'a> Reader<'a> {
             "PLANE" => {
                 let a = self.args_of(id, name)?;
                 Ok(Surface::Plane(Plane {
-                    frame: self.placement(self.reference(id, name, a.get(1))?)?,
+                    frame: self.placement_on(self.reference(id, name, a.get(1))?, Free::InPlane)?,
                 }))
             }
             "CYLINDRICAL_SURFACE" => {
                 let a = self.args_of(id, name)?;
-                let frame = self.placement(self.reference(id, name, a.get(1))?)?;
+                let frame = self.placement_on(self.reference(id, name, a.get(1))?, Free::AlongZ)?;
                 let radius = self.real(id, name, a.get(2))? * m;
                 if !positive(radius) {
                     return refuse(id, name, "radius not positive");
@@ -829,6 +853,51 @@ impl<'a> Reader<'a> {
             None => refuse(id, name, "no arc for its tube"),
         }
     }
+}
+
+/// Where a placement's origin may lie and still name the same surface.
+#[derive(Clone, Copy)]
+enum Free {
+    Fixed,
+    /// anywhere along its z axis: a cylinder's
+    AlongZ,
+    /// anywhere in its xy plane: a plane's
+    InPlane,
+}
+
+/// A plane's origin, which may lie anywhere in it: where it lies outside the model box, the foot
+/// of the perpendicular from the box's centre; a plane that misses the box is refused.
+fn rebased_in_plane(at: u32, p: Point3, normal: UnitVec3) -> R<Point3> {
+    if forge_math::tol::in_model_box(p) {
+        return Ok(p);
+    }
+    let n = Vec3::from(normal);
+    let foot = Point3::ORIGIN + n * p.to_vec().dot(n);
+    if !forge_math::tol::in_model_box(foot) {
+        return refuse(at, "CARTESIAN_POINT", "a plane that misses the 1 km model box");
+    }
+    Ok(foot)
+}
+
+/// A line's (or an axis') origin, which may lie anywhere along it (CATIA writes some kilometres
+/// out, Onshape some hundreds of metres): where it lies outside the model box, the foot of the
+/// perpendicular from the box's centre, the same line. Only a line that misses the box is
+/// refused. A point in the box is kept as written, so every line read before reads the same.
+fn rebased(at: u32, p: Point3, dir: UnitVec3) -> R<Point3> {
+    if forge_math::tol::in_model_box(p) {
+        return Ok(p);
+    }
+    let d = Vec3::from(dir);
+    let o = p.to_vec();
+    let foot = Point3::ORIGIN + (o - d * o.dot(d));
+    if !forge_math::tol::in_model_box(foot) {
+        return refuse(
+            at,
+            "CARTESIAN_POINT",
+            "a line or axis that misses the 1 km model box",
+        );
+    }
+    Ok(foot)
 }
 
 /// A curve's control net, for surfaces built by moving it. Conics become rational splines (exact)
