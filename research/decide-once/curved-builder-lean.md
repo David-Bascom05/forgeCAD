@@ -1,4 +1,4 @@
-# The curved face builder's Lean statements, against the float mapping (draft for agreement)
+# The curved face builder's Lean statements, against the float mapping (agreed with curved Rust, 2026-11-23)
 
 Context: curved-builder-mapping.md (dol-curved-rust, b3f88e2), agreed by the master on 2026-11-23.
 The common path is today's float code, with each tolerance decision replaced by a screen whose
@@ -24,6 +24,18 @@ Both discharge the same hypothesis. Nothing in Lean depends on which one ran.
 | `Star.star` (L2) | compact box, one point over the event, arms cover the rest ⇒ star | the same |
 
 ## Proposed new statements, one per screen of the mapping
+
+**S0. Keyed identities** (added by curved Rust, curved-fallback-rates.md at 7f83451). The most
+common questions on every curved boolean are coincidences by construction:
+- a curve ∩ edge point lies on that edge;
+- two cuts of one curve at one vertex are that vertex;
+- faces with equal exact carrier classes share a surface;
+- a face's vertex lies on a coincident face.
+
+These are decided by provenance and exact class keys, not by a screen, because no sign screen
+can decide a zero. In Lean a keyed decision is the fact it names: equal carriers, or a point that
+is the meet of the named carriers. Real near-misses are typed refusals: none on the gate parts,
+and 58 decisions in 16 of 6,440 fuzz plans.
 
 **S1. Sign.** Contract 1, `sign_filter_iv`: the enclosure holds `q(p)`. This is the IEEE session's statement. Lean consumes it as `sgn q(p) = s`.
 
@@ -55,11 +67,24 @@ Lean: the cyclic order of the arcs round the vertex, in the face's tangent plane
   - the count runs along a sample conic, anchored at a trim sample pushed to the face side by `o_f`;
   - each crossing is an S2 piece.
 
-  **Question for curved Rust:** does your face builder use area on curved faces? If so, which chart: uv, or a projection?
+  Today's `split_face` decides holes by uv signed area (boolean.rs at 7f83451, B:5525–5606).
+  That chart is injective only inside one period window, and a cycle that wraps the axis is
+  skipped there, not decided. **Agreed:** S5 is the statement. The uv area may serve as an
+  alternative screen only for non-wrapping cycles on cylinders and cones, with the chart's
+  injectivity as its hypothesis.
 
 **S6. Orientation** (mapping `classify_specs`). There is no screen here. `o_f` is `same_sense` combined with the per-kind rule (FaceSense). The hypothesis "the body is bounded by its faces" comes from the input's validity (`forge_topo::check`), as F6 states it. A NoSeed ray's hits are S2 pieces along the ray.
 
 **S7. Rooms** (A8 flood). `Rooms.room_preconnected`: each flood step joins pieces whose closures meet in the room. A step is certified by a shared split facet (combinatorial), so there is no new screen.
+
+**The S2 piece** (agreed):
+- on a closed-form conic, the piece is a parameter interval of the closed form, and γ is analytic;
+- on a meet chain, it is one Bernstein chart's interval of the certified trace, and γ is a
+  polynomial there.
+
+**No runtime fallback to the exact reference** (owner ruling). The reference is the fuzz oracle
+only, and an undecided question is a typed refusal. "Fallback" above therefore means a typed
+refusal, or an exact keyed fact (S0).
 
 ## What the builder must hand to Lean, per face ledger
 
