@@ -91,11 +91,13 @@ fn lin() -> f64 {
 }
 
 /// The faces of the operands, in arena order (body 0's first), or `NotFlat`.
+#[inline(never)]
 fn inputs(bodies: &[&Body]) -> Result<Vec<In>, Skip> {
     if !bodies.iter().all(|b| flat(b)) {
         return Err(Skip::NotFlat);
     }
-    let mut out = Vec::new();
+    let mut out = Vec::with_capacity(bodies.iter().map(|b| b.face_ids().count()).sum());
+    let mut vs = Vec::new();
     for (k, b) in bodies.iter().enumerate() {
         for f in b.face_ids() {
             let face = b.face(f);
@@ -106,10 +108,10 @@ fn inputs(bodies: &[&Body]) -> Result<Vec<In>, Skip> {
             let n = pl.frame.z().get();
             let mut lo = [f64::INFINITY; 3];
             let mut hi = [f64::NEG_INFINITY; 3];
-            let mut loops = Vec::new();
-            let mut lboxes = Vec::new();
+            let mut loops = Vec::with_capacity(face.loops.len());
+            let mut lboxes = Vec::with_capacity(face.loops.len());
             for &lp in face.loops.iter() {
-                let mut vs = Vec::new();
+                vs.clear();
                 let (mut llo, mut lhi) = ([f64::INFINITY; 3], [f64::NEG_INFINITY; 3]);
                 for c in b.lp(lp).coedges() {
                     let v = b.coedge_start(c);
@@ -122,7 +124,7 @@ fn inputs(bodies: &[&Body]) -> Result<Vec<In>, Skip> {
                     }
                     vs.push(v);
                 }
-                loops.push(vs);
+                loops.push(vs.clone());
                 lboxes.push((llo, lhi));
             }
             if loops.is_empty() {
@@ -132,7 +134,11 @@ fn inputs(bodies: &[&Body]) -> Result<Vec<In>, Skip> {
             out.push(In {
                 body: k,
                 face: f,
-                pf: plane_f(&plane),
+                // (the frame's normal is the exact one's f64)
+                pf: PlaneF {
+                    n: [n.x, n.y, n.z],
+                    c: plane.c.to_f64(),
+                },
                 plane,
                 lo,
                 hi,
@@ -312,6 +318,7 @@ fn plainly_apart(a: &In, b: &In, k: f64) -> bool {
 
 /// §6.1 step 1: per face, its snapped plane (the representative's, in its own sense) and its
 /// representative's index; or ambiguous past the spread cap.
+#[inline(never)]
 fn snap(fs: &[In]) -> Result<(Vec<DyPlane>, Vec<usize>), Skip> {
     let l = lin();
     let n = fs.len();
@@ -325,6 +332,14 @@ fn snap(fs: &[In]) -> Result<(Vec<DyPlane>, Vec<usize>), Skip> {
                 break;
             }
             let (a, b) = (i.min(j), i.max(j));
+            // (grown boxes plainly apart in y or z: an empty region)
+            let gap = |k: usize| {
+                let (lo, hi) = (fs[a].lo[k].max(fs[b].lo[k]) - l, fs[a].hi[k].min(fs[b].hi[k]) + l);
+                lo - hi > 1e-12 * (1.0 + lo.abs() + hi.abs())
+            };
+            if gap(1) || gap(2) {
+                continue;
+            }
             if plainly_apart(&fs[a], &fs[b], 1.0) {
                 continue;
             }
@@ -375,7 +390,14 @@ fn snap(fs: &[In]) -> Result<(Vec<DyPlane>, Vec<usize>), Skip> {
 
 /// §6.1 step 2 (`Snap.vertexAt`): every vertex of every body from the snapped planes of the faces
 /// round it, the first independent three, which every one of them must hold.
-fn vertices(bodies: &[&Body], fs: &[In], planes: &[DyPlane], reg: &Region) -> Result<Vec<Pts>, Skip> {
+#[inline(never)]
+fn vertices(
+    bodies: &[&Body],
+    fs: &[In],
+    planes: &[DyPlane],
+    reps: &[usize],
+    reg: &Region,
+) -> Result<Vec<Pts>, Skip> {
     let need = &reg.near;
     let g = 4.0 * lin();
     let in_region = |p: Point3| match reg.bx {
@@ -385,41 +407,80 @@ fn vertices(bodies: &[&Body], fs: &[In], planes: &[DyPlane], reg: &Region) -> Re
             (0..3).all(|k| lo[k] - g <= q[k] && q[k] <= hi[k] + g)
         }
     };
-    let mut round: Vec<HashMap<VertexId, Vec<usize>>> = vec![HashMap::default(); bodies.len()];
-    for (i, f) in fs.iter().enumerate() {
-        for lp in &f.loops {
-            for &v in lp {
-                let r = round[f.body].entry(v).or_default();
-                if !r.contains(&i) {
-                    r.push(i);
+    // the snapped planes in f64: a face its own representative keeps its own shadow
+    let spf: Vec<PlaneF> = planes
+        .iter()
+        .enumerate()
+        .map(|(i, p)| if reps[i] == i { fs[i].pf } else { plane_f(p) })
+        .collect();
+    // per body: the faces round each vertex, as a table by vertex index (a counting sort, faces
+    // in arena order within a vertex)
+    let mut tabs: Vec<(Vec<u32>, Vec<u32>)> = Vec::with_capacity(bodies.len());
+    for k in 0..bodies.len() {
+        let mut count: Vec<u32> = Vec::new();
+        for f in fs.iter().filter(|f| f.body == k) {
+            for lp in &f.loops {
+                for &v in lp {
+                    if count.len() <= v.index() + 1 {
+                        count.resize(v.index() + 2, 0);
+                    }
+                    count[v.index() + 1] += 1;
                 }
             }
         }
+        for x in 1..count.len() {
+            count[x] += count[x - 1];
+        }
+        let mut at = count.clone();
+        let mut faces = vec![u32::MAX; *count.last().unwrap_or(&0) as usize];
+        for (i, f) in fs.iter().enumerate().filter(|(_, f)| f.body == k) {
+            for lp in &f.loops {
+                for &v in lp {
+                    // (a face once per vertex)
+                    let (s0, a) = (count[v.index()] as usize, at[v.index()] as usize);
+                    if a == s0 || faces[a - 1] != i as u32 {
+                        faces[a] = i as u32;
+                        at[v.index()] += 1;
+                    }
+                }
+            }
+        }
+        // compact out the slots a repeat left
+        let nv = count.len().saturating_sub(1);
+        let mut start = vec![0u32; nv + 1];
+        let mut out = Vec::with_capacity(faces.len());
+        for v in 0..nv {
+            out.extend_from_slice(&faces[count[v] as usize..at[v] as usize]);
+            start[v + 1] = out.len() as u32;
+        }
+        tabs.push((start, out));
     }
     let mut out = Vec::new();
-    for (k, rk) in round.into_iter().enumerate() {
+    for (k, (start, faces)) in tabs.into_iter().enumerate() {
+        let nv = start.len().saturating_sub(1);
         let pts = Pts {
-            exact: RefCell::new(HashMap::default()),
-            f: RefCell::new(HashMap::default()),
-            spf: planes.iter().map(plane_f).collect(),
-            round: rk,
+            exact: RefCell::new(vec![None; nv]),
+            f: RefCell::new(vec![None; nv]),
+            spf: spf.clone(),
+            start,
+            faces,
         };
         // the near faces' vertices in the region now, each checked (§6.1's ambiguity is decided
         // there); the others when a parity test or a ray first needs them
-        let mut keys: Vec<VertexId> = pts
-            .round
-            .iter()
-            .filter(|(v, fsr)| fsr.iter().any(|&i| need[i]) && in_region(bodies[k].vertex(**v).point))
-            .map(|(&v, _)| v)
-            .collect();
-        keys.sort();
-        for v in keys {
-            let ps: Vec<&DyPlane> = pts.round[&v].iter().map(|&i| &planes[i]).collect();
+        for v in 0..nv as u32 {
+            let r = pts.round(VertexId(v));
+            if r.is_empty()
+                || !r.iter().any(|&i| need[i as usize])
+                || !in_region(bodies[k].vertex(VertexId(v)).point)
+            {
+                continue;
+            }
+            let ps: Vec<&DyPlane> = r.iter().map(|&i| &planes[i as usize]).collect();
             let p = vertex_at(&ps).ok_or(Skip::Ambiguous(
                 "a vertex is not one point of the planes round it",
             ))?;
-            pts.f.borrow_mut().insert(v, p.to_f64());
-            pts.exact.borrow_mut().insert(v, p);
+            pts.f.borrow_mut()[v as usize] = Some(p.to_f64());
+            pts.exact.borrow_mut()[v as usize] = Some(p);
         }
         out.push(pts);
     }
@@ -507,6 +568,7 @@ struct Classes {
 const NONE: u32 = u32::MAX;
 
 /// The distinct snapped planes of the near faces, in arena order of their first face.
+#[inline(never)]
 fn classes(snapped: &[DyPlane], reps: &[usize], near: &[bool]) -> Classes {
     let mut planes: Vec<DyPlane> = Vec::new();
     let mut rep = Vec::new();
@@ -603,6 +665,7 @@ fn rule_at(rule: &Rule, m: &[bool]) -> bool {
 }
 
 /// §3a: the region round the tools, decided once from the inputs.
+#[inline(never)]
 fn region(bodies: &[&Body], fs: &[In], snapped: &[DyPlane], reps: &[usize], rule: &Rule) -> Region {
     let all = Region {
         bx: None,
@@ -711,6 +774,7 @@ fn region(bodies: &[&Body], fs: &[In], snapped: &[DyPlane], reps: &[usize], rule
 
 /// The six walls of the box as classes: lo walls (inside on their positive side), hi walls (on
 /// their negative side).
+#[inline(never)]
 fn add_walls(cls: &mut Classes, lo: [f64; 3], hi: [f64; 3]) {
     for a in 0..3 {
         for (x, inside) in [(lo[a], Sgn::Pos), (hi[a], Sgn::Neg)] {
@@ -1112,6 +1176,7 @@ impl Arr<'_> {
 
 /// The cells of class plane `c` within the box `[lo, hi]`: its section split by every class
 /// plane crossing it.
+#[inline(never)]
 fn arrange(cls: &Classes, pf: &[PlaneF], c: u32, lo: [f64; 3], hi: [f64; 3]) -> Plane2 {
     let pc = &cls.planes[c as usize];
     let nf = &pf[c as usize].n;
@@ -1243,6 +1308,7 @@ fn arrange(cls: &Classes, pf: &[PlaneF], c: u32, lo: [f64; 3], hi: [f64; 3]) -> 
 
 /// Is the exact point inside face `f`'s polygon (its loops, with exact vertices), by the parity
 /// of the perturbed ray toward +s in the plane's projection `(s, t)`.
+#[inline(never)]
 fn in_face(q: &HPoint, f: &In, pts: &Pts, planes: &[DyPlane], s: usize, t: usize) -> bool {
     let qf = q.to_f64();
     // (a loop's exact polygon is within a few LINEAR of its kernel box)
@@ -1268,22 +1334,39 @@ fn in_face(q: &HPoint, f: &In, pts: &Pts, planes: &[DyPlane], s: usize, t: usize
 }
 
 /// The exact vertices of one body, and their f64 shadows (for screening only): the near faces'
-/// worked out first, any other's when a ray first needs it.
+/// worked out first, any other's when a ray first needs it. Tables by vertex index.
 pub(crate) struct Pts {
-    exact: RefCell<HashMap<VertexId, HPoint>>,
-    f: RefCell<HashMap<VertexId, [f64; 3]>>,
+    exact: RefCell<Vec<Option<HPoint>>>,
+    f: RefCell<Vec<Option<[f64; 3]>>>,
     /// the snapped planes in f64, by face
     spf: Vec<PlaneF>,
-    /// per vertex, the faces round it
-    round: HashMap<VertexId, Vec<usize>>,
+    /// the faces round vertex `v`: `faces[start[v]..start[v + 1]]`, in arena order
+    start: Vec<u32>,
+    faces: Vec<u32>,
 }
 
 impl Pts {
+    /// The faces round `v`.
+    fn round(&self, v: VertexId) -> &[u32] {
+        let v = v.index();
+        if v + 1 >= self.start.len() {
+            return &[];
+        }
+        &self.faces[self.start[v] as usize..self.start[v + 1] as usize]
+    }
+    /// The exact points worked out so far, by vertex.
+    #[allow(dead_code)]
+    fn known(&self) -> Vec<(VertexId, HPoint)> {
+        let e = self.exact.borrow();
+        (0..e.len())
+            .filter_map(|i| e[i].as_ref().map(|h| (VertexId(i as u32), h.clone())))
+            .collect()
+    }
     fn ensure(&self, v: VertexId, planes: &[DyPlane]) {
-        if self.exact.borrow().contains_key(&v) {
+        if self.exact.borrow()[v.index()].is_some() {
             return;
         }
-        let ps: Vec<&DyPlane> = self.round[&v].iter().map(|&i| &planes[i]).collect();
+        let ps: Vec<&DyPlane> = self.round(v).iter().map(|&i| &planes[i as usize]).collect();
         // (a far vertex its planes do not settle: the first meet, as the reference's vertexAt
         // would have refused the input; a far face is crossed only by rays)
         let p = vertex_at(&ps)
@@ -1302,35 +1385,36 @@ impl Pts {
                 q
             })
             .expect("three independent planes round a vertex");
-        self.f.borrow_mut().insert(v, p.to_f64());
-        self.exact.borrow_mut().insert(v, p);
+        self.f.borrow_mut()[v.index()] = Some(p.to_f64());
+        self.exact.borrow_mut()[v.index()] = Some(p);
     }
     /// The vertex in f64, within 1e-13 of the exact one relative to its size (for screening;
     /// `crosses_f`'s margin, 1e-12 of the scale, covers twice that plus its own rounding):
     /// the f64 meet of the three planes `ensure` would meet, where its bound says so; else the
     /// exact point rounded.
     fn pf(&self, v: VertexId, planes: &[DyPlane]) -> [f64; 3] {
-        if let Some(p) = self.f.borrow().get(&v) {
-            return *p;
+        if let Some(p) = self.f.borrow()[v.index()] {
+            return p;
         }
         if let Some(p) = self.first_meet_f(v, planes) {
-            self.f.borrow_mut().insert(v, p);
+            self.f.borrow_mut()[v.index()] = Some(p);
             return p;
         }
         self.ensure(v, planes);
-        self.f.borrow()[&v]
+        self.f.borrow()[v.index()].unwrap()
     }
     /// The f64 meet of the first independent three of the planes round `v` (their order as
     /// `vertex_at`'s), if its forward bound is within 1e-13 of its size; None to go exact (an
     /// earlier three the f64 cannot tell from dependent, or a loose bound).
     fn first_meet_f(&self, v: VertexId, planes: &[DyPlane]) -> Option<[f64; 3]> {
-        let r = &self.round[&v];
+        let r = self.round(v);
         for (x, &a) in r.iter().enumerate() {
             for (y, &b) in r.iter().enumerate() {
                 for (z, &c) in r.iter().enumerate() {
                     if x == y || y == z || x == z {
                         continue; // (a repeated plane: dependent)
                     }
+                    let (a, b, c) = (a as usize, b as usize, c as usize);
                     match meet_f(&self.spf[a], &self.spf[b], &self.spf[c]) {
                         Some((p, e)) => {
                             let m = 1.0 + p[0].abs().max(p[1].abs()).max(p[2].abs());
@@ -1351,7 +1435,7 @@ impl Pts {
     }
     fn ph(&self, v: VertexId, planes: &[DyPlane]) -> HPoint {
         self.ensure(v, planes);
-        self.exact.borrow()[&v].clone()
+        self.exact.borrow()[v.index()].clone().unwrap()
     }
 }
 
@@ -1497,6 +1581,7 @@ impl CellTab {
 /// `m`: `m`'s coordinates off axis `a` exactly, and the one on `a` that puts it on the plane
 /// (`W = n_a`, so its terms stay small). None where that point is not strictly inside (a facet
 /// too thin for `m`): the mean of its vertices is then.
+#[inline(never)]
 fn interior(cls: &Classes, pf: &[PlaneF], c: usize, a: usize, m: [f64; 3], fc: &[Sgn]) -> Option<HPoint> {
     let pc = &cls.planes[c];
     let (s, t) = ((a + 1) % 3, (a + 2) % 3);
@@ -1534,6 +1619,7 @@ fn join(covs: &[&Vec<Sgn>]) -> Vec<Sgn> {
 }
 
 #[allow(clippy::too_many_arguments)]
+#[inline(never)]
 fn build_ledger(
     bodies: &[&Body],
     fs: &[In],
@@ -1822,7 +1908,7 @@ fn fill(bodies: &[&Body], rule: &Rule) -> Result<Filled, Skip> {
     let fs = inputs(bodies)?;
     let (snapped, reps) = snap(&fs)?;
     let reg = region(bodies, &fs, &snapped, &reps, rule);
-    let pts = vertices(bodies, &fs, &snapped, &reg)?;
+    let pts = vertices(bodies, &fs, &snapped, &reps, &reg)?;
     let mut cls = classes(&snapped, &reps, &reg.near);
     if let Some((lo, hi)) = reg.bx {
         add_walls(&mut cls, lo, hi);
@@ -1905,11 +1991,8 @@ fn log(bodies: &[&Body], fs: &[In], cls: &Classes, pts: &[Pts], snapped: &[DyPla
     }
     let _ = snapped;
     for (k, vs) in pts.iter().enumerate() {
-        let vs = vs.exact.borrow();
-        let mut ids: Vec<_> = vs.keys().copied().collect();
-        ids.sort();
-        for v in ids {
-            let h = &vs[&v];
+        for (v, h) in vs.known() {
+            let h = &h;
             let p = h.to_f64();
             for (j, f) in fs.iter().enumerate() {
                 if f.body == k || cls.of_face[j] == NONE || !grown(f, BAND, p) {
@@ -1946,6 +2029,7 @@ fn log(bodies: &[&Body], fs: &[In], cls: &Classes, pts: &[Pts], snapped: &[DyPla
 ///   face of a closed, valid body says exactly what the ray parity says);
 /// - otherwise one ray (`Ref.Face.pierced`), from a point strictly inside the cell.
 #[allow(clippy::too_many_arguments)]
+#[inline(never)]
 fn witness_inside(
     b: &Built,
     cls: &Classes,
