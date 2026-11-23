@@ -214,7 +214,9 @@ impl Model {
             for g in c {
                 match g {
                     forge_sheet::Curve2::Line { a, b } => l.push(Seg::Line { a: *a, b: *b }),
-                    forge_sheet::Curve2::Arc { c, r, start, sweep } => l.push(Seg::Arc {
+                    forge_sheet::Curve2::Arc {
+                        c, r, start, sweep, ..
+                    } => l.push(Seg::Arc {
                         c: *c,
                         r: *r,
                         start: *start,

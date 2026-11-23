@@ -1,0 +1,14 @@
+# A dome: its wall a spline through three points meeting the axis square to it (its slope there
+# set), revolved. The wall reaches the axis at a pole. (From fix-shell's shell_spline_dome.fg,
+# unshelled.)
+param cup.h = 30
+param cup.r = 30
+param cup.m = (-24, 20)
+param cup.k = (1, 0)
+sketch cup(on: xz) {
+  l0 = line((0, 0), (-r, 0))
+  s1 = spline([(-r, 0), m, (0, h)], closed: false, end_slope: k)
+  l2 = line((0, h), (0, 0))
+  ax = line((0, h), (0, 0), construction: true)
+}
+body = revolve(cup, axis: cup.ax)

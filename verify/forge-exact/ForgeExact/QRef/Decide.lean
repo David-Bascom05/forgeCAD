@@ -424,7 +424,7 @@ def Quadric.mat (q : Quadric) : Mat :=
     #[q.xz / 2, q.yz / 2, q.zz, q.lz / 2],
     #[q.lx / 2, q.ly / 2, q.lz / 2, q.c]]
 
-def Mat.add (a b : Mat) : Mat := (Array.range 4).map fun i => (Array.range 4).map fun j => a[i]![j]! + b[i]![j]!
+def Mat.add (a b : Mat) : Mat := (Array.range a.size).map fun i => (Array.range a[i]!.size).map fun j => a[i]![j]! + b[i]![j]!
 def Mat.smul (k : Rat) (a : Mat) : Mat := a.map (·.map (k * ·))
 
 def det (m : Mat) : Rat := Id.run do
@@ -845,6 +845,116 @@ def contactAt (A : Arr) (i j : Nat) (t : Rat) : Option Contact := Id.run do
     return mk none (some s!"surfaces {i}, {j}: a contact along a conic with no rational point found")
   | _ => return mk none none
 
+/-! ## Singular points: cone apexes, decided exactly -/
+
+/-- The result at a cone's apex `p` lying on other surfaces, decided at first order.
+`C` is the cone's tangent cone at `p`: one nappe about its axis `a`, of half-angle
+`atan (s / c)`. For each smooth surface `j` through `p` (gradient `g`), `C` must lie strictly on
+one side of the tangent plane: `σ g · a > 0` and `(g · a)² (s² + c²) > s² |g|² |a|²`. These are
+exact tests; if one fails, the apex is undecided. Then near `p`:
+- on `C`, every quadric has a fixed sign (the axis direction's);
+- off `C`, membership depends only on the sector of the tangent planes, and with at most three
+  independent normals every sector occurs.
+
+The result is non-manifold at `p` iff:
+- the cone region is kept, its own sector is not, and another sector is (two pieces meeting at
+  `p`); or
+- the cone region is dropped, its own sector is kept, and not every sector is (a conical cavity
+  touching the boundary at its apex).
+
+Returns `(bad, undecided)` notes. Hand proof: curved-l2-proofs.md §3. -/
+def apexDecide (A : Arr) (solids : Array QSolid) : Array String × Array String := Id.run do
+  let mut bad : Array String := #[]
+  let mut und : Array String := #[]
+  for s in solids do
+    for f in s.faces do
+      if f.kind != .cone || f.s == 0 || f.c == 0 then continue
+      let qc := f.quadric
+      let (cc, _) := canon qc
+      let some k := A.qs.findIdx? (· == cc) | continue
+      -- the apex: the cone quadric's singular point
+      let ns := nullSpace (Quadric.mat qc)
+      let some v := ns.find? (fun v => v[3]! != 0) | continue
+      let p : V3 := ⟨v[0]! / v[3]!, v[1]! / v[3]!, v[2]! / v[3]!⟩
+      -- the axis into the nappe: r c + s (d · z) grows along s z
+      let ax : V3 := f.s * f.z
+      let through := (Array.range A.qs.size).filter fun m => m != k && (A.qs[m]!).eval p == 0
+      -- the nappe's own plane: through p, normal along the axis
+      let isNappe := fun (m : Nat) => (A.qs[m]!).qnorm == 0 && (((A.qs[m]!).grad p).cross f.z).isZero
+      let J := through.filter fun m => !isNappe m
+      if J.isEmpty then continue
+      -- the nappe's plane, if another solid bounds itself by it too, varies off C: not covered
+      let shared := through.any fun m => isNappe m &&
+        (Array.range A.solids.size).any fun si => si != f.solid && (A.solids[si]!).2.any (·.idx == m)
+      if shared then
+        und := und.push s!"the apex {fmt p} of face {f.solid}.{f.index}: its nappe's plane bounds another solid"
+        continue
+      -- every tangent plane must separate C
+      let s2 := f.s * f.s
+      let k2 := f.s * f.s + f.c * f.c
+      let mut sideOk := true
+      let mut sides : Array (Nat × Bool) := #[]
+      for m in J do
+        let g := (A.qs[m]!).grad p
+        if g.isZero then sideOk := false; break
+        let ga := g.dot ax
+        if ga * ga * k2 > s2 * g.norm2 * ax.norm2 && ga != 0 then sides := sides.push (m, ga > 0)
+        else sideOk := false; break
+      if !sideOk then
+        -- one smooth surface whose tangent plane cuts the tangent cone transversally: the link
+        -- is a 4-cycle of cells (cap₊, cap₋, out₋, out₊), also their order round both crossing
+        -- vertices; the kept cells must be one proper run of it (§3, Theorem 3.5)
+        let g := if J.size == 1 then (A.qs[J[0]!]!).grad p else ⟨0, 0, 0⟩
+        let ga := g.dot ax
+        if J.size == 1 && !g.isZero && ga * ga * k2 < s2 * g.norm2 * ax.norm2 then
+          let j := J[0]!
+          let inSign := decide ((A.qs[k]!).quad ax > 0)
+          let other : Nat → Bool := fun m =>
+            if through.contains m then decide (((A.qs[m]!).grad p).dot ax > 0) else decide ((A.qs[m]!).eval p > 0)
+          let cell := fun (inCone sj : Bool) => A.keptOn fun m =>
+            if m == k then (if inCone then inSign else !inSign) else if m == j then sj else other m
+          let cyc := #[cell true true, cell true false, cell false false, cell false true]
+          let changes := (List.range 4).foldl (fun n i => if cyc[i]! != cyc[(i + 1) % 4]! then n + 1 else n) 0
+          if changes > 2 then
+            bad := bad.push s!"the apex {fmt p} of face {f.solid}.{f.index}: opposite cells of its cut tangent cone kept"
+        else
+          und := und.push s!"the apex {fmt p} of face {f.solid}.{f.index}: a surface through it cuts its tangent cone"
+        continue
+      if J.size > 3 then
+        und := und.push s!"the apex {fmt p} of face {f.solid}.{f.index}: more than three surfaces through it"
+        continue
+      -- independent normals: every sector occurs
+      let gs := J.map fun m => (A.qs[m]!).grad p
+      let indep := match gs.size with
+        | 1 => true
+        | 2 => !(gs[0]!.cross gs[1]!).isZero
+        | _ => gs[0]!.dot (gs[1]!.cross gs[2]!) != 0
+      if !indep then
+        und := und.push s!"the apex {fmt p} of face {f.solid}.{f.index}: dependent normals there"
+        continue
+      -- signs: the cone quadric in C is the sign of its quadratic part on the axis
+      let inSign := decide ((A.qs[k]!).quad ax > 0)
+      let base : Nat → Bool := fun m =>
+        if m == k then inSign
+        else if through.contains m then decide (((A.qs[m]!).grad p).dot ax > 0)
+        else decide ((A.qs[m]!).eval p > 0)
+      let kC := A.keptOn base
+      -- off C: the cone quadric outside, the sector τ on J
+      let sector := fun (τ : Nat) => A.keptOn fun m =>
+        if m == k then !inSign
+        else match J.findIdx? (· == m) with
+          | some i => (τ >>> i) % 2 == 1
+          | none => base m
+      let own : Nat := (Array.range J.size).foldl (fun acc i =>
+        if (sides.find? (·.1 == J[i]!)).any (·.2) then acc + 2 ^ i else acc) 0
+      let all := (List.range (2 ^ J.size)).map sector
+      let ownKept := sector own
+      let anyOther := (List.range (2 ^ J.size)).any fun τ => τ != own && sector τ
+      let allKept := all.all id
+      if (kC && !ownKept && anyOther) || (!kC && ownKept && !allKept) then
+        bad := bad.push s!"the apex {fmt p} of face {f.solid}.{f.index} touches the rest of the result there"
+  return (bad, und)
+
 /-! ## Singular points: cone apexes -/
 
 /-- Directions spread over the sphere (Fibonacci), as rationals. -/
@@ -1101,5 +1211,177 @@ def contacts (A : Arr) : Array Contact := Id.run do
         | some c => out := out.push c
         | none => pure ()
   return out
+
+/-! ## Edges touching surfaces -/
+
+/-- A quadric restricted to the plane `P0 + u U + w V`, as a 3×3 conic matrix in `(u, w, 1)`. -/
+def conicOn (q : Quadric) (P0 U V : V3) : Mat :=
+  let g := q.grad P0
+  let quv := (q.quad (U + V) - q.quad U - q.quad V) / 2
+  #[#[q.quad U, quv, g.dot U / 2],
+    #[quv, q.quad V, g.dot V / 2],
+    #[g.dot U / 2, g.dot V / 2, q.eval P0]]
+
+/-- A 3×3 null vector, if any. -/
+def null3 (m : Mat) : Option (Array Rat) :=
+  let pad : Mat := (m.map (·.push 0)).push #[0, 0, 0, 1]
+  match (nullSpaceP pad).1.find? (fun v => v[3]! == 0 && v[2]! != 0) with
+  | some v => some #[v[0]!, v[1]!, v[2]!]
+  | none => none
+
+/-- Edges touching surfaces: on a plane `a`, the curve where it meets quadric `b` (an edge,
+when `a` and `b` bound one solid) tangent to quadric `c` at a point `p`. Found exactly, as two
+conics of the plane tangent at `p`: a rational root `t` of the plane pencil's determinant, its
+member's singular point on both. Where the history varies across the eight sign patterns of
+`a`, `b`, `c` there (the others' signs fixed), the contact is reported. Its local verdict needs
+second order along the edge, so the reference leaves it undecided. -/
+def edgeTouches (A : Arr) : Array String := Id.run do
+  let mut out : Array String := #[]
+  let n := A.qs.size
+  for ia in [0:n] do
+    let qa := A.qs[ia]!
+    if qa.qnorm != 0 then continue
+    let nrm : V3 := ⟨qa.lx, qa.ly, qa.lz⟩
+    if nrm.isZero then continue
+    let P0 : V3 := (-qa.c / nrm.norm2) * nrm
+    let e : V3 := if nrm.x == 0 && nrm.y == 0 then ⟨1, 0, 0⟩ else ⟨0, 0, 1⟩
+    let U := nrm.cross e
+    let V := nrm.cross U
+    for ib in [0:n] do
+      for ic in [ib + 1:n] do
+        if ib == ia || ic == ia then continue
+        let cb := conicOn A.qs[ib]! P0 U V
+        let cc := conicOn A.qs[ic]! P0 U V
+        if (A.qs[ib]!).qnorm == 0 && (A.qs[ic]!).qnorm == 0 then continue
+        -- det(cb + t cc), degree ≤ 3, by interpolation at four points
+        let ts : Array Rat := #[0, 1, -1, 2]
+        let ys := ts.map fun t => det (cb.add (cc.smul t))
+        let mut d : Poly := []
+        for k in [0:4] do
+          let mut basis : Poly := [1]
+          let mut den : Rat := 1
+          for m in [0:4] do
+            if m != k then
+              basis := pmul basis [-ts[m]!, 1]
+              den := den * (ts[k]! - ts[m]!)
+          d := padd d (pscale (ys[k]! / den) basis)
+        d := Poly.trim d
+        if Poly.isZero d then continue
+        let mut cands : Array Rat := #[]
+        for r in floatRoots (Poly.sqfree d) do
+          for t in convergents r do
+            if Poly.ev d t == 0 && !cands.contains t then cands := cands.push t
+        for t in cands do
+          let some v := null3 (cb.add (cc.smul t)) | continue
+          let p := P0 + (v[0]! / v[2]!) * U + (v[1]! / v[2]!) * V
+          if (A.qs[ib]!).eval p != 0 || (A.qs[ic]!).eval p != 0 then continue
+          -- a surface tangent to one of the edge's (a line or point of tangency ending on a
+          -- plane) is a surface contact, judged by `contacts`; here the third surface's normal
+          -- is parallel to neither
+          let (ga, gb, gc) := ((A.qs[ia]!).grad p, (A.qs[ib]!).grad p, (A.qs[ic]!).grad p)
+          if (gb.cross gc).isZero || (ga.cross gc).isZero || (ga.cross gb).isZero then continue
+          let others := (Array.range n).filter fun k => k != ia && k != ib && k != ic
+          if others.any (fun k => (A.qs[k]!).eval p == 0) then continue
+          let base : Nat → Bool := fun k => decide ((A.qs[k]!).eval p > 0)
+          let vals := (List.range 8).map fun m => A.keptOn fun k =>
+            if k == ia then m % 2 == 1 else if k == ib then (m / 2) % 2 == 1
+            else if k == ic then (m / 4) % 2 == 1 else base k
+          if vals.any id && !vals.all id then
+            out := out.push s!"the curve of surfaces {ia}, {ib} touches surface {ic} at {fmt p}: an edge-on-surface contact, not decided"
+  return out
+
+/-! ## Curves where three or more surfaces meet -/
+
+/-- Exact angular order in a plane spanned by `e1, e2`: the half (`true` upper) and then the
+cross product sign. -/
+def angLt (e1 e2 : V3) (a b : V3) : Bool :=
+  let (ax, ay) := (a.dot e1, a.dot e2)
+  let (bx, by_) := (b.dot e1, b.dot e2)
+  let ha := decide (ay > 0) || (ay == 0 && ax > 0)
+  let hb := decide (by_ > 0) || (by_ == 0 && bx > 0)
+  if ha != hb then ha else ax * by_ - ay * bx > 0
+
+/-- The result at a point `p` where the surfaces through it (more than two) share one tangent
+line, their normals spanning a plane with no two parallel. To first order, the configuration is
+the line's product with an arrangement of distinct lines through a point in the normal plane.
+The rays are ordered exactly, and the history is evaluated on each sector between consecutive
+rays (the others' signs are fixed at `p`). The result is non-manifold iff kept and dropped
+sectors alternate more than once round the point. `none`: the hypotheses fail. Hand proof:
+curved-l2-proofs.md §4. -/
+def curveSectors (A : Arr) (p : V3) : Option Bool := Id.run do
+  let T := (Array.range A.qs.size).filter fun k => (A.qs[k]!).eval p == 0
+  if T.size < 3 then return none
+  let gs := T.map fun k => (A.qs[k]!).grad p
+  if gs.any (·.isZero) then return none
+  let D := gs[0]!.cross gs[1]!
+  if D.isZero then return none
+  -- every normal ⊥ D, and no two parallel
+  if gs.any (fun g => g.dot D != 0) then return none
+  for a in [0:gs.size] do
+    for b in [a + 1:gs.size] do
+      if (gs[a]!.cross gs[b]!).isZero then return none
+  let e1 := gs[0]!
+  let e2 := D.cross e1
+  -- the rays: ± (g × D), each in the normal plane
+  let rays0 := gs.foldl (fun acc g => let r := g.cross D; acc.push r |>.push ((-1 : Rat) * r)) #[]
+  let rays := rays0.qsort (angLt e1 e2)
+  let base : Nat → Bool := fun k => decide ((A.qs[k]!).eval p > 0)
+  let kept := (Array.range rays.size).map fun i =>
+    let d := rays[i]! + rays[(i + 1) % rays.size]!
+    A.keptOn fun k => match T.findIdx? (· == k) with
+      | some j => decide (gs[j]!.dot d > 0)
+      | none => base k
+  let changes := (Array.range kept.size).foldl (fun n i => if kept[i]! != kept[(i + 1) % kept.size]! then n + 1 else n) 0
+  return some (changes > 2)
+
+/-- Curves where three surfaces meet: on a plane `a`, two quadrics' sections that are one conic
+(proportional restrictions). They are judged with `curveSectors` at a rational point of that
+conic. -/
+def tripleCurves (A : Arr) : Array String × Array String := Id.run do
+  let mut bad : Array String := #[]
+  let mut und : Array String := #[]
+  let n := A.qs.size
+  for ia in [0:n] do
+    let qa := A.qs[ia]!
+    if qa.qnorm != 0 then continue
+    let nrm : V3 := ⟨qa.lx, qa.ly, qa.lz⟩
+    if nrm.isZero then continue
+    let P0 : V3 := (-qa.c / nrm.norm2) * nrm
+    let e : V3 := if nrm.x == 0 && nrm.y == 0 then ⟨1, 0, 0⟩ else ⟨0, 0, 1⟩
+    let U := nrm.cross e
+    let V := nrm.cross U
+    for ib in [0:n] do
+      for ic in [ib + 1:n] do
+        if ib == ia || ic == ia then continue
+        if (A.qs[ib]!).qnorm == 0 && (A.qs[ic]!).qnorm == 0 then continue
+        let cb := (conicOn A.qs[ib]! P0 U V).flatMap id
+        let cc := (conicOn A.qs[ic]! P0 U V).flatMap id
+        -- proportional?
+        let some k0 := (Array.range 9).find? (fun k => cc[k]! != 0) | continue
+        let lam := cb[k0]! / cc[k0]!
+        if !(Array.range 9).all (fun k => cb[k]! == lam * cc[k]!) || lam == 0 then continue
+        -- a rational point of the conic, on a line through P0
+        let mut found := false
+        for D0 in #[U, V, U + V, U - V] do
+          if found then break
+          for α in realRoots (alongLine A.qs[ib]! P0 D0) do
+            match α with
+            | .rat t =>
+              let p := P0 + t * D0
+              found := true
+              -- two surfaces tangent there: a contact, judged by `contacts`
+              let T := (Array.range n).filter fun k => (A.qs[k]!).eval p == 0
+              let gs := T.map fun k => (A.qs[k]!).grad p
+              let tangent := (List.range gs.size).any fun a => (List.range gs.size).any fun b =>
+                a < b && (gs[a]!.cross gs[b]!).isZero
+              if tangent then break
+              match curveSectors A p with
+              | some true => bad := bad.push s!"surfaces {ia}, {ib}, {ic} meet along a curve through {fmt p}, the kept sectors round it not one run"
+              | some false => pure ()
+              | none => und := und.push s!"surfaces {ia}, {ib}, {ic} meet along a curve through {fmt p}, not decided"
+              break
+            | .iso _ => pure ()
+        if !found then und := und.push s!"surfaces {ia}, {ib}, {ic} meet along a curve with no rational point found"
+  return (bad, und)
 
 end ForgeExact.QRef

@@ -1,8 +1,10 @@
 # kernel/forge-sheet-core in Lean, by Aeneas (L4 of research/PROOF-STANDARD.md)
 
 The shipped Rust of `kernel/forge-sheet-core` (forge-sheet's combinatorial core: vertex classes,
-chaining, a hole's owner) is translated by `tools/aeneas/translate.sh forge-sheet-core` (Charon
-9e193f0, Aeneas 2e3d448 with the float patch; 26 definitions, nothing opaque) into
+chaining, a hole's owner; the development's rigid motions and joint frames, `place.rs`) is
+translated by `tools/aeneas/translate.sh forge-sheet-core` (Charon 9e193f0, Aeneas 2e3d448 with the
+float patch; 32 definitions, 1 opaque: `f64::sqrt`, defined in `FunsExternal.lean` as verify/ieee754's
+correctly rounded square root, never an axiom) into
 `lean/ForgeSheetCore/{Types,Funs}.lean`, and the translation is proven against verify/sheet.
 
 Proven (no `sorry`; `lean/ForgeSheetCore/Axioms.lean` checks the standard axioms only):
@@ -21,6 +23,16 @@ Proven (no `sorry`; `lean/ForgeSheetCore/Axioms.lean` checks the standard axioms
   Unchained` at the first vertex of unequal degrees (its first leaving, else arriving piece, and
   both degrees); `Err Pinched` with every vertex of degree past one, in order. The walk's own
   refusal (`at != start`) never happens (`WalkModel.walk_closes`).
+- `place.rs`, through the f64 bridge (each operation verify/ieee754's binary64 one, `u = 2⁻⁵³`,
+  `η = 2⁻¹⁰⁷⁵`): `apply_spec`, `vec_spec`, `then_spec`, `local_spec`, `inverse_spec` (each computed
+  coordinate, when finite, within a stated `a u S + b η` of the exact motion of the doubles'
+  values); `develop_err` (DevelopErr.lean): along a path of `n` joints the axis error grows as
+  `n ex`, the origin's as `n eo + R n² ex`, never exponentially.
+- `joint_spec` (RefineJoint.lean, model JointErr.lean): on the domain where each coordinate
+  difference `D = p1 − p0` of the doubles is `0` or in `[2⁻⁵⁰⁰, 2⁵⁰⁰]` in magnitude, not both `0`,
+  every step's exact result is zero or normal; then the frame's origin is `p0` exactly and, when
+  the outputs are finite, the length is within `(1 + u)³ − 1` of `|D|` and the axis within
+  `(1 + u)³ / (1 − u)³ − 1` (about `6 u`) of `(D.y, −D.x) / |D|`, each component relatively.
 - under them: the least-root union–find (`new_spec`, `find_spec`, `union_spec`), ported from the
   decide-once core's proofs (research/kernel-audit/decide-once/aeneas: the same `union_find.rs`),
   with the release build's wrapping `+= 1` shown not to wrap.

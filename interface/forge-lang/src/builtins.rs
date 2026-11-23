@@ -1851,6 +1851,9 @@ fn extrude(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Val
             match (a.num("taper", ANG)?, along) {
                 (Some(t), _) => {
                     dims.push(dim("taper", &t));
+                    if let Some(w) = crate::taper_lint::closes(&profile, dist, t.v, &dims, span, &id) {
+                        ev.warnings.push(w);
+                    }
                     (
                         Extent::Tapered {
                             distance: dist,
