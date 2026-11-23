@@ -2750,10 +2750,6 @@ fn axes_of(n: [f64; 3]) -> (usize, usize) {
 /// segment is the first clockwise from the way back.
 fn chain(w: &Wr, segs: &[Seg], n: [f64; 3]) -> Option<Vec<Vec<Seg>>> {
     let ax = axes_of(n);
-    let xy = |k: PK| {
-        let p = w.pos(k);
-        (p[ax.0], p[ax.1])
-    };
     // the segments by start point (then by index: the order they came in)
     let mut from: Vec<(PK, u32)> = segs.iter().enumerate().map(|(i, s)| (s.a, i as u32)).collect();
     from.sort_unstable();
@@ -2781,21 +2777,18 @@ fn chain(w: &Wr, segs: &[Seg], n: [f64; 3]) -> Option<Vec<Vec<Seg>>> {
                 0 => return None,
                 1 => cands[0],
                 _ => {
-                    let (pv, pu) = (xy(at), xy(segs[cur].a));
-                    let back = forge_math::dmath::atan2(pu.1 - pv.1, pu.0 - pv.0);
-                    let mut best = (f64::INFINITY, cands[0]);
-                    for &j in &cands {
-                        let pw = xy(segs[j].b);
-                        let out = forge_math::dmath::atan2(pw.1 - pv.1, pw.0 - pv.0);
-                        let mut turn = back - out;
-                        while turn <= 0.0 {
-                            turn += std::f64::consts::TAU;
-                        }
-                        if turn < best.0 {
-                            best = (turn, j);
+                    // the first clockwise from the way back, decided exactly
+                    let (v, u) = (hp(w, at), hp(w, segs[cur].a));
+                    let mut best = cands[0];
+                    let mut bp = hp(w, segs[best].b);
+                    for &j in &cands[1..] {
+                        let q = hp(w, segs[j].b);
+                        if cw_before(&v, &u, &q, &bp, ax) {
+                            best = j;
+                            bp = q;
                         }
                     }
-                    best.1
+                    best
                 }
             };
             used[next] = true;
@@ -2811,23 +2804,143 @@ fn chain(w: &Wr, segs: &[Seg], n: [f64; 3]) -> Option<Vec<Vec<Seg>>> {
     Some(loops)
 }
 
-/// Twice a loop's signed area in the projection, counter-clockwise positive.
-fn area(w: &Wr, lp: &[Seg], ax: (usize, usize)) -> f64 {
-    lp.iter()
-        .map(|s| {
-            let (p, q) = (w.pos(s.a), w.pos(s.b));
-            p[ax.0] * q[ax.1] - q[ax.0] * p[ax.1]
-        })
-        .sum()
+/// A write point exactly: a vertex cell's exact point, or body 0's vertex as it stands (a dyadic).
+fn hp(w: &Wr, k: PK) -> HPoint {
+    match k {
+        PK::Cell(c) => w.built.point[&c].clone(),
+        PK::Orig(v) => {
+            let q = w.bodies[0].vertex(v).point;
+            HPoint {
+                p: DyV3::from_f64(q.x, q.y, q.z),
+                w: Dy::from_i64(1),
+            }
+        }
+    }
 }
 
-/// Is the point inside the loop (projected; f64, for telling holes their face).
-fn inside_loop(w: &Wr, lp: &[Seg], ax: (usize, usize), q: (f64, f64)) -> bool {
+/// The sign of `(b − a) × (c − a)` in the projection `ax`, exactly.
+fn orient2(a: &HPoint, b: &HPoint, c: &HPoint, ax: (usize, usize)) -> i32 {
+    let (xa, ya, wa) = (a.p.get(ax.0), a.p.get(ax.1), &a.w);
+    let (xb, yb, wb) = (b.p.get(ax.0), b.p.get(ax.1), &b.w);
+    let (xc, yc, wc) = (c.p.get(ax.0), c.p.get(ax.1), &c.w);
+    let d = xa
+        .mul(&yb.mul(wc).sub(&yc.mul(wb)))
+        .sub(&ya.mul(&xb.mul(wc).sub(&xc.mul(wb))))
+        .add(&wa.mul(&xb.mul(yc).sub(&xc.mul(yb))));
+    d.signum() * wa.signum() * wb.signum() * wc.signum()
+}
+
+/// The sign of `(u − v) · (q − v)` in the projection `ax`, exactly.
+fn dot2(v: &HPoint, u: &HPoint, q: &HPoint, ax: (usize, usize)) -> i32 {
+    let comp = |p: &HPoint, k: usize| p.p.get(k).mul(&v.w).sub(&v.p.get(k).mul(&p.w));
+    let d = comp(u, ax.0).mul(&comp(q, ax.0)).add(&comp(u, ax.1).mul(&comp(q, ax.1)));
+    d.signum() * u.w.signum() * q.w.signum()
+}
+
+/// Where `q` lies clockwise from the way back `v → u`, as a class: 0 within (0, π), 1 at π, 2 within
+/// (π, 2π), 3 at 2π (the way back itself).
+fn cw_class(v: &HPoint, u: &HPoint, q: &HPoint, ax: (usize, usize)) -> u8 {
+    match orient2(v, u, q, ax) {
+        s if s < 0 => 0,
+        s if s > 0 => 2,
+        _ if dot2(v, u, q, ax) < 0 => 1,
+        _ => 3,
+    }
+}
+
+/// At point `v`, arriving from `u`: is the way to `q` strictly before the way to `r`, turning
+/// clockwise from the way back? (Ties keep `r`, the one met first.)
+fn cw_before(v: &HPoint, u: &HPoint, q: &HPoint, r: &HPoint, ax: (usize, usize)) -> bool {
+    let (cq, cr) = (cw_class(v, u, q, ax), cw_class(v, u, r, ax));
+    if cq != cr {
+        return cq < cr;
+    }
+    // within one open half turn, `r` clockwise of `q` puts `q` first
+    (cq == 0 || cq == 2) && orient2(v, q, r, ax) < 0
+}
+
+/// A final face's loop's points, exactly, in order.
+fn lp_hpoints(w: &Wr, kept: &[Kept], lp: &Lp) -> Vec<HPoint> {
+    match lp {
+        Lp::New(segs) => segs.iter().map(|s| hp(w, s.a)).collect(),
+        Lp::Kept(i) => {
+            let b0 = w.bodies[0];
+            b0.lp(kept[*i].lp)
+                .coedges()
+                .map(|c| hp(w, PK::Orig(b0.coedge_start(c))))
+                .collect()
+        }
+    }
+}
+
+/// A final face's loop's points: in f64 (the write's own, each rounded once from the exact
+/// point), and exactly, worked out only if an f64 screen cannot settle a decision.
+struct Ld {
+    pf: Vec<[f64; 3]>,
+    ph: std::cell::OnceCell<Vec<HPoint>>,
+}
+
+impl Ld {
+    fn exact(&self, w: &Wr, kept: &[Kept], lp: &Lp) -> &[HPoint] {
+        self.ph.get_or_init(|| lp_hpoints(w, kept, lp))
+    }
+}
+
+/// A loop's turning sense in the projection: +1 counter-clockwise (an outer loop), −1 clockwise (a
+/// hole). Its f64 area where that is plainly away from zero (the bound covers each point within 4
+/// ulps of its exact place and the sum's rounding), else exactly: the sense at its least vertex
+/// in (s, t) order, a corner of its hull.
+fn loop_sense(w: &Wr, kept: &[Kept], lp: &Lp, l: &Ld, ax: (usize, usize)) -> i32 {
+    let ps = &l.pf;
+    let n = ps.len();
+    let (mut a, mut m) = (0.0f64, 0.0f64);
+    for k in 0..n {
+        let (p, q) = (ps[k], ps[(k + 1) % n]);
+        let (t1, t2) = (p[ax.0] * q[ax.1], q[ax.0] * p[ax.1]);
+        a += t1 - t2;
+        m += t1.abs() + t2.abs();
+    }
+    if a.abs() > m * (n as f64 + 16.0) * f64::EPSILON * 4.0 {
+        return if a > 0.0 { 1 } else { -1 };
+    }
+    let ps = l.exact(w, kept, lp);
+    let mut i = 0;
+    for k in 1..n {
+        let c = ps[k].cmp_axis(&ps[i], ax.0);
+        if c < 0 || (c == 0 && ps[k].cmp_axis(&ps[i], ax.1) < 0) {
+            i = k;
+        }
+    }
+    match orient2(&ps[(i + n - 1) % n], &ps[i], &ps[(i + 1) % n], ax) {
+        0 => {
+            // (a loop folded flat at its hull's corner: no sense; taken as a hole)
+            -1
+        }
+        s => s,
+    }
+}
+
+/// Is loop `a`'s first side's middle inside loop `b` (projected), by the reference's perturbed ray
+/// parity: each side's crossing screened in f64 (`crosses_f`), exact (`crosses`) where it cannot
+/// say.
+#[allow(clippy::too_many_arguments)]
+fn inside_cert(w: &Wr, kept: &[Kept], la: &Lp, a: &Ld, lb: &Lp, b: &Ld, ax: (usize, usize)) -> bool {
+    let (p, q) = (a.pf[0], a.pf[1 % a.pf.len()]);
+    let mf = [0.5 * (p[0] + q[0]), 0.5 * (p[1] + q[1]), 0.5 * (p[2] + q[2])];
+    let me: std::cell::OnceCell<HPoint> = std::cell::OnceCell::new();
+    let n = b.pf.len();
     let mut c = false;
-    for s in lp {
-        let (p, r) = (w.pos(s.a), w.pos(s.b));
-        let (a, b) = ((p[ax.0], p[ax.1]), (r[ax.0], r[ax.1]));
-        if (a.1 > q.1) != (b.1 > q.1) && q.0 < a.0 + (q.1 - a.1) * (b.0 - a.0) / (b.1 - a.1) {
+    for k in 0..n {
+        let x = match crosses_f(mf, b.pf[k], b.pf[(k + 1) % n], ax.0, ax.1) {
+            Some(x) => x,
+            None => {
+                let ae = a.exact(w, kept, la);
+                let m = me.get_or_init(|| HPoint::mean(&[&ae[0], &ae[1 % ae.len()]]));
+                let be = b.exact(w, kept, lb);
+                crosses(m, &be[k], &be[(k + 1) % n], ax.0, ax.1)
+            }
+        };
+        if x {
             c = !c;
         }
     }
@@ -2847,54 +2960,6 @@ fn lp_points(w: &Wr, kept: &[Kept], lp: &Lp, out: &mut Vec<[f64; 3]>) {
             }));
         }
     }
-}
-
-/// `area` of a final face's loop.
-fn area_l(w: &Wr, kept: &[Kept], lp: &Lp, ax: (usize, usize)) -> f64 {
-    if let Lp::New(segs) = lp {
-        return area(w, segs, ax);
-    }
-    let mut ps = Vec::new();
-    lp_points(w, kept, lp, &mut ps);
-    let n = ps.len();
-    (0..n)
-        .map(|k| {
-            let (p, q) = (ps[k], ps[(k + 1) % n]);
-            p[ax.0] * q[ax.1] - q[ax.0] * p[ax.1]
-        })
-        .sum()
-}
-
-/// `inside_loop` for a final face's loop.
-fn inside_l(w: &Wr, kept: &[Kept], lp: &Lp, ax: (usize, usize), q: (f64, f64)) -> bool {
-    if let Lp::New(segs) = lp {
-        return inside_loop(w, segs, ax, q);
-    }
-    let mut ps = Vec::new();
-    lp_points(w, kept, lp, &mut ps);
-    let n = ps.len();
-    let mut c = false;
-    for k in 0..n {
-        let (p, r) = (ps[k], ps[(k + 1) % n]);
-        let (a, b) = ((p[ax.0], p[ax.1]), (r[ax.0], r[ax.1]));
-        if (a.1 > q.1) != (b.1 > q.1) && q.0 < a.0 + (q.1 - a.1) * (b.0 - a.0) / (b.1 - a.1) {
-            c = !c;
-        }
-    }
-    c
-}
-
-/// The middle of a loop's first side, projected: the point a hole is placed by.
-fn mid_l(w: &Wr, kept: &[Kept], lp: &Lp, ax: (usize, usize)) -> (f64, f64) {
-    let (p, q) = match lp {
-        Lp::New(h) => (w.pos(h[0].a), w.pos(h[0].b)),
-        Lp::Kept(_) => {
-            let mut ps = Vec::new();
-            lp_points(w, kept, lp, &mut ps);
-            (ps[0], ps[1 % ps.len()])
-        }
-    };
-    ((p[ax.0] + q[ax.0]) / 2.0, (p[ax.1] + q[ax.1]) / 2.0)
 }
 
 /// The body the core's answer describes, as an edit of body 0 (§3a's write): outside the region
@@ -3144,27 +3209,36 @@ fn write(w: &Wr, out: Option<&core::Body>) -> Option<Plan> {
         if loops.is_empty() {
             continue;
         }
+        // outer loops and holes, and each hole's holder: the innermost outer loop round it (all
+        // decided exactly)
         let (mut outer, mut holes) = (Vec::new(), Vec::new());
         for lp in loops {
-            if area_l(w, &kept, &lp, ax) > 0.0 {
-                outer.push(lp);
+            let mut pf = Vec::new();
+            lp_points(w, &kept, &lp, &mut pf);
+            let l = Ld { pf, ph: std::cell::OnceCell::new() };
+            if loop_sense(w, &kept, &lp, &l, ax) > 0 {
+                outer.push((lp, l));
             } else {
-                holes.push(lp);
+                holes.push((lp, l));
             }
         }
-        let mut faces: Vec<Vec<Lp>> = outer.into_iter().map(|o| vec![o]).collect();
-        for h in holes {
-            let m = mid_l(w, &kept, &h, ax);
-            let mut best: Option<(f64, usize)> = None;
-            for (k, fl) in faces.iter().enumerate() {
-                if inside_l(w, &kept, &fl[0], ax, m) {
-                    let a = area_l(w, &kept, &fl[0], ax);
-                    if best.is_none_or(|(b, _)| a < b) {
-                        best = Some((a, k));
-                    }
+        let mut held: Vec<Vec<Lp>> = (0..outer.len()).map(|_| Vec::new()).collect();
+        for (h, hl) in holes {
+            let mut best: Option<usize> = None;
+            for (k, (_, ol)) in outer.iter().enumerate() {
+                if inside_cert(w, &kept, &h, &hl, &outer[k].0, ol, ax)
+                    && best.is_none_or(|b| inside_cert(w, &kept, &outer[k].0, ol, &outer[b].0, &outer[b].1, ax))
+                {
+                    best = Some(k);
                 }
             }
-            faces[best?.1].push(h);
+            held[best?].push(h);
+        }
+        let mut faces: Vec<Vec<Lp>> = Vec::with_capacity(outer.len());
+        for ((o, _), hs) in outer.into_iter().zip(held) {
+            let mut fl = vec![o];
+            fl.extend(hs);
+            faces.push(fl);
         }
         for fl in faces {
             let src = fl
