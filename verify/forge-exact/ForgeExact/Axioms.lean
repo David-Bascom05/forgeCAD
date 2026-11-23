@@ -200,6 +200,9 @@ elab "#standard_axioms " ids:ident* : command => do
   ForgeExact.DecideOnce.Curved.covOn_spec
   ForgeExact.DecideOnce.Curved.axisPlane_on
   ForgeExact.DecideOnce.Curved.axisPlane_nz
+  ForgeExact.DecideOnce.Curved.axisPlane2_on
+  ForgeExact.DecideOnce.Curved.axisPlane2_nz
+  ForgeExact.DecideOnce.Curved.axisPlanes_orth
   ForgeExact.DecideOnce.Curved.nappePlane_on
   ForgeExact.DecideOnce.Curved.noScaled_seams
   ForgeExact.DecideOnce.Curved.homog_ev

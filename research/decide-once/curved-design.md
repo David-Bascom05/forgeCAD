@@ -158,8 +158,8 @@ the region is simply connected. Its singular points become vertices.
 | Surface | Seams | What they fix |
 |---|---|---|
 | plane | none | — |
-| cylinder (axis `o + t z`) | the plane through the axis with normal `z × e`, `e` the first of x, y, z not parallel to `z` (rational) | the band between caps (an annulus) becomes 2 discs; a plate's annulus round a hole on this axis is cut too |
-| cone | the axial seam as for a cylinder, and the **nappe plane** through the apex ⊥ axis (`QFace.nappe`) | the apex is a vertex (zeros: cone, seam, nappe plane); the two nappes are apart, so a double cone is 2 fans at the apex and is refused, as it must be (exact-curved §3, Theorem 3.4) |
+| cylinder (axis `o + t z`) | **two orthogonal axial planes**: normals `z × e` and `z × (z × e)`, `e` the first of x, y, z not parallel to `z` (rational). One is not enough: tier0's `plate1_not_faithful` / `plate_faithful` (ForgeCurved/PlateHole.lean, 718cfc8) | the band between caps (an annulus) becomes 2 discs; a plate's annulus round a hole on this axis is cut too |
+| cone | both axial seams as for a cylinder, and the **nappe plane** through the apex ⊥ axis (`QFace.nappe`) | the apex is a vertex (zeros: cone, seam, nappe plane); the two nappes are apart, so a double cone is 2 fans at the apex and is refused, as it must be (exact-curved §3, Theorem 3.4) |
 | sphere | the plane through the centre ⊥ e₁ (any fixed rational normal) | two open hemispheres, each a disc |
 | torus (Q2) | the axial seam and the equatorial plane | 4 discs; the horn torus's centre is a vertex |
 | contact curve (from exact-curved `localTouch`, or trace §7's closed forms) | the plane holding a contact line (two parallel axes span a rational plane), or the plane of a contact circle (⊥ the common axis, at a rational or `Quad` height) | R4 at a tangential contact: each facet now meets the contact edge from one side, so `around` counts the real sheets (case (iii) is refused) |
