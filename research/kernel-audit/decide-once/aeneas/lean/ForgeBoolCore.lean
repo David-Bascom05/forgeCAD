@@ -29,3 +29,4 @@ import ForgeBoolCore.BridgeTouch
 import ForgeBoolCore.RefineCore
 import ForgeBoolCore.Encode
 import ForgeBoolCore.EndToEnd
+import ForgeBoolCore.Integrate
