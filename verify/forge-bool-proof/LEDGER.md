@@ -92,11 +92,11 @@ verify/forge-bool-proof/ForgeBoolProof/<file>.
 
 | id | contract | owner | status | file / theorem |
 |---|---|---|---|---|
-| 1a.where | `whereR`, `whereF` | FLAT-SITES | open | — |
-| 1a.classify | `classify_spec`: Ok w ⇒ w = whereR ⟦b⟧ p | FLAT-SITES | open | — |
+| 1a.where | `whereR`, `whereF` | FLAT-SITES | proven | FlatSites/Where.lean `whereR`, `whereF`, `whereR_on_iff`, `whereR_outside_iff` |
+| 1a.classify | `classify_spec`: Ok w ⇒ w = whereR ⟦b⟧ p | FLAT-SITES | open: the `On` branch proven from two facts (`classify_on_sound`, `exists_face_of_on`): p exactly on the face's carrier (GAP: not checked by the code; held at 3,632 of 3,632 planar `On`s on the gate parts and fuzz 1–40, fails on the bench parts frame and volute, points 2.6e-16 and 8.6e-16 off the plane: an exact check there refuses ZeroThickness, so the exact answer must come from the exact key) and `point_in_face ≠ Outside` meaning p ∈ closure ⟦f⟧ (1a.pif), off the zones (D5.zone). The ray branch is open (GAP: rays rejected 0, all-degenerate 0 in the corpus) Fact 2 at point_in_face's nearest-edge `On`: 36 trim_in stretch samples on patterns seq are exactly off the edge (the three planes share no line: 31 cross far away, 5 parallel offset), so the exact answer there is Inside/Outside, not today's `On`: the owner to judge. | FlatSites/Where.lean |
 | 1a.total | `classify_total_flat`: never refuses on flat bodies | FLAT-SITES | open | — |
 | 1a.pif | `point_in_face_spec`: Ok w ⇒ w = whereF ⟦f⟧ p | FLAT-SITES | open | — |
-| 1a.foot | `foot`, `foot_on`; per probe site, foot ∈ relInterior region | FLAT-SITES | open | — |
+| 1a.foot | `foot`, `foot_on`; per probe site, foot ∈ relInterior region | FLAT-SITES | open: `foot_on`, `foot_self` proven (where the f64 point is on the carrier, as at the 3,632 classify `On`s of the gate parts and fuzz 1–40, the foot is the point; not at frame's and volute's); per-site membership open (G13) | FlatSites/Where.lean |
 | 1a.B3387 | trim_in's stretch midpoint M: screen sound bound, cold exact helper | FLAT-SITES | open | — |
 
 ## G. Guess sites (each becomes a proven screen plus an exact test, or goes)
@@ -127,9 +127,9 @@ verify/forge-bool-proof/ForgeBoolProof/<file>.
 | C.unify | unify's curved decisions | CURVED-SITES | open | — |
 | C.poles | poles and seams (`sphere_nearest`'s pole rule, periodic seams) | CURVED-SITES | open | — |
 | G12 | the `decide_once` feature becomes the fallback branch | FALLBACK | open | — |
-| G13 | `face_point`'s unchecked inward step | FLAT-SITES | open | — |
+| G13 | `face_point`'s unchecked inward step | FLAT-SITES | open (GAP): 7 of 6,675 probes land off their own face per point_in_face (6 curved, 1 planar; fuzz 19/20/21/30/40); returning None there (callers take the general path) changed no result | — |
 | G14 | trim_in's box-only accept | FLAT-SITES | proven (hyp: D4's cut completeness, `Sorted`) | verify/forge-curved/ForgeCurved/G14.lean `kept_iff`, `extra_not_end`, `edge_cut_not_kept` |
-| G15 | the stretch whose midpoint is exactly on ∂f_k | FLAT-SITES | open | — |
+| G15 | the stretch whose midpoint is exactly on ∂f_k | FLAT-SITES | proven for flat (straight stretch, edge line in the plane; hyp: D4 cut completeness): the stretch lies on the edge's carrier, today's along-the-edge reading; curved (a touch, not a crossing) open | FlatSites/G15.lean `along_or_crossing`, `on_middle_along` |
 | M.ct | forge-geom `meet::intersect`, cylinder × torus (`Form::Poly4`): its events from a sampled discriminant, which lost one of two loops on fuzz295 f69 (a wrong `Ok`) | FALLBACK (fix), CURVED-SITES (#7, certified isolation) | interim fix (PR proof/fix-torus-loops): a root-count scan where the discriminant flags double roots; NOT provably complete (a loop narrower than one sample can be lost): UNKNOWN | kernel/forge-geom/src/meet_tests.rs `thin_torus_on_a_wide_cylinder_both_loops` |
 | M.cert | M.ct's events certified: interval cover of (u, s), Krawczyk boxes of one event each (kernel/forge-geom/src/meet_cert.rs, tests and the decision log only) | CURVED-SITES | soundness of the cover proven (`no_event_of_cover`); `IntervalSound`, `CountConstant` stated; on seed 295 it proves the missed events (Missed at host u 1.918, 2.097, 2.149); runtime design open (cost) | verify/forge-curved EventCover.lean |
 | M.cone | `Form::Poly4` with a cone host (90 calls on fuzz 1–40): not covered by the certifier | CURVED-SITES | open | — |
