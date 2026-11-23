@@ -966,6 +966,36 @@ impl Body {
         if closes.iter().all(|x| x.1.is_empty()) {
             return fans;
         }
+        // the corners are geometry: walk by them only where they close each leaving coedge with
+        // a distinct use arriving at v, so the walk permutes the coedges leaving v (one fan by
+        // them is then one disc); else loop order's fans stand
+        let before = |c: CoedgeId| {
+            let f = self.coedge_face(c);
+            closes
+                .iter()
+                .filter(|x| x.0 == f)
+                .flat_map(|x| x.1.iter())
+                .find(|x| x.0 == c)
+                .map_or_else(
+                    || {
+                        let lp = self.lp(self.coedge(c).lp);
+                        let n = lp.coedges().len();
+                        let i = (c.0 - lp.coedge(0).0) as usize;
+                        lp.coedge((i + n - 1) % n)
+                    },
+                    |x| x.1,
+                )
+        };
+        let mut into: Vec<CoedgeId> = from.iter().map(|&c| before(c)).collect();
+        let arrive = into.iter().all(|&a| {
+            a.index() < self.coedges.len()
+                && self.coedge_end(a) == v
+                && self.edge(self.coedge(a).edge).coedges.contains(&a)
+        });
+        into.sort_unstable();
+        if !arrive || into.windows(2).any(|w| w[0] == w[1]) {
+            return fans;
+        }
         self.fans_by(from, prev, Some(&closes))
     }
 
@@ -1070,9 +1100,21 @@ impl Body {
             .filter(|&&c| self.coedge_start(c) == v)
             .filter_map(|&c| {
                 let a = angle(c, true);
+                // the other use of its own edge (a seam's) leaves the same way: it closes the
+                // corner only after a whole turn, never before another edge
+                let own = self.coedge(c).edge;
                 arriving
                     .iter()
-                    .map(|&(x, b)| (x, (b - a).rem_euclid(tau)))
+                    .map(|&(x, b)| {
+                        (
+                            x,
+                            if self.coedge(x).edge == own {
+                                tau
+                            } else {
+                                (b - a).rem_euclid(tau)
+                            },
+                        )
+                    })
                     .filter(|x| x.0 != c)
                     .min_by(|x, y| x.1.total_cmp(&y.1))
                     .map(|x| (c, x.0))

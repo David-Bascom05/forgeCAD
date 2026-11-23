@@ -1236,6 +1236,28 @@ def split_by(shape, s, keep, opts):
     return (minus() if keep != "plus" else None), (plus() if keep != "minus" else None)
 
 
+def member(f, opts):
+    """A weldment member: its section along a line (a prism) or an arc (a revolve), run on by
+    `reach` past each end, then each cut's half-space (where its z points) taken away."""
+    fc, pl = face(f)
+    r0, r1 = f["reach"]
+    p = f["path"]
+    if "line" in p:
+        z = pl.z
+        body = prism(translated(fc, [c * -r0 for c in z]), [c * (p["line"] + r0 + r1) for c in z])
+    else:
+        o, z, _, _ = revolve_frame(dict(f, axis=p["arc"]), pl)
+        # turned the way the path runs: where the profile plane's z points
+        if dot(cross(z, sub(pl.o, o)), pl.z) < 0:
+            z = [-c for c in z]
+        if r0:
+            fc = rotated(fc, o, z, -r0)
+        body = BRepPrimAPI_MakeRevol(fc, gp_Ax1(gp_Pnt(*o), gp_Dir(*z)), p["sweep"] + r0 + r1).Shape()
+    for c in f["cuts"]:
+        body, _ = split_by(body, {"s": "plane", "f": c}, "minus", opts)
+    return body
+
+
 def build(features, opts, trace=None):
     """The part the features make (its bodies as one compound when there are several);
     `trace(feature, part)` is called after each."""
@@ -1264,6 +1286,14 @@ def build(features, opts, trace=None):
     def current():
         return bodies[-1][1] if bodies else None
 
+    def acted_on(f):
+        """The part a tool is sized and cut against: the bodies its `in` names (`bodies:`), else
+        the current one (as the kernel's extent and hole read the bodies they act on)."""
+        if "in" in f and bodies:
+            on = [bodies[k][1] for k in picked_bodies(f)]
+            return on[0] if len(on) == 1 else compound(on)
+        return current()
+
     def part():
         return bodies[0][1] if len(bodies) == 1 else compound([b[1] for b in bodies]) if bodies else None
 
@@ -1272,13 +1302,13 @@ def build(features, opts, trace=None):
             k = f["kind"]
             tools = None
             if k == "extrude":
-                tools = [(extrude(f, current()), f["op"])]
+                tools = [(extrude(f, acted_on(f)), f["op"])]
             elif k == "revolve":
                 tools = [(revolve(f), f["op"])]
             elif k == "ball":
                 tools = [(BRepPrimAPI_MakeSphere(gp_Pnt(*f["center"]), f["radius"]).Shape(), f["op"])]
             elif k == "hole":
-                tools = [(hole(f, current()), "cut")]
+                tools = [(hole(f, acted_on(f)), "cut")]
             elif k == "sweep":
                 tools = [(sweep(f), f["op"])]
             elif k == "loft":
@@ -1311,6 +1341,17 @@ def build(features, opts, trace=None):
                     bodies[t][1] = minus if minus is not None else plus
                     if f["keep"] == "both":
                         bodies.append([f["i"], plus])
+            elif k == "member":
+                tools = [(member(f, opts), "new")]
+            elif k == "trim":
+                # the member less each tool's part beyond the region's plane
+                t = find(f["member"])
+                body = bodies[t][1]
+                for tool in f["tools"]:
+                    shape = bodies[find(tool["body"])][1] if "body" in tool else member(tool["member"], opts)
+                    _, beyond = split_by(shape, {"s": "plane", "f": f["region"]}, "plus", opts)
+                    body = boolean(body, [beyond], "cut", opts)
+                bodies[t][1] = body
             elif k == "move":
                 on = picked_bodies(f)
                 if f["copy"]:

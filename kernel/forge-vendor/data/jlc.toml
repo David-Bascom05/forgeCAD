@@ -1,0 +1,586 @@
+# JLCCNC sheet metal (JLC), restated from its public help and capability pages (read 2026-11-23).
+# Not an official profile and not endorsed by JLC. Verify with the vendor before ordering.
+# PARTIAL: JLCCNC publishes no K-factor, bend deduction or inside radius for its own process (only
+# an "outer R corner radius" per thickness, kept as each stock's note); a bent sheet gives r: and
+# bend: itself. Sources and choices: research/sheet-metal/vendors/jlc.md
+format = 1
+id = "jlc"
+name = "JLCCNC sheet metal (JLC)"
+source = "https://jlccnc.com/help/article/sheet-metal-fabrication-guidelines ; https://jlccnc.com/capabilities/sheet-metal-fabrication ; https://jlccnc.com/help/article/materials-supported-in-sheet-metal-fabrication ; https://jlccnc.com/help/article/sheet-metal-fasteners-chart"
+taken = "2026-11-23"
+units = "mm"
+note = "Partial: minimum bending edge and hole to bending edge per thickness (the guidelines' Bending Design Constraints table), minimum hole and hole spacing, tolerances, materials and thicknesses, press-in hardware. No K or inside radius published. Maximum part length 800 mm (no width stated, so not checked). Not official. Verify with the vendor before ordering."
+operations = ["laser", "punch", "bend", "hem", "tap", "countersink", "hardware", "powder_coat"]
+
+[tolerance]
+general = "+/-0.2 mm"
+cut = "+/-0.1 mm"
+bend = "+/-0.3 mm"
+bend_angle = "+/-1.0 deg (the guidelines print +1.0 deg)"
+punch = "+/-0.1 mm"
+hole_diameter = "+/-0.1 mm"
+thread = "+/-0.1 mm"
+
+[rules]
+min_hole = "max(0.5t, 1)"
+min_web = 1                  # minimum distance between holes
+
+[[material]]
+name = "5052 aluminum"
+aliases = ["5052", "AL5052", "aluminum 5052"]
+note = "Temper not stated by JLCCNC: no library material is named, so the part has no mass from it."
+
+[[material.stock]]
+t = 0.5
+min_flange = 3.5   # minimum bending edge, single bend
+hole_to_bend = 2.6   # round hole edge to bending edge
+note = "outer R corner radius 1.2 mm; second bend 4.5 mm, square hole to bending edge 3.5 mm"
+
+[[material.stock]]
+t = 0.8
+min_flange = 3.8   # minimum bending edge, single bend
+hole_to_bend = 3.3   # round hole edge to bending edge
+note = "second bend 5 mm, square hole to bending edge 3.8 mm"
+
+[[material.stock]]
+t = 1
+min_flange = 3.8   # minimum bending edge, single bend
+hole_to_bend = 3.3   # round hole edge to bending edge
+note = "outer R corner radius 1.8 mm; second bend 5.5 mm, square hole to bending edge 3.8 mm"
+
+[[material.stock]]
+t = 1.2
+min_flange = 5   # minimum bending edge, single bend
+hole_to_bend = 3.6   # round hole edge to bending edge
+note = "outer R corner radius 2 mm; second bend 6.5 mm, square hole to bending edge 5 mm"
+
+[[material.stock]]
+t = 1.5
+min_flange = 6   # minimum bending edge, single bend
+hole_to_bend = 4.5   # round hole edge to bending edge
+note = "outer R corner radius 2.75 mm; second bend 8.5 mm, square hole to bending edge 6 mm"
+
+[[material.stock]]
+t = 2
+min_flange = 8   # minimum bending edge, single bend
+hole_to_bend = 6   # round hole edge to bending edge
+note = "outer R corner radius 3.7 mm; second bend 10 mm, square hole to bending edge 8 mm"
+
+[[material.stock]]
+t = 2.5
+min_flange = 10   # minimum bending edge, single bend
+hole_to_bend = 7.5   # round hole edge to bending edge
+note = "outer R corner radius 5 mm; second bend 12 mm, square hole to bending edge 10 mm"
+
+[[material.stock]]
+t = 3
+min_flange = 13   # minimum bending edge, single bend
+hole_to_bend = 9   # round hole edge to bending edge
+note = "outer R corner radius 6 mm; second bend 19 mm, square hole to bending edge 13 mm"
+
+[[material.stock]]
+t = 4
+min_flange = 18   # minimum bending edge, single bend
+hole_to_bend = 12   # round hole edge to bending edge
+note = "outer R corner radius 8 mm; second bend 26 mm, square hole to bending edge 18 mm"
+
+[[material.stock]]
+t = 5
+min_flange = 23   # minimum bending edge, single bend
+hole_to_bend = 15   # round hole edge to bending edge
+note = "outer R corner radius 10 mm; second bend 33 mm, square hole to bending edge 23 mm"
+
+[[material.stock]]
+t = 6
+min_flange = 28   # minimum bending edge, single bend
+hole_to_bend = 18   # round hole edge to bending edge
+note = "outer R corner radius 12 mm; second bend 40 mm, square hole to bending edge 28 mm"
+
+[[material]]
+name = "304 stainless"
+aliases = ["304", "SUS304", "304 SS", "stainless 304"]
+library = "304 annealed"
+
+[[material.stock]]
+t = 0.5
+min_flange = 3.5   # minimum bending edge, single bend
+hole_to_bend = 2.6   # round hole edge to bending edge
+note = "outer R corner radius 1.2 mm; second bend 4.5 mm, square hole to bending edge 3.5 mm"
+
+[[material.stock]]
+t = 0.8
+min_flange = 3.8   # minimum bending edge, single bend
+hole_to_bend = 3.3   # round hole edge to bending edge
+note = "second bend 5 mm, square hole to bending edge 3.8 mm"
+
+[[material.stock]]
+t = 1
+min_flange = 3.8   # minimum bending edge, single bend
+hole_to_bend = 3.3   # round hole edge to bending edge
+note = "outer R corner radius 1.8 mm; second bend 5.5 mm, square hole to bending edge 3.8 mm"
+
+[[material.stock]]
+t = 1.2
+min_flange = 5   # minimum bending edge, single bend
+hole_to_bend = 3.6   # round hole edge to bending edge
+note = "outer R corner radius 2 mm; second bend 6.5 mm, square hole to bending edge 5 mm"
+
+[[material.stock]]
+t = 1.5
+min_flange = 6   # minimum bending edge, single bend
+hole_to_bend = 4.5   # round hole edge to bending edge
+note = "outer R corner radius 2.75 mm; second bend 8.5 mm, square hole to bending edge 6 mm"
+
+[[material.stock]]
+t = 2
+min_flange = 8   # minimum bending edge, single bend
+hole_to_bend = 6   # round hole edge to bending edge
+note = "outer R corner radius 3.7 mm; second bend 10 mm, square hole to bending edge 8 mm"
+
+[[material.stock]]
+t = 2.5
+min_flange = 10   # minimum bending edge, single bend
+hole_to_bend = 7.5   # round hole edge to bending edge
+note = "outer R corner radius 5 mm; second bend 12 mm, square hole to bending edge 10 mm"
+
+[[material.stock]]
+t = 3
+min_flange = 13   # minimum bending edge, single bend
+hole_to_bend = 9   # round hole edge to bending edge
+note = "outer R corner radius 6 mm; second bend 19 mm, square hole to bending edge 13 mm"
+
+[[material.stock]]
+t = 4
+min_flange = 18   # minimum bending edge, single bend
+hole_to_bend = 12   # round hole edge to bending edge
+note = "outer R corner radius 8 mm; second bend 26 mm, square hole to bending edge 18 mm"
+
+[[material.stock]]
+t = 5
+min_flange = 23   # minimum bending edge, single bend
+hole_to_bend = 15   # round hole edge to bending edge
+note = "outer R corner radius 10 mm; second bend 33 mm, square hole to bending edge 23 mm"
+
+[[material.stock]]
+t = 6
+min_flange = 28   # minimum bending edge, single bend
+hole_to_bend = 18   # round hole edge to bending edge
+note = "outer R corner radius 12 mm; second bend 40 mm, square hole to bending edge 28 mm"
+
+[[material]]
+name = "201 stainless"
+aliases = ["201", "SUS201", "stainless 201"]
+
+[[material.stock]]
+t = 0.5
+min_flange = 3.5   # minimum bending edge, single bend
+hole_to_bend = 2.6   # round hole edge to bending edge
+note = "outer R corner radius 1.2 mm; second bend 4.5 mm, square hole to bending edge 3.5 mm"
+
+[[material.stock]]
+t = 0.8
+min_flange = 3.8   # minimum bending edge, single bend
+hole_to_bend = 3.3   # round hole edge to bending edge
+note = "second bend 5 mm, square hole to bending edge 3.8 mm"
+
+[[material.stock]]
+t = 1
+min_flange = 3.8   # minimum bending edge, single bend
+hole_to_bend = 3.3   # round hole edge to bending edge
+note = "outer R corner radius 1.8 mm; second bend 5.5 mm, square hole to bending edge 3.8 mm"
+
+[[material.stock]]
+t = 1.2
+min_flange = 5   # minimum bending edge, single bend
+hole_to_bend = 3.6   # round hole edge to bending edge
+note = "outer R corner radius 2 mm; second bend 6.5 mm, square hole to bending edge 5 mm"
+
+[[material.stock]]
+t = 1.5
+min_flange = 6   # minimum bending edge, single bend
+hole_to_bend = 4.5   # round hole edge to bending edge
+note = "outer R corner radius 2.75 mm; second bend 8.5 mm, square hole to bending edge 6 mm"
+
+[[material.stock]]
+t = 2
+min_flange = 8   # minimum bending edge, single bend
+hole_to_bend = 6   # round hole edge to bending edge
+note = "outer R corner radius 3.7 mm; second bend 10 mm, square hole to bending edge 8 mm"
+
+[[material.stock]]
+t = 2.5
+min_flange = 10   # minimum bending edge, single bend
+hole_to_bend = 7.5   # round hole edge to bending edge
+note = "outer R corner radius 5 mm; second bend 12 mm, square hole to bending edge 10 mm"
+
+[[material.stock]]
+t = 3
+min_flange = 13   # minimum bending edge, single bend
+hole_to_bend = 9   # round hole edge to bending edge
+note = "outer R corner radius 6 mm; second bend 19 mm, square hole to bending edge 13 mm"
+
+[[material.stock]]
+t = 4
+min_flange = 18   # minimum bending edge, single bend
+hole_to_bend = 12   # round hole edge to bending edge
+note = "outer R corner radius 8 mm; second bend 26 mm, square hole to bending edge 18 mm"
+
+[[material.stock]]
+t = 5
+min_flange = 23   # minimum bending edge, single bend
+hole_to_bend = 15   # round hole edge to bending edge
+note = "outer R corner radius 10 mm; second bend 33 mm, square hole to bending edge 23 mm"
+
+[[material.stock]]
+t = 6
+min_flange = 28   # minimum bending edge, single bend
+hole_to_bend = 18   # round hole edge to bending edge
+note = "outer R corner radius 12 mm; second bend 40 mm, square hole to bending edge 28 mm"
+
+[[material]]
+name = "SPCC cold rolled steel"
+aliases = ["SPCC", "cold rolled steel", "CRS", "cold rolled sheet"]
+note = "SPCC (JIS G3141); no library material is named."
+
+[[material.stock]]
+t = 0.5
+min_flange = 3.5   # minimum bending edge, single bend
+hole_to_bend = 2.6   # round hole edge to bending edge
+note = "outer R corner radius 1.2 mm; second bend 4.5 mm, square hole to bending edge 3.5 mm"
+
+[[material.stock]]
+t = 0.8
+min_flange = 3.8   # minimum bending edge, single bend
+hole_to_bend = 3.3   # round hole edge to bending edge
+note = "second bend 5 mm, square hole to bending edge 3.8 mm"
+
+[[material.stock]]
+t = 1
+min_flange = 3.8   # minimum bending edge, single bend
+hole_to_bend = 3.3   # round hole edge to bending edge
+note = "outer R corner radius 1.8 mm; second bend 5.5 mm, square hole to bending edge 3.8 mm"
+
+[[material.stock]]
+t = 1.2
+min_flange = 5   # minimum bending edge, single bend
+hole_to_bend = 3.6   # round hole edge to bending edge
+note = "outer R corner radius 2 mm; second bend 6.5 mm, square hole to bending edge 5 mm"
+
+[[material.stock]]
+t = 1.5
+min_flange = 6   # minimum bending edge, single bend
+hole_to_bend = 4.5   # round hole edge to bending edge
+note = "outer R corner radius 2.75 mm; second bend 8.5 mm, square hole to bending edge 6 mm"
+
+[[material.stock]]
+t = 2
+min_flange = 8   # minimum bending edge, single bend
+hole_to_bend = 6   # round hole edge to bending edge
+note = "outer R corner radius 3.7 mm; second bend 10 mm, square hole to bending edge 8 mm"
+
+[[material.stock]]
+t = 2.5
+min_flange = 10   # minimum bending edge, single bend
+hole_to_bend = 7.5   # round hole edge to bending edge
+note = "outer R corner radius 5 mm; second bend 12 mm, square hole to bending edge 10 mm"
+
+[[material.stock]]
+t = 3
+min_flange = 13   # minimum bending edge, single bend
+hole_to_bend = 9   # round hole edge to bending edge
+note = "outer R corner radius 6 mm; second bend 19 mm, square hole to bending edge 13 mm"
+
+[[material.stock]]
+t = 4
+min_flange = 18   # minimum bending edge, single bend
+hole_to_bend = 12   # round hole edge to bending edge
+note = "outer R corner radius 8 mm; second bend 26 mm, square hole to bending edge 18 mm"
+
+[[material.stock]]
+t = 5
+min_flange = 23   # minimum bending edge, single bend
+hole_to_bend = 15   # round hole edge to bending edge
+note = "outer R corner radius 10 mm; second bend 33 mm, square hole to bending edge 23 mm"
+
+[[material.stock]]
+t = 6
+min_flange = 28   # minimum bending edge, single bend
+hole_to_bend = 18   # round hole edge to bending edge
+note = "outer R corner radius 12 mm; second bend 40 mm, square hole to bending edge 28 mm"
+
+[[material]]
+name = "galvanized steel"
+aliases = ["galvanized", "SGCC", "galvanized steel sheet"]
+
+[[material.stock]]
+t = 0.5
+min_flange = 3.5   # minimum bending edge, single bend
+hole_to_bend = 2.6   # round hole edge to bending edge
+note = "outer R corner radius 1.2 mm; second bend 4.5 mm, square hole to bending edge 3.5 mm"
+
+[[material.stock]]
+t = 0.8
+min_flange = 3.8   # minimum bending edge, single bend
+hole_to_bend = 3.3   # round hole edge to bending edge
+note = "second bend 5 mm, square hole to bending edge 3.8 mm"
+
+[[material.stock]]
+t = 1
+min_flange = 3.8   # minimum bending edge, single bend
+hole_to_bend = 3.3   # round hole edge to bending edge
+note = "outer R corner radius 1.8 mm; second bend 5.5 mm, square hole to bending edge 3.8 mm"
+
+[[material.stock]]
+t = 1.2
+min_flange = 5   # minimum bending edge, single bend
+hole_to_bend = 3.6   # round hole edge to bending edge
+note = "outer R corner radius 2 mm; second bend 6.5 mm, square hole to bending edge 5 mm"
+
+[[material.stock]]
+t = 1.5
+min_flange = 6   # minimum bending edge, single bend
+hole_to_bend = 4.5   # round hole edge to bending edge
+note = "outer R corner radius 2.75 mm; second bend 8.5 mm, square hole to bending edge 6 mm"
+
+[[material.stock]]
+t = 2
+min_flange = 8   # minimum bending edge, single bend
+hole_to_bend = 6   # round hole edge to bending edge
+note = "outer R corner radius 3.7 mm; second bend 10 mm, square hole to bending edge 8 mm"
+
+[[material.stock]]
+t = 2.5
+min_flange = 10   # minimum bending edge, single bend
+hole_to_bend = 7.5   # round hole edge to bending edge
+note = "outer R corner radius 5 mm; second bend 12 mm, square hole to bending edge 10 mm"
+
+[[material.stock]]
+t = 3
+min_flange = 13   # minimum bending edge, single bend
+hole_to_bend = 9   # round hole edge to bending edge
+note = "outer R corner radius 6 mm; second bend 19 mm, square hole to bending edge 13 mm"
+
+[[material.stock]]
+t = 4
+min_flange = 18   # minimum bending edge, single bend
+hole_to_bend = 12   # round hole edge to bending edge
+note = "outer R corner radius 8 mm; second bend 26 mm, square hole to bending edge 18 mm"
+
+[[material.stock]]
+t = 5
+min_flange = 23   # minimum bending edge, single bend
+hole_to_bend = 15   # round hole edge to bending edge
+note = "outer R corner radius 10 mm; second bend 33 mm, square hole to bending edge 23 mm"
+
+[[material.stock]]
+t = 6
+min_flange = 28   # minimum bending edge, single bend
+hole_to_bend = 18   # round hole edge to bending edge
+note = "outer R corner radius 12 mm; second bend 40 mm, square hole to bending edge 28 mm"
+
+# Press-in hardware (fasteners chart: "manually measured, for reference only", availability by
+# factory). sheet: the thinnest sheet the chart gives; no greatest is published, so 6 mm, the
+# thickest stock. edge: the chart's minimum distance (taken as hole centre to edge).
+
+[[hardware]]
+kind = "nut"
+size = "M2"
+code = "CLS-M2-1"
+sheet = [1, 6]
+hole = 4.25
+edge = 4.8
+
+[[hardware]]
+kind = "nut"
+size = "M2.5"
+code = "CLS-M2.5-1"
+sheet = [1, 6]
+hole = 4.25
+edge = 4.8
+
+[[hardware]]
+kind = "nut"
+size = "M3"
+code = "CLS-M3-1"
+sheet = [1, 6]
+hole = 4.25
+edge = 4.8
+
+[[hardware]]
+kind = "nut"
+size = "M3.5"
+code = "CLS-M3.5-1"
+sheet = [1, 6]
+hole = 4.75
+edge = 5.6
+
+[[hardware]]
+kind = "nut"
+size = "M4"
+code = "CLS-M4-1"
+sheet = [1, 6]
+hole = 5.4
+edge = 6.9
+
+[[hardware]]
+kind = "nut"
+size = "M5"
+code = "CLS-M5-1"
+sheet = [1, 6]
+hole = 6.4
+edge = 7.1
+
+[[hardware]]
+kind = "nut"
+size = "M6"
+code = "CLS-M6-1"
+sheet = [1.4, 6]
+hole = 8.75
+edge = 8.6
+
+[[hardware]]
+kind = "nut"
+size = "M8"
+code = "CLS-M8-1"
+sheet = [1.4, 6]
+hole = 10.5
+edge = 9.7
+
+[[hardware]]
+kind = "stud"
+size = "M2.5"
+code = "FH-M2.5"
+sheet = [1, 6]
+hole = 2.5
+edge = 5.4
+
+[[hardware]]
+kind = "stud"
+size = "M3"
+code = "FH-M3"
+sheet = [1, 6]
+hole = 3
+edge = 5.6
+
+[[hardware]]
+kind = "stud"
+size = "M3.5"
+code = "FH-M3.5"
+sheet = [1, 6]
+hole = 3.5
+edge = 6.4
+
+[[hardware]]
+kind = "stud"
+size = "M4"
+code = "FH-M4"
+sheet = [1, 6]
+hole = 4
+edge = 7.2
+
+[[hardware]]
+kind = "stud"
+size = "M5"
+code = "FH-M5"
+sheet = [1, 6]
+hole = 5
+edge = 7.2
+
+[[hardware]]
+kind = "stud"
+size = "M6"
+code = "FH-M6"
+sheet = [1.6, 6]
+hole = 6
+edge = 7.9
+
+[[hardware]]
+kind = "stud"
+size = "M8"
+code = "FH-M8"
+sheet = [2.4, 6]
+hole = 8
+edge = 9.6
+
+[[hardware]]
+kind = "standoff"
+size = "M2"
+code = "SO-M2"
+sheet = [1, 6]
+hole = 4.2
+edge = 6
+
+[[hardware]]
+kind = "standoff"
+size = "M2.5"
+code = "SO-M2.5"
+sheet = [1, 6]
+hole = 4.2
+edge = 6
+
+[[hardware]]
+kind = "standoff"
+size = "M3"
+code = "SO-M3"
+sheet = [1, 6]
+hole = 4.2
+edge = 6
+
+[[hardware]]
+kind = "standoff"
+size = "M3.5"
+code = "SO-M3.5"
+sheet = [1, 6]
+hole = 5.4
+edge = 8.8
+
+[[hardware]]
+kind = "standoff"
+size = "M4"
+code = "SO-M4"
+sheet = [1.3, 6]
+hole = 6
+edge = 8
+
+[[hardware]]
+kind = "standoff"
+size = "M5"
+code = "SO-M5"
+sheet = [1.3, 6]
+hole = 7.2
+edge = 8
+
+[[hardware]]
+kind = "standoff"
+size = "M6"
+code = "SO-M6"
+sheet = [1.3, 6]
+hole = 8.8
+edge = 10
+
+[[hardware]]
+kind = "standoff"
+size = "M8"
+code = "SO-M8"
+sheet = [1.3, 6]
+hole = 11
+edge = 14
+
+# Press-brake tooling for the bend simulator (forge-brake). JLCCNC publishes no press-brake
+# tooling (no V-dies, punches, tip radii, bend length or press; read 2026-11-23 at
+# https://jlccnc.com/help/article/sheet-metal-fabrication-guidelines and
+# https://jlccnc.com/capabilities/sheet-metal-fabrication): the standard set std-eu stands for
+# all of it. What it does publish near tooling is kept as data: the least width inside a bent
+# U per thickness (its section 2.6), and its outer bend radius per thickness (section 2.4).
+# Not official: verify with the vendor before ordering.
+[tooling]
+base = "std-eu"
+id = "jlc"
+note = "JLCCNC publishes no press-brake tooling: the standard set std-eu (read 2026-11-23, https://jlccnc.com/help/article/sheet-metal-fabrication-guidelines). Not official: verify with the vendor before ordering."
+source = "https://jlccnc.com/help/article/sheet-metal-fabrication-guidelines ; https://jlccnc.com/capabilities/sheet-metal-fabrication"
+taken = "2026-11-23"
+defaults = ["punches", "dies", "press", "backgauge"]
+# thickness, least inside width of a bent U (mm), published
+u_min_width = [[1, 12], [2, 12], [3, 18], [4, 20], [5, 23], [6, 25]]
+# thickness, outer bend radius (mm), published
+outer_radius = [[0.5, 1.2], [1, 1.8], [1.2, 2], [1.5, 2.75], [2, 3.7], [2.5, 5], [3, 6], [4, 8], [5, 10], [6, 12]]

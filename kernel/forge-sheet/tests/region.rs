@@ -196,21 +196,32 @@ fn a_pinch_names_both_edges() {
 #[test]
 fn near_coincident_edges_are_refused_by_name() {
     let wall = [rect(0.0, 0.0, 100.0, 50.0, 0)];
-    // a notch flush with the right edge (segment 1), 3e-6 inside it
-    let notch = rect(80.0, 10.0, 20.0 - 3e-6, 20.0, 20);
+    // a notch 1.5e-5 inside the right edge (segment 1): further than the tolerance, within twice
+    // it, the tolerance cannot say one carrier or two (the spread cap): refused, by name
+    let notch = rect(80.0, 10.0, 20.0 - 1.5e-5, 20.0, 20);
     match subtract(&wall, &[notch]) {
         Err(RegionError::NearCoincident { a, b, gap, limit, .. }) => {
             let mut ids = [a, b];
             ids.sort();
             assert_eq!(ids, [1, 21]);
-            assert!(gap > 1e-6 && gap < limit);
+            assert!(gap > limit && gap <= 2.0 * limit, "{gap} against {limit}");
         }
         other => panic!("{other:?}"),
     }
-    // exactly flush is a notch
-    let r = subtract(&wall, &[rect(80.0, 10.0, 20.0, 20.0, 20)]).unwrap();
-    assert_eq!(r.parts.len(), 1);
-    assert!((r.area() - (5000.0 - 400.0)).abs() < 1e-9);
+    // within the tolerance it is on the edge's carrier (one rule, decided once for the pair), and
+    // its corners are the edge's points: exactly the flush notch
+    let flush = subtract(&wall, &[rect(80.0, 10.0, 20.0, 20.0, 20)]).unwrap();
+    for off in [0.0, 3e-6, 9e-6] {
+        let r = subtract(&wall, &[rect(80.0, 10.0, 20.0 - off, 20.0, 20)]).unwrap();
+        assert_eq!(r.parts.len(), 1);
+        assert!((r.area() - (5000.0 - 400.0)).abs() < 1e-3, "{off}");
+        let ends = |r: &Region| -> Vec<Point2> { r.parts[0].outer.iter().map(|b| b.start).collect() };
+        assert_eq!(ends(&r).len(), ends(&flush).len(), "{off}");
+        assert!(
+            ends(&r).contains(&Point2::new(100.0, 10.0)),
+            "{off}: the edge's own point"
+        );
+    }
 }
 
 #[test]

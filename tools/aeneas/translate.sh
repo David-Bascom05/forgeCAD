@@ -73,7 +73,7 @@ mkdir -p "$work/gen"
 for f in Types Funs FunsExternal_Template TypesExternal_Template; do
   [ -f "$work/out/$f.lean" ] || continue
   sed -e '/^module$/d' -e 's/^public import /import /' -e '/^@\[expose\] public section$/d' \
-      -e "s/^import [A-Za-z_]*\.\(Types\|Funs\|FunsExternal\)$/import $PKG.\1/" \
+      -e "s/^import [A-Za-z_]*\.\(Types\|Funs\|FunsExternal\|TypesExternal\)$/import $PKG.\1/" \
       "$work/out/$f.lean" > "$work/gen/$f.lean"
 done
 sed -i 's/^import Aeneas$/import Aeneas\nimport AeneasF64/' "$work/gen/Types.lean"
@@ -90,7 +90,7 @@ dest=$dir/lean/$PKG
 missing=0
 while read -r n; do
   [ -n "$n" ] || continue
-  if ! { cat "$dest/FunsExternal.lean" "$dest/TypesExternal.lean" "$root"/verify/aeneas/bridge/AeneasF64/*.lean 2>/dev/null || true; } \
+  if ! { cat "$dest/FunsExternal.lean" "$dest/TypesExternal.lean" "$root/verify/aeneas/bridge/AeneasF64/Std.lean" 2>/dev/null || true; } \
       | awk '$1 == "def" || $1 == "opaque" || $1 == "abbrev" { print $2 }' | grep -qxF "$n"; then
     echo "$crate: opaque $n has no definition (FunsExternal.lean, TypesExternal.lean or the bridge)" >&2
     missing=1

@@ -16,9 +16,8 @@ use std::sync::Arc;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
 use winit::application::ApplicationHandler;
-use winit::event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent};
+use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, EventLoop, EventLoopProxy};
-use winit::keyboard::{Key, NamedKey};
 use winit::platform::web::{EventLoopExtWebSys, WindowAttributesExtWebSys};
 use winit::window::{Window, WindowId};
 
@@ -45,9 +44,7 @@ struct Ui {
     shell: Shell,
     device: wgpu::Device,
     queue: wgpu::Queue,
-    events: Vec<egui::Event>,
-    modifiers: egui::Modifiers,
-    pointer: egui::Pos2,
+    input: crate::webinput::Input,
     /// The last frame's shell, in ms.
     ui_ms: f64,
 }
@@ -64,9 +61,7 @@ impl Ui {
             shell: Shell::default(),
             device,
             queue,
-            events: vec![],
-            modifiers: Default::default(),
-            pointer: egui::Pos2::ZERO,
+            input: Default::default(),
             ui_ms: 0.0,
         }
     }
@@ -104,7 +99,7 @@ impl Ui {
             )),
             time: Some(now_ms() / 1000.0),
             focused: true,
-            events: std::mem::take(&mut self.events),
+            events: std::mem::take(&mut self.input.events),
             ..Default::default()
         };
         let shell = &mut self.shell;
@@ -178,121 +173,6 @@ impl Ui {
             page_save(&name, &bytes);
         }
     }
-
-    /// A window event as egui's input; true if it wants a frame.
-    fn event(&mut self, e: &WindowEvent, ppp: f32) -> bool {
-        let m = self.modifiers;
-        match e {
-            WindowEvent::CursorMoved { position, .. } => {
-                self.pointer = egui::pos2(position.x as f32 / ppp, position.y as f32 / ppp);
-                self.events.push(egui::Event::PointerMoved(self.pointer));
-            }
-            WindowEvent::CursorLeft { .. } => self.events.push(egui::Event::PointerGone),
-            WindowEvent::MouseInput { state, button, .. } => {
-                let button = match button {
-                    MouseButton::Left => egui::PointerButton::Primary,
-                    MouseButton::Right => egui::PointerButton::Secondary,
-                    MouseButton::Middle => egui::PointerButton::Middle,
-                    MouseButton::Back => egui::PointerButton::Extra1,
-                    MouseButton::Forward => egui::PointerButton::Extra2,
-                    MouseButton::Other(_) => return false,
-                };
-                self.events.push(egui::Event::PointerButton {
-                    pos: self.pointer,
-                    button,
-                    pressed: *state == ElementState::Pressed,
-                    modifiers: m,
-                });
-            }
-            WindowEvent::MouseWheel { delta, .. } => {
-                let (unit, delta) = match delta {
-                    MouseScrollDelta::LineDelta(x, y) => (egui::MouseWheelUnit::Line, egui::vec2(*x, *y)),
-                    MouseScrollDelta::PixelDelta(p) => (
-                        egui::MouseWheelUnit::Point,
-                        egui::vec2(p.x as f32 / ppp, p.y as f32 / ppp),
-                    ),
-                };
-                self.events.push(egui::Event::MouseWheel {
-                    unit,
-                    delta,
-                    phase: egui::TouchPhase::Move,
-                    source: egui::MouseWheelSource::Wheel,
-                    modifiers: m,
-                });
-            }
-            WindowEvent::ModifiersChanged(s) => {
-                let s = s.state();
-                self.modifiers = egui::Modifiers {
-                    alt: s.alt_key(),
-                    ctrl: s.control_key(),
-                    shift: s.shift_key(),
-                    mac_cmd: false,
-                    command: s.control_key() || s.super_key(),
-                };
-                self.events.push(egui::Event::ModifiersChanged(self.modifiers));
-            }
-            WindowEvent::KeyboardInput { event, .. } => {
-                let pressed = event.state == ElementState::Pressed;
-                if let Some(key) = key_of(&event.logical_key) {
-                    self.events.push(egui::Event::Key {
-                        key,
-                        physical_key: None,
-                        pressed,
-                        repeat: event.repeat,
-                        modifiers: m,
-                    });
-                }
-                if pressed
-                    && !m.ctrl
-                    && !m.command
-                    && let Some(t) = &event.text
-                    && !t.chars().any(char::is_control)
-                {
-                    self.events.push(egui::Event::Text(t.to_string()));
-                }
-            }
-            WindowEvent::Focused(f) => self.events.push(egui::Event::WindowFocused(*f)),
-            _ => return false,
-        }
-        true
-    }
-}
-
-fn key_of(k: &Key) -> Option<egui::Key> {
-    use egui::Key as K;
-    Some(match k {
-        Key::Named(n) => match n {
-            NamedKey::Enter => K::Enter,
-            NamedKey::Space => K::Space,
-            NamedKey::Backspace => K::Backspace,
-            NamedKey::Delete => K::Delete,
-            NamedKey::Escape => K::Escape,
-            NamedKey::Tab => K::Tab,
-            NamedKey::ArrowUp => K::ArrowUp,
-            NamedKey::ArrowDown => K::ArrowDown,
-            NamedKey::ArrowLeft => K::ArrowLeft,
-            NamedKey::ArrowRight => K::ArrowRight,
-            NamedKey::Home => K::Home,
-            NamedKey::End => K::End,
-            NamedKey::PageUp => K::PageUp,
-            NamedKey::PageDown => K::PageDown,
-            NamedKey::F1 => K::F1,
-            NamedKey::F2 => K::F2,
-            NamedKey::F3 => K::F3,
-            NamedKey::F4 => K::F4,
-            NamedKey::F5 => K::F5,
-            NamedKey::F6 => K::F6,
-            NamedKey::F7 => K::F7,
-            NamedKey::F8 => K::F8,
-            NamedKey::F9 => K::F9,
-            NamedKey::F10 => K::F10,
-            NamedKey::F11 => K::F11,
-            NamedKey::F12 => K::F12,
-            _ => return None,
-        },
-        Key::Character(s) => return egui::Key::from_name(&s.to_uppercase()),
-        _ => return None,
-    })
 }
 
 /// The canvas, its surface and the shell on it.
@@ -436,7 +316,7 @@ impl ApplicationHandler<Msg> for App {
             }
             e => {
                 let ppp = h.window.scale_factor() as f32;
-                if h.ui.event(e, ppp) {
+                if h.ui.input.event(e, ppp) {
                     h.window.request_redraw();
                 }
             }
@@ -535,10 +415,10 @@ pub async fn dwg_offscreen(
     }
     for p in clicks.as_chunks::<2>().0 {
         let at = egui::pos2(p[0], p[1]);
-        ui.events.push(egui::Event::PointerMoved(at));
+        ui.input.events.push(egui::Event::PointerMoved(at));
         ui.frame(&view, size, 1.0);
         for pressed in [true, false] {
-            ui.events.push(egui::Event::PointerButton {
+            ui.input.events.push(egui::Event::PointerButton {
                 pos: at,
                 button: egui::PointerButton::Primary,
                 pressed,
@@ -548,8 +428,8 @@ pub async fn dwg_offscreen(
         }
     }
     for line in typed.split(';').filter(|l| !l.is_empty()) {
-        ui.events.push(egui::Event::Text(line.to_string()));
-        ui.events.push(egui::Event::Key {
+        ui.input.events.push(egui::Event::Text(line.to_string()));
+        ui.input.events.push(egui::Event::Key {
             key: egui::Key::Enter,
             physical_key: None,
             pressed: true,

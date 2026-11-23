@@ -301,6 +301,7 @@ lacks):
 | Measure (distance, wall, mass), Check | off | the panel shows volume, faces, validity |
 | Section, lines, view cube, orbit/pan/zoom, fit, look at, origin planes | yes | the view's own |
 | Export STEP / DXF | CLI; DXF also in the panel | `forgecad export F.fg [dxf]` |
+| Export STL / 3MF / OBJ | File > Export | `forgecad export F.fg stl\|3mf\|obj` (`meshfile.rs`) |
 
 Assemblies (a document whose first line is `assembly`) open in the app too (`tests/fg_asm.rs`):
 the posed parts drawn, each distinct part meshed once (by content) and placed at every

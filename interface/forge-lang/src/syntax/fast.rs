@@ -230,9 +230,20 @@ pub(super) fn parse(toks: Vec<Tok>, la: Vec<u8>) -> Result<Vec<Stmt>, Error> {
 /// `stmts` (one could have begun) were missed.
 #[derive(Clone, Copy)]
 struct Miss {
-    set: u64,
+    /// The terminals expected, as `TermSet` holds them.
+    set: u128,
     end: bool,
     begin: bool,
+}
+
+/// FIRST of symbol `s`, a terminal or a nonterminal (`TermSet`'s width: a nonterminal's index is
+/// `NT_BASE` and up).
+fn first_of(s: u16) -> u128 {
+    if (s as u8) < table::NT_BASE {
+        1 << s
+    } else {
+        table::FIRST[s as usize - table::NT_BASE as usize]
+    }
 }
 
 pub(super) struct Fast {
@@ -259,8 +270,9 @@ impl Fast {
     /// for the lookahead and no empty one), as `Parser::expected` words it.
     #[cold]
     fn stop(&self, stop: u16) -> Box<Error> {
-        let m = self.miss.unwrap_or(Miss {
-            set: 1 << stop,
+        // a nonterminal stops only in `missed`, which has recorded the miss already
+        let m = self.miss.unwrap_or_else(|| Miss {
+            set: first_of(stop),
             end: false,
             begin: false,
         });
@@ -272,7 +284,7 @@ impl Fast {
             } else {
                 super::what(stop)
             },
-            expected: TermSet(m.set as u128),
+            expected: TermSet(m.set),
             span: self.span(),
         }))
     }
@@ -289,7 +301,7 @@ impl Fast {
     #[cold]
     fn missed(&mut self, a: usize, fk: u64) -> F<P> {
         let m = self.miss.get_or_insert(Miss {
-            set: table::FIRST[a] as u64 | if table::NULLABLE[a] { fk } else { 0 },
+            set: table::FIRST[a] | if table::NULLABLE[a] { fk as u128 } else { 0 },
             end: false,
             begin: false,
         });

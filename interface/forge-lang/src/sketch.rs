@@ -576,6 +576,39 @@ impl Sk {
         (h >> 24) & 0xff_ffff_ffff
     }
 
+    /// A loop that is one closed curve of the sketch (a closed spline or a whole ellipse), which
+    /// a profile hands on cut into pieces (`ProfileLoop::smooth_pieces`: a solid's edge may not
+    /// end where it starts), as that one curve again, one segment under its own id, run the way
+    /// the loop runs. Sheet metal takes it whole: one source, one trim, one curve on the flat.
+    pub fn whole_curve(&self, l: &forge_ops::ProfileLoop) -> Option<forge_ops::ProfileLoop> {
+        const PIECE: u64 = 0xffff << 48;
+        let base = l.segments.first()?.1 & !PIECE;
+        if l.segments.len() < 2
+            || !l
+                .segments
+                .iter()
+                .all(|(g, id)| matches!(g, forge_ops::Segment::Spline(_)) && id & !PIECE == base)
+        {
+            return None;
+        }
+        let e = self.ents.iter().map(|x| x.0).find(|&e| self.seg_id(e) == base)?;
+        let c = self.s.curve(e)?;
+        if !c.closed() {
+            return None;
+        }
+        let whole = forge_ops::Segment::Spline(c.clone());
+        let along: f64 = l.segments.iter().map(|(g, _)| g.area_term()).sum();
+        let c = if (whole.area_term() > 0.0) == (along > 0.0) {
+            c
+        } else {
+            std::sync::Arc::new(c.reversed())
+        };
+        Some(forge_ops::ProfileLoop::new(vec![(
+            forge_ops::Segment::Spline(c),
+            base,
+        )]))
+    }
+
     /// The region whose outside runs through one of `through` (any one if None and there is one).
     /// The sketch's regions, as `forge_sketch::profiles` finds them: those of the solve it came
     /// to while it is still that sketch, worked out once there (a sketch an edit left as it was

@@ -33,7 +33,7 @@ fn read(file: &Path) -> Log {
         undos: vec![],
         redos: vec![],
     };
-    let Ok(text) = std::fs::read_to_string(log_path(file)) else {
+    let Ok(text) = forge_dirs::fs::read_to_string(log_path(file)) else {
         return log;
     };
     for line in text.lines() {
@@ -69,7 +69,7 @@ fn append(file: &Path, j: Json) -> std::io::Result<()> {
     let mut line = String::new();
     j.write(&mut line);
     line.push('\n');
-    std::fs::OpenOptions::new()
+    forge_dirs::fs::OpenOptions::new()
         .create(true)
         .append(true)
         .open(log_path(file))?
@@ -78,7 +78,7 @@ fn append(file: &Path, j: Json) -> std::io::Result<()> {
 
 /// Writes `after` to `file` (which held `before`) and logs the edit.
 pub fn write(file: &Path, before: &str, after: &str) -> std::io::Result<()> {
-    std::fs::write(file, after)?;
+    forge_dirs::fs::write(file, after)?;
     if before != after {
         append(
             file,
@@ -101,7 +101,7 @@ pub enum Step {
 /// Undoes the last edit, or redoes the last undone: the file's new text, written and logged.
 pub fn step(file: &Path, step: Step) -> Result<String, String> {
     let log = read(file);
-    let now = std::fs::read_to_string(file).map_err(|e| format!("{}: {e}", file.display()))?;
+    let now = forge_dirs::fs::read_to_string(file).map_err(|e| format!("{}: {e}", file.display()))?;
     let (stack, word) = match step {
         Step::Undo => (&log.undos, "undo"),
         Step::Redo => (&log.redos, "redo"),
@@ -120,7 +120,7 @@ pub fn step(file: &Path, step: Step) -> Result<String, String> {
             file.display()
         ));
     }
-    std::fs::write(file, to).map_err(|e| format!("{}: {e}", file.display()))?;
+    forge_dirs::fs::write(file, to).map_err(|e| format!("{}: {e}", file.display()))?;
     append(file, Json::obj(vec![("kind", word.into())])).map_err(|e| format!("{}: {e}", file.display()))?;
     Ok(to.clone())
 }
@@ -149,7 +149,7 @@ pub fn history(file: &Path, now: &str) -> Option<(Vec<String>, Vec<String>)> {
 pub fn keep(file: &Path, undos: &[String], now: &str, redos: &[String]) -> std::io::Result<()> {
     let path = log_path(file);
     if undos.is_empty() && redos.is_empty() {
-        return match std::fs::remove_file(&path) {
+        return match forge_dirs::fs::remove_file(&path) {
             Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e),
             _ => Ok(()),
         };
@@ -176,7 +176,7 @@ pub fn keep(file: &Path, undos: &[String], now: &str, redos: &[String]) -> std::
     for _ in redos {
         line(Json::obj(vec![("kind", "undo".into())]));
     }
-    std::fs::write(path, out)
+    forge_dirs::fs::write(path, out)
 }
 
 #[cfg(test)]
@@ -185,11 +185,11 @@ mod tests {
 
     #[test]
     fn undo_and_redo_walk_the_log() {
-        let dir = std::env::temp_dir().join(format!("forge-undo-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).expect("dir");
+        let dir = forge_dirs::temp_dir().join(format!("forge-undo-{}", forge_dirs::process_id()));
+        forge_dirs::fs::create_dir_all(&dir).expect("dir");
         let f = dir.join("p.fg");
-        let _ = std::fs::remove_file(log_path(&f));
-        std::fs::write(&f, "a").expect("write");
+        let _ = forge_dirs::fs::remove_file(log_path(&f));
+        forge_dirs::fs::write(&f, "a").expect("write");
         write(&f, "a", "b").expect("edit");
         write(&f, "b", "c").expect("edit");
         assert_eq!(step(&f, Step::Undo).as_deref(), Ok("b"));
@@ -201,17 +201,17 @@ mod tests {
         assert!(step(&f, Step::Redo).is_err());
         assert_eq!(step(&f, Step::Undo).as_deref(), Ok("b"));
         // a hand edit since: refused, the file as it is
-        std::fs::write(&f, "hand").expect("write");
+        forge_dirs::fs::write(&f, "hand").expect("write");
         assert!(step(&f, Step::Undo).is_err());
-        assert_eq!(std::fs::read_to_string(&f).expect("read"), "hand");
+        assert_eq!(forge_dirs::fs::read_to_string(&f).expect("read"), "hand");
     }
 
     #[test]
     fn an_apps_stacks_kept_are_the_stacks_read_back_and_the_clis_to_step() {
-        let dir = std::env::temp_dir().join(format!("forge-undo-keep-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).expect("dir");
+        let dir = forge_dirs::temp_dir().join(format!("forge-undo-keep-{}", forge_dirs::process_id()));
+        forge_dirs::fs::create_dir_all(&dir).expect("dir");
         let f = dir.join("p.fg");
-        std::fs::write(&f, "c").expect("write");
+        forge_dirs::fs::write(&f, "c").expect("write");
         let (undos, redos) = (
             vec!["a".to_string(), "b".to_string()],
             vec!["e".to_string(), "d".to_string()],

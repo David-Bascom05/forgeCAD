@@ -3,7 +3,7 @@
 
 use crate::pattern::{Source, corners, instances};
 use crate::{Combine, Extent, Feature, Turn};
-use forge_math::{Box3, Frame, Point2, Vec2, dmath};
+use forge_math::{Box3, Frame, Interval, Point2, Vec2, dmath};
 use forge_ops::{Axis2, Profile, ProfileLoop, Segment};
 
 #[derive(Clone, Debug, PartialEq)]
@@ -227,32 +227,57 @@ impl Hole {
     }
 }
 
-fn segment_points(s: &Segment) -> Vec<Point2> {
-    match *s {
+fn segment_points(s: &Segment) -> impl Iterator<Item = Point2> {
+    let (pts, n) = match *s {
         Segment::Spline(ref c) => {
             let b = c.c.bbox(c.c.domain());
-            [
-                (b.x.lo, b.y.lo),
-                (b.x.lo, b.y.hi),
-                (b.x.hi, b.y.lo),
-                (b.x.hi, b.y.hi),
-            ]
-            .map(|(x, y)| Point2::new(x, y))
-            .to_vec()
+            (
+                [
+                    (b.x.lo, b.y.lo),
+                    (b.x.lo, b.y.hi),
+                    (b.x.hi, b.y.lo),
+                    (b.x.hi, b.y.hi),
+                ]
+                .map(|(x, y)| Point2::new(x, y)),
+                4,
+            )
         }
-        Segment::Line { a, b } => vec![a, b],
-        Segment::Arc { center, radius, .. } | Segment::Circle { center, radius, .. } => {
+        Segment::Line { a, b } => ([a, b, a, b], 2),
+        Segment::Arc { center, radius, .. } | Segment::Circle { center, radius, .. } => (
             [(1.0, 1.0), (1.0, -1.0), (-1.0, 1.0), (-1.0, -1.0)]
-                .map(|(x, y)| center + Vec2::new(x * radius, y * radius))
-                .to_vec()
-        }
-    }
+                .map(|(x, y)| center + Vec2::new(x * radius, y * radius)),
+            4,
+        ),
+    };
+    pts.into_iter().take(n)
 }
 
 pub(crate) fn profile_points(p: &Profile) -> impl Iterator<Item = Point2> + '_ {
     p.loops
         .iter()
         .flat_map(|l| l.segments.iter().flat_map(|(s, _)| segment_points(s)))
+}
+
+/// The box of a profile's points on its plane.
+fn plane_box(profile: &Profile) -> Box3 {
+    Box3::from_points(profile_points(profile).map(|q| profile.plane.plane_point(q)))
+}
+
+/// `b` moved by `v`: the box of its points each moved by `v`, to the bit (rounding `+ v` is
+/// monotone, so the least and greatest coordinates move to the least and greatest).
+fn shifted(b: &Box3, v: forge_math::Vec3) -> Box3 {
+    if b.is_empty() {
+        return *b;
+    }
+    let m = |i: Interval, d: f64| Interval {
+        lo: i.lo + d,
+        hi: i.hi + d,
+    };
+    Box3 {
+        x: m(b.x, v.x),
+        y: m(b.y, v.y),
+        z: m(b.z, v.z),
+    }
 }
 
 /// A box holding a solid feature's tool.
@@ -262,10 +287,10 @@ fn tool_box(f: &Feature) -> Box3 {
             profile,
             extent: Extent::Distance(distance),
             ..
-        } => Box3::from_points(profile_points(profile).flat_map(|q| {
-            let p = profile.plane.plane_point(q);
-            [p, p + profile.plane.z() * *distance]
-        })),
+        } => {
+            let b = plane_box(profile);
+            b.hull(&shifted(&b, profile.plane.z() * *distance))
+        }
         Feature::Revolve { profile, axis, .. } => {
             let dir = axis.dir.normalize().unwrap_or(Vec2::Y);
             let (mut lo, mut hi, mut r) = (f64::INFINITY, f64::NEG_INFINITY, 0.0f64);
@@ -278,7 +303,68 @@ fn tool_box(f: &Feature) -> Box3 {
             Box3::from_points([at(lo), at(hi)]).grow(r)
         }
         Feature::Ball { frame, radius, .. } => Box3::from_point(frame.origin).grow(*radius),
+        // a slanted extrude: a ruled loft between the profile moved to each end (lib.rs `tool`),
+        // so in the hull of the two moved boxes
+        Feature::Extrude {
+            profile,
+            extent: Extent::Along { forward, back, dir },
+            ..
+        } => {
+            let Some(unit) = dir.normalize() else {
+                return Box3::EMPTY;
+            };
+            let rise = unit.dot(profile.plane.z().get());
+            if rise == 0.0 || !rise.is_finite() {
+                return Box3::EMPTY;
+            }
+            let b = plane_box(profile);
+            shifted(&b, unit.get() * (-*back / rise)).hull(&shifted(&b, unit.get() * (*forward / rise)))
+        }
+        // a tapered extrude: the profile's prism, its walls leaning by at most |d tan a| (the
+        // loop offset by that much at the far end, `forge_ops::tapered`)
+        Feature::Extrude {
+            profile,
+            extent: Extent::Tapered { distance, angle },
+            ..
+        } => {
+            let lean = (*distance * dmath::sin(*angle) / dmath::cos(*angle)).abs();
+            let b = plane_box(profile);
+            b.hull(&shifted(&b, profile.plane.z() * *distance))
+                .grow(if lean.is_finite() { lean } else { 0.0 })
+        }
         _ => Box3::EMPTY,
+    }
+}
+
+/// `adds`, hulled into `b`: the common features (an extrude, revolve or ball) without a list.
+fn add_into(features: crate::History<'_>, i: usize, b: &mut Box3) {
+    match &features[i] {
+        Feature::Ball {
+            op: Combine::New | Combine::Add,
+            ..
+        } => *b = b.hull(&tool_box(&features[i])),
+        Feature::Extrude {
+            op: Combine::New | Combine::Add,
+            ..
+        }
+        | Feature::Revolve {
+            op: Combine::New | Combine::Add,
+            ..
+        } => {
+            // a part it cannot be built is no part of the reach (the build of feature i, from
+            // the same `resolve`, fails the same way, so no later feature is built)
+            match crate::extent::resolve(features, i) {
+                Ok(crate::extent::Resolved::Plain(f, _)) => *b = b.hull(&tool_box(&f)),
+                Ok(crate::extent::Resolved::UpTo(f, _)) => *b = b.hull(&tool_box(&f)),
+                Err(_) => {}
+            }
+        }
+        Feature::Extrude { .. } | Feature::Revolve { .. } | Feature::Ball { .. } => {}
+        _ => {
+            for a in adds(features, i) {
+                *b = b.hull(&a);
+            }
+        }
     }
 }
 
@@ -320,6 +406,8 @@ fn adds(features: crate::History<'_>, i: usize) -> Vec<Box3> {
         Feature::Sweep(_) | Feature::Coil(_) | Feature::Loft(_) => {
             crate::swept::reach_of(features, i).into_iter().collect()
         }
+        // a weldment member: the box round its path, run on, grown by its section's reach
+        Feature::Member(m) => vec![crate::weld::reach_box(m)],
         Feature::Import(t) => t
             .body
             .iter()
@@ -338,6 +426,49 @@ fn adds(features: crate::History<'_>, i: usize) -> Vec<Box3> {
             .unwrap_or_default(),
         _ => vec![],
     }
+}
+
+/// A box holding the part after rib `r` is added to a part inside `b`.
+///
+/// Every point of the rib's lump lies on a segment from a point within `t` of the path's plane
+/// region (inside the path's box grown by `t`) to the part or to the path: the wall is the region
+/// between the path and the part, thickened across the plane (or, for a web, the thickened path
+/// run along the normal to the part). So it lies in the hull of `b` and the path's box, grown by
+/// the thickness, the taper and the millimetre `rib` allows (rib.rs, `margin`); boxes are convex.
+/// The path's box is taken from whole circles for arcs, not from samples, so it holds the path.
+fn rib_reach(b: &Box3, r: &crate::rib::Rib) -> Box3 {
+    let pl = &r.plane;
+    let mut path = Box3::EMPTY;
+    for s in &r.path {
+        let pts: Vec<Point2> = match s {
+            Segment::Line { a, b } => vec![*a, *b],
+            Segment::Arc { center, radius, .. } | Segment::Circle { center, radius, .. } => {
+                let (c, q) = (*center, radius.abs());
+                vec![
+                    Point2::new(c.x - q, c.y - q),
+                    Point2::new(c.x + q, c.y - q),
+                    Point2::new(c.x - q, c.y + q),
+                    Point2::new(c.x + q, c.y + q),
+                ]
+            }
+            // a rib refuses these (`BadPath`): it adds nothing
+            Segment::Spline(_) => vec![],
+        };
+        for p in pts {
+            path = path.hull(&Box3::from_point(pl.plane_point(p)));
+        }
+    }
+    let bound = b.hull(&path);
+    if bound.is_empty() {
+        return bound;
+    }
+    let t = r.thickness.abs();
+    let taper = if (0.0..dmath::FRAC_PI_2).contains(&r.draft) {
+        bound.diagonal() * dmath::sin(r.draft) / dmath::cos(r.draft)
+    } else {
+        0.0
+    };
+    bound.grow(t + taper + 1.0)
 }
 
 /// A box holding all the material `features` can make, to size through holes by.
@@ -359,6 +490,7 @@ pub(crate) fn reach(features: crate::History<'_>) -> Box3 {
             Feature::Edit(crate::Edit::Thicken { thickness, .. }) if !b.is_empty() => {
                 b = b.grow(thickness.abs())
             }
+            Feature::Edit(crate::Edit::Rib(r)) => b = rib_reach(&b, r),
             Feature::Pattern {
                 of: Source::Body,
                 layout,
@@ -373,11 +505,7 @@ pub(crate) fn reach(features: crate::History<'_>) -> Box3 {
                     b = b.hull(&m.bbox(&b));
                 }
             }
-            _ => {
-                for a in adds(features, i) {
-                    b = b.hull(&a);
-                }
-            }
+            _ => add_into(features, i, &mut b),
         }
     }
     b

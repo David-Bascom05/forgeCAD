@@ -15,7 +15,7 @@ export PATH=$HOME/.elan/bin:$PATH ELAN_TOOLCHAIN=$(cat "$root/verify/aeneas/brid
 w=$(mktemp -d)
 [ -n "${KEEP:-}" ] || trap 'rm -rf "$w"' EXIT; [ -n "${KEEP:-}" ] && echo "work: $w"
 mkdir -p "$w/Sv"
-bridge=$(cat "$root"/verify/aeneas/bridge/AeneasF64/*.lean | awk '$1 == "def" || $1 == "opaque" || $1 == "abbrev" { print $2 }')
+bridge=$(awk '$1 == "def" || $1 == "opaque" || $1 == "abbrev" { print $2 }' "$root/verify/aeneas/bridge/AeneasF64/Std.lean")
 fix() { sed -e '/^module$/d' -e 's/^public import /import /' -e '/^@\[expose\] public section$/d' \
   -e 's/^import [A-Za-z_0-9]*\.\(Types\|Funs\|FunsExternal\|TypesExternal\)$/import Sv.\1/' "$1"; }
 [ -f "$out/TypesExternal_Template.lean" ] && fix "$out/TypesExternal_Template.lean" > "$w/Sv/TypesExternal.lean"

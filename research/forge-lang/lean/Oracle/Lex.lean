@@ -7,7 +7,7 @@ text in hex; the answer is its pieces as `kind:length`, or `e<error> lo hi`. It 
 open ForgeLang.LL1
 
 def code : Lex.Kind → String
-  | .num .none => "n0" | .num .mm => "n1" | .num .deg => "n2"
+  | .num .none => "n0" | .num .mm => "n1" | .num .deg => "n2" | .num .inch => "n3"
   | .str => "s" | .id => "i" | .kw k => s!"k{k}" | .op o => s!"o{o}"
   | .nl => "l" | .space => "w" | .comment => "c" | .newline => "j"
 

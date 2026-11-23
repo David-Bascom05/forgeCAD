@@ -88,11 +88,8 @@ impl Gui {
                 let (tx, rx) = channel();
                 self.asm.browsed = Some(rx);
                 let waker = self.waker.clone();
-                std::thread::spawn(move || {
-                    let got = rfd::FileDialog::new()
-                        .add_filter("Forge parts and assemblies", &["fg"])
-                        .pick_file()
-                        .map(|p| p.to_string_lossy().into_owned());
+                crate::plat::spawn("forge-job", move || {
+                    let got = crate::plat::pick_file(None, "Forge parts and assemblies", &["fg"]);
                     let _ = tx.send(got);
                     waker();
                 });
@@ -138,7 +135,7 @@ impl Gui {
     /// A part file the solve names, as a path to read.
     fn asm_path(&self, file: &str) -> std::path::PathBuf {
         let p = std::path::PathBuf::from(file);
-        if p.is_absolute() || p.exists() {
+        if p.is_absolute() || forge_dirs::fs::exists(&p) {
             return p;
         }
         let dir = self
@@ -160,8 +157,8 @@ impl Gui {
         let path = self.asm_path(&file);
         let tx = self.asm.snaps.0.clone();
         let waker = self.waker.clone();
-        std::thread::spawn(move || {
-            let got = std::fs::read_to_string(&path)
+        crate::plat::spawn("forge-job", move || {
+            let got = forge_dirs::fs::read_to_string(&path)
                 .map_err(|e| format!("{}: {e}", path.display()))
                 .and_then(|text| crate::snaps::part_snaps(&text, path.parent().map(|d| d.to_path_buf())))
                 .map(Arc::new);
@@ -395,10 +392,10 @@ impl Gui {
             .fg
             .as_ref()
             .and_then(|s| s.path.as_deref())
-            .and_then(|p| std::fs::canonicalize(p).ok())
+            .and_then(|p| forge_dirs::fs::canonicalize(p).ok())
             .and_then(|p| p.parent().map(|d| d.to_path_buf()));
         let Some(dir) = dir else { return f.to_string() };
-        let f = std::fs::canonicalize(f).unwrap_or_else(|_| f.into());
+        let f = forge_dirs::fs::canonicalize(f).unwrap_or_else(|_| f.into());
         // up from the assembly's folder as far as needed
         let mut up = String::new();
         let mut d = dir.as_path();
@@ -445,7 +442,7 @@ impl Gui {
     /// grounded. Another like `like`: its orientation, beside it.
     pub fn asm_place(&mut self, file: &str, like: Option<&str>) {
         let path = self.asm_path(file);
-        let text = match std::fs::read_to_string(&path) {
+        let text = match forge_dirs::fs::read_to_string(&path) {
             Ok(t) => t,
             Err(e) => {
                 self.shell.status = format!("{}: {e}", path.display());
@@ -574,10 +571,10 @@ impl Gui {
             let placed = match file {
                 Some(name) => {
                     let to = src_path.with_file_name(name);
-                    if to.exists() {
+                    if forge_dirs::fs::exists(&to) {
                         return Err(format!("{}: there is a file of that name", to.display()));
                     }
-                    std::fs::copy(&src_path, &to).map_err(|e| format!("{}: {e}", to.display()))?;
+                    forge_dirs::fs::copy(&src_path, &to).map_err(|e| format!("{}: {e}", to.display()))?;
                     rel(name)
                 }
                 None => i.file.clone(),
@@ -600,11 +597,11 @@ impl Gui {
             None => (i.file.clone(), origin),
             Some(name) => {
                 let to = src_path.with_file_name(name);
-                if to.exists() {
+                if forge_dirs::fs::exists(&to) {
                     return Err(format!("{}: there is a file of that name", to.display()));
                 }
-                let text =
-                    std::fs::read_to_string(&src_path).map_err(|e| format!("{}: {e}", src_path.display()))?;
+                let text = forge_dirs::fs::read_to_string(&src_path)
+                    .map_err(|e| format!("{}: {e}", src_path.display()))?;
                 // a declared anchor names the unmirrored geometry: out, for the mirror's own picks
                 let text: String = text
                     .lines()
@@ -642,7 +639,7 @@ impl Gui {
                     text.trim_end(),
                     crate::shell::fg::short(gap)
                 );
-                std::fs::write(&to, body).map_err(|e| format!("{}: {e}", to.display()))?;
+                forge_dirs::fs::write(&to, body).map_err(|e| format!("{}: {e}", to.display()))?;
                 // the new part's points lie 2 gap further along its axis: the pose takes that back
                 (rel(name), origin - cols[j] * (2.0 * gap))
             }

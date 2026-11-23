@@ -1,0 +1,12 @@
+[package]
+name = "forge-bool-core"
+description = "The decide-once flat-face boolean's combinatorial core: a ledger of decided signs in, a fresh body out (no floats)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+
+[lints]
+workspace = true

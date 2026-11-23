@@ -127,8 +127,9 @@ pub fn font_bytes() -> Vec<u8> {
 pub fn font_dir() -> std::path::PathBuf {
     static DIR: std::sync::OnceLock<std::path::PathBuf> = std::sync::OnceLock::new();
     DIR.get_or_init(|| {
-        let dir = std::env::temp_dir().join(format!("forge-fuzz-{}", std::process::id()));
-        let _ = std::fs::create_dir_all(&dir).and_then(|_| std::fs::write(dir.join(FONT), font_bytes()));
+        let dir = forge_dirs::temp_dir().join(format!("forge-fuzz-{}", forge_dirs::process_id()));
+        let _ = forge_dirs::fs::create_dir_all(&dir)
+            .and_then(|_| forge_dirs::fs::write(dir.join(FONT), font_bytes()));
         dir
     })
     .clone()
@@ -2650,6 +2651,7 @@ pub fn feature_kind(f: &Feature) -> &'static str {
         Feature::Regions(_) => "extrude",
         Feature::Import(_) => "import",
         Feature::Body(_) => "body",
+        Feature::Member(_) => "member",
     }
 }
 
@@ -2769,12 +2771,12 @@ pub fn run_kinds(seed: u64, len: usize, kinds: u64) -> Run {
         let cand = format!("{src}{}\n", lines.join("\n"));
         // HISTORY_LAST=F: each program tried is written to F first, so one that never ends is there
         if let Some(f) = std::env::var_os("HISTORY_LAST") {
-            let _ = std::fs::write(f, &cand);
+            let _ = forge_dirs::fs::write(f, &cand);
         }
         let mut labels = st.labels.clone();
         labels.extend(new_labels.iter().cloned());
         let before = cache.stages().count();
-        let t = std::time::Instant::now();
+        let t = forge_math::clock::Instant::now();
         let taken = std::mem::take(&mut cache);
         let (verdict, out) = match catch_unwind(AssertUnwindSafe(|| crate::run(&cand, opts(&labels), taken)))
         {

@@ -8,6 +8,7 @@ use forge_math::{Box3, Frame, Interval, Point2, Point3, Vec2, Vec3, dmath, tol};
 use std::sync::Arc;
 
 mod extruded;
+mod fold;
 pub mod meet;
 mod spun;
 pub mod swept;

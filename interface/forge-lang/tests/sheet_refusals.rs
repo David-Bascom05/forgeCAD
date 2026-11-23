@@ -1,5 +1,5 @@
-//! Sheet refusals that say what and where: a seam on a hem, a corner left closed, an edge at a
-//! slant to a tangent line, a corner round too big; and `unfold`, asked before an unfold is.
+//! Sheet refusals that say what and where: a seam on a hem, a corner left closed, a corner round
+//! too big; and `unfold`, asked before an unfold is (and a trapezoid flange, refused once, built).
 
 use forge_agent::json::Json;
 use forge_lang::error::Op;
@@ -162,9 +162,10 @@ tab = flange(base.edge(plan.outline[3]), height: h, side: \"down\")
 }
 
 #[test]
-fn a_slanted_edge_at_a_tangent_line_says_where() {
-    // a trapezoid's sides lean in 10 over 80: a, inside the base's edge, moves it to y = 1.5,
-    // where the right side is at 100 - 1.5 / 8; 3 further up, at the tangent line, 0.375 in
+fn a_flange_off_a_trapezoids_edge_builds() {
+    // a trapezoid's sides lean in 10 over 80: they meet a's tangent line off square, and the
+    // bend zone takes its ends from the base's points there (research/kernel-audit/audit2.md
+    // §2.1; this was refused as TangentMismatch): built, folded and flat, valid
     let src = "shared t = 1.5
 shared k = ratio(0.42)
 shared h = 30
@@ -173,19 +174,19 @@ sketch plan(on: xy) {
 }
 base = sheet(plan, t: t, r: t, bend: kfactor(k))
 a = flange(base.edge(plan.outline[0]), height: h)
+blank = unfold(base, on: offset(base.bottom, 30))
+expect valid
 ";
-    let j = error(&run(src), src);
-    assert_eq!(j.get("kind").and_then(Json::str), Some("TangentMismatch"));
-    let text = j.get("text").and_then(Json::str).unwrap();
-    assert!(
-        text.contains("base's edge meets a's tangent line on base's side 99.625 along the bend"),
-        "{text}"
-    );
-    let Some(Json::Arr(p)) = j.get("at_part") else {
-        panic!("{j}")
-    };
-    assert!(
-        (p[0].num().unwrap() - 99.8125).abs() < 1e-9 && p[1].num() == Some(1.5),
-        "{j}"
-    );
+    let r = run(src);
+    assert!(r.errors.is_empty(), "{}", forge_lang::report::text(&r, src));
+    assert!(r.expects.iter().all(|e| e.ok));
+    assert_eq!(r.measure.as_ref().expect("measured").problems, 0);
+    let s = &r.sheets[0];
+    for b in s
+        .folded
+        .iter()
+        .chain(s.unfolds.iter().filter_map(|u| u.1.as_ref()))
+    {
+        assert!(forge_topo::check::check(b).is_empty());
+    }
 }

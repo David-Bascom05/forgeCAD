@@ -133,11 +133,12 @@ const fn same(a: &[u8], b: &[u8]) -> bool {
 const NAMES: [NameSlot; NAME_SLOTS] = {
     let mut t: [NameSlot; NAME_SLOTS] = [("", None, false); NAME_SLOTS];
     let builtins: [&[&str]; 2] = [BUILTINS, crate::shapes::NAMES];
-    let constants: [&[&str]; 6] = [
+    let constants: [&[&str]; 7] = [
         &CONSTANTS,
         &MORE,
         crate::sheet::BUILTINS,
         crate::thermo::BUILTINS,
+        crate::weld::BUILTINS,
         crate::wired::NAMES,
         crate::sheet::CONSTANTS,
     ];
@@ -225,6 +226,10 @@ pub fn constant(name: &str) -> Option<Value> {
             .find(|m| **m == n)
             .map(|m| Value::Builtin(m)),
         n if crate::thermo::BUILTINS.contains(&n) => crate::thermo::BUILTINS
+            .iter()
+            .find(|m| **m == n)
+            .map(|m| Value::Builtin(m)),
+        n if crate::weld::BUILTINS.contains(&n) => crate::weld::BUILTINS
             .iter()
             .find(|m| **m == n)
             .map(|m| Value::Builtin(m)),
@@ -1244,6 +1249,7 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
         "use" => crate::uses::call(ev, args, span),
         n if crate::sheet::BUILTINS.contains(&n) => crate::sheet::call(ev, name, args, span),
         n if crate::thermo::BUILTINS.contains(&n) => crate::thermo::call(ev, name, args, span),
+        n if crate::weld::BUILTINS.contains(&n) => crate::weld::call(ev, name, args, span),
         n if crate::harness::BUILTINS.contains(&n) => crate::harness::call(ev, name, args, span),
         "revolve" => revolve(ev, args, span),
         "fillet" => crate::fillets::fillet(ev, args, span),
@@ -2919,6 +2925,9 @@ pub fn member(ev: &mut Eval, v: Value, name: &str, span: Span) -> R<Value> {
                 return v;
             }
             if let Some(v) = crate::shapes::member(ev, f, name) {
+                return Ok(v);
+            }
+            if let Some(v) = crate::weld::member(ev, f, name) {
                 return Ok(v);
             }
             match name {

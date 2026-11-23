@@ -13,4 +13,11 @@ import IEEE754.Computed
 import IEEE754.Nearest
 import IEEE754.TwoSum
 import IEEE754.TwoProduct
+import IEEE754.Dmath.Reduction
+import IEEE754.Dmath.CosPoly
+import IEEE754.Dmath.SinCos
+import IEEE754.Dmath.AtanPoly
+import IEEE754.Dmath.AtanEval
+import IEEE754.Dmath.AtanFacts
+import IEEE754.Dmath.AsinAcos
 import IEEE754.Axioms

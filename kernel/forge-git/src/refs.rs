@@ -74,7 +74,7 @@ impl Refs {
 
     pub fn packed(&self) -> Result<BTreeMap<String, (Oid, Option<Oid>)>, Error> {
         let mut m = BTreeMap::new();
-        let Ok(t) = std::fs::read_to_string(self.common.join("packed-refs")) else {
+        let Ok(t) = forge_dirs::fs::read_to_string(self.common.join("packed-refs")) else {
             return Ok(m);
         };
         let mut last: Option<String> = None;
@@ -111,7 +111,7 @@ impl Refs {
     }
 
     pub fn read(&self, name: &str) -> Result<Option<Value>, Error> {
-        match std::fs::read_to_string(self.file(name)) {
+        match forge_dirs::fs::read_to_string(self.file(name)) {
             Ok(t) => return self.parse_loose(&t).map(Some),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
             // a directory of refs where a ref would be: not one
@@ -153,7 +153,7 @@ impl Refs {
         let start = prefix.rfind('/').map_or("", |i| &prefix[..i]);
         let mut stack = vec![root.join(start)];
         while let Some(d) = stack.pop() {
-            let Ok(rd) = std::fs::read_dir(&d) else {
+            let Ok(rd) = forge_dirs::fs::read_dir(&d) else {
                 continue;
             };
             for e in rd.flatten() {
@@ -175,7 +175,7 @@ impl Refs {
                 if !rel.starts_with(prefix) || rel.ends_with(".lock") {
                     continue;
                 }
-                let Ok(t) = std::fs::read_to_string(&p) else {
+                let Ok(t) = forge_dirs::fs::read_to_string(&p) else {
                     continue;
                 };
                 match self.parse_loose(&t) {
@@ -240,7 +240,7 @@ impl Refs {
 }
 
 pub fn exists(p: &Path) -> bool {
-    std::fs::symlink_metadata(p).is_ok()
+    forge_dirs::fs::symlink_metadata(p).is_ok()
 }
 
 #[cfg(test)]
@@ -251,10 +251,10 @@ mod tests {
     /// use `\`, and its tags went missing).
     #[test]
     fn nested_loose_refs_list_by_slash_names() {
-        let d = std::env::temp_dir().join(format!("forge-git-refs-{}", std::process::id()));
+        let d = forge_dirs::temp_dir().join(format!("forge-git-refs-{}", forge_dirs::process_id()));
         let tags = d.join("refs").join("tags").join("forgecad").join("v");
-        std::fs::create_dir_all(&tags).unwrap();
-        std::fs::write(tags.join("3"), format!("{}\n", "ab".repeat(20))).unwrap();
+        forge_dirs::fs::create_dir_all(&tags).unwrap();
+        forge_dirs::fs::write(tags.join("3"), format!("{}\n", "ab".repeat(20))).unwrap();
         let r = Refs {
             git_dir: d.clone(),
             common: d.clone(),
@@ -262,7 +262,7 @@ mod tests {
         };
         let got: Vec<String> = r.list("refs/tags/").unwrap().into_keys().collect();
         assert_eq!(got, ["refs/tags/forgecad/v/3"]);
-        let _ = std::fs::remove_dir_all(&d);
+        let _ = forge_dirs::fs::remove_dir_all(&d);
     }
 
     #[test]
