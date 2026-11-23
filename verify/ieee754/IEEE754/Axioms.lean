@@ -70,7 +70,7 @@ elab "#standard_axioms " ids:ident* : command => do
   -- dmath: rem_pio2
   IEEE754.Dmath.quadrant IEEE754.Dmath.rem1 IEEE754.Dmath.tail IEEE754.Dmath.refine
   IEEE754.Dmath.remPio2_rat IEEE754.Dmath.remPio2_spec IEEE754.Dmath.ksin_poly IEEE754.Dmath.kcos_poly
-  IEEE754.Dmath.ksin_eval IEEE754.Dmath.half_mul IEEE754.Dmath.kcos_eval
+  IEEE754.Dmath.ksin_eval IEEE754.Dmath.half_mul IEEE754.Dmath.kcos_eval IEEE754.Dmath.pi_gt_d30 IEEE754.Dmath.pi_lt_d30
   IEEE754.Dmath.ksin_err IEEE754.Dmath.kcos_err IEEE754.Dmath.sinCos_err IEEE754.Dmath.sin_err IEEE754.Dmath.cos_err
   IEEE754.Dmath.atan_taylor IEEE754.Dmath.katan_poly IEEE754.Dmath.round_ulp IEEE754.Dmath.addU IEEE754.Dmath.subU
   IEEE754.Dmath.atanPoly_eval IEEE754.Dmath.arctan_lip IEEE754.Dmath.arctan_lip_m IEEE754.Dmath.red0 IEEE754.Dmath.red1
