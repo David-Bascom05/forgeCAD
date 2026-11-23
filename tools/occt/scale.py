@@ -10,8 +10,10 @@ the kernel's own) must match each:
   - every sampled point of each of our faces' surfaces within TOL of a surface of OCCT's image
     (on an analytic face, whose surface the file carries exactly; a procedural face is written as a
     B-spline fit, so there the bound is the file's stated fit, scaled, plus TOL);
-  - OCCT's volume and area of its image k^3 and k^2 its volume and area of the original (to
-    GProp's integration), and our exact volume and area k^3 and k^2 ours.
+  - OCCT's volume and area of its gp_Trsf image k^3 and k^2 those of the original, and our exact
+    volume and area k^3 and k^2 ours. (GTransform remakes every face as a B-spline over its trim:
+    there only points on the faces are held, and GProp's volume of the B-splines is reported, not
+    held: it is OCCT's integration of its fit, not the map.)
 
 TOL is 1e-9 relative to the part's size (1e-9 x (1 + |p|)).
 
@@ -66,8 +68,13 @@ def scaled_occt(shape, c, k):
     t = gp_Trsf()
     t.SetScale(gp_Pnt(*c), k)
     one = BRepBuilderAPI_Transform(shape, t, True).Shape()
+    # the same map as a general affine one, its matrix and translation given term by term
+    # (gp_GTrsf.SetTrsf keeps the rotation part, not the scale factor, of a similarity)
     g = gp_GTrsf()
-    g.SetTrsf(t)
+    for i in range(1, 4):
+        for j in range(1, 4):
+            g.SetValue(i, j, k if i == j else 0.0)
+        g.SetValue(i, 4, c[i - 1] * (1.0 - k))
     two = BRepBuilderAPI_GTransform(shape, g, True).Shape()
     return {"Trsf": one, "GTrsf": two}
 
@@ -116,14 +123,24 @@ def check(args):
             for p, analytic in case["pts"]:
                 g = gp_Pnt(*p)
                 e = math.inf
-                for s, box in surfs:
-                    if not near(box, p, 1e-3 + fit):
-                        continue
-                    pr = GeomAPI_ProjectPointOnSurf(g, s)
-                    if pr.NbPoints() > 0:
-                        e = min(e, pr.LowerDistance())
-                        if e <= tol(p):
-                            break
+                # the faces whose box holds the point first; a point of a face's surface past its
+                # trim (from its box's centre) is held to every surface
+                for pass_ in (0, 1):
+                    for s, box in surfs:
+                        if near(box, p, 1e-3 + fit) != (pass_ == 0):
+                            continue
+                        pr = GeomAPI_ProjectPointOnSurf(g, s)
+                        if pr.NbPoints() > 0:
+                            e = min(e, pr.LowerDistance())
+                            if e <= tol(p):
+                                break
+                    if e <= tol(p):
+                        break
+                general = how == "GTrsf"
+                if general and not any(near(box, p, 1e-3 + fit) for _, box in surfs):
+                    # GTransform remakes each face as a B-spline over its trim: a point of the
+                    # surface past the trim has nothing there to be held to
+                    continue
                 key = "analytic" if analytic else "fitted"
                 limit = tol(p) if analytic else tol(p) + fit
                 worst[key] = max(worst[key], e / limit)
@@ -132,6 +149,10 @@ def check(args):
             v1, a1 = vprops(img)
             for what, got, want in (("volume", v1, v0 * k ** 3), ("area", a1, a0 * k * k)):
                 r = abs(got - want) / abs(want)
+                if how == "GTrsf":
+                    # GProp over the B-splines GTransform makes: its integration, not the map
+                    worst["gtrsf_mass_rel"] = max(worst.get("gtrsf_mass_rel", 0.0), r)
+                    continue
                 worst["occt_mass"] = max(worst["occt_mass"], r / REL)
                 if r > REL:
                     bad.append(f"{tag}: OCCT {what} {got} vs k-scaled {want} ({r:.2e})")
