@@ -234,7 +234,7 @@ theorem sphere_exact (o x₁ x₂ x₃ f : E) (l₁ l₂ l₃ m₁ m₂ m₃ r c
     simp only [zero_smul, add_zero] at this
     linarith [foot inside.1 inside.2.1 inside.2.2]
   · have neg : l₁ < 0 ∨ l₂ < 0 ∨ l₃ < 0 := by
-      by_contra h; push_neg at h; exact inside ⟨h.1, h.2.1, h.2.2⟩
+      by_contra h; push Not at h; exact inside ⟨h.1, h.2.1, h.2.2⟩
     obtain ⟨t, t0, t1, n₁, n₂, n₃, zero⟩ := walk_to_edge l₁ l₂ l₃ m₁ m₂ m₃ p₁ p₂ p₃ neg
     have walk := plane_walk o f p t t0 t1 qp
     -- the point on the way, in the corners' weights
@@ -263,6 +263,47 @@ theorem sphere_exact (o x₁ x₂ x₃ f : E) (l₁ l₂ l₃ m₁ m₂ m₃ r c
       have near := mid_nearest o x₁ x₂ (by rw [h₁, h₂]) w₂
       rw [z, zero_smul, add_zero, this] at walk
       linarith
+
+/-- The foot of the centre, inside a triangle on the sphere whose edges' middles sag at most c,
+is at least √(r² − 8rc/3) from the centre: d² = r² − R² and R² = Σ λᵢλⱼ lᵢⱼ² ≤ L²/3 ≤ 8rc/3
+(the bound the code's filter takes for d). -/
+theorem foot_far (o x₁ x₂ x₃ f : E) (l₁ l₂ l₃ r c d : ℝ)
+    (hc : 0 < c) (hcr : c ≤ r) (hfd : ‖f - o‖ = d)
+    (h₁ : ‖x₁ - o‖ = r) (h₂ : ‖x₂ - o‖ = r) (h₃ : ‖x₃ - o‖ = r)
+    (hs : l₁ + l₂ + l₃ = 1) (p₁ : 0 ≤ l₁) (p₂ : 0 ≤ l₂) (p₃ : 0 ≤ l₃)
+    (hf : f = l₁ • x₁ + l₂ • x₂ + l₃ • x₃)
+    (q₁ : ⟪f - o, x₁ - f⟫ = 0) (q₂ : ⟪f - o, x₂ - f⟫ = 0) (q₃ : ⟪f - o, x₃ - f⟫ = 0)
+    (m₁₂ : r - ‖(x₁ + (1 / 2 : ℝ) • (x₂ - x₁)) - o‖ ≤ c)
+    (m₁₃ : r - ‖(x₁ + (1 / 2 : ℝ) • (x₃ - x₁)) - o‖ ≤ c)
+    (m₂₃ : r - ‖(x₂ + (1 / 2 : ℝ) • (x₃ - x₂)) - o‖ ≤ c) :
+    r ^ 2 - 8 * r * c / 3 ≤ d ^ 2 := by
+  have side : ∀ x : E, ‖x - o‖ = r → ⟪f - o, x - f⟫ = 0 → ‖x - f‖ ^ 2 = r ^ 2 - d ^ 2 := by
+    intro x hx hq
+    have e : ‖x - o‖ ^ 2 = ‖(f - o) + (x - f)‖ ^ 2 := by
+      rw [show x - o = (f - o) + (x - f) by abel]
+    rw [hx, norm_add_sq_real, hq, hfd] at e
+    linarith
+  have hR : ∀ x : E, ‖x - o‖ = r → ⟪f - o, x - f⟫ = 0 →
+      ‖x - f‖ = Real.sqrt (r ^ 2 - d ^ 2) := by
+    intro x hx hq
+    rw [← side x hx hq, Real.sqrt_sq (norm_nonneg _)]
+  have z : l₁ • (x₁ - f) + l₂ • (x₂ - f) + l₃ • (x₃ - f) = 0 := by
+    have : l₁ • f + l₂ • f + l₃ • f = f := by rw [← add_smul, ← add_smul, hs, one_smul]
+    rw [smul_sub, smul_sub, smul_sub]
+    calc l₁ • x₁ - l₁ • f + (l₂ • x₂ - l₂ • f) + (l₃ • x₃ - l₃ • f)
+        = (l₁ • x₁ + l₂ • x₂ + l₃ • x₃) - (l₁ • f + l₂ • f + l₃ • f) := by abel
+      _ = 0 := by rw [this, ← hf, sub_self]
+  have cs := circum_sq (x₁ - f) (x₂ - f) (x₃ - f) l₁ l₂ l₃ (Real.sqrt (r ^ 2 - d ^ 2)) hs z
+    (hR x₁ h₁ q₁) (hR x₂ h₂ q₂) (hR x₃ h₃ q₃)
+  simp only [sub_sub_sub_cancel_right] at cs
+  rw [← side x₁ h₁ q₁, Real.sq_sqrt (sq_nonneg _), side x₁ h₁ q₁] at cs
+  have s₁₂ := chord_short o x₁ x₂ r c hc hcr h₁ h₂ m₁₂
+  have s₁₃ := chord_short o x₁ x₃ r c hc hcr h₁ h₃ m₁₃
+  have s₂₃ := chord_short o x₂ x₃ r c hc hcr h₂ h₃ m₂₃
+  have hp := pairs_le l₁ l₂ l₃ hs
+  nlinarith [mul_le_mul_of_nonneg_left s₁₂ (mul_nonneg p₁ p₂),
+    mul_le_mul_of_nonneg_left s₁₃ (mul_nonneg p₁ p₃), mul_le_mul_of_nonneg_left s₂₃ (mul_nonneg p₂ p₃),
+    mul_pos hc (show 0 < r by linarith)]
 
 end Sag
 

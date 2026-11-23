@@ -18,3 +18,5 @@ import Tess.Sag
 #guard_msgs in #print axioms Sag.plane_walk
 /-- info: 'Sag.sphere_exact' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in #print axioms Sag.sphere_exact
+/-- info: 'Sag.foot_far' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in #print axioms Sag.foot_far
