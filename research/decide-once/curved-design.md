@@ -480,9 +480,12 @@ Done, standard axioms only (all in Axioms.lean):
 Open:
 - The refusal half of `sep_invariant` needs Q1's `xNonManifold_iff_top`: both refusals are then
   the same topological statement.
-- `NoScaled` for the sampler's planes would let `flat_correct_k` apply to `flat_exact`'s ledger
-  with no extra hypothesis. The sampler's planes are distinct by the snap, but no Lean lemma states
-  this yet.
+- ~~`NoScaled` for the sampler's planes~~ done in `Classes.lean`:
+  - `classesOf` is the bridge's class rule (`decide_once.rs` `classes`: a plane joins an earlier
+    class iff they have one point set, i.e. one `Plane.canon`);
+  - `noScaled_classesOf` and `scaled_classesOf`;
+  - **`flat_correct_classes`**: for every flat input on nonzero planes, the sampler's ledger over
+    the classes is `ExactK`, with `correct_k` and `zeroThickness_iff_k`, and no extra hypothesis.
 
 ## 6. Files and references
 
