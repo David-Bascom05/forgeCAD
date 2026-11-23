@@ -1,4 +1,5 @@
 import ForgeCurved.F6
+import ForgeExact.DecideOnce.QForm
 
 /-!
 # A Lean model of a `forge_topo::Body`: `⟦b⟧`, `⟦f⟧`, `ValidSolid`, and the bridge to rooms
@@ -27,6 +28,10 @@ This file is the target of the aeneas session's abstraction function. It maps th
   - each edge lies in the faces whose loops use it;
   - each edge's ends are on it.
 * `ValidExact b := WellFormed b ∧ ∃ S, Bounds b S`, and `denoteExact b` is that unique `S`.
+* **`Φ_u`, the local formula per vertex** (`formulas`): read from the topology, so the same on
+  stored and exact carriers. It reads only the vertex's incident carriers (`WellFormed`). Inside
+  the vertex's zone, off those carriers, the solid is `Φ_u` on the carriers' signs (`Bounds`).
+  `mem_denote_zone` is the exact decision there: evaluate `Φ_u` at `p`'s signs.
 
 **Stored bodies** (the master's ruling, and the coordinator's canonical counterpart).
 * `Refines δ b bs`: `b` has `bs`'s cell structure one-to-one (the same faces, loops, edges, ends and
@@ -54,6 +59,7 @@ set_option linter.unusedSectionVars false
 namespace ForgeCurved.BodyModel
 
 open Set Filter Topology ForgeCurved.FaceLocal ForgeCurved.FacetSides ForgeCurved.Rooms
+  ForgeExact ForgeExact.DecideOnce ForgeExact.DecideOnce.Curved
   ForgeCurved.F6
 
 variable {E : Type} [NormedAddCommGroup E] [NormedSpace ℝ E]
@@ -84,6 +90,28 @@ structure BodyModel (E : Type) [NormedAddCommGroup E] where
   clusters : List (Set E) := []
   /-- an exact body's cluster zones: per vertex, the closed δ-ball where micro-faces may lie -/
   zones : List (Set E) := []
+  /-- per vertex, the local formula `Φ_u` read from the topology: a Boolean formula over the signs
+  of the vertex's incident carriers (a literal `j` reads face `j`'s carrier) -/
+  formulas : List SForm := []
+
+/-- Face `f` uses an edge ending at vertex `u`. -/
+def IncV (b : BodyModel E) (u : Nat) (f : FaceModel E) : Prop :=
+  ∃ l ∈ f.loops, ∃ c ∈ l, ∃ e, b.edges[c.1]? = some e ∧ ∃ w, e.ends = some (u, w) ∨ e.ends = some (w, u)
+
+/-- Face `f` uses edge `i`. -/
+def IncE (f : FaceModel E) (i : Nat) : Prop := ∃ l ∈ f.loops, ∃ c ∈ l, c.1 = i
+
+/-- The carriers, by face index: what a local formula's literals read. -/
+def carriers (b : BodyModel E) : List (Carrier E ℝ) := b.faces.map (·.carrier)
+
+/-- A formula reads only literals `j` with `P j`. -/
+def Reads (P : Nat → Prop) : SForm → Prop
+  | .lit j _ => P j
+  | .tt => True
+  | .ff => True
+  | .and a c => Reads P a ∧ Reads P c
+  | .or a c => Reads P a ∧ Reads P c
+  | .not a => Reads P a
 
 /-- The faces' points. -/
 def Faces (b : BodyModel E) : Set E := ⋃ f ∈ b.faces, f.region
@@ -114,6 +142,10 @@ structure Bounds (b : BodyModel E) (S : Set E) : Prop where
   /-- every face point outside the cluster zones is on the boundary (inside a zone, micro-faces
   of the near-concurrent carriers need not be) -/
   faces_sub : Faces b \ Zones b ⊆ frontier S
+  /-- **`Φ_u`**: inside vertex `u`'s zone, off its incident carriers, the solid is the local formula
+  on the carriers' signs -/
+  local_formula : ∀ u Φ z, b.formulas[u]? = some Φ → b.zones[u]? = some z → ∀ x ∈ z,
+    (∀ f ∈ b.faces, IncV b u f → f.carrier x ≠ 0) → (x ∈ S ↔ Φ.den (carriers b) x)
   oriented : ∀ f ∈ b.faces, ∀ y, Alone b f y → Oriented f.carrier S f.sense y
   seeded : Seeded b
 
@@ -126,6 +158,10 @@ structure WellFormed (b : BodyModel E) : Prop where
     e.curve ⊆ closure f.region
   ends_on : ∀ e ∈ b.edges, ∀ u v, e.ends = some (u, v) → ∀ C D, b.clusters[u]? = some C →
     b.clusters[v]? = some D → (closure e.curve ∩ C).Nonempty ∧ (closure e.curve ∩ D).Nonempty
+  /-- a formula per vertex, each reading only that vertex's incident carriers -/
+  formulas_len : b.formulas.length = b.verts.length
+  formula_reads : ∀ u Φ, b.formulas[u]? = some Φ →
+    Reads (fun j => ∃ f, b.faces[j]? = some f ∧ IncV b u f) Φ
 
 /-! ## Uniqueness -/
 
@@ -251,6 +287,8 @@ structure Refines (δ : ℝ) (b bs : BodyModel E) : Prop where
   edges_len : b.edges.length = bs.edges.length
   verts_len : b.verts.length = bs.verts.length
   clusters_len : b.verts.length = bs.clusters.length
+  /-- the same local formulas: read from the shared topology -/
+  formulas_eq : b.formulas = bs.formulas
   face : ∀ i (h : i < b.faces.length),
     b.faces[i].loops = (bs.faces[i]'(faces_len ▸ h)).loops ∧
     b.faces[i].sense = (bs.faces[i]'(faces_len ▸ h)).sense ∧
@@ -270,13 +308,6 @@ vertex of four or more faces the f64 planes are only nearly concurrent, so the e
 micro-edges (and the micro-faces they bound). A cluster must be nonempty, connected and of diameter
 at most `δ` (`ClusterOK`). Otherwise `exactOf` is `none`, which happens only for invalid input.
 Edge isolation (`EdgeIsolated`) is a validity condition (`ValidSolid`), not a refusal. -/
-
-/-- Face `f` uses an edge ending at vertex `u`. -/
-def IncV (b : BodyModel E) (u : Nat) (f : FaceModel E) : Prop :=
-  ∃ l ∈ f.loops, ∃ c ∈ l, ∃ e, b.edges[c.1]? = some e ∧ ∃ w, e.ends = some (u, w) ∨ e.ends = some (w, u)
-
-/-- Face `f` uses edge `i`. -/
-def IncE (f : FaceModel E) (i : Nat) : Prop := ∃ l ∈ f.loops, ∃ c ∈ l, c.1 = i
 
 /-- **The vertex cluster**: the points of the δ-ball round `p₀` on two of `u`'s carriers. -/
 def vertCore (δ : ℝ) (b : BodyModel E) (u : Nat) (p₀ : E) : Set E :=
@@ -339,7 +370,8 @@ noncomputable def exactOf (δ : ℝ) (b : BodyModel E) : Option (BodyModel E) :=
            edges := b.edges.mapIdx fun i e => { curve := edgeMeet δ b i e, ends := e.ends }
            verts := b.verts
            clusters := b.verts.mapIdx fun u p => vertCore δ b u p
-           zones := b.verts.map fun p => Metric.closedBall p δ }
+           zones := b.verts.map fun p => Metric.closedBall p δ
+           formulas := b.formulas }
   else none
 
 /-- **(i) `exactOf` refines**: when each stored face region and edge curve is within δ of its exact
@@ -352,7 +384,7 @@ theorem exactOf_refines {δ : ℝ} {b bs : BodyModel E} (h : exactOf δ b = some
   split at h
   · rename_i hall
     cases h
-    refine ⟨by simp, by simp, by simp, by simp, fun i hi => ?_, fun i hi => ?_, fun u hu => ?_⟩
+    refine ⟨by simp, by simp, by simp, by simp, rfl, fun i hi => ?_, fun i hi => ?_, fun u hu => ?_⟩
     · simp only [List.getElem_map, exactFace]
       exact ⟨by simp, by simp, hface _ (List.getElem_mem hi)⟩
     · simp only [List.getElem_mapIdx]
@@ -385,6 +417,17 @@ theorem denote_refines {δ : ℝ} {b : BodyModel E} (hv : ValidSolid δ b)
     ∃ bs, exactOf δ b = some bs ∧ Refines δ b bs ∧ ValidExact bs ∧ denote δ b = denoteExact bs := by
   obtain ⟨bs, hb, -, hvx⟩ := hv
   exact ⟨bs, hb, exactOf_refines hb hface hedge, hvx, denote_spec hb⟩
+
+/-- **A decision inside a vertex zone**: off the incident carriers, membership in `⟦b⟧` is the
+local formula `Φ_u` evaluated at the exact carriers' signs (the stored and the exact carriers are
+the same functions). -/
+theorem mem_denote_zone {δ : ℝ} {b bs : BodyModel E} (h : exactOf δ b = some bs)
+    (hv : ValidExact bs) {u : Nat} {Φ : SForm} {z : Set E} (hΦ : bs.formulas[u]? = some Φ)
+    (hz : bs.zones[u]? = some z) {x : E} (hx : x ∈ z)
+    (hoff : ∀ f ∈ bs.faces, IncV bs u f → f.carrier x ≠ 0) :
+    (x ∈ denote δ b ↔ Φ.den (carriers bs) x) := by
+  rw [denote_spec h]
+  exact (bounds_denoteExact hv).local_formula u Φ z hΦ hz x hx hoff
 
 /-- `⟦f⟧`. -/
 def denoteFace (f : FaceModel E) : Set E := f.region
