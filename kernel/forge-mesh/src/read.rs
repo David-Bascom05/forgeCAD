@@ -318,7 +318,18 @@ pub fn obj(data: &[u8]) -> Result<TriMesh, ReadError> {
                     idx.push(i as u32);
                 }
                 if idx.len() < 3 {
-                    return err(here, line, "a face of fewer than three corners");
+                    // the format's own rule (Wavefront's OBJ, appendix B1: a face element needs
+                    // three vertices at least; two make a line, `l`): a file breaking it is not
+                    // read past, the way some readers skip the face
+                    return err(
+                        here,
+                        line,
+                        format!(
+                            "a face of {} corner{}: OBJ's faces have three at least (two points make a line, `l`)",
+                            idx.len(),
+                            if idx.len() == 1 { "" } else { "s" }
+                        ),
+                    );
                 }
                 if m.triangles.len() + idx.len() > MAX_TRIANGLES {
                     return err(here, line, format!("past the {MAX_TRIANGLES} triangles read"));
@@ -406,6 +417,17 @@ mod tests {
         b[80..84].copy_from_slice(&u32::MAX.to_le_bytes());
         assert!(stl(&b).is_err());
         assert!(stl(b"").is_err() && obj(b"").is_err());
+    }
+
+    #[test]
+    fn a_face_of_two_corners_is_refused_and_said_so() {
+        // formats-corpus's bug 16 (trimesh's notenoughindices.obj): refused, the rule named
+        let e = obj(b"v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\nf 1 2\n").unwrap_err();
+        assert_eq!(e.line, 5);
+        assert!(
+            e.why.contains("2 corners") && e.why.contains("three at least"),
+            "{e:?}"
+        );
     }
 
     #[test]
