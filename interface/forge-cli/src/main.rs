@@ -17,7 +17,7 @@ fn usage() -> ExitCode {
          forgecad agent list | send WINDOW MESSAGE | status WINDOW REQUEST\n       \
          forgecad update [INSTALL_ROOT]   (install latest main)\n       \
          forgecad build|check|query|measure|render|export FILE.fg [ARGS] [--json] [--labels SEL] [--px N] [--at FEAT] [-o OUT]\n       \
-         forgecad edit FILE.fg 'OP'.. [--base VERSION]   (typed ops, as a part's fixes give them; export F.fg dxf [SHEET])\n       \
+         forgecad edit FILE.fg 'OP'.. [--base VERSION]   (typed ops, as a part's fixes give them; export F.fg stl|3mf|obj|dxf [SHEET])\n       \
          forgecad diff A.fg B.fg [volume]   (what B changed from A: features, params, faces, volume)\n       \
          forgecad help [forge | WORD]   (the .fg language, or its sections on WORD)\n       \
          forgecad versions F | history F [--all] | create_version F NAME [NOTES] | restore F v3|SAVE | compare F A B [--volume]\n       \
@@ -329,6 +329,9 @@ fn command(cmd: &str, argv: &[String]) -> ExitCode {
         let ext = match cmd {
             "export" if a.words.first().is_some_and(|w| w == "dxf") => "dxf",
             "export" if a.words.first().is_some_and(|w| w == "dwg") => "dwg",
+            "export" if a.words.first().is_some_and(|w| w == "stl") => "stl",
+            "export" if a.words.first().is_some_and(|w| w == "3mf") => "3mf",
+            "export" if a.words.first().is_some_and(|w| w == "obj") => "obj",
             "export" => "step",
             _ => "png",
         };

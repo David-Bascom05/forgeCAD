@@ -22,5 +22,8 @@ forge-import = { path = "../forge-import" }
 forge-lang = { path = "../forge-lang" }
 forge-step = { path = "../../kernel/forge-step" }
 
+[dev-dependencies]
+forge-material = { path = "../../kernel/forge-material" }
+
 [lints]
 workspace = true

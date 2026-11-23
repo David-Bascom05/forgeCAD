@@ -188,6 +188,8 @@ pub struct App {
     dialog: Option<std::sync::mpsc::Receiver<Option<String>>>,
     /// Save As's, for an untitled document.
     save_as: Option<std::sync::mpsc::Receiver<Option<String>>>,
+    /// File > Export's outcome, said in the status bar.
+    exported: Option<std::sync::mpsc::Receiver<String>>,
     /// `--present`: how frames go out.
     present: Option<String>,
     /// `--run-for`: leaves by itself then, the orderly way.
@@ -302,6 +304,33 @@ impl App {
                             .save_file()
                             .map(|f| f.with_extension(ext).to_string_lossy().into_owned());
                         let _ = send.send(chosen);
+                        let _ = proxy.send_event(());
+                    });
+                }
+                Action::ExportMesh(f) => {
+                    let Some(s) = &l.gui.fg else { continue };
+                    let (src, part) = (s.src.clone(), s.path.clone());
+                    let stem = l.gui.shell.name.trim_end_matches(".fg").to_string();
+                    let (send, recv) = std::sync::mpsc::channel();
+                    self.exported = Some(recv);
+                    let proxy = self.proxy.clone();
+                    l.gui.shell.status = format!("Export {}: choose where", f.ext().to_uppercase());
+                    std::thread::spawn(move || {
+                        let mut d = rfd::FileDialog::new()
+                            .add_filter(f.label(), &[f.ext()])
+                            .set_file_name(format!("{stem}.{}", f.ext()));
+                        if let Some(dir) = part.as_deref().and_then(|p| std::path::Path::new(p).parent()) {
+                            d = d.set_directory(dir);
+                        }
+                        let said = match d.save_file() {
+                            Some(out) => {
+                                let out = out.with_extension(f.ext());
+                                crate::fg::export_mesh(&src, part.as_deref(), &out, f)
+                                    .unwrap_or_else(|e| format!("Not exported: {e}"))
+                            }
+                            None => String::new(),
+                        };
+                        let _ = send.send(said);
                         let _ = proxy.send_event(());
                     });
                 }
@@ -428,6 +457,15 @@ impl ApplicationHandler for App {
             self.save_as = None;
             if let (Some(path), Some(l)) = (got, &mut self.live) {
                 l.gui.save_as(&path);
+            }
+        }
+        if let Some(d) = &self.exported
+            && let Ok(said) = d.try_recv()
+        {
+            self.exported = None;
+            if let Some(l) = &mut self.live {
+                l.gui.shell.status = said;
+                l.window.request_redraw();
             }
         }
         if let Some(d) = &self.dialog
@@ -608,6 +646,7 @@ pub fn run(
         times,
         dialog: None,
         save_as: None,
+        exported: None,
         present,
         run_until: run_for.map(|s| Instant::now() + std::time::Duration::from_secs_f64(s)),
         spin,

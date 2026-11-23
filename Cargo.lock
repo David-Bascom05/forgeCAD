@@ -69,6 +69,7 @@ dependencies = [
  "forge-geom",
  "forge-import",
  "forge-lang",
+ "forge-material",
  "forge-math",
  "forge-mesh",
  "forge-model",
@@ -237,6 +238,7 @@ name = "forge-mesh"
 version = "0.1.0"
 dependencies = [
  "forge-geom",
+ "forge-git",
  "forge-math",
  "forge-ops",
  "forge-topo",
