@@ -1326,7 +1326,20 @@ fn arrange(cls: &Classes, pf: &[PlaneF], c: u32, lo: [f64; 3], hi: [f64; 3]) -> 
 /// of the perturbed ray toward +s in the plane's projection `(s, t)`.
 #[inline(never)]
 fn in_face(q: &HPoint, f: &In, pts: &Pts, planes: &[DyPlane], s: usize, t: usize) -> bool {
-    let qf = q.to_f64();
+    in_face_q(q.to_f64(), &|| q.clone(), f, pts, planes, s, t)
+}
+
+/// `in_face` at a point given by its f64 shadow `qf` (its `s` and `t` within a few ulps of the
+/// exact point's) and the exact point on demand.
+fn in_face_q(
+    qf: [f64; 3],
+    q: &dyn Fn() -> HPoint,
+    f: &In,
+    pts: &Pts,
+    planes: &[DyPlane],
+    s: usize,
+    t: usize,
+) -> bool {
     // (a loop's exact polygon is within a few LINEAR of its kernel box)
     let g = 4.0 * lin() + 1e-9 * (1.0 + qf[s].abs() + qf[t].abs());
     let mut k = 0;
@@ -1339,7 +1352,7 @@ fn in_face(q: &HPoint, f: &In, pts: &Pts, planes: &[DyPlane], s: usize, t: usize
             let (a, b) = (lp[i], lp[(i + 1) % n]);
             let c = match crosses_f(qf, pts.pf(a, planes), pts.pf(b, planes), s, t) {
                 Some(c) => c,
-                None => crosses(q, &pts.ph(a, planes), &pts.ph(b, planes), s, t),
+                None => crosses(&q(), &pts.ph(a, planes), &pts.ph(b, planes), s, t),
             };
             if c {
                 k += 1;
@@ -1511,7 +1524,11 @@ struct Facet {
     poly: Vec<u32>,
     /// `poly_e[k]`: the edge cell from `poly[k]` to `poly[k + 1]`
     poly_e: Vec<u32>,
-    mid: HPoint,
+    /// an interior point: exactly, once worked out (`Built::mid`); until then, the f64 point
+    /// `mid_f` whose projection along axis `mid_a` onto the plane is strictly inside
+    mid: std::cell::OnceCell<HPoint>,
+    mid_f: [f64; 3],
+    mid_a: usize,
 }
 
 /// A table by cell id (dense: ids are the ledger's, 0..n).
@@ -1571,6 +1588,17 @@ struct Built {
     by: FxMap<(u64, u64), u32>,
 }
 
+impl Built {
+    /// Facet `f`'s interior point, exactly.
+    fn mid(&self, cls: &Classes, f: u32) -> &HPoint {
+        let fc = &self.facet[&f];
+        fc.mid.get_or_init(|| {
+            project(cls, fc.class as usize, fc.mid_a, fc.mid_f)
+                .expect("a facet's plane is not parallel to its axis")
+        })
+    }
+}
+
 /// A table of cells by covector.
 #[derive(Default)]
 struct CellTab {
@@ -1596,6 +1624,16 @@ impl CellTab {
 /// too thin for `m`): the mean of its vertices is then.
 #[inline(never)]
 fn interior(cls: &Classes, pf: &[PlaneF], c: usize, a: usize, m: [f64; 3], fc: Row) -> Option<HPoint> {
+    let h = project(cls, c, a, m)?;
+    let hf = h.to_f64();
+    let inside =
+        (0..cls.planes.len()).all(|k| k == c || side_at(&cls.planes[k], &hf, &pf[k], &h) == row_get(fc, k));
+    inside.then_some(h)
+}
+
+/// `m`'s coordinates off axis `a` exactly, and the one on `a` that puts it on class plane `c`
+/// (`W = n_a`); None if the plane is parallel to `a`.
+fn project(cls: &Classes, c: usize, a: usize, m: [f64; 3]) -> Option<HPoint> {
     let pc = &cls.planes[c];
     let (s, t) = ((a + 1) % 3, (a + 2) % 3);
     let (ms, mt) = (Dy::from_f64(m[s]), Dy::from_f64(m[t]));
@@ -1609,14 +1647,50 @@ fn interior(cls: &Classes, pf: &[PlaneF], c: usize, a: usize, m: [f64; 3], fc: R
     xyz[s] = ms.mul(&w);
     xyz[t] = mt.mul(&w);
     let [x, y, z] = xyz;
-    let h = HPoint {
+    Some(HPoint {
         p: DyV3::new(x, y, z),
         w,
-    };
-    let hf = h.to_f64();
-    let inside =
-        (0..cls.planes.len()).all(|k| k == c || side_at(&cls.planes[k], &hf, &pf[k], &h) == row_get(fc, k));
-    inside.then_some(h)
+    })
+}
+
+/// `interior` screened in f64: is `project(m)` strictly inside the facet (`Some(true)`), plainly
+/// not (`Some(false)`), or does the exact test decide (None)? The projection's coordinates off
+/// `a` are `m`'s exactly; on `a` it is `(c − n_s m_s − n_t m_t) / n_a` in f64, within
+/// `e_a = γ·(|c| + |n_s m_s| + |n_t m_t|)/|n_a| + γ·|p_a|` of the exact one (`c` one rounding off
+/// the exact offset), and each sign is `side_err`'s with that bound.
+fn interior_f(cls: &Classes, pf: &[PlaneF], c: usize, a: usize, m: [f64; 3], fc: Row) -> Option<bool> {
+    let (s, t) = ((a + 1) % 3, (a + 2) % 3);
+    let n = &pf[c];
+    if n.n[a] == 0.0 {
+        return None;
+    }
+    let (ps, pt) = (n.n[s] * m[s], n.n[t] * m[t]);
+    let mut p = m;
+    p[a] = (n.c - ps - pt) / n.n[a];
+    let e = GAMMA * (n.c.abs() + ps.abs() + pt.abs()) / n.n[a].abs() + GAMMA * p[a].abs();
+    if !p[a].is_finite() || !e.is_finite() {
+        return None;
+    }
+    let mut undecided = false;
+    for k in 0..cls.planes.len() {
+        if k == c {
+            continue;
+        }
+        let pk = &pf[k];
+        let v = pk.n[0] * p[0] + pk.n[1] * p[1] + pk.n[2] * p[2] - pk.c;
+        let mag =
+            pk.n[0].abs() * p[0].abs() + pk.n[1].abs() * p[1].abs() + pk.n[2].abs() * p[2].abs() + pk.c.abs();
+        let bound = GAMMA * mag + (pk.n[0].abs() + pk.n[1].abs() + pk.n[2].abs()) * e;
+        if v.abs() <= bound {
+            undecided = true;
+            continue;
+        }
+        let sg = if v > 0.0 { Sgn::Pos } else { Sgn::Neg };
+        if sg != row_get(fc, k) {
+            return Some(false);
+        }
+    }
+    (!undecided).then_some(true)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1736,19 +1810,35 @@ fn build_ledger(
             if boxed.is_empty() {
                 continue;
             }
-            let mid = interior(cls, &pf, c, a, midf, fc).unwrap_or_else(|| {
-                let (e0, e1, e2) = (
-                    pl.exact(cls, cell[0].0 as usize),
-                    pl.exact(cls, cell[1].0 as usize),
-                    pl.exact(cls, cell[2].0 as usize),
-                );
-                HPoint::mean(&[&e0, &e1, &e2])
-            });
-            let holders: Vec<usize> = boxed
-                .iter()
-                .copied()
-                .filter(|&i| in_face(&mid, &fs[i], &pts[fs[i].body], snapped, s, t))
-                .collect();
+            // its interior point: midf projected onto the plane, certified in f64 where it can be
+            // (built exactly only when asked), else exactly, else the mean of three vertices
+            let mid = std::cell::OnceCell::new();
+            if interior_f(cls, &pf, c, a, midf, fc) != Some(true) {
+                let h = interior(cls, &pf, c, a, midf, fc).unwrap_or_else(|| {
+                    let (e0, e1, e2) = (
+                        pl.exact(cls, cell[0].0 as usize),
+                        pl.exact(cls, cell[1].0 as usize),
+                        pl.exact(cls, cell[2].0 as usize),
+                    );
+                    HPoint::mean(&[&e0, &e1, &e2])
+                });
+                let _ = mid.set(h);
+            }
+            let holders: Vec<usize> = match mid.get() {
+                Some(h) => boxed
+                    .iter()
+                    .copied()
+                    .filter(|&i| in_face(h, &fs[i], &pts[fs[i].body], snapped, s, t))
+                    .collect(),
+                None => {
+                    let q = || project(cls, c, a, midf).expect("a facet's plane is not parallel to its axis");
+                    boxed
+                        .iter()
+                        .copied()
+                        .filter(|&i| in_face_q(midf, &q, &fs[i], &pts[fs[i].body], snapped, s, t))
+                        .collect()
+                }
+            };
             if holders.is_empty() {
                 continue;
             }
@@ -1793,6 +1883,8 @@ fn build_ledger(
                 poly,
                 poly_e,
                 mid,
+                mid_f: midf,
+                mid_a: a,
             });
         }
     }
@@ -1867,7 +1959,7 @@ fn witness_point(b: &Built, cls: &Classes, t: u32) -> HPoint {
     let mut k = 4;
     loop {
         let d = Dy::from_i64(s as i64).scale2(-k);
-        let p = fc.mid.offset(n, &d);
+        let p = b.mid(cls, f).offset(n, &d);
         let pfl = p.to_f64();
         let ok = cls.planes.iter().enumerate().all(|(j, pl)| {
             if j == c {
@@ -2085,7 +2177,7 @@ fn witness_inside(
     body: usize,
 ) -> bool {
     let (f0, _) = b.side_of[&t];
-    let m = b.facet[&f0].mid.to_f64();
+    let m = b.mid(cls, f0).to_f64();
     let (lo, hi) = &bbox[body];
     if (0..3).any(|k| m[k] < lo[k] || m[k] > hi[k]) {
         return false;
