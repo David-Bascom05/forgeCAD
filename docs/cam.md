@@ -21,7 +21,7 @@ text, read back, and the path the text means is **certified** against the exact 
 An operation whose checks are not all proven is **refused**, with the check that failed, where,
 and a fix. A program is written only when every operation in it is certified. Every tool change is
 preceded by Z to the machine's safe position (the dialect's `retract_home`: `G91 G28 Z0.` on
-Fanuc and Haas, `G53 G0 Z0` on LinuxCNC; GRBL's manual change emits none).
+Fanuc and Haas, `G53 G0 Z0` on LinuxCNC; GRBL, which changes tools by hand, goes to the setup's clearance height in work coordinates and tells the operator to set Z for the new tool).
 
 ```
 forgecad cam F.fg [--json] [-o PROGRAM]     the reply, and the program if released; exit 0 certified
