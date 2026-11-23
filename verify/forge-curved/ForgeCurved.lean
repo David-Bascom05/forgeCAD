@@ -43,3 +43,5 @@ import ForgeCurved.QSides
 import ForgeCurved.QComplete
 import ForgeCurved.QExact
 import ForgeCurved.QPairChart
+import ForgeCurved.QEdgeCross
+import ForgeCurved.QEdgesSub

@@ -126,3 +126,6 @@ import ForgeCurved
 #print axioms ForgeCurved.bounded_sphereR
 #print axioms ForgeCurved.curved_exact_facets
 #print axioms ForgeCurved.pair_moves
+#print axioms ForgeCurved.edge_slab
+#print axioms ForgeCurved.planes_off
+#print axioms ForgeCurved.nonvert_edge
