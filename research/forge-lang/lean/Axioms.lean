@@ -156,3 +156,11 @@ open ForgeLang ForgeLang.Counter
 #print axioms ForgeLang.LL1.Reparse.reparse_correct
 #print axioms ForgeLang.LL1.Impl.reparse_number_correct
 #print axioms ForgeLang.LL1.ImplUnifiedDoc.reparse_number_correct
+#print axioms Builtins.shadows_append
+#print axioms Builtins.shadows_new
+#print axioms Builtins.resolve_append_off
+#print axioms Builtins.resolve_append_new
+#print axioms Builtins.bindings_resolve_as_before
+#print axioms Builtins.extend_conservative
+#print axioms Builtins.weld_conservative
+#print axioms Builtins.weld_not_keywords

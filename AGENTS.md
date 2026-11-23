@@ -30,8 +30,9 @@ round = fillet(edges(of: boss, crease: "convex"), r)
 Select in the part's own text: `edges(of: boss, crease: "convex")`, `edges(between: (a, b))`,
 anchors like `base.end`, `base.side(plan.outline[2])`, `hole.bore`; one copy of a pattern or one
 place of a hole: `edges(of: bolts[1], crease: "convex")`. Features: extrude cut revolve
-sweep loft coil thread hole fillet chamfer shell draft rib pattern, bodies, sheet metal, components
-and assemblies (`help forge`).
+sweep loft coil thread hole fillet chamfer shell draft rib pattern, bodies, sheet metal, weldments
+(`members` along a layout's segments with a standard or sketched section, `end_trim`, `end_cap`,
+`corner_plate`), components and assemblies (`help forge`).
 
 Tools (CLI `forgecad TOOL F ..`, or MCP). Replies are typed JSON with `--json` or over MCP:
 ```
@@ -43,7 +44,7 @@ diff A B [volume]           what B changed from A: features, params, faces by na
 query F params|features|stat|check
 query F SEL [--at FEAT]     @handles: `faces plane normal +z top`, `edges of boss convex`;
                             --at: the part as it stood after that feature (measure, render too)
-query F holes|aligned|interference|faces | section z=67 | gap A B | frame SKETCH
+query F holes|aligned|interference|faces|cutlist | section z=67 | gap A B | frame SKETCH
 measure F REF [REF] | mass | wall [exact]
 render F [VIEW] [--labels SEL] [--px N] [-o F.png]
 export F [ap214|ap242] [tol MM] [-o F.step] | dxf [SHEET] | dwg [SHEET]

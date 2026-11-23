@@ -2656,6 +2656,7 @@ pub fn feature_kind(f: &Feature) -> &'static str {
         Feature::Text(_) => "text",
         Feature::Import(_) => "import",
         Feature::Body(_) => "body",
+        Feature::Member(_) => "member",
     }
 }
 
