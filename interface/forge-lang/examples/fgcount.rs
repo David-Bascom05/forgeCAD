@@ -5,8 +5,8 @@
 //! cold build, then the part again with one dimension (`EDITED`) times 1.01 through the first
 //! build's cache (the reference's edit is that sum too).
 
-/// The dimension each part's edit changes: the .fc part's first param where the .fg part has
-/// it, else the .fg part's first (as the reference's counts were taken).
+/// The dimension each part's edit changes: the reference part's first param where the .fg part
+/// has it, else the .fg part's first (as the reference's counts were taken).
 const EDITED: &[(&str, &str)] = &[
     ("gearbox", "L"),
     ("volute", "dx"),

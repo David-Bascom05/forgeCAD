@@ -116,19 +116,18 @@ still reading `w`: the same numbers until the new param is edited, and then one 
 
 ## Results
 
-The three fair-test parts, ported by hand from their originals in the retired `.fc` format
-(`parts/`), build with the original's exact volume, face and edge counts, valid, with no errors or lints, and no number
+The three fair-test parts (`parts/`) build to their recorded volume, face and edge counts, valid,
+with no errors or lints, and no number
 outside params, no world placement after the first sketch, no positional selection:
 
-| part | .fc volume | Forge volume | faces | edges | features |
+| part | recorded volume | Forge volume | faces | edges | features |
 |---|---|---|---|---|---|
 | crank | 107177 | 107177.04 | 65 | 141 | 21 |
 | bracket | 183449.2 | 183449.24 | 137 | 316 | 32 |
 | manifold | 687248.8 | 687248.76 | 209 | 484 | 46 |
 
-All 15 bench parts are ported whole to `parts/bench/*.fg` (threads, text and body-targeted cuts
-included) and matched their `.fc` originals exactly in volume, area, centroid and inertia; the tests
-(`tests/bench_ports.rs`, `tests/ports.rs`) hold each to the originals' recorded volume, faces,
+All 15 bench parts are in `parts/bench/*.fg` (threads, text and body-targeted cuts included);
+the tests (`tests/bench_ports.rs`, `tests/ports.rs`) hold each to its recorded volume, faces,
 edges and bodies; `cargo run -p forge-lang --example benchfg bits`
 hashes what each .fg run builds, for the bit gate (`tools/speed/bits.txt`).
 
@@ -140,8 +139,8 @@ Timings (release, niced, the machine shared with other agents; median of 5 for c
 | bracket | 17 ms | 17 ms (kernel 9) | 1.7 ms | 5 ms (1 rebuilt) | 14 ms (31 rebuilt) |
 | manifold | 97 ms | 97 ms (kernel 26) | 7.6 ms | 69 ms (1 rebuilt) | 94 ms (45 rebuilt) |
 
-The holes lane's bench parts (ported in parts/bench), against the numbers their `.fc` originals
-built to, recorded (`tests/bench_ports.rs`), and their timings (release, niced,
+The holes lane's bench parts (in parts/bench), with their recorded numbers
+(`tests/bench_ports.rs`), and their timings (release, niced,
 shared machine; cold the median of 5 `fg run` processes, warm from `fg serve`):
 
 | part | volume | faces | edges | bodies | cold | serve unchanged | last param edited |
@@ -262,46 +261,46 @@ and edge of the finished part with the anchor the evaluator resolves back to it,
 or a hash; a pick no anchor names is the typed refusal `NoStableName`. Tests:
 `forge-render/tests/fg.rs`, `fg_tools.rs`, `fg_sheet.rs`.
 
-Every tool and command the app had for the retired `.fc` parts, and what it does on a `.fg` part
-(the gaps: what `.fg` still lacks):
+Every tool and command in the app, and what it does on a `.fg` part (the gaps: what `.fg` still
+lacks):
 
-| tool / command | .fc | .fg | how, on .fg |
-|---|---|---|---|
-| Open, New, Save, Undo, Redo | yes | yes | Save writes the text (Ctrl+S); undo/redo step the text the ops made |
-| Feature tree (select, open/close groups) | yes | yes | Forge ids: loops `bpsk[0,1]`, calls `lug.hub` nested |
-| Tree: delete, reorder | yes | yes | DeleteFeature, MoveFeature (up/down); a loop has no name to move: typed NotAStatement |
-| Tree: rename | yes | yes | Rename |
-| Tree: suppress / unsuppress | yes | no | no Forge op for a feature left out of the build |
-| End-of-part marker (history scrubbing) | yes | no | no Forge op or run option for building part of the history |
-| Edit a feature (its dialog again) | yes | params only | its params in the panel (SetParam); its picks: no op replaces a positional argument (SetArg sets keyword ones) |
-| Params panel | yes (.fc dims) | yes | driving editable (SetParam), driven read-only with what drives them, structural marked |
-| Dimension drag on the model | yes | no | values edit in the panel; no dimension placement on the model yet |
-| Errors, lint, fix buttons | flags only | yes | inline, each fix a typed op |
-| Start Sketch (on a face or an origin plane) | yes | yes | the face's anchor (`base.end`) or `xy`/`xz`/`yz`; its plane from the evaluator |
-| Sketch: line, circle, arc, rectangle, spline, point | yes | yes | written as a Forge block, every number a param of the sketch, drawn points `near(..)` |
-| Sketch: dimension, coincident, parallel, perpendicular, tangent | yes | yes | distance, radius, angle, coincident, parallel, perpendicular, tangent, horizontal, vertical, midpoint, equal, fix |
-| Sketch: hdist / vdist | yes | rect sides only | Forge has no horizontal/vertical distance: a rect's become its size params; others refused, typed |
-| Sketch: project geometry | yes | no | refused, typed (write `project(..)` in the source) |
-| Sketch: trim, offset, mirror | off | off | |
-| Edit an existing sketch | yes | no | no op replaces a sketch block's rows yet |
-| Extrude (add, cut) | yes | yes | `extrude(P, d)` / `cut(P, d)`, P a sketch, loop or closed entity chosen |
-| Revolve | yes | yes | `revolve(P, axis: L, angle: ang)`, L a line of the sketch |
-| Hole | yes | yes | `hole(at: S.points, d: d, depth: thru|depth)`; seats, fastener sizes, to-next: not in the form yet |
-| Fillet, Chamfer | yes | yes | edges picked: `edges(between: (A, B))`, several joined with `+` |
-| Shell | yes | yes | open faces picked |
-| Draft | yes | yes | faces picked, neutral plane a face, a sketch or an origin plane |
-| Thread | yes | yes | `thread(face: F, spec: "M6", length: "full")`, F a cylinder picked |
-| Combine | yes | yes | target and tools from the tree's names |
-| Work plane, axis, point | yes | yes | `workplane(offset: F, d)`, `workaxis(along: F)`, `workpoint(mid: E)` |
-| Linear pattern | yes | yes | `pattern(of: F, layout: lin(along: D, n, step))`, D a face's `.normal` or a line's `.dir` |
-| Circular pattern, mirror | off | off | (Forge has `circ`, `mirror`: no form yet) |
-| Sweep, Loft, Coil, Rib | yes | yes | profiles, paths and axes from the sketches' names |
-| Sheet metal: sheet, flange, cutout, unfold | - | yes | flange on an edge picked (`base.edge(plan.outline[1])`, `F.tip`) |
-| Sheet panel: report, flat/folded, DXF, shop | - | yes | the sheet's report as forge-lang gives it (bends, reliefs, corners, and whatever comes), shop violations with fix buttons |
-| Units | yes | no | a Forge part is mm and degrees: refused, typed |
-| Measure (distance, wall, mass), Check | off | off | the panel shows volume, faces, validity |
-| Section, lines, view cube, orbit/pan/zoom, fit, look at, origin planes | yes | yes | the view's own |
-| Export STEP / DXF | CLI | CLI; DXF also in the panel | `forgecad export F.fg [dxf]` |
+| tool / command | .fg | how, on .fg |
+|---|---|---|
+| Open, New, Save, Undo, Redo | yes | Save writes the text (Ctrl+S); undo/redo step the text the ops made |
+| Feature tree (select, open/close groups) | yes | Forge ids: loops `bpsk[0,1]`, calls `lug.hub` nested |
+| Tree: delete, reorder | yes | DeleteFeature, MoveFeature (up/down); a loop has no name to move: typed NotAStatement |
+| Tree: rename | yes | Rename |
+| Tree: suppress / unsuppress | no | no Forge op for a feature left out of the build |
+| End-of-part marker (history scrubbing) | no | no Forge op or run option for building part of the history |
+| Edit a feature (its dialog again) | params only | its params in the panel (SetParam); its picks: no op replaces a positional argument (SetArg sets keyword ones) |
+| Params panel | yes | driving editable (SetParam), driven read-only with what drives them, structural marked |
+| Dimension drag on the model | no | values edit in the panel; no dimension placement on the model yet |
+| Errors, lint, fix buttons | yes | inline, each fix a typed op |
+| Start Sketch (on a face or an origin plane) | yes | the face's anchor (`base.end`) or `xy`/`xz`/`yz`; its plane from the evaluator |
+| Sketch: line, circle, arc, rectangle, spline, point | yes | written as a Forge block, every number a param of the sketch, drawn points `near(..)` |
+| Sketch: dimension, coincident, parallel, perpendicular, tangent | yes | distance, radius, angle, coincident, parallel, perpendicular, tangent, horizontal, vertical, midpoint, equal, fix |
+| Sketch: hdist / vdist | rect sides only | Forge has no horizontal/vertical distance: a rect's become its size params; others refused, typed |
+| Sketch: project geometry | no | refused, typed (write `project(..)` in the source) |
+| Sketch: trim, offset, mirror | off | |
+| Edit an existing sketch | no | no op replaces a sketch block's rows yet |
+| Extrude (add, cut) | yes | `extrude(P, d)` / `cut(P, d)`, P a sketch, loop or closed entity chosen |
+| Revolve | yes | `revolve(P, axis: L, angle: ang)`, L a line of the sketch |
+| Hole | yes | `hole(at: S.points, d: d, depth: thru|depth)`; seats, fastener sizes, to-next: not in the form yet |
+| Fillet, Chamfer | yes | edges picked: `edges(between: (A, B))`, several joined with `+` |
+| Shell | yes | open faces picked |
+| Draft | yes | faces picked, neutral plane a face, a sketch or an origin plane |
+| Thread | yes | `thread(face: F, spec: "M6", length: "full")`, F a cylinder picked |
+| Combine | yes | target and tools from the tree's names |
+| Work plane, axis, point | yes | `workplane(offset: F, d)`, `workaxis(along: F)`, `workpoint(mid: E)` |
+| Linear pattern | yes | `pattern(of: F, layout: lin(along: D, n, step))`, D a face's `.normal` or a line's `.dir` |
+| Circular pattern, mirror | off | (Forge has `circ`, `mirror`: no form yet) |
+| Sweep, Loft, Coil, Rib | yes | profiles, paths and axes from the sketches' names |
+| Sheet metal: sheet, flange, cutout, unfold | yes | flange on an edge picked (`base.edge(plan.outline[1])`, `F.tip`) |
+| Sheet panel: report, flat/folded, DXF, shop | yes | the sheet's report as forge-lang gives it (bends, reliefs, corners, and whatever comes), shop violations with fix buttons |
+| Units | no | a Forge part is mm and degrees: refused, typed |
+| Measure (distance, wall, mass), Check | off | the panel shows volume, faces, validity |
+| Section, lines, view cube, orbit/pan/zoom, fit, look at, origin planes | yes | the view's own |
+| Export STEP / DXF | CLI; DXF also in the panel | `forgecad export F.fg [dxf]` |
 
 Assemblies (a document whose first line is `assembly`) open in the app too (`tests/fg_asm.rs`):
 the posed parts drawn, each distinct part meshed once (by content) and placed at every

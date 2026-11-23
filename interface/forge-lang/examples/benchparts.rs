@@ -12,8 +12,8 @@
 //!   benchparts font DIR            the block font the parts' text uses, as DIR/block.ttf
 //!   benchparts check [NAME]        each part's features, faces, validity, closed mesh and times
 //!   benchparts nary FILE.fg        a part file's n-ary regen, ok or its error (for shrinking)
-//! (`run`'s instructions less `resolve`'s are the kernel's regen alone, as the .fc gate counted
-//! one regen of a part whose selectors were resolved beforehand.)
+//! (`run`'s instructions less `resolve`'s are the kernel's regen alone: one regen of a part whose
+//! selectors were resolved beforehand.)
 use forge_math::hash::BitHasher;
 use forge_model::{Feature, Part, Solid};
 

@@ -147,8 +147,8 @@ fn button(h: &mut Headless, tool: &str) {
     h.step();
 }
 
-/// The tool on a sketch a feature reads already: the button would start a new sketch (as `.fc`'s
-/// did with no sketch free), so the tool is opened as Edit Feature's would be, on that sketch.
+/// The tool on a sketch a feature reads already: the button would start a new sketch (as it
+/// does with no sketch free), so the tool is opened as Edit Feature's would be, on that sketch.
 fn reuse(h: &mut Headless, kind: &'static str) {
     h.gui.fg_open_tool(kind);
     assert!(h.gui.shell.fg.as_ref().is_some_and(|p| p.tool.is_some()));
