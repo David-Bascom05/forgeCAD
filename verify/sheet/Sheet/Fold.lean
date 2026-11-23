@@ -180,6 +180,41 @@ theorem zone_BA (y w : ℝ) : b.zone b.BA y w = b.J (b.s, y, -w) := by
       exact mul_right_cancel₀ hc.ne' h2
     linear_combination (b.sense.val) * this + (-(w) * cos b.θ) * hσ
 
+/-- Wall `b`'s placement when its mold line is not the virtual sharp (a hem's, whose setback is
+`R + t`, the fold's outside, hem.rs): the turn `J` moved by `O`, build.rs's hem origin
+`(−s + ρ sin θ − s cos θ, 0, σ (ρ (1 − cos θ) − s sin θ))`. -/
+noncomputable def Jat (s' : ℝ) (p : V3) : V3 :=
+  let q := b.J p
+  (q.1 + (-s' + b.ρ * sin b.θ - s' * cos b.θ), q.2.1,
+    q.2.2 + b.σ * (b.ρ * (1 - cos b.θ) - s' * sin b.θ))
+
+/-- **The hem branch**: with the zone started at `−s'` for any `s'`, its far end is wall `b`'s
+tangent line placed by `Jat s'`: no condition on `s'` or on `θ < π` (a hem turns up to 2π). So the
+hem's setback `R + t` is consistent, and the ordinary bend's is the one value of `s'` for which
+the placement is the pure turn (`Jat_eq_J`). -/
+theorem zone_BA_hem (s' y w : ℝ) :
+    (-s' + (b.ρ + b.σ * w) * sin (b.φ b.BA), y,
+      b.σ * b.ρ - b.σ * (b.ρ + b.σ * w) * cos (b.φ b.BA)) = b.Jat s' (s', y, -w) := by
+  have hσ := b.sense.val_sq
+  simp only [Jat, J, φ_BA, σ]
+  refine Prod.ext ?_ (Prod.ext rfl ?_)
+  · simp only; ring
+  · simp only; linear_combination (-(w) * cos b.θ) * hσ
+
+/-- The ordinary bend's setback is the one that needs no offset. -/
+theorem Jat_eq_J (p : V3) : b.Jat b.s p = b.J p := by
+  have hc := b.one_add_cos_pos
+  have hsc := Real.sin_sq_add_cos_sq b.θ
+  have hs : b.s * (1 + cos b.θ) = b.ρ * sin b.θ := by simp only [s]; field_simp
+  have h2 : b.ρ * (1 - cos b.θ) = b.s * sin b.θ := by
+    have : b.ρ * (1 - cos b.θ) * (1 + cos b.θ) = b.s * sin b.θ * (1 + cos b.θ) := by
+      linear_combination (-b.ρ) * hsc + (-sin b.θ) * hs
+    exact mul_right_cancel₀ hc.ne' this
+  simp only [Jat]
+  refine Prod.ext ?_ (Prod.ext rfl ?_)
+  · simp only; linarith
+  · simp only; rw [h2]; ring
+
 /-! ## Derivatives: continuity of direction and the isometry -/
 
 /-- `∂F/∂u`, componentwise. -/

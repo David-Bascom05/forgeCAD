@@ -4,4 +4,7 @@ import Sheet.Tree
 import Sheet.Classes
 import Sheet.Region
 import Sheet.BranchBound
+import Sheet.Trig
+import Sheet.Checker
+import Sheet.Oracle
 import Sheet.Axioms

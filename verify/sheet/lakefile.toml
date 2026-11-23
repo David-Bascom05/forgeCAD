@@ -14,3 +14,8 @@ rev = "v4.36.0"
 
 [[lean_lib]]
 name = "Sheet"
+
+# The differential oracle of kernel/forge-sheet/tests/lean_diff.rs.
+[[lean_exe]]
+name = "sheet-oracle"
+root = "OracleMain"

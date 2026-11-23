@@ -5,6 +5,9 @@ import Sheet.Tree
 import Sheet.Classes
 import Sheet.Region
 import Sheet.BranchBound
+import Sheet.Trig
+import Sheet.Checker
+import Sheet.Oracle
 
 /-!
 # Only the standard axioms
@@ -31,7 +34,7 @@ elab "#standard_axioms " ids:ident* : command => do
   Sheet.Bend.rn_mem_iff Sheet.Bend.φ_BA Sheet.Bend.zone_zero Sheet.Bend.zone_BA
   Sheet.Bend.hasDerivAt_zone_u Sheet.Bend.hasDerivAt_zone_y Sheet.Bend.metricE_eq Sheet.Bend.iso
   Sheet.Bend.neutral_length Sheet.Bend.dir_zero Sheet.Bend.dir_BA Sheet.Bend.deduction
-  Sheet.Bend.F_glue Sheet.Bend.refold_b Sheet.Bend.refold_a
+  Sheet.Bend.F_glue Sheet.Bend.refold_b Sheet.Bend.refold_a Sheet.Bend.zone_BA_hem Sheet.Bend.Jat_eq_J
   -- the rules
   Sheet.kOfBA_baOfK Sheet.baOfK_kOfBA Sheet.BA_from_rule Sheet.BA_from_rule_physical
   Sheet.interp_affine Sheet.ktable_physical Sheet.allowance_physical
@@ -51,3 +54,9 @@ elab "#standard_axioms " ids:ident* : command => do
   -- the bend simulator's branch and bound
   Sheet.BB.Encl.comp Sheet.BB.Ival.addOut_mem Sheet.BB.lipschitz_lower Sheet.BB.search_sound
   Sheet.BB.certify_sound
+  -- enclosures and the checker
+  Sheet.Trig.mem_add Sheet.Trig.mem_sub Sheet.Trig.mem_mul Sheet.Trig.mem_coarsen Sheet.Trig.taylor
+  Sheet.Trig.taylorI_mem Sheet.Trig.double_mem Sheet.Trig.sinCos_mem Sheet.Trig.sc_mem
+  Sheet.Checker.all_spec Sheet.Checker.near_sound Sheet.Checker.dist2I_mem Sheet.Checker.Zone.atI_mem
+  Sheet.Checker.Zone.at_mem Sheet.Checker.kappa_sound Sheet.Checker.decide2_pass
+  Sheet.Checker.setback_sound Sheet.Checker.refoldVertex_sound
