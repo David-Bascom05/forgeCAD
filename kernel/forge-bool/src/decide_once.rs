@@ -2396,51 +2396,74 @@ fn why_split(l: &Ledger) -> Option<String> {
 #[inline(never)] // a phase of the profile (tools/speed/phases.sh)
 fn sliver(cls: &Classes, b: &Built, out: &core::Body) -> Option<Point3> {
     let l = lin();
+    // (each vertex cell's point rounded once, as `b.point[..].to_f64()` gives it)
+    let pf = |v: u32| {
+        *b.pointf
+            .get(&v)
+            .unwrap_or_else(|| panic!("vertex cell {v} has no point"))
+    };
     let pt = |v: u32| {
-        let p = b.point[&v].to_f64();
+        let p = pf(v);
         Point3::new(p[0], p[1], p[2])
     };
+    let mut ends: Vec<u32> = Vec::new();
     for e in &out.edges {
-        let mut count: HashMap<u32, u32> = HashMap::default();
+        // the vertex cells at one end of the run only
+        ends.clear();
         for c in &e.cells {
             let (u, v) = b.ends[&c.0];
-            *count.entry(u).or_default() += 1;
-            *count.entry(v).or_default() += 1;
+            ends.push(u);
+            ends.push(v);
         }
-        let ends: Vec<u32> = count.iter().filter(|(_, n)| **n == 1).map(|(v, _)| *v).collect();
-        if ends.len() == 2 && pt(ends[0]).distance(pt(ends[1])) < l {
-            let (p, q) = (pt(ends[0]), pt(ends[1]));
+        ends.sort_unstable();
+        let mut once: [u32; 2] = [0; 2];
+        let mut n = 0;
+        let mut i = 0;
+        while i < ends.len() {
+            let mut j = i;
+            while j < ends.len() && ends[j] == ends[i] {
+                j += 1;
+            }
+            if j - i == 1 {
+                if n < 2 {
+                    once[n] = ends[i];
+                }
+                n += 1;
+            }
+            i = j;
+        }
+        if n == 2 && pt(once[0]).distance(pt(once[1])) < l {
+            let (p, q) = (pt(once[0]), pt(once[1]));
             return Some(p + (q - p) * 0.5);
         }
     }
     // each face's vertices and box
-    let verts: Vec<(u32, Point3)> = out.verts.iter().map(|v| (v.0, pt(v.0))).collect();
-    for f in &out.faces {
-        let mut on: HashMap<u32, ()> = HashMap::default();
+    let verts: Vec<(u32, [f64; 3])> = out.verts.iter().map(|v| (v.0, pf(v.0))).collect();
+    let mut stamp: Vec<u32> = vec![u32::MAX; b.cells.len()];
+    for (fi, f) in out.faces.iter().enumerate() {
         let (mut lo, mut hi) = ([f64::INFINITY; 3], [f64::NEG_INFINITY; 3]);
         for c in &f.facets {
             for &v in &b.facet[&c.0].poly {
-                on.insert(v, ());
-                let p = b.point[&v].to_f64();
+                stamp[v as usize] = fi as u32;
+                let p = pf(v);
                 for k in 0..3 {
                     lo[k] = lo[k].min(p[k]);
                     hi[k] = hi[k].max(p[k]);
                 }
             }
         }
-        let pf = plane_f(&cls.planes[f.plane as usize]);
-        let len = (pf.n[0] * pf.n[0] + pf.n[1] * pf.n[1] + pf.n[2] * pf.n[2]).sqrt();
-        for &(v, p) in &verts {
-            if on.contains_key(&v) {
+        let pl = plane_f(&cls.planes[f.plane as usize]);
+        let len = (pl.n[0] * pl.n[0] + pl.n[1] * pl.n[1] + pl.n[2] * pl.n[2]).sqrt();
+        for &(v, q) in &verts {
+            if stamp[v as usize] == fi as u32 {
                 continue;
             }
-            let q = [p.x, p.y, p.z];
             if (0..3).any(|k| q[k] < lo[k] - l || q[k] > hi[k] + l) {
                 continue;
             }
-            let d = (pf.n[0] * q[0] + pf.n[1] * q[1] + pf.n[2] * q[2] - pf.c) / len;
+            let d = (pl.n[0] * q[0] + pl.n[1] * q[1] + pl.n[2] * q[2] - pl.c) / len;
             if d.abs() < l && cls.planes[f.plane as usize].side(&b.point[&v]) != 0 {
-                return Some(p);
+                return Some(Point3::new(q[0], q[1], q[2]));
             }
         }
     }
