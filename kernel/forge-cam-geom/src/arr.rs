@@ -78,6 +78,15 @@ pub fn same(cx: &mut Ctx, a: Pt, b: Pt) -> bool {
     if a == b {
         return true;
     }
+    // either coordinate's enclosures apart decides it at once (before an exact tie in the
+    // other, which costs the most a sign can): the same answer, the conjunction's order aside
+    let apart = |x: R, y: R, cx: &Ctx| {
+        let (ix, iy) = (cx.iv(x), cx.iv(y));
+        ix.hi < iy.lo || ix.lo > iy.hi
+    };
+    if apart(a.x, b.x, cx) || apart(a.y, b.y, cx) {
+        return false;
+    }
     cx.cmp(a.x, b.x) == Ordering::Equal && cx.cmp(a.y, b.y) == Ordering::Equal
 }
 
