@@ -106,6 +106,7 @@ dependencies = [
  "forge-agent",
  "forge-cam",
  "forge-cam-geom",
+ "forge-dirs",
  "forge-lang",
  "forge-math",
  "forge-model",
