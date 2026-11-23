@@ -1059,3 +1059,33 @@ fn a_taper_that_collapses_is_refused_cleanly() {
     let (v, _) = judge_built(include_str!("kernel_parts/taper_collapses.fg"));
     assert!(matches!(v, Verdict::Refused(_)), "{v:?}");
 }
+
+/// A ball cut centred on the top face over a 1 deg tapered rounded-rectangle pocket: the boolean
+/// stops on SplitCrossed (the sphere). Open: ignored until the boolean splits the sphere cleanly.
+#[test]
+#[ignore = "open: SplitCrossed on the sphere"]
+fn a_ball_over_a_tapered_pocket_builds() {
+    use forge_lang::fuzz::{Verdict, judge_built};
+    let (v, _) = judge_built(include_str!("kernel_parts/ball_over_tapered_pocket.fg"));
+    assert!(matches!(v, Verdict::Ok), "{v:?}");
+}
+
+/// A revolved cup whose wall is a spline, shelled: the shell stops on Rebuild (an edge); a straight
+/// wall shells. Open: ignored until the shell rebuilds offset spline walls.
+#[test]
+#[ignore = "open: the shell's Rebuild on a revolved spline wall"]
+fn a_revolved_spline_cup_shells() {
+    use forge_lang::fuzz::{Verdict, judge_built};
+    let (v, _) = judge_built(include_str!("kernel_parts/shell_revolved_spline.fg"));
+    assert!(matches!(v, Verdict::Ok), "{v:?}");
+}
+
+/// A plate whose wall is a wavy spline (crossing nowhere) builds, then its face fails to mesh
+/// (ConstraintThroughPoint). Open: ignored until the mesher takes the face.
+#[test]
+#[ignore = "open: ConstraintThroughPoint meshing a wavy spline wall"]
+fn a_wavy_spline_wall_meshes() {
+    use forge_lang::fuzz::{Verdict, judge_built};
+    let (v, _) = judge_built(include_str!("kernel_parts/mesh_wavy_spline.fg"));
+    assert!(matches!(v, Verdict::Ok), "{v:?}");
+}
