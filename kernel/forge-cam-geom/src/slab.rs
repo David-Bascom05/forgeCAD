@@ -858,3 +858,59 @@ pub fn certify_shared(
     }
     (Verdict::Clear { lower: lower - f.mu }, cells)
 }
+
+#[cfg(test)]
+mod gap_tests {
+    use super::*;
+
+    /// A trim arc whose stored ends lie off its circle (by an exaggerated 1e-3 here, ~1e-11 in
+    /// practice): the trim is the circle's arc plus the radial pieces to the ends. From points
+    /// all around, dist_region's low end must not exceed the distance to that trim (sampled
+    /// densely: the samples' least is at least the truth).
+    #[test]
+    fn an_arc_with_ends_off_its_circle_never_overstates_the_distance() {
+        let (c, r, g) = ([0.0, 0.0], 1.0, 1e-3);
+        // ends pushed in and out along their radii, a quarter turn ccw
+        let a = [r - g, 0.0];
+        let b = [0.0, r + g];
+        let region = vec![
+            TSeg::Arc { a, b, c, r, ccw: true },
+            TSeg::Line { a: b, b: [-2.0, 2.0] },
+            TSeg::Line { a: [-2.0, 2.0], b: [2.0, -2.0] },
+            TSeg::Line { a: [2.0, -2.0], b: a },
+        ];
+        let boxes: Vec<[f64; 4]> = region.iter().map(tseg_box).collect();
+        // the trim's points: the arc on its circle, the radial pieces, the lines
+        let mut pts: Vec<[f64; 2]> = vec![];
+        for k in 0..=4000 {
+            let t = std::f64::consts::FRAC_PI_2 * k as f64 / 4000.0;
+            pts.push([r * t.cos(), r * t.sin()]);
+        }
+        for k in 0..=100 {
+            let u = k as f64 / 100.0;
+            pts.push([r - g * u, 0.0]);
+            pts.push([0.0, r + g * u]);
+        }
+        let mut seed = 0x2545f4914f6cdd1du64;
+        let mut rnd = || {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            (seed >> 11) as f64 / (1u64 << 53) as f64
+        };
+        for _ in 0..2000 {
+            // points near the arc's ends, where the end candidates matter
+            let e = if rnd() < 0.5 { a } else { b };
+            let q = [e[0] + (rnd() - 0.5) * 0.02, e[1] + (rnd() - 0.5) * 0.02];
+            let d = dist_region(&Sec::Seg { a: q, b: q }, &region, &boxes, 10.0);
+            // the truth, from the samples (each a real trim point: the true least is ≤ theirs,
+            // so compare against their least less the samples' spacing)
+            let mut m = f64::INFINITY;
+            for p in &pts {
+                m = m.min(((p[0] - q[0]).powi(2) + (p[1] - q[1]).powi(2)).sqrt());
+            }
+            let spacing = std::f64::consts::FRAC_PI_2 / 4000.0 + g / 100.0;
+            assert!(d.lo <= m + spacing, "q {q:?}: lo {} vs trim {m}", d.lo);
+        }
+    }
+}
