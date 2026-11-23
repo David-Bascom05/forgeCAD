@@ -124,6 +124,7 @@ definitions (`keep`, `coreI`) are reused as the spec of D6–D8.
 | G9 | `SCRATCH` (thread-local) reused across booleans; `Face::query` (`FaceInfo`) kept across booleans and patched by `extend_query`/`drop_query_loops` | caches that outlive a call: a stale cache is a wrong answer | an invariant `CacheOK b` (the cached FaceInfo equals the one built fresh), preserved by every edit; a hypothesis of each D-step, proven for apply |
 | G10 | `nary`'s `Batch` (a trait object: GPU or CPU) and its threads | an external verdict source; parallel order | `Batch` sound when decided (a hypothesis on the impl; CpuBatch proven); results merged in a fixed order |
 | G11 | the many `LINEAR` / `RIM` tolerance tests (`on_edge`, `settle`, `tolerant_cuts`, `grown_tols`, `holds_edge`, `rolls_off`, `through_smooth_edge`, …) | each is a guess unless it is a proven screen | each becomes a screen plus exact; listed per function as the aeneas table arrives |
+| G13 | `face_point`'s inward step (min(0.01·len, 0.05)) is never checked against cuts or other loops | a probe may land in the wrong region: a wrong class, not an undecided one | a screened distance check with an exact fallback, then another probe or a typed refusal |
 | G12 | the `decide_once` cargo feature (off by default) | ships as the flat fallback (owner clarification) | it becomes the fallback branch: on in release, entered only after today's path refuses or is undecided, with no env switch; proven by IncCoreSpec/EndToEndF plus R3 |
 
 
@@ -238,6 +239,15 @@ Proof shape:
   - The obligation, per probe site: **`foot p ∈ relInterior region`**, the region the probe stands
     for. Then `whereR ⟦B⟧ (foot p)` and `whereF ⟦f⟧ (foot p)` are the region's class (D6).
   - Curved faces: curved Rust defines the foot (or an exact on-surface point near p) per kind.
+- **Probe sites and their regions** (decide-once Rust, 2026-11-23):
+
+  | site | region the foot must be in | the step's status |
+  |---|---|---|
+  | `face_point(f)` (classify_specs, survivors, plan_once_in) | the region of f, as cut by this boolean, next to f's first edge-middle | **unchecked guess** (G13): nothing checks that no cut or other loop comes within the step. It needs a screened distance with an exact fallback, then another probe or a typed refusal |
+  | `spare_probes(s)` | Spec s's region | checked by an f64 distance filter, which becomes a screened distance with an exact fallback |
+  | `local_class(f, p, ..)` (touches, crack_tip) | the sector of f at p between the other body's traces through p, per direction | **a guess** (step growth): replaced by D3's exact sector class (the carriers through p ordered by exact angle, face_fast's machinery), as its own step after (A) and the feet. The foot is used meanwhile |
+  | midpoints in local_split, imprint, nary_body | the open arc between the two cuts | kind (A): the exact midpoint of the two exact meets, by construction |
+
 - **The rule for both kinds:**
   1. a screen decides In/Out/On-surface when it can;
   2. otherwise the exact test at the exact point or the foot;
