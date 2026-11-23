@@ -2,6 +2,7 @@
 -- [forge_sheet_core]: function definitions
 import Aeneas
 import ForgeSheetCore.Types
+import ForgeSheetCore.FunsExternal
 open Aeneas Aeneas.Std Result ControlFlow Error
 set_option linter.dupNamespace false
 set_option linter.hashCommand false
@@ -17,7 +18,41 @@ set_option maxHeartbeats 1000000
 /- You can set the `maxRecDepth` value with the `-max-recdepth` CLI option -/
 set_option maxRecDepth 2048
 
+/- You can remove the following line by using the CLI option `-all-computable`: -/
+noncomputable section
+
 namespace forge_sheet_core
+
+/-- [forge_sheet_core::fold::setback]:
+    Source: 'kernel/forge-sheet-core/src/fold.rs', lines 8:0-10:1
+    Visibility: public -/
+def fold.setback (rho : F64) (s : F64) (c : F64) : Result F64 := do
+  let fl ← lift (F64.Ops.mul rho s)
+  let fl1 ← lift (F64.Ops.add (F64.Ops.ofBits 4607182418800017408) c)
+  ok (F64.Ops.div fl fl1)
+
+/-- [forge_sheet_core::fold::phi]:
+    Source: 'kernel/forge-sheet-core/src/fold.rs', lines 14:0-16:1
+    Visibility: public -/
+def fold.phi (u : F64) (rn : F64) (theta : F64) (ba : F64) : Result F64 := do
+  if F64.Ops.eq u ba
+  then ok theta
+  else ok (F64.Ops.div u rn)
+
+/-- [forge_sheet_core::fold::round_local]:
+    Source: 'kernel/forge-sheet-core/src/fold.rs', lines 21:0-24:1
+    Visibility: public -/
+def fold.round_local
+  (rho0 : F64) (sigma : F64) (s : F64) (c : F64) (y : F64) (w : F64) :
+  Result (F64 × F64 × F64)
+  := do
+  let fl ← lift (F64.Ops.mul sigma w)
+  let r ← lift (F64.Ops.add rho0 fl)
+  let fl1 ← lift (F64.Ops.mul r c)
+  let fl2 ← lift (F64.Ops.mul r s)
+  let fl3 ← lift (F64.Ops.neg sigma)
+  let fl4 ← lift (F64.Ops.mul fl3 y)
+  ok (fl1, fl2, fl4)
 
 /-- [forge_sheet_core::union_find::{forge_sheet_core::union_find::Uf}::find]: loop body 0:
     Source: 'kernel/forge-sheet-core/src/union_find.rs', lines 22:8-27:9 -/
@@ -104,7 +139,7 @@ def union_find.Uf.new_loop.body
   then
     let i1 ← lift (UScalar.cast .U32 i)
     let parent1 ← alloc.vec.Vec.push parent i1
-    let i2 ← lift (Std.Usize.wrapping_add i 1#usize)
+    let i2 ← i + 1#usize
     ok (cont (parent1, i2))
   else ok (done parent)
 
@@ -127,7 +162,7 @@ def union_find.Uf.new (n : Std.Usize) : Result union_find.Uf := do
   ok { parent := parent1 }
 
 /-- [forge_sheet_core::classes]: loop body 0:
-    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 32:4-37:5
+    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 33:4-38:5
     Visibility: public -/
 @[rust_loop_body]
 def classes_loop0.body
@@ -141,12 +176,12 @@ def classes_loop0.body
     let a ← lift (UScalar.cast .Usize i1)
     let b ← lift (UScalar.cast .Usize i2)
     let uf1 ← union_find.Uf.union uf a b
-    let k1 ← lift (Std.Usize.wrapping_add k 1#usize)
+    let k1 ← k + 1#usize
     ok (cont (uf1, k1))
   else ok (done uf)
 
 /-- [forge_sheet_core::classes]: loop 0:
-    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 32:4-37:5
+    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 33:4-38:5
     Visibility: public -/
 @[rust_loop]
 def classes_loop0
@@ -158,7 +193,7 @@ def classes_loop0
     (uf, k)
 
 /-- [forge_sheet_core::classes]: loop body 1:
-    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 42:4-54:5
+    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 43:4-55:5
     Visibility: public -/
 @[rust_loop_body]
 def classes_loop1.body
@@ -176,7 +211,7 @@ def classes_loop1.body
         do
         let number2 ← alloc.vec.Vec.push number next
         let class2 ← alloc.vec.Vec.push «class» next
-        let next2 ← lift (Std.U32.wrapping_add next 1#u32)
+        let next2 ← next + 1#u32
         ok (number2, class2, next2)
       else
         do
@@ -186,12 +221,12 @@ def classes_loop1.body
             number2 r
         let class2 ← alloc.vec.Vec.push «class» c
         ok (number2, class2, next)
-    let i1 ← lift (Std.Usize.wrapping_add i 1#usize)
+    let i1 ← i + 1#usize
     ok (cont (uf1, number1, class1, next1, i1))
   else ok (done «class»)
 
 /-- [forge_sheet_core::classes]: loop 1:
-    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 42:4-54:5
+    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 43:4-55:5
     Visibility: public -/
 @[rust_loop]
 def classes_loop1
@@ -205,7 +240,7 @@ def classes_loop1
     (uf, number, «class», next, i)
 
 /-- [forge_sheet_core::classes]:
-    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 29:0-56:1
+    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 30:0-57:1
     Visibility: public -/
 def classes
   (n : Std.Usize) (pairs : Slice (Std.U32 × Std.U32)) :
@@ -218,7 +253,7 @@ def classes
   classes_loop1 n uf1 number «class» 0#u32 0#usize
 
 /-- [forge_sheet_core::chain]: loop body 0:
-    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 94:4-108:5
+    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 95:4-109:5
     Visibility: public -/
 @[rust_loop_body]
 def chain_loop0.body
@@ -254,7 +289,7 @@ def chain_loop0.body
     let (i3, index_mut_back) ←
       alloc.vec.Vec.index_mut (core.slice.index.SliceIndexUsizeSlice Std.U32)
         n_out f
-    let i4 ← lift (Std.U32.wrapping_add i3 1#u32)
+    let i4 ← i3 + 1#u32
     let i5 ←
       alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32) n_in
         t
@@ -288,14 +323,14 @@ def chain_loop0.body
     let (i6, index_mut_back1) ←
       alloc.vec.Vec.index_mut (core.slice.index.SliceIndexUsizeSlice Std.U32)
         n_in t
-    let i7 ← lift (Std.U32.wrapping_add i6 1#u32)
-    let e1 ← lift (Std.Usize.wrapping_add e 1#usize)
+    let i7 ← i6 + 1#u32
+    let e1 ← e + 1#usize
     let n_in1 := index_mut_back1 i7
     ok (cont (n_out1, n_in1, first_out1, first_in1, second_in1, e1))
   else ok (done (n_out, n_in, first_out, first_in, second_in))
 
 /-- [forge_sheet_core::chain]: loop 0:
-    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 94:4-108:5
+    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 95:4-109:5
     Visibility: public -/
 @[rust_loop]
 def chain_loop0
@@ -313,7 +348,7 @@ def chain_loop0
     (n_out, n_in, first_out, first_in, second_in, e)
 
 /-- [forge_sheet_core::chain]: loop body 1:
-    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 1:0-125:5
+    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 1:0-126:5
     Visibility: public -/
 @[rust_loop_body]
 def chain_loop1.body
@@ -367,13 +402,13 @@ def chain_loop1.body
               alloc.vec.Vec.push pinches (i2, i3, i4)
             else ok pinches
           ok (bad, v1)
-      let v1 ← lift (Std.Usize.wrapping_add v 1#usize)
+      let v1 ← v + 1#usize
       ok (cont (bad1, pinches1, v1))
     else ok (done (bad, pinches))
   else ok (done (bad, pinches))
 
 /-- [forge_sheet_core::chain]: loop 1:
-    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 1:0-125:5
+    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 1:0-126:5
     Visibility: public -/
 @[rust_loop]
 def chain_loop1
@@ -391,7 +426,7 @@ def chain_loop1
     (bad, pinches, v)
 
 /-- [forge_sheet_core::chain]: loop body 3:
-    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 140:12-144:13
+    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 141:12-145:13
     Visibility: public -/
 @[rust_loop_body]
 def chain_loop2_loop0.body
@@ -422,7 +457,7 @@ def chain_loop2_loop0.body
     ok (cont (used1, pieces1, at1))
 
 /-- [forge_sheet_core::chain]: loop 3:
-    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 140:12-144:13
+    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 141:12-145:13
     Visibility: public -/
 @[rust_loop]
 def chain_loop2_loop0
@@ -437,7 +472,7 @@ def chain_loop2_loop0
     (used, pieces, «at»)
 
 /-- [forge_sheet_core::chain]: loop body 2:
-    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 1:0-155:5
+    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 1:0-156:5
     Visibility: public -/
 @[rust_loop_body]
 def chain_loop2.body
@@ -459,7 +494,7 @@ def chain_loop2.body
           start
       if b1
       then
-        let start1 ← lift (Std.Usize.wrapping_add start 1#usize)
+        let start1 ← start + 1#usize
         ok (cont (bad, used, pieces, starts, start1))
       else
         let i := alloc.vec.Vec.len pieces
@@ -475,13 +510,13 @@ def chain_loop2.body
             let i3 ← lift (UScalar.cast .U32 «at»)
             ok (some (ChainError.Unchained i2 i3 1#u32 1#u32))
           else ok bad
-        let start1 ← lift (Std.Usize.wrapping_add start 1#usize)
+        let start1 ← start + 1#usize
         ok (cont (bad1, used1, pieces1, starts1, start1))
     else ok (done (bad, pieces, starts))
   else ok (done (bad, pieces, starts))
 
 /-- [forge_sheet_core::chain]: loop 2:
-    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 1:0-155:5
+    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 1:0-156:5
     Visibility: public -/
 @[rust_loop]
 def chain_loop2
@@ -498,7 +533,7 @@ def chain_loop2
     (bad, used, pieces, starts, start)
 
 /-- [forge_sheet_core::chain]:
-    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 84:0-161:1
+    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 85:0-162:1
     Visibility: public -/
 def chain
   (nv : Std.Usize) («from» : Slice Std.U32) («to» : Slice Std.U32) :
@@ -534,7 +569,7 @@ def chain
   | some b => ok (core.result.Result.Err b)
 
 /-- [forge_sheet_core::owner]: loop body 1:
-    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 1:0-179:13
+    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 1:0-180:13
     Visibility: public -/
 @[rust_loop_body]
 def owner_loop0_loop0.body
@@ -551,20 +586,20 @@ def owner_loop0_loop0.body
         let b ← Slice.index_usize holds p
         if b
         then
-          let i ← lift (Std.Usize.wrapping_mul o k)
-          let i1 ← lift (Std.Usize.wrapping_add i p)
+          let i ← o * k
+          let i1 ← i + p
           let b1 ← Slice.index_usize nest i1
           if b1
           then ok ok1
           else ok false
         else ok ok1
       else ok ok1
-    let p1 ← lift (Std.Usize.wrapping_add p 1#usize)
+    let p1 ← p + 1#usize
     ok (cont (ok2, p1))
   else ok (done ok1)
 
 /-- [forge_sheet_core::owner]: loop 1:
-    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 1:0-179:13
+    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 1:0-180:13
     Visibility: public -/
 @[rust_loop]
 def owner_loop0_loop0
@@ -577,7 +612,7 @@ def owner_loop0_loop0
     (ok1, p)
 
 /-- [forge_sheet_core::owner]: loop body 0:
-    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 1:0-185:5
+    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 1:0-186:5
     Visibility: public -/
 @[rust_loop_body]
 def owner_loop0.body
@@ -600,16 +635,15 @@ def owner_loop0.body
                let i ← lift (UScalar.cast .U32 o)
                ok (some i)
           else ok found
-        let o1 ← lift (Std.Usize.wrapping_add o 1#usize)
+        let o1 ← o + 1#usize
         ok (cont (found1, o1))
-      else
-        let o1 ← lift (Std.Usize.wrapping_add o 1#usize)
-        ok (cont (found, o1))
+      else let o1 ← o + 1#usize
+           ok (cont (found, o1))
     else ok (done found)
   else ok (done found)
 
 /-- [forge_sheet_core::owner]: loop 0:
-    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 1:0-185:5
+    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 1:0-186:5
     Visibility: public -/
 @[rust_loop]
 def owner_loop0
@@ -622,7 +656,7 @@ def owner_loop0
     (found, o)
 
 /-- [forge_sheet_core::owner]:
-    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 167:0-187:1
+    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 168:0-188:1
     Visibility: public -/
 @[reducible]
 def owner
@@ -693,5 +727,26 @@ def place.inverse (m : place.Place) : Result place.Place := do
   let (ox, oy) ← place.local m (F64.Ops.ofBits 0) (F64.Ops.ofBits 0)
   let fl ← lift (F64.Ops.neg m.xy)
   ok { m with ox, oy, xy := fl }
+
+/-- [forge_sheet_core::place::joint]:
+    Source: 'kernel/forge-sheet-core/src/place.rs', lines 54:0-70:1
+    Visibility: public -/
+def place.joint
+  (p0x : F64) (p0y : F64) (p1x : F64) (p1y : F64) :
+  Result (place.Place × F64)
+  := do
+  let ex ← lift (F64.Ops.sub p0x p1x)
+  let ey ← lift (F64.Ops.sub p0y p1y)
+  let fl ← lift (F64.Ops.mul ex ex)
+  let fl1 ← lift (F64.Ops.mul ey ey)
+  let fl2 ← lift (F64.Ops.add fl fl1)
+  let la ← std.f64.F64.sqrt fl2
+  let k ← lift (F64.Ops.div (F64.Ops.ofBits 4607182418800017408) la)
+  let fl3 ← lift (F64.Ops.sub p1x p0x)
+  let vx ← lift (F64.Ops.mul fl3 k)
+  let fl4 ← lift (F64.Ops.sub p1y p0y)
+  let vy ← lift (F64.Ops.mul fl4 k)
+  let fl5 ← lift (F64.Ops.neg vx)
+  ok ({ ox := p0x, oy := p0y, xx := vy, xy := fl5 }, la)
 
 end forge_sheet_core

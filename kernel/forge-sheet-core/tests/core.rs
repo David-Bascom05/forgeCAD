@@ -97,3 +97,68 @@ fn place_then_inverse() {
     let id = then(inverse(a), a);
     assert!(id.ox.abs() < 1e-12 && id.oy.abs() < 1e-12 && (id.xx - 1.0).abs() < 1e-12 && id.xy.abs() < 1e-12);
 }
+
+#[test]
+fn joint_frame() {
+    use forge_sheet_core::place::joint;
+    let (j, la) = joint(1.0, 2.0, 4.0, 6.0);
+    assert_eq!(la, 5.0);
+    // right((3, 4) / 5) = (0.8, -0.6)
+    assert!((j.xx - 0.8).abs() < 1e-15 && (j.xy + 0.6).abs() < 1e-15);
+    assert_eq!((j.ox, j.oy), (1.0, 2.0));
+}
+
+#[test]
+fn setback_is_shops() {
+    use forge_math::dmath;
+    use forge_sheet_core::fold::setback;
+    let mut x: u64 = 0x5eed;
+    for _ in 0..10000 {
+        x ^= x << 13;
+        x ^= x >> 7;
+        x ^= x << 17;
+        let theta = (x >> 11) as f64 / (1u64 << 53) as f64 * 3.1;
+        let rho = 0.1 + (x % 1000) as f64 / 37.0;
+        let (s, c) = dmath::sin_cos(theta);
+        let shop = rho * s / (1.0 + c);
+        assert_eq!(setback(rho, s, c).to_bits(), shop.to_bits());
+        let (sh, ch) = dmath::sin_cos(theta / 2.0);
+        assert!((setback(rho, s, c) - rho * sh / ch).abs() <= 1e-12 * (1.0 + rho / (1.0 + c)));
+    }
+}
+
+#[test]
+fn round_is_builds() {
+    use forge_math::dmath;
+    use forge_sheet_core::fold::{phi, round_local};
+    let mut x: u64 = 0x2a2a;
+    let mut next = || {
+        x ^= x << 13;
+        x ^= x >> 7;
+        x ^= x << 17;
+        (x >> 11) as f64 / (1u64 << 53) as f64
+    };
+    for _ in 0..10000 {
+        let (theta, rho0, t) = (0.1 + 2.9 * next(), 0.5 + 9.0 * next(), 0.5 + 3.0 * next());
+        let sigma = if next() < 0.5 { 1.0 } else { -1.0 };
+        let rn = rho0 + 0.4 * t;
+        let ba = rn * theta;
+        let (u, y, w) = (
+            if next() < 0.1 { ba } else { ba * next() },
+            50.0 * next(),
+            t * next(),
+        );
+        // build.rs, as written there
+        let a = if u == ba { theta } else { u / rn };
+        let (s, c) = dmath::sin_cos(a);
+        let r = rho0 + sigma * w;
+        let want = (r * c, r * s, -sigma * y);
+        assert_eq!(phi(u, rn, theta, ba).to_bits(), a.to_bits());
+        let (s2, c2) = dmath::sin_cos(phi(u, rn, theta, ba));
+        let got = round_local(rho0, sigma, s2, c2, y, w);
+        assert_eq!(
+            (got.0.to_bits(), got.1.to_bits(), got.2.to_bits()),
+            (want.0.to_bits(), want.1.to_bits(), want.2.to_bits())
+        );
+    }
+}
