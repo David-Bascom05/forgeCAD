@@ -28,3 +28,4 @@ import ForgeCurved.QSlabs
 import ForgeCurved.QFacet
 import ForgeCurved.QPlane
 import ForgeCurved.QLineStage
+import ForgeCurved.QOffY
