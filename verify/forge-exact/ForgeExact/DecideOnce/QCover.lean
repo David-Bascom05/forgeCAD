@@ -155,6 +155,18 @@ theorem planeSamples_parts {qs : List Quadric} {c : Rat} {ss : List QS}
   obtain ⟨ls, hls, hlm⟩ := mapM_mem hl c' hc'
   exact ⟨ls, hls, fun s hs => List.mem_append_left _ (List.mem_flatten.mpr ⟨ls, hlm, hs⟩)⟩
 
+theorem planeSamples_edge {qs : List Quadric} {c : Rat} {ss : List QS}
+    (h : planeSamples qs false c = some ss) :
+    ∃ es, edgesOn ((activeOn qs c).filter fun q => !isXPlane q) c = some es ∧
+      ∀ e ∈ es, ∃ s ∈ ss, edgeSample qs .edge e = some s := by
+  unfold planeSamples at h
+  simp only [Option.bind_eq_bind, Option.pure_def, Option.bind_eq_some_iff,
+    Option.some.injEq] at h
+  obtain ⟨es, hes, turns, -, Ey, -, lines, -, edges, he, rfl⟩ := h
+  refine ⟨es, hes, fun e hee => ?_⟩
+  obtain ⟨s, hs, hsl⟩ := mapM_mem he e hee
+  exact ⟨s, List.mem_append_right _ hsl, by simpa using hs⟩
+
 theorem samplesAt_parts {qs : List Quadric} {ss : List QS} (h : samplesAt qs = some ss) :
     ∃ E, eventsOf qs rootFuel = some E ∧
       ∀ c ∈ planesOf E, ∃ ps, planeSamples qs false c = some ps ∧ ∀ s ∈ ps, s ∈ ss := by
@@ -166,6 +178,142 @@ theorem samplesAt_parts {qs : List Quadric} {ss : List QS} (h : samplesAt qs = s
   obtain ⟨p, hp, hpm⟩ := mapM_mem hps c hc
   exact ⟨p, hp, fun s hs =>
     List.mem_append_left _ (List.mem_append_left _ (List.mem_flatten.mpr ⟨p, hpm, hs⟩))⟩
+
+theorem proposeEdge_c {a b : Quadric} {c : Rat} {fuel : Nat} {es : List ESample}
+    (h : proposeEdge a b c fuel = some es) : ∀ e ∈ es, e.c = c := by
+  unfold proposeEdge at h
+  simp only [Option.bind_eq_bind] at h
+  split at h
+  · cases h
+  cases hr : rootsOf (elim a b c).R fuel with
+  | none => rw [hr] at h; cases h
+  | some ns =>
+    rw [hr, Option.bind_some] at h
+    split at h
+    · cases h; intro e he
+      obtain ⟨n, -, rfl⟩ := List.mem_map.mp he; rfl
+    · cases h
+
+theorem proposeEdgeLin_c {a b : Quadric} {c : Rat} {fuel : Nat} {es : List ESample}
+    (h : proposeEdgeLin a b c fuel = some es) : ∀ e ∈ es, e.c = c := by
+  unfold proposeEdgeLin at h
+  simp only [Option.bind_eq_bind] at h
+  split at h
+  · cases h
+  cases hr : rootsOf (elimLin a b c).R fuel with
+  | none => rw [hr] at h; cases h
+  | some ns =>
+    rw [hr, Option.bind_some] at h
+    split at h
+    · cases h; intro e he
+      obtain ⟨n, -, rfl⟩ := List.mem_map.mp he; rfl
+    · cases h
+
+theorem edgesOn_c {qs : List Quadric} {c : Rat} {es : List ESample} (h : edgesOn qs c = some es) :
+    ∀ e ∈ es, e.c = c := by
+  unfold edgesOn at h
+  simp only [Option.map_eq_some_iff] at h
+  obtain ⟨ls, hls, rfl⟩ := h
+  intro e he
+  obtain ⟨l, hl, he⟩ := List.mem_flatten.mp he
+  obtain ⟨pr, -, hpr⟩ := mapM_mem' hls l hl
+  unfold proposeEdgeAny at hpr
+  split at hpr
+  · split at hpr
+    · exact proposeEdgeLin_c hpr e he
+    · exact proposeEdgeLin_c hpr e he
+  · exact proposeEdge_c hpr e he
+
+section Located
+
+variable {K : Type} [Field K] [LE K] [LT K] [Std.IsLinearOrder K] [Std.LawfulOrderLT K]
+  [OrderedRing K] (M : Model K) [DecidableRel (α := K) (· < ·)]
+
+theorem lineSamples_located {qs : List Quadric} {c c' : Rat} {ls : List QS}
+    (h : lineSamples qs c c' = some ls) : ∀ s ∈ ls, ∃ p : PK K, p.1 = M.q c ∧
+      s.cov = covOfK (qs.map fun q => Quadric.evK M q) p := by
+  unfold lineSamples at h
+  simp only [Option.bind_eq_bind, Option.pure_def, Option.bind_eq_some_iff,
+    Option.some.injEq] at h
+  obtain ⟨roots, -, Ez, hEz, facets, hf, cells, hc, rfl⟩ := h
+  have hck := pickEvents_spec hEz
+  simp only [checkEvents, Bool.and_eq_true, List.all_eq_true] at hck
+  have hpt : ∀ t : K, (linePt M ⟨c, c', 0⟩ ⟨0, 0, 1⟩ t).1 = M.q c := by
+    intro t; simp [linePt, Model.q_zero]; grind
+  intro s hs
+  obtain ⟨X, hX, rfl⟩ := List.mem_map.mp hs
+  rcases List.mem_append.mp hX with hX | hX
+  · obtain ⟨n, hn, hcov⟩ := mapM_mem' hf X hX
+    obtain ⟨t, ht⟩ := denotes_of_isoOkN M (hck.1.2 n hn)
+    exact ⟨_, hpt t, covOn_spec M _ _ ht _ qs X hcov⟩
+  · obtain ⟨t, -, hcov⟩ := mapM_mem' hc X hX
+    exact ⟨_, hpt (M.q t), covOn_spec M _ _ (show Denotes M (.rat t) (M.q t) from rfl) _ qs X hcov⟩
+
+theorem edgeSample_located {qs : List Quadric} {tg : Tag} {e : ESample} {s : QS}
+    (h : edgeSample qs tg e = some s) : ∃ p : PK K, p.1 = M.q e.c ∧
+      s.cov = covOfK (qs.map fun q => Quadric.evK M q) p := by
+  unfold edgeSample at h
+  by_cases hc : (isoOkN e.y && e.dOk signFuel) = true
+  · rw [if_pos hc] at h
+    simp only [Bool.and_eq_true] at hc
+    simp only [Option.map_eq_some_iff] at h
+    obtain ⟨X, hX, rfl⟩ := h
+    obtain ⟨α, hα⟩ := denotes_of_isoOkN M hc.1
+    exact ⟨_, rfl, edgeCov_spec M hα hc.2 qs X hX⟩
+  · rw [if_neg hc] at h; cases h
+
+/-- **A sample not tagged vertex is on a sample plane.** (No carrier vanishes on a whole plane
+`x = c`, so no event plane is sampled.) -/
+theorem samplesAt_located {qs : List Quadric} {ss : List QS} (h : samplesAt qs = some ss)
+    (hz : ∀ q ∈ qs, ∀ c, zeroOn q c = false) :
+    ∃ E, eventsOf qs rootFuel = some E ∧ ∀ s ∈ ss, s.tag ≠ .vert →
+      ∃ c ∈ planesOf E, ∃ p : PK K, p.1 = M.q c ∧
+        s.cov = covOfK (qs.map fun q => Quadric.evK M q) p := by
+  unfold samplesAt at h
+  simp only [Option.bind_eq_bind, Option.pure_def, Option.bind_eq_some_iff,
+    Option.some.injEq] at h
+  obtain ⟨E, hE, ps, hps, es, hes, vs, hvs, rfl⟩ := h
+  refine ⟨E, hE, fun s hs htag => ?_⟩
+  rcases List.mem_append.mp hs with hs | hs
+  rcases List.mem_append.mp hs with hs | hs
+  · obtain ⟨l, hl, hs⟩ := List.mem_flatten.mp hs
+    obtain ⟨c, hc, hpc⟩ := mapM_mem' hps l hl
+    refine ⟨c, hc, ?_⟩
+    unfold planeSamples at hpc
+    simp only [Option.bind_eq_bind, Option.pure_def, Option.bind_eq_some_iff,
+      Option.some.injEq] at hpc
+    obtain ⟨es', hes', turns, -, Ey, -, lines, hl', edges, he', rfl⟩ := hpc
+    rcases List.mem_append.mp hs with hs | hs
+    · obtain ⟨l', hl'', hs⟩ := List.mem_flatten.mp hs
+      obtain ⟨c', -, hc'⟩ := mapM_mem' hl' l' hl''
+      exact lineSamples_located M hc' s hs
+    · obtain ⟨e, he, hse⟩ := mapM_mem' he' s hs
+      obtain ⟨p, hp1, hpc'⟩ := edgeSample_located M hse
+      have hec : e.c = c := by
+        -- edgesOn's samples are on its plane
+        exact edgesOn_c hes' e he
+      exact ⟨p, by rw [hp1, hec], hpc'⟩
+  · exfalso
+    obtain ⟨l, hl, -⟩ := List.mem_flatten.mp hs
+    obtain ⟨c, hc, -⟩ := mapM_mem' hes l hl
+    simp only [List.mem_filter, List.any_eq_true] at hc
+    obtain ⟨-, q, hq, hzq⟩ := hc
+    rw [hz q hq c] at hzq; cases hzq
+  · exfalso
+    unfold vertSamples at hvs
+    simp only [Option.map_eq_some_iff] at hvs
+    obtain ⟨ls, hls, rfl⟩ := hvs
+    obtain ⟨l, hl, hs⟩ := List.mem_flatten.mp hs
+    obtain ⟨t, -, ht⟩ := mapM_mem' hls l hl
+    unfold enumSamples at ht
+    simp only [Option.bind_eq_some_iff] at ht
+    obtain ⟨ds, -, hds⟩ := ht
+    obtain ⟨d, -, hd⟩ := mapM_mem' hds s hs
+    simp only [Option.map_eq_some_iff] at hd
+    obtain ⟨X, -, rfl⟩ := hd
+    exact htag rfl
+
+end Located
 
 /-- The frame `samplesOf` takes, and its certificates. -/
 theorem samplesOf_frame {qs : List Quadric} {ss : List QS} (h : samplesOf qs = some ss) :
