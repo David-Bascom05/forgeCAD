@@ -1,7 +1,9 @@
 //! The curved decide-once builder on kernel solids (feature `decide_once_curved`).
 #![cfg(feature = "decide_once_curved")]
 
-use forge_bool::decide_once_curved::{Kind, carrier_classes, near_pairs, read_faces, read_trims};
+use forge_bool::decide_once_curved::{
+    ExactPt, Kind, carrier_classes, cert_vertices, near_pairs, read_faces, read_trims,
+};
 use forge_math::{Frame, Point2, Point3};
 use forge_ops::{Profile, extrude};
 use forge_topo::Body;
@@ -85,4 +87,26 @@ fn stage_c_trims_of_a_drilled_plate() {
     assert!(rims.iter().all(|t| t.classes.0 != t.classes.1));
     // the box's 12 edges are between two planes
     assert!(ts.len() >= 12 + rims.len());
+}
+
+/// Stage (c) part 1: trim vertices certified. A plate notched by a rod at its edge: the box's
+/// corners are three planes' rational points; where the rod's wall meets the end face and the
+/// top or bottom, the vertex is `y = 10 ± √12`, certified on (plane, plane, cylinder).
+#[test]
+fn stage_c_vertices_of_a_notched_plate() {
+    let plate = block(Point3::ORIGIN, 30.0, 20.0, 6.0, 1);
+    let drill = rod(Point3::new(28.0, 10.0, -1.0), 4.0, 8.0, 2);
+    let notched = forge_bool::boolean(&plate, &drill, forge_bool::Op::Subtract, 3).unwrap();
+    let fs = read_faces(&[&notched]).unwrap();
+    let (cls, qs) = carrier_classes(&fs);
+    let ts = read_trims(&[&notched], &fs, &cls).unwrap();
+    let vs = cert_vertices(&[&notched], &ts, &qs).unwrap();
+    let alg = vs.iter().filter(|v| matches!(v.pt, ExactPt::Alg(..))).count();
+    let rat = vs.len() - alg;
+    assert_eq!(alg, 4, "the notch's four corners");
+    assert!(rat >= 6, "the box's corners left: {rat}");
+    for v in &vs {
+        let w = v.bx.iter().map(|i| i.hi - i.lo).fold(0.0, f64::max);
+        assert!(w < 1e-9, "box width {w}");
+    }
 }

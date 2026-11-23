@@ -2766,6 +2766,230 @@ pub fn read_trims(bodies: &[&forge_topo::Body], fs: &[CIn], cls: &[usize]) -> Re
     Ok(out)
 }
 
+/// An exact vertex: three planes' rational point, or a certified sample of three carriers in a
+/// frame (`x` is the same in every frame; `y`, `z` map back by [`frame_point`]).
+#[derive(Clone, Debug)]
+pub enum ExactPt {
+    Rat(V3),
+    Alg(Frame, VSample),
+}
+
+/// A trim end's vertex, certified: the three carrier classes it lies on, its exact point, and a
+/// float box enclosing that point (outward-rounded), matched to the stored point.
+#[derive(Clone, Debug)]
+pub struct VertCert {
+    pub body: usize,
+    pub vertex: forge_topo::VertexId,
+    pub classes: [usize; 3],
+    pub pt: ExactPt,
+    pub bx: [Interval; 3],
+}
+
+/// Cramer's rule for three planes; `None` when they do not meet in one point.
+pub fn planes_point(a: &Quadric, b: &Quadric, c: &Quadric) -> Option<V3> {
+    let det = det3_q(a, b, c);
+    if det.is_zero() {
+        return None;
+    }
+    let d = |m: [[&Q; 3]; 3]| {
+        m[0][0]
+            .mul(&m[1][1].mul(m[2][2]).sub(&m[1][2].mul(m[2][1])))
+            .sub(&m[0][1].mul(&m[1][0].mul(m[2][2]).sub(&m[1][2].mul(m[2][0]))))
+            .add(&m[0][2].mul(&m[1][0].mul(m[2][1]).sub(&m[1][1].mul(m[2][0]))))
+    };
+    let (na, nb, nc) = (a.c.neg(), b.c.neg(), c.c.neg());
+    let dx = d([[&na, &a.ly, &a.lz], [&nb, &b.ly, &b.lz], [&nc, &c.ly, &c.lz]]);
+    let dy = d([[&a.lx, &na, &a.lz], [&b.lx, &nb, &b.lz], [&c.lx, &nc, &c.lz]]);
+    let dz = d([[&a.lx, &a.ly, &na], [&b.lx, &b.ly, &nb], [&c.lx, &c.ly, &nc]]);
+    Some(V3 {
+        x: dx.div(&det),
+        y: dy.div(&det),
+        z: dz.div(&det),
+    })
+}
+
+/// A float box of a sample in frame `f`, in world coordinates. `in_frame` is
+/// `q(x + μ(y + λz) + νz, y + λz, z)`, so the frame point `(x, y, z)` is the world point
+/// `(x + μ(y + λz) + νz, y + λz, z)`. `None` when an enclosure is not finite or a denominator's
+/// enclosure holds 0.
+pub fn frame_point(f: &Frame, s: &VSample) -> Option<[Interval; 3]> {
+    let x = tighten(&s.x);
+    let dy = horner_iv(&s.dy, &x)?;
+    let dz = horner_iv(&s.dz, &x)?;
+    if dy.contains_zero() || dz.contains_zero() {
+        return None;
+    }
+    let y1 = -horner_iv(&s.ny, &x)?.div(&dy);
+    let z1 = -horner_iv(&s.nz, &x)?.div(&dz);
+    let y = y1 + enclose(&f.2) * z1;
+    let b = [x + enclose(&f.0) * y + enclose(&f.1) * z1, y, z1];
+    if b.iter().all(|i| i.lo.is_finite() && i.hi.is_finite()) {
+        Some(b)
+    } else {
+        None
+    }
+}
+
+/// The stored point is within `tol` of the box.
+fn near_box(b: &[Interval; 3], p: &[f64; 3], tol: f64) -> bool {
+    let mut ok = true;
+    let mut k = 0;
+    while k < 3 {
+        ok = ok && b[k].lo - tol <= p[k] && p[k] <= b[k].hi + tol;
+        k += 1;
+    }
+    ok
+}
+
+/// The world frame first, then [`frames`].
+fn frames_all() -> Vec<Frame> {
+    let mut out = vec![(Q::zero(), Q::zero(), Q::zero())];
+    out.extend(frames());
+    out
+}
+
+/// **One vertex, certified on three carriers**: the triple's exact points, proposed and
+/// certified in the first frame whose proposal succeeds, enclosed in boxes; exactly one box
+/// within `tol` of the stored point `p` is the vertex. More than one: `Ambiguous`; none, or no
+/// frame certifies: `Uncertified`.
+pub fn cert_triple(
+    qs: &[Quadric],
+    cl: [usize; 3],
+    p: &[f64; 3],
+    tol: f64,
+) -> Result<(ExactPt, [Interval; 3]), Skip> {
+    let (a, b, c) = (&qs[cl[0]], &qs[cl[1]], &qs[cl[2]]);
+    if is_plane_q(a) && is_plane_q(b) && is_plane_q(c) {
+        let v = planes_point(a, b, c).ok_or(Skip::Uncertified("three planes meet in no point"))?;
+        let bx = [enclose(&v.x), enclose(&v.y), enclose(&v.z)];
+        return if near_box(&bx, p, tol) {
+            Ok((ExactPt::Rat(v), bx))
+        } else {
+            Err(Skip::Uncertified(
+                "the three planes' point is not the stored vertex",
+            ))
+        };
+    }
+    let fs = frames_all();
+    let mut res: Option<Result<(ExactPt, [Interval; 3]), Skip>> = None;
+    let mut i = 0;
+    while res.is_none() && i < fs.len() {
+        let f = &fs[i];
+        let (fa, fb, fc) = (in_frame(f, a), in_frame(f, b), in_frame(f, c));
+        if let Some(ss) = propose_triple(&fa, &fb, &fc, ROOT_FUEL) {
+            let mut hit: Option<(ExactPt, [Interval; 3])> = None;
+            let mut many = false;
+            let mut boxed = true;
+            let mut k = 0;
+            while k < ss.len() {
+                match frame_point(f, &ss[k]) {
+                    Some(bx) => {
+                        if near_box(&bx, p, tol) {
+                            many = many || hit.is_some();
+                            hit = Some((ExactPt::Alg(f.clone(), ss[k].clone()), bx));
+                        }
+                    }
+                    None => boxed = false,
+                }
+                k += 1;
+            }
+            res = Some(if many {
+                Err(Skip::Ambiguous("two certified vertices within tolerance"))
+            } else if !boxed {
+                Err(Skip::Uncertified("a vertex box is not finite"))
+            } else {
+                hit.ok_or(Skip::Uncertified("no certified vertex at the stored point"))
+            });
+        }
+        i += 1;
+    }
+    res.unwrap_or(Err(Skip::Uncertified("no frame certifies the triple")))
+}
+
+/// **Trim vertices**: every end vertex of a non-closed trim, certified on three of the carrier
+/// classes of the faces round it (`cert_triple`), the first certified triple in index order.
+/// A vertex on fewer than three classes is `OutOfDomain`.
+pub fn cert_vertices(
+    bodies: &[&forge_topo::Body],
+    ts: &[Trim],
+    qs: &[Quadric],
+) -> Result<Vec<VertCert>, Skip> {
+    // (body, vertex, its stored point, the classes round it)
+    let mut vs: Vec<(usize, forge_topo::VertexId, [f64; 3], Vec<usize>)> = Vec::new();
+    let mut i = 0;
+    while i < ts.len() {
+        let t = &ts[i];
+        if !t.closed {
+            let ends = [(t.start, t.p0), (t.end, t.p1)];
+            let mut e = 0;
+            while e < 2 {
+                let (v, p) = ends[e];
+                let j = match vs.iter().position(|w| w.0 == t.body && w.1 == v) {
+                    Some(j) => j,
+                    None => {
+                        vs.push((t.body, v, p, Vec::new()));
+                        vs.len() - 1
+                    }
+                };
+                let cs = &mut vs[j].3;
+                if !cs.contains(&t.classes.0) {
+                    cs.push(t.classes.0);
+                }
+                if !cs.contains(&t.classes.1) {
+                    cs.push(t.classes.1);
+                }
+                e += 1;
+            }
+        }
+        i += 1;
+    }
+    let mut out: Vec<VertCert> = Vec::with_capacity(vs.len());
+    let mut j = 0;
+    while j < vs.len() {
+        let (bi, v, p, cs0) = &vs[j];
+        let mut cs = cs0.clone();
+        cs.sort_unstable();
+        if cs.len() < 3 {
+            return Err(Skip::OutOfDomain("a vertex on fewer than three carriers"));
+        }
+        let tol = bodies[*bi].vertex(*v).tol.max(forge_math::tol::LINEAR);
+        let mut got: Option<VertCert> = None;
+        let mut last = Skip::Uncertified("no triple certifies the vertex");
+        let n = cs.len();
+        let mut a = 0;
+        while got.is_none() && a < n {
+            let mut b = a + 1;
+            while got.is_none() && b < n {
+                let mut c = b + 1;
+                while got.is_none() && c < n {
+                    let cl = [cs[a], cs[b], cs[c]];
+                    match cert_triple(qs, cl, p, tol) {
+                        Ok((pt, bx)) => {
+                            got = Some(VertCert {
+                                body: *bi,
+                                vertex: *v,
+                                classes: cl,
+                                pt,
+                                bx,
+                            })
+                        }
+                        Err(s) => last = s,
+                    }
+                    c += 1;
+                }
+                b += 1;
+            }
+            a += 1;
+        }
+        match got {
+            Some(vc) => out.push(vc),
+            None => return Err(last),
+        }
+        j += 1;
+    }
+    Ok(out)
+}
+
 // =============================================================================================
 // QForm.lean: a body's sign formula
 // =============================================================================================
