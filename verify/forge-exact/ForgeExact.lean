@@ -25,4 +25,5 @@ import ForgeExact.DecideOnce.IncCore
 import ForgeExact.DecideOnce.CoreInc
 import ForgeExact.DecideOnce.Refines
 import ForgeExact.DecideOnce.Simulation
+import ForgeExact.DecideOnce.RoomConst
 import ForgeExact.Axioms
