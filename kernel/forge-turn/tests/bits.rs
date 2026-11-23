@@ -35,7 +35,7 @@ fn segs(h: &mut u64, ss: &[Seg]) {
 
 const PINNED: u64 = 0x79c1d6fad7dfed47;
 /// The threaded bush: boring, an ID groove and an ID thread.
-const PINNED_NUT: u64 = 0xf5f33ecc0e6e24ef;
+const PINNED_NUT: u64 = 0xca79261412071eaf;
 
 #[test]
 fn the_same_bits_everywhere() {

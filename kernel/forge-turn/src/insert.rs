@@ -100,6 +100,8 @@ pub struct TurnTool {
     /// The tip direction number of the control's nose-radius compensation (1–9; 3 for an OD
     /// right-hand tool).
     pub tip_number: u32,
+    /// A left-hand tool: the right-hand one mirrored across z (it feeds +z, away from the chuck).
+    pub left: bool,
     pub bodies: Vec<Body>,
     /// Cutting data: m/min, mm/rev, mm depth of cut.
     pub vc: f64,
@@ -301,10 +303,10 @@ pub fn decode_holder(code: &str) -> Result<HolderSpec, ToolError> {
         x => return Err(code_err(code, format!("holder style `{x}` not known"))),
     };
     let hand = c[4];
-    if hand != 'R' {
+    if hand != 'R' && hand != 'L' {
         return Err(code_err(
             code,
-            "only right-hand (R) OD holders in this phase: left-hand and boring bars are next",
+            "the hand: right (R) or left (L); neutral (N) holders are not in this library",
         ));
     }
     let h: f64 = c[5..7]
@@ -391,7 +393,8 @@ const HOLDER_PAD: f64 = 0.05;
 /// How far a generic seat's corners stand in from the insert's.
 const SEAT_INSET: f64 = 0.5;
 
-/// An OD turning tool from an insert and a right-hand holder: the insert's core (its nose
+/// An OD turning tool from an insert and a holder (a left-hand one is its right-hand twin
+/// mirrored across z, `mirrored`): the insert's core (its nose
 /// corner at the nose centre, the reference point), its body to its thickness below centre
 /// height with the effective clearance `clear_deg` (a negative insert in a negatively inclined
 /// seat: about 6°), and the holder's head and shank.
@@ -506,7 +509,7 @@ pub fn turning_tool(
         on_axis: false,
         cyl: None,
     };
-    Ok(TurnTool {
+    let t = TurnTool {
         id: id.into(),
         kind: Kind::Turn,
         code: insert.into(),
@@ -517,12 +520,44 @@ pub fn turning_tool(
         pitch: [0.0, 0.0],
         tip: [-re, -re],
         tip_number: 3,
+        left: false,
         bodies: vec![insert_body, head, shank_body],
         vc: 200.0,
         f: 0.2,
         ap: 2.0,
         source: "decoded from the ISO codes; holder head and f generic: verify with the vendor".into(),
-    })
+    };
+    Ok(if hol.hand == 'L' { mirrored(t) } else { t })
+}
+
+/// The tool mirrored across z (ρ, z) → (ρ, −z): a left-hand tool from its right-hand twin. A
+/// mirror maps a convex core to a convex core and the clearances with it; the edges' angles from
+/// +ρ change sign; the imaginary tip mirrors; the control's tip number with it (3 ↔ 4, 2 ↔ 1).
+pub fn mirrored(mut t: TurnTool) -> TurnTool {
+    for b in &mut t.bodies {
+        // mirrored, then the vertices after the first reversed: counter-clockwise again, the
+        // first vertex (the nose, which the checker's inner point starts from) still first
+        let m: Vec<[f64; 2]> = b.core.iter().map(|p| [p[0], -p[1]]).collect();
+        b.core = m[..1.min(m.len())]
+            .iter()
+            .chain(m[1..].iter().rev())
+            .copied()
+            .collect();
+        if let Some(c) = &mut b.cyl {
+            c.z = [-c.z[1], -c.z[0]];
+        }
+    }
+    t.edges = [-t.edges[0], -t.edges[1]];
+    t.tip = [t.tip[0], -t.tip[1]];
+    t.tip_number = match t.tip_number {
+        3 => 4,
+        4 => 3,
+        2 => 1,
+        1 => 2,
+        n => n,
+    };
+    t.left = !t.left;
+    t
 }
 
 /// An ISO 6261 boring bar, decoded: shank diameter, length, insert shape, style (κr), hand.
@@ -664,6 +699,7 @@ pub fn boring_tool(id: &str, insert: &str, bar: &str, seat_deg: Option<f64>) -> 
         pitch: [0.0, 0.0],
         tip: [re, -re],
         tip_number: 2,
+        left: false,
         bodies: vec![insert_body, bar_body],
         vc: 180.0,
         f: 0.15,
@@ -736,6 +772,7 @@ pub fn groove_tool(
         pitch: [0.0, 0.0],
         tip: [-rc, -rc],
         tip_number: 3,
+        left: false,
         bodies: vec![blade, holder],
         vc: 120.0,
         f: 0.06,
@@ -790,6 +827,7 @@ pub fn thread_tool(id: &str, rt: f64, pitch: [f64; 2], h: f64) -> Result<TurnToo
         pitch,
         tip: [-rt, 0.0],
         tip_number: 8,
+        left: false,
         bodies: vec![tip, holder],
         vc: 100.0,
         f: 0.0,
@@ -868,6 +906,7 @@ pub fn id_groove_tool(
         pitch: [0.0, 0.0],
         tip: [rc, -rc],
         tip_number: 2,
+        left: false,
         bodies: vec![blade, bar],
         vc: 100.0,
         f: 0.04,
@@ -930,6 +969,7 @@ pub fn id_thread_tool(
         pitch,
         tip: [rt, 0.0],
         tip_number: 6,
+        left: false,
         bodies: vec![tip, bar],
         vc: 80.0,
         f: 0.0,
@@ -981,6 +1021,7 @@ pub fn drill_tool(id: &str, d: f64, point_deg: f64, flute: f64, shank: f64) -> R
         pitch: [0.0, 0.0],
         tip: [0.0, 0.0],
         tip_number: 0,
+        left: false,
         bodies: vec![flutes, shank_body],
         vc: 25.0,
         f: 0.1,

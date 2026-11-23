@@ -24,7 +24,8 @@
 //! `turn_finish` with a boring tool finishes the bore), `turn_groove(op, tool:, from:, to:, r:)`
 //! (with an ID grooving bar, also `bore:` the bore's diameter on the way in), `turn_thread(op,
 //! tool:, d:, pitch:, from:, to:, passes:)` (an ID thread insert cuts an internal thread),
-//! `part_off(op, tool:, at:)`, `turn_drill(op, tool:, to:, peck:)`. Every op is
+//! `part_off(op, tool:, at:)`, `turn_drill(op, tool:, to:, peck:)`; `turn_finish` with a
+//! left-hand tool finishes up the profile, `from:` Z0 `to:` Z1. Every op is
 //! posted, read back (the round trip), and the path the text means is what is certified
 //! (forge_turn::ops::certify). The reply is `forgecad.cam/1` with `"process": "turning"`.
 use forge_agent::json::Json;
@@ -332,13 +333,17 @@ impl TurnCam {
             "turn_finish" => {
                 let si = self.setup_of(a)?;
                 let (t, st) = self.tool_of(a)?;
-                let r = ops::finish(
+                let (s, leave, to) = (
                     &self.setups[si].1,
-                    &t,
-                    st,
                     num(a, "leave", Some(0.0))?,
                     num(a, "to", None)?,
                 );
+                // a left-hand tool finishes up the profile, from `from:` to `to:`
+                let r = if t.left {
+                    ops::finish_up(s, &t, st, leave, num(a, "from", None)?, to)
+                } else {
+                    ops::finish(s, &t, st, leave, to)
+                };
                 op(self, "finish", r, si)
             }
             "turn_groove" => {

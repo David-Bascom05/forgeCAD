@@ -200,6 +200,12 @@ pub fn face(s: &Setup, tool: &TurnTool, t: u32, z_face: f64, ap: f64) -> Result<
             tool.id
         )));
     }
+    if tool.left {
+        return Err(OpError::Tool(format!(
+            "`{}` is a left-hand tool: it feeds +z (finish_up), not toward the chuck",
+            tool.id
+        )));
+    }
     if !(z_face < s.bar_front) {
         return Err(OpError::Geometry(
             "nothing to face: the face is at or past the bar's front".into(),
@@ -321,6 +327,12 @@ pub fn rough(
     if tool.kind != Kind::Turn {
         return Err(OpError::Tool(format!(
             "roughing needs a turning tool, not `{}`",
+            tool.id
+        )));
+    }
+    if tool.left {
+        return Err(OpError::Tool(format!(
+            "`{}` is a left-hand tool: it feeds +z (finish_up), not toward the chuck",
             tool.id
         )));
     }
@@ -536,6 +548,12 @@ pub fn finish(s: &Setup, tool: &TurnTool, t: u32, leave: f64, z_lo: f64) -> Resu
             tool.id
         )));
     }
+    if tool.left {
+        return Err(OpError::Tool(format!(
+            "`{}` is a left-hand tool: it feeds +z (finish_up), not toward the chuck",
+            tool.id
+        )));
+    }
     let inside = tool.kind == Kind::Bore;
     let re = tool.re;
     // outside: clockwise round the grown part from over the front face at its least radius;
@@ -631,6 +649,130 @@ pub fn finish(s: &Setup, tool: &TurnTool, t: u32, leave: f64, z_lo: f64) -> Resu
     }
     Ok(OpPath {
         name: format!("finish {}, leave {leave}", if inside { "bore" } else { "OD" }),
+        tool: tool.clone(),
+        t,
+        spindle: css(tool),
+        f: tool.f,
+        leave,
+        start,
+        steps,
+        removal: None,
+    })
+}
+
+fn flip(s: &Seg) -> Seg {
+    let f = |p: forge_cam_geom::region::P2| forge_cam_geom::region::p2(p.x, -p.y);
+    match *s {
+        Seg::Line { a, b } => Seg::Line { a: f(a), b: f(b) },
+        Seg::Arc { a, b, c, ccw } => Seg::Arc {
+            a: f(a),
+            b: f(b),
+            c: f(c),
+            ccw: !ccw,
+        },
+    }
+}
+
+/// The part of a piece from its start while it stays below z = z0 (clip_above mirrored).
+fn clip_below(s: &Seg, z0: f64) -> Option<(Seg, bool)> {
+    clip_above(&flip(s), -z0).map(|(p, e)| (flip(&p), e))
+}
+
+/// Finishing up the profile with a left-hand tool: the nose centre along the boundary of
+/// H ⊕ B_{r_ε + leave} counter-clockwise (up, +z, on the outside), from where it crosses
+/// z = z_lo farthest from the axis to z = z_hi. For the flanks a right-hand tool cannot follow:
+/// those facing the chuck (a collar's back chamfer, a ball's underside), reached from a groove
+/// or a neck cut first.
+pub fn finish_up(
+    s: &Setup,
+    tool: &TurnTool,
+    t: u32,
+    leave: f64,
+    z_lo: f64,
+    z_hi: f64,
+) -> Result<OpPath, OpError> {
+    if !(leave >= 0.0) {
+        return Err(OpError::Geometry(format!(
+            "a leave of {leave}: below the part (G1 holds the cutter from P ⊕ B_leave, leave ≥ 0)"
+        )));
+    }
+    if !(tool.kind == Kind::Turn && tool.left) {
+        return Err(OpError::Tool(format!(
+            "finishing up the profile needs a left-hand turning tool, not `{}`",
+            tool.id
+        )));
+    }
+    if !(z_hi > z_lo) {
+        return Err(OpError::Geometry(format!(
+            "from z = {z_lo} up to z = {z_hi}: the end must lie above the start"
+        )));
+    }
+    let re = tool.re;
+    let c = grown(s, re + leave)?;
+    let n = c.segs.len();
+    // the crossing of z = z_lo going up, farthest from the axis: the piece from there on
+    let mut best: Option<(usize, Seg)> = None;
+    for (i, sg) in c.segs.iter().enumerate() {
+        if !(sg.start().y < z_lo && sg.end().y >= z_lo) {
+            continue;
+        }
+        if let Some((back, true)) = clip_above(&sg.reversed(), z_lo) {
+            let tail = back.reversed();
+            if best.as_ref().is_none_or(|(_, b)| tail.start().x > b.start().x) {
+                best = Some((i, tail));
+            }
+        }
+    }
+    let (i0, tail) = best.ok_or(OpError::Geometry(format!(
+        "the finish path finds no start on the profile at z = {z_lo}"
+    )))?;
+    let mut segs = Vec::new();
+    let mut piece = tail;
+    let mut k = 0;
+    loop {
+        match clip_below(&piece, z_hi) {
+            None => break,
+            Some((p, ended)) => {
+                segs.push(p);
+                if ended {
+                    break;
+                }
+            }
+        }
+        k += 1;
+        if k >= n {
+            break;
+        }
+        piece = c.segs[(i0 + k) % n];
+    }
+    let p0 = tail.start();
+    let x_out = s.bar_r + APPROACH + re;
+    let start = [x_out, p0.y];
+    let mut steps = vec![Step::Rapid(start), Step::Feed([p0.x, p0.y])];
+    for sg in &segs {
+        let a = sg.start();
+        match *sg {
+            Seg::Line { b, .. } => {
+                if a != b {
+                    steps.push(Step::Feed([b.x, b.y]));
+                }
+            }
+            Seg::Arc { b, c, ccw, .. } => {
+                if a != b {
+                    steps.push(Step::Arc {
+                        to: [b.x, b.y],
+                        c: [c.x, c.y],
+                        ccw,
+                    });
+                }
+            }
+        }
+    }
+    let last = steps.last().unwrap().to();
+    steps.push(Step::Feed([last[0] + RETRACT, last[1] - RETRACT]));
+    steps.push(Step::Rapid([x_out, last[1] - RETRACT]));
+    Ok(OpPath {
+        name: format!("finish up z {z_lo}..{z_hi}, leave {leave}"),
         tool: tool.clone(),
         t,
         spindle: css(tool),
@@ -1095,7 +1237,7 @@ fn region_union(a: &Region, b: &Region) -> Result<Region, String> {
 /// hull lies inside the outline (it is convex). r' is r less the margin `less`, and less a
 /// relative 1e-6 (far more than the f64 rounding of the sums), so the points are strictly
 /// inside.
-fn outline_points(b: &Body, p: [f64; 2], less: f64, dense: bool, out: &mut Vec<[f64; 2]>) {
+fn outline_points(b: &Body, p: [f64; 2], less: f64, dense: Option<bool>, out: &mut Vec<[f64; 2]>) {
     let k = &b.core;
     let n = k.len();
     let rr = (b.r - less).max(0.0) * (1.0 - 1e-6);
@@ -1104,6 +1246,9 @@ fn outline_points(b: &Body, p: [f64; 2], less: f64, dense: bool, out: &mut Vec<[
         k.iter().map(|v| v[1]).sum::<f64>() / n as f64,
     ];
     let xmin = k.iter().map(|v| v[0]).fold(f64::INFINITY, f64::min);
+    let xmax = k.iter().map(|v| v[0]).fold(f64::NEG_INFINITY, f64::max);
+    // the cutting side: an inside tool cuts at its greatest x, an outside one at its least
+    let side = if dense == Some(true) { xmax } else { xmin };
     for i in 0..n {
         // the vertex, pulled a relative 1e-9 toward the centroid (inside under rounding)
         let v = [
@@ -1121,11 +1266,11 @@ fn outline_points(b: &Body, p: [f64; 2], less: f64, dense: bool, out: &mut Vec<[
             while t2 < t1 {
                 t2 += std::f64::consts::TAU;
             }
-            // for a finishing cut (leave 0), the cutting corners (the core's least x, and the
-            // reference vertex: a boring nose) densely
+            // for a finishing cut (leave 0), the cutting corners (the core's vertices on the
+            // cutting side, and the reference vertex: a nose) densely
             // enough that the polygon falls short of the disc by under SAMPLE_GAP, so the stock
             // model leaves no sliver on the finished surface; elsewhere three directions
-            let m = if dense && (k[i][0] == xmin || k[i] == [0.0, 0.0]) {
+            let m = if dense.is_some() && (k[i][0] == side || k[i] == [0.0, 0.0]) {
                 let step = 2.0 * dmath::acos_clamped(1.0 - SAMPLE_GAP / rr.max(SAMPLE_GAP));
                 (((t2 - t1) / step).ceil() as usize).clamp(2, 64)
             } else {
@@ -1176,7 +1321,7 @@ fn hull2(mut p: Vec<[f64; 2]>) -> Vec<[f64; 2]> {
 /// it stands for lies within `sag` of the chord (0 for a straight move): the hull of the outline
 /// points shrunk by sag at both ends. The hull of two translates of a convex set K' is K' ⊕
 /// [a, b]; each chord point lies within sag of a path point, and K' = K ⊕ B_{r − sag}.
-fn swept_inner(b: &Body, a: [f64; 2], e: [f64; 2], sag: f64, dense: bool) -> Vec<[f64; 2]> {
+fn swept_inner(b: &Body, a: [f64; 2], e: [f64; 2], sag: f64, dense: Option<bool>) -> Vec<[f64; 2]> {
     let mut pts = Vec::new();
     outline_points(b, a, sag, dense, &mut pts);
     outline_points(b, e, sag, dense, &mut pts);
@@ -1530,6 +1675,11 @@ fn certify_with(
             // removal (none for a thread pass: the teeth stay, so the stock of revolution keeps
             // them).
             let clears = !matches!(op.tool.kind, Kind::Thread | Kind::IdThread);
+            // a finishing cut's corners sampled densely, on the side it cuts (Some(inside))
+            let dense = (op.leave == 0.0).then_some(matches!(
+                op.tool.kind,
+                Kind::Bore | Kind::IdGroove | Kind::IdThread
+            ));
             let cutters: Vec<&Body> = op
                 .tool
                 .bodies
@@ -1551,7 +1701,7 @@ fn certify_with(
                         Move::Arc { .. } => pieces(mv),
                     } {
                         for b in &cutters {
-                            let q = swept_inner(b, pa, pb, sag, op.leave == 0.0);
+                            let q = swept_inner(b, pa, pb, sag, dense);
                             stock_model.remove(&mut stock, &q, &mut rep);
                         }
                     }
@@ -1564,7 +1714,7 @@ fn certify_with(
                 }
                 if clears {
                     for b in &cutters {
-                        let q = swept_inner(b, pa, pb, sag, op.leave == 0.0);
+                        let q = swept_inner(b, pa, pb, sag, dense);
                         stock_model.remove(&mut stock, &q, &mut rep);
                     }
                 }
@@ -1633,23 +1783,69 @@ fn certify_with(
         .collect();
     radii.sort_by(|a, b| a.total_cmp(b));
     radii.dedup();
-    // the part grown by each finishing corner's radius (plus tol): a region inside the smallest
-    // that holds it is a corner no corner of that radius reaches
-    let near: Vec<(f64, Region)> = radii
+    // what a finishing corner of radius r leaves: a disc's centres lie in the free region F_r =
+    // box ∖ (P ⊕ B_r) (the box the bar and the tool's approach lie in, at ρ ≥ 0: the centre line is
+    // as far as a nose goes), so a region R with R ∩ F_r = ∅ and every piece of its boundary at
+    // least r − 2 tol from F_r is a corner no disc of radius r reaches (an inside corner), to
+    // within 2 tol; one nearer (a band left by a leave) is "uncut". The distance is the checker's
+    // certified bound, a point swept along each piece (no offset of an offset: shrinking a grown
+    // region collapses its corner arcs, the offset's slow case).
+    let point = Body {
+        name: "leftover".into(),
+        cutter: false,
+        core: vec![[0.0, 0.0]],
+        r: 0.0,
+        depth: [0.0, 0.0],
+        relief: 0.0,
+        on_axis: true,
+        cyl: None,
+    };
+    let mut near: Vec<(f64, Region, Obstacle)> = radii
         .iter()
+        .filter(|&&r| r > 2.0 * s.tol)
         .filter_map(|&r| {
-            offset(&s.part.region, -(r + s.tol))
-                .ok()
-                .map(|(l, _)| (r, boolean::region_of(&l)))
+            let bx = Region {
+                loops: vec![rect(
+                    0.0,
+                    s.chuck.z_face - s.chuck.grip - 2.0 - r,
+                    s.bar_r + r + 1.0,
+                    s.bar_front.max(s.part.bbox[3]) + r + 1.0,
+                )],
+            };
+            let (g, _) = offset(&s.part.region, -r).ok()?;
+            let free = region_diff(&bx, &boolean::region_of(&g)).ok()?;
+            let obs = Obstacle::of_full("free", &free, s.part.mu).ok()?;
+            Some((r, free, obs))
         })
         .collect();
     for l in left.loops {
         let rg = Region { loops: vec![l] };
-        let reason = near
-            .iter()
-            .find(|(_, n)| region_diff(&rg, n).is_ok_and(|d| d.loops.is_empty()))
-            .map(|(r, _)| format!("nose radius {r}: an inside corner the finishing nose cannot reach"))
-            .unwrap_or_else(|| "uncut".to_string());
+        let mut reason = "uncut".to_string();
+        for (r, free, obs) in near.iter_mut() {
+            let held = boolean::boolean(&rg, free, Op::Inter).is_ok_and(|l| l.is_empty())
+                && rg.loops.iter().flat_map(|l| &l.segs).all(|sg| {
+                    let mv = match *sg {
+                        Seg::Line { a, b } => Move::Line {
+                            a: [a.x, a.y],
+                            b: [b.x, b.y],
+                        },
+                        Seg::Arc { a, b, c, ccw } => Move::Arc {
+                            a: [a.x, a.y],
+                            b: [b.x, b.y],
+                            c: [c.x, c.y],
+                            ccw,
+                        },
+                    };
+                    matches!(
+                        check::clearance(&point, &mv, obs, *r - 2.0 * s.tol),
+                        Verdict::Clear { .. }
+                    )
+                });
+            if held {
+                reason = format!("nose radius {r}: an inside corner the finishing nose cannot reach");
+                break;
+            }
+        }
         rep.leftover.push(rg);
         rep.leftover_reasons.push(reason);
     }

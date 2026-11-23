@@ -39,7 +39,7 @@ What the checks caught while the examples were written (each now a test, tests/r
 
 | gate | result |
 |---|---|
-| tests | forge-turn 29, forge-turn-lang 5; all pass native and wasm32-wasip1 |
+| tests | forge-turn 32, forge-turn-lang 6; all pass native and wasm32-wasip1 |
 | native = wasm32 | tests/bits.rs: one digest over the profile, the paths, the verdicts, the leftover and the three dialects' text, equal on x86-64 and wasm32-wasip1 |
 | clippy | clean; transcendental functions through forge_math::dmath |
 | no third-party crates in kernel/ | none |
@@ -85,15 +85,23 @@ What the checks caught while the examples were written (each now a test, tests/r
    diameter with Δ = [r1, d/2] declared; examples/machined/nut_turn.fg certifies in full, 58 ms;
    caught: finishing the bore on through the relief groove, the boring insert's trailing edge
    runs up through the groove's top wall; an M31 in an M30's bore, G1; an Ø16 bar in an M12's
-   bore, refused). Left: left-hand tools (refused by name today).
+   bore, refused). Left-hand tools are built: an L holder decodes to its R twin mirrored across
+   z (`mirrored`: convex cores to convex cores, the nose kept first, tip number 3 ↔ 4), refused by
+   the ops that feed toward the chuck; `finish_up` walks the grown profile up (+z) from z_lo to
+   z_hi (examples/machined/collar_turn.fg: a back chamfer, certified in full; caught: the
+   right-hand VBMT on down the chamfer, and the left-hand one started 1 mm over the shoulder,
+   its insert hanging 9 mm toward the chuck). Left: left-hand boring bars, left-hand roughing.
 3. Done: the .fg surface (interface/forge-turn-lang, docs/cam-turning.md; forge-cli sends a
    turning document there by one branch on `is_turning`, no change to forge-cam-lang), and the
    machine in CAM-MACHINE's format (machine.rs reads it; data/machines-lathe.toml is a copy of
    its generic-lathe until forge-machine is on main). Left: the setup sheet for turning, more
    than one setup per document.
-5. G4 reasons: "nose radius r" (inside the part grown by r, the smallest finishing corner, a
-   nose or a grooving blade's, that holds the region; decided by exact booleans) or "uncut";
-   reach and undercut are not told apart yet.
+5. G4 reasons: "nose radius r" (an inside corner: the region misses the free region F_r = box ∖
+   (P ⊕ B_r) where a disc's centre can be, and each piece of its boundary is at least r − 2·tol
+   from it by the checker's certified bound; r the smallest finishing corner, a nose or a
+   grooving blade's, that holds it) or "uncut" (a leave's band among them; before, "within r of
+   the part" called a band thinner than r a nose corner). Reach and undercut are not told apart
+   yet.
 6. Speed (David: prove a check unneeded rather than pay for it). Measured on the shaft job:
    generate 11 ms, post and round trip 0.13 ms, certify 267 ms, of which ~73% the in-process
    stock's exact booleans. Done: the normal path keeps the stock as columns (stair.rs: it loses
