@@ -165,6 +165,9 @@ impl Simple {
     }
 
     /// Where `p`, on the face's surface, lies; None near the boundary.
+    // (inline(always): point_in_face_past and point_in_face_at both call it; out of line it costs
+    // the hot path, coplanar seq +0.11%)
+    #[inline(always)]
     fn place(self, p: Point3) -> Option<Where> {
         let m = SIMPLE_MARGIN;
         match self {
