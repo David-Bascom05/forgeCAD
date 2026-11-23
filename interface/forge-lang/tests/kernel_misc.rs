@@ -1156,3 +1156,25 @@ fn a_chain_of_thousands_of_terms_runs_on_a_small_stack() {
         .expect("a thread");
     run.join().expect("runs on 1 MiB");
 }
+
+/// A block 50 x 20 x 20, one top long edge rounded 11, then the opposite one 12 (scale-programs'
+/// repro, 41 CADFS parts in the first 5k): the second ball's spring runs off the 9 wide top that is
+/// left and the ball runs through the part, all along the edge. The fillet spec has no seed there,
+/// and the refusal says so (it said Overflow, a kernel gap). At 8 it builds.
+#[test]
+fn opposite_rounds_too_wide_for_the_block_are_refused_as_no_seed() {
+    let src = |r2: &str| {
+        format!(
+            "shared r1 = 11\nshared r2 = {r2}\nsketch s(on: xy) {{\n  o = rect(corner: (0, 0), size: (50, 20))\n}}\n\
+             b = extrude(s, 20)\nf1 = fillet(edges(between: (b.end, b.side(s.o[0]))), r1)\n\
+             f2 = fillet(edges(between: (b.end, b.side(s.o[2]))), r2)\n"
+        )
+    };
+    let msg = common::refused(&src("12"));
+    assert!(
+        msg.contains("no ball of this radius rests on both faces"),
+        "{msg}"
+    );
+    let (r, _) = common::run(&src("8"));
+    assert!(r.errors.is_empty() && r.body.is_some(), "{:?}", r.errors);
+}

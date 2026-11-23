@@ -1739,11 +1739,16 @@ fn apply_fillet(
                 });
             }
             Ok(done) => return Ok(done),
-            Err(error) => return Err(RegenError::Fillet { feature: i, error }),
+            Err(error) => {
+                return Err(RegenError::Fillet {
+                    feature: i,
+                    error: forge_ops::typed_refusal(&body, &want, error),
+                });
+            }
         };
-    overlapping_rounds(&body, &want, &opts, id).ok_or(RegenError::Fillet {
+    overlapping_rounds(&body, &want, &opts, id).ok_or_else(|| RegenError::Fillet {
         feature: i,
-        error: first,
+        error: forge_ops::typed_refusal(&body, &want, first),
     })
 }
 

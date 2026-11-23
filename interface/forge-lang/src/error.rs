@@ -1479,6 +1479,14 @@ fn regen_text(e: &forge_model::RegenError) -> String {
              balls resting on the rim limit the fill",
             at.x, at.y, at.z
         ),
+        G::Fillet {
+            error: forge_ops::FilletError::NoSeed { at, .. },
+            ..
+        } => format!(
+            "fillet: no round: no ball of this radius rests on both faces along the edge (at its \
+             middle the ball would stand at ({:.3}, {:.3}, {:.3}))",
+            at.x, at.y, at.z
+        ),
         _ => words(e),
     }
 }

@@ -143,9 +143,104 @@ pub enum FilletError {
         rim: Option<EdgeId>,
         at: Point3,
     },
+    /// No round by the fillet spec (its NoSeed): no ball touches both faces near this edge. All
+    /// along it the ball resting on the two faces' surfaces touches one off the face and has
+    /// another face of the part inside it. `at` is that ball's centre at the edge's middle. Only a
+    /// refusal is typed so: nothing builds less.
+    NoSeed { edge: EdgeId, at: Point3 },
 }
 
 type R<T> = Result<T, FilletError>;
+
+/// A refusal as the spec types it: an Overflow where a picked edge has no seed (see `NoSeed`)
+/// says so. (The edge an Overflow names may be a piece or a later body's.) Only refusals are
+/// looked at, so a round that builds costs nothing more.
+pub fn typed_refusal(body: &Body, edges: &[FilletEdge], e: FilletError) -> FilletError {
+    if !matches!(e, FilletError::Overflow { .. }) {
+        return e;
+    }
+    edges
+        .iter()
+        .find_map(|f| match f.radius {
+            Radius::Constant(r) => {
+                no_seed(body, f.edge, r).map(|at| FilletError::NoSeed { edge: f.edge, at })
+            }
+            _ => None,
+        })
+        .unwrap_or(e)
+}
+
+/// Where edge `e` has no seed for radius r: at each of 9 points along it, the ball resting on its
+/// two faces' surfaces both touches one off the face (and off the faces it meets smoothly) and has
+/// another face of the part inside it, on that face and deeper than the tolerance (other than
+/// those faces and the faces at the edge's end vertices). Either alone is no proof: a spring off
+/// its face is a round running out, and a convex ball's obstacles are its supports (the spec's
+/// rule (d)). The centre at the middle, if no seed at all 9.
+fn no_seed(body: &Body, e: EdgeId, r: f64) -> Option<Point3> {
+    if e.index() >= body.edges.len() || !body.edge(e).alive {
+        return None;
+    }
+    let x = body.edge(e);
+    let first = local(body, e, r, x.range.mid()).ok()?;
+    // the two faces and the faces either meets across a smooth edge: one generator each
+    let mut own: Vec<FaceId> = first.faces.to_vec();
+    for &f in &first.faces {
+        for c in body.face(f).loops.iter().flat_map(|&l| body.lp(l).coedges()) {
+            let ce = body.coedge(c).edge;
+            if let Some(p) = body.partner(c)
+                && matches!(
+                    local(body, ce, r, body.edge(ce).range.mid()),
+                    Err(FilletError::Smooth { .. })
+                )
+            {
+                own.push(body.coedge_face(p));
+            }
+        }
+    }
+    // and the faces at its ends, where the round runs out or meets others (the vertex table's)
+    for f in body.face_ids() {
+        let at_end = body
+            .face(f)
+            .loops
+            .iter()
+            .flat_map(|&l| body.lp(l).coedges())
+            .any(|c| {
+                let y = body.edge(body.coedge(c).edge);
+                [y.start, y.end].iter().any(|v| *v == x.start || *v == x.end)
+            });
+        if at_end {
+            own.push(f);
+        }
+    }
+    let mut middle = None;
+    for k in 1..=9 {
+        let t = x.range.lo + x.range.width() * k as f64 / 10.0;
+        let l = local(body, e, r, t).ok()?;
+        let c = rolled_centre(body, &l, r).unwrap_or(l.p + l.toward * r);
+        let foot = |f: FaceId| {
+            let s = &body.face(f).surface;
+            s.eval(s.project(c))
+        };
+        // a spring off its face (and off the faces it runs on into smoothly)
+        let off = l.faces.iter().any(|&f| {
+            let p = foot(f);
+            !own.iter().any(|&g| on_face(body, g, p))
+        });
+        // and another face of the part inside the ball
+        let blocked = off
+            && body.face_ids().filter(|f| !own.contains(f)).any(|f| {
+                let p = foot(f);
+                p.distance(c) < r - 10.0 * tol::LINEAR && on_face(body, f, p)
+            });
+        if !blocked {
+            return None;
+        }
+        if k == 5 {
+            middle = Some(c);
+        }
+    }
+    middle
+}
 
 #[path = "fillet_cliff.rs"]
 mod fillet_cliff;

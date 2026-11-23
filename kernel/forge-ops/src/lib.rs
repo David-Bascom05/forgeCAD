@@ -28,6 +28,7 @@ pub use draft::{DraftError, draft};
 pub use extrude::{ExtrudeError, extrude, extrude_unlinked};
 pub use fillet::{
     FilletEdge, FilletError, FilletOptions, Radius, fillet, fillet_kind, fillet_with, law_starts,
+    typed_refusal,
 };
 pub use glyph::{GlyphError, GlyphSeg, Place, glyph};
 pub use loft::{Apex, LoftError, LoftGuides, LoftKind, LoftOptions, loft, loft_and_bounds, loft_bounds};
