@@ -75,7 +75,7 @@ class Step:
         )
 
 
-def tube(name, top, r_in=4.0, r_out=10.0, h=10.0):
+def tube(name, top, r_in=4.0, r_out=10.0, h=10.0, outer_both=False, cyl_in=None):
     """A tube r_in..r_out, z from 0 to its top, whose top face stands on the surface `top(st)` makes, which returns
     (surface, z at r_in, z at r_out, face sense)."""
     st = Step()
@@ -84,13 +84,14 @@ def tube(name, top, r_in=4.0, r_out=10.0, h=10.0):
     t_out, t_in = st.circle(z_out, r_out), st.circle(z_in, r_in)
     plane = st.add(f"PLANE('',{st.ax((0, 0, 0))})")
     cyl_o = st.add(f"CYLINDRICAL_SURFACE('',{st.ax((0, 0, 0))},{r_out!r})")
-    cyl_i = st.add(f"CYLINDRICAL_SURFACE('',{st.ax((0, 0, 0))},{r_in!r})")
+    # cyl_in: the inner cylinder's radius, a little off its circles' where a file's edges meet only within tolerance
+    cyl_i = st.add(f"CYLINDRICAL_SURFACE('',{st.ax((0, 0, 0))},{float(cyl_in or r_in)!r})")
     # circles run counter-clockwise seen from +z; a face's outer loop runs counter-clockwise about its normal
     faces = [
         st.face([st.loop(b_out, False, True), st.loop(b_in, True)], plane, False),
         st.face([st.loop(b_out, True, True), st.loop(t_out, False)], cyl_o, True),
         st.face([st.loop(b_in, False, True), st.loop(t_in, True)], cyl_i, False),
-        st.face([st.loop(t_out, True, True), st.loop(t_in, False)], surf, sense),
+        st.face([st.loop(t_out, True, True), st.loop(t_in, False, outer_both)], surf, sense),
     ]
     return st.text(st.solid(faces), name)
 
@@ -111,6 +112,14 @@ def offset_plane(st):
     base = st.add(f"PLANE('',{st.ax((0, 0, 8.0))})")
     surf = st.add(f"OFFSET_SURFACE('',{base},2.0,.F.)")
     return surf, 10.0, 10.0, True
+
+
+def fillet_band(st, R=12.0, r=5.0, zc=12.0):
+    """The top face on the inner side of a torus below its centre circle: a concave fillet's band between two
+    parallels, as ABC 00011984 has it (R 0.0308, r 0.0050 m, both loops FACE_OUTER_BOUND there)."""
+    surf = st.add(f"TOROIDAL_SURFACE('',{st.ax((0, 0, zc), (0, 0, -1), (-1, 0, 0))},{R!r},{r!r})")
+    z = lambda rho: zc - math.sqrt(r * r - (rho - R) ** 2)
+    return surf, z(8.0), z(10.0), False
 
 
 def whole_torus():
@@ -263,6 +272,7 @@ def main(out):
         "near_flat_cone": tube("near_flat_cone", near_flat_cone),
         "whole_torus": whole_torus(),
         "offset_plane": tube("offset_plane", offset_plane),
+        "fillet_band": tube("fillet_band", fillet_band, r_in=8.0),
         "lemon_ring": tube("lemon_ring", lemon_ring),
         "elbow": elbow(),
         "spool": spool(),
