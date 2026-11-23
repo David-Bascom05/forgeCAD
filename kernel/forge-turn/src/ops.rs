@@ -733,7 +733,7 @@ fn region_union(a: &Region, b: &Region) -> Result<Region, String> {
 }
 
 /// Points of a body's outline at depth 0, K ⊕ B_r', placed at p: each core vertex, and for
-/// r' > 0 the points r' from it along its normal cone (five directions across it). Their convex
+/// r' > 0 the points r' from it along its normal cone (three directions across it). Their convex
 /// hull lies inside the outline (it is convex). r' is r less the margin `less`, and less a
 /// relative 1e-6 (far more than the f64 rounding of the sums), so the points are strictly
 /// inside.
@@ -756,8 +756,8 @@ fn outline_points(b: &Body, p: [f64; 2], less: f64, out: &mut Vec<[f64; 2]>) {
             while t2 < t1 {
                 t2 += std::f64::consts::TAU;
             }
-            for j in 0..5 {
-                let t = t1 + (t2 - t1) * j as f64 / 4.0;
+            for j in 0..3 {
+                let t = t1 + (t2 - t1) * j as f64 / 2.0;
                 out.push([p[0] + v[0] + rr * t.cos(), p[1] + v[1] + rr * t.sin()]);
             }
         }
@@ -865,22 +865,23 @@ fn pieces(mv: &Move) -> Vec<(Move, [f64; 2], [f64; 2], f64)> {
 
 /// Removes a convex polygon from the stock: the polygon snapped inside on a coarse grid, retried
 /// smaller if the exact boolean would pinch; left out (counted) if it never makes a valid region.
-fn remove(stock: &mut Region, q: &[[f64; 2]], rep: &mut Report) -> bool {
+fn remove(stock: &mut Region, obs: &mut Obstacle, q: &[[f64; 2]], rep: &mut Report) {
     let mut last = String::new();
     for pull in [4.0, 256.0, 16384.0] {
         let q = snap_inside(q, pull);
         if q.len() < 3 {
-            return false;
+            return;
         }
-        let next = region_diff(stock, &Region { loops: vec![poly(&q)] }).and_then(|r| {
-            let mut cx = forge_cam_geom::real::Ctx::new();
-            forge_cam_geom::region::validate(&mut cx, &r).map(|_| r).map_err(|e| format!("{e:?}"))
-        });
+        // the obstacle validates the region exactly; an invalid result keeps the old stock
+        let next = region_diff(stock, &Region { loops: vec![poly(&q)] })
+            .and_then(|r| Obstacle::of("stock", &r, 0.0).map(|o| (r, o)).map_err(|e| format!("{e:?}")));
         match next {
-            Ok(r) => {
-                let changed = r != *stock;
-                *stock = r;
-                return changed;
+            Ok((r, o)) => {
+                if r != *stock {
+                    *stock = r;
+                    *obs = o;
+                }
+                return;
             }
             Err(e) => last = e,
         }
@@ -889,7 +890,6 @@ fn remove(stock: &mut Region, q: &[[f64; 2]], rep: &mut Report) -> bool {
         eprintln!("stock removal skipped: {last}");
     }
     rep.stock_skipped += 1;
-    false
 }
 
 /// Certifies the ops in order on the setup (see the module doc). `posted`: each op's moves as
@@ -973,22 +973,43 @@ pub fn certify(s: &Setup, ops: &[OpPath], posted: Option<&[Vec<PMove>]>) -> Resu
             if !*cut {
                 continue;
             }
-            // a cut, piece by piece: the non-cutting bodies against the stock as the pieces
-            // before have left it, then the piece's own removal (none for a thread pass: the
-            // teeth stay, so the stock of revolution keeps them)
+            // a cut: the non-cutting bodies against the stock as it stood before the move; where
+            // that is not proven (a body trailing the cutter through what it has just cut),
+            // piece by piece against the stock as the pieces before left it. Then the cut's
+            // removal (none for a thread pass: the teeth stay, so the stock of revolution keeps
+            // them).
             let clears = op.tool.kind != Kind::Thread;
+            let cutters: Vec<&Body> = op.tool.bodies.iter().filter(|b| b.cutter && b.depth[0] == 0.0).collect();
+            let mut whole = true;
+            for b in op.tool.bodies.iter().filter(|b| !b.cutter) {
+                rep.checks += 1;
+                match check::clearance(b, mv, &mut stock, s.holder_clearance) {
+                    Verdict::Clear { lower } => rep.least = rep.least.min(lower - s.holder_clearance),
+                    _ => whole = false,
+                }
+            }
+            if whole {
+                if clears {
+                    for (_, pa, pb, sag) in match mv {
+                        Move::Line { a, b } => vec![(*mv, *a, *b, 0.0)],
+                        Move::Arc { .. } => pieces(mv),
+                    } {
+                        for b in &cutters {
+                            let q = swept_inner(b, pa, pb, sag);
+                            remove(&mut stock_region, &mut stock, &q, &mut rep);
+                        }
+                    }
+                }
+                continue;
+            }
             for (pm, pa, pb, sag) in pieces(mv) {
                 for b in op.tool.bodies.iter().filter(|b| !b.cutter) {
                     run(b, &pm, &mut stock, s.holder_clearance, "stock", &mut rep);
                 }
                 if clears {
-                    let mut changed = false;
-                    for b in op.tool.bodies.iter().filter(|b| b.cutter && b.depth[0] == 0.0) {
+                    for b in &cutters {
                         let q = swept_inner(b, pa, pb, sag);
-                        changed |= remove(&mut stock_region, &q, &mut rep);
-                    }
-                    if changed {
-                        stock = Obstacle::of("stock", &stock_region, 0.0).map_err(|e| format!("stock: {e:?}"))?;
+                        remove(&mut stock_region, &mut stock, &q, &mut rep);
                     }
                 }
             }

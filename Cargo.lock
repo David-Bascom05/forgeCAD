@@ -511,6 +511,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-turn"
+version = "0.1.0"
+dependencies = [
+ "forge-cam-geom",
+ "forge-geom",
+ "forge-math",
+ "forge-ops",
+ "forge-post",
+ "forge-tooling",
+ "forge-topo",
+]
+
+[[package]]
 name = "forge-units"
 version = "0.1.0"
 
