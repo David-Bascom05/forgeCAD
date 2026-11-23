@@ -219,6 +219,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-mass"
+version = "0.1.0"
+dependencies = [
+ "forge-geom",
+ "forge-math",
+ "forge-ops",
+ "forge-topo",
+]
+
+[[package]]
 name = "forge-material"
 version = "0.1.0"
 dependencies = [
