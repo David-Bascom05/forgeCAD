@@ -2,7 +2,6 @@
 //! L6 for the offset: random star polygons (some with a round island), offset in and out, judged
 //! point by point against the definition C = {p in R : d(p, ∂R) >= r} (or R ⊕ B_r outward),
 //! away from a thin band around ∂C where f64 sampling cannot judge.
-use forge_cam_geom::offset::{OLoop, offset};
 use forge_cam_geom::region::{Loop, P2, Region, Seg, p2};
 
 struct Rng(u64);

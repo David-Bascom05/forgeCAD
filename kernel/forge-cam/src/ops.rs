@@ -328,7 +328,11 @@ pub fn certify_fixtured(
     // checked against, at every instant (G1-G3 need one point of the moved tool outside the set,
     // the faces' distances do the rest)
     let mut zmax = f64::NEG_INFINITY;
-    for f in part.iter().chain(stages.iter().flat_map(|s| s.1.iter())).chain(fixture.iter()) {
+    for f in part
+        .iter()
+        .chain(stages.iter().flat_map(|s| s.1.iter()))
+        .chain(fixture.iter())
+    {
         zmax = zmax.max(f.bbox[2].hi);
     }
     let top = tool.shape.top();
@@ -352,8 +356,11 @@ pub fn certify_fixtured(
         let mut seen = check::Seen::default();
         // each move's distance to each face's section, shared by the tool's bodies (one per
         // face set and face, reset after the move)
-        let mut shared: [Vec<Option<(forge_cam_geom::ival::Ival, f64)>>; 3] =
-            [vec![None; part.len()], vec![None; nstock], vec![None; fixture.len()]];
+        let mut shared: [Vec<Option<(forge_cam_geom::ival::Ival, f64)>>; 3] = [
+            vec![None; part.len()],
+            vec![None; nstock],
+            vec![None; fixture.len()],
+        ];
         let mut touched: Vec<(usize, usize)> = Vec::new();
         let mut outs = Vec::new();
         for (m, phase, idx) in &mv[c * CHUNK..((c + 1) * CHUNK).min(mv.len())] {
@@ -362,7 +369,12 @@ pub fn certify_fixtured(
             }
             let mut o = MoveOut::default();
             let tip_lo = m.at(forge_cam_geom::ival::Ival::new(0.0, 1.0))[2].lo;
-            if !(forge_cam_geom::ival::Ival::pt(tip_lo).add(forge_cam_geom::ival::Ival::pt(top)).lo > zmax) {
+            // proven above (a NaN is not)
+            let above = forge_cam_geom::ival::Ival::pt(tip_lo)
+                .add(forge_cam_geom::ival::Ival::pt(top))
+                .lo
+                > zmax;
+            if !above {
                 o.containment = Some(CheckOut {
                     rule: "containment",
                     verdict: "undecided",
@@ -386,9 +398,13 @@ pub fn certify_fixtured(
             for b in &tool.shape.bodies {
                 let sb = check::swept_box_body(m, b);
                 // the part: the cutter may touch it within tol on a cut; nothing else may touch it
-                for (set, (faces, what, grid)) in [(part, "part", &pgrid), (stock, "stock", sgrid), (fixture, "fixture", &fgrid)]
-                    .into_iter()
-                    .enumerate()
+                for (set, (faces, what, grid)) in [
+                    (part, "part", &pgrid),
+                    (stock, "stock", sgrid),
+                    (fixture, "fixture", &fgrid),
+                ]
+                .into_iter()
+                .enumerate()
                 {
                     if faces.is_empty() {
                         continue;
@@ -427,7 +443,11 @@ pub fn certify_fixtured(
                             (Part::Cutter, _, "part") => "gouge",
                             _ => "holder_collision",
                         };
-                        let tool_part = if b.part == Part::Cutter { "cutter" } else { "shank/holder" };
+                        let tool_part = if b.part == Part::Cutter {
+                            "cutter"
+                        } else {
+                            "shank/holder"
+                        };
                         let (verdict, value, at) = match v {
                             Verdict::Clear { lower } => {
                                 if what == "part" && b.part == Part::Cutter {
@@ -435,9 +455,7 @@ pub fn certify_fixtured(
                                 }
                                 continue;
                             }
-                            Verdict::Hit { d, at, .. } => {
-                                ("fail", d, at)
-                            }
+                            Verdict::Hit { d, at, .. } => ("fail", d, at),
                             Verdict::Undecided { lower, .. } => ("undecided", lower, [f64::NAN; 3]),
                         };
                         o.fails.push((
@@ -518,6 +536,24 @@ pub struct Heights {
     pub retract: f64,
 }
 
+/// What an op cuts with: the tool, its slot, the heights it links at, and its feeds (cut,
+/// plunge).
+#[derive(Clone, Copy)]
+pub struct Cut<'a> {
+    pub tool: &'a ToolUse,
+    pub tidx: usize,
+    pub h: Heights,
+    pub feed: (f64, f64),
+}
+
+/// Levels from `top` down to `bottom`, at most `step` apart.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Span {
+    pub top: f64,
+    pub bottom: f64,
+    pub step: f64,
+}
+
 fn push_loop(out: &mut Vec<PMove>, segs: &[Seg], z: f64, f: f64) {
     for s in segs {
         match *s {
@@ -556,18 +592,9 @@ pub enum OpError {
 
 /// Contour: the region's boundary, offset by the tool radius plus `leave` (outside for the
 /// part's outline: `outside` true), at each level.
-pub fn contour(
-    rg: &Region,
-    tool: &ToolUse,
-    tidx: usize,
-    h: Heights,
-    top: f64,
-    bottom: f64,
-    step: f64,
-    leave: f64,
-    outside: bool,
-    feed: (f64, f64),
-) -> Result<OpPath, OpError> {
+pub fn contour(rg: &Region, c: Cut, sp: Span, leave: f64, outside: bool) -> Result<OpPath, OpError> {
+    let Cut { tool, tidx, h, feed } = c;
+    let Span { top, bottom, step } = sp;
     let r = 0.5 * tool.tool.dc + leave;
     let d = if outside { -r } else { r };
     let (loops, _) = offset(rg, d).map_err(|e| OpError::Region(format!("{e:?}")))?;
@@ -619,17 +646,14 @@ pub fn contour(
 /// r + leave + k · stepover, innermost first, at each level.
 pub fn pocket(
     rg: &Region,
-    tool: &ToolUse,
-    tidx: usize,
-    h: Heights,
-    top: f64,
-    bottom: f64,
-    step: f64,
+    c: Cut,
+    sp: Span,
     stepover: f64,
     leave: f64,
-    feed: (f64, f64),
     ramp: Option<f64>,
 ) -> Result<OpPath, OpError> {
+    let Cut { tool, tidx, h, feed } = c;
+    let Span { top, bottom, step } = sp;
     let r = 0.5 * tool.tool.dc + leave;
     let mut passes = Vec::new();
     let mut k = 0;
@@ -661,7 +685,12 @@ pub fn pocket(
         let a = forge_cam_geom::region::p2(s.x + rh, s.y);
         let disk = Region {
             loops: vec![forge_cam_geom::region::Loop {
-                segs: vec![Seg::Arc { a, b: a, c: s, ccw: true }],
+                segs: vec![Seg::Arc {
+                    a,
+                    b: a,
+                    c: s,
+                    ccw: true,
+                }],
             }],
         };
         matches!(
@@ -760,16 +789,10 @@ pub fn pocket(
 
 /// Facing: zig-zag passes across the stock's top region from `top` down to `z`, the tool
 /// overhanging the stock by its radius each side.
-pub fn facing(
-    st: &Stock,
-    tool: &ToolUse,
-    tidx: usize,
-    h: Heights,
-    top: f64,
-    z: f64,
-    step: f64,
-    feed: (f64, f64),
-) -> OpPath {
+/// `sp.bottom` is the faced height.
+pub fn facing(st: &Stock, c: Cut, sp: Span) -> OpPath {
+    let Cut { tool, tidx, h, feed } = c;
+    let Span { top, bottom: z, step } = sp;
     let d = tool.tool.dc;
     let over = 0.7 * d;
     let (x0, x1) = (st.min[0] - 0.5 * d - 1.0, st.max[0] + 0.5 * d + 1.0);
@@ -802,7 +825,7 @@ pub fn facing(
                 phase: Phase::Cut,
             });
         }
-        let last = if n % 2 == 0 { x1 } else { x0 };
+        let last = if n.is_multiple_of(2) { x1 } else { x0 };
         mv.push(PMove::Line {
             to: [last, y1, h.retract],
             f: feed.0,
@@ -825,16 +848,16 @@ pub fn facing(
 }
 
 /// A canned cycle at each place (drilling straight down, along −z of the part).
+/// The cycle's feed is `c.feed.0`.
 pub fn holes(
     places: &[[f64; 3]],
     kind: forge_post::CycleKind,
-    tool: &ToolUse,
-    tidx: usize,
-    h: Heights,
+    c: Cut,
     depth_below_mouth: f64,
     q: f64,
-    f: f64,
 ) -> OpPath {
+    let Cut { tool, tidx, h, feed } = c;
+    let f = feed.0;
     let mut mv = Vec::new();
     let start = [places[0][0], places[0][1], h.clear];
     for p in places {

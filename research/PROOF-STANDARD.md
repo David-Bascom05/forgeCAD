@@ -30,6 +30,15 @@ A feature meets the standard when it has all six.
   - a CI check that the translations are current;
   - the per-module survey (research/aeneas/SURVEY.md) that names each module's L4 target.
 
+## No proofs at runtime for what is proven (the owner, 2026-11-23)
+
+"If we have proven all cases of a thing, and you are REALLY SURE, then we should not need to do a proof in runtime."
+
+- Code proven for every input in its stated domain (L3 plus L4) runs with no runtime re-check. Certificate checkers and re-verification of proven results run only in tests, fuzzing, CI and explicit on-demand commands, never on a normal build, edit or render.
+- A precondition the proof relies on is checked in debug builds only (as L5 already says).
+- Runtime work remains where the result depends on the particular input and can't be decided ahead of time: the exact fallback behind a proven float filter, and certifying a traced intersection curve. That is computing the answer, not re-proving it, and it is held to the speed rule like any other code.
+- A runtime check is removed only once the proof covers the shipped code (L4 by Aeneas, or the interim differential test named), not just the algorithm.
+
 ## Features
 
 Each row says who owns it, which levels it has, and what is next. The levels are counted from what
@@ -51,12 +60,14 @@ has been reported to the master.
 | Intersection tracing | trace | step lemma (Krawczyk) | phase B, binary64 |
 | .fg language | ieee (language proofs) | lexer, LL(1), edits, reparse | — |
 | Extrude / revolve / sweep / loft / coil / thread | sweep-spec | — | L1 |
-| Shell / draft / hole / rib / chamfer / pattern | ops-spec, fix-shell, fix-draft | — | L1 |
+| Shell / draft / hole / rib / chamfer / pattern-of-features | ops-spec, fix-shell, fix-draft | L1 partial: pattern P1–P3, hole H1 H3 H4, chamfer C1 C2 (plane pair), draft D1–D3 (planes) | L1 recarrier, shell, rib; L2 reference; L6 harness |
+| Thicken | surfaces (thin/thicken) | — | L1 with ValidSheet |
 | Surfaces and thin | surfaces | — | ValidSheet with fundamentals |
 | Sketch text | sketch-text | exact glyph geometry | L1 |
 | Weldments | weldments | — | L1 (members are extrudes and half-spaces) |
 | Assemblies and interference | fix-mesh-asm | — | L1 (one classification from the boolean) |
 | STEP import / export | import-robust | — | L1 (round-trip) |
+| CAM (toolpaths, stock, posts) | cam | — | L1: G1–G6 of research/cam (no gouge, holder/rapids clear, stock within tolerance, limits, post round-trip) |
 | Mesh export | mesh-export | closed / oriented / manifold check | L1 via tessellation |
 
 A branch that adds or changes a feature says which levels it keeps or adds. Merges are judged

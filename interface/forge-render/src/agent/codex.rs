@@ -197,6 +197,8 @@ impl Codex {
             }
             return Err(format!("Couldn't send to Codex: {e}"));
         }
+        // closed: Codex reads the prompt to its end (a no-op type in the browser build)
+        #[cfg_attr(target_arch = "wasm32", allow(clippy::drop_non_drop))]
         drop(stdin);
         let stdout = child.stdout.take().expect("piped");
         let stderr = child.stderr.take().expect("piped");

@@ -1,0 +1,15 @@
+[package]
+name = "forge-vendor"
+description = "Sheet-metal vendor profiles for ForgeCAD: what a fabricator stocks and makes, as saved data, turned into forge-sheet shop profiles"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+forge-dirs = { path = "../forge-dirs" }
+forge-material = { path = "../forge-material" }
+forge-sheet = { path = "../forge-sheet" }
+
+[lints]
+workspace = true

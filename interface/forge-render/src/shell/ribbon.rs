@@ -313,6 +313,41 @@ fn groups(s: &Shell) -> Vec<Group> {
         action: fg_open.then_some(Action::NewFeature(kind)),
         on: false,
     };
+    // a part's Weldments tab: members from a sketch's lines, their ends and plates, the cut list
+    if s.tab == super::WELD_TAB {
+        let cut_open = s.fg.as_ref().is_some_and(|f| f.cutlist_open);
+        return vec![
+            g(
+                "Sketch",
+                vec![go("Start Sketch", "sketch", Action::StartSketch, s.sketch_pick)],
+                vec![],
+            ),
+            g("Structure", vec![fg_new("Members", "member", "members")], vec![]),
+            g(
+                "Ends",
+                vec![],
+                vec![
+                    fg_new("End Trim", "endtrim", "endtrim"),
+                    fg_new("End Cap", "endcap", "endcap"),
+                ],
+            ),
+            g(
+                "Plates",
+                vec![fg_new("Corner Plate", "cornerplate", "cornerplate")],
+                vec![],
+            ),
+            g(
+                "Report",
+                vec![Tool {
+                    name: "Cut List",
+                    icon: "cutlist",
+                    action: fg_open.then_some(Action::Fg(FgCmd::CutList)),
+                    on: cut_open,
+                }],
+                vec![],
+            ),
+        ];
+    }
     match s.tab {
         0 => vec![
             g(

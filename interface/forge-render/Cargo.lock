@@ -1064,20 +1064,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "forge-cam"
+name = "forge-brake"
 version = "0.1.0"
 dependencies = [
- "forge-cam-geom",
- "forge-geom",
  "forge-math",
- "forge-post",
- "forge-tooling",
- "forge-topo",
+ "forge-ops",
+ "forge-sheet",
 ]
-
-[[package]]
-name = "forge-cam-geom"
-version = "0.1.0"
 
 [[package]]
 name = "forge-dirs"
@@ -1160,8 +1153,7 @@ dependencies = [
  "forge-agent",
  "forge-asm",
  "forge-bool",
- "forge-cam",
- "forge-cam-geom",
+ "forge-brake",
  "forge-dirs",
  "forge-draw",
  "forge-font",
@@ -1174,14 +1166,14 @@ dependencies = [
  "forge-mesh",
  "forge-model",
  "forge-ops",
- "forge-post",
  "forge-sheet",
  "forge-sketch",
  "forge-step",
  "forge-thermo",
- "forge-tooling",
  "forge-topo",
  "forge-units",
+ "forge-vendor",
+ "forge-weld",
 ]
 
 [[package]]
@@ -1196,6 +1188,7 @@ name = "forge-math"
 version = "0.1.0"
 dependencies = [
  "forge-alloc",
+ "forge-par",
 ]
 
 [[package]]
@@ -1203,6 +1196,7 @@ name = "forge-mesh"
 version = "0.1.0"
 dependencies = [
  "forge-geom",
+ "forge-git",
  "forge-math",
  "forge-topo",
 ]
@@ -1231,12 +1225,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "forge-post"
+name = "forge-par"
 version = "0.1.0"
-dependencies = [
- "forge-cam-geom",
- "forge-tooling",
-]
 
 [[package]]
 name = "forge-render"
@@ -1247,6 +1237,7 @@ dependencies = [
  "egui-wgpu",
  "egui-winit",
  "forge-agent",
+ "forge-brake",
  "forge-dirs",
  "forge-draw",
  "forge-dwg",
@@ -1260,11 +1251,13 @@ dependencies = [
  "forge-mesh",
  "forge-model",
  "forge-ops",
+ "forge-par",
  "forge-sheet",
  "forge-sketch",
  "forge-step",
  "forge-thermo",
  "forge-topo",
+ "forge-vendor",
  "js-sys",
  "keyring-core",
  "png",
@@ -1326,14 +1319,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "forge-tooling"
-version = "0.1.0"
-dependencies = [
- "forge-cam-geom",
- "forge-math",
-]
-
-[[package]]
 name = "forge-topo"
 version = "0.1.0"
 dependencies = [
@@ -1344,6 +1329,23 @@ dependencies = [
 [[package]]
 name = "forge-units"
 version = "0.1.0"
+
+[[package]]
+name = "forge-vendor"
+version = "0.1.0"
+dependencies = [
+ "forge-dirs",
+ "forge-material",
+ "forge-sheet",
+]
+
+[[package]]
+name = "forge-weld"
+version = "0.1.0"
+dependencies = [
+ "forge-math",
+ "forge-ops",
+]
 
 [[package]]
 name = "futures-core"

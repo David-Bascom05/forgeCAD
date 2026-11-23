@@ -114,7 +114,7 @@ fn closed_form_never_contradicts_the_branch_and_bound() {
             let b = [a[0] + g.r(-6.0, 6.0), a[1] + g.r(-6.0, 6.0), z];
             Move::Line { a, b }
         } else {
-            let th = g.r(0.0, 6.28);
+            let th = g.r(0.0, std::f64::consts::TAU);
             let (c0, s0) = (forge_math_free_cos(th), forge_math_free_sin(th));
             Move::Arc {
                 c: [g.r(-6.0, 6.0), g.r(-6.0, 6.0), z],

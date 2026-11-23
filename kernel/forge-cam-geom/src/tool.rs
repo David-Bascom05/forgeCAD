@@ -83,7 +83,10 @@ fn pre_of(s: &PSeg) -> Pre {
     };
     let line = match *s {
         PSeg::Line { a, b } => {
-            let (dx, dy) = (Ival::pt(b[0]).sub(Ival::pt(a[0])), Ival::pt(b[1]).sub(Ival::pt(a[1])));
+            let (dx, dy) = (
+                Ival::pt(b[0]).sub(Ival::pt(a[0])),
+                Ival::pt(b[1]).sub(Ival::pt(a[1])),
+            );
             let dd = dx.sqr().add(dy.sqr());
             Some([dx, dy, dd, dd.sqrt()])
         }

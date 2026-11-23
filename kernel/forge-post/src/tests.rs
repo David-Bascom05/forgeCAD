@@ -159,7 +159,11 @@ fn a_dropped_null_move_leaves_no_mode_behind() {
         let d = Dialect::get(name).unwrap();
         for null_rapid in [false, true] {
             let mut recs = vec![
-                Rec::ToolChange { t: 1, h: 1, name: "x".into() },
+                Rec::ToolChange {
+                    t: 1,
+                    h: 1,
+                    name: "x".into(),
+                },
                 Rec::Rapid([0.0, 0.0, 5.0]),
                 Rec::Line([0.0, 0.0, 0.0], 100.0),
                 Rec::Rapid([0.0, 0.0, 5.0]),
@@ -172,7 +176,15 @@ fn a_dropped_null_move_leaves_no_mode_behind() {
                 recs.push(Rec::Line([0.0, 0.0, 5.0], 100.0));
                 recs.push(Rec::Line([0.0, 0.0, -3.0], 100.0));
             }
-            let q = quantize(&Program { number: 1, title: "t".into(), recs }, &d).unwrap();
+            let q = quantize(
+                &Program {
+                    number: 1,
+                    title: "t".into(),
+                    recs,
+                },
+                &d,
+            )
+            .unwrap();
             round_trip(&q, &d).unwrap_or_else(|e| panic!("{name} {null_rapid}: {e}"));
             // the plunge to z −3 reads back as a feed, never a rapid
             let txt = print(&q, &d).unwrap();
@@ -181,7 +193,10 @@ fn a_dropped_null_move_leaves_no_mode_behind() {
                 .iter()
                 .find(|m| matches!(m, Motion::Feed(p, _) | Motion::Rapid(p) if p[2] < 0))
                 .expect("the plunge");
-            assert!(matches!(plunge, Motion::Feed(..)), "{name} {null_rapid}: {plunge:?}\n{txt}");
+            assert!(
+                matches!(plunge, Motion::Feed(..)),
+                "{name} {null_rapid}: {plunge:?}\n{txt}"
+            );
         }
     }
 }
@@ -197,21 +212,44 @@ fn a_vanishing_arc_is_not_a_full_circle() {
         title: "t".into(),
         recs: vec![
             Rec::Rapid(s),
-            Rec::Arc { to, c: [70.0, 30.0], cw: true, f: 500.0 },
+            Rec::Arc {
+                to,
+                c: [70.0, 30.0],
+                cw: true,
+                f: 500.0,
+            },
             Rec::Line([80.0, 34.0, 1.0], 500.0),
         ],
     };
     let q = quantize(&p, &d).unwrap();
-    assert!(!q.recs.iter().any(|r| matches!(r, QRec::Arc { .. })), "{:?}", q.recs);
+    assert!(
+        !q.recs.iter().any(|r| matches!(r, QRec::Arc { .. })),
+        "{:?}",
+        q.recs
+    );
     let txt = print(&q, &d).unwrap();
     assert!(!txt.split_whitespace().any(|w| w == "G2" || w == "G3"), "{txt}");
     // a full circle stays one
     let p = Program {
         number: 1,
         title: "t".into(),
-        recs: vec![Rec::Rapid(s), Rec::Arc { to: s, c: [70.0, 30.0], cw: true, f: 500.0 }],
+        recs: vec![
+            Rec::Rapid(s),
+            Rec::Arc {
+                to: s,
+                c: [70.0, 30.0],
+                cw: true,
+                f: 500.0,
+            },
+        ],
     };
-    assert!(quantize(&p, &d).unwrap().recs.iter().any(|r| matches!(r, QRec::Arc { .. })));
+    assert!(
+        quantize(&p, &d)
+            .unwrap()
+            .recs
+            .iter()
+            .any(|r| matches!(r, QRec::Arc { .. }))
+    );
 }
 
 #[test]
@@ -227,32 +265,63 @@ fn a_vanishing_helix_piece_is_not_a_full_helix() {
             number: 1,
             title: "t".into(),
             recs: vec![
-                Rec::ToolChange { t: 1, h: 1, name: "x".into() },
+                Rec::ToolChange {
+                    t: 1,
+                    h: 1,
+                    name: "x".into(),
+                },
                 Rec::Rapid([5.0, 0.0, 5.0]),
                 Rec::Line(s, 100.0),
-                Rec::Arc { to, c: [0.0, 0.0], cw: false, f: 100.0 },
+                Rec::Arc {
+                    to,
+                    c: [0.0, 0.0],
+                    cw: false,
+                    f: 100.0,
+                },
                 Rec::Line([6.0, 0.0, -0.5], 100.0),
             ],
         };
         let q = quantize(&p, &d).unwrap();
-        assert!(!q.recs.iter().any(|r| matches!(r, QRec::Arc { .. })), "{name}: {:?}", q.recs);
+        assert!(
+            !q.recs.iter().any(|r| matches!(r, QRec::Arc { .. })),
+            "{name}: {:?}",
+            q.recs
+        );
         let (txt, back) = round_trip(&q, &d).unwrap_or_else(|e| panic!("{name}: {e}"));
-        assert!(!txt.split_whitespace().any(|w| w == "G2" || w == "G3"), "{name}: {txt}");
-        assert!(back.iter().any(|m| matches!(m, Motion::Feed(p, _) if p[2] < 0)), "{name}");
+        assert!(
+            !txt.split_whitespace().any(|w| w == "G2" || w == "G3"),
+            "{name}: {txt}"
+        );
+        assert!(
+            back.iter().any(|m| matches!(m, Motion::Feed(p, _) if p[2] < 0)),
+            "{name}"
+        );
         // a whole helical turn, meant, stays one
         let p = Program {
             number: 1,
             title: "t".into(),
             recs: vec![
-                Rec::ToolChange { t: 1, h: 1, name: "x".into() },
+                Rec::ToolChange {
+                    t: 1,
+                    h: 1,
+                    name: "x".into(),
+                },
                 Rec::Rapid([5.0, 0.0, 5.0]),
                 Rec::Line(s, 100.0),
-                Rec::Arc { to: [5.0, 0.0, -0.5], c: [0.0, 0.0], cw: false, f: 100.0 },
+                Rec::Arc {
+                    to: [5.0, 0.0, -0.5],
+                    c: [0.0, 0.0],
+                    cw: false,
+                    f: 100.0,
+                },
             ],
         };
         let q = quantize(&p, &d).unwrap();
         let (_, back) = round_trip(&q, &d).unwrap_or_else(|e| panic!("{name}: {e}"));
-        assert!(back.iter().any(|m| matches!(m, Motion::Arc { full: true, .. })), "{name}");
+        assert!(
+            back.iter().any(|m| matches!(m, Motion::Arc { full: true, .. })),
+            "{name}"
+        );
     }
 }
 
@@ -266,7 +335,13 @@ fn round_trip_compares_what_the_control_executes() {
         title: "t".into(),
         recs: vec![
             QRec::Rapid([5000, 0, 0]),
-            QRec::Arc { to: [5000, 0, -500], c: [0, 0], cw: false, f: 1000, full: false },
+            QRec::Arc {
+                to: [5000, 0, -500],
+                c: [0, 0],
+                cw: false,
+                f: 1000,
+                full: false,
+            },
         ],
         decimals: d.decimals,
         feed_decimals: d.feed_decimals,

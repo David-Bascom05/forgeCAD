@@ -31,19 +31,38 @@ pub struct Fixture {
 #[derive(Clone, Debug, PartialEq)]
 pub enum FixtureError {
     /// The stock is wider than the vise opens.
-    Opening { need: f64, max: f64 },
+    Opening {
+        need: f64,
+        max: f64,
+    },
     /// The clamp depth is not within (0, min(stock height, jaw height)].
-    Clamp { clamp: f64, max: f64 },
+    Clamp {
+        clamp: f64,
+        max: f64,
+    },
     /// The parallels would not fit between the jaws.
-    Parallels { width: f64, opening: f64 },
+    Parallels {
+        width: f64,
+        opening: f64,
+    },
     /// The jaw-cutting tool cannot enter the grip: its radius, and the grip's.
-    ToolTooBig { r: f64 },
+    ToolTooBig {
+        r: f64,
+    },
     /// The grip comes within `wall` of the blank's edge.
-    Blank { wall: f64, need: f64 },
+    Blank {
+        wall: f64,
+        need: f64,
+    },
     /// The part does not seat in the pocket the tool can cut: where (a box of what is missed).
-    DoesNotSeat { at: [f64; 4] },
+    DoesNotSeat {
+        at: [f64; 4],
+    },
     /// The grip depth is not within (0, the part's height less the fixture clearance).
-    Grip { grip: f64, max: f64 },
+    Grip {
+        grip: f64,
+        max: f64,
+    },
     Geometry(String),
 }
 
@@ -55,7 +74,10 @@ impl std::fmt::Display for FixtureError {
                 "the stock is {need:.2} mm across the jaws; the vise opens {max:.2} mm: turn the stock, or a bigger vise"
             ),
             FixtureError::Clamp { clamp, max } => {
-                write!(f, "clamp depth {clamp:.2} mm: it must be > 0 and at most {max:.2} mm")
+                write!(
+                    f,
+                    "clamp depth {clamp:.2} mm: it must be > 0 and at most {max:.2} mm"
+                )
             }
             FixtureError::Parallels { width, opening } => write!(
                 f,
@@ -226,7 +248,12 @@ fn bbox_of(r: &Region) -> [f64; 4] {
             }
             if let Seg::Arc { a, c, .. } = *s {
                 let rr = ((a.x - c.x).powi(2) + (a.y - c.y).powi(2)).sqrt();
-                b = [b[0].min(c.x - rr), b[1].min(c.y - rr), b[2].max(c.x + rr), b[3].max(c.y + rr)];
+                b = [
+                    b[0].min(c.x - rr),
+                    b[1].min(c.y - rr),
+                    b[2].max(c.x + rr),
+                    b[3].max(c.y + rr),
+                ];
             }
         }
     }
@@ -237,7 +264,12 @@ fn disk(c: P2, r: f64) -> Region {
     let a = P2 { x: c.x + r, y: c.y };
     Region {
         loops: vec![Loop {
-            segs: vec![Seg::Arc { a, b: a, c, ccw: true }],
+            segs: vec![Seg::Arc {
+                a,
+                b: a,
+                c,
+                ccw: true,
+            }],
         }],
     }
 }
@@ -284,8 +316,11 @@ pub fn soft_jaws(
     relief_at: &[P2],
     clearance: f64,
 ) -> Result<SoftJaws, FixtureError> {
-    if !(fit > 0.0) {
-        return Err(FixtureError::Geometry(format!("fit {fit}: the jaws' pocket must be larger than the part (fit > 0)")));
+    // a NaN fit is refused too
+    if fit.is_nan() || fit <= 0.0 {
+        return Err(FixtureError::Geometry(format!(
+            "fit {fit}: the jaws' pocket must be larger than the part (fit > 0)"
+        )));
     }
     // the part stands above the jaws by more than the fixture clearance, or nothing of it could
     // be cut in the setup the jaws hold
@@ -309,14 +344,21 @@ pub fn soft_jaws(
             loops: r
                 .loops
                 .iter()
-                .filter(|l| area(&Region { loops: vec![(*l).clone()] }) > 0.0)
+                .filter(|l| {
+                    area(&Region {
+                        loops: vec![(*l).clone()],
+                    }) > 0.0
+                })
                 .cloned()
                 .collect(),
         })
         .collect();
     let band = &band[..];
     // G: every section of the band, united
-    let mut g = band.first().cloned().ok_or(FixtureError::Geometry("no section to grip".into()))?;
+    let mut g = band
+        .first()
+        .cloned()
+        .ok_or(FixtureError::Geometry("no section to grip".into()))?;
     for s in &band[1..] {
         g = region_of(&boolean(&g, s, Op::Union).map_err(geo)?);
     }
@@ -357,7 +399,10 @@ pub fn soft_jaws(
     hi[2] = top;
     let block = Stock { min: lo, max: hi };
     let need = 3.0;
-    let wall = (mb[0] - lo[0]).min(mb[1] - lo[1]).min(hi[0] - mb[2]).min(hi[1] - mb[3]);
+    let wall = (mb[0] - lo[0])
+        .min(mb[1] - lo[1])
+        .min(hi[0] - mb[2])
+        .min(hi[1] - mb[3]);
     if wall < need {
         return Err(FixtureError::Blank { wall, need });
     }
@@ -370,7 +415,10 @@ pub fn soft_jaws(
     ha[a] = mid[a];
     lb[a] = mid[a];
     let part = jaw(lo, hi)?;
-    let jaws = vec![("soft jaw".to_string(), jaw(lo, ha)?), ("soft jaw".to_string(), jaw(lb, hi)?)];
+    let jaws = vec![
+        ("soft jaw".to_string(), jaw(lo, ha)?),
+        ("soft jaw".to_string(), jaw(lb, hi)?),
+    ];
     // the vise: its jaws behind the blanks, its bed under them
     let bx = |la: f64, ha: f64, z0: f64, z1: f64| {
         let mut min = lo;
@@ -384,8 +432,14 @@ pub fn soft_jaws(
     let t = v.jaw_thickness;
     let vtop = (bot + v.jaw_height).min(top);
     let pieces = vec![
-        ("fixed jaw".to_string(), bx(lo[a] - t, lo[a], bot - v.bed_depth, vtop)),
-        ("moving jaw".to_string(), bx(hi[a], hi[a] + t, bot - v.bed_depth, vtop)),
+        (
+            "fixed jaw".to_string(),
+            bx(lo[a] - t, lo[a], bot - v.bed_depth, vtop),
+        ),
+        (
+            "moving jaw".to_string(),
+            bx(hi[a], hi[a] + t, bot - v.bed_depth, vtop),
+        ),
         ("bed".to_string(), bx(lo[a], hi[a], bot - v.bed_depth, bot)),
     ];
     let hold = Fixture {
@@ -448,7 +502,11 @@ impl Fixture {
 
     /// Every piece's name and box (a shaped piece's box encloses it).
     pub fn boxes(&self) -> Vec<(String, [f64; 3], [f64; 3])> {
-        let mut v: Vec<_> = self.pieces.iter().map(|(n, b)| (n.clone(), b.min, b.max)).collect();
+        let mut v: Vec<_> = self
+            .pieces
+            .iter()
+            .map(|(n, b)| (n.clone(), b.min, b.max))
+            .collect();
         for (n, fs) in &self.shaped {
             let mut lo = [f64::INFINITY; 3];
             let mut hi = [f64::NEG_INFINITY; 3];

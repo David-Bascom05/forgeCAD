@@ -11,7 +11,14 @@ use forge_tooling::Library;
 
 fn circle(r: f64, ccw: bool) -> Loop {
     let a = p2(r, 0.0);
-    Loop { segs: vec![Seg::Arc { a, b: a, c: p2(0.0, 0.0), ccw }] }
+    Loop {
+        segs: vec![Seg::Arc {
+            a,
+            b: a,
+            c: p2(0.0, 0.0),
+            ccw,
+        }],
+    }
 }
 fn square(h: f64) -> Loop {
     let (a, b, c, d) = (p2(-h, -h), p2(h, -h), p2(h, h), p2(-h, h));
@@ -72,7 +79,13 @@ fn path(segs: &[Seg], z: f64, k: usize) -> OpPath {
             }
         }
     }
-    OpPath { tool: 0, start: [s0.x, s0.y, z], moves, rpm: 8000.0, coolant: forge_post::Coolant::Flood }
+    OpPath {
+        tool: 0,
+        start: [s0.x, s0.y, z],
+        moves,
+        rpm: 8000.0,
+        coolant: forge_post::Coolant::Flood,
+    }
 }
 
 fn main() {
@@ -80,16 +93,49 @@ fn main() {
     let (run, _) = forge_lang::run(&src, forge_lang::Options::default(), Default::default());
     let body = run.body.expect("flange builds");
     let faces: Vec<Face> = forge_cam::lower::lower(&body).expect("lowers");
-    let holder = Holder { profile: vec![[0.0, 25.0], [20.0, 25.0], [25.0, 40.0], [60.0, 40.0]] };
+    let holder = Holder {
+        profile: vec![[0.0, 25.0], [20.0, 25.0], [25.0, 40.0], [60.0, 40.0]],
+    };
     let lib = Library::builtin();
     let r = 3.0;
-    let plate = offset(&Region { loops: vec![square(40.0)] }, -r).unwrap().0;
-    let boss = offset(&Region { loops: vec![circle(20.0, true)] }, -r).unwrap().0;
-    let bore = offset(&Region { loops: vec![circle(10.0, true)] }, r).unwrap().0;
-    let n: usize = std::env::args().nth(1).map(|a| a.parse().unwrap()).unwrap_or(5000);
+    let plate = offset(
+        &Region {
+            loops: vec![square(40.0)],
+        },
+        -r,
+    )
+    .unwrap()
+    .0;
+    let boss = offset(
+        &Region {
+            loops: vec![circle(20.0, true)],
+        },
+        -r,
+    )
+    .unwrap()
+    .0;
+    let bore = offset(
+        &Region {
+            loops: vec![circle(10.0, true)],
+        },
+        r,
+    )
+    .unwrap()
+    .0;
+    let n: usize = std::env::args()
+        .nth(1)
+        .map(|a| a.parse().unwrap())
+        .unwrap_or(5000);
     let k = (n / 28).max(1);
-    let paths = [path(&plate[0].segs, 2.0, k), path(&boss[0].segs, 13.0, k), path(&bore[0].segs, 1.0, k)];
-    for (tname, c) in [("flat 6", Cutter::Flat { d: 6.0 }), ("bull 6 r1", Cutter::Bull { d: 6.0, re: 1.0 })] {
+    let paths = [
+        path(&plate[0].segs, 2.0, k),
+        path(&boss[0].segs, 13.0, k),
+        path(&bore[0].segs, 1.0, k),
+    ];
+    for (tname, c) in [
+        ("flat 6", Cutter::Flat { d: 6.0 }),
+        ("bull 6 r1", Cutter::Bull { d: 6.0, re: 1.0 }),
+    ] {
         let tu = ToolUse {
             t: 1,
             tool: lib.tool("flat-6").unwrap().clone(),
@@ -107,6 +153,8 @@ fn main() {
             bad += s.checks.len();
         }
         let dt = t0.elapsed().as_secs_f64();
-        println!("{tname}: {mv} checker moves, {pairs} pairs, {cells} cells, {bad} checks reported, {dt:.3} s");
+        println!(
+            "{tname}: {mv} checker moves, {pairs} pairs, {cells} cells, {bad} checks reported, {dt:.3} s"
+        );
     }
 }

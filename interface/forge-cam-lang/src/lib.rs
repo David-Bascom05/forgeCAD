@@ -213,7 +213,8 @@ impl Cam {
         }
         let p = &self.parts[i];
         let h = p.h();
-        let faces = forge_cam::lower::turned(&p.faces, h).map_err(|e| format!("turning the part over: {e:?}"))?;
+        let faces =
+            forge_cam::lower::turned(&p.faces, h).map_err(|e| format!("turning the part over: {e:?}"))?;
         let (lo, hi) = p.bbox;
         let turned = PartIn {
             src: p.src.clone(),
@@ -299,13 +300,22 @@ impl Cam {
                     let a = self.named(args, env)?;
                     let name = match a.get("#0") {
                         Some(V::Str(s)) => s.clone(),
-                        _ => return Err("vise(\"NAME\", across: \"x\", clamp: MM, parallel: MM, clearance: MM)".into()),
+                        _ => {
+                            return Err(
+                                "vise(\"NAME\", across: \"x\", clamp: MM, parallel: MM, clearance: MM)"
+                                    .into(),
+                            );
+                        }
                     };
                     self.lib.vise(&name).map_err(|e| format!("{e:?}"))?;
                     let axis = match get_str(&a, "across", Some("x"))?.as_str() {
                         "x" => 0,
                         "y" => 1,
-                        o => return Err(format!("across: \"x\" or \"y\" (the jaws close along it), not `{o}`")),
+                        o => {
+                            return Err(format!(
+                                "across: \"x\" or \"y\" (the jaws close along it), not `{o}`"
+                            ));
+                        }
                     };
                     return Ok(V::Vise(ViseSpec {
                         name,
@@ -619,7 +629,12 @@ impl Cam {
                                     // an arc may bulge past its ends: its circle's box bounds it
                                     if let Seg::Arc { a, c, .. } = *sg {
                                         let r = ((a.x - c.x).powi(2) + (a.y - c.y).powi(2)).sqrt();
-                                        b = [b[0].min(c.x - r), b[1].min(c.y - r), b[2].max(c.x + r), b[3].max(c.y + r)];
+                                        b = [
+                                            b[0].min(c.x - r),
+                                            b[1].min(c.y - r),
+                                            b[2].max(c.x + r),
+                                            b[3].max(c.y + r),
+                                        ];
                                     }
                                 }
                                 b
@@ -640,7 +655,8 @@ impl Cam {
                             _ => false,
                         };
                         let boxes: Vec<[f64; 4]> = boxes;
-                        let (hb, ub): (Vec<[f64; 4]>, Vec<[f64; 4]>) = boxes.into_iter().partition(|b| held(b));
+                        let (hb, ub): (Vec<[f64; 4]>, Vec<[f64; 4]>) =
+                            boxes.into_iter().partition(|b| held(b));
                         for (boxes, why) in [(hb, "held by fixture"), (ub, "uncut")] {
                             if !boxes.is_empty() {
                                 self.leftover.push(Leftover {
@@ -739,7 +755,9 @@ impl Cam {
                         }
                         Some(*k)
                     }
-                    Some(_) => return Err("from: SETUP (the setup this one continues, the part turned over)".into()),
+                    Some(_) => {
+                        return Err("from: SETUP (the setup this one continues, the part turned over)".into());
+                    }
                 };
                 if from.is_some() {
                     part = self.turned_part(part)?;
@@ -752,7 +770,10 @@ impl Cam {
                 let stock = match a.get("stock") {
                     None if from.is_some() => {
                         let ip = self.setups[from.unwrap()].ip.turned(self.parts[part].h());
-                        Stock { min: ip.min, max: ip.max }
+                        Stock {
+                            min: ip.min,
+                            max: ip.max,
+                        }
                     }
                     Some(V::Stock(StockSpec::Margin(m))) => Stock {
                         min: [plo[0] - m[0], plo[1] - m[1], plo[2]],
@@ -788,10 +809,20 @@ impl Cam {
                             max_opening: l.max_opening,
                             bed_depth: l.bed_depth,
                         };
-                        let clamp = v.clamp.ok_or("fixture: vise(.., clamp: MM): how much of the stock the jaws grip")?;
+                        let clamp = v
+                            .clamp
+                            .ok_or("fixture: vise(.., clamp: MM): how much of the stock the jaws grip")?;
                         Some(
-                            forge_cam::fixture::vise(&v.name, size, &stock, v.axis, clamp, v.parallel, v.clearance)
-                                .map_err(|e| format!("fixture: {e}"))?,
+                            forge_cam::fixture::vise(
+                                &v.name,
+                                size,
+                                &stock,
+                                v.axis,
+                                clamp,
+                                v.parallel,
+                                v.clearance,
+                            )
+                            .map_err(|e| format!("fixture: {e}"))?,
                         )
                     }
                     Some(V::Jaws(j, _)) => {
@@ -813,7 +844,9 @@ impl Cam {
                     wcs: get_num(a, "wcs", Some(0.0))? as u32,
                     at: match a.get("at") {
                         None => None,
-                        Some(v) => Some(tuple3(v).ok_or("at: (x, y, z), the WCS origin in machine coordinates")?),
+                        Some(v) => {
+                            Some(tuple3(v).ok_or("at: (x, y, z), the WCS origin in machine coordinates")?)
+                        }
                     },
                     tol: get_num(a, "tol", Some(0.01))?,
                     clearance: get_num(a, "clearance", Some(0.1))?,
@@ -828,7 +861,8 @@ impl Cam {
                 });
                 Ok(V::Setup(self.setups.len() - 1))
             }
-            "facing" | "contour" | "pocket" | "clear" | "drill" | "engrave" | "thread_mill" | "edge_break" => self.op(name, f, a),
+            "facing" | "contour" | "pocket" | "clear" | "drill" | "engrave" | "thread_mill"
+            | "edge_break" => self.op(name, f, a),
             "soft_jaw" => self.soft_jaw(name, a),
             "program" => {
                 let su: Vec<usize> = match a.get("#0") {
@@ -885,7 +919,12 @@ impl Cam {
         let relief = match a.get("relief") {
             None => false,
             Some(V::Str(x)) if x == "corners" => true,
-            Some(_) => return Err("relief: \"corners\" (a relief of the tool's radius at each of the part's corners)".into()),
+            Some(_) => {
+                return Err(
+                    "relief: \"corners\" (a relief of the tool's radius at each of the part's corners)"
+                        .into(),
+                );
+            }
         };
         let orig = self.setups[k].part;
         let tp = self.turned_part(orig)?;
@@ -918,8 +957,20 @@ impl Cam {
             let m = self.setups[k]
                 .ip
                 .material(h - zm)
-                .map_err(|e| format!("soft_jaw: the stock {} left at z {:.3}: {e}", self.setups[k].name, h - zm))?
-                .ok_or_else(|| format!("soft_jaw: nothing to grip at z {:.3} of {}", h - zm, self.setups[k].name))?;
+                .map_err(|e| {
+                    format!(
+                        "soft_jaw: the stock {} left at z {:.3}: {e}",
+                        self.setups[k].name,
+                        h - zm
+                    )
+                })?
+                .ok_or_else(|| {
+                    format!(
+                        "soft_jaw: nothing to grip at z {:.3} of {}",
+                        h - zm,
+                        self.setups[k].name
+                    )
+                })?;
             band.push(forge_cam::stock::mirror_y(&m));
         }
         let part = &self.parts[tp];
@@ -1076,7 +1127,9 @@ impl Cam {
         }
         let v3 = |k: &str| -> Option<[f64; 3]> {
             let Json::Obj(fs) = &ans.json else { return None };
-            let (_, Json::Arr(xs)) = fs.iter().find(|(n, _)| n == k)? else { return None };
+            let (_, Json::Arr(xs)) = fs.iter().find(|(n, _)| n == k)? else {
+                return None;
+            };
             let n = |j: &Json| if let Json::Num(x) = j { Some(*x) } else { None };
             Some([n(&xs[0])?, n(&xs[1])?, n(&xs[2])?])
         };
@@ -1109,7 +1162,12 @@ impl Cam {
                         bands.push(stadium(p0, p1, tip));
                     }
                 }
-                Some(forge_sketch::Entity::Arc { center, start, end, ccw }) => {
+                Some(forge_sketch::Entity::Arc {
+                    center,
+                    start,
+                    end,
+                    ccw,
+                }) => {
                     let (c, p0, p1) = (w(s.point(center)), w(s.point(start)), w(s.point(end)));
                     let ccw = ccw != flip;
                     // in pieces of at most a quarter turn, as posted
@@ -1163,11 +1221,14 @@ impl Cam {
             }
         }
         if curves.is_empty() {
-            return Err(format!("engrave: the sketch `{sk}` has no lines, arcs or circles to follow"));
+            return Err(format!(
+                "engrave: the sketch `{sk}` has no lines, arcs or circles to follow"
+            ));
         }
         let top = get_num(a, "from", Some(o[2]))?;
         let depth = get_num(a, "depth", None)?;
-        if !(depth > 0.0) {
+        // a NaN depth is refused too
+        if depth.is_nan() || depth <= 0.0 {
             return Err("engrave: depth > 0".into());
         }
         let bottom = o[2] - depth;
@@ -1276,12 +1337,18 @@ impl Cam {
         }
         if (t.tool.tp - pitch).abs() > 1e-9 {
             out.fix = Some(format!("a thread mill of pitch {pitch}"));
-            return Err(format!("thread_mill: the tool's pitch {} is not the thread's {pitch}", t.tool.tp));
+            return Err(format!(
+                "thread_mill: the tool's pitch {} is not the thread's {pitch}",
+                t.tool.tp
+            ));
         }
         let (rb, rm, rt) = (0.5 * hole.d, 0.5 * major, 0.5 * t.tool.dc);
         if rt >= rb {
             out.fix = Some(format!("a thread mill under {:.3} mm across", hole.d));
-            return Err(format!("thread_mill: the tool ({} mm) does not go down the bore ({} mm)", t.tool.dc, hole.d));
+            return Err(format!(
+                "thread_mill: the tool ({} mm) does not go down the bore ({} mm)",
+                t.tool.dc, hole.d
+            ));
         }
         let rc = rm - rt;
         let depth = match hole.depth {
@@ -1290,13 +1357,19 @@ impl Cam {
         };
         let len = get_num(a, "length", Some(depth - 2.0 * pitch))?;
         if !(len > 0.0 && len <= depth) {
-            return Err(format!("thread_mill: length {len} must be over 0 and at most the hole's depth {depth}"));
+            return Err(format!(
+                "thread_mill: length {len} must be over 0 and at most the hole's depth {depth}"
+            ));
         }
         // the target: P ∖ Δ's boundary (a superset's), for every place
         let mut faces: Vec<Face> = vec![];
         let mut extra: Vec<Face> = vec![];
         let mut id = 6000u32;
-        let bands: Vec<([f64; 2], f64, f64)> = hole.places.iter().map(|p| ([p[0], p[1]], p[2] - len, p[2])).collect();
+        let bands: Vec<([f64; 2], f64, f64)> = hole
+            .places
+            .iter()
+            .map(|p| ([p[0], p[1]], p[2] - len, p[2]))
+            .collect();
         for f in &part.faces {
             let mut kept = Some(f.clone());
             // a flat face at the band's heights (the mouth's, an inner shoulder's): Δ's disk
@@ -1358,7 +1431,14 @@ impl Cam {
                     };
                     // Δ's outer wall over the band, the same sector at the major radius
                     let band = forge_cam_geom::ival::Ival::new(qlo_band.max(f.q.lo.min(qlo_band)), qhi_band);
-                    extra.push(Face::new(Surf::Cyl { o, x, y, ax, r: rm }, f.p, band, None, f.mu, id));
+                    extra.push(Face::new(
+                        Surf::Cyl { o, x, y, ax, r: rm },
+                        f.p,
+                        band,
+                        None,
+                        f.mu,
+                        id,
+                    ));
                     id += 1;
                 }
             }
@@ -1368,7 +1448,12 @@ impl Cam {
         }
         for (c, zb, zt) in &bands {
             // Δ's floor: the ring at the band's bottom
-            extra.push(forge_cam::stock::flat(&ring(*c, 0.5 * (rb + rm), 0.5 * (rm - rb)), *zb, 1e-9, id));
+            extra.push(forge_cam::stock::flat(
+                &ring(*c, 0.5 * (rb + rm), 0.5 * (rm - rb)),
+                *zb,
+                1e-9,
+                id,
+            ));
             id += 1;
             out.removals.push(format!(
                 "cosmetic_thread M{major}x{pitch} of `{hn}` at ({:.3}, {:.3}): the ring {rb:.3}..{rm:.3} mm from z {zb:.3} to {zt:.3}",
@@ -1482,12 +1567,15 @@ impl Cam {
         let (r0, rt) = (0.5 * t.tool.tip_d, 0.5 * t.tool.dc);
         const E: f64 = 0.2;
         let c = r0 + E;
-        if !(s > 0.0) {
+        if s.is_nan() || s <= 0.0 {
             return Err("edge_break: size must be over 0".into());
         }
         if c + s >= rt {
             out.fix = Some(format!("a chamfer mill over {:.3} mm across", 2.0 * (c + s)));
-            return Err(format!("edge_break: a {s} mm break needs the flank out to {:.3} mm; the tool's is {rt}", c + s));
+            return Err(format!(
+                "edge_break: a {s} mm break needs the flank out to {:.3} mm; the tool's is {rt}",
+                c + s
+            ));
         }
         if (z - ztop).abs() > 1e-9 {
             return Err(format!(
@@ -1503,7 +1591,8 @@ impl Cam {
             if let Some(forge_cam_geom::slab::Prism::Flat { z: fz, region, .. }) = &f.prism
                 && (fz - z).abs() <= 1e-9
             {
-                let rg = trim_region(region).ok_or_else(|| format!("edge_break: the top face {} has an open trim", f.id))?;
+                let rg = trim_region(region)
+                    .ok_or_else(|| format!("edge_break: the top face {} has an open trim", f.id))?;
                 tops = Some(match tops {
                     None => rg,
                     Some(r) => forge_cam_geom::boolean::region_of(
@@ -1531,9 +1620,7 @@ impl Cam {
                         faces.push(Face::new(f.surf, f.p, below, None, f.mu, f.id));
                     }
                 }
-                Surf::Plane { o, u, v }
-                    if u[2] == 0.0 && v[0] == 0.0 && v[1] == 0.0 && v[2].abs() == 1.0 =>
-                {
+                Surf::Plane { o, u, v } if u[2] == 0.0 && v[0] == 0.0 && v[1] == 0.0 && v[2].abs() == 1.0 => {
                     // vertical over a rectangle of (p, q) (q the height): kept below z − s
                     let mut ok = true;
                     let (mut p0, mut p1, mut q0, mut q1) =
@@ -1564,10 +1651,19 @@ impl Cam {
                     }
                     // heights o.z + v.z q
                     let qc = (zc - o[2]) * v[2];
-                    let (q0, q1) = if v[2] > 0.0 { (q0, q1.min(qc)) } else { (q0.max(qc), q1) };
+                    let (q0, q1) = if v[2] > 0.0 {
+                        (q0, q1.min(qc))
+                    } else {
+                        (q0.max(qc), q1)
+                    };
                     if q0 < q1 {
                         let c4 = [[p0, q0], [p1, q0], [p1, q1], [p0, q1]];
-                        let segs = (0..4).map(|k| TSeg::Line { a: c4[k], b: c4[(k + 1) % 4] }).collect();
+                        let segs = (0..4)
+                            .map(|k| TSeg::Line {
+                                a: c4[k],
+                                b: c4[(k + 1) % 4],
+                            })
+                            .collect();
                         faces.push(Face::new(
                             f.surf,
                             Ival::new(p0 - f.mu, p1 + f.mu),
@@ -1589,9 +1685,14 @@ impl Cam {
         let rg = tops.ok_or_else(|| format!("edge_break: the part has no flat face at z = {z}"))?;
         // E = R ⊖ s, as many loops as R (no feature narrower than 2s)
         let (el, _) = forge_cam_geom::offset::offset(&rg, s).map_err(|e| format!("edge_break: {e:?}"))?;
-        let el: Vec<_> = el.into_iter().filter(|l| !(l.segs.len() == 1 && matches!(l.segs[0], Seg::Line { a, b } if a == b))).collect();
+        let el: Vec<_> = el
+            .into_iter()
+            .filter(|l| !(l.segs.len() == 1 && matches!(l.segs[0], Seg::Line { a, b } if a == b)))
+            .collect();
         if el.len() != rg.loops.len() {
-            out.fix = Some(format!("a break under half the top's narrowest feature (size < {s})"));
+            out.fix = Some(format!(
+                "a break under half the top's narrowest feature (size < {s})"
+            ));
             return Err(format!(
                 "edge_break: the top eroded by {s} has {} loops where the top has {}: a feature is narrower than the break",
                 el.len(),
@@ -1659,7 +1760,12 @@ impl Cam {
                         let pa_b = ca.map(along).unwrap_or(0.0);
                         let pb_b = cb.map(along).unwrap_or(len);
                         let poly = [[0.0, 0.0], [len, 0.0], [pb_b, qb], [pa_b, qb]];
-                        let segs: Vec<TSeg> = (0..4).map(|k| TSeg::Line { a: poly[k], b: poly[(k + 1) % 4] }).collect();
+                        let segs: Vec<TSeg> = (0..4)
+                            .map(|k| TSeg::Line {
+                                a: poly[k],
+                                b: poly[(k + 1) % 4],
+                            })
+                            .collect();
                         // o + p u + q v: u along the piece, v down the 45° slope outward; the
                         // quadrilateral runs anticlockwise in (p, q) when u × v points out of the
                         // part (up and out)
@@ -1677,7 +1783,12 @@ impl Cam {
                         ));
                         id += 1;
                     }
-                    Seg::Arc { a: pa, b: pb, c: cc, ccw } => {
+                    Seg::Arc {
+                        a: pa,
+                        b: pb,
+                        c: cc,
+                        ccw,
+                    } => {
                         junction(prev, sg, *sg)?;
                         junction(sg, next, *next)?;
                         let r1 = ((pa.x - cc.x).powi(2) + (pa.y - cc.y).powi(2)).sqrt();
@@ -1685,7 +1796,11 @@ impl Cam {
                         // pieces of at most a quarter turn
                         let t0 = forge_math::dmath::atan2(pa.y - cc.y, pa.x - cc.x);
                         let mut t1 = if full {
-                            t0 + if ccw { std::f64::consts::TAU } else { -std::f64::consts::TAU }
+                            t0 + if ccw {
+                                std::f64::consts::TAU
+                            } else {
+                                -std::f64::consts::TAU
+                            }
                         } else {
                             forge_math::dmath::atan2(pb.y - cc.y, pb.x - cc.x)
                         };
@@ -1702,12 +1817,16 @@ impl Cam {
                         }
                         let m = (((t1 - t0).abs() / (0.5 * std::f64::consts::PI)).ceil() as usize).max(1);
                         for k in 0..m {
-                            let (u0, u1) = (t0 + (t1 - t0) * k as f64 / m as f64, t0 + (t1 - t0) * (k + 1) as f64 / m as f64);
+                            let (u0, u1) = (
+                                t0 + (t1 - t0) * k as f64 / m as f64,
+                                t0 + (t1 - t0) * (k + 1) as f64 / m as f64,
+                            );
                             let um = 0.5 * (u0 + u1);
                             let hh = 0.5 * (u1 - u0).abs();
                             let (sm, cm) = forge_math::dmath::sin_cos(um);
                             // tan of a quarter of the sweep, widened a little (a superset)
-                            let th = forge_math::dmath::sin(0.5 * hh) / forge_math::dmath::cos(0.5 * hh) * (1.0 + 1e-12);
+                            let th = forge_math::dmath::sin(0.5 * hh) / forge_math::dmath::cos(0.5 * hh)
+                                * (1.0 + 1e-12);
                             // ccw (the centre inside): the radius grows going down; cw shrinks
                             let kk = if ccw { 1.0 } else { -1.0 };
                             faces.push(Face::new(
@@ -1737,18 +1856,38 @@ impl Cam {
         ));
         // the path: the axis on R ⊕ c, the tip at z − s − e
         let (pl, _) = forge_cam_geom::offset::offset(&rg, -c).map_err(|e| format!("edge_break: {e:?}"))?;
-        let np = pl.iter().filter(|l| !(l.segs.len() == 1 && matches!(l.segs[0], Seg::Line { a, b } if a == b))).count();
+        let np = pl
+            .iter()
+            .filter(|l| !(l.segs.len() == 1 && matches!(l.segs[0], Seg::Line { a, b } if a == b)))
+            .count();
         if np != rg.loops.len() {
-            out.fix = Some(format!("a chamfer mill with a smaller tip (its axis runs {c:.3} mm off the edge)"));
+            out.fix = Some(format!(
+                "a chamfer mill with a smaller tip (its axis runs {c:.3} mm off the edge)"
+            ));
             return Err(format!(
                 "edge_break: the tool's axis path R ⊕ {c:.3} has {np} loops where the top has {}: a hole is too small for the tool",
                 rg.loops.len()
             ));
         }
         let zt = zc - E;
-        ops::contour(&rg, t, ti, h, zt, zt, 1.0, c - rt, true, feed)
-            .map(|p| vec![p])
-            .map_err(|e| format!("{e:?}"))
+        ops::contour(
+            &rg,
+            ops::Cut {
+                tool: t,
+                tidx: ti,
+                h,
+                feed,
+            },
+            ops::Span {
+                top: zt,
+                bottom: zt,
+                step: 1.0,
+            },
+            c - rt,
+            true,
+        )
+        .map(|p| vec![p])
+        .map_err(|e| format!("{e:?}"))
     }
 
     fn feeds_for(&self, su: usize, t: &ToolUse, ae: f64, ap: f64) -> Option<feeds::Feeds> {
@@ -1844,7 +1983,20 @@ impl Cam {
                     "edge_break" => self.edge_break(su, a, t, ti, h, (vf, vp), &mut out),
                     "facing" => {
                         let z = get_num(a, "to", Some(part.bbox.1[2]))?;
-                        let p = ops::facing(&s.stock, t, ti, h, s.stock.max[2], z, step, (vf, vp));
+                        let p = ops::facing(
+                            &s.stock,
+                            ops::Cut {
+                                tool: t,
+                                tidx: ti,
+                                h,
+                                feed: (vf, vp),
+                            },
+                            ops::Span {
+                                top: s.stock.max[2],
+                                bottom: z,
+                                step,
+                            },
+                        );
                         voids.push((None, z));
                         Ok(vec![p])
                     }
@@ -1883,22 +2035,22 @@ impl Cam {
                         let stepover = get_num(a, "stepover", Some(0.4 * d))?;
                         let p = ops::pocket(
                             &rg,
-                            t,
-                            ti,
-                            h,
-                            top,
-                            bottom,
-                            step,
+                            ops::Cut {
+                                tool: t,
+                                tidx: ti,
+                                h,
+                                feed: (vf, vp),
+                            },
+                            ops::Span { top, bottom, step },
                             stepover,
                             get_num(a, "leave", Some(0.0))?,
-                            (vf, vp),
                             ramp,
                         )
                         .map_err(|e| format!("{e:?}"))?;
-                        if stepover <= r {
-                            if let Some(o) = opening(&rg, r) {
-                                voids.push((Some(o), bottom));
-                            }
+                        if stepover <= r
+                            && let Some(o) = opening(&rg, r)
+                        {
+                            voids.push((Some(o), bottom));
                         }
                         Ok(vec![p])
                     }
@@ -1924,23 +2076,43 @@ impl Cam {
                                 if let (Ok((outer, _)), Ok((inner, _))) = (
                                     forge_cam_geom::offset::offset(&cr, -r),
                                     forge_cam_geom::offset::offset(&cr, r),
+                                ) && let Ok(band) = forge_cam_geom::boolean::boolean(
+                                    &forge_cam_geom::boolean::region_of(&outer),
+                                    &forge_cam_geom::boolean::region_of(&inner),
+                                    forge_cam_geom::boolean::Op::Diff,
                                 ) {
-                                    if let Ok(band) = forge_cam_geom::boolean::boolean(
-                                        &forge_cam_geom::boolean::region_of(&outer),
-                                        &forge_cam_geom::boolean::region_of(&inner),
-                                        forge_cam_geom::boolean::Op::Diff,
-                                    ) {
-                                        voids.push((Some(forge_cam_geom::boolean::region_of(&band)), bottom));
-                                    }
+                                    voids.push((Some(forge_cam_geom::boolean::region_of(&band)), bottom));
                                 }
                             }
-                            ops::contour(&rg, t, ti, h, top, bottom, step, leave, true, (vf, vp))
-                                .map(|p| vec![p])
-                                .map_err(|e| format!("{e:?}"))
+                            ops::contour(
+                                &rg,
+                                ops::Cut {
+                                    tool: t,
+                                    tidx: ti,
+                                    h,
+                                    feed: (vf, vp),
+                                },
+                                ops::Span { top, bottom, step },
+                                leave,
+                                true,
+                            )
+                            .map(|p| vec![p])
+                            .map_err(|e| format!("{e:?}"))
                         } else {
-                            ops::contour(&rg, t, ti, h, top, bottom, step, leave, false, (vf, vp))
-                                .map(|p| vec![p])
-                                .map_err(|e| format!("{e:?}"))
+                            ops::contour(
+                                &rg,
+                                ops::Cut {
+                                    tool: t,
+                                    tidx: ti,
+                                    h,
+                                    feed: (vf, vp),
+                                },
+                                ops::Span { top, bottom, step },
+                                leave,
+                                false,
+                            )
+                            .map(|p| vec![p])
+                            .map_err(|e| format!("{e:?}"))
                         }
                     }
                     _ => {
@@ -1961,10 +2133,26 @@ impl Cam {
                                     loops: vec![l.clone()],
                                 };
                                 paths.push(
-                                    ops::pocket(&rg, t, ti, h, top, bottom, step, stepover, leave, (vf, vp), ramp)
-                                        .map_err(|e| format!("{e:?}"))?,
+                                    ops::pocket(
+                                        &rg,
+                                        ops::Cut {
+                                            tool: t,
+                                            tidx: ti,
+                                            h,
+                                            feed: (vf, vp),
+                                        },
+                                        ops::Span { top, bottom, step },
+                                        stepover,
+                                        leave,
+                                        ramp,
+                                    )
+                                    .map_err(|e| format!("{e:?}"))?,
                                 );
-                                let o = if stepover <= 0.5 * d { opening(&rg, 0.5 * d) } else { None };
+                                let o = if stepover <= 0.5 * d {
+                                    opening(&rg, 0.5 * d)
+                                } else {
+                                    None
+                                };
                                 if let Some(o) = o {
                                     voids.push((Some(o), bottom));
                                 }
@@ -2009,23 +2197,27 @@ impl Cam {
                                 paths.push(
                                     ops::pocket(
                                         &rg,
-                                        t,
-                                        ti,
-                                        h,
-                                        p[2],
-                                        bottom,
-                                        step,
+                                        ops::Cut {
+                                            tool: t,
+                                            tidx: ti,
+                                            h,
+                                            feed: (vf, vp),
+                                        },
+                                        ops::Span {
+                                            top: p[2],
+                                            bottom,
+                                            step,
+                                        },
                                         stepover,
                                         get_num(a, "leave", Some(0.0))?,
-                                        (vf, vp),
                                         ramp,
                                     )
                                     .map_err(|e| format!("{e:?}"))?,
                                 );
-                                if stepover <= 0.5 * d {
-                                    if let Some(o) = opening(&rg, 0.5 * d) {
-                                        voids.push((Some(o), bottom));
-                                    }
+                                if stepover <= 0.5 * d
+                                    && let Some(o) = opening(&rg, 0.5 * d)
+                                {
+                                    voids.push((Some(o), bottom));
                                 }
                             }
                             Ok(paths)
@@ -2166,7 +2358,18 @@ impl Cam {
             // a 90° spot to just under the drill's radius: the chamfer ring the drill centres in
             let (sn, cs) = forge_math::dmath::sin_cos((0.5 * t.tool.angle).to_radians());
             let dspot = 0.45 * drill_d / (sn / cs).max(1e-9);
-            let mut p = ops::holes(&hole.places, CycleKind::Drill, t, ti, h, 0.0, 0.0, f);
+            let mut p = ops::holes(
+                &hole.places,
+                CycleKind::Drill,
+                ops::Cut {
+                    tool: t,
+                    tidx: ti,
+                    h,
+                    feed: (f, f),
+                },
+                0.0,
+                0.0,
+            );
             for m in &mut p.moves {
                 if let PMove::Cycle { z, r, .. } = m {
                     *z = *r - 2.0 - dspot;
@@ -2186,12 +2389,14 @@ impl Cam {
         paths.push(ops::holes(
             &hole.places,
             kind,
-            t,
-            ti,
-            h,
+            ops::Cut {
+                tool: t,
+                tidx: ti,
+                h,
+                feed: (f, f),
+            },
             depth,
             if peck { t.tool.dc } else { 0.0 },
-            f,
         ));
         // each hole's circle is cleared down to where the full diameter reaches
         for p in &hole.places {
@@ -2231,12 +2436,14 @@ impl Cam {
             let mut p = ops::holes(
                 &hole.places,
                 CycleKind::Tap,
-                t,
-                ti,
-                h,
+                ops::Cut {
+                    tool: t,
+                    tidx: ti,
+                    h,
+                    feed: (f, f),
+                },
                 depth.min(hole.depth.unwrap_or(depth)),
                 0.0,
-                f,
             );
             p.rpm = rpm;
             paths.push(p);
@@ -2297,11 +2504,31 @@ fn stadium(p0: [f64; 2], p1: [f64; 2], w: f64) -> Region {
         loops: vec![Loop {
             segs: vec![
                 Seg::Line { a: b2, b: a0 },
-                Seg::Arc { a: a0, b: a1, c: c1, ccw: true },
-                Seg::Arc { a: a1, b: a2, c: c1, ccw: true },
+                Seg::Arc {
+                    a: a0,
+                    b: a1,
+                    c: c1,
+                    ccw: true,
+                },
+                Seg::Arc {
+                    a: a1,
+                    b: a2,
+                    c: c1,
+                    ccw: true,
+                },
                 Seg::Line { a: a2, b: b0 },
-                Seg::Arc { a: b0, b: b1, c: c0, ccw: true },
-                Seg::Arc { a: b1, b: b2, c: c0, ccw: true },
+                Seg::Arc {
+                    a: b0,
+                    b: b1,
+                    c: c0,
+                    ccw: true,
+                },
+                Seg::Arc {
+                    a: b1,
+                    b: b2,
+                    c: c0,
+                    ccw: true,
+                },
             ],
         }],
     }
@@ -2312,7 +2539,12 @@ fn ring(c: [f64; 2], r: f64, w: f64) -> Region {
     let circ = |rr: f64, ccw: bool| {
         let a = p2(c[0] + rr, c[1]);
         Loop {
-            segs: vec![Seg::Arc { a, b: a, c: p2(c[0], c[1]), ccw }],
+            segs: vec![Seg::Arc {
+                a,
+                b: a,
+                c: p2(c[0], c[1]),
+                ccw,
+            }],
         }
     };
     Region {
@@ -2335,7 +2567,9 @@ fn opening(rg: &Region, r: f64) -> Option<Region> {
     let mut out: Option<Region> = None;
     if !rest.is_empty() {
         let cr = forge_cam_geom::boolean::region_of(&rest);
-        let (o, _) = forge_cam_geom::offset::offset(&cr, -r).map_err(|e| dbg(&e)).ok()?;
+        let (o, _) = forge_cam_geom::offset::offset(&cr, -r)
+            .map_err(|e| dbg(&e))
+            .ok()?;
         out = Some(forge_cam_geom::boolean::region_of(&o));
     }
     for l in pts {
@@ -2343,7 +2577,12 @@ fn opening(rg: &Region, r: f64) -> Option<Region> {
         let a = p2(c.x + r, c.y);
         let disk = Region {
             loops: vec![Loop {
-                segs: vec![Seg::Arc { a, b: a, c, ccw: true }],
+                segs: vec![Seg::Arc {
+                    a,
+                    b: a,
+                    c,
+                    ccw: true,
+                }],
             }],
         };
         out = Some(match out {
@@ -2456,7 +2695,10 @@ impl Cam {
                             return Some(fail(
                                 if v.lo < j.range[0] { v.lo } else { v.hi },
                                 lim,
-                                format!("joint {}: the path's {end} reach is outside its travel {:?}", j.name, j.range),
+                                format!(
+                                    "joint {}: the path's {end} reach is outside its travel {:?}",
+                                    j.name, j.range
+                                ),
                             ));
                         }
                     }
@@ -2468,7 +2710,10 @@ impl Cam {
                         return Some(fail(
                             span,
                             width,
-                            format!("joint {}: the path spans {span:.3} mm, the travel {width:.3} mm", j.name),
+                            format!(
+                                "joint {}: the path spans {span:.3} mm, the travel {width:.3} mm",
+                                j.name
+                            ),
                         ));
                     }
                 }
@@ -2799,7 +3044,16 @@ impl Cam {
                 None => (vec![], 0.0),
             };
             let target = self.ops[oi].target.as_ref().unwrap_or(&part.faces);
-            let mut sum = ops::certify_fixtured(&posted, &tool, target, &stages, &ffaces, fclear, s.tol, s.clearance);
+            let mut sum = ops::certify_fixtured(
+                &posted,
+                &tool,
+                target,
+                &stages,
+                &ffaces,
+                fclear,
+                s.tol,
+                s.clearance,
+            );
             if let Some(f) = &s.fixture {
                 for c in &mut sum.checks {
                     if c.rule == "fixture_collision"

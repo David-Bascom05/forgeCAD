@@ -29,10 +29,10 @@ fn close(a: P2, b: P2, tol: f64) -> bool {
 /// becomes a near-tie.
 fn merge_arcs(lp: Vec<Seg>) -> Vec<Seg> {
     let same = |x: &Seg, y: &Seg| matches!((x, y), (Seg::Arc { c: c1, ccw: w1, .. }, Seg::Arc { c: c2, ccw: w2, .. }) if c1 == c2 && w1 == w2);
-    if lp.iter().all(|s| same(s, &lp[0])) {
-        if let Seg::Arc { a, c, ccw, .. } = lp[0] {
-            return vec![Seg::Arc { a, b: a, c, ccw }];
-        }
+    if lp.iter().all(|s| same(s, &lp[0]))
+        && let Seg::Arc { a, c, ccw, .. } = lp[0]
+    {
+        return vec![Seg::Arc { a, b: a, c, ccw }];
     }
     // rotate so the loop starts at a break between different pieces
     let n = lp.len();

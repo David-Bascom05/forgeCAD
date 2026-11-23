@@ -723,10 +723,8 @@ pub fn print(p: &QProgram, d: &Dialect) -> Result<String, PostError> {
                 // not leave the mode it would have set)
                 let g = if matches!(r, QRec::Rapid(_)) { 0 } else { 1 };
                 let mut axes = Vec::new();
-                let mut i = 0;
-                for letter in ['X', 'Y', 'Z'] {
+                for (i, letter) in ['X', 'Y', 'Z'].into_iter().enumerate() {
                     word(&mut axes, letter, v[i], &mut pos[i], false);
-                    i += 1;
                 }
                 if !axes.is_empty() {
                     let mut ws = Vec::new();
@@ -1071,7 +1069,7 @@ pub fn read(text_: &str, d: &Dialect) -> Result<Vec<Motion>, ReadError> {
         let mut skip_motion = false;
         for g in &gs {
             match g {
-                0 | 1 | 2 | 3 => {
+                0..=3 => {
                     motion = Some(*g);
                     cycle = None;
                 }

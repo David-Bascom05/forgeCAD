@@ -18,6 +18,9 @@ Rust's `<`, `<=`, `>`, `>=` and `==` on `f64` are IEEE 754's ordered comparisons
 negation of `==`, so it is true when an operand is NaN.
 -/
 
+-- `f64::abs`, `f64::from_bits` and `<f64 as Clone>::clone` are the bridge's
+-- (verify/aeneas/bridge/AeneasF64/Std.lean), with the same definitions.
+
 open Aeneas Aeneas.Std Result
 open fv_predicates
 
@@ -30,10 +33,6 @@ def F64.Insts.CoreOpsArithSubF64F64.sub (a b : F64) : Result F64 := ok (IEEE754.
 def F64.Insts.CoreOpsArithMulF64F64.mul (a b : F64) : Result F64 := ok (IEEE754.FP.mul a b)
 /-- `<f64 as Neg>::neg` -/
 def F64.Insts.CoreOpsArithNegF64.neg (a : F64) : Result F64 := ok (IEEE754.FP.neg a)
-/-- `f64::abs` -/
-def core.f64.F64.abs (a : F64) : Result F64 := ok (IEEE754.FP.abs a)
-/-- `f64::from_bits` -/
-def core.f64.F64.from_bits (b : Std.U64) : Result F64 := ok (IEEE754.FP.ofBits b.val)
 /-- `<f64 as PartialEq>::eq` -/
 def F64.Insts.CoreCmpPartialEqF64.eq (a b : F64) : Result Bool := ok (IEEE754.FP.eq a b)
 /-- `<f64 as PartialEq>::ne` -/
@@ -44,8 +43,6 @@ def F64.Insts.CoreCmpPartialOrdF64.lt (a b : F64) : Result Bool := ok (IEEE754.F
 def F64.Insts.CoreCmpPartialOrdF64.gt (a b : F64) : Result Bool := ok (IEEE754.FP.lt b a)
 /-- `<f64 as PartialOrd>::ge` -/
 def F64.Insts.CoreCmpPartialOrdF64.ge (a b : F64) : Result Bool := ok (IEEE754.FP.le b a)
-/-- `<f64 as Clone>::clone` -/
-def F64.Insts.CoreCloneClone.clone (a : F64) : Result F64 := ok a
 
 /-! ## The integer fallback for NaN results: deliberately without meaning
 

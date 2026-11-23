@@ -6,6 +6,7 @@
 //!   of R ⊖ B_r is within one stepover of a pass, every pass offset from the original boundary);
 //! - a contour: the band its loop sweeps, (C ⊕ B_r) − (C ⊖ B_r), C the tool-centre loop's region;
 //! - a drilled hole: its circle, down to where the drill's full diameter reaches.
+//!
 //! So the modelled stock contains the true in-process stock, and a clearance proven against it
 //! holds against the true one (G2, G3).
 use forge_cam_geom::boolean::{Op, boolean, region_of};

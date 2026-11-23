@@ -6,6 +6,7 @@
 //! - a horizontal plane at z_f with region T: min = sd(D(path, T), z_f − z_t);
 //! - a vertical wall over a horizontal segment, or a vertical cylinder over an arc, for heights
 //!   in [z0, z1]: min = min over Δ ∈ [z0 − z_t, z1 − z_t] of sd(D(path, section), Δ);
+//!
 //! with D the least 2D distance between the path and the section, a closed form: the least of the
 //! distances between each curve's ends and the other curve, the feet of the normals common to
 //! both (a centre's foot on a line; the line of centres for two circles), and 0 where they meet.
@@ -144,7 +145,12 @@ pub fn pt_sec(q: [f64; 2], s: &Sec) -> Ival {
 /// A section curve with what every point's distance to it shares, worked out once: a segment's
 /// direction and its square length (the same arithmetic as before, done once per curve).
 enum Pre {
-    Seg { a: [f64; 2], b: [f64; 2], d: [Ival; 2], dd: Ival },
+    Seg {
+        a: [f64; 2],
+        b: [f64; 2],
+        d: [Ival; 2],
+        dd: Ival,
+    },
     Other(Sec),
 }
 
@@ -152,7 +158,12 @@ fn pre(s: &Sec) -> Pre {
     match *s {
         Sec::Seg { a, b } => {
             let d = sub2(b, a);
-            Pre::Seg { a, b, d, dd: dot(d, d) }
+            Pre::Seg {
+                a,
+                b,
+                d,
+                dd: dot(d, d),
+            }
         }
         _ => Pre::Other(*s),
     }
@@ -410,9 +421,9 @@ pub fn dist(s: &Sec, t: &Sec) -> Ival {
                 // concentric: |r1 − r2| wherever the sectors overlap
                 let v1 = sub2(a1, c1);
                 let v2 = sub2(a2, c2);
-                let o = if in_sector(c1, a1, b1, w1, v2) > 0 || in_sector(c2, a2, b2, w2, v1) > 0 {
-                    1
-                } else if in_sector(c1, a1, b1, w1, sub2(b2, c2)) > 0
+                let o = if in_sector(c1, a1, b1, w1, v2) > 0
+                    || in_sector(c2, a2, b2, w2, v1) > 0
+                    || in_sector(c1, a1, b1, w1, sub2(b2, c2)) > 0
                     || in_sector(c2, a2, b2, w2, sub2(b1, c1)) > 0
                 {
                     1
@@ -573,7 +584,10 @@ fn dist_region(path: &Sec, region: &[TSeg], boxes: &[[f64; 4]], gaps: &[f64], cu
         let d = if ok {
             less_gap(dist(path, &s), gap)
         } else {
-            Ival { lo: 0.0, hi: f64::INFINITY }
+            Ival {
+                lo: 0.0,
+                hi: f64::INFINITY,
+            }
         };
         if d.lo < lo {
             lo = d.lo;
@@ -830,7 +844,12 @@ pub fn certify_shared(
     let (path, zt) = path_sec(pl);
     let (lim_clear, lim_hit) = (limit + f.mu, limit - f.mu);
     let (d, dz) = match pr {
-        Prism::Flat { z, region, boxes, gaps } => {
+        Prism::Flat {
+            z,
+            region,
+            boxes,
+            gaps,
+        } => {
             let dz = Ival::pt(*z).sub(zt);
             // the face is wholly beyond the body's heights by more than the limit: no distance
             // needed (sd at ρ = 0 is already a lower bound for every ρ)
@@ -935,9 +954,18 @@ mod gap_tests {
         let a = [r - g, 0.0];
         let b = [0.0, r + g];
         let region = vec![
-            TSeg::Arc { a, b, c, r, ccw: true },
+            TSeg::Arc {
+                a,
+                b,
+                c,
+                r,
+                ccw: true,
+            },
             TSeg::Line { a: b, b: [-2.0, 2.0] },
-            TSeg::Line { a: [-2.0, 2.0], b: [2.0, -2.0] },
+            TSeg::Line {
+                a: [-2.0, 2.0],
+                b: [2.0, -2.0],
+            },
             TSeg::Line { a: [2.0, -2.0], b: a },
         ];
         let boxes: Vec<[f64; 4]> = region.iter().map(tseg_box).collect();
@@ -951,8 +979,10 @@ mod gap_tests {
         // the trim's points: the arc on its circle, the radial pieces, the lines
         let mut pts: Vec<[f64; 2]> = vec![];
         for k in 0..=4000 {
-            let t = std::f64::consts::FRAC_PI_2 * k as f64 / 4000.0;
-            pts.push([r * t.cos(), r * t.sin()]);
+            // the quarter turn by the rational map (no libm in a test that must match wasm)
+            let t = k as f64 / 4000.0;
+            let w = 1.0 + t * t;
+            pts.push([r * (1.0 - t * t) / w, r * 2.0 * t / w]);
         }
         for k in 0..=100 {
             let u = k as f64 / 100.0;

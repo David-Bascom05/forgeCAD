@@ -1,0 +1,18 @@
+# An egg outline of two splines, extruded, kept where it meets an arch (a spline top) extruded
+# across it. A fillet of 10 on the edge where the egg's spline wall meets the arch's spline top is
+# refused as NoBlend; at 5 it builds. Round numbers restating a CADFS part (00123784) with its fit
+# splines written exactly, which Onshape rounds at 10. The fillet spec is to judge it.
+sketch egg(on: xy) {
+  s0 = spline([(80, 0), (75, 22), (20, 47), (-50, 51), (-76, 40), (-85, 0)], start_slope: (0, 1.27), end_slope: (0, -1.44))
+  s1 = spline([(-85, 0), (-76, -40), (-50, -51), (20, -47), (75, -22), (80, 0)], start_slope: (0, -1.44), end_slope: (0, 1.27))
+}
+shell_ = extrude(egg, 50)
+sketch arch(on: xz) {
+  l0 = line((-84, 25), (-84, 0))
+  l1 = line((-84, 0), (74, 0))
+  l2 = line((74, 0), (74, 19))
+  s3 = spline([(74, 19), (7, 40), (-60, 44), (-84, 25)], start_slope: (0, 0.61), end_slope: (0, -0.68))
+}
+lid = extrude(arch, sym(180), new: true)
+hull_ = combine(shell_, tools: lid, op: "keep")
+edge = fillet(edges(between: (shell_.side(egg.s0), lid.side(arch.s3))), 10)
