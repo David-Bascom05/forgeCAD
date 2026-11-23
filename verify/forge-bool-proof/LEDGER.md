@@ -111,6 +111,23 @@ seams, and the curved screens S3/S4).
 | G15 | the stretch whose midpoint is exactly on ∂f_k | FLAT-SITES | open | — |
 | M.ct | forge-geom `meet::intersect`, cylinder × torus (`Form::Poly4`): its events from a sampled discriminant, which lost one of two loops on fuzz295 f69 (a wrong `Ok`) | FALLBACK (fix), CURVED-SITES (#7, certified isolation) | interim fix (PR proof/fix-torus-loops): a root-count scan where the discriminant flags double roots; NOT provably complete (a loop narrower than one sample can be lost): UNKNOWN | kernel/forge-geom/src/meet_tests.rs `thin_torus_on_a_wide_cylinder_both_loops` |
 
+## NC. No corpus evidence (FALLBACK's groups of research/coverage-2026-11-23, on main 103dfb8b)
+
+Code the corpus (gate parts, bench parts, suite fuzz 1–300 seq and nary1, the exact-reference repros)
+never runs. A count of 0 is no evidence either way: each row is UNKNOWN until a proof covers it or a
+fuzz family reaches it.
+
+| id | site | owner | status | file / theorem |
+|---|---|---|---|---|
+| NC.ref | the 17 refusal sites that run under nothing, unit tests included: boolean.rs `RetryInvalid`, the `undecided_touch` refusal, `OpenCurve`, `Uncut`, `NoNormal`, `DegenerateEdge`, `SplitOpen`, `EmptyCycle`, `HoleOutside`, `NoInteriorPoint`, `UntouchedOnOther`; nary.rs `NoClosedForm`, `ToolVerticesMeet`, `NoNormal`, `NoInteriorPoint`, `EmptyCycle`, `MergedRegion` (refusal-sites.tsv) | FALLBACK | open; no corpus evidence: proof must cover it, or add a fuzz family | — |
+| NC.fences | the FENCES rung (G2): `ODD` is set 21× (bench frame, sweep-diff), never with an error, so the fenced retry never runs | FALLBACK | open; no corpus evidence: proof must cover it, or add a fuzz family | — |
+| NC.careful | the CAREFUL rung (G2): never runs in the corpus | FALLBACK | open; no corpus evidence: proof must cover it, or add a fuzz family | — |
+| NC.retried | a retried boolean returning `Ok` (G3's after-retry check): none in the corpus; only 6 unit-test cases reach the check | FALLBACK | open; no corpus evidence: proof must cover it, or add a fuzz family | — |
+| NC.pinch | `pinched_new` finding a pinch (G6), `refuse_strays` refusing (G7): never in the corpus | FALLBACK | open; no corpus evidence: proof must cover it, or add a fuzz family | — |
+| NC.nary.isect | n-ary with an `Intersect` tool: no corpus n-ary run has one (every `any_intersect` path skipped) | FALLBACK | open; no corpus evidence: proof must cover it, or add a fuzz family | — |
+| NC.nary.par | n-ary's threaded `par_map` arms: only nary1 (one thread) runs | FALLBACK | open; no corpus evidence: proof must cover it, or add a fuzz family | — |
+| NC.nary.touch | touches inside an n-ary boolean: never reached | FALLBACK | open; no corpus evidence: proof must cover it, or add a fuzz family | — |
+
 ## A8, the flat fallback
 
 | id | contract | owner | status | file / theorem |
