@@ -1,0 +1,7 @@
+# chamfer: Build Chamfer TooLarge (16 parts, CADFS). A disc r 15, 4 thick, both rim edges chamfered 2: the two chamfers
+# meet exactly at mid-height, consuming the side wall. Onshape builds it; we refuse. For fillet-fix.
+sketch s(on: xy) {
+  c = circle((0, 0), 15)
+}
+b = extrude(s, 4)
+f = chamfer(edges(between: (b.side(s.c), b.start)) + edges(between: (b.end, b.side(s.c))), 2)

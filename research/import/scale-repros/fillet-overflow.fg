@@ -1,0 +1,8 @@
+# fillet: Build Fillet Overflow (41 parts in the first 5k, CADFS). A block 50 x 20 x 20: round one top long edge r 11,
+# then the opposite one r 12 (11 + 12 > 20). Onshape builds the source part; we refuse. For fillet-fix.
+sketch s(on: xy) {
+  o = rect(corner: (0, 0), size: (50, 20))
+}
+b = extrude(s, 20)
+f1 = fillet(edges(between: (b.end, b.side(s.o[0]))), 11)
+f2 = fillet(edges(between: (b.end, b.side(s.o[2]))), 12)

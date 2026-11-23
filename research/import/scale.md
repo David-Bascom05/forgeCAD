@@ -5,7 +5,37 @@ the truth rule (truth.md): OCCT's Gauss–Kronrod volume, the area that goes wit
 disagree, the source's exact copies kept as far as the program makes copies. A part matches when both its volume and
 its area are within 1e-4 of the source's.
 
-RESULTS
+**Paused by owner priority (2026-11-23)** after the first 5k, at merge 11a1436 (kernel and tools frozen at 57c0c8e and
+11a1436). The runs are stopped; the scripts resume a shard where it stopped. Compact results are in `scale-results/`
+(Fusion: verdicts and causes only), kernel repros in our own numbers in `scale-repros/`.
+
+## First 5k (5,150 parts judged)
+
+| corpus | parts | match | mismatch | uncertain | no truth | partial source | refused | fail | timeout | untranslated |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| CADFS, shards 1-2 of 200 | 2256 | 1327 | 120 | 6 | 8 | - | 137 | 11 | 1 | 646 |
+| DeepCAD, shards 0-2 of 200 | 2155 | 1503 | 68 | 2 | - | 465 | 41 | 27 | 0 | 49 |
+| Fusion, shard 0 of 10 | 739 | 724 | 4 | 0 | - | - | 9 | 1 | 0 | 1 |
+
+Match among judged parts (match / (match + mismatch)): CADFS 91.7%, DeepCAD 95.7%, Fusion 99.5%.
+
+Kernel causes, by parts: Boolean ZeroThickness 40 (all three corpora); fillet Overflow 39 (CADFS); chamfer TooLarge 15;
+fillet Corner 10; Boolean Internal(InconsistentClassification) 11, a failure; shell Rebuild(Collapsed) 6; cut Extent
+Ambiguous 5; shell Collapses 5; shell SelfIntersecting 5; SketchProfile SelfIntersection 9 (DeepCAD); NotClosed 5, a
+failure. ZeroThickness was not yet split into correct refusals (the source's own result touching or non-manifold, as in
+a cylinder joined to a plate whose hole is its own size, meeting along one circle) and kernel gaps (`zerothick-groove.fg`).
+
+Mismatch causes: CADFS, with a fillet 32, plain extrudes 31, extrudes with an approximated curve 11, fewer bodies than
+the source 11; DeepCAD, more bodies than the source 29 (one extrude's touching regions written as bodies apart,
+fusion.py), extrudes 21, cuts 13.
+
+Untranslated (CADFS): a region the query does not settle 163, imprint edge bounds nothing 67, an entity the sketch no
+longer has 53, an unequal chamfer 37, a pattern of many bodies 27, imprint edge source 24, deleteBodies 23. DeepCAD:
+extrude from a face 48. A language gap: `arc(center:, from:, to:)` is refused when its ends lie 3e-10 mm or more off
+its circle (5 of 739 Fusion parts; 30 of 400 DeepCAD parts before the importer refit the centre).
+
+Repros (`scale-repros/`, each fails with its signature on 11a1436): `fillet-overflow.fg`, `chamfer-toolarge.fg`,
+`classify-fillet-cut.fg`, `classify-near-tangent.fg`, `zerothick-groove.fg`.
 
 ## Data, and its terms
 
