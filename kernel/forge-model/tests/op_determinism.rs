@@ -101,7 +101,9 @@ fn fresh() -> &'static [Built] {
     })
 }
 
-/// A regen on a thread where `spoil` ran and panicked first.
+/// A regen on a thread where `spoil` ran and panicked first. Native only, as the tests using it:
+/// WASI has no threads, and a panic there aborts (no unwinding to catch).
+#[cfg(not(target_os = "wasi"))]
 fn spoiled(part: &Part, spoil: fn()) -> u64 {
     // resume_unwind: a panic without the hook's message
     let p2 = part.clone();
@@ -115,6 +117,8 @@ fn spoiled(part: &Part, spoil: fn()) -> u64 {
 
 /// Audit item 3: a STEP read sets the work budget and a panic inside it leaves it set; mass
 /// properties (what a fillet's retries and thermo accept or refuse by) on that thread then fail.
+// a thread and a caught panic: native only (see `spoiled`)
+#[cfg(not(target_os = "wasi"))]
 #[test]
 fn after_a_caught_panic_the_work_budget_is_back() {
     let bad: Vec<String> = suite::each(fresh(), |(name, _, body)| {
@@ -149,6 +153,8 @@ fn after_a_caught_panic_the_work_budget_is_back() {
 
 /// Audit item 1: a boolean retry sets its switches and a panic in the retry leaves them set; the
 /// one switch outside forge-bool (`ABSORB_HAIR_ROOTS`) stands for them.
+// a thread and a caught panic: native only (see `spoiled`)
+#[cfg(not(target_os = "wasi"))]
 #[test]
 fn after_a_caught_panic_the_boolean_switches_are_back() {
     let bad: Vec<String> = suite::each(fresh(), |(name, part, body)| {

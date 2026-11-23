@@ -337,7 +337,7 @@ mod tests {
 
     #[test]
     fn a_watch_sees_reads_and_its_parent_gets_them() {
-        let d = std::env::temp_dir().join(format!("forge-deps-{}", std::process::id()));
+        let d = forge_dirs::temp_dir().join(format!("forge-deps-{}", forge_dirs::process_id()));
         forge_dirs::fs::create_dir_all(&d).unwrap();
         let (a, b) = (d.join("a.fg"), d.join("b.fg"));
         forge_dirs::fs::write(&a, "one").unwrap();
@@ -362,7 +362,7 @@ mod tests {
 
     #[test]
     fn a_file_replaced_with_its_time_put_back_is_a_change() {
-        let d = std::env::temp_dir().join(format!("forge-deps-stamp-{}", std::process::id()));
+        let d = forge_dirs::temp_dir().join(format!("forge-deps-stamp-{}", forge_dirs::process_id()));
         forge_dirs::fs::create_dir_all(&d).unwrap();
         let a = d.join("a.ttf");
         let when = forge_math::clock::UNIX_EPOCH + std::time::Duration::from_secs(1_700_000_000);
@@ -388,7 +388,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn the_checked_reader_reads_only_a_plain_file_by_its_own_name() {
-        let d = std::env::temp_dir().join(format!("forge-deps-plain-{}", std::process::id()));
+        let d = forge_dirs::temp_dir().join(format!("forge-deps-plain-{}", forge_dirs::process_id()));
         let _ = forge_dirs::fs::remove_dir_all(&d);
         forge_dirs::fs::create_dir_all(&d).unwrap();
         let (a, link, pipe) = (d.join("a.ttf"), d.join("l.ttf"), d.join("p.ttf"));
@@ -423,7 +423,7 @@ mod tests {
 
     #[test]
     fn a_large_file_is_not_read_past_the_limit() {
-        let d = std::env::temp_dir().join(format!("forge-deps-big-{}", std::process::id()));
+        let d = forge_dirs::temp_dir().join(format!("forge-deps-big-{}", forge_dirs::process_id()));
         forge_dirs::fs::create_dir_all(&d).unwrap();
         let f = d.join("big.fg");
         forge_dirs::fs::write(&f, vec![b'x'; 100]).unwrap();
@@ -433,7 +433,8 @@ mod tests {
 
     /// A root with a part in it, a file outside it, and a link inside it to that file.
     fn fenced(tag: &str) -> (PathBuf, PathBuf) {
-        let base = std::env::temp_dir().join(format!("forge-deps-fence-{tag}-{}", std::process::id()));
+        let base =
+            forge_dirs::temp_dir().join(format!("forge-deps-fence-{tag}-{}", forge_dirs::process_id()));
         let (root, out) = (base.join("root"), base.join("outside"));
         forge_dirs::fs::create_dir_all(&root).unwrap();
         forge_dirs::fs::create_dir_all(&out).unwrap();

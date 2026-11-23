@@ -103,7 +103,7 @@ impl Drop for Server {
 }
 
 fn scratch(name: &str) -> PathBuf {
-    let d = std::env::temp_dir().join(format!("forgecad-fg-{name}-{}", std::process::id()));
+    let d = forge_dirs::temp_dir().join(format!("forgecad-fg-{name}-{}", forge_dirs::process_id()));
     std::fs::create_dir_all(&d).unwrap();
     std::fs::canonicalize(d).unwrap()
 }
@@ -287,7 +287,7 @@ fn serve_keeps_the_stages_and_refuses_files_outside_the_root() {
     assert_eq!(check.get("rebuilt").and_then(Json::num), Some(0.0));
     assert!(check.get("part").is_none());
     // outside the root
-    let out = std::env::temp_dir().join(format!("forgecad-fg-outside-{}.fg", std::process::id()));
+    let out = forge_dirs::temp_dir().join(format!("forgecad-fg-outside-{}.fg", forge_dirs::process_id()));
     std::fs::write(&out, PLATE).unwrap();
     let r = m.ask("build", Json::obj(vec![("file", out.to_str().unwrap().into())]));
     assert_eq!(r.get("ok"), Some(&Json::Bool(false)));

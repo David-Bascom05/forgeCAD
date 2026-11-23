@@ -984,7 +984,7 @@ mod tests {
                 .expect("clock");
             (PathBuf::from("/tmp"), t.as_nanos() as u64)
         } else {
-            (std::env::temp_dir(), std::process::id() as u64)
+            (forge_dirs::temp_dir(), forge_dirs::process_id() as u64)
         };
         let d = base.join(format!("forgecad-fg-unit-{id}"));
         std::fs::create_dir_all(&d).expect("temp dir");

@@ -248,7 +248,7 @@ mod tests {
     #[cfg(not(target_os = "wasi"))]
     #[test]
     fn a_line_goes_both_ways_and_a_live_path_is_not_taken_over() {
-        let dir = std::env::temp_dir().join(format!("forge-ipc-{}", std::process::id()));
+        let dir = forge_dirs::temp_dir().join(format!("forge-ipc-{}", forge_dirs::process_id()));
         private_dir(&dir).unwrap();
         let path = dir.join("t.sock");
         let l = Listener::bind(&path).unwrap();

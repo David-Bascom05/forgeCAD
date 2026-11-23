@@ -16,7 +16,8 @@ base = extrude(plan, 10)
 ";
 
 fn project(name: &str) -> PathBuf {
-    let d = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("release-{name}-{}", std::process::id()));
+    let d = PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+        .join(format!("release-{name}-{}", forge_dirs::process_id()));
     std::fs::create_dir_all(&d).unwrap();
     let d = std::fs::canonicalize(d).unwrap();
     let mut h = forge_history::History::turn_on(&d).unwrap();

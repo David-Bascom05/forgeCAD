@@ -12,7 +12,7 @@ static N: AtomicU32 = AtomicU32::new(0);
 fn tmp(name: &str) -> PathBuf {
     let d = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!(
         "forge-git-{name}-{}-{}",
-        std::process::id(),
+        forge_dirs::process_id(),
         N.fetch_add(1, Ordering::Relaxed)
     ));
     std::fs::create_dir_all(&d).unwrap();

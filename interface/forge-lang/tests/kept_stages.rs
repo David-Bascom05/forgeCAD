@@ -145,7 +145,7 @@ fn opts_in(dir: &Path) -> impl Fn() -> Options + '_ {
 // 1: a parameter's last bit is part of the key
 #[test]
 fn the_key_holds_every_bit_of_a_number() {
-    let d = std::env::temp_dir();
+    let d = forge_dirs::temp_dir();
     after_is_fresh(
         PLATE,
         &PLATE.replace("t = 6", "t = 6.000000000000001"),
@@ -157,7 +157,7 @@ fn the_key_holds_every_bit_of_a_number() {
 // 2, 3: the stamp a step names its faces with (its id) is part of the key
 #[test]
 fn the_key_holds_the_names_a_step_stamps() {
-    let d = std::env::temp_dir();
+    let d = forge_dirs::temp_dir();
     let renamed = PLATE.replace("base", "slab");
     after_is_fresh(PLATE, &renamed, &d, opts_in(&d));
 }
@@ -165,7 +165,7 @@ fn the_key_holds_the_names_a_step_stamps() {
 // 2, 6: what a step reads of the steps before it (its input shape, a pattern's source) is
 #[test]
 fn the_key_holds_what_came_before() {
-    let d = std::env::temp_dir();
+    let d = forge_dirs::temp_dir();
     after_is_fresh(PLATE, &PLATE.replace("w = 40", "w = 41"), &d, opts_in(&d));
     after_is_fresh(PLATE, &PLATE.replace("d: 4,", "d: 5,"), &d, opts_in(&d));
 }
@@ -206,7 +206,7 @@ fn a_step_is_the_same_on_any_number_of_threads() {
         let out = |threads: Option<&str>| {
             let mut c = std::process::Command::new(env!("CARGO_BIN_EXE_fg"));
             c.args(["run", path.to_str().unwrap(), "--json", "--step"])
-                .arg(std::env::temp_dir().join(format!("kept-threads-{}.step", threads.unwrap_or("all"))))
+                .arg(forge_dirs::temp_dir().join(format!("kept-threads-{}.step", threads.unwrap_or("all"))))
                 .env("FORGECAD_CACHE", "off");
             if let Some(t) = threads {
                 c.env("FORGECAD_THREADS", t);
@@ -218,7 +218,7 @@ fn a_step_is_the_same_on_any_number_of_threads() {
             let at = json.find("\"timings_ms\":{").unwrap();
             let end = at + json[at..].find('}').unwrap() + 2;
             let step = std::fs::read_to_string(
-                std::env::temp_dir().join(format!("kept-threads-{}.step", threads.unwrap_or("all"))),
+                forge_dirs::temp_dir().join(format!("kept-threads-{}.step", threads.unwrap_or("all"))),
             )
             .unwrap_or_default();
             // the STEP file names its time of writing

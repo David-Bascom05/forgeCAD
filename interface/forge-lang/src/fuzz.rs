@@ -133,7 +133,7 @@ pub fn font_bytes() -> Vec<u8> {
 pub fn font_dir() -> std::path::PathBuf {
     static DIR: std::sync::OnceLock<std::path::PathBuf> = std::sync::OnceLock::new();
     DIR.get_or_init(|| {
-        let dir = std::env::temp_dir().join(format!("forge-fuzz-{}", std::process::id()));
+        let dir = forge_dirs::temp_dir().join(format!("forge-fuzz-{}", forge_dirs::process_id()));
         let _ = forge_dirs::fs::create_dir_all(&dir)
             .and_then(|_| forge_dirs::fs::write(dir.join(FONT), font_bytes()));
         dir

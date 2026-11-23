@@ -16,7 +16,7 @@ fn repo(p: &str) -> PathBuf {
 }
 
 fn scratch(name: &str) -> PathBuf {
-    let d = std::env::temp_dir().join(format!("forgecad-mesh-{name}-{}", std::process::id()));
+    let d = forge_dirs::temp_dir().join(format!("forgecad-mesh-{name}-{}", forge_dirs::process_id()));
     std::fs::create_dir_all(&d).unwrap();
     std::fs::canonicalize(d).unwrap()
 }

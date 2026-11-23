@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 const CANARY: &str = "CANARY-7f3a9e";
 
 fn dir(name: &str) -> PathBuf {
-    let d = std::env::temp_dir().join(format!("fg-read-kinds-{}-{name}", std::process::id()));
+    let d = forge_dirs::temp_dir().join(format!("fg-read-kinds-{}-{name}", forge_dirs::process_id()));
     std::fs::create_dir_all(&d).unwrap();
     d
 }
