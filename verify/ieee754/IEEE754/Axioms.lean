@@ -22,6 +22,8 @@ import IEEE754.Interval.Sin
 import IEEE754.Exact.Big
 import IEEE754.Exact.QHenrici
 import IEEE754.Exact.DivRem2
+import IEEE754.Expansion
+import IEEE754.ExpansionSum
 
 /-!
 # Only the standard axioms
@@ -117,3 +119,8 @@ elab "#standard_axioms " ids:ident* : command => do
   IEEE754.Exact.shortDiv_spec IEEE754.Exact.Step.corr_spec IEEE754.Exact.dStep_spec IEEE754.Exact.knuthRun_spec
   IEEE754.Exact.norm_v IEEE754.Exact.rshift_spec IEEE754.Exact.knuthDiv_spec IEEE754.Exact.divremMag_spec
   IEEE754.Exact.Big.divrem_spec
+  -- Shewchuk expansions (sheet-spec)
+  IEEE754.NO_sublist IEEE754.NO_sum IEEE754.NO_abs_sum IEEE754.NO_top_dominates IEEE754.NO_sign
+  IEEE754.round_mult_grid IEEE754.two_sum_facts IEEE754.grow_step IEEE754.grow_chain_sum IEEE754.grow_chain_finite
+  IEEE754.grow_chain_NO IEEE754.grow_nonoverlapping
+  IEEE754.round_tie_even IEEE754.err_large IEEE754.two_sum_cor8a IEEE754.two_sum_cor8b IEEE754.two_sum_cor9
