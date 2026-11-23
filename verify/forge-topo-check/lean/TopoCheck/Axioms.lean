@@ -1,4 +1,5 @@
 import TopoCheck.Proof
+import TopoCheck.Flood
 
 /-! The theorems the README cites use only the standard axioms: the build fails otherwise. -/
 
@@ -7,3 +8,6 @@ import TopoCheck.Proof
 
 /-- info: 'TopoCheck.Body.one_cycle' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in #print axioms TopoCheck.Body.one_cycle
+
+/-- info: 'TopoCheck.Body.reached_iff' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in #print axioms TopoCheck.Body.reached_iff
