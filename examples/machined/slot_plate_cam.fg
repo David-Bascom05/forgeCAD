@@ -1,0 +1,13 @@
+machining
+# slot_plate.fg from the top: face the stock, then the two slots with a 6 mm end mill along their
+# centrelines, ramped in along each line at 3 degrees, in levels of 2 mm.
+shared tol = 0.01
+
+f    = part("slot_plate.fg", group: "N")
+m    = machine("generic-vmc3")
+t1   = tool("flat-10", t: 1, stickout: 32, holder: "bt40-er32")
+t2   = tool("flat-6", t: 2, stickout: 26, holder: "bt40-er32")
+op1  = setup(f, machine: m, stock: box(margin: (3, 3, 1)), origin: "top-corner", tol: tol)
+skim = facing(op1, tool: t1, to: 10, step: 1)
+slots = slot(op1, f.lines, tool: t2, depth: 4, step: 2, ramp: 3)
+prog = program(op1, post: "fanuc", number: 3002)
