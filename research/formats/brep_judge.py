@@ -187,7 +187,16 @@ def run(argv):
         v, why = verdict(ours, t)
         return {"file": f, "verdict": v, "why": why, "ours": ours, "ref": t}
 
-    with open(out, "w") as o, cf.ThreadPoolExecutor(jobs) as ex:
+    # resumable: files already judged in OUT are skipped, new rows appended
+    done = set()
+    if os.path.exists(out):
+        for l in open(out):
+            try:
+                done.add(json.loads(l)["file"])
+            except Exception:
+                pass
+    fs = [f for f in fs if f not in done]
+    with open(out, "a") as o, cf.ThreadPoolExecutor(jobs) as ex:
         for r in ex.map(one, fs):
             o.write(json.dumps(r) + "\n")
             o.flush()

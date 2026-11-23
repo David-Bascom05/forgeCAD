@@ -1,49 +1,196 @@
-{"file": "FreeCAD/data/examples/Schenkel.stp", "verdict": "match", "why": ["dvol -3.94e-07 darea 2.14e-07"], "written": "0.0.step"}
-{"file": "FreeCAD/data/tests/ModelRefineTests/Y_Rod_Mount.brep", "verdict": "match", "why": ["dvol -1.20e-14 darea -5.72e-14"], "written": "1.0.step"}
-{"file": "FreeCAD/data/tests/ModelRefineTests/ZMotorMountscripted.brep", "verdict": "match", "why": ["dvol 3.84e-14 darea 3.70e-15"], "written": "2.0.step"}
-{"file": "FreeCAD/data/tests/ModelRefineTests/aox.brep", "verdict": "match", "why": ["dvol 4.05e-10 darea -3.01e-10"], "written": "3.0.step"}
-{"file": "FreeCAD/data/tests/ModelRefineTests/blocks144.brep", "verdict": "match", "why": ["dvol 2.91e-15 darea -3.45e-16"], "written": "4.0.step"}
-{"file": "FreeCAD/data/tests/ModelRefineTests/cylinder1.brep", "verdict": "match", "why": ["dvol 3.05e-15 darea 3.77e-16"], "written": "5.0.step"}
-{"file": "FreeCAD/data/tests/ModelRefineTests/cylinder3.brep", "verdict": "match", "why": ["dvol 3.02e-15 darea 5.32e-16"], "written": "6.0.step"}
-{"file": "FreeCAD/data/tests/ModelRefineTests/cylinder4.brep", "verdict": "match", "why": ["dvol 2.97e-15 darea 5.14e-16"], "written": "7.0.step"}
-{"file": "FreeCAD/data/tests/ModelRefineTests/cylinder5.brep", "verdict": "match", "why": ["dvol 2.75e-15 darea 3.97e-16"], "written": "8.0.step"}
-{"file": "FreeCAD/data/tests/ModelRefineTests/cylinder7_V2.brep", "verdict": "match", "why": ["dvol -1.88e-08 darea 1.09e-07"], "written": "9.0.step"}
-{"file": "FreeCAD/data/tests/ModelRefineTests/cylinder8.brep", "verdict": "match", "why": ["dvol 2.86e-15 darea 5.32e-16"], "written": "10.0.step"}
-{"file": "FreeCAD/data/tests/ModelRefineTests/cylinderSeam1.brep", "verdict": "match", "why": ["dvol 2.49e-15 darea 0.00e+00"], "written": "11.0.step"}
-{"file": "FreeCAD/data/tests/ModelRefineTests/cylinderSeam10.brep", "verdict": "uncertain", "why": [], "written": "12.0.step"}
-{"file": "FreeCAD/data/tests/ModelRefineTests/cylinderSeam2.brep", "verdict": "match", "why": ["dvol 2.85e-15 darea -2.31e-16"], "written": "13.0.step"}
-{"file": "FreeCAD/data/tests/ModelRefineTests/cylinderSeam3.brep", "verdict": "match", "why": ["dvol 1.65e-07 darea 6.23e-08"], "written": "14.0.step"}
-{"file": "FreeCAD/data/tests/ModelRefineTests/cylinderSeam4.brep", "verdict": "match", "why": ["dvol 1.92e-15 darea 4.11e-16"], "written": "15.0.step"}
-{"file": "FreeCAD/data/tests/ModelRefineTests/cylinderSeam5.brep", "verdict": "match", "why": ["dvol 2.88e-09 darea 5.27e-09"], "written": "16.0.step"}
-{"file": "FreeCAD/data/tests/ModelRefineTests/cylinderSeam6.brep", "verdict": "match", "why": ["dvol 1.96e-08 darea 1.16e-08"], "written": "17.0.step"}
-{"file": "FreeCAD/data/tests/ModelRefineTests/cylinderSeam8.brep", "verdict": "match", "why": ["dvol 2.01e-15 darea 2.07e-16"], "written": "18.0.step"}
-{"file": "FreeCAD/data/tests/ModelRefineTests/cylinderSeam9.brep", "verdict": "match", "why": ["dvol 2.36e-15 darea -5.79e-16"], "written": "19.0.step"}
-{"file": "FreeCAD/data/tests/ModelRefineTests/filletBox.brep", "verdict": "match", "why": ["dvol 4.02e-16 darea 0.00e+00"], "written": "20.0.step"}
-{"file": "FreeCAD/data/tests/ModelRefineTests/holesInFace2.brep", "verdict": "match", "why": ["dvol 0.00e+00 darea 0.00e+00"], "written": "21.0.step"}
-{"file": "FreeCAD/data/tests/ModelRefineTests/refine_breaks_cylinder.brep", "verdict": "match", "why": ["dvol -1.50e-08 darea 1.61e-08"], "written": "22.0.step"}
-{"file": "FreeCAD/data/tests/ModelRefineTests/shelf.brep", "verdict": "match", "why": ["dvol 8.60e-16 darea -1.86e-16"], "written": "23.0.step"}
-{"file": "FreeCAD/data/tests/ModelRefineTests/spline.brep", "verdict": "match", "why": ["dvol 8.32e-08 darea 7.90e-08"], "written": "24.0.step"}
-{"file": "FreeCAD/data/tests/Step/as1-ac-214.stp", "verdict": "match", "why": ["dvol 0.00e+00 darea 2.08e-16"], "written": "25.0.step"}
-{"file": "FreeCAD/data/tests/Step/as1-ac-214.stp", "verdict": "match", "why": ["dvol 3.00e-16 darea -1.48e-16"], "written": "25.1.step"}
-{"file": "FreeCAD/data/tests/Step/as1-ac-214.stp", "verdict": "match", "why": ["dvol 1.19e-15 darea -9.60e-16"], "written": "25.2.step"}
-{"file": "FreeCAD/data/tests/Step/as1-ac-214.stp", "verdict": "match", "why": ["dvol -1.71e-16 darea -1.52e-16"], "written": "25.3.step"}
-{"file": "FreeCAD/data/tests/Step/as1-ac-214.stp", "verdict": "match", "why": ["dvol 1.62e-15 darea -9.89e-16"], "written": "25.4.step"}
-{"file": "FreeCAD/data/tests/Step/as1-ac-214_small.stp", "verdict": "match", "why": ["dvol -3.35e-08 darea -7.90e-08"], "written": "26.0.step"}
-{"file": "FreeCAD/data/tests/Step/as1-ac-214_small.stp", "verdict": "match", "why": ["dvol 1.74e-15 darea -4.22e-16"], "written": "26.1.step"}
-{"file": "FreeCAD/data/tests/Step/as1-ac-214_small.stp", "verdict": "match", "why": ["dvol -2.92e-09 darea -9.45e-09"], "written": "26.2.step"}
+{"file": "FreeCAD/data/examples/Schenkel.stp", "written": "0.0.step", "verdict": "match", "why": ["dvol -3.94e-07 darea 2.14e-07"]}
+{"file": "FreeCAD/data/tests/ModelRefineTests/Y_Rod_Mount.brep", "written": "1.0.step", "verdict": "match", "why": ["dvol -1.20e-14 darea -5.72e-14"]}
+{"file": "FreeCAD/data/tests/ModelRefineTests/ZMotorMountscripted.brep", "written": "2.0.step", "verdict": "match", "why": ["dvol 3.84e-14 darea 3.70e-15"]}
+{"file": "FreeCAD/data/tests/ModelRefineTests/aox.brep", "written": "3.0.step", "verdict": "match", "why": ["dvol 4.05e-10 darea -3.01e-10"]}
+{"file": "FreeCAD/data/tests/ModelRefineTests/blocks144.brep", "written": "4.0.step", "verdict": "match", "why": ["dvol 2.91e-15 darea -3.45e-16"]}
+{"file": "FreeCAD/data/tests/ModelRefineTests/cylinder1.brep", "written": "5.0.step", "verdict": "match", "why": ["dvol 3.05e-15 darea 3.77e-16"]}
+{"file": "FreeCAD/data/tests/ModelRefineTests/cylinder3.brep", "written": "6.0.step", "verdict": "match", "why": ["dvol 3.02e-15 darea 5.32e-16"]}
+{"file": "FreeCAD/data/tests/ModelRefineTests/cylinder4.brep", "written": "7.0.step", "verdict": "match", "why": ["dvol 2.97e-15 darea 5.14e-16"]}
+{"file": "FreeCAD/data/tests/ModelRefineTests/cylinder5.brep", "written": "8.0.step", "verdict": "match", "why": ["dvol 2.75e-15 darea 3.97e-16"]}
+{"file": "FreeCAD/data/tests/ModelRefineTests/cylinder7_V2.brep", "written": "9.0.step", "verdict": "match", "why": ["dvol -1.88e-08 darea 1.09e-07"]}
+{"file": "FreeCAD/data/tests/ModelRefineTests/cylinder8.brep", "written": "10.0.step", "verdict": "match", "why": ["dvol 2.86e-15 darea 5.32e-16"]}
+{"file": "FreeCAD/data/tests/ModelRefineTests/cylinderSeam1.brep", "written": "11.0.step", "verdict": "match", "why": ["dvol 2.49e-15 darea 0.00e+00"]}
+{"file": "FreeCAD/data/tests/ModelRefineTests/cylinderSeam10.brep", "written": "12.0.step", "verdict": "uncertain", "why": []}
+{"file": "FreeCAD/data/tests/ModelRefineTests/cylinderSeam2.brep", "written": "13.0.step", "verdict": "match", "why": ["dvol 2.85e-15 darea -2.31e-16"]}
+{"file": "FreeCAD/data/tests/ModelRefineTests/cylinderSeam3.brep", "written": "14.0.step", "verdict": "match", "why": ["dvol 1.65e-07 darea 6.23e-08"]}
+{"file": "FreeCAD/data/tests/ModelRefineTests/cylinderSeam4.brep", "written": "15.0.step", "verdict": "match", "why": ["dvol 1.92e-15 darea 4.11e-16"]}
+{"file": "FreeCAD/data/tests/ModelRefineTests/cylinderSeam5.brep", "written": "16.0.step", "verdict": "match", "why": ["dvol 2.88e-09 darea 5.27e-09"]}
+{"file": "FreeCAD/data/tests/ModelRefineTests/cylinderSeam6.brep", "written": "17.0.step", "verdict": "match", "why": ["dvol 1.96e-08 darea 1.16e-08"]}
+{"file": "FreeCAD/data/tests/ModelRefineTests/cylinderSeam8.brep", "written": "18.0.step", "verdict": "match", "why": ["dvol 2.01e-15 darea 2.07e-16"]}
+{"file": "FreeCAD/data/tests/ModelRefineTests/cylinderSeam9.brep", "written": "19.0.step", "verdict": "match", "why": ["dvol 2.36e-15 darea -5.79e-16"]}
+{"file": "FreeCAD/data/tests/ModelRefineTests/filletBox.brep", "written": "20.0.step", "verdict": "match", "why": ["dvol 4.02e-16 darea 0.00e+00"]}
+{"file": "FreeCAD/data/tests/ModelRefineTests/holesInFace2.brep", "written": "21.0.step", "verdict": "match", "why": ["dvol 0.00e+00 darea 0.00e+00"]}
+{"file": "FreeCAD/data/tests/ModelRefineTests/refine_breaks_cylinder.brep", "written": "22.0.step", "verdict": "match", "why": ["dvol -1.50e-08 darea 1.61e-08"]}
+{"file": "FreeCAD/data/tests/ModelRefineTests/shelf.brep", "written": "23.0.step", "verdict": "match", "why": ["dvol 8.60e-16 darea -1.86e-16"]}
+{"file": "FreeCAD/data/tests/ModelRefineTests/spline.brep", "written": "24.0.step", "verdict": "match", "why": ["dvol 8.32e-08 darea 7.90e-08"]}
+{"file": "FreeCAD/data/tests/Step/as1-ac-214.stp", "written": "25.0.step", "verdict": "match", "why": ["dvol 0.00e+00 darea 2.08e-16"]}
+{"file": "FreeCAD/data/tests/Step/as1-ac-214.stp", "written": "25.1.step", "verdict": "match", "why": ["dvol 3.00e-16 darea -1.48e-16"]}
+{"file": "FreeCAD/data/tests/Step/as1-ac-214.stp", "written": "25.2.step", "verdict": "match", "why": ["dvol 1.19e-15 darea -9.60e-16"]}
+{"file": "FreeCAD/data/tests/Step/as1-ac-214.stp", "written": "25.3.step", "verdict": "match", "why": ["dvol -1.71e-16 darea -1.52e-16"]}
+{"file": "FreeCAD/data/tests/Step/as1-ac-214.stp", "written": "25.4.step", "verdict": "match", "why": ["dvol 1.62e-15 darea -9.89e-16"]}
+{"file": "FreeCAD/data/tests/Step/as1-ac-214_small.stp", "written": "26.0.step", "verdict": "match", "why": ["dvol -3.35e-08 darea -7.90e-08"]}
+{"file": "FreeCAD/data/tests/Step/as1-ac-214_small.stp", "written": "26.1.step", "verdict": "match", "why": ["dvol 1.74e-15 darea -4.22e-16"]}
+{"file": "FreeCAD/data/tests/Step/as1-ac-214_small.stp", "written": "26.2.step", "verdict": "match", "why": ["dvol -2.92e-09 darea -9.45e-09"]}
 {"file": "FreeCAD/data/tests/Step/geometry_out.stp", "verdict": "not-read", "why": ["the file holds no solid"]}
-{"file": "FreeCAD/src/Mod/BIM/bimtests/test_roof_subtraction.brep", "verdict": "match", "why": ["dvol -1.40e-15 darea 2.22e-16"], "written": "28.0.step"}
-{"file": "FreeCAD/tests/src/Mod/Part/App/brepfiles/cylinder1.brep", "verdict": "match", "why": ["dvol 3.05e-15 darea 3.77e-16"], "written": "31.0.step"}
-{"file": "FreeCAD/tests/src/Mod/Part/App/brepfiles/helix1.brep", "verdict": "mismatch", "why": ["dvol -3.34e-02 darea -8.07e-03"], "written": "32.0.step"}
-{"file": "FreeCAD/tests/src/Mod/Part/App/brepfiles/unorientableSolid.brep", "verdict": "ref-refused", "why": ["0 solids"], "written": "33.0.step"}
-{"file": "cadquery/tests/testdata/red_cube_blue_cylinder.step", "verdict": "match", "why": ["dvol 2.32e-15 darea -1.21e-16"], "written": "34.0.step"}
-{"file": "cadquery/tests/testdata/red_cube_blue_cylinder.step", "verdict": "match", "why": ["dvol 4.55e-16 darea 0.00e+00"], "written": "34.1.step"}
-{"file": "libredwg/test/test-data/r11/ACEB10.stp", "verdict": "uncertain", "why": [], "written": "35.0.step"}
-{"file": "libredwg/test/test-data/r11/ACEB10.stp", "verdict": "match", "why": ["dvol -6.00e-08 darea 4.85e-07"], "written": "35.1.step"}
-{"file": "libredwg/test/test-data/r11/ACEB10.stp", "verdict": "match", "why": ["dvol -1.37e-09 darea 4.96e-11"], "written": "35.2.step"}
-{"file": "nist/nist-ftc-ctc-pmi-cad-models/NIST-FTC-CTC-PMI-CAD-models/CTC Definitions/nist_ctc_01_asme1_rd.stp", "verdict": "match", "why": ["dvol -6.10e-07 darea 1.49e-07"], "written": "36.0.step"}
-{"file": "nist/nist-ftc-ctc-pmi-cad-models/NIST-FTC-CTC-PMI-CAD-models/CTC Definitions/nist_ctc_02_asme1_rc.stp", "verdict": "match", "why": ["dvol -2.76e-07 darea 9.91e-07"], "written": "37.0.step"}
-{"file": "nist/nist-ftc-ctc-pmi-cad-models/NIST-FTC-CTC-PMI-CAD-models/CTC Definitions/nist_ctc_03_asme1_rc.stp", "verdict": "match", "why": ["dvol -4.19e-12 darea -9.84e-16"], "written": "38.0.step"}
-{"file": "nist/nist-ftc-ctc-pmi-cad-models/NIST-FTC-CTC-PMI-CAD-models/CTC Definitions/nist_ctc_04_asme1_rd.stp", "verdict": "match", "why": ["dvol -3.41e-10 darea 2.61e-09"], "written": "39.0.step"}
-{"file": "nist/nist-ftc-ctc-pmi-cad-models/NIST-FTC-CTC-PMI-CAD-models/CTC Definitions/nist_ctc_05_asme1_rd.stp", "verdict": "match", "why": ["dvol 7.05e-07 darea -3.03e-07"], "written": "40.0.step"}
-{"file": "nist/nist-ftc-ctc-pmi-cad-models/NIST-FTC-CTC-PMI-CAD-models/FTC Definitions/nist_ftc_06_asme1_rd.stp", "verdict": "no-mass", "why": ["face 89: the face's loops draw no region"], "written": "41.0.step"}
+{"file": "FreeCAD/src/Mod/BIM/bimtests/test_roof_subtraction.brep", "written": "28.0.step", "verdict": "match", "why": ["dvol -1.40e-15 darea 2.22e-16"]}
+{"file": "FreeCAD/tests/src/Mod/Part/App/brepfiles/cylinder1.brep", "written": "31.0.step", "verdict": "match", "why": ["dvol 3.05e-15 darea 3.77e-16"]}
+{"file": "FreeCAD/tests/src/Mod/Part/App/brepfiles/helix1.brep", "written": "32.0.step", "verdict": "mismatch", "why": ["dvol -3.34e-02 darea -8.07e-03"]}
+{"file": "FreeCAD/tests/src/Mod/Part/App/brepfiles/unorientableSolid.brep", "written": "33.0.step", "verdict": "ref-refused", "why": ["0 solids"]}
+{"file": "cadquery/tests/testdata/red_cube_blue_cylinder.step", "written": "34.0.step", "verdict": "match", "why": ["dvol 2.32e-15 darea -1.21e-16"]}
+{"file": "cadquery/tests/testdata/red_cube_blue_cylinder.step", "written": "34.1.step", "verdict": "match", "why": ["dvol 4.55e-16 darea 0.00e+00"]}
+{"file": "libredwg/test/test-data/r11/ACEB10.stp", "written": "35.0.step", "verdict": "uncertain", "why": []}
+{"file": "libredwg/test/test-data/r11/ACEB10.stp", "written": "35.1.step", "verdict": "match", "why": ["dvol -6.00e-08 darea 4.85e-07"]}
+{"file": "libredwg/test/test-data/r11/ACEB10.stp", "written": "35.2.step", "verdict": "match", "why": ["dvol -1.37e-09 darea 4.96e-11"]}
+{"file": "nist/nist-ftc-ctc-pmi-cad-models/NIST-FTC-CTC-PMI-CAD-models/CTC Definitions/nist_ctc_01_asme1_rd.stp", "written": "36.0.step", "verdict": "match", "why": ["dvol -6.10e-07 darea 1.49e-07"]}
+{"file": "nist/nist-ftc-ctc-pmi-cad-models/NIST-FTC-CTC-PMI-CAD-models/CTC Definitions/nist_ctc_02_asme1_rc.stp", "written": "37.0.step", "verdict": "match", "why": ["dvol -2.76e-07 darea 9.91e-07"]}
+{"file": "nist/nist-ftc-ctc-pmi-cad-models/NIST-FTC-CTC-PMI-CAD-models/CTC Definitions/nist_ctc_03_asme1_rc.stp", "written": "38.0.step", "verdict": "match", "why": ["dvol -4.19e-12 darea -9.84e-16"]}
+{"file": "nist/nist-ftc-ctc-pmi-cad-models/NIST-FTC-CTC-PMI-CAD-models/CTC Definitions/nist_ctc_04_asme1_rd.stp", "written": "39.0.step", "verdict": "match", "why": ["dvol -3.41e-10 darea 2.61e-09"]}
+{"file": "nist/nist-ftc-ctc-pmi-cad-models/NIST-FTC-CTC-PMI-CAD-models/CTC Definitions/nist_ctc_05_asme1_rd.stp", "written": "40.0.step", "verdict": "match", "why": ["dvol 7.05e-07 darea -3.03e-07"]}
+{"file": "nist/nist-ftc-ctc-pmi-cad-models/NIST-FTC-CTC-PMI-CAD-models/FTC Definitions/nist_ftc_06_asme1_rd.stp", "written": "41.0.step", "verdict": "no-mass", "why": ["face 89: the face's loops draw no region"]}
+{"file": "nist/nist-ftc-ctc-pmi-cad-models/NIST-FTC-CTC-PMI-CAD-models/FTC Definitions/nist_ftc_07_asme1_rd.stp", "written": "42.0.step", "verdict": "match", "why": ["dvol -2.99e-06 darea 4.49e-07"]}
+{"file": "nist/nist-ftc-ctc-pmi-cad-models/NIST-FTC-CTC-PMI-CAD-models/FTC Definitions/nist_ftc_08_asme1_rc.stp", "written": "43.0.step", "verdict": "match", "why": ["dvol 1.30e-09 darea -1.45e-10"]}
+{"file": "nist/nist-ftc-ctc-pmi-cad-models/NIST-FTC-CTC-PMI-CAD-models/FTC Definitions/nist_ftc_09_asme1_rd.stp", "written": "44.0.step", "verdict": "match", "why": ["dvol 5.91e-14 darea 1.37e-14"]}
+{"file": "nist/nist-ftc-ctc-pmi-cad-models/NIST-FTC-CTC-PMI-CAD-models/FTC Definitions/nist_ftc_10_asme1_rb.stp", "written": "45.0.step", "verdict": "match", "why": ["dvol 3.09e-07 darea 3.65e-07"]}
+{"file": "nist/nist-ftc-ctc-pmi-cad-models/NIST-FTC-CTC-PMI-CAD-models/FTC Definitions/nist_ftc_11_asme1_rb.stp", "written": "46.0.step", "verdict": "match", "why": ["dvol 1.95e-15 darea 6.65e-16"]}
+{"file": "nist/nist-pmi-step-files/NIST-PMI-STEP-Files/AP203 geometry only/nist_ctc_01_asme1_rd.stp", "written": "47.0.step", "verdict": "match", "why": ["dvol -6.10e-07 darea 1.49e-07"]}
+{"file": "nist/nist-pmi-step-files/NIST-PMI-STEP-Files/AP203 geometry only/nist_ctc_02_asme1_rc.stp", "written": "48.0.step", "verdict": "match", "why": ["dvol -2.76e-07 darea 9.91e-07"]}
+{"file": "nist/nist-pmi-step-files/NIST-PMI-STEP-Files/AP203 geometry only/nist_ctc_03_asme1_rc.stp", "written": "49.0.step", "verdict": "match", "why": ["dvol -4.19e-12 darea -9.84e-16"]}
+{"file": "nist/nist-pmi-step-files/NIST-PMI-STEP-Files/AP203 geometry only/nist_ctc_04_asme1_rd.stp", "written": "50.0.step", "verdict": "match", "why": ["dvol -3.41e-10 darea 2.61e-09"]}
+{"file": "nist/nist-pmi-step-files/NIST-PMI-STEP-Files/AP203 geometry only/nist_ctc_05_asme1_rd.stp", "written": "51.0.step", "verdict": "match", "why": ["dvol 7.05e-07 darea -3.03e-07"]}
+{"file": "nist/nist-pmi-step-files/NIST-PMI-STEP-Files/AP203 geometry only/nist_ftc_06_asme1_rd.stp", "written": "52.0.step", "verdict": "no-mass", "why": ["face 89: the face's loops draw no region"]}
+{"file": "nist/nist-pmi-step-files/NIST-PMI-STEP-Files/AP203 geometry only/nist_ftc_07_asme1_rd.stp", "written": "53.0.step", "verdict": "match", "why": ["dvol -2.99e-06 darea 4.49e-07"]}
+{"file": "nist/nist-pmi-step-files/NIST-PMI-STEP-Files/AP203 geometry only/nist_ftc_08_asme1_rc.stp", "written": "54.0.step", "verdict": "match", "why": ["dvol 1.30e-09 darea -1.45e-10"]}
+{"file": "nist/nist-pmi-step-files/NIST-PMI-STEP-Files/AP203 geometry only/nist_ftc_09_asme1_rd.stp", "written": "55.0.step", "verdict": "match", "why": ["dvol 5.91e-14 darea 1.37e-14"]}
+{"file": "nist/nist-pmi-step-files/NIST-PMI-STEP-Files/AP203 geometry only/nist_ftc_10_asme1_rb.stp", "written": "56.0.step", "verdict": "match", "why": ["dvol 3.09e-07 darea 3.65e-07"]}
+{"file": "nist/nist-pmi-step-files/NIST-PMI-STEP-Files/AP203 geometry only/nist_ftc_11_asme1_rb.stp", "written": "57.0.step", "verdict": "match", "why": ["dvol 1.95e-15 darea 6.65e-16"]}
+{"file": "nist/nist-pmi-step-files/NIST-PMI-STEP-Files/AP203 with PMI/nist_ctc_01_asme1_ap203.stp", "written": "58.0.step", "verdict": "match", "why": ["dvol -6.10e-07 darea 1.49e-07"]}
+{"file": "nist/nist-pmi-step-files/NIST-PMI-STEP-Files/AP203 with PMI/nist_ctc_02_asme1_ap203.stp", "written": "59.0.step", "verdict": "ref-refused", "why": ["timeout"]}
+{"file": "nist/nist-pmi-step-files/NIST-PMI-STEP-Files/AP203 with PMI/nist_ctc_03_asme1_ap203.stp", "written": "60.0.step", "verdict": "match", "why": ["dvol -4.19e-12 darea -9.84e-16"]}
+{"file": "nist/nist-pmi-step-files/NIST-PMI-STEP-Files/AP203 with PMI/nist_ctc_04_asme1_ap203.stp", "written": "61.0.step", "verdict": "match", "why": ["dvol 3.16e-09 darea 5.21e-10"]}
+{"file": "nist/nist-pmi-step-files/NIST-PMI-STEP-Files/AP203 with PMI/nist_ctc_05_asme1_ap203.stp", "written": "62.0.step", "verdict": "match", "why": ["dvol -3.06e-06 darea -1.85e-06"]}
+{"file": "nist/nist-pmi-step-files/NIST-PMI-STEP-Files/nist_ctc_01_asme1_ap242-e1.stp", "written": "63.0.step", "verdict": "match", "why": ["dvol -2.03e-07 darea -8.16e-08"]}
+{"file": "nist/nist-pmi-step-files/NIST-PMI-STEP-Files/nist_ctc_02_asme1_ap242-e2.stp", "written": "64.0.step", "verdict": "ref-refused", "why": ["timeout"]}
+{"file": "nist/nist-pmi-step-files/NIST-PMI-STEP-Files/nist_ctc_03_asme1_ap242-e2.stp", "written": "65.0.step", "verdict": "match", "why": ["dvol -3.51e-15 darea 0.00e+00"]}
+{"file": "nist/nist-pmi-step-files/NIST-PMI-STEP-Files/nist_ctc_04_asme1_ap242-e1.stp", "written": "66.0.step", "verdict": "match", "why": ["dvol -3.41e-07 darea -2.29e-07"]}
+{"file": "nist/nist-pmi-step-files/NIST-PMI-STEP-Files/nist_ctc_05_asme1_ap242-e1.stp", "written": "67.0.step", "verdict": "ref-refused", "why": ["timeout"]}
+{"file": "nist/nist-pmi-step-files/NIST-PMI-STEP-Files/nist_ftc_06_asme1_ap242-e2.stp", "written": "68.0.step", "verdict": "match", "why": ["dvol -2.42e-07 darea -6.17e-07"]}
+{"file": "nist/nist-pmi-step-files/NIST-PMI-STEP-Files/nist_ftc_07_asme1_ap242-e2.stp", "written": "69.0.step", "verdict": "match", "why": ["dvol -1.84e-06 darea 2.35e-07"]}
+{"file": "nist/nist-pmi-step-files/NIST-PMI-STEP-Files/nist_ftc_08_asme1_ap242-e1-tg.stp", "verdict": "not-read", "why": ["the file holds no solid"]}
+{"file": "nist/nist-pmi-step-files/NIST-PMI-STEP-Files/nist_ftc_08_asme1_ap242-e2.stp", "written": "71.0.step", "verdict": "match", "why": ["dvol 1.16e-15 darea -4.55e-16"]}
+{"file": "nist/nist-pmi-step-files/NIST-PMI-STEP-Files/nist_ftc_09_asme1_ap242-e1.stp", "written": "72.0.step", "verdict": "match", "why": ["dvol -1.49e-15 darea 6.02e-16"]}
+{"file": "nist/nist-pmi-step-files/NIST-PMI-STEP-Files/nist_ftc_10_asme1_ap242-e2.stp", "written": "73.0.step", "verdict": "match", "why": ["dvol -1.43e-05 darea -5.58e-06"]}
+{"file": "nist/nist-pmi-step-files/NIST-PMI-STEP-Files/nist_ftc_11_asme1_ap242-e2.stp", "written": "74.0.step", "verdict": "match", "why": ["dvol 1.56e-06 darea -5.27e-06"]}
+{"file": "nist/nist-pmi-step-files/NIST-PMI-STEP-Files/nist_stc_06_asme1_ap242-e3.stp", "written": "75.0.step", "verdict": "match", "why": ["dvol 2.71e-12 darea 1.38e-12"]}
+{"file": "nist/nist-pmi-step-files/NIST-PMI-STEP-Files/nist_stc_08_asme1_ap242-e3.stp", "written": "77.0.step", "verdict": "match", "why": ["dvol -9.82e-09 darea 2.34e-09"]}
+{"file": "nist/nist-pmi-step-files/NIST-PMI-STEP-Files/nist_stc_09_asme1_ap242-e3.stp", "written": "78.0.step", "verdict": "match", "why": ["dvol -8.32e-15 darea 0.00e+00"]}
+{"file": "nist/nist-pmi-step-files/NIST-PMI-STEP-Files/nist_stc_10_asme1_ap242-e2.stp", "written": "79.0.step", "verdict": "ref-refused", "why": ["timeout"]}
+{"file": "occt/data/occ/Axis_of_bearing.brep", "written": "82.0.step", "verdict": "match", "why": ["dvol 2.99e-15 darea -1.23e-16"]}
+{"file": "occt/data/occ/Axis_of_bearing.brep", "written": "82.1.step", "verdict": "match", "why": ["dvol 3.68e-15 darea -7.22e-16"]}
+{"file": "occt/data/occ/Axis_of_bearing.brep", "written": "82.2.step", "verdict": "match", "why": ["dvol 1.27e-15 darea 1.41e-16"]}
+{"file": "occt/data/occ/Axis_of_bearing.brep", "written": "82.3.step", "verdict": "mismatch", "why": ["dvol -1.00e+00 darea -1.00e+00"]}
+{"file": "occt/data/occ/Axis_of_bearing.brep", "written": "82.4.step", "verdict": "mismatch", "why": ["dvol -1.00e+00 darea -1.00e+00"]}
+{"file": "occt/data/occ/Axis_of_bearing.brep", "written": "82.5.step", "verdict": "match", "why": ["dvol 4.45e-15 darea 9.90e-16"]}
+{"file": "occt/data/occ/Axis_of_bearing.brep", "written": "82.6.step", "verdict": "match", "why": ["dvol 2.54e-15 darea 9.90e-16"]}
+{"file": "occt/data/occ/Axis_of_bearing.brep", "written": "82.7.step", "verdict": "mismatch", "why": ["dvol -1.00e+00 darea -1.00e+00"]}
+{"file": "occt/data/occ/Axis_of_bearing.brep", "written": "82.8.step", "verdict": "match", "why": ["dvol 1.27e-15 darea 1.41e-16"]}
+{"file": "occt/data/occ/Axis_of_bearing.brep", "written": "82.9.step", "verdict": "mismatch", "why": ["dvol -1.00e+00 darea -1.00e+00"]}
+{"file": "occt/data/occ/Axis_of_bearing.brep", "written": "82.10.step", "verdict": "mismatch", "why": ["dvol -1.00e+00 darea -1.00e+00"]}
+{"file": "occt/data/occ/Axis_of_bearing.brep", "written": "82.11.step", "verdict": "match", "why": ["dvol 4.24e-15 darea 7.07e-16"]}
+{"file": "occt/data/occ/Axis_of_bearing.brep", "written": "82.12.step", "verdict": "match", "why": ["dvol 2.54e-15 darea 8.48e-16"]}
+{"file": "occt/data/occ/Axis_of_bearing.brep", "written": "82.13.step", "verdict": "mismatch", "why": ["dvol -1.00e+00 darea -1.00e+00"]}
+{"file": "occt/data/occ/Axis_of_bearing.brep", "written": "82.14.step", "verdict": "match", "why": ["dvol 5.95e-15 darea 4.88e-15"]}
+{"file": "occt/data/occ/Axis_of_bearing.brep", "written": "82.15.step", "verdict": "match", "why": ["dvol 3.87e-15 darea 3.67e-16"]}
+{"file": "occt/data/occ/Axis_of_bearing.brep", "written": "82.16.step", "verdict": "match", "why": ["dvol 2.97e-15 darea 8.63e-16"]}
+{"file": "occt/data/occ/Ball.brep", "written": "83.0.step", "verdict": "match", "why": ["dvol 1.45e-15 darea 5.74e-16"]}
+{"file": "occt/data/occ/Ball.brep", "written": "83.1.step", "verdict": "match", "why": ["dvol 1.22e-07 darea 2.34e-07"]}
+{"file": "occt/data/occ/CrankArm.brep", "written": "85.0.step", "verdict": "match", "why": ["dvol 4.37e-15 darea 1.17e-16"]}
+{"file": "occt/data/occ/CrankArm.brep", "written": "85.1.step", "verdict": "match", "why": ["dvol 4.54e-05 darea -2.35e-05"]}
+{"file": "occt/data/occ/MODERN_Chair_1.brep", "written": "87.0.step", "verdict": "match", "why": ["dvol 1.67e-15 darea 1.51e-16"]}
+{"file": "occt/data/occ/MODERN_Chair_1.brep", "written": "87.1.step", "verdict": "match", "why": ["dvol -9.85e-11 darea 8.91e-12"]}
+{"file": "occt/data/occ/MODERN_Chair_1.brep", "written": "87.2.step", "verdict": "match", "why": ["dvol -9.85e-11 darea 8.91e-12"]}
+{"file": "occt/data/occ/MODERN_Chair_1.brep", "written": "87.3.step", "verdict": "match", "why": ["dvol 1.61e-14 darea 2.84e-14"]}
+{"file": "occt/data/occ/MODERN_Cooker_1.brep", "written": "88.0.step", "verdict": "match", "why": ["dvol -3.43e-16 darea -2.26e-15"]}
+{"file": "occt/data/occ/MODERN_Cooker_1.brep", "written": "88.1.step", "verdict": "match", "why": ["dvol -2.05e-15 darea -2.65e-15"]}
+{"file": "occt/data/occ/MODERN_Cooker_1.brep", "written": "88.2.step", "verdict": "match", "why": ["dvol -7.45e-15 darea -8.94e-15"]}
+{"file": "occt/data/occ/MODERN_Cooker_1_opened.brep", "written": "89.0.step", "verdict": "match", "why": ["dvol -4.85e-15 darea -4.98e-15"]}
+{"file": "occt/data/occ/MODERN_Cooker_1_opened.brep", "written": "89.1.step", "verdict": "match", "why": ["dvol 3.60e-14 darea 7.46e-14"]}
+{"file": "occt/data/occ/MODERN_Exhaust_1.brep", "written": "90.0.step", "verdict": "match", "why": ["dvol -1.92e-15 darea -5.34e-16"]}
+{"file": "occt/data/occ/MODERN_Exhaust_1.brep", "written": "90.1.step", "verdict": "match", "why": ["dvol 3.51e-07 darea 2.23e-08"]}
+{"file": "occt/data/occ/MODERN_Exhaust_1.brep", "written": "90.2.step", "verdict": "match", "why": ["dvol 1.62e-15 darea -5.23e-15"]}
+{"file": "occt/data/occ/MODERN_MVCooker_1.brep", "written": "91.0.step", "verdict": "match", "why": ["dvol 4.04e-16 darea -1.88e-16"]}
+{"file": "occt/data/occ/MODERN_MVCooker_1_opened.brep", "written": "92.0.step", "verdict": "match", "why": ["dvol -2.63e-10 darea 1.03e-15"]}
+{"file": "occt/data/occ/MODERN_Refrigerator_1.brep", "written": "93.0.step", "verdict": "match", "why": ["dvol 1.54e-15 darea -1.12e-16"]}
+{"file": "occt/data/occ/MODERN_Refrigerator_1.brep", "written": "93.1.step", "verdict": "match", "why": ["dvol 2.41e-16 darea 0.00e+00"]}
+{"file": "occt/data/occ/MODERN_Refrigerator_1_opened.brep", "written": "94.0.step", "verdict": "match", "why": ["dvol -1.26e-10 darea -7.07e-12"]}
+{"file": "occt/data/occ/MODERN_Refrigerator_1_opened.brep", "written": "94.1.step", "verdict": "match", "why": ["dvol -8.29e-11 darea -3.22e-12"]}
+{"file": "occt/data/occ/MODERN_Refrigerator_1_opened.brep", "written": "94.2.step", "verdict": "match", "why": ["dvol 2.55e-14 darea 2.24e-14"]}
+{"file": "occt/data/occ/MODERN_Refrigerator_1_opened.brep", "written": "94.3.step", "verdict": "match", "why": ["dvol 8.93e-15 darea -2.77e-15"]}
+{"file": "occt/data/occ/MODERN_Sink_1.brep", "written": "95.0.step", "verdict": "match", "why": ["dvol 1.41e-15 darea 9.03e-16"]}
+{"file": "occt/data/occ/MODERN_Sink_1.brep", "written": "95.1.step", "verdict": "match", "why": ["dvol -7.10e-15 darea -1.50e-15"]}
+{"file": "occt/data/occ/MODERN_Sink_1_opened.brep", "written": "96.0.step", "verdict": "match", "why": ["dvol 8.27e-15 darea 1.55e-14"]}
+{"file": "occt/data/occ/MODERN_Sink_1_opened.brep", "written": "96.1.step", "verdict": "match", "why": ["dvol 3.10e-15 darea 2.40e-14"]}
+{"file": "occt/data/occ/MODERN_Sink_1_opened.brep", "written": "96.2.step", "verdict": "match", "why": ["dvol -1.29e-15 darea -2.41e-16"]}
+{"file": "occt/data/occ/MODERN_Sink_1_opened.brep", "written": "96.3.step", "verdict": "match", "why": ["dvol -1.16e-15 darea -2.41e-16"]}
+{"file": "occt/data/occ/MODERN_Table_1.brep", "written": "97.0.step", "verdict": "match", "why": ["dvol -2.96e-11 darea -1.92e-12"]}
+{"file": "occt/data/occ/Motor-c.brep", "written": "98.0.step", "verdict": "match", "why": ["dvol -1.04e-13 darea -1.63e-14"]}
+{"file": "occt/data/occ/Motor-c.brep", "written": "98.1.step", "verdict": "match", "why": ["dvol -7.16e-08 darea -1.40e-07"]}
+{"file": "occt/data/occ/Motor-c.brep", "written": "98.2.step", "verdict": "match", "why": ["dvol -9.93e-09 darea -1.26e-09"]}
+{"file": "occt/data/occ/Motor-c.brep", "written": "98.3.step", "verdict": "match", "why": ["dvol 9.97e-16 darea -1.06e-15"]}
+{"file": "occt/data/occ/Motor-c.brep", "written": "98.4.step", "verdict": "match", "why": ["dvol 0.00e+00 darea 0.00e+00"]}
+{"file": "occt/data/occ/Motor-c.brep", "written": "98.5.step", "verdict": "match", "why": ["dvol -1.69e-13 darea 6.63e-16"]}
+{"file": "occt/data/occ/Motor-c.brep", "written": "98.6.step", "verdict": "match", "why": ["dvol 4.41e-15 darea 2.76e-15"]}
+{"file": "occt/data/occ/Motor-c.brep", "written": "98.7.step", "verdict": "match", "why": ["dvol 2.63e-15 darea 9.87e-16"]}
+{"file": "occt/data/occ/Motor-c.brep", "written": "98.8.step", "verdict": "match", "why": ["dvol -3.18e-08 darea 2.41e-08"]}
+{"file": "occt/data/occ/Motor-c.brep", "written": "98.9.step", "verdict": "match", "why": ["dvol 4.60e-15 darea 2.76e-15"]}
+{"file": "occt/data/occ/Motor-c.brep", "written": "98.10.step", "verdict": "match", "why": ["dvol 4.03e-15 darea 6.69e-16"]}
+{"file": "occt/data/occ/Motor-c.brep", "written": "98.11.step", "verdict": "match", "why": ["dvol 3.88e-15 darea 4.53e-16"]}
+{"file": "occt/data/occ/Motor-c.brep", "written": "98.12.step", "verdict": "match", "why": ["dvol 1.65e-12 darea 7.41e-16"]}
+{"file": "occt/data/occ/Motor-c.brep", "written": "98.13.step", "verdict": "invalid", "why": ["OCCT: not valid"]}
+{"file": "occt/data/occ/Motor-c.brep", "written": "98.14.step", "verdict": "match", "why": ["dvol -5.54e-09 darea 3.72e-09"]}
+{"file": "occt/data/occ/Motor-c.brep", "written": "98.15.step", "verdict": "match", "why": ["dvol 3.45e-15 darea 1.47e-15"]}
+{"file": "occt/data/occ/Motor-c.brep", "written": "98.16.step", "verdict": "match", "why": ["dvol -3.99e-14 darea -9.80e-14"]}
+{"file": "occt/data/occ/Pump_Nut.brep", "written": "99.0.step", "verdict": "match", "why": ["dvol -3.43e-10 darea -1.90e-10"]}
+{"file": "occt/data/occ/Pump_TopCover.brep", "written": "100.0.step", "verdict": "match", "why": ["dvol -6.12e-08 darea -3.34e-08"]}
+{"file": "occt/data/occ/bottle.brep", "written": "104.0.step", "verdict": "mismatch", "why": ["dvol -4.42e-04 darea -1.56e-05"]}
+{"file": "occt/data/occ/mal_ecrou.brep", "written": "111.0.step", "verdict": "match", "why": ["dvol 2.87e-15 darea 6.27e-16"]}
+{"file": "occt/data/occ/mal_tige.brep", "written": "112.0.step", "verdict": "match", "why": ["dvol 1.46e-15 darea -1.84e-16"]}
+{"file": "occt/data/occ/solid.brep", "written": "115.0.step", "verdict": "match", "why": ["dvol 1.46e-15 darea -1.84e-16"]}
+{"file": "occt/data/occ/wedge_ok.brep", "written": "117.0.step", "verdict": "match", "why": ["dvol -6.09e-16 darea -8.09e-16"]}
+{"file": "occt/data/step/linkrods.step", "written": "119.0.step", "verdict": "ref-refused", "why": ["timeout"]}
+{"file": "occt/data/step/screw.step", "written": "120.0.step", "verdict": "mismatch", "why": ["dvol 3.85e+02 darea 2.73e+01"]}
+{"file": "pythonocc-demos/assets/models/11752.stp", "written": "121.0.step", "verdict": "ref-refused", "why": ["exit 1"]}
+{"file": "pythonocc-demos/assets/models/KR600_R2830-4.stp", "verdict": "not-read", "why": ["timeout"]}
+{"file": "pythonocc-demos/assets/models/Motor-c.brep", "written": "123.0.step", "verdict": "match", "why": ["dvol -1.04e-13 darea -1.63e-14"]}
+{"file": "pythonocc-demos/assets/models/Motor-c.brep", "written": "123.1.step", "verdict": "match", "why": ["dvol -7.16e-08 darea -1.40e-07"]}
+{"file": "pythonocc-demos/assets/models/Motor-c.brep", "written": "123.2.step", "verdict": "match", "why": ["dvol -9.93e-09 darea -1.26e-09"]}
+{"file": "pythonocc-demos/assets/models/Motor-c.brep", "written": "123.3.step", "verdict": "match", "why": ["dvol 9.97e-16 darea -1.06e-15"]}
+{"file": "pythonocc-demos/assets/models/Motor-c.brep", "written": "123.4.step", "verdict": "match", "why": ["dvol 0.00e+00 darea 0.00e+00"]}
+{"file": "pythonocc-demos/assets/models/Motor-c.brep", "written": "123.5.step", "verdict": "match", "why": ["dvol -1.69e-13 darea 6.63e-16"]}
+{"file": "pythonocc-demos/assets/models/Motor-c.brep", "written": "123.6.step", "verdict": "match", "why": ["dvol 4.41e-15 darea 2.76e-15"]}
+{"file": "pythonocc-demos/assets/models/Motor-c.brep", "written": "123.7.step", "verdict": "match", "why": ["dvol 2.63e-15 darea 9.87e-16"]}
+{"file": "pythonocc-demos/assets/models/Motor-c.brep", "written": "123.8.step", "verdict": "match", "why": ["dvol -3.18e-08 darea 2.41e-08"]}
+{"file": "pythonocc-demos/assets/models/Motor-c.brep", "written": "123.9.step", "verdict": "match", "why": ["dvol 4.60e-15 darea 2.76e-15"]}
+{"file": "pythonocc-demos/assets/models/Motor-c.brep", "written": "123.10.step", "verdict": "match", "why": ["dvol 4.03e-15 darea 6.69e-16"]}
+{"file": "pythonocc-demos/assets/models/Motor-c.brep", "written": "123.11.step", "verdict": "match", "why": ["dvol 3.88e-15 darea 4.53e-16"]}
+{"file": "pythonocc-demos/assets/models/Motor-c.brep", "written": "123.12.step", "verdict": "match", "why": ["dvol 1.65e-12 darea 7.41e-16"]}
+{"file": "pythonocc-demos/assets/models/Motor-c.brep", "written": "123.13.step", "verdict": "invalid", "why": ["OCCT: not valid"]}
+{"file": "pythonocc-demos/assets/models/Motor-c.brep", "written": "123.14.step", "verdict": "match", "why": ["dvol -5.54e-09 darea 3.72e-09"]}
+{"file": "pythonocc-demos/assets/models/Motor-c.brep", "written": "123.15.step", "verdict": "match", "why": ["dvol 3.45e-15 darea 1.47e-15"]}
+{"file": "pythonocc-demos/assets/models/Motor-c.brep", "written": "123.16.step", "verdict": "match", "why": ["dvol -3.99e-14 darea -9.80e-14"]}
+{"file": "pythonocc-demos/assets/models/RC_Buggy_2_front_suspension.stp", "verdict": "not-read", "why": ["timeout"]}
+{"file": "pythonocc-demos/assets/models/Ventilator.stp", "written": "125.0.step", "verdict": "ref-refused", "why": ["timeout"]}
+{"file": "pythonocc-demos/assets/models/as1-oc-214.stp", "written": "126.0.step", "verdict": "match", "why": ["dvol -5.05e-07 darea -9.07e-07"]}
+{"file": "pythonocc-demos/assets/models/as1-oc-214.stp", "written": "126.1.step", "verdict": "match", "why": ["dvol 1.86e-06 darea 4.12e-07"]}
+{"file": "pythonocc-demos/assets/models/as1-oc-214.stp", "written": "126.2.step", "verdict": "match", "why": ["dvol -1.72e-07 darea 7.25e-07"]}
+{"file": "pythonocc-demos/assets/models/as1-oc-214.stp", "written": "126.3.step", "verdict": "match", "why": ["dvol -1.81e-07 darea -8.12e-08"]}
+{"file": "pythonocc-demos/assets/models/as1-oc-214.stp", "written": "126.4.step", "verdict": "match", "why": ["dvol -3.30e-08 darea -4.11e-08"]}
+{"file": "pythonocc-demos/assets/models/as1_pe_203.stp", "written": "127.0.step", "verdict": "match", "why": ["dvol 6.58e-16 darea 0.00e+00"]}
+{"file": "pythonocc-demos/assets/models/as1_pe_203.stp", "written": "127.1.step", "verdict": "match", "why": ["dvol 0.00e+00 darea 0.00e+00"]}
+{"file": "pythonocc-demos/assets/models/as1_pe_203.stp", "written": "127.2.step", "verdict": "match", "why": ["dvol 2.25e-15 darea 0.00e+00"]}
+{"file": "pythonocc-demos/assets/models/as1_pe_203.stp", "written": "127.3.step", "verdict": "match", "why": ["dvol 0.00e+00 darea 2.42e-16"]}
+{"file": "pythonocc-demos/assets/models/as1_pe_203.stp", "written": "127.4.step", "verdict": "match", "why": ["dvol 2.32e-15 darea 2.24e-16"]}
+{"file": "pythonocc-demos/assets/models/curve_geom_plate.igs", "verdict": "not-read", "why": ["the file holds no solid"]}
+{"file": "pythonocc-demos/assets/models/cylinder_head.brep", "written": "129.0.step", "verdict": "match", "why": ["dvol 1.15e-06 darea 2.49e-06"]}
+{"file": "pythonocc-demos/assets/models/face_recognition_sample_part.stp", "written": "130.0.step", "verdict": "match", "why": ["dvol 4.56e-16 darea 2.34e-16"]}
+{"file": "pythonocc-demos/assets/models/splinecage.stp", "verdict": "not-read", "why": ["the file holds no solid"]}
+{"file": "pythonocc-demos/assets/models/surf114.igs", "verdict": "not-read", "why": ["the file holds no solid"]}

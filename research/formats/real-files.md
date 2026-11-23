@@ -14,7 +14,7 @@ other format, and STEP, IGES and .brep from new sources. Each format has:
 Branch claude/repo-review-mbdrlj-formats-corpus, on import-robust (ad8c3d7), which has the new
 STL/OBJ/3MF readers. No dataset file is in the repository. The files were staged outside it, and
 `manifest/` lists every file used (source, URL, commit, path, bytes, sha256, licence). Every bug
-below is a repro made from nothing (`repro/`), apart from two that are marked.
+below is a repro made from nothing (`repro/`, or a committed test), apart from those marked (7 and 14, which point at public files).
 
 How results were adjudicated: where the rule called a file a mismatch and the cause was the
 reference, a second step settled it. Each such step is a declared function in the judge, run on
@@ -26,16 +26,16 @@ counted, and the correction is written where it was made (in the script and belo
 
 | format | read / write | corpus (files) | result |
 |---|---|---|---|
-| STL | read | Thingi10K every 20th (495), assimp+trimesh tests (36) | **all match** after adjudication (0 refused, 0 crash) |
+| STL, OBJ | read | **all of Thingi10K (10 000)**, assimp+trimesh tests (36), slicers' own models (622) | Thingi10K: 9992 match after adjudication, 1 truncated file refused, 0 crash; the rest below |
 | OBJ | read | Thingi10K's 42, common-3d-test-models, assimp, trimesh (125) | 110 match (9 after adjudication); 3 refused (1 bug) |
-| 3MF | read | 3MF Consortium test suites 2.4.1, 3mf-samples, assimp, trimesh (2361) | positives: 1411 match, 0 mismatch; 69 refused (3 bugs) |
+| 3MF | read | 3MF Consortium test suites 2.4.1, 3mf-samples, assimp, trimesh (2361); lib3mf, Cura, PrusaSlicer, OrcaSlicer and BambuStudio's own files (216) | positives: 1411 match, 0 mismatch; 69 refused (3 bugs); slicers' 216: 162 match, 28 refused (25 of them ZIP64, bug 3) |
 | STL | write | the STL and OBJ above, written back (656) | every STL source bit-equal; OBJ sources equal but for topology STL cannot hold |
 | STEP / IGES / .brep | read | NIST PMI CAD models (44), OCCT data (41), FreeCAD (34), pythonocc-demos (13), cadquery, libredwg (2); ABC every 40th of chunk 0 (250) | see §2: 4 bugs, one of them silent |
-| STEP | write | the repository's parts (173 with a solid), the real files above | parts: 173/173 match; real files: §2 |
-| DWG | read | LibreDWG (142), LibreCAD (25), GDAL (8), ezdxf (5) test files (180) | all 155 read match (4 after adjudication); of the 160 R2000+ files, 4 refused (1 bug) and 1 a truncated test file; 20 pre-R2000 refused by design |
+| STEP | write | the repository's parts (173 with a solid), the real files above | parts: 173/173 match; real files: 161 of the 178 solids that read valid come back matching, 1 writer bug (14) |
+| DWG | read | LibreDWG (142), LibreCAD (25), GDAL (8), ezdxf (5) test files (180); after ec20825 the 4 LibreCAD files read too | all 155 read match (4 after adjudication); of the 160 R2000+ files, 4 refused (1 bug) and 1 a truncated test file; 20 pre-R2000 refused by design |
 | DWG | write | the 155 read, written back | 155/155 read by dwgread as the original |
 | DXF | write | every sheet flat pattern in the repository (39) | 39/39: ezdxf reads them, audit clean, the same entities as the DWG |
-| TTF | read | Google Fonts every 20th (197), Adobe Source (188), Unicode text-rendering-tests (85), fonts in FreeCAD/ezdxf/GDAL/cadquery (32) | 388 k code points: all glyph ids and advances equal; outlines equal but for FreeType's side-bearing placement (1 low bug) |
+| TTF | read | **all of Google Fonts (3924 files)**, Adobe Source (188), Unicode text-rendering-tests (85), fonts in FreeCAD/ezdxf/GDAL/cadquery (32) | 5.4 M code points: every glyph id and advance equal; outlines equal but for FreeType's side-bearing placement (bug 9) and zero-area contours |
 | OTF (CFF) | read | the same | 113 of 502 fonts refused by design (CFF) |
 | SHX | read | ezdxf's 4 stroke fonts and 1 shape file (5 files, 21 230 shapes) | 5/5 match |
 | FCStd | read | FreeCAD's own test and example documents (59) | 34 of 35 translated bodies match FreeCAD's stored shape; 1 silent bug |
@@ -50,18 +50,20 @@ the reference.
 | # | format | bug | real files | repro | severity |
 |---|---|---|---|---|---|
 | 1 | FCStd | FreeCAD 1.1's `SideType` (0 one side, 1 two sides, 2 symmetric) is not read. FreeCAD 1.1 deprecates `Midplane` and leaves it false, so a symmetric or two-sided pad or pocket is translated one-sided: wrong geometry, reported as "translated" | FreeCAD's own data/examples/PartDesignExample.FCStd: 36% low, first divergence at its Mirrored | `fcstd_sidetype.rs`: a test in forge-import's fcstd.rs style. Fails today: "symmetric: centroid z 5 vs 0" | high |
-| 2 | STEP | An assembly's instances are not expanded: each part is read once, wherever and however often it is placed. No refusal, so the total is silently short | as1-ac-214 / as1-oc-214 / as1_pe_203 (5 of 18 solids, volume −15%), as1-ac-214_small (3 of 5), libredwg's ACEB10 (3 of 7) | `two-instances.step` (XCAF, one box placed twice): ours 1 solid, 1000; OCCT 2, 2000 | high |
-| 3 | 3MF, FCStd | ZIP64 packages are refused as "not a zip package". forge-import's zip.rs reads only the classic end record, and FCStd uses the same Zip | consortium positive P_XXX_2202_01 | `tetra-zip64.3mf`: lib3mf and Python's zipfile read it; `tetra.3mf`, the same package without ZIP64, reads | medium |
-| 4 | .brep, STEP | Tori whose major radius is not past the minor one (horn R = r, spindle R < r) are refused ("torus: radii 10 and 10"), or read as volume 0 | OCCT's Bottom.brep, Top.brep, mal_vis.brep (refused); MODERN_Sink_1.brep (one of 3 solids refused) | `horn-torus.brep`: ours volume 0, OCCT 19739.21. `spindle-torus.brep`: ours FaceWrongSide and volume 0, OCCT 6516.87. (`horn-torus.step` reads right but warned) | medium |
-| 5 | STEP | A LINE whose origin lies more than 1 km along it refuses the whole file ("CARTESIAN_POINT: outside the 1 km model box"). Its edge is near the part, and such a LINE is valid; CATIA writes them | NIST nist_stc_07_asme1_ap242-e3 (origin 169 m out; OCCT: 1 valid solid) | `far-line-origin.step`: a box whose one LINE origin is moved 2 km along the line. Ours refuses; OCCT reads 1000 | medium |
+| 2 | STEP | **Fixed here (4687a3d).** An assembly's instances are not expanded: each part is read once, wherever and however often it is placed. No refusal, so the total is silently short | as1-ac-214 / as1-oc-214 / as1_pe_203 (5 of 18 solids, volume −15%), as1-ac-214_small (3 of 5), libredwg's ACEB10 (3 of 7) | `two-instances.step` (XCAF, one box placed twice): ours 1 solid, 1000; OCCT 2, 2000 | high |
+| 3 | 3MF, FCStd | ZIP64 packages are refused as "not a zip package". forge-import's zip.rs reads only the classic end record, and FCStd uses the same Zip. Slicers write ZIP64 even for 120 kB files | consortium positive P_XXX_2202_01; **25 slicer files**: BambuStudio and OrcaSlicer's calibration 3MF, Cura's printer platforms, 18 of lib3mf's own | `tetra-zip64.3mf`: lib3mf and Python's zipfile read it; `tetra.3mf`, the same package without ZIP64, reads | **high** (import-robust's) |
+| 4 | .brep, STEP | **Fixed here (512ddac).** Tori whose major radius is not past the minor one (horn R = r, spindle R < r) are refused ("torus: radii 10 and 10"), or read as volume 0 | OCCT's Bottom.brep, Top.brep, mal_vis.brep (refused); MODERN_Sink_1.brep (one of 3 solids refused) | `horn-torus.brep`: ours volume 0, OCCT 19739.21. `spindle-torus.brep`: ours FaceWrongSide and volume 0, OCCT 6516.87. (`horn-torus.step` reads right but warned) | medium |
+| 5 | STEP | **Fixed here (8164af8)**, with cylinders' axes and planes' origins (Onshape writes those 500 m out). A LINE whose origin lies more than 1 km along it refuses the whole file ("CARTESIAN_POINT: outside the 1 km model box"). Its edge is near the part, and such a LINE is valid; CATIA writes them | NIST nist_stc_07_asme1_ap242-e3 (origin 169 m out; OCCT: 1 valid solid) | `far-line-origin.step`: a box whose one LINE origin is moved 2 km along the line. Ours refuses; OCCT reads 1000 | medium |
 | 6 | 3MF | A `requiredextensions` entry we don't know is read as core. The spec says a consumer must refuse it, and a required extension (displacement, booleans) can change the geometry | consortium negative N_XXX_0428 (read, not refused) | `tetra-required-unknown.3mf`: ours reads it | medium |
-| 7 | DWG | R2004+ files written by LibreCAD's DWG writer are refused: "compressed data ends early" (R2004, R2013) or "past the end" (R2007). dwgread reads all four | LibreCAD's tests: ordinary_enc_AC1018/AC1021/AC1027/ac1027_ansi932 | no synthetic repro: making one needs that writer's compressor. The files are public (LibreCAD @954217a, GPL-2), so this is the one bug that points at the source files | medium–low |
+| 7 | DWG | **Fixed in part here (ec20825): all four read, R2004 as dwgread does; R2007/R2013's objects mostly stay raw.** R2004+ files written by LibreCAD's DWG writer are refused: "compressed data ends early" (R2004, R2013) or "past the end" (R2007). dwgread reads all four | LibreCAD's tests: ordinary_enc_AC1018/AC1021/AC1027/ac1027_ansi932 | no synthetic repro: making one needs that writer's compressor. The files are public (LibreCAD @954217a, GPL-2), so this is the one bug that points at the source files | medium–low |
 | 8 | FCStd, 3MF | Refused rather than read: a sketch's GeomEllipse, AdditiveSphere, a chain through Part::Feature, pad type 3 (FCStd); OFFSET_SURFACE, AP242 tessellated solids (STEP). Named refusals, so gaps rather than faults | FreeCAD's Drilling_1, TestTangentMode3, hole_puzzle, PadTest/PocketTest; ABC 00002480; NIST nist_ftc_08_asme1_ap242-e1-tg | none: features to add (coverage.md's) | low (gaps) |
 | 9 | TTF | A glyph is placed by its glyf coordinates where FreeType moves it by hmtx lsb − xMin (the phantom point). It shifts 6875 glyphs in 39 fonts, nearly all by 1 unit (DejaVu, Halant, the Unicode tests' Lana by 91) | §5 | `lsb-not-xmin.ttf`: a 100-unit square at x 100, lsb 90. FreeType 2.13.2 puts it at 90..190, ours at 100..200 | low |
 | 10 | 3MF | A build item in another model part (production extension, `p:path`) is refused as "no object 1". Components with p:path are refused by name | 27 consortium positives (P_XPX_0705_01 and others) | `build-item-path.3mf` | low (message) |
 | 11 | 3MF | A member past the 256 MB cap is refused with "not a zip package (or one whose members would inflate past the caps)". The cap is by design; the message hides which applies | P_*_0909_04/06 (a 380 MB model) | (by size: none made) | low (message) |
 | 12 | OBJ | A line continued with `\` is refused ("\\" is not a vertex index). The format allows it, and trimesh and assimp read it | trimesh's wallhole.obj | `continuation.obj` | low |
 | 13 | TTF | cmap format 13 and Mac-only cmaps: "no Unicode cmap of format 4 or 12" | TestCMAP13, TestCMAPMacTurkish | — | low |
+| 14 | STEP write | A solid of OCCT's Motor-c.brep (solid 13) exports a B-spline face OCCT finds invalid (area -1.56, the solid's volume 1.9e89); every other of the 178 solids read valid comes back right | OCCT data/occ/Motor-c.brep (public, LGPL) | not reduced yet: the face is one the writer fits | medium |
+| 15 | STL | A binary STL one triangle short of its count is refused (numpy-stl and trimesh read the triangles there are) | Thingi10K 1 of 10 000 | (truncate any binary STL by 50 bytes) | low |
 
 The STEP and .brep problems that robustness.md already ranks are not repeated as new bugs. They
 are FaceWrongSide/LoopsCross on periodic faces (OCCT's Axis_of_bearing, Ball, screw.step,
@@ -71,6 +73,41 @@ owners.
 
 These were sent to import-robust (session_01Q19M119KWVSR9GxEW1HRUD), which owns the readers, for
 the master to route. This work wrote no fuzzer and changed no reader.
+
+## Fixed here
+
+At the master's direction (bugs 2, 4, 5 and 7; 1, 3, 6 and 10–12 went to import-robust, 9 to
+sketch-text), one commit each, each with its repro as a committed test. Each passes these gates:
+
+- reliability: 0 worse;
+- the speed gate (callgrind): 0 regressed, bits identical;
+- the readers' bit gate on real files: `bits.py`, the previous commit's stepread against the new
+  one on all 384 real STEP/.brep files; for DWG, the probe on all 180 DWG. Only the files of the
+  bug changed.
+
+| commit | bug | real files changed (of 384 STEP/.brep, or 180 DWG) |
+|---|---|---|
+| 8164af8 | 5: an origin far along its line, axis or plane | 4: NIST stc_07 refused → OCCT's volume to 3.5e-7; ABC 00007400 82 → 87 solids, to 4e-12; ABC 00005760 one more solid (OCCT times out on it); ABC 00007680 refuses later, at a linear extrusion whose profile lies 500 m along it (not done) |
+| 4687a3d | 2: assembly placements | 11: as1-ac-214, as1-oc-214, as1_pe_203 5 → 18 solids, OCCT's to 1e-9; as1-ac-214_small 3 → 5; ACEB10 3 → 7; RC_Buggy 91 → 211, OCCT's count (still invalid: a broken part, now in all its places); 5 NIST PMI files lose only an assembly ask |
+| 512ddac | 4: tori through their axis; whole faces bounded by a seam | 5, all OCCT .brep: mal_vis refused → OCCT's volume; MODERN_Sink_1 2 → 3 solids, to 1e-9; Axis_of_bearing 12 FaceWrongSide → none, to 2e-15; Bottom refused → read (FaceWrongSide on a cylinder, the seam class); Top refuses later, at a cone of half angle -90 degrees |
+| ec20825 | 7: LibreCAD's DWG | 4, all LibreCAD's: AC1018 refused → matches dwgread; AC1021, AC1027 ×2 refused → read, but most objects raw (4–29 data bits left past their fields) |
+
+A whole horn torus is pinched at its centre. Its volume and area read right, but the kernel's
+topology has no such vertex, and the check says so.
+
+## At scale
+
+At the owner's direction: thousands of files, not hundreds. These runs stream and resume
+(`stream.py`): fetch a batch, judge it by the same rule and adjudication, append each file's
+verdict with its hash, and delete the batch. Large STEP is scale-step's.
+
+| corpus | files | match (after adjudication) | refused | crash / timeout | notes |
+|---|---|---|---|---|---|
+| Thingi10K, all | 10 000 | 9992 | 1 (a binary STL one triangle short) | 0 / 0 | 2 OFF/PLY (not ours), 2 both refuse, 2 the reference refuses, 1 judge artefact (volumes of 1e-12) |
+| Google Fonts, all | 3924 (5.07 M code points) | 3822 | 0 | 0 / 0 | 102 differ only by zero-area contours ours drops (same area and box) |
+| Slicers and lib3mf's own files | 844 (216 3MF, 115 OBJ, 513 STL) | 784 | 28 3MF (25 ZIP64, 3 p:path) | 0 / 0 | 26 both refuse, 6 lib3mf refuses |
+| ABC chunk 0000 OBJ meshes | 7168 | ABC_OBJ | | | |
+| ABC chunk 0000 STEP, all, after the fixes | 10 000 | ABC_FULL | | | |
 
 ## 1. Meshes: STL, OBJ, 3MF
 
@@ -247,7 +284,16 @@ The mismatches and refusals, by cause:
     sheet parts whose flat pattern is a second body. Corrected before counting: those parts were
     right.
 - **Real files** (`write`): each solid we read is exported and held, through OCCT, to our own
-  body's volume and area to 1e-4. STEPW_REAL.
+  body's volume and area to 1e-4. Of 196 solids, 178 read valid, and of those:
+  - 161 match;
+  - 6 OCCT timed out on;
+  - 2 are uncertain under the truth rule;
+  - helix1's is our read's own warned body;
+  - bottle.brep's export is right (OCCT measures it at OCCT's own truth to 2e-6), but our measure of
+    the body as read is 4.4e-4 low (robustness.md's "genuinely off" class);
+  - Motor-c's solid 13 exports a face OCCT finds invalid (bug 14).
+
+  The 18 that read invalid are the reader's, not the writer's, and are left out.
 
 ## 3. DWG and DXF
 
@@ -395,6 +441,12 @@ dxf_judge.py target/release/forgecad DWGREAD OUT @FG_LIST
 font_judge.py run|shx target/release/formats-probe OUT @LIST;  font_judge.py adjudicate PROBE OUT
 fcstd_judge.py target/release/formats-probe target/release/forgecad OUT WORK @LIST
 repro/make.py DIR; repro/make_brep.py DIR; repro/make_font.py DIR
+# at scale, streamed and resumable (stream.py):
+stream.py thingi PROBE OUT META_DIR --batch 100 --jobs 2              # all of Thingi10K
+stream.py urls font PROBE OUT https://raw.githubusercontent.com/google/fonts/COMMIT/ @PATHS
+stream.py abc PROBE OUT abc_0000_obj_v00.7z --jobs 2                   # one pass over the 7z
+stream.py files mesh PROBE OUT @LIST;  stream.py report OUT
+bits.py BASE_STEPREAD NEW_STEPREAD OUT @LIST                           # a reader fix's bit gate
 ```
 
 `results/` holds every file's verdict and cause (paths relative to the source), from which the

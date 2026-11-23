@@ -1,0 +1,844 @@
+{"id":"x_BambuStudio/resources/calib/filament_flow/flowrate-test-pass1.3mf","verdict":"refused","why":["byte 0: not a zip package (or one whose members would inflate past the caps)"]}
+{"id":"x_BambuStudio/resources/calib/filament_flow/flowrate-test-pass2.3mf","verdict":"refused","why":["byte 0: not a zip package (or one whose members would inflate past the caps)"]}
+{"id":"x_BambuStudio/resources/calib/pressure_advance/auto_pa_line_dual.3mf","verdict":"refused","why":["line 20 (byte 1107): 3D/3dmodel.model: a component in another model file (production extension) is not read"]}
+{"id":"x_BambuStudio/resources/calib/pressure_advance/auto_pa_line_single.3mf","verdict":"refused","why":["line 20 (byte 1117): 3D/3dmodel.model: a component in another model file (production extension) is not read"]}
+{"id":"x_BambuStudio/resources/calib/pressure_advance/auto_pa_line_single_all.3mf","verdict":"refused","why":["line 23 (byte 1252): 3D/3dmodel.model: a component in another model file (production extension) is not read"]}
+{"id":"x_BambuStudio/resources/calib/pressure_advance/pa_pattern.3mf","verdict":"both-refused","why":["line 18 (byte 960): 3D/3dmodel.model: a component in another model file (production extension) is not read"]}
+{"id":"x_BambuStudio/resources/calib/pressure_advance/pressure_advance_test.stl","verdict":"match","triangles":2532}
+{"id":"x_BambuStudio/resources/calib/pressure_advance/tower.stl","verdict":"match","triangles":6332}
+{"id":"x_BambuStudio/resources/calib/pressure_advance/tower_with_seam.stl","verdict":"match","triangles":604}
+{"id":"x_BambuStudio/resources/calib/retraction/retraction_tower.stl","verdict":"match","triangles":35328}
+{"id":"x_BambuStudio/resources/calib/temperature_tower/temperature_tower.stl","verdict":"match","triangles":63728}
+{"id":"x_BambuStudio/resources/calib/vfa/VFA.stl","verdict":"match","triangles":29752}
+{"id":"x_BambuStudio/resources/model/3DBenchy.stl","verdict":"match","triangles":225154}
+{"id":"x_BambuStudio/resources/model/Bambu_Cube.stl","verdict":"match","triangles":868}
+{"id":"x_BambuStudio/resources/model/Bambu_Cube_V2.stl","verdict":"match","triangles":13318}
+{"id":"x_BambuStudio/resources/model/Disc.stl","verdict":"match","triangles":1440}
+{"id":"x_BambuStudio/resources/model/TearDrop.stl","verdict":"match","triangles":2074}
+{"id":"x_BambuStudio/resources/model/cone.stl","verdict":"match","triangles":510}
+{"id":"x_BambuStudio/resources/model/double_tear_romboid_cylinder.stl","verdict":"match","triangles":380}
+{"id":"x_BambuStudio/resources/model/ksr_FDMTest.stl","verdict":"match","triangles":57546}
+{"id":"x_BambuStudio/resources/model/rounded_rectangle.stl","verdict":"match","triangles":124}
+{"id":"x_BambuStudio/resources/model/torus.stl","verdict":"match","triangles":3072}
+{"id":"x_BambuStudio/resources/profiles/Anker/M5-CE-bed.stl","verdict":"match","triangles":720}
+{"id":"x_BambuStudio/resources/profiles/Anker/M5C-CE-bed.stl","verdict":"match","triangles":440}
+{"id":"x_BambuStudio/resources/profiles/Anycubic/anycubic_4maxpro2_buildplate_model.stl","verdict":"match","triangles":108}
+{"id":"x_BambuStudio/resources/profiles/Anycubic/anycubic_4maxpro_buildplate_model.stl","verdict":"match","triangles":108}
+{"id":"x_BambuStudio/resources/profiles/Anycubic/anycubic_chiron_buildplate_model.stl","verdict":"match","triangles":108}
+{"id":"x_BambuStudio/resources/profiles/Anycubic/anycubic_i3megas_buildplate_model.stl","verdict":"match","triangles":108}
+{"id":"x_BambuStudio/resources/profiles/Anycubic/anycubic_kobra2_buildplate_model.stl","verdict":"match","triangles":372}
+{"id":"x_BambuStudio/resources/profiles/Anycubic/anycubic_kobramax_buildplate_model.stl","verdict":"match","triangles":372}
+{"id":"x_BambuStudio/resources/profiles/Anycubic/anycubic_kobraplus_buildplate_model.stl","verdict":"match","triangles":372}
+{"id":"x_BambuStudio/resources/profiles/Anycubic/anycubic_vyper_buildplate_model.stl","verdict":"match","triangles":372}
+{"id":"x_BambuStudio/resources/profiles/Anycubic/elegoo_neptune4_buildplate_model.stl","verdict":"match","triangles":372}
+{"id":"x_BambuStudio/resources/profiles/Anycubic/elegoo_neptune4max_buildplate_model.stl","verdict":"match","triangles":372}
+{"id":"x_BambuStudio/resources/profiles/Anycubic/elegoo_neptune4plus_buildplate_model.stl","verdict":"match","triangles":372}
+{"id":"x_BambuStudio/resources/profiles/Anycubic/elegoo_neptune4pro_buildplate_model.stl","verdict":"match","triangles":372}
+{"id":"x_BambuStudio/resources/profiles/BBL/bbl-3dp-A1M.stl","verdict":"match","triangles":960}
+{"id":"x_BambuStudio/resources/profiles/BBL/bbl-3dp-H2C.stl","verdict":"match","triangles":1732}
+{"id":"x_BambuStudio/resources/profiles/BBL/bbl-3dp-H2D.stl","verdict":"match","triangles":348}
+{"id":"x_BambuStudio/resources/profiles/BBL/bbl-3dp-H3C.stl","verdict":"match","triangles":348}
+{"id":"x_BambuStudio/resources/profiles/BBL/bbl-3dp-O1S.stl","verdict":"match","triangles":348}
+{"id":"x_BambuStudio/resources/profiles/BBL/bbl-3dp-X1.stl","verdict":"match","triangles":1016}
+{"id":"x_BambuStudio/resources/profiles/BBL/bbl-3dp-hotend.stl","verdict":"match","triangles":12760}
+{"id":"x_BambuStudio/resources/profiles/Creality/creality_CR_6_SE_buildplate_model.stl","verdict":"match","triangles":372}
+{"id":"x_BambuStudio/resources/profiles/Creality/creality_cr10max_buildplate_model.stl","verdict":"match","triangles":372}
+{"id":"x_BambuStudio/resources/profiles/Creality/creality_cr10v2_buildplate_model.stl","verdict":"match","triangles":372}
+{"id":"x_BambuStudio/resources/profiles/Creality/creality_ender3s1_buildplate_model.stl","verdict":"match","triangles":372}
+{"id":"x_BambuStudio/resources/profiles/Creality/creality_ender3s1pro_buildplate_model.stl","verdict":"match","triangles":372}
+{"id":"x_BambuStudio/resources/profiles/Creality/creality_ender3v2_buildplate_model.stl","verdict":"match","triangles":372}
+{"id":"x_BambuStudio/resources/profiles/Creality/creality_ender3v3_buildplate_model.stl","verdict":"match","triangles":6328}
+{"id":"x_BambuStudio/resources/profiles/Creality/creality_ender3v3ke_buildplate_model.stl","verdict":"match","triangles":6328}
+{"id":"x_BambuStudio/resources/profiles/Creality/creality_ender3v3plus_buildplate_model.stl","verdict":"match","triangles":5792}
+{"id":"x_BambuStudio/resources/profiles/Creality/creality_ender5_buildplate_model.stl","verdict":"match","triangles":372}
+{"id":"x_BambuStudio/resources/profiles/Creality/creality_ender5plus_buildplate_model.stl","verdict":"match","triangles":372}
+{"id":"x_BambuStudio/resources/profiles/Creality/creality_ender5pro_buildplate_model.stl","verdict":"match","triangles":372}
+{"id":"x_BambuStudio/resources/profiles/Creality/creality_ender5s1_buildplate_model.stl","verdict":"match","triangles":372}
+{"id":"x_BambuStudio/resources/profiles/Creality/creality_ender5s_buildplate_model.stl","verdict":"match","triangles":372}
+{"id":"x_BambuStudio/resources/profiles/Creality/creality_ender6_buildplate_model.stl","verdict":"match","triangles":372}
+{"id":"x_BambuStudio/resources/profiles/Creality/creality_k1_buildplate_model.stl","verdict":"match","triangles":372}
+{"id":"x_BambuStudio/resources/profiles/Creality/creality_k1c_buildplate_model.stl","verdict":"match","triangles":6328}
+{"id":"x_BambuStudio/resources/profiles/Creality/creality_k1max_buildplate_model.stl","verdict":"match","triangles":372}
+{"id":"x_BambuStudio/resources/profiles/Creality/hotend.stl","verdict":"match","triangles":12760}
+{"id":"x_BambuStudio/resources/profiles/Elegoo/elegoo_neptune2_buildplate_model.stl","verdict":"match","triangles":372}
+{"id":"x_BambuStudio/resources/profiles/Elegoo/elegoo_neptune2d_buildplate_model.stl","verdict":"match","triangles":372}
+{"id":"x_BambuStudio/resources/profiles/Elegoo/elegoo_neptune2s_buildplate_model.stl","verdict":"match","triangles":372}
+{"id":"x_BambuStudio/resources/profiles/Elegoo/elegoo_neptune3_buildplate_model.stl","verdict":"match","triangles":372}
+{"id":"x_BambuStudio/resources/profiles/Elegoo/elegoo_neptune3max_buildplate_model.stl","verdict":"match","triangles":372}
+{"id":"x_BambuStudio/resources/profiles/Elegoo/elegoo_neptune3plus_buildplate_model.stl","verdict":"match","triangles":372}
+{"id":"x_BambuStudio/resources/profiles/Elegoo/elegoo_neptune3pro_buildplate_model.stl","verdict":"match","triangles":372}
+{"id":"x_BambuStudio/resources/profiles/Elegoo/elegoo_neptune4_buildplate_model.stl","verdict":"match","triangles":372}
+{"id":"x_BambuStudio/resources/profiles/Elegoo/elegoo_neptune4max_buildplate_model.stl","verdict":"match","triangles":372}
+{"id":"x_BambuStudio/resources/profiles/Elegoo/elegoo_neptune4plus_buildplate_model.stl","verdict":"match","triangles":372}
+{"id":"x_BambuStudio/resources/profiles/Elegoo/elegoo_neptune4pro_buildplate_model.stl","verdict":"match","triangles":372}
+{"id":"x_BambuStudio/resources/profiles/Elegoo/elegoo_neptune_buildplate_model.stl","verdict":"match","triangles":372}
+{"id":"x_BambuStudio/resources/profiles/Elegoo/elegoo_neptunex_buildplate_model.stl","verdict":"match","triangles":372}
+{"id":"x_BambuStudio/resources/profiles/Geeetech/105x105.stl","verdict":"match","triangles":37610}
+{"id":"x_BambuStudio/resources/profiles/Geeetech/220x220.stl","verdict":"match","triangles":12}
+{"id":"x_BambuStudio/resources/profiles/Geeetech/250x250.stl","verdict":"match","triangles":12}
+{"id":"x_BambuStudio/resources/profiles/Geeetech/255x255.stl","verdict":"match","triangles":12}
+{"id":"x_BambuStudio/resources/profiles/Geeetech/320x320.stl","verdict":"match","triangles":12}
+{"id":"x_BambuStudio/resources/profiles/Prusa/mini_bed.stl","verdict":"match","triangles":1156}
+{"id":"x_BambuStudio/resources/profiles/Prusa/mk3_bed.stl","verdict":"match","triangles":1836}
+{"id":"x_BambuStudio/resources/profiles/Qidi/qidi_Q1Pro_buildplate_model.stl","verdict":"match","triangles":236}
+{"id":"x_BambuStudio/resources/profiles/Qidi/qidi_xcfpro_buildplate_model.stl","verdict":"match","triangles":372}
+{"id":"x_BambuStudio/resources/profiles/Qidi/qidi_xmax3_buildplate_model.stl","verdict":"match","triangles":572}
+{"id":"x_BambuStudio/resources/profiles/Qidi/qidi_xmax_buildplate_model.stl","verdict":"match","triangles":372}
+{"id":"x_BambuStudio/resources/profiles/Qidi/qidi_xplus3_buildplate_model.stl","verdict":"match","triangles":556}
+{"id":"x_BambuStudio/resources/profiles/Qidi/qidi_xplus4_buildplate_model.stl","verdict":"match","triangles":404}
+{"id":"x_BambuStudio/resources/profiles/Qidi/qidi_xplus_buildplate_model.stl","verdict":"match","triangles":372}
+{"id":"x_BambuStudio/resources/profiles/Qidi/qidi_xseries_gen2_hotend.stl","verdict":"match","triangles":16114}
+{"id":"x_BambuStudio/resources/profiles/Qidi/qidi_xseries_gen3_hotend.stl","verdict":"match","triangles":4508}
+{"id":"x_BambuStudio/resources/profiles/Qidi/qidi_xsmart3_buildplate_model.stl","verdict":"match","triangles":696}
+{"id":"x_BambuStudio/resources/profiles/Voxelab/voxelab_aquilax2_buildplate_model.stl","verdict":"match","triangles":108}
+{"id":"x_BambuStudio/tests/data/20mm_cube.obj","verdict":"match","triangles":12}
+{"id":"x_BambuStudio/tests/data/2x20x10.obj","verdict":"match","triangles":12}
+{"id":"x_BambuStudio/tests/data/A.obj","verdict":"match","triangles":1246}
+{"id":"x_BambuStudio/tests/data/A_upsidedown.obj","verdict":"match","triangles":1246}
+{"id":"x_BambuStudio/tests/data/V.obj","verdict":"match","triangles":24}
+{"id":"x_BambuStudio/tests/data/V_standing.obj","verdict":"match","triangles":24}
+{"id":"x_BambuStudio/tests/data/bridge.obj","verdict":"match","triangles":28}
+{"id":"x_BambuStudio/tests/data/cube_with_concave_hole.obj","verdict":"match","triangles":48}
+{"id":"x_BambuStudio/tests/data/cube_with_concave_hole_enlarged.obj","verdict":"match","triangles":48}
+{"id":"x_BambuStudio/tests/data/cube_with_concave_hole_enlarged_standing.obj","verdict":"match","triangles":48}
+{"id":"x_BambuStudio/tests/data/cube_with_hole.obj","verdict":"match","triangles":32}
+{"id":"x_BambuStudio/tests/data/extruder_idler.obj","verdict":"match","triangles":3586}
+{"id":"x_BambuStudio/tests/data/extruder_idler_quads.obj","verdict":"match","triangles":7344}
+{"id":"x_BambuStudio/tests/data/frog_legs.obj","verdict":"match","triangles":18334}
+{"id":"x_BambuStudio/tests/data/ipadstand.obj","verdict":"match","triangles":56}
+{"id":"x_BambuStudio/tests/data/overhang.obj","verdict":"match","triangles":118}
+{"id":"x_BambuStudio/tests/data/pyramid.obj","verdict":"match","triangles":6}
+{"id":"x_BambuStudio/tests/data/simplification.obj","verdict":"match","triangles":28}
+{"id":"x_BambuStudio/tests/data/sloping_hole.obj","verdict":"match","triangles":136}
+{"id":"x_BambuStudio/tests/data/small_dorito.obj","verdict":"match","triangles":8}
+{"id":"x_BambuStudio/tests/data/test_3mf/Ger\u00e4te/B\u00fcchse.3mf","verdict":"match","triangles":12}
+{"id":"x_BambuStudio/tests/data/test_3mf/Prusa.stl","verdict":"match","triangles":614}
+{"id":"x_BambuStudio/tests/data/test_stl/ASCII/20mmbox-CR.stl","verdict":"both-refused","why":["line 1 (byte 0): no triangles"]}
+{"id":"x_BambuStudio/tests/data/test_stl/ASCII/20mmbox-CRLF.stl","verdict":"match","triangles":12}
+{"id":"x_BambuStudio/tests/data/test_stl/ASCII/20mmbox-LF.stl","verdict":"match","triangles":12}
+{"id":"x_BambuStudio/tests/data/test_stl/ASCII/20mmbox-nonstandard.stl","verdict":"both-refused","why":["line 71 (byte 2642): \"blah\" is not an STL word"]}
+{"id":"x_BambuStudio/tests/data/test_stl/Ger\u00e4te/20mmbox-\u010d\u0159\u0161\u0159\u011b\u00e1.stl","verdict":"match","triangles":12}
+{"id":"x_BambuStudio/tests/data/two_hollow_squares.obj","verdict":"match","triangles":96}
+{"id":"x_Cura/plugins/SimulationView/resources/nozzle.stl","verdict":"match","triangles":4204}
+{"id":"x_Cura/resources/meshes/101hero-platform.3mf","verdict":"match","triangles":4822}
+{"id":"x_Cura/resources/meshes/3dator_platform.3mf","verdict":"match","triangles":8612}
+{"id":"x_Cura/resources/meshes/3di_d300_platform.STL","verdict":"match","triangles":6648}
+{"id":"x_Cura/resources/meshes/3dtech_semi_professional_platform.3mf","verdict":"match","triangles":11742}
+{"id":"x_Cura/resources/meshes/Atom 3 bed.3mf","verdict":"match","triangles":34358}
+{"id":"x_Cura/resources/meshes/Atom 3 lite bed.3mf","verdict":"match","triangles":60336}
+{"id":"x_Cura/resources/meshes/BEEVERYCREATIVE-helloBEEprusa.3mf","verdict":"match","triangles":17056}
+{"id":"x_Cura/resources/meshes/BIQU_BX_PLATE.stl","verdict":"match","triangles":2910}
+{"id":"x_Cura/resources/meshes/BIQU_Hurakan_bed.stl","verdict":"match","triangles":20748}
+{"id":"x_Cura/resources/meshes/BIQU_SSS.stl","verdict":"match","triangles":4466}
+{"id":"x_Cura/resources/meshes/FT-5_build_plate.3mf","verdict":"match","triangles":7056}
+{"id":"x_Cura/resources/meshes/FelixPro2_platform.obj","verdict":"match","triangles":1912}
+{"id":"x_Cura/resources/meshes/FelixTec4_platform.3mf","verdict":"match","triangles":2876}
+{"id":"x_Cura/resources/meshes/FlashForge_DreamerNX.obj","verdict":"match","triangles":6982}
+{"id":"x_Cura/resources/meshes/Hellbot_Magna_2_230.obj","verdict":"mismatch","adjudicated":"match","triangles":260}
+{"id":"x_Cura/resources/meshes/Hellbot_Magna_2_300.obj","verdict":"mismatch","adjudicated":"match","triangles":268}
+{"id":"x_Cura/resources/meshes/Hellbot_Magna_2_400.obj","verdict":"mismatch","adjudicated":"match","triangles":268}
+{"id":"x_Cura/resources/meshes/Hellbot_Magna_2_500.obj","verdict":"mismatch","adjudicated":"match","triangles":268}
+{"id":"x_Cura/resources/meshes/Hellbot_Magna_SE_300.obj","verdict":"mismatch","adjudicated":"match","triangles":172}
+{"id":"x_Cura/resources/meshes/Hellbot_Magna_SE_Pro.obj","verdict":"mismatch","adjudicated":"match","triangles":260}
+{"id":"x_Cura/resources/meshes/Original_Prusa_i3_MK3S_MK3_platform.3mf","verdict":"match","triangles":9756}
+{"id":"x_Cura/resources/meshes/SH65_platform.STL","verdict":"match","triangles":6444}
+{"id":"x_Cura/resources/meshes/STREAM20PRO_platform.STL","verdict":"match","triangles":3802}
+{"id":"x_Cura/resources/meshes/STREAM30PRO_platform.STL","verdict":"match","triangles":3964}
+{"id":"x_Cura/resources/meshes/STREAM30ULTRA_platform.STL","verdict":"match","triangles":3140}
+{"id":"x_Cura/resources/meshes/Vertex_build_panel.3mf","verdict":"match","triangles":44}
+{"id":"x_Cura/resources/meshes/alya_nx_platform.3mf","verdict":"match","triangles":6478}
+{"id":"x_Cura/resources/meshes/alya_platform.3mf","verdict":"match","triangles":7748}
+{"id":"x_Cura/resources/meshes/aneta6_platform.3mf","verdict":"match","triangles":508}
+{"id":"x_Cura/resources/meshes/ankermake_m5_platform.obj","verdict":"mismatch","adjudicated":"match","triangles":364}
+{"id":"x_Cura/resources/meshes/ankermake_m5c_platform.obj","verdict":"mismatch","adjudicated":"match","triangles":364}
+{"id":"x_Cura/resources/meshes/anycubic_4max_platform.3mf","verdict":"match","triangles":44}
+{"id":"x_Cura/resources/meshes/anycubic_chiron_platform.obj","verdict":"match","triangles":22}
+{"id":"x_Cura/resources/meshes/anycubic_i3_mega_platform.3mf","verdict":"match","triangles":44}
+{"id":"x_Cura/resources/meshes/anycubic_i3_mega_s_platform.3mf","verdict":"match","triangles":44}
+{"id":"x_Cura/resources/meshes/anycubic_i3_mega_x_platform.stl","verdict":"match","triangles":28}
+{"id":"x_Cura/resources/meshes/anycubic_kobra2_platform.stl","verdict":"match","triangles":452}
+{"id":"x_Cura/resources/meshes/anycubic_kobra3v2_buildplate.stl","verdict":"match","triangles":84}
+{"id":"x_Cura/resources/meshes/anycubic_kobra_s1_buildplate.obj","verdict":"match","triangles":400}
+{"id":"x_Cura/resources/meshes/anycubic_mega_zero_platform.stl","verdict":"match","triangles":1304}
+{"id":"x_Cura/resources/meshes/anycubic_vyper_platform.stl","verdict":"match","triangles":612}
+{"id":"x_Cura/resources/meshes/arjun300_platform.stl","verdict":"match","triangles":13264}
+{"id":"x_Cura/resources/meshes/arjunpro300_platform.STL","verdict":"match","triangles":14216}
+{"id":"x_Cura/resources/meshes/artemis_platform.3mf","verdict":"match","triangles":17266}
+{"id":"x_Cura/resources/meshes/artillery_genius.stl","verdict":"match","triangles":16692}
+{"id":"x_Cura/resources/meshes/artillery_hornet.stl","verdict":"match","triangles":9278}
+{"id":"x_Cura/resources/meshes/artillery_swx1.stl","verdict":"match","triangles":15494}
+{"id":"x_Cura/resources/meshes/atmat_asterion_platform.stl","verdict":"match","triangles":19074}
+{"id":"x_Cura/resources/meshes/atmat_signal_pro_platform.stl","verdict":"match","triangles":16904}
+{"id":"x_Cura/resources/meshes/beamup_l.3mf","verdict":"match","triangles":2710}
+{"id":"x_Cura/resources/meshes/beamup_s.3mf","verdict":"match","triangles":2132}
+{"id":"x_Cura/resources/meshes/blocks_mk2_platform.stl","verdict":"match","triangles":11736}
+{"id":"x_Cura/resources/meshes/blocks_pros100_platform.stl","verdict":"match","triangles":10216}
+{"id":"x_Cura/resources/meshes/blocks_pros30_platform.stl","verdict":"match","triangles":15196}
+{"id":"x_Cura/resources/meshes/blocks_r21_platform.stl","verdict":"match","triangles":14950}
+{"id":"x_Cura/resources/meshes/blocks_rd50_platform.stl","verdict":"match","triangles":20208}
+{"id":"x_Cura/resources/meshes/blocks_zero_platform.stl","verdict":"match","triangles":16168}
+{"id":"x_Cura/resources/meshes/blv_mgn_cube_300_platform.3mf","verdict":"match","triangles":38408}
+{"id":"x_Cura/resources/meshes/blv_mgn_cube_350_platform.3mf","verdict":"match","triangles":41620}
+{"id":"x_Cura/resources/meshes/bq_hephestos_2_platform.3mf","verdict":"match","triangles":7542}
+{"id":"x_Cura/resources/meshes/bq_hephestos_platform.3mf","verdict":"match","triangles":4416}
+{"id":"x_Cura/resources/meshes/bq_witbox_platform.3mf","verdict":"match","triangles":18430}
+{"id":"x_Cura/resources/meshes/builder_premium_platform.3mf","verdict":"match","triangles":18871}
+{"id":"x_Cura/resources/meshes/cartesio_platform.3mf","verdict":"match","triangles":1896}
+{"id":"x_Cura/resources/meshes/cr-x.3mf","verdict":"ref-refused","why":["Lib3MFException 5: Invalid Model Coordinate Indices"],"triangles":19670}
+{"id":"x_Cura/resources/meshes/creality_cr10spro.3mf","verdict":"match","triangles":17344}
+{"id":"x_Cura/resources/meshes/creality_ender3.3mf","verdict":"match","triangles":2840}
+{"id":"x_Cura/resources/meshes/creality_ender3max.stl","verdict":"match","triangles":6472}
+{"id":"x_Cura/resources/meshes/cremaker_platform_200.obj","verdict":"match","triangles":1060}
+{"id":"x_Cura/resources/meshes/cremaker_platform_220.obj","verdict":"match","triangles":1060}
+{"id":"x_Cura/resources/meshes/dagoma_discoeasy200.3mf","verdict":"match","triangles":10898}
+{"id":"x_Cura/resources/meshes/dagoma_discoeasy200_bicolor.3mf","verdict":"match","triangles":20194}
+{"id":"x_Cura/resources/meshes/dagoma_discoultimate.3mf","verdict":"match","triangles":13454}
+{"id":"x_Cura/resources/meshes/dagoma_discoultimate_bicolor.3mf","verdict":"match","triangles":20256}
+{"id":"x_Cura/resources/meshes/dagoma_magis.3mf","verdict":"match","triangles":13166}
+{"id":"x_Cura/resources/meshes/dagoma_neva.3mf","verdict":"match","triangles":9486}
+{"id":"x_Cura/resources/meshes/dagoma_pro430.obj","verdict":"match","triangles":508}
+{"id":"x_Cura/resources/meshes/dagoma_sigma.stl","verdict":"match","triangles":12921}
+{"id":"x_Cura/resources/meshes/dagoma_sigma_pro.obj","verdict":"match","triangles":1170}
+{"id":"x_Cura/resources/meshes/deltacomb.3mf","verdict":"match","triangles":18920}
+{"id":"x_Cura/resources/meshes/deltacomb_dc20.stl","verdict":"match","triangles":6460}
+{"id":"x_Cura/resources/meshes/deltacomb_dc30.stl","verdict":"match","triangles":6066}
+{"id":"x_Cura/resources/meshes/diy220_platform.obj","verdict":"match","triangles":20456}
+{"id":"x_Cura/resources/meshes/elegoo_neptune_2.stl","verdict":"match","triangles":13268}
+{"id":"x_Cura/resources/meshes/elegoo_platform.3mf","verdict":"match","triangles":13022}
+{"id":"x_Cura/resources/meshes/elegoo_platform_max.3mf","verdict":"match","triangles":13022}
+{"id":"x_Cura/resources/meshes/eryone_er20_plateform.stl","verdict":"match","triangles":792}
+{"id":"x_Cura/resources/meshes/eryone_thinker_platform.obj","verdict":"match","triangles":6786}
+{"id":"x_Cura/resources/meshes/fabtotum_platform.3mf","verdict":"match","triangles":7126}
+{"id":"x_Cura/resources/meshes/fabxpro_platform.3mf","verdict":"match","triangles":5266}
+{"id":"x_Cura/resources/meshes/farm2_platform.obj","verdict":"match","triangles":11680}
+{"id":"x_Cura/resources/meshes/flsun_qq_s.3mf","verdict":"match","triangles":19927}
+{"id":"x_Cura/resources/meshes/flsun_sr.stl","verdict":"match","triangles":20020}
+{"id":"x_Cura/resources/meshes/flsun_v400.stl","verdict":"match","triangles":18694}
+{"id":"x_Cura/resources/meshes/flyingbear_platform.obj","verdict":"match","triangles":42}
+{"id":"x_Cura/resources/meshes/gmax_1-5_xt-plus_s3d_full model_150707.3mf","verdict":"match","triangles":20714}
+{"id":"x_Cura/resources/meshes/grr_neo_platform.3mf","verdict":"match","triangles":492}
+{"id":"x_Cura/resources/meshes/hardprint_hozo_ix_platform.stl","verdict":"match","triangles":14386}
+{"id":"x_Cura/resources/meshes/hardprint_hozo_platform.stl","verdict":"match","triangles":14386}
+{"id":"x_Cura/resources/meshes/hctech_hc300-m1&m1h.3mf","verdict":"match","triangles":13106}
+{"id":"x_Cura/resources/meshes/hctech_hc300-m2h.3mf","verdict":"match","triangles":94586}
+{"id":"x_Cura/resources/meshes/hctech_hc300-m3.3mf","verdict":"match","triangles":8316}
+{"id":"x_Cura/resources/meshes/hellbot_adonis.obj","verdict":"match","triangles":14}
+{"id":"x_Cura/resources/meshes/hellbot_hidra.obj","verdict":"mismatch","adjudicated":"match","triangles":236}
+{"id":"x_Cura/resources/meshes/hellbot_hidra_plus.obj","verdict":"mismatch","adjudicated":"match","triangles":252}
+{"id":"x_Cura/resources/meshes/hellbot_magna.obj","verdict":"match","triangles":14}
+{"id":"x_Cura/resources/meshes/hellbot_magna_SE.obj","verdict":"mismatch","adjudicated":"match","triangles":440}
+{"id":"x_Cura/resources/meshes/hms_platform.obj","verdict":"match","triangles":17916}
+{"id":"x_Cura/resources/meshes/ideagen3D_sapphire_plus.3mf","verdict":"match","triangles":4540}
+{"id":"x_Cura/resources/meshes/imade3d_jellybox_2_platform.3mf","verdict":"match","triangles":12172}
+{"id":"x_Cura/resources/meshes/imade3d_jellybox_platform.3mf","verdict":"match","triangles":12030}
+{"id":"x_Cura/resources/meshes/inat_proton_x_buildplate.stl","verdict":"match","triangles":404}
+{"id":"x_Cura/resources/meshes/inventor_platform.3mf","verdict":"match","triangles":16202}
+{"id":"x_Cura/resources/meshes/jgaurora_a5.3mf","verdict":"match","triangles":20000}
+{"id":"x_Cura/resources/meshes/jgaurora_a6_platform.stl","verdict":"match","triangles":3346}
+{"id":"x_Cura/resources/meshes/kemiq_q2.3mf","verdict":"match","triangles":6751}
+{"id":"x_Cura/resources/meshes/kingroon_kp3.stl","verdict":"match","triangles":10164}
+{"id":"x_Cura/resources/meshes/kingroon_kp3s.stl","verdict":"match","triangles":6514}
+{"id":"x_Cura/resources/meshes/koonovo.obj","verdict":"match","triangles":22}
+{"id":"x_Cura/resources/meshes/koonovo_kn3.stl","verdict":"match","triangles":15128}
+{"id":"x_Cura/resources/meshes/koonovo_kn5.stl","verdict":"match","triangles":17444}
+{"id":"x_Cura/resources/meshes/kossel_platform.3mf","verdict":"match","triangles":8376}
+{"id":"x_Cura/resources/meshes/kossel_pro_build_platform.3mf","verdict":"match","triangles":3260}
+{"id":"x_Cura/resources/meshes/leapfrog_bolt_pro_platform.3mf","verdict":"match","triangles":17829}
+{"id":"x_Cura/resources/meshes/liquid_platform.stl","verdict":"match","triangles":11996}
+{"id":"x_Cura/resources/meshes/lnl3d_d3.stl","verdict":"match","triangles":3781}
+{"id":"x_Cura/resources/meshes/lnl3d_d5.stl","verdict":"match","triangles":7764}
+{"id":"x_Cura/resources/meshes/lnl3d_d6.3mf","verdict":"match","triangles":45772}
+{"id":"x_Cura/resources/meshes/longer_235mm_platform.stl","verdict":"match","triangles":4104}
+{"id":"x_Cura/resources/meshes/longer_310mm_platform.stl","verdict":"match","triangles":4104}
+{"id":"x_Cura/resources/meshes/longer_415mm_platform.stl","verdict":"match","triangles":4104}
+{"id":"x_Cura/resources/meshes/longer_cube2_platform.stl","verdict":"match","triangles":4104}
+{"id":"x_Cura/resources/meshes/lotmaxx_sc_10_20_platform.3mf","verdict":"match","triangles":2002}
+{"id":"x_Cura/resources/meshes/lulzbot_mini.stl","verdict":"match","triangles":8274}
+{"id":"x_Cura/resources/meshes/lulzbot_taz_pro_bed.stl","verdict":"match","triangles":14320}
+{"id":"x_Cura/resources/meshes/makeR_pegasus_platform.3mf","verdict":"match","triangles":2684}
+{"id":"x_Cura/resources/meshes/makeR_prusa_tairona_i3_platform.3mf","verdict":"match","triangles":2684}
+{"id":"x_Cura/resources/meshes/makergear_m2_platform.3mf","verdict":"refused","why":["byte 0: not a zip package (or one whose members would inflate past the caps)"]}
+{"id":"x_Cura/resources/meshes/makerstarter_platform.3mf","verdict":"match","triangles":6750}
+{"id":"x_Cura/resources/meshes/malyan_m200_platform.3mf","verdict":"match","triangles":582}
+{"id":"x_Cura/resources/meshes/mankati_fullscale_xt_plus_platform.3mf","verdict":"match","triangles":18232}
+{"id":"x_Cura/resources/meshes/mendel90_platform.3mf","verdict":"match","triangles":3408}
+{"id":"x_Cura/resources/meshes/mingda_d2_base.stl","verdict":"match","triangles":5404}
+{"id":"x_Cura/resources/meshes/mingda_d4pro_base.stl","verdict":"match","triangles":5472}
+{"id":"x_Cura/resources/meshes/mingda_magician_max_base.stl","verdict":"match","triangles":6520}
+{"id":"x_Cura/resources/meshes/mingda_magician_pro_base.stl","verdict":"match","triangles":7782}
+{"id":"x_Cura/resources/meshes/mingda_magician_x_base.stl","verdict":"match","triangles":5826}
+{"id":"x_Cura/resources/meshes/mingda_rock3_base.stl","verdict":"match","triangles":5472}
+{"id":"x_Cura/resources/meshes/mixware_hyper_k_platform.stl","verdict":"match","triangles":1332}
+{"id":"x_Cura/resources/meshes/mixware_hyper_s_platform.stl","verdict":"match","triangles":1484}
+{"id":"x_Cura/resources/meshes/mixware_vulcan_platform.stl","verdict":"match","triangles":10134}
+{"id":"x_Cura/resources/meshes/mixware_wand_platform.stl","verdict":"match","triangles":14340}
+{"id":"x_Cura/resources/meshes/moai.obj","verdict":"match","triangles":4}
+{"id":"x_Cura/resources/meshes/mp_mini_delta_platform.3mf","verdict":"match","triangles":2948}
+{"id":"x_Cura/resources/meshes/npscura.stl","verdict":"match","triangles":15972}
+{"id":"x_Cura/resources/meshes/pbr3d_g1_buildplate.stl","verdict":"match","triangles":2276}
+{"id":"x_Cura/resources/meshes/predator_platform.stl","verdict":"match","triangles":8426}
+{"id":"x_Cura/resources/meshes/printrbot_play.3mf","verdict":"match","triangles":108}
+{"id":"x_Cura/resources/meshes/printrbot_simple_metal_platform.3mf","verdict":"match","triangles":664}
+{"id":"x_Cura/resources/meshes/printrbot_simple_metal_upgrade.3mf","verdict":"match","triangles":1960}
+{"id":"x_Cura/resources/meshes/prusai3_platform.3mf","verdict":"match","triangles":2684}
+{"id":"x_Cura/resources/meshes/prusai3_xl_platform.3mf","verdict":"match","triangles":3076}
+{"id":"x_Cura/resources/meshes/ratrig_vcore3_200.stl","verdict":"match","triangles":5814}
+{"id":"x_Cura/resources/meshes/ratrig_vcore3_300.stl","verdict":"match","triangles":5000}
+{"id":"x_Cura/resources/meshes/ratrig_vcore3_400.stl","verdict":"match","triangles":5000}
+{"id":"x_Cura/resources/meshes/ratrig_vcore3_500.stl","verdict":"match","triangles":5000}
+{"id":"x_Cura/resources/meshes/ratrig_vminion.stl","verdict":"match","triangles":914}
+{"id":"x_Cura/resources/meshes/rigid3d_mucit2_platform.3mf","verdict":"match","triangles":1248}
+{"id":"x_Cura/resources/meshes/rigid3d_mucit_platform.3mf","verdict":"match","triangles":6252}
+{"id":"x_Cura/resources/meshes/rigid3d_zero2_platform.3mf","verdict":"match","triangles":18850}
+{"id":"x_Cura/resources/meshes/rigid3d_zero3_platform.3mf","verdict":"match","triangles":2776}
+{"id":"x_Cura/resources/meshes/rigidbot_platform.3mf","verdict":"match","triangles":13069}
+{"id":"x_Cura/resources/meshes/rigidbotbig_platform.3mf","verdict":"match","triangles":16236}
+{"id":"x_Cura/resources/meshes/rostock_platform.3mf","verdict":"match","triangles":17436}
+{"id":"x_Cura/resources/meshes/sapphireplus_platform.stl","verdict":"match","triangles":396}
+{"id":"x_Cura/resources/meshes/sapphirepro_platform.stl","verdict":"match","triangles":396}
+{"id":"x_Cura/resources/meshes/skriware_2_platform.3mf","verdict":"match","triangles":13184}
+{"id":"x_Cura/resources/meshes/sovol_sv08_buildplate_model.stl","verdict":"match","triangles":9096}
+{"id":"x_Cura/resources/meshes/stereotech_start.3mf","verdict":"match","triangles":16062}
+{"id":"x_Cura/resources/meshes/stereotech_ste320_platform.obj","verdict":"match","triangles":9074}
+{"id":"x_Cura/resources/meshes/tam_series1.3mf","verdict":"match","triangles":4764}
+{"id":"x_Cura/resources/meshes/tank_m.obj","verdict":"match","triangles":22}
+{"id":"x_Cura/resources/meshes/tevo_blackwidow.3mf","verdict":"match","triangles":17322}
+{"id":"x_Cura/resources/meshes/tevo_tarantula_pro_platform.3mf","verdict":"match","triangles":372}
+{"id":"x_Cura/resources/meshes/tinyboy_fabrikator15.stl","verdict":"match","triangles":740}
+{"id":"x_Cura/resources/meshes/tinyboy_ra20.obj","verdict":"mismatch","adjudicated":"match","triangles":6144}
+{"id":"x_Cura/resources/meshes/tizyx_k25_platform.3mf","verdict":"match","triangles":1276}
+{"id":"x_Cura/resources/meshes/trimaker_cosmosII_platform.stl","verdict":"match","triangles":12866}
+{"id":"x_Cura/resources/meshes/trimaker_nebula_platform.stl","verdict":"match","triangles":19852}
+{"id":"x_Cura/resources/meshes/tronxy.stl","verdict":"match","triangles":8652}
+{"id":"x_Cura/resources/meshes/twotrees235x235_generic.stl","verdict":"match","triangles":316}
+{"id":"x_Cura/resources/meshes/twotrees300x300_generic.stl","verdict":"match","triangles":316}
+{"id":"x_Cura/resources/meshes/twotrees_platform.stl","verdict":"match","triangles":1688}
+{"id":"x_Cura/resources/meshes/ultimaker2_platform.obj","verdict":"match","triangles":6192}
+{"id":"x_Cura/resources/meshes/ultimaker2_plus_connect_platform.obj","verdict":"match","triangles":9937}
+{"id":"x_Cura/resources/meshes/ultimaker2go_platform.obj","verdict":"match","triangles":6024}
+{"id":"x_Cura/resources/meshes/ultimaker3_platform.obj","verdict":"match","triangles":20456}
+{"id":"x_Cura/resources/meshes/ultimaker_factor4_platform.obj","verdict":"match","triangles":3291}
+{"id":"x_Cura/resources/meshes/ultimaker_method_platform.stl","verdict":"match","triangles":7232}
+{"id":"x_Cura/resources/meshes/ultimaker_method_xl_platform.stl","verdict":"match","triangles":18400}
+{"id":"x_Cura/resources/meshes/ultimaker_platform.3mf","verdict":"match","triangles":3484}
+{"id":"x_Cura/resources/meshes/ultimaker_replicator_plus_platform.obj","verdict":"match","triangles":1472}
+{"id":"x_Cura/resources/meshes/ultimaker_s3_platform.obj","verdict":"match","triangles":4024}
+{"id":"x_Cura/resources/meshes/ultimaker_s5_platform.obj","verdict":"match","triangles":10204}
+{"id":"x_Cura/resources/meshes/ultimaker_s7_platform.obj","verdict":"match","triangles":3291}
+{"id":"x_Cura/resources/meshes/ultimaker_sketch_large_platform.obj","verdict":"match","triangles":11432}
+{"id":"x_Cura/resources/meshes/ultimaker_sketch_platform.obj","verdict":"match","triangles":17808}
+{"id":"x_Cura/resources/meshes/ultimaker_sketch_sprint_platform.obj","verdict":"match","triangles":2191}
+{"id":"x_Cura/resources/meshes/uni_200_platform.stl","verdict":"match","triangles":2658}
+{"id":"x_Cura/resources/meshes/uni_250_platform.stl","verdict":"match","triangles":4524}
+{"id":"x_Cura/resources/meshes/uni_300_platform.stl","verdict":"match","triangles":4394}
+{"id":"x_Cura/resources/meshes/uni_mini_platform.stl","verdict":"match","triangles":2384}
+{"id":"x_Cura/resources/meshes/uni_print_3d_platform.3mf","verdict":"match","triangles":12}
+{"id":"x_Cura/resources/meshes/vivedino_trex.stl","verdict":"match","triangles":9618}
+{"id":"x_Cura/resources/meshes/voron0_120_bed.stl","verdict":"match","triangles":13728}
+{"id":"x_Cura/resources/meshes/voron2_250_bed.3mf","verdict":"match","triangles":20648}
+{"id":"x_Cura/resources/meshes/voron2_300_bed.3mf","verdict":"match","triangles":20772}
+{"id":"x_Cura/resources/meshes/voron2_350_bed.3mf","verdict":"match","triangles":20806}
+{"id":"x_Cura/resources/meshes/voron_trident_250mm_bed_model.stl","verdict":"match","triangles":480}
+{"id":"x_Cura/resources/meshes/voron_trident_300mm_bed_model.stl","verdict":"match","triangles":480}
+{"id":"x_Cura/resources/meshes/voron_trident_350mm_bed_model.stl","verdict":"match","triangles":480}
+{"id":"x_Cura/resources/meshes/vzbot_235_bed.stl","verdict":"match","triangles":13646}
+{"id":"x_Cura/resources/meshes/vzbot_330_bed.stl","verdict":"match","triangles":20078}
+{"id":"x_Cura/resources/meshes/wanhao_110_110_platform.obj","verdict":"match","triangles":10226}
+{"id":"x_Cura/resources/meshes/wanhao_150_150_platform.obj","verdict":"match","triangles":10226}
+{"id":"x_Cura/resources/meshes/wanhao_200_200_platform.obj","verdict":"match","triangles":10226}
+{"id":"x_Cura/resources/meshes/wanhao_225_145_platform.obj","verdict":"match","triangles":10226}
+{"id":"x_Cura/resources/meshes/wanhao_300_200_platform.obj","verdict":"match","triangles":10226}
+{"id":"x_Cura/resources/meshes/wanhao_300_300_platform.obj","verdict":"match","triangles":20456}
+{"id":"x_Cura/resources/meshes/weedo_x40.3mf","verdict":"match","triangles":55668}
+{"id":"x_Cura/resources/meshes/z-bolt_classic_platform.3mf","verdict":"match","triangles":1236}
+{"id":"x_Cura/resources/meshes/z-bolt_plus_platform.3mf","verdict":"match","triangles":1134}
+{"id":"x_Cura/resources/meshes/zav_big.stl","verdict":"match","triangles":15728}
+{"id":"x_Cura/resources/meshes/zav_bigplus.stl","verdict":"match","triangles":15728}
+{"id":"x_Cura/resources/meshes/zav_l.stl","verdict":"match","triangles":16112}
+{"id":"x_Cura/resources/meshes/zav_max.stl","verdict":"match","triangles":16112}
+{"id":"x_Cura/resources/meshes/zav_maxpro.stl","verdict":"match","triangles":16898}
+{"id":"x_Cura/resources/meshes/zav_mini.stl","verdict":"match","triangles":17204}
+{"id":"x_Cura/resources/meshes/zyyx_platform.3mf","verdict":"match","triangles":6598}
+{"id":"x_Cura/resources/meshes/zyyx_pro_platform.stl","verdict":"match","triangles":2082}
+{"id":"x_OrcaSlicer/resources/calib/filament_flow/Orca-LinearFlow.3mf","verdict":"refused","why":["byte 0: not a zip package (or one whose members would inflate past the caps)"]}
+{"id":"x_OrcaSlicer/resources/calib/filament_flow/Orca-LinearFlow_fine.3mf","verdict":"match","triangles":27976}
+{"id":"x_OrcaSlicer/resources/calib/filament_flow/flowrate-test-pass1.3mf","verdict":"refused","why":["byte 0: not a zip package (or one whose members would inflate past the caps)"]}
+{"id":"x_OrcaSlicer/resources/calib/filament_flow/flowrate-test-pass2.3mf","verdict":"refused","why":["byte 0: not a zip package (or one whose members would inflate past the caps)"]}
+{"id":"x_OrcaSlicer/resources/calib/filament_flow/pass1.3mf","verdict":"refused","why":["byte 0: not a zip package (or one whose members would inflate past the caps)"]}
+{"id":"x_OrcaSlicer/resources/calib/pressure_advance/auto_pa_line_dual.3mf","verdict":"refused","why":["line 20 (byte 1107): 3D/3dmodel.model: a component in another model file (production extension) is not read"]}
+{"id":"x_OrcaSlicer/resources/calib/pressure_advance/auto_pa_line_single.3mf","verdict":"refused","why":["line 20 (byte 1117): 3D/3dmodel.model: a component in another model file (production extension) is not read"]}
+{"id":"x_OrcaSlicer/resources/calib/pressure_advance/pa_pattern.3mf","verdict":"both-refused","why":["line 18 (byte 960): 3D/3dmodel.model: a component in another model file (production extension) is not read"]}
+{"id":"x_OrcaSlicer/resources/calib/temperature_tower/belt_temp_provino_unit.stl","verdict":"match","triangles":152}
+{"id":"x_OrcaSlicer/resources/calib/temperature_tower/belt_temp_tower_230_190.stl","verdict":"match","triangles":5720}
+{"id":"x_OrcaSlicer/resources/calib/temperature_tower/belt_temp_tower_240_210.stl","verdict":"match","triangles":4470}
+{"id":"x_OrcaSlicer/resources/calib/temperature_tower/belt_temp_tower_250_230.stl","verdict":"match","triangles":3274}
+{"id":"x_OrcaSlicer/resources/calib/temperature_tower/belt_temp_tower_270_230.stl","verdict":"match","triangles":5932}
+{"id":"x_OrcaSlicer/resources/calib/temperature_tower/belt_temp_tower_280_240.stl","verdict":"match","triangles":5752}
+{"id":"x_OrcaSlicer/resources/calib/temperature_tower/belt_temp_tower_320_280.stl","verdict":"match","triangles":6556}
+{"id":"x_OrcaSlicer/resources/handy_models/OrcaBadge.3mf","verdict":"both-refused","why":["line 19 (byte 997): 3D/3dmodel.model: a component in another model file (production extension) is not read"]}
+{"id":"x_OrcaSlicer/resources/handy_models/OrcaSliced.3mf","verdict":"match","triangles":256568}
+{"id":"x_OrcaSlicer/resources/profiles/Anker/M5-CE-bed.stl","verdict":"match","triangles":412}
+{"id":"x_OrcaSlicer/resources/profiles/Anker/M5C-CE-bed.stl","verdict":"match","triangles":412}
+{"id":"x_OrcaSlicer/resources/profiles/Anycubic/Anycubic Kobra 2 Max_buildplate_model.stl","verdict":"match","triangles":172}
+{"id":"x_OrcaSlicer/resources/profiles/Anycubic/Anycubic Kobra 2 Neo_buildplate_model.stl","verdict":"match","triangles":204}
+{"id":"x_OrcaSlicer/resources/profiles/Anycubic/Anycubic Kobra 2 Plus_buildplate_model.stl","verdict":"match","triangles":196}
+{"id":"x_OrcaSlicer/resources/profiles/Anycubic/Anycubic Kobra 2 Pro_buildplate_model.stl","verdict":"match","triangles":156}
+{"id":"x_OrcaSlicer/resources/profiles/Anycubic/Anycubic Kobra 3 Max_buildplate_model.stl","verdict":"match","triangles":172}
+{"id":"x_OrcaSlicer/resources/profiles/Anycubic/Anycubic Kobra 3 V2_buildplate_model.stl","verdict":"match","triangles":420}
+{"id":"x_OrcaSlicer/resources/profiles/Anycubic/Anycubic Kobra 3_buildplate_model.stl","verdict":"match","triangles":420}
+{"id":"x_OrcaSlicer/resources/profiles/Anycubic/Anycubic Kobra Neo_buildplate_model.stl","verdict":"match","triangles":156}
+{"id":"x_OrcaSlicer/resources/profiles/Anycubic/Anycubic Kobra S1 Max_buildplate_model.stl","verdict":"match","triangles":920}
+{"id":"x_OrcaSlicer/resources/profiles/Anycubic/Anycubic Kobra S1_buildplate_model.stl","verdict":"match","triangles":464}
+{"id":"x_OrcaSlicer/resources/profiles/Anycubic/Anycubic Kobra X_buildplate_model.stl","verdict":"match","triangles":464}
+{"id":"x_OrcaSlicer/resources/profiles/Anycubic/Anycubic Predator_buildplate_model.stl","verdict":"match","triangles":1838}
+{"id":"x_OrcaSlicer/resources/profiles/Anycubic/Anycubic-hotend.stl","verdict":"match","triangles":560}
+{"id":"x_OrcaSlicer/resources/profiles/Anycubic/anycubic_4maxpro2_buildplate_model.stl","verdict":"match","triangles":108}
+{"id":"x_OrcaSlicer/resources/profiles/Anycubic/anycubic_4maxpro_buildplate_model.stl","verdict":"match","triangles":108}
+{"id":"x_OrcaSlicer/resources/profiles/Anycubic/anycubic_chiron_buildplate_model.stl","verdict":"match","triangles":108}
+{"id":"x_OrcaSlicer/resources/profiles/Anycubic/anycubic_i3megas_buildplate_model.stl","verdict":"match","triangles":108}
+{"id":"x_OrcaSlicer/resources/profiles/Anycubic/anycubic_kobra2_buildplate_model.stl","verdict":"match","triangles":156}
+{"id":"x_OrcaSlicer/resources/profiles/Anycubic/anycubic_kobra_buildplate_model.stl","verdict":"match","triangles":156}
+{"id":"x_OrcaSlicer/resources/profiles/Anycubic/anycubic_kobramax_buildplate_model.stl","verdict":"match","triangles":172}
+{"id":"x_OrcaSlicer/resources/profiles/Anycubic/anycubic_kobraplus_buildplate_model.stl","verdict":"match","triangles":196}
+{"id":"x_OrcaSlicer/resources/profiles/Anycubic/anycubic_vyper_buildplate_model.stl","verdict":"match","triangles":156}
+{"id":"x_OrcaSlicer/resources/profiles/Artillery/artillery_genius_buildplate_model.stl","verdict":"match","triangles":108}
+{"id":"x_OrcaSlicer/resources/profiles/Artillery/artillery_geniuspro_buildplate_model.stl","verdict":"match","triangles":108}
+{"id":"x_OrcaSlicer/resources/profiles/Artillery/artillery_hornet_buildplate_model.stl","verdict":"match","triangles":108}
+{"id":"x_OrcaSlicer/resources/profiles/Artillery/artillery_m1_pro_buildplate_model.stl","verdict":"match","triangles":1466}
+{"id":"x_OrcaSlicer/resources/profiles/Artillery/artillery_sidewinderx1_buildplate_model.stl","verdict":"match","triangles":108}
+{"id":"x_OrcaSlicer/resources/profiles/Artillery/artillery_sidewinderx2_buildplate_model.stl","verdict":"match","triangles":108}
+{"id":"x_OrcaSlicer/resources/profiles/Artillery/artillery_sidewinderx3plus_buildplate_model.stl","verdict":"match","triangles":1324}
+{"id":"x_OrcaSlicer/resources/profiles/Artillery/artillery_sidewinderx3pro_buildplate_model.stl","verdict":"match","triangles":1332}
+{"id":"x_OrcaSlicer/resources/profiles/Artillery/artillery_sidewinderx4plus_buildplate_model.stl","verdict":"match","triangles":1300}
+{"id":"x_OrcaSlicer/resources/profiles/Artillery/artillery_sidewinderx4pro_buildplate_model.stl","verdict":"match","triangles":1344}
+{"id":"x_OrcaSlicer/resources/profiles/BBL/bbl-3dp-A1M.stl","verdict":"match","triangles":460}
+{"id":"x_OrcaSlicer/resources/profiles/BBL/bbl-3dp-H2C.stl","verdict":"match","triangles":468}
+{"id":"x_OrcaSlicer/resources/profiles/BBL/bbl-3dp-H2D.stl","verdict":"match","triangles":572}
+{"id":"x_OrcaSlicer/resources/profiles/BBL/bbl-3dp-O1S.stl","verdict":"match","triangles":572}
+{"id":"x_OrcaSlicer/resources/profiles/BBL/bbl-3dp-X1.stl","verdict":"match","triangles":540}
+{"id":"x_OrcaSlicer/resources/profiles/BBL/bbl-3dp-hotend.stl","verdict":"match","triangles":624}
+{"id":"x_OrcaSlicer/resources/profiles/BIQU/BIQU_B1_buildplate_model.stl","verdict":"match","triangles":124}
+{"id":"x_OrcaSlicer/resources/profiles/BIQU/BIQU_BX_buildplate_model.stl","verdict":"match","triangles":124}
+{"id":"x_OrcaSlicer/resources/profiles/BIQU/BIQU_Hurakan_buildplate_model.stl","verdict":"match","triangles":124}
+{"id":"x_OrcaSlicer/resources/profiles/BenFab/benfab_450_buildplate_model.stl","verdict":"match","triangles":144}
+{"id":"x_OrcaSlicer/resources/profiles/Blocks/BLOCKS PrintCore.stl","verdict":"match","triangles":2644}
+{"id":"x_OrcaSlicer/resources/profiles/Blocks/PRO S100 HotBed model.stl","verdict":"match","triangles":6608}
+{"id":"x_OrcaSlicer/resources/profiles/Blocks/RD50 V2 HotBed model.stl","verdict":"match","triangles":7145}
+{"id":"x_OrcaSlicer/resources/profiles/Blocks/RF50 HotBed model.stl","verdict":"match","triangles":4324}
+{"id":"x_OrcaSlicer/resources/profiles/CONSTRUCT3D/construct_1_buildplate_model.stl","verdict":"match","triangles":2778}
+{"id":"x_OrcaSlicer/resources/profiles/CONSTRUCT3D/construct_1_xl_buildplate_model.stl","verdict":"match","triangles":2796}
+{"id":"x_OrcaSlicer/resources/profiles/Chuanying/chuanying_x1_buildplate_model.stl","verdict":"match","triangles":768}
+{"id":"x_OrcaSlicer/resources/profiles/Chuanying/chuanying_x1_hotend.stl","verdict":"match","triangles":1104}
+{"id":"x_OrcaSlicer/resources/profiles/Co Print/Co_Print_ChromaSet_buildplate_model.stl","verdict":"match","triangles":36}
+{"id":"x_OrcaSlicer/resources/profiles/Comgrow/comgrow_t300_buildplate_model.stl","verdict":"match","triangles":364}
+{"id":"x_OrcaSlicer/resources/profiles/Comgrow/comgrow_t500_buildplate_model.stl","verdict":"match","triangles":936}
+{"id":"x_OrcaSlicer/resources/profiles/Creality/creality_SPARKX_buildplate_model.stl","verdict":"match","triangles":306}
+{"id":"x_OrcaSlicer/resources/profiles/Creality/creality_cr10max_buildplate_model.stl","verdict":"match","triangles":156}
+{"id":"x_OrcaSlicer/resources/profiles/Creality/creality_cr10se_buildplate_model.stl","verdict":"match","triangles":854}
+{"id":"x_OrcaSlicer/resources/profiles/Creality/creality_cr10v2_buildplate_model.stl","verdict":"match","triangles":156}
+{"id":"x_OrcaSlicer/resources/profiles/Creality/creality_cr10v3_buildplate_model.stl","verdict":"match","triangles":156}
+{"id":"x_OrcaSlicer/resources/profiles/Creality/creality_cr6max_buildplate_model.stl","verdict":"match","triangles":156}
+{"id":"x_OrcaSlicer/resources/profiles/Creality/creality_cr6se_buildplate_model.stl","verdict":"match","triangles":156}
+{"id":"x_OrcaSlicer/resources/profiles/Creality/creality_crm4_buildplate_model.stl","verdict":"match","triangles":854}
+{"id":"x_OrcaSlicer/resources/profiles/Creality/creality_ender2pro_buildplate_model.stl","verdict":"match","triangles":156}
+{"id":"x_OrcaSlicer/resources/profiles/Creality/creality_ender3s1_buildplate_model.stl","verdict":"match","triangles":432}
+{"id":"x_OrcaSlicer/resources/profiles/Creality/creality_ender3s1plus_buildplate_model.stl","verdict":"match","triangles":854}
+{"id":"x_OrcaSlicer/resources/profiles/Creality/creality_ender3s1pro_buildplate_model.stl","verdict":"match","triangles":432}
+{"id":"x_OrcaSlicer/resources/profiles/Creality/creality_ender3v2_buildplate_model.stl","verdict":"match","triangles":156}
+{"id":"x_OrcaSlicer/resources/profiles/Creality/creality_ender3v2neo_buildplate_model.stl","verdict":"match","triangles":432}
+{"id":"x_OrcaSlicer/resources/profiles/Creality/creality_ender3v3_buildplate_model.stl","verdict":"match","triangles":854}
+{"id":"x_OrcaSlicer/resources/profiles/Creality/creality_ender3v3ke_buildplate_model.stl","verdict":"match","triangles":854}
+{"id":"x_OrcaSlicer/resources/profiles/Creality/creality_ender3v3plus_buildplate_model.stl","verdict":"match","triangles":854}
+{"id":"x_OrcaSlicer/resources/profiles/Creality/creality_ender3v3se_buildplate_model.stl","verdict":"match","triangles":854}
+{"id":"x_OrcaSlicer/resources/profiles/Creality/creality_ender3v4_buildplate_model.stl","verdict":"match","triangles":392}
+{"id":"x_OrcaSlicer/resources/profiles/Creality/creality_ender5_buildplate_model.stl","verdict":"match","triangles":156}
+{"id":"x_OrcaSlicer/resources/profiles/Creality/creality_ender5max_buildplate_model.stl","verdict":"match","triangles":854}
+{"id":"x_OrcaSlicer/resources/profiles/Creality/creality_ender5plus_buildplate_model.stl","verdict":"match","triangles":156}
+{"id":"x_OrcaSlicer/resources/profiles/Creality/creality_ender5pro_buildplate_model.stl","verdict":"match","triangles":156}
+{"id":"x_OrcaSlicer/resources/profiles/Creality/creality_ender5s1_buildplate_model.stl","verdict":"match","triangles":854}
+{"id":"x_OrcaSlicer/resources/profiles/Creality/creality_ender5s_buildplate_model.stl","verdict":"match","triangles":156}
+{"id":"x_OrcaSlicer/resources/profiles/Creality/creality_ender6_buildplate_model.stl","verdict":"match","triangles":156}
+{"id":"x_OrcaSlicer/resources/profiles/Creality/creality_hi_buildplate_model.stl","verdict":"match","triangles":392}
+{"id":"x_OrcaSlicer/resources/profiles/Creality/creality_k1_buildplate_model.stl","verdict":"match","triangles":854}
+{"id":"x_OrcaSlicer/resources/profiles/Creality/creality_k1c_buildplate_model.stl","verdict":"match","triangles":854}
+{"id":"x_OrcaSlicer/resources/profiles/Creality/creality_k1max_buildplate_model.stl","verdict":"match","triangles":854}
+{"id":"x_OrcaSlicer/resources/profiles/Creality/creality_k1se_buildplate_model.stl","verdict":"match","triangles":854}
+{"id":"x_OrcaSlicer/resources/profiles/Creality/creality_k2_buildplate_model.stl","verdict":"match","triangles":392}
+{"id":"x_OrcaSlicer/resources/profiles/Creality/creality_k2plus_buildplate_model.stl","verdict":"match","triangles":432}
+{"id":"x_OrcaSlicer/resources/profiles/Creality/creality_k2pro_buildplate_model.stl","verdict":"match","triangles":392}
+{"id":"x_OrcaSlicer/resources/profiles/Creality/creality_sermoond3_buildplate_model.stl","verdict":"match","triangles":156}
+{"id":"x_OrcaSlicer/resources/profiles/Creality/creality_sermoonv1_buildplate_model.stl","verdict":"match","triangles":156}
+{"id":"x_OrcaSlicer/resources/profiles/Custom/Custom_350_bed.stl","verdict":"match","triangles":108}
+{"id":"x_OrcaSlicer/resources/profiles/DeltaMaker/deltamaker_2_buildplate_model.stl","verdict":"match","triangles":20}
+{"id":"x_OrcaSlicer/resources/profiles/Dremel/dremel_3d20_buildplate_model.stl","verdict":"match","triangles":12}
+{"id":"x_OrcaSlicer/resources/profiles/Dremel/dremel_3d40_3d45_buildplate_model.stl","verdict":"match","triangles":12}
+{"id":"x_OrcaSlicer/resources/profiles/Dremel/dremel_3d45.stl","verdict":"match","triangles":1268}
+{"id":"x_OrcaSlicer/resources/profiles/Elegoo/elegoo_centuri_buildplate_model.stl","verdict":"match","triangles":1274}
+{"id":"x_OrcaSlicer/resources/profiles/Elegoo/elegoo_centuri_carbon_buildplate_model.stl","verdict":"match","triangles":1274}
+{"id":"x_OrcaSlicer/resources/profiles/Elegoo/elegoo_neptune2_buildplate_model.stl","verdict":"match","triangles":172}
+{"id":"x_OrcaSlicer/resources/profiles/Elegoo/elegoo_neptune2d_buildplate_model.stl","verdict":"match","triangles":172}
+{"id":"x_OrcaSlicer/resources/profiles/Elegoo/elegoo_neptune2s_buildplate_model.stl","verdict":"match","triangles":172}
+{"id":"x_OrcaSlicer/resources/profiles/Elegoo/elegoo_neptune3_buildplate_model.stl","verdict":"match","triangles":172}
+{"id":"x_OrcaSlicer/resources/profiles/Elegoo/elegoo_neptune3max_buildplate_model.stl","verdict":"match","triangles":172}
+{"id":"x_OrcaSlicer/resources/profiles/Elegoo/elegoo_neptune3plus_buildplate_model.stl","verdict":"match","triangles":172}
+{"id":"x_OrcaSlicer/resources/profiles/Elegoo/elegoo_neptune3pro_buildplate_model.stl","verdict":"match","triangles":172}
+{"id":"x_OrcaSlicer/resources/profiles/Elegoo/elegoo_neptune4_buildplate_model.stl","verdict":"match","triangles":172}
+{"id":"x_OrcaSlicer/resources/profiles/Elegoo/elegoo_neptune4max_buildplate_model.stl","verdict":"match","triangles":172}
+{"id":"x_OrcaSlicer/resources/profiles/Elegoo/elegoo_neptune4plus_buildplate_model.stl","verdict":"match","triangles":172}
+{"id":"x_OrcaSlicer/resources/profiles/Elegoo/elegoo_neptune4pro_buildplate_model.stl","verdict":"match","triangles":172}
+{"id":"x_OrcaSlicer/resources/profiles/Elegoo/elegoo_neptune_buildplate_model.stl","verdict":"match","triangles":172}
+{"id":"x_OrcaSlicer/resources/profiles/Elegoo/elegoo_neptunex_buildplate_model.stl","verdict":"match","triangles":172}
+{"id":"x_OrcaSlicer/resources/profiles/Elegoo/elegoo_orangestorm_giga_buildplate_model.stl","verdict":"match","triangles":560}
+{"id":"x_OrcaSlicer/resources/profiles/Eryone/X400_bed.stl","verdict":"match","triangles":188}
+{"id":"x_OrcaSlicer/resources/profiles/Eryone/eryone_er20_buildplate_model.stl","verdict":"match","triangles":472}
+{"id":"x_OrcaSlicer/resources/profiles/FELIX Printers/felix_food_extruder.stl","verdict":"match","triangles":1476}
+{"id":"x_OrcaSlicer/resources/profiles/FELIX Printers/felix_food_series_buildplate_model.stl","verdict":"match","triangles":3342}
+{"id":"x_OrcaSlicer/resources/profiles/FELIX Printers/felix_hotend.stl","verdict":"match","triangles":560}
+{"id":"x_OrcaSlicer/resources/profiles/FELIX Printers/felix_pro_l_series_buildplate_model.stl","verdict":"match","triangles":284}
+{"id":"x_OrcaSlicer/resources/profiles/FELIX Printers/felix_pro_series_buildplate_model.stl","verdict":"match","triangles":2832}
+{"id":"x_OrcaSlicer/resources/profiles/FELIX Printers/felix_pro_xl_series_buildplate_model.stl","verdict":"match","triangles":284}
+{"id":"x_OrcaSlicer/resources/profiles/FELIX Printers/felix_tec_series_buildplate_model.stl","verdict":"match","triangles":2536}
+{"id":"x_OrcaSlicer/resources/profiles/FLSun/flsun_SR_buildplate_model.stl","verdict":"match","triangles":1560}
+{"id":"x_OrcaSlicer/resources/profiles/FLSun/flsun_T1_buildplate_model.stl","verdict":"match","triangles":824}
+{"id":"x_OrcaSlicer/resources/profiles/FLSun/flsun_q5_buildplate_model.stl","verdict":"match","triangles":416}
+{"id":"x_OrcaSlicer/resources/profiles/FLSun/flsun_qqspro_buildplate_model.stl","verdict":"match","triangles":416}
+{"id":"x_OrcaSlicer/resources/profiles/FLSun/flsun_s1_buildplate_model.stl","verdict":"match","triangles":844}
+{"id":"x_OrcaSlicer/resources/profiles/FLSun/flsun_v400_buildplate_model.stl","verdict":"match","triangles":744}
+{"id":"x_OrcaSlicer/resources/profiles/Flashforge/flashforge_adventurer3_series_buildplate_model.stl","verdict":"match","triangles":540}
+{"id":"x_OrcaSlicer/resources/profiles/Flashforge/flashforge_adventurer5m_series_buildplate_model.stl","verdict":"match","triangles":768}
+{"id":"x_OrcaSlicer/resources/profiles/Flashforge/flashforge_adventurer_5m_series_hotend.stl","verdict":"match","triangles":1104}
+{"id":"x_OrcaSlicer/resources/profiles/Flashforge/flashforge_artemis_buildplate_model.stl","verdict":"match","triangles":118}
+{"id":"x_OrcaSlicer/resources/profiles/Flashforge/flashforge_c5_buildplate_model.stl","verdict":"match","triangles":236}
+{"id":"x_OrcaSlicer/resources/profiles/Flashforge/flashforge_g2s_buildplate_model.stl","verdict":"match","triangles":1781}
+{"id":"x_OrcaSlicer/resources/profiles/Flashforge/flashforge_g3u_buildplate_model.stl","verdict":"match","triangles":1798}
+{"id":"x_OrcaSlicer/resources/profiles/Flashforge/flashforge_g4pro_buildplate_model.stl","verdict":"match","triangles":888}
+{"id":"x_OrcaSlicer/resources/profiles/FlyingBear/FlyingBear Ghost 6-bed.stl","verdict":"match","triangles":42}
+{"id":"x_OrcaSlicer/resources/profiles/FlyingBear/FlyingBear Ghost7-bed.stl","verdict":"match","triangles":400}
+{"id":"x_OrcaSlicer/resources/profiles/FlyingBear/FlyingBear Reborn3-bed.stl","verdict":"match","triangles":308}
+{"id":"x_OrcaSlicer/resources/profiles/FlyingBear/FlyingBear S1-bed.stl","verdict":"match","triangles":268}
+{"id":"x_OrcaSlicer/resources/profiles/Folgertech/Folgertech_FT5_buildplate_model.stl","verdict":"match","triangles":1040}
+{"id":"x_OrcaSlicer/resources/profiles/Folgertech/Folgertech_FT6_buildplate_model.stl","verdict":"match","triangles":1184}
+{"id":"x_OrcaSlicer/resources/profiles/Folgertech/Folgertech_i3_buildplate_model.stl","verdict":"match","triangles":500}
+{"id":"x_OrcaSlicer/resources/profiles/Folgertech/hotend.stl","verdict":"match","triangles":560}
+{"id":"x_OrcaSlicer/resources/profiles/Geeetech/105x105.stl","verdict":"match","triangles":1840}
+{"id":"x_OrcaSlicer/resources/profiles/Geeetech/220x220.stl","verdict":"match","triangles":12}
+{"id":"x_OrcaSlicer/resources/profiles/Geeetech/250x250.stl","verdict":"match","triangles":12}
+{"id":"x_OrcaSlicer/resources/profiles/Geeetech/255x255.stl","verdict":"match","triangles":12}
+{"id":"x_OrcaSlicer/resources/profiles/Geeetech/320x320.stl","verdict":"match","triangles":12}
+{"id":"x_OrcaSlicer/resources/profiles/Ginger Additive/Ginger_G1.stl","verdict":"match","triangles":44}
+{"id":"x_OrcaSlicer/resources/profiles/Goofoo/Goofoo-GP1.stl","verdict":"match","triangles":300}
+{"id":"x_OrcaSlicer/resources/profiles/Goofoo/Goofoo-TurboM.stl","verdict":"match","triangles":140}
+{"id":"x_OrcaSlicer/resources/profiles/Goofoo/Goofoo-Velo+.stl","verdict":"match","triangles":216}
+{"id":"x_OrcaSlicer/resources/profiles/InfiMech/InfiMech EX-bed.stl","verdict":"match","triangles":400}
+{"id":"x_OrcaSlicer/resources/profiles/InfiMech/InfiMech TX-bed.stl","verdict":"match","triangles":398}
+{"id":"x_OrcaSlicer/resources/profiles/Kingroon/klp1_bed.stl","verdict":"match","triangles":298}
+{"id":"x_OrcaSlicer/resources/profiles/Kingroon/kp3s_bed.stl","verdict":"match","triangles":882}
+{"id":"x_OrcaSlicer/resources/profiles/Kingroon/mini_bed.stl","verdict":"match","triangles":298}
+{"id":"x_OrcaSlicer/resources/profiles/LH/LH_Stinger_buildplate_model.stl","verdict":"match","triangles":1620}
+{"id":"x_OrcaSlicer/resources/profiles/LONGER/longer_lk10_buildplate_model.stl","verdict":"match","triangles":332}
+{"id":"x_OrcaSlicer/resources/profiles/LONGER/longer_lk10plus_buildplate_model.stl","verdict":"match","triangles":332}
+{"id":"x_OrcaSlicer/resources/profiles/Lulzbot/taz_4_or_5_build_plate.stl","verdict":"match","triangles":2844}
+{"id":"x_OrcaSlicer/resources/profiles/Lulzbot/taz_6_build_plate.stl","verdict":"match","triangles":6362}
+{"id":"x_OrcaSlicer/resources/profiles/Lulzbot/taz_pro_dual_build_plate.stl","verdict":"match","triangles":6122}
+{"id":"x_OrcaSlicer/resources/profiles/M3D/m3d_enabler_D8500_bed_model.stl","verdict":"match","triangles":232}
+{"id":"x_OrcaSlicer/resources/profiles/MagicMaker/120_buildplate_model.stl","verdict":"match","triangles":172}
+{"id":"x_OrcaSlicer/resources/profiles/MagicMaker/125_buildplate_model.stl","verdict":"match","triangles":172}
+{"id":"x_OrcaSlicer/resources/profiles/MagicMaker/150_buildplate_model.stl","verdict":"match","triangles":172}
+{"id":"x_OrcaSlicer/resources/profiles/MagicMaker/160_buildplate_model.stl","verdict":"match","triangles":172}
+{"id":"x_OrcaSlicer/resources/profiles/MagicMaker/220210_buildplate_model.stl","verdict":"match","triangles":172}
+{"id":"x_OrcaSlicer/resources/profiles/MagicMaker/220_buildplate_model.stl","verdict":"match","triangles":172}
+{"id":"x_OrcaSlicer/resources/profiles/MagicMaker/250_buildplate_model.stl","verdict":"match","triangles":172}
+{"id":"x_OrcaSlicer/resources/profiles/MagicMaker/310_buildplate_model.stl","verdict":"match","triangles":172}
+{"id":"x_OrcaSlicer/resources/profiles/MagicMaker/MM_hotend.stl","verdict":"match","triangles":456}
+{"id":"x_OrcaSlicer/resources/profiles/Mellow/M1_bed_model.stl","verdict":"match","triangles":76}
+{"id":"x_OrcaSlicer/resources/profiles/Meltingplot/chx350-printbed.stl","verdict":"match","triangles":205}
+{"id":"x_OrcaSlicer/resources/profiles/Meltingplot/mbl133-printbed.stl","verdict":"match","triangles":205}
+{"id":"x_OrcaSlicer/resources/profiles/Meltingplot/mbl136-printbed.stl","verdict":"match","triangles":205}
+{"id":"x_OrcaSlicer/resources/profiles/Meltingplot/mbl308-printbed.stl","verdict":"match","triangles":205}
+{"id":"x_OrcaSlicer/resources/profiles/Meltingplot/mbl480-printbed.stl","verdict":"match","triangles":205}
+{"id":"x_OrcaSlicer/resources/profiles/OpenEYE/Plate.stl","verdict":"match","triangles":854}
+{"id":"x_OrcaSlicer/resources/profiles/Peopoly/magnetox_model-400x300.stl","verdict":"match","triangles":388}
+{"id":"x_OrcaSlicer/resources/profiles/Peopoly/magnetox_model.stl","verdict":"match","triangles":388}
+{"id":"x_OrcaSlicer/resources/profiles/Phrozen/Phrozen Arco_buildplate_model.stl","verdict":"match","triangles":220}
+{"id":"x_OrcaSlicer/resources/profiles/Positron3D/ThePositron_bed_model.stl","verdict":"match","triangles":500}
+{"id":"x_OrcaSlicer/resources/profiles/Prusa/Prusa XL_bed.stl","verdict":"match","triangles":316}
+{"id":"x_OrcaSlicer/resources/profiles/Prusa/coreone_bed.stl","verdict":"match","triangles":452}
+{"id":"x_OrcaSlicer/resources/profiles/Prusa/coreone_indx.stl","verdict":"match","triangles":452}
+{"id":"x_OrcaSlicer/resources/profiles/Prusa/coreonel_bed.stl","verdict":"match","triangles":1216}
+{"id":"x_OrcaSlicer/resources/profiles/Prusa/mini_bed.stl","verdict":"match","triangles":506}
+{"id":"x_OrcaSlicer/resources/profiles/Prusa/miniis_bed.stl","verdict":"match","triangles":506}
+{"id":"x_OrcaSlicer/resources/profiles/Prusa/mk3.5_bed.stl","verdict":"match","triangles":606}
+{"id":"x_OrcaSlicer/resources/profiles/Prusa/mk3_bed.stl","verdict":"match","triangles":606}
+{"id":"x_OrcaSlicer/resources/profiles/Prusa/mk4_bed.stl","verdict":"match","triangles":452}
+{"id":"x_OrcaSlicer/resources/profiles/Qidi/qidi_Q1Pro_buildplate_model.stl","verdict":"match","triangles":236}
+{"id":"x_OrcaSlicer/resources/profiles/Qidi/qidi_q2_buildplate_model.stl","verdict":"match","triangles":356}
+{"id":"x_OrcaSlicer/resources/profiles/Qidi/qidi_q2c_buildplate_model.stl","verdict":"match","triangles":356}
+{"id":"x_OrcaSlicer/resources/profiles/Qidi/qidi_xcfpro_buildplate_model.stl","verdict":"match","triangles":174}
+{"id":"x_OrcaSlicer/resources/profiles/Qidi/qidi_xmax3_buildplate_model.stl","verdict":"match","triangles":494}
+{"id":"x_OrcaSlicer/resources/profiles/Qidi/qidi_xmax4_buildplate_model.stl","verdict":"match","triangles":462}
+{"id":"x_OrcaSlicer/resources/profiles/Qidi/qidi_xmax_buildplate_model.stl","verdict":"match","triangles":174}
+{"id":"x_OrcaSlicer/resources/profiles/Qidi/qidi_xplus3_buildplate_model.stl","verdict":"match","triangles":452}
+{"id":"x_OrcaSlicer/resources/profiles/Qidi/qidi_xplus4_buildplate_model.stl","verdict":"match","triangles":404}
+{"id":"x_OrcaSlicer/resources/profiles/Qidi/qidi_xplus5_buildplate_model.stl","verdict":"match","triangles":488}
+{"id":"x_OrcaSlicer/resources/profiles/Qidi/qidi_xplus_buildplate_model.stl","verdict":"match","triangles":174}
+{"id":"x_OrcaSlicer/resources/profiles/Qidi/qidi_xseries_gen2_hotend.stl","verdict":"match","triangles":456}
+{"id":"x_OrcaSlicer/resources/profiles/Qidi/qidi_xseries_gen3_hotend.stl","verdict":"match","triangles":1176}
+{"id":"x_OrcaSlicer/resources/profiles/Qidi/qidi_xsmart3_buildplate_model.stl","verdict":"match","triangles":424}
+{"id":"x_OrcaSlicer/resources/profiles/Qidi/qidi_xsmart5_buildplate_model.stl","verdict":"match","triangles":914}
+{"id":"x_OrcaSlicer/resources/profiles/RH3D/E3NG-bed.stl","verdict":"match","triangles":4298}
+{"id":"x_OrcaSlicer/resources/profiles/RH3D/VIRTU-bed.stl","verdict":"match","triangles":5791}
+{"id":"x_OrcaSlicer/resources/profiles/Raise3D/raise3d_pro3_buildplate_model.stl","verdict":"match","triangles":108}
+{"id":"x_OrcaSlicer/resources/profiles/Raise3D/raise3d_pro3plus_buildplate_model.stl","verdict":"match","triangles":108}
+{"id":"x_OrcaSlicer/resources/profiles/Ratrig/ratrig-vcast-bed.stl","verdict":"match","triangles":2448}
+{"id":"x_OrcaSlicer/resources/profiles/Ratrig/ratrig-vcore-bed-200.stl","verdict":"match","triangles":2448}
+{"id":"x_OrcaSlicer/resources/profiles/Ratrig/ratrig-vcore-bed-300-clone-mode.stl","verdict":"match","triangles":1400}
+{"id":"x_OrcaSlicer/resources/profiles/Ratrig/ratrig-vcore-bed-300.stl","verdict":"match","triangles":2448}
+{"id":"x_OrcaSlicer/resources/profiles/Ratrig/ratrig-vcore-bed-400-clone-mode.stl","verdict":"match","triangles":1414}
+{"id":"x_OrcaSlicer/resources/profiles/Ratrig/ratrig-vcore-bed-400.stl","verdict":"match","triangles":2448}
+{"id":"x_OrcaSlicer/resources/profiles/Ratrig/ratrig-vcore-bed-500-clone-mode.stl","verdict":"match","triangles":1400}
+{"id":"x_OrcaSlicer/resources/profiles/Ratrig/ratrig-vcore-bed-500.stl","verdict":"match","triangles":2448}
+{"id":"x_OrcaSlicer/resources/profiles/Ratrig/ratrig-vminion-bed.stl","verdict":"match","triangles":456}
+{"id":"x_OrcaSlicer/resources/profiles/SecKit/SK-Go3_Bed.stl","verdict":"match","triangles":582}
+{"id":"x_OrcaSlicer/resources/profiles/SecKit/SK-Tank_Bed.stl","verdict":"match","triangles":582}
+{"id":"x_OrcaSlicer/resources/profiles/SecKit/seckit-hotend.stl","verdict":"match","triangles":97}
+{"id":"x_OrcaSlicer/resources/profiles/SeeMeCNC/SeeMeCNC_Buildplate_Model.stl","verdict":"match","triangles":1200}
+{"id":"x_OrcaSlicer/resources/profiles/SeeMeCNC/SeeMeCNC_Buildplate_Model_500.stl","verdict":"match","triangles":1200}
+{"id":"x_OrcaSlicer/resources/profiles/Snapmaker/Snapmaker A250_bed.stl","verdict":"match","triangles":422}
+{"id":"x_OrcaSlicer/resources/profiles/Snapmaker/Snapmaker A350_bed.stl","verdict":"match","triangles":420}
+{"id":"x_OrcaSlicer/resources/profiles/Snapmaker/Snapmaker Artisan_bed.stl","verdict":"match","triangles":156}
+{"id":"x_OrcaSlicer/resources/profiles/Snapmaker/Snapmaker J1_bed.stl","verdict":"match","triangles":1016}
+{"id":"x_OrcaSlicer/resources/profiles/Snapmaker/Snapmaker U1_bed.stl","verdict":"match","triangles":808}
+{"id":"x_OrcaSlicer/resources/profiles/Sovol/sovol_sv01pro_buildplate_model.stl","verdict":"match","triangles":172}
+{"id":"x_OrcaSlicer/resources/profiles/Sovol/sovol_sv02_buildplate_model.stl","verdict":"match","triangles":172}
+{"id":"x_OrcaSlicer/resources/profiles/Sovol/sovol_sv05_buildplate_model.stl","verdict":"match","triangles":212}
+{"id":"x_OrcaSlicer/resources/profiles/Sovol/sovol_sv06_ace_buildplate_model.stl","verdict":"match","triangles":616}
+{"id":"x_OrcaSlicer/resources/profiles/Sovol/sovol_sv06_buildplate_model.stl","verdict":"match","triangles":212}
+{"id":"x_OrcaSlicer/resources/profiles/Sovol/sovol_sv06plus_ace_buildplate_model.stl","verdict":"match","triangles":704}
+{"id":"x_OrcaSlicer/resources/profiles/Sovol/sovol_sv06plus_buildplate_model.stl","verdict":"match","triangles":250}
+{"id":"x_OrcaSlicer/resources/profiles/Sovol/sovol_sv07_buildplate_model.stl","verdict":"match","triangles":854}
+{"id":"x_OrcaSlicer/resources/profiles/Sovol/sovol_sv07plus_buildplate_model.stl","verdict":"match","triangles":854}
+{"id":"x_OrcaSlicer/resources/profiles/Sovol/sovol_sv08_buildplate_model.stl","verdict":"match","triangles":268}
+{"id":"x_OrcaSlicer/resources/profiles/Sovol/sovol_sv08_max_buildplate_model.stl","verdict":"match","triangles":778}
+{"id":"x_OrcaSlicer/resources/profiles/Sovol/sovol_zero_buildplate_model.stl","verdict":"match","triangles":388}
+{"id":"x_OrcaSlicer/resources/profiles/TwoTrees/SP-5_bed.stl","verdict":"match","triangles":220}
+{"id":"x_OrcaSlicer/resources/profiles/TwoTrees/TwoTrees SK1_buildplate_model.stl","verdict":"match","triangles":388}
+{"id":"x_OrcaSlicer/resources/profiles/UltiMaker/ultimaker_2_buildplate_model.stl","verdict":"match","triangles":244}
+{"id":"x_OrcaSlicer/resources/profiles/UltiMaker/ultimaker_hotend.stl","verdict":"match","triangles":456}
+{"id":"x_OrcaSlicer/resources/profiles/UltiMaker/ultimaker_s5_buildplate_model.stl","verdict":"match","triangles":1252}
+{"id":"x_OrcaSlicer/resources/profiles/Vivedino/Xplorer_buildplate_model.stl","verdict":"match","triangles":2996}
+{"id":"x_OrcaSlicer/resources/profiles/Volumic/EXO42_bed.stl","verdict":"match","triangles":816}
+{"id":"x_OrcaSlicer/resources/profiles/Volumic/EXO65_bed.stl","verdict":"match","triangles":1206}
+{"id":"x_OrcaSlicer/resources/profiles/Volumic/SH65_bed.stl","verdict":"match","triangles":658}
+{"id":"x_OrcaSlicer/resources/profiles/Volumic/VS20_bed.stl","verdict":"match","triangles":1854}
+{"id":"x_OrcaSlicer/resources/profiles/Volumic/VS30PRO_bed.stl","verdict":"match","triangles":1854}
+{"id":"x_OrcaSlicer/resources/profiles/Volumic/VS30U_bed.stl","verdict":"match","triangles":2496}
+{"id":"x_OrcaSlicer/resources/profiles/Voron/Voron_120_build_plate.stl","verdict":"match","triangles":338}
+{"id":"x_OrcaSlicer/resources/profiles/Voron/Voron_250_build_plate.stl","verdict":"match","triangles":338}
+{"id":"x_OrcaSlicer/resources/profiles/Voron/Voron_300_build_plate.stl","verdict":"match","triangles":338}
+{"id":"x_OrcaSlicer/resources/profiles/Voron/Voron_350_build_plate.stl","verdict":"match","triangles":338}
+{"id":"x_OrcaSlicer/resources/profiles/Voxelab/voxelab_aquilax2_buildplate_model.stl","verdict":"match","triangles":108}
+{"id":"x_OrcaSlicer/resources/profiles/Vzbot/Vz235SlicerBedModel-cnc.stl","verdict":"match","triangles":7592}
+{"id":"x_OrcaSlicer/resources/profiles/Vzbot/Vz330SlicerBedModel-cnc.stl","verdict":"match","triangles":8138}
+{"id":"x_OrcaSlicer/resources/profiles/Vzbot/goliath.stl","verdict":"match","triangles":3208}
+{"id":"x_OrcaSlicer/resources/profiles/WEMAKE3D/WEMAKE3D PhoenixProV1_buildplate_model.stl","verdict":"match","triangles":172}
+{"id":"x_OrcaSlicer/resources/profiles/WEMAKE3D/WEMAKE3D TinyBotV1_buildplate_model.stl","verdict":"match","triangles":172}
+{"id":"x_OrcaSlicer/resources/profiles/Wanhao France/Wanhao D12-300_hotend.stl","verdict":"match","triangles":536}
+{"id":"x_OrcaSlicer/resources/profiles/Wanhao France/Wanhao_D12-230_buildplate_model.stl","verdict":"match","triangles":172}
+{"id":"x_OrcaSlicer/resources/profiles/Wanhao France/Wanhao_D12-300_buildplate_model.stl","verdict":"match","triangles":172}
+{"id":"x_OrcaSlicer/resources/profiles/Wanhao France/Wanhao_D12-500_buildplate_model.stl","verdict":"match","triangles":172}
+{"id":"x_OrcaSlicer/resources/profiles/Wanhao/Wanhao D12-300_hotend.stl","verdict":"match","triangles":536}
+{"id":"x_OrcaSlicer/resources/profiles/Wanhao/Wanhao_D12-300_buildplate_model.stl","verdict":"match","triangles":156}
+{"id":"x_OrcaSlicer/resources/profiles/WonderMaker/wm_3dp_hotend.stl","verdict":"match","triangles":560}
+{"id":"x_OrcaSlicer/resources/profiles/WonderMaker/wm_buildplate_model.stl","verdict":"match","triangles":314}
+{"id":"x_OrcaSlicer/resources/profiles/Z-Bolt/Z-Bolt_S1000_buildplate_model.stl","verdict":"match","triangles":1804}
+{"id":"x_OrcaSlicer/resources/profiles/Z-Bolt/Z-Bolt_S300_buildplate_model.stl","verdict":"match","triangles":1320}
+{"id":"x_OrcaSlicer/resources/profiles/Z-Bolt/Z-Bolt_S400_buildplate_model.stl","verdict":"match","triangles":2308}
+{"id":"x_OrcaSlicer/resources/profiles/Z-Bolt/Z-Bolt_S600_buildplate_model.stl","verdict":"match","triangles":4332}
+{"id":"x_OrcaSlicer/resources/profiles/Z-Bolt/Z-Bolt_S800_buildplate_model.stl","verdict":"match","triangles":436}
+{"id":"x_OrcaSlicer/resources/profiles/hotend.stl","verdict":"match","triangles":560}
+{"id":"x_OrcaSlicer/resources/profiles/iQ/TiQ2.stl","verdict":"match","triangles":12}
+{"id":"x_OrcaSlicer/resources/profiles/iQ/TiQ8.stl","verdict":"match","triangles":12}
+{"id":"x_OrcaSlicer/resources/profiles/re3D/GB-HOTEND.stl","verdict":"match","triangles":3336}
+{"id":"x_OrcaSlicer/resources/profiles/re3D/GBX-HOTEND.stl","verdict":"match","triangles":5910}
+{"id":"x_OrcaSlicer/tests/data/20mm_cube.obj","verdict":"match","triangles":12}
+{"id":"x_OrcaSlicer/tests/data/2x20x10.obj","verdict":"match","triangles":12}
+{"id":"x_OrcaSlicer/tests/data/A.obj","verdict":"match","triangles":1246}
+{"id":"x_OrcaSlicer/tests/data/A_upsidedown.obj","verdict":"match","triangles":1246}
+{"id":"x_OrcaSlicer/tests/data/V.obj","verdict":"match","triangles":24}
+{"id":"x_OrcaSlicer/tests/data/V_standing.obj","verdict":"match","triangles":24}
+{"id":"x_OrcaSlicer/tests/data/bridge.obj","verdict":"match","triangles":28}
+{"id":"x_OrcaSlicer/tests/data/cube_with_concave_hole.obj","verdict":"match","triangles":48}
+{"id":"x_OrcaSlicer/tests/data/cube_with_concave_hole_enlarged.obj","verdict":"match","triangles":48}
+{"id":"x_OrcaSlicer/tests/data/cube_with_concave_hole_enlarged_standing.obj","verdict":"match","triangles":48}
+{"id":"x_OrcaSlicer/tests/data/cube_with_hole.obj","verdict":"match","triangles":32}
+{"id":"x_OrcaSlicer/tests/data/extruder_idler.obj","verdict":"match","triangles":3586}
+{"id":"x_OrcaSlicer/tests/data/extruder_idler_quads.obj","verdict":"match","triangles":7344}
+{"id":"x_OrcaSlicer/tests/data/frog_legs.obj","verdict":"match","triangles":18334}
+{"id":"x_OrcaSlicer/tests/data/ipadstand.obj","verdict":"match","triangles":56}
+{"id":"x_OrcaSlicer/tests/data/overhang.obj","verdict":"match","triangles":118}
+{"id":"x_OrcaSlicer/tests/data/pyramid.obj","verdict":"match","triangles":6}
+{"id":"x_OrcaSlicer/tests/data/simplification.obj","verdict":"match","triangles":28}
+{"id":"x_OrcaSlicer/tests/data/sloping_hole.obj","verdict":"match","triangles":136}
+{"id":"x_OrcaSlicer/tests/data/small_dorito.obj","verdict":"match","triangles":8}
+{"id":"x_OrcaSlicer/tests/data/test_3mf/Ger\u00e4te/B\u00fcchse.3mf","verdict":"match","triangles":12}
+{"id":"x_OrcaSlicer/tests/data/test_3mf/Prusa.stl","verdict":"match","triangles":614}
+{"id":"x_OrcaSlicer/tests/data/test_stl/ASCII/20mmbox-CR.stl","verdict":"both-refused","why":["line 1 (byte 0): no triangles"]}
+{"id":"x_OrcaSlicer/tests/data/test_stl/ASCII/20mmbox-CRLF.stl","verdict":"match","triangles":12}
+{"id":"x_OrcaSlicer/tests/data/test_stl/ASCII/20mmbox-LF.stl","verdict":"match","triangles":12}
+{"id":"x_OrcaSlicer/tests/data/test_stl/ASCII/20mmbox-nonstandard.stl","verdict":"both-refused","why":["line 71 (byte 2642): \"blah\" is not an STL word"]}
+{"id":"x_OrcaSlicer/tests/data/test_stl/Ger\u00e4te/20mmbox-\u010d\u0159\u0161\u0159\u011b\u00e1.stl","verdict":"match","triangles":12}
+{"id":"x_OrcaSlicer/tests/data/texture_import/two_color_sphere/test_two_color_sphere.obj","verdict":"mismatch","adjudicated":"match","triangles":224}
+{"id":"x_OrcaSlicer/tests/data/texture_import/two_color_sphere/test_two_color_sphere_textured.obj","verdict":"mismatch","adjudicated":"match","triangles":224}
+{"id":"x_OrcaSlicer/tests/data/two_hollow_squares.obj","verdict":"match","triangles":96}
+{"id":"x_PrusaSlicer/resources/lua/com.prusa3d.slicer.calibration/temp_tower-base.stl","verdict":"match","triangles":12}
+{"id":"x_PrusaSlicer/resources/lua/com.prusa3d.slicer.calibration/temp_tower-step.stl","verdict":"match","triangles":2584}
+{"id":"x_PrusaSlicer/resources/presets/prusa-research-fff/PrusaResearch/assets/coreone_bed.stl","verdict":"match","triangles":2398}
+{"id":"x_PrusaSlicer/resources/presets/prusa-research-fff/PrusaResearch/assets/coreoneindx_bed.stl","verdict":"match","triangles":2398}
+{"id":"x_PrusaSlicer/resources/presets/prusa-research-fff/PrusaResearch/assets/coreonel_bed.stl","verdict":"match","triangles":28388}
+{"id":"x_PrusaSlicer/resources/presets/prusa-research-fff/PrusaResearch/assets/mini_bed.stl","verdict":"match","triangles":1156}
+{"id":"x_PrusaSlicer/resources/presets/prusa-research-fff/PrusaResearch/assets/mk2_bed.stl","verdict":"match","triangles":48}
+{"id":"x_PrusaSlicer/resources/presets/prusa-research-fff/PrusaResearch/assets/mk3_bed.stl","verdict":"match","triangles":1836}
+{"id":"x_PrusaSlicer/resources/presets/prusa-research-fff/PrusaResearch/assets/mk4_bed.stl","verdict":"match","triangles":1836}
+{"id":"x_PrusaSlicer/resources/presets/prusa-research-fff/PrusaResearch/assets/xl_bed.stl","verdict":"match","triangles":516}
+{"id":"x_PrusaSlicer/resources/presets/prusa-research-sla/PrusaResearchSLA/assets/sl1_bed.stl","verdict":"match","triangles":8320}
+{"id":"x_PrusaSlicer/resources/presets/prusa-research-sla/PrusaResearchSLA/assets/sl1s_bed.stl","verdict":"match","triangles":5842}
+{"id":"x_PrusaSlicer/src/slic3r-shared/test/data/fdm_roundtrip1.3mf","verdict":"match","triangles":72}
+{"id":"x_PrusaSlicer/src/slic3r-shared/test/data/fdm_roundtrip2.3mf","verdict":"match","triangles":72}
+{"id":"x_PrusaSlicer/src/slic3r-shared/test/data/presets/prusa-research-sla/PrusaResearchSLA/assets/sl1_bed.stl","verdict":"match","triangles":8320}
+{"id":"x_PrusaSlicer/src/slic3r-shared/test/data/presets/prusa-research-sla/PrusaResearchSLA/assets/sl1s_bed.stl","verdict":"match","triangles":5842}
+{"id":"x_PrusaSlicer/src/slic3r-shared/test/data/sla_roundtrip1.3mf","verdict":"match","triangles":24}
+{"id":"x_PrusaSlicer/src/slic3r-shared/test/data/sla_roundtrip2.3mf","verdict":"match","triangles":24}
+{"id":"x_PrusaSlicer/src/slic3r-shared/test/data/test_3mf/production_ext.3mf","verdict":"both-refused","why":["line 6 (byte 289): 3D/3dmodel.model: no object 2"]}
+{"id":"x_PrusaSlicer/src/slic3r-shared/test/data/wipe_tower.3mf","verdict":"match","triangles":36}
+{"id":"x_PrusaSlicer/tests/data/20mm_cube.obj","verdict":"match","triangles":12}
+{"id":"x_PrusaSlicer/tests/data/2x20x10.obj","verdict":"match","triangles":12}
+{"id":"x_PrusaSlicer/tests/data/A.obj","verdict":"match","triangles":1246}
+{"id":"x_PrusaSlicer/tests/data/A_upsidedown.obj","verdict":"match","triangles":1246}
+{"id":"x_PrusaSlicer/tests/data/U_overhang.obj","verdict":"match","triangles":28}
+{"id":"x_PrusaSlicer/tests/data/V.obj","verdict":"match","triangles":24}
+{"id":"x_PrusaSlicer/tests/data/V_standing.obj","verdict":"match","triangles":24}
+{"id":"x_PrusaSlicer/tests/data/bridge.obj","verdict":"match","triangles":28}
+{"id":"x_PrusaSlicer/tests/data/cube_with_concave_hole.obj","verdict":"match","triangles":48}
+{"id":"x_PrusaSlicer/tests/data/cube_with_concave_hole_enlarged.obj","verdict":"match","triangles":48}
+{"id":"x_PrusaSlicer/tests/data/cube_with_concave_hole_enlarged_standing.obj","verdict":"match","triangles":48}
+{"id":"x_PrusaSlicer/tests/data/cube_with_hole.obj","verdict":"match","triangles":32}
+{"id":"x_PrusaSlicer/tests/data/extruder_idler.obj","verdict":"match","triangles":3586}
+{"id":"x_PrusaSlicer/tests/data/extruder_idler_quads.obj","verdict":"match","triangles":7344}
+{"id":"x_PrusaSlicer/tests/data/frog_legs.obj","verdict":"match","triangles":18334}
+{"id":"x_PrusaSlicer/tests/data/ipadstand.obj","verdict":"match","triangles":56}
+{"id":"x_PrusaSlicer/tests/data/overhang.obj","verdict":"match","triangles":118}
+{"id":"x_PrusaSlicer/tests/data/pyramid.obj","verdict":"match","triangles":6}
+{"id":"x_PrusaSlicer/tests/data/seam_test_object.3mf","verdict":"match","triangles":225154}
+{"id":"x_PrusaSlicer/tests/data/simplification.obj","verdict":"match","triangles":28}
+{"id":"x_PrusaSlicer/tests/data/sloping_hole.obj","verdict":"match","triangles":136}
+{"id":"x_PrusaSlicer/tests/data/small_dorito.obj","verdict":"match","triangles":8}
+{"id":"x_PrusaSlicer/tests/data/test_3mf/Ger\u00e4te/B\u00fcchse.3mf","verdict":"match","triangles":12}
+{"id":"x_PrusaSlicer/tests/data/test_3mf/Prusa.stl","verdict":"match","triangles":614}
+{"id":"x_PrusaSlicer/tests/data/test_stl/ASCII/20mmbox-CR.stl","verdict":"both-refused","why":["line 1 (byte 0): no triangles"]}
+{"id":"x_PrusaSlicer/tests/data/test_stl/ASCII/20mmbox-CRLF.stl","verdict":"match","triangles":12}
+{"id":"x_PrusaSlicer/tests/data/test_stl/ASCII/20mmbox-LF.stl","verdict":"match","triangles":12}
+{"id":"x_PrusaSlicer/tests/data/test_stl/ASCII/20mmbox-nonstandard.stl","verdict":"both-refused","why":["line 71 (byte 2642): \"blah\" is not an STL word"]}
+{"id":"x_PrusaSlicer/tests/data/test_stl/Ger\u00e4te/20mmbox-\u010d\u0159\u0161\u0159\u011b\u00e1.stl","verdict":"match","triangles":12}
+{"id":"x_PrusaSlicer/tests/data/two_hollow_squares.obj","verdict":"match","triangles":96}
+{"id":"x_lib3mf/SDK/Examples/Files/Helix.3mf","verdict":"match","triangles":500}
+{"id":"x_lib3mf/SDK/Examples/Files/Helix.stl","verdict":"match","triangles":500}
+{"id":"x_lib3mf/Tests/TestFiles/Attachments/withPackageThumbnail.3mf","verdict":"match","triangles":500}
+{"id":"x_lib3mf/Tests/TestFiles/BeamLattice/BeamSet_Not_Unique.3mf","verdict":"both-refused","why":["byte 0: not a zip package (or one whose members would inflate past the caps)"]}
+{"id":"x_lib3mf/Tests/TestFiles/BeamLattice/BeamSet_Unique.3mf","verdict":"both-refused","why":["byte 0: the build places no triangles"]}
+{"id":"x_lib3mf/Tests/TestFiles/BeamLattice/Box_Attributes_Negative_1.3mf","verdict":"match","triangles":1}
+{"id":"x_lib3mf/Tests/TestFiles/BeamLattice/Box_Attributes_Negative_2.3mf","verdict":"match","triangles":1}
+{"id":"x_lib3mf/Tests/TestFiles/BeamLattice/Box_Attributes_Positive.3mf","verdict":"match","triangles":1}
+{"id":"x_lib3mf/Tests/TestFiles/BeamLattice/Box_Simple.3mf","verdict":"match","triangles":12}
+{"id":"x_lib3mf/Tests/TestFiles/BeamLattice/testsuite_P_BXX_2021_06.3mf","verdict":"both-refused","why":["byte 0: the build places no triangles"]}
+{"id":"x_lib3mf/Tests/TestFiles/BuildItems/WagonWithWheels.3mf","verdict":"refused","why":["byte 0: not a zip package (or one whose members would inflate past the caps)"]}
+{"id":"x_lib3mf/Tests/TestFiles/CPP_UnitTests/3mfbase10_box.3mf","verdict":"match","triangles":12}
+{"id":"x_lib3mf/Tests/TestFiles/CPP_UnitTests/3mfbase11_AdjMount.3mf","verdict":"match","triangles":1704}
+{"id":"x_lib3mf/Tests/TestFiles/CPP_UnitTests/3mfbase12_holed_cube.3mf","verdict":"match","triangles":144}
+{"id":"x_lib3mf/Tests/TestFiles/CPP_UnitTests/3mfbase13_holed_cube_support.3mf","verdict":"match","triangles":77136}
+{"id":"x_lib3mf/Tests/TestFiles/CPP_UnitTests/3mfbase14_materialandcolor2.3mf","verdict":"match","triangles":26342}
+{"id":"x_lib3mf/Tests/TestFiles/CPP_UnitTests/3mfbase1_cube.3mf","verdict":"ref-refused","why":["Lib3MFException 5: Duplicate Resource ID"],"triangles":12}
+{"id":"x_lib3mf/Tests/TestFiles/CPP_UnitTests/3mfbase2_material093.3mf","verdict":"match","triangles":2708}
+{"id":"x_lib3mf/Tests/TestFiles/CPP_UnitTests/3mfbase4_Mesh1.3mf","verdict":"match","triangles":7486}
+{"id":"x_lib3mf/Tests/TestFiles/CPP_UnitTests/3mfbase5_texture093.3mf","verdict":"match","triangles":97586}
+{"id":"x_lib3mf/Tests/TestFiles/CPP_UnitTests/3mfbase8_VertexTet1.3mf","verdict":"ref-refused","why":["Lib3MFException 5: Resource not found"],"triangles":4}
+{"id":"x_lib3mf/Tests/TestFiles/CPP_UnitTests/3mfbase9_ladybug.3mf","verdict":"match","triangles":1860}
+{"id":"x_lib3mf/Tests/TestFiles/CPP_UnitTests/Box.3mf","verdict":"match","triangles":48}
+{"id":"x_lib3mf/Tests/TestFiles/CPP_UnitTests/Box.stl","verdict":"match","triangles":12}
+{"id":"x_lib3mf/Tests/TestFiles/CPP_UnitTests/Color_093.3mf","verdict":"match","triangles":4300}
+{"id":"x_lib3mf/Tests/TestFiles/CPP_UnitTests/Sphere.stl","verdict":"match","triangles":2880}
+{"id":"x_lib3mf/Tests/TestFiles/CPP_UnitTests/Texture.3mf","verdict":"match","triangles":1346}
+{"id":"x_lib3mf/Tests/TestFiles/CPP_UnitTests/Texture_093.3mf","verdict":"match","triangles":5072}
+{"id":"x_lib3mf/Tests/TestFiles/CPP_UnitTests/cube10.3mf","verdict":"match","triangles":12}
+{"id":"x_lib3mf/Tests/TestFiles/CPP_UnitTests/texcube.3mf","verdict":"match","triangles":12}
+{"id":"x_lib3mf/Tests/TestFiles/CPP_UnitTests/track093.3mf","verdict":"match","triangles":5282}
+{"id":"x_lib3mf/Tests/TestFiles/MetaData/MetaData_BuildItem_DefaultNS.3mf","verdict":"match","triangles":12}
+{"id":"x_lib3mf/Tests/TestFiles/MetaData/MetaData_Model_DefaultNS.3mf","verdict":"match","triangles":12}
+{"id":"x_lib3mf/Tests/TestFiles/MetaData/MetaData_Model_DefaultNS_Fail.3mf","verdict":"match","triangles":12}
+{"id":"x_lib3mf/Tests/TestFiles/MetaData/MetaData_Model_VendorNS.3mf","verdict":"match","triangles":12}
+{"id":"x_lib3mf/Tests/TestFiles/MetaData/MetaData_Model_VendorNS_Fail.3mf","verdict":"match","triangles":12}
+{"id":"x_lib3mf/Tests/TestFiles/MetaData/MetaData_Object_DefaultNS.3mf","verdict":"match","triangles":12}
+{"id":"x_lib3mf/Tests/TestFiles/MetaData/MetaData_Object_DefaultNS_Fail.3mf","verdict":"match","triangles":12}
+{"id":"x_lib3mf/Tests/TestFiles/MetaData/MetaData_Object_VendorNS.3mf","verdict":"match","triangles":12}
+{"id":"x_lib3mf/Tests/TestFiles/MetaData/MetaData_Object_VendorNS_Fail.3mf","verdict":"match","triangles":12}
+{"id":"x_lib3mf/Tests/TestFiles/Mixed/Box.3mf","verdict":"match","triangles":48}
+{"id":"x_lib3mf/Tests/TestFiles/Mixed/Box_\u0223\ud85d\udf21\ud84c\udf83.3mf","verdict":"match","triangles":48}
+{"id":"x_lib3mf/Tests/TestFiles/Mixed/MustWarnOrFail.3mf","verdict":"match","triangles":48}
+{"id":"x_lib3mf/Tests/TestFiles/Mixed/Thumbnail_Object.3mf","verdict":"match","triangles":8}
+{"id":"x_lib3mf/Tests/TestFiles/Mixed/Thumbnail_Package.3mf","verdict":"match","triangles":12}
+{"id":"x_lib3mf/Tests/TestFiles/Mixed/texcube.3mf","verdict":"match","triangles":12}
+{"id":"x_lib3mf/Tests/TestFiles/Mixed/texturecube_with_EscapeCharacters.3mf","verdict":"match","triangles":12}
+{"id":"x_lib3mf/Tests/TestFiles/Models/PartsForBoundingBox.3mf","verdict":"refused","why":["byte 0: not a zip package (or one whose members would inflate past the caps)"]}
+{"id":"x_lib3mf/Tests/TestFiles/Models/WithSomeResources.3mf","verdict":"match","triangles":5082}
+{"id":"x_lib3mf/Tests/TestFiles/Models/platform.3mf","verdict":"match","triangles":8498}
+{"id":"x_lib3mf/Tests/TestFiles/OPC_Issues/Box_ExtensionCustom.3mf","verdict":"match","triangles":12}
+{"id":"x_lib3mf/Tests/TestFiles/OPC_Issues/Box_OverrideCustom.3mf","verdict":"match","triangles":12}
+{"id":"x_lib3mf/Tests/TestFiles/OPC_Issues/Box_OverridePositive.3mf","verdict":"match","triangles":12}
+{"id":"x_lib3mf/Tests/TestFiles/Objects/HelixWithThumbnail.3mf","verdict":"match","triangles":500}
+{"id":"x_lib3mf/Tests/TestFiles/Objects/HelixWithThumbnail_IncorrectRelationship.3mf","verdict":"ref-refused","why":["Lib3MFException 5: The call parameter to the function was invalid"],"triangles":500}
+{"id":"x_lib3mf/Tests/TestFiles/Production/2ProductionBoxes.3mf","verdict":"refused","why":["line 8 (byte 414): 3D/3dmodel.model: no object 2"]}
+{"id":"x_lib3mf/Tests/TestFiles/Production/2ProductionBoxes_OneSliceFile.3mf","verdict":"both-refused","why":["line 8 (byte 414): 3D/3dmodel.model: no object 2"]}
+{"id":"x_lib3mf/Tests/TestFiles/Production/HierarchicalComponent.3mf","verdict":"match","triangles":12}
+{"id":"x_lib3mf/Tests/TestFiles/Production/Replaces_PP_701_04.3mf","verdict":"refused","why":["line 6 (byte 538): 3D/3dmodel.model: a component in another model file (production extension) is not read"]}
+{"id":"x_lib3mf/Tests/TestFiles/Production/detachedmodel.3mf","verdict":"refused","why":["line 6 (byte 303): 3D/3dmodel.model: a component in another model file (production extension) is not read"]}
+{"id":"x_lib3mf/Tests/TestFiles/Properties/MultiProperty_Out_incorrect.3mf","verdict":"match","triangles":12}
+{"id":"x_lib3mf/Tests/TestFiles/Properties/PyramidWithProperties.3mf","verdict":"refused","why":["byte 0: not a zip package (or one whose members would inflate past the caps)"]}
+{"id":"x_lib3mf/Tests/TestFiles/Properties/PyramidWithoutProperties.3mf","verdict":"refused","why":["byte 0: not a zip package (or one whose members would inflate past the caps)"]}
+{"id":"x_lib3mf/Tests/TestFiles/Reader/Box.3mf","verdict":"refused","why":["byte 0: not a zip package (or one whose members would inflate past the caps)"]}
+{"id":"x_lib3mf/Tests/TestFiles/Reader/CS-1111_3dmodel-e1r1_other-e1r1.3mf","verdict":"match","triangles":10}
+{"id":"x_lib3mf/Tests/TestFiles/Reader/DOS-FUZ-LIB3MF.3mf","verdict":"ref-refused","why":["Lib3MFException 5: A component resource is invalid."],"triangles":12}
+{"id":"x_lib3mf/Tests/TestFiles/Reader/GEN-C-ADA-COMPONENT-TRANSFORM-0.3mf","verdict":"both-refused","why":["line 61 (byte 0): 3D/3dmodel.model: attribute 'transform' at 61:92 is already defined"]}
+{"id":"x_lib3mf/Tests/TestFiles/Reader/GEN-M-ADA-ITEM-TRANSFORM-0.3mf","verdict":"both-refused","why":["line 151 (byte 0): 3D/3dmodel.model: attribute 'transform' at 151:72 is already defined"]}
+{"id":"x_lib3mf/Tests/TestFiles/Reader/Globo.3mf","verdict":"refused","why":["byte 0: not a zip package (or one whose members would inflate past the caps)"]}
+{"id":"x_lib3mf/Tests/TestFiles/Reader/N_XXX_0422_01.3mf","verdict":"both-refused","why":["line 9 (byte 499): 3D/3dmodel.model: <vertex> needs a finite x"]}
+{"id":"x_lib3mf/Tests/TestFiles/Reader/P_XXM_0519_01.3mf","verdict":"match","triangles":12}
+{"id":"x_lib3mf/Tests/TestFiles/Reader/Pyramid.3mf","verdict":"refused","why":["byte 0: not a zip package (or one whose members would inflate past the caps)"]}
+{"id":"x_lib3mf/Tests/TestFiles/Reader/Pyramid.stl","verdict":"match","triangles":10}
+{"id":"x_lib3mf/Tests/TestFiles/Reader/PyramidVolume.3mf","verdict":"match","triangles":10}
+{"id":"x_lib3mf/Tests/TestFiles/Reader/cam_51476_test.3mf","verdict":"match","triangles":130614}
+{"id":"x_lib3mf/Tests/TestFiles/RequiredExtensions/NotListed.3mf","verdict":"ref-refused","why":["Lib3MFException 5: The prefix of a required extension is invalid"],"triangles":12}
+{"id":"x_lib3mf/Tests/TestFiles/RequiredExtensions/Pass.3mf","verdict":"match","triangles":12}
+{"id":"x_lib3mf/Tests/TestFiles/RequiredExtensions/Unsupported.3mf","verdict":"match","triangles":12}
+{"id":"x_lib3mf/Tests/TestFiles/SecureContent/keystore.3mf","verdict":"refused","why":["byte 0: not a zip package (or one whose members would inflate past the caps)"]}
+{"id":"x_lib3mf/Tests/TestFiles/SecureContent/keystore_compressed.3mf","verdict":"both-refused","why":["byte 0: not a zip package (or one whose members would inflate past the caps)"]}
+{"id":"x_lib3mf/Tests/TestFiles/SecureContent/keystore_encrypted.3mf","verdict":"both-refused","why":["byte 0: not a zip package (or one whose members would inflate past the caps)"]}
+{"id":"x_lib3mf/Tests/TestFiles/SecureContent/keystore_encrypted_compressed.3mf","verdict":"both-refused","why":["byte 0: not a zip package (or one whose members would inflate past the caps)"]}
+{"id":"x_lib3mf/Tests/TestFiles/SecureContent/negative_keystore_empty.3mf","verdict":"both-refused","why":["line 6 (byte 451): 3D/3dmodel.model: a component in another model file (production extension) is not read"]}
+{"id":"x_lib3mf/Tests/TestFiles/SecureContent/negative_keystore_invalid_attributes.3mf","verdict":"refused","why":["line 6 (byte 451): 3D/3dmodel.model: a component in another model file (production extension) is not read"]}
+{"id":"x_lib3mf/Tests/TestFiles/SecureContent/negative_keystore_missing_attributes.3mf","verdict":"refused","why":["line 6 (byte 451): 3D/3dmodel.model: a component in another model file (production extension) is not read"]}
+{"id":"x_lib3mf/Tests/TestFiles/Slice/Expected_Slice_Hierarchy.3mf","verdict":"both-refused","why":["byte 0: not a zip package (or one whose members would inflate past the caps)"]}
+{"id":"x_lib3mf/Tests/TestFiles/Slice/MultiSliceStack_NoFile.3mf","verdict":"match","triangles":24}
+{"id":"x_lib3mf/Tests/TestFiles/Slice/MultiSliceStack_OneFile.3mf","verdict":"match","triangles":24}
+{"id":"x_lib3mf/Tests/TestFiles/Slice/MultiSliceStack_TwoFiles.3mf","verdict":"match","triangles":24}
+{"id":"x_lib3mf/Tests/TestFiles/Slice/PS_505_02_non_planar_transform.3mf","verdict":"match","triangles":12}
+{"id":"x_lib3mf/Tests/TestFiles/Slice/Slice_MustFail_TooRefsTooDeep.3mf","verdict":"both-refused","why":["line 38 (byte 1842): 3D/3dmodel.model: no object 2"]}
+{"id":"x_lib3mf/Tests/TestFiles/Slice/UniSliceStack_TwoFiles.3mf","verdict":"match","triangles":12}
+{"id":"x_lib3mf/Tests/TestFiles/Volumetric/Cube.3mf","verdict":"match","triangles":12}
+{"id":"x_lib3mf/Tests/TestFiles/Volumetric/Pyramid.3mf","verdict":"refused","why":["byte 0: not a zip package (or one whose members would inflate past the caps)"]}
+{"id":"x_lib3mf/Tests/TestFiles/Volumetric/RadialRadiator.3mf","verdict":"both-refused","why":["byte 0: not a zip package (or one whose members would inflate past the caps)"]}
+{"id":"x_lib3mf/Tests/TestFiles/Volumetric/SphereInACage.3mf","verdict":"both-refused","why":["byte 0: not a zip package (or one whose members would inflate past the caps)"]}
+{"id":"x_lib3mf/Tests/TestFiles/Volumetric/template.3mf","verdict":"both-refused","why":["line 1948 (byte 86383): 3D/3dmodel.model: an object with neither a mesh nor components"]}
+{"id":"x_lib3mf/Tests/TestFiles/Writer/Pyramid.3mf","verdict":"refused","why":["byte 0: not a zip package (or one whose members would inflate past the caps)"]}
+{"id":"x_lib3mf/Tests/TestFiles/v093/Material_093.3mf","verdict":"match","triangles":4300}
+{"id":"x_lib3mf/Tests/TestFiles/v093/Texture_093.3mf","verdict":"match","triangles":5072}
+{"id":"x_lib3mf/Tests/TestFiles/v093/Track_093.3mf","verdict":"match","triangles":5282}
+{"id":"x_lib3mf/outProduction.3mf","verdict":"refused","why":["byte 0: not a zip package (or one whose members would inflate past the caps)"]}
