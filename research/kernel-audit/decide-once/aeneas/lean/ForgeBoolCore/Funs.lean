@@ -47,35 +47,38 @@ def Pair.Insts.CoreCmpPartialEqPair {U : Type _} {T : Type _} (cmpPartialEqInst
 }
 
 /-- [forge_bool_core::index::{impl core::clone::Clone for forge_bool_core::index::Index}::clone]:
-    Source: 'src/index.rs', lines 7:9-7:14
+    Source: 'src/index.rs', lines 8:9-8:14
     Visibility: public -/
 def index.Index.Insts.CoreCloneClone.clone
   (self : index.Index) : Result index.Index := do
   let v ← alloc.vec.CloneVec.clone core.clone.CloneU32 self.order
-  ok { order := v }
+  let v1 ←
+    alloc.vec.CloneVec.clone (BuiltinClone (Std.U64 × Std.U32)) self.hs
+  ok { order := v, hs := v1 }
 
 /-- Trait implementation: [forge_bool_core::index::{impl core::clone::Clone for forge_bool_core::index::Index}]
-    Source: 'src/index.rs', lines 7:9-7:14 -/
+    Source: 'src/index.rs', lines 8:9-8:14 -/
 @[reducible]
 def index.Index.Insts.CoreCloneClone : core.clone.Clone index.Index := {
   clone := index.Index.Insts.CoreCloneClone.clone
 }
 
 /-- [forge_bool_core::index::{impl core::fmt::Debug for forge_bool_core::index::Index}::fmt]:
-    Source: 'src/index.rs', lines 7:16-7:21
+    Source: 'src/index.rs', lines 8:16-8:21
     Visibility: public -/
 def index.Index.Insts.CoreFmtDebug.fmt
   (self : index.Index) (f : core.fmt.Formatter) :
   Result ((core.result.Result Unit core.fmt.Error) × core.fmt.Formatter)
   := do
-  let dyn :=
-    Dyn.mk _ (core.fmt.DebugShared (core.fmt.DebugVec core.fmt.DebugU32))
-      self.order
-  core.fmt.Formatter.debug_struct_field1_finish f (toStr "Index") (toStr
-    "order") dyn
+  let dyn := Dyn.mk _ (core.fmt.DebugVec core.fmt.DebugU32) self.order
+  let dyn1 :=
+    Dyn.mk _ (core.fmt.DebugShared (core.fmt.DebugVec (Pair.Insts.CoreFmtDebug
+      core.fmt.DebugU64 core.fmt.DebugU32))) self.hs
+  core.fmt.Formatter.debug_struct_field2_finish f (toStr "Index") (toStr
+    "order") dyn (toStr "hs") dyn1
 
 /-- Trait implementation: [forge_bool_core::index::{impl core::fmt::Debug for forge_bool_core::index::Index}]
-    Source: 'src/index.rs', lines 7:16-7:21 -/
+    Source: 'src/index.rs', lines 8:16-8:21 -/
 @[reducible]
 def index.Index.Insts.CoreFmtDebug : core.fmt.Debug index.Index := {
   fmt := index.Index.Insts.CoreFmtDebug.fmt
@@ -88,6 +91,304 @@ def sort.rank (s : Sgn) : Result Std.U8 := do
   | Sgn.Neg => ok 0#u8
   | Sgn.Zero => ok 1#u8
   | Sgn.Pos => ok 2#u8
+
+/-- [forge_bool_core::index::hash_cov]: loop body 0:
+    Source: 'src/index.rs', lines 18:4-21:5 -/
+@[rust_loop_body]
+def index.hash_cov_loop.body
+  (c : Slice Sgn) (h : Std.U64) (i : Std.Usize) :
+  Result (ControlFlow (Std.U64 × Std.Usize) Std.U64)
+  := do
+  let i1 := Slice.len c
+  if i < i1
+  then
+    let s ← Slice.index_usize c i
+    let i2 ← sort.rank s
+    let i3 ← lift (UScalar.cast .U64 i2)
+    let i4 ← lift (h ^^^ i3)
+    let h1 ← lift (core.num.U64.wrapping_mul i4 1099511628211#u64)
+    let i5 ← i + 1#usize
+    ok (cont (h1, i5))
+  else ok (done h)
+
+/-- [forge_bool_core::index::hash_cov]: loop 0:
+    Source: 'src/index.rs', lines 18:4-21:5 -/
+@[rust_loop]
+def index.hash_cov_loop
+  (c : Slice Sgn) (h : Std.U64) (i : Std.Usize) : Result Std.U64 := do
+  loop
+    (fun (h1, i1) => index.hash_cov_loop.body c h1 i1)
+    (h, i)
+
+/-- [forge_bool_core::index::hash_cov]:
+    Source: 'src/index.rs', lines 15:0-23:1 -/
+@[reducible]
+def index.hash_cov (c : Slice Sgn) : Result Std.U64 := do
+  index.hash_cov_loop c 14695981039346656037#u64 0#usize
+
+/-- [forge_bool_core::{impl core::cmp::PartialEq<forge_bool_core::Sgn> for forge_bool_core::Sgn}::eq]:
+    Source: 'src/lib.rs', lines 30:29-30:38
+    Visibility: public -/
+def Sgn.Insts.CoreCmpPartialEqSgn.eq
+  (self : Sgn) (other : Sgn) : Result Bool := do
+  let self1 := read_discriminant self
+  let other1 := read_discriminant other
+  ok (self1 = other1)
+
+/-- [forge_bool_core::index::same]: loop body 0:
+    Source: 'src/index.rs', lines 29:4-32:5 -/
+@[rust_loop_body]
+def index.same_loop.body
+  (a : Slice Sgn) (b : Slice Sgn) (same : Bool) (i : Std.Usize) :
+  Result (ControlFlow (Bool × Std.Usize) Bool)
+  := do
+  if same
+  then
+    let i1 := Slice.len a
+    if i < i1
+    then
+      let s ← Slice.index_usize a i
+      let s1 ← Slice.index_usize b i
+      let same1 ← Sgn.Insts.CoreCmpPartialEqSgn.eq s s1
+      let i2 ← i + 1#usize
+      ok (cont (same1, i2))
+    else ok (done same)
+  else ok (done same)
+
+/-- [forge_bool_core::index::same]: loop 0:
+    Source: 'src/index.rs', lines 29:4-32:5 -/
+@[rust_loop]
+def index.same_loop
+  (a : Slice Sgn) (b : Slice Sgn) (same : Bool) (i : Std.Usize) :
+  Result Bool
+  := do
+  loop
+    (fun (same1, i1) => index.same_loop.body a b same1 i1)
+    (same, i)
+
+/-- [forge_bool_core::index::same]:
+    Source: 'src/index.rs', lines 26:0-34:1 -/
+def index.same (a : Slice Sgn) (b : Slice Sgn) : Result Bool := do
+  let i := Slice.len a
+  let i1 := Slice.len b
+  index.same_loop a b (i = i1) 0#usize
+
+/-- [forge_bool_core::sort::le2]:
+    Source: 'src/sort.rs', lines 144:0-146:1 -/
+def sort.le2
+  (a : (Std.U64 × Std.U32)) (b : (Std.U64 × Std.U32)) : Result Bool := do
+  let (i, i1) := a
+  let (i2, i3) := b
+  if i < i2
+  then ok true
+  else if i = i2
+       then ok (i1 <= i3)
+       else ok false
+
+/-- [forge_bool_core::sort::sort_hashed]: loop body 2:
+    Source: 'src/sort.rs', lines 163:12-172:13 -/
+@[rust_loop_body]
+def sort.sort_hashed_loop0_loop0_loop0.body
+  (src : alloc.vec.Vec (Std.U64 × Std.U32)) (mid : Std.Usize) (hi : Std.Usize)
+  (dst : alloc.vec.Vec (Std.U64 × Std.U32)) (i : Std.Usize) (j : Std.Usize)
+  (k : Std.Usize) :
+  Result (ControlFlow ((alloc.vec.Vec (Std.U64 × Std.U32)) × Std.Usize ×
+    Std.Usize × Std.Usize) (alloc.vec.Vec (Std.U64 × Std.U32)))
+  := do
+  if k < hi
+  then
+    let (dst1, i1, j1) ←
+      if i < mid
+      then
+        if j >= hi
+        then
+          do
+          let p ←
+            alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice (Std.U64
+              × Std.U32)) src i
+          let (_, index_mut_back) ←
+            alloc.vec.Vec.index_mut (core.slice.index.SliceIndexUsizeSlice
+              (Std.U64 × Std.U32)) dst k
+          let i2 ← i + 1#usize
+          let dst2 := index_mut_back p
+          ok (dst2, i2, j)
+        else
+          do
+          let p ←
+            alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice (Std.U64
+              × Std.U32)) src i
+          let p1 ←
+            alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice (Std.U64
+              × Std.U32)) src j
+          let b ← sort.le2 p p1
+          if b
+          then
+            let (_, index_mut_back) ←
+              alloc.vec.Vec.index_mut (core.slice.index.SliceIndexUsizeSlice
+                (Std.U64 × Std.U32)) dst k
+            let i2 ← i + 1#usize
+            let dst2 := index_mut_back p
+            ok (dst2, i2, j)
+          else
+            let (_, index_mut_back) ←
+              alloc.vec.Vec.index_mut (core.slice.index.SliceIndexUsizeSlice
+                (Std.U64 × Std.U32)) dst k
+            let j2 ← j + 1#usize
+            let dst2 := index_mut_back p1
+            ok (dst2, i, j2)
+      else
+        do
+        let p ←
+          alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice (Std.U64
+            × Std.U32)) src j
+        let (_, index_mut_back) ←
+          alloc.vec.Vec.index_mut (core.slice.index.SliceIndexUsizeSlice
+            (Std.U64 × Std.U32)) dst k
+        let j2 ← j + 1#usize
+        let dst2 := index_mut_back p
+        ok (dst2, i, j2)
+    let k1 ← k + 1#usize
+    ok (cont (dst1, i1, j1, k1))
+  else ok (done dst)
+
+/-- [forge_bool_core::sort::sort_hashed]: loop 2:
+    Source: 'src/sort.rs', lines 163:12-172:13 -/
+@[rust_loop]
+def sort.sort_hashed_loop0_loop0_loop0
+  (src : alloc.vec.Vec (Std.U64 × Std.U32))
+  (dst : alloc.vec.Vec (Std.U64 × Std.U32)) (mid : Std.Usize) (hi : Std.Usize)
+  (i : Std.Usize) (j : Std.Usize) (k : Std.Usize) :
+  Result (alloc.vec.Vec (Std.U64 × Std.U32))
+  := do
+  loop
+    (fun (dst1, i1, j1, k1) => sort.sort_hashed_loop0_loop0_loop0.body src mid
+      hi dst1 i1 j1 k1)
+    (dst, i, j, k)
+
+/-- [forge_bool_core::sort::sort_hashed]: loop body 1:
+    Source: 'src/sort.rs', lines 159:8-174:9 -/
+@[rust_loop_body]
+def sort.sort_hashed_loop0_loop0.body
+  (n : Std.Usize) (src : alloc.vec.Vec (Std.U64 × Std.U32))
+  (width : Std.Usize) (dst : alloc.vec.Vec (Std.U64 × Std.U32))
+  (lo : Std.Usize) :
+  Result (ControlFlow ((alloc.vec.Vec (Std.U64 × Std.U32)) × Std.Usize)
+    (alloc.vec.Vec (Std.U64 × Std.U32)))
+  := do
+  if lo < n
+  then
+    let i ← lo + width
+    let mid ← if i < n
+                then ok i
+                else ok n
+    let i1 ← 2#usize * width
+    let i2 ← lo + i1
+    let hi ← if i2 < n
+               then lo + i1
+               else ok n
+    let dst1 ← sort.sort_hashed_loop0_loop0_loop0 src dst mid hi lo mid lo
+    ok (cont (dst1, hi))
+  else ok (done dst)
+
+/-- [forge_bool_core::sort::sort_hashed]: loop 1:
+    Source: 'src/sort.rs', lines 159:8-174:9 -/
+@[rust_loop]
+def sort.sort_hashed_loop0_loop0
+  (n : Std.Usize) (src : alloc.vec.Vec (Std.U64 × Std.U32))
+  (dst : alloc.vec.Vec (Std.U64 × Std.U32)) (width : Std.Usize)
+  (lo : Std.Usize) :
+  Result (alloc.vec.Vec (Std.U64 × Std.U32))
+  := do
+  loop
+    (fun (dst1, lo1) => sort.sort_hashed_loop0_loop0.body n src width dst1 lo1)
+    (dst, lo)
+
+/-- [forge_bool_core::sort::sort_hashed]: loop body 0:
+    Source: 'src/sort.rs', lines 157:4-177:5 -/
+@[rust_loop_body]
+def sort.sort_hashed_loop0.body
+  (n : Std.Usize) (src : alloc.vec.Vec (Std.U64 × Std.U32))
+  (dst : alloc.vec.Vec (Std.U64 × Std.U32)) (width : Std.Usize) :
+  Result (ControlFlow ((alloc.vec.Vec (Std.U64 × Std.U32)) × (alloc.vec.Vec
+    (Std.U64 × Std.U32)) × Std.Usize) (alloc.vec.Vec (Std.U64 × Std.U32)))
+  := do
+  if width < n
+  then
+    let dst1 ← sort.sort_hashed_loop0_loop0 n src dst width 0#usize
+    let (src1, dst2) := core.mem.swap src dst1
+    let width1 ← width * 2#usize
+    ok (cont (src1, dst2, width1))
+  else ok (done src)
+
+/-- [forge_bool_core::sort::sort_hashed]: loop 0:
+    Source: 'src/sort.rs', lines 157:4-177:5 -/
+@[rust_loop]
+def sort.sort_hashed_loop0
+  (n : Std.Usize) (src : alloc.vec.Vec (Std.U64 × Std.U32))
+  (dst : alloc.vec.Vec (Std.U64 × Std.U32)) (width : Std.Usize) :
+  Result (alloc.vec.Vec (Std.U64 × Std.U32))
+  := do
+  loop
+    (fun (src1, dst1, width1) => sort.sort_hashed_loop0.body n src1 dst1
+      width1)
+    (src, dst, width)
+
+/-- [forge_bool_core::sort::sort_hashed]:
+    Source: 'src/sort.rs', lines 149:0-179:1 -/
+def sort.sort_hashed
+  (v : alloc.vec.Vec (Std.U64 × Std.U32)) :
+  Result (alloc.vec.Vec (Std.U64 × Std.U32))
+  := do
+  let n := alloc.vec.Vec.len v
+  if n < 2#usize
+  then ok v
+  else
+    let src ← alloc.vec.CloneVec.clone (BuiltinClone (Std.U64 × Std.U32)) v
+    sort.sort_hashed_loop0 n src src 1#usize
+
+/-- [forge_bool_core::index::hash_table]: loop body 0:
+    Source: 'src/index.rs', lines 40:4-43:5 -/
+@[rust_loop_body]
+def index.hash_table_loop.body
+  (cells : Slice (alloc.vec.Vec Sgn)) (hs : alloc.vec.Vec (Std.U64 × Std.U32))
+  (i : Std.Usize) :
+  Result (ControlFlow ((alloc.vec.Vec (Std.U64 × Std.U32)) × Std.Usize)
+    (alloc.vec.Vec (Std.U64 × Std.U32)))
+  := do
+  let i1 := Slice.len cells
+  if i < i1
+  then
+    let v ← Slice.index_usize cells i
+    let s := alloc.vec.Vec.deref v
+    let i2 ← index.hash_cov s
+    let i3 ← lift (UScalar.cast .U32 i)
+    let hs1 ← alloc.vec.Vec.push hs (i2, i3)
+    let i4 ← i + 1#usize
+    ok (cont (hs1, i4))
+  else ok (done hs)
+
+/-- [forge_bool_core::index::hash_table]: loop 0:
+    Source: 'src/index.rs', lines 40:4-43:5 -/
+@[rust_loop]
+def index.hash_table_loop
+  (cells : Slice (alloc.vec.Vec Sgn)) (hs : alloc.vec.Vec (Std.U64 × Std.U32))
+  (i : Std.Usize) :
+  Result (alloc.vec.Vec (Std.U64 × Std.U32))
+  := do
+  loop
+    (fun (hs1, i1) => index.hash_table_loop.body cells hs1 i1)
+    (hs, i)
+
+/-- [forge_bool_core::index::hash_table]:
+    Source: 'src/index.rs', lines 37:0-46:1 -/
+def index.hash_table
+  (cells : Slice (alloc.vec.Vec Sgn)) :
+  Result (alloc.vec.Vec (Std.U64 × Std.U32))
+  := do
+  let i := Slice.len cells
+  let hs := alloc.vec.Vec.with_capacity (Std.U64 × Std.U32) i
+  let hs1 ← index.hash_table_loop cells hs 0#usize
+  sort.sort_hashed hs1
 
 /-- [forge_bool_core::sort::cmp_cov]: loop body 0:
     Source: 'src/sort.rs', lines 17:4-25:5 -/
@@ -311,7 +612,7 @@ def sort.sort_by_cov
     sort.sort_by_cov_loop0 cells n src src 1#usize
 
 /-- [forge_bool_core::index::{forge_bool_core::index::Index}::new]: loop body 0:
-    Source: 'src/index.rs', lines 16:8-19:9
+    Source: 'src/index.rs', lines 52:8-55:9
     Visibility: public -/
 @[rust_loop_body]
 def index.Index.new_loop.body
@@ -330,7 +631,7 @@ def index.Index.new_loop.body
   else ok (done order)
 
 /-- [forge_bool_core::index::{forge_bool_core::index::Index}::new]: loop 0:
-    Source: 'src/index.rs', lines 16:8-19:9
+    Source: 'src/index.rs', lines 52:8-55:9
     Visibility: public -/
 @[rust_loop]
 def index.Index.new_loop
@@ -343,7 +644,7 @@ def index.Index.new_loop
     (order, i)
 
 /-- [forge_bool_core::index::{forge_bool_core::index::Index}::new]:
-    Source: 'src/index.rs', lines 13:4-22:5
+    Source: 'src/index.rs', lines 49:4-59:5
     Visibility: public -/
 def index.Index.new
   (cells : Slice (alloc.vec.Vec Sgn)) : Result index.Index := do
@@ -351,14 +652,108 @@ def index.Index.new
   let order := alloc.vec.Vec.with_capacity Std.U32 i
   let order1 ← index.Index.new_loop cells order 0#usize
   let order2 ← sort.sort_by_cov order1 cells
-  ok { order := order2 }
+  let hs ← index.hash_table cells
+  ok { order := order2, hs }
 
 /-- [forge_bool_core::NONE]
     Source: 'src/lib.rs', lines 144:0-144:27 -/
 @[global_simps, irreducible] def NONE : Std.U32 := core.num.U32.MAX
 
+/-- [forge_bool_core::index::{forge_bool_core::index::Index}::find_h]: loop body 0:
+    Source: 'src/index.rs', lines 68:8-75:9
+    Visibility: public -/
+@[rust_loop_body]
+def index.Index.find_h_loop0.body
+  (v : alloc.vec.Vec (Std.U64 × Std.U32)) (h : Std.U64) (lo : Std.Usize)
+  (hi : Std.Usize) :
+  Result (ControlFlow (Std.Usize × Std.Usize) Std.Usize)
+  := do
+  if lo < hi
+  then
+    let i ← hi - lo
+    let i1 ← i / 2#usize
+    let mid ← lo + i1
+    let (i2, _) ←
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice (Std.U64 ×
+        Std.U32)) v mid
+    if i2 < h
+    then let lo1 ← mid + 1#usize
+         ok (cont (lo1, hi))
+    else ok (cont (lo, mid))
+  else ok (done lo)
+
+/-- [forge_bool_core::index::{forge_bool_core::index::Index}::find_h]: loop 0:
+    Source: 'src/index.rs', lines 68:8-75:9
+    Visibility: public -/
+@[rust_loop]
+def index.Index.find_h_loop0
+  (v : alloc.vec.Vec (Std.U64 × Std.U32)) (h : Std.U64) (lo : Std.Usize)
+  (hi : Std.Usize) :
+  Result Std.Usize
+  := do
+  loop
+    (fun (lo1, hi1) => index.Index.find_h_loop0.body v h lo1 hi1)
+    (lo, hi)
+
+/-- [forge_bool_core::index::{forge_bool_core::index::Index}::find_h]: loop body 1:
+    Source: 'src/index.rs', lines 78:8-84:9
+    Visibility: public -/
+@[rust_loop_body]
+def index.Index.find_h_loop1.body
+  (v : alloc.vec.Vec (Std.U64 × Std.U32)) (cells : Slice (alloc.vec.Vec Sgn))
+  (key : Slice Sgn) (h : Std.U64) («at» : Std.U32) (p : Std.Usize) :
+  Result (ControlFlow (Std.U32 × Std.Usize) Std.U32)
+  := do
+  if «at» = NONE
+  then
+    let i := alloc.vec.Vec.len v
+    if p < i
+    then
+      let (i1, i2) ←
+        alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice (Std.U64 ×
+          Std.U32)) v p
+      if i1 = h
+      then
+        let i3 ← lift (UScalar.cast .Usize i2)
+        let v1 ← Slice.index_usize cells i3
+        let s := alloc.vec.Vec.deref v1
+        let b ← index.same s key
+        let at1 ← if b
+                    then ok i2
+                    else ok «at»
+        let p1 ← p + 1#usize
+        ok (cont (at1, p1))
+      else ok (done «at»)
+    else ok (done «at»)
+  else ok (done «at»)
+
+/-- [forge_bool_core::index::{forge_bool_core::index::Index}::find_h]: loop 1:
+    Source: 'src/index.rs', lines 78:8-84:9
+    Visibility: public -/
+@[rust_loop]
+def index.Index.find_h_loop1
+  (v : alloc.vec.Vec (Std.U64 × Std.U32)) (cells : Slice (alloc.vec.Vec Sgn))
+  (key : Slice Sgn) (h : Std.U64) («at» : Std.U32) (p : Std.Usize) :
+  Result Std.U32
+  := do
+  loop
+    (fun (at1, p1) => index.Index.find_h_loop1.body v cells key h at1 p1)
+    («at», p)
+
+/-- [forge_bool_core::index::{forge_bool_core::index::Index}::find_h]:
+    Source: 'src/index.rs', lines 63:4-86:5
+    Visibility: public -/
+def index.Index.find_h
+  (self : index.Index) (cells : Slice (alloc.vec.Vec Sgn)) (key : Slice Sgn) :
+  Result Std.U32
+  := do
+  let h ← index.hash_cov key
+  let hi := alloc.vec.Vec.len self.hs
+  let lo ← index.Index.find_h_loop0 self.hs h 0#usize hi
+  index.Index.find_h_loop1 self.hs cells key h NONE lo
+
 /-- [forge_bool_core::index::{forge_bool_core::index::Index}::find]: loop body 0:
-    Source: 'src/index.rs', lines 29:8-40:9
+    Source: 'src/index.rs', lines 93:8-104:9
     Visibility: public -/
 @[rust_loop_body]
 def index.Index.find_loop.body
@@ -391,7 +786,7 @@ def index.Index.find_loop.body
   else ok (done «at»)
 
 /-- [forge_bool_core::index::{forge_bool_core::index::Index}::find]: loop 0:
-    Source: 'src/index.rs', lines 29:8-40:9
+    Source: 'src/index.rs', lines 93:8-104:9
     Visibility: public -/
 @[rust_loop]
 def index.Index.find_loop
@@ -404,7 +799,7 @@ def index.Index.find_loop
     (lo, hi, «at»)
 
 /-- [forge_bool_core::index::{forge_bool_core::index::Index}::find]:
-    Source: 'src/index.rs', lines 25:4-42:5
+    Source: 'src/index.rs', lines 89:4-106:5
     Visibility: public -/
 def index.Index.find
   (self : index.Index) (cells : Slice (alloc.vec.Vec Sgn)) (key : Slice Sgn) :
@@ -458,15 +853,6 @@ def Sgn.Insts.CoreFmtDebug : core.fmt.Debug Sgn := {
 def Sgn.Insts.CoreMarkerStructuralPartialEq : core.marker.StructuralPartialEq
   Sgn := {
 }
-
-/-- [forge_bool_core::{impl core::cmp::PartialEq<forge_bool_core::Sgn> for forge_bool_core::Sgn}::eq]:
-    Source: 'src/lib.rs', lines 30:29-30:38
-    Visibility: public -/
-def Sgn.Insts.CoreCmpPartialEqSgn.eq
-  (self : Sgn) (other : Sgn) : Result Bool := do
-  let self1 := read_discriminant self
-  let other1 := read_discriminant other
-  ok (self1 = other1)
 
 /-- Trait implementation: [forge_bool_core::{impl core::cmp::PartialEq<forge_bool_core::Sgn> for forge_bool_core::Sgn}]
     Source: 'src/lib.rs', lines 30:29-30:38 -/
@@ -2052,7 +2438,7 @@ def find_loop
     Source: 'src/lib.rs', lines 244:0-254:1 -/
 def find (l : Ledger) (ext : Ext) (key : Slice Sgn) : Result Std.U32 := do
   let s := alloc.vec.Vec.deref l.cells
-  let f ← index.Index.find ext.index s key
+  let f ← index.Index.find_h ext.index s key
   find_loop l.cells ext.extra key f 0#usize
 
 /-- [forge_bool_core::intern]:
