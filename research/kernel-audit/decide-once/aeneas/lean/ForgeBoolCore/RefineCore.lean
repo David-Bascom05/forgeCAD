@@ -260,7 +260,7 @@ theorem core_spec_of (hS : SplitOkSpec) (hCl : ClassifyOnSpec) : CoreSpec := by
     rw [← hb, hbt]
     simp only [Bool.not_true, Bool.false_eq_true, ite_false]
     step with split_spec l e0 hok0 hw.pieces (by rw [hlen0]; exact hw.room) as ⟨s, ext, hsp⟩
-    apply WP.spec_mono (hCl l e0 s ext r m ⟨hw, hok0, hx0, hsp⟩ hm)
+    apply WP.spec_mono (hCl l e0 s ext r m ⟨hw, by rw [← hb, hbt], hok0, hx0, hsp⟩ hm)
     intro o ho
     exact ⟨ext, hsp.ext, ho⟩
   · rename_i hbf

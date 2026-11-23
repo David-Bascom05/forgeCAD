@@ -84,6 +84,8 @@ structure LedgerWF (l : Ledger) : Prop where
   pieces : ∀ q ∈ pcs l, q.1 < l.cells.val.length ∧ q.2 < U32.max
   inside : InsideWF l
   edges : ∀ e ∈ l.edges.val, (e : U32).val < l.cells.val.length
+  /-- the edge cells are distinct (`unify`'s edge positions need it) -/
+  edges_nodup : (idsOf l.edges).Nodup
   verts : ∀ v ∈ l.verts.val, (v : U32).val < l.cells.val.length
   /-- cells, plus the at most two new sides per piece, stay below `u32::MAX` (= `NONE`) -/
   room : l.cells.val.length + 2 * l.pieces.val.length + 1 < U32.max
@@ -114,6 +116,8 @@ def MarksEdges (l : Ledger) (ext : Ext) (isE : List Bool) : Prop :=
 /-- The state after `split` on a well-formed ledger, which every later stage is given. -/
 structure AfterSplit (l : Ledger) (e0 : Ext) (s : Split) (ext : Ext) : Prop where
   wf : LedgerWF l
+  /-- `split_ok` passed (the core splits only then): every piece cell is a facet of its face's class -/
+  ok : (toL l).splitOk = true
   ext0 : ExtOK l e0
   extra0 : e0.extra.val = []
   split : SplitOK l e0 s ext
@@ -247,6 +251,7 @@ structure LFits (L : ForgeExact.DecideOnce.Ledger) : Prop where
   faces : L.faceBody.length < U32.max ∧ L.faceCls.length < U32.max ∧
     (∀ b ∈ L.faceBody, b < U32.max) ∧ (∀ c ∈ L.faceCls, c < U32.max)
   ids : (∀ p ∈ L.pieces, p.2 < U32.max) ∧ (∀ q ∈ L.inside, q.2 < U32.max)
+  edges_nodup : L.edges.Nodup
   width : ∀ X ∈ L.pieces.map Prod.fst ++ L.inside.map Prod.fst ++ L.edges ++ L.verts, X.length < U32.max
   size : 32 * (L.pieces.length + L.inside.length + L.edges.length + L.verts.length + 1) < U32.max
 
