@@ -2,6 +2,7 @@ import Lean
 import ForgeSheetCore.RefineClasses
 import ForgeSheetCore.RefineOwner
 import ForgeSheetCore.RefineChain
+import ForgeSheetCore.RefinePlace
 
 /-! Only the standard axioms: each listed theorem about the translated Rust rests on `propext`,
 `Classical.choice` and `Quot.sound` alone (a `sorry` or `native_decide` fails the build). -/
@@ -24,3 +25,6 @@ elab "#standard_axioms " ids:ident* : command => do
   forge_sheet_core.unchained_block forge_sheet_core.pinch_block forge_sheet_core.loop1_chain_spec
   ForgeSheetCore.Walk.walk_closes ForgeSheetCore.Walk.closed_add forge_sheet_core.succ_perm
   forge_sheet_core.walk_spec forge_sheet_core.walks_spec forge_sheet_core.chain_spec
+  forge_sheet_core.round_le forge_sheet_core.add_err forge_sheet_core.mul_err forge_sheet_core.sub_err
+  forge_sheet_core.three_round forge_sheet_core.two_round forge_sheet_core.apply_spec
+  forge_sheet_core.vec_spec forge_sheet_core.then_spec
