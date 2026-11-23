@@ -1,4 +1,5 @@
 import Mathlib
+import Tess.Weights
 
 open RealInnerProductSpace
 
@@ -184,6 +185,84 @@ theorem sphere_filter (o x₁ x₂ x₃ f : E) (l₁ l₂ l₃ r c d : ℝ)
     rw [div_le_div_iff₀ (by positivity) (by positivity)]
     nlinarith
   linarith
+
+/-- A point of the plane through the foot `f` of `o` (p − f square to f − o) is no nearer `o`
+than any point on the way from `f` to it. -/
+theorem plane_walk (o f p : E) (t : ℝ) (t0 : 0 ≤ t) (t1 : t ≤ 1) (hperp : ⟪f - o, p - f⟫ = 0) :
+    ‖(f + t • (p - f)) - o‖ ≤ ‖p - o‖ := by
+  have e1 : ‖(f + t • (p - f)) - o‖ ^ 2 = ‖f - o‖ ^ 2 + t ^ 2 * ‖p - f‖ ^ 2 := by
+    rw [show (f + t • (p - f)) - o = (f - o) + t • (p - f) by abel, norm_add_sq_real,
+      inner_smul_right, hperp, norm_smul, mul_pow, Real.norm_eq_abs, sq_abs]
+    ring
+  have e2 : ‖p - o‖ ^ 2 = ‖f - o‖ ^ 2 + ‖p - f‖ ^ 2 := by
+    rw [show p - o = (f - o) + (p - f) by abel, norm_add_sq_real, hperp]
+    ring
+  have : ‖(f + t • (p - f)) - o‖ ^ 2 ≤ ‖p - o‖ ^ 2 := by
+    rw [e1, e2]
+    have : t ^ 2 ≤ 1 := by nlinarith
+    nlinarith [sq_nonneg ‖p - f‖]
+  exact (sq_le_sq₀ (norm_nonneg _) (norm_nonneg _)).mp this
+
+/-- **The sphere's rule is exact.** A triangle with its corners on the sphere (centre o, radius
+r), its edges' middles within c of it and, where the foot f of the centre on its plane lies in
+it, the foot within c of it: every point of it lies within c of the sphere. (Inside, the foot
+is nearest the centre; outside, the way from the foot to any point of the triangle crosses an
+edge, nearer the centre, whose middle is nearer still.) -/
+theorem sphere_exact (o x₁ x₂ x₃ f : E) (l₁ l₂ l₃ m₁ m₂ m₃ r c : ℝ)
+    (h₁ : ‖x₁ - o‖ = r) (h₂ : ‖x₂ - o‖ = r) (h₃ : ‖x₃ - o‖ = r)
+    (hs : l₁ + l₂ + l₃ = 1) (hf : f = l₁ • x₁ + l₂ • x₂ + l₃ • x₃)
+    (q₁ : ⟪f - o, x₁ - f⟫ = 0) (q₂ : ⟪f - o, x₂ - f⟫ = 0) (q₃ : ⟪f - o, x₃ - f⟫ = 0)
+    (ms : m₁ + m₂ + m₃ = 1) (p₁ : 0 ≤ m₁) (p₂ : 0 ≤ m₂) (p₃ : 0 ≤ m₃)
+    (m₁₂ : r - ‖(x₁ + (1 / 2 : ℝ) • (x₂ - x₁)) - o‖ ≤ c)
+    (m₁₃ : r - ‖(x₁ + (1 / 2 : ℝ) • (x₃ - x₁)) - o‖ ≤ c)
+    (m₂₃ : r - ‖(x₂ + (1 / 2 : ℝ) • (x₃ - x₂)) - o‖ ≤ c)
+    (foot : 0 ≤ l₁ → 0 ≤ l₂ → 0 ≤ l₃ → r - ‖f - o‖ ≤ c) :
+    r - ‖(m₁ • x₁ + m₂ • x₂ + m₃ • x₃) - o‖ ≤ c := by
+  set p := m₁ • x₁ + m₂ • x₂ + m₃ • x₃
+  -- p − f is a sum of the corners' offsets from f, each square to f − o
+  have hpf : p - f = m₁ • (x₁ - f) + m₂ • (x₂ - f) + m₃ • (x₃ - f) := by
+    have : m₁ • f + m₂ • f + m₃ • f = f := by rw [← add_smul, ← add_smul, ms, one_smul]
+    simp only [p, smul_sub]
+    calc m₁ • x₁ + m₂ • x₂ + m₃ • x₃ - f
+        = m₁ • x₁ + m₂ • x₂ + m₃ • x₃ - (m₁ • f + m₂ • f + m₃ • f) := by rw [this]
+      _ = m₁ • x₁ - m₁ • f + (m₂ • x₂ - m₂ • f) + (m₃ • x₃ - m₃ • f) := by abel
+  have qp : ⟪f - o, p - f⟫ = 0 := by
+    rw [hpf, inner_add_right, inner_add_right, inner_smul_right, inner_smul_right,
+      inner_smul_right, q₁, q₂, q₃]; ring
+  by_cases inside : 0 ≤ l₁ ∧ 0 ≤ l₂ ∧ 0 ≤ l₃
+  · have := plane_walk o f p 0 le_rfl zero_le_one qp
+    simp only [zero_smul, add_zero] at this
+    linarith [foot inside.1 inside.2.1 inside.2.2]
+  · have neg : l₁ < 0 ∨ l₂ < 0 ∨ l₃ < 0 := by
+      by_contra h; push_neg at h; exact inside ⟨h.1, h.2.1, h.2.2⟩
+    obtain ⟨t, t0, t1, n₁, n₂, n₃, zero⟩ := walk_to_edge l₁ l₂ l₃ m₁ m₂ m₃ p₁ p₂ p₃ neg
+    have walk := plane_walk o f p t t0 t1 qp
+    -- the point on the way, in the corners' weights
+    have hq : f + t • (p - f) = ((1 - t) * l₁ + t * m₁) • x₁ + ((1 - t) * l₂ + t * m₂) • x₂
+        + ((1 - t) * l₃ + t * m₃) • x₃ := by
+      simp only [p, hf]; module
+    set w₁ := (1 - t) * l₁ + t * m₁
+    set w₂ := (1 - t) * l₂ + t * m₂
+    set w₃ := (1 - t) * l₃ + t * m₃
+    have ws : w₁ + w₂ + w₃ = 1 := by simp only [w₁, w₂, w₃]; linear_combination (1 - t) * hs + t * ms
+    rw [hq] at walk
+    rcases zero with z | z | z
+    · -- on the edge x₂x₃
+      have : w₂ • x₂ + w₃ • x₃ = x₂ + w₃ • (x₃ - x₂) := by
+        rw [show w₂ = 1 - w₃ by linarith [z]]; module
+      have near := mid_nearest o x₂ x₃ (by rw [h₂, h₃]) w₃
+      rw [z, zero_smul, zero_add, this] at walk
+      linarith
+    · have : w₁ • x₁ + w₃ • x₃ = x₁ + w₃ • (x₃ - x₁) := by
+        rw [show w₁ = 1 - w₃ by linarith [z]]; module
+      have near := mid_nearest o x₁ x₃ (by rw [h₁, h₃]) w₃
+      rw [z, zero_smul, add_zero, this] at walk
+      linarith
+    · have : w₁ • x₁ + w₂ • x₂ = x₁ + w₂ • (x₂ - x₁) := by
+        rw [show w₁ = 1 - w₂ by linarith [z]]; module
+      have near := mid_nearest o x₁ x₂ (by rw [h₁, h₂]) w₂
+      rw [z, zero_smul, add_zero, this] at walk
+      linarith
 
 end Sag
 

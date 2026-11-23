@@ -12,3 +12,9 @@ import Tess.Sag
 #guard_msgs in #print axioms Sag.chord_short
 /-- info: 'Sag.sphere_filter' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in #print axioms Sag.sphere_filter
+/-- info: 'Sag.walk_to_edge' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in #print axioms Sag.walk_to_edge
+/-- info: 'Sag.plane_walk' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in #print axioms Sag.plane_walk
+/-- info: 'Sag.sphere_exact' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in #print axioms Sag.sphere_exact
