@@ -1471,6 +1471,10 @@ fn regen_text(e: &forge_model::RegenError) -> String {
         G::NotClosed { what, .. } => format!("{what} is gone, so the part is no closed solid"),
         G::MissingEdge { name, .. } => format!("the part has no edge {name:?}"),
         G::Bodies { count } => format!("the part ends as {count} bodies, not one"),
+        G::Body {
+            error: forge_model::BodyError::DeletesAll,
+            ..
+        } => "the delete would leave the part no body (DeletesAll)".into(),
         _ => words(e),
     }
 }
