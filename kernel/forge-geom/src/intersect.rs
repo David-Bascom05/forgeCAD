@@ -743,6 +743,11 @@ fn subdivide_pieces(
     near: Option<Box3>,
     mut stack: Vec<(f64, f64, f64)>,
 ) -> CurveSurface {
+    // an unbounded stretch has no middle to halve at (a whole line against a surface whose box
+    // is unbounded: a pipe along a hyperbola): not to be told apart, as a search past its leaves
+    if stack.iter().any(|&(a, b, _)| !(b - a).is_finite()) {
+        return CurveSurface::Overlap;
+    }
     let g = |t: f64| s.implicit(c.eval(t));
     let off = |p: Point3| {
         near.map_or(0.0, |b| {

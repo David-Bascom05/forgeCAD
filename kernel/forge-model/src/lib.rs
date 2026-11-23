@@ -15,6 +15,7 @@ mod path;
 pub mod pattern;
 pub mod regions;
 mod rib;
+pub mod sheets;
 pub mod splinefam;
 mod splitface;
 pub mod standard;
@@ -196,6 +197,8 @@ pub enum Feature {
     Work(Work),
     /// A feature on chosen bodies, or one that combines, splits or moves bodies (bodies.rs).
     Body(Box<BodyFeature>),
+    /// A sheet: a sketch's chains extruded or revolved into a surface body of its own (sheets.rs).
+    Sheet(Box<sheets::Sheet>),
     /// A weldment member: a section along a line or an arc, cut at its ends, a body of its own
     /// (weld.rs).
     Member(Box<weld::Member>),
@@ -1119,9 +1122,15 @@ pub fn tool_shapes(features: History<'_>, i: usize) -> Result<Vec<(Shape, Combin
 /// pass never sees the part in between, where the feature-by-feature regen refuses an empty
 /// one however later tools add to it; such histories are rebuilt feature by feature instead.
 fn may_empty(first: &Body, tools: &[Tool]) -> bool {
+    // (each live face's box, in id order: a loop over the faces, not their ids' iterator)
     let bx = |b: &Body| {
-        b.face_ids()
-            .fold(forge_math::Box3::EMPTY, |a, f| a.hull(&b.face_box(f)))
+        let mut a = forge_math::Box3::EMPTY;
+        for (k, f) in b.faces.iter().enumerate() {
+            if f.alive {
+                a = a.hull(&b.face_box(forge_topo::FaceId(k as u32)));
+            }
+        }
+        a
     };
     let holds = |a: &forge_math::Box3, b: &forge_math::Box3| {
         let h = a.grow(forge_math::tol::LINEAR);
@@ -1172,15 +1181,18 @@ pub(crate) fn not_empty(b: Body, i: usize) -> Result<Body, RegenError> {
 
 /// Whether a feature makes a new body.
 fn starts(f: &Feature) -> bool {
-    matches!(
-        f,
-        Feature::Extrude { op: Combine::New, .. }
-            | Feature::Revolve { op: Combine::New, .. }
-            | Feature::Ball { op: Combine::New, .. }
-    ) || swept::op(f) == Some(Combine::New)
-        || matches!(f, Feature::Import(t) if t.op == Combine::New)
-        || matches!(f, Feature::Member(_))
-        || matches!(f, Feature::Regions(r) if r.op == Combine::New)
+    // one match: an extrude, revolve, ball, import or region set says by its own op, a sheet by
+    // its (a new body unless it is a thin wall), a member always; the rest as `swept::op` says
+    match f {
+        Feature::Extrude { op, .. } | Feature::Revolve { op, .. } | Feature::Ball { op, .. } => {
+            *op == Combine::New
+        }
+        Feature::Import(t) => t.op == Combine::New,
+        Feature::Regions(r) => r.op == Combine::New,
+        Feature::Sheet(s) => sheets::op(s) == Combine::New,
+        Feature::Member(_) => true,
+        _ => swept::op(f) == Some(Combine::New),
+    }
 }
 
 /// Whether a feature changes the part as a whole, rather than making tools to combine with it.
@@ -2237,6 +2249,7 @@ fn tools(features: History<'_>, i: usize, build: bool) -> Result<Vec<Tool>, Rege
         Feature::Text(_) => text::tools(features, i),
         Feature::Regions(_) => regions::tools(features, i, build),
         Feature::Import(_) => import::tools(features, i),
+        Feature::Sheet(s) => Ok(vec![sheets::tool(i, features.id(i), s, build)?]),
         Feature::Member(m) => Ok(vec![weld::tool(m, i, features.id(i), build)?]),
         f => Ok(vec![tool(i, features.id(i), f, build)?]),
     }

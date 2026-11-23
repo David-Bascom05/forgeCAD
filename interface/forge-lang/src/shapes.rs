@@ -1126,7 +1126,7 @@ fn direct(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Valu
     Ok(feat(id, name, idx, hid, None))
 }
 
-fn side_word(a: &Args) -> R<Side> {
+pub(crate) fn side_word(a: &Args) -> R<Side> {
     Ok(match word(a, "side", &["out", "in", "both"])? {
         Some("in") => Side::Neg,
         Some("both") => Side::Both,
@@ -1470,4 +1470,134 @@ pub fn member(ev: &mut Eval, f: &Feat, name: &str) -> Option<Value> {
         }
         _ => None,
     }
+}
+
+// ---- sheets ---------------------------------------------------------------------------------
+
+/// One piece of a sheet's chain in its sketch's plane, its ends, as drawn: lines, arcs, splines and
+/// whole circles (a circle is a chain alone).
+fn plane_piece(sk: &Sk, id: EntityId) -> (Segment, Point2, Point2) {
+    match sk.s.entity(id) {
+        Some(Entity::Line { a, b }) => {
+            let (p, q) = (sk.pos(a), sk.pos(b));
+            (Segment::Line { a: p, b: q }, p, q)
+        }
+        Some(Entity::Arc {
+            center,
+            start,
+            end,
+            ccw,
+        }) => {
+            let (c, a, b) = (sk.pos(center), sk.pos(start), sk.pos(end));
+            let (a0, a1) = (
+                dmath::atan2(a.y - c.y, a.x - c.x),
+                dmath::atan2(b.y - c.y, b.x - c.x),
+            );
+            let sweep = if ccw {
+                dmath::wrap_tau(a1 - a0)
+            } else {
+                -dmath::wrap_tau(a0 - a1)
+            };
+            (
+                Segment::Arc {
+                    center: c,
+                    radius: a.distance(c),
+                    start: a0,
+                    sweep,
+                },
+                a,
+                b,
+            )
+        }
+        Some(Entity::Circle { center, .. }) => {
+            let c = sk.pos(center);
+            let r = sk.s.radius(id);
+            let p = Point2::new(c.x + r, c.y);
+            (
+                Segment::Circle {
+                    center: c,
+                    radius: r,
+                    ccw: true,
+                },
+                p,
+                p,
+            )
+        }
+        _ => {
+            let c = sk.s.curve(id).expect("a curve entity");
+            let (a, b) = (c.start(), c.end());
+            (Segment::Spline(c), a, b)
+        }
+    }
+}
+
+/// A chain's segments in its sketch's plane, each named as a profile names it.
+pub(crate) type Chain = Vec<(Segment, u64)>;
+
+/// A sheet's chain: the entities of one sketch end to end, each turned to run on from the one
+/// before (`path_of`'s rule), in that sketch's plane, named as a profile names its segments.
+pub(crate) fn chains_of(v: Value, span: Span) -> R<(Rc<RefCell<Sk>>, Vec<Chain>)> {
+    // a path's pieces, with circles (whole loops) anywhere among them
+    fn ents_of(v: Value, span: Span, out: &mut Vec<(Rc<RefCell<Sk>>, EntityId)>) -> R<()> {
+        match v {
+            Value::Ent(e) if e.loop_segs.is_empty() && e.kind == EntKind::Circle => {
+                out.push((e.sk.clone(), e.id));
+                Ok(())
+            }
+            Value::List(xs) => xs.iter().try_for_each(|x| ents_of(x.clone(), span, out)),
+            v => path_ents(v, span, out),
+        }
+    }
+    let mut ents = vec![];
+    ents_of(v, span, &mut ents)?;
+    let Some(sk) = ents.first().map(|e| e.0.clone()) else {
+        return Err(Error::EmptySelection { span });
+    };
+    // a sheet's chains lie in one sketch's plane
+    if let Some(e) = ents.iter().find(|e| !Rc::ptr_eq(&e.0, &sk)) {
+        return Err(Error::OtherSketch {
+            span,
+            sketch: e.0.borrow().id.clone(),
+            here: sk.borrow().id.clone(),
+        });
+    }
+    let s = sk.borrow();
+    let at = |p: Point2| Point3::new(p.x, p.y, 0.0);
+    let pieces: Vec<((Segment, u64), Point3, Point3)> = ents
+        .iter()
+        .map(|(_, id)| {
+            let (g, a, b) = plane_piece(&s, *id);
+            ((g, s.seg_id(*id)), at(a), at(b))
+        })
+        .collect();
+    drop(s);
+    // end to end, each piece turned to meet the one before; a chain ends where it closes on its
+    // own start (a loop, a circle, each contour of a glyph), and the next piece starts another
+    let ends: Vec<(Point3, Point3)> = pieces.iter().map(|p| (p.1, p.2)).collect();
+    let meets = |x: Point3, y: Point3| x.distance(y) <= MEET;
+    let mut chains = vec![];
+    let mut out: Chain = vec![];
+    let (mut start, mut here) = (None::<Point3>, None::<Point3>);
+    for (k, ((g, id), a, b)) in pieces.into_iter().enumerate() {
+        let forward = match here {
+            Some(x) if meets(x, a) => true,
+            Some(x) if meets(x, b) => false,
+            Some(_) => return Err(Error::PathGap { span, index: k }),
+            // a chain's first piece: turned only if its start, not its end, meets the next
+            None => match ends.get(k + 1) {
+                Some(&(c, d)) => meets(b, c) || meets(b, d) || !(meets(a, c) || meets(a, d)),
+                None => true,
+            },
+        };
+        let (g, from, to) = if forward { (g, a, b) } else { (g.reversed(), b, a) };
+        let from = *start.get_or_insert(from);
+        out.push((g, id));
+        here = Some(to);
+        if k + 1 < ends.len() && meets(from, to) {
+            chains.push(std::mem::take(&mut out));
+            (start, here) = (None, None);
+        }
+    }
+    chains.push(out);
+    Ok((sk, chains))
 }

@@ -79,6 +79,38 @@ impl TriMesh {
         bad
     }
 
+    /// `open_edges` of the mesh of `body` (`tessellate`'s, with `edges`), less each mesh edge along
+    /// a sheet's boundary (a body edge used once, by a sheet face) where it is used once: empty means
+    /// every other edge is shared by one triangle each way, and the boundary's once.
+    pub fn open_edges_of(&self, body: &forge_topo::Body) -> Vec<(u32, u32)> {
+        let mut rim: Vec<(u32, u32)> = Vec::new();
+        for e in body.edge_ids() {
+            let edge = body.edge(e);
+            if edge.coedges.len() != 1 || !body.face(body.coedge_face(edge.coedges[0])).sheet {
+                continue;
+            }
+            for w in self.edges.get(e.index()).map_or(&[][..], |v| &v[..]).windows(2) {
+                rim.push((w[0].min(w[1]), w[0].max(w[1])));
+            }
+        }
+        rim.sort_unstable();
+        let mut directed: Vec<(u32, u32)> = self
+            .triangles
+            .iter()
+            .flat_map(|&[a, b, c]| [(a, b), (b, c), (c, a)])
+            .collect();
+        directed.sort_unstable();
+        self.open_edges()
+            .into_iter()
+            .filter(|&(a, b)| {
+                let on_rim = rim.binary_search(&(a.min(b), a.max(b))).is_ok();
+                let once = directed.partition_point(|x| *x < (a, b)) + 1
+                    == directed.partition_point(|x| *x <= (a, b));
+                !(on_rim && once && directed.binary_search(&(b, a)).is_err())
+            })
+            .collect()
+    }
+
     /// The used vertices whose triangles do not make one fan (walking from triangle to triangle
     /// across the edges at the vertex): a pinch, where two sheets of the surface touch at a point.
     /// Empty, with no `open_edges`, means a closed manifold surface (verify/forge-mesh-check's

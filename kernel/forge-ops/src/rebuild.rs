@@ -44,6 +44,17 @@ pub fn rebuild(body: &mut Body, changed: &[bool]) -> Result<(), RebuildError> {
 /// Solves the flagged vertices onto the surfaces around them, then fits the flagged edges between
 /// their vertices. Each one's current geometry is the starting guess.
 pub fn rebuild_some(body: &mut Body, verts: &[bool], edges: &[bool]) -> Result<(), RebuildError> {
+    rebuild_some_reach(body, verts, edges, 0.0)
+}
+
+/// `rebuild_some`, where an edge may lie up to `reach` from its old curve though its vertices did not
+/// move: a thickened skin's edges, placed where they end but with the base's curves as the guess.
+pub fn rebuild_some_reach(
+    body: &mut Body,
+    verts: &[bool],
+    edges: &[bool],
+    reach: f64,
+) -> Result<(), RebuildError> {
     let mut vedges: Vec<Vec<EdgeId>> = vec![Vec::new(); body.vertices.len()];
     for e in body.edge_ids() {
         let edge = body.edge(e);
@@ -163,9 +174,12 @@ pub fn rebuild_some(body: &mut Body, verts: &[bool], edges: &[bool]) -> Result<(
         if !closed && ps.distance(pe) <= tol::LINEAR {
             return Err(RebuildError::Collapsed { edge: name });
         }
-        let shift = ps
+        let mut shift = ps
             .distance(old_pts[vs.index()])
             .max(pe.distance(old_pts[ve.index()]));
+        if reach > 0.0 {
+            shift = shift.max(reach);
+        }
         // (a seam on a procedural surface round an axis has no meridian to meet)
         let (curve, range) = b
             .as_ref()

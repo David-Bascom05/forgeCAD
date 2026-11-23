@@ -705,6 +705,36 @@ pub fn export(body: &Body, opt: &Options) -> Result<Export, ExportError> {
         solids.push(i);
     }
 
+    // sheets: each shell an OPEN_SHELL (a CLOSED_SHELL where no edge of it is a boundary), all in
+    // one surface model of their own representation, related to the solids'
+    let sheet_shells: Vec<u64> = (0..body.shells.len() as u32)
+        .map(ShellId)
+        .filter(|&s| !body.shell(s).faces.is_empty() && body.face(body.shell(s).faces[0]).sheet)
+        .map(|s| {
+            let fs: Vec<u64> = body.shell(s).faces.iter().map(|&f| faces[f.index()]).collect();
+            let open = body.shell(s).faces.iter().any(|&f| {
+                body.face(f).loops.iter().any(|&l| {
+                    body.lp(l)
+                        .coedges()
+                        .any(|c| body.edge(body.coedge(c).edge).coedges.len() == 1)
+                })
+            });
+            let i = w.begin();
+            w.s(if open { "OPEN_SHELL" } else { "CLOSED_SHELL" })
+                .s("('',")
+                .ids(&fs)
+                .s(")");
+            w.end();
+            i
+        })
+        .collect();
+    let sheet_model = (!sheet_shells.is_empty()).then(|| {
+        let i = w.begin();
+        w.s("SHELL_BASED_SURFACE_MODEL('',").ids(&sheet_shells).s(")");
+        w.end();
+        i
+    });
+
     let units = {
         let m = w.begin();
         w.s("(LENGTH_UNIT()NAMED_UNIT(*)SI_UNIT(.MILLI.,.METRE.))");
@@ -742,6 +772,24 @@ pub fn export(body: &Body, opt: &Options) -> Result<Export, ExportError> {
         .id(ctx)
         .s(")");
     w.end();
+    // the sheets' representation, related to the solids' (the product's shape is the solids')
+    if let Some(m) = sheet_model {
+        let msr = w.begin();
+        w.s("MANIFOLD_SURFACE_SHAPE_REPRESENTATION('',(")
+            .id(m)
+            .s("),")
+            .id(ctx)
+            .s(")");
+        w.end();
+        let r = w.begin();
+        w.s("SHAPE_REPRESENTATION_RELATIONSHIP('','',")
+            .id(brep)
+            .s(",")
+            .id(msr)
+            .s(")");
+        w.end();
+        let _ = r;
+    }
 
     let (context, protocol, year) = match opt.schema {
         Schema::Ap214 => ("automotive design", "automotive_design", 2001),
@@ -904,10 +952,11 @@ struct ShellKind {
 
 /// Each shell: bounding material, or a void in which outer shell. A void's sense is its signed
 /// volume; it belongs to the smallest outer shell whose box holds it.
+/// The solid shells' kinds (a sheet's shell is none of these: `sheet_shells`).
 fn shell_kinds(body: &Body) -> Vec<(ShellId, ShellKind)> {
     let shells: Vec<ShellId> = (0..body.shells.len() as u32)
         .map(ShellId)
-        .filter(|&s| !body.shell(s).faces.is_empty())
+        .filter(|&s| !body.shell(s).faces.is_empty() && !body.face(body.shell(s).faces[0]).sheet)
         .collect();
     let boxes: Vec<forge_math::Box3> = shells
         .iter()
