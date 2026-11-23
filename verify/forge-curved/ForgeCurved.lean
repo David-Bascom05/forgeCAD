@@ -13,3 +13,4 @@ import ForgeCurved.Diagonal
 import ForgeCurved.PlateHole
 import ForgeCurved.FaceModel
 import ForgeCurved.ContactModel
+import ForgeCurved.Bridge1

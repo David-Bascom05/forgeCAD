@@ -60,3 +60,6 @@ import ForgeCurved
 #print axioms ForgeCurved.graphCell_preconnected
 #print axioms ForgeCurved.localConn_of_contact
 #print axioms ForgeCurved.tangentPair_localConn
+#print axioms ForgeCurved.FaceLocal.badEdgeW_iff
+#print axioms ForgeCurved.FaceLocal.badVertS_iff
+#print axioms ForgeCurved.FaceLocal.touch_iff_xNonManifoldF
