@@ -3,6 +3,9 @@
 //! B-rep). Two builds that print the same lines mesh alike, bit for bit.
 //!
 //!   meshbits            one line per part (suite, fuzz histories, bench parts), quality and CDT case
+//!
+//! As wasm (`cargo build --profile wasm -p forge-model --example meshbits --target
+//! wasm32-wasip1`, run with tools/wasi-run.mjs) it prints the same lines: native = wasm.
 use forge_math::Point2;
 use forge_math::hash::BitHasher;
 use forge_math::rng::Rng;
@@ -74,7 +77,9 @@ fn bench_parts() -> Vec<(String, Part, Option<Vec<u64>>)> {
         .filter_map(|p| p.file_stem().map(|s| s.to_string_lossy().into_owned()))
         .collect();
     names.sort();
-    let fonts = std::env::temp_dir().join("forge-meshbits");
+    // (not std::env::temp_dir, which WASI does not have: meshbits runs as wasm too)
+    let tmp = std::env::var_os("TMPDIR").map_or_else(|| std::path::PathBuf::from("/tmp"), Into::into);
+    let fonts = tmp.join("forge-meshbits");
     std::fs::create_dir_all(&fonts).expect("temp dir");
     std::fs::write(
         fonts.join(forge_lang::bench::FONT),
