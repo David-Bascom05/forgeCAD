@@ -18,6 +18,7 @@ are each part's contours nested by the winding rule; a glyph's region is the uni
 | `mem_textRegion` | proven | the text's region is the union of every glyph's parts, in any order |
 | `refuses_meeting` | proven | the check before a text is set (every pair of loops of different glyphs) passing means no two glyphs meet |
 | `winding_is_topological` | proven | for a polygon `Simple` in winding2d's sense, the count off it is 0, 1 or -1, and two points joined by a segment meeting no side count alike: winding2d's `wind_simple_mem` and `wind_eq_of_seg`, through `polyWinding_eq` |
+| `lineCrossQ`, `lineCross_toQ` | proven | the line test on rationals (the kernel's doubles' values); the integer one is it on the points cast |
 | `lineCross_eq`, `onSeg_of_within`, `sides_toQ`, `polyWinding_eq` | proven | the bridge: off the polygon, `lineCross` is winding2d's half-open `cross` on the points cast to rationals (its refusal happens only on the side), and the sides are the same, so `polyWinding` is `wind` |
 
 ## Levels (research/PROOF-STANDARD.md)
@@ -27,7 +28,7 @@ are each part's contours nested by the winding rule; a glyph's region is the uni
 | L1 | the specs above: placed outline = the font's curves moved; nesting = the winding rule; a glyph = the union of its parts; refusal iff two glyphs meet. Curves are the spline-spec project's Béziers (control points only here) |
 | L2 | the exact references: the font's own numbers on an integer grid (TrueType integers, halves; CFF 2⁻¹⁶), `orient2d` exact, OpenCascade rebuilding every text part (tools/occt, 11 parts agree) |
 | L3 | proven for every input of the models: `decode_closes`, `winding_from_any_start`, `refuses_meeting`, `winding_is_topological` |
-| L4 | the TrueType `contour` walk: kernel/forge-font/src/glyf_core.rs, translated by Aeneas, is proven to be `contourOf` (so closed) for every well-formed glyph (verify/aeneas/forge-font: `contour_spec`, `contour_closes`). The simple-glyph record reader (`read_simple`) is proven never to fail on any bytes, and its output well-formed (`read_simple_spec`, `contour_of_read`). Still to do: the line crossing (`winding::line` on integers), the CFF reader |
+| L4 | the TrueType `contour` walk: kernel/forge-font/src/glyf_core.rs, translated by Aeneas, is proven to be `contourOf` (so closed) for every well-formed glyph (verify/aeneas/forge-font: `contour_spec`, `contour_closes`). The simple-glyph record reader (`read_simple`) is proven never to fail on any bytes, and its output well-formed (`read_simple_spec`, `contour_of_read`). The line crossing: the translated `winding::line` is `lineCrossQ` on the doubles' values, and `lineCross` on grid points, given orient2d's sign (verify/aeneas/forge-sketch: `line_spec`, `line_int`; `lineCross_toQ` here). Still to do: the CFF reader |
 | L5 | the line test on forge_math's proven orient2d; **open**: the curve pieces' counts by hull subdivision (winding.rs, rounding bound `m` per split, and each piece in its control hull) have no proof yet |
 | L6 | differential in CI: OCCT oracle on text parts, text parts' exact bits pinned native = wasm32, font corruption fuzzing (forge-font, forge-lang fonts.rs) |
 

@@ -26,3 +26,4 @@ theorem's axioms; none may be `sorryAx` or `Lean.ofReduceBool`. -/
 #print axioms ForgeText.sides_toQ
 #print axioms ForgeText.polyWinding_eq
 #print axioms ForgeText.winding_is_topological
+#print axioms ForgeText.lineCross_toQ

@@ -134,4 +134,34 @@ theorem winding_is_topological (vs : List Pt) (hs : Winding2d.Simple (vs.map toQ
   intro p q hp hq hm
   rw [polyWinding_eq vs p hp, polyWinding_eq vs q hq, Winding2d.wind_eq_of_seg _ _ _ hm]
 
+/-- The line test on rationals (the kernel's on doubles, whose values are rationals): the same
+rule as `lineCross`, the box test spelled with its ends. -/
+def lineCrossQ (a b p : Winding2d.Pt) : Option Int :=
+  let within := (a.x ≤ p.x ∨ b.x ≤ p.x) ∧ (p.x ≤ a.x ∨ p.x ≤ b.x) ∧
+    (a.y ≤ p.y ∨ b.y ≤ p.y) ∧ (p.y ≤ a.y ∨ p.y ≤ b.y)
+  if within ∧ Winding2d.orient a b p = 0 then none
+  else if decide (p.y < a.y) = decide (p.y < b.y) then some 0
+  else
+    let o := Winding2d.orient a b p
+    let up := decide (p.y < b.y)
+    if (up ∧ 0 < o) ∨ (¬up ∧ o < 0) then some (if up then 1 else -1) else some 0
+
+/-- The integer line test is the rational one on the points cast. -/
+theorem lineCross_toQ (a b p : Pt) : lineCross a b p = lineCrossQ (toQ a) (toQ b) (toQ p) := by
+  have h0 : orient a b p = 0 ↔ Winding2d.orient (toQ a) (toQ b) (toQ p) = 0 := by
+    rw [← orient_toQ]; exact ⟨fun h => by simp [h], fun h => Rat.intCast_inj.mp (by simpa using h)⟩
+  have hpos := pos_toQ a b p
+  have hneg := neg_toQ a b p
+  have l : ∀ u v : Int, ((u : Rat) ≤ v ↔ u ≤ v) := fun u v => Rat.intCast_le_intCast
+  have lt : ∀ u v : Int, ((u : Rat) < v ↔ u < v) := fun u v => Rat.intCast_lt_intCast
+  have w : (min a.x b.x ≤ p.x ∧ p.x ≤ max a.x b.x ∧ min a.y b.y ≤ p.y ∧ p.y ≤ max a.y b.y) ↔
+      (((toQ a).x ≤ (toQ p).x ∨ (toQ b).x ≤ (toQ p).x) ∧ ((toQ p).x ≤ (toQ a).x ∨ (toQ p).x ≤ (toQ b).x) ∧
+        ((toQ a).y ≤ (toQ p).y ∨ (toQ b).y ≤ (toQ p).y) ∧ ((toQ p).y ≤ (toQ a).y ∨ (toQ p).y ≤ (toQ b).y)) := by
+    simp only [toQ, l]; omega
+  unfold lineCross lineCrossQ
+  simp only [above, gt_iff_lt]
+  have ha : decide (p.y < a.y) = decide ((toQ p).y < (toQ a).y) := by simp [toQ, lt]
+  have hb : decide (p.y < b.y) = decide ((toQ p).y < (toQ b).y) := by simp [toQ, lt]
+  simp only [w, h0, ha, hb, hpos, hneg]
+
 end ForgeText
