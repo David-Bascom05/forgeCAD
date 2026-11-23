@@ -21,7 +21,10 @@
 //!    rounded once from their exact points, edges as straight runs, loops walked round each face.
 
 use crate::boolean::{BoolError, Op};
-use forge_bool_core::{self as core, BodyId, CellId, FaceId as CFace, Ledger, Outcome, Refusal, Rule, Sgn};
+use forge_bool_core::row::{row_get, row_set};
+use forge_bool_core::{
+    self as core, BodyId, CellId, FaceId as CFace, Ledger, Outcome, Refusal, Row, Rule, Sgn,
+};
 use forge_geom::{Curve, Line, Surface};
 use forge_math::exact::{Dy, DyPlane, DyV3, HPoint, meet3};
 use forge_math::{Interval, Point3};
@@ -68,6 +71,8 @@ pub enum Skip {
     /// §6.1 says ambiguous: a class past the spread cap, or a vertex its snapped planes do not
     /// settle.
     Ambiguous(&'static str),
+    /// More classes than a packed covector holds (counted in `SKIP_WIDE`).
+    Wide,
 }
 
 /// A face of an operand as the bridge reads it.
@@ -828,9 +833,8 @@ enum Pl {
 /// to the next vertex) lists, flat: cell `k` is `cv[cs[k]..cs[k + 1]]`.
 struct Plane2 {
     vx: Vec<Vx>,
-    /// the class vertices' covectors, one after another (`nc` signs each)
-    covs: Vec<Sgn>,
-    nc: usize,
+    /// the class vertices' covectors
+    covs: Vec<Row>,
     cs: Vec<u32>,
     cv: Vec<(u32, Pl)>,
     /// the section's plane and its box walls, to work out exact points
@@ -842,9 +846,9 @@ impl Plane2 {
     fn exact(&self, cls: &Classes, i: usize) -> HPoint {
         exact_vx(&self.vx[i], &self.pc, &self.walls, cls)
     }
-    fn cov(&self, i: u32) -> Option<&[Sgn]> {
+    fn cov(&self, i: u32) -> Option<Row> {
         let o = self.vx[i as usize].cov;
-        (o != NONE).then(|| &self.covs[o as usize..o as usize + self.nc])
+        (o != NONE).then(|| self.covs[o as usize])
     }
     fn ncells(&self) -> usize {
         self.cs.len().saturating_sub(1)
@@ -963,17 +967,30 @@ fn plane_f(p: &DyPlane) -> PlaneF {
     }
 }
 
-fn covector(cls: &Classes, pf: &[PlaneF], h: &HPoint, zero: &[u32]) -> Vec<Sgn> {
+fn covector(cls: &Classes, pf: &[PlaneF], h: &HPoint, zero: &[u32]) -> Row {
     let p = h.to_f64();
-    (0..cls.planes.len())
-        .map(|k| {
-            if zero.contains(&(k as u32)) {
-                Sgn::Zero
-            } else {
-                side_at(&cls.planes[k], &p, &pf[k], h)
-            }
-        })
-        .collect()
+    let mut r = Row::default();
+    for (k, (pl, pfk)) in cls.planes.iter().zip(pf).enumerate() {
+        if !zero.contains(&(k as u32)) {
+            r = row_set(r, k, side_at(pl, &p, pfk, h));
+        }
+    }
+    r
+}
+
+/// A row as a map key.
+fn rk(r: Row) -> (u64, u64) {
+    (r.pos, r.neg)
+}
+
+/// The covector of the cell spanned by two: on each class the first's sign, or the second's where
+/// the first is zero.
+fn row_join(a: Row, b: Row) -> Row {
+    let z = !(a.pos | a.neg);
+    Row {
+        pos: a.pos | (b.pos & z),
+        neg: a.neg | (b.neg & z),
+    }
 }
 
 /// The working state of `arrange`: the vertices so far, found by the planes they meet and (class
@@ -986,13 +1003,10 @@ struct Arr<'a> {
     walls: [DyPlane; 6],
     wf: [PlaneF; 6],
     vx: Vec<Vx>,
-    covs: Vec<Sgn>,
+    covs: Vec<Row>,
     by_pair: HashMap<u64, u32>,
-    /// covector hash → the first vertex with it; `next` chains the others with the same hash
-    by_cov: HashMap<u64, u32>,
-    next: Vec<u32>,
-    /// scratch for a new covector
-    buf: Vec<Sgn>,
+    /// class vertices by covector
+    by_cov: HashMap<(u64, u64), u32>,
 }
 
 impl Arr<'_> {
@@ -1008,10 +1022,9 @@ impl Arr<'_> {
             Pl::Wall(w) => &self.wf[w as usize],
         }
     }
-    fn cov(&self, i: u32) -> Option<&[Sgn]> {
+    fn cov(&self, i: u32) -> Option<Row> {
         let o = self.vx[i as usize].cov;
-        let nc = self.cls.planes.len();
-        (o != NONE).then(|| &self.covs[o as usize..o as usize + nc])
+        (o != NONE).then(|| self.covs[o as usize])
     }
     /// The vertex where planes `x` and `y` cross the section: an existing one with that pair, or
     /// (class vertices) that covector, else a new one.
@@ -1048,43 +1061,29 @@ impl Arr<'_> {
         let id = match (x, y) {
             (Pl::Class(i), Pl::Class(j)) => {
                 let nc = self.cls.planes.len();
-                let mut buf = std::mem::take(&mut self.buf);
-                buf.clear();
-                let mut h = Fx::default();
+                let mut r = Row::default();
                 for k in 0..nc {
-                    let s = if k as u32 == self.c || k as u32 == i || k as u32 == j {
-                        Sgn::Zero
-                    } else {
-                        side_err(&self.cls.planes[k], &self.pf[k], &x0.f, x0.err, || {
+                    if !(k as u32 == self.c || k as u32 == i || k as u32 == j) {
+                        let s = side_err(&self.cls.planes[k], &self.pf[k], &x0.f, x0.err, || {
                             exact_vx(&x0, self.pc, &self.walls, self.cls)
-                        })
-                    };
-                    h.write_u8(s as u8);
-                    buf.push(s);
+                        });
+                        r = row_set(r, k, s);
+                    }
                 }
-                let hv = h.finish();
-                let mut found = self.by_cov.get(&hv).copied().unwrap_or(NONE);
-                while found != NONE && self.cov(found) != Some(&buf[..]) {
-                    found = self.next[found as usize];
+                match self.by_cov.get(&rk(r)) {
+                    Some(&found) => found,
+                    None => {
+                        x0.cov = self.covs.len() as u32;
+                        self.covs.push(r);
+                        let id = self.vx.len() as u32;
+                        self.vx.push(x0);
+                        self.by_cov.insert(rk(r), id);
+                        id
+                    }
                 }
-                let id = if found != NONE {
-                    found
-                } else {
-                    x0.cov = self.covs.len() as u32;
-                    self.covs.extend_from_slice(&buf);
-                    let id = self.vx.len() as u32;
-                    self.vx.push(x0);
-                    // (a new head of its hash's chain)
-                    let head = self.by_cov.insert(hv, id).unwrap_or(NONE);
-                    self.next.push(head);
-                    id
-                };
-                self.buf = buf;
-                id
             }
             _ => {
                 self.vx.push(x0);
-                self.next.push(NONE);
                 self.vx.len() as u32 - 1
             }
         };
@@ -1099,7 +1098,7 @@ impl Arr<'_> {
             return 0;
         }
         if let (Pl::Class(k), Some(cv)) = (p, self.cov(i)) {
-            return match cv[k as usize] {
+            return match row_get(cv, k as usize) {
                 Sgn::Pos => 1,
                 Sgn::Neg => -1,
                 Sgn::Zero => 0,
@@ -1227,13 +1226,10 @@ fn arrange(cls: &Classes, pf: &[PlaneF], c: u32, lo: [f64; 3], hi: [f64; 3]) -> 
         covs: Vec::new(),
         by_pair: HashMap::default(),
         by_cov: HashMap::default(),
-        next: Vec::new(),
-        buf: Vec::with_capacity(nc),
     };
     let done = |ar: Arr, cs: Vec<u32>, cv: Vec<(u32, Pl)>| Plane2 {
         vx: ar.vx,
         covs: ar.covs,
-        nc,
         cs,
         cv,
         pc: pc.clone(),
@@ -1566,38 +1562,30 @@ struct Built {
     sides: Dense<Vec<(u32, i32)>>,
     /// a facet: the input faces it is a piece of
     holders: Dense<Vec<usize>>,
-    /// per cell: its covector as signs (the bridge's own; the ledger holds it packed)
-    cells: Vec<Vec<Sgn>>,
+    /// per cell: its covector
+    cells: Vec<Row>,
     /// per cell: is it on a wall (some wall class zero); for the write
     #[allow(dead_code)]
     wall: Vec<bool>,
-    /// cell ids by covector
-    by: FxMap<Vec<Sgn>, u32>,
+    /// cell ids by covector (`rk`)
+    by: FxMap<(u64, u64), u32>,
 }
 
 /// A table of cells by covector.
 #[derive(Default)]
 struct CellTab {
-    cells: Vec<Vec<Sgn>>,
-    by: FxMap<Vec<Sgn>, u32>,
+    cells: Vec<Row>,
+    by: FxMap<(u64, u64), u32>,
 }
 
 impl CellTab {
-    /// The id of `c`, added if new (copied only then).
-    fn id_of(&mut self, c: &[Sgn]) -> u32 {
-        if let Some(&i) = self.by.get(c) {
+    /// The id of `c`, added if new.
+    fn id_of(&mut self, c: Row) -> u32 {
+        if let Some(&i) = self.by.get(&rk(c)) {
             return i;
         }
-        self.cells.push(c.to_vec());
-        self.by.insert(c.to_vec(), self.cells.len() as u32 - 1);
-        self.cells.len() as u32 - 1
-    }
-    fn id(&mut self, c: Vec<Sgn>) -> u32 {
-        if let Some(&i) = self.by.get(&c) {
-            return i;
-        }
-        self.cells.push(c.clone());
-        self.by.insert(c, self.cells.len() as u32 - 1);
+        self.cells.push(c);
+        self.by.insert(rk(c), self.cells.len() as u32 - 1);
         self.cells.len() as u32 - 1
     }
 }
@@ -1607,7 +1595,7 @@ impl CellTab {
 /// (`W = n_a`, so its terms stay small). None where that point is not strictly inside (a facet
 /// too thin for `m`): the mean of its vertices is then.
 #[inline(never)]
-fn interior(cls: &Classes, pf: &[PlaneF], c: usize, a: usize, m: [f64; 3], fc: &[Sgn]) -> Option<HPoint> {
+fn interior(cls: &Classes, pf: &[PlaneF], c: usize, a: usize, m: [f64; 3], fc: Row) -> Option<HPoint> {
     let pc = &cls.planes[c];
     let (s, t) = ((a + 1) % 3, (a + 2) % 3);
     let (ms, mt) = (Dy::from_f64(m[s]), Dy::from_f64(m[t]));
@@ -1626,21 +1614,9 @@ fn interior(cls: &Classes, pf: &[PlaneF], c: usize, a: usize, m: [f64; 3], fc: &
         w,
     };
     let hf = h.to_f64();
-    let inside = (0..cls.planes.len()).all(|k| k == c || side_at(&cls.planes[k], &hf, &pf[k], &h) == fc[k]);
+    let inside =
+        (0..cls.planes.len()).all(|k| k == c || side_at(&cls.planes[k], &hf, &pf[k], &h) == row_get(fc, k));
     inside.then_some(h)
-}
-
-/// The covector of the cell spanned by vertices: on each class the side of any vertex off it.
-fn join(covs: &[&Vec<Sgn>]) -> Vec<Sgn> {
-    let n = covs[0].len();
-    (0..n)
-        .map(|k| {
-            covs.iter()
-                .map(|c| c[k])
-                .find(|&s| s != Sgn::Zero)
-                .unwrap_or(Sgn::Zero)
-        })
-        .collect()
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1653,14 +1629,19 @@ fn build_ledger(
     snapped: &[DyPlane],
     bx: Option<([f64; 3], [f64; 3])>,
 ) -> Built {
-    // a cell of the open region: strictly inside every wall
-    let open = |cv: &[Sgn]| {
-        cls.walls
-            .iter()
-            .zip(&cls.wall_in)
-            .all(|(&w, &s)| cv[w as usize] == s)
-    };
-    let on_wall = |cv: &[Sgn]| cls.walls.iter().any(|&w| cv[w as usize] == Sgn::Zero);
+    // a cell of the open region: strictly inside every wall (as masks)
+    let (mut wpos, mut wneg, mut wall_mask) = (0u64, 0u64, 0u64);
+    for (&w, &s) in cls.walls.iter().zip(&cls.wall_in) {
+        let b = core::row::bit(w as usize);
+        wall_mask |= b;
+        match s {
+            Sgn::Pos => wpos |= b,
+            Sgn::Neg => wneg |= b,
+            Sgn::Zero => {}
+        }
+    }
+    let open = |cv: Row| (cv.pos & wpos) == wpos && (cv.neg & wneg) == wneg;
+    let on_wall = |cv: Row| !(cv.pos | cv.neg) & wall_mask != 0;
     let pf: Vec<PlaneF> = cls.planes.iter().map(plane_f).collect();
     let mut tab = CellTab::default();
     let mut facet: Dense<Facet> = Dense::default();
@@ -1684,7 +1665,7 @@ fn build_ledger(
     }
     let mut per_face: Vec<Vec<u32>> = vec![Vec::new(); fs.len()];
     // scratch: a facet's covector, an edge's, the faces boxing a facet
-    let (mut fc, mut ec, mut boxed): (Vec<Sgn>, Vec<Sgn>, Vec<usize>) = (Vec::new(), Vec::new(), Vec::new());
+    let mut boxed: Vec<usize> = Vec::new();
     for (c, faces) in on.iter().enumerate() {
         if faces.is_empty() {
             continue;
@@ -1728,17 +1709,11 @@ fn build_ledger(
                 continue;
             }
             // its covector: on each class the side of any vertex off it
-            fc.clear();
-            fc.extend_from_slice(pl.cov(cell[0].0).unwrap());
+            let mut fc = pl.cov(cell[0].0).unwrap();
             for &(i, _) in &cell[1..] {
-                let cv = pl.cov(i).unwrap();
-                for k in 0..fc.len() {
-                    if fc[k] == Sgn::Zero {
-                        fc[k] = cv[k];
-                    }
-                }
+                fc = row_join(fc, pl.cov(i).unwrap());
             }
-            if !open(&fc) {
+            if !open(fc) {
                 continue;
             }
             // the faces whose box holds the cell's middle (in f64, within a margin), and only then
@@ -1761,7 +1736,7 @@ fn build_ledger(
             if boxed.is_empty() {
                 continue;
             }
-            let mid = interior(cls, &pf, c, a, midf, &fc).unwrap_or_else(|| {
+            let mid = interior(cls, &pf, c, a, midf, fc).unwrap_or_else(|| {
                 let (e0, e1, e2) = (
                     pl.exact(cls, cell[0].0 as usize),
                     pl.exact(cls, cell[1].0 as usize),
@@ -1777,7 +1752,7 @@ fn build_ledger(
             if holders.is_empty() {
                 continue;
             }
-            let id = tab.id_of(&fc);
+            let id = tab.id_of(fc);
             // its vertices and edges, as cells
             let mut poly = Vec::with_capacity(cell.len());
             let mut poly_e = Vec::with_capacity(cell.len());
@@ -1795,14 +1770,7 @@ fn build_ledger(
                     pointf.or_insert_with(vi, || hf);
                 }
                 let vj = vertex_id(j, &mut tab);
-                let (ci, cj) = (pl.cov(i).unwrap(), pl.cov(j).unwrap());
-                ec.clear();
-                ec.extend(
-                    ci.iter()
-                        .zip(cj)
-                        .map(|(&x, &y)| if x == Sgn::Zero { y } else { x }),
-                );
-                let e = tab.id_of(&ec);
+                let e = tab.id_of(row_join(pl.cov(i).unwrap(), pl.cov(j).unwrap()));
                 ends.or_insert_with(e, || (vi, vj));
                 poly.push(vi);
                 poly_e.push(e);
@@ -1838,11 +1806,11 @@ fn build_ledger(
         let fc = &facet[&id];
         for k in 0..fc.poly.len() {
             let v = fc.poly[k];
-            if !on_wall(&tab.cells[v as usize]) && is_v.insert(v, ()).is_none() {
+            if !on_wall(tab.cells[v as usize]) && is_v.insert(v, ()).is_none() {
                 verts.push(v);
             }
             let e = fc.poly_e[k];
-            if !on_wall(&tab.cells[e as usize]) && is_e.insert(e, ()).is_none() {
+            if !on_wall(tab.cells[e as usize]) && is_e.insert(e, ()).is_none() {
                 edges.push(e);
             }
         }
@@ -1857,9 +1825,7 @@ fn build_ledger(
         }
         let c = facet[&id].class as usize;
         for (sg, s) in [(Sgn::Pos, 1), (Sgn::Neg, -1)] {
-            let mut cv = tab.cells[id as usize].clone();
-            cv[c] = sg;
-            let t = tab.id(cv);
+            let t = tab.id_of(row_set(tab.cells[id as usize], c, sg));
             side_of.or_insert_with(t, || (id, s));
             sides.or_insert_with(t, Vec::new).push((id, s));
         }
@@ -1870,7 +1836,7 @@ fn build_ledger(
         face_body: fs.iter().map(|f| BodyId(f.body as u32)).collect(),
         face_class: cls.of_face.clone(),
         width: cls.planes.len() as u32,
-        cells: tab.cells.iter().map(|c| core::row::row_of(c)).collect(),
+        cells: tab.cells.clone(),
         pieces: pieces.iter().map(|&(f, c)| (CellId(c), CFace(f))).collect(),
         inside: Vec::new(),
         edges: edges.into_iter().map(CellId).collect(),
@@ -1885,7 +1851,7 @@ fn build_ledger(
         side_of,
         sides,
         holders: holders_of,
-        wall: tab.cells.iter().map(|cv| on_wall(cv)).collect(),
+        wall: tab.cells.iter().map(|&cv| on_wall(cv)).collect(),
         cells: tab.cells,
         by: tab.by,
     }
@@ -1895,7 +1861,7 @@ fn build_ledger(
 fn witness_point(b: &Built, cls: &Classes, t: u32) -> HPoint {
     let (f, s) = b.side_of[&t];
     let fc = &b.facet[&f];
-    let cov = &b.cells[f as usize];
+    let cov = b.cells[f as usize];
     let c = fc.class as usize;
     let n = &cls.planes[c].n;
     let mut k = 4;
@@ -1907,7 +1873,7 @@ fn witness_point(b: &Built, cls: &Classes, t: u32) -> HPoint {
             if j == c {
                 return true;
             }
-            side_at(pl, &pfl, &plane_f(pl), &p) == cov[j]
+            side_at(pl, &pfl, &plane_f(pl), &p) == row_get(cov, j)
         });
         if ok && cls.planes[c].side(&p) == s {
             return p;
@@ -1929,7 +1895,12 @@ fn ledger_wf(l: &Ledger) -> bool {
     let mut es: Vec<u32> = l.edges.iter().map(|e| e.0).collect();
     es.sort_unstable();
     let total = n as u128 + 2 * l.pieces.len() as u128 + 1;
+    let wmask = core::row::width_mask(l.width as usize);
     l.nb > 0
+        && l.width <= core::row::MAX_WIDTH
+        && l.cells
+            .iter()
+            .all(|r| r.pos & r.neg == 0 && (r.pos | r.neg) & !wmask == 0)
         && distinct(l.cells.iter().collect())
         && l.pieces.iter().all(|(c, _)| (c.0 as usize) < n)
         && l.inside.iter().all(|(c, _)| (c.0 as usize) < n)
@@ -1975,6 +1946,11 @@ fn fill(bodies: &[&Body], rule: &Rule) -> Result<Filled, Skip> {
     let mut cls = classes(&snapped, &reps, &reg.near);
     if let Some((lo, hi)) = reg.bx {
         add_walls(&mut cls, lo, hi);
+    }
+    // (rows hold 64 classes: past that the old path, counted)
+    if cls.planes.len() > core::row::MAX_WIDTH as usize {
+        SKIP_WIDE.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        return Err(Skip::Wide);
     }
     decided!(log(bodies, &fs, &cls, &pts, &snapped));
     let mut built = build_ledger(bodies, &fs, &cls, &pts, &snapped, reg.bx);
@@ -2454,7 +2430,7 @@ impl Wr<'_> {
             &self.cls.planes[w as usize],
         )?;
         let cv = covector(self.cls, &self.pf, &h, &[cg, ck, w]);
-        self.built.by.get(&cv).map(|&c| PK::Cell(c))
+        self.built.by.get(&rk(cv)).map(|&c| PK::Cell(c))
     }
 }
 
@@ -2844,7 +2820,7 @@ fn build_body(w: &Wr, fins: &[Fin]) -> Option<Body> {
                     }
                     let h = w.pts[k].ph(v, w.snapped);
                     let cv = covector(cls, &w.pf, &h, &[]);
-                    if let Some(&c) = built.by.get(&cv) {
+                    if let Some(&c) = built.by.get(&rk(cv)) {
                         orig_v.entry(c).or_insert((k, v));
                     }
                 }
@@ -2893,7 +2869,7 @@ fn build_body(w: &Wr, fins: &[Fin]) -> Option<Body> {
         } else {
             let h = w.pts[b].ph(v, w.snapped);
             let cv = covector(cls, &w.pf, &h, &[]);
-            built.by.get(&cv).map(|&c| PK::Cell(c))
+            built.by.get(&rk(cv)).map(|&c| PK::Cell(c))
         };
         placed.borrow_mut().insert((b, v), p);
         p
@@ -3012,7 +2988,6 @@ fn vid_of_orig(w: &Wr, v: VertexId) -> bool {
 
 /// The edge cell between two vertex cells of a facet.
 fn edge_cell(b: &Built, u: u32, v: u32) -> Option<u32> {
-    let cu = &b.cells[u as usize];
-    let cv = &b.cells[v as usize];
-    b.by.get(&join(&[cu, cv])).copied()
+    b.by.get(&rk(row_join(b.cells[u as usize], b.cells[v as usize])))
+        .copied()
 }
