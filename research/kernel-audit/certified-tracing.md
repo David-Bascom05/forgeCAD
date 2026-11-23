@@ -366,3 +366,37 @@ Feature on, after this:
 - rack18u guard_120: 674 ms (5566 before, 155 off). Its volume differs in the 12th digit,
   because the first march was refused and the quarter-step march certified;
 - the 300-pair sweep: the certificate takes 2.2 s (4.2 before).
+
+## 10. Cost, measured with the exact gate
+
+The callgrind gate ran on the same source with the feature off and on (on: forge-geom's default
+set locally, not committed). The parts' bits are **identical** on and off: every gate part's
+traced pairs certify, and none needs the quarter-step march.
+
+The cost on is concentrated in the curved bench parts. The fair lines are the cold builds (`app`,
+`edit`, `cli`). The `seq`/`nary1` regen lines profit from the memo, since the build before them on
+the same thread already certified the pairs. guard's regen is even 73% cheaper than off, because
+the off build marches every repeat.
+
+| part | app off | app on | × |
+|---|---|---|---|
+| guard | 56.9M | 387.9M | 6.8 |
+| quadarm | 50.3M | 189.1M | 3.8 |
+| frame | 440.1M | 1196.5M | 2.7 |
+| manifold | 249.0M | 569.0M | 2.3 |
+
+Parts with no traced analytic pair are unchanged.
+
+Where the cost goes: about 5M instructions per certified pair, against about 0.6M for its march.
+Nearly all of it is the coverage walk's boxes near the curve (1.5k–4k per pair). Each costs a
+patch of trig and an interval matrix, two evaluations of the other polynomial, and the claim
+tests. The fixes made so far are each box's patch once, a two-product float multiply, B as floats
+plus one error, the cheap Lipschitz test first, the per-pair memo, and Interval::sin_cos. They took
+guard from 610M to 388M. Inlining forge-math's interval operations helped as well, but it moved
+feature-off counts by ±1%, so it was reverted.
+
+**What would make it default-viable: certify in the host's domain.** For an analytic pair, the
+curve is the zero set of g(u, v) = f_b(P(u, v)), a curve in the plane. The march's points map to
+(u, v). The steps become 2 × 2 Krawczyk on pencils of lines, and the claims become thin 2D
+parallelograms that domain boxes fit without the 3D detour. The chain's 3D points are then shown
+to lie in P of the 2D tube. That should cut the per-pair cost several-fold, toward the march's own.
