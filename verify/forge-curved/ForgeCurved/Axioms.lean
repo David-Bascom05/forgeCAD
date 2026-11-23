@@ -85,3 +85,5 @@ import ForgeCurved
 #print axioms ForgeCurved.Sweep.limit_pointS
 #print axioms ForgeCurved.Sweep.crossesAll_edges_bounded
 #print axioms ForgeCurved.Sweep.crossesAll_facets_bounded
+#print axioms ForgeCurved.evK_real
+#print axioms ForgeCurved.carriersOf_real

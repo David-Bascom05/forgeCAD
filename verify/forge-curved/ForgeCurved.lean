@@ -21,3 +21,4 @@ import ForgeCurved.FacetSides
 import ForgeCurved.SweepCross
 import ForgeCurved.SweepFacet
 import ForgeCurved.SweepBound
+import ForgeCurved.RealModel
