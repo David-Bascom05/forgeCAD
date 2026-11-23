@@ -7323,6 +7323,9 @@ pub(crate) mod log {
     /// coincident is recorded only for planes nearly flush (within the band).
     pub(crate) fn coincident(a: &Body, fa: FaceId, b: &Body, fb: FaceId, yes: bool, site: &'static str) {
         let (sa, sb) = (&a.face(fa).surface, &b.face(fb).surface);
+        if yes {
+            crate::carrier_key::log(sa, sb, site);
+        }
         let gap = plane_gap(sa, sb);
         if !yes && !gap.is_some_and(|(sine, off)| sine <= 1e-3 && off <= BAND) {
             return;

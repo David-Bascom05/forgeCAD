@@ -13,6 +13,8 @@ macro_rules! decided {
 
 mod apex;
 pub mod boolean;
+#[cfg(any(test, feature = "decisions"))]
+pub mod carrier_key;
 pub mod classify;
 #[cfg(feature = "decide_once")]
 pub mod decide_once;

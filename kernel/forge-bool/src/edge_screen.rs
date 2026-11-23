@@ -51,7 +51,7 @@ fn split(a: f64) -> (f64, f64) {
 }
 
 /// `a · b = p + e` exactly (Dekker; no fused multiply-add, which native and wasm round apart).
-fn two_prod(a: f64, b: f64) -> (f64, f64) {
+pub(crate) fn two_prod(a: f64, b: f64) -> (f64, f64) {
     let p = a * b;
     let (ah, al) = split(a);
     let (bh, bl) = split(b);
@@ -62,7 +62,7 @@ fn two_prod(a: f64, b: f64) -> (f64, f64) {
 /// The exact sign of the sum of `terms`: grown into a nonoverlapping expansion (each new term
 /// carried through every component by TwoSum, the rounding errors kept), whose most significant
 /// nonzero component has the sum's sign.
-fn sum_sign(terms: &[f64]) -> i32 {
+pub(crate) fn sum_sign(terms: &[f64]) -> i32 {
     let mut ex: Vec<f64> = Vec::with_capacity(terms.len());
     let mut i = 0;
     while i < terms.len() {
@@ -90,12 +90,12 @@ fn sum_sign(terms: &[f64]) -> i32 {
     }
 }
 
-fn v3(v: forge_math::Vec3) -> [f64; 3] {
+pub(crate) fn v3(v: forge_math::Vec3) -> [f64; 3] {
     [v.x, v.y, v.z]
 }
 
 /// The exact sign of `u · v`.
-fn dot_sign(u: [f64; 3], v: [f64; 3]) -> i32 {
+pub(crate) fn dot_sign(u: [f64; 3], v: [f64; 3]) -> i32 {
     let mut t = [0.0; 6];
     let mut i = 0;
     while i < 3 {
@@ -108,7 +108,7 @@ fn dot_sign(u: [f64; 3], v: [f64; 3]) -> i32 {
 }
 
 /// The exact sign of `n · (a − b)` (no rounded difference).
-fn dot_diff_sign(n: [f64; 3], a: [f64; 3], b: [f64; 3]) -> i32 {
+pub(crate) fn dot_diff_sign(n: [f64; 3], a: [f64; 3], b: [f64; 3]) -> i32 {
     let mut t = [0.0; 12];
     let mut i = 0;
     while i < 3 {
@@ -124,7 +124,7 @@ fn dot_diff_sign(n: [f64; 3], a: [f64; 3], b: [f64; 3]) -> i32 {
 }
 
 /// `u × v = 0` exactly (u, v parallel).
-fn parallel(u: [f64; 3], v: [f64; 3]) -> bool {
+pub(crate) fn parallel(u: [f64; 3], v: [f64; 3]) -> bool {
     let c = |a: f64, b: f64, c: f64, d: f64| {
         let (p, e) = two_prod(a, b);
         let (q, f) = two_prod(c, d);
