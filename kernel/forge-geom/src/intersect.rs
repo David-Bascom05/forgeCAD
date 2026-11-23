@@ -438,6 +438,16 @@ fn conic_quadric(f: &Frame, a: f64, b: f64, range: Interval, s: &Surface) -> Opt
         major: a,
         minor: b,
     });
+    // a conic in a plane's own plane, to within LINEAR everywhere: what the probes below would
+    // find, bounded in closed form (each point o + a cos t x + b sin t y lies within
+    // |n·(o − p0)| + a |n·x| + b |n·y| of the plane), so none need taking
+    if let Surface::Plane(pl) = s {
+        let n = pl.frame.z();
+        let reach = n.dot(f.origin - pl.frame.origin).abs() + a * n.dot(f.x()).abs() + b * n.dot(f.y()).abs();
+        if reach <= tol::LINEAR {
+            return Some(CurveSurface::OnSurface);
+        }
+    }
     let probes = 9;
     let on = (0..probes).all(|i| {
         s.distance(curve.eval(range.lo + range.width() * i as f64 / (probes - 1) as f64)) <= tol::LINEAR
