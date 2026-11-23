@@ -96,6 +96,8 @@ interface/forge-lang/tests/parts/frame.fg#29 agree
 interface/forge-lang/tests/parts/frame.fg#36 agree
 interface/forge-lang/tests/parts/frame.fg#41 agree
 interface/forge-lang/tests/parts/frame.fg#94 agree
+interface/forge-lang/tests/parts/near_singular_hinge.fg#1 agree
+interface/forge-lang/tests/parts/near_singular_hinge.fg#3 agree
 interface/forge-render/tests/faulty/check-loops-cross.fg#1 agree
 interface/forge-render/tests/faulty/check-loops-cross.fg#6 agree
 loft/00000 agree
