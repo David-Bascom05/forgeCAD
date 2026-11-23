@@ -58,3 +58,12 @@ import ForgeCam
 #print axioms ForgeCam.DistArc.arcArc_D
 #print axioms ForgeCam.Dist2.segSegLo_le_all
 #print axioms ForgeCam.Dist2.clearFace_segSeg_all
+#print axioms ForgeCam.Trim.lineDec_sound
+#print axioms ForgeCam.Trim.radial_misses
+#print axioms ForgeCam.Trim.arcDec_sound
+#print axioms ForgeCam.Trim.raySide_sound
+#print axioms ForgeCam.Trim.raySide_classifies
+#print axioms ForgeCam.Trim.pointSide_sound
+#print axioms ForgeCam.Trim.distRegion_lower
+#print axioms ForgeCam.Trim.arcPiece_lower
+#print axioms ForgeCam.Trim.clearFace_region

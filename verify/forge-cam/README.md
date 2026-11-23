@@ -25,6 +25,12 @@ lake exe cache get && lake build && lake env lean Axioms.lean
 - `segArcLo_le`: segment–arc (the end candidates, the centre's foot, the crossing).
 - `arcArcLo_le`: arc–arc (the end candidates, the four line-of-centres candidates, the crossing, and |r1 − r2| for concentric arcs).
 - `clearFace_segArc` and `arcArc_D` discharge `ClearFace` (i). |
+| ForgeCam/Trim.lean | **The point-in-trim test and `dist_region`** (CAM 787239e). The trim's pieces: lines, and per arc its circle part plus two radial end pieces.
+- `lineDec_sound`, `radial_misses`, `arcDec_sound`: each piece's decided `ray_side` count is the true number of meetings. Radial pieces are never met outside the gap, and decided rays meet no piece end and are tangent to no arc.
+- `raySide_sound`, `raySide_classifies`, `pointSide_sound`: under the even-odd rule (`EvenOdd`, the region's meaning, assumed), a decided `classify` is exact.
+- `distRegion_lower`: with the start classified outside and the frontier in the pieces, a piece bound is a region bound.
+- `arcPiece_lower`: an arc's circle-part bound less the gap bounds its radial pieces.
+- `clearFace_region` closes ClearFace (i) for flat faces. |
 | ForgeCam/Machine.lean | G5 for 3-axis. `G5_line_iff`: a line move is within travel iff its ends are. `G5_arc`: an arc or helix is within travel if its circle's box is. `lineOkQ_iff`: the ℚ Bool check equals the ℝ spec. |
 | ForgeCam/Post.lean | G6 for forge-post's motion subset. The printer is modal: G only on a mode change, an axis only when it changes, F only when the feed changes, and a null move is dropped. **`round_trip`**: `read (print p) = normalize (motions p)`. `G6` adds quantisation, with error ≤ ½·10^−d (`roundEven_isQuant`, ties to even). **`faulty_counterexample`**: the printer as of 155e2f2 reads a plunge back as a rapid. Arc semantics: `arcFull_agrees` (the meant `full` equals the control's reading on every posted arc, as forge-post 4bfe2a2 compares), `arc2_safe` (with X, Y compared, a posted arc read as a full circle was planned as a full turn or more than a half turn) and `arc3_unsafe` (with all three compared, as in 0a4c189, a short helical arc is read as a full helical turn). |
 
@@ -58,9 +64,12 @@ For one face, slab.rs answers `Clear { lower }` when two things hold:
 
 ## Not covered yet
 
-- `slab::dist` for flat regions (`dist_region`: the box cutoff and the inside test) is still
-  hypothesis (i). Segment–segment (Dist2), segment–arc and arc–arc (DistArc) are proven. The arc
-  forms have no ℚ executable: they need ℚ(√d).
+- ClearFace (i) is now proven for every face kind: segment–segment (Dist2); segment–arc and
+  arc–arc (DistArc); flat regions (Trim). There are two stated conditions.
+  - The even-odd rule (`EvenOdd`): the trim region's meaning, a Jordan-curve fact.
+  - Arc ends on the circle: DistArc's arcs have their ends on the circle. For trim arcs whose
+    stored ends lie off it by the gap, the candidates must be reduced by the gap (see RESUME.md).
+- The arc forms have no ℚ executable: they need ℚ(√d).
 - The interval arithmetic (L5) and the B&B checker for non-prism faces.
 - The character level of G-code text: words to digits, and the dialect's templates.
 - The Aeneas translation of forge-cam-geom and forge-post (L4).

@@ -126,8 +126,17 @@ are covered.
 
 ## Still to do when asked
 
-1. `dist_region` (flat faces): the box cutoff and the trim's inside test (`Trim::classify`).
-   This is the last part of hypothesis (i).
+1. Done: `dist_region` and the point-in-trim test (Trim.lean). One mismatch is open with CAM
+   (787239e). `dist_region` passes trim arcs to `slab::dist` with their stored ends, which lie
+   off the circle by up to the gap. Its candidates use those ends, and no gap is subtracted,
+   unlike `tseg_dist`. Its lo can then exceed the true distance to the trim (arc plus radial
+   pieces) by up to 2·gap.
+   - Fix: lo − 2·gap, clamped at 0. Or snap the ends onto the circle and subtract one gap
+     (that matches DistArc and `arcPiece_lower` directly).
+   - D must also never be negative: `sd_rz` at ρ < 0 is not a lower bound.
+   - The same holds for cylinder walls' f64 ends.
+   - Once CAM fixes it: the perturbation lemma (candidates with ends moved by ≤ g change by
+     ≤ g) if they choose 2·gap.
 2. An executable ℚ(√d) form of the arc candidates, if the L6 tests want one.
 3. Not yet asked for: the character level of G-code (digits and templates), canned-cycle
    expansion in the G6 model, L5 for the checker's intervals, and L4 (Aeneas).
