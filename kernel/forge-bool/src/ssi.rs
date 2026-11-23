@@ -248,12 +248,119 @@ fn search(a: &Surface, b: &Surface, region: Box3) -> SurfaceSurface {
 
 /// Whether two surfaces are the same surface.
 pub fn coincident(a: &Surface, b: &Surface) -> bool {
+    // A `false` is proven by the tests below: each threshold (ANGULAR, LINEAR) lies far above
+    // their rounding, so a measure past it is nonzero in exact terms. A `true` is proven where
+    // the exact key holds (`same_carrier`: every `true` on plate, patterns and housing but 36
+    // one-ulp pattern copies in patterns seq, which stay the tolerance's until provenance keys,
+    // curved-fallback-rates.md); the decision log records the others.
+    let r = coincident_tol(a, b);
+    #[cfg(feature = "decisions")]
+    if r && !same_carrier(a, b) {
+        log_unkeyed();
+    }
+    r
+}
+
+/// (decision log) a `true` of `coincident` no exact key holds.
+#[cfg(feature = "decisions")]
+fn log_unkeyed() {
+    use crate::decisions::{self as d, Ent, Kind, Site};
+    let key = [Ent::NONE; 3];
+    d::decide(
+        Kind::Coincident,
+        key,
+        None,
+        None,
+        1,
+        Site::Named("ssi::coincident: true by tolerance, no exact key"),
+        f64::NAN,
+        f64::NAN,
+    );
+}
+
+fn coincident_tol(a: &Surface, b: &Surface) -> bool {
     match (a, b) {
         (Surface::Plane(p), Surface::Plane(q)) => forge_geom::intersect::planes_coincident(p, q),
         (Surface::Plane(p), s) | (s, Surface::Plane(p)) => plane_surface(p, s) == SurfaceSurface::Coincident,
         (Surface::Cylinder(c), Surface::Cylinder(d)) => cylinder_cylinder(c, d) == SurfaceSurface::Coincident,
         (Surface::Sphere(s), Surface::Sphere(t)) => sphere_sphere(s, t) == SurfaceSurface::Coincident,
         _ => forge_geom::meet::coaxial(a, b) == Some(SurfaceSurface::Coincident),
+    }
+}
+
+/// The coordinate axis a unit vector lies exactly along (two components exactly zero, the third
+/// exactly ±1), or `None`.
+fn axis_of(v: forge_math::UnitVec3) -> Option<usize> {
+    let w = v.get();
+    if w.y == 0.0 && w.z == 0.0 && w.x.abs() == 1.0 {
+        Some(0)
+    } else if w.x == 0.0 && w.z == 0.0 && w.y.abs() == 1.0 {
+        Some(1)
+    } else if w.x == 0.0 && w.y == 0.0 && w.z.abs() == 1.0 {
+        Some(2)
+    } else {
+        None
+    }
+}
+
+/// Every coordinate finite (where one is not, the toleranced tests see NaN and say no).
+fn finite(p: forge_math::Point3) -> bool {
+    p.x.is_finite() && p.y.is_finite() && p.z.is_finite()
+}
+
+fn coord(p: forge_math::Point3, k: usize) -> f64 {
+    if k == 0 {
+        p.x
+    } else if k == 1 {
+        p.y
+    } else {
+        p.z
+    }
+}
+
+/// **One surface, by exact keys** (curved-builder-mapping.md, S0): the stored data name the same
+/// point set exactly, with no tolerance and no rounding:
+/// * two planes square to one coordinate axis `k` (normals exactly `±e_k`) at the same
+///   coordinate: both are `{x_k = o_k}`;
+/// * two cylinders of equal radius along one coordinate axis `k` whose origins agree in the other
+///   two coordinates: both are the points at that radius from one line;
+/// * two spheres with equal centres and radii.
+///
+/// `false` says nothing: the pair goes to the toleranced tests. Where it says `true` those tests
+/// say so too (each of their measures is exactly zero there), so the answer never changes.
+pub fn same_carrier(a: &Surface, b: &Surface) -> bool {
+    match (a, b) {
+        (Surface::Plane(p), Surface::Plane(q)) => match (axis_of(p.frame.z()), axis_of(q.frame.z())) {
+            (Some(i), Some(j)) => {
+                i == j
+                    && finite(p.frame.origin)
+                    && finite(q.frame.origin)
+                    && coord(p.frame.origin, i) == coord(q.frame.origin, i)
+            }
+            _ => false,
+        },
+        (Surface::Cylinder(c), Surface::Cylinder(d)) => {
+            c.radius == d.radius
+                && c.radius.is_finite()
+                && finite(c.frame.origin)
+                && finite(d.frame.origin)
+                && match (axis_of(c.frame.z()), axis_of(d.frame.z())) {
+                    (Some(i), Some(j)) => {
+                        let (u, v) = ((i + 1) % 3, (i + 2) % 3);
+                        i == j
+                            && coord(c.frame.origin, u) == coord(d.frame.origin, u)
+                            && coord(c.frame.origin, v) == coord(d.frame.origin, v)
+                    }
+                    _ => false,
+                }
+        }
+        (Surface::Sphere(s), Surface::Sphere(t)) => {
+            s.radius == t.radius
+                && s.radius.is_finite()
+                && finite(s.frame.origin)
+                && s.frame.origin == t.frame.origin
+        }
+        _ => false,
     }
 }
 
@@ -399,6 +506,60 @@ mod tests {
     use forge_geom::testing::{rand_frame, rand_unit};
     use forge_geom::{CurveGeom, SurfaceGeom};
     use forge_math::rng::Rng;
+
+    /// The exact key: one surface by its stored data, and wherever it says so, so does
+    /// `coincident`'s toleranced test (the answer never changes).
+    #[test]
+    fn same_carrier_keys() {
+        use forge_geom::{Cylinder, Plane, Sphere};
+        use forge_math::{Frame, Point3, UnitVec3};
+        let pz = |o: Point3, z: UnitVec3| {
+            Surface::Plane(Plane {
+                frame: Frame::from_z(o, z),
+            })
+        };
+        let a = pz(Point3::new(0.0, 0.0, 6.0), UnitVec3::Z);
+        let b = pz(Point3::new(17.5, -3.0, 6.0), -UnitVec3::Z);
+        let c = pz(Point3::new(0.0, 0.0, 6.0 + 1e-15), UnitVec3::Z);
+        let tilt = pz(
+            Point3::new(0.0, 0.0, 6.0),
+            forge_math::Vec3::new(0.0, 1e-14, 1.0).normalize().unwrap(),
+        );
+        assert!(same_carrier(&a, &b) && coincident(&a, &b));
+        // a hair apart, or tilted by a hair: no key (the tolerance decides, as before)
+        assert!(!same_carrier(&a, &c) && coincident(&a, &c));
+        assert!(!same_carrier(&a, &tilt) && coincident(&a, &tilt));
+        let cy = |o: Point3, r: f64| {
+            Surface::Cylinder(Cylinder {
+                frame: Frame::from_z(o, UnitVec3::Z),
+                radius: r,
+            })
+        };
+        let (c1, c2) = (
+            cy(Point3::new(4.0, 2.0, 0.0), 3.0),
+            cy(Point3::new(4.0, 2.0, -9.0), 3.0),
+        );
+        assert!(same_carrier(&c1, &c2) && coincident(&c1, &c2));
+        assert!(!same_carrier(&c1, &cy(Point3::new(4.0, 2.5, 0.0), 3.0)));
+        let sp = |r: f64| {
+            Surface::Sphere(Sphere {
+                frame: Frame::from_z(Point3::new(1.0, 2.0, 3.0), UnitVec3::Z),
+                radius: r,
+            })
+        };
+        assert!(same_carrier(&sp(2.0), &sp(2.0)) && coincident(&sp(2.0), &sp(2.0)));
+        assert!(!same_carrier(&sp(2.0), &sp(2.5)) && !same_carrier(&a, &c1));
+        // random frames: the key holds only on axis-aligned data, and never against the test
+        let mut rng = Rng::new(7);
+        for _ in 0..2000 {
+            let (f, g) = (rand_frame(&mut rng), rand_frame(&mut rng));
+            let (x, y) = (
+                Surface::Plane(Plane { frame: f }),
+                Surface::Plane(Plane { frame: g }),
+            );
+            assert!(!same_carrier(&x, &y) || coincident(&x, &y));
+        }
+    }
 
     fn surfaces(a: &Surface, b: &Surface) -> SurfaceSurface {
         let far = forge_math::Point3::new(100.0, 100.0, 100.0);
