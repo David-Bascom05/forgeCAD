@@ -29,7 +29,8 @@ Needed:
    to it unchanged.
 
 This layer is the first piece of Lean, before any refinement proof. It is shared with the curved
-plan.
+plan. **Owners (the master, 2026-11-23):** aeneas does (1), as part of the Charon fix. dol-curved
+does (2) and (3).
 
 ## 1. classify.rs
 
@@ -42,16 +43,57 @@ plan.
 | `point_in_face(f, p)`, for p within LINEAR of f's surface | `Inside ⇒` p's foot on the surface is in `⟦f⟧` and farther than the tolerance from its boundary. `Outside ⇒` the foot is not in `⟦f⟧`. `On ⇒` the foot is within the tolerance of ∂f. **Today the result is a guess wherever an f64 parity or a `sag_bound` decides it** (see flags). |
 | `classify(p)` | `Inside ⇒ p ∈ interior ⟦b⟧`; `Outside ⇒ p ∉ ⟦b⟧`; `On ⇒ dist(p, ∂⟦b⟧) ≤ LINEAR`. |
 
+### 1a. The exact `On` (ruling, 2026-11-23): the Lean statements
+
+The master ruled: no guesses, so `On` becomes exact. A proven screen decides In/Out/On where it can.
+Otherwise an exact test runs for that point. The all-rays-degenerate case goes to an exact ray test
+for that point, and if that can't decide, a typed refusal. `On` never means "undecided". trim,
+split_face and classify_specs are updated to consume the exact `On`. decide-once Rust owns the
+Rust; these are the statements it is proven against.
+
+```lean
+/-- The exact answer for a point and a solid. -/
+def whereR (S : Set ℝ³) (p : ℝ³) : Where :=
+  if p ∈ interior S then .inside else if p ∈ frontier S then .on else .outside
+
+/-- The exact answer for a point of a face's surface and the face. -/
+def whereF (F : Set ℝ³) (p : ℝ³) : Where :=      -- F = ⟦f⟧, relative to its surface
+  if p ∈ relInterior F then .inside else if p ∈ relFrontier F then .on else .outside
+
+-- `classify` now returns `Result Where Refusal`; read the input point as the exact dyadic it is.
+theorem classify_spec (b : Body) (hv : ValidSolid b) (p : F64Point3) :
+    classify (Index.new b) p ⦃ r => ∀ w, r = .ok w → w = whereR ⟦b⟧ p.toReal ⦄
+
+-- Never refuses on flat bodies: planes and dyadic points always decide exactly.
+theorem classify_total_flat (b : Body) (hv : ValidSolid b) (hf : Flat b) (p : F64Point3) :
+    classify (Index.new b) p ⦃ r => ∃ w, r = .ok w ⦄
+
+theorem point_in_face_spec (b : Body) (hv : ValidSolid b) (f : FaceId) (p : ExactPt)
+    (hp : p.toReal ∈ surf ⟦b⟧ f) :
+    point_in_face (Index.new b) f p ⦃ r => ∀ w, r = .ok w → w = whereF ⟦f⟧ p.toReal ⦄
+```
+
+Proof shape:
+- each screen is a lemma: when it decides, its answer equals the exact one (IEEE model);
+- each exact fallback refines `whereR`/`whereF` directly;
+- parity uses dol-curved's F5/F6 (a ray from p crosses `∂⟦b⟧` an odd number of times iff p is inside,
+  for a ray in general position);
+- the exact ray test supplies the general position, or refuses.
+
+**One open point for decide-once Rust.** `point_in_face` is called today on f64 points that are only
+within LINEAR of f's surface (trim's curve samples, split_face's meets). `whereF` needs a point *on*
+the surface. The exact version needs those callers to pass the exact point (an exact meet, or a curve
+parameter with an exact evaluation). Otherwise the question must be restated, e.g. "the foot of p on
+f's surface", which itself needs an exact definition. This is where the callers' update gets its
+statement; it should be settled before the Rust changes.
+
 **Flags (guess steps in classify.rs, for the IEEE screens):**
 1. **`classify` returns `On` when every ray in `RAYS` is degenerate** (`OnSurface`, `Touching`, or a
    hit with `point_in_face = On`). So `On` means both "near the boundary" and "undecided", and the
-   `On ⇒ near ∂` statement is false there. Under the ruling, the undecided case must go to an exact
-   ray test for this point, or become a typed refusal; it must not be `On`.
+   `On ⇒ near ∂` statement is false there. **Ruled** (§1a): an exact ray test for this point, then a
+   typed refusal; never `On`.
 2. **`On` by `surface.distance(p) ≤ LINEAR`, then `point_in_face ≠ Outside`.** This is a tolerance
-   band, not a fact. Either the statement keeps the tolerance (`On` means within LINEAR, which callers
-   must then treat as such), or it becomes a screen plus an exact on-face test. This is the main
-   modelling decision for classify. It needs the owner or master, because callers (trim, split_face,
-   classify_specs) act on `On`.
+   band, not a fact. **Ruled: exact** (§1a): a screen, then an exact on-face test.
 3. **The `t > LINEAR` filter on ray hits** drops a crossing within LINEAR of p. That is sound only
    when p is not On, which step 1 established within tolerance only.
 4. **`line_surface` hits and `Contact::Touching`** are f64 decisions; each needs a screen with an exact
