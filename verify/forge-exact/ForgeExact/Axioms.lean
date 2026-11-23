@@ -147,3 +147,6 @@ elab "#standard_axioms " ids:ident* : command => do
   ForgeExact.DecideOnce.correct_ok_in
   ForgeExact.DecideOnce.Sample.local_exact
   ForgeExact.DecideOnce.Sample.local_correct
+  ForgeExact.DecideOnce.Sample.wall_region
+  ForgeExact.DecideOnce.Sample.wall_up
+  ForgeExact.DecideOnce.Sample.local_correct_walls

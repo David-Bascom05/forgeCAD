@@ -76,10 +76,8 @@ None for the core itself. What remains is the frontier optimisation:
    - **`LocalCompat`**, the named hypothesis of `local_exact` and `local_correct`: each body's
      membership is constant on the local arrangement's full cells inside the region. It needs a
      localized Jordan–Brouwer, since far face planes may cut a region cell. Owned by dol-jordan.
-   - The region's facts for the six walls, stated as hypotheses of `local_exact`. Their proof is pure
-     sign algebra on the wall planes:
-     - `U` (open R°) is open;
-     - each cell lies wholly in or out of it;
-     - region cells are closed upward under `≤`.
+   - (proven) the region's facts for the six walls: `wall_region` (each cell wholly in or out of R°),
+     `wall_up` (closed upward), and R° open (`allPos` of the inward walls). `local_correct_walls` is
+     `local_correct` with these discharged.
    - `SamplesIn`: the bridge's samples hit every region cell the boundary needs. This is the local
      form of `Samples`, which the global sampler (`sampler_covers`) discharges.

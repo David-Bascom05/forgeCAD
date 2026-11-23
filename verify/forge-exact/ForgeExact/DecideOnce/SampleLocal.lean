@@ -214,4 +214,69 @@ theorem local_correct (hnz : ∀ p ∈ ps, p.n ≠ ⟨0, 0, 0⟩) {U : Pred V3}
   ⟨fun _ hb => correct_ok_in (local_exact hnz hc hU hreg hup hX) rule hb,
    zeroThickness_iff_in (local_exact hnz hc hU hreg hup hX) rule⟩
 
+/-! ## The region of the six walls -/
+
+/-- The walls: indices into the carriers, each oriented with the region on its positive side. -/
+def wallIn (ws : List Nat) (X : Cov) : Prop := ∀ k ∈ ws, X.getD k .zero = .pos
+
+instance (ws : List Nat) : DecidablePred (wallIn ws) := fun X => by unfold wallIn; infer_instance
+
+/-- The open region: strictly inside every wall. -/
+def wallU (ps : List Plane) (ws : List Nat) : Pred V3 := Flat.allPos (ws.map fun k => ps.getD k default)
+
+theorem wallU_open (ps : List Plane) (ws : List Nat) : IsOpen (wallU ps ws) := Flat.isOpen_allPos _
+
+theorem covOf_getD (ps : List Plane) (x : V3) {k : Nat} (hk : k < ps.length) :
+    (covOf ps x).getD k .zero = sgnQ ((ps.getD k default).eval x) := by
+  simp [covOf, List.getD_eq_getElem?_getD, hk]
+
+theorem sgnQ_pos_iff (q : Rat) : sgnQ q = .pos ↔ q > 0 := by
+  unfold sgnQ; split
+  · simp_all
+  · split <;> simp_all
+
+theorem wall_region (ps : List Plane) (ws : List Nat) (hws : ∀ k ∈ ws, k < ps.length) :
+    ∀ Y x, covCell ps Y x → (wallU ps ws x ↔ wallIn ws Y) := by
+  intro Y x hx
+  have e := BoxEx.covCell_eq_covOf hx
+  subst e
+  unfold wallU wallIn Flat.allPos
+  simp only [List.mem_map, forall_exists_index, and_imp, forall_apply_eq_imp_iff₂]
+  constructor
+  · intro h k hk; rw [covOf_getD ps x (hws k hk), sgnQ_pos_iff]; exact h k hk
+  · intro h k hk; have := h k hk; rw [covOf_getD ps x (hws k hk), sgnQ_pos_iff] at this; exact this
+
+/-- `≤` keeps every nonzero sign. -/
+theorem le_getD : ∀ {X Y : Cov}, Cov.le X Y = true → ∀ k, X.getD k .zero ≠ .zero → Y.getD k .zero = X.getD k .zero
+  | [], _, _, k, hk => by simp at hk
+  | a :: X, [], h, _, _ => by simp [Cov.le] at h
+  | a :: X, b :: Y, h, k, hk => by
+    have h' : (a == .zero || a == b) = true ∧ Cov.le X Y = true := by
+      simp only [Cov.le, List.length_cons, List.zip_cons_cons, List.all_cons, Bool.and_eq_true, beq_iff_eq] at h ⊢
+      have h1 := h.1
+      refine ⟨h.2.1, ?_⟩
+      simp only [h.2.2, and_true]
+      omega
+    cases k with
+    | zero =>
+      simp only [List.getD_cons_zero] at hk ⊢
+      have := h'.1; simp only [Bool.or_eq_true, beq_iff_eq] at this
+      rcases this with e | e
+      · exact absurd e hk
+      · exact e.symm
+    | succ k =>
+      simp only [List.getD_cons_succ] at hk ⊢
+      exact le_getD h'.2 k hk
+
+theorem wall_up (ws : List Nat) : ∀ X Y, wallIn ws X → Cov.le X Y = true → wallIn ws Y := by
+  intro X Y hX hle k hk
+  rw [le_getD hle k (by rw [hX k hk]; decide), hX k hk]
+
+/-- **(c′) for the bridge's local ledger over the six walls**: as `local_correct`, with the region's
+facts proven. What it still takes is `LocalCompat` and the region's samples (`SamplesIn`). -/
+def local_correct_walls (hnz : ∀ p ∈ ps, p.n ≠ ⟨0, 0, 0⟩) (ws : List Nat) (hws : ∀ k ∈ ws, k < ps.length)
+    (hc : LocalCompat ps (brepA ss) (wallIn ws)) (hX : SamplesIn ps (brepA ss) ss.length X (wallIn ws))
+    (rule : Rule) :=
+  local_correct hnz hc (wallU_open ps ws) (wall_region ps ws hws) (wall_up ws) hX rule
+
 end ForgeExact.DecideOnce.Sample
