@@ -11,7 +11,7 @@ A feature meets the standard when it has all six.
 | # | Level | The boolean's instance |
 |---|---|---|
 | L1 | **A spec in Lean over the reals.** It is the one definition of the feature's result, with standard axioms only and no `sorry`. | `reg_kept`: the regularised boolean (verify/forge-exact) |
-| L2 | **An exact executable reference.** It runs over ℚ, or over exact algebraic numbers, and is proven equal to L1 on its domain. | the flat exact reference; Alg/Quad for curved |
+| L2 | **An exact executable reference.** It runs over ℚ, or over exact algebraic numbers, and is proven equal to L1 on its domain. For non-algebraic carriers (general offsets, splines) a certified enclosure counts as L2: signs by outward-rounded enclosures refined until decided, zeros only by construction, never decided by evaluation (decided 2026-11-23, research/decide-once/curved-design.md §5 D7). | the flat exact reference; Alg/Quad for curved |
 | L3 | **Correctness for every input in a stated domain.** No enumeration of logged cases: the algorithm's decisions give exactly L1, and a refusal happens exactly when L1 has no valid result. | decide-once (c): `flat_correct`; refusal iff `XNonManifold` |
 | L4 | **The shipped Rust refines the proven algorithm.** The kernel crate goes through Aeneas to Lean, with no panic and no overflow within stated size limits. Where Aeneas can't take the code, a differential test against the L2 oracle with a committed digest is the interim, marked interim. | forge-bool-core: union–find, flood, index, rules, … |
 | L5 | **Its floating-point predicates are proven** against verify/ieee754, under stated preconditions that debug builds check. | orient2d, cross_sign, dot3, incircle; TwoSum and TwoProduct |
@@ -53,7 +53,7 @@ has been reported to the master.
 | Feature | Owner session (branch suffix) | Has | Next |
 |---|---|---|---|
 | Boolean, flat | decide-once-lean, decide-once (Rust), ieee | L1 L2 L3 L5 (partial L4, L6). L4 for the forge-bool-core cores (v1 `end_to_end_proof`; A8 inc `incCoreSpec_proof`, `endToEndF_proof`), kept as spec and oracle. The shipped old path (boolean.rs) is the target: owner ruling 2026-11-23 | the old path end to end, as written (research/decide-once/old-path-statements.md §E, §D, §G) |
-| Boolean, curved | exact-curved, trace | L1 (quadrics) | L2 executable, L3 |
+| Boolean, curved | exact-curved, trace, dol-curved (decide-once design: research/decide-once/curved-design.md) | L1 (quadrics) | L2 executable, L3; decide-once Q0 done: (c) and (c′) for any carriers, flat as an instance (`exactK_of_exact`), `qform_compat` (DecideOnce/{Curved, CorrectK, LocalK, QForm, FlatK}.lean); Q1 next |
 | Fillets / rounds | fillet-spec, fillets, conic-fillet | — | L1 (ball closing), L2 |
 | Splines | spline-spec | — | L1, L2 oracle |
 | Sheet metal (fold, regions, refold) | sheet-spec, fix-sheet | — | L1 fold, L2 refold checker |

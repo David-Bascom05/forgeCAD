@@ -246,6 +246,11 @@ impl Reference {
             .ok()
             .and_then(|s| s.parse().ok())
             .unwrap_or(120u64);
+        self.ask_raw_secs(line, secs)
+    }
+
+    /// The raw answer, waiting at most `secs` seconds (then restarted, as `ask_raw`).
+    pub fn ask_raw_secs(&mut self, line: &str, secs: u64) -> Result<String, String> {
         writeln!(self.input, "{line}").map_err(|e| format!("stdin: {e}"))?;
         self.input.flush().map_err(|e| format!("flush: {e}"))?;
         match self.output.recv_timeout(std::time::Duration::from_secs(secs)) {

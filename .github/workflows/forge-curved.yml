@@ -1,0 +1,51 @@
+# Decide-once for curved inputs over ℝ (verify/forge-curved, design D1): the Mathlib proofs about
+# forge-exact's curved definitions (faithful cells, `xNonManifold_iff_top`, the tangent-cylinder
+# test, and `end_to_end_curved` through the aeneas project's proven `CoreSpec`). One `lake build` on the pinned toolchain, with Mathlib's
+# prebuilt cache; then the axiom report: every `#print axioms` line of ForgeCurved/Axioms.lean
+# must show only propext, Classical.choice and Quot.sound (no sorryAx).
+name: forge-curved
+
+on:
+  push:
+    branches: [main]
+    paths: ["verify/forge-curved/**", "verify/forge-exact/**", "research/kernel-audit/decide-once/aeneas/lean/**", ".github/workflows/forge-curved.yml"]
+  pull_request:
+    paths: ["verify/forge-curved/**", "verify/forge-exact/**", "research/kernel-audit/decide-once/aeneas/lean/**", ".github/workflows/forge-curved.yml"]
+  workflow_dispatch:
+
+jobs:
+  proofs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: toolchain and Mathlib cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.elan
+            ~/.cache/mathlib
+          key: forge-curved-${{ runner.os }}-${{ hashFiles('verify/forge-curved/lean-toolchain', 'verify/forge-curved/lake-manifest.json') }}
+      - name: elan and the pinned toolchain
+        run: |
+          if [ ! -x "$HOME/.elan/bin/elan" ]; then
+            curl -sSfL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -o elan-init.sh
+            sh elan-init.sh -y --default-toolchain none
+          fi
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+          "$HOME/.elan/bin/elan" toolchain install "$(cat verify/forge-curved/lean-toolchain)"
+      - name: the proofs
+        working-directory: verify/forge-curved
+        run: |
+          lake exe cache get
+          lake build 2>&1 | tee build.log
+          grep -q "Build completed successfully" build.log
+      - name: the axiom report
+        working-directory: verify/forge-curved
+        run: |
+          lake env lean ForgeCurved/Axioms.lean 2>&1 | tee axioms.log
+          if grep -q "sorryAx\|declaration uses 'sorry'" build.log axioms.log; then echo "::error::sorry"; exit 1; fi
+          bad=$(grep "depends on axioms" axioms.log | grep -v -E "\[(propext(, Classical\.choice)?(, Quot\.sound)?|propext, Quot\.sound|)\]" || true)
+          if [ -n "$bad" ]; then echo "::error::non-standard axioms:"; echo "$bad"; exit 1; fi
+          grep -q "'ForgeCurved.xNonManifold_iff_top' depends on axioms" axioms.log \
+            || { echo "::error::xNonManifold_iff_top missing from the axiom report"; exit 1; }
