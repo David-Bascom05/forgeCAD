@@ -1,6 +1,5 @@
 # Hydraulic valve body: a subplate for a 4/3 directional valve. The valve bolts to the top face
 # over four ports; drilled galleries take P to the front, T to the back and A, B to the sides.
-# Hand port of tools/bench-parts/valve.fc.
 
 shared bx = 90
 shared by = 70

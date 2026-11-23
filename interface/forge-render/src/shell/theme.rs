@@ -13,6 +13,7 @@ pub struct Theme {
     pub ink2: Color32,
     pub line: Color32,
     pub hover: Color32,
+    /// The one accent: primary buttons, the File button, the chosen tab's rule.
     pub accent: Color32,
     pub field: Color32,
     pub view: u32,
@@ -25,6 +26,14 @@ pub struct Theme {
     pub sketch: Color32,
     /// Sketch geometry projected from the part.
     pub projected: Color32,
+    /// A warning: an issue that doesn't stop the build.
+    pub warn: Color32,
+    /// Done and valid; never a call to action.
+    pub success: Color32,
+    /// Over the app behind a modal window.
+    pub scrim: Color32,
+    /// A floating panel's shadow.
+    pub shadow: Color32,
 }
 
 const fn c(x: u32) -> Color32 {
@@ -41,7 +50,7 @@ pub const DARK: Theme = Theme {
     ink2: c(0xA1A9B3),
     line: c(0x2A313B),
     hover: c(0x232A33),
-    accent: c(0x2F7D59),
+    accent: c(0x2F6FB3),
     field: c(0x0F1318),
     view: 0x12171D,
     on: c(0x1B2838),
@@ -51,6 +60,10 @@ pub const DARK: Theme = Theme {
     error: c(0xE0554A),
     selection: c(0x2C4A6B),
     projected: c(0xD9C24A),
+    warn: c(0xE0A030),
+    success: c(0x2F7D59),
+    scrim: Color32::from_black_alpha(140),
+    shadow: Color32::from_black_alpha(90),
 };
 
 pub const LIGHT: Theme = Theme {
@@ -63,7 +76,7 @@ pub const LIGHT: Theme = Theme {
     ink2: c(0x525A55),
     line: c(0xD5D9D3),
     hover: c(0xEEF1F5),
-    accent: c(0x1D5C42),
+    accent: c(0x1D5FA8),
     field: c(0xFFFFFF),
     view: 0xDDE2E8,
     on: c(0xE3ECF5),
@@ -73,7 +86,78 @@ pub const LIGHT: Theme = Theme {
     error: c(0xB83A30),
     selection: c(0xB9D2EC),
     projected: c(0x9A7A00),
+    warn: c(0xB87400),
+    success: c(0x1D5C42),
+    scrim: Color32::from_black_alpha(100),
+    shadow: Color32::from_black_alpha(36),
 };
+
+// The design system's numbers (research/ui/polish.md): every panel takes its spacing, sizes and
+// type from here.
+
+/// Spacing on a 4-px grid: icon to label, tight rows.
+pub const S1: f32 = 4.0;
+/// Between controls in a row; a button's side padding.
+pub const S2: f32 = 8.0;
+/// A panel's padding; between groups.
+pub const S3: f32 = 12.0;
+/// Between sections.
+pub const S4: f32 = 16.0;
+/// Between an empty state's blocks.
+pub const S5: f32 = 24.0;
+/// A control's corners: buttons, fields, chips.
+pub const R1: u8 = 4;
+/// A panel's or dialog's corners.
+pub const R2: u8 = 6;
+/// A button's, field's or combo's height.
+pub const CONTROL_H: f32 = 26.0;
+/// A floating panel's title row.
+pub const TITLE_ROW_H: f32 = 28.0;
+
+/// Group labels, hints, secondary meta.
+pub fn caption() -> FontId {
+    sans(11.0)
+}
+
+/// Dense UI: tree details, the status bar, tables.
+pub fn small() -> FontId {
+    sans(12.0)
+}
+
+/// Labels, menus, dialog fields.
+pub fn body() -> FontId {
+    sans(13.0)
+}
+
+/// A panel's or dialog's title.
+pub fn title() -> FontId {
+    semi(14.0)
+}
+
+/// An empty state's or a settings page's heading.
+pub fn heading() -> FontId {
+    semi(18.0)
+}
+
+/// Names and values in code: feature names, file names, numbers.
+pub fn code() -> FontId {
+    mono(12.0)
+}
+
+/// A floating panel's frame: the tool dialog, Measure, Issues, Settings.
+pub fn panel_frame(t: &Theme) -> egui::Frame {
+    egui::Frame::new()
+        .fill(t.surface)
+        .stroke(Stroke::new(1.0, t.line))
+        .corner_radius(R2)
+        .shadow(egui::Shadow {
+            offset: [0, 4],
+            blur: 16,
+            spread: 0,
+            color: t.shadow,
+        })
+        .inner_margin(S3 as i8)
+}
 
 /// A control's edge: a box, a button, a checkbox. Firmer than a rule (`line`), so a checkbox or a
 /// field reads on its window in either theme.

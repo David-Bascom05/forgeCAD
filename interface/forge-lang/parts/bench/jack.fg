@@ -1,6 +1,6 @@
-# Spring plunger knob (tools/bench-parts/jack.fc, hand port): a flanged screw whose shaft carries
+# Spring plunger knob: a flanged screw whose shaft carries
 # a compression spring up to a knurled knob, an M12 thread down the shaft and the maker's mark
-# raised round the band; the knurl one groove patterned round, as the .fc part has it.
+# raised round the band; the knurl one groove patterned round.
 
 shared rf = 22
 shared d = 12

@@ -60,7 +60,11 @@ impl Bridge {
         static NEXT: AtomicU32 = AtomicU32::new(0);
         let dir = directory()?;
         ipc::private_dir(&dir).map_err(|e| e.to_string())?;
-        let id = format!("{}-{}", std::process::id(), NEXT.fetch_add(1, Ordering::Relaxed));
+        let id = format!(
+            "{}-{}",
+            forge_dirs::process_id(),
+            NEXT.fetch_add(1, Ordering::Relaxed)
+        );
         let path = dir.join(format!("{id}.sock"));
         // a stale socket is replaced only after proving no listener owns it
         let listener = ipc::Listener::bind(&path).map_err(|e| e.to_string())?;
@@ -130,7 +134,7 @@ impl Bridge {
 impl Drop for Bridge {
     fn drop(&mut self) {
         self.stop.store(true, Ordering::Relaxed);
-        let _ = std::fs::remove_file(&self.path);
+        let _ = forge_dirs::fs::remove_file(&self.path);
     }
 }
 fn answer(window: &str, shared: &Mutex<State>, j: &Json) -> Json {
@@ -214,7 +218,10 @@ pub fn list() -> Result<Json, String> {
         return Ok(Json::Arr(vec![]));
     }
     let mut windows = Vec::new();
-    for entry in std::fs::read_dir(dir).map_err(|e| e.to_string())?.flatten() {
+    for entry in forge_dirs::fs::read_dir(dir)
+        .map_err(|e| e.to_string())?
+        .flatten()
+    {
         let path = entry.path();
         if path.extension().is_none_or(|x| x != "sock") {
             continue;

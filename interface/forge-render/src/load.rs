@@ -26,7 +26,7 @@ pub fn bench_dir() -> Result<PathBuf, String> {
             .or_else(forge_dirs::cache)
             .unwrap_or_else(std::env::temp_dir);
         let dir = base.join("forgecad").join("bench");
-        std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+        forge_dirs::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
         for n in BENCH {
             let src = bench_src(n).expect("a bench part");
             write_if_changed(&dir.join(format!("{n}.fg")), src.as_bytes())?;
@@ -35,7 +35,8 @@ pub fn bench_dir() -> Result<PathBuf, String> {
         let font = dir.join(forge_lang::bench::FONT);
         let made = dir.join(format!("{}.made", forge_lang::bench::FONT));
         let key = env!("FORGE_KERNEL_HASH");
-        let fresh = font.exists() && std::fs::read_to_string(&made).is_ok_and(|k| k == key);
+        let fresh =
+            forge_dirs::fs::exists(&font) && forge_dirs::fs::read_to_string(&made).is_ok_and(|k| k == key);
         if !fresh {
             write_if_changed(&font, &forge_lang::bench::font_bytes())?;
             write_if_changed(&made, key.as_bytes())?;
@@ -47,14 +48,14 @@ pub fn bench_dir() -> Result<PathBuf, String> {
 
 // written whole and then moved into place, so a reader never sees half a file
 fn write_if_changed(path: &Path, bytes: &[u8]) -> Result<(), String> {
-    if std::fs::read(path).is_ok_and(|b| b == bytes) {
+    if forge_dirs::fs::read(path).is_ok_and(|b| b == bytes) {
         return Ok(());
     }
-    let tmp = path.with_extension(format!("{}.tmp", std::process::id()));
-    std::fs::write(&tmp, bytes)
-        .and_then(|_| std::fs::rename(&tmp, path))
+    let tmp = path.with_extension(format!("{}.tmp", forge_dirs::process_id()));
+    forge_dirs::fs::write(&tmp, bytes)
+        .and_then(|_| forge_dirs::fs::rename(&tmp, path))
         .map_err(|e| {
-            let _ = std::fs::remove_file(&tmp);
+            let _ = forge_dirs::fs::remove_file(&tmp);
             format!("{}: {e}", path.display())
         })
 }
@@ -70,7 +71,7 @@ pub fn source(part: &str) -> Result<String, String> {
     match bench_src(part) {
         Some(s) => Ok(s.to_string()),
         None if !part.ends_with(".fg") => Err(format!("{part}: no bench part or .fg part file")),
-        None => std::fs::read_to_string(part).map_err(|e| format!("{part}: {e}")),
+        None => forge_dirs::fs::read_to_string(part).map_err(|e| format!("{part}: {e}")),
     }
 }
 
@@ -140,26 +141,7 @@ type Opened = (usize, Result<(PartMesh, bool), String>);
 
 /// Several parts, on up to four threads.
 pub fn open_all(parts: &[&str], use_cache: bool) -> Result<(Vec<PartMesh>, usize), String> {
-    let at = std::sync::atomic::AtomicUsize::new(0);
-    let mut out: Vec<Opened> = std::thread::scope(|s| {
-        let workers: Vec<_> = (0..4)
-            .map(|_| {
-                s.spawn(|| {
-                    let mut got = Vec::new();
-                    loop {
-                        let i = at.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                        let Some(p) = parts.get(i) else { return got };
-                        got.push((i, open(p, use_cache)));
-                    }
-                })
-            })
-            .collect();
-        workers
-            .into_iter()
-            .flat_map(|w| w.join().expect("a worker panicked"))
-            .collect()
-    });
-    out.sort_by_key(|x| x.0);
+    let out: Vec<Opened> = crate::plat::par_map(parts, 4, |p| (0, open(p, use_cache)));
     let mut meshes = Vec::with_capacity(out.len());
     let mut hits = 0;
     for (_, r) in out {

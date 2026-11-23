@@ -101,6 +101,17 @@ pub struct FrameOut {
     pub times: Times,
 }
 
+/// A build's word, kept for the host: its sequence number, whether its checks ran (it is the
+/// last word on that text), whether it built, its measures and its issues as lines.
+#[derive(Clone, Debug)]
+pub struct LastBuilt {
+    pub seq: u64,
+    pub checked: bool,
+    pub ok: bool,
+    pub measure: Option<forge_lang::Measure>,
+    pub issues: Vec<String>,
+}
+
 /// An assembly's occurrences, and each placement's mesh and solved pose.
 pub type AsmPlaced = (Vec<crate::fg::Occ>, Vec<(usize, crate::scene::Rows)>);
 /// A part file, and its anchors or why not.
@@ -147,6 +158,8 @@ pub struct Gui {
     format: wgpu::TextureFormat,
     /// A Forge (.fg) part, and its first view waiting for the layout.
     pub fg: Option<crate::fg::Session>,
+    /// The last build the part's session gave: what a host (the browser page, a test) reports.
+    pub last_built: Option<LastBuilt>,
     fg_view: Option<Loaded>,
     /// The Forge part's last meshes, folded and (a sheet's) flat, and its sheets' DXF.
     fg_folded: Option<crate::mesh::PartMesh>,
@@ -288,6 +301,7 @@ impl Gui {
             markup_occ_rx: None,
             format,
             fg: None,
+            last_built: None,
             fg_view: None,
             fg_folded: None,
             fg_flat: None,
@@ -375,7 +389,7 @@ impl Gui {
         }
         // a drawing opens in the Drawing environment
         if path.ends_with(".fg")
-            && std::fs::read_to_string(path).is_ok_and(|s| forge_lang::drawing::is_drawing(&s))
+            && forge_dirs::fs::read_to_string(path).is_ok_and(|s| forge_lang::drawing::is_drawing(&s))
         {
             match crate::shell::drawing::DrawingEnv::open(path) {
                 Ok(env) => self.shell.open_drawing(env),
@@ -1022,7 +1036,7 @@ impl Gui {
                         self.fg_finish_sketch();
                         continue;
                     }
-                    // the part's own unit, kept in its text (`# units in`) as `.fc` kept it: one
+                    // the part's own unit, kept in its text (`# units in`): one
                     // undo step, nothing it builds changed
                     Action::SetUnits(u) if !self.shell.fg.as_ref().is_some_and(|p| p.assembly) => {
                         if s.set_units(u) {
@@ -1126,7 +1140,7 @@ impl Gui {
                 h.target[0], h.target[1], h.target[2], h.yaw, h.pitch, h.roll, h.dist, h.fovy, h.parallel
             ));
         }
-        if let Err(why) = std::fs::write(path, out) {
+        if let Err(why) = forge_dirs::fs::write(path, out) {
             eprintln!("forge-app: can't keep the view beside the part: {why}");
         }
     }
@@ -1135,7 +1149,7 @@ impl Gui {
     fn load_view(path: &str) -> (crate::viewcube::Orient, Option<Camera>) {
         let mut orient = crate::viewcube::Orient::default();
         let mut home = None;
-        for line in std::fs::read_to_string(path).unwrap_or_default().lines() {
+        for line in forge_dirs::fs::read_to_string(path).unwrap_or_default().lines() {
             match line.split_once(' ') {
                 Some(("orient", w)) => orient = crate::viewcube::Orient::from_words(w).unwrap_or(orient),
                 Some(("home", w)) => {
@@ -1662,12 +1676,14 @@ impl Pixels {
 
 /// The app with no window: input by hand, a texture for a target. What `--shot`, `--bench` and the
 /// tests run. Clicks go by the shell's own names for what it drew.
+#[cfg(not(target_arch = "wasm32"))]
 impl Drop for Headless {
     fn drop(&mut self) {
         crate::fg::stop_builders();
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 pub struct Headless {
     pub gui: Gui,
     size: (f32, f32),
@@ -1681,6 +1697,7 @@ pub struct Headless {
     pointer: egui::Pos2,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl Headless {
     pub fn new(size: (f32, f32), scale: f32) -> Result<Headless, String> {
         let instance = render::native_instance();
@@ -2210,6 +2227,17 @@ impl Gui {
                 self.extras.frames.remove(gui_overlay::SELF);
                 self.extras.asked.remove(gui_overlay::SELF);
             }
+            self.last_built = Some(LastBuilt {
+                seq: b.seq,
+                checked: b.checked && !b.preview,
+                ok: b.ok,
+                measure: b.measure.clone(),
+                issues: b
+                    .issues
+                    .iter()
+                    .map(|i| format!("{:?}: {}", i.severity, i.text))
+                    .collect(),
+            });
             if let Some(p) = &mut self.shell.fg {
                 p.summary = b.summary();
                 // a part that gained a component is an assembly now (and back)
@@ -2236,7 +2264,7 @@ impl Gui {
                 let dir = s
                     .path
                     .as_deref()
-                    .and_then(|f| std::fs::canonicalize(f).ok())
+                    .and_then(|f| forge_dirs::fs::canonicalize(f).ok())
                     .and_then(|f| f.parent().map(|d| d.to_path_buf()));
                 let flags = crate::shell::fgasm::issue_flags(&p.issues);
                 ap.set_structure(
@@ -2382,9 +2410,7 @@ impl Gui {
             // here held up a frame (a fifth of a second on the cup)
             let old = std::mem::replace(&mut self.fg_walls, walls);
             if !old.is_empty() {
-                let _ = std::thread::Builder::new()
-                    .name("fg-walls-free".into())
-                    .spawn(move || drop(old));
+                crate::plat::spawn("fg-walls-free", move || drop(old));
             }
             if let Some(a) = b.anchors {
                 if let Some(p) = &mut self.shell.fg {
@@ -2735,7 +2761,7 @@ impl Gui {
         let (send, recv) = channel();
         self.fg_asm_located = Some(recv);
         let waker = self.waker.clone();
-        std::thread::spawn(move || {
+        crate::plat::spawn("forge-job", move || {
             let _ = send.send(locate(&src, dir, data.as_deref()));
             waker();
         });
@@ -2794,13 +2820,13 @@ impl Gui {
         let (send, recv) = channel();
         self.fg_asm_anchors = Some(recv);
         let waker = self.waker.clone();
-        std::thread::spawn(move || {
+        crate::plat::spawn("forge-job", move || {
             let path = dir
                 .as_ref()
                 .map(|d| d.join(&file))
-                .filter(|p| p.exists())
+                .filter(|p| forge_dirs::fs::exists(p))
                 .unwrap_or_else(|| std::path::PathBuf::from(&file));
-            let got = std::fs::read_to_string(&path)
+            let got = forge_dirs::fs::read_to_string(&path)
                 .map_err(|e| format!("{}: {e}", path.display()))
                 .map(|text| {
                     let opts = forge_lang::Options {

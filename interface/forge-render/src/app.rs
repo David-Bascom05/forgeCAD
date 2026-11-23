@@ -364,7 +364,7 @@ fn new_sheet_dialog() -> Option<String> {
         .save_file()?
         .with_extension("fg");
     let d = crate::shell::sheet::Defaults::default();
-    std::fs::write(&f, crate::shell::sheet::new_part_text(&d)).ok()?;
+    forge_dirs::fs::write(&f, crate::shell::sheet::new_part_text(&d)).ok()?;
     Some(f.to_string_lossy().into_owned())
 }
 

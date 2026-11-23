@@ -9,6 +9,7 @@ pub mod asmdrag;
 pub mod asmglyph;
 pub mod asmpart;
 pub mod asmtools;
+mod banner;
 pub mod content;
 pub mod dialog;
 pub mod docs;
@@ -21,6 +22,7 @@ pub mod dwgdoc;
 mod dwgdoc_edit_ui;
 mod dwgdoc_ui;
 pub mod dwgprops;
+mod empty;
 pub mod fg;
 pub mod fgasm;
 pub mod fgdialog;
@@ -717,6 +719,10 @@ impl Shell {
             p.image(tex, self.view_rect, whole, Color32::WHITE);
         }
         self.cube_words(ui, ppp);
+        // nothing open: where to start
+        if self.fg.is_none() && self.cube_place.is_none() {
+            self.empty_state(ui);
+        }
         self.title_bar(ui, s.width());
         self.shortcuts(&ctx);
         self.escape_one_level(&ctx);
@@ -743,6 +749,7 @@ impl Shell {
         self.fg_params_window(&ctx);
         self.fg_issues_window(&ctx);
         self.sheet_ui(&ctx);
+        self.build_banner(ui);
         self.view_toolbar(&ctx);
         self.sketch_ui(&ctx);
         self.mode_bar(&ctx);
@@ -977,7 +984,7 @@ impl Shell {
             if on {
                 p.rect_filled(r, up, t.raised);
                 p.rect_stroke(r, up, Stroke::new(1.0, t.line), StrokeKind::Inside);
-                p.rect_filled(Rect::from_min_size(r.min, vec2(w, 2.0)), 0.0, t.focus);
+                p.rect_filled(Rect::from_min_size(r.min, vec2(w, 2.0)), 0.0, t.accent);
             } else if resp.hovered() {
                 p.rect_filled(r, up, t.hover);
             }
@@ -1030,6 +1037,14 @@ impl Shell {
             self.asm_tree(ui, tree);
         } else if self.fg.is_some() {
             self.fg_tree(ui, tree);
+        } else {
+            p.text(
+                pos2(tree.left() + theme::S3, tree.top() + theme::S3),
+                Align2::LEFT_TOP,
+                "No document open",
+                theme::small(),
+                t.ink2,
+            );
         }
         self.agent_drag(ui);
     }
@@ -1113,6 +1128,7 @@ impl Shell {
         // a Forge file's issues a click away (an assembly's timings on hover): its checks, a
         // shop's rules, each with its fixes, in the Issues window
         let asm = self.is_asm();
+        let units = self.units.to_string();
         if let Some(fg) = &mut self.fg {
             if let Some(a) = &fg.asm
                 && !a.timings.is_empty()
@@ -1127,20 +1143,15 @@ impl Shell {
                 fg::plural(warnings, "warning")
             );
             let g = ui.fonts_mut(|f| f.layout_no_wrap(text.clone(), sans(12.0), Color32::WHITE));
-            let right = s.width()
-                - 10.0
-                - ui.fonts_mut(|f| f.layout_no_wrap(format!("| {}", self.units), mono(12.0), Color32::WHITE))
-                    .size()
-                    .x
-                - 12.0;
+            let right = Self::units_chip(&units, ui, &p, st) - theme::S2;
             let r = Rect::from_min_max(
                 pos2(right - g.size().x - 22.0, st.top() + 2.0),
                 pos2(right, st.bottom() - 2.0),
             );
             let resp = ui.interact(r, ui.scope_id().with("status-issues"), Sense::click());
-            if resp.hovered() || fg.issues_list {
-                p.rect_filled(r, 3.0, Color32::from_white_alpha(28));
-            }
+            // a chip at rest too, so it reads as the button it is
+            let lit = resp.hovered() || fg.issues_list;
+            p.rect_filled(r, theme::R1, Color32::from_white_alpha(if lit { 32 } else { 14 }));
             let ink = if errors > 0 {
                 t.error
             } else if warnings > 0 {
@@ -1166,22 +1177,26 @@ impl Shell {
             if resp.clicked() {
                 fg.issues_list = !fg.issues_list;
             }
-            p.text(
-                pos2(s.width() - 10.0, st.center().y),
-                Align2::RIGHT_CENTER,
-                format!("| {}", self.units),
-                mono(12.0),
-                Color32::WHITE,
-            );
             return;
         }
-        p.text(
-            pos2(s.width() - 10.0, st.center().y),
-            Align2::RIGHT_CENTER,
-            format!("| {}", self.units),
-            mono(12.0),
+        Self::units_chip(&units, ui, &p, st);
+    }
+
+    /// The document's length unit at the status bar's right end, as a chip; where it starts.
+    fn units_chip(units: &str, ui: &Ui, p: &egui::Painter, st: Rect) -> f32 {
+        let g = ui.fonts_mut(|f| f.layout_no_wrap(units.to_string(), mono(11.0), Color32::WHITE));
+        let pad = theme::S1 + 2.0;
+        let chip = Rect::from_min_max(
+            pos2(st.right() - theme::S2 - g.size().x - 2.0 * pad, st.top() + 3.0),
+            pos2(st.right() - theme::S2, st.bottom() - 3.0),
+        );
+        p.rect_filled(chip, theme::R1, Color32::from_white_alpha(20));
+        p.galley(
+            pos2(chip.left() + pad, chip.center().y - g.size().y * 0.5),
+            g,
             Color32::WHITE,
         );
+        chip.left()
     }
 
     /// Esc backs out one level, wherever one is: never two, and never none.
@@ -1260,13 +1275,11 @@ impl Shell {
             .fixed_pos(pos2(v.center().x, v.top() + 10.0))
             .order(egui::Order::Foreground)
             .show_sizing(ctx, |ui| {
-                egui::Frame::NONE
-                    .fill(t.surface)
-                    .stroke(Stroke::new(1.0, t.line))
-                    .corner_radius(4.0)
-                    .inner_margin(vec2(10.0, 6.0))
+                theme::panel_frame(&t)
+                    .inner_margin(vec2(theme::S3, 6.0))
                     .show(ui, |ui| {
                         ui.horizontal(|ui| {
+                            ui.spacing_mut().item_spacing.x = theme::S1 + 2.0;
                             ui.label(egui::RichText::new(text).font(sans(13.0)).color(t.ink));
                             ui.add_space(8.0);
                             if let Some(f) = finish {
