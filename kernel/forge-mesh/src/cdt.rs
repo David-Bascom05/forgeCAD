@@ -982,21 +982,18 @@ fn grid(v: f64, scale: f64) -> u32 {
     x as u32
 }
 
+// (Aeneas's Lean takes a negated bool for a Prop)
+#[allow(clippy::needless_bool)]
 /// Sorts v ascending: insertion sorts of runs of 16, merged bottom-up through `tmp`.
-fn sort_keys(v: &mut [u64], tmp: &mut Vec<u64>) {
+#[allow(clippy::ptr_arg)]
+fn sort_keys(v: &mut Vec<u64>, tmp: &mut Vec<u64>) {
     let n = v.len();
     let mut s = 0;
     while s < n {
         let e = if s + 16 < n { s + 16 } else { n };
         let mut i = s + 1;
         while i < e {
-            let x = v[i];
-            let mut j = i;
-            while j > s && v[j - 1] > x {
-                v[j] = v[j - 1];
-                j -= 1;
-            }
-            v[j] = x;
+            sink(v, s, i);
             i += 1;
         }
         s = e;
@@ -1012,7 +1009,7 @@ fn sort_keys(v: &mut [u64], tmp: &mut Vec<u64>) {
             } else {
                 merge_runs(tmp, v, w);
             }
-            in_v = !in_v;
+            in_v = if in_v { false } else { true };
             w *= 2;
         }
         if !in_v {
@@ -1023,6 +1020,24 @@ fn sort_keys(v: &mut [u64], tmp: &mut Vec<u64>) {
             }
         }
     }
+}
+
+/// v[i] moved down into v[s..i], sorted, past the values above it (an insertion sort's step).
+#[allow(clippy::ptr_arg)]
+fn sink(v: &mut Vec<u64>, s: usize, i: usize) {
+    let x = v[i];
+    let mut j = i;
+    let mut moving = true;
+    while moving && j > s {
+        let y = v[j - 1];
+        if y > x {
+            v[j] = y;
+            j -= 1;
+        } else {
+            moving = false;
+        }
+    }
+    v[j] = x;
 }
 
 /// One bottom-up merge pass: each two sorted runs of `w` in `src`, merged into `dst`.
@@ -1133,8 +1148,9 @@ pub struct Need {
 /// shorter chord: no triangulation to keep up. Triangles all counter-clockwise inside a simple
 /// boundary cover it once. None where a step has no such triangle, or a chord or triangle fails
 /// `refine`.
-// (!(x > 0.0), not x <= 0.0: a NaN takes the same side as before)
-#[allow(clippy::neg_cmp_op_on_partial_ord)]
+// (if x > 0.0 { false } else { true }, not x <= 0.0: a NaN takes the same side as before; and
+// not a negated bool, which Aeneas's Lean takes for a Prop)
+#[allow(clippy::needless_bool)]
 pub fn zip<R: Refine + ?Sized>(points: &[Point2], lp: &[u32], refine: &R) -> Option<Vec<[u32; 3]>> {
     let n = lp.len();
     if n < 3 {
@@ -1175,12 +1191,15 @@ pub fn zip<R: Refine + ?Sized>(points: &[Point2], lp: &[u32], refine: &R) -> Opt
                 at(points, lp, upper - 1),
                 at(points, lp, upper),
             ) > 0.0
+        } else if orient2d(
+            at(points, lp, lower),
+            at(points, lp, lower + 1),
+            at(points, lp, upper),
+        ) > 0.0
+        {
+            false
         } else {
-            !(orient2d(
-                at(points, lp, lower),
-                at(points, lp, lower + 1),
-                at(points, lp, upper),
-            ) > 0.0)
+            true
         };
         let (a, b) = if take_up {
             (lower, upper - 1)
@@ -1361,10 +1380,16 @@ fn within<R: Refine + ?Sized>(
 
     // interior points go in only where they land inside, clear of the boundary
     let order = brio_order(&kept, lo, size);
+    let mut err = None;
     let mut k = 0;
-    while k < order.len() {
-        mesh.insert_interior(kept[order[k]], eps)?;
+    while err.is_none() && k < order.len() {
+        if let Err(e) = mesh.insert_interior(kept[order[k]], eps) {
+            err = Some(e);
+        }
         k += 1;
+    }
+    if let Some(e) = err {
+        return Err(e);
     }
     let mut settled = true;
     if let Some(refine) = refine {
@@ -1564,7 +1589,7 @@ impl Mesh {
     fn refine<R: Refine + ?Sized>(
         &mut self,
         refine: &R,
-        given: usize,
+        input: usize,
         lo: Point2,
         size: f64,
         eps: f64,
@@ -1589,7 +1614,7 @@ impl Mesh {
         // of points: a quarter of a million, or four for each point given, and past that what
         // the chord asks for (`Refine::need`, asked then), four times over, up to `CEILING`;
         // either fails, typed (past the ceiling, as `TooFine`)
-        let mut budget = if 4 * given > 1 << 18 { 4 * given } else { 1 << 18 };
+        let mut budget = if 4 * input > 1 << 18 { 4 * input } else { 1 << 18 };
         let mut asked = false;
         let mut need: Option<Need> = None;
         let mut err: Option<CdtError> = None;
