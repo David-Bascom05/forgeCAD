@@ -252,3 +252,22 @@ identical. On: the scoreboard takes 5.7 s against 5.2 s. That is little, because
 reach `trace` only where meet.rs gives up. Per certified pair, the certificate costs about 40× the
 march, almost all of it in the exclusion walk's boxes near the curve (10⁵ boxes for 700 steps).
 The next thing to make faster: boxes aligned with each step's chord, instead of axis-aligned hulls.
+
+**OCCT** (`tools/occt/certify_check.py` on 119 certified pairs, `certify_sweep 120 7` with
+`DUMP=`). It samples `GeomAPI_IntSS`'s lines, keeping only the kernel's cone nappe, since
+OpenCascade's cone runs on through the apex.
+- Every OCCT point inside the region lies within 5.8e-2 of our chains' chords. That is chord sag at
+  steps of about 0.2; the evaluated curve is exact by its Newton step.
+- For 116 pairs, every point of ours lies within a step of OCCT's samples.
+- The other 3 are cone–cone pairs, with our points up to 1.3 from any OCCT sample. Those points lie
+  on both kernel cones to within 1e-8, and the certificate proves them a branch. So OCCT's walking
+  lines leave those stretches out (or sample them too sparsely). Our side is proven.
+
+**Feature-on test differences** (all refusals at singular contacts, none wrong):
+- `forge-bool/tests/booleans.rs` `a_hole_on_a_rounds_centre_circle_at_any_angle`: the hole is
+  tangent to the round;
+- `forge-model/tests/no_feature_dropped.rs` `a_result_that_is_not_closed_is_refused`: a refusal in
+  place of NotClosed;
+- `forge-lang/tests/drawings.rs`: rack18u `fans/guard_120.fg`'s swept wire (a cylinder) meets its
+  revolved loop (a torus of the same tube radius) tangentially along the joint circle. This is the
+  pipe–torus crease case of research/fillets/general-method.md, and it needs phase B.

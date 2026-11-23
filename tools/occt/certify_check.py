@@ -6,6 +6,8 @@ usage: <venv python> tools/occt/certify_check.py DUMP [half_size]"""
 import math
 import sys
 
+import numpy as np
+
 from OCP.gp import gp_Ax3, gp_Dir, gp_Pnt
 from OCP.Geom import (Geom_ConicalSurface, Geom_CylindricalSurface, Geom_Plane,
                       Geom_SphericalSurface, Geom_ToroidalSurface)
@@ -73,15 +75,15 @@ def main():
         occ = []
         for k in range(1, inter.NbLines() + 1):
             c = inter.Line(k)
-            t0, t1 = max(c.FirstParameter(), -1e3), min(c.LastParameter(), 1e3)
+            t0, t1 = max(c.FirstParameter(), -60.0), min(c.LastParameter(), 60.0)
             # coarse, then fine over the stretches inside the region
-            m = 4000
+            m = 24000
             ts = [t0 + (t1 - t0) * i / m for i in range(m + 1)]
             keep = [i for i, t in enumerate(ts) if inside(pt(c, t), -1.0)]
             for i in keep:
                 a, b = ts[max(i - 1, 0)], ts[min(i + 1, m)]
-                for j in range(41):
-                    q = pt(c, a + (b - a) * j / 40)
+                for j in range(11):
+                    q = pt(c, a + (b - a) * j / 10)
                     if on[0](q) and on[1](q):
                         occ.append(q)
         pair_occ = pair_ours = 0.0
@@ -91,15 +93,29 @@ def main():
             for i in range(m if closed else m - 1):
                 segs.append((pts[i], pts[(i + 1) % m]))
         # OCCT's points well inside the region lie on our chains
-        for p in occ:
-            if inside(p, 0.05):
-                d = min((seg_dist(p, a, b) for a, b in segs), default=float("inf"))
-                pair_occ = max(pair_occ, d)
+        P = np.array([p for p in occ if inside(p, 0.05)]).reshape(-1, 3)
+        if len(P):
+            if not segs:
+                pair_occ = float("inf")
+            else:
+                A = np.array([a for a, _ in segs])
+                D = np.array([b for _, b in segs]) - A
+                dd = np.maximum((D * D).sum(1), 1e-300)
+                for k in range(0, len(P), 32):
+                    W = P[k:k + 32, None, :] - A[None]
+                    t = np.clip((W * D[None]).sum(2) / dd, 0.0, 1.0)
+                    d = np.linalg.norm(W - t[..., None] * D[None], axis=2).min(1)
+                    pair_occ = max(pair_occ, float(d.max()))
         # our points inside the region lie on OCCT's curves
-        for _, pts in chains:
-            for p in pts:
-                if inside(p) and occ:
-                    pair_ours = max(pair_ours, min(math.dist(p, q) for q in occ))
+        Q = np.array([p for _, pts in chains for p in pts if inside(p)]).reshape(-1, 3)
+        if len(Q):
+            if not occ:
+                pair_ours = float("inf")
+            else:
+                O = np.array(occ)
+                for k in range(0, len(Q), 8):
+                    d = np.linalg.norm(Q[k:k + 8, None, :] - O[None], axis=2).min(1)
+                    pair_ours = max(pair_ours, float(d.max()))
         n += 1
         h = max((math.dist(a, b) for a, b in segs), default=0.0)
         if pair_occ > h or pair_ours > h:
