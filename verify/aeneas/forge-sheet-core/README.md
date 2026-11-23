@@ -54,10 +54,12 @@ Proven (no `sorry`; `lean/ForgeSheetCore/Axioms.lean` checks the standard axioms
   Filter16.lean's model). The exact branch is the refinement specs (`exp_*_spec`: the Rust loops
   are the list models `diffL`, `mulL`, `addL`, `negL`, `signL`) and `disc_model`: every two-sum
   and two-product the expansions make is exact, finite and on the grid, so their sum is the exact
-  value. The one assumption is the sign theorem of the expansion theory (Shewchuk 1997: the
-  invariant kept by Grow-Expansion with zero elimination, under which the top nonzero component
-  has the sum's sign), carried as the hypothesis `Tth : ExpansionTheory`, never an axiom, for
-  verify/ieee754 to discharge. `line_gap` is next, on the same pieces.
+  value. The sign is the expansion theory (Shewchuk 1997), proven generic over the format in
+  verify/ieee754's IEEE754/Expansion.lean: nonoverlapping as a `Mult` grid condition
+  (`Nonoverlapping`), kept by Grow-Expansion (`grow_nonoverlapping`, Theorem 10) and by dropping
+  components (zero elimination), and the sign of an expansion is its topmost nonzero
+  component's (`NO_sign`). ExpansionInst.lean instantiates it (`expansionTheory`), so
+  `disc_exact` holds with no assumption beyond the domain. `line_gap` is next, on the same pieces.
 - under them: the least-root union–find (`new_spec`, `find_spec`, `union_spec`), ported from the
   decide-once core's proofs (research/kernel-audit/decide-once/aeneas: the same `union_find.rs`),
   with every `+= 1` (overflow-checked in the canonical translation) shown not to overflow.
