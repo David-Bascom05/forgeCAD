@@ -76,13 +76,17 @@ notch's sharp inside corners (no end mill reaches them).
    - the trim arcs' stored-end gap (3a388e5, bfa4a72).
    Open: L5 for the checker's intervals.
 2. G4 (leftover) is checked: per z band, the final stock less the part's section grown by tol,
-   exactly (booleans); the flange has none, a facing-only program lists its regions. The
-   reasons (tool radius, reach) are not yet classified: every region says "uncut".
+   exactly (booleans); the flange has none, a facing-only program lists its regions. Reasons
+   (cam/g4-classify): "held by fixture", "below every tool tip" (band top ≤ the setup's lowest
+   posted tip), "tool radius" (no disk of the chain's smallest radius in the free section meets
+   it: exact booleans on an opening taken with a 1e-6 mm margin over the offset grid; the
+   margin argument is hyp H.grid in verify/forge-cam/RESUME.md), else "uncut". Observed, not
+   judged: a turned chain has sliver bands (e.g. [14, 14.000000000000004]) from h − z rounding.
 3. Ops: done since this note: engraving, thread milling (declared Δ), edge_break (chamfer /
    deburr), helical ramps in pockets. cam/pocket-islands: `slot` (end mill along centrelines,
    ramped along the first line) and pockets of the section keep their islands (the region is
    the hole less the section; before, the island was ignored and the pocket refused as a
-   gouge). Slot certification is slow (3.5 s for two slots, ~148k B&B cells: gap 5).
+   gouge). Slot certification was slow (3.5 s for two slots; now 1.4 s with ramps: gap 5).
 4. Declared removals Δ (deburr, chamfer and thread milling where the model lacks the geometry).
 5. Speed (measured 2026-11-23 on the cloud VM, 4 cores): the checker is not the bottleneck.
    cam_gonogo 10⁵ moves 0.50 s (5.0 µs/move, one thread), cam_product (ops::certify_fixtured)

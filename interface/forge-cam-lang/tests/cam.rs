@@ -55,6 +55,68 @@ fn leftover_is_listed() {
     );
 }
 
+/// G4's reasons: below every tool tip (the facing's floor), and tool radius (the notch's inside
+/// corners, which no disk of the chain's smallest radius reaches); the rest says "uncut".
+#[test]
+fn leftover_says_why() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    let cam = forge_cam_lang::run(
+        &doc(
+            "skim = facing(op1, tool: t1, to: 18, step: 1)\nprog = program(op1, post: \"fanuc\", number: 1)\n",
+        ),
+        &dir,
+    );
+    assert!(cam.leftover_done && !cam.leftover.is_empty());
+    // the facing's lowest tip is its floor, 18: everything under it is below every tool tip
+    for l in &cam.leftover {
+        // (the read-back tip: the posted 18 back in the part's frame, to f64)
+        let d = l.below.expect("the lowest tip");
+        assert!(
+            l.why == "below every tool tip" && (d - 18.0).abs() < 1e-9 && l.z1 <= d,
+            "{l:?}"
+        );
+    }
+    // unposted: no tip is known, so no such claim
+    let cam = forge_cam_lang::run(&doc("skim = facing(op1, tool: t1, to: 18, step: 1)\n"), &dir);
+    assert!(
+        cam.leftover.iter().all(|l| l.below.is_none()),
+        "{:?}",
+        cam.leftover
+    );
+    // and the bolt holes (6.6 mm) and the bore take no disk of the facing tool's radius, 5
+    assert!(
+        cam.leftover
+            .iter()
+            .any(|l| l.why == "tool radius" && l.r == Some(5.0)),
+        "{:?}",
+        cam.leftover
+    );
+    // the bracket: op2 (turned over) clears with the 10 mm tool; the chain's smallest is the
+    // 6 mm (op1's bore). The notch's corners (x 28 and 42, y −38 turned) are out of reach of a
+    // radius-3 disk; the rest of the notch's leftover a 6 mm tool could reach: uncut
+    let cam = bracket(&dir, &|s| s);
+    assert!(cam.ok && cam.leftover_done);
+    let tr: Vec<_> = cam.leftover.iter().filter(|l| l.why == "tool radius").collect();
+    assert!(!tr.is_empty(), "{:?}", cam.leftover);
+    for l in &tr {
+        assert_eq!(l.r, Some(3.0));
+        assert!(l.z0 >= 6.0 - 1e-9, "{l:?}");
+        for b in &l.boxes {
+            // each corner's box (its arc's circle box, a superset) touches a notch corner
+            let near = |x: f64, y: f64| b[0] <= x && x <= b[2] && b[1] <= y && y <= b[3];
+            assert!(near(28.0, -38.0) || near(42.0, -38.0), "{b:?}");
+        }
+    }
+    assert!(
+        cam.leftover
+            .iter()
+            .any(|l| l.why == "uncut" && l.z0 >= 6.0 - 1e-9)
+    );
+    let mut j = String::new();
+    cam.json().write(&mut j);
+    assert!(j.contains("\"why\":\"tool radius\",\"r\":3"), "{j}");
+}
+
 #[test]
 fn refusals_name_the_check_and_a_fix() {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
@@ -227,7 +289,11 @@ fn what_the_jaws_hold_is_left_over_by_name() {
             .iter()
             .any(|l| l.why == "held by fixture" && l.z1 <= 5.0)
     );
-    assert!(cam.leftover.iter().all(|l| l.why == "uncut" || l.z1 <= 5.0));
+    assert!(
+        cam.leftover
+            .iter()
+            .all(|l| l.why != "held by fixture" || l.z1 <= 5.0)
+    );
     let mut j = String::new();
     cam.json().write(&mut j);
     assert!(
