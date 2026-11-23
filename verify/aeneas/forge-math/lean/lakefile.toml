@@ -9,3 +9,9 @@ path = "../../bridge"
 
 [[lean_lib]]
 name = "ForgeMath"
+
+# The ieee session's theorems about the predicates' fast paths (stated for their respelled copy);
+# ForgeMath/Predicates.lean carries them over to this translation of the real crate.
+[[require]]
+name = "floatverification"
+path = "../../../../research/kernel-audit/float-verification/lean"
