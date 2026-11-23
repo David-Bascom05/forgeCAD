@@ -461,8 +461,13 @@ impl ProfileLoop {
     /// closing on itself cut in two. The first piece keeps the segment's id.
     /// None where a curve stops being one (a cusp, a piece too short).
     fn smooth_pieces(&self) -> Option<ProfileLoop> {
+        self.smooth_pieces_of(true)
+    }
+    /// `smooth_pieces` of a closed loop, or of an open chain (`closed` false), whose lone curve
+    /// does not close on itself and is left whole.
+    pub(crate) fn smooth_pieces_of(&self, closed: bool) -> Option<ProfileLoop> {
         let mut out = Vec::with_capacity(self.segments.len());
-        let alone = self.segments.len() == 1;
+        let alone = closed && self.segments.len() == 1;
         for (s, id) in &self.segments {
             let Segment::Spline(c) = s else {
                 out.push((s.clone(), *id));
@@ -515,6 +520,13 @@ impl ProfileLoop {
     fn polygon(&self) -> Vec<Point2> {
         self.segments.iter().flat_map(|(s, _)| s.samples(16)).collect()
     }
+    /// Whether the chain, open (its last segment's end not its first's start), crosses or touches
+    /// itself, as `crosses_itself` asks of a loop.
+    pub(crate) fn crosses_itself_open(&self) -> bool {
+        let mut poly = self.outline();
+        poly.push(self.segments[self.segments.len() - 1].0.end());
+        crosses::<false>(&poly)
+    }
     /// The polygon a crossing is looked for on: a line needs only its start.
     fn outline(&self) -> Vec<Point2> {
         self.segments
@@ -528,9 +540,15 @@ impl ProfileLoop {
 /// edge through another's corner counts, as a crossing there has no proper one to show.
 /// Edges are swept by their x extent, so only edges whose boxes overlap are tested, exactly.
 fn crosses_itself(poly: &[Point2]) -> bool {
+    crosses::<true>(poly)
+}
+
+/// `crosses_itself` of a closed polygon, or (`CLOSED` false) of an open polyline: its last point not
+/// joined back to its first.
+fn crosses<const CLOSED: bool>(poly: &[Point2]) -> bool {
     let n = poly.len();
     let seg = |i: usize| (poly[i], poly[(i + 1) % n]);
-    let mut order: Vec<usize> = (0..n).collect();
+    let mut order: Vec<usize> = (0..if CLOSED { n } else { n - 1 }).collect();
     order.sort_unstable_by(|&i, &j| {
         let (a, b) = (seg(i), seg(j));
         a.0.x.min(a.1.x).total_cmp(&b.0.x.min(b.1.x))
@@ -688,6 +706,118 @@ fn blunt_cusps(l: &ProfileLoop) -> ProfileLoop {
         out[j].0 = cut(&b, false, lo);
     }
     ProfileLoop::new(out)
+}
+
+/// A sheet's chains checked, each with whether it closes (its last end on its first start): segments
+/// end to end, none degenerate, ids unique, a circle alone, none crossing itself or another (the later
+/// chain's index in `SelfIntersecting`). A loop comes back counter-clockwise; splines are cut at their
+/// corners, a loop's lone closed spline in two, as a profile's are.
+pub(crate) fn sheet_chains(
+    chains: &[Vec<(Segment, u64)>],
+) -> Result<Vec<(Vec<(Segment, u64)>, bool)>, ProfileError> {
+    if chains.is_empty() || chains.iter().any(|c| c.is_empty()) {
+        return Err(ProfileError::Empty);
+    }
+    let mut ids: Vec<u64> = chains.iter().flat_map(|c| c.iter().map(|s| s.1)).collect();
+    ids.sort();
+    if let Some(w) = ids.windows(2).find(|w| w[0] == w[1]) {
+        return Err(ProfileError::DuplicateId { id: w[0] });
+    }
+    let mut out = Vec::with_capacity(chains.len());
+    for (ci, c) in chains.iter().enumerate() {
+        let n = c.len();
+        for (i, (s, id)) in c.iter().enumerate() {
+            if s.degenerate() {
+                return Err(ProfileError::Degenerate { id: *id });
+            }
+            if matches!(s, Segment::Circle { .. }) && n != 1 {
+                return Err(ProfileError::CircleNotAlone { id: *id });
+            }
+            if i + 1 < n {
+                let gap = s.end().distance(c[i + 1].0.start());
+                if gap > tol::LINEAR {
+                    return Err(ProfileError::Open { id: *id, gap });
+                }
+            }
+        }
+        let closed = matches!(c[..], [(Segment::Circle { .. }, _)])
+            || c[n - 1].0.end().distance(c[0].0.start()) <= tol::LINEAR;
+        let l = ProfileLoop::new(c.clone());
+        if if closed {
+            l.crosses_itself()
+        } else {
+            l.crosses_itself_open()
+        } {
+            return Err(ProfileError::SelfIntersecting { loop_index: ci });
+        }
+        let l = if closed && l.signed_area() < 0.0 {
+            l.reversed()
+        } else {
+            l
+        };
+        let l = if l.segments.iter().any(|(s, _)| matches!(s, Segment::Spline(_))) {
+            l.smooth_pieces_of(closed)
+                .ok_or(ProfileError::Degenerate { id: l.segments[0].1 })?
+        } else {
+            l
+        };
+        out.push((l, closed));
+    }
+    // two chains crossing or touching: the polylines of both, joined end to end at a gap, cross
+    for i in 1..out.len() {
+        for j in 0..i {
+            if chains_meet(&out[i].0, out[i].1, &out[j].0, out[j].1) {
+                return Err(ProfileError::SelfIntersecting { loop_index: i });
+            }
+        }
+    }
+    Ok(out.into_iter().map(|(l, closed)| (l.segments, closed)).collect())
+}
+
+/// Whether two chains' sampled polylines cross or touch, edge against edge, exactly.
+fn chains_meet(a: &ProfileLoop, a_closed: bool, b: &ProfileLoop, b_closed: bool) -> bool {
+    let poly = |l: &ProfileLoop, closed: bool| {
+        let mut p = l.outline();
+        p.push(if closed {
+            p[0]
+        } else {
+            l.segments[l.segments.len() - 1].0.end()
+        });
+        p
+    };
+    let (p, q) = (poly(a, a_closed), poly(b, b_closed));
+    let apart = |x: f64, y: f64| (x > 0.0 && y < 0.0) || (x < 0.0 && y > 0.0);
+    let on = |p: Point2, q: Point2, x: Point2| {
+        x.x >= p.x.min(q.x) && x.x <= p.x.max(q.x) && x.y >= p.y.min(q.y) && x.y <= p.y.max(q.y)
+    };
+    for u in p.windows(2) {
+        let (a, b) = (u[0], u[1]);
+        for v in q.windows(2) {
+            let (c, d) = (v[0], v[1]);
+            if a.x.max(b.x) < c.x.min(d.x)
+                || c.x.max(d.x) < a.x.min(b.x)
+                || a.y.max(b.y) < c.y.min(d.y)
+                || c.y.max(d.y) < a.y.min(b.y)
+            {
+                continue;
+            }
+            let (o1, o2, o3, o4) = (
+                orient2d(a, b, c),
+                orient2d(a, b, d),
+                orient2d(c, d, a),
+                orient2d(c, d, b),
+            );
+            if (apart(o1, o2) && apart(o3, o4))
+                || (o1 == 0.0 && on(a, b, c))
+                || (o2 == 0.0 && on(a, b, d))
+                || (o3 == 0.0 && on(c, d, a))
+                || (o4 == 0.0 && on(c, d, b))
+            {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 impl Profile {

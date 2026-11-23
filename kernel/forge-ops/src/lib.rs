@@ -25,7 +25,7 @@ mod wavefront;
 pub use chamfer::{ChamferCorner, ChamferError, ChamferSize, chamfer, chamfer_with};
 pub use direct::{DirectError, Rounded, delete_faces, move_faces, offset_faces, replace_face};
 pub use draft::{DraftError, draft};
-pub use extrude::{ExtrudeError, extrude, extrude_unlinked};
+pub use extrude::{ExtrudeError, extrude, extrude_sheet, extrude_unlinked};
 pub use fillet::{
     FilletEdge, FilletError, FilletOptions, Radius, fillet, fillet_kind, fillet_with, law_starts,
 };
@@ -33,7 +33,7 @@ pub use glyph::{GlyphError, GlyphSeg, Place, glyph};
 pub use loft::{Apex, LoftError, LoftGuides, LoftKind, LoftOptions, loft, loft_and_bounds, loft_bounds};
 pub use profile::{Profile, ProfileError, ProfileLoop, Segment, Touch};
 pub use rebuild::RebuildError;
-pub use revolve::{Axis2, RevolveError, revolve, revolve_cutter};
+pub use revolve::{Axis2, RevolveError, revolve, revolve_cutter, revolve_sheet};
 pub use shell::{ShellError, offset_solid, shell};
 pub use strip::{face_fillet, full_round};
 pub use sweep::{

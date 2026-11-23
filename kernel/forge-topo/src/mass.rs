@@ -68,8 +68,33 @@ impl std::fmt::Display for MassError {
     }
 }
 
+/// A solid's mass properties. A sheet has no volume: `NO_VOLUME` (its area is `sheet_area`).
 pub fn mass(body: &Body) -> Result<MassProps, MassError> {
     mass_rel(body, REL)
+}
+
+/// Why a sheet's `mass` is refused.
+pub const NO_VOLUME: &str = "a sheet has no volume";
+
+/// A sheet's area and its error bound: its faces' areas summed in face order, each as `mass`
+/// integrates it.
+pub fn sheet_area(body: &Body) -> Result<(f64, f64), MassError> {
+    let n = body.vertices.len().max(1) as f64;
+    let c = body
+        .vertices
+        .iter()
+        .fold(Point3::ORIGIN, |a, v| a + (v.point - Point3::ORIGIN) * (1.0 / n));
+    let size = body
+        .face_ids()
+        .fold(forge_math::Box3::EMPTY, |b, f| b.hull(&body.face_box(f)))
+        .diagonal();
+    let (mut a, mut e) = (0.0, 0.0);
+    for f in body.face_ids() {
+        let (v, err) = face_integrals(body, f, c, size, REL).map_err(|why| MassError { face: f, why })?;
+        a += v[10];
+        e += err[10];
+    }
+    Ok((a, e))
 }
 
 /// The signed volume one shell bounds: negative for a void.
@@ -109,6 +134,12 @@ pub fn face_area(body: &Body, f: FaceId) -> Result<f64, MassError> {
 }
 
 pub fn mass_rel(body: &Body, rel: f64) -> Result<MassProps, MassError> {
+    if body.sheet {
+        return Err(MassError {
+            face: FaceId(0),
+            why: NO_VOLUME,
+        });
+    }
     // moments about a point inside the part keep the cancellation small
     let n = body.vertices.len().max(1) as f64;
     let c = body

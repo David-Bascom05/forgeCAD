@@ -1052,10 +1052,12 @@ class Tr:
             # Forge's taper narrows the extrude for a positive angle, as Onshape's does with its pull direction flag set,
             # and widens it without (measured on the pilot: both ways match the STEP to 1e-12). The value is in degrees
             taper = num(self.val(a["draftAngle"]) * (1 if a.get("draftPullDirection") is True else -1))
+        # Onshape reads surfaceEntities only for a SURFACE body: on a solid one it is the UI's leftover list of the
+        # sketch's edges (71 of the 1914 sampled parts carry one), and the solid is made from entities alone
         b = a.get("bodyType")
         if isinstance(b, tuple) and "SOLID" not in b[1]:
             raise Unsupported("a thin or surface extrude")
-        if "surfaceEntities" in a or "entities" not in a:
+        if "entities" not in a:
             raise Unsupported("a surface extrude")
         if a.get("hasOffset") is True:
             raise Unsupported("extrude start offset")
@@ -1128,11 +1130,11 @@ class Tr:
 
     def revolve(self, f):
         a, env = f["args"], f["env"]
-        if "surfaceEntities" in a or "entities" not in a:
-            raise Unsupported("a surface revolve")
         b = a.get("bodyType")
         if isinstance(b, tuple) and "SOLID" not in b[1]:
             raise Unsupported("a thin or surface revolve")
+        if "entities" not in a:  # surfaceEntities on a solid revolve: as on an extrude
+            raise Unsupported("a surface revolve")
         by = self.regions(a["entities"], env)
         op = self.op_of(a)
         if op is None or len(by) != 1:

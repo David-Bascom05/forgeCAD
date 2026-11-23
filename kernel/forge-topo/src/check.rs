@@ -14,7 +14,7 @@ pub enum Problem {
     LoopsCross {
         face: FaceId,
     },
-    /// A solid edge must bound exactly two face sides.
+    /// A solid edge must bound exactly two face sides; a sheet's edge one (its boundary) or two.
     EdgeUses {
         edge: EdgeId,
         uses: usize,
@@ -117,7 +117,9 @@ impl Problem {
     pub fn reason(&self) -> String {
         match self {
             Problem::LoopsCross { .. } => "a face's boundary crosses itself".to_string(),
-            Problem::EdgeUses { uses, .. } => format!("an edge is used by {uses} faces, not 2"),
+            Problem::EdgeUses { uses, .. } => {
+                format!("an edge is used by {uses} faces, not 2 (1 on a sheet's boundary)")
+            }
             Problem::EdgeUsesSameWay { .. } => "the two faces at an edge turn the same way".to_string(),
             Problem::LoopEmpty { .. } => "a face has an empty boundary".to_string(),
             Problem::LoopBroken { .. } => "a face's boundary has a gap".to_string(),
@@ -425,7 +427,8 @@ fn check_known(body: &Body, known: &Known) -> Vec<Problem> {
     if out.is_empty() {
         check_sides(body, known, &mut out);
     }
-    if out.is_empty() && body.shells.len() > 1 {
+    // a sheet has no material for its shells to overlap in
+    if out.is_empty() && body.shells.len() > 1 && !body.sheet {
         check_shells(body, known, &mut out);
     }
     check_names(body, &mut out);
@@ -611,7 +614,9 @@ fn check_shell_euler(body: &Body, out: &mut Vec<Problem>) {
         edges.dedup();
         verts.sort();
         verts.dedup();
-        let value = verts.len() as i64 - edges.len() as i64 + 2 * f - l;
+        // a sheet's shell of genus g with B boundary cycles: 2 - 2g - B
+        let value = verts.len() as i64 - edges.len() as i64 + 2 * f - l
+            + if body.sheet { boundaries(body, &edges) } else { 0 };
         if value % 2 != 0 || value > 2 {
             out.push(Problem::ShellEuler {
                 shell: crate::body::ShellId(si as u32),
@@ -625,7 +630,13 @@ fn check_shell_euler(body: &Body, out: &mut Vec<Problem>) {
 /// arriving, then across to that one's partner, which leaves it again. One cycle is one fan.
 fn check_fans(body: &Body, out: &mut Vec<Problem>) {
     let mut prev = Vec::new();
-    for (v, cs) in body.leaving().iter().enumerate() {
+    for (v, cs) in body.leaving().iter_mut().enumerate() {
+        if body.sheet {
+            // a fan at a boundary vertex is a chain, from the coedge leaving along the boundary (the
+            // one no step reaches) to the one arriving: walked from there it is one fan, and a second
+            // boundary use leaving the vertex starts a second (a bow tie)
+            cs.sort_by_key(|&c| body.edge(body.coedge(c).edge).coedges.len() != 1);
+        }
         let fans = body.fans(cs, &mut prev);
         if fans.len() > 1 {
             out.push(Problem::VertexFans {
@@ -639,16 +650,20 @@ fn check_fans(body: &Body, out: &mut Vec<Problem>) {
 fn check_edges(body: &Body, out: &mut Vec<Problem>) {
     for e in body.edge_ids() {
         let edge = body.edge(e);
-        if edge.coedges.len() != 2 {
+        // on a sheet, an edge used once is on its boundary
+        let boundary = body.sheet && edge.coedges.len() == 1;
+        if edge.coedges.len() != 2 && !boundary {
             out.push(Problem::EdgeUses {
                 edge: e,
                 uses: edge.coedges.len(),
             });
             continue;
         }
-        let (a, b) = (body.coedge(edge.coedges[0]), body.coedge(edge.coedges[1]));
-        if a.forward == b.forward {
-            out.push(Problem::EdgeUsesSameWay { edge: e });
+        if !boundary {
+            let (a, b) = (body.coedge(edge.coedges[0]), body.coedge(edge.coedges[1]));
+            if a.forward == b.forward {
+                out.push(Problem::EdgeUsesSameWay { edge: e });
+            }
         }
         let closed = edge.start == edge.end;
         let degenerate = if closed {
@@ -1154,10 +1169,52 @@ fn check_euler(body: &Body, out: &mut Vec<Problem>) {
     let e = body.edges.len() as i64;
     let f = body.faces.len() as i64;
     let l = body.loops.len() as i64;
-    let value = v - e + 2 * f - l;
+    let mut value = v - e + 2 * f - l;
+    if body.sheet {
+        let all: Vec<EdgeId> = body.edge_ids().collect();
+        value += boundaries(body, &all);
+    }
     if value % 2 != 0 || value > 2 * body.shells.len() as i64 {
         out.push(Problem::Euler { value });
     }
+}
+
+/// How many cycles the boundary edges (used once) among `edges` form: the connected pieces of the
+/// graph they make on their vertices. Where every boundary vertex has one boundary edge in and one
+/// out (`check_fans` sees to it), each piece is one cycle.
+fn boundaries(body: &Body, edges: &[EdgeId]) -> i64 {
+    let mut parent: Vec<u32> = Vec::new();
+    let mut at: Vec<u32> = vec![u32::MAX; body.vertices.len()];
+    fn find(p: &mut [u32], mut i: u32) -> u32 {
+        while p[i as usize] != i {
+            p[i as usize] = p[p[i as usize] as usize];
+            i = p[i as usize];
+        }
+        i
+    }
+    let mut pieces = 0i64;
+    for &e in edges {
+        let edge = body.edge(e);
+        if edge.coedges.len() != 1 {
+            continue;
+        }
+        let mut node = |v: VertexId, parent: &mut Vec<u32>, pieces: &mut i64| {
+            if at[v.index()] == u32::MAX {
+                at[v.index()] = parent.len() as u32;
+                parent.push(parent.len() as u32);
+                *pieces += 1;
+            }
+            at[v.index()]
+        };
+        let a = node(edge.start, &mut parent, &mut pieces);
+        let b = node(edge.end, &mut parent, &mut pieces);
+        let (x, y) = (find(&mut parent, a), find(&mut parent, b));
+        if x != y {
+            parent[x.max(y) as usize] = x.min(y);
+            pieces -= 1;
+        }
+    }
+    pieces
 }
 
 /// Genus (number of through-holes) of a valid single-shell body.

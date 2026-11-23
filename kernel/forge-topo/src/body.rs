@@ -218,9 +218,14 @@ impl Joins {
     }
 }
 
-/// A solid: one or more closed shells (an outer skin, plus inner ones for voids).
+/// A solid: one or more closed shells (an outer skin, plus inner ones for voids). Or, with `sheet`,
+/// a surface with no material: shells open or closed, an edge used once on its boundary.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Body {
+    /// A sheet (a surface body): set only by what makes one, never read off the topology, so a
+    /// solid missing a face is still a solid that fails `check`. A face's outward normal is the
+    /// sheet's front.
+    pub sheet: bool,
     /// Faces (and edges) removed by in-place edits and not yet compacted away.
     pub dead: usize,
     /// What `forge_bool::unify` must know beyond the entities: merged names and kept edges.
@@ -480,6 +485,7 @@ impl Body {
         let mut emap = vec![NONE; self.edges.len()];
         let mut smap = vec![NONE; groups];
         let mut out = Body {
+            sheet: self.sheet,
             dead: 0,
             joins: std::mem::take(&mut self.joins),
             vertices: Vec::with_capacity(self.vertices.len()),
