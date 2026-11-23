@@ -7,7 +7,6 @@
 
 use forge_math::Point2;
 use forge_math::predicates::{certainly_in_circle, orient2d};
-use std::cmp::Ordering;
 use std::collections::VecDeque;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -987,61 +986,96 @@ pub fn zip(points: &[Point2], lp: &[u32], refine: &dyn Refine) -> Option<Vec<[u3
     if n < 3 {
         return None;
     }
-    let at = |k: usize| points[lp[k % n] as usize];
-    let s = (0..n).min_by(|&a, &b| {
-        (at(a).x, at(a).y)
-            .partial_cmp(&(at(b).x, at(b).y))
-            .unwrap_or(Ordering::Equal)
-    })?;
-    let mut out = Vec::with_capacity(n - 2);
-    let ccw = |a: usize, b: usize, c: usize| orient2d(at(a), at(b), at(c)) > 0.0;
-    let (mut lower, mut upper) = (s + n + 1, s + 2 * n - 1);
-    let mut tri = |v: [usize; 3]| {
-        let t = v.map(|k| lp[k % n]);
-        // a sliver the triangulation's choice of chords may well avoid: its call, not ours
-        let [a, b, c] = v.map(at);
-        let side = (a.distance(b)).max(b.distance(c)).max(c.distance(a));
-        if orient2d(a, b, c) <= 1e-5 * side * side
-            || (refine.triangles() && refine.triangle(t, t.map(|i| points[i as usize])))
-        {
-            return false;
+    // the leftmost point (the lowest y of those), the first of equals
+    let mut s = 0;
+    let mut k = 1;
+    while k < n {
+        let (m, x) = (at(points, lp, s), at(points, lp, k));
+        if m.x > x.x || (m.x == x.x && m.y > x.y) {
+            s = k;
         }
-        out.push(t);
-        true
-    };
-    if !tri([s + n, lower, upper]) {
-        return None;
+        k += 1;
     }
-    if lower + 1 < upper && refine.edge(lp[lower % n], lp[upper % n], at(lower), at(upper)) {
-        return None;
+    let mut out = Vec::with_capacity(n - 2);
+    let (mut lower, mut upper) = (s + n + 1, s + 2 * n - 1);
+    let mut ok = zip_tri(points, lp, refine, [s + n, lower, upper], &mut out);
+    if ok
+        && lower + 1 < upper
+        && refine.edge(
+            lp[lower % n],
+            lp[upper % n],
+            at(points, lp, lower),
+            at(points, lp, upper),
+        )
+    {
+        ok = false;
     }
-    while lower + 1 < upper {
-        let chord = |a: usize, b: usize| at(a).distance(at(b));
-        let up_first = lower + 2 < upper && chord(lower, upper - 1) < chord(lower + 1, upper);
+    while ok && lower + 1 < upper {
+        let up_first = lower + 2 < upper
+            && at(points, lp, lower).distance(at(points, lp, upper - 1))
+                < at(points, lp, lower + 1).distance(at(points, lp, upper));
         // the rest of the polygon is the triangle left: its chords are the sides
         let take_up = if up_first {
-            ccw(lower, upper - 1, upper)
+            orient2d(
+                at(points, lp, lower),
+                at(points, lp, upper - 1),
+                at(points, lp, upper),
+            ) > 0.0
         } else {
-            !ccw(lower, lower + 1, upper)
+            !(orient2d(
+                at(points, lp, lower),
+                at(points, lp, lower + 1),
+                at(points, lp, upper),
+            ) > 0.0)
         };
         let (a, b) = if take_up {
             (lower, upper - 1)
         } else {
             (lower + 1, upper)
         };
-        if a + 1 < b && refine.edge(lp[a % n], lp[b % n], at(a), at(b)) {
-            return None;
-        }
-        if !(if take_up {
-            tri([lower, upper - 1, upper])
+        if a + 1 < b && refine.edge(lp[a % n], lp[b % n], at(points, lp, a), at(points, lp, b)) {
+            ok = false;
         } else {
-            tri([lower, lower + 1, upper])
-        }) {
-            return None;
+            let v = if take_up {
+                [lower, upper - 1, upper]
+            } else {
+                [lower, lower + 1, upper]
+            };
+            ok = zip_tri(points, lp, refine, v, &mut out);
+            (lower, upper) = (a, b);
         }
-        (lower, upper) = (a, b);
     }
-    Some(out)
+    if ok { Some(out) } else { None }
+}
+
+/// The point at place k of the loop lp, round and round.
+fn at(points: &[Point2], lp: &[u32], k: usize) -> Point2 {
+    points[lp[k % lp.len()] as usize]
+}
+
+/// `zip`'s triangle of loop places v, kept in `out` unless it is a sliver or `refine` splits it.
+fn zip_tri(
+    points: &[Point2],
+    lp: &[u32],
+    refine: &dyn Refine,
+    v: [usize; 3],
+    out: &mut Vec<[u32; 3]>,
+) -> bool {
+    let n = lp.len();
+    let t = [lp[v[0] % n], lp[v[1] % n], lp[v[2] % n]];
+    // a sliver the triangulation's choice of chords may well avoid: its call, not ours
+    let (a, b, c) = (
+        points[t[0] as usize],
+        points[t[1] as usize],
+        points[t[2] as usize],
+    );
+    let side = (a.distance(b)).max(b.distance(c)).max(c.distance(a));
+    if orient2d(a, b, c) <= 1e-5 * side * side || (refine.triangles() && refine.triangle(t, [a, b, c])) {
+        false
+    } else {
+        out.push(t);
+        true
+    }
 }
 
 /// `triangulate`, then the points `refine` asks for inserted into the same triangulation, round
