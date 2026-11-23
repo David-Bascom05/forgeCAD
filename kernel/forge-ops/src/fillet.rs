@@ -2009,6 +2009,7 @@ fn cliff(
                 let Some(b) = Blend::new(other, &rail, l.sign[1 - s] * r, r, near, region) else {
                     continue;
                 };
+                let b = own_side(&b, &body.face(f).surface, l.sign[s], near);
                 let (Some(on_keep), Some(on_rail)) = (b.spring(true), b.spring(false)) else {
                     continue;
                 };
@@ -2056,6 +2057,37 @@ fn cliff(
         }
     }
     None
+}
+
+/// A cliff's blend as the stretch of its spine whose balls stand on the side of the rim's face
+/// (`sign`, along its natural normal) the round's ball did. A spine closed round the rail has a far
+/// side whose balls stand on the other: its pipe crosses this one along the rail, and nearest-point
+/// searches on the whole would stray there. Open spines, and spines on that side all round, are
+/// whole.
+fn own_side(b: &Blend, face: &Surface, sign: f64, near: Point3) -> Blend {
+    let Some(period) = b.spine.domain().period else {
+        return b.clone();
+    };
+    let on = |t: f64| sign * face.implicit(b.spine.eval(t)) > 0.0;
+    let t0 = spine_closest(&b.spine, near);
+    if !on(t0) {
+        return b.clone();
+    }
+    let step = period / 512.0;
+    let edge = |dir: f64| {
+        let mut t = t0;
+        for _ in 0..256 {
+            if !on(t + dir * step) {
+                return Some(t);
+            }
+            t += dir * step;
+        }
+        None
+    };
+    match (edge(-1.0), edge(1.0)) {
+        (Some(lo), Some(hi)) => b.spanned(Interval::new(lo, hi)),
+        _ => b.clone(),
+    }
 }
 
 /// Whether the face across coedge `c` from `f` stands in the way of a ball touching the far edge
@@ -4416,7 +4448,43 @@ impl Builder {
                 }
             }
         }
-        let ta = ta.or(any).unwrap_or(t0);
+        let mut ta = ta.or(any).unwrap_or(t0);
+        // a cliff's end is where its ball meets the plain round's (the ball on the rim and both
+        // faces). Their spines touch there, so a centre finds it only near: it is where the plain
+        // round's spring on the rim's side meets the cliff's spring on the rim, about the plain
+        // round's end (the edge was cut where that spring crosses the rim)
+        let cliff_of = |r: usize| self.rolled[r].cliff;
+        if !var && (cliff_of(ra).is_some() != cliff_of(rb).is_some()) {
+            let a_is_cliff = cliff_of(ra).is_some();
+            let (c, pl, ip) = if a_is_cliff { (ra, rb, ib) } else { (rb, ra, ia) };
+            let ks = cliff_of(c).expect("a cliff");
+            // the plain round's side paired with the cliff's rim side (sa with sb)
+            let (sc, sp) = if a_is_cliff { (sa, sb) } else { (sb, sa) };
+            let kp = if ks == sc { sp } else { 1 - sp };
+            let (cs, ps) = (&self.rolled[c], &self.rolled[pl]);
+            let gap = |t: f64| {
+                let tc = spine_closest(&cs.blend.spine, ps.blend.spine.eval(t));
+                ps.springs[kp].eval(t).distance(cs.springs[ks].eval(tc))
+            };
+            let t_end = self.end_t(pl, ring[ip].cin, vp);
+            let w = 1e-2;
+            let (mut lo, mut hi) = (t_end - w, t_end + w);
+            let phi = 0.618_033_988_749_894_8;
+            for _ in 0..80 {
+                let (x, y) = (hi - phi * (hi - lo), lo + phi * (hi - lo));
+                if gap(x) < gap(y) {
+                    hi = y;
+                } else {
+                    lo = x;
+                }
+            }
+            let t = 0.5 * (lo + hi);
+            ta = if a_is_cliff {
+                spine_closest(&cs.blend.spine, ps.blend.spine.eval(t))
+            } else {
+                t
+            };
+        }
         let ca = self.rolled[ra].blend.spine.eval(ta);
         let tb = if var {
             self.end_t(rb, ring[ib].cin, vp)

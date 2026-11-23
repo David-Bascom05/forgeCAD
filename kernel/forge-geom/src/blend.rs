@@ -650,6 +650,31 @@ pub struct Blend {
 }
 
 impl Blend {
+    /// The blend as the stretch `span` of its spine alone (a pipe's: other surfaces are whole).
+    pub fn spanned(&self, span: Interval) -> Blend {
+        let Surface::Procedural(Proc(pr)) = &self.surface else {
+            return self.clone();
+        };
+        let Some(p) = pr.as_any().and_then(|x| x.downcast_ref::<Pipe>()) else {
+            return self.clone();
+        };
+        let pipe = Pipe {
+            spine: p.spine.clone(),
+            first: p.first.clone(),
+            second: p.second.clone(),
+            d_first: p.d_first,
+            d_second: p.d_second,
+            radius: p.radius,
+            near: p.near,
+            span: Some(span),
+            smooth: OnceLock::new(),
+        };
+        Blend {
+            surface: Surface::Procedural(Proc(Arc::new(pipe))),
+            ..self.clone()
+        }
+    }
+
     /// The blend whose spine passes nearest `near`, or None where the offsets
     /// do not meet there.
     pub fn new(a: &Surface, b: &Surface, da: f64, db: f64, near: Point3, region: Box3) -> Option<Blend> {
@@ -1290,6 +1315,10 @@ pub struct Pipe {
     pub radius: f64,
     /// Where the blend was asked for.
     near: Point3,
+    /// The stretch of the spine the pipe is: none for all of it. A spine closed round a rail has
+    /// a far side whose balls fall on the other side of the rail's face; its pipe crosses this one
+    /// along the rail, and a search for the nearest spine point would land there.
+    span: Option<Interval>,
     /// `smooth`'s pipe, made on first use.
     smooth: OnceLock<Option<Surface>>,
 }
@@ -1309,8 +1338,20 @@ impl Pipe {
             .map(|s| (s, self.near))
     }
 
+    /// The spine parameter nearest p, within the pipe's span.
+    fn spine_at(&self, p: Point3) -> f64 {
+        match self.span {
+            Some(span) => self.spine.closest(p, span),
+            None => spine_closest(&self.spine, p),
+        }
+    }
+
     /// `project`, before `rail_polish`.
     fn project_far(&self, p: Point3) -> Point2 {
+        // its own stretch of the spine only: no far side to stray to
+        if self.span.is_some() {
+            return self.across(p, self.spine_at(p));
+        }
         // a point of a rail stands as near the far side of a spine closed round that rail: the
         // side this blend was asked for is the one
         if let Some((rail, near)) = self.rail_side()
@@ -1450,6 +1491,7 @@ impl Pipe {
             d_second: db,
             radius: da.abs(),
             near,
+            span: None,
             smooth: OnceLock::new(),
         };
         let t = p.spine.closest(near, p.spine.full_range(1e6));
@@ -1618,6 +1660,9 @@ impl Pipe {
     /// The spine's point nearest p: well off the pipe the guiding cubic's is near enough, the
     /// value serving a Newton step or a cell test.
     fn nearest_on_spine(&self, p: Point3) -> Point3 {
+        if let Some(span) = self.span {
+            return self.spine.eval(self.spine.closest(p, span));
+        }
         if let Curve::Intersection(ic) = &self.spine {
             let t = ic.closest_on_cubic(p);
             let c = ic.guide(t);
@@ -1705,6 +1750,7 @@ impl Procedural for Pipe {
                     d_second: self.d_second,
                     radius: self.radius,
                     near: self.near,
+                    span: self.span,
                     smooth: OnceLock::new(),
                 }))))
             })
@@ -1728,7 +1774,7 @@ impl Procedural for Pipe {
     }
     fn project(&self, p: Point3) -> Point2 {
         if self.rail_side().is_none() {
-            return self.across(p, spine_closest(&self.spine, p));
+            return self.across(p, self.spine_at(p));
         }
         let uv = self.project_far(p);
         self.rail_polish(p, uv)
@@ -1784,7 +1830,7 @@ impl Procedural for Pipe {
         p.distance(self.nearest_on_spine(p)) - self.radius
     }
     fn gradient(&self, p: Point3) -> Vec3 {
-        let u = spine_closest(&self.spine, p);
+        let u = self.spine_at(p);
         (p - self.spine.eval(u)).normalize().map_or(Vec3::Z, |n| n.get())
     }
     /// The nearest chain sample puts the spine's distance within the chain's reach; only
@@ -1818,6 +1864,7 @@ impl Procedural for Pipe {
             d_second: self.d_second,
             radius: self.radius,
             near: f.point_to_world(self.near),
+            span: self.span,
             smooth: OnceLock::new(),
         }))
     }

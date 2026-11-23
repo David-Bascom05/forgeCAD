@@ -701,3 +701,63 @@ f4 = fillet(edges(between: (b2.end, b2.side(b2_sk.l1))), 10)
 "#,
     );
 }
+
+/// Concave rings where an oblique boss leaves a bar near one of its ends (the pipe set's p00133 and
+/// p00188, kept to the round): the round's spring on the bar runs over the bar's rim and back, and
+/// there the ball rests on the rim (the cliff). The rim-resting pipe's spine runs on round the far
+/// side of the rim, whose pipe crosses this one along it: the cliff is that stretch of the spine
+/// alone, and its ends meet the plain round where their springs meet on the rim. Both were built
+/// notched (over-filled, OCCT agreeing), then refused; now right by the oracle.
+#[test]
+fn closed_rounds_resting_on_a_rim_over_a_stretch() {
+    valid(
+        r#"
+sketch q1(on: xy) {
+  q = pt(0, 0)
+}
+sketch s1(on: plane(at: q1.q, normal: Z, x: X)) {
+  o = rect(corner: (-16.3952, -16.3952), size: (32.7903, 32.7903))
+}
+body = extrude(s1, 54.1177)
+sketch q2(on: offset(xy, 29.5082936329)) {
+  q = pt(-1.93301791004, -0.695089237853)
+}
+sketch q3(on: offset(xy, -0.220298592779)) {
+  q = pt(0.346957480397, -0.911640848589)
+}
+sketch q4(on: offset(xy, 0.972022020986)) {
+  q = pt(0, -0.234889741618)
+}
+sketch s2(on: plane(at: q2.q, normal: axis(q1.q, q3.q), x: axis(q1.q, q4.q))) {
+  o = circle((0, 0), 8.19349)
+}
+boss = extrude(s2, 45.1503)
+round = fillet(edges(between: (body, boss), crease: "concave"), 2.60635453)
+"#,
+    );
+    valid(
+        r#"
+sketch q1(on: xy) {
+  q = pt(0, 0)
+}
+sketch s1(on: plane(at: q1.q, normal: Z, x: X)) {
+  o = circle((0, 0), 21.4243)
+}
+body = extrude(s1, 72.1187)
+sketch q2(on: offset(xy, 30.9111196229)) {
+  q = pt(-2.56779936379, -2.87049459052)
+}
+sketch q3(on: offset(xy, -0.340389806452)) {
+  q = pt(0.807446931317, -0.481834237856)
+}
+sketch q4(on: offset(xy, 0.816750966437)) {
+  q = pt(0, -0.576990345521)
+}
+sketch s2(on: plane(at: q2.q, normal: axis(q1.q, q3.q), x: axis(q1.q, q4.q))) {
+  o = circle((0, 0), 12.419)
+}
+boss = extrude(s2, 33.9082)
+round = fillet(edges(between: (body, boss), crease: "concave"), 4.89700934)
+"#,
+    );
+}

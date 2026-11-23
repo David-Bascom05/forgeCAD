@@ -701,10 +701,10 @@ gone = cut(sc, -10, bodies: \"all\")
 }
 
 /// A boss near a rod's end whose fillet runs off over the rim and back (the pipe set's p00010).
-/// Notched by the cap carried on, the round kept fill under the cap that a ball resting on the rim
-/// and the boss takes away (label_body: 11 points over, OCCT agreeing at each; the volume alone
-/// was within 1e-5 of OCCT's). The round resting on the rim there (the cliff) does not stand, so
-/// it is refused, not notched: typed as the spec's Unbuilt, a rim-limited fill.
+/// Over that stretch the ball rests on the rim (the cliff), not notched by the cap carried on: the
+/// notch kept fill under the cap a ball on the rim and the boss takes away (label_body: 11 points
+/// over, OCCT agreeing at each), and the cliff's round is right by the oracle at every point. It is
+/// 1.0 mm3 below the notch's 58261.65.
 #[test]
 fn fillet_runs_over_a_rim_and_back() {
     let src = r#"sketch o(on: xy) {
@@ -729,8 +729,9 @@ sketch s5(on: plane(at: d2.p, normal: axis(o.p, d3.p), x: axis(o.p, d4.p))) {
 extrude2 = extrude(s5, 35.7306)
 round = fillet(edges(between: (extrude1, extrude2), crease: "concave"), 2.13853177)
 "#;
-    let e = refusal(src);
-    assert!(e.contains("RimFill"), "{e}");
+    builds(src);
+    let v = mass(src);
+    assert!((v - 58260.642).abs() < 1e-2, "{v}");
 }
 
 /// Taking every wall of a disc leaves its ends bounding nothing: refused, not a body of faces with
