@@ -8,7 +8,10 @@ use forge_cam_geom::region::{Loop, P2, Region, Seg, p2};
 struct Rng(u64);
 impl Rng {
     fn next(&mut self) -> f64 {
-        self.0 = self.0.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        self.0 = self
+            .0
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
         ((self.0 >> 11) as f64) / ((1u64 << 53) as f64)
     }
 }
@@ -84,10 +87,18 @@ fn star(rng: &mut Rng, cx: f64, cy: f64) -> Loop {
         .map(|&t| {
             let r = 8.0 + 12.0 * rng.next();
             // round to a 1/64 grid: exact, and makes ties (parallel edges, equal lengths) likely
-            p2(((cx + r * t.cos()) * 64.0).round() / 64.0, ((cy + r * t.sin()) * 64.0).round() / 64.0)
+            p2(
+                ((cx + r * t.cos()) * 64.0).round() / 64.0,
+                ((cy + r * t.sin()) * 64.0).round() / 64.0,
+            )
         })
         .collect();
-    let segs = (0..n).map(|i| Seg::Line { a: pts[i], b: pts[(i + 1) % n] }).collect();
+    let segs = (0..n)
+        .map(|i| Seg::Line {
+            a: pts[i],
+            b: pts[(i + 1) % n],
+        })
+        .collect();
     Loop { segs }
 }
 
@@ -100,36 +111,67 @@ fn random_regions_match_the_definition() {
         if case % 3 == 0 {
             let r = 1.0 + 2.0 * rng.next();
             let a = p2(r, 0.0);
-            loops.push(Loop { segs: vec![Seg::Arc { a, b: a, c: p2(0.0, 0.0), ccw: false }] });
+            loops.push(Loop {
+                segs: vec![Seg::Arc {
+                    a,
+                    b: a,
+                    c: p2(0.0, 0.0),
+                    ccw: false,
+                }],
+            });
         }
         let rg = Region { loops };
         // star polygons can still self-intersect (consecutive angles close): skip refusals
-        let r = if case % 4 == 3 { -(0.25 + 3.0 * rng.next()) } else { 0.25 + 5.0 * rng.next() };
+        let r = if case % 4 == 3 {
+            -(0.25 + 3.0 * rng.next())
+        } else {
+            0.25 + 5.0 * rng.next()
+        };
         let (out, _) = match offset(&rg, r) {
             Ok(o) => o,
             Err(e) => {
-                assert!(matches!(e, forge_cam_geom::offset::OffsetError::Region(_)), "case {case}: {e:?}");
+                assert!(
+                    matches!(e, forge_cam_geom::offset::OffsetError::Region(_)),
+                    "case {case}: {e:?}"
+                );
                 continue;
             }
         };
         let bnd: Vec<Vec<P2>> = rg.loops.iter().map(|l| polyline(&l.segs)).collect();
-        let offs: Vec<Vec<P2>> = out.iter().filter(|l: &&OLoop| l.segs.len() > 1 || matches!(l.segs[0], Seg::Arc { .. })).map(|l| polyline(&l.segs)).collect();
+        let offs: Vec<Vec<P2>> = out
+            .iter()
+            .filter(|l: &&OLoop| l.segs.len() > 1 || matches!(l.segs[0], Seg::Arc { .. }))
+            .map(|l| polyline(&l.segs))
+            .collect();
         let band = 2e-3 * 20.0;
         for _ in 0..400 {
             let q = p2(-30.0 + 60.0 * rng.next(), -30.0 + 60.0 * rng.next());
             let inside_r: i32 = bnd.iter().map(|p| winding(p, q)).sum();
             let d = dist(&bnd, q);
-            let want = if r > 0.0 { inside_r != 0 && d >= r } else { inside_r != 0 || d <= -r };
+            let want = if r > 0.0 {
+                inside_r != 0 && d >= r
+            } else {
+                inside_r != 0 || d <= -r
+            };
             let margin = (d - r.abs()).abs();
             if margin < band {
                 continue;
             }
             let w: i32 = offs.iter().map(|p| winding(p, q)).sum();
-            let got = if r > 0.0 { w != 0 } else { w == 0 && !offs.is_empty() || w != 0 };
+            let got = if r > 0.0 {
+                w != 0
+            } else {
+                w == 0 && !offs.is_empty() || w != 0
+            };
             // outward: the loops run with the outside on their left (clockwise), so a point of
             // R ⊕ B_r has winding −1 inside the outer loop
             let got = if r > 0.0 { got } else { w != 0 };
-            assert_eq!(got, want, "case {case} r {r} q {q:?} d {d} w {w} loops {}", out.len());
+            assert_eq!(
+                got,
+                want,
+                "case {case} r {r} q {q:?} d {d} w {w} loops {}",
+                out.len()
+            );
             judged += 1;
         }
     }

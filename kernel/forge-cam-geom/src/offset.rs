@@ -59,7 +59,13 @@ pub fn offset(rg: &Region, r: f64) -> Result<(Vec<OLoop>, Stats), OffsetError> {
         let mut out = Vec::with_capacity(loops.len());
         let mut i = 0;
         while i < loops.len() {
-            out.push(OLoop { segs: region::Loop { segs: loops[i].segs.clone() }.reversed().segs });
+            out.push(OLoop {
+                segs: region::Loop {
+                    segs: loops[i].segs.clone(),
+                }
+                .reversed()
+                .segs,
+            });
             i += 1;
         }
         return Ok((out, st));
@@ -80,7 +86,9 @@ pub fn offset(rg: &Region, r: f64) -> Result<(Vec<OLoop>, Stats), OffsetError> {
         let mut out = Vec::new();
         let mut i = 0;
         while i < rg.loops.len() {
-            out.push(OLoop { segs: rg.loops[i].segs.clone() });
+            out.push(OLoop {
+                segs: rg.loops[i].segs.clone(),
+            });
             i += 1;
         }
         return Ok((out, Stats::default()));
@@ -135,7 +143,9 @@ pub fn offset(rg: &Region, r: f64) -> Result<(Vec<OLoop>, Stats), OffsetError> {
         let q = points[k];
         if !on_kept(&mut cx, &kept, q) && far_enough(&mut cx, &ex, q, rr, r2, u32::MAX) {
             let p = p2(cx.approx(q.x), cx.approx(q.y));
-            out.push(OLoop { segs: vec![Seg::Line { a: p, b: p }] });
+            out.push(OLoop {
+                segs: vec![Seg::Line { a: p, b: p }],
+            });
         }
         k += 1;
     }
@@ -187,7 +197,13 @@ fn raw_pieces(cx: &mut Ctx, ex: &Exact, r: R, r2: R) -> (Vec<Piece>, Vec<Pt>) {
                 let off = arr::scale(cx, pp, k);
                 let p1 = arr::add(cx, p, off);
                 let e1 = arr::add(cx, p1, d);
-                out.push(Piece { curve: Curve::Line { p: p1, d, dd }, s: p1, e: e1, full: false, tag });
+                out.push(Piece {
+                    curve: Curve::Line { p: p1, d, dd },
+                    s: p1,
+                    e: e1,
+                    full: false,
+                    tag,
+                });
             }
             Curve::Circle { c, rad, ccw, .. } => {
                 let nr = if ccw { cx.sub(rad, r) } else { cx.add(rad, r) };
@@ -201,7 +217,18 @@ fn raw_pieces(cx: &mut Ctx, ex: &Exact, r: R, r2: R) -> (Vec<Piece>, Vec<Pt>) {
                         let s = arr::add(cx, c, os);
                         let en = if e.piece.full { s } else { arr::add(cx, c, oe) };
                         let q = cx.sqr(nr);
-                        out.push(Piece { curve: Curve::Circle { c, rad: nr, rad2: q, ccw }, s, e: en, full: e.piece.full, tag });
+                        out.push(Piece {
+                            curve: Curve::Circle {
+                                c,
+                                rad: nr,
+                                rad2: q,
+                                ccw,
+                            },
+                            s,
+                            e: en,
+                            full: e.piece.full,
+                            tag,
+                        });
                     }
                     Ordering::Equal => pts.push(c),
                     Ordering::Less => {}
@@ -230,7 +257,12 @@ fn raw_pieces(cx: &mut Ctx, ex: &Exact, r: R, r2: R) -> (Vec<Piece>, Vec<Pt>) {
                     let s = arr::add(cx, v, nin);
                     let en = arr::add(cx, v, nout);
                     out.push(Piece {
-                        curve: Curve::Circle { c: v, rad: r, rad2: r2, ccw: false },
+                        curve: Curve::Circle {
+                            c: v,
+                            rad: r,
+                            rad2: r2,
+                            ccw: false,
+                        },
                         s,
                         e: en,
                         full: false,
@@ -256,7 +288,11 @@ fn unit_normal(cx: &mut Ctx, e: &Elem, at_end: bool, r: R) -> Pt {
         }
         Curve::Circle { c, rad, ccw, .. } => {
             let x = if at_end { e.piece.e } else { e.piece.s };
-            let v = if ccw { arr::sub(cx, c, x) } else { arr::sub(cx, x, c) };
+            let v = if ccw {
+                arr::sub(cx, c, x)
+            } else {
+                arr::sub(cx, x, c)
+            };
             let k = cx.div(r, rad);
             arr::scale(cx, v, k)
         }
@@ -398,7 +434,10 @@ fn duplicate(cx: &mut Ctx, kept: &[Piece], sp: &Piece) -> bool {
             let c = arr::cross(cx, ts, tp);
             let d = arr::dot(cx, ts, tp);
             let parallel = cx.sign(c) == Ordering::Equal && cx.sign(d) == Ordering::Greater;
-            let kind = matches!((k.curve, sp.curve), (Curve::Line { .. }, Curve::Line { .. }) | (Curve::Circle { .. }, Curve::Circle { .. }));
+            let kind = matches!(
+                (k.curve, sp.curve),
+                (Curve::Line { .. }, Curve::Line { .. }) | (Curve::Circle { .. }, Curve::Circle { .. })
+            );
             cx.release(m);
             if parallel && kind {
                 return true;
@@ -460,7 +499,13 @@ fn next_piece(cx: &mut Ctx, kept: &[Piece], used: &[bool], cur: usize) -> Option
 }
 
 /// The unused piece starting at cur's end with the sharpest left turn (or `also`, if given).
-fn next_piece_with(cx: &mut Ctx, kept: &[Piece], used: &[bool], cur: usize, also: Option<usize>) -> Option<usize> {
+fn next_piece_with(
+    cx: &mut Ctx,
+    kept: &[Piece],
+    used: &[bool],
+    cur: usize,
+    also: Option<usize>,
+) -> Option<usize> {
     let end = kept[cur].e;
     let mut cands: Vec<usize> = Vec::new();
     let mut j = 0;
@@ -477,7 +522,10 @@ fn next_piece_with(cx: &mut Ctx, kept: &[Piece], used: &[bool], cur: usize, also
     // outgoing direction nearest it going clockwise
     let m = cx.mark();
     let tin = arr::tangent(cx, &kept[cur], end);
-    let back = Pt { x: cx.neg(tin.x), y: cx.neg(tin.y) };
+    let back = Pt {
+        x: cx.neg(tin.x),
+        y: cx.neg(tin.y),
+    };
     let mut best = cands[0];
     let mut k = 1;
     while k < cands.len() {
@@ -511,7 +559,11 @@ fn curvier_left(cx: &mut Ctx, a: &Piece, b: &Piece) -> bool {
             }
             // same sign: the smaller radius curves more
             let o = cx.cmp(ra, rb);
-            if sa > 0 { o == Ordering::Less } else { o == Ordering::Greater }
+            if sa > 0 {
+                o == Ordering::Less
+            } else {
+                o == Ordering::Greater
+            }
         }
         ((sa, _), (sb, _)) => sa > sb,
     }
@@ -541,7 +593,12 @@ fn to_loop(cx: &mut Ctx, kept: &[Piece], chain: &[usize]) -> OLoop {
         let b = if pc.full { a } else { verts[(i + 1) % chain.len()] };
         let sg = match pc.curve {
             Curve::Line { .. } => Seg::Line { a, b },
-            Curve::Circle { c, ccw, .. } => Seg::Arc { a, b, c: p2(cx.approx(c.x), cx.approx(c.y)), ccw },
+            Curve::Circle { c, ccw, .. } => Seg::Arc {
+                a,
+                b,
+                c: p2(cx.approx(c.x), cx.approx(c.y)),
+                ccw,
+            },
         };
         segs.push(sg);
         i += 1;

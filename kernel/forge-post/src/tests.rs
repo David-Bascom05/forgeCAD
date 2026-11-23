@@ -4,30 +4,83 @@ fn prog(with_tap: bool) -> Program {
     let mut recs = vec![
         Rec::Comment("op1 (face)".into()),
         Rec::Wcs(0),
-        Rec::ToolChange { t: 1, h: 1, name: "flat-6".into() },
-        Rec::Spindle { rpm: 9549.3, cw: true },
+        Rec::ToolChange {
+            t: 1,
+            h: 1,
+            name: "flat-6".into(),
+        },
+        Rec::Spindle {
+            rpm: 9549.3,
+            cw: true,
+        },
         Rec::Coolant(Coolant::Flood),
         Rec::Rapid([-43.0, -43.0, 25.0]),
         Rec::Rapid([-43.0, -43.0, 2.0]),
         Rec::Line([-43.0, -43.0, -1.0], 300.0),
         Rec::Line([43.0, -43.0, -1.0], 1200.0),
-        Rec::Arc { to: [46.0, -40.0, -1.0], c: [43.0, -40.0], cw: false, f: 1200.0 },
+        Rec::Arc {
+            to: [46.0, -40.0, -1.0],
+            c: [43.0, -40.0],
+            cw: false,
+            f: 1200.0,
+        },
         Rec::Line([46.0, 40.0, -1.0], 1200.0),
         // a full circle, then a helix down
-        Rec::Arc { to: [46.0, 40.0, -1.0], c: [40.0, 40.0], cw: true, f: 1000.0 },
-        Rec::Arc { to: [34.0, 40.0, -2.5], c: [40.0, 40.0], cw: true, f: 1000.0 },
+        Rec::Arc {
+            to: [46.0, 40.0, -1.0],
+            c: [40.0, 40.0],
+            cw: true,
+            f: 1000.0,
+        },
+        Rec::Arc {
+            to: [34.0, 40.0, -2.5],
+            c: [40.0, 40.0],
+            cw: true,
+            f: 1000.0,
+        },
         Rec::Line([0.1 + 0.2, 1.0 / 3.0, -2.5], 1000.0),
         Rec::Rapid([0.3, 0.3333333333333333, 25.0]),
         Rec::Rapid([30.0, 0.0, 25.0]),
-        Rec::Cycle { kind: CycleKind::Peck, holes: vec![[30.0, 0.0], [0.0, 30.0], [-30.0, 0.0]], z: -14.0, r: 2.0, clear: 25.0, q: 4.0, dwell: 0.0, f: 150.0 },
+        Rec::Cycle {
+            kind: CycleKind::Peck,
+            holes: vec![[30.0, 0.0], [0.0, 30.0], [-30.0, 0.0]],
+            z: -14.0,
+            r: 2.0,
+            clear: 25.0,
+            q: 4.0,
+            dwell: 0.0,
+            f: 150.0,
+        },
         Rec::Rapid([0.0, -30.0, 25.0]),
-        Rec::Cycle { kind: CycleKind::Dwell, holes: vec![[0.0, -30.0]], z: -3.0, r: 2.0, clear: 25.0, q: 0.0, dwell: 0.25, f: 120.0 },
+        Rec::Cycle {
+            kind: CycleKind::Dwell,
+            holes: vec![[0.0, -30.0]],
+            z: -3.0,
+            r: 2.0,
+            clear: 25.0,
+            q: 0.0,
+            dwell: 0.25,
+            f: 120.0,
+        },
     ];
     if with_tap {
-        recs.push(Rec::Cycle { kind: CycleKind::Tap, holes: vec![[0.0, -30.0]], z: -10.0, r: 2.0, clear: 25.0, q: 0.0, dwell: 0.0, f: 1000.0 });
+        recs.push(Rec::Cycle {
+            kind: CycleKind::Tap,
+            holes: vec![[0.0, -30.0]],
+            z: -10.0,
+            r: 2.0,
+            clear: 25.0,
+            q: 0.0,
+            dwell: 0.0,
+            f: 1000.0,
+        });
     }
     recs.extend([Rec::Dwell(0.5), Rec::Coolant(Coolant::Off), Rec::SpindleStop]);
-    Program { number: 1001, title: "flange (op 1)".into(), recs }
+    Program {
+        number: 1001,
+        title: "flange (op 1)".into(),
+        recs,
+    }
 }
 
 #[test]
@@ -79,7 +132,10 @@ fn refusals_are_typed() {
     let f = Dialect::get("fanuc").unwrap();
     let q = quantize(&prog(true), &f).unwrap();
     assert!(round_trip(&q, &f).is_ok());
-    assert!(matches!(Dialect::get("heidenhain"), Err(PostError::UnknownDialect { .. })));
+    assert!(matches!(
+        Dialect::get("heidenhain"),
+        Err(PostError::UnknownDialect { .. })
+    ));
     // a cycle not started over its first hole
     let mut p = prog(false);
     p.recs.retain(|r| !matches!(r, Rec::Rapid(v) if v[0] == 30.0));

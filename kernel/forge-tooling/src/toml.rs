@@ -23,7 +23,10 @@ pub struct TomlError {
 }
 
 fn err(line: usize, what: &str) -> TomlError {
-    TomlError { line, what: what.to_string() }
+    TomlError {
+        line,
+        what: what.to_string(),
+    }
 }
 
 /// The table at a dotted path, made as needed; for an array of tables, its last element.
@@ -53,7 +56,10 @@ pub fn parse(src: &str) -> Result<Table, TomlError> {
             continue;
         }
         if s.starts_with("[[") {
-            let name = s.strip_prefix("[[").and_then(|x| x.strip_suffix("]]")).ok_or_else(|| err(ln, "bad [[table]] header"))?;
+            let name = s
+                .strip_prefix("[[")
+                .and_then(|x| x.strip_suffix("]]"))
+                .ok_or_else(|| err(ln, "bad [[table]] header"))?;
             let path: Vec<String> = name.split('.').map(|x| x.trim().to_string()).collect();
             let (last, parent) = path.split_last().unwrap();
             let t = walk(&mut root, parent, ln)?;
@@ -65,7 +71,10 @@ pub fn parse(src: &str) -> Result<Table, TomlError> {
             continue;
         }
         if s.starts_with('[') {
-            let name = s.strip_prefix('[').and_then(|x| x.strip_suffix(']')).ok_or_else(|| err(ln, "bad [table] header"))?;
+            let name = s
+                .strip_prefix('[')
+                .and_then(|x| x.strip_suffix(']'))
+                .ok_or_else(|| err(ln, "bad [table] header"))?;
             cur = name.split('.').map(|x| x.trim().to_string()).collect();
             walk(&mut root, &cur, ln)?;
             continue;
@@ -84,7 +93,11 @@ pub fn parse(src: &str) -> Result<Table, TomlError> {
             s.push_str(strip_comment(lines[i]).trim());
             i += 1;
         }
-        let mut p = Parser { b: s[eq + 1..].trim().as_bytes(), at: 0, line: ln };
+        let mut p = Parser {
+            b: s[eq + 1..].trim().as_bytes(),
+            at: 0,
+            line: ln,
+        };
         let v = p.value()?;
         p.ws();
         if p.at != p.b.len() {
@@ -147,13 +160,19 @@ impl Parser<'_> {
     }
     fn value(&mut self) -> Result<Val, TomlError> {
         self.ws();
-        let c = *self.b.get(self.at).ok_or_else(|| err(self.line, "missing value"))?;
+        let c = *self
+            .b
+            .get(self.at)
+            .ok_or_else(|| err(self.line, "missing value"))?;
         match c {
             b'"' => {
                 self.at += 1;
                 let mut out = String::new();
                 loop {
-                    let c = *self.b.get(self.at).ok_or_else(|| err(self.line, "unclosed string"))?;
+                    let c = *self
+                        .b
+                        .get(self.at)
+                        .ok_or_else(|| err(self.line, "unclosed string"))?;
                     self.at += 1;
                     match c {
                         b'"' => break,
@@ -175,7 +194,10 @@ impl Parser<'_> {
                             while end < self.b.len() && (self.b[end] & 0xC0) == 0x80 {
                                 end += 1;
                             }
-                            out.push_str(std::str::from_utf8(&self.b[start..end]).map_err(|_| err(self.line, "bad UTF-8"))?);
+                            out.push_str(
+                                std::str::from_utf8(&self.b[start..end])
+                                    .map_err(|_| err(self.line, "bad UTF-8"))?,
+                            );
                             self.at = end;
                         }
                     }
@@ -214,11 +236,20 @@ impl Parser<'_> {
             }
             _ => {
                 let start = self.at;
-                while self.at < self.b.len() && matches!(self.b[self.at], b'0'..=b'9' | b'.' | b'-' | b'+' | b'e' | b'E' | b'_') {
+                while self.at < self.b.len()
+                    && matches!(
+                        self.b[self.at],
+                        b'0'..=b'9' | b'.' | b'-' | b'+' | b'e' | b'E' | b'_'
+                    )
+                {
                     self.at += 1;
                 }
-                let t: String = std::str::from_utf8(&self.b[start..self.at]).unwrap().replace('_', "");
-                t.parse::<f64>().map(Val::Num).map_err(|_| err(self.line, &format!("not a value: `{t}`")))
+                let t: String = std::str::from_utf8(&self.b[start..self.at])
+                    .unwrap()
+                    .replace('_', "");
+                t.parse::<f64>()
+                    .map(Val::Num)
+                    .map_err(|_| err(self.line, &format!("not a value: `{t}`")))
             }
         }
     }
@@ -251,13 +282,25 @@ pub fn tables<'a>(t: &'a Table, k: &str) -> &'a [Table] {
 }
 pub fn nums(t: &Table, k: &str) -> Option<Vec<f64>> {
     match t.get(k) {
-        Some(Val::Arr(v)) => v.iter().map(|x| if let Val::Num(n) = x { Some(*n) } else { None }).collect(),
+        Some(Val::Arr(v)) => v
+            .iter()
+            .map(|x| if let Val::Num(n) = x { Some(*n) } else { None })
+            .collect(),
         _ => None,
     }
 }
 pub fn texts(t: &Table, k: &str) -> Option<Vec<String>> {
     match t.get(k) {
-        Some(Val::Arr(v)) => v.iter().map(|x| if let Val::Str(n) = x { Some(n.clone()) } else { None }).collect(),
+        Some(Val::Arr(v)) => v
+            .iter()
+            .map(|x| {
+                if let Val::Str(n) = x {
+                    Some(n.clone())
+                } else {
+                    None
+                }
+            })
+            .collect(),
         _ => None,
     }
 }

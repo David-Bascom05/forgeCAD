@@ -9,9 +9,13 @@ use forge_cam_geom::slab::{Prism, Sec};
 #[derive(Clone, Debug, PartialEq)]
 pub enum SectionError {
     /// A face crossing the height is not a prism along z: the section is not 2.5D there.
-    NotPrism { face: u32 },
+    NotPrism {
+        face: u32,
+    },
     /// The section's curves do not close into loops.
-    Open { at: P2 },
+    Open {
+        at: P2,
+    },
     Empty,
 }
 
@@ -60,8 +64,16 @@ pub fn section(faces: &[Face], z: f64, mu: f64) -> Result<Region, SectionError> 
             Some(Prism::Wall { sec, z0, z1 }) => {
                 if *z0 < z && z < *z1 {
                     pieces.push(match *sec {
-                        Sec::Seg { a, b } => Seg::Line { a: p2(a[0], a[1]), b: p2(b[0], b[1]) },
-                        Sec::Arc { c, a, b, ccw, .. } => Seg::Arc { a: p2(a[0], a[1]), b: p2(b[0], b[1]), c: p2(c[0], c[1]), ccw },
+                        Sec::Seg { a, b } => Seg::Line {
+                            a: p2(a[0], a[1]),
+                            b: p2(b[0], b[1]),
+                        },
+                        Sec::Arc { c, a, b, ccw, .. } => Seg::Arc {
+                            a: p2(a[0], a[1]),
+                            b: p2(b[0], b[1]),
+                            c: p2(c[0], c[1]),
+                            ccw,
+                        },
                     });
                 }
             }
@@ -141,7 +153,9 @@ pub fn section(faces: &[Face], z: f64, mu: f64) -> Result<Region, SectionError> 
                     let mut cx = forge_cam_geom::real::Ctx::new();
                     match forge_cam_geom::region::validate(&mut cx, &rg) {
                         Ok(_) => return Ok(rg),
-                        Err(forge_cam_geom::region::RegionError::Sense { lp, .. }) => rg.loops[lp] = rg.loops[lp].reversed(),
+                        Err(forge_cam_geom::region::RegionError::Sense { lp, .. }) => {
+                            rg.loops[lp] = rg.loops[lp].reversed()
+                        }
                         Err(_) => {
                             fixed = false;
                             break;
@@ -151,9 +165,15 @@ pub fn section(faces: &[Face], z: f64, mu: f64) -> Result<Region, SectionError> 
                 if fixed {
                     continue;
                 }
-                return Err(SectionError::Open { at: rg.loops[0].segs[0].start() });
+                return Err(SectionError::Open {
+                    at: rg.loops[0].segs[0].start(),
+                });
             }
-            Err(_) => return Err(SectionError::Open { at: rg.loops[0].segs[0].start() }),
+            Err(_) => {
+                return Err(SectionError::Open {
+                    at: rg.loops[0].segs[0].start(),
+                });
+            }
         }
     }
     Ok(rg)

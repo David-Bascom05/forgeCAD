@@ -62,7 +62,11 @@ fn locate(cx: &mut Ctx, ex: &Exact, q: Pt, pc: &Piece) -> Where {
             let d = arr::dot(cx, t1, t2);
             let s = cx.sign(d);
             cx.release(m);
-            return if s == Ordering::Greater { Where::Same } else { Where::Opposite };
+            return if s == Ordering::Greater {
+                Where::Same
+            } else {
+                Where::Opposite
+            };
         }
         i += 1;
     }
@@ -80,10 +84,30 @@ fn locate(cx: &mut Ctx, ex: &Exact, q: Pt, pc: &Piece) -> Where {
 fn reversed(cx: &mut Ctx, p: &Piece) -> Piece {
     match p.curve {
         Curve::Line { d, dd, .. } => {
-            let nd = Pt { x: cx.neg(d.x), y: cx.neg(d.y) };
-            Piece { curve: Curve::Line { p: p.e, d: nd, dd }, s: p.e, e: p.s, full: p.full, tag: p.tag }
+            let nd = Pt {
+                x: cx.neg(d.x),
+                y: cx.neg(d.y),
+            };
+            Piece {
+                curve: Curve::Line { p: p.e, d: nd, dd },
+                s: p.e,
+                e: p.s,
+                full: p.full,
+                tag: p.tag,
+            }
         }
-        Curve::Circle { c, rad, rad2, ccw } => Piece { curve: Curve::Circle { c, rad, rad2, ccw: !ccw }, s: p.e, e: p.s, full: p.full, tag: p.tag },
+        Curve::Circle { c, rad, rad2, ccw } => Piece {
+            curve: Curve::Circle {
+                c,
+                rad,
+                rad2,
+                ccw: !ccw,
+            },
+            s: p.e,
+            e: p.s,
+            full: p.full,
+            tag: p.tag,
+        },
     }
 }
 
@@ -130,7 +154,11 @@ pub fn boolean(a: &Region, b: &Region, op: Op) -> Result<Vec<OLoop>, OffsetError
             let sp = subs[k];
             let m = cx.mark();
             let q = arr::rep_point(&mut cx, &sp, sp.s, sp.e);
-            let w = if from_a { locate(&mut cx, &eb, q, &sp) } else { locate(&mut cx, &ea, q, &sp) };
+            let w = if from_a {
+                locate(&mut cx, &eb, q, &sp)
+            } else {
+                locate(&mut cx, &ea, q, &sp)
+            };
             cx.release(m);
             let keep = match (op, from_a, w) {
                 (Op::Union, true, Where::Out | Where::Same) => 1,
@@ -156,7 +184,12 @@ pub fn boolean(a: &Region, b: &Region, op: Op) -> Result<Vec<OLoop>, OffsetError
 
 /// The loops as a region (each loop's pieces as given).
 pub fn region_of(loops: &[OLoop]) -> Region {
-    Region { loops: loops.iter().map(|l| region::Loop { segs: l.segs.clone() }).collect() }
+    Region {
+        loops: loops
+            .iter()
+            .map(|l| region::Loop { segs: l.segs.clone() })
+            .collect(),
+    }
 }
 
 #[allow(dead_code)]
@@ -169,29 +202,54 @@ mod tests {
 
     fn circle(x: f64, y: f64, r: f64, ccw: bool) -> Loop {
         let a = p2(x + r, y);
-        Loop { segs: vec![Seg::Arc { a, b: a, c: p2(x, y), ccw }] }
+        Loop {
+            segs: vec![Seg::Arc {
+                a,
+                b: a,
+                c: p2(x, y),
+                ccw,
+            }],
+        }
     }
 
     #[test]
     fn square_minus_disc_and_shared_edges() {
-        let sq = Region { loops: vec![rect(0.0, 0.0, 10.0, 10.0)] };
-        let hole = Region { loops: vec![circle(5.0, 5.0, 2.0, true)] };
+        let sq = Region {
+            loops: vec![rect(0.0, 0.0, 10.0, 10.0)],
+        };
+        let hole = Region {
+            loops: vec![circle(5.0, 5.0, 2.0, true)],
+        };
         let d = boolean(&sq, &hole, Op::Diff).unwrap();
         assert_eq!(d.len(), 2, "{d:?}");
         // a disc over the edge: the square with a bite
-        let bite = Region { loops: vec![circle(10.0, 5.0, 2.0, true)] };
+        let bite = Region {
+            loops: vec![circle(10.0, 5.0, 2.0, true)],
+        };
         let d = boolean(&sq, &bite, Op::Diff).unwrap();
         assert_eq!(d.len(), 1);
-        assert!(d[0].segs.iter().any(|s| matches!(s, Seg::Arc { ccw: false, .. })), "{d:?}");
+        assert!(
+            d[0].segs.iter().any(|s| matches!(s, Seg::Arc { ccw: false, .. })),
+            "{d:?}"
+        );
         // two squares sharing an edge: their union is one rectangle's worth of loop
-        let s2 = Region { loops: vec![rect(10.0, 0.0, 20.0, 10.0)] };
+        let s2 = Region {
+            loops: vec![rect(10.0, 0.0, 20.0, 10.0)],
+        };
         let u = boolean(&sq, &s2, Op::Union).unwrap();
         assert_eq!(u.len(), 1, "{u:?}");
         let i = boolean(&sq, &s2, Op::Inter).unwrap();
         assert!(i.is_empty(), "{i:?}");
         // a square minus itself: nothing
         assert!(boolean(&sq, &sq, Op::Diff).unwrap().is_empty());
-        let x = boolean(&sq, &Region { loops: vec![rect(5.0, 5.0, 15.0, 15.0)] }, Op::Inter).unwrap();
+        let x = boolean(
+            &sq,
+            &Region {
+                loops: vec![rect(5.0, 5.0, 15.0, 15.0)],
+            },
+            Op::Inter,
+        )
+        .unwrap();
         assert_eq!(x.len(), 1);
         assert_eq!(x[0].segs.len(), 4, "{x:?}");
     }

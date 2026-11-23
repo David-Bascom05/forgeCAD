@@ -27,15 +27,34 @@ impl Stock {
         let (a, b) = (self.min, self.max);
         let rect = |w: f64, h: f64| Trim {
             segs: vec![
-                TSeg::Line { a: [0.0, 0.0], b: [w, 0.0] },
-                TSeg::Line { a: [w, 0.0], b: [w, h] },
-                TSeg::Line { a: [w, h], b: [0.0, h] },
-                TSeg::Line { a: [0.0, h], b: [0.0, 0.0] },
+                TSeg::Line {
+                    a: [0.0, 0.0],
+                    b: [w, 0.0],
+                },
+                TSeg::Line {
+                    a: [w, 0.0],
+                    b: [w, h],
+                },
+                TSeg::Line {
+                    a: [w, h],
+                    b: [0.0, h],
+                },
+                TSeg::Line {
+                    a: [0.0, h],
+                    b: [0.0, 0.0],
+                },
             ],
         };
         let (dx, dy, dz) = (b[0] - a[0], b[1] - a[1], b[2] - a[2]);
         let mk = |o: [f64; 3], u: [f64; 3], v: [f64; 3], w: f64, h: f64, id: u32| {
-            Face::new(Surf::Plane { o, u, v }, Ival::new(0.0, w), Ival::new(0.0, h), Some(rect(w, h)), 1e-9, id)
+            Face::new(
+                Surf::Plane { o, u, v },
+                Ival::new(0.0, w),
+                Ival::new(0.0, h),
+                Some(rect(w, h)),
+                1e-9,
+                id,
+            )
         };
         vec![
             mk([a[0], a[1], a[2]], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], dx, dy, 1000),
@@ -80,12 +99,32 @@ impl Phase {
 /// One move of a path, in the part's frame.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum PMove {
-    Rapid { to: [f64; 3] },
-    Line { to: [f64; 3], f: f64, phase: Phase },
+    Rapid {
+        to: [f64; 3],
+    },
+    Line {
+        to: [f64; 3],
+        f: f64,
+        phase: Phase,
+    },
     /// In the xy plane about c (xy), clockwise or not.
-    Arc { to: [f64; 3], c: [f64; 2], cw: bool, f: f64 },
+    Arc {
+        to: [f64; 3],
+        c: [f64; 2],
+        cw: bool,
+        f: f64,
+    },
     /// A canned hole cycle at each place.
-    Cycle { kind: forge_post::CycleKind, holes: [f64; 2], z: f64, r: f64, clear: f64, q: f64, dwell: f64, f: f64 },
+    Cycle {
+        kind: forge_post::CycleKind,
+        holes: [f64; 2],
+        z: f64,
+        r: f64,
+        clear: f64,
+        q: f64,
+        dwell: f64,
+        f: f64,
+    },
 }
 
 #[derive(Clone, Debug)]
@@ -151,23 +190,71 @@ pub fn checker_moves(p: &OpPath) -> Vec<(Move, Phase, usize)> {
                 }
                 let n = (((a1 - a0).abs() / (0.5 * std::f64::consts::PI)).ceil() as usize).max(1);
                 for k in 0..n {
-                    let (u0, u1) = (a0 + (a1 - a0) * k as f64 / n as f64, a0 + (a1 - a0) * (k + 1) as f64 / n as f64);
+                    let (u0, u1) = (
+                        a0 + (a1 - a0) * k as f64 / n as f64,
+                        a0 + (a1 - a0) * (k + 1) as f64 / n as f64,
+                    );
                     let um = 0.5 * (u0 + u1);
                     let (sm, cm) = dmath::sin_cos(um);
                     let h = 0.5 * (u1 - u0).abs();
                     let th = dmath::sin(0.5 * h) / dmath::cos(0.5 * h);
                     // the planar arc's frame turns with the travel: x at the middle, y forward
-                    let (x, y) = if cw { ([cm, sm, 0.0], [sm, -cm, 0.0]) } else { ([cm, sm, 0.0], [-sm, cm, 0.0]) };
-                    out.push((Move::Arc { c: [c[0], c[1], at[2]], x, y, r, t0: -th, t1: th }, Phase::Cut, i));
+                    let (x, y) = if cw {
+                        ([cm, sm, 0.0], [sm, -cm, 0.0])
+                    } else {
+                        ([cm, sm, 0.0], [-sm, cm, 0.0])
+                    };
+                    out.push((
+                        Move::Arc {
+                            c: [c[0], c[1], at[2]],
+                            x,
+                            y,
+                            r,
+                            t0: -th,
+                            t1: th,
+                        },
+                        Phase::Cut,
+                        i,
+                    ));
                 }
                 at = to;
             }
-            PMove::Cycle { holes, z, r, clear, .. } => {
+            PMove::Cycle {
+                holes, z, r, clear, ..
+            } => {
                 let (x, y) = (holes[0], holes[1]);
-                out.push((Move::Line { a: at, b: [x, y, clear] }, Phase::Rapid, i));
-                out.push((Move::Line { a: [x, y, clear], b: [x, y, r] }, Phase::Rapid, i));
-                out.push((Move::Line { a: [x, y, r], b: [x, y, z] }, Phase::Cut, i));
-                out.push((Move::Line { a: [x, y, z], b: [x, y, clear] }, Phase::Rapid, i));
+                out.push((
+                    Move::Line {
+                        a: at,
+                        b: [x, y, clear],
+                    },
+                    Phase::Rapid,
+                    i,
+                ));
+                out.push((
+                    Move::Line {
+                        a: [x, y, clear],
+                        b: [x, y, r],
+                    },
+                    Phase::Rapid,
+                    i,
+                ));
+                out.push((
+                    Move::Line {
+                        a: [x, y, r],
+                        b: [x, y, z],
+                    },
+                    Phase::Cut,
+                    i,
+                ));
+                out.push((
+                    Move::Line {
+                        a: [x, y, z],
+                        b: [x, y, clear],
+                    },
+                    Phase::Rapid,
+                    i,
+                ));
                 at = [x, y, clear];
             }
         }
@@ -176,8 +263,19 @@ pub fn checker_moves(p: &OpPath) -> Vec<(Move, Phase, usize)> {
 }
 
 /// Certifies a path: each move, each tool body, each nearby face of the part and the stock.
-pub fn certify(p: &OpPath, tool: &ToolUse, part: &[Face], stock: &[Face], tol: f64, clearance: f64) -> CheckSummary {
-    let mut sum = CheckSummary { clear: true, least: f64::INFINITY, ..Default::default() };
+pub fn certify(
+    p: &OpPath,
+    tool: &ToolUse,
+    part: &[Face],
+    stock: &[Face],
+    tol: f64,
+    clearance: f64,
+) -> CheckSummary {
+    let mut sum = CheckSummary {
+        clear: true,
+        least: f64::INFINITY,
+        ..Default::default()
+    };
     let mv = checker_moves(p);
     for (m, phase, idx) in &mv {
         for b in &tool.shape.bodies {
@@ -188,7 +286,11 @@ pub fn certify(p: &OpPath, tool: &ToolUse, part: &[Face], stock: &[Face], tol: f
                     // the cutter cuts the stock: that is the point
                     continue;
                 }
-                let limit = if what == "part" && b.part == Part::Cutter && *phase != Phase::Rapid { -tol } else { clearance };
+                let limit = if what == "part" && b.part == Part::Cutter && *phase != Phase::Rapid {
+                    -tol
+                } else {
+                    clearance
+                };
                 for f in faces {
                     if check::apart(&sb, &f.bbox, limit.max(0.0) + f.mu) {
                         continue;
@@ -215,7 +317,11 @@ pub fn certify(p: &OpPath, tool: &ToolUse, part: &[Face], stock: &[Face], tol: f
                                 value: d,
                                 limit,
                                 at,
-                                tool_part: if b.part == Part::Cutter { "cutter" } else { "shank/holder" },
+                                tool_part: if b.part == Part::Cutter {
+                                    "cutter"
+                                } else {
+                                    "shank/holder"
+                                },
                                 other: format!("{what} face {}", f.id),
                                 phase: phase.name(),
                                 move_index: *idx,
@@ -229,7 +335,11 @@ pub fn certify(p: &OpPath, tool: &ToolUse, part: &[Face], stock: &[Face], tol: f
                                 value: lower,
                                 limit,
                                 at: [f64::NAN; 3],
-                                tool_part: if b.part == Part::Cutter { "cutter" } else { "shank/holder" },
+                                tool_part: if b.part == Part::Cutter {
+                                    "cutter"
+                                } else {
+                                    "shank/holder"
+                                },
                                 other: format!("{what} face {}", f.id),
                                 phase: phase.name(),
                                 move_index: *idx,
@@ -258,8 +368,17 @@ pub struct Heights {
 fn push_loop(out: &mut Vec<PMove>, segs: &[Seg], z: f64, f: f64) {
     for s in segs {
         match *s {
-            Seg::Line { b, .. } => out.push(PMove::Line { to: [b.x, b.y, z], f, phase: Phase::Cut }),
-            Seg::Arc { b, c, ccw, .. } => out.push(PMove::Arc { to: [b.x, b.y, z], c: [c.x, c.y], cw: !ccw, f }),
+            Seg::Line { b, .. } => out.push(PMove::Line {
+                to: [b.x, b.y, z],
+                f,
+                phase: Phase::Cut,
+            }),
+            Seg::Arc { b, c, ccw, .. } => out.push(PMove::Arc {
+                to: [b.x, b.y, z],
+                c: [c.x, c.y],
+                cw: !ccw,
+                f,
+            }),
         }
     }
 }
@@ -267,7 +386,9 @@ fn push_loop(out: &mut Vec<PMove>, segs: &[Seg], z: f64, f: f64) {
 /// The depths from top down to bottom in steps of at most `step` (equal steps).
 pub fn levels(top: f64, bottom: f64, step: f64) -> Vec<f64> {
     let n = ((top - bottom) / step - 1e-9).ceil().max(1.0) as usize;
-    (1..=n).map(|k| top - (top - bottom) * k as f64 / n as f64).collect()
+    (1..=n)
+        .map(|k| top - (top - bottom) * k as f64 / n as f64)
+        .collect()
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -282,13 +403,30 @@ pub enum OpError {
 
 /// Contour: the region's boundary, offset by the tool radius plus `leave` (outside for the
 /// part's outline: `outside` true), at each level.
-pub fn contour(rg: &Region, tool: &ToolUse, tidx: usize, h: Heights, top: f64, bottom: f64, step: f64, leave: f64, outside: bool, feed: (f64, f64)) -> Result<OpPath, OpError> {
+pub fn contour(
+    rg: &Region,
+    tool: &ToolUse,
+    tidx: usize,
+    h: Heights,
+    top: f64,
+    bottom: f64,
+    step: f64,
+    leave: f64,
+    outside: bool,
+    feed: (f64, f64),
+) -> Result<OpPath, OpError> {
     let r = 0.5 * tool.tool.dc + leave;
     let d = if outside { -r } else { r };
     let (loops, _) = offset(rg, d).map_err(|e| OpError::Region(format!("{e:?}")))?;
-    let loops: Vec<_> = loops.into_iter().filter(|l| !(l.segs.len() == 1 && matches!(l.segs[0], Seg::Line { a, b } if a == b))).collect();
+    let loops: Vec<_> = loops
+        .into_iter()
+        .filter(|l| !(l.segs.len() == 1 && matches!(l.segs[0], Seg::Line { a, b } if a == b)))
+        .collect();
     if loops.is_empty() {
-        return Err(OpError::ToolTooBig { tool_d: tool.tool.dc, why: "the tool does not fit the contour".into() });
+        return Err(OpError::ToolTooBig {
+            tool_d: tool.tool.dc,
+            why: "the tool does not fit the contour".into(),
+        });
     }
     let mut mv = Vec::new();
     let first = loops[0].segs[0].start();
@@ -296,24 +434,54 @@ pub fn contour(rg: &Region, tool: &ToolUse, tidx: usize, h: Heights, top: f64, b
     for z in levels(top, bottom, step) {
         for l in &loops {
             let s = l.segs[0].start();
-            mv.push(PMove::Rapid { to: [s.x, s.y, h.retract] });
-            mv.push(PMove::Line { to: [s.x, s.y, z], f: feed.1, phase: Phase::Plunge });
+            mv.push(PMove::Rapid {
+                to: [s.x, s.y, h.retract],
+            });
+            mv.push(PMove::Line {
+                to: [s.x, s.y, z],
+                f: feed.1,
+                phase: Phase::Plunge,
+            });
             push_loop(&mut mv, &l.segs, z, feed.0);
-            mv.push(PMove::Line { to: [s.x, s.y, h.retract], f: feed.0, phase: Phase::Link });
+            mv.push(PMove::Line {
+                to: [s.x, s.y, h.retract],
+                f: feed.0,
+                phase: Phase::Link,
+            });
         }
     }
-    mv.push(PMove::Rapid { to: [first.x, first.y, h.clear] });
-    Ok(OpPath { tool: tidx, start, moves: mv, rpm: 0.0, coolant: forge_post::Coolant::Flood })
+    mv.push(PMove::Rapid {
+        to: [first.x, first.y, h.clear],
+    });
+    Ok(OpPath {
+        tool: tidx,
+        start,
+        moves: mv,
+        rpm: 0.0,
+        coolant: forge_post::Coolant::Flood,
+    })
 }
 
 /// Pocket: the region cleared by offset passes, each offset from the original boundary at
 /// r + leave + k · stepover, innermost first, at each level.
-pub fn pocket(rg: &Region, tool: &ToolUse, tidx: usize, h: Heights, top: f64, bottom: f64, step: f64, stepover: f64, leave: f64, feed: (f64, f64)) -> Result<OpPath, OpError> {
+pub fn pocket(
+    rg: &Region,
+    tool: &ToolUse,
+    tidx: usize,
+    h: Heights,
+    top: f64,
+    bottom: f64,
+    step: f64,
+    stepover: f64,
+    leave: f64,
+    feed: (f64, f64),
+) -> Result<OpPath, OpError> {
     let r = 0.5 * tool.tool.dc + leave;
     let mut passes = Vec::new();
     let mut k = 0;
     loop {
-        let (loops, _) = offset(rg, r + k as f64 * stepover).map_err(|e| OpError::Region(format!("{e:?}")))?;
+        let (loops, _) =
+            offset(rg, r + k as f64 * stepover).map_err(|e| OpError::Region(format!("{e:?}")))?;
         if loops.is_empty() {
             break;
         }
@@ -324,7 +492,10 @@ pub fn pocket(rg: &Region, tool: &ToolUse, tidx: usize, h: Heights, top: f64, bo
         }
     }
     if passes.is_empty() {
-        return Err(OpError::ToolTooBig { tool_d: tool.tool.dc, why: "the tool does not fit the pocket".into() });
+        return Err(OpError::ToolTooBig {
+            tool_d: tool.tool.dc,
+            why: "the tool does not fit the pocket".into(),
+        });
     }
     passes.reverse();
     let mut mv = Vec::new();
@@ -334,23 +505,50 @@ pub fn pocket(rg: &Region, tool: &ToolUse, tidx: usize, h: Heights, top: f64, bo
         for loops in &passes {
             for l in loops {
                 let s = l.segs[0].start();
-                mv.push(PMove::Rapid { to: [s.x, s.y, h.retract] });
-                mv.push(PMove::Line { to: [s.x, s.y, z], f: feed.1, phase: Phase::Plunge });
+                mv.push(PMove::Rapid {
+                    to: [s.x, s.y, h.retract],
+                });
+                mv.push(PMove::Line {
+                    to: [s.x, s.y, z],
+                    f: feed.1,
+                    phase: Phase::Plunge,
+                });
                 let point = l.segs.len() == 1 && matches!(l.segs[0], Seg::Line { a, b } if a == b);
                 if !point {
                     push_loop(&mut mv, &l.segs, z, feed.0);
                 }
-                mv.push(PMove::Line { to: [s.x, s.y, h.retract], f: feed.0, phase: Phase::Link });
+                mv.push(PMove::Line {
+                    to: [s.x, s.y, h.retract],
+                    f: feed.0,
+                    phase: Phase::Link,
+                });
             }
         }
     }
-    mv.push(PMove::Rapid { to: [s0.x, s0.y, h.clear] });
-    Ok(OpPath { tool: tidx, start, moves: mv, rpm: 0.0, coolant: forge_post::Coolant::Flood })
+    mv.push(PMove::Rapid {
+        to: [s0.x, s0.y, h.clear],
+    });
+    Ok(OpPath {
+        tool: tidx,
+        start,
+        moves: mv,
+        rpm: 0.0,
+        coolant: forge_post::Coolant::Flood,
+    })
 }
 
 /// Facing: zig-zag passes across the stock's top region from `top` down to `z`, the tool
 /// overhanging the stock by its radius each side.
-pub fn facing(st: &Stock, tool: &ToolUse, tidx: usize, h: Heights, top: f64, z: f64, step: f64, feed: (f64, f64)) -> OpPath {
+pub fn facing(
+    st: &Stock,
+    tool: &ToolUse,
+    tidx: usize,
+    h: Heights,
+    top: f64,
+    z: f64,
+    step: f64,
+    feed: (f64, f64),
+) -> OpPath {
     let d = tool.tool.dc;
     let over = 0.7 * d;
     let (x0, x1) = (st.min[0] - 0.5 * d - 1.0, st.max[0] + 0.5 * d + 1.0);
@@ -359,26 +557,63 @@ pub fn facing(st: &Stock, tool: &ToolUse, tidx: usize, h: Heights, top: f64, z: 
     let mut mv = Vec::new();
     let start = [x0, y0, h.clear];
     for zl in levels(top, z, step) {
-        mv.push(PMove::Rapid { to: [x0, y0, h.retract] });
-        mv.push(PMove::Line { to: [x0, y0, zl], f: feed.1, phase: Phase::Plunge });
+        mv.push(PMove::Rapid {
+            to: [x0, y0, h.retract],
+        });
+        mv.push(PMove::Line {
+            to: [x0, y0, zl],
+            f: feed.1,
+            phase: Phase::Plunge,
+        });
         for i in 0..=n {
             let y = y0 + (y1 - y0) * i as f64 / n as f64;
             let (xa, xb) = if i % 2 == 0 { (x0, x1) } else { (x1, x0) };
             if i > 0 {
-                mv.push(PMove::Line { to: [xa, y, zl], f: feed.0, phase: Phase::Cut });
+                mv.push(PMove::Line {
+                    to: [xa, y, zl],
+                    f: feed.0,
+                    phase: Phase::Cut,
+                });
             }
-            mv.push(PMove::Line { to: [xb, y, zl], f: feed.0, phase: Phase::Cut });
+            mv.push(PMove::Line {
+                to: [xb, y, zl],
+                f: feed.0,
+                phase: Phase::Cut,
+            });
         }
         let last = if n % 2 == 0 { x1 } else { x0 };
-        mv.push(PMove::Line { to: [last, y1, h.retract], f: feed.0, phase: Phase::Link });
-        mv.push(PMove::Rapid { to: [x0, y0, h.retract] });
+        mv.push(PMove::Line {
+            to: [last, y1, h.retract],
+            f: feed.0,
+            phase: Phase::Link,
+        });
+        mv.push(PMove::Rapid {
+            to: [x0, y0, h.retract],
+        });
     }
-    mv.push(PMove::Rapid { to: [x0, y0, h.clear] });
-    OpPath { tool: tidx, start, moves: mv, rpm: 0.0, coolant: forge_post::Coolant::Flood }
+    mv.push(PMove::Rapid {
+        to: [x0, y0, h.clear],
+    });
+    OpPath {
+        tool: tidx,
+        start,
+        moves: mv,
+        rpm: 0.0,
+        coolant: forge_post::Coolant::Flood,
+    }
 }
 
 /// A canned cycle at each place (drilling straight down, along −z of the part).
-pub fn holes(places: &[[f64; 3]], kind: forge_post::CycleKind, tool: &ToolUse, tidx: usize, h: Heights, depth_below_mouth: f64, q: f64, f: f64) -> OpPath {
+pub fn holes(
+    places: &[[f64; 3]],
+    kind: forge_post::CycleKind,
+    tool: &ToolUse,
+    tidx: usize,
+    h: Heights,
+    depth_below_mouth: f64,
+    q: f64,
+    f: f64,
+) -> OpPath {
     let mut mv = Vec::new();
     let start = [places[0][0], places[0][1], h.clear];
     for p in places {
@@ -387,10 +622,27 @@ pub fn holes(places: &[[f64; 3]], kind: forge_post::CycleKind, tool: &ToolUse, t
             forge_tooling::Kind::Drill => 0.5 * tool.tool.dc / (0.5 * tool.tool.angle).to_radians_tan(),
             _ => 0.0,
         };
-        mv.push(PMove::Rapid { to: [p[0], p[1], h.clear] });
-        mv.push(PMove::Cycle { kind, holes: [p[0], p[1]], z: p[2] - depth_below_mouth - tip, r: p[2] + 2.0, clear: h.clear, q, dwell: 0.0, f });
+        mv.push(PMove::Rapid {
+            to: [p[0], p[1], h.clear],
+        });
+        mv.push(PMove::Cycle {
+            kind,
+            holes: [p[0], p[1]],
+            z: p[2] - depth_below_mouth - tip,
+            r: p[2] + 2.0,
+            clear: h.clear,
+            q,
+            dwell: 0.0,
+            f,
+        });
     }
-    OpPath { tool: tidx, start, moves: mv, rpm: 0.0, coolant: forge_post::Coolant::Flood }
+    OpPath {
+        tool: tidx,
+        start,
+        moves: mv,
+        rpm: 0.0,
+        coolant: forge_post::Coolant::Flood,
+    }
 }
 
 trait TanDeg {

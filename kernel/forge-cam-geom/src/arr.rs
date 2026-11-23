@@ -31,16 +31,28 @@ pub struct Piece {
 }
 
 pub fn pt(cx: &mut Ctx, x: f64, y: f64) -> Pt {
-    Pt { x: cx.lit(x), y: cx.lit(y) }
+    Pt {
+        x: cx.lit(x),
+        y: cx.lit(y),
+    }
 }
 pub fn sub(cx: &mut Ctx, a: Pt, b: Pt) -> Pt {
-    Pt { x: cx.sub(a.x, b.x), y: cx.sub(a.y, b.y) }
+    Pt {
+        x: cx.sub(a.x, b.x),
+        y: cx.sub(a.y, b.y),
+    }
 }
 pub fn add(cx: &mut Ctx, a: Pt, b: Pt) -> Pt {
-    Pt { x: cx.add(a.x, b.x), y: cx.add(a.y, b.y) }
+    Pt {
+        x: cx.add(a.x, b.x),
+        y: cx.add(a.y, b.y),
+    }
 }
 pub fn scale(cx: &mut Ctx, a: Pt, k: R) -> Pt {
-    Pt { x: cx.mul(a.x, k), y: cx.mul(a.y, k) }
+    Pt {
+        x: cx.mul(a.x, k),
+        y: cx.mul(a.y, k),
+    }
 }
 pub fn dot(cx: &mut Ctx, a: Pt, b: Pt) -> R {
     let (p, q) = (cx.mul(a.x, b.x), cx.mul(a.y, b.y));
@@ -52,7 +64,10 @@ pub fn cross(cx: &mut Ctx, a: Pt, b: Pt) -> R {
 }
 /// The left normal (−y, x).
 pub fn perp(cx: &mut Ctx, a: Pt) -> Pt {
-    Pt { x: cx.neg(a.y), y: a.x }
+    Pt {
+        x: cx.neg(a.y),
+        y: a.x,
+    }
 }
 pub fn norm2(cx: &mut Ctx, a: Pt) -> R {
     dot(cx, a, a)
@@ -171,11 +186,21 @@ pub fn piece_box(cx: &Ctx, pc: &Piece) -> (f64, f64, f64, f64) {
     match pc.curve {
         Curve::Line { .. } => {
             let (sx, sy, ex, ey) = (cx.iv(pc.s.x), cx.iv(pc.s.y), cx.iv(pc.e.x), cx.iv(pc.e.y));
-            (sx.lo.min(ex.lo), sy.lo.min(ey.lo), sx.hi.max(ex.hi), sy.hi.max(ey.hi))
+            (
+                sx.lo.min(ex.lo),
+                sy.lo.min(ey.lo),
+                sx.hi.max(ex.hi),
+                sy.hi.max(ey.hi),
+            )
         }
         Curve::Circle { c, rad, .. } => {
             let (x, y, r) = (cx.iv(c.x), cx.iv(c.y), cx.iv(rad));
-            ((x.lo - r.hi).next_down(), (y.lo - r.hi).next_down(), (x.hi + r.hi).next_up(), (y.hi + r.hi).next_up())
+            (
+                (x.lo - r.hi).next_down(),
+                (y.lo - r.hi).next_down(),
+                (x.hi + r.hi).next_up(),
+                (y.hi + r.hi).next_up(),
+            )
         }
     }
 }
@@ -353,16 +378,29 @@ pub fn rep_point(cx: &mut Ctx, pc: &Piece, a: Pt, b: Pt) -> Pt {
                 s = -s;
             }
             let w = if same(cx, a, b) {
-                Pt { x: cx.neg(ua.x), y: cx.neg(ua.y) }
+                Pt {
+                    x: cx.neg(ua.x),
+                    y: cx.neg(ua.y),
+                }
             } else if s > 0 {
                 add(cx, ua, ub)
             } else if s < 0 {
                 let w0 = add(cx, ua, ub);
-                Pt { x: cx.neg(w0.x), y: cx.neg(w0.y) }
+                Pt {
+                    x: cx.neg(w0.x),
+                    y: cx.neg(w0.y),
+                }
             } else {
                 // exactly a half turn: the perpendicular in the sense of travel
                 let pp = perp(cx, ua);
-                if ccw { pp } else { Pt { x: cx.neg(pp.x), y: cx.neg(pp.y) } }
+                if ccw {
+                    pp
+                } else {
+                    Pt {
+                        x: cx.neg(pp.x),
+                        y: cx.neg(pp.y),
+                    }
+                }
             };
             // a dyadic direction near w, checked strictly inside (a, b)
             let mut prec = 53u64;
@@ -413,7 +451,14 @@ pub fn tangent(cx: &mut Ctx, pc: &Piece, x: Pt) -> Pt {
         Curve::Circle { c, ccw, .. } => {
             let v = sub(cx, x, c);
             let p = perp(cx, v);
-            if ccw { p } else { Pt { x: cx.neg(p.x), y: cx.neg(p.y) } }
+            if ccw {
+                p
+            } else {
+                Pt {
+                    x: cx.neg(p.x),
+                    y: cx.neg(p.y),
+                }
+            }
         }
     }
 }

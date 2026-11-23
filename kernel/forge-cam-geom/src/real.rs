@@ -25,7 +25,11 @@ pub struct Dy {
 
 impl Dy {
     pub fn zero() -> Dy {
-        Dy { neg: false, mag: Nat::zero(), exp: 0 }
+        Dy {
+            neg: false,
+            mag: Nat::zero(),
+            exp: 0,
+        }
     }
 
     fn norm(neg: bool, mag: Nat, exp: i64) -> Dy {
@@ -38,7 +42,11 @@ impl Dy {
             k += 1;
         }
         if k > 0 {
-            return Dy { neg, mag: mag.shr(k), exp: exp + k as i64 };
+            return Dy {
+                neg,
+                mag: mag.shr(k),
+                exp: exp + k as i64,
+            };
         }
         Dy { neg, mag, exp }
     }
@@ -53,7 +61,11 @@ impl Dy {
         let neg = b >> 63 == 1;
         let e = ((b >> 52) & 0x7ff) as i64;
         let f = b & ((1u64 << 52) - 1);
-        let (m, ex) = if e == 0 { (f, -1074) } else { (f | (1u64 << 52), e - 1075) };
+        let (m, ex) = if e == 0 {
+            (f, -1074)
+        } else {
+            (f | (1u64 << 52), e - 1075)
+        };
         Dy::norm(neg, Nat::from_u64(m), ex)
     }
 
@@ -65,7 +77,11 @@ impl Dy {
         if self.is_zero() {
             return Dy::zero();
         }
-        Dy { neg: !self.neg, mag: self.mag.clone(), exp: self.exp }
+        Dy {
+            neg: !self.neg,
+            mag: self.mag.clone(),
+            exp: self.exp,
+        }
     }
 
     fn add_mag(a: &Dy, b: &Dy) -> Dy {
@@ -109,7 +125,11 @@ impl Dy {
         if self.is_zero() {
             return Dy::zero();
         }
-        Dy { neg: self.neg, mag: self.mag.clone(), exp: self.exp - 1 }
+        Dy {
+            neg: self.neg,
+            mag: self.mag.clone(),
+            exp: self.exp - 1,
+        }
     }
 
     pub fn cmp(&self, o: &Dy) -> Ordering {
@@ -204,7 +224,13 @@ impl Dy {
             let step = if k < -1000 { 1000 } else { -k };
             // division by a power of two is exact until subnormal; then outward by one ulp
             let w = v / pow2(step);
-            v = if w * pow2(step) == v { w } else if up != self.neg { w.next_up() } else { w.next_down() };
+            v = if w * pow2(step) == v {
+                w
+            } else if up != self.neg {
+                w.next_up()
+            } else {
+                w.next_down()
+            };
             k += step;
         }
         if self.neg { -v } else { v }
@@ -222,7 +248,11 @@ fn nearest(d: &Dy) -> f64 {
         Ordering::Less => lo,
         Ordering::Greater => hi,
         Ordering::Equal => {
-            if lo.to_bits() & 1 == 0 { lo } else { hi }
+            if lo.to_bits() & 1 == 0 {
+                lo
+            } else {
+                hi
+            }
         }
     }
 }
@@ -249,7 +279,10 @@ impl BigIval {
         BigIval { lo: None, hi: None }
     }
     fn pt(d: &Dy) -> BigIval {
-        BigIval { lo: Some(d.clone()), hi: Some(d.clone()) }
+        BigIval {
+            lo: Some(d.clone()),
+            hi: Some(d.clone()),
+        }
     }
     fn contains_zero(&self) -> bool {
         let lo_ok = match &self.lo {
@@ -299,7 +332,10 @@ fn bmul(a: &BigIval, b: &BigIval, p: u64) -> BigIval {
                 }
                 i += 1;
             }
-            BigIval { lo: Some(c[lo].round(p, false)), hi: Some(c[hi].round(p, true)) }
+            BigIval {
+                lo: Some(c[lo].round(p, false)),
+                hi: Some(c[hi].round(p, true)),
+            }
         }
         _ => BigIval::whole(),
     }
@@ -311,8 +347,18 @@ fn bdiv(a: &BigIval, b: &BigIval, p: u64) -> BigIval {
     }
     match (&a.lo, &a.hi, &b.lo, &b.hi) {
         (Some(al), Some(ah), Some(bl), Some(bh)) => {
-            let lo_c = [al.div(bl, p, false), al.div(bh, p, false), ah.div(bl, p, false), ah.div(bh, p, false)];
-            let hi_c = [al.div(bl, p, true), al.div(bh, p, true), ah.div(bl, p, true), ah.div(bh, p, true)];
+            let lo_c = [
+                al.div(bl, p, false),
+                al.div(bh, p, false),
+                ah.div(bl, p, false),
+                ah.div(bh, p, false),
+            ];
+            let hi_c = [
+                al.div(bl, p, true),
+                al.div(bh, p, true),
+                ah.div(bl, p, true),
+                ah.div(bh, p, true),
+            ];
             let mut lo = 0usize;
             let mut hi = 0usize;
             let mut i = 1;
@@ -325,7 +371,10 @@ fn bdiv(a: &BigIval, b: &BigIval, p: u64) -> BigIval {
                 }
                 i += 1;
             }
-            BigIval { lo: Some(lo_c[lo].clone()), hi: Some(hi_c[hi].clone()) }
+            BigIval {
+                lo: Some(lo_c[lo].clone()),
+                hi: Some(hi_c[hi].clone()),
+            }
         }
         _ => BigIval::whole(),
     }
@@ -456,9 +505,16 @@ impl Ctx {
             (0.0, 0.0)
         } else {
             let b = d.mag.bits() as f64;
-            if d.exp >= 0 { (b + d.exp as f64, 0.0) } else { (b, -(d.exp as f64)) }
+            if d.exp >= 0 {
+                (b + d.exp as f64, 0.0)
+            } else {
+                (b, -(d.exp as f64))
+            }
         };
-        let iv = Ival { lo: d.to_f64(false), hi: d.to_f64(true) };
+        let iv = Ival {
+            lo: d.to_f64(false),
+            hi: d.to_f64(true),
+        };
         self.push(key, Op::Lit(d), iv, lu, ll)
     }
 
@@ -489,7 +545,14 @@ impl Ctx {
             return r;
         }
         let (na, nb) = (&self.nodes[a as usize], &self.nodes[b as usize]);
-        let lu = upadd(if upadd(na.lu, nb.ll) > upadd(nb.lu, na.ll) { upadd(na.lu, nb.ll) } else { upadd(nb.lu, na.ll) }, 1.0);
+        let lu = upadd(
+            if upadd(na.lu, nb.ll) > upadd(nb.lu, na.ll) {
+                upadd(na.lu, nb.ll)
+            } else {
+                upadd(nb.lu, na.ll)
+            },
+            1.0,
+        );
         let ll = upadd(na.ll, nb.ll);
         let iv = na.iv.add(nb.iv);
         self.push(key, Op::Add(a, b), iv, lu, ll)
@@ -509,7 +572,14 @@ impl Ctx {
             return r;
         }
         let (na, nb) = (&self.nodes[a as usize], &self.nodes[b as usize]);
-        let lu = upadd(if upadd(na.lu, nb.ll) > upadd(nb.lu, na.ll) { upadd(na.lu, nb.ll) } else { upadd(nb.lu, na.ll) }, 1.0);
+        let lu = upadd(
+            if upadd(na.lu, nb.ll) > upadd(nb.lu, na.ll) {
+                upadd(na.lu, nb.ll)
+            } else {
+                upadd(nb.lu, na.ll)
+            },
+            1.0,
+        );
         let ll = upadd(na.ll, nb.ll);
         let iv = na.iv.sub(nb.iv);
         self.push(key, Op::Sub(a, b), iv, lu, ll)
@@ -551,7 +621,11 @@ impl Ctx {
             && y.mag == Nat::from_u64(1)
         {
             // a power of two: exact
-            let inv = Dy { neg: y.neg, mag: Nat::from_u64(1), exp: -y.exp };
+            let inv = Dy {
+                neg: y.neg,
+                mag: Nat::from_u64(1),
+                exp: -y.exp,
+            };
             return self.dy(x.mul(&inv));
         }
         let key = Key::Op(4, a, b);
@@ -571,10 +645,18 @@ impl Ctx {
                 return a;
             }
             if !d.neg {
-                let (m, e) = if d.exp % 2 == 0 { (d.mag.clone(), d.exp) } else { (d.mag.shl(1), d.exp - 1) };
+                let (m, e) = if d.exp % 2 == 0 {
+                    (d.mag.clone(), d.exp)
+                } else {
+                    (d.mag.shl(1), d.exp - 1)
+                };
                 let q = m.isqrt();
                 if q.mul(&q) == m {
-                    return self.dy(Dy { neg: false, mag: q, exp: e / 2 });
+                    return self.dy(Dy {
+                        neg: false,
+                        mag: q,
+                        exp: e / 2,
+                    });
                 }
             }
         }
@@ -652,7 +734,11 @@ impl Ctx {
             let i = order[k] as usize;
             let v = match &self.nodes[i].op {
                 Op::Lit(d) => BigIval::pt(d),
-                Op::Add(x, y) => badd(slot[*x as usize].as_ref().unwrap(), slot[*y as usize].as_ref().unwrap(), p),
+                Op::Add(x, y) => badd(
+                    slot[*x as usize].as_ref().unwrap(),
+                    slot[*y as usize].as_ref().unwrap(),
+                    p,
+                ),
                 Op::Sub(x, y) => {
                     let ny = bneg(slot[*y as usize].as_ref().unwrap());
                     badd(slot[*x as usize].as_ref().unwrap(), &ny, p)
@@ -669,10 +755,18 @@ impl Ctx {
                         };
                         BigIval { lo, hi: m.hi }
                     } else {
-                        bmul(slot[*x as usize].as_ref().unwrap(), slot[*y as usize].as_ref().unwrap(), p)
+                        bmul(
+                            slot[*x as usize].as_ref().unwrap(),
+                            slot[*y as usize].as_ref().unwrap(),
+                            p,
+                        )
                     }
                 }
-                Op::Div(x, y) => bdiv(slot[*x as usize].as_ref().unwrap(), slot[*y as usize].as_ref().unwrap(), p),
+                Op::Div(x, y) => bdiv(
+                    slot[*x as usize].as_ref().unwrap(),
+                    slot[*y as usize].as_ref().unwrap(),
+                    p,
+                ),
                 Op::Sqrt(x) => bsqrt(slot[*x as usize].as_ref().unwrap(), p),
                 Op::Neg(x) => bneg(slot[*x as usize].as_ref().unwrap()),
             };
@@ -706,15 +800,28 @@ impl Ctx {
             return Ordering::Less;
         }
         if let Op::Lit(d) = &self.nodes[a as usize].op {
-            return if d.is_zero() { Ordering::Equal } else if d.neg { Ordering::Less } else { Ordering::Greater };
+            return if d.is_zero() {
+                Ordering::Equal
+            } else if d.neg {
+                Ordering::Less
+            } else {
+                Ordering::Greater
+            };
         }
         self.exact_evals += 1;
         // the separation bound, in bits: (D-1) lu + ll
         let k = self.radicals(a);
         let node = &self.nodes[a as usize];
-        let d = if k >= 60 { f64::INFINITY } else { (1u64 << k) as f64 };
+        let d = if k >= 60 {
+            f64::INFINITY
+        } else {
+            (1u64 << k) as f64
+        };
         let bits = ((d - 1.0) * node.lu + node.ll).next_up().ceil() + 1.0;
-        assert!(bits.is_finite() && bits < 1e9, "separation bound out of reach ({k} radicals)");
+        assert!(
+            bits.is_finite() && bits < 1e9,
+            "separation bound out of reach ({k} radicals)"
+        );
         let need = bits as i64;
         let mut p = 128u64;
         let dbg = std::env::var("FORGE_CAM_DEBUG").is_ok();

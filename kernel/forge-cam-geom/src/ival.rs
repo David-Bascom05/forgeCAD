@@ -16,7 +16,11 @@ pub const WHOLE: Ival = Ival {
 };
 
 fn down(x: f64) -> f64 {
-    if x.is_nan() { f64::NEG_INFINITY } else { x.next_down() }
+    if x.is_nan() {
+        f64::NEG_INFINITY
+    } else {
+        x.next_down()
+    }
 }
 fn up(x: f64) -> f64 {
     if x.is_nan() { f64::INFINITY } else { x.next_up() }
@@ -57,7 +61,11 @@ impl Ival {
     }
     /// [a, b] for a <= b, exactly.
     pub fn new(a: f64, b: f64) -> Ival {
-        if a <= b { Ival { lo: a, hi: b } } else { Ival { lo: b, hi: a } }
+        if a <= b {
+            Ival { lo: a, hi: b }
+        } else {
+            Ival { lo: b, hi: a }
+        }
     }
     fn fix(lo: f64, hi: f64) -> Ival {
         if lo.is_nan() || hi.is_nan() {
@@ -81,7 +89,10 @@ impl Ival {
     }
     #[inline]
     pub fn neg(self) -> Ival {
-        Ival { lo: -self.hi, hi: -self.lo }
+        Ival {
+            lo: -self.hi,
+            hi: -self.lo,
+        }
     }
     #[inline]
     pub fn sub(self, o: Ival) -> Ival {
@@ -136,7 +147,11 @@ impl Ival {
     /// wherever this is called on an exact value).
     #[inline]
     pub fn sqrt(self) -> Ival {
-        let lo = if self.lo <= 0.0 { 0.0 } else { down(self.lo.sqrt()).max(0.0) };
+        let lo = if self.lo <= 0.0 {
+            0.0
+        } else {
+            down(self.lo.sqrt()).max(0.0)
+        };
         let hi = if self.hi < 0.0 { 0.0 } else { up(self.hi.sqrt()) };
         Ival::fix(lo, hi)
     }
@@ -161,7 +176,10 @@ impl Ival {
         } else if self.hi <= 0.0 {
             self.neg()
         } else {
-            Ival { lo: 0.0, hi: if -self.lo > self.hi { -self.lo } else { self.hi } }
+            Ival {
+                lo: 0.0,
+                hi: if -self.lo > self.hi { -self.lo } else { self.hi },
+            }
         }
     }
     #[inline]

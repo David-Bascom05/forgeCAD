@@ -35,12 +35,26 @@ pub enum Surf {
     /// c = (1 − t²)/(1 + t²), s = 2t/(1 + t²) (t = tan of half the angle from x).
     Cyl { o: V3, x: V3, y: V3, ax: V3, r: f64 },
     /// A cone: o + (r0 + q k) (c(t) x + s(t) y) + q ax (k: the radius's change per unit height).
-    Cone { o: V3, x: V3, y: V3, ax: V3, r0: f64, k: f64 },
+    Cone {
+        o: V3,
+        x: V3,
+        y: V3,
+        ax: V3,
+        r0: f64,
+        k: f64,
+    },
     /// A sphere about o, radius r: point = o + r (cos φ (c x + s y) + sin φ ax) with the same
     /// rational map for both angles: p = t (azimuth), q = tan(φ/2) (elevation).
     Sphere { o: V3, x: V3, y: V3, ax: V3, r: f64 },
     /// A torus: o + (R + r cos φ)(c x + s y) + r sin φ ax; p = t, q = tan(φ/2).
-    Torus { o: V3, x: V3, y: V3, ax: V3, big: f64, r: f64 },
+    Torus {
+        o: V3,
+        x: V3,
+        y: V3,
+        ax: V3,
+        big: f64,
+        r: f64,
+    },
 }
 
 /// The domain: a box of (p, q), and for planes optionally a region of (p, q) in line/arc loops
@@ -69,9 +83,18 @@ pub struct Trim {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum TSeg {
-    Line { a: [f64; 2], b: [f64; 2] },
+    Line {
+        a: [f64; 2],
+        b: [f64; 2],
+    },
     /// An arc of less than a half turn.
-    Arc { a: [f64; 2], b: [f64; 2], c: [f64; 2], r: f64, ccw: bool },
+    Arc {
+        a: [f64; 2],
+        b: [f64; 2],
+        c: [f64; 2],
+        r: f64,
+        ccw: bool,
+    },
 }
 
 fn add3<T: Num>(a: [T; 3], b: [T; 3]) -> [T; 3] {
@@ -120,7 +143,10 @@ impl Surf {
                 let (c, s) = circ(p);
                 let (cf, sf) = circ(q);
                 let rad = add3(scale3(x, c), scale3(y, s));
-                add3(add3(pt3(o), mul3(rad, cf.mul(T::c(r)))), scale3(ax, sf.mul(T::c(r))))
+                add3(
+                    add3(pt3(o), mul3(rad, cf.mul(T::c(r)))),
+                    scale3(ax, sf.mul(T::c(r))),
+                )
             }
             Surf::Torus { o, x, y, ax, big, r } => {
                 let (c, s) = circ(p);
@@ -136,7 +162,16 @@ impl Surf {
 impl Face {
     pub fn new(surf: Surf, p: Ival, q: Ival, trim: Option<Trim>, mu: f64, id: u32) -> Face {
         let bbox = surf.eval(p, q);
-        let mut f = Face { surf, p, q, trim, mu, bbox, id, prism: None };
+        let mut f = Face {
+            surf,
+            p,
+            q,
+            trim,
+            mu,
+            bbox,
+            id,
+            prism: None,
+        };
         f.prism = crate::slab::Prism::of(&f);
         f
     }
@@ -225,7 +260,9 @@ impl Trim {
                     let sb = rb[1].sign();
                     if sa == 0 || sb == 0 {
                         // an end on the ray's line: this direction cannot say
-                        if (ra[1].lo <= 0.0 && ra[1].hi >= 0.0 && ra[0].hi >= 0.0) || (rb[1].lo <= 0.0 && rb[1].hi >= 0.0 && rb[0].hi >= 0.0) {
+                        if (ra[1].lo <= 0.0 && ra[1].hi >= 0.0 && ra[0].hi >= 0.0)
+                            || (rb[1].lo <= 0.0 && rb[1].hi >= 0.0 && rb[0].hi >= 0.0)
+                        {
                             return 0;
                         }
                     } else if sa != sb {
@@ -243,7 +280,9 @@ impl Trim {
                 TSeg::Arc { a, b, c, r, ccw } => {
                     let (ra, rb, rc) = (rot(a), rot(b), rot(c));
                     // the ends on the ray's line: undecided here
-                    if (ra[1].lo <= 0.0 && ra[1].hi >= 0.0 && ra[0].hi >= 0.0) || (rb[1].lo <= 0.0 && rb[1].hi >= 0.0 && rb[0].hi >= 0.0) {
+                    if (ra[1].lo <= 0.0 && ra[1].hi >= 0.0 && ra[0].hi >= 0.0)
+                        || (rb[1].lo <= 0.0 && rb[1].hi >= 0.0 && rb[0].hi >= 0.0)
+                    {
                         return 0;
                     }
                     let h2 = Ival::pt(r).sqr().sub(rc[1].sqr());
@@ -299,11 +338,21 @@ fn tseg_dist(s: &TSeg, p: Ival, q: Ival) -> f64 {
 /// A move of the tool tip (3-axis: the tool is translated, its axis +z).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Move {
-    Line { a: V3, b: V3 },
+    Line {
+        a: V3,
+        b: V3,
+    },
     /// A planar arc in z = const: centre c, radius r, from the direction x (unit) by the
     /// rational map over t in [t0, t1] (each |t| < 1 + small, so less than a half turn either
     /// side), in the frame (x, y).
-    Arc { c: V3, x: V3, y: V3, r: f64, t0: f64, t1: f64 },
+    Arc {
+        c: V3,
+        x: V3,
+        y: V3,
+        r: f64,
+        t0: f64,
+        t1: f64,
+    },
 }
 
 impl Move {
@@ -314,8 +363,16 @@ impl Move {
     pub fn at_n<T: Num>(&self, s: T) -> [T; 3] {
         match *self {
             Move::Line { a, b } => {
-                let d = [T::c(b[0]).sub(T::c(a[0])), T::c(b[1]).sub(T::c(a[1])), T::c(b[2]).sub(T::c(a[2]))];
-                [T::c(a[0]).add(s.mul(d[0])), T::c(a[1]).add(s.mul(d[1])), T::c(a[2]).add(s.mul(d[2]))]
+                let d = [
+                    T::c(b[0]).sub(T::c(a[0])),
+                    T::c(b[1]).sub(T::c(a[1])),
+                    T::c(b[2]).sub(T::c(a[2])),
+                ];
+                [
+                    T::c(a[0]).add(s.mul(d[0])),
+                    T::c(a[1]).add(s.mul(d[1])),
+                    T::c(a[2]).add(s.mul(d[2])),
+                ]
             }
             Move::Arc { c, x, y, r, t0, t1 } => {
                 let t = T::c(t0).add(s.mul(T::c(t1).sub(T::c(t0))));
@@ -329,11 +386,22 @@ impl Move {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Verdict {
-    Clear { lower: f64 },
+    Clear {
+        lower: f64,
+    },
     /// A real face point (params p, q) at a real instant s whose signed distance is at most d
     /// (< limit), at `at` (part frame).
-    Hit { d: f64, p: f64, q: f64, s: f64, at: V3 },
-    Undecided { lower: f64, cells: usize },
+    Hit {
+        d: f64,
+        p: f64,
+        q: f64,
+        s: f64,
+        at: V3,
+    },
+    Undecided {
+        lower: f64,
+        cells: usize,
+    },
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -375,7 +443,10 @@ fn cell_eval(body: &Body, f: &Face, mv: &Move, c: &Cell) -> (Ival, [f64; 3]) {
     let r2 = rel[0].sqr().add(rel[1].sqr());
     let r2b = mean_value(&r2, r2c, x);
     let zb = mean_value(&rel[2], rc[2], x);
-    let r2b = Ival { lo: r2b.lo.max(0.0), hi: r2b.hi };
+    let r2b = Ival {
+        lo: r2b.lo.max(0.0),
+        hi: r2b.hi,
+    };
     // ρ's width per unit of ρ²'s near ρ: 1 / (2ρ), at least 1 / (2 ρmax); z counts as is
     let inv = if r2c.lo > 1e-12 { 0.5 / r2c.lo.sqrt() } else { 1.0 };
     // how much the signed distance moves with ρ and with z at the centre (a heuristic for the
@@ -383,8 +454,12 @@ fn cell_eval(body: &Body, f: &Face, mv: &Move, c: &Cell) -> (Ival, [f64; 3]) {
     let (rm, zm) = (r2c.mid().max(0.0).sqrt(), rc[2].mid());
     let h = 1e-6 * (1.0 + rm.abs() + zm.abs());
     let s0 = body.sd_rz(Ival::pt(rm), Ival::pt(zm)).mid();
-    let nr = ((body.sd_rz(Ival::pt(rm + h), Ival::pt(zm)).mid() - s0) / h).abs().min(1.0);
-    let nz = ((body.sd_rz(Ival::pt(rm), Ival::pt(zm + h)).mid() - s0) / h).abs().min(1.0);
+    let nr = ((body.sd_rz(Ival::pt(rm + h), Ival::pt(zm)).mid() - s0) / h)
+        .abs()
+        .min(1.0);
+    let nz = ((body.sd_rz(Ival::pt(rm), Ival::pt(zm + h)).mid() - s0) / h)
+        .abs()
+        .min(1.0);
     let mut sm = [0.0; 3];
     let mut k = 0;
     while k < 3 {
@@ -400,10 +475,25 @@ fn cell_eval(body: &Body, f: &Face, mv: &Move, c: &Cell) -> (Ival, [f64; 3]) {
 /// A move at one height, in the xy plane: its 2D path and the tip's z.
 #[derive(Clone, Copy, Debug)]
 pub enum Planar {
-    Line { a: [f64; 2], b: [f64; 2], z: f64 },
+    Line {
+        a: [f64; 2],
+        b: [f64; 2],
+        z: f64,
+    },
     /// A vertical move: the tip at one xy, its height from z0 to z1 (either order).
-    Vertical { p: [f64; 2], z0: f64, z1: f64 },
-    Arc { c: [f64; 2], r: f64, a: [f64; 2], b: [f64; 2], ccw: bool, z: f64 },
+    Vertical {
+        p: [f64; 2],
+        z0: f64,
+        z1: f64,
+    },
+    Arc {
+        c: [f64; 2],
+        r: f64,
+        a: [f64; 2],
+        b: [f64; 2],
+        ccw: bool,
+        z: f64,
+    },
 }
 
 impl Move {
@@ -414,9 +504,17 @@ impl Move {
         match *self {
             Move::Line { a, b } => {
                 if a[2] == b[2] {
-                    Some(Planar::Line { a: [a[0], a[1]], b: [b[0], b[1]], z: a[2] })
+                    Some(Planar::Line {
+                        a: [a[0], a[1]],
+                        b: [b[0], b[1]],
+                        z: a[2],
+                    })
                 } else if a[0] == b[0] && a[1] == b[1] {
-                    Some(Planar::Vertical { p: [a[0], a[1]], z0: a[2], z1: b[2] })
+                    Some(Planar::Vertical {
+                        p: [a[0], a[1]],
+                        z0: a[2],
+                        z1: b[2],
+                    })
                 } else {
                     None
                 }
@@ -504,7 +602,10 @@ fn cell_eval_planar(body: &Body, f: &Face, pl: &Planar, c: &Cell) -> (Ival, [f64
             let dd = Ival::pt(d[0]).sqr().add(Ival::pt(d[1]).sqr());
             let (ux, uy) = (y[0].sub(D::c(a[0])), y[1].sub(D::c(a[1])));
             let (uxc, uyc) = (yc[0].sub(Ival::pt(a[0])), yc[1].sub(Ival::pt(a[1])));
-            let tn = mv(ux.mul(D::c(d[0])).add(uy.mul(D::c(d[1]))), uxc.scale(d[0]).add(uyc.scale(d[1])));
+            let tn = mv(
+                ux.mul(D::c(d[0])).add(uy.mul(D::c(d[1]))),
+                uxc.scale(d[0]).add(uyc.scale(d[1])),
+            );
             let da2 = mv(ux.sqr().add(uy.sqr()), uxc.sqr().add(uyc.sqr()));
             let (vx, vy) = (y[0].sub(D::c(b[0])), y[1].sub(D::c(b[1])));
             let (vxc, vyc) = (yc[0].sub(Ival::pt(b[0])), yc[1].sub(Ival::pt(b[1])));
@@ -513,7 +614,10 @@ fn cell_eval_planar(body: &Body, f: &Face, pl: &Planar, c: &Cell) -> (Ival, [f64
             if dd.hi == 0.0 {
                 da
             } else {
-                let cr = mv(ux.mul(D::c(d[1])).sub(uy.mul(D::c(d[0]))), uxc.scale(d[1]).sub(uyc.scale(d[0])));
+                let cr = mv(
+                    ux.mul(D::c(d[1])).sub(uy.mul(D::c(d[0]))),
+                    uxc.scale(d[1]).sub(uyc.scale(d[0])),
+                );
                 let perp = cr.abs().div(dd.sqrt());
                 if tn.hi <= 0.0 {
                     da
@@ -522,32 +626,61 @@ fn cell_eval_planar(body: &Body, f: &Face, pl: &Planar, c: &Cell) -> (Ival, [f64
                 } else if tn.lo >= 0.0 && tn.hi <= dd.lo {
                     perp
                 } else {
-                    Ival { lo: perp.lo, hi: da.hi.min(db.hi) }
+                    Ival {
+                        lo: perp.lo,
+                        hi: da.hi.min(db.hi),
+                    }
                 }
             }
         }
         Planar::Vertical { .. } => unreachable!(),
-        Planar::Arc { c: cc, r, a, b, ccw, .. } => {
+        Planar::Arc {
+            c: cc, r, a, b, ccw, ..
+        } => {
             let (vx, vy) = (y[0].sub(D::c(cc[0])), y[1].sub(D::c(cc[1])));
             let (vxc, vyc) = (yc[0].sub(Ival::pt(cc[0])), yc[1].sub(Ival::pt(cc[1])));
             let n2 = mv(vx.sqr().add(vy.sqr()), vxc.sqr().add(vyc.sqr()));
             let circ = nonneg(n2).sqrt().sub(Ival::pt(r)).abs();
             let (ax, ay) = (a[0] - cc[0], a[1] - cc[1]);
             let (bx, by) = (b[0] - cc[0], b[1] - cc[1]);
-            let c1 = mv(vy.mul(D::c(ax)).sub(vx.mul(D::c(ay))), vyc.scale(ax).sub(vxc.scale(ay)));
-            let c2 = mv(vx.mul(D::c(by)).sub(vy.mul(D::c(bx))), vxc.scale(by).sub(vyc.scale(bx)));
+            let c1 = mv(
+                vy.mul(D::c(ax)).sub(vx.mul(D::c(ay))),
+                vyc.scale(ax).sub(vxc.scale(ay)),
+            );
+            let c2 = mv(
+                vx.mul(D::c(by)).sub(vy.mul(D::c(bx))),
+                vxc.scale(by).sub(vyc.scale(bx)),
+            );
             let (c1, c2) = if ccw { (c1, c2) } else { (c1.neg(), c2.neg()) };
-            let ea = mv(y[0].sub(D::c(a[0])).sqr().add(y[1].sub(D::c(a[1])).sqr()), yc[0].sub(Ival::pt(a[0])).sqr().add(yc[1].sub(Ival::pt(a[1])).sqr()));
-            let eb = mv(y[0].sub(D::c(b[0])).sqr().add(y[1].sub(D::c(b[1])).sqr()), yc[0].sub(Ival::pt(b[0])).sqr().add(yc[1].sub(Ival::pt(b[1])).sqr()));
+            let ea = mv(
+                y[0].sub(D::c(a[0])).sqr().add(y[1].sub(D::c(a[1])).sqr()),
+                yc[0]
+                    .sub(Ival::pt(a[0]))
+                    .sqr()
+                    .add(yc[1].sub(Ival::pt(a[1])).sqr()),
+            );
+            let eb = mv(
+                y[0].sub(D::c(b[0])).sqr().add(y[1].sub(D::c(b[1])).sqr()),
+                yc[0]
+                    .sub(Ival::pt(b[0]))
+                    .sqr()
+                    .add(yc[1].sub(Ival::pt(b[1])).sqr()),
+            );
             let (da, db) = (nonneg(ea).sqrt(), nonneg(eb).sqrt());
-            let ends = Ival { lo: da.lo.min(db.lo), hi: da.hi.min(db.hi) };
+            let ends = Ival {
+                lo: da.lo.min(db.lo),
+                hi: da.hi.min(db.hi),
+            };
             // the sector of an arc of at most a half turn: both crosses non-negative
             if c1.lo >= 0.0 && c2.lo >= 0.0 {
                 circ
             } else if c1.hi < 0.0 || c2.hi < 0.0 {
                 ends
             } else {
-                Ival { lo: circ.lo, hi: ends.hi }
+                Ival {
+                    lo: circ.lo,
+                    hi: ends.hi,
+                }
             }
         }
     };
@@ -557,17 +690,39 @@ fn cell_eval_planar(body: &Body, f: &Face, pl: &Planar, c: &Cell) -> (Ival, [f64
     }
     // the split: how much the signed distance changes across the cell along each parameter,
     // at the centre, plus a little of the image's width (a heuristic only)
-    let at = |p: f64, q: f64| cell_eval_planar(body, f, pl, &Cell { p: Ival::pt(p), q: Ival::pt(q), s: c.s }).0.mid();
+    let at = |p: f64, q: f64| {
+        cell_eval_planar(
+            body,
+            f,
+            pl,
+            &Cell {
+                p: Ival::pt(p),
+                q: Ival::pt(q),
+                s: c.s,
+            },
+        )
+        .0
+        .mid()
+    };
     let (pm, qm) = (c.p.mid(), c.q.mid());
     let (hp, hq) = (0.5 * c.p.width(), 0.5 * c.q.width());
-    let dp = (at(pm + hp, qm) - at(pm - hp, qm)).abs() + (at(pm + hp, qm) + at(pm - hp, qm) - 2.0 * at(pm, qm)).abs();
-    let dq = (at(pm, qm + hq) - at(pm, qm - hq)).abs() + (at(pm, qm + hq) + at(pm, qm - hq) - 2.0 * at(pm, qm)).abs();
-    let sm = [dp + 1e-4 * diam(&f.surf.eval(c.p, qc)), dq + 1e-4 * diam(&f.surf.eval(pc, c.q)), 0.0];
+    let dp = (at(pm + hp, qm) - at(pm - hp, qm)).abs()
+        + (at(pm + hp, qm) + at(pm - hp, qm) - 2.0 * at(pm, qm)).abs();
+    let dq = (at(pm, qm + hq) - at(pm, qm - hq)).abs()
+        + (at(pm, qm + hq) + at(pm, qm - hq) - 2.0 * at(pm, qm)).abs();
+    let sm = [
+        dp + 1e-4 * diam(&f.surf.eval(c.p, qc)),
+        dq + 1e-4 * diam(&f.surf.eval(pc, c.q)),
+        0.0,
+    ];
     (sd, sm)
 }
 
 fn nonneg(x: Ival) -> Ival {
-    Ival { lo: x.lo.max(0.0), hi: x.hi.max(0.0) }
+    Ival {
+        lo: x.lo.max(0.0),
+        hi: x.hi.max(0.0),
+    }
 }
 
 /// A binary min-heap of cells by their lower bound: the least bound is searched first, so a
@@ -641,8 +796,16 @@ pub fn certify(body: &Body, f: &Face, mv: &Move, limit: f64, res: f64, budget: u
 pub fn certify_bb(body: &Body, f: &Face, mv: &Move, limit: f64, res: f64, budget: usize) -> (Verdict, usize) {
     let lim_clear = limit + f.mu;
     let lim_hit = limit - f.mu;
-    let s0 = if matches!(mv.planar(), Some(Planar::Line { .. } | Planar::Arc { .. })) { Ival::pt(0.5) } else { Ival::new(0.0, 1.0) };
-    let root = Cell { p: f.p, q: f.q, s: s0 };
+    let s0 = if matches!(mv.planar(), Some(Planar::Line { .. } | Planar::Arc { .. })) {
+        Ival::pt(0.5)
+    } else {
+        Ival::new(0.0, 1.0)
+    };
+    let root = Cell {
+        p: f.p,
+        q: f.q,
+        s: s0,
+    };
     let mut heap = Heap { v: Vec::new() };
     heap.push(cell_sd(body, f, mv, &root).lo, root);
     let mut lower = f64::INFINITY;
@@ -658,7 +821,13 @@ pub fn certify_bb(body: &Body, f: &Face, mv: &Move, limit: f64, res: f64, budget
         }
         spent += 1;
         if spent > budget {
-            return (Verdict::Undecided { lower: f64::NEG_INFINITY, cells: spent }, spent);
+            return (
+                Verdict::Undecided {
+                    lower: f64::NEG_INFINITY,
+                    cells: spent,
+                },
+                spent,
+            );
         }
         let holds = f.holds(c.p, c.q);
         if holds < 0 {
@@ -674,9 +843,22 @@ pub fn certify_bb(body: &Body, f: &Face, mv: &Move, limit: f64, res: f64, budget
             // the minimum over the motion of the signed distance is 1-Lipschitz
             let (pm, qm) = (c.p.mid(), c.q.mid());
             if f.holds(Ival::pt(pm), Ival::pt(qm)) == 1 {
-                let w = cell_sd(body, f, mv, &Cell { p: Ival::pt(pm), q: Ival::pt(qm), s: c.s });
+                let w = cell_sd(
+                    body,
+                    f,
+                    mv,
+                    &Cell {
+                        p: Ival::pt(pm),
+                        q: Ival::pt(qm),
+                        s: c.s,
+                    },
+                );
                 let img = f.surf.eval(c.p, c.q);
-                let mvd = if matches!(mv.planar(), Some(Planar::Line { .. } | Planar::Arc { .. })) { 0.0 } else { diam(&mv.at(c.s)) };
+                let mvd = if matches!(mv.planar(), Some(Planar::Line { .. } | Planar::Arc { .. })) {
+                    0.0
+                } else {
+                    diam(&mv.at(c.s))
+                };
                 let lip = Ival::pt(w.lo).sub(Ival::pt(diam(&img))).sub(Ival::pt(mvd)).lo;
                 if lip > sd.lo {
                     sd = Ival { lo: lip, hi: sd.hi };
@@ -692,11 +874,33 @@ pub fn certify_bb(body: &Body, f: &Face, mv: &Move, limit: f64, res: f64, budget
         // a witness: the cell's centre, if it is surely on the face
         let (pm, qm, sm) = (c.p.mid(), c.q.mid(), c.s.mid());
         if f.holds(Ival::pt(pm), Ival::pt(qm)) == 1 {
-            let w = cell_sd(body, f, mv, &Cell { p: Ival::pt(pm), q: Ival::pt(qm), s: Ival::pt(sm) });
+            let w = cell_sd(
+                body,
+                f,
+                mv,
+                &Cell {
+                    p: Ival::pt(pm),
+                    q: Ival::pt(qm),
+                    s: Ival::pt(sm),
+                },
+            );
             if w.hi < lim_hit {
                 let y = f.surf.eval(Ival::pt(pm), Ival::pt(qm));
-                let sm = if matches!(mv.planar(), Some(Planar::Line { .. } | Planar::Arc { .. })) { mv.nearest_s([y[0].mid(), y[1].mid()]) } else { sm };
-                return (Verdict::Hit { d: w.hi + f.mu, p: pm, q: qm, s: sm, at: [y[0].mid(), y[1].mid(), y[2].mid()] }, spent);
+                let sm = if matches!(mv.planar(), Some(Planar::Line { .. } | Planar::Arc { .. })) {
+                    mv.nearest_s([y[0].mid(), y[1].mid()])
+                } else {
+                    sm
+                };
+                return (
+                    Verdict::Hit {
+                        d: w.hi + f.mu,
+                        p: pm,
+                        q: qm,
+                        s: sm,
+                        at: [y[0].mid(), y[1].mid(), y[2].mid()],
+                    },
+                    spent,
+                );
             }
         }
         // split the parameter that moves the image most
@@ -727,7 +931,11 @@ fn split_by(c: &Cell, sm: &[f64; 3]) -> (Cell, Cell) {
     let mut i = 0;
     while i < 3 {
         // a parameter with width but no smear still curves a little: count its width slightly
-        let sc = if ws[i] > 0.0 { sm[i].max(1e-9 * ws[i]) } else { -1.0 };
+        let sc = if ws[i] > 0.0 {
+            sm[i].max(1e-9 * ws[i])
+        } else {
+            -1.0
+        };
         if sc > best {
             best = sc;
             k = i;
@@ -800,8 +1008,16 @@ fn best_split(body: &Body, f: &Face, mv: &Move, c: &Cell) -> (Cell, Cell) {
 #[allow(dead_code)]
 fn split_dim(f: &Face, mv: &Move, c: &Cell) -> usize {
     let (pm, qm, sm) = (Ival::pt(c.p.mid()), Ival::pt(c.q.mid()), Ival::pt(c.s.mid()));
-    let wp = if c.p.width() > 0.0 { diam(&f.surf.eval(c.p, qm)) } else { 0.0 };
-    let wq = if c.q.width() > 0.0 { diam(&f.surf.eval(pm, c.q)) } else { 0.0 };
+    let wp = if c.p.width() > 0.0 {
+        diam(&f.surf.eval(c.p, qm))
+    } else {
+        0.0
+    };
+    let wq = if c.q.width() > 0.0 {
+        diam(&f.surf.eval(pm, c.q))
+    } else {
+        0.0
+    };
     let ws = if c.s.width() > 0.0 { diam(&mv.at(c.s)) } else { 0.0 };
     let _ = sm;
     if wp >= wq && wp >= ws {
@@ -838,7 +1054,9 @@ pub fn swept_box_body(mv: &Move, b: &Body) -> [Ival; 3] {
 pub fn apart(a: &[Ival; 3], b: &[Ival; 3], gap: f64) -> bool {
     let mut k = 0;
     while k < 3 {
-        if Ival::pt(b[k].lo).sub(Ival::pt(a[k].hi)).lo > gap || Ival::pt(a[k].lo).sub(Ival::pt(b[k].hi)).lo > gap {
+        if Ival::pt(b[k].lo).sub(Ival::pt(a[k].hi)).lo > gap
+            || Ival::pt(a[k].lo).sub(Ival::pt(b[k].hi)).lo > gap
+        {
             return true;
         }
         k += 1;
@@ -854,7 +1072,11 @@ mod tests {
     fn wall(x: f64) -> Face {
         // the plane x = const, facing −x, over y in [−50, 50], z in [−20, 0]
         Face::new(
-            Surf::Plane { o: [x, 0.0, 0.0], u: [0.0, 1.0, 0.0], v: [0.0, 0.0, 1.0] },
+            Surf::Plane {
+                o: [x, 0.0, 0.0],
+                u: [0.0, 1.0, 0.0],
+                v: [0.0, 0.0, 1.0],
+            },
             Ival::new(-50.0, 50.0),
             Ival::new(-20.0, 0.0),
             None,
@@ -869,15 +1091,27 @@ mod tests {
         let cut = &t.bodies[0];
         let f = wall(10.0);
         // the tool's side runs along the wall, exactly touching it (x = 10 − 3)
-        let mv = Move::Line { a: [7.0, -20.0, -5.0], b: [7.0, 20.0, -5.0] };
+        let mv = Move::Line {
+            a: [7.0, -20.0, -5.0],
+            b: [7.0, 20.0, -5.0],
+        };
         let (v, n) = certify(cut, &f, &mv, -0.001, 1e-4, 1_000);
-        assert!(matches!(v, Verdict::Clear { lower } if lower >= -0.001), "{v:?} {n}");
+        assert!(
+            matches!(v, Verdict::Clear { lower } if lower >= -0.001),
+            "{v:?} {n}"
+        );
         // 0.01 mm into the wall: a gouge, with a witness
-        let mv = Move::Line { a: [7.01, -20.0, -5.0], b: [7.01, 20.0, -5.0] };
+        let mv = Move::Line {
+            a: [7.01, -20.0, -5.0],
+            b: [7.01, 20.0, -5.0],
+        };
         let (v, _) = certify(cut, &f, &mv, -0.001, 1e-4, 1_000_000);
         assert!(matches!(v, Verdict::Hit { d, .. } if d < -0.001), "{v:?}");
         // a diagonal move that only touches at its end
-        let mv = Move::Line { a: [0.0, 0.0, -5.0], b: [7.02, 3.0, -5.0] };
+        let mv = Move::Line {
+            a: [0.0, 0.0, -5.0],
+            b: [7.02, 3.0, -5.0],
+        };
         let (v, _) = certify(cut, &f, &mv, -0.001, 1e-4, 1_000_000);
         assert!(matches!(v, Verdict::Hit { s, .. } if s > 0.9), "{v:?}");
     }
@@ -889,14 +1123,27 @@ mod tests {
         let t = assemble(&Cutter::Flat { d: 6.0 }, 15.0, 6.0, 30.0, None).unwrap();
         let cut = &t.bodies[0];
         let boss = Face::new(
-            Surf::Cyl { o: [0.0, 0.0, -10.0], x: [1.0, 0.0, 0.0], y: [0.0, 1.0, 0.0], ax: [0.0, 0.0, 1.0], r: 10.0 },
+            Surf::Cyl {
+                o: [0.0, 0.0, -10.0],
+                x: [1.0, 0.0, 0.0],
+                y: [0.0, 1.0, 0.0],
+                ax: [0.0, 0.0, 1.0],
+                r: 10.0,
+            },
             Ival::new(-1.0, 1.0),
             Ival::new(0.0, 10.0),
             None,
             0.0,
             1,
         );
-        let mv = |r: f64| Move::Arc { c: [0.0, 0.0, -5.0], x: [1.0, 0.0, 0.0], y: [0.0, 1.0, 0.0], r, t0: -0.5, t1: 0.5 };
+        let mv = |r: f64| Move::Arc {
+            c: [0.0, 0.0, -5.0],
+            x: [1.0, 0.0, 0.0],
+            y: [0.0, 1.0, 0.0],
+            r,
+            t0: -0.5,
+            t1: 0.5,
+        };
         let (v, n) = certify(cut, &boss, &mv(13.0), -0.01, 2e-3, 20_000);
         assert!(matches!(v, Verdict::Clear { .. }), "{v:?} {n}");
         let (v, _) = certify(cut, &boss, &mv(12.98), -0.01, 2e-3, 2_000_000);

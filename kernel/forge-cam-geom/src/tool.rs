@@ -21,7 +21,13 @@ pub enum PSeg {
     /// From a to b on the circle about c of radius r, counter-clockwise in (ρ, z) or not; both
     /// ends exactly on the circle (the constructors make them so), spanning less than a half
     /// turn.
-    Arc { a: [f64; 2], b: [f64; 2], c: [f64; 2], r: f64, ccw: bool },
+    Arc {
+        a: [f64; 2],
+        b: [f64; 2],
+        c: [f64; 2],
+        r: f64,
+        ccw: bool,
+    },
 }
 
 impl PSeg {
@@ -104,19 +110,31 @@ impl Body {
             }
             i += 1;
         }
-        Ok(Body { chain, part, z0: first[1], z1: last[1], rmax })
+        Ok(Body {
+            chain,
+            part,
+            z0: first[1],
+            z1: last[1],
+            rmax,
+        })
     }
 
     /// The radius function's range over the heights z (within [z0, z1]).
     fn w_range(&self, z: Ival) -> Ival {
-        let mut out = Ival { lo: f64::INFINITY, hi: f64::NEG_INFINITY };
+        let mut out = Ival {
+            lo: f64::INFINITY,
+            hi: f64::NEG_INFINITY,
+        };
         let mut i = 0;
         while i < self.chain.len() {
             let s = self.chain[i];
             let (a, b) = (s.a(), s.b());
             let (zl, zh) = (a[1].min(b[1]), a[1].max(b[1]));
             if zh >= z.lo && zl <= z.hi {
-                let zc = Ival { lo: z.lo.max(zl), hi: z.hi.min(zh) };
+                let zc = Ival {
+                    lo: z.lo.max(zl),
+                    hi: z.hi.min(zh),
+                };
                 let w = if zl == zh {
                     // a cap: every radius along it
                     Ival::new(a[0].min(b[0]), a[0].max(b[0]))
@@ -124,17 +142,26 @@ impl Body {
                     match s {
                         PSeg::Line { .. } => {
                             // ρ = a.ρ + (z − a.z) (b.ρ − a.ρ) / (b.z − a.z)
-                            let k = Ival::pt(b[0]).sub(Ival::pt(a[0])).div(Ival::pt(b[1]).sub(Ival::pt(a[1])));
+                            let k = Ival::pt(b[0])
+                                .sub(Ival::pt(a[0]))
+                                .div(Ival::pt(b[1]).sub(Ival::pt(a[1])));
                             Ival::pt(a[0]).add(zc.sub(Ival::pt(a[1])).mul(k))
                         }
                         PSeg::Arc { c, r, .. } => {
                             let dz = zc.sub(Ival::pt(c[1]));
                             let h = Ival::pt(r).sqr().sub(dz.sqr()).sqrt();
-                            if a[0] + b[0] >= 2.0 * c[0] { Ival::pt(c[0]).add(h) } else { Ival::pt(c[0]).sub(h) }
+                            if a[0] + b[0] >= 2.0 * c[0] {
+                                Ival::pt(c[0]).add(h)
+                            } else {
+                                Ival::pt(c[0]).sub(h)
+                            }
                         }
                     }
                 };
-                out = Ival { lo: out.lo.min(w.lo), hi: out.hi.max(w.hi) };
+                out = Ival {
+                    lo: out.lo.min(w.lo),
+                    hi: out.hi.max(w.hi),
+                };
             }
             i += 1;
         }
@@ -192,8 +219,15 @@ impl Body {
             _ => {
                 // an inside point is no deeper than its gap to the side, (w(z) − ρ), or to
                 // either cap: each is a distance to a boundary point
-                let zc = Ival { lo: z.lo.max(self.z0), hi: z.hi.min(self.z1) };
-                let w = if zc.lo <= zc.hi { self.w_range(zc) } else { Ival::pt(0.0) };
+                let zc = Ival {
+                    lo: z.lo.max(self.z0),
+                    hi: z.hi.min(self.z1),
+                };
+                let w = if zc.lo <= zc.hi {
+                    self.w_range(zc)
+                } else {
+                    Ival::pt(0.0)
+                };
                 let side = Ival::pt(w.hi).sub(Ival::pt(rho.lo)).hi;
                 let bot = Ival::pt(z.hi).sub(Ival::pt(self.z0)).hi;
                 let top = Ival::pt(self.z1).sub(Ival::pt(z.lo)).hi;
@@ -228,7 +262,10 @@ fn len2(x: Ival, y: Ival) -> Ival {
 pub fn seg_dist(s: &PSeg, rho: Ival, z: Ival) -> Ival {
     match *s {
         PSeg::Line { a, b } => {
-            let (dx, dy) = (Ival::pt(b[0]).sub(Ival::pt(a[0])), Ival::pt(b[1]).sub(Ival::pt(a[1])));
+            let (dx, dy) = (
+                Ival::pt(b[0]).sub(Ival::pt(a[0])),
+                Ival::pt(b[1]).sub(Ival::pt(a[1])),
+            );
             let (px, py) = (rho.sub(Ival::pt(a[0])), z.sub(Ival::pt(a[1])));
             let dd = dx.sqr().add(dy.sqr());
             let t = px.mul(dx).add(py.mul(dy)).div(dd);
@@ -244,7 +281,10 @@ pub fn seg_dist(s: &PSeg, rho: Ival, z: Ival) -> Ival {
             if t.lo >= 0.0 && t.hi <= 1.0 {
                 return perp;
             }
-            Ival { lo: perp.lo, hi: da.hi.min(db.hi) }
+            Ival {
+                lo: perp.lo,
+                hi: da.hi.min(db.hi),
+            }
         }
         PSeg::Arc { a, b, c, r, ccw } => {
             let (vx, vy) = (rho.sub(Ival::pt(c[0])), z.sub(Ival::pt(c[1])));
@@ -258,14 +298,20 @@ pub fn seg_dist(s: &PSeg, rho: Ival, z: Ival) -> Ival {
             let circ = len2(vx, vy).sub(Ival::pt(r)).abs();
             let da = len2(rho.sub(Ival::pt(a[0])), z.sub(Ival::pt(a[1])));
             let db = len2(rho.sub(Ival::pt(b[0])), z.sub(Ival::pt(b[1])));
-            let ends = Ival { lo: da.lo.min(db.lo), hi: da.hi.min(db.hi) };
+            let ends = Ival {
+                lo: da.lo.min(db.lo),
+                hi: da.hi.min(db.hi),
+            };
             if c1.lo >= 0.0 && c2.lo >= 0.0 {
                 return circ;
             }
             if c1.hi < 0.0 || c2.hi < 0.0 {
                 return ends;
             }
-            Ival { lo: circ.lo, hi: ends.hi }
+            Ival {
+                lo: circ.lo,
+                hi: ends.hi,
+            }
         }
     }
 }
@@ -359,14 +405,29 @@ impl Cutter {
                     return Err(ToolError::Bad("dc"));
                 }
                 let r = 0.5 * d;
-                Ok((vec![PSeg::Line { a: [0.0, 0.0], b: [r, 0.0] }], [r, 0.0]))
+                Ok((
+                    vec![PSeg::Line {
+                        a: [0.0, 0.0],
+                        b: [r, 0.0],
+                    }],
+                    [r, 0.0],
+                ))
             }
             Cutter::Ball { d } => {
                 if !(d > 0.0) {
                     return Err(ToolError::Bad("dc"));
                 }
                 let r = 0.5 * d;
-                Ok((vec![PSeg::Arc { a: [0.0, 0.0], b: [r, r], c: [0.0, r], r, ccw: true }], [r, r]))
+                Ok((
+                    vec![PSeg::Arc {
+                        a: [0.0, 0.0],
+                        b: [r, r],
+                        c: [0.0, r],
+                        r,
+                        ccw: true,
+                    }],
+                    [r, r],
+                ))
             }
             Cutter::Bull { d, re } => {
                 let r = 0.5 * d;
@@ -379,9 +440,18 @@ impl Cutter {
                 let flat = r - re;
                 let mut v = Vec::new();
                 if flat > 0.0 {
-                    v.push(PSeg::Line { a: [0.0, 0.0], b: [flat, 0.0] });
+                    v.push(PSeg::Line {
+                        a: [0.0, 0.0],
+                        b: [flat, 0.0],
+                    });
                 }
-                v.push(PSeg::Arc { a: [flat, 0.0], b: [r, re], c: [flat, re], r: re, ccw: true });
+                v.push(PSeg::Arc {
+                    a: [flat, 0.0],
+                    b: [r, re],
+                    c: [flat, re],
+                    r: re,
+                    ccw: true,
+                });
                 Ok((v, [r, re]))
             }
             Cutter::Chamfer { d_tip, angle, d } => {
@@ -393,9 +463,15 @@ impl Cutter {
                 let h = (r - r0) / t;
                 let mut v = Vec::new();
                 if r0 > 0.0 {
-                    v.push(PSeg::Line { a: [0.0, 0.0], b: [r0, 0.0] });
+                    v.push(PSeg::Line {
+                        a: [0.0, 0.0],
+                        b: [r0, 0.0],
+                    });
                 }
-                v.push(PSeg::Line { a: [r0, 0.0], b: [r, h] });
+                v.push(PSeg::Line {
+                    a: [r0, 0.0],
+                    b: [r, h],
+                });
                 Ok((v, [r, h]))
             }
             Cutter::Drill { d, angle } => {
@@ -405,14 +481,24 @@ impl Cutter {
                 let t = half_tan(angle)?;
                 let r = 0.5 * d;
                 let h = r / t;
-                Ok((vec![PSeg::Line { a: [0.0, 0.0], b: [r, h] }], [r, h]))
+                Ok((
+                    vec![PSeg::Line {
+                        a: [0.0, 0.0],
+                        b: [r, h],
+                    }],
+                    [r, h],
+                ))
             }
         }
     }
 
     pub fn radius(&self) -> f64 {
         match *self {
-            Cutter::Flat { d } | Cutter::Ball { d } | Cutter::Bull { d, .. } | Cutter::Chamfer { d, .. } | Cutter::Drill { d, .. } => 0.5 * d,
+            Cutter::Flat { d }
+            | Cutter::Ball { d }
+            | Cutter::Bull { d, .. }
+            | Cutter::Chamfer { d, .. }
+            | Cutter::Drill { d, .. } => 0.5 * d,
         }
     }
 }
@@ -426,7 +512,13 @@ pub struct Holder {
 
 /// A complete tool: cutter type, flute length, shank diameter, stick-out (gauge: tip to the
 /// holder's nose) and the holder.
-pub fn assemble(cut: &Cutter, lcf: f64, dcon: f64, stickout: f64, holder: Option<&Holder>) -> Result<Shape, ToolError> {
+pub fn assemble(
+    cut: &Cutter,
+    lcf: f64,
+    dcon: f64,
+    stickout: f64,
+    holder: Option<&Holder>,
+) -> Result<Shape, ToolError> {
     let (mut chain, top) = cut.tip()?;
     let r = cut.radius();
     if !(lcf > top[1]) {
@@ -439,15 +531,27 @@ pub fn assemble(cut: &Cutter, lcf: f64, dcon: f64, stickout: f64, holder: Option
         return Err(ToolError::Bad("stickout"));
     }
     chain.push(PSeg::Line { a: top, b: [r, lcf] });
-    chain.push(PSeg::Line { a: [r, lcf], b: [0.0, lcf] });
+    chain.push(PSeg::Line {
+        a: [r, lcf],
+        b: [0.0, lcf],
+    });
     let cutter = Body::new(chain, Part::Cutter)?;
     // the shank above the flutes, up to the holder's nose
     let rs = 0.5 * dcon;
     let shank = Body::new(
         vec![
-            PSeg::Line { a: [0.0, lcf], b: [rs, lcf] },
-            PSeg::Line { a: [rs, lcf], b: [rs, stickout] },
-            PSeg::Line { a: [rs, stickout], b: [0.0, stickout] },
+            PSeg::Line {
+                a: [0.0, lcf],
+                b: [rs, lcf],
+            },
+            PSeg::Line {
+                a: [rs, lcf],
+                b: [rs, stickout],
+            },
+            PSeg::Line {
+                a: [rs, stickout],
+                b: [0.0, stickout],
+            },
         ],
         Part::NonCutting,
     )?;
@@ -458,15 +562,24 @@ pub fn assemble(cut: &Cutter, lcf: f64, dcon: f64, stickout: f64, holder: Option
         }
         let mut ch = Vec::new();
         let p0 = h.profile[0];
-        ch.push(PSeg::Line { a: [0.0, stickout + p0[0]], b: [0.5 * p0[1], stickout + p0[0]] });
+        ch.push(PSeg::Line {
+            a: [0.0, stickout + p0[0]],
+            b: [0.5 * p0[1], stickout + p0[0]],
+        });
         let mut i = 1;
         while i < h.profile.len() {
             let (a, b) = (h.profile[i - 1], h.profile[i]);
-            ch.push(PSeg::Line { a: [0.5 * a[1], stickout + a[0]], b: [0.5 * b[1], stickout + b[0]] });
+            ch.push(PSeg::Line {
+                a: [0.5 * a[1], stickout + a[0]],
+                b: [0.5 * b[1], stickout + b[0]],
+            });
             i += 1;
         }
         let pl = h.profile[h.profile.len() - 1];
-        ch.push(PSeg::Line { a: [0.5 * pl[1], stickout + pl[0]], b: [0.0, stickout + pl[0]] });
+        ch.push(PSeg::Line {
+            a: [0.5 * pl[1], stickout + pl[0]],
+            b: [0.0, stickout + pl[0]],
+        });
         bodies.push(Body::new(ch, Part::NonCutting)?);
     }
     Ok(Shape { bodies })
@@ -498,7 +611,10 @@ mod tests {
         // 45° below the ball's centre, at distance 4 from it: 1 outside
         let k = 4.0 / 2f64.sqrt();
         let s = b.bodies[0].sd(p(k), p(0.0), p(3.0 - k));
-        assert!(s.lo <= 1.0 + 1e-12 && s.hi >= 1.0 - 1e-12 && s.width() < 1e-9, "{s:?}");
+        assert!(
+            s.lo <= 1.0 + 1e-12 && s.hi >= 1.0 - 1e-12 && s.width() < 1e-9,
+            "{s:?}"
+        );
         // a box straddling the surface holds 0
         let s = b.bodies[0].sd(Ival::new(0.0, 0.5), p(0.0), Ival::new(-0.1, 0.1));
         assert!(s.lo < 0.0 && s.hi > 0.0);

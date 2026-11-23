@@ -61,15 +61,32 @@ impl D {
 impl Num for D {
     #[inline]
     fn c(x: f64) -> D {
-        D { v: Ival::pt(x), g: [Z; 3] }
+        D {
+            v: Ival::pt(x),
+            g: [Z; 3],
+        }
     }
     #[inline]
     fn add(self, o: D) -> D {
-        D { v: self.v.add(o.v), g: [self.g[0].add(o.g[0]), self.g[1].add(o.g[1]), self.g[2].add(o.g[2])] }
+        D {
+            v: self.v.add(o.v),
+            g: [
+                self.g[0].add(o.g[0]),
+                self.g[1].add(o.g[1]),
+                self.g[2].add(o.g[2]),
+            ],
+        }
     }
     #[inline]
     fn sub(self, o: D) -> D {
-        D { v: self.v.sub(o.v), g: [self.g[0].sub(o.g[0]), self.g[1].sub(o.g[1]), self.g[2].sub(o.g[2])] }
+        D {
+            v: self.v.sub(o.v),
+            g: [
+                self.g[0].sub(o.g[0]),
+                self.g[1].sub(o.g[1]),
+                self.g[2].sub(o.g[2]),
+            ],
+        }
     }
     #[inline]
     fn mul(self, o: D) -> D {
@@ -79,7 +96,10 @@ impl Num for D {
             g[k] = self.g[k].mul(o.v).add(self.v.mul(o.g[k]));
             k += 1;
         }
-        D { v: self.v.mul(o.v), g }
+        D {
+            v: self.v.mul(o.v),
+            g,
+        }
     }
     #[inline]
     fn div(self, o: D) -> D {
@@ -96,7 +116,10 @@ impl Num for D {
     #[inline]
     fn sqr(self) -> D {
         let two = self.v.scale(2.0);
-        D { v: self.v.sqr(), g: [two.mul(self.g[0]), two.mul(self.g[1]), two.mul(self.g[2])] }
+        D {
+            v: self.v.sqr(),
+            g: [two.mul(self.g[0]), two.mul(self.g[1]), two.mul(self.g[2])],
+        }
     }
 }
 

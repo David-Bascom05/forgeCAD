@@ -24,14 +24,31 @@ pub struct InProcess {
 
 fn rect(a: [f64; 3], b: [f64; 3]) -> Region {
     let (p, q, r, s) = (p2(a[0], a[1]), p2(b[0], a[1]), p2(b[0], b[1]), p2(a[0], b[1]));
-    Region { loops: vec![Loop { segs: vec![Seg::Line { a: p, b: q }, Seg::Line { a: q, b: r }, Seg::Line { a: r, b: s }, Seg::Line { a: s, b: p }] }] }
+    Region {
+        loops: vec![Loop {
+            segs: vec![
+                Seg::Line { a: p, b: q },
+                Seg::Line { a: q, b: r },
+                Seg::Line { a: r, b: s },
+                Seg::Line { a: s, b: p },
+            ],
+        }],
+    }
 }
 
 /// Arcs as pieces of at most a quarter turn (the checker's trims take less than a half).
 fn arc_pieces(a: [f64; 2], b: [f64; 2], c: [f64; 2], ccw: bool, full: bool) -> Vec<([f64; 2], [f64; 2])> {
     let r = ((a[0] - c[0]).powi(2) + (a[1] - c[1]).powi(2)).sqrt();
     let t0 = dmath::atan2(a[1] - c[1], a[0] - c[0]);
-    let mut t1 = if full { t0 + if ccw { std::f64::consts::TAU } else { -std::f64::consts::TAU } } else { dmath::atan2(b[1] - c[1], b[0] - c[0]) };
+    let mut t1 = if full {
+        t0 + if ccw {
+            std::f64::consts::TAU
+        } else {
+            -std::f64::consts::TAU
+        }
+    } else {
+        dmath::atan2(b[1] - c[1], b[0] - c[0])
+    };
     if !full {
         if ccw {
             while t1 <= t0 {
@@ -62,7 +79,11 @@ fn arc_pieces(a: [f64; 2], b: [f64; 2], c: [f64; 2], ccw: bool, full: bool) -> V
 
 impl InProcess {
     pub fn new(min: [f64; 3], max: [f64; 3]) -> InProcess {
-        InProcess { min, max, voids: vec![] }
+        InProcess {
+            min,
+            max,
+            voids: vec![],
+        }
     }
 
     pub fn cut(&mut self, region: Region, floor: f64) {
@@ -74,7 +95,13 @@ impl InProcess {
     /// Facing the whole box to z.
     pub fn face_to(&mut self, z: f64) {
         let g = 1.0;
-        self.cut(rect([self.min[0] - g, self.min[1] - g, 0.0], [self.max[0] + g, self.max[1] + g, 0.0]), z);
+        self.cut(
+            rect(
+                [self.min[0] - g, self.min[1] - g, 0.0],
+                [self.max[0] + g, self.max[1] + g, 0.0],
+            ),
+            z,
+        );
     }
 
     /// The material's xy region in the band just above height z (None: no material).
@@ -113,7 +140,10 @@ impl InProcess {
             // starts here (the box's bottom)
             let exposed = match (&below, &m) {
                 (None, Some(m)) => Some(m.clone()),
-                (Some(b), Some(m)) => boolean(b, m, Op::Diff).ok().filter(|d| !d.is_empty()).map(|d| region_of(&d)),
+                (Some(b), Some(m)) => boolean(b, m, Op::Diff)
+                    .ok()
+                    .filter(|d| !d.is_empty())
+                    .map(|d| region_of(&d)),
                 (Some(b), None) => Some(b.clone()),
                 (None, None) => None,
             };
@@ -143,11 +173,20 @@ fn flat(r: &Region, z: f64, mu: f64, id: u32) -> Face {
     for l in &r.loops {
         for s in &l.segs {
             match *s {
-                Seg::Line { a, b } => segs.push(TSeg::Line { a: [a.x, a.y], b: [b.x, b.y] }),
+                Seg::Line { a, b } => segs.push(TSeg::Line {
+                    a: [a.x, a.y],
+                    b: [b.x, b.y],
+                }),
                 Seg::Arc { a, b, c, ccw } => {
                     let rad = ((a.x - c.x).powi(2) + (a.y - c.y).powi(2)).sqrt();
                     for (p, q) in arc_pieces([a.x, a.y], [b.x, b.y], [c.x, c.y], ccw, a == b) {
-                        segs.push(TSeg::Arc { a: p, b: q, c: [c.x, c.y], r: rad, ccw });
+                        segs.push(TSeg::Arc {
+                            a: p,
+                            b: q,
+                            c: [c.x, c.y],
+                            r: rad,
+                            ccw,
+                        });
                     }
                     lo = [lo[0].min(c.x - rad), lo[1].min(c.y - rad)];
                     hi = [hi[0].max(c.x + rad), hi[1].max(c.y + rad)];
@@ -158,7 +197,18 @@ fn flat(r: &Region, z: f64, mu: f64, id: u32) -> Face {
             hi = [hi[0].max(a.x), hi[1].max(a.y)];
         }
     }
-    Face::new(Surf::Plane { o: [0.0, 0.0, z], u: [1.0, 0.0, 0.0], v: [0.0, 1.0, 0.0] }, Ival::new(lo[0] - mu, hi[0] + mu), Ival::new(lo[1] - mu, hi[1] + mu), Some(Trim { segs }), mu, id)
+    Face::new(
+        Surf::Plane {
+            o: [0.0, 0.0, z],
+            u: [1.0, 0.0, 0.0],
+            v: [0.0, 1.0, 0.0],
+        },
+        Ival::new(lo[0] - mu, hi[0] + mu),
+        Ival::new(lo[1] - mu, hi[1] + mu),
+        Some(Trim { segs }),
+        mu,
+        id,
+    )
 }
 
 fn walls(s: &Seg, z0: f64, z1: f64, mu: f64, id: &mut u32, out: &mut Vec<Face>) {
@@ -173,20 +223,46 @@ fn walls(s: &Seg, z0: f64, z1: f64, mu: f64, id: &mut u32, out: &mut Vec<Face>) 
             let h = z1 - z0;
             let trim = Trim {
                 segs: vec![
-                    TSeg::Line { a: [0.0, 0.0], b: [len, 0.0] },
-                    TSeg::Line { a: [len, 0.0], b: [len, h] },
-                    TSeg::Line { a: [len, h], b: [0.0, h] },
-                    TSeg::Line { a: [0.0, h], b: [0.0, 0.0] },
+                    TSeg::Line {
+                        a: [0.0, 0.0],
+                        b: [len, 0.0],
+                    },
+                    TSeg::Line {
+                        a: [len, 0.0],
+                        b: [len, h],
+                    },
+                    TSeg::Line {
+                        a: [len, h],
+                        b: [0.0, h],
+                    },
+                    TSeg::Line {
+                        a: [0.0, h],
+                        b: [0.0, 0.0],
+                    },
                 ],
             };
             // the unit direction is rounded: the wall is within mu of the true one
-            out.push(Face::new(Surf::Plane { o: [a.x, a.y, z0], u, v: [0.0, 0.0, 1.0] }, Ival::new(0.0, len), Ival::new(0.0, h), Some(trim), mu + 4.0 * f64::EPSILON * len, *id));
+            out.push(Face::new(
+                Surf::Plane {
+                    o: [a.x, a.y, z0],
+                    u,
+                    v: [0.0, 0.0, 1.0],
+                },
+                Ival::new(0.0, len),
+                Ival::new(0.0, h),
+                Some(trim),
+                mu + 4.0 * f64::EPSILON * len,
+                *id,
+            ));
             *id += 1;
         }
         Seg::Arc { a, b, c, ccw } => {
             let rad = ((a.x - c.x).powi(2) + (a.y - c.y).powi(2)).sqrt();
             for (p, q) in arc_pieces([a.x, a.y], [b.x, b.y], [c.x, c.y], ccw, a == b) {
-                let (t0, t1) = (dmath::atan2(p[1] - c.y, p[0] - c.x), dmath::atan2(q[1] - c.y, q[0] - c.x));
+                let (t0, t1) = (
+                    dmath::atan2(p[1] - c.y, p[0] - c.x),
+                    dmath::atan2(q[1] - c.y, q[0] - c.x),
+                );
                 let mut d = t1 - t0;
                 if ccw && d < 0.0 {
                     d += std::f64::consts::TAU;
@@ -199,7 +275,13 @@ fn walls(s: &Seg, z0: f64, z1: f64, mu: f64, id: &mut u32, out: &mut Vec<Face>) 
                 let half = 0.5 * d.abs();
                 let th = dmath::sin(0.5 * half) / dmath::cos(0.5 * half) * (1.0 + 1e-12);
                 out.push(Face::new(
-                    Surf::Cyl { o: [c.x, c.y, z0], x: [cm, sm, 0.0], y: [-sm, cm, 0.0], ax: [0.0, 0.0, 1.0], r: rad },
+                    Surf::Cyl {
+                        o: [c.x, c.y, z0],
+                        x: [cm, sm, 0.0],
+                        y: [-sm, cm, 0.0],
+                        ax: [0.0, 0.0, 1.0],
+                        r: rad,
+                    },
                     Ival::new(-th, th),
                     Ival::new(0.0, z1 - z0),
                     None,

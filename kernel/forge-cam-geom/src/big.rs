@@ -91,7 +91,11 @@ impl Nat {
         let mut carry = 0u64;
         let mut i = 0;
         while i < n {
-            let a = if i < self.limbs.len() { self.limbs[i] as u64 } else { 0 };
+            let a = if i < self.limbs.len() {
+                self.limbs[i] as u64
+            } else {
+                0
+            };
             let b = if i < o.limbs.len() { o.limbs[i] as u64 } else { 0 };
             let s = a + b + carry;
             v.push(s as u32);
@@ -358,7 +362,16 @@ mod tests {
 
     #[test]
     fn arithmetic_matches_u64() {
-        let xs = [0u64, 1, 2, 7, 0xffff_ffff, 0x1_0000_0000, 123_456_789_012, u64::MAX >> 3];
+        let xs = [
+            0u64,
+            1,
+            2,
+            7,
+            0xffff_ffff,
+            0x1_0000_0000,
+            123_456_789_012,
+            u64::MAX >> 3,
+        ];
         for &a in &xs {
             for &b in &xs {
                 let (x, y) = (n(a), n(b));

@@ -56,7 +56,12 @@ fn edges(body: &Body, fid: FaceId) -> Vec<(Curve, forge_math::Interval, V3, V3)>
     for &l in body.face(fid).loops.iter() {
         for c in body.lp(l).coedges() {
             let e = body.edge(body.coedge(c).edge);
-            v.push((e.curve.clone(), e.range, p3(body.vertex(e.start).point), p3(body.vertex(e.end).point)));
+            v.push((
+                e.curve.clone(),
+                e.range,
+                p3(body.vertex(e.start).point),
+                p3(body.vertex(e.end).point),
+            ));
         }
     }
     v
@@ -65,13 +70,22 @@ fn edges(body: &Body, fid: FaceId) -> Vec<(Curve, forge_math::Interval, V3, V3)>
 fn lower_face(body: &Body, fid: FaceId, k: usize, out: &mut Vec<Face>) -> Result<(), LowerError> {
     let f = body.face(fid);
     let bb = body.face_box(fid);
-    let scale = [bb.x.lo, bb.y.lo, bb.z.lo, bb.x.hi, bb.y.hi, bb.z.hi].iter().fold(0.0f64, |m, x| m.max(x.abs()));
+    let scale = [bb.x.lo, bb.y.lo, bb.z.lo, bb.x.hi, bb.y.hi, bb.z.hi]
+        .iter()
+        .fold(0.0f64, |m, x| m.max(x.abs()));
     let m = mu(scale);
-    let unsupported = |why: &str| LowerError::Unsupported { face: k, why: why.to_string() };
+    let unsupported = |why: &str| LowerError::Unsupported {
+        face: k,
+        why: why.to_string(),
+    };
     match &f.surface {
         Surface::Plane(pl) => {
             let o = p3(pl.frame.origin);
-            let (x, y, z) = (v3(pl.frame.x().get()), v3(pl.frame.y().get()), v3(pl.frame.z().get()));
+            let (x, y, z) = (
+                v3(pl.frame.x().get()),
+                v3(pl.frame.y().get()),
+                v3(pl.frame.z().get()),
+            );
             let proj = |p: V3| -> [f64; 2] {
                 let d = sub(p, o);
                 [dot(d, x), dot(d, y)]
@@ -105,12 +119,22 @@ fn lower_face(body: &Body, fid: FaceId, k: usize, out: &mut Vec<Face>) -> Result
                         for i in 1..=n {
                             let t = range.lo + w * i as f64 / n as f64;
                             let p = if i == n { proj(ve) } else { proj(p3(cv.eval(t))) };
-                            segs.push(TSeg::Arc { a: prev, b: p, c: cc, r: c.radius, ccw });
+                            segs.push(TSeg::Arc {
+                                a: prev,
+                                b: p,
+                                c: cc,
+                                r: c.radius,
+                                ccw,
+                            });
                             prev = p;
                         }
                         grow(cc, c.radius);
                     }
-                    _ => return Err(unsupported("a planar face bounded by a curve other than lines and circles")),
+                    _ => {
+                        return Err(unsupported(
+                            "a planar face bounded by a curve other than lines and circles",
+                        ));
+                    }
                 }
             }
             let pad = m;
@@ -126,7 +150,11 @@ fn lower_face(body: &Body, fid: FaceId, k: usize, out: &mut Vec<Face>) -> Result
         }
         Surface::Cylinder(cy) => {
             let o = p3(cy.frame.origin);
-            let (x, y, z) = (v3(cy.frame.x().get()), v3(cy.frame.y().get()), v3(cy.frame.z().get()));
+            let (x, y, z) = (
+                v3(cy.frame.x().get()),
+                v3(cy.frame.y().get()),
+                v3(cy.frame.z().get()),
+            );
             let (mut vlo, mut vhi) = (f64::INFINITY, f64::NEG_INFINITY);
             let mut seams: Vec<f64> = Vec::new();
             let mut mid_angle: Option<f64> = None;
@@ -139,8 +167,15 @@ fn lower_face(body: &Body, fid: FaceId, k: usize, out: &mut Vec<Face>) -> Result
                     Curve::Circle(c) => {
                         let cz = v3(c.frame.z().get());
                         let co = sub(p3(c.frame.origin), o);
-                        let off = [co[0] - dot(co, z) * z[0], co[1] - dot(co, z) * z[1], co[2] - dot(co, z) * z[2]];
-                        if (dot(cz, z).abs() - 1.0).abs() > 1e-12 || dot(off, off).sqrt() > tol::LINEAR || (c.radius - cy.radius).abs() > tol::LINEAR {
+                        let off = [
+                            co[0] - dot(co, z) * z[0],
+                            co[1] - dot(co, z) * z[1],
+                            co[2] - dot(co, z) * z[2],
+                        ];
+                        if (dot(cz, z).abs() - 1.0).abs() > 1e-12
+                            || dot(off, off).sqrt() > tol::LINEAR
+                            || (c.radius - cy.radius).abs() > tol::LINEAR
+                        {
                             return Err(unsupported("a cylinder edge that is not a circle about its axis"));
                         }
                         let v = dot(co, z);
@@ -191,7 +226,13 @@ fn lower_face(body: &Body, fid: FaceId, k: usize, out: &mut Vec<Face>) -> Result
                 let xm = [c * x[0] + s * y[0], c * x[1] + s * y[1], c * x[2] + s * y[2]];
                 let ym = [-s * x[0] + c * y[0], -s * x[1] + c * y[1], -s * x[2] + c * y[2]];
                 out.push(Face::new(
-                    Surf::Cyl { o, x: xm, y: ym, ax: z, r: cy.radius },
+                    Surf::Cyl {
+                        o,
+                        x: xm,
+                        y: ym,
+                        ax: z,
+                        r: cy.radius,
+                    },
                     Ival::new(-th, th),
                     Ival::new(vlo - m, vhi + m),
                     None,
@@ -201,6 +242,9 @@ fn lower_face(body: &Body, fid: FaceId, k: usize, out: &mut Vec<Face>) -> Result
             }
             Ok(())
         }
-        s => Err(unsupported(&format!("a {} face (this phase lowers planes and cylinders)", s.kind()))),
+        s => Err(unsupported(&format!(
+            "a {} face (this phase lowers planes and cylinders)",
+            s.kind()
+        ))),
     }
 }

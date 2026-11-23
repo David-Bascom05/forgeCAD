@@ -8,7 +8,10 @@ use forge_cam_geom::tool::{Cutter, assemble};
 struct Rng(u64);
 impl Rng {
     fn f(&mut self) -> f64 {
-        self.0 = self.0.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        self.0 = self
+            .0
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
         ((self.0 >> 11) as f64) / ((1u64 << 53) as f64)
     }
     fn r(&mut self, a: f64, b: f64) -> f64 {
@@ -38,16 +41,63 @@ fn closed_form_never_contradicts_the_branch_and_bound() {
         let body = &t.bodies[0];
         // a face: a wall along x at y = 0, a cylinder about z, or a floor rectangle
         let f = match case % 3 {
-            0 => Face::new(Surf::Plane { o: [0.0, 0.0, 0.0], u: [1.0, 0.0, 0.0], v: [0.0, 0.0, 1.0] }, Ival::new(-10.0, 10.0), Ival::new(-5.0, 5.0), None, 0.0, 0),
-            1 => Face::new(Surf::Cyl { o: [0.0, 0.0, -5.0], x: [1.0, 0.0, 0.0], y: [0.0, 1.0, 0.0], ax: [0.0, 0.0, 1.0], r: 5.0 }, Ival::new(-0.8, 0.8), Ival::new(0.0, 10.0), None, 0.0, 1),
+            0 => Face::new(
+                Surf::Plane {
+                    o: [0.0, 0.0, 0.0],
+                    u: [1.0, 0.0, 0.0],
+                    v: [0.0, 0.0, 1.0],
+                },
+                Ival::new(-10.0, 10.0),
+                Ival::new(-5.0, 5.0),
+                None,
+                0.0,
+                0,
+            ),
+            1 => Face::new(
+                Surf::Cyl {
+                    o: [0.0, 0.0, -5.0],
+                    x: [1.0, 0.0, 0.0],
+                    y: [0.0, 1.0, 0.0],
+                    ax: [0.0, 0.0, 1.0],
+                    r: 5.0,
+                },
+                Ival::new(-0.8, 0.8),
+                Ival::new(0.0, 10.0),
+                None,
+                0.0,
+                1,
+            ),
             _ => {
                 let segs = vec![
-                    TSeg::Line { a: [-8.0, -6.0], b: [8.0, -6.0] },
-                    TSeg::Line { a: [8.0, -6.0], b: [8.0, 6.0] },
-                    TSeg::Line { a: [8.0, 6.0], b: [-8.0, 6.0] },
-                    TSeg::Line { a: [-8.0, 6.0], b: [-8.0, -6.0] },
+                    TSeg::Line {
+                        a: [-8.0, -6.0],
+                        b: [8.0, -6.0],
+                    },
+                    TSeg::Line {
+                        a: [8.0, -6.0],
+                        b: [8.0, 6.0],
+                    },
+                    TSeg::Line {
+                        a: [8.0, 6.0],
+                        b: [-8.0, 6.0],
+                    },
+                    TSeg::Line {
+                        a: [-8.0, 6.0],
+                        b: [-8.0, -6.0],
+                    },
                 ];
-                Face::new(Surf::Plane { o: [0.0, 0.0, -2.0], u: [1.0, 0.0, 0.0], v: [0.0, 1.0, 0.0] }, Ival::new(-8.0, 8.0), Ival::new(-6.0, 6.0), Some(Trim { segs }), 0.0, 2)
+                Face::new(
+                    Surf::Plane {
+                        o: [0.0, 0.0, -2.0],
+                        u: [1.0, 0.0, 0.0],
+                        v: [0.0, 1.0, 0.0],
+                    },
+                    Ival::new(-8.0, 8.0),
+                    Ival::new(-6.0, 6.0),
+                    Some(Trim { segs }),
+                    0.0,
+                    2,
+                )
             }
         };
         assert!(f.prism.is_some(), "case {case}");
@@ -55,7 +105,10 @@ fn closed_form_never_contradicts_the_branch_and_bound() {
         let z = g.r(-6.0, 4.0);
         let mv = if case % 5 == 4 {
             let (x, y) = (g.r(-12.0, 12.0), g.r(-9.0, 9.0));
-            Move::Line { a: [x, y, z + 4.0], b: [x, y, z - 3.0] }
+            Move::Line {
+                a: [x, y, z + 4.0],
+                b: [x, y, z - 3.0],
+            }
         } else if case % 2 == 0 {
             let a = [g.r(-12.0, 12.0), g.r(-9.0, 9.0), z];
             let b = [a[0] + g.r(-6.0, 6.0), a[1] + g.r(-6.0, 6.0), z];
@@ -63,14 +116,24 @@ fn closed_form_never_contradicts_the_branch_and_bound() {
         } else {
             let th = g.r(0.0, 6.28);
             let (c0, s0) = (forge_math_free_cos(th), forge_math_free_sin(th));
-            Move::Arc { c: [g.r(-6.0, 6.0), g.r(-6.0, 6.0), z], x: [c0, s0, 0.0], y: [-s0, c0, 0.0], r: g.r(1.0, 9.0), t0: -g.r(0.05, 0.9), t1: g.r(0.05, 0.9) }
+            Move::Arc {
+                c: [g.r(-6.0, 6.0), g.r(-6.0, 6.0), z],
+                x: [c0, s0, 0.0],
+                y: [-s0, c0, 0.0],
+                r: g.r(1.0, 9.0),
+                t0: -g.r(0.05, 0.9),
+                t1: g.r(0.05, 0.9),
+            }
         };
         let lim = -0.01;
         let (a, _) = certify(body, &f, &mv, lim, 0.0025, 100_000);
         let (b, _) = certify_bb(body, &f, &mv, lim, 0.0025, 100_000);
         if let (Some(x), Some(y)) = (proven(&a), proven(&b)) {
             decided += 1;
-            assert_eq!(x, y, "case {case}: closed form {a:?}, branch and bound {b:?}, move {mv:?}");
+            assert_eq!(
+                x, y,
+                "case {case}: closed form {a:?}, branch and bound {b:?}, move {mv:?}"
+            );
             agree += 1;
             hits += usize::from(!x);
         }

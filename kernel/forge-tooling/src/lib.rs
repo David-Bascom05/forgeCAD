@@ -15,13 +15,32 @@ use toml::{Table, num, tables, text};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum LibError {
-    Toml { file: String, line: usize, what: String },
+    Toml {
+        file: String,
+        line: usize,
+        what: String,
+    },
     /// A record is missing a field its type needs: the record, the field, how to fix it.
-    Missing { record: String, field: &'static str, fix: String },
+    Missing {
+        record: String,
+        field: &'static str,
+        fix: String,
+    },
     /// A field has a value out of its range or of the wrong kind.
-    Bad { record: String, field: &'static str, why: String },
-    Unknown { kind: &'static str, name: String, near: Vec<String> },
-    Duplicate { kind: &'static str, name: String },
+    Bad {
+        record: String,
+        field: &'static str,
+        why: String,
+    },
+    Unknown {
+        kind: &'static str,
+        name: String,
+        near: Vec<String>,
+    },
+    Duplicate {
+        kind: &'static str,
+        name: String,
+    },
 }
 
 impl std::fmt::Display for LibError {
@@ -30,7 +49,9 @@ impl std::fmt::Display for LibError {
             LibError::Toml { file, line, what } => write!(f, "{file}:{line}: {what}"),
             LibError::Missing { record, field, fix } => write!(f, "{record}: missing `{field}` ({fix})"),
             LibError::Bad { record, field, why } => write!(f, "{record}: `{field}` {why}"),
-            LibError::Unknown { kind, name, near } => write!(f, "no {kind} `{name}`; near: {}", near.join(", ")),
+            LibError::Unknown { kind, name, near } => {
+                write!(f, "no {kind} `{name}`; near: {}", near.join(", "))
+            }
             LibError::Duplicate { kind, name } => write!(f, "{kind} `{name}` defined twice"),
         }
     }
@@ -95,7 +116,10 @@ impl Kind {
     }
     /// Makes holes (axial moves only) rather than mills.
     pub fn is_hole_tool(self) -> bool {
-        matches!(self, Kind::Spot | Kind::Drill | Kind::Tap | Kind::Reamer | Kind::Counterbore | Kind::Countersink)
+        matches!(
+            self,
+            Kind::Spot | Kind::Drill | Kind::Tap | Kind::Reamer | Kind::Counterbore | Kind::Countersink
+        )
     }
 }
 
@@ -141,29 +165,61 @@ pub struct Tool {
 }
 
 fn need(t: &Table, rec: &str, k: &'static str) -> Result<f64, LibError> {
-    num(t, k).ok_or_else(|| LibError::Missing { record: rec.to_string(), field: k, fix: format!("give `{k} = <mm>`") })
+    num(t, k).ok_or_else(|| LibError::Missing {
+        record: rec.to_string(),
+        field: k,
+        fix: format!("give `{k} = <mm>`"),
+    })
 }
 
 fn positive(rec: &str, k: &'static str, v: f64) -> Result<f64, LibError> {
-    if v > 0.0 && v.is_finite() { Ok(v) } else { Err(LibError::Bad { record: rec.to_string(), field: k, why: format!("must be > 0 (is {v})") }) }
+    if v > 0.0 && v.is_finite() {
+        Ok(v)
+    } else {
+        Err(LibError::Bad {
+            record: rec.to_string(),
+            field: k,
+            why: format!("must be > 0 (is {v})"),
+        })
+    }
 }
 
 impl Tool {
     pub fn from_table(t: &Table) -> Result<Tool, LibError> {
-        let id = text(t, "id").ok_or_else(|| LibError::Missing { record: "[[tool]]".into(), field: "id", fix: "give `id = \"...\"`".into() })?.to_string();
+        let id = text(t, "id")
+            .ok_or_else(|| LibError::Missing {
+                record: "[[tool]]".into(),
+                field: "id",
+                fix: "give `id = \"...\"`".into(),
+            })?
+            .to_string();
         let rec = format!("tool `{id}`");
         let ty = text(t, "type").ok_or_else(|| LibError::Missing { record: rec.clone(), field: "type", fix: "give `type = \"flat\"` (or ball, bull, chamfer, spot, drill, tap, thread_mill, reamer, bore, counterbore, countersink, slot, engrave)".into() })?;
-        let kind = Kind::parse(ty).ok_or_else(|| LibError::Bad { record: rec.clone(), field: "type", why: format!("`{ty}` is not a tool type") })?;
+        let kind = Kind::parse(ty).ok_or_else(|| LibError::Bad {
+            record: rec.clone(),
+            field: "type",
+            why: format!("`{ty}` is not a tool type"),
+        })?;
         let dc = positive(&rec, "dc", need(t, &rec, "dc")?)?;
         let lcf = positive(&rec, "lcf", need(t, &rec, "lcf")?)?;
         let dcon = positive(&rec, "dcon", need(t, &rec, "dcon")?)?;
         let oal = positive(&rec, "oal", need(t, &rec, "oal")?)?;
         if oal <= lcf {
-            return Err(LibError::Bad { record: rec, field: "oal", why: format!("{oal} is not longer than the flutes ({lcf})") });
+            return Err(LibError::Bad {
+                record: rec,
+                field: "oal",
+                why: format!("{oal} is not longer than the flutes ({lcf})"),
+            });
         }
-        let re = if kind == Kind::Bull { positive(&rec, "re", need(t, &rec, "re")?)? } else { num(t, "re").unwrap_or(0.0) };
+        let re = if kind == Kind::Bull {
+            positive(&rec, "re", need(t, &rec, "re")?)?
+        } else {
+            num(t, "re").unwrap_or(0.0)
+        };
         let angle = match kind {
-            Kind::Chamfer | Kind::Spot | Kind::Countersink | Kind::Engrave => positive(&rec, "angle", need(t, &rec, "angle")?)?,
+            Kind::Chamfer | Kind::Spot | Kind::Countersink | Kind::Engrave => {
+                positive(&rec, "angle", need(t, &rec, "angle")?)?
+            }
             Kind::Drill => positive(&rec, "sig", need(t, &rec, "sig")?)?,
             _ => num(t, "angle").unwrap_or(0.0),
         };
@@ -175,7 +231,13 @@ impl Tool {
         for p in tables(t, "preset") {
             presets.push(Preset {
                 name: text(p, "name").unwrap_or("").to_string(),
-                group: text(p, "group").ok_or_else(|| LibError::Missing { record: format!("{rec} preset"), field: "group", fix: "give `group = \"N\"` (ISO P M K N S H)".into() })?.to_string(),
+                group: text(p, "group")
+                    .ok_or_else(|| LibError::Missing {
+                        record: format!("{rec} preset"),
+                        field: "group",
+                        fix: "give `group = \"N\"` (ISO P M K N S H)".into(),
+                    })?
+                    .to_string(),
                 vc: need(p, &rec, "vc")?,
                 fz: need(p, &rec, "fz")?,
                 ap: num(p, "ap"),
@@ -210,9 +272,19 @@ impl Tool {
     pub fn cutter(&self) -> Cutter {
         match self.kind {
             Kind::Ball => Cutter::Ball { d: self.dc },
-            Kind::Bull => Cutter::Bull { d: self.dc, re: self.re },
-            Kind::Chamfer | Kind::Spot | Kind::Countersink | Kind::Engrave => Cutter::Chamfer { d_tip: self.tip_d, angle: self.angle, d: self.dc },
-            Kind::Drill => Cutter::Drill { d: self.dc, angle: self.angle },
+            Kind::Bull => Cutter::Bull {
+                d: self.dc,
+                re: self.re,
+            },
+            Kind::Chamfer | Kind::Spot | Kind::Countersink | Kind::Engrave => Cutter::Chamfer {
+                d_tip: self.tip_d,
+                angle: self.angle,
+                d: self.dc,
+            },
+            Kind::Drill => Cutter::Drill {
+                d: self.dc,
+                angle: self.angle,
+            },
             // taps, thread mills, reamers, bores, slot cutters: their flat envelope
             _ => Cutter::Flat { d: self.dc },
         }
@@ -220,7 +292,9 @@ impl Tool {
 
     /// The whole tool as exact bodies, held at `stickout` (tip to the holder's nose).
     pub fn shape(&self, stickout: f64, holder: Option<&Holder>) -> Result<Shape, ToolError> {
-        let h = holder.map(|h| gtool::Holder { profile: h.profile.clone() });
+        let h = holder.map(|h| gtool::Holder {
+            profile: h.profile.clone(),
+        });
         gtool::assemble(&self.cutter(), self.lcf, self.dcon, stickout, h.as_ref())
     }
 }
@@ -240,7 +314,13 @@ pub struct Holder {
 
 impl Holder {
     pub fn from_table(t: &Table) -> Result<Holder, LibError> {
-        let id = text(t, "id").ok_or_else(|| LibError::Missing { record: "[[holder]]".into(), field: "id", fix: "give `id`".into() })?.to_string();
+        let id = text(t, "id")
+            .ok_or_else(|| LibError::Missing {
+                record: "[[holder]]".into(),
+                field: "id",
+                fix: "give `id`".into(),
+            })?
+            .to_string();
         let rec = format!("holder `{id}`");
         let mut profile = Vec::new();
         match t.get("profile") {
@@ -249,16 +329,38 @@ impl Holder {
                     match p {
                         toml::Val::Arr(q) if q.len() == 2 => match (&q[0], &q[1]) {
                             (toml::Val::Num(z), toml::Val::Num(d)) => profile.push([*z, *d]),
-                            _ => return Err(LibError::Bad { record: rec, field: "profile", why: "each ring is [z, d] numbers".into() }),
+                            _ => {
+                                return Err(LibError::Bad {
+                                    record: rec,
+                                    field: "profile",
+                                    why: "each ring is [z, d] numbers".into(),
+                                });
+                            }
                         },
-                        _ => return Err(LibError::Bad { record: rec, field: "profile", why: "each ring is [z, d]".into() }),
+                        _ => {
+                            return Err(LibError::Bad {
+                                record: rec,
+                                field: "profile",
+                                why: "each ring is [z, d]".into(),
+                            });
+                        }
                     }
                 }
             }
-            _ => return Err(LibError::Missing { record: rec, field: "profile", fix: "give `profile = [[z, d], ...]` from the nose up".into() }),
+            _ => {
+                return Err(LibError::Missing {
+                    record: rec,
+                    field: "profile",
+                    fix: "give `profile = [[z, d], ...]` from the nose up".into(),
+                });
+            }
         }
         if profile.len() < 2 || profile.windows(2).any(|w| w[1][0] < w[0][0]) || profile[0][0] != 0.0 {
-            return Err(LibError::Bad { record: rec, field: "profile", why: "needs two or more rings from z = 0, z never falling".into() });
+            return Err(LibError::Bad {
+                record: rec,
+                field: "profile",
+                why: "needs two or more rings from z = 0, z never falling".into(),
+            });
         }
         Ok(Holder {
             gauge_length: need(t, &rec, "gauge_length")?,
@@ -286,9 +388,19 @@ pub struct Assembly {
 
 impl Assembly {
     pub fn from_table(t: &Table) -> Result<Assembly, LibError> {
-        let tn = num(t, "t").ok_or_else(|| LibError::Missing { record: "[[assembly]]".into(), field: "t", fix: "give the tool number `t = 1`".into() })?;
+        let tn = num(t, "t").ok_or_else(|| LibError::Missing {
+            record: "[[assembly]]".into(),
+            field: "t",
+            fix: "give the tool number `t = 1`".into(),
+        })?;
         let rec = format!("assembly T{tn}");
-        let tool = text(t, "tool").ok_or_else(|| LibError::Missing { record: rec.clone(), field: "tool", fix: "name a [[tool]] id".into() })?.to_string();
+        let tool = text(t, "tool")
+            .ok_or_else(|| LibError::Missing {
+                record: rec.clone(),
+                field: "tool",
+                fix: "name a [[tool]] id".into(),
+            })?
+            .to_string();
         let stickout = positive(&rec, "stickout", need(t, &rec, "stickout")?)?;
         Ok(Assembly {
             t: tn as u32,
@@ -327,21 +439,56 @@ pub struct Machine {
 
 impl Machine {
     pub fn from_table(t: &Table) -> Result<Machine, LibError> {
-        let name = text(t, "name").ok_or_else(|| LibError::Missing { record: "[[machine]]".into(), field: "name", fix: "give `name`".into() })?.to_string();
+        let name = text(t, "name")
+            .ok_or_else(|| LibError::Missing {
+                record: "[[machine]]".into(),
+                field: "name",
+                fix: "give `name`".into(),
+            })?
+            .to_string();
         let rec = format!("machine `{name}`");
         let mut joints = Vec::new();
         for j in tables(t, "joint") {
             let jn = text(j, "name").unwrap_or("?").to_string();
-            let axis = toml::nums(j, "axis").filter(|v| v.len() == 3).ok_or_else(|| LibError::Missing { record: format!("{rec} joint {jn}"), field: "axis", fix: "give `axis = [1, 0, 0]`".into() })?;
-            let range = toml::nums(j, "range").filter(|v| v.len() == 2 && v[0] < v[1]).ok_or_else(|| LibError::Missing { record: format!("{rec} joint {jn}"), field: "range", fix: "give `range = [lo, hi]`".into() })?;
-            joints.push(Joint { name: jn, axis: [axis[0], axis[1], axis[2]], range: [range[0], range[1]], rapid: num(j, "rapid").unwrap_or(10_000.0) });
+            let axis = toml::nums(j, "axis")
+                .filter(|v| v.len() == 3)
+                .ok_or_else(|| LibError::Missing {
+                    record: format!("{rec} joint {jn}"),
+                    field: "axis",
+                    fix: "give `axis = [1, 0, 0]`".into(),
+                })?;
+            let range = toml::nums(j, "range")
+                .filter(|v| v.len() == 2 && v[0] < v[1])
+                .ok_or_else(|| LibError::Missing {
+                    record: format!("{rec} joint {jn}"),
+                    field: "range",
+                    fix: "give `range = [lo, hi]`".into(),
+                })?;
+            joints.push(Joint {
+                name: jn,
+                axis: [axis[0], axis[1], axis[2]],
+                range: [range[0], range[1]],
+                rapid: num(j, "rapid").unwrap_or(10_000.0),
+            });
         }
-        let rpm = toml::nums(t, "rpm").filter(|v| v.len() == 2).ok_or_else(|| LibError::Missing { record: rec.clone(), field: "rpm", fix: "give `rpm = [min, max]`".into() })?;
+        let rpm = toml::nums(t, "rpm")
+            .filter(|v| v.len() == 2)
+            .ok_or_else(|| LibError::Missing {
+                record: rec.clone(),
+                field: "rpm",
+                fix: "give `rpm = [min, max]`".into(),
+            })?;
         let cr = toml::nums(t, "curve_rpm").unwrap_or_default();
         let ck = toml::nums(t, "curve_kw").unwrap_or_default();
         Ok(Machine {
             kind: text(t, "kind").unwrap_or("vmc3").to_string(),
-            control: text(t, "control").ok_or_else(|| LibError::Missing { record: rec.clone(), field: "control", fix: "name its dialect: fanuc, haas, linuxcnc or grbl".into() })?.to_string(),
+            control: text(t, "control")
+                .ok_or_else(|| LibError::Missing {
+                    record: rec.clone(),
+                    field: "control",
+                    fix: "name its dialect: fanuc, haas, linuxcnc or grbl".into(),
+                })?
+                .to_string(),
             joints,
             rpm: [rpm[0], rpm[1]],
             power: cr.iter().zip(ck.iter()).map(|(a, b)| [*a, *b]).collect(),
@@ -384,25 +531,38 @@ pub struct Library {
 impl Library {
     /// Adds a file's records (later files may not redefine an id already present).
     pub fn add(&mut self, file: &str, src: &str) -> Result<(), LibError> {
-        let t = toml::parse(src).map_err(|e| LibError::Toml { file: file.to_string(), line: e.line, what: e.what })?;
+        let t = toml::parse(src).map_err(|e| LibError::Toml {
+            file: file.to_string(),
+            line: e.line,
+            what: e.what,
+        })?;
         for r in tables(&t, "tool") {
             let x = Tool::from_table(r)?;
             if self.tools.iter().any(|o| o.id == x.id) {
-                return Err(LibError::Duplicate { kind: "tool", name: x.id });
+                return Err(LibError::Duplicate {
+                    kind: "tool",
+                    name: x.id,
+                });
             }
             self.tools.push(x);
         }
         for r in tables(&t, "holder") {
             let x = Holder::from_table(r)?;
             if self.holders.iter().any(|o| o.id == x.id) {
-                return Err(LibError::Duplicate { kind: "holder", name: x.id });
+                return Err(LibError::Duplicate {
+                    kind: "holder",
+                    name: x.id,
+                });
             }
             self.holders.push(x);
         }
         for r in tables(&t, "assembly") {
             let x = Assembly::from_table(r)?;
             if self.assemblies.iter().any(|o| o.t == x.t) {
-                return Err(LibError::Duplicate { kind: "assembly", name: format!("T{}", x.t) });
+                return Err(LibError::Duplicate {
+                    kind: "assembly",
+                    name: format!("T{}", x.t),
+                });
             }
             self.assemblies.push(x);
         }
@@ -425,13 +585,34 @@ impl Library {
     }
 
     pub fn tool(&self, id: &str) -> Result<&Tool, LibError> {
-        self.tools.iter().find(|t| t.id == id).ok_or_else(|| LibError::Unknown { kind: "tool", name: id.to_string(), near: near(id, self.tools.iter().map(|t| t.id.as_str())) })
+        self.tools
+            .iter()
+            .find(|t| t.id == id)
+            .ok_or_else(|| LibError::Unknown {
+                kind: "tool",
+                name: id.to_string(),
+                near: near(id, self.tools.iter().map(|t| t.id.as_str())),
+            })
     }
     pub fn holder(&self, id: &str) -> Result<&Holder, LibError> {
-        self.holders.iter().find(|t| t.id == id).ok_or_else(|| LibError::Unknown { kind: "holder", name: id.to_string(), near: near(id, self.holders.iter().map(|t| t.id.as_str())) })
+        self.holders
+            .iter()
+            .find(|t| t.id == id)
+            .ok_or_else(|| LibError::Unknown {
+                kind: "holder",
+                name: id.to_string(),
+                near: near(id, self.holders.iter().map(|t| t.id.as_str())),
+            })
     }
     pub fn machine(&self, name: &str) -> Result<&Machine, LibError> {
-        self.machines.iter().find(|t| t.name == name).ok_or_else(|| LibError::Unknown { kind: "machine", name: name.to_string(), near: near(name, self.machines.iter().map(|t| t.name.as_str())) })
+        self.machines
+            .iter()
+            .find(|t| t.name == name)
+            .ok_or_else(|| LibError::Unknown {
+                kind: "machine",
+                name: name.to_string(),
+                near: near(name, self.machines.iter().map(|t| t.name.as_str())),
+            })
     }
     pub fn group(&self, g: &str) -> Option<&feeds::Group> {
         self.cutting.iter().find(|x| x.group == g || x.name == g)
@@ -450,7 +631,9 @@ fn edit_distance(a: &str, b: &str) -> usize {
     for i in 1..=a.len() {
         let mut cur = vec![i; b.len() + 1];
         for j in 1..=b.len() {
-            cur[j] = (prev[j] + 1).min(cur[j - 1] + 1).min(prev[j - 1] + usize::from(a[i - 1] != b[j - 1]));
+            cur[j] = (prev[j] + 1)
+                .min(cur[j - 1] + 1)
+                .min(prev[j - 1] + usize::from(a[i - 1] != b[j - 1]));
         }
         prev = cur;
     }
@@ -477,11 +660,19 @@ mod tests {
         assert_eq!(m.power_at(750.0), Some(5.5));
         for t in &l.tools {
             let h = l.holder("bt40-er32").unwrap();
-            t.shape(t.lcf + 5.0, Some(h)).unwrap_or_else(|e| panic!("{}: {e:?}", t.id));
+            t.shape(t.lcf + 5.0, Some(h))
+                .unwrap_or_else(|e| panic!("{}: {e:?}", t.id));
         }
-        assert!(matches!(l.tool("flat-7"), Err(LibError::Unknown { near, .. }) if near.contains(&"flat-6".to_string())));
+        assert!(
+            matches!(l.tool("flat-7"), Err(LibError::Unknown { near, .. }) if near.contains(&"flat-6".to_string()))
+        );
         let mut m = Library::default();
-        let e = m.add("x.toml", "[[tool]]\nid = \"a\"\ntype = \"flat\"\ndc = 6\ndcon = 6\noal = 50\n").unwrap_err();
+        let e = m
+            .add(
+                "x.toml",
+                "[[tool]]\nid = \"a\"\ntype = \"flat\"\ndc = 6\ndcon = 6\noal = 50\n",
+            )
+            .unwrap_err();
         assert!(matches!(e, LibError::Missing { field: "lcf", .. }), "{e:?}");
     }
 }

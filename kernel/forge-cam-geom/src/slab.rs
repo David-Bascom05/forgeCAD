@@ -20,7 +20,11 @@ use crate::tool::Body;
 #[derive(Clone, Debug, PartialEq)]
 pub enum Prism {
     /// A horizontal face at height z, its region in xy.
-    Flat { z: f64, region: Vec<TSeg>, boxes: Vec<[f64; 4]> },
+    Flat {
+        z: f64,
+        region: Vec<TSeg>,
+        boxes: Vec<[f64; 4]>,
+    },
     /// A vertical face over a section curve, for heights z0..z1.
     Wall { sec: Sec, z0: f64, z1: f64 },
 }
@@ -28,9 +32,18 @@ pub enum Prism {
 /// A section or path curve in xy.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Sec {
-    Seg { a: [f64; 2], b: [f64; 2] },
+    Seg {
+        a: [f64; 2],
+        b: [f64; 2],
+    },
     /// Of at most a half turn.
-    Arc { c: [f64; 2], r: f64, a: [f64; 2], b: [f64; 2], ccw: bool },
+    Arc {
+        c: [f64; 2],
+        r: f64,
+        a: [f64; 2],
+        b: [f64; 2],
+        ccw: bool,
+    },
 }
 
 fn p(x: f64) -> Ival {
@@ -110,17 +123,26 @@ pub fn pt_sec(q: [f64; 2], s: &Sec) -> Ival {
             if t.lo >= 0.0 && t.hi <= 1.0 {
                 return perp;
             }
-            Ival { lo: perp.lo, hi: da.hi.min(db.hi) }
+            Ival {
+                lo: perp.lo,
+                hi: da.hi.min(db.hi),
+            }
         }
         Sec::Arc { c, r, a, b, ccw } => {
             let v = sub2(q, c);
             let circ = len(v).sub(p(r)).abs();
             let (da, db) = (len(sub2(q, a)), len(sub2(q, b)));
-            let ends = Ival { lo: da.lo.min(db.lo), hi: da.hi.min(db.hi) };
+            let ends = Ival {
+                lo: da.lo.min(db.lo),
+                hi: da.hi.min(db.hi),
+            };
             match in_sector(c, a, b, ccw, v) {
                 1 => circ,
                 -1 => ends,
-                _ => Ival { lo: circ.lo.min(ends.lo), hi: ends.hi },
+                _ => Ival {
+                    lo: circ.lo.min(ends.lo),
+                    hi: ends.hi,
+                },
             }
         }
     }
@@ -176,10 +198,22 @@ pub fn dist(s: &Sec, t: &Sec) -> Ival {
     let mut cs: Vec<Cand> = Vec::new();
     let (sa, sb) = ends(s);
     let (ta, tb) = ends(t);
-    cs.push(Cand { d: pt_sec(sa, t), sure: true });
-    cs.push(Cand { d: pt_sec(sb, t), sure: true });
-    cs.push(Cand { d: pt_sec(ta, s), sure: true });
-    cs.push(Cand { d: pt_sec(tb, s), sure: true });
+    cs.push(Cand {
+        d: pt_sec(sa, t),
+        sure: true,
+    });
+    cs.push(Cand {
+        d: pt_sec(sb, t),
+        sure: true,
+    });
+    cs.push(Cand {
+        d: pt_sec(ta, s),
+        sure: true,
+    });
+    cs.push(Cand {
+        d: pt_sec(tb, s),
+        sure: true,
+    });
     match (*s, *t) {
         (Sec::Seg { a, b }, Sec::Seg { a: c, b: d }) => {
             // they cross: 0
@@ -188,13 +222,39 @@ pub fn dist(s: &Sec, t: &Sec) -> Ival {
             let o2 = cross(u, sub2(d, a));
             let o3 = cross(v, sub2(a, c));
             let o4 = cross(v, sub2(b, c));
-            let apart = (o1.lo > 0.0 && o2.lo > 0.0) || (o1.hi < 0.0 && o2.hi < 0.0) || (o3.lo > 0.0 && o4.lo > 0.0) || (o3.hi < 0.0 && o4.hi < 0.0);
-            let cross_sure = ((o1.lo > 0.0 && o2.hi < 0.0) || (o1.hi < 0.0 && o2.lo > 0.0)) && ((o3.lo > 0.0 && o4.hi < 0.0) || (o3.hi < 0.0 && o4.lo > 0.0));
+            let apart = (o1.lo > 0.0 && o2.lo > 0.0)
+                || (o1.hi < 0.0 && o2.hi < 0.0)
+                || (o3.lo > 0.0 && o4.lo > 0.0)
+                || (o3.hi < 0.0 && o4.hi < 0.0);
+            let cross_sure = ((o1.lo > 0.0 && o2.hi < 0.0) || (o1.hi < 0.0 && o2.lo > 0.0))
+                && ((o3.lo > 0.0 && o4.hi < 0.0) || (o3.hi < 0.0 && o4.lo > 0.0));
             if !apart {
-                cs.push(Cand { d: Ival::pt(0.0), sure: cross_sure });
+                cs.push(Cand {
+                    d: Ival::pt(0.0),
+                    sure: cross_sure,
+                });
             }
         }
-        (Sec::Seg { a, b }, Sec::Arc { c, r, a: pa, b: pb, ccw }) | (Sec::Arc { c, r, a: pa, b: pb, ccw }, Sec::Seg { a, b }) => {
+        (
+            Sec::Seg { a, b },
+            Sec::Arc {
+                c,
+                r,
+                a: pa,
+                b: pb,
+                ccw,
+            },
+        )
+        | (
+            Sec::Arc {
+                c,
+                r,
+                a: pa,
+                b: pb,
+                ccw,
+            },
+            Sec::Seg { a, b },
+        ) => {
             let d = sub2(b, a);
             let dd = dot(d, d);
             let w = sub2(c, a);
@@ -204,43 +264,95 @@ pub fn dist(s: &Sec, t: &Sec) -> Ival {
             // the common normal through the centre: distance |h − r| if the foot is on the
             // segment and its direction from the centre in the arc
             let fv = [foot[0].sub(p(c[0])), foot[1].sub(p(c[1]))];
-            let on = if t.lo >= 0.0 && t.hi <= 1.0 { 1 } else if t.hi < 0.0 || t.lo > 1.0 { -1 } else { 0 };
+            let on = if t.lo >= 0.0 && t.hi <= 1.0 {
+                1
+            } else if t.hi < 0.0 || t.lo > 1.0 {
+                -1
+            } else {
+                0
+            };
             let f = and3(on, in_sector(c, pa, pb, ccw, fv));
             if f >= 0 {
-                cs.push(Cand { d: h.sub(p(r)).abs(), sure: f > 0 });
+                cs.push(Cand {
+                    d: h.sub(p(r)).abs(),
+                    sure: f > 0,
+                });
             }
             // crossings: the line meets the circle where the foot ± k along it
             if h.lo <= r {
                 let k2 = p(r).sqr().sub(h.sqr());
-                let k = Ival { lo: k2.lo.max(0.0), hi: k2.hi.max(0.0) }.sqrt().div(dd.sqrt());
+                let k = Ival {
+                    lo: k2.lo.max(0.0),
+                    hi: k2.hi.max(0.0),
+                }
+                .sqrt()
+                .div(dd.sqrt());
                 let mut sgn = 0;
                 while sgn < 2 {
                     let tt = if sgn == 0 { t.add(k) } else { t.sub(k) };
                     let x = [p(a[0]).add(tt.mul(d[0])), p(a[1]).add(tt.mul(d[1]))];
                     let xv = [x[0].sub(p(c[0])), x[1].sub(p(c[1]))];
-                    let on = if tt.lo >= 0.0 && tt.hi <= 1.0 { 1 } else if tt.hi < 0.0 || tt.lo > 1.0 { -1 } else { 0 };
+                    let on = if tt.lo >= 0.0 && tt.hi <= 1.0 {
+                        1
+                    } else if tt.hi < 0.0 || tt.lo > 1.0 {
+                        -1
+                    } else {
+                        0
+                    };
                     let f = and3(on, in_sector(c, pa, pb, ccw, xv));
                     if f >= 0 {
-                        cs.push(Cand { d: Ival::pt(0.0), sure: f > 0 && h.hi < r });
+                        cs.push(Cand {
+                            d: Ival::pt(0.0),
+                            sure: f > 0 && h.hi < r,
+                        });
                     }
                     sgn += 1;
                 }
             }
         }
-        (Sec::Arc { c: c1, r: r1, a: a1, b: b1, ccw: w1 }, Sec::Arc { c: c2, r: r2, a: a2, b: b2, ccw: w2 }) => {
+        (
+            Sec::Arc {
+                c: c1,
+                r: r1,
+                a: a1,
+                b: b1,
+                ccw: w1,
+            },
+            Sec::Arc {
+                c: c2,
+                r: r2,
+                a: a2,
+                b: b2,
+                ccw: w2,
+            },
+        ) => {
             let dv = sub2(c2, c1);
             let dl = len(dv);
             if c1 == c2 {
                 // concentric: |r1 − r2| wherever the sectors overlap
                 let v1 = sub2(a1, c1);
                 let v2 = sub2(a2, c2);
-                let o = if in_sector(c1, a1, b1, w1, v2) > 0 || in_sector(c2, a2, b2, w2, v1) > 0 { 1 } else if in_sector(c1, a1, b1, w1, sub2(b2, c2)) > 0 || in_sector(c2, a2, b2, w2, sub2(b1, c1)) > 0 { 1 } else { 0 };
-                cs.push(Cand { d: p(r1).sub(p(r2)).abs(), sure: o > 0 });
+                let o = if in_sector(c1, a1, b1, w1, v2) > 0 || in_sector(c2, a2, b2, w2, v1) > 0 {
+                    1
+                } else if in_sector(c1, a1, b1, w1, sub2(b2, c2)) > 0
+                    || in_sector(c2, a2, b2, w2, sub2(b1, c1)) > 0
+                {
+                    1
+                } else {
+                    0
+                };
+                cs.push(Cand {
+                    d: p(r1).sub(p(r2)).abs(),
+                    sure: o > 0,
+                });
             } else {
                 // the line of centres: the points c1 ± r1 u and c2 ± r2 u
                 let mut i = 0;
                 while i < 4 {
-                    let (s1, s2) = (if i & 1 == 0 { 1.0 } else { -1.0 }, if i & 2 == 0 { 1.0 } else { -1.0 });
+                    let (s1, s2) = (
+                        if i & 1 == 0 { 1.0 } else { -1.0 },
+                        if i & 2 == 0 { 1.0 } else { -1.0 },
+                    );
                     let u1 = [dv[0].scale(s1), dv[1].scale(s1)];
                     let u2 = [dv[0].scale(s2), dv[1].scale(s2)];
                     let f = and3(in_sector(c1, a1, b1, w1, u1), in_sector(c2, a2, b2, w2, u2));
@@ -258,7 +370,11 @@ pub fn dist(s: &Sec, t: &Sec) -> Ival {
                     let dd2 = dot(dv, dv);
                     let kk = dd2.add(p(r1).sqr()).sub(p(r2).sqr()).div(dd2.scale(2.0));
                     let h2 = p(r1).sqr().div(dd2).sub(kk.sqr());
-                    let h = Ival { lo: h2.lo.max(0.0), hi: h2.hi.max(0.0) }.sqrt();
+                    let h = Ival {
+                        lo: h2.lo.max(0.0),
+                        hi: h2.hi.max(0.0),
+                    }
+                    .sqrt();
                     let base = [p(c1[0]).add(kk.mul(dv[0])), p(c1[1]).add(kk.mul(dv[1]))];
                     let pv = [dv[1].neg(), dv[0]];
                     let mut sg = 0;
@@ -270,7 +386,10 @@ pub fn dist(s: &Sec, t: &Sec) -> Ival {
                             in_sector(c2, a2, b2, w2, [x[0].sub(p(c2[0])), x[1].sub(p(c2[1]))]),
                         );
                         if f >= 0 {
-                            cs.push(Cand { d: Ival::pt(0.0), sure: f > 0 && h2.lo > 0.0 });
+                            cs.push(Cand {
+                                d: Ival::pt(0.0),
+                                sure: f > 0 && h2.lo > 0.0,
+                            });
                         }
                         sg += 1;
                     }
@@ -285,7 +404,12 @@ pub fn dist(s: &Sec, t: &Sec) -> Ival {
 pub fn tseg_box(s: &TSeg) -> [f64; 4] {
     match *s {
         TSeg::Line { a, b } => [a[0].min(b[0]), a[1].min(b[1]), a[0].max(b[0]), a[1].max(b[1])],
-        TSeg::Arc { c, r, .. } => [Ival::pt(c[0]).sub(Ival::pt(r)).lo, Ival::pt(c[1]).sub(Ival::pt(r)).lo, Ival::pt(c[0]).add(Ival::pt(r)).hi, Ival::pt(c[1]).add(Ival::pt(r)).hi],
+        TSeg::Arc { c, r, .. } => [
+            Ival::pt(c[0]).sub(Ival::pt(r)).lo,
+            Ival::pt(c[1]).sub(Ival::pt(r)).lo,
+            Ival::pt(c[0]).add(Ival::pt(r)).hi,
+            Ival::pt(c[1]).add(Ival::pt(r)).hi,
+        ],
     }
 }
 
@@ -298,8 +422,16 @@ fn sec_box(s: &Sec) -> [f64; 4] {
 
 /// A lower bound on the distance between two boxes.
 fn box_gap(a: &[f64; 4], b: &[f64; 4]) -> f64 {
-    let gx = Ival::pt(b[0]).sub(Ival::pt(a[2])).lo.max(Ival::pt(a[0]).sub(Ival::pt(b[2])).lo).max(0.0);
-    let gy = Ival::pt(b[1]).sub(Ival::pt(a[3])).lo.max(Ival::pt(a[1]).sub(Ival::pt(b[3])).lo).max(0.0);
+    let gx = Ival::pt(b[0])
+        .sub(Ival::pt(a[2]))
+        .lo
+        .max(Ival::pt(a[0]).sub(Ival::pt(b[2])).lo)
+        .max(0.0);
+    let gy = Ival::pt(b[1])
+        .sub(Ival::pt(a[3]))
+        .lo
+        .max(Ival::pt(a[1]).sub(Ival::pt(b[3])).lo)
+        .max(0.0);
     Ival::pt(gx).sqr().add(Ival::pt(gy).sqr()).sqrt().lo
 }
 
@@ -335,7 +467,9 @@ fn dist_region(path: &Sec, region: &[TSeg], boxes: &[[f64; 4]], cutoff: f64) -> 
     }
     // inside: the path's start is a face point at distance 0
     let (a, _) = ends(path);
-    let tr = crate::check::Trim { segs: region.to_vec() };
+    let tr = crate::check::Trim {
+        segs: region.to_vec(),
+    };
     let side = tr.classify(Ival::pt(a[0]), Ival::pt(a[1]));
     if side > 0 {
         return Ival::pt(0.0);
@@ -354,24 +488,41 @@ impl Prism {
                 if u[2] == 0.0 && v[2] == 0.0 {
                     // horizontal: the trim mapped to xy
                     let t = f.trim.as_ref()?;
-                    let map = |q: [f64; 2]| [o[0] + q[0] * u[0] + q[1] * v[0], o[1] + q[0] * u[1] + q[1] * v[1]];
+                    let map =
+                        |q: [f64; 2]| [o[0] + q[0] * u[0] + q[1] * v[0], o[1] + q[0] * u[1] + q[1] * v[1]];
                     let flip = u[0] * v[1] - u[1] * v[0] < 0.0;
                     let mut region = Vec::with_capacity(t.segs.len());
                     for s in &t.segs {
                         region.push(match *s {
                             TSeg::Line { a, b } => TSeg::Line { a: map(a), b: map(b) },
-                            TSeg::Arc { a, b, c, r, ccw } => TSeg::Arc { a: map(a), b: map(b), c: map(c), r, ccw: ccw != flip },
+                            TSeg::Arc { a, b, c, r, ccw } => TSeg::Arc {
+                                a: map(a),
+                                b: map(b),
+                                c: map(c),
+                                r,
+                                ccw: ccw != flip,
+                            },
                         });
                     }
                     let boxes = region.iter().map(tseg_box).collect();
-                    return Some(Prism::Flat { z: o[2], region, boxes });
+                    return Some(Prism::Flat {
+                        z: o[2],
+                        region,
+                        boxes,
+                    });
                 }
                 // vertical, u horizontal and v along ±z, over a rectangular trim
-                if u[2] == 0.0 && v[0] == 0.0 && v[1] == 0.0 && (v[2] == 1.0 || v[2] == -1.0) && rectangular(f) {
+                if u[2] == 0.0
+                    && v[0] == 0.0
+                    && v[1] == 0.0
+                    && (v[2] == 1.0 || v[2] == -1.0)
+                    && rectangular(f)
+                {
                     // the trim's own corners (the vertices), not the padded box
                     let (mut p0, mut p1, mut q0, mut q1) = (f.p.lo, f.p.hi, f.q.lo, f.q.hi);
                     if let Some(t) = &f.trim {
-                        let (mut a0, mut a1, mut b0, mut b1) = (f64::INFINITY, f64::NEG_INFINITY, f64::INFINITY, f64::NEG_INFINITY);
+                        let (mut a0, mut a1, mut b0, mut b1) =
+                            (f64::INFINITY, f64::NEG_INFINITY, f64::INFINITY, f64::NEG_INFINITY);
                         for sg in &t.segs {
                             if let TSeg::Line { a, b } = *sg {
                                 for pt in [a, b] {
@@ -387,12 +538,21 @@ impl Prism {
                     let (q0, q1) = (o[2] + v[2] * q0, o[2] + v[2] * q1);
                     let a = [o[0] + p0 * u[0], o[1] + p0 * u[1]];
                     let b = [o[0] + p1 * u[0], o[1] + p1 * u[1]];
-                    return Some(Prism::Wall { sec: Sec::Seg { a, b }, z0: q0.min(q1), z1: q0.max(q1) });
+                    return Some(Prism::Wall {
+                        sec: Sec::Seg { a, b },
+                        z0: q0.min(q1),
+                        z1: q0.max(q1),
+                    });
                 }
                 None
             }
             Surf::Cyl { o, x, y, ax, r } => {
-                if !(ax[0] == 0.0 && ax[1] == 0.0 && (ax[2] == 1.0 || ax[2] == -1.0) && x[2] == 0.0 && y[2] == 0.0) {
+                if !(ax[0] == 0.0
+                    && ax[1] == 0.0
+                    && (ax[2] == 1.0 || ax[2] == -1.0)
+                    && x[2] == 0.0
+                    && y[2] == 0.0)
+                {
                     return None;
                 }
                 let at = |t: f64| {
@@ -401,7 +561,17 @@ impl Prism {
                 };
                 let ccw = x[0] * y[1] - x[1] * y[0] > 0.0;
                 let (q0, q1) = (o[2] + ax[2] * f.q.lo, o[2] + ax[2] * f.q.hi);
-                Some(Prism::Wall { sec: Sec::Arc { c: [o[0], o[1]], r, a: at(f.p.lo), b: at(f.p.hi), ccw }, z0: q0.min(q1), z1: q0.max(q1) })
+                Some(Prism::Wall {
+                    sec: Sec::Arc {
+                        c: [o[0], o[1]],
+                        r,
+                        a: at(f.p.lo),
+                        b: at(f.p.hi),
+                        ccw,
+                    },
+                    z0: q0.min(q1),
+                    z1: q0.max(q1),
+                })
             }
             _ => None,
         }
@@ -474,7 +644,15 @@ pub fn locate(mv: &crate::check::Move, pr: &Prism) -> (f64, [f64; 3]) {
 }
 
 /// The verdict for a planar move against a prism face (module doc).
-pub fn certify(body: &Body, f: &Face, pr: &Prism, pl: &Planar, limit: f64, res: f64, budget: usize) -> (Verdict, usize) {
+pub fn certify(
+    body: &Body,
+    f: &Face,
+    pr: &Prism,
+    pl: &Planar,
+    limit: f64,
+    res: f64,
+    budget: usize,
+) -> (Verdict, usize) {
     let (path, zt) = path_sec(pl);
     let (lim_clear, lim_hit) = (limit + f.mu, limit - f.mu);
     let (d, dz) = match pr {
@@ -486,10 +664,16 @@ pub fn certify(body: &Body, f: &Face, pr: &Prism, pl: &Planar, limit: f64, res: 
             if lb0 >= lim_clear {
                 return (Verdict::Clear { lower: lb0 - f.mu }, 1);
             }
-            let cutoff = Ival::pt(body.rmax).add(Ival::pt(limit.abs())).add(Ival::pt(f.mu)).hi;
+            let cutoff = Ival::pt(body.rmax)
+                .add(Ival::pt(limit.abs()))
+                .add(Ival::pt(f.mu))
+                .hi;
             (dist_region(&path, region, boxes, cutoff), dz)
         }
-        Prism::Wall { sec, z0, z1 } => (dist(&path, sec), Ival::new(Ival::pt(*z0).sub(zt).lo, Ival::pt(*z1).sub(zt).hi)),
+        Prism::Wall { sec, z0, z1 } => (
+            dist(&path, sec),
+            Ival::new(Ival::pt(*z0).sub(zt).lo, Ival::pt(*z1).sub(zt).hi),
+        ),
     };
     // the one-dimensional search over the height offset Δ
     let lo_rho = Ival::pt(d.lo);
@@ -501,7 +685,13 @@ pub fn certify(body: &Body, f: &Face, pr: &Prism, pl: &Planar, limit: f64, res: 
     while let Some(c) = stack.pop() {
         cells += 1;
         if cells > budget {
-            return (Verdict::Undecided { lower: f64::NEG_INFINITY, cells }, cells);
+            return (
+                Verdict::Undecided {
+                    lower: f64::NEG_INFINITY,
+                    cells,
+                },
+                cells,
+            );
         }
         let lb = body.sd_rz(lo_rho, c).lo;
         if lb >= lim_clear {
@@ -512,7 +702,16 @@ pub fn certify(body: &Body, f: &Face, pr: &Prism, pl: &Planar, limit: f64, res: 
             let m = Ival::pt(c.mid());
             let w = body.sd_rz(hi_rho, m).hi;
             if w < lim_hit {
-                return (Verdict::Hit { d: w + f.mu, p: d.hi, q: c.mid(), s: 0.5, at: [f64::NAN; 3] }, cells);
+                return (
+                    Verdict::Hit {
+                        d: w + f.mu,
+                        p: d.hi,
+                        q: c.mid(),
+                        s: 0.5,
+                        at: [f64::NAN; 3],
+                    },
+                    cells,
+                );
             }
         }
         if c.width() <= res {

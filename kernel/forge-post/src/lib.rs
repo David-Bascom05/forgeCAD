@@ -28,11 +28,20 @@ pub const DIALECTS: [(&str, &str); 4] = [
 #[derive(Clone, Debug, PartialEq)]
 pub enum PostError {
     Dialect(String),
-    UnknownDialect { name: String, known: Vec<String> },
+    UnknownDialect {
+        name: String,
+        known: Vec<String>,
+    },
     /// The dialect cannot do this: what, and the fix.
-    Unsupported { what: String, fix: String },
+    Unsupported {
+        what: String,
+        fix: String,
+    },
     /// A number past what the dialect's words can hold.
-    Range { what: String, value: f64 },
+    Range {
+        what: String,
+        value: f64,
+    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -59,16 +68,22 @@ impl Dialect {
                 return Dialect::parse(s);
             }
         }
-        Err(PostError::UnknownDialect { name: name.to_string(), known: DIALECTS.iter().map(|d| d.0.to_string()).collect() })
+        Err(PostError::UnknownDialect {
+            name: name.to_string(),
+            known: DIALECTS.iter().map(|d| d.0.to_string()).collect(),
+        })
     }
 
     pub fn parse(src: &str) -> Result<Dialect, PostError> {
-        let root = toml::parse(src).map_err(|e| PostError::Dialect(format!("line {}: {}", e.line, e.what)))?;
+        let root =
+            toml::parse(src).map_err(|e| PostError::Dialect(format!("line {}: {}", e.line, e.what)))?;
         let t = match root.get("dialect") {
             Some(toml::Val::Table(t)) => t.clone(),
             _ => return Err(PostError::Dialect("no [dialect] table".into())),
         };
-        let name = text(&t, "name").ok_or_else(|| PostError::Dialect("no name".into()))?.to_string();
+        let name = text(&t, "name")
+            .ok_or_else(|| PostError::Dialect("no name".into()))?
+            .to_string();
         let decimals = num(&t, "decimals").ok_or_else(|| PostError::Dialect("no decimals".into()))? as u32;
         let point = match text(&t, "point").unwrap_or("always") {
             "always" => Point::Always,
@@ -156,17 +171,38 @@ pub enum Coolant {
 pub enum Rec {
     Comment(String),
     Wcs(u32),
-    ToolChange { t: u32, h: u32, name: String },
-    Spindle { rpm: f64, cw: bool },
+    ToolChange {
+        t: u32,
+        h: u32,
+        name: String,
+    },
+    Spindle {
+        rpm: f64,
+        cw: bool,
+    },
     SpindleStop,
     Coolant(Coolant),
     Rapid([f64; 3]),
     Line([f64; 3], f64),
     /// To `to` about `c` (absolute), in the xy plane, clockwise or not; helical if z changes.
-    Arc { to: [f64; 3], c: [f64; 2], cw: bool, f: f64 },
+    Arc {
+        to: [f64; 3],
+        c: [f64; 2],
+        cw: bool,
+        f: f64,
+    },
     /// Holes at (x, y): from the clearance height down to `z` from the plane `r`; q the peck,
     /// dwell seconds, f the feed (for a tap: pitch × rpm).
-    Cycle { kind: CycleKind, holes: Vec<[f64; 2]>, z: f64, r: f64, clear: f64, q: f64, dwell: f64, f: f64 },
+    Cycle {
+        kind: CycleKind,
+        holes: Vec<[f64; 2]>,
+        z: f64,
+        r: f64,
+        clear: f64,
+        q: f64,
+        dwell: f64,
+        f: f64,
+    },
     Dwell(f64),
     Home,
 }
@@ -186,14 +222,35 @@ pub type Q = i64;
 pub enum QRec {
     Comment(String),
     Wcs(u32),
-    ToolChange { t: u32, h: u32, name: String },
-    Spindle { rpm: Q, cw: bool },
+    ToolChange {
+        t: u32,
+        h: u32,
+        name: String,
+    },
+    Spindle {
+        rpm: Q,
+        cw: bool,
+    },
     SpindleStop,
     Coolant(Coolant),
     Rapid([Q; 3]),
     Line([Q; 3], Q),
-    Arc { to: [Q; 3], c: [Q; 2], cw: bool, f: Q },
-    Cycle { kind: CycleKind, holes: Vec<[Q; 2]>, z: Q, r: Q, clear: Q, q: Q, dwell: Q, f: Q },
+    Arc {
+        to: [Q; 3],
+        c: [Q; 2],
+        cw: bool,
+        f: Q,
+    },
+    Cycle {
+        kind: CycleKind,
+        holes: Vec<[Q; 2]>,
+        z: Q,
+        r: Q,
+        clear: Q,
+        q: Q,
+        dwell: Q,
+        f: Q,
+    },
     Dwell(Q),
     Home,
 }
@@ -215,7 +272,10 @@ pub enum Motion {
 /// The nearest integer to x · 10^k, ties to even, exactly.
 pub fn quant(x: f64, k: u32) -> Result<Q, PostError> {
     if !x.is_finite() {
-        return Err(PostError::Range { what: "a non-finite number".into(), value: x });
+        return Err(PostError::Range {
+            what: "a non-finite number".into(),
+            value: x,
+        });
     }
     let d = Dy::from_f64(x);
     let mut m = d.mag.clone();
@@ -233,10 +293,17 @@ pub fn quant(x: f64, k: u32) -> Result<Q, PostError> {
         let half = m.bit(s - 1);
         let below = m.low_bits_nonzero(s - 1);
         let odd = fl.bit(0);
-        if half && (below || odd) { fl.add(&Nat::from_u64(1)) } else { fl }
+        if half && (below || odd) {
+            fl.add(&Nat::from_u64(1))
+        } else {
+            fl
+        }
     };
     if n.bits() > 62 {
-        return Err(PostError::Range { what: "a coordinate".into(), value: x });
+        return Err(PostError::Range {
+            what: "a coordinate".into(),
+            value: x,
+        });
     }
     let mut v2 = 0i64;
     let mut j = n.limbs.len();
@@ -293,22 +360,48 @@ pub fn digits(q: Q, k: u32, point: Point) -> String {
 pub fn quantize(p: &Program, d: &Dialect) -> Result<QProgram, PostError> {
     let k = d.decimals;
     let fk = d.feed_decimals;
-    let q3 = |v: [f64; 3]| -> Result<[Q; 3], PostError> { Ok([quant(v[0], k)?, quant(v[1], k)?, quant(v[2], k)?]) };
+    let q3 = |v: [f64; 3]| -> Result<[Q; 3], PostError> {
+        Ok([quant(v[0], k)?, quant(v[1], k)?, quant(v[2], k)?])
+    };
     let mut out = Vec::new();
     for r in &p.recs {
         out.push(match r {
             Rec::Comment(s) => QRec::Comment(s.clone()),
             Rec::Wcs(n) => QRec::Wcs(*n),
-            Rec::ToolChange { t, h, name } => QRec::ToolChange { t: *t, h: *h, name: name.clone() },
-            Rec::Spindle { rpm, cw } => QRec::Spindle { rpm: quant(*rpm, 0)?, cw: *cw },
+            Rec::ToolChange { t, h, name } => QRec::ToolChange {
+                t: *t,
+                h: *h,
+                name: name.clone(),
+            },
+            Rec::Spindle { rpm, cw } => QRec::Spindle {
+                rpm: quant(*rpm, 0)?,
+                cw: *cw,
+            },
             Rec::SpindleStop => QRec::SpindleStop,
             Rec::Coolant(c) => QRec::Coolant(*c),
             Rec::Rapid(v) => QRec::Rapid(q3(*v)?),
             Rec::Line(v, f) => QRec::Line(q3(*v)?, quant(*f, fk)?),
-            Rec::Arc { to, c, cw, f } => QRec::Arc { to: q3(*to)?, c: [quant(c[0], k)?, quant(c[1], k)?], cw: *cw, f: quant(*f, fk)? },
-            Rec::Cycle { kind, holes, z, r, clear, q, dwell, f } => QRec::Cycle {
+            Rec::Arc { to, c, cw, f } => QRec::Arc {
+                to: q3(*to)?,
+                c: [quant(c[0], k)?, quant(c[1], k)?],
+                cw: *cw,
+                f: quant(*f, fk)?,
+            },
+            Rec::Cycle {
+                kind,
+                holes,
+                z,
+                r,
+                clear,
+                q,
+                dwell,
+                f,
+            } => QRec::Cycle {
                 kind: *kind,
-                holes: holes.iter().map(|h| Ok([quant(h[0], k)?, quant(h[1], k)?])).collect::<Result<_, PostError>>()?,
+                holes: holes
+                    .iter()
+                    .map(|h| Ok([quant(h[0], k)?, quant(h[1], k)?]))
+                    .collect::<Result<_, PostError>>()?,
                 z: quant(*z, k)?,
                 r: quant(*r, k)?,
                 clear: quant(*clear, k)?,
@@ -320,7 +413,13 @@ pub fn quantize(p: &Program, d: &Dialect) -> Result<QProgram, PostError> {
             Rec::Home => QRec::Home,
         });
     }
-    Ok(QProgram { number: p.number, title: p.title.clone(), recs: out, decimals: k, feed_decimals: fk })
+    Ok(QProgram {
+        number: p.number,
+        title: p.title.clone(),
+        recs: out,
+        decimals: k,
+        feed_decimals: fk,
+    })
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -340,7 +439,18 @@ pub const CHIP_LIFT: f64 = 0.2;
 /// One hole of a cycle as motion, from (x, y) at the current height (the expansion every
 /// dialect and the reader share). G98 semantics: return to the clearance height.
 #[allow(clippy::too_many_arguments)]
-fn expand_hole(kind: CycleKind, h: [Q; 2], z: Q, r: Q, clear: Q, q: Q, dwell: Q, f: Q, k: u32, out: &mut Vec<Motion>) {
+fn expand_hole(
+    kind: CycleKind,
+    h: [Q; 2],
+    z: Q,
+    r: Q,
+    clear: Q,
+    q: Q,
+    dwell: Q,
+    f: Q,
+    k: u32,
+    out: &mut Vec<Motion>,
+) {
     let (x, y) = (h[0], h[1]);
     out.push(Motion::Rapid([x, y, clear]));
     out.push(Motion::Rapid([x, y, r]));
@@ -389,8 +499,22 @@ pub fn motions(p: &QProgram) -> Vec<Motion> {
             QRec::Coolant(c) => out.push(Motion::Coolant(*c)),
             QRec::Rapid(v) => out.push(Motion::Rapid(*v)),
             QRec::Line(v, f) => out.push(Motion::Feed(*v, *f)),
-            QRec::Arc { to, c, cw, f } => out.push(Motion::Arc { to: *to, c: *c, cw: *cw, f: *f }),
-            QRec::Cycle { kind, holes, z, r, clear, q, dwell, f } => {
+            QRec::Arc { to, c, cw, f } => out.push(Motion::Arc {
+                to: *to,
+                c: *c,
+                cw: *cw,
+                f: *f,
+            }),
+            QRec::Cycle {
+                kind,
+                holes,
+                z,
+                r,
+                clear,
+                q,
+                dwell,
+                f,
+            } => {
                 for h in holes {
                     expand_hole(*kind, *h, *z, *r, *clear, *q, *dwell, *f, p.decimals, &mut out);
                 }
@@ -452,7 +576,10 @@ impl Writer<'_> {
     }
     fn comment(&mut self, text: &str) {
         let strip = self.d.s("comment_strip");
-        let clean: String = text.chars().filter(|c| !strip.contains(*c) && *c != '\n').collect();
+        let clean: String = text
+            .chars()
+            .filter(|c| !strip.contains(*c) && *c != '\n')
+            .collect();
         let tpl = self.d.s("comment").to_string();
         self.emit(&fill(&tpl, &[("text", clean)]));
     }
@@ -462,9 +589,27 @@ impl Writer<'_> {
 pub fn print(p: &QProgram, d: &Dialect) -> Result<String, PostError> {
     let k = d.decimals;
     let num_ = |q: Q| digits(q, k, d.point);
-    let fnum = |q: Q| digits(q, d.feed_decimals, if d.point == Point::Full { Point::Never } else { d.point });
-    let mut w = Writer { d, lines: Vec::new(), n: d.n("line_start").unwrap_or(10.0) as i64 };
-    let title: String = p.title.chars().filter(|c| !d.s("comment_strip").contains(*c)).collect();
+    let fnum = |q: Q| {
+        digits(
+            q,
+            d.feed_decimals,
+            if d.point == Point::Full {
+                Point::Never
+            } else {
+                d.point
+            },
+        )
+    };
+    let mut w = Writer {
+        d,
+        lines: Vec::new(),
+        n: d.n("line_start").unwrap_or(10.0) as i64,
+    };
+    let title: String = p
+        .title
+        .chars()
+        .filter(|c| !d.s("comment_strip").contains(*c))
+        .collect();
     for l in d.lines("program_open") {
         let s = fill(&l, &[("num", p.number.to_string()), ("title", title.clone())]);
         if s == "%" { w.lines.push(s) } else { w.emit(&s) }
@@ -489,7 +634,10 @@ pub fn print(p: &QProgram, d: &Dialect) -> Result<String, PostError> {
                 let first = d.n("wcs_first").unwrap_or(54.0) as u32;
                 let count = d.n("wcs_count").unwrap_or(6.0) as u32;
                 if *n >= count {
-                    return Err(PostError::Unsupported { what: format!("work offset {n} (the dialect has {count})"), fix: "use a lower work offset".into() });
+                    return Err(PostError::Unsupported {
+                        what: format!("work offset {n} (the dialect has {count})"),
+                        fix: "use a lower work offset".into(),
+                    });
                 }
                 w.emit(&fill(d.s("wcs"), &[("n", (first + n).to_string())]));
             }
@@ -519,7 +667,10 @@ pub fn print(p: &QProgram, d: &Dialect) -> Result<String, PostError> {
                 };
                 let code = d.s(key);
                 if code.is_empty() {
-                    return Err(PostError::Unsupported { what: format!("coolant {c:?}"), fix: "choose a coolant the machine has (flood, mist) or none".into() });
+                    return Err(PostError::Unsupported {
+                        what: format!("coolant {c:?}"),
+                        fix: "choose a coolant the machine has (flood, mist) or none".into(),
+                    });
                 }
                 w.emit(code);
             }
@@ -548,7 +699,12 @@ pub fn print(p: &QProgram, d: &Dialect) -> Result<String, PostError> {
             QRec::Arc { to, c, cw, f } => {
                 let (sx, sy) = match (pos[0], pos[1]) {
                     (Some(x), Some(y)) => (x, y),
-                    _ => return Err(PostError::Unsupported { what: "an arc from an unknown position".into(), fix: "move to the arc's start first".into() }),
+                    _ => {
+                        return Err(PostError::Unsupported {
+                            what: "an arc from an unknown position".into(),
+                            fix: "move to the arc's start first".into(),
+                        });
+                    }
                 };
                 let g = if *cw { 2 } else { 3 };
                 let mut ws = vec![format!("G{g}")];
@@ -565,10 +721,26 @@ pub fn print(p: &QProgram, d: &Dialect) -> Result<String, PostError> {
                 }
                 w.emit(&ws.join(" "));
             }
-            QRec::Cycle { kind, holes, z, r, clear, q, dwell, f } => {
+            QRec::Cycle {
+                kind,
+                holes,
+                z,
+                r,
+                clear,
+                q,
+                dwell,
+                f,
+            } => {
                 let tpl = d.s(kind.key()).to_string();
                 if tpl == "refuse" || tpl.is_empty() {
-                    return Err(PostError::Unsupported { what: format!("the {kind:?} cycle on {}", d.name), fix: if *kind == CycleKind::Tap { "thread mill the hole instead, or post for a control with rigid tapping".into() } else { "use a dialect with the cycle".into() } });
+                    return Err(PostError::Unsupported {
+                        what: format!("the {kind:?} cycle on {}", d.name),
+                        fix: if *kind == CycleKind::Tap {
+                            "thread mill the hole instead, or post for a control with rigid tapping".into()
+                        } else {
+                            "use a dialect with the cycle".into()
+                        },
+                    });
                 }
                 if tpl == "expand" {
                     let mut ms = Vec::new();
@@ -583,7 +755,13 @@ pub fn print(p: &QProgram, d: &Dialect) -> Result<String, PostError> {
                             _ => continue,
                         };
                         // recursion on one record: write it as the main loop would
-                        let one = QProgram { number: 0, title: String::new(), recs: vec![rr], decimals: k, feed_decimals: d.feed_decimals };
+                        let one = QProgram {
+                            number: 0,
+                            title: String::new(),
+                            recs: vec![rr],
+                            decimals: k,
+                            feed_decimals: d.feed_decimals,
+                        };
                         write_moves(&one, d, &mut w, &mut pos, &mut feed, &mut motion);
                     }
                     continue;
@@ -591,7 +769,10 @@ pub fn print(p: &QProgram, d: &Dialect) -> Result<String, PostError> {
                 // the program has put the tool over the first hole at the clearance height
                 let first = holes[0];
                 if pos != [Some(first[0]), Some(first[1]), Some(*clear)] {
-                    return Err(PostError::Unsupported { what: "a cycle not started over its first hole at the clearance height".into(), fix: "rapid to the first hole at the clearance height before the cycle".into() });
+                    return Err(PostError::Unsupported {
+                        what: "a cycle not started over its first hole at the clearance height".into(),
+                        fix: "rapid to the first hole at the clearance height before the cycle".into(),
+                    });
                 }
                 let vars = |h: [Q; 2]| {
                     vec![
@@ -617,11 +798,17 @@ pub fn print(p: &QProgram, d: &Dialect) -> Result<String, PostError> {
             }
             QRec::Dwell(ms) => {
                 let tpl = d.s("dwell").to_string();
-                w.emit(&fill(&tpl, &[("ms", ms.to_string()), ("s", digits(*ms, 3, Point::Never))]));
+                w.emit(&fill(
+                    &tpl,
+                    &[("ms", ms.to_string()), ("s", digits(*ms, 3, Point::Never))],
+                ));
             }
             QRec::Home => {
                 if d.lines("retract_home").is_empty() {
-                    return Err(PostError::Unsupported { what: format!("a machine-home retract on {}", d.name), fix: "end with a rapid to the clearance height instead".into() });
+                    return Err(PostError::Unsupported {
+                        what: format!("a machine-home retract on {}", d.name),
+                        fix: "end with a rapid to the clearance height instead".into(),
+                    });
                 }
                 for l in d.lines("retract_home") {
                     w.emit(&l);
@@ -639,9 +826,26 @@ pub fn print(p: &QProgram, d: &Dialect) -> Result<String, PostError> {
     Ok(s)
 }
 
-fn write_moves(p: &QProgram, d: &Dialect, w: &mut Writer, pos: &mut [Option<Q>; 3], feed: &mut Option<Q>, motion: &mut Option<u32>) {
+fn write_moves(
+    p: &QProgram,
+    d: &Dialect,
+    w: &mut Writer,
+    pos: &mut [Option<Q>; 3],
+    feed: &mut Option<Q>,
+    motion: &mut Option<u32>,
+) {
     let num_ = |q: Q| digits(q, d.decimals, d.point);
-    let fnum = |q: Q| digits(q, d.feed_decimals, if d.point == Point::Full { Point::Never } else { d.point });
+    let fnum = |q: Q| {
+        digits(
+            q,
+            d.feed_decimals,
+            if d.point == Point::Full {
+                Point::Never
+            } else {
+                d.point
+            },
+        )
+    };
     for r in &p.recs {
         match r {
             QRec::Rapid(v) | QRec::Line(v, _) => {
@@ -671,7 +875,10 @@ fn write_moves(p: &QProgram, d: &Dialect, w: &mut Writer, pos: &mut [Option<Q>; 
             }
             QRec::Dwell(ms) => {
                 let tpl = d.s("dwell").to_string();
-                w.emit(&fill(&tpl, &[("ms", ms.to_string()), ("s", digits(*ms, 3, Point::Never))]));
+                w.emit(&fill(
+                    &tpl,
+                    &[("ms", ms.to_string()), ("s", digits(*ms, 3, Point::Never))],
+                ));
             }
             _ => {}
         }
@@ -686,7 +893,10 @@ pub struct ReadError {
 
 /// A decimal word's value in integer units of 10^-k, exactly; more digits than k is an error.
 fn parse_q(s: &str, k: u32, line: usize) -> Result<Q, ReadError> {
-    let e = |w: &str| ReadError { line, what: format!("{w}: `{s}`") };
+    let e = |w: &str| ReadError {
+        line,
+        what: format!("{w}: `{s}`"),
+    };
     let (neg, body) = match s.strip_prefix('-') {
         Some(b) => (true, b),
         None => (false, s.strip_prefix('+').unwrap_or(s)),
@@ -695,10 +905,18 @@ fn parse_q(s: &str, k: u32, line: usize) -> Result<Q, ReadError> {
         Some((a, b)) => (a, b),
         None => (body, ""),
     };
-    if fp.len() > k as usize || (ip.is_empty() && fp.is_empty()) || !ip.chars().all(|c| c.is_ascii_digit()) || !fp.chars().all(|c| c.is_ascii_digit()) {
+    if fp.len() > k as usize
+        || (ip.is_empty() && fp.is_empty())
+        || !ip.chars().all(|c| c.is_ascii_digit())
+        || !fp.chars().all(|c| c.is_ascii_digit())
+    {
         return Err(e("not a number in this dialect's digits"));
     }
-    let mut v: i64 = if ip.is_empty() { 0 } else { ip.parse().map_err(|_| e("too large"))? };
+    let mut v: i64 = if ip.is_empty() {
+        0
+    } else {
+        ip.parse().map_err(|_| e("too large"))?
+    };
     v = v.checked_mul(pow10(k)).ok_or_else(|| e("too large"))?;
     let mut f = 0i64;
     if !fp.is_empty() {
@@ -748,12 +966,27 @@ pub fn read(text_: &str, d: &Dialect) -> Result<Vec<Motion>, ReadError> {
             match l {
                 'G' => {
                     // G43.4 and the like are not ours: only whole G codes
-                    let g: f64 = v.parse().map_err(|_| ReadError { line: ln, what: format!("G{v}") })?;
-                    if g.fract() == 0.0 { gs.push(g as u32) } else { gs.push(10_000) }
+                    let g: f64 = v.parse().map_err(|_| ReadError {
+                        line: ln,
+                        what: format!("G{v}"),
+                    })?;
+                    if g.fract() == 0.0 {
+                        gs.push(g as u32)
+                    } else {
+                        gs.push(10_000)
+                    }
                 }
-                'M' => ms.push(v.parse().map_err(|_| ReadError { line: ln, what: format!("M{v}") })?),
+                'M' => ms.push(v.parse().map_err(|_| ReadError {
+                    line: ln,
+                    what: format!("M{v}"),
+                })?),
                 'N' | 'O' | 'X' | 'Y' | 'Z' | 'I' | 'J' | 'F' | 'R' | 'Q' | 'P' | 'S' | 'T' | 'H' | 'K' => {}
-                c => return Err(ReadError { line: ln, what: format!("an unknown word `{c}{v}`") }),
+                c => {
+                    return Err(ReadError {
+                        line: ln,
+                        what: format!("an unknown word `{c}{v}`"),
+                    });
+                }
             }
         }
         if let Some(sv) = get('S') {
@@ -772,7 +1005,12 @@ pub fn read(text_: &str, d: &Dialect) -> Result<Vec<Motion>, ReadError> {
                 88 => out.push(Motion::Coolant(Coolant::Through)),
                 9 | 89 => out.push(Motion::Coolant(Coolant::Off)),
                 0 | 2 | 30 => {}
-                m => return Err(ReadError { line: ln, what: format!("M{m}") }),
+                m => {
+                    return Err(ReadError {
+                        line: ln,
+                        what: format!("M{m}"),
+                    });
+                }
             }
         }
         // grbl's tool change is a pause with the tool in a comment: the comment named it
@@ -790,8 +1028,22 @@ pub fn read(text_: &str, d: &Dialect) -> Result<Vec<Motion>, ReadError> {
                 }
                 81 | 82 | 83 | 73 | 84 | 85 => {
                     let kind = CycleKind::from_g(*g).unwrap();
-                    let z = parse_q(&get('Z').ok_or_else(|| ReadError { line: ln, what: "a cycle with no Z".into() })?, k, ln)?;
-                    let r = parse_q(&get('R').ok_or_else(|| ReadError { line: ln, what: "a cycle with no R".into() })?, k, ln)?;
+                    let z = parse_q(
+                        &get('Z').ok_or_else(|| ReadError {
+                            line: ln,
+                            what: "a cycle with no Z".into(),
+                        })?,
+                        k,
+                        ln,
+                    )?;
+                    let r = parse_q(
+                        &get('R').ok_or_else(|| ReadError {
+                            line: ln,
+                            what: "a cycle with no R".into(),
+                        })?,
+                        k,
+                        ln,
+                    )?;
                     let q = match get('Q') {
                         Some(v) => parse_q(&v, k, ln)?,
                         None => 0,
@@ -800,7 +1052,10 @@ pub fn read(text_: &str, d: &Dialect) -> Result<Vec<Motion>, ReadError> {
                         Some(v) => parse_q(&v, if d.s("cycle_dwell").contains("{ms}") { 0 } else { 3 }, ln)?,
                         None => 0,
                     };
-                    let clear = pos[2].ok_or_else(|| ReadError { line: ln, what: "a cycle from an unknown height".into() })?;
+                    let clear = pos[2].ok_or_else(|| ReadError {
+                        line: ln,
+                        what: "a cycle from an unknown height".into(),
+                    })?;
                     cycle = Some((kind, z, r, q, dw, clear));
                     motion = Some(80);
                 }
@@ -809,9 +1064,16 @@ pub fn read(text_: &str, d: &Dialect) -> Result<Vec<Motion>, ReadError> {
                     motion = None;
                 }
                 4 => {
-                    let p = get('P').ok_or_else(|| ReadError { line: ln, what: "G4 with no P".into() })?;
+                    let p = get('P').ok_or_else(|| ReadError {
+                        line: ln,
+                        what: "G4 with no P".into(),
+                    })?;
                     // milliseconds (integer P) or seconds (with a point), as the dialect writes it
-                    let ms = if d.s("dwell").contains("{ms}") { parse_q(&p, 0, ln)? } else { parse_q(&p, 3, ln)? };
+                    let ms = if d.s("dwell").contains("{ms}") {
+                        parse_q(&p, 0, ln)?
+                    } else {
+                        parse_q(&p, 3, ln)?
+                    };
                     out.push(Motion::Dwell(ms));
                     skip_motion = true;
                 }
@@ -821,7 +1083,12 @@ pub fn read(text_: &str, d: &Dialect) -> Result<Vec<Motion>, ReadError> {
                     home = true;
                     skip_motion = true;
                 }
-                g => return Err(ReadError { line: ln, what: format!("G{g} is not in our subset") }),
+                g => {
+                    return Err(ReadError {
+                        line: ln,
+                        what: format!("G{g} is not in our subset"),
+                    });
+                }
             }
         }
         if home {
@@ -856,19 +1123,63 @@ pub fn read(text_: &str, d: &Dialect) -> Result<Vec<Motion>, ReadError> {
             Some(g @ (0 | 1)) => {
                 let p = [to[0], to[1], to[2]];
                 if p.iter().any(|x| x.is_none()) {
-                    return Err(ReadError { line: ln, what: "a move from an unknown position".into() });
+                    return Err(ReadError {
+                        line: ln,
+                        what: "a move from an unknown position".into(),
+                    });
                 }
                 let p = [p[0].unwrap(), p[1].unwrap(), p[2].unwrap()];
-                out.push(if g == 0 { Motion::Rapid(p) } else { Motion::Feed(p, feed) });
+                out.push(if g == 0 {
+                    Motion::Rapid(p)
+                } else {
+                    Motion::Feed(p, feed)
+                });
             }
             Some(g @ (2 | 3)) => {
-                let (sx, sy) = (pos[0].ok_or_else(|| ReadError { line: ln, what: "an arc from nowhere".into() })?, pos[1].unwrap());
-                let i = parse_q(&get('I').ok_or_else(|| ReadError { line: ln, what: "an arc with no I".into() })?, k, ln)?;
-                let j = parse_q(&get('J').ok_or_else(|| ReadError { line: ln, what: "an arc with no J".into() })?, k, ln)?;
-                let p = [to[0].unwrap(), to[1].unwrap(), to[2].ok_or_else(|| ReadError { line: ln, what: "an arc from an unknown height".into() })?];
-                out.push(Motion::Arc { to: p, c: [sx + i, sy + j], cw: g == 2, f: feed });
+                let (sx, sy) = (
+                    pos[0].ok_or_else(|| ReadError {
+                        line: ln,
+                        what: "an arc from nowhere".into(),
+                    })?,
+                    pos[1].unwrap(),
+                );
+                let i = parse_q(
+                    &get('I').ok_or_else(|| ReadError {
+                        line: ln,
+                        what: "an arc with no I".into(),
+                    })?,
+                    k,
+                    ln,
+                )?;
+                let j = parse_q(
+                    &get('J').ok_or_else(|| ReadError {
+                        line: ln,
+                        what: "an arc with no J".into(),
+                    })?,
+                    k,
+                    ln,
+                )?;
+                let p = [
+                    to[0].unwrap(),
+                    to[1].unwrap(),
+                    to[2].ok_or_else(|| ReadError {
+                        line: ln,
+                        what: "an arc from an unknown height".into(),
+                    })?,
+                ];
+                out.push(Motion::Arc {
+                    to: p,
+                    c: [sx + i, sy + j],
+                    cw: g == 2,
+                    f: feed,
+                });
             }
-            _ => return Err(ReadError { line: ln, what: "coordinates with no motion mode".into() }),
+            _ => {
+                return Err(ReadError {
+                    line: ln,
+                    what: "coordinates with no motion mode".into(),
+                });
+            }
         }
         pos = to;
     }
@@ -903,7 +1214,11 @@ fn raw_tool(text_: &str, ln: usize) -> u32 {
     if ln >= 2
         && let Some(r) = lines[ln - 2].trim().strip_prefix("(TOOL ")
     {
-        return r.split(':').next().and_then(|t| t.trim().parse().ok()).unwrap_or(0);
+        return r
+            .split(':')
+            .next()
+            .and_then(|t| t.trim().parse().ok())
+            .unwrap_or(0);
     }
     0
 }
@@ -915,8 +1230,16 @@ pub fn round_trip(p: &QProgram, d: &Dialect) -> Result<(String, Vec<Motion>), St
     let (back, want) = (normalize(&back), normalize(&motions(p)));
     // the control's view drops nothing we emit; tool events in GRBL come from its pause
     if back != want {
-        let i = back.iter().zip(want.iter()).position(|(a, b)| a != b).unwrap_or(back.len().min(want.len()));
-        return Err(format!("round trip differs at motion {i}: read {:?}, meant {:?}", back.get(i), want.get(i)));
+        let i = back
+            .iter()
+            .zip(want.iter())
+            .position(|(a, b)| a != b)
+            .unwrap_or(back.len().min(want.len()));
+        return Err(format!(
+            "round trip differs at motion {i}: read {:?}, meant {:?}",
+            back.get(i),
+            want.get(i)
+        ));
     }
     Ok((txt, back))
 }

@@ -9,8 +9,8 @@
 //!
 //! The data is per group, in our own numbers restated from public handbook ranges; it is a
 //! starting point. Every value is marked "verify with the tool maker".
-use crate::toml::{Table, num, text};
 use crate::LibError;
+use crate::toml::{Table, num, text};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Group {
@@ -32,9 +32,21 @@ pub struct Group {
 
 impl Group {
     pub fn from_table(t: &Table) -> Result<Group, LibError> {
-        let g = text(t, "group").ok_or_else(|| LibError::Missing { record: "[[group]]".into(), field: "group", fix: "give the ISO 513 letter".into() })?.to_string();
+        let g = text(t, "group")
+            .ok_or_else(|| LibError::Missing {
+                record: "[[group]]".into(),
+                field: "group",
+                fix: "give the ISO 513 letter".into(),
+            })?
+            .to_string();
         let rec = format!("cutting group {g}");
-        let n = |k: &'static str| num(t, k).ok_or_else(|| LibError::Missing { record: rec.clone(), field: k, fix: format!("give `{k}`") });
+        let n = |k: &'static str| {
+            num(t, k).ok_or_else(|| LibError::Missing {
+                record: rec.clone(),
+                field: k,
+                fix: format!("give `{k}`"),
+            })
+        };
         Ok(Group {
             name: text(t, "name").unwrap_or("").to_string(),
             vc_carbide: n("vc_carbide")?,
@@ -88,21 +100,42 @@ pub struct Feeds {
 pub const THIN_CAP: f64 = 3.0;
 
 pub fn feeds(g: &Group, c: &Cut, rpm_range: [f64; 2]) -> Feeds {
-    let d_eff = if c.ball && c.ap < 0.5 * c.d { 2.0 * (c.ap * (c.d - c.ap)).max(0.0).sqrt() } else { c.d };
+    let d_eff = if c.ball && c.ap < 0.5 * c.d {
+        2.0 * (c.ap * (c.d - c.ap)).max(0.0).sqrt()
+    } else {
+        c.d
+    };
     let vc0 = if c.carbide { g.vc_carbide } else { g.vc_hss };
     let n0 = 1000.0 * vc0 / (std::f64::consts::PI * d_eff.max(1e-6));
     let rpm = n0.clamp(rpm_range[0], rpm_range[1]);
     let vc = rpm * std::f64::consts::PI * d_eff / 1000.0;
     let target = g.fz_at(c.d);
     let r = (c.ae / c.d).clamp(0.0, 1.0);
-    let k = if r < 0.5 { 2.0 * (r - r * r).max(0.0).sqrt() } else { 1.0 };
-    let fz = if k > 0.0 { (target / k).min(THIN_CAP * target) } else { target };
+    let k = if r < 0.5 {
+        2.0 * (r - r * r).max(0.0).sqrt()
+    } else {
+        1.0
+    };
+    let fz = if k > 0.0 {
+        (target / k).min(THIN_CAP * target)
+    } else {
+        target
+    };
     let hex = fz * k;
     let vf = fz * rpm * c.flutes.max(1) as f64;
     let hm = hex.max(1e-4);
     let kc = g.kc1_1 * forge_math::dmath::powf(hm, -g.mc);
     let power = c.ap * c.ae * vf * kc / 6.0e7;
-    Feeds { rpm, vc, fz, hex, vf, power, d_eff, rpm_limited: rpm != n0 }
+    Feeds {
+        rpm,
+        vc,
+        fz,
+        hex,
+        vf,
+        power,
+        d_eff,
+        rpm_limited: rpm != n0,
+    }
 }
 
 #[cfg(test)]
@@ -111,14 +144,58 @@ mod tests {
 
     #[test]
     fn thinning_and_ball_diameter() {
-        let g = Group { group: "N".into(), name: "al".into(), vc_carbide: 300.0, vc_hss: 100.0, fz_d1: 0.01, fz_d20: 0.1, kc1_1: 700.0, mc: 0.25, source: String::new(), note: String::new() };
-        let full = feeds(&g, &Cut { d: 10.0, flutes: 3, ball: false, carbide: true, ap: 5.0, ae: 10.0 }, [0.0, 1e9]);
-        let light = feeds(&g, &Cut { d: 10.0, flutes: 3, ball: false, carbide: true, ap: 5.0, ae: 1.0 }, [0.0, 1e9]);
+        let g = Group {
+            group: "N".into(),
+            name: "al".into(),
+            vc_carbide: 300.0,
+            vc_hss: 100.0,
+            fz_d1: 0.01,
+            fz_d20: 0.1,
+            kc1_1: 700.0,
+            mc: 0.25,
+            source: String::new(),
+            note: String::new(),
+        };
+        let full = feeds(
+            &g,
+            &Cut {
+                d: 10.0,
+                flutes: 3,
+                ball: false,
+                carbide: true,
+                ap: 5.0,
+                ae: 10.0,
+            },
+            [0.0, 1e9],
+        );
+        let light = feeds(
+            &g,
+            &Cut {
+                d: 10.0,
+                flutes: 3,
+                ball: false,
+                carbide: true,
+                ap: 5.0,
+                ae: 1.0,
+            },
+            [0.0, 1e9],
+        );
         assert!((full.rpm - 9549.296585513721).abs() < 1e-6);
         // ae/D = 0.1: k = 2 sqrt(0.09) = 0.6
         assert!((light.fz / full.fz - 1.0 / 0.6).abs() < 1e-12);
         assert!((light.hex - full.fz).abs() < 1e-12);
-        let ball = feeds(&g, &Cut { d: 10.0, flutes: 2, ball: true, carbide: true, ap: 1.0, ae: 1.0 }, [0.0, 12_000.0]);
+        let ball = feeds(
+            &g,
+            &Cut {
+                d: 10.0,
+                flutes: 2,
+                ball: true,
+                carbide: true,
+                ap: 1.0,
+                ae: 1.0,
+            },
+            [0.0, 12_000.0],
+        );
         assert!((ball.d_eff - 6.0).abs() < 1e-12 && ball.rpm_limited && ball.rpm == 12_000.0);
     }
 }

@@ -25,9 +25,17 @@ pub fn p2(x: f64, y: f64) -> P2 {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Seg {
-    Line { a: P2, b: P2 },
+    Line {
+        a: P2,
+        b: P2,
+    },
     /// From a to b about (near) c; a == b: the full circle.
-    Arc { a: P2, b: P2, c: P2, ccw: bool },
+    Arc {
+        a: P2,
+        b: P2,
+        c: P2,
+        ccw: bool,
+    },
 }
 
 impl Seg {
@@ -44,7 +52,12 @@ impl Seg {
     pub fn reversed(&self) -> Seg {
         match *self {
             Seg::Line { a, b } => Seg::Line { a: b, b: a },
-            Seg::Arc { a, b, c, ccw } => Seg::Arc { a: b, b: a, c, ccw: !ccw },
+            Seg::Arc { a, b, c, ccw } => Seg::Arc {
+                a: b,
+                b: a,
+                c,
+                ccw: !ccw,
+            },
         }
     }
 }
@@ -88,15 +101,32 @@ impl Region {
 pub enum RegionError {
     Empty,
     /// Loop `lp`, piece `seg`: its end is not the next piece's start.
-    NotClosed { lp: usize, seg: usize },
+    NotClosed {
+        lp: usize,
+        seg: usize,
+    },
     /// A piece of zero length (or an arc of zero radius).
-    Degenerate { lp: usize, seg: usize },
+    Degenerate {
+        lp: usize,
+        seg: usize,
+    },
     /// Two pieces meet away from a shared end.
-    Crossing { a: (usize, usize), b: (usize, usize), at: P2 },
+    Crossing {
+        a: (usize, usize),
+        b: (usize, usize),
+        at: P2,
+    },
     /// A vertex where the boundary turns straight back.
-    Spike { lp: usize, seg: usize },
+    Spike {
+        lp: usize,
+        seg: usize,
+    },
     /// A loop whose sense does not match its nesting depth.
-    Sense { lp: usize, ccw: bool, depth: usize },
+    Sense {
+        lp: usize,
+        ccw: bool,
+        depth: usize,
+    },
 }
 
 /// One boundary piece, exact.
@@ -138,7 +168,13 @@ pub fn exact(cx: &mut Ctx, rg: &Region) -> Result<Exact, RegionError> {
                         return Err(RegionError::Degenerate { lp: l, seg: i });
                     }
                     elems.push(Elem {
-                        piece: Piece { curve: Curve::Line { p: a, d, dd }, s: a, e: b, full: false, tag: elems.len() as u32 },
+                        piece: Piece {
+                            curve: Curve::Line { p: a, d, dd },
+                            s: a,
+                            e: b,
+                            full: false,
+                            tag: elems.len() as u32,
+                        },
                         lp: l,
                         seg: i,
                         rho: None,
@@ -175,7 +211,12 @@ pub fn exact(cx: &mut Ctx, rg: &Region) -> Result<Exact, RegionError> {
                     let rho = cx.sqrt(q);
                     elems.push(Elem {
                         piece: Piece {
-                            curve: Curve::Circle { c: cen, rad: rho, rad2: q, ccw },
+                            curve: Curve::Circle {
+                                c: cen,
+                                rad: rho,
+                                rad2: q,
+                                ccw,
+                            },
                             s: a,
                             e: b,
                             full,
@@ -405,8 +446,14 @@ pub fn inside_loop(cx: &mut Ctx, ex: &Exact, l: usize, q: Pt) -> bool {
             }
             Curve::Circle { c, rad, ccw, .. } => {
                 // the y-monotone parts, split at the circle's top and bottom
-                let top = Pt { x: c.x, y: cx.add(c.y, rad) };
-                let bot = Pt { x: c.x, y: cx.sub(c.y, rad) };
+                let top = Pt {
+                    x: c.x,
+                    y: cx.add(c.y, rad),
+                };
+                let bot = Pt {
+                    x: c.x,
+                    y: cx.sub(c.y, rad),
+                };
                 let mut cuts: Vec<Pt> = Vec::new();
                 let mut k = 0;
                 let tb = [top, bot];
@@ -450,7 +497,11 @@ fn crosses_line(cx: &mut Ctx, a: Pt, b: Pt, q: Pt) -> bool {
     let c = arr::cross(cx, d, w);
     let s = cx.sign(c);
     // upward edge: the crossing is right of q iff q is left of it
-    if ub { s == Ordering::Greater } else { s == Ordering::Less }
+    if ub {
+        s == Ordering::Greater
+    } else {
+        s == Ordering::Less
+    }
 }
 
 fn crosses_arc_part(cx: &mut Ctx, c: Pt, rad: R, ccw: bool, u: Pt, w: Pt, q: Pt) -> bool {
@@ -485,7 +536,12 @@ fn crosses_arc_part(cx: &mut Ctx, c: Pt, rad: R, ccw: bool, u: Pt, w: Pt, q: Pt)
 pub fn rect(x0: f64, y0: f64, x1: f64, y1: f64) -> Loop {
     let (a, b, c, d) = (p2(x0, y0), p2(x1, y0), p2(x1, y1), p2(x0, y1));
     Loop {
-        segs: vec![Seg::Line { a, b }, Seg::Line { a: b, b: c }, Seg::Line { a: c, b: d }, Seg::Line { a: d, b: a }],
+        segs: vec![
+            Seg::Line { a, b },
+            Seg::Line { a: b, b: c },
+            Seg::Line { a: c, b: d },
+            Seg::Line { a: d, b: a },
+        ],
     }
 }
 
@@ -496,36 +552,87 @@ mod tests {
     #[test]
     fn validates() {
         let mut cx = Ctx::new();
-        let sq = Region { loops: vec![rect(0.0, 0.0, 10.0, 10.0)] };
+        let sq = Region {
+            loops: vec![rect(0.0, 0.0, 10.0, 10.0)],
+        };
         assert!(validate(&mut cx, &sq).is_ok());
         // reversed alone: wrong sense
-        assert!(matches!(validate(&mut cx, &sq.reversed()), Err(RegionError::Sense { .. })));
+        assert!(matches!(
+            validate(&mut cx, &sq.reversed()),
+            Err(RegionError::Sense { .. })
+        ));
         // with a clockwise island
         let hole = Loop {
-            segs: vec![Seg::Arc { a: p2(6.0, 5.0), b: p2(6.0, 5.0), c: p2(5.0, 5.0), ccw: false }],
+            segs: vec![Seg::Arc {
+                a: p2(6.0, 5.0),
+                b: p2(6.0, 5.0),
+                c: p2(5.0, 5.0),
+                ccw: false,
+            }],
         };
-        let r2 = Region { loops: vec![rect(0.0, 0.0, 10.0, 10.0), hole.clone()] };
+        let r2 = Region {
+            loops: vec![rect(0.0, 0.0, 10.0, 10.0), hole.clone()],
+        };
         assert!(validate(&mut cx, &r2).is_ok());
         // an island crossing the outside
         let bad = Loop {
-            segs: vec![Seg::Arc { a: p2(11.0, 5.0), b: p2(11.0, 5.0), c: p2(9.0, 5.0), ccw: false }],
+            segs: vec![Seg::Arc {
+                a: p2(11.0, 5.0),
+                b: p2(11.0, 5.0),
+                c: p2(9.0, 5.0),
+                ccw: false,
+            }],
         };
         assert!(matches!(
-            validate(&mut cx, &Region { loops: vec![rect(0.0, 0.0, 10.0, 10.0), bad] }),
+            validate(
+                &mut cx,
+                &Region {
+                    loops: vec![rect(0.0, 0.0, 10.0, 10.0), bad]
+                }
+            ),
             Err(RegionError::Crossing { .. })
         ));
         // a rounded slot: lines and half circles, tangent at every joint
         let slot = Loop {
             segs: vec![
-                Seg::Line { a: p2(0.0, 0.0), b: p2(10.0, 0.0) },
-                Seg::Arc { a: p2(10.0, 0.0), b: p2(10.0, 4.0), c: p2(10.0, 2.0), ccw: true },
-                Seg::Line { a: p2(10.0, 4.0), b: p2(0.0, 4.0) },
-                Seg::Arc { a: p2(0.0, 4.0), b: p2(0.0, 0.0), c: p2(0.0, 2.0), ccw: true },
+                Seg::Line {
+                    a: p2(0.0, 0.0),
+                    b: p2(10.0, 0.0),
+                },
+                Seg::Arc {
+                    a: p2(10.0, 0.0),
+                    b: p2(10.0, 4.0),
+                    c: p2(10.0, 2.0),
+                    ccw: true,
+                },
+                Seg::Line {
+                    a: p2(10.0, 4.0),
+                    b: p2(0.0, 4.0),
+                },
+                Seg::Arc {
+                    a: p2(0.0, 4.0),
+                    b: p2(0.0, 0.0),
+                    c: p2(0.0, 2.0),
+                    ccw: true,
+                },
             ],
         };
-        assert!(validate(&mut cx, &Region { loops: vec![slot.clone()] }).is_ok());
+        assert!(
+            validate(
+                &mut cx,
+                &Region {
+                    loops: vec![slot.clone()]
+                }
+            )
+            .is_ok()
+        );
         assert!(matches!(
-            validate(&mut cx, &Region { loops: vec![slot.reversed()] }),
+            validate(
+                &mut cx,
+                &Region {
+                    loops: vec![slot.reversed()]
+                }
+            ),
             Err(RegionError::Sense { .. })
         ));
     }

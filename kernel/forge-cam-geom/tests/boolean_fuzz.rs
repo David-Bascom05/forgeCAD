@@ -8,7 +8,10 @@ use forge_cam_geom::region::{Loop, P2, Region, Seg, p2};
 struct Rng(u64);
 impl Rng {
     fn next(&mut self) -> f64 {
-        self.0 = self.0.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        self.0 = self
+            .0
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
         ((self.0 >> 11) as f64) / ((1u64 << 53) as f64)
     }
 }
@@ -84,10 +87,18 @@ fn star(rng: &mut Rng, cx: f64, cy: f64) -> Loop {
         .map(|&t| {
             let r = 8.0 + 12.0 * rng.next();
             // round to a 1/64 grid: exact, and makes ties (parallel edges, equal lengths) likely
-            p2(((cx + r * t.cos()) * 64.0).round() / 64.0, ((cy + r * t.sin()) * 64.0).round() / 64.0)
+            p2(
+                ((cx + r * t.cos()) * 64.0).round() / 64.0,
+                ((cy + r * t.sin()) * 64.0).round() / 64.0,
+            )
         })
         .collect();
-    let segs = (0..n).map(|i| Seg::Line { a: pts[i], b: pts[(i + 1) % n] }).collect();
+    let segs = (0..n)
+        .map(|i| Seg::Line {
+            a: pts[i],
+            b: pts[(i + 1) % n],
+        })
+        .collect();
     Loop { segs }
 }
 
@@ -97,27 +108,46 @@ fn random_booleans_match_the_definition() {
     let mut rng = Rng(0xb001);
     let mut judged = 0usize;
     for case in 0..60 {
-        let a = Region { loops: vec![star(&mut rng, 0.0, 0.0)] };
+        let a = Region {
+            loops: vec![star(&mut rng, 0.0, 0.0)],
+        };
         let b = if case % 2 == 0 {
             {
                 let (ox, oy) = (6.0 * rng.next() - 3.0, 6.0 * rng.next() - 3.0);
-                Region { loops: vec![star(&mut rng, ox, oy)] }
+                Region {
+                    loops: vec![star(&mut rng, ox, oy)],
+                }
             }
         } else {
             let r = 4.0 + 8.0 * rng.next();
             let c = p2(10.0 * rng.next() - 5.0, 10.0 * rng.next() - 5.0);
-            Region { loops: vec![Loop { segs: vec![Seg::Arc { a: p2(c.x + r, c.y), b: p2(c.x + r, c.y), c, ccw: true }] }] }
+            Region {
+                loops: vec![Loop {
+                    segs: vec![Seg::Arc {
+                        a: p2(c.x + r, c.y),
+                        b: p2(c.x + r, c.y),
+                        c,
+                        ccw: true,
+                    }],
+                }],
+            }
         };
         let op = [Op::Union, Op::Inter, Op::Diff][case % 3];
         let out = match boolean(&a, &b, op) {
             Ok(o) => o,
             Err(_) => continue,
         };
-        let (pa, pb): (Vec<Vec<P2>>, Vec<Vec<P2>>) = (a.loops.iter().map(|l| polyline(&l.segs)).collect(), b.loops.iter().map(|l| polyline(&l.segs)).collect());
+        let (pa, pb): (Vec<Vec<P2>>, Vec<Vec<P2>>) = (
+            a.loops.iter().map(|l| polyline(&l.segs)).collect(),
+            b.loops.iter().map(|l| polyline(&l.segs)).collect(),
+        );
         let po: Vec<Vec<P2>> = out.iter().map(|l| polyline(&l.segs)).collect();
         for _ in 0..400 {
             let q = p2(-30.0 + 60.0 * rng.next(), -30.0 + 60.0 * rng.next());
-            let (ia, ib) = (pa.iter().map(|p| winding(p, q)).sum::<i32>() != 0, pb.iter().map(|p| winding(p, q)).sum::<i32>() != 0);
+            let (ia, ib) = (
+                pa.iter().map(|p| winding(p, q)).sum::<i32>() != 0,
+                pb.iter().map(|p| winding(p, q)).sum::<i32>() != 0,
+            );
             let near = dist(&pa, q).min(dist(&pb, q));
             if near < 0.05 {
                 continue;
