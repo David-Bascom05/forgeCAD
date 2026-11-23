@@ -10,11 +10,13 @@ on:
     paths: ["research/**/*.lean", "research/**/lean-toolchain", "research/**/lakefile.toml",
             "research/**/lake-manifest.json", "interface/forge-lang/grammar.ll1",
             "interface/forge-lang/src/**", "interface/forge-lang/tests/parse_diff*",
+            "kernel/forge-geom/src/spline.rs", "kernel/forge-geom/tests/spline_diff*",
             ".github/workflows/lean.yml"]
   pull_request:
     paths: ["research/**/*.lean", "research/**/lean-toolchain", "research/**/lakefile.toml",
             "research/**/lake-manifest.json", "interface/forge-lang/grammar.ll1",
             "interface/forge-lang/src/**", "interface/forge-lang/tests/parse_diff*",
+            "kernel/forge-geom/src/spline.rs", "kernel/forge-geom/tests/spline_diff*",
             ".github/workflows/lean.yml"]
   workflow_dispatch:
 
@@ -118,3 +120,45 @@ jobs:
       - name: build
         working-directory: ${{ matrix.dir }}
         run: lake build
+
+  # research/spline-loops/lean: the specification of .fg's splines (SplineSpec) and the Bernstein
+  # certificates (SplineLoops), on Mathlib v4.36.0-rc2 fetched with its build cache; then the kernel's
+  # splines against the spec's oracle (lake exe splineoracle) and the committed digest.
+  spline-spec:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: toolchain cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.elan
+          key: elan-${{ runner.os }}-${{ hashFiles('research/spline-loops/lean/lean-toolchain') }}
+      - name: Mathlib cache
+        uses: actions/cache@v4
+        with:
+          path: research/spline-loops/lean/.lake
+          key: lake-spline-${{ runner.os }}-${{ hashFiles('research/spline-loops/lean/lakefile.toml', 'research/spline-loops/lean/lake-manifest.json') }}-${{ hashFiles('research/spline-loops/lean/**/*.lean') }}
+          restore-keys: lake-spline-${{ runner.os }}-${{ hashFiles('research/spline-loops/lean/lakefile.toml', 'research/spline-loops/lean/lake-manifest.json') }}-
+      - name: elan, the toolchain, Mathlib's build
+        working-directory: research/spline-loops/lean
+        run: |
+          if [ ! -x "$HOME/.elan/bin/elan" ]; then
+            curl -sSfL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -o elan-init.sh
+            sh elan-init.sh -y --default-toolchain none
+          fi
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+          "$HOME/.elan/bin/elan" toolchain install "$(cat lean-toolchain)"
+          "$HOME/.elan/bin/lake" exe cache get
+      - name: build and axioms
+        working-directory: research/spline-loops/lean
+        run: |
+          lake build
+          lake env lean CheckAxioms.lean
+          lake env lean Axioms.lean | tee axioms.txt
+          ! grep -E "sorryAx|ofReduceBool" axioms.txt
+      - name: the kernel's splines against the spec
+        run: |
+          rustup show
+          FG_LEAN=1 cargo test --release --locked -p forge-geom --test spline_diff
+          git diff --exit-code kernel/forge-geom/tests/spline_diff.digest

@@ -483,6 +483,11 @@ impl Spline {
             .collect();
         (self.degree, self.breaks.clone(), pts)
     }
+    /// The breaks and the homogeneous Bezier points as held, (x w, y w, z w, w), degree + 1 a
+    /// piece: what the specification's oracle checks (tests/spline_diff.rs).
+    pub fn homogeneous(&self) -> (&[f64], &[[f64; 4]]) {
+        (&self.breaks, &self.pts)
+    }
     pub(crate) fn row(&self, i: usize) -> &[H] {
         &self.pts[i * (self.degree + 1)..(i + 1) * (self.degree + 1)]
     }
