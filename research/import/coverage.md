@@ -25,8 +25,8 @@ measure are given beside them where they differ.
 | set | parts | untranslated before | after | match (1e-4) before | after | uncertain after | match after, old measure |
 |---|---:|---:|---:|---:|---:|---:|---:|
 | FreeCAD library, bodies | 677 | 130 | 39 | 394 | 570 | 20 | 523 |
-| CADFS, all parts | 1914 | 640 | 522 | 1108 | 1177 | 5 | 1162 |
-| CADFS, parts with a fillet | 476 | 238 | 200 | 164 | 177 | 1 | 178 |
+| CADFS, all parts | 1914 | 640 | 522 | 1108 | 1179 | 5 | 1164 |
+| CADFS, parts with a fillet | 476 | 238 | 199 | 164 | 178 | 1 | 179 |
 | WHUCAD, 1 in 7 with a fillet | 319 | 35 | 29 | (1e-3: STEPs staged for the newly built only) | 0 new | | |
 
 No part got worse on any set through the importers: no match was lost, and nothing that built before stopped
@@ -329,8 +329,8 @@ All 1914 sampled parts:
 
 | class | before | after |
 |---|---:|---:|
-| match | 1108 | 1177 |
-| mismatch | 69 | 79 |
+| match | 1108 | 1179 |
+| mismatch | 69 | 77 |
 | uncertain | 3 | 5 |
 | no truth | 0 | 8 |
 | refused | 85 | 109 |
@@ -471,7 +471,17 @@ A full sweep on the merged kernel, against the one before the merge, moves only 
 | a variable or conic fillet (conic, or an empty vertexSettings) | 3 | | 1 | | | |
 
 - **No truth (8):** parts whose result is a sheet alone. The STEP truth measures solids, and these hold none.
-- **The 10 mismatches:** 8 are within 1.1e-2. Two sketch texts are off by 1.1e-1 and 2.1e-1 (00245556, 00239261), not yet looked at.
+- **The 10 mismatches:** 8 are within 1.1e-2. Two sketch texts were off by 1.1e-1 and 2.1e-1 (00245556, 00239261).
+  Their text lay inside the region an imprint query names. Onshape's region leaves the letters out; ours, drawn
+  without the text, kept them, silently. Two importer fixes came of it:
+  - **A region holding sketch text is refused** ("sketch text inside a region"), tested at 15 points across each text's
+    box from its record. Before, the reader went on as if the text weren't there. Both parts are now refused, and 2 more
+    reach the same refusal.
+  - **A text's string is unescaped before it is matched to its record.** The program writes `"SAM\\n"`, the record
+    holds "SAM" and a newline, and 5 parts were refused as "not in the sketch's record". Of those, 1 now matches
+    (00034578, 2.3e-7), and 4 stop on a font or on several lines. 00369427 matches too (4.2e-6).
+
+  At about 1 part in 900 each, both are worth hundreds of parts across CADFS's 380 thousand.
 
 CADFS goes from 1136 to 1177 matches, and the fillet subset from 167 to 177. The FreeCAD library has no sketch text,
 surfaces or conic fillets among its causes, so neither FreeCAD reader had anything to wire. Its sweep on the merged
@@ -485,7 +495,7 @@ Ranked for the parts with a fillet (all 1914 parts in brackets):
 |---|---:|---|
 | a region the query does not settle | 51 (119) | importer: the meaning of Onshape's `TD` weight on an imprint edge is not known (README: reading it as "the piece beside the vertex" gave 1 match and 16 wrong) |
 | a surface sweep, loft, along a spline, of a part's edges | 0 (6) | the merged sheets: importer |
-| sketch text beside other curves 5 (9), not in the record 3 (5), in a font not shipped 3 (13 parts, 7 fonts), alike 0 (1) | 11 (28) | the merged `text`: importer and fonts |
+| sketch text beside other curves 5 (9), inside a region 4, in a font not shipped (16 parts, 8 fonts), several lines 1, alike 1 | (31) | the merged `text`: importer (letters cut from the region) and fonts |
 | a reference to an entity the sketch no longer has, imprint edge source / bounds nothing | 29 (110) | importer: queries naming entities the program no longer has |
 | an unequal chamfer | 11 (23) | `chamfer(.., d2: | angle:, face: FACE)` exists. Tried and set aside: 15 of the 23 are single edges, where which face takes `width1` needs Onshape's per-edge rule. Reading it as the one face every edge bounds matched none of the rest. |
 | BLEND_EDGE / BLEND_FACE / OFFSET_* of an unknown feature, no edge or face on the carrier | 24 | importer: queries on blends' and offsets' own faces |
