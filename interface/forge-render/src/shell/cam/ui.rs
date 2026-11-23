@@ -176,6 +176,8 @@ impl Shell {
         let mut places: Places = vec![];
         let mut cmds: Vec<Cmd> = vec![];
         let sel = w.selected.clone();
+        // the op the simulation is playing (CAM-SIM's cursor), marked in the browser
+        let playing = self.camsim.as_ref().and_then(|s| s.cursor()).map(|c| c.op);
         let details_h = if sel.is_some() {
             (area.height() * 0.48).max(220.0)
         } else {
@@ -309,6 +311,17 @@ impl Shell {
                             &format!("cam:row:{op}"),
                             &mut places,
                         );
+                        if playing.as_deref() == Some(op.as_str()) {
+                            // the simulation's playhead: a small arrow at the row's left
+                            let r = resp.1.rect;
+                            let c = egui::pos2(r.left() + 6.0, r.center().y);
+                            ui.painter().add(egui::Shape::convex_polygon(
+                                vec![c + vec2(-3.0, -5.0), c + vec2(4.0, 0.0), c + vec2(-3.0, 5.0)],
+                                t.accent,
+                                Stroke::NONE,
+                            ));
+                            places.push((format!("cam:playing:{op}"), r));
+                        }
                         row_actions(&resp.1, op, &w, &mut cmds, &mut places);
                     }
                     // its program(s)

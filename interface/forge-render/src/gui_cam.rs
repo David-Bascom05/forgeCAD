@@ -1,8 +1,8 @@
 //! The host's side of the Manufacture workspace (shell/cam): a machining document opened with its
 //! part in the view, the document generated off the window's thread, the files it asks for
 //! written, and in the view what the workspace has in focus: the setup's stock and work
-//! offset, the selected op's posted path (a preview: the toolpath and simulation views proper
-//! read `CamWs::focus()`), and a located check's witness.
+//! offset and a located check's witness (the toolpath and its simulation are CAM-SIM's view,
+//! hosted on the same tab, which reads `CamWs::focus()`).
 use super::Gui;
 use crate::origin::WorldVert;
 use crate::shell::cam::{CamWs, run};
@@ -167,53 +167,6 @@ impl Gui {
                 behind,
             );
         }
-        // the selected op's posted path (else none): cuts blue, rapids dashed yellow
-        if let Some(op) = &w.focus.op
-            && let Some(k) = run.cam.ops.iter().position(|o| &o.name == op)
-        {
-            let cut = [0.25, 0.55, 1.0, 0.95];
-            let rapid = [0.98, 0.78, 0.25, 0.8];
-            for path in &run.cam.ops[k].paths {
-                let mut at = path.start;
-                let mut line: Vec<[f32; 3]> = vec![p3(at)];
-                let flush = |line: &mut Vec<[f32; 3]>, out: &mut Vec<WorldVert>| {
-                    if line.len() > 1 {
-                        crate::origin::polyline(line, px * 1.4, cut, cam, size, out);
-                    }
-                    line.clear();
-                };
-                for m in &path.moves {
-                    match *m {
-                        forge_cam::ops::PMove::Rapid { to } => {
-                            flush(&mut line, out);
-                            crate::origin::polyline(&[p3(at), p3(to)], px * 1.0, rapid, cam, size, out);
-                            at = to;
-                            line.push(p3(at));
-                        }
-                        forge_cam::ops::PMove::Line { to, .. } => {
-                            line.push(p3(to));
-                            at = to;
-                        }
-                        forge_cam::ops::PMove::Arc { to, c, cw, .. } => {
-                            for q in arc_points(at, to, c, cw) {
-                                line.push(p3(q));
-                            }
-                            at = to;
-                        }
-                        forge_cam::ops::PMove::Cycle { holes, z, r, .. } => {
-                            flush(&mut line, out);
-                            let top = [holes[0], holes[1], r];
-                            let bot = [holes[0], holes[1], z];
-                            crate::origin::polyline(&[p3(top), p3(bot)], px * 2.0, cut, cam, size, out);
-                            crate::origin::disc(p3(top), px * 4.0, cut, cam, size, out);
-                            at = top;
-                            line.push(p3(at));
-                        }
-                    }
-                }
-                flush(&mut line, out);
-            }
-        }
         // a located check's witness, seen through the part
         if let Some(l) = &w.focus.locate {
             let q = p3(l.at);
@@ -223,31 +176,4 @@ impl Gui {
             }
         }
     }
-}
-
-/// An xy arc about `c` from `a` to `b` (z linear), as points after `a`.
-fn arc_points(a: [f64; 3], b: [f64; 3], c: [f64; 2], cw: bool) -> Vec<[f64; 3]> {
-    let (dx, dy) = (a[0] - c[0], a[1] - c[1]);
-    let r = (dx * dx + dy * dy).sqrt().max(1e-9);
-    let t0 = forge_math::dmath::atan2(dy, dx);
-    let mut t1 = forge_math::dmath::atan2(b[1] - c[1], b[0] - c[0]);
-    let tau = std::f64::consts::TAU;
-    if cw {
-        while t1 >= t0 {
-            t1 -= tau;
-        }
-    } else {
-        while t1 <= t0 {
-            t1 += tau;
-        }
-    }
-    let n = (((t1 - t0).abs() * r / 0.5).ceil() as usize).clamp(4, 256);
-    (1..=n)
-        .map(|k| {
-            let s = k as f64 / n as f64;
-            let t = t0 + (t1 - t0) * s;
-            let (sn, cs) = forge_math::dmath::sin_cos(t);
-            [c[0] + r * cs, c[1] + r * sn, a[2] + (b[2] - a[2]) * s]
-        })
-        .collect()
 }
