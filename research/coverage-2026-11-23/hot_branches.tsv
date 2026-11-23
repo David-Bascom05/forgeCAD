@@ -1,0 +1,401 @@
+file	line	fn	total	true	false	source
+kernel/forge-geom/src/surface.rs	895	implicit_gradient	47952644	47952644	0	if rho > 0.0 {
+kernel/forge-geom/src/intcurve.rs	480	closest_on_cubic	37732444	13850733	23881711	if d < best {
+kernel/forge-geom/src/intcurve.rs	219	segments	32248092	11109474	21138618	if self.closed {
+kernel/forge-geom/src/intcurve.rs	229	wrap	31156361	28872262	2284099	if (0.0..hi).contains(&t) {
+kernel/forge-geom/src/intcurve.rs	105	settled	26543088	24490667	2052421	a.abs() <= 1e-6 && b.abs() <= 1e-6
+kernel/forge-geom/src/intcurve.rs	96	newton_step	26543088	4306	26538782	if det <= 1e-12 * aa * bb {
+kernel/forge-geom/src/intcurve.rs	320	onto	26203976	23577706	2626270	if settled(va.0, vb.0) {
+kernel/forge-geom/src/curve.rs	355	closest_numeric	25318912	12739649	12579263	if g0 < 0.0 && g1 >= 0.0 {
+kernel/forge-geom/src/curve.rs	349	closest_numeric	25318912	395608	24923304	let t1 = if i == N {
+kernel/forge-geom/src/meet.rs	675	newton	22710448	14631	22695817	if d1 == 0.0 || d1 * sign < 0.0 {
+kernel/forge-geom/src/meet.rs	675	newton	22695817	68205	22627612	if d1 == 0.0 || d1 * sign < 0.0 {
+kernel/forge-geom/src/meet.rs	680	newton	22627612	5504737	17122875	if dx.abs() <= 1e-13 * (1.0 + x.abs()) {
+kernel/forge-geom/src/spline.rs	1141	box_gap_sq	22104903	7651673	14453230	if x < i.lo {
+kernel/forge-geom/src/surface.rs	457	wrap_angle	19763871	300560	19463311	if x == 0.0 && y == 0.0 {
+kernel/forge-topo/src/body.rs	417	find	18391926	8010420	10381506	while p[i] != i {
+kernel/forge-geom/src/meet.rs	788	bisect	17596591	641069	16955522	if f == 0.0 {
+kernel/forge-geom/src/meet.rs	803	bisect	16955522	383705	16571817	if (next - x).abs() <= 2.0 * f64::EPSILON * x.abs() || b - a <= f64::EPSILON * a.abs().max(b.abs()) {
+kernel/forge-geom/src/meet.rs	798	bisect	16955522	16204280	751242	let next = if df != 0.0 && newton > a && newton < b {
+kernel/forge-geom/src/meet.rs	798	bisect	16955522	16955522	0	let next = if df != 0.0 && newton > a && newton < b {
+kernel/forge-geom/src/meet.rs	791	bisect	16955522	9137275	7818247	if (f < 0.0) == neg {
+kernel/forge-geom/src/meet.rs	803	bisect	16571817	0	16571817	if (next - x).abs() <= 2.0 * f64::EPSILON * x.abs() || b - a <= f64::EPSILON * a.abs().max(b.abs()) {
+kernel/forge-geom/src/meet.rs	798	bisect	16204280	15445715	758565	let next = if df != 0.0 && newton > a && newton < b {
+kernel/forge-geom/src/spline.rs	62	bern_eval	15756182	0	15756182	if n == 0 {
+kernel/forge-geom/src/spline.rs	81	bern_root	15712153	185873	15526280	if f == 0.0 {
+kernel/forge-geom/src/spline.rs	95	bern_root	15526280	215761	15310519	if next == x || b - a <= 4.0 * f64::EPSILON * a.abs().max(b.abs()).max(f64::MIN_POSITIVE) {
+kernel/forge-geom/src/spline.rs	90	bern_root	15526280	8905166	6621114	let next = if d != 0.0 && nt > a && nt < b {
+kernel/forge-geom/src/spline.rs	90	bern_root	15526280	15526280	0	let next = if d != 0.0 && nt > a && nt < b {
+kernel/forge-geom/src/spline.rs	84	bern_root	15526280	7207914	8318366	if (f < 0.0) == neg {
+kernel/forge-geom/src/spline.rs	95	bern_root	15310519	434404	14876115	if next == x || b - a <= 4.0 * f64::EPSILON * a.abs().max(b.abs()).max(f64::MIN_POSITIVE) {
+kernel/forge-geom/src/intersect.rs	784	subdivide_pieces	15103182	14976271	126911	while let Some((a, b, lip)) = stack.pop() {
+kernel/forge-geom/src/intersect.rs	788	subdivide_pieces	14976271	2704240	12272031	if off(p) > reach || s.implicit(p).abs() > reach {
+kernel/forge-geom/src/curve.rs	371	bisect_root	14954164	179618	14774546	if m <= a || m >= b {
+kernel/forge-geom/src/curve.rs	371	bisect_root	14774546	188658	14585888	if m <= a || m >= b {
+kernel/forge-geom/src/curve.rs	374	bisect_root	14585888	8248311	6337577	if g(m) < 0.0 {
+kernel/forge-geom/src/spline.rs	1143	box_gap_sq	14453230	4830136	9623094	} else if x > i.hi {
+kernel/forge-bool/src/classify.rs	1177	ray_hits_box	13504333	1800504	11703829	if di.abs() < 1e-300 {
+kernel/forge-geom/src/curve.rs	355	closest_numeric	12739649	368428	12371221	if g0 < 0.0 && g1 >= 0.0 {
+kernel/forge-geom/src/intersect.rs	788	subdivide_pieces	12272031	3079642	9192389	if off(p) > reach || s.implicit(p).abs() > reach {
+kernel/forge-geom/src/spline.rs	682	over	11985433	11970626	14807	(lo < hi || (lo == hi && (a..=b).contains(&lo))).then(|| {
+kernel/forge-geom/src/spline.rs	681	over	11985433	2355422	9630011	let hi = if i == n - 1 { range.hi } else { range.hi.min(b) };
+kernel/forge-geom/src/spline.rs	680	over	11985433	2355422	9630011	let lo = if i == 0 { range.lo } else { range.lo.max(a) };
+kernel/forge-geom/src/skinned.rs	977	first_nearest	11776007	1211269	10564738	.fold((none, f64::INFINITY), |b, x| if x.1 < b.1 { x } else { b })
+kernel/forge-bool/src/classify.rs	1186	ray_hits_box	11703829	5640348	6063481	if t0 > t1 {
+kernel/forge-geom/src/spline.rs	107	variations	11059988	11059116	872	if x != 0.0 {
+kernel/forge-geom/src/spline.rs	108	variations	11059116	869739	10189377	if last * x < 0.0 {
+kernel/forge-geom/src/spline.rs	508	locate	11001174	200517	10800657	let i = if n == 1 {
+kernel/forge-geom/src/intersect.rs	860	chain_pieces	10907109	10792589	114520	while (k as f64) < range.hi {
+kernel/forge-geom/src/intersect.rs	871	chain_pieces	10792589	365879	10426710	if b > a && clear <= 2.0 * tol::LINEAR + 1e-6 {
+kernel/forge-geom/src/intersect.rs	871	chain_pieces	10792589	10792589	0	if b > a && clear <= 2.0 * tol::LINEAR + 1e-6 {
+kernel/forge-geom/src/intersect.rs	863	chain_pieces	10792589	3684845	7107744	let i = if ic.closed {
+kernel/forge-geom/src/screw.rs	702	nearest_piece	9288832	8286237	1002595	if gap > 0.0 && gap * gap >= b2 {
+kernel/forge-geom/src/intersect.rs	798	subdivide_pieces	9192389	1893748	7298641	if b - a <= tol::LINEAR / lip {
+kernel/forge-geom/src/intersect.rs	792	subdivide_pieces	9192389	0	9192389	if budget == 0 && b - a <= coarse && b - a > tol::LINEAR / lip {
+kernel/forge-bool/src/boolean.rs	5573	split_face_in	9180052	5684536	3495516	if let Some(d) = c.get() {
+kernel/forge-geom/src/spline.rs	90	bern_root	8905166	4485406	4419760	let next = if d != 0.0 && nt > a && nt < b {
+kernel/forge-geom/src/screw.rs	702	nearest_piece	8286237	6457609	1828628	if gap > 0.0 && gap * gap >= b2 {
+kernel/forge-geom/src/spline.rs	799	closest	8033304	3550422	4482882	if d < best.0 {
+kernel/forge-geom/src/surface.rs	842	gradient	7987143	7987143	0	if rho > 0.0 {
+kernel/forge-geom/src/spline.rs	813	closest	7955510	6424762	1530748	|i: usize, s0: f64, s1: f64| (s0 >= 0.0 && s1 <= 1.0).then(|| box_gap_sq(&self.boxes[i], p));
+kernel/forge-bool/src/boolean.rs	5684	split_face_in	7644357	6275290	1369067	if face.same_sense {
+kernel/forge-bool/src/boolean.rs	5478	piece_samples	7567612	3884854	3682758	let k = if forward { i } else { n - i };
+kernel/forge-geom/src/intcurve.rs	74	refine_by	7247223	3798799	3448424	if ga.abs() <= 1e-3 * tol::LINEAR && gb.abs() <= 1e-3 * tol::LINEAR {
+kernel/forge-bool/src/boolean.rs	2600	trim_in	6890407	4649338	2241069	if !body.edge_box(e).overlaps(&reach) {
+kernel/forge-geom/src/intcurve.rs	615	trace	6174884	6172761	2123	while let Some((c, r)) = stack.pop() {
+kernel/forge-geom/src/intcurve.rs	616	trace	6172761	376024	5796737	if !touches(c, r)
+kernel/forge-geom/src/intcurve.rs	618	trace	5796737	2799845	2996892	|| first.implicit(c).abs() > r
+kernel/forge-geom/src/intcurve.rs	617	trace	5796737	0	5796737	|| (boxed && (!reaches(&pa, c, r) || !reaches(&pb, c, r)))
+kernel/forge-topo/src/small.rs	12	push	5785847	5774435	11412	Small::Inline(n, a) if (*n as usize) < N => {
+kernel/forge-bool/src/boolean.rs	5173	tied	5676375	2166076	3510299	d > 0.0 && x * x < 0.002 * d * d
+kernel/forge-bool/src/classify.rs	541	point_in_face_past	5645891	68397	5577494	if c == GONE || box_distance(b, p) > info.reach.min(best.map_or(f64::INFINITY, |x| x.0)) {
+kernel/forge-bool/src/classify.rs	541	point_in_face_past	5577494	5323973	253521	if c == GONE || box_distance(b, p) > info.reach.min(best.map_or(f64::INFINITY, |x| x.0)) {
+kernel/forge-geom/src/meet.rs	443	scaled	5531236	5531028	208	if r > 0.0 && r.is_finite() {
+kernel/forge-geom/src/meet.rs	443	scaled	5531028	5531028	0	if r > 0.0 && r.is_finite() {
+kernel/forge-geom/src/skinned.rs	911	extent	5126040	1754197	3371843	if d > hi {
+kernel/forge-geom/src/skinned.rs	908	extent	5126040	1549539	3576501	if d < lo {
+kernel/forge-topo/src/uv.rs	76	loop_samples	5122998	2618400	2504598	let k = if co.forward { i } else { n - i };
+kernel/forge-geom/src/skinned.rs	1240	seeds_near	4954140	4921760	32380	let n0 = first_nearest(&dist, |m| m != k && m % w != pole, 0).1;
+kernel/forge-geom/src/intcurve.rs	416	closest	4916224	2091654	2824570	if d < best.0 {
+kernel/forge-geom/src/meet.rs	1012	march	4894658	4810983	83675	while sig < 1.0 {
+kernel/forge-geom/src/meet.rs	1022	march	4810983	179473	4631510	if !ok || next == 1.0 || k % 16 == 0 {
+kernel/forge-geom/src/meet.rs	1017	march	4810983	4456085	354898	let guess = s + if ahead.abs() <= 1.0 { ahead } else { 0.0 };
+kernel/forge-geom/src/meet.rs	1049	march	4810974	205701	4605273	if chord > 1.5 * reach || bent || turned {
+kernel/forge-geom/src/meet.rs	1048	march	4810974	38618	4772356	let turned = short && chord > step * crate::intcurve::TURN_LEAST && eq.turns(back, p);
+kernel/forge-geom/src/meet.rs	1038	march	4810974	4711456	99518	let (bent, short) = if pts.len() > 1 {
+kernel/forge-geom/src/meet.rs	1030	march	4810974	1662714	3148260	if eq.periodic() {
+kernel/forge-topo/src/body.rs	424	find	4721482	533054	4188428	if !e.alive {
+kernel/forge-geom/src/meet.rs	1042	march	4711456	438135	4273321	(off && chord > 0.5 * l0, off && chord <= 0.5 * l0)
+kernel/forge-geom/src/meet.rs	1042	march	4711456	438135	4273321	(off && chord > 0.5 * l0, off && chord <= 0.5 * l0)
+kernel/forge-geom/src/meet.rs	1022	march	4631510	25589	4605921	if !ok || next == 1.0 || k % 16 == 0 {
+kernel/forge-geom/src/meet.rs	1022	march	4605921	256837	4349084	if !ok || next == 1.0 || k % 16 == 0 {
+kernel/forge-geom/src/meet.rs	1049	march	4605273	387006	4218267	if chord > 1.5 * reach || bent || turned {
+kernel/forge-geom/src/screw.rs	668	nearest_turn	4547622	4455025	92597	while m >= lo && m <= hi {
+kernel/forge-geom/src/screw.rs	668	nearest_turn	4455025	4418565	36460	while m >= lo && m <= hi {
+kernel/forge-geom/src/screw.rs	671	nearest_turn	4418565	3257461	1161104	if gap >= bound && gap >= last {
+kernel/forge-bool/src/boolean.rs	5010	place_cuts	4356536	269251	4087285	if d <= reach {
+kernel/forge-geom/src/intcurve.rs	80	refine_by	4314381	137498	4176883	if det <= 1e-12 * aa * bb {
+kernel/forge-geom/src/surface.rs	816	singular	4250630	240	4250390	t.is_spindle() && (t.major + t.minor * dmath::cos(uv.y)).abs() <= 2.0 * tol::LINEAR
+kernel/forge-geom/src/meet.rs	1049	march	4218267	243	4218024	if chord > 1.5 * reach || bent || turned {
+kernel/forge-geom/src/meet.rs	1065	march	4218024	0	4218024	if pts.len() > 100_000 {
+kernel/forge-geom/src/meet.rs	1057	march	4218024	4218024	0	let grow = if chord > 0.0 {
+kernel/forge-topo/src/body.rs	430	find	4188419	1494162	2694257	if x != y {
+kernel/forge-geom/src/meet.rs	1490	intersect	4168252	8740	4159512	if q.distance(p) < 0.2 * step && q.distance(next) <= 1.5 * step && !eq.turns(q, next) => {
+kernel/forge-bool/src/boolean.rs	6464	classify_specs	4100434	2966066	1134368	let floods = |p: usize| pieces[p].seg.is_none() && !imprinted[p];
+kernel/forge-geom/src/spline.rs	841	closest	3977755	2455991	1521764	if whole && box_gap_sq(&self.boxes[i], p) >= best.0 {
+kernel/forge-geom/src/spline.rs	840	closest	3977755	3212286	765469	let whole = s0 == 0.0 && s1 == 1.0;
+kernel/forge-geom/src/spline.rs	830	closest	3977755	2079441	1898314	if gap(i, s0, s1).is_some_and(|g| g > bound) {
+kernel/forge-geom/src/spline.rs	816	closest	3977755	2456155	1521600	let Some(g) = gap(i, s0, s1) else { continue };
+kernel/forge-bool/src/classify.rs	914	planar_parity	3836610	66895	3769715	if c == GONE || !ray_hits_box(p, d, b) {
+kernel/forge-geom/src/intcurve.rs	74	refine_by	3798799	2932842	865957	if ga.abs() <= 1e-3 * tol::LINEAR && gb.abs() <= 1e-3 * tol::LINEAR {
+kernel/forge-bool/src/classify.rs	914	planar_parity	3769715	2910051	859664	if c == GONE || !ray_hits_box(p, d, b) {
+kernel/forge-bool/src/boolean.rs	5229	clockwise	3720669	1223802	2496867	if back(j) {
+kernel/forge-bool/src/boolean.rs	5182	tied	3711659	1222679	2488980	if (near(a, theta) && mixed(k, i)) || (k != j && near(a, c) && mixed(k, j)) {
+kernel/forge-bool/src/boolean.rs	5182	tied	3710304	1964716	1745588	if (near(a, theta) && mixed(k, i)) || (k != j && near(a, c) && mixed(k, j)) {
+kernel/forge-geom/src/curve.rs	279	closest	3577840	151870	3425970	let t = if l.x == 0.0 && l.y == 0.0 {
+kernel/forge-geom/src/curve.rs	243	closest_on_arc	3577840	1776534	1801306	if range.width() >= dmath::TAU {
+kernel/forge-geom/src/surface.rs	678	normal	3574523	69132	3505391	if d.du.length() <= tol::LINEAR {
+kernel/forge-bool/src/boolean.rs	5612	split_face_in	3570120	3014138	555982	while !used[i] {
+kernel/forge-bool/src/boolean.rs	5250	uv_dir	3495516	11268	3484248	if let Surface::Cone(_) = face.surface
+kernel/forge-bool/src/boolean.rs	5246	uv_dir	3495516	1747812	1747704	let dir = if forward != at_end { d.d1 } else { -d.d1 };
+kernel/forge-bool/src/boolean.rs	5244	uv_dir	3495516	1747812	1747704	let t = if forward != at_end { p.range.lo } else { p.range.hi };
+kernel/forge-bool/src/boolean.rs	5256	uv_dir	3495504	20	3495484	if sd.du.dot(sd.du) <= 1e-18 * sd.dv.dot(sd.dv) {
+kernel/forge-bool/src/boolean.rs	5288	uv_dir	3495484	2781144	714340	let a = if face.same_sense { a } else { -a };
+kernel/forge-bool/src/boolean.rs	5285	uv_dir	3495484	3495484	0	let Some((a, b)) = forge_math::linalg::solve2(uu, uv2, uv2, vv, ru, rv) else {
+kernel/forge-bool/src/boolean.rs	5101	settle	3406608	3390257	16351	if k < near.len() {
+kernel/forge-bool/src/nary.rs	196	cell	3329394	3329394	0	let f = if w > 0.0 {
+kernel/forge-geom/src/meet.rs	1543	intersect	3290974	1749651	1541323	if inside[i] || !inside[(i + 1) % n] {
+kernel/forge-geom/src/screw.rs	671	nearest_turn	3257461	2153771	1103690	if gap >= bound && gap >= last {
+kernel/forge-geom/src/skinned.rs	699	point	3217012	3217012	0	if let Some(p) = &self.poly {
+kernel/forge-geom/src/skinned.rs	545	point	3217012	2621084	595928	if self.arcs {
+kernel/forge-bool/src/shape.rs	403	box_out	3203516	39463	3164053	let apart = |lo: f64, hi: f64, plo: f64, phi: f64| hi < plo - m || lo > phi + m;
+kernel/forge-topo/src/body.rs	1261	faces_where	3109304	2405407	703897	.filter(move |&i| ch.live >> i & 1 == 1 && hit(&ch.boxes[i]))
+kernel/forge-bool/src/nary.rs	1418	find	3027282	865031	2162251	while p[i] != i {
+kernel/forge-bool/src/boolean.rs	5557	split_face_in	3014230	1452319	1561911	let start_of = |h: (usize, bool)| if h.1 { pieces[h.0].start } else { pieces[h.0].end };
+kernel/forge-bool/src/boolean.rs	5616	split_face_in	3014138	0	3014138	if walked.len() - from > half.len() {
+kernel/forge-bool/src/boolean.rs	5585	split_face_in	3014138	1266414	1747724	if let [(_, j)] = out {
+kernel/forge-bool/src/boolean.rs	5558	split_face_in	3014138	1452271	1561867	let end_of = |h: (usize, bool)| if h.1 { pieces[h.0].end } else { pieces[h.0].start };
+kernel/forge-bool/src/boolean.rs	5607	split_face_in	3014028	2458046	555982	if used[s] {
+kernel/forge-geom/src/intcurve.rs	619	trace	2996892	1591197	1405695	|| !match second {
+kernel/forge-geom/src/meet.rs	635	polish_turn	2837068	34	2837034	if det == 0.0 || !det.is_finite() {
+kernel/forge-geom/src/meet.rs	635	polish_turn	2837034	175	2836859	if det == 0.0 || !det.is_finite() {
+kernel/forge-geom/src/meet.rs	642	polish_turn	2836859	173236	2663623	if dx.abs() <= 1e-15 * (1.0 + x.abs()) && ds.abs() <= 1e-12 * (1.0 + s.abs()) {
+kernel/forge-geom/src/screw.rs	706	nearest_piece	2831223	2293031	538192	if d2 < b2 {
+kernel/forge-geom/src/intcurve.rs	1021	finish	2808601	1063	2807538	if d.dot(along) < 0.0 { -d } else { d }
+kernel/forge-geom/src/intcurve.rs	1011	finish	2808601	935668	1872933	let along = if closed || (i > 0 && i + 1 < n) {
+kernel/forge-bool/src/boolean.rs	289	on_edge	2779692	1648965	1130727	if d <= edge.tol {
+kernel/forge-geom/src/meet.rs	1515	intersect	2710000	2709974	26	if tight(p) {
+kernel/forge-bool/src/boolean.rs	6495	classify_specs	2694920	7122	2687798	if specs[j].side != specs[i].side || fixed[j] {
+kernel/forge-bool/src/boolean.rs	6495	classify_specs	2694920	0	2694920	if specs[j].side != specs[i].side || fixed[j] {
+kernel/forge-geom/src/meet.rs	948	bisect	2680855	26736	2654119	if m <= a || m >= b {
+kernel/forge-geom/src/meet.rs	948	bisect	2654119	26318	2627801	if m <= a || m >= b {
+kernel/forge-geom/src/meet.rs	951	bisect	2627801	1313727	1314074	if (self.eval(m).0 < 0.0) == neg {
+kernel/forge-geom/src/intcurve.rs	327	onto	2626270	2595960	30310	if tight(q) {
+kernel/forge-geom/src/intcurve.rs	325	onto	2626270	2611354	14916	self.a.implicit(p).abs() <= 1e-3 * tol::LINEAR && self.b.implicit(p).abs() <= 1e-3 * tol::LINEAR
+kernel/forge-bool/src/boolean.rs	6511	classify_specs	2614031	12	2614019	Some(cj) if cj != c => {
+kernel/forge-bool/src/boolean.rs	5236	clockwise	2496867	2222008	274859	if top.is_none_or(|b| after(a, b.0)) {
+kernel/forge-bool/src/boolean.rs	5233	clockwise	2496867	1515809	981058	if after(theta, a) && best.is_none_or(|b| after(a, b.0)) {
+kernel/forge-bool/src/nary.rs	2411	find	2486758	1122722	1364036	.filter(move |(h, _)| list_at[h.0].seg.is_some() || list_at[h.0].side != Some(side))
+kernel/forge-geom/src/meet.rs	259	coeffs	2464492	2464492	0	let Alg::Torus { frame, big, r } = self.alg else {
+kernel/forge-geom/src/spline.rs	817	closest	2456155	1353763	1102392	if g < nearest.0 {
+kernel/forge-geom/src/spline.rs	841	closest	2455991	2162773	293218	if whole && box_gap_sq(&self.boxes[i], p) >= best.0 {
+kernel/forge-geom/src/screw.rs	493	cylindrical	2404874	2404867	7	let phi = if rho > 0.0 { dmath::atan2(l.y, l.x) } else { 0.0 };
+kernel/forge-geom/src/intcurve.rs	460	on_cubic	2296656	3723	2292933	if h <= 0.0 {
+kernel/forge-geom/src/intcurve.rs	466	on_cubic	2292933	798918	1494015	if done {
+kernel/forge-geom/src/intcurve.rs	231	wrap	2284099	2183610	100489	} else if self.closed {
+kernel/forge-geom/src/screw.rs	674	nearest_turn	2264794	1161104	1103690	if gap < bound
+kernel/forge-bool/src/boolean.rs	2614	trim_in	2241069	36507	2204562	if cuts[first..].iter().any(|x| x.on == CutOn::Edge(side, e)) {
+kernel/forge-bool/src/boolean.rs	2618	trim_in	2204562	1549784	654778	if let Surface::Plane(pl) = &body.face(f).surface
+kernel/forge-bool/src/boolean.rs	2934	trim_in	2190947	4794	2186153	let touch = (grazing && near.is_empty() && (corner() || touch_inside(&h))).then_some(h);
+kernel/forge-bool/src/boolean.rs	2923	trim_in	2190947	4794	2186153	let h = if grazing && near.is_empty() { slid(h) } else { h };
+kernel/forge-bool/src/boolean.rs	2952	trim_in	2189090	1338801	850289	if let Some(((s, tol), h)) = on
+kernel/forge-geom/src/ruled.rs	425	scan	2146436	1017558	1128878	if e < best.0 {
+kernel/forge-bool/src/nary.rs	442	divides	2119016	384	2118632	if any_intersect {
+kernel/forge-geom/src/meet.rs	776	real_roots	2057457	26377	2031080	if zb {
+kernel/forge-geom/src/meet.rs	773	real_roots	2057457	2031080	26377	if !za && !zb && (fa < 0.0) != (fb < 0.0) {
+kernel/forge-geom/src/meet.rs	770	real_roots	2057457	26377	2031080	if za {
+kernel/forge-topo/src/uv.rs	173	draw	2057344	31146	2026198	if singular[i] {
+kernel/forge-bool/src/boolean.rs	6478	classify_specs	2050217	1459123	591094	if floods(p) {
+kernel/forge-bool/src/boolean.rs	6467	classify_specs	2050217	1459123	591094	if floods(p) {
+kernel/forge-geom/src/meet.rs	773	real_roots	2031080	2004703	26377	if !za && !zb && (fa < 0.0) != (fb < 0.0) {
+kernel/forge-geom/src/meet.rs	773	real_roots	2004703	1024774	979929	if !za && !zb && (fa < 0.0) != (fb < 0.0) {
+kernel/forge-bool/src/boolean.rs	5182	tied	1964716	970	1963746	if (near(a, theta) && mixed(k, i)) || (k != j && near(a, c) && mixed(k, j)) {
+kernel/forge-geom/src/screw.rs	198	dist	1906947	1668783	238164	if !(t > 0.0 && t < 1.0) {
+kernel/forge-geom/src/intersect.rs	800	subdivide_pieces	1893748	5	1893743	if leaves.len() > 20_000 {
+kernel/forge-geom/src/intcurve.rs	1011	finish	1872933	1847885	25048	let along = if closed || (i > 0 && i + 1 < n) {
+kernel/forge-geom/src/intcurve.rs	1011	finish	1847885	1822837	25048	let along = if closed || (i > 0 && i + 1 < n) {
+kernel/forge-geom/src/spline.rs	652	part	1846718	1846694	24	if s1 != 0.0 {
+kernel/forge-geom/src/spline.rs	656	part	1846694	787454	1059240	if s0 != 0.0 {
+kernel/forge-geom/src/spline.rs	653	part	1846694	787546	1059148	if s1 != 1.0 {
+kernel/forge-topo/src/body.rs	958	coedge_start	1845342	926006	919336	if co.forward { e.start } else { e.end }
+kernel/forge-geom/src/screw.rs	1178	value	1833942	1373881	460061	if c.0.abs() < best.0.abs() {
+kernel/forge-bool/src/unify.rs	773	join_through	1822870	1258027	564843	if a.0 < 2 {
+kernel/forge-geom/src/spline.rs	848	closest	1814982	4199	1810783	let n = if self.rational {
+kernel/forge-bool/src/boolean.rs	908	edge_split	1813818	1530142	283676	.take_while(|&&(sd, ed, _)| sd == side && ed == e)
+kernel/forge-bool/src/classify.rs	1178	ray_hits_box	1800504	256459	1544045	if oi < lo || oi > hi {
+kernel/forge-geom/src/intersect.rs	814	subdivide_pieces	1793743	1692243	101500	while j < leaves.len() && leaves[j].0 <= hi {
+kernel/forge-geom/src/intcurve.rs	440	closest	1777491	0	1777491	if h <= 0.0 {
+kernel/forge-geom/src/meet.rs	1550	intersect	1773919	24268	1749651	if !inside[j] {
+kernel/forge-bool/src/boolean.rs	5595	split_face_in	1747724	1745399	2325	if !tied(pieces, half, out, i, theta, (c, j), ways())? {
+kernel/forge-bool/src/boolean.rs	2688	trim_in	1728841	731	1728110	let found = if on_spring {
+kernel/forge-bool/src/boolean.rs	2684	trim_in	1728841	1728110	731	let bends = !on_spring
+kernel/forge-bool/src/boolean.rs	2645	trim_in	1728841	0	1728841	if edge.tol > tol::LINEAR {
+kernel/forge-bool/src/boolean.rs	2726	trim_in	1728110	0	1728110	} else if bends {
+kernel/forge-bool/src/boolean.rs	2685	trim_in	1728110	24085	1704025	&& !matches!(edge.curve, Curve::Line(_) | Curve::Circle(_) | Curve::Ellipse(_))
+kernel/forge-bool/src/boolean.rs	2780	trim_in	1712186	226	1711960	if NO_RUN_ON.with(|c| c.get())
+kernel/forge-bool/src/boolean.rs	2781	trim_in	1711960	1711012	948	|| !matches!((&curve, &edge.curve), (Curve::Line(a), Curve::Line(b))
+kernel/forge-geom/src/meet.rs	732	real_roots	1693203	0	1693203	while deg > 0 && c[deg - 1] == 0.0 {
+kernel/forge-geom/src/meet.rs	732	real_roots	1693203	1693203	0	while deg > 0 && c[deg - 1] == 0.0 {
+kernel/forge-geom/src/intersect.rs	814	subdivide_pieces	1692243	1653871	38372	while j < leaves.len() && leaves[j].0 <= hi {
+kernel/forge-topo/src/body.rs	395	rebuild_shells	1685065	386941	1298124	if !self.faces[f].alive {
+kernel/forge-topo/src/body.rs	1174	face_normal	1678756	1322047	356709	Some(if face.same_sense { n } else { -n })
+kernel/forge-bool/src/nary.rs	1954	find	1678473	421378	1257095	if sg.sides.contains(&k) || !index[k].bbox.contains(m) {
+kernel/forge-geom/src/screw.rs	198	dist	1668783	1241330	427453	if !(t > 0.0 && t < 1.0) {
+kernel/forge-geom/src/screw.rs	1430	polish	1653191	7831	1645360	if next == uv {
+kernel/forge-geom/src/screw.rs	1405	polish	1653083	1652773	310	if k == 0 && !newton {
+kernel/forge-geom/src/screw.rs	1448	polish	1652773	7831	1644942	if !taken || tiny {
+kernel/forge-geom/src/screw.rs	1444	polish	1652773	1644942	7831	if taken || tiny || !overshoots {
+kernel/forge-geom/src/screw.rs	1427	polish	1652773	1652463	310	tiny = moves <= if k == 0 { 1e-7 } else { 1e-13 } * scale || moves * moves <= 1e-12 * f;
+kernel/forge-geom/src/screw.rs	1427	polish	1652773	677166	975607	tiny = moves <= if k == 0 { 1e-7 } else { 1e-13 } * scale || moves * moves <= 1e-12 * f;
+kernel/forge-geom/src/screw.rs	1421	polish	1652773	1652463	310	let overshoots = k == 0 && moves > 2.0 * f.sqrt();
+kernel/forge-geom/src/screw.rs	1417	polish	1652773	1652773	0	if !(x.is_finite() && y.is_finite()) {
+kernel/forge-geom/src/screw.rs	1417	polish	1652773	1652773	0	if !(x.is_finite() && y.is_finite()) {
+kernel/forge-geom/src/screw.rs	1412	polish	1652773	5154	1647619	if (uv.x <= dom.u.lo && x < 0.0) || (uv.x >= dom.u.hi && x > 0.0) {
+kernel/forge-geom/src/screw.rs	1408	polish	1652773	1652773	0	let Some((mut x, mut y)) = solve2(h00, h01, h01, h11, -gu, -gv) else {
+kernel/forge-geom/src/screw.rs	1405	polish	1652773	310	1652463	if k == 0 && !newton {
+kernel/forge-geom/src/screw.rs	1401	polish	1652773	1652671	102	let newton = huu > 0.0 && huu * hvv > huv * huv;
+kernel/forge-geom/src/screw.rs	1412	polish	1648129	4768	1643361	if (uv.x <= dom.u.lo && x < 0.0) || (uv.x >= dom.u.hi && x > 0.0) {
+kernel/forge-geom/src/screw.rs	1438	polish	1645360	1555434	89926	if fnext < f || (tiny && (fnext <= f || k == 0)) {
+kernel/forge-geom/src/screw.rs	1448	polish	1644942	669722	975220	if !taken || tiny {
+kernel/forge-geom/src/screw.rs	1414	polish	1643865	757	1643108	} else if (uv.y <= dom.v.lo && y < 0.0) || (uv.y >= dom.v.hi && y > 0.0) {
+kernel/forge-geom/src/screw.rs	1414	polish	1643137	590	1642547	} else if (uv.y <= dom.v.lo && y < 0.0) || (uv.y >= dom.v.hi && y > 0.0) {
+kernel/forge-bool/src/classify.rs	672	classify	1600257	27550	1572707	if boxes[f.index()].contains(p)
+kernel/forge-bool/src/nary.rs	593	nary_with	1597336	798670	798666	if out.coedges[c.index()].forward {
+kernel/forge-bool/src/nary.rs	670	nary_body	1570251	1040286	529965	.all(|&k| !index[k].bbox.overlaps(b) || sh[k].box_out(b, SHAPE_MARGIN))
+kernel/forge-bool/src/boolean.rs	6201	plane_area	1557490	755857	801633	a = if fwd { a + c } else { a - c };
+kernel/forge-bool/src/boolean.rs	2619	trim_in	1549784	475721	1074063	&& let Some(hits) = plane_meet(pl, &curve, range, &edge.curve)
+kernel/forge-bool/src/classify.rs	683	classify	1549490	1503495	45995	if !ray_hits_box(p, dir.get(), &boxes[f.index()]) {
+kernel/forge-bool/src/classify.rs	1178	ray_hits_box	1544045	259526	1284519	if oi < lo || oi > hi {
+kernel/forge-geom/src/meet.rs	1543	intersect	1541323	1517055	24268	if inside[i] || !inside[(i + 1) % n] {
+kernel/forge-bool/src/nary.rs	1175	nary_body	1530068	360606	1169462	if sg.sides.contains(&k)
+kernel/forge-bool/src/boolean.rs	5233	clockwise	1515809	1453364	62445	if after(theta, a) && best.is_none_or(|b| after(a, b.0)) {
+kernel/forge-bool/src/boolean.rs	2185	grown_tols	1495059	24932	1470127	if let VKey::Old(sd, v) = k
+kernel/forge-geom/src/meet.rs	576	pick_in	1472009	608510	863499	if self.periodic() {
+kernel/forge-geom/src/varblend.rs	1294	on	1452529	3514	1449015	if k == 2 {
+kernel/forge-bool/src/boolean.rs	941	edge_split	1443062	814748	628314	name: if whole.is_some() { edge.name } else { Name::NONE },
+kernel/forge-bool/src/nary.rs	2441	find	1437845	863304	574541	.find(|x| x.0 == h.1 && rr.contains(&(x.1 as usize)))
+kernel/forge-bool/src/classify.rs	529	point_in_face_past	1415414	408317	1007097	if let Some(w) = info
+kernel/forge-topo/src/check.rs	1148	ray_in	1415250	0	1415250	if di == 0.0 {
+kernel/forge-geom/src/intcurve.rs	626	trace	1405695	634333	771362	if 2.0 * r <= leaf {
+kernel/forge-geom/src/spline.rs	553	deriv	1404954	1398506	6448	if !self.rational {
+kernel/forge-geom/src/spline.rs	540	deriv	1404954	1404954	0	let (a2, top) = if p >= 2 {
+kernel/forge-geom/src/meet.rs	436	scaled	1382809	0	1382809	let top = if self.form == Form::Poly2 { 2 } else { 4 };
+kernel/forge-topo/src/body.rs	560	compact_owned	1381312	456573	924739	if vmap[v.index()] == NONE {
+kernel/forge-topo/src/body.rs	556	compact_owned	1381310	690656	690654	if emap[oe] == NONE {
+kernel/forge-geom/src/screw.rs	1072	closest	1365385	288741	1076644	if d < best.0 {
+kernel/forge-bool/src/nary.rs	875	nary_body	1340026	65284	1274742	if index[i].bbox.overlaps(&index[j].bbox) {
+kernel/forge-bool/src/boolean.rs	2953	trim_in	1338801	667218	671583	&& other.grow(tol::LINEAR).contains(h.point)
+kernel/forge-geom/src/screw/along.rs	577	helix_plane	1331685	46067	1285618	if done {
+kernel/forge-geom/src/screw/along.rs	571	helix_plane	1331685	588962	742723	let (nx, done) = if nt > u && nt < v {
+kernel/forge-geom/src/screw/along.rs	565	helix_plane	1331685	744022	587663	if (y > 0.0) == up {
+kernel/forge-bool/src/boolean.rs	6442	classify_specs	1318440	280517	1037923	let Some((_, lean)) = lean(bodies, segs, pieces, s.side, s.from, (p, fwd)) else {
+kernel/forge-topo/src/check.rs	755	open_at	1306955	0	1306955	if from != end {
+kernel/forge-topo/src/check.rs	750	open_at	1306955	572021	734934	let (from, to) = if body.coedge(c).forward {
+kernel/forge-geom/src/intersect.rs	535	conic_quadric	1295599	47447	1248152	if t > range.hi + 1e-12 {
+kernel/forge-geom/src/intersect.rs	516	conic_quadric	1295599	2914	1292685	let contact = if r.touching {
+kernel/forge-topo/src/small.rs	30	retain	1293614	552263	741351	if keep(&a[i]) {
+kernel/forge-bool/src/boolean.rs	4398	across	1292675	5626	1287049	if let Curve::Procedural(pc) = &edge.curve
+kernel/forge-bool/src/boolean.rs	4473	across	1288424	1208881	79543	Some(g) if g != f && body.face(g).surface != *s && !ssi::coincident(&body.face(g).surface, s) => {
+kernel/forge-geom/src/intersect.rs	935	planes_coincident	1265002	181726	1083276	p.normal_vec().cross(q.normal_vec()).length() <= tol::ANGULAR
+kernel/forge-bool/src/nary.rs	1954	find	1257095	1024660	232435	if sg.sides.contains(&k) || !index[k].bbox.contains(m) {
+kernel/forge-bool/src/nary.rs	1994	find	1252836	573718	679118	if let Ok(i) = degree.binary_search_by_key(&v, |x| x.0) {
+kernel/forge-geom/src/intersect.rs	545	conic_quadric	1248152	0	1248152	if s.distance(p) > 100.0 * tol::LINEAR {
+kernel/forge-geom/src/intersect.rs	540	conic_quadric	1248152	762	1247390	if let Some((cf, apex_v)) = cone_apex
+kernel/forge-bool/src/boolean.rs	1922	plan_once_in	1244427	3	1244424	if uses[p] > 2 {
+kernel/forge-geom/src/screw.rs	177	spans	1229951	795779	434172	self.d0.cross(w) * s >= 0.0 && w.cross(self.d1) * s >= 0.0
+kernel/forge-geom/src/screw.rs	176	spans	1229951	1229951	0	if sweep.abs() <= dmath::PI {
+kernel/forge-geom/src/screw.rs	175	spans	1229951	723437	506514	let s = if sweep > 0.0 { 1.0 } else { -1.0 };
+kernel/forge-geom/src/screw.rs	207	dist	1227973	794543	433430	if l > 0.0 && self.spans(w, sweep) {
+kernel/forge-geom/src/screw.rs	207	dist	1227973	1227973	0	if l > 0.0 && self.spans(w, sweep) {
+kernel/forge-bool/src/boolean.rs	5178	tied	1223649	2325	1221324	half[x].0 != half[y].0 && (side(x).is_none() || side(y).is_none() || side(x) != side(y) || pinch())
+kernel/forge-bool/src/boolean.rs	5182	tied	1222679	1355	1221324	if (near(a, theta) && mixed(k, i)) || (k != j && near(a, c) && mixed(k, j)) {
+kernel/forge-bool/src/unify.rs	271	rename	1220814	62180	1158634	bits[i] & b != 0 && k == NONE && alive && taken.binary_search(&m).is_ok()
+kernel/forge-bool/src/boolean.rs	4473	across	1208881	1089274	119607	Some(g) if g != f && body.face(g).surface != *s && !ssi::coincident(&body.face(g).surface, s) => {
+kernel/forge-geom/src/blend.rs	115	at	1208860	497848	711012	if k != self.id || q != key {
+kernel/forge-bool/src/nary.rs	2337	find	1196094	557449	638645	if let (None, Some(sd), Some(e)) = (list[p].seg, list[p].side, list[p].of)
+kernel/forge-geom/src/intersect.rs	503	conic_quadric	1186006	593003	593003	if phi == 0.0 {
+kernel/forge-geom/src/intersect.rs	500	conic_quadric	1186006	0	1186006	if [k0, k1, k2, k3, k4, k5].iter().all(|v| *v == 0.0) {
+kernel/forge-bool/src/nary.rs	1176	nary_body	1169462	939130	230332	|| !index[k].bbox.overlaps(&reach)
+kernel/forge-geom/src/screw.rs	675	nearest_turn	1161104	1145071	16033	&& let Some((j, d2, np, nr)) = self.nearest_piece(q, bound)
+kernel/forge-geom/src/skinned.rs	1107	ramped	1148928	1148928	0	a[0].dot(c[0]) > 0.0 && a[1].dot(c[1]) > 0.0 && a[2].dot(c[2]) > 0.0
+kernel/forge-geom/src/skinned.rs	1107	ramped	1148928	1148928	0	a[0].dot(c[0]) > 0.0 && a[1].dot(c[1]) > 0.0 && a[2].dot(c[2]) > 0.0
+kernel/forge-geom/src/intersect.rs	332	curve_surface_in	1145688	1142683	3005	Curve::Line(l) if !matches!(s, Surface::Procedural(_)) => return line_in_range(l, range, s),
+kernel/forge-geom/src/intersect.rs	386	line_in_range	1142683	1074198	68485	if let Surface::Plane(p) = s {
+kernel/forge-geom/src/screw.rs	659	nearest_turn	1141414	1141414	0	let start = if b != 0.0 {
+kernel/forge-geom/src/surface.rs	819	singular	1140135	825278	314857	Surface::Procedural(p) if p.regular() => false,
+kernel/forge-bool/src/boolean.rs	301	on_edge	1130727	440812	689915	let end = if s <= edge.range.lo {
+kernel/forge-bool/src/boolean.rs	1441	plan_once_in	1118685	362389	756296	if at == now {
+kernel/forge-bool/src/boolean.rs	4289	rolls_off	1116004	1116003	1	let Some(g) = body.partner(c).map(|o| body.coedge_face(o)) else {
+kernel/forge-bool/src/boolean.rs	4293	rolls_off	1116003	212470	903533	if g == f
+kernel/forge-bool/src/nary.rs	805	nary_body	1108028	16889	1091139	if k == i || k == j || !index[k].bbox.overlaps(b) || sh[k].box_out(b, SHAPE_MARGIN) {
+kernel/forge-geom/src/intersect.rs	121	line_plane_t	1099391	14681	1084710	if denom.abs() <= tol::ANGULAR {
+kernel/forge-geom/src/screw.rs	188	dist	1099047	368224	730823	if e0 <= e1 {
+kernel/forge-geom/src/varblend.rs	283	dist_grad	1097166	878944	218222	if !want_grad {
+kernel/forge-bool/src/nary.rs	805	nary_body	1091139	13022	1078117	if k == i || k == j || !index[k].bbox.overlaps(b) || sh[k].box_out(b, SHAPE_MARGIN) {
+kernel/forge-bool/src/boolean.rs	4473	across	1089274	1088033	1241	Some(g) if g != f && body.face(g).surface != *s && !ssi::coincident(&body.face(g).surface, s) => {
+kernel/forge-bool/src/boolean.rs	1763	plan_once_in	1088723	502427	586296	if co.forward {
+kernel/forge-bool/src/boolean.rs	4487	across	1088033	217786	870247	if smooth && !matches!(edge.curve, Curve::Intersection(_)) {
+kernel/forge-bool/src/nary.rs	805	nary_body	1078117	1034775	43342	if k == i || k == j || !index[k].bbox.overlaps(b) || sh[k].box_out(b, SHAPE_MARGIN) {
+kernel/forge-geom/src/meet.rs	738	real_roots	1077528	739063	338465	if *n < 4 && (*n == 0 || x - out[*n - 1] > 1e-14 * (1.0 + x.abs())) {
+kernel/forge-geom/src/meet.rs	738	real_roots	1077528	1077528	0	if *n < 4 && (*n == 0 || x - out[*n - 1] > 1e-14 * (1.0 + x.abs())) {
+kernel/forge-geom/src/screw.rs	807	value	1063953	1063949	4	let kr = if rho > 0.0 { k / rho } else { 0.0 };
+kernel/forge-geom/src/screw.rs	799	value	1063953	1063949	4	let (er, ephi) = if rho > 0.0 {
+kernel/forge-geom/src/screw.rs	789	value	1063953	1063949	4	let n = if rho > 0.0 {
+kernel/forge-geom/src/screw.rs	774	value	1063953	1063953	0	let Some(Near { d, q, np, nr, .. }) = near else {
+kernel/forge-geom/src/screw.rs	779	value	1063262	599855	463407	Some(nr) => (if (q - np).dot(nr) >= 0.0 { 1.0 } else { -1.0 }, nr),
+kernel/forge-geom/src/intersect.rs	389	line_in_range	1059517	995066	64451	PlaneMeet::At(t) if range.contains(t) => CurveSurface::Hits(vec![CurveHit {
+kernel/forge-bool/src/nary.rs	1184	nary_body	1058886	180972	877914	if index[k].boxes()[h.index()].overlaps(&reach)
+kernel/forge-bool/src/shape.rs	408	box_out	1057756	14029	1043727	apart(l.z.lo, l.z.hi, *lo, *hi)
+kernel/forge-bool/src/classify.rs	981	plane_ray_crossings	1057436	130648	926788	if s <= 0.0 {
+kernel/forge-bool/src/shape.rs	109	in_profile	1054795	421181	633614	if (a.y > q.y) != (b.y > q.y) && q.x < a.x + (q.y - a.y) / (b.y - a.y) * (b.x - a.x) {
+kernel/forge-bool/src/boolean.rs	912	edge_split	1046982	376998	669984	if let Some(period) = edge.curve.domain().period {
+kernel/forge-bool/src/shape.rs	409	box_out	1043727	24814	1018913	|| apart(l.x.lo, l.x.hi, p.0, p.1)
+kernel/forge-topo/src/chords.rs	27	before	1041595	461103	580492	p.x < q.x || (p.x == q.x && p.y < q.y)
+kernel/forge-bool/src/boolean.rs	6235	plane_inside	1038635	978566	60069	if !crate::classify::ray_hits_box(q, d, b) {
+kernel/forge-bool/src/boolean.rs	3467	trim_in	1037642	286273	751369	if *wk == Where::Outside {
+kernel/forge-bool/src/boolean.rs	3464	trim_in	1037642	1037642	0	if *wk == Where::On {
+kernel/forge-bool/src/classify.rs	564	point_in_face_past	1007097	210645	796452	if let Some((d, c, t)) = best {
+kernel/forge-geom/src/intcurve.rs	314	onto	992324	339112	653212	&& !self.hints.get().is_some_and(unhinted)
+kernel/forge-geom/src/intcurve.rs	312	onto	991186	658049	333137	let unhinted = |h: &[Option<Vec<Point2>>; 2]| h[0].is_none() && h[1].is_none();
+kernel/forge-bool/src/boolean.rs	839	get	990190	464310	525880	if at == self.stamp {
+kernel/forge-bool/src/boolean.rs	835	get	990190	7186	983004	if v.len() <= c.index() {
+kernel/forge-topo/src/body.rs	689	sole_survivors	989440	855823	133617	if edge.alive
+kernel/forge-bool/src/unify.rs	289	between_same	983935	62269	921666	if !x.alive || x.coedges.len() != 2 {
+kernel/forge-bool/src/classify.rs	621	point_in_face_past	971544	683306	288238	if let Surface::Plane(plane) = &face.surface {
+kernel/forge-bool/src/boolean.rs	5664	split_face_in	945531	734954	210577	let untouched = |cyc: &[usize]| planar && cyc.iter().all(|&i| i < nb);
+kernel/forge-geom/src/blend.rs	725	spine_closest	944509	20502	924007	if let Curve::Intersection(ic) = spine {
+kernel/forge-bool/src/classify.rs	993	plane_ray_crossings	926788	902103	24685	if t > range.lo && t < range.hi {
+kernel/forge-bool/src/classify.rs	990	plane_ray_crossings	926788	0	926788	if (t - range.lo).abs() <= margin || (t - range.hi).abs() <= margin {
+kernel/forge-bool/src/classify.rs	990	plane_ray_crossings	926788	0	926788	if (t - range.lo).abs() <= margin || (t - range.hi).abs() <= margin {
+kernel/forge-geom/src/intcurve.rs	431	closest	922132	329635	592497	if s1 <= s0 {
+kernel/forge-geom/src/intcurve.rs	422	closest	922132	485035	437097	if d < best.0 {
+kernel/forge-bool/src/unify.rs	289	between_same	921666	4	921662	if !x.alive || x.coedges.len() != 2 {
+kernel/forge-bool/src/unify.rs	293	between_same	921662	26306	895356	if a == b {
+kernel/forge-bool/src/nary.rs	1468	find	918009	377325	540684	if tx != sx || pts[j].y - y > widest {
+kernel/forge-geom/src/screw.rs	1197	value	916971	916971	0	let kr = if rho > 0.0 { k / rho } else { 0.0 };
+kernel/forge-geom/src/screw.rs	1189	value	916971	916971	0	let (er, ephi) = if rho > 0.0 {
+kernel/forge-geom/src/screw.rs	1183	value	916971	916971	0	let n = if rho > 0.0 {
+kernel/forge-geom/src/screw.rs	1171	value	916971	0	916971	let m0 = if k == 0.0 {
+kernel/forge-geom/src/screw.rs	1170	value	916971	916971	0	if lo <= hi {
+kernel/forge-bool/src/boolean.rs	2192	grown_tols	914144	914116	28	let Some((sd, e)) = c.on.edge() else { continue };
+kernel/forge-bool/src/boolean.rs	2195	grown_tols	914116	38110	876006	if k == VKey::Old(sd, edge.start) || k == VKey::Old(sd, edge.end) {
+kernel/forge-bool/src/boolean.rs	3714	cut_marks	912748	827916	84832	if let VKey::New(i) = k
+kernel/forge-bool/src/boolean.rs	4294	rolls_off	903533	288905	614628	|| std::mem::discriminant(s) != std::mem::discriminant(other)
+kernel/forge-bool/src/nary.rs	1504	find	903343	19344	883999	if vx.point.distance(c.point) <= vx.tol.max(c.tol) {
+kernel/forge-bool/src/classify.rs	993	plane_ray_crossings	902103	794623	107480	if t > range.lo && t < range.hi {
+kernel/forge-bool/src/nary.rs	3428	coincident	898233	514923	383310	if bucket.len() < 2 {
+kernel/forge-bool/src/boolean.rs	2782	trim_in	895944	948	894996	if a.dir.get().cross(b.dir.get()).length() <= 1e-6)
+kernel/forge-bool/src/classify.rs	1023	ruling_parity	895789	764221	131568	if c == GONE || !ray_hits_box(p, w, b) {
+kernel/forge-bool/src/classify.rs	1023	ruling_parity	895789	0	895789	if c == GONE || !ray_hits_box(p, w, b) {
+kernel/forge-bool/src/unify.rs	298	between_same	895356	82332	813024	if ka.0 == 0 || ka.0 != kb.0 || (ka.1 - kb.1).abs() > 1e-3 {
+kernel/forge-bool/src/nary.rs	832	nary_body	886357	339646	546711	k > t
+kernel/forge-bool/src/boolean.rs	2195	grown_tols	876006	23736	852270	if k == VKey::Old(sd, edge.start) || k == VKey::Old(sd, edge.end) {
+kernel/forge-geom/src/meet.rs	1296	intersect	873227	841613	31614	Some(x) if i < steps => x,
+kernel/forge-geom/src/varblend.rs	1520	solve_centre	871590	845912	25678	let better = |n: [f64; 3], o: [f64; 3]| norm(n) <= norm(o) && !n.iter().any(|x| x.is_nan());
+kernel/forge-bool/src/boolean.rs	5109	settle	869357	366054	503303	if p == was {
+kernel/forge-geom/src/varblend.rs	2300	nearest	865539	259711	605828	if d < best.0 {
+kernel/forge-bool/src/classify.rs	919	planar_parity	857624	691377	166247	if plane_ray_crossings(plane.frame.z().get(), p, d, &e.curve, e.range)? % 2 == 1 {
+kernel/forge-topo/src/body.rs	690	sole_survivors	855823	9420	846403	&& let Some(j) = wholes.iter().position(|&x| x == w)
+kernel/forge-bool/src/boolean.rs	2946	trim_in	850289	850289	0	if !CAREFUL.with(|c| c.get()) || !body.edge_box(e).grow(0.2).contains(h.point) {
+kernel/forge-geom/src/blend.rs	122	at	843111	786556	56555	if value {
+kernel/forge-geom/src/blend.rs	134	place	841149	0	841149	if len == 0.0 {
+kernel/forge-topo/src/check.rs	729	open_at	834169	5	834164	if uses != 2 {
+kernel/forge-topo/src/check.rs	733	open_at	834164	0	834164	if body.coedge(edge.coedges[0]).forward == body.coedge(edge.coedges[1]).forward {
+kernel/forge-bool/src/boolean.rs	3715	cut_marks	827916	165054	662862	&& !ended[i as usize]
+kernel/forge-bool/src/nary.rs	1473	find	822468	818523	3945	while from < firsts.len()
+kernel/forge-bool/src/nary.rs	1474	find	818523	407216	411307	&& (firsts[from].0 < sx + 1 || (firsts[from].0 == sx + 1 && pts[firsts[from].1].y < y - widest))
+kernel/forge-topo/src/check.rs	679	stray_edges_from	818150	818134	16	if !matches!(&edge.curve, Curve::Intersection(c) if c.strays()) {
+kernel/forge-topo/src/check.rs	676	stray_edges_from	818150	0	818150	if !edge.alive {
+kernel/forge-bool/src/boolean.rs	4241	plane_meet	815087	132923	682164	if g.0 == 0.0 || g.1 == 0.0 {
+kernel/forge-bool/src/unify.rs	298	between_same	813024	431909	381115	if ka.0 == 0 || ka.0 != kb.0 || (ka.1 - kb.1).abs() > 1e-3 {
+kernel/forge-geom/src/meet.rs	520	events	808721	801799	6922	while let Some((a, fa, b, fb, depth)) = stack.pop() {
+kernel/forge-bool/src/nary.rs	544	verdicts	807012	2724	804288	if !apply(k) {
+kernel/forge-bool/src/nary.rs	538	verdicts	807012	479625	327387	if own_left && own <= k {
+kernel/forge-bool/src/nary.rs	503	verdicts	807012	117065	689947	let (bin, bout) = if k == own {
+kernel/forge-bool/src/nary.rs	514	verdicts	804288	105068	699220	if k == 0 {
+kernel/forge-geom/src/meet.rs	521	events	801799	46	801753	if out.len() > MAX_EVENTS {
+kernel/forge-geom/src/meet.rs	524	events	801753	1226	800527	if fa == 0.0 {
+kernel/forge-geom/src/meet.rs	532	events	800527	797263	3264	if fb != 0.0 && (fa < 0.0) != (fb < 0.0) && !bent {
+kernel/forge-geom/src/meet.rs	531	events	800527	207497	593030	let bent = (fm - 0.5 * (fa + fb)).abs() > 0.25 * near && depth < 12;
+kernel/forge-bool/src/nary.rs	2573	find	798890	1	798889	if uses[p] > 2 {
+kernel/forge-bool/src/nary.rs	2590	find	798670	453675	344995	if let VKey::New(i) = v
+kernel/forge-bool/src/nary.rs	2800	find	798668	354259	444409	let (p, fwd) = lp[if flip { lp.len() - 1 - k } else { k }];
+kernel/forge-bool/src/nary.rs	634	nary_with	798663	277608	521055	Some(n) if n == c0 => break k == from.len(),
+kernel/forge-geom/src/meet.rs	532	events	797263	68893	728370	if fb != 0.0 && (fa < 0.0) != (fb < 0.0) && !bent {
+kernel/forge-geom/src/screw.rs	212	dist	794543	502317	292226	Some(if sweep > 0.0 { u } else { -u }),
+kernel/forge-bool/src/nary.rs	2316	find	787021	340570	446451	if last[at] != usize::MAX {
+kernel/forge-bool/src/nary.rs	2311	find	787021	633592	153429	let at = if count > 0 {
+kernel/forge-topo/src/uv.rs	250	uv_loop	782066	390558	391508	let kk = if co.forward { i } else { n - i };
+kernel/forge-geom/src/blend.rs	1975	nearest_on_spine	782005	200014	581991	if let Curve::Intersection(ic) = &self.spine {
+kernel/forge-geom/src/spline.rs	125	crossings	780047	21	780026	if a == 0.0 || b == 0.0 || a * b > 0.0 {
+kernel/forge-geom/src/spline.rs	125	crossings	780026	21	780005	if a == 0.0 || b == 0.0 || a * b > 0.0 {

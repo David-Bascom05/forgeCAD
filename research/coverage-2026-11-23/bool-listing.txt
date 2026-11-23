@@ -1,0 +1,1711 @@
+== boolean.rs :: fmt   (unrun closures/fns 4, regions 0, branch sites 0)
+  FN      L56    tests=2        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+  FN      L84    tests=1        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+  FN      L138   tests=0        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+  FN      L187   tests=1        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+== boolean.rs :: onto_spring   (unrun closures/fns 2, regions 0, branch sites 6)
+  FN      L333   tests=0        fn onto_spring(curve: &Curve, range: Interval, edge: &forge_topo::Edge, h: CurveHit) -> Option<Curve
+  closure L335   tests=0        if pc.0.as_any().is_some_and(|a| a.is::<forge_geom::blend::Spring>()));
+  branch  L335   corpus 0/0 tests 0/0  [never reached] if pc.0.as_any().is_some_and(|a| a.is::<forge_geom::blend::Spring>()));
+  branch  L336   corpus 0/0 tests 0/0  [never reached] if !spring {
+  branch  L340   corpus 0/0 tests 0/0  [never reached] if edge.curve.eval(s).distance(h.point) > 0.2 {
+  branch  L347   corpus 0/0 tests 0/0  [never reached] if r.length() <= 0.1 * edge.tol.min(tol::LINEAR) {
+  branch  L348   corpus 0/0 tests 0/0  [never reached] return (range.contains(t) && edge.range.contains(s)).then_some(CurveHit { t, point: e.p, ..h });
+  branch  L353   corpus 0/0 tests 0/0  [never reached] if det <= 1e-12 * aa * bb {
+== boolean.rs :: boolean_into   (unrun closures/fns 1, regions 2, branch sites 1)
+  closure L473   tests=9        if !imprinted(target, b, || std::borrow::Cow::Borrowed(b), op) {
+  region  L476-476   tests=T refuse_strays(target, first)?;
+  region  L477-477   tests=T }
+  branch  L473   corpus 29468/0 tests 23545/9  [never false] if !imprinted(target, b, || std::borrow::Cow::Borrowed(b), op) {
+== boolean.rs :: refuse_strays   (unrun closures/fns 0, regions 5, branch sites 1)
+  region  L509-509   tests=T if let Problem::EdgeOffFace { face, .. } | Problem::LoopsCross { face } = p {
+  region  L510-512   tests=T return Err(BoolError::lost(Lost::SplitCrossed {
+  region  L510-510   tests=T return Err(BoolError::lost(Lost::SplitCrossed {
+  region  L511-511   tests=T face: FaceRef::of(body, face),
+  region  L513-513   tests=- }
+  branch  L509   corpus 0/0 tests 1/0  [never reached] if let Problem::EdgeOffFace { face, .. } | Problem::LoopsCross { face } = p {
+== boolean.rs :: faces_survive   (unrun closures/fns 2, regions 0, branch sites 0)
+  FN      L522   tests=23460    fn faces_survive(a: &Body, b: &Body, op: Op, r: &Body) {
+  closure L526   tests=23460    let asked = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| survivors(a, b, op, r)));
+== boolean.rs :: survivors   (unrun closures/fns 1, regions 0, branch sites 0)
+  FN      L544   tests=23460    fn survivors(a: &Body, b: &Body, op: Op, r: &Body) -> Option<String> {
+== boolean.rs :: boolean_unlinked   (unrun closures/fns 2, regions 0, branch sites 1)
+  FN      L573   tests=1300     pub fn boolean_unlinked(target: &mut Body, b: forge_topo::Unlinked, op: Op) -> R<()> {
+  closure L582   tests=681      if imprinted(target, &b, || std::borrow::Cow::Owned(b.clone().into_body()), op) {
+  branch  L582   corpus 0/0 tests 681/619  [never reached] if imprinted(target, &b, || std::borrow::Cow::Owned(b.clone().into_body()), op) {
+== boolean.rs :: imprinted   (unrun closures/fns 0, regions 25, branch sites 6)
+  region  L603-603   tests=- crate::imprint::column(target, src, op)
+  region  L603-603   tests=- crate::imprint::column(target, src, op)
+  region  L603-603   tests=- crate::imprint::column(target, src, op)
+  region  L608-608   tests=T let mut slow = target.clone();
+  region  L609-609   tests=T let valid_before = forge_topo::check(target).is_empty();
+  region  L610-610   tests=T if !crate::imprint::column(target, src, op) {
+  region  L610-610   tests=T if !crate::imprint::column(target, src, op) {
+  region  L610-610   tests=T if !crate::imprint::column(target, src, op) {
+  region  L611-611   tests=T return false;
+  region  L612-612   tests=T }
+  region  L613-613   tests=T if let Err(e) = general(&mut slow, &body(), op) {
+  region  L613-613   tests=T if let Err(e) = general(&mut slow, &body(), op) {
+  region  L613-613   tests=T if let Err(e) = general(&mut slow, &body(), op) {
+  region  L614-614   tests=- panic!("imprint made a body where the general boolean failed: {e}");
+  region  L615-615   tests=T }
+  region  L616-616   tests=T if let Some(d) = crate::imprint::diff(target, &slow) {
+  region  L616-616   tests=T if let Some(d) = crate::imprint::diff(target, &slow) {
+  region  L617-617   tests=- panic!("imprint differs from the general boolean: {d}");
+  region  L618-618   tests=T }
+  region  L619-619   tests=T let problems = forge_topo::check(target);
+  region  L620-620   tests=T if valid_before && !problems.is_empty() {
+  region  L620-620   tests=T if valid_before && !problems.is_empty() {
+  region  L621-621   tests=- panic!(
+  region  L630-630   tests=T }
+  region  L631-631   tests=T true
+  branch  L610   corpus 0/0 tests 957/690  [never reached] if !crate::imprint::column(target, src, op) {
+  branch  L613   corpus 0/0 tests 0/690  [never reached] if let Err(e) = general(&mut slow, &body(), op) {
+  branch  L616   corpus 0/0 tests 0/690  [never reached] if let Some(d) = crate::imprint::diff(target, &slow) {
+  branch  L620   corpus 0/0 tests 690/0  [never reached] if valid_before && !problems.is_empty() {
+  branch  L620   corpus 0/0 tests 0/690  [never reached] if valid_before && !problems.is_empty() {
+  branch  L623   corpus 0/0 tests 0/0  [never reached] if forge_topo::check(&slow).is_empty() {
+== boolean.rs :: general   (unrun closures/fns 1, regions 3, branch sites 2)
+  closure L665   tests=6        let valid = |b: &Body| forge_topo::check(b).is_empty();
+  region  L660-660   tests=- undecided_touch(target)?;
+  region  L666-666   tests=T if RETRIED.with(|r| r.get()) && !valid(&target.compact()) {
+  region  L671-671   tests=- return Err(BoolError::lost(Lost::RetryInvalid));
+  branch  L666   corpus 0/29448 tests 6/24755  [never true] if RETRIED.with(|r| r.get()) && !valid(&target.compact()) {
+  branch  L666   corpus 0/0 tests 0/6  [never reached] if RETRIED.with(|r| r.get()) && !valid(&target.compact()) {
+== boolean.rs :: undecided_touch   (unrun closures/fns 1, regions 1, branch sites 1)
+  closure L686   tests=0        .any(|p| matches!(p, forge_topo::Problem::FaceWrongSide { .. })) =>
+  region  L688-688   tests=- Err(BoolError::ZeroThickness { at })
+  branch  L684   corpus 0/9 tests 0/105  [never true] if forge_topo::check(body)
+== boolean.rs :: pinched_new   (unrun closures/fns 1, regions 5, branch sites 2)
+  closure L791   tests=8        .map(|run| t.vertex(run[0].0).point)
+  region  L777-777   tests=- return false;
+  region  L785-785   tests=- false
+  region  L790-790   tests=T .find(|run| !one_fan(t, run) && pinched(t, run, &mut prev))
+  region  L790-790   tests=T .find(|run| !one_fan(t, run) && pinched(t, run, &mut prev))
+  region  L790-790   tests=T .find(|run| !one_fan(t, run) && pinched(t, run, &mut prev))
+  branch  L776   corpus 732392/0 tests 563463/0  [never false] let Some(next) = t.partner(forge_topo::CoedgeId(first + (c.0 - first + n - 1) % n)) else {
+  branch  L790   corpus 0/252397 tests 8/190044  [never true] .find(|run| !one_fan(t, run) && pinched(t, run, &mut prev))
+== boolean.rs :: next   (unrun closures/fns 0, regions 2, branch sites 1)
+  region  L827-827   tests=- self.at = Default::default();
+  region  L828-828   tests=- self.stamp = 1;
+  branch  L826   corpus 0/29494 tests 0/24872  [never true] if self.stamp == 0 {
+== boolean.rs :: get   (unrun closures/fns 0, regions 1, branch sites 0)
+  region  L842-842   tests=- let s = across(body, f, c)?;
+== boolean.rs :: edge_split   (unrun closures/fns 0, regions 1, branch sites 1)
+  region  L918-918   tests=- sp.0 -= period;
+  branch  L917   corpus 0/326912 tests 0/425300  [never true] while sp.0 >= edge.range.lo + period {
+== boolean.rs :: phase_times   (unrun closures/fns 2, regions 0, branch sites 0)
+  FN      L956   tests=0        pub fn phase_times() -> [u64; 7] {
+  closure L957   tests=0        PHASES.with(|p| *p.borrow())
+== boolean.rs :: lap   (unrun closures/fns 1, regions 3, branch sites 1)
+  closure L985   tests=0        PHASES.with(|p| p.borrow_mut()[k] += (now - *t0).as_nanos() as u64);
+  region  L984-984   tests=- let now = forge_math::clock::Instant::now();
+  region  L985-985   tests=- PHASES.with(|p| p.borrow_mut()[k] += (now - *t0).as_nanos() as u64);
+  region  L986-986   tests=- *t = Some(now);
+  branch  L983   corpus 0/206306 tests 0/173537  [never true] if let Some(t0) = t {
+== boolean.rs :: plan   (unrun closures/fns 2, regions 9, branch sites 2)
+  closure L1033  tests=6        RETRIED.with(|r| r.set(true));
+  closure L1038  tests=0        r.map_err(|e| match e {
+  region  L1033-1033  tests=T RETRIED.with(|r| r.set(true));
+  region  L1034-1034  tests=T let careful = Held::set(&CAREFUL, true);
+  region  L1034-1034  tests=T let careful = Held::set(&CAREFUL, true);
+  region  L1035-1035  tests=T let r = plan_retried(a, b, op, scratch);
+  region  L1035-1035  tests=T let r = plan_retried(a, b, op, scratch);
+  region  L1035-1035  tests=T let r = plan_retried(a, b, op, scratch);
+  region  L1035-1035  tests=T let r = plan_retried(a, b, op, scratch);
+  region  L1036-1036  tests=T drop(careful);
+  region  L1038-1038  tests=T r.map_err(|e| match e {
+  branch  L1032  corpus 0/10 tests 6/0  [never true] Err(BoolError::Internal(w)) if curved(a) || curved(b) => {
+  branch  L1032  corpus 0/10 tests 0/0  [never true] Err(BoolError::Internal(w)) if curved(a) || curved(b) => {
+== boolean.rs :: plan_retried   (unrun closures/fns 0, regions 2, branch sites 1)
+  region  L1070-1070  tests=- return r;
+  region  L1082-1082  tests=- e => e,
+  branch  L1069  corpus 0/20 tests 0/12  [never true] if !matches!(r, Err(BoolError::Internal(_))) {
+== boolean.rs :: plan_fenced   (unrun closures/fns 1, regions 8, branch sites 1)
+  closure L1097  tests=0        r.map_err(|e| match e {
+  region  L1093-1093  tests=- let held = Held::set(&FENCES, true);
+  region  L1093-1093  tests=- let held = Held::set(&FENCES, true);
+  region  L1094-1094  tests=- let r = plan_once(a, b, op, scratch);
+  region  L1094-1094  tests=- let r = plan_once(a, b, op, scratch);
+  region  L1094-1094  tests=- let r = plan_once(a, b, op, scratch);
+  region  L1094-1094  tests=- let r = plan_once(a, b, op, scratch);
+  region  L1095-1095  tests=- drop(held);
+  region  L1097-1097  tests=- r.map_err(|e| match e {
+  branch  L1092  corpus 0/36 tests 0/18  [never true] Err(BoolError::Internal(w)) if ODD.with(|o| o.get()) => {
+== boolean.rs :: plan_once_in   (unrun closures/fns 15, regions 66, branch sites 21)
+  closure L1339  tests=0        .filter_map(|c| c.on.edge())
+  closure L1340  tests=0        .flat_map(|(sd, e)| end_names(sd, e))
+  closure L1402  tests=0        let ends = sg.ends.map(|(x, y)| (cut_vertex[x], cut_vertex[y]));
+  closure L1657  tests=0        let cands = body.lp(l).coedges().map(|c| {
+  closure L1688  tests=0        let drawn = drawn.get_or_init(|| match &split.outlines {
+  closure L1692  tests=0        let outlines = outlines.get_or_init(|| {
+  closure L1696  tests=0        .map(|o| {
+  closure L1699  tests=0        |a, q| (a.0.min(q.x), a.1.max(q.x), a.2.min(q.y), a.3.max(q.y)),
+  closure L1710  tests=0        .position(|o| o.as_ref().is_some_and(|o| inside_poly(q, o)))
+  closure L1710  tests=0        .position(|o| o.as_ref().is_some_and(|o| inside_poly(q, o)))
+  closure L1719  tests=0        .filter(|p| loops.iter().flatten().any(|h| h.0 == *p))
+  closure L1719  tests=0        .filter(|p| loops.iter().flatten().any(|h| h.0 == *p))
+  closure L1862  tests=25551    debug_assert!(by_ends.windows(2).all(|w| w[0] < w[1]));
+  closure L1904  tests=0        let ls: Vec<Vec<usize>> = sp.loops.iter().map(|l| l.iter().map(|h| h.0).collect()).collect();
+  closure L1904  tests=0        let ls: Vec<Vec<usize>> = sp.loops.iter().map(|l| l.iter().map(|h| h.0).collect()).collect();
+  region  L1165-1165  tests=- let what = match &found {
+  region  L1166-1166  tests=- SurfaceSurface::Curves(cs) => format!("{} curves", cs.len()),
+  region  L1166-1166  tests=- SurfaceSurface::Curves(cs) => format!("{} curves", cs.len()),
+  region  L1167-1167  tests=- other => format!("{other:?}").chars().take(40).collect(),
+  region  L1169-1169  tests=- eprintln!("  pair {fa:?} {fb:?}: {what}");
+  region  L1169-1169  tests=- eprintln!("  pair {fa:?} {fb:?}: {what}");
+  region  L1169-1169  tests=- eprintln!("  pair {fa:?} {fb:?}: {what}");
+  region  L1169-1169  tests=- eprintln!("  pair {fa:?} {fb:?}: {what}");
+  region  L1185-1185  tests=- Some(cs) => cs,
+  region  L1224-1224  tests=- )?;
+  region  L1242-1242  tests=- eprintln!(
+  region  L1244-1244  tests=- t.faces,
+  region  L1245-1245  tests=- t.at,
+  region  L1246-1246  tests=- t.dir,
+  region  L1247-1247  tests=- near(0),
+  region  L1248-1248  tests=- near(1)
+  region  L1291-1291  tests=- )?;
+  region  L1302-1302  tests=- )?;
+  region  L1308-1308  tests=- let (cut_vertex, mut new_points, alias) = place_cuts(&bodies, &cuts)?;
+  region  L1337-1338  tests=- let mut old: Vec<Name> = cuts
+  region  L1342-1342  tests=- old.sort_unstable();
+  region  L1343-1343  tests=- for n in &mut vnames {
+  region  L1344-1344  tests=- while old.binary_search(n).is_ok() {
+  region  L1345-1345  tests=- *n = n.with(1);
+  region  L1345-1345  tests=- *n = n.with(1);
+  region  L1374-1374  tests=- let (q, tol) = settle(*p, curves)?;
+  region  L1401-1401  tests=- for (i, sg) in segs.iter().enumerate() {
+  region  L1402-1402  tests=- let ends = sg.ends.map(|(x, y)| (cut_vertex[x], cut_vertex[y]));
+  region  L1403-1403  tests=- eprintln!(
+  region  L1404-1404  tests=- seg {i}: faces {:?} ends {:?} range {:?} mid {:?},
+  region  L1405-1405  tests=- sg.faces,
+  region  L1406-1406  tests=- ends,
+  region  L1407-1407  tests=- sg.range,
+  region  L1408-1408  tests=- sg.curve.eval(sg.range.mid())
+  region  L1411-1411  tests=- for (i, c) in cuts.iter().enumerate() {
+  region  L1412-1412  tests=- eprintln!(
+  region  L1413-1413  tests=- cut {i}: on {:?} s {:.4} -> {:?} at {:?},
+  region  L1414-1414  tests=- c.on, c.s, cut_vertex[i], c.point
+  region  L1414-1414  tests=- c.on, c.s, cut_vertex[i], c.point
+  region  L1414-1414  tests=- c.on, c.s, cut_vertex[i], c.point
+  region  L1414-1414  tests=- c.on, c.s, cut_vertex[i], c.point
+  region  L1430-1430  tests=- scratch.edge_pieces = Default::default();
+  region  L1431-1431  tests=- scratch.boolean = 1;
+  region  L1536-1536  tests=T (_, Where::On) => None,
+  region  L1544-1544  tests=T None => {}
+  region  L1646-1646  tests=- let split = split_face(body, f, &pieces, &boundary, &new_edges, false, &|_| None)?;
+  region  L1686-1686  tests=- }
+  region  L1687-1687  tests=- }
+  region  L1688-1688  tests=- let drawn = drawn.get_or_init(|| match &split.outlines {
+  region  L1692-1692  tests=- let outlines = outlines.get_or_init(|| {
+  region  L1705-1705  tests=- let Some(q) = clear_point(cands, outlines) else {
+  region  L1705-1705  tests=- let Some(q) = clear_point(cands, outlines) else {
+  region  L1706-1706  tests=- continue;
+  region  L1708-1709  tests=- if let Some(r) = drawn
+  region  L1712-1712  tests=- moved.push((r, l));
+  region  L1712-1712  tests=- moved.push((r, l));
+  region  L1713-1713  tests=- }
+  region  L1862-1862  tests=T debug_assert!(by_ends.windows(2).all(|w| w[0] < w[1]));
+  region  L1903-1903  tests=- for (i, sp) in specs.iter().enumerate() {
+  region  L1904-1904  tests=- let ls: Vec<Vec<usize>> = sp.loops.iter().map(|l| l.iter().map(|h| h.0).collect()).collect();
+  region  L1905-1905  tests=- eprintln!(
+  region  L1906-1906  tests=-   SPEC {i}: side {} face {:?} class {:?} loops {ls:?},
+  region  L1906-1906  tests=-   SPEC {i}: side {} face {:?} class {:?} loops {ls:?},
+  region  L1907-1907  tests=- sp.side, sp.from, class[i]
+  region  L1907-1907  tests=- sp.side, sp.from, class[i]
+  region  L1907-1907  tests=- sp.side, sp.from, class[i]
+  branch  L1164  corpus 0/262810 tests 0/215058  [never true] if debug_on() {
+  branch  L1180  corpus 0/1 tests 0/0  [never true] index[0].point_in_face(fa, p) == Where::Outside
+  branch  L1204  corpus 49/0 tests 307/0  [never false] && !through_smooth_edge(bodies, [&index[0], &index[1]], [fa, fb], &curve)
+  branch  L1241  corpus 0/394 tests 0/1742  [never true] if debug_on() {
+  branch  L1269  corpus 1/0 tests 69/1  [never false] && !flows_on([a, b], t.faces, t.at, op == Op::Subtract)
+  branch  L1270  corpus 1/0 tests 69/0  [never false] && !crack_tip([a, b], [&index[0], &index[1]], t, op == Op::Union)
+  branch  L1336  corpus 0/29492 tests 0/24803  [never true] if clash {
+  branch  L1344  corpus 0/0 tests 0/0  [never reached] while old.binary_search(n).is_ok() {
+  branch  L1400  corpus 0/29492 tests 0/24803  [never true] if debug_on() {
+  branch  L1429  corpus 0/29492 tests 0/24803  [never true] if scratch.boolean == 0 {
+  branch  L1531  corpus 37426/0 tests 27278/0  [never false] && let Some(p) = face_point(body, f)
+  branch  L1550  corpus 211558/0 tests 178381/0  [never false] if FAST_EXTEND
+  branch  L1555  corpus 11473/0 tests 13874/13  [never false] && !imprints.iter().any(|im| im.side == 1 && im.into == f)
+  branch  L1659  corpus 0/0 tests 0/0  [never reached] if face.same_sense {
+  branch  L1667  corpus 48105/0 tests 307892/0  [never false] if split.outlines.is_none() {
+  branch  L1681  corpus 48105/0 tests 307892/0  [never false] if let Some(held) = held {
+  branch  L1705  corpus 0/0 tests 0/0  [never reached] let Some(q) = clear_point(cands, outlines) else {
+  branch  L1708  corpus 0/0 tests 0/0  [never reached] if let Some(r) = drawn
+  branch  L1791  corpus 1/0 tests 14/0  [never false] b != p && o.curve.eval(o.curve.closest(mid, o.range)).distance(mid) <= tol::LINEAR
+  branch  L1902  corpus 0/29456 tests 0/24782  [never true] if specs_on() {
+  branch  L1957  corpus 3269/0 tests 5155/0  [never false] (at, first, 1) if at == now => Some(first as usize),
+== boolean.rs :: apply   (unrun closures/fns 1, regions 5, branch sites 8)
+  closure L2068  tests=0        .unwrap_or_else(|| a.add_shell());
+  region  L2053-2053  tests=T new_outer.push(si);
+  region  L2146-2146  tests=T let loops = &mut a.faces[face.index()].loops;
+  region  L2147-2147  tests=T let at = loops.len() - s.loops.len();
+  region  L2148-2148  tests=T loops[..=at].rotate_right(1);
+  region  L2155-2155  tests=- }
+  branch  L2023  corpus 1871/0 tests 7266/0  [never false] if specs[si].side == 0 && specs[si].whole && !flip {
+  branch  L2051  corpus 13173/0 tests 19627/0  [never false] if s.extend && !flip && !s.remove.is_empty() {
+  branch  L2052  corpus 0/2189 tests 24/5169  [never true] if s.remove.contains(&a.face(s.from).loops[0]) {
+  branch  L2098  corpus 13173/0 tests 19627/0  [never false] let face = if s.extend && !flip {
+  branch  L2110  corpus 12052/0 tests 9751/0  [never false] && let Some(bx) = bx
+  branch  L2141  corpus 13252/0 tests 19651/0  [never false] if s.extend && !flip {
+  branch  L2145  corpus 0/123680 tests 24/114220  [never true] if !flip && new_outer.contains(&si) {
+  branch  L2152  corpus 64/0 tests 16/0  [never false] if let VKey::Old(0, v) = k {
+== boolean.rs :: grown_tol   (unrun closures/fns 1, regions 0, branch sites 0)
+  closure L2169  tests=0        grown.iter().filter(|g| g.0 == k).fold(tol, |t, g| t.max(g.1))
+== boolean.rs :: grown_tols   (unrun closures/fns 0, regions 1, branch sites 1)
+  region  L2210-2210  tests=- }
+  branch  L2207  corpus 475/0 tests 750/0  [never false] if let VKey::Old(sd, v) = from {
+== boolean.rs :: touches   (unrun closures/fns 0, regions 5, branch sites 2)
+  region  L2258-2258  tests=- _ if d.lo.is_finite() && d.hi.is_finite() => Interval::new(d.lo, d.hi),
+  region  L2258-2258  tests=- _ if d.lo.is_finite() && d.hi.is_finite() => Interval::new(d.lo, d.hi),
+  region  L2258-2258  tests=- _ if d.lo.is_finite() && d.hi.is_finite() => Interval::new(d.lo, d.hi),
+  region  L2258-2258  tests=- _ if d.lo.is_finite() && d.hi.is_finite() => Interval::new(d.lo, d.hi),
+  region  L2259-2259  tests=- _ => continue,
+  branch  L2258  corpus 0/0 tests 0/0  [never reached] _ if d.lo.is_finite() && d.hi.is_finite() => Interval::new(d.lo, d.hi),
+  branch  L2258  corpus 0/0 tests 0/0  [never reached] _ if d.lo.is_finite() && d.hi.is_finite() => Interval::new(d.lo, d.hi),
+== boolean.rs :: flows_on   (unrun closures/fns 0, regions 1, branch sites 0)
+  region  L2291-2291  tests=- _ => false,
+== boolean.rs :: crack_tip   (unrun closures/fns 0, regions 14, branch sites 8)
+  region  L2303-2303  tests=- return false;
+  region  L2308-2308  tests=- None => return false,
+  region  L2311-2311  tests=T let fr = Frame::from_z(t.at, n);
+  region  L2311-2311  tests=T let fr = Frame::from_z(t.at, n);
+  region  L2312-2312  tests=T let (x, y) = (fr.x().get(), fr.y().get());
+  region  L2313-2313  tests=T vec![x, -x, y, -y]
+  region  L2313-2313  tests=T vec![x, -x, y, -y]
+  region  L2313-2313  tests=T vec![x, -x, y, -y]
+  region  L2313-2313  tests=T vec![x, -x, y, -y]
+  region  L2313-2313  tests=T vec![x, -x, y, -y]
+  region  L2325-2325  tests=T x == Where::Inside || y == Where::Inside
+  region  L2325-2325  tests=T x == Where::Inside || y == Where::Inside
+  region  L2327-2327  tests=T x == Where::Inside && y == Where::Inside
+  region  L2333-2333  tests=- index[0].classify(q) == Where::On && index[1].classify(q) == Where::On
+  branch  L2302  corpus 1/0 tests 74/0  [never false] let Some(n) = bodies[0].face_normal(t.faces[0], s.project(t.at)) else {
+  branch  L2321  corpus 0/1 tests 0/74  [never true] dirs.iter().any(|&w| {
+  branch  L2324  corpus 0/2 tests 84/98  [never true] let inside = if any {
+  branch  L2325  corpus 0/0 tests 0/84  [never reached] x == Where::Inside || y == Where::Inside
+  branch  L2327  corpus 0/2 tests 4/94  [never true] x == Where::Inside && y == Where::Inside
+  branch  L2329  corpus 0/2 tests 0/182  [never true] inside || (x == Where::On && y == Where::On)
+  branch  L2329  corpus 2/0 tests 148/34  [never false] inside || (x == Where::On && y == Where::On)
+  branch  L2333  corpus 0/2 tests 0/148  [never true] index[0].classify(q) == Where::On && index[1].classify(q) == Where::On
+== boolean.rs :: local_class   (unrun closures/fns 0, regions 1, branch sites 1)
+  region  L2354-2354  tests=- let w = n.cross(d).normalize()?.get();
+  branch  L2377  corpus 48/0 tests 257/0  [never false] && body.face(g).same_sense == face.same_sense
+== boolean.rs :: touches_along   (unrun closures/fns 0, regions 2, branch sites 3)
+  region  L2415-2415  tests=- return false;
+  region  L2431-2431  tests=- return false;
+  branch  L2414  corpus 0/419 tests 0/521  [never true] if edge.coedges.len() != 2 {
+  branch  L2430  corpus 479/0 tests 625/0  [never false] let (Some(n), len) = (normal(other, into, dv.p), dv.d1.length()) else {
+  branch  L2433  corpus 479/0 tests 625/0  [never false] len > 0.0
+== boolean.rs :: tolerant_cuts   (unrun closures/fns 1, regions 0, branch sites 4)
+  FN      L2463  tests=0        fn tolerant_cuts(
+  branch  L2471  corpus 0/0 tests 0/0  [never reached] let CurveSurface::Hits(hits) = curve_surface(&edge.curve, edge.range, &body.face(face).surface) else
+  branch  L2476  corpus 0/0 tests 0/0  [never reached] if curve.eval(t).distance(h.point) <= band
+  branch  L2477  corpus 0/0 tests 0/0  [never reached] && index.face_box(face).grow(band).contains(h.point)
+  branch  L2478  corpus 0/0 tests 0/0  [never reached] && index.point_in_face(face, h.point) != Where::Outside
+== boolean.rs :: trim_in   (unrun closures/fns 14, regions 162, branch sites 51)
+  closure L2718  tests=0        match curve_surface_in(&edge.curve, edge.range, other_surface, || Some(within)) {
+  closure L2720  tests=0        more.into_iter().filter_map(|h| on_curve(h.t, h.point)).collect(),
+  closure L2727  tests=0        RETRIED.with(|r| r.set(true));
+  closure L2950  tests=0        on_edge(body, e, h.point).map(|o| (o, h))
+  closure L2992  tests=0        .min_by(|a, b| a.point.distance(p).total_cmp(&b.point.distance(p)))?;
+  closure L3037  tests=0        if closed && FENCES.with(|f| f.get()) && fenced.iter().any(|x| odd(x.0)) {
+  closure L3045  tests=0        .and_then(|a| a.downcast_ref::<forge_geom::blend::Spring>())
+  closure L3054  tests=0        && !cuts[first..].iter().any(|x| x.point.distance(h.point) <= 1e-2)
+  closure L3185  tests=0        .map(|i| curve.eval(range.lo + range.width() * i as f64 / 8.0))
+  closure L3186  tests=0        .filter(|&p| (0..2).all(|k| index[k].face_box(faces[k]).contains(p)))
+  closure L3186  tests=0        .filter(|&p| (0..2).all(|k| index[k].face_box(faces[k]).contains(p)))
+  closure L3187  tests=0        .find(|&p| (0..2).all(|k| index[k].point_in_face(faces[k], p) == Where::Inside))
+  closure L3187  tests=0        .find(|&p| (0..2).all(|k| index[k].point_in_face(faces[k], p) == Where::Inside))
+  closure L3197  tests=0        let tsp: Vec<_> = ts.iter().map(|&(t, k)| (t, cuts[k].point)).collect();
+  region  L2574-2577  tests=- return Err(BoolError::unhandled(Unhandled::OpenCurve {
+  region  L2574-2574  tests=- return Err(BoolError::unhandled(Unhandled::OpenCurve {
+  region  L2575-2575  tests=- a: FaceRef::of(bodies[0], faces[0]),
+  region  L2575-2575  tests=- a: FaceRef::of(bodies[0], faces[0]),
+  region  L2575-2575  tests=- a: FaceRef::of(bodies[0], faces[0]),
+  region  L2576-2576  tests=- b: FaceRef::of(bodies[1], faces[1]),
+  region  L2576-2576  tests=- b: FaceRef::of(bodies[1], faces[1]),
+  region  L2626-2626  tests=T || index[1 - k].point_in_face(faces[1 - k], h.point) != Where::Outside)
+  region  L2626-2626  tests=T || index[1 - k].point_in_face(faces[1 - k], h.point) != Where::Outside)
+  region  L2626-2626  tests=T || index[1 - k].point_in_face(faces[1 - k], h.point) != Where::Outside)
+  region  L2626-2626  tests=T || index[1 - k].point_in_face(faces[1 - k], h.point) != Where::Outside)
+  region  L2646-2646  tests=- let other = (bodies[1 - k], index[1 - k], faces[1 - k]);
+  region  L2646-2646  tests=- let other = (bodies[1 - k], index[1 - k], faces[1 - k]);
+  region  L2646-2646  tests=- let other = (bodies[1 - k], index[1 - k], faces[1 - k]);
+  region  L2646-2646  tests=- let other = (bodies[1 - k], index[1 - k], faces[1 - k]);
+  region  L2646-2646  tests=- let other = (bodies[1 - k], index[1 - k], faces[1 - k]);
+  region  L2646-2646  tests=- let other = (bodies[1 - k], index[1 - k], faces[1 - k]);
+  region  L2647-2647  tests=- for (t, s, point) in tolerant_cuts(edge, &curve, range, other) {
+  region  L2647-2647  tests=- for (t, s, point) in tolerant_cuts(edge, &curve, range, other) {
+  region  L2647-2647  tests=- for (t, s, point) in tolerant_cuts(edge, &curve, range, other) {
+  region  L2647-2647  tests=- for (t, s, point) in tolerant_cuts(edge, &curve, range, other) {
+  region  L2648-2648  tests=- ts.push((t, cuts.len()));
+  region  L2648-2648  tests=- ts.push((t, cuts.len()));
+  region  L2649-2649  tests=- cuts.push(Cut {
+  region  L2649-2656  tests=- cuts.push(Cut {
+  region  L2650-2650  tests=- pair: Name::NONE,
+  region  L2651-2651  tests=- on: CutOn::Edge(side, e),
+  region  L2652-2652  tests=- s,
+  region  L2653-2653  tests=- point,
+  region  L2654-2654  tests=- tol: edge.tol,
+  region  L2658-2658  tests=- continue;
+  region  L2663-2663  tests=- Some(m) => m.get(k, body, f, c)?,
+  region  L2665-2665  tests=- own = across(body, f, c)?;
+  region  L2701-2701  tests=- _ => None,
+  region  L2718-2718  tests=- match curve_surface_in(&edge.curve, edge.range, other_surface, || Some(within)) {
+  region  L2718-2718  tests=- match curve_surface_in(&edge.curve, edge.range, other_surface, || Some(within)) {
+  region  L2718-2718  tests=- match curve_surface_in(&edge.curve, edge.range, other_surface, || Some(within)) {
+  region  L2718-2718  tests=- match curve_surface_in(&edge.curve, edge.range, other_surface, || Some(within)) {
+  region  L2720-2720  tests=- more.into_iter().filter_map(|h| on_curve(h.t, h.point)).collect(),
+  region  L2722-2722  tests=- o => o,
+  region  L2727-2727  tests=- RETRIED.with(|r| r.set(true));
+  region  L2732-2732  tests=- CurveSurface::Hits(crossing_on_face(&curve, range, body, f, edge))
+  region  L2732-2732  tests=- CurveSurface::Hits(crossing_on_face(&curve, range, body, f, edge))
+  region  L2732-2732  tests=- CurveSurface::Hits(crossing_on_face(&curve, range, body, f, edge))
+  region  L2732-2732  tests=- CurveSurface::Hits(crossing_on_face(&curve, range, body, f, edge))
+  region  L2732-2732  tests=- CurveSurface::Hits(crossing_on_face(&curve, range, body, f, edge))
+  region  L2998-2998  tests=- && index[1 - k].point_in_face(faces[1 - k], q) != Where::Outside
+  region  L2998-2998  tests=- && index[1 - k].point_in_face(faces[1 - k], q) != Where::Outside
+  region  L2998-2998  tests=- && index[1 - k].point_in_face(faces[1 - k], q) != Where::Outside
+  region  L2998-2998  tests=- && index[1 - k].point_in_face(faces[1 - k], q) != Where::Outside
+  region  L3000-3000  tests=- ts.push((t, cuts.len()));
+  region  L3000-3000  tests=- ts.push((t, cuts.len()));
+  region  L3001-3001  tests=- cuts.push(Cut {
+  region  L3001-3008  tests=- cuts.push(Cut {
+  region  L3002-3002  tests=- pair: Name::NONE,
+  region  L3003-3003  tests=- on: CutOn::Edge(side, e),
+  region  L3004-3004  tests=- s,
+  region  L3005-3005  tests=- point: q,
+  region  L3006-3006  tests=- tol,
+  region  L3037-3037  tests=- if closed && FENCES.with(|f| f.get()) && fenced.iter().any(|x| odd(x.0)) {
+  region  L3038-3038  tests=- for &(k, e) in &fenced {
+  region  L3039-3039  tests=- let (body, side) = (bodies[k], sides[k]);
+  region  L3039-3039  tests=- let (body, side) = (bodies[k], sides[k]);
+  region  L3040-3040  tests=- let Curve::Procedural(pc) = &body.edge(e).curve else {
+  region  L3041-3041  tests=- continue;
+  region  L3044-3044  tests=- pc.0.as_any()
+  region  L3047-3047  tests=- continue;
+  region  L3049-3049  tests=- let across = spring.fence();
+  region  L3050-3050  tests=- let box_e = Some(body.edge_box(e).grow(2.0 * tol::LINEAR));
+  region  L3050-3050  tests=- let box_e = Some(body.edge_box(e).grow(2.0 * tol::LINEAR));
+  region  L3051-3051  tests=- if let CurveSurface::Hits(hs) = curve_surface_in(&curve, range, &across, || box_e) {
+  region  L3051-3051  tests=- if let CurveSurface::Hits(hs) = curve_surface_in(&curve, range, &across, || box_e) {
+  region  L3051-3051  tests=- if let CurveSurface::Hits(hs) = curve_surface_in(&curve, range, &across, || box_e) {
+  region  L3051-3051  tests=- if let CurveSurface::Hits(hs) = curve_surface_in(&curve, range, &across, || box_e) {
+  region  L3052-3052  tests=- for h in hs {
+  region  L3053-3053  tests=- if let Some((s, tol)) = on_edge(body, e, h.point)
+  region  L3053-3053  tests=- if let Some((s, tol)) = on_edge(body, e, h.point)
+  region  L3053-3053  tests=- if let Some((s, tol)) = on_edge(body, e, h.point)
+  region  L3054-3054  tests=- && !cuts[first..].iter().any(|x| x.point.distance(h.point) <= 1e-2)
+  region  L3055-3055  tests=- && index[1 - k].point_in_face(faces[1 - k], h.point) != Where::Outside
+  region  L3055-3055  tests=- && index[1 - k].point_in_face(faces[1 - k], h.point) != Where::Outside
+  region  L3055-3055  tests=- && index[1 - k].point_in_face(faces[1 - k], h.point) != Where::Outside
+  region  L3055-3055  tests=- && index[1 - k].point_in_face(faces[1 - k], h.point) != Where::Outside
+  region  L3057-3057  tests=- ts.push((h.t, cuts.len()));
+  region  L3057-3057  tests=- ts.push((h.t, cuts.len()));
+  region  L3058-3058  tests=- cuts.push(Cut {
+  region  L3058-3065  tests=- cuts.push(Cut {
+  region  L3059-3059  tests=- pair: Name::NONE,
+  region  L3060-3060  tests=- on: CutOn::Edge(side, e),
+  region  L3061-3061  tests=- s,
+  region  L3062-3062  tests=- point: h.point,
+  region  L3063-3063  tests=- tol,
+  region  L3066-3066  tests=- }
+  region  L3068-3068  tests=- }
+  region  L3182-3182  tests=- && ts.is_empty()
+  region  L3183-3183  tests=- && !closed
+  region  L3184-3184  tests=- && let Some(p) = (1..8)
+  region  L3189-3193  tests=- return Err(BoolError::lost(Lost::Uncut {
+  region  L3189-3189  tests=- return Err(BoolError::lost(Lost::Uncut {
+  region  L3190-3190  tests=- a: FaceRef::of(bodies[0], faces[0]),
+  region  L3190-3190  tests=- a: FaceRef::of(bodies[0], faces[0]),
+  region  L3190-3190  tests=- a: FaceRef::of(bodies[0], faces[0]),
+  region  L3191-3191  tests=- b: FaceRef::of(bodies[1], faces[1]),
+  region  L3191-3191  tests=- b: FaceRef::of(bodies[1], faces[1]),
+  region  L3197-3197  tests=- let tsp: Vec<_> = ts.iter().map(|&(t, k)| (t, cuts[k].point)).collect();
+  region  L3198-3198  tests=- eprintln!("  curve {faces:?} range {range:?} cuts {tsp:?}");
+  region  L3198-3198  tests=- eprintln!("  curve {faces:?} range {range:?} cuts {tsp:?}");
+  region  L3198-3198  tests=- eprintln!("  curve {faces:?} range {range:?} cuts {tsp:?}");
+  region  L3198-3198  tests=- eprintln!("  curve {faces:?} range {range:?} cuts {tsp:?}");
+  region  L3248-3248  tests=- }
+  region  L3332-3332  tests=- if there == Where::Inside && index[1 - on].point_in_face(faces[1 - on], q) == Where::Inside {
+  region  L3332-3332  tests=- if there == Where::Inside && index[1 - on].point_in_face(faces[1 - on], q) == Where::Inside {
+  region  L3332-3332  tests=- if there == Where::Inside && index[1 - on].point_in_face(faces[1 - on], q) == Where::Inside {
+  region  L3332-3332  tests=- if there == Where::Inside && index[1 - on].point_in_face(faces[1 - on], q) == Where::Inside {
+  region  L3333-3333  tests=- loops.push(mid);
+  region  L3334-3334  tests=- None
+  region  L3342-3342  tests=- let t = if closed && t >= range.hi { t - period } else { t };
+  region  L3482-3482  tests=- if closed && inside(range.lo, range.hi, &[])? {
+  region  L3508-3508  tests=- if inside(t0, t1, &[i0, i1])? {
+  region  L2843-2843  tests=- Where::Outside
+  region  L2852-2852  tests=- return true;
+  region  L2879-2879  tests=- (Where::Outside, _) | (_, Where::Outside) => Some(false),
+  region  L2899-2899  tests=- if smooth && p.distance(h.point) <= 1e-3 && curve.eval(t).distance(p) <= tol::LINEAR {
+  region  L2900-2900  tests=- CurveHit { t, point: p, ..h }
+  region  L2900-2900  tests=- CurveHit { t, point: p, ..h }
+  region  L2946-2946  tests=T if !CAREFUL.with(|c| c.get()) || !body.edge_box(e).grow(0.2).contains(h.point) {
+  region  L2948-2948  tests=- }
+  region  L2949-2949  tests=- let h = onto_spring(&curve, range, edge, h)?;
+  region  L2949-2949  tests=- let h = onto_spring(&curve, range, edge, h)?;
+  region  L2949-2949  tests=- let h = onto_spring(&curve, range, edge, h)?;
+  region  L2949-2949  tests=- let h = onto_spring(&curve, range, edge, h)?;
+  region  L2949-2949  tests=- let h = onto_spring(&curve, range, edge, h)?;
+  region  L2950-2950  tests=- on_edge(body, e, h.point).map(|o| (o, h))
+  region  L2950-2950  tests=- on_edge(body, e, h.point).map(|o| (o, h))
+  region  L2950-2950  tests=- on_edge(body, e, h.point).map(|o| (o, h))
+  region  L2985-2985  tests=- }
+  region  L2986-2986  tests=- let other = &bodies[1 - k].face(faces[1 - k]).surface;
+  region  L2986-2986  tests=- let other = &bodies[1 - k].face(faces[1 - k]).surface;
+  region  L2986-2986  tests=- let other = &bodies[1 - k].face(faces[1 - k]).surface;
+  region  L2986-2986  tests=- let other = &bodies[1 - k].face(faces[1 - k]).surface;
+  region  L2987-2987  tests=- let CurveSurface::Hits(hits) = curve_surface(&edge.curve, edge.range, other) else {
+  region  L2987-2987  tests=- let CurveSurface::Hits(hits) = curve_surface(&edge.curve, edge.range, other) else {
+  region  L2987-2987  tests=- let CurveSurface::Hits(hits) = curve_surface(&edge.curve, edge.range, other) else {
+  region  L2988-2988  tests=- return None;
+  region  L2990-2991  tests=- let h = hits
+  region  L2992-2992  tests=- .min_by(|a, b| a.point.distance(p).total_cmp(&b.point.distance(p)))?;
+  region  L2993-2993  tests=- let d = h.point.distance(p);
+  region  L2994-2994  tests=- (d <= RIM).then_some((h.t, h.point, d.max(tol::LINEAR)))
+  region  L2994-2994  tests=- (d <= RIM).then_some((h.t, h.point, d.max(tol::LINEAR)))
+  region  L2994-2994  tests=- (d <= RIM).then_some((h.t, h.point, d.max(tol::LINEAR)))
+  region  L2994-2994  tests=- (d <= RIM).then_some((h.t, h.point, d.max(tol::LINEAR)))
+  region  L3021-3021  tests=- continue;
+  region  L3238-3238  tests=T CutOn::Free => None,
+  region  L3470-3470  tests=- }
+  region  L3472-3472  tests=- if debug_on() && matches!(curve, Curve::Circle(_)) {
+  region  L3472-3472  tests=- if debug_on() && matches!(curve, Curve::Circle(_)) {
+  region  L3473-3473  tests=- eprintln!("  trim {faces:?} t {t:.4} p {p:?}: {:?} {:?}", w[0], w[1]);
+  region  L3473-3473  tests=- eprintln!("  trim {faces:?} t {t:.4} p {p:?}: {:?} {:?}", w[0], w[1]);
+  region  L3473-3473  tests=- eprintln!("  trim {faces:?} t {t:.4} p {p:?}: {:?} {:?}", w[0], w[1]);
+  region  L3473-3473  tests=- eprintln!("  trim {faces:?} t {t:.4} p {p:?}: {:?} {:?}", w[0], w[1]);
+  region  L3473-3473  tests=- eprintln!("  trim {faces:?} t {t:.4} p {p:?}: {:?} {:?}", w[0], w[1]);
+  region  L3473-3473  tests=- eprintln!("  trim {faces:?} t {t:.4} p {p:?}: {:?} {:?}", w[0], w[1]);
+  branch  L2553  corpus 40636/0 tests 37332/0  [never false] } else if domain.lo.is_finite() && domain.hi.is_finite() {
+  branch  L2625  corpus 171474/0 tests 143513/4  [never false] && ((other.contains(h.point) && !CAREFUL.with(|c| c.get()))
+  branch  L2625  corpus 171474/0 tests 143501/12  [never false] && ((other.contains(h.point) && !CAREFUL.with(|c| c.get()))
+  branch  L2626  corpus 0/0 tests 12/4  [never reached] || index[1 - k].point_in_face(faces[1 - k], h.point) != Where::Outside)
+  branch  L2645  corpus 0/1728841 tests 0/1636378  [never true] if edge.tol > tol::LINEAR {
+  branch  L2726  corpus 0/1728110 tests 0/1636360  [never true] } else if bends {
+  branch  L2783  corpus 948/0 tests 6547/0  [never false] || ![edge.start, edge.end].into_iter().all(|v| {
+  branch  L2810  corpus 1092/0 tests 957/0  [never false] if runs && !coplanar && !along.iter().any(|a| a.0 == k && a.1 == e) {
+  branch  L2840  corpus 456/0 tests 718/0  [never false] if range.contains(t) || closed {
+  branch  L2851  corpus 1274/0 tests 2603/0  [never false] let Some(n) = body.face_normal(f, body.face(f).surface.project(h.point)) else {
+  branch  L2874  corpus 50/0 tests 17/0  [never false] Where::Outside if !smooth() => Some(false),
+  branch  L2896  corpus 534/0 tests 79/0  [never false] matches!((normal(f), normal(g)), (Some(a), Some(b)) if a.cross(b).length() <= 1e-3)
+  branch  L2899  corpus 534/0 tests 79/0  [never false] if smooth && p.distance(h.point) <= 1e-3 && curve.eval(t).distance(p) <= tol::LINEAR {
+  branch  L2899  corpus 0/534 tests 0/79  [never true] if smooth && p.distance(h.point) <= 1e-3 && curve.eval(t).distance(p) <= tol::LINEAR {
+  branch  L2899  corpus 0/0 tests 0/0  [never reached] if smooth && p.distance(h.point) <= 1e-3 && curve.eval(t).distance(p) <= tol::LINEAR {
+  branch  L2946  corpus 850289/0 tests 798302/24  [never false] if !CAREFUL.with(|c| c.get()) || !body.edge_box(e).grow(0.2).contains(h.point) {
+  branch  L2946  corpus 0/0 tests 24/0  [never reached] if !CAREFUL.with(|c| c.get()) || !body.edge_box(e).grow(0.2).contains(h.point) {
+  branch  L2954  corpus 664422/0 tests 612730/60  [never false] && ((!(grazing || !other.contains(h.point)) && !CAREFUL.with(|c| c.get()))
+  branch  L2973  corpus 0/15992 tests 0/11042  [never true] || cuts[first..].iter().any(|x| {
+  branch  L2983  corpus 15834/0 tests 10681/0  [never false] if edge.curve.eval(edge.curve.closest(p, edge.range)).distance(p) > RIM {
+  branch  L2987  corpus 0/0 tests 0/0  [never reached] let CurveSurface::Hits(hits) = curve_surface(&edge.curve, edge.range, other) else {
+  branch  L2997  corpus 0/158 tests 0/361  [never true] && index[1 - k].face_box(faces[1 - k]).grow(tol::LINEAR).contains(q)
+  branch  L2998  corpus 0/0 tests 0/0  [never reached] && index[1 - k].point_in_face(faces[1 - k], q) != Where::Outside
+  branch  L3020  corpus 152/0 tests 0/0  [never false] let Some((sd, e)) = cuts[i].on.edge() else {
+  branch  L3034  corpus 140/0 tests 0/0  [never false] if closed && !fenced.is_empty() && !FENCES.with(|f| f.get()) && fenced.iter().any(|x| odd(x.0)) {
+  branch  L3037  corpus 0/228644 tests 0/214390  [never true] if closed && FENCES.with(|f| f.get()) && fenced.iter().any(|x| odd(x.0)) {
+  branch  L3037  corpus 0/0 tests 0/0  [never reached] if closed && FENCES.with(|f| f.get()) && fenced.iter().any(|x| odd(x.0)) {
+  branch  L3040  corpus 0/0 tests 0/0  [never reached] let Curve::Procedural(pc) = &body.edge(e).curve else {
+  branch  L3043  corpus 0/0 tests 0/0  [never reached] let Some(spring) =
+  branch  L3051  corpus 0/0 tests 0/0  [never reached] if let CurveSurface::Hits(hs) = curve_surface_in(&curve, range, &across, || box_e) {
+  branch  L3053  corpus 0/0 tests 0/0  [never reached] if let Some((s, tol)) = on_edge(body, e, h.point)
+  branch  L3054  corpus 0/0 tests 0/0  [never reached] && !cuts[first..].iter().any(|x| x.point.distance(h.point) <= 1e-2)
+  branch  L3055  corpus 0/0 tests 0/0  [never reached] && index[1 - k].point_in_face(faces[1 - k], h.point) != Where::Outside
+  branch  L3113  corpus 191/0 tests 56/0  [never false] || !(straight || on_it(0.25) && on_it(0.75))
+  branch  L3113  corpus 191/0 tests 56/0  [never false] || !(straight || on_it(0.25) && on_it(0.75))
+  branch  L3181  corpus 0/511189 tests 0/461894  [never true] if doubtful
+  branch  L3182  corpus 0/0 tests 0/0  [never reached] && ts.is_empty()
+  branch  L3183  corpus 0/0 tests 0/0  [never reached] && !closed
+  branch  L3184  corpus 0/0 tests 0/0  [never reached] && let Some(p) = (1..8)
+  branch  L3196  corpus 0/511189 tests 0/461894  [never true] if debug_on() {
+  branch  L3244  corpus 16/0 tests 114/0  [never false] if let Some((s, tol)) = onto(&cuts[i], mid) {
+  branch  L3332  corpus 0/1920 tests 0/13597  [never true] if there == Where::Inside && index[1 - on].point_in_face(faces[1 - on], q) == Where::Inside {
+  branch  L3332  corpus 0/0 tests 0/0  [never reached] if there == Where::Inside && index[1 - on].point_in_face(faces[1 - on], q) == Where::Inside {
+  branch  L3342  corpus 0/12 tests 0/133  [never true] let t = if closed && t >= range.hi { t - period } else { t };
+  branch  L3424  corpus 0/8359 tests 6/27985  [never true] && (ends.is_empty()
+  branch  L3425  corpus 0/8359 tests 8/27977  [never true] || ends[0] == ends[1]
+  branch  L3426  corpus 8359/0 tests 27977/0  [never false] || (0..2).any(|k| {
+  branch  L3448  corpus 3811/0 tests 18768/0  [never false] && eb.contains(a)
+  branch  L3449  corpus 3811/0 tests 18767/1  [never false] && eb.contains(b)
+  branch  L3464  corpus 1037642/0 tests 870227/0  [never false] if *wk == Where::On {
+  branch  L3472  corpus 0/318455 tests 0/281600  [never true] if debug_on() && matches!(curve, Curve::Circle(_)) {
+== boolean.rs :: rank_pairs   (unrun closures/fns 0, regions 1, branch sites 1)
+  region  L3582-3582  tests=- continue;
+  branch  L3581  corpus 0/21879 tests 0/36197  [never true] if at.len() < 2 {
+== boolean.rs :: cut_marks   (unrun closures/fns 0, regions 0, branch sites 2)
+  branch  L3698  corpus 4186/0 tests 14702/0  [never false] && c.pair == Name::NONE
+  branch  L3699  corpus 4186/0 tests 14702/0  [never false] && let Some((sd, e)) = c.on.edge()
+== boolean.rs :: flush_edges_as_cuts   (unrun closures/fns 9, regions 24, branch sites 7)
+  closure L4022  tests=0        .filter(|&p| pieces[p].name == g[0].0)
+  closure L4029  tests=4        let of = |k: usize| if k < g.len() { g[k].1 } else { cuts[k - g.len()] };
+  closure L4031  tests=4        rank_names(&mut names, &|k| {
+  closure L4065  tests=2        let lie = |v: VKey| {
+  closure L4066  tests=15       named.iter().find_map(|&(_, p, ends, _)| {
+  closure L4068  tests=30       ends.iter().any(|e| e.0 == v).then(|| {
+  closure L4068  tests=2        ends.iter().any(|e| e.0 == v).then(|| {
+  closure L4074  tests=14       let mut names: Vec<Name> = out.iter().map(|x| x.1).collect();
+  closure L4075  tests=2        rank_names(&mut names, &|k| {
+  region  L3998-3998  tests=- continue;
+  region  L4026-4026  tests=T }
+  region  L4027-4027  tests=T let (sd, f) = g[0].3;
+  region  L4028-4028  tests=T let frame = surface_frame(&bodies[sd].face(f).surface);
+  region  L4028-4028  tests=T let frame = surface_frame(&bodies[sd].face(f).surface);
+  region  L4030-4030  tests=T let mut names = vec![g[0].0; g.len() + cuts.len()];
+  region  L4030-4030  tests=T let mut names = vec![g[0].0; g.len() + cuts.len()];
+  region  L4030-4030  tests=T let mut names = vec![g[0].0; g.len() + cuts.len()];
+  region  L4031-4031  tests=T rank_names(&mut names, &|k| {
+  region  L4031-4031  tests=T rank_names(&mut names, &|k| {
+  region  L4035-4035  tests=T for (k, &p) in cuts.iter().enumerate() {
+  region  L4036-4036  tests=- pieces[p].name = names[g.len() + k];
+  region  L4036-4036  tests=- pieces[p].name = names[g.len() + k];
+  region  L4036-4036  tests=- pieces[p].name = names[g.len() + k];
+  region  L4038-4038  tests=T for (x, n) in g.iter_mut().zip(names) {
+  region  L4039-4039  tests=T x.0 = n;
+  region  L4062-4062  tests=T && let Some(&(_, _, _, (sd, f))) = named.first()
+  region  L4064-4064  tests=T let frame = surface_frame(&bodies[sd].face(f).surface);
+  region  L4064-4064  tests=T let frame = surface_frame(&bodies[sd].face(f).surface);
+  region  L4074-4074  tests=T let mut names: Vec<Name> = out.iter().map(|x| x.1).collect();
+  region  L4075-4075  tests=T rank_names(&mut names, &|k| {
+  region  L4075-4075  tests=T rank_names(&mut names, &|k| {
+  region  L4078-4078  tests=T for (o, n) in out.iter_mut().zip(names) {
+  region  L4079-4079  tests=T o.1 = n;
+  branch  L3987  corpus 0/3973 tests 0/17496  [never true] if uses[p] == 0 || done.contains(&p) {
+  branch  L3991  corpus 3973/0 tests 17496/0  [never false] let Some(other) = body
+  branch  L4024  corpus 3972/0 tests 17464/2  [never false] if g.len() + cuts.len() < 2 {
+  branch  L4029  corpus 0/0 tests 4/0  [never reached] let of = |k: usize| if k < g.len() { g[k].1 } else { cuts[k - g.len()] };
+  branch  L4061  corpus 0/1226 tests 1/4117  [never true] if sorted.windows(2).any(|w| w[0] == w[1])
+  branch  L4062  corpus 0/0 tests 1/0  [never reached] && let Some(&(_, _, _, (sd, f))) = named.first()
+  branch  L4069  corpus 0/0 tests 0/2  [never reached] let t = if v == pc.start { pc.range.lo } else { pc.range.hi };
+== boolean.rs :: flush_name   (unrun closures/fns 0, regions 1, branch sites 0)
+  region  L4102-4102  tests=- let &c = edge.coedges.iter().find(|&&c| body.coedge_face(c) == other)?;
+== boolean.rs :: plane_meet   (unrun closures/fns 0, regions 5, branch sites 5)
+  region  L4171-4171  tests=- return None;
+  region  L4177-4177  tests=- return None;
+  region  L4216-4216  tests=- continue;
+  region  L4220-4220  tests=- _ => return None,
+  region  L4235-4235  tests=- _ => (0.0, 1.0),
+  branch  L4170  corpus 0/409662 tests 0/441356  [never true] if k.frame.z().dot(n).abs() < 1.0 - 1e-12 {
+  branch  L4176  corpus 0/69467 tests 0/93315  [never true] if k1.frame.z().dot(n).abs() < 1.0 - 1e-12 || k2.frame.z().dot(n).abs() < 1.0 - 1e-12 {
+  branch  L4176  corpus 0/69467 tests 0/93315  [never true] if k1.frame.z().dot(n).abs() < 1.0 - 1e-12 || k2.frame.z().dot(n).abs() < 1.0 - 1e-12 {
+  branch  L4215  corpus 0/294102 tests 0/197318  [never true] if t > range.hi + 1e-12 {
+  branch  L4241  corpus 0/682164 tests 0/496409  [never true] if g.0 == 0.0 || g.1 == 0.0 {
+== boolean.rs :: through_smooth_edge   (unrun closures/fns 3, regions 12, branch sites 7)
+  closure L4378  tests=0        [1e-3, 1e-2, 5e-2].iter().any(|&x| {
+  closure L4379  tests=0        let side = |s: f64| {
+  closure L4381  tests=0        (index[1 - k].point_in_face(g, q) == Where::Inside).then(|| index[k].classify(q))
+  region  L4352-4352  tests=- return false;
+  region  L4368-4368  tests=- }
+  region  L4370-4370  tests=- let uv = os.project(m);
+  region  L4371-4371  tests=- let (Some(n), d) = (os.normal(uv), e.curve.deriv(e.range.mid()).d1) else {
+  region  L4371-4371  tests=- let (Some(n), d) = (os.normal(uv), e.curve.deriv(e.range.mid()).d1) else {
+  region  L4372-4372  tests=- return false;
+  region  L4374-4374  tests=- let Some(w) = n.cross(d).normalize() else {
+  region  L4375-4375  tests=- return false;
+  region  L4377-4377  tests=- let size = index[1 - k].face_box(g).diagonal();
+  region  L4377-4377  tests=- let size = index[1 - k].face_box(g).diagonal();
+  region  L4378-4378  tests=- [1e-3, 1e-2, 5e-2].iter().any(|&x| {
+  region  L4378-4378  tests=- [1e-3, 1e-2, 5e-2].iter().any(|&x| {
+  branch  L4331  corpus 0/14 tests 182/152  [never true] || ((q.x * q.x + q.y * q.y).sqrt() - c.radius).abs() > 2.0 * tol::LINEAR
+  branch  L4351  corpus 4993/0 tests 2302/0  [never false] let Some(h) = body.partner(c).map(|o| body.coedge_face(o)) else {
+  branch  L4364  corpus 4/0 tests 0/144  [never false] || !(on(e.curve.eval(e.range.lo)) && on(e.curve.eval(e.range.hi)))
+  branch  L4364  corpus 4/0 tests 0/0  [never false] || !(on(e.curve.eval(e.range.lo)) && on(e.curve.eval(e.range.hi)))
+  branch  L4365  corpus 4/0 tests 0/0  [never false] || index[1 - k].point_in_face(g, m) != Where::Inside
+  branch  L4371  corpus 0/0 tests 0/0  [never reached] let (Some(n), d) = (os.normal(uv), e.curve.deriv(e.range.mid()).d1) else {
+  branch  L4374  corpus 0/0 tests 0/0  [never reached] let Some(w) = n.cross(d).normalize() else {
+== boolean.rs :: across   (unrun closures/fns 4, regions 17, branch sites 3)
+  closure L4406  tests=0        let n = s.normal(s.project(d.p)).ok_or_else(|| {
+  closure L4431  tests=0        .ok_or_else(|| {
+  closure L4446  tests=0        curve: forge_geom::Parabola {
+  closure L4462  tests=0        let z = d.d1.cross(n.get()).normalize().ok_or_else(|| {
+  region  L4410-4410  tests=- })?;
+  region  L4427-4427  tests=- Curve::Ellipse(e) if matches!(s, Surface::Plane(_)) || n.dot(e.frame.z()).abs() > 1.0 - 1e-6 => {
+  region  L4427-4427  tests=- Curve::Ellipse(e) if matches!(s, Surface::Plane(_)) || n.dot(e.frame.z()).abs() > 1.0 - 1e-6 => {
+  region  L4435-4435  tests=- })?;
+  region  L4441-4441  tests=- Curve::Ellipse(e) => Surface::Plane(Plane::new(e.frame)),
+  region  L4443-4443  tests=- Curve::Parabola(pa) if n.dot(pa.frame.z()).abs() > 1.0 - 1e-6 => {
+  region  L4443-4443  tests=- Curve::Parabola(pa) if n.dot(pa.frame.z()).abs() > 1.0 - 1e-6 => {
+  region  L4444-4444  tests=- let h = pa.frame.z() * edge.range.width().max(1.0);
+  region  L4444-4444  tests=- let h = pa.frame.z() * edge.range.width().max(1.0);
+  region  L4452-4452  tests=- match forge_geom::ruled::Ruled::new(rail(-h), rail(h)) {
+  region  L4452-4452  tests=- match forge_geom::ruled::Ruled::new(rail(-h), rail(h)) {
+  region  L4452-4452  tests=- match forge_geom::ruled::Ruled::new(rail(-h), rail(h)) {
+  region  L4453-4453  tests=- Some(w) => w.surface(),
+  region  L4455-4457  tests=- return Err(BoolError::lost(Lost::DegenerateEdge {
+  region  L4455-4455  tests=- return Err(BoolError::lost(Lost::DegenerateEdge {
+  region  L4456-4456  tests=- face: FaceRef::of(body, f),
+  region  L4466-4466  tests=- })?;
+  branch  L4427  corpus 0/0 tests 0/0  [never reached] Curve::Ellipse(e) if matches!(s, Surface::Plane(_)) || n.dot(e.frame.z()).abs() > 1.0 - 1e-6 => {
+  branch  L4443  corpus 0/0 tests 0/0  [never reached] Curve::Parabola(pa) if n.dot(pa.frame.z()).abs() > 1.0 - 1e-6 => {
+  branch  L4487  corpus 217786/0 tests 74742/0  [never false] if smooth && !matches!(edge.curve, Curve::Intersection(_)) {
+== boolean.rs :: imprint   (unrun closures/fns 0, regions 9, branch sites 5)
+  region  L4542-4542  tests=- let hits = match curve_surface(&edge.curve, edge.range, &across(db, dst_face, c2)?) {
+  region  L4578-4578  tests=- cuts.push(Cut {
+  region  L4578-4585  tests=- cuts.push(Cut {
+  region  L4579-4579  tests=- pair: Name::NONE,
+  region  L4580-4580  tests=- on: CutOn::Edge(sides[dst], e2),
+  region  L4581-4581  tests=- s: s2,
+  region  L4582-4582  tests=- point: p,
+  region  L4645-4645  tests=- o => o,
+  region  L4647-4647  tests=- o => o,
+  branch  L4574  corpus 112/0 tests 687/0  [never false] && !end(e2_ends.start)
+  branch  L4575  corpus 112/0 tests 687/0  [never false] && !end(e2_ends.end)
+  branch  L4576  corpus 0/112 tests 0/687  [never true] && let Some((s2, tol)) = on_edge(db, e2, p)
+  branch  L4632  corpus 27649/0 tests 22371/0  [never false] a.0 == sides[src] && a.1 == e
+  branch  L4634  corpus 26602/0 tests 19436/0  [never false] a.2 == sides[src] && a.3 == e
+== boolean.rs :: on_to_its_vertex   (unrun closures/fns 1, regions 2, branch sites 2)
+  closure L4698  tests=0        .or_else(|| off(hi, edge.end))
+  region  L4696-4696  tests=- let hi = w[1] == edge.range.hi && !ts.contains(&w[1]);
+  region  L4696-4696  tests=- let hi = w[1] == edge.range.hi && !ts.contains(&w[1]);
+  branch  L4695  corpus 4/0 tests 0/0  [never false] let lo = w[0] == edge.range.lo && !ts.contains(&w[0]);
+  branch  L4696  corpus 0/4 tests 0/0  [never true] let hi = w[1] == edge.range.hi && !ts.contains(&w[1]);
+== boolean.rs :: touch_params   (unrun closures/fns 0, regions 2, branch sites 3)
+  region  L4757-4757  tests=- _ => return Vec::new(),
+  region  L4777-4777  tests=- continue;
+  branch  L4776  corpus 153/0 tests 222/0  [never false] let Some(j) = (0..w.len()).min_by(|&x, &y| w[x].total_cmp(&w[y])) else {
+  branch  L4803  corpus 119/0 tests 220/0  [never false] if !(slope > 0.0 && x < slope * ds && (vs - (slope * ds - x)).abs() <= 0.25 * vs) {
+  branch  L4803  corpus 34/0 tests 150/0  [never false] if !(slope > 0.0 && x < slope * ds && (vs - (slope * ds - x)).abs() <= 0.25 * vs) {
+== boolean.rs :: crossings_near   (unrun closures/fns 1, regions 3, branch sites 4)
+  closure L4872  tests=9        if !out.is_empty() && deep <= tol::LINEAR && !CHORDS.with(|c| c.get()) {
+  region  L4872-4872  tests=T if !out.is_empty() && deep <= tol::LINEAR && !CHORDS.with(|c| c.get()) {
+  region  L4872-4872  tests=T if !out.is_empty() && deep <= tol::LINEAR && !CHORDS.with(|c| c.get()) {
+  region  L4873-4873  tests=T out.pop();
+  branch  L4840  corpus 0/2 tests 0/6  [never true] || g((h.t + w).min(range.hi)).abs() <= 2.0 * tol::LINEAR)
+  branch  L4872  corpus 0/2 tests 9/67  [never true] if !out.is_empty() && deep <= tol::LINEAR && !CHORDS.with(|c| c.get()) {
+  branch  L4872  corpus 0/0 tests 9/0  [never reached] if !out.is_empty() && deep <= tol::LINEAR && !CHORDS.with(|c| c.get()) {
+  branch  L4872  corpus 0/0 tests 9/0  [never reached] if !out.is_empty() && deep <= tol::LINEAR && !CHORDS.with(|c| c.get()) {
+== boolean.rs :: share_cuts   (unrun closures/fns 0, regions 7, branch sites 2)
+  region  L4937-4937  tests=- continue;
+  region  L4964-4971  tests=T let cut = Cut {
+  region  L4965-4965  tests=T on: CutOn::Edge(to, e2),
+  region  L4966-4966  tests=T s,
+  region  L4967-4967  tests=T tol,
+  region  L4968-4968  tests=T point: c.point,
+  region  L4972-4972  tests=T cuts.push(cut);
+  branch  L4936  corpus 50998/0 tests 61899/0  [never false] let Some((sd, e)) = cuts[i].on.edge() else {
+  branch  L4963  corpus 0/2421 tests 11/1679  [never true] if let Some((s, tol)) = on_edge(bodies[to], e2, c.point) {
+== boolean.rs :: tied   (unrun closures/fns 0, regions 1, branch sites 2)
+  region  L5181-5181  tests=- let (a, k) = w?;
+  branch  L5176  corpus 250/0 tests 868/0  [never false] let pinch = || out.iter().all(|&(_, k)| side(k).is_some() && side(k) == side(i));
+  branch  L5182  corpus 970/0 tests 1322/0  [never false] if (near(a, theta) && mixed(k, i)) || (k != j && near(a, c) && mixed(k, j)) {
+== boolean.rs :: by_chords   (unrun closures/fns 0, regions 1, branch sites 0)
+  region  L5212-5212  tests=- Ok(clockwise(theta, |j| half[j] == back, ways.iter().map(|&w| Ok(w)))?.map_or(i, |w| w.1))
+== boolean.rs :: clockwise   (unrun closures/fns 0, regions 1, branch sites 0)
+  region  L5228-5228  tests=- let (a, j) = w?;
+== boolean.rs :: uv_dir   (unrun closures/fns 2, regions 11, branch sites 4)
+  closure L5264  tests=3        .ok_or_else(|| {
+  closure L5273  tests=0        .ok_or_else(|| {
+  region  L5260-5260  tests=T let step = if uv.y > 0.5 * (v.lo + v.hi) { -1e-6 } else { 1e-6 } * (v.hi - v.lo);
+  region  L5268-5268  tests=T })?
+  region  L5270-5270  tests=- let helper = if n.x.abs() < 0.9 { Vec3::X } else { Vec3::Y };
+  region  L5277-5277  tests=- })?
+  region  L5280-5280  tests=- return Ok(Vec2::new(if face.same_sense { a } else { -a }, b));
+  region  L5286-5286  tests=- return round_point(face, p, t, uv, forward != at_end);
+  region  L5286-5286  tests=- return round_point(face, p, t, uv, forward != at_end);
+  region  L5286-5286  tests=- return round_point(face, p, t, uv, forward != at_end);
+  region  L5286-5286  tests=- return round_point(face, p, t, uv, forward != at_end);
+  region  L5286-5286  tests=- return round_point(face, p, t, uv, forward != at_end);
+  region  L5286-5286  tests=- return round_point(face, p, t, uv, forward != at_end);
+  branch  L5260  corpus 0/20 tests 95/48  [never true] let step = if uv.y > 0.5 * (v.lo + v.hi) { -1e-6 } else { 1e-6 } * (v.hi - v.lo);
+  branch  L5270  corpus 20/0 tests 140/0  [never false] let helper = if n.x.abs() < 0.9 { Vec3::X } else { Vec3::Y };
+  branch  L5280  corpus 20/0 tests 140/0  [never false] return Ok(Vec2::new(if face.same_sense { a } else { -a }, b));
+  branch  L5285  corpus 3495484/0 tests 4162866/0  [never false] let Some((a, b)) = forge_math::linalg::solve2(uu, uv2, uv2, vv, ru, rv) else {
+== boolean.rs :: round_point   (unrun closures/fns 0, regions 5, branch sites 2)
+  region  L5298-5304  tests=- return Err(BoolError::unhandled(Unhandled::SplitThroughSingular {
+  region  L5298-5298  tests=- return Err(BoolError::unhandled(Unhandled::SplitThroughSingular {
+  region  L5300-5300  tests=- name: face.name,
+  region  L5301-5301  tests=- surface: face.surface.kind(),
+  region  L5312-5312  tests=- Ok(Vec2::new(cos, if flip { -sin } else { sin }))
+  branch  L5297  corpus 0/12 tests 0/48  [never true] if !matches!(face.surface, Surface::Cone(_) | Surface::Sphere(_)) {
+  branch  L5312  corpus 12/0 tests 48/0  [never false] Ok(Vec2::new(cos, if flip { -sin } else { sin }))
+== boolean.rs :: local_split   (unrun closures/fns 2, regions 5, branch sites 0)
+  closure L5338  tests=0        let resolve = |v: VKey| c.alias.iter().find(|(x, _)| *x == v).map_or(v, |&(_, t)| t);
+  closure L5375  tests=0        let reach = at_a.iter().fold(tol::LINEAR, |r, &v| r.max(body.vertex(v).tol));
+  region  L5364-5364  tests=- let class = match c.index[1].classify(face_point(body, c.f)?) {
+  region  L5365-5365  tests=- Where::Inside => Class::In,
+  region  L5367-5367  tests=- Where::On => return None,
+  region  L5371-5371  tests=- Op::Intersect => class == Class::In,
+  region  L5344-5344  tests=- VKey::Old(0, v) => Some(v),
+== boolean.rs :: face_point   (unrun closures/fns 0, regions 4, branch sites 0)
+  region  L5397-5397  tests=- let c = body.lp(*face.loops.first()?).coedges().next()?;
+  region  L5397-5397  tests=- let c = body.lp(*face.loops.first()?).coedges().next()?;
+  region  L5402-5402  tests=- let n = body.face_normal(f, face.surface.project(d.p))?;
+  region  L5403-5403  tests=- let inward = n.cross(along).normalize()?;
+== boolean.rs :: lone_cycle   (unrun closures/fns 0, regions 2, branch sites 1)
+  region  L5420-5420  tests=- return None;
+  region  L5429-5429  tests=- (0..ps.len()).find(|&k| !used[k] && (pieces[ps[k]].start == at || pieces[ps[k]].end == at))?;
+  branch  L5416  corpus 0/11473 tests 0/13874  [never true] if ps
+== boolean.rs :: split_face_in   (unrun closures/fns 6, regions 58, branch sites 12)
+  closure L5564  tests=3094268  debug_assert!(by_start.windows(2).all(|w| w[0] < w[1]));
+  closure L5973  tests=0        clear_point(cands, outlines).ok_or_else(|| {
+  closure L6006  tests=0        open.push(cyc.iter().map(|&i| half[i]).collect());
+  closure L6015  tests=0        let pts = polys[q].as_ref().map(|p| {
+  closure L6017  tests=0        .map(|v| format!("({:.3},{:.3})", v.x, v.y))
+  closure L6024  tests=0        cyc.iter().map(|&i| half[i]).collect::<Vec<_>>(),
+  region  L5564-5564  tests=T debug_assert!(by_start.windows(2).all(|w| w[0] < w[1]));
+  region  L5615-5615  tests=T i = next(i)?;
+  region  L5617-5619  tests=- return Err(BoolError::lost(Lost::SplitOpen {
+  region  L5617-5617  tests=- return Err(BoolError::lost(Lost::SplitOpen {
+  region  L5618-5618  tests=- face: FaceRef::of(body, f),
+  region  L5624-5624  tests=- eprintln!(
+  region  L5625-5625  tests=- crossed itself: face {f:?} {:?} sense {},
+  region  L5626-5626  tests=- body.face(f).surface,
+  region  L5627-5627  tests=- body.face(f).same_sense
+  region  L5629-5629  tests=- for (k, &(p, fwd)) in half.iter().enumerate() {
+  region  L5630-5630  tests=- let pc = &pieces[p];
+  region  L5631-5631  tests=- let (a, b) = if fwd {
+  region  L5632-5632  tests=- (pc.start, pc.end)
+  region  L5634-5634  tests=- (pc.end, pc.start)
+  region  L5636-5636  tests=- let mark = if walked[from..].contains(&k) { "*" } else { " " };
+  region  L5636-5636  tests=- let mark = if walked[from..].contains(&k) { "*" } else { " " };
+  region  L5636-5636  tests=- let mark = if walked[from..].contains(&k) { "*" } else { " " };
+  region  L5637-5637  tests=- eprintln!(
+  region  L5638-5638  tests=-   {mark}half {k}: piece {p} {a:?} -> {b:?} seg {:?} mid {:?},
+  region  L5638-5638  tests=-   {mark}half {k}: piece {p} {a:?} -> {b:?} seg {:?} mid {:?},
+  region  L5638-5638  tests=-   {mark}half {k}: piece {p} {a:?} -> {b:?} seg {:?} mid {:?},
+  region  L5638-5638  tests=-   {mark}half {k}: piece {p} {a:?} -> {b:?} seg {:?} mid {:?},
+  region  L5638-5638  tests=-   {mark}half {k}: piece {p} {a:?} -> {b:?} seg {:?} mid {:?},
+  region  L5639-5639  tests=- pc.seg,
+  region  L5640-5640  tests=- pc.curve.eval(pc.range.mid())
+  region  L5675-5675  tests=- if let Some((regions, open)) = plane_split(body, f, pl, walks, kind, pieces, outer)? {
+  region  L5766-5766  tests=T }
+  region  L5977-5977  tests=- })?
+  region  L6004-6004  tests=- }
+  region  L6005-6005  tests=- if !outer {
+  region  L6006-6006  tests=- open.push(cyc.iter().map(|&i| half[i]).collect());
+  region  L6006-6006  tests=- open.push(cyc.iter().map(|&i| half[i]).collect());
+  region  L6007-6007  tests=- continue;
+  region  L6008-6008  tests=- }
+  region  L6009-6009  tests=- if debug_on() {
+  region  L6010-6010  tests=- eprintln!(
+  region  L6011-6011  tests=- hole outside: face {f:?} {:?} sense {} probe {probe:?},
+  region  L6011-6011  tests=- hole outside: face {f:?} {:?} sense {} probe {probe:?},
+  region  L6012-6012  tests=- face.surface, face.same_sense
+  region  L6012-6012  tests=- face.surface, face.same_sense
+  region  L6014-6014  tests=- for (q, cyc) in cycles.iter().enumerate() {
+  region  L6015-6015  tests=- let pts = polys[q].as_ref().map(|p| {
+  region  L6021-6021  tests=- eprintln!(
+  region  L6022-6022  tests=-   cycle {q} area {:.4} halves {:?}\n    {:?},
+  region  L6023-6023  tests=- areas[q],
+  region  L6024-6024  tests=- cyc.iter().map(|&i| half[i]).collect::<Vec<_>>(),
+  region  L6025-6025  tests=- pts
+  region  L6028-6028  tests=- }
+  region  L6029-6031  tests=- return Err(BoolError::lost(Lost::HoleOutside {
+  region  L6029-6029  tests=- return Err(BoolError::lost(Lost::HoleOutside {
+  region  L6030-6030  tests=- face: FaceRef::of(body, f),
+  region  L5576-5576  tests=T let d = uv_dir(body, f, &pieces[half[i].0], half[i].1, at_end)?;
+  region  L5591-5591  tests=T let theta = dir(i, true)?;
+  region  L5594-5594  tests=- let (c, j) = clockwise(theta, |j| half[j] == back, ways())?.unwrap_or((theta, i));
+  region  L5595-5595  tests=- if !tied(pieces, half, out, i, theta, (c, j), ways())? {
+  region  L5598-5598  tests=- let mut ways: Vec<(Vec2, usize)> = ways().collect::<R<_>>()?;
+  region  L5592-5592  tests=- let ways = || out.iter().map(|&(_, k)| Ok((dir(k, false)?, k)));
+  region  L5970-5970  tests=- .filter_map(|&o| Some((polys[o].as_deref()?, boxes[o]?)))
+  branch  L5616  corpus 0/3014138 tests 0/3308269  [never true] if walked.len() - from > half.len() {
+  branch  L5623  corpus 0/28 tests 0/0  [never true] if debug_on() {
+  branch  L5631  corpus 0/0 tests 0/0  [never reached] let (a, b) = if fwd {
+  branch  L5636  corpus 0/0 tests 0/0  [never reached] let mark = if walked[from..].contains(&k) { "*" } else { " " };
+  branch  L5736  corpus 0/6492 tests 0/3873  [never true] if dom.u.period.is_some() || dom.v.period.is_some() {
+  branch  L5748  corpus 83264/0 tests 96542/11  [never false] if let Some(r) = reference {
+  branch  L5800  corpus 0/9839 tests 0/12373  [never true] if areas[k] > 0.0 || skip[k] {
+  branch  L5897  corpus 0/9742 tests 0/11591  [never true] if areas[c] > 0.0 || skip[c] {
+  branch  L5951  corpus 2070/0 tests 1315/0  [never false] if s > best.0 && su.iter().all(outside) {
+  branch  L6002  corpus 625/0 tests 952/0  [never false] if skip.contains(&true) {
+  branch  L6005  corpus 0/0 tests 0/0  [never reached] if !outer {
+  branch  L6009  corpus 0/0 tests 0/0  [never reached] if debug_on() {
+== boolean.rs :: cylinder_outline   (unrun closures/fns 0, regions 0, branch sites 2)
+  branch  L6061  corpus 267839/0 tests 367335/0  [never false] Curve::Line(l) if l.dir.cross(z).length() <= 1e-12 => {
+  branch  L6065  corpus 253706/0 tests 371665/0  [never false] if k.frame.z().cross(z).length() <= 1e-12 && (k.radius - c.radius).abs() <= tol::LINEAR =>
+== boolean.rs :: plane_split   (unrun closures/fns 1, regions 6, branch sites 2)
+  closure L6135  tests=0        .ok_or_else(|| {
+  region  L6139-6139  tests=- })?;
+  region  L6144-6144  tests=- return Ok(None);
+  region  L6160-6160  tests=- None => return Ok(None),
+  region  L6172-6174  tests=- return Err(BoolError::lost(Lost::HoleOutside {
+  region  L6172-6172  tests=- return Err(BoolError::lost(Lost::HoleOutside {
+  region  L6173-6173  tests=- face: FaceRef::of(body, f),
+  branch  L6143  corpus 16052/0 tests 24621/0  [never false] let Some(left) = n.cross(along).normalize() else {
+  branch  L6170  corpus 2366/0 tests 5142/0  [never false] None if !outer => open.push(w),
+== boolean.rs :: plane_area   (unrun closures/fns 0, regions 1, branch sites 0)
+  region  L6184-6184  tests=- let r = piece_end(&pieces[walk.first()?.0], walk[0].1);
+== boolean.rs :: plane_inside   (unrun closures/fns 0, regions 2, branch sites 0)
+  region  L6240-6240  tests=- None => continue 'ray,
+  region  L6245-6245  tests=- None
+== boolean.rs :: region_holds   (unrun closures/fns 0, regions 2, branch sites 1)
+  region  L6269-6269  tests=- return None;
+  region  L6271-6271  tests=- plane_inside(pl, q, region.first()?, pieces, boxes)
+  branch  L6268  corpus 194/0 tests 343/0  [never false] let Surface::Plane(pl) = &body.face(f).surface else {
+== boolean.rs :: plane_outlines   (unrun closures/fns 3, regions 0, branch sites 1)
+  FN      L6275  tests=0        fn plane_outlines(body: &Body, f: FaceId, regions: &[Region], pieces: &[Piece]) -> Vec<Option<Vec<Po
+  closure L6279  tests=0        .map(|r| {
+  closure L6287  tests=0        .map(|p| {
+  branch  L6288  corpus 0/0 tests 0/0  [never reached] if face.same_sense {
+== boolean.rs :: classify_specs   (unrun closures/fns 5, regions 52, branch sites 15)
+  closure L6389  tests=0        .map(|&pf| (pf, index[other].point_in_face(pf, p)))
+  closure L6415  tests=0        && spare_probes(body, s, pieces).all(|q| index[other].classify(q) == Where::On));
+  closure L6540  tests=0        .ok_or_else(|| {
+  closure L6556  tests=7        .map(|q| index[1 - s.side].classify(q))
+  closure L6557  tests=7        .find(|w| *w != Where::On)
+  region  L6383-6383  tests=- continue;
+  region  L6387-6388  tests=- let w: Vec<_> = partners
+  region  L6391-6391  tests=- eprintln!("  COPLANAR spec {i} face {:?} probe {p:?} partners {w:?}", s.from);
+  region  L6391-6391  tests=- eprintln!("  COPLANAR spec {i} face {:?} probe {p:?} partners {w:?}", s.from);
+  region  L6391-6391  tests=- eprintln!("  COPLANAR spec {i} face {:?} probe {p:?} partners {w:?}", s.from);
+  region  L6391-6391  tests=- eprintln!("  COPLANAR spec {i} face {:?} probe {p:?} partners {w:?}", s.from);
+  region  L6391-6391  tests=- eprintln!("  COPLANAR spec {i} face {:?} probe {p:?} partners {w:?}", s.from);
+  region  L6415-6415  tests=- && spare_probes(body, s, pieces).all(|q| index[other].classify(q) == Where::On));
+  region  L6415-6415  tests=- && spare_probes(body, s, pieces).all(|q| index[other].classify(q) == Where::On));
+  region  L6415-6415  tests=- && spare_probes(body, s, pieces).all(|q| index[other].classify(q) == Where::On));
+  region  L6421-6421  tests=- continue;
+  region  L6446-6446  tests=- continue;
+  region  L6544-6544  tests=- })?
+  region  L6547-6547  tests=- eprintln!(
+  region  L6548-6548  tests=-   RAY spec {i} probe {probe:?} -> {:?},
+  region  L6548-6548  tests=-   RAY spec {i} probe {probe:?} -> {:?},
+  region  L6549-6549  tests=- index[1 - s.side].classify(probe)
+  region  L6549-6549  tests=- index[1 - s.side].classify(probe)
+  region  L6555-6555  tests=T && let Some(w) = spare_probes(bodies[s.side], s, pieces)
+  region  L6555-6555  tests=T && let Some(w) = spare_probes(bodies[s.side], s, pieces)
+  region  L6555-6555  tests=T && let Some(w) = spare_probes(bodies[s.side], s, pieces)
+  region  L6559-6559  tests=T at = w;
+  region  L6565-6565  tests=- if debug_on() {
+  region  L6566-6566  tests=- eprintln!(
+  region  L6567-6567  tests=- untouched spec {i}: side {} face {:?} {:?} probe {probe:?} coplanar {coplanar:?},
+  region  L6567-6567  tests=- untouched spec {i}: side {} face {:?} {:?} probe {probe:?} coplanar {coplanar:?},
+  region  L6567-6567  tests=- untouched spec {i}: side {} face {:?} {:?} probe {probe:?} coplanar {coplanar:?},
+  region  L6568-6568  tests=- s.side,
+  region  L6569-6569  tests=- s.from,
+  region  L6570-6570  tests=- bodies[s.side].face(s.from).surface
+  region  L6572-6572  tests=- }
+  region  L6573-6575  tests=- return Err(BoolError::unhandled(Unhandled::UntouchedOnOther {
+  region  L6573-6573  tests=- return Err(BoolError::unhandled(Unhandled::UntouchedOnOther {
+  region  L6574-6574  tests=- face: FaceRef::of(bodies[s.side], s.from),
+  region  L6578-6578  tests=- spread(&mut class, i)?;
+  region  L6501-6501  tests=- eprintln!(
+  region  L6502-6502  tests=-   FLOOD spec {j} (face {:?}) <- spec {i} (face {:?} {:?}) ({c:?}) across piece {p},
+  region  L6502-6502  tests=-   FLOOD spec {j} (face {:?}) <- spec {i} (face {:?} {:?}) ({c:?}) across piece {p},
+  region  L6502-6502  tests=-   FLOOD spec {j} (face {:?}) <- spec {i} (face {:?} {:?}) ({c:?}) across piece {p},
+  region  L6502-6502  tests=-   FLOOD spec {j} (face {:?}) <- spec {i} (face {:?} {:?}) ({c:?}) across piece {p},
+  region  L6503-6503  tests=- specs[j].from,
+  region  L6504-6504  tests=- specs[i].from,
+  region  L6505-6505  tests=- bodies[specs[i].side].face(specs[i].from).surface
+  region  L6505-6505  tests=- bodies[specs[i].side].face(specs[i].from).surface
+  region  L6505-6505  tests=- bodies[specs[i].side].face(specs[i].from).surface
+  region  L6513-6513  tests=- debug_conflict(bodies, specs, pieces, class, i, j, p);
+  region  L6513-6513  tests=- debug_conflict(bodies, specs, pieces, class, i, j, p);
+  region  L6513-6513  tests=- debug_conflict(bodies, specs, pieces, class, i, j, p);
+  region  L6513-6513  tests=- debug_conflict(bodies, specs, pieces, class, i, j, p);
+  region  L6513-6513  tests=- debug_conflict(bodies, specs, pieces, class, i, j, p);
+  region  L6513-6513  tests=- debug_conflict(bodies, specs, pieces, class, i, j, p);
+  region  L6513-6513  tests=- debug_conflict(bodies, specs, pieces, class, i, j, p);
+  branch  L6382  corpus 7026/0 tests 18990/0  [never false] let Some(inner) = interior_point(body, s, pieces) else {
+  branch  L6386  corpus 0/7026 tests 0/18990  [never true] if specs_on() {
+  branch  L6401  corpus 4/0 tests 0/0  [never false] && let Inner::Narrow(_, c) = inner
+  branch  L6402  corpus 4/0 tests 0/0  [never false] && 2.0 * c > tol::LINEAR
+  branch  L6403  corpus 4/0 tests 0/0  [never false] && let Some(b) = beside_partner(body, bodies[other], s, pieces, other, pf)
+  branch  L6414  corpus 0/4860 tests 0/13878  [never true] || (w == Where::On
+  branch  L6420  corpus 3789/0 tests 8812/0  [never false] let (Some(h), Some(t)) = (here, there) else {
+  branch  L6445  corpus 0/280517 tests 0/251503  [never true] if lean.abs() <= 1e-9 {
+  branch  L6495  corpus 0/2694920 tests 0/2248124  [never true] if specs[j].side != specs[i].side || fixed[j] {
+  branch  L6500  corpus 0/73767 tests 0/60079  [never true] if specs_on() {
+  branch  L6512  corpus 0/12 tests 0/18  [never true] if debug_on() {
+  branch  L6546  corpus 0/10778 tests 0/6188  [never true] if specs_on() {
+  branch  L6554  corpus 0/10778 tests 7/6181  [never true] if at == Where::On
+  branch  L6555  corpus 0/0 tests 7/0  [never reached] && let Some(w) = spare_probes(bodies[s.side], s, pieces)
+  branch  L6565  corpus 0/0 tests 0/0  [never reached] if debug_on() {
+== boolean.rs :: lean   (unrun closures/fns 0, regions 2, branch sites 0)
+  region  L6606-6606  tests=- let n_here = body.face_normal(f, body.face(f).surface.project(d.p))?;
+  region  L6608-6608  tests=- let n_other = ob.face_normal(of, ob.face(of).surface.project(d.p))?;
+== boolean.rs :: debug_conflict   (unrun closures/fns 3, regions 0, branch sites 1)
+  FN      L6624  tests=0        fn debug_conflict(
+  closure L6633  tests=0        let show = |k: usize| {
+  closure L6653  tests=0        .any(|h| h.0 == k)
+  branch  L6648  corpus 0/0 tests 0/0  [never reached] if specs[i]
+== boolean.rs :: interior_point   (unrun closures/fns 0, regions 9, branch sites 2)
+  region  L6691-6691  tests=- let first = s.loops.first()?;
+  region  L6692-6692  tests=- let mut h = *first.first()?;
+  region  L6702-6702  tests=- if let Some(q) = clear_step(body, s, pieces, h, chord)? {
+  region  L6708-6708  tests=- && let Some(q) = clear_step(body, s, pieces, o, half_chord(&pieces[o.0]))?
+  region  L6710-6710  tests=- return Some(Inner::Clear(q));
+  region  L6715-6715  tests=- _ => probe(body, s.from, h, pieces).map(Inner::Stepped),
+  region  L6715-6715  tests=- _ => probe(body, s.from, h, pieces).map(Inner::Stepped),
+  region  L6715-6715  tests=- _ => probe(body, s.from, h, pieces).map(Inner::Stepped),
+  region  L6715-6715  tests=- _ => probe(body, s.from, h, pieces).map(Inner::Stepped),
+  branch  L6695  corpus 46/0 tests 2/0  [never false] && let Some((o, c)) = first
+  branch  L6708  corpus 0/12 tests 0/0  [never true] && let Some(q) = clear_step(body, s, pieces, o, half_chord(&pieces[o.0]))?
+== boolean.rs :: beside_partner   (unrun closures/fns 0, regions 10, branch sites 4)
+  region  L6749-6749  tests=- _ if pc.side == Some(other) => pc.of?,
+  region  L6750-6750  tests=- _ => return None,
+  region  L6753-6753  tests=- let c = edge.coedges.iter().copied().find(|&c| ob.coedge_face(c) == pf)?;
+  region  L6757-6757  tests=- .face_normal(s.from, body.face(s.from).surface.project(d.p))?
+  region  L6759-6759  tests=- .normalize()?;
+  region  L6764-6764  tests=- .face_normal(pf, ob.face(pf).surface.project(d.p))?
+  region  L6766-6766  tests=- .normalize()?;
+  region  L6769-6769  tests=- return None;
+  region  L6776-6776  tests=- let n = ob.face_normal(g, ob.face(g).surface.project(d.p))?;
+  region  L6778-6778  tests=- (lean.abs() > 1e-9).then_some(if lean < 0.0 { Class::In } else { Class::Out })
+  branch  L6748  corpus 2/0 tests 0/0  [never false] Some((side, e)) if side == other => e,
+  branch  L6749  corpus 2/0 tests 0/0  [never false] _ if pc.side == Some(other) => pc.of?,
+  branch  L6768  corpus 0/4 tests 0/0  [never true] if cos.abs() <= 0.5 {
+  branch  L6778  corpus 0/2 tests 0/0  [never true] (lean.abs() > 1e-9).then_some(if lean < 0.0 { Class::In } else { Class::Out })
+== boolean.rs :: planar_inner   (unrun closures/fns 2, regions 7, branch sites 2)
+  closure L6842  tests=0        slabs.sort_by(|a, b| b.0.total_cmp(&a.0));
+  closure L6860  tests=0        if best.is_none_or(|b| c > b.1) {
+  region  L6815-6815  tests=- let a = (8.0 * 0.25 * tol::LINEAR / c.radius.max(tol::LINEAR)).sqrt();
+  region  L6815-6815  tests=- let a = (8.0 * 0.25 * tol::LINEAR / c.radius.max(tol::LINEAR)).sqrt();
+  region  L6816-6816  tests=- ((pc.range.width() / a).ceil() as usize).clamp(4, 4096)
+  region  L6816-6816  tests=- ((pc.range.width() / a).ceil() as usize).clamp(4, 4096)
+  region  L6818-6818  tests=- _ => 256,
+  region  L6832-6832  tests=- }
+  region  L6862-6862  tests=- }
+  branch  L6830  corpus 4/0 tests 0/0  [never false] if ring.len() >= 2 {
+  branch  L6860  corpus 4/0 tests 0/0  [never false] if best.is_none_or(|b| c > b.1) {
+== boolean.rs :: clear_step   (unrun closures/fns 0, regions 1, branch sites 0)
+  region  L6880-6880  tests=- let q = probe_at(body, s.from, h, pieces, Some(step))?;
+== boolean.rs :: spare_probes   (unrun closures/fns 4, regions 0, branch sites 2)
+  FN      L6900  tests=7        fn spare_probes<'a>(body: &'a Body, s: &'a Spec, pieces: &'a [Piece]) -> impl Iterator<Item = Point3
+  closure L6901  tests=7        s.loops.iter().flatten().flat_map(move |&h| {
+  closure L6902  tests=7        [1.0 / 3.0, 2.0 / 3.0].into_iter().filter_map(move |frac| {
+  closure L6916  tests=12       .all(|&(o, _)| {
+  branch  L6907  corpus 0/0 tests 7/0  [never reached] let along = if h.1 { d.d1 } else { -d.d1 };
+  branch  L6917  corpus 0/0 tests 7/5  [never reached] o == h.0 || {
+== boolean.rs :: probe   (unrun closures/fns 1, regions 0, branch sites 0)
+  FN      L6929  tests=0        pub(crate) fn probe(body: &Body, f: FaceId, h: (usize, bool), pieces: &[Piece]) -> Option<Point3> {
+== boolean.rs :: probe_at   (unrun closures/fns 1, regions 2, branch sites 0)
+  closure L6948  tests=0        let step = step.unwrap_or_else(|| (0.01 * half_chord(piece)).min(0.05));
+  region  L6946-6946  tests=- let n = body.face_normal(f, face.surface.project(d.p))?;
+  region  L6947-6947  tests=- let inward = n.cross(along).normalize()?;
+== boolean.rs :: meet_region   (unrun closures/fns 1, regions 17, branch sites 1)
+  closure L6976  tests=36       let half = |a: f64| t.major.abs() * (1.0 - a * a).max(0.0).sqrt() + t.minor;
+  region  L6975-6975  tests=T let z = t.frame.z().get();
+  region  L6977-6977  tests=T let o = t.frame.origin;
+  region  L6978-6982  tests=T Box3 {
+  region  L6979-6979  tests=T x: Interval::new(o.x - half(z.x), o.x + half(z.x)),
+  region  L6979-6979  tests=T x: Interval::new(o.x - half(z.x), o.x + half(z.x)),
+  region  L6979-6979  tests=T x: Interval::new(o.x - half(z.x), o.x + half(z.x)),
+  region  L6979-6979  tests=T x: Interval::new(o.x - half(z.x), o.x + half(z.x)),
+  region  L6979-6979  tests=T x: Interval::new(o.x - half(z.x), o.x + half(z.x)),
+  region  L6980-6980  tests=T y: Interval::new(o.y - half(z.y), o.y + half(z.y)),
+  region  L6980-6980  tests=T y: Interval::new(o.y - half(z.y), o.y + half(z.y)),
+  region  L6980-6980  tests=T y: Interval::new(o.y - half(z.y), o.y + half(z.y)),
+  region  L6980-6980  tests=T y: Interval::new(o.y - half(z.y), o.y + half(z.y)),
+  region  L6980-6980  tests=T y: Interval::new(o.y - half(z.y), o.y + half(z.y)),
+  region  L6981-6981  tests=T z: Interval::new(o.z - half(z.z), o.z + half(z.z)),
+  region  L6981-6981  tests=T z: Interval::new(o.z - half(z.z), o.z + half(z.z)),
+  region  L6981-6981  tests=T z: Interval::new(o.z - half(z.z), o.z + half(z.z)),
+  region  L6981-6981  tests=T z: Interval::new(o.z - half(z.z), o.z + half(z.z)),
+  branch  L6970  corpus 21482/0 tests 27385/6  [never false] Surface::Torus(t) if !CAREFUL.with(|c| c.get()) => {
+== boolean.rs :: crossing_on_face   (unrun closures/fns 3, regions 0, branch sites 5)
+  FN      L7000  tests=2        fn crossing_on_face(
+  closure L7008  tests=565      let side = |t: f64| {
+  closure L7016  tests=516      let at = |k: usize| range.lo + range.width() * k as f64 / N as f64;
+  branch  L7021  corpus 0/0 tests 1/511  [never reached] if a.0 * b.0 < 0.0 {
+  branch  L7026  corpus 0/0 tests 23/27  [never reached] if g * gl > 0.0 {
+  branch  L7035  corpus 0/0 tests 1/0  [never reached] if r.1 <= tol::LINEAR && r.2 > edge.range.lo && r.2 < edge.range.hi {
+  branch  L7035  corpus 0/0 tests 1/0  [never reached] if r.1 <= tol::LINEAR && r.2 > edge.range.lo && r.2 < edge.range.hi {
+  branch  L7035  corpus 0/0 tests 1/0  [never reached] if r.1 <= tol::LINEAR && r.2 > edge.range.lo && r.2 < edge.range.hi {
+== classify.rs :: of   (unrun closures/fns 0, regions 4, branch sites 10)
+  region  L104-104   tests=- return None;
+  region  L116-116   tests=- return None;
+  region  L120-120   tests=- let [a, b] = h[..] else { return None };
+  region  L139-139   tests=- return None;
+  branch  L86    corpus 21808/0 tests 38824/0  [never false] (ci.frame.z().get().cross(n).length() < 1e-12
+  branch  L99    corpus 43803/0 tests 137189/0  [never false] && let Curve::Line(line) = &body.edge(body.coedge(c).edge).curve
+  branch  L103   corpus 0/43803 tests 0/137189  [never true] if ruling.is_some_and(|r| (r - off).length() >= 1e-9) {
+  branch  L112   corpus 0/41656 tests 0/132435  [never true] if ci.frame.z().get().cross(axis).length() >= 1e-12
+  branch  L113   corpus 0/41656 tests 0/132435  [never true] || off.length() >= 1e-9
+  branch  L114   corpus 0/41656 tests 0/132435  [never true] || (ci.radius - cy.radius).abs() >= 1e-9
+  branch  L120   corpus 20377/0 tests 64344/0  [never false] let [a, b] = h[..] else { return None };
+  branch  L136   corpus 0/16741 tests 0/11156  [never true] if !distinct
+  branch  L137   corpus 0/95 tests 0/118  [never true] || (e0.start, e0.end) != (e1.start, e1.end) && (e0.start, e0.end) != (e1.end, e1.start)
+  branch  L147   corpus 0/33227 tests 0/21861  [never true] if ci.frame.origin.distance(centre) >= 1e-9 || (ci.radius - sp.radius).abs() >= 1e-9 {
+== classify.rs :: place   (unrun closures/fns 0, regions 0, branch sites 1)
+  branch  L185   corpus 145302/0 tests 993302/0  [never false] if let Some(r) = seam
+== classify.rs :: drop_query_loops   (unrun closures/fns 0, regions 3, branch sites 2)
+  region  L242-242   tests=- let Some(q) = face.query.get_mut() else { return };
+  region  L244-244   tests=T face.query.clear();
+  region  L245-245   tests=T return;
+  branch  L242   corpus 2189/0 tests 5194/0  [never false] let Some(q) = face.query.get_mut() else { return };
+  branch  L243   corpus 2189/0 tests 420/4774  [never false] let Some(info) = std::sync::Arc::get_mut(q).and_then(|a| a.downcast_mut::<FaceInfo>()) else {
+== classify.rs :: extend_query   (unrun closures/fns 0, regions 1, branch sites 1)
+  region  L266-266   tests=- _ => None,
+  branch  L284   corpus 688/0 tests 40/0  [never false] && let Some(pl) = plane
+== classify.rs :: build   (unrun closures/fns 0, regions 1, branch sites 1)
+  region  L316-316   tests=T let Some(sp) = sp else { continue };
+  branch  L316   corpus 303643/0 tests 2316361/4  [never false] let Some(sp) = sp else { continue };
+== classify.rs :: face_box   (unrun closures/fns 1, regions 0, branch sites 0)
+  FN      L402   tests=0        pub fn face_box(body: &Body, f: FaceId) -> Box3 {
+== classify.rs :: coedges_meeting   (unrun closures/fns 0, regions 1, branch sites 0)
+  region  L512-512   tests=- None => (0..info.edges.len()).filter_map(hit).collect(),
+== classify.rs :: point_in_face_past   (unrun closures/fns 0, regions 1, branch sites 5)
+  region  L618-618   tests=- }
+  branch  L585   corpus 41/0 tests 13/0  [never false] && d > 1e-3 * tol::LINEAR
+  branch  L588   corpus 110/0 tests 68/0  [never false] o != GONE
+  branch  L611   corpus 6793/0 tests 1757383/0  [never false] if let Some(n) = body.face_normal(f, face.surface.project(q)) {
+  branch  L654   corpus 11/0 tests 128/0  [never false] && let Some(inside) = sphere_nearest(body, f, p, &info.edges)
+  branch  L658   corpus 0/65481 tests 0/504683  [never true] if point_in_loops(uv, &drawn.loops) || other_turn_inside(body, f, uv, drawn) {
+== classify.rs :: classify   (unrun closures/fns 0, regions 4, branch sites 1)
+  region  L687-687   tests=- LineSurface::OnSurface => continue 'ray,
+  region  L691-691   tests=T continue 'ray;
+  region  L695-695   tests=T Where::On => continue 'ray,
+  region  L708-708   tests=- Where::On
+  branch  L690   corpus 0/39831 tests 6/717213  [never true] if h.contact == Contact::Touching {
+== classify.rs :: edges_near   (unrun closures/fns 7, regions 0, branch sites 1)
+  FN      L714   tests=1262     pub(crate) fn edges_near(body: &Body, f: FaceId, bx: &Box3, out: &mut Vec<forge_topo::CoedgeId>) {
+  closure L716   tests=32172    let keep = |e: &(forge_topo::CoedgeId, Box3)| e.0 != GONE && e.1.overlaps(bx);
+  closure L723   tests=30164    .map(|&i| &info.edges[i as usize])
+  closure L724   tests=30164    .filter(|e| keep(e))
+  closure L725   tests=366      .map(|e| e.0),
+  closure L728   tests=2008     None => out.extend(info.edges.iter().filter(|e| keep(e)).map(|e| e.0)),
+  closure L728   tests=287      None => out.extend(info.edges.iter().filter(|e| keep(e)).map(|e| e.0)),
+  branch  L716   corpus 0/0 tests 31548/624  [never reached] let keep = |e: &(forge_topo::CoedgeId, Box3)| e.0 != GONE && e.1.overlaps(bx);
+== classify.rs :: in_planar_face   (unrun closures/fns 1, regions 0, branch sites 2)
+  FN      L734   tests=2213     pub(crate) fn in_planar_face(body: &Body, f: FaceId, p: Point3) -> Option<bool> {
+  branch  L735   corpus 0/0 tests 2213/0  [never reached] let Surface::Plane(plane) = &body.face(f).surface else {
+  branch  L747   corpus 0/0 tests 2213/0  [never reached] if let Some(inside) = planar_parity(body, plane, p, &info.edges, subset, angle) {
+== classify.rs :: in_loop   (unrun closures/fns 1, regions 0, branch sites 0)
+  FN      L756   tests=625      pub(crate) fn in_loop(p: Point3, pieces: &[(Curve, Interval)], plane: &forge_geom::Plane) -> Option<
+== classify.rs :: unit_rays_are_rays_normalized   (unrun closures/fns 2, regions 0, branch sites 0)
+  FN      L875   tests=1        fn unit_rays_are_rays_normalized() {
+  closure L878   tests=16       let bits = |v: Vec3| [v.x, v.y, v.z].map(f64::to_bits);
+== classify.rs :: plane_ray_crossings   (unrun closures/fns 0, regions 6, branch sites 5)
+  region  L957-957   tests=- if l.dir.cross(w).dot(n).abs() <= tol::LINEAR {
+  region  L958-958   tests=- return None; // the ray runs along this edge
+  region  L959-959   tests=- }
+  region  L960-960   tests=- return Some(0);
+  region  L970-970   tests=- return None;
+  region  L991-991   tests=- return None; // through a vertex
+  branch  L956   corpus 0/751898 tests 0/3696606  [never true] if den == 0.0 {
+  branch  L957   corpus 0/0 tests 0/0  [never reached] if l.dir.cross(w).dot(n).abs() <= tol::LINEAR {
+  branch  L969   corpus 0/751898 tests 0/3696606  [never true] if !t.is_finite() {
+  branch  L990   corpus 0/926788 tests 0/4793413  [never true] if (t - range.lo).abs() <= margin || (t - range.hi).abs() <= margin {
+  branch  L990   corpus 0/926788 tests 0/4793413  [never true] if (t - range.lo).abs() <= margin || (t - range.hi).abs() <= margin {
+== classify.rs :: ruling_parity   (unrun closures/fns 0, regions 5, branch sites 2)
+  region  L1014-1014  tests=- let radial = (rel - z * rel.dot(z)).normalize()?.get();
+  region  L1016-1016  tests=- Some(a) => (p - a).normalize()?.get(),
+  region  L1039-1039  tests=- Curve::Circle(k) => conic_plane(&k.frame, k.radius, k.radius, frame.origin, m)?,
+  region  L1040-1040  tests=- Curve::Ellipse(el) => conic_plane(&el.frame, el.major, el.minor, frame.origin, m)?,
+  region  L1055-1055  tests=- None => t,
+  branch  L1023  corpus 0/895789 tests 0/5044477  [never true] if c == GONE || !ray_hits_box(p, w, b) {
+  branch  L1061  corpus 98388/0 tests 618676/0  [never false] if t > e.range.lo && t < e.range.hi {
+== classify.rs :: sphere_nearest   (unrun closures/fns 0, regions 4, branch sites 3)
+  region  L1105-1105  tests=- let (_, c, t) = best?;
+  region  L1110-1110  tests=- return None;
+  region  L1113-1113  tests=- return Some(true);
+  region  L1119-1119  tests=- let side = body.face_normal(f, surface.project(q))?.cross(along).dot(p - q);
+  branch  L1109  corpus 0/11 tests 0/128  [never true] if t <= e.range.lo + margin || t >= e.range.hi - margin {
+  branch  L1109  corpus 0/11 tests 0/128  [never true] if t <= e.range.lo + margin || t >= e.range.hi - margin {
+  branch  L1112  corpus 0/11 tests 0/128  [never true] if body.partner(c).is_some_and(|o| body.coedge_face(o) == f) {
+== classify.rs :: conic_plane   (unrun closures/fns 0, regions 3, branch sites 3)
+  region  L1129-1129  tests=- return (cc.abs() > tol::LINEAR).then(Vec::new);
+  region  L1133-1133  tests=- return Some(Vec::new());
+  region  L1136-1136  tests=- return None;
+  branch  L1128  corpus 0/101570 tests 0/623109  [never true] if r <= 1e-12 * (a + b) {
+  branch  L1132  corpus 0/101570 tests 0/623109  [never true] if k.abs() > 1.0 + 1e-9 {
+  branch  L1135  corpus 0/101570 tests 0/623109  [never true] if k.abs() >= 1.0 - 1e-9 {
+== classify.rs :: conic_ray   (unrun closures/fns 0, regions 0, branch sites 1)
+  branch  L1156  corpus 0/152769 tests 0/966031  [never true] if disc <= 1e-12 * (bb * bb + (4.0 * aa * cc).abs()) || aa == 0.0 {
+== nary.rs :: nary_phase_times   (unrun closures/fns 2, regions 0, branch sites 0)
+  FN      L32    tests=0        pub fn nary_phase_times() -> [u64; 9] {
+  closure L33    tests=0        PHASES.with(|p| *p.borrow())
+== nary.rs :: stretch   (unrun closures/fns 0, regions 1, branch sites 2)
+  region  L77-77    tests=- return Some(range);
+  branch  L76    corpus 1365/0 tests 10782/0  [never false] let Curve::Intersection(ic) = c else {
+  branch  L91    corpus 99854/0 tests 800977/0  [never false] if b > a && boxes.iter().any(|x| x.overlaps(&bx)) {
+== nary.rs :: may_meet   (unrun closures/fns 0, regions 0, branch sites 1)
+  branch  L153   corpus 28590/0 tests 66360/0  [never false] near.length() <= sp.radius + m && far >= sp.radius - m
+== nary.rs :: cell   (unrun closures/fns 0, regions 1, branch sites 1)
+  region  L199-199   tests=- 0.0
+  branch  L196   corpus 3329394/0 tests 4197009/0  [never false] let f = if w > 0.0 {
+== nary.rs :: near   (unrun closures/fns 0, regions 1, branch sites 1)
+  region  L208-208   tests=- return Vec::new();
+  branch  L207   corpus 0/180303 tests 0/173610  [never true] if !self.all.overlaps(b) {
+== nary.rs :: at   (unrun closures/fns 0, regions 1, branch sites 1)
+  region  L233-233   tests=- return &[];
+  branch  L232   corpus 0/570562 tests 0/836581  [never true] if !self.all.contains(p) {
+== nary.rs :: nary_reg   (unrun closures/fns 1, regions 0, branch sites 0)
+  closure L257   tests=0        *REG.get_or_init(|| std::env::var("FORGE_NARY_REG").ok().and_then(|v| v.parse().ok()))
+== nary.rs :: in_result   (unrun closures/fns 0, regions 4, branch sites 2)
+  region  L406-406   tests=T Op::Union => v || inside[k],
+  region  L406-406   tests=T Op::Union => v || inside[k],
+  region  L407-407   tests=T Op::Subtract => v && !inside[k],
+  region  L407-407   tests=T Op::Subtract => v && !inside[k],
+  branch  L406   corpus 0/0 tests 16/58  [never reached] Op::Union => v || inside[k],
+  branch  L407   corpus 0/0 tests 46/98  [never reached] Op::Subtract => v && !inside[k],
+== nary.rs :: owned   (unrun closures/fns 0, regions 4, branch sites 2)
+  region  L426-426   tests=- Op::Intersect => (vin && inner[k], vout && outer[k]),
+  region  L426-426   tests=- Op::Intersect => (vin && inner[k], vout && outer[k]),
+  region  L426-426   tests=- Op::Intersect => (vin && inner[k], vout && outer[k]),
+  region  L426-426   tests=- Op::Intersect => (vin && inner[k], vout && outer[k]),
+  branch  L426   corpus 0/0 tests 0/0  [never reached] Op::Intersect => (vin && inner[k], vout && outer[k]),
+  branch  L426   corpus 0/0 tests 0/0  [never reached] Op::Intersect => (vin && inner[k], vout && outer[k]),
+== nary.rs :: divides   (unrun closures/fns 0, regions 1, branch sites 0)
+  region  L445-445   tests=T inside[k] = true;
+== nary.rs :: nary   (unrun closures/fns 1, regions 0, branch sites 0)
+  FN      L473   tests=16       pub fn nary(tools: &[&Body], ops: &[Op], threads: usize) -> R<Body> {
+== nary.rs :: warm   (unrun closures/fns 1, regions 0, branch sites 0)
+  FN      L482   tests=0        fn warm(&self) {}
+== nary.rs :: verdicts   (unrun closures/fns 0, regions 14, branch sites 7)
+  region  L527-527   tests=T for k in 0..self.shapes.len() {
+  region  L528-528   tests=T if !apply(k) {
+  region  L529-529   tests=- return 3;
+  region  L530-530   tests=T }
+  region  L540-540   tests=- if own < k && !apply(own) {
+  region  L541-541   tests=- return 3;
+  region  L548-548   tests=- if own_left && !apply(own) {
+  region  L549-549   tests=- return 3;
+  region  L520-520   tests=T Op::Intersect => (vin, vout) = (vin && bin, vout && bout),
+  region  L520-520   tests=T Op::Intersect => (vin, vout) = (vin && bin, vout && bout),
+  region  L520-520   tests=T Op::Intersect => (vin, vout) = (vin && bin, vout && bout),
+  region  L520-520   tests=T Op::Intersect => (vin, vout) = (vin && bin, vout && bout),
+  region  L520-520   tests=T Op::Intersect => (vin, vout) = (vin && bin, vout && bout),
+  region  L520-520   tests=- Op::Intersect => (vin, vout) = (vin && bin, vout && bout),
+  branch  L520   corpus 0/0 tests 3/2  [never reached] Op::Intersect => (vin, vout) = (vin && bin, vout && bout),
+  branch  L520   corpus 0/0 tests 0/5  [never reached] Op::Intersect => (vin, vout) = (vin && bin, vout && bout),
+  branch  L528   corpus 0/0 tests 0/10  [never reached] if !apply(k) {
+  branch  L540   corpus 0/117065 tests 0/195301  [never true] if own < k && !apply(own) {
+  branch  L540   corpus 0/0 tests 0/0  [never reached] if own < k && !apply(own) {
+  branch  L548   corpus 0/115768 tests 0/179170  [never true] if own_left && !apply(own) {
+  branch  L548   corpus 0/0 tests 0/0  [never reached] if own_left && !apply(own) {
+== nary.rs :: nary_with   (unrun closures/fns 0, regions 3, branch sites 2)
+  region  L587-587   tests=- crate::boolean::undecided_touch(&out)?;
+  region  L588-588   tests=- crate::boolean::refuse_strays(&out, 0)?;
+  region  L630-630   tests=- let Some(&c0) = from.first() else { continue };
+  branch  L630   corpus 277610/0 tests 245656/0  [never false] let Some(&c0) = from.first() else { continue };
+  branch  L635   corpus 521055/0 tests 475707/0  [never false] Some(n) if k < from.len() => (c, k) = (n, k + 1),
+== nary.rs :: nary_body   (unrun closures/fns 4, regions 74, branch sites 24)
+  closure L984   tests=0        let off = |p: Point3| {
+  closure L1129  tests=0        .map(|k| {
+  closure L1131  tests=0        local_class(tools[sd], &index[sd], f, t.at, t.dir, |q| kept_at(sd, q))
+  closure L1147  tests=18       let flipped = |sd: usize| sd > 0 && ops[sd - 1] == Op::Subtract;
+  region  L1049-1049  tests=- let out = out?;
+  region  L1128-1128  tests=- let got: Vec<_> = (0..2)
+  region  L1134-1134  tests=- eprintln!(
+  region  L1135-1135  tests=- nary: touch {:?} {:?} at {:?}: kept {got:?},
+  region  L1136-1136  tests=- t.sides, t.faces, t.at
+  region  L1136-1136  tests=- t.sides, t.faces, t.at
+  region  L1136-1136  tests=- t.sides, t.faces, t.at
+  region  L1145-1145  tests=T }
+  region  L1149-1154  tests=T && !crate::boolean::flows_on(
+  region  L1149-1149  tests=T && !crate::boolean::flows_on(
+  region  L1150-1150  tests=T [tools[t.sides[0]], tools[t.sides[1]]],
+  region  L1150-1150  tests=T [tools[t.sides[0]], tools[t.sides[1]]],
+  region  L1150-1150  tests=T [tools[t.sides[0]], tools[t.sides[1]]],
+  region  L1150-1150  tests=T [tools[t.sides[0]], tools[t.sides[1]]],
+  region  L1151-1151  tests=T t.faces,
+  region  L1152-1152  tests=T t.at,
+  region  L1153-1153  tests=T flipped(t.sides[0]) != flipped(t.sides[1]),
+  region  L1153-1153  tests=T flipped(t.sides[0]) != flipped(t.sides[1]),
+  region  L1153-1153  tests=T flipped(t.sides[0]) != flipped(t.sides[1]),
+  region  L1155-1155  tests=T && !crate::boolean::crack_tip(
+  region  L1156-1156  tests=T [tools[t.sides[0]], tools[t.sides[1]]],
+  region  L1156-1156  tests=T [tools[t.sides[0]], tools[t.sides[1]]],
+  region  L1156-1156  tests=T [tools[t.sides[0]], tools[t.sides[1]]],
+  region  L1156-1156  tests=T [tools[t.sides[0]], tools[t.sides[1]]],
+  region  L1157-1157  tests=T [&index[t.sides[0]], &index[t.sides[1]]],
+  region  L1157-1157  tests=T [&index[t.sides[0]], &index[t.sides[1]]],
+  region  L1157-1157  tests=T [&index[t.sides[0]], &index[t.sides[1]]],
+  region  L1157-1157  tests=T [&index[t.sides[0]], &index[t.sides[1]]],
+  region  L1158-1158  tests=T t,
+  region  L1159-1159  tests=T !flipped(t.sides[0]) && !flipped(t.sides[1]),
+  region  L1159-1159  tests=T !flipped(t.sides[0]) && !flipped(t.sides[1]),
+  region  L1159-1159  tests=T !flipped(t.sides[0]) && !flipped(t.sides[1]),
+  region  L1159-1159  tests=T !flipped(t.sides[0]) && !flipped(t.sides[1]),
+  region  L1162-1162  tests=T return Err(BoolError::ZeroThickness { at: t.at });
+  region  L753-753   tests=- let eb = body.edge_box(e);
+  region  L754-754   tests=- let mut far: f64 = 0.0;
+  region  L755-755   tests=- for x in [eb.x.lo, eb.x.hi] {
+  region  L756-756   tests=- for y in [eb.y.lo, eb.y.hi] {
+  region  L757-757   tests=- for z in [eb.z.lo, eb.z.hi] {
+  region  L758-758   tests=- far = far.max(radius(Point3::new(x, y, z)));
+  region  L758-758   tests=- far = far.max(radius(Point3::new(x, y, z)));
+  region  L758-758   tests=- far = far.max(radius(Point3::new(x, y, z)));
+  region  L758-758   tests=- far = far.max(radius(Point3::new(x, y, z)));
+  region  L758-758   tests=- far = far.max(radius(Point3::new(x, y, z)));
+  region  L758-758   tests=- far = far.max(radius(Point3::new(x, y, z)));
+  region  L762-762   tests=- far
+  region  L796-796   tests=T let Some(sh) = shapes else { return true };
+  region  L810-810   tests=T holds.push(k);
+  region  L830-830   tests=- let Some(sh) = shapes else { return false };
+  region  L967-967   tests=- )?;
+  region  L978-978   tests=- )?;
+  region  L982-982   tests=- SurfaceSurface::NotAnalytic if buried(i, &region) || buried(j, &region) => continue,
+  region  L982-982   tests=- SurfaceSurface::NotAnalytic if buried(i, &region) || buried(j, &region) => continue,
+  region  L982-982   tests=- SurfaceSurface::NotAnalytic if buried(i, &region) || buried(j, &region) => continue,
+  region  L982-982   tests=- SurfaceSurface::NotAnalytic if buried(i, &region) || buried(j, &region) => continue,
+  region  L982-982   tests=- SurfaceSurface::NotAnalytic if buried(i, &region) || buried(j, &region) => continue,
+  region  L988-988   tests=- match ssi::past_stalls(sa, sb, region, off) {
+  region  L988-988   tests=- match ssi::past_stalls(sa, sb, region, off) {
+  region  L988-988   tests=- match ssi::past_stalls(sa, sb, region, off) {
+  region  L988-988   tests=- match ssi::past_stalls(sa, sb, region, off) {
+  region  L989-989   tests=- Some(cs) => cs,
+  region  L991-994   tests=- return Err(BoolError::unhandled(Unhandled::NoClosedForm {
+  region  L991-991   tests=- return Err(BoolError::unhandled(Unhandled::NoClosedForm {
+  region  L992-992   tests=- a: FaceRef::of(a, fa),
+  region  L992-992   tests=- a: FaceRef::of(a, fa),
+  region  L993-993   tests=- b: FaceRef::of(b, fb),
+  region  L1033-1033  tests=- )?;
+  region  L1117-1117  tests=T Where::Inside => inner[k] = true,
+  region  L1226-1226  tests=- continue;
+  region  L1292-1292  tests=- }
+  region  L1316-1316  tests=- Some(r) => cut_by(si, kh, r, got) || cut_by(si, kh, sg.range, got),
+  region  L1316-1316  tests=- Some(r) => cut_by(si, kh, r, got) || cut_by(si, kh, sg.range, got),
+  region  L1316-1316  tests=- Some(r) => cut_by(si, kh, r, got) || cut_by(si, kh, sg.range, got),
+  region  L1316-1316  tests=- Some(r) => cut_by(si, kh, r, got) || cut_by(si, kh, sg.range, got),
+  branch  L749   corpus 64/0 tests 170/0  [never false] Curve::Circle(ci) if ci.frame.z().cross(fr.z()).length() <= 1e-12 => {
+  branch  L796   corpus 32532/0 tests 30753/9  [never false] let Some(sh) = shapes else { return true };
+  branch  L809   corpus 0/17087 tests 2/3220  [never true] if any_intersect {
+  branch  L830   corpus 145590/0 tests 146803/0  [never false] let Some(sh) = shapes else { return false };
+  branch  L833   corpus 339646/0 tests 597933/12  [never false] && ops[k - 1] != Op::Intersect
+  branch  L912   corpus 0/267134 tests 0/246959  [never true] if crate::boolean::rolls_off(a, fa, sb) || crate::boolean::rolls_off(b, fb, sa) {
+  branch  L982   corpus 0/0 tests 0/0  [never reached] SurfaceSurface::NotAnalytic if buried(i, &region) || buried(j, &region) => continue,
+  branch  L982   corpus 0/0 tests 0/0  [never reached] SurfaceSurface::NotAnalytic if buried(i, &region) || buried(j, &region) => continue,
+  branch  L985   corpus 0/0 tests 0/0  [never reached] ia.point_in_face(fa, p) == crate::classify::Where::Outside
+  branch  L1012  corpus 64/0 tests 6/0  [never false] && !crate::boolean::through_smooth_edge([a, b], [ia, ib], [fa, fb], &curve)
+  branch  L1069  corpus 0/181882 tests 933/175171  [never true] .map(|b| shapes.is_none() || !outside(&b.grow(tol::LINEAR)))
+  branch  L1127  corpus 0/2 tests 0/7  [never true] if debug {
+  branch  L1143  corpus 2/0 tests 2/5  [never false] if t.dir.is_none() && kept.contains(&None) {
+  branch  L1143  corpus 2/0 tests 1/1  [never false] if t.dir.is_none() && kept.contains(&None) {
+  branch  L1147  corpus 0/0 tests 12/6  [never reached] let flipped = |sd: usize| sd > 0 && ops[sd - 1] == Op::Subtract;
+  branch  L1148  corpus 0/2 tests 5/2  [never true] if both
+  branch  L1149  corpus 0/0 tests 5/0  [never reached] && !crate::boolean::flows_on(
+  branch  L1155  corpus 0/0 tests 5/0  [never reached] && !crate::boolean::crack_tip(
+  branch  L1159  corpus 0/0 tests 3/2  [never reached] !flipped(t.sides[0]) && !flipped(t.sides[1]),
+  branch  L1225  corpus 1394/0 tests 9244/0  [never false] let Ok(across) = crate::boolean::across(body, h, c) else {
+  branch  L1283  corpus 11054/0 tests 28142/0  [never false] if edges.iter().all(|x| x.2 && x.3) && met_of(met, fp, fs[1 - e]).is_some() {
+  branch  L1290  corpus 4597/0 tests 25175/0  [never false] if met_of(met, fp, top).is_some() {
+  branch  L1307  corpus 13251/0 tests 50710/0  [never false] && index[kh.0].point_in_face(kh.1, p) != Where::Outside
+  branch  L1316  corpus 991/0 tests 8066/0  [never false] Some(r) => cut_by(si, kh, r, got) || cut_by(si, kh, sg.range, got),
+== nary.rs :: find   (unrun closures/fns 15, regions 78, branch sites 20)
+  closure L1703  tests=1        .filter(|(_, t)| ties.binary_search(t).is_ok())
+  closure L1850  tests=44986    let split = par_map(order.len(), threads, 32, |k| {
+  closure L2112  tests=0        let normal = body.face_normal(r.face, face.surface.project(p)).ok_or_else(|| {
+  closure L2157  tests=0        .ok_or_else(|| {
+  closure L2199  tests=0        let p = *candidates.first().ok_or_else(|| {
+  closure L2271  tests=0        let on = |b: &[bool]| (0..n).filter(|&k| b[k]).collect::<Vec<_>>();
+  closure L2271  tests=0        let on = |b: &[bool]| (0..n).filter(|&k| b[k]).collect::<Vec<_>>();
+  closure L2472  tests=0        .then(|| holes_only(tools[side], side, f, list, boundary, &keep, &ties))
+  closure L2481  tests=0        let first = *loops.first().and_then(|l| l.first()).ok_or_else(|| {
+  closure L2491  tests=0        .ok_or_else(|| {
+  closure L2571  tests=0        let p = canon[p].map_or(p, |c| c.0);
+  closure L2685  tests=0        .unwrap_or_else(|| seams[i as usize - vnames.len()]),
+  closure L2823  tests=0        let from = grown.partition_point(|g| g.0 < v);
+  closure L2826  tests=0        .take_while(|g| g.0 == v)
+  closure L2827  tests=0        .fold(x.tol, |t, g| t.max(g.1));
+  region  L1526-1526  tests=- let VKey::Old(sd, _) = o else { unreachable!() };
+  region  L1528-1528  tests=- return Err(BoolError::unhandled(Unhandled::ToolVerticesMeet { at: heads[k] }));
+  region  L1528-1528  tests=- return Err(BoolError::unhandled(Unhandled::ToolVerticesMeet { at: heads[k] }));
+  region  L1619-1619  tests=- let (p, t) = r?;
+  region  L1684-1684  tests=- grown.push((k, d));
+  region  L1684-1684  tests=- grown.push((k, d));
+  region  L1850-1850  tests=T let split = par_map(order.len(), threads, 32, |k| {
+  region  L1850-1850  tests=T let split = par_map(order.len(), threads, 32, |k| {
+  region  L1850-1850  tests=T let split = par_map(order.len(), threads, 32, |k| {
+  region  L1850-1850  tests=T let split = par_map(order.len(), threads, 32, |k| {
+  region  L1856-1856  tests=T for ((sd, e), got) in order.into_iter().zip(split) {
+  region  L1857-1857  tests=T let first = pieces.list.len();
+  region  L1858-1858  tests=T pieces.of_edge[sd][e.index()] = (first as u32, got.len() as u32);
+  region  L1858-1858  tests=T pieces.of_edge[sd][e.index()] = (first as u32, got.len() as u32);
+  region  L1859-1859  tests=T pieces.list.extend(got);
+  region  L2388-2388  tests=T let mut class: Vec<Option<bool>> = class.into_iter().collect::<R<_>>()?;
+  region  L2504-2504  tests=- let Some(m) = m? else { continue };
+  region  L2547-2547  tests=- eprintln!("KEPT {} = reg {ri} flip {flip}", kept.len());
+  region  L2547-2547  tests=- eprintln!("KEPT {} = reg {ri} flip {flip}", kept.len());
+  region  L2547-2547  tests=- eprintln!("KEPT {} = reg {ri} flip {flip}", kept.len());
+  region  L2547-2547  tests=- eprintln!("KEPT {} = reg {ri} flip {flip}", kept.len());
+  region  L2803-2803  tests=- Some((q, f)) => (q, fwd != f),
+  region  L2803-2803  tests=- Some((q, f)) => (q, fwd != f),
+  region  L1958-1958  tests=T Member::In if any_intersect => holds.push(k),
+  region  L2074-2074  tests=- continue;
+  region  L2078-2078  tests=T let along = if fwd { d.d1 } else { -d.d1 };
+  region  L2080-2080  tests=- let n_here = body.face_normal(r.face, face.surface.project(d.p))?;
+  region  L2083-2083  tests=- let n_other = ob.face_normal(of, ob.face(of).surface.project(d.p))?;
+  region  L2087-2087  tests=T }
+  region  L2089-2089  tests=T None
+  region  L2182-2182  tests=- match judge(p)? {
+  region  L2203-2203  tests=- })?;
+  region  L2227-2227  tests=- Where::Outside => {}
+  region  L2228-2228  tests=- Where::On => ok = false,
+  region  L2233-2233  tests=- }
+  region  L2234-2234  tests=T }
+  region  L2238-2238  tests=T if debug {
+  region  L2239-2239  tests=- eprintln!(
+  region  L2240-2240  tests=- nary: region {ri} of tool {} face {:?} probes {candidates:?} on tools {stuck:?},
+  region  L2240-2240  tests=- nary: region {ri} of tool {} face {:?} probes {candidates:?} on tools {stuck:?},
+  region  L2240-2240  tests=- nary: region {ri} of tool {} face {:?} probes {candidates:?} on tools {stuck:?},
+  region  L2241-2241  tests=- r.side, r.face
+  region  L2241-2241  tests=- r.side, r.face
+  region  L2243-2243  tests=T }
+  region  L2244-2246  tests=T return Err(BoolError::unhandled(Unhandled::ProbeOnToolEdge {
+  region  L2244-2244  tests=T return Err(BoolError::unhandled(Unhandled::ProbeOnToolEdge {
+  region  L2245-2245  tests=T face: FaceRef::of(body, r.face),
+  region  L2256-2256  tests=- for (li, l) in r.loops.iter().enumerate() {
+  region  L2257-2257  tests=- for &(pc, fwd) in l {
+  region  L2258-2258  tests=- let q = &list[pc];
+  region  L2259-2259  tests=- eprintln!(
+  region  L2260-2260  tests=-   loop {li} piece {pc} fwd {fwd} {:?}->{:?} seg {:?} side {:?} mid {:?},
+  region  L2260-2260  tests=-   loop {li} piece {pc} fwd {fwd} {:?}->{:?} seg {:?} side {:?} mid {:?},
+  region  L2260-2260  tests=-   loop {li} piece {pc} fwd {fwd} {:?}->{:?} seg {:?} side {:?} mid {:?},
+  region  L2261-2261  tests=- q.start,
+  region  L2262-2262  tests=- q.end,
+  region  L2263-2263  tests=- q.seg,
+  region  L2264-2264  tests=- q.side,
+  region  L2265-2265  tests=- q.curve.eval(q.range.mid())
+  region  L2272-2272  tests=- eprintln!(
+  region  L2273-2273  tests=- REG {ri}: tool {} face {:?} probe {p:?} in {:?} out {:?} -> {fin} {fout},
+  region  L2273-2273  tests=- REG {ri}: tool {} face {:?} probe {p:?} in {:?} out {:?} -> {fin} {fout},
+  region  L2273-2273  tests=- REG {ri}: tool {} face {:?} probe {p:?} in {:?} out {:?} -> {fin} {fout},
+  region  L2273-2273  tests=- REG {ri}: tool {} face {:?} probe {p:?} in {:?} out {:?} -> {fin} {fout},
+  region  L2274-2274  tests=- r.side,
+  region  L2275-2275  tests=- r.face,
+  region  L2276-2276  tests=- on(&inner),
+  region  L2277-2277  tests=- on(&outer)
+  region  L2116-2116  tests=- })?;
+  region  L2161-2161  tests=- })?;
+  region  L2475-2475  tests=- Some(regions) => regions,
+  region  L2476-2476  tests=- None => split_face(tools[side], f, list, boundary, &keep, true, &gone(side, f))?.regions,
+  region  L2455-2455  tests=- _ => true,
+  region  L2485-2485  tests=- })?;
+  region  L2495-2495  tests=- })?;
+  region  L2615-2615  tests=- None => sg.curve.eval(sg.range.mid()),
+  region  L2620-2620  tests=- Some(Member::In) => true,
+  region  L2621-2621  tests=- Some(Member::Out) => false,
+  branch  L1526  corpus 4274/0 tests 26669/0  [never false] let VKey::Old(sd, _) = o else { unreachable!() };
+  branch  L1527  corpus 0/4274 tests 0/26669  [never true] if sides.contains(&sd) {
+  branch  L1610  corpus 26677/0 tests 65633/0  [never false] && let Some(fs) = three[i]
+  branch  L1683  corpus 0/78 tests 0/97  [never true] if d > tools[sd].vertex(v).tol {
+  branch  L1845  corpus 623/0 tests 967/27  [never false] if threads.min(order.len() / 512) <= 1 {
+  branch  L1958  corpus 0/154442 tests 8/250471  [never true] Member::In if any_intersect => holds.push(k),
+  branch  L2073  corpus 1/0 tests 2/0  [never false] let Some(at) = sg.sides.iter().position(|&s| s == k) else {
+  branch  L2078  corpus 1/0 tests 0/2  [never false] let along = if fwd { d.d1 } else { -d.d1 };
+  branch  L2085  corpus 1/0 tests 0/2  [never false] if l.abs() > 1e-9 * inward.length() {
+  branch  L2190  corpus 0/3 tests 0/16  [never true] if found.is_some() || candidates.is_empty() {
+  branch  L2205  corpus 1/0 tests 1/0  [never false] if let Ok(Err(k)) = judge(p)
+  branch  L2206  corpus 1/0 tests 0/1  [never false] && let Some(inside) = lean(r, k)
+  branch  L2231  corpus 1/0 tests 0/0  [never false] if ok {
+  branch  L2238  corpus 0/0 tests 0/1  [never reached] if debug {
+  branch  L2255  corpus 0/14609 tests 0/79860  [never true] if nary_reg() == Some(ri) {
+  branch  L2270  corpus 0/14609 tests 0/79860  [never true] if nary_on() {
+  branch  L2546  corpus 0/138089 tests 0/135783  [never true] if nary_on() {
+  branch  L2618  corpus 72/0 tests 0/0  [never false] index[k].bbox.contains(p)
+  branch  L2661  corpus 26886/0 tests 68899/0  [never false] if let VKey::New(i) = v
+  branch  L2791  corpus 36831/0 tests 28609/0  [never false] && let Some(b) = src.bbox.get()
+== nary.rs :: meet3   (unrun closures/fns 0, regions 3, branch sites 2)
+  region  L2883-2883  tests=- return None;
+  region  L2887-2887  tests=- return None;
+  region  L2890-2890  tests=- None
+  branch  L2882  corpus 0/400 tests 0/658  [never true] if det.abs() <= 1e-3 * g0.length() * g1.length() * g2.length() {
+  branch  L2886  corpus 0/400 tests 0/658  [never true] if q.distance(p) > tol::LINEAR {
+== nary.rs :: holes_only   (unrun closures/fns 0, regions 3, branch sites 4)
+  region  L2944-2944  tests=- return None;
+  region  L2963-2963  tests=- return None;
+  region  L3057-3057  tests=- return None;
+  branch  L2921  corpus 0/2944 tests 0/24934  [never true] .any(|(v, _)| matches!(v, VKey::Old(sd, _) if *sd == side) || ties.binary_search(v).is_ok())
+  branch  L2943  corpus 0/3877 tests 0/27541  [never true] if std::mem::replace(&mut used[j], true) {
+  branch  L2962  corpus 723/0 tests 2365/0  [never false] let forge_geom::Surface::Plane(plane) = &face.surface else {
+  branch  L3056  corpus 0/3035 tests 0/25752  [never true] if area.abs() <= 1e-12 {
+== nary.rs :: spans   (unrun closures/fns 0, regions 3, branch sites 3)
+  region  L3175-3175  tests=- let last = ms.pop().expect("two");
+  region  L3176-3176  tests=- ms[0].2 = ms[0].2.min(last.2);
+  region  L3176-3176  tests=- ms[0].2 = ms[0].2.min(last.2);
+  branch  L3158  corpus 80850/0 tests 213963/0  [never false] ms.retain(|&(t, v, _, _)| v != v0 && v != v1 && t > sg.range.lo + w && t < sg.range.hi - w);
+  branch  L3174  corpus 323/0 tests 804/0  [never false] if sg.ends.is_none() && ms.len() > 1 && ms[0].1 == ms[ms.len() - 1].1 {
+  branch  L3174  corpus 0/323 tests 0/804  [never true] if sg.ends.is_none() && ms.len() > 1 && ms[0].1 == ms[ms.len() - 1].1 {
+== nary.rs :: name_spans   (unrun closures/fns 6, regions 11, branch sites 3)
+  closure L3364  tests=0        let frame_of = |si: usize| {
+  closure L3387  tests=0        for alike in all.chunk_by(|a, b| a.0 == b.0).filter(|g| g.len() > 1) {
+  closure L3387  tests=0        for alike in all.chunk_by(|a, b| a.0 == b.0).filter(|g| g.len() > 1) {
+  closure L3390  tests=0        names.extend(alike.iter().map(|x| x.0));
+  closure L3391  tests=0        crate::boolean::rank_names(&mut names, &|w| {
+  closure L3394  tests=0        let range = sp.ends.map_or(sg.range, |[lo, hi]| Interval::new(lo.0, hi.0));
+  region  L3386-3386  tests=- }
+  region  L3387-3387  tests=- for alike in all.chunk_by(|a, b| a.0 == b.0).filter(|g| g.len() > 1) {
+  region  L3388-3388  tests=- let frame = frame_of(alike[0].2);
+  region  L3388-3388  tests=- let frame = frame_of(alike[0].2);
+  region  L3389-3389  tests=- names.clear();
+  region  L3390-3390  tests=- names.extend(alike.iter().map(|x| x.0));
+  region  L3390-3390  tests=- names.extend(alike.iter().map(|x| x.0));
+  region  L3391-3391  tests=- crate::boolean::rank_names(&mut names, &|w| {
+  region  L3391-3391  tests=- crate::boolean::rank_names(&mut names, &|w| {
+  region  L3397-3397  tests=- for (x, &n) in alike.iter().zip(&names) {
+  region  L3398-3398  tests=- spans[x.1].name = n;
+  branch  L3297  corpus 107038/0 tests 270298/0  [never false] if !(sides.contains(&k) && sides.contains(&other) && k != other) {
+  branch  L3370  corpus 0/0 tests 0/0  [never reached] crate::boolean::surface_frame(if fa.name.whole() <= fb.name.whole() {
+  branch  L3384  corpus 394/0 tests 241/0  [never false] if all.windows(2).all(|w| w[0].0 != w[1].0) {
+== nary.rs :: step_in   (unrun closures/fns 0, regions 2, branch sites 0)
+  region  L3475-3475  tests=- let n = body.face_normal(f, face.surface.project(d.p))?;
+  region  L3476-3476  tests=- let inward = n.cross(along).normalize()?;
+== nary.rs :: region_points   (unrun closures/fns 0, regions 1, branch sites 4)
+  region  L3589-3589  tests=- 0.01 * len
+  branch  L3560  corpus 138490/0 tests 285909/0  [never false] if let Some(p) = step_in(body, f, c, r, fwd, frac, step)
+  branch  L3576  corpus 2/0 tests 0/0  [never false] && let Some(&(len, i)) = order.first()
+  branch  L3586  corpus 2/0 tests 0/0  [never false] let step = if gap.is_finite() && gap > 0.0 {
+  branch  L3586  corpus 2/0 tests 0/0  [never false] let step = if gap.is_finite() && gap > 0.0 {
+== shape.rs :: in_profile   (unrun closures/fns 0, regions 2, branch sites 3)
+  region  L96-96    tests=- return None;
+  region  L100-100   tests=- return None;
+  branch  L95    corpus 0/183 tests 0/0  [never true] if (e0.y - q.y).abs() <= graze || (e1.y - q.y).abs() <= graze {
+  branch  L95    corpus 0/183 tests 0/0  [never true] if (e0.y - q.y).abs() <= graze || (e1.y - q.y).abs() <= graze {
+  branch  L99    corpus 0/55 tests 0/0  [never true] if touch {
+== shape.rs :: coil_member   (unrun closures/fns 0, regions 7, branch sites 14)
+  region  L179-179   tests=- return Member::Near;
+  region  L194-194   tests=- near = true;
+  region  L195-195   tests=- continue;
+  region  L217-217   tests=T near = true;
+  region  L219-219   tests=T } else if (inside || !clear) && to_end(off) <= m {
+  region  L220-220   tests=- near = true;
+  region  L224-224   tests=T Member::Near
+  branch  L172   corpus 0/846 tests 4881/5285  [never true] || rho > r.1 + da.max(0.0) + m
+  branch  L173   corpus 0/846 tests 181/5104  [never true] || l.z < h.0 + db.min(0.0) - m
+  branch  L174   corpus 0/846 tests 96/5008  [never true] || l.z > h.1 + db.max(0.0) + m
+  branch  L178   corpus 0/846 tests 0/5008  [never true] if rho <= 0.0 || least <= 0.0 {
+  branch  L178   corpus 0/846 tests 0/5008  [never true] if rho <= 0.0 || least <= 0.0 {
+  branch  L193   corpus 601/0 tests 2416/0  [never false] let Some((inside, d)) = in_profile(segs, q) else {
+  branch  L214   corpus 458/0 tests 1820/0  [never false] if inside && clear && to_end(into) > m {
+  branch  L214   corpus 458/0 tests 1820/0  [never false] if inside && clear && to_end(into) > m {
+  branch  L216   corpus 0/136 tests 0/431  [never true] } else if inside || !clear {
+  branch  L216   corpus 0/136 tests 1/430  [never true] } else if inside || !clear {
+  branch  L219   corpus 7/0 tests 151/14  [never false] } else if (inside || !clear) && to_end(off) <= m {
+  branch  L219   corpus 0/0 tests 0/14  [never reached] } else if (inside || !clear) && to_end(off) <= m {
+  branch  L219   corpus 0/7 tests 0/151  [never true] } else if (inside || !clear) && to_end(off) <= m {
+  branch  L223   corpus 0/846 tests 1/5007  [never true] if near {
+== shape.rs :: segment_in   (unrun closures/fns 1, regions 17, branch sites 3)
+  closure L262   tests=0        let gap = |lo: f64, hi: f64, x0: f64, x1: f64| lo - x0.max(x1) > m || x0.min(x1) - hi > m;
+  region  L261-261   tests=- let bx = c.bbox(c.domain());
+  region  L263-263   tests=- gap(bx.x.lo, bx.x.hi, a.x, b.x) || gap(bx.y.lo, bx.y.hi, a.y, b.y)
+  region  L263-263   tests=- gap(bx.x.lo, bx.x.hi, a.x, b.x) || gap(bx.y.lo, bx.y.hi, a.y, b.y)
+  region  L263-263   tests=- gap(bx.x.lo, bx.x.hi, a.x, b.x) || gap(bx.y.lo, bx.y.hi, a.y, b.y)
+  region  L263-263   tests=- gap(bx.x.lo, bx.x.hi, a.x, b.x) || gap(bx.y.lo, bx.y.hi, a.y, b.y)
+  region  L263-263   tests=- gap(bx.x.lo, bx.x.hi, a.x, b.x) || gap(bx.y.lo, bx.y.hi, a.y, b.y)
+  region  L263-263   tests=- gap(bx.x.lo, bx.x.hi, a.x, b.x) || gap(bx.y.lo, bx.y.hi, a.y, b.y)
+  region  L263-263   tests=- gap(bx.x.lo, bx.x.hi, a.x, b.x) || gap(bx.y.lo, bx.y.hi, a.y, b.y)
+  region  L263-263   tests=- gap(bx.x.lo, bx.x.hi, a.x, b.x) || gap(bx.y.lo, bx.y.hi, a.y, b.y)
+  region  L277-277   tests=- let far = c.distance(a).max(c.distance(b));
+  region  L277-277   tests=- let far = c.distance(a).max(c.distance(b));
+  region  L278-278   tests=- far < r - m || segment_distance(c, a, b) > r + m
+  region  L278-278   tests=- far < r - m || segment_distance(c, a, b) > r + m
+  region  L278-278   tests=- far < r - m || segment_distance(c, a, b) > r + m
+  region  L278-278   tests=- far < r - m || segment_distance(c, a, b) > r + m
+  region  L278-278   tests=- far < r - m || segment_distance(c, a, b) > r + m
+  region  L278-278   tests=- far < r - m || segment_distance(c, a, b) > r + m
+  branch  L262   corpus 0/0 tests 0/0  [never reached] let gap = |lo: f64, hi: f64, x0: f64, x1: f64| lo - x0.max(x1) > m || x0.min(x1) - hi > m;
+  branch  L263   corpus 0/0 tests 0/0  [never reached] gap(bx.x.lo, bx.x.hi, a.x, b.x) || gap(bx.y.lo, bx.y.hi, a.y, b.y)
+  branch  L278   corpus 0/0 tests 0/0  [never reached] far < r - m || segment_distance(c, a, b) > r + m
+== shape.rs :: combine   (unrun closures/fns 0, regions 0, branch sites 2)
+  branch  L289   corpus 0/330631 tests 0/1127580  [never true] if z < lo - m || z > hi + m || (!in2 && d2 > m) {
+  branch  L289   corpus 0/330631 tests 0/1127580  [never true] if z < lo - m || z > hi + m || (!in2 && d2 > m) {
+== shape.rs :: curved_box   (unrun closures/fns 4, regions 0, branch sites 3)
+  FN      L345   tests=0        pub fn curved_box(&self) -> Option<Box3> {
+  closure L346   tests=0        let curved = |ss: &[Seg2]| ss.iter().any(|s| matches!(s, Seg2::Curve(_)));
+  closure L346   tests=0        let curved = |ss: &[Seg2]| ss.iter().any(|s| matches!(s, Seg2::Curve(_)));
+  closure L347   tests=0        let world = |frame: &Frame, x: (f64, f64), y: (f64, f64), z: (f64, f64)| {
+  branch  L359   corpus 0/0 tests 0/0  [never reached] Shape::Prism { frame, segs, lo, hi } if curved(segs) => {
+  branch  L370   corpus 0/0 tests 0/0  [never reached] } if curved(segs) => {
+  branch  L390   corpus 0/0 tests 0/0  [never reached] } if curved(segs) => {
+== shape.rs :: face_out   (unrun closures/fns 0, regions 1, branch sites 1)
+  region  L511-511   tests=T false
+  branch  L514   corpus 0/4 tests 0/0  [never true] first.face_out(s, b, m) && rest.iter().all(|(op, x)| *op != Op::Union || x.face_out(s, b, m))
+== shape.rs :: box_in   (unrun closures/fns 1, regions 1, branch sites 1)
+  closure L581   tests=0        && rest.iter().all(|(op, s)| match op {
+  region  L581-581   tests=- && rest.iter().all(|(op, s)| match op {
+  branch  L580   corpus 0/32 tests 0/364  [never true] first.box_in(b, m)
+== shape.rs :: plane_in   (unrun closures/fns 0, regions 0, branch sites 1)
+  branch  L613   corpus 46/0 tests 146/0  [never false] r.is_finite() && segment_in(segs, (*origin, *perp), at(0.0), at(r), m + 1e-9 * (1.0 + r))
+== shape.rs :: member   (unrun closures/fns 0, regions 13, branch sites 15)
+  region  L667-667   tests=T _ if !sector.0 && sector.1 > m => Member::Out,
+  region  L667-667   tests=T _ if !sector.0 && sector.1 > m => Member::Out,
+  region  L667-667   tests=T _ if !sector.0 && sector.1 > m => Member::Out,
+  region  L668-668   tests=T Member::In if sector.0 && sector.1 > m => Member::In,
+  region  L668-668   tests=T Member::In if sector.0 && sector.1 > m => Member::In,
+  region  L668-668   tests=T Member::In if sector.0 && sector.1 > m => Member::In,
+  region  L669-669   tests=- _ => Member::Near,
+  region  L683-683   tests=T Op::Subtract if v == Member::Out || w == Member::In => Member::Out,
+  region  L685-685   tests=T Op::Intersect if v == Member::Out || w == Member::Out => Member::Out,
+  region  L696-696   tests=- Member::Out
+  region  L715-715   tests=- Member::Near
+  region  L648-648   tests=T r
+  region  L658-658   tests=T r
+  branch  L647   corpus 0/2 tests 448/4354  [never true] if d >= dmath::FRAC_PI_2 {
+  branch  L657   corpus 0/220 tests 13856/5002  [never true] if d >= dmath::FRAC_PI_2 {
+  branch  L667   corpus 0/0 tests 1006/466  [never reached] _ if !sector.0 && sector.1 > m => Member::Out,
+  branch  L667   corpus 0/0 tests 1006/0  [never reached] _ if !sector.0 && sector.1 > m => Member::Out,
+  branch  L668   corpus 0/0 tests 466/0  [never reached] Member::In if sector.0 && sector.1 > m => Member::In,
+  branch  L668   corpus 0/0 tests 466/0  [never reached] Member::In if sector.0 && sector.1 > m => Member::In,
+  branch  L682   corpus 154/0 tests 23650/0  [never false] Op::Union if v == Member::Out && w == Member::Out => Member::Out,
+  branch  L683   corpus 0/12 tests 0/379  [never true] Op::Subtract if v == Member::Out || w == Member::In => Member::Out,
+  branch  L683   corpus 0/12 tests 16/363  [never true] Op::Subtract if v == Member::Out || w == Member::In => Member::Out,
+  branch  L684   corpus 4/0 tests 255/0  [never false] Op::Subtract if v == Member::In && w == Member::Out => Member::In,
+  branch  L685   corpus 0/24 tests 0/1931  [never true] Op::Intersect if v == Member::Out || w == Member::Out => Member::Out,
+  branch  L685   corpus 0/24 tests 132/1799  [never true] Op::Intersect if v == Member::Out || w == Member::Out => Member::Out,
+  branch  L686   corpus 8/0 tests 1570/0  [never false] Op::Intersect if v == Member::In && w == Member::In => Member::In,
+  branch  L693   corpus 8319/0 tests 23798/0  [never false] if b.grow(m).contains(p) {
+  branch  L712   corpus 11937/0 tests 68092/0  [never false] } else if d > radius + m {
+== ssi.rs :: closed_form   (unrun closures/fns 0, regions 3, branch sites 1)
+  region  L34-34    tests=- return forge_geom::sheet::used_by(a, b, r);
+  region  L34-34    tests=- return forge_geom::sheet::used_by(a, b, r);
+  region  L34-34    tests=- return forge_geom::sheet::used_by(a, b, r);
+  branch  L33    corpus 0/529280 tests 0/465606  [never true] if forge_geom::sheet::spindle_in(a, b) {
+== ssi.rs :: closed_or_flush   (unrun closures/fns 0, regions 1, branch sites 1)
+  region  L55-55    tests=- return f;
+  branch  L54    corpus 0/97247 tests 0/38324  [never true] if near && let Some(f) = nearly_flush(a, b, region) {
+== ssi.rs :: nearly_flush   (unrun closures/fns 2, regions 4, branch sites 4)
+  closure L112   tests=0        .all(|&k| (p.signed_distance(k) - flip * q.signed_distance(k)).abs() <= tol::LINEAR)
+  closure L132   tests=0        touching.then(|| {
+  region  L107-107   tests=- return None;
+  region  L110-111   tests=- corners(region)
+  region  L131-131   tests=- && (at(hi).abs() - c.radius).abs() <= tol::LINEAR;
+  region  L137-137   tests=- _ => None,
+  branch  L106   corpus 0/9 tests 0/6  [never true] if c <= tol::ANGULAR {
+  branch  L109   corpus 0/9 tests 0/6  [never true] let flush = if c <= NEAR {
+  branch  L121   corpus 0/61385 tests 0/12901  [never true] if tilt <= tol::ANGULAR || tilt > NEAR {
+  branch  L130   corpus 0/13 tests 0/0  [never true] let touching = (at(lo).abs() - c.radius).abs() <= tol::LINEAR
+== ssi.rs :: turned_flush   (unrun closures/fns 0, regions 3, branch sites 1)
+  region  L169-169   tests=- across >= 2 && corners(&r).iter().all(|&k| within(p, q, k) && within(q, p, k))
+  region  L169-169   tests=- across >= 2 && corners(&r).iter().all(|&k| within(p, q, k) && within(q, p, k))
+  region  L169-169   tests=- across >= 2 && corners(&r).iter().all(|&k| within(p, q, k) && within(q, p, k))
+  branch  L169   corpus 0/1 tests 0/0  [never true] across >= 2 && corners(&r).iter().all(|&k| within(p, q, k) && within(q, p, k))
+== ssi.rs :: write   (unrun closures/fns 1, regions 0, branch sites 0)
+  FN      L194   tests=0        fn write(&mut self, bytes: &[u8]) {
+== ssi.rs :: write_usize   (unrun closures/fns 1, regions 0, branch sites 0)
+  FN      L202   tests=0        fn write_usize(&mut self, x: usize) {
+== ssi.rs :: searched_keeps   (unrun closures/fns 3, regions 0, branch sites 0)
+  FN      L223   tests=8        pub fn searched_keeps(most: usize) {
+  closure L224   tests=8        MET_MOST.with(|m| m.set(most));
+  closure L225   tests=8        MET.with(|m| *m.borrow_mut() = Default::default());
+== ssi.rs :: searched   (unrun closures/fns 0, regions 3, branch sites 3)
+  region  L232-232   tests=- return SurfaceSurface::NotAnalytic;
+  region  L246-246   tests=T *m = Default::default();
+  region  L259-259   tests=T }
+  branch  L231   corpus 0/66634 tests 0/64059  [never true] if forge_geom::sheet::apex_met(a, b, &region) {
+  branch  L245   corpus 0/41909 tests 16/25659  [never true] if m.1 >= most {
+  branch  L248   corpus 41909/0 tests 25667/8  [never false] if most > 0 {
+== ssi.rs :: past_stalls   (unrun closures/fns 1, regions 4, branch sites 3)
+  closure L280   tests=1        let curve = |c| (Curve::Intersection(std::sync::Arc::new(c)), Contact::Crossing);
+  region  L274-274   tests=- return None;
+  region  L276-276   tests=- let (curves, stalls) = forge_geom::intcurve::trace_past_stalls(a, b, region)?;
+  region  L279-279   tests=T }
+  region  L281-281   tests=T Some(curves.into_iter().map(curve).collect())
+  branch  L273   corpus 0/1 tests 0/2  [never true] if forge_geom::sheet::apex_met(a, b, &region) {
+  branch  L277   corpus 0/1 tests 0/2  [never true] if stalls.is_empty() || !stalls.into_iter().all(off) {
+  branch  L277   corpus 1/0 tests 1/1  [never false] if stalls.is_empty() || !stalls.into_iter().all(off) {
+== ssi.rs :: search   (unrun closures/fns 0, regions 0, branch sites 1)
+  branch  L291   corpus 40694/0 tests 24471/0  [never false] Some(r) if r != SurfaceSurface::NotAnalytic => r,
+== ssi.rs :: cylinder_cylinder   (unrun closures/fns 0, regions 3, branch sites 1)
+  region  L364-364   tests=T return SurfaceSurface::Curves(vec![(Curve::Line(Line::new(at(0.0), dir)), Contact::Touching)]);
+  region  L364-364   tests=T return SurfaceSurface::Curves(vec![(Curve::Line(Line::new(at(0.0), dir)), Contact::Touching)]);
+  region  L364-364   tests=T return SurfaceSurface::Curves(vec![(Curve::Line(Line::new(at(0.0), dir)), Contact::Touching)]);
+  branch  L363   corpus 0/6967 tests 65/11310  [never true] if h2 <= (2.0 * tol::LINEAR * r1).max(0.0) {
+== ssi.rs :: crossing_touch   (unrun closures/fns 0, regions 18, branch sites 1)
+  region  L381-381   tests=- let m = n.normalize()?;
+  region  L392-392   tests=T }
+  region  L394-394   tests=T let len2 = n.dot(n);
+  region  L395-395   tests=T let s = w.cross(b).dot(n) / len2;
+  region  L396-396   tests=T let t = w.cross(a).dot(n) / len2;
+  region  L397-397   tests=T let (p, q) = (c.frame.origin + a * s, d.frame.origin + b * t);
+  region  L397-397   tests=T let (p, q) = (c.frame.origin + a * s, d.frame.origin + b * t);
+  region  L397-397   tests=T let (p, q) = (c.frame.origin + a * s, d.frame.origin + b * t);
+  region  L397-397   tests=T let (p, q) = (c.frame.origin + a * s, d.frame.origin + b * t);
+  region  L398-398   tests=T let u = (q - p).normalize()?;
+  region  L398-398   tests=- let u = (q - p).normalize()?;
+  region  L400-400   tests=T let on_c = p + u * r1;
+  region  L400-400   tests=T let on_c = p + u * r1;
+  region  L401-401   tests=T let on_d = q - u * r2;
+  region  L401-401   tests=T let on_d = q - u * r2;
+  region  L402-402   tests=T Some(SurfaceSurface::Points(vec![on_c.lerp(on_d, 0.5)]))
+  region  L402-402   tests=T Some(SurfaceSurface::Points(vec![on_c.lerp(on_d, 0.5)]))
+  region  L402-402   tests=T Some(SurfaceSurface::Points(vec![on_c.lerp(on_d, 0.5)]))
+  branch  L390   corpus 10991/0 tests 11177/12  [never false] if gap < -tol::LINEAR {
+== ssi.rs :: equal_crossing   (unrun closures/fns 0, regions 2, branch sites 1)
+  region  L421-421   tests=- let x = u.normalize()?.get();
+  region  L423-423   tests=- let frame = Frame::from_axes(o, x, m, x.cross(m))?;
+  branch  L414   corpus 0/55 tests 0/53  [never true] if (r - d.radius).abs() > tol::LINEAR || (w.dot(n) / len).abs() > tol::LINEAR {
+== ssi.rs :: sphere_sphere   (unrun closures/fns 0, regions 1, branch sites 1)
+  region  L456-456   tests=T return SurfaceSurface::Points(vec![centre]);
+  branch  L455   corpus 0/5444 tests 130/11673  [never true] if h2 <= 2.0 * tol::LINEAR * r1 {
+== unify.rs :: rename   (unrun closures/fns 0, regions 0, branch sites 1)
+  branch  L277   corpus 0/55002 tests 0/36435  [never true] if twice.binary_search(&t.1).is_ok() || held.binary_search(&t.1).is_ok() {
+== unify.rs :: between_same   (unrun closures/fns 0, regions 2, branch sites 1)
+  region  L294-294   tests=- return keys[a.index()].0 == 1 && !kept(body, x.name);
+  region  L294-294   tests=- return keys[a.index()].0 == 1 && !kept(body, x.name);
+  branch  L294   corpus 0/26306 tests 0/59297  [never true] return keys[a.index()].0 == 1 && !kept(body, x.name);
+== unify.rs :: same_surface   (unrun closures/fns 0, regions 1, branch sites 2)
+  region  L334-334   tests=- _ => false,
+  branch  L329   corpus 15105/0 tests 11267/0  [never false] fa.same_sense == fb.same_sense && crate::ssi::cylinders_coincident(p, q)
+  branch  L332   corpus 291/0 tests 1399/1  [never false] fa.same_sense == fb.same_sense && crate::ssi::coincident(&fa.surface, &fb.surface)
+== unify.rs :: kept   (unrun closures/fns 1, regions 0, branch sites 1)
+  closure L340   tests=114      body.joins.kept.iter().any(|&k| name == k || name.is_piece_of(k))
+  branch  L340   corpus 0/0 tests 96/18  [never reached] body.joins.kept.iter().any(|&k| name == k || name.is_piece_of(k))
+== unify.rs :: set_face   (unrun closures/fns 0, regions 1, branch sites 0)
+  region  L453-453   tests=- Some(k) => self.made[k as usize].0 = f,
+== unify.rs :: finish   (unrun closures/fns 0, regions 1, branch sites 1)
+  region  L491-491   tests=- }
+  branch  L489   corpus 137/0 tests 301/0  [never false] if let Some(at) = body.faces[f.index()].loops.iter().position(|&x| x == id) {
+== unify.rs :: remove_edge   (unrun closures/fns 0, regions 4, branch sites 6)
+  region  L515-515   tests=- return None;
+  region  L550-550   tests=- return None;
+  region  L590-590   tests=- return None;
+  region  L618-618   tests=- return None;
+  branch  L505   corpus 0/14771 tests 0/15453  [never true] if !x.alive || x.coedges.len() != 2 {
+  branch  L514   corpus 0/1993 tests 0/494  [never true] if la != lb {
+  branch  L549   corpus 0/91 tests 0/56  [never true] if !exact && !same_surface(body, fa, fb) {
+  branch  L572   corpus 13942/0 tests 17215/1  [never false] while mid > 0 && mid < joined.len() {
+  branch  L588   corpus 0/65 tests 0/68  [never true] if joined.is_empty() && wraps {
+  branch  L617   corpus 0/2 tests 0/0  [never true] if !rests_on(body, w, keep, gone, &gone_edges) {
+== unify.rs :: rests_on   (unrun closures/fns 0, regions 0, branch sites 3)
+  branch  L685   corpus 110/0 tests 0/0  [never false] at(x.range.lo)
+  branch  L686   corpus 110/0 tests 0/0  [never false] && at(x.range.hi)
+  branch  L687   corpus 20/0 tests 0/0  [never false] && (!inside(crest) || (d0 + reach).abs() <= band)
+== unify.rs :: one_set   (unrun closures/fns 0, regions 0, branch sites 1)
+  branch  L706   corpus 10648/0 tests 7290/0  [never false] along(p.frame.z(), q.frame.z()) && p.radius == q.radius && c.dot(c) == 0.0
+== unify.rs :: outer_first   (unrun closures/fns 0, regions 1, branch sites 1)
+  region  L761-761   tests=- }
+  branch  L759   corpus 47/0 tests 131/0  [never false] if let Some(k) = face.loops.iter().position(|&l| outer(l)) {
+== unify.rs :: join_through   (unrun closures/fns 0, regions 1, branch sites 2)
+  region  L793-793   tests=T continue;
+  branch  L787   corpus 78896/0 tests 46692/11  [never false] let Some(&c) = body
+  branch  L796   corpus 0/78896 tests 1/46691  [never true] if body.coedge(n).edge != e2 || !join(body, c, n) {
+== unify.rs :: join   (unrun closures/fns 0, regions 6, branch sites 14)
+  region  L828-828   tests=- return false;
+  region  L832-832   tests=T return false;
+  region  L875-875   tests=- return false;
+  region  L878-878   tests=- return false;
+  region  L920-920   tests=- return false;
+  region  L929-929   tests=T return false;
+  branch  L827   corpus 0/78896 tests 0/46691  [never true] if e1 == e2 {
+  branch  L831   corpus 0/78896 tests 0/46691  [never true] if x1.start == x1.end || x2.start == x2.end || x1.coedges.len() != 2 || x2.coedges.len() != 2 {
+  branch  L831   corpus 0/78896 tests 0/46691  [never true] if x1.start == x1.end || x2.start == x2.end || x1.coedges.len() != 2 || x2.coedges.len() != 2 {
+  branch  L831   corpus 0/78896 tests 10/46681  [never true] if x1.start == x1.end || x2.start == x2.end || x1.coedges.len() != 2 || x2.coedges.len() != 2 {
+  branch  L831   corpus 0/78896 tests 0/46681  [never true] if x1.start == x1.end || x2.start == x2.end || x1.coedges.len() != 2 || x2.coedges.len() != 2 {
+  branch  L848   corpus 39134/0 tests 26449/0  [never false] (a.radius - b.radius).abs() <= tol::LINEAR
+  branch  L864   corpus 2013/0 tests 2099/0  [never false] x2.start == v && abut(x2.range.lo, x1.range.hi)
+  branch  L866   corpus 1609/0 tests 2110/0  [never false] x2.end == v && abut(x2.range.hi, x1.range.lo)
+  branch  L874   corpus 78850/0 tests 46668/0  [never false] let (Some(pc), Some(pn)) = (body.partner(c), body.partner(n)) else {
+  branch  L877   corpus 0/78850 tests 0/46668  [never true] if next(body, pn) != pc {
+  branch  L908   corpus 67580/0 tests 41434/0  [never false] && (x1.end == v) == (x2.start == v)
+  branch  L912   corpus 0/1947 tests 0/1279  [never true] || x1.curve.eval(t_mid).distance(x2.curve.eval(x2.range.mid())) > tol::LINEAR)
+  branch  L919   corpus 0/63645 tests 0/40489  [never true] if far != other && body.vertex(far).point.distance(body.vertex(other).point) <= pinch {
+  branch  L923   corpus 0/4526 tests 3/1500  [never true] && x1
+== unify.rs :: splice   (unrun closures/fns 0, regions 2, branch sites 4)
+  region  L951-951   tests=- return false;
+  region  L995-995   tests=- return false;
+  branch  L950   corpus 213/0 tests 14/0  [never false] let (Curve::Intersection(c1), Curve::Intersection(c2)) = (&x1.curve, &x2.curve) else {
+  branch  L957   corpus 0/89 tests 0/13  [never true] if far == other || body.vertex(far).point.distance(body.vertex(other).point) <= pinch {
+  branch  L994   corpus 0/82 tests 0/13  [never true] if off(range.lo, start) || off(range.hi, end) {
+  branch  L994   corpus 0/82 tests 0/13  [never true] if off(range.lo, start) || off(range.hi, end) {
+== unify.rs :: spliced   (unrun closures/fns 0, regions 8, branch sites 8)
+  region  L1028-1028  tests=- let same = (first.a == next.a && first.b == next.b) || (first.a == next.b && first.b == next.a);
+  region  L1028-1028  tests=- let same = (first.a == next.a && first.b == next.b) || (first.a == next.b && first.b == next.a);
+  region  L1034-1034  tests=- let mut i = (mine.hi.ceil() as usize).checked_sub(1)?.min(first.pts.len() - 1);
+  region  L1036-1036  tests=- i = i.checked_sub(1)?;
+  region  L1036-1036  tests=- i = i.checked_sub(1)?;
+  region  L1036-1036  tests=- i = i.checked_sub(1)?;
+  region  L1040-1040  tests=- j += 1;
+  region  L1043-1043  tests=- let d = forge_geom::intcurve::direction(&first.a, &first.b, at)?;
+  branch  L1028  corpus 89/0 tests 13/0  [never false] let same = (first.a == next.a && first.b == next.b) || (first.a == next.b && first.b == next.a);
+  branch  L1028  corpus 89/0 tests 13/0  [never false] let same = (first.a == next.a && first.b == next.b) || (first.a == next.b && first.b == next.a);
+  branch  L1028  corpus 0/0 tests 0/0  [never reached] let same = (first.a == next.a && first.b == next.b) || (first.a == next.b && first.b == next.a);
+  branch  L1029  corpus 0/82 tests 0/13  [never true] if first.closed || next.closed || !same {
+  branch  L1035  corpus 0/82 tests 0/13  [never true] while near(first.pts[i]) {
+  branch  L1039  corpus 82/0 tests 13/0  [never false] while j < next.pts.len() && near(next.pts[j]) {
+  branch  L1039  corpus 0/82 tests 0/13  [never true] while j < next.pts.len() && near(next.pts[j]) {
+  branch  L1063  corpus 82/0 tests 13/0  [never false] (lo < k && hi > k).then(|| (joined, Interval::new(lo, hi)))

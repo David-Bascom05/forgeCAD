@@ -1,0 +1,79 @@
+profile	bool_regions_run	bool_regions_only_this
+bench-bracket-nary1	7283	0
+bench-bracket-seq	6856	0
+bench-clamp-nary1	6781	0
+bench-clamp-seq	6752	0
+bench-conrod-nary1	8981	0
+bench-conrod-seq	8470	0
+bench-crank-nary1	9856	0
+bench-crank-seq	9170	0
+bench-frame-nary1	10570	20
+bench-frame-seq	9888	0
+bench-gearbox-nary1	9574	1
+bench-gearbox-seq	8600	0
+bench-guard-nary1	7341	0
+bench-guard-seq	7332	0
+bench-heatsink-nary1	7259	0
+bench-heatsink-seq	7232	0
+bench-hub-nary1	6940	0
+bench-hub-seq	6937	0
+bench-insert-nary1	6882	0
+bench-insert-seq	6745	0
+bench-jack-nary1	9624	0
+bench-jack-seq	9035	0
+bench-manifold-nary1	7939	0
+bench-manifold-seq	7939	0
+bench-quadarm-nary1	7761	0
+bench-quadarm-seq	7761	0
+bench-valve-nary1	9013	0
+bench-valve-seq	8307	0
+bench-volute-nary1	7784	0
+bench-volute-seq	7784	0
+c-ignored	6049	209
+c-sweepdiff	11621	371
+c-tests	7498	12
+fuzz-nary1	9760	127
+fuzz-seq	6529	23
+regen1-coplanar-nary1	6626	0
+regen1-coplanar-seq	5597	8
+regen1-hole-grid-nary1	4234	0
+regen1-hole-grid-seq	5661	0
+regen1-housing-nary1	7305	0
+regen1-housing-seq	5372	0
+regen1-mixed-nary1	7859	0
+regen1-mixed-seq	6383	15
+regen1-patterns-nary1	6574	0
+regen1-patterns-seq	5466	0
+regen1-plate-nary1	7050	0
+regen1-plate-seq	5410	0
+regen1-shaft-nary1	7461	0
+regen1-shaft-seq	5650	0
+regen1-torture-nary1	7050	0
+regen1-torture-seq	5410	0
+regen1-tour-nary1	7333	0
+regen1-tour-seq	7512	0
+regen1-upto-flat-nary1	5656	0
+regen1-upto-flat-seq	4660	0
+regen1-upto-nary1	6081	10
+regen1-upto-seq	7246	0
+
+forge-bool/src/boolean.rs:658	3 profiles	c-ignored=1 c-sweepdiff=1 c-tests=3
+forge-bool/src/boolean.rs:1060	2 profiles	c-ignored=16 c-sweepdiff=4
+forge-bool/src/boolean.rs:1074	2 profiles	c-ignored=3 c-sweepdiff=1
+forge-bool/src/boolean.rs:1076	2 profiles	c-ignored=10 c-sweepdiff=2
+forge-bool/src/boolean.rs:1187	1 profiles	c-sweepdiff=2
+forge-bool/src/boolean.rs:1255	2 profiles	c-sweepdiff=42 fuzz-seq=6
+forge-bool/src/boolean.rs:1272	1 profiles	c-sweepdiff=1
+forge-bool/src/boolean.rs:1924	1 profiles	c-tests=3
+forge-bool/src/boolean.rs:3035	3 profiles	bench-frame-nary1=12 bench-frame-seq=12 c-sweepdiff=18
+forge-bool/src/boolean.rs:5644	2 profiles	c-ignored=48 c-sweepdiff=8
+forge-bool/src/boolean.rs:6515	2 profiles	c-ignored=18 c-sweepdiff=6
+forge-bool/src/boolean.rs:4872	1 profiles	regen1-mixed-seq=2
+forge-bool/src/nary.rs:640	1 profiles	c-tests=1
+forge-bool/src/nary.rs:1144	1 profiles	fuzz-nary1=6
+forge-bool/src/nary.rs:2575	1 profiles	c-tests=1
+forge-bool/src/nary.rs:2377	16 profiles	bench-crank-nary1=3 bench-frame-nary1=3 bench-jack-nary1=3 c-tests=9 fuzz-nary1=1059 regen1-coplanar-nary1=3 regen1-hole-grid-nary1=3 regen1-housing-nary1=3 regen1-mixed-nary1=3 regen1-patterns-nary1=3 regen1-plate-nary1=3 regen1-shaft-nary1=3 regen1-torture-nary1=3 regen1-tour-nary1=3 regen1-upto-flat-nary1=3 regen1-upto-nary1=3
+forge-bool/src/ssi.rs:267	1 profiles	c-sweepdiff=1
+forge-bool/src/ssi.rs:147	1 profiles	c-sweepdiff=9
+forge-geom/src/spline/meet.rs:86	1 profiles	c-sweepdiff=146
+forge-geom/src/ruled/meet.rs:225	5 profiles	bench-crank-nary1=42 bench-crank-seq=36 bench-jack-nary1=240 bench-jack-seq=240 c-sweepdiff=70
