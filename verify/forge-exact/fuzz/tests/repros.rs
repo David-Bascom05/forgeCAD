@@ -264,8 +264,13 @@ fn band_two_axes_split_does_not_cross() {
 /// short of A (δ = −0.9), edge touches are built the same way. The banded form of
 /// `cube_on_a_corner_vertex_is_non_manifold`, whose site this shares: the touch test
 /// (boolean.rs:1108) and the four-use count (1746) only see a touch the cuts made exact.
+/// Agrees with the reference on main 2953130 (2026-11-23): no longer ignored. Which change made it
+/// agree is not established.
 #[test]
-#[ignore = "exact reference (snap): a corner overlap under LINEAR is built where §6.1 makes it a vertex touch"]
+#[cfg_attr(
+    not(feature = "reference"),
+    ignore = "asks the Lean reference: lake build in verify/forge-exact, then cargo test -p forge-exact-fuzz --features reference"
+)]
 fn band_three_axes_corner_overlap_is_a_touch() {
     band_agrees_snap("meets/meets/meets", Op::Union, &[0, 1, 2], 0.9);
 }
@@ -277,8 +282,13 @@ fn band_three_axes_corner_overlap_is_a_touch() {
 /// the coplanar imprint puts A's corner on B's end vertex 1.5e-5 away (`place_cuts`,
 /// boolean.rs:4561, merging with the heads' reach, a 2× allowance) while the strip between
 /// keeps both edges; the `4.0 * LINEAR` sample break (boolean.rs:3022) then skips it.
+/// Agrees with the reference on main 2953130 (2026-11-23): no longer ignored. Which change made it
+/// agree is not established.
 #[test]
-#[ignore = "exact reference (snap): a one-axis 1.5·LINEAR offset builds an invalid body (EdgeUses)"]
+#[cfg_attr(
+    not(feature = "reference"),
+    ignore = "asks the Lean reference: lake build in verify/forge-exact, then cargo test -p forge-exact-fuzz --features reference"
+)]
 fn band_one_axis_offset_builds_valid() {
     band_agrees_snap("equal/meets/equal", Op::Union, &[0], 1.5);
 }
@@ -289,8 +299,13 @@ fn band_one_axis_offset_builds_valid() {
 /// feature over LINEAR thick read as zero thickness (δ in 1.5..4.8, on x and z). Likely site:
 /// the four-use count (boolean.rs:1746) after `place_cuts` merged the strip's two edges, 1.5e-5
 /// apart, within its 2× reach.
+/// Agrees with the reference on main 2953130 (2026-11-23): no longer ignored. Which change made it
+/// agree is not established.
 #[test]
-#[ignore = "exact reference (snap): ZeroThickness refused for a contact strip 1.5·LINEAR wide"]
+#[cfg_attr(
+    not(feature = "reference"),
+    ignore = "asks the Lean reference: lake build in verify/forge-exact, then cargo test -p forge-exact-fuzz --features reference"
+)]
 fn band_one_axis_strip_builds() {
     band_agrees_snap("meets/meets/overlaps", Op::Union, &[0], 1.5);
 }
