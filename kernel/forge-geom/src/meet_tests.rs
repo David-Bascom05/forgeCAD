@@ -213,7 +213,7 @@ fn tube_square_to_a_torus_axis() {
 
 /// A thin torus on a wide cylinder (fuzz seed 295, feature 69): the cylinder cuts the tube in two
 /// loops, each about 3° of the cylinder's angle, and the discriminant's 64 samples saw one. The
-/// root count over `thin_window` finds both.
+/// root count, asked at the critical angles (`critical_us`), finds both.
 #[test]
 fn thin_torus_on_a_wide_cylinder_both_loops() {
     let o = Point3::new(57.513833943223545, 82.64151449414277, 31.529651297690172);

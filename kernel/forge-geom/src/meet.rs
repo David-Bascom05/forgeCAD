@@ -1101,38 +1101,127 @@ fn setup(a: &Surface, b: &Surface) -> Option<(Surface, Surface, Form)> {
     }
 }
 
-/// Where a cylinder host's root count is sampled for a thin torus's loops the discriminant missed:
-/// (first u, width, samples), the samples an arc of half the torus's minor radius apart, over the
-/// rulings that can reach the torus (those passing within its bounding ball; the count is 0 on
-/// every other ruling). None for other pairs, and where 64 samples round the whole host are already
-/// that fine.
-fn thin_window(eq: &Eqn, other: &Surface) -> Option<(f64, f64, usize)> {
+/// The cylinder angles inside every loop of a torus on a cylinder (M.ct's sampling rule): a loop
+/// that does not wind round the cylinder bounds a disc on it, on whose rim the distance to the
+/// torus's core circle C is the minor radius, so inside it that distance has an extremum: a point
+/// on the radial line from the cylinder's axis through a point C(θ) at a critical θ of
+/// g(θ) = dist²(C(θ), axis) (a trigonometric polynomial of degree 2: at most four), or where the
+/// torus's axis pierces the cylinder (the distance is not smooth there). Up to 12 angles.
+fn critical_us(eq: &Eqn, other: &Surface, out: &mut [f64; 16]) -> usize {
     let (Surface::Cylinder(_), Surface::Torus(t), Some((f, rho, _))) = (&eq.host, other, eq.line) else {
-        return None;
+        return 0;
     };
-    let step = 0.5 * t.minor / rho;
-    if !(step > 0.0 && dmath::TAU > 64.0 * step) {
-        return None;
+    let (a, d) = (f.origin, f.z().get());
+    let (o, x, y, z) = (t.frame.origin, t.frame.x().get(), t.frame.y().get(), t.frame.z().get());
+    let big = t.major;
+    let w = o - a;
+    let (al, be, p, q, k) = (x.dot(d), y.dot(d), w.dot(x), w.dot(y), w.dot(d));
+    // g'(θ) / 2R = (Q - k β) cos θ + (k α - P) sin θ - R α β cos 2θ - R (β² - α²) / 2 sin 2θ
+    let c = [0.0, q - k * be, k * al - p, -big * al * be, -0.5 * big * (be * be - al * al)];
+    let mut n = 0;
+    let mut push = |pt: Point3, n: &mut usize| {
+        let l = f.point_to_local(pt);
+        if *n < out.len() && (l.x != 0.0 || l.y != 0.0) {
+            out[*n] = dmath::atan2(l.y, l.x).rem_euclid(dmath::TAU);
+            *n += 1;
+        }
+    };
+    for (base, sg) in [(0.0, 1.0), (dmath::PI, -1.0)] {
+        let qd = trig2_quartic(c[0], sg * c[1], sg * c[2], c[3], c[4]);
+        let mut xs = [0.0; 4];
+        let m = real_roots(&qd, -1.01, 1.01, &mut xs);
+        for &v in &xs[..m] {
+            let th = base + 2.0 * dmath::atan(v);
+            let (st, ct) = dmath::sin_cos(th);
+            let cp = o + (x * ct + y * st) * big;
+            let foot = a + d * (cp - a).dot(d);
+            if let Some(dir) = (cp - foot).normalize() {
+                push(foot + dir.get() * rho, &mut n);
+                push(foot - dir.get() * rho, &mut n);
+            }
+        }
     }
-    // the ruling at u passes through (rho cos u, rho sin u) in the host's frame, along its axis
-    let c = f.point_to_local(t.frame.origin);
-    let d = (c.x * c.x + c.y * c.y).sqrt();
-    let reach = t.major.abs() + t.minor + tol::LINEAR;
-    let k = if d > 0.0 {
-        (d * d + rho * rho - reach * reach) / (2.0 * d * rho)
-    } else {
-        -2.0
-    };
-    if k >= 1.0 {
-        return None;
+    // where the core circle pierces the cylinder (the distance is 0 there, and not smooth):
+    // g(θ) = ρ², g(θ) = |w|² + R² + 2R (P cos θ + Q sin θ) - (k + R (α cos θ + β sin θ))²
+    let h = [
+        w.dot(w) + big * big - rho * rho - k * k - 0.5 * big * big * (al * al + be * be),
+        2.0 * big * (p - k * al),
+        2.0 * big * (q - k * be),
+        -0.5 * big * big * (al * al - be * be),
+        -big * big * al * be,
+    ];
+    for (base, sg) in [(0.0, 1.0), (dmath::PI, -1.0)] {
+        let qd = trig2_quartic(h[0], sg * h[1], sg * h[2], h[3], h[4]);
+        let mut xs = [0.0; 4];
+        let m = real_roots(&qd, -1.01, 1.01, &mut xs);
+        for &v in &xs[..m] {
+            let th = base + 2.0 * dmath::atan(v);
+            let (st, ct) = dmath::sin_cos(th);
+            push(o + (x * ct + y * st) * big, &mut n);
+        }
     }
-    let (from, width) = if k <= -1.0 {
-        (0.0, dmath::TAU)
-    } else {
-        let half = (dmath::acos(k) + step).min(dmath::PI);
-        (dmath::atan2(c.y, c.x) - half, 2.0 * half)
+    // the torus's axis o + λ z through the cylinder: |m + λ nn|² = ρ²
+    let (m0, nn) = (w - d * w.dot(d), z - d * z.dot(d));
+    let (qa, qb, qc) = (nn.dot(nn), 2.0 * m0.dot(nn), m0.dot(m0) - rho * rho);
+    let disc = qb * qb - 4.0 * qa * qc;
+    if qa > 0.0 && disc >= 0.0 {
+        let r = disc.sqrt();
+        for lam in [(-qb - r) / (2.0 * qa), (-qb + r) / (2.0 * qa)] {
+            push(o + z * lam, &mut n);
+        }
+    }
+    n
+}
+
+/// Events the critical angles show: from each, the root count's nearest change on either side
+/// (stepping out by doubling, then bisected); a change with no event within 1e-6 is one the
+/// discriminant missed.
+fn add_critical(eq: &Eqn, other: &Surface, events: &mut Vec<(f64, bool)>) {
+    let mut us = [0.0; 16];
+    let n = critical_us(eq, other, &mut us);
+    if n == 0 {
+        return;
+    }
+    let tau = dmath::TAU;
+    let near = |events: &[(f64, bool)], x: f64| {
+        events.iter().any(|e| {
+            let d = (e.0 - x).rem_euclid(tau);
+            d.min(tau - d) <= 1e-6
+        })
     };
-    Some((from, width, ((width / step).ceil() as usize).clamp(2, 1024)))
+    let mut found: Vec<(f64, bool)> = Vec::new();
+    for &u in &us[..n] {
+        let cu = eq.count(u);
+        for dir in [-1.0, 1.0] {
+            let mut step = 1e-5;
+            let mut far = None;
+            while step <= dmath::PI {
+                if eq.count(u + dir * step) != cu {
+                    far = Some(u + dir * step);
+                    break;
+                }
+                step *= 2.0;
+            }
+            let Some(mut b) = far else { continue };
+            let mut a = u;
+            for _ in 0..60 {
+                let m = 0.5 * (a + b);
+                if eq.count(m) == cu {
+                    a = m;
+                } else {
+                    b = m;
+                }
+            }
+            let x = (0.5 * (a + b)).rem_euclid(tau);
+            if !near(events, x) && !near(&found, x) {
+                found.push((x, true));
+            }
+        }
+    }
+    if !found.is_empty() {
+        events.extend(found);
+        events.sort_by(|p, q| p.0.total_cmp(&q.0));
+    }
 }
 
 /// One root of F(u, .) over an interval between events.
@@ -1263,43 +1352,11 @@ pub fn intersect(a: &Surface, b: &Surface, region: Box3) -> Option<SurfaceSurfac
             events.extend(found);
             events.sort_by(|p, q| p.0.total_cmp(&q.0));
         }
-    } else if form == Form::Poly4
-        && events.iter().any(|e| e.1)
-        && let Some((from, width, n)) = thin_window(&eq, &other)
-    {
-        // a small loop round a thin tube on a wide host (a torus's minor radius a fraction of the
-        // cylinder's) is found by its root count too, where the discriminant is too poorly scaled
-        // to see it: it then flags double roots that are flicker (fuzz seed 295, feature 69: one
-        // of two loops lost among them, and the boolean kept an edge on one face)
-        let at = |k: usize| from + width * k as f64 / n as f64;
-        let mut found = Vec::new();
-        let mut ch = eq.count(at(0));
-        for k in 0..n {
-            let (mut lo, mut hi) = (at(k), at(k + 1));
-            let cl = ch;
-            ch = eq.count(hi);
-            // (events lie in [0, 2π); the window may run past either end)
-            if cl == ch
-                || events
-                    .iter()
-                    .any(|e| (e.0 - lo + 1e-6).rem_euclid(dmath::TAU) <= hi - lo + 2e-6)
-            {
-                continue;
-            }
-            for _ in 0..60 {
-                let m = 0.5 * (lo + hi);
-                if eq.count(m) == cl {
-                    lo = m;
-                } else {
-                    hi = m;
-                }
-            }
-            found.push(((0.5 * (lo + hi)).rem_euclid(dmath::TAU), true));
-        }
-        if !found.is_empty() {
-            events.extend(found);
-            events.sort_by(|p, q| p.0.total_cmp(&q.0));
-        }
+    } else if form == Form::Poly4 {
+        // a loop the discriminant missed (a small one round a thin tube on a wide host, fuzz seed
+        // 295, feature 69): every loop holds one of the critical angles, where the root count is
+        // asked and followed to its changes (M.ct's sampling rule, `critical_us`)
+        add_critical(&eq, &other, &mut events);
     }
     // (decision log: the sampled events against the certified ones, curved-sites gap #7)
     #[cfg(feature = "decisions")]
