@@ -28,6 +28,7 @@ import ForgeExact.DecideOnce.RootCover
 import ForgeExact.DecideOnce.QPropose
 import ForgeExact.DecideOnce.QSweep
 import ForgeExact.DecideOnce.QVertPlane
+import ForgeExact.DecideOnce.QVert3
 import ForgeExact.DecideOnce.SampleLocal
 import ForgeExact.JordanLocal
 import ForgeExact.DecideOnce.LocalJordan
@@ -234,6 +235,11 @@ elab "#standard_axioms " ids:ident* : command => do
   ForgeExact.DecideOnce.Curved.swapYZ_ev
   ForgeExact.DecideOnce.Curved.gcd_cover
   ForgeExact.DecideOnce.Curved.proposeVertPlaneAny_complete
+  ForgeExact.DecideOnce.Curved.comb3_spec
+  ForgeExact.DecideOnce.Curved.linOk_spec
+  ForgeExact.DecideOnce.Curved.homSub_ev
+  ForgeExact.DecideOnce.Curved.secondProj_spec
+  ForgeExact.DecideOnce.Curved.proposeVert3_complete
   ForgeExact.DecideOnce.Sample.local_exact
   ForgeExact.DecideOnce.Sample.local_correct
   ForgeExact.DecideOnce.Sample.wall_region
