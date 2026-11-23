@@ -6,6 +6,7 @@ import ForgeBoolCore.RefineIndex
 import ForgeBoolCore.RefineSort
 import ForgeBoolCore.RefineExt
 import ForgeBoolCore.RefineSplit
+import ForgeBoolCore.RefineLedger
 /-! The refinement lemmas use the standard axioms only. -/
 #print axioms forge_bool_core.zero_idx_spec
 #print axioms forge_bool_core.is_facet_spec
@@ -32,3 +33,6 @@ import ForgeBoolCore.RefineSplit
 #print axioms forge_bool_core.split_loop3_spec
 #print axioms forge_bool_core.split_loop4_spec
 #print axioms forge_bool_core.split_spec
+#print axioms forge_bool_core.facets_toL
+#print axioms forge_bool_core.topes_toL
+#print axioms forge_bool_core.piece_toL
