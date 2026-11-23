@@ -123,7 +123,8 @@ elab "#standard_axioms " ids:ident* : command => do
   IEEE754.Exact.QB.truncDiv_q IEEE754.Exact.QB.divq_spec IEEE754.Exact.QB.ratio_tie IEEE754.Exact.QB.add_tie
   IEEE754.Exact.QB.neg_tie IEEE754.Exact.QB.sub_tie IEEE754.Exact.QB.mul_tie IEEE754.Exact.QB.div_tie
   IEEE754.Exact.QB.inv_tie IEEE754.Exact.QB.cmp_tie IEEE754.Exact.QB.qadd_spec IEEE754.Exact.QB.qsub_spec
-  IEEE754.Exact.QB.qmul_spec IEEE754.Exact.QB.ratio_spec'
+  IEEE754.Exact.QB.qmul_spec IEEE754.Exact.QB.ratio_spec' IEEE754.Exact.QB.floor_tie IEEE754.Exact.QB.ediv_eq_floor
+  IEEE754.Exact.QB.qmid_spec
   -- exact.rs Big
   IEEE754.Exact.add_into_spec IEEE754.Exact.sub_into_spec IEEE754.Exact.mul_into_spec IEEE754.Exact.shl_into_spec
   IEEE754.Exact.trimLen_spec IEEE754.Exact.cmp_mag_spec IEEE754.Exact.Big.fromMag_spec IEEE754.Exact.Big.view_spec

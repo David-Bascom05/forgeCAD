@@ -371,6 +371,84 @@ theorem ratio_spec' {G : Big → Big → Big} (hG : GcdOk G) {n d : Big} (hn : C
     Can (ratio G n d) ∧ QZ.Normal (toZ (ratio G n d)) ∧ QZ.val (toZ (ratio G n d)) = (val n : ℚ) / val d := by
   obtain ⟨c, e⟩ := ratio_tie hG hn hd; rw [e]; exact ⟨c, QZ.ratio_spec _ _⟩
 
+/-! ## `Q::floor`, `Q::mid` -/
+
+/-- `Q::floor`: `divrem(n, d).0` for `n ≥ 0`; else `−q` or `−q − 1` from `divrem(|n|, d)`. -/
+def qfloor (x : QB) : Big :=
+  if signum x.n ≥ 0 then (divrem x.n x.d).1 else
+    if isZero (divrem (babs x.n) x.d).2 then Big.neg (divrem (babs x.n) x.d).1
+    else Big.sub (Big.neg (divrem (babs x.n) x.d).1) one
+
+/-- **`Q::floor`** is the floor division `n / d` (for `d > 0`), canonical. -/
+theorem floor_tie {x : QB} (hx : Can x) (hd : 0 < val x.d) :
+    Canon (qfloor x) ∧ val (qfloor x) = val x.n / val x.d := by
+  obtain ⟨xn, xd⟩ := hx
+  have hd0 : val x.d ≠ 0 := ne_of_gt hd
+  unfold qfloor
+  have sg : signum x.n ≥ 0 ↔ 0 ≤ val x.n := by
+    rw [ge_iff_le, ← not_lt, sneg xn, not_lt]
+  by_cases hn : 0 ≤ val x.n
+  · rw [if_pos (sg.2 hn)]
+    obtain ⟨c1, -, h, -⟩ := divrem_spec xn xd
+    obtain ⟨e, l, p, -⟩ := h hd0
+    have r0 := p hn
+    rw [abs_of_pos hd, abs_of_nonneg r0] at l
+    refine ⟨c1, ((Int.ediv_emod_unique hd).2 ⟨by linarith, r0, l⟩).1.symm⟩
+  · rw [if_neg (fun h => hn (sg.1 h))]
+    obtain ⟨cb, vb⟩ := babs_spec xn
+    obtain ⟨c1, c2, h, -⟩ := divrem_spec cb xd
+    obtain ⟨e, l, p, -⟩ := h hd0
+    rw [vb] at e p
+    have r0 := p (abs_nonneg _)
+    rw [abs_of_pos hd, abs_of_nonneg r0] at l
+    rw [abs_of_neg (not_le.1 hn)] at e
+    obtain ⟨cq, vq⟩ := neg_spec c1
+    by_cases hr : val (divrem (babs x.n) x.d).2 = 0
+    · rw [if_pos ((isz c2).2 hr)]
+      refine ⟨cq, ?_⟩
+      rw [vq]
+      exact ((Int.ediv_emod_unique hd).2 ⟨by rw [hr] at e; linarith, le_refl 0, hd⟩).1.symm
+    · rw [if_neg (fun h' => hr ((isz c2).1 h'))]
+      obtain ⟨cs, vs⟩ := sub_spec cq canon_one
+      refine ⟨cs, ?_⟩
+      rw [vs, vq, val_one]
+      have : 0 < val (divrem (babs x.n) x.d).2 := lt_of_le_of_ne r0 (Ne.symm hr)
+      exact ((Int.ediv_emod_unique (r := val x.d - val (divrem (babs x.n) x.d).2) hd).2
+        ⟨by linarith, by linarith, by linarith⟩).1.symm
+
+/-- The floor division is `⌊n/d⌋` (Lean's `Rat.floor` of the value). -/
+lemma ediv_eq_floor {n d : ℤ} (hd : 0 < d) : n / d = ⌊((n : ℚ) / d)⌋ := by
+  symm; rw [Int.floor_eq_iff]
+  have hdq : (0 : ℚ) < d := by exact_mod_cast hd
+  have h1 := Int.ediv_mul_le n (ne_of_gt hd)
+  have h2 := Int.lt_ediv_add_one_mul_self n hd
+  constructor
+  · rw [le_div_iff₀ hdq]; exact_mod_cast h1
+  · rw [div_lt_iff₀ hdq]; exact_mod_cast h2
+
+/-- `Q::mid`: `ratio(n₁d₂ + n₂d₁, (d₁d₂) << 1)`. -/
+def qmid (G : Big → Big → Big) (x y : QB) : QB :=
+  ratio G (Big.add (Big.mul x.n y.d) (Big.mul y.n x.d)) (shl (Big.mul x.d y.d) 1)
+
+/-- **`Q::mid`** is `(x + y)/2`, normal, on canonical fields with nonzero denominators. -/
+theorem qmid_spec {G : Big → Big → Big} (hG : GcdOk G) {x y : QB} (hx : Can x) (hy : Can y)
+    (dx : val x.d ≠ 0) (dy : val y.d ≠ 0) :
+    Can (qmid G x y) ∧ QZ.Normal (toZ (qmid G x y)) ∧
+      QZ.val (toZ (qmid G x y)) = (QZ.val (toZ x) + QZ.val (toZ y)) / 2 := by
+  obtain ⟨-, ⟨c1, v1⟩⟩ := am hx.1 hy.2
+  obtain ⟨-, ⟨c2, v2⟩⟩ := am hy.1 hx.2
+  obtain ⟨⟨c3, v3⟩, -⟩ := am c1 c2
+  obtain ⟨-, ⟨c4, v4⟩⟩ := am hx.2 hy.2
+  obtain ⟨c5, v5⟩ := shl_spec c4 1
+  obtain ⟨c, nn, v⟩ := ratio_spec' hG c3 c5
+  refine ⟨c, nn, ?_⟩
+  unfold qmid; rw [v, v3, v1, v2, v5, v4]
+  simp only [QZ.val]
+  have : (val x.d : ℚ) ≠ 0 := by exact_mod_cast dx
+  have : (val y.d : ℚ) ≠ 0 := by exact_mod_cast dy
+  push_cast
+  field_simp
+
 end QB
 
 end IEEE754.Exact
