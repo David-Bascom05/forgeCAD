@@ -51,3 +51,12 @@ import ForgeCurved
 #print axioms ForgeCurved.transversalAt_of_linearIndependent
 #print axioms ForgeCurved.modelCell_preconnected
 #print axioms ForgeCurved.conicalAt_of_model
+#print axioms ForgeCurved.cellsConnected_of_diagonal
+#print axioms ForgeCurved.plate_faithful
+#print axioms ForgeCurved.plate1_not_faithful
+#print axioms ForgeCurved.FaceLocal.edgeLocal_of_model
+#print axioms ForgeCurved.FaceLocal.vertLocal_of_model
+#print axioms ForgeCurved.FaceLocal.xNonManifoldF_iff_top_of_models
+#print axioms ForgeCurved.graphCell_preconnected
+#print axioms ForgeCurved.localConn_of_contact
+#print axioms ForgeCurved.tangentPair_localConn

@@ -9,3 +9,7 @@ import ForgeCurved.FaceLocal
 import ForgeCurved.Strata
 import ForgeCurved.Linked
 import ForgeCurved.ConeModel
+import ForgeCurved.Diagonal
+import ForgeCurved.PlateHole
+import ForgeCurved.FaceModel
+import ForgeCurved.ContactModel
