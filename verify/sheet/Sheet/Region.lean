@@ -24,13 +24,17 @@ rational: everything here is over ℚ and every decision is an exact sign. `L` i
 **Point in region, exact** (replacing the 0.0137-rad turned ray and the 0.3/0.7 hole vote):
 4. A loop is a cyclic list of class points (lines end exactly on them) and arcs `(c, r, sense)`
    between consecutive points. Its region, by the even–odd rule, is the polygon over the points
-   XOR, for each arc, its lens `{|p − c|² < r²} ∩ {p strictly on the arc's side of its chord}`
-   (a counter-clockwise arc lies right of its chord, a clockwise one left, for every sweep).
-5. Polygon membership: the horizontal ray to `+x`, half-open: edge `a → b` counts iff
-   `(a.y > p.y) ≠ (b.y > p.y)` and `(b.y > a.y) = (orient(a, b, p) > 0)`. No turned ray: the
-   half-open rule decides a vertex level with `p` exactly. Theorems: invariant under rotating the
-   loop's start (`inPoly_rotate`), under reversing it for points off its edges
-   (`crosses_reverse`), and under translation (`inPoly_translate`).
+   XOR, for each arc, its lens: its disc and its side of the chord (a counter-clockwise arc lies
+   right of its chord, a clockwise one left, for every sweep).
+5. Every test is decided at `p` moved by `(δ³, δ²)`, `δ → 0` (simulation of simplicity), so no
+   tie is left: `side a b p` is `orient(a, b, p)` where nonzero, else `b.x − a.x`, else
+   `a.y − b.y` (`side_move`); in the disc on its circle means below the centre's height, or
+   level and left of it (`inDisc`, `disc_move`); the height test `a.y > p.y` is already the
+   move's. Polygon membership: the horizontal ray to `+x`, edge `a → b` counts iff
+   `(a.y > p.y) ≠ (b.y > p.y)` and `(b.y > a.y) = (side(a, b, p) > 0)`. Theorems: invariant
+   under rotating the loop's start (`inPoly_rotate`), under reversing it, for every point
+   (`crosses_reverse`: `side` is antisymmetric and never `0`), and under translation
+   (`inPoly_translate`).
 6. Holes: after `chain` there are no pinches, so the loops are pairwise disjoint. A hole `H` goes
    to the outer loop `O` that holds `H`'s representative vertex and is innermost among those:
    every other outer loop holding it also holds `O`'s representative (`owner`, unique when the
@@ -191,9 +195,107 @@ theorem box_spread (L : ℚ) (lo hi : P) (p q : P)
 
 /-! ## 4–5. Point in region -/
 
+/-- **The side of `p` from `a → b`, simulation of simplicity**: `orient a b p` where it is not
+`0`; on the line, the sign at `p` moved by `(δ³, δ²)`, `δ → 0` (`side_move`): `b.x − a.x`, else
+`a.y − b.y`. Never `0` for `a ≠ b` (`side_ne`), and antisymmetric (`side_swap`), so an edge
+counts alike either way it runs for every `p` (`crosses_reverse`). -/
+def side (a b p : P) : ℚ :=
+  if orient a b p ≠ 0 then orient a b p else if b.1 ≠ a.1 then b.1 - a.1 else a.2 - b.2
+
+theorem side_swap (a b p : P) : side b a p = -side a b p := by
+  unfold side; rw [orient_swap]
+  by_cases h : orient a b p = 0
+  · simp only [h, neg_zero, ne_eq, not_true_eq_false, if_false]
+    by_cases hx : b.1 = a.1
+    · simp [hx]
+    · have : a.1 ≠ b.1 := fun e => hx e.symm
+      simp [hx, this]
+  · simp [h]
+
+theorem side_ne {a b : P} (hab : a ≠ b) (p : P) : side a b p ≠ 0 := by
+  unfold side
+  by_cases h : orient a b p = 0
+  · simp only [h, ne_eq, not_true_eq_false, if_false]
+    by_cases hx : b.1 = a.1
+    · simp only [hx, not_true_eq_false, if_false]
+      intro hy; apply hab; exact Prod.ext hx.symm (by linarith)
+    · simp only [hx, not_false_eq_true, if_true]; intro e; exact hx (by linarith)
+  · simpa [h] using h
+
+theorem side_of_ne {a b p : P} (h : orient a b p ≠ 0) : side a b p = orient a b p := by
+  simp [side, h]
+
+/-- A sign survives a perturbation that shrinks with `δ`. -/
+theorem sign_ev {s K : ℚ} (hs : s ≠ 0) (hK : 0 ≤ K) :
+    ∃ δ0 > 0, ∀ δ, 0 < δ → δ < δ0 → ∀ e, |e| ≤ K * δ →
+      (0 < s + e ↔ 0 < s) ∧ (s + e < 0 ↔ s < 0) := by
+  have hs' : 0 < |s| := abs_pos.mpr hs
+  refine ⟨|s| / (K + 1), by positivity, fun δ hδ hδ0 e he => ?_⟩
+  have : K * δ < |s| := by
+    rw [lt_div_iff₀ (by linarith)] at hδ0
+    nlinarith
+  have := abs_lt.mp (lt_of_le_of_lt he this)
+  rcases lt_or_gt_of_ne hs with h | h
+  · rw [abs_of_neg h] at *
+    constructor <;> constructor <;> intro <;> linarith
+  · rw [abs_of_pos h] at *
+    constructor <;> constructor <;> intro <;> linarith
+
+def mv (p : P) (δ : ℚ) : P := (p.1 + δ ^ 3, p.2 + δ ^ 2)
+
+theorem orient_mv (a b p : P) (δ : ℚ) :
+    orient a b (mv p δ) = orient a b p + (b.1 - a.1) * δ ^ 2 + (a.2 - b.2) * δ ^ 3 := by
+  simp only [orient, mv]; ring
+
+/-- **`side` is the sign at the moved point**: for `a ≠ b`, for every small enough `δ > 0`,
+`orient a b (p + (δ³, δ²))` has `side a b p`'s sign. -/
+theorem side_move {a b : P} (hab : a ≠ b) (p : P) : ∃ δ0 > 0, ∀ δ, 0 < δ → δ < δ0 →
+    (0 < orient a b (mv p δ) ↔ 0 < side a b p) ∧ (orient a b (mv p δ) < 0 ↔ side a b p < 0) := by
+  by_cases ho : orient a b p = 0
+  · by_cases hx : b.1 - a.1 = 0
+    · have hy : a.2 - b.2 ≠ 0 := by
+        intro hy; apply hab; exact Prod.ext (by linarith) (by linarith)
+      have hs : side a b p = a.2 - b.2 := by
+        simp [side, ho, show b.1 = a.1 by linarith]
+      refine ⟨1, one_pos, fun δ hδ _ => ?_⟩
+      rw [orient_mv, ho, hx, hs, zero_mul, zero_add, zero_add]
+      have h3 : 0 < δ ^ 3 := by positivity
+      constructor
+      · exact ⟨fun h => pos_of_mul_pos_left h h3.le, fun h => mul_pos h h3⟩
+      · exact ⟨fun h => by nlinarith, fun h => mul_neg_of_neg_of_pos h h3⟩
+    · have hs : side a b p = b.1 - a.1 := by
+        simp [side, ho, show b.1 ≠ a.1 from fun e => hx (by rw [e]; ring)]
+      obtain ⟨δ0, h0, H⟩ := sign_ev hx (abs_nonneg (a.2 - b.2))
+      refine ⟨min δ0 1, by positivity, fun δ hδ hδ0 => ?_⟩
+      have hH := H δ hδ (lt_of_lt_of_le hδ0 (min_le_left _ _)) ((a.2 - b.2) * δ)
+        (by rw [abs_mul, abs_of_pos hδ])
+      have e : orient a b (mv p δ) = δ ^ 2 * ((b.1 - a.1) + (a.2 - b.2) * δ) := by
+        rw [orient_mv, ho]; ring
+      rw [e, hs]
+      have h2 : 0 < δ ^ 2 := by positivity
+      constructor
+      · rw [← hH.1]; exact ⟨fun h => pos_of_mul_pos_right h h2.le, fun h => mul_pos h2 h⟩
+      · rw [← hH.2]; exact ⟨fun h => by nlinarith, fun h => mul_neg_of_pos_of_neg h2 h⟩
+  · rw [side_of_ne ho]
+    obtain ⟨δ0, h0, H⟩ := sign_ev ho (by positivity : 0 ≤ |b.1 - a.1| + |a.2 - b.2|)
+    refine ⟨min δ0 1, by positivity, fun δ hδ hδ0 => ?_⟩
+    have hd1 : δ ≤ 1 := le_trans hδ0.le (min_le_right _ _)
+    have hH := H δ hδ (lt_of_lt_of_le hδ0 (min_le_left _ _))
+      ((b.1 - a.1) * δ ^ 2 + (a.2 - b.2) * δ ^ 3) (by
+        have h2 : δ ^ 2 ≤ δ := by nlinarith
+        have h3 : δ ^ 3 ≤ δ := by nlinarith
+        calc _ ≤ |(b.1 - a.1) * δ ^ 2| + |(a.2 - b.2) * δ ^ 3| := abs_add_le _ _
+          _ = |b.1 - a.1| * δ ^ 2 + |a.2 - b.2| * δ ^ 3 := by
+              rw [abs_mul, abs_mul, abs_of_pos (by positivity : (0:ℚ) < δ ^ 2),
+                abs_of_pos (by positivity : (0:ℚ) < δ ^ 3)]
+          _ ≤ |b.1 - a.1| * δ + |a.2 - b.2| * δ := by
+              gcongr
+          _ = _ := by ring)
+    rw [orient_mv, add_assoc]; exact hH
+
 /-- The half-open crossing of the horizontal ray from `p` with the edge `a → b`. -/
 def crosses (p a b : P) : Bool :=
-  (decide (a.2 > p.2) != decide (b.2 > p.2)) && (decide (b.2 > a.2) == decide (orient a b p > 0))
+  (decide (a.2 > p.2) != decide (b.2 > p.2)) && (decide (b.2 > a.2) == decide (side a b p > 0))
 
 /-- The cyclic edges of a loop. -/
 def edges : List P → List (P × P)
@@ -250,9 +352,12 @@ theorem edges_rotate (a : P) (rest : List P) :
 theorem inPoly_rotate (p a : P) (rest : List P) : inPoly p (rest ++ [a]) = inPoly p (a :: rest) :=
   parity_perm ((edges_rotate a rest).map _)
 
-/-- **Nor its direction**, for points off the edge: an edge counts the same either way it runs. -/
-theorem crosses_reverse (p a b : P) (h : orient a b p ≠ 0) : crosses p b a = crosses p a b := by
-  unfold crosses; rw [orient_swap]
+/-- **Nor its direction**, for every point: an edge counts the same either way it runs. -/
+theorem crosses_reverse (p a b : P) : crosses p b a = crosses p a b := by
+  by_cases hab : a = b
+  · subst hab; rfl
+  have h := side_ne hab p
+  unfold crosses; rw [side_swap]
   by_cases ha : a.2 > p.2 <;> by_cases hb : b.2 > p.2 <;> simp [ha, hb]
   · have hab : a.2 > b.2 := by linarith
     have : ¬ b.2 > a.2 := by linarith
@@ -272,8 +377,12 @@ def move (t : P) (p : P) : P := (p.1 + t.1, p.2 + t.2)
 theorem orient_move (t a b c : P) : orient (move t a) (move t b) (move t c) = orient a b c := by
   simp only [orient, move]; ring
 
+theorem side_move' (t a b p : P) : side (move t a) (move t b) (move t p) = side a b p := by
+  unfold side; rw [orient_move]; simp only [move, add_sub_add_right_eq_sub, ne_eq,
+    add_left_inj]
+
 theorem crosses_move (t p a b : P) : crosses (move t p) (move t a) (move t b) = crosses p a b := by
-  unfold crosses; rw [orient_move]; simp only [move, add_lt_add_iff_right]
+  unfold crosses; rw [side_move']; simp only [move, add_lt_add_iff_right]
 
 theorem edges_map (f : P → P) (vs : List P) :
     edges (vs.map f) = (edges vs).map fun e => (f e.1, f e.2) := by
@@ -292,11 +401,110 @@ theorem inPoly_translate (t p : P) (vs : List P) :
   simp only [inPoly, edges_map, List.map_map]
   congr 1; apply List.map_congr_left; intro e _; exact crosses_move t p e.1 e.2
 
-/-- An arc's lens: inside its circle and strictly on its side of the chord `a → b`
-(a counter-clockwise arc, `ccw = true`, lies right of its chord). -/
+/-- In the disc `|p − c| < r`, at `p` moved by `(δ³, δ²)` as `side` moves it (`disc_move`): on
+the circle, below the centre's height, or level with it and left of it. -/
+def inDisc (p c : P) (r : ℚ) : Bool :=
+  decide (norm2 (sub p c) < r * r) ||
+    (decide (norm2 (sub p c) = r * r) && (decide (p.2 < c.2) || (decide (p.2 = c.2) && decide (p.1 < c.1))))
+
+theorem norm2_mv (p c : P) (δ : ℚ) : norm2 (sub (mv p δ) c) = norm2 (sub p c) +
+    2 * (p.2 - c.2) * δ ^ 2 + 2 * (p.1 - c.1) * δ ^ 3 + δ ^ 4 + δ ^ 6 := by
+  simp only [norm2, sub, mv]; ring
+
+/-- **`inDisc` is the disc at the moved point**: for every small enough `δ > 0`,
+`|p + (δ³, δ²) − c| < r` exactly when `inDisc p c r`. -/
+theorem disc_move (p c : P) (r : ℚ) : ∃ δ0 > 0, ∀ δ, 0 < δ → δ < δ0 →
+    (norm2 (sub (mv p δ) c) < r * r ↔ inDisc p c r = true) := by
+  set A := norm2 (sub p c) - r * r with hA
+  set dx := p.1 - c.1
+  set dy := p.2 - c.2
+  have key : ∀ δ, norm2 (sub (mv p δ) c) < r * r ↔
+      A + 2 * dy * δ ^ 2 + 2 * dx * δ ^ 3 + δ ^ 4 + δ ^ 6 < 0 := fun δ => by
+    rw [norm2_mv]; constructor <;> intro h <;> linarith
+  simp only [inDisc, Bool.or_eq_true, Bool.and_eq_true, decide_eq_true_eq]
+  by_cases h0 : A = 0
+  · have heq : norm2 (sub p c) = r * r := by linarith
+    have hlt : ¬ norm2 (sub p c) < r * r := by linarith
+    rw [or_iff_right hlt, and_iff_right heq]
+    by_cases hy : dy = 0
+    · have hy' : p.2 = c.2 := by simp only [dy] at hy; linarith
+      have hy'' : ¬ p.2 < c.2 := by linarith
+      rw [or_iff_right hy'', and_iff_right hy']
+      by_cases hx : dx = 0
+      · have hx' : ¬ p.1 < c.1 := by simp only [dx] at hx; linarith
+        refine ⟨1, one_pos, fun δ hδ _ => ?_⟩
+        rw [key, h0, hy, hx]
+        constructor
+        · intro h; nlinarith [pow_pos hδ 4, pow_pos hδ 6]
+        · intro h; exact absurd h hx'
+      · have h2 : (2 * dx : ℚ) ≠ 0 := by positivity
+        obtain ⟨δ0, hδ0, H⟩ := sign_ev h2 (by norm_num : (0 : ℚ) ≤ 2)
+        refine ⟨min δ0 1, by positivity, fun δ hδ hδ1 => ?_⟩
+        have hd1 : δ ≤ 1 := le_trans hδ1.le (min_le_right _ _)
+        have hH := (H δ hδ (lt_of_lt_of_le hδ1 (min_le_left _ _)) (δ + δ ^ 3) (by
+          rw [abs_of_pos (by positivity)]
+          linarith [pow_le_of_le_one hδ.le hd1 (by norm_num : (3 : ℕ) ≠ 0)])).2
+        have e : A + 2 * dy * δ ^ 2 + 2 * dx * δ ^ 3 + δ ^ 4 + δ ^ 6 = δ ^ 3 * (2 * dx + (δ + δ ^ 3)) := by
+          rw [h0, hy]; ring
+        rw [key, e]
+        have h3 : 0 < δ ^ 3 := by positivity
+        have : p.1 < c.1 ↔ 2 * dx < 0 := by simp only [dx]; constructor <;> intro <;> linarith
+        rw [this, ← hH]
+        exact ⟨fun h => by nlinarith, fun h => mul_neg_of_pos_of_neg h3 h⟩
+    · have h2 : (2 * dy : ℚ) ≠ 0 := by positivity
+      obtain ⟨δ0, hδ0, H⟩ := sign_ev h2 (by positivity : (0 : ℚ) ≤ 2 * |dx| + 2)
+      refine ⟨min δ0 1, by positivity, fun δ hδ hδ1 => ?_⟩
+      have hd1 : δ ≤ 1 := le_trans hδ1.le (min_le_right _ _)
+      have hH := (H δ hδ (lt_of_lt_of_le hδ1 (min_le_left _ _)) (2 * dx * δ + δ ^ 2 + δ ^ 4) (by
+        have h2 : δ ^ 2 ≤ δ := by nlinarith
+        have h4 : δ ^ 4 ≤ δ := by nlinarith
+        calc _ ≤ |2 * dx * δ| + |δ ^ 2| + |δ ^ 4| := abs_add_three _ _ _
+          _ = 2 * |dx| * δ + δ ^ 2 + δ ^ 4 := by
+              rw [abs_mul, abs_mul, abs_of_pos hδ, abs_of_pos (by positivity : (0:ℚ) < δ ^ 2),
+                abs_of_pos (by positivity : (0:ℚ) < δ ^ 4)]; norm_num
+          _ ≤ _ := by nlinarith)).2
+      have e : A + 2 * dy * δ ^ 2 + 2 * dx * δ ^ 3 + δ ^ 4 + δ ^ 6 =
+          δ ^ 2 * (2 * dy + (2 * dx * δ + δ ^ 2 + δ ^ 4)) := by rw [h0]; ring
+      rw [key, e]
+      have h2' : 0 < δ ^ 2 := by positivity
+      have hyne : p.2 ≠ c.2 := fun e => hy (by simp only [dy]; rw [e]; ring)
+      have : (p.2 < c.2 ∨ p.2 = c.2 ∧ p.1 < c.1) ↔ 2 * dy < 0 := by
+        simp only [hyne, false_and, or_false, dy]; constructor <;> intro <;> linarith
+      rw [this, ← hH]
+      exact ⟨fun h => by nlinarith, fun h => mul_neg_of_pos_of_neg h2' h⟩
+  · obtain ⟨δ0, hδ0, H⟩ := sign_ev h0 (by positivity : (0 : ℚ) ≤ 2 * |dy| + 2 * |dx| + 2)
+    refine ⟨min δ0 1, by positivity, fun δ hδ hδ1 => ?_⟩
+    have hd1 : δ ≤ 1 := le_trans hδ1.le (min_le_right _ _)
+    have hH := (H δ hδ (lt_of_lt_of_le hδ1 (min_le_left _ _))
+      (2 * dy * δ ^ 2 + 2 * dx * δ ^ 3 + δ ^ 4 + δ ^ 6) (by
+        have h2 : δ ^ 2 ≤ δ := by nlinarith
+        have h3 : δ ^ 3 ≤ δ := by nlinarith
+        have h4 : δ ^ 4 ≤ δ := by nlinarith
+        have h6 : δ ^ 6 ≤ δ := by nlinarith
+        have a1 : |2 * dy * δ ^ 2| ≤ 2 * |dy| * δ := by
+          rw [abs_mul, abs_mul, abs_of_pos (by positivity : (0:ℚ) < δ ^ 2)]; norm_num
+          exact mul_le_mul_of_nonneg_left h2 (by positivity)
+        have a2 : |2 * dx * δ ^ 3| ≤ 2 * |dx| * δ := by
+          rw [abs_mul, abs_mul, abs_of_pos (by positivity : (0:ℚ) < δ ^ 3)]; norm_num
+          exact mul_le_mul_of_nonneg_left h3 (by positivity)
+        have a3 : |(δ ^ 4 : ℚ)| = δ ^ 4 := abs_of_pos (by positivity)
+        have a4 : |(δ ^ 6 : ℚ)| = δ ^ 6 := abs_of_pos (by positivity)
+        calc _ ≤ |2 * dy * δ ^ 2 + 2 * dx * δ ^ 3| + |δ ^ 4 + δ ^ 6| := by
+              rw [show 2 * dy * δ ^ 2 + 2 * dx * δ ^ 3 + δ ^ 4 + δ ^ 6 =
+                (2 * dy * δ ^ 2 + 2 * dx * δ ^ 3) + (δ ^ 4 + δ ^ 6) by ring]; exact abs_add_le _ _
+          _ ≤ (|2 * dy * δ ^ 2| + |2 * dx * δ ^ 3|) + (|δ ^ 4| + |δ ^ 6|) :=
+              add_le_add (abs_add_le _ _) (abs_add_le _ _)
+          _ ≤ _ := by rw [a3, a4]; linarith)).2
+    rw [key, show A + 2 * dy * δ ^ 2 + 2 * dx * δ ^ 3 + δ ^ 4 + δ ^ 6 =
+      A + (2 * dy * δ ^ 2 + 2 * dx * δ ^ 3 + δ ^ 4 + δ ^ 6) by ring, hH]
+    have hne : norm2 (sub p c) ≠ r * r := fun e => h0 (by rw [hA, e]; ring)
+    simp only [hne, false_and, or_false]
+    constructor <;> intro <;> linarith
+
+/-- An arc's lens: in its disc and on its side of the chord `a → b` (a counter-clockwise arc,
+`ccw = true`, lies right of its chord), both at `p` moved by `(δ³, δ²)`. -/
 def inLens (p : P) (a b c : P) (r : ℚ) (ccw : Bool) : Bool :=
-  decide (norm2 (sub p c) < r * r) &&
-    (if ccw then decide (orient a b p < 0) else decide (orient a b p > 0))
+  inDisc p c r && (if ccw then decide (side a b p < 0) else decide (side a b p > 0))
 
 /-- A loop: its points, and for each edge from point `i` an optional arc `(c, r, ccw)`. -/
 structure Loop where

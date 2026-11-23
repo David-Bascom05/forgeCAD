@@ -112,4 +112,56 @@ theorem split_at_region {ι : Type v} [DecidableEq ι] (op : (ι → Prop) → P
     rw [far_unchanged op A i₀ B hB htools hempty hreg x hxB]
     simp [hx]
 
+/-- Off the tools' closed set, the boolean is pointwise the target if `op` keeps it alone, else empty. -/
+theorem combine_off {ι : Type v} [DecidableEq ι] (op : (ι → Prop) → Prop) (A : ι → Pred X) (i₀ : ι)
+    (B : Pred X) (htools : ∀ i, i ≠ i₀ → ∀ x, A i x → B x) (hempty : ¬op fun _ => False) :
+    ∀ x, ¬B x → (combine op A x ↔ (op (fun i => i = i₀) ∧ A i₀ x)) := by
+  intro x hx
+  have hoff : ∀ i, i ≠ i₀ → ¬A i x := fun i hi hA => hx (htools i hi x hA)
+  unfold combine
+  rw [pattern_off hoff]
+  by_cases h0 : A i₀ x
+  · have : (fun i => i = i₀ ∧ A i₀ x) = fun i => i = i₀ := by funext i; simp [h0]
+    rw [this]; simp [h0]
+  · have : (fun i => i = i₀ ∧ A i₀ x) = fun _ => False := by funext i; simp [h0]
+    rw [this]; simp [h0, hempty]
+
+/-- **(F3) The stitch, reduced to a statement about the written body.** Suppose:
+* the core's kept cells agree with the boolean in the region, off a nowhere-dense wall `W` (as the
+  decomposition of `reg_in` does);
+* the written body `Out` agrees, off a nowhere-dense set `Z` (the carriers and walls), with the
+  core's kept cells inside the region and with the target (or nothing) outside.
+
+Then the written body regularises to the regularised boolean. What the bridge's write must
+therefore establish, on its Aeneas translation, is `hout`: the stitched body's membership, off the
+carrier planes, is the core's result in `R°` and the input target outside. -/
+theorem stitch_reg {ι : Type v} [DecidableEq ι] (op : (ι → Prop) → Prop) (A : ι → Pred X) (i₀ : ι)
+    (B U : Pred X) (hBU : B.Sub U) (htools : ∀ i, i ≠ i₀ → ∀ x, A i x → B x)
+    (hempty : ¬op fun _ => False)
+    (kept W : Pred X) (hW : NowhereDense W) (hkept : ∀ x, U x → ¬W x → (kept x ↔ combine op A x))
+    (Out Z : Pred X) (hZ : NowhereDense Z)
+    (hout : ∀ x, ¬Z x → (Out x ↔ (U x ∧ kept x) ∨ (¬U x ∧ op (fun i => i = i₀) ∧ A i₀ x))) :
+    reg Out = reg (combine op A) := by
+  let T : Pred X := fun x => (U x ∧ kept x) ∨ (¬U x ∧ op (fun i => i = i₀) ∧ A i₀ x)
+  have h1 : reg Out = reg T := reg_eq_of_sdiff hZ fun x hx => by
+    apply Classical.byContradiction; intro hz
+    have := hout x hz
+    rcases hx with ⟨a, b⟩ | ⟨a, b⟩
+    · exact b (this.mp a)
+    · exact b (this.mpr a)
+  have h2 : reg T = reg (combine op A) := reg_eq_of_sdiff hW fun x hx => by
+    apply Classical.byContradiction; intro hw
+    by_cases hu : U x
+    · have e : T x ↔ kept x := by simp [T, hu]
+      rcases hx with ⟨a, b⟩ | ⟨a, b⟩
+      · exact b ((hkept x hu hw).mp (e.mp a))
+      · exact b (e.mpr ((hkept x hu hw).mpr a))
+    · have hb : ¬B x := fun h => hu (hBU x h)
+      have e : T x ↔ op (fun i => i = i₀) ∧ A i₀ x := by simp [T, hu]
+      have e2 := combine_off op A i₀ B htools hempty x hb
+      rcases hx with ⟨a, b⟩ | ⟨a, b⟩
+      · exact b (e2.mpr (e.mp a))
+      · exact b (e.mpr (e2.mp a))
+  rw [h1, h2]
+
 end ForgeExact.DecideOnce.Frontier

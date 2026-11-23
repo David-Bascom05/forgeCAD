@@ -358,7 +358,8 @@ impl ShopProfile {
 /// `rho`, for a turn of `angle` below pi: rho tan(angle / 2), as rho sin / (1 + cos).
 pub fn setback(rho: f64, angle: f64) -> f64 {
     let (s, c) = dmath::sin_cos(angle);
-    rho * s / (1.0 + c)
+    // forge-sheet-core's (proven: SetbackErr.lean, RefineSetback.lean setback_spec)
+    forge_sheet_core::fold::setback(rho, s, c)
 }
 
 #[cfg(test)]

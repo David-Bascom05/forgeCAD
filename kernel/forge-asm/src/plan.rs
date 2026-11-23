@@ -9,9 +9,35 @@ use crate::model::*;
 use forge_math::Frame;
 use std::collections::BTreeMap;
 
-/// Frames closer than this (mm, and rad × size) are the same: what decides redundant from
-/// conflicting in closed form.
-pub(crate) const SAME: f64 = 1e-7;
+/// Whether a misfit is met: one rule for every "met or conflict" in the solve (closed form,
+/// clusters, relations, Newton's verdict, limits), under one tolerance, LINEAR: lengths in mm, and
+/// angles times the lever arm they turn (`lever`), so an angle is met when it moves no point of
+/// the arrangement further than a length that is met.
+pub(crate) fn met(gap: f64) -> bool {
+    gap <= forge_math::tol::LINEAR
+}
+
+/// The lever arm of an arrangement: how far a turn of one radian moves the furthest of its world
+/// points about their centroid, or the furthest of its anchors (offsets in their own bodies'
+/// frames) about its body, and at least 1 mm. A length of the arrangement itself, the same wherever
+/// the whole is moved (rigid motion moves the points and their centroid together and leaves the
+/// offsets as they are).
+pub(crate) fn lever(world: &[forge_math::Point3], offsets: impl Iterator<Item = forge_math::Vec3>) -> f64 {
+    let mut l = 1.0f64;
+    for o in offsets {
+        l = l.max(o.length());
+    }
+    if !world.is_empty() {
+        let k = 1.0 / world.len() as f64;
+        let c = world
+            .iter()
+            .fold(forge_math::Vec3::ZERO, |a, p| a + p.to_vec() * k);
+        for p in world {
+            l = l.max((p.to_vec() - c).length());
+        }
+    }
+    l
+}
 
 /// A top-level instance: one rigid body to the solver (a part, or a rigid subassembly).
 #[derive(Clone, Debug)]
@@ -256,15 +282,13 @@ impl Plan {
         if !any_ground && !bodies.is_empty() {
             diags.push(Diagnostic::NoGround);
         }
-        let mut size = 1.0f64;
-        for b in &bodies {
-            size = size.max(b.written.origin.to_vec().abs_max());
-        }
-        for j in &joints {
-            for l in &j.local {
-                size = size.max(l.origin.to_vec().abs_max());
-            }
-        }
+        let written: Vec<forge_math::Point3> = bodies.iter().map(|b| b.written.origin).collect();
+        let size = lever(
+            &written,
+            joints
+                .iter()
+                .flat_map(|j| j.local.iter().map(|l| l.origin.to_vec())),
+        );
 
         // pass 1: rigid clusters
         let n = bodies.len();
@@ -547,7 +571,7 @@ impl Plan {
 /// A constraint already decided by others: a warning if it agrees, else a conflict naming it and
 /// what implies it.
 pub(crate) fn closed_form(diags: &mut Vec<Diagnostic>, item: Item, implied: Vec<Item>, gap: f64) {
-    if gap <= SAME {
+    if met(gap) {
         diags.push(Diagnostic::Redundant {
             item,
             rows: 0,

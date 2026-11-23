@@ -60,6 +60,31 @@ export class ServerBackend {
     const j = await (await this.check(r, "list")).json();
     return j.files.map((f) => ({ path: f.path, version: f.etag, size: f.size }));
   }
+  /// Every file in one answer (`forgecad web`'s /api/bundle): [{path, bytes, version}]; null
+  /// where the server has none or the project is too big for one (then read one by one).
+  async bundle() {
+    const r = await fetch(`${this.base}/api/bundle`, { headers: this.headers() });
+    if (!r.ok) return null;
+    const b = new Uint8Array(await r.arrayBuffer());
+    const v = new DataView(b.buffer, b.byteOffset, b.byteLength);
+    const dec = new TextDecoder();
+    if (dec.decode(b.subarray(0, 4)) !== "FGB1") return null;
+    const n = v.getUint32(4, true);
+    let k = 8;
+    const part = () => {
+      const len = v.getUint32(k, true);
+      const got = b.subarray(k + 4, k + 4 + len);
+      k += 4 + len;
+      return got;
+    };
+    const out = [];
+    for (let i = 0; i < n; i++) {
+      const path = dec.decode(part());
+      const version = dec.decode(part());
+      out.push({ path, version, bytes: part() });
+    }
+    return out;
+  }
   async read(p) {
     const r = await this.check(await fetch(this.url(p), { headers: this.headers() }), p);
     return { bytes: new Uint8Array(await r.arrayBuffer()), version: r.headers.get("ETag") };
@@ -224,17 +249,43 @@ export class Mirror {
     this.fc = fc;
     this.onError = onError;
     this.versions = new Map();
+    // what the app has written: a load still under way leaves it be
+    this.touched = new Set();
     this.queue = Promise.resolve();
     this.pending = 0;
   }
-  /// Every file of the backend into the app's filesystem.
+  /// One file into the app's filesystem first (the part to open), if the backend has it.
+  async loadOne(rel) {
+    try {
+      const { bytes, version } = await this.backend.read(rel);
+      this.take(rel, bytes, version);
+    } catch {}
+  }
+  take(rel, bytes, version) {
+    // a file the app has written since (or one loaded already) is the app's: not replaced
+    if (this.versions.has(rel) || this.touched.has(rel)) return;
+    this.versions.set(rel, version);
+    this.fc.fs_load(`${this.mount}/${rel}`, bytes);
+  }
+  /// Every file of the backend into the app's filesystem: in one answer where the backend gives
+  /// one (`forgecad web`), else read side by side, a few at a time.
   async load() {
-    const files = await this.backend.list();
-    for (const f of files) {
-      const { bytes, version } = await this.backend.read(f.path);
-      this.versions.set(f.path, version);
-      this.fc.fs_load(`${this.mount}/${f.path}`, bytes);
+    const all = await this.backend.bundle?.();
+    if (all) {
+      for (const f of all) this.take(f.path, f.bytes, f.version);
+      return all.map((f) => f.path);
     }
+    const files = await this.backend.list();
+    let next = 0;
+    const reader = async () => {
+      while (next < files.length) {
+        const f = files[next++];
+        if (this.versions.has(f.path) || this.touched.has(f.path)) continue;
+        const { bytes, version } = await this.backend.read(f.path);
+        this.take(f.path, bytes, version);
+      }
+    };
+    await Promise.all(Array.from({ length: 16 }, reader));
     return files.map((f) => f.path);
   }
   owns(path) {
@@ -243,6 +294,7 @@ export class Mirror {
   /// The app wrote (bytes) or removed (null) a file.
   changed(path, bytes) {
     const rel = path.slice(this.mount.length + 1);
+    this.touched.add(rel);
     const copy = bytes ? bytes.slice() : null;
     this.pending += 1;
     this.queue = this.queue

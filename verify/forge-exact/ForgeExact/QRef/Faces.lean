@@ -14,7 +14,8 @@ written exactly as `[m, e]` (ForgeExact/Ref/Input.lean):
              "faces": [{"kind": "plane",  "o": P, "z": N,             "lo": P, "hi": P},
                        {"kind": "cyl",    "o": P, "z": A, "r": R,     "lo": P, "hi": P},
                        {"kind": "cone",   "o": P, "z": A, "r": R, "s": S, "c": C, "lo": P, "hi": P},
-                       {"kind": "sphere", "o": P, "r": R,             "lo": P, "hi": P}]}]}
+                       {"kind": "sphere", "o": P, "r": R,             "lo": P, "hi": P},
+                       {"kind": "torus",  "o": P, "z": A, "R": R, "r": r, "lo": P, "hi": P}]}]}
 ```
 
 A solid is the intersection of its faces' inner sides: the harness sends only tools that are
@@ -27,7 +28,9 @@ quadrics are written from the stored frames without normalising (README §6.2):
 * cone, radius `r` at `o`, growing by `s / c` per unit along `z`:
   `c² (|d|² − (d·z)²) − (r c + s (d·z))²` with `d = p − o`, and its nappe `r c + s (d·z) > 0`.
   Here `|z|` is taken as 1 (the stored axis is a unit vector to an ulp), so this cone is the
-  kernel's to about `r · 1e-16`.
+  kernel's to about `r · 1e-16`;
+* torus about `o + t z`, major radius `R`, minor `r` (a ring, `0 < r < R`): the quartic
+  `(|d|² + R² − r²)² − 4R² (|d|² − (d·z)²/|z|²)`, negative inside (`QRef.Poly`).
 -/
 
 namespace ForgeExact.QRef
@@ -39,6 +42,7 @@ inductive Kind
   | cyl
   | cone
   | sphere
+  | torus
   deriving BEq, Inhabited, Repr
 
 structure QFace where
@@ -51,6 +55,8 @@ structure QFace where
   s : Rat
   c : Rat
   box : Box
+  /-- a torus's major radius (`r` is its minor one) -/
+  big : Rat := 0
   deriving Inhabited
 
 /-- `(p − o)ᵀ S (p − o) + L · (p − o) + k`, with `S` given by its six entries. -/
@@ -80,6 +86,8 @@ def QFace.quadric (f : QFace) : Quadric :=
     -- c²(|d|² − (d·z)²) − (rc + s d·z)² = c²|d|² − (c² + s²)(d·z)² − 2rcs (d·z) − r²c²
     centred (c2 - k * z.x * z.x) (c2 - k * z.y * z.y) (c2 - k * z.z * z.z) (-2 * k * z.x * z.y)
       (-2 * k * z.x * z.z) (-2 * k * z.y * z.z) ((-2 * f.r * f.c * f.s) * z) (-(f.r * f.r * c2)) f.o
+  -- a torus is not a quadric: QRef.Poly reads it (`QFace.poly`)
+  | .torus => centred 0 0 0 0 0 0 ⟨0, 0, 0⟩ 1 f.o
 
 /-- The cone's nappe, as a quadric negative on it: `−(r c + s (p − o)·z)`. -/
 def QFace.nappe (f : QFace) : Option Quadric :=
@@ -95,6 +103,7 @@ def faceOf (solid index : Nat) (j : Json) : Except String QFace := do
     | "cyl" => pure Kind.cyl
     | "cone" => pure Kind.cone
     | "sphere" => pure Kind.sphere
+    | "torus" => pure Kind.torus
     | k => throw s!"a face of kind {k}"
   let o ← v3 (← j.getObjVal? "o")
   let z ← match j.getObjVal? "z" with
@@ -105,8 +114,11 @@ def faceOf (solid index : Nat) (j : Json) : Except String QFace := do
   let c := (num j "c").toOption.getD 0
   let lo ← v3 (← j.getObjVal? "lo")
   let hi ← v3 (← j.getObjVal? "hi")
-  if (kind == .plane || kind == .cyl || kind == .cone) && z.isZero then throw "a face's axis is zero"
-  return ⟨solid, index, kind, o, z, r, s, c, ⟨lo, hi⟩⟩
+  let big := (num j "R").toOption.getD 0
+  if (kind == .plane || kind == .cyl || kind == .cone || kind == .torus) && z.isZero then
+    throw "a face's axis is zero"
+  if kind == .torus && !(0 < r && r < big) then throw "a torus that is not a ring (0 < r < R)"
+  return { solid, index, kind, o, z, r, s, c, box := ⟨lo, hi⟩, big }
 
 structure QSolid where
   op : String

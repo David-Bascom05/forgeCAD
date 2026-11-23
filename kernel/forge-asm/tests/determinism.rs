@@ -79,7 +79,7 @@ fn bits_are_the_same_on_every_target_and_thread_count() {
     assert_eq!(one, EXPECTED);
 }
 
-const EXPECTED: u64 = 0x76b6_fb1b_6623_c86d;
+const EXPECTED: u64 = 0x8c11_68a3_3493_91fe;
 
 #[test]
 fn the_order_lines_are_written_in_changes_no_bit() {
