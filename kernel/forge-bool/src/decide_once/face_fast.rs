@@ -592,6 +592,7 @@ struct Sub {
 /// Per class plane: (segments, vertices, facets), summed over near class planes, and the screen
 /// tallies. `None` when a class holds more than 64 faces (the masks' width).
 #[inline(never)]
+#[allow(clippy::needless_range_loop)]
 pub(crate) fn counts(
     bodies: &[&Body],
     fs: &[In],
