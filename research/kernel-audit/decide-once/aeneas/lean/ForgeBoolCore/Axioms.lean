@@ -76,3 +76,4 @@ import ForgeBoolCore.RefineFan
 #print axioms forge_bool_core.edges_between_spec
 #print axioms forge_bool_core.fan_classes
 #print axioms forge_bool_core.bad_vert_spec
+#print axioms forge_bool_core.vert_scan_spec

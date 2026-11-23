@@ -441,4 +441,117 @@ theorem bad_vert_spec (l : Ledger) (ext : Ext) (hok : ExtOK l ext) (a : Assemble
     refine ⟨k, hk1, hk2, fun he => hk3 ?_⟩
     exact (fan_classes heN hI1 (by omega) hk2).mp ((least_iff hleast (by omega) hk2).mpr he.symm)
 
+/-- A vertex (by id) whose round facets form more than one fan: `bad_vert`'s answer, decided. -/
+def badV (l : Ledger) (ext : Ext) (a : Assembled) (isE : List Bool) (v : Nat) : Bool :=
+  let ar := aroundL l ext a (covAt l ext v)
+  (List.range ar.length).any fun k => !(cls (fanR l ext a isE (covAt l ext v) ar) (List.range ar.length) 0).contains k
+
+theorem badV_iff (l : Ledger) (ext : Ext) (a : Assembled) (isE : List Bool) (v : Nat) :
+    badV l ext a isE v = true ↔ ∃ k, 1 ≤ k ∧ k < (aroundL l ext a (covAt l ext v)).length ∧
+      ¬ Conn (fanR l ext a isE (covAt l ext v) (aroundL l ext a (covAt l ext v)))
+        (List.range (aroundL l ext a (covAt l ext v)).length) 0 k := by
+  unfold badV
+  simp only [List.any_eq_true, List.mem_range, Bool.not_eq_true', List.contains_eq_mem, decide_eq_false_iff_not]
+  constructor
+  · rintro ⟨k, hk, hn⟩
+    have h0 : 0 < (aroundL l ext a (covAt l ext v)).length := by omega
+    rw [cls_spec _ List.nodup_range (List.mem_range.mpr h0)] at hn
+    refine ⟨k, ?_, hk, hn⟩
+    by_contra h1; have : k = 0 := by omega
+    subst this; exact hn Conn.refl
+  · rintro ⟨k, _, hk, hn⟩
+    refine ⟨k, hk, ?_⟩
+    rw [cls_spec _ List.nodup_range (List.mem_range.mpr (by omega))]; exact hn
+
+/-- What the vertex scan leaves: no bad vertex and every vertex's `around`, or the first bad one. -/
+def ScanOutV (l : Ledger) (ext : Ext) (a : Assembled) (isE : List Bool) (vs : List Nat) (bad : U32)
+    (av : List (List Nat)) : Prop :=
+  (bad = NONE → vs.find? (badV l ext a isE) = none ∧ av = vs.map fun v => aroundL l ext a (covAt l ext v)) ∧
+  (bad ≠ NONE → vs.find? (badV l ext a isE) = some bad.val)
+
+theorem vert_scan_spec (l : Ledger) (ext : Ext) (hok : ExtOK l ext) (a : Assembled) (W : Nat) (h : ResOK l ext a W)
+    (isE : alloc.vec.Vec Bool) (hN : isE.val.length = (allCells l ext).length)
+    (hV : ∀ x ∈ l.verts.val, (x : U32).val < (allCells l ext).length) (hVs : l.verts.val.length < U32.max)
+    (b0 : U32) :
+    keep_on_loop4 l.nb l.face_body l.face_class l.cells l.pieces l.inside l.edges l.verts ext
+      a.result a.orient a.rpos isE b0 (alloc.vec.Vec.new (alloc.vec.Vec U32)) 0#usize ⦃ r =>
+      (b0 ≠ NONE → r.1 = b0) ∧
+      (b0 = NONE → ScanOutV l ext a isE.val (idsOf l.verts) r.1 (r.2.val.map fun v => v.val.map (·.val))) ⦄ := by
+  unfold keep_on_loop4
+  apply loop.spec_decr_nat
+    (fun (q : U32 × alloc.vec.Vec (alloc.vec.Vec U32) × Usize) => l.verts.val.length - q.2.2.val)
+    (fun q => q.2.2.val ≤ l.verts.val.length ∧ q.2.1.val.length = q.2.2.val ∧
+      (q.1 = NONE → b0 = NONE ∧ ((idsOf l.verts).take q.2.2.val).find? (badV l ext a isE.val) = none ∧
+        q.2.1.val.map (fun v => v.val.map (·.val)) =
+          ((idsOf l.verts).take q.2.2.val).map fun e => aroundL l ext a (covAt l ext e)) ∧
+      (q.1 ≠ NONE → (b0 ≠ NONE → q.1 = b0) ∧ (b0 = NONE → (idsOf l.verts).find? (badV l ext a isE.val) = some q.1.val)))
+  · rintro ⟨bd, av0, j⟩ ⟨hj, havl, hb1, hb2⟩
+    unfold keep_on_loop4.body
+    simp only at hj havl hb1 hb2 ⊢
+    split
+    · rename_i hnone
+      obtain ⟨hb0, hfind, hmap⟩ := hb1 hnone
+      split
+      · rename_i hlt
+        have hjl : j.val < l.verts.val.length := by scalar_tac
+        have hil : j.val < (idsOf l.verts).length := by simp [idsOf]; omega
+        have hget : (idsOf l.verts)[j.val]'hil = (l.verts.val[j.val]'hjl : U32).val := by simp [idsOf]
+        have hft := find_take_succ (f := badV l ext a isE.val) hil hfind
+        have htake : (idsOf l.verts).take (j.val + 1) = (idsOf l.verts).take j.val ++ [(idsOf l.verts)[j.val]'hil] :=
+          List.take_succ_eq_append_getElem hil
+        step as ⟨ci, hci⟩
+        have hcil : ci.val < (allCells l ext).length := by rw [hci]; exact hV _ (List.getElem_mem _)
+        change (do let ar ← around l ext a ci; _) ⦃ _ ⦄
+        step with around_spec l ext hok a W h ci hcil as ⟨ar, har⟩
+        change (do let b ← bad_vert l ext a (alloc.vec.Vec.deref isE) ci (alloc.vec.Vec.deref ar); _) ⦃ _ ⦄
+        step with bad_vert_spec l ext hok a W h (alloc.vec.Vec.deref isE) (by simpa [alloc.vec.Vec.deref] using hN) ci
+          hcil (alloc.vec.Vec.deref ar) (by simpa [alloc.vec.Vec.deref] using har) as ⟨b, hb⟩
+        have hcv : ci.val = (idsOf l.verts)[j.val]'hil := by rw [hget, hci]
+        have hael' : av0.val.length < Usize.max := by
+          have := u32_le_usize; have := U32.max_eq; scalar_tac
+        have hbadv : badV l ext a isE.val ((idsOf l.verts)[j.val]'hil) = b := by
+          rw [← hcv]
+          have hl : (alloc.vec.Vec.deref ar).val.length = (aroundL l ext a (covAt l ext ci.val)).length := by
+            simp only [alloc.vec.Vec.deref, Slice.from_val]; rw [← har, List.length_map]
+          have hm : (alloc.vec.Vec.deref ar).val.map (·.val) = aroundL l ext a (covAt l ext ci.val) := by
+            simpa [alloc.vec.Vec.deref] using har
+          have hiff := badV_iff l ext a isE.val ci.val
+          rw [hl, hm] at hb
+          simp only [alloc.vec.Vec.deref, Slice.from_val] at hb
+          cases hbb : b
+          · cases hv : badV l ext a isE.val ci.val
+            · rfl
+            · exact absurd (hb.mpr (hiff.mp hv)) (by simp [hbb])
+          · exact hiff.mpr (hb.mp hbb)
+        split
+        · rename_i hbt
+          rw [← hbadv] at hbt
+          rw [if_pos hbt] at hft
+          have hcn : ci ≠ NONE := by
+            intro e; rw [e, none_val] at hcil; have := hok.small; omega
+          step as ⟨ae1, hae1⟩
+          step as ⟨j1, hj1⟩
+          refine ⟨by scalar_tac, by simp [hae1, havl, hj1], fun e => absurd e hcn, fun _ => ⟨fun e => absurd hb0 e, fun _ => ?_⟩,
+            by scalar_tac⟩
+          rw [hcv]; exact find_of_take hft
+        · rename_i hbf
+          have hbf' : badV l ext a isE.val ((idsOf l.verts)[j.val]'hil) = false := by rw [hbadv]; simpa using hbf
+          rw [if_neg (by simp [hbf'])] at hft
+          step as ⟨ae1, hae1⟩
+          step as ⟨j1, hj1⟩
+          refine ⟨by scalar_tac, by simp [hae1, havl, hj1], fun _ => ⟨hb0, by rw [hj1]; exact hft, ?_⟩,
+            fun e => absurd hnone e, by scalar_tac⟩
+          rw [hj1, hae1, htake, List.map_append, List.map_append, hmap, ← hcv]; simp [har]
+      · rename_i hge
+        simp only [WP.spec_ok]
+        have : j.val = l.verts.val.length := by scalar_tac
+        have ht : (idsOf l.verts).take j.val = idsOf l.verts := List.take_of_length_le (by simp [idsOf]; omega)
+        rw [ht] at hfind hmap
+        exact ⟨fun e => absurd hb0 e, fun _ => ⟨fun _ => ⟨hfind, hmap⟩, fun e => absurd hnone e⟩⟩
+    · rename_i hsome
+      simp only [WP.spec_ok]
+      obtain ⟨h1, h2⟩ := hb2 hsome
+      exact ⟨h1, fun e => ⟨fun e2 => absurd e2 hsome, fun _ => h2 e⟩⟩
+  · refine ⟨by simp, by simp, fun e => ⟨e, by simp, by simp⟩, fun e => ⟨fun _ => rfl, fun e2 => absurd e2 e⟩⟩
+
 end forge_bool_core
