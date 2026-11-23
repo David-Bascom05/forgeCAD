@@ -86,11 +86,20 @@ structure CsrOK (c : Csr) (n : Nat) : Prop where
   last : (c.start.val.getD (c.start.val.length - 1) 0#u32).val = c.ids.val.length
   ids : ∀ x ∈ c.ids.val, x.val < n
 
+/-- The sector rows' bounds: `start` begins at 0, rises, and ends at the sectors' length. -/
+structure SecCsrOK (c : SecCsr) : Prop where
+  nonempty : c.start.val ≠ []
+  zero : (c.start.val.getD 0 0#u32).val = 0
+  mono : ∀ k, k + 1 < c.start.val.length →
+    (c.start.val.getD k 0#u32).val ≤ (c.start.val.getD (k + 1) 0#u32).val
+  last : (c.start.val.getD (c.start.val.length - 1) 0#u32).val = c.sec.val.length
+
 /-- **LedgerWF v2**: `inc::ledger_wf` as a proposition. -/
 structure LedgerWF2 (l : Ledger) : Prop where
   edge_facets : CsrOK l.edge_facets (nfacets l)
   vert_edges : CsrOK l.vert_edges (nrowsL l.edge_facets)
   sectors_rows : l.vert_sectors.start.val.length = l.vert_edges.start.val.length
+  sectors_csr : SecCsrOK l.vert_sectors
   wings : ∀ e, e < nrowsL l.edge_facets → ∀ φ, (rowL l.edge_facets e).count φ ≤ 2
   vert_edges_nodup : ∀ v, v < nrowsL l.vert_edges → (rowL l.vert_edges v).Nodup
   sectors : ∀ v, v < nrowsL l.vert_edges → ∀ s ∈ secRowL l.vert_sectors v,
@@ -106,7 +115,8 @@ structure LedgerWF2 (l : Ledger) : Prop where
   face_lists : l.face_class.val.length = l.face_body.val.length
   small : nfacets l < U32.max ∧ l.n_rooms.val < U32.max ∧ l.pieces.val.length < U32.max ∧
     l.face_body.val.length < U32.max ∧ nfacets l * l.nb.val ≤ Usize.max ∧
-    l.n_rooms.val * l.nb.val ≤ Usize.max ∧ nrowsL l.edge_facets < U32.max ∧ nrowsL l.vert_edges < U32.max
+    l.n_rooms.val * l.nb.val ≤ Usize.max ∧ nrowsL l.edge_facets < U32.max ∧ nrowsL l.vert_edges < U32.max ∧
+    l.vert_sectors.sec.val.length < U32.max
 
 /-- The facets of `toLF` are listed once each. -/
 theorem toLF_facets_nodup (l : Ledger) : (toLF l).facets.Nodup := by

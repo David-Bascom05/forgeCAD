@@ -1,4 +1,4 @@
-import ForgeBoolCore.RefineIncTouch
+import ForgeBoolCore.RefineIncFan
 import ForgeBoolCore.Specs
 import ForgeBoolCore.Refine
 import ForgeBoolCore.RefineUF
@@ -155,3 +155,8 @@ import ForgeBoolCore.RefineUnify
 #print axioms forge_bool_core.inc.aroundE_len
 #print axioms forge_bool_core.inc.core_k_loop1_spec
 #print axioms forge_bool_core.inc.edges_find_eq
+#print axioms ForgeBoolCore.UF.fan_bad
+#print axioms forge_bool_core.inc.around_v_spec
+#print axioms forge_bool_core.inc.fans_spec
+#print axioms forge_bool_core.inc.bad_vert_spec
+#print axioms forge_bool_core.inc.core_k_loop2_spec
