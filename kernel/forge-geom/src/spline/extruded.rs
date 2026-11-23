@@ -10,12 +10,12 @@ use std::sync::Arc;
 #[derive(Clone, Debug)]
 pub struct Extruded {
     frame: Frame,
-    c: Arc<Spline>,
+    pub(crate) c: Arc<Spline>,
     /// C's parameter carried past its ends as far as it stays regular.
-    ext: Interval,
+    pub(crate) ext: Interval,
     height: Interval,
-    whole: Box3,
-    id: u64,
+    pub(crate) whole: Box3,
+    pub(crate) id: u64,
     radius: f64,
     speed: f64,
 }

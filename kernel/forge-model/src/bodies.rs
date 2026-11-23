@@ -17,10 +17,21 @@ use std::borrow::Cow;
 use std::collections::HashSet;
 
 /// One body of a part: the feature (its place in the history) that made it, and its solid.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub struct Solid {
     pub id: usize,
     pub body: Body,
+}
+
+/// (a part's solids are copied for the next feature, which edits one in place: its arenas get
+/// room, so that edit's first new edge or face does not copy them again)
+impl Clone for Solid {
+    fn clone(&self) -> Solid {
+        Solid {
+            id: self.id,
+            body: self.body.clone_roomy(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -90,6 +101,10 @@ pub enum BodyError {
     NoBody {
         id: usize,
     },
+    /// The body this feature made is a sheet, which holds no material for this one to change.
+    OnSheet {
+        id: usize,
+    },
     /// The feature needs exactly one body (a copy, a split keeping both sides).
     NotOne,
     /// A body combined with itself.
@@ -115,12 +130,21 @@ pub enum BodyError {
 
 /// Whether a history makes or works on more than one body.
 pub fn multi(features: &[Feature]) -> bool {
-    features.iter().any(|f| matches!(f, Feature::Body(_)))
-        || features
-            .iter()
-            .filter(|f| op(f) == Some(Combine::New))
-            .nth(1)
-            .is_some()
+    // one pass: a body feature or a sheet (a body of its own) anywhere, or a second new body (each
+    // feature's op as `op` reads it, so every kind that makes a body counts)
+    let mut new = false;
+    for f in features {
+        if matches!(f, Feature::Body(_) | Feature::Sheet(_)) {
+            return true;
+        }
+        if op(f) == Some(Combine::New) {
+            if new {
+                return true;
+            }
+            new = true;
+        }
+    }
+    false
 }
 
 fn op(f: &Feature) -> Option<Combine> {
@@ -128,6 +152,7 @@ fn op(f: &Feature) -> Option<Combine> {
         Feature::Extrude { op, .. } | Feature::Revolve { op, .. } | Feature::Ball { op, .. } => Some(*op),
         Feature::Edit(Edit::Thicken { op, .. }) => Some(*op),
         Feature::Import(t) => Some(t.op),
+        Feature::Sheet(s) => Some(crate::sheets::op(s)),
         Feature::Member(_) => Some(Combine::New),
         Feature::Regions(r) => Some(r.op),
         _ => crate::swept::op(f),
@@ -292,13 +317,16 @@ fn step_unchecked(
         // starts from the same body, so from the same body finished)
         let tried = match crate::blunted(features, i) {
             None => crate::step_plain_finished(features, i, body, finished),
-            Some(fs) => match crate::step_plain_finished(features, i, body.clone(), finished) {
-                Err(e) if crate::lost_its_way(&e) => {
-                    crate::step_plain_finished(History::new(&fs, features.ids), i, body, finished)
-                        .map_err(|_| e)
+            Some(fs) => {
+                match crate::step_plain_finished(features, i, body.as_ref().map(Body::clone_roomy), finished)
+                {
+                    Err(e) if crate::lost_its_way(&e) => {
+                        crate::step_plain_finished(History::new(&fs, features.ids), i, body, finished)
+                            .map_err(|_| e)
+                    }
+                    r => r,
                 }
-                r => r,
-            },
+            }
         };
         let one = match tried {
             Err(e) if crate::lost_its_way(&e) => match crate::rebuilt_blunted(features, i) {
@@ -336,22 +364,32 @@ fn step_unchecked(
 pub(crate) fn sequential(features: History<'_>) -> Result<Vec<Solid>, RegenError> {
     let (plain, picks) = strip(&features);
     let plain = features.on(&plain);
-    let mut solids = Vec::new();
-    for i in 0..plain.len() {
-        solids = match apply_once(plain, &picks, i, solids) {
-            Err(e) if crate::lost_its_way(&e) => {
-                return match careful(plain, &picks, 0, plain.len(), Vec::new()) {
-                    Ok(s) => finish(s),
-                    Err(_) => match all_blunted(features, features.len() - 1, features.len()) {
-                        Some(Ok(s)) => finish(s),
-                        _ => Err(e),
-                    },
-                };
-            }
-            r => r?,
-        };
+    // (each feature in turn; the tools of those ahead built by a helper, `crate::ahead`)
+    let apart = |i: usize| {
+        let f = &plain[i];
+        !modifies(f)
+            && !matches!(
+                f,
+                Feature::Plane(_)
+                    | Feature::Work(_)
+                    | Feature::Body(_)
+                    | Feature::Param(_)
+                    | Feature::Sketch(_)
+            )
+    };
+    let solids = crate::ahead(plain, &apart, Vec::new(), &mut |i, solids, made| {
+        apply_once_made(plain, &picks, i, solids, made)
+    });
+    match solids {
+        Err(e) if crate::lost_its_way(&e) => match careful(plain, &picks, 0, plain.len(), Vec::new()) {
+            Ok(s) => finish(s),
+            Err(_) => match all_blunted(features, features.len() - 1, features.len()) {
+                Some(Ok(s)) => finish(s),
+                _ => Err(e),
+            },
+        },
+        r => finish(r?),
     }
-    finish(solids)
 }
 
 fn finish(mut solids: Vec<Solid>) -> Result<Vec<Solid>, RegenError> {
@@ -404,7 +442,18 @@ fn apply_once(
     plain: History<'_>,
     picks: &[Option<&Pick>],
     i: usize,
+    solids: Vec<Solid>,
+) -> Result<Vec<Solid>, RegenError> {
+    apply_once_made(plain, picks, i, solids, None)
+}
+
+/// `apply_once` with feature `i`'s tools made already (`tools(plain, i, true)`, exactly), if `made`.
+fn apply_once_made(
+    plain: History<'_>,
+    picks: &[Option<&Pick>],
+    i: usize,
     mut solids: Vec<Solid>,
+    made: Option<Vec<Tool>>,
 ) -> Result<Vec<Solid>, RegenError> {
     let f = &plain[i];
     let p = pick(picks, i);
@@ -424,7 +473,10 @@ fn apply_once(
         }
         _ => {}
     }
-    let ts = tools(plain, i, true)?;
+    let ts = match made {
+        Some(ts) => ts,
+        None => tools(plain, i, true)?,
+    };
     // parameters and sketches make nothing
     if ts.is_empty() {
         return Ok(solids);
@@ -436,7 +488,10 @@ fn apply_once(
         return Ok(solids);
     }
     let mut gone: Vec<usize> = Vec::new();
-    for (n, k) in targets(&ids(&solids), p, i)?.into_iter().enumerate() {
+    for (n, k) in targets(&ids(&solids), &sheets(&solids), p, i)?
+        .into_iter()
+        .enumerate()
+    {
         let salt = (n > 0).then(|| plain.id(solids[k].id));
         let body = std::mem::take(&mut solids[k].body);
         match add_tools(body, &ts, (i, plain.id(i)), salt) {
@@ -466,20 +521,34 @@ fn ids(solids: &[Solid]) -> Vec<usize> {
     solids.iter().map(|s| s.id).collect()
 }
 
-/// The bodies (positions in `ids`) a feature picks, or the current one: the last made.
-fn targets(ids: &[usize], p: Option<&Pick>, i: usize) -> Result<Vec<usize>, RegenError> {
-    let find = |id: usize| {
-        ids.iter().position(|&x| x == id).ok_or(RegenError::Body {
+/// The bodies (positions in `ids`) a feature picks, or the current one: the last solid made. A
+/// sheet (`sheet[k]`) holds no material to add to or cut: never the current body, left out of
+/// "all", and named is `OnSheet`.
+fn targets(ids: &[usize], sheet: &[bool], p: Option<&Pick>, i: usize) -> Result<Vec<usize>, RegenError> {
+    let find = |id: usize| match ids.iter().position(|&x| x == id) {
+        None => Err(RegenError::Body {
             feature: i,
             error: BodyError::NoBody { id },
-        })
+        }),
+        Some(k) if sheet.get(k) == Some(&true) => Err(RegenError::Body {
+            feature: i,
+            error: BodyError::OnSheet { id },
+        }),
+        Some(k) => Ok(k),
     };
+    let solid = |k: &usize| sheet.get(*k) != Some(&true);
     match p {
-        Some(Pick::All) => Ok((0..ids.len()).collect()),
+        Some(Pick::All) => Ok((0..ids.len()).filter(solid).collect()),
         Some(Pick::Some(want)) => want.iter().map(|&id| find(id)).collect(),
-        None if ids.is_empty() => Err(RegenError::NothingToCombine { feature: i }),
-        None => Ok(vec![ids.len() - 1]),
+        None => match (0..ids.len()).rev().find(solid) {
+            Some(k) => Ok(vec![k]),
+            None => Err(RegenError::NothingToCombine { feature: i }),
+        },
     }
+}
+
+fn sheets(solids: &[Solid]) -> Vec<bool> {
+    solids.iter().map(|s| s.body.is_sheet()).collect()
 }
 
 /// The names a feature works on (edges, faces), which say which bodies it is on.
@@ -524,16 +593,23 @@ fn named_targets(
     p: Option<&Pick>,
     names: &[Name],
     i: usize,
+    sheets_ok: bool,
 ) -> Result<Vec<usize>, RegenError> {
     if p.is_none() {
         let on: Vec<usize> = (0..solids.len())
             .filter(|&k| names.iter().any(|&n| holds(&solids[k].body, n)))
             .collect();
+        if let Some(&k) = on.iter().find(|&&k| !sheets_ok && solids[k].body.is_sheet()) {
+            return Err(RegenError::Body {
+                feature: i,
+                error: BodyError::OnSheet { id: solids[k].id },
+            });
+        }
         if !on.is_empty() {
             return Ok(on);
         }
     }
-    targets(&ids(solids), p, i)
+    targets(&ids(solids), &sheets(solids), p, i)
 }
 
 /// A fillet, chamfer, shell or draft cut down to the names `b` holds.
@@ -582,7 +658,9 @@ fn modify_on(
             .find(|&&n| !on.iter().any(|&k| holds(&solids[k].body, n)))
             .copied()
     };
-    let mut on = named_targets(solids, p, &all, i)?;
+    // a thicken may name a sheet's faces: its slab joins the current solid (or is a body)
+    let thicken = matches!(f, Feature::Edit(Edit::Thicken { .. }));
+    let mut on = named_targets(solids, p, &all, i, thicken)?;
     let finishing: Vec<usize> = match missing(solids, &on) {
         Some(_) => (0..solids.len()).collect(),
         None => on.clone(),
@@ -595,7 +673,7 @@ fn modify_on(
             crate::finish_canonical(b)
         };
     }
-    on = named_targets(solids, p, &all, i)?;
+    on = named_targets(solids, p, &all, i, thicken)?;
     // a name on no body this feature works on is an error, never a step left out
     if let Some(name) = missing(solids, &on) {
         return Err(RegenError::MissingEdge { feature: i, name });
@@ -609,6 +687,38 @@ fn modify_on(
         };
         // on every body picked, none of the names on this one: nothing to do here
         if crate::names_nothing(&g) && !crate::names_nothing(f) {
+            continue;
+        }
+        if let Feature::Edit(Edit::Thicken {
+            faces,
+            thickness,
+            side,
+            op: top,
+        }) = &*g
+            && solids[k].body.is_sheet()
+        {
+            let slab = Feature::Edit(Edit::Thicken {
+                faces: faces.clone(),
+                thickness: *thickness,
+                side: *side,
+                op: Combine::New,
+            });
+            let slab = modify(plain, &slab, i, &solids[k].body, threads)?;
+            match targets(&ids(solids), &sheets(solids), None, i) {
+                Ok(t) if *top != Combine::New => {
+                    let shape = part_shape(&slab);
+                    let tool = (slab, *top, shape);
+                    let t = t[0];
+                    let body = std::mem::take(&mut solids[t].body);
+                    solids[t].body = add_tools(body, &[tool], (i, plain.id(i)), None)?;
+                }
+                // with no solid yet, an added slab is the first
+                Err(RegenError::NothingToCombine { .. }) if *top == Combine::Add => {
+                    new.push(Solid { id: i, body: slab })
+                }
+                Err(e) => return Err(e),
+                Ok(_) => new.push(Solid { id: i, body: slab }),
+            }
             continue;
         }
         let out = modify(plain, &g, i, &solids[k].body, threads)?;
@@ -769,9 +879,16 @@ fn body_feature(
             keep,
         } => {
             let t = find(solids, *target, i)?;
+            for &id in std::iter::once(target).chain(tools) {
+                if let Ok(k) = find(solids, id, i)
+                    && solids[k].body.is_sheet()
+                {
+                    return Err(bad(BodyError::OnSheet { id }));
+                }
+            }
             // both bodies finished parts: their arenas in order of name, so nothing the
             // booleans make follows the order they were built in (docs/naming.md, Arena order)
-            let mut body = solids[t].body.clone().into_canonical();
+            let mut body = solids[t].body.clone_roomy().into_canonical();
             for (n, &id) in tools.iter().enumerate() {
                 if id == *target {
                     return Err(bad(BodyError::SameBody { id }));
@@ -793,7 +910,7 @@ fn body_feature(
         }
         BodyFeature::Split { by, keep } => {
             let surface = cutter(plain, i, by)?;
-            let on = targets(&ids(solids), p, i)?;
+            let on = targets(&ids(solids), &sheets(solids), p, i)?;
             if *keep == Keep::Both && on.len() != 1 {
                 return Err(bad(BodyError::NotOne));
             }
@@ -834,7 +951,7 @@ fn body_feature(
                     return Err(bad(BodyError::NoFace { name: n }));
                 }
             }
-            for k in named_targets(solids, p, faces, i)? {
+            for k in named_targets(solids, p, faces, i, false)? {
                 let mine: Vec<Name> = faces
                     .iter()
                     .copied()
@@ -864,17 +981,26 @@ fn body_feature(
         }
         BodyFeature::Move { steps, copy } => {
             let m = motion(steps);
-            let on = targets(&ids(solids), p, i)?;
+            // a move takes any body, a sheet too
+            let on = targets(&ids(solids), &[], p, i)?;
             let pe = |error: PatternError| RegenError::Pattern { feature: i, error };
             if *copy {
                 let [k] = on[..] else {
                     return Err(bad(BodyError::NotOne));
                 };
-                let body = moved(&solids[k].body.compact(), &m, |n| salted(n, "copy", me)).map_err(pe)?;
+                let mut body = moved(&solids[k].body.compact(), &m, |n| salted(n, "copy", me)).map_err(pe)?;
+                // (a moved copy of a sheet is a sheet)
+                if solids[k].body.is_sheet() {
+                    body.mark_sheet();
+                }
                 solids.push(Solid { id: i, body });
             } else {
                 for k in on {
+                    let sheet = solids[k].body.is_sheet();
                     solids[k].body = moved(&solids[k].body.compact(), &m, |n| n).map_err(pe)?;
+                    if sheet {
+                        solids[k].body.mark_sheet();
+                    }
                 }
             }
         }
@@ -1083,17 +1209,9 @@ fn build_each(plain: History<'_>, start: usize, threads: usize) -> Result<Vec<Ve
         out.extend(some(start..plain.len())?);
         return Ok(out);
     }
-    let chunk = n.div_ceil(threads);
-    let built: Vec<Result<Vec<Vec<Tool>>, RegenError>> = forge_math::par::scope(|s| {
-        let hs: Vec<_> = (start..plain.len())
-            .step_by(chunk)
-            .map(|a| {
-                let some = &some;
-                s.spawn(move || some(a..(a + chunk).min(plain.len())))
-            })
-            .collect();
-        hs.into_iter().map(|h| h.join().expect("tool builder")).collect()
-    });
+    // one feature at a time, in order; helpers join only once the work has run long enough to
+    // pay for them (a small part's tools never do)
+    let built = forge_math::par::map_adaptive(n, threads, 1, |k| some(start + k..start + k + 1));
     for b in built {
         out.extend(b?);
     }
@@ -1197,7 +1315,14 @@ fn nary_pass(features: History<'_>, threads: usize) -> Result<Vec<Solid>, RegenE
             _ if ts.is_empty() => {}
             _ => {
                 let ids: Vec<usize> = runs.iter().map(|r| r.id).collect();
-                let on = targets(&ids, p, i)?;
+                let sheet: Vec<bool> = runs
+                    .iter()
+                    .map(|r| match &r.base {
+                        Ok(b) => b.is_sheet(),
+                        Err(t) => t.0.is_sheet(),
+                    })
+                    .collect();
+                let on = targets(&ids, &sheet, p, i)?;
                 // a cut or an intersect may have emptied a body, and then this add belongs to what
                 // is left, not to it (one run would make the tool a body of its own): `nary` goes
                 // one at a time

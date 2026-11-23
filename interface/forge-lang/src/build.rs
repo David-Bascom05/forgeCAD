@@ -30,6 +30,8 @@ pub struct Span {
     pub solid: usize,
     pub faces: std::ops::Range<u32>,
     pub edges: std::ops::Range<u32>,
+    /// The body is a sheet (a surface, no material: `Face::sheet` on its faces).
+    pub sheet: bool,
 }
 
 impl Stage {
@@ -56,7 +58,7 @@ impl Stage {
             // one solid: finished into the view itself; several: each finished once, kept for
             // what looks at them one by one (validity, each one's mass)
             let several = self.solids.len() > 1;
-            let mut alone = (!several).then(|| forge_model::finish(self.solids[0].body.clone()));
+            let mut alone = (!several).then(|| forge_model::finish(self.solids[0].body.clone_roomy()));
             let each: &[Body] = if several { self.finished() } else { &[] };
             all.reserve_appends(each.iter());
             for (k, s) in self.solids.iter().enumerate() {
@@ -69,6 +71,8 @@ impl Stage {
                     solid: s.id,
                     faces: f..all.faces.len() as u32,
                     edges: e..all.edges.len() as u32,
+                    // (a body's faces are all a sheet's or none: its first says)
+                    sheet: all.faces.get(f as usize).is_some_and(|x| x.sheet),
                 });
             }
             let _ = self.spans.set(spans);
@@ -97,7 +101,7 @@ impl Stage {
         self.finished.get_or_init(|| {
             self.solids
                 .iter()
-                .map(|s| forge_model::finish(s.body.clone()))
+                .map(|s| forge_model::finish(s.body.clone_roomy()))
                 .collect()
         })
     }

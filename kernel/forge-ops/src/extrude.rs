@@ -68,7 +68,7 @@ pub(crate) fn prepared(profile: &Profile, distance: f64) -> Result<Profile, Extr
 }
 
 /// Where a builder puts what it makes: a Body (its one shell) or its entities alone.
-trait Sink {
+pub(crate) trait Sink {
     fn add_vertex(&mut self, p: Point3, name: Name) -> VertexId;
     fn add_edge(
         &mut self,
@@ -126,17 +126,17 @@ impl Sink for Unlinked {
     }
 }
 
-struct Builder<'a, B> {
-    profile: &'a Profile,
-    d: f64,
-    body: B,
+pub(crate) struct Builder<'a, B> {
+    pub(crate) profile: &'a Profile,
+    pub(crate) d: f64,
+    pub(crate) body: B,
     start_name: Name,
     end_name: Name,
     root: Name,
 }
 
 /// The pieces made for one profile segment.
-struct Wall {
+pub(crate) struct Wall {
     bottom: EdgeId,
     top: EdgeId,
     /// True when the profile direction runs with the edge curve's parameter.
@@ -144,7 +144,7 @@ struct Wall {
 }
 
 impl<'a, B: Sink> Builder<'a, B> {
-    fn new(profile: &'a Profile, d: f64, root: Name, body: B) -> Self {
+    pub(crate) fn new(profile: &'a Profile, d: f64, root: Name, body: B) -> Self {
         Builder {
             profile,
             d,
@@ -155,16 +155,16 @@ impl<'a, B: Sink> Builder<'a, B> {
         }
     }
 
-    fn frame(&self) -> &Frame {
+    pub(crate) fn frame(&self) -> &Frame {
         &self.profile.plane
     }
-    fn up(&self) -> UnitVec3 {
+    pub(crate) fn up(&self) -> UnitVec3 {
         self.frame().z()
     }
-    fn at(&self, p: Point2, level: f64) -> Point3 {
+    pub(crate) fn at(&self, p: Point2, level: f64) -> Point3 {
         self.frame().plane_point(p) + self.up() * level
     }
-    fn side_name(&self, id: u64) -> Name {
+    pub(crate) fn side_name(&self, id: u64) -> Name {
         crate::roles::side(self.root, id)
     }
 
@@ -193,12 +193,12 @@ impl<'a, B: Sink> Builder<'a, B> {
         self.body
     }
 
-    fn cap_name(&self, top: bool) -> Name {
+    pub(crate) fn cap_name(&self, top: bool) -> Name {
         if top { self.end_name } else { self.start_name }
     }
 
     /// Walls for a loop of lines and arcs: one vertical edge at each joint.
-    fn chain_walls(&mut self, segs: &[(Segment, u64)]) -> Vec<Wall> {
+    pub(crate) fn chain_walls(&mut self, segs: &[(Segment, u64)]) -> Vec<Wall> {
         let n = segs.len();
         let names: Vec<Name> = segs.iter().map(|(_, id)| self.side_name(*id)).collect();
         // two segments meet twice (a half disc): each joint also takes the segment starting there
@@ -260,7 +260,7 @@ impl<'a, B: Sink> Builder<'a, B> {
 
     /// The wall surface of a segment, its curve at the bottom, the curve's
     /// parameter range, and whether the profile runs with that parameter.
-    fn segment_geometry(&self, s: &Segment) -> (Surface, bool, Curve, Interval, bool) {
+    pub(crate) fn segment_geometry(&self, s: &Segment) -> (Surface, bool, Curve, Interval, bool) {
         let f = *self.frame();
         match *s {
             Segment::Spline(ref c) => {
@@ -317,7 +317,7 @@ impl<'a, B: Sink> Builder<'a, B> {
 
     /// A whole circle: one vertex at angle 0 on each cap, a closed edge on
     /// each cap, and a seam edge the wall uses twice.
-    fn circle_wall(&mut self, center: Point2, radius: f64, ccw: bool, id: u64) -> Wall {
+    pub(crate) fn circle_wall(&mut self, center: Point2, radius: f64, ccw: bool, id: u64) -> Wall {
         let name = self.side_name(id);
         let axis = self.frame().with_origin(self.at(center, 0.0));
         let start = Point2::new(center.x + radius, center.y);

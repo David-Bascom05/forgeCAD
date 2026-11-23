@@ -14,11 +14,16 @@ pub mod rebuild;
 pub mod revolve;
 pub mod roles;
 mod selfx;
+mod sheet_chain;
+pub mod sheet_extrude;
+pub mod sheet_revolve;
 pub mod shell;
 mod skin;
 pub mod strip;
 pub mod sweep;
 pub mod taper;
+mod taper_events;
+mod taper_spline;
 pub mod thicken;
 mod wavefront;
 
@@ -34,11 +39,13 @@ pub use loft::{Apex, LoftError, LoftGuides, LoftKind, LoftOptions, loft, loft_an
 pub use profile::{Profile, ProfileError, ProfileLoop, Segment, Touch};
 pub use rebuild::RebuildError;
 pub use revolve::{Axis2, RevolveError, revolve, revolve_cutter};
+pub use sheet_extrude::extrude_sheet;
+pub use sheet_revolve::revolve_sheet;
 pub use shell::{ShellError, offset_solid, shell};
 pub use strip::{face_fillet, full_round};
 pub use sweep::{
     CoilError, Handed, PathSeg, Stretch, SweepError, Winding, Wound, coil, coil_motion, sweep,
-    sweep_stretches,
+    sweep_stretches, sweep_unchecked,
 };
 pub use taper::{TaperError, closes_at, tapered};
 pub use thicken::{ThickenError, thicken};

@@ -69,6 +69,7 @@ fn kind(p: &Problem) -> &'static str {
         Problem::ShellsOverlap { .. } => "ShellsOverlap",
         Problem::ShellEuler { .. } => "ShellEuler",
         Problem::VertexFans { .. } => "VertexFans",
+        Problem::SheetMeetsSolid { .. } => "SheetMeetsSolid",
         Problem::BackLink { .. } => "BackLink",
         Problem::ShellFaces { .. } => "ShellFaces",
         Problem::ShellDisconnected { .. } => "ShellDisconnected",
@@ -98,7 +99,8 @@ fn invalid(ev: &mut Eval, solid: Option<usize>, body: &Body, p: &Problem) -> Inv
         }
         Problem::EdgeUses { edge: e, .. }
         | Problem::EdgeUsesSameWay { edge: e }
-        | Problem::EdgeDegenerate { edge: e } => at.push(edge(ev, e)),
+        | Problem::EdgeDegenerate { edge: e }
+        | Problem::SheetMeetsSolid { edge: e } => at.push(edge(ev, e)),
         Problem::VertexOffEdge { edge: e, vertex, .. } => {
             at.push(edge(ev, e));
             at.push(format!("corner {:?}", body.vertex(vertex).name));

@@ -406,7 +406,56 @@ impl Segment {
             Segment::Circle { radius, .. } => !(radius > tol::MIN_LENGTH && radius < f64::INFINITY),
         }
     }
+    /// The least and greatest of `(p - origin) · dir` over the segment, exactly for lines, arcs
+    /// and circles: the ends, and where an arc passes the directions `±dir` from its centre
+    /// (research/sweep-spec/DESIGN.md §3.1). A spline's from its samples (`side_samples`): its
+    /// exact test is the spun surface's root check.
+    pub fn reach(&self, origin: Point2, dir: Vec2) -> (f64, f64) {
+        let at = |p: Point2| (p - origin).dot(dir);
+        match *self {
+            Segment::Line { a, b } => {
+                let (x, y) = (at(a), at(b));
+                (x.min(y), x.max(y))
+            }
+            Segment::Circle { center, radius, .. } => {
+                let c = at(center);
+                let r = radius * dir.length();
+                (c - r, c + r)
+            }
+            Segment::Arc {
+                center,
+                radius,
+                start,
+                sweep,
+            } => {
+                let (x, y) = (
+                    at(arc_point(center, radius, start)),
+                    at(arc_point(center, radius, start + sweep)),
+                );
+                let (mut lo, mut hi) = (x.min(y), x.max(y));
+                let (a, b) = (start.min(start + sweep), start.max(start + sweep));
+                let c = at(center);
+                let r = radius * dir.length();
+                let up = dmath::atan2(dir.y, dir.x);
+                for (angle, v) in [(up, c + r), (up + dmath::PI, c - r)] {
+                    if angle + ((a - angle) / dmath::TAU).ceil() * dmath::TAU <= b {
+                        lo = lo.min(v);
+                        hi = hi.max(v);
+                    }
+                }
+                (lo, hi)
+            }
+            Segment::Spline(_) => self
+                .side_samples()
+                .into_iter()
+                .fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), p| {
+                    (lo.min(at(p)), hi.max(at(p)))
+                }),
+        }
+    }
+
     /// Points telling which side of a line the segment lies on: a line's ends do.
+    #[inline]
     pub fn side_samples(&self) -> Vec<Point2> {
         match *self {
             Segment::Line { a, b } => vec![a, b],
@@ -691,6 +740,14 @@ fn blunt_cusps(l: &ProfileLoop) -> ProfileLoop {
 }
 
 impl Profile {
+    /// Whether the region holds `p` (in its plane's coordinates): inside the outer loop and in no
+    /// hole, by the exact crossing parity of each loop (lines and arcs exact, splines by their
+    /// roots).
+    pub fn holds(&self, p: Point2) -> bool {
+        let mut loops = self.loops.iter();
+        loops.next().is_some_and(|outer| loop_holds(outer, p)) && loops.all(|h| !loop_holds(h, p))
+    }
+
     /// Checks the profile and returns it with the outer loop counter-clockwise
     /// and every hole clockwise; a loop that crosses or touches itself is refused.
     pub fn normalized(&self) -> Result<Profile, ProfileError> {
@@ -923,6 +980,21 @@ impl Profile {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn holds_is_the_region() {
+        let mut hole = Profile::circle(Point2::new(5.0, 5.0), 2.0, 10);
+        hole.segments.iter_mut().for_each(|(s, _)| *s = s.reversed());
+        let p = Profile {
+            plane: Frame::WORLD,
+            loops: vec![Profile::rectangle(Point2::ORIGIN, 10.0, 10.0, 0), hole],
+        };
+        assert!(p.holds(Point2::new(1.0, 1.0)));
+        assert!(!p.holds(Point2::new(5.0, 5.0)), "in the hole");
+        assert!(p.holds(Point2::new(5.0, 7.5)), "between the hole and the rim");
+        assert!(!p.holds(Point2::new(11.0, 5.0)), "outside");
+        assert!(!p.holds(Point2::new(5.0, -1e-3)), "a hair outside");
+    }
+
     use super::*;
 
     #[test]

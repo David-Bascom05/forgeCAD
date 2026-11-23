@@ -44,6 +44,17 @@ pub fn rebuild(body: &mut Body, changed: &[bool]) -> Result<(), RebuildError> {
 /// Solves the flagged vertices onto the surfaces around them, then fits the flagged edges between
 /// their vertices. Each one's current geometry is the starting guess.
 pub fn rebuild_some(body: &mut Body, verts: &[bool], edges: &[bool]) -> Result<(), RebuildError> {
+    rebuild_some_reach(body, verts, edges, 0.0)
+}
+
+/// `rebuild_some`, where an edge may lie up to `reach` from its old curve though its vertices did not
+/// move: a thickened skin's edges, placed where they end but with the base's curves as the guess.
+pub fn rebuild_some_reach(
+    body: &mut Body,
+    verts: &[bool],
+    edges: &[bool],
+    reach: f64,
+) -> Result<(), RebuildError> {
     let mut vedges: Vec<Vec<EdgeId>> = vec![Vec::new(); body.vertices.len()];
     for e in body.edge_ids() {
         let edge = body.edge(e);
@@ -108,6 +119,9 @@ pub fn rebuild_some(body: &mut Body, verts: &[bool], edges: &[bool]) -> Result<(
         {
             cons.extend(seam_constraints(&s, p0, cons.len()));
         }
+        // a drafted spline wall moves its points along its rulings: the vertex starts where its
+        // ruling now is, at its height (where the old point's foot on the section says)
+        let p0 = cons.iter().find_map(|s| ruled_start(s, p0)).unwrap_or(p0);
         let mut p = solve_point(&cons, p0).ok_or(RebuildError::Vertex {
             vertex: body.vertices[v].name,
         })?;
@@ -160,9 +174,12 @@ pub fn rebuild_some(body: &mut Body, verts: &[bool], edges: &[bool]) -> Result<(
         if !closed && ps.distance(pe) <= tol::LINEAR {
             return Err(RebuildError::Collapsed { edge: name });
         }
-        let shift = ps
+        let mut shift = ps
             .distance(old_pts[vs.index()])
             .max(pe.distance(old_pts[ve.index()]));
+        if reach > 0.0 {
+            shift = shift.max(reach);
+        }
         // (a seam on a procedural surface round an axis has no meridian to meet)
         let (curve, range) = b
             .as_ref()
@@ -235,11 +252,46 @@ fn meridian(s: &Surface, p: Point3) -> Option<Surface> {
     Some(Surface::Plane(Plane::new(Frame::from_zx(o, n, radial)?)))
 }
 
+/// A drafted spline wall's seam: the plane through its ruling at `p`, across the section (the
+/// vertex stays on the ruling, as a revolve's does on its meridian).
+fn ruling(s: &Surface, p: Point3) -> Option<Surface> {
+    let Surface::Procedural(w) = s else {
+        return None;
+    };
+    w.as_any()?.downcast_ref::<forge_geom::spline::Drafted>()?;
+    let d = w.deriv(w.project(p));
+    let n = d.du - d.dv * (d.du.dot(d.dv) / d.dv.dot(d.dv));
+    Some(Surface::Plane(Plane::new(Frame::from_z(d.p, n.normalize()?))))
+}
+
+/// Where a plane across a drafted spline wall's sweep cuts it: the section there, exactly.
+fn section_of(p: &Plane, s: &Surface) -> Option<(Curve, forge_geom::intersect::Contact)> {
+    let Surface::Procedural(w) = s else {
+        return None;
+    };
+    let d = w.as_any()?.downcast_ref::<forge_geom::spline::Drafted>()?;
+    let z = d.frame().z();
+    if p.normal_vec().cross(z).length() > tol::ANGULAR {
+        return None;
+    }
+    let v = z.dot(p.frame.origin - d.frame().origin);
+    Some((d.section_at(v), forge_geom::intersect::Contact::Crossing))
+}
+
+/// On a drafted spline wall, the point at `p`'s foot and height.
+fn ruled_start(s: &Surface, p: Point3) -> Option<Point3> {
+    let Surface::Procedural(w) = s else {
+        return None;
+    };
+    w.as_any()?.downcast_ref::<forge_geom::spline::Drafted>()?;
+    Some(w.deriv(w.project(p)).p)
+}
+
 /// Extra planes pinning a vertex that the surfaces around it leave free: the meridian of a
 /// seam, or two planes through the axis for a pole.
 fn seam_constraints(s: &Surface, p: Point3, have: usize) -> Vec<Surface> {
     let Some((o, z)) = axis_of(s) else {
-        return Vec::new();
+        return ruling(s, p).into_iter().take(3 - have.min(3)).collect();
     };
     let radial = (p - o) - z * z.dot(p - o);
     if radial.length() > tol::LINEAR {
@@ -576,7 +628,18 @@ fn edge_curve(
     let old_mid = oc.eval(or.mid());
     let guess = refine(a, b, old_mid).unwrap_or(old_mid);
     let analytic = match (a, b) {
+        (Surface::Plane(p), s) | (s, Surface::Plane(p)) if section_of(p, s).is_some() => {
+            SurfaceSurface::Curves(section_of(p, s).into_iter().collect())
+        }
         (Surface::Plane(p), s) | (s, Surface::Plane(p)) => plane_surface(p, s),
+        (Surface::Cone(_), Surface::Cone(_)) => match cones_meet(a, b) {
+            Some(cs) => SurfaceSurface::Curves(
+                cs.into_iter()
+                    .map(|c| (c, forge_geom::intersect::Contact::Crossing))
+                    .collect(),
+            ),
+            None => SurfaceSurface::NotAnalytic,
+        },
         _ => SurfaceSurface::NotAnalytic,
     };
     let curves: Vec<Curve> = match analytic {
@@ -586,13 +649,34 @@ fn edge_curve(
                 .bbox(or)
                 .hull(&Box3::from_points([ps, pe, guess]))
                 .grow(2.0 * shift + 10.0 * tol::LINEAR);
-            trace(a, b, region)?
+            // (none traced: perhaps two cones meeting on a plane, below)
+            trace(a, b, region)
+                .unwrap_or_default()
                 .into_iter()
                 .map(|c| Curve::Intersection(std::sync::Arc::new(c)))
                 .collect()
         }
         _ => return None,
     };
+    let best = fitted(curves, oc, or, ps, pe, closed, guess);
+    if best.is_none() {
+        // two cones on parallel axes with one slope, as a taper's walls where two arcs meet: the
+        // conic they meet on, which tracing loses where they come to touch
+        return fitted(cones_meet(a, b)?, oc, or, ps, pe, closed, guess);
+    }
+    best
+}
+
+/// Of `curves` (each either way), the one through `ps` and `pe` nearest `guess` at its middle.
+fn fitted(
+    curves: Vec<Curve>,
+    oc: &Curve,
+    or: Interval,
+    ps: Point3,
+    pe: Point3,
+    closed: bool,
+    guess: Point3,
+) -> Option<(Curve, Interval)> {
     let mut best: Option<(f64, Curve, Interval)> = None;
     for c in curves {
         for c in [reversed(&c), c] {
@@ -614,6 +698,45 @@ fn edge_curve(
         }
     }
     best.map(|b| (b.1, b.2))
+}
+
+/// Two cones on parallel axes with one slope meet on a plane: measured along a's axis each radius
+/// is linear in the height s, `α + β s`, and `|u|² = ρa²`, `|u - w|² = ρb²` (u, w across the axis)
+/// differ by `2 u.w + 2 (αb βb - αa βa) s = |w|² - αb² + αa²` where `βa² = βb²`. The curves are that
+/// plane's cut of a (exact conics), or None for any other pair.
+#[cold]
+#[inline(never)]
+fn cones_meet(a: &Surface, b: &Surface) -> Option<Vec<Curve>> {
+    let (Surface::Cone(a), Surface::Cone(b)) = (a, b) else {
+        return None;
+    };
+    let z = a.frame.z();
+    let zb = b.frame.z();
+    let same = z.dot(zb);
+    if z.cross(zb).length() > tol::ANGULAR {
+        return None;
+    }
+    let (aa, ba) = (a.radius, a.tan_a());
+    // b's v runs along z or against it; its radius at a's height s
+    let sb = (b.frame.origin - a.frame.origin).dot(z.get());
+    let bb = b.tan_a() * same.signum();
+    let ab = b.radius - bb * sb;
+    if (ba * ba - bb * bb).abs() > 1e-12 * ba * ba {
+        return None;
+    }
+    let w = (b.frame.origin - a.frame.origin) - z * sb;
+    if w.length() <= tol::LINEAR {
+        return None;
+    }
+    let n = w + z * (ab * bb - aa * ba);
+    let k = 0.5 * (w.dot(w) - ab * ab + aa * aa);
+    let len = n.length();
+    let normal = (n * (1.0 / len)).normalize()?;
+    let plane = Plane::new(Frame::from_z(a.frame.origin + n * (k / (len * len)), normal));
+    match forge_geom::intersect::plane_cone(&plane, a) {
+        SurfaceSurface::Curves(cs) => Some(cs.into_iter().map(|c| c.0).collect()),
+        _ => None,
+    }
 }
 
 #[cfg(test)]

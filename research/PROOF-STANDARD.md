@@ -52,7 +52,7 @@ has been reported to the master.
 
 | Feature | Owner session (branch suffix) | Has | Next |
 |---|---|---|---|
-| Boolean, flat | decide-once-lean, decide-once (Rust), ieee | L1 L2 L3 L4 L5 (partial L6). L4: `forge_bool_core::core` end to end, `end_to_end_proof` (no hypotheses; size limits in `LedgerWF`/`LFits`) | the bridge's `build_ledger` to L4 (`LedgerWF` on its Aeneas skeleton; debug_assert meanwhile); local ledger: `LocalCompat` (dol-jordan) and its other `ExactIn` clauses |
+| Boolean, flat | decide-once-lean, decide-once (Rust), ieee | L1 L2 L3 L5 (partial L4, L6). L4 for the forge-bool-core cores (v1 `end_to_end_proof`; A8 inc `incCoreSpec_proof`, `endToEndF_proof`), kept as spec and oracle. The shipped old path (boolean.rs) is the target: owner ruling 2026-11-23 | the old path end to end, as written (research/decide-once/old-path-statements.md §E, §D, §G) |
 | Boolean, curved | exact-curved, trace, dol-curved (decide-once design: research/decide-once/curved-design.md) | L1 (quadrics) | L2 executable, L3; decide-once Q0 done: (c) and (c′) for any carriers, flat as an instance (`exactK_of_exact`), `qform_compat` (DecideOnce/{Curved, CorrectK, LocalK, QForm, FlatK}.lean); Q1 next |
 | Fillets / rounds | fillet-spec, fillets, conic-fillet | — | L1 (ball closing), L2 |
 | Splines | spline-spec | — | L1, L2 oracle |
@@ -65,7 +65,7 @@ has been reported to the master.
 | Sketch solver | fundamentals (item 5) | — | L1 |
 | Intersection tracing | trace | step lemma (Krawczyk) | phase B, binary64 |
 | .fg language | ieee (language proofs) | lexer, LL(1), edits, reparse | — |
-| Extrude / revolve / sweep / loft / coil / thread | sweep-spec | — | L1 |
+| Extrude / revolve / sweep / loft / coil / thread | sweep-spec | extrude: L1 (`Prism`, `through_finite`), L2 over ℚ (polygons), L6 (`sweep-diff`, interim L4); taper: L1 algebra (mitre, events linear), the decided rule, L2 over ℚ (rational edge lengths), L6; revolve: lt_mul_sqrt_iff, reach_arc, CrossesAxis exact; coil: coil_injective, exact TurnsTouch; loft: ruled_translate, L2 over ℚ (homothetic), L6 | revolve L2 (QForm or the sign lemma over Fillet.Rev); taper over Alg (research/sweep-spec) |
 | Shell / draft / hole / rib / chamfer / pattern-of-features | ops-spec, fix-shell, fix-draft | L1 partial: pattern P1–P3, hole H1 H3 H4, chamfer C1 C2 (plane pair), draft D1–D3 (planes) | L1 recarrier, shell, rib; L2 reference; L6 harness |
 | Thicken | surfaces (thin/thicken) | — | L1 with ValidSheet |
 | Surfaces and thin | surfaces | — | ValidSheet with fundamentals |

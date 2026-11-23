@@ -237,14 +237,15 @@ revolve(PROFILE, axis: LINE, angle: A | sym(A) | two(A, B) | upto(FACES | WORKPL
                                     axis, `axis(E.start, E.end)` of a straight edge, `F.axis`,
                                     or the origin's `X`, `Y`, `Z` (else `BadValue`)
 hole(..), thread(..)                see Holes and threads
-fillet(EDGES, R, from: POINT, setbacks: [(POINT, d) | (POINT, EDGES, d)], only: false)
-fillet(groups: [(EDGES, R) | (EDGES, R, POINT), ..], setbacks: .., only: false)
+fillet(EDGES, R, from: POINT, setbacks: [(POINT, d) | (POINT, EDGES, d)], only: false, conic: RHO)
+fillet(groups: [(EDGES, R) | (EDGES, R, POINT), ..], setbacks: .., only: false, conic: RHO)
                                     R: r | vary(a, b) (linear along each edge) |
                                     vary([(t, r), ..]) (radii at fractions t of the way, 0 to 1,
                                     increasing; a smooth law through them). from: the vertex at
                                     POINT each edge's law starts from; setbacks: how far along
                                     the edges from the corner at POINT (one edge, or all) the
-                                    blends stop; only: the edges named, not their tangent chains
+                                    blends stop; only: the edges named, not their tangent chains;
+                                    conic: a conic section in place of the ball's arc (below)
 chamfer(EDGES, d, d2: D | angle: A, face: FACE, corner: "patch"|"point")
                                     d back along both faces; with d2, d along FACE and d2
                                     along the other face of each edge; with angle, d along
@@ -253,6 +254,25 @@ chamfer(EDGES, d, d2: D | angle: A, face: FACE, corner: "patch"|"point")
                                     corner get a flat triangle (patch) or run on to a point
 shell(t, open: FACES, out: false) hollow to walls t thick (out: outside the skin), FACES open
 ```
+
+A conic fillet (`conic: ratio(RHO)`, 0 < RHO < 1, one for the whole fillet) touches each face
+where the circular fillet of the same R does, r tan(phi/2) from the edge for faces turning by phi,
+so R is the setback's measure, not a radius of the result. Between those two feet its section is
+the conic tangent to both faces there: the rational quadratic through foot, apex and foot, the
+apex where the faces' tangent planes meet in the section's plane, with middle weight
+RHO / (1 - RHO). RHO is the shoulder ratio: the section crosses the line from the chord's middle
+to the apex RHO of the way along it. 0.5 is a parabola, below it an ellipse, above it a
+hyperbola; the circle is RHO = cos(phi/2) / (1 + cos(phi/2)), 0.4142 at a right angle. This is
+Onshape's conic fillet: its `radius` and `rho` are R and RHO. The surface is exact: on a
+straight edge the conic swept straight, on a circular edge between surfaces turned about one
+axis the conic turned, on any other edge (a post's root on a round bar) the conic carried along
+the ball's path in its section plane. Tangent chains meet in a shared conic section, two blends
+beside a sharp edge mitre (in the plane between them where one is the other's mirror image), and
+a blend runs out into the faces across its end. Refused, typed, at the place, where no exact
+conic stands: `ConicVertex` where the circular fillet would close a vertex with its ball (three
+blends at a corner, a pivot, a ball rolled on over the next face) or a setback is asked;
+`ConicEdge` for a varying R, a ball resting on a rim, beyond a smooth edge or across a face, or
+faces folding back to within a degree of each other; `BadValue` for RHO outside (0, 1).
 
 PROFILE: a sketch with one region, or one of its loops or closed entities (`S.outline`, `S.c`).
 A negative depth runs the other way. `upto(SKETCH)` ends on the sketch's plane (an edit
@@ -264,6 +284,63 @@ square to the sketch's normal, the depths measured along it); with `next` or `up
 `NotWith`. `flip: true` runs `thru` or `next` the other way (an extrude backwards, a cut out
 along the normal); on other extents it is `NotApplicable`. `bodies:` (as on holes) makes the
 extrude, cut or revolve act on those bodies, not the last made.
+
+### Sheets
+
+```
+extrude(PATH | PROFILE, d | sym(d) | two(f, b), surface: true)
+revolve(PATH | PROFILE, axis: LINE | AXIS, angle: A | sym(A) | two(A, B), surface: true)
+```
+
+- `surface: true` makes a sheet: a surface with no material, one face per piece of the chain, always
+  a body of its own named by the feature. PATH is what a sweep takes (a sketch line, arc, spline or
+  circle, a `path` block, or a list of them end to end, all of one sketch). A closed loop gives a tube
+  with no caps.
+- The pieces are read end to end, and a chain ends where it closes on its own start: so a closed
+  loop (a `rect`, `circle`, polygon or closed `path`), a list of loops, or each contour of a text's
+  glyph is a tube of its own, whatever else the sketch draws. A whole sketch gives the loops of its
+  one region, and a sketch with an open chain has none (`SketchProfile`), so name its loops instead.
+- The sheet's front (its faces' outward side) is the right of the chain walked with the sketch's
+  normal toward you. That is outside a loop, which is turned counter-clockwise first: each loop's
+  own outside, a hole's too, so `thin: t, side: "out"` on a plate and its bore thickens the bore
+  into the plate.
+- A sheet is never the body a solid feature acts on: an extrude, cut or hole goes to the last
+  solid. Naming a sheet's faces or edges in a fillet, chamfer, shell, draft or face edit, or naming
+  a sheet as a target or tool of `combine`, is the kernel's `OnSheet`. Bodies can be moved and
+  copied, and `upto(FACES)` ends on a sheet's face as on any face.
+- With `surface`, these are `NotWith`: `taper`, `along`, `flip`, `new` and `bodies`; on revolve,
+  `cut`, `keep` and an `upto` turn; a cut or intersect.
+- The part's volume, area and moments are its solids'. The build reports `sheet_area`, the sheets'
+  area, apart. A part of sheets alone measures volume 0 and area 0; its centroid is undefined and
+  reads as the origin.
+- `thicken(SHEET.faces, t, side:)` makes a slab from a sheet's faces. It adds to the current
+  solid, or cuts or keeps, or with `new: true` is a body of its own. The sheet stays.
+- STEP writes each sheet shell as an OPEN_SHELL (a CLOSED_SHELL where it has no boundary) in a
+  SHELL_BASED_SURFACE_MODEL.
+
+```
+sketch walls(on: plan.plane) {
+  path wall(start: (0, 40)) { line(to: (40, 40))  tarc(to: (50, 50)) }
+}
+skin = extrude(walls.wall, 20, surface: true)
+```
+
+```
+extrude(PATH | PROFILE, d | sym(d) | two(f, b), thin: t, side: "out"|"in"|"both", new: true, bodies: ..)
+cut(PATH | PROFILE, d | .., thin: t, side: ..)
+```
+
+A thin wall is that sheet thickened t, as `thicken` does it. "out" (the default) goes to the
+sheet's front, "in" to its back, and "both" t/2 to each side. Where the chain turns a corner, the
+wall's outer faces run on until they meet (a sharp mitre) and its inner faces stop where they
+cross. Lines offset to lines, arcs to concentric arcs, and a spline's wall to its exact offset
+surface. A wall whose offset reaches an arc's centre is the kernel's `Collapses`. A corner whose
+walls cannot meet in one face is `Crease`. With `thin`, these are `NotWith`: `taper`, `along`,
+`flip` and `surface`. `side` without `thin` is `NotWith` too.
+
+```
+fence = extrude(plan.wall, h, thin: t, side: "out")
+```
 
 ### Swept, wound and lofted shapes
 

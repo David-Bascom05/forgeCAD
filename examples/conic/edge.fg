@@ -1,0 +1,13 @@
+# A conic round on one edge of a block: the section between the ball's feet (r from the edge at
+# a right angle) is a parabola at rho 0.5. Taken off: H r^2 / 2 (1 - 2/3) = 83.333 mm3.
+shared L = 40
+shared W = 30
+shared H = 20
+param round.r = 5
+param round.rho = ratio(0.5)
+
+sketch plan(on: xy) {
+  outline = rect(corner: (0, 0), size: (L, W))
+}
+base = extrude(plan, H)
+round = fillet(edges(between: (base.side(plan.outline[1]), base.side(plan.outline[2]))), r, conic: rho)

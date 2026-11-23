@@ -444,12 +444,160 @@ needs three more things, beside A8:
 - about 0.4M from constants, for example witnesses fused into the builder's clipping and no
   HashMaps in the bridge.
 
+Measured today (decide-once Rust, plane-ledger-cells.md, e529a4f), per boolean on the proven v1
+core:
+
+| | coplanar | upto | housing |
+|---|---|---|---|
+| total | 6.0M | 5.5M | 2.2M |
+| fill | 4.0M | 4.15M | 1.57M |
+| core | 1.64M | 1.03M | |
+| write | 1.0M | 0.14M | |
+
+Of the plane cells `arrange` makes, only 10–15% become facets.
+
+**Measured face-arrangement sizes** (decide-once Rust, FORGE_A8_STATS: each real v1 ledger
+coarsened, joining fine facets across a fine edge that has exactly two of them round it, with one
+class and one holder set). Per boolean, fine → coarse:
+
+| | pieces → facets | edges | verts |
+|---|---|---|---|
+| coplanar | 46.7 → 17.1 | 72.4 → 40.8 | 30.1 → 26.9 |
+| upto | 54.0 → 16.8 | 103.5 → 53.2 | 53.2 → 41.2 |
+| housing | 19 → 12 | 28 → 20 | 12 → 12 |
+
+The §1a estimates (30/20/15 facets) were high for coplanar. R3's builder must reproduce these counts,
+up to seams: a cut along a carrier line adds one facet and the seam's edges.
+
 Housing and upto have the same phases, with fewer facets (15 and 20). They are 1 and 4 booleans, so
 they move their gate lines only slightly. Coplanar is the line that decides it.
 
 The per-phase split for upto and housing is asked of decide-once (Rust). **Risk:** if the last
 0.4M does not close, the switch stays off, and v1 stays proven and shipped-ready. A8 is still
 worth doing for curved: the same cells, and the Tier-1 separators move into the reference.
+
+## 3b. Provability of the speed steps (owner's rules, 2026-11-23)
+
+- **The shipped code is proven, not checked.** Proven code carries no runtime proof. Checks run in
+  debug builds, tests and CI only. Speed is measured in wall-clock time.
+  - So the builder (R3) is proven to produce a well-formed ledger (`LedgerWF2`) that refines the
+    plane ledger (`Refines`), and `inc::core` is proven against `coreMI` (`IncCoreSpec`).
+  - Release builds run neither `ledger_wf` nor a Refines check.
+- **The checker is an oracle, not a guard.** A Refines checker, plus `ledger_wf`, may live in
+  forge-bool-core, translated and proven (`ledger_wf ↔ LedgerWF2`, `refines_check ↔ Refines`).
+  - It is the debug assert's oracle, and a development aid for the builder.
+  - Its cost is measured separately and never counted as part of the boolean.
+  - It is never a permanent fallback path.
+- **Any optimisation that is provable is allowed, and the proof grows to cover it.** That covers
+  trim/split reuse, the whole-plane shortcut, the D7 memo, parallel planes, and anything faster.
+- **For each step, the Lean coordinator:**
+  - checks that it is provable;
+  - writes its statement here;
+  - plans the extra Lean, asking the master for more proof sessions when the volume grows.
+- **For each step, decide-once and bool-speed:**
+  1. keep its semantics a function of exact data (memo keys exact; parallel results merged in a
+     fixed order, so the ledger is a function of the input);
+  2. keep code inside forge-bool-core in Aeneas style (plain loops, no closures, iterators, maps,
+     floats or threads). Code outside it is proven through what it hands the core;
+  3. send the step's statement and commit for review before it is relied on.
+
+## 3b′. Owner rulings for both booleans (2026-11-23, later): prove the original
+
+"Prove the original bool, fix its bugs, and fall back to the proven one." "Prove the original
+implementation first." "Even the slow fallback should still be as fast as we can get it."
+
+1. **Today's code is the base.** It stays as it is wherever it is provable. Proofs target the
+   original functions (via Aeneas on the real code), not a parallel rewrite. Where A8 or curved wrap
+   a function, the proof is of the original plus its screen.
+2. **Guess steps become proven screens.** LINEAR snapping, the touch, the strays and pinched
+   heuristics, and the retry and re-snap ladders are each replaced by an f64 screen, proven via the
+   IEEE model, that answers *decided* or *undecided*.
+3. **Undecided goes exact for that question only.** Never to the whole exact reference, and never
+   to a whole-boolean switch of path.
+4. **If exact can't decide either, the boolean refuses** with a typed error. A wrong answer is never
+   allowed.
+5. **The exact references are fuzz oracles only.**
+6. **The exact per-question fallback is held to the speed rule too.** Provable speed steps on it are
+   welcome, with the proof growing alongside.
+7. **Order:** first prove today's code as it stands (pair loop, `Index`/`face_box`, `trim`,
+   `split_face`, `classify`, the meet chains), with only the guess steps swapped for screens. Only
+   then the exact fallback's speed work and further optimisations.
+
+**Owner decisions (2026-11-23, via the master).**
+- **Target: today's flat boolean, the old path** (boolean.rs, classify.rs, imprint.rs, nary.rs),
+  with its guess steps swapped for proven per-question screens. This is the same plan as curved.
+- **A8 is not shipped as a second boolean.** Its proven core (`IncCoreSpec`, `EndToEndF`) stays as a
+  spec and as a debug and fuzz oracle. The R3 builder proof for face_fast is dropped.
+- **No refactoring for the prover.** The code is proven as written. Charon running out of memory is
+  a tooling problem to fix, not a reason to restructure. A construct that truly can't translate once
+  the tooling is fixed goes to the master, named exactly.
+
+**Owner clarification (2026-11-23, later): A8 ships as the flat fallback.** "New perfect bool code
+can ship, but only as a fallback to faster code."
+- Flat booleans run today's path first. If it is undecided or would refuse, A8 (face_fast plus the
+  inc core) runs. If A8 can't decide either, the result is a typed refusal.
+- So the earlier line "A8 is not shipped as a second boolean" is superseded: A8 ships, as the
+  fallback only.
+- `boolean_correct`'s Ok case covers both branches. The A8 branch is proven by `IncCoreSpec` /
+  `EndToEndF` plus the R3 builder proof, which is back in scope after today's path's proofs.
+- An `Undecided` refusal now means both paths were undecided.
+
+**Order of Lean work.**
+1. IEEE: proven screens for today's guess steps (LINEAR snapping, the touch, strays, pinched, and
+   the retry and re-snap ladders as per-question screens).
+2. aeneas: fix Charon on boolean.rs and nary.rs as they stand. Then translate, in order: classify
+   (`Index`, `face_box`, `classify`), ssi and unify, imprint, boolean (pair loop `plan_once_in`,
+   `trim`, `split_face`, `classify_specs`, `touches`, the meet chain), and nary.
+3. Lean coordinator: refinement proofs of each translated function as it lands, against the Lean
+   models.
+4. dol-curved: the F-series, as the spec for today's curved code.
+5. Then R3 for face_fast (A8's branch), and the thin ≠ [] end-to-end theorem, which A8's branch needs
+   wherever thin rooms occur.
+6. After all of that: speed work on the exact per-question fallback.
+
+**Review of the plans against this ruling (Lean coordinator).** These assume a whole-boolean
+fallback, and must change to per-question exact plus a typed refusal:
+
+| where | what it assumes now | under the ruling |
+|---|---|---|
+| decide_once.rs `Skip` (`NotFlat`, `Ambiguous`, `Wide`) | the whole boolean leaves decide-once for the old path | each undecided question goes to its exact test; refuse if exact can't decide. `NotFlat` is scope, not a question: it routes by input kind, before any decision |
+| §3c keys/held (decide-once, 41afccb) | `vertex_at` failing near the region skips the whole boolean (`Skip::Ambiguous`) | the exact vertex for that meet only |
+| curved-brep-route.md §0.6 and §4 (`Uncertified`, `Budget`, `Tangent`, `NoSeed`) | counted skips, then the old path runs | per-question exact (exact vertex, exact second-order order, exact ray), then a typed refusal. `OutOfScope` routes by kind; `Inconsistent` is already a refusal (invalid input) |
+| today's boolean.rs retry and re-snap ladders | rerun the boolean with other tolerances | removed: a screen per question, exact for that question |
+
+Not affected: the A8 core proofs (`IncCoreSpec`, `EndToEndF`). The core decides nothing
+numerically. The checker/oracle rule of §3b stands.
+
+## 3c. The builder's speed steps as built (face_fast.rs), each with its correctness statement
+
+The builder is `kernel/forge-bool/src/decide_once/face_fast.rs`, outside forge-bool-core. It is
+proven through what it hands the core. In debug builds, its facets are asserted equal to
+face_builder's and to the plane ledger's coarsening on all 75 flat booleans (coplanar, upto,
+housing). Each step below is a statement for R3 to cover. f64 screens are proven in
+`verify/ieee754/IEEE754/Screen/Face.lean` (62120f5) unless marked "contract pending".
+
+| step | statement |
+|---|---|
+| keys | A vertex is `In(body, v)` or `M(a < b < c)`, the meet of three class planes. Equal keys are one point. A point is on every class in its `on` mask: an `M` point on its three classes; an input vertex on its round faces' classes when `Pts.held` (checked by `vertex_at` at input, so every plane round it holds its exact point). |
+| merge | Vertex = exact point. Points no axis keeps apart (`axis_sound`) are compared exactly. Two points of the current plane C that both lie on classes a and b, with C, a, b independent (the meets table holds their meet), are one point. |
+| line identity | Two points of line L = C∩K, both on a class h that crosses L (`crosses_line_sound`, else the exact d·n_h ≠ 0), are one point, so their order along L is 0. |
+| crossing | Edge (a, b) of a face on plane P meets plane K strictly between its ends iff side_K(a)·side_K(b) < 0, and the point is meet(C, K, across). An edge with an end on K adds that end. No other edge meets K. |
+| dependence | Three normals, each along one axis (one nonzero f64 component, so the exact Dy has one nonzero), are dependent iff two share an axis. Otherwise the exact det n_a·(n_b×n_c) decides. |
+| touch | A face's box is the hull of its vertices' shadows, each widened by its proven bound, so it holds the exact polygon; a class box is the hull of its faces'. A face whose box misses plane K has no vertex on K and no edge across K, so it adds no point to line C∩K and contains no point of it. No kernel-box premise (41afccb). |
+| bodies | Hypothesis `ValidSolid` (stated in §3c on decide-once's branch, coplanar adjacent faces included), for the snapped exact polygons: faces of one solid meet only along their common edges. So a stretch of C∩K inside a C face and a K face of the same body lies on that C face's boundary. Only different-body pairs need cutting. Source: the producing features' postcondition. forge_topo::check covers part of it in debug. |
+| whole plane | A plane whose faces are all of one body, each strictly inside the box (boxes grown by 4·LINEAR plus 1e-9 relative), with no near face of another body whose box meets both the plane and its faces' box, has its faces as its facets: one facet per face, holders {that face}. |
+| covered | A window of C∩K lying on one of C's boundary segments on the same line repeats that segment, so it is not added. |
+| inside cache | Face F's inside answer is constant on a run of windows that touch none of F's points (endpoints, crossings, ends on the line), because F's boundary meets the line only there. A face with an unlisted crossing (`always`: across far, across K, or a dependent meet) is retested every window. |
+| parity ray | For a point not on F's boundary, parity along any axis ray decides inside. The ray runs across the window's line. Results on F's boundary may differ from face_builder's, which changes segments only, never facets (asserted). |
+| edge index | An edge whose span on axis a (its points' shadows ± their bounds) misses [x − tol, x + tol] has both ends strictly on one side of the plane x_a = x (plane exact within tol), so it is skipped by `crossing`. In mid_in it is crosses_f's `false`. |
+| area | A face cycle of the planar graph is a bounded face's outer walk iff its signed area is > 0. Screened (contract pending), with the exact least-vertex turn as fallback. |
+| angle | Half-edges sorted by angle, on to_f64 of the exact line direction with an 8ε bound (fix (a), efd1d6f). The half-plane comes from the exact signs. |
+
+**D7, the ledger-outcome memo: tried and rejected (2026-11-23).**
+- What was tried: `core::core` memoized on the canonical ledger (only the faces the pieces name, renumbered monotonically, origin mapped back), with a full-equality check.
+- Coplanar seq: 70 booleans give 52 distinct ledgers, so at most 18 hits, and those are small ones.
+- Result: the core goes from 79.0M to 72.6M, saving 6.4M, while the memo costs 9.7M. Net: 3.3M worse. Not kept.
+- Many same-size ledgers differ, so "repeats" holds only up to relabelling, which needs a canonical form. Not pursued.
 
 ## 4. Order of work and gates
 

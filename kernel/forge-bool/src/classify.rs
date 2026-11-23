@@ -1,7 +1,7 @@
 use forge_geom::intersect::{Contact, LineSurface, line_surface};
 use forge_geom::{Curve, CurveGeom, Line, Surface, SurfaceGeom};
 use forge_math::predicates::triple;
-use forge_math::{Box2, Box3, Interval, Point2, Point3, Vec3, tol};
+use forge_math::{Box2, Box3, Interval, Point2, Point3, UnitVec3, Vec3, tol};
 use forge_topo::uv::{UvLoop, face_uv_loops, point_in_loops};
 use forge_topo::{Body, FaceId};
 
@@ -62,6 +62,8 @@ enum Simple {
 const SIMPLE_MARGIN: f64 = 1e-3;
 
 impl Simple {
+    // (out of line: folded into its lazy cell's initialiser it cost every classification more)
+    #[inline(never)]
     fn of(body: &Body, f: FaceId) -> Option<Simple> {
         let face = body.face(f);
         let [l] = face.loops[..] else { return None };
@@ -667,10 +669,7 @@ impl<'a> Index<'a> {
                 return Where::On;
             }
         }
-        'ray: for d in RAYS {
-            let dir = Vec3::new(d[0], d[1], d[2])
-                .normalize()
-                .expect("fixed ray directions are nonzero");
+        'ray: for &dir in &UNIT_RAYS {
             let line = Line::new(p, dir);
             let mut crossings = 0usize;
             for f in self.body.face_ids() {
@@ -802,6 +801,7 @@ fn other_turn_inside(body: &Body, f: FaceId, uv: Point2, info: &Drawn) -> bool {
 
 /// Fixed, deliberately irregular ray directions: a ray along one of these
 /// rarely grazes a model edge, and the next one is tried if it does.
+#[cfg(test)]
 const RAYS: [[f64; 3]; 8] = [
     [0.5773, 0.6071, 0.5463],
     [-0.3149, 0.8352, 0.4510],
@@ -812,6 +812,61 @@ const RAYS: [[f64; 3]; 8] = [
     [0.4402, -0.8577, -0.2657],
     [-0.0912, -0.2384, 0.9669],
 ];
+
+/// `RAYS` normalized, worked out once: the bits `Vec3::normalize` gives each
+/// (`unit_rays_are_rays_normalized` holds them to it), not a square root per point classified.
+static UNIT_RAYS: [UnitVec3; 8] = [
+    UnitVec3::new_unchecked(Vec3::new(
+        0.577216485702215,
+        0.6070121747268572,
+        0.5462209702738957,
+    )),
+    UnitVec3::new_unchecked(Vec3::new(
+        -0.3148807849863764,
+        0.8351490365850162,
+        0.450972480244064,
+    )),
+    UnitVec3::new_unchecked(Vec3::new(
+        0.7231184903762014,
+        -0.20170515766682315,
+        0.6606168921899027,
+    )),
+    UnitVec3::new_unchecked(Vec3::new(
+        -0.641769953034182,
+        -0.5527741197215578,
+        0.5315751122358541,
+    )),
+    UnitVec3::new_unchecked(Vec3::new(
+        0.19370319419200857,
+        0.4123067989951736,
+        -0.8902146797611049,
+    )),
+    UnitVec3::new_unchecked(Vec3::new(
+        -0.8835756975846523,
+        0.3090914985552467,
+        -0.35179032414019995,
+    )),
+    UnitVec3::new_unchecked(Vec3::new(
+        0.4401951974965928,
+        -0.8576906426461328,
+        -0.2656971012604378,
+    )),
+    UnitVec3::new_unchecked(Vec3::new(
+        -0.09119782906151849,
+        -0.23839432509063604,
+        0.966876983767349,
+    )),
+];
+
+#[cfg(test)]
+#[test]
+fn unit_rays_are_rays_normalized() {
+    for (d, u) in RAYS.iter().zip(&UNIT_RAYS) {
+        let n = Vec3::new(d[0], d[1], d[2]).normalize().expect("nonzero");
+        let bits = |v: Vec3| [v.x, v.y, v.z].map(f64::to_bits);
+        assert_eq!(bits(n.get()), bits(u.get()));
+    }
+}
 
 /// How far a loop polygon (default sampling, pi/16 per segment) can sit from
 /// a curved edge, plus tolerance.

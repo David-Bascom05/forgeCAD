@@ -716,15 +716,14 @@ pub enum Error {
     },
     /// A tapered extrude whose outline closes up before its depth (a lint): built to where it
     /// closes, the pyramid or ridge its walls make, `at` from its sketch where `depth` was asked.
-    /// The fixes: the param driving the depth set to `at`, or the one driving the taper set to the
-    /// largest angle that reaches the depth.
+    /// The fixes, `[depth, angle]`: the param driving the depth set to `at`, or the one driving
+    /// the taper set to the largest angle that reaches the depth.
     TaperCloses {
         span: Span,
         id: String,
         at: f64,
         depth: f64,
-        depth_fix: Option<Box<(ParamKey, Literal)>>,
-        angle_fix: Option<Box<(ParamKey, Literal)>>,
+        fixes: [Option<Box<(ParamKey, Literal)>>; 2],
     },
     /// A role anchor whose faces the part no longer has.
     NoFace {
@@ -1083,10 +1082,8 @@ impl Error {
                 value: fit.1,
             }],
             // as deep as it closes, or as steep as reaches the depth
-            TaperCloses {
-                depth_fix, angle_fix, ..
-            } => [depth_fix, angle_fix]
-                .into_iter()
+            TaperCloses { fixes, .. } => fixes
+                .iter()
                 .flatten()
                 .map(|f| Op::SetParam {
                     param: f.0.clone(),
@@ -1511,6 +1508,8 @@ fn regen_text(e: &forge_model::RegenError) -> String {
         G::NotClosed { what, .. } => format!("{what} is gone, so the part is no closed solid"),
         G::MissingEdge { name, .. } => format!("the part has no edge {name:?}"),
         G::Bodies { count } => format!("the part ends as {count} bodies, not one"),
+        // an edit's own error says why ("thicken: rebuild: vertex"), not the wrapper's name
+        G::Edit { error, .. } => words(error),
         G::Body {
             error: forge_model::BodyError::Pieces { pieces },
             ..

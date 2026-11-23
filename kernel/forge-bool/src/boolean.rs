@@ -450,7 +450,7 @@ pub fn boolean(a: &Body, b: &Body, op: Op, feature: u64) -> R<Body> {
     if let Some(r) = crate::decide_once::boolean(a, b, op)? {
         return Ok(r);
     }
-    let mut out = a.clone();
+    let mut out = a.clone_roomy();
     boolean_into(&mut out, b, op, feature)?;
     crate::unify::unify(&mut out);
     Ok(out.into_compact())
@@ -4493,7 +4493,9 @@ pub(crate) fn imprint(
                 }
             }
             ts.sort_by(f64::total_cmp);
-            let mut marks = vec![edge.range.lo];
+            // the ends and the crossings between: room for all at once
+            let mut marks = Vec::with_capacity(ts.len() + 2);
+            marks.push(edge.range.lo);
             marks.extend(
                 ts.iter()
                     .copied()
@@ -5441,7 +5443,8 @@ pub(crate) fn split_face(
         if used[s] {
             continue;
         }
-        let mut cyc = Vec::new();
+        // room for a usual cycle at once: no doubling from one up to there
+        let mut cyc: Vec<usize> = Vec::with_capacity(16.min(half.len()));
         let mut i = s;
         while !used[i] {
             used[i] = true;

@@ -137,6 +137,10 @@ pub struct Face {
     pub query: Cached<std::sync::Arc<dyn std::any::Any + Send + Sync>>,
     /// False once the face is removed by an in-place edit.
     pub alive: bool,
+    /// A face of a sheet (a surface body): set only by what makes one, never read off the topology,
+    /// so a solid missing a face is still a solid that fails `check`. Its outward normal is the
+    /// sheet's front.
+    pub sheet: bool,
 }
 
 /// Data derived from an entity and kept with it so it is worked out once.
@@ -218,9 +222,15 @@ impl Joins {
     }
 }
 
-/// A solid: one or more closed shells (an outer skin, plus inner ones for voids).
+/// A solid: one or more closed shells (an outer skin, plus inner ones for voids). A shell of sheet
+/// faces (`Face::sheet`) is a surface with no material instead, open or closed: an edge used once
+/// is on its boundary.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Body {
+    /// Some face may be a sheet's (`Face::sheet`): set with the first sheet face made, carried by
+    /// appending and compacting, never read off the topology. A solid never has it, so its checks
+    /// pass every sheet rule over without looking at a face.
+    pub sheets: bool,
     /// Faces (and edges) removed by in-place edits and not yet compacted away.
     pub dead: usize,
     /// What `forge_bool::unify` must know beyond the entities: merged names and kept edges.
@@ -267,9 +277,67 @@ struct Chunk {
 
 const RUN: usize = 16;
 
+/// Room an arena is given when it is copied whole (a clone, a compaction): the edit that follows
+/// (a boolean adds tens of entities) then grows it in place. Without it every arena of a copied
+/// body was exactly full, and the edit's first new edge or face copied it all again.
+pub fn room(n: usize) -> usize {
+    n + n / 4 + 8
+}
+
+/// `v` copied into a list with room to grow.
+fn roomy<T: Clone>(v: &[T]) -> Vec<T> {
+    let mut out = Vec::with_capacity(room(v.len()));
+    out.extend_from_slice(v);
+    out
+}
+
+impl Body {
+    /// A clone whose arenas have room to grow (`room`): for a copy an in-place edit comes to next
+    /// (a part's solids, copied for the next feature), so its first new edge or face does not copy
+    /// the arena again.
+    pub fn clone_roomy(&self) -> Body {
+        Body {
+            dead: self.dead,
+            joins: self.joins.clone(),
+            vertices: roomy(&self.vertices),
+            edges: roomy(&self.edges),
+            coedges: roomy(&self.coedges),
+            loops: roomy(&self.loops),
+            faces: roomy(&self.faces),
+            shells: self.shells.clone(),
+            hulls: self.hulls.clone(),
+            split: self.split.clone(),
+            from_file: self.from_file,
+            unplaced: self.unplaced,
+            unverified: self.unverified.clone(),
+            left_out: self.left_out.clone(),
+        }
+    }
+}
+
 impl Body {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Whether the body is a sheet: it has faces, all of them sheet faces.
+    pub fn is_sheet(&self) -> bool {
+        if !self.sheets {
+            return false;
+        }
+        let mut live = self.faces.iter().filter(|f| f.alive).peekable();
+        live.peek().is_some() && live.all(|f| f.sheet)
+    }
+    /// Whether any live face is a sheet's.
+    pub fn has_sheet(&self) -> bool {
+        self.sheets && self.faces.iter().any(|f| f.alive && f.sheet)
+    }
+    /// Makes every face a sheet's: for what makes a sheet, once its faces are made.
+    pub fn mark_sheet(&mut self) {
+        self.sheets = true;
+        for f in &mut self.faces {
+            f.sheet = true;
+        }
     }
 
     pub fn vertex(&self, id: VertexId) -> &Vertex {
@@ -480,6 +548,7 @@ impl Body {
         let mut emap = vec![NONE; self.edges.len()];
         let mut smap = vec![NONE; groups];
         let mut out = Body {
+            sheets: self.sheets,
             dead: 0,
             joins: std::mem::take(&mut self.joins),
             vertices: Vec::with_capacity(self.vertices.len()),
@@ -583,6 +652,10 @@ impl Body {
             let face = self.face(f);
             let shell = *smap[group[f.index()]].get_or_insert_with(|| out.add_shell());
             let nf = out.add_face(shell, face.surface.clone(), face.same_sense, face.name);
+            if self.sheets && face.sheet {
+                out.faces[nf.index()].sheet = true;
+                out.sheets = true;
+            }
             if let Some(b) = face.bbox.get() {
                 out.faces[nf.index()].bbox.set(*b);
             }
@@ -675,6 +748,7 @@ impl Body {
     /// Adds `other`'s entities after this body's, renumbered, its shells kept apart.
     /// Room in every arena for `others` all appended, made at once: appending them one by one
     /// then grows nothing (so no copy depends on whether the allocator can grow a block in place).
+    #[inline]
     pub fn reserve_appends<'a>(&mut self, others: impl Iterator<Item = &'a Body>) {
         let mut n = [0usize; 6];
         for o in others {
@@ -741,11 +815,13 @@ impl Body {
             bbox: x.bbox.clone(),
             query: Cached::default(),
             alive: x.alive,
+            sheet: x.sheet,
         }));
         self.shells.extend(other.shells.iter().map(|x| Shell {
             faces: x.faces.iter().map(|k| FaceId(k.0 + f)).collect(),
         }));
         self.dead += other.dead;
+        self.sheets |= other.sheets;
         self.joins.extend(&other.joins);
     }
 
@@ -798,6 +874,7 @@ impl Body {
             bbox: Cached::default(),
             query: Cached::default(),
             alive: true,
+            sheet: false,
         });
         self.shells[shell.index()].faces.push(id);
         // the new face is the last: so are its chunk and block

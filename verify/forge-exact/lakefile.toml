@@ -1,6 +1,6 @@
 name = "forgeexact"
 version = "0.1.0"
-defaultTargets = ["ForgeExact", "forge-exact", "curved-guards"]
+defaultTargets = ["ForgeExact", "forge-exact", "sweep-ref", "curved-guards"]
 
 [leanOptions]
 relaxedAutoImplicit = false
@@ -16,6 +16,12 @@ name = "ForgeExact"
 [[lean_exe]]
 name = "forge-exact"
 root = "Main"
+
+# The swept-solid reference (ForgeExact/Swept/Ref.lean gives its format): a kernel tool against
+# its feature's definition.
+[[lean_exe]]
+name = "sweep-ref"
+root = "SweepMain"
 
 # Non-vacuity of `curved_exact`: the representative curved inputs are certified (compiled; the
 # interpreted #guard of all five takes minutes).

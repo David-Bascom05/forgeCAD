@@ -14,6 +14,9 @@ export function threadsOn(wake) {
       if (e.data === "wake") wake();
       else if (Array.isArray(e.data) && e.data[0] === "thread") start(e.data[1], e.data[2], e.data[3]);
     };
+    // a worker that fails to start (or dies) leaves its job waiting: say so, loud
+    w.onerror = (e) => console.error(`forge worker error: ${e.message ?? e}`);
+    w.onmessageerror = () => console.error("forge worker: a message it could not read");
     w.postMessage([module, memory, id]);
   };
   globalThis.forge_thread = start;

@@ -14,7 +14,7 @@ pub enum Problem {
     LoopsCross {
         face: FaceId,
     },
-    /// A solid edge must bound exactly two face sides.
+    /// A solid edge must bound exactly two face sides; a sheet's edge one (its boundary) or two.
     EdgeUses {
         edge: EdgeId,
         uses: usize,
@@ -82,6 +82,10 @@ pub enum Problem {
         shell: crate::body::ShellId,
         value: i64,
     },
+    /// A sheet's face and a solid's share this edge: a sheet is a shell of its own.
+    SheetMeetsSolid {
+        edge: EdgeId,
+    },
     /// The faces round a vertex form more than one fan: the surface is pinched there.
     VertexFans {
         vertex: VertexId,
@@ -130,6 +134,7 @@ impl Problem {
             Problem::ShellsOverlap { .. } => "shells-overlap",
             Problem::ShellEuler { .. } => "shell-euler",
             Problem::VertexFans { .. } => "vertex-fans",
+            Problem::SheetMeetsSolid { .. } => "sheet-meets-solid",
             Problem::BackLink { .. } => "back-link",
             Problem::ShellFaces { .. } => "shell-faces",
             Problem::ShellDisconnected { .. } => "shell-disconnected",
@@ -141,7 +146,9 @@ impl Problem {
     pub fn reason(&self) -> String {
         match self {
             Problem::LoopsCross { .. } => "a face's boundary crosses itself".to_string(),
-            Problem::EdgeUses { uses, .. } => format!("an edge is used by {uses} faces, not 2"),
+            Problem::EdgeUses { uses, .. } => {
+                format!("an edge is used by {uses} faces, not 2 (1 on a sheet's boundary)")
+            }
             Problem::EdgeUsesSameWay { .. } => "the two faces at an edge turn the same way".to_string(),
             Problem::LoopEmpty { .. } => "a face has an empty boundary".to_string(),
             Problem::LoopBroken { .. } => "a face's boundary has a gap".to_string(),
@@ -162,6 +169,7 @@ impl Problem {
             Problem::OuterNotFirst { .. } => "a face's outer boundary is not listed first".to_string(),
             Problem::ShellsOverlap { .. } => "separate skins of the body overlap".to_string(),
             Problem::VertexFans { fans, .. } => format!("{fans} separate fans of faces meet at a corner"),
+            Problem::SheetMeetsSolid { .. } => "a sheet's face and a solid's share an edge".to_string(),
             Problem::BackLink { .. } => {
                 "the body's parts are not linked to each other consistently".to_string()
             }
@@ -183,6 +191,7 @@ impl Problem {
             | Problem::EdgeUsesSameWay { edge }
             | Problem::EdgeDegenerate { edge }
             | Problem::EdgeOffFace { edge, .. }
+            | Problem::SheetMeetsSolid { edge }
             | Problem::VertexOffEdge { edge, .. } => Some(e(edge)),
             Problem::LoopsCross { face }
             | Problem::FaceWrongSide { face, .. }
@@ -452,31 +461,64 @@ fn quiet_loops(a: &Body, f: FaceId, b: &Body, o: FaceId) -> Option<(Vec<bool>, B
 }
 
 fn check_known(body: &Body, known: &Known) -> Vec<Problem> {
+    // every sheet rule is asked only of a body with sheet faces: a solid's check is compiled as it
+    // was, with none of them in it
+    if body.has_sheet() {
+        check_known_as::<true>(body, known)
+    } else {
+        check_known_as::<false>(body, known)
+    }
+}
+
+/// `check_known`, of a body with sheet faces (`S`) or without.
+fn check_known_as<const S: bool>(body: &Body, known: &Known) -> Vec<Problem> {
     let mut out = Vec::new();
     // every other test reads through these links: where they are wrong, they are all there is to say
     check_links(body, &mut out);
     if !out.is_empty() {
         return out;
     }
-    check_edges(body, &mut out);
+    check_edges::<S>(body, &mut out);
     check_loops(body, &mut out);
     check_geometry(body, known, &mut out);
     out.extend(stray_edges(body));
     if out.is_empty() {
         check_sides(body, known, &mut out);
     }
-    if out.is_empty() && body.shells.len() > 1 {
+    if out.is_empty() && body.shells.len() > 1 && !S {
         check_shells(body, known, &mut out);
     }
+    // a sheet has no material for shells to overlap in: the solid shells alone, if two or more
+    if S && out.is_empty() {
+        let mut solid = body.clone();
+        for f in 0..solid.faces.len() {
+            if solid.faces[f].sheet {
+                solid.kill_face(FaceId(f as u32));
+            }
+        }
+        let solid = solid.into_compact();
+        if solid.shells.len() > 1 {
+            let mut found = Vec::new();
+            check_shells(&solid, &Known::default(), &mut found);
+            // (named by the face of the body itself)
+            for p in found {
+                if let Problem::ShellsOverlap { face } = p
+                    && let Some(f) = body.face_by_name(solid.face(face).name)
+                {
+                    out.push(Problem::ShellsOverlap { face: f });
+                }
+            }
+        }
+    }
     check_names(body, &mut out);
-    check_euler(body, &mut out);
+    check_euler::<S>(body, &mut out);
     // per shell and per vertex only once every edge has its two uses and every loop closes
     if !out
         .iter()
         .any(|p| matches!(p, Problem::EdgeUses { .. } | Problem::LoopBroken { .. }))
     {
-        check_shell_euler(body, &mut out);
-        check_fans(body, &mut out);
+        check_shell_euler::<S>(body, &mut out);
+        check_fans::<S>(body, &mut out);
     }
     check_shell_faces(body, &mut out);
     check_strays(body, &mut out);
@@ -727,6 +769,62 @@ pub fn open_at(body: &Body) -> Option<String> {
         let edge = body.edge(e);
         let uses = edge.coedges.len();
         if uses != 2 {
+            // a sheet's boundary edges are on one face: the whole check again, as a sheet's
+            if body.has_sheet() {
+                return open_at_sheets(body);
+            }
+            let ends = format!("the edge from {} to {}", at(edge.start), at(edge.end));
+            return Some(format!("{ends} is on {uses} face(s), not 2"));
+        }
+        if body.coedge(edge.coedges[0]).forward == body.coedge(edge.coedges[1]).forward {
+            let ends = format!("the edge from {} to {}", at(edge.start), at(edge.end));
+            return Some(format!("the faces either side of {ends} turn the same way"));
+        }
+    }
+    for f in body.face_ids() {
+        if body.face(f).loops.is_empty() {
+            return Some("a face has no boundary".to_string());
+        }
+    }
+    for l in body.loop_ids() {
+        // each use's end against the next's start, the last's against the first's
+        let mut uses = body.lp(l).coedges();
+        let Some(first) = uses.next() else { continue };
+        let (start, mut end) = (body.coedge_start(first), body.coedge_end(first));
+        for c in uses {
+            let e = body.edge(body.coedge(c).edge);
+            let (from, to) = if body.coedge(c).forward {
+                (e.start, e.end)
+            } else {
+                (e.end, e.start)
+            };
+            if from != end {
+                return Some(format!("a face's boundary breaks at {}", at(end)));
+            }
+            end = to;
+        }
+        if end != start {
+            return Some(format!("a face's boundary breaks at {}", at(end)));
+        }
+    }
+    None
+}
+
+/// `open_at` of a body with sheet faces: an edge used once by a sheet face is its boundary.
+#[cold]
+#[inline(never)]
+fn open_at_sheets(body: &Body) -> Option<String> {
+    let at = |v: crate::body::VertexId| {
+        let p = body.vertex(v).point;
+        format!("({:.3}, {:.3}, {:.3})", p.x, p.y, p.z)
+    };
+    for e in body.edge_ids() {
+        let edge = body.edge(e);
+        let uses = edge.coedges.len();
+        if uses != 2 {
+            if uses == 1 && body.face(body.coedge_face(edge.coedges[0])).sheet {
+                continue;
+            }
             let ends = format!("the edge from {} to {}", at(edge.start), at(edge.end));
             return Some(format!("{ends} is on {uses} face(s), not 2"));
         }
@@ -810,7 +908,7 @@ pub fn certify(body: &Body) -> Vec<Problem> {
     out
 }
 
-fn check_shell_euler(body: &Body, out: &mut Vec<Problem>) {
+fn check_shell_euler<const S: bool>(body: &Body, out: &mut Vec<Problem>) {
     // the distinct edges and vertices of each shell, counted by stamping each with the shell
     // (the same counts as sorting and dedup, without the sorts)
     let mut edge_at = vec![u32::MAX; body.edges.len()];
@@ -818,6 +916,9 @@ fn check_shell_euler(body: &Body, out: &mut Vec<Problem>) {
     for (si, shell) in body.shells.iter().enumerate() {
         let stamp = si as u32;
         let (mut f, mut l, mut e, mut v) = (0i64, 0i64, 0i64, 0i64);
+        // a sheet's shell: its distinct edges too, for its boundary cycles
+        let sheet = S && shell.faces.first().is_some_and(|&f| body.face(f).sheet);
+        let mut edges = Vec::new();
         for &face in &shell.faces {
             f += 1;
             for &lp in &body.face(face).loops {
@@ -827,6 +928,9 @@ fn check_shell_euler(body: &Body, out: &mut Vec<Problem>) {
                     if edge_at[ed.index()] != stamp {
                         edge_at[ed.index()] = stamp;
                         e += 1;
+                        if sheet {
+                            edges.push(ed);
+                        }
                     }
                     for x in [body.edge(ed).start, body.edge(ed).end] {
                         if vert_at[x.index()] != stamp {
@@ -837,7 +941,8 @@ fn check_shell_euler(body: &Body, out: &mut Vec<Problem>) {
                 }
             }
         }
-        let value = v - e + 2 * f - l;
+        // a sheet's shell of genus g with B boundary cycles: 2 - 2g - B
+        let value = v - e + 2 * f - l + if sheet { boundaries(body, &edges) } else { 0 };
         if value % 2 != 0 || value > 2 {
             out.push(Problem::ShellEuler {
                 shell: crate::body::ShellId(si as u32),
@@ -849,9 +954,20 @@ fn check_shell_euler(body: &Body, out: &mut Vec<Problem>) {
 
 /// Round each vertex, coedge to coedge: from one leaving it, back along its loop to the one
 /// arriving, then across to that one's partner, which leaves it again. One cycle is one fan.
-fn check_fans(body: &Body, out: &mut Vec<Problem>) {
+fn check_fans<const S: bool>(body: &Body, out: &mut Vec<Problem>) {
     let mut prev = Vec::new();
+    let mut sorted = Vec::new();
     for (v, cs) in body.leaving().iter().enumerate() {
+        let cs: &[CoedgeId] = if S {
+            // a fan at a boundary vertex is a chain, from the coedge leaving along the boundary (the
+            // one no step reaches) to the one arriving: walked from there it is one fan, and a second
+            // boundary use leaving the vertex starts a second (a bow tie)
+            sorted.clone_from(cs);
+            sorted.sort_by_key(|&c: &CoedgeId| body.edge(body.coedge(c).edge).coedges.len() != 1);
+            &sorted
+        } else {
+            cs
+        };
         let fans = body.fans(cs, &mut prev);
         if fans.len() > 1 {
             out.push(Problem::VertexFans {
@@ -862,19 +978,27 @@ fn check_fans(body: &Body, out: &mut Vec<Problem>) {
     }
 }
 
-fn check_edges(body: &Body, out: &mut Vec<Problem>) {
+fn check_edges<const S: bool>(body: &Body, out: &mut Vec<Problem>) {
     for e in body.edge_ids() {
         let edge = body.edge(e);
-        if edge.coedges.len() != 2 {
+        let sheet = |k: usize| body.face(body.coedge_face(edge.coedges[k])).sheet;
+        // on a sheet, an edge used once is on its boundary
+        let boundary = S && edge.coedges.len() == 1 && sheet(0);
+        if edge.coedges.len() != 2 && !boundary {
             out.push(Problem::EdgeUses {
                 edge: e,
                 uses: edge.coedges.len(),
             });
             continue;
         }
-        let (a, b) = (body.coedge(edge.coedges[0]), body.coedge(edge.coedges[1]));
-        if a.forward == b.forward {
-            out.push(Problem::EdgeUsesSameWay { edge: e });
+        if !boundary {
+            let (a, b) = (body.coedge(edge.coedges[0]), body.coedge(edge.coedges[1]));
+            if a.forward == b.forward {
+                out.push(Problem::EdgeUsesSameWay { edge: e });
+            }
+            if S && sheet(0) != sheet(1) {
+                out.push(Problem::SheetMeetsSolid { edge: e });
+            }
         }
         let closed = edge.start == edge.end;
         let degenerate = if closed {
@@ -1375,15 +1499,57 @@ fn check_names(body: &Body, out: &mut Vec<Problem>) {
     }
 }
 
-fn check_euler(body: &Body, out: &mut Vec<Problem>) {
+fn check_euler<const S: bool>(body: &Body, out: &mut Vec<Problem>) {
     let v = body.vertices.len() as i64;
     let e = body.edges.len() as i64;
     let f = body.faces.len() as i64;
     let l = body.loops.len() as i64;
-    let value = v - e + 2 * f - l;
+    let mut value = v - e + 2 * f - l;
+    if S {
+        let all: Vec<EdgeId> = body.edge_ids().collect();
+        value += boundaries(body, &all);
+    }
     if value % 2 != 0 || value > 2 * body.shells.len() as i64 {
         out.push(Problem::Euler { value });
     }
+}
+
+/// How many cycles the boundary edges (used once) among `edges` form: the connected pieces of the
+/// graph they make on their vertices. Where every boundary vertex has one boundary edge in and one
+/// out (`check_fans` sees to it), each piece is one cycle.
+fn boundaries(body: &Body, edges: &[EdgeId]) -> i64 {
+    let mut parent: Vec<u32> = Vec::new();
+    let mut at: Vec<u32> = vec![u32::MAX; body.vertices.len()];
+    fn find(p: &mut [u32], mut i: u32) -> u32 {
+        while p[i as usize] != i {
+            p[i as usize] = p[p[i as usize] as usize];
+            i = p[i as usize];
+        }
+        i
+    }
+    let mut pieces = 0i64;
+    for &e in edges {
+        let edge = body.edge(e);
+        if edge.coedges.len() != 1 {
+            continue;
+        }
+        let mut node = |v: VertexId, parent: &mut Vec<u32>, pieces: &mut i64| {
+            if at[v.index()] == u32::MAX {
+                at[v.index()] = parent.len() as u32;
+                parent.push(parent.len() as u32);
+                *pieces += 1;
+            }
+            at[v.index()]
+        };
+        let a = node(edge.start, &mut parent, &mut pieces);
+        let b = node(edge.end, &mut parent, &mut pieces);
+        let (x, y) = (find(&mut parent, a), find(&mut parent, b));
+        if x != y {
+            parent[x.max(y) as usize] = x.min(y);
+            pieces -= 1;
+        }
+    }
+    pieces
 }
 
 /// Genus (number of through-holes) of a valid single-shell body.
