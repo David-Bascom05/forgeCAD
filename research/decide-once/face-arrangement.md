@@ -98,7 +98,8 @@ What each table means:
 - **Facets need not be convex or simply connected.** An annular piece round a boss is fine. The
   core is combinatorial. The write gets each facet's boundary loops from the builder, outside the
   core.
-- **Edges and verts** are the 1- and 0-cells round the facets, as now.
+- **Edges and verts** are the 1- and 0-cells round the facets, as now. They are keyed by their
+  carrier pairs and triples, which makes τ and ν direct to define.
 - **Wings and sectors (rule W2, uniform for flat and curved).** A facet can meet a cell in its
   closure more than once. At an edge it can arrive from both sides (two *wings*). At a vert it can
   meet in several angular *sectors* (a cone apex on a plate, a pinched piece). This happens wherever
@@ -121,6 +122,11 @@ What each table means:
   not facets.
 
   For convex flat facets every multiplicity is 1 and every vert has one sector per facet.
+
+  The common flat wing is a **slit**: a crossing segment that ends inside a face, wherever a tool
+  edge pierces a face's interior. The face's facet then reaches the slit's edges from both sides,
+  so it is listed twice. A builder that prefers to cut instead extends the slit along its carrier
+  line to the facet boundary or to the first cut.
 
   `Refines`' (e) becomes a bijection from the reference's fine facets round an edge onto its wings:
   `List.Perm` of the mapped list. Each plane through an edge holds at most two fine facets round
@@ -185,7 +191,9 @@ instances:
 
 with these properties:
 
-- **(r) rooms.** For every fine facet `φ` and body `i`, F's membership of the room on each side
+- **(r) rooms.** (bool-research's review: rooms are radial side classes, not components, so a
+  map from topes to rooms would be ill-defined when a tope touches two shells. Hence the condition
+  is stated per facet-side.) For every fine facet `φ` and body `i`, F's membership of the room on each side
   of `σ φ`, through its flood and `inside`, equals the reference ledger's `memb i φ.plus` (resp.
   `φ.minus`). Rooms are reached through facet-sides, so no map from topes to rooms is needed, and
   several rooms in one geometric component are allowed. The condition is combinatorial, so the simulation
@@ -396,7 +404,9 @@ Then the Lean and Rust tracks run in parallel. Each arrow is a dependency.
 | Rust | **R1** v2 types plus a `LedgerWF` v2 debug check, as `forge_bool_core::v2`, v1 untouched | 0 | S |
 | Rust | **R2** the v2 core in Aeneas style, then translate.sh: `Funs` v2 | R1 | M |
 | Rust | **R3** the face-arrangement builder plus a debug "coarsens" check against v1's ledger (`Refines`' counts and sides) on the gate corpus | R1, L2 (`Refines` fixed) | L |
-| Rust | **R4** callgrind on coplanar, upto and housing against the old path | R2, R3 | S |
+| Rust | **R4** callgrind on coplanar, upto and housing against the old path | R2, R3, R5, R6 | S |
+| Rust | **R5** an in-place write: edit body 0's near faces only, as the old path's apply does (0.06M against 0.68M) | — | M |
+| Rust | **R6** exact planes and points for near faces only (`inputs` converts all ~183 faces today) | — | S |
 | Aeneas | **G1–G5** groups as before: tables/split_ok, classify/keep/rule/UF, around/fan, unify, collapse | R2, L1 | M each |
 | Aeneas | **E** `end_to_end_f_proof` = the groups + `core_refines` + `EndToEnd` | G*, L2, L3 | S |
 | CI | forge-bool-core-proof.yml gains the v2 translation and proof. Both end-to-end theorems must stay green. | R2 | S |
@@ -405,8 +415,10 @@ Critical path: L2 → R3 → R4 for speed, and R2 → G* → E for the proof.
 
 The switch flips to v2 only when all of the following hold:
 - E is green;
+- the naming rule agrees with today's names on the gate, or the owner approves the change of bits;
 - R4 beats the old path on all three benches;
-- the coarsens check passes on the corpus.
+- the coarsens check passes on the corpus. It costs about a full plane fill (~8M per boolean), so it
+  runs in CI on the gate corpus, not in every debug test.
 
 ## 5. Open questions for review
 
@@ -424,7 +436,8 @@ recommendation is §2.1's `coreI`.
 
 1. **Walls: settled.** Walls are clippers, not carriers or facets (bool-research agrees). The
    statements `wall_region` and `samplesIn_of` stay on the reference. The builder's clipped
-   polygons enter only through `Refines`.
+   polygons enter only through `Refines`. `enclosed` comes from wall-edge flags the builder
+   fills, not from geometry in the core.
 2. **Witnesses.** bool-research proposes one per room. The core keeps today's flood plus
    witness, which is correct for either: one witness per room is just a finer table. The builder
    chooses.
@@ -436,7 +449,10 @@ recommendation is §2.1's `coreI`.
    proven over it directly, rather than through `Faithful` on the reference. `Refines` does not
    give that for free, because it transfers facts from the reference, not to it. It would be a
    direct L1 for the face ledger. For curved that may be cheaper than Lemma D on the CAD.
-   Flat does not need it: the flat reference is already proven. This is for q1 and the master.
+   Flat does not need it: the flat reference is already proven. **Ruled (the master): route B for
+   curved.** The topological theorem goes over the face ledger, with F1–F5 as builder
+   obligations, so the curved reference needs only `ExactK` (curved-design.md §7, c4dbd57). Flat
+   keeps `Refines`.
 5. **Curved (dol-curved).** The same floor applies to the carrier arrangement. The refinement
    scheme of §2.2 is geometry-free over the cells, so it should transfer: the curved spec's
    carrier cells are the reference, and its face arrangement a coarsening.
