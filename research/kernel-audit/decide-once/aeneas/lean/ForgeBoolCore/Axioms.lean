@@ -104,3 +104,4 @@ import ForgeBoolCore.RefineSplitOk
 #print axioms forge_bool_core.s_loop0_spec
 #print axioms forge_bool_core.s_loop1_spec
 #print axioms forge_bool_core.split_ok_spec_proof
+#print axioms forge_bool_core.end_to_end_KU
