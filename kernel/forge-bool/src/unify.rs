@@ -577,7 +577,8 @@ fn remove_edge(body: &mut Body, w: &mut Work, e: EdgeId) -> Option<(FaceId, Face
     // edge of the other must lie on it as `check` asks (`edge_off_face`). The coincidence test
     // bounds a cylinder's axis and radius apart, so two it passes can be further apart than
     // either; and a run of faces each within it of the next is not within it of the one kept.
-    if body.face(fa).surface != body.face(fb).surface && !rests_on(body, w, gone, keep, &gone_edges) {
+    if !one_set(&body.face(fa).surface, &body.face(fb).surface) && !rests_on(body, w, gone, keep, &gone_edges)
+    {
         if !rests_on(body, w, keep, gone, &gone_edges) {
             return None;
         }
@@ -615,14 +616,39 @@ fn remove_edge(body: &mut Body, w: &mut Work, e: EdgeId) -> Option<(FaceId, Face
 /// Whether every edge of face `from` (its loops as `w` holds them), but those in `skip`, lies on
 /// face `onto`'s surface as `check` asks of an edge on its face.
 fn rests_on(body: &Body, w: &mut Work, from: FaceId, onto: FaceId, skip: &[EdgeId]) -> bool {
+    let s = &body.face(onto).surface;
     let loops: Vec<u32> = body.face(from).loops.iter().map(|l| l.0).collect();
     loops.into_iter().all(|l| {
         let cs = w.get(body, l).clone();
         cs.iter().all(|&c| {
             let e = body.coedge(c).edge;
-            skip.contains(&e) || forge_topo::check::edge_off_face(body, e, onto).is_none()
+            let x = body.edge(e);
+            skip.contains(&e)
+                || match (s, &x.curve) {
+                    // a line leaves a plane furthest at an end
+                    (Surface::Plane(p), Curve::Line(_)) => [x.range.lo, x.range.hi]
+                        .iter()
+                        .all(|&t| p.signed_distance(x.curve.eval(t)).abs() <= x.tol.max(tol::LINEAR)),
+                    _ => forge_topo::check::edge_off_face(body, e, onto).is_none(),
+                }
         })
     })
+}
+
+/// Whether surfaces `a` and `b` are one set of points, however their frames are put: then an
+/// edge on either is on both.
+fn one_set(a: &Surface, b: &Surface) -> bool {
+    let along = |u: forge_math::UnitVec3, v: forge_math::UnitVec3| u.get() == v.get() || u.get() == -v.get();
+    match (a, b) {
+        (Surface::Plane(p), Surface::Plane(q)) => {
+            along(p.frame.z(), q.frame.z()) && p.signed_distance(q.frame.origin) == 0.0
+        }
+        (Surface::Cylinder(p), Surface::Cylinder(q)) => {
+            let c = p.frame.z().cross(q.frame.origin - p.frame.origin);
+            along(p.frame.z(), q.frame.z()) && p.radius == q.radius && c.dot(c) == 0.0
+        }
+        _ => a == b,
+    }
 }
 
 /// Puts plane face `f`'s outer loop first (the boolean's local split relies on it).
