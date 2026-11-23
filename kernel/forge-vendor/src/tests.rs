@@ -139,7 +139,7 @@ fn partial_vendors_check_only_what_they_state() {
 
 #[test]
 fn saves_and_imports() {
-    let dir = std::env::temp_dir().join(format!("forge-vendor-{}", std::process::id()));
+    let dir = forge_dirs::temp_dir().join(format!("forge-vendor-{}", forge_dirs::process_id()));
     let _ = std::fs::remove_dir_all(&dir);
     let mut v = Profiles::builtin().find("fabworks").unwrap().vendor.clone();
     v.id = "my-shop".into();
