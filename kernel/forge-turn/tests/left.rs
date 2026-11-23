@@ -40,6 +40,7 @@ fn collar() -> Setup {
         tol: 0.002,
         machine: None,
         place: None,
+        fixtures: vec![],
     }
 }
 

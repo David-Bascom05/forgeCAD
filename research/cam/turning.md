@@ -91,6 +91,10 @@ What the checks caught while the examples were written (each now a test, tests/r
    z_hi (examples/machined/collar_turn.fg: a back chamfer, certified in full; caught: the
    right-hand VBMT on down the chamfer, and the left-hand one started 1 mm over the shoulder,
    its insert hanging 9 mm toward the chuck). Left: left-hand boring bars, left-hand roughing.
+   Other workholding: `Setup.fixtures`, named envelopes of revolution (a tailstock's centre and
+   quill, a steady rest), checked as the chuck is (G2); a live centre refuses facing to the
+   centre line and finishing from over it (tests/refuse.rs). The .fg records come from
+   WORKHOLDING (forge-workholding), lowered in forge-turn-lang.
 3. Done: the .fg surface (interface/forge-turn-lang, docs/cam-turning.md; forge-cli sends a
    turning document there by one branch on `is_turning`, no change to forge-cam-lang), and the
    machine in CAM-MACHINE's format (machine.rs reads it; data/machines-lathe.toml is a copy of

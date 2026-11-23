@@ -107,6 +107,7 @@ pub fn setup() -> Setup {
         tol: 0.002,
         machine: None,
         place: None,
+        fixtures: vec![],
     }
 }
 
@@ -155,6 +156,7 @@ pub fn nut() -> Setup {
         tol: 0.002,
         machine: None,
         place: None,
+        fixtures: vec![],
     }
 }
 

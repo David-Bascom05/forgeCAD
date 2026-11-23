@@ -57,6 +57,10 @@ pub struct Setup {
     /// it: G5 is checked in full when both are given, by spans only when the place is not.
     pub machine: Option<Lathe>,
     pub place: Option<Place>,
+    /// Other workholding as it turns (a tailstock's centre and quill, a steady rest's jaws): each
+    /// a named envelope of revolution, its half-profile in (ρ, z) in the part's frame. Checked as
+    /// the chuck is (G2: every body keeps the fixture clearance from it, on every move).
+    pub fixtures: Vec<(String, Region)>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -1520,6 +1524,12 @@ fn certify_with(
     };
     let mut part = Obstacle::of("part", &s.part.region, s.part.mu).map_err(|e| format!("{e:?}"))?;
     let mut chuck = Obstacle::of("chuck", &s.chuck_region(), 0.0).map_err(|e| format!("{e:?}"))?;
+    let mut fixtures = s
+        .fixtures
+        .iter()
+        .map(|(n, r)| Obstacle::of(n, r, 0.0).map(|o| (n.clone(), o)))
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| format!("{e:?}"))?;
     let mut stock_model = if exact {
         StockModel::Exact(s.bar())
     } else {
@@ -1661,6 +1671,9 @@ fn certify_with(
                 }
                 // G2
                 run(b, mv, &mut chuck, s.fixture_clearance, "chuck", &mut rep);
+                for (n, f) in fixtures.iter_mut() {
+                    run(b, mv, f, s.fixture_clearance, n, &mut rep);
+                }
                 // G3 on a rapid: every body off the stock
                 if *rapid {
                     run(b, mv, &mut stock, s.rapid_clearance, "stock", &mut rep);
