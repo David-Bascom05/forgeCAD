@@ -56,6 +56,7 @@ pub enum Ask {
     Save,
     ToggleText,
     AutoGenerate,
+    CheckNow,
 }
 
 impl From<Ask> for Cmd {
@@ -73,6 +74,7 @@ impl From<Ask> for Cmd {
             Ask::Save => Cmd::Save,
             Ask::ToggleText => Cmd::ToggleText,
             Ask::AutoGenerate => Cmd::AutoGenerate,
+            Ask::CheckNow => Cmd::CheckNow,
         }
     }
 }
@@ -105,6 +107,8 @@ pub enum Cmd {
     Text(String),
     ToggleText,
     AutoGenerate,
+    /// Run the certified checker now on what is generated (today: a generate, which checks).
+    CheckNow,
 }
 
 /// The setup dialog's state: the args as edited, by keyword.
@@ -548,6 +552,12 @@ impl CamWs {
                 self.text_edit = self.text.clone();
             }
             Cmd::AutoGenerate => self.auto = !self.auto,
+            // forge-cam-lang checks as it generates: until an on-demand checker of a run's
+            // posted paths is exposed, checking now is generating again
+            Cmd::CheckNow => {
+                self.want_run = true;
+                self.checks_open = true;
+            }
         }
     }
 

@@ -22,6 +22,29 @@ pub struct Check {
     pub mov: usize,
 }
 
+/// How an op's path is known to be safe (David, 2026-11-23: the generators are to be proven,
+/// the checker kept as an oracle and an on-demand command).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Assurance {
+    /// Proven by construction: its generator is proven (Lean, Aeneas L4); nothing checked.
+    Proven,
+    /// Checked on demand: the certified checker ran on it when asked (Check Now).
+    CheckedOnDemand,
+    /// Interim: the certified checker runs on every generate (forge-cam-lang today).
+    #[default]
+    CheckedAtGenerate,
+}
+
+impl Assurance {
+    pub fn words(self) -> &'static str {
+        match self {
+            Assurance::Proven => "proven by construction",
+            Assurance::CheckedOnDemand => "checked on demand",
+            Assurance::CheckedAtGenerate => "checked at generate (interim)",
+        }
+    }
+}
+
 /// One op as generated.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct OpRes {
@@ -30,6 +53,8 @@ pub struct OpRes {
     pub setup: String,
     /// built | refused | unposted
     pub status: String,
+    /// How its path is known safe.
+    pub assurance: Assurance,
     pub tool: Option<String>,
     pub tool_t: Option<u32>,
     pub tool_d: Option<f64>,
@@ -184,6 +209,8 @@ pub fn run(text: &str, dir: &Path) -> Run {
                 kind: s(x, "kind"),
                 setup: s(x, "setup"),
                 status: s(x, "status"),
+                // every op of forge-cam-lang is certified on the posted path when generated
+                assurance: Assurance::CheckedAtGenerate,
                 tool: t
                     .and_then(|t| t.get("id"))
                     .and_then(Json::str)

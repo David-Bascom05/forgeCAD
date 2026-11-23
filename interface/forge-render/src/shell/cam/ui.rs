@@ -130,6 +130,12 @@ pub fn groups(s: &Shell) -> Vec<(&'static str, Vec<Button>, Vec<Button>)> {
                     false,
                 ),
                 ("Checks", "cam_check", a(Ask::Checks), w.checks_open),
+                (
+                    "Check Now",
+                    "cam_check",
+                    (!generating && w.run.is_some()).then_some(Action::Cam(Ask::CheckNow)),
+                    false,
+                ),
                 ("Auto Generate", "cam_generate", a(Ask::AutoGenerate), w.auto),
             ],
         ),
@@ -538,6 +544,7 @@ fn row_actions(resp: &egui::Response, id: &str, w: &CamWs, cmds: &mut Vec<Cmd>, 
         };
         item(ui, "Edit…", "edit", Cmd::Edit(id.into()));
         item(ui, "Generate", "generate", Cmd::Generate);
+        item(ui, "Check Now", "check", Cmd::CheckNow);
         if is_op {
             item(ui, "Move Up", "up", Cmd::Move(id.into(), true));
             item(ui, "Move Down", "down", Cmd::Move(id.into(), false));
@@ -688,6 +695,9 @@ fn details(
             let st = w.status(id);
             let (_, word, c) = status_look(t, st);
             fact(ui, t, "Status", word, width, c);
+            if let Some(o) = run.and_then(|r| r.op(id)) {
+                note(ui, &format!("Assurance: {}", o.assurance.words()), width, t.ink2);
+            }
             if st == "stale" || st == "error" {
                 ui.horizontal(|ui| {
                     ui.add_space(14.0);
