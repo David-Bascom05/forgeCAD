@@ -98,147 +98,284 @@ fn model_path(zip: &Zip) -> Result<String, ReadError> {
     bad("no 3D model in the package (_rels/.rels names none, and there is no 3D/3dmodel.model)")
 }
 
+/// An object, by the model part that holds it and its id there.
+type Key = (String, String);
+
 enum Obj {
+    /// In millimetres (its part's unit applied).
     Mesh(Vec<[f64; 3]>, Vec<[u32; 3]>),
-    Parts(Vec<(String, M)>),
+    Parts(Vec<(Key, M)>),
+}
+
+/// The extensions whose required use this reader honours: materials (colours and textures, the
+/// geometry unchanged) and production (other model parts, `p:path`; UUIDs). Any other required
+/// extension changes what the geometry is (beams, slices, booleans, displacement, encryption): a
+/// consumer that does not read it must refuse the file (core 1.4, 2.3.1).
+const READ_EXTENSIONS: &[&str] = &[
+    "http://schemas.microsoft.com/3dmanufacturing/core/2015/02",
+    "http://schemas.microsoft.com/3dmanufacturing/material/2015/02",
+    "http://schemas.microsoft.com/3dmanufacturing/production/2015/06",
+];
+
+/// The production extension's namespace: `p:path`.
+const PRODUCTION: &str = "http://schemas.microsoft.com/3dmanufacturing/production/2015/06";
+
+/// Model parts one package may have read (the build's and its components').
+pub const MAX_PARTS: usize = 4096;
+
+/// A `p:path` as the zip member it names (absolute in the package, so the leading slash goes).
+fn member(path: &str) -> String {
+    path.trim_start_matches('/').to_string()
+}
+
+/// A build item: its object, its placement in millimetres, and where it is (offset, line).
+type Item = (Key, M, (usize, usize));
+
+/// What reading a package's model parts has made so far.
+struct Parts<'z> {
+    zip: &'z Zip<'z>,
+    objs: HashMap<Key, Obj>,
+    done: std::collections::HashSet<String>,
+    triangles: usize,
+}
+
+impl Parts<'_> {
+    /// The model part at zip member `path`: its objects into `objs`, and its build's items (each its
+    /// object's key and placement, in millimetres) when it has a build.
+    fn load(&mut self, path: &str) -> Result<Vec<Item>, ReadError> {
+        let mut todo = vec![];
+        let items = self.load_one(path, &mut todo)?.ok_or(ReadError {
+            at: 0,
+            line: 0,
+            why: format!("{path}: no <build>"),
+        })?;
+        while let Some(p) = todo.pop() {
+            if self.done.contains(&p) {
+                continue;
+            }
+            self.load_one(&p, &mut todo)?;
+        }
+        Ok(items)
+    }
+
+    /// One model part: its objects, and its build's items if it has a build.
+    fn load_one(&mut self, path: &str, todo: &mut Vec<String>) -> Result<Option<Vec<Item>>, ReadError> {
+        self.done.insert(path.to_string());
+        if self.done.len() > MAX_PARTS {
+            return bad(format!("past the {MAX_PARTS} model parts read"));
+        }
+        let xml = self.zip.read(path).ok_or(ReadError {
+            at: 0,
+            line: 0,
+            why: format!("{path}: no such part, or it would not read"),
+        })?;
+        let text = String::from_utf8(xml).map_err(|e| ReadError {
+            at: e.utf8_error().valid_up_to(),
+            line: 0,
+            why: format!("{path} is not UTF-8"),
+        })?;
+        let doc = roxmltree::Document::parse(&text).map_err(|e| {
+            let p = e.pos();
+            ReadError {
+                at: 0,
+                line: p.row as usize,
+                why: format!("{path}: {e}"),
+            }
+        })?;
+        let fail = |n: roxmltree::Node, why: String| -> ReadError {
+            let p = doc.text_pos_at(n.range().start);
+            ReadError {
+                at: n.range().start,
+                line: p.row as usize,
+                why: format!("{path}: {why}"),
+            }
+        };
+        let model = doc.root_element();
+        if !model.has_tag_name("model") {
+            return Err(fail(model, "the root is not a <model>".into()));
+        }
+        // a required extension this reader does not read: refused, by name
+        for prefix in model
+            .attribute("requiredextensions")
+            .unwrap_or("")
+            .split_whitespace()
+        {
+            let Some(ns) = model.lookup_namespace_uri(Some(prefix)) else {
+                return Err(fail(
+                    model,
+                    format!("required extension {prefix:?} has no namespace"),
+                ));
+            };
+            if !READ_EXTENSIONS.contains(&ns) {
+                return Err(fail(
+                    model,
+                    format!("requires extension {prefix:?} ({ns}), which this reader does not read"),
+                ));
+            }
+        }
+        let scale = match model.attribute("unit").unwrap_or("millimeter") {
+            "micron" => 1e-3,
+            "millimeter" => 1.0,
+            "centimeter" => 10.0,
+            "inch" => 25.4,
+            "foot" => 304.8,
+            "meter" => 1000.0,
+            u => return Err(fail(model, format!("unit {u:?} is not one of 3MF's"))),
+        };
+        let num = |n: roxmltree::Node, k: &str| -> Result<f64, ReadError> {
+            n.attribute(k)
+                .and_then(|v| v.trim().parse::<f64>().ok())
+                .filter(|v| v.is_finite())
+                .ok_or_else(|| fail(n, format!("<{}> needs a finite {k}", n.tag_name().name())))
+        };
+        // a placement in this part's unit, made millimetres (its translation scaled)
+        let place = |n: roxmltree::Node| -> Result<M, ReadError> {
+            let mut m = transform(n.attribute("transform")).map_err(|e| fail(n, e.why))?;
+            for t in &mut m.0[9..] {
+                *t *= scale;
+            }
+            Ok(m)
+        };
+        // the part another object is in: this one, or the production extension's path
+        let part_of = |n: roxmltree::Node, todo: &mut Vec<String>| -> String {
+            match n.attribute((PRODUCTION, "path")) {
+                Some(p) => {
+                    let m = member(p);
+                    todo.push(m.clone());
+                    m
+                }
+                None => path.to_string(),
+            }
+        };
+        let resources = model.children().find(|n| n.has_tag_name("resources"));
+        for o in resources
+            .iter()
+            .flat_map(|r| r.children())
+            .filter(|n| n.has_tag_name("object"))
+        {
+            let id = o
+                .attribute("id")
+                .ok_or_else(|| fail(o, "an object with no id".into()))?
+                .to_string();
+            let obj = if let Some(mesh) = o.children().find(|n| n.has_tag_name("mesh")) {
+                let mut vs = vec![];
+                let mut ts = vec![];
+                for v in mesh
+                    .children()
+                    .filter(|n| n.has_tag_name("vertices"))
+                    .flat_map(|n| n.children())
+                {
+                    if v.has_tag_name("vertex") {
+                        vs.push([num(v, "x")? * scale, num(v, "y")? * scale, num(v, "z")? * scale]);
+                    }
+                }
+                for t in mesh
+                    .children()
+                    .filter(|n| n.has_tag_name("triangles"))
+                    .flat_map(|n| n.children())
+                {
+                    if !t.has_tag_name("triangle") {
+                        continue;
+                    }
+                    let mut c = [0u32; 3];
+                    for (k, name) in ["v1", "v2", "v3"].iter().enumerate() {
+                        let i = t.attribute(*name).and_then(|v| v.trim().parse::<usize>().ok());
+                        match i {
+                            Some(i) if i < vs.len() => c[k] = i as u32,
+                            _ => {
+                                return Err(fail(
+                                    t,
+                                    format!("{name} is not one of the {} vertices", vs.len()),
+                                ));
+                            }
+                        }
+                    }
+                    // core 1.3, 4.1.4: a triangle's three vertices are distinct
+                    if c[0] == c[1] || c[1] == c[2] || c[0] == c[2] {
+                        return Err(fail(
+                            t,
+                            format!("a triangle with a vertex twice ({} {} {})", c[0], c[1], c[2]),
+                        ));
+                    }
+                    ts.push(c);
+                }
+                self.triangles += ts.len();
+                if self.triangles > MAX_TRIANGLES {
+                    return Err(fail(o, format!("past the {MAX_TRIANGLES} triangles read")));
+                }
+                Obj::Mesh(vs, ts)
+            } else if let Some(cs) = o.children().find(|n| n.has_tag_name("components")) {
+                let mut parts = vec![];
+                for c in cs.children().filter(|n| n.has_tag_name("component")) {
+                    let of = c
+                        .attribute("objectid")
+                        .ok_or_else(|| fail(c, "a component with no objectid".into()))?;
+                    parts.push(((part_of(c, todo), of.to_string()), place(c)?));
+                }
+                Obj::Parts(parts)
+            } else {
+                return Err(fail(o, "an object with neither a mesh nor components".into()));
+            };
+            if self.objs.insert((path.to_string(), id.clone()), obj).is_some() {
+                return Err(fail(o, format!("object {id} given twice")));
+            }
+        }
+        let Some(build) = model.children().find(|n| n.has_tag_name("build")) else {
+            return Ok(None);
+        };
+        let mut items = vec![];
+        {
+            for item in build.children().filter(|n| n.has_tag_name("item")) {
+                let id = item
+                    .attribute("objectid")
+                    .ok_or_else(|| fail(item, "an item with no objectid".into()))?;
+                let p = doc.text_pos_at(item.range().start);
+                items.push((
+                    (part_of(item, todo), id.to_string()),
+                    place(item)?,
+                    (item.range().start, p.row as usize),
+                ));
+            }
+        }
+        Ok(Some(items))
+    }
 }
 
 /// A 3MF package's build: every item's object, placed, as one mesh in millimetres.
 pub fn read(data: &[u8]) -> Result<TriMesh, ReadError> {
-    let zip = Zip::new(data).ok_or(ReadError {
+    let zip = Zip::new(data).map_err(|e| ReadError {
         at: 0,
         line: 0,
-        why: "not a zip package (or one whose members would inflate past the caps)".into(),
+        why: format!("the package: {e}"),
     })?;
+    // OPC: a package says its parts' content types
+    if !zip.has("[Content_Types].xml") {
+        return bad("no [Content_Types].xml: not an OPC package");
+    }
     let path = model_path(&zip)?;
-    let xml = zip.read(&path).ok_or(ReadError {
-        at: 0,
-        line: 0,
-        why: format!("{path} would not read"),
-    })?;
-    let text = String::from_utf8(xml).map_err(|e| ReadError {
-        at: e.utf8_error().valid_up_to(),
-        line: 0,
-        why: format!("{path} is not UTF-8"),
-    })?;
-    let doc = roxmltree::Document::parse(&text).map_err(|e| {
-        let p = e.pos();
-        ReadError {
-            at: 0,
-            line: p.row as usize,
-            why: format!("{path}: {e}"),
-        }
-    })?;
-    let at = |n: roxmltree::Node| -> (usize, usize) {
-        let p = doc.text_pos_at(n.range().start);
-        (n.range().start, p.row as usize)
+    let mut parts = Parts {
+        zip: &zip,
+        objs: HashMap::new(),
+        done: Default::default(),
+        triangles: 0,
     };
-    let fail = |n: roxmltree::Node, why: String| -> ReadError {
-        let (a, l) = at(n);
-        ReadError {
-            at: a,
-            line: l,
-            why: format!("{path}: {why}"),
-        }
-    };
-    let model = doc.root_element();
-    if !model.has_tag_name("model") {
-        return Err(fail(model, "the root is not a <model>".into()));
-    }
-    let scale = match model.attribute("unit").unwrap_or("millimeter") {
-        "micron" => 1e-3,
-        "millimeter" => 1.0,
-        "centimeter" => 10.0,
-        "inch" => 25.4,
-        "foot" => 304.8,
-        "meter" => 1000.0,
-        u => return Err(fail(model, format!("unit {u:?} is not one of 3MF's"))),
-    };
-    let num = |n: roxmltree::Node, k: &str| -> Result<f64, ReadError> {
-        n.attribute(k)
-            .and_then(|v| v.trim().parse::<f64>().ok())
-            .filter(|v| v.is_finite())
-            .ok_or_else(|| fail(n, format!("<{}> needs a finite {k}", n.tag_name().name())))
-    };
-    let mut objs: HashMap<String, Obj> = HashMap::new();
-    let mut total = 0usize;
-    for o in model.descendants().filter(|n| n.has_tag_name("object")) {
-        let id = o
-            .attribute("id")
-            .ok_or_else(|| fail(o, "an object with no id".into()))?
-            .to_string();
-        let obj = if let Some(mesh) = o.children().find(|n| n.has_tag_name("mesh")) {
-            let mut vs = vec![];
-            let mut ts = vec![];
-            for v in mesh
-                .children()
-                .filter(|n| n.has_tag_name("vertices"))
-                .flat_map(|n| n.children())
-            {
-                if v.has_tag_name("vertex") {
-                    vs.push([num(v, "x")?, num(v, "y")?, num(v, "z")?]);
-                }
-            }
-            for t in mesh
-                .children()
-                .filter(|n| n.has_tag_name("triangles"))
-                .flat_map(|n| n.children())
-            {
-                if !t.has_tag_name("triangle") {
-                    continue;
-                }
-                let mut c = [0u32; 3];
-                for (k, name) in ["v1", "v2", "v3"].iter().enumerate() {
-                    let i = t.attribute(*name).and_then(|v| v.trim().parse::<usize>().ok());
-                    match i {
-                        Some(i) if i < vs.len() => c[k] = i as u32,
-                        _ => return Err(fail(t, format!("{name} is not one of the {} vertices", vs.len()))),
-                    }
-                }
-                ts.push(c);
-            }
-            total += ts.len();
-            if total > MAX_TRIANGLES {
-                return Err(fail(o, format!("past the {MAX_TRIANGLES} triangles read")));
-            }
-            Obj::Mesh(vs, ts)
-        } else if let Some(cs) = o.children().find(|n| n.has_tag_name("components")) {
-            let mut parts = vec![];
-            for c in cs.children().filter(|n| n.has_tag_name("component")) {
-                if c.attributes().any(|a| a.name() == "path") {
-                    return Err(fail(
-                        c,
-                        "a component in another model file (production extension) is not read".into(),
-                    ));
-                }
-                let of = c
-                    .attribute("objectid")
-                    .ok_or_else(|| fail(c, "a component with no objectid".into()))?;
-                parts.push((
-                    of.to_string(),
-                    transform(c.attribute("transform")).map_err(|e| fail(c, e.why))?,
-                ));
-            }
-            Obj::Parts(parts)
+    let items = parts.load(&path)?;
+    let objs = &parts.objs;
+    let name = |k: &Key| {
+        if k.0 == path {
+            format!("object {}", k.1)
         } else {
-            return Err(fail(o, "an object with neither a mesh nor components".into()));
-        };
-        if objs.insert(id.clone(), obj).is_some() {
-            return Err(fail(o, format!("object {id} given twice")));
+            format!("object {} of /{}", k.1, k.0)
         }
-    }
-    let build = model
-        .children()
-        .find(|n| n.has_tag_name("build"))
-        .ok_or_else(|| fail(model, "no <build>".into()))?;
-    let mut out = TriMesh::default();
+    };
     // each object's triangles a copy costs, components counted through, so copies of copies are
     // refused before any is made
     fn cost(
-        objs: &HashMap<String, Obj>,
-        id: &str,
+        objs: &HashMap<Key, Obj>,
+        id: &Key,
         depth: usize,
-        memo: &mut HashMap<String, usize>,
+        memo: &mut HashMap<Key, usize>,
+        name: &dyn Fn(&Key) -> String,
     ) -> Result<usize, String> {
         if depth > MAX_NESTING {
             return Err(format!(
@@ -248,20 +385,20 @@ pub fn read(data: &[u8]) -> Result<TriMesh, ReadError> {
         if let Some(&c) = memo.get(id) {
             return Ok(c);
         }
-        let c = match objs.get(id).ok_or(format!("no object {id}"))? {
+        let c = match objs.get(id).ok_or_else(|| format!("no {}", name(id)))? {
             Obj::Mesh(_, ts) => ts.len(),
             Obj::Parts(ps) => {
                 let mut s = 0usize;
                 for (p, _) in ps {
-                    s = s.saturating_add(cost(objs, p, depth + 1, memo)?);
+                    s = s.saturating_add(cost(objs, p, depth + 1, memo, name)?);
                 }
                 s
             }
         };
-        memo.insert(id.to_string(), c);
+        memo.insert(id.clone(), c);
         Ok(c)
     }
-    fn put(objs: &HashMap<String, Obj>, id: &str, m: &M, out: &mut TriMesh) {
+    fn put(objs: &HashMap<Key, Obj>, id: &Key, m: &M, out: &mut TriMesh) {
         match &objs[id] {
             Obj::Mesh(vs, ts) => {
                 let base = out.positions.len() as u32;
@@ -282,23 +419,23 @@ pub fn read(data: &[u8]) -> Result<TriMesh, ReadError> {
             }
         }
     }
+    let mut out = TriMesh::default();
     let mut memo = HashMap::new();
     let mut made = 0usize;
-    let scale_m = M([scale, 0.0, 0.0, 0.0, scale, 0.0, 0.0, 0.0, scale, 0.0, 0.0, 0.0]);
-    for item in build.children().filter(|n| n.has_tag_name("item")) {
-        let id = item
-            .attribute("objectid")
-            .ok_or_else(|| fail(item, "an item with no objectid".into()))?;
-        let c = cost(&objs, id, 0, &mut memo).map_err(|e| fail(item, e))?;
+    for (id, m, (at, line)) in &items {
+        let fail = |why: String| ReadError {
+            at: *at,
+            line: *line,
+            why: format!("{path}: {why}"),
+        };
+        let c = cost(objs, id, 0, &mut memo, &name).map_err(fail)?;
         made = made.saturating_add(c);
         if made > MAX_TRIANGLES {
-            return Err(fail(
-                item,
-                format!("the build's copies make past the {MAX_TRIANGLES} triangles read"),
-            ));
+            return Err(fail(format!(
+                "the build's copies make past the {MAX_TRIANGLES} triangles read"
+            )));
         }
-        let m = transform(item.attribute("transform")).map_err(|e| fail(item, e.why))?;
-        put(&objs, id, &m.then(&scale_m), &mut out);
+        put(objs, id, m, &mut out);
     }
     if out.triangles.is_empty() {
         return bad("the build places no triangles");
@@ -310,8 +447,17 @@ pub fn read(data: &[u8]) -> Result<TriMesh, ReadError> {
 mod tests {
     use super::*;
 
-    /// A zip of stored members.
+    const CT: &str = "<?xml version=\"1.0\"?><Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"model\" ContentType=\"application/vnd.ms-package.3dmanufacturing-3dmodel+xml\"/></Types>";
+
+    /// An OPC package of stored members: its content types, then these.
     fn zip(members: &[(&str, &str)]) -> Vec<u8> {
+        let mut all = vec![("[Content_Types].xml", CT)];
+        all.extend_from_slice(members);
+        bare_zip(&all)
+    }
+
+    /// A zip of stored members.
+    fn bare_zip(members: &[(&str, &str)]) -> Vec<u8> {
         let (mut out, mut dir) = (vec![], vec![]);
         let le16 = |v: &mut Vec<u8>, x: usize| v.extend_from_slice(&(x as u16).to_le_bytes());
         let le32 = |v: &mut Vec<u8>, x: usize| v.extend_from_slice(&(x as u32).to_le_bytes());
@@ -418,5 +564,108 @@ mod tests {
                 .contains("nested")
         );
         assert!(read(b"not a zip").is_err());
+    }
+
+    /// `zip64_eocd` of research/formats/repro/make.py: a ZIP64 end record and its locator before
+    /// the classic one, whose counts and offset are then all ones, as slicers write packages.
+    fn as_zip64(d: &[u8]) -> Vec<u8> {
+        let e = d.windows(4).rposition(|w| w == [0x50, 0x4b, 5, 6]).unwrap();
+        let n = u16::from_le_bytes([d[e + 10], d[e + 11]]) as u64;
+        let size = u32::from_le_bytes(d[e + 12..e + 16].try_into().unwrap()) as u64;
+        let off = u32::from_le_bytes(d[e + 16..e + 20].try_into().unwrap()) as u64;
+        let mut out = d[..e].to_vec();
+        out.extend_from_slice(&0x0606_4b50u32.to_le_bytes());
+        out.extend_from_slice(&44u64.to_le_bytes());
+        out.extend_from_slice(&[45, 0, 45, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+        for v in [n, n, size, off] {
+            out.extend_from_slice(&v.to_le_bytes());
+        }
+        out.extend_from_slice(&0x0706_4b50u32.to_le_bytes());
+        out.extend_from_slice(&0u32.to_le_bytes());
+        out.extend_from_slice(&(e as u64).to_le_bytes());
+        out.extend_from_slice(&1u32.to_le_bytes());
+        let mut tail = d[e..].to_vec();
+        tail[4..12].copy_from_slice(&[0xff; 8]);
+        tail[12..20].copy_from_slice(&[0xff; 8]);
+        out.extend_from_slice(&tail);
+        out
+    }
+
+    fn one(model: &str) -> Vec<u8> {
+        zip(&[("3D/3dmodel.model", model)])
+    }
+
+    #[test]
+    fn a_zip64_package_reads_as_its_classic_one() {
+        // research/formats/repro/make.py's tetra-zip64.3mf: what Bambu Studio and OrcaSlicer write
+        let plain = one(&cube("millimeter", "<item objectid=\"1\"/>"));
+        let z = as_zip64(&plain);
+        let (a, b) = (read(&plain).unwrap(), read(&z).unwrap());
+        assert_eq!(a.positions, b.positions);
+        assert_eq!(a.triangles, b.triangles);
+    }
+
+    #[test]
+    fn an_unknown_required_extension_is_refused_by_name() {
+        // make.py's tetra-required-unknown.3mf (3MF core 1.4, 2.3.1; the consortium's N_XXX_0428)
+        let m = cube("millimeter", "<item objectid=\"1\"/>").replace(
+            "<model unit",
+            "<model xmlns:q=\"http://example.com/forge/unknown/2026\" requiredextensions=\"q\" unit",
+        );
+        let e = read(&one(&m)).unwrap_err();
+        assert!(
+            e.why.contains("requires extension \"q\"") && e.why.contains("example.com"),
+            "{e}"
+        );
+        // a prefix with no namespace
+        let m = cube("millimeter", "<item objectid=\"1\"/>")
+            .replace("<model unit", "<model requiredextensions=\"z\" unit");
+        assert!(read(&one(&m)).unwrap_err().why.contains("no namespace"));
+        // materials, required, are read: they change no geometry
+        let m = cube("millimeter", "<item objectid=\"1\"/>").replace(
+            "<model unit",
+            "<model xmlns:m=\"http://schemas.microsoft.com/3dmanufacturing/material/2015/02\" requiredextensions=\"m\" unit",
+        );
+        assert!(read(&one(&m)).is_ok());
+    }
+
+    #[test]
+    fn build_items_and_components_in_other_model_parts_are_read() {
+        // make.py's build-item-path.3mf: the root's build places an object of another part, as
+        // Bambu Studio's packages do (their components each name a part in 3D/Objects)
+        let p = "http://schemas.microsoft.com/3dmanufacturing/production/2015/06";
+        let root = format!(
+            "<?xml version=\"1.0\"?><model unit=\"millimeter\" xmlns=\"http://schemas.microsoft.com/3dmanufacturing/core/2015/02\" xmlns:p=\"{p}\" requiredextensions=\"p\"><resources/><build><item objectid=\"1\" p:path=\"/3D/other.model\" transform=\"1 0 0 0 1 0 0 0 1 0 0 3\"/></build></model>"
+        );
+        let other = cube("centimeter", "");
+        let m = read(&zip(&[("3D/3dmodel.model", &root), ("3D/other.model", &other)])).unwrap();
+        let s = forge_mesh::read::summary(&m);
+        // the other part's unit is its own: a 10 mm cube, lifted 3 mm in the root's
+        assert!((s.volume.unwrap() - 1000.0).abs() < 1e-9, "{s:?}");
+        assert_eq!(s.bbox, ([0.0, 0.0, 3.0], [10.0, 10.0, 13.0]));
+        // a component of the root naming an object in the other part
+        let root2 = format!(
+            "<?xml version=\"1.0\"?><model unit=\"millimeter\" xmlns=\"http://schemas.microsoft.com/3dmanufacturing/core/2015/02\" xmlns:p=\"{p}\"><resources><object id=\"9\"><components><component objectid=\"1\" p:path=\"/3D/other.model\"/></components></object></resources><build><item objectid=\"9\"/></build></model>"
+        );
+        let m = read(&zip(&[("3D/3dmodel.model", &root2), ("3D/other.model", &other)])).unwrap();
+        assert!((forge_mesh::read::summary(&m).volume.unwrap() - 1000.0).abs() < 1e-9);
+        // a part that is not there: named
+        let e = read(&zip(&[("3D/3dmodel.model", &root)])).unwrap_err();
+        assert!(e.why.contains("3D/other.model"), "{e}");
+    }
+
+    #[test]
+    fn core_rules_refused() {
+        // a triangle with a vertex twice (core 1.3, 4.1.4)
+        let m = cube("millimeter", "<item objectid=\"1\"/>")
+            .replace("v1=\"0\" v2=\"2\" v3=\"3\"", "v1=\"0\" v2=\"2\" v3=\"0\"");
+        assert!(read(&one(&m)).unwrap_err().why.contains("a vertex twice"));
+        // no content types: not an OPC package
+        let e = read(&bare_zip(&[(
+            "3D/3dmodel.model",
+            &cube("millimeter", "<item objectid=\"1\"/>"),
+        )]))
+        .unwrap_err();
+        assert!(e.why.contains("Content_Types"), "{e}");
     }
 }

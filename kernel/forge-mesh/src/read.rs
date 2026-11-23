@@ -247,15 +247,37 @@ fn stl_ascii(data: &[u8]) -> Result<TriMesh, ReadError> {
 }
 
 /// A Wavefront OBJ file's faces (`v` and `f`; texture and normal indices are read past; a face of
-/// more corners is cut into a fan). Every object and group in it goes into the one mesh.
+/// more corners is cut into a fan). Every object and group in it goes into the one mesh. A line
+/// that ends in a backslash goes on in the next (the format's continuation; trimesh and assimp
+/// read it): what is wrong is said at the line it starts on.
 pub fn obj(data: &[u8]) -> Result<TriMesh, ReadError> {
     let mut m = TriMesh::default();
     let mut at = 0;
-    for (k, raw) in data.split(|&c| c == b'\n').enumerate() {
+    let mut lines = data.split(|&c| c == b'\n').enumerate();
+    let mut joined: Vec<u8> = Vec::new();
+    while let Some((k, raw)) = lines.next() {
         let line = k + 1;
         let here = at;
         at += raw.len() + 1;
-        let text = raw.strip_suffix(b"\r").unwrap_or(raw);
+        let mut text = raw.strip_suffix(b"\r").unwrap_or(raw);
+        if text.ends_with(b"\\") {
+            // continued: the pieces joined by a space, each without its backslash
+            joined.clear();
+            joined.extend_from_slice(&text[..text.len() - 1]);
+            for (_, next) in lines.by_ref() {
+                at += next.len() + 1;
+                let n = next.strip_suffix(b"\r").unwrap_or(next);
+                joined.push(b' ');
+                match n.strip_suffix(b"\\") {
+                    Some(more) => joined.extend_from_slice(more),
+                    None => {
+                        joined.extend_from_slice(n);
+                        break;
+                    }
+                }
+            }
+            text = &joined;
+        }
         let text = match text.iter().position(|&c| c == b'#') {
             Some(h) => &text[..h],
             None => text,
@@ -384,5 +406,17 @@ mod tests {
         b[80..84].copy_from_slice(&u32::MAX.to_le_bytes());
         assert!(stl(&b).is_err());
         assert!(stl(b"").is_err() && obj(b"").is_err());
+    }
+
+    #[test]
+    fn a_continued_line_is_one_line() {
+        // research/formats/repro/make.py's continuation.obj: a tetrahedron, one face over two lines
+        let t = b"v 0 0 0\nv 1 0 0\nv 0 1 0\nv 0 0 1\nf 1 3 2\nf 1 2 4\nf 2 3 \\\n4\nf 1 4 3\n";
+        let s = summary(&obj(t).unwrap());
+        assert!(s.closed && (s.volume.unwrap() - 1.0 / 6.0).abs() < 1e-12, "{s:?}");
+        // CRLF, a line continued twice, and the line after it still counted
+        let t = b"v 0 0 0\r\nv 1 0 0\r\nv 0 1 0\r\nv 0 0 1\r\nf 1 \\\r\n3 \\\r\n2\r\nf 1 2 4\r\nf 2 3 4\r\nf 1 4 9\r\n";
+        let e = obj(t).unwrap_err();
+        assert_eq!(e.line, 10, "{e:?}");
     }
 }

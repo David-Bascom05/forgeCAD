@@ -64,6 +64,8 @@ enum Map {
     Delta(i64),
     /// Glyph id from the array at this offset, then + delta.
     Array(usize, i64),
+    /// Every char the same glyph (format 13, many to one).
+    Same(i64),
 }
 
 fn u16_at(d: &[u8], o: usize) -> Result<u16, FontError> {
@@ -155,6 +157,7 @@ impl Font {
             }
             let g = match m {
                 Map::Delta(delta) => (c as i64 + delta).rem_euclid(65536),
+                Map::Same(g) => g,
                 Map::Array(at, delta) => match u16_at(&self.data, at + 2 * (c - lo) as usize) {
                     Ok(0) | Err(_) => 0,
                     Ok(g) => (g as i64 + delta).rem_euclid(65536),
@@ -416,24 +419,32 @@ fn read_cmap(d: &[u8], at: usize) -> Result<Vec<(u32, u32, Map)>, FontError> {
         let (plat, enc) = (u16_at(d, r)?, u16_at(d, r + 2)?);
         let sub = at + u32_at(d, r + 4)? as usize;
         let format = u16_at(d, sub)?;
-        // full Unicode tables first, then the BMP ones
+        // full Unicode tables first, then the BMP ones, then a many-to-one table (format 13: a
+        // last-resort font's, each range one glyph)
         let rank = match (plat, enc, format) {
             (3, 10, 12) | (0, 4, 12) | (0, 6, 12) => 3,
             (3, 1, 4) | (0, _, 4) => 2,
+            (3, 10, 13) | (0, 4, 13) | (0, 6, 13) => 1,
             _ => 0,
         };
         if rank > 0 && best.is_none_or(|b| rank > b.0) {
             best = Some((rank, sub));
         }
     }
-    let (_, sub) = best.ok_or(FontError::Unsupported("no Unicode cmap of format 4 or 12"))?;
+    let (_, sub) = best.ok_or(FontError::Unsupported("no Unicode cmap of format 4, 12 or 13"))?;
     let mut out = Vec::new();
-    if u16_at(d, sub)? == 12 {
+    let format = u16_at(d, sub)?;
+    if format == 12 || format == 13 {
         let groups = u32_at(d, sub + 12)? as usize;
         for k in 0..groups {
             let g = sub + 16 + 12 * k;
             let (lo, hi, first) = (u32_at(d, g)?, u32_at(d, g + 4)?, u32_at(d, g + 8)?);
-            out.push((lo, hi, Map::Delta(first as i64 - lo as i64)));
+            let m = if format == 12 {
+                Map::Delta(first as i64 - lo as i64)
+            } else {
+                Map::Same(first as i64)
+            };
+            out.push((lo, hi, m));
         }
     } else {
         let segs = u16_at(d, sub + 6)? as usize / 2;
@@ -504,10 +515,33 @@ fn read_kern(d: &[u8], at: usize, len: usize) -> Result<Vec<(u16, u16, i16)>, Fo
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::testing::{TestGlyph, build, square_ring};
+    use crate::testing::{TestGlyph, build, square_ring, with_cmap};
 
     fn p(x: f64, y: f64) -> Point2 {
         Point2::new(x, y)
+    }
+
+    #[test]
+    fn a_many_to_one_cmap_is_read() {
+        // format 13 alone (the text-rendering-tests' TestCMAP13): each range one glyph
+        let font = build(1000, &[('A', square_ring()), ('B', square_ring())], &[]);
+        let mut c = vec![];
+        for x in [0u16, 1, 3, 10] {
+            c.extend(x.to_be_bytes());
+        }
+        c.extend(12u32.to_be_bytes());
+        c.extend([0, 13, 0, 0]);
+        c.extend((16 + 24u32).to_be_bytes());
+        c.extend(0u32.to_be_bytes());
+        c.extend(2u32.to_be_bytes());
+        for (lo, hi, g) in [(0x41u32, 0x5a, 1u32), (0x4e00, 0x9fff, 2)] {
+            for v in [lo, hi, g] {
+                c.extend(v.to_be_bytes());
+            }
+        }
+        let f = Font::parse(with_cmap(&font, c)).expect("parses");
+        assert_eq!((f.glyph('A'), f.glyph('Q'), f.glyph('Z')), (1, 1, 1));
+        assert_eq!((f.glyph('中'), f.glyph('a')), (2, 0));
     }
 
     #[test]
