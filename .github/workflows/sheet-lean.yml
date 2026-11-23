@@ -1,0 +1,40 @@
+# The sheet-metal spec (verify/sheet): its Lean proofs over Mathlib, and the axioms check (a
+# `sorry`, `native_decide` or any axiom past propext, Classical.choice and Quot.sound fails the
+# build: Sheet/Axioms.lean is in the default target).
+name: sheet-lean
+
+on:
+  push:
+    branches: [main]
+    paths: ["verify/sheet/**", ".github/workflows/sheet-lean.yml"]
+  pull_request:
+    paths: ["verify/sheet/**", ".github/workflows/sheet-lean.yml"]
+  workflow_dispatch:
+
+jobs:
+  proofs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: toolchain cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.elan
+          key: elan-${{ runner.os }}-${{ hashFiles('verify/sheet/lean-toolchain') }}
+      - name: elan and the pinned toolchain
+        run: |
+          if [ ! -x "$HOME/.elan/bin/elan" ]; then
+            curl -sSfL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -o elan-init.sh
+            sh elan-init.sh -y --default-toolchain none
+          fi
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+          "$HOME/.elan/bin/elan" toolchain install "$(cat verify/sheet/lean-toolchain)"
+      - name: prebuilt Mathlib
+        working-directory: verify/sheet
+        run: lake exe cache get
+      - name: the proofs and the axioms check
+        working-directory: verify/sheet
+        run: |
+          lake build 2>&1 | tee build.txt
+          ! grep -E "declaration uses 'sorry'|sorryAx|ofReduceBool" build.txt
