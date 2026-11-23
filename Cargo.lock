@@ -21,6 +21,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-alg"
+version = "0.1.0"
+dependencies = [
+ "forge-math",
+]
+
+[[package]]
 name = "forge-alloc"
 version = "0.1.0"
 
@@ -54,6 +61,7 @@ dependencies = [
 name = "forge-bool"
 version = "0.1.0"
 dependencies = [
+ "forge-alg",
  "forge-bool-core",
  "forge-geom",
  "forge-math",

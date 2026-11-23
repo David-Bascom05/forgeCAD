@@ -17,11 +17,11 @@
 //! | `QVert` | QVert.lean | vertex samples, `vert_cov`, and `bezout3` (completeness); the proposer is next |
 //! | `QForm` | QForm.lean | `SForm` and `on_cov`: a body's sign formula on a covector |
 //!
-//! Root isolation is `forge_math::exact::alg::roots_of` (RootCover.lean): complete by a checked
+//! Root isolation is `forge_alg::roots_of` (RootCover.lean): complete by a checked
 //! cover, or `None`. Still to come: the vertex proposer, the cell enumerator (Tier 1 is being
 //! redesigned by dol-curved, curved-design.md §2.3), `QSample`, `QLedger`, then the write.
 //!
-//! **Numbers.** Exact arithmetic is `forge_math::exact::alg` (rationals and `Num` over the one
+//! **Numbers.** Exact arithmetic is `forge_alg` (rationals and `Num` over the one
 //! bignum, `Big`). Every untrusted step (resultants, root isolation, cofactors) produces a
 //! certificate that a checker here verifies, as the Lean does; a failed check is
 //! [`Skip::Uncertified`], spent fuel [`Skip::Budget`], never a wrong sign.
@@ -35,12 +35,12 @@
 //! **Style** (research/kernel-audit/decide-once/aeneas/README.md): no struct holds a borrow, no
 //! `break`, no `return` inside a loop, no `Ordering`, `while` loops over indices.
 
-use forge_bool_core::Sgn;
-use forge_math::Interval;
-use forge_math::exact::alg::{
+use forge_alg::{
     Coef, Num, Poly, Q, eqv, gcd, is_zero_p, padd, pdiv, pmul, pneg, ppow, propose_sqfree, pscale, pshift_up,
     psub, roots_of, xgcd,
 };
+use forge_bool_core::Sgn;
+use forge_math::Interval;
 
 /// Why a boolean is not decided here, and goes to the old path, counted.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1732,7 +1732,7 @@ pub fn propose_vert3(qa: &Quadric, qb: &Quadric, qc: &Quadric, fuel: usize) -> O
 
 /// `deg` over ℚ.
 fn deg_p(p: &[Q]) -> usize {
-    forge_math::exact::alg::deg(p)
+    forge_alg::deg(p)
 }
 
 // =============================================================================================
@@ -1777,8 +1777,8 @@ impl SForm {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use forge_alg::{Iso, poly_i};
     use forge_math::exact::Big;
-    use forge_math::exact::alg::{Iso, poly_i};
 
     fn q(n: i64, d: i64) -> Q {
         Q::ratio(&Big::from_i64(n), &Big::from_i64(d))
@@ -2061,7 +2061,7 @@ mod tests {
                 }
                 println!(
                     "R_A degree {} (max {} bits); A, B, C: {} rationals, max {} bits",
-                    forge_math::exact::alg::deg(&c.r),
+                    forge_alg::deg(&c.r),
                     rb,
                     n,
                     bits

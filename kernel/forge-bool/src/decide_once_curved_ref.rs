@@ -9,8 +9,8 @@
 //! with the exact proposers of `decide_once_curved` as its fallback.
 
 use crate::decide_once_curved::*;
+use forge_alg::{Num, Poly, Q, is_zero_p, pmul, pscale, psub, roots_of};
 use forge_bool_core::Sgn;
-use forge_math::exact::alg::{Num, Poly, Q, is_zero_p, pmul, pscale, psub, roots_of};
 
 /// A covector (Lean's `Cov`).
 pub type Cov = Vec<Sgn>;

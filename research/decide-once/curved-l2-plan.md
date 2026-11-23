@@ -330,3 +330,20 @@ the faces `[2, 0, 2, 2, 0, 0]` times, all with `λ = 0`.
 **`Big` merged** (d3d3f6e): forge-math's `exact` is now the decide-once branch's `S/M/L` `Big`
 (33b461f), with `divrem` and `gcd` ported onto its 64-bit limbs. On it the three-quadric vertex
 takes 31 ms and 0.27 G instructions.
+
+**Milestone 1k: the curved numerics move to their own crate, `kernel/forge-alg`, and the speed
+gate is neutral by construction.** The decide-once branch's exact callgrind gate, flat switch on,
+showed all 97 lines higher after `divrem` and `gcd` were added to `forge_math::exact`, by at most
++0.05% (coplanar seq +92 k). None of the new code was linked. Any code added to `forge-math`
+moves rustc's codegen-unit partitioning of the crate, and with it the inlining of existing
+functions: `Dy::add` grew from 0x38b to 0x404 bytes. A comment alone moves nothing, but each of
+`mod div` alone, `div` over public API only, and `div` with `alg` did.
+
+So `forge-math` is now byte-identical to the decide-once branch's 33b461f, and the curved
+numerics are a separate in-house crate, `forge-alg`, over `Big`'s public variants and methods.
+`divrem` and `gcd` (`big_gcd`) are free functions there. `forge-bool`'s `decide_once_curved`
+enables `dep:forge-alg`, so nothing in the flat or default builds compiles it. The oracles and the
+curved digest pass, native and wasm.
+
+The gate on this branch's default build, before the `Big` merge against after it: 97 of 97 lines
+lower, none equal or higher.

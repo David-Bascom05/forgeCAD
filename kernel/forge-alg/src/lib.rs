@@ -20,9 +20,12 @@
 //!
 //! **Style** (research/kernel-audit/decide-once/aeneas/README.md): no struct holds a borrow, no
 //! `break`, no `return` inside a loop, no `Ordering` (comparisons answer −1, 0 or 1), loops are
-//! `while` loops over indices. Only [`Big`]'s public API is used.
+//! `while` loops over indices. Only [`Big`]'s public API is used; this crate is separate from `forge-math` so that nothing in
+//! it can move `forge-math`'s code generation (see `div`).
 
-use super::{Big, Dy};
+mod div;
+pub use div::{divrem, gcd as big_gcd};
+use forge_math::exact::{Big, Dy};
 
 // ---------------------------------------------------------------------------------------------
 // Natural-number helpers on Big (public API only: add, sub, mul, shl, bits, signum, abs)
@@ -37,14 +40,14 @@ fn big1() -> Big {
     Big::from_i64(1)
 }
 
-/// `(q, r)` with `a = q b + r` and `0 ≤ r < b`, for `a ≥ 0` and `b > 0` (`Big::divrem`).
+/// `(q, r)` with `a = q b + r` and `0 ≤ r < b`, for `a ≥ 0` and `b > 0` (`divrem`).
 pub fn divmod_nat(a: &Big, b: &Big) -> (Big, Big) {
-    a.divrem(b)
+    divrem(a, b)
 }
 
-/// The gcd of `|a|` and `|b|` (`Big::gcd`).
+/// The gcd of `|a|` and `|b|` (`big_gcd`).
 pub fn gcd_big(a: &Big, b: &Big) -> Big {
-    a.gcd(b)
+    big_gcd(a, b)
 }
 
 /// `⌊√a⌋` for `a ≥ 0`, bit by bit.
@@ -183,20 +186,20 @@ impl Q {
         } else if o.is_zero() {
             self.clone()
         } else {
-            let g = self.d.gcd(&o.d);
+            let g = big_gcd(&self.d, &o.d);
             if bcmp(&g, &big1()) == 0 {
                 Q {
                     n: self.n.mul(&o.d).add(&o.n.mul(&self.d)),
                     d: self.d.mul(&o.d),
                 }
             } else {
-                let d1g = self.d.divrem(&g).0;
-                let d2g = o.d.divrem(&g).0;
+                let d1g = divrem(&self.d, &g).0;
+                let d2g = divrem(&o.d, &g).0;
                 let t = self.n.mul(&d2g).add(&o.n.mul(&d1g));
                 if t.is_zero() {
                     Q::zero()
                 } else {
-                    let h = t.gcd(&g);
+                    let h = big_gcd(&t, &g);
                     if bcmp(&h, &big1()) == 0 {
                         Q {
                             n: t,
@@ -204,8 +207,8 @@ impl Q {
                         }
                     } else {
                         Q {
-                            n: t.divrem(&h).0,
-                            d: d1g.mul(&o.d.divrem(&h).0),
+                            n: divrem(&t, &h).0,
+                            d: d1g.mul(&divrem(&o.d, &h).0),
                         }
                     }
                 }
@@ -223,18 +226,18 @@ impl Q {
         if self.is_zero() || o.is_zero() {
             Q::zero()
         } else {
-            let g1 = self.n.gcd(&o.d);
-            let g2 = o.n.gcd(&self.d);
+            let g1 = big_gcd(&self.n, &o.d);
+            let g2 = big_gcd(&o.n, &self.d);
             let one = big1();
             let (n1, d2) = if bcmp(&g1, &one) == 0 {
                 (self.n.clone(), o.d.clone())
             } else {
-                (self.n.divrem(&g1).0, o.d.divrem(&g1).0)
+                (divrem(&self.n, &g1).0, divrem(&o.d, &g1).0)
             };
             let (n2, d1) = if bcmp(&g2, &one) == 0 {
                 (o.n.clone(), self.d.clone())
             } else {
-                (o.n.divrem(&g2).0, self.d.divrem(&g2).0)
+                (divrem(&o.n, &g2).0, divrem(&self.d, &g2).0)
             };
             Q {
                 n: n1.mul(&n2),
@@ -295,7 +298,7 @@ impl Q {
 
     /// An f64 near the value (a report or a filter's centre, never a decision).
     pub fn approx(&self) -> f64 {
-        super::ratio_f64(
+        forge_math::exact::ratio_f64(
             &Dy {
                 m: self.n.clone(),
                 e: 0,
@@ -1376,14 +1379,14 @@ mod tests {
             if b.is_zero() {
                 b = Big::from_i64(3);
             }
-            let (q, r) = a.divrem(&b);
+            let (q, r) = divrem(&a, &b);
             assert_eq!((q.clone(), r.clone()), divmod_slow(&a, &b), "divrem {k}");
             assert_eq!(q.mul(&b).add(&r), a);
             // signs: truncated
-            let (qn, rn) = a.neg().divrem(&b);
+            let (qn, rn) = divrem(&a.neg(), &b);
             assert_eq!((qn, rn), (q.neg(), r.neg()));
             // gcd against Euclid by the oracle
-            let g = a.gcd(&b);
+            let g = big_gcd(&a, &b);
             let (mut x, mut y) = (a.clone(), b.clone());
             while !y.is_zero() {
                 let t = divmod_slow(&x, &y).1;
@@ -1393,8 +1396,8 @@ mod tests {
             assert_eq!(g, x, "gcd {k}");
             k += 1;
         }
-        assert_eq!(Big::from_i64(12).gcd(&Big::from_i64(-18)), Big::from_i64(6));
-        assert_eq!(Big::zero().gcd(&Big::zero()), Big::zero());
+        assert_eq!(big_gcd(&Big::from_i64(12), &Big::from_i64(-18)), Big::from_i64(6));
+        assert_eq!(big_gcd(&Big::zero(), &Big::zero()), Big::zero());
     }
 
     #[test]

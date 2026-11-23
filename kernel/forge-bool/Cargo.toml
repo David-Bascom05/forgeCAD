@@ -11,6 +11,7 @@ forge-math = { path = "../forge-math" }
 forge-geom = { path = "../forge-geom" }
 forge-topo = { path = "../forge-topo" }
 forge-bool-core = { path = "../forge-bool-core", optional = true }
+forge-alg = { path = "../forge-alg", optional = true }
 
 [features]
 # the decision log (src/decisions.rs): every near-tolerance decision recorded under its entities,
@@ -21,7 +22,7 @@ decisions = ["forge-geom/decisions", "forge-topo/decisions"]
 decide_once = ["dep:forge-bool-core", "forge-math/exact"]
 # the decide-once boolean for quadric carriers (src/decide_once_curved.rs, research/decide-once/
 # curved-design.md): off by default; not yet reached from boolean.rs, so on or off the old path runs
-decide_once_curved = ["dep:forge-bool-core", "forge-math/exact"]
+decide_once_curved = ["dep:forge-bool-core", "dep:forge-alg", "forge-math/exact"]
 # the curved L2 reference (src/decide_once_curved_ref.rs), executable, for the L6 differential:
 # tests and fuzzing only, never the production path
 curved_reference = ["decide_once_curved"]

@@ -1,0 +1,13 @@
+[package]
+name = "forge-alg"
+description = "Exact rationals, polynomials and real algebraic numbers over forge_math::exact::Big (the curved decide-once numerics)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+forge-math = { path = "../forge-math", features = ["exact"] }
+
+[lints]
+workspace = true
