@@ -821,3 +821,17 @@ fn the_examples_export() {
         assert!(e.links.iter().all(|l| l.dummy || l.mass.is_some()), "{file}");
     }
 }
+
+/// The ZIP's hash, the same on every platform: wasm32-wasip1 runs this test too (tools/test-wasm.sh).
+#[test]
+fn the_export_is_the_same_bytes_native_and_wasm() {
+    let d = project("bits");
+    let (_, e) = export(&d, ARM, &["urdf"]);
+    let e = e.expect("the arm");
+    let h = forge_math::hash::hash128(&e.zip);
+    assert_eq!(
+        format!("{h:032x}"),
+        "4766d5d6d09f25626c8cf99beb0ba36d",
+        "the arm's URDF ZIP"
+    );
+}
