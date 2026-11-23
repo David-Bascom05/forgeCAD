@@ -142,4 +142,46 @@ theorem sort_packed_eq (l : List VKey) (hok : ∀ k ∈ l, k.ok) (hs : l.Pairwis
   rw [List.pairwise_map]
   exact List.Pairwise.imp_of_mem (fun {a b} ha hb h => packed_mono a b (hok a ha) (hok b hb) h) hs
 
+
+/-! ## Threads: answers in item order do not depend on the thread count -/
+
+/-- Two lists of (index, answer) pairs, permutations of each other and both sorted by strictly
+increasing index, are equal. Generalises `sorted_unique` to keyed pairs. -/
+theorem keyed_unique {α : Type} : ∀ (l₁ l₂ : List (Nat × α)), l₁.Perm l₂ →
+    l₁.Pairwise (fun a b => a.1 < b.1) → l₂.Pairwise (fun a b => a.1 < b.1) → l₁ = l₂
+  | [], l₂, hp, _, _ => List.Perm.nil_eq hp
+  | a :: r₁, [], hp, _, _ => absurd (List.Perm.length_eq hp) (by simp)
+  | a :: r₁, b :: r₂, hp, h₁, h₂ => by
+    have hab : a = b := by
+      have ha : a ∈ b :: r₂ := hp.mem_iff.mp (List.mem_cons_self ..)
+      have hb : b ∈ a :: r₁ := hp.mem_iff.mpr (List.mem_cons_self ..)
+      rcases List.mem_cons.mp ha with e | ha'
+      · exact e
+      · rcases List.mem_cons.mp hb with e | hb'
+        · exact e.symm
+        · have x : b.1 < a.1 := (List.pairwise_cons.mp h₂).1 a ha'
+          have y : a.1 < b.1 := (List.pairwise_cons.mp h₁).1 b hb'
+          omega
+    subst hab
+    have hr : r₁.Perm r₂ := (List.perm_cons a).mp hp
+    rw [keyed_unique r₁ r₂ hr (List.pairwise_cons.mp h₁).2 (List.pairwise_cons.mp h₂).2]
+
+/-- The sequential answer list `[(0, f 0), …, (n-1, f (n-1))]` is sorted by index. -/
+theorem seq_sorted {α : Type} (f : Nat → α) (n : Nat) :
+    ((List.range n).map fun i => (i, f i)).Pairwise (fun a b => a.1 < b.1) := by
+  rw [List.pairwise_map]
+  exact List.Pairwise.imp (fun h => h) (List.pairwise_lt_range)
+
+/-- **`par::map` equals the sequential map, whatever the threads did.** Whatever order the
+workers produced their `(i, f i)` pairs in, and however many workers there were, the collected
+list is a permutation of the sequential one. Sorted by index (`sort_unstable_by_key(|x| x.0)` in
+forge-math/src/par.rs), it is the sequential list. So the answers, and everything computed from
+them in item order, are independent of the thread count. Precondition: `f` is pure, so each
+`f i` is the same value on any thread. -/
+theorem par_map_eq {α : Type} (f : Nat → α) (n : Nat) (got : List (Nat × α))
+    (hperm : got.Perm ((List.range n).map fun i => (i, f i)))
+    (hsorted : got.Pairwise (fun a b => a.1 < b.1)) :
+    got = (List.range n).map fun i => (i, f i) :=
+  keyed_unique _ _ hperm hsorted (seq_sorted f n)
+
 end BoolResearch.Speedups

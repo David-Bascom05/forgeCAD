@@ -163,3 +163,107 @@ citing these facts.
 S4 is not in this table: its fact is `JordanLocal.contains_const_local`, which is already proven.
 Its L4 needs the old path's piece graph modelled. That is M-sized, and waits until S4's prototype
 shows zero disagreements.
+
+## Threads: wall-clock speed for the user (2026-11-23)
+
+The owner, relayed by the master: "the goal is speed for the user, not just small binaries".
+Threads are therefore ranked here by **wall-clock** win. The instruction gate stays as it is, and a
+new session (session_01Q19LzzwaZhmXMt4M3NiseR) is building a wall-clock user-latency gate beside
+it. The earlier S7 ("0 on the gate") is about the instruction gate only.
+
+### Measured on this machine (4 vCPUs, a VM; release build x86-64-v2)
+
+**Thread overhead** (std only, a small benchmark in the scratchpad):
+
+| Operation | Cost |
+|---|---|
+| `thread::spawn` + `join`, 1 thread | 42–50 µs |
+| `thread::scope` with 4 threads | about 105 µs |
+| a Mutex/Condvar pool waking 4 workers and waiting | about 110 µs (the VM's wake latency, about 25 µs per thread) |
+
+A desktop is typically 2–5× cheaper. The latency gate should re-measure on the target hardware.
+
+**Throughput:** coplanar seq runs 209M instructions in about 28 ms, so about 7.5G instructions/s
+on one core. A flat boolean (1.21M) is therefore about **0.16 ms**.
+
+**Where a regen's instructions are** (callgrind, switch off):
+
+| Part | Booleans' share | Tools' share |
+|---|---|---|
+| shaft | 98% | 2% |
+| mixed | 99% | 1% |
+| coplanar | 96% | 4% |
+| upto | **61%** | **39%** |
+
+**The existing parallel n-ary regen, wall-clock** (best of 5; `regen1 PART nary1` against
+`nary16`):
+
+| Part | nary1 | nary16 | Change |
+|---|---|---|---|
+| coplanar | 27.1 ms | 45.1 ms | **+66%** |
+| upto | 7.1 ms | 8.4 ms | **+18%** |
+| heatsink | 56.6 ms | 55.7 ms | −2% |
+| shaft | 67.6 ms | 50.4 ms | −25% |
+| mixed | 229.6 ms | 99.9 ms | **−56%** |
+
+`nary16` asks for 16 threads on 4 vCPUs. `forge-bool/src/nary.rs`'s `par_map` already starts
+helpers only after 200 µs of serial work. But `forge-model/src/lib.rs:1126` (tool building) and
+`bodies.rs:1052` spawn as soon as `threads > 1`, and nothing caps the count at the cores there are.
+
+### The break-even rule
+
+For a batch of serial work W, split over p threads at fixed overhead O, the parallel time is
+W/p + O:
+- **Break-even** is at W = O·p/(p−1). With O ≈ 105 µs and p = 4, that is W ≈ 140 µs, about **1M
+  instructions**.
+- **A 25% saving** of W needs W ≥ 2·O ≈ 210 µs, about **1.6M instructions**.
+- **Items:** each should be at least 5–10 µs (about 50k instructions), so that the shared atomic
+  counter and the result pushes stay under 5%.
+
+What that means at our sizes:
+- **A typical flat boolean** (about 0.16 ms, with the face-pair loop about 70% of it) is below
+  break-even. Splitting its pairs gains nothing.
+- **A large boolean** gains about (1 − 1/p) of its pair phase. That is one of 5M instructions or
+  more (about 0.7 ms): coplanar's largest, with 32 near faces against a median of 10, or the
+  curved booleans on mixed.
+- **Across a regen:** the n-ary batch (many tools at once) is already large enough on mixed and
+  shaft. It is too small on coplanar and upto, where the threads cost more than they save.
+
+### How results stay independent of the thread count
+
+The repository already has the pattern, in forge-math `par::map` and nary's `par_map`:
+- workers take items from a shared counter;
+- each answer is tagged with its item index;
+- the answers are sorted by index at the end;
+- everything after that runs in item order.
+
+The proof:
+- **`par_map_eq`** (Speedups.lean, proven, core Lean, standard axioms). The collected `(i, f i)`
+  list is a permutation of the sequential list. Once sorted by index, it *is* the sequential list,
+  whatever the scheduling or the thread count. This rests on `keyed_unique`.
+- The precondition is that `f` is pure: it reads shared state only immutably and writes only its
+  own answer.
+
+The rules for every threaded site:
+1. No floating-point reduction across items. Sums are taken after the sort, in item order.
+2. No ids or names allocated inside a worker. Names come from the inputs (as the boolean's pair
+   names already do, from face names) or are assigned after the merge.
+3. Chunking never decides results. Items are the unit, not thread-sized chunks.
+4. A panic in a worker resumes on the caller (`resume_unwind`, as par.rs does).
+
+### Ranked by expected wall-clock win
+
+| # | Item | Win (wall-clock) | Bits / naming | Proof | Size |
+|---|---|---|---|---|---|
+| **W1** | **Make the existing regen-level threading adaptive and capped.** Cap the thread count at the cores there are. Start serially, and add helpers only once more than about 200 µs of work remains, as nary's `par_map` already does, at `lib.rs:1126`, `bodies.rs:1052` and `ssi.rs:524`. | coplanar n-ary **45 → about 27 ms (−40%)**; upto 8.4 → about 7.1 ms (−15%); mixed keeps its −56% | none: answers already in item order; serial and parallel give one result | `par_map_eq` (proven) plus purity of the item function | S |
+| **W2** | S1–S4 above (single-thread instruction cuts) | about −12 to −16% on coplanar seq wall-clock, 1:1 with instructions | as listed per item | as listed | S–M |
+| **W3** | **Build tools ahead of the boolean chain in the seq regen.** While boolean k runs, a helper builds tools k+1 and beyond, in item order. | upto: tools are 39% of instructions, so about −30% latency on upto; coplanar, shaft and mixed about −1 to −4% | none: tools are pure functions of their features | `par_map_eq`. Each tool depends only on the part's parameters, not on the previous boolean's result. Features that read the body (up-to-face, holes) are excluded by the same `modifies` test the n-ary regen already uses. | S–M |
+| **W4** | **Face-pair batches inside one boolean,** adaptive (no helpers below about 1M instructions of pair work). Each pair's `trim` writes into its own buffers (cuts, segs, imprints, touching), concatenated in pair order with index remapping. | typical flat boolean: 0. Large booleans (≥ 5M instructions, mostly curved; coplanar's 32-near ones): up to about 2× on their pair phase with 4 cores. | medium: `trim` today pushes into shared `cuts`/`segs`, with cut indices held in `ts`. The concatenation must remap indices exactly; `rank_pairs` runs after, unchanged. | `par_map_eq`, plus "concat of per-pair outputs = the sequential fold" (an S list lemma), plus purity of `trim` per pair (it reads `bodies` and `index`, and writes only its own outputs once restructured) | M |
+| W5 | S5 (per-body caches) | −3% | low | as listed | M |
+| W6 | Independent bodies or assembly instances in parallel | already done in forge-asm (`solve.rs`, `check.rs`) | — | — | — |
+| — | Threads inside the decide-once/A8 builder | none at about 0.9M per boolean, below break-even | — | — | not recommended |
+
+**Recommended order for the user:** W1 (small, certain, and it removes a regression of the
+threaded path), then S1–S4 (W2), then W3 (it decides upto-like parts), then W4 for large
+booleans. W1 and W3 should be measured first on the latency gate. The figures here are from a
+4-vCPU VM.
