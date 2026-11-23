@@ -40,6 +40,25 @@ proof splits on the branch:
   part-built body. `boolean_into` edits `target` in place, so the in-place entry needs the target
   restored, or the path must only commit on success.
 
+**Size hypothesis `InputSize A B`.** It collects every magnitude bound the screens' IEEE proofs
+assume, as `LedgerWF2.small` did for the core:
+- coordinates and plane distances ≤ about 9e9 at LINEAR (Screen/Coincide `plane_dist_sound`);
+- cylinder measures ≤ 1e8 (`offp_margin`);
+- all values finite (< about 1e150);
+- a floor: every nonzero stored surface component ≥ INPUT_FLOOR (about 2^-480), so Dekker's
+  TwoProduct, used by the exact-sign keys (a84f308), never underflows.
+
+Binding today: offp_margin's S ≤ 1e8, which gives max |coord| ≤ about 1.6e7 (16 km in mm). Today's
+code has no size check, so one `#[cold]` check at the four boolean entries (vertex max |coord|
+against one `INPUT_SIZE` const) refuses with `Unhandled::InputTooLarge`. Each new screen adds its bound here.
+The check runs on surface data (each face's frame origin and radii, the quantities the screens
+bound), once where a body is created: forge-model tools, pattern copies after their transform,
+Unlinked, and import. **`boolean_preserves_InputSize`**: a result's faces carry operand surfaces
+with frames unchanged, so InputSize carries through every boolean by induction. Owner: curved Rust,
+with the list of every path by which a body reaches a boolean. The list is reviewed for a single combined bound before the
+theorem is closed. Outside these bounds the boolean refuses (an input out of scope); it never
+answers without a proof.
+
 The same statement covers:
 - `boolean_into` and `boolean_unlinked`, for the target in place;
 - `nary_with`, over n tools with the ops folded left;
@@ -66,7 +85,7 @@ The parts:
   I recommend F1. It is what "today's code, proven" can mean. Then ValidSolid R holds for `Rexact`,
   and for R itself when δ is below the body's own feature size, which is checked or refused.
 
-  **Ruled (the master, 2026-11-23): F1**, faithful within a proven δ ("we can use floating point").
+  **Ruled (the master, 2026-11-23): F1**, refined to vertex clusters (see §0); faithful within a proven δ ("we can use floating point").
   Inputs are read the same way: `ValidSolid b := ∃ b*, Refines_δ b b* ∧ ∃ S, Bounds b* S`, and
   `⟦b⟧ := ⟦b*⟧`. `Bounds` is dol-curved's (ForgeCurved/BodyModel.lean, 30c0577b): exact, on the exact
   counterpart.
@@ -79,6 +98,38 @@ The parts:
   - `ValidSolid δ b := ∃ bs, exactOf b = some bs ∧ ValidExact bs`;
   - `⟦b⟧ := denoteExact (exactOf b)`;
   - `exactOf = none` (a vertex whose meet isn't unique in its δ-ball) is a typed refusal.
+  **Ruled (the master, 2026-11-23): option (iv), the refined F1.** (Recorded first as an open
+  question; the record follows.) On real kernel bodies the f64 planes round a 4+ face
+  vertex are only approximately concurrent, so exactOf's unique-meet vertex is `none` on normal
+  parts. B:3387's trial refused bench part insert (VertexNotUnique at (40.3, −17, 36)).
+  - Approved, option (iv), vertex clusters, for inputs and outputs alike:
+    - the exact body is its exact carriers plus its topology;
+    - each f64 vertex corresponds to a connected exact cluster of diameter ≤ δ;
+    - `Refines_δ` is one-to-one up to vertex clusters;
+    - `exactOf = none` only for invalid input;
+    - ⟦b⟧ is the solid the exact planes bound under that topology;
+    - a refusal happens only per decision, when a decision needs a cluster point that neither the
+      screen nor exact can separate.
+  - This replaces the snapping steer: decide-once's snap merges coincident planes, not concurrent
+    ones.
+  - Rejected:
+    - (i) per-face canonical triples: the faces don't close;
+    - (ii) decide-once's snap: it merges coincident planes, not concurrent ones;
+    - (iii) f64 vertex points read exactly: the faces aren't planar.
+  **Restated for (iv): BodyModel.lean, bc5f25d3.**
+  - `vertCore` and `ClusterOK`; `exactOf = none` for invalid input only;
+  - `Refines δ` maps each vertex to its cluster, with `ends_on`;
+  - `Bounds` is split: `frontier_sub`, and `faces_sub` off the vertex zones;
+  - `ValidSolid δ b := ∃ bs, exactOf δ b = some bs ∧ EdgeIsolated ∧ ValidExact bs`.
+  **Φ_u, done (53957ebb).**
+  - `BodyModel.formulas`, an `SForm` per vertex; the stored body and its exact counterpart share it
+    (`Refines.formulas_eq`).
+  - `Bounds.local_formula`, and the decision lemma `mem_denote_zone`: for x in u's zone and off u's
+    incident carriers, `x ∈ ⟦b⟧ ↔ Φ_u.den (exact carriers) x`. So the exact test near a vertex is
+    "evaluate Φ_u at x's exact signs".
+  - A point on an incident carrier inside a zone is the residual per-decision refusal.
+  - Named hypothesis on aeneas's abstraction function: **`FormulaOfTopology abs`**. The Φ_u that `abs`
+    reads off a stored body's topology equals the stored local cone at u.
   Done in BodyModel.lean, b66293ec (`exactOf`, `exactOf_refines`, `denote_spec`, `denote_refines`).
   Also asked: `exactOf = none` when a second branch of the meet enters an edge's δ-tube.
   `exactOf_refines` needs `hface` and `hedge` (each stored region and curve within δ of its exact
@@ -124,6 +175,9 @@ definitions (`keep`, `coreI`) are reused as the spec of D6–D8.
 | G9 | `SCRATCH` (thread-local) reused across booleans; `Face::query` (`FaceInfo`) kept across booleans and patched by `extend_query`/`drop_query_loops` | caches that outlive a call: a stale cache is a wrong answer | an invariant `CacheOK b` (the cached FaceInfo equals the one built fresh), preserved by every edit; a hypothesis of each D-step, proven for apply |
 | G10 | `nary`'s `Batch` (a trait object: GPU or CPU) and its threads | an external verdict source; parallel order | `Batch` sound when decided (a hypothesis on the impl; CpuBatch proven); results merged in a fixed order |
 | G11 | the many `LINEAR` / `RIM` tolerance tests (`on_edge`, `settle`, `tolerant_cuts`, `grown_tols`, `holds_edge`, `rolls_off`, `through_smooth_edge`, …) | each is a guess unless it is a proven screen | each becomes a screen plus exact; listed per function as the aeneas table arrives |
+| G13 | `face_point`'s inward step (min(0.01·len, 0.05)) is never checked against cuts or other loops | a probe may land in the wrong region: a wrong class, not an undecided one | a screened distance check with an exact fallback, then another probe or a typed refusal |
+| G14 | trim_in B:2614/2938: `(box contains && !CAREFUL) \|\| point_in_face(..)` accepts a hit on the face's box alone | a box contains far more than the face: a guess that the hit is in the face | point_in_face_at on the exact point, behind a screen (the box test may stay as a fast *reject* only) |
+| G15 | after an exact `On` at a trim_in stretch midpoint (M exactly on an edge of f_k), today's `past`/hair handling decides the stretch | not yet stated | review separately: state what the stretch's class is when its midpoint is on ∂f_k exactly |
 | G12 | the `decide_once` cargo feature (off by default) | ships as the flat fallback (owner clarification) | it becomes the fallback branch: on in release, entered only after today's path refuses or is undecided, with no env switch; proven by IncCoreSpec/EndToEndF plus R3 |
 
 
@@ -138,28 +192,39 @@ translates them. Each statement is a refinement: the translated function, read t
 abstraction of its inputs, equals or soundly approximates a Lean definition over ℝ. Statements are
 written before the translation lands, so the proofs can start as soon as it elaborates.
 
-## 0. The missing layer: a Lean model of a `forge_topo::Body`
+## 0. The body layer: a Lean model of a `forge_topo::Body` (exists; this section was stale)
 
-Every statement below is about a `Body`. The repository has **no Lean model of one**: the decide-once
-models (`ForgeExact.DecideOnce`) are over ledgers, and forge-topo is not translated.
+Every statement below is about a `Body`. When this page was first written there was no Lean model
+of one. That is no longer true; the layer exists in three pieces, and §E/§D are stated against
+them:
 
-Needed:
-1. **The translated types.** Aeneas's `Body`, `Face`, `Loop`, `Coedge`, `Edge` and `Vertex`, with
-   `Surface` and `Curve` as translated enums, and the `Proc`/`ProcCurve` arms opaque (the aeneas
-   session's markers).
-2. **An abstraction `⟦b⟧ : Set ℝ³`, the solid a body bounds,** plus `⟦f⟧ : Set ℝ³` for each face: its
-   surface's points inside its trimming loops. These are defined only under a validity predicate,
-   `ValidSolid b`: faces meet only along common edges, the loops are closed and properly nested, and
-   the shell is closed and oriented.
-3. **The bridge to dol-curved's F-series.** F1–F6 work over an abstract arrangement `G` with rooms and
-   facets. `⟦b⟧` should be a union of rooms of the arrangement of the body's own faces, so F5/F6 apply
-   to it unchanged.
+1. **The exact model and its denotation: `verify/forge-curved/ForgeCurved/BodyModel.lean`** (on
+   main since #11). `FaceModel`, `EdgeModel`, `BodyModel`, `Bounds b S` (S is the solid the faces
+   bound), `bounds_unique`, `ValidExact`, `denoteExact`, `Refines δ`, `exactOf`, `exactOf_refines`,
+   `ValidSolid δ b`, `denote_spec`, `denote_refines`, and the bridge to the F-series
+   (`denote_eq_closure_rooms`, `f6_hyps`, `oriented_denote`): ⟦b⟧ is a union of closed rooms of the
+   arrangement of the body's own faces, so F5/F6 apply to it unchanged. The vertex-cluster
+   restatement (option iv, bc5f25d3) and the local formula Φ_u (53957ebb) are on dol-curved and
+   land on main with the S3/S4 screens (the spine's second PR).
+2. **The combinatorial validity of a body: `verify/forge-topo-check`** (on main). `TopoCheck.Body`
+   (the model), `Valid` (Spec.lean) and `check_sound` (Proof.lean): `check` returning no problem
+   implies `Valid`, at L1/L3, with the differential test on 1159 kernel bodies (L6). At L4 the
+   shipped `check_strays`, `check_links`, `check_shell_faces`, `check_edges` and `check_loops`
+   are proven on their Aeneas translation (`verify/aeneas/forge-topo`: `strays_refines`,
+   `links_refines`, `shell_faces_refines`, `edges_refines`, `loops_refines`; branch
+   rebase-fundamentals, landing as the spine's forge-topo PR). Left: `check_shell_euler`,
+   `check_fans`, and the composition into `Model.check` (research/fundamentals/RESUME.md there).
+   This is the `WellFormed` half of `ValidSolid` on outputs: it is what lets the post-build check
+   leave release once §E is proven (PROOF-STANDARD.md, the validity row).
+3. **The translated types.** Aeneas's `Body`, `Face`, `Loop`, `Coedge`, `Edge` and `Vertex` for
+   forge-bool, with `Surface` and `Curve` as translated enums and the `Proc`/`ProcCurve` arms
+   opaque, are the TRANSLATE agent's (verify/aeneas/forge-bool). Until they exist, §E and §D are
+   stated over `BodyModel` through an abstraction function `abs : Body → BodyModel ℝ³` taken as a
+   parameter, with the named hypothesis `FormulaOfTopology abs` (§E). When the translation lands,
+   `abs` becomes a definition and the statements are re-elaborated over it unchanged.
 
-This layer is the first piece of Lean, before any refinement proof. It is shared with the curved
-plan. **Owners (the master, 2026-11-23):** aeneas does (1), as part of the Charon fix. dol-curved
-does (2) and (3): ForgeCurved/BodyModel.lean (30c0577b) has `FaceModel`, `BodyModel`, `Bounds`,
-`ValidSolid`, `denote` and the bridge. Asked of it (review, 2026-11-23): uniqueness of `S`,
-`Refines_δ` with b*, and edges and vertices with their incidences (for F1 and the names).
+The Lean statements of §E and §D go in `verify/forge-bool-proof`. Its `LEDGER.md` is the single
+source of truth for what remains unproven: one row per contract, with its owner, status and file.
 
 ## 1. classify.rs
 
@@ -209,12 +274,71 @@ Proof shape:
   for a ray in general position);
 - the exact ray test supplies the general position, or refuses.
 
-**One open point for decide-once Rust.** `point_in_face` is called today on f64 points that are only
-within LINEAR of f's surface (trim's curve samples, split_face's meets). `whereF` needs a point *on*
-the surface. The exact version needs those callers to pass the exact point (an exact meet, or a curve
-parameter with an exact evaluation). Otherwise the question must be restated, e.g. "the foot of p on
-f's surface", which itself needs an exact definition. This is where the callers' update gets its
-statement; it should be settled before the Rust changes.
+**The callers' points (settled with decide-once Rust, 2026-11-23).** About 40 call sites of
+`point_in_face` and `classify` in boolean.rs and nary.rs fall into two kinds:
+
+- **(A) Constructed points**, meant to be on a surface: a curve ∩ surface hit, a cut, or an edge's
+  `curve.eval(t)`. These are in trim_in, find, local_split, tolerant_cuts, through_smooth_edge,
+  nary_body's hit tests, and plan_once_in's NotAnalytic `off`.
+  - **The caller passes the exact point**: for flat faces, the meet of three carriers (the two faces'
+    planes and the edge's across plane), as its key. That point is on f's plane by construction.
+  - Obligations: `pt.toReal ∈ carrier f` (so `point_in_face_spec` applies), and the f64 point the
+    code also carries is within δ of it (F1).
+  - Curved hits are curved Rust's: an exact curve parameter or an exact evaluation, with the same
+    spec.
+- **(B) Probe points**, chosen to stand for a region: face_point and spare_probes in classify_specs,
+  survivors, crack_tip, local_class and its midpoints, touches, imprint, plan_once_in's probes, and
+  nary_body's.
+  - **Both `point_in_face` and `classify` take the foot**, the exact orthogonal projection of the
+    dyadic probe onto f's exact carrier:
+    ```lean
+    /-- The foot of `p` on the plane `n·x = d` (n, d exact rationals): a rational point. -/
+    def foot (n : ℚ³) (d : ℚ) (p : ℚ³) : ℚ³ := p - ((n ⬝ p - d) / (n ⬝ n)) • n
+    theorem foot_on : n ≠ 0 → n ⬝ foot n d p = d
+    ```
+  - Why `classify` takes the foot as well, and not the raw dyadic probe: the region's class is
+    constant on the region (D5/D6), but a raw probe sits off the face by rounding. Where the region
+    lies closer than that rounding to the other body's boundary, the raw probe can classify
+    differently from the region. The foot lies on the face exactly.
+  - The obligation, per probe site: **`foot p ∈ relInterior region`**, the region the probe stands
+    for. Then `whereR ⟦B⟧ (foot p)` and `whereF ⟦f⟧ (foot p)` are the region's class (D6).
+  - Curved faces: curved Rust defines the foot (or an exact on-surface point near p) per kind.
+- **Probe sites and their regions** (decide-once Rust, 2026-11-23):
+
+  | site | region the foot must be in | the step's status |
+  |---|---|---|
+  | `face_point(f)` (classify_specs, survivors, plan_once_in) | the region of f, as cut by this boolean, next to f's first edge-middle | **unchecked guess** (G13): nothing checks that no cut or other loop comes within the step. It needs a screened distance with an exact fallback, then another probe or a typed refusal |
+  | `spare_probes(s)` | Spec s's region | checked by an f64 distance filter, which becomes a screened distance with an exact fallback |
+  | `local_class(f, p, ..)` (touches, crack_tip) | the sector of f at p between the other body's traces through p, per direction | **a guess** (step growth): replaced by D3's exact sector class (the carriers through p ordered by exact angle, face_fast's machinery), as its own step after (A) and the feet. The foot is used meanwhile |
+  | midpoints in local_split, imprint, nary_body | the open arc between the two cuts | kind (A): the exact midpoint of the two exact meets, by construction |
+
+- **The rule for both kinds:**
+  1. a screen decides In/Out/On-surface when it can;
+  2. otherwise the exact test at the exact point or the foot;
+  3. if every ray is degenerate, the exact ray test at that point;
+  4. if that can't decide either, a typed refusal.
+
+  Measured (flat-guess-site-rates.md, 4d260609): On ≤ 1e-12 and almost always exactly 0, and the
+  all-rays branch fired 0 times, so the exact path is rare.
+- **Measured (decide-once Rust, 2026-11-23):**
+  - the first (A) attempt, at trim_in's planar hit sites, ran 58 times on the gate and fuzz 1–40, never with all three faces planar; it cost +0.53% on coplanar by un-inlining on_edge, so it was reverted;
+  - flat `On` comes mostly from B:3387, trim_in's `at(k, p)` midpoint between two cuts (3,011 of 5,602), and that is the next flat step;
+  - the nine point_in_face near-misses are all curved (B:2845, B:3315);
+  - rule for every exact fallback: one `#[cold] #[inline(never)]` helper with a single call site, measured against the inlining effect.
+- **B:3387, approved (2026-11-23):** a stretch of a flat pair line between consecutive cuts X_i, X_j
+  (exact meets). Its class is `whereF ⟦f_k⟧ M` with `M = (X_i + X_j)/2`.
+  - Screen: today's f64 point_in_face at q = eval(mid), sound when
+    |q − M| + δ_input + parity rounding < reach.
+  - Cold helper, run only on today's On:
+    - X_i = X_j tested exactly (the stretch is empty);
+    - M on an edge exactly gives `On` (then G15);
+    - otherwise the exact parity, with a ray that avoids every exact vertex, so it is never undecided;
+    - the only refusal is VertexNotUnique.
+- **Rust plan:**
+  - exact companions: `classify_exact(ExactPt) → Result<Where, Refusal>` and
+    `point_in_face_at(f, ExactPt)`, where `ExactPt` is a key or a foot;
+  - callers move kind by kind, (A) first, in trim_in;
+  - the f64 signatures stay until every caller has moved.
 
 **Flags (guess steps in classify.rs, for the IEEE screens):**
 1. **`classify` returns `On` when every ray in `RAYS` is degenerate** (`OnSurface`, `Touching`, or a

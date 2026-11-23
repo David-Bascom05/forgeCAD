@@ -1,6 +1,9 @@
 # The sheet-metal spec (verify/sheet): its Lean proofs over Mathlib, and the axioms check (a
 # `sorry`, `native_decide` or any axiom past propext, Classical.choice and Quot.sound fails the
 # build: Sheet/Axioms.lean is in the default target).
+# Lake's build directories (this project's and verify/ieee754's) are restored from main's latest;
+# Lake rebuilds every module whose sources differ and replays the messages of the others, so the
+# log checked below is the same. Main's runs save them (tools/ci/lake-cache.py).
 name: sheet-lean
 
 on:
@@ -25,11 +28,6 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
-      - name: toolchain cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.elan
-          key: elan-${{ runner.os }}-${{ hashFiles('verify/sheet/lean-toolchain') }}
       - name: elan and the pinned toolchain
         run: |
           if [ ! -x "$HOME/.elan/bin/elan" ]; then
@@ -38,6 +36,17 @@ jobs:
           fi
           echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
           "$HOME/.elan/bin/elan" toolchain install "$(cat verify/sheet/lean-toolchain)"
+      - name: Lake cache key
+        id: lake
+        run: python3 tools/ci/lake-cache.py sheet verify/sheet
+      - name: Lake build (restored; Lake rebuilds what changed)
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ steps.lake.outputs.paths }}
+          key: ${{ steps.lake.outputs.key }}
+          restore-keys: |
+            ${{ steps.lake.outputs.prefix }}
+            ${{ steps.lake.outputs.any }}
       - name: prebuilt Mathlib
         working-directory: verify/sheet
         run: lake exe cache get
@@ -45,7 +54,7 @@ jobs:
         working-directory: verify/sheet
         run: |
           lake build 2>&1 | tee build.txt
-          ! grep -E "declaration uses 'sorry'|sorryAx|ofReduceBool" build.txt
+          ! grep -E "declaration uses [\`']sorry|sorryAx|ofReduceBool" build.txt
       - name: the kernel against the Lean model
         # Every sheet part in the repository, seeded random strips and the trims' region cases:
         # what forge-sheet publishes is judged by `lake exe sheet-oracle`, and the committed
@@ -56,3 +65,9 @@ jobs:
           SHEET_LEAN=1 cargo test --release --locked -p forge-lang --test sheet_lean_diff -- --nocapture
           SHEET_LEAN=1 cargo test --release --locked -p forge-sheet --test lean_diff_region -- --nocapture
           git diff --exit-code interface/forge-lang/tests/sheet_lean_diff.digest kernel/forge-sheet/tests/lean_diff_region.digest
+      - name: save the Lake build (main only, even when a check failed)
+        if: ${{ always() && steps.lake.outcome == 'success' && github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ steps.lake.outputs.paths }}
+          key: ${{ steps.lake.outputs.key }}
