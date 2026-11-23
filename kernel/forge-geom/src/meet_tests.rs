@@ -210,3 +210,51 @@ fn tube_square_to_a_torus_axis() {
     let mut worst = 0.0;
     check(&c, &t, &res, 0.5 * region.diagonal() / 64.0, &mut worst).unwrap();
 }
+
+/// A thin torus on a wide cylinder (fuzz seed 295, feature 69): the cylinder cuts the tube in two
+/// loops, each about 3° of the cylinder's angle, and the discriminant's 64 samples saw one. The
+/// root count over `thin_window` finds both.
+#[test]
+fn thin_torus_on_a_wide_cylinder_both_loops() {
+    let o = Point3::new(57.513833943223545, 82.64151449414277, 31.529651297690172);
+    let tf = Frame::from_axes(o, Vec3::X, Vec3::new(0.0, -1.0, 0.0), Vec3::new(0.0, 0.0, -1.0)).unwrap();
+    let t = Surface::Torus(Torus {
+        frame: tf,
+        major: 1.018123715855934,
+        minor: 0.22881392007971665,
+    });
+    let z = Vec3::new(-0.04760542051711398, 0.17499343179871532, 0.9834180305265392);
+    let x = Vec3::new(-0.34481495645685883, 0.921132764696941, -0.18060198117801576);
+    let cf = Frame::from_axes(
+        Point3::new(64.28286796892466, 86.4342803264453, 17.574469684406452),
+        x,
+        z.cross(x),
+        z,
+    )
+    .unwrap();
+    let c = Surface::Cylinder(Cylinder {
+        frame: cf,
+        radius: 8.70706734376011,
+    });
+    let region = Box3::from_point(o).grow(1.018123715855934 + 0.22881392007971665 + 1e-6);
+    let res = intersect(&c, &t, region).expect("a closed form");
+    let SurfaceSurface::Curves(cs) = &res else {
+        panic!("curves, not {res:?}")
+    };
+    assert_eq!(cs.len(), 2, "{res:?}");
+    // one loop either side of the ring: torus angles about 42° and 227°
+    let mut at: Vec<f64> = cs
+        .iter()
+        .map(|(k, _)| {
+            let q = k.eval(k.domain().lo) - o;
+            (forge_math::dmath::atan2(-q.y, q.x) * 180.0 / forge_math::dmath::PI).rem_euclid(360.0)
+        })
+        .collect();
+    at.sort_by(f64::total_cmp);
+    assert!(
+        (35.0..50.0).contains(&at[0]) && (220.0..235.0).contains(&at[1]),
+        "{at:?}"
+    );
+    let mut worst = 0.0;
+    check(&c, &t, &res, 0.5 * region.diagonal() / 64.0, &mut worst).unwrap();
+}

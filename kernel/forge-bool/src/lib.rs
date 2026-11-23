@@ -17,6 +17,7 @@ macro_rules! decided {
 pub const FEATURES: &[(&str, bool)] = &[
     ("decisions", cfg!(feature = "decisions")),
     ("decide_once", cfg!(feature = "decide_once")),
+    ("imprint_column", cfg!(feature = "imprint_column")),
 ];
 
 pub mod boolean;
@@ -32,6 +33,9 @@ pub mod edge_screen;
 pub mod imprint;
 pub mod nary;
 pub mod shape;
+// (debug builds only: release compiles none of it, so its code and layout are as before)
+#[cfg(debug_assertions)]
+pub mod size;
 pub mod ssi;
 pub mod unify;
 
