@@ -1469,7 +1469,10 @@ fn kernel_text(e: &SheetError) -> String {
             fm(*gap)
         ),
         NeedsRelief { .. } => "the wall keeps material beside the bend zone: it needs a relief there (cut one past the tangent line)".into(),
-        TangentMismatch { gap, .. } => format!("a wall's edge meets the tangent line at a slant ({} off)", fm(*gap)),
+        TangentMismatch { gap, .. } => format!(
+            "a wall and its bend zone disagree where a cut crosses the tangent line ({} off)",
+            fm(*gap)
+        ),
         ArcSweep { sweep, .. } => format!("an arc sweeping {}", fm(*sweep)),
         FoldedClash { depth, .. } => format!("folded, two strips pass through each other ({} deep)", fm(*depth)),
         TrimCurveUnsupported { curve, .. } => format!("a {curve:?} trim this strip cannot carry"),
@@ -2101,7 +2104,7 @@ fn refusal_context(st: &SheetState, error: &SheetError) -> Option<Context> {
             let (name, on) = (joint(*j), wall(w));
             // `at` is in the bend's coordinates: across it, and along the mold line from its start
             let mut text = format!(
-                "{on}'s edge meets {name}'s tangent line on {on}'s side {} along the bend from its start",
+                "a cut meets {name}'s tangent line on {on}'s side {} along the bend from its start, not where it meets it in the bend",
                 fm(at.y)
             );
             let mut data = vec![("flange", s(&name)), ("wall", s(&on)), ("along", Json::Num(at.y))];

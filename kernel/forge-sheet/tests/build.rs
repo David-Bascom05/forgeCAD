@@ -387,13 +387,18 @@ fn refusals_are_typed() {
         build(&s, Map::Folded),
         Err(SheetError::TrimTouchesBendLine { .. })
     ));
-    // a cut's edge along the tangent line (reliefs are cut past it): refused
+    // a cut's edge along the tangent line: the wall ends there, so the zone beside the notch
+    // has a free edge on that line (decided from the wall's points: its stretches end at the
+    // notch); folded and flat, valid, the flat a notch's area less
     let mut s = part(g.clone(), 40.0, 30.0, &[(1, ang(90.0), 30.0)]);
     s.cut(WallId(0), rect(30.0, 10.0, 8.0, 5.0, 0)).unwrap();
-    assert!(matches!(
-        build(&s, Map::Folded),
-        Err(SheetError::TrimAlongBendLine { .. } | SheetError::TangentMismatch { .. })
-    ));
+    for m in [Map::Folded, Map::Flat] {
+        checked(&build(&s, m).expect("builds"));
+    }
+    let whole = part(g.clone(), 40.0, 30.0, &[(1, ang(90.0), 30.0)]);
+    let (v0, e0) = volume(&build(&whole, Map::Flat).unwrap());
+    let (v1, e1) = volume(&build(&s, Map::Flat).unwrap());
+    assert!(((v0 - v1) - 8.0 * 5.0 * g.thickness).abs() <= e0 + e1 + 1e-9);
     // a flange too short for its setback, and an arc edge
     let mut s = part(g, 40.0, 30.0, &[]);
     assert!(matches!(

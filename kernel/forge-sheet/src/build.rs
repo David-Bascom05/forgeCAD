@@ -1524,7 +1524,9 @@ fn build_once(
             cx.source(TrimRef::BendEnd { joint, end: End::End }),
             cx.source(TrimRef::TangentLine { joint, side: Side::A }),
         ];
-        let wall = [rect(0.0, 0.0, b.ba, b.len, ids, &Rigid::ID)];
+        let wall = [zone_outline(sheet, &strips, b, joint, ids, |id| {
+            cx.sources[id as usize]
+        })];
         let cuts = std::mem::take(&mut cut_strips[nw + bi]);
         let region = subtract(&wall, &cuts).map_err(|e| {
             SheetError::from_region(feature, Strip::Bend(joint), e, |i| cx.sources[i as usize])
@@ -1799,9 +1801,6 @@ impl<'a> Strips<'a> {
                 }
             }
         }
-        // vertex slots: walls' first, then bends' (sharing the walls' on tangent lines)
-        let mut slot: Vec<Vec<usize>> = loops.iter().map(|l| vec![usize::MAX; l.bounds.len()]).collect();
-        let mut slots: Vec<(usize, Point2)> = Vec::new();
         // per (bend, side): the walls' tangent stretches, (y0, y1, loop, index), y in the joint frame
         let mut stretches: std::collections::BTreeMap<(usize, Side), Vec<Stretch>> = Default::default();
         for (li, l) in loops.iter().enumerate() {
@@ -1809,8 +1808,6 @@ impl<'a> Strips<'a> {
                 continue;
             }
             for (i, b) in l.bounds.iter().enumerate() {
-                slot[li][i] = slots.len();
-                slots.push((l.strip, b.start));
                 if let Kind::Tangent(bi, side) = l.kinds[i] {
                     let j = if side == Side::A {
                         &bends[bi].ja
@@ -1827,7 +1824,66 @@ impl<'a> Strips<'a> {
                 }
             }
         }
+        // a zone's tangent line is cut where its walls' stretches end: the walls' points, decided
+        // once in the walls, become the zone's (a wall's end inside a zone's stretch by more than
+        // the tolerance splits it there; ends within it are the same point)
+        for l in loops.iter_mut().filter(|l| l.strip >= nw) {
+            let n = l.bounds.len();
+            let mut bounds = Vec::with_capacity(n);
+            let mut kinds = Vec::with_capacity(n);
+            for i in 0..n {
+                let (b, k) = (&l.bounds[i], l.kinds[i]);
+                let Kind::Tangent(bi, side) = k else {
+                    bounds.push(b.clone());
+                    kinds.push(k);
+                    continue;
+                };
+                let (p, q) = (b.start, l.bounds[(i + 1) % n].start);
+                let (lo, hi) = (p.y.min(q.y), p.y.max(q.y));
+                let mut ys: Vec<f64> = stretches
+                    .get(&(bi, side))
+                    .into_iter()
+                    .flatten()
+                    .flat_map(|&(a, e, _, _)| [a, e])
+                    .filter(|&y| y > lo + TOL && y < hi - TOL)
+                    .collect();
+                ys.sort_by(f64::total_cmp);
+                ys.dedup_by(|a, b| *a - *b <= TOL);
+                if q.y < p.y {
+                    ys.reverse();
+                }
+                let mut at = p;
+                for y in ys.into_iter().chain([f64::NAN]) {
+                    let next = if y.is_nan() { q } else { Point2::new(p.x, y) };
+                    bounds.push(Bound {
+                        piece: Piece::Line { a: at, b: next },
+                        id: b.id,
+                        start: at,
+                    });
+                    kinds.push(k);
+                    at = next;
+                }
+            }
+            l.bounds = bounds;
+            l.kinds = kinds;
+        }
+        // vertex slots: walls' first, then bends' (sharing the walls' on tangent lines)
+        let mut slot: Vec<Vec<usize>> = loops.iter().map(|l| vec![usize::MAX; l.bounds.len()]).collect();
+        let mut slots: Vec<(usize, Point2)> = Vec::new();
+        for (li, l) in loops.iter().enumerate() {
+            if l.strip >= nw {
+                continue;
+            }
+            for (i, b) in l.bounds.iter().enumerate() {
+                slot[li][i] = slots.len();
+                slots.push((l.strip, b.start));
+            }
+        }
+        // each zone stretch is its wall's stretch, one to one, ends within the tolerance; a zone
+        // stretch with no wall beside it at all is a free edge of the zone (its bend runs on past
+        // the wall's end: the square end of a flange beside a corner under a right angle)
         let mut twin = HashMap::new();
+        let mut free = Vec::new();
         for (li, l) in loops.iter().enumerate() {
             if l.strip < nw {
                 continue;
@@ -1842,10 +1898,19 @@ impl<'a> Strips<'a> {
                 // the wall runs the stretch the other way
                 let best = list
                     .iter()
+                    .filter(|&&(_, _, wl, wi)| !twin.contains_key(&(wl, wi)))
                     .map(|&(a, b, wl, wi)| ((a - y1).abs().max((b - y0).abs()), wl, wi))
                     .min_by(|a, b| a.0.total_cmp(&b.0));
                 let joint = cx.sheet.joints[bends[bi].joint].id;
                 let Some((_, wl, wi)) = best.filter(|b| b.0 <= TOL) else {
+                    let (lo, hi) = (y0.min(y1), y0.max(y1));
+                    let beside = list
+                        .iter()
+                        .any(|&(a, b, _, _)| a.max(b) > lo + TOL && a.min(b) < hi - TOL);
+                    if !beside {
+                        free.push((li, i));
+                        continue;
+                    }
                     let at = l.bounds[i].start;
                     return Err(SheetError::TangentMismatch {
                         feature,
@@ -1862,6 +1927,9 @@ impl<'a> Strips<'a> {
                 twin.insert((li, i), (wl, wi));
                 twin.insert((wl, wi), (li, i));
             }
+        }
+        for (li, i) in free {
+            loops[li].kinds[i] = Kind::Side;
         }
         // every wall stretch must have found its bend's
         for (&(bi, side), list) in &stretches {
@@ -3932,6 +4000,72 @@ fn developed(p: &Piece, a: Point2, b: Point2, by: &Rigid) -> Option<Curve2> {
             }
         }
     })
+}
+
+/// A bend zone's outline before its cuts, in its own frame (u from a's tangent line to b's, y
+/// along the joint): the rectangle [0, BA] x [0, len], or under `EndCondition::Aligned` each end
+/// the segment between the walls' points on their tangent lines, read off the walls' regions
+/// (built first). A point within the tolerance of the joint's end is that end, so square walls
+/// give the rectangle exactly; a point past it (a wall running on past the mold line's end) is
+/// held at it, so that end is square.
+fn zone_outline(
+    sheet: &Sheet,
+    strips: &[StripData],
+    b: &Bend,
+    joint: crate::error::JointId,
+    ids: [u64; 4],
+    source: impl Fn(u64) -> TrimRef,
+) -> ProfileLoop {
+    let square = || rect(0.0, 0.0, b.ba, b.len, ids, &Rigid::ID);
+    if sheet.bend_ends == crate::graph::EndCondition::Normal || b.free {
+        return square();
+    }
+    // the y span of a wall's stretches of this joint's tangent line, in the joint frame
+    let span = |w: usize, side: Side, j: &Rigid| {
+        let mut lo = f64::INFINITY;
+        let mut hi = f64::NEG_INFINITY;
+        for c in &strips[w].region.parts {
+            for l in std::iter::once(&c.outer).chain(&c.holes) {
+                for (i, q) in l.iter().enumerate() {
+                    if source(q.id) == (TrimRef::TangentLine { joint, side }) {
+                        for p in [q.start, l[(i + 1) % l.len()].start] {
+                            let y = j.local(p).y;
+                            lo = lo.min(y);
+                            hi = hi.max(y);
+                        }
+                    }
+                }
+            }
+        }
+        let snap = |y: f64| {
+            if y <= TOL {
+                0.0
+            } else if y >= b.len - TOL {
+                b.len
+            } else {
+                y
+            }
+        };
+        (lo <= hi).then(|| (snap(lo), snap(hi)))
+    };
+    let (Some((a0, a1)), Some((b0, b1))) = (span(b.a, Side::A, &b.ja), span(b.b, Side::B, &b.jb)) else {
+        return square();
+    };
+    let p = Point2::new;
+    let corners = [p(0.0, a0), p(b.ba, b0), p(b.ba, b1), p(0.0, a1)];
+    ProfileLoop::new(
+        (0..4)
+            .map(|k| {
+                (
+                    Segment::Line {
+                        a: corners[k],
+                        b: corners[(k + 1) % 4],
+                    },
+                    ids[k],
+                )
+            })
+            .collect(),
+    )
 }
 
 /// How a line piece runs in a bend zone (u across the bend, y along its axis), decided once for

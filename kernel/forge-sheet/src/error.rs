@@ -230,8 +230,11 @@ pub enum SheetError {
         end: End,
         at: Point2,
     },
-    /// The wall's material at its tangent line and the bend zone's disagree (a wall edge meets
-    /// the mold line at a slant): the stretch of tangent line ending at `at` misses by `gap`.
+    /// The wall's material at its tangent line and the bend zone's disagree where both have some:
+    /// the stretch of tangent line ending at `at` misses its wall's by `gap` (a cut met in the
+    /// wall and in the zone at points further apart than the tolerance), or a trim lies on the
+    /// mold line. (A wall edge meeting the mold line at a slant is not this: the zone's end is
+    /// taken from the wall's points, `EndCondition`.)
     TangentMismatch {
         feature: FeatureId,
         joint: JointId,
