@@ -1,4 +1,4 @@
-use crate::cdt::{CdtError, Refine, Triangulation, triangulate_as_far, triangulate_within, zip};
+use crate::cdt::{CdtError, Fault, Refine, Triangulation, triangulate_as_far, triangulate_within, zip};
 use crate::mesh::TriMesh;
 use forge_geom::CurveGeom;
 use forge_geom::{Curve, Surface, SurfaceGeom};
@@ -820,7 +820,7 @@ fn tessellate_with(body: &Body, q: &Quality, mend: bool) -> Result<TriMesh, Tess
         if n > MAX_EDGE_CUTS {
             return Err(TessError::Face {
                 face: body.coedge_face(edge.coedges[0]),
-                error: CdtError::Internal("an edge would take too many points"),
+                error: CdtError::Internal(Fault::EdgeTooFine),
             });
         }
         let mut s = Vec::with_capacity(n + 1);
@@ -874,7 +874,7 @@ fn tessellate_with(body: &Body, q: &Quality, mend: bool) -> Result<TriMesh, Tess
         if splits > MAX_EDGE_CUTS {
             return Err(TessError::Face {
                 face: f,
-                error: CdtError::Internal("crossing chords would take too many points"),
+                error: CdtError::Internal(Fault::CrossingsTooFine),
             });
         }
         let mut changed = Vec::new();
@@ -1529,7 +1529,7 @@ fn mesh_face(
                 let nv = ((hi.y - lo.y) / dv).ceil().max(1.0) as usize;
                 // (a file's bad number can ask for any grid at all)
                 if nu.saturating_mul(nv) > MAX_EDGE_CUTS {
-                    return Err(CdtError::Internal("a face would take too many points"));
+                    return Err(CdtError::Internal(Fault::FaceTooFine));
                 }
                 let mut g = Grid::new(lo, hi, nu, nv, &uv, &loops);
                 // a cell's chords sag within the tolerance only where its steps come from the

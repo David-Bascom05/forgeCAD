@@ -56,7 +56,56 @@ pub enum CdtError {
         required: u64,
     },
     /// An invariant broke; a bug, not bad input.
-    Internal(&'static str),
+    Internal(Fault),
+}
+
+/// Which invariant broke (`CdtError::Internal`), or which limit of work a face ran past. Its
+/// Debug is its text, quoted, as a `&str`'s is.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Fault {
+    BrokenLink,
+    FanLostA,
+    NoStartWedge,
+    WalkLostEdge,
+    RecoveryStuck,
+    BoundaryTooLong,
+    CrossedEdgeGone,
+    NotRecovered,
+    Untangled,
+    ChordGone,
+    LocationFailed,
+    RefinementTooLong,
+    EdgeTooFine,
+    CrossingsTooFine,
+    FaceTooFine,
+}
+
+impl Fault {
+    pub fn text(self) -> &'static str {
+        match self {
+            Fault::BrokenLink => "broken link",
+            Fault::FanLostA => "fan lost a",
+            Fault::NoStartWedge => "no start wedge",
+            Fault::WalkLostEdge => "walk lost edge",
+            Fault::RecoveryStuck => "constraint recovery did not converge",
+            Fault::BoundaryTooLong => "the boundary would take too long",
+            Fault::CrossedEdgeGone => "crossed edge vanished",
+            Fault::NotRecovered => "constraint not recovered",
+            Fault::Untangled => "a tangled boundary did not untangle",
+            Fault::ChordGone => "a boundary chord vanished",
+            Fault::LocationFailed => "point location failed",
+            Fault::RefinementTooLong => "refinement would take too long",
+            Fault::EdgeTooFine => "an edge would take too many points",
+            Fault::CrossingsTooFine => "crossing chords would take too many points",
+            Fault::FaceTooFine => "a face would take too many points",
+        }
+    }
+}
+
+impl std::fmt::Debug for Fault {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self.text())
+    }
 }
 
 /// Rounds of refinement before it counts as unsettled.
@@ -504,7 +553,7 @@ impl Mesh {
         while on && k <= self.tris.len() {
             let tt = self.tris[t as usize];
             match slot(tt.v, a) {
-                None => err = Some(CdtError::Internal("fan lost a")),
+                None => err = Some(CdtError::Internal(Fault::FanLostA)),
                 Some(ia) => {
                     let (v1, v2) = (tt.v[nx(ia)], tt.v[pv(ia)]);
                     let o1 = orient2d(pa, pb, self.p(v1));
@@ -529,7 +578,7 @@ impl Mesh {
             return Err(e);
         }
         let Some((mut t, mut left, mut right)) = cur else {
-            return Err(CdtError::Internal("no start wedge"));
+            return Err(CdtError::Internal(Fault::NoStartWedge));
         };
 
         // the edges it crosses, in order from a
@@ -537,7 +586,7 @@ impl Mesh {
         let mut walking = true;
         while walking && err.is_none() {
             match self.find_edge(right, left) {
-                None => err = Some(CdtError::Internal("walk lost edge")),
+                None => err = Some(CdtError::Internal(Fault::WalkLostEdge)),
                 Some((tc, ic)) => {
                     debug_assert_eq!(tc, t);
                     if self.tris[tc as usize].c[ic] {
@@ -548,7 +597,7 @@ impl Mesh {
                         let u = self.tris[tc as usize].n[ic];
                         let uu = self.tris[u as usize];
                         match slot(uu.n, tc) {
-                            None => err = Some(CdtError::Internal("broken link")),
+                            None => err = Some(CdtError::Internal(Fault::BrokenLink)),
                             Some(j) => {
                                 let q = uu.v[j];
                                 if q == b {
@@ -591,25 +640,25 @@ impl Mesh {
                 head + queued
             };
             if budget == 0 {
-                err = Some(CdtError::Internal("constraint recovery did not converge"));
+                err = Some(CdtError::Internal(Fault::RecoveryStuck));
             } else {
                 budget -= 1;
                 if budget % 1024 == 0 {
                     forge_geom::budget::spend_many(16 * 1024);
                     if forge_geom::budget::over() {
-                        err = Some(CdtError::Internal("the boundary would take too long"));
+                        err = Some(CdtError::Internal(Fault::BoundaryTooLong));
                     }
                 }
             }
             if err.is_none() {
                 match self.find_edge(x, y) {
-                    None => err = Some(CdtError::Internal("crossed edge vanished")),
+                    None => err = Some(CdtError::Internal(Fault::CrossedEdgeGone)),
                     Some((t, i)) => {
                         let tt = self.tris[t as usize];
                         let u = tt.n[i];
                         let uu = self.tris[u as usize];
                         match slot(uu.n, t) {
-                            None => err = Some(CdtError::Internal("broken link")),
+                            None => err = Some(CdtError::Internal(Fault::BrokenLink)),
                             Some(j) => {
                                 let (p, q) = (tt.v[i], uu.v[j]);
                                 let (pp, pq) = (self.p(p), self.p(q));
@@ -646,7 +695,7 @@ impl Mesh {
         }
 
         let Some((t, i)) = self.has_edge(a, b) else {
-            return Err(CdtError::Internal("constraint not recovered"));
+            return Err(CdtError::Internal(Fault::NotRecovered));
         };
         self.mark(t, i, crossing(a, b, shift))?;
 
@@ -706,11 +755,11 @@ impl Mesh {
             todo.pop();
             if a != b {
                 if budget == 0 {
-                    err = Some(CdtError::Internal("a tangled boundary did not untangle"));
+                    err = Some(CdtError::Internal(Fault::Untangled));
                 } else {
                     budget -= 1;
                     if forge_geom::budget::over() {
-                        err = Some(CdtError::Internal("the boundary would take too long"));
+                        err = Some(CdtError::Internal(Fault::BoundaryTooLong));
                     }
                 }
             }
@@ -751,7 +800,7 @@ impl Mesh {
             let (a, b, n) = uses[k];
             if n % 2 == 0 {
                 match self.has_edge(a, b) {
-                    None => err = Some(CdtError::Internal("a boundary chord vanished")),
+                    None => err = Some(CdtError::Internal(Fault::ChordGone)),
                     Some((t, i)) => self.unmark(t, i),
                 }
             }
@@ -777,12 +826,12 @@ impl Mesh {
         let (dl, dr) = (orient2d(pa, pb, pl), orient2d(pa, pb, pr));
         let x = pl.lerp(pr, dl / (dl - dr));
         let Some((t, i)) = self.has_edge(l, r) else {
-            return Err(CdtError::Internal("crossed edge vanished"));
+            return Err(CdtError::Internal(Fault::CrossedEdgeGone));
         };
         self.unmark(t, i);
         let n = take_uses(uses, l, r);
         let Some(loc) = self.locate(x) else {
-            return Err(CdtError::Internal("point location failed"));
+            return Err(CdtError::Internal(Fault::LocationFailed));
         };
         let w = match loc {
             // on a corner, to the last bit: the chords go through it
@@ -811,9 +860,7 @@ impl Mesh {
     /// Inserts an interior point where it lands inside the region, clear of the boundary and of
     /// existing points by `eps`; elsewhere it is skipped.
     fn insert_interior(&mut self, p: Point2, eps: f64) -> Result<(), CdtError> {
-        let loc = self
-            .locate(p)
-            .ok_or(CdtError::Internal("point location failed"))?;
+        let loc = self.locate(p).ok_or(CdtError::Internal(Fault::LocationFailed))?;
         let skip = match &loc {
             Location::Vertex(_) => true,
             Location::Inside(t) => {
@@ -864,7 +911,7 @@ impl Mesh {
         let u = self.tris[t as usize].n[i];
         if u != NONE {
             let Some(k) = slot(self.tris[u as usize].n, t) else {
-                return Err(CdtError::Internal("broken link"));
+                return Err(CdtError::Internal(Fault::BrokenLink));
             };
             self.tris[u as usize].c[k] = true;
         }
@@ -1423,7 +1470,7 @@ impl Mesh {
             let i = order[k];
             let v = SUPER + i as u32;
             match self.locate(points[i]) {
-                None => err = Some(CdtError::Internal("point location failed")),
+                None => err = Some(CdtError::Internal(Fault::LocationFailed)),
                 Some(Location::Vertex(w)) => {
                     if tangled {
                         same_as.push(u64::from(v) << 32 | u64::from(w));
@@ -1455,12 +1502,12 @@ impl Mesh {
         while err.is_none() && l < loops.len() {
             let lp = &loops[l];
             if forge_geom::budget::over() {
-                err = Some(CdtError::Internal("the boundary would take too long"));
+                err = Some(CdtError::Internal(Fault::BoundaryTooLong));
             }
             let mut k = 0;
             while err.is_none() && k < lp.len() {
                 if k % 256 == 255 && forge_geom::budget::over() {
-                    err = Some(CdtError::Internal("the boundary would take too long"));
+                    err = Some(CdtError::Internal(Fault::BoundaryTooLong));
                 } else {
                     let a = lp[k] + SUPER;
                     let b = if k + 1 == lp.len() { lp[0] } else { lp[k + 1] } + SUPER;
@@ -1591,7 +1638,7 @@ impl Mesh {
                 }
             }
             if !stop && err.is_none() && forge_geom::budget::over() {
-                err = Some(CdtError::Internal("refinement would take too long"));
+                err = Some(CdtError::Internal(Fault::RefinementTooLong));
             }
             if !stop && err.is_none() {
                 mids.clear();
@@ -1767,6 +1814,12 @@ mod tests {
     }
 
     /// A boundary's cost counts against a file's budget: past it, a clean error.
+    #[test]
+    fn a_fault_reads_as_its_text_did() {
+        assert_eq!(format!("{:?}", CdtError::Internal(Fault::BrokenLink)), "Internal(\"broken link\")");
+        assert_eq!(Fault::BoundaryTooLong.text(), "the boundary would take too long");
+    }
+
     #[test]
     fn sort_keys_sorts() {
         let mut rng = Rng::new(7);
