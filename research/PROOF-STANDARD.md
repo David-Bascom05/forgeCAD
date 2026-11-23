@@ -37,8 +37,8 @@ has been reported to the master.
 | Sketch solver | fundamentals (item 5) | — | L1 |
 | Intersection tracing | trace | step lemma (Krawczyk) | phase B, binary64 |
 | .fg language | ieee (language proofs) | lexer, LL(1), edits, reparse | — |
-| Extrude / revolve / sweep / loft / coil / thread | — | — | **unowned** |
-| Shell / draft / hole / rib / thicken | — | — | **unowned** |
+| Extrude / revolve / sweep / loft / coil / thread | sweep-spec | — | L1 |
+| Shell / draft / hole / rib / chamfer / pattern | ops-spec, fix-shell, fix-draft | — | L1 |
 | Surfaces and thin | surfaces | — | ValidSheet with fundamentals |
 | Sketch text | sketch-text | exact glyph geometry | L1 |
 | Weldments | weldments | — | L1 (members are extrudes and half-spaces) |
