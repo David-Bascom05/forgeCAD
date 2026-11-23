@@ -80,7 +80,11 @@ fn face_of(body: &Body, f: forge_topo::FaceId) -> Result<Face, String> {
             }
             let (o, r) = (s.frame.origin, s.radius);
             Ok(Face {
-                json: format!("{{\"kind\":\"sphere\",\"o\":{},\"r\":{},{lohi}}}", p3(o), exact(r)),
+                json: format!(
+                    "{{\"kind\":\"sphere\",\"o\":{},\"r\":{},{lohi}}}",
+                    p3(o),
+                    exact(r)
+                ),
                 q: Box::new(move |p: Point3| (p - o).dot(p - o) - r * r),
             })
         }
@@ -107,16 +111,62 @@ fn face_of(body: &Body, f: forge_topo::FaceId) -> Result<Face, String> {
                 }),
             })
         }
-        Surface::Torus(_) => Err("a face is a torus".into()),
+        Surface::Torus(t) => {
+            if !face.same_sense {
+                return Err("a torus face with the solid outside".into());
+            }
+            let (o, z, big, r) = (t.frame.origin, t.frame.z().get(), t.major, t.minor);
+            if !(0.0 < r && r < big) {
+                return Err("a torus that is not a ring".into());
+            }
+            Ok(Face {
+                json: format!(
+                    "{{\"kind\":\"torus\",\"o\":{},\"z\":{},\"R\":{},\"r\":{},{lohi}}}",
+                    p3(o),
+                    v3(z),
+                    exact(big),
+                    exact(r)
+                ),
+                q: Box::new(move |p: Point3| {
+                    let d = p - o;
+                    let s2 = d.dot(d);
+                    let w = d.dot(z);
+                    let a = s2 + big * big - r * r;
+                    a * a - 4.0 * big * big * (s2 - w * w / z.dot(z))
+                }),
+            })
+        }
         Surface::Procedural(_) => Err("a face is procedural".into()),
     }
+}
+
+thread_local! {
+    /// The feature ids of the part being judged (a forge_lang program's; `None`: positions).
+    /// Names in a part refer to faces by these ids, so its regens and tools must use them.
+    static IDS: std::cell::RefCell<Option<Vec<u64>>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Runs `f` with the part's feature ids set (see `IDS`).
+pub fn with_ids<T>(ids: Option<Vec<u64>>, f: impl FnOnce() -> T) -> T {
+    let old = IDS.with(|c| c.replace(ids));
+    let out = f();
+    IDS.with(|c| *c.borrow_mut() = old);
+    out
+}
+
+/// The ids for the first `n` features.
+fn ids_for(n: usize) -> Option<Vec<u64>> {
+    IDS.with(|c| c.borrow().as_ref().map(|v| v[..n.min(v.len())].to_vec()))
 }
 
 /// Deterministic sample points.
 struct Lcg(u64);
 impl Lcg {
     fn next(&mut self) -> f64 {
-        self.0 = self.0.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        self.0 = self
+            .0
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
         ((self.0 >> 11) as f64) / ((1u64 << 53) as f64)
     }
 }
@@ -163,7 +213,11 @@ pub fn dump_curved(body: &Body, op: Combine) -> Result<String, String> {
     };
     Ok(format!(
         "{{\"op\":\"{op}\",\"faces\":[{}]}}",
-        faces.iter().map(|f| f.json.as_str()).collect::<Vec<_>>().join(",")
+        faces
+            .iter()
+            .map(|f| f.json.as_str())
+            .collect::<Vec<_>>()
+            .join(",")
     ))
 }
 
@@ -180,7 +234,8 @@ pub fn curved_tools(part: &Part) -> Result<(Vec<String>, Vec<Point3>, forge_math
     if forge_model::bodies::multi(&part.features) {
         return Err("several bodies".into());
     }
-    let h = History::new(&part.features, None);
+    let ids = ids_for(part.features.len());
+    let h = History::new(&part.features, ids.as_deref());
     let mut solids = Vec::new();
     let mut probes = Vec::new();
     let mut bbox: Option<forge_math::Box3> = None;
@@ -222,7 +277,9 @@ pub fn curved_tools(part: &Part) -> Result<(Vec<String>, Vec<Point3>, forge_math
             }
         }
     }
-    let Some(bb) = bbox else { return Err("no solids".into()) };
+    let Some(bb) = bbox else {
+        return Err("no solids".into());
+    };
     let mut rng = Lcg(0xfeed);
     for _ in 0..96 {
         probes.push(Point3::new(
@@ -240,7 +297,11 @@ pub fn curved_input(part: &Part, rule: &str) -> Result<(String, Vec<Point3>), St
 }
 
 /// The question with points for the reference to examine (`hints`: where the kernel refused).
-pub fn curved_input_hints(part: &Part, rule: &str, hints: &[Point3]) -> Result<(String, Vec<Point3>), String> {
+pub fn curved_input_hints(
+    part: &Part,
+    rule: &str,
+    hints: &[Point3],
+) -> Result<(String, Vec<Point3>), String> {
     let (solids, probes, _) = curved_tools(part)?;
     Ok((
         format!(
@@ -345,10 +406,7 @@ fn probe_check(body: &Body, probes: &[Point3], ans: &[i64]) -> Option<String> {
             continue;
         }
         let w = idx.classify(*p);
-        let ok = match (a, w) {
-            (1, Where::Inside) | (-1, Where::Outside) => true,
-            _ => false,
-        };
+        let ok = matches!((a, w), (1, Where::Inside) | (-1, Where::Outside));
         if !ok {
             return Some(format!(
                 "probe ({:.6}, {:.6}, {:.6}) is {} where the kernel's classifier says {:?}",
@@ -383,7 +441,10 @@ pub fn classify_curved(r: &CAnswer, k: &Kernel, body: Option<&Body>, probes: &[P
         } else if (volume - r.estimate).abs()
             > ESTIMATE_SLACK * r.estimate.abs().max(1.0) + 10.0 * r.estimate_err.max(0.0) + s
         {
-            Some(format!("volume {volume} where the reference estimates {}", r.estimate))
+            Some(format!(
+                "volume {volume} where the reference estimates {}",
+                r.estimate
+            ))
         } else {
             None
         }
@@ -392,7 +453,9 @@ pub fn classify_curved(r: &CAnswer, k: &Kernel, body: Option<&Body>, probes: &[P
         "ambiguous" => Class::Ambiguous,
         "solid" | "sliver" => match k {
             Kernel::Refused(e) if r.verdict == "sliver" && e.contains("ZeroThickness") => Class::Agree,
-            Kernel::Refused(e) => Class::Refused(format!("refused {e} where the reference gives a {}", r.verdict)),
+            Kernel::Refused(e) => {
+                Class::Refused(format!("refused {e} where the reference gives a {}", r.verdict))
+            }
             Kernel::Built { invalid: Some(p), .. } => Class::Wrong(format!("invalid body {p}")),
             Kernel::Built { volume, area, .. } => {
                 if let Some(w) = volume_ok(*volume, *area) {
@@ -410,7 +473,9 @@ pub fn classify_curved(r: &CAnswer, k: &Kernel, body: Option<&Body>, probes: &[P
         "empty" => match k {
             Kernel::Refused(e) if e.starts_with("Empty") => Class::Agree,
             Kernel::Refused(e) => Class::Refused(format!("refused {e} where the result is empty")),
-            Kernel::Built { volume, .. } => Class::Wrong(format!("built volume {volume} where the result is empty")),
+            Kernel::Built { volume, .. } => {
+                Class::Wrong(format!("built volume {volume} where the result is empty"))
+            }
         },
         "nonmanifold" => match k {
             Kernel::Refused(e) if e.contains("ZeroThickness") => Class::Agree,
@@ -428,9 +493,18 @@ pub fn classify_curved(r: &CAnswer, k: &Kernel, body: Option<&Body>, probes: &[P
 
 /// The kernel's body for a path, and how it is judged.
 pub fn kernel_path(part: &Part, path: &str) -> (Kernel, Option<Body>) {
-    let r = guarded(|| match path {
-        "nary" => part.regenerate_nary(1).map_err(|e| format!("{e:?}")),
-        _ => part.regenerate().map_err(|e| format!("{e:?}")),
+    let ids = ids_for(part.features.len());
+    let r = guarded(|| match (path, &ids) {
+        ("nary", None) => part.regenerate_nary(1).map_err(|e| format!("{e:?}")),
+        // with ids: the regen forge_lang runs, so the names are its names
+        ("nary", Some(ids)) => part
+            .regenerate_nary_solids_ids(1, Some(ids))
+            .map_err(|e| format!("{e:?}"))
+            .and_then(|mut s| match s.len() {
+                1 => Ok(s.remove(0).body),
+                n => Err(format!("{n} bodies")),
+            }),
+        (_, ids) => part.regenerate_ids(ids.as_deref()).map_err(|e| format!("{e:?}")),
     });
     let body = r.as_ref().ok().cloned();
     (judge_body(r), body)
@@ -445,17 +519,26 @@ pub fn stage_class_curved(a: &CAnswer, e: &str, n: usize) -> Class {
         "empty" | "nonmanifold" => Class::Agree,
         "sliver" if e.contains("ZeroThickness") => Class::Agree,
         "ambiguous" => Class::Ambiguous,
-        v => Class::Refused(format!("refused {e} where the reference gives {v} at feature {n}")),
+        v => Class::Refused(format!(
+            "refused {e} where the reference gives {v} at feature {n}"
+        )),
     }
 }
 
 /// Both kernel paths of a part, judged against one answer of the reference; refusals at the
 /// stage they name.
-pub fn judge_curved(reference: &mut Reference, part: &Part, rule: &str) -> Vec<(&'static str, Class, Option<CAnswer>)> {
+pub fn judge_curved(
+    reference: &mut Reference,
+    part: &Part,
+    rule: &str,
+) -> Vec<(&'static str, Class, Option<CAnswer>)> {
     let (input, probes) = match curved_input(part, rule) {
         Ok(x) => x,
         Err(e) => {
-            return vec![("sequential", Class::Scope(e.clone()), None), ("nary", Class::Scope(e), None)];
+            return vec![
+                ("sequential", Class::Scope(e.clone()), None),
+                ("nary", Class::Scope(e), None),
+            ];
         }
     };
     let ans = reference.ask_curved(&input);
@@ -503,7 +586,12 @@ pub fn judge_curved(reference: &mut Reference, part: &Part, rule: &str) -> Vec<(
 }
 
 /// One path of a part, judged.
-pub fn judge_curved_path(reference: &mut Reference, part: &Part, rule: &str, path: &str) -> (Class, Option<CAnswer>) {
+pub fn judge_curved_path(
+    reference: &mut Reference,
+    part: &Part,
+    rule: &str,
+    path: &str,
+) -> (Class, Option<CAnswer>) {
     let all = judge_curved(reference, part, rule);
     let (_, c, a) = all.into_iter().find(|(p, _, _)| *p == path).expect("a path");
     (c, a)
@@ -512,20 +600,32 @@ pub fn judge_curved_path(reference: &mut Reference, part: &Part, rule: &str, pat
 /// The part with every feature whose tools are not quadric solids the reference takes dropped
 /// (its convex-quadric sub-history); features that make nothing are kept.
 pub fn curved_part(part: &Part) -> Part {
+    curved_part_ids(part, None).0
+}
+
+/// `curved_part`, with the features' ids (a forge_lang program's) dropped alongside.
+pub fn curved_part_ids(part: &Part, ids: Option<&[u64]>) -> (Part, Option<Vec<u64>>) {
     let mut p = part.clone();
+    let mut ids = ids.map(|v| v.to_vec());
     let mut i = 1;
     while i < p.features.len() {
         let f = &p.features[i];
         let ok = inert(f)
-            || guarded(|| forge_model::feature_tools(History::new(&p.features, None), i).map_err(|e| format!("{e:?}")))
-                .is_ok_and(|ts| ts.iter().all(|(b, op)| dump_curved(b, *op).is_ok()));
+            || guarded(|| {
+                forge_model::feature_tools(History::new(&p.features, ids.as_deref()), i)
+                    .map_err(|e| format!("{e:?}"))
+            })
+            .is_ok_and(|ts| ts.iter().all(|(b, op)| dump_curved(b, *op).is_ok()));
         if ok {
             i += 1;
         } else {
             p.features.remove(i);
+            if let Some(v) = ids.as_mut() {
+                v.remove(i);
+            }
         }
     }
-    p
+    (p, ids)
 }
 
 /// The tool (the last feature) moved by `d`.

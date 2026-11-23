@@ -1,0 +1,14 @@
+# A plate whose left wall is a spline through 19 points (wavy, one tight turn back at y 20.2 to
+# 20.5), crossing nowhere (checked by sampling the cubic densely). It builds, then its face fails
+# to mesh (ConstraintThroughPoint). The points are from a seeded random walk of my own; CADFS
+# 00468533 and 00893869, with their fit splines written exactly, fail the same way.
+param plate.w = 30
+param plate.h = 60
+param plate.t = 6
+sketch wall(on: xy) {
+  s0 = spline([(0, 0), (-2.875, 1.321), (-0.553, 6.062), (-1.954, 9.137), (-2.669, 11.195), (-2.878, 13.858), (-1.803, 18.096), (-2.056, 20.472), (-2.124, 20.245), (-2.644, 24.269), (-0.932, 25.47), (-2.814, 32.022), (-0.775, 39.77), (-0.937, 41.643), (-2.864, 43.653), (-2.003, 47.055), (-0.147, 50.495), (-0.097, 54.075), (0, h)], closed: false)
+  l1 = line((0, h), (w, h))
+  l2 = line((w, h), (w, 0))
+  l3 = line((w, 0), (0, 0))
+}
+plate = extrude(wall, t)

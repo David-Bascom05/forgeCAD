@@ -303,6 +303,12 @@ impl Procedural for Spun {
     fn mesh_radius(&self) -> f64 {
         self.radius
     }
+    /// The section's own offset folds or its circles close up (`Spline::offset_fold`): the
+    /// surface's two curvatures are the section's and the circles'.
+    fn offset_fold(&self, d: f64, uv: Box2) -> Option<Option<Point2>> {
+        let v = Interval::new(uv.v.lo.max(self.c.domain().lo), uv.v.hi.min(self.c.domain().hi));
+        Some(self.c.offset_fold(d, v).map(|t| Point2::new(uv.u.mid(), t)))
+    }
     fn shape_bounds(&self, uv: Box2) -> Option<ShapeBounds> {
         let [c1, c2, c3] = self.c.derivative_bounds(uv.v);
         let b = self.c.bbox(uv.v);

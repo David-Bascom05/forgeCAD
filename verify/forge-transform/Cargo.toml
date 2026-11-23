@@ -1,0 +1,15 @@
+[package]
+name = "forge-transform"
+description = "Rigid motions, mirrors and patterns against their Lean proofs (lean/)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+forge-math = { path = "../../kernel/forge-math" }
+forge-topo = { path = "../../kernel/forge-topo" }
+forge-model = { path = "../../kernel/forge-model" }
+
+[lints]
+workspace = true

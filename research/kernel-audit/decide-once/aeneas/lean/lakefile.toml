@@ -1,0 +1,18 @@
+name = "forgeboolcore"
+version = "0.1.0"
+defaultTargets = ["ForgeBoolCore"]
+
+# Aeneas's Lean library at the commit whose aeneas translated kernel/forge-bool-core (charon 9e193f0)
+[[require]]
+name = "aeneas"
+git = "https://github.com/AeneasVerif/aeneas"
+rev = "2e3d4488280bb8a95411db81019a7854a784861f"
+subDir = "backends/lean"
+
+[[lean_lib]]
+name = "ForgeBoolCore"
+
+# The spec the translation is proven against: ForgeExact.DecideOnce (core Lean)
+[[require]]
+name = "forgeexact"
+path = "../../../../../verify/forge-exact"

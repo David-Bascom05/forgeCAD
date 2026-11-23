@@ -185,7 +185,7 @@ mod tests {
 
     #[test]
     fn undo_and_redo_walk_the_log() {
-        let dir = std::env::temp_dir().join(format!("forge-undo-{}", std::process::id()));
+        let dir = forge_dirs::temp_dir().join(format!("forge-undo-{}", forge_dirs::process_id()));
         forge_dirs::fs::create_dir_all(&dir).expect("dir");
         let f = dir.join("p.fg");
         let _ = forge_dirs::fs::remove_file(log_path(&f));
@@ -208,7 +208,7 @@ mod tests {
 
     #[test]
     fn an_apps_stacks_kept_are_the_stacks_read_back_and_the_clis_to_step() {
-        let dir = std::env::temp_dir().join(format!("forge-undo-keep-{}", std::process::id()));
+        let dir = forge_dirs::temp_dir().join(format!("forge-undo-keep-{}", forge_dirs::process_id()));
         forge_dirs::fs::create_dir_all(&dir).expect("dir");
         let f = dir.join("p.fg");
         forge_dirs::fs::write(&f, "c").expect("write");

@@ -1,0 +1,10 @@
+name = "meshfiles"
+version = "0.1.0"
+defaultTargets = ["MeshFiles"]
+
+[leanOptions]
+autoImplicit = false
+relaxedAutoImplicit = false
+
+[[lean_lib]]
+name = "MeshFiles"
