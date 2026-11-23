@@ -109,4 +109,4 @@ elab "#standard_axioms " ids:ident* : command => do
   IEEE754.Exact.add_into_spec IEEE754.Exact.sub_into_spec IEEE754.Exact.mul_into_spec IEEE754.Exact.shl_into_spec
   IEEE754.Exact.trimLen_spec IEEE754.Exact.cmp_mag_spec IEEE754.Exact.Big.fromMag_spec IEEE754.Exact.Big.view_spec
   IEEE754.Exact.Big.neg_spec IEEE754.Exact.Big.add_spec IEEE754.Exact.Big.sub_spec IEEE754.Exact.Big.mul_spec
-  IEEE754.Exact.Big.shl_spec IEEE754.Exact.Big.signum_spec IEEE754.Exact.Big.isZero_spec IEEE754.Exact.Big.cmpBig_spec
+  IEEE754.Exact.Big.shl_spec IEEE754.Exact.Big.signum_spec IEEE754.Exact.Big.isZero_spec IEEE754.Exact.Big.cmpBig_spec IEEE754.Exact.Big.limbs_unique IEEE754.Exact.Big.eq_iff_val

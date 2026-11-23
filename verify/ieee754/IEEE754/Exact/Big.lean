@@ -434,6 +434,145 @@ theorem cmpBig_spec {x y : Big} (hx : Canon x) (hy : Canon y) : cmpBig x y = com
     · rw [Int.sign_eq_one_of_pos (by omega), compare_gt_iff_gt.mpr h]; simp
   cases x <;> cases y <;> first | rfl | exact gen
 
+/-! ## One representation per value -/
+
+/-- Equal trimmed limb slices of equal value have the same length and the same limbs. -/
+lemma limbs_unique {a b : ℕ → ℕ} {la lb : ℕ} (ha : Limbs a la) (hb : Limbs b lb)
+    (ta : la = 0 ∨ a (la - 1) ≠ 0) (tb : lb = 0 ∨ b (lb - 1) ≠ 0) (h : valF a la = valF b lb) :
+    la = lb ∧ ∀ i < la, a i = b i := by
+  have hl : la = lb := by
+    rcases lt_trichotomy la lb with hl | hl | hl
+    · have := len_le_of_lt ha tb (by
+        by_contra hn; push Not at hn
+        have := cmp_mag_spec ha hb ta tb; unfold cmpMag at this
+        rw [if_pos (by omega), compare_lt_iff_lt.mpr hl] at this
+        have := compare_lt_iff_lt.mp this.symm; omega)
+      omega
+    · exact hl
+    · have := len_le_of_lt hb ta (by
+        by_contra hn; push Not at hn
+        have := cmp_mag_spec ha hb ta tb; unfold cmpMag at this
+        rw [if_pos (by omega), compare_gt_iff_gt.mpr hl] at this
+        have := compare_gt_iff_gt.mp this.symm; omega)
+      omega
+  subst hl
+  refine ⟨rfl, ?_⟩
+  -- from the top down: `valF w (k+1) = valF w k + w k · B^k`, `valF w k < B^k`
+  have key : ∀ k ≤ la, valF a k = valF b k → ∀ i < k, a i = b i := by
+    intro k
+    induction k with
+    | zero => intro _ _ i hi; omega
+    | succ k ih =>
+      intro hk he i hi
+      rw [valF_succ, valF_succ] at he
+      have h1 := valF_lt (fun j hj => ha j (by omega) : Limbs a k)
+      have h2 := valF_lt (fun j hj => hb j (by omega) : Limbs b k)
+      have hp : 0 < B ^ k := by positivity
+      have d1 : (valF a k + a k * B ^ k) / B ^ k = a k := by
+        rw [Nat.add_mul_div_right _ _ hp, Nat.div_eq_of_lt h1, zero_add]
+      have d2 : (valF b k + b k * B ^ k) / B ^ k = b k := by
+        rw [Nat.add_mul_div_right _ _ hp, Nat.div_eq_of_lt h2, zero_add]
+      have hk' : a k = b k := by rw [← d1, ← d2, he]
+      rcases Nat.lt_succ_iff_lt_or_eq.mp hi with hi' | hi'
+      · exact ih (by omega) (by rw [hk'] at he; omega) i hi'
+      · subst hi'; exact hk'
+  exact key la le_rfl h
+
+lemma canon_big {x : Big} (hx : Canon x) (h : ¬ ∃ v, x = S v) : 2 ^ 126 ≤ valF (view x).2.1 (view x).2.2 := by
+  cases x with
+  | S v => exact absurd ⟨v, rfl⟩ h
+  | M n k w =>
+    obtain ⟨h1, -, lim, top, -, hn⟩ := hx
+    simp only [view]
+    by_contra hc; push Not at hc
+    apply hn; refine ⟨?_, hc⟩
+    by_contra hk; push Not at hk
+    have := valF_ge_top (f := w) (show 0 < k by omega)
+    have : 1 ≤ w (k - 1) := Nat.one_le_iff_ne_zero.mpr top
+    have : B ^ 2 ≤ B ^ (k - 1) := Nat.pow_le_pow_right (by norm_num) (by omega)
+    have : B ^ (k - 1) ≤ w (k - 1) * B ^ (k - 1) := Nat.le_mul_of_pos_left _ (by omega)
+    have : (2 : ℕ) ^ 126 ≤ B ^ 2 := by rw [B_val]; norm_num
+    omega
+  | L n k w =>
+    obtain ⟨h1, lim, top, -⟩ := hx
+    simp only [view]
+    have := valF_ge_top (f := w) (show 0 < k by omega)
+    have : 1 ≤ w (k - 1) := Nat.one_le_iff_ne_zero.mpr top
+    have : B ^ 2 ≤ B ^ (k - 1) := Nat.pow_le_pow_right (by norm_num) (by omega)
+    have : B ^ (k - 1) ≤ w (k - 1) * B ^ (k - 1) := Nat.le_mul_of_pos_left _ (by omega)
+    have : (2 : ℕ) ^ 126 ≤ B ^ 2 := by rw [B_val]; norm_num
+    omega
+
+lemma sgnz_inj {n m : Bool} {a b : ℕ} (ha : 0 < a) (h : sgnz n a = sgnz m b) : n = m ∧ a = b := by
+  cases n <;> cases m <;> simp [sgnz] at h ⊢ <;> omega
+
+/-- **`Eq` is value equality under `Canon`.** The derived structural `==` (and so `Hash`) agrees
+with the value. -/
+theorem eq_iff_val {x y : Big} (hx : Canon x) (hy : Canon y) : x = y ↔ val x = val y := by
+  refine ⟨fun h => h ▸ rfl, fun h => ?_⟩
+  obtain ⟨lx, tx, ex, -⟩ := view_spec hx
+  obtain ⟨ly, ty, ey, -⟩ := view_spec hy
+  -- an `S` value is under `2^126`, an `M` or `L` one is not
+  have small : ∀ {z : Big}, Canon z → ((∃ v, z = S v) ↔ |val z| < 2 ^ 126) := by
+    intro z hz
+    obtain ⟨-, -, ez, -⟩ := view_spec hz
+    constructor
+    · rintro ⟨v, rfl⟩; exact hz
+    · intro hs; by_contra hn
+      have := canon_big hz hn
+      rw [ez] at hs
+      have : (2 : ℤ) ^ 126 ≤ |sgnz (view z).1 (valF (view z).2.1 (view z).2.2)| := by
+        cases (view z).1 <;> simp [sgnz] <;> exact_mod_cast this
+      linarith
+  by_cases hsx : ∃ v, x = S v
+  · obtain ⟨v, rfl⟩ := hsx
+    obtain ⟨w, rfl⟩ := (small hy).mpr (h ▸ (small hx).mp ⟨v, rfl⟩)
+    simp only [val] at h; rw [h]
+  · have hsy : ¬ ∃ v, y = S v := fun hy' => hsx ((small hx).mpr (h ▸ (small hy).mp hy'))
+    have bx := canon_big hx hsx
+    have by' := canon_big hy hsy
+    rw [ex, ey] at h
+    obtain ⟨hn, hv⟩ := sgnz_inj (by omega) h
+    obtain ⟨hl, hw⟩ := limbs_unique lx ly tx ty hv
+    cases x with
+    | S v => exact absurd ⟨v, rfl⟩ hsx
+    | M n k w =>
+      cases y with
+      | S v => exact absurd ⟨v, rfl⟩ hsy
+      | M n' k' w' =>
+        simp only [view] at hn hl hw
+        obtain ⟨-, -, -, -, zx, -⟩ := hx
+        obtain ⟨-, -, -, -, zy, -⟩ := hy
+        subst hn hl
+        congr 1
+        funext i
+        by_cases hi : i < k
+        · exact hw i hi
+        · rw [zx i (by omega), zy i (by omega)]
+      | L n' k' w' =>
+        simp only [view] at hl
+        obtain ⟨-, h8, -⟩ := hx
+        obtain ⟨h8', -⟩ := hy
+        omega
+    | L n k w =>
+      cases y with
+      | S v => exact absurd ⟨v, rfl⟩ hsy
+      | M n' k' w' =>
+        simp only [view] at hl
+        obtain ⟨h8, -⟩ := hx
+        obtain ⟨-, h8', -⟩ := hy
+        omega
+      | L n' k' w' =>
+        simp only [view] at hn hl hw
+        obtain ⟨-, -, -, zx⟩ := hx
+        obtain ⟨-, -, -, zy⟩ := hy
+        subst hn hl
+        congr 1
+        funext i
+        by_cases hi : i < k
+        · exact hw i hi
+        · rw [zx i (by omega), zy i (by omega)]
+
 end Big
 
 end IEEE754.Exact
