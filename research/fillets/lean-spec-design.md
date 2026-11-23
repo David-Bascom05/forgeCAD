@@ -565,3 +565,25 @@ y 11 to f1's cylinder.
   recorded anywhere reachable. The spec stays (a) until Onshape's STEP truth on some of them is
   scored.
 
+**Onshape on narrow convex supports (2026-11-23).** The fillet census worker listed the CADFS
+pilot's fillets with r above a plane support's width (`narrow.rs`). For four of them I compared
+Onshape's blend cylinders (radius r, axis along the edge) with the carried support planes
+(`research/fillets/spec/blendaxis.py`). I also asked whether the feet of the ball tangent to both
+carried planes lie on the body before (`fillet-spec supports`):
+
+| part | kernel | feet on the body | Onshape's blend |
+|---|---|---|---|
+| 00402272, r 10.795 on faces 2.46 wide | refused (Overflow) | neither | tangent to **both carried planes** (axis r√2 from the edge): the supports carried on, no cliff, no roll |
+| 00196819, r 5.08 | refused (NoBlend) | one | tangent to one plane, 0.177 inside the other: rolled onto the neighbour |
+| 00684321, r 5.08 | built, matches to 2.3e-6 | one, or both | tangent to one plane, 0.118 inside the other where one foot is off: rolled |
+| 00958346, r 289 | built, matches to 1.8e-15 | mixed | both carried planes where both feet are on; offset where one is off |
+
+So Onshape does carry a convex round's support planes on, at least where neither foot can lie on
+the body (00402272). That contradicts "the notch is never right" for the convex kind (§12, as told
+to the fillet-fix worker). A single decided rule consistent with these four: where a spring would
+cross a **smooth** edge of its face, the support switches to the neighbour (`switch_support`; focal
+there refuses). Where it would leave its face over a **sharp** edge, the support plane is carried on
+(the cut is the carried ball's shadow, intersected with S). This is P1 on the crossed edge, not a
+retry order. It is to be confirmed on all 15 listed fillets before it is adopted. Under it, the
+opposite-rounds repro (the crossed edge is smooth, the roll focal) stays a refusal.
+

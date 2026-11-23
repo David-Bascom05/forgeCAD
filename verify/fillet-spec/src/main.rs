@@ -476,6 +476,77 @@ fn score(f: &str) {
     }
 }
 
+/// `supports F.fg K`: fillet feature K's picked edges on the body before it: the edge's middle and
+/// direction, its radius and kind, and its two faces' surfaces (for comparing a truth's blend
+/// cylinder against the carried supports). One JSON line per edge.
+fn supports(f: &str, k: usize) {
+    let Ok(src) = std::fs::read_to_string(f) else { return };
+    let m = forge_lang::fuzz::build_with(&src, opts());
+    let Some(forge_model::Feature::Fillet { edges, .. }) = m.features.get(k) else {
+        eprintln!("feature {k} is no fillet ({} features)", m.features.len());
+        return;
+    };
+    let Some(body) = m.body_after(k) else { return };
+    let body = if body.dead > 0 { body.compact() } else { body };
+    for (name, radius) in edges {
+        let forge_ops::Radius::Constant(r) = radius else { continue };
+        let Some(e) = body.edge_by_name(*name) else { continue };
+        let x = body.edge(e);
+        let d = x.curve.deriv(x.range.mid());
+        let faces: Vec<String> = x
+            .coedges
+            .iter()
+            .map(|&c| {
+                let fid = body.coedge_face(c);
+                format!("{{\"s\":{},\"sense\":{}}}", surf(&body.face(fid).surface), body.face(fid).same_sense)
+            })
+            .collect();
+        // the ball tangent to both carried planes at the edge's middle: are its feet on the body?
+        let feet_on = {
+            use forge_bool::classify::{Index, Where};
+            let planes: Vec<(Point3, Vec3)> = x
+                .coedges
+                .iter()
+                .filter_map(|&c| {
+                    let fid = body.coedge_face(c);
+                    let face = body.face(fid);
+                    match &face.surface {
+                        Surface::Plane(q) => {
+                            let n = q.frame.z().get() * if face.same_sense { 1.0 } else { -1.0 };
+                            Some((q.frame.origin, n))
+                        }
+                        _ => None,
+                    }
+                })
+                .collect();
+            if planes.len() == 2 {
+                let convex = forge_ops::fillet::fillet_kind(&body, e) == Some(true);
+                let side = if convex { -1.0 } else { 1.0 };
+                let (n0, n1) = (planes[0].1, planes[1].1);
+                let c = d.p + (n0 + n1) * (side * r / (1.0 + n0.dot(n1)));
+                let idx = Index::new(&body);
+                let on = |q: Point3| matches!(idx.classify(q), Where::On);
+                let f0 = c - n0 * (side * r);
+                let f1 = c - n1 * (side * r);
+                format!("[{},{}]", on(f0), on(f1))
+            } else {
+                "null".to_string()
+            }
+        };
+        println!(
+            "{{\"mid\":{},\"dir\":{},\"r\":{r},\"feet_on_body\":{feet_on},\"convex\":{},\"faces\":[{}]}}",
+            p(d.p),
+            v(d.d1),
+            match forge_ops::fillet::fillet_kind(&body, e) {
+                Some(true) => "true",
+                Some(false) => "false",
+                None => "null",
+            },
+            faces.join(",")
+        );
+    }
+}
+
 fn parts(files: &[String]) {
     for f in files {
         let Ok(src) = std::fs::read_to_string(f) else {
@@ -576,6 +647,7 @@ fn main() {
         Some("mids") => mids(&args[1..]),
         Some("onboth") => onboth(&args[1..]),
         Some("score") => score(&args[1]),
+        Some("supports") => supports(&args[1], args.get(2).and_then(|x| x.parse().ok()).unwrap_or(0)),
         Some("near") => near(&args[1], &args[2]),
         Some("random") => {
             let n = args.get(1).and_then(|x| x.parse().ok()).unwrap_or(20);
