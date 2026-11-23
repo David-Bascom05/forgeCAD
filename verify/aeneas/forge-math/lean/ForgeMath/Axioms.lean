@@ -5,6 +5,7 @@ import Lean
 import ForgeMath.Refine
 import ForgeMath.Predicates
 import ForgeMath.Estimate
+import ForgeMath.Expansion
 import ForgeMath.Dmath
 import ForgeMath.Atan
 
@@ -36,6 +37,8 @@ elab "#standard_axioms " ids:ident* : command => do
   ForgeMath.cross_sign_of_fast ForgeMath.cross_sign_fast
   ForgeMath.orient2d_of_fast ForgeMath.orient2d_fast
   ForgeMath.slice_sum ForgeMath.estimate_eq
+  ForgeMath.Expansion.next_spec ForgeMath.Expansion.sum_loop_spec ForgeMath.Expansion.sum_into_spec
+  ForgeMath.Expansion.scale_loop_spec ForgeMath.Expansion.scale_into_spec
   F64.Ops.add_err F64.Ops.sub_err F64.Ops.mul_err F64.Ops.div_err
   ForgeMath.Dmath.k_sin_eq ForgeMath.Dmath.k_cos_eq ForgeMath.Dmath.exponent_spec
   ForgeMath.Dmath.rem_pio2_spec ForgeMath.Dmath.sin_cos_spec ForgeMath.Dmath.sin_spec
