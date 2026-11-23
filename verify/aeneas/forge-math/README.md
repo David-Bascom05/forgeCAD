@@ -18,6 +18,8 @@ diverge, and what its value is. Axioms: `propext`, `Classical.choice` and `Quot.
 | `CROSS_BOUND`, `CCW_BOUND` | `CROSS_BOUND_eq`, `CCW_BOUND_eq` | the real code computes `(2 + 8·EPS)·EPS` and `(3 + 16·EPS)·EPS`; evaluated, they are the literals the ieee session's bounds use |
 | `estimate` | `slice_sum`, `estimate_eq` | the shipped `e.iter().sum()` is the left fold of the model's `add` from `-0.0` (std's `Sum for f64`, defined in the bridge's `Core.lean`); `estimate` returns that sum when its sign agrees with the last component's, else the last component |
 | `next_component`, `sum_into` | `next_spec`, `sum_into_spec` (`Expansion.lean`) | with `e.len() + f.len() ≤ h.len()`, no panic, and `h[..n]` is `sumIntoL e f`: the merge by magnitude (`mergeL`), the twoSum chain keeping nonzero errors (`growL`), and the last sum unless it is zero with something before it |
+| `mergeL` | `mergeL_perm`, `mergeL_sorted` | the merge is a permutation of `e ++ f`; with finite components and both inputs sorted by `\|val\|`, it is sorted (`magLe`) |
+| `estimate` | `estimate_spec` | `estimate` is `estimateL` |
 | `scale_into` | `scale_into_spec` | with `2·e.len() ≤ h.len()`, no panic, and `h[..n]` is `scaleL e b` (Scale-Expansion with zero elimination, over `twoProduct`/`twoSum`) |
 | `cross_sign` | `cross_sign_of_fast`, `cross_sign_fast` | if the fast test passes, the result is finite, nonzero and has the exact sign of `a·b − c·d`, for every finite input |
 | `orient2d` | `orient2d_of_fast`, `orient2d_fast` | if the fast test passes and the three filter products are `Relative` (`check_filter`), the result is finite, nonzero and has the exact orientation's sign |

@@ -39,6 +39,7 @@ elab "#standard_axioms " ids:ident* : command => do
   ForgeMath.slice_sum ForgeMath.estimate_eq
   ForgeMath.Expansion.next_spec ForgeMath.Expansion.sum_loop_spec ForgeMath.Expansion.sum_into_spec
   ForgeMath.Expansion.scale_loop_spec ForgeMath.Expansion.scale_into_spec
+  ForgeMath.Expansion.mergeL_perm ForgeMath.Expansion.mergeL_sorted ForgeMath.Expansion.estimate_spec
   F64.Ops.add_err F64.Ops.sub_err F64.Ops.mul_err F64.Ops.div_err
   ForgeMath.Dmath.k_sin_eq ForgeMath.Dmath.k_cos_eq ForgeMath.Dmath.exponent_spec
   ForgeMath.Dmath.rem_pio2_spec ForgeMath.Dmath.sin_cos_spec ForgeMath.Dmath.sin_spec

@@ -2,6 +2,7 @@
 Copyright (c) 2026 ForgeCAD contributors. Released under the Mozilla Public License 2.0.
 -/
 import ForgeMath.Refine
+import ForgeMath.Estimate
 
 /-!
 # The shipped expansion arithmetic, as list functions
@@ -47,6 +48,60 @@ lemma mergeL_length (e f : List F64) : (mergeL e f).length = e.length + f.length
     | cons b f ihf =>
       rw [mergeL]; split <;> simp_all <;> omega
 
+/-- **The merge is a permutation** of `e ++ f`. -/
+theorem mergeL_perm (e f : List F64) : (mergeL e f).Perm (e ++ f) := by
+  induction e generalizing f with
+  | nil => simp [mergeL]
+  | cons a e ih =>
+    induction f with
+    | nil => simp [mergeL]
+    | cons b f ihf =>
+      rw [mergeL]; split
+      · exact (ih (b :: f)).cons a
+      · refine ((ihf).cons b).trans ?_
+        simpa using (List.perm_middle (a := b) (l₁ := a :: e) (l₂ := f)).symm
+
+/-- `|a| ≤ |b|` on values. -/
+def magLe (a b : F64) : Prop := |a.val| ≤ |b.val|
+
+lemma lt_abs_iff {a b : F64} (ha : a.isFinite) (hb : b.isFinite) :
+    IEEE754.FP.lt (IEEE754.FP.abs a) (IEEE754.FP.abs b) = true ↔ |a.val| < |b.val| := by
+  rw [IEEE754.FP.lt_iff (by simpa using ha) (by simpa using hb), IEEE754.FP.abs_val, IEEE754.FP.abs_val]
+
+/-- **The merge is sorted by magnitude**: if `e` and `f` are (least first) and every component is
+finite, so is `mergeL e f`. -/
+theorem mergeL_sorted (e f : List F64) (hfin : ∀ x ∈ e ++ f, x.isFinite)
+    (he : e.Pairwise magLe) (hf : f.Pairwise magLe) : (mergeL e f).Pairwise magLe := by
+  induction e generalizing f with
+  | nil => simpa [mergeL] using hf
+  | cons a e ih =>
+    induction f with
+    | nil => simpa [mergeL] using he
+    | cons b f ihf =>
+      rw [List.pairwise_cons] at he hf
+      have fa : a.isFinite := hfin a (by simp)
+      have fb : b.isFinite := hfin b (by simp)
+      rw [mergeL]; split
+      · rename_i hlt
+        have hab : |a.val| < |b.val| := (lt_abs_iff fa fb).mp hlt
+        refine List.pairwise_cons.mpr ⟨fun y hy => ?_, ih (b :: f) (fun x hx => hfin x (by simp_all))
+          he.2 (List.pairwise_cons.mpr hf)⟩
+        rcases List.mem_append.mp ((mergeL_perm e (b :: f)).subset hy) with h | h
+        · exact he.1 y h
+        · rcases List.mem_cons.mp h with rfl | h
+          · exact hab.le
+          · exact le_trans hab.le (hf.1 y h)
+      · rename_i hlt
+        have hba : |b.val| ≤ |a.val| := by
+          by_contra hc; exact hlt ((lt_abs_iff fa fb).mpr (not_le.mp hc))
+        refine List.pairwise_cons.mpr ⟨fun y hy => ?_, ihf (fun x hx => hfin x ?_) hf.2⟩
+        · rcases List.mem_append.mp ((mergeL_perm (a :: e) f).subset hy) with h | h
+          · rcases List.mem_cons.mp h with rfl | h
+            · exact hba
+            · exact le_trans hba (he.1 y h)
+          · exact hf.1 y h
+        · simp only [List.mem_append, List.mem_cons] at hx ⊢; tauto
+
 /-- The twoSum chain: each nonzero error in order, and the last sum. -/
 def growL (q : F64) : List F64 → List F64 × F64
   | [] => ([], q)
@@ -64,6 +119,16 @@ def sumIntoL (e f : List F64) : List F64 :=
     if nz r.2 || r.1.isEmpty then r.1 ++ [r.2] else r.1
 
 lemma ofBits0 : F64.Ops.ofBits 0 = .zero false := by decide
+
+/-- `estimate` on lists: the sum, a left fold of `add` from `-0.0`, when its sign agrees with the
+last component's, else the last component (`+0` for none). `ForgeMath.estimate_eq` is the
+shipped function's equation in these terms. -/
+def estimateL (e : List F64) : F64 :=
+  let top := e.getLast?.getD (.zero false)
+  let sum := e.foldl F64.Ops.add ForgeMath.negZero
+  if IEEE754.FP.lt (.zero false) sum = IEEE754.FP.lt (.zero false) top then
+    if IEEE754.FP.lt sum (.zero false) = IEEE754.FP.lt top (.zero false) then sum else top
+  else top
 
 /-- **`next_component`**: the head of the merge of what is left, and the cursors past it. -/
 theorem next_spec (e f : Slice F64) (ei fi : Usize) (he : ei.val ≤ e.val.length) (hf : fi.val ≤ f.val.length)
@@ -342,5 +407,11 @@ theorem scale_into_spec (e : Slice F64) (b : F64) (h : Slice F64) (hh : 2 * e.va
           omega
         refine ⟨?_, by simp_all⟩
         rw [hL]; simp_all
+
+/-- **`estimate` is `estimateL`.** -/
+theorem estimate_spec (e : Slice F64) : predicates.estimate e = ok (estimateL e.val) := by
+  rw [ForgeMath.estimate_eq]
+  simp only [estimateL, ofBits0, F64.Ops.gt_def, F64.Ops.lt_def]
+  split_ifs <;> rfl
 
 end ForgeMath.Expansion
