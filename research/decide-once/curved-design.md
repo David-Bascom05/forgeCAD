@@ -401,7 +401,16 @@ sound because a refinement's covectors restrict to the old ones.
    the reliability scoreboard (985 parts) no worse.
 5. **Speed**: tools/speed/gate.sh shows no REGRESSED line with the feature on, and the bits are
    identical wherever the curved path is skipped. Flat inputs never reach the curved bridge.
-6. **Skips** (`Uncertified`, `OutOfDomain`, `Ambiguous`) run the old path, counted in the report.
+6. **Skips** (`Uncertified`, `OutOfDomain`, `Ambiguous`, `Budget`, `Tier1`) run the old path,
+   counted in the report.
+7. **The tier counts** (the master, 2026-11-23). On the exact-curved quadric families and on the
+   corpus, report:
+   - how often Tier 0 passes;
+   - how often Tier 1 runs, and how often it then skips;
+   - Tier 1's cost on the gate lines it touches.
+
+   Tier 1 may not make any gate line slower. If it would, those inputs skip (`Skip::Tier1`) rather
+   than run it.
    A skip is decided from the inputs alone, so it is one rule.
 
 ## 4. Phases
