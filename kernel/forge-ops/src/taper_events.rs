@@ -290,7 +290,17 @@ pub(crate) fn first_event(p: &Profile, sign: f64, reach: f64) -> Option<Option<(
         }
     }
     Some(if cross <= edge && cross.is_finite() {
-        Some((cross, Event::Cross))
+        // a loop that closes up here meets itself as it goes (an outline flattening to a ridge, a
+        // hole to a slit): that is its collapse, which the slabs end or drop (sweep-spec 2.2,
+        // rules 2 and 3), not walls crossing
+        if p.loops
+            .iter()
+            .any(|l| crate::taper::closes(&l.segments, cross * sign))
+        {
+            Some((cross, Event::Edge))
+        } else {
+            Some((cross, Event::Cross))
+        }
     } else if edge.is_finite() {
         Some((edge, Event::Edge))
     } else {

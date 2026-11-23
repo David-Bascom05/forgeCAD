@@ -470,6 +470,26 @@ fn slab(
     Ok(b)
 }
 
+/// A loop closed up: no wider than what counts as gone.
+fn closed(lp: &ProfileLoop) -> bool {
+    let around: f64 = lp.segments.iter().map(|(x, _)| x.start().distance(x.end())).sum();
+    lp.signed_area().abs() <= 8.0 * GONE * around
+}
+
+/// Whether a loop, offset `d`, has closed up there (segments that no longer meet have not: that
+/// is walls crossing).
+pub(crate) fn closes(segs: &[(Segment, u64)], d: f64) -> bool {
+    offset(segs, d).is_some_and(|m| {
+        let kept: Vec<(Segment, u64)> = m
+            .iter()
+            .zip(segs)
+            .filter(|(x, _)| x.length > 2.0 * GONE)
+            .map(|(x, s)| (x.seg.clone(), s.1))
+            .collect();
+        kept.is_empty() || closed(&ProfileLoop::new(kept))
+    })
+}
+
 /// What is left of `p`'s loops up a slab `h` high, offset to `moved` where `wiped` are gone: the
 /// profile the next slab starts from, or None where the outline has closed up (a loop no wider
 /// than what counts as gone, or no loop left). A hole that closes is dropped.
@@ -486,10 +506,8 @@ fn left_up(p: &Profile, moved: &[Vec<Moved>], wiped: &[Vec<bool>], h: f64) -> Op
         if kept.is_empty() {
             continue;
         }
-        // (closed up: a loop no wider than what counts as gone)
-        let around: f64 = kept.iter().map(|(x, _)| x.start().distance(x.end())).sum();
         let lp = ProfileLoop::new(kept);
-        if lp.signed_area().abs() > 8.0 * GONE * around {
+        if !closed(&lp) {
             loops.push(lp);
         } else if loops.is_empty() {
             return None;

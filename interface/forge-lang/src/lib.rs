@@ -42,6 +42,7 @@ pub mod sketch;
 pub mod stdparts;
 pub mod store;
 pub mod syntax;
+mod taper_lint;
 pub mod thermo;
 pub mod thermo_kept;
 pub mod tightbox;
@@ -507,6 +508,7 @@ fn run_once(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
     let t2 = Instant::now();
     ev.run(&prog);
     sheet::finish(&mut ev);
+    taper_lint::lint(&mut ev);
     let assembly = ev.asm.as_ref().is_some_and(|d| !d.is_empty());
     if assembly && let Some(e) = props::material_unused(&ev) {
         ev.errors.push(e);
