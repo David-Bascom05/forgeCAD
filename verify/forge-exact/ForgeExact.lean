@@ -25,6 +25,7 @@ import ForgeExact.DecideOnce.FlatK
 import ForgeExact.DecideOnce.Classes
 import ForgeExact.DecideOnce.QLine
 import ForgeExact.DecideOnce.QSep
+import ForgeExact.DecideOnce.QEdge
 import ForgeExact.DecideOnce.SampleLocal
 import ForgeExact.JordanLocal
 import ForgeExact.DecideOnce.LocalJordan

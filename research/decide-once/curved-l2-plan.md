@@ -28,15 +28,20 @@ set that hits every cell is all the enumerator needs.
 |---|---|---|---|---|
 | 1 | `QLine.lean` | `Quadric.evK` (a quadric's value in any model K), `linePt`, `covOn`: the exact covector of the point that a number `n` names on a rational line | `alongLine_ev`, **`covOn_spec`**: the decided covector is `covOfK` of the point, in every model | **done** |
 | 2 | `QSep.lean` | Tier-0 seams from `QFace` data (`Quadric.ofPlane`): the cylinder's and cone's axial plane, the cone's nappe plane, the sphere's centre plane; contact-curve planes from `QRef.contactAt` | `seam_through_axis` and the like: each seam holds the axis or the apex exactly; the seams carry no face | **done**: `axisPlane_on`, `axisPlane_nz`, `nappePlane_on`, `centrePlane_on`, `equatorPlane_on`, `noScaled_seams` (contact-curve planes still to add) |
-| 3 | `Alg/RUR.lean` | rational univariate representations for 0-dimensional systems: a conic pair on a rational plane (edge samples), three quadrics (vertices). Each is a separating linear form, its minimal polynomial `R`, and coordinates `Pᵢ(u)/Q(u)`. Subresultants are untrusted; a reduction identity is checked, as in `Alg.Sum.redCert` | `rur_spec`: every root of `R` gives a common zero, and the carrier's sign there is `Num.sign` of a univariate polynomial | |
+| 3 | `QEdge.lean` (the plane-section RUR) | edge samples: a point where `q_j = q_k = 0` crosses a rational plane `x = c`, given by `y = α` (a root of `R`) and `z = −N(α)/D(α)`. The data come from untrusted elimination and are checked by identities: `homog q = D²·q(c, y, −N/D)` must equal `R·Q` for both quadrics. Vertices (three quadrics) follow the same pattern | **done** (sound half): `homog_ev`, `onCurve_spec` (both quadrics vanish at the sample), `edgeCov_spec` (the decided covector is the sample's). A `#guard` runs the unit sphere against z = 0. **Next**: the completeness half, a Bezout identity `R = A·q_j + B·q_k` in ℚ[y, z] (every crossing is a root of `R`); then vertices |
 | 4 | `QSweep.lean` | for each carrier j: critical values in a fixed rational direction (`Num`s: d-critical points of j and of each curve j∩k, crossings), and rational midpoints between consecutive values by `QRef.between`. The candidates are the flat `cand1` with algebraic roots | `cand_ok`: for every critical-free interval, one candidate lies in it (the curved `cand1_ok`) | |
 | 5 | `QSample.lean` | the samples: on each sweep plane x = c and each rational line y = c' in it, the roots on carrier j (`covOn`, facet samples). Points of j∩k on sweep planes (RUR, edge samples). Vertices (RUR) | **`qsampler_covers`**: every realised cell lying in a carrier is some sample's covector. This is the curved `sampler_covers`, and L2's main theorem. It needs the delineability of the sweep (between critical values the curves on j are graphs), which is where the q1 session's Lemma D and this module meet | |
 | 6 | `QLedger.lean` | `curvedLedger`: cells are the samples' distinct covectors. Pieces: φ is a piece of body i iff i's formula differs on φ.plus and φ.minus (`SForm.onCov`, `QForm.lean`). Inside: formula evaluation. Edges: covectors hit by an edge sample. Verts: those hit only by vertex samples | **`curved_exact`**: `ExactK` (and, with the q1 session's theorem, `CurvedTarget`) for every input in the Q1 domain. The dimension rule is sound because a sample on a sweep plane between critical values is never a vertex, and a nearby point of its arc has its covector | |
 
 **Fuel.** `Num.sign` and the isolations take fuel. Spent fuel answers `none` and never a wrong
-sign. The decided rule is: one fixed fuel constant per call site, stated in the module. An input
-whose decision runs out of fuel is `Skip::Budget` and goes to the old path, counted. That is one
-rule, as D3 asks, not a retry.
+sign. The decided rule, accepted by the master on 2026-11-23: one fixed fuel constant per call
+site, recorded here and in the module. An input whose decision runs out of fuel is
+`Skip::Budget`, goes to the old path, and is counted.
+
+| Constant | Value | Call sites | Defined in |
+|---|---|---|---|
+| `signFuel` | 200 (`Num.sign` bisections, as exact-curved's contact decisions use) | `covOn`, `edgeCov`, `ESample.dOk` | QEdge.lean |
+| `rootFuel` | 60 (`QRef.realRoots`' default) | root isolation of `R` and of the line restrictions | QEdge.lean |
 
 **Order of work:**
 1. QSep (small);
