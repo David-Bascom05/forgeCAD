@@ -1216,12 +1216,23 @@ impl<'a> StepCtx<'a> {
             true,
         ));
         // the shoulder's contact on the leg through the motion, certified by bisection
-        let (cmin, cmax, at) = range_1d(|i| self.contact(i), |x| self.contact(x), 0.0, self.phimax);
+        // certified: the contact's least place along the leg, and its farthest
+        let (cmin, cmax, at, proven) = range_1d(|i| self.contact(i), |x| self.contact(x), 0.0, self.phimax);
         let mut c = Check::rule(Rule::VTooNarrow, cmin, 0.0, false);
         c.phi = Some(at);
+        if !proven {
+            c.pass = false;
+            c.certified = false;
+            c.undecided = true;
+        }
         out.push(c);
         let (far, near, ylen) = self.leg_geometry();
         let mut mf = Check::rule(Rule::MinFlange, far.min(near), cmax.max(0.0), false);
+        if !proven {
+            mf.pass = false;
+            mf.certified = false;
+            mf.undecided = true;
+        }
         let leg = if far <= near { self.bj.b } else { self.bj.a };
         mf.part = Some(PartRef {
             strip: Strip::Wall(self.m.walls[leg].id),
@@ -1493,16 +1504,26 @@ fn rect(x0: f64, z0: f64, x1: f64, z1: f64) -> Region {
 
 /// The least and greatest of f over [lo, hi], within 1e-6, by interval bisection; and where the
 /// least falls.
-fn range_1d(fi: impl Fn(Interval) -> Interval, fp: impl Fn(f64) -> f64, lo: f64, hi: f64) -> (f64, f64, f64) {
+/// Certified bounds on f over [lo, hi] by interval bisection: (a lower bound on its least value,
+/// an upper bound on its greatest, where the least point found is, proven). Each interval is
+/// settled once its enclosure lies within 1e-4 of the extremes found at points; the bounds are
+/// the settled enclosures'. Not proven (false) when the split budget runs out first.
+fn range_1d(
+    fi: impl Fn(Interval) -> Interval,
+    fp: impl Fn(f64) -> f64,
+    lo: f64,
+    hi: f64,
+) -> (f64, f64, f64, bool) {
     let ends = [fp(lo), fp(hi)];
     let mut best_lo = (ends[0].min(ends[1]), if ends[0] <= ends[1] { lo } else { hi });
     let mut best_hi = ends[0].max(ends[1]);
+    let (mut cert_lo, mut cert_hi) = (f64::INFINITY, f64::NEG_INFINITY);
     let mut stack = vec![Interval::new(lo, hi)];
     let mut n = 0;
     while let Some(i) = stack.pop() {
         n += 1;
-        if n > 4000 {
-            break;
+        if n > 20_000 {
+            return (best_lo.0, best_hi, best_lo.1, false);
         }
         let e = fi(i);
         let m = fp(i.mid());
@@ -1510,14 +1531,16 @@ fn range_1d(fi: impl Fn(Interval) -> Interval, fp: impl Fn(f64) -> f64, lo: f64,
             best_lo = (m, i.mid());
         }
         best_hi = best_hi.max(m);
-        if (e.lo >= best_lo.0 - 1e-6 && e.hi <= best_hi + 1e-6) || i.width() < 1e-9 {
+        if (e.lo >= best_lo.0 - 1e-4 && e.hi <= best_hi + 1e-4) || i.width() < 1e-9 {
+            cert_lo = cert_lo.min(e.lo);
+            cert_hi = cert_hi.max(e.hi);
             continue;
         }
         let (a, b) = i.split();
         stack.push(a);
         stack.push(b);
     }
-    (best_lo.0, best_hi, best_lo.1)
+    (cert_lo.min(best_lo.0), cert_hi.max(best_hi), best_lo.1, true)
 }
 
 struct ToolPb<'a, 'b> {
@@ -1722,7 +1745,12 @@ mod tests {
 
     #[test]
     fn range_finds_extremes() {
-        let (lo, hi, at) = range_1d(|i| i.sin(), dmath::sin, 0.0, 3.0);
-        assert!((hi - 1.0).abs() < 1e-6 && lo.abs() < 1e-12 && at == 0.0);
+        let (lo, hi, at, ok) = range_1d(|i| i.sin(), dmath::sin, 0.0, 3.0);
+        assert!(
+            ok && (hi - 1.0).abs() < 1e-4 && lo <= 0.0 && lo > -1e-4 && at == 0.0,
+            "{lo} {hi}"
+        );
+        // sin really reaches 1: the upper bound is at least it
+        assert!(hi >= 1.0);
     }
 }

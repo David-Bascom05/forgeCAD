@@ -331,11 +331,8 @@ fn rules_just_pass_and_just_fail() {
     let reach = rule_of(&part, &tl, su, 0.0, Rule::MinFlange, None).limit;
     let s = forge_sheet::setback_of(&part.gauge, 2.0, deg(90.0));
     for (h, pass) in [(reach + s + 0.05, true), (reach + s - 0.05, false)] {
-        assert_eq!(
-            rule_of(&ell(h), &tl, su, 0.0, Rule::MinFlange, None).pass,
-            pass,
-            "min_flange at {h}"
-        );
+        let c = rule_of(&ell(h), &tl, su, 0.0, Rule::MinFlange, None);
+        assert_eq!(c.pass, pass, "min_flange at {h}: {c:?}");
     }
     // the die's and the punch's angles against the overbent included angle (88 degrees each)
     for (ob, pass) in [(deg(2.0) - e, true), (deg(2.0) + e, false)] {
