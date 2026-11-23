@@ -1,4 +1,5 @@
 import ForgeExact.DecideOnce.QLine
+import ForgeExact.Alg.Sum
 
 /-!
 # Q1 L2: edge samples on a rational plane, by a checked univariate representation
@@ -178,6 +179,39 @@ theorem edgeCov_spec [DecidableRel (α := K) (· < ·)] {e : ESample} {fuel : Na
     simp only [covOfK, List.map_cons, List.map_map] at ih ⊢
     rw [sgnK_of_signIs hq', ih]
 
+
+/-! ## Completeness: every crossing is a root of `R`
+
+`restrB q c` is `q` on the plane `x = c` as a polynomial in `z` with coefficients in `ℚ[y]`
+(`Alg.Sum`'s `BPoly`, evaluated by `yHom`). A **Bezout certificate** is `A`, `B` with
+`A·q_j|ₓ₌c + B·q_k|ₓ₌c = R`, an identity of coefficient lists checked by `bzero`. Then at every
+point of the plane on both quadrics, `R(y) = 0` (`bezout_spec`): every crossing of the curve with
+the plane is some root of `R`, so isolating all of `R`'s real roots finds every crossing. -/
+
+/-- `q` on `x = c`, as a polynomial in `z` over `ℚ[y]`. -/
+def restrB (q : Quadric) (c : Rat) : BPoly :=
+  let a := restr q c
+  [⟨a.1⟩, ⟨a.2.1⟩, ⟨a.2.2⟩]
+
+theorem restrB_ev (q : Quadric) (c : Rat) (y z : K) :
+    evalWith (yHom M y) (restrB q c) z = Quadric.evK M q (M.q c, y, z) := by
+  simp only [restrB, restr, evalWith_cons, evalWith_nil, yHom, Model.ev, Quadric.evK]
+  simp only [Model.q, M.ι.map_add, M.ι.map_mul]
+  grind
+
+/-- The Bezout certificate `A·q_j + B·q_k = R` on the plane `x = c`. -/
+def bezout (qj qk : Quadric) (c : Rat) (A B : BPoly) (R : Poly) : Bool :=
+  bzero (psub (padd (pmul A (restrB qj c)) (pmul B (restrB qk c))) (liftY R))
+
+/-- **Every crossing is a root of `R`.** -/
+theorem bezout_spec {qj qk : Quadric} {c : Rat} {A B : BPoly} {R : Poly}
+    (h : bezout qj qk c A B R = true) {y z : K}
+    (hj : Quadric.evK M qj (M.q c, y, z) = 0) (hk : Quadric.evK M qk (M.q c, y, z) = 0) :
+    M.ev R y = 0 := by
+  have e := ev_bzero M _ h z y
+  rw [eval_psub, eval_padd, eval_pmul, eval_pmul, restrB_ev, restrB_ev, ev_liftY, hj, hk] at e
+  grind
+
 /-! ## A check that runs (a test, not a theorem)
 
 The unit sphere and the plane `z = 0` meet in the unit circle; on the sweep plane `x = 0` it
@@ -192,5 +226,7 @@ def circleAt0 : ESample := ⟨0, [-1, 0, 1], [0], [1], .rat 1, [1], [0]⟩
 #guard circleAt0.onCurve sphere1 planeZ
 #guard circleAt0.dOk signFuel
 #guard edgeCov [sphere1, planeZ, planeYh] circleAt0 signFuel = some [.zero, .zero, .pos]
+-- on x = 0: sphere y² + z² − 1, plane z; y² − 1 = 1·(sphere) + (−z)·(plane)
+#guard bezout sphere1 planeZ 0 [⟨[1]⟩] [⟨[]⟩, ⟨[-1]⟩] [-1, 0, 1]
 
 end ForgeExact.DecideOnce.Curved

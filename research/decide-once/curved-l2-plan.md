@@ -28,7 +28,7 @@ set that hits every cell is all the enumerator needs.
 |---|---|---|---|---|
 | 1 | `QLine.lean` | `Quadric.evK` (a quadric's value in any model K), `linePt`, `covOn`: the exact covector of the point that a number `n` names on a rational line | `alongLine_ev`, **`covOn_spec`**: the decided covector is `covOfK` of the point, in every model | **done** |
 | 2 | `QSep.lean` | Tier-0 seams from `QFace` data (`Quadric.ofPlane`): the cylinder's and cone's axial plane, the cone's nappe plane, the sphere's centre plane; contact-curve planes from `QRef.contactAt` | `seam_through_axis` and the like: each seam holds the axis or the apex exactly; the seams carry no face | **done**: `axisPlane_on`, `axisPlane_nz`, `nappePlane_on`, `centrePlane_on`, `equatorPlane_on`, `noScaled_seams` (contact-curve planes still to add) |
-| 3 | `QEdge.lean` (the plane-section RUR) | edge samples: a point where `q_j = q_k = 0` crosses a rational plane `x = c`, given by `y = α` (a root of `R`) and `z = −N(α)/D(α)`. The data come from untrusted elimination and are checked by identities: `homog q = D²·q(c, y, −N/D)` must equal `R·Q` for both quadrics. Vertices (three quadrics) follow the same pattern | **done** (sound half): `homog_ev`, `onCurve_spec` (both quadrics vanish at the sample), `edgeCov_spec` (the decided covector is the sample's). A `#guard` runs the unit sphere against z = 0. **Next**: the completeness half, a Bezout identity `R = A·q_j + B·q_k` in ℚ[y, z] (every crossing is a root of `R`); then vertices |
+| 3 | `QEdge.lean` (the plane-section RUR) | edge samples: a point where `q_j = q_k = 0` crosses a rational plane `x = c`, given by `y = α` (a root of `R`) and `z = −N(α)/D(α)`. The data come from untrusted elimination and are checked by identities: `homog q = D²·q(c, y, −N/D)` must equal `R·Q` for both quadrics. Vertices (three quadrics) follow the same pattern | **done** (sound half): `homog_ev`, `onCurve_spec` (both quadrics vanish at the sample), `edgeCov_spec` (the decided covector is the sample's). A `#guard` runs the unit sphere against z = 0. **Completeness done**: `bezout_spec`: a Bezout certificate `A·q_j + B·q_k = R` in ℚ[y][z], checked by `bzero`, makes every crossing of the curve with the plane a root of `R` (with `#guard`). **Next**: vertices, then an untrusted proposer (resultant, subresultant, Bezout cofactors) |
 | 4 | `QSweep.lean` | for each carrier j: critical values in a fixed rational direction (`Num`s: d-critical points of j and of each curve j∩k, crossings), and rational midpoints between consecutive values by `QRef.between`. The candidates are the flat `cand1` with algebraic roots | `cand_ok`: for every critical-free interval, one candidate lies in it (the curved `cand1_ok`) | |
 | 5 | `QSample.lean` | the samples: on each sweep plane x = c and each rational line y = c' in it, the roots on carrier j (`covOn`, facet samples). Points of j∩k on sweep planes (RUR, edge samples). Vertices (RUR) | **`qsampler_covers`**: every realised cell lying in a carrier is some sample's covector. This is the curved `sampler_covers`, and L2's main theorem. It needs the delineability of the sweep (between critical values the curves on j are graphs), which is where the q1 session's Lemma D and this module meet | |
 | 6 | `QLedger.lean` | `curvedLedger`: cells are the samples' distinct covectors. Pieces: φ is a piece of body i iff i's formula differs on φ.plus and φ.minus (`SForm.onCov`, `QForm.lean`). Inside: formula evaluation. Edges: covectors hit by an edge sample. Verts: those hit only by vertex samples | **`curved_exact`**: `ExactK` (and, with the q1 session's theorem, `CurvedTarget`) for every input in the Q1 domain. The dimension rule is sound because a sample on a sweep plane between critical values is never a vertex, and a nearby point of its arc has its covector | |
@@ -82,8 +82,25 @@ the decide-once Rust session is doing for `Big`. They are interim L4 for now, ch
 differential test against the Lean L2 with a committed digest, and the blocker is named:
 Aeneas and bignum arithmetic.
 
-**Asked of the decide-once Rust session:**
-1. `Big`'s API and limb layout, so that `Alg::Num` and the RUR build on it;
-2. where the exact numerics live (`forge_math::exact` beside `Dy`?);
-3. whether `forge_bool_core`'s `Ledger` constructor (`encode`) takes covectors of any width as
-   they are (`LFits.width`). The curved ledger's width is the near surfaces plus the seams.
+**Answered by the decide-once Rust session (2026-11-23):**
+1. **The bignum.** `forge_math::exact::Big` (kernel/forge-math/src/exact.rs, feature `exact`, as of
+   b6a9dd4) has one representation per value:
+   - `S(i128)` below 2^126;
+   - `M { neg, n, w: [u64; 8] }` up to 8 inline limbs;
+   - `L { neg, mag: Vec<u64> }` beyond that.
+
+   Its API: `zero`, `from_i64`, `is_zero`, `signum`, `neg`, `abs`, `add`, `sub`, `mul`, `shl`, `bits`,
+   `cmp_big`. `Dy` (dyadic) builds on it. There is no division, gcd or sqrt: the curved side adds
+   them (rationals over `Big`, then `Alg::Num`).
+
+   It is not yet in the Aeneas style (`scratch` takes a closure, and `cmp_mag` returns `Ordering`);
+   a restyle is promised to the IEEE session. **The curved side writes against the API above, never
+   the internals.**
+2. **Where.** In `forge_math::exact`, behind the `exact` feature. The RUR and algebraic numbers go
+   in a submodule, `forge_math::exact::alg`. There is one bignum.
+3. **Width.** Ledger cells are `Vec<Vec<Sgn>>` of any one width. `LedgerWF` bounds counts, not
+   width, so near surfaces plus seams as classes is fine.
+
+The flat bridge is being restructured for speed (a body-local read, then a sparse arrangement).
+`decide_once_curved.rs` shares code with it only through `forge_math::exact` and
+`forge_bool_core`, never through `decide_once.rs` internals.

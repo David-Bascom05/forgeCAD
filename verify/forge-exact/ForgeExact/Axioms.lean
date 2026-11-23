@@ -199,6 +199,8 @@ elab "#standard_axioms " ids:ident* : command => do
   ForgeExact.DecideOnce.Curved.homog_ev
   ForgeExact.DecideOnce.Curved.onCurve_spec
   ForgeExact.DecideOnce.Curved.edgeCov_spec
+  ForgeExact.DecideOnce.Curved.restrB_ev
+  ForgeExact.DecideOnce.Curved.bezout_spec
   ForgeExact.DecideOnce.Sample.local_exact
   ForgeExact.DecideOnce.Sample.local_correct
   ForgeExact.DecideOnce.Sample.wall_region
