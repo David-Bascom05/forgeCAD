@@ -101,11 +101,33 @@ fn quantisation_is_exact() {
     assert!(quant(f64::NAN, 3).is_err());
 }
 
+/// The test program without what the dialect refuses by design (a dwell whose units no open
+/// source gives, a coolant whose code is machine-configured): those refusals are tested apart.
+fn prog_for(d: &Dialect, tap: bool) -> Program {
+    let mut p = prog(tap);
+    if d.s("dwell").is_empty() {
+        p.recs.retain(|r| {
+            !matches!(
+                r,
+                Rec::Dwell(_)
+                    | Rec::Cycle {
+                        kind: CycleKind::Dwell,
+                        ..
+                    }
+            )
+        });
+    }
+    if d.s("coolant_flood").is_empty() {
+        p.recs.retain(|r| !matches!(r, Rec::Coolant(_)));
+    }
+    p
+}
+
 #[test]
 fn every_dialect_round_trips() {
     for (name, _) in DIALECTS {
         let d = Dialect::get(name).unwrap();
-        let mut p = prog(false);
+        let mut p = prog_for(&d, false);
         if !d.lines("retract_home").is_empty() {
             p.recs.push(Rec::Home);
         }
@@ -451,6 +473,8 @@ fn siemens_iso_program_reads_as_the_manual_says() {
     assert!(txt.contains("G00 G43 H1"), "{txt}");
     assert!(txt.contains("G04 X0.5"), "{txt}");
     assert!(txt.contains("G98 G82 X0. Y-30. Z-3. R2. P250 F120."), "{txt}");
+    // peck and chip-break retracts are GUD settings: posted as moves
+    assert!(!txt.contains("G83") && !txt.contains("G73"), "{txt}");
     eprintln!("{txt}");
 }
 
@@ -495,4 +519,46 @@ fn heidenhain_iso_program_reads_as_the_manual_says() {
         Err(PostError::Unsupported { .. })
     ));
     eprintln!("{txt}");
+}
+
+#[test]
+fn machine_configured_codes_are_refused_not_guessed() {
+    // Mach3: the dwell unit and the flood/mist outputs are settings the program cannot see
+    let d = Dialect::get("mach3").unwrap();
+    let mut p = prog(false);
+    p.recs.retain(|r| !matches!(r, Rec::Coolant(_)));
+    assert!(matches!(
+        print(&quantize(&p, &d).unwrap(), &d),
+        Err(PostError::Unsupported { .. })
+    ));
+    let p = prog_for(&d, false);
+    let mut with_flood = p.clone();
+    with_flood.recs.insert(3, Rec::Coolant(Coolant::Flood));
+    assert!(matches!(
+        print(&quantize(&with_flood, &d).unwrap(), &d),
+        Err(PostError::Unsupported { .. })
+    ));
+    assert!(print(&quantize(&p, &d).unwrap(), &d).is_ok());
+    // PathPilot's G84 dwells by default when P is left out: refused; MASSO has no G84
+    for n in ["pathpilot", "masso"] {
+        let d = Dialect::get(n).unwrap();
+        let q = quantize(&prog_for(&d, true), &d).unwrap();
+        assert!(matches!(print(&q, &d), Err(PostError::Unsupported { .. })), "{n}");
+    }
+    // Centroid: parentheses are expressions there, so no comment is written with them
+    let d = Dialect::get("centroid-cnc12").unwrap();
+    let txt = print(&quantize(&prog(false), &d).unwrap(), &d).unwrap();
+    assert!(!txt.contains('(') && txt.contains("; op1 face"), "{txt}");
+    // every dialect restated from a maker's manual cites every code it sets
+    for n in [
+        "siemens",
+        "heidenhain",
+        "pathpilot",
+        "mach3",
+        "mach4",
+        "centroid-cnc12",
+        "masso",
+    ] {
+        assert!(!Dialect::get(n).unwrap().cites.is_empty(), "{n}");
+    }
 }

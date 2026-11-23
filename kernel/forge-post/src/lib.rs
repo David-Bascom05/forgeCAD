@@ -18,19 +18,24 @@ use forge_cam_geom::big::Nat;
 use forge_cam_geom::real::Dy;
 use forge_tooling::toml::{self, Table, num, text, texts};
 
-pub const DIALECTS: [(&str, &str); 6] = [
+pub const DIALECTS: [(&str, &str); 11] = [
     ("fanuc", include_str!("../data/fanuc.toml")),
     ("haas", include_str!("../data/haas.toml")),
     ("linuxcnc", include_str!("../data/linuxcnc.toml")),
     ("grbl", include_str!("../data/grbl.toml")),
     ("siemens", include_str!("../data/siemens.toml")),
     ("heidenhain", include_str!("../data/heidenhain.toml")),
+    ("pathpilot", include_str!("../data/pathpilot.toml")),
+    ("mach3", include_str!("../data/mach3.toml")),
+    ("mach4", include_str!("../data/mach4.toml")),
+    ("centroid-cnc12", include_str!("../data/centroid-cnc12.toml")),
+    ("masso", include_str!("../data/masso.toml")),
 ];
 
 /// Controls whose dialect we cannot restate: no openly published programming manual gives the
 /// codes a post needs (research/cam/posts/BLOCKED.md). Asking for one is a typed refusal with
 /// the reason, never a guessed dialect.
-pub const UNAVAILABLE: [(&str, &str); 4] = [
+pub const UNAVAILABLE: [(&str, &str); 5] = [
     (
         "brother",
         "no open programming manual for Brother CNC-C00/D00 (it ships with the machine); Brother's public FAQs give 19 of 31 codes but not spindle M3/M4/M5, arcs, dwell or the drilling cycles",
@@ -42,6 +47,10 @@ pub const UNAVAILABLE: [(&str, &str); 4] = [
     (
         "mazak-eia-lathe",
         "Mazak's EIA/ISO programming manuals are behind the MPower customer login; no open source gives the codes",
+    ),
+    (
+        "syntec",
+        "Syntec's programming manuals need a syntecclub.com login; no open source gives the codes",
     ),
     (
         "okuma-osp",
@@ -846,7 +855,10 @@ pub fn print(p: &QProgram, d: &Dialect) -> Result<String, PostError> {
             }
             QRec::ToolChange { t, h, name } => {
                 for l in d.lines("tool_change") {
-                    w.emit(&fill(&l, &[("t", t.to_string()), ("name", name.clone())]));
+                    w.emit(&fill(
+                        &l,
+                        &[("t", t.to_string()), ("h", h.to_string()), ("name", name.clone())],
+                    ));
                 }
                 let lc = d.s("length_comp").to_string();
                 if !lc.is_empty() {
@@ -977,7 +989,7 @@ pub fn print(p: &QProgram, d: &Dialect) -> Result<String, PostError> {
                             decimals: k,
                             feed_decimals: d.feed_decimals,
                         };
-                        write_moves(&one, d, &mut w, &mut pos, &mut feed, &mut motion);
+                        write_moves(&one, d, &mut w, &mut pos, &mut feed, &mut motion)?;
                     }
                     continue;
                 }
@@ -1013,6 +1025,12 @@ pub fn print(p: &QProgram, d: &Dialect) -> Result<String, PostError> {
             }
             QRec::Dwell(ms) => {
                 let tpl = d.s("dwell").to_string();
+                if tpl.is_empty() {
+                    return Err(PostError::Unsupported {
+                        what: format!("a dwell on {} (no open source gives its units)", d.name),
+                        fix: "leave the dwell out, or post for a control whose dwell is known".into(),
+                    });
+                }
                 w.emit(&fill(
                     &tpl,
                     &[("ms", ms.to_string()), ("s", digits(*ms, 3, Point::Never))],
@@ -1053,7 +1071,7 @@ fn write_moves(
     pos: &mut [Option<Q>; 3],
     feed: &mut Option<Q>,
     motion: &mut Option<u32>,
-) {
+) -> Result<(), PostError> {
     let num_ = |q: Q| d.coord(q);
     let fnum = |q: Q| {
         digits(
@@ -1096,6 +1114,12 @@ fn write_moves(
             }
             QRec::Dwell(ms) => {
                 let tpl = d.s("dwell").to_string();
+                if tpl.is_empty() {
+                    return Err(PostError::Unsupported {
+                        what: format!("a dwell on {} (no open source gives its units)", d.name),
+                        fix: "leave the dwell out, or post for a control whose dwell is known".into(),
+                    });
+                }
                 w.emit(&fill(
                     &tpl,
                     &[("ms", ms.to_string()), ("s", digits(*ms, 3, Point::Never))],
@@ -1104,6 +1128,7 @@ fn write_moves(
             _ => {}
         }
     }
+    Ok(())
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -1161,10 +1186,11 @@ pub fn read(text_: &str, d: &Dialect) -> Result<Vec<Motion>, ReadError> {
     // no motion (ignored) or that make the block carry none (skipped), more word letters
     let eol = d.s("comment_eol").chars().next();
     let block_end = d.s("block_end").trim().to_string();
-    let g_ignore: Vec<u32> = toml::nums(&d.t, "read_g_ignore")
-        .unwrap_or_default()
-        .into_iter()
-        .map(|x| x as u32)
+    let g_ignore_f: Vec<f64> = toml::nums(&d.t, "read_g_ignore").unwrap_or_default();
+    let g_ignore: Vec<u32> = g_ignore_f
+        .iter()
+        .filter(|x| x.fract() == 0.0)
+        .map(|x| *x as u32)
         .collect();
     let g_skip: Vec<u32> = toml::nums(&d.t, "read_g_skip")
         .unwrap_or_default()
@@ -1230,6 +1256,8 @@ pub fn read(text_: &str, d: &Dialect) -> Result<Vec<Motion>, ReadError> {
                     })?;
                     if g.fract() == 0.0 {
                         gs.push(g as u32)
+                    } else if g_ignore_f.contains(&g) {
+                        // a decimal G the dialect lists as carrying no motion (G91.1)
                     } else {
                         gs.push(10_000)
                     }
