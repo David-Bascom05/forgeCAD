@@ -1037,3 +1037,26 @@ extrude2 = extrude(s4, 2)
         assert!(mesh.open_edges().is_empty());
     }
 }
+
+/// A tapered cut whose walls meet before its depth: the hexagon's walls, 80 deg, close on its
+/// centre at sqrt 3 / tan 80 deg = 0.305 down, short of the 0.5 asked, so the pit is the pyramid
+/// they make, as a square's is (forge-ops taper.rs: past a closed profile there is nothing). It
+/// built an invalid body (EdgeDegenerate): the slab's top joints were merged by distance, and a
+/// hexagon's lie 2 GONE apart where its sides have shrunk to GONE; and sides shrinking at other
+/// rates were kept a few GONE long. Exact volumes from the profile's half-planes moved in.
+#[test]
+fn a_taper_whose_walls_meet_is_the_pyramid_they_make() {
+    use forge_lang::fuzz::{Verdict, judge_built};
+    let src = include_str!("kernel_parts/taper_collapses.fg");
+    let irregular = src.replace("(1, -s)])", "(1.3, -s)])");
+    for (src, exact) in [
+        (src.to_string(), 1598.9420381157493),
+        (irregular, 1598.9048017085177),
+    ] {
+        let (v, _) = judge_built(&src);
+        assert!(matches!(v, Verdict::Ok), "{v:?}");
+        let b = built(&src).body;
+        let vol = forge_topo::mass::mass(&b).expect("a mass").volume;
+        assert!((vol - exact).abs() <= 1e-9 * exact, "volume {vol}, exact {exact}");
+    }
+}

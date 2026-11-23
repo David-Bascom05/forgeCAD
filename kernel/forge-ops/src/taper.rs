@@ -188,6 +188,49 @@ fn offset(segs: &[(Segment, u64)], d: f64) -> Option<Vec<Moved>> {
 
 const GONE: f64 = 1e-7;
 
+/// Which segments of each loop of `p`, offset `d` (`moved`) to where a segment is wiped out,
+/// are gone at this event: under 2 GONE long, or wiped out at the event's own offset. Segments
+/// shrink at their own rates (a line between corners of other angles shrinks faster), so where
+/// the first is GONE long, others closing with it are still a few GONE long: each segment's rate
+/// is its length's change since half the offset (the loop keeps its segments in between), and a
+/// segment whose length runs out within twice the soonest time, over all loops, goes with it.
+fn gone_at(p: &Profile, d: f64, moved: &[Vec<Moved>]) -> Vec<Vec<bool>> {
+    let short = |m: &[Moved]| m.iter().map(|x| x.length <= 2.0 * GONE).collect::<Vec<bool>>();
+    let half: Option<Vec<Vec<Moved>>> = p.loops.iter().map(|l| offset(&l.segments, 0.5 * d)).collect();
+    let Some(half) = half else {
+        return moved.iter().map(|m| short(m)).collect();
+    };
+    // the offset each segment has left: its length over the rate it shrinks at
+    let left: Vec<Vec<f64>> = moved
+        .iter()
+        .zip(&half)
+        .map(|(m, h)| {
+            m.iter()
+                .zip(h)
+                .map(|(x, y)| {
+                    let rate = (y.length - x.length) / (0.5 * d.abs());
+                    if rate > 0.0 {
+                        x.length.max(0.0) / rate
+                    } else {
+                        f64::INFINITY
+                    }
+                })
+                .collect()
+        })
+        .collect();
+    let soonest = left.iter().flatten().fold(f64::INFINITY, |a, &b| a.min(b));
+    moved
+        .iter()
+        .zip(&left)
+        .map(|(m, l)| {
+            m.iter()
+                .zip(l)
+                .map(|(x, &t)| x.length <= 2.0 * GONE || t <= 2.0 * soonest)
+                .collect()
+        })
+        .collect()
+}
+
 /// The least offset in (0, reach], `sign` the way it goes, at which a segment of the profile is
 /// wiped out.
 fn next_event(p: &Profile, sign: f64, reach: f64) -> Option<f64> {
@@ -284,24 +327,38 @@ fn slab(p: &Profile, d: f64, h: f64, angle: f64, root: Name) -> Result<Body, Tap
     let mut bottom_loops: Vec<Vec<(EdgeId, bool)>> = Vec::new();
     let mut uprights: Vec<EdgeId> = Vec::new();
     let mut made = false;
-    for (l, m) in p.loops.iter().zip(&moved) {
+    let wiped = gone_at(p, d, &moved);
+    for (li, (l, m)) in p.loops.iter().zip(&moved).enumerate() {
         let segs = &l.segments;
         let n = segs.len();
         let names: Vec<Name> = segs.iter().map(|s| crate::roles::side(root, s.1)).collect();
         let joint = |i: usize, n0: Name| if n <= 2 { n0.with_name(names[i]) } else { n0 };
+        // a segment the offset has wiped out (`gone_at`, as `tapered` counts one gone) ends where it
+        // starts: its two joints are one top vertex, decided by the segment, not by how far apart
+        // the joints happen to be (a hexagon closing on its centre has joints 2 GONE apart)
+        let mut first: Vec<usize> = (0..n).collect();
+        for i in (0..n).filter(|&i| wiped[li][i]) {
+            let (a, c) = (first[i], first[(i + 1) % n]);
+            let (lo, hi) = (a.min(c), a.max(c));
+            first.iter_mut().filter(|f| **f == hi).for_each(|f| *f = lo);
+        }
         let mut verts: Vec<[VertexId; 2]> = Vec::with_capacity(n);
         for i in 0..n {
             let prev = names[(i + n - 1) % n];
             let name = joint(i, Name::NONE.with_set(&[start, prev, names[i]]));
             let vb = b.add_vertex(base.plane_point(segs[i].0.start()), name);
             let q = m[i].seg.start();
-            let vt = match tops.iter().find(|t| t.1.distance(q) <= 2.0 * GONE) {
-                Some(t) => t.0,
-                None => {
-                    let name = joint(i, Name::NONE.with_set(&[end, prev, names[i]]));
-                    let v = b.add_vertex(lid.plane_point(q), name);
-                    tops.push((v, q));
-                    v
+            let vt = if first[i] < i {
+                verts[first[i]][1]
+            } else {
+                match tops.iter().find(|t| t.1.distance(q) <= 2.0 * GONE) {
+                    Some(t) => t.0,
+                    None => {
+                        let name = joint(i, Name::NONE.with_set(&[end, prev, names[i]]));
+                        let v = b.add_vertex(lid.plane_point(q), name);
+                        tops.push((v, q));
+                        v
+                    }
                 }
             };
             verts.push([vb, vt]);
@@ -446,15 +503,22 @@ pub fn tapered(profile: &Profile, distance: f64, angle: f64, feature: u64) -> Re
         k += 1;
         // what is left of each loop, up a slab
         let mut loops = Vec::new();
-        for l in &p.loops {
-            let Some(m) = offset(&l.segments, d * sign) else {
-                return Err(TaperError::Draft(plain));
-            };
+        let Some(moved) = p
+            .loops
+            .iter()
+            .map(|l| offset(&l.segments, d * sign))
+            .collect::<Option<Vec<_>>>()
+        else {
+            return Err(TaperError::Draft(plain));
+        };
+        let wiped = gone_at(&p, d * sign, &moved);
+        for ((l, m), w) in p.loops.iter().zip(&moved).zip(&wiped) {
             let kept: Vec<(Segment, u64)> = m
                 .iter()
                 .zip(&l.segments)
-                .filter(|(x, _)| x.length > 2.0 * GONE)
-                .map(|(x, s)| (x.seg.clone(), s.1))
+                .zip(w)
+                .filter(|(_, w)| !**w)
+                .map(|((x, s), _)| (x.seg.clone(), s.1))
                 .collect();
             if kept.is_empty() {
                 continue;
