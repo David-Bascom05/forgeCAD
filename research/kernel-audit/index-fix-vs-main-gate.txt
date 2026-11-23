@@ -1,0 +1,92 @@
+# The Index fix merged on main ec32818 (this branch's merge 8aeb1da + fmt), against ec32818 itself: the exact
+# callgrind gate (tools/speed/gate.sh, GATE_COUNTER=callgrind, exact mode) run on both, same machine.
+# bits: identical. Lines up (main count, merged count):
+UP   torture nary1         125975991    125978498 +0.002%
+UP   plate nary1           125976024    125978531 +0.002%
+UP   housing nary1         142443828    142450637 +0.005%
+UP   coplanar nary1        157170040    157191895 +0.014%
+UP   patterns seq          200177110    200197601 +0.010%
+UP   patterns nary1        147734180    147753610 +0.013%
+UP   hole-grid nary1       109345392    109351456 +0.006%
+UP   tour seq                9935784      9939018 +0.033%
+UP   tour nary1              8885140      8890437 +0.060%
+UP   upto-flat seq          15049605     15053427 +0.025%
+UP   upto-flat nary1        11962165     11966695 +0.038%
+UP   gearbox app           242229688    242249407 +0.008%
+UP   gearbox cli           513619021    514330854 +0.139%
+UP   gearbox seq           218114321    218123720 +0.004% (diag)
+UP   crank nary1           269474184    269475524 +0.000% (diag)
+UP   valve nary1           116614026    116748371 +0.115% (diag)
+UP   heatsink app           93955800     93963213 +0.008%
+UP   heatsink edit         183553066    183568389 +0.008%
+UP   heatsink cli          166497883    166511564 +0.008%
+UP   heatsink seq           82920879     82921897 +0.001% (diag)
+UP   heatsink nary1         73820952     73823114 +0.003% (diag)
+UP   quadarm app            49980269     49982041 +0.004%
+UP   quadarm edit           98094516     98098541 +0.004%
+UP   quadarm cli            66649957     66654866 +0.007%
+UP   quadarm seq            40591493     40592026 +0.001% (diag)
+UP   quadarm nary1          41000768     41001331 +0.001% (diag)
+UP   frame nary1           337635965    339376736 +0.516% (diag)
+UP   bracket app            10344568     10344845 +0.003%
+UP   bracket edit           19311361     19312552 +0.006%
+UP   bracket cli            17330976     17331865 +0.005%
+UP   bracket seq             7284905      7285398 +0.007% (diag)
+UP   bracket nary1           7158400      7158597 +0.003% (diag)
+UP   insert app             27339161     27340216 +0.004%
+UP   insert edit            48013753     48016338 +0.005%
+UP   insert cli             36130787     36132720 +0.005%
+UP   insert seq             18318894     18319744 +0.005% (diag)
+UP   insert nary1           18842061     18842770 +0.004% (diag)
+UP   clamp app              11744974     11745436 +0.004%
+UP   clamp edit             22121615     22122837 +0.006%
+UP   clamp cli              25807404     25809518 +0.008%
+UP   clamp seq               8476408      8476843 +0.005% (diag)
+UP   clamp nary1             8477236      8477732 +0.006% (diag)
+UP   hub app                24086599     24088481 +0.008%
+UP   hub edit               44129124     44133257 +0.009%
+UP   hub cli                37225874     37228735 +0.008%
+UP   hub seq                18047576     18049632 +0.011% (diag)
+UP   hub nary1              16689214     16690631 +0.008% (diag)
+UP   guard app              56591650     56593253 +0.003%
+UP   guard edit            112135234    112138884 +0.003%
+UP   guard cli              75175339     75180316 +0.007%
+UP   guard seq              53690685     53692429 +0.003% (diag)
+UP   guard nary1            53685103     53686849 +0.003% (diag)
+lines 97, up 52, down 45, same 0
+
+# frame nary1 (+1,732,225, diagnostic), self cost by function, merged − main, regen call only
+# (--toggle-collect=*benchparts::regen), changes over 20,000. Rust +1,618,640, libc/ld +113,585:
+-1222531	???:forge_math::predicates::inside_polygon
+-908750	???:<forge_bool::classify::Index>::classify
+-558330	???:<forge_geom::blend::Pipe>::nearest_on_spine
+-142825	???:<forge_geom::surface::Surface as forge_geom::surface::SurfaceGeom>::project
+-108053	???:forge_math::dmath::atan
+-92967	???:forge_math::dmath::atan2
+-74565	???:forge_topo::uv::uv_loop::<&forge_topo::uv::default_segments>
+-61986	???:forge_topo::uv::draw
+-51709	???:<std::sync::once::Once>::call_once_force::<<std::sync::once_lock::OnceLock<forge_bool::classify::Drawn>>::
+-30781	???:<std::sync::once::Once>::call_once_force::<<std::sync::once_lock::OnceLock<core::option::Option<forge_bool
+-24927	???:<alloc::vec::Vec<forge_math::vec::Point2> as alloc::vec::spec_from_iter_nested::SpecFromIterNested<forge_m
+-22056	???:<forge_geom::surface::Surface>::singular
++20677	???:<forge_math::frame::Frame>::from_z
++21567	./malloc/./malloc/malloc.c:_int_malloc
++21770	???:<forge_geom::intcurve::IntCurve>::closest_on_cubic
++27568	???:<forge_bool::classify::Simple>::of
++29981	./malloc/./malloc/malloc.c:_int_free
++33191	???:<forge_geom::intcurve::IntCurve>::hermite
++56196	???:<forge_geom::curve::Curve as forge_geom::curve::CurveGeom>::eval'2
++59020	???:<forge_geom::curve::Curve>::eval_rest
++61548	???:<forge_geom::blend::Spring as forge_geom::curve::ProceduralCurve>::point
++64761	???:<forge_geom::intcurve::IntCurve>::bbox
++73286	???:<forge_bool::classify::Index>::point_in_face_past
++136891	???:compiler_builtins::math::libm_math::fmod::fmod
++198030	???:forge_geom::blend::foot
++240220	???:<forge_geom::surface::Surface>::implicit
++246860	???:<forge_geom::surface::Surface>::implicit_gradient
++345690	???:forge_bool::classify::region_crossings::<forge_bool::classify::ruling_crossings::{closure#0}>
++367505	???:<forge_geom::intcurve::IntCurve>::eval
++591744	???:<forge_geom::blend::Spring as forge_geom::curve::ProceduralCurve>::speed_bound
++627993	???:<forge_geom::blend::Pipe>::nearest_on_spine_at
++740239	???:forge_geom::intersect::pieces_near
++905643	???:<forge_bool::classify::Index>::ray_parity
