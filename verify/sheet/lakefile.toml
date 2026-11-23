@@ -15,7 +15,14 @@ rev = "v4.36.0"
 [[lean_lib]]
 name = "Sheet"
 
-# The differential oracle of kernel/forge-sheet/tests/lean_diff.rs.
+# The differential oracle of interface/forge-lang/tests/sheet_lean_diff.rs and
+# kernel/forge-sheet/tests/lean_diff_region.rs.
 [[lean_exe]]
 name = "sheet-oracle"
 root = "OracleMain"
+
+# The IEEE 754 model (verify/ieee754, the same toolchain and Mathlib pin): the float filter of
+# Sheet/Float.lean is proven against it.
+[[require]]
+name = "ieee754"
+path = "../ieee754"

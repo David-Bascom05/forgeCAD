@@ -5,6 +5,8 @@ import Sheet.Tree
 import Sheet.Classes
 import Sheet.Region
 import Sheet.BranchBound
+import Sheet.Build
+import Sheet.Float
 import Sheet.Trig
 import Sheet.Checker
 import Sheet.Oracle
@@ -54,6 +56,12 @@ elab "#standard_axioms " ids:ident* : command => do
   -- the bend simulator's branch and bound
   Sheet.BB.Encl.comp Sheet.BB.Ival.addOut_mem Sheet.BB.lipschitz_lower Sheet.BB.search_sound
   Sheet.BB.certify_sound
+  -- L3: the kernel's joint decisions
+  Sheet.Build.decide_ok_iff Sheet.Build.setback_pos_iff Sheet.Build.toBend_physical
+  Sheet.Build.accepted_bend Sheet.Build.build_refold
+  -- L5: the float filter of the vertex-class predicate
+  Sheet.Float.sub_bound Sheet.Float.sq_sum_bounds Sheet.Float.filter_sound
+  Sheet.Float.near_filter_sound
   -- enclosures and the checker
   Sheet.Trig.mem_add Sheet.Trig.mem_sub Sheet.Trig.mem_mul Sheet.Trig.mem_coarsen Sheet.Trig.taylor
   Sheet.Trig.taylorI_mem Sheet.Trig.double_mem Sheet.Trig.sinCos_mem Sheet.Trig.sc_mem
