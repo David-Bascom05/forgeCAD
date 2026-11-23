@@ -432,4 +432,90 @@ theorem growMany_good (L : ℤ) (hL : -1074 ≤ L) (N : ℕ) :
       have e : 6 * (N : ℚ) * (rest.length + 1) * ηq = 6 * N * rest.length * ηq + 6 * N * ηq := by ring
       linarith
 
+/-! ## The product's terms -/
+
+abbrev tpr (a b : _root_.F64) := twoProduct ForgeMath.splitter a b
+
+/-- The two-product terms of `e o`, row by row, error before product (`exp_mul`'s order). -/
+def prodTerms (e o : List _root_.F64) : List _root_.F64 :=
+  e.flatMap fun a => o.flatMap fun b => [(tpr a b).2, (tpr a b).1]
+
+theorem mulRow_eq (a : _root_.F64) (o out : List _root_.F64) :
+    mulRow a o out = growMany out (o.flatMap fun b => [(tpr a b).2, (tpr a b).1]) := by
+  induction o generalizing out with
+  | nil => rfl
+  | cons b bs ih =>
+      simp only [mulRow, List.foldl_cons, List.flatMap_cons, growMany, List.foldl_append] at ih ⊢
+      rw [ih]; rfl
+
+theorem mulL_eq (e o : List _root_.F64) : mulL e o = growMany [] (prodTerms e o) := by
+  unfold mulL prodTerms
+  suffices h : ∀ out, e.foldl (fun out a => mulRow a o out) out =
+      growMany out (e.flatMap fun a => o.flatMap fun b => [(tpr a b).2, (tpr a b).1]) from h []
+  induction e with
+  | nil => intro out; rfl
+  | cons a rest ih =>
+      intro out
+      simp only [List.foldl_cons, List.flatMap_cons]
+      rw [ih, mulRow_eq]; simp only [growMany, List.foldl_append]
+
+theorem prodTerms_len (e o : List _root_.F64) : (prodTerms e o).length = 2 * e.length * o.length := by
+  unfold prodTerms
+  induction e with
+  | nil => simp
+  | cons a rest ih =>
+      simp only [List.flatMap_cons, List.length_append, ih, List.length_cons]
+      have : (o.flatMap fun b => [(tpr a b).2, (tpr a b).1]).length = 2 * o.length := by
+        induction o with
+        | nil => simp
+        | cons b bs ihb => simp only [List.flatMap_cons, List.length_append, ihb]; simp; ring
+      rw [this]; ring
+
+/-- **The product's terms**: each good on the grid `2^(Le + Lo)`, their sum `Σe · Σo` exactly,
+their mass within `(1 + 2u) Me Mo + 2 |e||o| η`. -/
+theorem prodTerms_good {Le Lo : ℤ} (hΛ : -1074 ≤ Le + Lo) (e o : List _root_.F64)
+    (he : ∀ x ∈ e, Good Le x ∧ |x.val| ≤ Amax) (ho : ∀ x ∈ o, Good Lo x ∧ |x.val| ≤ Amax) :
+    (∀ x ∈ prodTerms e o, Good (Le + Lo) x) ∧ esumL (prodTerms e o) = esumL e * esumL o ∧
+      massL (prodTerms e o) ≤ (1 + 2 * uq) * (massL e * massL o) + 2 * e.length * o.length * ηq := by
+  have row : ∀ a, Good Le a ∧ |a.val| ≤ Amax →
+      (∀ x ∈ o.flatMap (fun b => [(tpr a b).2, (tpr a b).1]), Good (Le + Lo) x) ∧
+      esumL (o.flatMap (fun b => [(tpr a b).2, (tpr a b).1])) = a.val * esumL o ∧
+      massL (o.flatMap (fun b => [(tpr a b).2, (tpr a b).1])) ≤
+        (1 + 2 * uq) * (|a.val| * massL o) + 2 * o.length * ηq := by
+    intro a ha
+    induction o with
+    | nil => simp
+    | cons b bs ih =>
+        have hb := ho b (by simp)
+        obtain ⟨i1, i2, i3⟩ := ih (fun x h => ho x (by simp [h]))
+        obtain ⟨p1, p2, p3, p4, p5, p6⟩ :=
+          twoProduct_good ha.1.1 hb.1.1 ha.2 hb.2 ha.1.2 hb.1.2 hΛ
+        simp only [List.flatMap_cons, List.mem_append, esumL_append, massL_append, esumL_cons,
+          massL_cons, esumL_nil, massL_nil, List.length_cons, Nat.cast_add, Nat.cast_one]
+        refine ⟨?_, ?_, ?_⟩
+        · intro x hx
+          rcases hx with hx | hx
+          · simp at hx; rcases hx with rfl | rfl
+            · exact ⟨p2, p6⟩
+            · exact ⟨p1, p5⟩
+          · exact i1 x hx
+        · rw [i2]; linarith
+        · rw [abs_mul] at p4
+          have : (1 + 2 * uq) * (|a.val| * (|b.val| + massL bs)) =
+              (1 + 2 * uq) * (|a.val| * |b.val|) + (1 + 2 * uq) * (|a.val| * massL bs) := by ring
+          linarith
+  induction e with
+  | nil => simp [prodTerms]
+  | cons a rest ih =>
+      obtain ⟨i1, i2, i3⟩ := ih (fun x h => he x (by simp [h]))
+      obtain ⟨r1, r2, r3⟩ := row a (he a (by simp))
+      unfold prodTerms at i1 i2 i3 ⊢
+      simp only [List.flatMap_cons, List.mem_append, esumL_append, massL_append, esumL_cons,
+        massL_cons, List.length_cons, Nat.cast_add, Nat.cast_one]
+      refine ⟨fun x hx => hx.elim (r1 x) (i1 x), by rw [r2, i2]; ring, ?_⟩
+      have : (1 + 2 * uq) * ((|a.val| + massL rest) * massL o) =
+          (1 + 2 * uq) * (|a.val| * massL o) + (1 + 2 * uq) * (massL rest * massL o) := by ring
+      have : 2 * ((rest.length : ℚ) + 1) * o.length * ηq = 2 * o.length * ηq + 2 * rest.length * o.length * ηq := by ring
+      linarith
+
 end forge_sheet_core
