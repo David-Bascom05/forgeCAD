@@ -661,12 +661,9 @@ impl crate::topo::Topo for Body {
         self.edges[e].alive
     }
     #[inline]
-    fn edge_start(&self, e: usize) -> usize {
-        self.edges[e].start.index()
-    }
-    #[inline]
-    fn edge_end(&self, e: usize) -> usize {
-        self.edges[e].end.index()
+    fn edge_ends(&self, e: usize) -> (usize, usize) {
+        let e = &self.edges[e];
+        (e.start.index(), e.end.index())
     }
 }
 

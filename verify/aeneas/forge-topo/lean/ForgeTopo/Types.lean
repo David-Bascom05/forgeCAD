@@ -26,7 +26,6 @@ structure topo.Topo (Self : Type _) where
   n_vertices : Self → Result Std.Usize
   n_edges : Self → Result Std.Usize
   edge_alive : Self → Std.Usize → Result Bool
-  edge_start : Self → Std.Usize → Result Std.Usize
-  edge_end : Self → Std.Usize → Result Std.Usize
+  edge_ends : Self → Std.Usize → Result (Std.Usize × Std.Usize)
 
 end forge_topo

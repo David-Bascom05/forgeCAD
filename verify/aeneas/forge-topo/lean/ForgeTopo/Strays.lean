@@ -64,8 +64,8 @@ section
 variable {T : Type} (TopoInst : topo.Topo T) (t : T)
 
 theorem loop0_spec (nv : Usize) (ne : Usize) (S E : Nat → Nat)
-    (hs : ∀ e : Usize, e.val < ne.val → TopoInst.edge_start t e ⦃ s => s.val = S e.val ⦄)
-    (he : ∀ e : Usize, e.val < ne.val → TopoInst.edge_end t e ⦃ s => s.val = E e.val ⦄)
+    (hse : ∀ e : Usize, e.val < ne.val →
+      TopoInst.edge_ends t e ⦃ p => p.1.val = S e.val ∧ p.2.val = E e.val ⦄)
     (used : alloc.vec.Vec Bool) (hl : used.val.length = nv.val)
     (h0 : ∀ i < nv.val, used.val[i]! = false) :
     topo.strays_loop0 TopoInst t nv used ne 0#usize ⦃ r =>
@@ -80,8 +80,19 @@ theorem loop0_spec (nv : Usize) (ne : Usize) (S E : Nat → Nat)
     by_cases hlt : e.val < ne.val
     · have hlt' : e < ne := by scalar_tac
       simp only [hlt', ite_true]
-      apply WP.spec_bind (hs e hlt)
-      intro a ha
+      apply WP.spec_bind (hse e hlt)
+      rintro ⟨a, b⟩ ⟨ha, hb⟩
+      show (do
+        let used1 ← if a < nv then do
+            let (_, index_mut_back) ← alloc.vec.Vec.index_mut (core.slice.index.SliceIndexUsizeSlice Bool) u a
+            ok (index_mut_back true)
+          else ok u
+        let used2 ← if b < nv then do
+            let (_, index_mut_back) ← alloc.vec.Vec.index_mut (core.slice.index.SliceIndexUsizeSlice Bool) used1 b
+            ok (index_mut_back true)
+          else ok used1
+        let e1 ← lift (e.wrapping_add 1#usize)
+        ok (ControlFlow.cont (used2, e1))) ⦃ _ => _ ⦄
       -- the first end
       have step1 : (if a < nv then do
             let (_, index_mut_back) ← alloc.vec.Vec.index_mut (core.slice.index.SliceIndexUsizeSlice Bool) u a
@@ -94,8 +105,6 @@ theorem loop0_spec (nv : Usize) (ne : Usize) (S E : Nat → Nat)
         · have han' : ¬ a < nv := by scalar_tac
           simp only [han', ite_false, han]
       rw [step1]; simp only [Std.bind_ok]
-      apply WP.spec_bind (he e hlt)
-      intro b hb
       set u1 := (if a.val < nv.val then u.set a true else u)
       have hl1 : u1.val.length = nv.val := by
         simp only [u1]; split <;> simp [alloc.vec.Vec.set_val_eq, hlen]
@@ -175,8 +184,8 @@ theorem loop1_spec (nv : Usize) (used : alloc.vec.Vec Bool) (hl : used.val.lengt
 /-- The shipped `strays` returns `strayRef`'s list, for every instance with these values. -/
 theorem strays_spec (NV NE : Usize) (S E : Nat → Nat)
     (hnv : TopoInst.n_vertices t = ok NV) (hne : TopoInst.n_edges t = ok NE)
-    (hs : ∀ e : Usize, e.val < NE.val → TopoInst.edge_start t e ⦃ s => s.val = S e.val ⦄)
-    (he : ∀ e : Usize, e.val < NE.val → TopoInst.edge_end t e ⦃ s => s.val = E e.val ⦄) :
+    (hse : ∀ e : Usize, e.val < NE.val →
+      TopoInst.edge_ends t e ⦃ p => p.1.val = S e.val ∧ p.2.val = E e.val ⦄) :
     topo.strays TopoInst t ⦃ r => r.val.map (·.val) = strayRef NV.val NE.val S E ⦄ := by
   unfold topo.strays
   rw [hnv]; simp only [Std.bind_ok]
@@ -185,8 +194,8 @@ theorem strays_spec (NV NE : Usize) (S E : Nat → Nat)
   rw [hne]; simp only [Std.bind_ok]
   have hl : used.val.length = NV.val := by rw [hused]; simp
   have h0 : ∀ i < NV.val, used.val[i]! = false := by
-    intro i hi; rw [hused]; simp [List.getElem!_replicate, hi]
-  apply WP.spec_bind (loop0_spec TopoInst t NV NE S E hs he used hl h0)
+    intro i hi; rw [hused]; simp [hi]
+  apply WP.spec_bind (loop0_spec TopoInst t NV NE S E hse used hl h0)
   rintro u1 ⟨hl1, hm⟩
   apply WP.spec_mono (loop1_spec NV u1 hl1)
   intro r hr
@@ -203,7 +212,7 @@ theorem filterMap_ite_eq {α β} (l : List α) (p : α → Bool) (g : α → β)
       (l.filter fun v => !p v).map g := by
   induction l with
   | nil => rfl
-  | cons a t ih => cases h : p a <;> simp [List.filter_cons, h, ih]
+  | cons a t ih => cases h : p a <;> simp [h, ih]
 
 /-- The model's `checkStrays` is `strayRef` of the model body's counts and ends. -/
 theorem checkStrays_eq (b : TopoCheck.Body) :
@@ -234,12 +243,12 @@ is exactly `Model.checkStrays`. -/
 theorem strays_refines {T : Type} (TopoInst : topo.Topo T) (t : T) (b : TopoCheck.Body) (NV NE : Usize)
     (hnv : TopoInst.n_vertices t = ok NV) (hne : TopoInst.n_edges t = ok NE)
     (hnv' : NV.val = b.nv) (hne' : NE.val = b.edges.size)
-    (hs : ∀ e : Usize, e.val < NE.val → TopoInst.edge_start t e ⦃ s => s.val = (b.ed e.val).start ⦄)
-    (he : ∀ e : Usize, e.val < NE.val → TopoInst.edge_end t e ⦃ s => s.val = (b.ed e.val).stop ⦄) :
+    (hse : ∀ e : Usize, e.val < NE.val → TopoInst.edge_ends t e ⦃ p =>
+      p.1.val = (b.ed e.val).start ∧ p.2.val = (b.ed e.val).stop ⦄) :
     topo.strays TopoInst t ⦃ r => (r.val.map (·.val)).map TopoCheck.Problem.strayVertex =
       b.checkStrays ⦄ := by
   have h := strays_spec TopoInst t NV NE (fun k => (b.ed k).start) (fun k => (b.ed k).stop)
-    hnv hne hs he
+    hnv hne hse
   apply WP.spec_mono h
   intro r hr
   rw [hr, checkStrays_eq, hnv', hne']

@@ -12,8 +12,8 @@ pub trait Topo {
     fn n_edges(&self) -> usize;
     /// Whether edge `e` is live (`Edge::alive`).
     fn edge_alive(&self, e: usize) -> bool;
-    fn edge_start(&self, e: usize) -> usize;
-    fn edge_end(&self, e: usize) -> usize;
+    /// Edge `e`'s start and end vertices.
+    fn edge_ends(&self, e: usize) -> (usize, usize);
 }
 
 /// `check_strays`: the vertices no edge (live or left over) starts or ends at, in order.
@@ -23,11 +23,10 @@ pub fn strays<T: Topo>(t: &T) -> Vec<usize> {
     let ne = t.n_edges();
     let mut e = 0;
     while e < ne {
-        let a = t.edge_start(e);
+        let (a, b) = t.edge_ends(e);
         if a < nv {
             used[a] = true;
         }
-        let b = t.edge_end(e);
         if b < nv {
             used[b] = true;
         }
