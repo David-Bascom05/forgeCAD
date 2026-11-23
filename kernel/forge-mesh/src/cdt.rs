@@ -108,6 +108,18 @@ fn nx(i: usize) -> usize {
 fn pv(i: usize) -> usize {
     (i + 2) % 3
 }
+/// Where x is in a triangle's three vertices or neighbours.
+fn slot(a: [u32; 3], x: u32) -> Option<usize> {
+    if a[0] == x {
+        Some(0)
+    } else if a[1] == x {
+        Some(1)
+    } else if a[2] == x {
+        Some(2)
+    } else {
+        None
+    }
+}
 
 impl Mesh {
     fn p(&self, v: u32) -> Point2 {
@@ -238,7 +250,7 @@ impl Mesh {
         let (c_ca, c_ab, c_bc) = (tt.c[nx(i)], tt.c[pv(i)], tt.c[i]);
         let u = tt.n[i];
         let uu = self.tris[u as usize];
-        let j = (0..3).find(|&k| uu.n[k] == t).expect("neighbour links back");
+        let j = slot(uu.n, t).expect("neighbour links back");
         let d = uu.v[j];
         let (n_bd, n_dc) = (uu.n[nx(j)], uu.n[pv(j)]);
         let (c_bd, c_dc) = (uu.c[nx(j)], uu.c[pv(j)]);
@@ -295,7 +307,7 @@ impl Mesh {
         let (o, a, b) = (tt.v[i], tt.v[nx(i)], tt.v[pv(i)]);
         let u = tt.n[i];
         let uu = self.tris[u as usize];
-        let j = (0..3).find(|&k| uu.n[k] == t).expect("neighbour links back");
+        let j = slot(uu.n, t).expect("neighbour links back");
         let q = uu.v[j];
         let (n_bo, n_oa) = (tt.n[nx(i)], tt.n[pv(i)]);
         let (c_bo, c_oa) = (tt.c[nx(i)], tt.c[pv(i)]);
@@ -333,7 +345,7 @@ impl Mesh {
                 continue;
             }
             let uu = self.tris[u as usize];
-            let Some(j) = (0..3).find(|&k| uu.n[k] == t) else {
+            let Some(j) = slot(uu.n, t) else {
                 continue;
             };
             let q = uu.v[j];
@@ -366,7 +378,7 @@ impl Mesh {
             for _ in 0..self.tris.len() {
                 *steps += 1;
                 let tt = self.tris[t as usize];
-                let ia = (0..3).find(|&k| tt.v[k] == a)?;
+                let ia = slot(tt.v, a)?;
                 if tt.v[nx(ia)] == b {
                     return Some((t, pv(ia)));
                 }
@@ -401,9 +413,7 @@ impl Mesh {
         let mut cur: Option<(u32, u32, u32)> = None;
         for _ in 0..=self.tris.len() {
             let tt = self.tris[t as usize];
-            let ia = (0..3)
-                .find(|&k| tt.v[k] == a)
-                .ok_or(CdtError::Internal("fan lost a"))?;
+            let ia = slot(tt.v, a).ok_or(CdtError::Internal("fan lost a"))?;
             let (v1, v2) = (tt.v[nx(ia)], tt.v[pv(ia)]);
             let o1 = orient2d(pa, pb, self.p(v1));
             let o2 = orient2d(pa, pb, self.p(v2));
@@ -441,9 +451,7 @@ impl Mesh {
             crossed.push_back((left, right));
             let u = self.tris[tc as usize].n[ic];
             let uu = self.tris[u as usize];
-            let j = (0..3)
-                .find(|&k| uu.n[k] == tc)
-                .ok_or(CdtError::Internal("broken link"))?;
+            let j = slot(uu.n, tc).ok_or(CdtError::Internal("broken link"))?;
             let q = uu.v[j];
             if q == b {
                 break;
@@ -482,9 +490,7 @@ impl Mesh {
             let tt = self.tris[t as usize];
             let u = tt.n[i];
             let uu = self.tris[u as usize];
-            let j = (0..3)
-                .find(|&k| uu.n[k] == t)
-                .ok_or(CdtError::Internal("broken link"))?;
+            let j = slot(uu.n, t).ok_or(CdtError::Internal("broken link"))?;
             let (p, q) = (tt.v[i], uu.v[j]);
             let (pp, pq) = (self.p(p), self.p(q));
             let convex = {
@@ -531,7 +537,7 @@ impl Mesh {
                 }
                 let u = tt.n[i];
                 let uu = self.tris[u as usize];
-                let Some(j) = (0..3).find(|&k| uu.n[k] == t) else {
+                let Some(j) = slot(uu.n, t) else {
                     continue;
                 };
                 let r = uu.v[j];
@@ -629,7 +635,7 @@ impl Mesh {
         self.tris[t as usize].c[i] = false;
         let u = self.tris[t as usize].n[i];
         if u != NONE
-            && let Some(k) = (0..3).find(|&k| self.tris[u as usize].n[k] == t)
+            && let Some(k) = slot(self.tris[u as usize].n, t)
         {
             self.tris[u as usize].c[k] = false;
         }
@@ -685,9 +691,7 @@ impl Mesh {
         self.tris[t as usize].c[i] = true;
         let u = self.tris[t as usize].n[i];
         if u != NONE {
-            let k = (0..3)
-                .find(|&k| self.tris[u as usize].n[k] == t)
-                .ok_or(CdtError::Internal("broken link"))?;
+            let k = slot(self.tris[u as usize].n, t).ok_or(CdtError::Internal("broken link"))?;
             self.tris[u as usize].c[k] = true;
         }
         Ok(())
@@ -1182,7 +1186,7 @@ fn within(
                         look.push(t);
                     }
                     let tt = mesh.tris[t as usize];
-                    let Some(i) = (0..3).find(|&k| tt.v[k] == v) else {
+                    let Some(i) = slot(tt.v, v) else {
                         break;
                     };
                     t = tt.n[nx(i)];
