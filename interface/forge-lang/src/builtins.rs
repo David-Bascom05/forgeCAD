@@ -1661,17 +1661,11 @@ pub(crate) fn profile_of(
     }
 }
 
-/// The regions a profile argument names: a sketch's or one loop's (one region, `profile_of`),
-/// or a list of loops of one sketch (a sketch text): every region only they bound.
-pub(crate) fn profiles_of(
-    ev: &Eval,
-    v: Value,
-    span: Span,
-) -> R<(Rc<RefCell<Sk>>, Vec<forge_ops::Profile>, Vec<EntityId>)> {
-    let Value::List(xs) = v else {
-        let (sk, p, segs) = profile_of(ev, v, span)?;
-        return Ok((sk, vec![p], segs));
-    };
+/// A profile argument's sketch, its regions, and the entities they were taken from.
+type Regions = (Rc<RefCell<Sk>>, Vec<forge_ops::Profile>, Vec<EntityId>);
+
+/// The regions a list of loops of one sketch (a sketch text) bound, only they.
+pub(crate) fn profiles_of(xs: &[Value], span: Span) -> R<Regions> {
     let mut sk: Option<Rc<RefCell<Sk>>> = None;
     let mut ids = Vec::new();
     for x in xs.iter() {
@@ -1731,14 +1725,25 @@ fn extrude(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Val
     if a.poisoned() {
         return Ok(Value::Unresolved);
     }
-    let (sk, mut profiles, segs) = profiles_of(ev, a.req("profile")?, a.span("profile"))?;
-    if profiles.is_empty() {
-        return Err(Error::Regions {
-            span: a.span("profile"),
-            sketch: sk.borrow().id.clone(),
-            count: 0,
-        });
-    }
+    // one region (a sketch's, a loop's), or every region of a list of loops (a text's)
+    let (sk, profile, many, segs) = match a.req("profile")? {
+        Value::List(xs) => {
+            let (sk, mut ps, segs) = profiles_of(&xs, a.span("profile"))?;
+            if ps.is_empty() {
+                return Err(Error::Regions {
+                    span: a.span("profile"),
+                    sketch: sk.borrow().id.clone(),
+                    count: 0,
+                });
+            }
+            let one = ps.remove(0);
+            (sk, one, ps, segs)
+        }
+        v => {
+            let (sk, p, segs) = profile_of(ev, v, a.span("profile"))?;
+            (sk, p, Vec::new(), segs)
+        }
+    };
     if a.opt("taper").is_some() {
         if !matches!(a.req("d")?, Value::Num(_)) {
             return Err(Error::NotWith {
@@ -1757,11 +1762,14 @@ fn extrude(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Val
             }
             .into());
         }
-        let curved = profiles.iter().flat_map(|p| &p.loops).any(|l| {
-            l.segments
-                .iter()
-                .any(|g| matches!(g.0, forge_ops::Segment::Spline(_)))
-        });
+        let curved = std::iter::once(&profile)
+            .chain(&many)
+            .flat_map(|p| &p.loops)
+            .any(|l| {
+                l.segments
+                    .iter()
+                    .any(|g| matches!(g.0, forge_ops::Segment::Spline(_)))
+            });
         if curved {
             return Err(Error::TaperOnCurve {
                 span: a.span("taper"),
@@ -1937,8 +1945,7 @@ fn extrude(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Val
         _ if a.flag("new")? || !has_solid(ev) => Combine::New,
         _ => Combine::Add,
     };
-    let f = if profiles.len() == 1 {
-        let profile = profiles.pop().expect("one region");
+    let f = if many.is_empty() {
         Feature::Extrude { profile, extent, op }
     } else {
         // several regions (a text's glyphs): each extruded alike, none reaching a face
@@ -1950,6 +1957,9 @@ fn extrude(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Val
                 with: "several regions (a text): next and upto end each region on its own face",
             });
         }
+        // (in order: the first region was taken out above)
+        let mut profiles = many;
+        profiles.insert(0, profile);
         Feature::Regions(Box::new(forge_model::regions::Regions { profiles, extent, op }))
     };
     let f = crate::bodies::wrap_in(ev, &a, f)?;
@@ -2817,18 +2827,22 @@ fn cap(ev: &mut Eval, f: &Feat, end: bool) -> Value {
         let fr = sf.with_origin(o);
         if z_sign < 0.0 { fr.flipped() } else { fr }
     });
-    // its own root, or a several-region extrude's (a text's) one per region
-    let roots: Vec<Name> = match region_roots(ev, f) {
-        Some(rs) => rs.into_iter().map(|r| r.0).collect(),
-        None => vec![Name::feature(f.hid)],
-    };
+    let root = Name::feature(f.hid);
     // which of the tool's caps lies where: the one the kernel names "start" sits at the sketch
     // unless the extrude ran backwards. Asked of the part as the feature left it, so a cap a
     // later edit moved (an offset, a draft, a slab) is still found by its name.
-    let names: Vec<Name> = roots
-        .iter()
-        .flat_map(|&root| [forge_ops::roles::start(root), forge_ops::roles::end(root)])
-        .collect();
+    let own_caps = [forge_ops::roles::start(root), forge_ops::roles::end(root)];
+    // a several-region extrude's (a text's): each region's
+    let region_caps: Vec<Name> = region_roots(ev, f).map_or(Vec::new(), |rs| {
+        rs.iter()
+            .flat_map(|r| [forge_ops::roles::start(r.0), forge_ops::roles::end(r.0)])
+            .collect()
+    });
+    let names: &[Name] = if region_caps.is_empty() {
+        &own_caps
+    } else {
+        &region_caps
+    };
     let at_height = |body: &Body, fr: Frame, nm: Name| {
         crate::build::role_faces(body, nm).into_iter().any(|x| {
             face_plane(body, x).is_some_and(|fp| (fp.origin - fr.origin).dot(fr.z().get()).abs() < 1e-6)

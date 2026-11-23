@@ -190,3 +190,34 @@ fn the_nameplate_example_builds() {
     assert!(r.ok(), "{:?}", r.errors);
     assert!(forge_topo::check(r.body.as_ref().unwrap()).is_empty());
 }
+
+/// Text parts' exact bits (vertex points, edge ranges, face count): the same on every target
+/// (CI runs this natively and as wasm32-wasip1, so the constants hold for both).
+#[test]
+fn text_bits_are_the_same_everywhere() {
+    let bits = |src: &str| {
+        let r = run(src);
+        assert!(r.ok(), "{:?}", r.errors);
+        let b = r.body.as_ref().unwrap();
+        let mut h = forge_math::hash::BitHasher::new();
+        for v in &b.vertices {
+            h.p3(v.point);
+        }
+        for e in &b.edges {
+            h.f64(e.range.lo);
+            h.f64(e.range.hi);
+        }
+        h.u64(b.faces.len() as u64);
+        format!("{:016x}", h.finish())
+    };
+    let got = [
+        bits(&part("FORGE 40", ", angle: 7deg", "extrude")),
+        bits(&part(
+            "Qg&8",
+            ", font: \"Source Sans 3\", align: \"center\"",
+            "cut",
+        )),
+    ];
+    println!("{got:?}");
+    assert_eq!(got, ["62b0602ea86db6e0", "9b4b3744493af53b"]);
+}

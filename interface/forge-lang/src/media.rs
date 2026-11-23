@@ -183,7 +183,7 @@ pub fn font(dir: Option<&Path>, root: Option<&Path>, file: &str, span: Span) -> 
             return Err(FileProblem::WrongKind);
         }
         // what the font reader says of it would be its bytes: only that it is no font it reads
-        forge_font::Font::parse(data.to_vec()).map_err(|_| FileProblem::WrongKind)
+        forge_font::Font::parse_cff_too(data.to_vec()).map_err(|_| FileProblem::WrongKind)
     })
     .map_err(|problem| {
         FeatError::File {
@@ -229,7 +229,8 @@ pub fn font_for(
     }
     let f = font(dir, root, name, span)?;
     // the file's own style: bold and italic as its name table says them
-    let has = |w: &str| f.style.split_whitespace().any(|x| x.eq_ignore_ascii_case(w));
+    let style_name = f.names().1;
+    let has = |w: &str| style_name.split_whitespace().any(|x| x.eq_ignore_ascii_case(w));
     let own = (has("Bold"), has("Italic") || has("Oblique"));
     if (bold || italic) && own != (bold, italic) {
         return Err(FeatError::Text {

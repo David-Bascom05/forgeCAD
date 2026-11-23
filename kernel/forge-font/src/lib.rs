@@ -71,10 +71,8 @@ pub struct Font {
     pub ascender: f64,
     pub descender: f64,
     pub line_gap: f64,
-    /// The family and style the name table gives (the typographic ones where there are),
-    /// empty where it gives none.
-    pub family: String,
-    pub style: String,
+    /// Where the name table is (`names` reads it when asked).
+    name: Option<(usize, usize)>,
     glyphs: usize,
     outlines: Outlines,
     hmtx: (usize, usize),
@@ -94,8 +92,12 @@ enum Outlines {
         loca: (usize, usize),
         glyf: (usize, usize),
     },
-    Cff(Box<cff::Cff>),
+    /// CFF outlines, and what reads one glyph's (`cff::Cff::outline`, held here so only a font
+    /// read with `parse_cff_too` brings the charstring interpreter in).
+    Cff(Box<cff::Cff>, CffOutline),
 }
+
+type CffOutline = fn(&cff::Cff, u16) -> Result<Vec<Vec<Seg>>, FontError>;
 
 #[derive(Clone, Copy, Debug)]
 enum Map {
@@ -122,7 +124,21 @@ pub(crate) fn u32_at(d: &[u8], o: usize) -> Result<u32, FontError> {
 }
 
 impl Font {
+    /// A TrueType (glyf) font; one with CFF outlines is `FontError::Cff`.
     pub fn parse(data: Vec<u8>) -> Result<Font, FontError> {
+        Font::read(data, None)
+    }
+
+    /// A TrueType font, or an OpenType one with CFF (cubic) outlines.
+    pub fn parse_cff_too(data: Vec<u8>) -> Result<Font, FontError> {
+        Font::read(data, Some((cff::Cff::parse, cff::Cff::outline)))
+    }
+
+    #[allow(clippy::type_complexity)]
+    fn read(
+        data: Vec<u8>,
+        cff: Option<(fn(&[u8]) -> Result<cff::Cff, FontError>, CffOutline)>,
+    ) -> Result<Font, FontError> {
         let d = &data[..];
         let version = u32_at(d, 0)?;
         if version != 0x0001_0000
@@ -169,18 +185,19 @@ impl Font {
                     glyf,
                 }
             }
-            None => match find(b"CFF ") {
-                Some((at, len)) => {
-                    let c = cff::Cff::parse(&d[at..at + len])?;
+            None => match (find(b"CFF "), cff) {
+                (Some(_), None) => return Err(FontError::Cff),
+                (Some((at, len)), Some((parse, outline))) => {
+                    let c = parse(&d[at..at + len])?;
                     if c.glyphs() < glyphs {
                         return Err(FontError::Unsupported("fewer CFF charstrings than glyphs"));
                     }
-                    Outlines::Cff(Box::new(c))
+                    Outlines::Cff(Box::new(c), outline)
                 }
-                None if find(b"CFF2").is_some() => {
+                (None, _) if find(b"CFF2").is_some() => {
                     return Err(FontError::Unsupported("CFF2 (variable) outlines are not read"));
                 }
-                None => return Err(FontError::Missing("glyf")),
+                (None, _) => return Err(FontError::Missing("glyf")),
             },
         };
         let (ascender, descender, line_gap) = (
@@ -188,10 +205,7 @@ impl Font {
             i16_at(d, hhea + 6)? as f64,
             i16_at(d, hhea + 8)? as f64,
         );
-        let (family, style) = match find(b"name") {
-            Some((at, len)) => read_names(&d[at..at + len]),
-            None => (String::new(), String::new()),
-        };
+        let name = find(b"name");
         let cmap = read_cmap(d, need("cmap")?.0)?;
         let mut warnings = Vec::new();
         let kern = match find(b"kern").map(|(k, len)| read_kern(d, k, len)) {
@@ -208,8 +222,7 @@ impl Font {
             ascender,
             descender,
             line_gap,
-            family,
-            style,
+            name,
             glyphs,
             outlines,
             hmtx,
@@ -252,9 +265,18 @@ impl Font {
             .map_or(0.0, |i| self.kern[i].2 as f64)
     }
 
+    /// The family and style the name table gives (the typographic ones where there are), empty
+    /// where it gives none.
+    pub fn names(&self) -> (String, String) {
+        match self.name {
+            Some((at, len)) => read_names(&self.data[at..at + len]),
+            None => (String::new(), String::new()),
+        }
+    }
+
     /// Whether the outlines are CFF's (cubic) rather than glyf's (quadratic).
     pub fn is_cff(&self) -> bool {
-        matches!(self.outlines, Outlines::Cff(_))
+        matches!(self.outlines, Outlines::Cff(..))
     }
 
     /// The glyphs the font holds.
@@ -264,11 +286,11 @@ impl Font {
 
     /// The glyph's closed contours, in font units.
     pub fn outline(&self, g: u16) -> Result<Vec<Vec<Seg>>, FontError> {
-        if let Outlines::Cff(c) = &self.outlines {
+        if let Outlines::Cff(c, outline) = &self.outlines {
             if g as usize >= self.glyphs {
                 return Err(FontError::Unsupported("glyph id out of range"));
             }
-            return c.outline(g);
+            return outline(c, g);
         }
         let mut out = Vec::new();
         let mut budget = BUDGET;
@@ -524,8 +546,10 @@ fn read_names(t: &[u8]) -> (String, String) {
             let b = t.get(strings + off..strings + off + len)?;
             if plat == 3 && (enc == 1 || enc == 10) || plat == 0 {
                 let w: Vec<u16> = b
-                    .chunks_exact(2)
-                    .map(|c| u16::from_be_bytes([c[0], c[1]]))
+                    .as_chunks::<2>()
+                    .0
+                    .iter()
+                    .map(|c| u16::from_be_bytes(*c))
                     .collect();
                 return String::from_utf16(&w).ok();
             }
@@ -697,7 +721,7 @@ mod tests {
     fn cff_and_junk_are_refused() {
         let mut otto = b"OTTO".to_vec();
         otto.extend([0; 8]);
-        assert!(Font::parse(otto).is_err());
+        assert!(Font::parse(otto.clone()).is_err() && Font::parse_cff_too(otto).is_err());
         assert_eq!(Font::parse(vec![0, 1]).unwrap_err(), FontError::Truncated);
         assert!(matches!(
             Font::parse(b"wOFF0000000000000000".to_vec()),
@@ -713,7 +737,7 @@ mod tests {
         use crate::testing::{build_cff, build_cff_raw};
         // a ring of quadratics, raised to cubics: its controls land on whole units (multiples of 3)
         let ring = square_ring();
-        let font = Font::parse(build_cff(
+        let font = Font::parse_cff_too(build_cff(
             1000,
             &[
                 ('I', TestGlyph::bar(100.0, 0.0, 200.0, 700.0, 300.0)),
@@ -764,7 +788,8 @@ mod tests {
             6, // hlineto
             14,
         ];
-        let f = Font::parse(build_cff_raw(1000, &[('A', cs, 500)], &[gsub], &[lsub])).expect("parses");
+        let f =
+            Font::parse_cff_too(build_cff_raw(1000, &[('A', cs, 500)], &[gsub], &[lsub])).expect("parses");
         let c = f.outline(f.glyph('A')).expect("outline");
         assert_eq!(
             c,
@@ -781,11 +806,11 @@ mod tests {
             vec![n(5), 10, 14],
             vec![n(5), 5, 14],
         ] {
-            let f = Font::parse(build_cff_raw(1000, &[('A', bad, 500)], &[], &[])).expect("parses");
+            let f = Font::parse_cff_too(build_cff_raw(1000, &[('A', bad, 500)], &[], &[])).expect("parses");
             assert!(f.outline(f.glyph('A')).is_err());
         }
         let rec = vec![n(-107), 29, 11];
-        let f = Font::parse(build_cff_raw(
+        let f = Font::parse_cff_too(build_cff_raw(
             1000,
             &[('A', vec![n(-107), 29, 14], 500)],
             &[rec],
@@ -850,6 +875,114 @@ mod tests {
         }
         let f = kern(&[0, 1, 0, 20, 1, 1, 0, 0, 0, 1, 1, 5]).expect("loads");
         assert_eq!((f.kerning(1, 1), f.warnings.len()), (5.0, 0));
+    }
+
+    /// A CFF font with subroutines, hints, flex and every short operator, truncated at every
+    /// thirteenth byte and scrambled 400 ways: refused or read, never a panic, never long.
+    #[test]
+    fn corrupted_cff_never_panics() {
+        use crate::testing::{build_cff_raw, charstring};
+        let n = |v: i32| (v + 139) as u8;
+        let mut glyphs = vec![
+            (
+                'A',
+                vec![
+                    n(50),
+                    n(0),
+                    n(5),
+                    n(20),
+                    n(5),
+                    18,
+                    19,
+                    0xc0,
+                    n(1),
+                    n(1),
+                    21,
+                    n(-107),
+                    29,
+                    n(-107),
+                    10,
+                    n(-10),
+                    6,
+                    14,
+                ],
+                500,
+            ),
+            // a flex, hflex, hflex1 and flex1 in turn
+            (
+                'B',
+                {
+                    let mut v = vec![n(0), n(0), 21];
+                    v.extend([n(1); 12]);
+                    v.extend([n(50), 12, 35]);
+                    v.extend([n(1); 7]);
+                    v.extend([12, 34]);
+                    v.extend([n(1); 9]);
+                    v.extend([12, 36]);
+                    v.extend([n(1); 11]);
+                    v.extend([12, 37, 14]);
+                    v
+                },
+                500,
+            ),
+            // vv, hh, vh and hv curves, rcurveline, rlinecurve
+            (
+                'C',
+                {
+                    let mut v = vec![n(0), n(0), 21];
+                    v.extend([n(2), n(3), n(4), n(5), n(6), 26]);
+                    v.extend([n(2), n(3), n(4), n(5), n(6), 27]);
+                    v.extend([n(3), n(4), n(5), n(6), n(7), n(8), n(9), n(10), n(11), 30]);
+                    v.extend([n(3), n(4), n(5), n(6), 31]);
+                    v.extend([n(1), n(2), n(3), n(4), n(5), n(6), n(7), n(8), 24]);
+                    v.extend([n(1), n(2), n(3), n(4), n(5), n(6), n(7), n(8), 25, 14]);
+                    v
+                },
+                500,
+            ),
+        ];
+        glyphs.push(('O', charstring(&square_ring()), 700));
+        let base = build_cff_raw(
+            1000,
+            &glyphs,
+            &[vec![n(10), n(0), 5, 11]],
+            &[vec![n(0), n(10), 5, 11]],
+        );
+        assert_eq!(Font::parse(base.clone()).unwrap_err(), FontError::Cff);
+        let f = Font::parse_cff_too(base.clone()).expect("parses");
+        for c in ['A', 'B', 'C', 'O'] {
+            let o = f.outline(f.glyph(c)).unwrap_or_else(|e| panic!("{c}: {e:?}"));
+            assert!(!o.is_empty(), "{c}");
+            for contour in &o {
+                for k in 0..contour.len() {
+                    assert_eq!(contour[k].end(), contour[(k + 1) % contour.len()].start(), "{c}");
+                }
+            }
+        }
+        let mut r = forge_math::rng::Rng::new(77);
+        let mut files: Vec<Vec<u8>> = (0..base.len())
+            .step_by(13)
+            .map(|cut| base[..cut].to_vec())
+            .collect();
+        for _ in 0..400 {
+            let mut d = base.clone();
+            for _ in 0..1 + r.below(8) {
+                let k = r.below(d.len());
+                d[k] = if r.bool() { 0xff } else { r.below(256) as u8 };
+            }
+            files.push(d);
+        }
+        forge_math::par::map(files.len(), |i| {
+            if let Ok(f) = Font::parse_cff_too(files[i].clone()) {
+                for g in 0..f.glyphs.min(64) as u16 + 2 {
+                    let _ = f.outline(g);
+                    let _ = f.advance(g);
+                }
+                for c in ['A', 'B', 'C', 'O', 'z'] {
+                    let _ = f.glyph(c);
+                }
+            }
+        });
     }
 
     /// Truncated and scrambled fonts never panic, and never take long or much memory.

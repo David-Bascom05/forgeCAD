@@ -140,7 +140,7 @@ fn dict(d: &[u8]) -> Result<Vec<(u16, Vec<f64>)>, FontError> {
     Ok(out)
 }
 
-fn get<'a>(dict: &'a [(u16, Vec<f64>)], op: u16) -> Option<&'a [f64]> {
+fn get(dict: &[(u16, Vec<f64>)], op: u16) -> Option<&[f64]> {
     dict.iter().find(|e| e.0 == op).map(|e| &e.1[..])
 }
 
@@ -508,7 +508,7 @@ impl Machine<'_> {
                 }
                 // rlineto
                 5 => {
-                    if s.is_empty() || s.len() % 2 != 0 {
+                    if s.is_empty() || !s.len().is_multiple_of(2) {
                         return Err(bad("rlineto of odd operands"));
                     }
                     for p in s.chunks(2) {
@@ -530,7 +530,7 @@ impl Machine<'_> {
                 }
                 // rrcurveto
                 8 => {
-                    if s.is_empty() || s.len() % 6 != 0 {
+                    if s.is_empty() || !s.len().is_multiple_of(6) {
                         return Err(bad("rrcurveto of operands not in sixes"));
                     }
                     for c in s.chunks(6) {
@@ -539,7 +539,7 @@ impl Machine<'_> {
                 }
                 // rcurveline: curves, then a line
                 24 => {
-                    if s.len() < 8 || (s.len() - 2) % 6 != 0 {
+                    if s.len() < 8 || !(s.len() - 2).is_multiple_of(6) {
                         return Err(bad("rcurveline of the wrong operands"));
                     }
                     let (cs6, l) = s.split_at(s.len() - 2);
@@ -550,7 +550,7 @@ impl Machine<'_> {
                 }
                 // rlinecurve: lines, then a curve
                 25 => {
-                    if s.len() < 8 || (s.len() - 6) % 2 != 0 {
+                    if s.len() < 8 || !(s.len() - 6).is_multiple_of(2) {
                         return Err(bad("rlinecurve of the wrong operands"));
                     }
                     let (ls, c) = s.split_at(s.len() - 6);
@@ -591,7 +591,7 @@ impl Machine<'_> {
                 }
                 // vhcurveto hvcurveto: alternating, the last with an optional final delta
                 30 | 31 => {
-                    if s.len() < 4 || !(s.len() % 4 == 0 || s.len() % 4 == 1) {
+                    if s.len() < 4 || !(s.len().is_multiple_of(4) || s.len() % 4 == 1) {
                         return Err(bad("vhcurveto or hvcurveto of the wrong operands"));
                     }
                     let mut h = b0 == 31;

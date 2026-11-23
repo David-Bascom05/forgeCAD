@@ -38,10 +38,10 @@ pub fn key(p: &Profile) -> Option<u64> {
     p.loops.first()?.segments.iter().map(|s| s.1).min()
 }
 
-/// Region k's plain extrude: what feature `i` builds for it.
-pub fn region(r: &Regions, k: usize) -> Feature {
+/// A region's plain extrude: what the feature builds for it.
+pub fn region(r: &Regions, profile: &Profile) -> Feature {
     Feature::Extrude {
-        profile: r.profiles[k].clone(),
+        profile: profile.clone(),
         extent: r.extent,
         op: r.op,
     }
@@ -73,10 +73,11 @@ pub(crate) fn tools(features: History<'_>, i: usize, build: bool) -> Result<Vec<
     }
     let id = features.id(i);
     let mut out = Vec::with_capacity(keys.len());
-    for (k, &key) in keys.iter().enumerate() {
-        let f = region(r, k);
+    for (p, &key) in r.profiles.iter().zip(&keys) {
+        let f = region(r, p);
+        // (a plain extent comes to a plain extrude: To and ToNext are refused above)
         let Resolved::Plain(plain, _) = extent::resolve_as(features, i, &f)? else {
-            unreachable!("To and ToNext refused above")
+            return Err(e(RegionsError::Extent));
         };
         out.push(crate::tool(i, region_id(id, key), &plain, build)?);
     }

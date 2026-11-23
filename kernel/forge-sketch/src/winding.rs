@@ -68,9 +68,6 @@ enum Leaf {
     Right,
 }
 
-/// The decided pieces of a curve in order, each with its ends.
-type Leaves = Vec<(Leaf, End, End)>;
-
 /// What the hull's box says of the piece, if it decides.
 fn decide(lo: Point2, hi: Point2, m: f64, p: Point2) -> Option<Leaf> {
     if lo.y > p.y + m {
@@ -86,52 +83,76 @@ fn decide(lo: Point2, hi: Point2, m: f64, p: Point2) -> Option<Leaf> {
     }
 }
 
-/// The count over a curve's leaves. A run of pieces right of p counts its first start's class
-/// against its last end's (the split points between them cancel); each of those two is a curve
-/// end (exact), or shared with a piece wholly above or below (its class), or classed from its
-/// computed point if that is far enough from p's height to be certain.
-fn count(leaves: &Leaves, p: Point2) -> Option<i32> {
-    let class = |k: usize, at_start: bool| -> Option<bool> {
-        let (_, a, b) = leaves[k];
-        let e = if at_start { a } else { b };
-        if e.err == 0.0 {
-            return Some(above(e.at, p));
+/// The count over a curve's decided pieces, taken in order as they come. A run of pieces right
+/// of p counts its first start's class against its last end's (the split points between them
+/// cancel); each of those two is a curve end (exact), or shared with a piece wholly above or
+/// below (its class), or classed from its computed point if that is far enough from p's height
+/// to be certain. Nothing is kept but the run open now.
+struct Count {
+    p: Point2,
+    total: i32,
+    prev: Option<Leaf>,
+    /// The open run's start class and its last piece's end.
+    run: Option<(bool, End)>,
+    sure: bool,
+}
+
+impl Count {
+    fn new(p: Point2) -> Count {
+        Count {
+            p,
+            total: 0,
+            prev: None,
+            run: None,
+            sure: true,
         }
-        let near = if at_start {
-            k.checked_sub(1)
-        } else {
-            Some(k + 1).filter(|&j| j < leaves.len())
-        };
-        if let Some((Leaf::Level(c), ..)) = near.map(|j| leaves[j]) {
-            return Some(c);
-        }
-        if (e.at.y - p.y).abs() > e.err {
-            return Some(above(e.at, p));
-        }
-        None
-    };
-    let mut total = 0;
-    let mut k = 0;
-    while k < leaves.len() {
-        if leaves[k].0 != Leaf::Right {
-            k += 1;
-            continue;
-        }
-        let first = k;
-        while k + 1 < leaves.len() && leaves[k + 1].0 == Leaf::Right {
-            k += 1;
-        }
-        total += class(k, false)? as i32 - class(first, true)? as i32;
-        k += 1;
     }
-    Some(total)
+
+    /// An end's class: exact, or the class of the piece beside it wholly above or below, or its
+    /// own point's if far enough from p's height.
+    fn class(&mut self, e: End, beside: Option<Leaf>) -> bool {
+        if e.err == 0.0 {
+            return above(e.at, self.p);
+        }
+        if let Some(Leaf::Level(c)) = beside {
+            return c;
+        }
+        if (e.at.y - self.p.y).abs() <= e.err {
+            self.sure = false;
+        }
+        above(e.at, self.p)
+    }
+
+    fn push(&mut self, leaf: Leaf, a: End, b: End) {
+        if leaf == Leaf::Right {
+            match &mut self.run {
+                Some(run) => run.1 = b,
+                None => {
+                    let c = self.class(a, self.prev);
+                    self.run = Some((c, b));
+                }
+            }
+        } else if let Some((start, end)) = self.run.take() {
+            let c = self.class(end, Some(leaf));
+            self.total += c as i32 - start as i32;
+        }
+        self.prev = Some(leaf);
+    }
+
+    fn finish(mut self) -> Option<i32> {
+        if let Some((start, end)) = self.run.take() {
+            let c = self.class(end, None);
+            self.total += c as i32 - start as i32;
+        }
+        self.sure.then_some(self.total)
+    }
 }
 
 type H = [f64; 4];
 
 /// A rational Bézier piece in homogeneous points, split at its midpoint until decided; its
 /// leaves pushed in order. False if some piece is not decided within the splits allowed.
-fn bezier(h: &[H], a: End, b: End, p: Point2, depth: usize, out: &mut Leaves) -> bool {
+fn bezier(h: &[H], a: End, b: End, p: Point2, depth: usize, out: &mut Count) -> bool {
     // the hull, and how far its points may be off: each midpoint level adds at most one
     // rounding of the largest coordinate, and projecting divides by the least weight
     let (mut lo, mut hi) = (
@@ -146,12 +167,12 @@ fn bezier(h: &[H], a: End, b: End, p: Point2, depth: usize, out: &mut Leaves) ->
         big = big.max(q[0].abs()).max(q[1].abs()).max(q[3].abs());
         wmin = wmin.min(q[3]);
     }
-    if !(wmin > 0.0) || !big.is_finite() {
+    if wmin.is_nan() || wmin <= 0.0 || !big.is_finite() {
         return false;
     }
     let m = 4.0 * (depth as f64 + 2.0) * EPS * big / wmin;
     if let Some(leaf) = decide(lo, hi, m, p) {
-        out.push((leaf, a, b));
+        out.push(leaf, a, b);
         return true;
     }
     if depth >= DEPTH {
@@ -166,8 +187,9 @@ fn bezier(h: &[H], a: End, b: End, p: Point2, depth: usize, out: &mut Leaves) ->
     right.push(rows[n - 1]);
     for k in 1..n {
         for i in 0..n - k {
-            for c in 0..4 {
-                rows[i][c] = (rows[i][c] + rows[i + 1][c]) / 2.0;
+            let next = rows[i + 1];
+            for (x, y) in rows[i].iter_mut().zip(next) {
+                *x = (*x + y) / 2.0;
             }
         }
         left.push(rows[0]);
@@ -191,7 +213,7 @@ fn arc(
     (t1, b): (f64, End),
     p: Point2,
     depth: usize,
-    out: &mut Leaves,
+    out: &mut Count,
 ) -> bool {
     // the box of the arc: its ends and any axis extreme between them, each point within a few
     // roundings of the trigonometry and the sums
@@ -207,7 +229,7 @@ fn arc(
     }
     let m = 16.0 * EPS * (c.x.abs().max(c.y.abs()) + r) + 8.0 * EPS * r * (1.0 + t0.abs().max(t1.abs()));
     if let Some(leaf) = decide(lo, hi, m, p) {
-        out.push((leaf, a, b));
+        out.push(leaf, a, b);
         return true;
     }
     if depth >= DEPTH {
@@ -242,7 +264,7 @@ fn arc_segment(
     let n = (span / dmath::FRAC_PI_2).ceil().max(1.0) as usize;
     let exact = |at: Point2| End { at, err: 0.0 };
     let m = 16.0 * EPS * (c.x.abs().max(c.y.abs()) + r) + 8.0 * EPS * r * (1.0 + t0.abs() + span);
-    let mut leaves = Vec::new();
+    let mut leaves = Count::new(p);
     let mut prev = (t0, exact(a));
     for k in 1..=n {
         let t = if k == n {
@@ -263,7 +285,7 @@ fn arc_segment(
         }
         prev = (t, e);
     }
-    Some(sign * count(&leaves, p)?)
+    Some(sign * leaves.finish()?)
 }
 
 /// The signed crossings of the ray from p with one segment, its ends as the segment gives them.
@@ -285,7 +307,7 @@ fn segment(s: &Segment, p: Point2) -> Option<i32> {
             let (deg, pts) = c.c.homogeneous();
             let n = deg + 1;
             let pieces = pts.len() / n;
-            let mut leaves = Vec::new();
+            let mut leaves = Count::new(p);
             let mut a = End {
                 at: s.start(),
                 err: 0.0,
@@ -310,7 +332,7 @@ fn segment(s: &Segment, p: Point2) -> Option<i32> {
                 }
                 a = b;
             }
-            count(&leaves, p)
+            leaves.finish()
         }
     }
 }

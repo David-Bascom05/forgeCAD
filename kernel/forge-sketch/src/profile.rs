@@ -35,14 +35,14 @@ pub enum ExtractError {
 /// one profile per outer loop, with the loops directly inside it as holes (an
 /// island inside a hole is its own profile). Segment ids are entity ids.
 pub fn profiles(sketch: &Sketch) -> Result<Vec<Profile>, ExtractError> {
-    profiles_among(sketch, |_| true)
+    profiles_among(sketch, &|_| true)
 }
 
 /// `profiles` of only the entities `keep` takes (a text's own glyphs, whatever else the sketch
 /// draws round them).
 pub fn profiles_among(
     sketch: &Sketch,
-    keep: impl Fn(EntityId) -> bool,
+    keep: &dyn Fn(EntityId) -> bool,
 ) -> Result<Vec<Profile>, ExtractError> {
     let mut open: Vec<(Segment, EntityId)> = Vec::new();
     let mut loops: Vec<ProfileLoop> = Vec::new();
@@ -118,27 +118,34 @@ pub fn profiles_among(
     }
     check_crossings(&loops)?;
 
-    // which loop lies inside which, decided exactly (winding.rs)
+    // which loop lies inside which, decided exactly (winding.rs); each pair asked as needed
     let n = loops.len();
-    let boxes: Vec<(Point2, Point2)> = loops.iter().map(crate::winding::bbox).collect();
-    let mut within = vec![false; n * n];
-    for i in 0..n {
+    let inside = |i: usize, j: usize| -> Result<bool, ExtractError> {
+        if i == j {
+            return Ok(false);
+        }
+        crate::winding::inside(&loops[i], &loops[j], crate::winding::bbox(&loops[j])).ok_or(
+            ExtractError::Undecided {
+                inner: EntityId(loops[i].segments[0].1),
+                outer: EntityId(loops[j].segments[0].1),
+            },
+        )
+    };
+    let mut depth = vec![0usize; n];
+    for (i, d) in depth.iter_mut().enumerate() {
         for j in 0..n {
-            if i == j {
-                continue;
-            }
-            within[i * n + j] =
-                crate::winding::inside(&loops[i], &loops[j], boxes[j]).ok_or(ExtractError::Undecided {
-                    inner: EntityId(loops[i].segments[0].1),
-                    outer: EntityId(loops[j].segments[0].1),
-                })?;
+            *d += inside(i, j)? as usize;
         }
     }
-    let inside = |i: usize, j: usize| within[i * n + j];
-    let depth: Vec<usize> = (0..n).map(|i| (0..n).filter(|&j| inside(i, j)).count()).collect();
-    let parent: Vec<Option<usize>> = (0..n)
-        .map(|i| (0..n).find(|&j| inside(i, j) && depth[j] + 1 == depth[i]))
-        .collect();
+    let mut parent: Vec<Option<usize>> = vec![None; n];
+    for (i, p) in parent.iter_mut().enumerate() {
+        for j in 0..n {
+            if depth[j] + 1 == depth[i] && inside(i, j)? {
+                *p = Some(j);
+                break;
+            }
+        }
+    }
 
     let mut out = Vec::new();
     for o in (0..n).filter(|&i| depth[i].is_multiple_of(2)) {

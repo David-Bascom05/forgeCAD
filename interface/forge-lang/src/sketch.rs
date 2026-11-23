@@ -659,7 +659,7 @@ impl Sk {
             _ => &self.s,
         };
         let ps =
-            forge_sketch::profiles_among(solved, |e| keep.binary_search(&e).is_ok()).map_err(|error| {
+            forge_sketch::profiles_among(solved, &|e| keep.binary_search(&e).is_ok()).map_err(|error| {
                 Error::SketchProfile {
                     span,
                     sketch: self.id.clone(),

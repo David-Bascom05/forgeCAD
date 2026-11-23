@@ -77,6 +77,7 @@ impl<'a> History<'a> {
     }
 
     /// The id feature `i`'s names derive from.
+    #[inline]
     pub fn id(&self, i: usize) -> u64 {
         self.ids.map_or(i as u64 + 1, |ids| ids[i])
     }

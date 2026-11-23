@@ -92,7 +92,7 @@ impl TtfFont {
         let os2 = os2_cap(&data);
         let names = names(&data);
         let font = Font::parse(data).map_err(|e| match e {
-            FontError::Cff => "CFF (PostScript) outlines where TrueType ones are needed".to_string(),
+            FontError::Cff => "CFF (PostScript) outlines are not read; a TrueType font is needed".to_string(),
             FontError::Truncated => "the font file ends early".to_string(),
             FontError::Missing(t) => format!("the font has no {t} table"),
             FontError::Unsupported(w) => w.to_string(),
