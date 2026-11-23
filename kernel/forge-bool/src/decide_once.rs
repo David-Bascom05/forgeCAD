@@ -2746,64 +2746,6 @@ fn axes_of(n: [f64; 3]) -> (usize, usize) {
     if n[a] > 0.0 { (u, v) } else { (v, u) }
 }
 
-/// Chains a pool's segments into loops; at a point the boundary passes more than once, the next
-/// segment is the first clockwise from the way back.
-fn chain(w: &Wr, segs: &[Seg], n: [f64; 3]) -> Option<Vec<Vec<Seg>>> {
-    let ax = axes_of(n);
-    // the segments by start point (then by index: the order they came in)
-    let mut from: Vec<(PK, u32)> = segs.iter().enumerate().map(|(i, s)| (s.a, i as u32)).collect();
-    from.sort_unstable();
-    let mut used = vec![false; segs.len()];
-    let mut loops = Vec::new();
-    for s0 in 0..segs.len() {
-        if used[s0] {
-            continue;
-        }
-        used[s0] = true;
-        let mut lp = vec![segs[s0]];
-        let start = segs[s0].a;
-        let mut cur = s0;
-        let mut guard = 0;
-        while segs[cur].b != start || lp.is_empty() {
-            let at = segs[cur].b;
-            let lo = from.partition_point(|x| x.0 < at);
-            let cands: Vec<usize> = from[lo..]
-                .iter()
-                .take_while(|x| x.0 == at)
-                .map(|x| x.1 as usize)
-                .filter(|&j| !used[j])
-                .collect();
-            let next = match cands.len() {
-                0 => return None,
-                1 => cands[0],
-                _ => {
-                    // the first clockwise from the way back, decided exactly
-                    let (v, u) = (hp(w, at), hp(w, segs[cur].a));
-                    let mut best = cands[0];
-                    let mut bp = hp(w, segs[best].b);
-                    for &j in &cands[1..] {
-                        let q = hp(w, segs[j].b);
-                        if cw_before(&v, &u, &q, &bp, ax) {
-                            best = j;
-                            bp = q;
-                        }
-                    }
-                    best
-                }
-            };
-            used[next] = true;
-            lp.push(segs[next]);
-            cur = next;
-            guard += 1;
-            if guard > segs.len() {
-                return None;
-            }
-        }
-        loops.push(lp);
-    }
-    Some(loops)
-}
-
 /// A write point exactly: a vertex cell's exact point, or body 0's vertex as it stands (a dyadic).
 fn hp(w: &Wr, k: PK) -> HPoint {
     match k {
@@ -2846,17 +2788,6 @@ fn cw_class(v: &HPoint, u: &HPoint, q: &HPoint, ax: (usize, usize)) -> u8 {
         _ if dot2(v, u, q, ax) < 0 => 1,
         _ => 3,
     }
-}
-
-/// At point `v`, arriving from `u`: is the way to `q` strictly before the way to `r`, turning
-/// clockwise from the way back? (Ties keep `r`, the one met first.)
-fn cw_before(v: &HPoint, u: &HPoint, q: &HPoint, r: &HPoint, ax: (usize, usize)) -> bool {
-    let (cq, cr) = (cw_class(v, u, q, ax), cw_class(v, u, r, ax));
-    if cq != cr {
-        return cq < cr;
-    }
-    // within one open half turn, `r` clockwise of `q` puts `q` first
-    (cq == 0 || cq == 2) && orient2(v, q, r, ax) < 0
 }
 
 /// A final face's loop's points, exactly, in order.
@@ -3134,13 +3065,11 @@ fn write(w: &Wr, out: Option<&core::Body>) -> Option<Plan> {
             at_pts.dedup();
         }
     }
-    // per core face, its members (input faces), by core face index
+    // 2. inside: the core's faces' facet sides, for the stitch's cancel (forge_bool_core::stitch)
     let mut core_srcs: Vec<Vec<usize>> = Vec::new();
-    // 2. inside: the core's faces, their boundary off the walls
+    let mut core_grp: Vec<Grp> = Vec::new();
+    let mut core_sides: Vec<(u32, u32, u32, u32)> = Vec::new(); // (core face, u, v, edge cell)
     if let Some(out) = out {
-        // a face's uses of each edge cell, by cell id (reset after each face)
-        let mut count: Vec<u8> = vec![0; built.wall.len()];
-        let mut segs = Vec::new();
         for (fi, f) in out.faces.iter().enumerate() {
             // its members: every input face a facet of it is a piece of
             let mut ms: Vec<usize> = Vec::new();
@@ -3152,8 +3081,7 @@ fn write(w: &Wr, out: Option<&core::Body>) -> Option<Plan> {
             ms.sort_unstable();
             ms.dedup();
             core_srcs.push(ms);
-            let grp = (f.plane, if f.orient == Sgn::Pos { 1 } else { -1 });
-            segs.clear();
+            core_grp.push((f.plane, if f.orient == Sgn::Pos { 1 } else { -1 }));
             for c in &f.facets {
                 let fc = &built.facet[&c.0];
                 let n = fc.poly.len();
@@ -3166,98 +3094,213 @@ fn write(w: &Wr, out: Option<&core::Body>) -> Option<Plan> {
                     } else {
                         (fc.poly[k], fc.poly[(k + 1) % n], fc.poly_e[k])
                     };
-                    count[e as usize] = count[e as usize].saturating_add(1);
-                    segs.push((u, v, e));
+                    core_sides.push((fi as u32, u, v, e));
                 }
-            }
-            let pool = pools.entry(grp).or_default();
-            for &(u, v, e) in &segs {
-                if count[e as usize] == 1 && !built.wall[e as usize] {
-                    pool.push(Seg {
-                        a: PK::Cell(u),
-                        b: PK::Cell(v),
-                        src: f.origin.0 as usize,
-                        keep: None,
-                        cf: fi as u32,
-                    });
-                }
-            }
-            for &(_, _, e) in &segs {
-                count[e as usize] = 0;
             }
         }
     }
-    // 3. the final faces: each group's loops (chained from its segments, and its kept ones),
-    // holes given to the outer loop round them
+    // the stitch's ids: points (a vertex cell by its cell id, a kept vertex of body 0 after the
+    // cells), groups, kept edges
+    let ncell = built.wall.len() as u32;
+    let mut origs: Vec<VertexId> = Vec::new();
+    for segs in pools.values() {
+        for sg in segs {
+            for k in [sg.a, sg.b] {
+                if let PK::Orig(v) = k {
+                    origs.push(v);
+                }
+            }
+        }
+    }
+    origs.sort_unstable();
+    origs.dedup();
+    let pid = |k: PK| match k {
+        PK::Cell(c) => c,
+        PK::Orig(v) => ncell + origs.binary_search(&v).expect("a point of the stitch") as u32,
+    };
+    let pk_of = |i: u32| if i < ncell { PK::Cell(i) } else { PK::Orig(origs[(i - ncell) as usize]) };
     let mut groups: Vec<Grp> = pools.keys().copied().collect();
+    groups.extend(core_grp.iter().copied());
     groups.extend(kept.iter().map(|x| x.grp));
     groups.sort_unstable();
     groups.dedup();
-    let mut fins: Vec<Fin> = Vec::new();
-    for grp in groups {
-        let n = w.normal(grp);
-        let ax = axes_of(n);
-        let mut loops: Vec<Lp> = match pools.get(&grp) {
-            Some(segs) if !segs.is_empty() => chain(w, segs, n)?.into_iter().map(Lp::New).collect(),
-            _ => Vec::new(),
-        };
-        for (i, x) in kept.iter().enumerate() {
-            if x.grp == grp {
-                loops.push(Lp::Kept(i));
-            }
-        }
-        if loops.is_empty() {
-            continue;
-        }
-        // outer loops and holes, and each hole's holder: the innermost outer loop round it (all
-        // decided exactly)
-        let (mut outer, mut holes) = (Vec::new(), Vec::new());
-        for lp in loops {
-            let mut pf = Vec::new();
-            lp_points(w, &kept, &lp, &mut pf);
-            let l = Ld { pf, ph: std::cell::OnceCell::new() };
-            if loop_sense(w, &kept, &lp, &l, ax) > 0 {
-                outer.push((lp, l));
-            } else {
-                holes.push((lp, l));
-            }
-        }
-        let mut held: Vec<Vec<Lp>> = (0..outer.len()).map(|_| Vec::new()).collect();
-        for (h, hl) in holes {
-            let mut best: Option<usize> = None;
-            for (k, (_, ol)) in outer.iter().enumerate() {
-                if inside_cert(w, &kept, &h, &hl, &outer[k].0, ol, ax)
-                    && best.is_none_or(|b| inside_cert(w, &kept, &outer[k].0, ol, &outer[b].0, &outer[b].1, ax))
-                {
-                    best = Some(k);
+    let gid = |g: Grp| groups.binary_search(&g).expect("a group of the stitch") as u32;
+    let mut keeps: Vec<(EdgeId, bool)> = Vec::new();
+    // per group: the near faces' remainders, then the core faces' sides
+    let mut by_grp: Vec<Vec<forge_bool_core::stitch::Seg>> = vec![Vec::new(); groups.len()];
+    for (&grp, segs) in &pools {
+        for sg in segs {
+            let keep = match sg.keep {
+                Some(k) => {
+                    keeps.push(k);
+                    keeps.len() as u32 - 1
                 }
+                None => forge_bool_core::stitch::NONE,
+            };
+            let x = forge_bool_core::stitch::Seg {
+                a: pid(sg.a),
+                b: pid(sg.b),
+                grp: gid(grp),
+                src: sg.src as u32,
+                keep,
+                cf: forge_bool_core::stitch::NONE,
+            };
+            by_grp[x.grp as usize].push(x);
+        }
+    }
+    {
+        use forge_bool_core::stitch::{Side, cancel};
+        let sides: Vec<Side> = core_sides
+            .iter()
+            .map(|&(f, u, v, e)| Side {
+                face: f,
+                u: pid(PK::Cell(u)),
+                v: pid(PK::Cell(v)),
+                e,
+                wall: built.wall[e as usize],
+            })
+            .collect();
+        let fgrp: Vec<u32> = core_grp.iter().map(|&g| gid(g)).collect();
+        let fsrc: Vec<u32> = match out {
+            Some(out) => out.faces.iter().map(|f| f.origin.0).collect(),
+            None => Vec::new(),
+        };
+        for x in cancel(&sides, &fgrp, &fsrc) {
+            by_grp[x.grp as usize].push(x);
+        }
+    }
+    let ssegs: Vec<forge_bool_core::stitch::Seg> = by_grp.concat();
+    // the bridge's own view of each segment
+    let bseg = |x: &forge_bool_core::stitch::Seg| Seg {
+        a: pk_of(x.a),
+        b: pk_of(x.b),
+        src: x.src as usize,
+        keep: (x.keep != forge_bool_core::stitch::NONE).then(|| keeps[x.keep as usize]),
+        cf: x.cf,
+    };
+    // 3. the turn order where a group's boundary leaves a point more than once, decided exactly:
+    // its segment ends clockwise about the group's outward normal, from the first one's way
+    // (ends in one direction: the ways out first)
+    let turns = {
+        let mut out_at: Vec<(u32, u32, u32)> = ssegs.iter().enumerate().map(|(i, x)| (x.grp, x.a, i as u32)).collect();
+        out_at.sort_unstable();
+        let mut in_at: Vec<(u32, u32, u32)> = ssegs.iter().enumerate().map(|(i, x)| (x.grp, x.b, i as u32)).collect();
+        in_at.sort_unstable();
+        let mut keys: Vec<(u32, u32)> = Vec::new();
+        let mut k = 0;
+        while k < out_at.len() {
+            let mut j = k + 1;
+            while j < out_at.len() && (out_at[j].0, out_at[j].1) == (out_at[k].0, out_at[k].1) {
+                j += 1;
             }
-            held[best?].push(h);
+            if j - k > 1 {
+                keys.push((out_at[k].0, out_at[k].1));
+            }
+            k = j;
         }
-        let mut faces: Vec<Vec<Lp>> = Vec::with_capacity(outer.len());
-        for ((o, _), hs) in outer.into_iter().zip(held) {
-            let mut fl = vec![o];
-            fl.extend(hs);
-            faces.push(fl);
+        let mut ends = forge_bool_core::v2::Csr {
+            start: vec![0],
+            ids: Vec::new(),
+        };
+        for &(g, p) in &keys {
+            let ax = axes_of(w.normal(groups[g as usize]));
+            let v = hp(w, pk_of(p));
+            // (end, the point it runs to from p)
+            let mut row: Vec<(u32, HPoint)> = Vec::new();
+            let lo = out_at.partition_point(|x| (x.0, x.1) < (g, p));
+            for x in out_at[lo..].iter().take_while(|x| (x.0, x.1) == (g, p)) {
+                row.push((2 * x.2, hp(w, pk_of(ssegs[x.2 as usize].b))));
+            }
+            let lo = in_at.partition_point(|x| (x.0, x.1) < (g, p));
+            for x in in_at[lo..].iter().take_while(|x| (x.0, x.1) == (g, p)) {
+                row.push((2 * x.2 + 1, hp(w, pk_of(ssegs[x.2 as usize].a))));
+            }
+            // clockwise from the first end's way (it last, at a full turn), by insertion
+            let r0 = row[0].1.clone();
+            let before = |x: &(u32, HPoint), y: &(u32, HPoint)| -> bool {
+                let (cx, cy) = (cw_class(&v, &r0, &x.1, ax), cw_class(&v, &r0, &y.1, ax));
+                if cx != cy {
+                    return cx < cy;
+                }
+                match cx {
+                    0 | 2 if orient2(&v, &x.1, &y.1, ax) != 0 => orient2(&v, &x.1, &y.1, ax) < 0,
+                    // one direction: the way out first
+                    _ => x.0 & 1 == 0 && y.0 & 1 == 1,
+                }
+            };
+            let mut sorted: Vec<(u32, HPoint)> = Vec::with_capacity(row.len());
+            for e in row {
+                let at = sorted.iter().position(|y| before(&e, y)).unwrap_or(sorted.len());
+                sorted.insert(at, e);
+            }
+            ends.ids.extend(sorted.iter().map(|e| e.0));
+            ends.start.push(ends.ids.len() as u32);
         }
-        for fl in faces {
-            let src = fl
+        forge_bool_core::stitch::Turns { keys, ends }
+    };
+    // 4. the chain (the stitch), then each loop's sense and each hole's holder, decided exactly
+    let chained = forge_bool_core::stitch::chain(&ssegs, &turns)?;
+    let mut loops: Vec<Lp> = chained
+        .iter()
+        .map(|lp| Lp::New(lp.iter().map(|&i| bseg(&ssegs[i as usize])).collect()))
+        .collect();
+    let mut lgrp: Vec<u32> = chained.iter().map(|lp| ssegs[lp[0] as usize].grp).collect();
+    for (i, x) in kept.iter().enumerate() {
+        loops.push(Lp::Kept(i));
+        lgrp.push(gid(x.grp));
+    }
+    let lsrc: Vec<u32> = loops
+        .iter()
+        .map(|lp| match lp {
+            Lp::New(segs) => segs
                 .iter()
-                .map(|lp| match lp {
-                    Lp::New(segs) => segs
-                        .iter()
-                        .map(|s| match s.cf {
-                            NONE => s.src,
-                            c => core_srcs[c as usize].first().copied().unwrap_or(s.src),
-                        })
-                        .min()
-                        .unwrap_or(usize::MAX),
-                    Lp::Kept(i) => kept[*i].g,
+                .map(|s| match s.cf {
+                    NONE => s.src,
+                    c => core_srcs[c as usize].first().copied().unwrap_or(s.src),
                 })
                 .min()
-                .unwrap_or(usize::MAX);
-            fins.push(Fin { grp, loops: fl, src });
+                .unwrap_or(usize::MAX) as u32,
+            Lp::Kept(i) => kept[*i].g as u32,
+        })
+        .collect();
+    let lds: Vec<Ld> = loops
+        .iter()
+        .map(|lp| {
+            let mut pf = Vec::new();
+            lp_points(w, &kept, lp, &mut pf);
+            Ld { pf, ph: std::cell::OnceCell::new() }
+        })
+        .collect();
+    let lax: Vec<(usize, usize)> = lgrp.iter().map(|&g| axes_of(w.normal(groups[g as usize]))).collect();
+    let outer: Vec<bool> = (0..loops.len()).map(|l| loop_sense(w, &kept, &loops[l], &lds[l], lax[l]) > 0).collect();
+    let mut holder: Vec<u32> = vec![forge_bool_core::stitch::NONE; loops.len()];
+    for h in 0..loops.len() {
+        if outer[h] {
+            continue;
         }
+        let mut best: Option<usize> = None;
+        for k in 0..loops.len() {
+            if !outer[k] || lgrp[k] != lgrp[h] {
+                continue;
+            }
+            if inside_cert(w, &kept, &loops[h], &lds[h], &loops[k], &lds[k], lax[h])
+                && best.is_none_or(|b| inside_cert(w, &kept, &loops[k], &lds[k], &loops[b], &lds[b], lax[h]))
+            {
+                best = Some(k);
+            }
+        }
+        holder[h] = best.map_or(forge_bool_core::stitch::NONE, |b| b as u32);
+    }
+    let faces = forge_bool_core::stitch::faces(&lgrp, &lsrc, &outer, &holder)?;
+    let mut slots: Vec<Option<Lp>> = loops.into_iter().map(Some).collect();
+    let mut fins: Vec<Fin> = Vec::with_capacity(faces.len());
+    for f in faces {
+        let fl: Vec<Lp> = f.loops.iter().map(|&l| slots[l as usize].take().expect("a loop once")).collect();
+        fins.push(Fin {
+            grp: groups[f.grp as usize],
+            loops: fl,
+            src: f.src as usize,
+        });
     }
     // in input arena order (of the least input face each holds)
     fins.sort_by_key(|f| f.src);
