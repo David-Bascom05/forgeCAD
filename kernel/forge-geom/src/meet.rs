@@ -1223,10 +1223,14 @@ pub fn intersect(a: &Surface, b: &Surface, region: Box3) -> Option<SurfaceSurfac
         _ => false,
     };
     // a small loop round a thin tube on a wide host (a torus's minor radius a fraction of the
-    // cylinder's) is found by its root count too: the discriminant there is too poorly scaled to
-    // see it (fuzz seed 295, feature 69: one of two loops lost, and the boolean kept an edge on one
-    // face)
-    let scan = count_samples(&eq.host, &other);
+    // cylinder's) is found by its root count too, where the discriminant is too poorly scaled to
+    // see it: it then flags double roots that are flicker (fuzz seed 295, feature 69: one of two
+    // loops lost among them, and the boolean kept an edge on one face)
+    let scan = if !axes_meet && events.iter().any(|e| e.1) {
+        count_samples(&eq.host, &other)
+    } else {
+        64
+    };
     if matches!(form, Form::Poly4 | Form::Trig2) && (axes_meet || scan > 64) {
         let at = |k: usize| dmath::TAU * k as f64 / scan as f64;
         let mut found = Vec::new();
