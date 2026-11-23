@@ -743,9 +743,15 @@ fn wind(
         Some((_, r, h)) => (*r, *h),
         None => ring[k].extent(),
     };
-    let rmin = (0..ring.len())
-        .map(|k| extent(k).0.0)
-        .fold(f64::INFINITY, f64::min);
+    // the section's ranges of r and h (exact for lines and arcs, a curve's from its own)
+    let ((rlo, rhi), (hlo, hhi)) = (0..ring.len()).map(extent).fold(
+        (
+            (f64::INFINITY, f64::NEG_INFINITY),
+            (f64::INFINITY, f64::NEG_INFINITY),
+        ),
+        |(r, h), (er, eh)| ((r.0.min(er.0), r.1.max(er.1)), (h.0.min(eh.0), h.1.max(eh.1))),
+    );
+    let rmin = rlo;
     if rmin <= tol::LINEAR {
         return Err(CoilError::CrossesAxis);
     }
@@ -756,27 +762,18 @@ fn wind(
     // number of turns that fits (research/sweep-spec, Screw.coil_injective): k (T a, T b) in
     // (r, h) for 1 <= k, k T <= angle. A section with a spline keeps the sufficient bound: the
     // pitch past its height.
-    if curves.iter().any(Option::is_some) {
-        let (lo, hi) = (0..ring.len())
-            .map(|k| extent(k).1)
-            .fold((f64::INFINITY, f64::NEG_INFINITY), |a, h| {
-                (a.0.min(h.0), a.1.max(h.1))
-            });
-        if pitch <= hi - lo + tol::LINEAR {
+    // a whole turn's shift past the section's height or width clears every turn after it (both
+    // components grow with k): the pitch past the height is the usual case, and costs nothing more
+    let clear = |w: Vec2| w.x.abs() > rhi - rlo + tol::LINEAR || w.y.abs() > hhi - hlo + tol::LINEAR;
+    let turn = Vec2::new(dmath::TAU * a, dmath::TAU * b);
+    if dmath::TAU <= angle + tol::ANGULAR && !clear(turn) {
+        if curves.iter().any(Option::is_some) {
+            // a section with a spline keeps the sufficient bound
             return Err(CoilError::TurnsTouch);
         }
-    } else {
-        // past the k whose translate's box is clear of the section's box, every larger k is too
-        // (both components of the shift grow with k)
-        let (br, bh) = forge_geom::screw::sections_box(&ring);
         let mut k = 1.0;
-        while k * dmath::TAU <= angle + tol::ANGULAR {
-            let w = Vec2::new(k * dmath::TAU * a, k * dmath::TAU * b);
-            let clear = w.x.abs() > br.hi - br.lo + tol::LINEAR || w.y.abs() > bh.hi - bh.lo + tol::LINEAR;
-            if clear {
-                break;
-            }
-            if !forge_geom::screw::apart_from_translate(&ring, w, tol::LINEAR) {
+        while k * dmath::TAU <= angle + tol::ANGULAR && !clear(turn * k) {
+            if !forge_geom::screw::apart_from_translate(&ring, turn * k, tol::LINEAR) {
                 return Err(CoilError::TurnsTouch);
             }
             k += 1.0;

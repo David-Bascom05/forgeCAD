@@ -413,23 +413,6 @@ pub fn apart_from_translate(sections: &[Section], w: Vec2, gap: f64) -> bool {
     })
 }
 
-/// The box of a section's pieces, (r range, h range).
-pub fn sections_box(sections: &[Section]) -> (Interval, Interval) {
-    sections.iter().fold(
-        (
-            Interval::new(f64::INFINITY, f64::NEG_INFINITY),
-            Interval::new(f64::INFINITY, f64::NEG_INFINITY),
-        ),
-        |(r, h), s| {
-            let (sr, sh) = s.bbox(Interval::new(0.0, 1.0));
-            (
-                Interval::new(r.lo.min(sr.lo), r.hi.max(sr.hi)),
-                Interval::new(h.lo.min(sh.lo), h.hi.max(sh.hi)),
-            )
-        },
-    )
-}
-
 /// A face's track: its section carried on `e` past each end, turned back to its left by a
 /// semicircle of radius `w` at each end, and joined by the section offset `2 w` to its left. A
 /// closed curve, smooth (C1) all round, that follows the section closely.
