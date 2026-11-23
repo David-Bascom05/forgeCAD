@@ -1,5 +1,4 @@
-//! Extents and body targets the retired `.fc` format had, written in Forge: each part held to
-//! what the `.fc` part built (volume, faces, edges, bodies).
+//! Extents and body targets: each part held to its known solid (volume, faces, edges, bodies).
 mod common;
 
 /// Volume, faces, edges and bodies of a part that builds valid.
@@ -18,9 +17,9 @@ sketch sb(on: xy) {
 b = extrude(sb, 10, new: true)
 ";
 
-/// `.fc` `thicken cut 2 neg (faces plane normal +z of a) in a`: the slab cut from the first body
-/// though the second was made last (1800 mm3, 12 faces, 24 edges, 2 bodies); and `in b`, a body
-/// not holding the face, refused as .fc refused it (the kernel's MissingEdge).
+/// A thicken 2 inward of a's top, cut, in body a: the slab cut from the first body though the
+/// second was made last (1800 mm3, 12 faces, 24 edges, 2 bodies); and in b, a body not holding
+/// the face, refused (the kernel's MissingEdge).
 #[test]
 fn thicken_in_a_body() {
     let v = shape(&format!(
@@ -34,7 +33,7 @@ fn thicken_in_a_body() {
     assert!(r.contains("has no edge"), "{r}");
 }
 
-/// `.fc` `thicken 2 (faces plane normal +z of a) in all`: 2200 mm3, 12 faces, 24 edges, 2 bodies.
+/// A thicken 2 of a's top in every body: 2200 mm3, 12 faces, 24 edges, 2 bodies.
 #[test]
 fn thicken_in_every_body() {
     let v = shape(&format!("{TWO}th = thicken(a.end, 2, bodies: \"all\")\n"));
@@ -54,8 +53,8 @@ sketch s(on: xy) {
 }
 ";
 
-/// `.fc` `extrude to s ..`, s a sketch: up to the sketch's plane (10500 mm3, 11 faces, 24
-/// edges), and `off -4` short of it (10100 mm3).
+/// An extrude `upto(t)`, t a sketch: up to the sketch's plane (10500 mm3, 11 faces, 24
+/// edges), and `upto(t, -4)` short of it (10100 mm3).
 #[test]
 fn up_to_a_sketch_plane() {
     let v = shape(&format!("{UPTO}a = extrude(s, upto(t))\n"));
@@ -66,9 +65,9 @@ fn up_to_a_sketch_plane() {
     assert_eq!((v.1, v.2, v.3), (11, 24, 1));
 }
 
-/// Face edits on chosen bodies, as .fc's `offset|move|draft .. in FEAT|all`: offset in a 2200
-/// mm3, moved up 3 in a 2300, drafted 5deg in all 1956.255668 (12 faces, 24 edges, 2 bodies
-/// each); moved in b, which does not hold the face, refused as .fc refused it.
+/// Face edits on chosen bodies (`bodies: F` or `"all"`): offset in a 2200 mm3, moved up 3 in a
+/// 2300, drafted 5deg in all 1956.255668 (12 faces, 24 edges, 2 bodies each); moved in b, which
+/// does not hold the face, refused.
 #[test]
 fn face_edits_in_bodies() {
     for (line, vol) in [
@@ -89,9 +88,9 @@ fn face_edits_in_bodies() {
     assert!(r.contains("has no edge"), "{r}");
 }
 
-/// `.fc` `revolve to t ..`, t a sketch on a plane through the axis: a disc turned from xz up to
-/// yz, a quarter turn (2467.4011 mm3, 3 faces, 3 edges), and `off 10` 10deg on (2741.556778);
-/// t on xy, square to the axis, refused as .fc refused it (NotSquare).
+/// A revolve `upto(t)`, t a sketch on a plane through the axis: a disc turned from xz up to
+/// yz, a quarter turn (2467.4011 mm3, 3 faces, 3 edges), and `upto(t, 10deg)` 10deg on
+/// (2741.556778); t on xy, square to the axis, refused (NotSquare).
 #[test]
 fn revolve_up_to_a_sketch_plane() {
     let turn = |on: &str, angle: &str| {
@@ -109,8 +108,8 @@ fn revolve_up_to_a_sketch_plane() {
     assert!(e.contains("NotSquare"), "{e}");
 }
 
-/// `.fc`'s `revolve .. axis` took an origin axis, a work axis or a straight edge of the part:
-/// Forge's revolve takes each, where it lies in the profile's plane (a square 10 x 10, its near
+/// A revolve's axis may be an origin axis, a work axis or a straight edge of the part, each
+/// where it lies in the profile's plane (a square 10 x 10, its near
 /// side 10 off the axis, a quarter turn: pi / 4 * (20^2 - 10^2) * 10).
 #[test]
 fn revolve_about_an_axis_of_the_part_or_the_origin() {

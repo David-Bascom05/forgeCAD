@@ -302,7 +302,7 @@ fn refs(q: &Query) -> Vec<String> {
 
 /// Runs the document at `path` and answers the query on it.
 pub fn ask_file(path: &Path, root: Option<PathBuf>, text: &str) -> Answer {
-    match std::fs::read_to_string(path) {
+    match forge_dirs::fs::read_to_string(path) {
         Ok(src) => ask(&src, path.parent().map(Path::to_path_buf), root, text),
         Err(e) => Answer::err(qe("File", format!("{}: {e}", path.display()))),
     }
@@ -437,7 +437,7 @@ fn scene(src: &str, dir: Option<PathBuf>, root: Option<PathBuf>, req: &Request) 
                     _ => PathBuf::from(plain),
                 };
                 let p = p.as_path();
-                let part_run = std::fs::read_to_string(p).ok().map(|text| {
+                let part_run = forge_dirs::fs::read_to_string(p).ok().map(|text| {
                     let o = part_opts(
                         p.parent().map(Path::to_path_buf),
                         root.clone(),

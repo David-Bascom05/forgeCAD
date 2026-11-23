@@ -1,6 +1,6 @@
 # Hydraulic valve manifold: one ISO 4401-03 (CETOP 3) valve station on top, SAE O-ring boss
 # work ports on the sides, a relief cartridge in a boss on the right, a gauge port on a lofted
-# boss. Hand port of fair/fc/manifold/model.fc.
+# boss.
 
 shared L = 120
 shared W = 80

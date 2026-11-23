@@ -16,11 +16,11 @@ use forge_agent::json::Json;
 use forge_asm as fa;
 use forge_asm::check::{BrepExact, Checker, Exact, PartMesh};
 use forge_asm::{ConstraintKind, Freedom, JointKind};
+use forge_math::clock::Instant;
 use forge_math::{Frame, Point3, UnitVec3, Vec3};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::rc::Rc;
 use std::sync::Arc;
-use std::time::Instant;
 
 /// Built-ins of an assembly document.
 pub const NAMES: &[&str] = &[
@@ -2629,11 +2629,11 @@ fn locate_now(
     if file.starts_with(crate::stdparts::KEY) {
         return crate::stdparts::text_of(file).map(|_| std::path::PathBuf::from(file));
     }
-    let p = std::fs::canonicalize(dir.as_ref()?.join(file)).ok()?;
+    let p = forge_dirs::fs::canonicalize(dir.as_ref()?.join(file)).ok()?;
     if p.extension().is_none_or(|x| x != "fg") {
         return None;
     }
-    let meta = std::fs::metadata(&p).ok()?;
+    let meta = forge_dirs::fs::metadata(&p).ok()?;
     if !meta.is_file() || meta.len() > LIMIT {
         return None;
     }
@@ -2657,7 +2657,7 @@ fn not_located(
     }
     // something there the loader refused: not a plain .fg, or too big; read no further
     match dir.as_ref().map(|d| d.join(file)) {
-        Some(p) if std::fs::symlink_metadata(&p).is_ok() => FileProblem::NotForge,
+        Some(p) if forge_dirs::fs::symlink_metadata(&p).is_ok() => FileProblem::NotForge,
         _ => FileProblem::Missing,
     }
 }
@@ -2680,7 +2680,7 @@ pub fn read_capped(p: &std::path::Path) -> Option<String> {
     }
     // a link inside the fence is the file it names (the loaders' fence looked through it):
     // read as it is, a regular file, capped (deps::read_plain)
-    let bytes = std::fs::canonicalize(p)
+    let bytes = forge_dirs::fs::canonicalize(p)
         .ok()
         .and_then(|real| crate::deps::read_plain(&real, LIMIT).ok());
     crate::deps::read(p, bytes.as_deref());
@@ -2694,7 +2694,7 @@ pub fn read_capped(p: &std::path::Path) -> Option<String> {
 
 /// Why a file located but did not read: not there, or there and no Forge file.
 fn read_problem(p: &std::path::Path) -> FileProblem {
-    if std::fs::symlink_metadata(p).is_err() {
+    if forge_dirs::fs::symlink_metadata(p).is_err() {
         return FileProblem::Missing;
     }
     FileProblem::NotForge
@@ -4053,7 +4053,7 @@ pub fn finish(
             let Some(text) = text else {
                 // located and read but no Forge file, or never located
                 let problem = match std::path::Path::new(&path) {
-                    p if p.is_absolute() && std::fs::symlink_metadata(p).is_ok() => read_problem(p),
+                    p if p.is_absolute() && forge_dirs::fs::symlink_metadata(p).is_ok() => read_problem(p),
                     _ => named.map_or(FileProblem::Missing, |i| not_located(&dir, &fence, &i.file)),
                 };
                 ev.errors

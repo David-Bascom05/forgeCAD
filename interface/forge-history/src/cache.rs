@@ -95,13 +95,17 @@ fn append(h: &History, recs: &[Rec]) {
         return;
     }
     let p = file(h);
-    let _ = std::fs::create_dir_all(p.parent().expect("dir"));
+    let _ = forge_dirs::fs::create_dir_all(p.parent().expect("dir"));
     let mut text = String::new();
     for r in recs {
         text.push_str(&line(r));
     }
     // one write of whole lines: concurrent appenders interleave by line at worst
-    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&p) {
+    if let Ok(mut f) = forge_dirs::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&p)
+    {
         let _ = f.write_all(text.as_bytes());
     }
 }
@@ -129,7 +133,7 @@ fn rec_of(h: &History, id: &Oid) -> Result<Rec, Error> {
 
 /// A save just made: on the end of the file, if there is one (else the next look builds it).
 pub fn appended(h: &History, id: &Oid, parent: Option<Oid>, who: &Sig, msg: &str, changed: &[String]) {
-    if !file(h).exists() {
+    if !forge_dirs::fs::exists(file(h)) {
         return;
     }
     append(
@@ -152,7 +156,7 @@ pub fn log(h: &History) -> Result<Vec<Rec>, Error> {
         return Ok(vec![]);
     };
     let mut known: HashMap<Oid, Rec> = HashMap::new();
-    if let Ok(t) = std::fs::read_to_string(file(h)) {
+    if let Ok(t) = forge_dirs::fs::read_to_string(file(h)) {
         for l in t.lines() {
             if let Some(r) = parse(h, l) {
                 known.insert(r.id, r);

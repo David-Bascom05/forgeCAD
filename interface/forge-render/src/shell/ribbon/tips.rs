@@ -90,6 +90,9 @@ fn why(s: &Shell, scope: &str, name: &str) -> String {
     if let Some(w) = why_off(name) {
         return w.to_string();
     }
+    if s.no_document() && scope != "thermo" {
+        return "open or create a part first (File > New, or Open)".into();
+    }
     match scope {
         "sketch" if s.sketch.is_none() => {
             "start a sketch first: 3D Model > Start Sketch, or double-click a sketch in the browser".into()

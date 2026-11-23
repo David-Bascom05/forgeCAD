@@ -584,7 +584,7 @@ impl LinkForm {
 /// The .fg files in a folder, and in its folders a level down, by their path from it.
 fn fg_files(base: &std::path::Path, out: &mut Vec<String>) {
     let list = |d: &std::path::Path| -> Vec<PathBuf> {
-        let mut v: Vec<PathBuf> = std::fs::read_dir(d)
+        let mut v: Vec<PathBuf> = forge_dirs::fs::read_dir(d)
             .map(|rd| rd.filter_map(|e| e.ok().map(|e| e.path())).collect())
             .unwrap_or_default();
         v.sort();
@@ -597,7 +597,7 @@ fn fg_files(base: &std::path::Path, out: &mut Vec<String>) {
     };
     let fg = |p: &PathBuf| p.extension().is_some_and(|x| x == "fg");
     for p in list(base) {
-        if p.is_dir() && !name(&p).starts_with('.') {
+        if forge_dirs::fs::is_dir(&p) && !name(&p).starts_with('.') {
             out.extend(
                 list(&p)
                     .iter()
@@ -1633,7 +1633,7 @@ impl Shell {
                 }
             }
             p.circle_filled(o, 7.0, ink);
-            p.text(o, Align2::CENTER_CENTER, label, semi(10.0), Color32::WHITE);
+            p.text(o, Align2::CENTER_CENTER, label, semi(11.0), Color32::WHITE);
         };
         for (k, pk) in f.picks.iter().enumerate() {
             if let Some(fr) = pk.as_ref().and_then(|x| x.world) {
@@ -1762,8 +1762,8 @@ pub fn command(fg: &mut super::fg::FgPanel, c: super::FgCmd) -> String {
                         .into_iter()
                         .filter(|f| !own.ends_with(f.as_str()) || f.contains('/'))
                         .map(|f| {
-                            let sub =
-                                std::fs::read_to_string(d.join(&f)).is_ok_and(|t| super::fg::is_assembly(&t));
+                            let sub = forge_dirs::fs::read_to_string(d.join(&f))
+                                .is_ok_and(|t| super::fg::is_assembly(&t));
                             (f, sub)
                         })
                         .collect()

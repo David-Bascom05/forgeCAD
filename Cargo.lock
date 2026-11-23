@@ -82,6 +82,7 @@ name = "forge-coverage"
 version = "0.1.0"
 dependencies = [
  "forge-bool",
+ "forge-geom",
  "forge-math",
  "forge-mesh",
  "forge-model",
@@ -173,7 +174,9 @@ name = "forge-history"
 version = "0.1.0"
 dependencies = [
  "forge-agent",
+ "forge-dirs",
  "forge-git",
+ "forge-math",
 ]
 
 [[package]]
@@ -306,6 +309,13 @@ dependencies = [
  "forge-ops",
  "forge-refold",
  "forge-topo",
+]
+
+[[package]]
+name = "forge-sheet-core"
+version = "0.1.0"
+dependencies = [
+ "forge-math",
 ]
 
 [[package]]

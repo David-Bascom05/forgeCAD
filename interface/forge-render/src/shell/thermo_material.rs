@@ -158,7 +158,7 @@ pub fn tab(ui: &mut Ui, t: &Theme, m: &mut Material) -> bool {
                 pos2(r.left() + x, r.center().y),
                 Align2::LEFT_CENTER,
                 s,
-                sans(10.5),
+                sans(11.0),
                 t.ink2,
             );
         }
@@ -263,7 +263,7 @@ pub fn tab(ui: &mut Ui, t: &Theme, m: &mut Material) -> bool {
         fit_b.center(),
         Align2::CENTER_CENTER,
         "Fit from test data…",
-        sans(12.5),
+        sans(13.0),
         t.ink,
     );
     if resp.clicked() {
@@ -321,7 +321,7 @@ pub fn tab(ui: &mut Ui, t: &Theme, m: &mut Material) -> bool {
             "{src}{}",
             temp.map_or(String::new(), |c| format!(" · at {c:.0} °C"))
         ),
-        sans(11.5),
+        sans(12.0),
         ink,
     );
     if st.open {
@@ -368,7 +368,7 @@ fn fit_window(ctx: &egui::Context, t: &Theme, m: &Material, st: &mut FitState) {
                                 .hint_text("path to a CSV"),
                         );
                         if ui.button("Load").clicked() {
-                            match std::fs::read_to_string(st.file.trim()) {
+                            match forge_dirs::fs::read_to_string(st.file.trim()) {
                                 Ok(text) => {
                                     st.points = fit::read_csv(&text);
                                     st.said = format!("{} points read", st.points.len());
@@ -393,7 +393,7 @@ fn fit_window(ctx: &egui::Context, t: &Theme, m: &Material, st: &mut FitState) {
                     row(ui, "Columns", &mut |ui| {
                         ui.label(
                             egui::RichText::new("stretch, true stress (MPa)")
-                                .font(sans(12.5))
+                                .font(sans(13.0))
                                 .color(t.ink),
                         );
                     });
@@ -445,7 +445,7 @@ fn fit_window(ctx: &egui::Context, t: &Theme, m: &Material, st: &mut FitState) {
                             st.said = "load at least two points first".into();
                         }
                     }
-                    ui.label(egui::RichText::new(&st.said).font(sans(11.5)).color(t.ink2));
+                    ui.label(egui::RichText::new(&st.said).font(sans(12.0)).color(t.ink2));
                 });
                 ui.add_space(12.0);
                 ui.vertical(|ui| plot(ui, t, m, st));
@@ -543,7 +543,7 @@ fn plot(ui: &mut Ui, t: &Theme, m: &Material, st: &FitState) {
         pos2(area.center().x, r.bottom() - 6.0),
         Align2::CENTER_BOTTOM,
         format!("stretch (1.0 – {lmax:.1})"),
-        sans(11.5),
+        sans(12.0),
         t.ink2,
     );
     let dashed: Vec<egui::Pos2> = cur.iter().map(|q| at(q.0, q.1)).collect();
@@ -573,7 +573,7 @@ fn plot(ui: &mut Ui, t: &Theme, m: &Material, st: &FitState) {
         k.min + vec2(24.0, 14.0),
         Align2::LEFT_CENTER,
         format!("Test points ({})", st.points.len()),
-        sans(11.5),
+        sans(12.0),
         t.ink,
     );
     p.line_segment(
@@ -587,7 +587,7 @@ fn plot(ui: &mut Ui, t: &Theme, m: &Material, st: &FitState) {
             Some(f) => format!("{} fit · RMS {:.1} %", MODELS[st.model].0, f.rms * 100.0),
             None => "the fit (none yet)".into(),
         },
-        sans(11.5),
+        sans(12.0),
         t.ink,
     );
     p.line_segment(
@@ -598,7 +598,7 @@ fn plot(ui: &mut Ui, t: &Theme, m: &Material, st: &FitState) {
         k.min + vec2(24.0, 52.0),
         Align2::LEFT_CENTER,
         "the law in use",
-        sans(11.5),
+        sans(12.0),
         t.ink,
     );
     // the fit's numbers in tiles
@@ -635,7 +635,7 @@ fn plot(ui: &mut Ui, t: &Theme, m: &Material, st: &FitState) {
             b.min + vec2(10.0, 14.0),
             Align2::LEFT_CENTER,
             *name,
-            sans(10.5),
+            sans(11.0),
             t.ink2,
         );
         p.text(b.min + vec2(10.0, 40.0), Align2::LEFT_CENTER, v, semi(16.0), *c);

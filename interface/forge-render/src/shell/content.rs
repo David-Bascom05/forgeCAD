@@ -584,7 +584,7 @@ impl Shell {
                                         let short: String = src.chars().take(80).collect();
                                         ui.label(
                                             egui::RichText::new(format!("Source: {short}"))
-                                                .font(sans(10.0))
+                                                .font(sans(11.0))
                                                 .color(t.ink2),
                                         );
                                     }
