@@ -398,7 +398,9 @@ Two corrections from bool-research's measurement (callgrind, switch off):
 So A8 alone, at today's constant factors, leaves decide-once at **about 1.3× the old path** on
 coplanar.
 
-**Budget (signed off): ≤ 1.28M per flat boolean, on every gate line.** bool-research's bottom-up
+**Budget (signed off): ≤ 1.16M per flat boolean, on every gate line.** That is the old path's real
+flat cost (a8-review.md §6.5, baa5b47: of the 200.6M, the 80 rods take 119.7M, leaving 80.9M for
+the 70 flat booleans). It replaces the 1.28M above. bool-research's bottom-up
 estimate, from measured per-op costs and the coplanar counts, is about 0.50M. Their budget per
 boolean (a8-review.md §6, deb531d):
 
@@ -413,9 +415,10 @@ boolean (a8-review.md §6, deb531d):
 | core v2 | 0.25M |
 | collapse | 0.04M |
 | write in place | 0.20M |
-| **total** | **0.92M** (28% under 1.28M) |
+| **total** | **0.92M** (21% under 1.16M) |
 
-The gap between 1.65M and 0.92M is constant factors, so they are stated as rules:
+The gap between 1.65M and 0.92M is constant factors. So these six are **binding build rules** for
+the v2 bridge and builder (the master, 2026-11-23):
 1. R6: no exact plane or point for a far face.
 2. No HashMap in the bridge. Keys are tuples of near-class ids, so use dense tables or sorted
    arrays.
@@ -425,7 +428,14 @@ The gap between 1.65M and 0.92M is constant factors, so they are stated as rules
 5. Witnesses fused into the builder, with the orientation shortcut first.
 6. R5: the in-place write.
 
-**R4-early.** Callgrind R3's builder phases on the three benches. Any phase more than 1.5× over its
+**Fast form from the start** (the owner's rule, PROOF-STANDARD.md): v2's core is designed in its
+fast form, with dense tables, ids, `row_eq`/`row_hash`-style flat keys where the builder needs
+them, and no `Vec` per cell. So the fast form is the proven one.
+
+**Allocation pass line (R4):** ≤ 1,000 allocated blocks per flat boolean (dhat). Decide-once is at
+about 4,990 today, the old path at about 1,150. This is how rule 3 is checked.
+
+**R4-early (checkpoint, binding).** Callgrind R3's builder phases on the three benches. Any phase more than 1.5× over its
 budget is fixed before the Aeneas groups continue. R5 may land first, on today's v1 path, gated by
 the bits check. "Nothing slower"
 needs three more things, beside A8:
@@ -469,7 +479,8 @@ Critical path: L2 → R3 → R4 for speed, and R2 → G* → E for the proof.
 
 The switch flips to v2 only when all of the following hold:
 - E is green;
-- v2 ≤ the old path on **every** gate line;
+- v2 ≤ the old path on **every** gate line (target ≤ 1.16M per flat boolean), and ≤ 1,000 allocated
+  blocks per flat boolean;
 - fuzz seed 29 passes;
 - the naming rule agrees with today's names on the gate, or the owner approves the change of bits;
 - R4 beats the old path on all three benches;
