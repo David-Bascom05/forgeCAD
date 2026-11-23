@@ -274,6 +274,42 @@ theorem todayOK_of_correct {today : Body → Body → Op → Except (Refusal E K
   · simp only; rw [e] at this; exact Or.inr this
   · simp only; rw [e] at this; exact this
 
+/-! ## D0: `boolean` = clone, `boolean_into`, `into_compact`
+
+Read functionally, the clone is gone: the in-place boolean takes `A` by value (the bridge's
+`readInPlace`). What is left is the compaction of the result. -/
+
+/-- **D0**: compaction keeps a valid, faithful result valid and faithful, keeps its solid, its
+names and its size. -/
+def D0 (δ : ℝ) (abs : Body → BodyModel E) (Names : Body → Body → Op → Body → Prop)
+    (Size : Body → Prop) (compact : Body → Body) : Prop :=
+  ∀ R, ValidSolid δ (abs R) → Faithful δ (abs R) →
+    ValidSolid δ (abs (compact R)) ∧ Faithful δ (abs (compact R)) ∧
+      denote δ (abs (compact R)) = denote δ (abs R) ∧
+      (∀ A B op, Names A B op R → Names A B op (compact R)) ∧ (Size R → Size (compact R))
+
+/-- The boolean with its result compacted. -/
+def withCompact (inner : Body → Body → Op → Except (Refusal E K Q) Body) (compact : Body → Body)
+    (A B : Body) (op : Op) : Except (Refusal E K Q) Body :=
+  match inner A B op with
+  | .ok R => .ok (compact R)
+  | .error e => .error e
+
+/-- **D0 composes**: compaction keeps §E. -/
+theorem compact_correct {inner : Body → Body → Op → Except (Refusal E K Q) Body}
+    {compact : Body → Body} (h0 : D0 δ abs Names Size compact)
+    (h : BooleanCorrect δ abs sc Names Size inner) :
+    BooleanCorrect δ abs sc Names Size (withCompact inner compact) := by
+  intro A B op hA hB
+  have hc := h A B op hA hB
+  unfold withCompact
+  rcases e : inner A B op with err | R
+  · rw [e] at hc; exact hc
+  · rw [e] at hc
+    obtain ⟨hv, hf, hd, hn⟩ := hc
+    obtain ⟨hv', hf', hd', hn', -⟩ := h0 R hv hf
+    exact ⟨hv', hf', hd'.trans hd, hn' A B op hn⟩
+
 /-! ## Sequential regen: a fold of booleans -/
 
 /-- Apply the tools in order, stopping at the first refusal. -/

@@ -71,7 +71,7 @@ verify/forge-bool-proof/ForgeBoolProof/<file>.
 
 | id | function(s) | contract | owner | status | file / theorem |
 |---|---|---|---|---|---|
-| D0 | `boolean` → clone, `boolean_into`, `into_compact` | compact keeps ⟦·⟧ and names; clone is the identity | SPINE | open | — |
+| D0 | `boolean` → clone, `boolean_into`, `into_compact` | compaction keeps a valid faithful result valid and faithful, and keeps its solid, names and size (`D0`); the clone is gone in the functional reading (`readInPlace`) | SPINE (stmt, composition), TRANSLATE (`into_compact` against `D0`) | stated; composition proven | Compose.lean `D0`, `compact_correct` |
 | D1 | `Index::new`, `face_box` | ⟦f⟧ ⊆ box f; boxes that miss ⇒ faces miss | FLAT-SITES | stated | Contracts.lean `D1`, `PairsOK` |
 | D2 | `meet_region`, `ssi::surfaces_in`, `plane_meet`, `crossings_near` | every point of ⟦fa⟧ ∩ ⟦fb⟧ is on a returned curve (within δ, F1); closed-form miss = `Unhandled::NoClosedForm` | TRANSLATE | stated | Contracts.lean `D2`, `CurvesOK` |
 | D3 | `touches`, `flows_on`, `crack_tip`, `local_class` | every contact listed with exact local classes; the non-manifold refusal is `RefusalTrue` | FALLBACK (with G4) | stated | Contracts.lean `D3`, `TouchesOK` |

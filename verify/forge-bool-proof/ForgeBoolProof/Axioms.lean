@@ -14,3 +14,4 @@ import ForgeBoolProof
 #print axioms ForgeBoolProof.booleanCorrectR_of_shape
 #print axioms ForgeBoolProof.booleanCorrectR_of_steps
 #print axioms ForgeBoolProof.bounds_of_faces
+#print axioms ForgeBoolProof.compact_correct
