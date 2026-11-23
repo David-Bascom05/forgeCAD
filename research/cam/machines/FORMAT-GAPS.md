@@ -17,7 +17,7 @@ Add rows; don't rewrite others'.
 | 9 | Gantry routers fit `vmc3` only by counting (XYZ head-side, part on `base`); see also row 4 | (C): routers, Datron neo | `kind = "router3"` label, or confirm vmc3-by-count | CAM-MACHINE decides |
 | 10 | Swiss-type: guide bushing body with its own clearance (tools ~0.5–1 mm from its face) and stock-outside-bushing limit; gang post T→station map; 2–3 channels run together with waits (merged timelines for inter-channel collision); headstock Z1 is a table-side linear | (C): Citizen, Star, Tsugami, Nomura | `[[machine.guide_bushing]]`, per-body `clearance`; `[[machine.gang]]` stations; setup with one program per channel + dialect wait codes (extends row 5) | open (smallest-first) |
 | 11 | Unbounded rotary (Pocket NC B, ±9999 on the control) | (C): Penta | `cyclic = true` with the control's range | confirm pending |
-| 12 | Dialects missing: pathpilot, carbide-motion, buildbotics, mach4, masso, centroid-acorn, datron-next, shopbot (OpenSBP, not G-code), roland RML-1/NC, fanuc-lathe-multipath (+ Citizen/Star/Tsugami M-codes) | (C) | findings only; no posts yet (coordinator) | finding |
+| 12 | Dialects missing: siemens (SYIL 828D, Grizzly Sinumerik), mach3 (Grizzly G0951), centroid-cnc12 (Avid EX, Sherline Acorn), syntec (Laguna SmartShop), pathpilot, carbide-motion, buildbotics, mach4, masso, centroid-acorn, datron-next, shopbot (OpenSBP, not G-code), roland RML-1/NC, fanuc-lathe-multipath (+ Citizen/Star/Tsugami M-codes) | (C) | findings only; no posts yet (coordinator) | finding |
 
 ## Details: MACHINE-LIB C rows (8–12), 2026-11-23
 
