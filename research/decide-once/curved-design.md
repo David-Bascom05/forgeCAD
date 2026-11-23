@@ -171,7 +171,10 @@ that axis. So the zero count at any point stays ≈ (surfaces through it) + 2, f
 
 **Tier-0 check** (exact, combinatorial, on the per-surface arrangement graphs of §2.4):
 - every facet has one boundary walk on a simply connected surface piece (so it is a disc);
-- no edge occurs twice in one facet's walk (the wing condition);
+- no edge occurs twice in one facet's walk (the wing condition, R4);
+- no vertex occurs twice in one facet's walk (the vertex wing condition, R5, which the q1 session's
+  `xNonManifold_iff_top` needs: a facet passing a vertex twice would make one combinatorial fan
+  two topological ones);
 - the covector map is injective on components: union–find over the arrangement graph gives one
   component per listed class;
 - every 3-cell's wedges (round its edges, in their exact cyclic order) are wedge-connected. This
@@ -189,7 +192,7 @@ that axis. So the zero count at any point stays ≈ (surfaces through it) + 2, f
   by `cand1`'s midpoint rule (`Sampler.minAbove`). Walls are parallel, so no point has two. Each
   open slab holds at most one event value.
 - **The proof obligation is Lemma D:** in a slab with at most one event, with the seams in place,
-  every 2-cell on every quadric is an open disc and every 1-cell an open arc, and R1–R4 hold. For
+  every 2-cell on every quadric is an open disc and every 1-cell an open arc, and R1–R5 hold. For
   quadrics this is short Morse theory: the level sets of `d·x` on a quadric are conics, and there
   is one critical point of each kind.
 
@@ -433,7 +436,7 @@ proof session on verify/forge-exact; "Rust" means a bridge session in the kernel
 
 | | Decision | Consequence |
 |---|---|---|
-| D1 | **Mathlib over ℝ for the curved L1/L3**; the executable reference stays core Lean over `Alg` | R1–R4, Lemma D and `xNonManifold_iff_top` are proven in a Mathlib package importing forge-exact's definitions; the reference is proven against any `Model`, ℝ among them |
+| D1 | **Mathlib over ℝ for the curved L1/L3**; the executable reference stays core Lean over `Alg` | R1–R5, Lemma D and `xNonManifold_iff_top` are proven in a Mathlib package importing forge-exact's definitions; the reference is proven against any `Model`, ℝ among them |
 | D2 | **A sign-formula sidecar for Q1** | the formula route (§2.5a); `qform_compat` (QForm.lean) is `compat` |
 | D3 | **"Tier 1 iff the Tier-0 check fails" is one decided rule** | **The rule, as spec:** the separators of a boolean are the Tier-0 seams of §2.3's table for its near carriers; if and only if the Tier-0 check on the resulting arrangement fails, the Tier-1 walls (direction, events, midpoints as in §2.3) are added to them. Both are functions of the near carriers alone; no other separator is ever added, and nothing is retried |
 | D4 | **Switch-on domain: quadric carriers on formula-carrying bodies**; everything else counted and sent to the old path | `Skip::OutOfDomain` beside `Uncertified` and `Ambiguous` |
@@ -476,6 +479,10 @@ Done, standard axioms only (all in Axioms.lean):
     keeps a point in its cell (`line_in_cell`, by `Flat.stepFor`), and `perp_exists`.
   - `NoScaled` (no two carriers are one plane up to scale) is the snap's distinct classes.
     `Exact` does not state it, so it is a named hypothesis here.
+
+- `Faithful` gained **R5** (`vwing`, the wing condition at listed vertices) at the q1 session's
+  request. It proved `xNonManifold_iff_top` and `zeroThickness_iff_top` (verify/forge-curved,
+  ForgeCurved/Manifold.lean, branch `dol-curved-q1`) from `ExactK`, `Faithful` and R5.
 
 Open:
 - The refusal half of `sep_invariant` needs Q1's `xNonManifold_iff_top`: both refusals are then

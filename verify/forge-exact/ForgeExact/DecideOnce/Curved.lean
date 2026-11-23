@@ -19,8 +19,8 @@ unchanged. What changes is where the covectors come from. Here are the definitio
   tangent along a line have parallel normals along an edge);
 * `Faithful`: what a plane arrangement has for free (its cells are convex) and a curved one has
   only after the separators: every listed cell is connected, `Cov.le` is closure incidence, each
-  facet has both of its sides beside it, and a facet meets an incident edge in one sheet (the
-  wing condition, which fails for two tangent cylinders without a seam);
+  facet has both of its sides beside it, and a facet meets an incident edge (R4) or vertex (R5)
+  in one sheet (the wing conditions; R4 fails for two tangent cylinders without a seam);
 * `ExactK`: `Exact` with these cells. Every field reads as before; `Correct.lean`'s proofs use
   the fields, not the planes, except through `topeDecomp` (the nowhere-dense wall), which becomes
   a hypothesis on the carriers (`wallND`).
@@ -103,6 +103,12 @@ structure Faithful [Topology P] (cs : List (Carrier P K)) (Listed : Cov → Prop
   incident listed edge in one connected sheet -/
   wing : ∀ e φ, Listed e → Listed φ → IsEdgeK cs e → φ.isFacet = true → Cov.le e φ = true →
     ∀ x, covCellK cs e x → ∀ W : Pred P, IsOpen W → W x →
+      ∃ U : Pred P, IsOpen U ∧ U.Sub W ∧ U x ∧ Connected ((covCellK cs φ).inter U)
+  /-- R5, the vertex wing condition: the same at any point of an incident listed vertex (a facet
+  whose boundary walk passed a vertex twice would make one combinatorial fan two topological ones;
+  needed by the q1 session's `xNonManifold_iff_top`) -/
+  vwing : ∀ v φ, Listed v → Listed φ → IsVertK cs v → φ.isFacet = true → Cov.le v φ = true →
+    ∀ x, covCellK cs v x → ∀ W : Pred P, IsOpen W → W x →
       ∃ U : Pred P, IsOpen U ∧ U.Sub W ∧ U x ∧ Connected ((covCellK cs φ).inter U)
 
 /-! ## The curved exact ledger -/
