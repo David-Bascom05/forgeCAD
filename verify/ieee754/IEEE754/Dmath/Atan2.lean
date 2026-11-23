@@ -6,9 +6,9 @@ import IEEE754.Dmath.AtanErr
 /-!
 # `dmath::atan2`: the contract (C2)
 
-`atan2_err`: for finite `y`, `x`, not both zero (and not `y = −0` with `x < 0`, where the Rust
+`atan2_err50`: for finite `y`, `x`, not both zero (and not `y = −0` with `x < 0`, where the Rust
 returns `−π`), `dmath::atan2(y, x)` is finite and within `2^-50` of `atan2R y x`, the angle of
-`(x, y)` in `(−π, π]`.
+`(x, y)` in `(−π, π]`; `atan2_err` is sharper (`3.56·10^-16` for `x > 0`, `6.9·10^-16` otherwise).
 -/
 
 namespace IEEE754.Dmath
@@ -76,46 +76,53 @@ lemma quot_le {x y : F64} (hx : x.isFinite) (hy : y.isFinite) (hx0 : x.val ≠ 0
       _ = 2 ^ (200 : ℤ) * 2 ^ (-1074 : ℤ) := two_zpow_add _ _
       _ ≤ 2 ^ (200 : ℤ) * |x.val| := mul_le_mul_of_nonneg_left hm (two_zpow_pos _).le
 
+/-- A relative perturbation `c` of `u ≥ 0` moves `arctan` by at most `c/(2(1−c))`
+(`u/(1 + u²) ≤ 1/2`). -/
+lemma arctan_rel_gen {d u c : ℝ} (hu : 0 ≤ u) (hc0 : 0 ≤ c) (hc1 : c ≤ 1 / 2) (hd : |d - u| ≤ u * c) :
+    |arctan d - arctan u| ≤ c / (2 * (1 - c)) := by
+  have hdl : u * (1 - c) ≤ d := by
+    have := (abs_le.mp hd).1; nlinarith
+  have hm0 : 0 ≤ u * (1 - c) := mul_nonneg hu (by linarith)
+  have h := arctan_lip_m (b := u) hm0 hdl (by nlinarith)
+  have h2 : |d - u| / (1 + (u * (1 - c)) ^ 2) ≤ u * c / (1 + (u * (1 - c)) ^ 2) :=
+    div_le_div_of_nonneg_right hd (by positivity)
+  have h3 : u * c / (1 + (u * (1 - c)) ^ 2) ≤ c / (2 * (1 - c)) := by
+    rw [div_le_div_iff₀ (by positivity) (by nlinarith)]
+    nlinarith [sq_nonneg (u * (1 - c) - 1), mul_nonneg hc0 (sq_nonneg (u * (1 - c) - 1))]
+  exact le_trans h (le_trans h2 h3)
+
 set_option linter.constructorNameAsVariable false in
 /-- `|arctan d − arctan u|` for `d` within `2^-53·u + η` of `u ≥ 0` (`η ≤ 2^-200`). -/
 lemma arctan_rel {d u η : ℝ} (hu : 0 ≤ u) (hη0 : 0 ≤ η) (hη : η ≤ 1 / 2 ^ 200)
-    (hd : |d - u| ≤ u / 2 ^ 53 + η) : |arctan d - arctan u| ≤ 1 / 2 ^ 53 + 1 / 2 ^ 100 := by
-  set e100 : ℝ := 1 / 2 ^ 100
-  have he : η ≤ e100 / 4 := le_trans hη (by norm_num [e100])
-  have he0 : 0 < e100 := by positivity
-  clear hη
-  clear_value e100
-  have he1 : e100 / 2 ^ 53 ≤ e100 / 4 := div_le_div_of_nonneg_left he0.le (by norm_num) (by norm_num)
-  by_cases hs : u < e100
+    (hd : |d - u| ≤ u / 2 ^ 53 + η) : |arctan d - arctan u| ≤ 1 / 2 ^ 54 + 1 / 2 ^ 100 := by
+  -- the constants, opaque to `linarith`
+  have k1 : (1 : ℝ) / 2 ^ 200 = (1 / 2 ^ 100) * (1 / 2 ^ 100) := by norm_num
+  have k2 : (1 : ℝ) / 2 ^ 100 * (1 / 2 ^ 53) + 1 / 2 ^ 200 ≤ 1 / 2 ^ 54 + 1 / 2 ^ 100 := by norm_num
+  have k3 : (1 / 2 ^ 53 + 1 / 2 ^ 100 : ℝ) / (2 * (1 - (1 / 2 ^ 53 + 1 / 2 ^ 100))) ≤ 1 / 2 ^ 54 + 1 / 2 ^ 100 := by
+    rw [div_le_iff₀ (by norm_num)]; norm_num
+  have k4 : (1 / 2 ^ 53 + 1 / 2 ^ 100 : ℝ) ≤ 1 / 2 := by norm_num
+  have k5 : (0 : ℝ) < 1 / 2 ^ 100 := by positivity
+  have k6 : (0 : ℝ) < 1 / 2 ^ 53 := by positivity
+  rw [k1] at hη
+  rw [div_eq_mul_one_div u (2 ^ 53)] at hd
+  generalize (1 : ℝ) / 2 ^ 100 = e at *
+  generalize (1 : ℝ) / 2 ^ 53 = f at *
+  generalize (1 : ℝ) / 2 ^ 54 = g at *
+  by_cases hs : u < e
   · have h1 := arctan_lip d u
-    have h2 : u / 2 ^ 53 ≤ e100 / 2 ^ 53 := div_le_div_of_nonneg_right hs.le (by positivity)
-    have h3 : (0 : ℝ) ≤ 1 / 2 ^ 53 := by positivity
-    linarith
+    have h2 : u * f ≤ e * f := mul_le_mul_of_nonneg_right hs.le k6.le
+    have h3 : e * f = e * f := rfl
+    nlinarith
   rw [not_lt] at hs
-  have hu4 : u / 2 ^ 53 ≤ u / 4 := div_le_div_of_nonneg_left hu (by norm_num) (by norm_num)
-  have hdl : u / 2 ≤ d := by
-    have := (abs_le.mp hd).1
-    linarith
-  have h := arctan_lip_m (m := u / 2) (by positivity) hdl (half_le_self hu)
-  have hq : u / (1 + (u / 2) ^ 2) ≤ 1 := by
-    rw [div_le_one (by positivity)]; nlinarith [sq_nonneg (u / 2 - 1)]
-  have h2 : |d - u| / (1 + (u / 2) ^ 2) ≤ (u / 2 ^ 53 + η) / (1 + (u / 2) ^ 2) :=
-    div_le_div_of_nonneg_right hd (by positivity)
-  have h3 : (u / 2 ^ 53 + η) / (1 + (u / 2) ^ 2) ≤ 1 / 2 ^ 53 + η := by
-    rw [add_div]
-    have e1 : u / 2 ^ 53 / (1 + (u / 2) ^ 2) = (u / (1 + (u / 2) ^ 2)) / 2 ^ 53 := by ring
-    rw [e1]
-    have h4 := div_le_div_of_nonneg_right hq (by positivity : (0 : ℝ) ≤ 2 ^ 53)
-    have h5 : η / (1 + (u / 2) ^ 2) ≤ η := div_le_self hη0 (by nlinarith [sq_nonneg (u / 2)])
-    exact add_le_add (by rw [div_le_iff₀ (by positivity)] at h4 ⊢; linarith) h5
-  have h6 : η ≤ e100 := le_trans he (by linarith)
-  exact le_trans h (le_trans h2 (le_trans h3 (add_le_add (le_refl _) h6)))
+  have hηu : η ≤ u * e := le_trans hη (mul_le_mul_of_nonneg_right hs k5.le)
+  have hdc : |d - u| ≤ u * (f + e) := by nlinarith
+  exact le_trans (arctan_rel_gen hu (by linarith) k4 hdc) k3
 
 /-! ## `z ≈ arctan |y/x|` on each branch -/
 
 lemma zA {u : ℝ} (hu : 2 ^ 60 ≤ u) :
     (add FRAC_PI_2 (mul HALF PI_LO)).isFinite ∧
-      |((add FRAC_PI_2 (mul HALF PI_LO)).val : ℝ) - arctan u| ≤ 413 / 10 ^ 18 := by
+      |((add FRAC_PI_2 (mul HALF PI_LO)).val : ℝ) - arctan u| ≤ 356 / 10 ^ 18 := by
   have fH : HALF.isFinite := by decide
   have fL : PI_LO.isFinite := by decide
   have fF : FRAC_PI_2.isFinite := by decide
@@ -151,17 +158,17 @@ lemma zA {u : ℝ} (hu : 2 ^ 60 ≤ u) :
   rw [abs_le]; constructor <;> linarith
 
 lemma zB {u : ℝ} (hu0 : 0 ≤ u) (hu : u ≤ 1 / 2 ^ 60) :
-    (FP.zero false : F64).isFinite ∧ |((FP.zero false : F64).val : ℝ) - arctan u| ≤ 413 / 10 ^ 18 := by
+    (FP.zero false : F64).isFinite ∧ |((FP.zero false : F64).val : ℝ) - arctan u| ≤ 356 / 10 ^ 18 := by
   refine ⟨rfl, ?_⟩
   have := arctan_abs_le u
   simp only [FP.val, Rat.cast_zero, zero_sub, abs_neg]
   rw [abs_of_nonneg hu0] at this
-  have n : (1 : ℝ) / 2 ^ 60 ≤ 413 / 10 ^ 18 := by norm_num
+  have n : (1 : ℝ) / 2 ^ 60 ≤ 356 / 10 ^ 18 := by norm_num
   linarith
 
 lemma zC {x y : F64} (hx : x.isFinite) (hy : y.isFinite) (hx0 : x.val ≠ 0) (hq : |y.val / x.val| ≤ 2 ^ (200 : ℤ)) :
     (atan (div y x).abs).isFinite ∧
-      |((atan (div y x).abs).val : ℝ) - arctan (|(y.val : ℝ) / x.val|)| ≤ 413 / 10 ^ 18 := by
+      |((atan (div y x).abs).val : ℝ) - arctan (|(y.val : ℝ) / x.val|)| ≤ 356 / 10 ^ 18 := by
   have hdr := div_eq_round hy hx hx0
   have fd : (div y x).isFinite := by
     rw [hdr]; exact round_finite_of_le_emax (le_trans hq (two_zpow_le (by simp)))
@@ -195,7 +202,7 @@ lemma zC {x y : F64} (hx : x.isFinite) (hy : y.isFinite) (hx0 : x.val ≠ 0) (hq
   obtain ⟨fz, ez⟩ := atan_err fa
   refine ⟨fz, ?_⟩
   have := abs_sub_le ((atan (div y x).abs).val : ℝ) (arctan ((div y x).abs.val : ℝ)) (arctan (|(y.val : ℝ) / x.val|))
-  have n : (3 : ℝ) / 10 ^ 16 + (1 / 2 ^ 53 + 1 / 2 ^ 100) ≤ 413 / 10 ^ 18 := by norm_num
+  have n : (3 : ℝ) / 10 ^ 16 + (1 / 2 ^ 54 + 1 / 2 ^ 100) ≤ 356 / 10 ^ 18 := by norm_num
   linarith
 
 /-! ## The quadrants -/
@@ -203,11 +210,11 @@ lemma zC {x y : F64} (hx : x.isFinite) (hy : y.isFinite) (hx0 : x.val ≠ 0) (hq
 lemma qcast_le {a c : ℚ} (h : (a : ℝ) ≤ (c : ℝ)) : a ≤ c := by exact_mod_cast h
 
 lemma quad {x y z : F64} (hx : x.isFinite) (hy : y.isFinite) (fz : z.isFinite) (hx0 : x.val ≠ 0)
-    (hy0 : y.val ≠ 0) (hz : |(z.val : ℝ) - arctan (|(y.val : ℝ) / x.val|)| ≤ 413 / 10 ^ 18) :
+    (hy0 : y.val ≠ 0) (hz : |(z.val : ℝ) - arctan (|(y.val : ℝ) / x.val|)| ≤ 356 / 10 ^ 18) :
     (if x.sign then (if y.sign then sub (sub z PI_LO) PI else sub PI (sub z PI_LO))
       else (if y.sign then z.neg else z)).isFinite ∧
     |(((if x.sign then (if y.sign then sub (sub z PI_LO) PI else sub PI (sub z PI_LO))
-      else (if y.sign then z.neg else z)).val : ℚ) : ℝ) - atan2R y.val x.val| ≤ 1 / 2 ^ 50 := by
+      else (if y.sign then z.neg else z)).val : ℚ) : ℝ) - atan2R y.val x.val| ≤ (if (0 : ℝ) < x.val then 356 / 10 ^ 18 else 69 / 10 ^ 17) := by
   set u := |(y.val : ℝ) / x.val|
   have hu0 : 0 ≤ u := abs_nonneg _
   have ha0 : 0 ≤ arctan u := arctan_nonneg.mpr hu0
@@ -240,8 +247,8 @@ lemma quad {x y z : F64} (hx : x.isFinite) (hy : y.isFinite) (fz : z.isFinite) (
   push_cast at ewr er1r er2r hc
   have hcl := abs_le.mp hc
   have hwlr := abs_le.mp ewr
-  have n : (413 : ℝ) / 10 ^ 18 + 1 / 2 ^ 53 + 1 / 2 ^ 52 + 2 / 10 ^ 20 ≤ 1 / 2 ^ 50 := by norm_num
-  have n0 : (413 : ℝ) / 10 ^ 18 ≤ 1 / 2 ^ 50 := by norm_num
+  have n : (356 : ℝ) / 10 ^ 18 + 1 / 2 ^ 53 + 1 / 2 ^ 52 + 2 / 10 ^ 20 ≤ 69 / 10 ^ 17 := by norm_num
+  have n0 : (356 : ℝ) / 10 ^ 18 ≤ 1 / 2 ^ 50 := by norm_num
   obtain ⟨sxn, sxp⟩ := @sign_val x
   obtain ⟨syn, syp⟩ := @sign_val y
   have hX : (x.val : ℝ) ≠ 0 := by exact_mod_cast hx0
@@ -257,9 +264,10 @@ lemma quad {x y z : F64} (hx : x.isFinite) (hy : y.isFinite) (fz : z.isFinite) (
       exact_mod_cast this
     simp only [Bool.false_eq_true, if_false]
     refine ⟨fz, ?_⟩
+    rw [if_pos hxp]
     unfold atan2R; rw [if_pos hxp]
     have : (y.val : ℝ) / x.val = u := (abs_of_pos (div_pos hyp hxp)).symm
-    rw [this]; exact le_trans hz n0
+    rw [this]; exact hz
   · -- x > 0, y < 0
     have ex := sxp hxs; have ey := syn hys
     have hxp : (0 : ℝ) < x.val := by
@@ -270,12 +278,13 @@ lemma quad {x y z : F64} (hx : x.isFinite) (hy : y.isFinite) (fz : z.isFinite) (
       exact_mod_cast this
     simp only [Bool.false_eq_true, if_false, if_true]
     refine ⟨by simpa using fz, ?_⟩
+    rw [if_pos hxp]
     unfold atan2R; rw [if_pos hxp]
     have : (y.val : ℝ) / x.val = -u := by
       simp only [u]; rw [abs_of_neg (div_neg_of_neg_of_pos hyn hxp)]; ring
     rw [this, arctan_neg, FP.val_neg]; push_cast
     rw [show -(z.val : ℝ) - -arctan u = -((z.val : ℝ) - arctan u) by ring, abs_neg]
-    exact le_trans hz n0
+    exact hz
   · -- x < 0, y > 0
     have ex := sxn hxs; have ey := syp hys
     have hxn : (x.val : ℝ) < 0 := by
@@ -286,6 +295,7 @@ lemma quad {x y z : F64} (hx : x.isFinite) (hy : y.isFinite) (fz : z.isFinite) (
       exact_mod_cast this
     simp only [Bool.false_eq_true, if_false, if_true]
     refine ⟨fr1, ?_⟩
+    rw [if_neg (not_lt.mpr hxn.le)]
     unfold atan2R; rw [if_neg (not_lt.mpr hxn.le), if_pos hxn, if_pos hyp.le]
     have : (y.val : ℝ) / x.val = -u := by
       simp only [u]; rw [abs_of_neg (div_neg_of_pos_of_neg hyp hxn)]; ring
@@ -302,6 +312,7 @@ lemma quad {x y z : F64} (hx : x.isFinite) (hy : y.isFinite) (fz : z.isFinite) (
       exact_mod_cast this
     simp only [if_true]
     refine ⟨fr2, ?_⟩
+    rw [if_neg (not_lt.mpr hxn.le)]
     unfold atan2R; rw [if_neg (not_lt.mpr hxn.le), if_pos hxn, if_neg (not_le.mpr hyn)]
     have : (y.val : ℝ) / x.val = u := (abs_of_pos (div_pos_of_neg_of_neg hyn hxn)).symm
     rw [this]
@@ -319,11 +330,12 @@ lemma val_ne_zero {x : F64} (hx : x.isFinite) (h : x.isZero = false) : x.val ≠
     exact mul_ne_zero (by cases s <;> simp [sgn]) (mul_ne_zero this.ne' (two_zpow_pos _).ne')
   | _ => simp_all [FP.isFinite, FP.isZero]
 
-/-- **Contract C2.** For finite `y`, `x`, not both zero, and not `y = −0` with `x < 0`,
-`dmath::atan2(y, x)` is finite and within `2^-50` of `atan2R y x`. -/
+/-- **`dmath::atan2`.** For finite `y`, `x`, not both zero, and not `y = −0` with `x < 0`,
+`atan2(y, x)` is finite and within `3.56·10^-16` of `atan2R y x` when `x > 0`, `6.9·10^-16`
+otherwise. -/
 theorem atan2_err {x y : F64} (hx : x.isFinite) (hy : y.isFinite) (hne : x.val ≠ 0 ∨ y.val ≠ 0)
     (hsz : y.val = 0 → y.sign = false ∨ x.sign = false) :
-    (atan2 y x).isFinite ∧ |((atan2 y x).val : ℝ) - atan2R y.val x.val| ≤ 1 / 2 ^ 50 := by
+    (atan2 y x).isFinite ∧ |((atan2 y x).val : ℝ) - atan2R y.val x.val| ≤ (if (0 : ℝ) < x.val then 356 / 10 ^ 18 else 69 / 10 ^ 17) := by
   have hxn : x.isNaN = false := by cases x <;> simp_all [FP.isFinite, FP.isNaN]
   have hyn : y.isNaN = false := by cases y <;> simp_all [FP.isFinite, FP.isNaN]
   have hxi : x.isInf = false := by cases x <;> simp_all [FP.isFinite, FP.isInf]
@@ -372,7 +384,10 @@ theorem atan2_err {x y : F64} (hx : x.isFinite) (hy : y.isFinite) (hne : x.val �
       have hx0 := val_zero_of_isZero hxz
       have hF := c_FRAC_PI_2
       have fF : FRAC_PI_2.isFinite := by decide
-      have n : (62 : ℝ) / 10 ^ 18 ≤ 1 / 2 ^ 50 := by norm_num
+      have n : (62 : ℝ) / 10 ^ 18 ≤ 69 / 10 ^ 17 := by norm_num
+      have hb : (if (0 : ℝ) < x.val then (356 : ℝ) / 10 ^ 18 else 69 / 10 ^ 17) = 69 / 10 ^ 17 := by
+        rw [if_neg]; rw [hx0]; simp
+      rw [hb]
       unfold atan2R
       rw [hx0, Rat.cast_zero, if_neg (lt_irrefl 0), if_neg (lt_irrefl 0)]
       cases hys : y.sign
@@ -403,7 +418,8 @@ theorem atan2_err {x y : F64} (hx : x.isFinite) (hy : y.isFinite) (hne : x.val �
         have : (0 : ℚ) < x.val := by rw [ex]; exact abs_pos.mpr hx0
         exact_mod_cast this
       simp only [Bool.false_eq_true, if_false]
-      rw [if_pos hxp, hy0]; refine ⟨hy, ?_⟩; simp
+      rw [if_pos hxp, hy0]; refine ⟨hy, ?_⟩; simp only [Rat.cast_zero, sub_zero, abs_zero]
+      split_ifs <;> norm_num
     · have ex := sxn hxs
       have hxn' : (x.val : ℝ) < 0 := by
         have : x.val < (0 : ℚ) := by rw [ex]; exact neg_neg_of_pos (abs_pos.mpr hx0)
@@ -412,6 +428,15 @@ theorem atan2_err {x y : F64} (hx : x.isFinite) (hy : y.isFinite) (hne : x.val �
         rcases hsz hy0 with h | h; exact h; rw [hxs] at h; exact absurd h (by decide)
       simp only [if_true, hys, Bool.false_eq_true, if_false]
       rw [if_neg (not_lt.mpr hxn'.le), if_pos hxn', if_pos le_rfl, zero_add]
+      rw [if_neg (not_lt.mpr hxn'.le)]
       refine ⟨by decide, le_trans c_PI (by norm_num)⟩
+
+/-- **Contract C2**, as stated: within `2^-50`. -/
+theorem atan2_err50 {x y : F64} (hx : x.isFinite) (hy : y.isFinite) (hne : x.val ≠ 0 ∨ y.val ≠ 0)
+    (hsz : y.val = 0 → y.sign = false ∨ x.sign = false) :
+    (atan2 y x).isFinite ∧ |((atan2 y x).val : ℝ) - atan2R y.val x.val| ≤ 1 / 2 ^ 50 := by
+  obtain ⟨f, e⟩ := atan2_err hx hy hne hsz
+  refine ⟨f, le_trans e ?_⟩
+  split_ifs <;> norm_num
 
 end IEEE754.Dmath

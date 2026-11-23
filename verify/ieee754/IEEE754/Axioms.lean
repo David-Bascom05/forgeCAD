@@ -80,4 +80,4 @@ elab "#standard_axioms " ids:ident* : command => do
   IEEE754.Dmath.reduced_err IEEE754.Dmath.red_t0 IEEE754.Dmath.red_t1 IEEE754.Dmath.red_t2 IEEE754.Dmath.red_t3
   IEEE754.Dmath.big_err IEEE754.Dmath.small_err IEEE754.Dmath.tiny_err IEEE754.Dmath.atan_err
   IEEE754.Dmath.quot_le IEEE754.Dmath.arctan_rel IEEE754.Dmath.zA IEEE754.Dmath.zB IEEE754.Dmath.zC IEEE754.Dmath.quad
-  IEEE754.Dmath.atan2_err
+  IEEE754.Dmath.atan2_err IEEE754.Dmath.atan2_err50 IEEE754.Dmath.arctan_rel_gen
