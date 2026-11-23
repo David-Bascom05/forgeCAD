@@ -15,6 +15,12 @@
 //! else is judged as in label_pipe: either side of each new face at δ, and random points round the
 //! rounded edges, each held at δ round it.
 //!
+//! A convex round's ball need not lie in the body: it rolls on the faces of the asked-for edge
+//! nearest the point (and of the picked edges meeting that one at a vertex), and only air on the open side
+//! of those faces stops it (`Rolled`). Farther than 3r from every picked edge, the body is kept.
+//! Demanding the whole ball inside the body (OLD_CONVEX=1) takes material off every wall thinner
+//! than the ball, which no fillet does (research/fillets/census.md).
+//!
 //! One fillet is one radius class of one kind. A fillet of several radii, or of both kinds, is
 //! `unjudged`.
 use forge_bool::{Index, Where as KWhere};
@@ -35,6 +41,31 @@ struct Kernel<'a> {
     inverted: bool,
 }
 
+/// A convex round's obstacle at one point: only the air that is air on both counts, outside the
+/// body and on the air side of some face the ball rolls on there (the faces of the picked edges
+/// near the point, each surface carried on whole). A rolling ball touches its faces and nothing
+/// else asks it to stay in the body, so air behind a wall thinner than the ball (the far side of a
+/// plate, a channel's inside) does not stop it. A ball clear of either air is clear of both: clear
+/// of the body's air, or wholly on the material side of every rolled surface and crossing no face
+/// whose normal there looks the way a contact's does (the faces beside the ones it rests on, not
+/// the back of a wall). A point just off a rolled face is in both, so the distance to the rolled
+/// faces bounds the obstacle's distance from above.
+struct Rolled<'k, 'a> {
+    k: &'k Kernel<'a>,
+    faces: Vec<FaceId>,
+    boxes: Vec<Box3>,
+}
+
+/// The distance from p to a box (0 inside it): a lower bound on the distance to what it holds.
+fn box_distance(b: &Box3, p: Point3) -> f64 {
+    if b.is_empty() {
+        return f64::INFINITY;
+    }
+    let c = |v: f64, lo: f64, hi: f64| (lo - v).max(v - hi).max(0.0);
+    let (dx, dy, dz) = (c(p.x, b.x.lo, b.x.hi), c(p.y, b.y.lo, b.y.hi), c(p.z, b.z.lo, b.z.hi));
+    (dx * dx + dy * dy + dz * dz).sqrt()
+}
+
 /// The tolerance the kernel's projections and trims stand to.
 const KERNEL_ERR: f64 = 1e-7;
 
@@ -48,6 +79,75 @@ impl<'a> Kernel<'a> {
             boxes,
             inverted,
         }
+    }
+
+    /// The point of face f nearest p, and its distance: the surface's foot where the face holds it,
+    /// else the nearest point of its edges.
+    fn nearest_on_face(&self, f: FaceId, p: Point3) -> (f64, Point3) {
+        let s = &self.b.face(f).surface;
+        let foot = s.eval(s.project(p));
+        if self.ix.point_in_face(f, foot) != KWhere::Outside {
+            return (foot.distance(p), foot);
+        }
+        let mut best = (f64::INFINITY, foot);
+        for &l in &self.b.face(f).loops {
+            for c in self.b.lp(l).coedges() {
+                let x = self.b.edge(self.b.coedge(c).edge);
+                let q = x.curve.eval(x.curve.closest(p, x.range));
+                if q.distance(p) < best.0 {
+                    best = (q.distance(p), q);
+                }
+            }
+        }
+        best
+    }
+
+    /// The outward normal of face f at the point of its surface nearest q.
+    fn normal_at(&self, f: FaceId, q: Point3) -> Option<Vec3> {
+        let s = &self.b.face(f).surface;
+        self.b.face_normal(f, s.project(q)).map(|n| n.get())
+    }
+
+    /// The distance to `rolled`, and whether p is on their material side: by the normal at the
+    /// nearest point, summed over the rolled faces that hold it where that is an edge.
+    fn rolled_side(&self, rolled: &[FaceId], boxes: &[Box3], p: Point3) -> (f64, Option<bool>) {
+        let (mut best, mut side) = (f64::INFINITY, None);
+        let mut order: Vec<(f64, FaceId)> =
+            rolled.iter().zip(boxes).map(|(&f, b)| (box_distance(b, p), f)).collect();
+        order.sort_by(|a, b| a.0.total_cmp(&b.0));
+        for (lower, f) in order {
+            if lower >= best {
+                break;
+            }
+            let s = &self.b.face(f).surface;
+            let foot = s.eval(s.project(p));
+            let d = foot.distance(p);
+            if d < best && self.ix.point_in_face(f, foot) != KWhere::Outside {
+                best = d;
+                side = self.normal_at(f, foot).map(|n| (p - foot).dot(n) < 0.0);
+            }
+            for &l in &self.b.face(f).loops {
+                for c in self.b.lp(l).coedges() {
+                    let e = self.b.coedge(c).edge;
+                    let x = self.b.edge(e);
+                    let q = x.curve.eval(x.curve.closest(p, x.range));
+                    let d = q.distance(p);
+                    if d < best {
+                        best = d;
+                        let mut n = Vec3::new(0.0, 0.0, 0.0);
+                        for g in faces_of(self.b, e) {
+                            if rolled.contains(&g)
+                                && let Some(m) = self.normal_at(g, q)
+                            {
+                                n = n + m;
+                            }
+                        }
+                        side = (n.length() > 1e-12).then(|| (p - q).dot(n) < 0.0);
+                    }
+                }
+            }
+        }
+        (best, side)
     }
 
     fn face_distance(&self, f: FaceId, p: Point3, best: f64) -> f64 {
@@ -74,15 +174,7 @@ impl<'a> Kernel<'a> {
             .iter()
             .enumerate()
             .filter(|(_, b)| !b.is_empty())
-            .map(|(i, b)| {
-                let c = |v: f64, lo: f64, hi: f64| (lo - v).max(v - hi).max(0.0);
-                let (dx, dy, dz) = (
-                    c(p.x, b.x.lo, b.x.hi),
-                    c(p.y, b.y.lo, b.y.hi),
-                    c(p.z, b.z.lo, b.z.hi),
-                );
-                ((dx * dx + dy * dy + dz * dz).sqrt(), i)
-            })
+            .map(|(i, b)| (box_distance(b, p), i))
             .collect();
         order.sort_by(|a, b| a.0.total_cmp(&b.0));
         let mut best = f64::INFINITY;
@@ -124,6 +216,54 @@ impl Obstacle for Kernel<'_> {
     }
     fn clear_at(&self, p: Point3, need: f64) -> bool {
         self.distance(p) - KERNEL_ERR >= need && self.inside(p) == Some(false)
+    }
+}
+
+impl Obstacle for Rolled<'_, '_> {
+    fn sd(&self, p: Point3) -> f64 {
+        self.k.sd(p)
+    }
+    fn err(&self, _: Point3) -> f64 {
+        KERNEL_ERR
+    }
+    fn upper(&self, p: Point3) -> f64 {
+        self.k.rolled_side(&self.faces, &self.boxes, p).0 + KERNEL_ERR
+    }
+    fn clear_at(&self, p: Point3, need: f64) -> bool {
+        if self.k.clear_at(p, need) {
+            return true;
+        }
+        // wholly on the material side of each rolled face's surface, carried on whole; the normals
+        // there are the ball's contacts
+        let mut contacts = Vec::with_capacity(self.faces.len());
+        for &f in &self.faces {
+            let s = &self.k.b.face(f).surface;
+            let uv = s.project(p);
+            let foot = s.eval(uv);
+            let Some(n) = self.k.b.face_normal(f, uv) else { return false };
+            if foot.distance(p) - KERNEL_ERR < need || (p - foot).dot(n.get()) >= 0.0 {
+                return false;
+            }
+            contacts.push(n.get());
+        }
+        // and crossing no face that looks the way a contact does: the ball may pass out through the
+        // back of a wall, not through the faces beside the ones it rests on
+        let ids: Vec<FaceId> = self.k.b.face_ids().collect();
+        for (i, bx) in self.k.boxes.iter().enumerate() {
+            if box_distance(bx, p) >= need {
+                continue;
+            }
+            let g = ids[i];
+            let (d, q) = self.k.nearest_on_face(g, p);
+            if d >= need - KERNEL_ERR {
+                continue;
+            }
+            match self.k.normal_at(g, q) {
+                Some(n) if contacts.iter().all(|c| c.dot(n) <= 0.0) => {}
+                _ => return false,
+            }
+        }
+        true
     }
 }
 
@@ -196,6 +336,7 @@ fn judge(
     randoms: usize,
     seed: u64,
     dump: Option<&str>,
+    asked: &[EdgeId],
 ) -> String {
     let names: BTreeSet<_> = after.edge_ids().map(|e| after.edge(e).name).collect();
     let rounded: Vec<EdgeId> = s
@@ -232,6 +373,38 @@ fn judge(
     let near_guard = |x: Point3| guards.iter().any(|&e| to_edge(s, e, x) < 3.0 * r);
     let near_table = |x: Point3| table.iter().any(|v| v.distance(x) < 3.0 * r);
     let obstacle = Kernel::new(s, convex);
+    // a convex round's ball at x rolls on the faces of the picked edge nearest x and of the picked
+    // edges that meet it at a vertex; farther than 3r from every picked edge the body is kept; OLD_CONVEX=1 keeps the opening of the whole body (the
+    // rule of census.md's first pass)
+    let rolling = convex && std::env::var_os("OLD_CONVEX").is_none();
+    // the nearest edge the feature asked for (a rounded edge it did not ask for is one the round
+    // swallowed, and the ball does not rest on its faces)
+    let aimed: Vec<EdgeId> = {
+        let a: Vec<EdgeId> = asked.iter().copied().filter(|e| picked.contains(e)).collect();
+        if a.is_empty() { picked.iter().copied().collect() } else { a }
+    };
+    let rolled_at = |x: Point3| -> Option<Rolled> {
+        let (d, e0) = aimed
+            .iter()
+            .map(|&e| (to_edge(s, e, x), e))
+            .min_by(|a, b| a.0.total_cmp(&b.0))?;
+        if d >= 3.0 * r && picked.iter().all(|&e| to_edge(s, e, x) >= 3.0 * r) {
+            return None;
+        }
+        let ends = |e: EdgeId| [s.edge(e).start, s.edge(e).end];
+        let mut faces: Vec<FaceId> = picked
+            .iter()
+            .filter(|&&e| e == e0 || ends(e).iter().any(|v| ends(e0).contains(v)))
+            .flat_map(|&e| faces_of(s, e))
+            .collect();
+        faces.sort();
+        faces.dedup();
+        (!faces.is_empty()).then(|| Rolled {
+            k: &obstacle,
+            boxes: faces.iter().map(|&f| s.face_box(f)).collect(),
+            faces,
+        })
+    };
     let sx = Index::new(s);
     let ix = Index::new(after);
     let delta = (1e-3 * r).max(1e-5);
@@ -247,7 +420,16 @@ fn judge(
             // concave: in the body; convex: outside it, where nothing changes
             return Some(inside);
         }
-        match covered(&obstacle, x, r, &search) {
+        let answer = if rolling {
+            match rolled_at(x) {
+                Some(o) => covered(&o, x, r, &search),
+                // no picked edge within 3r: the round changes nothing here
+                None => return Some(convex),
+            }
+        } else {
+            covered(&obstacle, x, r, &search)
+        };
+        match answer {
             // a clear ball covers it: air for a concave round, material kept for a convex one
             Covered::Yes(_) => Some(convex),
             Covered::No => Some(!convex),
@@ -408,6 +590,9 @@ fn one(path: &str, per_face: usize, randoms: usize) -> Vec<String> {
             continue;
         }
         let Some(r) = edges[0].1.constant() else { continue };
+        // R_SCALE=k judges the kernel's round as if r times k had been asked: a check that the
+        // oracle still tells a wrong round from a right one
+        let r = r * std::env::var("R_SCALE").ok().and_then(|v| v.parse::<f64>().ok()).unwrap_or(1.0);
         let (Some(s), Some(a)) = (m.body_after(k), m.body_after(k + 1)) else {
             out.push(format!("{head},\"label\":\"unjudged\",\"why\":\"no body\"}}"));
             continue;
@@ -417,7 +602,11 @@ fn one(path: &str, per_face: usize, randoms: usize) -> Vec<String> {
             .fold(k as u64, |h, c| h.wrapping_mul(31).wrapping_add(c as u64));
         let body = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let dump = std::env::var("DUMP").ok().map(|d| format!("{d}/{id}.{k}"));
-            judge(&s, &a, r, per_face, randoms, seed, dump.as_deref())
+            let asked: Vec<EdgeId> = s
+                .edge_ids()
+                .filter(|&e| edges.iter().any(|(n, _)| *n == s.edge(e).name))
+                .collect();
+            judge(&s, &a, r, per_face, randoms, seed, dump.as_deref(), &asked)
         }))
         .unwrap_or_else(|_| "\"label\":\"unjudged\",\"why\":\"panicked\"".into());
         out.push(format!("{head},{body}}}"));
