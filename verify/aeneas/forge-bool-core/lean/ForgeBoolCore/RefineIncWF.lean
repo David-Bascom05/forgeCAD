@@ -1196,6 +1196,98 @@ theorem wf_loop6_spec (nf : Usize) (ip : alloc.vec.Vec Bool) (ok0 ok : Bool) (f 
         cases this
   · exact ⟨hf, h⟩
 
+
+theorem ledger_wf_loop7_false (v v1 : alloc.vec.Vec U32) (ne e : Usize) :
+    ledger_wf_loop7 v v1 ne false e ⦃ r => r = false ⦄ := by
+  unfold ledger_wf_loop7
+  apply loop.spec_decr_nat (fun (_ : Bool × Usize) => 0) (fun q => q.1 = false)
+  · rintro ⟨o, j⟩ ho
+    simp only at ho
+    subst ho
+    unfold ledger_wf_loop7.body
+    simp
+  · exact rfl
+
+theorem ledger_wf_loop8_false (v v1 v2 v3 : alloc.vec.Vec U32) (sc : SecCsr) (nf nv k : Usize) :
+    ledger_wf_loop8 v v1 v2 v3 sc nf nv false k ⦃ r => r = false ⦄ := by
+  unfold ledger_wf_loop8
+  apply loop.spec_decr_nat (fun (_ : Bool × Usize) => 0) (fun q => q.1 = false)
+  · rintro ⟨o, j⟩ ho
+    simp only at ho
+    subst ho
+    unfold ledger_wf_loop8.body
+    simp
+  · exact rfl
+
+theorem ledger_wf_loop9_false (i : U32) (v : alloc.vec.Vec (U32 × U32)) (nf f : Usize) :
+    ledger_wf_loop9 i v nf false f ⦃ r => r = false ⦄ := by
+  unfold ledger_wf_loop9
+  apply loop.spec_decr_nat (fun (_ : Bool × Usize) => 0) (fun q => q.1 = false)
+  · rintro ⟨o, j⟩ ho
+    simp only at ho
+    subst ho
+    unfold ledger_wf_loop9.body
+    simp
+  · exact rfl
+
+theorem ledger_wf_loop10_false (v : alloc.vec.Vec BodyId) (v1 v2 : alloc.vec.Vec U32) (v3 : alloc.vec.Vec (FacetId × FaceId)) (nf : Usize) (ip : alloc.vec.Vec Bool) (k : Usize) :
+    ledger_wf_loop10 v v1 v2 v3 nf false ip k ⦃ r => r.1 = false ⦄ := by
+  unfold ledger_wf_loop10
+  apply loop.spec_decr_nat (fun (_ : Bool × alloc.vec.Vec Bool × Usize) => 0) (fun q => q.1 = false)
+  · rintro ⟨o, ipc, j⟩ ho
+    simp only at ho
+    subst ho
+    unfold ledger_wf_loop10.body
+    simp
+  · exact rfl
+
+theorem ledger_wf_loop11_false (i i1 : U32) (v : alloc.vec.Vec (RoomId × BodyId)) (k : Usize) :
+    ledger_wf_loop11 i i1 v false k ⦃ r => r = false ⦄ := by
+  unfold ledger_wf_loop11
+  apply loop.spec_decr_nat (fun (_ : Bool × Usize) => 0) (fun q => q.1 = false)
+  · rintro ⟨o, j⟩ ho
+    simp only at ho
+    subst ho
+    unfold ledger_wf_loop11.body
+    simp
+  · exact rfl
+
+theorem ledger_wf_loop12_false (nf : Usize) (ip : alloc.vec.Vec Bool) (f : Usize) :
+    ledger_wf_loop12 nf false ip f ⦃ r => r = false ⦄ := by
+  unfold ledger_wf_loop12
+  apply loop.spec_decr_nat (fun (_ : Bool × Usize) => 0) (fun q => q.1 = false)
+  · rintro ⟨o, j⟩ ho
+    simp only at ho
+    subst ho
+    unfold ledger_wf_loop12.body
+    simp
+  · exact rfl
+
+
+/-- `ledger_wf`'s branch after a failed opening check returns `false`. -/
+theorem wf_else_false (l : Ledger) (nf ne nv : Usize) :
+    (do
+      let ok2 ← ledger_wf_loop7 l.edge_facets.start l.edge_facets.ids ne false 0#usize
+      let ok3 ← ledger_wf_loop8 l.edge_facets.start l.edge_facets.ids l.vert_edges.start l.vert_edges.ids
+        l.vert_sectors nf nv ok2 0#usize
+      let ok4 ← ledger_wf_loop9 l.n_rooms l.facet_rooms nf ok3 0#usize
+      let is_piece ← alloc.vec.from_elem core.clone.CloneBool false nf
+      let (ok5, is_piece1) ← ledger_wf_loop10 l.face_body l.face_class l.facet_class l.pieces nf ok4 is_piece 0#usize
+      let ok6 ← ledger_wf_loop11 l.nb l.n_rooms l.inside ok5 0#usize
+      ledger_wf_loop12 nf ok6 is_piece1 0#usize) ⦃ r => r = false ⦄ := by
+  step with ledger_wf_loop7_false as ⟨o2, h2⟩
+  subst h2
+  step with ledger_wf_loop8_false as ⟨o3, h3⟩
+  subst h3
+  step with ledger_wf_loop9_false as ⟨o4, h4⟩
+  subst h4
+  step as ⟨ip, hip1, hip2⟩
+  step with ledger_wf_loop10_false as ⟨o5, ip1, h5⟩
+  subst h5
+  step with ledger_wf_loop11_false as ⟨o6, h6⟩
+  subst h6
+  exact ledger_wf_loop12_false nf ip1 0#usize
+
 end inc
 
 end forge_bool_core
