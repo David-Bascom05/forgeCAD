@@ -483,4 +483,183 @@ theorem tri_ray (a b c p : P2) (hD : o2 a b c ≠ 0) (ha : p.v ≠ a.v) (hb : p.
   simp only [List.map_cons, List.map_nil]
   rw [ev0, ev1, ev2]
 
+/-- The three events of `rayFns`, as crossings: `rayFns` listed `[gₐ, g_b, g_c]`, `g_b`'s and
+`g_c`'s roots are events iff the ray meets the open edges `c a` and `a b`. -/
+theorem ev_edges (a b c p : P2) (hD : o2 a b c ≠ 0) (ha : p.v ≠ a.v) (hb : p.v ≠ b.v)
+    (hc : p.v ≠ c.v) :
+    isEv 0 (rayEnd a b c p) (rayFns a b c p) (rayFns a b c p)[1]! = decide (gc p c a) ∧
+    isEv 0 (rayEnd a b c p) (rayFns a b c p) (rayFns a b c p)[2]! = decide (gc p a b) := by
+  obtain ⟨g0, g1, g2, hl⟩ : ∃ g0 g1 g2, rayFns a b c p = [g0, g1, g2] := ⟨_, _, _, rfl⟩
+  have ev1 := ev_edge b c a p (by rw [← o2_cyc]; exact hD) ha hc
+  have ev2 := ev_edge c a b p (by rw [o2_cyc]; exact hD) hb ha
+  rw [rayFns_cyc, rayEnd_cyc] at ev1
+  rw [rayFns_cyc, rayEnd_cyc, rayFns_cyc, rayEnd_cyc] at ev2
+  rw [hl] at ev1 ev2 ⊢
+  simp only [List.getElem!_cons_zero, List.getElem!_cons_succ] at ev1 ev2 ⊢
+  have p1 : [g1, g2, g0].Perm [g0, g1, g2] :=
+    ((List.Perm.swap g1 g0 [g2]).trans (List.Perm.cons g1 (List.Perm.swap g2 g0 []))).symm
+  have p2 : [g2, g0, g1].Perm [g0, g1, g2] :=
+    ((List.Perm.cons g0 (List.Perm.swap g2 g1 [])).trans (List.Perm.swap g2 g0 [g1])).symm
+  rw [isEv_perm p1] at ev1
+  rw [isEv_perm p2] at ev2
+  exact ⟨ev1, ev2⟩
+
+/-- **The ray from a point on an edge's line, outside that edge**, meets the other edges an even
+number of times (and that edge never). -/
+theorem tri_ray_line (a b c p : P2) (hD : o2 a b c ≠ 0) (ha : p.v ≠ a.v) (hb : p.v ≠ b.v)
+    (hc : p.v ≠ c.v) (h1 : o2 p b c = 0)
+    (hout : o2 a b c * o2 a p c < 0 ∨ o2 a b c * o2 a b p < 0) :
+    par [decide (gc p b c), decide (gc p c a), decide (gc p a b)] = false := by
+  have hs := bary_sum a b c p
+  rw [h1] at hs
+  obtain ⟨hpu, hpv⟩ := on_bc a b c p hD h1
+  have hbc : b.v ≠ c.v := by intro e; apply hb; rw [hpv, ← e]; grind
+  -- the ray never meets the edge it starts on
+  have n0 : ¬ gc p b c := by
+    rintro ⟨μ, h0, h1', hv, hu⟩
+    have hμ : μ = o2 a b p / o2 a b c := by
+      have : μ * (c.v - b.v) = o2 a b p / o2 a b c * (c.v - b.v) := by grind
+      have hne : c.v - b.v ≠ 0 := by grind
+      grind
+    have k1 := div_pos_of_mul hD (show 0 < o2 a b c * o2 a b p from by
+      rcases hout with h | h
+      · -- w_b = D - w_c; both coordinates of a point inside the edge are positive
+        have : 0 < o2 a b p / o2 a b c := by rw [← hμ]; exact h0
+        have e : o2 a b c * o2 a b p = o2 a b p / o2 a b c * (o2 a b c * o2 a b c) := by
+          rw [show o2 a b p / o2 a b c * (o2 a b c * o2 a b c) = (o2 a b p / o2 a b c * o2 a b c) * o2 a b c by grind,
+            Rat.div_mul_cancel hD]; grind
+        rw [e]; exact Rat.mul_pos this (sq_pos' hD)
+      · have : 0 < o2 a b p / o2 a b c := by rw [← hμ]; exact h0
+        have e : o2 a b c * o2 a b p = o2 a b p / o2 a b c * (o2 a b c * o2 a b c) := by
+          rw [show o2 a b p / o2 a b c * (o2 a b c * o2 a b c) = (o2 a b p / o2 a b c * o2 a b c) * o2 a b c by grind,
+            Rat.div_mul_cancel hD]; grind
+        rw [e]; exact Rat.mul_pos this (sq_pos' hD))
+    have k2 : 0 < o2 a b c * o2 a p c := by
+      have : o2 a p c / o2 a b c = 1 - μ := by
+        rw [hμ]
+        have : (o2 a p c / o2 a b c + o2 a b p / o2 a b c) * o2 a b c = 1 * o2 a b c := by
+          rw [Rat.add_mul, Rat.div_mul_cancel hD, Rat.div_mul_cancel hD]; grind
+        grind
+      have hp : 0 < o2 a p c / o2 a b c := by rw [this]; grind
+      have e : o2 a b c * o2 a p c = o2 a p c / o2 a b c * (o2 a b c * o2 a b c) := by
+        rw [show o2 a p c / o2 a b c * (o2 a b c * o2 a b c) = (o2 a p c / o2 a b c * o2 a b c) * o2 a b c by grind,
+          Rat.div_mul_cancel hD]; grind
+      rw [e]; exact Rat.mul_pos hp (sq_pos' hD)
+    rcases hout with h | h
+    · grind
+    · have : 0 < o2 a b c * o2 a b p := by
+        have := k1; have e : o2 a b c * o2 a b p = o2 a b p / o2 a b c * (o2 a b c * o2 a b c) := by
+          rw [show o2 a b p / o2 a b c * (o2 a b c * o2 a b c) = (o2 a b p / o2 a b c * o2 a b c) * o2 a b c by grind,
+            Rat.div_mul_cancel hD]; grind
+        rw [e]; exact Rat.mul_pos k1 (sq_pos' hD)
+      grind
+  simp only [n0, decide_false, par_cons, Bool.false_xor]
+  obtain ⟨ga, gb, gc', hl⟩ : ∃ g0 g1 g2, rayFns a b c p = [g0, g1, g2] := ⟨_, _, _, rfl⟩
+  have hga : ∀ l, ga.ev l = l * (o2 a b c * (b.v - c.v)) := fun l => by
+    have := rayFns_ev a b c p l
+    rw [hl] at this
+    simp only [List.map_cons, List.map_nil, List.cons.injEq] at this
+    rw [this.1]; unfold o2 shift at *; grind
+  obtain ⟨⟨e1, e2⟩⟩ : Nonempty (_ ∧ _) := ⟨ev_edges a b c p hD ha hb hc⟩
+  rw [hl] at e1 e2
+  simp only [List.getElem!_cons_zero, List.getElem!_cons_succ] at e1 e2
+  rcases lt_trichotomy' (o2 a b c * (b.v - c.v)) 0 with k | k | k
+  · -- the ray leaves to the side away from the triangle: it meets nothing
+    have none_ : ∀ q : P2, ∀ l, 0 < l → shift p l = q → o2 a b c * o2 q b c < 0 := by
+      intro q l hl0 hq
+      have := rayFns_ev a b c p l
+      rw [hl] at this
+      simp only [List.map_cons, List.map_nil, List.cons.injEq] at this
+      rw [← hq, ← this.1, hga]; exact mul_neg_of_pos_of_neg hl0 k
+    have n1 : ¬ gc p c a := by
+      rintro ⟨μ, h0, h1', hv, hu⟩
+      have := none_ (lerp2 c a μ) (c.u + μ * (a.u - c.u) - p.u) (by grind)
+        (by simp only [shift, lerp2, P2.mk.injEq]; constructor <;> grind)
+      have e : o2 (lerp2 c a μ) b c = μ * o2 a b c := by unfold o2 lerp2; grind
+      rw [e] at this
+      have := Rat.mul_pos (sq_pos' hD) h0; grind
+    have n2 : ¬ gc p a b := by
+      rintro ⟨μ, h0, h1', hv, hu⟩
+      have := none_ (lerp2 a b μ) (a.u + μ * (b.u - a.u) - p.u) (by grind)
+        (by simp only [shift, lerp2, P2.mk.injEq]; constructor <;> grind)
+      have e : o2 (lerp2 a b μ) b c = (1 - μ) * o2 a b c := by unfold o2 lerp2; grind
+      rw [e] at this
+      have := Rat.mul_pos (sq_pos' hD) (show 0 < 1 - μ by grind); grind
+    simp [n1, n2]
+  · exfalso
+    rcases Rat.mul_eq_zero.mp k with h | h
+    · exact hD h
+    · exact hbc (by grind)
+  · -- into the triangle's side: the other two sides decide it
+    obtain ⟨hM, hroots⟩ := rayEnd_gt a b c p
+    have hΛ : 0 < rayEnd a b c p := by
+      have := qabs_nonneg' (a.u - p.u); have := qabs_nonneg' (b.u - p.u)
+      have := qabs_nonneg' (c.u - p.u); grind
+    have hev0 := rayFns_ev a b c p 0
+    rw [shift_zero, hl] at hev0
+    simp only [List.map_cons, List.map_nil, List.cons.injEq] at hev0
+    have hw1 : o2 a p c ≠ 0 := by
+      intro h; apply hc; have := (two_sides_vertex a b c p hD).1 h1 h; exact this
+    have hw2 : o2 a b p ≠ 0 := by
+      intro h; apply hb; have := (two_sides_vertex a b c p hD).2.2 h1 h; exact this
+    have hends : ∀ g ∈ [gb, gc'], g.ev 0 ≠ 0 ∧ g.ev (rayEnd a b c p) ≠ 0 := by
+      intro g hg
+      have hr : g.root < rayEnd a b c p := hroots g (by rw [hl]; simp at hg ⊢; grind)
+      have h0 : g.ev 0 ≠ 0 := by
+        simp only [List.mem_cons, List.mem_nil_iff, or_false] at hg
+        rcases hg with rfl | rfl
+        · rw [hev0.2.1]; exact mul_ne_zero' hD hw1
+        · rw [hev0.2.2.1]; exact mul_ne_zero' hD hw2
+      exact ⟨h0, ev_ne_of_gt g _ h0 hr⟩
+    have hdist : Distinct [gb, gc'] 0 (rayEnd a b c p) := by
+      intro s _ _
+      have := rayFns_ev a b c p s
+      rw [hl] at this
+      simp only [List.map_cons, List.map_nil, List.cons.injEq] at this
+      obtain ⟨-, f2, f3, -⟩ := this
+      simp only [List.countP_cons, List.countP_nil, f2, f3]
+      have z2 : o2 a b c * o2 a (shift p s) c = 0 ↔ o2 a (shift p s) c = 0 := by
+        constructor
+        · intro h; rcases Rat.mul_eq_zero.mp h with h | h; exact absurd h hD; exact h
+        · intro h; rw [h]; grind
+      have z3 : o2 a b c * o2 a b (shift p s) = 0 ↔ o2 a b (shift p s) = 0 := by
+        constructor
+        · intro h; rcases Rat.mul_eq_zero.mp h with h | h; exact absurd h hD; exact h
+        · intro h; rw [h]; grind
+      by_cases q2 : o2 a (shift p s) c = 0 <;> by_cases q3 : o2 a b (shift p s) = 0 <;>
+        simp [z2, z3, q2, q3]
+      exact ha ((two_sides_vertex a b c (shift p s) hD).2.1 q2 q3)
+    have hip := ip [gb, gc'] 0 (rayEnd a b c p) hΛ hends hdist
+    have p0 : pos [gb, gc'] 0 = false := by
+      simp only [pos, List.all_cons, List.all_nil, Bool.and_true, hev0.2.1, hev0.2.2.1]
+      rcases hout with h | h <;> simp [show ¬ (0 < o2 a b c * o2 a p c) ∨ ¬ (0 < o2 a b c * o2 a b p) by grind]
+      all_goals grind
+    have pΛ : pos [gb, gc'] (rayEnd a b c p) = false := by
+      apply Classical.byContradiction; intro hn
+      have hp : pos [gb, gc'] (rayEnd a b c p) = true := by simpa using hn
+      have hfull : pos (rayFns a b c p) (rayEnd a b c p) = true := by
+        rw [hl]; simp only [pos, List.all_cons] at hp ⊢
+        simp only [hp, Bool.and_true]
+        rw [hga]; simp; exact Rat.mul_pos hΛ k
+      rw [pos_rayFns] at hfull
+      have := inside_u_le a b c _ (p.u + (qabs (a.u - p.u) + qabs (b.u - p.u) + qabs (c.u - p.u))) hD hfull
+        (by have := le_add_qabs a.u p.u; have := qabs_nonneg' (b.u - p.u); have := qabs_nonneg' (c.u - p.u); grind)
+        (by have := le_add_qabs b.u p.u; have := qabs_nonneg' (a.u - p.u); have := qabs_nonneg' (c.u - p.u); grind)
+        (by have := le_add_qabs c.u p.u; have := qabs_nonneg' (a.u - p.u); have := qabs_nonneg' (b.u - p.u); grind)
+      simp only [shift] at this; grind
+    rw [p0, pΛ] at hip
+    -- events of the pair are events of the triple: the first side is positive past 0
+    have tr : ∀ g ∈ [gb, gc'], isEv 0 (rayEnd a b c p) [ga, gb, gc'] g = isEv 0 (rayEnd a b c p) [gb, gc'] g := by
+      intro g hg
+      rw [isEv_cons_other _ _ _ _ _ hg]
+      cases h : isEv 0 (rayEnd a b c p) [gb, gc'] g
+      · rfl
+      · unfold isEv at h; simp only [Bool.and_eq_true, decide_eq_true_eq] at h
+        simp only [Bool.true_and, decide_eq_true_eq]; rw [hga]; exact Rat.mul_pos h.1.1.2 k
+    rw [tr gb (by simp)] at e1
+    rw [tr gc' (by simp)] at e2
+    simp only [List.map_cons, List.map_nil, par_cons, par_nil, Bool.xor_false] at hip
+    rw [e1, e2] at hip
+    revert hip; cases decide (gc p c a) <;> cases decide (gc p a b) <;> simp
+
 end ForgeCertify

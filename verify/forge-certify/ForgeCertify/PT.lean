@@ -526,4 +526,285 @@ theorem pt_general (Q H : Plane) (u : Tri) (e w : V3) (hnx : Q.n.x ≠ 0) (ha : 
   cases decide (shadow e w (u.a, u.b)) <;> cases decide (shadow e w (u.b, u.c)) <;>
     cases decide (shadow e w (u.c, u.a)) <;> rfl
 
+/-! ## Triangles along `x` -/
+
+/-- A plane containing the `x` direction, seen along its own normal's larger part: `(x, y)` when
+`n.z ≠ 0`, else `(x, z)`. Rays along `+x` are rays along `+u`. -/
+def piv (Q : Plane) (p : V3) : P2 := if Q.n.z ≠ 0 then ⟨p.x, p.y⟩ else ⟨p.x, p.z⟩
+
+def Tri.Dv (Q : Plane) (u : Tri) : Rat := o2 (piv Q u.a) (piv Q u.b) (piv Q u.c)
+
+theorem piv_inj (Q : Plane) (hnx : Q.n.x = 0) (hn : Q.n ≠ ⟨0, 0, 0⟩) {p q : V3} (hp : Q.eval p = 0)
+    (hq : Q.eval q = 0) (h : piv Q p = piv Q q) : p = q := by
+  unfold piv at h
+  simp only [Plane.eval, V3.dot, hnx] at hp hq
+  by_cases hz : Q.n.z ≠ 0
+  · simp only [hz, ne_eq, not_false_eq_true, ite_true, P2.mk.injEq] at h
+    apply v3_ext h.1 h.2
+    have : Q.n.z * p.z = Q.n.z * q.z := by rw [h.2] at hp; grind
+    grind
+  · simp only [hz, ite_false, P2.mk.injEq] at h
+    have hz' : Q.n.z = 0 := by grind
+    have hy : Q.n.y ≠ 0 := by intro hy; apply hn; cases h' : Q.n; simp_all
+    apply v3_ext h.1 _ h.2
+    rw [hz'] at hp hq
+    have : Q.n.y * p.y = Q.n.y * q.y := by grind
+    grind
+
+theorem piv_lerp (Q : Plane) (b c : V3) (μ : Rat) :
+    piv Q (b + μ * (c - b)) = lerp2 (piv Q b) (piv Q c) μ := by
+  unfold piv lerp2; split <;> simp
+
+theorem piv_ex (Q : Plane) (z : V3) (l : Rat) : piv Q (z + l * ex) = shift (piv Q z) l := by
+  unfold piv shift ex; split <;> simp <;> grind
+
+theorem eval_ex (Q : Plane) (hnx : Q.n.x = 0) (z : V3) (l : Rat) : Q.eval (z + l * ex) = Q.eval z := by
+  simp only [Plane.eval, V3.dot, ex, hnx]; simp; grind
+
+theorem eval_lerp (Q : Plane) (b c : V3) (μ : Rat) :
+    Q.eval (b + μ * (c - b)) = Q.eval b + μ * (Q.eval c - Q.eval b) := by
+  simp only [Plane.eval, V3.dot]; simp; grind
+
+/-- The edge's shadow on the segment, for a plane along `x`, is the in-plane ray from the
+segment's crossing of the plane meeting the edge. -/
+theorem shadow_vert (Q : Plane) (hnx : Q.n.x = 0) (hn : Q.n ≠ ⟨0, 0, 0⟩) (e w b c : V3)
+    (hb : Q.eval b = 0) (hc : Q.eval c = 0) (s' : Rat) (hs0 : 0 < s') (hs1 : s' < 1)
+    (hq : Q.eval (seg e w s') = 0) (huniq : ∀ s, Q.eval (seg e w s) = 0 → s = s') :
+    shadow e w (b, c) ↔ gc (piv Q (seg e w s')) (piv Q b) (piv Q c) := by
+  constructor
+  · rintro ⟨s, μ, l, h0, h1, hμ0, hμ1, hl0, heq⟩
+    have hr : Q.eval (b + μ * (c - b)) = 0 := by rw [eval_lerp, hb, hc]; grind
+    have : Q.eval (seg e w s) = 0 := by rw [← eval_ex Q hnx _ l]; simp only at heq; rw [heq]; exact hr
+    have hs := huniq s this; subst hs
+    have := congrArg (piv Q) heq
+    rw [piv_ex, piv_lerp] at this
+    refine ⟨μ, hμ0, hμ1, ?_, ?_⟩
+    · have := congrArg P2.v this; simp [shift, lerp2] at this; grind
+    · have := congrArg P2.u this; simp [shift, lerp2] at this; grind
+  · rintro ⟨μ, hμ0, hμ1, hv, hu⟩
+    obtain ⟨r, hr⟩ : ∃ r, r = b + μ * (c - b) := ⟨_, rfl⟩
+    have hrQ : Q.eval r = 0 := by rw [hr, eval_lerp, hb, hc]; grind
+    have hpr : piv Q r = lerp2 (piv Q b) (piv Q c) μ := by rw [hr, piv_lerp]
+    refine ⟨s', μ, (piv Q r).u - (piv Q (seg e w s')).u, hs0, hs1, hμ0, hμ1, ?_, ?_⟩
+    · rw [hpr]; simp only [lerp2]; grind
+    · rw [← hr]
+      apply piv_inj Q hnx hn (by rw [eval_ex Q hnx]; exact hq) hrQ
+      rw [piv_ex, hpr]
+      simp only [shift, lerp2, P2.mk.injEq]; constructor
+      · grind
+      · grind
+
+/-- On a plane along `x`, any plane's value is affine in the in-plane coordinates. -/
+theorem affine_on (Q H : Plane) (hnx : Q.n.x = 0) (hn : Q.n ≠ ⟨0, 0, 0⟩) :
+    ∃ α β γ : Rat, ∀ p, Q.eval p = 0 → H.eval p = α * (piv Q p).u + β * (piv Q p).v + γ := by
+  by_cases hz : Q.n.z ≠ 0
+  · refine ⟨H.n.x, H.n.y - H.n.z * Q.n.y / Q.n.z, H.n.z * Q.c / Q.n.z - H.c, fun p hp => ?_⟩
+    simp only [piv, hz, ne_eq, not_false_eq_true, ite_true]
+    simp only [Plane.eval, V3.dot, hnx] at hp ⊢
+    have e : p.z = (Q.c - Q.n.y * p.y) / Q.n.z := by
+      have : p.z * Q.n.z = Q.c - Q.n.y * p.y := by grind
+      rw [← this, Rat.mul_div_cancel hz]
+    rw [e]
+    have k1 : H.n.z * ((Q.c - Q.n.y * p.y) / Q.n.z) = H.n.z * Q.c / Q.n.z - H.n.z * Q.n.y / Q.n.z * p.y := by
+      simp only [Rat.div_def]; grind
+    grind
+  · have hz' : Q.n.z = 0 := by grind
+    have hy : Q.n.y ≠ 0 := by intro hy; apply hn; cases h' : Q.n; simp_all
+    refine ⟨H.n.x, H.n.z, H.n.y * Q.c / Q.n.y - H.c, fun p hp => ?_⟩
+    simp only [piv, hz, ite_false]
+    simp only [Plane.eval, V3.dot, hnx, hz'] at hp ⊢
+    have e : p.y = Q.c / Q.n.y := by
+      have : p.y * Q.n.y = Q.c := by grind
+      rw [← this, Rat.mul_div_cancel hy]
+    rw [e]
+    have k1 : H.n.y * (Q.c / Q.n.y) = H.n.y * Q.c / Q.n.y := by simp only [Rat.div_def]; grind
+    grind
+
+/-- In-plane barycentric bound for a plane along `x`. -/
+theorem liftv_H (Q H : Plane) (u : Tri) (p : V3) (hnx : Q.n.x = 0) (hn : Q.n ≠ ⟨0, 0, 0⟩)
+    (ha : Q.eval u.a = 0) (hb : Q.eval u.b = 0) (hc : Q.eval u.c = 0) (hp : Q.eval p = 0)
+    (hin : inside2 (piv Q u.a) (piv Q u.b) (piv Q u.c) (piv Q p) = true)
+    (Ha : H.eval u.a ≤ 0) (Hb : H.eval u.b ≤ 0) (Hc : H.eval u.c ≤ 0) : H.eval p ≤ 0 := by
+  obtain ⟨α, β, γ, hF⟩ := affine_on Q H hnx hn
+  rw [hF _ ha] at Ha; rw [hF _ hb] at Hb; rw [hF _ hc] at Hc; rw [hF _ hp]
+  obtain ⟨A, B, C, P, hA, hB, hC, hP⟩ : ∃ A B C P, A = piv Q u.a ∧ B = piv Q u.b ∧ C = piv Q u.c ∧ P = piv Q p :=
+    ⟨_, _, _, _, rfl, rfl, rfl, rfl⟩
+  rw [← hA, ← hB, ← hC, ← hP] at hin; rw [← hP]; rw [← hA] at Ha; rw [← hB] at Hb; rw [← hC] at Hc
+  simp only [inside2, Bool.and_eq_true, decide_eq_true_eq] at hin
+  obtain ⟨⟨h1, h2⟩, h3⟩ := hin
+  have hD : o2 A B C ≠ 0 := by intro h; rw [h] at h1; simp at h1
+  have hu := bary_u A B C P
+  have hv := bary_v A B C P
+  have hs := bary_sum A B C P
+  have e : o2 A B C * (o2 A B C * (α * P.u + β * P.v + γ)) =
+      o2 A B C * o2 P B C * (α * A.u + β * A.v + γ) + o2 A B C * o2 A P C * (α * B.u + β * B.v + γ) +
+        o2 A B C * o2 A B P * (α * C.u + β * C.v + γ) := by
+    have : o2 A B C * (α * P.u + β * P.v + γ) = α * (o2 A B C * P.u) + β * (o2 A B C * P.v) + γ * o2 A B C := by
+      grind
+    rw [this, hu, hv]; rw [← hs]; grind
+  have i1 := Rat.mul_le_mul_of_nonneg_left Ha (Rat.le_of_lt h1)
+  have i2 := Rat.mul_le_mul_of_nonneg_left Hb (Rat.le_of_lt h2)
+  have i3 := Rat.mul_le_mul_of_nonneg_left Hc (Rat.le_of_lt h3)
+  apply Classical.byContradiction; intro hn'
+  have := Rat.mul_pos (sq_pos' hD) (show 0 < α * P.u + β * P.v + γ by grind)
+  grind
+
+/-- A point of the segment on a closed edge would be in the triangle `H` separates from it. -/
+theorem edge_out (H : Plane) (e w p q : V3) (s μ : Rat) (he : 0 < H.eval e) (hw : 0 < H.eval w)
+    (hs0 : 0 ≤ s) (hs1 : s ≤ 1) (hp : H.eval p ≤ 0) (hq : H.eval q ≤ 0)
+    (h : seg e w s = p + μ * (q - p)) : μ < 0 ∨ 1 < μ := by
+  apply Classical.byContradiction; intro hn
+  have h1 := H_seg_pos H e w he hw s hs0 hs1
+  have := convex_le (x := H.eval p) (y := H.eval q) (m := 0) (μ := μ) (by grind) (by grind) hp hq
+  rw [h, eval_lerp] at h1; grind
+
+structure PVGen (Q : Plane) (u : Tri) (e w : V3) : Prop where
+  qe : Q.eval e ≠ 0
+  qw : Q.eval w ≠ 0
+  verts : ∀ s, 0 < s → s < 1 → Q.eval (seg e w s) = 0 →
+    (piv Q (seg e w s)).v ≠ (piv Q u.a).v ∧ (piv Q (seg e w s)).v ≠ (piv Q u.b).v ∧
+      (piv Q (seg e w s)).v ≠ (piv Q u.c).v
+
+theorem hit_vert (Q : Plane) (u : Tri) (z : V3) (hnx : Q.n.x = 0) : hit Q u z = false := by
+  simp [hit, ahead, hnx]
+
+/-- The point of the in-plane line `b c` at the barycentric weight of `c`. -/
+theorem on_line_out (Q H : Plane) (u : Tri) (e w : V3) (s : Rat) (hnx : Q.n.x = 0)
+    (hn : Q.n ≠ ⟨0, 0, 0⟩) (hb : Q.eval u.b = 0) (hc : Q.eval u.c = 0)
+    (hq : Q.eval (seg e w s) = 0) (hs0 : 0 ≤ s) (hs1 : s ≤ 1) (S : Sep H u e w)
+    (hD : o2 (piv Q u.a) (piv Q u.b) (piv Q u.c) ≠ 0)
+    (h1 : o2 (piv Q (seg e w s)) (piv Q u.b) (piv Q u.c) = 0) :
+    o2 (piv Q u.a) (piv Q u.b) (piv Q u.c) * o2 (piv Q u.a) (piv Q (seg e w s)) (piv Q u.c) < 0 ∨
+      o2 (piv Q u.a) (piv Q u.b) (piv Q u.c) * o2 (piv Q u.a) (piv Q u.b) (piv Q (seg e w s)) < 0 := by
+  obtain ⟨hu, hv⟩ := on_bc _ _ _ _ hD h1
+  obtain ⟨ν, hν⟩ : ∃ ν, ν = o2 (piv Q u.a) (piv Q u.b) (piv Q (seg e w s)) / o2 (piv Q u.a) (piv Q u.b) (piv Q u.c) :=
+    ⟨_, rfl⟩
+  rw [← hν] at hu hv
+  have hpt : seg e w s = u.b + ν * (u.c - u.b) := by
+    apply piv_inj Q hnx hn hq (by rw [eval_lerp, hb, hc]; grind)
+    rw [piv_lerp]; cases h : piv Q (seg e w s); simp only [lerp2, P2.mk.injEq]; rw [h] at hu hv
+    exact ⟨hu, hv⟩
+  have hw2 : o2 (piv Q u.a) (piv Q (seg e w s)) (piv Q u.c) = (1 - ν) * o2 (piv Q u.a) (piv Q u.b) (piv Q u.c) := by
+    rw [hpt, piv_lerp, o2_lerp_bc]
+  have hw3 : o2 (piv Q u.a) (piv Q u.b) (piv Q (seg e w s)) = ν * o2 (piv Q u.a) (piv Q u.b) (piv Q u.c) := by
+    rw [hpt, piv_lerp, o2_lerp_bc']
+  have hD2 := sq_pos' hD
+  rcases edge_out H e w u.b u.c s ν S.he S.hw hs0 hs1 S.hb S.hc hpt with h | h
+  · right; rw [hw3]; have := mul_neg_of_pos_of_neg hD2 h; grind
+  · left; rw [hw2]; have := mul_neg_of_pos_of_neg hD2 (show 1 - ν < 0 by grind); grind
+
+theorem Sep.cyc {H : Plane} {u : Tri} {e w : V3} (S : Sep H u e w) : Sep H ⟨u.b, u.c, u.a⟩ e w :=
+  ⟨S.he, S.hw, S.hb, S.hc, S.ha⟩
+
+/-- **Constancy, triangles along `x`**: never hit; their edges' shadows on a segment missing them
+are even in number. -/
+theorem pt_vert (Q H : Plane) (u : Tri) (e w : V3) (hnx : Q.n.x = 0) (hn : Q.n ≠ ⟨0, 0, 0⟩)
+    (ha : Q.eval u.a = 0) (hb : Q.eval u.b = 0) (hc : Q.eval u.c = 0) (hD : u.Dv Q ≠ 0)
+    (G : PVGen Q u e w) (S : Sep H u e w) :
+    (hit Q u e ^^ hit Q u w) = par (u.segs.map fun E => decide (shadow e w E)) := by
+  rw [hit_vert Q u e hnx, hit_vert Q u w hnx]
+  simp only [Bool.false_xor]
+  apply Eq.symm
+  obtain ⟨f, hf⟩ : ∃ f, f = aff01 (Q.eval e) (Q.eval w) := ⟨_, rfl⟩
+  have hfs : ∀ s, f.ev s = Q.eval (seg e w s) := fun s => by rw [hf, aff01_ev, plane_seg]
+  have h0 : f.ev 0 = Q.eval e := by rw [hfs, seg_zero]
+  have h1 : f.ev 1 = Q.eval w := by rw [hfs, seg_one]
+  -- a shadow needs the segment on the plane
+  have need : ∀ E : Seg, Q.eval E.1 = 0 → Q.eval E.2 = 0 → shadow e w E →
+      ∃ s, 0 < s ∧ s < 1 ∧ Q.eval (seg e w s) = 0 := by
+    rintro E hE1 hE2 ⟨s, μ, l, hs0, hs1, -, -, -, heq⟩
+    refine ⟨s, hs0, hs1, ?_⟩
+    rw [← eval_ex Q hnx _ l, heq, eval_lerp, hE1, hE2]; grind
+  by_cases hcross : ∃ s, 0 < s ∧ s < 1 ∧ Q.eval (seg e w s) = 0
+  · -- one crossing point
+    have hopp : (0 < f.ev 0 ∧ f.ev 1 < 0) ∨ (f.ev 0 < 0 ∧ 0 < f.ev 1) := by
+      obtain ⟨s, hs0, hs1, hz⟩ := hcross
+      rw [h0, h1]
+      rcases lt_trichotomy' 0 (Q.eval e) with a | a | a <;> rcases lt_trichotomy' 0 (Q.eval w) with b | b | b
+      · have := f.pos_between (s := s) (by rw [h0]; exact a) (by rw [h1]; exact b) (by grind) (by grind)
+        rw [hfs] at this; grind
+      · exact absurd b.symm G.qw
+      · exact Or.inl ⟨a, b⟩
+      all_goals first | exact absurd a.symm G.qe | exact absurd b.symm G.qw | exact Or.inr ⟨a, b⟩ | skip
+      have := f.neg_between (s := s) (by rw [h0]; exact a) (by rw [h1]; exact b) (by grind) (by grind)
+      rw [hfs] at this; grind
+    obtain ⟨hm, hr0, hr1, huniq⟩ : f.m ≠ 0 ∧ 0 < f.root ∧ f.root < 1 ∧ ∀ s, f.ev s = 0 → s = f.root := by
+      rcases hopp with ⟨a, b⟩ | ⟨a, b⟩
+      · obtain ⟨hm, r0, r1, hs⟩ := f.down (by decide) a b
+        refine ⟨by grind, r0, r1, fun s hs0 => ?_⟩
+        rw [Aff.ev_eq f (by grind)] at hs0
+        rcases Rat.mul_eq_zero.mp hs0 with h | h; exact absurd h (by grind); grind
+      · obtain ⟨hm, r0, r1, hs⟩ := f.up (by decide) a b
+        refine ⟨by grind, r0, r1, fun s hs0 => ?_⟩
+        rw [Aff.ev_eq f (by grind)] at hs0
+        rcases Rat.mul_eq_zero.mp hs0 with h | h; exact absurd h (by grind); grind
+    have hq : Q.eval (seg e w f.root) = 0 := by rw [← hfs]; exact Aff.ev_root f hm
+    have hu' : ∀ s, Q.eval (seg e w s) = 0 → s = f.root := fun s h => huniq s (by rw [hfs]; exact h)
+    have sAB := shadow_vert Q hnx hn e w u.a u.b ha hb f.root hr0 hr1 hq hu'
+    have sBC := shadow_vert Q hnx hn e w u.b u.c hb hc f.root hr0 hr1 hq hu'
+    have sCA := shadow_vert Q hnx hn e w u.c u.a hc ha f.root hr0 hr1 hq hu'
+    simp only [Tri.segs, List.map_cons, List.map_nil]
+    rw [show decide (shadow e w (u.a, u.b)) = decide (gc (piv Q (seg e w f.root)) (piv Q u.a) (piv Q u.b)) by
+        simp [sAB],
+      show decide (shadow e w (u.b, u.c)) = decide (gc (piv Q (seg e w f.root)) (piv Q u.b) (piv Q u.c)) by
+        simp [sBC],
+      show decide (shadow e w (u.c, u.a)) = decide (gc (piv Q (seg e w f.root)) (piv Q u.c) (piv Q u.a)) by
+        simp [sCA]]
+    obtain ⟨va, vb, vc⟩ := G.verts f.root hr0 hr1 hq
+    obtain ⟨A, B, C, P, hA, hB, hC, hP⟩ : ∃ A B C P, A = piv Q u.a ∧ B = piv Q u.b ∧ C = piv Q u.c ∧
+        P = piv Q (seg e w f.root) := ⟨_, _, _, _, rfl, rfl, rfl, rfl⟩
+    have hDv : o2 A B C ≠ 0 := by rw [hA, hB, hC]; exact hD
+    rw [← hA, ← hB, ← hC, ← hP]
+    rw [← hA, ← hP] at va; rw [← hB, ← hP] at vb; rw [← hC, ← hP] at vc
+    have hrot : ∀ x y z : Bool, ((x ^^ (y ^^ (z ^^ false))) = false) ↔ ((y ^^ (z ^^ (x ^^ false))) = false) := by
+      decide
+    -- the point on two edge lines would be a vertex
+    obtain ⟨t1, t2, t3⟩ := two_sides_vertex A B C P hDv
+    by_cases l1 : o2 P B C = 0
+    · have hout := on_line_out Q H u e w f.root hnx hn hb hc hq (by grind) (by grind) S hD
+        (by rw [← hB, ← hC, ← hP]; exact l1)
+      rw [← hA, ← hB, ← hC, ← hP] at hout
+      have := tri_ray_line A B C P hDv va vb vc l1 hout
+      simp only [par_cons, par_nil] at this ⊢
+      revert this; cases decide (gc P A B) <;> cases decide (gc P B C) <;> cases decide (gc P C A) <;> simp
+    by_cases l2 : o2 A P C = 0
+    · -- on the line `c a`: the triangle `b c a`
+      have hout := on_line_out Q H ⟨u.b, u.c, u.a⟩ e w f.root hnx hn hc ha hq (by grind) (by grind) S.cyc
+        (by show o2 (piv Q u.b) (piv Q u.c) (piv Q u.a) ≠ 0; rw [← o2_cyc]; exact hD)
+        (by show o2 _ (piv Q u.c) (piv Q u.a) = 0; rw [← hC, ← hA, ← hP]; unfold o2 at l2 ⊢; grind)
+      simp only at hout
+      rw [← hA, ← hB, ← hC, ← hP] at hout
+      have := tri_ray_line B C A P (by rw [← o2_cyc]; exact hDv) vb vc va (by unfold o2 at l2 ⊢; grind) hout
+      simp only [par_cons, par_nil] at this ⊢
+      revert this; cases decide (gc P A B) <;> cases decide (gc P B C) <;> cases decide (gc P C A) <;> simp
+    by_cases l3 : o2 A B P = 0
+    · have hout := on_line_out Q H ⟨u.c, u.a, u.b⟩ e w f.root hnx hn ha hb hq (by grind) (by grind) S.cyc.cyc
+        (by show o2 (piv Q u.c) (piv Q u.a) (piv Q u.b) ≠ 0; rw [o2_cyc]; exact hD)
+        (by show o2 _ (piv Q u.a) (piv Q u.b) = 0; rw [← hA, ← hB, ← hP]; unfold o2 at l3 ⊢; grind)
+      simp only at hout
+      rw [← hA, ← hB, ← hC, ← hP] at hout
+      have := tri_ray_line C A B P (by rw [o2_cyc]; exact hDv) vc va vb (by unfold o2 at l3 ⊢; grind) hout
+      simp only [par_cons, par_nil] at this ⊢
+      revert this; cases decide (gc P A B) <;> cases decide (gc P B C) <;> cases decide (gc P C A) <;> simp
+    -- off every edge line: the interior, which `H` rules out
+    have hin := tri_ray A B C P hDv va vb vc l1 l2 l3
+    have hno : inside2 A B C P = false := by
+      apply Classical.byContradiction; intro hn'
+      have hin' : inside2 A B C P = true := by simpa using hn'
+      rw [hA, hB, hC, hP] at hin'
+      have := liftv_H Q H u _ hnx hn ha hb hc hq hin' S.ha S.hb S.hc
+      have := H_seg_pos H e w S.he S.hw f.root (by grind) (by grind)
+      grind
+    rw [hno] at hin
+    simp only [par_cons, par_nil] at hin ⊢
+    revert hin; cases decide (gc P A B) <;> cases decide (gc P B C) <;> cases decide (gc P C A) <;> simp
+  · -- no crossing: no shadow
+    apply par_all_false
+    intro b hb
+    simp only [Tri.segs, List.map_cons, List.map_nil, List.mem_cons, List.mem_nil_iff, or_false] at hb
+    rcases hb with rfl | rfl | rfl <;> simp only [decide_eq_false_iff_not] <;> intro hs
+    · exact hcross (need _ ha hb hs)
+    · exact hcross (need _ hb hc hs)
+    · exact hcross (need _ hc ha hs)
+
 end ForgeCertify
