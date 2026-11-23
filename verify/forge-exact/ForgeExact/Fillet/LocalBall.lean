@@ -90,6 +90,37 @@ theorem local_eq_closing {S : Pred (V K)} {r : K} {x : V K} (hr : 0 < r)
   · rintro ⟨h1, h2⟩
     exact ⟨⟨hc.mp h1, fun h => h2 (hx.mpr h)⟩, hw⟩
 
+/-! ## The obstacle: rule (d), the owner's (2026-11-23)
+
+Scored against Onshape's truth (lean-spec-design.md §13):
+* a **convex** round is what the ball touching the two faces sweeps: the dual pick's local fill, whose
+  obstacle is the two supports alone (`cutD`), even where the ball pokes through a thin wall's far
+  side;
+* a **concave** fill stops where any free ball of the local body reaches: the closing's fill of the
+  body `S` itself (local by `closing_local`), at the points whose nearest free centre of `S` is a
+  rolling ball's (`fillD`). -/
+
+/-- `c` is the nearest free centre of `x` for the body `S`, and a rolling ball's centre (its feet
+inside both faces). -/
+def WitnessS (S : Pred (V K)) (r : K) (x c : V K) : Prop :=
+  Free S r c ∧ Foot P.F₁ r c ∧ Foot P.F₂ r c ∧ ∀ c', Free S r c' → V.d2 x c ≤ V.d2 x c'
+
+/-- Rule (d), concave: the fill of `S`'s own closing where a rolling ball is the nearest free one. -/
+def fillD (S : Pred (V K)) (r : K) : Pred (V K) := fun x => fill S r x ∧ ∃ c, P.WitnessS S r x c
+
+/-- Rule (d), convex: the dual pick's local fill (the supports' complements as the only obstacle),
+inside `S`. -/
+def cutD (S : Pred (V K)) (r : K) : Pred (V K) := P.localCut S r
+
+/-- **Where no third generator is within reach, the two halves of rule (d) agree with the local
+ball**: the concave fill of `S` is the local fill of the supports. -/
+theorem fillD_eq_local {S : Pred (V K)} {r : K} {x : V K} (hr : 0 < r)
+    (agree : ∀ y, V.d2 y x < 4 * (r * r) → (S y ↔ P.H y)) (hw : ∃ c, P.Witness r x c)
+    (hw' : ∃ c, P.WitnessS S r x c) : P.fillD S r x ↔ P.localFill r x := by
+  rw [P.local_eq_closing hr agree hw]
+  simp only [fillD]
+  exact ⟨fun h => h.1, fun h => ⟨h, hw'⟩⟩
+
 end Pick
 
 end ForgeExact.Fillet

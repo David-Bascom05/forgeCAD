@@ -526,3 +526,21 @@ convex column tests the whole body before as the obstacle, which is stricter tha
 (supports and their neighbours only). It separates supports-only from the opening; (b) proper
 differs only where the poked face neighbours a support, which this run does not isolate.
 
+**Adopted (the owner, 2026-11-23): rule (d) is final for L1.** A convex round is what the ball
+touching the two faces sweeps. A concave fill stops where any free ball of the local body reaches.
+In Lean: `Pick.cutD` (convex: the dual pick's local fill, the two supports as the only obstacle) and
+`Pick.fillD` (concave: the closing's fill of the body itself, where the nearest free centre is a
+rolling ball's). `fillD_eq_local`: where no third generator is within reach, the two agree with the
+local ball, so the closing theorems of §8 hold for (d).
+
+**Open witnesses.**
+- 00983398 (split 8 / 7) is no disagreement. The kernel's volume equals Onshape's (8289.6874), and
+  the 7 points that read as material lie on the blend surface within the STEP fit: classifier
+  noise.
+- 00318570 is one. The kernel removes 25.8 mm³ (0.1 %) more than Onshape (25534.0 against
+  25559.8). The 6 points lie in `f5`, a round of r 7 on edges between a side face and the faces of
+  another feature, together with the start face's edges to them. Not yet known why: either Onshape
+  stops the round where the ball pokes through a face that neighbours a support (the one case where
+  (b) proper and (d) differ), or the kernel's corner there is wrong. To settle with the fillet-kernel
+  session.
+
