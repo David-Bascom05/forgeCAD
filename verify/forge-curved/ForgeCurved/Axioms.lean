@@ -39,3 +39,5 @@ import ForgeCurved
 #print axioms ForgeCurved.faithfulAll_of_mixed
 #print axioms ForgeCurved.qRule_tier0Sound_of_data
 #print axioms ForgeCurved.transversalAt_of_linearIndependent
+#print axioms ForgeCurved.modelCell_preconnected
+#print axioms ForgeCurved.conicalAt_of_model
