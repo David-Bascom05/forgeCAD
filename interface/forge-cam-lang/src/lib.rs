@@ -55,6 +55,8 @@ enum V {
     Tool(usize),
     Setup(usize),
     Holes(usize, String),
+    /// A part's sketch, by name.
+    Sketch(usize, String),
     Stock(StockSpec),
     Vise(ViseSpec),
     /// Soft jaws: their index, and the jaws as a part.
@@ -79,6 +81,9 @@ enum StockSpec {
 }
 
 struct PartIn {
+    /// The part's source and where it is, to read its sketches.
+    src: String,
+    pdir: std::path::PathBuf,
     /// The workholding a setup of this part gets unless it names one (soft jaws, held to be cut).
     hold: Option<forge_cam::fixture::Fixture>,
     /// This is part `k` turned over about x (a later setup's view of it).
@@ -204,6 +209,8 @@ impl Cam {
         let faces = forge_cam::lower::turned(&p.faces, h).map_err(|e| format!("turning the part over: {e:?}"))?;
         let (lo, hi) = p.bbox;
         let turned = PartIn {
+            src: p.src.clone(),
+            pdir: p.pdir.clone(),
             hold: None,
             turn_of: Some(i),
             file: p.file.clone(),
@@ -243,6 +250,17 @@ impl Cam {
                 V::Part(i) => {
                     if self.parts[i].holes.iter().any(|h| &h.name == name) {
                         V::Holes(i, name.clone())
+                    } else if forge_lang::sketch_view(
+                        &self.parts[i].src,
+                        name,
+                        forge_lang::Options {
+                            dir: Some(self.parts[i].pdir.clone()),
+                            ..Default::default()
+                        },
+                    )
+                    .is_some()
+                    {
+                        V::Sketch(i, name.clone())
                     } else {
                         let have: Vec<&str> = self.parts[i].holes.iter().map(|h| h.name.as_str()).collect();
                         return Err(format!(
@@ -654,6 +672,8 @@ impl Cam {
                     }
                 }
                 self.parts.push(PartIn {
+                    src: src.clone(),
+                    pdir: path.parent().map(|p| p.to_path_buf()).unwrap_or_default(),
                     hold: None,
                     turn_of: None,
                     file,
@@ -789,7 +809,7 @@ impl Cam {
                 });
                 Ok(V::Setup(self.setups.len() - 1))
             }
-            "facing" | "contour" | "pocket" | "clear" | "drill" => self.op(name, f, a),
+            "facing" | "contour" | "pocket" | "clear" | "drill" | "engrave" => self.op(name, f, a),
             "soft_jaw" => self.soft_jaw(name, a),
             "program" => {
                 let su: Vec<usize> = match a.get("#0") {
@@ -813,7 +833,7 @@ impl Cam {
                 Ok(V::Num(0.0))
             }
             _ => Err(format!(
-                "`{f}` is not a machining built-in (part, machine, tool, setup, facing, contour, pocket, drill, program, box)"
+                "`{f}` is not a machining built-in (part, machine, tool, setup, facing, contour, pocket, drill, engrave, program, box)"
             )),
         }
     }
@@ -987,6 +1007,8 @@ impl Cam {
         }
         let b = sj.block;
         self.parts.push(PartIn {
+            src: String::new(),
+            pdir: Default::default(),
             hold: Some(sj.hold.clone()),
             turn_of: None,
             file: format!("{name} (soft jaws, {})", bl.name),
@@ -997,6 +1019,201 @@ impl Cam {
         });
         self.jaws.push(sj);
         Ok(V::Jaws(self.jaws.len() - 1, self.parts.len() - 1))
+    }
+
+    /// The tool's tip along a sketch's curves (lines, arcs, circles; not construction), on a
+    /// plane facing +z, in levels down to `depth` below it. What it clears for the stock: each
+    /// line's and circle's band of the tip's radius, from the floor up (a V tool clears at least
+    /// that: wider above).
+    #[allow(clippy::too_many_arguments)]
+    fn engrave(
+        &self,
+        su: usize,
+        a: &BTreeMap<String, V>,
+        t: &ToolUse,
+        ti: usize,
+        h: Heights,
+        feed: (f64, f64),
+        step: f64,
+        voids: &mut Vec<(Option<Region>, f64)>,
+    ) -> Result<Vec<OpPath>, String> {
+        let (pi, sk) = match a.get("#1") {
+            Some(V::Sketch(p, n)) if *p == self.setups[su].part => (*p, n.clone()),
+            Some(V::Sketch(..)) => {
+                return Err("engrave: the sketch is on the part the other way up: engrave it in a setup that holds it so".into());
+            }
+            _ => return Err("engrave(SETUP, PART.SKETCH, tool:, depth:)".into()),
+        };
+        let part = &self.parts[pi];
+        let opts = || forge_lang::Options {
+            dir: Some(part.pdir.clone()),
+            ..Default::default()
+        };
+        // the sketch's plane, from the part's query (r9-rounded: toolpath placement only; the
+        // path is certified as posted)
+        let ans = forge_lang::query::ask(&part.src, Some(part.pdir.clone()), None, &format!("frame {sk}"));
+        if !ans.ok {
+            return Err(format!("engrave: {}", ans.text.trim()));
+        }
+        let v3 = |k: &str| -> Option<[f64; 3]> {
+            let Json::Obj(fs) = &ans.json else { return None };
+            let (_, Json::Arr(xs)) = fs.iter().find(|(n, _)| n == k)? else { return None };
+            let n = |j: &Json| if let Json::Num(x) = j { Some(*x) } else { None };
+            Some([n(&xs[0])?, n(&xs[1])?, n(&xs[2])?])
+        };
+        let (o, x, y, z) = match (v3("origin"), v3("x"), v3("y"), v3("z")) {
+            (Some(o), Some(x), Some(y), Some(z)) => (o, x, y, z),
+            _ => return Err("engrave: the sketch's frame".into()),
+        };
+        if (z[2] - 1.0).abs() > 1e-9 || z[0].abs() > 1e-9 || z[1].abs() > 1e-9 {
+            return Err("engrave: the sketch's plane must face +z in this setup".into());
+        }
+        let view = forge_lang::sketch_view(&part.src, &sk, opts()).ok_or("engrave: the sketch")?;
+        let s = &view.s;
+        let w = |p: forge_math::Point2| [o[0] + x[0] * p.x + y[0] * p.y, o[1] + x[1] * p.x + y[1] * p.y];
+        // each curve: its start, and its moves as (to, Some((centre, cw)) for an arc)
+        type Piece = ([f64; 2], Vec<([f64; 2], Option<([f64; 2], bool)>)>);
+        let mut curves: Vec<Piece> = vec![];
+        // the sketch's handedness in the part's xy: x × y along +z keeps arcs' sense
+        let flip = x[0] * y[1] - x[1] * y[0] < 0.0;
+        let tip = 0.5 * t.tool.tip_d.max(0.0);
+        let mut bands: Vec<Region> = vec![];
+        for id in s.entity_ids() {
+            if s.is_construction(id) {
+                continue;
+            }
+            match s.entity(id) {
+                Some(forge_sketch::Entity::Line { a: pa, b: pb }) => {
+                    let (p0, p1) = (w(s.point(pa)), w(s.point(pb)));
+                    curves.push((p0, vec![(p1, None)]));
+                    if tip > 0.0 {
+                        bands.push(stadium(p0, p1, tip));
+                    }
+                }
+                Some(forge_sketch::Entity::Arc { center, start, end, ccw }) => {
+                    let (c, p0, p1) = (w(s.point(center)), w(s.point(start)), w(s.point(end)));
+                    let ccw = ccw != flip;
+                    // in pieces of at most a quarter turn, as posted
+                    let r = ((p0[0] - c[0]).powi(2) + (p0[1] - c[1]).powi(2)).sqrt();
+                    let a0 = forge_math::dmath::atan2(p0[1] - c[1], p0[0] - c[0]);
+                    let mut a1 = forge_math::dmath::atan2(p1[1] - c[1], p1[0] - c[0]);
+                    let tau = std::f64::consts::TAU;
+                    if ccw {
+                        while a1 <= a0 {
+                            a1 += tau;
+                        }
+                    } else {
+                        while a1 >= a0 {
+                            a1 -= tau;
+                        }
+                    }
+                    let n = ((a1 - a0).abs() / std::f64::consts::FRAC_PI_2).ceil().max(1.0) as usize;
+                    let mut mv = vec![];
+                    for k in 1..=n {
+                        let to = if k == n {
+                            p1
+                        } else {
+                            let (sn, cs) = forge_math::dmath::sin_cos(a0 + (a1 - a0) * k as f64 / n as f64);
+                            [c[0] + r * cs, c[1] + r * sn]
+                        };
+                        mv.push((to, Some((c, !ccw))));
+                    }
+                    curves.push((p0, mv));
+                }
+                Some(forge_sketch::Entity::Circle { center, r }) => {
+                    let c = w(s.point(center));
+                    let r = s.params()[r];
+                    let p0 = [c[0] + r, c[1]];
+                    let mv = (1..=4)
+                        .map(|k| {
+                            let to = match k {
+                                1 => [c[0], c[1] + r],
+                                2 => [c[0] - r, c[1]],
+                                3 => [c[0], c[1] - r],
+                                _ => p0,
+                            };
+                            (to, Some((c, false)))
+                        })
+                        .collect();
+                    curves.push((p0, mv));
+                    if tip > 0.0 && r > tip {
+                        bands.push(ring(c, r, tip));
+                    }
+                }
+                _ => {}
+            }
+        }
+        if curves.is_empty() {
+            return Err(format!("engrave: the sketch `{sk}` has no lines, arcs or circles to follow"));
+        }
+        let top = get_num(a, "from", Some(o[2]))?;
+        let depth = get_num(a, "depth", None)?;
+        if !(depth > 0.0) {
+            return Err("engrave: depth > 0".into());
+        }
+        let bottom = o[2] - depth;
+        let mut mv = vec![];
+        for z in ops::levels(top, bottom, step) {
+            for (p0, ms) in &curves {
+                mv.push(PMove::Rapid {
+                    to: [p0[0], p0[1], h.retract],
+                });
+                mv.push(PMove::Line {
+                    to: [p0[0], p0[1], z],
+                    f: feed.1,
+                    phase: Phase::Plunge,
+                });
+                let mut at = *p0;
+                for (to, arc) in ms {
+                    mv.push(match arc {
+                        None => PMove::Line {
+                            to: [to[0], to[1], z],
+                            f: feed.0,
+                            phase: Phase::Cut,
+                        },
+                        Some((c, cw)) => PMove::Arc {
+                            to: [to[0], to[1], z],
+                            c: *c,
+                            cw: *cw,
+                            f: feed.0,
+                        },
+                    });
+                    at = *to;
+                }
+                mv.push(PMove::Line {
+                    to: [at[0], at[1], h.retract],
+                    f: feed.0,
+                    phase: Phase::Link,
+                });
+            }
+        }
+        let first = curves[0].0;
+        mv.push(PMove::Rapid {
+            to: [first[0], first[1], h.clear],
+        });
+        // the bands it clears, united (none is claimed if the union cannot be formed)
+        let mut u: Option<Region> = None;
+        for b in bands {
+            u = match u {
+                None => Some(b),
+                Some(r) => forge_cam_geom::boolean::boolean(&r, &b, forge_cam_geom::boolean::Op::Union)
+                    .ok()
+                    .map(|l| forge_cam_geom::boolean::region_of(&l)),
+            };
+            if u.is_none() {
+                break;
+            }
+        }
+        if let Some(u) = u {
+            voids.push((Some(u), bottom));
+        }
+        Ok(vec![OpPath {
+            tool: ti,
+            start: [first[0], first[1], h.clear],
+            moves: mv,
+            rpm: 0.0,
+            coolant: forge_post::Coolant::Flood,
+        }])
     }
 
     fn feeds_for(&self, su: usize, t: &ToolUse, ae: f64, ap: f64) -> Option<feeds::Feeds> {
@@ -1030,6 +1247,7 @@ impl Cam {
                 "contour" => "contour",
                 "pocket" => "pocket",
                 "clear" => "clear",
+                "engrave" => "engrave",
                 _ => "drill",
             },
             setup: su,
@@ -1082,6 +1300,7 @@ impl Cam {
                 out.feeds = fd;
                 let h = s.heights;
                 match kind {
+                    "engrave" => self.engrave(su, a, t, ti, h, (vf, vp), step, &mut voids),
                     "facing" => {
                         let z = get_num(a, "to", Some(part.bbox.1[2]))?;
                         let p = ops::facing(&s.stock, t, ti, h, s.stock.max[2], z, step, (vf, vp));
@@ -1483,6 +1702,44 @@ impl Cam {
 
 /// The opening of a region by a disc of radius r, (R ⊖ B_r) ⊕ B_r: what a pocket with
 /// stepover ≤ r provably clears.
+/// The points within w of the segment p0 p1: a stadium (two lines, two half circles in quarter
+/// arcs), anticlockwise.
+fn stadium(p0: [f64; 2], p1: [f64; 2], w: f64) -> Region {
+    let (dx, dy) = (p1[0] - p0[0], p1[1] - p0[1]);
+    let l = (dx * dx + dy * dy).sqrt();
+    let (ux, uy) = (dx / l * w, dy / l * w);
+    let (nx, ny) = (-uy, ux);
+    let q = |p: [f64; 2], a: f64, b: f64| p2(p[0] + a, p[1] + b);
+    let (a0, a1, a2) = (q(p1, -nx, -ny), q(p1, ux, uy), q(p1, nx, ny));
+    let (b0, b1, b2) = (q(p0, nx, ny), q(p0, -ux, -uy), q(p0, -nx, -ny));
+    let (c1, c0) = (p2(p1[0], p1[1]), p2(p0[0], p0[1]));
+    Region {
+        loops: vec![Loop {
+            segs: vec![
+                Seg::Line { a: b2, b: a0 },
+                Seg::Arc { a: a0, b: a1, c: c1, ccw: true },
+                Seg::Arc { a: a1, b: a2, c: c1, ccw: true },
+                Seg::Line { a: a2, b: b0 },
+                Seg::Arc { a: b0, b: b1, c: c0, ccw: true },
+                Seg::Arc { a: b1, b: b2, c: c0, ccw: true },
+            ],
+        }],
+    }
+}
+
+/// The points within w of the circle about c of radius r (r > w): a ring.
+fn ring(c: [f64; 2], r: f64, w: f64) -> Region {
+    let circ = |rr: f64, ccw: bool| {
+        let a = p2(c[0] + rr, c[1]);
+        Loop {
+            segs: vec![Seg::Arc { a, b: a, c: p2(c[0], c[1]), ccw }],
+        }
+    };
+    Region {
+        loops: vec![circ(r + w, true), circ(r - w, false)],
+    }
+}
+
 fn opening(rg: &Region, r: f64) -> Option<Region> {
     let dbg = |e: &dyn std::fmt::Debug| {
         if std::env::var("FORGE_CAM_DEBUG").is_ok() {

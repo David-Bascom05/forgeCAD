@@ -96,6 +96,7 @@ dependencies = [
  "forge-math",
  "forge-model",
  "forge-post",
+ "forge-sketch",
  "forge-tooling",
 ]
 

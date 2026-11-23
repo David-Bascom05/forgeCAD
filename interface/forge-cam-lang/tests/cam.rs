@@ -329,3 +329,34 @@ fn helical_ramps_are_posted_and_certified() {
     let txt = cam.programs.iter().find(|p| p.name == "p1").unwrap().text.clone().unwrap();
     assert!(txt.lines().any(|l| l.contains("G3") && l.contains(" Z")), "{txt}");
 }
+
+#[test]
+fn engraving_follows_the_sketch_into_the_modelled_groove() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    let src = std::fs::read_to_string(dir.join("plate_mark_cam.fg")).unwrap();
+    let cam = forge_cam_lang::run(&src, &dir);
+    assert!(cam.ok, "{:?} {:?}", cam.errors, cam.ops.iter().map(|o| (&o.name, &o.refusal)).collect::<Vec<_>>());
+    let o = cam.ops.iter().find(|o| o.name == "mark").unwrap();
+    assert_eq!((o.kind, o.status), ("engrave", "built"));
+    // two levels along the line, down to 0.3 below the top
+    let low = o.paths[0]
+        .moves
+        .iter()
+        .filter_map(|m| if let forge_cam::ops::PMove::Line { to, .. } = m { Some(to[2]) } else { None })
+        .fold(f64::INFINITY, f64::min);
+    assert!((low - 4.7).abs() < 1e-9, "{low}");
+    // the line to the groove's square ends: the V tool's width at depth cuts the end walls
+    let tmp = std::env::temp_dir().join(format!("forge-cam-mark-{}", std::process::id()));
+    std::fs::create_dir_all(&tmp).unwrap();
+    let part = std::fs::read_to_string(dir.join("plate_mark.fg")).unwrap();
+    std::fs::write(
+        tmp.join("plate_mark.fg"),
+        part.replace("line((m + groove_w / 2, W / 2), (L - m - groove_w / 2, W / 2))", "line((m, W / 2), (L - m, W / 2))"),
+    )
+    .unwrap();
+    let cam = forge_cam_lang::run(&src, &tmp);
+    let _ = std::fs::remove_dir_all(&tmp);
+    let o = cam.ops.iter().find(|o| o.name == "mark").unwrap();
+    assert_eq!(o.status, "refused");
+    assert!(o.checks.iter().any(|c| c.rule == "gouge"), "{:?}", o.checks);
+}
