@@ -1049,11 +1049,9 @@ class Tr:
             raise Unsupported("draft on an extrude's second direction")
         taper = None
         if a.get("hasDraft") is True:
-            # Forge's taper narrows the extrude for a positive angle, as Onshape's does with its pull direction flag set
-            # (every draft of the 1914-part sample has it: the other way is not measured). The value is in degrees here
-            if a.get("draftPullDirection") is not True:
-                raise Unsupported("draft on an extrude, pulled the other way")
-            taper = num(self.val(a["draftAngle"]))
+            # Forge's taper narrows the extrude for a positive angle, as Onshape's does with its pull direction flag set,
+            # and widens it without (measured on the pilot: both ways match the STEP to 1e-12). The value is in degrees
+            taper = num(self.val(a["draftAngle"]) * (1 if a.get("draftPullDirection") is True else -1))
         b = a.get("bodyType")
         if isinstance(b, tuple) and "SOLID" not in b[1]:
             raise Unsupported("a thin or surface extrude")
