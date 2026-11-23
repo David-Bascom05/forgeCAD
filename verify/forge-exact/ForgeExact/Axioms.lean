@@ -24,6 +24,7 @@ import ForgeExact.DecideOnce.QLine
 import ForgeExact.DecideOnce.QSep
 import ForgeExact.DecideOnce.QEdge
 import ForgeExact.DecideOnce.QVert
+import ForgeExact.DecideOnce.RootCover
 import ForgeExact.DecideOnce.SampleLocal
 import ForgeExact.JordanLocal
 import ForgeExact.DecideOnce.LocalJordan
@@ -207,6 +208,8 @@ elab "#standard_axioms " ids:ident* : command => do
   ForgeExact.DecideOnce.Curved.vertCov_spec
   ForgeExact.DecideOnce.Curved.restrT_ev
   ForgeExact.DecideOnce.Curved.bezout3_spec
+  ForgeExact.DecideOnce.Curved.gaps_complete
+  ForgeExact.DecideOnce.Curved.cover_complete
   ForgeExact.DecideOnce.Sample.local_exact
   ForgeExact.DecideOnce.Sample.local_correct
   ForgeExact.DecideOnce.Sample.wall_region

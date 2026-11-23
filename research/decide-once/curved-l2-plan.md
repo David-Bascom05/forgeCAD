@@ -43,6 +43,16 @@ site, recorded here and in the module. An input whose decision runs out of fuel 
 | `signFuel` | 200 (`Num.sign` bisections, as exact-curved's contact decisions use) | `covOn`, `edgeCov`, `ESample.dOk` | QEdge.lean |
 | `rootFuel` | 60 (`QRef.realRoots`' default) | root isolation of `R` and of the line restrictions | QEdge.lean |
 
+**Root isolation is certified, not trusted** (`RootCover.lean`). `QRef.realRoots` is incomplete:
+an interval still being split at the fuel limit is dropped silently (`if d ≥ fuel then continue`),
+losing its roots. The curved ledger takes its roots from a checked cover instead:
+- breakpoints, with each gap root-free or isolating one root;
+- both rays root-free by Descartes on the shifted polynomial.
+
+`cover_complete` proves every root in any model is in `coverRoots`. `certifiedRoots` is the
+proposer, and it answers `none` when the cover does not check (`Skip::Budget`). This needs a
+square-free input; the squarefree reduction is the next small step (a certificate `p | sqfree(p)^k`).
+
 **Order of work:**
 1. QSep (small);
 2. RUR (medium; it is the exact core of edges and vertices);
