@@ -81,7 +81,8 @@ def faces_boxed(img):
     for f in each(img, TopAbs_FACE, TopoDS.Face):
         b = Bnd_Box()
         BRepBndLib.Add_s(f, b)
-        out.append((BRep_Tool.Surface_s(f), b.Get()))
+        lo, hi = b.CornerMin(), b.CornerMax()
+        out.append((BRep_Tool.Surface_s(f), (lo.X(), lo.Y(), lo.Z(), hi.X(), hi.Y(), hi.Z())))
     return out
 
 
