@@ -24,6 +24,8 @@ decisions = ["forge-bool/decisions"]
 [dev-dependencies]
 forge-lang = { path = "../../interface/forge-lang" }
 forge-mesh = { path = "../forge-mesh" }
+# the scale check's export (examples/scale_occt.rs)
+forge-step = { path = "../forge-step" }
 
 # its test: every feature kind reaches the oracle
 [[example]]

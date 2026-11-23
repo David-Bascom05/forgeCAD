@@ -265,31 +265,39 @@ fn rigid(steps: &[Step]) -> Frame {
     m
 }
 
-/// `b` moved by the steps' pieces in order, every name passed through `rename` once.
-fn moved_by(b: &Body, ps: &[Piece], rename: impl Fn(Name) -> Name, i: usize) -> Result<Body, RegenError> {
+/// `b` moved by the steps' pieces in order; with `rename` (a copy), every name passed through it
+/// once, by the first rigid piece's move (as a move of one piece names) or, with none, directly.
+fn moved_by(
+    b: &Body,
+    ps: &[Piece],
+    rename: Option<&dyn Fn(Name) -> Name>,
+    i: usize,
+) -> Result<Body, RegenError> {
     let pe = |error: PatternError| RegenError::Pattern { feature: i, error };
     let mut out: Option<Body> = None;
-    let mut named = false;
+    let mut named = rename.is_none();
     for p in ps {
         let from = out.as_ref().unwrap_or(b);
-        let next = match *p {
-            Piece::Rigid(f) if !named => {
+        let next = match (*p, rename) {
+            (Piece::Rigid(f), Some(r)) if !named => {
                 named = true;
-                moved(from, &Motion::Rigid(f), &rename).map_err(pe)?
+                moved(from, &Motion::Rigid(f), r).map_err(pe)?
             }
-            Piece::Rigid(f) => moved(from, &Motion::Rigid(f), |n| n).map_err(pe)?,
-            Piece::Scale { about, k } => {
+            (Piece::Rigid(f), _) => moved(from, &Motion::Rigid(f), |n| n).map_err(pe)?,
+            (Piece::Scale { about, k }, _) => {
                 forge_topo::similar::scaled(from, about, k).map_err(|e| bad(i)(BodyError::Scale(e)))?
             }
         };
         out = Some(next);
     }
     let out = out.unwrap_or_else(|| b.clone());
-    if named {
+    if let (false, Some(r)) = (named, rename) {
+        // its names as `moved` gives them, the joins' too; geometry and order untouched
+        let mut out = renamed(&out, r);
+        out.joins = out.joins.renamed(r);
         return Ok(out);
     }
-    // only scales: the names passed through `rename` by a move that changes nothing else
-    moved(&out, &Motion::Rigid(Frame::WORLD), &rename).map_err(pe)
+    Ok(out)
 }
 
 /// Feature `i` of a history applied to the bodies features `..i` left: `regenerate_solids`
@@ -949,11 +957,12 @@ fn body_feature(
                 let [k] = on[..] else {
                     return Err(bad(BodyError::NotOne));
                 };
-                let body = moved_by(&solids[k].body.compact(), &ps, |n| salted(n, "copy", me), i)?;
+                let salt = |n| salted(n, "copy", me);
+                let body = moved_by(&solids[k].body.compact(), &ps, Some(&salt), i)?;
                 solids.push(Solid { id: i, body });
             } else {
                 for k in on {
-                    solids[k].body = moved_by(&solids[k].body.compact(), &ps, |n| n, i)?;
+                    solids[k].body = moved_by(&solids[k].body.compact(), &ps, None, i)?;
                 }
             }
         }
