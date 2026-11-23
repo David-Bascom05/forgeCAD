@@ -4,9 +4,10 @@
 # tens of GB.
 name: wasm
 
+# No push trigger: pull requests merge with current main in their head, so this ran on the tree
+# that lands, and its build cache holds no third-party crates (nothing for main to warm). A manual
+# run (workflow_dispatch) runs it on main.
 on:
-  push:
-    branches: [main]
   pull_request:
   workflow_dispatch:
 
@@ -31,5 +32,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      # without verify/forge-certify: it alone turns forge-bool's `certify` on, and features unify
+      # over the packages built, so the rest is tested as shipped (certify off); it has no tests
       - name: test (wasm32-wasip1)
-        run: sh tools/test-wasm.sh
+        run: sh tools/test-wasm.sh --exclude forge-certify
+      - name: forge-certify compiles (forge-bool with `certify`)
+        if: ${{ !cancelled() }}
+        run: cargo check --locked --target wasm32-wasip1 -p forge-certify --all-targets

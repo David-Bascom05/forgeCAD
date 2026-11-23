@@ -20,11 +20,15 @@ pub const FEATURES: &[(&str, bool)] = &[
 ];
 
 pub mod boolean;
+#[cfg(any(test, feature = "decisions"))]
+pub mod carrier_key;
 pub mod classify;
 #[cfg(feature = "decide_once")]
 pub mod decide_once;
 #[cfg(feature = "decisions")]
 pub mod decisions;
+#[cfg(any(test, feature = "decisions"))]
+pub mod edge_screen;
 pub mod imprint;
 pub mod nary;
 pub mod shape;
