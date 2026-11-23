@@ -25,7 +25,7 @@ frontier of `R` take their places.
 
 **The theorem** (`xNonManifold_iff_top`), for continuous carriers into ℝ: on an exact curved
 ledger (`ExactK`) whose listed cells are `Faithful` and satisfy the vertex wing condition
-(`VWing`, R5 below), `XNonManifoldK ↔ TopNonManifold`. With `zeroThickness_iff_k`
+(R1–R5, R5 being `Faithful.vwing`), `XNonManifoldK ↔ TopNonManifold`. With `zeroThickness_iff_k`
 (`zeroThickness_iff_top`): **the core refuses iff the result has three sheets at an edge or two
 fans at a vertex**.
 
@@ -37,9 +37,9 @@ Which faithfulness each half uses:
   (the same near a vertex) and R2 (the chain of facets round a vertex is joined through its edge
   cells).
 
-**R5, the vertex wing condition** (`VWing`), is R4 at vertices: a listed facet meets small
-neighbourhoods of a listed vertex below it in one connected set. Curved.lean's `Faithful` states
-R4 at edges only. Without R5 a facet reaching a vertex in two corners (a facet whose boundary
+**R5, the vertex wing condition** (`Faithful.vwing`), is R4 at vertices: a listed facet meets
+small neighbourhoods of a listed vertex below it in one connected set. It was added to Curved.lean
+for this theorem. Without R5 a facet reaching a vertex in two corners (a facet whose boundary
 walk passes the vertex twice) would make one combinatorial fan two topological ones. For the
 Tier-0 check (design §2.3) this is "no vertex occurs twice in one facet's boundary walk", the
 vertex form of its wing condition.
@@ -83,13 +83,6 @@ point of an edge cell, or two local fans at a vertex cell. -/
 def TopNonManifold (cs : List (Carrier P ℝ)) (R : Set P) : Prop :=
   (∃ x, IsEdgeK cs (covOfK cs x) ∧ ThreeSheets cs R x) ∨
   (∃ v, IsVertK cs (covOfK cs v) ∧ TwoFans cs R v)
-
-/-- **R5, the vertex wing condition**: a listed facet meets small neighbourhoods of a point of a
-listed vertex below it in one connected set (R4, `Faithful.wing`, at vertices). -/
-def VWing [ForgeExact.Topology P] (cs : List (Carrier P ℝ)) (Listed : Cov → Prop) : Prop :=
-  ∀ v φ, Listed v → Listed φ → IsVertK cs v → φ.isFacet = true → Cov.le v φ = true →
-    ∀ x, covCellK cs v x → ∀ W : Pred P, ForgeExact.Topology.IsOpen W → W x →
-      ∃ U : Pred P, ForgeExact.Topology.IsOpen U ∧ U.Sub W ∧ U x ∧ Connected ((covCellK cs φ).inter U)
 
 /-! ## Tools -/
 
@@ -337,7 +330,7 @@ theorem vert_comb_top (hc : ∀ c ∈ cs, Continuous c) (h : ExactK L cs A)
   exact hn (e ▸ hac)
 
 theorem vert_top_comb (hc : ∀ c ∈ cs, Continuous c) (h : ExactK L cs A)
-    (hf : Faithful cs (Listed L)) (hvw : VWing cs (Listed L)) (rule : Rule) {v : P}
+    (hf : Faithful cs (Listed L)) (rule : Rule) {v : P}
     (hvx : IsVertK cs (covOfK cs v)) (h2 : TwoFans cs (Rset L A rule) v) :
     ∃ V, RealisedK cs V ∧ IsVertK cs V ∧ ∃ a b,
       (XBoundaryK L cs A rule a ∧ Cov.le V a = true) ∧ (XBoundaryK L cs A rule b ∧ Cov.le V b = true) ∧
@@ -354,7 +347,7 @@ theorem vert_top_comb (hc : ∀ c ∈ cs, Continuous c) (h : ExactK L cs A)
     intro φ _
     by_cases hφ : XBoundaryK L cs A rule φ ∧ Cov.le V φ = true
     · have hVl := vert_listed h ⟨v, rfl⟩ hvx hφ.1 hφ.2
-      obtain ⟨U, hUo, hUW, hvU, hUc⟩ := hvw V φ (Or.inr (Or.inr (Or.inr hVl)))
+      obtain ⟨U, hUo, hUW, hvU, hUc⟩ := hf.vwing V φ (Or.inr (Or.inr (Or.inr hVl)))
         (Or.inl (bdry_listed h hφ.1)) hvx hφ.1.2.1 hφ.2 v rfl (fun y => y ∈ W)
         (show IsOpen {y | y ∈ W} from hWo) hvW
       rw [connected_iff] at hUc
@@ -439,10 +432,10 @@ theorem vert_top_comb (hc : ∀ c ∈ cs, Continuous c) (h : ExactK L cs A)
 /-! ## The theorem -/
 
 /-- **`xNonManifold_iff_top`.** Over continuous carriers into ℝ, on an exact curved ledger whose
-listed cells are faithful (R1–R4) and satisfy the vertex wing condition (R5), the covector
+listed cells are faithful (R1–R5), the covector
 non-manifoldness the core refuses is the topological one of the regularised result. -/
 theorem xNonManifold_iff_top (hc : ∀ c ∈ cs, Continuous c) (h : ExactK L cs A)
-    (hf : Faithful cs (Listed L)) (hvw : VWing cs (Listed L)) (rule : Rule) :
+    (hf : Faithful cs (Listed L)) (rule : Rule) :
     XNonManifoldK L cs A rule ↔ TopNonManifold cs (Rset L A rule) := by
   constructor
   · rintro (⟨E, hr, hed, a, b, c, hab, hac, hbc, ha, hb, hc'⟩ | ⟨V, hr, hvx, a, b, ha, hb, hn⟩)
@@ -450,13 +443,13 @@ theorem xNonManifold_iff_top (hc : ∀ c ∈ cs, Continuous c) (h : ExactK L cs 
     · exact Or.inr (vert_comb_top hc h hf rule hr hvx ha hb hn)
   · rintro (⟨x, hed, h3⟩ | ⟨v, hvx, h2⟩)
     · exact Or.inl (edge_top_comb hc h hf rule hed h3)
-    · exact Or.inr (vert_top_comb hc h hf hvw rule hvx h2)
+    · exact Or.inr (vert_top_comb hc h hf rule hvx h2)
 
 /-- **The refusal, topologically**: the core refuses `ZeroThickness` iff the regularised result
 has three local sheets at a point of an edge cell, or two local fans at a vertex cell. -/
 theorem zeroThickness_iff_top (hc : ∀ c ∈ cs, Continuous c) (h : ExactK L cs A)
-    (hf : Faithful cs (Listed L)) (hvw : VWing cs (Listed L)) (rule : Rule) :
+    (hf : Faithful cs (Listed L)) (rule : Rule) :
     (∃ x, core L rule = .refused (.zeroThickness x)) ↔ TopNonManifold cs (Rset L A rule) :=
-  (zeroThickness_iff_k h rule).trans (xNonManifold_iff_top hc h hf hvw rule)
+  (zeroThickness_iff_k h rule).trans (xNonManifold_iff_top hc h hf rule)
 
 end ForgeCurved

@@ -31,15 +31,14 @@ open ForgeExact ForgeExact.DecideOnce ForgeExact.DecideOnce.Curved
 variable {P : Type} [TopologicalSpace P]
 
 /-- R1–R5 for every cell of the arrangement. -/
-def FaithfulAll (cs : List (Carrier P ℝ)) : Prop :=
-  Faithful cs (fun _ => True) ∧ VWing cs (fun _ => True)
+def FaithfulAll (cs : List (Carrier P ℝ)) : Prop := Faithful cs (fun _ => True)
 
 /-- Faithful for all cells is faithful for the listed ones. -/
 theorem FaithfulAll.listed {cs : List (Carrier P ℝ)} (h : FaithfulAll cs) (Listed : Cov → Prop) :
-    Faithful cs Listed ∧ VWing cs Listed :=
-  ⟨⟨fun X _ => h.1.connected X trivial, fun X Y _ _ => h.1.incidence X Y trivial trivial,
-    fun φ _ => h.1.sides φ trivial, fun e φ _ _ => h.1.wing e φ trivial trivial⟩,
-    fun v φ _ _ => h.2 v φ trivial trivial⟩
+    Faithful cs Listed :=
+  ⟨fun X _ => h.connected X trivial, fun X Y _ _ => h.incidence X Y trivial trivial,
+    fun φ _ => h.sides φ trivial, fun e φ _ _ => h.wing e φ trivial trivial,
+    fun v φ _ _ => h.vwing v φ trivial trivial⟩
 
 /-- The separator rule's components, all functions of the near carriers. -/
 structure SepRule (P : Type) where

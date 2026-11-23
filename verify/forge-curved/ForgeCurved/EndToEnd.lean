@@ -14,7 +14,7 @@ The core reads covectors and nothing else (design §0.1), so the curved theorem 
   `ok` answer is a valid body whose faces are the exact boundary facets and whose kept cells
   regularise to the regularised boolean; its `ZeroThickness` refusal is `XNonManifoldK`. This is
   `correct_ok_k` and `zeroThickness_iff_k` (forge-exact, Q0) put together;
-* `curved_correct_top`: over continuous carriers into ℝ with faithful cells (and R5), the refusal
+* `curved_correct_top`: over continuous carriers into ℝ with faithful cells (R1–R5), the refusal
   is also the topological `TopNonManifold` of the regularised result (`zeroThickness_iff_top`).
 
 **The domain** (design D4): quadric carriers (`Quadric`, separators being planes, i.e. quadrics
@@ -62,9 +62,9 @@ theorem curved_correct {P K : Type} [Zero K] [LT K] [DecidableRel (α := K) (· 
 /-- Over ℝ, with faithful cells: the refusal is topological too. -/
 theorem curved_correct_top {P : Type} [TopologicalSpace P] {L : Ledger}
     {cs : List (Carrier P ℝ)} {A : Nat → Pred P} (hc : ∀ c ∈ cs, Continuous c)
-    (h : CurvedTarget L cs A) (hv : VWing cs (Listed L)) (rule : Rule) :
+    (h : CurvedTarget L cs A) (rule : Rule) :
     (∃ x, core L rule = .refused (.zeroThickness x)) ↔ TopNonManifold cs (Rset L A rule) :=
-  zeroThickness_iff_top hc h.1 h.2 hv rule
+  zeroThickness_iff_top hc h.1 h.2 rule
 
 /-! ## The domain: quadric carriers, formula bodies -/
 
@@ -112,13 +112,12 @@ namespace forge_bool_core
 open ForgeExact ForgeExact.DecideOnce ForgeExact.DecideOnce.Curved ForgeCurved
 
 /-- **End to end, curved.** For quadric carriers and formula bodies, on every Rust ledger that
-reads as a curved target ledger of them (exact, faithful, R5), `forge_bool_core::core`'s answer is
+reads as a curved target ledger of them (exact, faithful: R1–R5), `forge_bool_core::core`'s answer is
 the exact regularised boolean, and it refuses `ZeroThickness` exactly when the result is
 non-manifold: as covectors (`XNonManifoldK`) and as sets (`TopNonManifold`). -/
 def EndToEndCurved : Prop :=
   ∀ (qs : List Quadric) (F : Nat → SForm) (L : ForgeExact.DecideOnce.Ledger),
     (hT : CurvedTarget L (qs.map Quadric.eval) (fun i => (F i).den (qs.map Quadric.eval))) →
-    VWing (qs.map Quadric.eval) (Listed L) →
     ∀ (l : forge_bool_core.Ledger) (r : forge_bool_core.Rule), toL l = L → LedgerWF l →
     core l r ⟨alloc.vec.Vec.new CellId, alloc.vec.Vec.new CellId⟩ ⦃ o => ∃ ext,
       (∀ b, outcomeL l ext o = .ok b →
@@ -136,7 +135,7 @@ def EndToEndCurved : Prop :=
 /-- **`EndToEndCurved`, proven**: `CoreSpec`, `coreM_nil`, then `curved_correct`, as
 `end_to_end_of` is for flat. -/
 theorem end_to_end_curved : EndToEndCurved := by
-  intro qs F L hT hv l r hL hw
+  intro qs F L hT l r hL hw
   apply WP.spec_mono (core_spec_proof l r ⟨alloc.vec.Vec.new CellId, alloc.vec.Vec.new CellId⟩ hw
     ⟨fun c hc => by simp at hc, fun c hc => by simp at hc⟩)
   rintro o ⟨ext, _, ho⟩
@@ -148,6 +147,6 @@ theorem end_to_end_curved : EndToEndCurved := by
   refine ⟨ext, fun b hb => ?_, ?_, ?_⟩
   · exact hok b (ho ▸ hb)
   · rw [ho]; exact hzt
-  · rw [ho]; exact curved_correct_top (quadrics_cont qs) hT hv _
+  · rw [ho]; exact curved_correct_top (quadrics_cont qs) hT _
 
 end forge_bool_core
