@@ -89,6 +89,7 @@ fn lin() -> f64 {
 }
 
 /// The faces of the operands, in arena order (body 0's first), or `NotFlat`.
+#[inline(never)] // a phase of the profile (tools/speed/phases.sh)
 fn inputs(bodies: &[&Body]) -> Result<Vec<In>, Skip> {
     let mut out = Vec::new();
     for (k, b) in bodies.iter().enumerate() {
@@ -242,6 +243,7 @@ fn plainly_apart(a: &In, b: &In, k: f64) -> bool {
 
 /// §6.1 step 1: per face, its snapped plane (the representative's, in its own sense) and its
 /// representative's index; or ambiguous past the spread cap.
+#[inline(never)] // a phase of the profile (tools/speed/phases.sh)
 fn snap(fs: &[In]) -> Result<(Vec<DyPlane>, Vec<usize>), Skip> {
     let l = lin();
     let ld = Dy::from_f64(l);
@@ -314,6 +316,7 @@ fn snap(fs: &[In]) -> Result<(Vec<DyPlane>, Vec<usize>), Skip> {
 
 /// §6.1 step 2 (`Snap.vertexAt`): every vertex of every body from the snapped planes of the faces
 /// round it, the first independent three, which every one of them must hold.
+#[inline(never)] // a phase of the profile (tools/speed/phases.sh)
 fn vertices(bodies: &[&Body], fs: &[In], planes: &[DyPlane], reg: &Region) -> Result<Vec<Pts>, Skip> {
     let need = &reg.near;
     let g = 4.0 * lin();
@@ -445,6 +448,7 @@ struct Classes {
 const NONE: u32 = u32::MAX;
 
 /// The distinct snapped planes of the near faces, in arena order of their first face.
+#[inline(never)] // a phase of the profile (tools/speed/phases.sh)
 fn classes(snapped: &[DyPlane], reps: &[usize], near: &[bool]) -> Classes {
     let mut planes: Vec<DyPlane> = Vec::new();
     let mut rep = Vec::new();
@@ -541,6 +545,7 @@ fn rule_at(rule: &Rule, m: &[bool]) -> bool {
 }
 
 /// §3a: the region round the tools, decided once from the inputs.
+#[inline(never)] // a phase of the profile (tools/speed/phases.sh)
 fn region(bodies: &[&Body], fs: &[In], snapped: &[DyPlane], rule: &Rule) -> Region {
     let all = Region {
         bx: None,
@@ -820,6 +825,7 @@ fn covector(cls: &Classes, pf: &[PlaneF], h: &HPoint, zero: &[u32]) -> Vec<Sgn> 
 
 /// The cells of class plane `c` within the box `[lo, hi]`: its section split by every class
 /// plane crossing it.
+#[inline(never)] // a phase of the profile (tools/speed/phases.sh)
 fn arrange(cls: &Classes, pf: &[PlaneF], c: u32, lo: [f64; 3], hi: [f64; 3]) -> Plane2 {
     let pc = &cls.planes[c as usize];
     let nf = &pf[c as usize].n;
@@ -1041,6 +1047,7 @@ fn arrange(cls: &Classes, pf: &[PlaneF], c: u32, lo: [f64; 3], hi: [f64; 3]) -> 
 
 /// Is the exact point inside face `f`'s polygon (its loops, with exact vertices), by the parity
 /// of the perturbed ray toward +s in the plane's projection `(s, t)`.
+#[inline(never)] // a phase of the profile (tools/speed/phases.sh)
 fn in_face(q: &HPoint, f: &In, pts: &Pts, planes: &[DyPlane], s: usize, t: usize) -> bool {
     let qf = q.to_f64();
     // (a loop's exact polygon is within a few LINEAR of its kernel box)
@@ -1219,6 +1226,7 @@ fn join(covs: &[&Vec<Sgn>]) -> Vec<Sgn> {
 }
 
 #[allow(clippy::too_many_arguments)]
+#[inline(never)] // a phase of the profile (tools/speed/phases.sh)
 fn build_ledger(
     bodies: &[&Body],
     fs: &[In],
@@ -1473,6 +1481,7 @@ pub struct Decided {
 type Filled = (Vec<In>, Vec<DyPlane>, Classes, Vec<Pts>, Built, Region);
 
 /// The ledger of `bodies`, filled, with the witnesses answered; and what the bridge kept.
+#[inline(never)] // a phase of the profile (tools/speed/phases.sh)
 fn fill(bodies: &[&Body], rule: &Rule) -> Result<Filled, Skip> {
     let fs = inputs(bodies)?;
     let (snapped, reps) = snap(&fs)?;
@@ -1601,6 +1610,7 @@ fn log(bodies: &[&Body], fs: &[In], cls: &Classes, pts: &[Pts], snapped: &[DyPla
 ///   face of a closed, valid body says exactly what the ray parity says);
 /// - otherwise one ray (`Ref.Face.pierced`), from a point strictly inside the cell.
 #[allow(clippy::too_many_arguments)]
+#[inline(never)] // a phase of the profile (tools/speed/phases.sh)
 fn witness_inside(
     b: &Built,
     cls: &Classes,
@@ -1777,6 +1787,7 @@ fn why_split(l: &Ledger) -> Option<String> {
 /// §6.1 step 3 on the core's body: an edge shorter than LINEAR, or a vertex within LINEAR of a
 /// face it is not on (over the face's box), is a sub-LINEAR feature of the exact result. It is not
 /// collapsed: the boolean refuses there (ZeroThickness), the one answer besides a valid body.
+#[inline(never)] // a phase of the profile (tools/speed/phases.sh)
 fn sliver(cls: &Classes, b: &Built, out: &core::Body) -> Option<Point3> {
     let l = lin();
     let pt = |v: u32| {
@@ -2046,6 +2057,7 @@ fn inside_loop(w: &Wr, lp: &[Seg], ax: (usize, usize), q: (f64, f64)) -> bool {
 /// The body the core's answer describes, with everything outside the region passed through
 /// (§3a's write), written fresh. `None` only if the segments do not close into loops, which a
 /// valid ledger never gives.
+#[inline(never)] // a phase of the profile (tools/speed/phases.sh)
 fn write(w: &Wr, out: Option<&core::Body>) -> Option<Body> {
     let (bodies, fs, cls, built, reg) = (w.bodies, w.fs, w.cls, w.built, w.reg);
     let l = &built.ledger;
@@ -2251,6 +2263,7 @@ fn w_out(w: &Wr, g: usize) -> i32 {
 
 /// The body of the final faces: vertices where three or more faces meet, an edge per straight run
 /// between two, shells by adjacency; names kept where the entity is the input's.
+#[inline(never)] // a phase of the profile (tools/speed/phases.sh)
 fn build_body(w: &Wr, fins: &[Fin]) -> Option<Body> {
     let (bodies, fs, cls, built) = (w.bodies, w.fs, w.cls, w.built);
     let face_name = |g: usize| bodies[fs[g].body].face(fs[g].face).name;

@@ -21,10 +21,17 @@
 #                           the same kernel code, compiled without AVX.
 # Unset, perf is used when it counts instructions:u and callgrind otherwise. The callgrind gate
 # takes ~20 min on 4 busy cores. GATE_REPS=3 keeps the least of 3 counts, for a line near 0.5%.
+# GATE_EXACT=1 is GATE_COUNTER=callgrind (the deterministic count). GATE_FEATURES=f,.. builds with
+# those cargo features (`forge-bool/decide_once`: the decide-once switch on), in a target dir of
+# its own (target/callgrind-on for the switch); its baseline is still the counter's, which is the
+# old path's, so the table is the switch against the old path. tools/speed/phases.sh splits a
+# line's boolean into its phases.
 set -e
 dir=$(dirname "$0")
 perf=${PERF:-perf}
 counter=${GATE_COUNTER:-}
+[ "${GATE_EXACT:-}" = 1 ] && counter=callgrind
+feat=${GATE_FEATURES:-}
 if [ -z "$counter" ]; then
   if "$perf" stat -x, -e instructions:u true 2>&1 >/dev/null | grep -q '^[0-9][0-9]*,'; then
     counter=perf
@@ -61,9 +68,18 @@ count() {
   echo "$best"
 }
 echo "counter: $counter (baseline $baseline)"
+if [ -n "$feat" ]; then
+  # target/callgrind-on (as phases.sh builds it), or target/perf-on
+  tag=$(echo "$feat" | tr -c 'a-z0-9\n' -)
+  [ "$feat" = forge-bool/decide_once ] && tag=on
+  if [ "$counter" = callgrind ]; then target="$target-$tag"; else target="$target/perf-$tag"; fi
+  fflag="--features $feat"
+else
+  fflag=
+fi
 export CARGO_TARGET_DIR="$target"
-cargo build -q --release -p forge-model --example regen1 --example bits
-cargo build -q --release -p forge-lang --example benchparts
+cargo build -q --release -p forge-model --example regen1 --example bits $fflag
+cargo build -q --release -p forge-lang --example benchparts $fflag
 bin="$target/release/examples"
 now=$(mktemp)
 for p in torture plate shaft housing coplanar patterns mixed hole-grid tour upto upto-flat; do

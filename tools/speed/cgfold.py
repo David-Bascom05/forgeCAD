@@ -4,6 +4,8 @@
   cgfold.py OUT incl NAME..     the inclusive Ir of each function whose name contains NAME (summed
                                 over the matches that are not called from another match, so a
                                 function and its own helpers are not counted twice), one per line
+  cgfold.py OUT sum NAME..      the inclusive Ir of the union of every function whose name contains
+                                any NAME, a match called from another match counted once
   cgfold.py OUT fold [ROOT]     folded stacks (`a;b;c IR`, flamegraph.pl's input) of the call
                                 tree under ROOT (default: the whole program), the cost of each
                                 call edge shared down the callee's edges in proportion
@@ -84,6 +86,24 @@ def parse(path):
     return self_cost, calls, incl
 
 
+def reached(calls, ms):
+    """The members of `ms` reachable through calls from another member (counted in its cost)."""
+    inner = set()
+    for f_ in ms:
+        seen = {f_}
+        todo = [f_]
+        while todo:
+            x = todo.pop()
+            for g in calls.get(x, {}):
+                if g in seen:
+                    continue
+                seen.add(g)
+                if g in ms and g != f_:
+                    inner.add(g)
+                todo.append(g)
+    return inner
+
+
 def roots(calls, incl, root):
     if root:
         return [f for f in incl if root in f]
@@ -127,12 +147,14 @@ def main():
             ms = [f for f in incl if want in f]
             ms_set = set(ms)
             # drop a match reached from another match (its cost is already in the caller's)
-            inner = set()
-            for f_ in ms:
-                for g in calls.get(f_, {}):
-                    if g in ms_set and g != f_:
-                        inner.add(g)
+            inner = reached(calls, ms_set)
             print(want, sum(incl[f] for f in ms if f not in inner))
+        return
+    if mode == "sum":
+        ms = [f for f in incl if any(w in f for w in sys.argv[3:])]
+        ms_set = set(ms)
+        inner = reached(calls, ms_set)
+        print(sum(incl[f] for f in ms if f not in inner))
         return
     root = sys.argv[3] if len(sys.argv) > 3 else None
     rs = roots(calls, incl, root)
