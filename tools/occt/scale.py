@@ -15,13 +15,16 @@ the kernel's own) must match each:
 
 TOL is 1e-9 relative to the part's size (1e-9 x (1 + |p|)).
 
-  tools/occt/scale.py DIR      (VENV python: tools/occt/setup.sh)
+  tools/occt/scale.py DIR [JOBS]      (VENV python: tools/occt/setup.sh)
 """
 import json
 import math
+import multiprocessing as mp
 import sys
 
 from OCP.BRep import BRep_Tool
+from OCP.Bnd import Bnd_Box
+from OCP.BRepBndLib import BRepBndLib
 from OCP.BRepBuilderAPI import BRepBuilderAPI_GTransform, BRepBuilderAPI_Transform
 from OCP.BRepGProp import BRepGProp
 from OCP.GeomAPI import GeomAPI_ProjectPointOnSurf
@@ -73,23 +76,32 @@ def tol(p):
     return REL * (1.0 + math.sqrt(sum(x * x for x in p)))
 
 
-def main():
-    d = sys.argv[1]
-    cases = json.load(open(f"{d}/index.json"))
-    shapes = {}
+def faces_boxed(img):
+    out = []
+    for f in each(img, TopAbs_FACE, TopoDS.Face):
+        b = Bnd_Box()
+        BRepBndLib.Add_s(f, b)
+        out.append((BRep_Tool.Surface_s(f), b.Get()))
+    return out
+
+
+def near(box, p, r):
+    x0, y0, z0, x1, y1, z1 = box
+    return x0 - r <= p[0] <= x1 + r and y0 - r <= p[1] <= y1 + r and z0 - r <= p[2] <= z1 + r
+
+
+def check(args):
+    d, cases = args
     worst = {"vertex": 0.0, "analytic": 0.0, "fitted": 0.0, "occt_mass": 0.0, "ours_mass": 0.0}
     bad = []
+    orig = read(f"{d}/{cases[0]['step']}")
+    v0, a0 = vprops(orig)
     for case in cases:
         name, c, k = case["name"], case["c"], case["k"]
-        if name not in shapes:
-            shapes[name] = read(f"{d}/{case['step']}")
-        orig = shapes[name]
-        v0, a0 = vprops(orig)
         for how, img in scaled_occt(orig, c, k).items():
             tag = f"{name} k={k} {how}"
             vs = [BRep_Tool.Pnt_s(v) for v in each(img, TopAbs_VERTEX, TopoDS.Vertex)]
-            vs = {(round(p.X(), 6), round(p.Y(), 6), round(p.Z(), 6)): p for p in vs}.values()
-            vs = list(vs)
+            vs = list({(round(p.X(), 6), round(p.Y(), 6), round(p.Z(), 6)): p for p in vs}.values())
             ours = case["verts"]
             if len(vs) != len(ours):
                 bad.append(f"{tag}: {len(ours)} vertices, OCCT {len(vs)}")
@@ -98,15 +110,19 @@ def main():
                 worst["vertex"] = max(worst["vertex"], e / tol(p))
                 if e > tol(p):
                     bad.append(f"{tag}: vertex {p} {e:.3e} from OCCT's")
-            surfs = [BRep_Tool.Surface_s(f) for f in each(img, TopAbs_FACE, TopoDS.Face)]
+            surfs = faces_boxed(img)
             fit = case["fitted"] * k
             for p, analytic in case["pts"]:
                 g = gp_Pnt(*p)
                 e = math.inf
-                for s in surfs:
+                for s, box in surfs:
+                    if not near(box, p, 1e-3 + fit):
+                        continue
                     pr = GeomAPI_ProjectPointOnSurf(g, s)
                     if pr.NbPoints() > 0:
                         e = min(e, pr.LowerDistance())
+                        if e <= tol(p):
+                            break
                 key = "analytic" if analytic else "fitted"
                 limit = tol(p) if analytic else tol(p) + fit
                 worst[key] = max(worst[key], e / limit)
@@ -126,8 +142,26 @@ def main():
             worst["ours_mass"] = max(worst["ours_mass"], r / REL)
             if r > REL:
                 bad.append(f"{name} k={k}: our {what} {got} vs k-scaled {want} ({r:.2e})")
-    parts = len({c["name"] for c in cases})
-    print(f"{parts} parts, {len(cases)} scales, 2 OCCT transforms each")
+    print(f"{cases[0]['name']}: {'ok' if not bad else str(len(bad)) + ' failures'}", flush=True)
+    return worst, bad
+
+
+def main():
+    d = sys.argv[1]
+    jobs = int(sys.argv[2]) if len(sys.argv) > 2 else 3
+    cases = json.load(open(f"{d}/index.json"))
+    by = {}
+    for c in cases:
+        by.setdefault(c["name"], []).append(c)
+    with mp.Pool(jobs) as pool:
+        results = pool.map(check, [(d, cs) for cs in by.values()], chunksize=1)
+    worst = {}
+    bad = []
+    for w, b in results:
+        for key, v in w.items():
+            worst[key] = max(worst.get(key, 0.0), v)
+        bad += b
+    print(f"{len(by)} parts, {len(cases)} scales, 2 OCCT transforms each")
     print("worst / bound: " + ", ".join(f"{k} {v:.3g}" for k, v in worst.items()))
     for b in bad:
         print("FAIL", b)
