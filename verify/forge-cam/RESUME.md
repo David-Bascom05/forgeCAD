@@ -112,7 +112,8 @@ are covered.
 - Its sign is exact since 815d10e: `Prism::of`'s guard and the assertion take cross(a − c, b − c)
   as an outward-rounded interval. A wall gets the closed form only if lo > 0 (ccw) or hi < 0
   (cw); otherwise it goes to the B&B. The guard can err only toward the general path. Done.
-  (CAM's message named it 6e3fa7c; the branch has it as 815d10e.)
+  (CAM's message named it 6e3fa7c; the branch has it as 815d10e.) The interval guard suffices: no
+  exact orient2d is needed (the master, 2026-11-23).
 
 ## Still to do when asked
 
