@@ -27,3 +27,6 @@ import ForgeCurved
 #print axioms ForgeCurved.Delineable.delineable
 #print axioms ForgeCurved.Delineable.delineable_poly
 #print axioms ForgeCurved.Sweep.crossesAll_edges
+#print axioms ForgeCurved.Thom.thom
+#print axioms ForgeCurved.Thom.merge
+#print axioms ForgeCurved.CAD.cyl_R1

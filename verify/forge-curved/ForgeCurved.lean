@@ -5,3 +5,4 @@ import ForgeCurved.Separators
 import ForgeCurved.WallsCounter
 import ForgeCurved.DelineablePoly
 import ForgeCurved.Sweep
+import ForgeCurved.CAD
