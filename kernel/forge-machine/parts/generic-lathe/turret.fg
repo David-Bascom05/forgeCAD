@@ -1,0 +1,19 @@
+# generic-lathe turret: the 12-station plate on X (index axis z through x = 270), 80 thick.
+# frame: the machine's base frame at the home pose.
+shared cx = 270
+shared R = 150
+shared T = 80
+shared bolt_r = 110
+shared bolt = 12
+
+sketch plan(on: offset(xy, -T / 2)) {
+  outline = circle((cx, 0), R)
+}
+plate = extrude(plan.outline, T)
+sketch bp(on: plate.end) {
+  b0 = pt(cx + bolt_r, 0)
+  b1 = pt(cx - bolt_r, 0)
+  b2 = pt(cx, bolt_r)
+  b3 = pt(cx, -bolt_r)
+}
+bolts = hole(at: [bp.b0, bp.b1, bp.b2, bp.b3], d: bolt, depth: thru)

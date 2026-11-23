@@ -1,0 +1,17 @@
+# generic-trunnion-bc cradle: the tilting body on B (axis along y through z = -50), under the rotary.
+# frame: the machine's base frame at the home pose.
+shared L = 400
+shared W = 480
+shared z0 = -150
+shared H = 110
+shared pocket_r = 120
+shared pocket_d = 30
+
+sketch plan(on: offset(xy, z0)) {
+  outline = rect(center: (0, 0), size: (L, W))
+}
+body = extrude(plan, H)
+sketch pk(on: body.end) {
+  c = circle((0, 0), pocket_r)
+}
+seat = cut(pk.c, pocket_d)
