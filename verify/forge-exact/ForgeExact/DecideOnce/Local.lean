@@ -29,6 +29,14 @@ namespace ForgeExact.DecideOnce
 
 open ForgeExact ForgeExact.Ref Topology Ledger
 
+/-- **The named open obligation of the frontier: local compatibility.** Each body's membership is
+constant on every full cell of the local arrangement inside the region. It needs a localized
+Jordan–Brouwer: a far face's plane may cut a region cell without the far face meeting it, so
+`brep_compat` (every face plane in the arrangement) does not apply. Every (c′) theorem below takes it
+through `ExactIn.compat`. -/
+def LocalCompat (ps : List Plane) (A : Nat → Pred V3) (In : Cov → Prop) : Prop :=
+  ∀ T ∈ fulls ps.length, In T → ∀ i, (covCell ps T).Sub (A i) ∨ ∀ x, covCell ps T x → ¬A i x
+
 /-- **An exact local ledger**: `Exact`, with compatibility, completeness, edges and verts restricted
 to the region's cells `In`, and the region a union of cells (`U`, open), closed upward. -/
 structure ExactIn (L : Ledger) (ps : List Plane) (A : Nat → Pred V3) (In : Cov → Prop) (U : Pred V3) : Prop where
@@ -36,7 +44,8 @@ structure ExactIn (L : Ledger) (ps : List Plane) (A : Nat → Pred V3) (In : Cov
   open_ : IsOpen U
   region : ∀ X x, covCell ps X x → (U x ↔ In X)
   up : ∀ X Y, In X → Cov.le X Y = true → In Y
-  compat : ∀ T ∈ fulls ps.length, In T → ∀ i, (covCell ps T).Sub (A i) ∨ ∀ x, covCell ps T x → ¬A i x
+  /-- the open obligation `LocalCompat` -/
+  compat : LocalCompat ps A In
   pieceFacet : ∀ p ∈ L.pieces, p.1.isFacet = true ∧ p.1.zeroIdx = L.clsOf p.2 ∧ L.bodyOf p.2 < L.nb
   oneFace : ∀ p ∈ L.pieces, ∀ q ∈ L.pieces, q.1 = p.1 → L.bodyOf q.2 = L.bodyOf p.2 → q.2 = p.2
   pieceReal : ∀ p ∈ L.pieces, Realised ps p.1

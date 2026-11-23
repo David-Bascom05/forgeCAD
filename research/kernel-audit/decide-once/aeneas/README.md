@@ -25,40 +25,52 @@ nothing left opaque that the core itself defines. Getting there took a style pas
 - No local variable named `uf`, because it shadowed the generated namespace `uf`. The module is
   now `union_find`.
 
-`FunsExternal.lean` (Aeneas's template, unchanged) declares eight std functions as axioms:
-- the derived `PartialEq` and `Debug` of pairs;
-- `Hash`;
-- `Vec::default`;
-- `Bool::ne`;
-- the derived `PartialOrd::le` of `(u32, u32, u32)`, which `sort_triples` compares with.
+`FunsExternal.lean` declares seven std functions as axioms: `Bool::ne`, the derived `Debug`, `eq`
+and `ne` of pairs, two `Hash` impls, and `Vec::default`. The core's proven path uses none of them.
+`sort_triples` now compares field by field (`le3`), so the tuple `PartialOrd` axiom is gone.
 
-None of them is used by the functions proven so far. The proof of `split_ok` will need the tuple
-order. Either define it there, or have `sort_triples` compare field by field, as `cmp_cov` already
-does.
+## What is proven
 
-## What is proven (`lean/ForgeBoolCore/Refine.lean`)
+Every lemma says the Rust returns `ok`, so it does not panic, overflow or diverge, and returns the
+Lean core's value. Proofs use only the standard axioms (`lean/ForgeBoolCore/Axioms.lean`) and contain
+no `sorry`. The obligations are stated in `lean/ForgeBoolCore/Specs.lean`; how they are split across
+sessions is in `lean/SPLIT.md`.
 
-Each lemma says the Rust returns `ok` (so it does not panic, overflow or diverge) with the value
-of the Lean core's function. A slice of signs is read as a covector by `covOf`
-(`id ↦ cells[id]`, sign by sign).
+- **Every stage except two:**
+  - the index, `cov`, `find` and `intern`;
+  - `split` and `split_ok` (group S);
+  - `membership`, the classify check, and the keep table;
+  - `around`, `between`, `edges_between` and `bad_vert`;
+  - `core_k`'s loops and the four position-to-covector bridges (group R);
+  - `new_ext`, `core_k`, `keep_on`, `classify_on` and `core` (`RefineCore.lean`).
+- **End to end** (`EndToEnd.lean`, `Integrate.lean`):
+  - `end_to_end_KU (hK : CollapseSpec) (hU : UnifySpec) : EndToEnd`. On a Rust ledger that reads as
+    the sampler's ledger of a flat input, `forge_bool_core::core` answers the exact regularised
+    boolean: the body is `Valid`, its faces are exactly the boundary facets, its kept cells give
+    `reg` of the boolean, and `ZeroThickness` ↔ `XNonManifold`.
+  - `end_to_end_encode`: the same for the Rust ledger `encode` builds from any sampler ledger
+    within `LFits`.
+- **Size limits** (`LedgerWF`, `LFits`):
+  - fewer than `u32::MAX` cells (the ledger's plus two new sides per piece), edges and verts;
+  - ids below `u32::MAX`;
+  - `3·n ≤ usize::MAX` for the sorts;
+  - distinct edge cells;
+  - `nb > 0`;
+  - at most 12 zeros (`ENUM_ZEROS`) in the enumerating branches.
 
-| Rust | Lean core | lemma |
-|---|---|---|
-| `zero_idx` | `Cov.zeroIdx` | `zero_idx_spec` (loop: `zero_idx_loop_spec`) |
-| `is_facet` | `Cov.isFacet` | `is_facet_spec` (loop: `is_facet_loop_spec`) |
-| `le` | `Cov.le` | `le_spec` (loop: `le_loop_spec`) |
+## Open obligations
 
-`lean/ForgeBoolCore/Axioms.lean` prints each lemma's axioms: propext, Classical.choice and
-Quot.sound only. There is no `sorry`.
+1. `CollapseSpec` (group K) and `UnifySpec` (group U). They are stated in `Specs.lean`, and
+   `end_to_end_KU` takes them as hypotheses.
+2. **The frontier (local ledger, decide-once-spec §3a).** Proven in verify/forge-exact:
+   - F1: `far_unchanged`;
+   - F2: `frontier_local`;
+   - the global split: `split_at_region` (`DecideOnce/Frontier.lean`);
+   - (c′) in the open region for any ledger satisfying `ExactIn` (`DecideOnce/Local.lean`).
 
-## Next, in order
-
-1. `with_set` = `List.set`, `zeros`, the sorted index (`Index::find` returns the id with that
-   covector, given no repeats), and `find` / `intern` over the ledger plus `Ext`.
-2. The union–find: after the unions of a list of pairs, `find x` is the least member of `x`'s
-   class. Then `Closure.head_eq` gives the Lean's `head` (spec §4's note).
-3. `split_ok` = `splitOk`, `split` = `facets` / `topes` (dedup in first-seen order), `flood` /
-   `membership` = `memb`, and `apply_rule`.
-4. `around` = `Ledger.around`. The enumeration finds exactly the `φ` with `x ≤ φ`; sorting
-   restores result order. The same for `between` / `edges_between` and `fanRel`.
-5. `bad_vert` = `badVert`, then `unify` = `Ledger.unify`, then `core` = `DecideOnce.core`.
+   Open:
+   - **`LocalCompat`**, the named hypothesis that every `ExactIn` theorem carries: each body's
+     membership is constant on the local arrangement's full cells inside the region. It needs a
+     localized Jordan–Brouwer, since far face planes may cut a region cell.
+   - the remaining `ExactIn` clauses for the bridge's local ledger, i.e. the sampler's lemmas
+     restricted to the region.
