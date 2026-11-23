@@ -376,11 +376,6 @@ fn choice_row(
 /// one there is now), and why the others are held off.
 fn coming(kind: &str) -> Vec<(&'static str, &'static [&'static str], &'static str)> {
     match kind {
-        "extrude" | "revolve" => vec![(
-            "Body",
-            &["Solid", "Thin", "Surface"],
-            "not yet: the language has no thin: or surface: (research/surfaces/design.md); Thicken makes a wall from faces meanwhile",
-        )],
         "fillet" => vec![(
             "Section",
             &["Circular", "Conic"],
@@ -706,7 +701,13 @@ impl Shell {
         if !tool.params.is_empty() || !tool.words.is_empty() || !tool.flags.is_empty() {
             heading(ui, "Behavior", t);
         }
-        for c in tool.choices.iter().filter(|c| !top(c)) {
+        // a thin wall's side, with Thin only
+        let thin = tool.choice("Body") == "Thin";
+        for c in tool
+            .choices
+            .iter()
+            .filter(|c| !top(c) && (c.name != "Side" || kind != "extrude" || thin))
+        {
             if let Some(k) = choice_row(ui, t, c, true, places) {
                 chose = Some((c.name, k));
             }

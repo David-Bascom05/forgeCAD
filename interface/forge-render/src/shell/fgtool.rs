@@ -401,10 +401,27 @@ const PATTERN_OF: &[(&str, &str)] = &[("Features", "features"), ("Solids", "soli
 pub(super) fn choices_of(kind: &str) -> Vec<Choice> {
     let c = |name, items| Choice { name, items, on: 0 };
     match kind {
-        "extrude" => vec![c("Extents", EXTENTS), c("Output", OUTPUT)],
+        "extrude" => vec![
+            c("Extents", EXTENTS),
+            c("Output", OUTPUT),
+            c(
+                "Body",
+                &[
+                    ("Solid", "extrude"),
+                    ("Thin", "thicken"),
+                    ("Surface", "sheetbody"),
+                ],
+            ),
+            // a thin wall's side of its chain (shown with Thin only)
+            c(
+                "Side",
+                &[("Out", "flipout"), ("In", "flipin"), ("Both", "symmetric")],
+            ),
+        ],
         "revolve" => vec![
             c("Extents", &[("Angle", "angle"), ("Full", "full")]),
             c("Output", OUTPUT3),
+            c("Body", &[("Solid", "revolve"), ("Surface", "sheetbody")]),
         ],
         "sweep" | "coil" | "loft" => vec![c("Output", OUTPUT)],
         "hole" => vec![
@@ -547,23 +564,42 @@ pub(super) fn form_of(kind: &str, c: &dyn Fn(&str) -> &'static str) -> Option<Fo
     use SlotKind as K;
     Some(match kind {
         "extrude" => {
-            let mut slots = vec![slot("Profile", K::Profile)];
+            // a sheet or a thin wall goes along a chain (open or closed); a solid fills a profile
+            let solid = !matches!(c("Body"), "Thin" | "Surface");
+            let mut slots = vec![if solid {
+                slot("Profile", K::Profile)
+            } else {
+                slot("Path", K::Path)
+            }];
             let mut params = vec![];
             match c("Extents") {
-                "Distance" => params.extend([param("d", "10", Dim::Length), param("taper", "0", Dim::Angle)]),
-                "Symmetric" => params.push(param("d", "10", Dim::Length)),
+                "Distance" if solid => {
+                    params.extend([param("d", "10", Dim::Length), param("taper", "0", Dim::Angle)])
+                }
+                "Distance" | "Symmetric" => params.push(param("d", "10", Dim::Length)),
                 "To" => slots.push(slot("To", K::UpTo)),
                 _ => {}
             }
-            let flags = if c("Extents") == "Distance" {
+            let words = vec![];
+            if c("Body") == "Thin" {
+                params.push(param("t", "2", Dim::Length));
+            }
+            let flags = if c("Extents") == "Distance" && solid {
                 vec![("flip", false)]
             } else {
                 vec![]
             };
-            (slots, params, vec![], flags)
+            (slots, params, words, flags)
         }
         "revolve" => (
-            vec![slot("Profile", K::Profile), slot("Axis", K::RevAxis)],
+            vec![
+                if c("Body") == "Surface" {
+                    slot("Path", K::Path)
+                } else {
+                    slot("Profile", K::Profile)
+                },
+                slot("Axis", K::RevAxis),
+            ],
             if c("Extents") == "Angle" {
                 vec![param("ang", "360", Dim::Angle)]
             } else {
@@ -1300,6 +1336,48 @@ impl FgTool {
         // statements a form writes above its params and its own (a hole's placing sketch)
         let mut before = String::new();
         let stmt = match self.kind {
+            "extrude" if matches!(self.choice("Body"), "Thin" | "Surface") => {
+                let body = self.choice("Body");
+                let no = |why: String| ToolError::NoForgeForm { tool: "Extrude", why };
+                let extent = match self.choice("Extents") {
+                    "Distance" => "d",
+                    "Symmetric" => "sym(d)",
+                    e => {
+                        return Err(no(format!(
+                            "a {} goes a distance or symmetric, not {e}",
+                            body.to_lowercase()
+                        )));
+                    }
+                };
+                let path = self.listed("Path")?;
+                if body == "Surface" {
+                    if self.choice("Output") != "Join" {
+                        return Err(no(
+                            "a surface is a body of its own: it joins, cuts or intersects nothing".into(),
+                        ));
+                    }
+                    format!("{n} = extrude({path}, {extent}, surface: true)")
+                } else {
+                    let f = match self.choice("Output") {
+                        "Cut" => "cut",
+                        "Intersect" => {
+                            return Err(no("a thin wall joins, cuts or is new: no Intersect".into()));
+                        }
+                        _ => "extrude",
+                    };
+                    let side = match self.choice("Side") {
+                        "In" => ", side: \"in\"",
+                        "Both" => ", side: \"both\"",
+                        _ => "",
+                    };
+                    let new = if self.choice("Output") == "New Solid" {
+                        ", new: true"
+                    } else {
+                        ""
+                    };
+                    format!("{n} = {f}({path}, {extent}, thin: t{side}{new})")
+                }
+            }
             "extrude" => {
                 let output = self.choice("Output");
                 let f = match output {
@@ -1324,6 +1402,24 @@ impl FgTool {
                 };
                 let new = if output == "New Solid" { ", new: true" } else { "" };
                 format!("{n} = {f}({}, {extent}{taper}{new})", self.one("Profile")?)
+            }
+            "revolve" if self.choice("Body") == "Surface" => {
+                if self.choice("Output") != "Join" {
+                    return Err(ToolError::NoForgeForm {
+                        tool: "Revolve",
+                        why: "a surface is a body of its own: it joins or cuts nothing".into(),
+                    });
+                }
+                format!(
+                    "{n} = revolve({}, axis: {}{}, surface: true)",
+                    self.listed("Path")?,
+                    self.one("Axis")?,
+                    if self.choice("Extents") == "Angle" {
+                        ", angle: ang"
+                    } else {
+                        ""
+                    }
+                )
             }
             "revolve" => format!(
                 "{n} = revolve({}, axis: {}{}{})",
@@ -1895,6 +1991,54 @@ impl FgTool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_surface_and_a_thin_wall_write_their_extrudes_and_read_back() {
+        let mut t = FgTool::new("extrude", &[]).unwrap();
+        t.choose("Body", 2);
+        assert_eq!(t.slots[0].label, "Path");
+        assert!(t.params.iter().all(|p| p.name != "taper") && t.flags.is_empty());
+        t.take(Ok("walls.wall".into()));
+        assert_eq!(
+            t.text().unwrap(),
+            "param extrude1.d = 10\nextrude1 = extrude(walls.wall, d, surface: true)\n"
+        );
+        // a surface goes a distance or symmetric, and joins nothing
+        t.choose("Extents", 2);
+        assert_eq!(t.text().map_err(|e| e.kind()), Err("NoForgeForm"));
+        t.choose("Extents", 1);
+        t.choose("Output", 1);
+        assert_eq!(t.text().map_err(|e| e.kind()), Err("NoForgeForm"));
+        // a thin wall, both sides, cut
+        t.choose("Body", 1);
+        t.choose("Side", 2);
+        assert_eq!(
+            t.text().unwrap(),
+            "param extrude1.d = 10\nparam extrude1.t = 2\nextrude1 = cut(walls.wall, sym(d), thin: t, side: \"both\")\n"
+        );
+        // Edit Feature reads each back into its form
+        for (text, body) in [
+            ("sk = 1\ns1 = extrude(walls.wall, d, surface: true)\n", "Surface"),
+            ("s1 = extrude(walls.wall, d, thin: t, side: \"in\")\n", "Thin"),
+        ] {
+            let e = FgTool::edit("s1", text).unwrap_or_else(|e| panic!("{text}: {}", e.text()));
+            assert_eq!(e.choice("Body"), body, "{text}");
+            assert_eq!(e.slots[0].picks, vec!["walls.wall".to_string()]);
+        }
+    }
+
+    #[test]
+    fn a_revolved_surface_writes_its_call() {
+        let mut t = FgTool::new("revolve", &[]).unwrap();
+        t.choose("Body", 1);
+        t.take(Ok("sk.arc1".into()));
+        t.active = 1;
+        t.take(Ok("Z".into()));
+        assert_eq!(
+            t.text().unwrap(),
+            "param revolve1.ang = 360deg\nrevolve1 = revolve(sk.arc1, axis: Z, angle: ang, surface: true)\n"
+        );
+    }
 
     #[test]
     fn members_write_their_section_and_only_the_options_set() {

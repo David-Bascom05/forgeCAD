@@ -458,7 +458,12 @@ pub fn rows(run: &Run, src: &str) -> (Vec<FeatRow>, Vec<ParamRow>, Vec<Issue>) {
         .filter(|f| seen.insert(f.id.clone()))
         .map(|f| FeatRow {
             id: f.id.clone(),
-            kind: f.kind.to_string(),
+            // a sheet (a surface body) apart from sheet metal's `sheet`, which shares its kind
+            kind: if run.solids.iter().any(|s| s.sheet && s.solid == f.idx) {
+                "surface".to_string()
+            } else {
+                f.kind.to_string()
+            },
             line: line_of(src, f.span.lo),
             status: match f.status {
                 forge_lang::eval::Status::Ok => Status::Ok,

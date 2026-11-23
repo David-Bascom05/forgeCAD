@@ -1,6 +1,5 @@
-//! What's coming shows in its dialog, held off: Extrude's and Revolve's Thin and Surface bodies
-//! (the language has no `thin:`/`surface:` yet) and Fillet's conic section. Hovering says why;
-//! clicking changes nothing the dialog writes. `FORGE_UI_SHOTS=DIR` keeps a picture.
+//! What's coming shows in its dialog, held off: Fillet's conic section (being built in the
+//! kernel). Hovering says why; clicking changes nothing the dialog writes. `FORGE_UI_SHOTS=DIR` keeps a picture.
 
 use forge_render::gui::{Gui, Headless};
 
@@ -22,7 +21,7 @@ sketch boss(on: plate.end) {
 ";
 
 #[test]
-fn thin_surface_and_conic_are_shown_held_off() {
+fn the_conic_section_is_shown_held_off() {
     let dir = std::env::temp_dir().join(format!("fg-coming-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let file = dir.join("p.fg");
@@ -37,12 +36,7 @@ fn thin_surface_and_conic_are_shown_held_off() {
     h.step();
     h.gui.open(file.to_str().unwrap());
     assert!(h.until(ready));
-    for (tool, row, held) in [
-        ("Fillet", "Section", "Conic"),
-        ("Extrude", "Body", "Thin"),
-        ("Extrude", "Body", "Surface"),
-        ("Revolve", "Body", "Surface"),
-    ] {
+    for (tool, row, held) in [("Fillet", "Section", "Conic")] {
         assert!(h.click(&format!("tool:{tool}")), "no {tool}");
         assert!(h.until(|g| g.shell.fg.as_ref().is_some_and(|p| p.tool.is_some())));
         for _ in 0..4 {
