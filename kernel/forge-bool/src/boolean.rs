@@ -4493,9 +4493,16 @@ pub(crate) fn imprint(
                         a.2 == sides[src] && a.3 == e
                     }
                 };
+                // (all three On, a straight stretch ending at this edge's own vertex lies along the
+                // boundary only if that vertex is on it: coverage G5a)
                 let place = match at(0.5) {
                     Where::On if !along.iter().any(lies_along) => match at(0.381_966_011_250_105_1) {
-                        Where::On => at(0.618_033_988_749_894_9),
+                        Where::On => match at(0.618_033_988_749_894_9) {
+                            Where::On if matches!(edge.curve, Curve::Line(_)) => {
+                                on_to_its_vertex(index[dst], dst_face, sb, e, [w[0], w[1]], &ts)
+                            }
+                            o => o,
+                        },
                         o => o,
                     },
                     o => o,
@@ -4529,6 +4536,26 @@ pub(crate) fn imprint(
         }
     }
     Ok(())
+}
+
+/// Where a straight stretch `w` of edge `e` that its samples read On the destination face's boundary
+/// lies: decided once, at the edge's own vertex it ends at (not a crossing), when that vertex is off
+/// the boundary. Samples (1 - f) d from the boundary all read On while d <= LINEAR / 0.618, so with
+/// the vertex d > LINEAR off they would drop as running along the boundary a stretch whose vertex
+/// was decided off it (coverage G5a). Out of line: the imprint's loop is hot and this is not.
+#[cold]
+#[inline(never)]
+fn on_to_its_vertex(index: &Index, face: FaceId, body: &Body, e: EdgeId, w: [f64; 2], ts: &[f64]) -> Where {
+    let edge = body.edge(e);
+    let off = |at_end: bool, v: VertexId| {
+        let o = at_end.then(|| index.point_in_face(face, body.vertex(v).point));
+        o.filter(|&o| o != Where::On)
+    };
+    let lo = w[0] == edge.range.lo && !ts.contains(&w[0]);
+    let hi = w[1] == edge.range.hi && !ts.contains(&w[1]);
+    off(lo, edge.start)
+        .or_else(|| off(hi, edge.end))
+        .unwrap_or(Where::On)
 }
 
 pub(crate) fn overlap(a: &forge_math::Box3, b: &forge_math::Box3) -> forge_math::Box3 {
