@@ -164,6 +164,8 @@ pub struct Options {
     pub checks: bool,
     /// Threads on an axis not modelled but recorded (`Run::threads`), as a drawing draws them.
     pub cosmetic_threads: bool,
+    /// Collect the hole features for CAM (`Run::holes`); off, a build does no work for it.
+    pub holes: bool,
     /// An assembly: mesh its parts for the overlap check and the expects' clearances. Off (a
     /// drawing, which asks for neither), a part loads without them, and a run that needs them
     /// does not share its loads (the setting is in their key).
@@ -198,6 +200,7 @@ impl Default for Options {
             step: None,
             checks: true,
             cosmetic_threads: false,
+            holes: false,
             meshes: true,
             asks: vec![],
             comp_anchors: false,
@@ -628,7 +631,7 @@ fn run_once(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
         vec![]
     };
     let (rebuilt, reused) = (ev.b.rebuilt, ev.b.reused);
-    let holes = holes::hole_infos(&ev);
+    let holes = if opts.holes { holes::hole_infos(&ev) } else { vec![] };
     let run = Run {
         errors: std::mem::take(&mut ev.errors),
         warnings: std::mem::take(&mut ev.warnings),

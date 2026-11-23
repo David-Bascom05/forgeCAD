@@ -446,7 +446,7 @@ impl Cam {
                 let file = get_str(a, "#0", None)?;
                 let path = dir.join(&file);
                 let src = std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
-                let (run, _) = crate::run(&src, crate::Options::default(), Default::default());
+                let (run, _) = crate::run(&src, crate::Options { holes: true, ..Default::default() }, Default::default());
                 if !run.ok() {
                     return Err(format!(
                         "the part `{file}` does not build: {:?}",
