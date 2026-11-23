@@ -1,6 +1,5 @@
-== hole-grid seq: mine 117805795 base 117867297 diff -61502
-   kernel functions above base: 4 (+4458), below: -29989
-   + 3194 forge_bool::unify (every function in unify.rs, summed)
+== hole-grid seq: mine 117800971 base 117867293 diff -66322
+   kernel functions above base: 3 (+1264), below: -31615
    + 1206 ???:<std::sync::once::Once>::call_once_force::<<std::sync::once_lock::OnceLock<alloc::sync::Arc<dyn core::any::Any + core::marker::Send + core::marker
    + 52 ???:forge_geom::intersect::planes_coincident
    + 6 ???:<core::option::Option<forge_topo::body::EdgeId> as alloc::vec::spec_from_elem::SpecFromElem>::from_elem::<alloc::alloc::Global>
@@ -8,12 +7,11 @@
    (non-kernel) -56 ./elf/../sysdeps/x86_64/dl-machine.h:_dl_relocate_object
    (non-kernel) -35 ./elf/./elf/do-rel.h:_dl_relocate_object
    (non-kernel) +30 ./stdlib/../stdlib/strtol_l.c:____strtoul_l_internal
-   (non-kernel) -14 ???:0x00000000001982b0
    (non-kernel) +14 ???:0x0000000000198350
-== hole-grid nary1: mine 109725874 base 109726323 diff -449
-   kernel functions above base: 5 (+9252), below: -9638
+   (non-kernel) -14 ???:0x00000000001982b0
+== hole-grid nary1: mine 109721050 base 109726319 diff -5269
+   kernel functions above base: 4 (+6058), below: -11264
    + 4800 ???:<forge_bool::classify::Index>::classify
-   + 3194 forge_bool::unify (every function in unify.rs, summed)
    + 1200 ???:<std::sync::once::Once>::call_once_force::<<std::sync::once_lock::OnceLock<alloc::sync::Arc<dyn core::any::Any + core::marker::Send + core::marker
    + 52 ???:forge_geom::intersect::planes_coincident
    + 6 ???:<core::option::Option<forge_topo::body::EdgeId> as alloc::vec::spec_from_elem::SpecFromElem>::from_elem::<alloc::alloc::Global>
@@ -23,10 +21,9 @@
    (non-kernel) +14 ???:0x0000000000198350
    (non-kernel) -14 ???:0x00000000001982b0
    (non-kernel) +12 ???:0x0000000000198390
-== upto seq: mine 40917693 base 40918446 diff -753
-   kernel functions above base: 5 (+554), below: -890
+== upto seq: mine 40917473 base 40918442 diff -969
+   kernel functions above base: 4 (+428), below: -980
    + 316 ???:<std::sync::once::Once>::call_once_force::<<std::sync::once_lock::OnceLock<alloc::sync::Arc<dyn core::any::Any + core::marker::Send + core::marker
-   + 126 forge_bool::unify (every function in unify.rs, summed)
    + 52 ???:forge_geom::intersect::planes_coincident
    + 36 ???:<core::option::Option<forge_topo::body::EdgeId> as alloc::vec::spec_from_elem::SpecFromElem>::from_elem::<alloc::alloc::Global>
    + 24 ???:forge_bool::ssi::coincident
@@ -36,10 +33,9 @@
    (non-kernel) +30 ./stdlib/../stdlib/strtol_l.c:____strtoul_l_internal
    (non-kernel) -14 ???:0x00000000001982b0
    (non-kernel) +14 ???:0x0000000000198350
-== upto nary1: mine 29167282 base 29167818 diff -536
-   kernel functions above base: 6 (+591), below: -1075
+== upto nary1: mine 29167062 base 29167814 diff -752
+   kernel functions above base: 5 (+465), below: -1165
    + 256 ???:<forge_bool::classify::Index>::classify
-   + 126 forge_bool::unify (every function in unify.rs, summed)
    + 92 ???:<std::sync::once::Once>::call_once_force::<<std::sync::once_lock::OnceLock<alloc::sync::Arc<dyn core::any::Any + core::marker::Send + core::marker
    + 52 ???:forge_geom::intersect::planes_coincident
    + 41 ???:<core::option::Option<forge_topo::body::EdgeId> as alloc::vec::spec_from_elem::SpecFromElem>::from_elem::<alloc::alloc::Global>
@@ -50,10 +46,9 @@
    (non-kernel) -14 ???:0x00000000001982b0
    (non-kernel) +14 ???:0x0000000000198350
    (non-kernel) +12 ???:0x0000000000198390
-== upto-flat seq: mine 15089398 base 15089323 diff 75
-   kernel functions above base: 4 (+450), below: -194
+== upto-flat seq: mine 15089184 base 15089319 diff -135
+   kernel functions above base: 3 (+327), below: -281
    + 243 ???:<std::sync::once::Once>::call_once_force::<<std::sync::once_lock::OnceLock<alloc::sync::Arc<dyn core::any::Any + core::marker::Send + core::marker
-   + 123 forge_bool::unify (every function in unify.rs, summed)
    + 52 ???:forge_geom::intersect::planes_coincident
    + 32 ???:<forge_bool::classify::Index>::point_in_face_past
    (non-kernel) -120 ./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S:__memcpy_avx_unaligned_erms
@@ -62,10 +57,9 @@
    (non-kernel) +30 ./stdlib/../stdlib/strtol_l.c:____strtoul_l_internal
    (non-kernel) +14 ???:0x0000000000198350
    (non-kernel) -14 ???:0x00000000001982b0
-== upto-flat nary1: mine 11994418 base 11994501 diff -83
-   kernel functions above base: 5 (+412), below: -434
+== upto-flat nary1: mine 11994204 base 11994497 diff -293
+   kernel functions above base: 4 (+289), below: -521
    + 192 ???:<forge_bool::classify::Index>::classify
-   + 123 forge_bool::unify (every function in unify.rs, summed)
    + 52 ???:forge_geom::intersect::planes_coincident
    + 40 ???:<std::sync::once::Once>::call_once_force::<<std::sync::once_lock::OnceLock<alloc::sync::Arc<dyn core::any::Any + core::marker::Send + core::marker
    + 5 ???:<core::option::Option<forge_topo::body::EdgeId> as alloc::vec::spec_from_elem::SpecFromElem>::from_elem::<alloc::alloc::Global>
@@ -75,8 +69,8 @@
    (non-kernel) +14 ???:0x0000000000198350
    (non-kernel) -14 ???:0x00000000001982b0
    (non-kernel) -12 ???:0x00000000001982f0
-== volute edit: mine 2242762834 base 2242790443 diff -27609
-   kernel functions above base: 13 (+4834), below: -69334
+== volute edit: mine 2242759865 base 2242790446 diff -30581
+   kernel functions above base: 13 (+4834), below: -72306
    + 1636 ???:forge_math::dmath::sin_cos
    + 756 ???:<forge_bool::classify::Index>::classify
    + 702 ???:forge_geom::intersect::planes_coincident
@@ -95,8 +89,8 @@
    (non-kernel) -2748 ./malloc/./malloc/malloc.c:unlink_chunk.isra.0
    (non-kernel) -1929 ./malloc/./malloc/malloc.c:_int_malloc
    (non-kernel) -991 ./malloc/./malloc/malloc.c:_int_free_merge_chunk
-== heatsink app: mine 94385055 base 94516153 diff -131098
-   kernel functions above base: 2 (+6936), below: -132349
+== heatsink app: mine 94375682 base 94516156 diff -140474
+   kernel functions above base: 2 (+6936), below: -141725
    + 6912 ???:forge_bool::ssi::cylinders_coincident
    + 24 ???:<core::option::Option<forge_topo::body::EdgeId> as alloc::vec::spec_from_elem::SpecFromElem>::from_elem::<alloc::alloc::Global>
    (non-kernel) -5346 ./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S:__memcpy_avx_unaligned_erms
@@ -105,18 +99,18 @@
    (non-kernel) -30 ./elf/./elf/do-rel.h:_dl_relocate_object
    (non-kernel) +14 ???:0x0000000000389770
    (non-kernel) -14 ???:0x0000000000389660
-== heatsink edit: mine 184990842 base 185248084 diff -257242
-   kernel functions above base: 2 (+13872), below: -264698
+== heatsink edit: mine 184972093 base 185248087 diff -275994
+   kernel functions above base: 2 (+13872), below: -283450
    + 13824 ???:forge_bool::ssi::cylinders_coincident
    + 48 ???:<core::option::Option<forge_topo::body::EdgeId> as alloc::vec::spec_from_elem::SpecFromElem>::from_elem::<alloc::alloc::Global>
    (non-kernel) -5734 ./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S:__memcpy_avx_unaligned_erms
    (non-kernel) -604 ./string/../sysdeps/x86_64/multiarch/memcmp-avx2-movbe.S:__memcmp_avx2_movbe
    (non-kernel) -48 ./elf/../sysdeps/x86_64/dl-machine.h:_dl_relocate_object
    (non-kernel) -30 ./elf/./elf/do-rel.h:_dl_relocate_object
-   (non-kernel) -14 ???:0x0000000000389660
    (non-kernel) +14 ???:0x0000000000389770
-== heatsink cli: mine 167603403 base 167838451 diff -235048
-   kernel functions above base: 2 (+10392), below: -242045
+   (non-kernel) -14 ???:0x0000000000389660
+== heatsink cli: mine 167589130 base 167838454 diff -249324
+   kernel functions above base: 2 (+10392), below: -256321
    + 10368 ???:forge_bool::ssi::cylinders_coincident
    + 24 ???:<core::option::Option<forge_topo::body::EdgeId> as alloc::vec::spec_from_elem::SpecFromElem>::from_elem::<alloc::alloc::Global>
    (non-kernel) -2872 ./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S:__memcpy_avx_unaligned_erms
@@ -125,8 +119,8 @@
    (non-kernel) -30 ./elf/./elf/do-rel.h:_dl_relocate_object
    (non-kernel) +14 ???:0x0000000000389770
    (non-kernel) -14 ???:0x0000000000389660
-== conrod app: mine 60193912 base 60253231 diff -59319
-   kernel functions above base: 9 (+6439), below: -45219
+== conrod app: mine 60191145 base 60253234 diff -62089
+   kernel functions above base: 9 (+6439), below: -47989
    + 3300 ???:forge_bool::ssi::cylinders_coincident
    + 1950 ???:forge_geom::intersect::planes_coincident
    + 880 ???:<forge_geom::curve::Curve as forge_geom::curve::CurveGeom>::eval
@@ -142,8 +136,8 @@
    (non-kernel) -1192 ./malloc/./malloc/malloc.c:malloc_consolidate
    (non-kernel) -1044 ./malloc/./malloc/malloc.c:unlink_chunk.isra.0
    (non-kernel) -883 ./malloc/./malloc/malloc.c:_int_free_maybe_consolidate
-== jack app: mine 376362186 base 376485490 diff -123304
-   kernel functions above base: 9 (+8975), below: -124494
+== jack app: mine 376360359 base 376485493 diff -125134
+   kernel functions above base: 9 (+8975), below: -126324
    + 5904 ???:forge_bool::ssi::coincident
    + 1380 ???:forge_bool::ssi::cylinders_coincident
    + 780 ???:forge_geom::intersect::planes_coincident
@@ -158,9 +152,9 @@
    (non-kernel) -30 ./elf/./elf/do-rel.h:_dl_relocate_object
    (non-kernel) +14 ???:0x0000000000389770
    (non-kernel) -14 ???:0x0000000000389660
-   (non-kernel) +12 ???:0x00000000003897b0
-== bracket app: mine 10372048 base 10378809 diff -6761
-   kernel functions above base: 3 (+126), below: -6120
+   (non-kernel) -12 ???:0x00000000003896a0
+== bracket app: mine 10371272 base 10378812 diff -7540
+   kernel functions above base: 3 (+126), below: -6899
    + 117 ???:forge_geom::intersect::planes_coincident
    + 6 ???:<std::sync::once::Once>::call_once_force::<<std::sync::once_lock::OnceLock<alloc::sync::Arc<dyn core::any::Any + core::marker::Send + core::marker
    + 3 ???:<core::option::Option<forge_topo::body::EdgeId> as alloc::vec::spec_from_elem::SpecFromElem>::from_elem::<alloc::alloc::Global>
@@ -170,8 +164,8 @@
    (non-kernel) -30 ./elf/./elf/do-rel.h:_dl_relocate_object
    (non-kernel) -14 ???:0x0000000000389660
    (non-kernel) +14 ???:0x0000000000389770
-== bracket cli: mine 17421845 base 17432501 diff -10656
-   kernel functions above base: 3 (+204), below: -10367
+== bracket cli: mine 17420603 base 17432504 diff -11901
+   kernel functions above base: 3 (+204), below: -11612
    + 195 ???:forge_geom::intersect::planes_coincident
    + 6 ???:<std::sync::once::Once>::call_once_force::<<std::sync::once_lock::OnceLock<alloc::sync::Arc<dyn core::any::Any + core::marker::Send + core::marker
    + 3 ???:<core::option::Option<forge_topo::body::EdgeId> as alloc::vec::spec_from_elem::SpecFromElem>::from_elem::<alloc::alloc::Global>
@@ -179,11 +173,10 @@
    (non-kernel) -90 ./string/../sysdeps/x86_64/multiarch/memmove-vec-unaligned-erms.S:__memcpy_avx_unaligned_erms
    (non-kernel) -48 ./elf/../sysdeps/x86_64/dl-machine.h:_dl_relocate_object
    (non-kernel) -30 ./elf/./elf/do-rel.h:_dl_relocate_object
-   (non-kernel) +14 ???:0x0000000000389770
    (non-kernel) -14 ???:0x0000000000389660
-== insert cli: mine 36271714 base 36271828 diff -114
-   kernel functions above base: 5 (+1262), below: -520
-   + 1197 forge_bool::unify (every function in unify.rs, summed)
+   (non-kernel) +14 ???:0x0000000000389770
+== insert cli: mine 36269652 base 36271831 diff -2179
+   kernel functions above base: 4 (+65), below: -1388
    + 52 ???:forge_geom::intersect::planes_coincident
    + 5 ???:<core::option::Option<forge_topo::body::EdgeId> as alloc::vec::spec_from_elem::SpecFromElem>::from_elem::<alloc::alloc::Global>
    + 4 ???:forge_model::modify
@@ -194,8 +187,8 @@
    (non-kernel) -30 ./elf/./elf/do-rel.h:_dl_relocate_object
    (non-kernel) -14 ???:0x0000000000389660
    (non-kernel) +14 ???:0x0000000000389770
-== clamp app: mine 11801523 base 11804109 diff -2586
-   kernel functions above base: 4 (+160), below: -1978
+== clamp app: mine 11800711 base 11804112 diff -3401
+   kernel functions above base: 4 (+160), below: -2793
    + 78 ???:forge_geom::intersect::planes_coincident
    + 52 ???:forge_model::bodies::body_feature
    + 27 ???:<std::sync::once::Once>::call_once_force::<<std::sync::once_lock::OnceLock<alloc::sync::Arc<dyn core::any::Any + core::marker::Send + core::marker
@@ -206,8 +199,8 @@
    (non-kernel) -30 ./elf/./elf/do-rel.h:_dl_relocate_object
    (non-kernel) +14 ???:0x0000000000389770
    (non-kernel) -14 ???:0x0000000000389660
-== clamp cli: mine 25867013 base 25870771 diff -3758
-   kernel functions above base: 4 (+238), below: -3147
+== clamp cli: mine 25864638 base 25870774 diff -6136
+   kernel functions above base: 4 (+238), below: -5525
    + 156 ???:forge_geom::intersect::planes_coincident
    + 52 ???:forge_model::bodies::body_feature
    + 27 ???:<std::sync::once::Once>::call_once_force::<<std::sync::once_lock::OnceLock<alloc::sync::Arc<dyn core::any::Any + core::marker::Send + core::marker
@@ -218,10 +211,9 @@
    (non-kernel) -30 ./elf/./elf/do-rel.h:_dl_relocate_object
    (non-kernel) +14 ???:0x0000000000389770
    (non-kernel) -14 ???:0x0000000000389660
-== hub cli: mine 37313813 base 37326194 diff -12381
-   kernel functions above base: 5 (+3732), below: -8898
+== hub cli: mine 37312418 base 37326197 diff -13779
+   kernel functions above base: 4 (+2775), below: -9339
    + 1584 ???:forge_bool::ssi::coincident
-   + 957 forge_bool::unify (every function in unify.rs, summed)
    + 777 ???:<forge_bool::classify::Index>::classify
    + 400 ???:<std::sync::once::Once>::call_once_force::<<std::sync::once_lock::OnceLock<alloc::sync::Arc<dyn core::any::Any + core::marker::Send + core::marker
    + 14 ???:<core::option::Option<forge_topo::body::EdgeId> as alloc::vec::spec_from_elem::SpecFromElem>::from_elem::<alloc::alloc::Global>
