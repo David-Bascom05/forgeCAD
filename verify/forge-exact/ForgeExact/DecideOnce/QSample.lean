@@ -1,4 +1,4 @@
-import ForgeExact.DecideOnce.QSweep
+import ForgeExact.DecideOnce.QSing
 
 /-!
 # Q1 L2: the samples (plan §2, module 5)
@@ -138,12 +138,12 @@ def ratEvents (E : List Num) : List Rat := E.filterMap fun n => match n with
   | .rat q => some q
   | .iso _ => none
 
-/-- **The frame certificate**: every carrier is a plane `x = const` (whose cells lie in a rational
-event plane), or meets every line parallel to `z` in finitely many points (a plane with a `z` term,
-or `zz ≠ 0`). Then no carrier's trace on a sweep plane has a vertical line, so the rational lines
-`y = c'` meet every curve of it. -/
+/-- **The frame certificate**: every carrier meets every line parallel to `z` in finitely many
+points: a plane with a `z` term, or `zz ≠ 0`. Then no carrier's trace on a sweep plane has a
+vertical line, so the rational lines `y = c'` meet every curve of it. No carrier is a plane
+`x = const`, so no cell lies in a level plane: the tilted frames take axis-aligned planes. -/
 def frameOk (qs : List Quadric) : Bool :=
-  qs.all fun q => isXPlane q || (isPlaneQ q && q.lz != 0) || q.zz != 0
+  qs.all fun q => (isPlaneQ q && q.lz != 0) || q.zz != 0
 
 /-- The samples in the frame the carriers are given in. -/
 def samplesAt (qs : List Quadric) : Option (List QS) := do
@@ -173,14 +173,16 @@ def frames : List Frame :=
     shears.map (fun l => (0, 0, l))
 
 /-- **The samples**: every sweep plane's, and the vertices, in the first frame of `frames` (a
-tilted sweep and a projection shear) that passes `frameOk` and where every step succeeds. The tilt
+tilted sweep and a projection shear) that passes `frameOk` and `singAll` and where every
+step succeeds. The tilt
 keeps every rational line and curve direction out of the level planes; the projection shear
 separates two crossings of one sweep plane with one `y`. `none`:
 undecided in every frame (fuel, or a degenerate input the proposers do not cover). Never a wrong
 covector. -/
 def samplesOf (qs : List Quadric) : Option (List QS) :=
   frames.findSome? fun f =>
-    if frameOk (qs.map (inFrame f)) then samplesAt (qs.map (inFrame f)) else none
+    if frameOk (qs.map (inFrame f)) && singAll (qs.map (inFrame f)) then
+      samplesAt (qs.map (inFrame f)) else none
 
 /-! ## Every sample is realised -/
 
