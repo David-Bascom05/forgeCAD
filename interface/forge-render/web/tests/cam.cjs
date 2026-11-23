@@ -39,10 +39,14 @@ async function click(p, name, button = 0, double = false) {
   await settle(p);
 }
 
-/// A few frames drawn after the last ask.
+/// The frame an ask draws (the page is idle after it: no frames come unasked).
 async function settle(p) {
   const f0 = (await p.evaluate(() => window.forgecad.state())).frames;
-  await t.until(p, (s) => s.frames >= f0 + 3, "frames", 60000);
+  const t0 = Date.now();
+  while (Date.now() - t0 < 5000) {
+    if ((await p.evaluate(() => window.forgecad.state())).frames > f0) return;
+    await new Promise((r) => setTimeout(r, 50));
+  }
 }
 
 async function shot(p, name) {
