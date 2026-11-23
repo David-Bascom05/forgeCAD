@@ -17,7 +17,7 @@ type Tool = (
     &'static [(&'static str, &'static str)],
 );
 
-const TOOLS: [Tool; 14] = [
+const TOOLS: [Tool; 15] = [
     (
         "query",
         "selector -> @handles; or stat, file, check, params, features; holes, section z=V, gap A B, ..",
