@@ -164,7 +164,6 @@ fn as_motions(evs: &[Ev], c: &Control) -> Vec<Motion> {
     let ix = |l: char| c.letters.iter().position(|x| *x == l).unwrap();
     let (xi, yi, zi) = (ix('X'), ix('Y'), ix('Z'));
     let mut out = Vec::new();
-    let mut pos: Option<[i64; 3]> = None;
     let mut last_comment = String::new();
     let full3 = |v: &Vec<Option<i64>>| [v[xi].unwrap(), v[yi].unwrap(), v[zi].unwrap()];
     for e in evs {
@@ -172,32 +171,28 @@ fn as_motions(evs: &[Ev], c: &Control) -> Vec<Motion> {
             Ev::Rapid(v) => {
                 let p = full3(v);
                 out.push(Motion::Rapid(p));
-                pos = Some(p);
             }
             Ev::Feed { to, f, .. } => {
                 let p = full3(to);
                 out.push(Motion::Feed(p, *f));
-                pos = Some(p);
             }
             Ev::Arc {
                 to,
                 plane: 17,
-                centre: Centre::Offset([i, j]),
+                centre: Centre::Abs([i, j]),
                 cw,
                 full,
                 f,
                 ..
             } => {
-                let s = pos.unwrap();
                 let p = full3(to);
                 out.push(Motion::Arc {
                     to: p,
-                    c: [s[0] + i, s[1] + j],
+                    c: [*i, *j],
                     cw: *cw,
                     f: *f,
                     full: *full,
                 });
-                pos = Some(p);
             }
             Ev::Arc { .. } => panic!("an arc forge-post does not write"),
             Ev::Dwell { ms } => out.push(Motion::Dwell(*ms)),
@@ -214,7 +209,6 @@ fn as_motions(evs: &[Ev], c: &Control) -> Vec<Motion> {
                 if out.last() != Some(&Motion::Home) {
                     out.push(Motion::Home);
                 }
-                pos = None;
             }
             Ev::Comment(c) => last_comment = c.clone(),
             // grbl: the tool is named in the comment before M0

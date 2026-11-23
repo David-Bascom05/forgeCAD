@@ -10,6 +10,7 @@ repository.workspace = true
 forge-math = { path = "../forge-math" }
 forge-tooling = { path = "../forge-tooling" }
 forge-post = { path = "../forge-post" }
+forge-machine-core = { path = "../forge-machine-core" }
 
 [lints]
 workspace = true
