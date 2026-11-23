@@ -59,5 +59,7 @@ refinement:
   input points come first; every triangle is counter-clockwise; every loop edge is an edge of
   some triangle; no two triangles overlap; and a point on no loop edge is in a triangle exactly
   when a ray from it crosses an odd number of loop edges.
-They are the boundary proposed to fix-mesh-asm (the tessellation plan's M1/M2: what a settled
+- `Settled` (the seam with M2): when a refinement settles, every edge but the loops' has
+  `edge = false`, and every triangle `triangle = false` when triangles are asked of.
+They are the boundary with fix-mesh-asm's research/tessellation-proof (M1/M2: what a settled
 refinement means for the chord is theirs). The proofs are next.

@@ -152,4 +152,29 @@ def Correct : Prop :=
     cdt.within inst points loops interior refine false cdt.ROUNDS as_far = ok (.Ok (t, s)) →
     Good points.val (loops.val.map (·.val)) t
 
+/-- Triangle tr's edges, each as its two corners' indices in order round it. -/
+def edgesOf (tr : Array Std.U32 3#usize) : List (Std.U32 × Std.U32) :=
+  match tr.val with
+  | [i, j, k] => [(i, j), (j, k), (k, i)]
+  | _ => []
+
+/-- The seam with the tessellation plan's M2 (research/tessellation-proof: "settled ⇒ every test
+passed"): when a refinement settles, every triangle and every edge but the loops' passes it.
+Each edge that is no loop edge gets `edge = false`; each triangle, when the refinement asks of
+triangles, `triangle = false`. (Loop edges are the boundary's chords, judged by the
+tessellator before the CDT is called.) -/
+def Settled : Prop :=
+  OrientSound → InCircleSound →
+  ∀ (points interior : Slice P) (loops : Slice (alloc.vec.Vec Std.U32)) (r : R)
+    (as_far : Bool) t,
+    Total inst r →
+    (∀ p ∈ points.val, InRange p) →
+    cdt.within inst points loops interior (some r) false cdt.ROUNDS as_far = ok (.Ok (t, true)) →
+    ∀ tr ∈ t.triangles.val, ∀ a b c, corners t.points.val tr = some (a, b, c) →
+      (inst.triangles r = ok true → inst.triangle r tr (Array.make 3#usize [a, b, c]) = ok false) ∧
+      ∀ e ∈ edgesOf tr,
+        (e ∉ loopEdges (loops.val.map (·.val)) ∧ (e.2, e.1) ∉ loopEdges (loops.val.map (·.val))) →
+        ∀ pa pb, pt t.points.val e.1 = some pa → pt t.points.val e.2 = some pb →
+          inst.edge r e.1 e.2 pa pb = ok false
+
 end forge_mesh.Spec
