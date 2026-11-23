@@ -3,5 +3,6 @@ Copyright (c) 2026 ForgeCAD contributors. Released under the Mozilla Public Lice
 -/
 import ForgeMesh.Funs
 import ForgeMesh.Basic
+import ForgeMesh.Sort
 import ForgeMesh.Axioms
 import ForgeMesh.Spec

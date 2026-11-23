@@ -4,6 +4,7 @@ Copyright (c) 2026 ForgeCAD contributors. Released under the Mozilla Public Lice
 import Lean
 import ForgeMesh.Funs
 import ForgeMesh.Basic
+import ForgeMesh.Sort
 
 /-!
 # No axiom in the CDT's translation
@@ -30,3 +31,6 @@ elab "#standard_axioms " ids:ident* : command => do
   forge_mesh.cdt.zip
   forge_mesh.nx_spec forge_mesh.pv_spec forge_mesh.slot_spec forge_mesh.least_spec
   forge_mesh.most_spec forge_mesh.same_chord_spec
+  forge_mesh.sink_loop_spec forge_mesh.merge_inner_spec forge_mesh.merge_runs_spec forge_mesh.sink_spec
+  forge_mesh.sort_runs_inner_spec forge_mesh.sort_runs_spec forge_mesh.merge_passes_spec
+  forge_mesh.copy_back_spec forge_mesh.sort_keys_spec
