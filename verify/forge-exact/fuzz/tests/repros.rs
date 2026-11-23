@@ -494,3 +494,22 @@ fn band_ball_on_an_edge_splits() {
 fn band_tangent_inside_cylinder_holes() {
     agrees_curved(&band_curved("cylinder_cylinder/perpendicular_tangent_inside/Add", 1, -0.9));
 }
+
+/// Cone apexes on a face that lies on the nappe's axis-normal plane, and two cones sharing an
+/// apex. The reference read the face as the nappe's selector and skipped the apex; it now cuts
+/// the apex's link into the caps C, −C and the tangent planes' sectors, and finds the kept cells
+/// are not a disc. Each result touches itself at the apex, and the kernel builds every one.
+/// fix-touch refuses them.
+#[test]
+#[ignore = "exact curved reference: a cone apex on a face normal to its axis touches it at a point"]
+fn cone_apex_on_a_face_normal_to_its_axis_is_non_manifold() {
+    for name in [
+        "plane_cone/apex_on_top_from_above/Add",
+        "plane_cone/apex_on_top_from_inside/Cut",
+        "cylinder_cone/apex_on_cap_centre/Cut",
+        "cone_cone/apex_to_apex/Add",
+        "cone_cone/inverted_overlap/Cut",
+    ] {
+        agrees_curved(&degenerate_curved(name));
+    }
+}

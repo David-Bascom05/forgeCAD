@@ -1,13 +1,13 @@
-# The kernel against the exact curved reference (stage 2: planes, cylinders, cones, spheres)
+# The kernel against the exact curved reference (planes, cylinders, cones, spheres; tori)
 
 `verify/forge-exact` now decides booleans of solids bounded by planes and the kernel's analytic
 quadrics (cylinders, cones, spheres) exactly, over ℚ, with Lean proofs of the parts listed in
 "What is proven" below. Its harness, `exact-curved`, gives each case to the kernel and to the
-reference and judges the kernel's sequential and n-ary paths. Tori, offsets and procedural
-surfaces are not in this stage (README §6.2, stage 3 and 4).
+reference and judges the kernel's sequential and n-ary paths. Tori are in step 4 (below); procedural
+surfaces are not (README §6.2).
 
 Rebuild: `lake build` in verify/forge-exact, then
-`cargo run --release -p forge-exact-fuzz --bin exact-curved -- [degen] [families] [lang] [band]
+`cargo run --release -p forge-exact-fuzz --bin exact-curved -- [degen] [families] [lang] [band] [torus] [torusband]
 [--seeds N] [--lang N] [--rule strict|snap] [--threads N] [--only NAME] [--shrink]`.
 Repros: `cargo test --release -p forge-exact-fuzz --test repros -- --ignored` (the curved ones are
 at the end of tests/repros.rs).
@@ -150,7 +150,8 @@ surfaces are again planes, cylinders, cones, spheres and tori, so they need noth
 
 | source | agree | wrong | refused | ambiguous | out of scope |
 |---|--:|--:|--:|--:|--:|
-| degenerate pairs (279: plane/cylinder/cone/sphere × configs × Add/Cut/Keep) | 248 | 9 | 3 | 19 | 0 |
+| degenerate pairs (279: plane/cylinder/cone/sphere × configs × Add/Cut/Keep) | 240 | 19 | 3 | 17 | 0 |
+| torus pairs (93: plane/cylinder/cone/sphere/torus with a torus × configs × Add/Cut/Keep) | 40 | 0 | 0 | 50 | 3 |
 | scoreboard families (36 × 4 seeds, convex-quadric sub-histories) | 86 | 4 | 0 | 5 | 21 |
 | forge_lang programs (300, extrude/revolve/ball/hole/pattern, convex-quadric sub-history) | 200 | 0 | 0 | 0 | 100 |
 | curved band (279 pairs × tool moved ±0.9, 3 LINEAR on x, y, z = 2 511) | 2 191 | 50 | 102 | 168 | 0 |
@@ -170,7 +171,7 @@ the four extra ambiguous are near touches, which the snap rule calls slivers.
 
 ## Bugs (each a repro at the end of tests/repros.rs)
 
-### Point contacts built instead of ZeroThickness: 9 degenerate pairs (14 before the apex rule) and their band variants
+### Point contacts built instead of ZeroThickness: 19 degenerate pairs and their band variants
 
 The union or difference meets itself at one point. By §6 the result is non-manifold, and the
 kernel must refuse with ZeroThickness, as it must for the flat `cube_on_a_corner_vertex`. It
@@ -181,13 +182,23 @@ The cases:
 - sphere_sphere: tangent_outside/Add, equal_tangent_outside/Add, tangent_inside/Cut;
 - cylinder_sphere: pole_on_cap/Add, pole_on_bottom_inside/Cut;
 - cone_sphere/pole_on_base_centre/Add;
-- the cone-apex contacts (plane_cone/apex_on_vertex/Add, apex_on_edge/Add,
-  cylinder_cone/apex_on_wall/Add, cone_cone/apex_on_surface/Add, cone_sphere/pole_on_apex/Add).
-  These are now *ambiguous* in the reference, because its apex check is sampled.
+- cone apexes on a surface, decided by the exact apex test (curved-l2-proofs.md §3):
+  - plane_cone/apex_on_vertex/Add and apex_on_edge/Add;
+  - cylinder_cone/apex_on_wall/Add;
+  - cone_cone/apex_on_surface/Add;
+  - cone_sphere/pole_on_apex/Add;
+- cone apexes on a face normal to the axis, and two cones sharing an apex:
+  - plane_cone/apex_on_top_from_above/Add and apex_on_top_from_inside/Cut;
+  - cylinder_cone/apex_on_cap_centre/Cut;
+  - cone_cone/apex_to_apex/Add and inverted_overlap/Cut.
+
+  The reference first said *solid* on these five, because it took the face for the nappe's
+  selector and skipped the apex. fix-touch found the gap: its kernel refuses them. The reference
+  now decides them from the apex's link.
 
 Tests: `ball_resting_on_the_top_is_non_manifold`,
-`cavity_touching_the_top_from_inside_is_non_manifold`, `balls_touching_at_a_point_are_non_manifold`.
-Owner: the touch-decisions session.
+`cavity_touching_the_top_from_inside_is_non_manifold`, `balls_touching_at_a_point_are_non_manifold`,
+`cone_apex_on_a_face_normal_to_its_axis_is_non_manifold`. Owner: the touch-decisions session.
 
 ### SplitThroughSingular: a ball centred on a cylinder's rim
 
@@ -228,8 +239,14 @@ Owner: the fix-curved session.
 
 ## Still open in the reference
 
-- The L2 gaps above: the octree traversal and the touch/saddle test, to be proven next.
-- Edge-on-surface contacts (the base_rim_on_wall gap).
-- An exact apex test: an `Alg` sign on the tangent cone's quadratic form in place of sampling.
+- Tangent contacts with a torus: 50 of the 93 torus pairs are ambiguous. All are tangent
+  configurations, or a cone apex on the torus. They need a touch certificate for quartics, as
+  the pencil gives for quadrics. Without one the reference never says *nonmanifold* there.
+- The torus band (each torus pair with its tool moved ±0.9 and 3 LINEAR): about 40 s a case,
+  because the manifold check splits near-tangent boxes down to its budget. The full run was
+  stopped after 50 of 837 cases. It needs a cheaper near-tangency test first.
+- A second singular quadric through a cone's apex (two cones of different angles sharing an
+  apex) is undecided. Two cones sharing the apex and the quadric are decided (§3).
+- Edge-on-surface contacts (the base_rim_on_wall gap) stay undecided.
 - Speed: 90 family cases took over 30 s.
-- Tori and offsets (ROADMAP step 4).
+- The families and lang rows predate the apex fix (the degenerate pairs were rerun).

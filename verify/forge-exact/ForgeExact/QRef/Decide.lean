@@ -847,6 +847,41 @@ def contactAt (A : Arr) (i j : Nat) (t : Rat) : Option Contact := Id.run do
 
 /-! ## Singular points: cone apexes, decided exactly -/
 
+/-- The link of a cone's apex as cells: the caps (nodes 0, 1) and the sectors (`2 + τ`) of
+`n ≤ 3` planes with independent normals. Is the kept region empty, all, or a disc: connected,
+with connected complement, and no checkerboard round a vertex (two planes' line)? -/
+def linkDisc (n : Nat) (kPlus kMinus : Bool) (cell : Nat → Bool) (own anti : Nat) : Bool := Id.run do
+  let N := 2 + 2 ^ n
+  let kept : Nat → Bool := fun v => if v == 0 then kPlus else if v == 1 then kMinus else cell (v - 2)
+  let adj : Nat → Nat → Bool := fun u v =>
+    (u == 0 && v == 2 + own) || (v == 0 && u == 2 + own) ||
+    (u == 1 && v == 2 + anti) || (v == 1 && u == 2 + anti) ||
+    (u ≥ 2 && v ≥ 2 && (let x := (u - 2) ^^^ (v - 2); x != 0 && x &&& (x - 1) == 0))
+  let conn := fun (val : Bool) => Id.run do
+    let nodes := (List.range N).filter fun v => kept v == val
+    match nodes.head? with
+    | none => return true
+    | some s0 =>
+      let mut seen : Array Nat := #[s0]
+      let mut stack : Array Nat := #[s0]
+      while !stack.isEmpty do
+        let u := stack.back!
+        stack := stack.pop
+        for v in [0:N] do
+          if kept v == val && adj u v && !seen.contains v then
+            seen := seen.push v; stack := stack.push v
+      return seen.size == nodes.length
+  if (List.range N).all (kept · == kept 0) then return true
+  if !(conn true && conn false) then return false
+  -- vertices: for planes a < b, the four cells round their line, the other bits fixed
+  for a in [0:n] do
+    for b in [a + 1:n] do
+      for rest in [0:2 ^ n] do
+        if (rest >>> a) % 2 == 1 || (rest >>> b) % 2 == 1 then continue
+        let c := fun (x y : Nat) => cell (rest ||| (x <<< a) ||| (y <<< b))
+        if c 0 0 == c 1 1 && c 0 1 == c 1 0 && c 0 0 != c 0 1 then return false
+  return true
+
 /-- The result at a cone's apex `p` lying on other surfaces, decided at first order.
 `C` is the cone's tangent cone at `p`: one nappe about its axis `a`, of half-angle
 `atan (s / c)`. For each smooth surface `j` through `p` (gradient `g`), `C` must lie strictly on
@@ -879,16 +914,17 @@ def apexDecide (A : Arr) (solids : Array QSolid) : Array String × Array String 
       -- the axis into the nappe: r c + s (d · z) grows along s z
       let ax : V3 := f.s * f.z
       let through := (Array.range A.qs.size).filter fun m => m != k && (A.qs[m]!).eval p == 0
-      -- the nappe's own plane: through p, normal along the axis
+      -- the nappe's own plane: through p, normal along the axis. It is only the selector of the
+      -- cone's half unless a face lies on it or another solid's literal uses it; then it is a
+      -- surface through p like any other (it separates C: its normal is the axis)
       let isNappe := fun (m : Nat) => (A.qs[m]!).qnorm == 0 && (((A.qs[m]!).grad p).cross f.z).isZero
-      let J := through.filter fun m => !isNappe m
-      if J.isEmpty then continue
-      -- the nappe's plane, if another solid bounds itself by it too, varies off C: not covered
-      let shared := through.any fun m => isNappe m &&
-        (Array.range A.solids.size).any fun si => si != f.solid && (A.solids[si]!).2.any (·.idx == m)
-      if shared then
-        und := und.push s!"the apex {fmt p} of face {f.solid}.{f.index}: its nappe's plane bounds another solid"
-        continue
+      let matters := fun (m : Nat) => isNappe m && (!(A.faces.getD m #[]).isEmpty ||
+        (Array.range A.solids.size).any fun si => si != f.solid && (A.solids[si]!).2.any (·.idx == m))
+      -- another solid using the cone quadric itself: its opposite nappe −C matters too
+      let kShared := (Array.range A.solids.size).any fun si =>
+        si != f.solid && (A.solids[si]!).2.any (·.idx == k)
+      let J := through.filter fun m => !isNappe m || matters m
+      if J.isEmpty && !kShared then continue
       -- every tangent plane must separate C
       let s2 := f.s * f.s
       let k2 := f.s * f.s + f.c * f.c
@@ -906,7 +942,7 @@ def apexDecide (A : Arr) (solids : Array QSolid) : Array String × Array String 
         -- vertices; the kept cells must be one proper run of it (§3, Theorem 3.5)
         let g := if J.size == 1 then (A.qs[J[0]!]!).grad p else ⟨0, 0, 0⟩
         let ga := g.dot ax
-        if J.size == 1 && !g.isZero && ga * ga * k2 < s2 * g.norm2 * ax.norm2 then
+        if J.size == 1 && !kShared && !g.isZero && ga * ga * k2 < s2 * g.norm2 * ax.norm2 then
           let j := J[0]!
           let inSign := decide ((A.qs[k]!).quad ax > 0)
           let other : Nat → Bool := fun m =>
@@ -932,27 +968,24 @@ def apexDecide (A : Arr) (solids : Array QSolid) : Array String × Array String 
       if !indep then
         und := und.push s!"the apex {fmt p} of face {f.solid}.{f.index}: dependent normals there"
         continue
-      -- signs: the cone quadric in C is the sign of its quadratic part on the axis
+      -- the link at p: the caps D₊ (C) and D₋ (−C), and the cells O_τ of the tangent planes
+      -- off them (every sector meets the link off the caps: each plane separates C from −C)
       let inSign := decide ((A.qs[k]!).quad ax > 0)
-      let base : Nat → Bool := fun m =>
+      let other : Nat → Bool := fun m => decide ((A.qs[m]!).eval p > 0)
+      let σ : Nat → Bool := fun m => decide (((A.qs[m]!).grad p).dot ax > 0)
+      let capKept := fun (plus : Bool) => A.keptOn fun m =>
         if m == k then inSign
-        else if through.contains m then decide (((A.qs[m]!).grad p).dot ax > 0)
-        else decide ((A.qs[m]!).eval p > 0)
-      let kC := A.keptOn base
-      -- off C: the cone quadric outside, the sector τ on J
-      let sector := fun (τ : Nat) => A.keptOn fun m =>
+        else if J.contains m || through.contains m then (if plus then σ m else !σ m)
+        else other m
+      let cellKept := fun (τ : Nat) => A.keptOn fun m =>
         if m == k then !inSign
         else match J.findIdx? (· == m) with
           | some i => (τ >>> i) % 2 == 1
-          | none => base m
-      let own : Nat := (Array.range J.size).foldl (fun acc i =>
-        if (sides.find? (·.1 == J[i]!)).any (·.2) then acc + 2 ^ i else acc) 0
-      let all := (List.range (2 ^ J.size)).map sector
-      let ownKept := sector own
-      let anyOther := (List.range (2 ^ J.size)).any fun τ => τ != own && sector τ
-      let allKept := all.all id
-      if (kC && !ownKept && anyOther) || (!kC && ownKept && !allKept) then
-        bad := bad.push s!"the apex {fmt p} of face {f.solid}.{f.index} touches the rest of the result there"
+          | none => if through.contains m then σ m else other m
+      let own : Nat := (Array.range J.size).foldl (fun acc i => if σ J[i]! then acc + 2 ^ i else acc) 0
+      let anti : Nat := 2 ^ J.size - 1 - own
+      if !linkDisc J.size (capKept true) (capKept false) cellKept own anti then
+        bad := bad.push s!"the apex {fmt p} of face {f.solid}.{f.index}: the result there is not a manifold (its link is not a disc)"
   return (bad, und)
 
 /-! ## Singular points: cone apexes -/

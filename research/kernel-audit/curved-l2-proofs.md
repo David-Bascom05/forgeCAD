@@ -236,42 +236,62 @@ So `C` near `p` carries one pattern, `P_C`.
 point, so its sign at `p + d` is `Q(d)`'s, constant on `C`. Quadrics not through `p` keep their
 sign near `p` (`sign_nbhd`). ∎
 
-**Lemma 3.3.** Suppose `|J| ≤ 3` with independent normals. Then off `C̄`, near `p`, membership is
-`κ` with the cone quadric outside and the `J` signs those of the point's sector. Every one of
-the `2^{|J|}` sectors meets every neighbourhood of `p` off `C̄`.
+**Which planes count.** The nappe's own plane `N` passes through `p` with normal `a`. When it
+serves only as the cone solid's selector, its sign matters only to that solid: off `C ∪ −C` the
+cone quadric is outside, so the cone solid is out whatever `N`'s sign, and on `−C` the cone
+solid is out by its selector. Then `J` omits `N`. When a face lies on `N`'s carrier, or another
+solid's literal uses it, `N` is a surface through `p` like any other and belongs to `J`. This
+holds for a box top, a cylinder cap, a base disc, or a second cone's selector. Its normal is the
+axis, so it separates `C` (Lemma 3.1). (The first version dropped `N` in every case and then
+skipped an empty `J`. That missed five non-manifold apexes. The repro is
+`cone_apex_on_a_face_normal_to_its_axis_is_non_manifold`.)
 
-*Proof.* Independent normals: the surfaces cross transversally at `p`. By the implicit function
-theorem, a neighbourhood of `p` is homeomorphic to the linear model, the arrangement of the
-tangent planes, and every sign vector is realised by an open cone. `C̄` lies inside one sector
-(the separating one, `own`). Removing it leaves every other sector intact, and leaves `own`
-nonempty: `C̄` is a proper closed sub-cone of it. ∎
+**Lemma 3.3 (the caps).** Lemma 3.2 holds on `−C` as well, with every `q_j` of sign `−σ_j` and
+the cone quadric of the same sign as on `C` (its quadratic part is even). So `−C` near `p`
+carries one pattern too, `P_−C`. It matters when another solid uses the cone quadric (two cones
+sharing an apex and an axis). Otherwise `−C` is out for the cone solid, and lies inside the
+sector `anti` (every `J` sign `−σ_j`), where every other solid sees the same signs as on the rest
+of `anti`.
 
-**Theorem 3.4.** Let `kC = κ(P_C)`, `ownKept = κ(own sector, cone outside)`, and let `anyOther`
-and `allKept` range over the other sectors and over all sectors. The result is non-manifold at
-`p` iff `(kC ∧ ¬ownKept ∧ anyOther) ∨ (¬kC ∧ ownKept ∧ ¬allKept)`.
+**Lemma 3.4 (the cells).** Suppose `|J| ≤ 3` with independent normals. Then the link of `p` is cut
+into these cells:
+- the caps `D₊` (of `C`) and `D₋` (of `−C`);
+- for each of the `2^{|J|}` sectors `τ` of the tangent planes, the cell `O_τ`: the sector's
+  link, less the caps.
 
-*Proof.* By 3.2–3.3, near `p` the kept set is `(C if kC) ∪ (the kept sectors, less C̄)`, and its
-link at `p` is a union of spherical regions.
-- `kC` and `ownKept`: `C` lies inside a kept sector and changes nothing.
-- `¬kC` and `¬ownKept`: `C` lies inside a dropped sector and changes nothing.
+Every `O_τ` is nonempty and connected. `D₊` lies inside the sector `own`, and `D₋` inside `anti`.
+`D₊` meets only `O_own`, along a circle, and `D₋` meets only `O_anti`. Two cells `O_τ` and
+`O_τ'` share an arc iff `τ` and `τ'` differ in one bit. Two planes' line meets the link at two
+vertices, and round each of them lie the four cells with the other bits fixed. On every cell,
+membership is `κ` on one pattern:
+- on `D₊`, `P_C`; on `D₋`, `P_−C`;
+- on `O_τ`, the cone quadric outside, `τ`'s signs on `J`, and the other quadrics at their signs
+  at `p`.
 
-In both cases the apex adds no non-manifold point. The sectors' own structure at `p` is that of
-the other solids, judged by the other contacts.
-- `kC` and `¬ownKept`: the link is the cap of `C` together with the links of the kept sectors.
-  These are disjoint, since `C̄` lies inside the dropped sector `own`. With another sector kept
-  the link is disconnected, so not a disc: non-manifold. With none kept, the link is the cap
-  alone, a disc (the cone's own apex): manifold.
-- `¬kC` and `ownKept`: the link is the kept sectors' link with an open cap removed from the
-  interior of `own`'s. If every sector is kept, that is a sphere minus a cap, a disc: manifold.
-  Otherwise the kept sectors' link has nonempty boundary, and removing an interior cap leaves a
-  non-disc (an annulus when it was a disc): non-manifold. ∎
+*Proof.* By the implicit function theorem (independent normals, transversal crossings), a
+neighbourhood of `p` is homeomorphic to the arrangement of the tangent planes. The caps sit
+strictly inside one sector each (Lemma 3.1, applied to `±a`). A polyhedral cone with at most
+three faces is not a circular cone, so `own` minus `D₊` is a nonempty annulus. The planes' arcs
+lie off the caps, so the adjacencies of the sectors are those of the hyperplane arrangement.
+The signs are those of Lemmas 3.2 and 3.3. ∎
 
-**Hypothesis on the nappe.** The nappe's own plane passes through `p`. The analysis fixes its
-sign as the cone's. If another solid also bounds itself by that plane (a cone standing on a cap,
-its nappe plane the cap), the plane's sign varies off `C` and matters there. The apex is then
-undecided.
+**Theorem 3.5′ (`linkDisc`).** The result is a manifold at `p` iff the kept cells' union `X` on
+the link is empty, everything, or a closed disc. A disc means: `X` is connected through shared
+arcs, so is its complement, and no vertex has its four cells kept as a checkerboard.
 
-**Theorem 3.5 (one surface cutting `C`).** Suppose `J = {j}` and `j`'s tangent plane cuts `C`
+*Proof.* Near `p` the result is the cone over `X`, which is a manifold with boundary at `p` iff
+`X` is `∅`, `S²` or a disc. Suppose `X` has no checkerboard vertex. The caps' circles carry no
+vertex. Then `X` is a compact surface with boundary in `S²`. If it is connected, each boundary
+circle bounds one component of its complement (Jordan), so a connected complement means one
+boundary circle, and the region is a disc (Schoenflies). Conversely, a disc is connected, its
+complement is a disc too, and a pinch vertex makes `X` not a surface. ∎
+
+The earlier rule, Theorem 3.4, `(kC ∧ ¬ownKept ∧ anyOther) ∨ (¬kC ∧ ownKept ∧ ¬allKept)`, is the
+case `P_−C ~ anti` of this. 3.5′ also judges the sectors' own pattern at `p`, which 3.4 left to the
+other contacts.
+
+**Theorem 3.5 (one surface cutting `C`).** Suppose `J = {j}`, no other solid uses the cone
+quadric, and `j`'s tangent plane cuts `C`
 transversally: `(g·a)²(s² + c²) < s²|g|²|a|²`. Then the result is non-manifold at `p` iff
 exactly two opposite cells of the cycle `cap₊, cap₋, out₋, out₊` are kept. These are the cone
 region and its outside, on either side of the plane.
