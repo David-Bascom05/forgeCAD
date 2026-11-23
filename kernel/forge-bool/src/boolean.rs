@@ -1035,6 +1035,9 @@ impl Rung {
 /// by the caller across the tries, as the thread-locals it replaces were.
 #[derive(Clone, Copy, Debug, Default)]
 pub(crate) struct Tried {
+    /// The rung the try running now reads (set by `plan_once_in`; `PLAIN` in the n-ary boolean):
+    /// carried here so `trim` takes one argument for both.
+    pub(crate) rung: Rung,
     /// A try took a dear way round: it lost its way once, or an edge held by no surface was crossed.
     pub(crate) retried: bool,
     /// A closed curve crossed springs an odd number of times in this try (cleared by each fenced try).
@@ -1166,6 +1169,7 @@ use self::plan_once_in as plan_once;
 fn plan_once_in(a: &Body, b: &Body, op: Op, scratch: &mut Scratch, rung: Rung, tried: &mut Tried) -> R<Plan> {
     // forge-geom reads its hair-root choice from its own flag: on for this try alone
     let _absorbing = Absorbing::on(rung.absorb);
+    tried.rung = rung;
     let mut clock = phases_on().then(forge_math::clock::Instant::now);
     let bodies = [a, b];
     let index = [Index::new(a), Index::new(b)];
@@ -1271,7 +1275,6 @@ fn plan_once_in(a: &Body, b: &Body, op: Op, scratch: &mut Scratch, rung: Rung, t
                     &mut imprints,
                     &mut touching,
                     Some(&mut scratch.across),
-                    rung,
                     tried,
                 )?;
             }
@@ -2563,7 +2566,6 @@ pub(crate) fn trim(
     touching: &mut Vec<Touch>,
     // (the plain boolean's: its two bodies' surfaces across their edges, kept per boolean)
     mut memo: Option<&mut AcrossMemo>,
-    rung: Rung,
     tried: &mut Tried,
 ) -> R<()> {
     // the curve's cuts by parameter: a list kept with the memo and reused
@@ -2586,7 +2588,6 @@ pub(crate) fn trim(
         touching,
         memo.as_deref_mut(),
         &mut ts,
-        rung,
         tried,
     );
     if let Some(m) = memo {
@@ -2610,9 +2611,9 @@ fn trim_in(
     touching: &mut Vec<Touch>,
     mut memo: Option<&mut AcrossMemo>,
     ts: &mut Vec<(f64, usize)>,
-    rung: Rung,
     tried: &mut Tried,
 ) -> R<()> {
+    let rung = tried.rung;
     let domain = curve.domain();
     let closed = domain.period.is_some();
     let period = domain.period.unwrap_or(0.0);

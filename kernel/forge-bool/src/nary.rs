@@ -1031,7 +1031,6 @@ fn nary_body(
                         &mut out.imprints,
                         &mut out.touching,
                         None,
-                        crate::boolean::Rung::PLAIN,
                         &mut crate::boolean::Tried::default(),
                     )?;
                 }
