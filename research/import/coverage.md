@@ -495,7 +495,7 @@ Ranked for the parts with a fillet (all 1914 parts in brackets):
 |---|---:|---|
 | a region the query does not settle | 51 (119) | importer: the meaning of Onshape's `TD` weight on an imprint edge is not known (README: reading it as "the piece beside the vertex" gave 1 match and 16 wrong) |
 | a surface sweep, loft, along a spline, of a part's edges | 0 (6) | the merged sheets: importer |
-| sketch text beside other curves 5 (9), inside a region 4, in a font not shipped (16 parts, 9 fonts), several lines 1, alike 1 | (32) | the merged `text`: importer (letters cut from the region) and fonts |
+| sketch text beside other curves 5 (9), inside a region 4, in a font not shipped (16 parts, 8 fonts), several lines 1, alike 1 | (31) | the merged `text`: importer (letters cut from the region) and fonts |
 | a reference to an entity the sketch no longer has, imprint edge source / bounds nothing | 29 (110) | importer: queries naming entities the program no longer has |
 | an unequal chamfer | 11 (23) | `chamfer(.., d2: | angle:, face: FACE)` exists. Tried and set aside: 15 of the 23 are single edges, where which face takes `width1` needs Onshape's per-edge rule. Reading it as the one face every edge bounds matched none of the rest. |
 | BLEND_EDGE / BLEND_FACE / OFFSET_* of an unknown feature, no edge or face on the carrier | 24 | importer: queries on blends' and offsets' own faces |
