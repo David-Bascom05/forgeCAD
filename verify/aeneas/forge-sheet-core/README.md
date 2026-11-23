@@ -3,7 +3,7 @@
 The shipped Rust of `kernel/forge-sheet-core` (forge-sheet's combinatorial core: vertex classes,
 chaining, a hole's owner; the development's rigid motions and joint frames, `place.rs`) is
 translated by `tools/aeneas/translate.sh forge-sheet-core` (Charon 9e193f0, Aeneas 2e3d448 with the
-float patch; 32 definitions, 1 opaque: `f64::sqrt`, defined in `FunsExternal.lean` as verify/ieee754's
+float patch; 33 definitions, 1 opaque: `f64::sqrt`, defined in `FunsExternal.lean` as verify/ieee754's
 correctly rounded square root, never an axiom) into
 `lean/ForgeSheetCore/{Types,Funs}.lean`, and the translation is proven against verify/sheet.
 
@@ -33,6 +33,11 @@ Proven (no `sorry`; `lean/ForgeSheetCore/Axioms.lean` checks the standard axioms
   every step's exact result is zero or normal; then the frame's origin is `p0` exactly and, when
   the outputs are finite, the length is within `(1 + u)³ − 1` of `|D|` and the axis within
   `(1 + u)³ / (1 − u)³ − 1` (about `6 u`) of `(D.y, −D.x) / |D|`, each component relatively.
+- In progress: `setback_spec` (RefineSetback.lean, not yet in the build; model SetbackErr.lean, proven): `fold::setback(ρ, s, c)` (shop.rs's
+  `ρ ⊗ s ⊘ (1 ⊕ c)`, op for op) fed dmath's `sin_cos(θ)` (verify/ieee754 `Dmath.sinCos_err`,
+  within `ε = 2⁻⁵²`): for finite `ρ`, finite `|θ| ≤ 2²⁰` with `C = 1 + cos θ ≥ 2⁻⁵⁰`, the
+  setback, when finite, is within `|ρ| (4ε + 4η) / C² + 10 u |ρ| / C + 3η / C + η` of
+  `ρ sin θ / C = ρ tan(θ/2)`. The `ε / C²` term is the hairpin's ill-conditioning.
 - under them: the least-root union–find (`new_spec`, `find_spec`, `union_spec`), ported from the
   decide-once core's proofs (research/kernel-audit/decide-once/aeneas: the same `union_find.rs`),
   with the release build's wrapping `+= 1` shown not to wrap.

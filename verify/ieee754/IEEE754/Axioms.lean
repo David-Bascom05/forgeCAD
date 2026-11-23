@@ -5,7 +5,13 @@ import Lean
 import IEEE754.Binary64
 import IEEE754.Compare
 import IEEE754.Computed
-import IEEE754.TwoSum
+import IEEE754.Dmath.Reduction
+import IEEE754.Dmath.CosPoly
+import IEEE754.Dmath.SinCos
+import IEEE754.Dmath.AtanPoly
+import IEEE754.Dmath.AtanEval
+import IEEE754.Dmath.AtanFacts
+import IEEE754.Dmath.AsinAcos
 
 /-!
 # Only the standard axioms
@@ -58,3 +64,22 @@ elab "#standard_axioms " ids:ident* : command => do
   -- nearest
   IEEE754.rne_nearest IEEE754.round_nearest
   IEEE754.add_err_representable IEEE754.fast2sum IEEE754.fast_two_sum_exact IEEE754.two_sum_exact_of_le
+  IEEE754.two_sum_core IEEE754.two_sum_exact
+  IEEE754.veltkamp_core IEEE754.veltkamp IEEE754.dekker_core IEEE754.two_product_exact
+  IEEE754.F64.two_product_exact
+  -- dmath: rem_pio2
+  IEEE754.Dmath.quadrant IEEE754.Dmath.rem1 IEEE754.Dmath.tail IEEE754.Dmath.refine
+  IEEE754.Dmath.remPio2_rat IEEE754.Dmath.remPio2_spec IEEE754.Dmath.ksin_poly IEEE754.Dmath.kcos_poly
+  IEEE754.Dmath.ksin_eval IEEE754.Dmath.half_mul IEEE754.Dmath.kcos_eval IEEE754.Dmath.pi_gt_d30 IEEE754.Dmath.pi_lt_d30
+  IEEE754.Dmath.ksin_err IEEE754.Dmath.kcos_err IEEE754.Dmath.sinCos_err IEEE754.Dmath.sin_err IEEE754.Dmath.cos_err
+  IEEE754.Dmath.atan_taylor IEEE754.Dmath.katan_poly IEEE754.Dmath.round_ulp IEEE754.Dmath.addU IEEE754.Dmath.subU
+  IEEE754.Dmath.atanPoly_eval IEEE754.Dmath.arctan_lip IEEE754.Dmath.arctan_lip_m IEEE754.Dmath.red0 IEEE754.Dmath.red1
+  IEEE754.Dmath.red2 IEEE754.Dmath.red3 IEEE754.Dmath.c_half IEEE754.Dmath.c_quarter IEEE754.Dmath.c_threehalf
+  IEEE754.Dmath.c_pio2 IEEE754.Dmath.c_pi IEEE754.Dmath.c_PI IEEE754.Dmath.c_FRAC_PI_2
+  IEEE754.Dmath.add_ulp IEEE754.Dmath.sub_ulp IEEE754.Dmath.mul_ulp IEEE754.Dmath.div_ulp
+  IEEE754.Dmath.reduced_err IEEE754.Dmath.red_t0 IEEE754.Dmath.red_t1 IEEE754.Dmath.red_t2 IEEE754.Dmath.red_t3
+  IEEE754.Dmath.big_err IEEE754.Dmath.small_err IEEE754.Dmath.tiny_err IEEE754.Dmath.atan_err
+  IEEE754.Dmath.quot_le IEEE754.Dmath.arctan_rel IEEE754.Dmath.zA IEEE754.Dmath.zB IEEE754.Dmath.zC IEEE754.Dmath.quad
+  IEEE754.Dmath.atan2_err IEEE754.Dmath.atan2_err50 IEEE754.Dmath.arctan_rel_gen
+  IEEE754.Dmath.prod_err IEEE754.Dmath.sqrt_pert IEEE754.Dmath.sqrtArg_err IEEE754.Dmath.pert_y IEEE754.Dmath.pert_x
+  IEEE754.Dmath.arccos_eq_atan2R IEEE754.Dmath.arcsin_eq_atan2R IEEE754.Dmath.asin_err IEEE754.Dmath.acos_err
