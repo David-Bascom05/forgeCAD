@@ -163,6 +163,56 @@ theorem vertOK_iff (l : Ledger) (hve : CsrOK l.vert_edges (nrowsL l.edge_facets)
     · rw [one_le_count_iff, mem_val, ← hef]; exact h5
     · rw [one_le_count_iff, mem_val, ← hef]; exact h6
 
+
+theorem forall_idx {β : Type} (L : List β) (d : β) (P : β → Prop) :
+    (∀ j, j < L.length → P (L.getD j d)) ↔ ∀ x ∈ L, P x := by
+  constructor
+  · intro h x hx
+    obtain ⟨j, hj, rfl⟩ := List.getElem_of_mem hx
+    have := h j hj
+    rwa [List.getD_eq_getElem?_getD, List.getElem?_eq_getElem hj, Option.getD_some] at this
+  · intro h j hj
+    rw [List.getD_eq_getElem?_getD, List.getElem?_eq_getElem hj, Option.getD_some]
+    exact h _ (List.getElem_mem _)
+
+theorem exists_idx {β : Type} (L : List β) (d : β) (P : β → Prop) :
+    (∃ j, j < L.length ∧ P (L.getD j d)) ↔ ∃ x ∈ L, P x := by
+  constructor
+  · rintro ⟨j, hj, h⟩
+    rw [List.getD_eq_getElem?_getD, List.getElem?_eq_getElem hj, Option.getD_some] at h
+    exact ⟨_, List.getElem_mem _, h⟩
+  · rintro ⟨x, hx, h⟩
+    obtain ⟨j, hj, rfl⟩ := List.getElem_of_mem hx
+    exact ⟨j, hj, by rw [List.getD_eq_getElem?_getD, List.getElem?_eq_getElem hj, Option.getD_some]; exact h⟩
+
+theorem rooms_iff (l : Ledger) (hl : l.facet_rooms.val.length = nfacets l) :
+    RoomsTo l (nfacets l) ↔ ∀ p ∈ l.facet_rooms.val, p.1.val < l.n_rooms.val ∧ p.2.val < l.n_rooms.val ∧ p.1 ≠ p.2 := by
+  unfold RoomsTo
+  rw [← hl, ← forall_idx _ (0#u32, 0#u32)]
+  constructor
+  · intro h j hj; obtain ⟨a, b, c⟩ := h j hj; exact ⟨b, c, a⟩
+  · intro h j hj; obtain ⟨a, b, c⟩ := h j hj; exact ⟨c, a, b⟩
+
+theorem pieces_iff (l : Ledger) :
+    PiecesTo l l.pieces.val.length ↔ ∀ p ∈ l.pieces.val, (p.1 : U32).val < nfacets l ∧
+      (p.2 : U32).val < l.face_body.val.length ∧
+      l.face_class.val.getD (p.2 : U32).val 0#u32 = l.facet_class.val.getD (p.1 : U32).val 0#u32 := by
+  unfold PiecesTo pcF pfF
+  exact forall_idx _ default (fun (p : FacetId × FaceId) => (p.1 : U32).val < nfacets l ∧ (p.2 : U32).val < l.face_body.val.length ∧
+      l.face_class.val.getD (p.2 : U32).val 0#u32 = l.facet_class.val.getD (p.1 : U32).val 0#u32)
+
+theorem inside_iff (l : Ledger) :
+    InsideTo l l.inside.val.length ↔ ∀ p ∈ l.inside.val, (p.1 : U32).val < l.n_rooms.val ∧ (p.2 : U32).val < l.nb.val := by
+  unfold InsideTo
+  exact forall_idx _ default (fun (p : RoomId × BodyId) => (p.1 : U32).val < l.n_rooms.val ∧ (p.2 : U32).val < l.nb.val)
+
+theorem every_iff (l : Ledger) :
+    (∀ f, f < nfacets l → ∃ j, j < l.pieces.val.length ∧ pcF l j = f) ↔
+      ∀ φ, φ < nfacets l → ∃ p ∈ l.pieces.val, (p.1 : U32).val = φ := by
+  apply forall_congr'; intro f; apply imp_congr_right; intro _
+  unfold pcF
+  exact exists_idx _ default (fun (p : FacetId × FaceId) => (p.1 : U32).val = f)
+
 end inc
 
 end forge_bool_core
