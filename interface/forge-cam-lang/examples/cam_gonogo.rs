@@ -205,6 +205,8 @@ fn main() {
                 let mut lowest = f64::INFINITY;
                 for m in &mv[c * CHUNK..((c + 1) * CHUNK).min(mv.len())] {
                     let sb = swept_box(m, t.rmax(), t.top());
+                    // each body's swept box, once per move (as ops::certify does)
+                    let bbs: Vec<_> = t.bodies.iter().map(|b| forge_cam_geom::check::swept_box_body(m, b)).collect();
                     grid.near(&sb, &mut cand, &mut seen);
                     for &fi in &cand {
                         let f = &faces[fi as usize];
@@ -213,9 +215,9 @@ fn main() {
                             continue;
                         }
                         let mut shared = None;
-                        for b in &t.bodies {
+                        for (b, bb) in t.bodies.iter().zip(&bbs) {
                             let lim = if b.part == forge_cam_geom::tool::Part::Cutter { -tol } else { clear };
-                            if apart(&forge_cam_geom::check::swept_box_body(m, b), &f.bbox, lim.max(0.0) + f.mu) {
+                            if apart(bb, &f.bbox, lim.max(0.0) + f.mu) {
                                 continue;
                             }
                             near += 1;

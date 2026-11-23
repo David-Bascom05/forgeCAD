@@ -216,11 +216,50 @@ impl Face {
 impl Trim {
     /// 1: the box is inside the trim region; -1: outside; 0: unknown.
     pub fn classify(&self, p: Ival, q: Ival) -> i32 {
+        TrimRef {
+            segs: &self.segs,
+            gaps: None,
+        }
+        .classify(p, q)
+    }
+
+    #[cfg(test)]
+    fn ray_side(&self, x: f64, y: f64, d: [f64; 2]) -> i32 {
+        TrimRef {
+            segs: &self.segs,
+            gaps: None,
+        }
+        .ray_side(x, y, d)
+    }
+}
+
+/// A trim's pieces borrowed, with their end gaps when the caller has them worked out (a gap
+/// below 0 or none: worked out here).
+pub struct TrimRef<'a> {
+    pub segs: &'a [TSeg],
+    pub gaps: Option<&'a [f64]>,
+}
+
+impl TrimRef<'_> {
+    fn gap(&self, i: usize) -> f64 {
+        if let Some(g) = self.gaps
+            && g[i] >= 0.0
+        {
+            return g[i];
+        }
+        match self.segs[i] {
+            TSeg::Line { .. } => 0.0,
+            TSeg::Arc { a, b, c, r, .. } => arc_gap(a, b, c, r),
+        }
+    }
+
+    /// 1: the box is inside the trim region; -1: outside; 0: unknown.
+    pub fn classify(&self, p: Ival, q: Ival) -> i32 {
         // the box misses the boundary: then all of it is on the side of its centre
         let mut lo = f64::INFINITY;
         let mut i = 0;
         while i < self.segs.len() {
-            let d = tseg_dist(&self.segs[i], p, q);
+            let d = tseg_dist(&self.segs[i], p, q, self.gap(i));
             if d < lo {
                 lo = d;
             }
@@ -305,7 +344,8 @@ impl Trim {
                     let (ra, rb, rc) = (rot(a), rot(b), rot(c));
                     // an end, or the radial piece joining it to the circle, on the ray's line
                     // (within the gap of the end): undecided here
-                    let g = arc_gap(a, b, c, r);
+                    let _ = (c, r);
+                    let g = self.gap(i);
                     let near = |e: [Ival; 2]| e[1].lo <= g && e[1].hi >= -g && e[0].hi >= -g;
                     if near(ra) || near(rb) {
                         return 0;
@@ -370,10 +410,10 @@ pub(crate) fn arc_gap(a: [f64; 2], b: [f64; 2], c: [f64; 2], r: f64) -> f64 {
 
 /// A lower bound on the distance from the box to the trim segment (a trim arc's radial end
 /// pieces included).
-fn tseg_dist(s: &TSeg, p: Ival, q: Ival) -> f64 {
-    let (seg, gap) = match *s {
-        TSeg::Line { a, b } => (crate::tool::PSeg::Line { a, b }, 0.0),
-        TSeg::Arc { a, b, c, r, ccw } => (crate::tool::PSeg::Arc { a, b, c, r, ccw }, arc_gap(a, b, c, r)),
+fn tseg_dist(s: &TSeg, p: Ival, q: Ival, gap: f64) -> f64 {
+    let seg = match *s {
+        TSeg::Line { a, b } => crate::tool::PSeg::Line { a, b },
+        TSeg::Arc { a, b, c, r, ccw } => crate::tool::PSeg::Arc { a, b, c, r, ccw },
     };
     Ival::pt(crate::tool::seg_dist(&seg, p, q).lo)
         .sub(Ival::pt(gap))

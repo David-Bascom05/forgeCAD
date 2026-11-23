@@ -60,6 +60,39 @@ pub struct Body {
     pub z1: f64,
     /// The largest radius.
     pub rmax: f64,
+    /// Per piece, worked out once: its box, and for a line its direction, square length and
+    /// length (the same arithmetic seg_dist would do on every call).
+    pre: Vec<Pre>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct Pre {
+    bx: [f64; 4],
+    line: Option<[Ival; 4]>,
+}
+
+fn pre_of(s: &PSeg) -> Pre {
+    let (x0, y0, x1, y1) = match *s {
+        PSeg::Line { a, b } => (a[0].min(b[0]), a[1].min(b[1]), a[0].max(b[0]), a[1].max(b[1])),
+        PSeg::Arc { c, r, .. } => (
+            Ival::pt(c[0]).sub(Ival::pt(r)).lo,
+            Ival::pt(c[1]).sub(Ival::pt(r)).lo,
+            Ival::pt(c[0]).add(Ival::pt(r)).hi,
+            Ival::pt(c[1]).add(Ival::pt(r)).hi,
+        ),
+    };
+    let line = match *s {
+        PSeg::Line { a, b } => {
+            let (dx, dy) = (Ival::pt(b[0]).sub(Ival::pt(a[0])), Ival::pt(b[1]).sub(Ival::pt(a[1])));
+            let dd = dx.sqr().add(dy.sqr());
+            Some([dx, dy, dd, dd.sqrt()])
+        }
+        PSeg::Arc { .. } => None,
+    };
+    Pre {
+        bx: [x0, y0, x1, y1],
+        line,
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -110,8 +143,10 @@ impl Body {
             }
             i += 1;
         }
+        let pre = chain.iter().map(pre_of).collect();
         Ok(Body {
             chain,
+            pre,
             part,
             z0: first[1],
             z1: last[1],
@@ -194,11 +229,14 @@ impl Body {
         while i < self.chain.len() {
             // a segment whose box is at least `hi` away changes neither end of the minimum
             // (its interval lies at or above hi ≥ lo): skipped, the result is the same
-            if hi.is_finite() && box_gap(&self.chain[i], rho, z) >= hi {
+            if hi.is_finite() && box_gap(&self.pre[i].bx, rho, z) >= hi {
                 i += 1;
                 continue;
             }
-            let d = seg_dist(&self.chain[i], rho, z);
+            let d = match (self.chain[i], self.pre[i].line) {
+                (PSeg::Line { a, b }, Some(l)) => line_dist(a, b, l, rho, z),
+                (s, _) => seg_dist(&s, rho, z),
+            };
             if d.lo < lo {
                 lo = d.lo;
             }
@@ -262,16 +300,8 @@ impl Body {
 
 /// A lower bound on the distance from the box (ρ, z) to the segment: the larger axis gap to a
 /// box holding the segment (rounded down).
-fn box_gap(s: &PSeg, rho: Ival, z: Ival) -> f64 {
-    let (x0, y0, x1, y1) = match *s {
-        PSeg::Line { a, b } => (a[0].min(b[0]), a[1].min(b[1]), a[0].max(b[0]), a[1].max(b[1])),
-        PSeg::Arc { c, r, .. } => (
-            Ival::pt(c[0]).sub(Ival::pt(r)).lo,
-            Ival::pt(c[1]).sub(Ival::pt(r)).lo,
-            Ival::pt(c[0]).add(Ival::pt(r)).hi,
-            Ival::pt(c[1]).add(Ival::pt(r)).hi,
-        ),
-    };
+fn box_gap(bx: &[f64; 4], rho: Ival, z: Ival) -> f64 {
+    let [x0, y0, x1, y1] = *bx;
     let gx = Ival::pt(x0)
         .sub(Ival::pt(rho.hi))
         .lo
@@ -288,6 +318,29 @@ fn len2(x: Ival, y: Ival) -> Ival {
 }
 
 /// An interval holding the distance from every point of the box to the segment.
+/// seg_dist for a line, its direction, square length and length given ([dx, dy, dd, √dd]).
+fn line_dist(a: [f64; 2], b: [f64; 2], l: [Ival; 4], rho: Ival, z: Ival) -> Ival {
+    let [dx, dy, dd, sdd] = l;
+    let (px, py) = (rho.sub(Ival::pt(a[0])), z.sub(Ival::pt(a[1])));
+    let t = px.mul(dx).add(py.mul(dy)).div(dd);
+    if t.hi <= 0.0 {
+        return len2(px, py);
+    }
+    if t.lo >= 1.0 {
+        return len2(rho.sub(Ival::pt(b[0])), z.sub(Ival::pt(b[1])));
+    }
+    let perp = px.mul(dy).sub(py.mul(dx)).abs().div(sdd);
+    if t.lo >= 0.0 && t.hi <= 1.0 {
+        return perp;
+    }
+    let da = len2(px, py);
+    let db = len2(rho.sub(Ival::pt(b[0])), z.sub(Ival::pt(b[1])));
+    Ival {
+        lo: perp.lo,
+        hi: da.hi.min(db.hi),
+    }
+}
+
 pub fn seg_dist(s: &PSeg, rho: Ival, z: Ival) -> Ival {
     match *s {
         PSeg::Line { a, b } => {

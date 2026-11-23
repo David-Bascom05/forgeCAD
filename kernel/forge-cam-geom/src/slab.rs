@@ -138,29 +138,33 @@ fn in_sector(c: [f64; 2], a: [f64; 2], b: [f64; 2], ccw: bool, v: [Ival; 2]) -> 
 
 /// The distance from a point to a section curve (always realised).
 pub fn pt_sec(q: [f64; 2], s: &Sec) -> Ival {
+    pt_pre(q, &pre(s))
+}
+
+/// A section curve with what every point's distance to it shares, worked out once: a segment's
+/// direction and its square length (the same arithmetic as before, done once per curve).
+enum Pre {
+    Seg { a: [f64; 2], b: [f64; 2], d: [Ival; 2], dd: Ival },
+    Other(Sec),
+}
+
+fn pre(s: &Sec) -> Pre {
     match *s {
         Sec::Seg { a, b } => {
             let d = sub2(b, a);
-            let w = sub2(q, a);
-            let dd = dot(d, d);
-            let t = dot(w, d).div(dd);
-            // only what the answer needs
-            if t.hi <= 0.0 {
-                return len(w);
-            }
-            if t.lo >= 1.0 {
-                return len(sub2(q, b));
-            }
-            let perp = cross(d, w).abs().div(dd.sqrt());
-            if t.lo >= 0.0 && t.hi <= 1.0 {
-                return perp;
-            }
-            let (da, db) = (len(w), len(sub2(q, b)));
-            Ival {
-                lo: perp.lo,
-                hi: da.hi.min(db.hi),
-            }
+            Pre::Seg { a, b, d, dd: dot(d, d) }
         }
+        _ => Pre::Other(*s),
+    }
+}
+
+fn pt_pre(q: [f64; 2], s: &Pre) -> Ival {
+    let s = match s {
+        Pre::Seg { a, b, d, dd } => return pt_seg(q, *a, *b, *d, *dd),
+        Pre::Other(s) => s,
+    };
+    match *s {
+        Sec::Seg { .. } => unreachable!("segments are Pre::Seg"),
         Sec::Arc { c, r, a, b, ccw } => {
             let v = sub2(q, c);
             let side = in_sector(c, a, b, ccw, v);
@@ -181,6 +185,27 @@ pub fn pt_sec(q: [f64; 2], s: &Sec) -> Ival {
                 hi: ends.hi,
             }
         }
+    }
+}
+
+fn pt_seg(q: [f64; 2], a: [f64; 2], b: [f64; 2], d: [Ival; 2], dd: Ival) -> Ival {
+    let w = sub2(q, a);
+    let t = dot(w, d).div(dd);
+    // only what the answer needs
+    if t.hi <= 0.0 {
+        return len(w);
+    }
+    if t.lo >= 1.0 {
+        return len(sub2(q, b));
+    }
+    let perp = cross(d, w).abs().div(dd.sqrt());
+    if t.lo >= 0.0 && t.hi <= 1.0 {
+        return perp;
+    }
+    let (da, db) = (len(w), len(sub2(q, b)));
+    Ival {
+        lo: perp.lo,
+        hi: da.hi.min(db.hi),
     }
 }
 
@@ -247,26 +272,30 @@ pub fn dist(s: &Sec, t: &Sec) -> Ival {
     let mut cs = Cands::new();
     let (sa, sb) = ends(s);
     let (ta, tb) = ends(t);
+    let (ps, pt) = (pre(s), pre(t));
     cs.push(Cand {
-        d: pt_sec(sa, t),
+        d: pt_pre(sa, &pt),
         sure: true,
     });
     cs.push(Cand {
-        d: pt_sec(sb, t),
+        d: pt_pre(sb, &pt),
         sure: true,
     });
     cs.push(Cand {
-        d: pt_sec(ta, s),
+        d: pt_pre(ta, &ps),
         sure: true,
     });
     cs.push(Cand {
-        d: pt_sec(tb, s),
+        d: pt_pre(tb, &ps),
         sure: true,
     });
     match (*s, *t) {
         (Sec::Seg { a, b }, Sec::Seg { a: c, b: d }) => {
-            // they cross: 0
-            let (u, v) = (sub2(b, a), sub2(d, c));
+            // they cross: 0 (the segments' directions as worked out above)
+            let (u, v) = match (&ps, &pt) {
+                (Pre::Seg { d: u, .. }, Pre::Seg { d: v, .. }) => (*u, *v),
+                _ => (sub2(b, a), sub2(d, c)),
+            };
             let o1 = cross(u, sub2(c, a));
             let o2 = cross(u, sub2(d, a));
             let o3 = cross(v, sub2(a, c));
@@ -560,8 +589,9 @@ fn dist_region(path: &Sec, region: &[TSeg], boxes: &[[f64; 4]], gaps: &[f64], cu
     if a[0] < rb[0] || a[0] > rb[2] || a[1] < rb[1] || a[1] > rb[3] {
         return Ival { lo, hi };
     }
-    let tr = crate::check::Trim {
-        segs: region.to_vec(),
+    let tr = crate::check::TrimRef {
+        segs: region,
+        gaps: Some(gaps),
     };
     let side = tr.classify(Ival::pt(a[0]), Ival::pt(a[1]));
     if side > 0 {
