@@ -308,6 +308,7 @@ dependencies = [
  "forge-mesh",
  "forge-ops",
  "forge-refold",
+ "forge-sheet-core",
  "forge-topo",
 ]
 

@@ -781,20 +781,13 @@ impl Verts {
             }
         }
         let n = pts.len();
-        let mut up: Vec<u32> = (0..n as u32).collect();
-        fn root(up: &mut [u32], mut a: u32) -> u32 {
-            while up[a as usize] != a {
-                up[a as usize] = up[up[a as usize] as usize];
-                a = up[a as usize];
-            }
-            a
-        }
-        // pairs within the tolerance, found on a grid of that size
+        // pairs within the tolerance (`near`), found on a grid of that size
         let cell = |p: Point2| ((p.x / TOL).floor() as i64, (p.y / TOL).floor() as i64);
         let mut grid: Map<(i64, i64), Vec<u32>> = Map::default();
         for (i, q) in pts.iter().enumerate() {
             grid.entry(cell(q.0)).or_default().push(i as u32);
         }
+        let mut pairs: Vec<(u32, u32)> = Vec::new();
         for i in 0..n {
             let (ci, cj) = cell(pts[i].0);
             for a in ci - 1..=ci + 1 {
@@ -804,67 +797,48 @@ impl Verts {
                     };
                     for &j in list {
                         if (j as usize) > i && near(TOL, pts[i].0, pts[j as usize].0) {
-                            let (ra, rb) = (root(&mut up, i as u32), root(&mut up, j));
-                            if ra != rb {
-                                up[ra.max(rb) as usize] = ra.min(rb);
-                            }
+                            pairs.push((i as u32, j));
                         }
                     }
                 }
             }
         }
-        // each class's least-named member, and its spread
-        let mut best: Map<u32, u32> = Map::default();
-        let mut boxes: Map<u32, Bx> = Map::default();
-        for i in 0..n as u32 {
-            let r = root(&mut up, i);
-            let b = best.entry(r).or_insert(i);
-            let (x, y) = (&pts[i as usize].1, &pts[*b as usize].1);
-            if (x.0, x.1).cmp(&(y.0, y.1)).then(x.2.total_cmp(&y.2)).is_lt() {
-                *b = i;
+        // the classes are forge-sheet-core's (proven): the points come in name order, so each
+        // class is numbered by, and is, its least-named point
+        let class_of = forge_sheet_core::classes(n, &pairs);
+        let count = class_of.iter().map(|&c| c as usize + 1).max().unwrap_or(0);
+        let mut rep: Vec<u32> = vec![u32::MAX; count];
+        let mut boxes: Vec<Bx> = vec![Bx::EMPTY; count];
+        for (i, &c) in class_of.iter().enumerate() {
+            if rep[c as usize] == u32::MAX {
+                rep[c as usize] = i as u32;
             }
-            let bx = boxes.entry(r).or_insert(Bx::EMPTY);
-            *bx = bx.hull(Bx::of(pts[i as usize].0));
+            boxes[c as usize] = boxes[c as usize].hull(Bx::of(pts[i].0));
         }
-        for i in 0..n as u32 {
-            let r = root(&mut up, i);
-            let b = boxes[&r];
+        for (i, &c) in class_of.iter().enumerate() {
+            let b = boxes[c as usize];
             // the box's diagonal within twice the tolerance (Region.lean's `box_spread`: it holds
             // every two points of the class within it, the pairwise cap)
             let (dx, dy) = (b.x1 - b.x0, b.y1 - b.y0);
             if dx * dx + dy * dy > NEAR * NEAR {
-                let spread = (dx * dx + dy * dy).sqrt();
-                let other = (0..n as u32)
-                    .find(|&j| root(&mut up, j) == r && pts[j as usize].2 != pts[i as usize].2)
+                let other = (0..n)
+                    .find(|&j| class_of[j] == c && pts[j].2 != pts[i].2)
                     .unwrap_or(i);
                 return Err(RegionError::NearCoincident {
-                    a: pts[i as usize].2,
-                    b: pts[other as usize].2,
-                    at: pts[i as usize].0,
-                    gap: spread,
+                    a: pts[i].2,
+                    b: pts[other].2,
+                    at: pts[i].0,
+                    gap: (dx * dx + dy * dy).sqrt(),
                     limit: 2.0 * TOL,
                 });
             }
         }
-        // classes numbered in order of their least-named points
-        let mut reps: Vec<u32> = best.values().copied().collect();
-        reps.sort_by(|&a, &b| {
-            let (x, y) = (&pts[a as usize].1, &pts[b as usize].1);
-            (x.0, x.1).cmp(&(y.0, y.1)).then(x.2.total_cmp(&y.2))
-        });
-        let mut number: Map<u32, u32> = Map::default();
-        for (k, &r) in reps.iter().enumerate() {
-            number.insert(root(&mut up, r), k as u32);
-        }
         let class = (0..all.len())
-            .map(|idx| {
-                let (a, b) = (first[idx], first[idx] + us[idx].len());
-                (a..b).map(|i| number[&root(&mut up, i as u32)]).collect()
-            })
+            .map(|idx| class_of[first[idx]..first[idx] + us[idx].len()].to_vec())
             .collect();
         Ok(Verts {
             class,
-            pts: reps.iter().map(|&r| pts[r as usize].0).collect(),
+            pts: rep.iter().map(|&r| pts[r as usize].0).collect(),
         })
     }
 }
@@ -1127,62 +1101,40 @@ pub fn subtract(wall: &[ProfileLoop], cuts: &[ProfileLoop]) -> Result<Region, Re
 }
 
 fn chain(kept: Vec<Kept>, pts: &[Point2]) -> Result<Region, RegionError> {
-    let mut out_of: Vec<Vec<u32>> = vec![Vec::new(); pts.len()];
-    let mut into: Vec<Vec<u32>> = vec![Vec::new(); pts.len()];
-    for (i, e) in kept.iter().enumerate() {
-        out_of[e.from as usize].push(i as u32);
-        into[e.to as usize].push(i as u32);
-    }
-    let mut pinches = Vec::new();
-    for v in 0..pts.len() {
-        let (o, a) = (out_of[v].len(), into[v].len());
-        if o != a {
-            let e = out_of[v].first().or(into[v].first()).copied().unwrap_or(0);
-            return Err(RegionError::Unchained {
-                at: pts[v],
-                edge: kept[e as usize].id,
-                leaving: o as u32,
-                arriving: a as u32,
-            });
-        }
-        if o > 1 {
-            pinches.push(RegionPinch {
-                at: pts[v],
-                a: kept[into[v][0] as usize].id,
-                b: kept[into[v][1] as usize].id,
-                width: 0.0,
-                limit: TOL,
-            });
-        }
-    }
-    if !pinches.is_empty() {
-        return Err(RegionError::Pinched { pinches });
-    }
-    // every vertex has one piece in and one out: the loops follow
-    let mut used = vec![false; kept.len()];
-    let mut loops: Vec<Vec<u32>> = Vec::new();
-    for start in 0..kept.len() {
-        if used[start] {
-            continue;
-        }
-        let mut lp = Vec::new();
-        let mut at = start as u32;
-        while !used[at as usize] {
-            used[at as usize] = true;
-            lp.push(at);
-            at = out_of[kept[at as usize].to as usize][0];
-        }
-        if at != start as u32 {
-            let e = &kept[at as usize];
-            return Err(RegionError::Unchained {
-                at: pts[e.from as usize],
-                edge: e.id,
-                leaving: 1,
-                arriving: 1,
-            });
-        }
-        loops.push(lp);
-    }
+    // the combinatorics are forge-sheet-core's `chain` (proven, verify/aeneas/forge-sheet-core):
+    // degrees, pinches, then the walks
+    let from: Vec<u32> = kept.iter().map(|e| e.from).collect();
+    let to: Vec<u32> = kept.iter().map(|e| e.to).collect();
+    let found = forge_sheet_core::chain(pts.len(), &from, &to).map_err(|e| match e {
+        forge_sheet_core::ChainError::Unchained {
+            vertex,
+            piece,
+            leaving,
+            arriving,
+        } => RegionError::Unchained {
+            at: pts[vertex as usize],
+            edge: kept[piece as usize].id,
+            leaving,
+            arriving,
+        },
+        forge_sheet_core::ChainError::Pinched { pinches } => RegionError::Pinched {
+            pinches: pinches
+                .into_iter()
+                .map(|(v, a, b)| RegionPinch {
+                    at: pts[v as usize],
+                    a: kept[a as usize].id,
+                    b: kept[b as usize].id,
+                    width: 0.0,
+                    limit: TOL,
+                })
+                .collect(),
+        },
+    })?;
+    let loops: Vec<Vec<u32>> = found
+        .starts
+        .windows(2)
+        .map(|w| found.pieces[w[0] as usize..w[1] as usize].to_vec())
+        .collect();
     let mut parts: Vec<Component> = Vec::new();
     let mut holes: Vec<Vec<Bound>> = Vec::new();
     for l in &loops {
@@ -1202,17 +1154,23 @@ fn chain(kept: Vec<Kept>, pts: &[Point2]) -> Result<Region, RegionError> {
     // vote: after `chain` the loops are disjoint, so the vertex is on no other loop
     let reps: Vec<Point2> = parts.iter().map(|c| c.outer[0].start).collect();
     let holds_at = |c: &Component, p: Point2| in_loop(c.outer.iter().map(|b| &b.piece), p);
+    let k = parts.len();
     for h in holes {
         let at = h[0].start;
-        let held: Vec<usize> = (0..parts.len()).filter(|&i| holds_at(&parts[i], at)).collect();
-        let owner = held
-            .iter()
-            .copied()
-            .find(|&i| held.iter().all(|&j| j == i || holds_at(&parts[j], reps[i])));
-        let Some(i) = owner else {
+        // the geometric facts decided exactly here (`in_loop`), the rule forge-sheet-core's
+        // `owner` (proven); nest[o k + p]: outer p holds outer o's vertex, asked only where both
+        // hold the hole's
+        let held: Vec<bool> = parts.iter().map(|c| holds_at(c, at)).collect();
+        let mut nest = vec![false; k * k];
+        for o in (0..k).filter(|&o| held[o]) {
+            for p in (0..k).filter(|&p| p != o && held[p]) {
+                nest[o * k + p] = holds_at(&parts[p], reps[o]);
+            }
+        }
+        let Some(i) = forge_sheet_core::owner(k, &held, &nest) else {
             return Err(RegionError::HoleOutside { edge: h[0].id, at });
         };
-        parts[i].holes.push(h);
+        parts[i as usize].holes.push(h);
     }
     Ok(Region { parts })
 }
