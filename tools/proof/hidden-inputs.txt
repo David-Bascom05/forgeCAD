@@ -7,8 +7,8 @@
 #   must-fix N  item N of forgecad-gate/instant-load/op-memo-proof.md ("Audit"): an op's output
 #               depends on it today; remove it or key it, then reclass the line
 # Reviewed 2026-11-04 (impl-proof audit of main f730c784). Format: class  @ file|kind|line  [x count]
-speed (timing stats; a clock that picks a path is must-fix 5)  @ forge-bool/src/boolean.rs|clock|let mut clock = phases_on().then(std::time::Instant::now);  x 2
-speed (timing stats; a clock that picks a path is must-fix 5)  @ forge-bool/src/boolean.rs|clock|let now = std::time::Instant::now();
+speed (timing stats; a clock that picks a path is must-fix 5)  @ forge-bool/src/boolean.rs|clock|let mut clock = phases_on().then(forge_math::clock::Instant::now);  x 2
+speed (timing stats; a clock that picks a path is must-fix 5)  @ forge-bool/src/boolean.rs|clock|let now = forge_math::clock::Instant::now();
 no-output (prints only)  @ forge-bool/src/boolean.rs|env|*ON.get_or_init(|| std::env::var_os("FORGE_DEBUG").is_some())
 no-output (prints only)  @ forge-bool/src/boolean.rs|env|*ON.get_or_init(|| std::env::var_os("FORGE_PHASES").is_some())
 no-output (prints only)  @ forge-bool/src/boolean.rs|env|*ON.get_or_init(|| std::env::var_os("FORGE_SPECS").is_some())
@@ -38,6 +38,12 @@ speed (lazy field or constant table)  @ forge-bool/src/classify.rs|lazy|info.dra
 speed (lazy field or constant table)  @ forge-bool/src/classify.rs|lazy|info.simple = std::sync::OnceLock::new();  x 2
 speed (lazy field or constant table)  @ forge-bool/src/classify.rs|lazy|simple: std::sync::OnceLock::new(),
 speed (lazy field or constant table)  @ forge-bool/src/classify.rs|lazy|simple: std::sync::OnceLock<Option<Simple>>,
+no-output (decision log, feature `decisions` only, off in every build: records and prints, never read by the boolean; STRICT panics as the log's assertion)  @ forge-bool/src/decisions.rs|env|if found > 0 && std::env::var_os("FORGE_DECISIONS_STRICT").is_some() && !std::thread::panicking() {
+no-output (decision log, feature `decisions` only, off in every build: records and prints, never read by the boolean; STRICT panics as the log's assertion)  @ forge-bool/src/decisions.rs|env|if std::env::var_os("FORGE_DECISIONS_TRACE").is_some() {
+no-output (decision log, feature `decisions` only, off in every build: records and prints, never read by the boolean; STRICT panics as the log's assertion)  @ forge-bool/src/decisions.rs|static|static INPUT: RefCell<(String, String)> = const { RefCell::new((String::new(), String::new())) };
+no-output (decision log, feature `decisions` only, off in every build: records and prints, never read by the boolean; STRICT panics as the log's assertion)  @ forge-bool/src/decisions.rs|static|static LEDGER: RefCell<Option<Ledger>> = const { RefCell::new(None) };
+no-output (decision log, feature `decisions` only, off in every build: records and prints, never read by the boolean; STRICT panics as the log's assertion)  @ forge-bool/src/decisions.rs|static|static STATS: Mutex<Option<Stats>> = Mutex::new(None);
+no-output (decision log, feature `decisions` only, off in every build: records and prints, never read by the boolean; STRICT panics as the log's assertion)  @ forge-bool/src/decisions.rs|thread_local|thread_local! {
 keyed (the imprint's mode is in forge_model::switches, part of the session's step key and its prefix reuse; kept_switches)  @ forge-bool/src/imprint.rs|atomic|static MODE: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(u8::MAX);
 no-output (work index, counter or stop flag)  @ forge-bool/src/imprint.rs|atomic|static TAKEN: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 keyed (the imprint's mode is in forge_model::switches, part of the session's step key and its prefix reuse; kept_switches)  @ forge-bool/src/imprint.rs|env|let m = match std::env::var("FORGE_IMPRINT").as_deref() {
@@ -48,12 +54,12 @@ speed (stats counter)  @ forge-bool/src/imprint.rs|static|static TAKEN: std::syn
 no-output (work index, counter or stop flag)  @ forge-bool/src/nary.rs|atomic|let next = AtomicUsize::new(0);
 no-output (work index, counter or stop flag)  @ forge-bool/src/nary.rs|atomic|static PICK: AtomicUsize = AtomicUsize::new(0);
 no-output (work index, counter or stop flag)  @ forge-bool/src/nary.rs|atomic|use std::sync::atomic::{AtomicUsize, Ordering};
-speed (timing stats; a clock that picks a path is must-fix 5)  @ forge-bool/src/nary.rs|clock|let merge_start = std::time::Instant::now();
-speed (timing stats; a clock that picks a path is must-fix 5)  @ forge-bool/src/nary.rs|clock|let mut clock = std::time::Instant::now();
-speed (timing stats; a clock that picks a path is must-fix 5)  @ forge-bool/src/nary.rs|clock|let now = std::time::Instant::now();
-speed (timing stats; a clock that picks a path is must-fix 5)  @ forge-bool/src/nary.rs|clock|let start = std::time::Instant::now();
-speed (timing stats; a clock that picks a path is must-fix 5)  @ forge-bool/src/nary.rs|clock|let t = std::time::Instant::now();
-speed (timing stats; a clock that picks a path is must-fix 5)  @ forge-bool/src/nary.rs|clock|let t0 = std::time::Instant::now();
+speed (timing stats; a clock that picks a path is must-fix 5)  @ forge-bool/src/nary.rs|clock|let merge_start = forge_math::clock::Instant::now();
+speed (timing stats; a clock that picks a path is must-fix 5)  @ forge-bool/src/nary.rs|clock|let mut clock = forge_math::clock::Instant::now();
+speed (timing stats; a clock that picks a path is must-fix 5)  @ forge-bool/src/nary.rs|clock|let now = forge_math::clock::Instant::now();
+speed (timing stats; a clock that picks a path is must-fix 5)  @ forge-bool/src/nary.rs|clock|let start = forge_math::clock::Instant::now();
+speed (timing stats; a clock that picks a path is must-fix 5)  @ forge-bool/src/nary.rs|clock|let t = forge_math::clock::Instant::now();
+speed (timing stats; a clock that picks a path is must-fix 5)  @ forge-bool/src/nary.rs|clock|let t0 = forge_math::clock::Instant::now();
 no-output (prints only)  @ forge-bool/src/nary.rs|env|*ON.get_or_init(|| std::env::var_os("FORGE_NARY").is_some())
 no-output (prints only)  @ forge-bool/src/nary.rs|env|*REG.get_or_init(|| std::env::var("FORGE_NARY_REG").ok().and_then(|v| v.parse().ok()))
 no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-bool/src/nary.rs|float|let r = |e: forge_math::Vec3| ((a * x.dot(e)).powi(2) + (b * y.dot(e)).powi(2)).sqrt();
@@ -106,7 +112,8 @@ no-output (stalls noted only inside intcurve::noting, the caller's restored on u
 no-output (stalls noted only inside intcurve::noting, the caller's restored on unwind; a_trace_that_panics_leaves_no_noting_behind)  @ forge-geom/src/intcurve.rs|thread_local|thread_local! {
 speed (lazy field: cold and warm give the same bits, intcurve.rs:303-314)  @ forge-geom/src/intersect.rs|lazy|let (asked, near) = (std::cell::OnceCell::new(), std::cell::Cell::new(Some(near)));
 no-output (a retry flag: set and cleared inside one boolean by boolean::Held, unwinding too; held_tests)  @ forge-geom/src/intersect.rs|static|pub static ABSORB_HAIR_ROOTS: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
-no-output (ABSORB_HAIR_ROOTS, Held-scoped to one boolean)  @ forge-geom/src/intersect.rs|thread_local|thread_local! {
+no-output (decision log, feature `decisions` only, off in every build: records and prints, never read by the boolean; STRICT panics as the log's assertion)  @ forge-geom/src/intersect.rs|static|static LOG: RefCell<Option<Vec<Hair>>> = const { RefCell::new(None) };
+no-output (ABSORB_HAIR_ROOTS, Held-scoped to one boolean; hair_log::LOG, the decision log only)  @ forge-geom/src/intersect.rs|thread_local|thread_local! {  x 2
 no-output (test code)  @ forge-geom/src/meet_tests.rs|clock|let at = std::time::Instant::now();
 no-output (work index, counter or stop flag)  @ forge-geom/src/screw.rs|atomic|static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
 speed (cache answering a function of its own key)  @ forge-geom/src/screw.rs|static|static KEPT: [KeptSlot; KeptSeeds::SLOTS] = const {
@@ -153,6 +160,14 @@ no-output (read only by the n-ary regen, Part::regenerate_nary*; forge-lang buil
 no-output (read only by the n-ary regen, Part::regenerate_nary*; forge-lang builds by step_solids, which never batches, and the n-ary regen is not memoised)  @ forge-gpu/src/lib.rs|static|static RENT: AtomicU64 = AtomicU64::new(0);
 no-output (constant tables or print switches)  @ forge-gpu/src/lib.rs|static|static SAID: Once = Once::new();
 no-output (read only by the n-ary regen, Part::regenerate_nary*; forge-lang builds by step_solids, which never batches, and the n-ary regen is not memoised)  @ forge-gpu/src/lib.rs|threads|std::thread::spawn(gpu);
+no-output (the clock itself: timings only, the browser host sets its source)  @ forge-math/src/clock.rs|clock|SystemTime::now()
+no-output (the clock itself: timings only, the browser host sets its source)  @ forge-math/src/clock.rs|clock|pub fn system_now() -> SystemTime {
+no-output (the clock itself: timings only, the browser host sets its source)  @ forge-math/src/clock.rs|clock|pub fn system_now() -> std::time::SystemTime {
+no-output (the clock itself: timings only, the browser host sets its source)  @ forge-math/src/clock.rs|clock|pub use std::time::{SystemTime, UNIX_EPOCH};
+no-output (the clock itself: timings only, the browser host sets its source)  @ forge-math/src/clock.rs|clock|span(Instant::now().0 - self.0)
+no-output (the clock itself: timings only, the browser host sets its source)  @ forge-math/src/clock.rs|lazy|static CLOCKS: OnceLock<(fn() -> f64, fn() -> f64)> = OnceLock::new();
+no-output (the clock itself: timings only, the browser host sets its source)  @ forge-math/src/clock.rs|lazy|use std::sync::OnceLock;
+no-output (the clock itself: timings only, the browser host sets its source)  @ forge-math/src/clock.rs|static|static CLOCKS: OnceLock<(fn() -> f64, fn() -> f64)> = OnceLock::new();
 no-output (forge_math::par: answers in item order, each a function of its item; the thread count only splits the work)  @ forge-math/src/par.rs|atomic|let next = std::sync::atomic::AtomicUsize::new(0);
 no-output (forge_math::par: answers in item order, each a function of its item; the thread count only splits the work)  @ forge-math/src/par.rs|env|std::env::var("FORGECAD_THREADS")
 no-output (forge_math::par: answers in item order, each a function of its item; the thread count only splits the work)  @ forge-math/src/par.rs|threads|.unwrap_or_else(|| std::thread::available_parallelism().map_or(1, |n| n.get()))
@@ -274,6 +289,8 @@ no-output (test switch, off unless a test sets it)  @ forge-topo/src/check.rs|la
 no-output (test switch, off unless a test sets it)  @ forge-topo/src/check.rs|lazy|let fine = std::cell::OnceCell::new();
 no-output (test switch, off unless a test sets it)  @ forge-topo/src/check.rs|lazy|let signs: Vec<std::cell::OnceCell<Option<i64>>> = vec![std::cell::OnceCell::new(); body.shells.len()];
 no-output (test switch, off unless a test sets it)  @ forge-topo/src/check.rs|static|static BOTH: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+no-output (decision log, feature `decisions` only, off in every build: records and prints, never read by the boolean; STRICT panics as the log's assertion)  @ forge-topo/src/check.rs|static|static LOG: RefCell<Option<Vec<OnFace>>> = const { RefCell::new(None) };
+no-output (decision log, feature `decisions` only, off in every build: records and prints, never read by the boolean; STRICT panics as the log's assertion)  @ forge-topo/src/check.rs|thread_local|thread_local! {
 no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-topo/src/mass.rs|float|1e-6 * rel * size.powi(k)
 no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-topo/src/mass.rs|float|let floor: F = std::array::from_fn(|m| 1e-6 * rel * size.powi([3, 4, 4, 4, 5, 5, 5, 5, 5, 5, 2][m]));
 speed (lazy field or constant table)  @ forge-topo/src/mass.rs|lazy|static R: OnceLock<Kronrod> = OnceLock::new();  x 2

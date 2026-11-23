@@ -1,6 +1,6 @@
 # Failures the .fg program generator (forge_lang::fuzz) still finds over its test seeds: a failure
 # whose kind holds one of these lines is known. tests/fuzz.rs fails when a line here no longer
 # matches any failure: remove it then, so the list only shrinks.
-# booleans losing their way: a classification that floods inconsistently (the .fc list's
-# 'inconsistent classification'), on a hole and a rib here
+# booleans losing their way: a classification that floods inconsistently ('inconsistent
+# classification'), on a hole and a rib here
 Internal(InconsistentClassification

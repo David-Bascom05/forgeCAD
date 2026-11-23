@@ -403,6 +403,69 @@ mod global {
     }
 }
 
+/// The threaded browser build (shared memory: `target_feature = "atomics"`): the same heap behind
+/// a spin lock. A spin, never a wait: the page's main thread may not block (`memory.atomic.wait`
+/// traps there), and the heap is held only for an allocation's few hundred instructions. Plain
+/// wasm and native builds never compile this.
+#[cfg(all(target_family = "wasm", target_feature = "atomics"))]
+mod global {
+    use super::Heap;
+    use core::alloc::{GlobalAlloc, Layout};
+    use core::cell::UnsafeCell;
+    use core::sync::atomic::{AtomicBool, Ordering};
+
+    struct Alloc {
+        held: AtomicBool,
+        heap: UnsafeCell<Heap>,
+    }
+
+    // every use of `heap` is under `held`
+    unsafe impl Sync for Alloc {}
+
+    #[global_allocator]
+    static ALLOC: Alloc = Alloc {
+        held: AtomicBool::new(false),
+        heap: UnsafeCell::new(Heap::new()),
+    };
+
+    fn grow(bytes: usize) -> Option<(usize, usize)> {
+        const PAGE: usize = 65536;
+        let pages = bytes.div_ceil(PAGE).max(16);
+        let old = core::arch::wasm32::memory_grow(0, pages);
+        (old != usize::MAX).then_some((old * PAGE, pages * PAGE))
+    }
+
+    impl Alloc {
+        fn with<T>(&self, f: impl FnOnce(&mut Heap) -> T) -> T {
+            while self
+                .held
+                .compare_exchange_weak(false, true, Ordering::Acquire, Ordering::Relaxed)
+                .is_err()
+            {
+                core::hint::spin_loop();
+            }
+            let got = f(unsafe { &mut *self.heap.get() });
+            self.held.store(false, Ordering::Release);
+            got
+        }
+    }
+
+    unsafe impl GlobalAlloc for Alloc {
+        unsafe fn alloc(&self, l: Layout) -> *mut u8 {
+            self.with(|h| unsafe { h.alloc(l.size(), l.align(), &mut grow) })
+        }
+
+        #[inline(never)]
+        unsafe fn dealloc(&self, p: *mut u8, l: Layout) {
+            self.with(|h| unsafe { h.dealloc(p, l.size(), l.align()) })
+        }
+
+        unsafe fn realloc(&self, p: *mut u8, l: Layout, new: usize) -> *mut u8 {
+            self.with(|h| unsafe { h.realloc(p, l.size(), l.align(), new, &mut grow) })
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

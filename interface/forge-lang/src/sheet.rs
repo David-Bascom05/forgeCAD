@@ -16,6 +16,7 @@ use crate::syntax::{Arg, Span};
 use crate::values::{Dim, Num, Src, Ty};
 use forge_agent::json::Json;
 use forge_geom::spline::PlaneSpline;
+use forge_math::clock::Instant;
 use forge_math::{Frame, Point2, Point3, Vec3, dmath};
 use forge_model::{Feature, Solid};
 use forge_ops::{ProfileLoop, Segment};
@@ -24,7 +25,6 @@ use forge_topo::{Body, Name};
 use std::cell::RefCell;
 use std::collections::BTreeSet;
 use std::rc::Rc;
-use std::time::Instant;
 
 pub const BUILTINS: &[&str] = &[
     "sheet",
@@ -58,6 +58,15 @@ pub const BUILTINS: &[&str] = &[
 ];
 
 /// Sheet constants: the relief kinds and corner treatments that take no size.
+/// The names `constant` knows.
+pub const CONSTANTS: &[&str] = &[
+    "tear",
+    "no_relief",
+    "closed_corner",
+    "tear_corner",
+    "trim_to_bend",
+];
+
 pub fn constant(name: &str) -> Option<Value> {
     Some(match name {
         "tear" => sv(SheetVal::Relief(Rc::new(ReliefV {
@@ -241,7 +250,7 @@ impl SheetVal {
         let d = |n: &Num| Num {
             v: n.v,
             dim: n.dim,
-            src: Src::Driven(std::sync::Arc::new([key.clone()].into())),
+            src: Src::Driven(std::sync::Arc::new([std::sync::Arc::new(key.clone())].into())),
         };
         let rule = |r: &RuleV| RuleV {
             rule: r.rule.clone(),

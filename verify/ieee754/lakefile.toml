@@ -1,0 +1,22 @@
+name = "ieee754"
+version = "0.1.0"
+defaultTargets = ["IEEE754", "ieee754-eval"]
+
+[leanOptions]
+autoImplicit = false
+relaxedAutoImplicit = false
+
+# Mathlib at the tag matching the toolchain (the same pin Aeneas's Lean library uses, so a
+# project can require both).
+[[require]]
+name = "mathlib"
+git = "https://github.com/leanprover-community/mathlib4.git"
+rev = "v4.36.0"
+
+[[lean_lib]]
+name = "IEEE754"
+
+# Reads ops on stdin, prints results (bits in hex), for the hardware check (check/).
+[[lean_exe]]
+name = "ieee754-eval"
+root = "Main"

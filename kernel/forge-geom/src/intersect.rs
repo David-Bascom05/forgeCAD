@@ -557,6 +557,16 @@ fn conic_quadric(f: &Frame, a: f64, b: f64, range: Interval, s: &Surface) -> Opt
         }
         let t = t.min(range.hi);
         let absorb = ABSORB_HAIR_ROOTS.with(|k| k.get());
+        #[cfg(feature = "decisions")]
+        if near(t) && hits.iter().any(|h| near_between(&near, t + apart(h.t, t), t)) {
+            let p = curve.eval(t);
+            let beside = hits
+                .iter()
+                .filter(|h| near_between(&near, t + apart(h.t, t), t))
+                .map(|h| h.point.distance(p))
+                .fold(0.0, f64::max);
+            hair_log::record(p, beside, s.distance(p), if absorb { 0 } else { 2 });
+        }
         if near(t) && (absorb || !hits.iter().any(|h| near_between(&near, t + apart(h.t, t), t))) {
             // the roots beside it that never leave the tolerance are that touch, as for a line
             if absorb {
@@ -572,6 +582,59 @@ fn conic_quadric(f: &Frame, a: f64, b: f64, range: Interval, s: &Surface) -> Opt
     hits.sort_by(|x, y| x.t.total_cmp(&y.t));
     hits.dedup_by(|x, y| x.point.distance(y.point) <= tol::LINEAR);
     Some(CurveSurface::Hits(hits))
+}
+
+/// The decision log's view of the hair-root choice (feature `decisions`): a conic's turn within
+/// tolerance of the surface with roots beside it that never leave the tolerance, taken as one touch
+/// (ABSORB_HAIR_ROOTS) or left as the crossings. Recorded only inside `collect`.
+#[cfg(feature = "decisions")]
+pub mod hair_log {
+    use forge_math::Point3;
+    use std::cell::RefCell;
+
+    /// One choice: the turn's point, how far the farthest root beside it lies, the turn's distance
+    /// from the surface (within LINEAR), and the answer: 0 one touch, 2 two crossings.
+    #[derive(Clone, Copy, Debug)]
+    pub struct Hair {
+        pub point: Point3,
+        pub beside: f64,
+        pub measure: f64,
+        pub answer: u8,
+    }
+
+    thread_local! {
+        static LOG: RefCell<Option<Vec<Hair>>> = const { RefCell::new(None) };
+    }
+
+    struct Restore(Option<Vec<Hair>>);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            let outer = self.0.take();
+            LOG.with(|l| *l.borrow_mut() = outer);
+        }
+    }
+
+    /// `f`, with the choices it made (a nested `collect` keeps its own).
+    pub fn collect<T>(f: impl FnOnce() -> T) -> (T, Vec<Hair>) {
+        let restore = Restore(LOG.with(|l| l.borrow_mut().replace(Vec::new())));
+        let r = f();
+        let got = LOG.with(|l| l.borrow_mut().take()).unwrap_or_default();
+        drop(restore);
+        (r, got)
+    }
+
+    pub(crate) fn record(point: Point3, beside: f64, measure: f64, answer: u8) {
+        LOG.with(|l| {
+            if let Some(v) = l.borrow_mut().as_mut() {
+                v.push(Hair {
+                    point,
+                    beside,
+                    measure,
+                    answer,
+                });
+            }
+        });
+    }
 }
 
 thread_local! {

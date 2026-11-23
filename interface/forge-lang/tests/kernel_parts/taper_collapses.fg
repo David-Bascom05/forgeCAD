@@ -1,0 +1,17 @@
+# A hexagonal pit 0.5 deep whose walls taper 80 deg: they meet 0.36 down (0.5 tan 80 deg is
+# past the hexagon's inradius 1.73), so the tool collapses. The cut builds an invalid body
+# (EdgeDegenerate) where a clean refusal is due; at 70 deg the walls do not meet and it builds.
+# Restated from a CADFS part (00713562, a 0.2 deep hexagon at 85 deg) that fails the same way.
+param base.w = 20
+param plate.t = 4
+sketch base(on: xy) {
+  r = rect(center: (0, 0), size: (w, w))
+}
+plate = extrude(base, t)
+param pit.d = 0.5
+param pit.a = 80deg
+param hex.s = 1.7320508075688772
+sketch hex(on: plate.end) {
+  p = poly([(2, 0), (1, s), (-1, s), (-2, 0), (-1, -s), (1, -s)])
+}
+pit = cut(hex, d, taper: a)

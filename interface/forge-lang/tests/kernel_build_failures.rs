@@ -550,9 +550,9 @@ extrude2 = extrude(s3, 10)
     );
 }
 
-/// The other half of `pinches_say_where`: a disc whose hole touches its rim. The .fc part:
-///   extrude 5 circle 0 0 40 circle 0 -30 10
-/// refused by the kernel as ZeroThickness at (0, -40, ..), on the line that made it.
+/// The other half of `pinches_say_where`: a disc 40 in radius whose hole, 10 in radius at
+/// (0, -30), touches its rim: refused by the kernel as ZeroThickness at (0, -40, ..), on the line
+/// that made it.
 #[test]
 fn a_pinched_disc_says_where() {
     let e = refusal(
@@ -568,10 +568,9 @@ extrude1 = extrude(s1, 5)
 
 /// Loops that touch are for the result to answer. A cut by such a profile whose touch lands in
 /// empty space, here beyond the plate, leaves a sound part; a plate whose hole touches its outline
-/// is refused above, and so is a boss whose outline pinches. The .fc parts:
-///   extrude 4 rect -60 -25 120 80 / extrude cut 6 at 0 0 -1 circle 0 0 30 circle 0 -20 10   builds
-///   extrude 4 rect -60 -60 120 120 / the same cut                                       builds
-///   extrude 4 rect -60 -60 120 120 / extrude add 6 at 0 0 4 circle 0 0 30 circle 0 -20 10   ZeroThickness
+/// is refused above, and so is a boss whose outline pinches. Checked: the touching cut through a
+/// plate it overhangs builds, the same cut through a plate holding the whole profile builds, and a
+/// boss of the same profile on that plate is ZeroThickness.
 #[test]
 fn a_touching_profile_is_judged_by_its_result() {
     let pi = forge_math::dmath::PI;
@@ -677,11 +676,8 @@ gone = cut(sc, -10)
     );
 }
 
-/// The .fc part cut every body at once (`in all`):
-///   a: extrude 8 rect 0 0 10 10
-///   b: extrude new 8 rect 40 0 10 10
-///   extrude cut 10 at 0 0 -1 rect -1 -1 12 12 in all       takes a whole, keeps b
-///   extrude cut 10 at 0 0 -1 rect -1 -1 60 12 in all       takes both: refused
+/// A cut in every body at once, of two blocks a and b: a cut over a alone takes it whole and keeps
+/// b; a cut over both takes both, and is refused.
 #[test]
 fn a_cut_in_every_body() {
     let src = "sketch sa(on: xy) {
@@ -755,6 +751,9 @@ fill = delete_faces(faces(of: extrude1, shape: "cyl"))
 }
 
 /// A cone with a hexagon cut through it, its top edges rounded: no panic, and sound if it builds.
+/// The hexagon's corners lie on the cone's base circle (to 7e-8 mm, its 17.320508 a rounded
+/// √300), so the cut leaves six slivers round the foot touching only at those corners: refused
+/// with ZeroThickness at the cut, as any corner touch is.
 #[test]
 fn rounding_a_hex_cut_cone_top_does_not_panic() {
     let src = r#"sketch s1(on: xz) {
@@ -772,7 +771,13 @@ round = fillet(edges(between: (hexcut, cone.side(s1.p1[1]))), 0.5)
     // (it builds since corner patches stopped following storage order; a refusal must name the fillet)
     match r.errors.first() {
         None => assert!(r.measure.expect("measured").problems == 0),
-        Some(e) => assert!(format!("{e:?}").contains("round"), "{e:?}"),
+        Some(e) => {
+            let e = format!("{e:?}");
+            assert!(
+                e.contains("round") || e.contains("\"hexcut\"") && e.contains("ZeroThickness"),
+                "{e}"
+            )
+        }
     }
 }
 
@@ -916,22 +921,11 @@ ball2 = ball(s5.c, 3.6)
 }
 
 /// A full round whose side face keeps edges it no longer holds: refused, not a body 5 off its face
-/// (repros/check-edge-off-face.fc). The .fc part, a fuzzed one whose picks are by place:
-///   L0: extrude 8.52 rect 0 0 53.78 114.36
-///   L1: split plane z 0.951 0.258 0.172 at 37.9 60.16 6.25 +
-///   L2: movebody by 35.98 2.3 -10.61 rot 38.28 57.24 4.26 0 0 1 42.91
-///   L3: fillet 3.04..2.35 from (verts near 35.53 135.81 -10.61) (edges near 61.7 86.03 -10.61) (edges convex near 24.74 125.78 -10.61)
-///   L5: movebody by 158.74 119.01 26.09
-///   L8: sweep cut z 0 0 -1 x -1 0 0 at 221.81 208.74 99.68 rrect -12.99 -12.99 25.98 25.98 3.9 path line 221.81 208.74 99.68 221.81 208.74 10.52000000000001 arc z 0 1 0 x 1 0 0 at 192.41 208.74 10.52000000000001 29.4 0 30 line 217.87114687126248 208.74 -4.179999999999987 186.24614687126248 208.74 -58.956106789365734
-///   L11: extrude add 78.13 z 0.826 0.52 0.217 at 263.16 180.65 20.27 loop line -30.04 0 30.04 0 arc 0 0 30.04 0 180
-///   L12: fillet 0.06 (edges convex circle of L8)
-///   L17: offset -4.58 (faces near 209.64 238.28 19.73)
-///   L19: hole 21.99 z 0 0 -1 at 162.07 252.77 37.23 34.89 pt 118 thread 26.39 3.5
-///   L25: fullround (faces near 195.14 231.14 24) (faces near 204.84 236.72 19.73) (faces near 198.43 232.31 15.48)
-/// Its picks traced to what made them (`forgecad query .. of FEAT`): L3 rounds the block's
-/// bottom edges along the split face and along its far side, from their corner; L17 and L25
-/// take the piece of the block's right side the lump leaves alone (its side less the piece touching
-/// the lump), and the pieces of the top and bottom beside it.
+/// (a fuzzed part: a block split, moved, filleted, cut by a sweep, a lump added, offset, bored and
+/// rounded). Its picks traced to what made them (`forgecad query .. of FEAT`): `round` rounds the
+/// block's bottom edges along the split face and along its far side, from their corner; `back`
+/// and `end` take the piece of the block's right side the lump leaves alone (its side less the
+/// piece touching the lump), and the pieces of the top and bottom beside it.
 #[test]
 fn full_round_leaving_an_edge_off_its_face_is_refused() {
     let src = r#"
@@ -1564,7 +1558,7 @@ round = fillet(edges(between: (b.start, b.side(s.r[1]))) + edges(between: (b.sta
 
 /// To the next face backwards, as forwards with the frame flipped: a floor, a wall and a roof, and a
 /// block from mid air down to the floor or up to the roof: down on a flipped plane, and on the
-/// plane facing up with `flip: true` (the .fc `extrude next back xy at 0 0 25 ..`), the same.
+/// plane facing up with `flip: true`, the same.
 #[test]
 fn to_next_backwards() {
     let full = 60.0 * 60.0 * 10.0 * 2.0 + 5.0 * 60.0 * 40.0;
@@ -2084,9 +2078,7 @@ bevel = chamfer(edges(of: b), 1)
 
 /// Three chamfers of one feature at a corner, `corner point`: their cut planes run on to a point (CATIA's
 /// corner). Own numbers: the volume of |x|,|y|,|z| <= 5 with |x|+|y|, |y|+|z|, |z|+|x| <= 9, by
-/// inclusion-exclusion: 1000 - 12 * 5 + 8 * 3/4. The .fc part:
-///   extrude 10 rect 0 0 10 10
-///   chamfer 1 corner point (edges)
+/// inclusion-exclusion: 1000 - 12 * 5 + 8 * 3/4, for a 10 mm cube chamfered 1 on every edge.
 #[test]
 fn three_chamfers_at_a_corner_meet_at_a_point_when_asked() {
     let b = built(

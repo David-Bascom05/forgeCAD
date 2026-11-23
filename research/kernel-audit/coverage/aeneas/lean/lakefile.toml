@@ -1,0 +1,13 @@
+name = "placecuts"
+version = "0.1.0"
+defaultTargets = ["Placecuts"]
+
+# Aeneas's Lean library at the commit whose aeneas translated placecuts (charon 9e193f0)
+[[require]]
+name = "aeneas"
+git = "https://github.com/AeneasVerif/aeneas"
+rev = "2e3d4488"
+subDir = "backends/lean"
+
+[[lean_lib]]
+name = "Placecuts"

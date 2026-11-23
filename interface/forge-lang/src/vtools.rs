@@ -202,7 +202,7 @@ pub fn restore(file: &Path, to: &str, agent: Option<&str>) -> Result<Json, Strin
     // what is on disk now is kept first: a restore never loses work that was never saved
     for p in &paths {
         let f = h.abs(p);
-        if f.is_file() {
+        if forge_dirs::fs::is_file(&f) {
             let _ = save(&f, "saved before restore", agent);
         }
     }

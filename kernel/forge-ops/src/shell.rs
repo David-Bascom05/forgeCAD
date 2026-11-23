@@ -107,10 +107,11 @@ pub fn shell(
             continue;
         }
         let face = base.face(f);
-        let (fo, fi) = (
-            outer.face_by_name(face.name).expect("opened faces stay"),
-            inner.face_by_name(face.name).expect("opened faces stay"),
-        );
+        // an opened face the walls' offset closes over is gone
+        // from the moved skin: the opening collapses
+        let (Some(fo), Some(fi)) = (outer.face_by_name(face.name), inner.face_by_name(face.name)) else {
+            return Err(ShellError::Collapses { face: face.name });
+        };
         if outer.face(fo).loops.len() != inner.face(fi).loops.len() {
             return Err(ShellError::Collapses { face: face.name });
         }

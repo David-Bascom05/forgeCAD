@@ -418,7 +418,7 @@ mod tests {
         let key = format!(
             "written behind {} {:?}",
             std::process::id(),
-            std::time::SystemTime::now()
+            forge_math::clock::system_now()
         );
         for n in 0..5u64 {
             let key = format!("{key} {n}");

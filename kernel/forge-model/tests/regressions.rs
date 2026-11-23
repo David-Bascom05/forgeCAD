@@ -3605,11 +3605,9 @@ fn self_intersecting_profile_is_rejected() {
     );
 }
 
-/// A wall flush with a rounded base's back edge, ending where the corner arcs start. As a part
-/// file:
-///     extrude 8 rrect -40 -25 80 50 6
-///     extrude 8 xz at 0 25 0 rect -40 0 80 45
-/// The corner arcs leave the wall's edge along it: the split once took the wrong way there.
+/// A wall flush with a rounded base's back edge, ending where the corner arcs start: an 80 x 50
+/// base 8 thick with corners rounded 6, and an 80 x 45 wall 8 thick on xz at its back. The corner
+/// arcs leave the wall's edge along it: the split once took the wrong way there.
 #[test]
 fn wall_flush_with_rounded_base_edge() {
     let block = |plane, l: ProfileLoop| Feature::Extrude {
@@ -3668,7 +3666,9 @@ fn cylinder_tangent_to_top_and_wall_inside() {
 
 /// Equal rods whose axes cross meet in two ellipses that cross where the rods touch. With the
 /// rods' seams away from there, kept curve pieces end at free vertices (on no edge), whose
-/// naming once panicked. The common part is the Steinmetz solid, 16 r^3 / 3.
+/// naming once panicked. The common part is the Steinmetz solid, 16 r^3 / 3. One less the other
+/// leaves two pieces of rod meeting only at the two points the rods touch: not a manifold there,
+/// refused with ZeroThickness as a corner touch is.
 #[test]
 fn equal_rods_crossing_end_pieces_at_free_vertices() {
     use forge_math::{Frame, Point3, Vec3};
@@ -3699,6 +3699,20 @@ fn equal_rods_crossing_end_pieces_at_free_vertices() {
             part.regenerate_nary(1),
             part.regenerate_nary(2),
         ] {
+            if op == Combine::Cut {
+                assert!(
+                    matches!(
+                        b,
+                        Err(forge_model::RegenError::Boolean {
+                            feature: 1,
+                            error: forge_bool::BoolError::ZeroThickness { .. }
+                        })
+                    ),
+                    "{:?}",
+                    b.map(|b| b.faces.len())
+                );
+                continue;
+            }
             let b = b.expect("regenerates");
             assert!(
                 forge_topo::check(&b).is_empty(),

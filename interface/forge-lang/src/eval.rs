@@ -11,7 +11,7 @@ use forge_math::{Frame, Point3, UnitVec3, Vec3};
 use forge_sketch::EntityId;
 use forge_topo::Name;
 use std::cell::RefCell;
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::rc::Rc;
 
 /// How a rule is enforced: not at all, as a typed lint (a warning with fixes, never blocking),
@@ -250,7 +250,7 @@ pub struct FeatInfo {
     pub stmt: Span,
     pub top_level: bool,
     /// Every param its evaluation read (its arguments, its sketch rows, its selections).
-    pub reads: BTreeSet<ParamKey>,
+    pub reads: values::Keys,
     /// A sketch's plane, as built.
     pub frame: Option<Frame>,
     /// The part's volume and centroid after it, when asked for (`Options::volumes`).
@@ -301,16 +301,66 @@ impl std::hash::Hasher for NameHasher {
     }
 }
 
+/// The params by name: each shared one's and each local's place, in order, for those so far
+/// (`sync` takes in the ones added since).
+#[derive(Default)]
+struct ParamIx {
+    shared: usize,
+    locals: usize,
+    by: HashMap<String, Vec<(bool, u32)>, std::hash::BuildHasherDefault<NameHasher>>,
+}
+
+impl ParamIx {
+    #[inline]
+    fn sync(&mut self, shared: &[ParamInfo], locals: &[ParamInfo]) {
+        if (self.shared, self.locals) != (shared.len(), locals.len()) {
+            self.catch_up(shared, locals);
+        }
+    }
+    fn catch_up(&mut self, shared: &[ParamInfo], locals: &[ParamInfo]) {
+        if self.shared > shared.len() || self.locals > locals.len() {
+            *self = ParamIx::default();
+        }
+        for (k, p) in shared.iter().enumerate().skip(self.shared) {
+            self.by
+                .entry(p.key.name.clone())
+                .or_default()
+                .push((true, k as u32));
+        }
+        for (k, p) in locals.iter().enumerate().skip(self.locals) {
+            self.by
+                .entry(p.key.name.clone())
+                .or_default()
+                .push((false, k as u32));
+        }
+        (self.shared, self.locals) = (shared.len(), locals.len());
+    }
+    /// The places of the params named `name`, shared (true) or local, each kind in order.
+    fn named(&self, name: &str) -> impl Iterator<Item = (bool, usize)> + '_ {
+        self.by
+            .get(name)
+            .into_iter()
+            .flatten()
+            .map(|&(s, k)| (s, k as usize))
+    }
+}
+
 pub struct Eval<'s> {
     pub src: &'s str,
     pub rules: Rules,
     pub shared: Vec<ParamInfo>,
     pub locals: Vec<ParamInfo>,
+    params_ix: ParamIx,
     pub fns: HashMap<String, Rc<FnDef>>,
     scopes: Vec<Scope>,
     pub b: Builder,
     pub feats: Vec<FeatInfo>,
-    ids: HashMap<String, Span>,
+    /// Each id made so far and where: a second is DuplicateId. FNV like `Scope`; nothing
+    /// iterates it.
+    ids: HashMap<String, Span, std::hash::BuildHasherDefault<NameHasher>>,
+    /// Each kernel name (`history_id`) made so far, and the feature (in `feats`) that made it
+    /// first: two ids with one kernel name are refused (HistoryId.lean: `checked_distinct`).
+    hids: HashMap<u64, usize, std::hash::BuildHasherDefault<NameHasher>>,
     pub errors: Vec<Error>,
     pub warnings: Vec<Warning>,
     ctx: Ctx,
@@ -329,7 +379,7 @@ pub struct Eval<'s> {
     /// Calls made for the top-level statement being evaluated: its budget.
     calls: usize,
     /// Params read since the last feature was made.
-    pub reads: BTreeSet<ParamKey>,
+    pub reads: values::Keys,
     /// Measure the part's volume after every feature.
     pub volumes: bool,
     /// Run the slow checks (a thermoform's wall simulation, what changed nothing, a sketch's
@@ -426,11 +476,13 @@ impl<'s> Eval<'s> {
             rules,
             shared: vec![],
             locals: vec![],
+            params_ix: ParamIx::default(),
             fns: HashMap::new(),
             scopes: vec![Scope::default()],
             b: Builder::new(building, cache),
             feats: vec![],
-            ids: HashMap::new(),
+            ids: HashMap::default(),
+            hids: HashMap::default(),
             errors: vec![],
             warnings: vec![],
             ctx: Ctx::default(),
@@ -442,7 +494,7 @@ impl<'s> Eval<'s> {
             ent_name: None,
             observed: BTreeSet::new(),
             calls: 0,
-            reads: BTreeSet::new(),
+            reads: values::Keys::new(),
             volumes: false,
             checks: true,
             poisoned: false,
@@ -638,17 +690,22 @@ impl<'s> Eval<'s> {
         }
         // hard: no local (a function's parameter or binding, a loop or comprehension variable, a
         // sketch's entity) has a top-level name
-        let mut top = crate::edit::bound(prog);
+        // (the names borrowed from the program, not copied)
+        let mut top: HashSet<&str> = HashSet::new();
+        crate::edit::bound_into(prog, &mut top);
         for s in prog {
             if let StmtKind::Param { owner, .. } = &s.kind {
-                top.extend(owner.first().map(|o| o.name.clone()));
+                top.extend(owner.first().map(|o| o.name.as_str()));
             }
         }
         let mut locals = vec![];
         locals_of(prog, true, &mut locals);
         for (name, span) in locals {
-            if top.contains(&name) {
-                self.errors.push(Error::ShadowsTopLevel { span, name });
+            if top.contains(name) {
+                self.errors.push(Error::ShadowsTopLevel {
+                    span,
+                    name: name.to_string(),
+                });
             }
         }
     }
@@ -662,7 +719,7 @@ impl<'s> Eval<'s> {
                         self.literals_expr(d, false, &None);
                     }
                 }
-                for b in body {
+                for b in body.iter() {
                     self.literals_stmt(b, &None);
                 }
             }
@@ -982,12 +1039,12 @@ impl<'s> Eval<'s> {
                 }
             }
             let here = &self.ctx.owner;
-            if let Some(p) = self
-                .shared
-                .iter()
-                .chain(&self.locals)
-                .find(|p| p.key.name == name && Self::visible(&p.key.owner, here).is_some())
-            {
+            self.params_ix.sync(&self.shared, &self.locals);
+            let of = |(s, k): (bool, usize)| if s { &self.shared[k] } else { &self.locals[k] };
+            let visible = |p: &&ParamInfo| Self::visible(&p.key.owner, here).is_some();
+            let hit = (self.params_ix.named(name).filter(|x| x.0).map(of).find(visible))
+                .or_else(|| self.params_ix.named(name).filter(|x| !x.0).map(of).find(visible));
+            if let Some(p) = hit {
                 first = Some(p.span);
             }
             if let Some(first) = first {
@@ -1000,7 +1057,7 @@ impl<'s> Eval<'s> {
             }
         }
         if self.scopes.len() == 1
-            && let Some(p) = self.shared.iter().find(|p| p.key.name == name)
+            && let Some(p) = self.first_shared(name).map(|k| &self.shared[k])
         {
             return Err(Error::Rebind {
                 span,
@@ -1098,7 +1155,7 @@ impl<'s> Eval<'s> {
                 })
             }
             StmtKind::Shared { name, value } => {
-                if let Some(p) = self.shared.iter().find(|p| &p.key.name == name) {
+                if let Some(p) = self.first_shared(name).map(|k| &self.shared[k]) {
                     return Err(Error::ParamTwice {
                         span: s.span,
                         param: p.key.clone(),
@@ -1122,7 +1179,13 @@ impl<'s> Eval<'s> {
                     owner: owner.clone(),
                     name: name.clone(),
                 };
-                if let Some(p) = self.locals.iter().find(|p| p.key == key) {
+                self.params_ix.sync(&self.shared, &self.locals);
+                let same = self
+                    .params_ix
+                    .named(name)
+                    .filter(|x| !x.0)
+                    .map(|x| &self.locals[x.1]);
+                if let Some(p) = same.into_iter().find(|p| p.key == key) {
                     return Err(Error::ParamTwice {
                         span: s.span,
                         param: key,
@@ -1147,7 +1210,7 @@ impl<'s> Eval<'s> {
                     Rc::new(FnDef {
                         name: name.clone(),
                         params: params.clone(),
-                        body: Rc::new(body.clone()),
+                        body: body.clone(),
                         span: s.span,
                         lib: None,
                     }),
@@ -1383,6 +1446,12 @@ impl<'s> Eval<'s> {
         Some(owner.len() * 2 + score)
     }
 
+    /// The first shared param named `name`.
+    fn first_shared(&mut self, name: &str) -> Option<usize> {
+        self.params_ix.sync(&self.shared, &self.locals);
+        self.params_ix.named(name).find(|x| x.0).map(|x| x.1)
+    }
+
     fn param_num(&mut self, which: (bool, usize), span: Span) -> Value {
         let p = if which.0 {
             &mut self.shared[which.1]
@@ -1420,20 +1489,23 @@ impl<'s> Eval<'s> {
             });
         }
         let here = &self.ctx.owner;
-        let best = self
-            .locals
-            .iter()
-            .enumerate()
-            .filter(|(_, p)| p.key.name == name)
-            .filter_map(|(k, p)| Self::visible(&p.key.owner, here).map(|s| (s, k)))
-            .max();
+        self.params_ix.sync(&self.shared, &self.locals);
+        // (the params of this name looked up once: the best local in reach, the first shared)
+        let (mut best, mut first) = (None, None);
+        for (shared, k) in self.params_ix.named(name) {
+            if shared {
+                first = first.or(Some(k));
+            } else if let Some(s) = Self::visible(&self.locals[k].key.owner, here) {
+                best = best.max(Some((s, k)));
+            }
+        }
         if let Some((_, k)) = best {
             return Ok(self.param_num((false, k), span));
         }
         if let Some((v, _)) = self.scopes[0].get(name) {
             return Ok(v.clone());
         }
-        if let Some(k) = self.shared.iter().position(|p| p.key.name == name) {
+        if let Some(k) = first {
             return Ok(self.param_num((true, k), span));
         }
         if let Some(f) = self.fns.get(name) {
@@ -1451,7 +1523,9 @@ impl<'s> Eval<'s> {
         if let Some(v) = crate::harness::constant(self, name) {
             return Ok(v);
         }
-        if let Some(k) = self.locals.iter().position(|p| p.key.name == name) {
+        self.params_ix.sync(&self.shared, &self.locals);
+        let local = self.params_ix.named(name).find(|x| !x.0);
+        if let Some((_, k)) = local {
             let err = self.out_of_scope(self.locals[k].key.clone(), span);
             self.rule(self.rules.scoped_params, err)?;
             return Ok(self.param_num((false, k), span));
@@ -1915,7 +1989,12 @@ impl<'s> Eval<'s> {
                 match r {
                     Err(e)
                         if poisoned
-                            && !matches!(e, Error::UnnamedFeature { .. } | Error::DuplicateId { .. }) =>
+                            && !matches!(
+                                e,
+                                Error::UnnamedFeature { .. }
+                                    | Error::DuplicateId { .. }
+                                    | Error::HistoryIdClash { .. }
+                            ) =>
                     {
                         Ok(Value::Unresolved)
                     }
@@ -1989,7 +2068,7 @@ impl<'s> Eval<'s> {
                 max: def.params.len(),
             });
         }
-        let mut scope = Scope::default();
+        let mut scope = Scope::with_capacity_and_hasher(def.params.len(), Default::default());
         for (k, a) in args.iter().enumerate() {
             let pname = match &a.name {
                 Some((n, nsp)) => {
@@ -2083,15 +2162,17 @@ impl<'s> Eval<'s> {
                     index: self.id_keys(span)?,
                 });
                 let id = path_text(&path);
-                if let Some(first) = self.ids.get(&id) {
-                    return Err(Error::DuplicateId {
+                match self.ids.entry(id.clone()) {
+                    std::collections::hash_map::Entry::Occupied(first) => Err(Error::DuplicateId {
                         span,
                         id,
-                        first: *first,
-                    });
+                        first: *first.get(),
+                    }),
+                    std::collections::hash_map::Entry::Vacant(e) => {
+                        e.insert(span);
+                        Ok(id)
+                    }
                 }
-                self.ids.insert(id.clone(), span);
-                Ok(id)
             }
             other => {
                 self.ctx.pending = other;
@@ -2140,6 +2221,22 @@ impl<'s> Eval<'s> {
         hid: u64,
         push: impl FnOnce(&mut crate::build::Builder) -> R<usize>,
     ) -> R<(usize, u64)> {
+        // one kernel name, one id: another id hashing to it would name the same entities
+        match self.hids.entry(hid) {
+            std::collections::hash_map::Entry::Occupied(e) if self.feats[*e.get()].id != id => {
+                let first = &self.feats[*e.get()];
+                return Err(Error::HistoryIdClash {
+                    span,
+                    id: id.into(),
+                    other: first.id.clone(),
+                    first: first.span,
+                });
+            }
+            std::collections::hash_map::Entry::Occupied(_) => {}
+            std::collections::hash_map::Entry::Vacant(e) => {
+                e.insert(self.feats.len());
+            }
+        }
         let was_building = self.b.building;
         let r = push(&mut self.b);
         let idx = self.b.features.len() - 1;
@@ -2275,7 +2372,8 @@ impl<'s> Eval<'s> {
         r?;
         if sk.borrow().free {
             let ps = sk.borrow().params.clone();
-            self.observed.extend(ps);
+            self.observed
+                .extend(ps.into_iter().map(std::sync::Arc::unwrap_or_clone));
         }
         {
             let skb = sk.borrow();
@@ -2364,7 +2462,7 @@ pub(crate) fn driving(v: &Value, key: &ParamKey, span: Span) -> Value {
             Value::Num(n) => Value::Num(Num {
                 v: n.v,
                 dim: n.dim,
-                src: Src::Driven(std::sync::Arc::new([key.clone()].into())),
+                src: Src::Driven(std::sync::Arc::new([std::sync::Arc::new(key.clone())].into())),
             }),
             Value::List(xs) => Value::List(Rc::new(xs.iter().map(|x| inner(x, key)).collect())),
             Value::Tuple(xs) => Value::Tuple(Rc::new(xs.iter().map(|x| inner(x, key)).collect())),
@@ -2379,6 +2477,21 @@ pub(crate) fn driving(v: &Value, key: &ParamKey, span: Span) -> Value {
             src: Src::driving(key.clone()),
         }),
         o => inner(o, key),
+    }
+}
+
+/// `collect_params`, shared.
+pub fn collect_keys(v: &Value, out: &mut values::Keys) {
+    match v {
+        Value::Num(n) => n.src.add_keys(out),
+        Value::List(xs) | Value::Tuple(xs) => xs.iter().for_each(|x| collect_keys(x, out)),
+        Value::Map(m) => m.iter().for_each(|x| collect_keys(&x.1, out)),
+        Value::Sheet(s) => {
+            let mut ps = BTreeSet::new();
+            s.params(&mut ps);
+            out.extend(ps.into_iter().map(std::sync::Arc::new));
+        }
+        _ => {}
     }
 }
 
@@ -2529,7 +2642,7 @@ pub fn arith(op: BinOp, x: &Value, y: &Value, span: Span, sa: Span, sb: Span) ->
         (Value::Verts(a), Value::Verts(b)) if op == BinOp::Sub => Ok(Value::Verts(Rc::new(
             a.iter().copied().filter(|n| !b.contains(n)).collect(),
         ))),
-        // the first set less what the second holds (`.fc` picked one of several by place)
+        // the first set less what the second holds
         (Value::Faces(a), Value::Faces(b)) if op == BinOp::Sub => Ok(Value::Faces(Rc::new(Faces {
             names: a.names.iter().copied().filter(|n| !b.names.contains(n)).collect(),
             owner: a.owner.clone(),
@@ -2582,8 +2695,8 @@ pub fn unit_or_z(v: Vec3) -> UnitVec3 {
 
 /// The local names statements bind, with where: function parameters and bodies, loop and
 /// comprehension variables, a sketch's or path's names. A loop at top level binds top-level names.
-fn locals_of(stmts: &[Stmt], top: bool, out: &mut Vec<(String, Span)>) {
-    fn comp(e: &Expr, out: &mut Vec<(String, Span)>) {
+fn locals_of<'a>(stmts: &'a [Stmt], top: bool, out: &mut Vec<(&'a str, Span)>) {
+    fn comp<'a>(e: &'a Expr, out: &mut Vec<(&'a str, Span)>) {
         match &e.kind {
             ExprKind::Comp {
                 item,
@@ -2591,7 +2704,7 @@ fn locals_of(stmts: &[Stmt], top: bool, out: &mut Vec<(String, Span)>) {
                 iter,
                 cond,
             } => {
-                out.extend(vars.iter().map(|v| (v.clone(), e.span)));
+                out.extend(vars.iter().map(|v| (v.as_str(), e.span)));
                 comp(item, out);
                 comp(iter, out);
                 if let Some(c) = cond {
@@ -2621,7 +2734,7 @@ fn locals_of(stmts: &[Stmt], top: bool, out: &mut Vec<(String, Span)>) {
         match &s.kind {
             StmtKind::Assign { name, value } => {
                 if !top {
-                    out.push((name.clone(), s.span));
+                    out.push((name.as_str(), s.span));
                 }
                 comp(value, out);
             }
@@ -2636,13 +2749,13 @@ fn locals_of(stmts: &[Stmt], top: bool, out: &mut Vec<(String, Span)>) {
             } => {}
             StmtKind::Block { name, args, body, .. } => {
                 if !top {
-                    out.push((name.clone(), s.span));
+                    out.push((name.as_str(), s.span));
                 }
                 args.iter().for_each(|a| comp(&a.value, out));
                 locals_of(body, false, out);
             }
             StmtKind::For { vars, iter, body } => {
-                out.extend(vars.iter().map(|v| (v.clone(), s.span)));
+                out.extend(vars.iter().map(|v| (v.as_str(), s.span)));
                 comp(iter, out);
                 locals_of(body, top, out);
             }
@@ -2652,7 +2765,7 @@ fn locals_of(stmts: &[Stmt], top: bool, out: &mut Vec<(String, Span)>) {
                 locals_of(other.as_deref().unwrap_or(&[]), top, out);
             }
             StmtKind::Fn { params, body, .. } => {
-                out.extend(params.iter().map(|p| (p.name.clone(), s.span)));
+                out.extend(params.iter().map(|p| (p.name.as_str(), s.span)));
                 locals_of(body, false, out);
             }
             StmtKind::Expect { .. } => {}

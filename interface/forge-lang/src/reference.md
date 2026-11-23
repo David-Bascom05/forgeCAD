@@ -28,7 +28,7 @@ expect volume = 11966 +- 0.1%
 `#` starts a comment. A comment line `# units in` (or `cm`, `m`, `ft`, `mm`) is the part's
 own unit for people: the app shows lengths and takes bare numbers typed in it, converting to mm as
 it writes them; the text's numbers stay mm and nothing builds from the line. `#~ID ` starts a line
-`Suppress {id}` took out of the build. Numbers: `12`, `0.5`, `1e3`, with a unit `mm` or `deg`. A minus sign
+`Suppress {id}` took out of the build (`#~ID< `, `#~ID> `: one it put on a line of its own). Numbers: `12`, `0.5`, `1e3`, with a unit `mm` or `deg`. A minus sign
 directly before a digit, where no value precedes it, is part of the number (`-1`, `(-1, 2)`);
 `a -1` and `a - 1` subtract. Strings: `"M6"`. Names: letters, digits, `_`. Keywords: `shared param
 fn for in if else return expect and or not true false sketch path at component` (`at:` is still a keyword
@@ -531,7 +531,7 @@ FACES - FACES   EDGES - EDGES       the first set less the second's (one piece o
 `verts` finds the part's vertices: `of` a feature, those on a face it made (lineage, as for
 edges); `of` faces or edges, their corners and ends; `between: (A, B)` where faces of both meet;
 `body` in those bodies. One vertex is a reference the kernel follows through every edit above
-it (by its maker's own name for it, as `.fc`'s `(verts ..)`): a work feature's point, a fillet's
+it (by its maker's own name for it): a work feature's point, a fillet's
 `from` or setback corner, a place of `places(at:)` (each vertex of a set one place); where a
 plain point is wanted it is where the vertex is. Several where one is wanted is `NotOne`; a
 vertex no earlier solid feature made is `NoOwner`.
@@ -1263,11 +1263,14 @@ SetArg {id, arg, text}              keyword argument arg of the call making id b
 SetProperty {key, text}             an argument of properties(..) set (null: taken out)
 Rename {from, to}                   a top-level name and every use of it renamed
 Suppress {id}                       the statement making id, its params, and every statement
-                                    reading what they bind out of the build, each line kept
-                                    as a comment `#~ID LINE`
+                                    reading what they bind out of the build, each kept as
+                                    a comment `#~ID LINE` (one sharing a line with a statement
+                                    kept on a line of its own: `#~ID<`, `#~ID>`)
 Unsuppress {id}                     those lines put back as they were
-Respell {span, to}                  the name at span written `to` (UnknownName's fix: the
-                                    nearest name in reach, two edits or fewer away)
+Respell {span, to}                  the name read at span written `to` (UnknownName's fix: the
+                                    nearest name in reach, two edits or fewer away, the part's
+                                    names before built-ins); a binder or a part of a token is
+                                    refused (NotARead)
 Undo | Redo                         (`fg edit F`) the file's last edit taken back, or put back
                                     (its log `F.fg.log` beside it)
 ```

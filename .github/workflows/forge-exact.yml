@@ -7,9 +7,9 @@ name: forge-exact
 on:
   push:
     branches: [main]
-    paths: ["verify/forge-exact/**", ".github/workflows/forge-exact.yml"]
+    paths: ["verify/forge-exact/**", "kernel/**", ".github/workflows/forge-exact.yml"]
   pull_request:
-    paths: ["verify/forge-exact/**", ".github/workflows/forge-exact.yml"]
+    paths: ["verify/forge-exact/**", "kernel/**", ".github/workflows/forge-exact.yml"]
   workflow_dispatch:
 
 jobs:
@@ -44,3 +44,8 @@ jobs:
           echo "$out"
           echo "$out" | sed -n 1p | grep -q '"verdict":"nonmanifold"'
           echo "$out" | sed -n 2p | grep -q '"verdict":"solid".*"volume":"7"'
+      - name: rust (rust-toolchain.toml)
+        run: rustup show
+      - uses: Swatinem/rust-cache@v2
+      - name: the kernel's repros against the reference
+        run: cargo test --release --locked -p forge-exact-fuzz --features reference
