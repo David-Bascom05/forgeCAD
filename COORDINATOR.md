@@ -234,3 +234,11 @@ Workers (each its own cloud session, tag `forgecad-worker`; they report via send
   CAM workers started early at David's request: they branch from #16's branch
   (claude/repo-review-mbdrlj-cam-lean) and open PRs only after #15/#16 merge.
 Queue: #31 CI running on 924bc4d0 (contains main db5c0759).
+
+## 9. Merge log + David's relaxed rule (cloud coordinator)
+David (22:0x UTC): "feel free to merge stuff as long as it will not mess things up". Applied as: a PR
+whose CI is green may merge WITHOUT update-branch + re-CI only if `git merge-tree` of main + PR head,
+diffed against the PR head, touches only files that cannot affect what the PR's CI tested (CI yaml,
+disjoint research/ or examples of crates the PR doesn't touch). Kernel-touching PRs keep the full rule.
+Merged: #31 (dee3b0d0), #14 (940ba39d), #15 (ee512a7c), #16 (2953130b). #32 updated → 73342d50, CI running.
+#33: full workspace test passed (FALLBACK, 2206/0 failed at 8655b848); needs update-branch + CI.
