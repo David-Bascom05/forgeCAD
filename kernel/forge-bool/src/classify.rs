@@ -842,18 +842,28 @@ fn planar_parity(
     let (sn, cs) = forge_math::dmath::sin_cos(angle);
     let d = plane.frame.x() * cs + plane.frame.y() * sn;
     let mut inside = false;
-    let all: Box<dyn Iterator<Item = &(forge_topo::CoedgeId, Box3)>> = match subset {
-        Some(ix) => Box::new(ix.iter().map(|&i| &edges[i as usize])),
-        None => Box::new(edges.iter()),
-    };
-    for &(c, ref b) in all {
+    // each use of an edge the ray may meet (of `subset`, or all), in order
+    let mut cross = |&(c, ref b): &(forge_topo::CoedgeId, Box3)| -> Option<()> {
         if c == GONE || !ray_hits_box(p, d, b) {
-            continue;
+            return Some(());
         }
         let e = body.edge(body.coedge(c).edge);
         // a seam cannot occur on a plane; each use of an edge here is one crossing set
         if plane_ray_crossings(plane.frame.z().get(), p, d, &e.curve, e.range)? % 2 == 1 {
             inside = !inside;
+        }
+        Some(())
+    };
+    match subset {
+        Some(ix) => {
+            for &i in ix {
+                cross(&edges[i as usize])?;
+            }
+        }
+        None => {
+            for x in edges {
+                cross(x)?;
+            }
         }
     }
     Some(inside)
@@ -869,7 +879,8 @@ pub(crate) fn plane_ray_crossings(
     curve: &Curve,
     range: Interval,
 ) -> Option<usize> {
-    let hits: Vec<(f64, f64)> = match curve {
+    // (at most two: a line's one, a conic's two)
+    let (hits, nh): ([(f64, f64); 2], usize) = match curve {
         Curve::Line(l) => {
             // ray p + s d against segment o + t dir, t in range
             let w = l.origin - p;
@@ -891,7 +902,7 @@ pub(crate) fn plane_ray_crossings(
             if !t.is_finite() {
                 return None;
             }
-            vec![(s, t)]
+            ([(s, t), (0.0, 0.0)], 1)
         }
         Curve::Circle(k) => conic_ray(&k.frame, k.radius, k.radius, p, d),
         Curve::Ellipse(el) => conic_ray(&el.frame, el.major, el.minor, p, d),
@@ -899,7 +910,7 @@ pub(crate) fn plane_ray_crossings(
     };
     let periodic = curve.domain().period;
     let mut n = 0;
-    for (s, t) in hits {
+    for &(s, t) in &hits[..nh] {
         if s <= 0.0 {
             continue;
         }
@@ -1064,7 +1075,7 @@ fn conic_plane(f: &forge_math::Frame, a: f64, b: f64, at: Point3, m: Vec3) -> Op
 /// Where the ray p + s d (s any sign) meets a conic o + a cos t x + b sin t y
 /// lying in a plane that contains the ray: (s, t) pairs. A tangent ray gives
 /// none (it touches without crossing).
-fn conic_ray(f: &forge_math::Frame, a: f64, b: f64, p: Point3, d: Vec3) -> Vec<(f64, f64)> {
+fn conic_ray(f: &forge_math::Frame, a: f64, b: f64, p: Point3, d: Vec3) -> ([(f64, f64); 2], usize) {
     let q = f.point_to_local(p);
     let v = f.vec_to_local(d);
     // ((qx + s vx) / a)^2 + ((qy + s vy) / b)^2 = 1
@@ -1076,14 +1087,12 @@ fn conic_ray(f: &forge_math::Frame, a: f64, b: f64, p: Point3, d: Vec3) -> Vec<(
     );
     let disc = bb * bb - 4.0 * aa * cc;
     if disc <= 1e-12 * (bb * bb + (4.0 * aa * cc).abs()) || aa == 0.0 {
-        return Vec::new();
+        return ([(0.0, 0.0); 2], 0);
     }
     let r = disc.sqrt();
     let qq = -0.5 * (bb + if bb >= 0.0 { r } else { -r });
-    [qq / aa, cc / qq]
-        .into_iter()
-        .map(|s| (s, forge_math::dmath::atan2(qy + s * vy, qx + s * vx)))
-        .collect()
+    let at = |s: f64| (s, forge_math::dmath::atan2(qy + s * vy, qx + s * vx));
+    ([at(qq / aa), at(cc / qq)], 2)
 }
 
 fn box_distance(b: &Box3, p: Point3) -> f64 {
