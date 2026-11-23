@@ -222,6 +222,35 @@ fn the_table_frame_example_lists_its_members_and_plates() {
     assert_eq!(list.plates.len(), 6, "{list:?}");
     assert!(h.gui.shell.place("weld:cutlist:row:0").is_some());
     shot(&mut h, "weld-0-table-frame");
+    // the legs' row lights the four legs, and only them; again, off
+    let k = list.lines.iter().position(|l| l.qty == 4).unwrap();
+    assert!(h.gui.fg_lit_faces().is_empty());
+    assert!(h.click(&format!("weld:cutlist:row:{k}")));
+    for _ in 0..3 {
+        h.step();
+    }
+    let lit = h.gui.fg_lit_faces();
+    let a = h.gui.fg_anchors.as_ref().unwrap();
+    let mut legs: Vec<u32> = list.lines[k]
+        .members
+        .iter()
+        .flat_map(|m| {
+            a.role_faces
+                .get(&format!("{m}.faces"))
+                .cloned()
+                .unwrap_or_default()
+        })
+        .collect();
+    legs.sort_unstable();
+    legs.dedup();
+    assert!(!lit.is_empty());
+    assert_eq!(lit, legs);
+    shot(&mut h, "weld-5-cutlist-lit");
+    assert!(h.click(&format!("weld:cutlist:row:{k}")));
+    for _ in 0..3 {
+        h.step();
+    }
+    assert!(h.gui.fg_lit_faces().is_empty());
 }
 
 /// Clicks where this place in the world is on screen, once the view knows what's under it.

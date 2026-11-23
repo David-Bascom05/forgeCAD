@@ -9,7 +9,7 @@ code that isn't on this branch yet.
 |---|---|
 | The section list is one dropdown of ~200 designations | **fixed**: Family, then Size in that family (`after/weld-4-section-picker`) |
 | A member slot took picks from the browser and chips only | **fixed**: a click on a member in the view takes it; an unnamed edge reads as its face's member (tests/weld_ui.rs) |
-| Cut List rows don't light their members in the view | open: the browser lights one feature's faces; a row is several members. Needs a multi-feature highlight |
+| Cut List rows don't light their members in the view | fixed: clicking a row's Qty lights all its members' faces; again clears it (`weld-5-cutlist-lit.png`) |
 | End Trim's "To" takes a member or body from the browser only | open: a view click on a member face gives the face (a plane trim), which is also valid; a "the member, not its face" toggle would make the cope reachable from the view |
 
 ## Sheet vendors and DFM (claude/repo-review-mbdrlj-sheet-vendors, not merged here)

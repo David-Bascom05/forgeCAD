@@ -368,6 +368,8 @@ pub struct FgPanel {
     /// The weldments' cut list, as the last build had it; its panel up.
     pub cutlist: super::weld_ui::CutList,
     pub cutlist_open: bool,
+    /// The Cut List row whose members the view lights.
+    pub cutlist_lit: Option<usize>,
     /// The Issues window is up, over the status bar.
     pub issues_list: bool,
     /// Edit Occurrence: a placed component call's args.

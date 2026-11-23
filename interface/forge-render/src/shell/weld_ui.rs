@@ -181,6 +181,8 @@ impl Shell {
         }
         let t = self.theme;
         let list = fg.cutlist.clone();
+        let lit = fg.cutlist_lit;
+        let mut light: Option<Option<usize>> = None;
         let path = fg.path.clone();
         let v = self.view_rect;
         let mut places: Vec<(String, Rect)> = Vec::new();
@@ -245,7 +247,18 @@ impl Shell {
                                     let cell = |ui: &mut egui::Ui, s: String| {
                                         ui.label(egui::RichText::new(s).font(theme::small()).color(t.ink))
                                     };
-                                    let r = cell(ui, l.qty.to_string());
+                                    // a row lights its members in the view; again, off
+                                    let on = lit == Some(k);
+                                    let r = ui.selectable_label(
+                                        on,
+                                        egui::RichText::new(l.qty.to_string())
+                                            .font(theme::small())
+                                            .color(t.ink),
+                                    );
+                                    if r.clicked() {
+                                        light = Some((!on).then_some(k));
+                                    }
+                                    let r = r.on_hover_text("Light these members in the view");
                                     places.push((format!("weld:cutlist:row:{k}"), r.rect));
                                     cell(ui, l.section.clone());
                                     cell(ui, num(l.length, 2));
@@ -319,8 +332,14 @@ impl Shell {
                 Err(e) => format!("Couldn't write {}: {e}", to.display()),
             };
         }
-        if close && let Some(fg) = &mut self.fg {
-            fg.cutlist_open = false;
+        if let Some(fg) = &mut self.fg {
+            if let Some(l) = light {
+                fg.cutlist_lit = l;
+            }
+            if close {
+                fg.cutlist_open = false;
+                fg.cutlist_lit = None;
+            }
         }
     }
 }

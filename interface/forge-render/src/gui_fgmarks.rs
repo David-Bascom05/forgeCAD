@@ -83,6 +83,21 @@ impl Gui {
         let (Some(p), Some(a)) = (self.fg_part_quiet(), self.fg_anchors.as_ref()) else {
             return vec![];
         };
+        // a Cut List row: every member on it
+        if p.cutlist_open
+            && let Some(line) = p.cutlist_lit.and_then(|k| p.cutlist.lines.get(k))
+        {
+            let mut out: Vec<u32> = line
+                .members
+                .iter()
+                .filter_map(|m| a.role_faces.get(&format!("{m}.faces")))
+                .flatten()
+                .copied()
+                .collect();
+            out.sort_unstable();
+            out.dedup();
+            return out;
+        }
         let Some(key) = p.selected.as_deref() else {
             return vec![];
         };
