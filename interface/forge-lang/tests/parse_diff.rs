@@ -505,6 +505,18 @@ fn random_sentences_and_edits() {
 /// files change; `FG_LEAN=1` still asks Lean).
 #[test]
 fn every_fg_file() {
+    // `reference` is a direct, recursive port of the Lean parser (one frame per rule and symbol),
+    // so a long file nests deeply; debug frames on Windows overflow the default 2 MB test stack.
+    // The shipped parser is iterative and is not what needs the room.
+    std::thread::Builder::new()
+        .stack_size(256 << 20)
+        .spawn(every_fg_file_body)
+        .expect("spawn")
+        .join()
+        .unwrap();
+}
+
+fn every_fg_file_body() {
     let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../..");
     let mut files = Vec::new();
     let mut dirs = vec![std::path::PathBuf::from(root)];
