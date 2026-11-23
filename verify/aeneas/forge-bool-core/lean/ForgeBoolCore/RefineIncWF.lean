@@ -200,6 +200,115 @@ theorem csr_ok_spec (c : Csr) (n : U32) : csr_ok c n ⦃ b => b = true ↔ CsrOK
     simp only [Std.bind_ok]
     exact hfinal false (by simp [this])
 
+/-! ### `count_in`, `count_sec` -/
+
+theorem drop_take_succ {β : Type} (L : List β) {lo i : Nat} (hlo : lo ≤ i) (hi : i < L.length) :
+    (L.drop lo).take (i + 1 - lo) = (L.drop lo).take (i - lo) ++ [L[i]] := by
+  rw [show i + 1 - lo = (i - lo) + 1 by omega, List.take_add_one, List.getElem?_drop,
+    show lo + (i - lo) = i by omega, List.getElem?_eq_getElem hi]
+  rfl
+
+theorem count_in_spec (ids : Slice U32) (lo hi : Usize) (x : U32) (hlo : lo.val ≤ hi.val)
+    (hhi : hi.val ≤ ids.val.length) :
+    count_in ids lo hi x ⦃ n => n.val = ((ids.val.drop lo.val).take (hi.val - lo.val)).count x ⦄ := by
+  unfold count_in count_in_loop
+  apply loop.spec_decr_nat (fun (q : Usize × Usize) => hi.val - q.2.val)
+    (fun q => lo.val ≤ q.2.val ∧ q.2.val ≤ hi.val ∧
+      q.1.val = ((ids.val.drop lo.val).take (q.2.val - lo.val)).count x)
+  · rintro ⟨n, i⟩ ⟨h1, h2, hn⟩
+    unfold count_in_loop.body
+    simp only at h1 h2 hn ⊢
+    split
+    · rename_i hlt
+      have hil : i.val < ids.val.length := by scalar_tac
+      have hcl : ((ids.val.drop lo.val).take (i.val - lo.val)).count x ≤ i.val := by
+        have := List.count_le_length (a := x) (l := (ids.val.drop lo.val).take (i.val - lo.val))
+        simp at this; omega
+      step as ⟨y, hy⟩
+      have hstep := drop_take_succ ids.val h1 hil
+      split
+      · rename_i hyx
+        step as ⟨n1, hn1⟩
+        step as ⟨i1, hi1⟩
+        have : i1.val = i.val + 1 := by scalar_tac
+        refine ⟨by omega, by scalar_tac, ?_, by scalar_tac⟩
+        rw [this, hstep, List.count_append, ← hn, hn1, ← hy, hyx]; simp
+      · rename_i hyx
+        step as ⟨i1, hi1⟩
+        have : i1.val = i.val + 1 := by scalar_tac
+        refine ⟨by omega, by scalar_tac, ?_, by scalar_tac⟩
+        rw [this, hstep, List.count_append, ← hn, ← hy]
+        simp [List.count_singleton, hyx]
+    · rename_i hge
+      simp only [WP.spec_ok]
+      have : i.val = hi.val := by scalar_tac
+      rw [← this]; exact hn
+  · exact ⟨Nat.le_refl _, hlo, by simp⟩
+
+/-- Two sectors alike, field by field. -/
+def secEq (y x : Sector) : Bool := decide (y.facet.val = x.facet.val ∧ y.a.val = x.a.val ∧ y.b.val = x.b.val)
+
+theorem count_sec_spec (secs : Slice Sector) (lo hi : Usize) (x : Sector) (hlo : lo.val ≤ hi.val)
+    (hhi : hi.val ≤ secs.val.length) :
+    count_sec secs lo hi x ⦃ n => n.val = ((secs.val.drop lo.val).take (hi.val - lo.val)).countP (secEq · x) ⦄ := by
+  unfold count_sec count_sec_loop
+  apply loop.spec_decr_nat (fun (q : Usize × Usize) => hi.val - q.2.val)
+    (fun q => lo.val ≤ q.2.val ∧ q.2.val ≤ hi.val ∧
+      q.1.val = ((secs.val.drop lo.val).take (q.2.val - lo.val)).countP (secEq · x))
+  · rintro ⟨n, i⟩ ⟨h1, h2, hn⟩
+    unfold count_sec_loop.body
+    simp only at h1 h2 hn ⊢
+    split
+    · rename_i hlt
+      have hil : i.val < secs.val.length := by scalar_tac
+      have hcl : ((secs.val.drop lo.val).take (i.val - lo.val)).countP (secEq · x) ≤ i.val := by
+        have := List.countP_le_length (p := (secEq · x)) (l := (secs.val.drop lo.val).take (i.val - lo.val))
+        simp at this; omega
+      step as ⟨y, hy⟩
+      have hstep := drop_take_succ secs.val h1 hil
+      have key : ∀ (n1 : Usize), n1.val = n.val + (if secEq y x then 1 else 0) →
+          ∀ (i1 : Usize), i1.val = i.val + 1 →
+          n1.val = ((secs.val.drop lo.val).take (i1.val - lo.val)).countP (secEq · x) := by
+        intro n1 hn1 i1 hi1
+        rw [hi1, hstep, List.countP_append, ← hn, hn1, ← hy]; simp
+      split
+      · rename_i hf
+        split
+        · rename_i ha
+          split
+          · rename_i hb
+            step as ⟨n1, hn1⟩
+            step as ⟨i1, hi1⟩
+            refine ⟨by scalar_tac, by scalar_tac, key n1 ?_ i1 (by scalar_tac), by scalar_tac⟩
+            have : secEq y x = true := by simp [secEq, hf, ha, hb]
+            rw [this]; scalar_tac
+          · rename_i hb
+            step as ⟨i1, hi1⟩
+            refine ⟨by scalar_tac, by scalar_tac, key n ?_ i1 (by scalar_tac), by scalar_tac⟩
+            have : secEq y x = false := by
+              simp only [secEq, decide_eq_false_iff_not, not_and]
+              intro _ _ e; exact hb (UScalar.eq_of_val_eq e)
+            simp [this]
+        · rename_i ha
+          step as ⟨i1, hi1⟩
+          refine ⟨by scalar_tac, by scalar_tac, key n ?_ i1 (by scalar_tac), by scalar_tac⟩
+          have : secEq y x = false := by
+            simp only [secEq, decide_eq_false_iff_not, not_and]
+            intro _ e; exact absurd (UScalar.eq_of_val_eq e) ha
+          simp [this]
+      · rename_i hf
+        step as ⟨i1, hi1⟩
+        refine ⟨by scalar_tac, by scalar_tac, key n ?_ i1 (by scalar_tac), by scalar_tac⟩
+        have : secEq y x = false := by
+          simp only [secEq, decide_eq_false_iff_not, not_and]
+          intro e; exact absurd (UScalar.eq_of_val_eq e) hf
+        simp [this]
+    · rename_i hge
+      simp only [WP.spec_ok]
+      have : i.val = hi.val := by scalar_tac
+      rw [← this]; exact hn
+  · exact ⟨Nat.le_refl _, hlo, by simp⟩
+
 end inc
 
 end forge_bool_core

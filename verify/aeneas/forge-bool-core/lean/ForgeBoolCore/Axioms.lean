@@ -168,3 +168,5 @@ import ForgeBoolCore.RefineUnify
 #print axioms forge_bool_core.inc.collapse_specI
 #print axioms forge_bool_core.inc.incCoreSpec_of_unify
 #print axioms forge_bool_core.inc.csr_ok_spec
+#print axioms forge_bool_core.inc.count_in_spec
+#print axioms forge_bool_core.inc.count_sec_spec
