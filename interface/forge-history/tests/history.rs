@@ -1,4 +1,6 @@
 //! Saves, versions, restore and the saves list on real repositories, with git as the judge.
+// git itself judges, a process: WASI starts none, so native only
+#![cfg(not(target_os = "wasi"))]
 
 use forge_git::Sig;
 use forge_history::{History, Paused, Saved};
@@ -11,7 +13,7 @@ static N: AtomicU32 = AtomicU32::new(0);
 fn tmp(name: &str) -> PathBuf {
     let d = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!(
         "forge-history-{name}-{}-{}",
-        std::process::id(),
+        forge_dirs::process_id(),
         N.fetch_add(1, Ordering::Relaxed)
     ));
     std::fs::create_dir_all(&d).unwrap();

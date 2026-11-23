@@ -1,0 +1,52 @@
+# The sheet-metal spec (verify/sheet): its Lean proofs over Mathlib, and the axioms check (a
+# `sorry`, `native_decide` or any axiom past propext, Classical.choice and Quot.sound fails the
+# build: Sheet/Axioms.lean is in the default target).
+name: sheet-lean
+
+on:
+  push:
+    branches: [main]
+    paths: ["verify/sheet/**", "verify/ieee754/**", "kernel/forge-sheet/**", "interface/forge-lang/src/sheet*",
+      "interface/forge-lang/tests/sheet_lean_diff*", ".github/workflows/sheet-lean.yml"]
+  pull_request:
+    paths: ["verify/sheet/**", "verify/ieee754/**", "kernel/forge-sheet/**", "interface/forge-lang/src/sheet*",
+      "interface/forge-lang/tests/sheet_lean_diff*", ".github/workflows/sheet-lean.yml"]
+  workflow_dispatch:
+
+jobs:
+  proofs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: toolchain cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.elan
+          key: elan-${{ runner.os }}-${{ hashFiles('verify/sheet/lean-toolchain') }}
+      - name: elan and the pinned toolchain
+        run: |
+          if [ ! -x "$HOME/.elan/bin/elan" ]; then
+            curl -sSfL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -o elan-init.sh
+            sh elan-init.sh -y --default-toolchain none
+          fi
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+          "$HOME/.elan/bin/elan" toolchain install "$(cat verify/sheet/lean-toolchain)"
+      - name: prebuilt Mathlib
+        working-directory: verify/sheet
+        run: lake exe cache get
+      - name: the proofs and the axioms check
+        working-directory: verify/sheet
+        run: |
+          lake build 2>&1 | tee build.txt
+          ! grep -E "declaration uses 'sorry'|sorryAx|ofReduceBool" build.txt
+      - name: the kernel against the Lean model
+        # Every sheet part in the repository, seeded random strips and the trims' region cases:
+        # what forge-sheet publishes is judged by `lake exe sheet-oracle`, and the committed
+        # digests must be what the oracle gives.
+        run: |
+          (cd verify/sheet && lake build sheet-oracle)
+          rustup show
+          SHEET_LEAN=1 cargo test --release --locked -p forge-lang --test sheet_lean_diff -- --nocapture
+          SHEET_LEAN=1 cargo test --release --locked -p forge-sheet --test lean_diff_region -- --nocapture
+          git diff --exit-code interface/forge-lang/tests/sheet_lean_diff.digest kernel/forge-sheet/tests/lean_diff_region.digest

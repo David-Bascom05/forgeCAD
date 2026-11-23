@@ -79,7 +79,7 @@
     } else {
       pick.style.display = "flex";
     }
-  } else if (!["part", "stress", "bench", "offscreen", "moving"].some((k) => q.has(k))) {
+  } else if (!["part", "stress", "bench", "moving"].some((k) => q.has(k))) {
     await import("./app.js");
   } else {
     await init();

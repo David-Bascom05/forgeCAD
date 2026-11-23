@@ -1488,6 +1488,13 @@ pub fn profile(s: &forge_model::Sketch, through: Option<&str>) -> R<Profile> {
             ExtractError::Degenerate { entity } => format!("{} has no length", n(entity)),
             ExtractError::SelfIntersection { a, b } => format!("{} and {} cross", n(a), n(b)),
             ExtractError::Profile(e) => format!("{e:?}"),
+            ExtractError::Undecided { inner, outer } => {
+                format!(
+                    "whether the loop through {} is inside the one through {} is not certain",
+                    n(inner),
+                    n(outer)
+                )
+            }
         }
     })?;
     let mut p = match through {

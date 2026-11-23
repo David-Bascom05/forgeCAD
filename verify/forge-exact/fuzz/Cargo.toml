@@ -11,6 +11,11 @@ repository.workspace = true
 name = "exact-fuzz"
 path = "src/main.rs"
 
+# The curved comparison: solids bounded by planes, cylinders, cones and spheres.
+[[bin]]
+name = "exact-curved"
+path = "src/curved_main.rs"
+
 # The swept solids against their definitions: every extrude of every repo part, and random ones
 # (sweep-ref, built by `lake build` in verify/forge-exact).
 [[bin]]
@@ -21,6 +26,8 @@ path = "src/sweep_main.rs"
 # they run where that has happened (the forge-exact workflow), not in a plain `cargo test --workspace`
 [features]
 reference = []
+# the kernel's flat booleans by the decide-once path (forge-bool's `decide_once`)
+decide_once = ["forge-bool/decide_once"]
 
 [dependencies]
 forge-math = { path = "../../../kernel/forge-math" }

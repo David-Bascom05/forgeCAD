@@ -2,9 +2,7 @@
 # one `property: kind` per line (what follows two spaces and # is a note). The CI job fails on
 # any failure not listed here; remove a line once its bug is fixed.
 rigid: redundant vertices differ  # M1
-mirror: redundant vertices differ  # M1
 order: redundant vertices differ  # M1
-backends: nary 1: redundant vertices differ  # M1, M2
 backends: nary no shapes: redundant vertices differ  # M1, M2
 backends: nary 1: topology differs  # M3
 mirror: fails: Boolean Internal "face  # M5

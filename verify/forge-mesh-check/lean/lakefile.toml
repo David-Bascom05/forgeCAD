@@ -1,0 +1,17 @@
+name = "meshcheck"
+version = "0.1.0"
+defaultTargets = ["MeshCheck"]
+# Mathlib is shared with verify/forge-mass/lean (same pin), so it is fetched once.
+packagesDir = "../../forge-mass/lean/.lake/packages"
+
+[leanOptions]
+autoImplicit = false
+relaxedAutoImplicit = false
+
+[[require]]
+name = "mathlib"
+git = "https://github.com/leanprover-community/mathlib4.git"
+rev = "v4.36.0"
+
+[[lean_lib]]
+name = "MeshCheck"

@@ -1,0 +1,320 @@
+diff --git a/src/extract/Extract.ml b/src/extract/Extract.ml
+index 018541a6..6bdfabb7 100644
+--- a/src/extract/Extract.ml
++++ b/src/extract/Extract.ml
+@@ -478,6 +478,24 @@ let extract_cast_kind_gen (span : Meta.span)
+          | TInt _, TBool | TUInt _, TBool ->
+              (* This is not allowed by rustc: the way of doing it in Rust is: [x != 0] *)
+              [%craise] span "Unexpected cast: integer to bool"
++         | TFloat fty, (TInt _ | TUInt _) ->
++             (* forge-aeneas: Rust's saturating float-to-integer [as] *)
++             let ity = literal_as_integer tgt in
++             let s =
++               if Scalars.integer_type_is_signed ity then ".toIScalar"
++               else ".toUScalar"
++             in
++             (float_name fty ^ ".Ops" ^ s, None, Some (integer_type_to_string ity))
++         | (TInt _ | TUInt _), TFloat fty ->
++             (* forge-aeneas: integer to float, rounded to nearest *)
++             let s =
++               if Scalars.integer_type_is_signed (literal_as_integer src) then
++                 ".ofIScalar"
++               else ".ofUScalar"
++             in
++             (float_name fty ^ ".Ops" ^ s, None, None)
++         | TFloat f0, TFloat f1 ->
++             (float_name f0 ^ ".Ops.to" ^ float_name f1, None, None)
+          | TBool, TBool ->
+              (* There shouldn't be any cast here. Note that if
+                 one writes [b as bool] in Rust (where [b] is a
+@@ -566,7 +584,7 @@ let extract_unop (span : Meta.span)
+     (extract_expr : inside:bool -> texpr -> unit) (fmt : F.formatter)
+     ~(inside : bool) (unop : unop) (arg : texpr) : unit =
+   match unop with
+-  | Not _ | Neg _ | ArrayToSlice ->
++  | Not _ | Neg _ | FloatNeg _ | ArrayToSlice ->
+       let unop = unop_name unop in
+       if inside then F.pp_print_string fmt "(";
+       F.pp_print_string fmt unop;
+@@ -590,8 +608,36 @@ let extract_binop (span : Meta.span) (ctx : extraction_ctx)
+     (extract_expr : inside:bool -> texpr -> unit) (fmt : F.formatter)
+     ~(inside : bool) (binop : binop) (arg0 : texpr) (arg1 : texpr) : unit =
+   if inside then F.pp_print_string fmt "(";
+-  (* Some binary operations have a special notation depending on the backend *)
++  (* forge-aeneas: IEEE 754 operations are calls of [F64.add], [F64.lt], ...,
++     which the Lean side defines (verify/aeneas/bridge). Equality is IEEE 754
++     equality ([NaN != NaN], [-0 == +0]), never Lean's [=]. *)
++  let float_op : (float_type * string) option =
++    match binop with
++    | FloatArith (op, fty) ->
++        Some
++          ( fty,
++            match op with
++            | FAdd -> "add"
++            | FSub -> "sub"
++            | FMul -> "mul"
++            | FDiv -> "div"
++            | FRem -> "rem" )
++    | Eq (TLiteral (TFloat fty)) -> Some (fty, "eq")
++    | Ne (TLiteral (TFloat fty)) -> Some (fty, "ne")
++    | Lt (TFloat fty) -> Some (fty, "lt")
++    | Le (TFloat fty) -> Some (fty, "le")
++    | Ge (TFloat fty) -> Some (fty, "ge")
++    | Gt (TFloat fty) -> Some (fty, "gt")
++    | _ -> None
++  in
+   (match (backend (), binop) with
++  | _, _ when Option.is_some float_op ->
++      let fty, name = Option.get float_op in
++      F.pp_print_string fmt (float_name fty ^ ".Ops." ^ name);
++      F.pp_print_space fmt ();
++      extract_expr ~inside:true arg0;
++      F.pp_print_space fmt ();
++      extract_expr ~inside:true arg1
+   | HOL4, (Eq _ | Ne _)
+   | (FStar | Coq | Lean), (Eq _ | Lt _ | Le _ | Ne _ | Ge _ | Gt _)
+   | (FStar | Lean), (BoolAnd | BoolOr)
+diff --git a/src/extract/ExtractBase.ml b/src/extract/ExtractBase.ml
+index fecf97ba..8dd87ada 100644
+--- a/src/extract/ExtractBase.ml
++++ b/src/extract/ExtractBase.ml
+@@ -941,6 +941,7 @@ let unop_name (unop : unop) : string =
+       match backend () with
+       | Lean -> "-."
+       | _ -> int_name int_ty ^ "_neg")
++  | FloatNeg fty -> float_name fty ^ ".Ops.neg"
+   | ArrayToSlice -> (
+       match backend () with
+       | Lean -> "Std.Array.to_slice"
+diff --git a/src/extract/ExtractTypes.ml b/src/extract/ExtractTypes.ml
+index b4a90513..24cb2a87 100644
+--- a/src/extract/ExtractTypes.ml
++++ b/src/extract/ExtractTypes.ml
+@@ -100,6 +100,14 @@ let extract_literal (span : Meta.span) (fmt : F.formatter) ~(is_pattern : bool)
+           if inside then F.pp_print_string fmt ")")
+   | VStr s -> extract_str span ~inside fmt s
+   | VPureString s -> extract_pure_string fmt s
++  | VFloat fv when not is_pattern ->
++      (* forge-aeneas: a float literal is its IEEE 754 encoding, as rustc
++         computed it ([float_bits]); no decimal string is parsed. *)
++      if inside then F.pp_print_string fmt "(";
++      F.pp_print_string fmt (float_name fv.float_ty ^ ".Ops.ofBits");
++      F.pp_print_space fmt ();
++      F.pp_print_string fmt (Z.to_string fv.float_bits);
++      if inside then F.pp_print_string fmt ")"
+   | VChar _ | VFloat _ | VByteStr _ ->
+       [%admit_raise] span
+         "Float, string, non-ASCII chars and byte string literals are \
+diff --git a/src/interp/InterpExpressions.ml b/src/interp/InterpExpressions.ml
+index b7ef879f..8b4ae913 100644
+--- a/src/interp/InterpExpressions.ml
++++ b/src/interp/InterpExpressions.ml
+@@ -116,6 +116,10 @@ let literal_to_tvalue (span : Meta.span) (ty : scalar_type) (cv : literal)
+       [%sanity_check] span (int_ty = sv_ty);
+       [%sanity_check] span (check_integer_value_in_range min_ptr_size sv);
+       { value = VLiteral (VScalar sv); ty = TScalar ty }
++  | TFloat fty, VFloat fv ->
++      (* forge-aeneas: a float literal (its encoding is in [float_bits]) *)
++      [%sanity_check] span (fv.float_ty = fty);
++      { value = VLiteral (VFloat fv); ty = TScalar ty }
+   (* Remaining cases (invalid) *)
+   | _, _ -> [%craise] span "Improperly typed constant value"
+ 
+@@ -983,6 +987,7 @@ let eval_unary_op_symbolic (config : config) (span : Meta.span) (unop : unop)
+         | Not, (TScalar (TInteger (Unsigned _)) as lty) -> lty
+         | Neg OPanic, (TScalar (TInteger (Signed _)) as lty) -> lty
+         | Neg OPanic, (TScalar (TInteger (Unsigned _)) as lty) -> lty
++        | Neg _, (TScalar (TFloat _) as lty) -> lty (* forge-aeneas *)
+         | Cast (CastScalar tgt_ty), _ -> TScalar tgt_ty
+         | Cast (CastUnsize (ty1, _, _)), ty0 ->
+             (* If the following function succeeds, then it means the cast is well-formed
+@@ -1186,6 +1191,14 @@ let eval_binary_op_symbolic (config : config) (span : Meta.span) (binop : binop)
+                  than the operand *)
+               TScalar (integer_as_scalar int_ty1)
+           | Ne | Eq -> [%craise] span "Unreachable")
++      | TScalar (TFloat fty1), TScalar (TFloat fty2) when fty1 = fty2 -> (
++          (* forge-aeneas: IEEE 754 arithmetic and comparisons *)
++          match binop with
++          | Lt | Le | Ge | Gt -> TScalar TBool
++          | Add _ | Sub _ | Mul _ | Div _ | Rem _ -> TScalar (TFloat fty1)
++          | _ ->
++              [%craise] span
++                ("Invalid float binop: " ^ binop_to_string binop))
+       | _ -> [%craise] span "Invalid inputs for binop"
+   in
+   let res_sv = { sv_id = res_sv_id; sv_ty = res_sv_ty } in
+diff --git a/src/pure/PrintPure.ml b/src/pure/PrintPure.ml
+index e88224c6..8c0b5147 100644
+--- a/src/pure/PrintPure.ml
++++ b/src/pure/PrintPure.ml
+@@ -907,6 +907,7 @@ let unop_to_string (env : fmt_env) (unop : unop) : string =
+   match unop with
+   | Not _ -> "¬"
+   | Neg _ -> "-"
++  | FloatNeg _ -> "-."
+   | Cast kind -> cast_kind_to_string env kind
+   | ArrayToSlice -> "array_to_slice"
+ 
+@@ -952,6 +953,13 @@ let binop_to_string (env : fmt_env) (binop : binop) =
+   | BoolAnd -> "&&"
+   | BoolOr -> "||"
+   | BoolXor -> "^^"
++  | FloatArith (op, _) -> (
++      match op with
++      | FAdd -> "+."
++      | FSub -> "-."
++      | FMul -> "*."
++      | FDiv -> "/."
++      | FRem -> "%.")
+ 
+ let fun_or_op_id_to_string (env : fmt_env) (fun_id : fun_or_op_id) : string =
+   match fun_id with
+diff --git a/src/pure/Pure.ml b/src/pure/Pure.ml
+index 5f78d1e9..30b2e620 100644
+--- a/src/pure/Pure.ml
++++ b/src/pure/Pure.ml
+@@ -663,6 +663,13 @@ and binop =
+           [assert!(b0 && b1)] can be translated to [assert b0; assert b1]. *)
+   | BoolXor
+       (** Boolean exclusive-or, used to translate Rust [a ^ b] on booleans. *)
++  | FloatArith of float_arith * float_type
++      (** forge-aeneas: IEEE 754 arithmetic on [f32]/[f64]. It cannot fail; it
++          is extracted to a call of [F64.add] etc., which the Lean side
++          defines as the IEEE 754 operation (rounding to nearest, ties to
++          even). *)
++
++and float_arith = FAdd | FSub | FMul | FDiv | FRem
+ 
+ and builtin_impl_data =
+   | BuiltinCopy
+@@ -1212,6 +1219,7 @@ and tpat = { pat : pat; ty : ty }
+ type unop =
+   | Not of integer_type option
+   | Neg of integer_type
++  | FloatNeg of float_type  (** forge-aeneas: IEEE 754 negation *)
+   | Cast of cast_kind
+   | ArrayToSlice
+ 
+diff --git a/src/pure/PureMicroPassesAnnots.ml b/src/pure/PureMicroPassesAnnots.ml
+index d85cc0fc..8c63687e 100644
+--- a/src/pure/PureMicroPassesAnnots.ml
++++ b/src/pure/PureMicroPassesAnnots.ml
+@@ -303,7 +303,7 @@ let add_type_annotations_to_fun_decl (trans_ctx : trans_ctx)
+               | Fun fid -> begin compute_known_tys_from_fun_id qualif fid end
+               | Unop unop -> begin
+                   match unop with
+-                  | Not _ | Neg _ | Cast _ | ArrayToSlice ->
++                  | Not _ | Neg _ | FloatNeg _ | Cast _ | ArrayToSlice ->
+                       (known_f_ty, known_args_tys, false)
+                 end
+               | Binop _ -> (known_f_ty, known_args_tys, false)
+diff --git a/src/pure/PureMicroPassesGeneral.ml b/src/pure/PureMicroPassesGeneral.ml
+index 700129e1..e9fd2708 100644
+--- a/src/pure/PureMicroPassesGeneral.ml
++++ b/src/pure/PureMicroPassesGeneral.ml
+@@ -723,7 +723,7 @@ let simplify_duplicate_calls =
+ let lift_unop (unop : unop) : bool =
+   match unop with
+   | Not None -> false
+-  | Not (Some _) | Neg _ | Cast _ | ArrayToSlice -> true
++  | Not (Some _) | Neg _ | FloatNeg _ | Cast _ | ArrayToSlice -> true
+ 
+ (** A helper predicate *)
+ let inline_unop unop = not (lift_unop unop)
+@@ -733,6 +733,7 @@ let lift_binop (binop : binop) : bool =
+   match binop with
+   | Eq _ | Lt _ | Le _ | Ne _ | Ge _ | Gt _ | BoolAnd | BoolOr | BoolXor ->
+       false
++  | FloatArith _ -> true
+   | BitXor _
+   | BitAnd _
+   | BitOr _
+diff --git a/src/pure/PureUtils.ml b/src/pure/PureUtils.ml
+index 437df96f..94de23a9 100644
+--- a/src/pure/PureUtils.ml
++++ b/src/pure/PureUtils.ml
+@@ -2850,7 +2850,7 @@ let binop_can_fail : binop -> bool = function
+   | Mul (OWrap, _)
+   | Shl (OWrap, _, _)
+   | Shr (OWrap, _, _)
+-  | BoolAnd | BoolOr | BoolXor | Cmp _ -> false
++  | BoolAnd | BoolOr | BoolXor | Cmp _ | FloatArith _ -> false
+   | Div _ | Rem _ | Add _ | Sub _ | Mul _ | Shl _ | Shr _ -> true
+ 
+ let mk_bool_not (b : texpr) : texpr =
+diff --git a/src/symbolic/SymbolicToPureExpressions.ml b/src/symbolic/SymbolicToPureExpressions.ml
+index a74eabf0..7b959d39 100644
+--- a/src/symbolic/SymbolicToPureExpressions.ml
++++ b/src/symbolic/SymbolicToPureExpressions.ml
+@@ -554,6 +554,19 @@ and translate_function_call_aux (call : S.call) (e : S.expr) (ctx : bs_ctx) :
+             let dest = mk_tpat_from_fvar dest_mplace dest in
+             (ctx, Unop (Not ty), effect_info, args, [], dest)
+         | _ -> [%craise] ctx.span "Unreachable")
++    | S.Unop (E.Neg _) when (match args with
++                             | [ { ty = TLiteral (TFloat _); _ } ] -> true
++                             | _ -> false) -> (
++        (* forge-aeneas: IEEE 754 negation (flips the sign; cannot fail) *)
++        match args with
++        | [ ({ ty = TLiteral (TFloat fty); _ } as _arg) ] ->
++            let effect_info =
++              { can_fail = false; can_diverge = false; is_rec = false }
++            in
++            let ctx, dest = fresh_var_for_symbolic_value call.dest ctx in
++            let dest = mk_tpat_from_fvar dest_mplace dest in
++            (ctx, Unop (FloatNeg fty), effect_info, args, [], dest)
++        | _ -> [%craise] ctx.span "Unreachable")
+     | S.Unop (E.Neg overflow) -> (
+         match args with
+         | [ arg ] ->
+@@ -645,9 +658,16 @@ and translate_function_call_aux (call : S.call) (e : S.expr) (ctx : bs_ctx) :
+               args];
+         match args with
+         | [ arg0; arg1 ] ->
++            let float_ty =
++              match arg0.ty with
++              | TLiteral (TFloat fty) -> Some fty
++              | _ -> None
++            in
+             let effect_info =
+               {
+-                can_fail = ExpressionsUtils.binop_can_fail binop;
++                can_fail =
++                  Option.is_none float_ty
++                  && ExpressionsUtils.binop_can_fail binop;
+                 can_diverge = false;
+                 is_rec = false;
+               }
+@@ -668,6 +688,21 @@ and translate_function_call_aux (call : S.call) (e : S.expr) (ctx : bs_ctx) :
+               lit_ty0
+             in
+             let binop =
++              match (float_ty, binop) with
++              | Some fty, (Expressions.Add _ | Sub _ | Mul _ | Div _ | Rem _)
++                ->
++                  (* forge-aeneas: IEEE 754 arithmetic *)
++                  [%sanity_check] ctx.span (arg0.ty = arg1.ty);
++                  let op : float_arith =
++                    match binop with
++                    | Add _ -> FAdd
++                    | Sub _ -> FSub
++                    | Mul _ -> FMul
++                    | Div _ -> FDiv
++                    | _ -> FRem
++                  in
++                  FloatArith (op, fty)
++              | Some _, (Expressions.Eq | Ne | Lt | Le | Ge | Gt) | None, _ -> (
+               match binop with
+               | Expressions.BitXor ->
+                   if arg0.ty = TLiteral TBool then BoolXor
+@@ -701,7 +736,10 @@ and translate_function_call_aux (call : S.call) (e : S.expr) (ctx : bs_ctx) :
+                   let ty0 = ty_as_integer ctx.span arg0.ty in
+                   let ty1 = ty_as_integer ctx.span arg1.ty in
+                   Shr (om, ty0, ty1)
+-              | Expressions.Cmp -> Cmp (get_single_int_ty ())
++              | Expressions.Cmp -> Cmp (get_single_int_ty ()))
++              | Some _, _ ->
++                  [%craise] ctx.span
++                    ("Unsupported float operation: " ^ binop_to_string binop)
+             in
+             (ctx, Binop binop, effect_info, args, [], dest)
+         | _ -> [%craise] ctx.span "Unreachable")

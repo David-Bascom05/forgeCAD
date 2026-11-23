@@ -1,0 +1,16 @@
+[package]
+name = "forge-refold"
+description = "An exact-reference check of forge-sheet's flat patterns: the flat, refolded by a model of its own, is the folded part"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+forge-math = { path = "../../kernel/forge-math" }
+forge-topo = { path = "../../kernel/forge-topo" }
+forge-ops = { path = "../../kernel/forge-ops" }
+forge-sheet = { path = "../../kernel/forge-sheet" }
+
+[lints]
+workspace = true
