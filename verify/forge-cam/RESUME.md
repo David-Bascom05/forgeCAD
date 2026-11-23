@@ -124,26 +124,14 @@ are covered.
   its circle's arc of radius r plus radial pieces to its stored ends. The model of `dist_region`
   should take that definition of the region.
 
-## Queued, not started: the shadow closed forms (CAM, shadow.rs at 007ce37, head d690ae4)
+## The shadow closed forms (CAM shadow.rs at 007ce37): done
 
-Waiting for the master to schedule it. `shadow` only ever answers Clear; anything else goes to
-certify_bb. The statements, as CAM gave them:
-- **S1, the pointwise bound.** If |P − A|_xy ≥ h ≥ 0 and P.z − A.z ∈ Z on F' × M', then the
-  minimum over F' × M' is ≥ min over z ∈ Z of sdRZ(h, z). This is `sdRZ_le_sd` plus the
-  enclosure.
-- **S2, plane faces.** For an orthonormal (n, ê), |x − y| ≥ √(gap(Xn, Yn)² + gap(Xê, Yê)²). The
-  face's coordinates are o·v + P(e·v) + T(g·v). The move's are: a line's end hull (affine), an
-  arc's c·v ± r, a piece's `at(s)` box.
-- **S3, cone faces.** |c x + s y|² ∈ [min(|x|², |y|²) − |x·y|, max(|x|², |y|²) + |x·y|]. Then
-  |P − A|_xy ≥ gap(R_F, R_M), where:
-  - R_M.lo is `pt_sec(o, path)`, as in the slab proofs;
-  - R_M.hi is a line's end max (convexity), or an arc's |c − o| + r.
-- **S4, the search.** The leaves cover T0 × [0, 1], and Clear needs every leaf ≥ limit + μ.
-  Lower = min − μ.
-
-Plan: S1 from Hypograph. S2 and S3 as plane lemmas over ℝ² (Pythagoras on an orthonormal
-frame; the cone enclosure is 2|cs| ≤ 1). S4 is a cover argument like `certified_clear`. All
-small to medium; no new geometry.
+Shadow.lean proves S1–S4, with `shadow_face` and `certified_clear_gen` assembling them.
+- The frame (n, ê) and the dot products are exact over ℝ. shadow.rs encloses them in intervals
+  (checked: n from an interval |e|, ê = (n.y, −n.x)). That is L5.
+- Mismatch, sent to CAM: the cone's whole-move `dmin = pt_sec(axis, Sec::Arc)` uses the arc's
+  stored f64 ends with no gap lowering (since 3a388e5, `dist` and `dist_region` lower).
+  `arc_near` proves dmin − gap sound; or use ||c − o| − r|.
 
 ## Still to do when asked
 

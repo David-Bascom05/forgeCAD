@@ -32,6 +32,12 @@ lake exe cache get && lake build && lake env lean Axioms.lean
 - `arcPiece_lower`: an arc's circle-part bound less the gap bounds its radial pieces.
 - `clearFace_region` closes ClearFace (i) for flat faces.
 - The stored ends (CAM 3a388e5): `segArcLo_shift` and `arcArcLo_shift` show that moving an arc's ends along their rays by at most g raises √lo by at most g. So `segArc_trim` and `arcArc_trim`: slab's max(0, √lo − 2g per arc) bounds the distance to the trim piece, radial pieces included. |
+| ForgeCam/Shadow.lean | **The closed forms by symmetry** (shadow.rs, CAM 007ce37), S1–S4.
+- `shadow_point`: a horizontal-distance bound into `sdRZ`.
+- Plane: `frame_orthonormal`, `frame_gap` (the gap across and along), `plane_coord`, `line_coord`, `arc_coord`.
+- Cone: `cone_factor` (the |c x + s y|² enclosure), `cone_radius`, `axis_gap`, `line_far`, `arc_far`, and `arc_near` (point–arc less the gap).
+- Search: `shadow_cover`, `shadow_face`.
+- `certified_clear_gen` carries a per-face bound of any face kind into the clearance. |
 | ForgeCam/Machine.lean | G5 for 3-axis. `G5_line_iff`: a line move is within travel iff its ends are. `G5_arc`: an arc or helix is within travel if its circle's box is. `lineOkQ_iff`: the ℚ Bool check equals the ℝ spec. |
 | ForgeCam/Post.lean | G6 for forge-post's motion subset. The printer is modal: G only on a mode change, an axis only when it changes, F only when the feed changes, and a null move is dropped. **`round_trip`**: `read (print p) = normalize (motions p)`. `G6` adds quantisation, with error ≤ ½·10^−d (`roundEven_isQuant`, ties to even). **`faulty_counterexample`**: the printer as of 155e2f2 reads a plunge back as a rapid. Arc semantics: `arcFull_agrees` (the meant `full` equals the control's reading on every posted arc, as forge-post 4bfe2a2 compares), `arc2_safe` (with X, Y compared, a posted arc read as a full circle was planned as a full turn or more than a half turn) and `arc3_unsafe` (with all three compared, as in 0a4c189, a short helical arc is read as a full helical turn). |
 

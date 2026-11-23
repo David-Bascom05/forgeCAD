@@ -10,3 +10,4 @@ import ForgeCam.Dist2
 import ForgeCam.Vise
 import ForgeCam.DistArc
 import ForgeCam.Trim
+import ForgeCam.Shadow
