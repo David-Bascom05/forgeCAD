@@ -311,6 +311,14 @@ impl App {
                     let Some(s) = &l.gui.fg else { continue };
                     let (src, part) = (s.src.clone(), s.path.clone());
                     let stem = l.gui.shell.name.trim_end_matches(".fg").to_string();
+                    // as the options dialog left them
+                    let opts = l
+                        .gui
+                        .shell
+                        .mesh_opts
+                        .clone()
+                        .filter(|o| o.format == f)
+                        .unwrap_or_else(|| forge_lang::meshfile::Options::new(f));
                     let (send, recv) = std::sync::mpsc::channel();
                     self.exported = Some(recv);
                     let proxy = self.proxy.clone();
@@ -325,7 +333,7 @@ impl App {
                         let said = match d.save_file() {
                             Some(out) => {
                                 let out = out.with_extension(f.ext());
-                                crate::fg::export_mesh(&src, part.as_deref(), &out, f)
+                                crate::fg::export_mesh_with(&src, part.as_deref(), &out, &opts)
                                     .unwrap_or_else(|e| format!("Not exported: {e}"))
                             }
                             None => String::new(),

@@ -96,13 +96,68 @@ fn the_file_menu_asks_for_each_export() {
         h.move_to(r.center().x, r.center().y);
         h.step();
         h.button(true);
+        h.step();
+        h.button(false);
+        for _ in 0..4 {
+            h.step();
+        }
+        assert!(!h.gui.shell.file_menu, "{label}: the menu closes");
+        // the writer's options first, then Export asks the host
+        assert_eq!(
+            h.gui.shell.mesh_dialog.as_ref().map(|o| o.format),
+            Some(f),
+            "{label}: no options"
+        );
+        if f == Format::Stl
+            && let Ok(shots) = std::env::var("FORGE_UI_SHOTS")
+        {
+            for _ in 0..12 {
+                h.step();
+            }
+            if let Ok(png) = h.png() {
+                std::fs::write(std::path::Path::new(&shots).join("mesh-export-options.png"), png).unwrap();
+            }
+        }
+        let r = h.gui.shell.place("mesh:export").expect("an Export button");
+        h.move_to(r.center().x, r.center().y);
+        h.step();
+        h.button(true);
         let mut asked = h.step().host.contains(&Action::ExportMesh(f));
         h.button(false);
         for _ in 0..4 {
             asked |= h.step().host.contains(&Action::ExportMesh(f));
         }
         assert!(asked, "{label} asked for no export");
-        assert!(!h.gui.shell.file_menu, "{label}: the menu closes");
+        assert!(h.gui.shell.mesh_dialog.is_none(), "{label}: the dialog closes");
+        assert_eq!(h.gui.shell.mesh_opts.as_ref().map(|o| o.format), Some(f));
     }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn the_options_set_in_the_dialog_are_the_ones_written() {
+    let dir = scratch("opts");
+    let src = std::fs::read_to_string(repo("examples/demo/part_tools.fg")).unwrap();
+    let part = dir.join("part_tools.fg");
+    for e in std::fs::read_dir(repo("examples/demo")).unwrap().flatten() {
+        if e.path().is_file() {
+            std::fs::copy(e.path(), dir.join(e.file_name())).unwrap();
+        }
+    }
+    // ASCII STL, a coarser chord: a text file, fewer triangles than the default's
+    let mut o = forge_lang::meshfile::Options::new(Format::Stl);
+    let fine = dir.join("fine.stl");
+    let said = forge_render::fg::export_mesh_with(&src, part.to_str(), &fine, &o).unwrap();
+    assert!(said.contains("watertight and manifold"), "{said}");
+    o.ascii = true;
+    o.tol *= 20.0;
+    let coarse = dir.join("coarse.stl");
+    forge_render::fg::export_mesh_with(&src, part.to_str(), &coarse, &o).unwrap();
+    let text = std::fs::read_to_string(&coarse).expect("ASCII");
+    assert!(text.starts_with("solid"), "{}", &text[..40.min(text.len())]);
+    let facets = text.matches("facet normal").count();
+    // binary STL: 80-byte header, a count, 50 bytes a triangle
+    let fine_tris = (std::fs::metadata(&fine).unwrap().len() as usize - 84) / 50;
+    assert!(facets > 0 && facets < fine_tris, "{facets} vs {fine_tris}");
     let _ = std::fs::remove_dir_all(&dir);
 }

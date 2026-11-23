@@ -899,6 +899,10 @@ impl Gui {
                     self.shell.prefs.open = !self.shell.prefs.open;
                     continue;
                 }
+                Action::MeshExport(f) => {
+                    self.shell.mesh_export_open(f);
+                    continue;
+                }
                 Action::Look(g) => {
                     let s = &mut self.shell.settings;
                     s.set_toggle(g, !s.toggle(g));

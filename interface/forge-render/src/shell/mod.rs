@@ -38,6 +38,7 @@ pub mod inspect;
 pub mod markup;
 pub mod materials;
 mod measure_ui;
+pub mod mesh_ui;
 pub mod occedit;
 pub mod panel;
 pub(crate) mod placed;
@@ -193,6 +194,8 @@ pub enum Action {
     SaveAs,
     /// File > Export STL / 3MF / OBJ: the host's file dialog, then `fg::export_mesh`.
     ExportMesh(forge_lang::meshfile::Format),
+    /// File > Export STL / 3MF / OBJ: the writer's options first (mesh_ui.rs).
+    MeshExport(forge_lang::meshfile::Format),
     /// A ground or shadow switch of the View tab, flipped.
     Look(crate::look::Toggle),
 }
@@ -363,6 +366,9 @@ pub struct Shell {
     /// The view's switches for parts and for assemblies: kept for the session, each kind its own.
     pub overlays: [Overlays; 2],
     pub file_menu: bool,
+    /// File > Export's options dialog, up; and the options the last export was asked with.
+    pub mesh_dialog: Option<forge_lang::meshfile::Options>,
+    pub mesh_opts: Option<forge_lang::meshfile::Options>,
     /// The sheet metal environment: its tabs, dialogs and flat pattern.
     pub sheet: sheet::SheetUi,
     style_set: Option<bool>,
@@ -429,6 +435,8 @@ impl Default for Shell {
             fg_dim: None,
             overlays: [PART_OVERLAYS, ASM_OVERLAYS],
             file_menu: false,
+            mesh_dialog: None,
+            mesh_opts: None,
             sheet: sheet::SheetUi::new(),
             style_set: None,
             inspect: Default::default(),
@@ -764,6 +772,7 @@ impl Shell {
         self.mode_bar(&ctx);
         self.resize_edges(ui, s);
         self.menus(&ctx);
+        self.mesh_export_ui(&ctx);
         self.settings_window(&ctx);
         self.new_drawing_window(&ctx);
         self.markup_ui(ui);
@@ -1458,7 +1467,7 @@ impl Shell {
                     ("Export 3MF...", Format::ThreeMf),
                     ("Export OBJ...", Format::Obj),
                 ] {
-                    items.push((label, model_open.then_some(Action::ExportMesh(f))));
+                    items.push((label, model_open.then_some(Action::MeshExport(f))));
                 }
             }
             if self.drawing.is_some() {

@@ -737,6 +737,16 @@ pub fn export_mesh(
     out: &std::path::Path,
     f: forge_lang::meshfile::Format,
 ) -> Result<String, String> {
+    export_mesh_with(src, part, out, &forge_lang::meshfile::Options::new(f))
+}
+
+/// `export_mesh` with the writer's options as File > Export's dialog set them.
+pub fn export_mesh_with(
+    src: &str,
+    part: Option<&str>,
+    out: &std::path::Path,
+    o: &forge_lang::meshfile::Options,
+) -> Result<String, String> {
     use forge_lang::meshfile;
     let dir = part.and_then(|p| std::path::Path::new(p).parent().map(std::path::Path::to_path_buf));
     let opts = forge_lang::Options {
@@ -749,23 +759,12 @@ pub fn export_mesh(
         .or(out.to_str())
         .and_then(|p| std::path::Path::new(p).file_stem())
         .map_or_else(|| "part".into(), |s| s.to_string_lossy().into_owned());
-    let e = meshfile::export(&run, &name, dir.as_deref(), &meshfile::Options::new(f))?;
+    let e = meshfile::export(&run, &name, dir.as_deref(), o)?;
     std::fs::write(out, &e.bytes).map_err(|e| format!("{}: {e}", out.display()))?;
     let file = out
         .file_name()
         .map_or_else(String::new, |n| n.to_string_lossy().into_owned());
-    Ok(if e.watertight() && e.manifold() {
-        format!(
-            "Exported {file}: {} objects, {} triangles, watertight and manifold",
-            e.checks.len(),
-            e.triangles()
-        )
-    } else {
-        format!(
-            "Exported {file}: {} triangles, but not closed and manifold: check it before printing",
-            e.triangles()
-        )
-    })
+    Ok(crate::shell::mesh_ui::said(&file, &e))
 }
 
 pub fn stop_builders() {
