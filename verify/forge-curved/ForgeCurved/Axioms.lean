@@ -21,3 +21,10 @@ import ForgeCurved
 #print axioms ForgeCurved.sides_of_seamed
 #print axioms ForgeCurved.quadric_sides
 #print axioms ForgeCurved.faithful_of_rule
+#print axioms ForgeCurved.faithfulAll_of_local
+#print axioms ForgeCurved.faithfulAll_of_local'
+#print axioms ForgeCurved.transversal_chart
+#print axioms ForgeCurved.localGood'_of_transversal
+#print axioms ForgeCurved.faithfulAll_of_transversal
+#print axioms ForgeCurved.tier0Sound_of_spec
+#print axioms ForgeCurved.qRule_tier0Sound

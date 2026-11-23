@@ -22,6 +22,9 @@ for `EndToEndCurved`. That project builds in about 2 minutes on the shared Mathl
 | EndToEnd | `core_spec_proof`, `curved_correct`, `curved_correct_top`, **`end_to_end_curved : EndToEndCurved`** | the Rust core on any curved target ledger of quadric carriers and formula bodies: `CoreSpec`, `coreM_nil`, `curved_correct`, as `end_to_end_of` is for flat |
 | Sides | `sides_of_fderiv`, `sides_of_seamed`, `quadric_sides` | **R3 for every facet** of differentiable carriers whose singular zeros lie on another carrier (`SingularSeamed`), so for quadrics with the apex seamed |
 | Separators | `SepRule.separators`, `FaithfulAll.listed`, `faithful_of_rule` | the D3 rule as one function; `Tier0Sound` and `LemmaD` stated; both together give faithful cells whichever tier the rule takes |
+| Local | `LocalGood`, **`faithfulAll_of_local`**, `faithfulAll_of_local'` | R2–R5 are local: continuous carriers, R1, R3 and a local picture at every point (small neighbourhoods meet each cell above the point's in a connected set; each realised one comes near) give `FaithfulAll` |
+| Transversal | `TransversalAt`, `transversal_chart`, `localGood'_of_transversal`, **`faithfulAll_of_transversal`** | at a point where the gradients of the `C¹` carriers through it are jointly onto, the inverse function theorem makes the cells near it convex orthant faces; so for transversal carriers `FaithfulAll` is R1 alone |
+| Tier0 | `Tier0Spec`, `tier0Sound_of_spec`, **`qRule_tier0Sound`** | a Tier-0 check is sound once it certifies transversality and R1 of the seamed arrangement; for Q1 nothing else is needed |
 
 **R5, the vertex wing condition** (`Faithful.vwing`, added to Curved.lean by dol-curved at 1abc5b0
 for this theorem): R4 at vertices. Without it, a facet whose boundary walk passes a vertex
@@ -39,7 +42,12 @@ covector count is wrong.
 
 ## Open (in the order of the task)
 
-- **`Tier0Sound`** and **`LemmaD`**, i.e. R1, R2, R4 and R5 for the seamed (or walled) quadric
+- **`Tier0Sound`**: reduced to `Tier0Spec` (`qRule_tier0Sound`): the check must certify
+  transversality (an algebraic fact, dol-curved's side) and R1 (every realised cell connected,
+  the Jordan part). Non-transversal points (cone apex, tangent contact lines) need a local model
+  (`LocalGood`) in place of the chart; until then a check requiring transversality sends them to
+  Tier 1.
+- **`Tier0Sound`** (R1) and **`LemmaD`**, i.e. R1, R2, R4 and R5 for the seamed (or walled) quadric
   arrangements. These are the L–XL proofs of design §4 Q1 L3: 2D Jordan–Schoenflies for
   piecewise-conic curves on simply connected quadric pieces, and the slab Morse argument. They
   need the executable side's seams, check and walls (dol-curved's `curvedLedger`) to be stated
