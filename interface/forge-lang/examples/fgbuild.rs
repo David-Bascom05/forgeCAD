@@ -1,7 +1,8 @@
 //! One .fg file built: its errors, and its part regenerated with each face's name and plane
 //! (normal, offset) printed, sorted. `fgbuild FILE.fg [fuzz]`: `fuzz` builds with the fuzz
 //! judge's options (forge_lang::fuzz::options: lints off). For comparing builds (forge-bool's
-//! decide_once switch on and off, say) on a repro.
+//! decide_once switch on and off, say) on a repro. FGBUILD_EDGES=1 adds every edge's and
+//! vertex's name by where it lies.
 use forge_geom::Surface;
 
 fn main() {
@@ -69,6 +70,27 @@ fn main() {
             lines.sort();
             for l in lines {
                 println!("  {l}");
+            }
+        }
+        // FGBUILD_EDGES=1: each edge's name by its midpoint, each vertex's by its point (rounded
+        // to 1e-4, sorted), for comparing names between builds
+        if std::env::var_os("FGBUILD_EDGES").is_some() {
+            let r = |x: f64| (x * 1e4).round() / 1e4 + 0.0;
+            let mut lines: Vec<String> = b
+                .edge_ids()
+                .map(|e| {
+                    let ed = b.edge(e);
+                    let m = forge_geom::CurveGeom::eval(&ed.curve, ed.range.mid());
+                    format!("  edge ({}, {}, {}) {:?}", r(m.x), r(m.y), r(m.z), ed.name)
+                })
+                .chain(b.vertex_ids().map(|v| {
+                    let p = b.vertex(v).point;
+                    format!("  vertex ({}, {}, {}) {:?}", r(p.x), r(p.y), r(p.z), b.vertex(v).name)
+                }))
+                .collect();
+            lines.sort();
+            for l in lines {
+                println!("{l}");
             }
         }
     }
