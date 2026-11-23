@@ -319,6 +319,9 @@ struct PickState {
     surface: wgpu::RenderPipeline,
     line: wgpu::RenderPipeline,
     ready: Arc<AtomicBool>,
+    /// Called when a pick's read back is in: an event loop that has gone idle (a browser's,
+    /// where the answer comes on the page's own loop) is woken to take it.
+    wake: Option<Arc<dyn Fn() + Send + Sync>>,
     /// The pixel asked about, the camera it was asked with, when.
     busy: Option<((f32, f32), Camera, f64)>,
     /// The geometry it was asked of.
@@ -1259,6 +1262,7 @@ impl Renderer {
             surface: pick_surface,
             line: pick_line,
             ready: Arc::new(AtomicBool::new(false)),
+            wake: None,
             busy: None,
             asked: 0,
         };
@@ -1614,6 +1618,11 @@ impl Renderer {
     }
 
     /// Whether a pick is under way: one at a time.
+    /// What a pick's read back calls when it is in (the host's waker).
+    pub fn set_pick_wake(&mut self, wake: Arc<dyn Fn() + Send + Sync>) {
+        self.pick.wake = Some(wake);
+    }
+
     pub fn pick_busy(&self) -> bool {
         self.pick.busy.is_some()
     }
@@ -1713,12 +1722,16 @@ impl Renderer {
         self.pick.id_read.slice(..).map_async(wgpu::MapMode::Read, |_| {});
         self.pick.ready.store(false, Ordering::Release);
         let ready = self.pick.ready.clone();
+        let wake = self.pick.wake.clone();
         self.pick
             .depth_read
             .slice(..)
             .map_async(wgpu::MapMode::Read, move |r| {
                 if r.is_ok() {
                     ready.store(true, Ordering::Release);
+                }
+                if let Some(w) = wake {
+                    w();
                 }
             });
         self.pick.busy = Some((px, *camera, now_ms()));

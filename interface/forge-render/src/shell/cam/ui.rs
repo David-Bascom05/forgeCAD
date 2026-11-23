@@ -6,7 +6,7 @@
 use super::schema::{self, Kind, Tab};
 use super::{Ask, CamWs, Cmd, Locate, OpDlg, SetupDlg};
 use crate::shell::placed::Placed;
-use crate::shell::theme::{Theme, medium, mono, sans, semi};
+use crate::shell::theme::{Theme, medium, mono, sans};
 use crate::shell::thermo_ui::{button, fact, foot, frame, head, heading, note, row, tabs};
 use crate::shell::{Action, Shell, icons};
 use egui::{Align2, Color32, Rect, Sense, Stroke, Ui, pos2, vec2};
@@ -18,17 +18,63 @@ pub type Button = (&'static str, &'static str, Option<Action>, bool);
 const DLG_W: f32 = 420.0;
 const ROW_H: f32 = 26.0;
 
-/// An op's state: its glyph, word and colour.
+/// An op's state: its word and colour (its mark is painted: `mark`).
 pub fn status_look(t: &Theme, status: &str) -> (&'static str, &'static str, Color32) {
     match status {
-        "built" => ("✔", "certified", t.success),
-        "refused" => ("✖", "refused", t.error),
-        "unposted" => ("!", "not posted", t.warn),
-        "stale" => ("↻", "needs generating", t.ink2),
-        "generating" => ("…", "generating", t.accent),
-        "suppressed" => ("⊘", "suppressed", t.ink2.gamma_multiply(0.6)),
-        _ => ("?", "not generated", t.error),
+        "built" => ("", "certified", t.success),
+        "refused" => ("", "refused", t.error),
+        "unposted" => ("", "not posted", t.warn),
+        "stale" => ("", "needs generating", t.ink2),
+        "generating" => ("", "generating", t.accent),
+        "suppressed" => ("", "suppressed", t.ink2.gamma_multiply(0.6)),
+        _ => ("", "not generated", t.error),
     }
+}
+
+/// A state's mark, painted (the UI's font has no check or cross): a disc with a tick, a cross,
+/// a bar; a ring for stale, a ring with a dot for generating, a slashed ring for suppressed.
+pub fn mark(p: &egui::Painter, c: egui::Pos2, t: &Theme, status: &str) {
+    let (_, _, col) = status_look(t, status);
+    let r = 6.0;
+    let w = Stroke::new(1.6, Color32::WHITE);
+    match status {
+        "built" => {
+            p.circle_filled(c, r, col);
+            p.line_segment([c + vec2(-3.0, 0.2), c + vec2(-0.8, 2.6)], w);
+            p.line_segment([c + vec2(-0.8, 2.6), c + vec2(3.2, -2.4)], w);
+        }
+        "refused" | "error" | "fail" => {
+            p.circle_filled(c, r, col);
+            p.line_segment([c + vec2(-2.6, -2.6), c + vec2(2.6, 2.6)], w);
+            p.line_segment([c + vec2(-2.6, 2.6), c + vec2(2.6, -2.6)], w);
+        }
+        "unposted" | "undecided" => {
+            p.circle_filled(c, r, col);
+            p.line_segment([c + vec2(0.0, -3.2), c + vec2(0.0, 0.8)], w);
+            p.circle_filled(c + vec2(0.0, 3.0), 0.9, Color32::WHITE);
+        }
+        "generating" => {
+            p.circle_stroke(c, r - 0.5, Stroke::new(1.5, col));
+            p.circle_filled(c, 2.2, col);
+        }
+        "suppressed" => {
+            p.circle_stroke(c, r - 0.5, Stroke::new(1.5, col));
+            p.line_segment([c + vec2(-3.5, 3.5), c + vec2(3.5, -3.5)], Stroke::new(1.5, col));
+        }
+        _ => {
+            p.circle_stroke(c, r - 0.5, Stroke::new(1.5, col));
+        }
+    }
+}
+
+/// A fold arrow, painted: right (folded) or down.
+fn fold_arrow(p: &egui::Painter, c: egui::Pos2, open: bool, col: Color32) {
+    let pts = if open {
+        vec![c + vec2(-4.0, -2.0), c + vec2(4.0, -2.0), c + vec2(0.0, 3.0)]
+    } else {
+        vec![c + vec2(-2.0, -4.0), c + vec2(3.0, 0.0), c + vec2(-2.0, 4.0)]
+    };
+    p.add(egui::Shape::convex_polygon(pts, col, Stroke::NONE));
 }
 
 fn icon_of(func: &str) -> &'static str {
@@ -41,25 +87,55 @@ pub fn groups(s: &Shell) -> Vec<(&'static str, Vec<Button>, Vec<Button>)> {
     let a = |c: Ask| Some(Action::Cam(c));
     let has_setup = !w.setups().is_empty();
     let op = |sp: &'static schema::OpSpec| -> Button {
-        (sp.label, sp.icon, has_setup.then_some(Action::Cam(Ask::NewOp(sp.func))), false)
+        (
+            sp.label,
+            sp.icon,
+            has_setup.then_some(Action::Cam(Ask::NewOp(sp.func))),
+            false,
+        )
     };
     let of = |g: &str| -> Vec<Button> { schema::OPS.iter().filter(|o| o.group == g).map(op).collect() };
     let two_d = of("2D");
     let (big2, small2) = two_d.split_at(3.min(two_d.len()));
     let generating = w.running.is_some();
     vec![
-        ("Setup", vec![("New Setup", "cam_setup", a(Ask::NewSetup), false)], vec![]),
+        (
+            "Setup",
+            vec![("New Setup", "cam_setup", a(Ask::NewSetup), false)],
+            vec![],
+        ),
         ("2D", big2.to_vec(), small2.to_vec()),
         ("Drilling", of("Drilling"), vec![]),
         (
             "Actions",
             vec![
-                ("Generate", "cam_generate", (!generating).then_some(Action::Cam(Ask::Generate)), generating),
-                ("Post Process", "cam_post", a(Ask::PostProcess), w.post_dlg.is_some()),
+                (
+                    "Generate",
+                    "cam_generate",
+                    (!generating).then_some(Action::Cam(Ask::Generate)),
+                    generating,
+                ),
+                (
+                    "Post Process",
+                    "cam_post",
+                    a(Ask::PostProcess),
+                    w.post_dlg.is_some(),
+                ),
             ],
             vec![
-                ("Setup Sheet", "cam_sheet", w.run.is_some().then_some(Action::Cam(Ask::SetupSheet)), false),
+                (
+                    "Setup Sheet",
+                    "cam_sheet",
+                    w.run.is_some().then_some(Action::Cam(Ask::SetupSheet)),
+                    false,
+                ),
                 ("Checks", "cam_check", a(Ask::Checks), w.checks_open),
+                (
+                    "Check Now",
+                    "cam_check",
+                    (!generating && w.run.is_some()).then_some(Action::Cam(Ask::CheckNow)),
+                    false,
+                ),
                 ("Auto Generate", "cam_generate", a(Ask::AutoGenerate), w.auto),
             ],
         ),
@@ -81,6 +157,15 @@ pub fn num(x: f64) -> String {
     if s == "-0" { "0".into() } else { s.into() }
 }
 
+/// A work offset's word: G54 for the first.
+fn wcs_word(k: u32) -> String {
+    if k < 6 {
+        format!("G{}", 54 + k)
+    } else {
+        format!("G54.1 P{}", k - 5)
+    }
+}
+
 fn time(s: f64) -> String {
     if s >= 60.0 {
         format!("{}:{:02} min", (s / 60.0).floor(), (s % 60.0).round() as u32)
@@ -97,7 +182,13 @@ impl Shell {
         let mut places: Places = vec![];
         let mut cmds: Vec<Cmd> = vec![];
         let sel = w.selected.clone();
-        let details_h = if sel.is_some() { (area.height() * 0.48).max(220.0) } else { 0.0 };
+        // the op the simulation is playing (CAM-SIM's cursor), marked in the browser
+        let playing = self.camsim.as_ref().and_then(|s| s.cursor()).map(|c| c.op);
+        let details_h = if sel.is_some() {
+            (area.height() * 0.48).max(220.0)
+        } else {
+            0.0
+        };
         let tree = Rect::from_min_max(area.min, pos2(area.right(), area.bottom() - details_h));
         let mut child = ui.new_child(egui::UiBuilder::new().max_rect(tree));
         egui::ScrollArea::vertical()
@@ -107,7 +198,14 @@ impl Shell {
                 let width = area.width();
                 // the document: its name and how it stands
                 let (r, _) = ui.allocate_exact_size(vec2(width, ROW_H + 4.0), Sense::hover());
-                icons::draw(ui.painter(), pos2(r.left() + 10.0, r.top() + 6.0), 16.0, "cam_setup", 1.5, t.ink);
+                icons::draw(
+                    ui.painter(),
+                    pos2(r.left() + 10.0, r.top() + 6.0),
+                    16.0,
+                    "cam_setup",
+                    1.5,
+                    t.ink,
+                );
                 let cert = match &w.run {
                     _ if w.running.is_some() => ("generating…".to_string(), t.accent),
                     Some(run) if run.certification == "full" => ("certified".into(), t.success),
@@ -115,11 +213,28 @@ impl Shell {
                     Some(_) => ("refused".into(), t.error),
                     None => ("not generated".into(), t.ink2),
                 };
-                ui.painter().text(pos2(r.left() + 32.0, r.center().y), Align2::LEFT_CENTER, "Setups", medium(13.0), t.ink);
-                ui.painter().text(pos2(r.right() - 10.0, r.center().y), Align2::RIGHT_CENTER, &cert.0, sans(12.0), cert.1);
+                ui.painter().text(
+                    pos2(r.left() + 32.0, r.center().y),
+                    Align2::LEFT_CENTER,
+                    "Setups",
+                    medium(13.0),
+                    t.ink,
+                );
+                ui.painter().text(
+                    pos2(r.right() - 10.0, r.center().y),
+                    Align2::RIGHT_CENTER,
+                    &cert.0,
+                    sans(12.0),
+                    cert.1,
+                );
                 places.push(("cam:certification".into(), r));
                 if w.setups().is_empty() {
-                    note(ui, "No setups yet: Setup ▸ New Setup places the stock and the work offset.", width, t.ink2);
+                    note(
+                        ui,
+                        "No setups yet: Setup > New Setup places the stock and the work offset.",
+                        width,
+                        t.ink2,
+                    );
                 }
                 let setups: Vec<String> = w.setups().iter().map(|s| s.name.clone()).collect();
                 for su in setups {
@@ -130,17 +245,20 @@ impl Shell {
                         .iter()
                         .map(|s| (s.name.clone(), s.func.clone()))
                         .collect();
-                    let worst = ops.iter().map(|o| w.status(&o.0)).fold("built", |a, b| match (a, b) {
-                        ("refused" | "error", _) => a,
-                        (_, "refused" | "error") => b,
-                        ("stale" | "generating", _) => a,
-                        (_, "stale" | "generating") => b,
-                        ("unposted", _) => a,
-                        (_, "unposted") => b,
-                        _ => a,
-                    });
+                    let worst = ops
+                        .iter()
+                        .map(|o| w.status(&o.0))
+                        .fold("built", |a, b| match (a, b) {
+                            ("refused" | "error", _) => a,
+                            (_, "refused" | "error") => b,
+                            ("stale" | "generating", _) => a,
+                            (_, "stale" | "generating") => b,
+                            ("unposted", _) => a,
+                            (_, "unposted") => b,
+                            _ => a,
+                        });
                     let label = match w.run.as_ref().and_then(|r| r.setup(&su)) {
-                        Some(s) => format!("{su}  ·  G{}", s.offset),
+                        Some(s) => format!("{su}  ·  {}", wcs_word(s.offset)),
                         None => su.clone(),
                     };
                     let resp = tree_row(
@@ -151,7 +269,13 @@ impl Shell {
                         Some(!folded),
                         "cam_setup",
                         &label,
-                        if suppressed { "suppressed" } else if ops.is_empty() { "" } else { worst },
+                        if suppressed {
+                            "suppressed"
+                        } else if ops.is_empty() {
+                            ""
+                        } else {
+                            worst
+                        },
                         sel.as_deref() == Some(su.as_str()),
                         &format!("cam:row:{su}"),
                         &mut places,
@@ -175,7 +299,11 @@ impl Shell {
                             .and_then(|r| r.op(op))
                             .and_then(|o| o.tool_t.map(|n| format!("T{n}")))
                             .unwrap_or_default();
-                        let label = if tool.is_empty() { op.clone() } else { format!("{op}  ·  {tool}") };
+                        let label = if tool.is_empty() {
+                            op.clone()
+                        } else {
+                            format!("{op}  ·  {tool}")
+                        };
                         let resp = tree_row(
                             ui,
                             &t,
@@ -189,17 +317,34 @@ impl Shell {
                             &format!("cam:row:{op}"),
                             &mut places,
                         );
+                        if playing.as_deref() == Some(op.as_str()) {
+                            // the simulation's playhead: a small arrow at the row's left
+                            let r = resp.1.rect;
+                            let c = egui::pos2(r.left() + 6.0, r.center().y);
+                            ui.painter().add(egui::Shape::convex_polygon(
+                                vec![c + vec2(-3.0, -5.0), c + vec2(4.0, 0.0), c + vec2(-3.0, 5.0)],
+                                t.accent,
+                                Stroke::NONE,
+                            ));
+                            places.push((format!("cam:playing:{op}"), r));
+                        }
                         row_actions(&resp.1, op, &w, &mut cmds, &mut places);
                     }
                     // its program(s)
                     let progs: Vec<String> = w
                         .stmts
                         .iter()
-                        .filter(|s| s.role == super::doc::Role::Program && s.setup.as_deref() == Some(su.as_str()))
+                        .filter(|s| {
+                            s.role == super::doc::Role::Program && s.setup.as_deref() == Some(su.as_str())
+                        })
                         .map(|s| s.name.clone())
                         .collect();
                     for p in progs {
-                        let st = match w.run.as_ref().and_then(|r| r.programs.iter().find(|x| x.name == p)) {
+                        let st = match w
+                            .run
+                            .as_ref()
+                            .and_then(|r| r.programs.iter().find(|x| x.name == p))
+                        {
                             Some(x) if x.error.is_none() && x.text.is_some() => "built",
                             Some(_) => "refused",
                             None => "stale",
@@ -223,7 +368,13 @@ impl Shell {
                 // the tools the document names
                 ui.add_space(6.0);
                 let (r, _) = ui.allocate_exact_size(vec2(width, ROW_H), Sense::hover());
-                ui.painter().text(pos2(r.left() + 12.0, r.center().y), Align2::LEFT_CENTER, "Tools", medium(13.0), t.ink);
+                ui.painter().text(
+                    pos2(r.left() + 12.0, r.center().y),
+                    Align2::LEFT_CENTER,
+                    "Tools",
+                    medium(13.0),
+                    t.ink,
+                );
                 for s in w.tools() {
                     let label = format!(
                         "{}  ·  {}  T{}",
@@ -231,14 +382,26 @@ impl Shell {
                         s.pos(0).map(super::doc::unquote).unwrap_or_default(),
                         s.arg("t").unwrap_or("?")
                     );
-                    let resp = tree_row(ui, &t, width, 1, None, "cam_tools", &label, "", false, &format!("cam:tool:{}", s.name), &mut places);
+                    let resp = tree_row(
+                        ui,
+                        &t,
+                        width,
+                        1,
+                        None,
+                        "cam_tools",
+                        &label,
+                        "",
+                        false,
+                        &format!("cam:tool:{}", s.name),
+                        &mut places,
+                    );
                     if resp.1.double_clicked() {
                         cmds.push(Cmd::ToolLibrary);
                     }
                 }
                 if let Some(run) = &w.run {
                     for e in &run.errors {
-                        note(ui, &format!("✖ {e}"), width, t.error);
+                        note(ui, e, width, t.error);
                     }
                 }
                 if let Some(s) = &w.said {
@@ -252,7 +415,9 @@ impl Shell {
             egui::ScrollArea::vertical()
                 .id_salt("cam-details")
                 .auto_shrink([false, false])
-                .show(&mut child, |ui| details(ui, &t, &w, &id, r.width(), &mut cmds, &mut places));
+                .show(&mut child, |ui| {
+                    details(ui, &t, &w, &id, r.width(), &mut cmds, &mut places)
+                });
         }
         for c in cmds {
             w.command(c);
@@ -328,7 +493,7 @@ fn tree_row(
     let mut arrow = false;
     if let Some(open) = fold {
         let a = Rect::from_center_size(pos2(x0 + 5.0, r.center().y), vec2(14.0, 14.0));
-        p.text(a.center(), Align2::CENTER_CENTER, if open { "▾" } else { "▸" }, sans(12.0), t.ink2);
+        fold_arrow(p, a.center(), open, t.ink2);
         let ar = ui.interact(a, ui.scope_id().with((key, "fold")), Sense::click());
         places.push((format!("{key}:fold"), a));
         arrow = ar.clicked();
@@ -351,8 +516,7 @@ fn tree_row(
         if faded { ink.gamma_multiply(0.5) } else { ink },
     );
     if !status.is_empty() {
-        let (g, _, c) = status_look(t, status);
-        p.text(pos2(r.right() - 12.0, r.center().y), Align2::RIGHT_CENTER, g, semi(13.0), c);
+        mark(p, pos2(r.right() - 16.0, r.center().y), t, status);
         places.push((format!("{key}:status:{status}"), r));
     }
     places.push((key.to_string(), r));
@@ -380,6 +544,7 @@ fn row_actions(resp: &egui::Response, id: &str, w: &CamWs, cmds: &mut Vec<Cmd>, 
         };
         item(ui, "Edit…", "edit", Cmd::Edit(id.into()));
         item(ui, "Generate", "generate", Cmd::Generate);
+        item(ui, "Check Now", "check", Cmd::CheckNow);
         if is_op {
             item(ui, "Move Up", "up", Cmd::Move(id.into(), true));
             item(ui, "Move Down", "down", Cmd::Move(id.into(), false));
@@ -398,7 +563,15 @@ fn row_actions(resp: &egui::Response, id: &str, w: &CamWs, cmds: &mut Vec<Cmd>, 
 
 /// The selected statement's results: an op's tool, feeds, path, certificate and checks; a
 /// setup's stock and work offset; a program's lines.
-fn details(ui: &mut Ui, t: &Theme, w: &CamWs, id: &str, width: f32, cmds: &mut Vec<Cmd>, places: &mut Places) {
+fn details(
+    ui: &mut Ui,
+    t: &Theme,
+    w: &CamWs,
+    id: &str,
+    width: f32,
+    cmds: &mut Vec<Cmd>,
+    places: &mut Places,
+) {
     let Some(s) = w.stmt(id) else { return };
     let run = w.run.as_ref();
     heading(ui, t, &format!("{id} · {}", s.func), width);
@@ -409,29 +582,78 @@ fn details(ui: &mut Ui, t: &Theme, w: &CamWs, id: &str, width: f32, cmds: &mut V
                 return;
             };
             fact(ui, t, "Machine", &su.machine, width, t.ink);
-            fact(ui, t, "Work offset", &format!("G{}", su.offset), width, t.ink);
+            fact(ui, t, "Work offset", &wcs_word(su.offset), width, t.ink);
             fact(
                 ui,
                 t,
                 "Origin (part frame)",
-                &format!("{}, {}, {}", num(su.origin[0]), num(su.origin[1]), num(su.origin[2])),
+                &format!(
+                    "{}, {}, {}",
+                    num(su.origin[0]),
+                    num(su.origin[1]),
+                    num(su.origin[2])
+                ),
                 width,
                 t.ink,
             );
             let sz = [0, 1, 2].map(|k| su.stock_max[k] - su.stock_min[k]);
-            fact(ui, t, "Stock", &format!("{} × {} × {} mm", num(sz[0]), num(sz[1]), num(sz[2])), width, t.ink);
+            fact(
+                ui,
+                t,
+                "Stock",
+                &format!("{} × {} × {} mm", num(sz[0]), num(sz[1]), num(sz[2])),
+                width,
+                t.ink,
+            );
             fact(ui, t, "Tolerance", &format!("{} mm", num(su.tol)), width, t.ink);
-            fact(ui, t, "Clearance", &format!("{} mm", num(su.clearance)), width, t.ink);
-            fact(ui, t, "Clear · retract", &format!("{} · {} mm", num(su.clear_h), num(su.retract_h)), width, t.ink);
-            fact(ui, t, "Fixture", su.fixture.as_deref().unwrap_or("none"), width, t.ink);
+            fact(
+                ui,
+                t,
+                "Clearance",
+                &format!("{} mm", num(su.clearance)),
+                width,
+                t.ink,
+            );
+            fact(
+                ui,
+                t,
+                "Clear · retract",
+                &format!("{} · {} mm", num(su.clear_h), num(su.retract_h)),
+                width,
+                t.ink,
+            );
+            fact(
+                ui,
+                t,
+                "Fixture",
+                su.fixture.as_deref().unwrap_or("none"),
+                width,
+                t.ink,
+            );
             match su.at {
-                Some(a) => fact(ui, t, "Placed at", &format!("{}, {}, {}", num(a[0]), num(a[1]), num(a[2])), width, t.ink),
+                Some(a) => fact(
+                    ui,
+                    t,
+                    "Placed at",
+                    &format!("{}, {}, {}", num(a[0]), num(a[1]), num(a[2])),
+                    width,
+                    t.ink,
+                ),
                 None => fact(ui, t, "Placed at", "not placed (G5 spans only)", width, t.warn),
             }
-            for l in run.map(|r| r.leftover.iter().filter(|l| l.setup == id).collect::<Vec<_>>()).unwrap_or_default() {
+            for l in run
+                .map(|r| r.leftover.iter().filter(|l| l.setup == id).collect::<Vec<_>>())
+                .unwrap_or_default()
+            {
                 note(
                     ui,
-                    &format!("Left over z {}…{}: {} region(s), {}", num(l.z[0]), num(l.z[1]), l.boxes.len(), l.why),
+                    &format!(
+                        "Left over z {}…{}: {} region(s), {}",
+                        num(l.z[0]),
+                        num(l.z[1]),
+                        l.boxes.len(),
+                        l.why
+                    ),
                     width,
                     t.warn,
                 );
@@ -444,8 +666,21 @@ fn details(ui: &mut Ui, t: &Theme, w: &CamWs, id: &str, width: f32, cmds: &mut V
             };
             fact(ui, t, "Post", &p.post, width, t.ink);
             fact(ui, t, "Lines", &p.lines.to_string(), width, t.ink);
-            fact(ui, t, "Round trip", if p.round_trip { "exact" } else { "no" }, width, if p.round_trip { t.success } else { t.error });
-            fact(ui, t, "Certified", &p.certified, width, if p.certified == "full" { t.success } else { t.warn });
+            fact(
+                ui,
+                t,
+                "Round trip",
+                if p.round_trip { "exact" } else { "no" },
+                width,
+                if p.round_trip { t.success } else { t.error },
+            );
+            // the side panel is narrow: the word, its reason as a note below
+            let (word, why) = p.certified.split_once(" (").unwrap_or((p.certified.as_str(), ""));
+            let ink = if p.certified == "full" { t.success } else { t.warn };
+            fact(ui, t, "Certified", word, width, ink);
+            if !why.is_empty() {
+                note(ui, why.trim_end_matches(')'), width, t.ink2);
+            }
             if let Some(e) = &p.error {
                 note(ui, e, width, t.error);
             }
@@ -458,8 +693,11 @@ fn details(ui: &mut Ui, t: &Theme, w: &CamWs, id: &str, width: f32, cmds: &mut V
         }
         super::doc::Role::Op(_) => {
             let st = w.status(id);
-            let (g, word, c) = status_look(t, st);
-            fact(ui, t, "Status", &format!("{g} {word}"), width, c);
+            let (_, word, c) = status_look(t, st);
+            fact(ui, t, "Status", word, width, c);
+            if let Some(o) = run.and_then(|r| r.op(id)) {
+                note(ui, &format!("Assurance: {}", o.assurance.words()), width, t.ink2);
+            }
             if st == "stale" || st == "error" {
                 ui.horizontal(|ui| {
                     ui.add_space(14.0);
@@ -468,13 +706,19 @@ fn details(ui: &mut Ui, t: &Theme, w: &CamWs, id: &str, width: f32, cmds: &mut V
                     }
                 });
             }
-            let Some(o) = run.and_then(|r| r.op(id)) else { return };
+            let Some(o) = run.and_then(|r| r.op(id)) else {
+                return;
+            };
             if let Some(tool) = &o.tool {
                 fact(
                     ui,
                     t,
                     "Tool",
-                    &format!("T{} {tool} ⌀{}", o.tool_t.unwrap_or(0), num(o.tool_d.unwrap_or(0.0))),
+                    &format!(
+                        "T{} {tool}, D {}",
+                        o.tool_t.unwrap_or(0),
+                        num(o.tool_d.unwrap_or(0.0))
+                    ),
                     width,
                     t.ink,
                 );
@@ -483,19 +727,53 @@ fn details(ui: &mut Ui, t: &Theme, w: &CamWs, id: &str, width: f32, cmds: &mut V
                 fact(ui, t, "Plan", p, width, t.ink);
             }
             if let (Some(rpm), Some(f)) = (o.rpm, o.feed) {
-                fact(ui, t, "Spindle · feed", &format!("{} rpm · {} mm/min", num(rpm.round()), num(f.round())), width, t.ink);
+                fact(
+                    ui,
+                    t,
+                    "Spindle",
+                    &format!("{} rpm", num(rpm.round())),
+                    width,
+                    t.ink,
+                );
+                fact(ui, t, "Feed", &format!("{} mm/min", num(f.round())), width, t.ink);
             }
             if let (Some(vc), Some(fz), Some(hex)) = (o.vc, o.fz, o.hex) {
-                fact(ui, t, "vc · fz · hex", &format!("{} m/min · {} · {} mm", num(vc), num(fz), num(hex)), width, t.ink);
+                fact(ui, t, "vc", &format!("{} m/min", num(vc.round())), width, t.ink);
+                fact(
+                    ui,
+                    t,
+                    "fz · chip (thinned)",
+                    &format!("{} · {} mm", num(fz), num(hex)),
+                    width,
+                    t.ink,
+                );
             }
             if let Some(p) = o.power_kw {
                 fact(ui, t, "Power", &format!("{} kW", num(p)), width, t.ink);
             }
             fact(ui, t, "Moves", &o.moves.to_string(), width, t.ink);
-            fact(ui, t, "Cutting · rapid", &format!("{} · {} mm", num(o.length_cut.round()), num(o.length_rapid.round())), width, t.ink);
+            fact(
+                ui,
+                t,
+                "Cutting · rapid",
+                &format!(
+                    "{} · {} mm",
+                    num(o.length_cut.round()),
+                    num(o.length_rapid.round())
+                ),
+                width,
+                t.ink,
+            );
             fact(ui, t, "Time", &time(o.time_s), width, t.ink);
             if let Some(l) = o.least {
-                fact(ui, t, "Least cutter distance", &format!("{} mm", num(l)), width, t.ink);
+                fact(
+                    ui,
+                    t,
+                    "Least cutter distance",
+                    &format!("{} mm", num(l)),
+                    width,
+                    t.ink,
+                );
             }
             if o.pairs > 0 {
                 fact(ui, t, "Certified pairs", &o.pairs.to_string(), width, t.ink);
@@ -504,7 +782,12 @@ fn details(ui: &mut Ui, t: &Theme, w: &CamWs, id: &str, width: f32, cmds: &mut V
                 note(ui, &format!("Declared removal: {r}"), width, t.ink2);
             }
             if let Some(r) = &o.refusal {
-                note(ui, r, width, if o.status == "unposted" { t.warn } else { t.error });
+                note(
+                    ui,
+                    r,
+                    width,
+                    if o.status == "unposted" { t.warn } else { t.error },
+                );
             }
             if let Some(f) = &o.fix {
                 note(ui, &format!("Fix: {f}"), width, t.accent);
@@ -528,16 +811,29 @@ fn details(ui: &mut Ui, t: &Theme, w: &CamWs, id: &str, width: f32, cmds: &mut V
 }
 
 /// A failed or undecided check: click to locate its witness. True when clicked.
-fn check_row(ui: &mut Ui, t: &Theme, c: &super::run::Check, width: f32, key: &str, places: &mut Places) -> bool {
+fn check_row(
+    ui: &mut Ui,
+    t: &Theme,
+    c: &super::run::Check,
+    width: f32,
+    key: &str,
+    places: &mut Places,
+) -> bool {
     let (r, resp) = ui.allocate_exact_size(vec2(width, 38.0), Sense::click());
     if resp.hovered() {
         ui.painter().rect_filled(r, 0.0, t.hover);
     }
     let ink = if c.verdict == "fail" { t.error } else { t.warn };
+    mark(
+        ui.painter(),
+        pos2(r.left() + 20.0, r.top() + 10.0),
+        t,
+        if c.verdict == "fail" { "fail" } else { "undecided" },
+    );
     ui.painter().text(
-        pos2(r.left() + 14.0, r.top() + 10.0),
+        pos2(r.left() + 32.0, r.top() + 10.0),
         Align2::LEFT_CENTER,
-        format!("{} {} · {} vs {}", if c.verdict == "fail" { "✖" } else { "?" }, c.rule, num(c.value), num(c.limit)),
+        format!("{} · {} vs {} mm", c.rule, num(c.value), num(c.limit)),
         medium(12.0),
         ink,
     );
@@ -557,14 +853,29 @@ fn check_row(ui: &mut Ui, t: &Theme, c: &super::run::Check, width: f32, key: &st
         sans(11.0),
         t.ink2,
     );
-    ui.painter().text(pos2(r.right() - 12.0, r.center().y), Align2::RIGHT_CENTER, "Locate", sans(11.0), t.accent);
+    ui.painter().text(
+        pos2(r.right() - 12.0, r.center().y),
+        Align2::RIGHT_CENTER,
+        "Locate",
+        sans(11.0),
+        t.accent,
+    );
     places.push((key.to_string(), r));
     resp.clicked()
 }
 
 /// A text field for argument `key`: its words, the text as written, a unit and the default.
 #[allow(clippy::too_many_arguments)]
-fn arg_field(ui: &mut Ui, t: &Theme, label: &str, v: &mut String, hint: &str, unit: &str, key: &str, places: &mut Places) {
+fn arg_field(
+    ui: &mut Ui,
+    t: &Theme,
+    label: &str,
+    v: &mut String,
+    hint: &str,
+    unit: &str,
+    key: &str,
+    places: &mut Places,
+) {
     row(ui, t, label, DLG_W, 30.0, |ui| {
         let r = ui.add(
             egui::TextEdit::singleline(v)
@@ -580,11 +891,26 @@ fn arg_field(ui: &mut Ui, t: &Theme, label: &str, v: &mut String, hint: &str, un
 }
 
 /// A choice among `items` (value, words); `now` the value as written.
-fn arg_choice(ui: &mut Ui, t: &Theme, label: &str, v: &mut String, items: &[(String, String)], key: &str, places: &mut Places) {
+fn arg_choice(
+    ui: &mut Ui,
+    t: &Theme,
+    label: &str,
+    v: &mut String,
+    items: &[(String, String)],
+    key: &str,
+    places: &mut Places,
+) {
     row(ui, t, label, DLG_W, 30.0, |ui| {
-        let shown = items.iter().find(|x| x.0 == *v).map_or_else(|| v.clone(), |x| x.1.clone());
+        let shown = items
+            .iter()
+            .find(|x| x.0 == *v)
+            .map_or_else(|| v.clone(), |x| x.1.clone());
         let r = egui::ComboBox::from_id_salt(("cam-choice", key))
-            .selected_text(if shown.is_empty() { "(default)".to_string() } else { shown })
+            .selected_text(if shown.is_empty() {
+                "(default)".to_string()
+            } else {
+                shown
+            })
             .width(ui.available_width() - 6.0)
             .show_ui(ui, |ui| {
                 for (k, (val, words)) in items.iter().enumerate() {
@@ -599,7 +925,14 @@ fn arg_choice(ui: &mut Ui, t: &Theme, label: &str, v: &mut String, items: &[(Str
     });
 }
 
-fn op_dialog(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, d: &mut OpDlg, places: &mut Places) -> (bool, Option<Rect>) {
+fn op_dialog(
+    ctx: &egui::Context,
+    t: &Theme,
+    v: Rect,
+    w: &mut CamWs,
+    d: &mut OpDlg,
+    places: &mut Places,
+) -> (bool, Option<Rect>) {
     let Some(spec) = schema::spec(&d.func) else {
         w.text_open = true;
         return (false, None);
@@ -611,7 +944,10 @@ fn op_dialog(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, d: &mut OpD
         .iter()
         .map(|s| {
             let id = s.pos(0).map(super::doc::unquote).unwrap_or_default();
-            (s.name.clone(), format!("{} · T{} · {id}", s.name, s.arg("t").unwrap_or("?")))
+            (
+                s.name.clone(),
+                format!("{} · T{} · {id}", s.name, s.arg("t").unwrap_or("?")),
+            )
         })
         .collect();
     let part = w.parts.first().cloned().unwrap_or_default();
@@ -619,11 +955,21 @@ fn op_dialog(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, d: &mut OpD
         .holes
         .iter()
         .map(|h| {
-            let depth = h.depth.map_or("through".to_string(), |x| format!("{} deep", num(x)));
-            let thr = h.thread.map(|(m, p)| format!(" · M{}×{}", num(m), num(p))).unwrap_or_default();
+            let depth = h
+                .depth
+                .map_or("through".to_string(), |x| format!("{} deep", num(x)));
+            let thr = h
+                .thread
+                .map(|(m, p)| format!(" · M{}×{}", num(m), num(p)))
+                .unwrap_or_default();
             (
                 format!("{}.{}", part.name, h.name),
-                format!("{} · ⌀{} {depth}{thr} · {} place(s)", h.name, num(h.d), h.places.len()),
+                format!(
+                    "{} · D {} {depth}{thr} · {} place(s)",
+                    h.name,
+                    num(h.d),
+                    h.places.len()
+                ),
             )
         })
         .collect();
@@ -707,7 +1053,7 @@ fn op_dialog(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, d: &mut OpD
                                 fact(ui, t, "Feed", &format!("{} mm/min", num(fd.round())), DLG_W, t.ink);
                             }
                             if let (Some(vc), Some(fz)) = (o.vc, o.fz) {
-                                fact(ui, t, "Cutting speed · per tooth", &format!("{} m/min · {} mm", num(vc), num(fz)), DLG_W, t.ink);
+                                fact(ui, t, "Cutting speed · per tooth", &format!("{} m/min · {} mm", num(vc.round()), num(fz)), DLG_W, t.ink);
                             }
                             if let Some(h) = o.hex {
                                 fact(ui, t, "Chip thickness (thinned)", &format!("{} mm", num(h)), DLG_W, t.ink);
@@ -787,9 +1133,22 @@ fn op_dialog(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, d: &mut OpD
     (!(ok || cancel || close), rect)
 }
 
-fn setup_dialog(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, d: &mut SetupDlg, places: &mut Places) -> (bool, Option<Rect>) {
+fn setup_dialog(
+    ctx: &egui::Context,
+    t: &Theme,
+    v: Rect,
+    w: &mut CamWs,
+    d: &mut SetupDlg,
+    places: &mut Places,
+) -> (bool, Option<Rect>) {
     let (mut ok, mut cancel, mut close) = (false, false, false);
-    let get = |d: &SetupDlg, k: &str| d.args.iter().find(|a| a.0 == k).map(|a| a.1.clone()).unwrap_or_default();
+    let get = |d: &SetupDlg, k: &str| {
+        d.args
+            .iter()
+            .find(|a| a.0 == k)
+            .map(|a| a.1.clone())
+            .unwrap_or_default()
+    };
     let set = |d: &mut SetupDlg, k: &str, v: String| match d.args.iter_mut().find(|a| a.0 == k) {
         Some(a) => a.1 = v,
         None => d.args.push((k.to_string(), v)),
@@ -799,9 +1158,23 @@ fn setup_dialog(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, d: &mut 
         .stmts
         .iter()
         .filter(|s| s.role == super::doc::Role::Machine)
-        .map(|s| (s.name.clone(), format!("{} · {}", s.name, s.pos(0).map(super::doc::unquote).unwrap_or_default())))
+        .map(|s| {
+            (
+                s.name.clone(),
+                format!(
+                    "{} · {}",
+                    s.name,
+                    s.pos(0).map(super::doc::unquote).unwrap_or_default()
+                ),
+            )
+        })
         .collect();
-    machines.extend(w.lib.machines.iter().map(|m| (format!("machine(\"{}\")", m.name), format!("{} ({}, {})", m.name, m.kind, m.control))));
+    machines.extend(w.lib.machines.iter().map(|m| {
+        (
+            format!("machine(\"{}\")", m.name),
+            format!("{} ({}, {})", m.name, m.kind, m.control),
+        )
+    }));
     let mut fixtures: Vec<(String, String)> = vec![(String::new(), "none".into())];
     fixtures.extend(
         w.stmts
@@ -869,6 +1242,12 @@ fn setup_dialog(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, d: &mut 
                     arg_choice(ui, t, "Origin", &mut o, &items, "cam:setup:origin", places);
                     arg_field(ui, t, "Origin point", &mut o, "\"top-center\" or (x, y, z)", "", "cam:setup:origin:text", places);
                     set(d, "origin", o);
+                    let mut wcs = get(d, "wcs");
+                    let offsets: Vec<(String, String)> = std::iter::once((String::new(), "G54 (default)".to_string()))
+                        .chain((1..6).map(|k| (k.to_string(), format!("G{}", 54 + k))))
+                        .collect();
+                    arg_choice(ui, t, "Work offset", &mut wcs, &offsets, "cam:setup:wcs", places);
+                    set(d, "wcs", wcs);
                     let mut at = get(d, "at");
                     arg_field(ui, t, "Placed at (machine)", &mut at, "unplaced: G5 spans only", "", "cam:setup:at", places);
                     set(d, "at", at);
@@ -931,11 +1310,9 @@ fn setup_dialog(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, d: &mut 
             (ok, cancel, _) = foot(ui, t, "cam:setup", false, places);
         });
     let rect = r.map(|r| r.response.rect);
-    if ok {
-        if let Err(e) = w.setup_ok(d) {
-            d.error = Some(e);
-            return (true, rect);
-        }
+    if ok && let Err(e) = w.setup_ok(d) {
+        d.error = Some(e);
+        return (true, rect);
     }
     (!(ok || cancel || close), rect)
 }
@@ -963,7 +1340,12 @@ fn post_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: &
         .show_placed(ctx, places, |ui, places| {
             close = head(ui, t, "cam_post", "Post Process", width, places, "cam:post");
             if progs.is_empty() {
-                note(ui, "No program(..) in the document: a new setup makes one.", width, t.ink2);
+                note(
+                    ui,
+                    "No program(..) in the document: a new setup makes one.",
+                    width,
+                    t.ink2,
+                );
                 return;
             }
             let d = w.post_dlg.as_mut().expect("open");
@@ -982,27 +1364,70 @@ fn post_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: &
             let was = post.clone();
             arg_choice(ui, t, "Dialect", &mut post, &dialects, "cam:post:dialect", places);
             if post != was {
-                edits.push(super::doc::Edit::Set { id: id.clone(), arg: "post".into(), text: post });
+                edits.push(super::doc::Edit::Set {
+                    id: id.clone(),
+                    arg: "post".into(),
+                    text: post,
+                });
             }
             let mut number = s.arg("number").unwrap_or("").to_string();
             let was = number.clone();
-            arg_field(ui, t, "Program number", &mut number, "", "", "cam:post:number", places);
+            arg_field(
+                ui,
+                t,
+                "Program number",
+                &mut number,
+                "",
+                "",
+                "cam:post:number",
+                places,
+            );
             if number != was && number.trim().parse::<u32>().is_ok() {
-                edits.push(super::doc::Edit::Set { id: id.clone(), arg: "number".into(), text: number.trim().into() });
+                edits.push(super::doc::Edit::Set {
+                    id: id.clone(),
+                    arg: "number".into(),
+                    text: number.trim().into(),
+                });
             }
-            let res = w.run.as_ref().and_then(|r| r.programs.iter().find(|p| p.name == id)).cloned();
+            let res = w
+                .run
+                .as_ref()
+                .and_then(|r| r.programs.iter().find(|p| p.name == id))
+                .cloned();
             match &res {
                 Some(p) => {
-                    fact(ui, t, "Lines · round trip", &format!("{} · {}", p.lines, if p.round_trip { "exact" } else { "no" }), width, t.ink);
-                    fact(ui, t, "Certified", &p.certified, width, if p.certified == "full" { t.success } else { t.warn });
+                    fact(
+                        ui,
+                        t,
+                        "Lines · round trip",
+                        &format!("{} · {}", p.lines, if p.round_trip { "exact" } else { "no" }),
+                        width,
+                        t.ink,
+                    );
+                    fact(
+                        ui,
+                        t,
+                        "Certified",
+                        &p.certified,
+                        width,
+                        if p.certified == "full" { t.success } else { t.warn },
+                    );
                     if let Some(e) = &p.error {
                         note(ui, e, width, t.error);
                     }
                 }
                 None => note(ui, "Not generated yet.", width, t.ink2),
             }
-            if w.stale.iter().any(|o| w.stmt(o).and_then(|s| s.setup.clone()) == s.setup) {
-                note(ui, "Some of its ops need generating: the text below is from the last run.", width, t.warn);
+            if w.stale
+                .iter()
+                .any(|o| w.stmt(o).and_then(|s| s.setup.clone()) == s.setup)
+            {
+                note(
+                    ui,
+                    "Some of its ops need generating: the text below is from the last run.",
+                    width,
+                    t.warn,
+                );
             }
             let text = res.as_ref().and_then(|p| p.text.clone()).unwrap_or_default();
             let (r, _) = ui.allocate_exact_size(vec2(width, 360.0), Sense::hover());
@@ -1014,10 +1439,18 @@ fn post_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: &
                 .auto_shrink([false, false])
                 .show(&mut child, |ui| {
                     if text.is_empty() {
-                        ui.label(egui::RichText::new("(no program: an op of it is refused, or not generated)").font(mono(12.0)).color(t.ink2));
+                        ui.label(
+                            egui::RichText::new("(no program: an op of it is refused, or not generated)")
+                                .font(mono(12.0))
+                                .color(t.ink2),
+                        );
                     }
                     for (n, l) in text.lines().enumerate() {
-                        ui.label(egui::RichText::new(format!("{:>4}  {l}", n + 1)).font(mono(12.0)).color(t.ink));
+                        ui.label(
+                            egui::RichText::new(format!("{:>4}  {l}", n + 1))
+                                .font(mono(12.0))
+                                .color(t.ink),
+                        );
                     }
                 });
             ui.add_space(6.0);
@@ -1027,7 +1460,9 @@ fn post_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: &
                     let p = w.dir.join(format!("{id}.nc"));
                     write = Some((p.display().to_string(), text.clone()));
                 }
-                if button(ui, t, "Setup Sheet", false, "cam:post:sheet".into(), places) && let Some(r) = &w.run {
+                if button(ui, t, "Setup Sheet", false, "cam:post:sheet".into(), places)
+                    && let Some(r) = &w.run
+                {
                     let p = w.path.trim_end_matches(".fg").to_string() + "-sheet.html";
                     write = Some((p, r.sheet.clone()));
                 }
@@ -1075,7 +1510,7 @@ fn tools_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: 
             egui::ScrollArea::vertical().id_salt("cam-tools-list").auto_shrink([false, false]).show(&mut child, |ui| {
                 for tool in &w.lib.tools {
                     let line = format!(
-                        "{}  ·  {}  ·  ⌀{}  ·  {} fl  ·  flute {}",
+                        "{}  ·  {}  ·  D {}  ·  {} fl  ·  flute {}",
                         tool.id,
                         tool.kind.name(),
                         num(tool.dc),
@@ -1113,10 +1548,22 @@ fn tools_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: 
         });
     if let Some(id) = add {
         let n = w.tools().len() + 1;
-        let tn = (1..).find(|k| !w.tools().iter().any(|s| s.arg("t") == Some(&k.to_string()))).unwrap_or(n);
+        let tn = (1..)
+            .find(|k| !w.tools().iter().any(|s| s.arg("t") == Some(&k.to_string())))
+            .unwrap_or(n);
         let name = super::doc::free_name(&w.stmts, &format!("t{tn}"));
-        let holder = w.lib.holders.first().map(|h| format!(", holder: \"{}\"", h.id)).unwrap_or_default();
-        let stick = w.lib.tools.iter().find(|x| x.id == id).map_or(30.0, |x| (x.lcf + 10.0).round());
+        let holder = w
+            .lib
+            .holders
+            .first()
+            .map(|h| format!(", holder: \"{}\"", h.id))
+            .unwrap_or_default();
+        let stick = w
+            .lib
+            .tools
+            .iter()
+            .find(|x| x.id == id)
+            .map_or(30.0, |x| (x.lcf + 10.0).round());
         // after the last tool, else before the first setup
         let before = w
             .tools()
@@ -1127,7 +1574,10 @@ fn tools_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: 
             .map(|s| s.name.clone());
         w.edit(&super::doc::Edit::Add {
             before,
-            text: format!("{name} = tool(\"{id}\", t: {tn}, stickout: {}{holder})", num(stick)),
+            text: format!(
+                "{name} = tool(\"{id}\", t: {tn}, stickout: {}{holder})",
+                num(stick)
+            ),
         });
     }
     if close {
@@ -1136,7 +1586,13 @@ fn tools_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: 
     r.map(|r| r.response.rect)
 }
 
-fn checks_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: &mut Places) -> Option<Rect> {
+fn checks_window(
+    ctx: &egui::Context,
+    t: &Theme,
+    v: Rect,
+    w: &mut CamWs,
+    places: &mut Places,
+) -> Option<Rect> {
     let mut close = false;
     let width = 460.0;
     let mut locate: Option<Locate> = None;
@@ -1164,8 +1620,8 @@ fn checks_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places:
             note(ui, "Rules: gouge, holder_collision, rapid_clear, fixture_collision, axis_limit (G5), leftover (G4), on the posted path.", width, t.ink2);
             let mut k = 0;
             for o in &run.ops {
-                let (g, wd, c) = status_look(t, &o.status);
-                fact(ui, t, &format!("{} · {}", o.name, o.kind), &format!("{g} {wd}"), width, c);
+                let (_, wd, c) = status_look(t, &o.status);
+                fact(ui, t, &format!("{} · {}", o.name, o.kind), wd, width, c);
                 for ch in &o.checks {
                     if check_row(ui, t, ch, width, &format!("cam:checks:{k}"), places) {
                         locate = Some(Locate { op: o.name.clone(), mov: ch.mov, at: ch.at, rule: ch.rule.clone() });
@@ -1207,21 +1663,32 @@ fn text_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: &
         .frame(frame(t))
         .constrain_to(crate::shell::dialog_area(ctx))
         .show_placed(ctx, places, |ui, places| {
-            close = head(ui, t, "cam_post", &format!("{} · text", w.path.rsplit('/').next().unwrap_or("")), width, places, "cam:text");
+            close = head(
+                ui,
+                t,
+                "cam_post",
+                &format!("{} · text", w.path.rsplit('/').next().unwrap_or("")),
+                width,
+                places,
+                "cam:text",
+            );
             if w.text_edit != w.text && !ui.memory(|m| m.has_focus(egui::Id::unique("cam-text-edit"))) {
                 w.text_edit = w.text.clone();
             }
-            egui::ScrollArea::vertical().id_salt("cam-text-scroll").max_height(420.0).show(ui, |ui| {
-                let r = ui.add(
-                    egui::TextEdit::multiline(&mut w.text_edit)
-                        .id(egui::Id::unique("cam-text-edit"))
-                        .font(mono(12.0))
-                        .code_editor()
-                        .desired_width(width - 28.0)
-                        .desired_rows(20),
-                );
-                places.push(("cam:text:edit".into(), r.rect));
-            });
+            egui::ScrollArea::vertical()
+                .id_salt("cam-text-scroll")
+                .max_height(420.0)
+                .show(ui, |ui| {
+                    let r = ui.add(
+                        egui::TextEdit::multiline(&mut w.text_edit)
+                            .id(egui::Id::unique("cam-text-edit"))
+                            .font(mono(12.0))
+                            .code_editor()
+                            .desired_width(width - 28.0)
+                            .desired_rows(20),
+                    );
+                    places.push(("cam:text:edit".into(), r.rect));
+                });
             ui.horizontal(|ui| {
                 ui.add_space(14.0);
                 apply = button(ui, t, "Apply", true, "cam:text:apply".into(), places);
@@ -1241,8 +1708,15 @@ fn text_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: &
 /// The status bar's words for the workspace.
 pub fn status_line(w: &CamWs) -> String {
     let n = w.stmts.iter().filter(|s| s.is_op() && !s.suppressed).count();
-    let built = w.stmts.iter().filter(|s| s.is_op() && w.status(&s.name) == "built").count();
-    let time: f64 = w.run.as_ref().map_or(0.0, |r| r.ops.iter().map(|o| o.time_s).sum());
+    let built = w
+        .stmts
+        .iter()
+        .filter(|s| s.is_op() && w.status(&s.name) == "built")
+        .count();
+    let time: f64 = w
+        .run
+        .as_ref()
+        .map_or(0.0, |r| r.ops.iter().map(|o| o.time_s).sum());
     format!(
         "{} · {built}/{n} ops certified · {} machining{}",
         w.path.rsplit('/').next().unwrap_or(""),
@@ -1250,4 +1724,3 @@ pub fn status_line(w: &CamWs) -> String {
         if w.dirty() { " · unsaved" } else { "" }
     )
 }
-

@@ -61,6 +61,8 @@ enum Ask {
     Click(String, u8, bool),
     /// Text typed into what has the focus, then Enter if asked (`app_type`).
     Type(String, bool),
+    /// A Manufacture workspace command, as words (`app_cam`).
+    Cam(String),
 }
 
 thread_local! {
@@ -136,6 +138,9 @@ struct Host {
     target: Option<wgpu::Texture>,
     gui: Gui,
     input: Input,
+    /// A test's click off the view (`app_click`): the view's pick it asks is dropped after
+    /// the frame (nothing of the view was clicked; the offscreen adapter's pick may not finish).
+    unpick: bool,
     frames: u64,
     /// A frame the app asked for later (a tooltip's delay), as `now_ms`.
     next: Option<f64>,
@@ -227,6 +232,7 @@ async fn open_host(
         target,
         gui,
         input: Input::default(),
+        unpick: false,
         frames: 0,
         next: None,
     })
@@ -345,6 +351,11 @@ impl Host {
             }
             (None, None) => return,
         };
+        if std::mem::take(&mut self.unpick)
+            && let Some(v) = &mut self.gui.view
+        {
+            v.nav.take_pick();
+        }
         self.frames += 1;
         FRAMES.with(|f| f.set(self.frames));
         if self.frames == 1 {
@@ -353,6 +364,7 @@ impl Host {
         if self.frames == 2 {
             say("forge-app: drawn in the canvas");
         }
+
         self.cursor(out.platform.cursor_icon);
         for c in &out.platform.commands {
             if let egui::OutputCommand::CopyText(t) = c
@@ -431,9 +443,14 @@ impl Host {
                 Ask::Click(name, button, double) => match self.gui.shell.place(&name) {
                     Some(r) => {
                         let at = r.center();
-                        let b = if button == 1 { egui::PointerButton::Secondary } else { egui::PointerButton::Primary };
+                        let b = if button == 1 {
+                            egui::PointerButton::Secondary
+                        } else {
+                            egui::PointerButton::Primary
+                        };
                         let ev = &mut self.input.events;
-                        ev.push(egui::Event::PointerMoved(at));
+                        // no hover move first: a press carries its place, and a hover over the
+                        // view starts a pick the offscreen software adapter may never finish
                         for _ in 0..if double { 2 } else { 1 } {
                             for pressed in [true, false] {
                                 ev.push(egui::Event::PointerButton {
@@ -444,10 +461,16 @@ impl Host {
                                 });
                             }
                         }
-                        self.input.pointer = at;
+                        ev.push(egui::Event::PointerGone);
+                        self.unpick = !self.gui.shell.view_rect.contains(at);
                     }
                     None => console_error(&format!("app_click: nothing noted as `{name}`")),
                 },
+                Ask::Cam(words) => {
+                    if let Err(e) = cam_words(&mut self.gui, &words) {
+                        console_error(&format!("app_cam: {e}"));
+                    }
+                }
                 Ask::Type(text, enter) => {
                     self.input.events.push(egui::Event::Text(text));
                     if enter {
@@ -641,7 +664,11 @@ impl ApplicationHandler<Msg> for App {
 
     fn about_to_wait(&mut self, _: &ActiveEventLoop) {
         let Some(h) = &mut self.host else { return };
-        if h.gui.pick_busy() || h.gui.picks() || h.next.is_some_and(|n| now_ms() >= n) {
+        // a pick in flight is not drawn for: its read back wakes the loop when it is in (the
+        // renderer's pick waker), and is taken here. Drawn for, as it was, a headless page's
+        // loop spun at 60 fps, the software adapter's read back starved behind the frames,
+        // and an answer that came after the loop went idle was never taken: it drew for ever
+        if h.gui.picks() || h.next.is_some_and(|n| now_ms() >= n) {
             h.next = None;
             h.window.request_redraw();
         }
@@ -690,6 +717,8 @@ fn state_json(g: &Gui, canvas: Json) -> String {
         ("built", built.unwrap_or(Json::Null)),
         ("camsim", g.camsim_state().unwrap_or(Json::Null)),
         ("cam", cam_json(g)),
+        // a pick of the view in flight (the host draws on until it is answered)
+        ("pick_busy", g.pick_busy().into()),
         // where the shell's named things are, for the tests' clicks (`app_click`)
         (
             "places",
@@ -701,7 +730,15 @@ fn state_json(g: &Gui, canvas: Json) -> String {
                     .map(|(n, r)| {
                         Json::obj(vec![
                             ("name", n.clone().into()),
-                            ("rect", Json::Arr(vec![num(r.left().into()), num(r.top().into()), num(r.width().into()), num(r.height().into())])),
+                            (
+                                "rect",
+                                Json::Arr(vec![
+                                    num(r.left().into()),
+                                    num(r.top().into()),
+                                    num(r.width().into()),
+                                    num(r.height().into()),
+                                ]),
+                            ),
                         ])
                     })
                     .collect(),
@@ -709,6 +746,50 @@ fn state_json(g: &Gui, canvas: Json) -> String {
         ),
     ])
     .to_string()
+}
+
+/// A workspace command as words, for the tests to drive it without a pointer: `select ID`,
+/// `edit ID`, `new-op FUNC`, `new-setup`, `tab K` (the open dialog's), `set ARG TEXT` (the op
+/// dialog's), `post`, `tools`, `checks`, `generate`, `close` (every window).
+fn cam_words(g: &mut Gui, words: &str) -> Result<(), String> {
+    use crate::shell::cam::Cmd;
+    let w = g.shell.cam.as_mut().ok_or("no machining document open")?;
+    let (verb, rest) = words.split_once(' ').unwrap_or((words, ""));
+    match verb {
+        "select" => w.command(Cmd::Select(rest.into())),
+        "edit" => w.command(Cmd::Edit(rest.into())),
+        "new-op" => {
+            let f = crate::shell::cam::schema::spec(rest).ok_or("no such op")?.func;
+            w.command(Cmd::NewOp(f));
+        }
+        "new-setup" => w.command(Cmd::NewSetup),
+        "tab" => {
+            let k: usize = rest.parse().map_err(|_| "tab K")?;
+            if let Some(d) = &mut w.op_dlg {
+                d.tab = k;
+            } else if let Some(d) = &mut w.setup_dlg {
+                d.tab = k;
+            }
+        }
+        "set" => {
+            let (k, v) = rest.split_once(' ').unwrap_or((rest, ""));
+            w.op_dlg.as_mut().ok_or("no op dialog")?.set(k, v.into());
+        }
+        "post" => w.command(Cmd::PostProcess),
+        "tools" => w.command(Cmd::ToolLibrary),
+        "checks" => w.command(Cmd::Checks),
+        "generate" => w.command(Cmd::Generate),
+        "close" => {
+            w.op_dlg = None;
+            w.setup_dlg = None;
+            w.post_dlg = None;
+            w.tools_open = false;
+            w.checks_open = false;
+            w.text_open = false;
+        }
+        _ => return Err(format!("unknown `{verb}`")),
+    }
+    Ok(())
 }
 
 /// The Manufacture workspace as the page's tests read it: the document's ops and their states.
@@ -720,7 +801,9 @@ fn cam_json(g: &Gui) -> Json {
         ("generated", w.run.is_some().into()),
         (
             "certification",
-            w.run.as_ref().map_or(Json::Null, |r| r.certification.clone().into()),
+            w.run
+                .as_ref()
+                .map_or(Json::Null, |r| r.certification.clone().into()),
         ),
         ("selected", w.selected.clone().map_or(Json::Null, Json::from)),
         ("dirty", w.dirty().into()),
@@ -741,14 +824,23 @@ fn cam_json(g: &Gui) -> Json {
                     .collect(),
             ),
         ),
-        ("dialogs", Json::Arr(
-            [("op", w.op_dlg.is_some()), ("setup", w.setup_dlg.is_some()), ("post", w.post_dlg.is_some()),
-             ("tools", w.tools_open), ("checks", w.checks_open), ("text", w.text_open)]
+        (
+            "dialogs",
+            Json::Arr(
+                [
+                    ("op", w.op_dlg.is_some()),
+                    ("setup", w.setup_dlg.is_some()),
+                    ("post", w.post_dlg.is_some()),
+                    ("tools", w.tools_open),
+                    ("checks", w.checks_open),
+                    ("text", w.text_open),
+                ]
                 .into_iter()
                 .filter(|x| x.1)
                 .map(|x| x.0.to_string().into())
                 .collect(),
-        )),
+            ),
+        ),
     ])
 }
 
@@ -887,6 +979,12 @@ pub fn app_camsim(cmd: &str) {
 #[wasm_bindgen]
 pub fn app_click(name: String, button: u8, double: bool) {
     ask(Ask::Click(name, button, double));
+}
+
+/// A Manufacture workspace command as words (`cam_words`), without a pointer.
+#[wasm_bindgen]
+pub fn app_cam(words: String) {
+    ask(Ask::Cam(words));
 }
 
 /// Text typed into what has the focus; Enter after it if `enter`.

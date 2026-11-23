@@ -8,7 +8,9 @@ use forge_render::shell::CAM_TAB;
 
 fn generated(g: &Gui) -> bool {
     g.view.is_some()
-        && g.fg.as_ref().is_some_and(|s| s.done == s.seq && s.whole >= s.changed)
+        && g.fg
+            .as_ref()
+            .is_some_and(|s| s.done == s.seq && s.whole >= s.changed)
         && g.shell
             .cam
             .as_ref()
@@ -77,7 +79,15 @@ fn a_machining_document_opens_on_manufacture_and_generates() {
         assert_eq!(w.status(op), "built", "{op}");
         assert!(h.gui.shell.place(&format!("cam:row:{op}")).is_some(), "{op} row");
     }
-    for tool in ["New Setup", "Face", "2D Contour", "Pocket", "Drill", "Generate", "Post Process"] {
+    for tool in [
+        "New Setup",
+        "Face",
+        "2D Contour",
+        "Pocket",
+        "Drill",
+        "Generate",
+        "Post Process",
+    ] {
         assert!(h.gui.shell.place(&format!("tool:{tool}")).is_some(), "{tool}");
     }
     shot(&mut h, "cam-opened");
@@ -89,15 +99,27 @@ fn the_op_dialog_edits_the_text_and_marks_it_stale() {
     let before = text(&h);
     assert!(h.click("cam:row:prof"));
     h.step();
-    assert_eq!(h.gui.shell.cam.as_ref().unwrap().selected.as_deref(), Some("prof"));
+    assert_eq!(
+        h.gui.shell.cam.as_ref().unwrap().selected.as_deref(),
+        Some("prof")
+    );
     shot(&mut h, "cam-selected");
     h.gui.shell.cam.as_mut().unwrap().auto = false;
-    h.gui.shell.cam.as_mut().unwrap().command(forge_render::shell::cam::Cmd::Edit("prof".into()));
+    h.gui
+        .shell
+        .cam
+        .as_mut()
+        .unwrap()
+        .command(forge_render::shell::cam::Cmd::Edit("prof".into()));
     h.step();
     assert!(h.placed("cam:op:ok").is_some(), "the op dialog");
     // the Passes tab: stock to leave
-    let tabs = forge_render::shell::cam::schema::tabs(forge_render::shell::cam::schema::spec("contour").unwrap());
-    let k = tabs.iter().position(|t| *t == forge_render::shell::cam::schema::Tab::Passes).unwrap();
+    let tabs =
+        forge_render::shell::cam::schema::tabs(forge_render::shell::cam::schema::spec("contour").unwrap());
+    let k = tabs
+        .iter()
+        .position(|t| *t == forge_render::shell::cam::schema::Tab::Passes)
+        .unwrap();
     assert!(h.click(&format!("cam:op:tab:{k}")));
     h.step();
     assert!(h.click("cam:op:arg:leave"));
@@ -114,7 +136,12 @@ fn the_op_dialog_edits_the_text_and_marks_it_stale() {
     assert_eq!(w.status("skim"), "built", "an earlier op is untouched");
     // the file is the document's only when saved
     assert_eq!(std::fs::read_to_string(&file).unwrap(), before);
-    h.gui.shell.cam.as_mut().unwrap().command(forge_render::shell::cam::Cmd::Save);
+    h.gui
+        .shell
+        .cam
+        .as_mut()
+        .unwrap()
+        .command(forge_render::shell::cam::Cmd::Save);
     h.step();
     assert_eq!(std::fs::read_to_string(&file).unwrap(), after);
 }

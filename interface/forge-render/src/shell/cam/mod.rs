@@ -56,6 +56,7 @@ pub enum Ask {
     Save,
     ToggleText,
     AutoGenerate,
+    CheckNow,
 }
 
 impl From<Ask> for Cmd {
@@ -73,6 +74,7 @@ impl From<Ask> for Cmd {
             Ask::Save => Cmd::Save,
             Ask::ToggleText => Cmd::ToggleText,
             Ask::AutoGenerate => Cmd::AutoGenerate,
+            Ask::CheckNow => Cmd::CheckNow,
         }
     }
 }
@@ -105,6 +107,8 @@ pub enum Cmd {
     Text(String),
     ToggleText,
     AutoGenerate,
+    /// Run the certified checker now on what is generated (today: a generate, which checks).
+    CheckNow,
 }
 
 /// The setup dialog's state: the args as edited, by keyword.
@@ -270,7 +274,9 @@ impl CamWs {
     fn read_parts(&mut self) {
         let mut out = vec![];
         for s in self.stmts.iter().filter(|s| s.role == Role::Part) {
-            let Some(file) = s.pos(0).map(doc::unquote) else { continue };
+            let Some(file) = s.pos(0).map(doc::unquote) else {
+                continue;
+            };
             let path = self.dir.join(&file);
             let mut info = PartInfo {
                 name: s.name.clone(),
@@ -328,7 +334,11 @@ impl CamWs {
             return "suppressed";
         }
         if self.stale.iter().any(|s| s == id) {
-            return if self.running.is_some() { "generating" } else { "stale" };
+            return if self.running.is_some() {
+                "generating"
+            } else {
+                "stale"
+            };
         }
         match self.run.as_ref().and_then(|r| r.op(id)) {
             Some(o) => o.status.as_str(),
@@ -345,7 +355,12 @@ impl CamWs {
     fn restale(&mut self) {
         self.stale = match &self.run {
             Some(r) => run::stale(&r.stmts, &self.stmts),
-            None => self.stmts.iter().filter(|s| s.is_op() && !s.suppressed).map(|s| s.name.clone()).collect(),
+            None => self
+                .stmts
+                .iter()
+                .filter(|s| s.is_op() && !s.suppressed)
+                .map(|s| s.name.clone())
+                .collect(),
         };
     }
 
@@ -410,19 +425,36 @@ impl CamWs {
     /// A pick in the view while an op dialog is up: the part's feature it is on, as the op's
     /// geometry (a hole feature, or a sketch) when the op takes one. Says what was taken.
     pub fn pick(&mut self, anchor: &str) -> String {
-        let feat: String = anchor.chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
-        let Some(d) = &mut self.op_dlg else { return String::new() };
-        let Some(spec) = schema::spec(&d.func) else { return String::new() };
-        let Some(field) = spec.fields.iter().find(|f| matches!(f.kind, schema::Kind::Hole | schema::Kind::Sketch)) else {
+        let feat: String = anchor
+            .chars()
+            .take_while(|c| c.is_alphanumeric() || *c == '_')
+            .collect();
+        let Some(d) = &mut self.op_dlg else {
+            return String::new();
+        };
+        let Some(spec) = schema::spec(&d.func) else {
+            return String::new();
+        };
+        let Some(field) = spec
+            .fields
+            .iter()
+            .find(|f| matches!(f.kind, schema::Kind::Hole | schema::Kind::Sketch))
+        else {
             return format!("Picked {anchor}: {} takes no geometry from the model", spec.label);
         };
-        let Some(part) = self.parts.first() else { return String::new() };
+        let Some(part) = self.parts.first() else {
+            return String::new();
+        };
         let ok = match field.kind {
             schema::Kind::Hole => part.holes.iter().any(|h| h.name == feat),
             _ => part.sketches.contains(&feat),
         };
         if !ok {
-            let what = if field.kind == schema::Kind::Hole { "a hole() feature" } else { "a sketch" };
+            let what = if field.kind == schema::Kind::Hole {
+                "a hole() feature"
+            } else {
+                "a sketch"
+            };
             return format!("Picked {anchor}: not on {what} of {}", part.file);
         }
         let v = format!("{}.{feat}", part.name);
@@ -457,18 +489,26 @@ impl CamWs {
             Cmd::Generate => self.want_run = true,
             Cmd::Suppress(id) => {
                 let sup = self.stmt(&id).is_some_and(|s| s.suppressed);
-                self.edit(&if sup { Edit::Unsuppress { id } } else { Edit::Suppress { id } });
+                self.edit(&if sup {
+                    Edit::Unsuppress { id }
+                } else {
+                    Edit::Suppress { id }
+                });
             }
             Cmd::Delete(id) => {
-                if self.edit(&Edit::Delete { id: id.clone() }) && self.selected.as_deref() == Some(id.as_str()) {
+                if self.edit(&Edit::Delete { id: id.clone() })
+                    && self.selected.as_deref() == Some(id.as_str())
+                {
                     self.selected = None;
                     self.focus.op = None;
                 }
             }
             Cmd::Move(id, up) => self.move_op(&id, up),
             Cmd::Rename(from, to) => {
-                if self.edit(&Edit::Rename { from: from.clone(), to: to.clone() })
-                    && self.selected.as_deref() == Some(from.as_str())
+                if self.edit(&Edit::Rename {
+                    from: from.clone(),
+                    to: to.clone(),
+                }) && self.selected.as_deref() == Some(from.as_str())
                 {
                     self.select(&to);
                 }
@@ -512,6 +552,12 @@ impl CamWs {
                 self.text_edit = self.text.clone();
             }
             Cmd::AutoGenerate => self.auto = !self.auto,
+            // forge-cam-lang checks as it generates: until an on-demand checker of a run's
+            // posted paths is exposed, checking now is generating again
+            Cmd::CheckNow => {
+                self.want_run = true;
+                self.checks_open = true;
+            }
         }
     }
 
@@ -534,9 +580,13 @@ impl CamWs {
     /// An op one place earlier or later among its setup's ops (the text's order is the order
     /// they run in).
     fn move_op(&mut self, id: &str, up: bool) {
-        let Some(su) = self.stmt(id).and_then(|s| s.setup.clone()) else { return };
+        let Some(su) = self.stmt(id).and_then(|s| s.setup.clone()) else {
+            return;
+        };
         let ops: Vec<String> = self.ops_of(&su).iter().map(|s| s.name.clone()).collect();
-        let Some(k) = ops.iter().position(|n| n == id) else { return };
+        let Some(k) = ops.iter().position(|n| n == id) else {
+            return;
+        };
         let before = if up {
             if k == 0 {
                 return;
@@ -691,7 +741,10 @@ impl CamWs {
             }
             Some(id) => {
                 let get = |a: &[(String, String)], k: &str| {
-                    a.iter().find(|x| x.0 == k).map(|x| x.1.trim().to_string()).unwrap_or_default()
+                    a.iter()
+                        .find(|x| x.0 == k)
+                        .map(|x| x.1.trim().to_string())
+                        .unwrap_or_default()
                 };
                 let mut es = vec![];
                 let keys: Vec<String> = d.args.iter().chain(&d.was).map(|a| a.0.clone()).collect();
@@ -733,7 +786,10 @@ impl CamWs {
                             continue;
                         }
                         if now.is_empty() {
-                            es.push(Edit::Unset { id: id.clone(), arg: k.clone() });
+                            es.push(Edit::Unset {
+                                id: id.clone(),
+                                arg: k.clone(),
+                            });
                         } else {
                             es.push(Edit::Set {
                                 id: id.clone(),
@@ -801,13 +857,23 @@ impl CamWs {
                         continue;
                     }
                     if v.is_empty() {
-                        es.push(Edit::Unset { id: id.clone(), arg: k.into() });
+                        es.push(Edit::Unset {
+                            id: id.clone(),
+                            arg: k.into(),
+                        });
                     } else {
-                        es.push(Edit::Set { id: id.clone(), arg: k.into(), text: v });
+                        es.push(Edit::Set {
+                            id: id.clone(),
+                            arg: k.into(),
+                            text: v,
+                        });
                     }
                 }
                 if d.name != *id {
-                    es.push(Edit::Rename { from: id.clone(), to: d.name.clone() });
+                    es.push(Edit::Rename {
+                        from: id.clone(),
+                        to: d.name.clone(),
+                    });
                 }
                 self.edits(&es)?;
                 Ok(())
@@ -817,14 +883,33 @@ impl CamWs {
 
     /// The setup dialog's keyword arguments, in the order they are written ("" left out).
     pub fn setup_kw(d: &SetupDlg) -> Vec<(&'static str, String)> {
-        let get = |k: &str| d.args.iter().find(|a| a.0 == k).map(|a| a.1.trim().to_string()).unwrap_or_default();
+        let get = |k: &str| {
+            d.args
+                .iter()
+                .find(|a| a.0 == k)
+                .map(|a| a.1.trim().to_string())
+                .unwrap_or_default()
+        };
         let stock = match get("stock_kind").as_str() {
             "box" => format!("box(min: {}, max: {})", get("min"), get("max")),
             "from" => String::new(),
             _ => format!("box(margin: {})", get("margin")),
         };
-        let mut out = vec![("from", get("from")), ("machine", get("machine")), ("stock", stock)];
-        for k in ["origin", "tol", "clearance", "clear", "retract", "at", "fixture"] {
+        let mut out = vec![
+            ("from", get("from")),
+            ("machine", get("machine")),
+            ("stock", stock),
+        ];
+        for k in [
+            "origin",
+            "wcs",
+            "tol",
+            "clearance",
+            "clear",
+            "retract",
+            "at",
+            "fixture",
+        ] {
             out.push((k, get(k)));
         }
         out
@@ -903,7 +988,12 @@ prog = program(op1, post: \"fanuc\", number: 1001)
         d.set("stepover", "2.5".into());
         w.op_ok(&d).expect("added");
         // named so it never hides the built-in
-        assert!(w.text.contains("pocket2 = pocket(op1, tool: t1, from: 12, to: 4, stepover: 2.5)\nprog"), "{}", w.text);
+        assert!(
+            w.text
+                .contains("pocket2 = pocket(op1, tool: t1, from: 12, to: 4, stepover: 2.5)\nprog"),
+            "{}",
+            w.text
+        );
         assert_eq!(w.selected.as_deref(), Some("pocket2"));
         assert!(w.stale.contains(&"pocket2".to_string()));
         // undone: the text as it was
@@ -921,7 +1011,8 @@ prog = program(op1, post: \"fanuc\", number: 1001)
         d.set("step", "".into());
         w.op_ok(&d).expect("edited");
         assert!(
-            w.text.contains("prof = contour(op1, tool: t1, side: \"outside\", from: 12, to: -0.5, leave: 0.2)"),
+            w.text
+                .contains("prof = contour(op1, tool: t1, side: \"outside\", from: 12, to: -0.5, leave: 0.2)"),
             "{}",
             w.text
         );
@@ -940,7 +1031,11 @@ prog = program(op1, post: \"fanuc\", number: 1001)
         d.set("from", "".into());
         d.set("to", "".into());
         w.op_ok(&d).expect("edited");
-        assert!(w.text.contains("bore = pocket(op1, f.bore_h, tool: t1)\nprog"), "{}", w.text);
+        assert!(
+            w.text.contains("bore = pocket(op1, f.bore_h, tool: t1)\nprog"),
+            "{}",
+            w.text
+        );
     }
 
     #[test]
@@ -966,11 +1061,18 @@ prog = program(op1, post: \"fanuc\", number: 1001)
         assert_eq!(d.name, "op2");
         w.setup_ok(&d).expect("added");
         assert!(
-            w.text.contains("op2 = setup(f, machine: m, stock: box(margin: (3, 3, 2)), origin: \"top-center\")"),
+            w.text.contains(
+                "op2 = setup(f, machine: m, stock: box(margin: (3, 3, 2)), origin: \"top-center\")"
+            ),
             "{}",
             w.text
         );
-        assert!(w.text.contains("prog2 = program(op2, post: \"fanuc\", number: 1002)"), "{}", w.text);
+        assert!(
+            w.text
+                .contains("prog2 = program(op2, post: \"fanuc\", number: 1002)"),
+            "{}",
+            w.text
+        );
     }
 
     #[test]

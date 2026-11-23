@@ -22,6 +22,29 @@ pub struct Check {
     pub mov: usize,
 }
 
+/// How an op's path is known to be safe (David, 2026-11-23: the generators are to be proven,
+/// the checker kept as an oracle and an on-demand command).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Assurance {
+    /// Proven by construction: its generator is proven (Lean, Aeneas L4); nothing checked.
+    Proven,
+    /// Checked on demand: the certified checker ran on it when asked (Check Now).
+    CheckedOnDemand,
+    /// Interim: the certified checker runs on every generate (forge-cam-lang today).
+    #[default]
+    CheckedAtGenerate,
+}
+
+impl Assurance {
+    pub fn words(self) -> &'static str {
+        match self {
+            Assurance::Proven => "proven by construction",
+            Assurance::CheckedOnDemand => "checked on demand",
+            Assurance::CheckedAtGenerate => "checked at generate (interim)",
+        }
+    }
+}
+
 /// One op as generated.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct OpRes {
@@ -30,6 +53,8 @@ pub struct OpRes {
     pub setup: String,
     /// built | refused | unposted
     pub status: String,
+    /// How its path is known safe.
+    pub assurance: Assurance,
     pub tool: Option<String>,
     pub tool_t: Option<u32>,
     pub tool_d: Option<f64>,
@@ -132,7 +157,10 @@ fn arr(j: &Json, k: &str) -> Vec<Json> {
     }
 }
 fn strs(j: &Json, k: &str) -> Vec<String> {
-    arr(j, k).iter().filter_map(|x| x.str().map(str::to_string)).collect()
+    arr(j, k)
+        .iter()
+        .filter_map(|x| x.str().map(str::to_string))
+        .collect()
 }
 
 /// Generates `text` (its files beside it in `dir`).
@@ -152,7 +180,7 @@ pub fn run(text: &str, dir: &Path) -> Run {
                 part: s(x, "part"),
                 machine: s(x, "machine"),
                 origin: v3(wcs.and_then(|w| w.get("origin"))).unwrap_or_default(),
-                offset: wcs.and_then(|w| n(w, "offset")).unwrap_or(54.0) as u32,
+                offset: wcs.and_then(|w| n(w, "offset")).unwrap_or(0.0) as u32,
                 stock_min: v3(st.and_then(|w| w.get("min"))).unwrap_or_default(),
                 stock_max: v3(st.and_then(|w| w.get("max"))).unwrap_or_default(),
                 tol: n(x, "tol").unwrap_or(0.0),
@@ -160,7 +188,11 @@ pub fn run(text: &str, dir: &Path) -> Run {
                 at: v3(x.get("at")),
                 clear_h: h.and_then(|h| n(h, "clear")).unwrap_or(0.0),
                 retract_h: h.and_then(|h| n(h, "retract")).unwrap_or(0.0),
-                fixture: x.get("fixture").and_then(|f| f.get("name")).and_then(Json::str).map(str::to_string),
+                fixture: x
+                    .get("fixture")
+                    .and_then(|f| f.get("name"))
+                    .and_then(Json::str)
+                    .map(str::to_string),
             }
         })
         .collect();
@@ -177,7 +209,12 @@ pub fn run(text: &str, dir: &Path) -> Run {
                 kind: s(x, "kind"),
                 setup: s(x, "setup"),
                 status: s(x, "status"),
-                tool: t.and_then(|t| t.get("id")).and_then(Json::str).map(str::to_string),
+                // every op of forge-cam-lang is certified on the posted path when generated
+                assurance: Assurance::CheckedAtGenerate,
+                tool: t
+                    .and_then(|t| t.get("id"))
+                    .and_then(Json::str)
+                    .map(str::to_string),
                 tool_t: t.and_then(|t| n(t, "T")).map(|v| v as u32),
                 tool_d: t.and_then(|t| n(t, "d")),
                 refusal: o.refusal.clone(),
@@ -325,7 +362,11 @@ pub fn stale(ran: &[Stmt], now: &[Stmt]) -> Vec<String> {
             // where it was: every op of its setup after its position in the run
             let pos = ran.iter().position(|x| x.name == r.name).unwrap_or(0);
             for x in &ran[pos..] {
-                if x.is_op() && x.setup == r.setup && now.iter().any(|s| s.name == x.name && !s.suppressed) && !out.contains(&x.name) {
+                if x.is_op()
+                    && x.setup == r.setup
+                    && now.iter().any(|s| s.name == x.name && !s.suppressed)
+                    && !out.contains(&x.name)
+                {
                     out.push(x.name.clone());
                 }
             }
@@ -340,7 +381,10 @@ mod tests {
 
     fn flange() -> (String, std::path::PathBuf) {
         let dir = std::path::PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/machined"));
-        (std::fs::read_to_string(dir.join("flange_cam.fg")).expect("the example"), dir)
+        (
+            std::fs::read_to_string(dir.join("flange_cam.fg")).expect("the example"),
+            dir,
+        )
     }
 
     #[test]
@@ -350,11 +394,21 @@ mod tests {
         assert!(r.errors.is_empty(), "{:?}", r.errors);
         let names: Vec<&str> = r.ops.iter().map(|o| o.name.as_str()).collect();
         assert_eq!(names, ["skim", "top", "prof", "bore", "bolts"]);
-        assert!(r.ops.iter().all(|o| o.status == "built"), "{:?}", r.ops.iter().map(|o| (&o.name, &o.status, &o.refusal)).collect::<Vec<_>>());
+        assert!(
+            r.ops.iter().all(|o| o.status == "built"),
+            "{:?}",
+            r.ops
+                .iter()
+                .map(|o| (&o.name, &o.status, &o.refusal))
+                .collect::<Vec<_>>()
+        );
         assert_eq!(r.setups.len(), 1);
         assert!(r.setups[0].stock_max[2] > r.setups[0].stock_min[2]);
         let p = &r.programs[0];
-        assert!(p.round_trip && p.text.as_ref().is_some_and(|t| t.lines().count() == p.lines), "{p:?}");
+        assert!(
+            p.round_trip && p.text.as_ref().is_some_and(|t| t.lines().count() == p.lines),
+            "{p:?}"
+        );
         assert!(r.ops[0].tool_t == Some(1) && r.ops[0].rpm.is_some());
         assert!(r.ops.iter().all(|o| o.moves > 0 && o.time_s > 0.0));
         assert!(r.sheet.contains("<html>"));
@@ -366,22 +420,48 @@ mod tests {
     fn an_edit_makes_that_op_and_later_ones_of_its_setup_stale() {
         let (text, _) = flange();
         let was = doc::read(&text).unwrap();
-        let t = doc::apply(&text, &doc::Edit::Set { id: "prof".into(), arg: "step".into(), text: "3".into() }).unwrap();
+        let t = doc::apply(
+            &text,
+            &doc::Edit::Set {
+                id: "prof".into(),
+                arg: "step".into(),
+                text: "3".into(),
+            },
+        )
+        .unwrap();
         assert_eq!(stale(&was, &doc::read(&t).unwrap()), ["prof", "bore", "bolts"]);
         // a tool changed: every op after it
-        let t = doc::apply(&text, &doc::Edit::Set { id: "t1".into(), arg: "stickout".into(), text: "40".into() }).unwrap();
-        assert_eq!(stale(&was, &doc::read(&t).unwrap()), ["skim", "top", "prof", "bore", "bolts"]);
+        let t = doc::apply(
+            &text,
+            &doc::Edit::Set {
+                id: "t1".into(),
+                arg: "stickout".into(),
+                text: "40".into(),
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            stale(&was, &doc::read(&t).unwrap()),
+            ["skim", "top", "prof", "bore", "bolts"]
+        );
     }
 
     #[test]
     fn a_refusal_comes_back_with_its_check_and_fix() {
         let (text, dir) = flange();
         // a tool too short for the bore: its shank goes into the stock
-        let t = text.replace("t1   = tool(\"flat-10\", t: 1, stickout: 32", "t1   = tool(\"flat-10\", t: 1, stickout: 12");
+        let t = text.replace(
+            "t1   = tool(\"flat-10\", t: 1, stickout: 32",
+            "t1   = tool(\"flat-10\", t: 1, stickout: 12",
+        );
         assert_ne!(t, text);
         let r = run(&t, &dir);
         let bad: Vec<&OpRes> = r.ops.iter().filter(|o| o.status == "refused").collect();
-        assert!(!bad.is_empty(), "{:?}", r.ops.iter().map(|o| (&o.name, &o.status)).collect::<Vec<_>>());
+        assert!(
+            !bad.is_empty(),
+            "{:?}",
+            r.ops.iter().map(|o| (&o.name, &o.status)).collect::<Vec<_>>()
+        );
         assert!(bad.iter().any(|o| o.refusal.is_some()));
         assert_eq!(r.certification, "refused");
     }

@@ -255,3 +255,4 @@ cam,Checks,"Every op's verdict and the failed checks with their witnesses: click
 cam,Auto Generate,"Generate again after each edit",
 cam,Tool Library,"The library's cutters and holders: add one to the document as a tool with its T number",
 cam,Document Text,"The machining document's text, the source of truth: edit it by hand",
+cam,Check Now,"Run the certified checker on the generated paths now: gouge, holder, rapid, fixture and axis checks on the posted path (today it generates again, which checks)",

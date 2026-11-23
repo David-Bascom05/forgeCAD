@@ -130,7 +130,13 @@ pub const OPS: &[OpSpec] = &[
         what: "The part's outline or its holes, at the section, in levels",
         fields: &[
             TOOL,
-            f("side", "Side", Geometry, Choice(&["outside", "inside"]), "outside"),
+            f(
+                "side",
+                "Side",
+                Geometry,
+                Choice(&["outside", "inside"]),
+                "outside",
+            ),
             f("from", "Top height", Heights, Len, "the part's top"),
             f("to", "Bottom height", Heights, Len, "the part's bottom"),
             f("step", "Max stepdown", Passes, Len, "half the tool's diameter"),
@@ -145,7 +151,13 @@ pub const OPS: &[OpSpec] = &[
         what: "A hole feature's circle to its depth, or every hole and slot between two heights",
         fields: &[
             TOOL,
-            f("#1", "Hole feature", Geometry, Hole, "every pocket between the heights"),
+            f(
+                "#1",
+                "Hole feature",
+                Geometry,
+                Hole,
+                "every pocket between the heights",
+            ),
             f("from", "Top height", Heights, Len, "(needed without a hole)"),
             f("to", "Bottom height", Heights, Len, "(needed without a hole)"),
             f("step", "Max stepdown", Passes, Len, "half the tool's diameter"),
@@ -200,7 +212,13 @@ pub const OPS: &[OpSpec] = &[
         fields: &[
             TOOL,
             req("#1", "Hole feature", Geometry, Hole),
-            f("length", "Thread length", Passes, Len, "the depth less two pitches"),
+            f(
+                "length",
+                "Thread length",
+                Passes,
+                Len,
+                "the depth less two pitches",
+            ),
         ],
     },
 ];
