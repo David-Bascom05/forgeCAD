@@ -62,7 +62,7 @@ pub fn section(faces: &[Face], z: f64, mu: f64) -> Result<Region, SectionError> 
             continue;
         }
         match &f.prism {
-            Some(Prism::Wall { sec, z0, z1 }) => {
+            Some(Prism::Wall { sec, z0, z1, .. }) => {
                 if *z0 < z && z < *z1 {
                     pieces.push(match *sec {
                         Sec::Seg { a, b } => Seg::Line {

@@ -24,9 +24,12 @@ pub enum Prism {
         z: f64,
         region: Vec<TSeg>,
         boxes: Vec<[f64; 4]>,
+        /// Each piece's end gap (arc_gap; 0 for a line), or −1 for an arc outside Piece.ok:
+        /// worked out once with the face.
+        gaps: Vec<f64>,
     },
-    /// A vertical face over a section curve, for heights z0..z1.
-    Wall { sec: Sec, z0: f64, z1: f64 },
+    /// A vertical face over a section curve, for heights z0..z1; `gap` its arc's end gap.
+    Wall { sec: Sec, z0: f64, z1: f64, gap: f64 },
 }
 
 /// A section or path curve in xy.
@@ -508,7 +511,7 @@ fn box_gap(a: &[f64; 4], b: &[f64; 4]) -> f64 {
 /// The least distance from a path curve to a flat region (0 if they meet). Pieces whose box is
 /// farther than `cutoff` count by that box bound alone (a lower bound; the distance only
 /// matters below the tool's reach).
-fn dist_region(path: &Sec, region: &[TSeg], boxes: &[[f64; 4]], cutoff: f64) -> Ival {
+fn dist_region(path: &Sec, region: &[TSeg], boxes: &[[f64; 4]], gaps: &[f64], cutoff: f64) -> Ival {
     let mut lo = f64::INFINITY;
     let mut hi = f64::INFINITY;
     let pb = sec_box(path);
@@ -531,14 +534,11 @@ fn dist_region(path: &Sec, region: &[TSeg], boxes: &[[f64; 4]], cutoff: f64) -> 
             i += 1;
             continue;
         }
-        let (s, gap, ok) = match region[i] {
-            TSeg::Line { a, b } => (Sec::Seg { a, b }, 0.0, true),
-            TSeg::Arc { a, b, c, r, ccw } => (
-                Sec::Arc { c, r, a, b, ccw },
-                crate::check::arc_gap(a, b, c, r),
-                arc_ok(a, b, c, r, ccw),
-            ),
+        let s = match region[i] {
+            TSeg::Line { a, b } => Sec::Seg { a, b },
+            TSeg::Arc { a, b, c, r, ccw } => Sec::Arc { c, r, a, b, ccw },
         };
+        let (gap, ok) = (gaps[i].max(0.0), gaps[i] >= 0.0);
         // an arc piece outside the proven candidates' hypothesis (Trim.lean's Piece.ok) gives
         // no lower bound: 0
         let d = if ok {
@@ -598,10 +598,24 @@ impl Prism {
                         });
                     }
                     let boxes = region.iter().map(tseg_box).collect();
+                    let gaps = region
+                        .iter()
+                        .map(|t| match *t {
+                            TSeg::Line { .. } => 0.0,
+                            TSeg::Arc { a, b, c, r, ccw } => {
+                                if arc_ok(a, b, c, r, ccw) {
+                                    crate::check::arc_gap(a, b, c, r)
+                                } else {
+                                    -1.0
+                                }
+                            }
+                        })
+                        .collect();
                     return Some(Prism::Flat {
                         z: o[2],
                         region,
                         boxes,
+                        gaps,
                     });
                 }
                 // vertical, u horizontal and v along ±z, over a rectangular trim
@@ -635,6 +649,7 @@ impl Prism {
                         sec: Sec::Seg { a, b },
                         z0: q0.min(q1),
                         z1: q0.max(q1),
+                        gap: 0.0,
                     });
                 }
                 None
@@ -672,6 +687,7 @@ impl Prism {
                     },
                     z0: q0.min(q1),
                     z1: q0.max(q1),
+                    gap: crate::check::arc_gap(a, b, [o[0], o[1]], r),
                 })
             }
             _ => None,
@@ -784,7 +800,7 @@ pub fn certify_shared(
     let (path, zt) = path_sec(pl);
     let (lim_clear, lim_hit) = (limit + f.mu, limit - f.mu);
     let (d, dz) = match pr {
-        Prism::Flat { z, region, boxes } => {
+        Prism::Flat { z, region, boxes, gaps } => {
             let dz = Ival::pt(*z).sub(zt);
             // the face is wholly beyond the body's heights by more than the limit: no distance
             // needed (sd at ρ = 0 is already a lower bound for every ρ)
@@ -799,24 +815,20 @@ pub fn certify_shared(
             let d = match *shared {
                 Some((d, cut)) if cut >= cutoff => d,
                 _ => {
-                    let d = dist_region(&path, region, boxes, cutoff);
+                    let d = dist_region(&path, region, boxes, gaps, cutoff);
                     *shared = Some((d, cutoff));
                     d
                 }
             };
             (d, dz)
         }
-        Prism::Wall { sec, z0, z1 } => {
+        Prism::Wall { sec, z0, z1, gap } => {
             let d = match *shared {
                 Some((d, _)) => d,
                 None => {
                     // a wall's arc ends are its parametrisation's, evaluated: off the circle by
                     // their rounding, accounted as for trims
-                    let gap = match *sec {
-                        Sec::Arc { c, r, a, b, .. } => crate::check::arc_gap(a, b, c, r),
-                        Sec::Seg { .. } => 0.0,
-                    };
-                    let d = less_gap(dist(&path, sec), gap);
+                    let d = less_gap(dist(&path, sec), *gap);
                     *shared = Some((d, f64::INFINITY));
                     d
                 }
@@ -899,6 +911,13 @@ mod gap_tests {
             TSeg::Line { a: [2.0, -2.0], b: a },
         ];
         let boxes: Vec<[f64; 4]> = region.iter().map(tseg_box).collect();
+        let gaps: Vec<f64> = region
+            .iter()
+            .map(|t| match *t {
+                TSeg::Line { .. } => 0.0,
+                TSeg::Arc { a, b, c, r, .. } => crate::check::arc_gap(a, b, c, r),
+            })
+            .collect();
         // the trim's points: the arc on its circle, the radial pieces, the lines
         let mut pts: Vec<[f64; 2]> = vec![];
         for k in 0..=4000 {
@@ -921,7 +940,7 @@ mod gap_tests {
             // points near the arc's ends, where the end candidates matter
             let e = if rnd() < 0.5 { a } else { b };
             let q = [e[0] + (rnd() - 0.5) * 0.02, e[1] + (rnd() - 0.5) * 0.02];
-            let d = dist_region(&Sec::Seg { a: q, b: q }, &region, &boxes, 10.0);
+            let d = dist_region(&Sec::Seg { a: q, b: q }, &region, &boxes, &gaps, 10.0);
             // the truth, from the samples (each a real trim point: the true least is ≤ theirs,
             // so compare against their least less the samples' spacing)
             let mut m = f64::INFINITY;
