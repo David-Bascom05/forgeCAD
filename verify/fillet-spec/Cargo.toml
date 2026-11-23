@@ -13,6 +13,7 @@ forge-topo = { path = "../../kernel/forge-topo" }
 forge-ops = { path = "../../kernel/forge-ops", features = ["spec-probe"] }
 forge-model = { path = "../../kernel/forge-model" }
 forge-lang = { path = "../../interface/forge-lang" }
+forge-bool = { path = "../../kernel/forge-bool" }
 
 [lints]
 workspace = true

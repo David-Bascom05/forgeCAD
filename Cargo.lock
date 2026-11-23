@@ -6,6 +6,7 @@ version = 4
 name = "fillet-spec"
 version = "0.1.0"
 dependencies = [
+ "forge-bool",
  "forge-geom",
  "forge-lang",
  "forge-math",

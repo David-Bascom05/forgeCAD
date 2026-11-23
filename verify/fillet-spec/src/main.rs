@@ -120,6 +120,114 @@ fn opts() -> forge_lang::Options {
     }
 }
 
+/// The spec's predicates along one picked edge, sampled (a diagnosis, not a proof): P7, the faces'
+/// normal curvature across the edge against r (focal where the ball side's radius is below r), and
+/// P2, whether the ball at the edge's crease point fits (every point of a sphere just inside it
+/// classified on the ball's side of the body).
+fn probe_edge(body: &Body, idx: &forge_bool::classify::Index, e: EdgeId, r: f64) -> String {
+    use forge_bool::classify::Where;
+    use forge_geom::SurfaceGeom;
+    let x = body.edge(e);
+    let convex = forge_ops::fillet::fillet_kind(body, e);
+    let (c0, c1) = (x.coedges[0], x.coedges[1]);
+    let faces = [body.coedge_face(c0), body.coedge_face(c1)];
+    let mut focal_min = f64::INFINITY;
+    let (mut blocked, mut samples) = (0, 0);
+    let mut worst_out = 0usize;
+    let rolled = forge_ops::fillet::edge_blend(body, e, r);
+    for i in 0..9 {
+        let t = x.range.lo + x.range.width() * (i as f64 + 0.5) / 9.0;
+        let d = x.curve.deriv(t);
+        let Some(tan) = d.d1.normalize() else { continue };
+        let mut ns = Vec::new();
+        for &f in &faces {
+            let s = &body.face(f).surface;
+            let uv = s.project(d.p);
+            let Some(n) = body.face_normal(f, uv) else { continue };
+            let n = n.get();
+            ns.push(n);
+            // normal curvature across the edge, in the face, against its outward normal
+            let sd = s.deriv(uv);
+            let w = n.cross(tan.get());
+            let (e_, f_, g_) = (sd.du.dot(sd.du), sd.du.dot(sd.dv), sd.dv.dot(sd.dv));
+            let det = e_ * g_ - f_ * f_;
+            if det.abs() < 1e-18 {
+                continue;
+            }
+            let (bu, bv) = (sd.du.dot(w), sd.dv.dot(w));
+            let a = (g_ * bu - f_ * bv) / det;
+            let b = (e_ * bv - f_ * bu) / det;
+            let ii = (sd.duu * (a * a) + sd.duv * (2.0 * a * b) + sd.dvv * (b * b)).dot(n);
+            let i1 = (sd.du * a + sd.dv * b).length_sq();
+            let k = ii / i1;
+            // the ball's side: inside for a convex edge (-n), outside for a concave one (+n)
+            let toward = if convex == Some(true) { -k } else { k };
+            if toward > 1e-12 {
+                focal_min = focal_min.min(1.0 / toward);
+            }
+        }
+        if ns.len() != 2 {
+            continue;
+        }
+        let cdot = ns[0].dot(ns[1]);
+        let side = if convex == Some(true) { -1.0 } else { 1.0 };
+        let c = match &rolled {
+            // the kernel's crease point, which the differential test holds to the spec's
+            Ok((b, _, _)) => b.spine.eval(spine_closest(&b.spine, d.p)),
+            Err(_) => d.p + (ns[0] + ns[1]) * (side * r / (1.0 + cdot)),
+        };
+        samples += 1;
+        let mut out = 0;
+        for j in 0..240 {
+            // a spiral of points on the sphere of radius 0.99 r
+            let z = 1.0 - 2.0 * (j as f64 + 0.5) / 240.0;
+            let a = j as f64 * 2.399_963_229_728_653;
+            let q = (1.0 - z * z).max(0.0).sqrt();
+            let p = c + Vec3::new(q * a.cos(), q * a.sin(), z) * (0.99 * r);
+            let wrong = match idx.classify(p) {
+                Where::Inside => convex != Some(true),
+                Where::Outside => convex == Some(true),
+                Where::On => true,
+            };
+            if wrong {
+                out += 1;
+            }
+        }
+        if out > 0 {
+            blocked += 1;
+        }
+        worst_out = worst_out.max(out);
+    }
+    format!(
+        "{{\"edge\":{},\"r\":{r},\"convex\":{:?},\"focal_min\":{},\"ball_blocked\":{blocked},\"of\":{samples},\"worst_out_of_240\":{worst_out},\"rolled\":\"{}\"}}",
+        e.index(),
+        convex,
+        if focal_min.is_finite() { format!("{focal_min:.4}") } else { "null".into() },
+        match &rolled {
+            Ok(_) => "ok".to_string(),
+            Err(err) => format!("{err:?}"),
+        }
+    )
+}
+
+fn probe(files: &[String]) {
+    for f in files {
+        let Ok(src) = std::fs::read_to_string(f) else { continue };
+        let m = forge_lang::fuzz::build_with(&src, opts());
+        for k in 0..m.features.len() {
+            let forge_model::Feature::Fillet { edges, .. } = &m.features[k] else { continue };
+            let Some(body) = m.body_after(k) else { continue };
+            let body = if body.dead > 0 { body.compact() } else { body };
+            let idx = forge_bool::classify::Index::new(&body);
+            for (name, radius) in edges {
+                let forge_ops::Radius::Constant(r) = radius else { continue };
+                let Some(e) = body.edge_by_name(*name) else { continue };
+                println!("{}#{k} {}", f, probe_edge(&body, &idx, e, *r));
+            }
+        }
+    }
+}
+
 fn parts(files: &[String]) {
     for f in files {
         let Ok(src) = std::fs::read_to_string(f) else {
@@ -212,6 +320,7 @@ fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     match args.first().map(String::as_str) {
         Some("parts") => parts(&args[1..]),
+        Some("probe") => probe(&args[1..]),
         Some("random") => {
             let n = args.get(1).and_then(|x| x.parse().ok()).unwrap_or(20);
             let seed = args.get(2).and_then(|x| x.parse().ok()).unwrap_or(1);

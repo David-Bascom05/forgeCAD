@@ -268,3 +268,80 @@ overflow decision on circle creases and against cylinder generators.
 **Blocked**: the census dataset (`~/forgecad-data`) is not on this machine, so the census's "wrong"
 fillets are not re-judged yet. `fillet-spec parts F.fg ..` piped into `fillet-check` judges any part's
 blends by the spec. Judging whole results by the spec (Tier A) is the next tool.
+
+## 9. One rule per construction (the owner: old code stays where it is proven)
+
+This answers the fillet session's inventory (research/fillets/HANDOFF.md §3 on
+claude/repo-review-mbdrlj-fillets, its line numbers at fe8e0f1b). "Keep" means a provable refinement
+of the spec (general-method.md §9: guard G, construction F; F equals the spec on G's domain, and
+is total there). "Replace" means its selection becomes the decided predicate named, evaluated once,
+with no retry. The construction stays where it is the refinement on that predicate's domain.
+
+### Shape choices (R and G)
+
+| # | today | decided rule (predicate) | verdict |
+|---|---|---|---|
+| 1 | cliff as a retry after Overflow/Corner/Mitre; notch (`excursions`) as the default over a rim | the closing never notches. A P3 event onto a rim generator is a cliff, decided where the event is; the notch goes | cliff: keep (refinement for line and circle rims, §9 "cliff"). Retry and notch: replace |
+| 2 | chain carried past kinks under 0.5°, then `straight` on refusal | reach Γ_E (§1.3) crosses an unpicked convex or smooth (P1 within τ) edge, and stops at an unpicked concave one. A picked chain ends at a vertex only where P1 says sharp | replace the 0.5° rule and its retry by P1 under τ |
+| 3 | `seams`, `reseamed`, `cliff_seams`, `seam_off`, `rim_seam_off` | faces on one carrier are one generator (§1.1): a seam is no edge of the spec. Normalise before rolling, unconditionally | replace (normalisation, not a retry) |
+| 4 | the walk order and `walk_tests` / `walk_spend` budget | no budget. A trace is certified complete or refused `Undecided { predicate, at }` | replace |
+| 5 | `across` / `roll_across` only inside a retry | P3: the springs of two picks cross on a strip face (a swallowed sheet at a triple point), decided up front | roll_across: keep (crowding vertex). Retry: replace |
+| 6 | `rim_split` only under `rims`; skips rims through the edge's own vertices | every P3 event on a rim splits there. The skipped case is a vertex-table row (mixed convexity at v) | replace the switch; the split stays |
+| 7 | one hot edge: `switched_out`, else `run_out`, else `roll_over` on Overflow | run-out iff P2: the end ball is clear of every generator not at v (Cap_v row). Roll-over iff P3 has an event on the end face before the arc's end. Switched-out iff the support beyond is G1 (P1) | each keep as the row it is; the order goes |
+| 8 | joint: `joint(a,b)`, `joint(b,a)`, `walk_joint` ×2 | the joint is the shared cross-section at the crease point where the two arcs meet (P8 orders them). Obligation: joint(a,b) = joint(b,a) whenever both build, since both are that section of one tangent chain; then the order is cost only. The walk joints are certified traces or `Undecided` | keep joint (prove the symmetry); replace the walk order and budget |
+| 9 | ring of 3, same kind: `mitre`, then `joint` if `continues_here` | P1 on the unpicked edge at v: sharp gives the mitre row (two pipes cut along the P9 branch through the node); smooth gives a tangent chain, so a joint | keep both, each on its own P1 sign; the fallback goes |
+| 10 | corners: `corner::setbacks` closed form, else `ball_setbacks`; user setbacks override | equal radii, one kind, all picked, P4 exposed: the sphere (C_r(W_v), O5), as one function. Otherwise one named rule, the G1 patch (setback = one radius past the springs' meeting, or the user's setbacks), with its own obligations: G1, and inside the closing's bounds | keep both as two rows; the "else" goes |
+| 11 | `minority_first`: the kind with fewer edges at the vertex first | §1.3: the concave fills first, then the convex picks named in the result. To be checked against the 4 + 1 parts `minority_first` fixed before it replaces it | replace (a fixed convention) |
+| 12 | `overlapping_rounds` (lib.rs) after Overflow/Corner/Mitre | several radius classes combine by union of fills (concave) and intersection of kept parts (convex), each on the same S. Opposite inward sheets crossing is a P3 event, decided up front | keep the boolean (refinement for classes and groups that share no vertex); the retry goes |
+| 13 | `closed_up` / `unsure` then refuse after the check; `without_spurs` only when unsound; `joined_pieces` as a retry; `SplitFirst` | `unsure`: replaced by certified decisions, refused at the locus. `without_spurs`: unconditional. `joined_pieces`: needless vertices removed before rolling (normalisation, as seams). `SplitFirst`: keep (topology prep the geometry asks for, decided by P3) | as stated |
+| 14 | `switch_support` before `cliff` | disjoint conditions: switch when the edge beyond the spring is G1 (P1 smooth), cliff when it is sharp | keep both; the order is immaterial once P1 decides |
+
+Also listed by the master:
+- **The spring's 4-sample check, falling back to a procedural spring.** Decided by the pair's class: a line or circle spine on the closed-form table has its closed-form spring (`spring₁`, and the revolution theorems). The sample check goes.
+- **The spindle torus built as a Pipe.** Done: `hole_closing`, kernel change 1 of §8.
+
+### Numerical duplicates (N)
+
+These are not choices of shape. Each needs either a proof that the two ways agree within the stated
+bound, or a selection by a decided predicate:
+
+| today | rule |
+|---|---|
+| `Blend::new`: closed form, else traced | the pair's class (`specKind` in Check.lean, proven per class) picks one path; the traced path is used only off the table |
+| `cross_curve`: closed form, else traced; `run_out`'s `towards_touch` a→b then b→a | the same: class first. The two walk directions must agree (a certified trace has one answer) |
+| `roll`: `blend_of(near)`, else `rolled_centre` | the start of a trace; the spine is the same curve, so this is no choice of result. Keep, with a certified trace |
+| corner.rs `trim_curve` fallback; `close_hole`, else `close_hole_rational` | the G1 patch rule's own obligation: one construction, the other proven equal or dropped |
+| `mitre`'s far point: `crossing_edge`, else nearest hit | P9 selects the branch through the node; the hit is then unique |
+
+**Known bug** (the fillet session's): `fillet_cliff::clear` walks t0→t1 the shorter way round a closed
+spine, so a face-to-face piece longer than half the loop is refused (p00015). The rule: walk in the
+spine's own direction from the cliff's exit to its next entry.
+
+## 10. Proof levels (research/PROOF-STANDARD.md)
+
+| level | state |
+|---|---|
+| L1 | Partial. The spec over any ordered field, square roots where named (ℝ and the real algebraic numbers are instances). Proven: the closing and its laws, locality, plane–plane, revolution, boss and hole tori, the Pivot sphere, TooLarge, the conic section, and overflow on line creases (§8). Not yet: the vertex table, regBool, the cone, sphere and torus pairs, `no_analytic` |
+| L2 | Partial. `fillet-check` decides each blend in exact rationals. Its kind classification and residual tests are executable; proven equal to L1 only in what the theorems cover (plane–plane, revolution, and the bound `near_crease`). `quadNonneg` is proven over any field, but its Bool uses `Classical.decide`; a computable ℚ instance is next |
+| L3 | None yet: refusal iff no valid result needs the vertex table and regBool. The refusals specified so far: TooLarge (`hole_too_large`), Focal (P7), overflow on line creases (`clear_sphere`) |
+| L4 | Interim: the differential test. Blocker: `Blend::new` and `roll` are float code that Aeneas can't take before the aeneas session's float bridge. Next: the combinatorial cores (the vertex-table dispatch and `resolve`'s decision), written float-free for Aeneas |
+| L5 | None. `off_axis_arc`'s sign and `specKind`'s par/perp tests are the first predicates for the float bridge |
+| L6 | The differential test on 974 blends, and native/wasm identity. Not in CI yet: next, a CI job running `fillet-spec random` and `parts` into `fillet-check`, with a committed digest |
+
+## 11. Corpus verdicts (the master's cases)
+
+`fillet-spec probe F.fg` evaluates, along each picked edge at 9 points:
+- P7, the faces' normal curvature across the edge on the ball's side;
+- P2, whether the ball at the kernel's crease point fits: 240 points of a sphere of 0.99 r, classified against the body.
+
+It is a diagnosis, not a certificate. Its controls are the same parts at the radius that builds.
+
+| part | kernel | verdict by the spec |
+|---|---|---|
+| fillet_tangent_chain_scoop.fg (r 1.5, 19 thick) | Overflow | **kernel gap.** P2: the ball fits at all 9 samples, as at 18 thick. The chain's end vertex is where the end face meets the scoop face: the scoop's arc (radius 160.08 about (X −141, Z 6)) reaches the end face X = 19 at Z = 11 with slope 5/160, so the two faces meet at 1.8°. That is a convex edge, sharp under τ (0.031 · 1.5 ≫ LINEAR), so the vertex is the run-out row with Cap_v holding the scoop's half-space: a defined result. The 1.8° grazing clip is what run_out fails on. At 18 thick the faces meet at 6.7° and it builds |
+| fillet_crescent_both_edges.fg (r 2) | Overflow | **correct refusal.** P2: the ball resting on the start face and either wall pokes through the other wall at all 9 samples of both edges (about 100 of 240 points out); at r 1, 0 of 9. The crescent is narrower than 2r along the whole edge, so no seed arc exists and the spec has no round. The typed error should say so (NoBlend: no seed), not Overflow |
+| fillet_spline_walls_noblend.fg (r 10) | NoBlend | **undetermined.** P7 is not the cause: the smallest radius across the edge on the ball's side is 18.1 > 10. P2 with the two-plane centre (the kernel has none) has 3 of 9 samples blocked by 5 of 240 points, within that estimate's error (about r²κ). It needs the Tier A judge; Onshape rounds it |
+| fillet_wavy_plate_notch.fg (r 5) | Overflow | **undetermined.** P7 is not the cause (8.5 > 5). The probe's control (r 2, which builds) reads blocked too, so its P2 is not reliable on this body. It needs the Tier A judge |
+
+CADFS 00123784, 00539691 and 00154651 are the three parts the last three restate. WHUCAD 100001734
+needs the dataset, which is not on this machine.
