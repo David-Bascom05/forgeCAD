@@ -549,3 +549,42 @@ fn every_posted_position_is_within_the_machines_travel() {
         cam.warnings
     );
 }
+
+#[test]
+fn edge_break_certifies_the_chamfer_and_refuses_what_it_cannot_cut() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    let src = std::fs::read_to_string(dir.join("plate_break_cam.fg")).unwrap();
+    let t0 = std::time::Instant::now();
+    let cam = forge_cam_lang::run(&src, &dir);
+    let dt = t0.elapsed().as_secs_f64();
+    assert!(
+        cam.ok,
+        "{:?} {:?}",
+        cam.errors,
+        cam.ops.iter().map(|o| (&o.name, &o.refusal)).collect::<Vec<_>>()
+    );
+    // the 0.3 mm break with chamfer-10-90: declared, certified, within budget (the closed forms
+    // by symmetry: 105,228 cells and 0.5 s for the whole program where the branch and bound
+    // alone took 644,450 cells and 113 s for the break)
+    let b = cam.ops.iter().find(|o| o.name == "brk").unwrap();
+    assert_eq!(b.status, "built");
+    assert_eq!(b.removals.len(), 1);
+    assert!(
+        b.removals[0].starts_with("edge_break 0.3 x 45°"),
+        "{}",
+        b.removals[0]
+    );
+    assert!(b.cells < 200_000, "{} cells", b.cells);
+    assert!(dt < 30.0, "{dt} s");
+    // refused: a break the tool's flank cannot reach, and a tool that is not a 90° chamfer mill
+    for (edit, why) in [
+        ("tool: t7, size: 0.3)", "tool: t7, size: 4.5)"),
+        ("tool: t7, size: 0.3)", "tool: t1, size: 0.3)"),
+    ] {
+        let s = src.replace(edit, why);
+        let cam = forge_cam_lang::run(&s, &dir);
+        let b = cam.ops.iter().find(|o| o.name == "brk").unwrap();
+        assert_eq!(b.status, "refused", "{why}");
+        assert!(b.fix.is_some(), "{why}: {:?}", b.refusal);
+    }
+}

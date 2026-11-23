@@ -958,6 +958,16 @@ pub fn certify_shared(
         }
         return (v, n);
     }
+    // a plane with a horizontal direction, or a cone with a vertical axis: a clearance proven by
+    // symmetry (shadow.rs) where it can be, else the branch and bound decides
+    if let Some(pl) = mv.planar() {
+        let (lower, n) = crate::shadow::clear(body, f, mv, &pl, limit, res, budget);
+        if let Some(lower) = lower {
+            return (Verdict::Clear { lower }, n);
+        }
+        let (v, m) = certify_bb(body, f, mv, limit, res, budget);
+        return (v, n + m);
+    }
     certify_bb(body, f, mv, limit, res, budget)
 }
 
