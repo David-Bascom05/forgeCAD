@@ -108,6 +108,23 @@ fn nx(i: usize) -> usize {
 fn pv(i: usize) -> usize {
     (i + 2) % 3
 }
+/// Two constraints a-b and another cross (a, b less `shift`, as the caller numbers them).
+fn crossing(a: u32, b: u32, shift: u32) -> CdtError {
+    CdtError::ConstraintsIntersect {
+        a: a.wrapping_sub(shift),
+        b: b.wrapping_sub(shift),
+    }
+}
+
+/// The constraint a-b passes through `point` (all less `shift`).
+fn through(a: u32, b: u32, point: u32, shift: u32) -> CdtError {
+    CdtError::ConstraintThroughPoint {
+        a: a.wrapping_sub(shift),
+        b: b.wrapping_sub(shift),
+        point: point.wrapping_sub(shift),
+    }
+}
+
 /// Where x is in a triangle's three vertices or neighbours.
 fn slot(a: [u32; 3], x: u32) -> Option<usize> {
     if a[0] == x {
@@ -428,127 +445,170 @@ impl Mesh {
         }
     }
 
-    fn insert_constraint(&mut self, a: u32, b: u32, ext: impl Fn(u32) -> u32) -> Result<(), CdtError> {
-        let err_cross = || CdtError::ConstraintsIntersect { a: ext(a), b: ext(b) };
+    /// The constraint a-b, recovered by flipping the edges it crosses. Errors name points less
+    /// `shift` (the super-triangle's corners, or none).
+    fn insert_constraint(&mut self, a: u32, b: u32, shift: u32) -> Result<(), CdtError> {
         if let Some((t, i)) = self.has_edge(a, b) {
             self.hit = (a, b);
-            return self.mark(t, i, err_cross);
+            return self.mark(t, i, crossing(a, b, shift));
         }
         let (pa, pb) = (self.p(a), self.p(b));
+        let mut err: Option<CdtError> = None;
 
         // the triangle around a whose far edge the segment leaves through
         let start = self.vtri[a as usize];
         let mut t = start;
-        let mut crossed: VecDeque<(u32, u32)> = VecDeque::new();
         let mut cur: Option<(u32, u32, u32)> = None;
-        for _ in 0..=self.tris.len() {
+        let mut on = true;
+        let mut k = 0;
+        while on && k <= self.tris.len() {
             let tt = self.tris[t as usize];
-            let ia = slot(tt.v, a).ok_or(CdtError::Internal("fan lost a"))?;
-            let (v1, v2) = (tt.v[nx(ia)], tt.v[pv(ia)]);
-            let o1 = orient2d(pa, pb, self.p(v1));
-            let o2 = orient2d(pa, pb, self.p(v2));
-            for (o, v) in [(o1, v1), (o2, v2)] {
-                if o == 0.0 && (self.p(v) - pa).dot(pb - pa) > 0.0 {
-                    return Err(CdtError::ConstraintThroughPoint {
-                        a: ext(a),
-                        b: ext(b),
-                        point: ext(v),
-                    });
+            match slot(tt.v, a) {
+                None => err = Some(CdtError::Internal("fan lost a")),
+                Some(ia) => {
+                    let (v1, v2) = (tt.v[nx(ia)], tt.v[pv(ia)]);
+                    let o1 = orient2d(pa, pb, self.p(v1));
+                    let o2 = orient2d(pa, pb, self.p(v2));
+                    if o1 == 0.0 && (self.p(v1) - pa).dot(pb - pa) > 0.0 {
+                        err = Some(through(a, b, v1, shift));
+                    } else if o2 == 0.0 && (self.p(v2) - pa).dot(pb - pa) > 0.0 {
+                        err = Some(through(a, b, v2, shift));
+                    } else if o1 < 0.0 && o2 > 0.0 {
+                        cur = Some((t, v2, v1));
+                        on = false;
+                    } else {
+                        t = tt.n[nx(ia)];
+                        on = t != start;
+                    }
                 }
             }
-            if o1 < 0.0 && o2 > 0.0 {
-                cur = Some((t, v2, v1));
-                break;
-            }
-            t = tt.n[nx(ia)];
-            if t == start {
-                break;
-            }
+            on = on && err.is_none();
+            k += 1;
+        }
+        if let Some(e) = err {
+            return Err(e);
         }
         let Some((mut t, mut left, mut right)) = cur else {
             return Err(CdtError::Internal("no start wedge"));
         };
 
-        loop {
-            let (tc, ic) = self
-                .find_edge(right, left)
-                .ok_or(CdtError::Internal("walk lost edge"))?;
-            debug_assert_eq!(tc, t);
-            if self.tris[tc as usize].c[ic] {
-                self.hit = (left, right);
-                return Err(err_cross());
-            }
-            crossed.push_back((left, right));
-            let u = self.tris[tc as usize].n[ic];
-            let uu = self.tris[u as usize];
-            let j = slot(uu.n, tc).ok_or(CdtError::Internal("broken link"))?;
-            let q = uu.v[j];
-            if q == b {
-                break;
-            }
-            let oq = orient2d(pa, pb, self.p(q));
-            if oq == 0.0 {
-                return Err(CdtError::ConstraintThroughPoint {
-                    a: ext(a),
-                    b: ext(b),
-                    point: ext(q),
-                });
-            }
-            if oq > 0.0 {
-                left = q;
-            } else {
-                right = q;
-            }
-            t = u;
-        }
-
-        let mut fresh: Vec<(u32, u32)> = Vec::new();
-        let mut budget = 64 * (crossed.len() + 4) * (crossed.len() + 4);
-        while let Some((x, y)) = crossed.pop_front() {
-            budget = budget
-                .checked_sub(1)
-                .ok_or(CdtError::Internal("constraint recovery did not converge"))?;
-            if budget.is_multiple_of(1024) {
-                forge_geom::budget::spend_many(16 * 1024);
-                if forge_geom::budget::over() {
-                    return Err(CdtError::Internal("the boundary would take too long"));
+        // the edges it crosses, in order from a
+        let mut crossed: Vec<(u32, u32)> = Vec::new();
+        let mut walking = true;
+        while walking && err.is_none() {
+            match self.find_edge(right, left) {
+                None => err = Some(CdtError::Internal("walk lost edge")),
+                Some((tc, ic)) => {
+                    debug_assert_eq!(tc, t);
+                    if self.tris[tc as usize].c[ic] {
+                        self.hit = (left, right);
+                        err = Some(crossing(a, b, shift));
+                    } else {
+                        crossed.push((left, right));
+                        let u = self.tris[tc as usize].n[ic];
+                        let uu = self.tris[u as usize];
+                        match slot(uu.n, tc) {
+                            None => err = Some(CdtError::Internal("broken link")),
+                            Some(j) => {
+                                let q = uu.v[j];
+                                if q == b {
+                                    walking = false;
+                                } else {
+                                    let oq = orient2d(pa, pb, self.p(q));
+                                    if oq == 0.0 {
+                                        err = Some(through(a, b, q, shift));
+                                    } else if oq > 0.0 {
+                                        left = q;
+                                    } else {
+                                        right = q;
+                                    }
+                                    t = u;
+                                }
+                            }
+                        }
+                    }
                 }
             }
-            let (t, i) = self
-                .find_edge(x, y)
-                .ok_or(CdtError::Internal("crossed edge vanished"))?;
-            let tt = self.tris[t as usize];
-            let u = tt.n[i];
-            let uu = self.tris[u as usize];
-            let j = slot(uu.n, t).ok_or(CdtError::Internal("broken link"))?;
-            let (p, q) = (tt.v[i], uu.v[j]);
-            let (pp, pq) = (self.p(p), self.p(q));
-            let convex = {
-                let s1 = orient2d(pp, pq, self.p(x));
-                let s2 = orient2d(pp, pq, self.p(y));
-                (s1 > 0.0 && s2 < 0.0) || (s1 < 0.0 && s2 > 0.0)
-            };
-            if !convex {
-                crossed.push_back((x, y));
-                continue;
-            }
-            self.flip(t, i);
-            let still_crosses = p != a && p != b && q != a && q != b && {
-                let s1 = orient2d(pa, pb, pp);
-                let s2 = orient2d(pa, pb, pq);
-                (s1 > 0.0 && s2 < 0.0) || (s1 < 0.0 && s2 > 0.0)
-            };
-            if still_crosses {
-                crossed.push_back((p, q));
-            } else {
-                fresh.push((p, q));
-            }
+        }
+        if let Some(e) = err {
+            return Err(e);
         }
 
-        let (t, i) = self
-            .has_edge(a, b)
-            .ok_or(CdtError::Internal("constraint not recovered"))?;
-        self.mark(t, i, err_cross)?;
+        // flipped away in turn, a queue (a ring over `crossed`: each edge taken off it puts at
+        // most one back); an edge whose quadrilateral is not convex waits its turn again
+        let ring = crossed.len();
+        let mut head = 0;
+        let mut queued = ring;
+        let mut fresh: Vec<(u32, u32)> = Vec::new();
+        let mut budget = 64 * (ring + 4) * (ring + 4);
+        while queued > 0 && err.is_none() {
+            let (x, y) = crossed[head];
+            head = if head + 1 == ring { 0 } else { head + 1 };
+            queued -= 1;
+            let back = if head + queued >= ring {
+                head + queued - ring
+            } else {
+                head + queued
+            };
+            if budget == 0 {
+                err = Some(CdtError::Internal("constraint recovery did not converge"));
+            } else {
+                budget -= 1;
+                if budget % 1024 == 0 {
+                    forge_geom::budget::spend_many(16 * 1024);
+                    if forge_geom::budget::over() {
+                        err = Some(CdtError::Internal("the boundary would take too long"));
+                    }
+                }
+            }
+            if err.is_none() {
+                match self.find_edge(x, y) {
+                    None => err = Some(CdtError::Internal("crossed edge vanished")),
+                    Some((t, i)) => {
+                        let tt = self.tris[t as usize];
+                        let u = tt.n[i];
+                        let uu = self.tris[u as usize];
+                        match slot(uu.n, t) {
+                            None => err = Some(CdtError::Internal("broken link")),
+                            Some(j) => {
+                                let (p, q) = (tt.v[i], uu.v[j]);
+                                let (pp, pq) = (self.p(p), self.p(q));
+                                let convex = {
+                                    let s1 = orient2d(pp, pq, self.p(x));
+                                    let s2 = orient2d(pp, pq, self.p(y));
+                                    (s1 > 0.0 && s2 < 0.0) || (s1 < 0.0 && s2 > 0.0)
+                                };
+                                if !convex {
+                                    crossed[back] = (x, y);
+                                    queued += 1;
+                                } else {
+                                    self.flip(t, i);
+                                    let still_crosses = p != a && p != b && q != a && q != b && {
+                                        let s1 = orient2d(pa, pb, pp);
+                                        let s2 = orient2d(pa, pb, pq);
+                                        (s1 > 0.0 && s2 < 0.0) || (s1 < 0.0 && s2 > 0.0)
+                                    };
+                                    if still_crosses {
+                                        crossed[back] = (p, q);
+                                        queued += 1;
+                                    } else {
+                                        fresh.push((p, q));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if let Some(e) = err {
+            return Err(e);
+        }
+
+        let Some((t, i)) = self.has_edge(a, b) else {
+            return Err(CdtError::Internal("constraint not recovered"));
+        };
+        self.mark(t, i, crossing(a, b, shift))?;
 
         // restore the Delaunay property around the new edges
         let mut changed = true;
@@ -556,27 +616,31 @@ impl Mesh {
         while changed && rounds < 64 {
             changed = false;
             rounds += 1;
-            for edge in fresh.iter_mut() {
-                let (p, q) = *edge;
-                let Some((t, i)) = self.has_edge(p, q) else {
-                    continue;
-                };
-                let tt = self.tris[t as usize];
-                if tt.c[i] {
-                    continue;
+            let mut e = 0;
+            while e < fresh.len() {
+                let (p, q) = fresh[e];
+                if let Some((t, i)) = self.has_edge(p, q) {
+                    let tt = self.tris[t as usize];
+                    if !tt.c[i] {
+                        let u = tt.n[i];
+                        let uu = self.tris[u as usize];
+                        if let Some(j) = slot(uu.n, t) {
+                            let r = uu.v[j];
+                            if certainly_in_circle(
+                                self.p(tt.v[0]),
+                                self.p(tt.v[1]),
+                                self.p(tt.v[2]),
+                                self.p(r),
+                            ) {
+                                let o = tt.v[i];
+                                self.flip(t, i);
+                                fresh[e] = (o, r);
+                                changed = true;
+                            }
+                        }
+                    }
                 }
-                let u = tt.n[i];
-                let uu = self.tris[u as usize];
-                let Some(j) = slot(uu.n, t) else {
-                    continue;
-                };
-                let r = uu.v[j];
-                if certainly_in_circle(self.p(tt.v[0]), self.p(tt.v[1]), self.p(tt.v[2]), self.p(r)) {
-                    let o = tt.v[i];
-                    self.flip(t, i);
-                    *edge = (o, r);
-                    changed = true;
-                }
+                e += 1;
             }
         }
         // each a search round a vertex: a constraint across thousands of triangles is the dear part
@@ -606,7 +670,7 @@ impl Mesh {
             if forge_geom::budget::over() {
                 return Err(CdtError::Internal("the boundary would take too long"));
             }
-            match self.insert_constraint(a, b, |v| v) {
+            match self.insert_constraint(a, b, 0) {
                 Ok(()) => *uses.entry(key(a, b)).or_insert(0) += 1,
                 Err(CdtError::ConstraintThroughPoint { point, .. }) => {
                     todo.push((point, b));
@@ -714,14 +778,16 @@ impl Mesh {
         Ok(())
     }
 
-    fn mark(&mut self, t: u32, i: usize, err: impl Fn() -> CdtError) -> Result<(), CdtError> {
+    fn mark(&mut self, t: u32, i: usize, err: CdtError) -> Result<(), CdtError> {
         if self.tris[t as usize].c[i] {
-            return Err(err());
+            return Err(err);
         }
         self.tris[t as usize].c[i] = true;
         let u = self.tris[t as usize].n[i];
         if u != NONE {
-            let k = slot(self.tris[u as usize].n, t).ok_or(CdtError::Internal("broken link"))?;
+            let Some(k) = slot(self.tris[u as usize].n, t) else {
+                return Err(CdtError::Internal("broken link"));
+            };
             self.tris[u as usize].c[k] = true;
         }
         Ok(())
@@ -1059,7 +1125,7 @@ fn within(
                 }
                 let a = lp[k] + SUPER;
                 let b = lp[(k + 1) % lp.len()] + SUPER;
-                mesh.insert_constraint(a, b, ext)?;
+                mesh.insert_constraint(a, b, SUPER)?;
             }
         }
     }
