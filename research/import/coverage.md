@@ -403,7 +403,8 @@ TRANSLATION_ENTITY slides by a sketch line itself, from its start to its end. Ea
 **The rotation's sense is not measured by these.** Turned the other way, all three matching parts come out with the
 same volume, area and box, so the reading of the sense rests on the circular patterns' and is still open. A part
 where the sense changes the shape would show it as a mismatch, not as a false match. SCALE_UNIFORMLY (4 parts) has
-no form: **missing: a scale motion** for `movebody`/`copybody`.
+no form. **Language gap: a scale motion** for `movebody`/`copybody` (00194324, 00371302, 00593192, 00743818). It is a
+language change, so it needs the Lean model extended, and is left for the language work.
 
 ### What still stops CADFS
 

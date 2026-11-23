@@ -91,6 +91,14 @@ are not affected: fcstd_truth measures the stored shape as it is and drops no co
 - 45 stay as they were, among them 00879304. Its STEP holds 199 solids, the pattern's 100 and 99 copies of them,
   and its program makes 100 bodies, so the copies are counted once, as before.
 
+## Conventions not yet measured
+
+**A rotation's sense.** A CADFS rotation or circular pattern about a sketch line turns right-handed about the line run
+from its start. No part in this sample measures that. Of the 9 matching parts with a spin or a circular pattern, each
+comes out with the same volume, area and box when turned the other way: whole turns, or shapes that land on
+themselves. The reading is kept, because a wrong sense on a shape it changes shows as a mismatch, and a shape it does
+not change cannot be wrong. A part that measures it is to be recorded here.
+
 ## Re-measuring
 
 FreeCAD's truths are taken as each body is translated (`run_freecad.py run`), and CADFS's and WHUCAD's by
