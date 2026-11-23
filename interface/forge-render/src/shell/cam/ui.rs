@@ -654,14 +654,13 @@ fn details(
                 width,
                 if p.round_trip { t.success } else { t.error },
             );
-            fact(
-                ui,
-                t,
-                "Certified",
-                &p.certified,
-                width,
-                if p.certified == "full" { t.success } else { t.warn },
-            );
+            // the side panel is narrow: the word, its reason as a note below
+            let (word, why) = p.certified.split_once(" (").unwrap_or((p.certified.as_str(), ""));
+            let ink = if p.certified == "full" { t.success } else { t.warn };
+            fact(ui, t, "Certified", word, width, ink);
+            if !why.is_empty() {
+                note(ui, why.trim_end_matches(')'), width, t.ink2);
+            }
             if let Some(e) = &p.error {
                 note(ui, e, width, t.error);
             }
