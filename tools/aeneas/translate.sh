@@ -10,6 +10,9 @@
 #   PKG=ForgeMath                  the Lean library (lean/PKG/...)
 #   CHARON_ARGS=(--start-from forge_math::predicates::orient2d --opaque ...)
 #                                  Charon's item selection; the defaults are --preset=aeneas
+#   OVERFLOW_CHECKS=false          interim, per crate: translate without overflow checks (integer ops
+#                                  as wrapping). The default, and the target, is true (below); a crate
+#                                  set to false carries a TODO in its translate.conf.
 # The crate is built as release (`cargo --release`) with overflow checks on: `#[cfg(debug_assertions)]`
 # checks are not part of the shipped code, so not of the translation either; and integer overflow
 # is a failure, so a theorem that a function returns `ok` also proves the shipped build, which
@@ -44,6 +47,7 @@ dir=$root/verify/aeneas/$crate
 conf=$dir/translate.conf
 [ -f "$conf" ] || { echo "no $conf" >&2; exit 2; }
 PKG=
+OVERFLOW_CHECKS=true
 CHARON_ARGS=()
 # shellcheck source=/dev/null
 . "$conf"
@@ -57,7 +61,7 @@ name=${crate//-/_}
 (
   cd "$src"
   PATH=$H/charon/bin:$PATH RUSTUP_TOOLCHAIN=$TC CARGO_TARGET_DIR=$H/target-charon \
-    CARGO_PROFILE_RELEASE_OVERFLOW_CHECKS=true \
+    CARGO_PROFILE_RELEASE_OVERFLOW_CHECKS=$OVERFLOW_CHECKS \
     "$CHARON" cargo --preset=aeneas "${CHARON_ARGS[@]}" --dest-file "$work/$name.llbc" -- --release
 ) > "$work/charon.log" 2>&1 || { cat "$work/charon.log" >&2; echo "charon failed on $crate" >&2; exit 1; }
 "$AENEAS" -backend lean -split-files "$work/$name.llbc" -dest "$work/out" > "$work/aeneas.log" 2>&1 \
