@@ -1535,6 +1535,9 @@ struct Built {
     facet: Dense<Facet>,
     /// a vertex cell's exact point
     point: Dense<HPoint>,
+    /// a vertex cell's point in f64 (the exact one rounded once), for the write
+    #[allow(dead_code)]
+    pointf: Dense<[f64; 3]>,
     /// an edge cell's two vertex cells
     ends: Dense<(u32, u32)>,
     /// a side cell: a facet it is a side of and which side
@@ -1640,6 +1643,7 @@ fn build_ledger(
     let mut tab = CellTab::default();
     let mut facet: Dense<Facet> = Dense::default();
     let mut point: Dense<HPoint> = Dense::default();
+    let mut pointf: Dense<[f64; 3]> = Dense::default();
     let mut ends: Dense<(u32, u32)> = Dense::default();
     let mut side_of: Dense<(u32, i32)> = Dense::default();
     let mut sides: Dense<Vec<(u32, i32)>> = Dense::default();
@@ -1764,7 +1768,10 @@ fn build_ledger(
                     vid[i as usize]
                 };
                 let vi = vertex_id(i, &mut tab);
-                point.or_insert_with(vi, || pl.exact(cls, i as usize));
+                if pointf.get(&vi).is_none() {
+                    let hf = point.or_insert_with(vi, || pl.exact(cls, i as usize)).to_f64();
+                    pointf.or_insert_with(vi, || hf);
+                }
                 let vj = vertex_id(j, &mut tab);
                 let (ci, cj) = (pl.cov(i).unwrap(), pl.cov(j).unwrap());
                 ec.clear();
@@ -1850,6 +1857,7 @@ fn build_ledger(
         ledger,
         facet,
         point,
+        pointf,
         ends,
         side_of,
         sides,
@@ -1883,6 +1891,33 @@ fn witness_point(b: &Built, cls: &Classes, t: u32) -> HPoint {
         k += 6;
         assert!(k < 4000, "no point off a facet inside its side");
     }
+}
+
+/// `LedgerWF` (ForgeBoolCore/Specs.lean), the core's precondition: bodies, distinct cells, ids in
+/// range, distinct edge ids, and the counts the core's u32 ids and usize sizes can hold.
+fn ledger_wf(l: &Ledger) -> bool {
+    let n = l.cells.len();
+    let distinct = |xs: Vec<&[Sgn]>| {
+        let mut xs = xs;
+        xs.sort();
+        xs.windows(2).all(|w| w[0] != w[1])
+    };
+    let mut es: Vec<u32> = l.edges.iter().map(|e| e.0).collect();
+    es.sort_unstable();
+    let total = n as u128 + 2 * l.pieces.len() as u128 + 1;
+    l.nb > 0
+        && distinct(l.cells.iter().map(|c| &c[..]).collect())
+        && l.pieces.iter().all(|(c, _)| (c.0 as usize) < n)
+        && l.inside.iter().all(|(c, _)| (c.0 as usize) < n)
+        && l.edges.iter().all(|c| (c.0 as usize) < n)
+        && l.verts.iter().all(|c| (c.0 as usize) < n)
+        && es.windows(2).all(|w| w[0] != w[1])
+        && l.face_body.iter().all(|b| b.0 < u32::MAX)
+        && l.pieces.iter().all(|(_, f)| f.0 < u32::MAX)
+        && total < u32::MAX as u128
+        && (l.edges.len() as u128) < u32::MAX as u128
+        && (l.verts.len() as u128) < u32::MAX as u128
+        && 3 * total <= usize::MAX as u128
 }
 
 /// The op as the core's rule.
@@ -1954,6 +1989,10 @@ fn fill(bodies: &[&Body], rule: &Rule) -> Result<Filled, Skip> {
         }
     }
     built.ledger.inside = inside;
+    debug_assert!(
+        ledger_wf(&built.ledger),
+        "the bridge's ledger is not well formed (LedgerWF)"
+    );
     Ok((fs, snapped, cls, pts, built, reg))
 }
 
