@@ -2,4 +2,5 @@ import ForgeSheetCore.Funs
 import ForgeSheetCore.UFModel
 import ForgeSheetCore.RefineUF
 import ForgeSheetCore.RefineClasses
+import ForgeSheetCore.RefineOwner
 import ForgeSheetCore.Axioms
