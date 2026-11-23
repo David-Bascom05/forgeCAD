@@ -14,8 +14,8 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 /// The tools a part file takes, on the command line and over `serve`/`mcp`.
-pub const COMMANDS: [&str; 8] = [
-    "build", "check", "query", "measure", "render", "export", "edit", "diff",
+pub const COMMANDS: [&str; 9] = [
+    "build", "check", "query", "measure", "render", "export", "edit", "diff", "cam",
 ];
 
 /// A tool's arguments: the file, and its words (a selector, the refs to measure, the view, the
@@ -216,12 +216,59 @@ impl Session {
             "export" => self.export(a),
             "edit" => self.edit(a, params),
             "diff" => self.diff(a),
+            "cam" => self.cam(a),
             _ => Err(format!(
                 "unknown command '{cmd}' ({}; a part changes by edit F OP)",
                 COMMANDS.join(" ")
             )),
         };
         r.unwrap_or_else(fail)
+    }
+
+    /// `cam F [sheet]`: a machining document's reply (`forgecad.cam/1`); the file it carries is
+    /// the program (only when every op is certified) or, with `sheet`, the setup sheet.
+    fn cam(&mut self, a: &Args) -> Result<Reply, String> {
+        let path = self.path(&a.file)?;
+        let src = std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+        let dir = path.parent().map(Path::to_path_buf).unwrap_or_default();
+        let cam = forge_cam_lang::run(&src, &dir);
+        let mut text = String::new();
+        for e in &cam.errors {
+            text.push_str(&format!("error: {e}\n"));
+        }
+        for o in &cam.ops {
+            text.push_str(&format!(
+                "{} {} {}: {} moves, {}\n",
+                o.name,
+                o.kind,
+                o.status,
+                o.moves,
+                if o.status == "built" {
+                    "certified".to_string()
+                } else {
+                    o.refusal.clone().unwrap_or_default()
+                }
+            ));
+        }
+        text.push_str(&match cam.certification() {
+            "full" => "certification: full (G1-G6, every position within the machine's travel)\n".to_string(),
+            "except G5" => {
+                "certification: except G5 (unchecked: no `at:` on a setup; the spans fit the travel)\n"
+                    .to_string()
+            }
+            c => format!("certification: {c}\n"),
+        });
+        let file = if a.words.first().is_some_and(|w| w == "sheet") {
+            Some(cam.sheet().into_bytes())
+        } else {
+            cam.program_text().map(|(t, _)| t.as_bytes().to_vec())
+        };
+        Ok(Reply {
+            ok: cam.ok,
+            text,
+            json: cam.json(),
+            png: file,
+        })
     }
 
     fn body(run: &Run) -> Result<&Body, String> {
