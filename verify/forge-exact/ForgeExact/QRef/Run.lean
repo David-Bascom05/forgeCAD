@@ -224,9 +224,10 @@ def runCurved (j : Json) : Except String Json := do
             edgeBad := edgeBad.push s!"planes {a}, {b} cross at {fmt p} with opposite sectors kept: non-manifold along the edge"
   if strict then ambiguous := ambiguous ++ nearNotes.filter (·.startsWith "surfaces")
   let excl := cts.map (·.excl)
-  let bad := cts.filterMap (·.bad) ++ edgeBad
-  -- the apex check samples directions: it never decides, it only makes the verdict ambiguous
-  let opens := cts.filterMap (·.open_) ++ (apexCheck A solids).map (s!"undecided (sampled, not proven): " ++ ·)
+  let (apexBad, apexUnd) := apexDecide A solids
+  let (triBad, triUnd) := tripleCurves A
+  let bad := cts.filterMap (·.bad) ++ edgeBad ++ apexBad ++ triBad
+  let opens := cts.filterMap (·.open_) ++ apexUnd ++ edgeTouches A ++ triUnd
   let empty := tree.witness.isNone && tree.und.all fun b => A.anyKept (signsAt A b) excl == some false
   let verdict :=
     if !ambiguous.isEmpty then "ambiguous"

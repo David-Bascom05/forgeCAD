@@ -83,3 +83,68 @@ index 52e846ba..7dddd073 100644
      Extract.extract_trait_impl ctx fmt ~is_rec trait_impl;
      EmitJson.record_trait_impl_if_enabled ctx trait_impl)
  
+diff --git a/src/pure/PureMicroPassesAnnots.ml b/src/pure/PureMicroPassesAnnots.ml
+index 8c63687e..b3db2c5d 100644
+--- a/src/pure/PureMicroPassesAnnots.ml
++++ b/src/pure/PureMicroPassesAnnots.ml
+@@ -111,9 +111,30 @@ let add_type_annotations_to_fun_decl (trans_ctx : trans_ctx)
+                     [%sanity_check] span (List.length generics.types = 1);
+                     Collections.List.repeat (List.length supd.updates)
+                       (List.nth generics.types 0)
+-                | _ ->
+-                    PureTypeCheck.get_adt_field_types span type_decls adt_id
+-                      None generics
++                | _ -> (
++                    (* forge-aeneas: an ADT whose declaration was not translated
++                       (its type group failed) has no field types to look up:
++                       fall back to the updates' own types, as for an unknown
++                       type below, instead of an uncaught [Not_found]. *)
++                    try
++                      PureTypeCheck.get_adt_field_types span type_decls adt_id
++                        None generics
++                    with Not_found ->
++                      let n =
++                        List.fold_left
++                          (fun m ((fid, _) : _ * texpr) ->
++                            max m (FieldId.to_int fid + 1))
++                          0 supd.updates
++                      in
++                      List.init n (fun i ->
++                          match
++                            List.find_opt
++                              (fun ((fid, _) : _ * texpr) ->
++                                FieldId.to_int fid = i)
++                              supd.updates
++                          with
++                          | Some (_, fe) -> fe.ty
++                          | None -> ty))
+               in
+               [%ldebug
+                 "- ty: " ^ ty_to_string ty ^ "\n- field_tys:\n"
+diff --git a/src/symbolic/SymbolicToPure.ml b/src/symbolic/SymbolicToPure.ml
+index 38ec2bba..6429e249 100644
+--- a/src/symbolic/SymbolicToPure.ml
++++ b/src/symbolic/SymbolicToPure.ml
+@@ -251,10 +251,20 @@ let translate_trait_decl (ctx : Contexts.decls_ctx) (trait_decl : A.trait_decl)
+   let methods_to_extract =
+     TraitDeclId.Map.find def_id ctx.trait_methods_to_extract
+   in
++  (* forge-aeneas: a method that cannot be translated (as several of
++     [Iterator]'s cannot: [where Self: Iterator<Item = &T>] constraints) is
++     left out of the trait, with a warning, instead of losing the whole trait
++     declaration, and with it every use of the trait. *)
+   let methods =
+-    List.map
++    List.filter_map
+       (fun ((method_id, m) : TraitMethodId.id * A.trait_method T.binder) ->
+-        translate_trait_method ctx opt_span translate_ty trait_decl method_id m)
++        try
++          Some
++            (translate_trait_method ctx opt_span translate_ty trait_decl
++               method_id m)
++        with Errors.CFailure _ ->
++          [%warn] span ("Left a method out of trait " ^ name ^ ": its signature could not be translated");
++          None)
+       (TraitMethodId.Map.to_list methods_to_extract)
+   in
+   {

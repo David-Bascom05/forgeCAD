@@ -252,3 +252,29 @@ All pass, none ignored:
 - doc-tests: 0
 
 Total 42 passed, 0 failed, 0 ignored.
+
+## 8. After the fix (branch claude/repo-review-mbdrlj-fix-mesh-asm): done, and the follow-ups
+Done:
+- §5 (a) and (b): the generic rank (bipartite matching of the block's rows on its unknowns)
+  and one SVD in the block's own frame (rank.rs, replacing qr.rs). The floor is
+  64·ε·(m+n)·max(1, σmax) plus the residual, and a gap of 1e3 above it. Redundant rows,
+  `implied_by`, mobility and each joint's free motions all come from that one factorization.
+  Each block's report carries `generic_rank` and `rank_clear`.
+- §5 (d): one met rule, `plan::met(gap)`: gap ≤ LINEAR, with angles scaled by the
+  arrangement's lever (its extent about its centroid, plus the anchors' offsets). Used for
+  closed-form SAME, Newton acceptance, limits and relations. tests/invariance.rs: moving a whole
+  assembly by a rigid motion changes no answer.
+- Interference from the boolean: a near pair (boxes within tolerance + LINEAR/2) is decided by
+  the exact intersection. Touching (2V ≤ LINEAR·A) is reported as contact; TOUCH_VOLUME is gone.
+
+Follow-ups, not done here:
+- §5 (c), the witness configuration. Where `rank < generic_rank` (a toggle, aligned axes), the
+  drop is reported, but not confirmed at a generic point of the solution manifold. The step:
+  evaluate J at a random configuration that satisfies the same structure, and report
+  "singular position" when its rank is the generic one.
+- §5 (e) / R4, the ramp in re-solves. The diagnosis's subset solves (`solves`) and the final
+  re-solve still start from `begin` with no ramp, so a set solvable only through the ramp can be
+  named a Conflict. The step: run every membership test through the solve's own homotopy.
+- A typed Issue for a block whose rank is not clear (`rank_clear == false`, no gap of 1e3 at
+  the floor): today it is only a field of the block's report. It would be a forge-asm Diagnostic
+  plus a forge-lang Issue (a language change, under its own review), so it is left here.

@@ -78,7 +78,7 @@ js-sys = "=0.3.107"
 # the clock (std's Instant panics in a browser), already in winit's tree
 web-time = "=1.1.0"
 # the page: its storage, fetch, workers (already in wgpu's tree)
-web-sys = { version = "=0.3.107", features = ["Window", "Storage", "console", "Navigator", "Clipboard"] }
+web-sys = { version = "=0.3.107", features = ["Window", "Storage", "console", "Navigator", "Clipboard", "Element", "HtmlCanvasElement"] }
 
 [lints.rust]
 unsafe_code = "forbid"

@@ -39,7 +39,7 @@ structure forge_math.vec.Vec2 where
   y : F64
 
 /-- [forge_geom::spline::Form]
-    Source: 'kernel/forge-geom/src/spline.rs', lines 1231:0-1231:13
+    Source: 'kernel/forge-geom/src/spline.rs', lines 1233:0-1233:13
     Name pattern: [forge_geom::spline::Form]
     Visibility: public -/
 @[discriminant isize, rust_type "forge_geom::spline::Form"]
@@ -65,7 +65,7 @@ inductive forge_geom.spline.Form where
   forge_geom.spline.Form
 
 /-- [forge_geom::spline::PlaneSpline]
-    Source: 'kernel/forge-geom/src/spline.rs', lines 1259:0-1259:22
+    Source: 'kernel/forge-geom/src/spline.rs', lines 1261:0-1261:22
     Name pattern: [forge_geom::spline::PlaneSpline]
     Visibility: public -/
 @[rust_type "forge_geom::spline::PlaneSpline"]

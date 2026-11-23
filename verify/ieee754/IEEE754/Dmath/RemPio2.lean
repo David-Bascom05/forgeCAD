@@ -6,7 +6,7 @@ import IEEE754.Dmath.Consts
 /-!
 # `dmath::rem_pio2`
 
-The model of `rem_pio2` (Cody–Waite with a three-part `π/2`) and its accuracy for `|x| ≤ 2048`:
+The model of `rem_pio2` (Cody–Waite with a three-part `π/2`) and its accuracy for `|x| ≤ 2^20`:
 `y0 + y1` is `x − n·π/2` within `2^-56`.
 -/
 
@@ -133,39 +133,39 @@ lemma expo_gap {x y : F64} (hx : x.isFinite) (hy : y.isFinite) {k : ℤ} (hk : 0
 lemma fin_consts : INVPIO2.isFinite ∧ TOINT.isFinite ∧ PIO2_1.isFinite ∧ PIO2_1T.isFinite ∧ PIO2_2.isFinite ∧
     PIO2_2T.isFinite ∧ PIO2_3.isFinite ∧ PIO2_3T.isFinite := by decide
 
-/-- `f = (x·INVPIO2 + TOINT) − TOINT` is an integer within `1/2 + 2^-43` of `x·INVPIO2`. -/
-lemma quadrant {x : F64} (hx : x.isFinite) (hb : |x.val| ≤ 2048) :
+/-- `f = (x·INVPIO2 + TOINT) − TOINT` is an integer within `1/2 + 2^-34` of `x·INVPIO2`. -/
+lemma quadrant {x : F64} (hx : x.isFinite) (hb : |x.val| ≤ 1048576) :
     let f := sub (add (mul x INVPIO2) TOINT) TOINT
-    f.isFinite ∧ (∃ k : ℤ, f.val = k ∧ |k| ≤ 1305) ∧
-      |f.val - x.val * INVPIO2.val| ≤ 1 / 2 + 2 ^ (-43 : ℤ) := by
+    f.isFinite ∧ (∃ k : ℤ, f.val = k ∧ |k| ≤ 667546) ∧
+      |f.val - x.val * INVPIO2.val| ≤ 1 / 2 + 2 ^ (-34 : ℤ) := by
   intro f
   obtain ⟨hI, hT, -⟩ := fin_consts
   have hIv : INVPIO2.val = 5734161139222659 / 2 ^ 53 := INVPIO2_val
   have hTv : TOINT.val = 6755399441055744 := TOINT_val
-  -- `t = x ⊗ INVPIO2`, within `2^-43`
+  -- `t = x ⊗ INVPIO2`, within `2^-34`
   set t := mul x INVPIO2 with ht
   have htr : t = round binary64 (x.sign ^^ INVPIO2.sign) (x.val * INVPIO2.val) := mul_eq_round hx hI
-  have hXI : |x.val * INVPIO2.val| ≤ 1304 := by
+  have hXI : |x.val * INVPIO2.val| ≤ 667545 := by
     rw [abs_mul, hIv]; rw [abs_of_pos (by norm_num : (0:ℚ) < 5734161139222659 / 2 ^ 53)]
-    calc |x.val| * (5734161139222659 / 2 ^ 53) ≤ 2048 * (5734161139222659 / 2 ^ 53) :=
+    calc |x.val| * (5734161139222659 / 2 ^ 53) ≤ 1048576 * (5734161139222659 / 2 ^ 53) :=
           mul_le_mul_of_nonneg_right hb (by norm_num)
-      _ ≤ 1304 := by norm_num
+      _ ≤ 667545 := by norm_num
   have htf : t.isFinite := by
-    rw [htr]; exact round_finite_of_le_emax (le_trans hXI (le_trans (by norm_num : (1304:ℚ) ≤ 2 ^ (11:ℤ)) (two_zpow_le (by simp))))
-  have hte : |t.val - x.val * INVPIO2.val| ≤ 2 ^ (-43 : ℤ) := by
+    rw [htr]; exact round_finite_of_le_emax (le_trans hXI (le_trans (by norm_num : (667545:ℚ) ≤ 2 ^ (20:ℤ)) (two_zpow_le (by simp))))
+  have hte : |t.val - x.val * INVPIO2.val| ≤ 2 ^ (-34 : ℤ) := by
     by_cases h0 : x.val * INVPIO2.val = 0
     · rw [htr, h0]; simp [round, val]
     · have := (round_grid (f := binary64) (zs := x.sign ^^ INVPIO2.sign) h0 (by rw [← htr]; exact htf)).2
       rw [← htr] at this
-      have hq := qOf_le (f := binary64) h0 (k := 11) (lt_of_le_of_lt hXI (by norm_num))
+      have hq := qOf_le (f := binary64) h0 (k := 20) (lt_of_le_of_lt hXI (by norm_num))
       simp only [binary64_prec, binary64_qmin] at hq
       exact le_trans this (two_zpow_le (by omega))
-  have htb : |t.val| ≤ 1304 + 1 / 1000 := by
-    have h2 : (2 : ℚ) ^ (-43 : ℤ) ≤ 1 / 1000 := by norm_num
+  have htb : |t.val| ≤ 667545 + 1 / 1000 := by
+    have h2 : (2 : ℚ) ^ (-34 : ℤ) ≤ 1 / 1000 := by norm_num
     calc |t.val| = |(t.val - x.val * INVPIO2.val) + x.val * INVPIO2.val| := by ring_nf
       _ ≤ |t.val - x.val * INVPIO2.val| + |x.val * INVPIO2.val| := abs_add_le _ _
-      _ ≤ 2 ^ (-43 : ℤ) + 1304 := add_le_add hte hXI
-      _ ≤ 1304 + 1 / 1000 := by linarith
+      _ ≤ 2 ^ (-34 : ℤ) + 667545 := add_le_add hte hXI
+      _ ≤ 667545 + 1 / 1000 := by linarith
   -- `u = t ⊕ TOINT` is an integer within `1/2` of `t + TOINT`
   set u := add t TOINT with hu
   have hur : u = round binary64 (t.sign && TOINT.sign) (t.val + TOINT.val) := add_eq_round htf hT
@@ -195,10 +195,10 @@ lemma quadrant {x : F64} (hx : x.isFinite) (hb : |x.val| ≤ 2048) :
   obtain ⟨hub1, hub2⟩ := hub
   obtain ⟨htb1, htb2⟩ := htb'
   have hf := sterbenz huf hT (by rw [hTv]; linarith) (by rw [hTv]; linarith)
-  change (sub u TOINT).isFinite ∧ (∃ k : ℤ, (sub u TOINT).val = k ∧ |k| ≤ 1305) ∧
-    |(sub u TOINT).val - x.val * INVPIO2.val| ≤ 1 / 2 + 2 ^ (-43 : ℤ)
+  change (sub u TOINT).isFinite ∧ (∃ k : ℤ, (sub u TOINT).val = k ∧ |k| ≤ 667546) ∧
+    |(sub u TOINT).val - x.val * INVPIO2.val| ≤ 1 / 2 + 2 ^ (-34 : ℤ)
   refine ⟨hf.1, ⟨ku - 6755399441055744, by rw [hf.2, hku, hTv]; push_cast; ring, ?_⟩, ?_⟩
-  · have : |(ku : ℚ) - 6755399441055744| ≤ 1305 := by
+  · have : |(ku : ℚ) - 6755399441055744| ≤ 667546 := by
       rw [← hku]; exact abs_le.mpr ⟨by linarith, by linarith⟩
     exact_mod_cast this
   · rw [hf.2]
@@ -210,12 +210,12 @@ lemma quadrant {x : F64} (hx : x.isFinite) (hb : |x.val| ≤ 2048) :
     refine le_trans (abs_add_le _ _) (add_le_add ?_ hte)
     exact abs_le.mpr ⟨by linarith, by linarith⟩
 
-/-- The first remainder: `f ⊗ PIO2_1` and `x ⊖ f·PIO2_1` are exact, and `|r| ≤ 0.78540`. -/
-lemma rem1 {x f : F64} (hx : x.isFinite) (hb : |x.val| ≤ 2048) (hf : f.isFinite) {k : ℤ} (hk : f.val = k)
-    (hk2 : |k| ≤ 1305) (hkx : |f.val - x.val * INVPIO2.val| ≤ 1 / 2 + 2 ^ (-43 : ℤ)) :
+/-- The first remainder: `f ⊗ PIO2_1` and `x ⊖ f·PIO2_1` are exact, and `|r| ≤ 0.78544`. -/
+lemma rem1 {x f : F64} (hx : x.isFinite) (hb : |x.val| ≤ 1048576) (hf : f.isFinite) {k : ℤ} (hk : f.val = k)
+    (hk2 : |k| ≤ 667546) (hkx : |f.val - x.val * INVPIO2.val| ≤ 1 / 2 + 2 ^ (-34 : ℤ)) :
     (mul f PIO2_1).isFinite ∧ (mul f PIO2_1).val = k * PIO2_1.val ∧
       (sub x (mul f PIO2_1)).isFinite ∧ (sub x (mul f PIO2_1)).val = x.val - k * PIO2_1.val ∧
-      |x.val - k * PIO2_1.val| ≤ 78540 / 100000 := by
+      |x.val - k * PIO2_1.val| ≤ 78544 / 100000 := by
   obtain ⟨hI, -, hP1, -⟩ := fin_consts
   have hIv : INVPIO2.val = 5734161139222659 / 2 ^ 53 := INVPIO2_val
   have hPv : PIO2_1.val = 1686629713 / 2 ^ 30 := PIO2_1_val
@@ -228,34 +228,34 @@ lemma rem1 {x f : F64} (hx : x.isFinite) (hb : |x.val| ≤ 2048) (hf : f.isFinit
     refine rep_grid ?_ (by simp) ?_
     · rw [abs_mul]; simp only [binary64_prec]
       rw [abs_of_pos (by norm_num : (0 : ℤ) < 1686629713)]
-      calc |k| * 1686629713 ≤ 1305 * 1686629713 := mul_le_mul_of_nonneg_right hk2 (by norm_num)
+      calc |k| * 1686629713 ≤ 667546 * 1686629713 := mul_le_mul_of_nonneg_right hk2 (by norm_num)
         _ ≤ 2 ^ 53 := by norm_num
     · rw [← e, abs_mul, abs_of_pos (by norm_num : (0 : ℚ) < 1686629713 / 2 ^ 30)]
-      have : |(k : ℚ)| ≤ 1305 := by exact_mod_cast hk2
-      calc |(k : ℚ)| * (1686629713 / 2 ^ 30) ≤ 1305 * (1686629713 / 2 ^ 30) :=
+      have : |(k : ℚ)| ≤ 667546 := by exact_mod_cast hk2
+      calc |(k : ℚ)| * (1686629713 / 2 ^ 30) ≤ 667546 * (1686629713 / 2 ^ 30) :=
             mul_le_mul_of_nonneg_right this (by norm_num)
-        _ < 2 ^ (binary64.emax + 1) := lt_of_lt_of_le (by norm_num : (1305 * (1686629713 / 2 ^ 30) : ℚ) < 2 ^ (12 : ℤ))
+        _ < 2 ^ (binary64.emax + 1) := lt_of_lt_of_le (by norm_num : (667546 * (1686629713 / 2 ^ 30) : ℚ) < 2 ^ (21 : ℤ))
             (two_zpow_le (by simp))
   obtain ⟨hmf, hmv⟩ := mul_of_rep hf hP1 (by rw [hk]; exact hm)
   rw [hk] at hmv
   -- the bound on `r`
-  have hrb : |x.val - k * PIO2_1.val| ≤ 78540 / 100000 := by
+  have hrb : |x.val - k * PIO2_1.val| ≤ 78544 / 100000 := by
     have key : x.val - k * PIO2_1.val =
         PIO2_1.val * ((x.val * INVPIO2.val - k) + x.val * (1 / PIO2_1.val - INVPIO2.val)) := by
       rw [hPv]; field_simp; ring
     rw [key, abs_mul, hPv, abs_of_pos (by norm_num : (0:ℚ) < 1686629713 / 2 ^ 30)]
-    have h1 : |x.val * INVPIO2.val - k| ≤ 1 / 2 + 2 ^ (-43 : ℤ) := by rw [abs_sub_comm, ← hk]; exact hkx
+    have h1 : |x.val * INVPIO2.val - k| ≤ 1 / 2 + 2 ^ (-34 : ℤ) := by rw [abs_sub_comm, ← hk]; exact hkx
     have h2 : |x.val * (1 / (1686629713 / 2 ^ 30) - 5734161139222659 / 2 ^ 53)| ≤
-        2048 * (1 / (1686629713 / 2 ^ 30) - 5734161139222659 / 2 ^ 53) := by
+        1048576 * (1 / (1686629713 / 2 ^ 30) - 5734161139222659 / 2 ^ 53) := by
       rw [abs_mul, abs_of_pos (by norm_num : (0:ℚ) < 1 / (1686629713 / 2 ^ 30) - 5734161139222659 / 2 ^ 53)]
       exact mul_le_mul_of_nonneg_right hb (by norm_num)
     rw [hIv] at h1 ⊢
     calc 1686629713 / 2 ^ 30 * |x.val * (5734161139222659 / 2 ^ 53) - k +
           x.val * (1 / (1686629713 / 2 ^ 30) - 5734161139222659 / 2 ^ 53)|
-        ≤ 1686629713 / 2 ^ 30 * ((1 / 2 + 2 ^ (-43 : ℤ)) +
-          2048 * (1 / (1686629713 / 2 ^ 30) - 5734161139222659 / 2 ^ 53)) :=
+        ≤ 1686629713 / 2 ^ 30 * ((1 / 2 + 2 ^ (-34 : ℤ)) +
+          1048576 * (1 / (1686629713 / 2 ^ 30) - 5734161139222659 / 2 ^ 53)) :=
           mul_le_mul_of_nonneg_left (le_trans (abs_add_le _ _) (add_le_add h1 h2)) (by norm_num)
-      _ ≤ 78540 / 100000 := by norm_num
+      _ ≤ 78544 / 100000 := by norm_num
   -- `x ⊖ k·P1` is exact
   have hr : Rep binary64 (x.val - k * PIO2_1.val) := by
     by_cases hk0 : k = 0
@@ -264,12 +264,12 @@ lemma rem1 {x f : F64} (hx : x.isFinite) (hb : |x.val| ≤ 2048) (hf : f.isFinit
       -- `|x| ≥ 1/2`, so its grid is at least `2^-53`
       have hx2 : (1 : ℚ) / 2 ≤ |x.val| := by
         have hk1 : (1 : ℚ) ≤ |(k : ℚ)| := by exact_mod_cast Int.one_le_abs hk0
-        have : |(k : ℚ)| ≤ |x.val * INVPIO2.val| + (1 / 2 + 2 ^ (-43 : ℤ)) := by
-          have hkx' : |(k : ℚ) - x.val * INVPIO2.val| ≤ 1 / 2 + 2 ^ (-43 : ℤ) := by rw [← hk]; exact hkx
+        have : |(k : ℚ)| ≤ |x.val * INVPIO2.val| + (1 / 2 + 2 ^ (-34 : ℤ)) := by
+          have hkx' : |(k : ℚ) - x.val * INVPIO2.val| ≤ 1 / 2 + 2 ^ (-34 : ℤ) := by rw [← hk]; exact hkx
           have := abs_sub_abs_le_abs_sub (k : ℚ) (x.val * INVPIO2.val)
           linarith
         rw [abs_mul, hIv, abs_of_pos (by norm_num : (0:ℚ) < 5734161139222659 / 2 ^ 53)] at this
-        have h3 : (2 : ℚ) ^ (-43 : ℤ) ≤ 1 / 1000 := by norm_num
+        have h3 : (2 : ℚ) ^ (-34 : ℤ) ≤ 1 / 1000 := by norm_num
         by_contra hc; rw [not_le] at hc
         have := mul_lt_mul_of_pos_right hc (by norm_num : (0:ℚ) < 5734161139222659 / 2 ^ 53)
         norm_num at this ⊢; linarith
@@ -283,7 +283,7 @@ lemma rem1 {x f : F64} (hx : x.isFinite) (hb : |x.val| ≤ 2048) (hf : f.isFinit
         rw [hPv]; exact ⟨k * 1686629713, by push_cast; ring⟩
       have hMr : Mult (x.val - k * PIO2_1.val) (min e (-30)) :=
         mult_sub (mult_of_le hMe (min_le_left _ _)) (mult_of_le hM1 (min_le_right _ _))
-      refine rep_of_mult hMr (by simp; omega) ?_ (lt_of_le_of_lt hrb (lt_of_lt_of_le (by norm_num : (78540 / 100000 : ℚ) < 2 ^ (11:ℤ)) (two_zpow_le (by simp))))
+      refine rep_of_mult hMr (by simp; omega) ?_ (lt_of_le_of_lt hrb (lt_of_lt_of_le (by norm_num : (78544 / 100000 : ℚ) < 2 ^ (11:ℤ)) (two_zpow_le (by simp))))
       calc |x.val - k * PIO2_1.val| ≤ 1 := le_trans hrb (by norm_num)
         _ = 2 ^ (53 : ℕ) * 2 ^ (-53 : ℤ) := by rw [← zpow_natCast, ← two_zpow_add]; norm_num
         _ ≤ 2 ^ binary64.prec * 2 ^ (min e (-30)) := by
@@ -400,21 +400,18 @@ lemma rel_bound {v x B : ℚ} (h : |v - x| ≤ 2 ^ (-53 : ℤ) * |v|) (hx : |x| 
 
 lemma refine {t f P PT : F64} (ht : t.isFinite) (hf : f.isFinite) (hP : P.isFinite) (hPT : PT.isFinite)
     {k : ℤ} (hk : f.val = k) (htb : |t.val| ≤ 1) (hmP : Rep binary64 (k * P.val))
-    (hkP : |k * P.val| ≤ 1 / 524288) (hkPT : |k * PT.val| ≤ 1 / 1125899906842624) :
+    (hkP : |k * P.val| ≤ 1 / 16384) (hkPT : |k * PT.val| ≤ 1 / 2 ^ 49) :
     (sub t (mul f P)).isFinite ∧
       (sub (mul f PT) (sub (sub t (sub t (mul f P))) (mul f P))).isFinite ∧
       |(sub t (mul f P)).val - (t.val - k * P.val)| ≤ 2 ^ (-53 : ℤ) * |(sub t (mul f P)).val| ∧
-      |(sub t (mul f P)).val| ≤ |t.val| + 1 / 262144 ∧
-      |(sub (mul f PT) (sub (sub t (sub t (mul f P))) (mul f P))).val| ≤ 1 / 32768 ∧
+      |(sub t (mul f P)).val| ≤ |t.val| + 1 / 8192 ∧
+      |(sub (mul f PT) (sub (sub t (sub t (mul f P))) (mul f P))).val| ≤ 1 / 2 ^ 47 ∧
       |((sub t (mul f P)).val - (sub (mul f PT) (sub (sub t (sub t (mul f P))) (mul f P))).val) -
-        (t.val - k * P.val - k * PT.val)| ≤ 1 / 4611686018427387904 ∧
-      (|(sub t (mul f P)).val| ≤ 1 / 131072 ∨
-        |(sub (mul f PT) (sub (sub t (sub t (mul f P))) (mul f P))).val| ≤
-          1 / 140737488355328 + |(sub t (mul f P)).val| / 4503599627370496) := by
+        (t.val - k * P.val - k * PT.val)| ≤ 1 / 2 ^ 62 := by
   obtain ⟨hmf, hmv⟩ := mul_of_rep hf hP (by rw [hk]; exact hmP)
   rw [hk] at hmv
   set mP := mul f P
-  have hkP' : |mP.val| ≤ 1 / 524288 := by rw [hmv]; exact hkP
+  have hkP' : |mP.val| ≤ 1 / 16384 := by rw [hmv]; exact hkP
   -- `r' = t ⊖ k·P`
   have h1 : |t.val - mP.val| ≤ 16 := by have := abs_sub t.val mP.val; linarith
   set r' := sub t mP
@@ -423,66 +420,37 @@ lemma refine {t f P PT : F64} (ht : t.isFinite) (hf : f.isFinite) (hP : P.isFini
   have e1' := e1; rw [u53] at e1'
   have hr'2 : |r'.val| ≤ 2 := le_trans (rel_bound e1 (le_trans (abs_sub _ _) (by linarith : |t.val| + |mP.val| ≤ 7 / 4)))
     (by norm_num)
-  have hr'b : |r'.val| ≤ |t.val| + 1 / 262144 := by
+  have hδ : |r'.val - (t.val - mP.val)| ≤ 1 / 4503599627370496 := by linarith
+  have hr'b : |r'.val| ≤ |t.val| + 1 / 8192 := by
     have := abs_sub_abs_le_abs_sub r'.val (t.val - mP.val)
     have := abs_sub t.val mP.val
     linarith
-  -- `z = t ⊖ r'`, `e = z ⊖ k·P`
-  have hz' : |t.val - r'.val| ≤ 16 := by have := abs_sub t.val r'.val; linarith
+  -- `z = t ⊖ r'`, `e = z ⊖ k·P`: `e` is about the rounding error of `r'`
+  have htr : |t.val - r'.val| ≤ 1 / 16384 + 1 / 4503599627370496 := by
+    have := abs_le.mp hδ; have := abs_le.mp hkP'
+    exact abs_le.mpr ⟨by linarith, by linarith⟩
+  have hz' : |t.val - r'.val| ≤ 16 := by linarith
   set z := sub t r'
   have hz : z.isFinite := sub_fin_le ht hr' hz'
   have ez : |z.val - (t.val - r'.val)| ≤ 2 ^ (-53 : ℤ) * |z.val| := sub_err ht hr' hz'
-  have htr : |t.val - r'.val| ≤ 1 / 524288 + 1 / 4503599627370496 := by
-    have := abs_le.mp e1'; have := abs_le.mp hkP'
-    exact abs_le.mpr ⟨by linarith, by linarith⟩
-  have hzb : |z.val| ≤ 1 / 262144 := le_trans (rel_bound ez htr) (by norm_num)
+  have hzb : |z.val| ≤ 1 / 8192 := le_trans (rel_bound ez htr) (by norm_num)
   have ez' := ez; rw [u53] at ez'
-  have he' : |z.val - mP.val| ≤ 16 := by have := abs_sub z.val mP.val; linarith
+  have ezb : |z.val - (t.val - r'.val)| ≤ 1 / 9007199254740992 * (1 / 8192) := by
+    have := mul_le_mul_of_nonneg_left hzb (by norm_num : (0 : ℚ) ≤ 1 / 9007199254740992); linarith
+  have hzm : |z.val - mP.val| ≤ 1 / 2 ^ 51 := by
+    have key : z.val - mP.val = (z.val - (t.val - r'.val)) - (r'.val - (t.val - mP.val)) := by ring
+    rw [key]
+    have := abs_sub (z.val - (t.val - r'.val)) (r'.val - (t.val - mP.val))
+    have n : (1 : ℚ) / 9007199254740992 * (1 / 8192) + 1 / 4503599627370496 ≤ 1 / 2 ^ 51 := by norm_num
+    linarith
+  have he' : |z.val - mP.val| ≤ 16 := le_trans hzm (by norm_num)
   set e := sub z mP
   have he : e.isFinite := sub_fin_le hz hmf he'
   have ee : |e.val - (z.val - mP.val)| ≤ 2 ^ (-53 : ℤ) * |e.val| := sub_err hz hmf he'
-  have heb : |e.val| ≤ 1 / 131072 :=
-    le_trans (rel_bound ee (le_trans (abs_sub _ _) (by linarith : |z.val| + |mP.val| ≤ 3 / 524288))) (by norm_num)
+  have heb : |e.val| ≤ 1 / 2 ^ 50 := le_trans (rel_bound ee hzm) (by norm_num)
   have ee' := ee; rw [u53] at ee'
-  -- the errors of `z` and `e`: zero when `|k·P| ≤ |t|`, else below `2^-68`
-  have hsmall : |z.val - (t.val - r'.val)| + |e.val - (z.val - mP.val)| ≤ 1 / 295147905179352825856 ∧
-      (|r'.val| ≤ 1 / 131072 ∨ |e.val| ≤ |r'.val| / 9007199254740992) := by
-    rcases le_or_gt |mP.val| |t.val| with hle | hlt
-    · have hmn : mP.neg.isFinite := by simpa using hmf
-      have hr'' : add t mP.neg = r' := rfl
-      have hf2' := fast2sum ht hmn (by rw [hr'']; exact hr') (by rw [FP.val_neg, abs_neg]; exact hle)
-      have hf2 : (sub r' t).isFinite ∧ (sub r' t).val = r'.val - t.val := hf2'
-      have hrep : Rep binary64 (t.val - r'.val) := by
-        have h1 : Rep binary64 (r'.val - t.val) := by
-          have h2 := hf2; rw [sub_eq_round hr' ht] at h2; exact rep_of_round h2
-        have h3 := rep_neg h1; rwa [show -(r'.val - t.val) = t.val - r'.val by ring] at h3
-      obtain ⟨-, hzv⟩ := sub_of_rep ht hr' hrep
-      have herr : Rep binary64 (z.val - mP.val) := by
-        rw [hzv]
-        have h4 := add_err_representable ht hmn (by rw [hr'']; exact hr')
-        rw [hr'', FP.val_neg] at h4
-        have h2 : Rep binary64 (t.val + -mP.val - r'.val) := fun zs => h4 zs
-        rwa [show t.val + -mP.val - r'.val = t.val - r'.val - mP.val by ring] at h2
-      obtain ⟨-, hev⟩ := sub_of_rep hz hmf herr
-      refine ⟨by rw [hev, hzv, _root_.sub_self, _root_.sub_self, abs_zero]; norm_num, Or.inr ?_⟩
-      rw [hev, hzv, show t.val - r'.val - mP.val = -(r'.val - (t.val - mP.val)) by ring, abs_neg]
-      linarith
-    · have htk : |t.val| ≤ 1 / 524288 := by linarith
-      have hr2 : |r'.val| ≤ 1 / 131072 := by
-        have := abs_sub_abs_le_abs_sub r'.val (t.val - mP.val)
-        have := abs_sub t.val mP.val
-        linarith
-      have hz2 : |z.val| ≤ 1 / 32768 := by
-        have := abs_sub_abs_le_abs_sub z.val (t.val - r'.val)
-        have := abs_sub t.val r'.val
-        linarith
-      have he2 : |e.val| ≤ 1 / 16384 := by
-        have := abs_sub_abs_le_abs_sub e.val (z.val - mP.val)
-        have := abs_sub z.val mP.val
-        linarith
-      exact ⟨by linarith, Or.inl hr2⟩
   -- `w' = k·PT ⊖ e`
-  have hmPT : |f.val * PT.val| ≤ 16 := by rw [hk]; linarith
+  have hmPT : |f.val * PT.val| ≤ 16 := by rw [hk]; exact le_trans hkPT (by norm_num)
   have hmTf := mul_fin_small hf hPT hmPT
   set mPT := mul f PT
   have e5 := mul_err_abs hf hPT hmTf
@@ -492,25 +460,17 @@ lemma refine {t f P PT : F64} (ht : t.isFinite) (hf : f.isFinite) (hP : P.isFini
       le_trans (two_zpow_le (by norm_num : (-1074 - 1 : ℤ) ≤ -100)) (by norm_num)
     have h3 : (2 : ℚ) ^ (-((53 : ℕ) : ℤ)) = 1 / 9007199254740992 := by norm_num
     rw [h3] at e5; linarith
-  obtain ⟨hsmall, hcase⟩ := hsmall
-  have hmPTb : |mPT.val| ≤ 1 / 562949953421312 := by
+  have hmPTb : |mPT.val| ≤ 1 / 2 ^ 48 := by
     have := abs_sub_abs_le_abs_sub mPT.val (k * PT.val)
     linarith
   have hw'' : |mPT.val - e.val| ≤ 16 := by have := abs_sub mPT.val e.val; linarith
   have hw' := sub_fin_le hmTf he hw''
   have e4 : |(sub mPT e).val - (mPT.val - e.val)| ≤ 2 ^ (-53 : ℤ) * |(sub mPT e).val| := sub_err hmTf he hw''
-  have hw'b : |(sub mPT e).val| ≤ 1 / 32768 :=
-    le_trans (rel_bound e4 (le_trans (abs_sub _ _) (by linarith : |mPT.val| + |e.val| ≤ 1 / 65536))) (by norm_num)
+  have hw'b : |(sub mPT e).val| ≤ 1 / 2 ^ 47 :=
+    le_trans (rel_bound e4 (le_trans (abs_sub _ _) (by linarith : |mPT.val| + |e.val| ≤ 1 / 2 ^ 48 + 1 / 2 ^ 50)))
+      (by norm_num)
   have e4' := e4; rw [u53] at e4'
-  refine ⟨hr', hw', by rw [← hmv]; exact e1, hr'b, hw'b, ?_, ?_⟩
-  rotate_left
-  · rcases hcase with h | h
-    · exact Or.inl h
-    · right
-      have := abs_sub_abs_le_abs_sub (sub mPT e).val (mPT.val - e.val)
-      have := abs_sub mPT.val e.val
-      have : 0 ≤ |(sub mPT e).val| := abs_nonneg _
-      linarith
+  refine ⟨hr', hw', by rw [← hmv]; exact e1, hr'b, hw'b, ?_⟩
   have key : (r'.val - (sub mPT e).val) - (t.val - k * P.val - k * PT.val) =
       (z.val - (t.val - r'.val)) + (e.val - (z.val - mP.val)) - ((sub mPT e).val - (mPT.val - e.val)) -
         (mPT.val - k * PT.val) := by rw [hmv]; ring
@@ -520,11 +480,20 @@ lemma refine {t f P PT : F64} (ht : t.isFinite) (hf : f.isFinite) (hP : P.isFini
     ((sub mPT e).val - (mPT.val - e.val))
   have a3 := abs_sub ((z.val - (t.val - r'.val)) + (e.val - (z.val - mP.val)) -
     ((sub mPT e).val - (mPT.val - e.val))) (mPT.val - k * PT.val)
+  have b1 : |e.val - (z.val - mP.val)| ≤ 1 / 9007199254740992 * (1 / 2 ^ 50) := by
+    have := mul_le_mul_of_nonneg_left heb (by norm_num : (0 : ℚ) ≤ 1 / 9007199254740992); linarith
+  have b2 : |(sub mPT e).val - (mPT.val - e.val)| ≤ 1 / 9007199254740992 * (1 / 2 ^ 47) := by
+    have := mul_le_mul_of_nonneg_left hw'b (by norm_num : (0 : ℚ) ≤ 1 / 9007199254740992); linarith
+  have b3 : |mPT.val - k * PT.val| ≤ 1 / 9007199254740992 * (1 / 2 ^ 48) + 1 / 2 ^ 100 := by
+    have := mul_le_mul_of_nonneg_left hmPTb (by norm_num : (0 : ℚ) ≤ 1 / 9007199254740992); linarith
+  have n : (1 : ℚ) / 9007199254740992 * (1 / 8192) + 1 / 9007199254740992 * (1 / 2 ^ 50) +
+      1 / 9007199254740992 * (1 / 2 ^ 47) + (1 / 9007199254740992 * (1 / 2 ^ 48) + 1 / 2 ^ 100) ≤ 1 / 2 ^ 62 := by
+    norm_num
   linarith
 
 /-! ## The reduction, on rationals -/
 
-lemma toIntSat_int {f : F64} (hf : f.isFinite) {k : ℤ} (hk : f.val = k) (hk2 : |k| ≤ 1305) :
+lemma toIntSat_int {f : F64} (hf : f.isFinite) {k : ℤ} (hk : f.val = k) (hk2 : |k| ≤ 667546) :
     FP.toIntSat (-2 ^ 31) (2 ^ 31 - 1) f = k := by
   have ht : FP.truncQ (k : ℚ) = k := by unfold FP.truncQ; split_ifs <;> simp
   have hb := abs_le.mp hk2
@@ -538,26 +507,26 @@ lemma toIntSat_int {f : F64} (hf : f.isFinite) {k : ℤ} (hk : f.val = k) (hk2 :
   | fin s m e h => simp only [FP.toIntSat]; rw [hk, ht]; omega
   | _ => simp [isFinite] at hf
 
-lemma kmul {k : ℤ} (hk2 : |k| ≤ 1305) {c B : ℚ} (h : 1305 * |c| ≤ B) : |(k : ℚ) * c| ≤ B := by
+lemma kmul {k : ℤ} (hk2 : |k| ≤ 667546) {c B : ℚ} (h : 667546 * |c| ≤ B) : |(k : ℚ) * c| ≤ B := by
   rw [abs_mul]
-  have : |(k : ℚ)| ≤ 1305 := by exact_mod_cast hk2
+  have : |(k : ℚ)| ≤ 667546 := by exact_mod_cast hk2
   nlinarith [abs_nonneg c]
 
-lemma rep_k {k : ℤ} (hk2 : |k| ≤ 1305) {n : ℕ} (d : ℕ) (hd : d ≤ 1074) (hn : 1305 * n ≤ 2 ^ 53) :
+lemma rep_k {k : ℤ} (hk2 : |k| ≤ 667546) {n : ℕ} (d : ℕ) (hd : d ≤ 1074) (hn : 667546 * n ≤ 2 ^ 53) :
     Rep binary64 ((k : ℚ) * (n / 2 ^ d)) := by
   have e : (k : ℚ) * (n / 2 ^ d) = ((k * n : ℤ) : ℚ) * 2 ^ (-(d : ℤ)) := by
     push_cast; rw [zpow_neg, zpow_natCast]; ring
   rw [e]
   refine rep_grid ?_ (by simp; omega) ?_
   · simp only [binary64_prec]; rw [abs_mul]
-    calc |k| * |(n : ℤ)| ≤ 1305 * n := by
+    calc |k| * |(n : ℤ)| ≤ 667546 * n := by
           rw [abs_of_nonneg (by positivity : (0 : ℤ) ≤ n)]; exact mul_le_mul_of_nonneg_right hk2 (by positivity)
       _ ≤ 2 ^ 53 := by exact_mod_cast hn
   · rw [← e, abs_mul, abs_of_nonneg (by positivity : (0 : ℚ) ≤ n / 2 ^ d)]
-    have h1 : |(k : ℚ)| ≤ 1305 := by exact_mod_cast hk2
+    have h1 : |(k : ℚ)| ≤ 667546 := by exact_mod_cast hk2
     have h2 : (n : ℚ) / 2 ^ d ≤ n := div_le_self (by positivity) (one_le_pow₀ (by norm_num))
-    have h3 : (1305 : ℚ) * n ≤ 2 ^ 53 := by exact_mod_cast hn
-    calc |(k : ℚ)| * (n / 2 ^ d) ≤ 1305 * n := mul_le_mul h1 h2 (by positivity) (by norm_num)
+    have h3 : (667546 : ℚ) * n ≤ 2 ^ 53 := by exact_mod_cast hn
+    calc |(k : ℚ)| * (n / 2 ^ d) ≤ 667546 * n := mul_le_mul h1 h2 (by positivity) (by norm_num)
       _ ≤ 2 ^ (53 : ℤ) := by rw [show (2 : ℚ) ^ (53 : ℤ) = 2 ^ 53 by norm_num]; exact h3
       _ < 2 ^ (binary64.emax + 1) := two_zpow_lt (by simp)
 
@@ -574,15 +543,15 @@ lemma tail_y1 {r w : F64} (hr : r.isFinite) (hw : w.isFinite) (hrb : |r.val| ≤
   linarith
 
 /-- Path 1 of `rem_pio2`: `y0 = r ⊖ w`, `w = f ⊗ PIO2_1T`. -/
-lemma path1 {r f : F64} (hr : r.isFinite) (hf : f.isFinite) {k : ℤ} (hk : f.val = k) (hk2 : |k| ≤ 1305)
+lemma path1 {r f : F64} (hr : r.isFinite) (hf : f.isFinite) {k : ℤ} (hk : f.val = k) (hk2 : |k| ≤ 667546)
     {R : ℚ} (hrv : r.val = R) (hrb : |R| ≤ 1) :
     (sub r (mul f PIO2_1T)).isFinite ∧ (sub (sub r (sub r (mul f PIO2_1T))) (mul f PIO2_1T)).isFinite ∧
       |(sub r (mul f PIO2_1T)).val + (sub (sub r (sub r (mul f PIO2_1T))) (mul f PIO2_1T)).val -
         (R - k * PIO2_1T.val)| ≤ 1 / 2 ^ 60 ∧
       |(sub (sub r (sub r (mul f PIO2_1T))) (mul f PIO2_1T)).val| ≤
-        2 ^ (-53 : ℤ) * |(sub r (mul f PIO2_1T)).val| + 1 / 2 ^ 64 := by
+        2 ^ (-53 : ℤ) * |(sub r (mul f PIO2_1T)).val| + 1 / 2 ^ 62 := by
   obtain ⟨-, -, -, hP1T, -⟩ := fin_consts
-  have hkw : |f.val * PIO2_1T.val| ≤ 1 / 8388608 := by rw [hk, PIO2_1T_val]; exact kmul hk2 (by norm_num)
+  have hkw : |f.val * PIO2_1T.val| ≤ 1 / 16384 := by rw [hk, PIO2_1T_val]; exact kmul hk2 (by norm_num)
   have hwf := mul_fin_small hf hP1T (by linarith)
   set w := mul f PIO2_1T
   have ew := mul_err_abs hf hP1T hwf
@@ -592,7 +561,7 @@ lemma path1 {r f : F64} (hr : r.isFinite) (hf : f.isFinite) {k : ℤ} (hk : f.va
   rw [show (2 : ℚ) ^ (-((53 : ℕ) : ℤ)) = 1 / 9007199254740992 by norm_num] at ew
   have ew' : |w.val - k * PIO2_1T.val| ≤ 1 / 9007199254740992 * |w.val| + 2 ^ (-1074 - 1 : ℤ) := ew
   rw [hk] at hkw
-  have hwb : |w.val| ≤ 1 / 4194304 := by
+  have hwb : |w.val| ≤ 1 / 8192 := by
     have := abs_sub_abs_le_abs_sub w.val (k * PIO2_1T.val); linarith
   have hrb' : |r.val| ≤ 1 := by rw [hrv]; exact hrb
   obtain ⟨t1, t2, t3, -⟩ := tail hr hwf hrb' (by linarith)
@@ -618,7 +587,7 @@ def tl (r w : F64) : F64 × F64 :=
   let y0 := sub r w
   (y0, sub (sub r y0) w)
 
-lemma tl_spec {r w : F64} (hr : r.isFinite) (hw : w.isFinite) (hrb : |r.val| ≤ 1) (hwb : |w.val| ≤ 1 / 32768) :
+lemma tl_spec {r w : F64} (hr : r.isFinite) (hw : w.isFinite) (hrb : |r.val| ≤ 1) (hwb : |w.val| ≤ 1 / 2 ^ 47) :
     (tl r w).1.isFinite ∧ (tl r w).2.isFinite ∧
       |(tl r w).1.val + (tl r w).2.val - (r.val - w.val)| ≤ 1 / 2 ^ 64 ∧
       |(tl r w).2.val| ≤ 2 ^ (-53 : ℤ) * |(tl r w).1.val| + 1 / 2 ^ 64 := by
@@ -632,31 +601,29 @@ lemma tl_spec {r w : F64} (hr : r.isFinite) (hw : w.isFinite) (hrb : |r.val| ≤
     linarith
 
 /-- The step with `PIO2_2`, from `t = r`. -/
-lemma step2 {t f : F64} (ht : t.isFinite) (hf : f.isFinite) {k : ℤ} (hk : f.val = k) (hk2 : |k| ≤ 1305)
+lemma step2 {t f : F64} (ht : t.isFinite) (hf : f.isFinite) {k : ℤ} (hk : f.val = k) (hk2 : |k| ≤ 667546)
     (htb : |t.val| ≤ 1) :
     (step t f PIO2_2 PIO2_2T).1.isFinite ∧ (step t f PIO2_2 PIO2_2T).2.isFinite ∧
       |(step t f PIO2_2 PIO2_2T).1.val - (t.val - k * PIO2_2.val)| ≤
         2 ^ (-53 : ℤ) * |(step t f PIO2_2 PIO2_2T).1.val| ∧
-      |(step t f PIO2_2 PIO2_2T).1.val| ≤ |t.val| + 1 / 262144 ∧
-      |(step t f PIO2_2 PIO2_2T).2.val| ≤ 1 / 32768 ∧
+      |(step t f PIO2_2 PIO2_2T).1.val| ≤ |t.val| + 1 / 8192 ∧
+      |(step t f PIO2_2 PIO2_2T).2.val| ≤ 1 / 2 ^ 47 ∧
       |((step t f PIO2_2 PIO2_2T).1.val - (step t f PIO2_2 PIO2_2T).2.val) -
-        (t.val - k * PIO2_2.val - k * PIO2_2T.val)| ≤ 1 / 4611686018427387904 ∧
-      (|(step t f PIO2_2 PIO2_2T).1.val| ≤ 1 / 131072 ∨
-        |(step t f PIO2_2 PIO2_2T).2.val| ≤ 1 / 140737488355328 + |(step t f PIO2_2 PIO2_2T).1.val| / 4503599627370496) := by
+        (t.val - k * PIO2_2.val - k * PIO2_2T.val)| ≤ 1 / 2 ^ 62 := by
   obtain ⟨-, -, -, -, hP2, hP2T, -⟩ := fin_consts
   exact refine ht hf hP2 hP2T hk htb (by rw [PIO2_2_val]; exact rep_k hk2 65 (by norm_num) (by norm_num))
     (by rw [PIO2_2_val]; exact kmul hk2 (by norm_num)) (by rw [PIO2_2T_val]; exact kmul hk2 (by norm_num))
 
 /-- The step with `PIO2_3`. -/
-lemma step3 {t f : F64} (ht : t.isFinite) (hf : f.isFinite) {k : ℤ} (hk : f.val = k) (hk2 : |k| ≤ 1305)
+lemma step3 {t f : F64} (ht : t.isFinite) (hf : f.isFinite) {k : ℤ} (hk : f.val = k) (hk2 : |k| ≤ 667546)
     (htb : |t.val| ≤ 1) :
     (step t f PIO2_3 PIO2_3T).1.isFinite ∧ (step t f PIO2_3 PIO2_3T).2.isFinite ∧
-      |(step t f PIO2_3 PIO2_3T).1.val| ≤ |t.val| + 1 / 262144 ∧
-      |(step t f PIO2_3 PIO2_3T).2.val| ≤ 1 / 32768 ∧
+      |(step t f PIO2_3 PIO2_3T).1.val| ≤ |t.val| + 1 / 8192 ∧
+      |(step t f PIO2_3 PIO2_3T).2.val| ≤ 1 / 2 ^ 47 ∧
       |((step t f PIO2_3 PIO2_3T).1.val - (step t f PIO2_3 PIO2_3T).2.val) -
-        (t.val - k * PIO2_3.val - k * PIO2_3T.val)| ≤ 1 / 4611686018427387904 := by
+        (t.val - k * PIO2_3.val - k * PIO2_3T.val)| ≤ 1 / 2 ^ 62 := by
   obtain ⟨-, -, -, -, -, -, hP3, hP3T⟩ := fin_consts
-  obtain ⟨a, b, -, c, d, e, -⟩ := refine ht hf hP3 hP3T hk htb
+  obtain ⟨a, b, -, c, d, e⟩ := refine ht hf hP3 hP3T hk htb
     (by rw [PIO2_3_val]; exact rep_k hk2 96 (by norm_num) (by norm_num))
     (by rw [PIO2_3_val]; exact kmul hk2 (by norm_num)) (by rw [PIO2_3T_val]; exact kmul hk2 (by norm_num))
   exact ⟨a, b, c, d, e⟩
@@ -672,15 +639,15 @@ lemma remPio2_eq (x : F64) : remPio2 x =
        else (n, tl (step r f PIO2_2 PIO2_2T).1 (step r f PIO2_2 PIO2_2T).2)
      else (n, tl r (mul f PIO2_1T))) := rfl
 
-/-- **`rem_pio2` on rationals.** For `|x| ≤ 2048`: `y0`, `y1` finite, `|n| ≤ 1305`, and
+/-- **`rem_pio2` on rationals.** For `|x| ≤ 2^20`: `y0`, `y1` finite, `|n| ≤ 667546`, and
 `y0 + y1 = x − n·C` within `2^-60`, `C` one of the three-part `π/2`s; `y1` is a tail of `y0`. -/
-theorem remPio2_rat {x : F64} (hx : x.isFinite) (hb : |x.val| ≤ 2048) :
-    (remPio2 x).2.1.isFinite ∧ (remPio2 x).2.2.isFinite ∧ |(remPio2 x).1| ≤ 1305 ∧
+theorem remPio2_rat {x : F64} (hx : x.isFinite) (hb : |x.val| ≤ 1048576) :
+    (remPio2 x).2.1.isFinite ∧ (remPio2 x).2.2.isFinite ∧ |(remPio2 x).1| ≤ 667546 ∧
       (∃ C : ℚ, (C = PIO2_1.val + PIO2_1T.val ∨ C = PIO2_1.val + PIO2_2.val + PIO2_2T.val ∨
           C = PIO2_1.val + PIO2_2.val + PIO2_3.val + PIO2_3T.val) ∧
         |(remPio2 x).2.1.val + (remPio2 x).2.2.val - (x.val - (remPio2 x).1 * C)| ≤ 1 / 2 ^ 60) ∧
-      |(remPio2 x).2.2.val| ≤ 2 ^ (-53 : ℤ) * |(remPio2 x).2.1.val| + 1 / 2 ^ 64 ∧
-      |x.val - (remPio2 x).1 * PIO2_1.val| ≤ 78540 / 100000 := by
+      |(remPio2 x).2.2.val| ≤ 2 ^ (-53 : ℤ) * |(remPio2 x).2.1.val| + 1 / 2 ^ 62 ∧
+      |x.val - (remPio2 x).1 * PIO2_1.val| ≤ 78544 / 100000 := by
   obtain ⟨hf, ⟨k, hk, hk2⟩, hkx⟩ := quadrant hx hb
   obtain ⟨hmf, hmv, hrf, hrv, hrb⟩ := rem1 hx hb hf hk hk2 hkx
   have hn := toIntSat_int hf hk hk2
@@ -693,31 +660,32 @@ theorem remPio2_rat {x : F64} (hx : x.isFinite) (hb : |x.val| ≤ 2048) :
   set r := sub x (mul f PIO2_1)
   split_ifs with h1 h2
   · -- path 3
-    obtain ⟨a1, a2, a3, a4, a5, a6, a7⟩ := step2 hrf hf hk hk2 hrb1
+    obtain ⟨a1, a2, a3, a4, a5, a6⟩ := step2 hrf hf hk hk2 hrb1
     set r2 := (step r f PIO2_2 PIO2_2T).1
     set w2 := (step r f PIO2_2 PIO2_2T).2
     have hy0f : (sub r2 w2).isFinite := sub_fin_le a1 a2 (by have := abs_sub r2.val w2.val; linarith)
     have hgap := expo_gap hx hy0f (k := 49) (by norm_num) (by exact_mod_cast h2)
-    have hy0b : |(sub r2 w2).val| ≤ 1 / 274877906944 := by
-      have h4 : (2 : ℚ) ^ (-(49 : ℤ)) * |x.val| ≤ 2 ^ (-(49 : ℤ)) * 2048 := mul_le_mul_of_nonneg_left hb (by positivity)
-      have h3 : (2 : ℚ) ^ (-(49 : ℤ)) * 2048 = 1 / 274877906944 := by norm_num
+    have hy0b : |(sub r2 w2).val| ≤ 1 / 2 ^ 29 := by
+      have h4 : (2 : ℚ) ^ (-(49 : ℤ)) * |x.val| ≤ 2 ^ (-(49 : ℤ)) * 1048576 :=
+        mul_le_mul_of_nonneg_left hb (by positivity)
+      have h3 : (2 : ℚ) ^ (-(49 : ℤ)) * 1048576 = 1 / 2 ^ 29 := by norm_num
       exact (lt_of_lt_of_le hgap (le_trans h4 (le_of_eq h3))).le
     have ey0 : |(sub r2 w2).val - (r2.val - w2.val)| ≤ 2 ^ (-53 : ℤ) * |(sub r2 w2).val| :=
       sub_err a1 a2 (by have := abs_sub r2.val w2.val; linarith)
     rw [u53] at ey0
-    -- `|r2| ≤ 2^-17`
-    have hr2s : |r2.val| ≤ 1 / 131072 := by
-      rcases a7 with h | h
-      · exact h
-      · have := abs_sub_abs_le_abs_sub r2.val w2.val
-        have := abs_sub_abs_le_abs_sub (r2.val - w2.val) (sub r2 w2).val
-        rw [abs_sub_comm (r2.val - w2.val)] at this
-        have : 0 ≤ |r2.val| := abs_nonneg _
-        linarith
+    -- `|r2| ≤ 2^-28`
+    have hr2s : |r2.val| ≤ 1 / 2 ^ 28 := by
+      have := abs_sub_abs_le_abs_sub (r2.val - w2.val) (sub r2 w2).val
+      rw [abs_sub_comm (r2.val - w2.val)] at this
+      have := abs_sub_abs_le_abs_sub r2.val w2.val
+      have : 0 ≤ |(sub r2 w2).val| := abs_nonneg _
+      have n : (1 : ℚ) / 2 ^ 29 + 1 / 9007199254740992 * (1 / 2 ^ 29) + 1 / 2 ^ 47 ≤ 1 / 2 ^ 28 := by norm_num
+      have := mul_le_mul_of_nonneg_left hy0b (by norm_num : (0 : ℚ) ≤ 1 / 9007199254740992)
+      linarith
     have a3' := a3; rw [u53] at a3'
     obtain ⟨b1, b2, b3, b4, b5⟩ := step3 a1 hf hk hk2 (by linarith)
     obtain ⟨c1, c2, c3, c4⟩ := tl_spec b1 b2 (by linarith) b4
-    refine ⟨c1, c2, hk2, ⟨_, Or.inr (Or.inr rfl), ?_⟩, c4, hrb⟩
+    refine ⟨c1, c2, hk2, ⟨_, Or.inr (Or.inr rfl), ?_⟩, by linarith, hrb⟩
     rw [hrv] at a3'
     have key : (tl (step r2 f PIO2_3 PIO2_3T).1 (step r2 f PIO2_3 PIO2_3T).2).1.val +
           (tl (step r2 f PIO2_3 PIO2_3T).1 (step r2 f PIO2_3 PIO2_3T).2).2.val -
@@ -741,16 +709,16 @@ theorem remPio2_rat {x : F64} (hx : x.isFinite) (hb : |x.val| ≤ 2048) :
           ((step r2 f PIO2_3 PIO2_3T).1.val - (step r2 f PIO2_3 PIO2_3T).2.val))
         (((step r2 f PIO2_3 PIO2_3T).1.val - (step r2 f PIO2_3 PIO2_3T).2.val) -
           (r2.val - k * PIO2_3.val - k * PIO2_3T.val))
-    have e3 : |r2.val - (x.val - k * PIO2_1.val - k * PIO2_2.val)| ≤ 1 / 9007199254740992 * (1 / 131072) := by
-      rw [show x.val - k * PIO2_1.val - k * PIO2_2.val = x.val - k * PIO2_1.val - k * PIO2_2.val from rfl]
+    have e3 : |r2.val - (x.val - k * PIO2_1.val - k * PIO2_2.val)| ≤ 1 / 9007199254740992 * (1 / 2 ^ 28) := by
       have := mul_le_mul_of_nonneg_left hr2s (by norm_num : (0 : ℚ) ≤ 1 / 9007199254740992)
       linarith
+    have n : (1 : ℚ) / 2 ^ 64 + 1 / 2 ^ 62 + 1 / 9007199254740992 * (1 / 2 ^ 28) ≤ 1 / 2 ^ 60 := by norm_num
     linarith
   · -- path 2
-    obtain ⟨a1, a2, -, a4, a5, a6, -⟩ := step2 hrf hf hk hk2 hrb1
-    have hrb2 : |r.val| ≤ 78540 / 100000 := by rw [hrv]; exact hrb
+    obtain ⟨a1, a2, -, a4, a5, a6⟩ := step2 hrf hf hk hk2 hrb1
+    have hrb2 : |r.val| ≤ 78544 / 100000 := by rw [hrv]; exact hrb
     obtain ⟨c1, c2, c3, c4⟩ := tl_spec a1 a2 (by linarith) a5
-    refine ⟨c1, c2, hk2, ⟨_, Or.inr (Or.inl rfl), ?_⟩, c4, hrb⟩
+    refine ⟨c1, c2, hk2, ⟨_, Or.inr (Or.inl rfl), ?_⟩, by linarith, hrb⟩
     rw [hrv] at a6
     show |_| ≤ _
     have := abs_add_le ((tl (step r f PIO2_2 PIO2_2T).1 (step r f PIO2_2 PIO2_2T).2).1.val +
@@ -767,6 +735,7 @@ theorem remPio2_rat {x : F64} (hx : x.isFinite) (hb : |x.val| ≤ 2048) :
         (((step r f PIO2_2 PIO2_2T).1.val - (step r f PIO2_2 PIO2_2T).2.val) -
           (x.val - k * PIO2_1.val - k * PIO2_2.val - k * PIO2_2T.val)) := by ring
     rw [key]
+    have n : (1 : ℚ) / 2 ^ 64 + 1 / 2 ^ 62 ≤ 1 / 2 ^ 60 := by norm_num
     linarith
   · -- path 1
     obtain ⟨c1, c2, c3, c4⟩ := path1 hrf hf hk hk2 hrv (by linarith)

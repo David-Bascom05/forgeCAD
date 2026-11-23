@@ -103,9 +103,12 @@ Serve `.wasm` as `application/wasm`. To allow the threaded build later, also sen
   each. In it the page's main thread never waits on a lock (a wait there traps): the locks it
   shares with the workers spin (`plat::lock`, `forge_dirs::fs`, forge-alloc's heap), kernel work
   runs on workers, and the WebGPU objects stay on the page's thread (the worker hands back a view's
-  meshes and scene). The kernel's own parallel paths (n-ary booleans, `forge_math::par`) still run
-  on one thread there: std can't start a thread in a browser, so they take their one-thread path,
-  as on WASI.
+  meshes and scene). The kernel's own parallel paths (`forge_math::par`, on forge-par) run on the
+  pool's workers, a scope's jobs handed to them by the spawner the app installs; on the page's
+  own thread a scope runs its jobs in turn. The heap is eight heaps, each behind its own spin lock,
+  a thread taking the one its stack picks (else the next free) and a block going back to the heap
+  whose page it is: behind one lock, with more workers than cores, the kernel's tens of millions
+  of allocations made a parallel build several times slower than one thread.
 - The Agent tab: the Claude and Codex agents run their CLIs, and the MCP bridge a socket: desktop
   only. OpenAI-compatible endpoints are not yet reached from the page.
 - Speech input: desktop only.

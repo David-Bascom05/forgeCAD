@@ -291,3 +291,178 @@ fn the_refold_check_tells_a_wrong_flat() {
     let flat = build_with(&b, Map::Flat).unwrap();
     assert!(forge_refold::judge(&a, &fold, &flat).is_err());
 }
+
+#[test]
+fn mold_lines_one_by_the_rule_or_refused() {
+    // band (e): a flange whose mold line is longer than its base edge by d. Within LINEAR the two
+    // far ends are one vertex, the two mold lines one segment (the base's): built, valid, and the
+    // flat refolds; past it, two segments no fold joins: JointLengths
+    use forge_ops::Segment;
+    for (d, ok) in [
+        (0.0, true),
+        (0.9e-5, true),
+        (-0.9e-5, true),
+        (1.1e-5, false),
+        (-1.1e-5, false),
+    ] {
+        let (mut s, base) = Sheet::face(
+            FeatureId(1),
+            gauge(),
+            Frame::WORLD,
+            &[poly(&[(0.0, 0.0), (60.0, 0.0), (60.0, 40.0), (0.0, 40.0)])],
+        )
+        .unwrap();
+        let (fw, j) = s.flange(base, 1, dmath::PI / 2.0, 20.0).unwrap();
+        // the flange's mold-line segment lengthened by d along itself
+        let on_b = s.joints.iter().find(|x| x.id == j).unwrap().on_b;
+        let w = s.walls.iter_mut().find(|w| w.id == fw).unwrap();
+        let segs = &mut w.outline[0].segments;
+        let k = segs.iter().position(|x| x.1 == on_b).unwrap();
+        let n = segs.len();
+        let Segment::Line { a, b } = segs[k].0 else {
+            panic!("a line")
+        };
+        let u = (b - a) * (1.0 / a.distance(b));
+        let b2 = b + u * d;
+        segs[k].0 = Segment::Line { a, b: b2 };
+        if let Segment::Line { b: e, .. } = segs[(k + 1) % n].0 {
+            segs[(k + 1) % n].0 = Segment::Line { a: b2, b: e };
+        }
+        match forge_refold::check(&s) {
+            Ok(_) => assert!(ok, "{d}: built"),
+            Err(forge_refold::RefoldError::Build(_, forge_sheet::SheetError::JointLengths { .. })) => {
+                assert!(!ok, "{d}: refused")
+            }
+            Err(e) => panic!("{d}: {e:?}"),
+        }
+    }
+}
+
+/// A plate turned `rot` with a flange, and a slot crossing its bend at a slant: in the folded
+/// body, the worst distance from an edge's own ends to its vertices (where the zone's edges meet
+/// the walls' vertices at the crossings).
+fn slanted_slot_gap(rot: f64) -> f64 {
+    use forge_geom::CurveGeom;
+    let (sn, cs) = dmath::sin_cos(rot);
+    let turn = |x: f64, y: f64| (cs * x - sn * y, sn * x + cs * y);
+    let plate: Vec<(f64, f64)> = [(0.0, 0.0), (60.0, 0.0), (60.0, 40.0), (0.0, 40.0)]
+        .iter()
+        .map(|&(x, y)| turn(x, y))
+        .collect();
+    let (mut s, base) = Sheet::face(FeatureId(1), gauge(), Frame::WORLD, &[poly(&plate)]).unwrap();
+    s.flange(base, 1, dmath::PI / 2.0, 30.0).unwrap();
+    let slot: Vec<(f64, f64)> = [(50.0, 12.0), (75.0, 21.0), (75.0, 25.0), (50.0, 16.0)]
+        .iter()
+        .map(|&(x, y)| turn(x, y))
+        .collect();
+    s.cut(WallId(0), poly(&slot)).unwrap();
+    let b = build_with(&s, Map::Folded).expect("builds");
+    assert!(forge_topo::check::check(&b.body).is_empty());
+    let mut worst: f64 = 0.0;
+    for e in &b.body.edges {
+        let (p, q) = (e.curve.eval(e.range.lo), e.curve.eval(e.range.hi));
+        let (v, w) = (b.body.vertex(e.start).point, b.body.vertex(e.end).point);
+        worst = worst
+            .max(p.distance(v).min(p.distance(w)))
+            .max(q.distance(v).min(q.distance(w)));
+    }
+    worst
+}
+
+#[test]
+fn a_crossing_is_the_walls_in_the_zone_too() {
+    // the slot's crossings of the tangent lines are decided once, in the walls, and carried to
+    // the zone: the zone's edges end on the walls' vertices to the folds' rounding
+    for rot in [0.3, 0.7, 1.1, 2.0] {
+        let gap = slanted_slot_gap(rot);
+        eprintln!("rot {rot}: worst gap {gap:e}");
+        assert!(gap < 1e-12, "{rot}: {gap:e}");
+    }
+}
+
+#[test]
+fn a_hairpin_whose_setback_is_not_known_to_the_tolerance_is_refused() {
+    // the setback rho tan(theta/2) near a half turn: its computed value's proven error bound grows
+    // as (1 + cos theta)^-2; past LINEAR / 2 the bend is BendAngle, its limit the largest turn that
+    // holds. R = 1 inside, up (rho = 1): the band starts about 0.0073 short of pi, where the
+    // setback is about 270, so the walls are long
+    let g = Gauge {
+        thickness: 0.5,
+        radius: 1.0,
+        rule: BendRule::K(0.4),
+    };
+    let at = |turn: f64| {
+        let (mut s, base) = Sheet::face(
+            FeatureId(1),
+            g.clone(),
+            Frame::WORLD,
+            &[poly(&[(0.0, 0.0), (2000.0, 0.0), (2000.0, 40.0), (0.0, 40.0)])],
+        )
+        .unwrap();
+        s.flange(base, 1, turn, 1500.0).map_err(|e| format!("{e:?}"))?;
+        build_with(&s, Map::Flat).map(|_| ()).map_err(|e| match e {
+            forge_sheet::SheetError::BendAngle { limit, .. } => format!("limit {limit}"),
+            e => format!("{e:?}"),
+        })
+    };
+    assert_eq!(at(dmath::PI - 0.02), Ok(()));
+    let r = at(dmath::PI - 0.005);
+    let Err(l) = &r else { panic!("built at pi - 0.005") };
+    let limit: f64 = l
+        .strip_prefix("limit ")
+        .unwrap_or_else(|| panic!("{l}"))
+        .parse()
+        .unwrap();
+    assert!(limit > dmath::PI - 0.01 && limit < dmath::PI - 0.005, "{limit}");
+    assert_eq!(at(limit - 1e-5), Ok(()), "the limit holds: {limit}");
+}
+
+#[test]
+fn a_flange_tip_resting_on_a_bends_outer_skin_is_a_touch() {
+    // the base's right flange bends down about the axis x = 96, z = -4 (inside radius 2, outer
+    // skin radius 4, t = 2); a chain from the base's narrower left tongue (y in [10, 30]) climbs,
+    // runs right and drops a flange at x in [97, 99] whose tip comes down onto that outer skin,
+    // inside the zone's width (y in [0, 40]): its corner (97, y, -4 + sqrt 15) is on the skin. A
+    // tip on a face with no gap is no valid solid: FoldedTouch. 0.5 higher it builds.
+    let at = |h5: f64| {
+        let (mut s, base) = Sheet::face(
+            FeatureId(1),
+            gauge(),
+            Frame::WORLD,
+            &[poly(&[
+                (10.0, 0.0),
+                (100.0, 0.0),
+                (100.0, 40.0),
+                (10.0, 40.0),
+                (10.0, 30.0),
+                (0.0, 30.0),
+                (0.0, 10.0),
+                (10.0, 10.0),
+            ])],
+        )
+        .unwrap();
+        let down = -dmath::FRAC_PI_2;
+        s.flange(base, 1, down, 30.0).unwrap();
+        let (f3, _) = s.flange(base, 5, -down, 40.0).unwrap();
+        let (f4, _) = s.flange(f3, 1, -down, 97.0).unwrap();
+        let (f5, _) = s.flange(f4, 1, -down, h5).unwrap();
+        (build_with(&s, Map::Folded).map(|_| ()), f5)
+    };
+    let on = 44.0 - 15f64.sqrt();
+    let (r, f5) = at(on);
+    match r {
+        Err(forge_sheet::SheetError::FoldedTouch { a, b, at, .. }) => {
+            let strips = [a, b];
+            assert!(strips.contains(&forge_sheet::Strip::Wall(f5)), "{a:?} {b:?}");
+            assert!(
+                strips.iter().any(|s| matches!(s, forge_sheet::Strip::Bend(_))),
+                "{a:?} {b:?}"
+            );
+            // on the skin, inside the zone's width
+            let d = ((at.x - 96.0).powi(2) + (at.z + 4.0).powi(2)).sqrt();
+            assert!((d - 4.0).abs() < 1e-4 && at.y > 9.0 && at.y < 31.0, "{at:?}");
+        }
+        r => panic!("a tip on the bend's skin: {r:?}"),
+    }
+    assert_eq!(at(on - 0.5).0, Ok(()));
+}
