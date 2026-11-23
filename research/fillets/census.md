@@ -39,10 +39,12 @@ oracle's own wrongs fall to 0, 1 and 3, and the witnesses overrule each of those
    number put them inside, and our volumes match OCCT's to 1e-8, so no material was lost. p00080's
    "material past a rim" (HANDOFF) is this too: its points stand 4.8 from any face, and OCCT puts them outside.
    The reverse (Index agreeing with the oracle where OCCT disagrees, hiding a wrong) was measured on
-   33 of the pipe set's parts, 989,308 points (research/fillets/oracle/occt_all.py, stopped for time):
-   220 Index-vs-OCCT disagreements, 199 of them p00023's, and 7 points where only OCCT disagrees. The
-   cluster I checked (p00011's 3) is 0.0025 from a new face, and the mesh winding number sides with Index, so it is
-   the STEP file's surface fit. Nothing hidden was found. On FreeCAD (33 wrong), WHUCAD (20) and CADFS (23)
+   all 169 pipe parts the kernel builds, every point label_pipe judged: 5,067,447 points
+   (research/fillets/oracle/occt_all.py). 406 Index-vs-OCCT disagreements in all, and 56 points in 21
+   parts where only OCCT disagrees with the oracle. The mesh winding number on our own tessellation
+   sides with Index at all 46 of those it could judge (29 outside, 17 inside; p00007's 3 have no
+   mesh), so they are the STEP file's surface fit, as p00011's cluster at 0.0025 from a new face
+   showed. Nothing hidden was found. p00188's STEP export is invalid for OCCT. On FreeCAD (33 wrong), WHUCAD (20) and CADFS (23)
    OCCT agrees with `Index` at every counted point: that fault is not what made them wrong.
    The 305 disagreeing points of the 14 parts, with each side's answer, are in
    oracle/index-misclass.tsv (regenerate the parts with fc_twin.py PIPE 0 200; their sha1 is listed).
