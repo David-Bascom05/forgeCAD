@@ -19,10 +19,19 @@ import ForgeExact.DecideOnce.CorrectK
 import ForgeExact.DecideOnce.LocalK
 import ForgeExact.DecideOnce.QForm
 import ForgeExact.DecideOnce.FlatK
+import ForgeExact.DecideOnce.Classes
+import ForgeExact.DecideOnce.QLine
+import ForgeExact.DecideOnce.QSep
+import ForgeExact.DecideOnce.QEdge
+import ForgeExact.DecideOnce.QVert
 import ForgeExact.DecideOnce.SampleLocal
 import ForgeExact.JordanLocal
 import ForgeExact.DecideOnce.LocalJordan
 import ForgeExact.DecideOnce.LocalFinal
+import ForgeExact.Alg.Sum
+import ForgeExact.Quad.Cert
+import ForgeExact.QRef.Octree
+import ForgeExact.Poly3.Octree
 
 /-!
 # Only the standard axioms
@@ -179,6 +188,23 @@ elab "#standard_axioms " ids:ident* : command => do
   ForgeExact.DecideOnce.Curved.isEdgeK_iff
   ForgeExact.DecideOnce.Curved.exactK_of_exact
   ForgeExact.DecideOnce.Curved.flat_correct_k
+  ForgeExact.DecideOnce.Curved.noScaled_classesOf
+  ForgeExact.DecideOnce.Curved.scaled_classesOf
+  ForgeExact.DecideOnce.Curved.flat_correct_classes
+  ForgeExact.DecideOnce.Curved.alongLine_ev
+  ForgeExact.DecideOnce.Curved.covOn_spec
+  ForgeExact.DecideOnce.Curved.axisPlane_on
+  ForgeExact.DecideOnce.Curved.axisPlane_nz
+  ForgeExact.DecideOnce.Curved.nappePlane_on
+  ForgeExact.DecideOnce.Curved.noScaled_seams
+  ForgeExact.DecideOnce.Curved.homog_ev
+  ForgeExact.DecideOnce.Curved.onCurve_spec
+  ForgeExact.DecideOnce.Curved.edgeCov_spec
+  ForgeExact.DecideOnce.Curved.restrB_ev
+  ForgeExact.DecideOnce.Curved.bezout_spec
+  ForgeExact.DecideOnce.Curved.homog3_ev
+  ForgeExact.DecideOnce.Curved.onVert_spec
+  ForgeExact.DecideOnce.Curved.vertCov_spec
   ForgeExact.DecideOnce.Sample.local_exact
   ForgeExact.DecideOnce.Sample.local_correct
   ForgeExact.DecideOnce.Sample.wall_region
@@ -190,3 +216,47 @@ elab "#standard_axioms " ids:ident* : command => do
   ForgeExact.DecideOnce.Sample.localCompat_of
   ForgeExact.DecideOnce.Sample.local_correct_final
   ForgeExact.DecideOnce.Frontier.stitch_reg
+  ForgeExact.Alg.noPosRoot_spec
+  ForgeExact.Alg.onePosRoot_spec
+  ForgeExact.Alg.moebius_unique
+  ForgeExact.Alg.moebius_none
+  ForgeExact.Alg.Iso.denotes_of_ok
+  ForgeExact.Alg.Denotes.unique
+  ForgeExact.Alg.cmpRat_spec
+  ForgeExact.Alg.bisect_spec
+  ForgeExact.Alg.sign_spec
+  ForgeExact.Alg.cmp_spec
+  ForgeExact.Alg.neg_spec
+  ForgeExact.Alg.addRat_spec
+  ForgeExact.Alg.mulPos_spec
+  ForgeExact.Alg.ev_redCert
+  ForgeExact.Alg.add_spec
+  ForgeExact.Alg.mul_spec
+  ForgeExact.Quad.box_bound
+  ForgeExact.Quad.sign_nbhd
+  ForgeExact.Quad.escape
+  ForgeExact.Quad.wall_nowhereDense
+  ForgeExact.Quad.QForm.den_iff_onSigns
+  ForgeExact.Quad.quad_boolean
+  ForgeExact.Quad.member_off_wall
+  ForgeExact.Quad.member_box
+  ForgeExact.Quad.pairCheck_spec
+  ForgeExact.Quad.empty_of_patterns
+  ForgeExact.QRef.BF.eval3_sound
+  ForgeExact.QRef.BF.allFalse_sound
+  ForgeExact.QRef.reg_off_wall
+  ForgeExact.QRef.in_box
+  ForgeExact.QRef.out_box
+  ForgeExact.QRef.empty_of_leaves
+  ForgeExact.Poly3.zero_of_roots
+  ForgeExact.Poly3.escape_one
+  ForgeExact.Poly3.box_bound
+  ForgeExact.Poly3.sign_nbhd
+  ForgeExact.Poly3.escape
+  ForgeExact.Poly3.wall_nowhereDense
+  ForgeExact.Poly3.reg_off_wall
+  ForgeExact.Poly3.in_box
+  ForgeExact.Poly3.out_box
+  ForgeExact.Poly3.empty_of_leaves
+  ForgeExact.Poly3.eval_about
+  ForgeExact.Poly3.about_bound

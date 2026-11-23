@@ -46,5 +46,6 @@ jobs:
           echo "$out" | sed -n 2p | grep -q '"verdict":"solid".*"volume":"7"'
       - name: rust (rust-toolchain.toml)
         run: rustup show
+      - uses: Swatinem/rust-cache@v2
       - name: the kernel's repros against the reference
         run: cargo test --release --locked -p forge-exact-fuzz --features reference

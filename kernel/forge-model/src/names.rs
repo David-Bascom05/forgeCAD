@@ -346,8 +346,10 @@ pub fn regen(features: &[Feature], ids: Option<&[u64]>) -> Result<Body, RegenErr
     if !crate::bodies::multi(features) {
         return part.regenerate_ids(ids);
     }
+    let solids = part.regenerate_solids_ids(ids)?;
     let mut all = Body::new();
-    for s in part.regenerate_solids_ids(ids)? {
+    all.reserve_appends(solids.iter().map(|s| &s.body));
+    for s in &solids {
         all.append(&s.body);
     }
     Ok(all)
