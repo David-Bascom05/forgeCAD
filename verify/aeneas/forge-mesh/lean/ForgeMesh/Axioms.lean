@@ -6,6 +6,7 @@ import ForgeMesh.Funs
 import ForgeMesh.Basic
 import ForgeMesh.Sort
 import ForgeMesh.Curves
+import ForgeMesh.Search
 
 /-!
 # No axiom in the CDT's translation
@@ -36,3 +37,4 @@ elab "#standard_axioms " ids:ident* : command => do
   forge_mesh.sort_runs_inner_spec forge_mesh.sort_runs_spec forge_mesh.merge_passes_spec
   forge_mesh.copy_back_spec forge_mesh.sort_keys_spec
   forge_mesh.spread_spec forge_mesh.morton_spec forge_mesh.hilbert_loop_spec forge_mesh.hilbert_spec
+  forge_mesh.one_loop_spec forge_mesh.one_spec forge_mesh.find_use_loop_spec forge_mesh.find_use_spec

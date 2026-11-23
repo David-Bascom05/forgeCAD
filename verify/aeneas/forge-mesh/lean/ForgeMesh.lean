@@ -5,5 +5,6 @@ import ForgeMesh.Funs
 import ForgeMesh.Basic
 import ForgeMesh.Sort
 import ForgeMesh.Curves
+import ForgeMesh.Search
 import ForgeMesh.Axioms
 import ForgeMesh.Spec
