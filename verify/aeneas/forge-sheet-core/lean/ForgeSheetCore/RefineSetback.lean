@@ -1,12 +1,11 @@
 import ForgeSheetCore.Funs
 import ForgeSheetCore.SetbackErr
 import ForgeSheetCore.RefinePlace
+import ForgeSheetCore.RefineJoint
 import IEEE754.Dmath.SinCos
 open Aeneas Aeneas.Std Result
 
 /-!
-(In progress: not yet in the default target; it waits on verify/ieee754's Dmath building here.)
-
 # `fold::setback`: the setback through the f64 bridge, with dmath's sine and cosine
 
 build.rs computes `(s, c) = dmath::sin_cos(θ)` and then `setback(ρ, s, c) = ρ ⊗ s ⊘ (1 ⊕ c)`
@@ -17,6 +16,8 @@ shipped dmath, the aeneas session's equality) and each operation within `u |r| +
 computed setback, when finite, is within
 `|ρ| (4ε + 4η) / C² + 10 u |ρ| / C + 3η / C + η` (`ε = 2⁻⁵²`) of `ρ sin θ / C = ρ tan(θ / 2)`.
 -/
+
+set_option exponentiation.threshold 1100
 
 namespace forge_sheet_core
 
@@ -63,7 +64,8 @@ theorem setback_spec (rho theta : IEEE754.F64) (hr : rho.isFinite) (hθ : theta.
   set c := (Dmath.sinCos theta).2
   unfold fold.setback
   simp only [lift, Std.bind_ok, WP.spec_ok, F64.Ops.add_def, F64.Ops.mul_def, F64.Ops.div_def]
-  intro hfin C
+  intro hfin
+  set C := 1 + Real.cos theta.val with hCdef
   have one_f := one_fin
   -- the denominator: finite (a small value), and at least C / 2
   have dfin : (FP.add (F64.Ops.ofBits 4607182418800017408) c).isFinite := by
@@ -81,12 +83,14 @@ theorem setback_spec (rho theta : IEEE754.F64) (hr : rho.isFinite) (hθ : theta.
   have hε : (2 : ℝ) ^ (-52 : ℤ) = 1 / 2 ^ 52 := by norm_num
   have U0 : (0 : ℝ) ≤ 2 ^ (-53 : ℤ) := by positivity
   have U8 : (2 : ℝ) ^ (-53 : ℤ) ≤ 1 / 8 := by norm_num
+  have h50 : (2 : ℝ) ^ (-50 : ℤ) = 1 / 2 ^ 50 := by norm_num
+  rw [h50] at hC
   have hεC : (2 : ℝ) ^ (-52 : ℤ) ≤ C / 4 := by
-    have : (2 : ℝ) ^ (-52 : ℤ) * 4 = 2 ^ (-50 : ℤ) := by norm_num
-    simp only [C]; linarith
+    rw [hε]; have : (1 : ℝ) / 2 ^ 52 * 4 = 1 / 2 ^ 50 := by norm_num
+    linarith
   have hηC : (2 : ℝ) ^ (-1075 : ℤ) ≤ C / 8 := by
-    have : (2 : ℝ) ^ (-1075 : ℤ) * 8 ≤ 2 ^ (-50 : ℤ) := by norm_num
-    simp only [C]; linarith
+    have : (2 : ℝ) ^ (-1075 : ℤ) * 8 ≤ 1 / 2 ^ 50 := by norm_num
+    linarith
   have ed := cast_err (add_err dfin)
   rw [one_val] at ed; push_cast at ed
   have ec' : |(c.val : ℝ) - Real.cos theta.val| ≤ 2 ^ (-52 : ℤ) := by rw [hε]; exact ec
@@ -96,10 +100,10 @@ theorem setback_spec (rho theta : IEEE754.F64) (hr : rho.isFinite) (hθ : theta.
   have d0 : (FP.add (F64.Ops.ofBits 4607182418800017408) c).val ≠ 0 := by
     intro h0
     have : ((FP.add (F64.Ops.ofBits 4607182418800017408) c).val : ℝ) = 0 := by exact_mod_cast h0
-    simp only [C] at hCp; linarith
+    linarith
   -- the numerator: finite, since the quotient is
   have mfin : (FP.mul rho s).isFinite := by
-    rcases FP.trichotomy (FP.mul rho s) with h | ⟨sg, h⟩ | h
+    rcases IEEE754.trichotomy (FP.mul rho s) with h | ⟨sg, h⟩ | h
     · exact h
     · exfalso; rw [h] at hfin
       cases hd : FP.add (F64.Ops.ofBits 4607182418800017408) c <;>

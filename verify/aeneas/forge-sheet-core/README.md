@@ -33,7 +33,7 @@ Proven (no `sorry`; `lean/ForgeSheetCore/Axioms.lean` checks the standard axioms
   every step's exact result is zero or normal; then the frame's origin is `p0` exactly and, when
   the outputs are finite, the length is within `(1 + u)³ − 1` of `|D|` and the axis within
   `(1 + u)³ / (1 − u)³ − 1` (about `6 u`) of `(D.y, −D.x) / |D|`, each component relatively.
-- In progress: `setback_spec` (RefineSetback.lean, not yet in the build; model SetbackErr.lean, proven): `fold::setback(ρ, s, c)` (shop.rs's
+- `setback_spec` (RefineSetback.lean, model SetbackErr.lean): `fold::setback(ρ, s, c)` (shop.rs's
   `ρ ⊗ s ⊘ (1 ⊕ c)`, op for op) fed dmath's `sin_cos(θ)` (verify/ieee754 `Dmath.sinCos_err`,
   within `ε = 2⁻⁵²`): for finite `ρ`, finite `|θ| ≤ 2²⁰` with `C = 1 + cos θ ≥ 2⁻⁵⁰`, the
   setback, when finite, is within `|ρ| (4ε + 4η) / C² + 10 u |ρ| / C + 3η / C + η` of
