@@ -96,6 +96,7 @@ structure SecCsrOK (c : SecCsr) : Prop where
 
 /-- **LedgerWF v2**: `inc::ledger_wf` as a proposition. -/
 structure LedgerWF2 (l : Ledger) : Prop where
+  nb_pos : 0 < l.nb.val
   edge_facets : CsrOK l.edge_facets (nfacets l)
   vert_edges : CsrOK l.vert_edges (nrowsL l.edge_facets)
   sectors_rows : l.vert_sectors.start.val.length = l.vert_edges.start.val.length
