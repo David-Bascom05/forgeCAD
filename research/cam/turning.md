@@ -47,13 +47,13 @@ What the checks caught while the examples were written (each now a test, tests/r
 
 ## Levels (PROOF-STANDARD.md)
 
-- L1 (Turn.lean, 16 theorems, standard axioms): π is 1-Lipschitz (`pi_lipschitz`,
+- L1 (Turn.lean, 17 theorems, standard axioms): π is 1-Lipschitz (`pi_lipschitz`,
   `turn_clear3`): a clearance in the half-plane is one in space; the smear bound (`smear_le`,
   `smear_anti`, `abs_le_rho`); the full section (`fold_clear`, `fold_sigma`, `sigma_mem`); the
   checker's one distance bound, a separating axis between hulls (`sep_axis_hull`, `sep_axis`),
   with the swept core a hull of finitely many points (`zono_eq_hull`); the smear vertex by
   vertex (`smear_hull`, Jensen) and a slab shrunk past the nose radius (`eroded_gap`); the
-  assembly through
+  in-process stock as columns (`rect_in_convex`); the assembly through
   `clear_of_frontier` (`turn_clear`, `turn_clear_ball`).
 - Hypotheses, open (not proven, not assumed true elsewhere):
   - **H.arc** (the control): an arc block whose ends lie at unequal radii (quantisation) moves
@@ -88,7 +88,14 @@ What the checks caught while the examples were written (each now a test, tests/r
    than one setup per document.
 5. G4 reasons: "nose radius r" (inside the part grown by the smallest finishing nose, decided by
    exact booleans) or "uncut"; reach and undercut are not told apart yet.
-6. Speed: certification is dominated by the in-process stock's exact booleans (~73%); next, a
-   local window for the boolean or a coarser stock for the trailing bodies.
+6. Speed (David: prove a check unneeded rather than pay for it). Measured on the shaft job:
+   generate 11 ms, post and round trip 0.13 ms, certify 267 ms, of which ~73% the in-process
+   stock's exact booleans. Done: the normal path keeps the stock as columns (stair.rs: it loses
+   only rectangles proven inside a cut's swept outline, `rect_in_convex`, so it stays a superset
+   and G3 against it is sound) with no booleans: certify 58 ms, `forgecad cam` 70 ms end to end
+   (was 276). The exact stock and the G4 leftover run in `cam F check` and as the test oracle.
+   Next: G1 for the nose disc by construction from the exact offset (the remaining checks are
+   the input-dependent ones: the insert's flanks and the holder against the part and the
+   chuck).
 7. Canned cycles (G71/G70/G76) as posted text (today the cycles are expanded into moves, which
    is what G6 reads back and certifies).

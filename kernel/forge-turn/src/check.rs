@@ -176,6 +176,12 @@ impl Obstacle {
     /// no boundary of Hf: H and its mirror meet there), and inside(q) ⇔ (|q.x|, q.z) ∈ H.
     pub fn of(name: &str, half: &Region, mu: f64) -> Result<Obstacle, ObstacleError> {
         let mut o = Obstacle::of_full(name, half, mu)?;
+        o.fold_from_half(half);
+        Ok(o)
+    }
+
+    /// Turns an obstacle made of a half-plane region into its full section (see `of`).
+    fn fold_from_half(&mut self, half: &Region) {
         let mut pieces = Vec::new();
         let mut loop_boxes = Vec::new();
         let mut bbox = [f64::INFINITY, f64::INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY];
@@ -195,7 +201,7 @@ impl Obstacle {
                     }
                 };
             }
-            let mine = &o.pieces[start..start + n];
+            let mine = &self.pieces[start..start + n];
             start += n;
             let mut on_axis = false;
             let mut lb = [f64::INFINITY, f64::INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY];
@@ -245,17 +251,35 @@ impl Obstacle {
             merge(&mut bbox, lb);
             merge(&mut bbox, mb);
         }
-        o.pieces = pieces;
-        o.loop_boxes = loop_boxes;
-        o.bbox = bbox;
-        o.fold = true;
-        Ok(o)
+        self.pieces = pieces;
+        self.loop_boxes = loop_boxes;
+        self.bbox = bbox;
+        self.fold = true;
+    }
+
+    /// `of` for a region known valid by construction (the staircase stock: x-monotone steps,
+    /// distinct breakpoints, every top above the bottom: a simple counter-clockwise polygon), made
+    /// exact without the validation pass.
+    pub fn of_valid(name: &str, half: &Region, mu: f64) -> Result<Obstacle, ObstacleError> {
+        Obstacle::of_inner(name, half, mu, false).map(|mut o| {
+            o.fold_from_half(half);
+            o
+        })
     }
 
     /// The obstacle of a region of the whole plane as it is.
     pub fn of_full(name: &str, region: &Region, mu: f64) -> Result<Obstacle, ObstacleError> {
+        Obstacle::of_inner(name, region, mu, true)
+    }
+
+    fn of_inner(name: &str, region: &Region, mu: f64, validate: bool) -> Result<Obstacle, ObstacleError> {
         let mut cx = Ctx::new();
-        let ex = region::validate(&mut cx, region).map_err(|e| ObstacleError::Region(format!("{e:?}")))?;
+        let ex = if validate {
+            region::validate(&mut cx, region)
+        } else {
+            region::exact(&mut cx, region)
+        }
+        .map_err(|e| ObstacleError::Region(format!("{e:?}")))?;
         let mut pieces = Vec::new();
         let mut loop_boxes = Vec::new();
         let mut bbox = [f64::INFINITY, f64::INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY];
