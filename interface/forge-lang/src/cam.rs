@@ -446,7 +446,8 @@ impl Cam {
                 let file = get_str(a, "#0", None)?;
                 let path = dir.join(&file);
                 let src = std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
-                let (run, _) = crate::run(&src, crate::Options { holes: true, ..Default::default() }, Default::default());
+                let (run, _) = crate::run(&src, crate::Options::default(), Default::default());
+                let holes = crate::hole_view(&src, crate::Options::default());
                 if !run.ok() {
                     return Err(format!(
                         "the part `{file}` does not build: {:?}",
@@ -467,7 +468,7 @@ impl Cam {
                 self.parts.push(PartIn {
                     file,
                     faces,
-                    holes: run.holes,
+                    holes,
                     bbox: (lo, hi),
                     group: get_str(a, "group", Some("N"))?,
                 });

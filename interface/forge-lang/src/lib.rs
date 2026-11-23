@@ -164,8 +164,6 @@ pub struct Options {
     pub checks: bool,
     /// Threads on an axis not modelled but recorded (`Run::threads`), as a drawing draws them.
     pub cosmetic_threads: bool,
-    /// Collect the hole features for CAM (`Run::holes`); off, a build does no work for it.
-    pub holes: bool,
     /// An assembly: mesh its parts for the overlap check and the expects' clearances. Off (a
     /// drawing, which asks for neither), a part loads without them, and a run that needs them
     /// does not share its loads (the setting is in their key).
@@ -200,7 +198,6 @@ impl Default for Options {
             step: None,
             checks: true,
             cosmetic_threads: false,
-            holes: false,
             meshes: true,
             asks: vec![],
             comp_anchors: false,
@@ -271,8 +268,6 @@ pub struct Run {
     pub thermos: Vec<thermo::ThermoOut>,
     /// The threads left unmodelled (`Options::cosmetic_threads`), in the part's frame.
     pub threads: Vec<holes::Cosmetic>,
-    /// The hole features, as CAM plans them (`holes::hole_infos`).
-    pub holes: Vec<holes::HoleInfo>,
     /// Where each solid is in `body`: its faces and edges.
     pub solids: Vec<build::Span>,
     /// The stage `body` is (`build::Stage::id`): equal ids, the very same body.
@@ -466,7 +461,6 @@ fn run_once(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
                     sheets: vec![],
                     thermos: vec![],
                     threads: vec![],
-                    holes: vec![],
                     solids: vec![],
                     stage: 0,
                     asm: None,
@@ -631,7 +625,6 @@ fn run_once(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
         vec![]
     };
     let (rebuilt, reused) = (ev.b.rebuilt, ev.b.reused);
-    let holes = if opts.holes { holes::hole_infos(&ev) } else { vec![] };
     let run = Run {
         errors: std::mem::take(&mut ev.errors),
         warnings: std::mem::take(&mut ev.warnings),
@@ -649,7 +642,6 @@ fn run_once(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
         sheets: sheet::outputs(&ev),
         thermos: std::mem::take(&mut ev.thermos),
         threads: std::mem::take(&mut ev.threads),
-        holes,
         solids: if built_all {
             ev.b.stages.last().map_or(vec![], |s| s.spans().to_vec())
         } else {
@@ -733,6 +725,24 @@ pub struct SketchView {
     pub s: forge_sketch::Sketch,
     /// Each name the block bound to an entity: the entity, and a loop's segments.
     pub named: Vec<(String, forge_sketch::EntityId, Vec<forge_sketch::EntityId>)>,
+}
+
+/// The hole features of `src`, as CAM plans them (`holes::hole_infos`): an evaluation of its
+/// own, so an ordinary build does no work for CAM.
+pub fn hole_view(src: &str, opts: Options) -> Vec<holes::HoleInfo> {
+    let Ok(prog) = syntax::parse(src) else {
+        return vec![];
+    };
+    let mut ev = Eval::new(src, opts.rules, opts.build, Default::default());
+    ev.dir = opts.dir.clone();
+    ev.root = fence_of(&opts);
+    ev.asm = Some(asm::Doc::default());
+    ev.check_static(&prog);
+    if !ev.errors.is_empty() {
+        ev.b.building = false;
+    }
+    ev.run(&prog);
+    holes::hole_infos(&ev)
 }
 
 /// The sketch `id` of `src` as evaluated (built with `opts.build`), if evaluation made it.
