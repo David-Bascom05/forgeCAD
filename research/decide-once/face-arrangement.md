@@ -1,7 +1,8 @@
 # A8: decide-once over the face arrangement (design, for sign-off)
 
-Status: draft. It was written by the Lean side for review by the research session (bool-research),
-then sign-off by the master. No proof work starts until it is signed off. The current proven core
+Status: draft. It was written by the Lean side and merged with bool-research's draft (6b776b5 on
+-bool-research: the cell definition, the radial sides and the measurements are theirs). It goes
+to the master for sign-off. No proof work starts until it is signed off. The current proven core
 (`forge_bool_core`, `end_to_end_proof`) stays shipped-ready behind the switch, and nothing is
 deleted.
 
@@ -12,8 +13,9 @@ actually crosses it, about 40 cells. Only that change gets under the old path's 
 
 ## 0. The proposal in one paragraph
 
-The cells become **rooms** (components of the region's interior minus the near faces and walls),
-**facets** (pieces of faces, split only along crossings), **edges** and **verts**. The ledger
+The cells become **facets** (pieces of faces, cut only by their cut sets, §1a), **edges**,
+**verts**, and **rooms**. A room is a class of facet-sides joined radially round edges, and it
+replaces a tope. The ledger
 gives their incidence explicitly as id tables, not covectors.
 
 The proof does **not** start over. The plane-arrangement ledger that the sampler builds stays the
@@ -25,6 +27,37 @@ ZeroThickness ↔ non-manifold) carry over unchanged to the new core through one
 
 The new Rust core has no covectors at all. It drops cov, find, intern, index, sort, hash, split and
 between, and its Aeneas proof is about half the size of today's.
+
+## 1a. Cells (bool-research's definition)
+
+The region `R°` holds the near faces `f`. Each has a closed polygon `P_f` on its carrier class,
+taken after the snap and clipped by the region's walls. The walls clip faces; they are not
+carriers.
+
+A face's **cut set** is
+`X_f = ∂P_f ∪ ⋃ {P_f ∩ P_g : g near, cls g ≠ cls f} ∪ ⋃ {P_f ∩ ∂P_g : cls g = cls f, body g ≠ body f}`.
+The last term is the imprint of a coplanar overlap.
+
+- **Verts** are where `X_f`'s segments end or meet: a `meet3`, or a polygon vertex.
+- **Edges** are the components of `⋃ X_f` minus the verts.
+- **Facets** are the components of `relint P_f ∖ X_f`. A coplanar overlap gives one facet that is
+  a piece of both faces, as now.
+- **Rooms.** Round each edge, the facets have an exact radial order: a degree-2 sign in the plane
+  coefficients, the predicate trueform and Lévy use. Consecutive facet-sides face one wedge, so
+  union-find joins them, and the classes are the rooms.
+
+  One geometric component may hold several rooms. The outside of an inner shell and the inside of
+  an outer one share no edge, for example. That is harmless: each room has its own exact witness.
+
+Measured per boolean (bool-research, callgrind), plane-ledger pieces against the estimated
+face-arrangement facets:
+- coplanar: 47 → 30 (231 ledger cells in all);
+- housing: 19 → 15;
+- upto: 54 → 20.
+
+The arrangement *work* falls about 10×: 9 crossing segments, against 9.5 crossing classes over
+whole sections. The ledger cells fall about 1.5×. With explicit incidence, each core step is
+O(degree), not an O(classes) covector scan.
 
 ## 1. The ledger interface (Rust, `forge_bool_core` v2)
 
@@ -54,8 +87,8 @@ pub struct MetricLedger { pub thin: Vec<RoomId>, pub enclosed: Vec<RoomId> }   /
 
 What each table means:
 
-- **Rooms** lie inside the region `R°`. The walls bound them but are not facets: no body owns a
-  wall. A room touching a wall is not `enclosed`.
+- **Rooms** are the radial classes of facet-sides (§1a), inside the region `R°`. The walls clip
+  faces but are not facets: no body owns a wall. A room reaching a wall is not `enclosed`.
 - **Facets** are only pieces of faces. A plane piece that lies in no face does not exist here,
   because it lies inside a room.
 - **The two sides of a facet are different rooms.** This always holds, since crossing a piece of
@@ -144,22 +177,23 @@ instances:
 ### 2.2 Coarsening
 
 `Refines (F : IncLedger) (L : Ledger) (ps A)`: there are maps
-- ρ : `L.topes → rooms F`,
 - σ : `L.facets → facets F`,
 - τ : `L.edges → Option (edges F)`,
 - ν : `L.verts → Option (verts F)`,
 
 with these properties:
 
-- **(r) rooms.** ρ is onto. F's membership of `ρ T`, through its flood and `inside`, equals the
-  reference ledger's `memb i T` for every body. The condition is combinatorial, so the simulation
+- **(r) rooms.** For every fine facet `φ` and body `i`, F's membership of the room on each side
+  of `σ φ`, through its flood and `inside`, equals the reference ledger's `memb i φ.plus` (resp.
+  `φ.minus`). Rooms are reached through facet-sides, so no map from topes to rooms is needed, and
+  several rooms in one geometric component are allowed. The condition is combinatorial, so the simulation
   theorem has no geometry in it. Geometry enters only in proving `Refines` for a builder, where
   `room_const` gives it. The theorem is therefore stated over any reference ledger: the flat
   `sampleLedger`, or dol-curved's carrier ledger, which is `ExactK` (CorrectK.lean). Curved then
   instantiates `EndToEndF` with no second simulation proof.
 - **(s) facets.**
   - σ is onto.
-  - It keeps the class and the sides: `F.facet_rooms (σ φ) = (ρ φ.plus, ρ φ.minus)`.
+  - It keeps the class, and the sense of the sides: `+` of `σ φ` is on `φ.plus`'s side.
   - It keeps the pieces: `(φ, f) ∈ L.pieces ↔ (σ φ, f) ∈ F.pieces`.
   - Each fibre σ⁻¹(F-facet) is connected through fine edges with τ = none. A face-arrangement
     facet is one connected piece.
@@ -263,10 +297,12 @@ F-facets of one class, say), `Refines` gains a condition and the builder has to 
 `toL l = sampleLedger …` (build_ledger, not yet proven for v1 either). One part of it is new
 geometry:
 
-- **`room_const`.** Two topes joined by a polyline whose every segment is `Clear` of every face
-  (`JordanLocal.Clear`: it meets each face's plane, if at all, outside the face) have the same
-  membership in every body. This is `contains_const_local`, applied segment by segment, at about
-  150 lines. It is what lets the builder decide a room's membership with one ray, and it gives (r).
+- **`room_const`, from bool-research's wedge lemma.** For consecutive facets `φ`, `ψ` round an
+  edge, points just off `φ` and just off `ψ`, near a point of the edge, are joined by a polyline
+  whose every segment is `Clear` of every face. (`JordanLocal.Clear`: the segment meets each
+  face's plane, if at all, outside the face.) So, by `contains_const_local` applied segment by
+  segment, every facet-side of one room has one membership in every body. One witness per room
+  then gives (r). The wedge lemma is the one hard new geometric proof, estimated at 300–500 lines.
 - (s), (e) and (v) are facts about the builder's own segment-within-polygon arrangement, set
   against the sampler's plane cells. They belong to the builder's L3 (its Aeneas proof), in the same
   place today's `sampleLedger` equation would be proven.
@@ -309,6 +345,38 @@ The Rust core v2 should shrink from about 1.1k lines to about 0.7k. Per boolean,
 core should cost well under the 0.6M budget. Every lookup is O(1) or a Csr row; nothing hashes or
 sorts covectors.
 
+## 3a. Speed, against the old path (per flat boolean, estimates)
+
+Two corrections from bool-research's measurement (callgrind, switch off):
+- **The old path costs about 1.28M per flat boolean, not 3.0M.** Its write is in place, about
+  0.06M.
+- **On the gate, only coplanar (70 booleans), housing (1) and upto (4) reach the flat path.** The
+  15 bench parts' booleans are all NotFlat.
+
+| phase | decide-once now (coplanar) | A8 (coplanar) | how |
+|---|---|---|---|
+| arrangement | 3.46M | 0.4M | about 9 exact segments, per-face insertion, `meet3` behind a filter |
+| sample (witnesses) | 0.41M | 0.15M | one parity per room |
+| ledger | 1.60M | 0.35M | about 150 cells; id tables; no `Vec<Sgn>` interning |
+| core | 1.63M | 0.35M | Csr reads: O(degree), not 16-wide scans |
+| write | 0.68M | 0.15M | **in place**, as the old path's apply: edit only the near faces |
+| rest | 0.42M | 0.25M | exact planes for near faces only |
+| **total** | **8.2M** | **≈1.65M** | old path **1.28M** |
+
+So A8 alone leaves decide-once at **about 1.3× the old path** on coplanar. "Nothing slower"
+needs three more things, beside A8:
+- the in-place write;
+- near-only `inputs`;
+- about 0.4M from constants, for example witnesses fused into the builder's clipping and no
+  HashMaps in the bridge.
+
+Housing and upto have the same phases, with fewer facets (15 and 20). They are 1 and 4 booleans, so
+they move their gate lines only slightly. Coplanar is the line that decides it.
+
+The per-phase split for upto and housing is asked of decide-once (Rust). **Risk:** if the last
+0.4M does not close, the switch stays off, and v1 stays proven and shipped-ready. A8 is still
+worth doing for curved: the same cells, and the Tier-1 separators move into the reference.
+
 ## 4. Order of work and gates
 
 Step 0 is the sign-off of this design: the §1 interface, `Refines` (§2.2 and §2.2a), the
@@ -340,12 +408,24 @@ The switch flips to v2 only when all of the following hold:
 
 ## 5. Open questions for review
 
-1. **Walls.** I treat region walls as room boundaries that are not facets. The alternative is
-   facets of a pseudo-body, which would keep `enclosed` a table lookup. Which does the builder
-   prefer?
-2. **Witnesses.** Should witnesses be one per room per body, which needs no flood, or flood plus
-   witness as now? I propose keeping the flood (fewer rays, and the proofs port). At ~40 rooms,
-   per-room witnesses may be cheaper than the flood's union-find. Ask bool-speed.
+**The two drafts, reconciled.** bool-research's draft proved the face ledger exact directly
+(`ExactF`), replacing Sample, Sampler, Witness and Boxes. This design instead keeps the plane
+ledger as the never-run reference and proves `Refines`. The reason: today's end-to-end conclusion
+includes `reg (decomp …).kept = reg (combine …)`, a statement about point sets, proven over the
+plane arrangement's tope decomposition. `ExactF` would have to re-prove a decomposition of space
+into rooms, whereas `Refines` inherits it.
+
+Both routes need the wedge lemma. `Refines` adds the simulation theorem (§2.2a, about 1.1k lines
+for unify). `ExactF` would add generalising Correct and Coverage over face geometry plus `cover`
+and `complete`, which I estimate as larger. bool-research's one-core-over-an-interface
+recommendation is §2.1's `coreI`.
+
+1. **Walls: settled.** Walls are clippers, not carriers or facets (bool-research agrees). The
+   statements `wall_region` and `samplesIn_of` stay on the reference. The builder's clipped
+   polygons enter only through `Refines`.
+2. **Witnesses.** bool-research proposes one per room. The core keeps today's flood plus
+   witness, which is correct for either: one witness per room is just a finer table. The builder
+   chooses.
 3. **Facets with holes.** These are fine for the core. Does the write (F3's stitch) accept loops
    with holes, or should the builder cut such facets to be simply connected? Cutting is allowed
    by (s): fibres stay connected.
