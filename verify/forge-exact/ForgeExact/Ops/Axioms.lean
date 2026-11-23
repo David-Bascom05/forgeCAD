@@ -38,3 +38,6 @@ the build fails on `sorryAx` or any axiom past `propext`, `Classical.choice` and
   ForgeExact.Ops.Draft.Drafted.on_neutral_line
   ForgeExact.Ops.Draft.Drafted.drafted_angle
   ForgeExact.Ops.Draft.beta_ne_zero
+  ForgeExact.Ops.Shell.level_le_d2
+  ForgeExact.Ops.Shell.foot_d2
+  ForgeExact.Ops.Shell.erosion_eq_sharp
