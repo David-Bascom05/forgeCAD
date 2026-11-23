@@ -1134,29 +1134,9 @@ fn build_each(
         return some(from..features.len());
     }
     // one feature at a time from a shared counter: tools differ widely in cost (a hole up to the
-    // next face against a plain extrude), so fixed chunks left threads idle
-    let next = std::sync::atomic::AtomicUsize::new(from);
-    type Built = (usize, Result<Vec<Tool>, RegenError>);
-    let done: Vec<Vec<Built>> = forge_math::par::scope(|s| {
-        let hs: Vec<_> = (0..threads.min(n))
-            .map(|_| {
-                s.spawn(|| {
-                    let mut got = Vec::new();
-                    loop {
-                        let i = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                        if i >= features.len() {
-                            break got;
-                        }
-                        got.push((i, some(i..i + 1)));
-                    }
-                })
-            })
-            .collect();
-        hs.into_iter().map(|h| h.join().expect("tool builder")).collect()
-    });
-    let mut built: Vec<Built> = done.into_iter().flatten().collect();
-    built.sort_unstable_by_key(|b| b.0);
-    let built = built.into_iter().map(|b| b.1);
+    // next face against a plain extrude), so fixed chunks left threads idle; helpers join only
+    // once the work has run long enough to pay for them (a small part's tools never do)
+    let built = forge_math::par::map_adaptive(n, threads, 1, |k| some(from + k..from + k + 1));
     let mut out = Vec::new();
     for b in built {
         out.extend(b?);
@@ -1201,8 +1181,9 @@ fn sequential(features: History<'_>, from: usize, b: Body) -> Option<Body> {
 }
 
 /// wasm has no threads.
+/// Elsewhere, no more threads than cores (`forge_math::par::cap`).
 fn wasm_one(threads: usize) -> usize {
-    if cfg!(target_family = "wasm") { 1 } else { threads }
+    if cfg!(target_family = "wasm") { 1 } else { forge_math::par::cap(threads) }
 }
 
 /// How an n-ary regen classifies its regions in one batch.
