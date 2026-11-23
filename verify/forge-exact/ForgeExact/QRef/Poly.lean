@@ -168,6 +168,8 @@ structure Ctx where
   crosses : Array (Array P3)
   /-- sign combinations proven empty everywhere: carrier `i` positive iff `si`, `j` iff `sj` -/
   excl : Array (Nat × Bool × Nat × Bool) := #[]
+  /-- pairs within LINEAR of touching (a sliver): their near-parallel boxes are not chased -/
+  near : Array (Nat × Nat) := #[]
 
 def Ctx.of (A : PArr) : Ctx :=
   let n := A.ps.size
@@ -274,6 +276,9 @@ partial def check (C : Ctx) (b : Cube) (depth : Nat) : StateM Nat LC := do
         let ga := gAt a
         let gc := gAt c
         if (ga.cross gc).norm2 * 10000 < ga.norm2 * gc.norm2 then
+          -- a known near touch (the verdict is a sliver): the box is its own
+          if U.size == 2 && C.near.any (fun (i, j) => (i == a && j == c) || (i == c && j == a)) then
+            return .ok
           return .und s!"surfaces {a}, {c} nearly tangent near {fmt b.c} (half-width {qf b.h})"
   let left ← get
   if depth == 0 || left < 8 then
@@ -563,6 +568,81 @@ def judgeTouch (A : PArr) (t : Touch) : Option String × Option String := Id.run
     return (some s!"surfaces {t.iT}, {t.iF} touch {what} through {fmt t.p}: non-manifold there", none)
   return (none, none)
 
+/-! ## Near touches with a torus (the sliver rule)
+
+Two surfaces within LINEAR of touching, but not touching exactly: some rigid move of at most
+LINEAR makes them touch. For a torus `T` and a face `F` on a parallel axis (or a plane normal
+to it), with `e` the distance between their axes (a sphere's centre to `T`'s axis) and `g₀`
+the gap of the coaxial pair (`F` moved by `e` onto `T`'s axis): moving by `e`, then by `|g₀|`
+along the gap, makes them touch, so `|g₀| + e ≤ LINEAR` is enough. `e` is bounded above by a
+rational, so the test is exact and only ever errs towards not near. A plane at a support point
+has the exact gap `|d| − h`. -/
+
+/-- A rational `≥ √q` (`q ≥ 0`), from a float rounded up and checked. -/
+def sqrtUp (q : Rat) : Rat := Id.run do
+  if q ≤ 0 then return 0
+  if let some r := ratSqrt? q then return r
+  let f := Float.sqrt (qf q) * (1 + 1e-12) + 1e-300
+  let mut u : Rat := (Rat.ofScientific (f * 1e18).toUInt64.toNat true 18)
+  for _ in [0:64] do
+    if u * u ≥ q then return u
+    u := u * 2
+  return u
+
+/-- `|√d2 − K| ≤ m` with `m ≥ 0`, exactly. -/
+def sqrtGapWithin (d2 K m : Rat) : Bool :=
+  m ≥ 0 && (let lo := qmax 0 (K - m); lo * lo ≤ d2 && d2 ≤ (K + m) * (K + m))
+
+/-- Near pairs `(iT, iF)` with a note. -/
+def nearTorus (A : PArr) (faces : Array QFace) (l : Rat) : Array (Nat × Nat × String) := Id.run do
+  let mut out : Array (Nat × Nat × String) := #[]
+  for T in faces do
+    if T.kind != .torus then continue
+    let some (iT, _) := carrierOf A T | continue
+    let (R, r) := (T.big, T.r)
+    let z := T.z
+    for F in faces do
+      if F.solid == T.solid && F.index == T.index then continue
+      let some (iF, _) := carrierOf A F | continue
+      if iF == iT then continue
+      let tag := s!"faces {T.solid}.{T.index} (a torus) and {F.solid}.{F.index} are within LINEAR of touching"
+      let parallel := (F.z.cross z).isZero
+      -- exact gaps `g` and gaps `√d2 − K`, of the coaxial pair, and the axis offset `e²`
+      let w0 := (F.o - T.o).dot z / z.norm2
+      let (e2, exact, roots) : Rat × Array Rat × Array (Rat × Rat) := match F.kind with
+        | .plane =>
+          if parallel then (0, #[qabs w0 - r], #[]) else (0, #[], #[])
+        | .cyl =>
+          if parallel then (distLine2 F.o T.o z, #[qabs (F.r - R) - r], #[]) else (0, #[], #[])
+        | .sphere =>
+          let d2 := R * R + w0 * w0
+          (distLine2 F.o T.o z, #[], #[(d2, r + F.r), (d2, qabs (r - F.r))])
+        | .torus =>
+          if parallel then
+            let d2 := (F.big - R) * (F.big - R) + w0 * w0
+            (distLine2 F.o T.o z, #[], #[(d2, r + F.r), (d2, qabs (r - F.r))])
+          else (0, #[], #[])
+        | _ => (0, #[], #[])
+      let eU := sqrtUp e2
+      let mut near := false
+      for g in exact do
+        if (g != 0 || e2 != 0) && qabs g + eU ≤ l then near := true
+      for (d2, K) in roots do
+        if (d2 != K * K || e2 != 0) && sqrtGapWithin d2 K (l - eU) then near := true
+      -- a plane at a support point (not normal to the axis)
+      if F.kind == .plane && !parallel then
+        let n := F.z
+        let a := n.dot z / z.norm2
+        let nperp := n - a * z
+        if !nperp.isZero then
+          if let (some ln, some lp) := (ratSqrt? n.norm2, ratSqrt? nperp.norm2) then
+            let h := R * lp + r * ln
+            let d := n.dot (F.o - T.o)
+            let g := (qabs d - h) / ln
+            if g != 0 && qabs g ≤ l then near := true
+      if near then out := out.push (iT, iF, tag)
+  return out
+
 /-! ## The driver -/
 
 def runPoly (j : Json) (solids0 : Array QSolid) : Except String Json := do
@@ -589,8 +669,11 @@ def runPoly (j : Json) (solids0 : Array QSolid) : Except String Json := do
       match nearPair l f g with
       | some n => nearNotes := nearNotes.push n
       | none => pure ()
-  if strict then ambiguous := ambiguous ++ nearNotes
   let A := arrP solids
+  let nearT := nearTorus A faces l
+  for (_, _, n) in nearT do
+    if !nearNotes.contains n then nearNotes := nearNotes.push n
+  if strict then ambiguous := ambiguous ++ nearNotes
   let bb := (faces.foldl (fun b f => b.hull f.box) faces[0]!.box).grow 1
   let ctr := (1 / 2 : Rat) * (bb.lo + bb.hi)
   let d := bb.hi - bb.lo
@@ -621,7 +704,7 @@ def runPoly (j : Json) (solids0 : Array QSolid) : Except String Json := do
   -- the local check of every undecided leaf
   let mut opens : Array String := #[]
   if !empty && bad.isEmpty then
-    let C := { Ctx.of A with excl }
+    let C := { Ctx.of A with excl, near := nearT.map fun (i, j, _) => (i, j) }
     let mut budget := checkBudget
     for b in tree.und do
       let (r, left) := (check C b 12).run budget
