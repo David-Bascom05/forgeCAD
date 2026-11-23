@@ -221,6 +221,20 @@ with these properties:
   - if `ν v = none`, the star at `v` maps into a single facet, or a single edge's facets (`v` lies
     inside a facet, an edge or a room).
 
+**Fixed in Lean (L2, f9778eab).** The authoritative list of conditions is the structure `Refines`
+in verify/forge-exact/ForgeExact/DecideOnce/Refines.lean. Beyond the items above, the proof needed
+these:
+- nodup facets, edges, sectors and coarse vert-edges;
+- every coarse piece comes from a fine one, and a coarse facet's two rooms differ;
+- sector facets are listed, and sector bounds are among the vert's edges;
+- fine sectors across an edge inside a coarse facet lie in one coarse sector;
+- at a fine vert inside a coarse cell, one coarse facet's sectors are joined, any two coarse facets'
+  sectors meet at an edge, and the fine edges along a coarse edge all map to it;
+- a coarse vert has a single fine vert.
+
+The builder's coarsens check (R3) checks these. `core_refines` and `flat_refines` are proven,
+with standard axioms only.
+
 **Simulation theorem** (`core_refines`): if `Refines F L ps A`, `Exact L ps A` and
 `LedgerWF F`, then `coreI F rule` corresponds to `coreI (inc L) rule` under (ρ, σ, τ, ν):
 - the same refusal kind, with a ZeroThickness cell mapping to the cell named;
