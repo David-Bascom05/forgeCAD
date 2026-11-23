@@ -78,3 +78,30 @@ opaque core.f64.F64.max : F64 → F64 → Result F64 := fun _ _ => fail .panic
 opaque F64.Insts.CoreFmtDebug.fmt :
     F64 → core.fmt.Formatter → Result ((core.result.Result Unit core.fmt.Error) × core.fmt.Formatter) :=
   fun _ f => ok (.Ok (), f)
+
+/-- `<f64 as PartialEq>::eq`, called through the trait: IEEE equality. -/
+def F64.Insts.CoreCmpPartialEqF64.eq (a b : F64) : Result Bool := ok (IEEE754.FP.eq a b)
+/-- `<f64 as PartialEq>::ne` -/
+def F64.Insts.CoreCmpPartialEqF64.ne (a b : F64) : Result Bool := ok (!IEEE754.FP.eq a b)
+/-- `<f64 as PartialOrd>::partial_cmp`: `None` when either is NaN; `-0` and `+0` are equal. -/
+def F64.Insts.CoreCmpPartialOrdF64.partial_cmp (a b : F64) : Result (Option Ordering) :=
+  ok (IEEE754.FP.cmp a b)
+
+/-- `RangeInclusive::contains`, std's `RangeBounds::contains`: `start <= item`, and
+`item <= end` (or `item < start` once the range is exhausted, so that it contains nothing). -/
+def core.ops.range.RangeInclusive.contains {Idx : Type _} {U : Type _}
+    (_ : core.cmp.PartialOrd Idx Idx) (inst1 : core.cmp.PartialOrd Idx U)
+    (inst2 : core.cmp.PartialOrd U Idx) (r : core.ops.range.RangeInclusive Idx) (item : U) :
+    Result Bool := do
+  let a ← inst1.le r.start item
+  if a then
+    if r.exhausted then inst2.lt item r.start else inst2.le item r.«end»
+  else ok false
+
+/-- `Vec::clear`: the empty vector (capacity is not modelled). -/
+def alloc.vec.Vec.clear {T : Type _} (A : Type _) (_ : alloc.vec.Vec T) : Result (alloc.vec.Vec T) :=
+  ok (alloc.vec.Vec.new T)
+/-- `Vec::reserve`: the same vector (capacity is not modelled; an allocation failure aborts the
+process, outside every theorem). -/
+def alloc.vec.Vec.reserve {T : Type _} (A : Type _) (v : alloc.vec.Vec T) (_ : Std.Usize) :
+    Result (alloc.vec.Vec T) := ok v

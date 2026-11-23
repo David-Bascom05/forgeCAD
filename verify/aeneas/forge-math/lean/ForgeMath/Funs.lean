@@ -31,6 +31,23 @@ def F64.Insts.CoreCloneClone : core.clone.Clone F64 := {
   clone := F64.Insts.CoreCloneClone.clone
 }
 
+/-- Trait implementation: [core::cmp::impls::{impl core::cmp::PartialEq<f64> for f64}]
+    Source: '/rustc/library/core/src/cmp.rs', lines 2183:12-2183:39; this code is generated from a macro invocation at: '/rustc/library/core/src/cmp.rs', lines 2193:4-2195:5
+    Name pattern: [core::cmp::PartialEq<f64, f64>] -/
+@[reducible, rust_trait_impl "core::cmp::PartialEq<f64, f64>"]
+def F64.Insts.CoreCmpPartialEqF64 : core.cmp.PartialEq F64 F64 := {
+  eq := F64.Insts.CoreCmpPartialEqF64.eq
+}
+
+/-- Trait implementation: [core::cmp::impls::{impl core::cmp::PartialOrd<f64> for f64}]
+    Source: '/rustc/library/core/src/cmp.rs', lines 2263:12-2263:40; this code is generated from a macro invocation at: '/rustc/library/core/src/cmp.rs', lines 2299:4-2299:42
+    Name pattern: [core::cmp::PartialOrd<f64, f64>] -/
+@[reducible, rust_trait_impl "core::cmp::PartialOrd<f64, f64>"]
+def F64.Insts.CoreCmpPartialOrdF64 : core.cmp.PartialOrd F64 F64 := {
+  partialEqInst := F64.Insts.CoreCmpPartialEqF64
+  partial_cmp := F64.Insts.CoreCmpPartialOrdF64.partial_cmp
+}
+
 /-- Trait implementation: [core::fmt::float::{impl core::fmt::Debug for f64}]
     Source: '/rustc/library/core/src/fmt/float.rs', lines 209:12-209:30; this code is generated from a macro invocation at: '/rustc/library/core/src/fmt/float.rs', lines 239:0-239:21
     Name pattern: [core::fmt::Debug<f64>] -/
@@ -66,6 +83,22 @@ def F64.Insts.CoreIterTraitsAccumSumSharedAF64 : core.iter.traits.accum.Sum F64
 def F64.Insts.CoreMarkerCopy : core.marker.Copy F64 := {
   cloneInst := F64.Insts.CoreCloneClone
 }
+
+/-- [forge_math::dmath::PI]
+    Source: 'kernel/forge-math/src/dmath.rs', lines 9:0-9:42
+    Visibility: public -/
+@[global_simps, irreducible] def dmath.PI : Result F64 := core.f64.consts.PI
+
+/-- [forge_math::dmath::TAU]
+    Source: 'kernel/forge-math/src/dmath.rs', lines 10:0-10:44
+    Visibility: public -/
+@[global_simps, irreducible] def dmath.TAU : Result F64 := core.f64.consts.TAU
+
+/-- [forge_math::dmath::FRAC_PI_2]
+    Source: 'kernel/forge-math/src/dmath.rs', lines 11:0-11:56
+    Visibility: public -/
+@[global_simps, irreducible]
+def dmath.FRAC_PI_2 : Result F64 := core.f64.consts.FRAC_PI_2
 
 /-- [forge_math::dmath::TOINT]
     Source: 'kernel/forge-math/src/dmath.rs', lines 13:0-13:38 -/
@@ -302,6 +335,809 @@ def dmath.sin_cos (x : F64) : Result (F64 × F64) := do
              ok (fl2, s)
   else let fl ← core.f64.F64.NAN
        ok (fl, fl)
+
+/-- [forge_math::dmath::sin]:
+    Source: 'kernel/forge-math/src/dmath.rs', lines 100:0-102:1
+    Visibility: public -/
+def dmath.sin (x : F64) : Result F64 := do
+  let (fl, _) ← dmath.sin_cos x
+  ok fl
+
+/-- [forge_math::dmath::cos]:
+    Source: 'kernel/forge-math/src/dmath.rs', lines 104:0-106:1
+    Visibility: public -/
+def dmath.cos (x : F64) : Result F64 := do
+  let (_, fl) ← dmath.sin_cos x
+  ok fl
+
+/-- [forge_math::dmath::atan::AT]
+    Source: 'kernel/forge-math/src/dmath.rs', lines 121:4-133:6 -/
+@[global_simps, irreducible]
+def dmath.atan.AT : Array F64 11#usize :=
+  Array.make 11#usize [
+    F64.Ops.ofBits 4599676419421066509, F64.Ops.ofBits 13819745816549059524,
+    F64.Ops.ofBits 4594314991288484863, F64.Ops.ofBits 13816042856347014769,
+    F64.Ops.ofBits 4591215095208222830, F64.Ops.ofBits 13813579038447671917,
+    F64.Ops.ofBits 4589464229703073105, F64.Ops.ofBits 13811939918460419482,
+    F64.Ops.ofBits 4587333258118041067, F64.Ops.ofBits 13808797612367309871,
+    F64.Ops.ofBits 4580351289466214929
+    ]
+
+/-- [forge_math::dmath::atan::ATANLO]
+    Source: 'kernel/forge-math/src/dmath.rs', lines 115:4-120:6 -/
+@[global_simps, irreducible]
+def dmath.atan.ATANLO : Array F64 4#usize :=
+  Array.make 4#usize [
+    F64.Ops.ofBits 4357843414468748770, F64.Ops.ofBits 4359948597267291143,
+    F64.Ops.ofBits 4354989122426817469, F64.Ops.ofBits 4364452196894661639
+    ]
+
+/-- [forge_math::dmath::atan::ATANHI]
+    Source: 'kernel/forge-math/src/dmath.rs', lines 109:4-114:6 -/
+@[global_simps, irreducible]
+def dmath.atan.ATANHI : Array F64 4#usize :=
+  Array.make 4#usize [
+    F64.Ops.ofBits 4602023952714414927, F64.Ops.ofBits 4605249457297304856,
+    F64.Ops.ofBits 4607027438436873883, F64.Ops.ofBits 4609753056924675352
+    ]
+
+/-- [forge_math::dmath::atan]:
+    Source: 'kernel/forge-math/src/dmath.rs', lines 108:0-175:1
+    Visibility: public -/
+def dmath.atan (x : F64) : Result F64 := do
+  let b ← core.f64.F64.is_nan x
+  if b
+  then ok x
+  else
+    let neg ← core.f64.F64.is_sign_negative x
+    let ax ← core.f64.F64.abs x
+    if F64.Ops.ge ax (F64.Ops.ofBits 4904419994206470144)
+    then
+      let fl ← Array.index_usize dmath.atan.ATANHI 3#usize
+      let fl1 ← Array.index_usize dmath.atan.ATANLO 3#usize
+      let z ← lift (F64.Ops.add fl fl1)
+      if neg
+      then ok (F64.Ops.neg z)
+      else ok z
+    else
+      if F64.Ops.lt ax (F64.Ops.ofBits 4601552919265804288)
+      then
+        if F64.Ops.lt ax (F64.Ops.ofBits 4485585228861014016)
+        then ok x
+        else
+          let z ← lift (F64.Ops.mul ax ax)
+          let w ← lift (F64.Ops.mul z z)
+          let fl ← Array.index_usize dmath.atan.AT 0#usize
+          let fl1 ← Array.index_usize dmath.atan.AT 2#usize
+          let fl2 ← Array.index_usize dmath.atan.AT 4#usize
+          let fl3 ← Array.index_usize dmath.atan.AT 6#usize
+          let fl4 ← Array.index_usize dmath.atan.AT 8#usize
+          let fl5 ← Array.index_usize dmath.atan.AT 10#usize
+          let fl6 ← lift (F64.Ops.mul w fl5)
+          let fl7 ← lift (F64.Ops.add fl4 fl6)
+          let fl8 ← lift (F64.Ops.mul w fl7)
+          let fl9 ← lift (F64.Ops.add fl3 fl8)
+          let fl10 ← lift (F64.Ops.mul w fl9)
+          let fl11 ← lift (F64.Ops.add fl2 fl10)
+          let fl12 ← lift (F64.Ops.mul w fl11)
+          let fl13 ← lift (F64.Ops.add fl1 fl12)
+          let fl14 ← lift (F64.Ops.mul w fl13)
+          let fl15 ← lift (F64.Ops.add fl fl14)
+          let s1 ← lift (F64.Ops.mul z fl15)
+          let fl16 ← Array.index_usize dmath.atan.AT 1#usize
+          let fl17 ← Array.index_usize dmath.atan.AT 3#usize
+          let fl18 ← Array.index_usize dmath.atan.AT 5#usize
+          let fl19 ← Array.index_usize dmath.atan.AT 7#usize
+          let fl20 ← Array.index_usize dmath.atan.AT 9#usize
+          let fl21 ← lift (F64.Ops.mul w fl20)
+          let fl22 ← lift (F64.Ops.add fl19 fl21)
+          let fl23 ← lift (F64.Ops.mul w fl22)
+          let fl24 ← lift (F64.Ops.add fl18 fl23)
+          let fl25 ← lift (F64.Ops.mul w fl24)
+          let fl26 ← lift (F64.Ops.add fl17 fl25)
+          let fl27 ← lift (F64.Ops.mul w fl26)
+          let fl28 ← lift (F64.Ops.add fl16 fl27)
+          let s2 ← lift (F64.Ops.mul w fl28)
+          if (-1)#i32 < 0#i32
+          then
+            let fl29 ← lift (F64.Ops.add s1 s2)
+            let fl30 ← lift (F64.Ops.mul ax fl29)
+            let r ← lift (F64.Ops.sub ax fl30)
+            if neg
+            then ok (F64.Ops.neg r)
+            else ok r
+          else
+            let i ← lift (IScalar.hcast .Usize (-1)#i32)
+            let fl29 ← Array.index_usize dmath.atan.ATANHI i
+            let fl30 ← lift (F64.Ops.add s1 s2)
+            let fl31 ← lift (F64.Ops.mul ax fl30)
+            let fl32 ← Array.index_usize dmath.atan.ATANLO i
+            let fl33 ← lift (F64.Ops.sub fl31 fl32)
+            let fl34 ← lift (F64.Ops.sub fl33 ax)
+            let r ← lift (F64.Ops.sub fl29 fl34)
+            if neg
+            then ok (F64.Ops.neg r)
+            else ok r
+      else
+        let (ax1, id) ←
+          if F64.Ops.lt ax (F64.Ops.ofBits 4608026843730149376)
+          then
+            if F64.Ops.lt ax (F64.Ops.ofBits 4604367669032910848)
+            then
+              do
+              let fl ←
+                lift (F64.Ops.mul (F64.Ops.ofBits 4611686018427387904) ax)
+              let fl1 ←
+                lift (F64.Ops.sub fl (F64.Ops.ofBits 4607182418800017408))
+              let fl2 ←
+                lift (F64.Ops.add (F64.Ops.ofBits 4611686018427387904) ax)
+              let ax2 ← lift (F64.Ops.div fl1 fl2)
+              ok (ax2, 0#i32)
+            else
+              do
+              let fl ←
+                lift (F64.Ops.sub ax (F64.Ops.ofBits 4607182418800017408))
+              let fl1 ←
+                lift (F64.Ops.add ax (F64.Ops.ofBits 4607182418800017408))
+              let ax2 ← lift (F64.Ops.div fl fl1)
+              ok (ax2, 1#i32)
+          else
+            if F64.Ops.lt ax (F64.Ops.ofBits 4612671180845875200)
+            then
+              do
+              let fl ←
+                lift (F64.Ops.sub ax (F64.Ops.ofBits 4609434218613702656))
+              let fl1 ←
+                lift (F64.Ops.mul (F64.Ops.ofBits 4609434218613702656) ax)
+              let fl2 ←
+                lift (F64.Ops.add (F64.Ops.ofBits 4607182418800017408) fl1)
+              let ax2 ← lift (F64.Ops.div fl fl2)
+              ok (ax2, 2#i32)
+            else
+              do
+              let ax2 ←
+                lift (F64.Ops.div (F64.Ops.ofBits 13830554455654793216) ax)
+              ok (ax2, 3#i32)
+        let z ← lift (F64.Ops.mul ax1 ax1)
+        let w ← lift (F64.Ops.mul z z)
+        let fl ← Array.index_usize dmath.atan.AT 0#usize
+        let fl1 ← Array.index_usize dmath.atan.AT 2#usize
+        let fl2 ← Array.index_usize dmath.atan.AT 4#usize
+        let fl3 ← Array.index_usize dmath.atan.AT 6#usize
+        let fl4 ← Array.index_usize dmath.atan.AT 8#usize
+        let fl5 ← Array.index_usize dmath.atan.AT 10#usize
+        let fl6 ← lift (F64.Ops.mul w fl5)
+        let fl7 ← lift (F64.Ops.add fl4 fl6)
+        let fl8 ← lift (F64.Ops.mul w fl7)
+        let fl9 ← lift (F64.Ops.add fl3 fl8)
+        let fl10 ← lift (F64.Ops.mul w fl9)
+        let fl11 ← lift (F64.Ops.add fl2 fl10)
+        let fl12 ← lift (F64.Ops.mul w fl11)
+        let fl13 ← lift (F64.Ops.add fl1 fl12)
+        let fl14 ← lift (F64.Ops.mul w fl13)
+        let fl15 ← lift (F64.Ops.add fl fl14)
+        let s1 ← lift (F64.Ops.mul z fl15)
+        let fl16 ← Array.index_usize dmath.atan.AT 1#usize
+        let fl17 ← Array.index_usize dmath.atan.AT 3#usize
+        let fl18 ← Array.index_usize dmath.atan.AT 5#usize
+        let fl19 ← Array.index_usize dmath.atan.AT 7#usize
+        let fl20 ← Array.index_usize dmath.atan.AT 9#usize
+        let fl21 ← lift (F64.Ops.mul w fl20)
+        let fl22 ← lift (F64.Ops.add fl19 fl21)
+        let fl23 ← lift (F64.Ops.mul w fl22)
+        let fl24 ← lift (F64.Ops.add fl18 fl23)
+        let fl25 ← lift (F64.Ops.mul w fl24)
+        let fl26 ← lift (F64.Ops.add fl17 fl25)
+        let fl27 ← lift (F64.Ops.mul w fl26)
+        let fl28 ← lift (F64.Ops.add fl16 fl27)
+        let s2 ← lift (F64.Ops.mul w fl28)
+        if id < 0#i32
+        then
+          let fl29 ← lift (F64.Ops.add s1 s2)
+          let fl30 ← lift (F64.Ops.mul ax1 fl29)
+          let r ← lift (F64.Ops.sub ax1 fl30)
+          if neg
+          then ok (F64.Ops.neg r)
+          else ok r
+        else
+          let i ← lift (IScalar.hcast .Usize id)
+          let fl29 ← Array.index_usize dmath.atan.ATANHI i
+          let fl30 ← lift (F64.Ops.add s1 s2)
+          let fl31 ← lift (F64.Ops.mul ax1 fl30)
+          let fl32 ← Array.index_usize dmath.atan.ATANLO i
+          let fl33 ← lift (F64.Ops.sub fl31 fl32)
+          let fl34 ← lift (F64.Ops.sub fl33 ax1)
+          let r ← lift (F64.Ops.sub fl29 fl34)
+          if neg
+          then ok (F64.Ops.neg r)
+          else ok r
+
+/-- [forge_math::dmath::atan2::PI_LO]
+    Source: 'kernel/forge-math/src/dmath.rs', lines 178:4-178:55 -/
+@[global_simps, irreducible]
+def dmath.atan2.PI_LO : F64 := F64.Ops.ofBits 4368955796522032135
+
+/-- [forge_math::dmath::atan2]:
+    Source: 'kernel/forge-math/src/dmath.rs', lines 177:0-219:1
+    Visibility: public -/
+def dmath.atan2 (y : F64) (x : F64) : Result F64 := do
+  let b ← core.f64.F64.is_nan x
+  if b
+  then core.f64.F64.NAN
+  else
+    let b1 ← core.f64.F64.is_nan y
+    if b1
+    then core.f64.F64.NAN
+    else
+      if F64.Ops.eq y (F64.Ops.ofBits 0)
+      then
+        let b2 ← core.f64.F64.is_sign_negative x
+        if b2
+        then
+          let b3 ← core.f64.F64.is_sign_negative y
+          if b3
+          then let fl ← dmath.PI
+               ok (F64.Ops.neg fl)
+          else dmath.PI
+        else ok y
+      else
+        if F64.Ops.eq x (F64.Ops.ofBits 0)
+        then
+          if F64.Ops.lt y (F64.Ops.ofBits 0)
+          then let fl ← dmath.FRAC_PI_2
+               ok (F64.Ops.neg fl)
+          else dmath.FRAC_PI_2
+        else
+          let b2 ← core.f64.F64.is_infinite x
+          if b2
+          then
+            let b3 ← core.f64.F64.is_infinite y
+            let q ←
+              if b3
+              then
+                if F64.Ops.gt x (F64.Ops.ofBits 0)
+                then
+                  do
+                  let fl ← dmath.PI
+                  ok (F64.Ops.div fl (F64.Ops.ofBits 4616189618054758400))
+                else
+                  do
+                  let fl ← dmath.PI
+                  let fl1 ←
+                    lift (F64.Ops.mul (F64.Ops.ofBits 4613937818241073152) fl)
+                  ok (F64.Ops.div fl1 (F64.Ops.ofBits 4616189618054758400))
+              else
+                if F64.Ops.gt x (F64.Ops.ofBits 0)
+                then ok (F64.Ops.ofBits 0)
+                else dmath.PI
+            if F64.Ops.lt y (F64.Ops.ofBits 0)
+            then ok (F64.Ops.neg q)
+            else ok q
+          else
+            let b3 ← core.f64.F64.is_infinite y
+            if b3
+            then
+              if F64.Ops.lt y (F64.Ops.ofBits 0)
+              then let fl ← dmath.FRAC_PI_2
+                   ok (F64.Ops.neg fl)
+              else dmath.FRAC_PI_2
+            else
+              let i ← dmath.exponent y
+              let i1 ← dmath.exponent x
+              let k ← i - i1
+              let z ←
+                if k > 60#i32
+                then
+                  do
+                  let fl ←
+                    lift (F64.Ops.mul (F64.Ops.ofBits 4602678819172646912)
+                      dmath.atan2.PI_LO)
+                  let fl1 ← dmath.FRAC_PI_2
+                  ok (F64.Ops.add fl1 fl)
+                else
+                  if F64.Ops.lt x (F64.Ops.ofBits 0)
+                  then
+                    if k < (-60)#i32
+                    then ok (F64.Ops.ofBits 0)
+                    else
+                      do
+                      let fl ← lift (F64.Ops.div y x)
+                      let fl1 ← core.f64.F64.abs fl
+                      dmath.atan fl1
+                  else
+                    do
+                    let fl ← lift (F64.Ops.div y x)
+                    let fl1 ← core.f64.F64.abs fl
+                    dmath.atan fl1
+              if F64.Ops.lt x (F64.Ops.ofBits 0)
+              then
+                if F64.Ops.lt y (F64.Ops.ofBits 0)
+                then
+                  let fl ← lift (F64.Ops.sub z dmath.atan2.PI_LO)
+                  let fl1 ← dmath.PI
+                  ok (F64.Ops.sub fl fl1)
+                else
+                  let fl ← lift (F64.Ops.sub z dmath.atan2.PI_LO)
+                  let fl1 ← dmath.PI
+                  ok (F64.Ops.sub fl1 fl)
+              else
+                if F64.Ops.lt y (F64.Ops.ofBits 0)
+                then ok (F64.Ops.neg z)
+                else ok z
+
+/-- [forge_math::dmath::asin]:
+    Source: 'kernel/forge-math/src/dmath.rs', lines 222:0-227:1
+    Visibility: public -/
+def dmath.asin (x : F64) : Result F64 := do
+  let ri ←
+    core.ops.range.RangeInclusive.new (F64.Ops.ofBits 13830554455654793216)
+      (F64.Ops.ofBits 4607182418800017408)
+  let b ←
+    core.ops.range.RangeInclusive.contains F64.Insts.CoreCmpPartialOrdF64
+      F64.Insts.CoreCmpPartialOrdF64 F64.Insts.CoreCmpPartialOrdF64 ri x
+  if b
+  then
+    let fl ← lift (F64.Ops.sub (F64.Ops.ofBits 4607182418800017408) x)
+    let fl1 ← lift (F64.Ops.add (F64.Ops.ofBits 4607182418800017408) x)
+    let fl2 ← lift (F64.Ops.mul fl fl1)
+    let fl3 ← std.f64.F64.sqrt fl2
+    dmath.atan2 x fl3
+  else core.f64.F64.NAN
+
+/-- [forge_math::dmath::acos]:
+    Source: 'kernel/forge-math/src/dmath.rs', lines 230:0-235:1
+    Visibility: public -/
+def dmath.acos (x : F64) : Result F64 := do
+  let ri ←
+    core.ops.range.RangeInclusive.new (F64.Ops.ofBits 13830554455654793216)
+      (F64.Ops.ofBits 4607182418800017408)
+  let b ←
+    core.ops.range.RangeInclusive.contains F64.Insts.CoreCmpPartialOrdF64
+      F64.Insts.CoreCmpPartialOrdF64 F64.Insts.CoreCmpPartialOrdF64 ri x
+  if b
+  then
+    let fl ← lift (F64.Ops.sub (F64.Ops.ofBits 4607182418800017408) x)
+    let fl1 ← lift (F64.Ops.add (F64.Ops.ofBits 4607182418800017408) x)
+    let fl2 ← lift (F64.Ops.mul fl fl1)
+    let fl3 ← std.f64.F64.sqrt fl2
+    dmath.atan2 fl3 x
+  else core.f64.F64.NAN
+
+/-- [forge_math::dmath::acos_clamped]:
+    Source: 'kernel/forge-math/src/dmath.rs', lines 239:0-241:1
+    Visibility: public -/
+def dmath.acos_clamped (x : F64) : Result F64 := do
+  let fl ←
+    core.f64.F64.clamp x (F64.Ops.ofBits 13830554455654793216) (F64.Ops.ofBits
+      4607182418800017408)
+  dmath.acos fl
+
+/-- [forge_math::dmath::cbrt::P4]
+    Source: 'kernel/forge-math/src/dmath.rs', lines 250:4-250:50 -/
+@[global_simps, irreducible]
+def dmath.cbrt.P4 : F64 := F64.Ops.ofBits 4594428087489588695
+
+/-- [forge_math::dmath::cbrt::P3]
+    Source: 'kernel/forge-math/src/dmath.rs', lines 249:4-249:51 -/
+@[global_simps, irreducible]
+def dmath.cbrt.P3 : F64 := F64.Ops.ofBits 13828378297712988633
+
+/-- [forge_math::dmath::cbrt::P2]
+    Source: 'kernel/forge-math/src/dmath.rs', lines 248:4-248:50 -/
+@[global_simps, irreducible]
+def dmath.cbrt.P2 : F64 := F64.Ops.ofBits 4609981089455920834
+
+/-- [forge_math::dmath::cbrt::P1]
+    Source: 'kernel/forge-math/src/dmath.rs', lines 247:4-247:50 -/
+@[global_simps, irreducible]
+def dmath.cbrt.P1 : F64 := F64.Ops.ofBits 13834540050331739168
+
+/-- [forge_math::dmath::cbrt::P0]
+    Source: 'kernel/forge-math/src/dmath.rs', lines 246:4-246:49 -/
+@[global_simps, irreducible]
+def dmath.cbrt.P0 : F64 := F64.Ops.ofBits 4611127355109402258
+
+/-- [forge_math::dmath::cbrt::B2]
+    Source: 'kernel/forge-math/src/dmath.rs', lines 245:4-245:32 -/
+@[global_simps, irreducible] def dmath.cbrt.B2 : Std.U32 := 696219795#u32
+
+/-- [forge_math::dmath::cbrt::B1]
+    Source: 'kernel/forge-math/src/dmath.rs', lines 244:4-244:32 -/
+@[global_simps, irreducible] def dmath.cbrt.B1 : Std.U32 := 715094163#u32
+
+/-- [forge_math::dmath::cbrt]:
+    Source: 'kernel/forge-math/src/dmath.rs', lines 243:0-278:1
+    Visibility: public -/
+def dmath.cbrt (x : F64) : Result F64 := do
+  let bits ← core.f64.F64.to_bits x
+  let i ← bits >>> 32#i32
+  let i1 ← lift (UScalar.cast .U32 i)
+  let hx ← lift (i1 &&& 2147483647#u32)
+  if hx >= 2146435072#u32
+  then ok (F64.Ops.add x x)
+  else
+    if hx < 1048576#u32
+    then
+      let fl ← core.f64.F64.from_bits 4850376798678024192#u64
+      let fl1 ← lift (F64.Ops.mul x fl)
+      let ubits ← core.f64.F64.to_bits fl1
+      let i2 ← ubits >>> 32#i32
+      let i3 ← lift (UScalar.cast .U32 i2)
+      let hx1 ← lift (i3 &&& 2147483647#u32)
+      if hx1 = 0#u32
+      then ok x
+      else
+        let i4 ← hx1 / 3#u32
+        let hx2 ← i4 + dmath.cbrt.B2
+        let i5 ← 1#u64 <<< 63#i32
+        let ubits1 ← lift (bits &&& i5)
+        let i6 ← lift (UScalar.cast .U64 hx2)
+        let i7 ← i6 <<< 32#i32
+        let ubits2 ← lift (ubits1 ||| i7)
+        let t ← core.f64.F64.from_bits ubits2
+        let fl2 ← lift (F64.Ops.mul t t)
+        let fl3 ← lift (F64.Ops.div t x)
+        let r ← lift (F64.Ops.mul fl2 fl3)
+        let fl4 ← lift (F64.Ops.mul r dmath.cbrt.P2)
+        let fl5 ← lift (F64.Ops.add dmath.cbrt.P1 fl4)
+        let fl6 ← lift (F64.Ops.mul r fl5)
+        let fl7 ← lift (F64.Ops.add dmath.cbrt.P0 fl6)
+        let fl8 ← lift (F64.Ops.mul r r)
+        let fl9 ← lift (F64.Ops.mul fl8 r)
+        let fl10 ← lift (F64.Ops.mul r dmath.cbrt.P4)
+        let fl11 ← lift (F64.Ops.add dmath.cbrt.P3 fl10)
+        let fl12 ← lift (F64.Ops.mul fl9 fl11)
+        let fl13 ← lift (F64.Ops.add fl7 fl12)
+        let t1 ← lift (F64.Ops.mul t fl13)
+        let i8 ← core.f64.F64.to_bits t1
+        let i9 ← lift (core.num.U64.wrapping_add i8 2147483648#u64)
+        let i10 ← lift (i9 &&& 18446744072635809792#u64)
+        let t2 ← core.f64.F64.from_bits i10
+        let s ← lift (F64.Ops.mul t2 t2)
+        let r1 ← lift (F64.Ops.div x s)
+        let w ← lift (F64.Ops.add t2 t2)
+        let fl14 ← lift (F64.Ops.sub r1 t2)
+        let fl15 ← lift (F64.Ops.add w r1)
+        let r2 ← lift (F64.Ops.div fl14 fl15)
+        let fl16 ← lift (F64.Ops.mul t2 r2)
+        ok (F64.Ops.add t2 fl16)
+    else
+      let i2 ← hx / 3#u32
+      let hx1 ← i2 + dmath.cbrt.B1
+      let i3 ← 1#u64 <<< 63#i32
+      let ubits ← lift (bits &&& i3)
+      let i4 ← lift (UScalar.cast .U64 hx1)
+      let i5 ← i4 <<< 32#i32
+      let ubits1 ← lift (ubits ||| i5)
+      let t ← core.f64.F64.from_bits ubits1
+      let fl ← lift (F64.Ops.mul t t)
+      let fl1 ← lift (F64.Ops.div t x)
+      let r ← lift (F64.Ops.mul fl fl1)
+      let fl2 ← lift (F64.Ops.mul r dmath.cbrt.P2)
+      let fl3 ← lift (F64.Ops.add dmath.cbrt.P1 fl2)
+      let fl4 ← lift (F64.Ops.mul r fl3)
+      let fl5 ← lift (F64.Ops.add dmath.cbrt.P0 fl4)
+      let fl6 ← lift (F64.Ops.mul r r)
+      let fl7 ← lift (F64.Ops.mul fl6 r)
+      let fl8 ← lift (F64.Ops.mul r dmath.cbrt.P4)
+      let fl9 ← lift (F64.Ops.add dmath.cbrt.P3 fl8)
+      let fl10 ← lift (F64.Ops.mul fl7 fl9)
+      let fl11 ← lift (F64.Ops.add fl5 fl10)
+      let t1 ← lift (F64.Ops.mul t fl11)
+      let i6 ← core.f64.F64.to_bits t1
+      let i7 ← lift (core.num.U64.wrapping_add i6 2147483648#u64)
+      let i8 ← lift (i7 &&& 18446744072635809792#u64)
+      let t2 ← core.f64.F64.from_bits i8
+      let s ← lift (F64.Ops.mul t2 t2)
+      let r1 ← lift (F64.Ops.div x s)
+      let w ← lift (F64.Ops.add t2 t2)
+      let fl12 ← lift (F64.Ops.sub r1 t2)
+      let fl13 ← lift (F64.Ops.add w r1)
+      let r2 ← lift (F64.Ops.div fl12 fl13)
+      let fl14 ← lift (F64.Ops.mul t2 r2)
+      ok (F64.Ops.add t2 fl14)
+
+/-- [forge_math::dmath::sin_cos_steps]: loop body 0:
+    Source: 'kernel/forge-math/src/dmath.rs', lines 288:4-295:5
+    Visibility: public -/
+@[rust_loop_body]
+def dmath.sin_cos_steps_loop.body
+  (start : F64) (step : F64) (sd : F64) (cd : F64)
+  (iter : core.ops.range.Range Std.Usize) (out : alloc.vec.Vec (F64 × F64))
+  (s : F64) (c : F64) :
+  Result (ControlFlow ((core.ops.range.Range Std.Usize) × (alloc.vec.Vec (F64
+    × F64)) × F64 × F64) (alloc.vec.Vec (F64 × F64)))
+  := do
+  let (o, iter1) ←
+    core.iter.range.IteratorRange.next core.iter.range.StepUsize iter
+  match o with
+  | none => ok (done out)
+  | some k =>
+    let i ← k % 32#usize
+    let (s1, c1) ←
+      if i = 0#usize
+      then
+        do
+        let fl ← lift (F64.Ops.ofUScalar k)
+        let fl1 ← lift (F64.Ops.mul step fl)
+        let fl2 ← lift (F64.Ops.add start fl1)
+        dmath.sin_cos fl2
+      else
+        do
+        let fl ← lift (F64.Ops.mul s cd)
+        let fl1 ← lift (F64.Ops.mul c sd)
+        let s2 ← lift (F64.Ops.add fl fl1)
+        let fl2 ← lift (F64.Ops.mul c cd)
+        let fl3 ← lift (F64.Ops.mul s sd)
+        let c2 ← lift (F64.Ops.sub fl2 fl3)
+        ok (s2, c2)
+    let out1 ← alloc.vec.Vec.push out (s1, c1)
+    ok (cont (iter1, out1, s1, c1))
+
+/-- [forge_math::dmath::sin_cos_steps]: loop 0:
+    Source: 'kernel/forge-math/src/dmath.rs', lines 288:4-295:5
+    Visibility: public -/
+@[rust_loop]
+def dmath.sin_cos_steps_loop
+  (iter : core.ops.range.Range Std.Usize) (start : F64) (step : F64)
+  (out : alloc.vec.Vec (F64 × F64)) (sd : F64) (cd : F64) (s : F64) 
+  (c : F64) :
+  Result (alloc.vec.Vec (F64 × F64))
+  := do
+  loop
+    (fun (iter1, out1, s1, c1) => dmath.sin_cos_steps_loop.body start step sd
+      cd iter1 out1 s1 c1)
+    (iter, out, s, c)
+
+/-- [forge_math::dmath::sin_cos_steps]:
+    Source: 'kernel/forge-math/src/dmath.rs', lines 283:0-296:1
+    Visibility: public -/
+def dmath.sin_cos_steps
+  (start : F64) (step : F64) (n : Std.Usize) (out : alloc.vec.Vec (F64 × F64))
+  :
+  Result (alloc.vec.Vec (F64 × F64))
+  := do
+  let out1 ← alloc.vec.Vec.clear alloc.alloc.Global out
+  let out2 ← alloc.vec.Vec.reserve alloc.alloc.Global out1 n
+  let (sd, cd) ← dmath.sin_cos step
+  dmath.sin_cos_steps_loop { start := 0#usize, «end» := n } start step out2
+    sd cd (F64.Ops.ofBits 0) (F64.Ops.ofBits 4607182418800017408)
+
+/-- [forge_math::dmath::wrap_tau]:
+    Source: 'kernel/forge-math/src/dmath.rs', lines 299:0-308:1
+    Visibility: public -/
+def dmath.wrap_tau (a : F64) : Result F64 := do
+  let fl ← dmath.TAU
+  let fl1 ← lift (F64.Ops.div a fl)
+  let fl2 ← std.f64.F64.floor fl1
+  let fl3 ← lift (F64.Ops.mul fl fl2)
+  let r ← lift (F64.Ops.sub a fl3)
+  let r1 ← if F64.Ops.ge r fl
+             then ok (F64.Ops.sub r fl)
+             else ok r
+  if F64.Ops.lt r1 (F64.Ops.ofBits 0)
+  then ok (F64.Ops.ofBits 0)
+  else ok r1
+
+/-- [forge_math::dmath::LN2_HI]
+    Source: 'kernel/forge-math/src/dmath.rs', lines 310:0-310:52 -/
+@[global_simps, irreducible]
+def dmath.LN2_HI : F64 := F64.Ops.ofBits 4604418534311723008
+
+/-- [forge_math::dmath::LN2_LO]
+    Source: 'kernel/forge-math/src/dmath.rs', lines 311:0-311:53 -/
+@[global_simps, irreducible]
+def dmath.LN2_LO : F64 := F64.Ops.ofBits 4461442080421002358
+
+/-- [forge_math::dmath::pow2]:
+    Source: 'kernel/forge-math/src/dmath.rs', lines 314:0-316:1 -/
+def dmath.pow2 (k : Std.I32) : Result F64 := do
+  let i ← 1023#i32 + k
+  let i1 ← lift (IScalar.hcast .U64 i)
+  let i2 ← i1 <<< 52#i32
+  core.f64.F64.from_bits i2
+
+/-- [forge_math::dmath::exp::P5]
+    Source: 'kernel/forge-math/src/dmath.rs', lines 325:4-325:52 -/
+@[global_simps, irreducible]
+def dmath.exp.P5 : F64 := F64.Ops.ofBits 4496342204012209360
+
+/-- [forge_math::dmath::exp::P4]
+    Source: 'kernel/forge-math/src/dmath.rs', lines 324:4-324:53 -/
+@[global_simps, irreducible]
+def dmath.exp.P4 : F64 := F64.Ops.ofBits 13743786778040626161
+
+/-- [forge_math::dmath::exp::P3]
+    Source: 'kernel/forge-math/src/dmath.rs', lines 323:4-323:52 -/
+@[global_simps, irreducible]
+def dmath.exp.P3 : F64 := F64.Ops.ofBits 4544508515198557740
+
+/-- [forge_math::dmath::exp::P2]
+    Source: 'kernel/forge-math/src/dmath.rs', lines 322:4-322:53 -/
+@[global_simps, irreducible]
+def dmath.exp.P2 : F64 := F64.Ops.ofBits 13791923578850950547
+
+/-- [forge_math::dmath::exp::P1]
+    Source: 'kernel/forge-math/src/dmath.rs', lines 321:4-321:52 -/
+@[global_simps, irreducible]
+def dmath.exp.P1 : F64 := F64.Ops.ofBits 4595172819793696062
+
+/-- [forge_math::dmath::exp::INVLN2]
+    Source: 'kernel/forge-math/src/dmath.rs', lines 320:4-320:53 -/
+@[global_simps, irreducible]
+def dmath.exp.INVLN2 : F64 := F64.Ops.ofBits 4609176140021203710
+
+/-- [forge_math::dmath::exp]:
+    Source: 'kernel/forge-math/src/dmath.rs', lines 319:0-345:1
+    Visibility: public -/
+def dmath.exp (x : F64) : Result F64 := do
+  let b ← core.f64.F64.is_nan x
+  if b
+  then ok x
+  else
+    if F64.Ops.gt x (F64.Ops.ofBits 4649454530587146735)
+    then core.f64.F64.INFINITY
+    else
+      if F64.Ops.lt x (F64.Ops.ofBits 13873137513782915153)
+      then ok (F64.Ops.ofBits 0)
+      else
+        let fl ← lift (F64.Ops.mul x dmath.exp.INVLN2)
+        let fl1 ←
+          if F64.Ops.lt x (F64.Ops.ofBits 0)
+          then ok (F64.Ops.ofBits 13826050856027422720)
+          else ok (F64.Ops.ofBits 4602678819172646912)
+        let fl2 ← lift (F64.Ops.add fl fl1)
+        let k ← lift (F64.Ops.toIScalar .I32 fl2)
+        let fl3 ← lift (F64.Ops.ofIScalar k)
+        let fl4 ← lift (F64.Ops.mul fl3 dmath.LN2_HI)
+        let hi ← lift (F64.Ops.sub x fl4)
+        let fl5 ← lift (F64.Ops.ofIScalar k)
+        let lo ← lift (F64.Ops.mul fl5 dmath.LN2_LO)
+        let r ← lift (F64.Ops.sub hi lo)
+        let z ← lift (F64.Ops.mul r r)
+        let fl6 ← lift (F64.Ops.mul z dmath.exp.P5)
+        let fl7 ← lift (F64.Ops.add dmath.exp.P4 fl6)
+        let fl8 ← lift (F64.Ops.mul z fl7)
+        let fl9 ← lift (F64.Ops.add dmath.exp.P3 fl8)
+        let fl10 ← lift (F64.Ops.mul z fl9)
+        let fl11 ← lift (F64.Ops.add dmath.exp.P2 fl10)
+        let fl12 ← lift (F64.Ops.mul z fl11)
+        let fl13 ← lift (F64.Ops.add dmath.exp.P1 fl12)
+        let fl14 ← lift (F64.Ops.mul z fl13)
+        let c ← lift (F64.Ops.sub r fl14)
+        let fl15 ← lift (F64.Ops.mul r c)
+        let fl16 ← lift (F64.Ops.sub (F64.Ops.ofBits 4611686018427387904) c)
+        let fl17 ← lift (F64.Ops.div fl15 fl16)
+        let fl18 ← lift (F64.Ops.sub lo fl17)
+        let fl19 ← lift (F64.Ops.sub fl18 hi)
+        let y ← lift (F64.Ops.sub (F64.Ops.ofBits 4607182418800017408) fl19)
+        let h ← k / 2#i32
+        let fl20 ← dmath.pow2 h
+        let fl21 ← lift (F64.Ops.mul y fl20)
+        let i ← k - h
+        let fl22 ← dmath.pow2 i
+        ok (F64.Ops.mul fl21 fl22)
+
+/-- [forge_math::dmath::ln::LG7]
+    Source: 'kernel/forge-math/src/dmath.rs', lines 355:4-355:50 -/
+@[global_simps, irreducible]
+def dmath.ln.LG7 : F64 := F64.Ops.ofBits 4594499633228436036
+
+/-- [forge_math::dmath::ln::LG6]
+    Source: 'kernel/forge-math/src/dmath.rs', lines 354:4-354:50 -/
+@[global_simps, irreducible]
+def dmath.ln.LG6 : F64 := F64.Ops.ofBits 4594685411790997151
+
+/-- [forge_math::dmath::ln::LG5]
+    Source: 'kernel/forge-math/src/dmath.rs', lines 353:4-353:50 -/
+@[global_simps, irreducible]
+def dmath.ln.LG5 : F64 := F64.Ops.ofBits 4595719342595441630
+
+/-- [forge_math::dmath::ln::LG4]
+    Source: 'kernel/forge-math/src/dmath.rs', lines 352:4-352:50 -/
+@[global_simps, irreducible]
+def dmath.ln.LG4 : F64 := F64.Ops.ofBits 4597174411056806063
+
+/-- [forge_math::dmath::ln::LG3]
+    Source: 'kernel/forge-math/src/dmath.rs', lines 351:4-351:50 -/
+@[global_simps, irreducible]
+def dmath.ln.LG3 : F64 := F64.Ops.ofBits 4598818590951641945
+
+/-- [forge_math::dmath::ln::LG2]
+    Source: 'kernel/forge-math/src/dmath.rs', lines 350:4-350:50 -/
+@[global_simps, irreducible]
+def dmath.ln.LG2 : F64 := F64.Ops.ofBits 4600877379321592324
+
+/-- [forge_math::dmath::ln::LG1]
+    Source: 'kernel/forge-math/src/dmath.rs', lines 349:4-349:50 -/
+@[global_simps, irreducible]
+def dmath.ln.LG1 : F64 := F64.Ops.ofBits 4604180019048437139
+
+/-- [forge_math::dmath::ln]:
+    Source: 'kernel/forge-math/src/dmath.rs', lines 348:0-387:1
+    Visibility: public -/
+def dmath.ln (x : F64) : Result F64 := do
+  let b ← core.f64.F64.is_nan x
+  if b
+  then core.f64.F64.NAN
+  else
+    if F64.Ops.lt x (F64.Ops.ofBits 0)
+    then core.f64.F64.NAN
+    else
+      if F64.Ops.eq x (F64.Ops.ofBits 0)
+      then core.f64.F64.NEG_INFINITY
+      else
+        let fl ← core.f64.F64.INFINITY
+        if F64.Ops.eq x fl
+        then ok x
+        else
+          let fl1 ← core.f64.F64.MIN_POSITIVE
+          let (x1, k) ←
+            if F64.Ops.lt x fl1
+            then
+              do
+              let fl2 ← dmath.pow2 54#i32
+              let x2 ← lift (F64.Ops.mul x fl2)
+              let k1 ← 0#i32 - 54#i32
+              ok (x2, k1)
+            else ok (x, 0#i32)
+          let bits ← core.f64.F64.to_bits x1
+          let i ← bits >>> 52#i32
+          let i1 ← lift (i &&& 2047#u64)
+          let i2 ← lift (UScalar.hcast .I32 i1)
+          let i3 ← i2 - 1023#i32
+          let k1 ← k + i3
+          let i4 ← lift (bits &&& 4503599627370495#u64)
+          let i5 ← lift (i4 ||| 4607182418800017408#u64)
+          let m ← core.f64.F64.from_bits i5
+          let fl2 ← core.f64.consts.SQRT_2
+          let (k2, m1) ←
+            if F64.Ops.gt m fl2
+            then
+              do
+              let m2 ←
+                lift (F64.Ops.mul m (F64.Ops.ofBits 4602678819172646912))
+              let k3 ← k1 + 1#i32
+              ok (k3, m2)
+            else ok (k1, m)
+          let f ← lift (F64.Ops.sub m1 (F64.Ops.ofBits 4607182418800017408))
+          let fl3 ← lift (F64.Ops.add (F64.Ops.ofBits 4611686018427387904) f)
+          let s ← lift (F64.Ops.div f fl3)
+          let z ← lift (F64.Ops.mul s s)
+          let w ← lift (F64.Ops.mul z z)
+          let fl4 ← lift (F64.Ops.mul w dmath.ln.LG6)
+          let fl5 ← lift (F64.Ops.add dmath.ln.LG4 fl4)
+          let fl6 ← lift (F64.Ops.mul w fl5)
+          let fl7 ← lift (F64.Ops.add dmath.ln.LG2 fl6)
+          let t1 ← lift (F64.Ops.mul w fl7)
+          let fl8 ← lift (F64.Ops.mul w dmath.ln.LG7)
+          let fl9 ← lift (F64.Ops.add dmath.ln.LG5 fl8)
+          let fl10 ← lift (F64.Ops.mul w fl9)
+          let fl11 ← lift (F64.Ops.add dmath.ln.LG3 fl10)
+          let fl12 ← lift (F64.Ops.mul w fl11)
+          let fl13 ← lift (F64.Ops.add dmath.ln.LG1 fl12)
+          let t2 ← lift (F64.Ops.mul z fl13)
+          let r ← lift (F64.Ops.add t2 t1)
+          let fl14 ←
+            lift (F64.Ops.mul (F64.Ops.ofBits 4602678819172646912) f)
+          let hfsq ← lift (F64.Ops.mul fl14 f)
+          let k3 ← lift (F64.Ops.ofIScalar k2)
+          let fl15 ← lift (F64.Ops.mul k3 dmath.LN2_HI)
+          let fl16 ← lift (F64.Ops.add hfsq r)
+          let fl17 ← lift (F64.Ops.mul s fl16)
+          let fl18 ← lift (F64.Ops.mul k3 dmath.LN2_LO)
+          let fl19 ← lift (F64.Ops.add fl17 fl18)
+          let fl20 ← lift (F64.Ops.sub hfsq fl19)
+          let fl21 ← lift (F64.Ops.sub fl20 f)
+          ok (F64.Ops.sub fl15 fl21)
+
+/-- [forge_math::dmath::powf]:
+    Source: 'kernel/forge-math/src/dmath.rs', lines 390:0-392:1
+    Visibility: public -/
+def dmath.powf (x : F64) (y : F64) : Result F64 := do
+  let fl ← dmath.ln x
+  let fl1 ← lift (F64.Ops.mul y fl)
+  dmath.exp fl1
 
 /-- [forge_math::frame::{impl core::clone::Clone for forge_math::frame::Frame}::clone]:
     Source: 'kernel/forge-math/src/frame.rs', lines 5:9-5:14

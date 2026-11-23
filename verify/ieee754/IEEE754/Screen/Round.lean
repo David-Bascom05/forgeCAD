@@ -16,7 +16,7 @@ namespace IEEE754.Screen
 open FP
 
 /-- `2^-53`, as a literal so `linarith` sees a numeral. -/
-notation "ε" => (1 / 9007199254740992 : ℚ)
+scoped notation "ε" => (1 / 9007199254740992 : ℚ)
 /-- `2^-1075`. -/
 noncomputable abbrev η : ℚ := 2 ^ (-1075 : ℤ)
 
