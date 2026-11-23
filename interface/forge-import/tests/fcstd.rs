@@ -953,6 +953,43 @@ fn with_shapes(d: &str, extra: &[(&str, &str)]) -> Vec<u8> {
 
 /// The cubic B-spline's knots and poles here are written as they are, so the side is exact: its
 /// weights too. The area under a rational curve, by Gauss on many spans.
+/// Ellipses and elliptical arcs are written exactly (`ellipse`, `earc`): two half-ellipse arcs
+/// from (0, 10) to (0, -10), one whose normal is +z (round by x = -4) and one whose normal is -z
+/// (round by x = +2), and a whole ellipse inside as a hole.
+#[test]
+fn ellipses_and_their_arcs_are_written_exactly() {
+    let h = std::f64::consts::FRAC_PI_2;
+    let pi = std::f64::consts::PI;
+    let earc = |b: f64, nz: f64| {
+        format!(
+            "<Geometry type=\"Part::GeomArcOfEllipse\"><ArcOfEllipse CenterX=\"0\" CenterY=\"0\" CenterZ=\"0\" NormalX=\"0\" NormalY=\"0\" NormalZ=\"{nz}\" MajorRadius=\"10\" MinorRadius=\"{b}\" AngleXU=\"{h}\" StartAngle=\"0\" EndAngle=\"{pi}\"/><Construction value=\"0\"/></Geometry>"
+        )
+    };
+    let hole = format!(
+        "<Geometry type=\"Part::GeomEllipse\"><Ellipse CenterX=\"0\" CenterY=\"0\" CenterZ=\"0\" NormalX=\"0\" NormalY=\"0\" NormalZ=\"1\" MajorRadius=\"3\" MinorRadius=\"1\" AngleXU=\"{h}\"/><Construction value=\"0\"/></Geometry>"
+    );
+    let g = format!(
+        "<GeometryList count=\"3\">{}{}{hole}</GeometryList>",
+        earc(4.0, 1.0),
+        earc(2.0, -1.0)
+    );
+    let d = doc(&[
+        body("Pad", &["Sketch", "Pad"]),
+        sketch("Sketch", place(0.0), g),
+        pad("Pad", "", "Sketch", 5.0, &[]),
+    ]);
+    let bodies = translate(&with_shapes(&d, &[])).expect("reads");
+    assert_eq!(bodies[0].status(), "translated", "{:?}", bodies[0].fail);
+    assert!(!bodies[0].approx);
+    let fg = bodies[0].fg.clone().expect("a part file");
+    assert!(
+        fg.contains("= ellipse(center: ") && fg.matches("= earc(center: ").count() == 2,
+        "{fg}"
+    );
+    // half of each of the two ellipses, less the hole: (10 * 4 + 10 * 2) pi / 2 - 3 pi, 5 deep
+    near(built(&fg).volume, 5.0 * 27.0 * pi, "volume", &fg);
+}
+
 /// A periodic B-spline is written as Forge's NURBS: its poles wrapped (the first `degree` again after
 /// the last) and its knots run on periodically to all `poles + degree + 1` of them.
 #[test]

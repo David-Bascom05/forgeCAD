@@ -1,5 +1,6 @@
 """A sketch's plane arrangement: curves split where they meet, the regions they bound, and any set of
-regions' boundary as loops. Lines and arcs are exact; ellipses and splines are fine polylines (approx)."""
+regions' boundary as loops. Lines and arcs are exact; splines and ellipses are fine polylines (approx)
+where not written exactly."""
 import math
 
 EPS = 1e-5  # mm: points this close are one point
@@ -205,9 +206,37 @@ def bezier_dist(spans, p):
     return out
 
 
+def ellipse_at(c, u, a, b, sense, t):
+    """The point at parameter t of the ellipse of centre c, major axis u (a unit vector), semi-axes a along u and b
+    along u turned a quarter counter-clockwise (sense 1) or clockwise (-1)."""
+    ca, sa = math.cos(t), math.sin(t) * sense
+    return (c[0] + a * ca * u[0] - b * sa * u[1], c[1] + a * ca * u[1] + b * sa * u[0])
+
+
+def ellipse_dist(src, p):
+    """The distance from p to an ellipse or elliptical arc (src as entities() keeps it): the nearest of 256 samples
+    over its parameter range, refined by halving steps."""
+    _, c, u, a, b, sense, t0, t1, _ = src
+    at = lambda t: dist(ellipse_at(c, u, a, b, sense, t), p)
+    n = 256
+    best = min((at(t0 + (t1 - t0) * i / n), t0 + (t1 - t0) * i / n) for i in range(n + 1))
+    d, t = best
+    step = (t1 - t0) / n
+    for _ in range(50):
+        step /= 2
+        for v in (t - step, t + step):
+            if t0 <= v <= t1:
+                e = at(v)
+                if e < d:
+                    d, t = e, v
+    return d
+
+
 def carrier_dist(pc, p):
-    """curve_dist, but to the exact curve where the piece is written exactly (the whole of a fit spline marked exact):
-    a written spline's faces lie on it, not on its sampled chords."""
+    """curve_dist, but to the exact curve where the piece is written exactly (the whole of a fit spline marked exact,
+    of an ellipse or of an elliptical arc): a written curve's faces lie on it, not on its sampled chords."""
+    if pc.kind == "poly" and pc.src is not None and pc.src[0] == "ellipse":
+        return ellipse_dist(pc.src, p)
     if pc.kind == "poly" and pc.src is not None and pc.src[0] == "through":
         if getattr(pc, "spans", None) is None:
             pc.spans = forge_through(pc.src[1], pc.src[2], pc.src[3])
@@ -243,14 +272,21 @@ def entities(ents):
                 p = Piece(e["id"], "line", a, b)
             else:
                 p = Piece(e["id"], "arc", a, b, cf[0], cf[1], cf[2])
-        elif k == "skEllipse":
-            c, ma, r1, r2 = e["center"], e["majorAxis"], e["majorRadius"], e["minorRadius"]
+        elif k in ("skEllipse", "skEllipseArc"):
+            # sampled for the arrangement; written exactly while a piece is the whole of it (the part is approx
+            # only where the arrangement cuts one, Arrangement.__init__)
+            c, ma, r1, r2 = tuple(e["center"]), e["majorAxis"], e["majorRadius"], e["minorRadius"]
             l = math.hypot(*ma)
-            ux, uy = ma[0] / l, ma[1] / l
-            pts = [(c[0] + r1 * math.cos(t) * ux - r2 * math.sin(t) * uy, c[1] + r1 * math.cos(t) * uy + r2 * math.sin(t) * ux) for t in (2 * math.pi * i / 96 for i in range(96))]
-            pts.append(pts[0])
+            u = (ma[0] / l, ma[1] / l)
+            # the minor axis: u turned a quarter counter-clockwise (sense 1) or clockwise (-1)
+            sense = e.get("sense", 1)
+            t0, t1 = (e["t0"], e["t1"]) if k == "skEllipseArc" else (0.0, 2 * math.pi)
+            n = max(8, math.ceil(96 * (t1 - t0) / (2 * math.pi)))
+            pts = [ellipse_at(c, u, r1, r2, sense, t0 + (t1 - t0) * i / n) for i in range(n + 1)]
+            if k == "skEllipse":
+                pts[-1] = pts[0]
             p = Piece(e["id"], "poly", pts[0], pts[-1], pts=pts)
-            approx = approx or not e.get("construction")
+            p.src = ("ellipse", c, u, r1, r2, sense, t0, t1, k == "skEllipse")
         elif k == "skFitSpline":
             pts = [tuple(x) for x in e["points"]]
             d0, d1 = e.get("startDerivative"), e.get("endDerivative")
@@ -466,7 +502,10 @@ class Arrangement:
             # a closed spline or polyline meets itself only at its ends
         self.pieces = []
         for c, h in zip(self.curves, hits):
-            self.pieces += split(c, h)
+            ps = split(c, h)
+            if c.src is not None and c.src[0] == "ellipse" and not (len(ps) == 1 and ps[0].src is not None):
+                self.approx = True  # a stretch of an ellipse is written as a polyline
+            self.pieces += ps
         self.verts = []
         keep = []
         for p in self.pieces:

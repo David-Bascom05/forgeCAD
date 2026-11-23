@@ -19,8 +19,8 @@ come from `research/import/tally.py`.
 
 | set | parts | untranslated before | after | match (1e-4) before | after |
 |---|---:|---:|---:|---:|---:|
-| FreeCAD library, bodies | 677 | 130 | 52 | 394 | 512 |
-| CADFS, all parts | 1914 | 640 | 615 | 1099 | 1111 |
+| FreeCAD library, bodies | 677 | 130 | 49 | 394 | 515 |
+| CADFS, all parts | 1914 | 640 | 615 | 1099 | 1112 |
 | CADFS, parts with a fillet | 476 | 238 | 228 | 164 | 166 |
 | WHUCAD, 1 in 7 with a fillet | 319 | 35 | 29 | (1e-3: STEPs staged for the newly built only) | 0 new |
 
@@ -28,7 +28,8 @@ No part got worse on any set: no match was lost, and nothing that built before s
 
 The first pass took on the four biggest FreeCAD causes and CADFS's extrude draft. A second pass took on causes that
 need only importer work: FreeCAD's Thickness, a mirror plane on a feature's face, a pattern axis on a feature's edge,
-CADFS's extrude up to a curved face, and WHUCAD's splines.
+CADFS's extrude up to a curved face, and WHUCAD's splines. A third pass writes sketch ellipses and elliptical arcs
+exactly.
 
 In the first pass FreeCAD's matches rose by 112, and only 30 of those were newly translated parts:
 - 30 refused before and match now;
@@ -40,11 +41,11 @@ Both come from writing sketch splines exactly.
 
 | class | before | after |
 |---|---:|---:|
-| match | 394 | 512 |
+| match | 394 | 515 |
 | mismatch | 95 | 79 |
 | refused | 53 | 29 |
 | fail | 5 | 5 |
-| untranslated | 130 | 52 |
+| untranslated | 130 | 49 |
 
 ### The causes this pass took on
 
@@ -131,7 +132,28 @@ marked approx.
 - **Pad TaperAngle** was tried and not kept. FreeCAD's sign can't be measured in this set: one of its two bodies
   stops on a later cut, and the other doesn't translate. So it stays unsupported rather than guessed.
 
-### What still stops FreeCAD (52 bodies)
+### The third pass: ellipses written exactly
+
+A sketch's ellipse is `ellipse(center:, major:, b:)` and an elliptical arc is `earc(.., from:, to:, cw:)`. Each is
+written exactly while the arrangement leaves it whole. A stretch of one that the arrangement cuts is still a polyline,
+and the part is then approx. FreeCAD's records give the major axis at `AngleXU`, with the minor axis turned a quarter
+the normal's way; an arc's angles are the ellipse's parameters. Both readers do this, and on these bodies their
+volumes agree to 1e-12.
+
+| part | before | after |
+|---|---|---|
+| FreeCAD 5ab390cb.Body, .Body001 | untranslated (`GeomEllipse`) | match: 2.2e-10 and 2e-15 in volume |
+| FreeCAD 82d7764f.PolarPattern004 | untranslated (`GeomArcOfEllipse`) | match: 5.9e-5 in volume, 8.8e-6 in area (nothing in it is approx; not yet explained) |
+| CADFS 00737513 | approx, 8.0e-5 / 1.0e-4 | match: 2.3e-5 / 6.5e-8 |
+| CADFS 00298092 | approx, a match | a match, no longer approx (2.3e-11) |
+| CADFS 00340940, 00879304, 00910674 | approx, 5.6e-4 to 6.1e-4 off | 1.0e-4 to 1.6e-4 off: **the STEP's ellipse is the approximation**. 00340940 is a 25 by 12.5 ellipse extruded 76.2. We build π·25·12.5·76.2 = 74809.175 to 1e-15; Onshape's STEP measures 74797.390. Reported, not counted. |
+
+The other 21 CADFS parts with an ellipse come out as before: one already matched (00472699), two are refused at a
+fillet, and 18 stop on another cause. Six of those 18 stop on `skEllipticalArc`, whose FeatureScript records hold no
+geometry (`skEllipticalArc(sketch, "E0", {})`). Their solved curve is only in the sketch record, under another id, so
+they stay untranslated.
+
+### What still stops FreeCAD (49 bodies)
 
 | cause | bodies | `.fg` feature it maps to, or what is missing |
 |---|---:|---|
@@ -140,7 +162,6 @@ marked approx.
 | an empty body | 4 | nothing to make |
 | a Part tree through / chain through Part::Loft, Part::Sweep, Part::Fillet, Part::FeaturePython | 7 | `loft`, `sweep` and `fillet` exist; importer: the Part workbench forms |
 | a hole with its thread in the shape | 3 | `thread` exists; importer |
-| sketch curve GeomEllipse / GeomArcOfEllipse | 3 | `ellipse`, `earc` exist; importer |
 | a pad with TaperAngle | 2 | `extrude(.., taper:)` exists; importer, once FreeCAD's sign is measured |
 | a pad or pocket of type 3 (up to face), a pad with Offset | 5 | `extrude(.., upto(FACES), offset)` exists; importer |
 | a thickness of mode 2 (intersection) | 1 | importer |
@@ -160,7 +181,7 @@ All 1914 sampled parts:
 
 | class | before | after |
 |---|---:|---:|
-| match | 1099 | 1111 |
+| match | 1099 | 1112 |
 | mismatch | 81 | 84 |
 | refused | 85 | 92 |
 | fail | 8 | 11 |
@@ -214,7 +235,7 @@ Ranked for the parts with a fillet (all 1914 parts in brackets):
 | a variable or conic fillet | 9 (9) | all 9 are conic: **missing: a conic cross-section fillet** (`vary` covers variable radii) |
 | BLEND_EDGE / BLEND_FACE / OFFSET_* of an unknown feature, no edge or face on the carrier | 24 | importer: queries on blends' and offsets' own faces |
 | feature deleteBodies | 4 (17) | importer (bodies dropped from the part) |
-| sketch curve skEllipticalArc | 2 (6) | `earc` exists; importer |
+| sketch curve skEllipticalArc | 2 (6) | `earc` exists and is written; importer: the FeatureScript record holds no geometry, only the sketch record does |
 | a pattern of many bodies, a mirror in a curved face, an axis on a solid's edge | 7 (18) | importer; a curved mirror has no form |
 
 ## WHUCAD
@@ -332,7 +353,7 @@ spline's shape, not by anything else in the part.
 
 ## Rust (interface/forge-import) and Python (tools/find-parts/recreate)
 
-Both readers have the exact splines, the split-edge match, Draft, the helix pipe as a coil, `Part::Extrusion` and
+Both readers have the exact splines and ellipses, the split-edge match, Draft, the helix pipe as a coil, `Part::Extrusion` and
 the loose blend's base. Their parts build to the same volumes (checked on five of the changed bodies, to 1e-12).
 
 The sweep along a sketch's lines and arcs is in the Python reader only. It translated one body, which the kernel
@@ -343,7 +364,7 @@ its parts stay lint-free. New tests in interface/forge-import/tests/fcstd.rs use
 built and its volume worked out by hand: a rational spline side, an edge stored in pieces (both picked; one alone),
 a draft, a helix pipe whose binder holds a different helix from the helix's own properties, a fillet outside a
 body on a `Part::Extrusion`, and a periodic spline (its poles wrapped, its volume checked against the closed uniform
-cubic's own area).
+cubic's own area), and two elliptical arcs of opposite normals around an elliptical hole.
 
 ## Reproduce
 

@@ -168,6 +168,24 @@ def sketch_ents(doc, name):
                 a1 += 2 * math.pi
             pt = lambda a: [c[0] + r * math.cos(xu + nz * a), c[1] + r * math.sin(xu + nz * a)]
             ents.append({"kind": "skArc", "id": f"e{k}", "start": pt(a0), "mid": pt((a0 + a1) / 2), "end": pt(a1), "construction": con})
+        elif t in ("Part::GeomEllipse", "Part::GeomArcOfEllipse"):
+            # the major axis at AngleXU, the minor axis the normal crossed with it: a quarter turn the sketch's way
+            # (sense 1) or back where the normal is -z; an arc's angles are the ellipse's parameters
+            arc = t == "Part::GeomArcOfEllipse"
+            e = g.find("ArcOfEllipse" if arc else "Ellipse")
+            xu = float(e.get("AngleXU", "0"))
+            d = {"id": f"e{k}", "center": [float(e.get("CenterX")), float(e.get("CenterY"))], "majorAxis": [math.cos(xu), math.sin(xu)],
+                 "majorRadius": float(e.get("MajorRadius")), "minorRadius": float(e.get("MinorRadius")), "sense": 1 if float(e.get("NormalZ", "1")) > 0 else -1, "construction": con}
+            if arc:
+                a0, a1 = float(e.get("StartAngle")), float(e.get("EndAngle"))
+                while a1 <= a0:
+                    a1 += 2 * math.pi
+                d.update(kind="skEllipseArc", t0=a0, t1=a1)
+            else:
+                d.update(kind="skEllipse")
+            if not (d["majorRadius"] > 0 and d["minorRadius"] > 0 and d.get("t1", 0) - d.get("t0", 0) <= 4 * math.pi):
+                raise Unsupported("an ellipse of no size")
+            ents.append(d)
         elif t == "Part::GeomBSplineCurve":
             e = g.find("BSplineCurve")
             nb = bspline_exact(e)
@@ -266,8 +284,12 @@ def closed_wires(ents):
     for e in ents:
         if e.get("construction"):
             continue
-        if e["kind"] == "skCircle":
+        if e["kind"] in ("skCircle", "skEllipse"):
             keep.append([e["id"]])
+        elif e["kind"] == "skEllipseArc":
+            c, u = e["center"], e["majorAxis"]
+            at = lambda t: sketch2d.ellipse_at(c, u, e["majorRadius"], e["minorRadius"], e["sense"], t)
+            left.append((e["id"], at(e["t0"]), at(e["t1"])))
         elif e["kind"] in ("polyline", "nurbs"):
             left.append((e["id"], e["points"][0], e["points"][-1]))
         elif e["kind"] in ("skLineSegment", "skArc"):
@@ -430,8 +452,8 @@ class Tr:
         out = []
         for prof in a.merged(regs):
             loops = [loop_segs(a, lp, flip, num) for lp in prof]
-            # a spline the arrangement cut, or one not clamped, is written as a polyline: the part is then approx
-            if any(a.pieces[i].kind == "poly" and (a.pieces[i].src is None or a.pieces[i].src[0] != "nurbs") for lp in prof for i, _ in lp):
+            # a spline or ellipse the arrangement cut is written as a polyline: the part is then approx
+            if any(a.pieces[i].kind == "poly" and (a.pieces[i].src is None or a.pieces[i].src[0] not in ("nurbs", "ellipse")) for lp in prof for i, _ in lp):
                 self.approx = True
             this = op
             if self.bodies == 0:
@@ -681,7 +703,7 @@ class Tr:
         subs = [x for x in d.subs(name, "Spine") if x]
         if subs:
             # the spine's edges by name: only all of them is read (a sketch's EdgeN is its shape's order, not its rows')
-            n_edges = sum(1 for e in ents if e["kind"] in ("skLineSegment", "skArc", "skCircle", "nurbs", "polyline"))
+            n_edges = sum(1 for e in ents if e["kind"] in ("skLineSegment", "skArc", "skCircle", "nurbs", "polyline", "skEllipse", "skEllipseArc"))
             if len(set(subs)) != n_edges:
                 raise Unsupported("a pipe along some edges of a sketch")
         pieces = []

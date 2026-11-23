@@ -3,7 +3,7 @@
 //! `.brep`: a fillet's `EdgeN` is sampled from its base's stored shape and found on our part by
 //! position. Macros and scripts in the file are never touched.
 
-use crate::arrangement::{Arrangement, Ent, Kind, Nurbs, Shape, circle_from};
+use crate::arrangement::{Arrangement, Ellipse, Ent, Exact, Kind, Nurbs, Shape, circle_from};
 use crate::py::{self, V2, V3, add, dot, neg, num, pmax, pmin};
 use crate::state::{Edge, State};
 use crate::zip::Zip;
@@ -375,6 +375,36 @@ fn sketch_ents(doc: &Doc, name: &str) -> Result<Vec<Ent>, Fail> {
                     end: pt(a1),
                 }
             }
+            Some(t @ ("Part::GeomEllipse" | "Part::GeomArcOfEllipse")) => {
+                // the major axis at AngleXU, the minor axis the normal crossed with it: a quarter turn
+                // the sketch's way, or back where the normal is -z; an arc's angles are parameters
+                let arc = t == "Part::GeomArcOfEllipse";
+                let e = el(if arc { "ArcOfEllipse" } else { "Ellipse" })?;
+                let f = |k| float(e.attribute(k));
+                let xu = float(Some(e.attribute("AngleXU").unwrap_or("0")))?;
+                let nz = float(Some(e.attribute("NormalZ").unwrap_or("1")))?;
+                let (mut t0, mut t1) = (0.0, py::TAU);
+                if arc {
+                    (t0, t1) = (f("StartAngle")?, f("EndAngle")?);
+                    while t1 <= t0 {
+                        t1 += py::TAU;
+                    }
+                }
+                let (a, b) = (f("MajorRadius")?, f("MinorRadius")?);
+                if !(a > 0.0 && b > 0.0 && t1 - t0 <= 2.0 * py::TAU) {
+                    return Err(Fail::Unsupported("an ellipse of no size".into()));
+                }
+                Shape::Ellipse(Rc::new(Ellipse {
+                    center: (f("CenterX")?, f("CenterY")?),
+                    u: (py::cos(xu), py::sin(xu)),
+                    a,
+                    b,
+                    sense: if nz > 0.0 { 1.0 } else { -1.0 },
+                    t0,
+                    t1,
+                    whole: !arc,
+                }))
+            }
             Some("Part::GeomBSplineCurve") => {
                 let e = el("BSplineCurve")?;
                 let periodic = e.attribute("IsPeriodic") == Some("1");
@@ -589,6 +619,8 @@ fn ends(e: &Ent) -> Option<(V2, V2)> {
         Shape::Line { start, end } | Shape::Arc { start, end, .. } => Some((*start, *end)),
         Shape::Poly { points } | Shape::Nurbs { points, .. } => Some((points[0], points[points.len() - 1])),
         Shape::Circle { .. } => None,
+        Shape::Ellipse(el) if el.whole => None,
+        Shape::Ellipse(el) => Some((el.at(el.t0), el.at(el.t1))),
     }
 }
 
@@ -1375,9 +1407,30 @@ impl Sk {
                     let cw = if d * turn < 0.0 { ", cw: true" } else { "" };
                     self.row("a", format!("arc(center: {c}, from: {f}, to: {t}{cw})"));
                 }
+                Kind::Poly if matches!(p.src, Some(Exact::Ellipse(_))) => {
+                    // the whole of an ellipse or elliptical arc: its centre, a major axis end and
+                    // its minor semi-axis
+                    let Some(Exact::Ellipse(el)) = &p.src else {
+                        continue;
+                    };
+                    let c = to(el.center);
+                    let m = to((el.center.0 + el.a * el.u.0, el.center.1 + el.a * el.u.1));
+                    let (c, m, b) = (self.p(c), self.p(m), self.r(el.b));
+                    if el.whole {
+                        self.row("e", format!("ellipse(center: {c}, major: {m}, b: {b})"));
+                    } else {
+                        let (f, t) = (self.p(to(s)), self.p(to(e)));
+                        let d = if (el.sense > 0.0) == fwd { 1.0 } else { -1.0 };
+                        let cw = if d * turn < 0.0 { ", cw: true" } else { "" };
+                        self.row(
+                            "e",
+                            format!("earc(center: {c}, major: {m}, b: {b}, from: {f}, to: {t}{cw})"),
+                        );
+                    }
+                }
                 Kind::Poly if p.src.is_some() => {
                     // the whole of a NURBS: its poles, knots and weights, run the loop's way
-                    let Some(nb) = &p.src else { continue };
+                    let Some(Exact::Nurbs(nb)) = &p.src else { continue };
                     let (mut poles, mut ws, mut ks) =
                         (nb.poles.clone(), nb.weights.clone(), nb.knots.clone());
                     if !fwd {

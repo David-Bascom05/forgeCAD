@@ -1857,7 +1857,7 @@ def segs_of(arr, lp):
         if not fwd:
             s, e = e, s
         if p.kind == "poly":
-            if p.src is not None:
+            if p.src is not None and p.src[0] != "ellipse":
                 t = Thru(*p.src)
             else:
                 # a stretch of a curve: enough of its points for the cubic through them to stay on it

@@ -110,6 +110,15 @@ def loop_segs(a, lp, flip, fmt):
                 ps[0], ps[-1] = s, e
             ws = None if all(w == 1.0 for w in weights) else [fmt(w) for w in weights]
             out.append(("nurbs", [q(x) for x in ps], deg, [fmt(k) for k in knots], ws))
+        elif p.kind == "poly" and p.src is not None and p.src[0] == "ellipse":
+            # the whole of an ellipse or elliptical arc: its centre, a major axis end and its minor semi-axis
+            _, c, u, ra, rb, sense, _, _, whole = p.src
+            m = f((c[0] + ra * u[0], c[1] + ra * u[1]))
+            if whole:
+                out.append(("ellipse", q(f(c)), q(m), fmt(rb)))
+            else:
+                ccw = (sense > 0) == fwd
+                out.append(("earc", q(f(c)), q(m), fmt(rb), q(s), q(e), ccw != flip))
         elif p.kind == "poly" and p.src is not None and p.src[0] == "through":
             # the whole of a fit spline marked exact: its own points (and end slopes), run the loop's way. CADFS's
             # stay polylines: written exactly they turned a match into a shell refusal and two parts into mesh
@@ -173,6 +182,13 @@ def rows_of(loops):
                 _, c, s, e, ccw = sg
                 cw = "" if ccw else ", cw: true"
                 rows.append(f"a{k} = arc(center: {arc_centre(c, s, e)}, from: {pt2(s)}, to: {pt2(e)}{cw})")
+            elif sg[0] == "ellipse":
+                _, c, m, b = sg
+                rows.append(f"e{k} = ellipse(center: {pt2(c)}, major: {pt2(m)}, b: {b})")
+            elif sg[0] == "earc":
+                _, c, m, b, s, e, ccw = sg
+                cw = "" if ccw else ", cw: true"
+                rows.append(f"e{k} = earc(center: {pt2(c)}, major: {pt2(m)}, b: {b}, from: {pt2(s)}, to: {pt2(e)}{cw})")
             elif sg[0] == "nurbs":
                 # ("nurbs", [poles], degree, [knots], [weights] or None)
                 _, ps, deg, ks, ws = sg

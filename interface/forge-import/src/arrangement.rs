@@ -1,5 +1,6 @@
 //! A sketch's plane arrangement: curves split where they meet, the regions they bound, and any set
-//! of regions' boundary as loops. Lines and arcs are exact; splines are fine polylines (approx).
+//! of regions' boundary as loops. Lines and arcs are exact; splines and ellipses are fine polylines
+//! (approx) where not written exactly.
 //! Ported from tools/find-parts/recreate/sketch2d.py, operation for operation, so a sketch makes
 //! the same loops to the last digit.
 
@@ -37,6 +38,54 @@ pub enum Shape {
         points: Vec<V2>,
         nurbs: Rc<Nurbs>,
     },
+    /// An ellipse or an arc of one: sampled for the arrangement, and a piece that is the whole of
+    /// it is written exactly; the part is approx only where the arrangement cuts it.
+    Ellipse(Rc<Ellipse>),
+}
+
+/// An ellipse, or an arc of it, in a sketch's plane: the point at parameter t is
+/// `center + a cos t u + b sin t w`, `w` being `u` turned a quarter counter-clockwise (`sense` 1)
+/// or clockwise (-1); an arc runs from `t0` up to `t1`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Ellipse {
+    pub center: V2,
+    pub u: V2,
+    pub a: f64,
+    pub b: f64,
+    pub sense: f64,
+    pub t0: f64,
+    pub t1: f64,
+    pub whole: bool,
+}
+
+impl Ellipse {
+    pub fn at(&self, t: f64) -> V2 {
+        let (ca, sa) = (py::cos(t), py::sin(t) * self.sense);
+        let (c, u) = (self.center, self.u);
+        (
+            c.0 + self.a * ca * u.0 - self.b * sa * u.1,
+            c.1 + self.a * ca * u.1 + self.b * sa * u.0,
+        )
+    }
+
+    /// Its samples for the arrangement: 96 to a whole turn, at least 8.
+    pub fn points(&self) -> Vec<V2> {
+        let n = pmax(8.0, (96.0 * (self.t1 - self.t0) / TAU).ceil()) as usize;
+        let mut pts: Vec<V2> = (0..=n)
+            .map(|i| self.at(self.t0 + (self.t1 - self.t0) * i as f64 / n as f64))
+            .collect();
+        if self.whole {
+            pts[n] = pts[0];
+        }
+        pts
+    }
+}
+
+/// What a piece that is the whole of its entity is written as.
+#[derive(Clone, Debug)]
+pub enum Exact {
+    Nurbs(Rc<Nurbs>),
+    Ellipse(Rc<Ellipse>),
 }
 
 /// A clamped, non-periodic NURBS in a sketch's plane: Forge's `spline(.., degree:, knots:,
@@ -80,8 +129,8 @@ pub struct Piece {
     pub others: Vec<(usize, bool)>,
     pub va: usize,
     pub vb: usize,
-    /// The NURBS this piece is the whole of, if it is.
-    pub src: Option<Rc<Nurbs>>,
+    /// The NURBS or ellipse this piece is the whole of, if it is.
+    pub src: Option<Exact>,
 }
 
 fn sub(a: V2, b: V2) -> V2 {
@@ -235,8 +284,12 @@ fn entities(ents: &[Ent]) -> (Vec<Piece>, bool) {
                 Piece::poly(k, points.clone())
             }
             Shape::Nurbs { points, nurbs } => Piece {
-                src: Some(nurbs.clone()),
+                src: Some(Exact::Nurbs(nurbs.clone())),
                 ..Piece::poly(k, points.clone())
+            },
+            Shape::Ellipse(el) => Piece {
+                src: Some(Exact::Ellipse(el.clone())),
+                ..Piece::poly(k, el.points())
             },
         };
         if !e.construction {
@@ -581,7 +634,12 @@ impl Arrangement {
         };
         let mut keep = vec![];
         for (c, h) in curves.iter().zip(&hits) {
-            for mut p in split(c, h) {
+            let ps = split(c, h);
+            if matches!(c.src, Some(Exact::Ellipse(_))) && !(ps.len() == 1 && ps[0].src.is_some()) {
+                // a stretch of an ellipse is written as a polyline
+                a.approx = true;
+            }
+            for mut p in ps {
                 p.va = a.vert(p.a);
                 p.vb = a.vert(p.b);
                 if p.va != p.vb || matches!(p.kind, Kind::Circle | Kind::Poly) {
