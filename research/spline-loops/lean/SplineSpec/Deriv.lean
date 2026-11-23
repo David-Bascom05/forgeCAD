@@ -8,6 +8,7 @@ differenced poles, which is what `derivative_bounds` and the hull tests take.
 import SplineSpec.Basis
 import Mathlib.Analysis.Calculus.Deriv.Add
 import Mathlib.Analysis.Calculus.Deriv.Mul
+import Mathlib.Analysis.Calculus.Deriv.Inv
 
 open Finset
 
@@ -177,5 +178,32 @@ theorem hasDerivAt_curve (u : ℕ → ℝ) (hu : Monotone u) (p n j : ℕ) (hj :
   try simp only [i1, i2, Nat.cast_add, Nat.cast_one]
   rw [e1, shift, ← sum_sub_distrib, mul_sum]
   refine sum_congr rfl fun i _ => by ring
+
+/-- **A rational curve's derivative**, `C = A / W` with `A = Σ N w P` and `W = Σ N w`:
+`C' = (A' - C W') / W`, where A' and W' are the B-splines of degree p on the differenced
+homogeneous poles (`hasDerivAt_curve`). This is what bounds a rational curve's derivative:
+A', W' by their poles (`eval_between`), W from below by the least weight. -/
+theorem hasDerivAt_rational (u : ℕ → ℝ) (hu : Monotone u) (p n j : ℕ) (hj : u j < u (j + 1))
+    (hpj : p + 1 ≤ j) (hjn : j < n) (w P : ℕ → ℝ) (t : ℝ) (hW : weightOn u (p + 1) n j w t ≠ 0) :
+    HasDerivAt (fun s => homOn u (p + 1) n j w P s / weightOn u (p + 1) n j w s)
+      ((∑ i ∈ range n, nb u j i p t * ((p + 1) * (w i * P i - w (i - 1) * P (i - 1)) / (u (i + p + 1) - u i))
+        - homOn u (p + 1) n j w P t / weightOn u (p + 1) n j w t *
+          ∑ i ∈ range n, nb u j i p t * ((p + 1) * (w i - w (i - 1)) / (u (i + p + 1) - u i)))
+        / weightOn u (p + 1) n j w t) t := by
+  have hA := hasDerivAt_curve u hu p n j hj hpj hjn (fun i => w i * P i) t
+  have hB := hasDerivAt_curve u hu p n j hj hpj hjn w t
+  have eA : (fun s => homOn u (p + 1) n j w P s) = fun s => ∑ i ∈ range n, nb u j i (p + 1) s * (w i * P i) := by
+    funext s; exact homOn_eq _ _ _ _ _ _ _
+  have eB : (fun s => weightOn u (p + 1) n j w s) = fun s => ∑ i ∈ range n, nb u j i (p + 1) s * w i := by
+    funext s; exact weightOn_eq _ _ _ _ _ _
+  rw [← eA] at hA
+  rw [← eB] at hB
+  have h := hA.div hB hW
+  convert h using 1
+  generalize (∑ i ∈ range n, nb u j i p t * ((↑p + 1) * (w i * P i - w (i - 1) * P (i - 1)) / (u (i + p + 1) - u i))) = A'
+  generalize (∑ i ∈ range n, nb u j i p t * ((↑p + 1) * (w i - w (i - 1)) / (u (i + p + 1) - u i))) = W'
+  generalize homOn u (p + 1) n j w P t = A at *
+  generalize weightOn u (p + 1) n j w t = W at *
+  field_simp
 
 end SplineSpec

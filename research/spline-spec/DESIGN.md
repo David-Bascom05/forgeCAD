@@ -37,7 +37,7 @@ Defaults (the language, unchanged here): through-spline closed unless `closed: f
 splines open when `degree/knots/weights` are given, else closed unless `closed: false`; degree 3, or n - 1 (n - 2 closed)
 with fewer points; knots uniform clamped; weights 1.
 
-## The spec (Lean, `research/spline-spec/lean`, built on research/spline-loops/lean's Mathlib pin v4.36.0-rc2)
+## The spec (Lean: `research/spline-loops/lean/SplineSpec`, on that project's Mathlib pin v4.36.0-rc2)
 
 Everything is generic over a linear ordered field K: ℝ for the theorems, ℚ for the executable model (`#eval`, the oracle).
 
@@ -127,3 +127,33 @@ Theorems (all over ℝ, no sorry, standard axioms only, `Axioms.lean` prints the
 ## A default I would question (not changing it)
 Through-splines closed by default: every fit-spline source (CADFS, WHUCAD, Fusion, FreeCAD) is open by default, and the
 import session's "open chain" bug came from it. Open by default, closed by `closed: true`, would be the usual rule.
+
+## Status (built)
+
+Lean, `research/spline-loops/lean` (`lake build`; `lake env lean Axioms.lean`, `CheckAxioms.lean`: 369 theorems,
+standard axioms only, no sorry):
+
+| file | what |
+|---|---|
+| `SplineSpec/Defs.lean` | the definitions, core Lean, generic over the number type (the spec over ℝ, the model over `Rat`) |
+| `Slopes.lean` | the slope system: row dominance, `slopes_exist`, `slopes_unique`, `slopes_bound` (Varah, row-scaled) |
+| `Interp.lean` | T7: `interp_exists_unique` (every C2 cubic interpolant is the Hermite form of a solution), `interp_through` |
+| `Centripetal.lean` | the parameters over ℝ, `centripetal_strictMono`, `spline_exists_unique` (the language's through-spline) |
+| `Basis.lean` | T1, T2, T5: `nb_sum_one`, `nb_nonneg`, `eval_between` (convex hull), `clamped_start`, `clamped_end` |
+| `Deriv.lean` | T3: `hasDerivAt_nb`, `hasDerivAt_curve` (the derivative is the B-spline of degree p - 1 on differenced poles) |
+| `Continuity.lean` | T4: `nb_continuous`, `iter_curveOn`, `curve_smooth` (C^(p-k) at a knot of multiplicity k) |
+| `Cert.lean` | the control-spline certificate: `span_bernstein`, `bern_close` |
+| `Interval.lean` | the oracle's intervals enclose; `rows_in`, `residual_in`, `through_cert` |
+| `Oracle.lean` | `lake exe splineoracle` |
+
+Not yet: T6 (Boehm insertion leaves the curve unchanged) as a theorem. The kernel's insertion is checked
+case by case instead: the oracle compares its Bezier pieces with the spec's curve computed by Cox-de Boor,
+not with an insertion of its own. The rational derivative is the quotient rule on `hasDerivAt_curve`
+applied to the homogeneous coordinates and the weight.
+
+Differential test, `kernel/forge-geom/tests/spline_diff.rs`: 698 curves, all within the curve's scale
+over 2^30 of the spec. The largest bound Lean proves is 6.2e-12. A planted 1e-6 error in the natural end
+row is caught.
+
+Rust changes so far: `Spline::homogeneous` (an accessor for the test). No disagreement past the bound,
+so no numeric change. R1 and R2 wait on the master's answer.

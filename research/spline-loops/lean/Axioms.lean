@@ -19,6 +19,7 @@ open SplineSpec
 -- Derivatives are B-splines of one degree less; C^(p-k) at a knot of multiplicity k.
 #print axioms hasDerivAt_nb
 #print axioms hasDerivAt_curve
+#print axioms hasDerivAt_rational
 #print axioms nb_continuous
 #print axioms iter_curveOn
 #print axioms curve_smooth
