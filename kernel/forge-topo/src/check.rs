@@ -838,10 +838,20 @@ fn check_sides_of(body: &Body, faces: &[FaceId], known: Option<&Known>, out: &mu
                             .distance(d.p)
                     })
                     .fold(f64::INFINITY, f64::min);
-                // and short of the edge's own far stretches: a curve can double back past a tip within a
-                // hair of itself (a thin lens's two arms are one edge). Its drawing's chords, all but the
-                // two at the probe's sample.
-                let own = match e.curve {
+                let step = step.min(0.25 * clearance);
+                let inside = |step: f64| {
+                    let probe = surface.project(d.p + inward * step);
+                    let probe = unwrap_near(body, f, probe, mid_uv);
+                    in_loops(probe)
+                        || point_in_loops(
+                            probe,
+                            fine.get_or_init(|| face_uv_loops_with(body, f, |e| 8 * default_segments(e))),
+                        )
+                };
+                // where no step finds the face, steps short of the edge's own far stretches too: a
+                // curve can double back past a tip within a hair of itself (a thin lens's two arms
+                // are one edge). Its drawing's chords, all but the two at the probe's sample.
+                let own = || match e.curve {
                     forge_geom::Curve::Line(_)
                     | forge_geom::Curve::Circle(_)
                     | forge_geom::Curve::Ellipse(_) => f64::INFINITY,
@@ -862,17 +872,10 @@ fn check_sides_of(body: &Body, faces: &[FaceId], known: Option<&Known>, out: &mu
                         near
                     }
                 };
-                let step = step.min(0.25 * clearance.min(own));
-                let inside = |step: f64| {
-                    let probe = surface.project(d.p + inward * step);
-                    let probe = unwrap_near(body, f, probe, mid_uv);
-                    in_loops(probe)
-                        || point_in_loops(
-                            probe,
-                            fine.get_or_init(|| face_uv_loops_with(body, f, |e| 8 * default_segments(e))),
-                        )
-                };
-                if ![1.0, 0.1, 0.01].iter().any(|&k| inside(k * step)) {
+                if ![1.0, 0.1, 0.01].iter().any(|&k| inside(k * step)) && {
+                    let short = step.min(0.25 * own());
+                    ![1.0, 0.1, 0.01].iter().any(|&k| inside(k * short))
+                } {
                     out.push(Problem::FaceWrongSide { face: f, coedge: c });
                 }
             }

@@ -4301,6 +4301,19 @@ pub(crate) fn across(body: &Body, f: FaceId, c: forge_topo::CoedgeId) -> R<Surfa
                 })
             }
             Curve::Ellipse(e) => Surface::Plane(Plane::new(e.frame)),
+            // where two surfaces meet: the one that is not this face's holds it exactly and crosses
+            // the face along it (an imprint between two faces on one surface, as a cut made again)
+            Curve::Intersection(ic)
+                if [&ic.a, &ic.b].iter().any(|x| *x == s || ssi::coincident(x, s))
+                    && ![&ic.a, &ic.b].iter().all(|x| *x == s || ssi::coincident(x, s)) =>
+            {
+                let other = if ic.a == *s || ssi::coincident(&ic.a, s) {
+                    &ic.b
+                } else {
+                    &ic.a
+                };
+                other.clone()
+            }
             // likewise the parabolic wall square to a parabola's plane (a vertex blend's rim)
             Curve::Parabola(pa) if n.dot(pa.frame.z()).abs() > 1.0 - 1e-6 => {
                 let h = pa.frame.z() * edge.range.width().max(1.0);

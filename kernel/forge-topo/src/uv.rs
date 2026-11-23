@@ -72,7 +72,11 @@ pub fn loop_samples(body: &Body, lp: LoopId, segments: impl Fn(&Edge) -> usize) 
         first.push(pts.len());
         let co = body.coedge(c);
         let e = body.edge(co.edge);
-        for i in 0..n {
+        // (a coedge starts at its vertex, which the one before ends at: drawn there, the two meet;
+        // drawn from each curve's end, within tolerance of it, the loop can zigzag across itself
+        // where it turns back, as at a hairpin's tip)
+        pts.push(body.vertex(body.coedge_start(c)).point);
+        for i in 1..n {
             let k = if co.forward { i } else { n - i };
             let t = (e.range.lo + e.range.width() * (k as f64 / n as f64)).min(e.range.hi);
             pts.push(e.curve.eval(t));
