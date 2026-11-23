@@ -392,8 +392,18 @@ fn through_range(
 /// Feature `i` (an extrude or revolve with any extent) as the plain extrude or revolve it
 /// comes to: a distance from a moved sketch, or an angle from a turned one.
 pub(crate) fn resolve<'a>(features: History<'a>, i: usize) -> Result<Resolved<'a>, RegenError> {
+    resolve_as(features, i, &features.features[i])
+}
+
+/// `resolve`, of `f` standing in feature `i`'s place in the history (one region of a
+/// `Feature::Regions`, as its plain extrude).
+pub(crate) fn resolve_as<'a>(
+    features: History<'a>,
+    i: usize,
+    f: &'a Feature,
+) -> Result<Resolved<'a>, RegenError> {
     let err = bad(i);
-    match &features[i] {
+    match f {
         Feature::Extrude {
             extent: Extent::Distance(_) | Extent::Tapered { .. } | Extent::Along { .. },
             ..
@@ -401,7 +411,7 @@ pub(crate) fn resolve<'a>(features: History<'a>, i: usize) -> Result<Resolved<'a
         | Feature::Revolve {
             extent: Turn::Angle(_),
             ..
-        } => Ok(Resolved::Plain(Cow::Borrowed(&features.features[i]), None)),
+        } => Ok(Resolved::Plain(Cow::Borrowed(f), None)),
         Feature::Extrude {
             profile,
             extent: Extent::ThroughAlong { toward, dir },

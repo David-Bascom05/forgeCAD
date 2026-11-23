@@ -1224,17 +1224,12 @@ fn par<T: Send>(n: usize, threads: usize, f: impl Fn(usize) -> T + Sync) -> Vec<
 
 /// `par` for few but heavy items: each a thread's work, in order.
 fn par_any<T: Send>(n: usize, threads: usize, f: impl Fn(usize) -> T + Sync) -> Vec<T> {
-    #[cfg(target_family = "wasm")]
-    let threads = {
-        let _ = threads;
-        1
-    };
     if threads <= 1 || n < 2 {
         return (0..n).map(f).collect();
     }
     // items taken one at a time, as costs differ; put back in order
     let next = std::sync::atomic::AtomicUsize::new(0);
-    let mut got: Vec<(usize, T)> = std::thread::scope(|s| {
+    let mut got: Vec<(usize, T)> = forge_math::par::scope(|s| {
         let hs: Vec<_> = (0..threads.min(n))
             .map(|_| {
                 let (f, next) = (&f, &next);

@@ -115,7 +115,7 @@ fn outcome(r: &Run) -> String {
 /// `src` run in the session `cache` holds, with the bench font beside it.
 fn run(src: &str, cache: Cache) -> (Run, Cache) {
     // the scratch folder common::run writes the font to
-    let dir = std::env::temp_dir().join(format!("forge-lang-tests-{}", std::process::id()));
+    let dir = forge_dirs::temp_dir().join(format!("forge-lang-tests-{}", forge_dirs::process_id()));
     if !dir.join(forge_lang::bench::FONT).exists() {
         common::run("");
     }

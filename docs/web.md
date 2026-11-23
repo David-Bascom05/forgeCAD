@@ -91,9 +91,21 @@ Serve `.wasm` as `application/wasm`. To allow the threaded build later, also sen
 
 ## What differs from the desktop
 
-- The build runs on the page's thread, between frames: a long rebuild holds the page for its
-  length. (The threaded build, in a Web Worker on shared memory, needs the standard library
-  built with atomics; see `research/web/parity.md`.)
+- Two builds of the app. The default runs the kernel on the page's thread, between frames: a long
+  rebuild holds the page for its length. The threaded artifact (`THREADS=1 sh web/build.sh OUT`,
+  into `OUT/threads`) runs each document's build on a Web Worker sharing the page's memory, so the
+  page never blocks for a build; the page loads it by itself where it is cross-origin isolated
+  (`forgecad web` sends the headers; a static host must send
+  `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp`), and
+  `?threads=0` opts out. It is the same source and the same pinned stable toolchain with its
+  `rust-src`, std rebuilt with atomics (`-Zbuild-std`, enabled by `RUSTC_BOOTSTRAP` for that build
+  only); `web/build.sh` holds the exact flags. Both give the same bits: the parity tests run on
+  each. In it the page's main thread never waits on a lock (a wait there traps): the locks it
+  shares with the workers spin (`plat::lock`, `forge_dirs::fs`, forge-alloc's heap), kernel work
+  runs on workers, and the WebGPU objects stay on the page's thread (the worker hands back a view's
+  meshes and scene). The kernel's own parallel paths (n-ary booleans, `forge_math::par`) still run
+  on one thread there: std can't start a thread in a browser, so they take their one-thread path,
+  as on WASI.
 - The Agent tab: the Claude and Codex agents run their CLIs, and the MCP bridge a socket: desktop
   only. OpenAI-compatible endpoints are not yet reached from the page.
 - Speech input: desktop only.
@@ -108,6 +120,8 @@ From `interface/forge-render`, with `OUT` built and `forgecad` and `forge-parity
 cargo build --release --bin forge-parity && (cd ../.. && cargo build --release -p forge-cli)
 node web/tests/e2e.cjs OUT        # open, edit a parameter, rebuild, save, StaleBase; volume = native
 node web/tests/parity.cjs OUT     # bench parts and examples: page vs native, bit for bit
+node web/tests/responsive.cjs OUT # (THREADS=1) the threaded page never blocks for a build
+THREADED=1 sh web/tests/ci.sh     # (from the root) all of it on the threaded artifact
 cargo test -p forge-cli web::     # (from the root) forgecad web's API
 ```
 

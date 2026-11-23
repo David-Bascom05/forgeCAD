@@ -17,7 +17,7 @@ pub fn round_step(span: f32) -> f32 {
 }
 
 /// The ground grid (z = 0) under what's in view: every tenth-or-so of its size, each fifth line
-/// stronger.
+/// stronger and a little wider, the whole fading out toward its edge so it has no hard border.
 pub fn grid(
     center: [f32; 3],
     radius: f32,
@@ -33,32 +33,35 @@ pub fn grid(
         (center[0] / step).round() * step,
         (center[1] / step).round() * step,
     );
-    let (lo, hi) = (-n as f32 * step, n as f32 * step);
+    let hi = n as f32 * step;
+    // pieces along each line, so its alpha can fall off toward the edge
+    const PIECES: i32 = 8;
+    let fade = |a: f32, b: f32| {
+        let r = a.abs().max(b.abs()) / hi;
+        let t = ((r - 0.7) / 0.3).clamp(0.0, 1.0);
+        1.0 - t * t * (3.0 - 2.0 * t)
+    };
+    let mut line = |at: f32, major: bool, across: bool| {
+        let (a, w) = if major { (0.38, 1.5) } else { (0.15, 1.0) };
+        for k in 0..PIECES {
+            let s0 = -hi + 2.0 * hi * k as f32 / PIECES as f32;
+            let s1 = -hi + 2.0 * hi * (k + 1) as f32 / PIECES as f32;
+            let f = fade(at, 0.5 * (s0 + s1));
+            if f <= 0.01 {
+                continue;
+            }
+            let ends = if across {
+                [[cx + s0, cy + at, 0.0], [cx + s1, cy + at, 0.0]]
+            } else {
+                [[cx + at, cy + s0, 0.0], [cx + at, cy + s1, 0.0]]
+            };
+            polyline(&ends, px * w, [rgb[0], rgb[1], rgb[2], a * f], camera, size, out);
+        }
+    };
     for k in -n..=n {
         let at = k as f32 * step;
-        let major = ((cx + at) / step).round() as i64 % 5 == 0;
-        let a = if major { 0.30 } else { 0.14 };
-        let c = [rgb[0], rgb[1], rgb[2], a];
-        let w = px * if major { 1.25 } else { 1.0 };
-        polyline(
-            &[[cx + at, cy + lo, 0.0], [cx + at, cy + hi, 0.0]],
-            w,
-            c,
-            camera,
-            size,
-            out,
-        );
-        let major = ((cy + at) / step).round() as i64 % 5 == 0;
-        let c = [rgb[0], rgb[1], rgb[2], if major { 0.30 } else { 0.14 }];
-        let w = px * if major { 1.25 } else { 1.0 };
-        polyline(
-            &[[cx + lo, cy + at, 0.0], [cx + hi, cy + at, 0.0]],
-            w,
-            c,
-            camera,
-            size,
-            out,
-        );
+        line(at, ((cx + at) / step).round() as i64 % 5 == 0, false);
+        line(at, ((cy + at) / step).round() as i64 % 5 == 0, true);
     }
 }
 

@@ -112,6 +112,29 @@ fn profile(p: &Profile) -> String {
     format!("\"plane\":{},\"loops\":[{}]", frame(&p.plane), loops.join(","))
 }
 
+/// A weldment member as the oracle builds it (tools/occt/build.py `member`).
+fn member(m: &forge_model::weld::Member) -> String {
+    let path = match m.path {
+        forge_model::weld::MemberPath::Line { length } => format!("{{\"line\":{}}}", num(length)),
+        forge_model::weld::MemberPath::Arc { axis, sweep } => format!(
+            "{{\"arc\":[{},{},{},{}],\"sweep\":{}}}",
+            num(axis.origin.x),
+            num(axis.origin.y),
+            num(axis.dir.x),
+            num(axis.dir.y),
+            num(sweep)
+        ),
+    };
+    let cuts: Vec<String> = m.cuts.iter().map(frame).collect();
+    format!(
+        "{{\"kind\":\"member\",\"op\":\"new\",{},\"path\":{path},\"reach\":[{},{}],\"cuts\":[{}]}}",
+        profile(&m.profile),
+        num(m.reach[0]),
+        num(m.reach[1]),
+        cuts.join(",")
+    )
+}
+
 fn op(c: Combine) -> &'static str {
     match c {
         Combine::New => "new",
@@ -509,6 +532,53 @@ fn rounds(
     Ok((format!("[{}]", out.join(",")), smooth, odd))
 }
 
+/// An extrude's extent as the oracle's JSON.
+fn extent_json(features: History<'_>, i: usize, extent: Extent) -> String {
+    match extent {
+        Extent::Distance(d) => format!("{{\"d\":{}}}", num(d)),
+        Extent::Tapered { distance, angle } => {
+            format!("{{\"d\":{},\"taper\":{}}}", num(distance), num(angle))
+        }
+        Extent::Along { forward, back, dir } => format!(
+            "{{\"two\":[{},{}],\"along\":[{},{},{}]}}",
+            num(forward),
+            num(back),
+            num(dir.x),
+            num(dir.y),
+            num(dir.z)
+        ),
+        Extent::Symmetric(d) => format!("{{\"sym\":{}}}", num(d)),
+        Extent::TwoSided { forward, back } => format!("{{\"two\":[{},{}]}}", num(forward), num(back)),
+        Extent::ThroughAlong { toward, dir } => format!(
+            "{{\"through\":\"{}\",\"along\":[{},{},{}]}}",
+            match toward {
+                Toward::Forward => "forward",
+                Toward::Back => "back",
+                Toward::Both => "both",
+            },
+            num(dir.x),
+            num(dir.y),
+            num(dir.z)
+        ),
+        Extent::Through(t) => format!(
+            "{{\"through\":\"{}\"}}",
+            match t {
+                Toward::Forward => "forward",
+                Toward::Back => "back",
+                Toward::Both => "both",
+            }
+        ),
+        Extent::To { target: t, offset } => {
+            format!(
+                "{{\"to\":{},\"offset\":{}}}",
+                target(features, i, &t),
+                num(offset)
+            )
+        }
+        Extent::ToNext { reverse } => format!("{{\"next\":{reverse}}}"),
+    }
+}
+
 /// One feature as OCCT replays it.
 enum Step {
     /// Its JSON, with why OCCT builds it its own way if it does.
@@ -528,53 +598,20 @@ fn export(features: History<'_>, i: usize, before: Option<&Before>) -> Result<St
             extent,
             op: c,
         } => {
-            let e = match *extent {
-                Extent::Distance(d) => format!("{{\"d\":{}}}", num(d)),
-                Extent::Tapered { distance, angle } => {
-                    format!("{{\"d\":{},\"taper\":{}}}", num(distance), num(angle))
-                }
-                Extent::Along { forward, back, dir } => format!(
-                    "{{\"two\":[{},{}],\"along\":[{},{},{}]}}",
-                    num(forward),
-                    num(back),
-                    num(dir.x),
-                    num(dir.y),
-                    num(dir.z)
-                ),
-                Extent::Symmetric(d) => format!("{{\"sym\":{}}}", num(d)),
-                Extent::TwoSided { forward, back } => format!("{{\"two\":[{},{}]}}", num(forward), num(back)),
-                Extent::ThroughAlong { toward, dir } => format!(
-                    "{{\"through\":\"{}\",\"along\":[{},{},{}]}}",
-                    match toward {
-                        Toward::Forward => "forward",
-                        Toward::Back => "back",
-                        Toward::Both => "both",
-                    },
-                    num(dir.x),
-                    num(dir.y),
-                    num(dir.z)
-                ),
-                Extent::Through(t) => format!(
-                    "{{\"through\":\"{}\"}}",
-                    match t {
-                        Toward::Forward => "forward",
-                        Toward::Back => "back",
-                        Toward::Both => "both",
-                    }
-                ),
-                Extent::To { target: t, offset } => {
-                    format!(
-                        "{{\"to\":{},\"offset\":{}}}",
-                        target(features, i, &t),
-                        num(offset)
-                    )
-                }
-                Extent::ToNext { reverse } => format!("{{\"next\":{reverse}}}"),
-            };
+            let e = extent_json(features, i, *extent);
             json(format!(
                 "{{\"kind\":\"extrude\",\"op\":\"{}\",{},\"extent\":{e}}}",
                 op(*c),
                 profile(p)
+            ))
+        }
+        Feature::Regions(r) => {
+            let e = extent_json(features, i, r.extent);
+            let ps: Vec<String> = r.profiles.iter().map(|p| format!("{{{}}}", profile(p))).collect();
+            json(format!(
+                "{{\"kind\":\"regions\",\"op\":\"{}\",\"profiles\":[{}],\"extent\":{e}}}",
+                op(r.op),
+                ps.join(",")
             ))
         }
         Feature::Revolve {
@@ -731,6 +768,9 @@ fn export(features: History<'_>, i: usize, before: Option<&Before>) -> Result<St
                 ),
             })
         }
+        // a weldment member: its section extruded or revolved, run on past its ends, then each
+        // cut's half-space taken away
+        Feature::Member(m) => json(member(m)),
         // work planes, axes, points and frames resolve to frames later features use, evaluated
         Feature::Plane(_) | Feature::Param(_) | Feature::Sketch(_) | Feature::Work(_) => Ok(Step::Nothing),
         Feature::Body(b) => match &**b {
@@ -755,6 +795,23 @@ fn export(features: History<'_>, i: usize, before: Option<&Before>) -> Result<St
             )),
             // the solid stays the same
             BodyFeature::SplitFace { .. } => Ok(Step::Nothing),
+            // a member less, beyond the region's plane, each tool (a body, or a member's envelope)
+            BodyFeature::Trim(t) => {
+                let tools: Vec<String> = t
+                    .tools
+                    .iter()
+                    .map(|x| match x {
+                        forge_model::weld::TrimTool::Body(id) => format!("{{\"body\":{id}}}"),
+                        forge_model::weld::TrimTool::Envelope(m) => format!("{{\"member\":{}}}", member(m)),
+                    })
+                    .collect();
+                json(format!(
+                    "{{\"kind\":\"trim\",\"member\":{},\"region\":{},\"tools\":[{}]}}",
+                    t.member,
+                    frame(&t.region),
+                    tools.join(",")
+                ))
+            }
             BodyFeature::Move { steps, copy } => json(format!(
                 "{{\"kind\":\"move\",\"m\":[{}],\"copy\":{copy}}}",
                 body_motion(steps).map(p3).join(",")
@@ -1220,7 +1277,7 @@ fn one_or_all(
 /// (the bench font beside it, for text).
 fn fg(path: &std::path::Path) -> (String, Part, Vec<u64>) {
     let src = std::fs::read_to_string(path).expect("a part file");
-    let dir = std::env::temp_dir().join(format!("forge-oracle-{}", std::process::id()));
+    let dir = forge_dirs::temp_dir().join(format!("forge-oracle-{}", forge_dirs::process_id()));
     std::fs::create_dir_all(&dir).expect("temp dir");
     std::fs::write(dir.join(forge_lang::bench::FONT), forge_lang::bench::font_bytes()).expect("font");
     for e in std::fs::read_dir(path.parent().expect("a folder"))
@@ -1247,7 +1304,23 @@ fn fg(path: &std::path::Path) -> (String, Part, Vec<u64>) {
 
 /// .fg parts for what only part files write: sketches, work features, standard holes,
 /// patterns along paths and at points, and parts of several bodies.
-const MODELS: [(&str, &str); 3] = [
+const MODELS: [(&str, &str); 4] = [
+    (
+        "model-weld",
+        "shared W = 300
+shared D = 200
+sketch lay(on: xy) {
+  r = rect(corner: (0, 0), size: (W, D))
+  base = line((0, 0), (W, 0), construction: true)
+}
+top = members(lay.r, section: \"SHS 40x40x3\")
+sketch side(on: rotate(lay.plane, about: lay.base, by: 90deg)) {
+  post = line((W / 2, 0), (W / 2, -D))
+}
+legs = members(side.post, section: \"CHS 33.7x3.2\")
+seat = end_trim(legs[0], to: top[0])
+",
+    ),
     (
         "model-sketch",
         "shared w = 20
@@ -1566,6 +1639,7 @@ mod tests {
             Feature::Sketch(_) => "sketch",
             Feature::Thread(_) => "thread",
             Feature::Text(_) => "text",
+            Feature::Regions(_) => "regions",
             Feature::Import(_) => "import",
             Feature::Work(_) => "work",
             Feature::Body(b) => match &**b {
@@ -1574,7 +1648,9 @@ mod tests {
                 BodyFeature::Split { .. } => "split",
                 BodyFeature::SplitFace { .. } => "splitface",
                 BodyFeature::Move { .. } => "movebody",
+                BodyFeature::Trim(_) => "trim",
             },
+            Feature::Member(_) => "member",
         }
     }
 
@@ -1651,6 +1727,8 @@ mod tests {
             "split",
             "splitface",
             "movebody",
+            "member",
+            "trim",
         ];
         let missing: Vec<&&str> = all.iter().filter(|k| !seen.contains(k)).collect();
         assert!(missing.is_empty(), "kinds in no oracle part: {missing:?}");

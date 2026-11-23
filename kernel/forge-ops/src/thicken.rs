@@ -314,6 +314,8 @@ pub fn thicken(body: &Body, faces: &[Name], lo: f64, hi: f64, feature: u64) -> R
             out.faces[f.index()].loops.swap(0, 1);
         }
     }
+    // faces apart from each other thicken into slabs apart: a shell each
+    out.rebuild_shells();
     let problems = check_against(&out, &base);
     if !problems.is_empty() {
         return Err(ThickenError::Invalid(problems));

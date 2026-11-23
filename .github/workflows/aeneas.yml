@@ -1,0 +1,61 @@
+# The kernel's Rust, translated to Lean by Charon and Aeneas (verify/aeneas). First, translate
+# every configured crate afresh and fail if a committed translation differs: the proofs are about
+# the code as it is, and cannot go stale. Second, build the Lean: the float bridge, the
+# translations, the proofs, and the axioms check (only propext, Classical.choice, Quot.sound).
+name: aeneas
+
+on:
+  push:
+    branches: [main]
+    paths: ["kernel/**", "verify/aeneas/**", "verify/ieee754/**", "tools/aeneas/**",
+      ".github/workflows/aeneas.yml"]
+  pull_request:
+    paths: ["kernel/**", "verify/aeneas/**", "verify/ieee754/**", "tools/aeneas/**",
+      ".github/workflows/aeneas.yml"]
+  workflow_dispatch:
+
+jobs:
+  translation-fresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      FORGE_AENEAS: ${{ github.workspace }}/../forge-aeneas
+    steps:
+      - uses: actions/checkout@v4
+      - name: toolchain cache (keyed on the pins and the patches)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ github.workspace }}/../forge-aeneas
+            ~/.rustup/toolchains/nightly-*
+            ~/.elan
+          key: aeneas-${{ runner.os }}-${{ hashFiles('tools/aeneas/setup.sh', 'tools/aeneas/patches/**') }}
+      - name: Charon and Aeneas at the pins (built once, then cached)
+        run: tools/aeneas/setup.sh
+      - name: every translation equals a fresh one
+        run: tools/aeneas/translate.sh --all --check
+
+  lean:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: toolchain cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.elan
+          key: elan-${{ runner.os }}-${{ hashFiles('verify/aeneas/bridge/lean-toolchain') }}
+      - name: elan and the pinned toolchain
+        run: |
+          if [ ! -x "$HOME/.elan/bin/elan" ]; then
+            curl -sSfL https://raw.githubusercontent.com/leanprover/elan/v4.1.2/elan-init.sh -o elan-init.sh
+            sh elan-init.sh -y --default-toolchain none
+          fi
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+          "$HOME/.elan/bin/elan" toolchain install "$(cat verify/aeneas/bridge/lean-toolchain)"
+      - name: the bridge, every translation and its proofs
+        run: |
+          for d in verify/aeneas/*/lean; do
+            echo "== $d"
+            (cd "$d" && lake exe cache get && lake build) || exit 1
+          done

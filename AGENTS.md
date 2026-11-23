@@ -27,11 +27,21 @@ bolts = pattern(of: bolt, layout: lin(along: plan.outline[0].dir, n: count(2), s
 round = fillet(edges(of: boss, crease: "convex"), r)
 ```
 
+Sheet metal can be held to a fabricator's published capabilities: `sheet(plan, t: 0.063in,
+vendor: "sendcutsend", material: "5052-H32 aluminum")` takes the vendor's radius and K for that
+stock and refuses a thickness or material it does not offer, with the options as fixes;
+`query F dfm` lists every violation (rule, measured, limit, faces, place on the flat).
+`forgecad vendor list|show|new|import|export` manages profiles (built in: sendcutsend, fabworks,
+oshcut, xometry, jlc, restated from their public guides: verify with the vendor before ordering).
+
 Select in the part's own text: `edges(of: boss, crease: "convex")`, `edges(between: (a, b))`,
 anchors like `base.end`, `base.side(plan.outline[2])`, `hole.bore`; one copy of a pattern or one
 place of a hole: `edges(of: bolts[1], crease: "convex")`. Features: extrude cut revolve
-sweep loft coil thread hole fillet chamfer shell draft rib pattern, bodies, sheets (surfaces:
-`extrude(S.path, d, surface: true)`), thin walls (`extrude(S.path, d, thin: t, side: "both")`), sheet metal, components and assemblies (`help forge`).
+sweep loft coil thread hole fillet chamfer shell draft rib pattern, text (in a sketch:
+`label = text("AB-1", at: (x, y), size: s, font: "Open Sans")`, then `extrude(sk.label, h)`), bodies,
+sheets (surfaces: `extrude(S.path, d, surface: true)`), thin walls (`extrude(S.path, d, thin: t,
+side: "both")`), sheet metal, weldments (`members` along a layout's segments with a standard or
+sketched section, `end_trim`, `end_cap`, `corner_plate`), components and assemblies (`help forge`).
 
 Tools (CLI `forgecad TOOL F ..`, or MCP). Replies are typed JSON with `--json` or over MCP:
 ```
@@ -43,10 +53,17 @@ diff A B [volume]           what B changed from A: features, params, faces by na
 query F params|features|stat|check
 query F SEL [--at FEAT]     @handles: `faces plane normal +z top`, `edges of boss convex`;
                             --at: the part as it stood after that feature (measure, render too)
-query F holes|aligned|interference|faces | section z=67 | gap A B | frame SKETCH
+query F holes|aligned|interference|faces|cutlist | section z=67 | gap A B | frame SKETCH | dfm
+query F bendsim [--tooling T] [--vendor V] [--sequence 3,1,2]
+                            a sheet bent on a press brake: order, tooling, every check through
+                            each bend's motion, fixes (docs/bendsim.md)
 measure F REF [REF] | mass | wall [exact]
 render F [VIEW] [--labels SEL] [--px N] [-o F.png]
 export F [ap214|ap242] [tol MM] [-o F.step] | dxf [SHEET] | dwg [SHEET]
+export F stl|3mf|obj [tol MM] [angle DEG] [ascii] [normals] [faces] [flat] [-o F.3mf]
+                            meshes: an object per solid (an assembly's: per part, a 3MF item
+                            per occurrence; flat: one each), tol 0.01 mm, angle 15 deg by
+                            default; each checked closed and facing out (`watertight`), `manifold`
 help forge
 ```
 SEL: `faces|edges|verts`, then filters: plane cyl cone .. | line circle | convex concave |

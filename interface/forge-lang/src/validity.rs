@@ -70,6 +70,10 @@ fn kind(p: &Problem) -> &'static str {
         Problem::ShellEuler { .. } => "ShellEuler",
         Problem::VertexFans { .. } => "VertexFans",
         Problem::SheetMeetsSolid { .. } => "SheetMeetsSolid",
+        Problem::BackLink { .. } => "BackLink",
+        Problem::ShellFaces { .. } => "ShellFaces",
+        Problem::ShellDisconnected { .. } => "ShellDisconnected",
+        Problem::StrayVertex { .. } => "StrayVertex",
     }
 }
 
@@ -102,16 +106,21 @@ fn invalid(ev: &mut Eval, solid: Option<usize>, body: &Body, p: &Problem) -> Inv
             at.push(format!("corner {:?}", body.vertex(vertex).name));
         }
         Problem::LoopEmpty { lp } | Problem::LoopBroken { lp, .. } => at.push(face(ev, body.lp(lp).face)),
-        Problem::VertexTolerance { vertex, .. } | Problem::VertexFans { vertex, .. } => {
-            at.push(format!("corner {:?}", body.vertex(vertex).name))
-        }
+        Problem::VertexTolerance { vertex, .. }
+        | Problem::VertexFans { vertex, .. }
+        | Problem::StrayVertex { vertex } => at.push(format!("corner {:?}", body.vertex(vertex).name)),
         Problem::DuplicateName { name } => at.push(format!("{name:?}")),
         Problem::ShellEuler { shell, .. } => {
             if let Some(&f) = body.shell(shell).faces.first() {
                 at.push(face(ev, f));
             }
         }
-        Problem::Euler { .. } => {}
+        Problem::ShellFaces { shell } | Problem::ShellDisconnected { shell } => {
+            if let Some(&f) = body.shells.get(shell.index()).and_then(|s| s.faces.first()) {
+                at.push(face(ev, f));
+            }
+        }
+        Problem::Euler { .. } | Problem::BackLink { .. } => {}
     }
     Invalid {
         body: owner,

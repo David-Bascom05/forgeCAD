@@ -156,6 +156,7 @@ pub fn mass_rel(body: &Body, rel: f64) -> Result<MassProps, MassError> {
         Box::new((0..ids.len()).map(one))
     };
     let mut sheet_faces = 0;
+    let mut abs = [0.0; NF];
     for (&f, got) in ids.iter().zip(each) {
         let (v, er) = got.map_err(|why| MassError { face: f, why })?;
         if body.sheets && body.face(f).sheet {
@@ -166,6 +167,7 @@ pub fn mass_rel(body: &Body, rel: f64) -> Result<MassProps, MassError> {
         for k in 0..NF {
             t[k] += v[k];
             e[k] += er[k];
+            abs[k] += v[k].abs();
         }
         if er[0] > loosest.1 {
             loosest = (f, er[0]);
@@ -194,6 +196,16 @@ pub fn mass_rel(body: &Body, rel: f64) -> Result<MassProps, MassError> {
             err: [0.0; 4],
             faces,
         });
+    }
+    // the face sum's own rounding: within γn Σ|v| of the exact sum of the faces' values, n faces
+    // summed (a sheet's are not), γn = nu / (1 - nu), u = 2^-53
+    // (verify/forge-mass/lean/ForgeMass/Rounding.lean `face_sum_err`)
+    let nu = (ids.len() - sheet_faces) as f64 * (0.5 * f64::EPSILON);
+    if nu < 1.0 {
+        let gamma = nu / (1.0 - nu);
+        for k in 0..NF {
+            e[k] += gamma * abs[k];
+        }
     }
     let vol = t[0];
     // shells may overlap (`extrude new`), so their volumes add up past one box round them all: each
@@ -247,8 +259,13 @@ pub fn mass_rel(body: &Body, rel: f64) -> Result<MassProps, MassError> {
         std::array::from_fn(|i| std::array::from_fn(|j| if i == j { tr - s(i, i) } else { -s(i, j) }));
     let (principal, axes) = eigen(inertia);
     let gl = g.length();
+    // the bounds verify/forge-mass/lean/ForgeMass/Errors.lean proves: the centroid's distance takes
+    // the first moments' errors as a vector (`centroid_bound`), each second moment its own error
+    // to second order (`inertia_entry_bound`), both over the volume's least |vol| - e0
     let em = e[1].abs().max(e[2]).max(e[3]);
+    let en = (e[1] * e[1] + e[2] * e[2] + e[3] * e[3]).sqrt();
     let es = e[4..10].iter().fold(0.0f64, |a, &x| a.max(x));
+    let least = vol.abs() - e[0];
     Ok(MassProps {
         volume: vol,
         area: t[10],
@@ -259,8 +276,16 @@ pub fn mass_rel(body: &Body, rel: f64) -> Result<MassProps, MassError> {
         err: [
             e[0],
             e[10],
-            (em + gl * e[0]) / vol.abs(),
-            2.0 * (es + 2.0 * gl * em + gl * gl * e[0]),
+            if least > 0.0 {
+                (en + gl * e[0]) / least
+            } else {
+                f64::INFINITY
+            },
+            if least > 0.0 {
+                2.0 * (es + 2.0 * gl * em + gl * gl * e[0] + (em + gl * e[0]) * (em + gl * e[0]) / least)
+            } else {
+                f64::INFINITY
+            },
         ],
         faces,
     })

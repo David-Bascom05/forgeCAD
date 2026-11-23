@@ -8,10 +8,12 @@ import ForgeExact.Flat
   the two points classified for a 2-D cell lie in the two 3-D cells beside it, one each side of
   `P` (`step_leaves_plane`), and `Flat.flat_boolean` applies to them as sample points.
 
-What is not proven, and is the reference's one assumption about its input: a closed planar
-B-rep's ray-parity membership (`Ref.Solid.contains`) is constant on every cell of the arrangement
-of its planes (the Jordan–Brouwer property of a closed polyhedral surface). The kernel's own
-`check` certifies that the tools handed over are closed.
+The reference's former assumption about its input, that a closed planar B-rep's ray-parity
+membership (`Ref.Solid.contains`) is constant on every cell of the arrangement of its planes (the
+Jordan–Brouwer property of a closed polyhedral surface), is now a theorem:
+`ForgeExact.Jordan.contains_const`, for solids whose loops lie in their face planes and whose
+edges are each used an even number of times. The kernel's own `check` certifies both of the tools
+handed over.
 -/
 
 namespace ForgeExact.RefFacts

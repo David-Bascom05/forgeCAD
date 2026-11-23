@@ -16,17 +16,19 @@ on what geometry, and with what repro?
     mirroring);
   - the kernel returns a pinched body there, where the exact answer is ZeroThickness.
 - The modelled kernel's answer on all other patterns is the spec's regularised boolean.
-- Inside the tolerance band (inputs whose coincidences are within LINEAR), three bands fail. Their
+- Inside the tolerance band (inputs whose coincidences are within LINEAR), five bands fail. Their
   sites are pinned:
   - one is a disagreement between `on_edge`, `share_cuts`/`place_cuts` and `point_in_face`;
-  - two are one probe floor in `clear_step`.
+  - two are one probe floor in `clear_step`;
+  - one is the coplanar imprint's stretch samples (G5a), one `nearly_flush`'s NEAR cap (G5b).
 - Tilted planes:
   - across the 1e-11, 1e-9, 1e-6, 1e-4 and 1e-3 thresholds, faces that share no boundary are right
     at every angle;
   - a tilted face whose sides are flush with the other body's fails in a band set by
     `nearly_flush`'s LINEAR and the same probe floor;
-  - a second strip of a flush-ended tilted face fails at draft-like angles (0.01°–0.15°). Not
-    fully pinned.
+  - a face drafted or tilted against a face it nearly lies on fails at draft-like angles
+    (0.006°–0.103° for a drafted lid) in two bands, G5a and G5b, each pinned to its site and
+    reproduced by a real `draft(...)` part (`parts/drafted_lid.fg`).
 
 ## 1. What is proven
 
@@ -41,7 +43,8 @@ boolean.rs and intersect.rs lines it models:
 - regions;
 - `classify_specs`: coplanar, lean, flood, ray;
 - `keep_of`;
-- the four-use ZeroThickness test.
+- the four-use ZeroThickness test (1739–1749; the first session cited 1724–1737, and the touch test as
+  1061–1094 where it is 1067–1108. boolean.rs is unchanged since 888fc195).
 
 Every predicate on two boxes compares two coordinates on one axis. So a consistent sign assignment
 is one of Allen's 13 relations per axis, and with three ops that gives 13³ × 3 = 6591 patterns.
@@ -139,18 +142,75 @@ tol_a, ≤ 2·tol_a):
 
   Non-transitive coincidence is where the tolerance band lives (§3).
 
+### 1.5 `interior_point`'s probe (Coverage/Probe.lean, kernel-checked)
+
+`clear_step` (boolean.rs:6179–6207) and its fallback `probe` (6174) are modelled on a strip of width
+w, over ℚ. The steps are s_k = 2^(n−1−k)·u for k < n, where u is the last step ≥ 2·LINEAR. A probe is
+clear when the far side is at least a step away; with no clear step, the fallback default step is
+used.
+
+| theorem | statement |
+|---|---|
+| `fits_iff` | some step fits ⟺ 2·u ≤ w |
+| `kernelProbe_inside_iff` | the kernel's probe lands strictly inside the strip ⟺ 2·u ≤ w ∨ s_def < w |
+| `g3_edge` | at a half chord ≥ 5 (s₀ = 0.05, 12 steps, u = 0.05·2⁻¹¹), a strip w ≤ 0.05 wide gets its probe outside ⟺ w < 0.05·2⁻¹⁰ mm = 4.8828125·LINEAR (`g3_edge_linear`) |
+| `ProbeSpec` | **the specification for the fix-probe session's exact interior point**: strictly inside every strip of positive width |
+| `kernel_not_spec` | the kernel's probe violates `ProbeSpec`: a strip 2·LINEAR wide |
+| `midpoint_spec` | the midpoint meets `ProbeSpec` |
+
+G3 and G4 are this theorem with w = δ (G3) and w = (reach/2)·θ (G4).
+
+**On the extracted code** (`aeneas/clearstep`, `aeneas/lean/Clearstep`; no sorry, no native_decide,
+standard axioms only). `interior_point`/`clear_step` are extracted float-free. Every float test is a
+table: `small`, `nsteps`, `probed`, `clear`, `fallback_ok`. The kernel's skip of a piece by index is
+kept, so a spur's piece is skipped both ways. Aeneas translates the extraction, and on it:
+- `interior_point_spec`: on sized tables, it returns ok, equal to a pure reference.
+- `first_clear_step`, `chosen_gets_step`: the step taken is the first step clear of every other
+  piece; the chosen half-edge gets one whenever some step is clear.
+- `strip_step_iff`, `strip_first_fit`, `strip_no_fit`, `g3_edge_code`: on a strip with 12 steps
+  (lengths in units of the last step), a step is taken iff w ≥ 2 units = 0.05·2⁻¹⁰ mm, and otherwise
+  the fallback runs.
+
+Not proven: that the tables encode the kernel's floats (argued in lib.rs), and the conversion from
+real widths to units (exact, because each 2·step is a whole number of units).
+
+### 1.6 The probe fix (Coverage/Inner.lean, kernel-checked)
+
+The fix is on branch claude/repo-review-mbdrlj-fix-probe, a3cc22d. Where no step clears, it replaces
+the stepping fallback on a plane with `planar_inner`, a point decided from the region's own boundary.
+A region still within LINEAR of its partner's boundary is decided by `beside_partner`. Both are
+transcribed over ℚ, statement by statement:
+
+| theorem | statement |
+|---|---|
+| `candidate_inside` | the midpoint of every scanline span (sorted crossings paired off) that lies off the crossings is inside the region by the even-odd rule, with the kernel's half-open crossing test |
+| `crossing_on_boundary` | every crossing point lies on its edge segment |
+| `planarInner_spec` | **ProbeSpec for the fix**: if `planar_inner` returns a point with clearance > 0 (clearance positive only off the boundary), the point is strictly inside the region: even-odd inside and on no edge. This holds for every region however narrow, where the stepping probe fails at 2·LINEAR (`Probe.kernel_not_spec`). |
+| `beside_exact` | in a cross-section across the partner's edge E (`here`, `there` the region's and partner's inward directions in the partner's plane, `n` the outward normal of the face beyond E, the other body the wedge of the two half-spaces, intersected at a convex E and united at a concave one): the code's decision equals the exact position of every point `t·here`, t > 0. `here = there` → On (on the partner); `here = −there` → In iff the point is interior to the other body, Out iff exterior. |
+
+The fix makes `beside_partner`'s call only for a region wider than LINEAR whose point is within
+LINEAR of the partner's boundary. The theorem holds wherever it decides; it returns no decision
+(`lean` 0, or `|cos| ≤ 0.5`) where the cross-section says nothing.
+
+Trusted:
+- the f64 evaluation of the same formulas;
+- the polygonising of curved pieces into chords within LINEAR/4;
+- that the clearance used is the distance to the region's boundary.
+
 ## 2. The gaps
 
 | # | pattern | outcome | site | repro | real parts |
 |---|---|---|---|---|---|
-| G1 | two boxes meeting at one corner, union: `meets`/`metBy` on all three axes (8 patterns) | kernel: a pinched body `check` accepts, volume right; exact: ZeroThickness (non-manifold vertex) | No flat-face site decides a corner touch. The four-use test (boolean.rs:1724–1737) sees edges only, and the touch test (1061–1094) is fed by `touches` (2048–2101), which is empty for two planes. `place_cuts` merges the two corners (an alias), and `split_old_pinches` (631–653, from `general` 571) gives each fan its own vertex again. | `verify/forge-coverage/tests/box_family.rs` `corner_touch_*` (ignored), `parts/corner_touch.fg` | Yes: the scoreboard's `plane_plane/vertex_on_vertex/Add` and any blocks placed corner to corner. The scoreboard reads `ok` there (§4). |
+| G1 | two boxes meeting at one corner, union: `meets`/`metBy` on all three axes (8 patterns) | kernel: a pinched body `check` accepts, volume right; exact: ZeroThickness (non-manifold vertex) | No flat-face site decides a corner touch. The four-use test (boolean.rs:1739–1749) sees edges only, and the touch test (1067–1108) is fed by `touches` (2048–2101), which is empty for two planes. `place_cuts` merges the two corners (an alias), and `split_old_pinches` (631–653, from `general` 571) gives each fan its own vertex again. | `verify/forge-coverage/tests/box_family.rs` `corner_touch_*` (ignored), `parts/corner_touch.fg` | Yes: the scoreboard's `plane_plane/vertex_on_vertex/Add` and any blocks placed corner to corner. The scoreboard reads `ok` there (§4). |
 | G2 | **band 1**: B's coincident ends moved by δ ∈ (LINEAR/√2, LINEAR] on two or three axes | `SplitCrossed`, and at −0.9 `Euler`/`VertexFans`/`EdgeUses` invalid bodies: 1323 of 5187 runs (two axes), 2778 of 5943 (three) | Each plane reads coincident (forge-geom intersect.rs:853–855), but a corner moved on two axes is √2·δ > LINEAR off its edge or vertex. In the decision log, every failing run and no passing run has two contradictions: (1) `point_in_face`'s nearest edge (classify.rs:588) decided both ways; (2) `on_edge` (283) in `share_cuts` (4522) against `place_cuts`' end vertex (4584), plus `on_edge` in the stretch test (3058) against classify.rs:588. | `tests/band.rs` `band_two_axes_meets_equal_equal` (ignored); edges in `band_two_axes_edges` | Inputs coincident to within LINEAR on two axes: the near-coincident family (near-coincident.md). Not in the suite parts, which use exact values. |
 | G3 | **band 2**: one axis moved, δ ∈ (LINEAR, 4.8828125·LINEAR] at unit ≥ 5; 7.8125·LINEAR at unit 1 | EdgeUses invalid bodies or spurious ZeroThickness: 527 of 3549 runs for δ > 0, 302 for δ < 0 | B's face beside A's runs δ past A's end: a sliver region δ wide. `classify_specs`' coplanar test (5888) probes it through `interior_point` (6150), whose `clear_step` (6186–6201) starts at min(0.01·half chord, 0.05) and halves while the step is ≥ 2·LINEAR (6188). A probe must be one step clear of every other piece, so a sliver under twice the last step (0.05·2⁻¹⁰ mm = 1/20480 mm) gets none. `probe` (6174) then steps 0.05 across it onto A's face, and the sliver is classed OnOpposite instead of Out. | `band_one_axis_sliver_1_5`, `band_one_axis_sliver_at_edge` (ignored); `band_one_axis_edges` pins 4.8828 fail / 4.8829 pass, and 7.80 / 7.82 at unit 1 | A face overhanging a coplanar neighbour by 1e-5–5e-5 mm: snapped or converted coordinates. Not observed in the suite. |
 | G4 | **band 3**: a tilted face whose sides are flush with the other body's (`cap_over`, `wall_over`): reach·θ ∈ (LINEAR, 0.05·2⁻¹⁰ mm], i.e. θ ∈ (2e-6, 1.953e-5] at reach 5 | SplitCrossed at the lower edge, then ZeroThickness / EdgeUses, on all three ops | `nearly_flush` (ssi.rs:85) stops reading the pair Coincident once a region corner is past LINEAR. The strip of B's flush side between the crossing line and A's edge is then (reach/2)·θ wide at its probe: the same `clear_step` floor as G3. Probe traces flip between 1.95e-5 (step 0.025, Outside) and 1.96e-5 (step 2.44e-5, Inside). | `tilt_cap_over_5e_6` (ignored); `tilt_band_edges` | Faces tilted by 2–20 µrad flush with a side: imported near-flush geometry. Rare in modelled parts. |
-| G5 | a tilted face whose tilted **ends** are also near a side (`cap`, `wall_flush`): a second strip up to 12.5θ² thick | subtract: ZeroThickness for θ ≈ 1.1e-4–2.5e-3; union, subtract, intersect: `InconsistentClassification` for θ ∈ [2.0e-3, 2.5e-3] | Not fully pinned. The strip is 5–8 LINEAR wide at 2.0–2.5e-3, consistent with the `clear_step` floor. Below θ ≈ 9e-4 the strip is thinner than LINEAR, and refusing it is defensible. | `results/tilt-sweep.tsv` (`cap`, `wall_flush` rows); `tilt_sweep cap` | **Plausible**: θ = 1.75e-3 is a 0.1° draft. A drafted tool whose ends sit flush with a part's sides fails subtract here. Worth a forge-model draft repro. |
+| G5a | a face drafted or tilted θ against a face of the other body it nearly lies on, with a corner of one body d off the other's face, LINEAR < d ≤ φ·LINEAR (φ = 1.618): d = 5θ² in the drafted lid, 0.0810°–0.1031°; d = 2.5θ² in `cap`, θ ∈ (2.0e-3, 2.5441e-3] | drafted lid: add refused with ZeroThickness (cut and keep right). `cap`: InconsistentClassification on all three ops; the ladder (ABSORB_HAIR_ROOTS, CHORDS) rescues neither | The corner is off the other body's edge, since d > LINEAR. The coplanar imprint (boolean.rs:4227–4244) samples the stretch of the corner's edge between the corner and where it crosses the other face's edge, at 0.5, then 0.382, then 0.618, with `point_in_face`. The samples lie (1 − f)·d from that edge, so all three read On while d ≤ LINEAR/0.618 = φ·LINEAR. The stretch is then dropped as lying along the boundary: the vertex is decided off, its edge on. The region it should close keeps a spur (a piece twice in one loop), which ends in the flood conflict (6004–6013) or the four-use test (1746). Edges measured: d = LINEAR exactly below, d = 1.6181·LINEAR above. The decision log records nothing here. | `parts/drafted_lid.fg` (`forgecad build`: "the solids touch exactly at (10, 2.500008, 9.995637)"); `tests/g5.rs` `g5a_drafted_lid_0_1_deg_add`, `g5a_cap_2_2e_3` (ignored); `examples/draft_g5` | **Yes, plausibly**: a 0.1° draft, the commonest small draft, on a lid or cover flush with a block's top hits it. So would an assembly part turned by about 0.1°. |
+| G5b | the same geometry with θ > NEAR = 1e-4 rad and d ≤ LINEAR: the drafted lid from 0.0057° to 0.0810°; `cap` from θ = 1.1e-4 to 2.0e-3 | drafted lid: add, cut and keep all refused with Unsupported(UntouchedOnOther). `cap`: subtract refused with ZeroThickness | The two near-parallel faces are within LINEAR of each other everywhere they overlap. The tolerance rule (ForgeExact.Snap `tolEq`, checked numerically for `cap`: tolerance-equal exactly while d ≤ LINEAR) merges them, the wall between them collapses, and the result is a valid body. `nearly_flush` (ssi.rs:66, `c <= NEAR`) refuses to merge a pair turned by more than 1e-4, and `ssi::coincident` needs ANGULAR. The pair is kept as crossing, which leaves a strip of a face within LINEAR of the other body everywhere. That strip is refused by the ray-probe fallback (classify_specs 6018–6056: every probe On, UntouchedOnOther at 6056) or by the four-use test (1746). Edges: θ = NEAR below (0.005° passes, 0.006° fails), d = LINEAR above. | `parts/drafted_lid.fg` at 0.05° ("the plane face … untouched, lies on the other body"); `g5b_drafted_lid_0_05_deg`, `g5b_cap_subtract_1e_3` (ignored); `g5_drafted_lid_edges`, `g5_cap_edges` pin all four edges | **Yes, plausibly**: drafts of 0.01°–0.08° on faces flush with another body. |
 
-**Count.** 8 sign-pattern gaps (G1, proven exhaustive on the family), plus 3 pinned tolerance bands
-(G2–G4) and 1 partly pinned band (G5). G3 and G4 share one site.
+**Count.** 8 sign-pattern gaps (G1, proven exhaustive on the family), plus 5 pinned tolerance bands
+(G2–G5b). G3 and G4 share one site (`clear_step`). G5a and G5b have separate sites, and both are
+reached by a real 0.1° / 0.05° draft.
 
 ## 3. The tolerance band in the decision log
 
@@ -215,8 +275,11 @@ the baseline would show G1 as `ok` (wrong: exact is ZeroThickness).
 - **Band 1 (G2)**: every failing run enters ABSORB_HAIR_ROOTS → CHORDS → NO_RUN_ON, and every rung
   ends `Internal`. None rescues a band input.
 - **Bands 2 and 3 (G3, G4)**: these end in invalid bodies or ZeroThickness, not `Internal`, so the
-  ladder is not entered. The exceptions are the SplitCrossed lower edge of G4 and G5's
-  InconsistentClassification, which reach the ladder and are not rescued either.
+  ladder is not entered. The exception is the SplitCrossed lower edge of G4, which reaches the
+  ladder and is not rescued.
+- **G5a in `cap`** (InconsistentClassification) enters ABSORB_HAIR_ROOTS and CHORDS, both ending
+  `Internal`. The drafted lid's G5a and both G5b refusals are not `Internal`, so they do not enter
+  the ladder.
 - **CAREFUL, FENCES, the RETRIED result check and `bends`** are reached by no flat-face input here.
   CAREFUL needs a torus or procedural face (896); FENCES needs springs.
 
@@ -229,12 +292,11 @@ and CAREFUL never succeed.
 Each takes its distance or sign tests as tables, as `placecuts` does:
 
 1. `place_cuts`' clustering (4561–4620). **Done**, proven (§1.4).
-2. `clear_step` / `interior_point`'s step ladder (6150–6207): steps as indices k with step =
-   s₀·2⁻ᵏ, and "clear" and "inside the face" as tables. Proving "a probe exists iff the region is
-   ≥ 2·s₀·2⁻ᵏᵐᵃˣ wide" gives G3/G4's edge as a theorem on the code.
+2. `clear_step` / `interior_point`'s step ladder (6150–6207). **Done** (§1.5): the geometric
+   model and the extraction, each proven.
 3. `edge_split` (756–813): the sort, dedup and piece chain. Cut order and the vertex keys are
    given.
-4. The four-use count (1724–1737) and `keep_of` (6096).
+4. The four-use count (1739–1749) and `keep_of` (6096).
 5. `classify_specs`' flood (5933–6031): the union over shared native pieces, the lean seeds, and
    the InconsistentClassification refusal.
 6. `split_new_pinches` / `split_old_pinches` fan walks (631–699): the coedge partner graph as

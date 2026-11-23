@@ -714,6 +714,18 @@ pub enum Error {
         /// The largest value of the param driving a refused size that builds (`Options::fit_sizes`).
         fit: Option<Box<(ParamKey, Literal)>>,
     },
+    /// A tapered extrude whose outline closes up before its depth (a lint): built to where it
+    /// closes, the pyramid or ridge its walls make, `at` from its sketch where `depth` was asked.
+    /// The fixes: the param driving the depth set to `at`, or the one driving the taper set to the
+    /// largest angle that reaches the depth.
+    TaperCloses {
+        span: Span,
+        id: String,
+        at: f64,
+        depth: f64,
+        depth_fix: Option<Box<(ParamKey, Literal)>>,
+        angle_fix: Option<Box<(ParamKey, Literal)>>,
+    },
     /// A role anchor whose faces the part no longer has.
     NoFace {
         span: Span,
@@ -797,6 +809,8 @@ pub enum Error {
     Sheet(Box<crate::sheet::SheetErr>),
     /// Thermoforming: the kernel's refusals and the language's own (`thermo.rs`).
     Thermo(Box<crate::thermo::ThermoErr>),
+    /// Weldments: the frame rule's refusals and the language's own (`weld.rs`).
+    Weld(Box<crate::weld::WeldErr>),
     /// A used file (`uses.rs`): missing, cyclic, misplaced, failing, or the target of an edit.
     Use(Box<crate::uses::UseErr>),
     // ---- shapes (sweep, coil, loft, shell, draft, offset, rib, face fillets, balls) ----
@@ -909,6 +923,7 @@ impl Error {
             | SketchKernel { span, .. }
             | SketchProfile { span, .. }
             | Build { span, .. }
+            | TaperCloses { span, .. }
             | NoFace { span, .. }
             | NotPlanar { span, .. }
             | EmptySelection { span }
@@ -937,6 +952,7 @@ impl Error {
             | NotFinite { .. } => None,
             Sheet(e) => e.span(),
             Thermo(e) => e.span(),
+            Weld(e) => e.span(),
             Use(e) => e.span(),
             Props(e) => e.span(),
         }
@@ -984,6 +1000,7 @@ impl Error {
             SketchKernel { .. } => "SketchKernel",
             SketchProfile { .. } => "SketchProfile",
             Build { .. } => "Build",
+            TaperCloses { .. } => "TaperCloses",
             NoFace { .. } => "NoFace",
             NotPlanar { .. } => "NotPlanar",
             EmptySelection { .. } => "EmptySelection",
@@ -1001,6 +1018,7 @@ impl Error {
             NotFinite { .. } => "NotFinite",
             Sheet(e) => e.kind(),
             Thermo(e) => e.kind(),
+            Weld(e) => e.kind(),
             Use(e) => e.kind(),
             Props(e) => e.kind(),
             NotWith { .. } => "NotWith",
@@ -1064,6 +1082,17 @@ impl Error {
                 param: fit.0.clone(),
                 value: fit.1,
             }],
+            // as deep as it closes, or as steep as reaches the depth
+            TaperCloses {
+                depth_fix, angle_fix, ..
+            } => [depth_fix, angle_fix]
+                .into_iter()
+                .flatten()
+                .map(|f| Op::SetParam {
+                    param: f.0.clone(),
+                    value: f.1,
+                })
+                .collect(),
             // a misspelt name: the nearest in reach
             UnknownName {
                 span, near: Some(n), ..
@@ -1077,6 +1106,7 @@ impl Error {
             }],
             Sheet(e) => e.fixes(),
             Thermo(e) => e.fixes(),
+            Weld(e) => e.fixes(),
             Feat(e) => e.fixes(),
             Std(e) => e.fixes(),
             Asm(n) => n.fixes(),
@@ -1091,7 +1121,7 @@ impl Error {
         match self {
             Syntax(s) => match s {
                 SyntaxError::BadNumber { .. } => "a malformed number".into(),
-                SyntaxError::UnknownUnit { .. } => "unknown unit (mm, deg)".into(),
+                SyntaxError::UnknownUnit { .. } => "unknown unit (mm, in, deg)".into(),
                 SyntaxError::OpenString { .. } => "a string not closed".into(),
                 SyntaxError::BadChar { .. } => "a character Forge does not use".into(),
                 SyntaxError::Expected { what, .. } => format!("expected {what}"),
@@ -1107,6 +1137,11 @@ impl Error {
                     format!("`{word}` is a keyword now and cannot be a name: rename it")
                 }
             },
+            TaperCloses { id, at, depth, .. } => format!(
+                "{id}: the taper closes at depth {} before {}: built to where its walls meet",
+                crate::values::fmt(*at),
+                crate::values::fmt(*depth)
+            ),
             LooseLiteral { value, rule, .. } => format!(
                 "loose number {}: numbers live in shared/param definitions [{}]",
                 crate::values::fmt(*value),
@@ -1241,6 +1276,7 @@ impl Error {
             }
             Sheet(e) => e.text(),
             Thermo(e) => e.text(),
+            Weld(e) => e.text(),
             Use(e) => e.text(),
             Props(e) => e.text(),
             NotWith { func, arg, with, .. } => format!("{func}: {arg} does not apply with {with}"),
@@ -1292,6 +1328,9 @@ impl Error {
         use Error::*;
         let s = |x: &str| Json::Str(x.into());
         match self {
+            TaperCloses { id, at, depth, .. } => {
+                vec![("id", s(id)), ("at", (*at).into()), ("depth", (*depth).into())]
+            }
             LooseLiteral { value, rule, .. } => vec![("value", (*value).into()), ("rule", s(rule.name()))],
             WorldAfterFirst { first, rule, .. } => vec![("first", s(first)), ("rule", s(rule.name()))],
             Recursion { func, rule, .. } => vec![("func", s(func)), ("rule", s(rule.name()))],
@@ -1374,6 +1413,7 @@ impl Error {
             ShadowsTopLevel { name, .. } => vec![("name", s(name))],
             Sheet(e) => e.data(),
             Thermo(e) => e.data(),
+            Weld(e) => e.data(),
             Use(e) => e.data(),
             Props(e) => e.data(),
             NotWith { func, arg, with, .. } => vec![("func", s(func)), ("arg", s(arg)), ("with", s(with))],
@@ -1473,6 +1513,16 @@ fn regen_text(e: &forge_model::RegenError) -> String {
         G::Bodies { count } => format!("the part ends as {count} bodies, not one"),
         // an edit's own error says why ("thicken: rebuild: vertex"), not the wrapper's name
         G::Edit { error, .. } => words(error),
+        G::Body {
+            error: forge_model::BodyError::Pieces { pieces },
+            ..
+        } => format!(
+            "the end trim would leave the member in {pieces} pieces: trim it to what lies across its end"
+        ),
+        G::Body {
+            error: forge_model::BodyError::Unsupported(what),
+            ..
+        } => format!("{what} is not supported"),
         _ => words(e),
     }
 }

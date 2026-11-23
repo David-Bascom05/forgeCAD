@@ -10,6 +10,7 @@ pub mod asmglyph;
 pub mod asmpart;
 pub mod asmtools;
 mod banner;
+pub mod bendsim;
 pub mod content;
 pub mod dialog;
 pub mod docs;
@@ -51,15 +52,17 @@ pub mod thermo;
 pub mod thermo_material;
 pub mod thermo_ui;
 mod tree;
+pub mod vendorui;
 pub mod versions;
 mod visual_style;
 pub mod voice;
+pub mod weld_ui;
 
 pub use crate::nav::NavTool;
 use crate::render::VisualStyle;
 use crate::shell::placed::Placed;
 use egui::{Align2, Color32, CornerRadius, Rect, Sense, Stroke, StrokeKind, Ui, pos2, vec2};
-use theme::{Theme, medium, mono, sans, semi};
+use theme::{Theme, mono, sans, semi};
 
 pub const TABS: [&str; 5] = ["3D Model", "Sketch", "Inspect", "View", "Manage"];
 /// A sheet metal part's own tabs: shown first, Inventor's way; the flat pattern's in its place.
@@ -72,6 +75,8 @@ pub const THERMO_TAB: usize = 7;
 pub const ASM_TAB: usize = 8;
 /// An assembly's Harness tab: after Assemble.
 pub const HARNESS_TAB: usize = 9;
+/// A part's Weldments tab: structural members, their ends and plates, the cut list.
+pub const WELD_TAB: usize = 10;
 
 const TITLE_H: f32 = 36.0;
 const TABS_H: f32 = 34.0;
@@ -187,6 +192,8 @@ pub enum Action {
     Doc(docs::DocCmd),
     /// Where an untitled document is to be saved: the host's file dialog, then `Gui::save_as`.
     SaveAs,
+    /// File > Export STL / 3MF / OBJ: the host's file dialog, then `fg::export_mesh`.
+    ExportMesh(forge_lang::meshfile::Format),
     /// A ground or shadow switch of the View tab, flipped.
     Look(crate::look::Toggle),
 }
@@ -218,6 +225,8 @@ pub enum FgCmd {
     ContentCenter,
     /// Show All of the joints' and constraints' glyphs in the view (else only those called for).
     Relationships,
+    /// The Weldments tab's Cut List panel, up or down.
+    CutList,
 }
 
 /// What the view shows, for the buttons that reflect it.
@@ -464,6 +473,7 @@ impl Shell {
             FgCmd::Thermo(c) => fg.thermo_command(c),
             FgCmd::Harness(c) => fg.harness_command(c),
             FgCmd::Parameters => fg.params_open = !fg.params_open,
+            FgCmd::CutList => fg.cutlist_open = !fg.cutlist_open,
             FgCmd::Interference => {
                 if let Some(a) = &mut fg.asm {
                     a.interference = !a.interference;
@@ -746,6 +756,7 @@ impl Shell {
         self.content_window(&ctx);
         self.fg_params_window(&ctx);
         self.fg_issues_window(&ctx);
+        self.cutlist_window(&ctx);
         self.sheet_ui(&ctx);
         self.build_banner(ui);
         self.view_toolbar(&ctx);
@@ -776,7 +787,7 @@ impl Shell {
                 continue;
             }
             let ink = if l.hovered { t.on_ink } else { t.ink };
-            let g = ui.fonts_mut(|f| f.layout_no_wrap(l.text.to_string(), medium(size), ink));
+            let g = ui.fonts_mut(|f| f.layout_no_wrap(l.text.to_string(), semi(size), ink));
             let mid = g.mesh_bounds.center();
             let colour = ink.gamma_multiply(l.alpha);
             let mut mesh = egui::Mesh::with_texture(egui::TextureId::default());
@@ -959,6 +970,7 @@ impl Shell {
                 FLAT_TAB => &"Flat Pattern",
                 ASM_TAB => &"Assemble",
                 HARNESS_TAB => &"Harness",
+                WELD_TAB => &"Weldments",
                 k => &TABS[k],
             };
             let on = k == self.tab;
@@ -1006,7 +1018,7 @@ impl Shell {
         } else if fg && self.sheet.env {
             vec![SHEET_TAB, 0, 1, ASM_TAB, 2, 3, 4]
         } else if self.fg.is_some() {
-            vec![0, 1, ASM_TAB, HARNESS_TAB, THERMO_TAB, 2, 3, 4]
+            vec![0, 1, ASM_TAB, WELD_TAB, HARNESS_TAB, THERMO_TAB, 2, 3, 4]
         } else {
             vec![0, 1, THERMO_TAB, 2, 3, 4]
         }
@@ -1438,6 +1450,17 @@ impl Shell {
             // a Forge file is written when asked (Ctrl+S too)
             items.push(("Save", model_open.then_some(Action::Fg(FgCmd::Save))));
             items.push(("New Drawing...", model_open.then_some(Action::NewDrawing)));
+            // the part's mesh for printing and viewers: written natively, beside the part
+            if cfg!(not(target_arch = "wasm32")) {
+                use forge_lang::meshfile::Format;
+                for (label, f) in [
+                    ("Export STL...", Format::Stl),
+                    ("Export 3MF...", Format::ThreeMf),
+                    ("Export OBJ...", Format::Obj),
+                ] {
+                    items.push((label, model_open.then_some(Action::ExportMesh(f))));
+                }
+            }
             if self.drawing.is_some() {
                 items.push(("Close Drawing", Some(Action::CloseDrawing)));
             }

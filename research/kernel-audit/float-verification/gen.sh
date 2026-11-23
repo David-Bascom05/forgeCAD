@@ -23,10 +23,13 @@ for f in Types Funs; do
     "$work/out/$f.lean" > "$here/lean/FvPredicates/$f.lean"
 done
 sed -i 's/^import Aeneas$/import Aeneas\nimport FvPredicates.F64/' "$here/lean/FvPredicates/Types.lean"
-# The opaque functions are defined by hand in FvPredicates/FunsExternal.lean; the template only
+# The opaque functions are defined by hand in FvPredicates/FunsExternal.lean, or by the float
+# bridge (verify/aeneas/bridge/AeneasF64/Std.lean); the template only
 # lists them, so check that the list has not changed.
 grep -oE '(^|\] )axiom [^ ]+' "$work/out/FunsExternal_Template.lean" | sed -E 's/^(\] )?axiom //' | sort > "$work/opaque"
-grep -o '^def [^ ]*' "$here/lean/FvPredicates/FunsExternal.lean" | sed 's/^def //' | sort > "$work/defined"
+cat "$here/lean/FvPredicates/FunsExternal.lean" "$here/../../../verify/aeneas/bridge/AeneasF64/Std.lean" | grep -o '^def [^ ]*' | sed 's/^def //' | sort > "$work/all"
+# only the bridge functions this translation asks for
+comm -12 "$work/all" "$work/opaque" > "$work/defined"; grep -o '^def [^ ]*' "$here/lean/FvPredicates/FunsExternal.lean" | sed 's/^def //' | sort | comm -23 - "$work/defined" | sed 's/^/extra: /' >&2
 if ! diff -u "$work/opaque" "$work/defined"; then
   echo "gen.sh: the opaque functions changed; update FvPredicates/FunsExternal.lean" >&2
   exit 1

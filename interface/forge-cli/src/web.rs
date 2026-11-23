@@ -272,8 +272,10 @@ fn read_request(r: &mut BufReader<TcpStream>) -> Result<Option<Request>, Respons
     }))
 }
 
-fn write_response(s: &mut TcpStream, r: &Response, keep: bool) -> std::io::Result<()> {
-    let mut head = format!(
+/// The response; to a HEAD its head only (its Content-Length still the body's): a body sent
+/// would be read as the next response on a kept connection.
+fn write_response(s: &mut TcpStream, r: &Response, keep: bool, head: bool) -> std::io::Result<()> {
+    let mut text = format!(
         "HTTP/1.1 {} {}\r\nContent-Type: {}\r\nContent-Length: {}\r\nX-Content-Type-Options: nosniff\r\n\
          Cache-Control: no-cache\r\nCross-Origin-Opener-Policy: same-origin\r\n\
          Cross-Origin-Embedder-Policy: require-corp\r\nConnection: {}\r\n",
@@ -284,11 +286,13 @@ fn write_response(s: &mut TcpStream, r: &Response, keep: bool) -> std::io::Resul
         if keep { "keep-alive" } else { "close" }
     );
     for (k, v) in &r.headers {
-        head.push_str(&format!("{k}: {v}\r\n"));
+        text.push_str(&format!("{k}: {v}\r\n"));
     }
-    head.push_str("\r\n");
-    s.write_all(head.as_bytes())?;
-    s.write_all(&r.body)?;
+    text.push_str("\r\n");
+    s.write_all(text.as_bytes())?;
+    if !head {
+        s.write_all(&r.body)?;
+    }
     s.flush()
 }
 
@@ -296,17 +300,17 @@ fn connection(s: TcpStream, c: &Config, lock: &Mutex<()>) -> std::io::Result<()>
     let mut out = s.try_clone()?;
     let mut r = BufReader::new(s);
     loop {
-        let (resp, keep) = match read_request(&mut r) {
+        let (resp, keep, head) = match read_request(&mut r) {
             Ok(None) => return Ok(()),
             Ok(Some(q)) => {
                 let keep = !q
                     .header("connection")
                     .is_some_and(|v| v.eq_ignore_ascii_case("close"));
-                (answer(&q, c, lock), keep)
+                (answer(&q, c, lock), keep, q.method == "HEAD")
             }
-            Err(e) => (e, false),
+            Err(e) => (e, false, false),
         };
-        write_response(&mut out, &resp, keep)?;
+        write_response(&mut out, &resp, keep, head)?;
         if !keep {
             return Ok(());
         }
@@ -578,7 +582,7 @@ fn put(p: &Path, bytes: &[u8]) -> std::io::Result<()> {
         ".{}.forgecad-web-{}",
         p.file_name()
             .map_or_else(Default::default, |n| n.to_string_lossy()),
-        std::process::id()
+        forge_dirs::process_id()
     ));
     std::fs::write(&tmp, bytes)?;
     std::fs::rename(&tmp, p).inspect_err(|_| {
@@ -709,7 +713,8 @@ fn static_file(c: &Config, path: &str) -> Response {
     }
 }
 
-#[cfg(test)]
+// a TCP server and its clients: WASI listens on nothing, so native only
+#[cfg(all(test, not(target_os = "wasi")))]
 mod tests {
     use super::*;
 
@@ -788,7 +793,7 @@ mod tests {
     fn started(token: Option<&str>, writable: bool) -> (SocketAddr, PathBuf) {
         static N: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
         let n = N.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-        let d = std::env::temp_dir().join(format!("forgecad-web-{}-{n}", std::process::id()));
+        let d = forge_dirs::temp_dir().join(format!("forgecad-web-{}-{n}", forge_dirs::process_id()));
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(d.join("sub")).unwrap();
         std::fs::write(d.join("part.fg"), "shared t = 2\n").unwrap();
@@ -901,7 +906,7 @@ mod tests {
         let outside = root
             .parent()
             .unwrap()
-            .join(format!("forgecad-web-outside-{}", std::process::id()));
+            .join(format!("forgecad-web-outside-{}", forge_dirs::process_id()));
         std::fs::write(&outside, "private").unwrap();
         for p in [
             "/api/files/..%2Fsecret",
@@ -980,6 +985,24 @@ mod tests {
     }
 
     #[test]
+    fn a_head_has_no_body_and_the_connection_goes_on() {
+        let (at, root) = started(None, true);
+        let mut s = TcpStream::connect(at).unwrap();
+        let host = format!("Host: localhost:{}\r\n", at.port());
+        let req = format!(
+            "HEAD /api/files/part.fg HTTP/1.1\r\n{host}\r\nGET /api/files/part.fg HTTP/1.1\r\n{host}Connection: close\r\n\r\n"
+        );
+        s.write_all(req.as_bytes()).unwrap();
+        let mut got = String::new();
+        s.read_to_string(&mut got).unwrap();
+        // two heads, one body: the GET's, after its own head
+        assert_eq!(got.matches("HTTP/1.1 200").count(), 2, "{got}");
+        assert_eq!(got.matches("shared t = 2").count(), 1, "{got}");
+        assert!(got.trim_end().ends_with("shared t = 2"), "{got}");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
     fn a_read_only_server_writes_nothing() {
         let (at, root) = started(None, false);
         let (s, _, _) = call(at, "PUT", "/api/files/part.fg", &[("If-None-Match", "*")], b"x");
@@ -991,7 +1014,7 @@ mod tests {
 
     #[test]
     fn a_non_loopback_bind_makes_a_token() {
-        let d = std::env::temp_dir();
+        let d = forge_dirs::temp_dir();
         let c = parse(&[
             d.to_string_lossy().into_owned(),
             "--bind".into(),
