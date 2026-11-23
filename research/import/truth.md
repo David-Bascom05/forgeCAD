@@ -77,16 +77,17 @@ result:
 - where its distinct solids are, they are not;
 - where neither, the truth is uncertain.
 
-One limit: where the program's bodies match neither count, the truth is uncertain. One way that can happen is an
-Onshape body of two disjoint lumps, which the STEP writes as two solids. That may be 00647071's case (below); it is
-not checked. FreeCAD's truths
+One limit: where the program's bodies match neither count, the truth is uncertain. 00647071 is such a part, checked.
+Its program makes no copies (an extrude, a fillet and two cuts), and its cuts leave the part in two lumps, which the
+STEP writes as two solids. The reader counts that as one body: it does not count lumps a cut separates. The STEP
+then holds those two solids four times over, 2 distinct and 6 copies, the copies 3.0000 times the distinct volume.
+Ours is the distinct volume to 1.5e-6, but neither count fits, so the truth is uncertain, as the rule says. FreeCAD's truths
 are not affected: fcstd_truth measures the stored shape as it is and drops no copies.
 
 **What it moved (CADFS).** Of the 49 parts whose STEP holds exact copies:
 
 - 3 mismatches become matches (00293826, 00724634, 00846949: patterns of new bodies spun onto each other);
-- 1 match becomes uncertain (00647071: the program makes 1 body, and the STEP holds 2 distinct solids and 6
-  copies);
+- 1 match becomes uncertain (00647071, above);
 - 45 stay as they were, among them 00879304. Its STEP holds 199 solids, the pattern's 100 and 99 copies of them,
   and its program makes 100 bodies, so the copies are counted once, as before.
 
