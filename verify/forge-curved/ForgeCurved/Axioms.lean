@@ -64,3 +64,5 @@ import ForgeCurved
 #print axioms ForgeCurved.FaceLocal.badVertS_iff
 #print axioms ForgeCurved.FaceLocal.touch_iff_xNonManifoldF
 #print axioms ForgeCurved.cylPlane_localConn
+#print axioms ForgeCurved.tangent_edgeLocal
+#print axioms ForgeCurved.tangent_refused
