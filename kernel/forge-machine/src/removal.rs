@@ -173,7 +173,8 @@ fn within(a: [f64; 2], b: [f64; 2], p: [f64; 2], r: f64) -> Option<(f64, f64)> {
 
 /// Mills a box stock (part coordinates) through a timeline on a grid of `step`.
 pub fn mill(s: &Setup, tl: &Timeline, min: V3, max: V3, step: f64) -> Result<MillResult, RemovalError> {
-    if step.is_nan() || step <= 0.0 || (0..3).any(|k| min[k].is_nan() || max[k].is_nan() || min[k] >= max[k]) {
+    if step.is_nan() || step <= 0.0 || (0..3).any(|k| min[k].is_nan() || max[k].is_nan() || min[k] >= max[k])
+    {
         return Err(RemovalError::Grid(
             "a stock box needs min < max and a step > 0".into(),
         ));
