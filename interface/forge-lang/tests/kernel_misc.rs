@@ -1043,3 +1043,13 @@ extrude2 = extrude(s4, 2)
         assert!(mesh.open_edges().is_empty());
     }
 }
+
+/// A plate whose wall is a wavy spline (19 points, one tight turn back, crossing nowhere) builds
+/// and meshes: its chords, crossing a neighbour's near the turn, are cut by the crossing pre-pass
+/// (it failed ConstraintThroughPoint; from the import branch, CADFS 00468533 and 00893869).
+#[test]
+fn a_wavy_spline_wall_meshes() {
+    use forge_lang::fuzz::{Verdict, judge_built};
+    let (v, _) = judge_built(include_str!("kernel_parts/mesh_wavy_spline.fg"));
+    assert!(matches!(v, Verdict::Ok), "{v:?}");
+}
