@@ -17,7 +17,9 @@ An operation whose checks are not all proven is **refused**, with the check that
 and a fix. A program is written only when every operation in it is certified.
 
 ```
-forgecad cam F.fg [--json] [-o PROGRAM]     the reply, and the program if released
+forgecad cam F.fg [--json] [-o PROGRAM]     the reply, and the program if released; exit 0 certified
+                                             in full, 3 released but certified except G5 (a setup
+                                             not placed with `at:`), 1 refused
 forgecad cam F.fg sheet -o SHEET.html        the setup sheet
 ```
 The document layer is `interface/forge-cam-lang` (`forge_cam_lang::run`); forge-lang itself only
@@ -84,7 +86,7 @@ the document (formats: research/cam/libraries-tools.md §5). A Fusion tool libra
 ## The reply: `forgecad.cam/1`
 
 ```
-ok, schema: "forgecad.cam/1", errors[], warnings[],
+ok, schema: "forgecad.cam/1", certification (full | except G5 | refused), errors[], warnings[],
 setups[]   name, part, machine, wcs {origin, axes, offset}, stock {kind, min, max}, tol, clearance, at,
            heights {clear, retract}, fixture {kind, name, across, jaw_top, clamp, clearance,
            pieces[] {name, min, max}} | null
@@ -97,7 +99,8 @@ ops[]      name, kind (facing|clear|contour|pocket|drill|engrave|thread_mill), s
                     at, tool_part (cutter|shank/holder), other, phase (cut|plunge|link|rapid), move},
            removals[] (declared Δ, e.g. cosmetic threads), leftover {status}, refusal | null
 blocking[] {op, why}      fixes[] {op, fix}      suggestions[] {kind: NeedTool, op, why}
-programs[] {name, post, lines, round_trip, error | null}
+programs[] {name, post, lines, round_trip, certified (full | except G5 (unchecked: no `at:`) | no),
+           error | null}
 leftover   {computed, rule, regions[] {setup, z, boxes, why (uncut | held by fixture)}}: decided at the
            end of each chain of setups (a setup another continues with `from:` hands its stock on)
 scope      what is proven and what is not

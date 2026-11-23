@@ -33,6 +33,9 @@ fn the_flange_program_is_certified() {
     assert!(cam.sheet().contains("certified"));
     // G4: every band decided, nothing left over
     assert!(cam.leftover_done && cam.leftover.is_empty(), "{:?}", cam.leftover);
+    // not placed on the machine: released, but not called fully certified
+    assert_eq!(cam.certification(), "except G5");
+    assert!(j.contains("\"certified\":\"except G5 (unchecked: no `at:`)\""), "{j}");
 }
 
 #[test]
@@ -231,6 +234,8 @@ fn soft_jaws_hold_the_part_turned_over() {
     );
     assert_eq!(cam.programs.len(), 3);
     assert!(cam.programs.iter().all(|p| p.error.is_none() && p.round_trip));
+    // every setup placed: G5 on every position, certified in full
+    assert_eq!(cam.certification(), "full");
     // the jaws are cut in their own setup, and op2's ops are checked against them
     let rest = cam.ops.iter().find(|o| o.name == "rest").unwrap();
     assert!(rest.status == "built" && rest.pairs > 0);

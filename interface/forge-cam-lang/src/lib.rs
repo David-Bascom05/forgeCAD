@@ -2577,6 +2577,23 @@ impl Cam {
         po
     }
 
+    /// Whether a program's setups are all placed (`at:`), so G5 checked its positions.
+    fn placed(&self, p: &ProgramOut) -> bool {
+        p.setups.iter().all(|&i| self.setups[i].at.is_some())
+    }
+
+    /// "full": every check proven, G5 on every position; "except G5": released, but a posted
+    /// setup is not placed, so G5 checked spans only; "refused": not released.
+    pub fn certification(&self) -> &'static str {
+        if !self.ok {
+            "refused"
+        } else if self.programs.iter().all(|p| self.placed(p)) {
+            "full"
+        } else {
+            "except G5"
+        }
+    }
+
     /// The reply, `forgecad.cam/1`.
     pub fn json(&self) -> Json {
         let n = |x: f64| Json::Num(x);
@@ -2797,12 +2814,26 @@ impl Cam {
                     ("post", Json::Str(p.post.clone())),
                     ("lines", n(p.lines as f64)),
                     ("round_trip", p.round_trip.into()),
+                    (
+                        "certified",
+                        Json::Str(
+                            if p.error.is_some() {
+                                "no"
+                            } else if self.placed(p) {
+                                "full"
+                            } else {
+                                "except G5 (unchecked: no `at:`)"
+                            }
+                            .into(),
+                        ),
+                    ),
                     ("error", p.error.clone().map(Json::Str).unwrap_or(Json::Null)),
                 ])
             })
             .collect();
         Json::obj(vec![
             ("ok", self.ok.into()),
+            ("certification", Json::Str(self.certification().into())),
             ("schema", Json::Str("forgecad.cam/1".into())),
             ("errors", Json::Arr(self.errors.iter().map(|e| Json::Str(e.clone())).collect())),
             ("warnings", Json::Arr(self.warnings.iter().map(|e| Json::Str(e.clone())).collect())),

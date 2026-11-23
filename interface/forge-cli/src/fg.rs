@@ -250,6 +250,11 @@ impl Session {
                 }
             ));
         }
+        text.push_str(&match cam.certification() {
+            "full" => "certification: full (G1-G6, every position within the machine's travel)\n".to_string(),
+            "except G5" => "certification: except G5 (unchecked: no `at:` on a setup; the spans fit the travel)\n".to_string(),
+            c => format!("certification: {c}\n"),
+        });
         let file = if a.words.first().is_some_and(|w| w == "sheet") {
             Some(cam.sheet().into_bytes())
         } else {
