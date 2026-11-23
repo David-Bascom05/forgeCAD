@@ -870,6 +870,13 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
             let r = a.req_num("r", LEN)?;
             let st = a.num("start", ANG)?.unwrap_or(Num::konst(0.0, Dim::Angle));
             let src = values::join_src(&values::join_src(&n.src, &r.src), &st.src);
+            // a count is a size
+            if !(n.v >= 0.0 && n.v <= crate::eval::MAX_COUNT as f64) {
+                return Err(Error::TooLarge {
+                    span: a.span("n"),
+                    value: n.v,
+                });
+            }
             let k = n.v.round() as usize;
             let pts = (0..k)
                 .map(|i| {

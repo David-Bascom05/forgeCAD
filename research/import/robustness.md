@@ -86,6 +86,7 @@ All of these are fixed at the root.
 | fg | stack overflow at 5000 brackets, a 30 000-term sum, 5000 unary minuses | the recursive descent parser, evaluation and drop of a tree that deep | the parser refuses depth past 400 (each nested expression, block and prefix operator, and each link of a chain counts) with `Syntax(TooDeep)` at its span; evaluation nesting (calls included) is held at 600, as `Fuel`. Both fit a thread's 2 MB stack (checked under `ulimit -s 2048`) |
 | fg | shift overflow in the fast parser | a nonterminal past 64 used as a terminal's bit | `checked_shl` |
 | fg | i64 overflow (range end + 1), capacity overflow, an assert in `Frame::rotated_about_z`, i64 overflow in the sheet's vertex grid | numbers no part has: count(1e26), count(2^63 − 1), −1e308 deg, a flange leg of 2^63 | a number not finite or past 1e12 (angles: 1e5 rad) is `TooLarge` where it is evaluated; a range holds at most 2^20 items. (`dmath::sin_cos` past its reduction's 2^20 π/2 gives no unit pair; making it take whole turns off first changed the exact results of the speed gate's fuzz parts, which pass such arguments, so the kernel is left as it is and the language's bound keeps files from it) |
+| fg | 309 GB asked at once; 2 GB in the crossing sweep and the sketch | polar(n: 2^32), polar(n: 1e6) | a count that sizes geometry (a polygon's sides, a pattern's copies) is at most 100 000 (`TooLarge`); the sweep's margin is rounding's (1e-6), not 1e-3 |
 | fg | 1.5 GB in `fg check` | a loop made 65 536 sketches and cutouts | a run executes at most 10^7 statements and makes at most 20 000 features (`Fuel`) |
 | fg | 4.7 GB asked at once | a hull of 3000 discs: the sketch's freedom took a dense rank of one block | a block past 2^21 entries is taken as of full rank (its freedom not counted) |
 | fg | 78 s | a hexagon nut of 65 535 sides: `chain_loops`' node search, `check_crossings`' every pair, `seg_id`'s search were each quadratic | a grid, a sweep over boxes (pairs judged in the old order, so the same error comes first), one lookup: 0.3 s |
@@ -97,8 +98,9 @@ All of these are fixed at the root.
 | git | slice index panic | a signature with `>` before `<` | the `>` searched after the `<` |
 | git | abort allocating | a pack delta declaring a result of 2^50 bytes | capacity bounded by what the delta's ops can make |
 
-No finding remained in the last runs of json, material, inflate, ttf, stl, obj or 3mf. Three
-findings were the harness's own and are fixed there: a mutant grown past the memory cap inside the
+No finding remained in the last runs of json, material, inflate, ttf, stl, obj or 3mf. Four
+findings were the harness's own and are fixed there: memory an earlier case left resident counted
+against every case after it (a case's memory is now its peak less what was resident before it), a mutant grown past the memory cap inside the
 mutator, a 64 MB deflate bomb whose making outran the timeout, and quadratic repeats.
 
 **Seeds from the datasets** (a long run of step on the 1531 CADFS files) found the last two rows'
@@ -132,7 +134,8 @@ the browser build. Each reader's:
   - Parse depth 400.
   - Evaluation nesting 600; calls 100 000 per statement and 10^6 per run.
   - 10^7 statements and 20 000 features per run; components 2000.
-  - Numbers within 1e12 (angles within 1e5 rad); ranges within 2^20 items.
+  - Numbers within 1e12 (angles within 1e5 rad); ranges within 2^20 items; a count that sizes
+    geometry within 100 000.
   - The sketch's dense rank is capped at 2^21 entries.
 - **Zips (FCStd, 3MF):** members are capped before they inflate: 256 MB each, 1 GB in all,
   1000:1 past 64 kB.

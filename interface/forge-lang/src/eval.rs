@@ -472,6 +472,9 @@ pub const MAX_MAGNITUDE: f64 = 1e12;
 pub const MAX_ANGLE: f64 = 1e5;
 /// The most items a range may make.
 pub const MAX_LIST: usize = 1 << 20;
+/// The most a count that sizes geometry may be (a polygon's sides, a pattern's copies): each is
+/// an entity or a feature's copy, and a sketch of a million entities took gigabytes.
+pub const MAX_COUNT: usize = 100_000;
 /// Statements a whole run may execute, loops and calls and components with it.
 pub const STEP_BUDGET: u64 = 10_000_000;
 /// Features one evaluation may make (each kept with its record, sketches too).

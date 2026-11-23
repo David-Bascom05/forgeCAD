@@ -182,7 +182,10 @@ fn worker(a: &[String]) {
             let _ = o.flush();
         }
         let (_, data) = case(t, &pool, s, k);
+        // what this case adds: memory an earlier case left with the allocator stays resident and
+        // would count against every case after it
         reset_peak();
+        let before = forge_read_fuzz::rss_kb();
         let t0 = Instant::now();
         let r = run(t, &data);
         let ms = t0.elapsed().as_millis();
@@ -192,7 +195,12 @@ fn worker(a: &[String]) {
             Outcome::Panic(p) => format!("panic {}", p.replace('\n', " ")),
         };
         let mut o = out.lock();
-        let _ = writeln!(o, "D {k} {ms} {} {} {what}", peak_kb(), data.len());
+        let _ = writeln!(
+            o,
+            "D {k} {ms} {} {} {what}",
+            peak_kb().saturating_sub(before),
+            data.len()
+        );
         let _ = o.flush();
         k += stride;
     }
@@ -393,6 +401,14 @@ fn supervise(t: Target, c: &Cfg, seconds: Option<u64>) -> usize {
                 }
             }
         }
+    }
+    // a worker that never ran a case (it could not start) is no clean run
+    if done == 0 && findings.is_empty() {
+        findings.push(Finding {
+            kind: "no-run".into(),
+            case: 0,
+            what: "no case ran: the worker did not start".into(),
+        });
     }
     let _ = std::fs::create_dir_all(&c.out);
     // one file per kind and place: a panic by where it was, others by kind

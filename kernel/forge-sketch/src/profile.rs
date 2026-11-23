@@ -533,8 +533,9 @@ fn crossing_candidates(all: &[(Segment, u64, usize)]) -> Vec<(usize, usize)> {
             let pts = s.samples(16);
             // the samples' box, grown by the longest step between them: a curve strays from its
             // chords by less than that
+            // (a meeting point lies on both segments, so the margin is only rounding's)
             let gap = pts.windows(2).map(|w| w[0].distance(w[1])).fold(0.0, f64::max);
-            let g = gap + 1e-3;
+            let g = gap + 1e-6;
             let mut b = [f64::INFINITY, f64::INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY];
             for p in &pts {
                 b = [b[0].min(p.x), b[1].min(p.y), b[2].max(p.x), b[3].max(p.y)];
