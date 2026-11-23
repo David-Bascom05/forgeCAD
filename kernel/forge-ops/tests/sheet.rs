@@ -20,6 +20,8 @@ fn valid(b: &Body) {
     let p = check(b);
     assert!(p.is_empty(), "{p:?}");
     assert!(b.is_sheet());
+    // what copies a body keeps its faces' mark
+    assert!(b.compact().is_sheet() && b.clone().into_canonical().is_sheet());
 }
 
 fn counts(b: &Body) -> (usize, usize, usize, usize) {

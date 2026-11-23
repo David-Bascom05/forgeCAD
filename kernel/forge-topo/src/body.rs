@@ -605,6 +605,9 @@ impl Body {
             let face = self.face(f);
             let shell = *smap[group[f.index()]].get_or_insert_with(|| out.add_shell());
             let nf = out.add_face(shell, face.surface.clone(), face.same_sense, face.name);
+            if face.sheet {
+                out.faces[nf.index()].sheet = true;
+            }
             if let Some(b) = face.bbox.get() {
                 out.faces[nf.index()].bbox.set(*b);
             }

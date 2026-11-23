@@ -44,6 +44,11 @@ fn both(features: Vec<Feature>) -> Vec<forge_model::Solid> {
         assert_eq!(a.body.is_sheet(), b.body.is_sheet());
         assert!(check(&a.body).is_empty(), "{:?}", check(&a.body));
         assert!(check(&b.body).is_empty(), "{:?}", check(&b.body));
+        // a sheet's mesh is open only along its boundary, once; a solid's closed
+        let c = a.body.compact();
+        let m = forge_mesh::tessellate(&c, &forge_mesh::Quality::default()).unwrap();
+        assert!(m.open_edges_of(&c).is_empty());
+        assert_eq!(m.open_edges().is_empty(), !c.is_sheet());
     }
     seq
 }

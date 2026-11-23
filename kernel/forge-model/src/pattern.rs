@@ -383,6 +383,9 @@ pub(crate) fn moved(b: &Body, m: &Motion, rename: impl Fn(Name) -> Name) -> Resu
             face.same_sense,
             rename(face.name),
         );
+        if face.sheet {
+            out.faces[nf.index()].sheet = true;
+        }
         for &l in &face.loops {
             let mut uses = Vec::with_capacity(b.lp(l).coedges().len());
             for c in b.lp(l).coedges() {

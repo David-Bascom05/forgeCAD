@@ -345,13 +345,13 @@ impl<'a, B: Sink> Builder<'a, B> {
             verts.push(pair);
         }
         let mut uprights: Vec<EdgeId> = Vec::with_capacity(n + 1);
-        for i in 0..=n {
+        for (i, pair) in verts.iter().enumerate() {
             let line = Line::new(self.at(at(i), 0.0), self.up());
             uprights.push(self.body.add_edge(
                 Curve::Line(line),
                 Interval::new(0.0, self.d),
-                verts[i][0],
-                verts[i][1],
+                pair[0],
+                pair[1],
                 joint_name(i),
             ));
         }

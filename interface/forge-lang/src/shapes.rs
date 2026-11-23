@@ -1531,9 +1531,12 @@ fn plane_piece(sk: &Sk, id: EntityId) -> (Segment, Point2, Point2) {
     }
 }
 
+/// A chain's segments in its sketch's plane, each named as a profile names it.
+pub(crate) type Chain = Vec<(Segment, u64)>;
+
 /// A sheet's chain: the entities of one sketch end to end, each turned to run on from the one
 /// before (`path_of`'s rule), in that sketch's plane, named as a profile names its segments.
-pub(crate) fn chain_of(v: Value, span: Span) -> R<(Rc<RefCell<Sk>>, Vec<(Segment, u64)>)> {
+pub(crate) fn chain_of(v: Value, span: Span) -> R<(Rc<RefCell<Sk>>, Chain)> {
     let mut ents = vec![];
     match v {
         Value::Ent(e) if e.loop_segs.is_empty() && e.kind == EntKind::Circle => {

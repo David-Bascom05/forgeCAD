@@ -708,13 +708,14 @@ fn blunt_cusps(l: &ProfileLoop) -> ProfileLoop {
     ProfileLoop::new(out)
 }
 
+/// A chain's segments, and whether it closes.
+pub(crate) type Chain = (Vec<(Segment, u64)>, bool);
+
 /// A sheet's chains checked, each with whether it closes (its last end on its first start): segments
 /// end to end, none degenerate, ids unique, a circle alone, none crossing itself or another (the later
 /// chain's index in `SelfIntersecting`). A loop comes back counter-clockwise; splines are cut at their
 /// corners, a loop's lone closed spline in two, as a profile's are.
-pub(crate) fn sheet_chains(
-    chains: &[Vec<(Segment, u64)>],
-) -> Result<Vec<(Vec<(Segment, u64)>, bool)>, ProfileError> {
+pub(crate) fn sheet_chains(chains: &[Vec<(Segment, u64)>]) -> Result<Vec<Chain>, ProfileError> {
     if chains.is_empty() || chains.iter().any(|c| c.is_empty()) {
         return Err(ProfileError::Empty);
     }

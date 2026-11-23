@@ -158,11 +158,12 @@ pub fn mass_rel(body: &Body, rel: f64) -> Result<MassProps, MassError> {
     } else {
         Box::new((0..ids.len()).map(one))
     };
-    let mut sheet_area = 0.0;
+    let (mut sheet_area, mut sheet_faces) = (0.0, 0);
     for (&f, got) in ids.iter().zip(each) {
         let (v, er) = got.map_err(|why| MassError { face: f, why })?;
         if body.face(f).sheet {
             sheet_area += v[10];
+            sheet_faces += 1;
             faces.push((f, v[10]));
             continue;
         }
@@ -182,7 +183,7 @@ pub fn mass_rel(body: &Body, rel: f64) -> Result<MassProps, MassError> {
         }
         faces.push((f, v[10]));
     }
-    if body.is_sheet() {
+    if sheet_faces > 0 && sheet_faces == ids.len() {
         return Ok(MassProps {
             volume: 0.0,
             area: 0.0,

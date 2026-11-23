@@ -305,7 +305,7 @@ pub fn thicken(body: &Body, faces: &[Name], lo: f64, hi: f64, feature: u64) -> R
             let mut a = forge_math::Vec3::ZERO;
             for k in 0..pts.len() {
                 let (p, q) = (pts[k], pts[(k + 1) % pts.len()]);
-                a = a + (p - Point3::ORIGIN).cross(q - Point3::ORIGIN);
+                a += (p - Point3::ORIGIN).cross(q - Point3::ORIGIN);
             }
             a.dot(n.get())
         };
