@@ -379,12 +379,6 @@ pub fn rat_events(e: &[Num]) -> Vec<Q> {
     out
 }
 
-/// `frameOk`: every carrier is a plane with a `z` term, or has `zz ≠ 0`.
-pub fn frame_ok(qs: &[Quadric]) -> bool {
-    qs.iter()
-        .all(|q| (is_plane_q(q) && !q.lz.is_zero()) || !q.zz.is_zero())
-}
-
 /// `samplesAt`: the samples in the frame the carriers are given in.
 pub fn samples_at(qs: &[Quadric]) -> Option<Vec<QS>> {
     let e = events_of(qs, ROOT_FUEL)?;
@@ -411,64 +405,6 @@ pub fn samples_at(qs: &[Quadric]) -> Option<Vec<QS>> {
         j += 1;
     }
     Some(all)
-}
-
-impl Quadric {
-    /// `Quadric.shearX μ ν`: `q(x + μ y + ν z, y, z)` (`shearX_ev`).
-    pub fn shear_x(&self, mu: &Q, nu: &Q) -> Quadric {
-        let two = Q::from_i64(2);
-        Quadric {
-            xx: self.xx.clone(),
-            yy: self.yy.add(&self.xx.mul(mu).mul(mu)).add(&self.xy.mul(mu)),
-            zz: self.zz.add(&self.xx.mul(nu).mul(nu)).add(&self.xz.mul(nu)),
-            xy: self.xy.add(&two.mul(&self.xx).mul(mu)),
-            xz: self.xz.add(&two.mul(&self.xx).mul(nu)),
-            yz: self
-                .yz
-                .add(&two.mul(&self.xx).mul(mu).mul(nu))
-                .add(&self.xy.mul(nu))
-                .add(&self.xz.mul(mu)),
-            lx: self.lx.clone(),
-            ly: self.ly.add(&self.lx.mul(mu)),
-            lz: self.lz.add(&self.lx.mul(nu)),
-            c: self.c.clone(),
-        }
-    }
-}
-
-/// `Frame`: `(μ, ν, λ)`.
-pub type Frame = (Q, Q, Q);
-
-/// `inFrame f q = (q.shearX μ ν).shear λ`.
-pub fn in_frame(f: &Frame, q: &Quadric) -> Quadric {
-    q.shear_x(&f.0, &f.1).shear(&f.2)
-}
-
-fn fr(a: (i64, i64), b: (i64, i64), l: i64) -> Frame {
-    (
-        Q::from_i64(a.0).div(&Q::from_i64(a.1)),
-        Q::from_i64(b.0).div(&Q::from_i64(b.1)),
-        Q::from_i64(l),
-    )
-}
-
-/// `frames`: six tilted frames first, then the untilted ones.
-pub fn frames() -> Vec<Frame> {
-    let mut out = vec![
-        fr((1, 3), (1, 5), 1),
-        fr((1, 3), (1, 5), 2),
-        fr((2, 7), (3, 11), 1),
-        fr((2, 7), (3, 11), 3),
-        fr((3, 13), (5, 17), 1),
-        fr((3, 13), (5, 17), 2),
-    ];
-    let ls = shears();
-    let mut i = 0;
-    while i < ls.len() {
-        out.push((Q::zero(), Q::zero(), ls[i].clone()));
-        i += 1;
-    }
-    out
 }
 
 /// **`samplesOf`**: the samples in the first frame that passes `frame_ok` and `sing_all` and

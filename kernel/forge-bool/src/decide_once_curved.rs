@@ -2326,18 +2326,87 @@ pub fn near_pairs(fs: &[CIn], cls: &[usize]) -> Vec<(usize, usize)> {
 }
 
 // =============================================================================================
+// QSample.lean's frames: the sweep's decided rule, shared by the builder and the reference
+// =============================================================================================
+
+/// `frameOk`: every carrier is a plane with a `z` term, or has `zz ≠ 0`.
+pub fn frame_ok(qs: &[Quadric]) -> bool {
+    qs.iter()
+        .all(|q| (is_plane_q(q) && !q.lz.is_zero()) || !q.zz.is_zero())
+}
+
+impl Quadric {
+    /// `Quadric.shearX μ ν`: `q(x + μ y + ν z, y, z)` (`shearX_ev`).
+    pub fn shear_x(&self, mu: &Q, nu: &Q) -> Quadric {
+        let two = Q::from_i64(2);
+        Quadric {
+            xx: self.xx.clone(),
+            yy: self.yy.add(&self.xx.mul(mu).mul(mu)).add(&self.xy.mul(mu)),
+            zz: self.zz.add(&self.xx.mul(nu).mul(nu)).add(&self.xz.mul(nu)),
+            xy: self.xy.add(&two.mul(&self.xx).mul(mu)),
+            xz: self.xz.add(&two.mul(&self.xx).mul(nu)),
+            yz: self
+                .yz
+                .add(&two.mul(&self.xx).mul(mu).mul(nu))
+                .add(&self.xy.mul(nu))
+                .add(&self.xz.mul(mu)),
+            lx: self.lx.clone(),
+            ly: self.ly.add(&self.lx.mul(mu)),
+            lz: self.lz.add(&self.lx.mul(nu)),
+            c: self.c.clone(),
+        }
+    }
+}
+
+/// `Frame`: `(μ, ν, λ)`.
+pub type Frame = (Q, Q, Q);
+
+/// `inFrame f q = (q.shearX μ ν).shear λ`.
+pub fn in_frame(f: &Frame, q: &Quadric) -> Quadric {
+    q.shear_x(&f.0, &f.1).shear(&f.2)
+}
+
+fn fr(a: (i64, i64), b: (i64, i64), l: i64) -> Frame {
+    (
+        Q::from_i64(a.0).div(&Q::from_i64(a.1)),
+        Q::from_i64(b.0).div(&Q::from_i64(b.1)),
+        Q::from_i64(l),
+    )
+}
+
+/// `frames`: six tilted frames first, then the untilted ones.
+pub fn frames() -> Vec<Frame> {
+    let mut out = vec![
+        fr((1, 3), (1, 5), 1),
+        fr((1, 3), (1, 5), 2),
+        fr((2, 7), (3, 11), 1),
+        fr((2, 7), (3, 11), 3),
+        fr((3, 13), (5, 17), 1),
+        fr((3, 13), (5, 17), 2),
+    ];
+    let ls = shears();
+    let mut i = 0;
+    while i < ls.len() {
+        out.push((Q::zero(), Q::zero(), ls[i].clone()));
+        i += 1;
+    }
+    out
+}
+
+// =============================================================================================
 // The builder, stage (b): the crossing curve of a near pair, as certified slab samples
 // =============================================================================================
 
 /// The crossing curve `q_j = q_k = 0` of a near pair, sampled between its `x`-events. In frame
-/// `λ` (`shears`), the curve's turning points in `x` are the `events`. On each sweep plane
+/// `frame` (`frames()`), the projected curve's events in `x` are the `events`. On each sweep plane
 /// `x = planes[s]` (one between consecutive events, one outside each end: `planes_of`), the
 /// curve's crossings are `slabs[s]`, certified (`propose_edge_any`) and sorted by `y`. Between
 /// consecutive events every branch of the curve is a graph over `x` (no turning point), so it
 /// crosses each slab's plane once: branch `b` of slab `s` is one arc piece.
 #[derive(Clone, Debug)]
 pub struct PairCurve {
-    pub shear: Q,
+    /// the frame (`frames()`) the curve is sampled in
+    pub frame: Frame,
     pub events: Vec<Num>,
     pub planes: Vec<Q>,
     pub slabs: Vec<Vec<ESample>>,
@@ -2452,10 +2521,143 @@ fn sorted_by_y(es: Vec<ESample>) -> Option<Vec<ESample>> {
     if out.len() == es.len() { Some(out) } else { None }
 }
 
+/// The projected curve `R(x, y) = Res_z(q_j, q_k)`, a polynomial in `y` over `ℚ[x]`.
+pub fn proj_r(qj: &Quadric, qk: &Quadric) -> BPoly {
+    btrim(&elim_z(qj, qk).r)
+}
+
+/// `∂_y f` for a polynomial in `y` over `ℚ[x]`.
+pub fn bderiv_y(f: &[Poly]) -> BPoly {
+    let mut out: BPoly = Vec::new();
+    let mut k = 1;
+    while k < f.len() {
+        out.push(pscale(&Q::from_i64(k as i64), &f[k]));
+        k += 1;
+    }
+    out
+}
+
+/// The resultant-like end of the remainder sequence of `f`, `g` in their outer variable, with
+/// its identity `s f + t g = r` checked (`r` free of the outer variable), or `None`.
+pub fn res_outer(f: &[Poly], g: &[Poly]) -> Option<(Poly, BPoly, BPoly)> {
+    let one: BPoly = vec![vec![Q::one()]];
+    let (ff, gg) = (btrim(f), btrim(g));
+    if bzero_q(&ff) || bzero_q(&gg) {
+        return None;
+    }
+    // (a, sa, ta) has the larger degree; each step reduces it by the other (`prem`), then swaps
+    let (mut a, mut sa, mut ta, mut b, mut sb, mut tb) = if bdeg(&ff) >= bdeg(&gg) {
+        (ff.clone(), one.clone(), Vec::new(), gg.clone(), Vec::new(), one)
+    } else {
+        (gg.clone(), Vec::new(), one.clone(), ff.clone(), one, Vec::new())
+    };
+    let mut it = 0;
+    while !bzero_q(&b) && bdeg(&b) > 0 && it < CHAIN_FUEL {
+        let (r, rs, rt) = prem(&b, &sb, &tb, PREM_FUEL, &a, &sa, &ta);
+        a = b;
+        sa = sb;
+        ta = tb;
+        b = btrim(&r);
+        sb = rs;
+        tb = rt;
+        it += 1;
+    }
+    if bzero_q(&b) || bdeg(&b) > 0 {
+        return None;
+    }
+    let r = b[0].clone();
+    let lhs = padd(&pmul(&sb, &ff), &pmul(&tb, &gg));
+    if bzero(&psub(&lhs, std::slice::from_ref(&r))) && !is_zero_p(&r) {
+        Some((r, sb, tb))
+    } else {
+        None
+    }
+}
+
+/// **The projected events** of a pair: the `x`s where `R = ∂_y R = 0` (turning points,
+/// apparent crossings of the projection, tangencies), complete by the checked identity and
+/// `roots_of`, joined with the space curve's own turning points (`pair_events`). Between
+/// consecutive events the projected branches keep their `y`-order (lemma L1).
+pub fn proj_events(qj: &Quadric, qk: &Quadric) -> Option<Vec<Num>> {
+    let r = proj_r(qj, qk);
+    if bzero_q(&r) {
+        return None;
+    }
+    let (d, _, _) = res_outer(&r, &bderiv_y(&r))?;
+    let mut raw = roots_of(&d, ROOT_FUEL)?;
+    raw.extend(propose_triple_xs(qj, qk, &crit_q(qj, qk), ROOT_FUEL)?);
+    pick_events(&raw)
+}
+
+/// `f` with its variables exchanged: a polynomial in `y` over `ℚ[x]` becomes one in `x` over
+/// `ℚ[y]`.
+pub fn btranspose(f: &[Poly]) -> BPoly {
+    let mut nx = 0;
+    let mut k = 0;
+    while k < f.len() {
+        if f[k].len() > nx {
+            nx = f[k].len();
+        }
+        k += 1;
+    }
+    let mut out: BPoly = Vec::with_capacity(nx);
+    let mut i = 0;
+    while i < nx {
+        let mut row: Poly = Vec::with_capacity(f.len());
+        let mut j = 0;
+        while j < f.len() {
+            row.push(if i < f[j].len() {
+                f[j][i].clone()
+            } else {
+                Q::zero()
+            });
+            j += 1;
+        }
+        out.push(row);
+        i += 1;
+    }
+    out
+}
+
+/// **The fiber's candidates** over the event `e`: a superset of the `y`s of `R(e, y) = 0`.
+/// Rational `e`: the roots of `R(e, ·)`. Isolated `e`, a root of `p`: the roots of the end of the
+/// remainder sequence of `R` and `p` in `x`, checked (every common zero's `y` is one of them).
+pub fn fiber_ys(r: &[Poly], e: &Num) -> Option<Vec<Num>> {
+    match e {
+        Num::Rat(c) => {
+            let mut fy: Poly = Vec::with_capacity(r.len());
+            let mut k = 0;
+            while k < r.len() {
+                fy.push(forge_alg::ev(&r[k], c));
+                k += 1;
+            }
+            if is_zero_p(&fy) {
+                None
+            } else {
+                roots_of(&fy, ROOT_FUEL)
+            }
+        }
+        Num::Iso(iso) => {
+            let rt = btranspose(r);
+            let mut pe: BPoly = Vec::with_capacity(iso.p.len());
+            let mut k = 0;
+            while k < iso.p.len() {
+                pe.push(vec![iso.p[k].clone()]);
+                k += 1;
+            }
+            let (res, _, _) = res_outer(&rt, &pe)?;
+            roots_of(&res, ROOT_FUEL)
+        }
+    }
+}
+
 /// The curve in one frame, or `None` if a step is undecided there.
-fn pair_curve_at(qj: &Quadric, qk: &Quadric, l: &Q) -> Option<PairCurve> {
-    let (a, b) = (qj.shear(l), qk.shear(l));
-    let events = pair_events(&a, &b)?;
+fn pair_curve_at(qj: &Quadric, qk: &Quadric, f: &Frame) -> Option<PairCurve> {
+    let (a, b) = (in_frame(f, qj), in_frame(f, qk));
+    if !frame_ok(&[a.clone(), b.clone()]) {
+        return None;
+    }
+    let events = proj_events(&a, &b)?;
     let planes = planes_of(&events);
     let mut slabs: Vec<Vec<ESample>> = Vec::with_capacity(planes.len());
     let mut i = 0;
@@ -2465,26 +2667,26 @@ fn pair_curve_at(qj: &Quadric, qk: &Quadric, l: &Q) -> Option<PairCurve> {
         i += 1;
     }
     Some(PairCurve {
-        shear: l.clone(),
+        frame: f.clone(),
         events,
         planes,
         slabs,
     })
 }
 
-/// **Stage (b)**: a near pair's crossing curve, in the first frame of `shears` where every
-/// step is certified (the decided rule, as `samplesOf`'s), or [`Skip::Budget`].
+/// **Stage (b)**: a near pair's crossing curve, in the first frame of `frames()` (the
+/// reference's decided rule) where every step is certified, or [`Skip::Uncertified`].
 pub fn pair_curve(qj: &Quadric, qk: &Quadric) -> Result<PairCurve, Skip> {
-    let ls = shears();
+    let fs = frames();
     let mut out: Option<PairCurve> = None;
     let mut i = 0;
-    while out.is_none() && i < ls.len() {
-        out = pair_curve_at(qj, qk, &ls[i]);
+    while out.is_none() && i < fs.len() {
+        out = pair_curve_at(qj, qk, &fs[i]);
         i += 1;
     }
     match out {
         Some(c) => Ok(c),
-        None => Err(Skip::Budget("a crossing curve undecided in every frame")),
+        None => Err(Skip::Uncertified("a crossing curve undecided in every frame")),
     }
 }
 
@@ -2833,29 +3035,9 @@ mod tests {
         }
     }
 
-    /// Stage (b): the unit circle in z = 0 turns at x = ±1, and crosses the middle plane twice.
+    /// Stage (b): closed crossing curves, sampled in the first certified frame.
     #[test]
-    fn stage_b_circle() {
-        let c = pair_curve(&sphere1(), &plane_z()).unwrap();
-        assert_eq!(c.events.len(), 2);
-        let counts: Vec<usize> = c.slabs.iter().map(|s| s.len()).collect();
-        assert_eq!(counts, vec![0, 2, 0]);
-        // two unit spheres a half apart in x: their circle lies in x = 1/4 (a plane x = const:
-        // no turning point in x, the whole curve at one event), as the proposers find it
-        let s2 = QFace {
-            solid: 0,
-            index: 0,
-            kind: Kind::Sphere,
-            o: V3::new(q(1, 2), qi(0), qi(0)),
-            z: V3::default(),
-            r: qi(1),
-            s: qi(0),
-            c: qi(0),
-        }
-        .quadric();
-        let r = pair_curve(&sphere1(), &s2);
-        assert!(r.is_ok() || matches!(r, Err(Skip::Budget(_))));
-        // a cylinder along z through the sphere: two circles, each turning twice
+    fn stage_b_curves() {
         let cyl = QFace {
             solid: 0,
             index: 0,
@@ -2867,10 +3049,34 @@ mod tests {
             c: qi(0),
         }
         .quadric();
-        let c = pair_curve(&sphere1(), &cyl).unwrap();
-        assert_eq!(c.slabs.len(), c.events.len() + 1);
-        assert!(c.slabs.iter().all(|s| s.len() % 2 == 0));
-        assert!(c.slabs.iter().any(|s| s.len() == 4));
+        for (a, b, most) in [(sphere1(), plane_z(), 2), (sphere1(), cyl, 4)] {
+            let c = pair_curve(&a, &b).unwrap();
+            assert_eq!(c.slabs.len(), c.events.len() + 1);
+            assert!(c.slabs[0].is_empty() && c.slabs[c.slabs.len() - 1].is_empty());
+            assert!(c.slabs.iter().all(|s| s.len() % 2 == 0));
+            assert_eq!(c.slabs.iter().map(|s| s.len()).max(), Some(most));
+        }
+    }
+
+    /// The projected curve, its events and a fiber, untilted: the circle `x² + y² = 1`.
+    #[test]
+    fn stage_b_projection() {
+        let r = proj_r(&sphere1(), &plane_z());
+        let e = proj_events(&sphere1(), &plane_z()).unwrap();
+        let lohi: Vec<(Q, Q)> = e.iter().map(|n| (n.lo(), n.hi())).collect();
+        assert_eq!(lohi, vec![(qi(-1), qi(-1)), (qi(1), qi(1))]);
+        let ys = fiber_ys(&r, &Num::Rat(qi(1))).unwrap();
+        assert_eq!(ys.len(), 1);
+        assert_eq!(ys[0].cmp_rat(&qi(0)), 0);
+        // an isolated event: the fiber of y² + x² − 2 over x = √2 is y = 0
+        let r2: BPoly = vec![poly_i(&[-2, 0, 1]), Vec::new(), poly_i(&[1])];
+        let s2 = Num::Iso(Iso {
+            p: poly_i(&[-2, 0, 1]),
+            a: qi(1),
+            b: qi(2),
+        });
+        let ys = fiber_ys(&r2, &s2).unwrap();
+        assert!(ys.iter().any(|n| n.cmp_rat(&qi(0)) == 0));
     }
 
     /// QLine: the covector along a line through the unit sphere.
