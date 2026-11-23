@@ -139,3 +139,6 @@ import ForgeCurved
 #print axioms ForgeCurved.facets_negB
 #print axioms ForgeCurved.curved_edges_verts
 #print axioms ForgeCurved.curved_exact
+#print axioms ForgeCurved.F6.f6
+#print axioms ForgeCurved.grad_cyl
+#print axioms ForgeCurved.grad_cone
