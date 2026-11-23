@@ -2100,6 +2100,67 @@ mod v2check {
 
     /// `core L` corresponds to `coreI (inc L)` (CoreInc.lean): the same outcome, the same faces (as
     /// facet cells), edge runs and vertices.
+    /// The face arrangement's counts by coarsening the plane ledger: fine facets joined across
+    /// a fine edge round which exactly two of them lie, of one class and one holder set (the
+    /// edge then lies inside a coarse facet); coarse edges the fine edges with other stars, coarse
+    /// verts the fine verts with an edge kept. (facets, edges, verts), for A8's estimate.
+    pub(crate) fn coarse_counts(l: &Ledger) -> (usize, usize, usize) {
+        let le = |x: &[Sgn], y: &[Sgn]| x.iter().zip(y).all(|(&a, &b)| a == Sgn::Zero || a == b);
+        let zero = |x: &[Sgn]| x.iter().position(|&s| s == Sgn::Zero).unwrap();
+        let mut facets: Vec<u32> = Vec::new();
+        let mut holders: Vec<Vec<u32>> = Vec::new();
+        for &(c, f) in &l.pieces {
+            match facets.iter().position(|&x| x == c.0) {
+                Some(i) => holders[i].push(f.0),
+                None => {
+                    facets.push(c.0);
+                    holders.push(vec![f.0]);
+                }
+            }
+        }
+        for h in &mut holders {
+            h.sort_unstable();
+        }
+        let n = facets.len();
+        let mut parent: Vec<usize> = (0..n).collect();
+        fn find(p: &mut Vec<usize>, x: usize) -> usize {
+            let mut x = x;
+            while p[x] != x {
+                p[x] = p[p[x]];
+                x = p[x];
+            }
+            x
+        }
+        let mut kept_e = vec![false; l.edges.len()];
+        for (k, e) in l.edges.iter().enumerate() {
+            let round: Vec<usize> = (0..n)
+                .filter(|&i| le(&l.cells[e.0 as usize], &l.cells[facets[i] as usize]))
+                .collect();
+            let inner = round.len() == 2 && {
+                let (a, b) = (round[0], round[1]);
+                zero(&l.cells[facets[a] as usize]) == zero(&l.cells[facets[b] as usize])
+                    && holders[a] == holders[b]
+            };
+            if inner {
+                let (a, b) = (find(&mut parent, round[0]), find(&mut parent, round[1]));
+                parent[a.max(b)] = a.min(b);
+            } else {
+                kept_e[k] = true;
+            }
+        }
+        let nf = (0..n).filter(|&i| find(&mut parent, i) == i).count();
+        let ne = kept_e.iter().filter(|&&b| b).count();
+        let nv = l
+            .verts
+            .iter()
+            .filter(|v| {
+                (0..l.edges.len())
+                    .any(|k| kept_e[k] && le(&l.cells[v.0 as usize], &l.cells[l.edges[k].0 as usize]))
+            })
+            .count();
+        (nf, ne, nv)
+    }
+
     pub(crate) fn agrees_v2(l: &Ledger, rule: &Rule, out: &Outcome) {
         use core::v2;
         let (il, facets, ev) = inc(l);
@@ -2381,6 +2442,16 @@ pub fn decide(bodies: &[&Body], rule: &Rule) -> Result<Decided, Skip> {
     // (debug: the A8 core on the plane ledger's incidence form answers alike, CoreInc.lean)
     #[cfg(debug_assertions)]
     v2check::agrees_v2(&built.ledger, rule, &outcome);
+    #[cfg(debug_assertions)]
+    if std::env::var_os("FORGE_A8_STATS").is_some() {
+        let (f, e, v) = v2check::coarse_counts(&built.ledger);
+        eprintln!(
+            "a8: fine pieces {} edges {} verts {}; coarse facets {f} edges {e} verts {v}",
+            built.ledger.pieces.len(),
+            built.ledger.edges.len(),
+            built.ledger.verts.len()
+        );
+    }
     Ok(Decided {
         ledger: built.ledger,
         outcome,
@@ -2478,6 +2549,16 @@ fn plan_of(bodies: &[&Body], rule: &Rule) -> Result<Option<Plan>, BoolError> {
     // (debug: the A8 core on the plane ledger's incidence form answers alike, CoreInc.lean)
     #[cfg(debug_assertions)]
     v2check::agrees_v2(&built.ledger, rule, &outcome);
+    #[cfg(debug_assertions)]
+    if std::env::var_os("FORGE_A8_STATS").is_some() {
+        let (f, e, v) = v2check::coarse_counts(&built.ledger);
+        eprintln!(
+            "a8: fine pieces {} edges {} verts {}; coarse facets {f} edges {e} verts {v}",
+            built.ledger.pieces.len(),
+            built.ledger.edges.len(),
+            built.ledger.verts.len()
+        );
+    }
     if stats() {
         eprintln!(
             "decide-once: {} bodies, {} faces ({} near), {} classes, {} cells, {} pieces, {} edges, {} verts, {} witnesses",
