@@ -218,7 +218,11 @@ fn main() {
             for f in s.body.face_ids() {
                 let k = format!("{:?}", s.body.face(f).surface);
                 let a = mass::face_area(&s.body, f).map_or(f64::NAN, |x| x);
-                eprintln!("face {} {} {a}", f.0, k.split(['(', ' ', '{']).next().unwrap_or(""));
+                eprintln!(
+                    "face {} {} {a}",
+                    f.0,
+                    k.split(['(', ' ', '{']).next().unwrap_or("")
+                );
             }
         }
         let mut ed = String::new();

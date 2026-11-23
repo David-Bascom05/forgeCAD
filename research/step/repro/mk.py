@@ -103,7 +103,8 @@ def near_flat_cone(st):
     surf = st.add(f"CONICAL_SURFACE('',{st.ax((0, 0, z0))},{r0!r},{a!r})")
     # a point at radius r lies at z0 + (r - r0) / tan(a)
     zr = lambda r: z0 + (r - r0) / math.tan(a)
-    return surf, zr(4.0), zr(10.0), True
+    # the cone's own normal (away from its axis) points down here, nearly along -z: the face is reversed
+    return surf, zr(4.0), zr(10.0), False
 
 
 def offset_plane(st):

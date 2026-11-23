@@ -30,6 +30,7 @@ import concurrent.futures as cf
 import gzip
 import json
 import os
+import re
 import resource
 import shutil
 import struct
@@ -43,7 +44,7 @@ import zlib
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
-OUT = os.path.join(HERE, "scale")
+OUT = os.environ.get("SCALE_OUT", os.path.join(HERE, "scale"))  # elsewhere: a rerun to compare with
 SHARD = 500
 TOL = 1e-3
 OURS_MEM, OURS_TIME = 3 << 30, 60
@@ -70,6 +71,13 @@ CORPORA = {
     "automate": {
         "zip": "https://zenodo.org/api/records/7776208/files/step.zip/content",
         "licence": "CC0-1.0",
+    },
+    # Fusion 360 Gallery, Segmentation s2.0.1, the extended STEP set: Autodesk's licence, non-commercial research.
+    # Used for testing only, not redistributed; owner approved 2026-11-23. No file or excerpt in the repository.
+    # Its STEP files are scaled by 10 (the dataset's note), which changes nothing judged here.
+    "fusion": {
+        "zip": "https://fusion-360-gallery-dataset.s3.us-west-2.amazonaws.com/segmentation/s2.0.1/s2.0.1_extended_step.zip",
+        "licence": "Fusion 360 Gallery Dataset License (non-commercial research); testing only, not redistributed; owner approved 2026-11-23",
     },
     # NIST MBE PMI validation and conformance test models: "can be used without any restrictions".
     "nist": {
@@ -367,9 +375,15 @@ KINDS = [b"PLANE", b"CYLINDRICAL_SURFACE", b"CONICAL_SURFACE", b"SPHERICAL_SURFA
          b"PCURVE", b"ELLIPSE", b"B_SPLINE_CURVE", b"BREP_WITH_VOIDS", b"MAPPED_ITEM", b"TESSELLATED"]
 
 
+LEMON = re.compile(rb"DEGENERATE_TOROIDAL_SURFACE\s*\([^;]*\.F\.\s*\)\s*;")
+
+
 def census(data):
     """Which geometry kinds a file names, counted as text (nothing runs), to tie causes to forms at scale."""
     out = {}
+    n = len(LEMON.findall(data))
+    if n:
+        out["lemon"] = n
     for k in KINDS:
         n = data.count(k + b"(") + data.count(k + b" (")
         if k == b"TOROIDAL_SURFACE":
@@ -411,7 +425,7 @@ def one(path):
         data = f.read()
     d = child([BIN], OURS_TIME, OURS_MEM, stdin=data)
     cls, cause = judge(o, d)
-    return {**compact(o, d, cls, cause), "kinds": census(data)}
+    return unsure_of_occt({**compact(o, d, cls, cause), "kinds": census(data), "lemon_census": True})
 
 
 # ---- shards
@@ -472,6 +486,17 @@ def run(c, k0, k1, jobs, stride=1):
 CLASSES = ["match", "mismatch", "uncertain", "refused", "crash", "timeout", "empty", "fetch-failed"]
 
 
+def unsure_of_occt(r):
+    """Where OCCT's own measure is known wrong, whatever its measures say of each other: a degenerate torus's
+    inner part (select_outer .F., a lemon), which it measures as its whole torus (repro/lemon_ring.step: closed
+    form 2398.876, ours the same, OCCT's Gauss-Kronrod 2683.12). A row from before the census told lemons
+    apart counts any degenerate torus."""
+    k = r.get("kinds") or {}
+    if r["cls"] in ("match", "mismatch") and (k.get("lemon") or ("degenerate_toroidal" in k and "lemon" not in k and not r.get("lemon_census"))):
+        r["cls"], r["cause"] = "uncertain", "occt-lemon"
+    return r
+
+
 def rejudge(r):
     """The class and cause of a stored row under the rule as it is now (the row keeps what judge reads)."""
     if r["cls"] == "fetch-failed":
@@ -480,7 +505,7 @@ def rejudge(r):
     if "agg" not in u and u.get("n", 0) > len(u.get("solids") or []):
         return r  # an early row of more than 50 solids: its verdict from the run, which saw them all
     r["cls"], r["cause"] = judge(r["occt"], u)
-    return r
+    return unsure_of_occt(r)
 
 
 def load(c):

@@ -1,0 +1,11 @@
+{
+ "corpus": "fusion",
+ "source": "https://fusion-360-gallery-dataset.s3.us-west-2.amazonaws.com/segmentation/s2.0.1/s2.0.1_extended_step.zip",
+ "licence": "Fusion 360 Gallery Dataset License (non-commercial research); testing only, not redistributed; owner approved 2026-11-23",
+ "files": 42912,
+ "bytes": 2494769507,
+ "shard": 500,
+ "order": "ids sorted as strings",
+ "ids_sha256": "d608ffdfac755d0ede2c2771be73d344f229da04e82863c96a5aa68bb79f8df7",
+ "indexed": "2026-11-23"
+}

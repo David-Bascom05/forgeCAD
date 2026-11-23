@@ -3,7 +3,7 @@
 #   research/step/repro/check.sh [STEPREAD]
 cd "$(dirname "$0")"
 python3 -I mk.py . >/dev/null
-BIN=${1:-../../../target/release/examples/stepread} python3 -I - <<'PY'
+BIN=$(realpath "${1:-../../../target/release/examples/stepread}") python3 -I - <<'PY'
 import glob, json, os, subprocess, sys
 sys.path.insert(0, "..")
 import scale
