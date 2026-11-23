@@ -69,3 +69,31 @@ fn owners() {
     assert_eq!(owner(2, &holds, &nest), Some(1));
     assert_eq!(owner(2, &[false, false], &nest), None);
 }
+
+#[test]
+fn place_then_inverse() {
+    use forge_sheet_core::place::{Place, apply, inverse, then};
+    let (s, c) = forge_math::dmath::sin_cos(0.7);
+    let a = Place {
+        ox: 3.0,
+        oy: -2.0,
+        xx: c,
+        xy: s,
+    };
+    let b = Place {
+        ox: -1.5,
+        oy: 4.25,
+        xx: 0.6,
+        xy: 0.8,
+    };
+    let ab = then(a, b);
+    // (a ∘ b)(p) = a(b(p))
+    let p = (1.25, -0.5);
+    let (bx, by) = apply(b, p.0, p.1);
+    let (x1, y1) = apply(a, bx, by);
+    let (x2, y2) = apply(ab, p.0, p.1);
+    assert!((x1 - x2).abs() < 1e-12 && (y1 - y2).abs() < 1e-12);
+    // a⁻¹ ∘ a = id
+    let id = then(inverse(a), a);
+    assert!(id.ox.abs() < 1e-12 && id.oy.abs() < 1e-12 && (id.xx - 1.0).abs() < 1e-12 && id.xy.abs() < 1e-12);
+}

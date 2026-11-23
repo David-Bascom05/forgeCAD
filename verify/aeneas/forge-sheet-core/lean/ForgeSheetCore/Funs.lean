@@ -127,7 +127,7 @@ def union_find.Uf.new (n : Std.Usize) : Result union_find.Uf := do
   ok { parent := parent1 }
 
 /-- [forge_sheet_core::classes]: loop body 0:
-    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 31:4-36:5
+    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 32:4-37:5
     Visibility: public -/
 @[rust_loop_body]
 def classes_loop0.body
@@ -146,7 +146,7 @@ def classes_loop0.body
   else ok (done uf)
 
 /-- [forge_sheet_core::classes]: loop 0:
-    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 31:4-36:5
+    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 32:4-37:5
     Visibility: public -/
 @[rust_loop]
 def classes_loop0
@@ -158,7 +158,7 @@ def classes_loop0
     (uf, k)
 
 /-- [forge_sheet_core::classes]: loop body 1:
-    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 41:4-53:5
+    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 42:4-54:5
     Visibility: public -/
 @[rust_loop_body]
 def classes_loop1.body
@@ -191,7 +191,7 @@ def classes_loop1.body
   else ok (done «class»)
 
 /-- [forge_sheet_core::classes]: loop 1:
-    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 41:4-53:5
+    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 42:4-54:5
     Visibility: public -/
 @[rust_loop]
 def classes_loop1
@@ -205,7 +205,7 @@ def classes_loop1
     (uf, number, «class», next, i)
 
 /-- [forge_sheet_core::classes]:
-    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 28:0-55:1
+    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 29:0-56:1
     Visibility: public -/
 def classes
   (n : Std.Usize) (pairs : Slice (Std.U32 × Std.U32)) :
@@ -218,7 +218,7 @@ def classes
   classes_loop1 n uf1 number «class» 0#u32 0#usize
 
 /-- [forge_sheet_core::chain]: loop body 0:
-    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 93:4-107:5
+    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 94:4-108:5
     Visibility: public -/
 @[rust_loop_body]
 def chain_loop0.body
@@ -295,7 +295,7 @@ def chain_loop0.body
   else ok (done (n_out, n_in, first_out, first_in, second_in))
 
 /-- [forge_sheet_core::chain]: loop 0:
-    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 93:4-107:5
+    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 94:4-108:5
     Visibility: public -/
 @[rust_loop]
 def chain_loop0
@@ -313,7 +313,7 @@ def chain_loop0
     (n_out, n_in, first_out, first_in, second_in, e)
 
 /-- [forge_sheet_core::chain]: loop body 1:
-    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 1:0-124:5
+    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 1:0-125:5
     Visibility: public -/
 @[rust_loop_body]
 def chain_loop1.body
@@ -373,7 +373,7 @@ def chain_loop1.body
   else ok (done (bad, pinches))
 
 /-- [forge_sheet_core::chain]: loop 1:
-    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 1:0-124:5
+    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 1:0-125:5
     Visibility: public -/
 @[rust_loop]
 def chain_loop1
@@ -391,7 +391,7 @@ def chain_loop1
     (bad, pinches, v)
 
 /-- [forge_sheet_core::chain]: loop body 3:
-    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 139:12-143:13
+    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 140:12-144:13
     Visibility: public -/
 @[rust_loop_body]
 def chain_loop2_loop0.body
@@ -422,7 +422,7 @@ def chain_loop2_loop0.body
     ok (cont (used1, pieces1, at1))
 
 /-- [forge_sheet_core::chain]: loop 3:
-    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 139:12-143:13
+    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 140:12-144:13
     Visibility: public -/
 @[rust_loop]
 def chain_loop2_loop0
@@ -437,7 +437,7 @@ def chain_loop2_loop0
     (used, pieces, «at»)
 
 /-- [forge_sheet_core::chain]: loop body 2:
-    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 1:0-154:5
+    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 1:0-155:5
     Visibility: public -/
 @[rust_loop_body]
 def chain_loop2.body
@@ -481,7 +481,7 @@ def chain_loop2.body
   else ok (done (bad, pieces, starts))
 
 /-- [forge_sheet_core::chain]: loop 2:
-    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 1:0-154:5
+    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 1:0-155:5
     Visibility: public -/
 @[rust_loop]
 def chain_loop2
@@ -498,7 +498,7 @@ def chain_loop2
     (bad, used, pieces, starts, start)
 
 /-- [forge_sheet_core::chain]:
-    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 83:0-160:1
+    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 84:0-161:1
     Visibility: public -/
 def chain
   (nv : Std.Usize) («from» : Slice Std.U32) («to» : Slice Std.U32) :
@@ -534,7 +534,7 @@ def chain
   | some b => ok (core.result.Result.Err b)
 
 /-- [forge_sheet_core::owner]: loop body 1:
-    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 1:0-178:13
+    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 1:0-179:13
     Visibility: public -/
 @[rust_loop_body]
 def owner_loop0_loop0.body
@@ -564,7 +564,7 @@ def owner_loop0_loop0.body
   else ok (done ok1)
 
 /-- [forge_sheet_core::owner]: loop 1:
-    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 1:0-178:13
+    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 1:0-179:13
     Visibility: public -/
 @[rust_loop]
 def owner_loop0_loop0
@@ -577,7 +577,7 @@ def owner_loop0_loop0
     (ok1, p)
 
 /-- [forge_sheet_core::owner]: loop body 0:
-    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 1:0-184:5
+    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 1:0-185:5
     Visibility: public -/
 @[rust_loop_body]
 def owner_loop0.body
@@ -609,7 +609,7 @@ def owner_loop0.body
   else ok (done found)
 
 /-- [forge_sheet_core::owner]: loop 0:
-    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 1:0-184:5
+    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 1:0-185:5
     Visibility: public -/
 @[rust_loop]
 def owner_loop0
@@ -622,7 +622,7 @@ def owner_loop0
     (found, o)
 
 /-- [forge_sheet_core::owner]:
-    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 166:0-186:1
+    Source: 'kernel/forge-sheet-core/src/lib.rs', lines 167:0-187:1
     Visibility: public -/
 @[reducible]
 def owner
@@ -630,5 +630,68 @@ def owner
   Result (Option Std.U32)
   := do
   owner_loop0 k holds nest none 0#usize
+
+/-- [forge_sheet_core::place::apply]:
+    Source: 'kernel/forge-sheet-core/src/place.rs', lines 16:0-20:1
+    Visibility: public -/
+def place.apply
+  (m : place.Place) (px : F64) (py : F64) : Result (F64 × F64) := do
+  let fl ← lift (F64.Ops.mul m.xx px)
+  let ax ← lift (F64.Ops.add m.ox fl)
+  let fl1 ← lift (F64.Ops.mul m.xy px)
+  let ay ← lift (F64.Ops.add m.oy fl1)
+  let fl2 ← lift (F64.Ops.neg m.xy)
+  let fl3 ← lift (F64.Ops.mul fl2 py)
+  let fl4 ← lift (F64.Ops.add ax fl3)
+  let fl5 ← lift (F64.Ops.mul m.xx py)
+  let fl6 ← lift (F64.Ops.add ay fl5)
+  ok (fl4, fl6)
+
+/-- [forge_sheet_core::place::vec]:
+    Source: 'kernel/forge-sheet-core/src/place.rs', lines 23:0-25:1
+    Visibility: public -/
+def place.vec
+  (m : place.Place) (vx : F64) (vy : F64) : Result (F64 × F64) := do
+  let fl ← lift (F64.Ops.mul m.xx vx)
+  let fl1 ← lift (F64.Ops.neg m.xy)
+  let fl2 ← lift (F64.Ops.mul fl1 vy)
+  let fl3 ← lift (F64.Ops.add fl fl2)
+  let fl4 ← lift (F64.Ops.mul m.xy vx)
+  let fl5 ← lift (F64.Ops.mul m.xx vy)
+  let fl6 ← lift (F64.Ops.add fl4 fl5)
+  ok (fl3, fl6)
+
+/-- [forge_sheet_core::place::local]:
+    Source: 'kernel/forge-sheet-core/src/place.rs', lines 28:0-32:1
+    Visibility: public -/
+def place.local
+  (m : place.Place) (px : F64) (py : F64) : Result (F64 × F64) := do
+  let dx ← lift (F64.Ops.sub px m.ox)
+  let dy ← lift (F64.Ops.sub py m.oy)
+  let fl ← lift (F64.Ops.mul dx m.xx)
+  let fl1 ← lift (F64.Ops.mul dy m.xy)
+  let fl2 ← lift (F64.Ops.add fl fl1)
+  let fl3 ← lift (F64.Ops.neg m.xy)
+  let fl4 ← lift (F64.Ops.mul dx fl3)
+  let fl5 ← lift (F64.Ops.mul dy m.xx)
+  let fl6 ← lift (F64.Ops.add fl4 fl5)
+  ok (fl2, fl6)
+
+/-- [forge_sheet_core::place::then]:
+    Source: 'kernel/forge-sheet-core/src/place.rs', lines 35:0-39:1
+    Visibility: public -/
+def place.then
+  (m : place.Place) (inner : place.Place) : Result place.Place := do
+  let (ox, oy) ← place.apply m inner.ox inner.oy
+  let (xx, xy) ← place.vec m inner.xx inner.xy
+  ok { ox, oy, xx, xy }
+
+/-- [forge_sheet_core::place::inverse]:
+    Source: 'kernel/forge-sheet-core/src/place.rs', lines 42:0-45:1
+    Visibility: public -/
+def place.inverse (m : place.Place) : Result place.Place := do
+  let (ox, oy) ← place.local m (F64.Ops.ofBits 0) (F64.Ops.ofBits 0)
+  let fl ← lift (F64.Ops.neg m.xy)
+  ok { m with ox, oy, xy := fl }
 
 end forge_sheet_core
