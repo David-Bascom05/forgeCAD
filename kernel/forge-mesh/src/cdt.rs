@@ -7,7 +7,6 @@
 
 use forge_math::Point2;
 use forge_math::predicates::{certainly_in_circle, orient2d};
-use std::collections::VecDeque;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Triangulation {
@@ -486,6 +485,8 @@ impl Mesh {
 
     /// The constraint a-b, recovered by flipping the edges it crosses. Errors name points less
     /// `shift` (the super-triangle's corners, or none).
+    // (Aeneas: no is_multiple_of, research/aeneas/STYLE.md)
+    #[allow(clippy::manual_is_multiple_of)]
     fn insert_constraint(&mut self, a: u32, b: u32, shift: u32) -> Result<(), CdtError> {
         if let Some((t, i)) = self.has_edge(a, b) {
             self.hit = (a, b);
@@ -935,7 +936,7 @@ fn grid(v: f64, scale: f64) -> u32 {
 }
 
 /// Sorts v ascending: insertion sorts of runs of 16, merged bottom-up through `tmp`.
-fn sort_keys(v: &mut Vec<u64>, tmp: &mut Vec<u64>) {
+fn sort_keys(v: &mut [u64], tmp: &mut Vec<u64>) {
     let n = v.len();
     let mut s = 0;
     while s < n {
@@ -1001,6 +1002,8 @@ fn merge_runs(src: &[u64], dst: &mut [u64], w: usize) {
 
 /// Position along a Hilbert curve over a 65536 x 65536 grid: neighbours along it are
 /// neighbours in the plane (a Z-order curve jumps across at each power of two).
+// (Aeneas: no mem::swap, research/aeneas/STYLE.md)
+#[allow(clippy::manual_swap)]
 fn hilbert(mut x: u32, mut y: u32) -> u64 {
     let mut d = 0u64;
     let mut s = 1u32 << 15;
@@ -1054,7 +1057,7 @@ pub fn triangulate(
     loops: &[Vec<u32>],
     interior: &[Point2],
 ) -> Result<Triangulation, CdtError> {
-    triangulate_refined(points, loops, interior, None)
+    triangulate_refined(points, loops, interior, None::<&dyn Refine>)
 }
 
 /// What refinement splits (point indices as in the result, and their positions).
@@ -1083,7 +1086,9 @@ pub struct Need {
 /// shorter chord: no triangulation to keep up. Triangles all counter-clockwise inside a simple
 /// boundary cover it once. None where a step has no such triangle, or a chord or triangle fails
 /// `refine`.
-pub fn zip(points: &[Point2], lp: &[u32], refine: &dyn Refine) -> Option<Vec<[u32; 3]>> {
+// (!(x > 0.0), not x <= 0.0: a NaN takes the same side as before)
+#[allow(clippy::neg_cmp_op_on_partial_ord)]
+pub fn zip<R: Refine + ?Sized>(points: &[Point2], lp: &[u32], refine: &R) -> Option<Vec<[u32; 3]>> {
     let n = lp.len();
     if n < 3 {
         return None;
@@ -1156,10 +1161,10 @@ fn at(points: &[Point2], lp: &[u32], k: usize) -> Point2 {
 }
 
 /// `zip`'s triangle of loop places v, kept in `out` unless it is a sliver or `refine` splits it.
-fn zip_tri(
+fn zip_tri<R: Refine + ?Sized>(
     points: &[Point2],
     lp: &[u32],
-    refine: &dyn Refine,
+    refine: &R,
     v: [usize; 3],
     out: &mut Vec<[u32; 3]>,
 ) -> bool {
@@ -1182,11 +1187,11 @@ fn zip_tri(
 
 /// `triangulate`, then the points `refine` asks for inserted into the same triangulation, round
 /// after round, until it asks for none.
-pub fn triangulate_refined(
+pub fn triangulate_refined<R: Refine + ?Sized>(
     points: &[Point2],
     loops: &[Vec<u32>],
     interior: &[Point2],
-    refine: Option<&dyn Refine>,
+    refine: Option<&R>,
 ) -> Result<Triangulation, CdtError> {
     triangulate_within(points, loops, interior, refine, false)
 }
@@ -1194,24 +1199,27 @@ pub fn triangulate_refined(
 /// `triangulate_refined`. `tangled`: a boundary that crosses or repeats itself or has two points in one place is no error.
 /// The region is what an odd number of chords parts from the outside, its chords cut where they
 /// cross, with a point there (after the input points) that the face's neighbours do not have.
-pub fn triangulate_within(
+pub fn triangulate_within<R: Refine + ?Sized>(
     points: &[Point2],
     loops: &[Vec<u32>],
     interior: &[Point2],
-    refine: Option<&dyn Refine>,
+    refine: Option<&R>,
     tangled: bool,
 ) -> Result<Triangulation, CdtError> {
-    within(points, loops, interior, refine, tangled, ROUNDS, false).map(|t| t.0)
+    match within(points, loops, interior, refine, tangled, ROUNDS, false) {
+        Ok((t, _)) => Ok(t),
+        Err(e) => Err(e),
+    }
 }
 
 /// `triangulate_within`, but a refinement that does not settle (`CdtError::Unsettled`) gives the
 /// triangulation as far as it got, with `false`: for a file's body, drawn as it is, its caller
 /// to say so (`TriMesh::unsettled`).
-pub fn triangulate_as_far(
+pub fn triangulate_as_far<R: Refine + ?Sized>(
     points: &[Point2],
     loops: &[Vec<u32>],
     interior: &[Point2],
-    refine: Option<&dyn Refine>,
+    refine: Option<&R>,
     tangled: bool,
 ) -> Result<(Triangulation, bool), CdtError> {
     within(points, loops, interior, refine, tangled, ROUNDS, true)
@@ -1220,40 +1228,17 @@ pub fn triangulate_as_far(
 /// `triangulate_within`, refining for at most `rounds` rounds; with `as_far`, an unsettled
 /// refinement stops where it is instead of failing. With whether it settled.
 #[inline(never)]
-fn within(
+fn within<R: Refine + ?Sized>(
     points: &[Point2],
     loops: &[Vec<u32>],
     interior: &[Point2],
-    refine: Option<&dyn Refine>,
+    refine: Option<&R>,
     tangled: bool,
     rounds: usize,
     as_far: bool,
 ) -> Result<(Triangulation, bool), CdtError> {
-    let n = points.len() as u32;
-    for (i, p) in points.iter().enumerate() {
-        if !(p.x.is_finite() && p.y.is_finite()) {
-            return Err(CdtError::NonFinite { point: i as u32 });
-        }
-    }
-    for (li, lp) in loops.iter().enumerate() {
-        if lp.len() < 3 && !tangled {
-            return Err(CdtError::BadLoop { loop_index: li });
-        }
-        for k in 0..lp.len() {
-            if lp[k] >= n {
-                return Err(CdtError::BadIndex { index: lp[k] });
-            }
-            if lp[k] == lp[(k + 1) % lp.len()] && !tangled {
-                return Err(CdtError::BadLoop { loop_index: li });
-            }
-        }
-    }
-
-    let mut lo = Point2::new(f64::INFINITY, f64::INFINITY);
-    let mut hi = Point2::new(f64::NEG_INFINITY, f64::NEG_INFINITY);
-    for p in points {
-        lo = Point2::new(lo.x.min(p.x), lo.y.min(p.y));
-        hi = Point2::new(hi.x.max(p.x), hi.y.max(p.y));
+    if let Some(e) = bad_input(points, loops, tangled) {
+        return Err(e);
     }
     if points.is_empty() {
         return Ok((
@@ -1264,17 +1249,29 @@ fn within(
             true,
         ));
     }
+    let mut lo = Point2::new(f64::INFINITY, f64::INFINITY);
+    let mut hi = Point2::new(f64::NEG_INFINITY, f64::NEG_INFINITY);
+    let mut k = 0;
+    while k < points.len() {
+        let p = points[k];
+        lo = Point2::new(lo.x.min(p.x), lo.y.min(p.y));
+        hi = Point2::new(hi.x.max(p.x), hi.y.max(p.y));
+        k += 1;
+    }
     let size = (hi.x - lo.x).max(hi.y - lo.y).max(f64::MIN_POSITIVE);
     let eps = 1e-12 * size;
     let c = Point2::new(0.5 * (lo.x + hi.x), 0.5 * (lo.y + hi.y));
     let m = 100.0 * size;
 
-    let kept: Vec<Point2> = interior
-        .iter()
-        .copied()
-        .filter(|p| p.x.is_finite() && p.y.is_finite())
-        .filter(|&p| p.x >= lo.x && p.x <= hi.x && p.y >= lo.y && p.y <= hi.y)
-        .collect();
+    let mut kept: Vec<Point2> = Vec::new();
+    let mut k = 0;
+    while k < interior.len() {
+        let p = interior[k];
+        if p.x.is_finite() && p.y.is_finite() && p.x >= lo.x && p.x <= hi.x && p.y >= lo.y && p.y <= hi.y {
+            kept.push(p);
+        }
+        k += 1;
+    }
 
     let mut pts = Vec::with_capacity(SUPER as usize + points.len() + kept.len());
     pts.push(Point2::new(c.x - m, c.y - m));
@@ -1293,236 +1290,49 @@ fn within(
         stack: Vec::new(),
         hit: (NONE, NONE),
     };
-    let ext = |v: u32| v.wrapping_sub(SUPER);
-    // a tangled boundary's second point in one place stands for the first
-    let mut same_as: Vec<(u32, u32)> = Vec::new();
-
     mesh.pts.extend_from_slice(points);
     mesh.vtri.resize(mesh.pts.len(), 0);
-    for i in brio_order(points, lo, size) {
-        let p = points[i];
-        let v = SUPER + i as u32;
-        match mesh
-            .locate(p)
-            .ok_or(CdtError::Internal("point location failed"))?
-        {
-            Location::Vertex(w) if tangled => same_as.push((v, w)),
-            Location::Vertex(w) => {
-                return Err(CdtError::DuplicatePoint {
-                    a: ext(w),
-                    b: i as u32,
-                });
-            }
-            loc => mesh.insert(v, loc),
-        }
-    }
+    let same_as = mesh.insert_points(points, lo, size, tangled)?;
     if tangled {
-        same_as.sort_unstable();
-        let one = |v: u32| {
-            same_as
-                .binary_search_by_key(&v, |x| x.0)
-                .map_or(v, |k| same_as[k].1)
-        };
-        let chords = loops
-            .iter()
-            .flat_map(|lp| (0..lp.len()).map(|k| (one(lp[k] + SUPER), one(lp[(k + 1) % lp.len()] + SUPER))))
-            .collect();
+        let mut chords: Vec<(u32, u32)> = Vec::new();
+        let mut l = 0;
+        while l < loops.len() {
+            let lp = &loops[l];
+            let mut k = 0;
+            while k < lp.len() {
+                let b = if k + 1 == lp.len() { lp[0] } else { lp[k + 1] };
+                chords.push((one(&same_as, lp[k] + SUPER), one(&same_as, b + SUPER)));
+                k += 1;
+            }
+            l += 1;
+        }
         mesh.insert_tangled(chords)?;
     } else {
-        for lp in loops {
-            if forge_geom::budget::over() {
-                return Err(CdtError::Internal("the boundary would take too long"));
-            }
-            for k in 0..lp.len() {
-                if k % 256 == 255 && forge_geom::budget::over() {
-                    return Err(CdtError::Internal("the boundary would take too long"));
-                }
-                let a = lp[k] + SUPER;
-                let b = lp[(k + 1) % lp.len()] + SUPER;
-                mesh.insert_constraint(a, b, SUPER)?;
-            }
-        }
+        mesh.insert_loops(loops)?;
     }
-
-    // even-odd flood fill from the super triangle's corner
-    let nt = mesh.tris.len();
-    let mut parity: Vec<Option<bool>> = vec![None; nt];
-    let seed = mesh.vtri[0];
-    parity[seed as usize] = Some(false);
-    let mut queue = VecDeque::from([seed]);
-    while let Some(t) = queue.pop_front() {
-        let tt = mesh.tris[t as usize];
-        let pt = parity[t as usize].expect("queued triangles have parity");
-        for i in 0..3 {
-            let u = tt.n[i];
-            if u == NONE || parity[u as usize].is_some() {
-                continue;
-            }
-            parity[u as usize] = Some(pt ^ tt.c[i]);
-            queue.push_back(u);
-        }
-    }
-    mesh.inside = parity.iter().map(|p| *p == Some(true)).collect();
+    mesh.flood();
 
     // interior points go in only where they land inside, clear of the boundary
-    let kept: Vec<Point2> = brio_order(&kept, lo, size).into_iter().map(|i| kept[i]).collect();
-    for &p in &kept {
-        mesh.insert_interior(p, eps)?;
+    let order = brio_order(&kept, lo, size);
+    let mut k = 0;
+    while k < order.len() {
+        mesh.insert_interior(kept[order[k]], eps)?;
+        k += 1;
     }
     let mut settled = true;
-    // then the points the caller asks for, round after round, into the same triangulation; each
-    // round looks only at the triangles the last one made (each made triangle holds a new point)
     if let Some(refine) = refine {
-        let mut mids: Vec<Point2> = Vec::new();
-        let mut fresh_from = SUPER;
-        let mut seen = vec![false; mesh.tris.len()];
-        let mut split = vec![false; mesh.tris.len()];
-        let mut look: Vec<u32> = (0..mesh.tris.len() as u32).collect();
-        let triangles = refine.triangles();
-        // a cascade that never ends stops at a number of rounds (each halves what it splits:
-        // two hundred halvings are past any double's precision), one that only grows at a budget
-        // of points: a quarter of a million, or four for each point given, and past that what
-        // the chord asks for (`Refine::need`, asked then), four times over, up to `CEILING`;
-        // either fails, typed (past the ceiling, as `TooFine`)
-        let mut budget = (4 * (points.len() + kept.len())).max(1 << 18);
-        let mut need: Option<Option<Need>> = None;
-        let unsettled = |rounds: usize, mesh: &Mesh| CdtError::Unsettled {
-            rounds: rounds as u32,
-            points: (mesh.pts.len() as u32).saturating_sub(SUPER),
-        };
-        settled = false;
-        for round in 0..rounds {
-            if mesh.pts.len() > budget && need.is_none() {
-                let n = refine.need();
-                need = Some(n);
-                if let Some(n) = n {
-                    // (an ideal mesh past the ceiling: no refinement fits under it)
-                    if n.points > CEILING as u64 && !as_far {
-                        return Err(CdtError::TooFine {
-                            chord: n.chord,
-                            required: n.points,
-                        });
-                    }
-                    let want = n.points.saturating_mul(SAFETY).min(CEILING as u64) as usize;
-                    budget = budget.max(want);
-                }
-            }
-            if mesh.pts.len() > budget {
-                if as_far {
-                    break;
-                }
-                if let Some(Some(n)) = need
-                    && budget >= CEILING
-                {
-                    return Err(CdtError::TooFine {
-                        chord: n.chord,
-                        required: n.points,
-                    });
-                }
-                return Err(unsettled(round, &mesh));
-            }
-            if forge_geom::budget::over() {
-                return Err(CdtError::Internal("refinement would take too long"));
-            }
-            mids.clear();
-            let first_new = mesh.pts.len() as u32;
-            seen.resize(mesh.tris.len(), false);
-            split.resize(mesh.tris.len(), false);
-            for &t in &look {
-                seen[t as usize] = true;
-            }
-            // a triangle only once none of its edges is split (its middle sags by a third more
-            // than they do at most, and splitting them may be all it needs): its edges are
-            // looked at from the lower of their two triangles, and `look` runs upwards
-            for &t in &look {
-                let tt = mesh.tris[t as usize];
-                if !mesh.inside[t as usize]
-                    || tt.v.iter().any(|&v| v < SUPER)
-                    || tt.v.iter().all(|&v| v < fresh_from)
-                {
-                    continue;
-                }
-                for i in 0..3 {
-                    let u = tt.n[i];
-                    if tt.c[i] || (u != NONE && u < t && seen[u as usize] && mesh.inside[u as usize]) {
-                        continue;
-                    }
-                    let (va, vb) = (tt.v[nx(i)], tt.v[pv(i)]);
-                    if va < fresh_from && vb < fresh_from {
-                        continue;
-                    }
-                    if refine.edge(va - SUPER, vb - SUPER, mesh.p(va), mesh.p(vb)) {
-                        mids.push(mesh.p(va).lerp(mesh.p(vb), 0.5));
-                        split[t as usize] = true;
-                        if u != NONE && seen[u as usize] {
-                            split[u as usize] = true;
-                        }
-                    }
-                }
-                if triangles && !split[t as usize] {
-                    let p = tt.v.map(|v| mesh.p(v));
-                    if refine.triangle(tt.v.map(|v| v - SUPER), p) {
-                        mids.push(Point2::new(
-                            (p[0].x + p[1].x + p[2].x) / 3.0,
-                            (p[0].y + p[1].y + p[2].y) / 3.0,
-                        ));
-                    }
-                }
-            }
-            for &t in &look {
-                seen[t as usize] = false;
-                split[t as usize] = false;
-            }
-            if mids.is_empty() {
-                settled = true;
-                break;
-            }
-            // along a Hilbert curve, so each walk starts beside the point before
-            let scale = 65535.0 / size;
-            let zq = |v: f64| (v * scale).clamp(0.0, 65535.0) as u32;
-            mids.sort_by_cached_key(|p| hilbert(zq(p.x - lo.x), zq(p.y - lo.y)));
-            for &p in &mids {
-                mesh.insert_interior(p, eps)?;
-            }
-            // the triangles round each new point (whose fan closes: it lies inside the region)
-            look.clear();
-            seen.resize(mesh.tris.len(), false);
-            for v in first_new..mesh.pts.len() as u32 {
-                let start = mesh.vtri[v as usize];
-                let mut t = start;
-                for _ in 0..mesh.tris.len() {
-                    if !seen[t as usize] {
-                        seen[t as usize] = true;
-                        look.push(t);
-                    }
-                    let tt = mesh.tris[t as usize];
-                    let Some(i) = slot(tt.v, v) else {
-                        break;
-                    };
-                    t = tt.n[nx(i)];
-                    if t == start || t == NONE {
-                        break;
-                    }
-                }
-            }
-            for &t in &look {
-                seen[t as usize] = false;
-            }
-            look.sort_unstable();
-            fresh_from = first_new;
-        }
-        if !settled && !as_far {
-            return Err(unsettled(rounds, &mesh));
-        }
+        settled = mesh.refine(refine, points.len() + kept.len(), lo, size, eps, rounds, as_far)?;
     }
 
-    let triangles = mesh
-        .tris
-        .iter()
-        .zip(&mesh.inside)
-        .filter(|(t, inside)| **inside && t.v.iter().all(|&v| v >= SUPER))
-        .map(|(t, _)| t.v.map(|v| v - SUPER))
-        .collect();
+    let mut triangles = Vec::new();
+    let mut t = 0;
+    while t < mesh.tris.len() {
+        let v = mesh.tris[t].v;
+        if mesh.inside[t] && v[0] >= SUPER && v[1] >= SUPER && v[2] >= SUPER {
+            triangles.push([v[0] - SUPER, v[1] - SUPER, v[2] - SUPER]);
+        }
+        t += 1;
+    }
     Ok((
         Triangulation {
             points: mesh.pts.split_off(SUPER as usize),
@@ -1530,6 +1340,410 @@ fn within(
         },
         settled,
     ))
+}
+
+/// The first thing wrong with the input, if anything is: a point not finite, a loop index out of
+/// range, a loop too short or repeating a point (unless `tangled`).
+fn bad_input(points: &[Point2], loops: &[Vec<u32>], tangled: bool) -> Option<CdtError> {
+    let n = points.len() as u32;
+    let mut err = None;
+    let mut i = 0;
+    while err.is_none() && i < points.len() {
+        let p = points[i];
+        if !(p.x.is_finite() && p.y.is_finite()) {
+            err = Some(CdtError::NonFinite { point: i as u32 });
+        }
+        i += 1;
+    }
+    let mut li = 0;
+    while err.is_none() && li < loops.len() {
+        let lp = &loops[li];
+        if lp.len() < 3 && !tangled {
+            err = Some(CdtError::BadLoop { loop_index: li });
+        }
+        let mut k = 0;
+        while err.is_none() && k < lp.len() {
+            let next = if k + 1 == lp.len() { lp[0] } else { lp[k + 1] };
+            if lp[k] >= n {
+                err = Some(CdtError::BadIndex { index: lp[k] });
+            } else if lp[k] == next && !tangled {
+                err = Some(CdtError::BadLoop { loop_index: li });
+            }
+            k += 1;
+        }
+        li += 1;
+    }
+    err
+}
+
+/// The point a tangled boundary's second point in one place stands for: the first
+/// (`same_as`, sorted: each a point above, the one it stands for below).
+fn one(same_as: &[u64], v: u32) -> u32 {
+    let (mut l, mut r) = (0, same_as.len());
+    while l < r {
+        let m = l + (r - l) / 2;
+        if ((same_as[m] >> 32) as u32) < v {
+            l = m + 1;
+        } else {
+            r = m;
+        }
+    }
+    if l < same_as.len() && (same_as[l] >> 32) as u32 == v {
+        (same_as[l] & 0xffff_ffff) as u32
+    } else {
+        v
+    }
+}
+
+/// The point budget's error: unsettled after `rounds` rounds, with the points it has.
+#[allow(clippy::implicit_saturating_sub)]
+fn unsettled(rounds: usize, mesh: &Mesh) -> CdtError {
+    let n = mesh.pts.len() as u32;
+    CdtError::Unsettled {
+        rounds: rounds as u32,
+        points: if n > SUPER { n - SUPER } else { 0 },
+    }
+}
+
+impl Mesh {
+    /// The input points, in BRIO order. A point where one already is: for a tangled boundary, a
+    /// stand-in for that one (returned, sorted, as `one` reads them); otherwise an error.
+    fn insert_points(
+        &mut self,
+        points: &[Point2],
+        lo: Point2,
+        size: f64,
+        tangled: bool,
+    ) -> Result<Vec<u64>, CdtError> {
+        let mut same_as: Vec<u64> = Vec::new();
+        let order = brio_order(points, lo, size);
+        let mut err = None;
+        let mut k = 0;
+        while err.is_none() && k < order.len() {
+            let i = order[k];
+            let v = SUPER + i as u32;
+            match self.locate(points[i]) {
+                None => err = Some(CdtError::Internal("point location failed")),
+                Some(Location::Vertex(w)) => {
+                    if tangled {
+                        same_as.push(u64::from(v) << 32 | u64::from(w));
+                    } else {
+                        err = Some(CdtError::DuplicatePoint {
+                            a: w.wrapping_sub(SUPER),
+                            b: i as u32,
+                        });
+                    }
+                }
+                Some(loc) => self.insert(v, loc),
+            }
+            k += 1;
+        }
+        match err {
+            Some(e) => Err(e),
+            None => {
+                let mut tmp = Vec::new();
+                sort_keys(&mut same_as, &mut tmp);
+                Ok(same_as)
+            }
+        }
+    }
+
+    /// Each loop's edges, as constraints, in order.
+    fn insert_loops(&mut self, loops: &[Vec<u32>]) -> Result<(), CdtError> {
+        let mut err = None;
+        let mut l = 0;
+        while err.is_none() && l < loops.len() {
+            let lp = &loops[l];
+            if forge_geom::budget::over() {
+                err = Some(CdtError::Internal("the boundary would take too long"));
+            }
+            let mut k = 0;
+            while err.is_none() && k < lp.len() {
+                if k % 256 == 255 && forge_geom::budget::over() {
+                    err = Some(CdtError::Internal("the boundary would take too long"));
+                } else {
+                    let a = lp[k] + SUPER;
+                    let b = if k + 1 == lp.len() { lp[0] } else { lp[k + 1] } + SUPER;
+                    if let Err(e) = self.insert_constraint(a, b, SUPER) {
+                        err = Some(e);
+                    }
+                }
+                k += 1;
+            }
+            l += 1;
+        }
+        match err {
+            Some(e) => Err(e),
+            None => Ok(()),
+        }
+    }
+
+    /// Which triangles are inside: an even-odd flood fill from the super triangle's corner,
+    /// across constraint edges.
+    fn flood(&mut self) {
+        let nt = self.tris.len();
+        let mut parity: Vec<u8> = vec![2; nt];
+        let seed = self.vtri[0];
+        parity[seed as usize] = 0;
+        let mut queue: Vec<u32> = vec![seed];
+        let mut head = 0;
+        while head < queue.len() {
+            let t = queue[head];
+            head += 1;
+            let tt = self.tris[t as usize];
+            let pt = parity[t as usize];
+            let mut i = 0;
+            while i < 3 {
+                let u = tt.n[i];
+                if u != NONE && parity[u as usize] == 2 {
+                    parity[u as usize] = pt ^ u8::from(tt.c[i]);
+                    queue.push(u);
+                }
+                i += 1;
+            }
+        }
+        self.inside = Vec::with_capacity(nt);
+        let mut t = 0;
+        while t < nt {
+            self.inside.push(parity[t] == 1);
+            t += 1;
+        }
+    }
+
+    /// Then the points the caller asks for, round after round, into the same triangulation; each
+    /// round looks only at the triangles the last one made (each made triangle holds a new
+    /// point). With whether it settled.
+    #[allow(clippy::too_many_arguments)]
+    fn refine<R: Refine + ?Sized>(
+        &mut self,
+        refine: &R,
+        given: usize,
+        lo: Point2,
+        size: f64,
+        eps: f64,
+        rounds: usize,
+        as_far: bool,
+    ) -> Result<bool, CdtError> {
+        let mut mids: Vec<Point2> = Vec::new();
+        let mut keys: Vec<u64> = Vec::new();
+        let mut tmp: Vec<u64> = Vec::new();
+        let mut fresh_from = SUPER;
+        let mut seen = vec![false; self.tris.len()];
+        let mut split = vec![false; self.tris.len()];
+        let mut look: Vec<u64> = Vec::with_capacity(self.tris.len());
+        let mut t = 0;
+        while t < self.tris.len() {
+            look.push(t as u64);
+            t += 1;
+        }
+        let triangles = refine.triangles();
+        // a cascade that never ends stops at a number of rounds (each halves what it splits:
+        // two hundred halvings are past any double's precision), one that only grows at a budget
+        // of points: a quarter of a million, or four for each point given, and past that what
+        // the chord asks for (`Refine::need`, asked then), four times over, up to `CEILING`;
+        // either fails, typed (past the ceiling, as `TooFine`)
+        let mut budget = if 4 * given > 1 << 18 { 4 * given } else { 1 << 18 };
+        let mut asked = false;
+        let mut need: Option<Need> = None;
+        let mut err: Option<CdtError> = None;
+        let mut settled = false;
+        let mut stop = false;
+        let mut round = 0;
+        while !stop && err.is_none() && round < rounds {
+            if self.pts.len() > budget && !asked {
+                asked = true;
+                need = refine.need();
+                if let Some(n) = need {
+                    // (an ideal mesh past the ceiling: no refinement fits under it)
+                    if n.points > CEILING as u64 && !as_far {
+                        err = Some(CdtError::TooFine {
+                            chord: n.chord,
+                            required: n.points,
+                        });
+                    } else {
+                        let want = if n.points > u64::MAX / SAFETY {
+                            u64::MAX
+                        } else {
+                            n.points * SAFETY
+                        };
+                        let want = if want < CEILING as u64 {
+                            want as usize
+                        } else {
+                            CEILING
+                        };
+                        if want > budget {
+                            budget = want;
+                        }
+                    }
+                }
+            }
+            if err.is_none() && self.pts.len() > budget {
+                if as_far {
+                    stop = true;
+                } else {
+                    err = Some(match need {
+                        Some(n) if budget >= CEILING => CdtError::TooFine {
+                            chord: n.chord,
+                            required: n.points,
+                        },
+                        _ => unsettled(round, self),
+                    });
+                }
+            }
+            if !stop && err.is_none() && forge_geom::budget::over() {
+                err = Some(CdtError::Internal("refinement would take too long"));
+            }
+            if !stop && err.is_none() {
+                mids.clear();
+                let first_new = self.pts.len() as u32;
+                seen.resize(self.tris.len(), false);
+                split.resize(self.tris.len(), false);
+                let mut k = 0;
+                while k < look.len() {
+                    seen[look[k] as usize] = true;
+                    k += 1;
+                }
+                // a triangle only once none of its edges is split (its middle sags by a third
+                // more than they do at most, and splitting them may be all it needs): its edges
+                // are looked at from the lower of their two triangles, and `look` runs upwards
+                let mut k = 0;
+                while k < look.len() {
+                    let t = look[k] as u32;
+                    self.asks(refine, t, fresh_from, triangles, &seen, &mut split, &mut mids);
+                    k += 1;
+                }
+                let mut k = 0;
+                while k < look.len() {
+                    seen[look[k] as usize] = false;
+                    split[look[k] as usize] = false;
+                    k += 1;
+                }
+                if mids.is_empty() {
+                    settled = true;
+                    stop = true;
+                } else {
+                    // along a Hilbert curve, so each walk starts beside the point before (by
+                    // key, then by place: a key below 2^32 and a place below 2^32, one u64)
+                    let scale = 65535.0 / size;
+                    keys.clear();
+                    let mut k = 0;
+                    while k < mids.len() {
+                        let p = mids[k];
+                        let h = hilbert(grid(p.x - lo.x, scale), grid(p.y - lo.y, scale));
+                        keys.push(h << 32 | k as u64);
+                        k += 1;
+                    }
+                    sort_keys(&mut keys, &mut tmp);
+                    let mut k = 0;
+                    while err.is_none() && k < keys.len() {
+                        let p = mids[(keys[k] & 0xffff_ffff) as usize];
+                        if let Err(e) = self.insert_interior(p, eps) {
+                            err = Some(e);
+                        }
+                        k += 1;
+                    }
+                }
+                if !stop && err.is_none() {
+                    // the triangles round each new point (whose fan closes: it lies inside the
+                    // region)
+                    look.clear();
+                    seen.resize(self.tris.len(), false);
+                    let mut v = first_new;
+                    while v < self.pts.len() as u32 {
+                        self.fan_into(v, &mut seen, &mut look);
+                        v += 1;
+                    }
+                    let mut k = 0;
+                    while k < look.len() {
+                        seen[look[k] as usize] = false;
+                        k += 1;
+                    }
+                    sort_keys(&mut look, &mut tmp);
+                    fresh_from = first_new;
+                }
+            }
+            if !stop && err.is_none() {
+                round += 1;
+            }
+        }
+        if let Some(e) = err {
+            return Err(e);
+        }
+        if !settled && !as_far {
+            return Err(unsettled(rounds, self));
+        }
+        Ok(settled)
+    }
+
+    /// What `refine` asks of triangle t: the middles of its edges that must be split (each once,
+    /// from the lower of its two triangles), then its centroid if no edge of it is split.
+    #[allow(clippy::too_many_arguments)]
+    fn asks<R: Refine + ?Sized>(
+        &self,
+        refine: &R,
+        t: u32,
+        fresh_from: u32,
+        triangles: bool,
+        seen: &[bool],
+        split: &mut [bool],
+        mids: &mut Vec<Point2>,
+    ) {
+        let tt = self.tris[t as usize];
+        let [v0, v1, v2] = tt.v;
+        if self.inside[t as usize]
+            && !(v0 < SUPER || v1 < SUPER || v2 < SUPER)
+            && !(v0 < fresh_from && v1 < fresh_from && v2 < fresh_from)
+        {
+            let mut i = 0;
+            while i < 3 {
+                let u = tt.n[i];
+                let (va, vb) = (tt.v[nx(i)], tt.v[pv(i)]);
+                if !(tt.c[i] || (u != NONE && u < t && seen[u as usize] && self.inside[u as usize]))
+                    && !(va < fresh_from && vb < fresh_from)
+                    && refine.edge(va - SUPER, vb - SUPER, self.p(va), self.p(vb))
+                {
+                    mids.push(self.p(va).lerp(self.p(vb), 0.5));
+                    split[t as usize] = true;
+                    if u != NONE && seen[u as usize] {
+                        split[u as usize] = true;
+                    }
+                }
+                i += 1;
+            }
+            if triangles && !split[t as usize] {
+                let p = [self.p(v0), self.p(v1), self.p(v2)];
+                if refine.triangle([v0 - SUPER, v1 - SUPER, v2 - SUPER], p) {
+                    mids.push(Point2::new(
+                        (p[0].x + p[1].x + p[2].x) / 3.0,
+                        (p[0].y + p[1].y + p[2].y) / 3.0,
+                    ));
+                }
+            }
+        }
+    }
+
+    /// The triangles round vertex v not yet `seen`, onto `look` (and seen).
+    fn fan_into(&self, v: u32, seen: &mut [bool], look: &mut Vec<u64>) {
+        let start = self.vtri[v as usize];
+        let mut t = start;
+        let mut on = true;
+        let mut k = 0;
+        while on && k < self.tris.len() {
+            if !seen[t as usize] {
+                seen[t as usize] = true;
+                look.push(u64::from(t));
+            }
+            let tt = self.tris[t as usize];
+            match slot(tt.v, v) {
+                None => on = false,
+                Some(i) => {
+                    t = tt.n[nx(i)];
+                    on = t != start && t != NONE;
+                }
+            }
+            k += 1;
+        }
+    }
 }
 
 #[cfg(test)]
@@ -1541,7 +1755,7 @@ mod tests {
     fn tangled(pts: &[(f64, f64)], loops: &[&[u32]]) -> f64 {
         let points: Vec<Point2> = pts.iter().map(|p| Point2::new(p.0, p.1)).collect();
         let loops: Vec<Vec<u32>> = loops.iter().map(|l| l.to_vec()).collect();
-        let t = triangulate_within(&points, &loops, &[], None, true).unwrap();
+        let t = triangulate_within(&points, &loops, &[], None::<&dyn Refine>, true).unwrap();
         t.triangles
             .iter()
             .map(|v| {
@@ -1582,7 +1796,7 @@ mod tests {
         let lp: Vec<u32> = (0..n).collect();
         let got = {
             let _b = forge_geom::budget::scoped(0);
-            triangulate_refined(&points, &[lp], &[], None)
+            triangulate_refined(&points, &[lp], &[], None::<&dyn Refine>)
         };
         assert!(matches!(got, Err(CdtError::Internal(_))), "{got:?}");
     }
