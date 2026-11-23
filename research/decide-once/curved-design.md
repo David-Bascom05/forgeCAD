@@ -567,3 +567,72 @@ Referenced:
   - Berberich, Kerber and Sagraloff, "Exact geometric-topological analysis of algebraic surfaces"
     (SoCG 2008): exact arrangements of quadrics by projection and lifting, the heavier alternative
     to Tier 1.
+
+## 7. A8 for curved: the face arrangement (assessment, 2026-11-23)
+
+The master moved the flat path to A8 (research/decide-once/face-arrangement.md, 2ff687bd on
+`decide-once-lean`):
+- the cells are **rooms** (components of the region minus the near faces) and **facets** (pieces
+  of faces, split only where other faces cross them), with explicit incidence (`Csr` tables);
+- the carrier ledger stays the proof's **reference**: a Lean definition that is never run;
+- the face ledger is proven a coarsening of it (`Refines`: maps ρ, σ, τ, ν with star bijections),
+  and `core_refines` carries every theorem over.
+
+The scheme is combinatorial over cells, so it applies to curved unchanged. The assessment:
+
+**1. Tier-0 failures: most disappear at runtime.** Rooms and facets are connected components by
+definition, so R1 holds of the face ledger by construction. The R1 failures behind §2.3 cannot
+occur in it:
+- the Steinmetz lobes, the plate with a hole, the LemmaD counterexample are disconnected sign
+  classes. In the face ledger they are distinct rooms or facets by construction.
+
+What remains is the **wing condition**. A face piece that reaches a crossing curve from both sides
+(two cylinders tangent along a line; a facet wrapping round an edge) breaks (e)'s bijection: two
+fine facets round the edge map to one face facet. Two remedies:
+- (W1) the builder splits such a facet locally, along a seam piece through the edge, only where it
+  occurs;
+- (W2) `edge_facets` and `vert_facets` rows count **wings** (a facet listed once per side it
+  reaches the cell from), with (e)/(v) a bijection onto wings. `around` then counts sheets, and the
+  tangent-cylinder union shows 4 and is refused.
+
+W2 is the smaller change and is decided once by the builder. It needs `LedgerWF`'s "rows have no
+repeats" relaxed to "repeats are wings". This is to agree with the coordinator.
+
+**2. Cells: fewer than flat's ratio, and the separators leave the runtime.** The carrier ledger
+pays more than flat's ~300 cells, because every seam (and Tier 1's CAD) splits space everywhere.
+The face ledger splits a face only where another near face crosses it, plus W1's local splits.
+Seams, polar planes, projection cylinders and level-1 walls all live only in the **reference**,
+which is never run. So:
+- Tier 1's cost leaves the gate entirely. §3's switch-on item 7 then counts the builder's local
+  splits, not CAD runs;
+- the only runtime geometry is the faces' own crossings: QSIC arcs for quadric pairs, certified
+  chains beyond them, vertices.
+
+**3. What the proof still needs.** `EndToEndF`'s conclusions are the reference's:
+- `correct_k`, `zeroThickness_iff_k` over `ExactK`;
+- and, for topological meaning, `xNonManifold_iff_top` over `Faithful` (q1).
+
+So the reference must still be `ExactK` and `Faithful`. Tier 0 / Tier 1 and Lemma D stay as
+proof obligations, now with no runtime cost. One open point: without a runtime check, the
+reference's R2–R5 must hold for every input in the domain. Tier 1's CAD does not give them
+automatically (§2.3).
+
+Two routes:
+- (a) prove them for the reference construction outright;
+- (b) state the topological theorem over the face ledger directly. Its rooms and facets are
+  components, so R1 is free there, and its incidence is explicit, so R2/R4/R5 become builder
+  obligations of the same kind as `Refines`.
+
+Route (b) may make `Faithful` on the reference unnecessary. It is for q1 and the coordinator to
+judge.
+
+**4. Effect on the work in flight.**
+- L2 (this branch: QLine, QEdge, QVert, RootCover, QPropose) is the reference's executable and
+  stays. It also becomes the builder's exact fallback: the same certified crossings, computed only
+  between faces that meet.
+- Formula bodies make a room's membership a formula evaluation on any of its points
+  (`qform_compat`), so the curved `room_const` is free on the formula route.
+- Rust (dol-curved-rust): the builder targets the v2 ledger (ids, `Csr`), not covectors; Tier 1 is
+  never built in Rust.
+- Tier0 / LemmaD: their theorems are about the reference and remain needed (§3 above), at no
+  runtime cost.
