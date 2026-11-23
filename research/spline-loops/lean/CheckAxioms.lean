@@ -1,6 +1,5 @@
 import Lean
-import SplineSpec.Interp
-import SplineSpec.Basis
+import SplineSpec
 import SplineLoops
 open Lean Elab Command
 
