@@ -1,0 +1,22 @@
+name = "forgetopo"
+version = "0.1.0"
+defaultTargets = ["ForgeTopo"]
+# Mathlib and Aeneas's library shared with verify/forge-mass/lean's checkout (same pins).
+packagesDir = "../../../forge-mass/lean/.lake/packages"
+
+[leanOptions]
+autoImplicit = false
+relaxedAutoImplicit = false
+
+# The bridge: Aeneas's library (and the f64 model, unused here: check's topology has no floats).
+[[require]]
+name = "aeneasf64"
+path = "../../bridge"
+
+# The model the translation refines.
+[[require]]
+name = "topocheck"
+path = "../../../forge-topo-check/lean"
+
+[[lean_lib]]
+name = "ForgeTopo"
