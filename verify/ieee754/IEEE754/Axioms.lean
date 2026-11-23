@@ -18,6 +18,7 @@ import IEEE754.Screen.Near
 import IEEE754.Screen.Cross
 import IEEE754.Screen.Interior
 import IEEE754.Interval.Sin
+import IEEE754.Exact.Big
 
 /-!
 # Only the standard axioms
@@ -102,3 +103,8 @@ elab "#standard_axioms " ids:ident* : command => do
   -- Interval sin/cos
   IEEE754.Interval.below_round IEEE754.Interval.above_round IEEE754.Interval.crit_counted
   IEEE754.Interval.sin_encloses IEEE754.Interval.cos_encloses
+  -- exact.rs Big
+  IEEE754.Exact.add_into_spec IEEE754.Exact.sub_into_spec IEEE754.Exact.mul_into_spec IEEE754.Exact.shl_into_spec
+  IEEE754.Exact.trimLen_spec IEEE754.Exact.cmp_mag_spec IEEE754.Exact.Big.fromMag_spec IEEE754.Exact.Big.view_spec
+  IEEE754.Exact.Big.neg_spec IEEE754.Exact.Big.add_spec IEEE754.Exact.Big.sub_spec IEEE754.Exact.Big.mul_spec
+  IEEE754.Exact.Big.shl_spec IEEE754.Exact.Big.signum_spec IEEE754.Exact.Big.isZero_spec IEEE754.Exact.Big.cmpBig_spec
