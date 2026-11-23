@@ -103,6 +103,16 @@ are covered.
   cases, 0 outside (run here).
 - `segSegLo_le_all` covers points too (a plunge or drill move projects to one).
 
+## DistArc's precondition in the code (c316607)
+
+- Walls of revolution are lowered to quarter turns.
+- `Prism::of` refuses walls not strictly under a half turn (they go to the B&B).
+- `slab::dist` debug-asserts every arc is strictly under a half turn, with the sign set by
+  `ccw`.
+- Residual (L5): those tests take the cross product's sign in f64. A plain f64 sign is not an
+  exact sign near cross = 0, so it should go through the exact `orient2d` or interval predicate
+  when the checker's L5 is done.
+
 ## Still to do when asked
 
 1. `dist_region` (flat faces): the box cutoff and the trim's inside test (`Trim::classify`).
