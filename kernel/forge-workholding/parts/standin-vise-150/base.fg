@@ -1,4 +1,4 @@
-# generic-vise-150 base: the body under the jaws (400 long along the clamp axis, 150 wide,
+# standin-vise-150 (a stand-in: see data/standins.toml) base: the body under the jaws (400 long along the clamp axis, 150 wide,
 # 50 high: the vise's height less the jaws'), with the screw channel and the bed's slot.
 # frame: the body's corner at the origin, the clamp axis along x.
 shared L = 400

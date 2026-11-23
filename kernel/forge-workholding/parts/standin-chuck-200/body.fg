@@ -1,4 +1,4 @@
-# generic-chuck-200 body: r 100, 80 long (z 0..80, the face at z = 80), three jaw slots and the
+# standin-chuck-200 (a stand-in: see data/standins.toml) body: r 100, 80 long (z 0..80, the face at z = 80), three jaw slots and the
 # through bore. frame: the spindle axis along z.
 shared R = 100
 shared L = 80

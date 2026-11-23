@@ -68,16 +68,16 @@ fn a_vise_on_parallels_a_cut_too_deep_hits_a_parallel() {
     // gripping 20 of a 50 mm jaw: parallels 30 high
     let v = mill::vise(
         "vise",
-        l.get("generic-vise-150").unwrap(),
+        l.get("standin-vise-150").unwrap(),
         &stock,
         0,
         20.0,
-        Some(l.get("generic-parallels").unwrap()),
+        Some(l.get("standin-parallels").unwrap()),
         None,
     )
     .unwrap();
     assert!(v.bodies.iter().filter(|b| b.name.starts_with("parallel")).count() == 2);
-    assert_eq!(v.bodies[0].part.as_deref(), Some("generic-vise-150/base.fg"));
+    assert_eq!(v.bodies[0].part.as_deref(), Some("standin-vise-150/base.fg"));
     let w = Workholding { placed: vec![v] };
     // a slot along y over the parallel at x 0..3 (the tool spans x 3..9): 2 above the seat
     // clears it by 2; through the stock's bottom it meets the parallel
@@ -89,17 +89,17 @@ fn a_vise_on_parallels_a_cut_too_deep_hits_a_parallel() {
     // a parallel 25 high is not in the set: refused, with the clamps that are
     let e = mill::vise(
         "vise",
-        l.get("generic-vise-150").unwrap(),
+        l.get("standin-vise-150").unwrap(),
         &stock,
         0,
         25.0,
-        Some(l.get("generic-vise-100").unwrap()),
+        Some(l.get("kurt-dx6").unwrap()),
         None,
     );
     assert!(e.is_err());
     let e = mill::vise(
         "vise",
-        l.get("generic-vise-150").unwrap(),
+        l.get("standin-vise-150").unwrap(),
         &stock,
         0,
         25.0,
@@ -122,8 +122,8 @@ fn a_strap_clamp_the_path_beside_it_clears_the_one_under_it_does_not() {
     };
     let c = mill::strap_clamp(
         "clamp",
-        l.get("generic-strap-m12").unwrap(),
-        l.get("generic-step-block-25").unwrap(),
+        l.get("standin-strap-m12").unwrap(),
+        l.get("standin-step-block-25").unwrap(),
         &stock,
         0.0,
         [50.0, 60.0],
@@ -148,8 +148,8 @@ fn a_strap_clamp_the_path_beside_it_clears_the_one_under_it_does_not() {
     assert!(
         mill::strap_clamp(
             "c",
-            l.get("generic-strap-m12").unwrap(),
-            l.get("generic-step-block-25").unwrap(),
+            l.get("standin-strap-m12").unwrap(),
+            l.get("standin-step-block-25").unwrap(),
             &stock,
             0.0,
             [50.0, 60.0],
@@ -168,7 +168,7 @@ fn a_dovetail_job_five_sides_open_above_the_grip() {
         min: [0.0; 3],
         max: [40.0, 40.0, 40.0],
     };
-    let d = mill::dovetail("dovetail", l.get("generic-dovetail-60").unwrap(), &stock, 0, 30.0).unwrap();
+    let d = mill::dovetail("dovetail", l.get("standin-dovetail-60").unwrap(), &stock, 0, 30.0).unwrap();
     assert!(d.notes[0].contains("tenon 30.00"), "{:?}", d.notes);
     let w = Workholding { placed: vec![d] };
     let c = stock.mid();
@@ -205,7 +205,7 @@ fn a_dovetail_job_five_sides_open_above_the_grip() {
         assert!(!run(5.0).is_empty(), "{dir:?}");
     }
     // a tenon outside the fixture's range is refused
-    assert!(mill::dovetail("d", l.get("generic-dovetail-60").unwrap(), &stock, 0, 10.0).is_err());
+    assert!(mill::dovetail("d", l.get("standin-dovetail-60").unwrap(), &stock, 0, 10.0).is_err());
     // a maker's dovetail whose body sizes are not published: refused, naming the field
     let e = mill::dovetail("d", l.get("5thaxis-dm25").unwrap(), &stock, 0, 30.0).unwrap_err();
     assert!(e.to_string().contains("not published"), "{e}");
@@ -214,7 +214,7 @@ fn a_dovetail_job_five_sides_open_above_the_grip() {
 #[test]
 fn a_lathe_chuck_job_and_its_stick_out() {
     let l = Library::builtin();
-    let ch = lathe::chuck("chuck", l.get("generic-chuck-200").unwrap(), 60.0, 0.0, 25.0).unwrap();
+    let ch = lathe::chuck("chuck", l.get("standin-chuck-200").unwrap(), 60.0, 0.0, 25.0).unwrap();
     let (nose, clear) = (0.8, 1.0);
     // skimming the bar's OD (nose centre at ρ 30.3) toward the chuck
     let path = |zmin: f64| vec![[30.3, 81.0], [30.3, zmin]];
@@ -232,7 +232,7 @@ fn a_lathe_chuck_job_and_its_stick_out() {
     assert!(lathe::overhang(200.0, 60.0, true).is_none());
     assert!(lathe::overhang(80.0, 60.0, false).is_none());
     // a tailstock centre at the far end is one more body of revolution
-    let ce = lathe::centre("tail", l.get("generic-live-centre").unwrap(), 200.0, 2.0, 50.0).unwrap();
+    let ce = lathe::centre("tail", l.get("standin-live-centre").unwrap(), 200.0, 2.0, 50.0).unwrap();
     let far = lathe::check_path(
         &[ch.clone(), ce],
         &[[30.3, 199.0], [30.3, 150.0]],
@@ -244,7 +244,7 @@ fn a_lathe_chuck_job_and_its_stick_out() {
     let face = lathe::check_path(
         &[
             ch,
-            lathe::centre("tail", l.get("generic-live-centre").unwrap(), 200.0, 2.0, 50.0).unwrap(),
+            lathe::centre("tail", l.get("standin-live-centre").unwrap(), 200.0, 2.0, 50.0).unwrap(),
         ],
         &[[10.0, 201.0], [0.0, 201.0]],
         nose,
@@ -253,7 +253,7 @@ fn a_lathe_chuck_job_and_its_stick_out() {
     );
     assert_eq!(face.hit.map(|h| h.0), Some("tail/centre".to_string()));
     // a bar the jaws cannot close on
-    assert!(lathe::chuck("c", l.get("generic-chuck-200").unwrap(), 10.0, 0.0, 10.0).is_err());
+    assert!(lathe::chuck("c", l.get("standin-chuck-200").unwrap(), 10.0, 0.0, 10.0).is_err());
     // a collet: the ER32's range
     assert!(lathe::collet("c", l.get("er32-rego-fix").unwrap(), 25.0, 0.0).is_err());
     assert!(lathe::collet("c", l.get("er32-rego-fix").unwrap(), 20.0, 0.0).is_ok());
@@ -262,7 +262,7 @@ fn a_lathe_chuck_job_and_its_stick_out() {
 #[test]
 fn vacuum_hold_down_both_ways() {
     let l = Library::builtin();
-    let r = l.get("generic-vacuum-300").unwrap();
+    let r = l.get("standin-vacuum-300").unwrap();
     let big = Box3 {
         min: [0.0; 3],
         max: [200.0, 150.0, 10.0],
@@ -291,7 +291,7 @@ fn plates_zero_point_patterns_and_custom() {
     // dowels: hole (0, 0) is at (25, 25): clear of the stock; hole (1, 1) at (75, 75) is under it
     let p = mill::fixture_plate(
         "plate",
-        l.get("generic-plate-50").unwrap(),
+        l.get("standin-plate-50").unwrap(),
         &stock,
         [0.0, 0.0],
         &[(0, 1)],
@@ -301,7 +301,7 @@ fn plates_zero_point_patterns_and_custom() {
     assert!(
         mill::fixture_plate(
             "plate",
-            l.get("generic-plate-50").unwrap(),
+            l.get("standin-plate-50").unwrap(),
             &stock,
             [0.0, 0.0],
             &[(1, 1)]
@@ -315,7 +315,7 @@ fn plates_zero_point_patterns_and_custom() {
     };
     let p2 = mill::fixture_plate(
         "plate",
-        l.get("generic-plate-50").unwrap(),
+        l.get("standin-plate-50").unwrap(),
         &s2,
         [0.0, 0.0],
         &[(0, 1)],
@@ -329,18 +329,18 @@ fn plates_zero_point_patterns_and_custom() {
     };
     let mut v = mill::vise(
         "vise",
-        l.get("generic-centring-vise-80").unwrap(),
+        l.get("standin-centring-vise-80").unwrap(),
         &s,
         0,
         4.0,
-        Some(l.get("generic-parallels").unwrap()),
+        Some(l.get("standin-parallels").unwrap()),
         None,
     )
     .unwrap();
     let z = mill::zero_point(
         "zp",
-        l.get("generic-zero-point-52").unwrap(),
-        Some(l.get("generic-riser-100").unwrap()),
+        l.get("standin-zero-point-52").unwrap(),
+        Some(l.get("standin-riser-100").unwrap()),
         &mut v,
         [0.0, 0.0],
         &[(0, 0)],
@@ -371,13 +371,13 @@ fn plates_zero_point_patterns_and_custom() {
     // two vises side by side: a pattern
     let one = mill::vise(
         "v",
-        l.get("generic-vise-100").unwrap(),
+        l.get("standin-vise-150").unwrap(),
         &Box3 {
             min: [0.0; 3],
-            max: [60.0, 40.0, 32.0],
+            max: [60.0, 40.0, 50.0],
         },
         0,
-        32.0,
+        50.0,
         None,
         None,
     )
@@ -388,7 +388,7 @@ fn plates_zero_point_patterns_and_custom() {
     // a custom angle plate turned a quarter
     let c = mill::custom(
         "ap",
-        l.get("generic-angle-plate").unwrap(),
+        l.get("standin-angle-plate").unwrap(),
         &Pose::quarter_z(1, [0.0; 3]),
         vec![],
     )
@@ -397,7 +397,7 @@ fn plates_zero_point_patterns_and_custom() {
     // an edge clamp against the stock's side
     let e = mill::side_clamp(
         "mb",
-        l.get("generic-edge-clamp-m8").unwrap(),
+        l.get("standin-edge-clamp-m8").unwrap(),
         &stock,
         0.0,
         [50.0, 80.0],

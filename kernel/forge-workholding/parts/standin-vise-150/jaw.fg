@@ -1,4 +1,4 @@
-# generic-vise-150 jaw: a hard jaw 20 thick (x), 150 wide (y), 50 high, with two counterbored
+# standin-vise-150 (a stand-in: see data/standins.toml) jaw: a hard jaw 20 thick (x), 150 wide (y), 50 high, with two counterbored
 # screw holes. frame: the jaw's corner at the origin.
 shared T = 20
 shared W = 150

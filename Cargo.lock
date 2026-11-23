@@ -132,6 +132,7 @@ dependencies = [
  "forge-ops",
  "forge-step",
  "forge-topo",
+ "forge-workholding",
 ]
 
 [[package]]
@@ -537,6 +538,7 @@ version = "0.1.0"
 dependencies = [
  "forge-cam",
  "forge-cam-geom",
+ "forge-dirs",
  "forge-lang",
  "forge-math",
  "forge-mesh",

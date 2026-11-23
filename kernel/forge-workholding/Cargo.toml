@@ -12,6 +12,7 @@ forge-math = { path = "../forge-math" }
 forge-tooling = { path = "../forge-tooling" }
 
 [dev-dependencies]
+forge-dirs = { path = "../forge-dirs" }
 forge-lang = { path = "../../interface/forge-lang" }
 forge-mesh = { path = "../forge-mesh" }
 forge-cam = { path = "../forge-cam" }

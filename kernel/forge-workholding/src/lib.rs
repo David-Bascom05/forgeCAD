@@ -5,8 +5,8 @@
 //! steady rests.
 //!
 //! A library record (`[[workholding]]`, TOML) holds a device's published sizes, each value cited
-//! (`[[workholding.cite]]`: the fields, the source, the date it was read) or, for our generic
-//! records, the record's own `source`. A size the maker does not publish is listed in `unknown`
+//! (`[[workholding.cite]]`: the fields, the source, the date it was read); a stand-in for a class
+//! no maker publishes enough of says so (`standin = true`) and gives its `basis`. A size the maker does not publish is listed in `unknown`
 //! and has no value: a body that needs it is refused with a typed error naming the field and the
 //! fix (measure it, give it in the job), never filled in.
 //!
@@ -15,9 +15,11 @@
 //! role and a keep-out) are what the certified checker keeps the tool from (G2), what the machine
 //! simulation poses with the table, and what the leftover report calls "held". Lathe devices give
 //! their envelope of revolution (lathe.rs).
+pub mod cli;
 pub mod geom;
 pub mod lathe;
 pub mod mill;
+pub mod schema;
 
 use forge_tooling::toml::{self, Table, Val, num, nums, tables, text};
 pub use geom::{Pose, Prim, V3};
@@ -49,7 +51,7 @@ pub enum Kind {
 
 /// Every kind: its name in the TOML, the numbers a record of it must give (or list as unknown),
 /// the numbers it may give.
-const KINDS: &[(Kind, &str, &[&str], &[&str])] = &[
+pub(crate) const KINDS: &[(Kind, &str, &[&str], &[&str])] = &[
     (
         Kind::Vise,
         "vise",
@@ -301,8 +303,9 @@ pub struct Record {
     pub kind: Kind,
     pub vendor: String,
     pub product: String,
-    /// Ours (round numbers, no maker's product): `source` covers every value.
-    pub generic: bool,
+    /// A stand-in for a class no maker publishes enough of: `source` holds its basis (which
+    /// published values it follows, which numbers are ours) and covers every value.
+    pub standin: bool,
     pub vals: BTreeMap<String, f64>,
     pub lists: BTreeMap<String, Vec<f64>>,
     pub words: BTreeMap<String, String>,
@@ -420,8 +423,8 @@ impl Record {
         let mut lists = BTreeMap::new();
         let mut words = BTreeMap::new();
         let skip = [
-            "name", "kind", "vendor", "product", "generic", "unknown", "source", "taken", "note", "cite",
-            "part", "body",
+            "name", "kind", "vendor", "product", "standin", "basis", "unknown", "source", "taken", "note",
+            "cite", "part", "body",
         ];
         for (k, v) in t {
             if skip.contains(&k.as_str()) {
@@ -484,11 +487,13 @@ impl Record {
             let fields = toml::texts(c, "fields").unwrap_or_default();
             let source = text(c, "source").unwrap_or("").to_string();
             let taken = text(c, "taken").unwrap_or("").to_string();
-            if fields.is_empty() || source.is_empty() || taken.is_empty() {
+            // a user's value carries provenance "user" and needs no date read
+            let user = source.starts_with("user") || source == "given in the job";
+            if fields.is_empty() || source.is_empty() || (taken.is_empty() && !user) {
                 return Err(bad(
                     &rec,
                     "cite",
-                    "each cite gives `fields`, `source` and `taken`",
+                    "each cite gives `fields`, `source` and `taken` (the date it was read; a user's own values: source = \"user\")",
                 ));
             }
             cites.push(Cite {
@@ -497,16 +502,18 @@ impl Record {
                 taken,
             });
         }
-        let generic = toml::boolean(t, "generic").unwrap_or(false);
-        let source = text(t, "source").unwrap_or("").to_string();
-        if generic && source.is_empty() {
+        let standin = toml::boolean(t, "standin").unwrap_or(false);
+        let source = text(t, if standin { "basis" } else { "source" })
+            .unwrap_or("")
+            .to_string();
+        if standin && source.is_empty() {
             return Err(WhError::Missing {
                 record: rec,
-                field: "source".into(),
-                fix: "a generic record says whose numbers they are".into(),
+                field: "basis".into(),
+                fix: "a stand-in says which published values it follows and which numbers are ours".into(),
             });
         }
-        if !generic {
+        if !standin {
             // every value of a maker's product is cited
             for f in vals.keys().chain(lists.keys()) {
                 if !cites.iter().any(|c| c.fields.iter().any(|x| x == f)) {
@@ -584,7 +591,7 @@ impl Record {
         Ok(Record {
             vendor: s("vendor"),
             product: s("product"),
-            generic,
+            standin,
             vals,
             lists,
             words,
@@ -658,9 +665,9 @@ impl Record {
         Ok(r)
     }
 
-    /// The citation of a field (the generic record's source for ours).
+    /// The citation of a field (a stand-in's basis for a stand-in).
     pub fn cite(&self, k: &str) -> Option<String> {
-        if self.generic {
+        if self.standin {
             return Some(self.source.clone());
         }
         self.cites
@@ -679,16 +686,16 @@ pub struct Library {
 
 pub const BUILTIN: [(&str, &str); 3] = [
     (
-        "builtin/workholding/generic.toml",
-        include_str!("../data/generic.toml"),
-    ),
-    (
         "builtin/workholding/products.toml",
         include_str!("../data/products.toml"),
     ),
     (
         "builtin/workholding/lathe.toml",
         include_str!("../data/lathe.toml"),
+    ),
+    (
+        "builtin/workholding/standins.toml",
+        include_str!("../data/standins.toml"),
     ),
 ];
 
@@ -1015,7 +1022,7 @@ mod tests {
         }
         for (r, f) in &l.records {
             assert!(!r.name.is_empty(), "{f}");
-            if !r.generic {
+            if !r.standin {
                 assert!(
                     !r.vendor.is_empty() && !r.cites.is_empty(),
                     "{}: a product names its maker and sources",
@@ -1040,15 +1047,15 @@ mod tests {
     #[test]
     fn levels_hide_lower_and_refuse_twice() {
         let mut l = Library::builtin();
-        let mine = "[[workholding]]\nname = \"generic-vise-150\"\nkind = \"riser\"\ngeneric = true\nsource = \"mine\"\nd = 50\nheight = 100\n";
+        let mine = "[[workholding]]\nname = \"standin-vise-150\"\nkind = \"riser\"\nstandin = true\nbasis = \"mine\"\nd = 50\nheight = 100\n";
         l.add_level(&[("user/a.toml".into(), mine.into())]).unwrap();
-        assert_eq!(l.get("generic-vise-150").unwrap().kind, Kind::Riser);
+        assert_eq!(l.get("standin-vise-150").unwrap().kind, Kind::Riser);
         let e = l
             .add_level(&[("p/a.toml".into(), mine.into()), ("p/b.toml".into(), mine.into())])
             .unwrap_err();
         assert!(matches!(e, WhError::Duplicate { .. }), "{e:?}");
         assert!(
-            matches!(l.get("generic-vise-15"), Err(WhError::Unknown { near, .. }) if near.contains(&"generic-vise-150".to_string()))
+            matches!(l.get("standin-vise-15"), Err(WhError::Unknown { near, .. }) if near.contains(&"standin-vise-150".to_string()))
         );
     }
 
@@ -1056,7 +1063,7 @@ mod tests {
     fn records_refuse_what_they_cannot_hold() {
         let p = |s: &str| parse_file("t.toml", s);
         // a field missing, neither given nor unknown
-        let e = p("[[workholding]]\nname = \"r\"\nkind = \"riser\"\ngeneric = true\nsource = \"s\"\nd = 5\n")
+        let e = p("[[workholding]]\nname = \"r\"\nkind = \"riser\"\nstandin = true\nbasis = \"s\"\nd = 5\n")
             .unwrap_err();
         assert!(
             matches!(&e, WhError::Missing { field, .. } if field == "height"),
@@ -1073,12 +1080,12 @@ mod tests {
         assert!(matches!(r[0].get("height"), Err(WhError::Unpublished { .. })));
         assert_eq!(r[0].with("height", 80.0).unwrap().get("height"), Ok(80.0));
         // a field that is not the kind's
-        let e = p("[[workholding]]\nname = \"r\"\nkind = \"riser\"\ngeneric = true\nsource = \"s\"\nd = 5\nheight = 9\njaw_width = 3\n").unwrap_err();
+        let e = p("[[workholding]]\nname = \"r\"\nkind = \"riser\"\nstandin = true\nbasis = \"s\"\nd = 5\nheight = 9\njaw_width = 3\n").unwrap_err();
         assert!(
             matches!(&e, WhError::Bad { field, .. } if field == "jaw_width"),
             "{e:?}"
         );
-        let e = p("[[workholding]]\nname = \"r\"\nkind = \"riser\"\ngeneric = true\nsource = \"s\"\nd = -5\nheight = 9\n").unwrap_err();
+        let e = p("[[workholding]]\nname = \"r\"\nkind = \"riser\"\nstandin = true\nbasis = \"s\"\nd = -5\nheight = 9\n").unwrap_err();
         assert!(matches!(&e, WhError::Bad { field, .. } if field == "d"), "{e:?}");
     }
 }
