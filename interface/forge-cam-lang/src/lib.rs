@@ -828,7 +828,7 @@ impl Cam {
                 });
                 Ok(V::Setup(self.setups.len() - 1))
             }
-            "facing" | "contour" | "pocket" | "clear" | "drill" | "engrave" | "thread_mill" => self.op(name, f, a),
+            "facing" | "contour" | "pocket" | "clear" | "drill" | "engrave" | "thread_mill" | "edge_break" => self.op(name, f, a),
             "soft_jaw" => self.soft_jaw(name, a),
             "program" => {
                 let su: Vec<usize> = match a.get("#0") {
@@ -852,7 +852,7 @@ impl Cam {
                 Ok(V::Num(0.0))
             }
             _ => Err(format!(
-                "`{f}` is not a machining built-in (part, machine, tool, setup, facing, contour, pocket, drill, engrave, thread_mill, program, box)"
+                "`{f}` is not a machining built-in (part, machine, tool, setup, facing, contour, pocket, drill, engrave, thread_mill, edge_break, program, box)"
             )),
         }
     }
@@ -1446,6 +1446,311 @@ impl Cam {
         }])
     }
 
+    /// Edge break (a declared removal, the master's option (a)): the part's top edges at `at:`
+    /// (default its top) broken by a 45° chamfer of `size:` s with a 90° chamfer mill. Δ is the
+    /// band of the top within s of its edges, below the 45° surface z' = z − s + d, d the
+    /// distance inside the top's outline R. The op is certified against P ∖ Δ: the top eroded
+    /// to E = R ⊖ s, the walls cut to z − s, and the chamfer surfaces from each piece of E down
+    /// to the same piece moved out by s (planes for lines, cones for arcs; a line's ends at a
+    /// sharp corner meet the next line's on the corner's bisector). The path: the tool's axis on
+    /// R ⊕ c with c = r_tip + e at depth z − s − e (e = 0.2 mm), where the tool's flank is that
+    /// surface; every point of R ⊕ c is c from R, so the flank never goes below it. In this
+    /// phase the top must be the part's top, with only vertical walls through the band, and the
+    /// pieces of E must meet tangentially wherever an arc meets (a sharp corner between lines is
+    /// taken; one with an arc is refused).
+    #[allow(clippy::too_many_arguments)]
+    fn edge_break(
+        &self,
+        su: usize,
+        a: &BTreeMap<String, V>,
+        t: &ToolUse,
+        ti: usize,
+        h: Heights,
+        feed: (f64, f64),
+        out: &mut OpOut,
+    ) -> Result<Vec<OpPath>, String> {
+        use forge_cam_geom::check::{Surf, TSeg, Trim};
+        use forge_cam_geom::ival::Ival;
+        let part = &self.parts[self.setups[su].part];
+        if t.tool.kind != Kind::Chamfer || (t.tool.angle - 90.0).abs() > 1e-9 {
+            out.fix = Some("a 90° chamfer mill (chamfer-10-90)".into());
+            return Err(format!("edge_break: `{}` is not a 90° chamfer mill", t.tool.id));
+        }
+        let ztop = part.bbox.1[2];
+        let z = get_num(a, "at", Some(ztop))?;
+        let s = get_num(a, "size", None)?;
+        let (r0, rt) = (0.5 * t.tool.tip_d, 0.5 * t.tool.dc);
+        const E: f64 = 0.2;
+        let c = r0 + E;
+        if !(s > 0.0) {
+            return Err("edge_break: size must be over 0".into());
+        }
+        if c + s >= rt {
+            out.fix = Some(format!("a chamfer mill over {:.3} mm across", 2.0 * (c + s)));
+            return Err(format!("edge_break: a {s} mm break needs the flank out to {:.3} mm; the tool's is {rt}", c + s));
+        }
+        if (z - ztop).abs() > 1e-9 {
+            return Err(format!(
+                "edge_break: at z = {z} is not the part's top ({ztop}); this phase breaks the top's edges only"
+            ));
+        }
+        let zc = z - s;
+        let mu = 1e-9;
+        // the top's outline R: the union of the flat faces at z
+        let mut tops: Option<Region> = None;
+        let mut faces: Vec<Face> = vec![];
+        for f in &part.faces {
+            if let Some(forge_cam_geom::slab::Prism::Flat { z: fz, region, .. }) = &f.prism
+                && (fz - z).abs() <= 1e-9
+            {
+                let rg = trim_region(region).ok_or_else(|| format!("edge_break: the top face {} has an open trim", f.id))?;
+                tops = Some(match tops {
+                    None => rg,
+                    Some(r) => forge_cam_geom::boolean::region_of(
+                        &forge_cam_geom::boolean::boolean(&r, &rg, forge_cam_geom::boolean::Op::Union)
+                            .map_err(|e| format!("edge_break: the top's faces: {e:?}"))?,
+                    ),
+                });
+                continue;
+            }
+            if f.bbox[2].hi <= zc + f.mu {
+                faces.push(f.clone());
+                continue;
+            }
+            // through the band: a vertical wall, kept below z − s
+            match f.surf {
+                Surf::Cyl { o, ax, .. } if ax[0] == 0.0 && ax[1] == 0.0 && ax[2].abs() == 1.0 => {
+                    // heights o.z + ax.z q
+                    let qc = (zc - o[2]) * ax[2];
+                    let below = if ax[2] > 0.0 {
+                        Ival::new(f.q.lo, f.q.hi.min(qc))
+                    } else {
+                        Ival::new(f.q.lo.max(qc), f.q.hi)
+                    };
+                    if below.lo < below.hi {
+                        faces.push(Face::new(f.surf, f.p, below, None, f.mu, f.id));
+                    }
+                }
+                Surf::Plane { o, u, v }
+                    if u[2] == 0.0 && v[0] == 0.0 && v[1] == 0.0 && v[2].abs() == 1.0 =>
+                {
+                    // vertical over a rectangle of (p, q) (q the height): kept below z − s
+                    let mut ok = true;
+                    let (mut p0, mut p1, mut q0, mut q1) =
+                        (f64::INFINITY, f64::NEG_INFINITY, f64::INFINITY, f64::NEG_INFINITY);
+                    match &f.trim {
+                        Some(tr) if tr.segs.len() == 4 => {
+                            for sg in &tr.segs {
+                                match *sg {
+                                    TSeg::Line { a, b } if a[0] == b[0] || a[1] == b[1] => {
+                                        for pt in [a, b] {
+                                            p0 = p0.min(pt[0]);
+                                            p1 = p1.max(pt[0]);
+                                            q0 = q0.min(pt[1]);
+                                            q1 = q1.max(pt[1]);
+                                        }
+                                    }
+                                    _ => ok = false,
+                                }
+                            }
+                        }
+                        _ => ok = false,
+                    }
+                    if !ok {
+                        return Err(format!(
+                            "edge_break: the wall {} through the break's band is not a rectangle; this phase breaks a top over plain walls",
+                            f.id
+                        ));
+                    }
+                    // heights o.z + v.z q
+                    let qc = (zc - o[2]) * v[2];
+                    let (q0, q1) = if v[2] > 0.0 { (q0, q1.min(qc)) } else { (q0.max(qc), q1) };
+                    if q0 < q1 {
+                        let c4 = [[p0, q0], [p1, q0], [p1, q1], [p0, q1]];
+                        let segs = (0..4).map(|k| TSeg::Line { a: c4[k], b: c4[(k + 1) % 4] }).collect();
+                        faces.push(Face::new(
+                            f.surf,
+                            Ival::new(p0 - f.mu, p1 + f.mu),
+                            Ival::new(q0 - f.mu, q1 + f.mu),
+                            Some(Trim { segs }),
+                            f.mu,
+                            f.id,
+                        ));
+                    }
+                }
+                _ => {
+                    return Err(format!(
+                        "edge_break: face {} reaches into the break's band (z {zc:.3} to {z:.3}) and is not a vertical wall; this phase breaks a top over vertical walls",
+                        f.id
+                    ));
+                }
+            }
+        }
+        let rg = tops.ok_or_else(|| format!("edge_break: the part has no flat face at z = {z}"))?;
+        // E = R ⊖ s, as many loops as R (no feature narrower than 2s)
+        let (el, _) = forge_cam_geom::offset::offset(&rg, s).map_err(|e| format!("edge_break: {e:?}"))?;
+        let el: Vec<_> = el.into_iter().filter(|l| !(l.segs.len() == 1 && matches!(l.segs[0], Seg::Line { a, b } if a == b))).collect();
+        if el.len() != rg.loops.len() {
+            out.fix = Some(format!("a break under half the top's narrowest feature (size < {s})"));
+            return Err(format!(
+                "edge_break: the top eroded by {s} has {} loops where the top has {}: a feature is narrower than the break",
+                el.len(),
+                rg.loops.len()
+            ));
+        }
+        let er = forge_cam_geom::boolean::region_of(&el);
+        let mut id = 7000u32;
+        faces.push(forge_cam::stock::flat(&er, z, mu, id));
+        id += 1;
+        // the chamfer surfaces, piece by piece of E
+        let rt2 = std::f64::consts::FRAC_1_SQRT_2;
+        let dir = |sg: &Seg, at_end: bool| -> [f64; 2] {
+            match *sg {
+                Seg::Line { a, b } => {
+                    let (dx, dy) = (b.x - a.x, b.y - a.y);
+                    let l = (dx * dx + dy * dy).sqrt();
+                    [dx / l, dy / l]
+                }
+                Seg::Arc { a, b, c, ccw } => {
+                    let p = if at_end { b } else { a };
+                    let (rx, ry) = (p.x - c.x, p.y - c.y);
+                    let l = (rx * rx + ry * ry).sqrt();
+                    if ccw { [-ry / l, rx / l] } else { [ry / l, -rx / l] }
+                }
+            }
+        };
+        let cross = |u: [f64; 2], v: [f64; 2]| u[0] * v[1] - u[1] * v[0];
+        let dotp = |u: [f64; 2], v: [f64; 2]| u[0] * v[0] + u[1] * v[1];
+        for l in &er.loops {
+            let n = l.segs.len();
+            for (i, sg) in l.segs.iter().enumerate() {
+                let prev = &l.segs[(i + n - 1) % n];
+                let next = &l.segs[(i + 1) % n];
+                // a junction: tangent (no miter), or a sharp corner between two lines
+                let junction = |p: &Seg, q: &Seg, at: Seg| -> Result<Option<[f64; 2]>, String> {
+                    let (u0, u1) = (dir(p, true), dir(q, false));
+                    if cross(u0, u1).abs() <= 1e-9 && dotp(u0, u1) > 0.0 {
+                        return Ok(None);
+                    }
+                    let pt = at.start();
+                    match (p, q) {
+                        (Seg::Line { .. }, Seg::Line { .. }) if cross(u0, u1) > 0.0 => {
+                            // outward normals (inside on the left): the corner's bisector
+                            let (n0, n1) = ([u0[1], -u0[0]], [u1[1], -u1[0]]);
+                            let k = s / (1.0 + dotp(n0, n1));
+                            Ok(Some([pt.x + k * (n0[0] + n1[0]), pt.y + k * (n0[1] + n1[1])]))
+                        }
+                        _ => Err(format!(
+                            "edge_break: the top's corner at ({:.3}, {:.3}) is sharp where an arc meets (or turns inward); this phase breaks sharp corners between lines only",
+                            pt.x, pt.y
+                        )),
+                    }
+                };
+                match *sg {
+                    Seg::Line { a: pa, b: pb } => {
+                        let u2 = dir(sg, false);
+                        let nn = [u2[1], -u2[0]];
+                        let len = ((pb.x - pa.x).powi(2) + (pb.y - pa.y).powi(2)).sqrt();
+                        let qb = s * std::f64::consts::SQRT_2;
+                        // bottom ends: moved out by s, or the corner
+                        let ca = junction(prev, sg, *sg)?;
+                        let cb = junction(sg, next, *next)?;
+                        let along = |p: [f64; 2]| (p[0] - pa.x) * u2[0] + (p[1] - pa.y) * u2[1];
+                        let pa_b = ca.map(along).unwrap_or(0.0);
+                        let pb_b = cb.map(along).unwrap_or(len);
+                        let poly = [[0.0, 0.0], [len, 0.0], [pb_b, qb], [pa_b, qb]];
+                        let segs: Vec<TSeg> = (0..4).map(|k| TSeg::Line { a: poly[k], b: poly[(k + 1) % 4] }).collect();
+                        // o + p u + q v: u along the piece, v down the 45° slope outward; the
+                        // quadrilateral runs anticlockwise in (p, q) when u × v points out of the
+                        // part (up and out)
+                        faces.push(Face::new(
+                            Surf::Plane {
+                                o: [pa.x, pa.y, z],
+                                u: [u2[0], u2[1], 0.0],
+                                v: [nn[0] * rt2, nn[1] * rt2, -rt2],
+                            },
+                            Ival::new(pa_b.min(0.0) - mu, pb_b.max(len) + mu),
+                            Ival::new(-mu, qb + mu),
+                            Some(Trim { segs }),
+                            mu,
+                            id,
+                        ));
+                        id += 1;
+                    }
+                    Seg::Arc { a: pa, b: pb, c: cc, ccw } => {
+                        junction(prev, sg, *sg)?;
+                        junction(sg, next, *next)?;
+                        let r1 = ((pa.x - cc.x).powi(2) + (pa.y - cc.y).powi(2)).sqrt();
+                        let full = pa == pb;
+                        // pieces of at most a quarter turn
+                        let t0 = forge_math::dmath::atan2(pa.y - cc.y, pa.x - cc.x);
+                        let mut t1 = if full {
+                            t0 + if ccw { std::f64::consts::TAU } else { -std::f64::consts::TAU }
+                        } else {
+                            forge_math::dmath::atan2(pb.y - cc.y, pb.x - cc.x)
+                        };
+                        if !full {
+                            if ccw {
+                                while t1 <= t0 {
+                                    t1 += std::f64::consts::TAU;
+                                }
+                            } else {
+                                while t1 >= t0 {
+                                    t1 -= std::f64::consts::TAU;
+                                }
+                            }
+                        }
+                        let m = (((t1 - t0).abs() / (0.5 * std::f64::consts::PI)).ceil() as usize).max(1);
+                        for k in 0..m {
+                            let (u0, u1) = (t0 + (t1 - t0) * k as f64 / m as f64, t0 + (t1 - t0) * (k + 1) as f64 / m as f64);
+                            let um = 0.5 * (u0 + u1);
+                            let hh = 0.5 * (u1 - u0).abs();
+                            let (sm, cm) = forge_math::dmath::sin_cos(um);
+                            // tan of a quarter of the sweep, widened a little (a superset)
+                            let th = forge_math::dmath::sin(0.5 * hh) / forge_math::dmath::cos(0.5 * hh) * (1.0 + 1e-12);
+                            // ccw (the centre inside): the radius grows going down; cw shrinks
+                            let kk = if ccw { 1.0 } else { -1.0 };
+                            faces.push(Face::new(
+                                Surf::Cone {
+                                    o: [cc.x, cc.y, z],
+                                    x: [cm, sm, 0.0],
+                                    y: [-sm, cm, 0.0],
+                                    ax: [0.0, 0.0, -1.0],
+                                    r0: r1,
+                                    k: kk,
+                                },
+                                Ival::new(-th, th),
+                                Ival::new(0.0, s),
+                                None,
+                                mu,
+                                id,
+                            ));
+                            id += 1;
+                        }
+                    }
+                }
+            }
+        }
+        out.target = Some(faces);
+        out.removals.push(format!(
+            "edge_break {s} x 45° of the top at z {z:.3}: the band within {s} of its edges, from z {zc:.3} up, below the 45° surface"
+        ));
+        // the path: the axis on R ⊕ c, the tip at z − s − e
+        let (pl, _) = forge_cam_geom::offset::offset(&rg, -c).map_err(|e| format!("edge_break: {e:?}"))?;
+        let np = pl.iter().filter(|l| !(l.segs.len() == 1 && matches!(l.segs[0], Seg::Line { a, b } if a == b))).count();
+        if np != rg.loops.len() {
+            out.fix = Some(format!("a chamfer mill with a smaller tip (its axis runs {c:.3} mm off the edge)"));
+            return Err(format!(
+                "edge_break: the tool's axis path R ⊕ {c:.3} has {np} loops where the top has {}: a hole is too small for the tool",
+                rg.loops.len()
+            ));
+        }
+        let zt = zc - E;
+        ops::contour(&rg, t, ti, h, zt, zt, 1.0, c - rt, true, feed)
+            .map(|p| vec![p])
+            .map_err(|e| format!("{e:?}"))
+    }
+
     fn feeds_for(&self, su: usize, t: &ToolUse, ae: f64, ap: f64) -> Option<feeds::Feeds> {
         let g = self.lib.group(&self.parts[self.setups[su].part].group)?;
         let m = self.lib.machine(&self.setups[su].machine).ok()?;
@@ -1479,6 +1784,7 @@ impl Cam {
                 "clear" => "clear",
                 "engrave" => "engrave",
                 "thread_mill" => "thread_mill",
+                "edge_break" => "edge_break",
                 _ => "drill",
             },
             setup: su,
@@ -1535,6 +1841,7 @@ impl Cam {
                 match kind {
                     "engrave" => self.engrave(su, a, t, ti, h, (vf, vp), step, &mut voids),
                     "thread_mill" => self.thread_mill(su, a, t, ti, h, (vf, vp), &mut out, &mut voids),
+                    "edge_break" => self.edge_break(su, a, t, ti, h, (vf, vp), &mut out),
                     "facing" => {
                         let z = get_num(a, "to", Some(part.bbox.1[2]))?;
                         let p = ops::facing(&s.stock, t, ti, h, s.stock.max[2], z, step, (vf, vp));
