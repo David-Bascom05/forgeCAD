@@ -1,4 +1,4 @@
-use crate::rebuild::{RebuildError, rebuild_some};
+use crate::rebuild::{RebuildError, rebuild_some_reach};
 use crate::selfx::crossing;
 use crate::shell::offset;
 use forge_geom::{Cone, Curve, CurveGeom, Cylinder, Line, Plane, Surface, SurfaceGeom};
@@ -279,7 +279,8 @@ pub fn thicken(body: &Body, faces: &[Name], lo: f64, hi: f64, feature: u64) -> R
     solve_v.iter().for_each(|v| verts[v.index()] = true);
     let mut edges = vec![false; out.edges.len()];
     solve_e.iter().for_each(|e| edges[e.index()] = true);
-    rebuild_some(&mut out, &verts, &edges).map_err(ThickenError::Rebuild)?;
+    // a skin's edges lie as far from the base's as the skin is offset
+    rebuild_some_reach(&mut out, &verts, &edges, lo.abs().max(hi.abs())).map_err(ThickenError::Rebuild)?;
     // a ring's outer loop first: the one running counter-clockwise round its outward normal
     for f in rings {
         let face = out.face(f);

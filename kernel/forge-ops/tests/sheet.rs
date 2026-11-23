@@ -382,10 +382,21 @@ mod thickened {
         let t = 0.5;
         let v = solid(&thicken(&s, &faces(&s), -t / 2.0, t / 2.0, 2).unwrap());
         assert!((v - 5.0 * t * len).abs() < 1e-7 * v, "{v} {}", 5.0 * t * len);
-        // one side: still valid, and between the two (the curve bends both ways)
-        let out = solid(&thicken(&s, &faces(&s), 0.0, t, 2).unwrap());
-        let inn = solid(&thicken(&s, &faces(&s), -t, 0.0, 2).unwrap());
-        assert!((out + inn - 2.0 * 5.0 * t * len).abs() < 1e-7 * v, "{out} {inn}");
+        // one side, each way: the two together are twice the wall both ways (the curvature terms
+        // cancel), up to a wall nearly as thick as the curve's tightest radius (3.12)
+        for t in [t, 1.5, 3.0] {
+            let out = solid(&thicken(&s, &faces(&s), 0.0, t, 2).unwrap());
+            let inn = solid(&thicken(&s, &faces(&s), -t, 0.0, 2).unwrap());
+            assert!(
+                (out + inn - 2.0 * 5.0 * t * len).abs() < 1e-7 * out,
+                "{t}: {out} {inn}"
+            );
+        }
+        // past it, the inside's offset would turn back on itself
+        assert!(matches!(
+            thicken(&s, &faces(&s), -3.2, 0.0, 2),
+            Err(forge_ops::ThickenError::Collapses { .. })
+        ));
     }
 
     #[test]
