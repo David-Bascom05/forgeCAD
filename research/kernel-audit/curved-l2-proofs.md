@@ -471,3 +471,37 @@ So on this path:
 **What stays unproven in Lean:** the check above, and the executable `norm`, `mul3` and `deriv3`
 that build the gradients and the cross products. A wrong derivative could accept a bad box. The
 signs of those polynomials are taken with the proven `Poly3.boxSign`.
+
+## 6. Completeness of root finding
+
+Several decisions need every root of a polynomial, not only sound ones. A root that is missed
+makes them wrong, not undecided. dol-curved found that `realRoots` dropped an interval still
+being split when its fuel ran out. The contacts also found the pencil's rational roots in
+floating point: float roots, then the convergents of their continued fractions.
+
+- **`realRoots` now returns `none`** unless its cover is complete. An interval left at the fuel
+  limit, or still on the stack at the step budget, gives `none`. Every interval of `[−B, B]`
+  must be cleared by Descartes' rule (`noPosRoot`, proven) or isolated (`Iso.ok`). Above degree
+  2 it works on the square-free part, whose roots are the same, so double roots no longer
+  exhaust the fuel.
+- **`rationalRoots`** gives every rational root of `p`, or `none`.
+  - Clear `p`'s denominators. A rational root `u/v` in lowest terms then has `v | L`, the
+    cleared leading coefficient.
+  - Two distinct rationals with denominators dividing `L` differ by at least `1/L²`.
+  - Each isolating interval is halved (exact sign bisection) below width `1/L²`. It then holds
+    at most one such rational. That candidate is its simplest rational, the one of least
+    denominator, and it is tested exactly.
+
+The decisions that need completeness, and what an incomplete cover now gives:
+
+| decision | needs | incomplete gives |
+|---|---|---|
+| `contacts`: the pencil's rational roots `t` | every rational root of `det(A_i + tA_j)` | an open contact, so ambiguous (its exclusion `⟨i,+,i,−⟩` excludes nothing) |
+| contact line subdivision (Theorem 2.5) | every root of the other quadrics, `S(w,w)` and `S(D,w)` along the line | the contact undecided |
+| isolated contact points on the pencil's null line | every root of `q_i` there | the contact undecided |
+| `edgeTouches`: the plane pencil's rational roots | every rational root | an undecided note |
+| conic contacts, triple curves | one rational point | fewer points, so undecided (never wrong) |
+| polynomial path: constant signs on a touch circle | no real root (`noRealRoot`, complete by construction) | the touch undecided |
+
+The volume estimate's `froots` and `nearTouch`'s float roots stay heuristic. They feed only the
+estimate and near-decision notes, as documented.
