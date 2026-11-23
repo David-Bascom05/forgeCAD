@@ -187,6 +187,10 @@ pub struct Options {
     pub cut: Vec<String>,
     /// Mesh paths as `package://NAME/meshes/..`; None: relative `meshes/..`.
     pub package: Option<String>,
+    /// The root link: the group of this source instance (default: the grounded group).
+    pub root: Option<String>,
+    /// Joints made fixed at these values (forge units, the kind's freedoms in order).
+    pub freeze: Vec<(String, Vec<f64>)>,
 }
 
 impl Default for Options {
@@ -203,6 +207,8 @@ impl Default for Options {
             travel: None,
             cut: vec![],
             package: None,
+            root: None,
+            freeze: vec![],
         }
     }
 }
@@ -292,6 +298,25 @@ pub enum UrdfError {
     },
     Mass(String),
     Mesh(String),
+    /// A robot document's statement that cannot apply.
+    Robot(String),
+    /// Overrides whose recorded source value (`*_was`) the source no longer has: each needs a
+    /// choice (keep, reset), none is applied or dropped silently.
+    Conflicts(Vec<Conflict>),
+}
+
+/// An override against a source value that has changed.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Conflict {
+    /// The robot document's line.
+    pub line: usize,
+    /// The statement (`joint(elbow)`) and the field (`limit`).
+    pub what: String,
+    pub field: String,
+    /// The source's value when the override was made, now, and the override's.
+    pub was: String,
+    pub now: String,
+    pub set: String,
 }
 
 impl UrdfError {
@@ -309,12 +334,16 @@ impl UrdfError {
             UrdfError::Unresolved { .. } => "Unresolved",
             UrdfError::Mass(_) => "Mass",
             UrdfError::Mesh(_) => "Mesh",
+            UrdfError::Robot(_) => "Robot",
+            UrdfError::Conflicts(_) => "Conflicts",
         }
     }
 
     pub fn text(&self) -> String {
         match self {
-            UrdfError::NotBuilt(m) | UrdfError::Mass(m) | UrdfError::Mesh(m) => m.clone(),
+            UrdfError::NotBuilt(m) | UrdfError::Mass(m) | UrdfError::Mesh(m) | UrdfError::Robot(m) => {
+                m.clone()
+            }
             UrdfError::NoMaterial(s) => format!(
                 "no material on {}: a link's mass needs one (properties(material: ..)); no density is assumed",
                 s.join(", ")
@@ -339,6 +368,16 @@ impl UrdfError {
             ),
             UrdfError::Relation { id, why } => format!("relation {id}: {why}"),
             UrdfError::NoSuchJoint(j) => format!("cut {j}: the assembly has no joint or constraint {j}"),
+            UrdfError::Conflicts(cs) => cs
+                .iter()
+                .map(|c| {
+                    format!(
+                        "line {}: {}'s {} in the source went from {} to {}; the robot overrides it to {}",
+                        c.line, c.what, c.field, c.was, c.now, c.set
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join("; "),
             UrdfError::Unresolved { joint } => {
                 format!("joint {joint}: an end is not placed (its anchor did not resolve)")
             }
@@ -351,6 +390,15 @@ impl UrdfError {
             UrdfError::ClosedLoop { joints } => joints.iter().map(|j| format!("cut {j}")).collect(),
             UrdfError::LooseConstraint { id, .. } => vec![format!("cut {id}")],
             UrdfError::UnlimitedTranslation { .. } => vec!["travel MM".into()],
+            UrdfError::Conflicts(cs) => cs
+                .iter()
+                .flat_map(|c| {
+                    [
+                        format!("line {}: keep ({}_was: {})", c.line, c.field, c.now),
+                        format!("line {}: reset ({} back to the source's)", c.line, c.field),
+                    ]
+                })
+                .collect(),
             UrdfError::MissingLimits { joints } => {
                 let mut f: Vec<String> = joints
                     .iter()
@@ -432,6 +480,10 @@ pub struct Exported {
     pub residual: f64,
     /// Each mesh closed and manifold.
     pub watertight: bool,
+    /// A robot document's overrides as applied: (line, statement, field, the source's value,
+    /// the override's), as the document writes them; the source's is empty where the field has
+    /// none to link to (effort, a robot-made geometry).
+    pub overrides: Vec<(usize, String, String, String, String)>,
 }
 
 impl Exported {
@@ -506,6 +558,23 @@ impl Exported {
             ("warnings", strs(&self.warnings)),
             ("residual", Json::Num(self.residual)),
             ("watertight", self.watertight.into()),
+            (
+                "overrides",
+                Json::Arr(
+                    self.overrides
+                        .iter()
+                        .map(|(line, what, field, linked, set)| {
+                            Json::obj(vec![
+                                ("line", (*line).into()),
+                                ("what", what.as_str().into()),
+                                ("field", field.as_str().into()),
+                                ("linked", linked.as_str().into()),
+                                ("set", set.as_str().into()),
+                            ])
+                        })
+                        .collect(),
+                ),
+            ),
         ])
     }
 
@@ -710,6 +779,8 @@ struct Wj {
     limit: Option<(f64, f64)>,
     position: Vec<f64>,
     mimic: Option<(String, f64, f64)>,
+    /// (damping, friction).
+    dynamics: Option<(f64, f64)>,
 }
 
 /// One URDF link to write.
@@ -717,18 +788,62 @@ struct Wl {
     name: String,
     bodies: Vec<String>,
     visuals: Vec<Visual>,
+    collisions: Vec<Visual>,
+    /// The solids its mass is composed of (an assembly's); empty for a part, whose `inertial`
+    /// is given whole.
+    pieces: Vec<Own>,
     inertial: Option<Inertial>,
+    /// `inertial` is final: a part's, or a robot document's override.
+    inertial_set: bool,
     dummy: bool,
 }
 
+/// What a visual or collision element is (mm).
+#[derive(Clone, Debug, PartialEq)]
+enum Geo {
+    Mesh(String),
+    Box([f64; 3]),
+    Cylinder {
+        r: f64,
+        len: f64,
+    },
+    Sphere(f64),
+    /// The link's convex hull, made when the model is finished.
+    Hull,
+}
+
+#[derive(Clone)]
 struct Visual {
     name: String,
-    mesh: String,
+    /// The source body (top-level instance) it draws; empty for one a robot document added.
+    body: String,
+    geo: Geo,
     /// In the link frame.
     at: Frame,
     material: Option<(String, [u8; 3])>,
 }
 
+/// A solid of a link, owned so a link can be merged into another.
+#[derive(Clone)]
+struct Own {
+    id: String,
+    body: String,
+    material: Option<forge_material::Material>,
+    mass: forge_topo::mass::MassProps,
+    at: Frame,
+}
+
+/// The robot before it is written: links, joints, each mesh's points (mm, its own frame) for
+/// hulls, and transmissions.
+struct Model {
+    links: Vec<Wl>,
+    joints: Vec<Wj>,
+    points: BTreeMap<String, Vec<Point3>>,
+    transmissions: Vec<(String, String, f64, Option<String>)>,
+    root: String,
+}
+
+#[derive(Clone, Debug, PartialEq)]
 struct Inertial {
     mass: f64,
     /// m, link frame.
@@ -773,8 +888,8 @@ fn inertial(pieces: &[Piece]) -> Option<Inertial> {
     Some(Inertial {
         mass,
         com: c.map(|x| x / 1000.0),
-        inertia: i.map(|r| r.map(|x| x * 1e-6)),
-        err: finite.then_some([em, ec / 1000.0, ei * 1e-6]),
+        inertia: i.map(|r| r.map(|x| x / 1e6)),
+        err: finite.then_some([em, ec / 1000.0, ei / 1e6]),
     })
 }
 
@@ -796,6 +911,22 @@ fn mesh_uri(o: &Options, file: &str) -> String {
 /// The run as URDF. An assembly's run must have been made with `crate::Options::render` and
 /// `kin` (its parts' bodies, its structure).
 pub fn export(run: &Run, name: &str, dir: Option<&Path>, o: &Options) -> Result<Exported, UrdfError> {
+    export_robot(run, name, dir, o, None)
+}
+
+/// The run as URDF with a robot document's overrides on top (`crate::robot`).
+pub fn export_robot(
+    run: &Run,
+    name: &str,
+    dir: Option<&Path>,
+    o: &Options,
+    doc: Option<&crate::robot::Robot>,
+) -> Result<Exported, UrdfError> {
+    let mut o = o.clone();
+    if let Some(r) = doc {
+        r.shape(&mut o);
+    }
+    let o = &o;
     if let Some(e) = run.errors.first() {
         return Err(UrdfError::NotBuilt(format!(
             "the {} did not build: {}: {}",
@@ -817,11 +948,24 @@ pub fn export(run: &Run, name: &str, dir: Option<&Path>, o: &Options) -> Result<
         warnings: vec![],
         residual: 0.0,
         watertight: true,
+        overrides: vec![],
     };
-    let (links, joints) = match &run.asm {
+    let mut model = match &run.asm {
         Some(asm) => assembly(run, asm, o, &mut ex)?,
-        None => (vec![part(run, name, dir, o, &mut ex)?], vec![]),
+        None => part(run, name, dir, o, &mut ex)?,
     };
+    let mut o = o.clone();
+    if let Some(r) = doc {
+        apply(&mut model, r, &mut o, &mut ex)?;
+    }
+    let o = &o;
+    finish(&mut model, &mut ex)?;
+    let Model {
+        links,
+        joints,
+        transmissions,
+        ..
+    } = model;
     let missing: Vec<String> = joints
         .iter()
         .filter(|j| has_limit(j) && (actuation(o, j).0.is_none() || actuation(o, j).1.is_none()))
@@ -836,7 +980,7 @@ pub fn export(run: &Run, name: &str, dir: Option<&Path>, o: &Options) -> Result<
             missing.join(" ")
         ));
     }
-    ex.urdf = write(&robot, &links, &joints, o, &ex);
+    ex.urdf = write(&robot, &links, &joints, &transmissions, o, &ex);
     let mut members: Vec<(&str, &[u8])> = vec![];
     let urdf_name = format!("{robot}.urdf");
     members.push((&urdf_name, ex.urdf.as_bytes()));
@@ -872,7 +1016,13 @@ pub fn export(run: &Run, name: &str, dir: Option<&Path>, o: &Options) -> Result<
 }
 
 /// A part: one link at its origin.
-fn part(run: &Run, name: &str, dir: Option<&Path>, o: &Options, ex: &mut Exported) -> Result<Wl, UrdfError> {
+fn part(
+    run: &Run,
+    name: &str,
+    dir: Option<&Path>,
+    o: &Options,
+    ex: &mut Exported,
+) -> Result<Model, UrdfError> {
     let body = run
         .body
         .as_ref()
@@ -898,7 +1048,7 @@ fn part(run: &Run, name: &str, dir: Option<&Path>, o: &Options, ex: &mut Exporte
             let k = f64::from_bits(d) * 1e-9;
             forge_topo::mass::mass(body)
                 .ok()
-                .map(|m| [k * m.err[0], m.err[2] / 1000.0, k * m.err[3] * 1e-6])
+                .map(|m| [k * m.err[0], m.err[2] / 1000.0, k * m.err[3] / 1e6])
         }
         _ => {
             ex.notes
@@ -911,7 +1061,9 @@ fn part(run: &Run, name: &str, dir: Option<&Path>, o: &Options, ex: &mut Exporte
     mo.angle = o.angle;
     let scene = crate::meshfile::scene(run, name, dir, &mo).map_err(UrdfError::Mesh)?;
     let mesh_name = format!("meshes/{}.stl", ident(name));
-    let (bytes, ok) = stl(scene.flatten().objects, name);
+    let objects = scene.flatten().objects;
+    let pts: Vec<Point3> = objects.iter().flat_map(|o| o.positions.iter().copied()).collect();
+    let (bytes, ok) = stl(objects, name);
     ex.watertight &= ok;
     ex.meshes.push((mesh_name.clone(), bytes));
     let material = phys.solids.iter().find_map(|s| s.material.clone()).map(|m| {
@@ -919,33 +1071,38 @@ fn part(run: &Run, name: &str, dir: Option<&Path>, o: &Options, ex: &mut Exporte
         let rgb = libs.find(&m).map_or([0x80; 3], |x| x.1.colour);
         (m, rgb)
     });
-    Ok(Wl {
+    let v = Visual {
         name: ident(name),
-        bodies: vec![name.to_string()],
-        visuals: vec![Visual {
+        body: name.to_string(),
+        geo: Geo::Mesh(mesh_name.clone()),
+        at: Frame::WORLD,
+        material,
+    };
+    Ok(Model {
+        root: ident(name),
+        links: vec![Wl {
             name: ident(name),
-            mesh: mesh_name,
-            at: Frame::WORLD,
-            material,
+            bodies: vec![name.to_string()],
+            collisions: vec![Visual {
+                material: None,
+                ..v.clone()
+            }],
+            visuals: vec![v],
+            pieces: vec![],
+            inertial: Some(Inertial {
+                mass,
+                com: phys.centroid.map(|x| x / 1000.0),
+                inertia: i.map(|r| r.map(|x| x / 1e6)),
+                err,
+            }),
+            inertial_set: true,
+            dummy: false,
         }],
-        inertial: Some(Inertial {
-            mass,
-            com: phys.centroid.map(|x| x / 1000.0),
-            inertia: i.map(|r| r.map(|x| x * 1e-6)),
-            err,
-        }),
-        dummy: false,
+        joints: vec![],
+        points: BTreeMap::from([(mesh_name, pts)]),
+        transmissions: vec![],
     })
 }
-
-/// A solid in a link: its occurrence, material, unit-density mass properties, and where it is
-/// in the link's frame.
-type Held<'a> = (
-    String,
-    Option<&'a forge_material::Material>,
-    &'a forge_topo::mass::MassProps,
-    Frame,
-);
 
 /// Union-find over a few bodies.
 fn find(p: &mut [usize], mut i: usize) -> usize {
@@ -957,12 +1114,7 @@ fn find(p: &mut [usize], mut i: usize) -> usize {
 }
 
 #[allow(clippy::too_many_lines)]
-fn assembly(
-    run: &Run,
-    asm: &crate::asm::AsmOut,
-    o: &Options,
-    ex: &mut Exported,
-) -> Result<(Vec<Wl>, Vec<Wj>), UrdfError> {
+fn assembly(run: &Run, asm: &crate::asm::AsmOut, o: &Options, ex: &mut Exported) -> Result<Model, UrdfError> {
     let kin = asm.kin.as_ref().ok_or_else(|| {
         UrdfError::NotBuilt("the assembly was run without its structure (Options::kin)".into())
     })?;
@@ -1018,8 +1170,18 @@ fn assembly(
         groups[g].push(i);
         *of = g;
     }
-    let root = first_ground.map_or(0, |g| group_of[g]);
-    if first_ground.is_none() {
+    let root = match &o.root {
+        Some(r) => {
+            let b = kin
+                .bodies
+                .iter()
+                .position(|b| b.name == *r)
+                .ok_or_else(|| UrdfError::Robot(format!("root({r}): the source has no instance {r}")))?;
+            group_of[b]
+        }
+        None => first_ground.map_or(0, |g| group_of[g]),
+    };
+    if first_ground.is_none() && o.root.is_none() {
         ex.notes.push(format!(
             "nothing is grounded: the root link is {}'s, the first instance's",
             kin.bodies[0].name
@@ -1093,15 +1255,18 @@ fn assembly(
         .collect();
     let mut st = State {
         frame: vec![None; groups.len()],
+        anchor: vec![None; groups.len()],
         order: vec![root],
         wj: vec![],
         dummies: vec![],
         carries: BTreeMap::new(),
         native_planar: BTreeSet::new(),
+        frozen: BTreeSet::new(),
         lnames,
         jnames,
     };
     st.frame[root] = Some(Frame::WORLD);
+    st.anchor[root] = Some(Frame::WORLD);
     let size = {
         let o: Vec<Point3> = kin.bodies.iter().map(|b| b.pose.origin).collect();
         let c = o.iter().fold(Vec3::ZERO, |s, p| s + p.to_vec()) / o.len() as f64;
@@ -1123,6 +1288,7 @@ fn assembly(
         }
         let f = kin.bodies[groups[g][0]].pose;
         st.frame[g] = Some(f);
+        st.anchor[g] = Some(f);
         st.order.push(g);
         ex.notes.push(format!(
             "{} is joined to nothing that reaches the root: a floating joint",
@@ -1140,16 +1306,18 @@ fn assembly(
             limit: None,
             position: vec![],
             mimic: None,
+            dynamics: None,
         });
         tree_cx.grow_from(g, &mut st, ex)?;
     }
     let State {
-        frame,
+        anchor,
         order,
         mut wj,
         dummies,
         carries,
         native_planar,
+        frozen,
         ..
     } = st;
     // relations: the follower's URDF joint mimics the leader's
@@ -1164,6 +1332,12 @@ fn assembly(
                 return Err(UrdfError::Relation {
                     id: r.id.clone(),
                     why: format!("its joint {} is cut", v.0),
+                });
+            }
+            if frozen.contains(&v.0) {
+                return Err(UrdfError::Relation {
+                    id: r.id.clone(),
+                    why: format!("its joint {} is frozen", v.0),
                 });
             }
             if native_planar.contains(&v.0) {
@@ -1214,7 +1388,8 @@ fn assembly(
     let mut mesh_of: Vec<Option<String>> = vec![None; asm.parts.len()];
     let mut mnames = Names::default();
     let mut visuals: Vec<Vec<Visual>> = (0..groups.len()).map(|_| vec![]).collect();
-    let mut pieces: Vec<Vec<Held>> = (0..groups.len()).map(|_| vec![]).collect();
+    let mut pieces: Vec<Vec<Own>> = (0..groups.len()).map(|_| vec![]).collect();
+    let mut points: BTreeMap<String, Vec<Point3>> = BTreeMap::new();
     let mut missing = vec![];
     let mut vnames = Names::default();
     for (k, (path, doc, pose)) in asm.occurrences.iter().enumerate() {
@@ -1226,7 +1401,7 @@ fn assembly(
             continue;
         }
         let g = group_of[*b];
-        let lf = frame[g].expect("every group placed");
+        let lf = anchor[g].expect("every group placed");
         let at = lf.inverse().compose(pose);
         let sum = asm.part_docs.get(doc);
         if let Some(Some(p)) = asm.occ_part.get(k) {
@@ -1244,6 +1419,10 @@ fn assembly(
                         UrdfError::Mesh(format!("meshing {stem} failed: {}", crate::error::words(&e)))
                     })?;
                     let f = format!("meshes/{}.stl", mnames.take(&stem));
+                    points.insert(
+                        f.clone(),
+                        objects.iter().flat_map(|o| o.positions.iter().copied()).collect(),
+                    );
                     let (bytes, ok) = stl(objects, &stem);
                     ex.watertight &= ok;
                     ex.meshes.push((f.clone(), bytes));
@@ -1259,7 +1438,8 @@ fn assembly(
             });
             visuals[g].push(Visual {
                 name: vnames.take(path),
-                mesh: file,
+                body: kin.bodies[*b].name.clone(),
+                geo: Geo::Mesh(file),
                 at,
                 material,
             });
@@ -1273,7 +1453,13 @@ fn assembly(
             if s.1.is_none() {
                 missing.push(format!("{path} ({})", s.0));
             }
-            pieces[g].push((path.clone(), s.1.as_ref(), m, at));
+            pieces[g].push(Own {
+                id: path.clone(),
+                body: kin.bodies[*b].name.clone(),
+                material: s.1.clone(),
+                mass: m.clone(),
+                at,
+            });
         }
     }
     if !missing.is_empty() {
@@ -1282,27 +1468,21 @@ fn assembly(
     let _ = run;
     let mut links = vec![];
     for &g in &order {
-        let ps: Vec<Piece> = pieces[g]
-            .iter()
-            .map(|(id, mat, m, at)| Piece {
-                id: id.clone(),
-                material: *mat,
-                mass: m,
-                at: *at,
-            })
-            .collect();
-        let inertial = inertial(&ps);
-        if inertial.is_none() {
-            ex.notes.push(format!(
-                "link {} has no solids (references only): massless",
-                gname[g]
-            ));
-        }
+        let v = std::mem::take(&mut visuals[g]);
         links.push(Wl {
             name: gname[g].clone(),
             bodies: groups[g].iter().map(|&b| kin.bodies[b].name.clone()).collect(),
-            visuals: std::mem::take(&mut visuals[g]),
-            inertial,
+            collisions: v
+                .iter()
+                .map(|x| Visual {
+                    material: None,
+                    ..x.clone()
+                })
+                .collect(),
+            visuals: v,
+            pieces: std::mem::take(&mut pieces[g]),
+            inertial: None,
+            inertial_set: false,
             dummy: false,
         });
     }
@@ -1313,18 +1493,29 @@ fn assembly(
                 .into(),
         );
     }
-    Ok((links, wj))
+    Ok(Model {
+        root: gname[root].clone(),
+        links,
+        joints: wj,
+        points,
+        transmissions: vec![],
+    })
 }
 
 /// What the tree walk builds.
 struct State {
+    /// Each group's link frame as the URDF places it at the export pose.
     frame: Vec<Option<Frame>>,
+    /// Each group's link frame where the solve has it: its parts are drawn from it. The same as
+    /// `frame` (to the solve's residual) unless a joint above it is frozen at another value.
+    anchor: Vec<Option<Frame>>,
     order: Vec<usize>,
     wj: Vec<Wj>,
     dummies: Vec<Wl>,
     /// The URDF joint carrying each forge (joint, freedom), and its value's unit (1 or 1e-3).
     carries: BTreeMap<(String, Freedom), (String, f64)>,
     native_planar: BTreeSet<String>,
+    frozen: BTreeSet<String>,
     lnames: Names,
     jnames: Names,
 }
@@ -1388,8 +1579,46 @@ impl Tree<'_> {
         }
         let value = |f: Freedom| values.iter().find(|v| v.0 == f).map_or(0.0, |v| v.1);
         let pf = st.frame[from].expect("placed");
+        let pa = st.anchor[from].expect("placed");
         let (jo_world, other) = if forward { (bw, aw) } else { (aw, bw) };
         let mut cur = jo_world;
+        if let Some(fv) = o.freeze.iter().find(|f| f.0 == l.id).map(|f| &f.1) {
+            // frozen: fixed at the values given, the child's subtree moved with it
+            let fs = steps(kind);
+            if fv.len() != fs.len() {
+                return Err(UrdfError::Robot(format!(
+                    "freeze({}): {} takes {} value(s) ({}), not {}",
+                    l.id,
+                    kind.name(),
+                    fs.len(),
+                    fs.iter().map(|s| s.freedom.name()).collect::<Vec<_>>().join(" "),
+                    fv.len()
+                )));
+            }
+            let m = fs.iter().zip(fv).fold(Frame::WORLD, |f, (s, v)| {
+                f.compose(&motion(s.axis, s.prismatic, *v))
+            });
+            let m = if forward { m } else { m.inverse() };
+            let origin = pa.inverse().compose(&jo_world).compose(&m);
+            let name = st.jnames.take(&l.id);
+            st.wj.push(Wj {
+                name,
+                kind: "fixed",
+                of: l.id.clone(),
+                parent: gname[from].clone(),
+                child: gname[to].clone(),
+                origin,
+                axis: None,
+                limit: None,
+                position: vec![],
+                mimic: None,
+                dynamics: None,
+            });
+            st.frozen.insert(l.id.clone());
+            st.frame[to] = Some(pf.compose(&origin));
+            st.anchor[to] = Some(other);
+            return Ok(());
+        }
         if kind == JointKind::Planar && l.limits.is_empty() {
             let m = steps(kind).iter().fold(Frame::WORLD, |f, s| {
                 f.compose(&motion(s.axis, s.prismatic, value(s.freedom)))
@@ -1404,7 +1633,7 @@ impl Tree<'_> {
                 of: l.id.clone(),
                 parent: gname[from].clone(),
                 child: gname[to].clone(),
-                origin: pf.inverse().compose(&jo_world),
+                origin: pa.inverse().compose(&jo_world),
                 axis: Some([0.0, 0.0, 1.0]),
                 limit: None,
                 position: vec![
@@ -1413,6 +1642,7 @@ impl Tree<'_> {
                     dmath::atan2(m.x().get().y, m.x().get().x),
                 ],
                 mimic: None,
+                dynamics: None,
             });
         } else {
             let mut chain = steps(kind);
@@ -1433,7 +1663,7 @@ impl Tree<'_> {
                     st.lnames.take(&format!("{}__{}", l.id, i + 1))
                 };
                 let jorigin = if i == 0 {
-                    pf.inverse().compose(&jo_world)
+                    pa.inverse().compose(&jo_world)
                 } else {
                     Frame::WORLD
                 };
@@ -1483,6 +1713,7 @@ impl Tree<'_> {
                     limit,
                     position: vec![v * unit],
                     mimic: None,
+                    dynamics: None,
                 });
                 if !last {
                     // the massless link between, where the chain has got to
@@ -1490,7 +1721,10 @@ impl Tree<'_> {
                         name: child.clone(),
                         bodies: vec![],
                         visuals: vec![],
+                        collisions: vec![],
+                        pieces: vec![],
                         inertial: None,
+                        inertial_set: true,
                         dummy: true,
                     });
                     parent = child;
@@ -1498,7 +1732,8 @@ impl Tree<'_> {
             }
         }
         ex.residual = ex.residual.max(frame_gap(&cur, &other, self.size));
-        st.frame[to] = Some(cur);
+        st.frame[to] = Some(pf.compose(&pa.inverse()).compose(&cur));
+        st.anchor[to] = Some(other);
         Ok(())
     }
 }
@@ -1534,7 +1769,15 @@ fn actuation(o: &Options, j: &Wj) -> (Option<f64>, Option<f64>) {
 
 // ---- the XML ----------------------------------------------------------------------------------
 
-fn write(robot: &str, links: &[Wl], joints: &[Wj], o: &Options, ex: &Exported) -> String {
+#[allow(clippy::type_complexity)]
+fn write(
+    robot: &str,
+    links: &[Wl],
+    joints: &[Wj],
+    transmissions: &[(String, String, f64, Option<String>)],
+    o: &Options,
+    ex: &Exported,
+) -> String {
     let mut s = String::new();
     let _ = writeln!(s, "<?xml version=\"1.0\"?>");
     let _ = writeln!(
@@ -1574,28 +1817,36 @@ fn write(robot: &str, links: &[Wl], joints: &[Wj], o: &Options, ex: &Exported) -
             );
             let _ = writeln!(s, "    </inertial>");
         }
-        for v in &l.visuals {
-            let mesh = format!(
-                "<mesh filename=\"{}\" scale=\"0.001 0.001 0.001\"/>",
-                attr(&mesh_uri(o, &v.mesh))
-            );
-            let _ = writeln!(s, "    <visual name=\"{}\">", attr(&v.name));
-            let _ = writeln!(s, "      {}", origin(&v.at));
-            let _ = writeln!(s, "      <geometry>{mesh}</geometry>");
-            if let Some((name, rgb)) = &v.material {
-                let c = rgb.map(|x| x as f64 / 255.0);
-                let _ = writeln!(
-                    s,
-                    "      <material name=\"{}\"><color rgba=\"{} 1\"/></material>",
-                    attr(&ident(name)),
-                    nums(&c)
-                );
+        for (tag, list) in [("visual", &l.visuals), ("collision", &l.collisions)] {
+            for v in list {
+                let _ = writeln!(s, "    <{tag} name=\"{}\">", attr(&v.name));
+                let _ = writeln!(s, "      {}", origin(&v.at));
+                let g = match &v.geo {
+                    Geo::Mesh(m) => format!(
+                        "<mesh filename=\"{}\" scale=\"0.001 0.001 0.001\"/>",
+                        attr(&mesh_uri(o, m))
+                    ),
+                    Geo::Box(b) => format!("<box size=\"{}\"/>", nums(&b.map(|x| x / 1000.0))),
+                    Geo::Cylinder { r, len } => format!(
+                        "<cylinder radius=\"{}\" length=\"{}\"/>",
+                        num(r / 1000.0),
+                        num(len / 1000.0)
+                    ),
+                    Geo::Sphere(r) => format!("<sphere radius=\"{}\"/>", num(r / 1000.0)),
+                    Geo::Hull => unreachable!("hulls are made in finish"),
+                };
+                let _ = writeln!(s, "      <geometry>{g}</geometry>");
+                if let (Some((name, rgb)), "visual") = (&v.material, tag) {
+                    let c = rgb.map(|x| x as f64 / 255.0);
+                    let _ = writeln!(
+                        s,
+                        "      <material name=\"{}\"><color rgba=\"{} 1\"/></material>",
+                        attr(&ident(name)),
+                        nums(&c)
+                    );
+                }
+                let _ = writeln!(s, "    </{tag}>");
             }
-            let _ = writeln!(s, "    </visual>");
-            let _ = writeln!(s, "    <collision name=\"{}\">", attr(&v.name));
-            let _ = writeln!(s, "      {}", origin(&v.at));
-            let _ = writeln!(s, "      <geometry>{mesh}</geometry>");
-            let _ = writeln!(s, "    </collision>");
         }
         let _ = writeln!(s, "  </link>");
     }
@@ -1636,6 +1887,14 @@ fn write(robot: &str, links: &[Wl], joints: &[Wj], o: &Options, ex: &Exported) -
             }
             _ => {}
         }
+        if let Some((d, f)) = j.dynamics {
+            let _ = writeln!(
+                s,
+                "    <dynamics damping=\"{}\" friction=\"{}\"/>",
+                num(d),
+                num(f)
+            );
+        }
         if let Some((leader, m, off)) = &j.mimic {
             let _ = writeln!(
                 s,
@@ -1647,8 +1906,828 @@ fn write(robot: &str, links: &[Wl], joints: &[Wj], o: &Options, ex: &Exported) -
         }
         let _ = writeln!(s, "  </joint>");
     }
+    for (joint, actuator, reduction, interface) in transmissions {
+        let _ = writeln!(s, "  <transmission name=\"{}\">", attr(&format!("{joint}_trans")));
+        let _ = writeln!(s, "    <type>transmission_interface/SimpleTransmission</type>");
+        let _ = writeln!(s, "    <joint name=\"{}\">", attr(joint));
+        if let Some(i) = interface {
+            let _ = writeln!(s, "      <hardwareInterface>{}</hardwareInterface>", attr(i));
+        }
+        let _ = writeln!(s, "    </joint>");
+        let _ = writeln!(s, "    <actuator name=\"{}\">", attr(actuator));
+        let _ = writeln!(
+            s,
+            "      <mechanicalReduction>{}</mechanicalReduction>",
+            num(*reduction)
+        );
+        let _ = writeln!(s, "    </actuator>");
+        let _ = writeln!(s, "  </transmission>");
+    }
     let _ = writeln!(s, "</robot>");
     s
+}
+
+// ---- a robot document's overrides ------------------------------------------------------------
+
+use crate::robot::{GeoSpec, Robot, Target};
+
+/// A link by a robot document's name for it: `src.X` is the link holding source instance X.
+fn link_of(m: &Model, t: &Target) -> Result<usize, UrdfError> {
+    match t {
+        Target::Source(b) => m.links.iter().position(|l| l.bodies.contains(b)).ok_or_else(|| {
+            let have: Vec<&str> = m
+                .links
+                .iter()
+                .flat_map(|l| l.bodies.iter().map(String::as_str))
+                .collect();
+            UrdfError::Robot(format!(
+                "src.{b}: the source has no instance {b} in the robot (has: {})",
+                have.join(" ")
+            ))
+        }),
+        Target::Name(n) => m.links.iter().position(|l| l.name == *n).ok_or_else(|| {
+            let have: Vec<&str> = m.links.iter().map(|l| l.name.as_str()).collect();
+            UrdfError::Robot(format!("no link {n} (links: {})", have.join(" ")))
+        }),
+    }
+}
+
+/// A joint by a robot document's name for it: `src.J` is source joint J when it is one URDF
+/// joint (a chain's are named one by one: `"J_tz"`).
+fn joint_of(m: &Model, t: &Target) -> Result<usize, UrdfError> {
+    let n = match t {
+        Target::Source(j) => {
+            let of: Vec<usize> = (0..m.joints.len()).filter(|&k| m.joints[k].of == *j).collect();
+            match of.as_slice() {
+                [k] => return Ok(*k),
+                [] => j,
+                many => {
+                    let names: Vec<&str> = many.iter().map(|&k| m.joints[k].name.as_str()).collect();
+                    return Err(UrdfError::Robot(format!(
+                        "src.{j} is several URDF joints ({}): name the one meant, as \"{}\"",
+                        names.join(" "),
+                        names[0]
+                    )));
+                }
+            }
+        }
+        Target::Name(n) => n,
+    };
+    m.joints.iter().position(|j| j.name == *n).ok_or_else(|| {
+        let have: Vec<&str> = m.joints.iter().map(|j| j.name.as_str()).collect();
+        UrdfError::Robot(format!("no joint {n} (joints: {})", have.join(" ")))
+    })
+}
+
+fn same(a: f64, b: f64) -> bool {
+    (a - b).abs() <= 1e-9 * a.abs().max(b.abs()) + 1e-12
+}
+
+fn fmt_vals(v: &[f64]) -> String {
+    fmt_in(v, false)
+}
+
+/// Values as a robot document writes them: angles in degrees (to 1e-9 of a degree).
+fn fmt_in(v: &[f64], deg: bool) -> String {
+    let t: Vec<String> = v
+        .iter()
+        .map(|x| {
+            if deg {
+                format!("{}deg", num((x.to_degrees() * 1e9).round() / 1e9))
+            } else {
+                num(*x)
+            }
+        })
+        .collect();
+    if t.len() == 1 {
+        t[0].clone()
+    } else {
+        format!("({})", t.join(", "))
+    }
+}
+
+/// One override whose recorded linked value (`was`) is no longer the source's.
+#[allow(clippy::too_many_arguments)]
+fn conflict(
+    out: &mut Vec<Conflict>,
+    line: usize,
+    what: &str,
+    field: &str,
+    was: &[f64],
+    now: &[f64],
+    set: &[f64],
+    deg: bool,
+) {
+    if was.len() == now.len() && was.iter().zip(now).all(|(a, b)| same(*a, *b)) {
+        return;
+    }
+    out.push(Conflict {
+        line,
+        what: what.to_string(),
+        field: field.to_string(),
+        was: fmt_in(was, deg),
+        now: fmt_in(now, deg),
+        set: fmt_in(set, deg),
+    });
+}
+
+/// Whether a tensor (kg m²) is one a body can have: symmetric positive definite, and its
+/// principal moments within the triangle inequality.
+fn physical(i: &[[f64; 3]; 3]) -> bool {
+    let (p, _) = forge_topo::mass::eigen(*i);
+    let tol = 1e-12 * p[2].abs();
+    p[0] > 0.0 && p[0] + p[1] >= p[2] - tol
+}
+
+#[allow(clippy::too_many_lines)]
+fn apply(m: &mut Model, r: &Robot, o: &mut Options, ex: &mut Exported) -> Result<(), UrdfError> {
+    let mut conflicts = vec![];
+    // names
+    for (t, name) in &r.renames {
+        let k = link_of(m, t)?;
+        let new = ident(name);
+        if m.links.iter().enumerate().any(|(i, l)| i != k && l.name == new) {
+            return Err(UrdfError::Robot(format!("link name {new} is taken")));
+        }
+        let old = std::mem::replace(&mut m.links[k].name, new.clone());
+        for j in &mut m.joints {
+            if j.parent == old {
+                j.parent = new.clone();
+            }
+            if j.child == old {
+                j.child = new.clone();
+            }
+        }
+        if m.root == old {
+            m.root = new;
+        }
+    }
+    // merges: across fixed joints only
+    for (into, others) in &r.merges {
+        for other in others {
+            let (a, b) = (link_of(m, into)?, link_of(m, other)?);
+            if a == b {
+                continue;
+            }
+            let (an, bn) = (m.links[a].name.clone(), m.links[b].name.clone());
+            let Some(jk) = m
+                .joints
+                .iter()
+                .position(|j| (j.parent == an && j.child == bn) || (j.parent == bn && j.child == an))
+            else {
+                return Err(UrdfError::Robot(format!(
+                    "merge({an}, {bn}): they are not joined directly; merge along the tree one joint at a time"
+                )));
+            };
+            let j = &m.joints[jk];
+            if j.kind != "fixed" {
+                let v: Vec<String> = j.position.iter().map(|x| num(*x)).collect();
+                return Err(UrdfError::Robot(format!(
+                    "merge({an}, {bn}): joint {} moves ({}); freeze it first: freeze(src.{}, at: ..) (now at {} in URDF units)",
+                    j.name,
+                    j.kind,
+                    j.of,
+                    v.join(" ")
+                )));
+            }
+            let (pn, cn, t) = (j.parent.clone(), j.child.clone(), j.origin);
+            m.joints.remove(jk);
+            let ci = m.links.iter().position(|l| l.name == cn).expect("the child");
+            let c = m.links.remove(ci);
+            if c.dummy || c.inertial_set && !c.pieces.is_empty() {
+                return Err(UrdfError::Robot(format!("merge: {cn} cannot be merged")));
+            }
+            let pi = m.links.iter().position(|l| l.name == pn).expect("the parent");
+            let p = &mut m.links[pi];
+            let mv = |v: Visual| Visual {
+                at: t.compose(&v.at),
+                ..v
+            };
+            p.visuals.extend(c.visuals.into_iter().map(mv));
+            p.collisions.extend(c.collisions.into_iter().map(mv));
+            p.pieces.extend(c.pieces.into_iter().map(|x| Own {
+                at: t.compose(&x.at),
+                ..x
+            }));
+            p.bodies.extend(c.bodies);
+            for j in m.joints.iter_mut().filter(|j| j.parent == cn) {
+                j.parent = pn.clone();
+                j.origin = t.compose(&j.origin);
+            }
+            // merged under the parent's name, unless the one named first was the child
+            if cn == an {
+                let pi = m.links.iter().position(|l| l.name == pn).expect("the parent");
+                m.links[pi].name = an.clone();
+                for j in &mut m.joints {
+                    if j.parent == pn {
+                        j.parent = an.clone();
+                    }
+                    if j.child == pn {
+                        j.child = an.clone();
+                    }
+                }
+                if m.root == pn {
+                    m.root = an.clone();
+                }
+            }
+        }
+    }
+    // drops
+    for t in &r.drops {
+        let k = link_of(m, t)?;
+        let whole = match t {
+            Target::Source(b) => m.links[k].bodies == [b.clone()],
+            Target::Name(_) => true,
+        };
+        if !whole {
+            let Target::Source(b) = t else { unreachable!() };
+            let l = &mut m.links[k];
+            l.visuals.retain(|v| v.body != *b);
+            l.collisions.retain(|v| v.body != *b);
+            l.pieces.retain(|v| v.body != *b);
+            l.bodies.retain(|x| x != b);
+            continue;
+        }
+        let name = m.links[k].name.clone();
+        if name == m.root {
+            return Err(UrdfError::Robot(format!(
+                "drop({name}): it is the root (re-root first)"
+            )));
+        }
+        let kids: Vec<&str> = m
+            .joints
+            .iter()
+            .filter(|j| j.parent == name)
+            .map(|j| j.child.as_str())
+            .collect();
+        if !kids.is_empty() {
+            return Err(UrdfError::Robot(format!(
+                "drop({name}): {} hang from it and would be left floating; drop or merge them first",
+                kids.join(" ")
+            )));
+        }
+        if let Some(jk) = m.joints.iter().position(|j| j.child == name) {
+            let jn = m.joints[jk].name.clone();
+            if m.joints
+                .iter()
+                .any(|j| j.mimic.as_ref().is_some_and(|x| x.0 == jn))
+            {
+                return Err(UrdfError::Robot(format!("drop({name}): joint {jn} is mimicked")));
+            }
+            m.joints.remove(jk);
+        }
+        m.links.remove(k);
+    }
+    // frames: URDF-only fixed links
+    for (name, on, at) in &r.frames {
+        let k = link_of(m, on)?;
+        let n = ident(name);
+        if m.links.iter().any(|l| l.name == n) {
+            return Err(UrdfError::Robot(format!("frame {n}: the name is taken")));
+        }
+        let parent = m.links[k].name.clone();
+        let jn = format!("{n}_joint");
+        if m.joints.iter().any(|j| j.name == jn) {
+            return Err(UrdfError::Robot(format!("frame {n}: joint name {jn} is taken")));
+        }
+        m.links.push(Wl {
+            name: n.clone(),
+            bodies: vec![],
+            visuals: vec![],
+            collisions: vec![],
+            pieces: vec![],
+            inertial: None,
+            inertial_set: true,
+            dummy: false,
+        });
+        m.joints.push(Wj {
+            name: jn,
+            kind: "fixed",
+            of: String::new(),
+            parent,
+            child: n,
+            origin: *at,
+            axis: None,
+            limit: None,
+            position: vec![],
+            mimic: None,
+            dynamics: None,
+        });
+    }
+    // geometry: a statement replaces the link's visuals or collisions; more for the same add
+    let mut replaced: BTreeSet<(usize, bool)> = BTreeSet::new();
+    let mut explicit_collision: BTreeSet<String> = BTreeSet::new();
+    let mut mnames = Names::default();
+    for (n, _) in &ex.meshes {
+        mnames.take(n);
+    }
+    for g in &r.geometry {
+        let k = link_of(m, &g.link)?;
+        let lname = m.links[k].name.clone();
+        let base = |geo: Geo, at: Frame| Visual {
+            name: format!("{lname}_{}", if g.collision { "collision" } else { "visual" }),
+            body: String::new(),
+            geo,
+            at,
+            material: None,
+        };
+        let new: Vec<Visual> = match &g.spec {
+            GeoSpec::Box { size, at } => vec![base(Geo::Box(*size), *at)],
+            GeoSpec::Cylinder { r, len, at } => vec![base(Geo::Cylinder { r: *r, len: *len }, *at)],
+            GeoSpec::Sphere { r, at } => vec![base(Geo::Sphere(*r), *at)],
+            GeoSpec::Capsule { r, len, at } => {
+                // URDF has no capsule: a cylinder and a sphere at each end
+                let end = |z: f64| at.compose(&Frame::WORLD.with_origin(Point3::new(0.0, 0.0, z)));
+                vec![
+                    base(Geo::Cylinder { r: *r, len: *len }, *at),
+                    base(Geo::Sphere(*r), end(len / 2.0)),
+                    base(Geo::Sphere(*r), end(-len / 2.0)),
+                ]
+            }
+            GeoSpec::Hull => vec![base(Geo::Hull, Frame::WORLD)],
+            GeoSpec::Mesh { file, bytes, at } => {
+                let stem = Path::new(file)
+                    .file_stem()
+                    .map_or_else(|| "mesh".into(), |s| s.to_string_lossy().into_owned());
+                let f = format!("meshes/{}.stl", mnames.take(&stem));
+                let (objects, _) = forge_mesh::read_stl(bytes)
+                    .map_err(|e| UrdfError::Mesh(format!("{file}: not an STL: {e:?}")))?;
+                m.points.insert(
+                    f.clone(),
+                    objects.iter().flat_map(|o| o.positions.iter().copied()).collect(),
+                );
+                ex.meshes.push((f.clone(), bytes.clone()));
+                vec![base(Geo::Mesh(f), *at)]
+            }
+        };
+        let l = &mut m.links[k];
+        let list = if g.collision {
+            &mut l.collisions
+        } else {
+            &mut l.visuals
+        };
+        if replaced.insert((k, g.collision)) {
+            let material = list.iter().find_map(|v| v.material.clone());
+            list.clear();
+            if !g.collision {
+                list.extend(new.into_iter().map(|v| Visual {
+                    material: material.clone(),
+                    ..v
+                }));
+                continue;
+            }
+        }
+        list.extend(new);
+        if g.collision {
+            explicit_collision.insert(lname);
+        }
+    }
+    if r.hull_collisions {
+        for l in m
+            .links
+            .iter_mut()
+            .filter(|l| !explicit_collision.contains(&l.name))
+        {
+            if l.visuals.iter().any(|v| matches!(v.geo, Geo::Mesh(_))) && !replaced_any(&l.collisions) {
+                l.collisions = vec![Visual {
+                    name: format!("{}_hull", l.name),
+                    body: String::new(),
+                    geo: Geo::Hull,
+                    at: Frame::WORLD,
+                    material: None,
+                }];
+            }
+        }
+    }
+    // inertia
+    for ov in &r.inertials {
+        let k = link_of(m, &ov.link)?;
+        let l = &mut m.links[k];
+        let linked = if l.inertial_set {
+            l.inertial.clone()
+        } else {
+            inertial(&pieces_of(l))
+        };
+        let what = format!("inertial({})", l.name);
+        let (lm, lc, li) = match &linked {
+            Some(i) => (
+                i.mass,
+                i.com.map(|x| x * 1000.0),
+                i.inertia.map(|r| r.map(|x| x * 1e6)),
+            ),
+            None => (0.0, [0.0; 3], [[0.0; 3]; 3]),
+        };
+        let six = |i: &[[f64; 3]; 3]| [i[0][0], i[0][1], i[0][2], i[1][1], i[1][2], i[2][2]];
+        if let (Some(was), Some(set)) = (ov.mass_was, ov.mass) {
+            conflict(
+                &mut conflicts,
+                ov.line,
+                &what,
+                "mass",
+                &[was],
+                &[lm],
+                &[set],
+                false,
+            );
+        }
+        if let (Some(was), Some(set)) = (ov.com_was, ov.com) {
+            conflict(&mut conflicts, ov.line, &what, "com", &was, &lc, &set, false);
+        }
+        if let (Some(was), Some(set)) = (ov.inertia_was, ov.inertia) {
+            conflict(
+                &mut conflicts,
+                ov.line,
+                &what,
+                "inertia",
+                &was,
+                &six(&li),
+                &set,
+                false,
+            );
+        }
+        let mass = ov.mass.unwrap_or(lm);
+        let com = ov.com.unwrap_or(lc);
+        let inertia = match ov.inertia {
+            Some(v) => [[v[0], v[1], v[2]], [v[1], v[3], v[4]], [v[2], v[4], v[5]]],
+            None => li,
+        };
+        let inertia = inertia.map(|r| r.map(|x| x / 1e6));
+        if mass.is_nan() || mass <= 0.0 || mass.is_infinite() {
+            return Err(UrdfError::Robot(format!(
+                "{what}: mass {} is not positive",
+                num(mass)
+            )));
+        }
+        if !physical(&inertia) {
+            return Err(UrdfError::Robot(format!(
+                "{what}: the inertia is not one a body can have (not positive definite, or a principal moment above the other two's sum)"
+            )));
+        }
+        for (field, linked, set) in [
+            ("mass", vec![lm], ov.mass.map(|v| vec![v])),
+            ("com", lc.to_vec(), ov.com.map(|v| v.to_vec())),
+            ("inertia", six(&li).to_vec(), ov.inertia.map(|v| v.to_vec())),
+        ] {
+            if let Some(set) = set {
+                ex.overrides.push((
+                    ov.line,
+                    what.clone(),
+                    field.into(),
+                    fmt_vals(&linked),
+                    fmt_vals(&set),
+                ));
+            }
+        }
+        l.inertial = Some(Inertial {
+            mass,
+            com: com.map(|x| x / 1000.0),
+            inertia,
+            err: None,
+        });
+        l.inertial_set = true;
+        ex.notes
+            .push(format!("{what} overridden: its bounds are not known"));
+    }
+    // joints
+    for ov in &r.joints {
+        let k = joint_of(m, &ov.joint)?;
+        let what = format!("joint({})", m.joints[k].name);
+        let j = &mut m.joints[k];
+        if let Some(kind) = &ov.kind {
+            let kind: &'static str = match kind.as_str() {
+                "revolute" => "revolute",
+                "continuous" => "continuous",
+                "prismatic" => "prismatic",
+                "fixed" => "fixed",
+                other => {
+                    return Err(UrdfError::Robot(format!(
+                        "{what}: type {other} (revolute, continuous, prismatic, fixed; freeze(..) fixes a source joint at a value)"
+                    )));
+                }
+            };
+            if j.kind == "planar" || j.kind == "floating" {
+                return Err(UrdfError::Robot(format!(
+                    "{what}: a {} joint's type is not changed here",
+                    j.kind
+                )));
+            }
+            ex.overrides
+                .push((ov.line, what.clone(), "type".into(), j.kind.into(), kind.into()));
+            j.kind = kind;
+            if kind == "fixed" {
+                j.axis = None;
+                j.limit = None;
+                j.position.clear();
+            } else if j.axis.is_none() {
+                j.axis = Some([0.0, 0.0, 1.0]);
+                j.position = vec![0.0];
+            }
+            if kind == "continuous" {
+                j.limit = None;
+            }
+        }
+        let unit = if j.kind == "prismatic" { 1e-3 } else { 1.0 };
+        if let Some(a) = ov.axis {
+            let n = (a[0] * a[0] + a[1] * a[1] + a[2] * a[2]).sqrt();
+            if n.is_nan() || n <= 0.0 {
+                return Err(UrdfError::Robot(format!("{what}: axis (0, 0, 0)")));
+            }
+            if let (Some(was), Some(now)) = (ov.axis_was, j.axis) {
+                conflict(&mut conflicts, ov.line, &what, "axis", &was, &now, &a, false);
+            }
+            ex.overrides.push((
+                ov.line,
+                what.clone(),
+                "axis".into(),
+                j.axis.map_or(String::new(), |x| fmt_vals(&x)),
+                fmt_vals(&a),
+            ));
+            j.axis = Some(a.map(|x| x / n));
+        }
+        if let Some((lo, hi)) = ov.limit {
+            if let Some(was) = ov.limit_was {
+                let now = j.limit.map_or(vec![], |(a, b)| vec![a / unit, b / unit]);
+                conflict(
+                    &mut conflicts,
+                    ov.line,
+                    &what,
+                    "limit",
+                    &[was.0, was.1],
+                    &now,
+                    &[lo, hi],
+                    unit == 1.0,
+                );
+            }
+            if lo > hi {
+                return Err(UrdfError::Robot(format!("{what}: limit lower above upper")));
+            }
+            if j.kind == "continuous" {
+                j.kind = "revolute";
+            }
+            ex.overrides.push((
+                ov.line,
+                what.clone(),
+                "limit".into(),
+                j.limit
+                    .map_or(String::new(), |(a, b)| fmt_in(&[a / unit, b / unit], unit == 1.0)),
+                fmt_in(&[lo, hi], unit == 1.0),
+            ));
+            j.limit = Some((lo * unit, hi * unit));
+        }
+        if matches!(j.kind, "revolute" | "prismatic") && j.limit.is_none() {
+            return Err(UrdfError::Robot(format!(
+                "{what}: a {} joint needs a limit",
+                j.kind
+            )));
+        }
+        for (field, v) in [
+            ("effort", ov.effort),
+            ("velocity", ov.velocity),
+            ("damping", ov.damping),
+            ("friction", ov.friction),
+        ] {
+            if let Some(v) = v {
+                ex.overrides
+                    .push((ov.line, what.clone(), field.into(), String::new(), num(v)));
+            }
+        }
+        if let Some(e) = ov.effort {
+            o.effort_of.insert(j.name.clone(), e);
+        }
+        if let Some(v) = ov.velocity {
+            o.velocity_of.insert(j.name.clone(), v);
+        }
+        if ov.damping.is_some() || ov.friction.is_some() {
+            let (d0, f0) = j.dynamics.unwrap_or((0.0, 0.0));
+            j.dynamics = Some((ov.damping.unwrap_or(d0), ov.friction.unwrap_or(f0)));
+        }
+    }
+    let fixed: Vec<String> = m
+        .joints
+        .iter()
+        .filter(|j| j.kind == "fixed")
+        .map(|j| j.name.clone())
+        .collect();
+    for j in &m.joints {
+        if let Some((leader, ..)) = &j.mimic
+            && fixed.contains(leader)
+        {
+            return Err(UrdfError::Robot(format!(
+                "joint {} mimics {leader}, which is now fixed",
+                j.name
+            )));
+        }
+    }
+    // transmissions
+    for (t, actuator, reduction, interface) in &r.transmissions {
+        let k = joint_of(m, t)?;
+        if m.joints[k].kind == "fixed" {
+            return Err(UrdfError::Robot(format!(
+                "transmission: joint {} is fixed",
+                m.joints[k].name
+            )));
+        }
+        m.transmissions.push((
+            m.joints[k].name.clone(),
+            actuator.clone(),
+            *reduction,
+            interface.clone(),
+        ));
+    }
+    if !conflicts.is_empty() {
+        return Err(UrdfError::Conflicts(conflicts));
+    }
+    Ok(())
+}
+
+fn replaced_any(c: &[Visual]) -> bool {
+    c.iter().any(|v| v.body.is_empty())
+}
+
+fn pieces_of(l: &Wl) -> Vec<Piece<'_>> {
+    l.pieces
+        .iter()
+        .map(|x| Piece {
+            id: x.id.clone(),
+            material: x.material.as_ref(),
+            mass: &x.mass,
+            at: x.at,
+        })
+        .collect()
+}
+
+/// The model made whole: each link's mass composed, its hull made.
+fn finish(m: &mut Model, ex: &mut Exported) -> Result<(), UrdfError> {
+    for l in &mut m.links {
+        if !l.inertial_set {
+            l.inertial = inertial(&pieces_of(l));
+            if l.inertial.is_none() && !l.dummy {
+                ex.notes.push(format!(
+                    "link {} has no solids (references only): massless",
+                    l.name
+                ));
+            }
+        }
+        if !l.collisions.iter().any(|c| c.geo == Geo::Hull) {
+            continue;
+        }
+        let mut pts = vec![];
+        for v in &l.visuals {
+            if let Geo::Mesh(f) = &v.geo
+                && let Some(p) = m.points.get(f)
+            {
+                pts.extend(p.iter().map(|x| v.at.point_to_world(*x)));
+            }
+        }
+        let (positions, triangles) = hull(&pts).ok_or_else(|| {
+            UrdfError::Mesh(format!(
+                "link {}: no convex hull (its meshes are flat or empty)",
+                l.name
+            ))
+        })?;
+        let file = format!("meshes/{}_hull.stl", ident(&l.name));
+        let object = forge_mesh::Object {
+            name: format!("{}_hull", l.name),
+            positions,
+            triangles,
+            ..forge_mesh::Object::default()
+        };
+        let (bytes, ok) = stl(vec![object], &file);
+        ex.watertight &= ok;
+        ex.meshes.push((file.clone(), bytes));
+        for c in &mut l.collisions {
+            if c.geo == Geo::Hull {
+                c.geo = Geo::Mesh(file.clone());
+                c.at = Frame::WORLD;
+            }
+        }
+    }
+    Ok(())
+}
+
+// ---- convex hull ------------------------------------------------------------------------------
+
+/// The convex hull of points: its corners and outward triangles, or None when the points span
+/// no volume. Incremental (each point in turn: the faces it sees go, the horizon is fanned to
+/// it), in the points' order, so the same points give the same hull. A point within `eps` of a
+/// face's plane counts as on it: the hull holds every point to within `eps` (1e-9 of the size).
+#[allow(clippy::type_complexity)]
+fn hull(pts: &[Point3]) -> Option<(Vec<Point3>, Vec<[u32; 3]>)> {
+    // distinct points, in order
+    let mut seen = BTreeSet::new();
+    let p: Vec<Point3> = pts
+        .iter()
+        .filter(|q| seen.insert([q.x.to_bits(), q.y.to_bits(), q.z.to_bits()]))
+        .copied()
+        .collect();
+    if p.len() < 4 {
+        return None;
+    }
+    let size = p
+        .iter()
+        .fold(0.0f64, |m, q| m.max(q.x.abs()).max(q.y.abs()).max(q.z.abs()));
+    let eps = 1e-9 * size.max(1.0);
+    // a first tetrahedron: the extremes in x, the farthest from their line, from their plane
+    let (mut i0, mut i1) = (0, 0);
+    for (k, q) in p.iter().enumerate() {
+        if q.x < p[i0].x {
+            i0 = k;
+        }
+        if q.x > p[i1].x {
+            i1 = k;
+        }
+    }
+    if i0 == i1 {
+        i1 = (0..p.len()).max_by(|&a, &b| (p[a] - p[i0]).length().total_cmp(&(p[b] - p[i0]).length()))?;
+    }
+    let d01 = p[i1] - p[i0];
+    let i2 = (0..p.len()).max_by(|&a, &b| {
+        d01.cross(p[a] - p[i0])
+            .length()
+            .total_cmp(&d01.cross(p[b] - p[i0]).length())
+    })?;
+    let n = d01.cross(p[i2] - p[i0]);
+    if n.length() <= eps * d01.length() {
+        return None;
+    }
+    let i3 = (0..p.len()).max_by(|&a, &b| n.dot(p[a] - p[i0]).abs().total_cmp(&n.dot(p[b] - p[i0]).abs()))?;
+    if n.dot(p[i3] - p[i0]).abs() <= eps * n.length() {
+        return None;
+    }
+    let plane = |f: &[usize; 3]| {
+        let n = (p[f[1]] - p[f[0]]).cross(p[f[2]] - p[f[0]]);
+        let l = n.length();
+        (n / l, f[0])
+    };
+    let mut faces: Vec<[usize; 3]> = if n.dot(p[i3] - p[i0]) < 0.0 {
+        vec![[i0, i1, i2], [i0, i3, i1], [i1, i3, i2], [i2, i3, i0]]
+    } else {
+        vec![[i0, i2, i1], [i0, i1, i3], [i1, i2, i3], [i2, i0, i3]]
+    };
+    let mut planes: Vec<(Vec3, usize)> = faces.iter().map(plane).collect();
+    // farthest from the first tetrahedron's middle first: the outermost points make the hull
+    // early, and points on its faces after them are skipped (ties in index order)
+    let mid = Point3::new(
+        (p[i0].x + p[i1].x + p[i2].x + p[i3].x) / 4.0,
+        (p[i0].y + p[i1].y + p[i2].y + p[i3].y) / 4.0,
+        (p[i0].z + p[i1].z + p[i2].z + p[i3].z) / 4.0,
+    );
+    let mut order: Vec<usize> = (0..p.len()).filter(|k| ![i0, i1, i2, i3].contains(k)).collect();
+    order.sort_by(|&a, &b| {
+        (p[b] - mid)
+            .length()
+            .total_cmp(&(p[a] - mid).length())
+            .then(a.cmp(&b))
+    });
+    for k in order {
+        let q = &p[k];
+        let visible: Vec<bool> = planes.iter().map(|(n, a)| n.dot(*q - p[*a]) > eps).collect();
+        if !visible.iter().any(|&v| v) {
+            continue;
+        }
+        let mut edges: BTreeSet<(usize, usize)> = BTreeSet::new();
+        for (f, _) in faces.iter().zip(&visible).filter(|x| *x.1) {
+            for e in [(f[0], f[1]), (f[1], f[2]), (f[2], f[0])] {
+                edges.insert(e);
+            }
+        }
+        let horizon: Vec<(usize, usize)> = faces
+            .iter()
+            .zip(&visible)
+            .filter(|x| *x.1)
+            .flat_map(|(f, _)| [(f[0], f[1]), (f[1], f[2]), (f[2], f[0])])
+            .filter(|&(a, b)| !edges.contains(&(b, a)))
+            .collect();
+        let mut keep_f = vec![];
+        let mut keep_p = vec![];
+        for ((f, pl), v) in faces.iter().zip(&planes).zip(&visible) {
+            if !v {
+                keep_f.push(*f);
+                keep_p.push(*pl);
+            }
+        }
+        faces = keep_f;
+        planes = keep_p;
+        for (a, b) in horizon {
+            let f = [a, b, k];
+            planes.push(plane(&f));
+            faces.push(f);
+        }
+    }
+    // the corners used, renumbered in order
+    let mut index = BTreeMap::new();
+    let mut positions = vec![];
+    let mut triangles = vec![];
+    for f in &faces {
+        let t = f.map(|i| {
+            *index.entry(i).or_insert_with(|| {
+                positions.push(p[i]);
+                (positions.len() - 1) as u32
+            })
+        });
+        triangles.push(t);
+    }
+    Some((positions, triangles))
 }
 
 #[cfg(test)]
@@ -1672,6 +2751,37 @@ mod tests {
         assert_eq!(num(4.5e-21), "4.5e-21");
         assert_eq!(num(-2e-5), "-2e-5");
         assert_eq!(comment("a--b-"), "a- -b- ");
+    }
+
+    #[test]
+    fn a_hull_holds_its_points_and_is_closed() {
+        // a cube's corners, points inside it and on its faces, and a sliver off one face
+        let mut pts = vec![];
+        for i in 0..27 {
+            let c = |k: usize| ((i / 3usize.pow(k as u32)) % 3) as f64 * 5.0;
+            pts.push(Point3::new(c(0), c(1), c(2)));
+        }
+        pts.push(Point3::new(5.0, 5.0, 10.000_001));
+        let (p, t) = hull(&pts).expect("a hull");
+        // V − E + F = 2 for a closed surface of triangles: E = 3F/2
+        assert_eq!(p.len() as i64 - (3 * t.len() / 2) as i64 + t.len() as i64, 2);
+        // every extreme point is a corner (a first-tetrahedron point on a face may stay too)
+        for i in [0, 2, 6, 8, 18, 20, 24, 26, 27] {
+            assert!(p.contains(&pts[i]), "{:?} is a corner", pts[i]);
+        }
+        assert!(p.len() <= 10, "{} corners", p.len());
+        for q in &pts {
+            for tri in &t {
+                let [a, b, c] = tri.map(|i| p[i as usize]);
+                let n = (b - a).cross(c - a);
+                assert!(n.dot(*q - a) <= 1e-9 * n.length(), "a point outside");
+            }
+        }
+        // flat points have no hull
+        let flat: Vec<Point3> = (0..10)
+            .map(|i| Point3::new(i as f64, (i * i) as f64, 0.0))
+            .collect();
+        assert!(hull(&flat).is_none());
     }
 
     #[test]

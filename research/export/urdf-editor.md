@@ -30,12 +30,14 @@ fore = link(src.fore, name: "forearm")   # a linked link, renamed
 merge(fore, src.finger)                  # several rigid groups as one link (see §4)
 drop(src.cable)                          # out of the robot: no visual, no collision, no mass
 collision(src.upper, box(size: (144, 24, 10), at: pose(at: (60, 0, 5))))
-collision(fore, hull)                    # simplified: primitive | hull | mesh("x.stl") | decimate(n)
+collision(fore, hull)                    # simplified: box | cylinder | sphere | capsule | hull | mesh("x.stl")
+collisions("hull")                       # links with no collision(..): their convex hull (default) or "mesh"
+actuation(effort: eff, velocity: 2)      # every moving joint's, unless its joint(..) says
 visual(src.base, mesh("meshes/base_lowpoly.stl"))
-inertial(fore, mass: 0.42kg, was: 0.391kg)                      # override, and the linked value it replaced
-joint(src.elbow, limit: (-90deg, 90deg), was: (-135deg, 135deg))
+inertial(fore, mass: 0.42, mass_was: 0.391)    # override (kg), and the linked value it replaced
+joint(src.elbow, limit: (-90deg, 90deg), limit_was: (-135deg, 135deg))
 joint(src.elbow, effort: eff, velocity: 1.5, damping: 0.1, friction: 0.02)   # URDF-only: no `was`
-joint(src.grip, type: "fixed", at: 4)    # a joint's kind changed (here frozen at 4 mm)
+freeze(src.grip, at: 4)                  # a joint made fixed (here at 4 mm)
 cut(src.j3)                              # a closed loop opened here
 tool0 = frame(on: fore, at: pose(at: (144, 0, 5)))     # URDF-only fixed child link
 cam = frame(on: src.base, at: pose(at: (0, 40, 30), z: (0, -1, 0)))
@@ -44,7 +46,8 @@ transmission(src.shoulder, actuator: "m1", reduction: 50)
 - Names: `src.X` is the source's instance or joint X (stable ids: forge-lang's instance and
   joint names). A source rename shows as a broken reference with a fix (`rename src.old ->
   src.new`), never a silent loss.
-- `was:` records the linked value an override replaced, written by the editor when the override
+- `FIELD_was:` (`limit_was`, `axis_was`, `mass_was`, `com_was`, `inertia_was`) records the linked
+  value an override replaced, written by the editor when the override
   is made. It is what conflict detection compares against (§5). URDF-only fields (effort,
   velocity, damping, friction, transmission, names, frames) have no linked value, hence no `was`.
 - Where an edit goes: a fact of the mechanism (a joint's limits, axis, drive) can be changed in
@@ -126,6 +129,16 @@ Look: forgeCAD's existing panels and palette (gui_inspect, palette.rs); no new w
   workspace (tree, panels, sliders at two poses, conflict banner) committed under
   research/export/urdf-ui/, from the web build in Chromium as web.yml runs it.
 
+## 7a. Status (claude/urdf-robot)
+Built (phase 2a): `forge_lang::robot` (the document, read with every bad line named),
+`urdf::export_robot` (tree overrides `root`/`cut`/`freeze` into the walk, which keeps each link's
+solved anchor apart from its URDF placement so a frozen joint at another value moves its subtree
+rigidly; model overrides `link`/`merge`/`drop`/`frame`/`visual`/`collision`/`collisions`/
+`inertial`/`joint`/`transmission`/`actuation`; convex hulls; conflicts with keep/reset fixes;
+every override listed with its linked value in the reply), `forgecad build|export ROBOT.fg`.
+Units: mm, angles as written (bare = rad), kg, kg mm². Not yet: `source(none)` and `import`
+(phase 2b), `decimate(n)`, edit ops for robot statements (with the editor).
+
 ## 8. Order
 1. Exporter on main (this branch; merge train 3).
 2. `model`/`write` split; robot document (parse, eval, overrides, conflicts); CLI build/export/
@@ -134,10 +147,11 @@ Look: forgeCAD's existing panels and palette (gui_inspect, palette.rs); no new w
 4. Editing: ops from the panels, linked/overridden chips, reset, conflict banner, import/export.
 5. Screenshots, docs (AGENTS.md, help forge).
 
-## 9. For David
-- Default target of a mechanism edit (joint limits/axis) made in the editor: override in the
-  robot (proposed) or write the assembly.
-- `merge` across a moving joint: refuse until the joint is explicitly frozen (proposed), or
-  freeze implicitly at its current value (would be an assumption, so not proposed).
-- Collision default stays the visual mesh; `hull` is one click. Should new robots default to
-  hulls?
+## 9. Decisions (coordinator, within David's intent, 2026-11-23)
+- Editing a joint's limits or axis in the editor writes a **robot override** by default; the
+  assembly stays as it is. An explicit "apply to assembly" action sits next to it.
+- `merge` across a moving joint is refused until that joint is frozen by a visible statement,
+  `freeze(J, at: v)` (the joint becomes fixed at v); never implicit.
+- Collision default for new robots: a **convex hull per link** (it contains the visual mesh, so
+  contact is never under-reported, and simulators take it cheaply); visual stays the mesh.
+  Box/cylinder/capsule fits and a decimated mesh are the alternatives offered.
