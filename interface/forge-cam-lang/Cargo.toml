@@ -13,6 +13,7 @@ forge-cam = { path = "../../kernel/forge-cam" }
 forge-cam-geom = { path = "../../kernel/forge-cam-geom" }
 forge-tooling = { path = "../../kernel/forge-tooling" }
 forge-post = { path = "../../kernel/forge-post" }
+forge-model = { path = "../../kernel/forge-model" }
 
 [dev-dependencies]
 forge-math = { path = "../../kernel/forge-math" }

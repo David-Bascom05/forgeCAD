@@ -94,6 +94,7 @@ dependencies = [
  "forge-cam-geom",
  "forge-lang",
  "forge-math",
+ "forge-model",
  "forge-post",
  "forge-tooling",
 ]

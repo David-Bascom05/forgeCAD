@@ -726,24 +726,6 @@ pub struct SketchView {
     pub named: Vec<(String, forge_sketch::EntityId, Vec<forge_sketch::EntityId>)>,
 }
 
-/// The hole features of `src`, as CAM plans them (`holes::hole_infos`): an evaluation of its
-/// own, so an ordinary build does no work for CAM.
-pub fn hole_view(src: &str, opts: Options) -> Vec<holes::HoleInfo> {
-    let Ok(prog) = syntax::parse(src) else {
-        return vec![];
-    };
-    let mut ev = Eval::new(src, opts.rules, opts.build, Default::default());
-    ev.dir = opts.dir.clone();
-    ev.root = fence_of(&opts);
-    ev.asm = Some(asm::Doc::default());
-    ev.check_static(&prog);
-    if !ev.errors.is_empty() {
-        ev.b.building = false;
-    }
-    ev.run(&prog);
-    holes::hole_infos(&ev)
-}
-
 /// The sketch `id` of `src` as evaluated (built with `opts.build`), if evaluation made it.
 pub fn sketch_view(src: &str, id: &str, opts: Options) -> Option<SketchView> {
     let prog = syntax::parse(src).ok()?;

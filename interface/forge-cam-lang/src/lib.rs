@@ -24,6 +24,8 @@
 //! and the stock, rapids against both. An op whose checks are not all `pass` is refused, with the
 //! check, where, and a fix. The reply is `forgecad.cam/1`.
 use forge_lang::syntax::{self, Arg, Expr, ExprKind, StmtKind};
+pub mod holes;
+
 use forge_agent::json::Json;
 use forge_cam::ops::{self, CheckOut, Heights, OpPath, PMove, Phase, Stock, ToolUse};
 use forge_cam_geom::check::Face;
@@ -67,7 +69,7 @@ enum StockSpec {
 struct PartIn {
     file: String,
     faces: Vec<Face>,
-    holes: Vec<forge_lang::holes::HoleInfo>,
+    holes: Vec<holes::HoleInfo>,
     bbox: ([f64; 3], [f64; 3]),
     group: String,
 }
@@ -447,7 +449,7 @@ impl Cam {
                 let path = dir.join(&file);
                 let src = std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
                 let (run, _) = forge_lang::run(&src, forge_lang::Options::default(), Default::default());
-                let holes = forge_lang::hole_view(&src, forge_lang::Options::default());
+                let holes = holes::hole_view(&src, forge_lang::Options::default());
                 if !run.ok() {
                     return Err(format!(
                         "the part `{file}` does not build: {:?}",
