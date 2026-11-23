@@ -1,0 +1,18 @@
+# A plate whose top edges are broken by a 45° chamfer mill (plate_break_cam.fg): rounded corners
+# and a through bore, so the break runs along lines, round corners and a circle.
+
+shared L = 40
+shared W = 30
+shared t = 8
+param bore.d = 10
+param corners.r = 4
+
+sketch plan(on: xy) {
+  outline = rect(corner: (0, 0), size: (L, W))
+}
+plate = extrude(plan, t)
+sketch top(on: plate.end) {
+  h = pt(L / 2, W / 2)
+}
+bore = hole(at: top.h, d: d, depth: thru)
+corners = fillet(edges(of: plate, along: Z), r)

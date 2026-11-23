@@ -20,9 +20,13 @@ converse direction the loop needs: an exact `On` point lies on some face's regio
 find it (given D1's boxes and the distance filter's completeness).
 
 **Measured (FLAT-SITES, 2026-11-23**: gate parts seq + nary1, fuzz 1–40 seq, temporary probes):
-* fact 1 held at **3,632 of 3,632** planar `On`s of `classify`: every point is exactly on the
-  plane, as the f64 point itself. So `foot p = p` (`foot_self`), and today's answer at the f64
-  point is the answer at the foot: provenance, with nothing to change;
+* fact 1 held at **3,632 of 3,632** planar `On`s of `classify` in that corpus: every point exactly
+  on the plane, as the f64 point itself, so there `foot p = p` (`foot_self`). It does **not** hold
+  on the bench parts: frame (`dbh`, feature 98, a point 2.6e-16 off its plane) and volute
+  (`dbolt`, feature 31, 8.6e-16 off). Requiring it in the code (proof/flat-sites-onplane: `On`
+  only where `n·(p − o) = 0` exactly) made both parts refuse with `ZeroThickness`, so today's
+  tolerance `On` is load-bearing there. Fact 1 is a GAP: at those points the exact answer must
+  come from the point's exact key (its foot), not from the f64 point;
 * fact 2 rests on `point_in_face`'s nearest-edge `On`. On a plane face with a line edge:
   2,579 points lie exactly on both planes (exactly on the edge's carrier: `on_edge_closure`);
   1,471 lie exactly on the plane across but not on the face's own plane (points constructed on the
@@ -30,12 +34,13 @@ find it (given D1's boxes and the distance filter's completeness).
   **36 lie exactly on the face's plane but 1.4e-14 … 8.0e-14 off the edge's line** (patterns seq,
   pattern copies: their planes are rotated, so the meet is not representable). There the exact
   test *on the f64 point* would flip `On` to `Inside`/`Outside`; the caller's exact key (the meet
-  of the three planes) is on the edge. Finding: not a wrong result (the point stands for a point on
-  the edge), and the §1a rule must read the key, not the f64 point.
+  of the three planes) is on the edge. So the §1a rule must read the key, not the f64 point;
+  whether today's answer there equals the exact one is open until it does (UNKNOWN, not checked
+  against the exact reference).
 
 **Ledger.** 1a.where: proven (this file). 1a.classify: the On branch proven from facts 1–2
-(`classify_on_sound`), fact 1 a GAP with 0 failures in the corpus; the ray branch is open.
-1a.foot: `foot_on`, `foot_self` proven.
+(`classify_on_sound`), fact 1 a GAP (fails on the bench parts frame and volute, above); the ray
+branch is open. 1a.foot: `foot_on`, `foot_self` proven.
 -/
 
 set_option linter.unusedSectionVars false

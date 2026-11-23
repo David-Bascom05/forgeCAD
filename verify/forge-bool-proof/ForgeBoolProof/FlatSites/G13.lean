@@ -7,8 +7,10 @@ old-path-statements.md §G, G13. `face_point(f)` steps inward from the middle of
 by `min(0.01·len, 0.05)`, and its two callers classify the point against the other solid to class
 a whole face no new edge touches (boolean.rs `general`'s untouched faces; `local`'s first loop):
 * the step was unchecked: a face narrower than the step there puts the probe off the face;
-* now `face_point` keeps a probe only when `point_in_face(f, q)` is `Inside` (halving the step up to
-  four times, else `None`, and the callers take the general path).
+* with proof/flat-sites-g13, `face_point` keeps a planar face's probe only when it is inside the
+  face (`classify::probe_inside`: `point_in_face(f, q) = Inside`, or a cheap sufficient test cross-
+  checked against it in debug builds), halving the step up to four times, else `None` (the callers
+  take the general path); a curved face's probe stays unchecked (G13.curved, open).
 
 What makes the class of the probe the class of the face:
 * `point_in_face = Inside` gives `q ∈ relint ⟦f⟧` (1a.pif);

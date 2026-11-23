@@ -4,5 +4,5 @@ import ForgeBoolProof.Compose
 import ForgeBoolProof.KeepRule
 import ForgeBoolProof.FlatSites.Where
 import ForgeBoolProof.FlatSites.G15
-import ForgeBoolProof.FlatSites.OnPlane
 import ForgeBoolProof.FlatSites.G13
+import ForgeBoolProof.Bridge

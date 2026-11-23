@@ -19,6 +19,7 @@ fn usage() -> ExitCode {
          forgecad update [INSTALL_ROOT]   (install latest main)\n       \
          forgecad build|check|query|measure|render|export FILE.fg [ARGS] [--json] [--labels SEL] [--px N] [--at FEAT] [-o OUT]\n       \
          forgecad edit FILE.fg 'OP'.. [--base VERSION]   (typed ops, as a part's fixes give them; export F.fg stl|3mf|obj|dxf [SHEET])\n       \
+         forgecad cam FILE.fg [sheet] [--json] [-o OUT]   (a machining document: certified toolpaths, the program or setup sheet)\n       \
          forgecad diff A.fg B.fg [volume]   (what B changed from A: features, params, faces, volume)\n       \
          forgecad help [forge | WORD]   (the .fg language, or its sections on WORD)\n       \
          forgecad versions F | history F [--all] | create_version F NAME [NOTES] | restore F v3|SAVE | compare F A B [--volume]\n       \
@@ -365,6 +366,8 @@ fn command(cmd: &str, argv: &[String]) -> ExitCode {
             "export" if a.words.first().is_some_and(|w| w == "3mf") => "3mf",
             "export" if a.words.first().is_some_and(|w| w == "obj") => "obj",
             "export" => "step",
+            "cam" if a.words.first().is_some_and(|w| w == "sheet") => "html",
+            "cam" => "nc",
             _ => "png",
         };
         let stem = a.file.trim_end_matches(".fg");
@@ -379,6 +382,16 @@ fn command(cmd: &str, argv: &[String]) -> ExitCode {
     }
     // a closed pipe (`| head`) is not an error worth a panic
     let _ = writeln!(std::io::stdout(), "{text}");
+    // cam: 0 fully certified, 3 released but certified except G5 (a setup not placed), 1 refused
+    if cmd == "cam"
+        && r.ok
+        && let forge_agent::json::Json::Obj(fs) = &r.json
+        && fs
+            .iter()
+            .any(|(k, v)| k == "certification" && *v == forge_agent::json::Json::Str("except G5".into()))
+    {
+        return ExitCode::from(3);
+    }
     if r.ok {
         ExitCode::SUCCESS
     } else {
