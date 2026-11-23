@@ -6,6 +6,7 @@ import ForgeExact.RefFacts
 import ForgeExact.Alg.Sum
 import ForgeExact.Quad.Cert
 import ForgeExact.QRef.Octree
+import ForgeExact.Poly3.Octree
 
 /-!
 # Only the standard axioms
@@ -82,3 +83,13 @@ elab "#standard_axioms " ids:ident* : command => do
   ForgeExact.QRef.in_box
   ForgeExact.QRef.out_box
   ForgeExact.QRef.empty_of_leaves
+  ForgeExact.Poly3.zero_of_roots
+  ForgeExact.Poly3.escape_one
+  ForgeExact.Poly3.box_bound
+  ForgeExact.Poly3.sign_nbhd
+  ForgeExact.Poly3.escape
+  ForgeExact.Poly3.wall_nowhereDense
+  ForgeExact.Poly3.reg_off_wall
+  ForgeExact.Poly3.in_box
+  ForgeExact.Poly3.out_box
+  ForgeExact.Poly3.empty_of_leaves
