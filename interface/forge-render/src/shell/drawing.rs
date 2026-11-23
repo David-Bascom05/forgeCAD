@@ -2063,7 +2063,7 @@ impl Shell {
             let mut edit = false;
             resp.context_menu(|ui| {
                 ui.set_min_width(220.0);
-                ui.label(egui::RichText::new(&id).font(semi(12.5)));
+                ui.label(egui::RichText::new(&id).font(semi(13.0)));
                 if ui.button("Edit...").clicked() {
                     edit = true;
                     ui.close();
@@ -2237,7 +2237,7 @@ impl Shell {
                 pos2(x + 22.0, y + 12.0),
                 Align2::LEFT_CENTER,
                 &label,
-                if depth == 0 { semi(12.5) } else { sans(12.5) },
+                if depth == 0 { semi(13.0) } else { sans(13.0) },
                 ink,
             );
             self.places.push((format!("dwgrow:{id}"), r));
@@ -2262,7 +2262,7 @@ impl Shell {
                 if y > side.bottom() - 16.0 {
                     break;
                 }
-                let g = ui.fonts_mut(|f| f.layout(pr, sans(11.5), t.ink2, side.width() - 20.0));
+                let g = ui.fonts_mut(|f| f.layout(pr, sans(12.0), t.ink2, side.width() - 20.0));
                 let h = g.size().y;
                 p.galley(pos2(side.left() + 10.0, y), g, t.ink2);
                 y += h + 4.0;
@@ -2299,7 +2299,7 @@ impl Shell {
                             ui.separator();
                             ui.label(
                                 egui::RichText::new(tool.prompt(env.step()))
-                                    .font(sans(12.5))
+                                    .font(sans(13.0))
                                     .color(t.ink2),
                             );
                             if matches!(tool, DwgCmd::Baseline | DwgCmd::Ordinate | DwgCmd::Chain)
@@ -2357,7 +2357,7 @@ impl Shell {
                         tangent,
                         label,
                     } => {
-                        ui.label(egui::RichText::new("Orientation").font(semi(12.5)));
+                        ui.label(egui::RichText::new("Orientation").font(semi(13.0)));
                         egui::Grid::new("dirs").spacing(vec2(6.0, 6.0)).show(ui, |ui| {
                             for (k, (n, _)) in DIRS.iter().enumerate() {
                                 if ui.selectable_label(*dir == k, *n).clicked() {
@@ -2381,7 +2381,7 @@ impl Shell {
                             ui.label("Label");
                             ui.text_edit_singleline(label);
                         });
-                        ui.label(egui::RichText::new("Style").font(semi(12.5)));
+                        ui.label(egui::RichText::new("Style").font(semi(13.0)));
                         ui.horizontal(|ui| {
                             ui.selectable_value(hidden, true, "Hidden Line");
                             ui.selectable_value(hidden, false, "Hidden Line Removed");
@@ -2771,7 +2771,7 @@ fn moved(env: &mut DrawingEnv, d: &Drag) {
 }
 
 fn fcf_form(ui: &mut Ui, f: &mut FcfForm, t: super::theme::Theme) {
-    ui.label(egui::RichText::new("Characteristic").font(semi(12.5)));
+    ui.label(egui::RichText::new("Characteristic").font(semi(13.0)));
     egui::Grid::new("chars").spacing(vec2(4.0, 4.0)).show(ui, |ui| {
         for (k, (word, _)) in forge_draw::gdt::CHARS.iter().enumerate() {
             let (r, resp) = ui.allocate_exact_size(vec2(36.0, 30.0), Sense::click());
@@ -2822,7 +2822,7 @@ fn fcf_form(ui: &mut Ui, f: &mut FcfForm, t: super::theme::Theme) {
             }
         }
     });
-    ui.label(egui::RichText::new("Tolerance").font(semi(12.5)));
+    ui.label(egui::RichText::new("Tolerance").font(semi(13.0)));
     ui.horizontal(|ui| {
         ui.toggle_value(&mut f.dia, "\u{d8}");
         ui.add(egui::TextEdit::singleline(&mut f.tol).desired_width(70.0));
@@ -2830,7 +2830,7 @@ fn fcf_form(ui: &mut Ui, f: &mut FcfForm, t: super::theme::Theme) {
             ui.toggle_value(&mut f.mods[k], *m);
         }
     });
-    ui.label(egui::RichText::new("Datums").font(semi(12.5)));
+    ui.label(egui::RichText::new("Datums").font(semi(13.0)));
     ui.horizontal(|ui| {
         for d in f.datums.iter_mut() {
             ui.add(egui::TextEdit::singleline(d).desired_width(56.0).hint_text("—"));

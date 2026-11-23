@@ -459,7 +459,7 @@ impl Shell {
                                     )
                                     .on_hover_text(why.as_str());
                                     ui.label(
-                                        egui::RichText::new(why.as_str()).font(sans(10.0)).color(t.ink2),
+                                        egui::RichText::new(why.as_str()).font(sans(11.0)).color(t.ink2),
                                     );
                                 }
                                 w => {
@@ -479,7 +479,7 @@ impl Shell {
                                     };
                                     ui.label(
                                         egui::RichText::new(format!("{} {src}", unit(f.dim)))
-                                            .font(sans(10.0))
+                                            .font(sans(11.0))
                                             .color(t.ink2),
                                     );
                                 }
