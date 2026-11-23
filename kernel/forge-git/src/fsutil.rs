@@ -3,7 +3,7 @@
 //! are replaced (refs, the index).
 
 use crate::Error;
-use std::fs::{File, OpenOptions};
+use forge_dirs::fs::{File, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -15,12 +15,12 @@ fn temp_beside(path: &Path) -> PathBuf {
     let t = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |d| d.subsec_nanos());
-    path.with_file_name(format!("tmp_obj_{}_{n}_{t}", std::process::id()))
+    path.with_file_name(format!("tmp_obj_{}_{n}_{t}", forge_dirs::process_id()))
 }
 
 /// Writes a file that must not change once there (an object): no-op if it exists.
 pub fn write_new(path: &Path, data: &[u8]) -> Result<(), Error> {
-    if path.exists() {
+    if forge_dirs::fs::exists(path) {
         return Ok(());
     }
     let tmp = temp_beside(path);
@@ -30,10 +30,10 @@ pub fn write_new(path: &Path, data: &[u8]) -> Result<(), Error> {
         f.sync_data()?;
         drop(f);
         // the same content under the same name: a racing writer's copy is as good as ours
-        std::fs::rename(&tmp, path)
+        forge_dirs::fs::rename(&tmp, path)
     })();
     if r.is_err() {
-        let _ = std::fs::remove_file(&tmp);
+        let _ = forge_dirs::fs::remove_file(&tmp);
     }
     r.map_err(Error::from)
 }
@@ -54,7 +54,7 @@ impl Lock {
         name.push(".lock");
         let lock = target.with_file_name(name);
         if let Some(d) = lock.parent() {
-            std::fs::create_dir_all(d)?;
+            forge_dirs::fs::create_dir_all(d)?;
         }
         match OpenOptions::new().write(true).create_new(true).open(&lock) {
             Ok(f) => Ok(Lock {
@@ -76,7 +76,7 @@ impl Lock {
         let f = self.file.take().expect("open");
         f.sync_data()?;
         drop(f);
-        std::fs::rename(&self.lock, &self.target)?;
+        forge_dirs::fs::rename(&self.lock, &self.target)?;
         Ok(())
     }
 }
@@ -84,7 +84,7 @@ impl Lock {
 impl Drop for Lock {
     fn drop(&mut self) {
         if self.file.take().is_some() {
-            let _ = std::fs::remove_file(&self.lock);
+            let _ = forge_dirs::fs::remove_file(&self.lock);
         }
     }
 }
@@ -92,7 +92,7 @@ impl Drop for Lock {
 /// Appends a line to a log, creating it and its directories.
 pub fn append(path: &Path, line: &[u8]) -> Result<(), Error> {
     if let Some(d) = path.parent() {
-        std::fs::create_dir_all(d)?;
+        forge_dirs::fs::create_dir_all(d)?;
     }
     let mut f = OpenOptions::new().create(true).append(true).open(path)?;
     f.write_all(line)?;

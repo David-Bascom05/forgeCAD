@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 const CANARY: &str = "CANARY-7f3a9e";
 
 fn dir(name: &str) -> PathBuf {
-    let d = std::env::temp_dir().join(format!("fg-read-kinds-{}-{name}", std::process::id()));
+    let d = forge_dirs::temp_dir().join(format!("fg-read-kinds-{}-{name}", forge_dirs::process_id()));
     std::fs::create_dir_all(&d).unwrap();
     d
 }
@@ -132,6 +132,8 @@ fn a_part_that_does_not_parse_is_refused_with_nothing_of_it() {
 }
 
 /// The rack copied outside any git checkout: its assemblies read ../hw and ../frame as before.
+// copies with `cp`, a process: WASI starts none, so native only
+#[cfg(not(target_os = "wasi"))]
 #[test]
 fn the_rack_outside_git_loads() {
     let src_dir = Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/rack18u"));
@@ -200,7 +202,13 @@ fn a_drawing_under_a_session_root_reads_nothing_outside_it() {
         let _ = std::fs::remove_file(inside.join("link.fg"));
         std::os::unix::fs::symlink(d.join("out.fg"), inside.join("link.fg")).unwrap();
     }
-    for model in ["../out.fg", "link.fg"] {
+    // the link only where one is made (unix)
+    let models: &[&str] = if cfg!(unix) {
+        &["../out.fg", "link.fg"]
+    } else {
+        &["../out.fg"]
+    };
+    for &model in models {
         let src = format!(
             "drawing\nm = part(\"{model}\")\ns1 = sheet(\"A4\")\ntop = base_view(m, sheet: s1, dir: \"top\", at: (100, 100))\n"
         );

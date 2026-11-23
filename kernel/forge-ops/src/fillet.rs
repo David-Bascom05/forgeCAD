@@ -1285,12 +1285,12 @@ fn pivot_of(body: &Body, e: EdgeId, r: f64, root: Name) -> Option<Pivot> {
 
 /// Runs `f` over 0..n on the machine's threads, results in order.
 fn par_map<T: Send>(n: usize, f: impl Fn(usize) -> T + Sync) -> Vec<T> {
-    let threads = std::thread::available_parallelism().map_or(1, |t| t.get()).min(n);
+    let threads = forge_math::par::threads().min(n);
     if threads <= 1 {
         return (0..n).map(f).collect();
     }
     let next = std::sync::atomic::AtomicUsize::new(0);
-    let parts: Vec<Vec<(usize, T)>> = std::thread::scope(|s| {
+    let parts: Vec<Vec<(usize, T)>> = forge_math::par::scope(|s| {
         let workers: Vec<_> = (0..threads)
             .map(|_| {
                 s.spawn(|| {

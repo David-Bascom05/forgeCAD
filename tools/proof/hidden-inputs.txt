@@ -7,8 +7,135 @@
 #   must-fix N  item N of forgecad-gate/instant-load/op-memo-proof.md ("Audit"): an op's output
 #               depends on it today; remove it or key it, then reclass the line
 # Reviewed 2026-11-04 (impl-proof audit of main f730c784). Format: class  @ file|kind|line  [x count]
-speed (timing stats; a clock that picks a path is must-fix 5)  @ forge-bool/src/boolean.rs|clock|let mut clock = phases_on().then(std::time::Instant::now);  x 2
-speed (timing stats; a clock that picks a path is must-fix 5)  @ forge-bool/src/boolean.rs|clock|let now = std::time::Instant::now();
+#
+# forge-lang (interface/forge-lang/src; not scanned by kernel/forge-model/tests/hidden_inputs.rs):
+# every std HashMap/HashSet with a random seed (RandomState) on the part-build path, reviewed
+# 2026-11-23 (bool-speed). ORDER: iteration reached output order (fixed, see the note); ORDER-SAFE:
+# iterated, result order-independent; LOOKUP: never iterated (results unaffected; the seed still
+# moves instruction counts, which tools/speed/exact.sh fixes for measurement).
+#   FIXED (was ORDER: now a BTreeMap, errors by name)  |  interface/forge-lang/src/eval.rs:804  |  calls (Eval::recursion)  |  HashMap<String, (Span, BTreeSet<String>)>  |  eval.rs:823 `for (f, (span, _)) in &calls` pushes one Error::Recursion per recursive fn (into self.errors, or self.warnings at Lint level via rule() eval.rs:1058) in hash order: with 2+ recursive/mutually recursive fns the order of reported errors/lints changes run to run; nothing re-sorts them
+#   FIXED (was ORDER?: the old entries kept are now the least keys)  |  interface/forge-lang/src/build.rs:206  |  Cache.memo  |  HashMap<String, Rc<dyn Any>>  |  build.rs:454 `for (k, v) in self.cache.memo` with `break` at MEMO_KEPT=128 (build.rs:455): which of last run's memo entries survive is hash order -> decides what the next run must redo, which reaches the reported `remade` count (lib.rs:638, report.rs:148) and timing; geometry unchanged only if every memo value is a pure function of its key
+#   ORDER-SAFE  |  kernel/forge-model/src/splitface.rs:194  |  cuts  |  HashMap<EdgeId, Vec<(f64, VertexId)>>  |  splitface.rs:200 keys collected then cut_edges.sort() at :201 before use
+#   ORDER-SAFE  |  kernel/forge-ops/src/chamfer.rs:324  |  Walk.end_vertex (made :173)  |  HashMap<End=(EdgeId,bool), VertexId>  |  chamfer.rs:201 iterated; each distinct key writes its own edge's start/end slot, so the result is independent of order
+#   ORDER-SAFE  |  kernel/forge-sheet/src/build.rs:1642  |  Strips.twin (made :1830)  |  HashMap<(usize, usize), (usize, usize)>  |  iterated build.rs:1902 (reachability flood fill; the error uses the first unreached index of the `reached` Vec), :1958 (sets bool matrix entries), :2716 (collected into a HashSet): all order-independent
+#   ORDER-SAFE  |  kernel/forge-thermo/src/sdf.rs:262  |  want  |  HashSet<(i64, i64, i64)>  |  sdf.rs:294 `for (i,j,k) in want`: each node's distance is a pure function of (i,j,k), written to its own brick slot
+#   ORDER-SAFE  |  kernel/forge-thermo/src/sdf.rs:24  |  Sdf.bricks (made :258)  |  HashMap<(i32, i32, i32), Box<[f32; B^3]>>  |  sdf.rs:390 `.values()` only counted (nodes()); else get/entry
+#   ORDER-SAFE  |  kernel/forge-thermo/src/simulated.rs:616  |  directed  |  HashMap<(usize, usize), usize>  |  simulated.rs:636 `.keys()` filtered into rim, then rim.sort_unstable() (unique keys) before pushing rim triangles
+#   ORDER-SAFE  |  interface/forge-lang/src/anchors.rs:285  |  best  |  HashMap<Name, (usize, String)>  |  anchors.rs:296 `best.values()` -> sizes.insert(t, k) (k = faces.len() of anchor t, same for every face of t); :299 into_iter collected into the HashMap out.faces; ties at :290 are decided by the sorted Vec `sets`, not by this map
+#   ORDER-SAFE  |  interface/forge-lang/src/anchors.rs:89  |  Anchors.faces  |  HashMap<Name, String>  |  anchors.rs:300 `.values()` collected then sorted+dedup at :301-302; other uses are lookups (anchors.rs:316, query.rs:527)
+#   ORDER-SAFE  |  interface/forge-lang/src/build.rs:268  |  Kept.stages  |  HashMap<u128, Vec<Entry>>  |  build.rs:333-336 iterated for LRU eviction via min_by_key on tick; ticks are unique, so the evicted entry is order-independent
+#   ORDER-SAFE  |  interface/forge-lang/src/builtins.rs:2506  |  from  |  HashSet<Name>  |  builtins.rs:2512 `from.iter()` mapped into another HashSet `to` (lookups only)
+#   ORDER-SAFE  |  interface/forge-lang/src/eval.rs:309  |  Eval.fns  |  HashMap<String, Rc<FnDef>>  |  eval.rs:1478 `.keys()` feed edit_ops::nearest, a min over (dist, builtin, name) with a total tie-break (edit_ops.rs:385); uses.rs:279 iterates sub.fns into a BTreeMap; clone at eval.rs:493
+#   LOOKUP  |  kernel/forge-asm/src/check.rs:686  |  NARROWS  |  HashMap<NarrowKey=(u128,u128,[u64;9]), Narrow>  |  lookups only (get/insert, clear past 1<<20 at :1395)
+#   LOOKUP  |  kernel/forge-asm/src/check.rs:746  |  GAPS  |  HashMap<GapKey=(u128,u128,[u64;9],u64), Gap>  |  lookups only (get/insert/clear)
+#   LOOKUP  |  kernel/forge-asm/src/check.rs:873  |  VOLUMES  |  HashMap<VolumeKey=(u128,u128,[u64;9]), Result<f64, ExactFail>>  |  lookups only
+#   LOOKUP  |  kernel/forge-geom/src/corner/rational.rs:1259  |  cache() C  |  Mutex<HashMap<Vec<u64>, bool>>  |  lookups only (:1126 get, :1135 insert, :1255 clear)
+#   LOOKUP  |  kernel/forge-mesh/src/tessellate.rs:1042  |  placed  |  HashMap<(u32, u64, u64), u32>  |  lookups only
+#   LOOKUP  |  kernel/forge-model/src/splitface.rs:48  |  seen  |  HashSet<EdgeId>  |  lookups only (insert result decides seams, in loop order)
+#   LOOKUP  |  kernel/forge-model/src/splitface.rs:176  |  vert  |  HashMap<usize, VertexId>  |  lookups only
+#   LOOKUP  |  kernel/forge-model/src/splitface.rs:202  |  pieces  |  HashMap<EdgeId, Vec<EdgeId>>  |  lookups only
+#   LOOKUP  |  kernel/forge-model/src/splitface.rs:236  |  leave  |  HashMap<VertexId, Use=(EdgeId,bool)>  |  lookups only
+#   LOOKUP  |  kernel/forge-model/src/splitface.rs:339  |  from (walk)  |  HashMap<VertexId, Vec<usize>>  |  lookups only
+#   LOOKUP  |  kernel/forge-model/src/splitface.rs:442  |  seen (round_seam)  |  HashSet<Use=(EdgeId,bool)>  |  lookups only (insert in boundary order)
+#   LOOKUP  |  kernel/forge-model/src/bodies.rs:632  |  wholes (split_off)  |  HashSet<Name>  |  lookups only
+#   LOOKUP  |  kernel/forge-model/src/bodies.rs:805  |  taken  |  HashSet<Name>  |  lookups only (passed to split_off, contains at :627/:640)
+#   LOOKUP  |  kernel/forge-ops/src/shell.rs:104  |  links  |  HashMap<(VertexId, VertexId), EdgeId>  |  lookups only (:362/:365 get, :393 insert)
+#   LOOKUP  |  kernel/forge-ops/src/shell.rs:739  |  sub (collapse)  |  HashMap<EdgeId, Option<(EdgeId, bool)>>  |  lookups only
+#   LOOKUP  |  kernel/forge-ops/src/direct.rs:470  |  count (carry_names::pair)  |  HashMap<&Vec<Name>, (usize, usize, Option<Name>)>  |  lookups only (output follows `new` Vec order)
+#   LOOKUP  |  kernel/forge-ops/src/direct.rs:495  |  kept  |  HashSet<Name>  |  lookups only
+#   LOOKUP  |  kernel/forge-ops/src/direct.rs:521  |  had (edges)  |  HashSet<Name>  |  lookups only
+#   LOOKUP  |  kernel/forge-ops/src/direct.rs:522  |  used (edges)  |  HashSet<Name>  |  lookups only
+#   LOOKUP  |  kernel/forge-ops/src/direct.rs:550  |  had (vertices)  |  HashSet<Name>  |  lookups only
+#   LOOKUP  |  kernel/forge-ops/src/direct.rs:551  |  used (vertices)  |  HashSet<Name>  |  lookups only
+#   LOOKUP  |  kernel/forge-ops/src/direct.rs:703  |  sub  |  HashMap<EdgeId, Option<(EdgeId, bool)>>  |  lookups only
+#   LOOKUP  |  kernel/forge-ops/src/chamfer.rs:97  |  bevel_of  |  HashMap<EdgeId, usize>  |  lookups only
+#   LOOKUP  |  kernel/forge-ops/src/chamfer.rs:99  |  corners  |  HashMap<VertexId, Vec<(FaceId, CoedgeId, CoedgeId)>>  |  lookups only
+#   LOOKUP  |  kernel/forge-ops/src/chamfer.rs:326  |  Walk.contact (made :174)  |  HashMap<(EdgeId, bool, FaceId), VertexId>  |  lookups only
+#   LOOKUP  |  kernel/forge-ops/src/chamfer.rs:328  |  Walk.corner_path (made :175)  |  HashMap<CoedgeId, Path>  |  lookups only
+#   LOOKUP  |  kernel/forge-ops/src/chamfer.rs:330  |  Walk.cap (made :176)  |  HashMap<End, (FaceId, Path)>  |  lookups only
+#   LOOKUP  |  kernel/forge-ops/src/chamfer.rs:186  |  contact_edge  |  HashMap<(EdgeId, FaceId), EdgeId>  |  lookups only
+#   LOOKUP  |  kernel/forge-ops/src/chamfer.rs:225  |  used  |  HashMap<EdgeId, bool>  |  lookups only (:242 extend INTO it from a Vec)
+#   LOOKUP  |  kernel/forge-sheet/src/build.rs:2715  |  joined (flat_overlap)  |  HashSet<(usize, usize)>  |  lookups only
+#   LOOKUP  |  kernel/forge-sheet/src/build.rs:3056  |  index  |  HashMap<(usize, usize), usize>  |  lookups only
+#   LOOKUP  |  kernel/forge-sheet/src/build.rs:3113  |  count  |  HashMap<u64, usize>  |  lookups only
+#   LOOKUP  |  kernel/forge-sheet/src/build.rs:3157  |  tedges  |  HashMap<(usize, usize), [EdgeId; 2]>  |  lookups only
+#   LOOKUP  |  kernel/forge-sheet/src/build.rs:3186  |  rails  |  HashMap<usize, EdgeId>  |  lookups only
+#   LOOKUP  |  kernel/forge-sketch/src/solve.rs:657  |  rows_of  |  HashMap<ConstraintId, Vec<usize>>  |  lookups only (redundant list follows self.constraints order)
+#   LOOKUP  |  kernel/forge-step/src/heal.rs:976  |  index  |  HashMap<(usize, usize, usize), usize>  |  lookups only (STEP/IGES/BREP read, used by the `import` feature)
+#   LOOKUP  |  kernel/forge-step/src/heal.rs:998  |  owner  |  HashMap<usize, usize>  |  lookups only (same; `import` feature)
+#   LOOKUP  |  kernel/forge-thermo/src/sdf.rs:52  |  index  |  HashMap<u32, u32>  |  lookups only
+#   LOOKUP  |  kernel/forge-thermo/src/sdf.rs:36  |  Surface.edge_normal (made :79)  |  HashMap<(u32, u32), Vec3>  |  lookups only (float += in triangle order via entry)
+#   LOOKUP  |  kernel/forge-thermo/src/sdf.rs:38  |  Surface.cells (made :97)  |  HashMap<(i64, i64, i64), Vec<u32>>  |  lookups only
+#   LOOKUP  |  kernel/forge-thermo/src/surface.rs:277  |  cells (webbing)  |  HashMap<(i64, i64, i64), Vec<usize>>  |  lookups only
+#   LOOKUP  |  kernel/forge-thermo/src/stretch.rs:1173  |  side (hinges)  |  HashMap<(usize, usize), (usize, usize)>  |  lookups only (insert/remove)
+#   LOOKUP  |  kernel/forge-thermo/src/simulated.rs:575  |  Builder.nodes  |  HashMap<usize, usize>  |  lookups only
+#   LOOKUP  |  kernel/forge-thermo/src/simulated.rs:576  |  Builder.cuts  |  HashMap<(i64, i64), usize>  |  lookups only
+#   LOOKUP  |  interface/forge-lang/src/anchors.rs:91  |  Anchors.sizes  |  HashMap<String, usize>  |  lookups only in scope (forge-render reads by key)
+#   LOOKUP  |  interface/forge-lang/src/anchors.rs:93  |  Anchors.edges  |  HashMap<Name, String>  |  lookups only
+#   LOOKUP  |  interface/forge-lang/src/anchors.rs:97  |  Anchors.planes  |  HashMap<String, Frame>  |  lookups only in scope
+#   LOOKUP  |  interface/forge-lang/src/anchors.rs:104  |  Anchors.role_faces  |  HashMap<String, Vec<Name>>  |  lookups only in scope
+#   LOOKUP  |  interface/forge-lang/src/anchors.rs:310  |  tried  |  HashMap<(String, String), Vec<Name>>  |  lookups only
+#   LOOKUP  |  interface/forge-lang/src/asm.rs:2595  |  LOCATED  |  thread_local RefCell<Option<HashMap<LocateKey, Option<PathBuf>>>>  |  lookups only
+#   LOOKUP  |  interface/forge-lang/src/asm.rs:4387  |  unique  |  HashMap<(DocId, u64), usize>  |  lookups only (:4404 get, :4412 insert)
+#   LOOKUP  |  interface/forge-lang/src/asm.rs:4967  |  AtTexts.dims  |  Option<HashMap<ParamKey, Option<Dim>>>  |  lookups only
+#   LOOKUP  |  interface/forge-lang/src/asm.rs:4969  |  AtTexts.texts  |  HashMap<Vec<(ParamKey, u64, Dim)>, Result<String, Unevaluable>>  |  lookups only
+#   LOOKUP  |  interface/forge-lang/src/build.rs:203  |  Cache.comps  |  HashMap<String, Cache>  |  lookups only (asm.rs remove/insert)
+#   LOOKUP  |  interface/forge-lang/src/build.rs:217  |  Cache.sketches  |  HashMap<String, Rc<Solved>>  |  lookups only
+#   LOOKUP  |  interface/forge-lang/src/build.rs:376  |  Builder.memo  |  HashMap<String, Rc<dyn Any>>  |  lookups only (moved whole into Cache.memo at :453)
+#   LOOKUP  |  interface/forge-lang/src/build.rs:384  |  Builder.sketches  |  HashMap<String, Rc<Solved>>  |  lookups only (moved into Cache at :472)
+#   LOOKUP  |  interface/forge-lang/src/builtins.rs:2336  |  wholes  |  HashSet<Name>  |  lookups only
+#   LOOKUP  |  interface/forge-lang/src/builtins.rs:2407  |  ids  |  HashMap<Name, EdgeId>  |  lookups only
+#   LOOKUP  |  interface/forge-lang/src/builtins.rs:2512  |  to  |  HashSet<Name>  |  lookups only
+#   LOOKUP  |  interface/forge-lang/src/builtins.rs:3379  |  More.touching  |  Option<HashSet<Name>>  |  lookups only
+#   LOOKUP  |  interface/forge-lang/src/builtins.rs:3381  |  More.body (built as keep :3464)  |  Option<HashSet<Name>>  |  lookups only (extend INTO it from spans)
+#   LOOKUP  |  interface/forge-lang/src/eval.rs:393  |  Eval.copied  |  HashMap<u64, Vec<Rc<Feat>>>  |  lookups only (patterns.rs:72 insert, builtins.rs:2435 get)
+#   LOOKUP  |  interface/forge-lang/src/eval.rs:907  |  seen  |  HashSet<(kind, Span)>  |  lookups only (errors.retain keeps Vec order)
+#   LOOKUP  |  interface/forge-lang/src/media.rs:22  |  FONTS (alias Cache<T> :20)  |  Mutex<Option<HashMap<PathBuf, (Arc<[u8]>, Arc<Font>)>>>  |  lookups only
+#   LOOKUP  |  interface/forge-lang/src/media.rs:23  |  SOLIDS (alias Cache<T> :20)  |  Mutex<Option<HashMap<PathBuf, (Arc<[u8]>, Arc<Body>)>>>  |  lookups only
+#   LOOKUP  |  interface/forge-lang/src/pins.rs:35  |  histories() H  |  Mutex<HashMap<PathBuf, Option<Arc<History>>>>  |  lookups only
+#   LOOKUP  |  interface/forge-lang/src/verts.rs:106  |  in_bodies / keep (:108)  |  Option<HashSet<Name>>  |  lookups only
+#   LOOKUP  |  interface/forge-lang/src/bin/fg.rs:769  |  caches (serve)  |  HashMap<String, Cache>  |  lookups only (remove/insert)
+#   LOOKUP  |  kernel/forge-draw/src/hlr.rs:526  |  pts  |  HashMap<usize, Point2>  |  drawing
+#   LOOKUP  |  kernel/forge-draw/src/hlr.rs:555  |  by  |  HashMap<usize, Vec<usize>>  |  drawing
+#   LOOKUP  |  kernel/forge-draw/src/hlr.rs:632  |  uv  |  HashMap<(u32, u32), Point2>  |  drawing
+#   LOOKUP  |  kernel/forge-draw/src/hlr.rs:725  |  first  |  HashMap<usize, usize>  |  drawing
+#   LOOKUP  |  kernel/forge-draw/src/hlr.rs:901  |  Parts.curves  |  Mutex<HashMap<CurveKey, Arc<PartCurves>>>  |  drawing
+#   LOOKUP  |  kernel/forge-draw/src/hlr.rs:902  |  Parts.covers  |  Mutex<HashMap<usize, Arc<Local>>>  |  drawing
+#   LOOKUP  |  kernel/forge-draw/src/hlr.rs:903  |  Parts.held  |  Mutex<HashMap<usize, Arc<Body>>>  |  drawing
+#   LOOKUP  |  kernel/forge-draw/src/hlr.rs:960  |  first  |  HashMap<(usize, [u64; 3]), usize>  |  drawing
+#   LOOKUP  |  kernel/forge-dwg/src/edit.rs:351  |  by_block values  |  BTreeMap<u32, HashSet<u32>>  |  dwg
+#   LOOKUP  |  kernel/forge-dwg/src/draft/boundary.rs:140  |  cells  |  HashMap<(i64, i64), Vec<usize>>  |  dwg
+#   LOOKUP  |  kernel/forge-dwg/src/fonts/mod.rs:91  |  by_name  |  HashMap<String, usize>  |  dwg
+#   LOOKUP  |  kernel/forge-dwg/src/fonts/mod.rs:95  |  resolved  |  RwLock<HashMap<(String, String), Resolved>>  |  dwg
+#   LOOKUP  |  kernel/forge-dwg/src/fonts/mod.rs:96  |  glyphs  |  RwLock<HashMap<Key, Arc<Glyph>>>  |  dwg
+#   LOOKUP  |  kernel/forge-dwg/src/fonts/shx.rs:78  |  shapes (made :163)  |  HashMap<u16, (usize, usize)>  |  dwg
+#   LOOKUP  |  kernel/forge-git/src/odb.rs:23  |  map  |  HashMap<(usize, u64), Arc<Object>>  |  git
+#   LOOKUP  |  kernel/forge-git/src/odb.rs:86  |  known  |  HashSet<PathBuf>  |  git
+#   LOOKUP  |  kernel/forge-git/src/ignore.rs:60  |  cache  |  HashMap<String, Vec<Rule>>  |  git
+#   LOOKUP  |  kernel/forge-git/src/walk.rs:20  |  seen  |  HashSet<Oid>  |  git
+#   LOOKUP  |  kernel/forge-step/src/fit.rs:86  |  rates  |  RefCell<HashMap<..>>  |  export
+#   LOOKUP  |  kernel/forge-step/src/fit.rs:137  |  misses  |  HashMap<..>  |  export
+#   LOOKUP  |  kernel/forge-step/src/fit.rs:192  |  known  |  HashMap<u64, ..>  |  export
+#   LOOKUP  |  kernel/forge-step/src/fit.rs:199  |  misses  |  HashMap<(u64, u64), ..>  |  export
+#   LOOKUP  |  kernel/forge-step/src/fit.rs:270  |  nodes  |  HashMap<..>  |  export
+#   LOOKUP  |  kernel/forge-step/src/fit.rs:287  |  values  |  RefCell<HashMap<..>>  |  export
+#   LOOKUP  |  kernel/forge-model/src/names.rs:1193  |  built  |  HashMap<(usize, usize), Option<Arc<Body>>>  |  fuzz
+#   LOOKUP  |  interface/forge-lang/src/fuzz.rs:2668  |  made (also field :184)  |  HashMap<Name, Vec<usize>>  |  fuzz
+#   LOOKUP  |  interface/forge-lang/src/compare.rs:315  |  am  |  HashMap<&str, &str>  |  diff
+#   LOOKUP  |  interface/forge-lang/src/compare.rs:316  |  bm  |  HashMap<&str, &str>  |  diff
+#   LOOKUP  |  interface/forge-lang/src/compare.rs:368  |  lcs out  |  HashSet<&str>  |  diff
+#   ORDER-SAFE  |  interface/forge-lang/src/compare.rs:475  |  count m (na/nb)  |  HashMap<u64, Vec<usize>>  |  diff (iterated :486, each unique name pairs its own slots)
+#   LOOKUP  |  interface/forge-lang/src/compare.rs:575  |  kinds()  |  HashMap<String, &str>  |  diff
+#   LOOKUP  |  interface/forge-lang/src/compare.rs:579  |  units()  |  HashMap<String, &str>  |  diff
+#   LOOKUP  |  interface/forge-lang/src/query.rs:222  |  Part.handles  |  HashMap<Name, String>  |  query
+#   LOOKUP  |  interface/forge-lang/src/query.rs:426  |  index  |  HashMap<String, usize>  |  query
+#   LOOKUP  |  interface/forge-lang/src/query.rs:534  |  seen  |  HashMap<&str, usize>  |  query
+#   LOOKUP  |  interface/forge-lang/src/explode.rs:207  |  way  |  HashMap<(u8, usize, [i8; 3]), Option<[f32; 3]>>  |  drawing
+#   LOOKUP  |  interface/forge-lang/src/drawing/doc.rs:575  |  env  |  HashMap<String, Val>  |  drawing
+#   LOOKUP  |  interface/forge-lang/src/drawing/regen.rs:502  |  drawn  |  HashMap<DrawKey, (Vec<Piece>, Vec<Stroke>)>  |  drawing
+#   LOOKUP  |  interface/forge-lang/src/drawing/regen.rs:3070  |  stack  |  HashMap<String, f64>  |  drawing
+speed (timing stats; a clock that picks a path is must-fix 5)  @ forge-bool/src/boolean.rs|clock|let mut clock = phases_on().then(forge_math::clock::Instant::now);  x 2
+speed (timing stats; a clock that picks a path is must-fix 5)  @ forge-bool/src/boolean.rs|clock|let now = forge_math::clock::Instant::now();
 no-output (prints only)  @ forge-bool/src/boolean.rs|env|*ON.get_or_init(|| std::env::var_os("FORGE_DEBUG").is_some())
 no-output (prints only)  @ forge-bool/src/boolean.rs|env|*ON.get_or_init(|| std::env::var_os("FORGE_PHASES").is_some())
 no-output (prints only)  @ forge-bool/src/boolean.rs|env|*ON.get_or_init(|| std::env::var_os("FORGE_SPECS").is_some())
@@ -54,12 +181,12 @@ speed (stats counter)  @ forge-bool/src/imprint.rs|static|static TAKEN: std::syn
 no-output (work index, counter or stop flag)  @ forge-bool/src/nary.rs|atomic|let next = AtomicUsize::new(0);
 no-output (work index, counter or stop flag)  @ forge-bool/src/nary.rs|atomic|static PICK: AtomicUsize = AtomicUsize::new(0);
 no-output (work index, counter or stop flag)  @ forge-bool/src/nary.rs|atomic|use std::sync::atomic::{AtomicUsize, Ordering};
-speed (timing stats; a clock that picks a path is must-fix 5)  @ forge-bool/src/nary.rs|clock|let merge_start = std::time::Instant::now();
-speed (timing stats; a clock that picks a path is must-fix 5)  @ forge-bool/src/nary.rs|clock|let mut clock = std::time::Instant::now();
-speed (timing stats; a clock that picks a path is must-fix 5)  @ forge-bool/src/nary.rs|clock|let now = std::time::Instant::now();
-speed (timing stats; a clock that picks a path is must-fix 5)  @ forge-bool/src/nary.rs|clock|let start = std::time::Instant::now();
-speed (timing stats; a clock that picks a path is must-fix 5)  @ forge-bool/src/nary.rs|clock|let t = std::time::Instant::now();
-speed (timing stats; a clock that picks a path is must-fix 5)  @ forge-bool/src/nary.rs|clock|let t0 = std::time::Instant::now();
+speed (timing stats; a clock that picks a path is must-fix 5)  @ forge-bool/src/nary.rs|clock|let merge_start = forge_math::clock::Instant::now();
+speed (timing stats; a clock that picks a path is must-fix 5)  @ forge-bool/src/nary.rs|clock|let mut clock = forge_math::clock::Instant::now();
+speed (timing stats; a clock that picks a path is must-fix 5)  @ forge-bool/src/nary.rs|clock|let now = forge_math::clock::Instant::now();
+speed (timing stats; a clock that picks a path is must-fix 5)  @ forge-bool/src/nary.rs|clock|let start = forge_math::clock::Instant::now();
+speed (timing stats; a clock that picks a path is must-fix 5)  @ forge-bool/src/nary.rs|clock|let t = forge_math::clock::Instant::now();
+speed (timing stats; a clock that picks a path is must-fix 5)  @ forge-bool/src/nary.rs|clock|let t0 = forge_math::clock::Instant::now();
 no-output (prints only)  @ forge-bool/src/nary.rs|env|*ON.get_or_init(|| std::env::var_os("FORGE_NARY").is_some())
 no-output (prints only)  @ forge-bool/src/nary.rs|env|*REG.get_or_init(|| std::env::var("FORGE_NARY_REG").ok().and_then(|v| v.parse().ok()))
 no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-bool/src/nary.rs|float|let r = |e: forge_math::Vec3| ((a * x.dot(e)).powi(2) + (b * y.dot(e)).powi(2)).sqrt();
@@ -76,11 +203,12 @@ speed (buffers, stats)  @ forge-bool/src/nary.rs|static|static PHASES: std::cell
 speed (stats counter)  @ forge-bool/src/nary.rs|static|static PICK: AtomicUsize = AtomicUsize::new(0);
 no-output (constant tables or print switches)  @ forge-bool/src/nary.rs|static|static REG: std::sync::OnceLock<Option<usize>> = std::sync::OnceLock::new();
 speed (stats counter)  @ forge-bool/src/nary.rs|thread_local|thread_local! {
-no-output (results and errors put back in index order)  @ forge-bool/src/nary.rs|threads|let parts: Vec<Vec<(usize, T)>> = std::thread::scope(|s| {
+no-output (results and errors put back in index order)  @ forge-bool/src/nary.rs|threads|let parts: Vec<Vec<(usize, T)>> = forge_math::par::scope(|s| {
 no-output (no iteration order reaches an output; audit)  @ forge-bool/src/ssi.rs|hash-order|std::collections::HashMap<
 speed (cache answering a function of its own key)  @ forge-bool/src/ssi.rs|static|static MET: std::cell::RefCell<Mets> = std::cell::RefCell::new(Default::default());
 speed (cache answering a function of its own key)  @ forge-bool/src/ssi.rs|static|static MET_MOST: std::cell::Cell<usize> = const { std::cell::Cell::new(4096) };
 speed (cache answering a function of its own key)  @ forge-bool/src/ssi.rs|thread_local|thread_local! {
+keyed (keyed-like: identity of one traced curve, sharing made by the op itself: equality only, deterministic)  @ forge-bool/src/unify.rs|pointer|(Curve::Intersection(a), Curve::Intersection(b)) => !std::sync::Arc::ptr_eq(a, b),
 speed (lazy field or constant table)  @ forge-geom/src/blend.rs|lazy|samples: OnceLock::new(),  x 5
 speed (lazy field or constant table)  @ forge-geom/src/blend.rs|lazy|samples: OnceLock<Vec<(f64, Point3)>>,
 speed (lazy field or constant table)  @ forge-geom/src/blend.rs|lazy|smooth: OnceLock::new(),  x 14
@@ -160,10 +288,17 @@ no-output (read only by the n-ary regen, Part::regenerate_nary*; forge-lang buil
 no-output (read only by the n-ary regen, Part::regenerate_nary*; forge-lang builds by step_solids, which never batches, and the n-ary regen is not memoised)  @ forge-gpu/src/lib.rs|static|static RENT: AtomicU64 = AtomicU64::new(0);
 no-output (constant tables or print switches)  @ forge-gpu/src/lib.rs|static|static SAID: Once = Once::new();
 no-output (read only by the n-ary regen, Part::regenerate_nary*; forge-lang builds by step_solids, which never batches, and the n-ary regen is not memoised)  @ forge-gpu/src/lib.rs|threads|std::thread::spawn(gpu);
+no-output (the clock itself: timings only, the browser host sets its source)  @ forge-math/src/clock.rs|clock|SystemTime::now()
+no-output (the clock itself: timings only, the browser host sets its source)  @ forge-math/src/clock.rs|clock|pub fn system_now() -> SystemTime {
+no-output (the clock itself: timings only, the browser host sets its source)  @ forge-math/src/clock.rs|clock|pub fn system_now() -> std::time::SystemTime {
+no-output (the clock itself: timings only, the browser host sets its source)  @ forge-math/src/clock.rs|clock|pub use std::time::{SystemTime, UNIX_EPOCH};
+no-output (the clock itself: timings only, the browser host sets its source)  @ forge-math/src/clock.rs|clock|span(Instant::now().0 - self.0)
+no-output (the clock itself: timings only, the browser host sets its source)  @ forge-math/src/clock.rs|lazy|static CLOCKS: OnceLock<(fn() -> f64, fn() -> f64)> = OnceLock::new();
+no-output (the clock itself: timings only, the browser host sets its source)  @ forge-math/src/clock.rs|lazy|use std::sync::OnceLock;
+no-output (the clock itself: timings only, the browser host sets its source)  @ forge-math/src/clock.rs|static|static CLOCKS: OnceLock<(fn() -> f64, fn() -> f64)> = OnceLock::new();
 no-output (forge_math::par: answers in item order, each a function of its item; the thread count only splits the work)  @ forge-math/src/par.rs|atomic|let next = std::sync::atomic::AtomicUsize::new(0);
 no-output (forge_math::par: answers in item order, each a function of its item; the thread count only splits the work)  @ forge-math/src/par.rs|env|std::env::var("FORGECAD_THREADS")
 no-output (forge_math::par: answers in item order, each a function of its item; the thread count only splits the work)  @ forge-math/src/par.rs|threads|.unwrap_or_else(|| std::thread::available_parallelism().map_or(1, |n| n.get()))
-no-output (forge_math::par: answers in item order, each a function of its item; the thread count only splits the work)  @ forge-math/src/par.rs|threads|let mut got: Vec<(usize, T)> = std::thread::scope(|s| {
 no-output (prints only)  @ forge-math/src/trace.rs|clock|Span(name, on().then(Instant::now))
 no-output (prints only)  @ forge-math/src/trace.rs|env|*ON.get_or_init(|| std::env::var_os("FORGECAD_TRACE").is_some())
 no-output (prints only)  @ forge-math/src/trace.rs|lazy|static ON: OnceLock<bool> = OnceLock::new();
@@ -174,12 +309,12 @@ no-output (no iteration order reaches an output; audit)  @ forge-mesh/src/tessel
 no-output (no iteration order reaches an output; audit)  @ forge-model/src/bodies.rs|hash-order|fn split_off(mut b: Body, taken: &HashSet<Name>, salt: impl Fn(Name) -> Name) -> Body {
 no-output (no iteration order reaches an output; audit)  @ forge-model/src/bodies.rs|hash-order|let taken: HashSet<Name> = all_names(&below).collect();
 no-output (no iteration order reaches an output; audit)  @ forge-model/src/bodies.rs|hash-order|let wholes: HashSet<Name> = taken.iter().map(|n| n.whole()).collect();
-no-output (results and errors put back in index order)  @ forge-model/src/bodies.rs|threads|let built: Vec<Result<Vec<Vec<Tool>>, RegenError>> = std::thread::scope(|s| {
+no-output (results and errors put back in index order)  @ forge-model/src/bodies.rs|threads|let built: Vec<Result<Vec<Vec<Tool>>, RegenError>> = forge_math::par::scope(|s| {
 no-output (work index, counter or stop flag)  @ forge-model/src/lib.rs|atomic|let next = std::sync::atomic::AtomicUsize::new(from);
 speed (lazy field or constant table)  @ forge-model/src/lib.rs|lazy|let index = std::cell::OnceCell::new();
 speed (a counter, stats only)  @ forge-model/src/lib.rs|static|static NAME_FALLBACKS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 speed (a counter, stats only)  @ forge-model/src/lib.rs|thread_local|thread_local! {
-no-output (results and errors put back in index order)  @ forge-model/src/lib.rs|threads|let done: Vec<Vec<Built>> = std::thread::scope(|s| {
+no-output (results and errors put back in index order)  @ forge-model/src/lib.rs|threads|let done: Vec<Vec<Built>> = forge_math::par::scope(|s| {
 no-output (looked up by key, never iterated)  @ forge-model/src/names.rs|hash-order|let mut built: std::collections::HashMap<(usize, usize), Option<std::sync::Arc<Body>>> =
 no-output (no iteration order reaches an output; audit)  @ forge-model/src/splitface.rs|hash-order|leave: &HashMap<VertexId, Use>,
 no-output (no iteration order reaches an output; audit)  @ forge-model/src/splitface.rs|hash-order|let mut cuts: HashMap<EdgeId, Vec<(f64, VertexId)>> = HashMap::new();
@@ -191,7 +326,7 @@ no-output (no iteration order reaches an output; audit)  @ forge-model/src/split
 no-output (no iteration order reaches an output; audit)  @ forge-model/src/splitface.rs|hash-order|pieces: &HashMap<EdgeId, Vec<EdgeId>>,
 no-output (constant tables or print switches)  @ forge-model/src/standard.rs|static|pub static SCREWS: &[Screw] = &[
 no-output (how many test-sweep items run at once; the answers come in item order)  @ forge-model/src/suite.rs|env|std::env::var("FORGECAD_EACH")
-no-output (results and panics put back in item order)  @ forge-model/src/suite.rs|threads|std::thread::scope(|s| {
+no-output (results and panics put back in item order)  @ forge-model/src/suite.rs|threads|forge_math::par::scope(|s| {
 speed (cache answering a function of its own key)  @ forge-model/src/swept.rs|static|static BUILT: std::cell::RefCell<Vec<(u64, String, Tool)>> = const { std::cell::RefCell::new(Vec::new()) };
 speed (cache answering a function of its own key)  @ forge-model/src/swept.rs|static|static BUILT_MOST: std::cell::Cell<usize> = const { std::cell::Cell::new(64) };
 speed (cache answering a function of its own key)  @ forge-model/src/swept.rs|static|static SEEN: std::cell::RefCell<Vec<(Feature, Option<Box3>)>> = const { std::cell::RefCell::new(Vec::new()) };
@@ -225,8 +360,7 @@ no-output (no iteration order reaches an output; audit)  @ forge-ops/src/direct.
 no-output (work index, counter or stop flag)  @ forge-ops/src/fillet.rs|atomic|let next = std::sync::atomic::AtomicUsize::new(0);
 no-output (each fillet_with starts its own walk budget and restores its caller's, unwinding too; a_fillet_starts_with_its_own_walk_budget_and_leaves_its_callers)  @ forge-ops/src/fillet.rs|static|static WALK_LEFT: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
 no-output (each fillet_with starts its own walk budget and restores its caller's, unwinding too; a_fillet_starts_with_its_own_walk_budget_and_leaves_its_callers)  @ forge-ops/src/fillet.rs|thread_local|thread_local! {
-no-output (results and errors put back in index order)  @ forge-ops/src/fillet.rs|threads|let parts: Vec<Vec<(usize, T)>> = std::thread::scope(|s| {
-no-output (results and errors put back in index order)  @ forge-ops/src/fillet.rs|threads|let threads = std::thread::available_parallelism().map_or(1, |t| t.get()).min(n);
+no-output (results and errors put back in index order)  @ forge-ops/src/fillet.rs|threads|let parts: Vec<Vec<(usize, T)>> = forge_math::par::scope(|s| {
 speed (lazy field or constant table)  @ forge-ops/src/selfx.rs|lazy|let loops: Vec<OnceCell<Vec<UvLoop>>> = vec![OnceCell::new(); n];
 speed (lazy field or constant table)  @ forge-ops/src/selfx.rs|lazy|let pieces: Vec<OnceCell<Vec<Box3>>> = vec![OnceCell::new(); n];
 speed (lazy field or constant table)  @ forge-ops/src/selfx.rs|lazy|let verts: Vec<OnceCell<Vec<VertexId>>> = vec![OnceCell::new(); n];
@@ -235,6 +369,19 @@ no-output (no iteration order reaches an output; audit)  @ forge-ops/src/shell.r
 no-output (no iteration order reaches an output; audit)  @ forge-ops/src/shell.rs|hash-order|let mut sub: HashMap<EdgeId, Option<(EdgeId, bool)>> = HashMap::new();
 no-output (no iteration order reaches an output; audit)  @ forge-ops/src/shell.rs|hash-order|links: &'a mut std::collections::HashMap<(VertexId, VertexId), EdgeId>,
 no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-ops/src/sweep.rs|float|let l3 = q.d1.length().powi(3);
+no-output (forge-par, reviewed: a hooked scope's count of unjoined panics; it decides only whether the scope panics, never an answer)  @ forge-par/src/lib.rs|atomic|panics: AtomicUsize,
+no-output (forge-par, reviewed: the import of the panic count above)  @ forge-par/src/lib.rs|atomic|use std::sync::atomic::{AtomicUsize, Ordering};
+no-output (forge-par, reviewed: the host's spawner, set once; it picks which threads run a scope's closures, and every parallel path puts the answers back in item order)  @ forge-par/src/lib.rs|lazy|static SPAWNER: OnceLock<Spawner> = OnceLock::new();
+no-output (forge-par, reviewed: the import of the spawner's cell)  @ forge-par/src/lib.rs|lazy|use std::sync::{Arc, Condvar, Mutex, MutexGuard, OnceLock};
+no-output (forge-par, reviewed: the host's spawner, set once; it picks which threads run a scope's closures, and every parallel path puts the answers back in item order)  @ forge-par/src/lib.rs|static|static SPAWNER: OnceLock<Spawner> = OnceLock::new();
+no-output (forge-par, reviewed: std's scope with no spawner installed; its users put the answers back in item order)  @ forge-par/src/lib.rs|threads|return std::thread::scope(|s| {
+no-output (test code)  @ forge-par/src/tests.rs|atomic|let done = AtomicBool::new(false);
+no-output (test code)  @ forge-par/src/tests.rs|atomic|let done: Vec<AtomicBool> = (0..8).map(|_| AtomicBool::new(false)).collect();
+no-output (test code)  @ forge-par/src/tests.rs|atomic|let total = AtomicUsize::new(0);
+no-output (test code)  @ forge-par/src/tests.rs|atomic|use std::sync::atomic::AtomicBool;
+no-output (test code)  @ forge-par/src/tests.rs|static|static MAY_WAIT: Cell<bool> = const { Cell::new(true) };
+no-output (test code)  @ forge-par/src/tests.rs|thread_local|thread_local! {
+no-output (test code)  @ forge-par/src/tests.rs|threads|std::thread::spawn(j);
 no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-sheet/src/build.rs|float|let size = (bx.x.width().powi(2) + bx.y.width().powi(2) + bx.z.width().powi(2)).sqrt();  x 3
 no-output (no iteration order reaches an output; audit)  @ forge-sheet/src/build.rs|hash-order|let index: HashMap<(usize, usize), usize> = sides.iter().enumerate().map(|(k, s)| (*s, k)).collect();
 no-output (no iteration order reaches an output; audit)  @ forge-sheet/src/build.rs|hash-order|let joined: std::collections::HashSet<(usize, usize)> = self
@@ -244,12 +391,13 @@ no-output (no iteration order reaches an output; audit)  @ forge-sheet/src/build
 no-output (no iteration order reaches an output; audit)  @ forge-sheet/src/build.rs|hash-order|twin: HashMap<(usize, usize), (usize, usize)>,
 no-output (a count of the checks' questions; tests read it, no op does)  @ forge-sheet/src/build.rs|static|static ASKED: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
 no-output (a count of the checks' questions; tests read it, no op does)  @ forge-sheet/src/build.rs|thread_local|thread_local! {
+no-output (looked up only, never iterated; audit)  @ forge-sheet/src/region.rs|hash-order|let mut along: std::collections::HashSet<(u32, u32), std::hash::BuildHasherDefault<Mix>> =
 no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-sheet/src/form.rs|float|+ (hi.powi(3) - lo.powi(3)) / 3.0 * (dmath::sin(s1) - dmath::sin(s0))
 no-output (powi: small integer exponents, same bits native and wasm; ban-list it)  @ forge-sheet/src/form.rs|float|let r = (near(l.x, self.c.x).powi(2) + near(l.y, self.c.y).powi(2)).sqrt();
 no-output (no iteration order reaches an output; audit)  @ forge-sheet/src/region.rs|hash-order|type Map<K, V> = HashMap<K, V, std::hash::BuildHasherDefault<Mix>>;
 no-output (FFI buffer or a local identity of one object)  @ forge-sheet/src/region.rs|pointer|let x_is_spline = matches!(x, Piece::Spline { s: q, .. } if Arc::ptr_eq(q, s));
 no-output (test code)  @ forge-thermo/src/bench.rs|env|let path = format!("{}/data/benchmarks/{name}.csv", env!("CARGO_MANIFEST_DIR"));
-no-output (the Newton factor's subtrees on their own threads: each supernode's arithmetic fixed by the pattern, the same whatever the thread count or order; joined before the top)  @ forge-thermo/src/newton.rs|threads|std::thread::scope(|sc| {
+no-output (the Newton factor's subtrees on their own threads: each supernode's arithmetic fixed by the pattern, the same whatever the thread count or order; joined before the top)  @ forge-thermo/src/newton.rs|threads|forge_math::par::scope(|sc| {
 no-output (looked up by key only: get, entry; nodes() sums counts, an integer)  @ forge-thermo/src/sdf.rs|hash-order|bricks: HashMap<(i32, i32, i32), Box<[f32; B * B * B]>>,
 no-output (looked up by key only: get, entry; each cell's list in triangle order)  @ forge-thermo/src/sdf.rs|hash-order|cells: HashMap<(i64, i64, i64), Vec<u32>>,
 no-output (looked up by key only; each key's sum added in triangle order)  @ forge-thermo/src/sdf.rs|hash-order|edge_normal: HashMap<(u32, u32), Vec3>,

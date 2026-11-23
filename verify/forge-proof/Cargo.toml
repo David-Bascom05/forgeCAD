@@ -20,6 +20,7 @@ forge-model = { path = "../../kernel/forge-model" }
 decisions = ["forge-bool/decisions", "forge-model/decisions"]
 
 [dev-dependencies]
+forge-dirs = { path = "../../kernel/forge-dirs" }
 # .fg part files (examples, tests); the selections' entity helpers (examples/topo)
 forge-lang = { path = "../../interface/forge-lang" }
 forge-agent = { path = "../../interface/forge-agent" }

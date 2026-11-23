@@ -1,0 +1,353 @@
+# OSH Cut, restated from its public material and design pages (read 2026-11-22). Not an official
+# profile and not endorsed by OSH Cut. Verify with the vendor before ordering.
+# PARTIAL: OSH Cut publishes bend radii, K and minimum flange only in its web app's catalog, which
+# could not be read; this profile has no bend data, so a bent sheet must give r: and bend: itself.
+# Sources and choices: research/sheet-metal/vendors/oshcut.md
+format = 1
+id = "oshcut"
+name = "OSH Cut"
+source = "https://www.oshcut.com/materialdetails/aluminum-5052-h32 ; /aluminum-6061-t6 ; /steel-a1008-cr ; /stainless-steel-304-2b-finish ; https://www.oshcut.com/capabilities"
+taken = "2026-11-22"
+units = "in"
+note = "Partial: cut rules per stock (minimum hole, channel, wall, part size) from OSH Cut's material pages; no bend radii or K (in its app catalog only). Not official. Verify with the vendor before ordering."
+operations = ["laser", "bend", "tap", "countersink", "hardware", "powder_coat", "deburr"]
+kerf = 0.006
+
+[limits]
+max_flat = [59, 119]
+min_flat = [0.1, 0.1]
+
+[tolerance]
+cut = "+/-0.005 in for most materials and thicknesses"
+bend_angle = "+/-1.0 deg"
+
+[[material]]
+name = "5052-H32 aluminum"
+aliases = ["5052", "5052-H32", "aluminum 5052"]
+library = "5052-H32"
+
+[[material.stock]]
+t = 0.02
+min_hole = 0.01
+min_slot = 0.01   # min recommended channel
+min_web = 0.02   # min recommended wall
+not = ["hardware"]
+note = "max part 119 x 47 in"
+
+[[material.stock]]
+t = 0.032
+min_hole = 0.01
+min_slot = 0.01   # min recommended channel
+min_web = 0.02   # min recommended wall
+note = "max part 119 x 47 in"
+
+[[material.stock]]
+t = 0.04
+min_hole = 0.01
+min_slot = 0.01   # min recommended channel
+min_web = 0.02   # min recommended wall
+note = "max part 119 x 47 in"
+
+[[material.stock]]
+t = 0.05
+min_hole = 0.0125
+min_slot = 0.01   # min recommended channel
+min_web = 0.02   # min recommended wall
+
+[[material.stock]]
+t = 0.063
+min_hole = 0.01575
+min_slot = 0.013   # min recommended channel
+min_web = 0.021   # min recommended wall
+
+[[material.stock]]
+t = 0.08
+min_hole = 0.02
+min_slot = 0.016   # min recommended channel
+min_web = 0.027   # min recommended wall
+
+[[material.stock]]
+t = 0.09
+min_hole = 0.0225
+min_slot = 0.018   # min recommended channel
+min_web = 0.03   # min recommended wall
+
+[[material.stock]]
+t = 0.1
+min_hole = 0.025
+min_slot = 0.02   # min recommended channel
+min_web = 0.033   # min recommended wall
+
+[[material.stock]]
+t = 0.125
+min_hole = 0.03125
+min_slot = 0.025   # min recommended channel
+min_web = 0.042   # min recommended wall
+
+[[material.stock]]
+t = 0.16
+min_hole = 0.04
+min_slot = 0.032   # min recommended channel
+min_web = 0.053   # min recommended wall
+note = "max part 119 x 47 in"
+
+[[material.stock]]
+t = 0.188
+min_hole = 0.047
+min_slot = 0.038   # min recommended channel
+min_web = 0.063   # min recommended wall
+
+[[material.stock]]
+t = 0.25
+min_hole = 0.0625
+min_slot = 0.05   # min recommended channel
+min_web = 0.083   # min recommended wall
+
+[[material.stock]]
+t = 0.375
+min_hole = 0.09375
+min_slot = 0.075   # min recommended channel
+min_web = 0.125   # min recommended wall
+
+[[material.stock]]
+t = 0.5
+min_hole = 0.125
+min_slot = 0.1   # min recommended channel
+min_web = 0.167   # min recommended wall
+not = ["bend"]
+
+[[material]]
+name = "6061-T6 aluminum"
+aliases = ["6061", "6061-T6", "aluminum 6061"]
+library = "6061-T6"
+
+[[material.stock]]
+t = 0.032
+min_hole = 0.01575
+min_slot = 0.013   # min recommended channel
+min_web = 0.021   # min recommended wall
+not = ["bend", "tap"]
+note = "max part 119 x 47 in"
+
+[[material.stock]]
+t = 0.04
+min_hole = 0.01575
+min_slot = 0.013   # min recommended channel
+min_web = 0.021   # min recommended wall
+not = ["bend"]
+note = "max part 119 x 47 in"
+
+[[material.stock]]
+t = 0.05
+min_hole = 0.01575
+min_slot = 0.013   # min recommended channel
+min_web = 0.021   # min recommended wall
+not = ["bend"]
+note = "max part 119 x 47 in"
+
+[[material.stock]]
+t = 0.063
+min_hole = 0.01575
+min_slot = 0.013   # min recommended channel
+min_web = 0.021   # min recommended wall
+not = ["bend"]
+note = "max part 119 x 47 in"
+
+[[material.stock]]
+t = 0.08
+min_hole = 0.02
+min_slot = 0.016   # min recommended channel
+min_web = 0.027   # min recommended wall
+not = ["bend"]
+note = "max part 119 x 47 in"
+
+[[material.stock]]
+t = 0.09
+min_hole = 0.0225
+min_slot = 0.018   # min recommended channel
+min_web = 0.03   # min recommended wall
+not = ["bend"]
+note = "max part 119 x 47 in"
+
+[[material.stock]]
+t = 0.1
+min_hole = 0.025
+min_slot = 0.02   # min recommended channel
+min_web = 0.033   # min recommended wall
+not = ["bend"]
+note = "max part 119 x 47 in"
+
+[[material.stock]]
+t = 0.125
+min_hole = 0.03125
+min_slot = 0.025   # min recommended channel
+min_web = 0.042   # min recommended wall
+not = ["bend"]
+note = "max part 119 x 47 in"
+
+[[material.stock]]
+t = 0.188
+min_hole = 0.047
+min_slot = 0.038   # min recommended channel
+min_web = 0.063   # min recommended wall
+not = ["bend"]
+note = "max part 119 x 47 in"
+
+[[material.stock]]
+t = 0.25
+min_hole = 0.0625
+min_slot = 0.05   # min recommended channel
+min_web = 0.083   # min recommended wall
+not = ["bend"]
+note = "max part 119 x 47 in"
+
+[[material.stock]]
+t = 0.375
+min_hole = 0.09375
+min_slot = 0.075   # min recommended channel
+min_web = 0.125   # min recommended wall
+not = ["bend"]
+note = "max part 119 x 47 in"
+
+[[material.stock]]
+t = 0.5
+min_hole = 0.125
+min_slot = 0.1   # min recommended channel
+min_web = 0.167   # min recommended wall
+not = ["bend"]
+note = "max part 119 x 47 in"
+
+[[material.stock]]
+t = 0.625
+min_hole = 0.1875
+min_slot = 0.15   # min recommended channel
+min_web = 0.25   # min recommended wall
+not = ["bend"]
+note = "max part 119 x 47 in"
+
+[[material.stock]]
+t = 0.75
+min_hole = 0.1875
+min_slot = 0.15   # min recommended channel
+min_web = 0.25   # min recommended wall
+not = ["bend"]
+note = "max part 119 x 47 in"
+
+[[material]]
+name = "A1008 cold rolled steel"
+aliases = ["1008", "A1008", "1008 CR", "mild steel", "steel"]
+library = "1008 cold rolled"
+
+[[material.stock]]
+t = 0.024
+min_hole = 0.01
+min_slot = 0.01   # min recommended channel
+min_web = 0.02   # min recommended wall
+not = ["hardware", "tap"]
+note = "max part 119 x 47 in"
+
+[[material.stock]]
+t = 0.03
+min_hole = 0.01
+min_slot = 0.01   # min recommended channel
+min_web = 0.02   # min recommended wall
+not = ["tap"]
+
+[[material.stock]]
+t = 0.036
+min_hole = 0.01
+min_slot = 0.01   # min recommended channel
+min_web = 0.02   # min recommended wall
+not = ["tap"]
+
+[[material.stock]]
+t = 0.048
+min_hole = 0.012
+min_slot = 0.01   # min recommended channel
+min_web = 0.02   # min recommended wall
+
+[[material.stock]]
+t = 0.06
+min_hole = 0.015
+min_slot = 0.012   # min recommended channel
+min_web = 0.02   # min recommended wall
+
+[[material.stock]]
+t = 0.075
+min_hole = 0.01875
+min_slot = 0.015   # min recommended channel
+min_web = 0.025   # min recommended wall
+
+[[material.stock]]
+t = 0.09
+min_hole = 0.0225
+min_slot = 0.018   # min recommended channel
+min_web = 0.03   # min recommended wall
+note = "max part 119 x 47 in"
+
+[[material.stock]]
+t = 0.1
+min_hole = 0.025
+min_slot = 0.02   # min recommended channel
+min_web = 0.033   # min recommended wall
+
+[[material.stock]]
+t = 0.12
+min_hole = 0.03
+min_slot = 0.024   # min recommended channel
+min_web = 0.04   # min recommended wall
+
+[[material.stock]]
+t = 0.135
+min_hole = 0.03375
+min_slot = 0.027   # min recommended channel
+min_web = 0.045   # min recommended wall
+
+[[material]]
+name = "304 #2B stainless"
+aliases = ["304", "304 stainless", "304-2B", "304 SS"]
+library = "304 annealed"
+
+[[material.stock]]
+t = 0.036
+min_hole = 0.01
+min_slot = 0.01   # min recommended channel
+min_web = 0.02   # min recommended wall
+not = ["tap"]
+note = "max part 119 x 47 in"
+
+[[material.stock]]
+t = 0.048
+min_hole = 0.012
+min_slot = 0.01   # min recommended channel
+min_web = 0.02   # min recommended wall
+
+[[material.stock]]
+t = 0.06
+min_hole = 0.015
+min_slot = 0.012   # min recommended channel
+min_web = 0.02   # min recommended wall
+
+[[material.stock]]
+t = 0.075
+min_hole = 0.01875
+min_slot = 0.015   # min recommended channel
+min_web = 0.025   # min recommended wall
+
+[[material.stock]]
+t = 0.1
+min_hole = 0.025
+min_slot = 0.02   # min recommended channel
+min_web = 0.033   # min recommended wall
+
+[[material.stock]]
+t = 0.12
+min_hole = 0.03
+min_slot = 0.024   # min recommended channel
+min_web = 0.04   # min recommended wall
+
+[[material.stock]]
+t = 0.135
+min_hole = 0.03375
+min_slot = 0.027   # min recommended channel
+min_web = 0.045   # min recommended wall

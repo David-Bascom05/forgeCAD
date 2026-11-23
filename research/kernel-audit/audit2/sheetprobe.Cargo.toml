@@ -1,0 +1,10 @@
+[package]
+name = "sheetprobe"
+version = "0.0.0"
+edition = "2024"
+[dependencies]
+forge-sheet = { path = "../../../../kernel/forge-sheet" }
+forge-math = { path = "../../../../kernel/forge-math" }
+forge-ops = { path = "../../../../kernel/forge-ops" }
+forge-topo = { path = "../../../../kernel/forge-topo" }
+[workspace]

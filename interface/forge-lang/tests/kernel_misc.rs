@@ -1039,3 +1039,354 @@ extrude2 = extrude(s4, 2)
         assert!(mesh.open_edges().is_empty());
     }
 }
+
+/// A tapered pocket's cone and a bore's cylinder 0.15 apart: the boolean stops on
+/// InconsistentClassification (a CADFS part fails so; see the fixture). Open: ignored until the
+/// boolean classifies near-coincident cone and cylinder faces alike.
+#[test]
+#[ignore = "open: InconsistentClassification, cone against plane"]
+fn a_bore_beside_a_tapered_lobe_builds() {
+    use forge_lang::fuzz::{Verdict, judge_built};
+    let (v, _) = judge_built(include_str!("kernel_parts/tapered_lobe_bore.fg"));
+    assert!(matches!(v, Verdict::Ok), "{v:?}");
+}
+
+/// A fillet carried along a tangent chain (a concave arc, a straight side, a top arc) into an end
+/// face a scoop has trimmed: Overflow, where FreeCAD rounds it. Open: ignored until the fillet
+/// builds there.
+#[test]
+#[ignore = "open: Fillet Overflow along a tangent chain into a trimmed face"]
+fn a_fillet_along_a_tangent_chain_past_a_scoop_builds() {
+    use forge_lang::fuzz::{Verdict, judge_built};
+    let (v, _) = judge_built(include_str!("kernel_parts/fillet_tangent_chain_scoop.fg"));
+    assert!(matches!(v, Verdict::Ok), "{v:?}");
+}
+
+/// A drill started on a plane tangent to a round crown, cut up to a bore: NotClosed (a judge fail).
+/// Open: ignored until the cut builds.
+#[test]
+#[ignore = "open: NotClosed drilling from a plane tangent to the crown"]
+fn a_drill_from_a_tangent_plane_to_a_bore_builds() {
+    use forge_lang::fuzz::{Verdict, judge_built};
+    let (v, _) = judge_built(include_str!("kernel_parts/drill_from_tangent_plane.fg"));
+    assert!(matches!(v, Verdict::Ok), "{v:?}");
+}
+
+/// A ring cut whose outer circle is tangent to the block's top and bottom: the two sides it leaves
+/// meet only along lines, a non-manifold result, which the kernel refuses as ZeroThickness at the
+/// tangent lines (the owner's decision, as mainstream mechanical CAD; Onshape builds it).
+#[test]
+fn a_ring_cut_tangent_to_two_faces_is_refused_at_the_tangent_lines() {
+    use forge_lang::fuzz::{Verdict, judge_built};
+    let (v, _) = judge_built(include_str!("kernel_parts/ring_cut_tangent.fg"));
+    let Verdict::Refused(why) = &v else {
+        panic!("{v:?}")
+    };
+    assert!(why.contains("ZeroThickness"), "{why}");
+    // the tangent lines: the outer circle's top and bottom, z = 0 and z = 10
+    assert!(
+        why.contains("z: 0") || why.contains("z: 10") || why.contains("z: 9"),
+        "{why}"
+    );
+}
+
+/// Three fillets on exactly written spline walls that the kernel refuses where Onshape rounds them
+/// (CADFS, fit splines written exactly). Open: ignored until the fillet spec says what each is due
+/// (a round, or a refusal with its reason); each test expects a build.
+#[test]
+#[ignore = "open: fillet NoBlend where spline walls meet (for the fillet spec)"]
+fn a_fillet_where_two_spline_walls_meet_builds() {
+    use forge_lang::fuzz::{Verdict, judge_built};
+    let (v, _) = judge_built(include_str!("kernel_parts/fillet_spline_walls_noblend.fg"));
+    assert!(matches!(v, Verdict::Ok), "{v:?}");
+}
+
+#[test]
+#[ignore = "open: fillet Overflow between a wavy spline wall and a notch (for the fillet spec)"]
+fn a_fillet_on_a_notched_wavy_plate_builds() {
+    use forge_lang::fuzz::{Verdict, judge_built};
+    let (v, _) = judge_built(include_str!("kernel_parts/fillet_wavy_plate_notch.fg"));
+    assert!(matches!(v, Verdict::Ok), "{v:?}");
+}
+
+#[test]
+#[ignore = "open: fillet Overflow on both edges of a narrow crescent (for the fillet spec)"]
+fn a_fillet_on_both_edges_of_a_crescent_builds() {
+    use forge_lang::fuzz::{Verdict, judge_built};
+    let (v, _) = judge_built(include_str!("kernel_parts/fillet_crescent_both_edges.fg"));
+    assert!(matches!(v, Verdict::Ok), "{v:?}");
+}
+
+/// A tapered cut whose walls meet before its depth: the hexagon's walls, 80 deg, close on its
+/// centre at sqrt 3 / tan 80 deg = 0.305 down, short of the 0.5 asked, so the pit is the pyramid
+/// they make, as a square's is (forge-ops taper.rs: past a closed profile there is nothing). It
+/// built an invalid body (EdgeDegenerate): the slab's top joints were merged by distance, and a
+/// hexagon's lie 2 GONE apart where its sides have shrunk to GONE; and sides shrinking at other
+/// rates were kept a few GONE long. Exact volumes from the profile's half-planes moved in.
+#[test]
+fn a_taper_whose_walls_meet_is_the_pyramid_they_make() {
+    use forge_lang::fuzz::{Verdict, judge_built};
+    let src = include_str!("kernel_parts/taper_collapses.fg");
+    let irregular = src.replace("(1, -s)])", "(1.3, -s)])");
+    for (src, exact) in [
+        (src.to_string(), 1598.9420381157493),
+        (irregular, 1598.9048017085177),
+    ] {
+        let (v, _) = judge_built(&src);
+        assert!(matches!(v, Verdict::Ok), "{v:?}");
+        let b = built(&src).body;
+        let vol = forge_topo::mass::mass(&b).expect("a mass").volume;
+        assert!((vol - exact).abs() <= 1e-9 * exact, "volume {vol}, exact {exact}");
+    }
+}
+
+/// The same pit says so (a lint, the part still built): its walls close at sqrt 3 / tan 80 deg,
+/// short of its depth. The fixes set the depth to where they close, or the taper to the largest
+/// angle that reaches the depth (three figures, towards 0), and each leaves no lint.
+#[test]
+fn a_taper_that_closes_short_of_its_depth_says_so() {
+    use forge_lang::error::{Error, Op, Warning};
+    let src = include_str!("kernel_parts/taper_collapses.fg");
+    let lints = |src: &str| -> Vec<Error> {
+        let r = forge_lang::run(src, forge_lang::Options::default(), Default::default()).0;
+        assert!(r.errors.is_empty(), "{:?}", r.errors);
+        r.warnings
+            .into_iter()
+            .filter_map(|w| match w {
+                Warning::Lint(e @ Error::TaperCloses { .. }) => Some(e),
+                _ => None,
+            })
+            .collect()
+    };
+    let found = lints(src);
+    let [Error::TaperCloses { at, depth, .. }] = &found[..] else {
+        panic!("{found:?}")
+    };
+    let (s, c) = dmath::sin_cos(80f64.to_radians());
+    let h = 3f64.sqrt() / (s / c);
+    assert!((at - h).abs() < 1e-9 && *depth == 0.5, "{at} {depth}");
+    let fixes = found[0].fixes();
+    let values: Vec<(String, f64)> = fixes
+        .iter()
+        .map(|f| match f {
+            Op::SetParam { param, value } => (param.to_string(), value.value),
+            o => panic!("{o:?}"),
+        })
+        .collect();
+    assert_eq!(
+        values,
+        vec![("pit.d".to_string(), 0.305), ("pit.a".to_string(), 73.8)]
+    );
+    for f in &fixes {
+        let fixed = forge_lang::edit::apply(src, f).expect("applies");
+        assert!(lints(&fixed).is_empty(), "{f:?}");
+    }
+    // at 70 deg the walls do not meet: no lint
+    assert!(lints(&src.replace("80deg", "70deg")).is_empty());
+}
+
+/// A ball cut centred on the top face over a 1 deg tapered rounded-rectangle pocket: the boolean
+/// stops on SplitCrossed (the sphere). Open: ignored until the boolean splits the sphere cleanly.
+#[test]
+#[ignore = "open: SplitCrossed on the sphere"]
+fn a_ball_over_a_tapered_pocket_builds() {
+    use forge_lang::fuzz::{Verdict, judge_built};
+    let (v, _) = judge_built(include_str!("kernel_parts/ball_over_tapered_pocket.fg"));
+    assert!(matches!(v, Verdict::Ok), "{v:?}");
+}
+
+/// A revolved cup whose wall is a spline, shelled. The revolve makes the wall two faces of one
+/// surface; their offsets coincide, so the seam between them is no intersection but the seam moved
+/// with the offset: the section's exact offset curve, turned to the seam's angle.
+#[test]
+fn a_revolved_spline_cup_shells() {
+    use forge_lang::fuzz::{Verdict, judge_built};
+    let (v, _) = judge_built(include_str!("kernel_parts/shell_revolved_spline.fg"));
+    assert!(matches!(v, Verdict::Ok), "{v:?}");
+}
+
+/// A cup like `shell_revolved_spline.fg`: its wall a spline through `wall` (r, z), top to bottom,
+/// revolved about z and shelled `t` with the top open.
+fn spline_cup(wall: &[(f64, f64)], t: f64) -> String {
+    let n = wall.len();
+    let mut src = String::new();
+    for (k, (r, z)) in wall.iter().enumerate() {
+        src += &format!("param cup.p{k} = ({:?}, {z:?})\n", -r);
+    }
+    let pts: Vec<String> = (0..n).map(|k| format!("p{k}")).collect();
+    let (top, bottom) = (wall[0].1, wall[n - 1].0);
+    src += &format!(
+        "param cup.h = {top:?}
+param cup.f = {:?}
+sketch cup(on: xz) {{
+  l0 = line((0, 0), (0, h))
+  l1 = line((0, h), p0)
+  s2 = spline([{}], closed: false)
+  l3 = line(p{}, (0, 0))
+  ax = line((0, h), (0, 0), construction: true)
+}}
+body = revolve(cup, axis: cup.ax)
+param skin.t = {t:?}
+skin = shell(t, open: body.side(cup.l1))
+",
+        -bottom,
+        pts.join(", "),
+        n - 1
+    );
+    src
+}
+
+const CUP: [(f64, f64); 3] = [(30.0, 60.0), (12.0, 30.0), (20.0, 0.0)];
+const WAVY: [(f64, f64); 5] = [
+    (30.0, 60.0),
+    (22.0, 45.0),
+    (30.0, 30.0),
+    (22.0, 15.0),
+    (30.0, 0.0),
+];
+const ESS: [(f64, f64); 4] = [(30.0, 60.0), (18.0, 40.0), (26.0, 20.0), (16.0, 0.0)];
+
+/// A wall's points, a thickness, and the shelled cup's volume and area.
+type CupCase = (&'static [(f64, f64)], f64, f64, f64);
+
+/// Spline cups shelled over a range of walls, from a thousandth of an inch to all but the thickness
+/// that folds them, each valid and of the volume and area worked out apart (the section's offset
+/// curve integrated about the axis at 30 digits), within the mass's bounds.
+#[test]
+fn spline_cups_shell_over_thickness_and_shape() {
+    use forge_lang::fuzz::{Verdict, judge_built};
+    let cases: [CupCase; 9] = [
+        (&CUP, 0.0254, 216.198410283863, 17029.7522630528),
+        (&CUP, 0.5, 4158.56214467998, 16757.5911114297),
+        (&CUP, 5.0, 33064.6281621307, 14480.1564355208),
+        (&CUP, 11.7, 53164.4361673539, 12057.1887502532),
+        (&WAVY, 0.5, 6852.54405525901, 27539.506350796),
+        (&WAVY, 2.0, 25641.0532814929, 26182.9901104585),
+        (&WAVY, 5.4, 59702.3710213139, 23729.8296165452),
+        (&ESS, 1.0, 10086.7492998474, 20430.292960212),
+        (&ESS, 3.0, 28283.1314584731, 19606.1579806174),
+    ];
+    for (wall, t, volume, area) in cases {
+        let src = spline_cup(wall, t);
+        let (v, _) = judge_built(&src);
+        assert!(matches!(v, Verdict::Ok), "{} points, {t}: {v:?}", wall.len());
+        let b = built(&src);
+        let m = forge_topo::mass::mass(&b.body).expect("a mass");
+        let (dv, da) = ((m.volume - volume).abs(), (m.area - area).abs());
+        assert!(
+            dv <= m.err[0].max(1e-6 * volume) && da <= m.err[1].max(1e-6 * area),
+            "{} points, {t}: volume {} against {volume} (err {}), area {} against {area} (err {})",
+            wall.len(),
+            m.volume,
+            m.err[0],
+            m.area,
+            m.err[1]
+        );
+    }
+}
+
+/// Just past the thickness where the wall's offset folds, the shell is refused there, typed: the
+/// cup's circles close up at 11.7582990712 (its waist), the wavy wall's bump turns back at
+/// 175/32, the S's at 11.3718828313 (worked out apart at 30 digits); just short of it, it shells.
+#[test]
+fn a_spline_wall_too_thick_for_its_curvature_is_refused_where_it_folds() {
+    for (wall, fold) in [
+        (&CUP[..], 11.7582990712012),
+        (&WAVY[..], 175.0 / 32.0),
+        (&ESS[..], 11.3718828313),
+    ] {
+        let past = kernel_util::refusal(&spline_cup(wall, fold * (1.0 + 1e-5)));
+        assert!(past.contains("Folds"), "{} points: {past}", wall.len());
+        built(&spline_cup(wall, fold * (1.0 - 1e-5)));
+    }
+}
+
+/// A plate whose wall is a wavy spline (crossing nowhere) builds, then its face fails to mesh
+/// (ConstraintThroughPoint). Open: ignored until the mesher takes the face.
+#[test]
+#[ignore = "open: ConstraintThroughPoint meshing a wavy spline wall"]
+fn a_wavy_spline_wall_meshes() {
+    use forge_lang::fuzz::{Verdict, judge_built};
+    let (v, _) = judge_built(include_str!("kernel_parts/mesh_wavy_spline.fg"));
+    assert!(matches!(v, Verdict::Ok), "{v:?}");
+}
+
+/// A through hole goes through a rib that stands above the rest of the part. The box a through
+/// hole is sized by (`hole::reach`) left ribs out, so this hole ran 7 mm, through the plate only,
+/// and stopped 1 mm into the rib (research/ops-spec/design.md §2, H1: a finite depth is exact iff
+/// it clears the part). The column it removes is exact: the disc under the tent's ridge,
+/// 40·π·R² − (34/30)·(4R³/3) with R = 2.5.
+#[test]
+fn thru_hole_goes_through_a_rib_above_the_part() {
+    let src = "shared L = 80
+shared W = 30
+shared t = 6
+param web.w = 8
+param bore.d = 5
+param tent.y = -15
+param tent.x0 = 10
+param tent.xm = 40
+param tent.x1 = 70
+param tent.top = 40
+sketch plan(on: xy) {
+  outline = rect(corner: (0, 0), size: (L, W))
+}
+base = extrude(plan, t)
+sketch tent(on: offset(xz, y)) {
+  path a(start: (x0, t)) {
+    line(to: (xm, top))
+    line(to: (x1, t))
+  }
+}
+web = rib(tent.a, w, flip: true)
+sketch spot(on: xy) {
+  c = pt(L / 2, W / 2)
+}
+bore = hole(at: spot.c, d: d, depth: thru, flip: true)
+";
+    let (b, v) = body(src);
+    assert!(forge_topo::check(&b).is_empty(), "{:?}", forge_topo::check(&b));
+    let r: f64 = 2.5;
+    let plate_and_rib = 80.0 * 30.0 * 6.0 + 60.0 * 34.0 / 2.0 * 8.0;
+    let column = 40.0 * dmath::PI * r * r - 34.0 / 30.0 * (4.0 * r * r * r / 3.0);
+    assert!(
+        (v - (plate_and_rib - column)).abs() < 1e-6,
+        "volume {v}, through the rib {}",
+        plate_and_rib - column
+    );
+}
+
+/// A through hole goes through a tapered boss. `hole::reach` gave a tapered (and a slanted)
+/// extrude no box at all, so this hole ran 7 mm, through the plate only, and stopped at the
+/// boss's foot. Exact: the plate, the boss's frustum (radius 10 narrowing by 30 tan 2°), less the
+/// hole's 36 mm column.
+#[test]
+fn thru_hole_goes_through_a_tapered_boss() {
+    let src = "shared L = 80
+shared W = 30
+shared t = 6
+param top.r = 10
+param boss.h = 30
+param boss.a = 2deg
+param bore.d = 5
+sketch plan(on: xy) {
+  outline = rect(corner: (0, 0), size: (L, W))
+}
+base = extrude(plan, t)
+sketch top(on: base.end) {
+  c = circle((L / 2, W / 2), r)
+}
+boss = extrude(top.c, h, taper: a)
+sketch spot(on: xy) {
+  p = pt(L / 2, W / 2)
+}
+bore = hole(at: spot.p, d: d, depth: thru, flip: true)
+";
+    let (b, v) = body(src);
+    assert!(forge_topo::check(&b).is_empty(), "{:?}", forge_topo::check(&b));
+    let (r0, h) = (10.0f64, 30.0f64);
+    let r1 = r0 - h * dmath::sin(2f64.to_radians()) / dmath::cos(2f64.to_radians());
+    let boss = dmath::PI * h / 3.0 * (r0 * r0 + r0 * r1 + r1 * r1);
+    let exact = 80.0 * 30.0 * 6.0 + boss - dmath::PI * 2.5 * 2.5 * 36.0;
+    assert!((v - exact).abs() < 1e-6, "volume {v}, through the boss {exact}");
+}

@@ -99,15 +99,31 @@ def loop_segs(a, lp, flip, fmt):
                 c = c1 if math.dist(c1, c) <= math.dist(c2, c) else c2
             out.append(("arc", q(c), q(s), q(e), d > 0))
         elif p.kind == "poly" and p.src is not None and p.src[0] == "nurbs":
-            # the whole of a clamped NURBS: its poles, knots and weights, run the loop's way
+            # the whole of a NURBS: its poles, knots and weights, run the loop's way. A clamped one's end poles are
+            # its ends, set to the loop's own; an unclamped or periodic one's poles are written as they are
             _, deg, poles, knots, weights = p.src
             if not fwd:
                 poles, weights = poles[::-1], weights[::-1]
                 knots = [knots[0] + knots[-1] - k for k in knots[::-1]]
             ps = [f(x) for x in poles]
-            ps[0], ps[-1] = s, e
+            if knots[: deg + 1] == [knots[0]] * (deg + 1) and knots[-deg - 1 :] == [knots[-1]] * (deg + 1):
+                ps[0], ps[-1] = s, e
             ws = None if all(w == 1.0 for w in weights) else [fmt(w) for w in weights]
             out.append(("nurbs", [q(x) for x in ps], deg, [fmt(k) for k in knots], ws))
+        elif p.kind == "poly" and p.src is not None and p.src[0] == "through":
+            # the whole of a fit spline marked exact: its own points (and end slopes), run the loop's way. CADFS's
+            # stay polylines: written exactly they turned a match into a shell refusal and two parts into mesh
+            # failures (research/import/coverage.md)
+            _, pts, d0, d1 = p.src
+            ps = [f(x) for x in (pts if fwd else pts[::-1])]
+            if not fwd:
+                d0, d1 = (None if d1 is None else (-d1[0], -d1[1])), (None if d0 is None else (-d0[0], -d0[1]))
+            ps[0], ps[-1] = s, e
+            # Forge's slope is the rate along the curve: the derivative over the length through the points, as
+            # cadfs.section_of writes a loft's
+            length = sum(math.dist(u, v) for u, v in zip(pts, pts[1:])) or 1.0
+            fl = lambda v: None if v is None else q((v[0] / length, (-v[1] if flip else v[1]) / length))
+            out.append(("spline", [q(x) for x in ps], fl(d0), fl(d1)))
         elif p.kind == "poly":
             ps = [f(x) for x in (p.pts if fwd else p.pts[::-1])]
             ps[0], ps[-1] = s, e
@@ -169,7 +185,9 @@ def rows_of(loops):
                 _, ps, d0, d1 = sg
                 closed = len(ps) > 3 and ps[0] == ps[-1]
                 body = ", ".join(pt2(p) for p in (ps[:-1] if closed else ps))
-                extra = ", closed: true" if closed else ""
+                # a through-points spline is closed unless told otherwise, or given an end slope
+                sloped = d0 is not None or d1 is not None
+                extra = ", closed: true" if closed and not sloped else ("" if closed or sloped else ", closed: false")
                 if d0 is not None:
                     extra += f", start_slope: {pt2(d0)}"
                 if d1 is not None:
@@ -285,6 +303,8 @@ class Prog:
                 x = {"both": "thru_all"}.get(e[1], "thru")
                 if e[1] != "both" and ((e[1] == "fwd") == cut):
                     more = ", flip: true"
+            elif w == "upto":
+                x = f"upto({e[1]})"
             elif w == "next":
                 x = "next"
                 if (e[1] == "fwd") == cut:
@@ -296,7 +316,9 @@ class Prog:
             if getattr(st, "along", None):
                 # the walls slanted along it, each end square to the normal
                 more += f", along: {self.dir(st.along)}"
-            self.out.append(f"{i} = {call}({sk}, {x}{more}{new}{self.opts(st, made)})")
+            # a row's own regions (a text's glyphs: `sk.r0`), or the sketch's one
+            prof = f"{sk}.{st.member}" if getattr(st, "member", None) else sk
+            self.out.append(f"{i} = {call}({prof}, {x}{more}{new}{self.opts(st, made)})")
             if made:
                 self.cur = i
         elif k == "revolve":

@@ -8,7 +8,7 @@
 use super::Shell;
 use super::fg::{FgAct, From, Severity, short};
 use super::icons;
-use super::theme::{medium, mono, sans, semi};
+use super::theme::{medium, mono, sans};
 use crate::shell::placed::Placed;
 use egui::{Align2, Color32, Rect, Sense, Stroke, Ui, pos2, vec2};
 use forge_lang::asm::{ExpectOut, InstOut, Issue as AsmIssue, JointOut, LinkFamily, LinkOut};
@@ -1861,20 +1861,11 @@ const WARN: Color32 = Color32::from_rgb(0xE0, 0xA0, 0x30);
 
 /// A dialog's frame, as the feature dialogs have it.
 pub(super) fn dialog_frame(t: &super::theme::Theme) -> egui::Frame {
-    egui::Frame::new()
-        .fill(t.surface)
-        .stroke(Stroke::new(1.0, t.line))
-        .corner_radius(6)
-        .shadow(egui::Shadow {
-            offset: [0, 4],
-            blur: 16,
-            spread: 0,
-            color: Color32::from_black_alpha(90),
-        })
-        .inner_margin(12)
+    super::theme::panel_frame(t)
 }
 
-/// A dialog's title row with its close box: true when closed.
+/// A dialog's title row with its close box: true when closed. The body under it gets the design
+/// system's spacing, so the controls egui lays out don't touch.
 pub(super) fn dialog_head(
     ui: &mut Ui,
     t: &super::theme::Theme,
@@ -1883,11 +1874,12 @@ pub(super) fn dialog_head(
     name: &str,
     places: &mut Vec<(String, Rect)>,
 ) -> bool {
+    ui.spacing_mut().item_spacing = vec2(super::theme::S2, super::theme::S1);
     let w = ui.available_width();
-    let (head, _) = ui.allocate_exact_size(vec2(w, 26.0), Sense::hover());
+    let (head, _) = ui.allocate_exact_size(vec2(w, super::theme::TITLE_ROW_H), Sense::hover());
     icons::draw(
         ui.painter(),
-        head.left_top() + vec2(0.0, 2.0),
+        pos2(head.left(), head.center().y - 10.0),
         20.0,
         icon,
         1.5,
@@ -1897,11 +1889,14 @@ pub(super) fn dialog_head(
         pos2(head.left() + 28.0, head.center().y),
         Align2::LEFT_CENTER,
         title,
-        semi(14.0),
+        super::theme::title(),
         t.ink,
     );
     let x = Rect::from_center_size(pos2(head.right() - 10.0, head.center().y), vec2(20.0, 20.0));
     let r = ui.interact(x, ui.scope_id().with(("close", name)), Sense::click());
+    if r.hovered() {
+        ui.painter().rect_filled(x, super::theme::R1, t.hover);
+    }
     icons::draw(
         ui.painter(),
         x.left_top() + vec2(2.0, 2.0),
@@ -2162,7 +2157,7 @@ impl Shell {
                 if !n.detail.is_empty() && room > 30.0 {
                     let mut d = n.detail.clone();
                     let wide = |s: &str, ui: &mut Ui| {
-                        ui.fonts_mut(|f| f.layout_no_wrap(s.to_string(), sans(10.0), t.ink2))
+                        ui.fonts_mut(|f| f.layout_no_wrap(s.to_string(), sans(11.0), t.ink2))
                             .size()
                             .x
                     };
@@ -2173,7 +2168,7 @@ impl Shell {
                         pos2(used + 10.0 + room, r.center().y),
                         Align2::RIGHT_CENTER,
                         d,
-                        sans(10.0),
+                        sans(11.0),
                         t.ink2,
                     );
                 }
@@ -2850,13 +2845,13 @@ impl Shell {
                         ui.set_width(ui.spacing().slider_width);
                         ui.label(
                             egui::RichText::new(format!("{}{unit}", short(lo)))
-                                .font(sans(10.0))
+                                .font(sans(11.0))
                                 .color(t.ink2),
                         );
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             ui.label(
                                 egui::RichText::new(format!("{}{unit}", short(hi)))
-                                    .font(sans(10.0))
+                                    .font(sans(11.0))
                                     .color(t.ink2),
                             );
                         });
@@ -2996,7 +2991,7 @@ impl Shell {
                             .max_height(220.0)
                             .show(ui, |ui| {
                                 for x in list.iter().take(400) {
-                                    ui.label(egui::RichText::new(x).font(mono(10.0)).color(t.ink2));
+                                    ui.label(egui::RichText::new(x).font(mono(11.0)).color(t.ink2));
                                 }
                             });
                     }
@@ -3142,7 +3137,7 @@ impl Shell {
                                             e.line,
                                             e.metric
                                         ))
-                                        .font(mono(10.0))
+                                        .font(mono(11.0))
                                         .color(if e.ok {
                                             t.ink2
                                         } else {
@@ -3201,7 +3196,7 @@ impl Shell {
                             .font(mono(12.0))
                             .color(t.ink),
                     );
-                    ui.label(egui::RichText::new("mm³").font(sans(10.0)).color(t.ink2));
+                    ui.label(egui::RichText::new("mm³").font(sans(11.0)).color(t.ink2));
                 });
                 super::measure_ui::coord_table(
                     ui,
@@ -3225,7 +3220,7 @@ impl Shell {
                         ui.vertical(|ui| {
                             for f in faces {
                                 let short = f.strip_prefix(&format!("{who}/")).unwrap_or(f);
-                                ui.label(egui::RichText::new(short).font(mono(10.0)).color(t.ink));
+                                ui.label(egui::RichText::new(short).font(mono(11.0)).color(t.ink));
                             }
                         });
                     });
@@ -3279,7 +3274,7 @@ impl Shell {
                                     );
                                     ui.label(
                                         egui::RichText::new(part_word(file))
-                                            .font(mono(10.0))
+                                            .font(mono(11.0))
                                             .color(t.ink2),
                                     );
                                     ui.end_row();
@@ -3641,9 +3636,9 @@ mod tests {
     #[test]
     fn a_part_opens_to_its_features_and_edits_one_in_place() {
         let dir = std::env::temp_dir().join(format!("fgasm-inplace-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
+        forge_dirs::fs::create_dir_all(&dir).unwrap();
         let part = "shared t = 6\nsketch s(on: xy) {\n  r = rect(center: (0, 0), size: (40, 20))\n}\nplate = extrude(s, t)\n";
-        std::fs::write(dir.join("plate.fg"), part).unwrap();
+        forge_dirs::fs::write(dir.join("plate.fg"), part).unwrap();
         let rows = vec![occ("a", "plate.fg"), occ("b", "plate.fg")];
         // the file as the document writes it, the solve's resolved name on the occurrences
         let insts = vec![
@@ -3680,7 +3675,7 @@ mod tests {
             .expect("the distance, as written");
         d.text = "8".into();
         assert!(ip.write().unwrap());
-        let text = std::fs::read_to_string(dir.join("plate.fg")).unwrap();
+        let text = forge_dirs::fs::read_to_string(dir.join("plate.fg")).unwrap();
         assert!(
             text.contains("param plate.d = 8\nplate = extrude(s, d)"),
             "{text}"
@@ -3699,16 +3694,16 @@ mod tests {
         );
         f.text = "9".into();
         assert!(ip.write().unwrap());
-        let text = std::fs::read_to_string(dir.join("plate.fg")).unwrap();
+        let text = forge_dirs::fs::read_to_string(dir.join("plate.fg")).unwrap();
         assert!(text.contains("shared t = 9"), "{text}");
-        std::fs::remove_dir_all(&dir).ok();
+        forge_dirs::fs::remove_dir_all(&dir).ok();
     }
 
     /// One file holding bodies and components: each in-file component opens to its own tree
     /// read from this file's features, and editing one edits this file (Edit Feature).
     #[test]
     fn in_file_components_open_to_their_trees_and_edit_this_file() {
-        let src = std::fs::read_to_string(concat!(
+        let src = forge_dirs::fs::read_to_string(concat!(
             env!("CARGO_MANIFEST_DIR"),
             "/../../examples/unified/peg_board.fg"
         ))

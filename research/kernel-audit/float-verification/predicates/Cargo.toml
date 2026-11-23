@@ -1,0 +1,17 @@
+[package]
+name = "fv-predicates"
+version = "0.1.0"
+edition = "2024"
+license = "MPL-2.0"
+publish = false
+description = "kernel/forge-math/src/predicates.rs (cross_sign, orient2d), spelled so Aeneas can translate it"
+
+# Its own workspace: a scratch copy, not part of the ForgeCAD build.
+[workspace]
+
+[lib]
+path = "src/lib.rs"
+
+# The tests check the copy against the kernel, bit for bit.
+[dev-dependencies]
+forge-math = { path = "../../../../kernel/forge-math" }

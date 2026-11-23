@@ -481,7 +481,30 @@ fn corners(
                 Vec2::new(d.y, -d.x)
             };
             let (n1, n2) = (out_of(p0, p1), out_of(q0, q1));
-            let at = |x: f64, y: f64| v + n1 * x + n2 * y;
+            // the true frame: `off(x, y)` is the step from the corner to the point x out of edge
+            // 1's line and y out of edge 2's (n1 . d = x, n2 . d = y, by Cramer); the lines cross
+            // at the corner's angle, sin A = |n1 x n2|, so the edges are not parallel
+            let det = n1.cross(n2);
+            if det.abs() <= tol::ANGULAR {
+                continue;
+            }
+            // (where the edges are exactly perpendicular the solve is the expansion in the normals,
+            // unit to rounding, and is evaluated so, to the bit as a square corner always was)
+            let square = n1.dot(n2) == 0.0;
+            let off = |x: f64, y: f64| {
+                if square {
+                    n1 * x + n2 * y
+                } else {
+                    Vec2::new((x * n2.y - y * n1.y) / det, (n1.x * y - n2.x * x) / det)
+                }
+            };
+            let at = |x: f64, y: f64| {
+                if square {
+                    v + n1 * x + n2 * y
+                } else {
+                    v + off(x, y)
+                }
+            };
             // the square of both zones' ends near the corner, a thickness to spare
             let lo = |b: &Bend| -b.s - t;
             let hi = |b: &Bend| (b.ba - b.s).max(0.0) + t;
@@ -537,13 +560,10 @@ fn corners(
                 joints,
                 size,
             };
+            // the region within h of c out of both edges' lines: a square at a right angle, else
+            // the parallelogram of the four offset lines
             let square_at = |c: Point2, h: f64| {
-                polygon(&[
-                    c + (n1 + n2) * -h,
-                    c + (n1 - n2) * h,
-                    c + (n1 + n2) * h,
-                    c + (n2 - n1) * h,
-                ])
+                polygon(&[c + off(-h, -h), c + off(h, -h), c + off(h, h), c + off(-h, h)])
             };
             let (lp, size, automatic) = match kind {
                 CornerKind::Circular { size, placement } | CornerKind::Square { size, placement } => {
@@ -591,10 +611,14 @@ fn corners(
                     if width.is_nan() || width <= RELIEF_MIN {
                         return Err(unbuilt(width));
                     }
+                    // the bisector of the two zones' inner lines (their tangent lines on this
+                    // wall), through where they cross, from a thickness inside it to a thickness
+                    // past the far corner of the zones' overlap
                     let m = (n1 + n2) * (1.0 / (n1 + n2).length());
                     let across = Vec2::new(-m.y, m.x) * (0.5 * width);
-                    let inner = at(-b1.s, -b2.s) - v;
-                    let (from, to) = (v - m * (inner.length() + t), v + m * (t + b1.ba.max(b2.ba)));
+                    let inner = at(-b1.s, -b2.s);
+                    let far = (at(b1.ba - b1.s, b2.ba - b2.s) - inner).dot(m).max(0.0);
+                    let (from, to) = (inner - m * t, inner + m * (far + t));
                     (
                         polygon(&[from - across, to - across, to + across, from + across]),
                         width,
@@ -689,15 +713,39 @@ fn corners(
                 } else {
                     p0.distance(v) <= TOL
                 };
-                let (bt, jt, jo, start) = if first_is_cut {
-                    (b1, j1, j2, p0.distance(v) <= TOL)
+                let (bt, bo, jt, jo, start) = if first_is_cut {
+                    (b1, b2, j1, j2, p0.distance(v) <= TOL)
                 } else {
-                    (b2, j2, j1, q0.distance(v) <= TOL)
+                    (b2, b1, j2, j1, q0.distance(v) <= TOL)
+                };
+                let (nt, no) = if first_is_cut { (n1, n2) } else { (n2, n1) };
+                // how far along its edge from the corner the cut wall goes, in the true frame:
+                // past the other wall's thickness and the gap, (t + gap) / sin A, and across its
+                // own thickness, t |cot A| (at a right angle, t + gap); for a tear, which leaves
+                // the corner's material, past the other zone's whole footprint too (out of the
+                // other edge's line by its setback, over this zone's width), and a kerf
+                let (sin_a, cos_a) = if square {
+                    (1.0, 0.0)
+                } else {
+                    (det.abs(), -no.dot(nt))
+                };
+                // (the reach past a thickness: at a right angle the gap itself)
+                let past = if square {
+                    gap
+                } else {
+                    (t + gap + t * cos_a.abs()) / sin_a - t
+                };
+                let past = match kind {
+                    CornerKind::Tear | CornerKind::ConstantWidth { .. } => {
+                        let x = (bt.s * cos_a).max(-(bt.ba - bt.s) * cos_a);
+                        past.max((bo.s + x) / sin_a + sheet.rule.kerf - t)
+                    }
+                    _ => past,
                 };
                 let (y0, y1) = if start {
-                    (-t, t + gap)
+                    (-t, t + past)
                 } else {
-                    (bt.len - t - gap, bt.len + t)
+                    (bt.len - t - past, bt.len + t)
                 };
                 let far = sheet.walls[bt.b]
                     .outline
@@ -1524,7 +1572,9 @@ fn build_once(
             cx.source(TrimRef::BendEnd { joint, end: End::End }),
             cx.source(TrimRef::TangentLine { joint, side: Side::A }),
         ];
-        let wall = [rect(0.0, 0.0, b.ba, b.len, ids, &Rigid::ID)];
+        let wall = [zone_outline(sheet, &strips, b, joint, ids, |id| {
+            cx.sources[id as usize]
+        })];
         let cuts = std::mem::take(&mut cut_strips[nw + bi]);
         let region = subtract(&wall, &cuts).map_err(|e| {
             SheetError::from_region(feature, Strip::Bend(joint), e, |i| cx.sources[i as usize])
@@ -1718,16 +1768,18 @@ impl<'a> Strips<'a> {
                         }
                         // cut points along the piece: an arc in a bend turning past half way goes
                         // in pieces, so the ruled side wall along each is regular to its ends; a
-                        // spline in a bend goes at its knots
+                        // spline in a bend goes at its knots. In either map alike: one topology,
+                        // laid out flat or folded (§2.0's refold condition)
+                        let zone = matches!(s.strip, Strip::Bend(_));
                         let mut cuts: Vec<f64> = match b.piece {
-                            Piece::Arc { t0, t1, .. } if round => {
+                            Piece::Arc { t0, t1, .. } if zone => {
                                 let turn = (t1 - t0).abs();
                                 let parts = (turn / (0.99 * dmath::PI)).ceil().max(1.0) as usize;
                                 // sweeps are checked when cuts are made: at most a whole turn
                                 debug_assert!(parts <= 3, "an arc of {turn} rad in a bend");
                                 (1..parts).map(|q| q as f64 / parts as f64).collect()
                             }
-                            Piece::Spline { s: ref c, t0, t1 } if round => c
+                            Piece::Spline { s: ref c, t0, t1 } if zone => c
                                 .knots_in(Interval::new(t0.min(t1), t0.max(t1)))
                                 .into_iter()
                                 .map(|k| (k - t0) / (t1 - t0))
@@ -1737,17 +1789,39 @@ impl<'a> Strips<'a> {
                         };
                         cuts.sort_by(f64::total_cmp);
                         let parts = cuts.len() + 1;
+                        // a spline is cut at its knots themselves (in the order of `cuts`), not
+                        // at fractions of the piece mapped back: to rounding, those take a sliver
+                        // of the next span along
+                        let exact: Vec<f64> = match b.piece {
+                            Piece::Spline { s: ref c, t0, t1 } if zone => {
+                                let mut ks: Vec<(f64, f64)> = c
+                                    .knots_in(Interval::new(t0.min(t1), t0.max(t1)))
+                                    .into_iter()
+                                    .map(|k| ((k - t0) / (t1 - t0), k))
+                                    .filter(|(u, _)| *u > 1e-12 && *u < 1.0 - 1e-12)
+                                    .collect();
+                                ks.sort_by(|x, y| x.0.total_cmp(&y.0));
+                                ks.into_iter().map(|x| x.1).collect()
+                            }
+                            _ => Vec::new(),
+                        };
                         for q in 0..parts {
                             let u0 = if q == 0 { 0.0 } else { cuts[q - 1] };
                             let u1 = if q == parts - 1 { 1.0 } else { cuts[q] };
-                            bounds.push(Bound {
-                                piece: if parts == 1 {
-                                    b.piece.clone()
-                                } else {
-                                    b.piece.sub(u0, u1)
+                            let piece = match b.piece {
+                                _ if parts == 1 => b.piece.clone(),
+                                Piece::Spline { s: ref c, t0, t1 } => Piece::Spline {
+                                    s: c.clone(),
+                                    t0: if q == 0 { t0 } else { exact[q - 1] },
+                                    t1: if q == parts - 1 { t1 } else { exact[q] },
                                 },
+                                _ => b.piece.sub(u0, u1),
+                            };
+                            let start = if q == 0 { b.start } else { piece.at(0.0) };
+                            bounds.push(Bound {
+                                piece,
                                 id: b.id,
-                                start: if q == 0 { b.start } else { b.piece.at(u0) },
+                                start,
                             });
                             kinds.push(k);
                         }
@@ -1799,9 +1873,6 @@ impl<'a> Strips<'a> {
                 }
             }
         }
-        // vertex slots: walls' first, then bends' (sharing the walls' on tangent lines)
-        let mut slot: Vec<Vec<usize>> = loops.iter().map(|l| vec![usize::MAX; l.bounds.len()]).collect();
-        let mut slots: Vec<(usize, Point2)> = Vec::new();
         // per (bend, side): the walls' tangent stretches, (y0, y1, loop, index), y in the joint frame
         let mut stretches: std::collections::BTreeMap<(usize, Side), Vec<Stretch>> = Default::default();
         for (li, l) in loops.iter().enumerate() {
@@ -1809,8 +1880,6 @@ impl<'a> Strips<'a> {
                 continue;
             }
             for (i, b) in l.bounds.iter().enumerate() {
-                slot[li][i] = slots.len();
-                slots.push((l.strip, b.start));
                 if let Kind::Tangent(bi, side) = l.kinds[i] {
                     let j = if side == Side::A {
                         &bends[bi].ja
@@ -1827,7 +1896,66 @@ impl<'a> Strips<'a> {
                 }
             }
         }
+        // a zone's tangent line is cut where its walls' stretches end: the walls' points, decided
+        // once in the walls, become the zone's (a wall's end inside a zone's stretch by more than
+        // the tolerance splits it there; ends within it are the same point)
+        for l in loops.iter_mut().filter(|l| l.strip >= nw) {
+            let n = l.bounds.len();
+            let mut bounds = Vec::with_capacity(n);
+            let mut kinds = Vec::with_capacity(n);
+            for i in 0..n {
+                let (b, k) = (&l.bounds[i], l.kinds[i]);
+                let Kind::Tangent(bi, side) = k else {
+                    bounds.push(b.clone());
+                    kinds.push(k);
+                    continue;
+                };
+                let (p, q) = (b.start, l.bounds[(i + 1) % n].start);
+                let (lo, hi) = (p.y.min(q.y), p.y.max(q.y));
+                let mut ys: Vec<f64> = stretches
+                    .get(&(bi, side))
+                    .into_iter()
+                    .flatten()
+                    .flat_map(|&(a, e, _, _)| [a, e])
+                    .filter(|&y| y > lo + TOL && y < hi - TOL)
+                    .collect();
+                ys.sort_by(f64::total_cmp);
+                ys.dedup_by(|a, b| *a - *b <= TOL);
+                if q.y < p.y {
+                    ys.reverse();
+                }
+                let mut at = p;
+                for y in ys.into_iter().chain([f64::NAN]) {
+                    let next = if y.is_nan() { q } else { Point2::new(p.x, y) };
+                    bounds.push(Bound {
+                        piece: Piece::Line { a: at, b: next },
+                        id: b.id,
+                        start: at,
+                    });
+                    kinds.push(k);
+                    at = next;
+                }
+            }
+            l.bounds = bounds;
+            l.kinds = kinds;
+        }
+        // vertex slots: walls' first, then bends' (sharing the walls' on tangent lines)
+        let mut slot: Vec<Vec<usize>> = loops.iter().map(|l| vec![usize::MAX; l.bounds.len()]).collect();
+        let mut slots: Vec<(usize, Point2)> = Vec::new();
+        for (li, l) in loops.iter().enumerate() {
+            if l.strip >= nw {
+                continue;
+            }
+            for (i, b) in l.bounds.iter().enumerate() {
+                slot[li][i] = slots.len();
+                slots.push((l.strip, b.start));
+            }
+        }
+        // each zone stretch is its wall's stretch, one to one, ends within the tolerance; a zone
+        // stretch with no wall beside it at all is a free edge of the zone (its bend runs on past
+        // the wall's end: the square end of a flange beside a corner under a right angle)
         let mut twin = HashMap::new();
+        let mut free = Vec::new();
         for (li, l) in loops.iter().enumerate() {
             if l.strip < nw {
                 continue;
@@ -1842,10 +1970,19 @@ impl<'a> Strips<'a> {
                 // the wall runs the stretch the other way
                 let best = list
                     .iter()
+                    .filter(|&&(_, _, wl, wi)| !twin.contains_key(&(wl, wi)))
                     .map(|&(a, b, wl, wi)| ((a - y1).abs().max((b - y0).abs()), wl, wi))
                     .min_by(|a, b| a.0.total_cmp(&b.0));
                 let joint = cx.sheet.joints[bends[bi].joint].id;
                 let Some((_, wl, wi)) = best.filter(|b| b.0 <= TOL) else {
+                    let (lo, hi) = (y0.min(y1), y0.max(y1));
+                    let beside = list
+                        .iter()
+                        .any(|&(a, b, _, _)| a.max(b) > lo + TOL && a.min(b) < hi - TOL);
+                    if !beside {
+                        free.push((li, i));
+                        continue;
+                    }
                     let at = l.bounds[i].start;
                     return Err(SheetError::TangentMismatch {
                         feature,
@@ -1862,6 +1999,9 @@ impl<'a> Strips<'a> {
                 twin.insert((li, i), (wl, wi));
                 twin.insert((wl, wi), (li, i));
             }
+        }
+        for (li, i) in free {
+            loops[li].kinds[i] = Kind::Side;
         }
         // every wall stretch must have found its bend's
         for (&(bi, side), list) in &stretches {
@@ -2101,14 +2241,19 @@ impl<'a> Strips<'a> {
                 }
             }
         }
-        // no clash: walls meeting without passing into each other (an edge along a face at a
-        // corner) are faces of one solid touching, which no valid solid has
+        // no clash: strips meeting without passing into each other past the limit (an edge
+        // along a face at a corner, a zone grazing a wall) are faces of one solid touching, which
+        // no valid solid has. Every pair not joined by design, a wall or a zone against a wall:
+        // a point of one's boundary within the tolerance of the other's material is a touch, so
+        // a zone passing into a wall at all is a clash (past the limit) or a touch (short of it),
+        // never neither
         for a in 0..ns {
             for b in 0..ns {
+                let loose = self.loose.contains(&(a, b)) || self.loose.contains(&(b, a));
                 if a == b
                     || joined[a * ns + b]
+                    || loose
                     || !boxes[a].grow(TOL).overlaps(&boxes[b])
-                    || !matches!(self.strips[a].folded, Geo::Plane(_))
                     || !matches!(self.strips[b].folded, Geo::Plane(_))
                 {
                     continue;
@@ -2126,13 +2271,16 @@ impl<'a> Strips<'a> {
         Ok(())
     }
 
-    /// A point of plane strip `a`'s boundary edges (both skins, and the rails through the sheet)
-    /// within `TOL` of plane strip `b`'s material, if one is: halving, a part dropped once its box
+    /// A point of strip `a`'s boundary edges (both skins, and the rails through the sheet)
+    /// within `TOL` of strip `b`'s material, if one is: halving, a part dropped once its box
     /// cannot reach `b` or its middle is farther than the box is wide (distance is 1-Lipschitz).
+    /// `b` is a wall; `a` a wall or a zone, whose lines fold to lines, circles or helices, each
+    /// within a closed-form sag of its chord, so every line is judged by chords exactly.
     fn touch(&self, a: usize, b: usize, flat_b: (Point2, Point2)) -> Option<Point3> {
         asked();
         let t = self.t;
         let geo = self.strips[a].folded;
+
         // a curve halved while its box may reach b and its middle is near enough; a piece whose
         // chord is within TOL / 2 of it is judged by its chord, exactly
         let search = |box_of: &dyn Fn(Interval) -> forge_math::Box3,
@@ -2167,13 +2315,21 @@ impl<'a> Strips<'a> {
         };
         for ld in self.loops.iter().filter(|l| l.strip == a) {
             for bd in &ld.bounds {
-                let sag = |u: Interval| match bd.piece {
-                    Piece::Line { .. } => 0.0,
-                    Piece::Arc { r, t0, t1, .. } => {
+                let sag = |u: Interval| match (geo, &bd.piece) {
+                    // folded round a zone's axis a line is a line, a circle or a helix: off its
+                    // chord at most as a circle of its turn, rho (1 - cos(turn / 2))
+                    (Geo::Round { rho0, sigma, rn, .. }, &Piece::Line { a: p, b: q }) => {
+                        let half = 0.5 * ((q.x - p.x) * u.width()).abs() / rn;
+                        let rho = rho0.max(rho0 + sigma * t);
+                        rho * (1.0 - dmath::cos(half.min(dmath::PI)))
+                    }
+                    (Geo::Round { .. }, _) => f64::INFINITY,
+                    (_, Piece::Line { .. }) => 0.0,
+                    (_, &Piece::Arc { r, t0, t1, .. }) => {
                         let half = 0.5 * (t1 - t0).abs() * u.width();
                         r * (1.0 - dmath::cos(half.min(dmath::PI)))
                     }
-                    Piece::Spline { .. } => f64::INFINITY,
+                    (_, Piece::Spline { .. }) => f64::INFINITY,
                 };
                 for w in [0.0, t] {
                     if let Some(p) = search(
@@ -2987,15 +3143,28 @@ impl Strips<'_> {
                 if seen[l0][i0] || self.loops[l0].kinds[i0] != Kind::Side {
                     continue;
                 }
-                let mut out: Vec<Curve2> = Vec::new();
+                let mut out: Vec<FlatPiece> = Vec::new();
                 let (mut l, mut i) = (l0, i0);
                 while !seen[l][i] {
                     seen[l][i] = true;
                     let ld = &self.loops[l];
                     let by = &strip_dev[ld.strip];
-                    let (a, b) = (ld.bounds[i].start, ld.bounds[(i + 1) % ld.bounds.len()].start);
-                    if let Some(c) = developed(&ld.bounds[i].piece, a, b, by) {
-                        push_joined(&mut out, c);
+                    let bound = &ld.bounds[i];
+                    let (a, b) = (bound.start, ld.bounds[(i + 1) % ld.bounds.len()].start);
+                    if let Some(c) = developed(&bound.piece, a, b, by) {
+                        let spline = match bound.piece {
+                            Piece::Spline { ref s, t0, t1 } => Some((s, t0, t1, by)),
+                            _ => None,
+                        };
+                        let c = FlatPiece {
+                            id: bound.id,
+                            curve: c,
+                            spline,
+                        };
+                        match out.last().and_then(|last| joined(last, &c)) {
+                            Some(j) => *out.last_mut().expect("a last") = j,
+                            None => out.push(c),
+                        }
                     }
                     (l, i) = self.next(l, i).0;
                 }
@@ -3004,6 +3173,11 @@ impl Strips<'_> {
                 {
                     out[0] = c;
                     out.pop();
+                }
+                let mut out: Vec<Curve2> = out.into_iter().map(|c| c.curve).collect();
+                // a contour of one arc closes on itself: a whole turn, by topology
+                if let [Curve2::Arc { sweep, .. }] = &mut out[..] {
+                    *sweep = dmath::TAU.copysign(*sweep);
                 }
                 contours.push(out);
             }
@@ -3559,7 +3733,6 @@ impl Strips<'_> {
                 Interval::new(t0.min(t1), t0.max(t1)),
                 t1 > t0,
             )),
-            (Geo::Round { .. }, Piece::Line { .. }) if a.x == b.x => line(),
             (
                 Geo::Round {
                     axis,
@@ -3570,21 +3743,21 @@ impl Strips<'_> {
                     ba,
                 },
                 Piece::Line { .. },
-            ) => {
-                if a.y == b.y {
+            ) => match ZoneLine::of(a, b) {
+                ZoneLine::Along => line(),
+                ZoneLine::Across(y) => {
                     let (p0, p1) = (phi(a.x, rn, theta, ba), phi(b.x, rn, theta, ba));
                     Some((
                         Curve::Circle(Circle {
-                            frame: axis.with_origin(axis.point_to_world(Point3::new(0.0, 0.0, -sigma * a.y))),
+                            frame: axis.with_origin(axis.point_to_world(Point3::new(0.0, 0.0, -sigma * y))),
                             radius: rho0 + sigma * w,
                         }),
                         Interval::new(p0.min(p1), p0.max(p1)),
                         p1 > p0,
                     ))
-                } else {
-                    wrapped(axis, rho0 + sigma * w, rn, &ld.bounds[i].piece, a, b, sigma)
                 }
-            }
+                ZoneLine::Slant => wrapped(axis, rho0 + sigma * w, rn, &ld.bounds[i].piece, a, b, sigma),
+            },
             (
                 Geo::Round {
                     axis,
@@ -3641,9 +3814,14 @@ impl Strips<'_> {
                 frame: f.with_origin(f.point_to_world(Point3::new(c.x, c.y, 0.0))),
                 radius: r,
             })),
-            (Geo::Round { axis, .. }, Piece::Line { .. }) if a.y == b.y => {
-                let at = geo.point(a, self.t);
-                plane(axis.z().get(), at, up_at(a))
+            (Geo::Round { axis, .. }, Piece::Line { .. })
+                if matches!(ZoneLine::of(a, b), ZoneLine::Across(_)) =>
+            {
+                let ZoneLine::Across(y) = ZoneLine::of(a, b) else {
+                    unreachable!("matched")
+                };
+                let on = Point2::new(a.x, y);
+                plane(axis.z().get(), geo.point(on, self.t), up_at(on))
             }
             (
                 Geo::Round {
@@ -3654,7 +3832,7 @@ impl Strips<'_> {
                     ..
                 },
                 Piece::Line { .. } | Piece::Arc { .. } | Piece::Spline { .. },
-            ) if a.x != b.x || !matches!(piece, Piece::Line { .. }) => {
+            ) if !matches!(piece, Piece::Line { .. }) || ZoneLine::of(a, b) == ZoneLine::Slant => {
                 let flat = flat_in_bend(piece, a, b, sigma).ok_or_else(fail)?;
                 let wrap = |w: f64| {
                     Rail::Wrap(Wrap {
@@ -3912,44 +4090,167 @@ fn developed(p: &Piece, a: Point2, b: Point2, by: &Rigid) -> Option<Curve2> {
     })
 }
 
-/// Two pieces that continue one line or one circle, as one.
-fn joined(x: &Curve2, y: &Curve2) -> Option<Curve2> {
-    match (x, y) {
+/// A bend zone's outline before its cuts, in its own frame (u from a's tangent line to b's, y
+/// along the joint): the rectangle [0, BA] x [0, len], or under `EndCondition::Aligned` each end
+/// the segment between the walls' points on their tangent lines, read off the walls' regions
+/// (built first). A point within the tolerance of the joint's end is that end, so square walls
+/// give the rectangle exactly; a point past it (a wall running on past the mold line's end) is
+/// held at it, so that end is square.
+fn zone_outline(
+    sheet: &Sheet,
+    strips: &[StripData],
+    b: &Bend,
+    joint: crate::error::JointId,
+    ids: [u64; 4],
+    source: impl Fn(u64) -> TrimRef,
+) -> ProfileLoop {
+    let square = || rect(0.0, 0.0, b.ba, b.len, ids, &Rigid::ID);
+    if sheet.bend_ends == crate::graph::EndCondition::Normal || b.free {
+        return square();
+    }
+    // the y span of a wall's stretches of this joint's tangent line, in the joint frame
+    let span = |w: usize, side: Side, j: &Rigid| {
+        let mut lo = f64::INFINITY;
+        let mut hi = f64::NEG_INFINITY;
+        for c in &strips[w].region.parts {
+            for l in std::iter::once(&c.outer).chain(&c.holes) {
+                for (i, q) in l.iter().enumerate() {
+                    if source(q.id) == (TrimRef::TangentLine { joint, side }) {
+                        for p in [q.start, l[(i + 1) % l.len()].start] {
+                            let y = j.local(p).y;
+                            lo = lo.min(y);
+                            hi = hi.max(y);
+                        }
+                    }
+                }
+            }
+        }
+        let snap = |y: f64| {
+            if y <= TOL {
+                0.0
+            } else if y >= b.len - TOL {
+                b.len
+            } else {
+                y
+            }
+        };
+        (lo <= hi).then(|| (snap(lo), snap(hi)))
+    };
+    let (Some((a0, a1)), Some((b0, b1))) = (span(b.a, Side::A, &b.ja), span(b.b, Side::B, &b.jb)) else {
+        return square();
+    };
+    let p = Point2::new;
+    let corners = [p(0.0, a0), p(b.ba, b0), p(b.ba, b1), p(0.0, a1)];
+    ProfileLoop::new(
+        (0..4)
+            .map(|k| {
+                (
+                    Segment::Line {
+                        a: corners[k],
+                        b: corners[(k + 1) % 4],
+                    },
+                    ids[k],
+                )
+            })
+            .collect(),
+    )
+}
+
+/// How a line piece runs in a bend zone (u across the bend, y along its axis), decided once for
+/// its edges and its side face alike, by the one tolerance rule (research/kernel-audit/README.md
+/// §6.1): along the axis when its u is constant within LINEAR over it (a line, folded), across it
+/// when its y is (a circle round the axis, at the mean y: each end within half the gap of it,
+/// which the edges' LINEAR tolerance carries), else slanted (a wrapped line). Exact coordinates
+/// are not asked: a cut one rounding off square to the bend is square to it.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum ZoneLine {
+    Along,
+    Across(f64),
+    Slant,
+}
+
+impl ZoneLine {
+    fn of(a: Point2, b: Point2) -> ZoneLine {
+        if (a.x - b.x).abs() <= TOL {
+            ZoneLine::Along
+        } else if (a.y - b.y).abs() <= TOL {
+            ZoneLine::Across(if a.y == b.y { a.y } else { 0.5 * (a.y + b.y) })
+        } else {
+            ZoneLine::Slant
+        }
+    }
+}
+
+/// A side piece on the flat: its source, its curve, and for a spline the source curve in its
+/// strip with the strip's motion, so pieces of one spline join on that one curve.
+struct FlatPiece<'a> {
+    id: u64,
+    curve: Curve2,
+    spline: Option<(&'a std::sync::Arc<Spline>, f64, f64, &'a Rigid)>,
+}
+
+/// Two pieces, consecutive on a contour, as one when they lie on one carrier. Decided once:
+/// pieces of one source (one `Bound::id`) are pieces of one curve by definition, with no test;
+/// pieces of different sources are one carrier only under the one tolerance rule (research/
+/// kernel-audit/README.md §6.1): lines, each piece's ends within LINEAR of the other's line, in
+/// one sense; arcs, centres and radii within LINEAR together, in one sense. Splines of different
+/// sources never join.
+fn joined<'a>(x: &FlatPiece<'a>, y: &FlatPiece<'a>) -> Option<FlatPiece<'a>> {
+    let id = x.id;
+    let curve = match (&x.curve, &y.curve) {
         (Curve2::Line { a, b }, Curve2::Line { a: b2, b: c }) => {
-            let (u, v) = (*b - *a, *c - *b2);
-            let same = u.cross(v).abs() <= 1e-12 * u.length() * v.length() && u.dot(v) > 0.0;
-            (same && b.distance(*b2) <= TOL).then_some(Curve2::Line { a: *a, b: *c })
+            let off = |p: Point2, q: Point2, r: Point2| {
+                forge_math::predicates::orient2d(p, q, r).abs() / p.distance(q)
+            };
+            let same = x.id == y.id
+                || ((*b - *a).dot(*c - *b2) > 0.0
+                    && [*b2, *c].iter().all(|&r| off(*a, *b, r) <= TOL)
+                    && [*a, *b].iter().all(|&r| off(*b2, *c, r) <= TOL));
+            same.then_some(Curve2::Line { a: *a, b: *c })?
         }
         (
             Curve2::Arc { c, r, start, sweep },
             Curve2::Arc {
                 c: c2,
                 r: r2,
-                start: s2,
                 sweep: w2,
+                ..
             },
         ) => {
-            let gap = dmath::sin(0.5 * (start + sweep - s2)).abs();
-            let same = c.distance(*c2) <= TOL && (r - r2).abs() <= TOL && sweep * w2 > 0.0 && gap <= 1e-12;
-            (same && (sweep + w2).abs() <= dmath::TAU * (1.0 + 1e-12)).then_some(Curve2::Arc {
+            let same = x.id == y.id || (sweep * w2 > 0.0 && c.distance(*c2) + (r - r2).abs() <= TOL);
+            same.then_some(Curve2::Arc {
                 c: *c,
                 r: *r,
                 start: *start,
                 sweep: sweep + w2,
-            })
+            })?
         }
-        _ => None,
-    }
-}
-
-fn push_joined(out: &mut Vec<Curve2>, c: Curve2) {
-    if let Some(last) = out.last()
-        && let Some(j) = joined(last, &c)
-    {
-        *out.last_mut().expect("a last") = j;
-        return;
-    }
-    out.push(c);
+        (Curve2::Spline { .. }, Curve2::Spline { .. }) if x.id == y.id => {
+            let ((s, t0, t1, by), (_, u0, u1, _)) = (x.spline?, y.spline?);
+            // one sense, the second further along it (a closed spline is not joined across its
+            // seam)
+            if (t1 > t0) != (u1 > u0) || (t1 > t0) != (u0 > t0) {
+                return None;
+            }
+            let piece = Piece::Spline {
+                s: s.clone(),
+                t0,
+                t1: u1,
+            };
+            let ends = x.curve.ends().0;
+            return Some(FlatPiece {
+                id,
+                curve: developed(&piece, ends, ends, by)?,
+                spline: Some((s, t0, u1, by)),
+            });
+        }
+        _ => return None,
+    };
+    Some(FlatPiece {
+        id,
+        curve,
+        spline: None,
+    })
 }
 
 fn own_stretch(s: &Spline, range: Interval) -> Option<Spline> {

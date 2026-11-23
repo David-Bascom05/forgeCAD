@@ -2,7 +2,25 @@
 //! error bound proves the sign; otherwise the determinant is recomputed exactly
 //! with floating-point expansions (Shewchuk, "Adaptive Precision Floating-Point
 //! Arithmetic and Fast Robust Geometric Predicates", 1997). The returned value
-//! always has the correct sign; its magnitude is an approximation.
+//! has the correct sign; its magnitude is an approximation.
+//!
+//! Shewchuk's bounds and expansions assume no underflow and no overflow. Here the precondition
+//! for an exact answer is that no product a predicate forms underflows inexactly, checked in
+//! debug builds only, out of line (`check_filter`, `check_triple`, `check_in_circle`,
+//! `check_two_product`):
+//! - for the fast filters, each product's rounding error is relative (`product_relative`):
+//!   then Shewchuk's bounds hold (proven for `orient2d`, research/kernel-audit/float-verification.md).
+//!   `cross_sign`'s filter needs nothing: it is sound for every finite input, by monotonicity
+//!   (proven);
+//! - for the slow paths, each `two_product` is exact (`product_exact`): then the expansions are
+//!   exact.
+//!
+//! Inputs within each predicate's window imply both (see `product_exact`). Real kernel inputs
+//! meet the precondition: forge-mesh snaps uv noise below 2^-200 to 0 (`Layout::put`), and a
+//! survey of the release tests and the fuzz suite found no violation. A slow-path result of
+//! `cross_sign`, `orient2d`, `dot3` or `incircle` that comes out NaN (a product overflowed) is
+//! recomputed exactly with fixed-width integers (`Big`); `triple`'s is not (the check
+//! measurably slowed its frequent slow path).
 
 use crate::{Point2, Vec2, Vec3};
 use std::cmp::Ordering;
@@ -16,6 +34,240 @@ const ICC_BOUND: f64 = (10.0 + 96.0 * EPS) * EPS;
 const CCW_BOUND_B: f64 = (2.0 + 12.0 * EPS) * EPS;
 const ICC_BOUND_B: f64 = (4.0 + 48.0 * EPS) * EPS;
 // derived and tested in research/predicate-bounds/
+/// The exponent of a nonzero finite double's lowest set bit: `x` is an odd multiple of
+/// `2^lsb(x)`.
+#[cfg(debug_assertions)]
+fn lsb(x: f64) -> i32 {
+    let bits = x.to_bits();
+    let e = ((bits >> 52) & 0x7ff) as i32;
+    let m = if e == 0 {
+        bits & ((1 << 52) - 1)
+    } else {
+        (bits & ((1 << 52) - 1)) | (1 << 52)
+    };
+    (if e == 0 { -1074 } else { e - 1075 }) + m.trailing_zeros() as i32
+}
+
+/// The slow paths' precondition, at each `two_product`: `x * y` has a zero factor or is a
+/// multiple of `2^-1074` (`lsb(x) + lsb(y) >= -1074`), so its rounding error is representable
+/// and Dekker's product is exact. Checked in debug builds (`check_two_product`, out of line).
+/// Overflow is not part of it: a NaN slow-path result is recomputed with `Big`.
+///
+/// Inputs within a predicate's window imply it: every nonzero input in `[2^-480, 2^500]` for
+/// the degree-2 predicates, `[2^-300, 2^330]` for `triple`, `[2^-210, 2^250]` for the in-circle
+/// tests. Every input, difference and partial product is then a multiple of `2^(lo - 52)` (or
+/// of its power), and `deg · (lo - 52) >= -1074`
+/// (research/kernel-audit/float-verification/lean, `product_exact_of_grid`).
+#[cfg(debug_assertions)]
+fn product_exact(x: f64, y: f64) -> bool {
+    x == 0.0 || y == 0.0 || !x.is_finite() || !y.is_finite() || lsb(x) + lsb(y) >= -1074
+}
+
+/// The filters' precondition: a product they form is normal, or exact (`product_exact`), so
+/// its rounding error is relative and the filter's bound covers it.
+#[cfg(debug_assertions)]
+fn product_relative(x: f64, y: f64) -> bool {
+    (x * y).abs() >= f64::MIN_POSITIVE || product_exact(x, y)
+}
+
+/// The precondition at a `two_product` (debug builds; out of line, so the release code the
+/// optimizer sees is unchanged).
+#[cfg(debug_assertions)]
+#[cold]
+#[inline(never)]
+fn check_two_product(a: f64, b: f64) {
+    assert!(product_exact(a, b), "two_product inexact: {a:e} * {b:e}");
+}
+
+/// The precondition of `orient2d`'s and `dot3`'s filters: each product's rounding error is
+/// relative (the bound covers no absolute, subnormal error).
+#[cfg(debug_assertions)]
+#[cold]
+#[inline(never)]
+fn check_filter(name: &str, products: &[(f64, f64)]) {
+    for &(p, q) in products {
+        assert!(
+            product_relative(p, q),
+            "{name}: a product underflows: {p:e} * {q:e}"
+        );
+    }
+}
+
+/// The precondition of `triple`'s filter: its products' rounding errors are relative.
+#[cfg(debug_assertions)]
+#[cold]
+#[inline(never)]
+fn check_triple(a: Vec3, b: Vec3, c: Vec3) {
+    let (yz, zy) = (b.y * c.z, b.z * c.y);
+    let (zx, xz) = (b.z * c.x, b.x * c.z);
+    let (xy, yx) = (b.x * c.y, b.y * c.x);
+    let ok = [
+        (b.y, c.z),
+        (b.z, c.y),
+        (b.z, c.x),
+        (b.x, c.z),
+        (b.x, c.y),
+        (b.y, c.x),
+    ]
+    .iter()
+    .chain(&[(a.x, yz - zy), (a.y, zx - xz), (a.z, xy - yx)])
+    .chain(&[
+        (a.x, yz.abs() + zy.abs()),
+        (a.y, zx.abs() + xz.abs()),
+        (a.z, xy.abs() + yx.abs()),
+    ])
+    .all(|&(p, q)| product_relative(p, q));
+    assert!(ok, "triple: a product underflows: {a:?} {b:?} {c:?}");
+}
+
+/// The precondition of the in-circle tests' filters: their products' rounding errors are
+/// relative.
+#[cfg(debug_assertions)]
+#[cold]
+#[inline(never)]
+fn check_in_circle(name: &str, a: Point2, b: Point2, c: Point2, d: Point2) {
+    let (adx, ady) = (a.x - d.x, a.y - d.y);
+    let (bdx, bdy) = (b.x - d.x, b.y - d.y);
+    let (cdx, cdy) = (c.x - d.x, c.y - d.y);
+    let (bdxcdy, cdxbdy) = (bdx * cdy, cdx * bdy);
+    let (cdxady, adxcdy) = (cdx * ady, adx * cdy);
+    let (adxbdy, bdxady) = (adx * bdy, bdx * ady);
+    let alift = adx * adx + ady * ady;
+    let blift = bdx * bdx + bdy * bdy;
+    let clift = cdx * cdx + cdy * cdy;
+    let ok = [
+        (bdx, cdy),
+        (cdx, bdy),
+        (cdx, ady),
+        (adx, cdy),
+        (adx, bdy),
+        (bdx, ady),
+        (adx, adx),
+        (ady, ady),
+        (bdx, bdx),
+        (bdy, bdy),
+        (cdx, cdx),
+        (cdy, cdy),
+        (alift, bdxcdy - cdxbdy),
+        (blift, cdxady - adxcdy),
+        (clift, adxbdy - bdxady),
+        (alift, bdxcdy.abs() + cdxbdy.abs()),
+        (blift, cdxady.abs() + adxcdy.abs()),
+        (clift, adxbdy.abs() + bdxady.abs()),
+    ]
+    .iter()
+    .all(|&(p, q)| product_relative(p, q));
+    assert!(ok, "{name}: a product underflows: {a:?} {b:?} {c:?} {d:?}");
+}
+
+/// Exact signed integers of `N` 64-bit limbs (two's complement, little-endian): the last resort
+/// for inputs outside the expansion windows. `of(x)` is `x · 2^1074`, an integer for every finite
+/// double (below 2^2099), so each determinant scaled by a power of 2^1074 is a polynomial in
+/// these. `N` is chosen per predicate so the polynomial cannot overflow.
+#[derive(Clone, Copy)]
+struct Big<const N: usize>([u64; N]);
+
+impl<const N: usize> Big<N> {
+    fn of(x: f64) -> Self {
+        let bits = x.to_bits();
+        let e = ((bits >> 52) & 0x7ff) as usize;
+        let f = bits & ((1 << 52) - 1);
+        // x = m · 2^(sh - 1074)
+        let (m, sh) = if e == 0 { (f, 0) } else { (f | (1 << 52), e - 1) };
+        let mut r = [0u64; N];
+        let (limb, bit) = (sh / 64, sh % 64);
+        r[limb] = m << bit;
+        if bit > 0 {
+            r[limb + 1] = m >> (64 - bit);
+        }
+        let v = Big(r);
+        if bits >> 63 == 1 { v.neg() } else { v }
+    }
+
+    fn neg(self) -> Self {
+        let mut r = [0u64; N];
+        let mut carry = 1u64;
+        for (o, &x) in r.iter_mut().zip(&self.0) {
+            let (s, c) = (!x).overflowing_add(carry);
+            *o = s;
+            carry = c as u64;
+        }
+        Big(r)
+    }
+
+    fn add(self, o: Self) -> Self {
+        let mut r = [0u64; N];
+        let mut carry = false;
+        for ((d, &x), &y) in r.iter_mut().zip(&self.0).zip(&o.0) {
+            let (s1, c1) = x.overflowing_add(y);
+            let (s2, c2) = s1.overflowing_add(carry as u64);
+            *d = s2;
+            carry = c1 || c2;
+        }
+        Big(r)
+    }
+
+    fn sub(self, o: Self) -> Self {
+        self.add(o.neg())
+    }
+
+    /// The product modulo 2^(64N): the signed product, when it fits.
+    fn mul(self, o: Self) -> Self {
+        let mut r = [0u64; N];
+        for i in 0..N {
+            if self.0[i] == 0 {
+                continue;
+            }
+            let mut carry = 0u128;
+            for j in 0..N - i {
+                let t = r[i + j] as u128 + self.0[i] as u128 * o.0[j] as u128 + carry;
+                r[i + j] = t as u64;
+                carry = t >> 64;
+            }
+        }
+        Big(r)
+    }
+
+    fn negative(&self) -> bool {
+        self.0[N - 1] >> 63 == 1
+    }
+
+    /// About `self · 2^-scale`, with the exact sign: never zero unless `self` is, never
+    /// infinite (clamped to the least subnormal and to `f64::MAX`).
+    fn to_f64(self, scale: i32) -> f64 {
+        let neg = self.negative();
+        let m = if neg { self.neg() } else { self };
+        let Some(k) = m.0.iter().rposition(|&l| l != 0) else {
+            return 0.0;
+        };
+        let lo = if k > 0 { m.0[k - 1] } else { 0 };
+        let mut v = m.0[k] as f64 * f64::from_bits((1023 + 64) << 52) + lo as f64;
+        let mut e = 64 * (k as i32 - 1) - scale;
+        while e > 0 && v.is_finite() {
+            let s = e.min(1000);
+            v *= f64::from_bits(((1023 + s) as u64) << 52);
+            e -= s;
+        }
+        while e < 0 && v != 0.0 {
+            let s = (-e).min(1000);
+            v *= f64::from_bits(((1023 - s) as u64) << 52);
+            e += s;
+        }
+        let v = v.clamp(f64::from_bits(1), f64::MAX);
+        if neg { -v } else { v }
+    }
+}
+
+/// The exact determinant `a*d - b*c`'s sign, for any finite inputs.
+#[cold]
+#[inline(never)]
+fn cross_big(a: f64, d: f64, b: f64, c: f64) -> f64 {
+    if ![a, b, c, d].iter().all(|x| x.is_finite()) {
+        return f64::NAN;
+    }
+    type B = Big<68>;
+    B::of(a).mul(B::of(d)).sub(B::of(b).mul(B::of(c))).to_f64(2148)
+}
 /// a*b - c*d evaluated in f64 is within this times |a*b| + |c*d| (as evaluated) of the truth.
 const CROSS_BOUND: f64 = (2.0 + 8.0 * EPS) * EPS;
 /// The same for a 3-term dot product, relative to the sum of the products' magnitudes.
@@ -44,6 +296,8 @@ fn split(a: f64) -> (f64, f64) {
 }
 
 fn two_product(a: f64, b: f64) -> (f64, f64) {
+    #[cfg(debug_assertions)]
+    check_two_product(a, b);
     let x = a * b;
     let (ahi, alo) = split(a);
     let (bhi, blo) = split(b);
@@ -153,6 +407,15 @@ pub fn orient2d(a: Point2, b: Point2, c: Point2) -> f64 {
     let right = (a.y - c.y) * (b.x - c.x);
     let det = left - right;
     let detsum = left.abs() + right.abs();
+    #[cfg(debug_assertions)]
+    check_filter(
+        "orient2d",
+        &[
+            (a.x - c.x, b.y - c.y),
+            (a.y - c.y, b.x - c.x),
+            (CCW_BOUND, detsum),
+        ],
+    );
     let bound = CCW_BOUND * detsum;
     if det > bound || -det > bound {
         return det;
@@ -169,7 +432,8 @@ fn orient2d_adapt(a: Point2, b: Point2, c: Point2, detsum: f64) -> f64 {
     if det >= CCW_BOUND_B * detsum || -det >= CCW_BOUND_B * detsum {
         return det;
     }
-    orient2d_exact(a, b, c)
+    let e = orient2d_exact(a, b, c);
+    if e.is_nan() { orient2d_big(a, b, c) } else { e }
 }
 
 fn orient2d_exact(a: Point2, b: Point2, c: Point2) -> f64 {
@@ -184,6 +448,19 @@ fn orient2d_exact(a: Point2, b: Point2, c: Point2) -> f64 {
     let mut h = [0.0; 16];
     let n = cross_two(&acx, &bcy, &acy, &bcx, &mut h);
     estimate(&h[..n])
+}
+
+/// `orient2d` exactly, for any finite coordinates.
+#[cold]
+#[inline(never)]
+fn orient2d_big(a: Point2, b: Point2, c: Point2) -> f64 {
+    if ![a.x, a.y, b.x, b.y, c.x, c.y].iter().all(|x| x.is_finite()) {
+        return f64::NAN;
+    }
+    type B = Big<68>;
+    let (acx, acy) = (B::of(a.x).sub(B::of(c.x)), B::of(a.y).sub(B::of(c.y)));
+    let (bcx, bcy) = (B::of(b.x).sub(B::of(c.x)), B::of(b.y).sub(B::of(c.y)));
+    acx.mul(bcy).sub(acy.mul(bcx)).to_f64(2148)
 }
 
 /// a - b as a two-component expansion (zero tail dropped).
@@ -225,12 +502,15 @@ fn cross_two(
 pub fn cross_sign(a: f64, b: f64, c: f64, d: f64) -> f64 {
     let (l, r) = (a * b, c * d);
     let det = l - r;
+    // sound for every finite input: rounding is monotone, so `det` never has the wrong sign,
+    // only, at worst, zero (research/kernel-audit/float-verification.md)
     if det.abs() > CROSS_BOUND * (l.abs() + r.abs()) {
         return det;
     }
     let mut h = [0.0; 4];
     let n = cross_exact(a, b, c, d, &mut h);
-    estimate(&h[..n])
+    let e = estimate(&h[..n]);
+    if e.is_nan() { cross_big(a, b, c, d) } else { e }
 }
 
 /// The 2D cross product u x v with the right sign: positive when v is counter-clockwise of u.
@@ -244,6 +524,16 @@ pub fn cross2(u: Vec2, v: Vec2) -> f64 {
 pub fn dot3(u: Vec3, v: Vec3) -> f64 {
     let (x, y, z) = (u.x * v.x, u.y * v.y, u.z * v.z);
     let dot = x + y + z;
+    #[cfg(debug_assertions)]
+    check_filter(
+        "dot3",
+        &[
+            (u.x, v.x),
+            (u.y, v.y),
+            (u.z, v.z),
+            (DOT3_BOUND, x.abs() + y.abs() + z.abs()),
+        ],
+    );
     if dot.abs() > DOT3_BOUND * (x.abs() + y.abs() + z.abs()) {
         return dot;
     }
@@ -253,7 +543,19 @@ pub fn dot3(u: Vec3, v: Vec3) -> f64 {
     let (z1, z0) = two_product(u.z, v.z);
     let np = sum_into(&[x0, x1], &[y0, y1], &mut p);
     let nq = sum_into(&p[..np], &[z0, z1], &mut q);
-    estimate(&q[..nq])
+    let e = estimate(&q[..nq]);
+    if e.is_nan() { dot3_big(u, v) } else { e }
+}
+
+#[cold]
+#[inline(never)]
+fn dot3_big(u: Vec3, v: Vec3) -> f64 {
+    if ![u.x, u.y, u.z, v.x, v.y, v.z].iter().all(|x| x.is_finite()) {
+        return f64::NAN;
+    }
+    type B = Big<68>;
+    let p = |a: f64, b: f64| B::of(a).mul(B::of(b));
+    p(u.x, v.x).add(p(u.y, v.y)).add(p(u.z, v.z)).to_f64(2148)
 }
 
 /// The triple product a . (b x c) with the right sign: positive when a, b, c form a
@@ -267,6 +569,8 @@ pub fn triple(a: Vec3, b: Vec3, c: Vec3) -> f64 {
     let permanent = a.x.abs() * (yz.abs() + zy.abs())
         + a.y.abs() * (zx.abs() + xz.abs())
         + a.z.abs() * (xy.abs() + yx.abs());
+    #[cfg(debug_assertions)]
+    check_triple(a, b, c);
     if det.abs() > TRIPLE_BOUND * permanent {
         return det;
     }
@@ -353,6 +657,8 @@ pub fn certainly_in_circle(a: Point2, b: Point2, c: Point2, d: Point2) -> bool {
     let permanent = (bdxcdy.abs() + cdxbdy.abs()) * alift
         + (cdxady.abs() + adxcdy.abs()) * blift
         + (adxbdy.abs() + bdxady.abs()) * clift;
+    #[cfg(debug_assertions)]
+    check_in_circle("certainly_in_circle", a, b, c, d);
     det > ICC_BOUND * permanent
 }
 
@@ -372,10 +678,13 @@ pub fn incircle(a: Point2, b: Point2, c: Point2, d: Point2) -> f64 {
     let permanent = (bdxcdy.abs() + cdxbdy.abs()) * alift
         + (cdxady.abs() + adxcdy.abs()) * blift
         + (adxbdy.abs() + bdxady.abs()) * clift;
+    #[cfg(debug_assertions)]
+    check_in_circle("incircle", a, b, c, d);
     let bound = ICC_BOUND * permanent;
     if det > bound || -det > bound {
         return det;
     }
+
     // stage B: exact for the rounded differences; their rounding is within the bound
     let det = incircle_exact_diffs([adx, ady, bdx, bdy, cdx, cdy]);
     let exact = [
@@ -391,7 +700,30 @@ pub fn incircle(a: Point2, b: Point2, c: Point2, d: Point2) -> f64 {
     if exact || det >= ICC_BOUND_B * permanent || -det >= ICC_BOUND_B * permanent {
         return det;
     }
-    incircle_exact(a, b, c, d)
+    let e = incircle_exact(a, b, c, d);
+    if e.is_nan() { incircle_big(a, b, c, d) } else { e }
+}
+
+/// `incircle` exactly, for any finite coordinates.
+#[cold]
+#[inline(never)]
+fn incircle_big(a: Point2, b: Point2, c: Point2, d: Point2) -> f64 {
+    if ![a.x, a.y, b.x, b.y, c.x, c.y, d.x, d.y]
+        .iter()
+        .all(|x| x.is_finite())
+    {
+        return f64::NAN;
+    }
+    type B = Big<136>;
+    let df = |p: f64, q: f64| B::of(p).sub(B::of(q));
+    let (adx, ady) = (df(a.x, d.x), df(a.y, d.y));
+    let (bdx, bdy) = (df(b.x, d.x), df(b.y, d.y));
+    let (cdx, cdy) = (df(c.x, d.x), df(c.y, d.y));
+    let lift = |x: B, y: B| x.mul(x).add(y.mul(y));
+    let ta = lift(adx, ady).mul(bdx.mul(cdy).sub(cdx.mul(bdy)));
+    let tb = lift(bdx, bdy).mul(cdx.mul(ady).sub(adx.mul(cdy)));
+    let tc = lift(cdx, cdy).mul(adx.mul(bdy).sub(bdx.mul(ady)));
+    ta.add(tb).add(tc).to_f64(4296)
 }
 
 fn incircle_exact(a: Point2, b: Point2, c: Point2, d: Point2) -> f64 {
@@ -501,6 +833,147 @@ mod tests {
             -1
         } else {
             0
+        }
+    }
+
+    /// `x · 2^k`, exactly (the result normal or zero).
+    fn sc(x: i64, k: i32) -> f64 {
+        let (mut v, mut k) = (x as f64, k);
+        while k != 0 {
+            let s = k.clamp(-1000, 1000);
+            v *= f64::from_bits(((1023 + s) as u64) << 52);
+            k -= s;
+        }
+        v
+    }
+
+    /// The products underflow and straddle a rounding midpoint the wrong way round: the fast
+    /// filter answers -5e-324 for a positive determinant
+    /// (research/kernel-audit/float-verification.md). The input breaks the precondition, and
+    /// the debug check says so.
+    #[test]
+    #[cfg(debug_assertions)]
+    #[should_panic(expected = "orient2d: a product underflows")]
+    fn orient2d_underflow_counterexample_is_caught() {
+        let a = Point2::new(5.394455326111622e-162, 1.6245062719943995e-164);
+        let b = Point2::new(1.3762009331530288e-157, 4.1443425003634566e-160);
+        let c = Point2::new(-4.608837897596252e-178, 0.0);
+        orient2d(a, b, c);
+    }
+
+    /// Products that overflow: the expansions answer NaN, and the integer evaluation decides.
+    /// Outside the window, so release only.
+    #[test]
+    #[cfg(not(debug_assertions))]
+    fn overflow_is_exact() {
+        let p = |x: f64, y: f64| Point2::new(x, y);
+        assert!(cross_sign(1e300, 1e10, 1e300, 1e9) > 0.0);
+        assert!(cross_sign(1e200, 1e200, 1e200, 1e199) > 0.0);
+        let v = orient2d(p(1e300, 0.0), p(0.0, 1e300), p(-1e300, -1e300));
+        assert!(v > 0.0 && v.is_finite());
+        assert!(orient2d(p(1e300, 1e300), p(2e300, 2e300), p(0.0, 1e-300)) > 0.0);
+        assert!(dot3(Vec3::new(1e300, 1.0, 0.0), Vec3::new(1e300, 0.0, 0.0)) > 0.0);
+    }
+
+    #[test]
+    fn lattice_at_every_scale() {
+        // near-degenerate integer configurations scaled by 2^k, exact signs from i128, at scales
+        // inside every window (incircle's is the narrowest: [2^-210, 2^250]); the degree-2
+        // predicates again at their own window's edges in `degree2_at_window_edges`
+        let mut r = Rng::new(505);
+        for k in [-210, -150, -60, 0, 60, 150, 228] {
+            for _ in 0..400 {
+                let a = (r.below(1 << 20) as i64 - (1 << 19), r.below(1 << 20) as i64);
+                let (dx, dy) = (r.below(1 << 10) as i64 + 1, r.below(1 << 10) as i64);
+                let b = (a.0 + dx, a.1 + dy);
+                let m = r.below(7) as i64 - 3;
+                let c = (
+                    a.0 + dx * m + (r.below(3) as i64 - 1),
+                    a.1 + dy * m + (r.below(3) as i64 - 1),
+                );
+                let q = |v: (i64, i64)| Point2::new(sc(v.0, k), sc(v.1, k));
+                assert_eq!(
+                    sign(orient2d(q(a), q(b), q(c))),
+                    orient_ref(a, b, c),
+                    "2^{k} {a:?} {b:?} {c:?}"
+                );
+                let i = |x: i64| x as i128;
+                let want = (i(a.0) * i(b.1) - i(a.1) * i(b.0)).signum() as i32;
+                assert_eq!(
+                    sign(cross_sign(sc(a.0, k), sc(b.1, k), sc(a.1, k), sc(b.0, k))),
+                    want,
+                    "2^{k}"
+                );
+                // cocircular: a square's corners, the last nudged
+                let s = r.below(1 << 8) as i64 + 1;
+                let (cx, cy) = (r.below(1 << 12) as i64, r.below(1 << 12) as i64);
+                let mut d = (cx, cy + s);
+                d.0 += r.below(3) as i64 - 1;
+                let sq = [(cx, cy), (cx + s, cy), (cx + s, cy + s), d];
+                assert_eq!(
+                    sign(incircle(q(sq[0]), q(sq[1]), q(sq[2]), q(sq[3]))),
+                    incircle_ref(sq[0], sq[1], sq[2], sq[3]),
+                    "2^{k} {sq:?}"
+                );
+                // coplanar vectors, nudged
+                let v3 = |r: &mut Rng| {
+                    [
+                        r.below(1 << 12) as i64 - (1 << 11),
+                        r.below(1 << 12) as i64 - (1 << 11),
+                        r.below(1 << 12) as i64 - (1 << 11),
+                    ]
+                };
+                let (va, vb) = (v3(&mut r), v3(&mut r));
+                let mm = r.below(5) as i64 - 2;
+                let vc = [
+                    va[0] * mm + vb[0],
+                    va[1] * mm + vb[1],
+                    va[2] * mm + vb[2] + (r.below(3) as i64 - 1),
+                ];
+                let f = |v: [i64; 3]| Vec3::new(sc(v[0], k), sc(v[1], k), sc(v[2], k));
+                let cr = [
+                    i(vb[1]) * i(vc[2]) - i(vb[2]) * i(vc[1]),
+                    i(vb[2]) * i(vc[0]) - i(vb[0]) * i(vc[2]),
+                    i(vb[0]) * i(vc[1]) - i(vb[1]) * i(vc[0]),
+                ];
+                let want = (i(va[0]) * cr[0] + i(va[1]) * cr[1] + i(va[2]) * cr[2]).signum() as i32;
+                assert_eq!(
+                    sign(triple(f(va), f(vb), f(vc))),
+                    want,
+                    "2^{k} {va:?} {vb:?} {vc:?}"
+                );
+                let w = [cr[0] as i64 % (1 << 20), cr[1] as i64 % (1 << 20), 0];
+                let want = (i(va[0]) * i(w[0]) + i(va[1]) * i(w[1])).signum() as i32;
+                assert_eq!(sign(dot3(f(va), f(w))), want, "2^{k}");
+            }
+        }
+    }
+
+    #[test]
+    fn degree2_at_window_edges() {
+        let mut r = Rng::new(506);
+        for k in [-480, -400, -300, 300, 400, 478] {
+            for _ in 0..400 {
+                let a = (r.below(1 << 20) as i64 - (1 << 19), r.below(1 << 20) as i64);
+                let (dx, dy) = (r.below(1 << 10) as i64 + 1, r.below(1 << 10) as i64);
+                let b = (a.0 + dx, a.1 + dy);
+                let m = r.below(7) as i64 - 3;
+                let c = (
+                    a.0 + dx * m + (r.below(3) as i64 - 1),
+                    a.1 + dy * m + (r.below(3) as i64 - 1),
+                );
+                let q = |v: (i64, i64)| Point2::new(sc(v.0, k), sc(v.1, k));
+                assert_eq!(sign(orient2d(q(a), q(b), q(c))), orient_ref(a, b, c), "2^{k}");
+                let i = |x: i64| x as i128;
+                let want = (i(a.0) * i(b.1) - i(a.1) * i(b.0)).signum() as i32;
+                assert_eq!(
+                    sign(cross_sign(sc(a.0, k), sc(b.1, k), sc(a.1, k), sc(b.0, k))),
+                    want
+                );
+                let want = (i(a.0) * i(c.0) + i(a.1) * i(c.1)).signum() as i32;
+                let f = |v: (i64, i64)| Vec3::new(sc(v.0, k), sc(v.1, k), 0.0);
+                assert_eq!(sign(dot3(f(a), f(c))), want);
+            }
         }
     }
 

@@ -46,7 +46,7 @@ pub struct AgentHost {
     pub conversations_dir: Option<PathBuf>,
     chat: Option<crate::agent::conversations::Conversation>,
     endpoint_history: Option<std::sync::Arc<std::sync::Mutex<Vec<forge_agent::json::Json>>>>,
-    last_saved: Option<std::time::Instant>,
+    last_saved: Option<crate::plat::Instant>,
     save_error: Option<String>,
     resumed: bool,
     /// `agent.toml`, unless a test says otherwise.
@@ -84,7 +84,7 @@ impl AgentHost {
             chat.history = history.lock().map_err(|e| e.to_string())?.clone();
         }
         chat.save(&base)?;
-        self.last_saved = Some(std::time::Instant::now());
+        self.last_saved = Some(crate::plat::Instant::now());
         Ok(())
     }
 }
@@ -125,7 +125,7 @@ impl Gui {
                     .settings_file
                     .clone()
                     .or_else(settings_path)
-                    .and_then(|p| std::fs::read_to_string(p).ok())
+                    .and_then(|p| forge_dirs::fs::read_to_string(p).ok())
             {
                 AgentSettings::from_toml(&text).write_extra(&mut self.shell.settings.extra);
             }
@@ -376,12 +376,12 @@ impl Gui {
 
     /// The tab a file is open in, if it's not the active one.
     fn agent_tab_of(&self, path: &str) -> Option<usize> {
-        let want = std::fs::canonicalize(path).ok()?;
+        let want = forge_dirs::fs::canonicalize(path).ok()?;
         let i = self.documents().iter().position(|d| {
             d.sub.is_none()
                 && d.path
                     .as_deref()
-                    .and_then(|p| std::fs::canonicalize(p).ok())
+                    .and_then(|p| forge_dirs::fs::canonicalize(p).ok())
                     .as_ref()
                     == Some(&want)
         })?;
@@ -426,14 +426,14 @@ impl Gui {
             None => self.fg.as_ref().and_then(|s| s.path.clone())?,
         };
         // absolute: the agent runs elsewhere
-        Some(std::fs::canonicalize(&p).map_or(p, |a| a.display().to_string()))
+        Some(forge_dirs::fs::canonicalize(&p).map_or(p, |a| a.display().to_string()))
     }
 
     fn agent_keyring(&mut self, f: impl FnOnce() -> Result<Option<bool>, String> + Send + 'static) {
         let (tx, rx) = channel();
         self.agent.keyring = Some(rx);
         let waker = self.waker.clone();
-        std::thread::spawn(move || {
+        crate::plat::spawn("forge-job", move || {
             let _ = tx.send(f());
             waker();
         });
@@ -642,9 +642,9 @@ impl Gui {
             if undo {
                 let to = trash_path(Path::new(&f.path));
                 if let Some(d) = to.parent() {
-                    std::fs::create_dir_all(d).map_err(|e| format!("{}: {e}", d.display()))?;
+                    forge_dirs::fs::create_dir_all(d).map_err(|e| format!("{}: {e}", d.display()))?;
                 }
-                std::fs::rename(&f.path, &to).map_err(|e| format!("{}: {e}", f.path))?;
+                forge_dirs::fs::rename(&f.path, &to).map_err(|e| format!("{}: {e}", f.path))?;
                 set(self, Some(to));
                 if active.as_deref() == Some(f.path.as_str())
                     && let Some(back) = f.opened_from.clone()
@@ -655,10 +655,10 @@ impl Gui {
                 self.shell.status = format!("Moved {} aside to .forgecad-trash", name_of(&f.path));
             } else {
                 let from = f.trash.clone().ok_or("the file isn't in the trash")?;
-                if Path::new(&f.path).exists() {
+                if forge_dirs::fs::exists(Path::new(&f.path)) {
                     return Err(format!("{} exists again: not put back", f.path));
                 }
-                std::fs::rename(&from, &f.path).map_err(|e| format!("{}: {e}", from.display()))?;
+                forge_dirs::fs::rename(&from, &f.path).map_err(|e| format!("{}: {e}", from.display()))?;
                 set(self, None);
                 if f.path.ends_with(".fg") {
                     self.agent_open(&f.path);
@@ -687,7 +687,7 @@ impl Gui {
         } else {
             f.after.clone()
         };
-        std::fs::write(&f.path, text).map_err(|e| format!("{}: {e}", f.path))?;
+        forge_dirs::fs::write(&f.path, text).map_err(|e| format!("{}: {e}", f.path))?;
         set(self, None);
         Ok(())
     }

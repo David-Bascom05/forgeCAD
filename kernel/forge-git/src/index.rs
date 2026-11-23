@@ -31,7 +31,7 @@ impl IEntry {
 
     /// An entry for a file just written, its stat taken now.
     pub fn from_file(path: &str, file: &Path, mode: u32, id: Oid) -> Result<IEntry, Error> {
-        let m = std::fs::symlink_metadata(file)?;
+        let m = forge_dirs::fs::symlink_metadata(file)?;
         let s = stat(&m);
         Ok(IEntry {
             ctime: (s[0], s[1]),
@@ -52,7 +52,7 @@ impl IEntry {
 
 /// ctime, mtime (seconds and nanoseconds), dev, ino, uid, gid, as the index keeps them.
 #[cfg(unix)]
-fn stat(m: &std::fs::Metadata) -> [u32; 8] {
+fn stat(m: &forge_dirs::fs::Metadata) -> [u32; 8] {
     use std::os::unix::fs::MetadataExt;
     [
         m.ctime() as u32,
@@ -68,7 +68,7 @@ fn stat(m: &std::fs::Metadata) -> [u32; 8] {
 
 /// Where the platform has no such stat: only the time (git then checks the content).
 #[cfg(not(unix))]
-fn stat(m: &std::fs::Metadata) -> [u32; 8] {
+fn stat(m: &forge_dirs::fs::Metadata) -> [u32; 8] {
     let t = m
         .modified()
         .ok()
@@ -304,7 +304,7 @@ impl Index {
 /// Reads the index at `path`, changes it, and writes it back under its lock.
 pub fn update(path: &Path, hash: HashKind, f: impl FnOnce(&mut Index)) -> Result<(), Error> {
     let mut lock = Lock::take(path)?;
-    let mut idx = match std::fs::read(path) {
+    let mut idx = match forge_dirs::fs::read(path) {
         Ok(d) => Index::parse(&d, hash)?,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Index::empty(),
         Err(e) => return Err(e.into()),

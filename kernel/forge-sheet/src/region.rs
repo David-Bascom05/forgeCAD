@@ -35,11 +35,37 @@ type Map<K, V> = HashMap<K, V, std::hash::BuildHasherDefault<Mix>>;
 use std::sync::Arc;
 
 const TOL: f64 = tol::LINEAR;
-/// How far a piece may lie from a boundary and still be along it. Inputs meant to coincide do so to
-/// rounding; a wider band swallows real pieces beside a tangent contact and unbalances the chain.
-const ALONG: f64 = 1e-9;
-/// Side by side closer than this and not `ALONG`: the tolerance cannot tell them from coincident.
+/// Carriers further apart than the tolerance but within this are neither one carrier nor two the
+/// tolerance can tell apart (the spread cap of research/kernel-audit/README.md §6.1): refused.
 const NEAR: f64 = 2.0 * TOL;
+
+/// Whether two pieces lie on one carrier, decided once for the pair by the one tolerance rule
+/// (README §6.1, as verify/forge-exact's Snap.lean has it for planes): lines, each one's ends
+/// within the tolerance of the other's line; arcs, centres and radii within it together; splines,
+/// one curve. `Some(gap)` past the tolerance but within `NEAR`: ambiguous. Arcs against lines are
+/// never one carrier (a tangent contact is a crossing, split at the touch).
+fn carrier(x: &Piece, y: &Piece) -> Result<bool, f64> {
+    let gap = match (x, y) {
+        (&Piece::Line { a, b }, &Piece::Line { a: c, b: d }) => {
+            let off = |p: Point2, q: Point2, r: Point2| {
+                predicates::orient2d(p, q, r).abs() / p.distance(q).max(1e-300)
+            };
+            off(a, b, c).max(off(a, b, d)).max(off(c, d, a)).max(off(c, d, b))
+        }
+        (&Piece::Arc { c, r, .. }, &Piece::Arc { c: e, r: q, .. }) => c.distance(e) + (r - q).abs(),
+        (Piece::Spline { s, .. }, Piece::Spline { s: q, .. }) => {
+            return Ok(same_curve(s, q));
+        }
+        _ => return Ok(false),
+    };
+    if gap <= TOL {
+        Ok(true)
+    } else if gap <= NEAR {
+        Err(gap)
+    } else {
+        Ok(false)
+    }
+}
 
 /// A piece of a loop. Arcs run from angle t0 to t1, counter-clockwise when t1 > t0.
 #[derive(Clone, Debug)]
@@ -678,32 +704,119 @@ enum Side {
     OnRight,
 }
 
-/// Vertices by position: the first point within tolerance names them all.
-#[derive(Default)]
+/// Vertex classes: each split point's class, and each class's point.
 struct Verts {
-    grid: Map<(i64, i64), Vec<u32>>,
+    /// Per piece (index into `all`), the class of each of its split points in order.
+    class: Vec<Vec<u32>>,
     pts: Vec<Point2>,
 }
 
 impl Verts {
-    fn id(&mut self, p: Point2) -> u32 {
-        let h = 4.0 * TOL;
-        let (i, j) = ((p.x / h).floor() as i64, (p.y / h).floor() as i64);
-        for a in i - 1..=i + 1 {
-            for b in j - 1..=j + 1 {
-                if let Some(l) = self.grid.get(&(a, b)) {
-                    for &v in l {
-                        if self.pts[v as usize].distance(p) <= 0.9 * TOL {
-                            return v;
+    fn of(&self, piece: usize, k: usize) -> u32 {
+        self.class[piece][k]
+    }
+
+    fn classes(
+        all: &[(usize, usize, Bx)],
+        members: &[Member],
+        us: &[Vec<f64>],
+    ) -> Result<Verts, RegionError> {
+        // every split point, with its name (its piece's place in the input: the wall's loops,
+        // then the cuts, in the order the sheet has them; then its fraction along the piece),
+        // where it is, and its segment id
+        let mut pts: Vec<(Point2, (usize, usize, f64), u64)> = Vec::new();
+        let mut first: Vec<usize> = Vec::with_capacity(all.len());
+        for (idx, &(m, k, _)) in all.iter().enumerate() {
+            let (piece, id) = (&members[m].pieces[k].0, members[m].pieces[k].1);
+            first.push(pts.len());
+            for &u in &us[idx] {
+                pts.push((piece.at(u), (m, k, u), id));
+            }
+        }
+        let n = pts.len();
+        let mut up: Vec<u32> = (0..n as u32).collect();
+        fn root(up: &mut [u32], mut a: u32) -> u32 {
+            while up[a as usize] != a {
+                up[a as usize] = up[up[a as usize] as usize];
+                a = up[a as usize];
+            }
+            a
+        }
+        // pairs within the tolerance, found on a grid of that size
+        let cell = |p: Point2| ((p.x / TOL).floor() as i64, (p.y / TOL).floor() as i64);
+        let mut grid: Map<(i64, i64), Vec<u32>> = Map::default();
+        for (i, q) in pts.iter().enumerate() {
+            grid.entry(cell(q.0)).or_default().push(i as u32);
+        }
+        for i in 0..n {
+            let (ci, cj) = cell(pts[i].0);
+            for a in ci - 1..=ci + 1 {
+                for b in cj - 1..=cj + 1 {
+                    let Some(list) = grid.get(&(a, b)) else {
+                        continue;
+                    };
+                    for &j in list {
+                        if (j as usize) > i && pts[i].0.distance(pts[j as usize].0) <= TOL {
+                            let (ra, rb) = (root(&mut up, i as u32), root(&mut up, j));
+                            if ra != rb {
+                                up[ra.max(rb) as usize] = ra.min(rb);
+                            }
                         }
                     }
                 }
             }
         }
-        let v = self.pts.len() as u32;
-        self.pts.push(p);
-        self.grid.entry((i, j)).or_default().push(v);
-        v
+        // each class's least-named member, and its spread
+        let mut best: Map<u32, u32> = Map::default();
+        let mut boxes: Map<u32, Bx> = Map::default();
+        for i in 0..n as u32 {
+            let r = root(&mut up, i);
+            let b = best.entry(r).or_insert(i);
+            let (x, y) = (&pts[i as usize].1, &pts[*b as usize].1);
+            if (x.0, x.1).cmp(&(y.0, y.1)).then(x.2.total_cmp(&y.2)).is_lt() {
+                *b = i;
+            }
+            let bx = boxes.entry(r).or_insert(Bx::EMPTY);
+            *bx = bx.hull(Bx::of(pts[i as usize].0));
+        }
+        for i in 0..n as u32 {
+            let r = root(&mut up, i);
+            let b = boxes[&r];
+            let (dx, dy) = (b.x1 - b.x0, b.y1 - b.y0);
+            let spread = (dx * dx + dy * dy).sqrt();
+            if spread > 2.0 * TOL {
+                let other = (0..n as u32)
+                    .find(|&j| root(&mut up, j) == r && pts[j as usize].2 != pts[i as usize].2)
+                    .unwrap_or(i);
+                return Err(RegionError::NearCoincident {
+                    a: pts[i as usize].2,
+                    b: pts[other as usize].2,
+                    at: pts[i as usize].0,
+                    gap: spread,
+                    limit: 2.0 * TOL,
+                });
+            }
+        }
+        // classes numbered in order of their least-named points
+        let mut reps: Vec<u32> = best.values().copied().collect();
+        reps.sort_by(|&a, &b| {
+            let (x, y) = (&pts[a as usize].1, &pts[b as usize].1);
+            (x.0, x.1).cmp(&(y.0, y.1)).then(x.2.total_cmp(&y.2))
+        });
+        let mut number: Map<u32, u32> = Map::default();
+        for (k, &r) in reps.iter().enumerate() {
+            number.insert(root(&mut up, r), k as u32);
+        }
+        let class = (0..all.len())
+            .map(|idx| {
+                let (a, b) = (first[idx], first[idx] + us[idx].len());
+                (a..b).map(|i| number[&root(&mut up, i as u32)]).collect()
+            })
+            .collect();
+        Ok(Verts {
+            class,
+            pts: reps.iter().map(|&r| pts[r as usize].0).collect(),
+        })
     }
 }
 
@@ -746,6 +859,9 @@ pub fn subtract(wall: &[ProfileLoop], cuts: &[ProfileLoop]) -> Result<Region, Re
     let mut order: Vec<u32> = (0..n as u32).collect();
     order.sort_by(|a, b| all[*a as usize].2.x0.total_cmp(&all[*b as usize].2.x0));
     let mut us: Vec<Vec<f64>> = vec![vec![0.0, 1.0]; n];
+    // the pairs on one carrier, decided here once and read wherever the pair meets again
+    let mut along: std::collections::HashSet<(u32, u32), std::hash::BuildHasherDefault<Mix>> =
+        Default::default();
     for (ai, &a) in order.iter().enumerate() {
         let (ma, ka, ba) = all[a as usize];
         for &b in &order[ai + 1..] {
@@ -757,6 +873,24 @@ pub fn subtract(wall: &[ProfileLoop], cuts: &[ProfileLoop]) -> Result<Region, Re
                 continue;
             }
             let (x, y) = (&members[ma].pieces[ka].0, &members[mb].pieces[kb].0);
+            match carrier(x, y) {
+                Ok(true) => {
+                    along.insert((a, b));
+                    along.insert((b, a));
+                }
+                Ok(false) => {}
+                Err(gap) => {
+                    // side by side, the tolerance cannot say one carrier or two
+                    let p = y.at(y.nearest(x.at(0.5)));
+                    return Err(RegionError::NearCoincident {
+                        a: members[ma].pieces[ka].1,
+                        b: members[mb].pieces[kb].1,
+                        at: p,
+                        gap,
+                        limit: TOL,
+                    });
+                }
+            }
             let (mut ux, mut uy) = (Vec::new(), Vec::new());
             meet(x, y, &mut ux, &mut uy);
             ends_on(x, y, bb, &mut ux, &mut uy);
@@ -796,46 +930,36 @@ pub fn subtract(wall: &[ProfileLoop], cuts: &[ProfileLoop]) -> Result<Region, Re
             wall.len() + g - 1..wall.len() + g
         }
     };
-    // the first near miss seen: (own id, other id, where, gap)
-    let mut near_miss: Option<(u64, u64, Point2, f64)> = None;
-    let mut side_of = |g: usize, own: (usize, u64), p: Point2, dir: Vec2, also: [Point2; 2]| -> Side {
+    // each piece's place in `all`, to read the pairs decided above
+    let mut index: Vec<Vec<u32>> = members.iter().map(|m| vec![0; m.pieces.len()]).collect();
+    for (i, &(m, k, _)) in all.iter().enumerate() {
+        index[m][k] = i as u32;
+    }
+    let side_of = |g: usize, own: (usize, usize), p: Point2, dir: Vec2| -> Side {
         if g == own.0 {
             return Side::OnLeft;
         }
-        // on the boundary of g? its tangent says which side. A piece that only passes close
-        // (near a tangent contact) has other points off it, and the ray decides.
+        // on the boundary of g: along a piece of it on this piece's carrier (decided once, for
+        // the pair), its tangent saying which side; the piece is split at the overlap's ends, so
+        // its middle is on the overlap or off it
         for m in group_loops(g) {
-            if !members[m].bx.holds(p, 2.0 * TOL) {
+            if !members[m].bx.holds(p, TOL) {
                 continue;
             }
-            for ((q, qid), bq) in members[m].pieces.iter().zip(&members[m].boxes) {
-                if !bq.holds(p, 2.0 * TOL) {
+            for (k, ((q, _), bq)) in members[m].pieces.iter().zip(&members[m].boxes).enumerate() {
+                if !bq.holds(p, TOL) || !along.contains(&(own.1 as u32, index[m][k])) {
                     continue;
                 }
                 let v = q.nearest(p);
-                let gap = q.at(v).distance(p);
-                // (a short piece only near a tangent contact is no such thing: curves part as s^2)
-                if near_miss.is_none()
-                    && gap > ALONG
-                    && gap <= NEAR
-                    && also[0].distance(also[1]) > 0.1
-                    && also.iter().all(|&e| q.at(q.nearest(e)).distance(e) <= NEAR)
-                {
-                    let t = q.tangent(v);
-                    if (t.dot(dir) / (t.length() * dir.length()).max(1e-300)).abs() > 0.99 {
-                        near_miss = Some((own.1, *qid, p, gap));
-                    }
+                if q.at(v).distance(p) > TOL {
+                    continue;
                 }
-                if gap <= ALONG && also.iter().all(|&e| q.at(q.nearest(e)).distance(e) <= ALONG) {
-                    let t = q.tangent(v);
-                    let c = t.dot(dir) / (t.length() * dir.length()).max(1e-300);
-                    if c > 0.99 {
-                        return Side::OnLeft;
-                    }
-                    if c < -0.99 {
-                        return Side::OnRight;
-                    }
-                }
+                let t = q.tangent(v);
+                return if t.dot(dir) > 0.0 {
+                    Side::OnLeft
+                } else {
+                    Side::OnRight
+                };
             }
         }
         let mut odd = false;
@@ -846,24 +970,31 @@ pub fn subtract(wall: &[ProfileLoop], cuts: &[ProfileLoop]) -> Result<Region, Re
         }
         if odd { Side::In } else { Side::Out }
     };
-    let mut verts = Verts::default();
+    // vertex classes, decided once over every split point before any piece is kept: two points
+    // within the tolerance are one vertex, transitively (union-find), so the classes do not hang
+    // on the order the points come in; each class is its least-named point's (by the piece's
+    // place in the input, then along it), and a class spread past twice the
+    // tolerance is not one vertex the tolerance can tell: refused
+    for list in us.iter_mut() {
+        list.sort_by(f64::total_cmp);
+    }
+    let verts = Verts::classes(&all, &members, &us)?;
     let mut kept: Vec<Kept> = Vec::new();
     let mut near: Vec<u32> = Vec::new();
     let mut seen = vec![usize::MAX; group_count];
-    let mut key: Map<(u32, u32), Vec<Point2>> = Map::default();
+    let mut key: Map<(u32, u32), Vec<u32>> = Map::default();
     let mut sub_id = 0;
     for (idx, &(m, k, _)) in all.iter().enumerate() {
         let (source, sid) = (&members[m].pieces[k].0, members[m].pieces[k].1);
         let own = members[m].group;
-        let list = &mut us[idx];
-        list.sort_by(f64::total_cmp);
+        let list = &us[idx];
         for w in 0..list.len() - 1 {
             let (u0, u1) = (list[w], list[w + 1]);
             if u1 - u0 <= 0.0 {
                 continue;
             }
-            let (pa, pb) = (source.at(u0), source.at(u1));
-            let (va, vb) = (verts.id(pa), verts.id(pb));
+            let pa = source.at(u0);
+            let (va, vb) = (verts.of(idx, w), verts.of(idx, w + 1));
             let um = 0.5 * (u0 + u1);
             let mp = source.at(um);
             if va == vb && mp.distance(pa) <= 2.0 * TOL {
@@ -876,8 +1007,7 @@ pub fn subtract(wall: &[ProfileLoop], cuts: &[ProfileLoop]) -> Result<Region, Re
             near.extend(&grid[i * side + j]);
             let (mut left_in, mut right_in) = (true, true);
             // the wall first: most pieces leave here
-            let also = [source.at(u0 + 0.25 * (u1 - u0)), source.at(u0 + 0.75 * (u1 - u0))];
-            match side_of(0, (own, sid), mp, dir, also) {
+            match side_of(0, (own, idx), mp, dir) {
                 Side::In => {}
                 Side::Out => {
                     left_in = false;
@@ -895,7 +1025,7 @@ pub fn subtract(wall: &[ProfileLoop], cuts: &[ProfileLoop]) -> Result<Region, Re
                     continue;
                 }
                 seen[g] = sub_id;
-                match side_of(g, (own, sid), mp, dir, also) {
+                match side_of(g, (own, idx), mp, dir) {
                     Side::In => {
                         left_in = false;
                         right_in = false;
@@ -924,12 +1054,16 @@ pub fn subtract(wall: &[ProfileLoop], cuts: &[ProfileLoop]) -> Result<Region, Re
                 },
                 p => p,
             };
-            // where boundaries coincide, each keeps the same piece: once is enough
+            // where boundaries coincide, each keeps the same piece: once is enough (the same ends,
+            // on one carrier, decided above)
             let at = key.entry((from, to)).or_default();
-            if at.iter().any(|q| q.distance(mp) <= 4.0 * TOL) {
+            if at
+                .iter()
+                .any(|&q| q == idx as u32 || along.contains(&(q, idx as u32)))
+            {
                 continue;
             }
-            at.push(mp);
+            at.push(idx as u32);
             kept.push(Kept {
                 from,
                 to,
@@ -939,15 +1073,6 @@ pub fn subtract(wall: &[ProfileLoop], cuts: &[ProfileLoop]) -> Result<Region, Re
                 u,
             });
         }
-    }
-    if let Some((a, b, at, gap)) = near_miss {
-        return Err(RegionError::NearCoincident {
-            a,
-            b,
-            at,
-            gap,
-            limit: NEAR,
-        });
     }
     chain(kept, &verts.pts)
 }
@@ -1102,4 +1227,76 @@ fn stretch(a: &Piece, b: &Piece) -> Piece {
 pub fn holds(c: &Component, p: Point2) -> bool {
     inside(c.outer.iter().map(|b| &b.piece), p)
         && !c.holes.iter().any(|h| inside(h.iter().map(|b| &b.piece), p))
+}
+
+#[cfg(test)]
+mod vertex_tests {
+    use super::*;
+
+    fn member(group: usize, a: (f64, f64), b: (f64, f64), id: u64) -> Member {
+        let p = Piece::Line {
+            a: Point2::new(a.0, a.1),
+            b: Point2::new(b.0, b.1),
+        };
+        let bx = p.bbox();
+        Member {
+            group,
+            pieces: vec![(p, id)],
+            boxes: vec![bx],
+            bx,
+        }
+    }
+
+    /// The partition of the pieces' ends into classes, by segment id and end.
+    fn partition(ms: Vec<Member>) -> Result<Vec<Vec<(u64, usize)>>, RegionError> {
+        let all: Vec<(usize, usize, Bx)> = (0..ms.len()).map(|m| (m, 0, ms[m].bx)).collect();
+        let us = vec![vec![0.0, 1.0]; ms.len()];
+        let v = Verts::classes(&all, &ms, &us)?;
+        let mut by: Vec<Vec<(u64, usize)>> = vec![vec![]; v.pts.len()];
+        for (m, mm) in ms.iter().enumerate() {
+            for k in 0..2 {
+                by[v.of(m, k) as usize].push((mm.pieces[0].1, k));
+            }
+        }
+        let mut out: Vec<Vec<(u64, usize)>> = by
+            .into_iter()
+            .map(|mut c| {
+                c.sort();
+                c
+            })
+            .collect();
+        out.sort();
+        Ok(out)
+    }
+
+    #[test]
+    fn vertex_classes_are_transitive_and_do_not_hang_on_order() {
+        // three ends 0.8 tolerances apart in a row: first-come within 0.9 made two vertices or
+        // one by the order they came in; the classes are one, whichever comes first
+        let t = TOL;
+        let make = |order: [usize; 3]| {
+            let ends = [(1.0, 0.0), (1.0 + 0.8 * t, 0.0), (1.0 + 1.6 * t, 0.0)];
+            let far = [(0.0, 0.0), (1.0, 1.0), (2.0, 0.0)];
+            order
+                .iter()
+                .map(|&i| member(usize::from(i != 0), far[i], ends[i], 10 + i as u64))
+                .collect::<Vec<_>>()
+        };
+        let a = partition(make([0, 1, 2])).unwrap();
+        for order in [[0, 2, 1], [1, 0, 2], [2, 1, 0]] {
+            assert_eq!(partition(make(order)).unwrap(), a);
+        }
+        assert!(a.iter().any(|c| c.len() == 3), "{a:?}");
+        // a row spread past twice the tolerance is no one vertex: refused
+        let spread = vec![
+            member(0, (0.0, 0.0), (1.0, 0.0), 1),
+            member(1, (1.0, 1.0), (1.0 + 0.9 * t, 0.0), 2),
+            member(1, (2.0, 1.0), (1.0 + 1.8 * t, 0.0), 3),
+            member(1, (2.0, 0.0), (1.0 + 2.7 * t, 0.0), 4),
+        ];
+        assert!(matches!(
+            partition(spread),
+            Err(RegionError::NearCoincident { .. })
+        ));
+    }
 }
