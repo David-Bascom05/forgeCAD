@@ -1,0 +1,207 @@
+# The exact gate's lines over base on 9147ec6, function by function
+#
+# Head 9147ec6 (the reach fixes, fix 2 History::base as Given, the pattern copy rule, the cheap
+# sound body_box) against the gate's baseline on 5de0a5f, profiled under the gate's exact
+# conditions. "forge_*" is every function of the kernel and language crates (raw names), the rest
+# is libc and std.
+#
+# Every user-facing and synthetic line over base has forge code net at or below base: the excess
+# is non-forge (glibc malloc, _int_malloc, realloc copying), the heap lying differently.
+# The two diagnostic gearbox lines (seq, nary1) have forge code up: hole::body_box, the part's box
+# a through tool after gearbox's draft is now sized by (the fix's own work: the draft's growth in
+# reach was a heuristic). Their totals are under base.
+#
+line                  total    forge_*  non-forge
+shaft seq            +18999     -25975     +44974
+hole-grid seq         +1673      -2920      +4593
+gearbox seq         -162672    +138358    -301030
+gearbox nary1        -25820    +130968    -156788
+volute app           +15313      -1227     +16540
+volute edit            +769      -2320      +3089
+crank cli            +73830     -14442     +88272
+valve app           +152129      -4133    +156262
+heatsink cli        +143395      -3966    +147361
+conrod app            +4713     -14774     +19487
+jack app              +9899      -1064     +10963
+jack cli            +135743      -1163    +136906
+jack seq             +24380      -2037     +26417
+jack nary1          +156080      -2309    +158389
+manifold app          +4084      -6928     +11012
+bracket cli            +420      -5871      +6291
+insert cli            +5515       -829      +6344
+hub edit             +36752      -3566     +40318
+hub nary1             +5844      -3714      +9558
+
+== shaft seq: +18999
+      -28390  ::from_iter
+      -14328  _int_free
+       -7057  malloc
+       -6366  _int_realloc
+       -5910  realloc
+       -5425  free
+       -4046  _int_free_merge_chunk
+       -2920  ::finish_grow
+       -2628  ::reserve::do_reserve_and_handle::
+       -1606  __rustc::__rdl_realloc
+       -1575  __rustc::__rdl_alloc
+       -1215  __vfscanf_internal
+       +2782  forge_model::step_plain_finished  FORGE-ROSE
+       +4186  unlink_chunk.isra.0
+       +8104  __memcpy_avx_unaligned_erms
+      +10000  malloc_consolidate
+      +78206  _int_malloc
+
+== hole-grid seq: +1673
+       -2886  ::from_points::
+       -1596  forge_model::pattern::moved_shape
+       -1215  __vfscanf_internal
+       +1066  ::next
+       +1768  _int_malloc
+       +6143  __memcpy_avx_unaligned_erms
+
+== gearbox seq: -162672
+     -382550  ::from_points::
+     -150198  __memcpy_avx_unaligned_erms
+      -63688  forge_math::poly::roots_into'2
+      -53371  _int_free
+      -42318  malloc
+      -29077  free
+      -28528  forge_model::hole::segment_points
+      -24408  forge_model::hole::adds
+      -13738  _int_malloc
+       -8624  ::call'2
+       -8442  __rustc::__rdl_alloc
+       -8176  ::from_iter
+       -2658  _int_realloc
+       -2604  forge_model::hole::reach
+       -2454  realloc
+       -2352  core::ptr::drop_glue::
+       -2294  systrim.constprop.0
+       -1920  forge_model::extent::resolve'2
+       -1594  forge_model::extent::resolve
+       -1593  unlink_chunk.isra.0
+       -1457  sbrk
+       -1426  forge_bool::classify::plane_ray_crossings
+       -1200  ::finish_grow
+       -1120  forge_math::predicates::triple
+       -1008  ::reserve::do_reserve_and_handle::
+       -1004  _int_free_merge_chunk
+       +3264  ::initialize::
+       +4677  malloc_consolidate
+      +11214  ::edge_box
+      +17052  ::call
+      +23456  ::shifted_cos
+      +27732  forge_math::dmath::sin_cos  FORGE-ROSE
+      +34560  forge_math::poly::roots_into  FORGE-ROSE
+      +42416  ::bbox
+      +48712  forge_model::hole::tool_box  FORGE-ROSE
+      +57302  ::next
+      +66204  ::add
+     +105976  ::mul
+     +233728  forge_model::hole::body_box  FORGE-ROSE
+
+== gearbox nary1: -25820
+     -382550  ::from_points::
+     -107559  __memcpy_avx_unaligned_erms
+      -50522  _int_free
+      -40728  malloc
+      -31844  forge_math::poly::roots_into'2
+      -28528  forge_model::hole::segment_points
+      -28333  free
+      -22736  forge_model::hole::adds
+       -8374  ::from_iter
+       -8226  __rustc::__rdl_alloc
+       -4312  ::call'2
+       -2849  systrim.constprop.0
+       -1931  realloc
+       -1811  core::ptr::drop_glue::
+       -1802  sbrk
+       -1354  forge_model::extent::resolve
+       -1111  _int_realloc
+       -1080  forge_model::extent::resolve'2
+       +1238  forge_model::step_plain_finished  FORGE-ROSE
+       +1743  ::call_once_force::::{closure#0}
+       +3304  ::initialize::
+       +3320  forge_model::hole::reach  FORGE-ROSE
+       +4076  ::near
+       +6208  unlink_chunk.isra.0
+       +6313  _int_free_maybe_consolidate
+       +7254  malloc_consolidate
+       +8423  ::edge_box
+      +12838  ::call
+      +15443  _int_free_merge_chunk
+      +17280  forge_math::poly::roots_into  FORGE-ROSE
+      +23456  ::shifted_cos
+      +27732  forge_math::dmath::sin_cos  FORGE-ROSE
+      +42416  ::bbox
+      +44830  _int_malloc
+      +66204  ::add
+      +72566  forge_model::hole::tool_box  FORGE-ROSE
+      +82225  ::next
+     +105976  ::mul
+     +148090  forge_model::hole::body_box  FORGE-ROSE
+
+== volute app: +15313
+      -12468  ::from_points::
+       -1865  _int_free
+       -1826  malloc
+       -1522  forge_model::hole::adds
+       -1240  free
+       +1294  __memcmp_avx2_movbe
+       +1419  malloc_consolidate
+       +4153  forge_model::hole::reach  FORGE-ROSE
+       +4548  forge_model::hole::tool_box  FORGE-ROSE
+       +4606  _int_malloc
+       +4613  ::next
+      +15737  __memcpy_avx_unaligned_erms
+
+== volute edit: +769
+      -24936  ::from_points::
+      -20024  _int_malloc
+       -5034  _int_free
+       -3909  unlink_chunk.isra.0
+       -3726  malloc
+       -3044  forge_model::hole::adds
+       -2480  free
+       -1672  forge_model::hole::segment_points
+       -1338  ::from_iter
+       -1329  malloc_consolidate
+       +1113  _int_free_maybe_consolidate
+       +1700  forge_model::hole::needs_base_cold  FORGE-ROSE
+       +3155  _int_free_merge_chunk
+       +3477  __memcmp_avx2_movbe
+       +8306  forge_model::hole::reach  FORGE-ROSE
+       +9096  forge_model::hole::tool_box  FORGE-ROSE
+       +9226  ::next
+      +33491  __memcpy_avx_unaligned_erms
+
+== crank cli: +73830
+      -38032  ::from_points::
+       -3840  malloc
+       -2816  forge_model::hole::segment_points
+       -2728  free
+       -2002  _int_free
+       +1662  forge_model::hole::reach  FORGE-ROSE
+       +5480  malloc_consolidate
+      +12192  forge_model::hole::tool_box  FORGE-ROSE
+      +13288  ::next
+      +16303  unlink_chunk.isra.0
+      +25564  __memcpy_avx_unaligned_erms
+      +53529  _int_malloc
+
+== valve app: +152129
+      -25974  ::from_points::
+       -7643  _int_free
+       -4782  malloc
+       -3566  ::from_iter
+       -3343  free
+       -2088  forge_model::hole::segment_points
+       -1930  forge_model::hole::adds
+       -1584  __memcmp_avx2_movbe
+       -1289  realloc
+       +1027  forge_model::hole::needs_base_cold  FORGE-ROSE
+       +2406  malloc_consolidate
+       +6751  unlink_chunk.isra.0
+       +8424  forge_model::hole::tool_box  FORGE-ROSE
+       +9594  ::next
+       +9628  forge_model::hole::reach  FORGE-ROSE
