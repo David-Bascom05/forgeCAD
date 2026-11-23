@@ -2,22 +2,27 @@
 //! for, on the bench parts (parts/bench/*.fg), at whatever thread count the process is given
 //! (FORGECAD_THREADS, the CPUs taskset leaves it).
 //!
-//!   latbench ops PART [K]     one round on PART: `open` (the cold build, `forgecad build`'s:
-//!                             checks on), then K timed reps (after one untimed warm-up) of each
-//!                             of: `edit` (one dimension changed, rebuilt from the open's cache:
-//!                             a new value every rep), `step` (STEP AP214 export), `mesh` (3MF
-//!                             export, checked), `draw` (hidden-line views front, top, right, iso),
-//!                             `nary` (the kernel's n-ary regen at the process's thread count);
-//!                             an op's reps stop once they took LATBENCH_BUDGET s (default 2),
-//!                             and LATBENCH_SKIP=op,.. leaves ops out
+//!   latbench ops PART [K]     one round on PART: `cold` (the first build in this fresh process,
+//!                             one sample), then of each op one untimed warm-up and timed reps
+//!                             (at least 3, then until they took LATBENCH_BUDGET s, default 0.5,
+//!                             or K, default 30): `open` (the part built from nothing with checks,
+//!                             `forgecad build`'s, as a running app opens a file), `edit` (one
+//!                             dimension changed, rebuilt from the last rep's cache: a new value
+//!                             every rep), `step` (STEP AP214 export), `mesh` (tessellation at the
+//!                             mesh export's quality, checked closed), `view` (at the live
+//!                             viewer's quality), `draw` (hidden-line views front, top, right,
+//!                             iso), `nary` (the kernel's n-ary regen at the process's thread
+//!                             count); LATBENCH_SKIP=op,.. leaves ops out
 //!   latbench kern NAME [K]    the kernel's suite part NAME (forge_model::suite: coplanar, upto,
 //!                             shaft, mixed, ..): `kseq` (the sequential regen) and `nary` (the
-//!                             n-ary regen at the process's thread count), warm-up then K reps
+//!                             n-ary regen at the process's thread count), reps as above
 //!   latbench exec CMD ARG..   one timed run of a child process (the CAM certify line)
 //!   latbench bits             each part's result hashed, seq and n-ary at the process's thread
 //!                             count (compared across FORGECAD_THREADS=1, 2, N by latency.sh)
-//! Output: one line per sample, `OP REP WALL_NS CPU_NS` (CPU: user+sys of the whole process, all
-//! threads, over the op, in 10 ms ticks), REP 0 for `open`.
+//! Output: one line per sample, `OP REP WALL_NS CPU_NS RUN_NS` (CPU: user+sys of the whole
+//! process, every thread, over the op, in 10 ms ticks; RUN: the calling thread's time on a CPU,
+//! to the ns, steal excluded). Only APIs old commits have too: latency.sh builds this file into
+//! the base's tree.
 //!
 //! Validation knobs (latency.sh --selftest; never set in a real comparison):
 //!   LATBENCH_SLOW=PART:OP:FRAC,..  after OP on PART, spin until (1+FRAC) x its time has passed:
@@ -53,7 +58,8 @@ fn children_cpu_ns() -> u64 {
 }
 
 fn font_dir() -> std::path::PathBuf {
-    let dir = forge_dirs::temp_dir().join("forge-latbench");
+    // (std's, not forge_dirs': the harness builds on older commits too, to be their base)
+    let dir = std::env::temp_dir().join("forge-latbench");
     std::fs::create_dir_all(&dir).expect("temp dir");
     std::fs::write(dir.join(forge_lang::bench::FONT), forge_lang::bench::font_bytes()).expect("font");
     dir
@@ -125,7 +131,7 @@ fn par_views(part: &str) -> bool {
 /// Times `f`, prints its sample, and returns its value.
 fn timed<T>(part: &str, op: &str, rep: usize, f: impl FnOnce() -> T) -> T {
     let extra = slow(part, op);
-    let (c0, t0) = (cpu_ns(), Instant::now());
+    let (r0, c0, t0) = (run_ns(), cpu_ns(), Instant::now());
     let v = std::hint::black_box(f());
     if extra > 0.0 {
         let until = t0 + t0.elapsed().mul_f64(1.0 + extra);
@@ -134,12 +140,40 @@ fn timed<T>(part: &str, op: &str, rep: usize, f: impl FnOnce() -> T) -> T {
         }
     }
     let wall = t0.elapsed();
-    let cpu = cpu_ns() - c0;
+    let (cpu, run) = (cpu_ns() - c0, run_ns() - r0);
     if rep != usize::MAX {
-        println!("{op} {rep} {} {cpu}", wall.as_nanos());
+        println!("{op} {rep} {} {cpu} {run}", wall.as_nanos());
     }
     v
 }
+
+/// The calling thread's time on a CPU so far, in ns (/proc/thread-self/schedstat: the
+/// scheduler's own clock, to the ns, without the time the hypervisor stole). At one thread it is
+/// the wait less what the machine's other tenants took.
+fn run_ns() -> u64 {
+    std::fs::read_to_string("/proc/thread-self/schedstat")
+        .ok()
+        .and_then(|s| s.split(' ').next().and_then(|x| x.parse().ok()))
+        .unwrap_or(0)
+}
+
+/// OP on PART: one untimed warm-up, then timed reps until at least MIN_REPS were made and they
+/// took LATBENCH_BUDGET s, or K were made.
+fn reps(name: &str, op: &str, k: usize, mut go: impl FnMut(usize)) {
+    if skip(op) {
+        return;
+    }
+    timed(name, op, usize::MAX, || go(0));
+    let t0 = Instant::now();
+    for rep in 1..=k {
+        timed(name, op, rep, || go(rep));
+        if rep >= MIN_REPS && t0.elapsed() > budget() {
+            break;
+        }
+    }
+}
+
+const MIN_REPS: usize = 3;
 
 fn options(dir: &std::path::Path) -> forge_lang::Options {
     forge_lang::Options {
@@ -166,36 +200,59 @@ fn views(name: &str, body: &forge_topo::Body) -> usize {
     }
 }
 
+/// The live viewer's mesh quality for `body` (forge-render's `quality_for`, restated).
+fn view_quality(body: &forge_topo::Body) -> forge_mesh::Quality {
+    const LADDER: [(f64, f64); 4] = [(0.01, 15.0), (0.05, 22.5), (0.25, 45.0), (1.0, 60.0)];
+    let (mut lo, mut hi) = ([f64::MAX; 3], [f64::MIN; 3]);
+    for v in &body.vertices {
+        for (i, x) in [v.point.x, v.point.y, v.point.z].into_iter().enumerate() {
+            lo[i] = lo[i].min(x);
+            hi[i] = hi[i].max(x);
+        }
+    }
+    let r = (0..3).map(|i| (hi[i] - lo[i]).powi(2)).sum::<f64>().sqrt() / 2.0;
+    let (chord, turn) = LADDER.iter().rev().find(|c| c.0 <= r / 200.0).copied().unwrap_or(LADDER[0]);
+    forge_mesh::Quality {
+        chord,
+        max_angle: turn.to_radians(),
+    }
+}
+
 fn ops(name: &str, k: usize) {
     let dir = font_dir();
     let src = source(name);
     let opts = options(&dir);
-    let (run, cache) = timed(name, "open", 0, || {
+    // the first build in a fresh process (informational: it carries the process's own start)
+    let (run, cache) = timed(name, "cold", 0, || {
         forge_lang::run(&src, opts.clone(), Default::default())
     });
     assert!(run.errors.is_empty(), "{name}: {:?}", run.errors);
+    // open: the part built from nothing, as a running app opens a file
+    reps(name, "open", k, |_| {
+        let (r, _) = forge_lang::run(&src, opts.clone(), Default::default());
+        assert!(r.errors.is_empty(), "{name}: {:?}", r.errors);
+    });
     let body = run.body.clone().expect("a solid");
     // edit: a new value of the first dimension every rep, each rebuilt from the last one's cache
     let mut cache = Some(cache);
-    let t0 = Instant::now();
-    for rep in 0..=k {
-        if rep > 1 && t0.elapsed() > budget() {
-            break;
-        }
-        let s = edited(&src, 1.0 + 0.01 * (rep + 1) as f64);
-        let r = if rep == 0 { usize::MAX } else { rep };
-        let (run, c) = timed(name, "edit", r, || {
-            forge_lang::run(&s, opts.clone(), cache.take().expect("cache"))
-        });
+    let mut n = 0;
+    reps(name, "edit", k, |_| {
+        n += 1;
+        let s = edited(&src, 1.0 + 0.001 * n as f64);
+        let (run, c) = forge_lang::run(&s, opts.clone(), cache.take().expect("cache"));
         assert!(run.errors.is_empty(), "{name} edited: {:?}", run.errors);
         cache = Some(c);
-    }
+    });
     let mut sopt = forge_step::Options::default();
     if !run.sheets.is_empty() {
         sopt.tol = forge_step::SHEET_TOL;
     }
     sopt.name = name.to_string();
-    let mopt = forge_lang::meshfile::Options::new(forge_lang::meshfile::Format::ThreeMf);
+    // the mesh export's quality (meshfile's defaults: 0.01 mm, 15 deg) and the viewer's (the
+    // live mesher's level: the coarsest of its ladder whose chord is under 1/200 of the part's
+    // radius, about half a pixel at a window's fit; forge-render live.rs)
+    let export_q = forge_mesh::Quality::default();
+    let view_q = view_quality(&body);
     // the part's kernel features as the build sent them, for the n-ary regen
     let (f, ids) = {
         let o = forge_lang::Options {
@@ -206,40 +263,30 @@ fn ops(name: &str, k: usize) {
         let (f, ids) = c.history();
         (Part { features: f.to_vec() }, ids.to_vec())
     };
-    let ops: [(&str, &dyn Fn() -> usize); 4] = [
-        ("step", &|| forge_step::export(&body, &sopt).expect("step").text.len()),
-        ("mesh", &|| {
-            let e = forge_lang::meshfile::export(&run, name, Some(&dir), &mopt).expect("mesh");
-            assert!(e.checks.iter().all(|c| c.watertight()), "{name}: mesh not watertight");
-            e.bytes.len()
-        }),
-        ("draw", &|| views(name, &body)),
-        ("nary", &|| {
-            f.regenerate_nary_solids_ids(forge_math::par::threads(), Some(&ids))
-                .expect("nary")
-                .len()
-        }),
-    ];
-    for (op, go) in ops {
-        if skip(op) {
-            continue;
-        }
-        timed(name, op, usize::MAX, go);
-        let t0 = Instant::now();
-        for rep in 1..=k {
-            timed(name, op, rep, go);
-            if t0.elapsed() > budget() {
-                break;
-            }
-        }
-    }
+    reps(name, "step", k, |_| {
+        std::hint::black_box(forge_step::export(&body, &sopt).expect("step").text.len());
+    });
+    reps(name, "mesh", k, |_| {
+        let m = forge_mesh::tessellate(&body, &export_q).expect("mesh");
+        assert!(m.open_edges().is_empty(), "{name}: mesh not closed");
+    });
+    reps(name, "view", k, |_| {
+        std::hint::black_box(forge_mesh::tessellate(&body, &view_q).expect("view mesh"));
+    });
+    reps(name, "draw", k, |_| {
+        std::hint::black_box(views(name, &body));
+    });
+    reps(name, "nary", k, |_| {
+        let n = f.regenerate_nary_solids_ids(forge_math::par::threads(), Some(&ids));
+        assert!(n.is_ok(), "{name}: nary");
+    });
 }
 
-/// The time an op's reps may take in a round (LATBENCH_BUDGET seconds, default 2): after it, no
-/// more reps (at least one is timed).
+/// The time an op's reps may take in a round (LATBENCH_BUDGET seconds, default 0.5): after it,
+/// no more reps (at least MIN_REPS are timed).
 fn budget() -> std::time::Duration {
     std::time::Duration::from_secs_f64(
-        std::env::var("LATBENCH_BUDGET").ok().and_then(|b| b.parse().ok()).unwrap_or(2.0),
+        std::env::var("LATBENCH_BUDGET").ok().and_then(|b| b.parse().ok()).unwrap_or(0.5),
     )
 }
 
@@ -268,26 +315,17 @@ fn main() {
     match args.first().map(String::as_str) {
         Some("ops") => ops(
             &args[1],
-            args.get(2).map_or(5, |k| k.parse().expect("K")),
+            args.get(2).map_or(30, |k| k.parse().expect("K")),
         ),
         Some("kern") => {
             let name = &args[1];
-            let k = args.get(2).map_or(5, |k| k.parse().expect("K"));
+            let k = args.get(2).map_or(30, |k| k.parse().expect("K"));
             let part = forge_model::suite::part(name).expect("a suite part");
-            let ops: [(&str, &dyn Fn() -> bool); 2] = [
-                ("kseq", &|| part.regenerate().is_ok()),
-                ("nary", &|| part.regenerate_nary(forge_math::par::threads()).is_ok()),
-            ];
-            for (op, go) in ops {
-                assert!(timed(name, op, usize::MAX, go), "{name} {op} failed");
-                let t0 = Instant::now();
-                for rep in 1..=k {
-                    timed(name, op, rep, go);
-                    if t0.elapsed() > budget() {
-                        break;
-                    }
-                }
-            }
+            reps(name, "kseq", k, |_| assert!(part.regenerate().is_ok(), "{name} kseq"));
+            reps(name, "nary", k, |_| {
+                let t = forge_math::par::threads();
+                assert!(part.regenerate_nary(t).is_ok(), "{name} nary");
+            });
         }
         Some("exec") => {
             let (c0, t0) = (children_cpu_ns(), Instant::now());
@@ -298,7 +336,7 @@ fn main() {
                 .expect("spawn");
             let wall = t0.elapsed();
             assert!(st.success(), "{} failed: {st}", args[1]);
-            println!("exec 0 {} {}", wall.as_nanos(), children_cpu_ns() - c0);
+            println!("exec 0 {} {} 0", wall.as_nanos(), children_cpu_ns() - c0);
         }
         Some("bits") => {
             let dir = font_dir();

@@ -11,7 +11,8 @@
 #        tools/speed/latency.sh bits                results at FORGECAD_THREADS=1, 2 and N: the
 #                                                   same as each other and as bits.txt
 # opts:  --rounds N   rounds per side (default 12): each a fresh process per part and threads
-#        --reps K     timed reps of each op in a round, after one warm-up rep (default 5)
+#        --reps K     most timed reps of an op in a round (default 30; at least 3, then until
+#                     they took LATBENCH_BUDGET s, default 0.5), after one warm-up rep
 #        --parts "a b .."  (default: every parts/bench/*.fg)
 #        --threads "t1 tN" (default both): t1 = FORGECAD_THREADS=1 on one pinned core; tN = every
 #                     core, FORGECAD_THREADS unset (what a user gets); tK = FORGECAD_THREADS=K on
@@ -20,8 +21,12 @@
 #                     (default coplanar upto shaft mixed patterns plate)
 #        --heavy      draw every part (default: LAT_DRAW_PARTS, those whose four views take under
 #                     ~1 s at 4 cores; the others take 2 to over 100 s)
+#        --skip "op,op"  leave those ops out of the bench parts' rounds (e.g. step,mesh,draw,nary)
 #        --raw FILE   keep the raw samples (default: a temp file, removed)
 #        -o FILE      write the report there too
+#        --head REV   head from REV (a worktree) instead of this checkout
+# HEAD_FEATURES / BASE_FEATURES: cargo features for that side's build (e.g. forge-bool/decide_once:
+# the same commit with a switch off and on, `--base REV --head REV`).
 # Environment for validation only (see latbench.rs): HEAD_ENV="VAR=v .." / BASE_ENV, set on one
 # side's runs. LAT_CORE: the core of the one-thread runs (default the last).
 #
@@ -39,26 +44,30 @@ set -e
 dir=$(cd "$(dirname "$0")" && pwd)
 root=$PWD
 rounds=12
-reps=5
+reps=30
 parts=
 threads="t1 tN"
 raw=
 out=
 base=
 mode=record
+head=
 heavy=
+skipops=
 kparts="coplanar upto shaft mixed patterns plate"
 draw_parts=${LAT_DRAW_PARTS:-"bracket clamp conrod guard heatsink hub insert quadarm"}
 while [ $# -gt 0 ]; do
   case $1 in
     bits) mode=bits ;;
     --base) base=$2; mode=compare; shift ;;
+    --head) head=$2; shift ;;
     --rounds) rounds=$2; shift ;;
     --reps) reps=$2; shift ;;
     --parts) parts=$2; shift ;;
     --threads) threads=$2; shift ;;
     --raw) raw=$2; shift ;;
     --heavy) heavy=1 ;;
+    --skip) skipops=$2; shift ;;
     --kparts) kparts=$2; shift ;;
     -o) out=$2; shift ;;
     *) echo "latency.sh: unknown argument $1" >&2; exit 64 ;;
@@ -72,9 +81,11 @@ target="${CARGO_TARGET_DIR:-$root/target}/latency"
 work=$(mktemp -d /tmp/forge-latency.XXXXXX)
 trap 'rm -rf "$work"' EXIT
 
-build() { # build SRC_DIR TARGET_DIR DEST: latbench (and the gate's bit examples) into DEST
+build() { # build SRC_DIR TARGET_DIR DEST [FEATURES]: latbench (and the gate's bit examples)
+  # shellcheck disable=SC2086
   (cd "$1" && CARGO_TARGET_DIR="$2" cargo build -q --release -p forge-lang --example latbench \
-    --example benchparts && CARGO_TARGET_DIR="$2" cargo build -q --release -p forge-model --example bits)
+    --example benchparts ${4:+--features "$4"} &&
+    CARGO_TARGET_DIR="$2" cargo build -q --release -p forge-model --example bits ${4:+--features "$4"})
   mkdir -p "$3"
   cp "$2/release/examples/latbench" "$2/release/examples/benchparts" "$2/release/examples/bits" "$3/"
   if [ -f "$1/interface/forge-cam-lang/examples/cam_gonogo.rs" ]; then
@@ -82,8 +93,24 @@ build() { # build SRC_DIR TARGET_DIR DEST: latbench (and the gate's bit examples
     cp "$2/release/examples/cam_gonogo" "$3/"
   fi
 }
-echo "latency: building head ($(git rev-parse --short HEAD)$(git diff --quiet || echo +dirty))" >&2
-build "$root" "$target/head" "$work/head"
+# worktree REV SIDE: a checkout of REV at $target/wt-SIDE, with this checkout's latbench.rs (the
+# other side may predate it: both measure the same ops)
+worktree() {
+  wt="$target/wt-$2"
+  git worktree remove --force "$wt" 2>/dev/null || rm -rf "$wt"
+  git worktree prune
+  git worktree add -q --detach "$wt" "$(git rev-parse "$1")"
+  cp "$root/interface/forge-lang/examples/latbench.rs" "$wt/interface/forge-lang/examples/"
+}
+if [ -n "$head" ]; then
+  echo "latency: building head ($(git rev-parse --short "$head")${HEAD_FEATURES:+ features $HEAD_FEATURES})" >&2
+  worktree "$head" head
+  build "$wt" "$target/head" "$work/head" "${HEAD_FEATURES:-}"
+  git worktree remove --force "$wt"
+else
+  echo "latency: building head ($(git rev-parse --short HEAD)$(git diff --quiet || echo +dirty)${HEAD_FEATURES:+ features $HEAD_FEATURES})" >&2
+  build "$root" "$target/head" "$work/head" "${HEAD_FEATURES:-}"
+fi
 mkdir -p "$work/parts"
 cp interface/forge-lang/parts/bench/*.fg "$work/parts/"
 
@@ -124,15 +151,9 @@ if [ "$mode" = compare ]; then
   if [ "$base" = self ]; then
     mkdir -p "$work/base" && cp "$work/head/"* "$work/base/"
   else
-    rev=$(git rev-parse "$base")
-    wt="$target/wt-base"
-    git worktree remove --force "$wt" 2>/dev/null || rm -rf "$wt"
-    git worktree prune
-    git worktree add -q --detach "$wt" "$rev"
-    # (the base may predate latbench: build it with head's harness, so both measure the same ops)
-    cp "$root/interface/forge-lang/examples/latbench.rs" "$wt/interface/forge-lang/examples/"
-    echo "latency: building base ($(git rev-parse --short "$rev"))" >&2
-    build "$wt" "$target/base" "$work/base"
+    echo "latency: building base ($(git rev-parse --short "$base")${BASE_FEATURES:+ features $BASE_FEATURES})" >&2
+    worktree "$base" base
+    build "$wt" "$target/base" "$work/base" "${BASE_FEATURES:-}"
     git worktree remove --force "$wt"
   fi
   sides="base head"
@@ -145,8 +166,9 @@ for s in $sides; do [ -f "$work/$s/cam_gonogo" ] || cam=; done
 samples=${raw:-$work/raw}
 : > "$samples"
 one() { # one SIDE ROUND PART THREADS: one round's samples, labelled
-  skipenv=
-  if [ -z "$heavy" ] && ! echo " $draw_parts " | grep -q " $3 "; then skipenv=LATBENCH_SKIP=draw; fi
+  sk=$skipops
+  if [ -z "$heavy" ] && ! echo " $draw_parts " | grep -q " $3 "; then sk="$sk,draw"; fi
+  skipenv=${sk:+LATBENCH_SKIP=$sk}
   if [ "$3" = cam ]; then
     run "$1" "$4" exec "$work/$1/cam_gonogo"
   elif [ "${3#k-}" != "$3" ]; then
@@ -173,7 +195,7 @@ for r in $(seq "$rounds"); do
 done
 
 report() {
-  echo "# latency.sh $mode: head $(git rev-parse --short HEAD)$(git diff --quiet || echo +dirty)${base:+, base $base}"
+  echo "# latency.sh $mode: head ${head:-$(git rev-parse --short HEAD)$(git diff --quiet || echo +dirty)}${HEAD_FEATURES:+ [$HEAD_FEATURES]}${base:+, base $base}${BASE_FEATURES:+ [$BASE_FEATURES]}"
   echo "# $ncpu CPUs ($(grep -m1 'model name' /proc/cpuinfo | sed 's/.*: //')), rounds $rounds, reps $reps;"\
     "threads: t1 = 1 on core $core, tN = $ncpu (all cores, FORGECAD_THREADS unset)"
   [ -n "${HEAD_ENV:-}" ] && echo "# HEAD_ENV=$HEAD_ENV"
