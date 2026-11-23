@@ -43,7 +43,8 @@ def bodies(steps):
 def with_bodies(d):
     """DeepCAD's extrudes carry no body records, which Fusion's do and the translator reads to know which body a
     feature makes or acts on. Read the way Onshape's defaults go: a new body is a body of its own, a join goes into the
-    body made last, a cut or an intersect acts on every body."""
+    body made last, a cut or an intersect acts on every body. (A new body joining the last, as DeepCAD's own
+    reconstruction reads it, matched fewer: 279 against 286 of 400.)"""
     alive, k = [], 0
     for s in d["sequence"]:
         e = d["entities"].get(s["entity"], {})
