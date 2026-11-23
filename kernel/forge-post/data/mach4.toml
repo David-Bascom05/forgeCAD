@@ -10,7 +10,7 @@ point = "always"
 program_open = []
 program_close = ["M30", "%"]
 line_numbers = false
-safe_start = ["G00 G90 G17 G40 G49 G80", "G21 G94", "G91.1"]
+safe_start = ["G90 G17 G40 G49 G80", "G21 G94", "G91.1"]
 tool_change = ["T{t} M06"]
 length_comp = "G43 H{h}"
 spindle_cw = "S{rpm} M03"
@@ -65,7 +65,7 @@ key = "safe_start"
 source = "https://www.machsupport.com/wp-content/uploads/2014/05/Mill%20GCode%20Programming.pdf"
 taken = "2026-11-23"
 where = "Mach4 CNC Controller Mill Programming Guide (Newfangled Solutions / Artsoft USA), Version 1.1, Build 3775 (c) 2014; Ch.1 Format p9-10; G20/G21 p35; G94 p54"
-note = "the guide's safe-start block, G21 G94, G91.1 incremental arc centres"
+note = "the guide's safe-start codes (its G00 left out: G00 and G80 are two motion-group codes in one block), G21 G94, G91.1 incremental arc centres"
 
 [[dialect.cite]]
 key = "tool_change"

@@ -151,8 +151,13 @@ fn fit(mut p: Program, d: &Dialect) -> Program {
     p.recs.retain(|r| match r {
         Rec::Coolant(c) => !d.template(key(c)).is_empty(),
         Rec::Dwell(_) => !d.template("dwell").is_empty(),
-        Rec::Cycle { kind: CycleKind::Dwell, .. } => !d.template("dwell").is_empty() || d.template("cycle_dwell") != "expand",
-        Rec::Cycle { kind: CycleKind::Tap, .. } => !matches!(d.template("cycle_tap"), "refuse" | ""),
+        Rec::Cycle {
+            kind: CycleKind::Dwell,
+            ..
+        } => !d.template("dwell").is_empty() || d.template("cycle_dwell") != "expand",
+        Rec::Cycle {
+            kind: CycleKind::Tap, ..
+        } => !matches!(d.template("cycle_tap"), "refuse" | ""),
         Rec::Home => d.has_lines("retract_home"),
         _ => true,
     });

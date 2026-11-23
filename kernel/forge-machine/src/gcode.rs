@@ -54,6 +54,40 @@ pub struct Control {
     pub lathe: bool,
     /// The plane at program start: 17 (mill) or 18 (lathe).
     pub plane0: u8,
+    /// The dialect's lexical extras, read in this shell before the words reach the core.
+    pub lex: Lex,
+}
+
+/// A dialect's text conventions beyond the Fanuc words the core interprets (forge-post's
+/// data keys; research/cam/posts). They are rewritten here, in the shell, into the core's words:
+/// the core and its Lean spec (verify/forge-machine) cover the Fanuc subset only.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Lex {
+    /// A block terminator to drop (HEIDENHAIN ISO `*`).
+    pub block_end: String,
+    /// G codes (tenths: G91.1 = 911) that carry no motion on this control (G291, G71, G91.1).
+    pub g_ignore: Vec<u16>,
+    /// The T block is the tool change (no M6); a bare T changes only the speed.
+    pub tool_word: bool,
+    /// The arc centre is its own block, absolute (I J), before G02/G03.
+    pub centre_abs: bool,
+    /// The dwell's word in a G4 block (P, or F / X on some controls).
+    pub dwell_letter: char,
+    /// A canned cycle's P counts milliseconds (G82 P250) though G4's dwell is in seconds.
+    pub cycle_p_ms: bool,
+}
+
+impl Default for Lex {
+    fn default() -> Lex {
+        Lex {
+            block_end: String::new(),
+            g_ignore: Vec::new(),
+            tool_word: false,
+            centre_abs: false,
+            dwell_letter: 'P',
+            cycle_p_ms: false,
+        }
+    }
 }
 
 impl Control {
@@ -68,6 +102,7 @@ impl Control {
             dwell_seconds,
             lathe: false,
             plane0: 17,
+            lex: Lex::default(),
         }
     }
 
@@ -86,7 +121,9 @@ impl Control {
         };
         let decimals = toml::num(d, "decimals").ok_or("the dialect has no decimals")? as u32;
         let feed_decimals = toml::num(d, "feed_decimals").ok_or("the dialect has no feed_decimals")? as u32;
-        let dwell = toml::text(d, "dwell").ok_or("the dialect has no dwell template")?;
+        // a dialect may have no dwell (its units unknown: forge-post refuses one); a G4 in its
+        // text is then read as Fanuc's P milliseconds
+        let dwell = toml::text(d, "dwell").unwrap_or("G4 P{ms}");
         let mut letters = Vec::new();
         let mut rotary = Vec::new();
         let mut diameter = None;
@@ -104,7 +141,28 @@ impl Control {
             }
         }
         let lathe = matches!(def.kind, crate::def::Kind::Lathe | crate::def::Kind::MillTurn);
+        // the dwell's word: the letter before the template's {ms} or {s}
+        let dwell_letter = dwell
+            .find("{ms}")
+            .or_else(|| dwell.find("{s}"))
+            .and_then(|i| dwell[..i].chars().last())
+            .filter(|c| c.is_ascii_alphabetic())
+            .unwrap_or('P');
+        let lex = Lex {
+            block_end: toml::text(d, "block_end").unwrap_or("").trim().to_string(),
+            g_ignore: toml::nums(d, "read_g_ignore")
+                .unwrap_or_default()
+                .into_iter()
+                .map(|g| (g * 10.0).round() as u16)
+                .collect(),
+            tool_word: d.get("tool_word") == Some(&toml::Val::Bool(true)),
+            centre_abs: toml::text(d, "arc") == Some("centre_abs"),
+            dwell_letter,
+            cycle_p_ms: !dwell.contains("{ms}")
+                && toml::text(d, "cycle_dwell").is_some_and(|t| t.contains("P{ms}")),
+        };
         Ok(Control {
+            lex,
             decimals,
             feed_decimals,
             letters,
@@ -242,6 +300,8 @@ pub struct State {
     pub rpm: Q,
     pub css: bool,
     pub selected: Option<u32>,
+    /// The arc centre an absolute I J block set (`Lex::centre_abs`), in program units.
+    pub centre: Option<(Q, Q)>,
 }
 
 impl State {
@@ -260,6 +320,7 @@ impl State {
             rpm: 0,
             css: false,
             selected: None,
+            centre: None,
         }
     }
 }
@@ -299,7 +360,18 @@ pub fn parse_q(s: &str, k: u32, line: usize) -> Result<Q, GError> {
 }
 
 /// A block's words, upper-cased, in order, and its comments.
-fn words(raw: &str, line: usize, comments: &mut Vec<String>) -> Result<Option<Vec<(char, String)>>, GError> {
+fn words(
+    raw: &str,
+    line: usize,
+    comments: &mut Vec<String>,
+    lex: &Lex,
+) -> Result<Option<Vec<(char, String)>>, GError> {
+    let raw = if lex.block_end.is_empty() {
+        raw
+    } else {
+        let t = raw.trim_end();
+        t.strip_suffix(lex.block_end.as_str()).unwrap_or(t)
+    };
     let mut s = String::new();
     let mut depth = 0i32;
     let mut com = String::new();
@@ -331,7 +403,8 @@ fn words(raw: &str, line: usize, comments: &mut Vec<String>) -> Result<Option<Ve
         return Err(ge(line, "an unclosed comment"));
     }
     let s = s.trim();
-    if s.is_empty() || s == "%" {
+    // a tape mark, or a program header / last block such as `%NAME G71 *`
+    if s.is_empty() || s.contains('%') {
         return Ok(None);
     }
     if s.starts_with('/') {
@@ -353,6 +426,11 @@ fn words(raw: &str, line: usize, comments: &mut Vec<String>) -> Result<Option<Ve
             j += 1;
         }
         let v: String = b[i + 1..j].iter().collect();
+        if v.is_empty() && l == 'T' && lex.tool_word {
+            // a bare T block: only the speed changes
+            i = j;
+            continue;
+        }
         if v.is_empty() {
             return Err(ge(line, format!("the word `{l}` has no value")));
         }
@@ -360,6 +438,90 @@ fn words(raw: &str, line: usize, comments: &mut Vec<String>) -> Result<Option<Ve
         i = j;
     }
     Ok(Some(out))
+}
+
+/// A value in integer units of 10^-k as a decimal word.
+fn q_text(q: Q, k: u32) -> String {
+    let p = pow10(k);
+    let (sign, a) = if q < 0 { ("-", -q) } else { ("", q) };
+    if k == 0 {
+        format!("{sign}{a}")
+    } else {
+        format!("{sign}{}.{:0w$}", a / p, a % p, w = k as usize)
+    }
+}
+
+/// The dialect's extras rewritten into the core's (Fanuc) words; None if the block only set
+/// shell state (an absolute arc centre).
+fn lex_rewrite(
+    mut ws: Vec<(char, String)>,
+    ln: usize,
+    c: &Control,
+    st: &mut State,
+) -> Result<Option<Vec<(char, String)>>, GError> {
+    let lex = &c.lex;
+    let g_of = |v: &str| parse_q(v, 1, ln).ok();
+    if !lex.g_ignore.is_empty() {
+        ws.retain(|(l, v)| *l != 'G' || !g_of(v).is_some_and(|g| lex.g_ignore.contains(&(g as u16))));
+    }
+    let has_g = |ws: &[(char, String)], g: i64| ws.iter().any(|(l, v)| *l == 'G' && g_of(v) == Some(g * 10));
+    // the dwell's word to P (G4 F seconds; G04 X seconds)
+    if lex.dwell_letter != 'P' && has_g(&ws, 4) {
+        for w in ws.iter_mut() {
+            if w.0 == lex.dwell_letter {
+                w.0 = 'P';
+            }
+        }
+    }
+    // a cycle's P in milliseconds where G4 counts seconds: to seconds for the core
+    if lex.cycle_p_ms && [73, 81, 82, 83, 84, 85].iter().any(|g| has_g(&ws, *g)) {
+        for w in ws.iter_mut() {
+            if w.0 == 'P' {
+                w.1 = q_text(parse_q(&w.1, 0, ln)?, 3);
+            }
+        }
+    }
+    // the T block is the tool change
+    if lex.tool_word
+        && ws.iter().any(|(l, v)| *l == 'T' && !v.is_empty())
+        && !ws.iter().any(|(l, v)| *l == 'M' && parse_q(v, 0, ln) == Ok(6))
+    {
+        ws.push(('M', "6".into()));
+    }
+    if lex.centre_abs {
+        let k = c.decimals;
+        let ij: Vec<(char, String)> = ws
+            .iter()
+            .filter(|(l, _)| matches!(l, 'I' | 'J'))
+            .cloned()
+            .collect();
+        let arc = has_g(&ws, 2) || has_g(&ws, 3);
+        if !ij.is_empty() && !arc {
+            let get = |ch: char| {
+                ij.iter()
+                    .find(|(l, _)| *l == ch)
+                    .map(|(_, v)| parse_q(v, k, ln))
+                    .ok_or_else(|| ge(ln, format!("a centre block with no {ch}")))?
+            };
+            st.centre = Some((get('I')?, get('J')?));
+            ws.retain(|(l, _)| !matches!(l, 'I' | 'J'));
+            if ws.iter().all(|(l, _)| *l == 'N') {
+                return Ok(None);
+            }
+        } else if arc {
+            let (cx, cy) = st.centre.ok_or_else(|| ge(ln, "an arc with no centre defined"))?;
+            let at = |ch: char| {
+                c.idx(ch)
+                    .and_then(|i| st.core.pos[i])
+                    .ok_or_else(|| ge(ln, "an arc from an unknown position"))
+            };
+            let (sx, sy) = (at('X')?, at('Y')?);
+            ws.retain(|(l, _)| !matches!(l, 'I' | 'J'));
+            ws.push(('I', q_text(cx - sx, k)));
+            ws.push(('J', q_text(cy - sy, k)));
+        }
+    }
+    Ok(Some(ws))
 }
 
 /// Interprets a whole program.
@@ -375,12 +537,15 @@ pub fn run(text: &str, c: &Control) -> Result<(Vec<Block>, State), GError> {
 /// One block: its events appended to `out`, the state advanced.
 pub fn block(raw: &str, ln: usize, c: &Control, st: &mut State, out: &mut Vec<Block>) -> Result<(), GError> {
     let mut comments = Vec::new();
-    let parsed = words(raw, ln, &mut comments)?;
+    let parsed = words(raw, ln, &mut comments, &c.lex)?;
     let push = |out: &mut Vec<Block>, ev: Ev| out.push(Block { line: ln, ev });
     for c in comments {
         push(out, Ev::Comment(c));
     }
     let Some(ws) = parsed else { return Ok(()) };
+    let Some(ws) = lex_rewrite(ws, ln, c, st)? else {
+        return Ok(());
+    };
     let k = c.decimals;
     let mut gs: Vec<u16> = Vec::new(); // G codes in tenths: G43.4 = 434
     let mut ms: Vec<u32> = Vec::new();
