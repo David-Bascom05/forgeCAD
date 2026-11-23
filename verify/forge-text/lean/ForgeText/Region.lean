@@ -33,9 +33,27 @@ theorem mem_textRegion {P : Type} (glyphs : List (List (Region P))) (p : P) :
   · rintro ⟨g, hg, r, hr, hp⟩
     exact ⟨union g, ⟨g, hg, rfl⟩, r, hr, hp⟩
 
-/-- The refusal's claim: a text is set only if no two different glyphs' boundaries meet. -/
-def RefusesMeeting {P : Type} (boundaries : List (Region P)) (set : Bool) : Prop :=
-  set = true → ∀ i j, i ≠ j → (hi : i < boundaries.length) → (hj : j < boundaries.length) →
-    ¬ Meet (boundaries[i]'hi) (boundaries[j]'hj)
+/-- The check `profiles_in_groups` makes before a text is set: over the loops `0..n`, each with
+its glyph (`whole`), every pair `i < j` of different glyphs is asked whether they meet (crossing or
+touching); the text is set only if none does. -/
+def apart (n : Nat) (whole : Nat → Nat) (meets : Nat → Nat → Bool) : Bool :=
+  (List.range n).all fun i => (List.range n).all fun j => !(decide (i < j) && decide (whole i ≠ whole j)) || !meets i j
+
+/-- The refusal's claim: a set text has no two loops of different glyphs that meet (`meets`
+being symmetric, as two loops sharing a point is). -/
+theorem refuses_meeting (n : Nat) (whole : Nat → Nat) (meets : Nat → Nat → Bool)
+    (symm : ∀ a b, meets a b = meets b a) (h : apart n whole meets = true) :
+    ∀ i j, i < n → j < n → whole i ≠ whole j → meets i j = false := by
+  intro i j hi hj hw
+  simp only [apart, List.all_eq_true, List.mem_range] at h
+  have hij : i ≠ j := fun e => hw (e ▸ rfl)
+  rcases Nat.lt_or_gt_of_ne hij with lt | gt
+  · have := h i hi j hj
+    simp [lt, hw] at this
+    simpa using this
+  · have := h j hj i hi
+    have hw' : whole j ≠ whole i := fun e => hw e.symm
+    simp [gt, hw'] at this
+    rw [symm]; simpa using this
 
 end ForgeText

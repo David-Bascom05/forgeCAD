@@ -32,14 +32,23 @@ def lineCross (a b p : Pt) : Option Int :=
     let up := above p b
     if (up ∧ o > 0) ∨ (¬up ∧ o < 0) then some (if up then 1 else -1) else some 0
 
+/-- The sum of counts, none if any is (a point on a side). -/
+def total : List (Option Int) → Option Int
+  | [] => some 0
+  | x :: xs =>
+    match x, total xs with
+    | some a, some b => some (a + b)
+    | _, _ => none
+
+/-- A polygon's sides, the closing one last. -/
+def sides : List Pt → List (Pt × Pt)
+  | [] => []
+  | v :: rest => (v :: rest).zip (rest ++ [v])
+
 /-- A polygon's winding number about p: the sum of its sides' crossings (closing side
 included); `none` if p lies on it. -/
 def polyWinding (vs : List Pt) (p : Pt) : Option Int :=
-  match vs with
-  | [] => some 0
-  | v :: _ =>
-    let sides := (vs.zip (vs.drop 1 ++ [v]))
-    sides.foldl (fun acc s => do let a ← acc; let c ← lineCross s.1 s.2 p; pure (a + c)) (some 0)
+  total ((sides vs).map fun s => lineCross s.1 s.2 p)
 
 /-- A unit square's winding about its centre (on the doubled grid) is 1, about a point beside
 it 0, and a point on a side is undecided. -/
@@ -47,10 +56,67 @@ example : polyWinding [⟨0, 0⟩, ⟨2, 0⟩, ⟨2, 2⟩, ⟨0, 2⟩] ⟨1, 1�
 example : polyWinding [⟨0, 0⟩, ⟨2, 0⟩, ⟨2, 2⟩, ⟨0, 2⟩] ⟨3, 1⟩ = some 0 := by decide
 example : polyWinding [⟨0, 0⟩, ⟨2, 0⟩, ⟨2, 2⟩, ⟨0, 2⟩] ⟨2, 1⟩ = none := by decide
 
-/-- The count's claim (L3, to be proven): it is the polygon's, not its listing's: where the
-vertex list starts does not change it. -/
-def WindingFromAnyStart : Prop :=
-  ∀ (vs : List Pt) (p : Pt) (k : Nat), polyWinding (vs.rotateLeft k) p = polyWinding vs p
+/-- One step of rotation: the first vertex moved to the end. -/
+def rot1 {α : Type} : List α → List α
+  | [] => []
+  | a :: t => t ++ [a]
+
+/-- `k` steps of rotation. -/
+def rot {α : Type} : Nat → List α → List α
+  | 0, l => l
+  | k + 1, l => rot1 (rot k l)
+
+def plus : Option Int → Option Int → Option Int
+  | some a, some b => some (a + b)
+  | _, _ => none
+
+theorem total_cons (x : Option Int) (xs : List (Option Int)) : total (x :: xs) = plus x (total xs) := by
+  simp only [total]; cases x <;> cases total xs <;> rfl
+
+theorem plus_comm (a b : Option Int) : plus a b = plus b a := by
+  cases a <;> cases b <;> simp [plus, Int.add_comm]
+
+theorem plus_assoc (a b c : Option Int) : plus (plus a b) c = plus a (plus b c) := by
+  cases a <;> cases b <;> cases c <;> simp [plus, Int.add_assoc]
+
+theorem total_append (l m : List (Option Int)) : total (l ++ m) = plus (total l) (total m) := by
+  induction l with
+  | nil => cases h : total m <;> simp [total, plus, h]
+  | cons x xs ih => rw [List.cons_append, total_cons, total_cons, ih, plus_assoc]
+
+theorem total_rot1 (l : List (Option Int)) : total (rot1 l) = total l := by
+  cases l with
+  | nil => rfl
+  | cons a t =>
+    simp only [rot1]
+    rw [total_append, total_cons, total_cons]
+    have : total ([] : List (Option Int)) = some 0 := rfl
+    rw [this]
+    cases a <;> cases total t <;> simp [plus, Int.add_comm]
+
+theorem sides_rot1 (vs : List Pt) : sides (rot1 vs) = rot1 (sides vs) := by
+  match vs with
+  | [] => rfl
+  | [v] => rfl
+  | v :: w :: rest =>
+    simp only [rot1, sides, List.cons_append, List.zip_cons_cons]
+    have h := List.zip_append (l₁ := w :: rest) (r₁ := [v]) (l₂ := rest ++ [v]) (r₂ := [w]) (by simp)
+    simpa using h
+
+theorem map_rot1 {α β : Type} (f : α → β) (l : List α) : (rot1 l).map f = rot1 (l.map f) := by
+  cases l <;> simp [rot1]
+
+theorem polyWinding_rot1 (vs : List Pt) (p : Pt) : polyWinding (rot1 vs) p = polyWinding vs p := by
+  unfold polyWinding
+  rw [sides_rot1, map_rot1, total_rot1]
+
+/-- The count is the polygon's, not its listing's: where the vertex list starts (rotated by
+any number of steps) does not change it. -/
+theorem winding_from_any_start (vs : List Pt) (p : Pt) (k : Nat) :
+    polyWinding (rot k vs) p = polyWinding vs p := by
+  induction k with
+  | zero => rfl
+  | succ k ih => simp only [rot]; rw [polyWinding_rot1, ih]
 
 /-- The rule's claim (L3, to be proven): for a simple polygon (no two non-adjacent sides
 meet) and a point off it, the count is 1 or -1 (inside) or 0 (outside), and two points joined by a

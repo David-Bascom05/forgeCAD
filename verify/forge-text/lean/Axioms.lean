@@ -11,3 +11,11 @@ theorem's axioms; none may be `sorryAx` or `Lean.ofReduceBool`. -/
 #print axioms ForgeText.Seg.place_kind
 #print axioms ForgeText.step_out_prefix
 #print axioms ForgeText.mem_textRegion
+#print axioms ForgeText.chain_append
+#print axioms ForgeText.step_inv
+#print axioms ForgeText.decode_closes
+#print axioms ForgeText.total_append
+#print axioms ForgeText.sides_rot1
+#print axioms ForgeText.polyWinding_rot1
+#print axioms ForgeText.winding_from_any_start
+#print axioms ForgeText.refuses_meeting

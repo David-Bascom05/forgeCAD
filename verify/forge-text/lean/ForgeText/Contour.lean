@@ -36,18 +36,68 @@ order, the first again appended as an on point to close it). -/
 def decode (start : Pt) (rest : List (Pt × Bool)) : List Seg :=
   (rest.foldl step { at_ := start, ctrl := none, out := [] }).out
 
-/-- Every piece the walk makes starts where the one before ended (the pen moves only by
-making a piece, or onto a midpoint it then starts from). -/
-def ChainedFrom (start : Pt) (out : List Seg) : Prop :=
-  ∀ i, (h : i < out.length) →
-    (out[i]'h).start = if i = 0 then start else (out[i - 1]'(by omega)).stop
+/-- The pieces chain from `p`: each starts where the one before ended, the first at `p`. -/
+def Chain : Pt → List Seg → Prop
+  | _, [] => True
+  | p, s :: rest => s.start = p ∧ Chain s.stop rest
 
-/-- The decoder's claim (L3, to be proven): the pieces chain from the start and, the last point
-being the start again (on the curve), the contour closes. -/
-def DecodeCloses : Prop :=
-  ∀ (start : Pt) (rest : List (Pt × Bool)),
-    let out := decode start (rest ++ [(start, true)])
-    ChainedFrom start out ∧ (out ≠ [] → Closed out)
+/-- Where a chain from `p` ends. -/
+def endOf : Pt → List Seg → Pt
+  | p, [] => p
+  | _, s :: rest => endOf s.stop rest
+
+theorem chain_append (p : Pt) (l : List Seg) (s : Seg) :
+    Chain p (l ++ [s]) ↔ Chain p l ∧ s.start = endOf p l := by
+  induction l generalizing p with
+  | nil => simp [Chain, endOf]
+  | cons x xs ih => simp [Chain, endOf, ih, and_assoc]
+
+theorem endOf_append (p : Pt) (l : List Seg) (s : Seg) : endOf p (l ++ [s]) = s.stop := by
+  induction l generalizing p with
+  | nil => rfl
+  | cons x xs ih => exact ih _
+
+/-- The walk's invariant: its pieces chain from the start and end where the pen is. -/
+def Inv (start : Pt) (w : Walk) : Prop := Chain start w.out ∧ endOf start w.out = w.at_
+
+theorem step_inv (start : Pt) (w : Walk) (q : Pt × Bool) (h : Inv start w) : Inv start (step w q) := by
+  obtain ⟨hc, he⟩ := h
+  obtain ⟨p, b⟩ := q
+  cases b <;> cases hw : w.ctrl <;> simp only [step, hw]
+  · exact ⟨hc, he⟩
+  · split
+    · next heq => exact ⟨hc, by rw [he]; exact heq.symm⟩
+    · exact ⟨(chain_append _ _ _).2 ⟨hc, by simp [Seg.start, he]⟩, by simp [endOf_append, Seg.stop]⟩
+  · split
+    · next heq => exact ⟨hc, by rw [he]; exact heq.symm⟩
+    · exact ⟨(chain_append _ _ _).2 ⟨hc, by simp [Seg.start, he]⟩, by simp [endOf_append, Seg.stop]⟩
+  · split
+    · next heq => exact ⟨hc, by rw [he]; exact heq.symm⟩
+    · exact ⟨(chain_append _ _ _).2 ⟨hc, by simp [Seg.start, he]⟩, by simp [endOf_append, Seg.stop]⟩
+
+theorem foldl_inv (start : Pt) (l : List (Pt × Bool)) (w : Walk) (h : Inv start w) :
+    Inv start (l.foldl step w) := by
+  induction l generalizing w with
+  | nil => exact h
+  | cons q qs ih => exact ih _ (step_inv start w q h)
+
+/-- An on point leaves the pen on it. -/
+theorem step_on_at (w : Walk) (p : Pt) : (step w (p, true)).at_ = p := by
+  cases hw : w.ctrl <;> simp [step, hw]
+
+/-- The decoder's claim (`contour`): the pieces chain from the start and, the walk ending on the
+start (on the curve), close there: the contour is closed. -/
+theorem decode_closes (start : Pt) (rest : List (Pt × Bool)) :
+    Chain start (decode start (rest ++ [(start, true)])) ∧
+      endOf start (decode start (rest ++ [(start, true)])) = start := by
+  have h := foldl_inv start (rest ++ [(start, true)]) { at_ := start, ctrl := none, out := [] }
+    ⟨trivial, rfl⟩
+  have hat : ((rest ++ [(start, true)]).foldl step { at_ := start, ctrl := none, out := [] }).at_ = start := by
+    rw [List.foldl_append]
+    simp only [List.foldl_cons, List.foldl_nil]
+    exact step_on_at _ _
+  unfold decode
+  exact ⟨h.1, h.2.trans hat⟩
 
 /-- No piece is a point: a piece is made only where the pen moves. -/
 theorem step_out_prefix (w : Walk) (q : Pt × Bool) : ∃ t, (step w q).out = w.out ++ t := by

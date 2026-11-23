@@ -62,11 +62,6 @@ theorem Seg.start_place (d : Pt) (s : Seg) : (s.place d).start = s.start + d := 
 theorem Seg.stop_place (d : Pt) (s : Seg) : (s.place d).stop = s.stop + d := by
   cases s <;> rfl
 
-/-- A contour is closed: each piece ends where the next starts, the last where the first
-starts. -/
-def Closed (c : List Seg) : Prop :=
-  ∀ i, (h : i < c.length) → (c[i]'h).stop = (c[(i + 1) % c.length]'(Nat.mod_lt _ (by omega))).start
-
 /-- Placing keeps the font's kind of piece and its control points, each moved by the same
 offset: the laid-out outline is the font's, exactly. -/
 theorem Seg.place_kind (d : Pt) (s : Seg) :
