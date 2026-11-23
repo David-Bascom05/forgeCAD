@@ -103,12 +103,18 @@ impl Interval {
     /// sin over the interval: the endpoints' values, and 1 wherever a point (k + 1/2) pi with k even
     /// may lie inside, -1 where one with k odd may.
     pub fn sin(&self) -> Interval {
-        self.trig(dmath::sin, 0.5)
+        if let Some(w) = self.trig_whole() {
+            return w;
+        }
+        self.trig_at(dmath::sin(self.lo), dmath::sin(self.hi), 0.5)
     }
     /// cos over the interval: the endpoints' values, and 1 wherever a multiple k pi with k even may
     /// lie inside, -1 where one with k odd may.
     pub fn cos(&self) -> Interval {
-        self.trig(dmath::cos, 0.0)
+        if let Some(w) = self.trig_whole() {
+            return w;
+        }
+        self.trig_at(dmath::cos(self.lo), dmath::cos(self.hi), 0.0)
     }
     /// sin and cos over the interval together, each as `sin` and `cos` give it (one dmath call
     /// per end for both).
@@ -118,22 +124,6 @@ impl Interval {
         }
         let (a, b) = (dmath::sin_cos(self.lo), dmath::sin_cos(self.hi));
         (self.trig_at(a.0, b.0, 0.5), self.trig_at(a.1, b.1, 0.0))
-    }
-    /// The range of sin or cos (`f`, its extremes at (k + `half`) pi, the even k maxima).
-    ///
-    /// The contract (proven on verify/ieee754's model by the IEEE work, Dmath.sin_err and cos_err):
-    /// for finite |x| <= TRIG_MOST = 2^20, dmath's sin and cos are within an absolute TRIG_ERR =
-    /// 2^-52 of the true values. So each end's value, pushed out by TRIG_ERR and then rounded
-    /// outward, encloses the true one; the error is absolute, not relative (dmath is not within a
-    /// few ulps of tiny values: near the zeros, ulps are far below its error). A point (k + half) pi
-    /// is counted inside when k + half lies in [a / PI or a / PI_UP, b / PI or b / PI_UP], rounded
-    /// outward: PI < pi < PI_UP, so a point that may be inside is never missed. The
-    /// result is clamped to [-1, 1]. Past TRIG_MOST, or across a whole turn, it is [-1, 1].
-    fn trig(&self, f: fn(f64) -> f64, half: f64) -> Interval {
-        if let Some(w) = self.trig_whole() {
-            return w;
-        }
-        self.trig_at(f(self.lo), f(self.hi), half)
     }
     /// The answer with no value of dmath's asked: empty for empty, [-1, 1] past TRIG_MOST, for a
     /// non-finite end, or across a whole turn.
@@ -147,8 +137,18 @@ impl Interval {
         }
         None
     }
-    /// `trig` from the function's values at the ends, `fa` and `fb` (finite ends within TRIG_MOST
-    /// and under a turn apart: `trig_whole` is None).
+    /// The range of sin or cos from its values at the ends, `fa` and `fb` (its extremes at
+    /// (k + `half`) pi, the even k maxima; finite ends within TRIG_MOST and under a turn apart:
+    /// `trig_whole` is None).
+    ///
+    /// The contract (proven on verify/ieee754's model by the IEEE work, Dmath.sin_err and cos_err):
+    /// for finite |x| <= TRIG_MOST = 2^20, dmath's sin and cos are within an absolute TRIG_ERR =
+    /// 2^-52 of the true values. So each end's value, pushed out by TRIG_ERR and then rounded
+    /// outward, encloses the true one; the error is absolute, not relative (dmath is not within a
+    /// few ulps of tiny values: near the zeros, ulps are far below its error). A point (k + half) pi
+    /// is counted inside when k + half lies in [a / PI or a / PI_UP, b / PI or b / PI_UP], rounded
+    /// outward: PI < pi < PI_UP, so a point that may be inside is never missed. The
+    /// result is clamped to [-1, 1]. Past TRIG_MOST, or across a whole turn, it is [-1, 1].
     fn trig_at(&self, fa: f64, fb: f64, half: f64) -> Interval {
         let (a, b) = (self.lo, self.hi);
         let (mut lo, mut hi) = (
