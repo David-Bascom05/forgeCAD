@@ -324,6 +324,9 @@ fn hull(mut p: Vec<[f64; 2]>) -> Vec<[f64; 2]> {
 /// so growing it covers the hull's rounding many times over.
 const HOLDER_PAD: f64 = 0.05;
 
+/// How far a generic seat's corners stand in from the insert's.
+const SEAT_INSET: f64 = 0.5;
+
 /// An OD turning tool from an insert and a right-hand holder: the insert's core (its nose
 /// corner at the nose centre, the reference point), its body to its thickness below centre
 /// height with the effective clearance `clear_deg` (a negative insert in a negatively inclined
@@ -390,18 +393,30 @@ pub fn turning_tool(id: &str, insert: &str, holder: &str, seat_deg: Option<f64>)
         [rho0 + hol.length, zb + hol.b],
         [rho0, zb + hol.b],
     ];
-    let mut head_pts = far.clone();
+    // the head under the insert: the seat is smaller than the insert (its corners SEAT_INSET in
+    // toward the insert's middle) and its sides fall away below the insert at the insert's
+    // clearance, continuing the insert's own relief; it reaches back to the shank's front
+    let mid = {
+        let n = core.len() as f64;
+        [core.iter().map(|p| p[0]).sum::<f64>() / n, core.iter().map(|p| p[1]).sum::<f64>() / n]
+    };
+    let mut head_pts: Vec<[f64; 2]> = far
+        .iter()
+        .map(|p| {
+            let v = [mid[0] - p[0], mid[1] - p[1]];
+            let l = (v[0] * v[0] + v[1] * v[1]).sqrt().max(1e-9);
+            [p[0] + SEAT_INSET * v[0] / l, p[1] + SEAT_INSET * v[1] / l]
+        })
+        .collect();
     head_pts.push([rho0, zb]);
     head_pts.push([rho0, zb + hol.b]);
-    // the head sits under the insert: a seat corner away from the cutting edges (the far
-    // corner), grown by the pad and the nose radius
     let head = Body {
         name: "holder head".into(),
         cutter: false,
         core: hull(head_pts),
-        r: re + HOLDER_PAD,
+        r: (re - ins.thickness * relief).max(0.0) + HOLDER_PAD,
         depth: [ins.thickness, hol.h],
-        relief: 0.0,
+        relief,
         on_axis: false,
     };
     let shank_body = Body {
@@ -511,7 +526,7 @@ pub fn thread_tool(id: &str, rt: f64, pitch: [f64; 2], h: f64) -> Result<TurnToo
     let holder = Body {
         name: "thread holder".into(),
         cutter: false,
-        core: vec![[reach + rt, -10.0], [reach + rt + 60.0, -10.0], [reach + rt + 60.0, 12.0], [reach + rt, 12.0]],
+        core: vec![[reach + rt, -2.5], [reach + rt + 60.0, -2.5], [reach + rt + 60.0, 22.5], [reach + rt, 22.5]],
         r: HOLDER_PAD,
         depth: [0.0, h],
         relief: 0.0,
