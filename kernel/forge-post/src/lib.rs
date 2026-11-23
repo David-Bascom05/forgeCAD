@@ -675,24 +675,29 @@ pub fn print(p: &QProgram, d: &Dialect) -> Result<String, PostError> {
                 w.emit(code);
             }
             QRec::Rapid(v) | QRec::Line(v, _) => {
+                // a null move (no axis changes) is not written, and changes no modal state: the
+                // G and F of a block are committed only with the block (a dropped null move must
+                // not leave the mode it would have set)
                 let g = if matches!(r, QRec::Rapid(_)) { 0 } else { 1 };
-                let mut ws = Vec::new();
-                if motion != Some(g) {
-                    ws.push(format!("G{g}"));
-                    motion = Some(g);
-                }
+                let mut axes = Vec::new();
                 let mut i = 0;
                 for letter in ['X', 'Y', 'Z'] {
-                    word(&mut ws, letter, v[i], &mut pos[i], false);
+                    word(&mut axes, letter, v[i], &mut pos[i], false);
                     i += 1;
                 }
-                if let QRec::Line(_, f) = r
-                    && feed != Some(*f)
-                {
-                    ws.push(format!("F{}", fnum(*f)));
-                    feed = Some(*f);
-                }
-                if ws.len() > usize::from(ws.first().is_some_and(|s| s.starts_with('G'))) {
+                if !axes.is_empty() {
+                    let mut ws = Vec::new();
+                    if motion != Some(g) {
+                        ws.push(format!("G{g}"));
+                        motion = Some(g);
+                    }
+                    ws.extend(axes);
+                    if let QRec::Line(_, f) = r
+                        && feed != Some(*f)
+                    {
+                        ws.push(format!("F{}", fnum(*f)));
+                        feed = Some(*f);
+                    }
                     w.emit(&ws.join(" "));
                 }
             }
@@ -850,26 +855,27 @@ fn write_moves(
         match r {
             QRec::Rapid(v) | QRec::Line(v, _) => {
                 let g = if matches!(r, QRec::Rapid(_)) { 0 } else { 1 };
-                let mut ws = Vec::new();
-                if *motion != Some(g) {
-                    ws.push(format!("G{g}"));
-                    *motion = Some(g);
-                }
-                let mut changed = false;
+                let mut axes = Vec::new();
                 for (i, letter) in ['X', 'Y', 'Z'].into_iter().enumerate() {
                     if pos[i] != Some(v[i]) {
-                        ws.push(format!("{letter}{}", num_(v[i])));
+                        axes.push(format!("{letter}{}", num_(v[i])));
                         pos[i] = Some(v[i]);
-                        changed = true;
                     }
                 }
-                if let QRec::Line(_, f) = r
-                    && *feed != Some(*f)
-                {
-                    ws.push(format!("F{}", fnum(*f)));
-                    *feed = Some(*f);
-                }
-                if changed {
+                // as in print: modal state only moves with a written block
+                if !axes.is_empty() {
+                    let mut ws = Vec::new();
+                    if *motion != Some(g) {
+                        ws.push(format!("G{g}"));
+                        *motion = Some(g);
+                    }
+                    ws.extend(axes);
+                    if let QRec::Line(_, f) = r
+                        && *feed != Some(*f)
+                    {
+                        ws.push(format!("F{}", fnum(*f)));
+                        *feed = Some(*f);
+                    }
                     w.emit(&ws.join(" "));
                 }
             }

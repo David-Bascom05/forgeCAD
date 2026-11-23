@@ -150,3 +150,30 @@ fn reader_refuses_what_is_not_ours() {
     assert!(read("G41 D1\n", &f).is_err());
     assert!(read("G0 X1. Y1. Z1.\nG1 X2. F100.\n", &f).is_ok());
 }
+
+#[test]
+fn a_dropped_null_move_leaves_no_mode_behind() {
+    // found by the Lean model of G6: a null feed after a rapid must not make the next feed a rapid
+    // (nor a null rapid after a feed make the next retract a feed)
+    for (name, _) in DIALECTS {
+        let d = Dialect::get(name).unwrap();
+        for null_rapid in [false, true] {
+            let mut recs = vec![
+                Rec::ToolChange { t: 1, h: 1, name: "x".into() },
+                Rec::Rapid([0.0, 0.0, 5.0]),
+                Rec::Line([0.0, 0.0, 0.0], 100.0),
+                Rec::Rapid([0.0, 0.0, 5.0]),
+            ];
+            if null_rapid {
+                recs.push(Rec::Line([0.0, 0.0, -3.0], 100.0));
+                recs.push(Rec::Rapid([0.0, 0.0, -3.0]));
+                recs.push(Rec::Line([0.0, 0.0, 5.0], 100.0));
+            } else {
+                recs.push(Rec::Line([0.0, 0.0, 5.0], 100.0));
+                recs.push(Rec::Line([0.0, 0.0, -3.0], 100.0));
+            }
+            let q = quantize(&Program { number: 1, title: "t".into(), recs }, &d).unwrap();
+            round_trip(&q, &d).unwrap_or_else(|e| panic!("{name} {null_rapid}: {e}"));
+        }
+    }
+}
