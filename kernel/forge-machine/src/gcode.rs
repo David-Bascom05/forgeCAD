@@ -22,6 +22,8 @@
 
 pub type Q = i64;
 
+use forge_machine_core as mcore;
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct GError {
     pub line: usize,
@@ -157,8 +159,9 @@ pub enum Coolant {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Centre {
-    /// The centre is the start plus (I, J) / (I, K) / (J, K): plane coordinates, radius units.
-    Offset([Q; 2]),
+    /// The centre in plane coordinates, program units (the start plus I J K; on a diameter X, I
+    /// counts twice: a radius added to a diameter word).
+    Abs([Q; 2]),
     /// The radius word: negative for an arc of more than half a turn.
     R(Q),
 }
@@ -230,48 +233,32 @@ pub struct Block {
     pub ev: Ev,
 }
 
-/// The modal state between blocks.
+/// The modal state between blocks: the core's (forge-machine-core) and the words the core does
+/// not read.
 #[derive(Clone, Debug, PartialEq)]
 pub struct State {
-    pub pos: Vec<Option<Q>>,
-    pub absolute: bool,
-    /// 0 1 2 3 or 80 (a cycle is active) or None.
-    pub motion: Option<u8>,
-    pub plane: u8,
+    pub core: mcore::State,
     pub feed_mode: FeedMode,
-    pub feed: Q,
     pub rpm: Q,
     pub css: bool,
-    /// G98 (true): back to the initial level; G99: to R.
-    pub retract_initial: bool,
-    pub cycle: Option<Cycle>,
     pub selected: Option<u32>,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Cycle {
-    pub g: u8,
-    pub z: Q,
-    pub r: Q,
-    pub q: Q,
-    pub dwell_ms: Q,
-    /// The height the cycle started from (G98's return level).
-    pub initial: Q,
 }
 
 impl State {
     pub fn new(c: &Control) -> State {
         State {
-            pos: vec![None; c.letters.len()],
-            absolute: true,
-            motion: None,
-            plane: c.plane0,
+            core: mcore::State {
+                pos: vec![None; c.letters.len()],
+                absolute: true,
+                mode: None,
+                plane: c.plane0 as u32,
+                feed: None,
+                retract_initial: true,
+                cyc: None,
+            },
             feed_mode: FeedMode::PerMin,
-            feed: 0,
             rpm: 0,
             css: false,
-            retract_initial: true,
-            cycle: None,
             selected: None,
         }
     }
@@ -512,12 +499,16 @@ pub fn block(raw: &str, ln: usize, c: &Control, st: &mut State, out: &mut Vec<Bl
     if has_g(95) {
         st.feed_mode = FeedMode::PerRev;
     }
-    if let Some(f) = get('F') {
-        st.feed = parse_q(f, c.feed_decimals, ln)?;
-        if st.feed < 0 {
-            return Err(ge(ln, "a negative feed"));
+    let f_word = match get('F') {
+        Some(f) => {
+            let v = parse_q(f, c.feed_decimals, ln)?;
+            if v < 0 {
+                return Err(ge(ln, "a negative feed"));
+            }
+            Some(v)
         }
-    }
+        None => None,
+    };
     if has_g(96) {
         st.css = true;
     }
@@ -614,12 +605,7 @@ pub fn block(raw: &str, ln: usize, c: &Control, st: &mut State, out: &mut Vec<Bl
         push(out, Ev::Dwell { ms });
         nonmodal_used_words = true;
     }
-    // 4. plane, comp, length, wcs, distance, retract
-    for (g, p) in [(17u16, 17u8), (18, 18), (19, 19)] {
-        if has_g(g) {
-            st.plane = p;
-        }
-    }
+    // 4. length, wcs (the shell's); plane, distance and retract modes go to the core
     if has_g(43) {
         let h = whole('H')?.ok_or_else(|| ge(ln, "G43 with no H"))?;
         push(out, Ev::Length(Some(h as u32)));
@@ -632,135 +618,36 @@ pub fn block(raw: &str, ln: usize, c: &Control, st: &mut State, out: &mut Vec<Bl
             push(out, Ev::Wcs(n as u32));
         }
     }
-    if has_g(90) {
-        st.absolute = true;
-    }
-    if has_g(91) {
-        st.absolute = false;
-    }
-    if has_g(98) {
-        st.retract_initial = true;
-    }
-    if has_g(99) {
-        st.retract_initial = false;
-    }
-    // the axis words of this block
     let mut axis: Vec<Option<Q>> = vec![None; c.letters.len()];
     for (i, l) in c.letters.iter().enumerate() {
         axis[i] = coord(*l)?;
     }
     let any_axis = axis.iter().any(|a| a.is_some());
-    // the target: absolute words replace, incremental add to a known position
-    let target = |st: &State| -> Result<Vec<Option<Q>>, GError> {
-        let mut to = st.pos.clone();
-        for i in 0..axis.len() {
-            if let Some(v) = axis[i] {
-                to[i] = Some(if st.absolute {
-                    v
-                } else {
-                    st.pos[i].ok_or_else(|| {
-                        ge(
-                            ln,
-                            format!("an incremental {} from an unknown position", c.letters[i]),
-                        )
-                    })? + v
-                });
-            }
-        }
-        Ok(to)
+    let absolute = if has_g(91) {
+        Some(false)
+    } else if has_g(90) {
+        Some(true)
+    } else {
+        None
     };
-    // 5. G28, G53
-    if has_g(28) {
-        let via = target(st)?;
-        let axes: Vec<usize> = (0..axis.len()).filter(|i| axis[*i].is_some()).collect();
-        if axes.is_empty() {
-            return Err(ge(
-                ln,
-                "G28 with no axis word (which axes go home is not assumed)",
-            ));
-        }
-        push(
-            out,
-            Ev::Home {
-                via: via.clone(),
-                axes: axes.clone(),
-            },
-        );
-        st.pos = via;
-        for i in axes {
-            st.pos[i] = None; // the reference point in program coordinates depends on offsets
-        }
-        if let Some(e) = stop {
-            push(out, e);
-        }
-        return Ok(());
-    }
+    // 5. G53: a non-modal machine-coordinate move (the shell's: the core's position of those
+    // axes becomes unknown)
     if has_g(53) {
-        if !st.absolute {
+        if !absolute.unwrap_or(st.core.absolute) {
             return Err(ge(ln, "G53 in G91: machine moves are absolute"));
         }
         let mv: Vec<(usize, Q)> = (0..axis.len()).filter_map(|i| axis[i].map(|v| (i, v))).collect();
         push(out, Ev::Machine(mv.clone()));
+        if let Some(a) = absolute {
+            st.core.absolute = a;
+        }
         for (i, _) in mv {
-            st.pos[i] = None;
+            st.core.pos[i] = None;
         }
         if let Some(e) = stop {
             push(out, e);
         }
         return Ok(());
-    }
-    // 6. motion
-    if let Some(&g) = motion_gs.first() {
-        match g {
-            0 | 10 | 20 | 30 => {
-                st.motion = Some((g / 10) as u8);
-                st.cycle = None;
-            }
-            800 => {
-                st.motion = None;
-                st.cycle = None;
-            }
-            _ => {
-                if st.plane != 17 {
-                    return Err(ge(ln, "canned cycles are modelled in G17 only"));
-                }
-                let zi = c
-                    .idx('Z')
-                    .ok_or_else(|| ge(ln, "a cycle on a control with no Z"))?;
-                let z = coord('Z')?.ok_or_else(|| ge(ln, "a cycle with no Z"))?;
-                let r = coord('R')?.ok_or_else(|| ge(ln, "a cycle with no R"))?;
-                if !st.absolute {
-                    return Err(ge(ln, "a cycle in G91 is not modelled"));
-                }
-                let q = coord('Q')?.unwrap_or(0);
-                let dwell_ms = match get('P') {
-                    Some(p) => {
-                        if c.dwell_seconds {
-                            parse_q(p, 3, ln)?
-                        } else {
-                            parse_q(p, 0, ln)?
-                        }
-                    }
-                    None => 0,
-                };
-                let initial = st.pos[zi].ok_or_else(|| ge(ln, "a cycle from an unknown height"))?;
-                if r > initial || z > r {
-                    return Err(ge(ln, "a cycle needs bottom Z ≤ R ≤ the initial height"));
-                }
-                if q < 0 {
-                    return Err(ge(ln, "a negative peck"));
-                }
-                st.cycle = Some(Cycle {
-                    g: (g / 10) as u8,
-                    z,
-                    r,
-                    q,
-                    dwell_ms,
-                    initial,
-                });
-                st.motion = Some(80);
-            }
-        }
     }
     if nonmodal_used_words && !any_axis {
         if let Some(e) = stop {
@@ -768,183 +655,127 @@ pub fn block(raw: &str, ln: usize, c: &Control, st: &mut State, out: &mut Vec<Bl
         }
         return Ok(());
     }
-    if has_g(43) && !any_axis {
-        if let Some(e) = stop {
-            push(out, e);
-        }
-        return Ok(());
+    let motion_g = motion_gs.first().map(|g| (*g / 10) as u32);
+    if !any_axis
+        && motion_g.is_none()
+        && (get('I').is_some()
+            || get('J').is_some()
+            || get('K').is_some()
+            || (get('R').is_some() && st.core.cyc.is_none()))
+    {
+        return Err(ge(ln, "arc words with no axis word"));
     }
-    if !any_axis {
-        if motion_gs.is_empty()
-            && (get('I').is_some()
-                || get('J').is_some()
-                || get('K').is_some()
-                || (get('R').is_some() && st.cycle.is_none()))
-        {
-            return Err(ge(ln, "arc words with no axis word"));
-        }
-        if let Some(e) = stop {
-            push(out, e);
-        }
-        return Ok(());
+    // I is X's centre word: on a diameter X it is a radius, the core adds it to the X word
+    let mut iw = coord('I')?;
+    if c.diameter == Some('X') {
+        iw = iw.map(|v| 2 * v);
     }
-    let to = target(st)?;
-    match st.motion {
-        Some(80) => {
-            let cy = st.cycle.unwrap();
-            let xi = c.idx('X').ok_or_else(|| ge(ln, "a cycle with no X axis"))?;
-            let yi = c.idx('Y').ok_or_else(|| ge(ln, "a cycle with no Y axis"))?;
-            let zi = c.idx('Z').unwrap();
-            if axis[zi].is_some() && motion_gs.is_empty() {
-                return Err(ge(
-                    ln,
-                    "a Z word in a cycle's repeat block changes the bottom: write the cycle again",
-                ));
-            }
-            let (x, y) = (
-                to[xi].ok_or_else(|| ge(ln, "a hole with no X"))?,
-                to[yi].ok_or_else(|| ge(ln, "a hole with no Y"))?,
-            );
-            let back = if st.retract_initial { cy.initial } else { cy.r };
-            let mut base = to.clone();
-            base[zi] = None;
-            let at = |z: Q| {
-                let mut v = base.clone();
-                v[xi] = Some(x);
-                v[yi] = Some(y);
-                v[zi] = Some(z);
-                v
-            };
-            let f = st.feed;
-            let mode = st.feed_mode;
-            let rapid = |out: &mut Vec<Block>, z: Q| {
-                out.push(Block {
-                    line: ln,
-                    ev: Ev::Rapid(at(z)),
-                })
-            };
-            let feed = |out: &mut Vec<Block>, z: Q| {
-                out.push(Block {
-                    line: ln,
-                    ev: Ev::Feed { to: at(z), f, mode },
-                })
-            };
-            // as forge-post: to (x, y) at the current height, then R
-            rapid(out, st.pos[zi].unwrap());
-            rapid(out, cy.r);
-            match cy.g {
-                81 | 82 | 85 | 84 => {
-                    feed(out, cy.z);
-                    if cy.g == 82 && cy.dwell_ms > 0 {
-                        push(out, Ev::Dwell { ms: cy.dwell_ms });
-                    }
-                    if cy.g == 85 || cy.g == 84 {
-                        feed(out, cy.r);
-                    }
-                }
-                83 | 73 => {
-                    let step = if cy.q > 0 { cy.q } else { cy.r - cy.z };
-                    let pc = forge_post::quant(forge_post::PECK_CLEAR, k).unwrap_or(0);
-                    let lift = forge_post::quant(forge_post::CHIP_LIFT, k).unwrap_or(0);
-                    let mut depth = cy.r;
-                    while depth > cy.z {
-                        let next = if depth - step > cy.z { depth - step } else { cy.z };
-                        feed(out, next);
-                        depth = next;
-                        if depth > cy.z {
-                            if cy.g == 83 {
-                                rapid(out, cy.r);
-                                rapid(out, depth + pc);
-                            } else {
-                                rapid(out, depth + lift);
-                            }
-                        }
-                    }
-                }
-                _ => unreachable!(),
-            }
-            rapid(out, back);
-            st.pos = at(back);
+    let cycle = matches!(motion_g, Some(73 | 81..=85));
+    let dwell_p = if cycle {
+        match get('P') {
+            Some(p) => Some(if c.dwell_seconds {
+                parse_q(p, 3, ln)?
+            } else {
+                parse_q(p, 0, ln)?
+            }),
+            None => None,
         }
-        Some(0) => {
-            push(out, Ev::Rapid(to.clone()));
-            st.pos = to;
-        }
-        Some(1) => {
-            if st.feed == 0 {
-                return Err(ge(ln, "a feed move with F0 (or no F yet)"));
-            }
-            push(
-                out,
-                Ev::Feed {
-                    to: to.clone(),
-                    f: st.feed,
-                    mode: st.feed_mode,
+    } else {
+        None
+    };
+    let plane = if has_g(19) {
+        Some(19)
+    } else if has_g(18) {
+        Some(18)
+    } else if has_g(17) {
+        Some(17)
+    } else {
+        None
+    };
+    let b = mcore::Block {
+        g: motion_g,
+        absolute,
+        retract_initial: if has_g(99) {
+            Some(false)
+        } else if has_g(98) {
+            Some(true)
+        } else {
+            None
+        },
+        plane,
+        home: has_g(28),
+        ax: axis,
+        i: iw,
+        j: coord('J')?,
+        k: coord('K')?,
+        r: coord('R')?,
+        q: if cycle { coord('Q')? } else { None },
+        p: dwell_p,
+        f: f_word,
+    };
+    let axes = mcore::Axes {
+        x: c.idx('X').unwrap_or(usize::MAX),
+        y: c.idx('Y').unwrap_or(usize::MAX),
+        z: c.idx('Z').unwrap_or(usize::MAX),
+    };
+    let pc = forge_post::quant(forge_post::PECK_CLEAR, k).unwrap_or(0);
+    let lift = forge_post::quant(forge_post::CHIP_LIFT, k).unwrap_or(0);
+    let (evs, next) = mcore::step(&axes, pc, lift, &st.core, &b).map_err(|r| ge(ln, refusal(r)))?;
+    st.core = next;
+    let mode = st.feed_mode;
+    for e in evs {
+        push(
+            out,
+            match e {
+                mcore::Ev::Rapid(v) => Ev::Rapid(v),
+                mcore::Ev::Feed(v, f) => Ev::Feed { to: v, f, mode },
+                mcore::Ev::Arc(to, plane, centre, cw, full, f) => Ev::Arc {
+                    to,
+                    plane: plane as u8,
+                    centre: match centre {
+                        mcore::Centre::Abs(a, b) => Centre::Abs([a, b]),
+                        mcore::Centre::R(r) => Centre::R(r),
+                    },
+                    cw,
+                    full,
+                    f,
+                    mode,
                 },
-            );
-            st.pos = to;
-        }
-        Some(g @ (2 | 3)) => {
-            if st.feed == 0 {
-                return Err(ge(ln, "an arc with F0 (or no F yet)"));
-            }
-            let (a, b, wa, wb) = match st.plane {
-                17 => ('X', 'Y', 'I', 'J'),
-                18 => ('Z', 'X', 'K', 'I'),
-                _ => ('Y', 'Z', 'J', 'K'),
-            };
-            let ai = c
-                .idx(a)
-                .ok_or_else(|| ge(ln, format!("an arc in a plane with no {a} axis")))?;
-            let bi = c
-                .idx(b)
-                .ok_or_else(|| ge(ln, format!("an arc in a plane with no {b} axis")))?;
-            let (sa, sb) = (
-                st.pos[ai].ok_or_else(|| ge(ln, "an arc from an unknown position"))?,
-                st.pos[bi].ok_or_else(|| ge(ln, "an arc from an unknown position"))?,
-            );
-            let (ea, eb) = (to[ai].unwrap(), to[bi].unwrap());
-            let centre = match (coord('R')?, coord(wa)?, coord(wb)?) {
-                (Some(r), None, None) => {
-                    if r == 0 {
-                        return Err(ge(ln, "an arc with R0"));
-                    }
-                    if ea == sa && eb == sb {
-                        return Err(ge(ln, "a full circle cannot be written with R"));
-                    }
-                    Centre::R(r)
-                }
-                (None, ia, ib) if ia.is_some() || ib.is_some() => {
-                    Centre::Offset([ia.unwrap_or(0), ib.unwrap_or(0)])
-                }
-                (Some(_), _, _) => return Err(ge(ln, "an arc with both R and a centre word")),
-                _ => return Err(ge(ln, "an arc with no centre (I J K) or R")),
-            };
-            for (i, t) in to.iter().enumerate() {
-                if i != ai && i != bi && t != &st.pos[i] && c.rotary[i] {
-                    return Err(ge(ln, "a rotary axis moving during an arc is not modelled"));
-                }
-            }
-            push(
-                out,
-                Ev::Arc {
-                    to: to.clone(),
-                    plane: st.plane,
-                    centre,
-                    cw: g == 2,
-                    full: ea == sa && eb == sb,
-                    f: st.feed,
-                    mode: st.feed_mode,
-                },
-            );
-            st.pos = to;
-        }
-        _ => return Err(ge(ln, "coordinates with no motion mode")),
+                mcore::Ev::Home(via, axes) => Ev::Home { via, axes },
+                mcore::Ev::Dwell(ms) => Ev::Dwell { ms },
+            },
+        );
     }
     if let Some(e) = stop {
         push(out, e);
     }
     Ok(())
+}
+
+/// A refusal's words.
+fn refusal(r: mcore::Refuse) -> &'static str {
+    use mcore::Refuse::*;
+    match r {
+        IncrementalFromUnknown => "an incremental move from an unknown position",
+        HomeNoAxis => "G28 with no axis word (which axes go home is not assumed)",
+        UnknownMotion => "a motion code not in the subset",
+        CycleNotG17 => "canned cycles are modelled in G17 only",
+        CycleNoZ => "a cycle with no Z",
+        CycleNoR => "a cycle with no R",
+        CycleIncremental => "a cycle in G91 is not modelled",
+        CycleUnknownHeight => "a cycle from an unknown height",
+        CycleOrder => "a cycle needs bottom Z ≤ R ≤ the initial height",
+        CycleNegativePeck => "a negative peck",
+        CycleZRepeat => "a Z word in a cycle's repeat block changes the bottom: write the cycle again",
+        HoleUnknown => "a hole with no X, Y or feed",
+        NoFeed => "a feed move with no F (F0)",
+        ArcUnknown => "an arc from an unknown position (or in a plane this control has no axis for)",
+        ArcR0 => "an arc with R0",
+        ArcFullR => "a full circle cannot be written with R",
+        ArcRAndCentre => "an arc with both R and a centre word",
+        ArcNoCentre => "an arc with no centre (I J K) or R",
+        NoMotion => "coordinates with no motion mode",
+    }
 }
 
 #[cfg(test)]

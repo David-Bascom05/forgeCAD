@@ -40,13 +40,18 @@ structure Block (n : ℕ) where
   absolute : Option Bool := none
   /-- G98 (true) or G99 (false). -/
   retractInitial : Option Bool := none
+  /-- G17 G18 G19. -/
+  plane : Option ℕ := none
   /-- G28. -/
   home : Bool := false
   ax : Pos n := fun _ => none
   i : Option ℤ := none
   j : Option ℤ := none
+  k : Option ℤ := none
   r : Option ℤ := none
   q : Option ℤ := none
+  /-- A cycle's dwell P (ms). -/
+  p : Option ℤ := none
   f : Option ℤ := none
   t : Option ℕ := none
 
@@ -55,6 +60,7 @@ structure Cyc where
   z : ℤ
   r : ℤ
   q : ℤ
+  dwell : ℤ
   initial : ℤ
   deriving DecidableEq
 
@@ -62,15 +68,23 @@ structure State (n : ℕ) where
   pos : Pos n := fun _ => none
   absolute : Bool := true
   mode : Option ℕ := none
+  plane : ℕ := 17
   feed : Option ℤ := none
   retractInitial : Bool := true
   cyc : Option Cyc := none
 
+/-- An arc's centre: absolute plane coordinates, or the radius word. -/
+inductive Centre
+  | abs (a b : ℤ)
+  | r (v : ℤ)
+  deriving DecidableEq
+
 inductive Ev (n : ℕ)
   | rapid (dst : Pos n)
   | feed (dst : Pos n) (f : ℤ)
-  | arc (dst : Pos n) (c : ℤ × ℤ) (cw full : Bool) (f : ℤ)
+  | arc (dst : Pos n) (plane : ℕ) (c : Centre) (cw full : Bool) (f : ℤ)
   | home (via : Pos n) (axes : List (Fin n))
+  | dwell (ms : ℤ)
   | tool (t : ℕ)
 
 /-- The target of a block's axis words: absolute words replace; incremental ones add to a known
@@ -114,7 +128,8 @@ def hole {n : ℕ} (A : Axes n) (base : Pos n) (c : Cyc) (cur back pc lift : ℤ
             else [])
       else []
     else
-      [.feed (at_ c.z) f] ++ (if c.g = 85 ∨ c.g = 84 then [.feed (at_ c.r) f] else [])
+      [.feed (at_ c.z) f] ++ (if c.g = 82 ∧ 0 < c.dwell then [.dwell c.dwell] else []) ++
+        (if c.g = 85 ∨ c.g = 84 then [.feed (at_ c.r) f] else [])
   [.rapid (at_ cur), .rapid (at_ c.r)] ++ cut ++ [.rapid (at_ back)]
 
 /-- One block. `none` is the interpreter's refusal. -/
@@ -126,7 +141,9 @@ def step {n : ℕ} (A : Axes n) (pc lift : ℤ) (σ : State n) (b : Block n) :
   let feed := b.f.or σ.feed
   let absolute := b.absolute.getD σ.absolute
   let ri := b.retractInitial.getD σ.retractInitial
-  let σ1 : State n := { σ with feed := feed, absolute := absolute, retractInitial := ri }
+  let plane := b.plane.getD σ.plane
+  let σ1 : State n := { σ with feed := feed, absolute := absolute, retractInitial := ri,
+                                plane := plane }
   let anyAx := (List.finRange n).any fun k => (b.ax k).isSome
   if b.home then
     match target absolute σ.pos b.ax with
@@ -146,8 +163,8 @@ def step {n : ℕ} (A : Axes n) (pc lift : ℤ) (σ : State n) (b : Block n) :
       else if g = 81 ∨ g = 82 ∨ g = 83 ∨ g = 84 ∨ g = 85 ∨ g = 73 then
         match b.ax A.z, b.r, σ.pos A.z with
         | some z, some r, some init =>
-          if absolute ∧ z ≤ r ∧ r ≤ init ∧ 0 ≤ b.q.getD 0 then
-            some { σ1 with mode := some 80, cyc := some ⟨g, z, r, b.q.getD 0, init⟩ }
+          if plane = 17 ∧ absolute ∧ z ≤ r ∧ r ≤ init ∧ 0 ≤ b.q.getD 0 then
+            some { σ1 with mode := some 80, cyc := some ⟨g, z, r, b.q.getD 0, b.p.getD 0, init⟩ }
           else none
         | _, _, _ => none
       else none
@@ -174,11 +191,22 @@ def step {n : ℕ} (A : Axes n) (pc lift : ℤ) (σ : State n) (b : Block n) :
     | none => none
   | some g, _ =>
     if g = 2 ∨ g = 3 then
-      match σ.pos A.x, σ.pos A.y, dst A.x, dst A.y, feed with
-      | some sx, some sy, some ex, some ey, some f =>
-        if b.i.isNone ∧ b.j.isNone then none else
-        some ([.arc dst (sx + b.i.getD 0, sy + b.j.getD 0) (g = 2) (ex = sx ∧ ey = sy) f],
-          { σ2 with pos := dst })
+      -- the plane's axes and centre words: G17 X Y (I J), G18 Z X (K I), G19 Y Z (J K)
+      let (pa, pb, wa, wb) :=
+        if plane = 17 then (A.x, A.y, b.i, b.j)
+        else if plane = 18 then (A.z, A.x, b.k, b.i)
+        else (A.y, A.z, b.j, b.k)
+      match σ.pos pa, σ.pos pb, dst pa, dst pb, feed with
+      | some sa, some sb, some ea, some eb, some f =>
+        let full := decide (ea = sa) && decide (eb = sb)
+        let c? : Option Centre := match b.r, wa, wb with
+          | some r, none, none => if r = 0 ∨ full then none else some (.r r)
+          | some _, _, _ => none
+          | none, none, none => none
+          | none, ia, ib => some (.abs (sa + ia.getD 0) (sb + ib.getD 0))
+        match c? with
+        | none => none
+        | some c => some ([.arc dst plane c (g = 2) full f], { σ2 with pos := dst })
       | _, _, _, _, _ => none
     else none
   | none, _ => none
@@ -372,9 +400,11 @@ def forget : Ev 3 → Option ForgeCam.Post.Motion
   | .feed p f => match p 0, p 1, p 2 with
     | some x, some y, some z => some (.feed (x, y, z) f)
     | _, _, _ => none
-  | .arc p c cw _ f => match p 0, p 1, p 2 with
-    | some x, some y, some z => some (.arc (x, y, z) c cw f)
+  | .arc p 17 (.abs ca cb) cw _ f => match p 0, p 1, p 2 with
+    | some x, some y, some z => some (.arc (x, y, z) (ca, cb) cw f)
     | _, _, _ => none
+  | .arc _ _ _ _ _ _ => none
+  | .dwell _ => none
   | .tool t => some (.tool t)
   | .home _ _ => none
 
@@ -384,6 +414,7 @@ def WF (b : ForgeCam.Post.Block) : Prop := ∀ g, b.g = some g → g ≤ 3
 /-- What the model's state knows, ours knows the same. -/
 structure Rel (st : ForgeCam.Post.State) (σ : State 3) : Prop where
   abs : σ.absolute = true
+  plane : σ.plane = 17
   cyc : σ.cyc = none
   mode : ∀ m, st.mode = some m → σ.mode = some m
   modeOk : ∀ m, σ.mode = some m → m ≤ 3
@@ -409,10 +440,10 @@ theorem step_refines (pc lift : ℤ) (st : ForgeCam.Post.State) (σ : State 3)
     (hr : Rel st σ) (hw : WF b) (h : ForgeCam.Post.readBlock st b = some (ms, st')) :
     ∃ es σ', step xyz pc lift σ (embed b) = some (es, σ') ∧ es.map forget = ms.map some ∧
       Rel st' σ' := by
-  obtain ⟨habs, hcyc, hmode, hmodeOk, hfeed, hx, hy, hz⟩ := hr
-  rcases σ with ⟨pos, absolute, mode, feed, ri, cyc⟩
-  simp only at habs hcyc hfeed hmode hmodeOk hx hy hz
-  subst habs hcyc hfeed
+  obtain ⟨habs, hplane, hcyc, hmode, hmodeOk, hfeed, hx, hy, hz⟩ := hr
+  rcases σ with ⟨pos, absolute, mode, plane, feed, ri, cyc⟩
+  simp only at habs hplane hcyc hfeed hmode hmodeOk hx hy hz
+  subst habs hplane hcyc hfeed
   rcases b with ⟨g, x, y, z, i, j, f, t⟩
   cases t with
   | some t =>
@@ -515,7 +546,7 @@ theorem step_refines (pc lift : ℤ) (st : ForgeCam.Post.State) (σ : State 3)
         obtain ⟨rfl, rfl⟩ := h
         have hpx := hx sx hsx
         have hpy := hy sy hsy
-        refine ⟨[.arc dst (sx + i0, sy + j0) (decide (2 = 2)) (decide (a = sx) && decide (b' = sy)) f1],
+        refine ⟨[.arc dst 17 (.abs (sx + i0) (sy + j0)) (decide (2 = 2)) (decide (a = sx) && decide (b' = sy)) f1],
           { pos := dst, mode := some 2, feed := f.or st.feed, retractInitial := ri }, ?_, ?_, ?_⟩
         · rcases g with _ | g0
           · have hmd : mode = some 2 := hgm
@@ -543,7 +574,7 @@ theorem step_refines (pc lift : ℤ) (st : ForgeCam.Post.State) (σ : State 3)
         obtain ⟨rfl, rfl⟩ := h
         have hpx := hx sx hsx
         have hpy := hy sy hsy
-        refine ⟨[.arc dst (sx + i0, sy + j0) (decide (3 = 2)) (decide (a = sx) && decide (b' = sy)) f1],
+        refine ⟨[.arc dst 17 (.abs (sx + i0) (sy + j0)) (decide (3 = 2)) (decide (a = sx) && decide (b' = sy)) f1],
           { pos := dst, mode := some 3, feed := f.or st.feed, retractInitial := ri }, ?_, ?_, ?_⟩
         · rcases g with _ | g0
           · have hmd : mode = some 3 := hgm
