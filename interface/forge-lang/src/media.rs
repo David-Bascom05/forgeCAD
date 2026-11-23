@@ -195,6 +195,55 @@ pub fn font(dir: Option<&Path>, root: Option<&Path>, file: &str, span: Span) -> 
     })
 }
 
+/// Whether a font's name is a file's (a path, or a name with an extension: .ttf, .otf, or any
+/// other, which is then the wrong kind), not a shipped family's.
+fn is_font_file(name: &str) -> bool {
+    name.contains(['/', '\\']) || !ext_of(name).is_empty()
+}
+
+/// A font by what a part names: a shipped family in a style (`crate::fonts`), or a font file
+/// beside the part (.ttf, .otf), which is the one face it holds: a style asked of a file must be
+/// its own.
+pub fn font_for(
+    dir: Option<&Path>,
+    root: Option<&Path>,
+    name: &str,
+    bold: bool,
+    italic: bool,
+    span: Span,
+) -> R<Arc<forge_font::Font>> {
+    use crate::feat_error::TextProblem;
+    let style = crate::fonts::style(bold, italic);
+    if !is_font_file(name) {
+        return crate::fonts::shipped(name, bold, italic).ok_or_else(|| {
+            let problem = if crate::fonts::is_family(name) {
+                TextProblem::NoStyle {
+                    family: name.into(),
+                    style,
+                }
+            } else {
+                TextProblem::NoFamily(name.into())
+            };
+            FeatError::Text { span, problem }.into()
+        });
+    }
+    let f = font(dir, root, name, span)?;
+    // the file's own style: bold and italic as its name table says them
+    let has = |w: &str| f.style.split_whitespace().any(|x| x.eq_ignore_ascii_case(w));
+    let own = (has("Bold"), has("Italic") || has("Oblique"));
+    if (bold || italic) && own != (bold, italic) {
+        return Err(FeatError::Text {
+            span,
+            problem: TextProblem::NoStyle {
+                family: name.into(),
+                style,
+            },
+        }
+        .into());
+    }
+    Ok(f)
+}
+
 pub fn solid(dir: Option<&Path>, root: Option<&Path>, file: &str, span: Span) -> R<Arc<Body>> {
     let p = find(dir, root, file, SOLID_KINDS, span)?;
     let ext = ext_of(file);
@@ -225,7 +274,7 @@ pub fn solid(dir: Option<&Path>, root: Option<&Path>, file: &str, span: Span) ->
     })
 }
 
-fn string(a: &Args, k: &'static str) -> R<String> {
+pub(crate) fn string(a: &Args, k: &'static str) -> R<String> {
     match a.req(k)? {
         Value::Str(s) => Ok(s.to_string()),
         o => Err(Error::WrongType {
@@ -238,6 +287,9 @@ fn string(a: &Args, k: &'static str) -> R<String> {
 }
 
 pub fn text(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
+    if ev.sketch_ref().is_some() {
+        return crate::sketch_text::text(ev, args, span);
+    }
     not_in_sketch(ev, "text", span)?;
     let id = ev.take_id("text", span)?;
     let a = Args::bind(
@@ -255,9 +307,17 @@ pub fn text(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
     let text = string(&a, "text")?;
     let file = string(&a, "font")?;
     // `check` with no part file to look beside reads nothing
-    let font = match (ev.dir.is_some() || ev.b.building)
-        .then(|| font(ev.dir.as_deref(), ev.root.as_deref(), &file, a.span("font")))
-    {
+    let shipped = !is_font_file(&file);
+    let font = match (shipped || ev.dir.is_some() || ev.b.building).then(|| {
+        font_for(
+            ev.dir.as_deref(),
+            ev.root.as_deref(),
+            &file,
+            false,
+            false,
+            a.span("font"),
+        )
+    }) {
         Some(f) => Some(f?),
         None => None,
     };

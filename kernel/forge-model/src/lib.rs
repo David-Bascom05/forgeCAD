@@ -13,6 +13,7 @@ pub mod names;
 pub mod params;
 mod path;
 pub mod pattern;
+pub mod regions;
 mod rib;
 pub mod splinefam;
 mod splitface;
@@ -183,6 +184,8 @@ pub enum Feature {
     Thread(Box<ScrewThread>),
     /// Text embossed on or engraved into a plane or a cylinder.
     Text(Box<Text>),
+    /// Several regions of a sketch extruded alike (regions.rs).
+    Regions(Box<regions::Regions>),
     /// A solid read from another system's file.
     Import(Box<Import>),
     /// A work plane, axis, point or UCS defined by references; it makes nothing.
@@ -287,6 +290,10 @@ pub enum RegenError {
     Text {
         feature: usize,
         error: TextError,
+    },
+    Regions {
+        feature: usize,
+        error: regions::RegionsError,
     },
     Work {
         feature: usize,
@@ -1016,6 +1023,7 @@ fn starts(f: &Feature) -> bool {
     ) || swept::op(f) == Some(Combine::New)
         || matches!(f, Feature::Import(t) if t.op == Combine::New)
         || matches!(f, Feature::Member(_))
+        || matches!(f, Feature::Regions(r) if r.op == Combine::New)
 }
 
 /// Whether a feature changes the part as a whole, rather than making tools to combine with it.
@@ -1166,7 +1174,11 @@ fn short(features: History<'_>, from: usize) -> bool {
     let mut n = 0;
     for f in features.iter().skip(from) {
         match f {
-            Feature::Pattern { .. } | Feature::Thread(_) | Feature::Text(_) | Feature::Import(_) => {
+            Feature::Pattern { .. }
+            | Feature::Thread(_)
+            | Feature::Text(_)
+            | Feature::Regions(_)
+            | Feature::Import(_) => {
                 return false;
             }
             Feature::Plane(_) | Feature::Param(_) | Feature::Sketch(_) | Feature::Work(_) => {}
@@ -2071,6 +2083,7 @@ fn tools(features: History<'_>, i: usize, build: bool) -> Result<Vec<Tool>, Rege
         }
         Feature::Thread(_) => thread::tools(features, i, build),
         Feature::Text(_) => text::tools(features, i),
+        Feature::Regions(_) => regions::tools(features, i, build),
         Feature::Import(_) => import::tools(features, i),
         Feature::Member(m) => Ok(vec![weld::tool(m, i, features.id(i), build)?]),
         f => Ok(vec![tool(i, features.id(i), f, build)?]),

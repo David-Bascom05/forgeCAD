@@ -114,12 +114,14 @@ pub fn layout(font: &Font, text: &str, size: f64) -> Result<Vec<Vec<Vec<GlyphSeg
             .map(|c| {
                 c.iter()
                     .map(|s| match *s {
-                        Seg::Line(a, b) => GlyphSeg::Line(at(a), at(b)),
-                        Seg::Quad(a, m, b) => GlyphSeg::Quad(at(a), at(m), at(b)),
+                        Seg::Line(a, b) => Ok(GlyphSeg::Line(at(a), at(b))),
+                        Seg::Quad(a, m, b) => Ok(GlyphSeg::Quad(at(a), at(m), at(b))),
+                        // the raised letters' walls are parabolic: a CFF font is for sketch text
+                        Seg::Cubic(..) => Err(TextError::Font(FontError::Cff)),
                     })
-                    .collect()
+                    .collect::<Result<Vec<_>, _>>()
             })
-            .collect();
+            .collect::<Result<_, _>>()?;
         regions.extend(nest(contours));
         x += font.advance(g) * k;
         prev = Some(g);

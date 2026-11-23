@@ -329,7 +329,8 @@ fn adds(features: crate::History<'_>, i: usize) -> Vec<Box3> {
             .map(|b| b.faces_box())
             .collect(),
         Feature::Text(t) if matches!(t.op, Combine::Cut | Combine::Keep) => vec![],
-        Feature::Text(_) => crate::tools(features, i, true)
+        Feature::Regions(r) if matches!(r.op, Combine::Cut | Combine::Keep) => vec![],
+        Feature::Text(_) | Feature::Regions(_) => crate::tools(features, i, true)
             .map(|ts| {
                 ts.iter()
                     .filter(|t| !matches!(t.1, Combine::Cut | Combine::Keep))
