@@ -1,5 +1,5 @@
 //! Text in a sketch: `text("FORGE", at: (x, y), size: s, font:, bold:, italic:, align:, angle:)`
-//! sets the string in the font (`forge_font::layout`) and draws each glyph's contours as fixed
+//! (or a list of lines, `text(["FORGE", "CAD"], ..)`) sets the string in the font (`forge_font::layout`) and draws each glyph's contours as fixed
 //! sketch geometry, exactly as the font holds them: a line stays a line, a TrueType quadratic is
 //! a degree-2 control spline on its three points, a CFF cubic a degree-3 one on its four. Its
 //! regions are what any sketch's are (`forge_sketch::profiles`): each outside contour with the
@@ -37,7 +37,27 @@ pub fn text(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
     if a.poisoned() {
         return Ok(Value::Unresolved);
     }
-    let string = crate::media::string(&a, "text")?;
+    // one line, or a list of lines (a string holds no line break)
+    let string = match a.req("text")? {
+        Value::List(xs) => {
+            let mut lines = Vec::with_capacity(xs.len());
+            for x in xs.iter() {
+                match x {
+                    Value::Str(l) => lines.push(l.to_string()),
+                    o => {
+                        return Err(Error::WrongType {
+                            span: a.span("text"),
+                            what: "a text's lines",
+                            want: Ty::Str,
+                            found: o.ty(),
+                        });
+                    }
+                }
+            }
+            lines.join("\n")
+        }
+        _ => crate::media::string(&a, "text")?,
+    };
     let size = a.req_num("size", LEN)?;
     positive(&size, a.span("size"), "a text's size")?;
     // where the baseline starts: coordinates, which the text is fixed to (a solved point would

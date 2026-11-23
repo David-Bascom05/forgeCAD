@@ -2817,11 +2817,18 @@ fn cap(ev: &mut Eval, f: &Feat, end: bool) -> Value {
         let fr = sf.with_origin(o);
         if z_sign < 0.0 { fr.flipped() } else { fr }
     });
-    let root = Name::feature(f.hid);
+    // its own root, or a several-region extrude's (a text's) one per region
+    let roots: Vec<Name> = match region_roots(ev, f) {
+        Some(rs) => rs.into_iter().map(|r| r.0).collect(),
+        None => vec![Name::feature(f.hid)],
+    };
     // which of the tool's caps lies where: the one the kernel names "start" sits at the sketch
     // unless the extrude ran backwards. Asked of the part as the feature left it, so a cap a
     // later edit moved (an offset, a draft, a slab) is still found by its name.
-    let names = [forge_ops::roles::start(root), forge_ops::roles::end(root)];
+    let names: Vec<Name> = roots
+        .iter()
+        .flat_map(|&root| [forge_ops::roles::start(root), forge_ops::roles::end(root)])
+        .collect();
     let at_height = |body: &Body, fr: Frame, nm: Name| {
         crate::build::role_faces(body, nm).into_iter().any(|x| {
             face_plane(body, x).is_some_and(|fp| (fp.origin - fr.origin).dot(fr.z().get()).abs() < 1e-6)
@@ -3159,6 +3166,66 @@ pub fn edge_snap(body: &Body, e: EdgeId, name: &str) -> Result<Point3, (Point3, 
 }
 
 /// `E.side(entity)`: the face an entity of the profile made.
+/// A several-region extrude's (a text's) regions: each one's root name and the segment ids of
+/// its loops. None for any other feature.
+pub(crate) fn region_roots(ev: &Eval, f: &Feat) -> Option<Vec<(Name, Vec<u64>)>> {
+    let Some(Feature::Regions(r)) = crate::holes::kernel_feature(ev, f.idx) else {
+        return None;
+    };
+    const PIECE: u64 = 0xffff << 48;
+    Some(
+        r.profiles
+            .iter()
+            .filter_map(|p| {
+                let key = forge_model::regions::key(p)?;
+                let segs = p
+                    .loops
+                    .iter()
+                    .flat_map(|l| l.segments.iter().map(|s| s.1 & !PIECE))
+                    .collect();
+                Some((Name::feature(forge_model::regions::region_id(f.hid, key)), segs))
+            })
+            .collect(),
+    )
+}
+
+/// `E.side(X)` of an entity or loop, or of a list of them (a text): every face they made.
+pub fn side_of(ev: &mut Eval, f: &Feat, v: Value, span: Span) -> R<Value> {
+    let Value::List(xs) = v else {
+        let Value::Ent(e) = v else {
+            return Err(Error::WrongType {
+                span,
+                what: "side(entity)",
+                want: Ty::Entity,
+                found: v.ty(),
+            });
+        };
+        return side(ev, f, &e, span);
+    };
+    let mut out: Option<Faces> = None;
+    for x in xs.iter() {
+        let Value::Ent(e) = x else {
+            return Err(Error::WrongType {
+                span,
+                what: "side(entity)",
+                want: Ty::Entity,
+                found: x.ty(),
+            });
+        };
+        match side(ev, f, e, span)? {
+            Value::Faces(fs) => match &mut out {
+                None => out = Some((*fs).clone()),
+                Some(o) => {
+                    o.names.extend(fs.names.iter().copied());
+                    o.plane = None;
+                }
+            },
+            other => return Ok(other),
+        }
+    }
+    Ok(out.map_or(Value::Unresolved, |o| Value::Faces(Rc::new(o))))
+}
+
 pub fn side(ev: &mut Eval, f: &Feat, e: &Ent, span: Span) -> R<Value> {
     let sk = f.prof.clone().expect("a profile feature");
     if !Rc::ptr_eq(&sk, &e.sk) {
@@ -3175,12 +3242,18 @@ pub fn side(ev: &mut Eval, f: &Feat, e: &Ent, span: Span) -> R<Value> {
     };
     let root = Name::feature(f.hid);
     let segs: Vec<u64> = ids.iter().map(|&i| sk.borrow().seg_id(i)).collect();
+    let regions = region_roots(ev, f);
     let names: Vec<Name> = match crate::shapes::side_names(ev, f, &segs) {
         Some(n) => n,
         None => ids
             .iter()
             .flat_map(|&i| {
                 let seg = sk.borrow().seg_id(i);
+                // a several-region extrude's wall is named under its region's root
+                let root = regions
+                    .as_ref()
+                    .and_then(|rs| rs.iter().find(|r| r.1.contains(&seg)))
+                    .map_or(root, |r| r.0);
                 // a revolve's faces are named per part of the turn as well
                 if f.kind == "revolve" {
                     vec![

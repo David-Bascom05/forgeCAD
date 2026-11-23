@@ -1,6 +1,7 @@
-//! The fonts shipped with ForgeCAD, by family and style: Open Sans (TrueType outlines) and
-//! Source Sans 3 (CFF outlines), each under the SIL Open Font License 1.1, which allows them to
-//! be embedded and redistributed with software (fonts/OFL-OpenSans.txt, fonts/OFL-SourceSans3.md).
+//! The fonts shipped with ForgeCAD, by family and style: Open Sans 1.10 (TrueType outlines; the
+//! version Onshape sets sketch text in; Apache License 2.0) and Source Sans 3 (CFF outlines; SIL
+//! Open Font License 1.1). Both licences allow them to be embedded and redistributed with
+//! software (fonts/README.md records where each came from, its licence and its hash).
 //! A part names one by its family (`font: "Open Sans"`); a font file beside the part
 //! (`font: "block.ttf"`) is read as `media::font` reads it.
 

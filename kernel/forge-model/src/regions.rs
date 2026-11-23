@@ -7,8 +7,9 @@
 
 use crate::extent::{self, Resolved};
 use crate::{Combine, Extent, Feature, History, RegenError, Tool};
+use forge_bool::{Op, Shape};
 use forge_ops::Profile;
-use forge_topo::Name;
+use forge_topo::{Body, Name};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Regions {
@@ -46,7 +47,8 @@ pub fn region(r: &Regions, k: usize) -> Feature {
     }
 }
 
-/// The solids feature `i` (Regions) combines with the part: one per region, in order.
+/// The solids feature `i` (Regions) combines with the part: one per region, in order; a new
+/// body's joined into one.
 pub(crate) fn tools(features: History<'_>, i: usize, build: bool) -> Result<Vec<Tool>, RegenError> {
     let Feature::Regions(r) = &features[i] else {
         unreachable!("only regions")
@@ -77,6 +79,21 @@ pub(crate) fn tools(features: History<'_>, i: usize, build: bool) -> Result<Vec<
             unreachable!("To and ToNext refused above")
         };
         out.push(crate::tool(i, region_id(id, key), &plain, build)?);
+    }
+    // a new body: the regions' solids joined into it, one tool (as a part's first feature takes)
+    if r.op == Combine::New && out.len() > 1 {
+        let shape = Shape::Csg {
+            first: Box::new(out[0].2.clone()),
+            rest: out[1..].iter().map(|t| (Op::Union, t.2.clone())).collect(),
+        };
+        let body = if build {
+            let bodies: Vec<&Body> = out.iter().map(|t| &t.0).collect();
+            let ops = vec![Op::Union; bodies.len() - 1];
+            forge_bool::nary(&bodies, &ops, 1).map_err(|error| RegenError::Boolean { feature: i, error })?
+        } else {
+            Body::new()
+        };
+        return Ok(vec![(body, Combine::New, shape)]);
     }
     Ok(out)
 }

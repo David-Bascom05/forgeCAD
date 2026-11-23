@@ -195,6 +195,12 @@ pub fn font(dir: Option<&Path>, root: Option<&Path>, file: &str, span: Span) -> 
     })
 }
 
+/// Whether a font's name is a file's (a path, or a name with an extension: .ttf, .otf, or any
+/// other, which is then the wrong kind), not a shipped family's.
+fn is_font_file(name: &str) -> bool {
+    name.contains(['/', '\\']) || !ext_of(name).is_empty()
+}
+
 /// A font by what a part names: a shipped family in a style (`crate::fonts`), or a font file
 /// beside the part (.ttf, .otf), which is the one face it holds: a style asked of a file must be
 /// its own.
@@ -208,7 +214,7 @@ pub fn font_for(
 ) -> R<Arc<forge_font::Font>> {
     use crate::feat_error::TextProblem;
     let style = crate::fonts::style(bold, italic);
-    if !FONT_KINDS.contains(&ext_of(name).as_str()) {
+    if !is_font_file(name) {
         return crate::fonts::shipped(name, bold, italic).ok_or_else(|| {
             let problem = if crate::fonts::is_family(name) {
                 TextProblem::NoStyle {
@@ -301,7 +307,7 @@ pub fn text(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
     let text = string(&a, "text")?;
     let file = string(&a, "font")?;
     // `check` with no part file to look beside reads nothing
-    let shipped = !FONT_KINDS.contains(&ext_of(&file).as_str());
+    let shipped = !is_font_file(&file);
     let font = match (shipped || ev.dir.is_some() || ev.b.building).then(|| {
         font_for(
             ev.dir.as_deref(),

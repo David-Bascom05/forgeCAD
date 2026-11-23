@@ -165,6 +165,33 @@ outside the part builds). A loop that crosses or touches itself, or two loops cr
 overlapping, is `SketchProfile` naming the two entities; a knife edge (a line leaving tangent
 along the arc it came on) is not a crossing.
 
+Text in a sketch:
+
+```
+label = text(STRING | [LINE, ..], at: (x, y), size: s, font: "Open Sans", bold: false, italic: false,
+             align: "left"|"center"|"right", angle: A)
+raised = extrude(top.label, h)        every glyph region; cut(top.label, d) engraves
+raised.side(top.label[k])             the walls of the k-th drawn character (blanks draw nothing)
+raised.end  raised.start              every glyph's cap
+```
+
+The glyphs are drawn exactly as the font holds them, fixed in the sketch: a line stays a line, a
+TrueType quadratic is a degree-2 control spline on its three points, a CFF cubic a degree-3 one on
+its four. `size` is the em; the baseline starts at `at` (aligned by the line's advance), turned by
+`angle`; a list of strings, `text(["FIRST", "SECOND"], ..)`, sets each line the font's
+ascender − descender + line gap below the one before (a string holds no line break).
+`font:` is a shipped family (Open Sans: Regular, Bold, Italic, Bold Italic; Source Sans 3:
+Regular, CFF outlines; SIL OFL 1.1) or a .ttf/.otf file beside the part, which is its one face
+(`bold`/`italic` must be its own). The text's regions are only its own glyphs' (whatever else
+the sketch draws): each outside contour with the counters inside it as holes, which loop lies
+inside which decided exactly. Glyph contours that cross or touch (some fonts' accented
+composites, neighbours kerned into each other) are `SketchProfile`, never joined. A missing
+glyph, family or style, or nothing drawn, is `Text` (`NoGlyph`, `NoFamily`, `NoStyle`, `Empty`).
+Names: segment s of contour c of the n-th `ch` of the string is `label.ch#n.c.s`, so a glyph's
+faces keep their names while other characters come and go, and when the text moves, turns or
+resizes; the extrude of several regions names each region's caps by its outline's least
+segment. `next` and `upto` do not take several regions (`NotWith`).
+
 A loop value (rect, slot, hull, poly, path) indexes its segments: `o[2]`, `o.segs`. Entity
 members: points `x y`; lines `a b dir`; arcs `center a b`; circles `center`; arcs and circles `axis` (through
 the centre, square to the sketch).

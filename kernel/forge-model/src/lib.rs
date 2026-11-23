@@ -1018,6 +1018,7 @@ fn starts(f: &Feature) -> bool {
             | Feature::Ball { op: Combine::New, .. }
     ) || swept::op(f) == Some(Combine::New)
         || matches!(f, Feature::Import(t) if t.op == Combine::New)
+        || matches!(f, Feature::Regions(r) if r.op == Combine::New)
 }
 
 /// Whether a feature changes the part as a whole, rather than making tools to combine with it.
