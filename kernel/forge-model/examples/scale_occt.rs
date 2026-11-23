@@ -1,7 +1,7 @@
 //! Exports for the OCCT check of the uniform scale (tools/occt/scale.py): each suite part of one
-//! body as STEP, and for each factor our scaled body's vertices and points on its faces' surfaces
-//! (each face's own: the image of a point of the face's surface, projected onto the scaled surface
-//! and evaluated there), with our exact mass properties of both.
+//! body as STEP, and for each factor our scaled body's vertices and points of its faces (on each
+//! face's edges, the image of the point projected onto the face's scaled surface and evaluated
+//! there), with our exact mass properties of both.
 //!
 //!   cargo run --release -p forge-model --example scale_occt -- DIR
 //!   tools/occt/scale.py DIR
@@ -42,14 +42,15 @@ fn main() {
             let mut pts = vec![];
             for (f0, f1) in b.faces.iter().zip(&s.faces) {
                 let analytic = !matches!(f0.surface, Surface::Procedural(_));
-                // points of the original face's surface near its edges' middles and its box's centre
+                // points of the face itself: on its edges, a quarter, half and three quarters along
                 let mut seeds: Vec<Point3> = vec![];
-                let fid = b.face_ids().find(|&i| b.face(i).name == f0.name).expect("face");
-                seeds.push(b.face_box(fid).center());
                 for &l in &f0.loops {
-                    for c in b.lp(l).coedges().take(4) {
+                    for c in b.lp(l).coedges().take(6) {
                         let e = b.edge(b.coedge(c).edge);
-                        seeds.push(forge_geom::CurveGeom::eval(&e.curve, e.range.mid()));
+                        for a in [0.25, 0.5, 0.75] {
+                            let t = e.range.lo + a * (e.range.hi - e.range.lo);
+                            seeds.push(forge_geom::CurveGeom::eval(&e.curve, t));
+                        }
                     }
                 }
                 for q in seeds {
