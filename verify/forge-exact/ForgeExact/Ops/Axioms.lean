@@ -54,3 +54,7 @@ the build fails on `sorryAx` or any axiom past `propext`, `Classical.choice` and
   ForgeExact.Ops.ChamferCorner.Corner.patch_row
   ForgeExact.Ops.ChamferCorner.Corner.equal_is_point
   ForgeExact.Ops.Shell.sharp_sub_erosion
+  ForgeExact.Ops.Rib.between
+  ForgeExact.Ops.Rib.segment_mem
+  ForgeExact.Ops.Rib.rib_in_hull
+  ForgeExact.Ops.Rib.grow_mem
