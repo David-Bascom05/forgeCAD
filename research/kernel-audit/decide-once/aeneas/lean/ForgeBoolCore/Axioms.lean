@@ -8,6 +8,7 @@ import ForgeBoolCore.RefineExt
 import ForgeBoolCore.RefineSplit
 import ForgeBoolCore.RefineLedger
 import ForgeBoolCore.RefineMemb
+import ForgeBoolCore.RefineClassify
 /-! The refinement lemmas use the standard axioms only. -/
 #print axioms forge_bool_core.zero_idx_spec
 #print axioms forge_bool_core.is_facet_spec
@@ -44,3 +45,5 @@ import ForgeBoolCore.RefineMemb
 #print axioms forge_bool_core.memb_loop1_spec
 #print axioms forge_bool_core.memb_eq
 #print axioms forge_bool_core.membership_spec
+#print axioms forge_bool_core.classify_outer_spec
+#print axioms forge_bool_core.ckAll_eq

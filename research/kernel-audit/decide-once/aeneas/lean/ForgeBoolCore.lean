@@ -13,4 +13,5 @@ import ForgeBoolCore.DedupModel
 import ForgeBoolCore.RefineSplit
 import ForgeBoolCore.RefineLedger
 import ForgeBoolCore.RefineMemb
+import ForgeBoolCore.RefineClassify
 import ForgeBoolCore.Axioms
