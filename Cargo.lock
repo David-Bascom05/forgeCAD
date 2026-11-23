@@ -532,6 +532,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-workholding"
+version = "0.1.0"
+dependencies = [
+ "forge-cam",
+ "forge-cam-geom",
+ "forge-lang",
+ "forge-math",
+ "forge-mesh",
+ "forge-post",
+ "forge-tooling",
+]
+
+[[package]]
 name = "roxmltree"
 version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

@@ -1,0 +1,17 @@
+# generic-vise-150 jaw: a hard jaw 20 thick (x), 150 wide (y), 50 high, with two counterbored
+# screw holes. frame: the jaw's corner at the origin.
+shared T = 20
+shared W = 150
+shared H = 50
+param holes.d = 11
+param bolt.step = 100
+
+sketch plan(on: xy) {
+  outline = rect(corner: (0, 0), size: (T, W))
+}
+jaw = extrude(plan, H)
+sketch face(on: jaw.side(plan.outline[3])) {
+  h = pt(-W / 2 + step / 2, H / 2)
+}
+holes = hole(at: face.h, d: d, depth: thru)
+bolt = pattern(of: holes, layout: lin(along: plan.outline[0].dir, n: count(2), step: step))

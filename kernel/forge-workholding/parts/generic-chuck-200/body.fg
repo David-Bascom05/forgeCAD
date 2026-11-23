@@ -1,0 +1,21 @@
+# generic-chuck-200 body: r 100, 80 long (z 0..80, the face at z = 80), three jaw slots and the
+# through bore. frame: the spindle axis along z.
+shared R = 100
+shared L = 80
+shared bore = 52
+shared jaw_w = 24
+shared jaw_d = 12
+shared jaw_in = 30
+
+sketch plan(on: xy) {
+  outline = circle((0, 0), R)
+}
+body = extrude(plan.outline, L)
+sketch j0(on: body.end) {
+  r = rect(corner: (jaw_in, -jaw_w / 2), size: (R - jaw_in, jaw_w))
+}
+jaw = cut(j0.r, jaw_d)
+sketch bb(on: body.end) {
+  c = circle((0, 0), bore / 2)
+}
+through = cut(bb.c, L)

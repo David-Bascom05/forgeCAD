@@ -1,0 +1,342 @@
+# Real workholding products from openly published specs. Every value is cited
+# ([[workholding.cite]]: the fields, the public source, the date it was read); a size the
+# maker does not publish is listed in `unknown` and has no value.
+#
+# Units: mm, N, kPa, degrees. Inch values converted at 25.4 mm/in, lbf at 4.44822 N. Read on
+# 2026-11-23 from public pages; nothing behind a login. Where a maker's own site refused
+# automated reading, a distributor's copy of the maker's catalog or a distributor's spec table
+# is cited instead, and the note says so. Verify with the vendor before ordering, and measure the
+# device before trusting a clearance.
+
+[[workholding]]
+name = "kurt-dx6"
+kind = "vise"
+vendor = "Kurt"
+product = "DX6 CrossOver"
+note = "height = bed height 2.875 in + jaw depth 1.735 in = 4.61 in, as Penn Tool lists (it also lists a 'vise height' of 4-3/8 in, unexplained). Weight conflicts between sources (65 / 69 lb), not recorded. Kurt's own site refused automated reading."
+unknown = ["jaw_thickness"]
+jaw_width = 152.4
+jaw_height = 44.07
+max_opening = 230.63
+body_length = 426.97
+body_width = 187.73
+height = 117.09
+clamp_force = 30621
+[[workholding.cite]]
+fields = ["jaw_width", "jaw_height", "max_opening", "body_length", "body_width", "clamp_force"]
+source = "https://www.marssupply.com/userfiles/products/documents/k/KURT_DX6_Catalog.pdf (Kurt DX6 catalog, Dimensional Data: B 6.000, H 1.735, AA 9.080, C 16.810, I 7.391; 6,884 lbf at 80 ft-lb)"
+taken = "2026-11-23"
+[[workholding.cite]]
+fields = ["height"]
+source = "https://www.penntoolco.com/kurt-dx6-crossover-precision-machine-vise-61-421-171/ (overall height 4.61 in)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "kurt-3600v"
+kind = "vise"
+vendor = "Kurt"
+product = "3600V"
+note = "the catalog's opening and height letters could not be tied to their features from the text: listed as unknown"
+unknown = ["jaw_thickness", "max_opening", "body_width", "height"]
+jaw_width = 152.4
+jaw_height = 44.07
+body_length = 382.52
+clamp_force = 28273
+[[workholding.cite]]
+fields = ["jaw_width", "jaw_height", "body_length", "clamp_force"]
+source = "https://www.marssupply.com/userfiles/products/documents/k/KURT_DX6_Catalog.pdf (Kurt catalog, 3600 series table: B 6.000, H 1.735, C 15.060 in; 6,356 lbf at 80 ft-lb)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "orange-vise-6x20-ds"
+kind = "vise"
+vendor = "Orange Vise"
+product = "6 x 20 dual station (OV6-200DS5)"
+note = "a dual-station vise placed as one station; the maker publishes Parasolid models from which the unknown sizes can be measured"
+unknown = ["jaw_height", "jaw_thickness", "max_opening", "body_width", "height"]
+jaw_width = 152.4
+body_length = 508
+clamp_force = 32027
+[[workholding.cite]]
+fields = ["jaw_width", "body_length", "clamp_force"]
+source = "https://www.orangevise.com/6x20-dual-station-vise/ (6 in jaws, 20 in body, 7200 lb at 120 ft-lb)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "lang-makro-grip-77"
+kind = "self_centring"
+vendor = "LANG Technik"
+product = "Makro-Grip 77 (48120-77)"
+note = "clamping range 0-120 mm (min_opening 0); form-fit grip on pre-stamped serrations 3 mm deep; 52 mm Quick-Point grid, 16 mm studs"
+unknown = ["jaw_height", "jaw_thickness"]
+jaw_width = 77
+max_opening = 120
+body_length = 130
+body_width = 77
+height = 65
+grip = 3
+clamp_force = 14000
+[[workholding.cite]]
+fields = ["jaw_width", "max_opening", "body_length", "body_width", "height", "grip", "clamp_force"]
+source = "https://lang-technik.de/en/products/48120-77-makro-grip-77-5-axis-vise-jaw-width-77-mm-clamping-range-0-120-mm (77 mm jaw, 0-120 mm, 130 x 77 x 65 mm, 3 mm clamping depth, 14,000 N at 60 Nm)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "lang-makro-grip-125"
+kind = "self_centring"
+vendor = "LANG Technik"
+product = "Makro-Grip 125 (48155-77)"
+note = "the 125 body with 77 mm jaws; clamping range 0-155 mm; 96 mm grid, 20 mm studs"
+unknown = ["jaw_height", "jaw_thickness"]
+jaw_width = 77
+max_opening = 155
+body_length = 160
+body_width = 125
+height = 89
+grip = 3
+clamp_force = 20000
+[[workholding.cite]]
+fields = ["jaw_width", "max_opening", "body_length", "body_width", "height", "grip", "clamp_force"]
+source = "https://lang-technik.de/en/products/48155-77-makro-grip-125-5-axis-vise-jaw-width-77-mm-clamping-range-0-155-mm (77 mm jaw, 0-155 mm, 160 x 125 x 89 mm, 3 mm, 20,000 N at 100 Nm)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "5thaxis-v75100x"
+kind = "self_centring"
+vendor = "5th Axis"
+product = "V75100X"
+note = "75 x 100 x 56 mm read as jaw width x length x height; range 0-76.3 mm; 45° dovetail jaws; centring ±0.0127 mm"
+unknown = ["jaw_height", "jaw_thickness", "body_width"]
+jaw_width = 75
+max_opening = 76.3
+body_length = 100
+height = 56
+clamp_force = 22000
+repeatability = 0.0127
+[[workholding.cite]]
+fields = ["jaw_width", "max_opening", "body_length", "height"]
+source = "https://5thaxis.com/wp-content/uploads/2022/09/2022-Summer-5th-Axis-Catalog.pdf (V75100X: 75mm x 100mm x 56mm, 0 - 76.3mm)"
+taken = "2026-11-23"
+[[workholding.cite]]
+fields = ["clamp_force", "repeatability"]
+source = "https://5thaxis.com/wp-content/uploads/2021/04/V75100X-1.pdf (22 kN at 60 Nm; centring ± 0.0005 in)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "5thaxis-v510x"
+kind = "self_centring"
+vendor = "5th Axis"
+product = "V510X"
+note = "125.7 x 254 x 73.6 mm; forward range 0-184.7 mm (reversed 60.3-234.7)"
+unknown = ["jaw_height", "jaw_thickness"]
+jaw_width = 125.7
+body_width = 125.7
+body_length = 254
+height = 73.6
+max_opening = 184.7
+clamp_force = 25100
+[[workholding.cite]]
+fields = ["jaw_width", "body_width", "body_length", "height", "max_opening", "clamp_force"]
+source = "https://5thaxis.com/wp-content/uploads/2022/09/2022-Summer-5th-Axis-Catalog.pdf (V510X: 125.7mm x 254mm x 73.6mm; jaw 125.7mm; fwd 0 - 184.7mm; 25.1 kN at 75 Nm)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "5thaxis-dm25"
+kind = "dovetail"
+vendor = "5th Axis"
+product = "DM25 dovetail fixture"
+note = "printed as 37x41x27 mm without saying which is which; for stock 25-75 mm (the stock's size, not the tenon's)"
+unknown = ["body_length", "body_width", "height", "min_width", "max_width"]
+grip = 2.54
+angle = 45
+[[workholding.cite]]
+fields = ["grip", "angle"]
+source = "https://5thaxis.com/wp-content/uploads/2022/09/2022-Summer-5th-Axis-Catalog.pdf (p.53: 45° dovetail; required dovetail depth DM25 2.54mm)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "5thaxis-dm50"
+kind = "dovetail"
+vendor = "5th Axis"
+product = "DM50 dovetail fixture"
+note = "printed as 50x50x38 mm without saying which is which"
+unknown = ["body_length", "body_width", "height", "min_width", "max_width"]
+grip = 5.08
+angle = 45
+[[workholding.cite]]
+fields = ["grip", "angle"]
+source = "https://5thaxis.com/wp-content/uploads/2022/09/2022-Summer-5th-Axis-Catalog.pdf (p.53: 45° dovetail; required dovetail depth DM50 5.08mm)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "lang-quick-point-52"
+kind = "zero_point"
+vendor = "LANG Technik"
+product = "Quick-Point 52 single plate (45151)"
+note = "a rectangular plate 150 x 116 x 27 mm, not a round module: module_d unknown, give the plate's footprint as a custom body if it matters; pull-in force 'up to 14 kN depending on the plate'"
+unknown = ["module_d"]
+pitch = 52
+stud_d = 16
+module_h = 27
+repeatability = 0.005
+[[workholding.cite]]
+fields = ["stud_d", "module_h"]
+source = "https://lang-technik.de/en/products/45151-quick-point-52-single-plate-150-x-116-x-27-mm-without-mounting-bores (150 x 116 x 27 mm; 16 mm studs)"
+taken = "2026-11-23"
+[[workholding.cite]]
+fields = ["pitch", "repeatability"]
+source = "https://lang-technik.de/en/service/faq/zero-point-clamping-system (52 mm grid; repeatability 0.005 mm)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "lang-quick-point-96"
+kind = "zero_point"
+vendor = "LANG Technik"
+product = "Quick-Point 96 single plate (45400)"
+note = "a rectangular plate 192 x 156 x 27 mm (from the product's title)"
+unknown = ["module_d"]
+pitch = 96
+stud_d = 20
+module_h = 27
+repeatability = 0.005
+[[workholding.cite]]
+fields = ["module_h"]
+source = "https://lang-technik.de/en/products/45400-quick-point-96-single-plate-192-x-156-x-27-mm-bores-150-x-100-50-mm-and-clamping-edge (192 x 156 x 27 mm)"
+taken = "2026-11-23"
+[[workholding.cite]]
+fields = ["pitch", "stud_d", "repeatability"]
+source = "https://lang-technik.de/en/service/faq/zero-point-clamping-system (96 mm grid, 20 mm studs; 0.005 mm)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "5thaxis-rocklock-52"
+kind = "zero_point"
+vendor = "5th Axis"
+product = "RockLock 52 low-profile base RL52A-4"
+note = "the PS16F pull stud's diameter is not given in the catalog text (CAD is offered)"
+unknown = ["stud_d"]
+pitch = 52
+module_d = 116
+module_h = 25
+repeatability = 0.008
+[[workholding.cite]]
+fields = ["pitch", "module_d", "module_h", "repeatability"]
+source = "https://5thaxis.com/wp-content/uploads/2022/09/2022-Summer-5th-Axis-Catalog.pdf (RL52A-4: Ø116mm x 25mm; 52 mm stud spacing; +/- 8 μm)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "schunk-nse3-138-v1"
+kind = "zero_point"
+vendor = "SCHUNK"
+product = "NSE3 138-V1 quick-change pallet module"
+note = "a single module: its grid pitch is the user's layout; 28 kN pull-down with turbo"
+unknown = ["pitch", "stud_d"]
+module_d = 138
+module_h = 55.7
+pull_force = 8000
+repeatability = 0.005
+[[workholding.cite]]
+fields = ["module_d", "module_h", "pull_force", "repeatability"]
+source = "https://schunk.com/us/en/workpiece-clamping-technology/quick-change-pallet-systems/quick-change-pallet-system-for-general-milling-applications-and-heavy-duty-cutting/individual-modules-nse3/nse3-138-v1/p/000000000001313723 (Ø138 x Ø110 x 55,7 mm; 8 kN; < 0.005 mm)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "schunk-nse-m-plus-138"
+kind = "zero_point"
+vendor = "SCHUNK"
+product = "NSE-M plus 138 (manual)"
+unknown = ["pitch", "stud_d"]
+module_d = 138
+module_h = 43
+pull_force = 2500
+repeatability = 0.005
+[[workholding.cite]]
+fields = ["module_d", "module_h", "pull_force", "repeatability"]
+source = "https://schunk.com/us/en/workpiece-clamping-technology/quick-change-pallet-systems/quick-change-pallet-system-for-general-milling-applications-and-heavy-duty-cutting/individual-modules-nse-plus/nse-m-plus-138/p/000000000000471140 (Ø138 x Ø110 x 43 mm; 2.5 kN; < 0.005 mm)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "mitee-bite-pitbull-m6"
+kind = "edge_clamp"
+vendor = "Mitee-Bite"
+product = "Pitbull 56050 (steel, M6)"
+note = "C (clamp width) 19.05, A (tap offset from the work's edge) 7.62, slot B 7.11, E 14.48 (unlabelled in text), D* minimum recommended clamp height 3.81; total throw 0.610; the body's own length and height are not stated"
+unknown = ["body_length", "height"]
+body_width = 19.05
+clamp_force = 16000
+torque = 22.5
+[[workholding.cite]]
+fields = ["body_width", "clamp_force", "torque"]
+source = "https://www.miteebite.com/wp-content/uploads/2020/03/Pitbull-Clamp-Instr-METRIC-1.pdf (56050: C 19.05, 22.5 N·m, 16,000 N)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "mitee-bite-pitbull-m10"
+kind = "edge_clamp"
+vendor = "Mitee-Bite"
+product = "Pitbull 56070 (steel, M10)"
+note = "C 25.40, A 10.16, slot B 11.43, E 18.03 (unlabelled), D* 6.35; total throw 1.270"
+unknown = ["body_length", "height"]
+body_width = 25.4
+clamp_force = 26000
+torque = 40.6
+[[workholding.cite]]
+fields = ["body_width", "clamp_force", "torque"]
+source = "https://www.miteebite.com/wp-content/uploads/2020/03/Pitbull-Clamp-Instr-METRIC-1.pdf (56070: C 25.40, 40.6 N·m, 26,000 N)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "mitee-bite-talongrip-33150"
+kind = "toe_clamp"
+vendor = "Mitee-Bite"
+product = "TalonGrip fixture grip 33150"
+note = "25.4 x 25.4 x 12.7 mm read as length x width x height; M8; grips 1.5-5.6 mm of the work's height"
+body_length = 25.4
+body_width = 25.4
+height = 12.7
+[[workholding.cite]]
+fields = ["body_length", "body_width", "height"]
+source = "https://www.miteebite.com/2024%20CATALOG-FINAL_8-24.pdf (2024 catalog p.19-20: 33150 25.4x25.4x12.7 M8, 1.5-5.6 mm)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "kipp-k1516-12"
+kind = "strap_clamp"
+vendor = "KIPP"
+product = "K1516.12 clamp strap DIN 6314 (M12/M14)"
+note = "L 100; the table also prints A 20, B1 14, B2 40, F 20.2 kN but ties the letters to features only on its drawing: width and thickness listed as unknown; the stud is the user's"
+unknown = ["width", "thickness", "stud_d", "stud_above"]
+length = 100
+[[workholding.cite]]
+fields = ["length"]
+source = "https://www.marek.eu/data/katalogove-listy/kipp/K1516.pdf (KIPP K1516, DIN 6314 straight: K1516.12 L 100)"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "fowler-parallels-52-437-125"
+kind = "parallels"
+vendor = "Fowler"
+product = "52-437-125-0 parallel set"
+note = "10 pairs, 1/2 to 1-5/8 in by 1/8 in, 1/8 in thick, 6 in long; 'absolute heights are nominal'"
+heights = [12.7, 15.875, 19.05, 22.225, 25.4, 28.575, 31.75, 34.925, 38.1, 41.275]
+width = 3.175
+length = 152.4
+[[workholding.cite]]
+fields = ["heights", "width", "length"]
+source = "https://www.fowlerprecision.com/524371250"
+taken = "2026-11-23"
+
+[[workholding]]
+name = "witte-r3-600x400"
+kind = "vacuum"
+vendor = "Witte"
+product = "R3 grid plate 600 x 400 (Hoffmann 385030-R3)"
+note = "the vacuum is the pump's: measure it; the seal's inset is the gasket you lay"
+unknown = ["vacuum", "seal_inset"]
+length = 600
+width = 400
+thickness = 32.5
+[[workholding.cite]]
+fields = ["length", "width", "thickness"]
+source = "https://www.hoffmann-group.com/GB/en/houk/p/385030-R3 (600 x 400 x 32.5 mm)"
+taken = "2026-11-23"
