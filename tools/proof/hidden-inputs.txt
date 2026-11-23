@@ -187,6 +187,10 @@ no-output (Fx-hashed: a fixed hasher, the same order every run; lookups and sets
 no-output (Fx-hashed: a fixed hasher, the same order every run; lookups and sets)  @ forge-bool/src/decide_once.rs|hash-order|type HashMap<K, V> = FxMap<K, V>;
 no-output (FORGE_DECIDE_STATS, prints only)  @ forge-bool/src/decide_once.rs|lazy|static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
 no-output (FORGE_DECIDE_STATS, prints only)  @ forge-bool/src/decide_once.rs|static|static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+no-output (FORGE_A8_DETAIL, debug builds only, prints only)  @ forge-bool/src/decide_once.rs|env|if std::env::var_os("FORGE_A8_DETAIL").is_some() {
+no-output (FORGE_A8_STATS, debug builds only, prints only)  @ forge-bool/src/decide_once.rs|env|if std::env::var_os("FORGE_A8_STATS").is_some() {  x 2
+no-output (FORGE_A8_DETAIL, debug builds only, prints only)  @ forge-bool/src/decide_once/face_builder.rs|env|if std::env::var_os("FORGE_A8_DETAIL").is_some() {
+no-output (FORGE_A8_SEGS, debug builds only, prints only)  @ forge-bool/src/decide_once/face_builder.rs|env|if std::env::var_os("FORGE_A8_SEGS").is_some() {
 no-output (decision log, feature `decisions` only, off in every build: records and prints, never read by the boolean; STRICT panics as the log's assertion)  @ forge-bool/src/decisions.rs|env|if found > 0 && std::env::var_os("FORGE_DECISIONS_STRICT").is_some() && !std::thread::panicking() {
 no-output (decision log, feature `decisions` only, off in every build: records and prints, never read by the boolean; STRICT panics as the log's assertion)  @ forge-bool/src/decisions.rs|env|if std::env::var_os("FORGE_DECISIONS_TRACE").is_some() {
 no-output (decision log, feature `decisions` only, off in every build: records and prints, never read by the boolean; STRICT panics as the log's assertion)  @ forge-bool/src/decisions.rs|static|static INPUT: RefCell<(String, String)> = const { RefCell::new((String::new(), String::new())) };

@@ -19,10 +19,10 @@
 
 #![forbid(unsafe_code)]
 
+pub mod inc;
 mod index;
 mod sort;
 mod union_find;
-pub mod v2;
 
 pub use index::Index;
 use union_find::Uf;

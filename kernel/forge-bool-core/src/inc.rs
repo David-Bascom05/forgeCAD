@@ -130,10 +130,16 @@ pub enum Outcome {
     Refused(Refusal),
 }
 
+/// `start` is not empty and its first entry is 0. (Its own fn, so the translation's test has a
+/// declared `Bool` type.)
+fn starts_at_zero(start: &[u32]) -> bool {
+    if start.is_empty() { false } else { start[0] == 0 }
+}
+
 /// A Csr is well formed over `n_ids` ids: `start` starts at 0, never decreases, ends at
 /// `ids.len()`, and every id is below `n_ids`.
 pub fn csr_ok(c: &Csr, n_ids: u32) -> bool {
-    let mut ok = !c.start.is_empty() && c.start[0] == 0;
+    let mut ok = starts_at_zero(&c.start);
     let mut k = 1;
     while ok && k < c.start.len() {
         ok = c.start[k - 1] <= c.start[k];
@@ -168,7 +174,8 @@ fn count_in(ids: &[u32], lo: usize, hi: usize, x: u32) -> usize {
 
 /// `LedgerWF` v2: the Csrs well formed, a facet at most twice per edge row, no repeat in a
 /// vert's edges, each sector's facet in range and its two edges in its vert's row, ids and counts
-/// in range, a facet's two sides distinct rooms, and every facet a piece of some face.
+/// in range, a sector's facet round both its edges, a facet's two sides distinct rooms, and every
+/// facet a piece of some face of its own class.
 pub fn ledger_wf(l: &Ledger) -> bool {
     let nf = l.facet_class.len();
     let ne = rows(&l.edge_facets.start);
@@ -226,6 +233,13 @@ pub fn ledger_wf(l: &Ledger) -> bool {
             ok = (sc.facet as usize) < nf
                 && count_in(&l.vert_edges.ids, lo, hi, sc.a) == 1
                 && count_in(&l.vert_edges.ids, lo, hi, sc.b) == 1;
+            // the sector's facet is round both its edges
+            if ok {
+                let (alo, ahi) = row(&l.edge_facets, sc.a as usize);
+                let (blo, bhi) = row(&l.edge_facets, sc.b as usize);
+                ok = count_in(&l.edge_facets.ids, alo, ahi, sc.facet) >= 1
+                    && count_in(&l.edge_facets.ids, blo, bhi, sc.facet) >= 1;
+            }
             j += 1;
         }
         v += 1;
@@ -242,7 +256,9 @@ pub fn ledger_wf(l: &Ledger) -> bool {
     let mut k = 0;
     while ok && k < l.pieces.len() {
         let (c, g) = l.pieces[k];
-        ok = (c.0 as usize) < nf && (g.0 as usize) < l.face_body.len();
+        ok = (c.0 as usize) < nf
+            && (g.0 as usize) < l.face_body.len()
+            && l.face_class[g.0 as usize] == l.facet_class[c.0 as usize];
         if ok {
             is_piece[c.0 as usize] = true;
         }
