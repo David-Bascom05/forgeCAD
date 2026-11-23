@@ -138,7 +138,10 @@ fn refusals_are_typed() {
     ));
     // a real control whose manual is not open: refused with the reason
     for (n, _) in UNAVAILABLE {
-        assert!(matches!(Dialect::get(n), Err(PostError::Unavailable { .. })), "{n}");
+        assert!(
+            matches!(Dialect::get(n), Err(PostError::Unavailable { .. })),
+            "{n}"
+        );
     }
     // a cycle not started over its first hole
     let mut p = prog(false);
@@ -435,4 +438,20 @@ fn a_cited_dialect_cites_every_code_it_sets() {
     // a published cite without its source is refused
     let bad = format!("{cited}[[dialect.cite]]\nkey = \"dwell\"\n");
     assert!(Dialect::parse(&bad).is_err());
+}
+
+#[test]
+fn siemens_iso_program_reads_as_the_manual_says() {
+    let d = Dialect::get("siemens").unwrap();
+    assert!(d.cites.len() >= 25);
+    let mut p = prog(true);
+    p.recs.push(Rec::Home);
+    let q = quantize(&p, &d).unwrap();
+    let (txt, _) = round_trip(&q, &d).unwrap();
+    // ISO mode selected alone in the first block, metric in its own block, G43 under G00
+    assert!(txt.starts_with("N10 G291\nN20 (flange op 1)\nN30 G21\n"), "{txt}");
+    assert!(txt.contains("G00 G43 H1"), "{txt}");
+    assert!(txt.contains("G04 X0.5"), "{txt}");
+    assert!(txt.contains("G98 G82 X0. Y-30. Z-3. R2. P250 F120."), "{txt}");
+    eprintln!("{txt}");
 }

@@ -18,11 +18,12 @@ use forge_cam_geom::big::Nat;
 use forge_cam_geom::real::Dy;
 use forge_tooling::toml::{self, Table, num, text, texts};
 
-pub const DIALECTS: [(&str, &str); 4] = [
+pub const DIALECTS: [(&str, &str); 5] = [
     ("fanuc", include_str!("../data/fanuc.toml")),
     ("haas", include_str!("../data/haas.toml")),
     ("linuxcnc", include_str!("../data/linuxcnc.toml")),
     ("grbl", include_str!("../data/grbl.toml")),
+    ("siemens", include_str!("../data/siemens.toml")),
 ];
 
 /// Controls whose dialect we cannot restate: no openly published programming manual gives the
