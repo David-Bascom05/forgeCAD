@@ -802,6 +802,46 @@ struct Scratch {
     /// where the boolean is this one's.
     edge_pieces: [Vec<(u32, u32, u32)>; 2],
     boolean: u32,
+    /// `across` of each coedge (by side and coedge index), current where its stamp is this
+    /// boolean's: a face's edges are trimmed against every face of the other body it meets, and
+    /// the surface across an edge is the same each time
+    across: AcrossMemo,
+}
+
+/// `across` per side and coedge, stamped by the boolean it was worked out in: (stamp, slot in
+/// `surfaces`), small, so the lists grow cheaply with the bodies' arenas.
+#[derive(Default)]
+pub(crate) struct AcrossMemo {
+    stamp: u32,
+    at: [Vec<(u32, u32)>; 2],
+    surfaces: Vec<Surface>,
+}
+
+impl AcrossMemo {
+    /// A new boolean: what was kept before is stale.
+    fn next(&mut self) {
+        self.stamp = self.stamp.wrapping_add(1);
+        if self.stamp == 0 {
+            self.at = Default::default();
+            self.stamp = 1;
+        }
+        self.surfaces.clear();
+    }
+    /// `across(body, f, c)` for side `k`, worked out once per boolean.
+    fn get(&mut self, k: usize, body: &Body, f: FaceId, c: forge_topo::CoedgeId) -> R<Surface> {
+        let v = &mut self.at[k];
+        if v.len() <= c.index() {
+            v.resize(body.coedges.len().max(c.index() + 1), (0, 0));
+        }
+        let (at, slot) = v[c.index()];
+        if at == self.stamp {
+            return Ok(self.surfaces[slot as usize].clone());
+        }
+        let s = across(body, f, c)?;
+        v[c.index()] = (self.stamp, self.surfaces.len() as u32);
+        self.surfaces.push(s.clone());
+        Ok(s)
+    }
 }
 
 impl Scratch {
@@ -1077,6 +1117,7 @@ fn plan_once_in(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
     let mut clock = phases_on().then(forge_math::clock::Instant::now);
     let bodies = [a, b];
     let index = [Index::new(a), Index::new(b)];
+    scratch.across.next();
     // new edges and vertices are named by the faces and edges meeting there, never by the
     // feature: the n-ary boolean, meeting them all at once, names them alike
     let root = Name::feature(0);
@@ -1177,6 +1218,7 @@ fn plan_once_in(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
                     &mut segs,
                     &mut imprints,
                     &mut touching,
+                    Some(&mut scratch.across),
                 )?;
             }
         }
@@ -2441,6 +2483,8 @@ pub(crate) fn trim(
     segs: &mut Vec<Seg>,
     imprints: &mut Vec<Imprint>,
     touching: &mut Vec<Touch>,
+    // (the plain boolean's: its two bodies' surfaces across their edges, kept per boolean)
+    mut memo: Option<&mut AcrossMemo>,
 ) -> R<()> {
     let domain = curve.domain();
     let closed = domain.period.is_some();
@@ -2555,7 +2599,10 @@ pub(crate) fn trim(
                     }
                     continue;
                 }
-                let across = across(body, f, c)?;
+                let across = match memo.as_deref_mut() {
+                    Some(m) => m.get(k, body, f, c)?,
+                    None => across(body, f, c)?,
+                };
                 // only hits on the edge count: within its ends' tolerance of its box
                 let near = || {
                     let slack = body
