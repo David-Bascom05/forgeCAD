@@ -2383,7 +2383,7 @@ fn material_window(ctx: &egui::Context, t: &Theme, fg: &mut FgPanel, places: &mu
         let said = match forge_material::user_dir() {
             Some(d) => {
                 let file = d.join("mine.toml");
-                let _ = std::fs::create_dir_all(&d);
+                let _ = forge_dirs::fs::create_dir_all(&d);
                 match forge_material::save(&file, &m, None) {
                     Ok(()) => {
                         fg.thermo_materials.clear();

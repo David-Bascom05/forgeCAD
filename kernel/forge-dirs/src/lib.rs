@@ -13,12 +13,27 @@
 
 use std::path::PathBuf;
 
+pub mod fs;
+
+/// This process's id, for names of files made beside others; in a browser page (which has no
+/// process ids: std panics) 1.
+pub fn process_id() -> u32 {
+    if BROWSER { 1 } else { std::process::id() }
+}
+
+/// In a browser page: the user's folder is `/home` in the page's filesystem (`fs`), kept with
+/// the page's storage; there is no cache folder (a result kept is rebuilt instead).
+const BROWSER: bool = cfg!(all(target_arch = "wasm32", target_os = "unknown"));
+
 fn var(k: &str) -> Option<PathBuf> {
     std::env::var_os(k).filter(|v| !v.is_empty()).map(PathBuf::from)
 }
 
 /// The user's home folder: `HOME`, or on Windows `USERPROFILE`.
 pub fn home() -> Option<PathBuf> {
+    if BROWSER {
+        return Some(PathBuf::from("/home"));
+    }
     var("HOME").or_else(|| if cfg!(windows) { var("USERPROFILE") } else { None })
 }
 
@@ -37,6 +52,9 @@ pub fn config() -> Option<PathBuf> {
 
 /// Files that can be rebuilt: build caches, downloaded models.
 pub fn cache() -> Option<PathBuf> {
+    if BROWSER {
+        return None;
+    }
     var("XDG_CACHE_HOME").or_else(|| {
         if cfg!(windows) {
             var("LOCALAPPDATA")

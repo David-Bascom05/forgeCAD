@@ -187,7 +187,7 @@ fn describe(path: &Path, file: &str, root: Option<&Path>) -> (String, String) {
         .map_or_else(|| file.to_string(), |s| s.to_string_lossy().into_owned());
     // only inside the session's root (links resolved), and only a Forge file: its words are
     // then its own part number and description
-    let inside = root.is_none_or(|r| std::fs::canonicalize(path).is_ok_and(|p| p.starts_with(r)));
+    let inside = root.is_none_or(|r| forge_dirs::fs::canonicalize(path).is_ok_and(|p| p.starts_with(r)));
     let Some(src) = inside.then(|| crate::asm::read_capped(path)).flatten() else {
         return (stem, String::new());
     };
@@ -253,12 +253,13 @@ fn load(
         return Err("is outside the session's root, not read".into());
     }
     // a Forge file, or nothing of it said
-    let src = crate::asm::read_capped(&path).ok_or_else(|| match std::fs::symlink_metadata(&path) {
-        Err(_) => "no such file".to_string(),
-        Ok(_) => {
-            "is not a Forge file this reads (a plain .fg of text that parses, at most 64 MB)".to_string()
-        }
-    })?;
+    let src =
+        crate::asm::read_capped(&path).ok_or_else(|| match forge_dirs::fs::symlink_metadata(&path) {
+            Err(_) => "no such file".to_string(),
+            Ok(_) => {
+                "is not a Forge file this reads (a plain .fg of text that parses, at most 64 MB)".to_string()
+            }
+        })?;
     // a drawing shows the model's shape: its checks (overlap, expects) are its own report's
     let opts = crate::Options {
         build: true,
@@ -380,7 +381,7 @@ fn wants_of(
 /// subassembly's (the first that exists).
 fn resolve(base: &Path, model: &Model, f: &str) -> PathBuf {
     let direct = base.join(f);
-    if direct.exists() {
+    if forge_dirs::fs::exists(&direct) {
         return direct;
     }
     let name = Path::new(f)
@@ -389,7 +390,7 @@ fn resolve(base: &Path, model: &Model, f: &str) -> PathBuf {
         .unwrap_or_default();
     for other in &model.files {
         let p = base.join(other);
-        if p.file_name() == Some(&name) && p.exists() {
+        if p.file_name() == Some(&name) && forge_dirs::fs::exists(&p) {
             return p;
         }
     }
@@ -2695,7 +2696,7 @@ pub fn make(src: &str, dir: &Path) -> Drawing {
 
 /// `make` for a session kept to `root` (`fg serve`, MCP): no model or part read outside it.
 pub fn make_in(src: &str, dir: &Path, root: Option<&Path>) -> Drawing {
-    let root = root.and_then(|r| std::fs::canonicalize(r).ok());
+    let root = root.and_then(|r| forge_dirs::fs::canonicalize(r).ok());
     make_with(src, dir, root.as_deref(), None, None)
 }
 
@@ -2711,7 +2712,7 @@ pub struct Shown {
 /// `make`, showing first the sheets as last made (when nothing they were made from changed), then
 /// each view as it is made; the sheets made are kept for the next open.
 pub fn shown(src: &str, file: &Path, show: &mut dyn FnMut(Shown)) -> Drawing {
-    let file = std::fs::canonicalize(file).unwrap_or_else(|_| file.to_path_buf());
+    let file = forge_dirs::fs::canonicalize(file).unwrap_or_else(|_| file.to_path_buf());
     let dir = file.parent().map(Path::to_path_buf).unwrap_or_default();
     let key = crate::store::key("drawing-pages", |h| {
         h.str(&file.to_string_lossy());
@@ -2794,7 +2795,7 @@ fn sheets_so_far(ctx: &Ctx) -> Vec<Page> {
 
 /// A drawing block's text made (`block::text`): `own` is the .fg it is in, what `part()` draws.
 pub fn make_own(src: &str, dir: &Path, root: Option<&Path>, own: &str) -> Drawing {
-    let root = root.and_then(|r| std::fs::canonicalize(r).ok());
+    let root = root.and_then(|r| forge_dirs::fs::canonicalize(r).ok());
     make_with(src, dir, root.as_deref(), Some(own), None)
 }
 

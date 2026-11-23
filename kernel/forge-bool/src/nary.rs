@@ -37,8 +37,8 @@ thread_local! {
     static PHASES: std::cell::RefCell<[u64; 9]> = const { std::cell::RefCell::new([0; 9]) };
 }
 
-fn lap(t: &mut std::time::Instant, k: usize) {
-    let now = std::time::Instant::now();
+fn lap(t: &mut forge_math::clock::Instant, k: usize) {
+    let now = forge_math::clock::Instant::now();
     PHASES.with(|p| p.borrow_mut()[k] = (now - *t).as_nanos() as u64);
     *t = now;
 }
@@ -65,7 +65,7 @@ fn par_map<T: Send>(n: usize, threads: usize, per: usize, f: impl Fn(usize) -> T
         }
     };
     let parts: Vec<Vec<(usize, T)>> = std::thread::scope(|s| {
-        let start = std::time::Instant::now();
+        let start = forge_math::clock::Instant::now();
         let mut mine = Vec::new();
         let mut helpers = Vec::new();
         loop {
@@ -681,7 +681,7 @@ fn nary_body(
 ) -> R<Body> {
     assert_eq!(ops.len() + 1, tools.len(), "one op per tool after the first");
     let n = tools.len();
-    let mut clock = std::time::Instant::now();
+    let mut clock = forge_math::clock::Instant::now();
     let index: Vec<Index> = par_map(n, threads, 16, |k| Index::new(tools[k]));
     let debug = crate::boolean::debug_on();
 
@@ -2107,7 +2107,7 @@ fn nary_body(
         let r = &regs[ri];
         let body = tools[r.side];
         let face = body.face(r.face);
-        let t0 = std::time::Instant::now();
+        let t0 = forge_math::clock::Instant::now();
         let mut candidates = match first {
             Some(p) => vec![p],
             None => region_points(body, r.face, &r.loops, list, &geom, 1),
@@ -2387,7 +2387,7 @@ fn nary_body(
                 }
             }
             let boxes: Vec<forge_math::Box3> = index.iter().map(|x| x.bbox).collect();
-            let t = std::time::Instant::now();
+            let t = forge_math::clock::Instant::now();
             let codes = batch.verdicts(&pts, &sides, &boxes);
             PHASES.with(|p| p.borrow_mut()[8] = t.elapsed().as_nanos() as u64);
             par_map(regs.len(), threads, 32, |ri| match at[ri].map(|i| codes[i]) {
@@ -2403,7 +2403,7 @@ fn nary_body(
     for ri in 0..regs.len() {
         class[ri] = class[group[ri]];
     }
-    let merge_start = std::time::Instant::now();
+    let merge_start = forge_math::clock::Instant::now();
 
     // a new edge with the same verdict on both sides divides nothing: the face is split again
     // without it, each new region taking the verdict of the old ones it is made of. The edge of

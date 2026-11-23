@@ -150,15 +150,15 @@ impl Codex {
     }
 
     fn start(&mut self, prompt: &str, picture: Option<Vec<u8>>) -> Result<(), String> {
-        std::fs::create_dir_all(&self.cfg.cwd).map_err(|e| e.to_string())?;
+        forge_dirs::fs::create_dir_all(&self.cfg.cwd).map_err(|e| e.to_string())?;
         let image = if let Some(png) = picture {
             static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
             let p = self.cfg.cwd.join(format!(
                 "codex-{}-{}.png",
-                std::process::id(),
+                forge_dirs::process_id(),
                 NEXT.fetch_add(1, Ordering::Relaxed)
             ));
-            std::fs::write(&p, png).map_err(|e| e.to_string())?;
+            forge_dirs::fs::write(&p, png).map_err(|e| e.to_string())?;
             Some(p)
         } else {
             None
@@ -179,7 +179,7 @@ impl Codex {
             Ok(c) => c,
             Err(e) => {
                 if let Some(p) = image {
-                    let _ = std::fs::remove_file(p);
+                    let _ = forge_dirs::fs::remove_file(p);
                 }
                 return Err(format!(
                     "Codex didn't start: {e}. Install the Codex CLI and run codex login."
@@ -193,7 +193,7 @@ impl Codex {
             let _ = child.kill();
             let _ = child.wait();
             if let Some(p) = image {
-                let _ = std::fs::remove_file(p);
+                let _ = forge_dirs::fs::remove_file(p);
             }
             return Err(format!("Couldn't send to Codex: {e}"));
         }
@@ -257,7 +257,7 @@ impl Codex {
             };
             let stderr = errors.join().unwrap_or_default();
             if let Some(p) = image {
-                let _ = std::fs::remove_file(p);
+                let _ = forge_dirs::fs::remove_file(p);
             }
             for change in watch.check() {
                 out.send(change);

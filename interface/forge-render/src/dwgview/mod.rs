@@ -703,13 +703,13 @@ mod tests {
             extents: None,
         };
         s.grow_extents();
-        let t = std::time::Instant::now();
+        let t = crate::plat::Instant::now();
         let g = Geom::new(Arc::new(s));
         let built = t.elapsed();
         assert_eq!(g.n_items(), 100_000);
         assert_eq!(g.n_lines, 200_000);
         assert_eq!(g.n_fill_verts, 300_000);
-        let t = std::time::Instant::now();
+        let t = crate::plat::Instant::now();
         let all = |_: usize| true;
         // room (37, 81): its left wall, its fill
         assert_eq!(
@@ -780,6 +780,6 @@ mod tests {
                 });
             }
         }
-        std::fs::write(&path, forge_dwg::write(&doc)).expect("written");
+        forge_dirs::fs::write(&path, forge_dwg::write(&doc)).expect("written");
     }
 }

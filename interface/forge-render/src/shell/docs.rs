@@ -28,7 +28,6 @@ macro_rules! per_doc {
         }
     };
 }
-#[cfg(not(target_arch = "wasm32"))]
 pub(crate) use per_doc;
 
 per_doc!(

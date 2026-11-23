@@ -8,7 +8,7 @@ use forge_agent::select::Ent;
 use forge_mesh::{Quality, TriMesh};
 use forge_topo::{Body, EdgeId, FaceId, VertexId};
 use std::collections::HashMap;
-use std::sync::mpsc::{Receiver, Sender, channel};
+use std::sync::mpsc::{Receiver, channel};
 
 fn ent(e: Entity) -> Ent {
     match e {
@@ -38,7 +38,7 @@ struct Ask {
 #[derive(Default)]
 pub struct Measurer {
     names: Vec<String>,
-    to: Option<Sender<Ask>>,
+    to: Option<crate::plat::Server<Ask>>,
     from: Option<Receiver<(u64, String)>>,
     last: u64,
     answered: u64,
@@ -53,30 +53,30 @@ impl Measurer {
     }
 
     fn start(&mut self) {
-        let (to, asks) = channel::<Ask>();
         let (answers, from) = channel();
-        std::thread::spawn(move || {
-            let mut bodies: HashMap<String, Result<(Body, TriMesh), String>> = HashMap::new();
-            while let Ok(mut a) = asks.recv() {
-                // only the latest matters
-                while let Ok(newer) = asks.try_recv() {
-                    a = newer;
+        let mut bodies: HashMap<String, Result<(Body, TriMesh), String>> = HashMap::new();
+        let to = crate::plat::serve(
+            "forge-measure",
+            move |mut a: Ask, asks: &std::sync::mpsc::Receiver<Ask>| {
+                {
+                    // only the latest matters
+                    while let Ok(newer) = asks.try_recv() {
+                        a = newer;
+                    }
+                    let got = bodies.entry(a.part.clone()).or_insert_with(|| {
+                        let body = crate::load::body(&a.part)?;
+                        let mesh = forge_mesh::tessellate::tessellate_tolerant(&body, &Quality::default())
+                            .map_err(|e| forge_lang::error::words(&e))?;
+                        Ok((body, mesh))
+                    });
+                    let text = match got {
+                        Ok((b, m)) => say(b, m, &a.of),
+                        Err(e) => e.clone(),
+                    };
+                    answers.send((a.id, text)).is_ok()
                 }
-                let got = bodies.entry(a.part.clone()).or_insert_with(|| {
-                    let body = crate::load::body(&a.part)?;
-                    let mesh = forge_mesh::tessellate::tessellate_tolerant(&body, &Quality::default())
-                        .map_err(|e| forge_lang::error::words(&e))?;
-                    Ok((body, mesh))
-                });
-                let text = match got {
-                    Ok((b, m)) => say(b, m, &a.of),
-                    Err(e) => e.clone(),
-                };
-                if answers.send((a.id, text)).is_err() {
-                    return;
-                }
-            }
-        });
+            },
+        );
         self.to = Some(to);
         self.from = Some(from);
     }

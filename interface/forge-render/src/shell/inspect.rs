@@ -352,7 +352,7 @@ pub struct Outline {
 
 /// The folder a document is in: where its project's materials are.
 pub fn doc_dir(file: &str) -> Option<std::path::PathBuf> {
-    std::fs::canonicalize(file)
+    forge_dirs::fs::canonicalize(file)
         .ok()?
         .parent()
         .map(|d| d.to_path_buf())
@@ -1046,7 +1046,7 @@ impl Shell {
         dirty: bool,
     ) {
         let path = std::path::Path::new(file);
-        let meta = std::fs::metadata(file).ok();
+        let meta = forge_dirs::fs::metadata(file).ok();
         ui.add_space(12.0);
         let w = ui.available_width();
         let (r, _) = ui.allocate_exact_size(vec2(w, 48.0), Sense::hover());

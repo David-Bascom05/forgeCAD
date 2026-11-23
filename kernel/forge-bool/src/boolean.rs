@@ -615,7 +615,7 @@ fn general(target: &mut Body, b: &Body, op: Op) -> R<()> {
     RETRIED.with(|r| r.set(false));
     let mut scratch = SCRATCH.with(|s| s.take());
     let plan = plan(target, b, op, &mut scratch)?;
-    let mut clock = phases_on().then(std::time::Instant::now);
+    let mut clock = phases_on().then(forge_math::clock::Instant::now);
     let (loops, verts) = (target.loops.len(), target.vertices.len());
     let touched = touched_old(&plan);
     apply(target, b, &plan);
@@ -914,9 +914,9 @@ fn specs_on() -> bool {
 }
 
 /// Adds the time since `*t` to phase `k` and restarts the clock.
-fn lap(t: &mut Option<std::time::Instant>, k: usize) {
+fn lap(t: &mut Option<forge_math::clock::Instant>, k: usize) {
     if let Some(t0) = t {
-        let now = std::time::Instant::now();
+        let now = forge_math::clock::Instant::now();
         PHASES.with(|p| p.borrow_mut()[k] += (now - *t0).as_nanos() as u64);
         *t = Some(now);
     }
@@ -1051,7 +1051,7 @@ fn plan_once(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
 use self::plan_once_in as plan_once;
 
 fn plan_once_in(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
-    let mut clock = phases_on().then(std::time::Instant::now);
+    let mut clock = phases_on().then(forge_math::clock::Instant::now);
     let bodies = [a, b];
     let index = [Index::new(a), Index::new(b)];
     // new edges and vertices are named by the faces and edges meeting there, never by the
