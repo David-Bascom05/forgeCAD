@@ -13,8 +13,8 @@ theorem new_ext_spec_proof : NewExtSpec := by
   unfold new_ext
   have hl : (alloc.vec.Vec.deref l.cells).val.length = l.cells.val.length := by simp [alloc.vec.Vec.deref]
   step with index_new_spec (alloc.vec.Vec.deref l.cells) (by rw [hl]; have := hw.room; omega)
-    (by rw [hl]; have := hw.sort_room; omega) as ⟨ix, hix⟩
-  refine ⟨⟨hix, ?_, ?_⟩, rfl⟩
+    (by rw [hl]; have := hw.sort_room; omega) as ⟨ix, hix, hhs⟩
+  refine ⟨⟨hix, hhs, ?_, ?_⟩, rfl⟩
   · simpa [allCells] using hw.cells_nodup
   · simp [allCells]; have := hw.room; omega
 

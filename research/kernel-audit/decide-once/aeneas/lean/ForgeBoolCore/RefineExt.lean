@@ -19,6 +19,7 @@ def covAt (l : Ledger) (ext : Ext) (id : Nat) : List Sgn := (allCells l ext).get
 
 structure ExtOK (l : Ledger) (ext : Ext) : Prop where
   index : IndexOK ext.index.order (alloc.vec.Vec.deref l.cells)
+  hash : HashOK ext.index.hs (alloc.vec.Vec.deref l.cells)
   nodup : (allCells l ext).Nodup
   small : (allCells l ext).length < U32.max
 
@@ -145,7 +146,7 @@ theorem cells_find_loop_spec (l : Ledger) (ext : Ext) (hok : ExtOK l ext) (key :
 theorem cells_find_spec (l : Ledger) (ext : Ext) (hok : ExtOK l ext) (key : Slice Sgn) :
     find l ext key ⦃ r => FindAll l ext key.val r ⦄ := by
   unfold find
-  step with index_find_spec ext.index (alloc.vec.Vec.deref l.cells) key hok.index as ⟨f, hf⟩
+  step with find_h_spec ext.index (alloc.vec.Vec.deref l.cells) key hok.hash as ⟨f, hf⟩
   obtain ⟨hf1, hf2⟩ := hf
   have hdl : (alloc.vec.Vec.deref l.cells).val.length = l.cells.val.length := by simp [alloc.vec.Vec.deref]
   apply cells_find_loop_spec l ext hok key f 0#usize (by simp)
@@ -212,7 +213,7 @@ theorem intern_spec (l : Ledger) (ext : Ext) (hok : ExtOK l ext) (key : alloc.ve
     have hf1' : f1.val = (allCells l ext).length := by
       rw [hf1v, UScalar.cast_val_eq, hi1v]; apply Nat.mod_eq_of_lt
       have := U32.max_eq; simp; omega
-    refine ⟨⟨hok.index, ?_, ?_⟩, by rw [hall]; simp [hnin], by rw [hf1', hl2]; omega, ?_⟩
+    refine ⟨⟨hok.index, hok.hash, ?_, ?_⟩, by rw [hall]; simp [hnin], by rw [hf1', hl2]; omega, ?_⟩
     · rw [hall]; exact List.nodup_append.mpr ⟨hok.nodup, List.nodup_singleton _, fun a ha b hb => by
         simp at hb; subst hb; intro e; subst e; exact hnin ha⟩
     · rw [hl2]; omega
