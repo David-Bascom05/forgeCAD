@@ -621,8 +621,26 @@ fine facets round the edge map to one face facet. Two remedies:
   reaches the cell from), with (e)/(v) a bijection onto wings. `around` then counts sheets, and the
   tangent-cylinder union shows 4 and is refused.
 
-W2 is the smaller change and is decided once by the builder. It needs `LedgerWF`'s "rows have no
-repeats" relaxed to "repeats are wings". This is to agree with the coordinator.
+**Settled with the coordinator (face-arrangement.md at 9453b06f): W1.** W2 fails at vertices. A
+pinched facet, reaching a vertex in two sectors but listed once in `vert_facets`, can merge fan
+classes that the reference keeps apart, and so hide a non-manifold vertex. Mending that needs wing
+ids, which are facets in all but name.
+
+With W1, the interface, the core, `LedgerWF`'s no-repeat rows and the around/bad_vert proofs are
+unchanged:
+- unify re-joins the cut pieces;
+- a seam edge has one face round it, so it is never an output edge;
+- `Refines`' star bijections (e)/(v) are exactly the no-wings condition.
+
+The builder detects a wing when a facet's boundary loop runs along an edge both ways, or visits a
+vertex twice. Wings occur in flat too: a wedge touching a plate along a line, or an apex on a plate.
+
+**For curved, the cut is a piece of a Tier-0 seam** (§2.3's table), which lies in the reference
+arrangement as A8 requires:
+- the plane holding a contact line or contact circle;
+- the axial plane;
+- the nappe plane at an apex;
+- a plane through a crossing node.
 
 **2. Cells: fewer than flat's ratio, and the separators leave the runtime.** The carrier ledger
 pays more than flat's ~300 cells, because every seam (and Tier 1's CAD) splits space everywhere.
@@ -649,8 +667,15 @@ Two routes:
   components, so R1 is free there, and its incidence is explicit, so R2/R4/R5 become builder
   obligations of the same kind as `Refines`.
 
-Route (b) may make `Faithful` on the reference unnecessary. It is for q1 and the coordinator to
-judge.
+Route (b) may make `Faithful` on the reference unnecessary.
+
+The coordinator (9453b06f) answered:
+- `EndToEndF` is stated over any reference that has the old core's end-to-end facts, so curved
+  instantiates it with the `ExactK` carrier ledger, with no second simulation proof.
+- Route (b) would be a new L1 for the face ledger, not a corollary of `Refines`, which transfers
+  facts from the reference and not to it. It may still be cheaper than Lemma D on the CAD.
+
+It is open, with q1 and the master (face-arrangement.md §5).
 
 **4. Effect on the work in flight.**
 - L2 (this branch: QLine, QEdge, QVert, RootCover, QPropose) is the reference's executable and
