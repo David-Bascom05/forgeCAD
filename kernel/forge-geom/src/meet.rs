@@ -1034,10 +1034,16 @@ impl Piece {
             let chord = p.distance(back);
             // a link turns at most about 20 degrees from the one before (unless it is
             // already much the shorter: a long link's chord leaves the tangent itself)
-            let bent = pts.len() > 1 && {
+            // a link much the shorter whose chord turns as far is judged by the curve's tangent
+            // instead (below): a smooth tip narrower than the step (a hole a hair off tangent to a
+            // rim) would otherwise be cut inside it
+            let (bent, short) = if pts.len() > 1 {
                 let (d0, d1) = (back - pts[pts.len() - 2], p - back);
                 let l0 = d0.length();
-                d0.dot(d1) < 0.94 * l0 * chord && chord > 0.5 * l0
+                let turns = d0.dot(d1) < 0.94 * l0 * chord;
+                (turns && chord > 0.5 * l0, turns && chord <= 0.5 * l0)
+            } else {
+                (false, false)
             };
             let away_p = away(p);
             let reach = away_back.min(away_p);
@@ -1047,7 +1053,7 @@ impl Piece {
             // and a hairpin whose arms are a hair apart would be rounded inside one link
             let ends = if pts.len() == 1 {
                 first.map(|a| (a, eq.tangent_at(p)))
-            } else if next == 1.0 && self.turns[1] && !self.crossing[1] {
+            } else if short || next == 1.0 && self.turns[1] && !self.crossing[1] {
                 Some((eq.tangent_at(back), eq.tangent_at(p)))
             } else {
                 None
