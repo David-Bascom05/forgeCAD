@@ -849,7 +849,8 @@ pub fn build_result(id: u32) -> Option<String> {
 }
 
 /// What a test that timed out reports: the builds handed out and not yet taken (by number,
-/// whether done) and, in the threaded build, the worker pool (`plat::threads::state`).
+/// whether done), the memory's size and, in the threaded build, the worker pool
+/// (`plat::threads::state`).
 #[wasm_bindgen]
 pub fn pool_state() -> String {
     let builds: Vec<String> = crate::plat::lock(&BUILDS)
@@ -860,7 +861,11 @@ pub fn pool_state() -> String {
     let pool = crate::plat::threads::state();
     #[cfg(not(target_feature = "atomics"))]
     let pool = "null".to_string();
-    format!(r#"{{"builds":[{}],"pool":{pool}}}"#, builds.join(","))
+    let mib = core::arch::wasm32::memory_size(0) / 16;
+    format!(
+        r#"{{"builds":[{}],"pool":{pool},"memory_mib":{mib}}}"#,
+        builds.join(",")
+    )
 }
 
 /// The bench parts (and their font) written into `dir`; their paths.

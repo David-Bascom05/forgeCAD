@@ -507,18 +507,20 @@ mod global {
             }
         }
 
-        /// A new block off a heap; out of memory there, off any other with room.
+        /// A new block: off the thread's heap, else off any other's free memory, and only when
+        /// none has room, off memory grown for the thread's heap (each heap growing for itself
+        /// while the others held free memory ran the 4 GiB out).
         fn fresh(
             &self,
             f: impl Fn(&mut Heap, &mut dyn FnMut(usize) -> Option<(usize, usize)>) -> *mut u8,
         ) -> *mut u8 {
             let k = self.pick();
-            let p = f(self.shards[k].heap(), &mut |b| grow(k, b));
+            let p = f(self.shards[k].heap(), &mut |_| None);
             self.shards[k].give();
             if !p.is_null() {
                 return p;
             }
-            for j in (0..HEAPS).filter(|&j| j != k) {
+            for j in (1..HEAPS).map(|i| (k + i) % HEAPS) {
                 let s = &self.shards[j];
                 s.take();
                 let p = f(s.heap(), &mut |_| None);
@@ -527,7 +529,11 @@ mod global {
                     return p;
                 }
             }
-            core::ptr::null_mut()
+            let s = &self.shards[k];
+            s.take();
+            let p = f(s.heap(), &mut |b| grow(k, b));
+            s.give();
+            p
         }
 
         /// The heap block `p` is of, held.
