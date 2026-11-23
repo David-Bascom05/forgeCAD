@@ -19,6 +19,8 @@ pub mod decide_once;
 mod decide_once_row;
 #[cfg(feature = "decisions")]
 pub mod decisions;
+#[cfg(feature = "decide_once")]
+mod exact_face;
 pub mod imprint;
 pub mod nary;
 pub mod shape;
