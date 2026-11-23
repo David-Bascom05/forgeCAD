@@ -89,11 +89,11 @@ verify/forge-bool-proof/ForgeBoolProof/<file>.
 
 | id | contract | owner | status | file / theorem |
 |---|---|---|---|---|
-| 1a.where | `whereR`, `whereF` | FLAT-SITES | open | — |
-| 1a.classify | `classify_spec`: Ok w ⇒ w = whereR ⟦b⟧ p | FLAT-SITES | open | — |
+| 1a.where | `whereR`, `whereF` | FLAT-SITES | proven | FlatSites/Where.lean `whereR`, `whereF`, `whereR_on_iff`, `whereR_outside_iff` |
+| 1a.classify | `classify_spec`: Ok w ⇒ w = whereR ⟦b⟧ p | FLAT-SITES | open: the `On` branch proven from two facts (`classify_on_sound`, `exists_face_of_on`): p exactly on the face's carrier (GAP: not checked by the code; held at 3,632 of 3,632 planar `On`s) and `point_in_face ≠ Outside` meaning p ∈ closure ⟦f⟧ (1a.pif), off the zones (D5.zone). The ray branch is open (GAP: rays rejected 0, all-degenerate 0 in the corpus) | FlatSites/Where.lean |
 | 1a.total | `classify_total_flat`: never refuses on flat bodies | FLAT-SITES | open | — |
 | 1a.pif | `point_in_face_spec`: Ok w ⇒ w = whereF ⟦f⟧ p | FLAT-SITES | open | — |
-| 1a.foot | `foot`, `foot_on`; per probe site, foot ∈ relInterior region | FLAT-SITES | open | — |
+| 1a.foot | `foot`, `foot_on`; per probe site, foot ∈ relInterior region | FLAT-SITES | open: `foot_on`, `foot_self` proven (where the f64 point is on the carrier, as at every measured classify `On`, the foot is the point); per-site membership open (G13) | FlatSites/Where.lean |
 | 1a.B3387 | trim_in's stretch midpoint M: screen sound bound, cold exact helper | FLAT-SITES | open | — |
 
 ## G. Guess sites (each becomes a proven screen plus an exact test, or goes)
@@ -117,9 +117,9 @@ verify/forge-bool-proof/ForgeBoolProof/<file>.
 | C.cuts | the `on_edge` / `place_cuts` coincidence sites on curved faces | CURVED-SITES | open | — |
 | C.poles | poles and seams (`sphere_nearest`'s pole rule, periodic seams) | CURVED-SITES | open | — |
 | G12 | the `decide_once` feature becomes the fallback branch | FALLBACK | open | — |
-| G13 | `face_point`'s unchecked inward step | FLAT-SITES | open | — |
-| G14 | trim_in's box-only accept | FLAT-SITES | open | — |
-| G15 | the stretch whose midpoint is exactly on ∂f_k | FLAT-SITES | open | — |
+| G13 | `face_point`'s unchecked inward step | FLAT-SITES | open (GAP): 7 of 6,675 probes land off their own face per point_in_face (6 curved, 1 planar; fuzz 19/20/21/30/40); returning None there (callers take the general path) changed no result | — |
+| G14 | trim_in's box-only accept | FLAT-SITES | proven (hyp: D4's cut completeness, `Sorted`) | ForgeCurved/G14.lean `kept_iff`, `extra_not_end`, `edge_cut_not_kept` (#27) |
+| G15 | the stretch whose midpoint is exactly on ∂f_k | FLAT-SITES | proven for flat (straight stretch, edge line in the plane; hyp: D4 cut completeness): the stretch lies on the edge's carrier, today's along-the-edge reading; curved (a touch, not a crossing) open | FlatSites/G15.lean `along_or_crossing`, `on_middle_along` |
 
 ## A8, the flat fallback
 
