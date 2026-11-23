@@ -30,3 +30,4 @@ import ForgeCurved.QPlane
 import ForgeCurved.QLineStage
 import ForgeCurved.QOffY
 import ForgeCurved.QOffX
+import ForgeCurved.QFacetSampled

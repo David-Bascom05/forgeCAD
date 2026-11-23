@@ -101,3 +101,4 @@ import ForgeCurved
 #print axioms ForgeCurved.plane_to_line
 #print axioms ForgeCurved.plane_offY
 #print axioms ForgeCurved.facet_offX
+#print axioms ForgeCurved.facet_sampled
