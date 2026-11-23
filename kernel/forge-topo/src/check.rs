@@ -87,6 +87,26 @@ pub enum Problem {
         vertex: VertexId,
         fans: usize,
     },
+    /// The entities' links disagree: an edge's use that is not a coedge of that edge in a loop
+    /// its face lists, a loop's coedge that its edge does not list, a face's loop that is
+    /// another face's, or an id past the end. `what` is "edge", "loop" or "face", `id` its id.
+    BackLink {
+        what: &'static str,
+        id: u32,
+    },
+    /// A shell's face list disagrees with its faces' own `shell`, lists a face twice or none
+    /// at all, misses a live face, or two faces at an edge lie in different shells.
+    ShellFaces {
+        shell: ShellId,
+    },
+    /// A shell's faces are not all joined through edges: it is more than one piece.
+    ShellDisconnected {
+        shell: ShellId,
+    },
+    /// A vertex no edge starts or ends at.
+    StrayVertex {
+        vertex: VertexId,
+    },
 }
 
 impl Problem {
@@ -110,6 +130,10 @@ impl Problem {
             Problem::ShellsOverlap { .. } => "shells-overlap",
             Problem::ShellEuler { .. } => "shell-euler",
             Problem::VertexFans { .. } => "vertex-fans",
+            Problem::BackLink { .. } => "back-link",
+            Problem::ShellFaces { .. } => "shell-faces",
+            Problem::ShellDisconnected { .. } => "shell-disconnected",
+            Problem::StrayVertex { .. } => "stray-vertex",
         }
     }
 
@@ -138,6 +162,14 @@ impl Problem {
             Problem::OuterNotFirst { .. } => "a face's outer boundary is not listed first".to_string(),
             Problem::ShellsOverlap { .. } => "separate skins of the body overlap".to_string(),
             Problem::VertexFans { fans, .. } => format!("{fans} separate fans of faces meet at a corner"),
+            Problem::BackLink { .. } => {
+                "the body's parts are not linked to each other consistently".to_string()
+            }
+            Problem::ShellFaces { .. } => {
+                "a skin of the body does not list its faces consistently".to_string()
+            }
+            Problem::ShellDisconnected { .. } => "a skin of the body is in separate pieces".to_string(),
+            Problem::StrayVertex { .. } => "a corner of the body is on no edge".to_string(),
         }
     }
 
@@ -158,7 +190,10 @@ impl Problem {
             | Problem::OuterNotFirst { face }
             | Problem::ShellsOverlap { face } => Some(f(face)),
             Problem::LoopEmpty { lp } | Problem::LoopBroken { lp, .. } => Some(f(body.lp(lp).face)),
-            Problem::VertexTolerance { vertex, .. } | Problem::VertexFans { vertex, .. } => Some(v(vertex)),
+            Problem::VertexTolerance { vertex, .. }
+            | Problem::VertexFans { vertex, .. }
+            | Problem::StrayVertex { vertex } => Some(v(vertex)),
+            Problem::BackLink { .. } | Problem::ShellFaces { .. } | Problem::ShellDisconnected { .. } => None,
             Problem::DuplicateName { name } => Some(Entity::Named(name)),
             Problem::Euler { .. } | Problem::ShellEuler { .. } => None,
         }
@@ -418,6 +453,11 @@ fn quiet_loops(a: &Body, f: FaceId, b: &Body, o: FaceId) -> Option<(Vec<bool>, B
 
 fn check_known(body: &Body, known: &Known) -> Vec<Problem> {
     let mut out = Vec::new();
+    // every other test reads through these links: where they are wrong, they are all there is to say
+    check_links(body, &mut out);
+    if !out.is_empty() {
+        return out;
+    }
     check_edges(body, &mut out);
     check_loops(body, &mut out);
     check_geometry(body, known, &mut out);
@@ -438,7 +478,185 @@ fn check_known(body: &Body, known: &Known) -> Vec<Problem> {
         check_shell_euler(body, &mut out);
         check_fans(body, &mut out);
     }
+    check_shell_faces(body, &mut out);
+    check_strays(body, &mut out);
     out
+}
+
+/// Whether coedge `c` is one of loop `lp`'s.
+fn in_loop(lp: &crate::body::Loop, c: CoedgeId) -> bool {
+    let n = lp.coedges().len() as u32;
+    n > 0 && (lp.coedge(0).0..lp.coedge(0).0 + n).contains(&c.0)
+}
+
+/// The links between entities (`WF` of verify/forge-topo-check/lean/TopoCheck/Spec.lean), and that
+/// every id is in range: each live face's loops are its own; each loop of a live face is listed by
+/// it once, and its coedges name it and are uses of their (live) edges; each live edge's uses
+/// are coedges of it in such loops, and its ends are vertices.
+fn check_links(body: &Body, out: &mut Vec<Problem>) {
+    let (nv, ne, nc, nl, nf) = (
+        body.vertices.len(),
+        body.edges.len(),
+        body.coedges.len(),
+        body.loops.len(),
+        body.faces.len(),
+    );
+    let mut listed = vec![0u32; nl];
+    for f in body.face_ids() {
+        let mut ok = true;
+        for &l in body.face(f).loops.iter() {
+            if l.index() >= nl || body.loops[l.index()].face != f {
+                ok = false;
+            } else {
+                listed[l.index()] += 1;
+            }
+        }
+        if !ok {
+            out.push(Problem::BackLink {
+                what: "face",
+                id: f.0,
+            });
+        }
+    }
+    for (i, e) in body.edges.iter().enumerate() {
+        if !e.alive {
+            continue;
+        }
+        let ok = e.start.index() < nv
+            && e.end.index() < nv
+            && e.coedges.iter().all(|&c| {
+                c.index() < nc && {
+                    let co = &body.coedges[c.index()];
+                    co.edge.index() == i
+                        && co.lp.index() < nl
+                        && listed[co.lp.index()] == 1
+                        && in_loop(&body.loops[co.lp.index()], c)
+                }
+            });
+        if !ok {
+            out.push(Problem::BackLink {
+                what: "edge",
+                id: i as u32,
+            });
+        }
+    }
+    for (i, lp) in body.loops.iter().enumerate() {
+        let f = lp.face.index();
+        // left over from an in-place edit (a dead face's, or one `remove_loop` took off): no part
+        // of the body, left for `compact`
+        if f < nf && (!body.faces[f].alive || listed[i] == 0) {
+            continue;
+        }
+        let ok = f < nf
+            && listed[i] == 1
+            && lp.coedges().all(|c| {
+                c.index() < nc && {
+                    let co = &body.coedges[c.index()];
+                    co.lp.index() == i
+                        && co.edge.index() < ne
+                        && body.edges[co.edge.index()].alive
+                        && body.edges[co.edge.index()].coedges.contains(&c)
+                }
+            });
+        if !ok {
+            out.push(Problem::BackLink {
+                what: "loop",
+                id: i as u32,
+            });
+        }
+    }
+}
+
+/// The shells: each lists its faces once, each live face is in the one shell it names, the faces
+/// at an edge share a shell, and a shell's faces are joined through its edges. A shell at fault
+/// is named once; `shells.len()` names a face whose shell is out of range.
+fn check_shell_faces(body: &Body, out: &mut Vec<Problem>) {
+    let (ns, nf) = (body.shells.len(), body.faces.len());
+    let mut bad = vec![false; ns + 1];
+    let mut listed = vec![0u32; nf];
+    for (s, sh) in body.shells.iter().enumerate() {
+        if sh.faces.is_empty() {
+            bad[s] = true;
+        }
+        for &f in &sh.faces {
+            if f.index() >= nf || !body.faces[f.index()].alive || body.faces[f.index()].shell.index() != s {
+                bad[s] = true;
+            } else {
+                listed[f.index()] += 1;
+            }
+        }
+    }
+    let at = |f: FaceId| body.face(f).shell.index().min(ns);
+    for f in body.face_ids() {
+        if listed[f.index()] != 1 {
+            bad[at(f)] = true;
+        }
+    }
+    for e in body.edge_ids() {
+        let uses = &body.edge(e).coedges;
+        if let Some(&c0) = uses.first() {
+            let s0 = body.face(body.coedge_face(c0)).shell;
+            if uses.iter().any(|&c| body.face(body.coedge_face(c)).shell != s0) {
+                bad[at(body.coedge_face(c0))] = true;
+            }
+        }
+    }
+    for (s, &b) in bad.iter().enumerate() {
+        if b {
+            out.push(Problem::ShellFaces {
+                shell: ShellId(s as u32),
+            });
+        }
+    }
+    // joined: every face of a sound shell reached from its first through edges (`seen` holds the
+    // shell a face was last reached from, so each shell's flood is its own)
+    let mut seen = vec![usize::MAX; nf];
+    let mut stack = Vec::new();
+    for (s, sh) in body.shells.iter().enumerate() {
+        if bad[s] {
+            continue;
+        }
+        stack.push(sh.faces[0]);
+        seen[sh.faces[0].index()] = s;
+        while let Some(f) = stack.pop() {
+            for &l in body.face(f).loops.iter() {
+                for c in body.lp(l).coedges() {
+                    for &u in body.edge(body.coedge(c).edge).coedges.iter() {
+                        let g = body.coedge_face(u);
+                        if seen[g.index()] != s {
+                            seen[g.index()] = s;
+                            stack.push(g);
+                        }
+                    }
+                }
+            }
+        }
+        if sh.faces.iter().any(|f| seen[f.index()] != s) {
+            out.push(Problem::ShellDisconnected {
+                shell: ShellId(s as u32),
+            });
+        }
+    }
+}
+
+/// Every vertex is an end of an edge (a dead edge's ends are left over from an in-place edit,
+/// for `compact` to drop with it).
+fn check_strays(body: &Body, out: &mut Vec<Problem>) {
+    let mut used = vec![false; body.vertices.len()];
+    for e in &body.edges {
+        for v in [e.start, e.end] {
+            if let Some(u) = used.get_mut(v.index()) {
+                *u = true;
+            }
+        }
+    }
+    for (v, &u) in used.iter().enumerate() {
+        if !u {
+            out.push(Problem::StrayVertex {
+                vertex: VertexId(v as u32),
+            });
+        }
+    }
 }
 
 /// Edges on a traced curve that strays from its chain (`IntCurve::strays`) looked at closely: 16
@@ -469,6 +687,15 @@ pub fn stray_edges_from(body: &Body, first: usize) -> Vec<Problem> {
             }
             let s = &body.face(f).surface;
             let worst = pts.iter().map(|&p| s.distance(p)).fold(0.0, f64::max);
+            #[cfg(feature = "decisions")]
+            face_log::record(
+                body,
+                e,
+                f,
+                worst,
+                edge.tol.max(tol::LINEAR),
+                "check: a stray edge, 256 points",
+            );
             if worst > edge.tol.max(tol::LINEAR) {
                 out.push(Problem::EdgeOffFace {
                     edge: e,
@@ -561,6 +788,15 @@ pub fn certify(body: &Body) -> Vec<Problem> {
         for f in faces {
             let s = &body.face(f).surface;
             let worst = pts.iter().map(|&p| s.distance(p)).fold(0.0, f64::max);
+            #[cfg(feature = "decisions")]
+            face_log::record(
+                body,
+                e,
+                f,
+                worst,
+                body.edge(e).tol.max(tol::LINEAR),
+                "certify: 256 points",
+            );
             let known = |p: &Problem| matches!(p, Problem::EdgeOffFace { edge, face, .. } if *edge == e && *face == f);
             if worst > body.edge(e).tol.max(tol::LINEAR) && !out.iter().any(known) {
                 out.push(Problem::EdgeOffFace {
@@ -575,25 +811,33 @@ pub fn certify(body: &Body) -> Vec<Problem> {
 }
 
 fn check_shell_euler(body: &Body, out: &mut Vec<Problem>) {
+    // the distinct edges and vertices of each shell, counted by stamping each with the shell
+    // (the same counts as sorting and dedup, without the sorts)
+    let mut edge_at = vec![u32::MAX; body.edges.len()];
+    let mut vert_at = vec![u32::MAX; body.vertices.len()];
     for (si, shell) in body.shells.iter().enumerate() {
-        let (mut f, mut l) = (0i64, 0i64);
-        let (mut edges, mut verts) = (Vec::new(), Vec::new());
+        let stamp = si as u32;
+        let (mut f, mut l, mut e, mut v) = (0i64, 0i64, 0i64, 0i64);
         for &face in &shell.faces {
             f += 1;
             for &lp in &body.face(face).loops {
                 l += 1;
                 for c in body.lp(lp).coedges() {
-                    let e = body.coedge(c).edge;
-                    edges.push(e);
-                    verts.extend([body.edge(e).start, body.edge(e).end]);
+                    let ed = body.coedge(c).edge;
+                    if edge_at[ed.index()] != stamp {
+                        edge_at[ed.index()] = stamp;
+                        e += 1;
+                    }
+                    for x in [body.edge(ed).start, body.edge(ed).end] {
+                        if vert_at[x.index()] != stamp {
+                            vert_at[x.index()] = stamp;
+                            v += 1;
+                        }
+                    }
                 }
             }
         }
-        edges.sort();
-        edges.dedup();
-        verts.sort();
-        verts.dedup();
-        let value = verts.len() as i64 - edges.len() as i64 + 2 * f - l;
+        let value = v - e + 2 * f - l;
         if value % 2 != 0 || value > 2 {
             out.push(Problem::ShellEuler {
                 shell: crate::body::ShellId(si as u32),
@@ -716,6 +960,8 @@ pub fn edge_off_face(body: &Body, e: EdgeId, f: FaceId) -> Option<Problem> {
     if worst > band {
         worst = points.iter().map(|&p| s.distance(p)).fold(0.0, f64::max);
     }
+    #[cfg(feature = "decisions")]
+    face_log::record(body, e, f, worst, band, "check: edge_off_face, 16 points");
     (worst > band).then_some(Problem::EdgeOffFace {
         edge: e,
         face: f,
@@ -1148,4 +1394,74 @@ pub fn genus(body: &Body) -> i64 {
     let value = body.vertices.len() as i64 - body.edges.len() as i64 + 2 * body.faces.len() as i64
         - body.loops.len() as i64;
     body.shells.len() as i64 - value / 2
+}
+
+/// The decision log's view of check's edge-on-face answers (feature `decisions`): each edge's
+/// farthest sample from a face of its, against the edge's tolerance, at each site that asks.
+/// Recorded only inside `collect`, and only near the limit (within 100 LINEAR).
+#[cfg(feature = "decisions")]
+pub mod face_log {
+    use crate::body::{Body, EdgeId, FaceId};
+    use forge_math::tol;
+    use std::cell::RefCell;
+
+    /// One answer: the body's address, the edge, the face, on (1) or off (0), the farthest
+    /// sample's distance against the limit, and the site.
+    #[derive(Clone, Copy, Debug)]
+    pub struct OnFace {
+        pub body: usize,
+        pub edge: EdgeId,
+        pub face: FaceId,
+        pub answer: u8,
+        pub measure: f64,
+        pub limit: f64,
+        pub site: &'static str,
+    }
+
+    thread_local! {
+        static LOG: RefCell<Option<Vec<OnFace>>> = const { RefCell::new(None) };
+    }
+
+    struct Restore(Option<Vec<OnFace>>);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            let outer = self.0.take();
+            LOG.with(|l| *l.borrow_mut() = outer);
+        }
+    }
+
+    /// `f`, with the answers it gave (a nested `collect` keeps its own).
+    pub fn collect<T>(f: impl FnOnce() -> T) -> (T, Vec<OnFace>) {
+        let restore = Restore(LOG.with(|l| l.borrow_mut().replace(Vec::new())));
+        let r = f();
+        let got = LOG.with(|l| l.borrow_mut().take()).unwrap_or_default();
+        drop(restore);
+        (r, got)
+    }
+
+    pub(crate) fn record(
+        body: &Body,
+        edge: EdgeId,
+        face: FaceId,
+        measure: f64,
+        limit: f64,
+        site: &'static str,
+    ) {
+        if measure > 100.0 * tol::LINEAR {
+            return;
+        }
+        LOG.with(|l| {
+            if let Some(v) = l.borrow_mut().as_mut() {
+                v.push(OnFace {
+                    body: body as *const Body as usize,
+                    edge,
+                    face,
+                    answer: (measure <= limit) as u8,
+                    measure,
+                    limit,
+                    site,
+                });
+            }
+        });
+    }
 }

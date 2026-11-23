@@ -7,10 +7,36 @@ use crate::values::{Dim, Ty};
 use forge_agent::json::Json;
 
 /// A param: shared (no owner) or local to the feature path `owner` (`boss`, `lug.hub`, `bolt[2]`).
-#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Clone, Debug, Eq)]
 pub struct ParamKey {
     pub owner: Vec<Seg>,
     pub name: String,
+}
+
+// by owner, then name; one key (a set's, shared) is itself at once
+impl std::hash::Hash for ParamKey {
+    fn hash<H: std::hash::Hasher>(&self, h: &mut H) {
+        self.owner.hash(h);
+        self.name.hash(h);
+    }
+}
+impl PartialEq for ParamKey {
+    fn eq(&self, o: &ParamKey) -> bool {
+        std::ptr::eq(self, o) || (self.owner == o.owner && self.name == o.name)
+    }
+}
+impl PartialOrd for ParamKey {
+    fn partial_cmp(&self, o: &ParamKey) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(o))
+    }
+}
+impl Ord for ParamKey {
+    fn cmp(&self, o: &ParamKey) -> std::cmp::Ordering {
+        if std::ptr::eq(self, o) {
+            return std::cmp::Ordering::Equal;
+        }
+        (&self.owner, &self.name).cmp(&(&o.owner, &o.name))
+    }
 }
 
 impl PartialOrd for Seg {
@@ -165,7 +191,7 @@ pub enum Op {
     /// statement made, where missing), or with no text is taken out.
     SetProperty { key: String, text: Option<String> },
     /// The statement making `id`, its params, and every statement reading it out of the build,
-    /// their lines kept as comments `#~ID ..` (`.fc`'s suppress).
+    /// their lines kept as comments `#~ID ..`.
     Suppress { id: String },
     /// The lines `Suppress {id}` kept as comments put back.
     Unsuppress { id: String },
@@ -616,6 +642,20 @@ pub enum Error {
         id: String,
         first: Span,
     },
+    /// Two features whose ids the kernel names by one number (`build::history_id`): each would
+    /// select and round the other's entities as its own. `first` made `other`.
+    HistoryIdClash {
+        span: Span,
+        id: String,
+        other: String,
+        first: Span,
+    },
+    /// Respell at a span that is not exactly one read of a name: a binder (Rename's), a member,
+    /// or a part of a token.
+    NotARead {
+        span: Span,
+        text: String,
+    },
     IndexOut {
         span: Span,
         index: i64,
@@ -673,6 +713,18 @@ pub enum Error {
         error: forge_model::RegenError,
         /// The largest value of the param driving a refused size that builds (`Options::fit_sizes`).
         fit: Option<Box<(ParamKey, Literal)>>,
+    },
+    /// A tapered extrude whose outline closes up before its depth (a lint): built to where it
+    /// closes, the pyramid or ridge its walls make, `at` from its sketch where `depth` was asked.
+    /// The fixes: the param driving the depth set to `at`, or the one driving the taper set to the
+    /// largest angle that reaches the depth.
+    TaperCloses {
+        span: Span,
+        id: String,
+        at: f64,
+        depth: f64,
+        depth_fix: Option<Box<(ParamKey, Literal)>>,
+        angle_fix: Option<Box<(ParamKey, Literal)>>,
     },
     /// A role anchor whose faces the part no longer has.
     NoFace {
@@ -757,6 +809,8 @@ pub enum Error {
     Sheet(Box<crate::sheet::SheetErr>),
     /// Thermoforming: the kernel's refusals and the language's own (`thermo.rs`).
     Thermo(Box<crate::thermo::ThermoErr>),
+    /// Weldments: the frame rule's refusals and the language's own (`weld.rs`).
+    Weld(Box<crate::weld::WeldErr>),
     /// A used file (`uses.rs`): missing, cyclic, misplaced, failing, or the target of an edit.
     Use(Box<crate::uses::UseErr>),
     // ---- shapes (sweep, coil, loft, shell, draft, offset, rib, face fillets, balls) ----
@@ -856,6 +910,8 @@ impl Error {
             | ShadowsBuiltin { span, .. }
             | ParamTwice { span, .. }
             | DuplicateId { span, .. }
+            | HistoryIdClash { span, .. }
+            | NotARead { span, .. }
             | IndexOut { span, .. }
             | ReturnOutsideFn { span }
             | WrongPlace { span, .. }
@@ -867,6 +923,7 @@ impl Error {
             | SketchKernel { span, .. }
             | SketchProfile { span, .. }
             | Build { span, .. }
+            | TaperCloses { span, .. }
             | NoFace { span, .. }
             | NotPlanar { span, .. }
             | EmptySelection { span }
@@ -895,6 +952,7 @@ impl Error {
             | NotFinite { .. } => None,
             Sheet(e) => e.span(),
             Thermo(e) => e.span(),
+            Weld(e) => e.span(),
             Use(e) => e.span(),
             Props(e) => e.span(),
         }
@@ -929,6 +987,8 @@ impl Error {
             ShadowsBuiltin { .. } => "ShadowsBuiltin",
             ParamTwice { .. } => "ParamTwice",
             DuplicateId { .. } => "DuplicateId",
+            HistoryIdClash { .. } => "HistoryIdClash",
+            NotARead { .. } => "NotARead",
             IndexOut { .. } => "IndexOut",
             ReturnOutsideFn { .. } => "ReturnOutsideFn",
             WrongPlace { .. } => "WrongPlace",
@@ -940,6 +1000,7 @@ impl Error {
             SketchKernel { .. } => "SketchKernel",
             SketchProfile { .. } => "SketchProfile",
             Build { .. } => "Build",
+            TaperCloses { .. } => "TaperCloses",
             NoFace { .. } => "NoFace",
             NotPlanar { .. } => "NotPlanar",
             EmptySelection { .. } => "EmptySelection",
@@ -957,6 +1018,7 @@ impl Error {
             NotFinite { .. } => "NotFinite",
             Sheet(e) => e.kind(),
             Thermo(e) => e.kind(),
+            Weld(e) => e.kind(),
             Use(e) => e.kind(),
             Props(e) => e.kind(),
             NotWith { .. } => "NotWith",
@@ -1015,12 +1077,23 @@ impl Error {
             ],
             // what reads the entity goes too, or the edit keeps it
             EntityStillRead { reader, .. } => vec![Op::DeleteFeature { id: reader.clone() }],
-            // a size too big for where it goes: as large as builds (.fc's `try:`)
+            // a size too big for where it goes: as large as builds
             Build { fit: Some(fit), .. } => vec![Op::SetParam {
                 param: fit.0.clone(),
                 value: fit.1,
             }],
-            // a misspelt name: the nearest in reach (.fc's `try:`)
+            // as deep as it closes, or as steep as reaches the depth
+            TaperCloses {
+                depth_fix, angle_fix, ..
+            } => [depth_fix, angle_fix]
+                .into_iter()
+                .flatten()
+                .map(|f| Op::SetParam {
+                    param: f.0.clone(),
+                    value: f.1,
+                })
+                .collect(),
+            // a misspelt name: the nearest in reach
             UnknownName {
                 span, near: Some(n), ..
             } if span.hi > span.lo => vec![Op::Respell {
@@ -1033,6 +1106,7 @@ impl Error {
             }],
             Sheet(e) => e.fixes(),
             Thermo(e) => e.fixes(),
+            Weld(e) => e.fixes(),
             Feat(e) => e.fixes(),
             Std(e) => e.fixes(),
             Asm(n) => n.fixes(),
@@ -1047,7 +1121,7 @@ impl Error {
         match self {
             Syntax(s) => match s {
                 SyntaxError::BadNumber { .. } => "a malformed number".into(),
-                SyntaxError::UnknownUnit { .. } => "unknown unit (mm, deg)".into(),
+                SyntaxError::UnknownUnit { .. } => "unknown unit (mm, in, deg)".into(),
                 SyntaxError::OpenString { .. } => "a string not closed".into(),
                 SyntaxError::BadChar { .. } => "a character Forge does not use".into(),
                 SyntaxError::Expected { what, .. } => format!("expected {what}"),
@@ -1063,6 +1137,11 @@ impl Error {
                     format!("`{word}` is a keyword now and cannot be a name: rename it")
                 }
             },
+            TaperCloses { id, at, depth, .. } => format!(
+                "{id}: the taper closes at depth {} before {}: built to where its walls meet",
+                crate::values::fmt(*at),
+                crate::values::fmt(*depth)
+            ),
             LooseLiteral { value, rule, .. } => format!(
                 "loose number {}: numbers live in shared/param definitions [{}]",
                 crate::values::fmt(*value),
@@ -1123,6 +1202,12 @@ impl Error {
             }
             ParamTwice { param, .. } => format!("{param} is defined twice"),
             DuplicateId { id, .. } => format!("feature id {id} is made twice"),
+            HistoryIdClash { id, other, .. } => {
+                format!("features {other} and {id} have one kernel name (history id); rename one")
+            }
+            NotARead { text, .. } => {
+                format!("Respell takes a whole read of a name, not `{text}`; Rename renames a binder")
+            }
             IndexOut { index, len, .. } => format!("index {index} out of 0..{len}"),
             ReturnOutsideFn { .. } => "return outside a function".into(),
             WrongPlace {
@@ -1191,6 +1276,7 @@ impl Error {
             }
             Sheet(e) => e.text(),
             Thermo(e) => e.text(),
+            Weld(e) => e.text(),
             Use(e) => e.text(),
             Props(e) => e.text(),
             NotWith { func, arg, with, .. } => format!("{func}: {arg} does not apply with {with}"),
@@ -1242,6 +1328,9 @@ impl Error {
         use Error::*;
         let s = |x: &str| Json::Str(x.into());
         match self {
+            TaperCloses { id, at, depth, .. } => {
+                vec![("id", s(id)), ("at", (*at).into()), ("depth", (*depth).into())]
+            }
             LooseLiteral { value, rule, .. } => vec![("value", (*value).into()), ("rule", s(rule.name()))],
             WorldAfterFirst { first, rule, .. } => vec![("first", s(first)), ("rule", s(rule.name()))],
             Recursion { func, rule, .. } => vec![("func", s(func)), ("rule", s(rule.name()))],
@@ -1283,6 +1372,8 @@ impl Error {
             UnknownArg { func, arg, .. } => vec![("func", s(func)), ("arg", s(arg))],
             MissingArg { func, arg, .. } => vec![("func", s(func)), ("arg", s(arg))],
             DuplicateId { id, .. } | Build { id, .. } => vec![("id", s(id))],
+            HistoryIdClash { id, other, .. } => vec![("id", s(id)), ("other", s(other))],
+            NotARead { text, .. } => vec![("text", s(text))],
             NoFace { id, role, .. } | NotPlanar { id, role, .. } => {
                 vec![("id", s(id)), ("role", s(&format!("{role:?}")))]
             }
@@ -1322,6 +1413,7 @@ impl Error {
             ShadowsTopLevel { name, .. } => vec![("name", s(name))],
             Sheet(e) => e.data(),
             Thermo(e) => e.data(),
+            Weld(e) => e.data(),
             Use(e) => e.data(),
             Props(e) => e.data(),
             NotWith { func, arg, with, .. } => vec![("func", s(func)), ("arg", s(arg)), ("with", s(with))],
@@ -1419,6 +1511,16 @@ fn regen_text(e: &forge_model::RegenError) -> String {
         G::NotClosed { what, .. } => format!("{what} is gone, so the part is no closed solid"),
         G::MissingEdge { name, .. } => format!("the part has no edge {name:?}"),
         G::Bodies { count } => format!("the part ends as {count} bodies, not one"),
+        G::Body {
+            error: forge_model::BodyError::Pieces { pieces },
+            ..
+        } => format!(
+            "the end trim would leave the member in {pieces} pieces: trim it to what lies across its end"
+        ),
+        G::Body {
+            error: forge_model::BodyError::Unsupported(what),
+            ..
+        } => format!("{what} is not supported"),
         _ => words(e),
     }
 }

@@ -1,5 +1,5 @@
-# A part the kernel builds and the check does not pass: the boss's top edge rounded, then a
-# cross with rounded inner corners cut down through the round, whose edges end off their face.
+# Once a part the kernel built with edges off their faces (EdgeOffFace): the boss's top edge
+# rounded, then a cross with rounded inner corners cut down through the round. Now built valid.
 sketch foot(on: xy) {
   c = circle((0, 0), 4.5)
 }

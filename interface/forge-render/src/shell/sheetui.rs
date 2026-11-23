@@ -130,6 +130,8 @@ pub(super) fn sheet_groups(s: &Shell) -> Vec<Group> {
             )],
             vec![
                 tool("Rules", SheetCmd::Rules, s.sheet.rules_open.is_some()),
+                tool("Vendor", SheetCmd::Vendor, s.sheet.vendor.open),
+                tool("Check (DFM)", SheetCmd::Dfm, s.sheet.vendor.dfm_open),
                 Tool {
                     name: "Convert to Part",
                     icon: "folder",
@@ -155,6 +157,8 @@ pub(super) fn flat_groups(s: &Shell) -> Vec<Group> {
             "Manage",
             vec![
                 tool("Bend Table", SheetCmd::BendTable, u.bend_table),
+                tool("Bend Simulation", SheetCmd::BendSim, u.bend_sim.is_some()),
+                tool("Check (DFM)", SheetCmd::Dfm, u.vendor.dfm_open),
                 tool("Save Copy As DXF/DWG", SheetCmd::ExportDxf, u.dxf_open.is_some()),
             ],
             vec![],
@@ -233,7 +237,9 @@ impl Shell {
         self.sheet_defaults(ctx);
         self.sheet_rules(ctx);
         self.sheet_bend_table(ctx);
+        self.sheet_bend_sim(ctx);
         self.sheet_dxf(ctx);
+        self.vendor_ui(ctx);
     }
 
     fn sheet_window<R>(
@@ -553,7 +559,7 @@ impl Shell {
                         for c in choices {
                             let sel = picked.contains(&c);
                             let r = ui.add(
-                                egui::Button::new(egui::RichText::new(&c).font(mono(10.0)))
+                                egui::Button::new(egui::RichText::new(&c).font(mono(11.0)))
                                     .small()
                                     .selected(sel),
                             );
@@ -771,7 +777,7 @@ impl Shell {
                     r.center_bottom() - vec2(0.0, 8.0),
                     Align2::CENTER_CENTER,
                     tl.about,
-                    sans(10.0),
+                    sans(11.0),
                     t.ink2,
                 );
                 places.push(("sheet:preview".into(), r));
@@ -992,7 +998,7 @@ impl Shell {
                         for (n, text) in &existing {
                             ui.label(egui::RichText::new(n).font(medium(12.0)).color(t.ink));
                             ui.add(
-                                egui::Label::new(egui::RichText::new(text).font(mono(10.0)).color(t.ink2))
+                                egui::Label::new(egui::RichText::new(text).font(mono(11.0)).color(t.ink2))
                                     .wrap(),
                             );
                         }
@@ -1071,6 +1077,28 @@ impl Shell {
         }
         if !close {
             self.sheet.rules_open = Some(nr);
+        }
+    }
+
+    fn sheet_bend_sim(&mut self, ctx: &egui::Context) {
+        let Some(mut st) = self.sheet.bend_sim.take() else {
+            return;
+        };
+        st.tick(f64::from(ctx.input(|i| i.stable_dt)).min(0.1));
+        if st.playing {
+            ctx.request_repaint();
+        }
+        let v = self.view_rect;
+        let (close, _) = self.sheet_window(
+            ctx,
+            "sheet:bendsim",
+            "bendtable",
+            "Bend Simulation",
+            (pos2(v.right() - 560.0, v.top() + 48.0), 540.0),
+            |ui, _| super::bendsim::body(ui, &mut st),
+        );
+        if !close {
+            self.sheet.bend_sim = Some(st);
         }
     }
 
@@ -1307,7 +1335,28 @@ impl Shell {
                         [c - vec2(0.0, 6.0), c + vec2(0.0, 6.0)],
                         Stroke::new(1.2, t.focus),
                     );
-                    p.text(c + vec2(7.0, 7.0), Align2::LEFT_TOP, id, mono(10.0), t.focus);
+                    p.text(c + vec2(7.0, 7.0), Align2::LEFT_TOP, id, mono(11.0), t.focus);
+                }
+            }
+        }
+        // the DFM panel's violations on the blank, the chosen one larger
+        if self.sheet.vendor.dfm_open {
+            for (pts, chosen) in self.sheet.vendor.flat_marks(&f.sheet) {
+                let c = if chosen {
+                    super::vendorui::CHOSEN
+                } else {
+                    super::vendorui::MARK
+                };
+                let ps: Vec<egui::Pos2> = pts.iter().filter_map(|q| at(*q)).collect();
+                if let [a, b, ..] = ps[..] {
+                    p.line_segment([a, b], Stroke::new(if chosen { 2.5 } else { 1.5 }, c));
+                }
+                for q in ps {
+                    p.circle_stroke(
+                        q,
+                        if chosen { 9.0 } else { 5.0 },
+                        Stroke::new(if chosen { 2.5 } else { 1.5 }, c),
+                    );
                 }
             }
         }

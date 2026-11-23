@@ -10,6 +10,15 @@ repository.workspace = true
 forge-math = { path = "../forge-math" }
 forge-geom = { path = "../forge-geom" }
 forge-topo = { path = "../forge-topo" }
+forge-bool-core = { path = "../forge-bool-core", optional = true }
+
+[features]
+# the decision log (src/decisions.rs): every near-tolerance decision recorded under its entities,
+# contradictions within one boolean counted, and the retry ladder's rungs; off, nothing is compiled
+decisions = ["forge-geom/decisions", "forge-topo/decisions"]
+# the decide-once flat-face boolean (src/decide_once.rs over forge-bool-core): flat booleans go
+# through the ledger and the combinatorial core; off by default, the old path unchanged
+decide_once = ["dep:forge-bool-core"]
 
 [dev-dependencies]
 forge-ops = { path = "../forge-ops" }

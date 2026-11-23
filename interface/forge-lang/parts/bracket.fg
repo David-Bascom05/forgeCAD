@@ -1,6 +1,6 @@
 # Machined aluminium clevis bracket: a pocketed base flange with four counterbored M6 bolts,
 # an upright web carrying a lug with a revolved hub and pin bore, a lightening pocket in the
-# web, and a curved centre gusset tying web to base. Hand port of fair/fc/bracket/model.fc.
+# web, and a curved centre gusset tying web to base.
 
 shared L = 140                 # base length (x)
 shared W = 70                  # base depth (y)

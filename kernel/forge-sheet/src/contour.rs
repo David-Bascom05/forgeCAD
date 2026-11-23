@@ -104,8 +104,11 @@ pub struct Plan {
 }
 
 const MEET: f64 = tol::LINEAR;
-/// Arcs are tangent to their lines to this (radians).
-const TANGENT: f64 = 1e-9;
+/// Two directions along a piece `len` long are one when they part by at most the tolerance over
+/// it (the one rule of research/kernel-audit/README.md §6.1): |sin| len <= LINEAR.
+fn same_way(angle: f64, len: f64) -> bool {
+    dmath::sin(angle.abs().min(0.5 * dmath::PI)) * len <= tol::LINEAR
+}
 
 fn arc_end(center: Point2, radius: f64, a: f64) -> Point2 {
     let (s, c) = dmath::sin_cos(a);
@@ -222,7 +225,7 @@ pub fn plan(profile: &[Segment], start: Option<Vec2>) -> Result<Plan, ContourErr
         let mut b = a + d * len;
         let mut j = k + 1;
         while let Some(&P::Line { d: d2, len: l2, .. }) = ps.get(j) {
-            if turn(d, d2).abs() > TANGENT {
+            if !same_way(turn(d, d2), len.min(l2)) {
                 break;
             }
             b += d * l2;
@@ -236,21 +239,24 @@ pub fn plan(profile: &[Segment], start: Option<Vec2>) -> Result<Plan, ContourErr
                 k = j;
             }
             Some(&P::Arc { r, d0, d1, sweep, .. }) => {
-                let P::Line { d: d2, .. } = ps[j + 1] else {
+                let P::Line { d: d2, len: l2, .. } = ps[j + 1] else {
                     return Err(ContourError::ArcsMeet { piece: j + 1 });
                 };
-                for (x, y) in [(d, d0), (d1, d2)] {
+                // tangent: the line and the arc's end one direction over the line's length
+                for (x, y, l) in [(d, d0, len), (d1, d2, l2)] {
                     let angle = turn(x, y);
-                    if angle.is_nan() || angle.abs() > TANGENT {
+                    if angle.is_nan() || !same_way(angle, l) {
                         return Err(ContourError::NotTangent {
                             piece: j,
                             angle,
-                            limit: TANGENT,
+                            limit: tol::LINEAR / l,
                         });
                     }
                 }
                 let th = turn(d, d2);
-                if (th - sweep).abs() > 1e-9 {
+                // the turn from line to line is the sweep or a whole turn off it (the arc turning
+                // the other way round): the two lie 2 pi apart, so pi tells them
+                if (th - sweep).abs() > dmath::PI {
                     // tangent at both ends but turning the other way round: a turn past half
                     return Err(ContourError::Turn {
                         piece: j,
@@ -265,9 +271,9 @@ pub fn plan(profile: &[Segment], start: Option<Vec2>) -> Result<Plan, ContourErr
     }
     if let Some(s) = start {
         // the corner where the profile leaves the edge
-        let (_, _, _, d0) = walls[0];
+        let (_, l0, _, d0) = walls[0];
         let th = turn(s, d0);
-        if th.abs() <= TANGENT {
+        if same_way(th, l0) {
             return Err(ContourError::Coplanar { piece: 0 });
         }
         bends.insert(0, (0, th, None));

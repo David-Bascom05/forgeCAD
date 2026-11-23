@@ -387,13 +387,18 @@ fn refusals_are_typed() {
         build(&s, Map::Folded),
         Err(SheetError::TrimTouchesBendLine { .. })
     ));
-    // a cut's edge along the tangent line (reliefs are cut past it): refused
+    // a cut's edge along the tangent line: the wall ends there, so the zone beside the notch
+    // has a free edge on that line (decided from the wall's points: its stretches end at the
+    // notch); folded and flat, valid, the flat a notch's area less
     let mut s = part(g.clone(), 40.0, 30.0, &[(1, ang(90.0), 30.0)]);
     s.cut(WallId(0), rect(30.0, 10.0, 8.0, 5.0, 0)).unwrap();
-    assert!(matches!(
-        build(&s, Map::Folded),
-        Err(SheetError::TrimAlongBendLine { .. } | SheetError::TangentMismatch { .. })
-    ));
+    for m in [Map::Folded, Map::Flat] {
+        checked(&build(&s, m).expect("builds"));
+    }
+    let whole = part(g.clone(), 40.0, 30.0, &[(1, ang(90.0), 30.0)]);
+    let (v0, e0) = volume(&build(&whole, Map::Flat).unwrap());
+    let (v1, e1) = volume(&build(&s, Map::Flat).unwrap());
+    assert!(((v0 - v1) - 8.0 * 5.0 * g.thickness).abs() <= e0 + e1 + 1e-9);
     // a flange too short for its setback, and an arc edge
     let mut s = part(g, 40.0, 30.0, &[]);
     assert!(matches!(
@@ -557,7 +562,7 @@ fn bits_are_the_same_everywhere() {
         h = h.with(volume(&b).0.to_bits());
     }
     println!("digest {:#x}", h.0);
-    assert_eq!(h.0, 0xfd30_10ad_e7ff_90a5);
+    assert_eq!(h.0, 0x593c_d8b3_195e_7c60);
 }
 
 /// The area of the band x0..x1 of the circle (cx, a), by the chord's antiderivative.
@@ -931,14 +936,11 @@ fn fuzz_curved_edges_skimming_a_wall() {
             ]);
             s.cut(gid, cut).unwrap();
             match build(&s, Map::Folded) {
+                // whatever passes in at all is a clash or a touch: no band builds
                 Ok(b) => {
-                    assert!(depth <= 2.0 * limit, "seed {seed}: {depth} deep, built");
-                    if depth < 0.0 {
-                        checked(&b);
-                        clear += 1;
-                    } else {
-                        between += 1;
-                    }
+                    assert!(depth < 0.0, "seed {seed}: {depth} deep, built");
+                    checked(&b);
+                    clear += 1;
                 }
                 Err(SheetError::FoldedClash { at, .. }) => {
                     assert!(depth > 0.0, "seed {seed}: refused {depth} clear, at {at:?}");
@@ -950,7 +952,10 @@ fn fuzz_curved_edges_skimming_a_wall() {
                 }
                 // within tolerance of the base, neither in nor clear: an edge on a face
                 Err(SheetError::FoldedTouch { .. }) => {
-                    assert!(depth.abs() <= 2.0 * limit, "seed {seed}: touch at {depth}");
+                    assert!(
+                        depth >= -limit && depth <= 2.0 * limit,
+                        "seed {seed}: touch at {depth}"
+                    );
                     between += 1;
                 }
                 Err(e) => panic!("seed {seed} depth {depth}: {e:?}"),

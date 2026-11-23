@@ -28,11 +28,29 @@ pub struct Sk {
     pub idx: usize,
     /// Params its rows read, and whether the solver moves anything (a free point): then they
     /// are all observed, structural params.
-    pub params: std::collections::BTreeSet<crate::error::ParamKey>,
+    pub params: crate::values::Keys,
     pub free: bool,
     /// The numbers that placed and sized entities, by role ("x", "y" of a point or a circle's
     /// written centre, "r"), with where they came from: what fixes that move or resize set.
     pub nums: Vec<(EntityId, &'static str, crate::values::Num)>,
+    /// The solve `finish` came to (its regions worked out once, for this run and the next).
+    done: Done,
+}
+
+/// `Sk`'s solve: no part of what a sketch is (equal and printed as nothing).
+#[derive(Clone, Default)]
+struct Done(Option<Rc<Solved>>);
+
+impl PartialEq for Done {
+    fn eq(&self, _: &Done) -> bool {
+        true
+    }
+}
+
+impl std::fmt::Debug for Done {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("..")
+    }
 }
 
 type R<T> = Result<T, Error>;
@@ -48,6 +66,8 @@ pub struct Solved {
     /// solve), then kept for the runs after.
     dof: std::cell::Cell<Option<usize>>,
     conflicting: Vec<ConstraintId>,
+    /// `forge_sketch::profiles` of `out`, worked out the first time a profile is asked for.
+    regions: std::cell::OnceCell<Result<Vec<Profile>, forge_sketch::ExtractError>>,
 }
 
 /// One item of a hull: a point (r = 0) or a disc, in counter-clockwise order.
@@ -83,6 +103,7 @@ impl Sk {
             params: Default::default(),
             free: false,
             nums: vec![],
+            done: Done::default(),
         }
     }
 
@@ -501,6 +522,7 @@ impl Sk {
                     residual: rep.max_residual,
                     dof: std::cell::Cell::new(dof),
                     conflicting,
+                    regions: std::cell::OnceCell::new(),
                 })
             }
         };
@@ -509,6 +531,7 @@ impl Sk {
             done.dof.set(Some(done.out.freedom().0));
         }
         let r = self.outcome(&done);
+        self.done = Done(Some(done.clone()));
         (done, r)
     }
 
@@ -549,16 +572,67 @@ impl Sk {
         (h >> 24) & 0xff_ffff_ffff
     }
 
+    /// A loop that is one closed curve of the sketch (a closed spline or a whole ellipse), which
+    /// a profile hands on cut into pieces (`ProfileLoop::smooth_pieces`: a solid's edge may not
+    /// end where it starts), as that one curve again, one segment under its own id, run the way
+    /// the loop runs. Sheet metal takes it whole: one source, one trim, one curve on the flat.
+    pub fn whole_curve(&self, l: &forge_ops::ProfileLoop) -> Option<forge_ops::ProfileLoop> {
+        const PIECE: u64 = 0xffff << 48;
+        let base = l.segments.first()?.1 & !PIECE;
+        if l.segments.len() < 2
+            || !l
+                .segments
+                .iter()
+                .all(|(g, id)| matches!(g, forge_ops::Segment::Spline(_)) && id & !PIECE == base)
+        {
+            return None;
+        }
+        let e = self.ents.iter().map(|x| x.0).find(|&e| self.seg_id(e) == base)?;
+        let c = self.s.curve(e)?;
+        if !c.closed() {
+            return None;
+        }
+        let whole = forge_ops::Segment::Spline(c.clone());
+        let along: f64 = l.segments.iter().map(|(g, _)| g.area_term()).sum();
+        let c = if (whole.area_term() > 0.0) == (along > 0.0) {
+            c
+        } else {
+            std::sync::Arc::new(c.reversed())
+        };
+        Some(forge_ops::ProfileLoop::new(vec![(
+            forge_ops::Segment::Spline(c),
+            base,
+        )]))
+    }
+
     /// The region whose outside runs through one of `through` (any one if None and there is one).
-    pub fn profile(&self, through: Option<&[EntityId]>, span: Span) -> R<Profile> {
-        let ps = forge_sketch::profiles(&self.s).map_err(|error| Error::SketchProfile {
+    /// The sketch's regions, as `forge_sketch::profiles` finds them: those of the solve it came
+    /// to while it is still that sketch, worked out once there (a sketch an edit left as it was
+    /// keeps its solve, and so its regions); else afresh.
+    fn regions(&self, span: Span) -> R<std::borrow::Cow<'_, [Profile]>> {
+        let err = |error| Error::SketchProfile {
             span,
             sketch: self.id.clone(),
             error,
-        })?;
+        };
+        match &self.done.0 {
+            Some(d) if d.out.same_bits(&self.s) => {
+                match d.regions.get_or_init(|| forge_sketch::profiles(&d.out)) {
+                    Ok(ps) => Ok(std::borrow::Cow::Borrowed(&ps[..])),
+                    Err(e) => Err(err(e.clone())),
+                }
+            }
+            _ => Ok(std::borrow::Cow::Owned(
+                forge_sketch::profiles(&self.s).map_err(err)?,
+            )),
+        }
+    }
+
+    pub fn profile(&self, through: Option<&[EntityId]>, span: Span) -> R<Profile> {
+        let ps = self.regions(span)?;
         const PIECE: u64 = 0xffff << 48;
         let mut p = match through {
-            None if ps.len() == 1 => ps.into_iter().next().expect("one"),
+            None if ps.len() == 1 => ps[0].clone(),
             None => {
                 return Err(Error::Regions {
                     span,
@@ -567,7 +641,7 @@ impl Sk {
                 });
             }
             Some(ids) => ps
-                .into_iter()
+                .iter()
                 .find(|p| {
                     p.loops[0]
                         .segments
@@ -578,7 +652,8 @@ impl Sk {
                     span,
                     sketch: self.id.clone(),
                     count: 0,
-                })?,
+                })?
+                .clone(),
         };
         for l in &mut p.loops {
             for g in &mut l.segments {
@@ -591,11 +666,39 @@ impl Sk {
 
     /// Every region of the sketch, its segments named as `profile` names them.
     pub fn profiles(&self, span: Span) -> R<Vec<Profile>> {
-        let ps = forge_sketch::profiles(&self.s).map_err(|error| Error::SketchProfile {
-            span,
-            sketch: self.id.clone(),
-            error,
-        })?;
+        let ps = self.regions(span)?.into_owned();
+        const PIECE: u64 = 0xffff << 48;
+        Ok(ps
+            .into_iter()
+            .map(|mut p| {
+                for l in &mut p.loops {
+                    for g in &mut l.segments {
+                        let (piece, e) = (g.1 & PIECE, EntityId(g.1 & !PIECE));
+                        g.1 = piece | self.seg_id(e);
+                    }
+                }
+                p
+            })
+            .collect())
+    }
+
+    /// The regions only the entities `ids` bound (a text's glyphs, whatever else the sketch
+    /// draws), their segments named as `profile` names them.
+    pub fn profiles_among(&self, ids: &[EntityId], span: Span) -> R<Vec<Profile>> {
+        let mut keep = ids.to_vec();
+        keep.sort_unstable();
+        let solved = match &self.done.0 {
+            Some(d) if d.out.same_bits(&self.s) => &d.out,
+            _ => &self.s,
+        };
+        let ps =
+            forge_sketch::profiles_among(solved, &|e| keep.binary_search(&e).is_ok()).map_err(|error| {
+                Error::SketchProfile {
+                    span,
+                    sketch: self.id.clone(),
+                    error,
+                }
+            })?;
         const PIECE: u64 = 0xffff << 48;
         Ok(ps
             .into_iter()

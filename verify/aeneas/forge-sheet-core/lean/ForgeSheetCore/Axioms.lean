@@ -1,0 +1,26 @@
+import Lean
+import ForgeSheetCore.RefineClasses
+import ForgeSheetCore.RefineOwner
+import ForgeSheetCore.RefineChain
+
+/-! Only the standard axioms: each listed theorem about the translated Rust rests on `propext`,
+`Classical.choice` and `Quot.sound` alone (a `sorry` or `native_decide` fails the build). -/
+
+open Lean Elab Command
+
+elab "#standard_axioms " ids:ident* : command => do
+  for id in ids do
+    let n ← liftCoreM (realizeGlobalConstNoOverloadWithInfo id)
+    let axs ← liftCoreM (collectAxioms n)
+    for a in axs do
+      unless a == ``propext || a == ``Classical.choice || a == ``Quot.sound do
+        throwError "{n} rests on the axiom {a}"
+
+#standard_axioms
+  forge_sheet_core.find_spec forge_sheet_core.union_spec forge_sheet_core.new_spec
+  forge_sheet_core.loop0_spec forge_sheet_core.loop1_spec forge_sheet_core.classes_spec
+  forge_sheet_core.classList_iff forge_sheet_core.inner_spec forge_sheet_core.owner_spec
+  forge_sheet_core.fo_block forge_sheet_core.in_block forge_sheet_core.loop0_chain_spec
+  forge_sheet_core.unchained_block forge_sheet_core.pinch_block forge_sheet_core.loop1_chain_spec
+  ForgeSheetCore.Walk.walk_closes ForgeSheetCore.Walk.closed_add forge_sheet_core.succ_perm
+  forge_sheet_core.walk_spec forge_sheet_core.walks_spec forge_sheet_core.chain_spec

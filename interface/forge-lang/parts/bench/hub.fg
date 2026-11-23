@@ -1,7 +1,6 @@
 # Wheel hub: a turned flange and spigot, its work axis and the point where it meets the back
 # face, five stud holes on the bolt circle there, cooling scallops patterned round the rim edge,
 # two circlip grooves patterned along the axis, lightening holes between the studs.
-# Hand port of tools/bench-parts/hub.fc.
 
 shared pcd = 114.3
 shared n = count(5)

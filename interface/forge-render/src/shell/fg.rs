@@ -365,6 +365,9 @@ pub struct FgPanel {
     pub picked: Option<Result<String, super::fgtool::ToolError>>,
     /// The Parameters dialog is up.
     pub params_open: bool,
+    /// The weldments' cut list, as the last build had it; its panel up.
+    pub cutlist: super::weld_ui::CutList,
+    pub cutlist_open: bool,
     /// The Issues window is up, over the status bar.
     pub issues_list: bool,
     /// Edit Occurrence: a placed component call's args.
@@ -393,6 +396,8 @@ pub fn suppressed(src: &str) -> Vec<Suppressed> {
         let Some((id, line)) = rest.split_once(' ') else {
             continue;
         };
+        // `#~ID<`, `#~ID>`: a statement Suppress put on a line of its own
+        let id = id.trim_end_matches(['<', '>']);
         let at = match out.iter().position(|x| x.id == id) {
             Some(i) => i,
             None => {
@@ -988,9 +993,7 @@ impl Shell {
                     let flag = fg.flag(&row.key);
                     let tint = match flag {
                         Some(Severity::Error) => Some(t.error),
-                        Some(Severity::Lint | Severity::Warning | Severity::Violation) => {
-                            Some(Color32::from_rgb(0xE0, 0xA0, 0x30))
-                        }
+                        Some(Severity::Lint | Severity::Warning | Severity::Violation) => Some(WARN),
                         None => None,
                     };
                     icons::draw(
@@ -1042,7 +1045,20 @@ impl Shell {
                         places.push((format!("fg:eye:{}", row.key), eye_rect(r)));
                     }
                     if let Some(c) = tint {
-                        p.circle_filled(pos2(r.right() - 4.0, r.top() + 6.0), 3.0, c);
+                        let at = pos2(r.right() - 4.0, r.top() + 6.0);
+                        p.circle_filled(at, 3.0, c);
+                        // what the dot means, on its own hover
+                        let why = if flag == Some(Severity::Error) {
+                            "An error here: the status bar's chip lists it"
+                        } else {
+                            "A warning here: the status bar's chip lists it"
+                        };
+                        ui.interact(
+                            Rect::from_center_size(at, vec2(10.0, 10.0)),
+                            ui.scope_id().with(("flag", &row.key)),
+                            Sense::hover(),
+                        )
+                        .on_hover_text(why);
                     }
                     let is_sketch = kind == Some("sketch");
                     // Start Sketch waiting for a plane: a sketch row is the one to edit
@@ -1197,6 +1213,10 @@ impl Shell {
                 SlotKind::Points if is_sketch => Ok(format!("{k}.points")),
                 SlotKind::RevAxis if made("workaxis") => Ok(k.clone()),
                 SlotKind::Feature | SlotKind::Features if !is_sketch => Ok(k.clone()),
+                // a weldment's member, by its own row (`frame[2]`)
+                SlotKind::Member | SlotKind::Members if work == "member" => Ok(k.clone()),
+                // an end trimmed to a sketch's or work plane's plane, a member or a body
+                SlotKind::TrimTo => Ok(k.clone()),
                 _ => Err(ToolError::WrongPick {
                     slot: tool.slots[tool.active].label,
                     what: if is_sketch { "sketch" } else { "feature" },
@@ -1493,39 +1513,69 @@ impl Shell {
         };
         let r = ui.label(egui::RichText::new(head).font(medium(12.0)).color(ink));
         places.push(("fg:issues".into(), r.rect));
+        ui.add_space(super::theme::S1);
         let issues = std::mem::take(&mut fg.issues);
         // a long list shows its first few until asked
         let cap = if fg.all_issues { 300 } else { 8 };
         // an assembly's notes (intended contacts) are counted in Analyze Interference, not here
         let note = is_note;
-        for (i, is) in issues.iter().enumerate().filter(|x| !note(x.1)).take(cap) {
+        for (k, (i, is)) in issues
+            .iter()
+            .enumerate()
+            .filter(|x| !note(x.1))
+            .take(cap)
+            .enumerate()
+        {
             let colour = match is.severity {
                 Severity::Error => t.error,
                 _ => WARN,
             };
             let word = match is.severity {
-                Severity::Error => "error",
-                Severity::Lint => "lint",
-                Severity::Warning => "warning",
-                Severity::Violation => "violation",
+                Severity::Error => "Error",
+                Severity::Lint => "Lint",
+                Severity::Warning => "Warning",
+                Severity::Violation => "Violation",
             };
-            let r = ui.label(
-                egui::RichText::new(format!("{word} {} · line {}:{}", is.kind, is.line, is.col))
-                    .font(medium(12.0))
-                    .color(colour),
-            );
+            // each issue a row of its own: a rule between, its severity in words as well as colour
+            if k > 0 {
+                ui.add_space(super::theme::S1);
+                ui.separator();
+            }
+            ui.add_space(super::theme::S1);
+            let r = ui
+                .horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = super::theme::S2;
+                    egui::Frame::new()
+                        .fill(colour.gamma_multiply(0.16))
+                        .corner_radius(super::theme::R1)
+                        .inner_margin(egui::Margin::symmetric(6, 1))
+                        .show(ui, |ui| {
+                            ui.label(egui::RichText::new(word).font(medium(11.0)).color(colour));
+                        });
+                    ui.label(
+                        egui::RichText::new(format!("{} · line {}:{}", is.kind, is.line, is.col))
+                            .font(super::theme::caption())
+                            .color(t.ink2),
+                    );
+                })
+                .response;
             places.push((format!("fg:issue:{i}"), r.rect));
+            ui.add_space(2.0);
             ui.label(egui::RichText::new(&is.text).font(sans(12.0)).color(t.ink));
-            ui.horizontal_wrapped(|ui| {
-                for (j, op) in is.fixes.iter().enumerate() {
-                    if Self::fg_button(ui, &op_label(op), format!("fg:fix:{i}:{j}"), places) {
-                        out.push(FgAct::Apply(op.clone()));
+            if !is.fixes.is_empty() || is.asm.is_some() {
+                ui.add_space(2.0);
+                ui.horizontal_wrapped(|ui| {
+                    ui.spacing_mut().item_spacing = vec2(super::theme::S1 + 2.0, super::theme::S1);
+                    for (j, op) in is.fixes.iter().enumerate() {
+                        if Self::fg_button(ui, &op_label(op), format!("fg:fix:{i}:{j}"), places) {
+                            out.push(FgAct::Apply(op.clone()));
+                        }
                     }
-                }
-                if let Some(ai) = &is.asm {
-                    Self::asm_show_button(ui, &mut fg.asm, ai, i, out, places);
-                }
-            });
+                    if let Some(ai) = &is.asm {
+                        Self::asm_show_button(ui, &mut fg.asm, ai, i, out, places);
+                    }
+                });
+            }
         }
         let listed = issues.iter().filter(|i| !note(i)).count();
         if listed > 8 {

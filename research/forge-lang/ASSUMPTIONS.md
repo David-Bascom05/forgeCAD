@@ -613,25 +613,44 @@ check-local and drag-speed proofs the same way.
   component body reads a name the closure binds, the suppressed document evaluates, to the old
   model and log with exactly the closure's fragments removed, every other fragment (ids,
   traces) unchanged. No dependency graph: the closure (`suppFrom`, the pass `apply_suppress`
-  makes) is closed under reads by construction. `unsuppress_suppress`: Unsuppress after Suppress
-  is the identity on the text, given what `apply_suppress` refuses (a line already tagged).
-  `lines_eq_stmts`: commenting lines is removing statements when each statement has a line.
+  makes) is closed under reads by construction. On the text, a line is a list of pieces
+  (statement fragments and gaps): `suppress_live`, the parser reads exactly the kept statements'
+  pieces, in order, however many statements share a line, and `suppress_text_closure`, those are
+  `suppressAt`'s statements; `unsuppress_suppress`, Unsuppress after Suppress gives every line
+  back byte for byte (`readTag_render`: a tagged line reads back as its marks and text, given
+  what `apply_suppress` refuses, a line already tagged).
 
   | Assumption | Counterexample without it |
   |---|---|
-  | One statement per line | `same_line_drops`; in fg, `a = extrude(plan, t); b = extrude(plan, 2 * t)` and Suppress `b` takes out `a` too, `ok: true`. **Finding**: `apply_suppress` comments from the line's start. Fix: refuse when another statement shares a line with one taken out, or split the line first |
   | No function or component body reads a taken-out name | Not needed for soundness: the run is the typed error `unbound`, refused |
 
+  **Fixed** (was the assumption "one statement per line", counterexample `same_line_drops`): in
+  fg, `a = extrude(plan, t); b = extrude(plan, 2 * t)` and Suppress `b` took out `a` too, `ok:
+  true`, since `apply_suppress` commented from the line's start. Now a statement sharing its line
+  with one kept goes on a line of its own, the break put in marked in its tag (`#~b<` before it,
+  `#~b>` after it), and Unsuppress takes the break out; where a break borders another feature's
+  suppressed line, Unsuppress keeps it and moves the mark onto that line, so the two put back in
+  either order give the text back (`tests/recorded_parity.rs`, `suppress_takes_one_statement_of_a_line`;
+  the moved mark is not in the Lean model, which has one tag).
+
 - **Respell.** `respell_read_binders`: respelling reads keeps every binder, so every name id (P5);
-  `respell_text`: one splice, every other byte kept.
+  `respell_text`: one splice, every other byte kept. `respellChecked` is the op as it is now:
+  the span must be exactly a read token's (`respellChecked_read`); `respell_refuses_binder`: a
+  binder's span is refused, `respell_refuses_inside`: so is a span starting inside a token, or at
+  its start and ending elsewhere, for any lexed text (tokens nonempty and apart).
 
-  | Assumption | Counterexample without it |
-  |---|---|
-  | The span is a read | `respell_binder_renames`; in fg, Respell at `base`'s binder gives `plate = extrude(..)`, `ok: true`: a feature id changed by an op meant to fix a typo. **Finding**: `apply_respell` checks only that the bytes spell an identifier. Fix: refuse unless the span is an `UnknownName`'s, or a read |
-  | The span is a whole token | `respell_subtoken`; in fg, the span of `as` in `base` gives `bxe`. Same fix |
+  **Fixed** (were the assumptions "the span is a read" and "the span is a whole token"):
+  `respell_binder_renames`, in fg Respell at `base`'s binder gave `plate = extrude(..)`, `ok:
+  true`, a feature id changed by an op meant to fix a typo; `respell_subtoken`, the span of `as`
+  in `base` gave `bxe`. `apply_respell` now parses the text and takes the span only when it is a
+  `Name` node's (`edit::reads_at`): anything else is the typed error `NotARead`, binders being
+  Rename's (`respell_binder_refused`, `respell_subtoken_refused`: the two counterexamples,
+  refused).
 
-  Also seen: for `tt` with `t` a shared param, the UnknownName's fix is `Respell` to the builtin
-  `pt` (both one edit away; ties go to the alphabetically first). Low severity.
+  Also fixed: for `tt` with `t` a shared param, the UnknownName's fix was `Respell` to the
+  builtin `pt` (both one edit away; ties went to the alphabetically first). `edit_ops::nearest`
+  now ranks by distance, then a name the part binds (param, feature, local, function) before a
+  built-in, then alphabetically (`a_typo_respells_to_the_parts_name_before_a_builtin`).
 - **Undo / Redo.** `undo_write`: Undo right after an edit gives the text before it byte for byte
   (so, by P1, the old model). `redo_undo`, `undo_redo`: each undoes the other and leaves the
   stacks as they were, so an Undo loses nothing. `step_refused`: a hand edit since refuses the
@@ -657,16 +676,38 @@ check-local and drag-speed proofs the same way.
   theorem that keeps an id keeps the feature's kernel names. `historyId_collides`:
   `qolagjaapenjgkgca` and `qpibohgembfgikgid` have one history id (found by a distinguished-point
   search, about 2^31 hashes; `two_features_run`: a run with both has unique ids).
+  `checked_distinct`: with the check `Eval::push_made` makes (`hidCheck`: one look-up and insert
+  per feature in the kernel names so far), no two ids that pass share a kernel name;
+  `checked_complete`: it refuses only then; `run_kernel_names`: a run that evaluated and passed
+  gives its features distinct kernel names (with `run_ids_unique`); `clash_refused`: the pair
+  above is refused, both named.
 
-  | Assumption | Counterexample without it |
-  |---|---|
-  | No two features of a part share a history id (not checked anywhere) | **Finding**: in fg, two extrudes with those names and `fillet(edges(of: qolagjaapenjgkgca, crease: "convex"), 1)` build with no error; the fillet rounds the other feature's edges too (31 faces and 11904.3 mm³ against 29 and 11925.3 with other names) and the part is `valid: false` with only `DuplicateName` problems. Fix: a typed error when two features of a run share a history id (one pass over the ids), or a wider name |
+  **Fixed** (was the assumption "no two features of a part share a history id", checked
+  nowhere): in fg, two extrudes with those names and `fillet(edges(of: qolagjaapenjgkgca,
+  crease: "convex"), 1)` built with no error, the fillet rounded the other feature's edges too
+  (31 faces and 11904.3 mm³ against 29 and 11925.3 with other names), and the part was `valid:
+  false` with only `DuplicateName` problems. Now the second feature is the typed error
+  `HistoryIdClash` naming both ids, at its call, the first's span with it
+  (`a_history_id_clash_is_refused`). Every feature of a part goes through `push_made`
+  (`push_feature`, sheet steps, thermoform, unfold), so the check covers all of them.
+
+  What else keys on `history_id`: the builder's caches (`Cache::ids`, `kept`, memo keys) key a
+  stage on the feature's content and its kernel name together, and what they give back is a
+  function of both, so two features alike but for an id that hashes the same get the same
+  stage, which is the right one: no aliasing beyond the part's own names, which the check rules
+  out. Sheet unfolds salt their names with their feature's `history_id` (`Name::feature`), the
+  same id, covered. Assemblies name instances, joints and bodies by `history_id` of their ids
+  (`asm::hid`): two instance (or joint) ids that hash the same are reported by forge-asm
+  (`Diagnostic::DuplicateInstance`, `DuplicateJoint`: the issue `DuplicateItem`, the second left
+  out), not silently aliased, though the message names one id only; a part's body is named by
+  the feature that made it, whose id the part's own check covers. Not changed here.
 
 `diff/core_diff.py` now checks each against Rust: Suppress (Lean computes the edited document
 with `suppressAt`) and Unsuppress, Undo and Redo after every applied op, Respell of a misspelt
 read, the comparisons and `-`, and fit_sizes; `tests/core_diff.rs` checks `history_id` against
-`historyId`. The two findings above are categories it knows (`suppress-line`,
-`respell-binder`). No other difference.
+`historyId`. The two findings above (`suppress-line`, `respell-binder`) were categories it
+knew; fixed, they are no longer allowed: Suppress of one of two statements on a line, its
+Unsuppress, and Respell at a binder and inside a token are checked. No other difference.
 
 ### The one-pass parser (`LL1/Driver.lean`, `LL1/ImplDriver.lean`)
 
@@ -866,11 +907,11 @@ read, the comparisons and `-`, and fit_sizes; `tests/core_diff.rs` checks `histo
 | `Axioms.lean` | `lake env lean Axioms.lean`: the axioms of every main theorem |
 | `CheckAxioms.lean` | `lake env lean CheckAxioms.lean`: every theorem of every module, only the three axioms |
 | `Compare.lean` | comparisons, `and`, `or`, `not`, `-`, `expect` as core abbreviations, with their equations |
-| `Suppress.lean` | `suppress_complete`, `unsuppress_suppress`, `lines_eq_stmts`, `same_line_drops` |
-| `Respell.lean` | `respell_read_binders`, `respell_text`, `respell_binder_renames`, `respell_subtoken` |
+| `Suppress.lean` | `suppress_complete`, `suppress_live`, `suppress_text_closure`, `unsuppress_suppress`, `readTag_render` |
+| `Respell.lean` | `respell_read_binders`, `respell_text`, `respell_refuses_binder`, `respell_refuses_inside`, `respell_binder_refused`, `respell_subtoken_refused` (and the unchecked op's `respell_binder_renames`, `respell_subtoken`) |
 | `Undo.lean` | `undo_write`, `redo_undo`, `undo_redo`, `step_refused`, `history_keep`, `unchecked_loses_edit` |
 | `Fit.lean` | `fit_builds`, `fit_near_max`, `fit_misses_larger` |
-| `HistoryId.lean` | `historyId_stable`, `historyId_collides`, `two_features_run` |
+| `HistoryId.lean` | `historyId_stable`, `historyId_collides`, `two_features_run`, `checked_distinct`, `checked_complete`, `run_kernel_names`, `clash_refused` |
 | `LL1/Driver.lean` | the table driver and the recursive descent: `rd_eq_run`, `rd_accepts_parse` |
 | `LL1/ImplDriver.lean` | the same on table.rs's grammar |
 | `Counter/*.lean` | every counterexample named above, proven by evaluation (`rfl`/`decide`) or induction |

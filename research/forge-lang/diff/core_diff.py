@@ -1088,7 +1088,8 @@ def compare_respell(cases, lean, fg, tmp, note):
             continue
         for cat, det in classify(d, lean_view(d, lean[key]), rust_view(fg_json(fg, path, bool(d["comps"])))):
             note(f"after-Respell:{cat}", key, det, new)
-    # Respell.respell_binder_renames: the op takes a binder too, and renames the feature
+    # Respell.respell_binder_refused, respell_subtoken_refused: a binder's span and a span inside
+    # a token are refused (NotARead); before the check, Respell took both
     path = os.path.join(tmp, "respell_binder.fg")
     text = "shared t = 6\n" + "\n".join(SKETCH) + "\nbase = extrude(plan, t)\n"
     with open(path, "w") as f:
@@ -1098,10 +1099,15 @@ def compare_respell(cases, lean, fg, tmp, note):
     note("respell", "binder", "", "")
     if res.get("ok"):
         note("respell-binder", "binder", "Respell at a binder renames the feature (base -> plate), not refused", text)
+    res = fg_edit(fg, path, {"op": "Respell", "span": {"lo": lo + 1, "hi": lo + 3}, "to": "x"})
+    note("respell", "subtoken", "", "")
+    if res.get("ok"):
+        note("respell-binder", "subtoken", "Respell inside a token (base -> bxe), not refused", text)
 
 
 def compare_suppress_line(fg, tmp, note):
-    """Suppress.same_line_drops: two statements on one line, Suppress the second."""
+    """Suppress.suppress_live: two statements on one line, Suppress the second: the first stays;
+    Suppress.unsuppress_suppress: Unsuppress gives the text back byte for byte."""
     path = os.path.join(tmp, "suppress_line.fg")
     text = "shared t = 6\n" + "\n".join(SKETCH) + "\na = extrude(plan, t); b = extrude(plan, 2 * t)\n"
     with open(path, "w") as f:
@@ -1109,8 +1115,12 @@ def compare_suppress_line(fg, tmp, note):
     res = fg_edit(fg, path, {"op": "Suppress", "id": "b"})
     ids = [x["id"] for x in fg_json(fg, path, False)["features"]]
     note("suppress", "same_line", "", "")
-    if not res.get("ok") or "a" not in ids:
-        note("suppress-line", "same_line", f"Suppress b took out a as well: features {ids}", text)
+    if not res.get("ok") or "a" not in ids or "b" in ids:
+        note("suppress-line", "same_line", f"Suppress b: features {ids}", text)
+    res = fg_edit(fg, path, {"op": "Unsuppress", "id": "b"})
+    back = open(path).read()
+    if not res.get("ok") or back != text:
+        note("suppress-line", "same_line", f"Unsuppress b: {res}", back)
 
 
 def compare_fit(fg, tmp, note):
@@ -1227,10 +1237,10 @@ def run_all(cases, lean, a, exit_=True):
 
 # Differences that are filed findings (impl-proof-findings.md), or the mapping itself (`link`:
 # fg names a shared param whose value is an expression where the model names its sites;
-# `strict-list`: fg evaluates every element of a list, the model's `sel` only the chosen one;
-# `suppress-line`: Suppress comments whole lines (Suppress.same_line_drops); `respell-binder`:
-# Respell takes a binder's span and renames the feature (Respell.respell_binder_renames)).
-KNOWN = "link,strict-list,suppress-line,respell-binder"
+# `strict-list`: fg evaluates every element of a list, the model's `sel` only the chosen one).
+# `suppress-line` (Suppress took a whole line) and `respell-binder` (Respell took a binder's span)
+# were findings, fixed: Suppress.suppress_live, Respell.respell_refuses_binder.
+KNOWN = "link,strict-list"
 
 
 def main():

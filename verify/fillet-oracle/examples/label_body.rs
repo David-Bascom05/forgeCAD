@@ -62,7 +62,11 @@ fn box_distance(b: &Box3, p: Point3) -> f64 {
         return f64::INFINITY;
     }
     let c = |v: f64, lo: f64, hi: f64| (lo - v).max(v - hi).max(0.0);
-    let (dx, dy, dz) = (c(p.x, b.x.lo, b.x.hi), c(p.y, b.y.lo, b.y.hi), c(p.z, b.z.lo, b.z.hi));
+    let (dx, dy, dz) = (
+        c(p.x, b.x.lo, b.x.hi),
+        c(p.y, b.y.lo, b.y.hi),
+        c(p.z, b.z.lo, b.z.hi),
+    );
     (dx * dx + dy * dy + dz * dz).sqrt()
 }
 
@@ -112,8 +116,11 @@ impl<'a> Kernel<'a> {
     /// nearest point, summed over the rolled faces that hold it where that is an edge.
     fn rolled_side(&self, rolled: &[FaceId], boxes: &[Box3], p: Point3) -> (f64, Option<bool>) {
         let (mut best, mut side) = (f64::INFINITY, None);
-        let mut order: Vec<(f64, FaceId)> =
-            rolled.iter().zip(boxes).map(|(&f, b)| (box_distance(b, p), f)).collect();
+        let mut order: Vec<(f64, FaceId)> = rolled
+            .iter()
+            .zip(boxes)
+            .map(|(&f, b)| (box_distance(b, p), f))
+            .collect();
         order.sort_by(|a, b| a.0.total_cmp(&b.0));
         for (lower, f) in order {
             if lower >= best {
@@ -139,7 +146,7 @@ impl<'a> Kernel<'a> {
                             if rolled.contains(&g)
                                 && let Some(m) = self.normal_at(g, q)
                             {
-                                n = n + m;
+                                n += m;
                             }
                         }
                         side = (n.length() > 1e-12).then(|| (p - q).dot(n) < 0.0);
@@ -240,7 +247,9 @@ impl Obstacle for Rolled<'_, '_> {
             let s = &self.k.b.face(f).surface;
             let uv = s.project(p);
             let foot = s.eval(uv);
-            let Some(n) = self.k.b.face_normal(f, uv) else { return false };
+            let Some(n) = self.k.b.face_normal(f, uv) else {
+                return false;
+            };
             if foot.distance(p) - KERNEL_ERR < need || (p - foot).dot(n.get()) >= 0.0 {
                 return false;
             }
@@ -328,6 +337,7 @@ fn to_edge(b: &Body, e: EdgeId, p: Point3) -> f64 {
 /// bodies before and after as DIR/NAME.before.step and DIR/NAME.after.step, for a classifier other
 /// than forge-bool's `Index` (research/fillets/oracle/occt_body.py). With DUMP_ALL set too, every
 /// judged fillet is written, its .pts empty where nothing was counted (for occt_refillet.py).
+#[allow(clippy::too_many_arguments)]
 fn judge(
     s: &Body,
     after: &Body,
@@ -381,7 +391,11 @@ fn judge(
     // swallowed, and the ball does not rest on its faces)
     let aimed: Vec<EdgeId> = {
         let a: Vec<EdgeId> = asked.iter().copied().filter(|e| picked.contains(e)).collect();
-        if a.is_empty() { picked.iter().copied().collect() } else { a }
+        if a.is_empty() {
+            picked.iter().copied().collect()
+        } else {
+            a
+        }
     };
     let rolled_at = |x: Point3| -> Option<Rolled> {
         let (d, e0) = aimed
@@ -592,7 +606,10 @@ fn one(path: &str, per_face: usize, randoms: usize) -> Vec<String> {
         let Some(r) = edges[0].1.constant() else { continue };
         // R_SCALE=k judges the kernel's round as if r times k had been asked: a check that the
         // oracle still tells a wrong round from a right one
-        let r = r * std::env::var("R_SCALE").ok().and_then(|v| v.parse::<f64>().ok()).unwrap_or(1.0);
+        let r = r * std::env::var("R_SCALE")
+            .ok()
+            .and_then(|v| v.parse::<f64>().ok())
+            .unwrap_or(1.0);
         let (Some(s), Some(a)) = (m.body_after(k), m.body_after(k + 1)) else {
             out.push(format!("{head},\"label\":\"unjudged\",\"why\":\"no body\"}}"));
             continue;

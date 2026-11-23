@@ -1,6 +1,6 @@
 use forge_geom::intersect::{Contact, SurfaceSurface, plane_surface};
 use forge_geom::surface::Proc;
-use forge_geom::{Circle, Curve, Cylinder, Ellipse, Line, Sphere, Surface};
+use forge_geom::{Circle, Curve, Cylinder, Ellipse, Line, Plane, Sphere, Surface};
 use forge_math::{Box3, Frame, Point3, tol};
 
 /// Intersection of two surfaces within `region`: closed form where the pair
@@ -57,6 +57,23 @@ pub(crate) fn closed_or_flush(a: &Surface, b: &Surface, region: &Box3) -> Surfac
     r
 }
 
+/// Two planes (normals' dot `d`) that neither flush rule of `nearly_flush` can find flush over
+/// `region`, told first and cheaply (no cross product or root): most planes it is asked about
+/// cross. The gap of the turned rule, q's distance at the projection onto p, is affine with
+/// gradient g = m - d n, so within LINEAR at every corner of the once-grown box it spreads
+/// S = sum |g_i| ext_i over `region` by at most 2 LINEAR + 2 LINEAR (|g_x| + |g_y| + |g_z|) <=
+/// (2 + 2 sqrt 3) LINEAR < 6 LINEAR (`region` reaches LINEAR past that box). The NEAR rule's gap
+/// p.sd - flip q.sd has gradient -flip g + (1 - |d|) n, and there 1 - |d| <= c^2 <= 1e-8, so
+/// within LINEAR at every corner S <= 2 LINEAR + 1e-8 sum ext_i. Past both, neither holds.
+#[inline]
+fn spread_apart(p: &Plane, q: &Plane, d: f64, region: &Box3) -> bool {
+    let (n, m) = (p.normal_vec().get(), q.normal_vec().get());
+    let g = m - n * d;
+    // S - 1e-8 sum ext_i past 6 LINEAR
+    let w = |g: f64, i: forge_math::Interval| (g.abs() - 1e-8) * (i.hi - i.lo);
+    w(g.x, region.x) + w(g.y, region.y) + w(g.z, region.z) > 6.0 * tol::LINEAR
+}
+
 /// Surfaces too nearly flush for an angle test to see, as a model rounded to 9 digits has them: a
 /// plane on a plane, or tangent to a cylinder along its length, to within LINEAR all over `region`.
 /// Left to the closed forms, the plane crossing the other in a line or a cylinder in two hairs
@@ -64,7 +81,7 @@ pub(crate) fn closed_or_flush(a: &Surface, b: &Surface, region: &Box3) -> Surfac
 #[cold]
 fn nearly_flush(a: &Surface, b: &Surface, region: &Box3) -> Option<SurfaceSurface> {
     const NEAR: f64 = 1e-4;
-    let corners = || {
+    let corners = |region: &Box3| {
         [
             (region.x.lo, region.y.lo, region.z.lo),
             (region.x.hi, region.y.lo, region.z.lo),
@@ -81,14 +98,22 @@ fn nearly_flush(a: &Surface, b: &Surface, region: &Box3) -> Option<SurfaceSurfac
         (Surface::Plane(p), Surface::Plane(q)) => {
             let (n, m) = (p.normal_vec(), q.normal_vec());
             let d = n.dot(m);
+            if spread_apart(p, q, d, region) {
+                return None;
+            }
             let flip = if d < 0.0 { -1.0 } else { 1.0 };
             let c = n.cross(m).length();
-            (c > tol::ANGULAR
-                && c <= NEAR
-                && corners()
+            if c <= tol::ANGULAR {
+                return None;
+            }
+            let flush = if c <= NEAR {
+                corners(region)
                     .iter()
-                    .all(|&k| (p.signed_distance(k) - flip * q.signed_distance(k)).abs() <= tol::LINEAR))
-            .then_some(SurfaceSurface::Coincident)
+                    .all(|&k| (p.signed_distance(k) - flip * q.signed_distance(k)).abs() <= tol::LINEAR)
+            } else {
+                turned_flush(p, q, region)
+            };
+            flush.then_some(SurfaceSurface::Coincident)
         }
         (Surface::Plane(p), Surface::Cylinder(c)) | (Surface::Cylinder(c), Surface::Plane(p)) => {
             let (n, ax) = (p.normal_vec(), c.frame.z());
@@ -97,7 +122,7 @@ fn nearly_flush(a: &Surface, b: &Surface, region: &Box3) -> Option<SurfaceSurfac
                 return None;
             }
             // the plane's distance from the axis, where the region lies along the axis
-            let along = corners().map(|k| ax.dot(k - c.frame.origin));
+            let along = corners(region).map(|k| ax.dot(k - c.frame.origin));
             let (lo, hi) = along
                 .iter()
                 .fold((f64::MAX, f64::MIN), |m, &t| (m.0.min(t), m.1.max(t)));
@@ -111,6 +136,37 @@ fn nearly_flush(a: &Surface, b: &Surface, region: &Box3) -> Option<SurfaceSurfac
         }
         _ => None,
     }
+}
+
+/// Two planes turned more than NEAR, flush by the tolerance rule (ForgeExact.Snap `tolEq`, coverage
+/// G5b): over the faces' boxes grown by LINEAR once (`region` is their overlap grown again), which
+/// is more than 4 LINEAR across on two axes (not the column where two faces meet on an edge), each
+/// plane is within LINEAR of the other at the projection onto it of every corner.
+#[cold]
+#[inline(never)]
+fn turned_flush(p: &Plane, q: &Plane, region: &Box3) -> bool {
+    let corners = |region: &Box3| {
+        [
+            (region.x.lo, region.y.lo, region.z.lo),
+            (region.x.hi, region.y.lo, region.z.lo),
+            (region.x.lo, region.y.hi, region.z.lo),
+            (region.x.hi, region.y.hi, region.z.lo),
+            (region.x.lo, region.y.lo, region.z.hi),
+            (region.x.hi, region.y.lo, region.z.hi),
+            (region.x.lo, region.y.hi, region.z.hi),
+            (region.x.hi, region.y.hi, region.z.hi),
+        ]
+        .map(|(x, y, z)| Point3::new(x, y, z))
+    };
+    let r = region.grow(-tol::LINEAR);
+    let across = [r.x, r.y, r.z]
+        .iter()
+        .filter(|i| i.hi - i.lo > 4.0 * tol::LINEAR)
+        .count();
+    let within = |p: &Plane, q: &Plane, k: Point3| {
+        q.signed_distance(k - p.normal_vec() * p.signed_distance(k)).abs() <= tol::LINEAR
+    };
+    across >= 2 && corners(&r).iter().all(|&k| within(p, q, k) && within(q, p, k))
 }
 
 /// Pairs searched: a boolean meets one pair several times over the same region, and a drag meets over again every
@@ -251,10 +307,23 @@ pub fn coincident(a: &Surface, b: &Surface) -> bool {
     match (a, b) {
         (Surface::Plane(p), Surface::Plane(q)) => forge_geom::intersect::planes_coincident(p, q),
         (Surface::Plane(p), s) | (s, Surface::Plane(p)) => plane_surface(p, s) == SurfaceSurface::Coincident,
-        (Surface::Cylinder(c), Surface::Cylinder(d)) => cylinder_cylinder(c, d) == SurfaceSurface::Coincident,
+        (Surface::Cylinder(c), Surface::Cylinder(d)) => cylinders_coincident(c, d),
         (Surface::Sphere(s), Surface::Sphere(t)) => sphere_sphere(s, t) == SurfaceSurface::Coincident,
         _ => forge_geom::meet::coaxial(a, b) == Some(SurfaceSurface::Coincident),
     }
+}
+
+/// Whether two cylinders are one: `cylinder_cylinder`'s Coincident (parallel axes, within
+/// `tol::LINEAR` of each other square to `c`'s, radii within it), without making the lines of
+/// two that are not. The same test, term for term: keep the two alike.
+pub(crate) fn cylinders_coincident(c: &Cylinder, d: &Cylinder) -> bool {
+    let a = c.frame.z();
+    if a.cross(d.frame.z()).length() > tol::ANGULAR {
+        return false;
+    }
+    let off = d.frame.origin - c.frame.origin;
+    let off = off - a * a.dot(off);
+    off.length() <= tol::LINEAR && (c.radius - d.radius).abs() <= tol::LINEAR
 }
 
 /// Parallel axes give lines (or the same cylinder), equal ones with crossing axes two
@@ -267,7 +336,7 @@ fn cylinder_cylinder(c: &Cylinder, d: &Cylinder) -> SurfaceSurface {
         }
         return equal_crossing(c, d).unwrap_or(SurfaceSurface::NotAnalytic);
     }
-    // work in c's cross-section plane
+    // work in c's cross-section plane (`cylinders_coincident` is this test of Coincident alone)
     let off = d.frame.origin - c.frame.origin;
     let off = off - a * a.dot(off);
     let dist = off.length();

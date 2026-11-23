@@ -38,7 +38,7 @@ impl Config {
         if depth > 10 {
             return;
         }
-        let Ok(t) = std::fs::read_to_string(p) else {
+        let Ok(t) = forge_dirs::fs::read_to_string(p) else {
             return;
         };
         let before = self.entries.len();

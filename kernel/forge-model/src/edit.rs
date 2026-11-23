@@ -3,7 +3,7 @@
 
 use crate::rib::{Rib, RibError, rib};
 use crate::{Combine, Feature, History, RegenError, Target, op_of};
-use forge_bool::{BoolError, boolean};
+use forge_bool::BoolError;
 use forge_math::{Frame, Point3, Vec3};
 use forge_ops::{
     DirectError, Rounded, ThickenError, delete_faces, move_faces, offset_faces, replace_face, thicken,
@@ -127,8 +127,8 @@ pub(crate) fn apply(features: History<'_>, i: usize, edit: &Edit, body: &Body) -
             if *op == Combine::New {
                 return Ok(slab);
             }
-            let b =
-                boolean(body, &slab, op_of(*op), id + 1_000_000).map_err(|e| err(EditError::Boolean(e)))?;
+            let b = crate::combined(body, &slab, op_of(*op), id + 1_000_000)
+                .map_err(|e| err(EditError::Boolean(e)))?;
             if b.faces.is_empty() {
                 return Err(err(EditError::Empty));
             }

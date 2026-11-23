@@ -1,0 +1,37 @@
+[package]
+name = "forge-exact-fuzz"
+description = "The kernel's flat-face booleans against the exact Lean reference (lake build in verify/forge-exact first)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+# The comparison: every case of every source, totals and each disagreement.
+[[bin]]
+name = "exact-fuzz"
+path = "src/main.rs"
+
+# The curved comparison: solids bounded by planes, cylinders, cones and spheres.
+[[bin]]
+name = "exact-curved"
+path = "src/curved_main.rs"
+
+# The tests that ask the compiled Lean reference: built by `lake build` in verify/forge-exact, so
+# they run where that has happened (the forge-exact workflow), not in a plain `cargo test --workspace`
+[features]
+reference = []
+# the kernel's flat booleans by the decide-once path (forge-bool's `decide_once`)
+decide_once = ["forge-bool/decide_once"]
+
+[dependencies]
+forge-math = { path = "../../../kernel/forge-math" }
+forge-geom = { path = "../../../kernel/forge-geom" }
+forge-topo = { path = "../../../kernel/forge-topo" }
+forge-model = { path = "../../../kernel/forge-model" }
+forge-ops = { path = "../../../kernel/forge-ops" }
+forge-bool = { path = "../../../kernel/forge-bool" }
+forge-proof = { path = "../../forge-proof" }
+forge-lang = { path = "../../../interface/forge-lang" }
+
+[lints]
+workspace = true

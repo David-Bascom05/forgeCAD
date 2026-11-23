@@ -3,8 +3,9 @@
 //! takes the least of its pieces' names, a piece a boolean split off counting as the face or edge
 //! it came from; the others are kept as aliases (`Body::joins`) so a reference to any piece still
 //! finds it.
+use forge_geom::intcurve::IntCurve;
 use forge_geom::{Curve, CurveGeom, Surface, SurfaceGeom};
-use forge_math::{Interval, Point2, tol};
+use forge_math::{Interval, Point2, Point3, tol};
 use forge_topo::{Body, CoedgeId, EdgeId, FaceId, LoopId};
 
 /// Joins, all over `body`, faces on one plane or cylinder that meet along an edge (an edge left
@@ -12,6 +13,8 @@ use forge_topo::{Body, CoedgeId, EdgeId, FaceId, LoopId};
 /// edges on one line or circle that meet at a vertex nothing else ends at. Removed entities stay
 /// as tombstones (counted in `Body::dead`) until `Body::compact`.
 pub fn unify(body: &mut Body) {
+    #[cfg(feature = "decisions")]
+    let _scope = crate::decisions::scope("unify", String::from("plain"));
     // each face's kind and a number one surface gives all its faces (a plane's distance from the
     // origin, a cylinder's radius), so most edges are passed over without reading their faces
     let keys: Vec<(u8, f64)> = body
@@ -87,6 +90,11 @@ pub fn unify(body: &mut Body) {
     }
 }
 
+use forge_topo::Name;
+
+/// (each one left, its new name, the least of its pieces' own), (each piece's name, its group)
+type Renamed = (Vec<(u32, Name, Name)>, Vec<(Name, u32)>);
+
 /// Names each face or edge joined here after what its pieces came from, so the sequential
 /// regen (which splits faces and edges the n-ary one never does) and the n-ary one name a joined
 /// entity alike: a face takes the least of its pieces' wholes (a piece's whole if a boolean split
@@ -95,9 +103,6 @@ pub fn unify(body: &mut Body) {
 /// would take leaves each the least of its pieces' own. Every piece's name is kept as an alias of
 /// the whole's. `faces` and `edges` are (gone, went into) pairs, in the order joined.
 fn rename_wholes(body: &mut Body, faces: &[(u32, u32)], edges: &[(u32, u32)]) {
-    use forge_topo::Name;
-    // (each one left, its new name, the least of its pieces' own), (each piece's name, its group)
-    type Renamed = (Vec<(u32, Name, Name)>, Vec<(Name, u32)>);
     if faces.is_empty() && edges.is_empty() {
         return;
     }
@@ -147,72 +152,6 @@ fn rename_wholes(body: &mut Body, faces: &[(u32, u32)], edges: &[(u32, u32)]) {
     };
     // per entity joined into: (the one left, its name, whether a piece had a whole), worked out
     // over the pairs and their roots; then the pieces' names to the one left's as aliases
-    let rename = |pairs: &[(u32, u32)],
-                  n: usize,
-                  name: &dyn Fn(u32) -> Name,
-                  other: &dyn Fn(u32) -> Option<Name>,
-                  alive: &dyn Fn(u32) -> bool|
-     -> Renamed {
-        const NONE: u32 = u32::MAX;
-        let mut parent = vec![NONE; n];
-        for &(gone, kept) in pairs {
-            parent[gone as usize] = kept;
-        }
-        let root = |mut x: u32| {
-            while parent[x as usize] != NONE {
-                x = parent[x as usize];
-            }
-            x
-        };
-        // (root, least whole-or-own name, least own name, any whole)
-        let mut slot = vec![NONE; n];
-        let mut gs: Vec<(u32, Name, Name, bool)> = Vec::new();
-        let mut members: Vec<(Name, u32)> = Vec::with_capacity(pairs.len());
-        let mut add = |r: u32, m: Name, gs: &mut Vec<(u32, Name, Name, bool)>| {
-            let w = whole(m);
-            let k = &mut slot[r as usize];
-            if *k == NONE {
-                *k = gs.len() as u32;
-                gs.push((r, Name(u64::MAX), Name(u64::MAX), false));
-            }
-            let g = &mut gs[*k as usize];
-            g.1 = g.1.min(w.unwrap_or(m));
-            g.2 = g.2.min(m);
-            g.3 |= w.is_some();
-            *k
-        };
-        for &(gone, kept) in pairs {
-            let r = root(kept);
-            let k = add(r, name(gone), &mut gs);
-            members.push((name(gone), k));
-        }
-        for k in 0..gs.len() {
-            let r = gs[k].0;
-            add(r, name(r), &mut gs);
-            members.push((name(r), k as u32));
-        }
-        let mut to: Vec<(u32, Name, Name)> = gs
-            .iter()
-            .map(|&(r, w, own, any)| (r, if any { w } else { other(r).unwrap_or(w) }, own))
-            .collect();
-        // a name two would take, or one a live entity left alone holds: each keeps the least of
-        // its own
-        let mut taken: Vec<Name> = to.iter().map(|t| t.1).collect();
-        taken.sort_unstable();
-        let twice: Vec<Name> = taken.windows(2).filter(|w| w[0] == w[1]).map(|w| w[0]).collect();
-        let mut held: Vec<Name> = (0..n as u32)
-            .filter(|&x| slot[x as usize] == NONE && alive(x))
-            .map(name)
-            .filter(|m| taken.binary_search(m).is_ok())
-            .collect();
-        held.sort_unstable();
-        for t in &mut to {
-            if twice.binary_search(&t.1).is_ok() || held.binary_search(&t.1).is_ok() {
-                t.1 = t.2;
-            }
-        }
-        (to, members)
-    };
     let apply = |body: &mut Body, (to, members): Renamed, faces: bool| {
         let aliases = members.iter().map(|&(n, k)| (n, to[k as usize].1));
         body.joins.aliases.extend(aliases.filter(|a| a.0 != a.1));
@@ -226,9 +165,10 @@ fn rename_wholes(body: &mut Body, faces: &[(u32, u32)], edges: &[(u32, u32)]) {
     let r = rename(
         faces,
         body.faces.len(),
-        &|f| body.faces[f as usize].name,
-        &|_| None,
-        &|f| body.faces[f as usize].alive,
+        |f| body.faces[f as usize].name,
+        |_| None,
+        body.faces.iter().map(|f| (f.name, f.alive)),
+        &whole,
     );
     apply(body, r, true);
     // an edge named from its faces takes their new names
@@ -242,70 +182,197 @@ fn rename_wholes(body: &mut Body, faces: &[(u32, u32)], edges: &[(u32, u32)]) {
     let r = rename(
         edges,
         body.edges.len(),
-        &|e| body.edges[e as usize].name,
-        &sides,
-        &|e| body.edges[e as usize].alive,
+        |e| body.edges[e as usize].name,
+        sides,
+        body.edges.iter().map(|e| (e.name, e.alive)),
+        &whole,
     );
     apply(body, r, false);
 }
 
-/// How near two surfaces count as one. "On one surface" is not transitive: pieces each this near
-/// the next stay within a tolerance of the one a run of them keeps.
-const SAME: f64 = 0.5 * tol::LINEAR;
+/// `rename_wholes`' work for faces or for edges: `pairs` the (gone, went into) pairs, `n` how
+/// many entities there are, `name`, `other` (a name from elsewhere, for a group no piece of which
+/// had a whole) read from the body, `all` each entity's name and whether it is alive, in order, and
+/// `whole` a name's whole.
+fn rename<N, O, A>(
+    pairs: &[(u32, u32)],
+    n: usize,
+    name: N,
+    other: O,
+    all: A,
+    whole: &dyn Fn(Name) -> Option<Name>,
+) -> Renamed
+where
+    N: Fn(u32) -> Name,
+    O: Fn(u32) -> Option<Name>,
+    A: Iterator<Item = (Name, bool)>,
+{
+    const NONE: u32 = u32::MAX;
+    let mut parent = vec![NONE; n];
+    for &(gone, kept) in pairs {
+        parent[gone as usize] = kept;
+    }
+    let root = |mut x: u32| {
+        while parent[x as usize] != NONE {
+            x = parent[x as usize];
+        }
+        x
+    };
+    // (root, least whole-or-own name, least own name, any whole)
+    let mut slot = vec![NONE; n];
+    let mut gs: Vec<(u32, Name, Name, bool)> = Vec::new();
+    let mut members: Vec<(Name, u32)> = Vec::with_capacity(pairs.len());
+    let mut add = |r: u32, m: Name, gs: &mut Vec<(u32, Name, Name, bool)>| {
+        let w = whole(m);
+        let k = &mut slot[r as usize];
+        if *k == NONE {
+            *k = gs.len() as u32;
+            gs.push((r, Name(u64::MAX), Name(u64::MAX), false));
+        }
+        let g = &mut gs[*k as usize];
+        g.1 = g.1.min(w.unwrap_or(m));
+        g.2 = g.2.min(m);
+        g.3 |= w.is_some();
+        *k
+    };
+    for &(gone, kept) in pairs {
+        let r = root(kept);
+        let k = add(r, name(gone), &mut gs);
+        members.push((name(gone), k));
+    }
+    for k in 0..gs.len() {
+        let r = gs[k].0;
+        add(r, name(r), &mut gs);
+        members.push((name(r), k as u32));
+    }
+    let mut to: Vec<(u32, Name, Name)> = gs
+        .iter()
+        .map(|&(r, w, own, any)| (r, if any { w } else { other(r).unwrap_or(w) }, own))
+        .collect();
+    // a name two would take, or one a live entity left alone holds: each keeps the least of
+    // its own
+    let mut taken: Vec<Name> = to.iter().map(|t| t.1).collect();
+    taken.sort_unstable();
+    let twice: Vec<Name> = taken.windows(2).filter(|w| w[0] == w[1]).map(|w| w[0]).collect();
+    // (a bit of each name taken, asked first: most entities' names are none of them)
+    let bit = |m: Name| ((m.0 >> 6) as usize & 15, 1u64 << (m.0 & 63));
+    let mut bits = [0u64; 16];
+    for &m in &taken {
+        let (i, b) = bit(m);
+        bits[i] |= b;
+    }
+    let mut held: Vec<Name> = all
+        .zip(&slot)
+        .filter(|&((m, alive), &k)| {
+            let (i, b) = bit(m);
+            bits[i] & b != 0 && k == NONE && alive && taken.binary_search(&m).is_ok()
+        })
+        .map(|((m, _), _)| m)
+        .collect();
+    held.sort_unstable();
+    for t in &mut to {
+        if twice.binary_search(&t.1).is_ok() || held.binary_search(&t.1).is_ok() {
+            t.1 = t.2;
+        }
+    }
+    (to, members)
+}
 
 /// Whether live edge `e` lies between two faces on one surface, facing the same way (`keys` as
-/// `unify` makes them).
+/// `unify` makes them); or has one plane face on both sides: a slit, a spur or a bridge between
+/// two of its loops, which bounds nothing. (One face round a cylinder or cone on both sides is
+/// mostly its seam, which the face needs.)
 fn between_same(body: &Body, keys: &[(u8, f64)], e: EdgeId) -> bool {
     let x = body.edge(e);
     if !x.alive || x.coedges.len() != 2 {
         return false;
     }
     let (a, b) = (body.coedge_face(x.coedges[0]), body.coedge_face(x.coedges[1]));
+    if a == b {
+        return keys[a.index()].0 == 1 && !kept(body, x.name);
+    }
     let (ka, kb) = (keys[a.index()], keys[b.index()]);
     // (far looser than the test below: faces on one surface differ by tolerances here)
-    if a == b || ka.0 == 0 || ka.0 != kb.0 || (ka.1 - kb.1).abs() > 1e-3 {
+    if ka.0 == 0 || ka.0 != kb.0 || (ka.1 - kb.1).abs() > 1e-3 {
         return false;
     }
+    let same = same_surface(body, a, b)
+        // (not along a line from the apex: a whole cone there would have no seam)
+        && (ka.0 != 3
+            || [x.start, x.end].iter().all(|&v| {
+                let s = &body.face(a).surface;
+                !s.singular(s.project(body.vertex(v).point))
+            }));
+    decided!(log_same(body, a, b, same));
+    // unless a feature split the face there on purpose
+    same && !kept(body, x.name)
+}
+
+/// Whether faces `a` and `b` lie on one surface and face the same way: the boolean's own test of
+/// the two surfaces (`ssi::coincident`), so a contact the boolean read as one surface is one face
+/// here. "On one surface" is not transitive, so `remove_edge` asks it again of the faces an edge
+/// lies between when it goes, the merged one bearing the surface it keeps: every piece of a run
+/// joined is within the test of the surface the whole keeps, not only of its neighbour. A plane's outward normal is its z or -z; a cylinder's or cone's natural normal points
+/// away from its axis whichever way its frame turns.
+fn same_surface(body: &Body, a: FaceId, b: FaceId) -> bool {
     let (fa, fb) = (body.face(a), body.face(b));
-    // on one surface, facing the same way: a plane's outward normal is its z or -z; a cylinder's
-    // natural normal points away from its axis whichever way its frame turns
-    let parallel = |u: forge_math::UnitVec3, v: forge_math::UnitVec3| {
-        let c = u.cross(v);
-        c.dot(c) <= tol::ANGULAR * tol::ANGULAR
-    };
-    let same = match (&fa.surface, &fb.surface) {
+    let facing = match (&fa.surface, &fb.surface) {
         (Surface::Plane(p), Surface::Plane(q)) => {
-            parallel(p.frame.z(), q.frame.z())
-                && (p.frame.z().dot(q.frame.z()) > 0.0) == (fa.same_sense == fb.same_sense)
-                && p.frame.z().dot(q.frame.origin - p.frame.origin).abs() <= SAME
+            (p.frame.z().dot(q.frame.z()) > 0.0) == (fa.same_sense == fb.same_sense)
         }
+        (Surface::Cylinder(_), Surface::Cylinder(_)) | (Surface::Cone(_), Surface::Cone(_)) => {
+            fa.same_sense == fb.same_sense
+        }
+        _ => return false,
+    };
+    facing && crate::ssi::coincident(&fa.surface, &fb.surface)
+}
+
+/// Whether a feature split a face on purpose along the edge named `name`.
+fn kept(body: &Body, name: forge_topo::Name) -> bool {
+    body.joins.kept.iter().any(|&k| name == k || name.is_piece_of(k))
+}
+
+/// unify's answer for faces `a` and `b` of `body` (planes or cylinders near one surface), beside
+/// the boolean's own test of the same two surfaces (`ssi::coincident`).
+#[cfg(feature = "decisions")]
+fn log_same(body: &Body, a: FaceId, b: FaceId, same: bool) {
+    use crate::decisions::{self as d, BAND, Ent, Kind, Site};
+    let (fa, fb) = (body.face(a), body.face(b));
+    // (facing the same way is unify's own condition: the boolean's test is of the surfaces alone,
+    // so faces facing apart are left out)
+    let (gap, facing) = match (&fa.surface, &fb.surface) {
+        (Surface::Plane(p), Surface::Plane(q)) => (
+            p.frame.z().dot(q.frame.origin - p.frame.origin).abs(),
+            (p.frame.z().dot(q.frame.z()) > 0.0) == (fa.same_sense == fb.same_sense),
+        ),
         (Surface::Cylinder(p), Surface::Cylinder(q)) => {
             let off = q.frame.origin - p.frame.origin;
-            fa.same_sense == fb.same_sense
-                && (p.radius - q.radius).abs() <= SAME
-                && parallel(p.frame.z(), q.frame.z())
-                && {
-                    let c = p.frame.z().cross(off);
-                    c.dot(c) <= SAME * SAME
-                }
+            (
+                (p.radius - q.radius).abs().max(p.frame.z().cross(off).length()),
+                fa.same_sense == fb.same_sense,
+            )
         }
-        // (not along a line from the apex: a whole cone there would have no seam)
-        (Surface::Cone(_), Surface::Cone(_)) => {
-            let s = &fa.surface;
-            fa.same_sense == fb.same_sense
-                && crate::ssi::coincident(s, &fb.surface)
-                && [x.start, x.end]
-                    .iter()
-                    .all(|&v| !s.singular(s.project(body.vertex(v).point)))
-        }
-        _ => false,
+        _ => return,
     };
-    // unless a feature split the face there on purpose
-    same && !body
-        .joins
-        .kept
-        .iter()
-        .any(|&k| x.name == k || x.name.is_piece_of(k))
+    if gap > BAND || !facing {
+        return;
+    }
+    let key = d::pair(Ent::f(body, a), Ent::f(body, b));
+    let site = Site::Named("unify: same_surface");
+    d::decide(
+        Kind::Coincident,
+        key,
+        None,
+        None,
+        same as u8,
+        site,
+        gap,
+        tol::LINEAR,
+    );
+    let yes = crate::ssi::coincident(&fa.surface, &fb.surface);
+    let site = Site::Named("unify: ssi::coincident (the boolean's test)");
+    d::decide(Kind::Coincident, key, None, None, yes as u8, site, gap, f64::NAN);
 }
 
 /// Whether the closed chain of edge uses `chain` goes round face `f`'s periodic surface.
@@ -353,6 +420,8 @@ struct Work {
     made: Vec<(FaceId, Vec<CoedgeId>)>,
     /// The edges taken out.
     dropped: Vec<EdgeId>,
+    /// Each face that has taken another in.
+    grown: Vec<bool>,
 }
 
 const MADE: u32 = 1 << 31;
@@ -364,6 +433,7 @@ impl Work {
             loops: vec![None; body.loops.len()],
             made: Vec::new(),
             dropped: Vec::new(),
+            grown: vec![false; body.faces.len()],
         }
     }
 
@@ -448,7 +518,9 @@ fn remove_edge(body: &mut Body, w: &mut Work, e: EdgeId) -> Option<(FaceId, Face
         if j == i + 1 || (i == 0 && j == n - 1) {
             // walked there and straight back: a spur
             if n == 2 {
-                return None;
+                // a loop of the one edge there and back, inside the face: it bounds nothing and
+                // goes with the face's other such loops once every join is done
+                return Some((fa, fa));
             }
             cs.retain(|&c| c != ca && c != cb);
         } else {
@@ -466,6 +538,10 @@ fn remove_edge(body: &mut Body, w: &mut Work, e: EdgeId) -> Option<(FaceId, Face
         w.dropped.push(e);
         body.dead += 1;
         return Some((fa, fa));
+    }
+    // (asked again of the faces now on either side where one is a merge, keeping one surface)
+    if (w.grown[fa.index()] || w.grown[fb.index()]) && !same_surface(body, fa, fb) {
+        return None;
     }
     let sb = w.get(body, lb).clone();
     let sa = w.get(body, la);
@@ -522,11 +598,22 @@ fn remove_edge(body: &mut Body, w: &mut Work, e: EdgeId) -> Option<(FaceId, Face
         return None;
     }
     // the face with more loops holds the merge
-    let (keep, gone, lk, lg) = if body.face(fa).loops.len() >= body.face(fb).loops.len() {
+    let (mut keep, mut gone, mut lk, mut lg) = if body.face(fa).loops.len() >= body.face(fb).loops.len() {
         (fa, fb, la, lb)
     } else {
         (fb, fa, lb, la)
     };
+    // faces on surfaces one only to within tolerance: the one left keeps its own, so every
+    // edge of the other must lie on it as `check` asks (`edge_off_face`). The coincidence test
+    // bounds a cylinder's axis and radius apart, so two it passes can be further apart than
+    // either; and a run of faces each within it of the next is not within it of the one kept.
+    if !one_set(&body.face(fa).surface, &body.face(fb).surface) && !rests_on(body, w, gone, keep, &gone_edges)
+    {
+        if !rests_on(body, w, keep, gone, &gone_edges) {
+            return None;
+        }
+        (keep, gone, lk, lg) = (gone, keep, lg, lk);
+    }
     for &d in &gone_edges {
         body.edges[d.index()].alive = false;
     }
@@ -553,7 +640,46 @@ fn remove_edge(body: &mut Body, w: &mut Work, e: EdgeId) -> Option<(FaceId, Face
     w.get(body, lg).clear();
     body.faces[gone.index()].alive = false;
     body.dead += 1;
+    w.grown[keep.index()] = true;
     Some((keep, gone))
+}
+
+/// Whether every edge of face `from` (its loops as `w` holds them), but those in `skip`, lies on
+/// face `onto`'s surface as `check` asks of an edge on its face.
+fn rests_on(body: &Body, w: &mut Work, from: FaceId, onto: FaceId, skip: &[EdgeId]) -> bool {
+    let s = &body.face(onto).surface;
+    let loops: Vec<u32> = body.face(from).loops.iter().map(|l| l.0).collect();
+    loops.into_iter().all(|l| {
+        let cs = w.get(body, l).clone();
+        cs.iter().all(|&c| {
+            let e = body.coedge(c).edge;
+            let x = body.edge(e);
+            skip.contains(&e)
+                || match (s, &x.curve) {
+                    // a line leaves a plane furthest at an end
+                    (Surface::Plane(p), Curve::Line(_)) => [x.range.lo, x.range.hi]
+                        .iter()
+                        .all(|&t| p.signed_distance(x.curve.eval(t)).abs() <= x.tol.max(tol::LINEAR)),
+                    _ => forge_topo::check::edge_off_face(body, e, onto).is_none(),
+                }
+        })
+    })
+}
+
+/// Whether surfaces `a` and `b` are one set of points, however their frames are put: then an
+/// edge on either is on both.
+fn one_set(a: &Surface, b: &Surface) -> bool {
+    let along = |u: forge_math::UnitVec3, v: forge_math::UnitVec3| u.get() == v.get() || u.get() == -v.get();
+    match (a, b) {
+        (Surface::Plane(p), Surface::Plane(q)) => {
+            along(p.frame.z(), q.frame.z()) && p.signed_distance(q.frame.origin) == 0.0
+        }
+        (Surface::Cylinder(p), Surface::Cylinder(q)) => {
+            let c = p.frame.z().cross(q.frame.origin - p.frame.origin);
+            along(p.frame.z(), q.frame.z()) && p.radius == q.radius && c.dot(c) == 0.0
+        }
+        _ => a == b,
+    }
 }
 
 /// Puts plane face `f`'s outer loop first (the boolean's local split relies on it).
@@ -678,28 +804,42 @@ fn join(body: &mut Body, c: CoedgeId, n: CoedgeId) -> bool {
     if x1.start == x1.end || x2.start == x2.end || x1.coedges.len() != 2 || x2.coedges.len() != 2 {
         return false;
     }
-    // on one line or circle (cheap tests first; the walk round v and the evaluation settle it)
-    let same_kind = match (&x1.curve, &x2.curve) {
-        (Curve::Line(a), Curve::Line(b)) => {
-            let c = a.dir.cross(b.dir);
-            c.dot(c) <= tol::ANGULAR * tol::ANGULAR
-        }
-        (Curve::Circle(a), Curve::Circle(b)) => {
-            (a.radius - b.radius).abs() <= tol::LINEAR
-                && a.frame.origin.distance(b.frame.origin) <= tol::LINEAR
-        }
-        // pieces of one other curve: only where their parameter ranges abut, not across the
-        // start of a closed curve
-        (a, b) => {
-            let abut = |t: f64, u: f64| (t - u).abs() <= 1e-9 * (1.0 + t.abs());
-            a == b
-                && if x1.end == v {
-                    x2.start == v && abut(x2.range.lo, x1.range.hi)
-                } else {
-                    x2.end == v && abut(x2.range.hi, x1.range.lo)
-                }
-        }
+    // two traces of where the same two surfaces meet (the pieces two booleans traced apart):
+    // one branch through v, whose chains are spliced there
+    let traced = match (&x1.curve, &x2.curve) {
+        (Curve::Intersection(a), Curve::Intersection(b)) => !std::sync::Arc::ptr_eq(a, b),
+        _ => false,
     };
+    // on one line or circle (cheap tests first; the walk round v and the evaluation settle it)
+    let same_kind = traced
+        || match (&x1.curve, &x2.curve) {
+            (Curve::Line(a), Curve::Line(b)) => {
+                let c = a.dir.cross(b.dir);
+                c.dot(c) <= tol::ANGULAR * tol::ANGULAR
+            }
+            (Curve::Circle(a), Curve::Circle(b)) => {
+                (a.radius - b.radius).abs() <= tol::LINEAR
+                    && a.frame.origin.distance(b.frame.origin) <= tol::LINEAR
+            }
+            // pieces of one other curve: only where their parameter ranges abut, on a periodic
+            // curve (an ellipse) by whole periods too, as a circle's do: where the pieces of one
+            // ellipse meet its start falls where its frame puts it, which a mirror image moves. Not
+            // across the start of a closed curve that is not periodic.
+            (a, b) => {
+                let period = a.domain().period;
+                let abut = |t: f64, u: f64| {
+                    let d = t - u;
+                    let d = period.map_or(d, |p| d - p * (d / p).round());
+                    d.abs() <= 1e-9 * (1.0 + t.abs())
+                };
+                a == b
+                    && if x1.end == v {
+                        x2.start == v && abut(x2.range.lo, x1.range.hi)
+                    } else {
+                        x2.end == v && abut(x2.range.hi, x1.range.lo)
+                    }
+            }
+        };
     if !same_kind {
         return false;
     }
@@ -717,6 +857,9 @@ fn join(body: &mut Body, c: CoedgeId, n: CoedgeId) -> bool {
         !matches!(s, Surface::Plane(_) | Surface::Cylinder(_)) && s.singular(s.project(at))
     }) {
         return false;
+    }
+    if traced {
+        return splice(body, e1, e2, v);
     }
     // e1's curve carried on past v by e2's length (both unit-speed lines, or circles of one radius)
     let far = if x2.start == v { x2.end } else { x2.start };
@@ -770,6 +913,127 @@ fn join(body: &mut Body, c: CoedgeId, n: CoedgeId) -> bool {
     body.edges[e2.index()].alive = false;
     body.dead += 1;
     true
+}
+
+/// `join` for two traced edges `e1` and `e2` meeting at `v`: e1 takes one chain through v
+/// (`spliced`) from its own far end to e2's, if each far end is on it.
+fn splice(body: &mut Body, e1: EdgeId, e2: EdgeId, v: forge_topo::VertexId) -> bool {
+    use std::borrow::Cow;
+    let (x1, x2) = (body.edge(e1), body.edge(e2));
+    let (Curve::Intersection(c1), Curve::Intersection(c2)) = (&x1.curve, &x2.curve) else {
+        return false;
+    };
+    let far = if x2.start == v { x2.end } else { x2.start };
+    let other = if x1.end == v { x1.start } else { x1.end };
+    // nor a loop back to one point (a pinch's): asked before any chain is made
+    let pinch = body.vertex(far).tol.max(body.vertex(other).tol).max(tol::LINEAR);
+    if far == other || body.vertex(far).point.distance(body.vertex(other).point) <= pinch {
+        return false;
+    }
+    // e2 as run into v (`into`) or away from it, turned round if it runs the other way
+    let run = |into: bool| -> (Cow<'_, IntCurve>, Interval) {
+        if (x2.end == v) == into {
+            (Cow::Borrowed(c2.as_ref()), x2.range)
+        } else {
+            let h = c2.domain_hi();
+            (
+                Cow::Owned(reversed(c2)),
+                Interval::new(h - x2.range.hi, h - x2.range.lo),
+            )
+        }
+    };
+    let at = body.vertex(v).point;
+    let spliced = if x1.end == v {
+        // along e1 into v, then e2 away from it
+        let (b, rb) = run(false);
+        spliced(c1, x1.range, &b, rb, at)
+    } else {
+        // along e2 into v, then e1 away from it
+        let (a, ra) = run(true);
+        spliced(&a, ra, c1, x1.range, at)
+    };
+    let Some((curve, range)) = spliced else {
+        return false;
+    };
+    let (start, end) = if x1.end == v {
+        (x1.start, far)
+    } else {
+        (far, x1.end)
+    };
+    // its ends where the edge's vertices are
+    let off = |t: f64, w: forge_topo::VertexId| {
+        curve.eval(t).distance(body.vertex(w).point) > body.vertex(w).tol.max(tol::LINEAR)
+    };
+    if off(range.lo, start) || off(range.hi, end) {
+        return false;
+    }
+    let edge = &mut body.edges[e1.index()];
+    edge.curve = Curve::Intersection(std::sync::Arc::new(curve));
+    edge.range = range;
+    edge.start = start;
+    edge.end = end;
+    edge.bbox.clear();
+    body.edges[e2.index()].alive = false;
+    body.dead += 1;
+    true
+}
+
+/// `c`'s chain run the other way: t on it is `domain_hi() - t` on `c`.
+fn reversed(c: &IntCurve) -> IntCurve {
+    let pts = c.pts.iter().rev().copied().collect();
+    let tans = c.tans.iter().rev().map(|&t| -t).collect();
+    IntCurve::new(c.a.clone(), c.b.clone(), pts, tans, c.closed, c.sag)
+}
+
+/// One chain through `at` along `first`'s piece `mine` (which ends at `at`, at `mine.hi`) and
+/// then `next`'s piece `theirs` (which starts there, at `theirs.lo`): two traces of one branch of
+/// where the same two surfaces meet, as two booleans split it, made one. `first`'s samples
+/// before `at`, `at`, then `next`'s after it; with the pieces' far ends' parameters on it. None
+/// for a closed chain, another pair of surfaces, or where the surfaces meet tangentially at
+/// `at` (no one branch there).
+fn spliced(
+    first: &IntCurve,
+    mine: Interval,
+    next: &IntCurve,
+    theirs: Interval,
+    at: Point3,
+) -> Option<(IntCurve, Interval)> {
+    let same = (first.a == next.a && first.b == next.b) || (first.a == next.b && first.b == next.a);
+    if first.closed || next.closed || !same {
+        return None;
+    }
+    let near = |q: Point3| q.distance(at) <= tol::LINEAR;
+    // samples strictly before `at` on the first chain, strictly after it on the next
+    let mut i = (mine.hi.ceil() as usize).checked_sub(1)?.min(first.pts.len() - 1);
+    while near(first.pts[i]) {
+        i = i.checked_sub(1)?;
+    }
+    let mut j = (theirs.lo.floor() as usize + 1).min(next.pts.len());
+    while j < next.pts.len() && near(next.pts[j]) {
+        j += 1;
+    }
+    let along = first.tans[i];
+    let d = forge_geom::intcurve::direction(&first.a, &first.b, at)?;
+    let d = if d.dot(along) < 0.0 { -d } else { d };
+    let mut pts = first.pts[..=i].to_vec();
+    let mut tans = first.tans[..=i].to_vec();
+    pts.push(at);
+    tans.push(d);
+    pts.extend_from_slice(&next.pts[j..]);
+    tans.extend_from_slice(&next.tans[j..]);
+    let joined = IntCurve::new(
+        first.a.clone(),
+        first.b.clone(),
+        pts,
+        tans,
+        false,
+        first.sag.max(next.sag),
+    );
+    let k = (i + 1) as f64;
+    // the far ends, on their own sides of `at`
+    let lo = joined.closest(first.eval(mine.lo), Interval::new(0.0, k));
+    let hi = joined.closest(next.eval(theirs.hi), Interval::new(k, joined.domain_hi()));
+    (lo < k && hi > k).then(|| (joined, Interval::new(lo, hi)))
 }
 
 /// The coedge after `c` in its loop, passing uses of edges joined away.
