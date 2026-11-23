@@ -250,8 +250,14 @@ of the sign of major − minor, so it is one decided rule written as a cascade, 
 and prove it as a case split.
 
 The post-hoc pinch refusal ("refused only if `forge_topo::check` reports problems") is a
-fallback. Its exact replacement is to refuse a full turn when two face-making segments share an
-axis vertex and the call is not a cutter. Both of those can be tested before building.
+fallback. Its exact replacement follows from the set. On a full turn, take a point of the profile
+on the axis where two segments that make faces leave it, with no segment along the axis there.
+Its neighbourhood in the solid is the cone over the band those two directions sweep, an annulus,
+not a disc. So it is a non-manifold point of `Rev(R)` whatever the B-rep checker says, and the
+rule decided before building is: **refuse a full turn (not a cutter) with such a point.** A cutter
+is exempt, because its result is a boolean's operand and not a solid of its own. Before it ships,
+the scoreboard and the corpus list every part this changes. Any part that builds today with such
+a point builds a non-manifold solid.
 
 L2: the revolve of a polygon is a **QForm**. To see why, take ρ = √(x² + y²). Then a·ρ > c − b·z
 is equivalent to a boolean of `a > 0`, `c − b·z < 0` and `a²(x² + y²) ≷ (c − b·z)²`: planes and
