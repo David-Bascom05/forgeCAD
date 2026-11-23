@@ -143,3 +143,6 @@ open ForgeLang ForgeLang.Counter
 #print axioms ForgeLang.LL1.Reparse.reparse_tokens
 #print axioms ForgeLang.LL1.Impl.reparse_parse
 #print axioms ForgeLang.LL1.ImplUnifiedDoc.reparse_parse
+#print axioms ForgeLang.LL1.Reparse.reparse_correct
+#print axioms ForgeLang.LL1.Impl.reparse_number_correct
+#print axioms ForgeLang.LL1.ImplUnifiedDoc.reparse_number_correct
