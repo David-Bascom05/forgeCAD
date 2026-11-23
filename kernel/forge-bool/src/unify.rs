@@ -27,9 +27,12 @@ pub fn unify(body: &mut Body) {
             _ => (0, 0.0),
         })
         .collect();
-    let cands: Vec<EdgeId> = (0..body.edges.len() as u32)
-        .map(EdgeId)
-        .filter(|&e| between_same(body, &keys, e))
+    let cands: Vec<EdgeId> = body
+        .edges
+        .iter()
+        .zip(0u32..)
+        .filter(|&(x, _)| between_same(body, &keys, x))
+        .map(|(_, e)| EdgeId(e))
         .collect();
     // the order edges go in decides which stays as the seam of a face that wraps round: the last
     // one of its ring. Rulings (a line on a cylinder or cone) go last, so the seam kept is one
@@ -278,12 +281,11 @@ where
     (to, members)
 }
 
-/// Whether live edge `e` lies between two faces on one surface, facing the same way (`keys` as
+/// Whether edge `x`, alive, lies between two faces on one surface, facing the same way (`keys` as
 /// `unify` makes them); or has one plane face on both sides: a slit, a spur or a bridge between
 /// two of its loops, which bounds nothing. (One face round a cylinder or cone on both sides is
 /// mostly its seam, which the face needs.)
-fn between_same(body: &Body, keys: &[(u8, f64)], e: EdgeId) -> bool {
-    let x = body.edge(e);
+fn between_same(body: &Body, keys: &[(u8, f64)], x: &forge_topo::Edge) -> bool {
     if !x.alive || x.coedges.len() != 2 {
         return false;
     }
