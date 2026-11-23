@@ -259,7 +259,7 @@ pub fn json(run: &Run, src: &str) -> Json {
                 ]
                 .into_iter()
                 // the sheets' area apart, where the part has sheets: volume and area are the solids'
-                .chain(sheet_area(m).map(|a| ("sheet_area", a.into())))
+                .chain(sheet_area(run).map(|a| ("sheet_area", a.into())))
                 // the bodies that are sheets, by the features that made them
                 .chain(sheet_bodies(run).map(|ids| ("sheets", ids)))
                 .chain([
@@ -305,8 +305,9 @@ fn sheet_bodies(run: &Run) -> Option<Json> {
 }
 
 /// The area of the part's sheets, where it has any.
-fn sheet_area(m: &crate::Measure) -> Option<f64> {
-    m.mass.as_ref().map(|x| x.sheet_area).filter(|&a| a != 0.0)
+pub fn sheet_area(run: &Run) -> Option<f64> {
+    let b = run.body.as_ref().filter(|b| b.has_sheet())?;
+    forge_topo::mass::sheet_area(b).ok().map(|x| x.0)
 }
 
 pub fn text(run: &Run, src: &str) -> String {
@@ -381,7 +382,7 @@ pub fn text(run: &Run, src: &str) -> String {
             m.edges,
             if m.problems == 0 { "valid" } else { "INVALID" }
         ));
-        if let Some(a) = sheet_area(m) {
+        if let Some(a) = sheet_area(run) {
             // the part's volume and area are its solids'
             let at = out.len() - 1;
             out.insert_str(at, &format!(", sheet area {} mm2", milli(a)));

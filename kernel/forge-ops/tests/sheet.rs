@@ -194,7 +194,7 @@ fn a_sheet_has_no_volume_and_check_keeps_solids_closed() {
     let mut b = extrude_sheet(&Frame::WORLD, &[chain], 10.0, 7).unwrap();
     let m = mass(&b).unwrap();
     assert_eq!((m.volume, m.area), (0.0, 0.0));
-    assert!((m.sheet_area - 650.0).abs() < 1e-9);
+    assert!((area(&b) - 650.0).abs() < 1e-9);
     // the same topology called a solid: its boundary edges are each used once, not twice
     for f in &mut b.faces {
         f.sheet = false;
