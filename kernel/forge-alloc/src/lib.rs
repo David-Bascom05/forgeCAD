@@ -403,40 +403,73 @@ mod global {
     }
 }
 
-/// The threaded browser build (shared memory: `target_feature = "atomics"`): the same heap behind
-/// a spin lock. A spin, never a wait: the page's main thread may not block (`memory.atomic.wait`
-/// traps there), and the heap is held only for an allocation's few hundred instructions. Plain
-/// wasm and native builds never compile this.
+/// The threaded browser build (shared memory: `target_feature = "atomics"`): the same heap,
+/// eight of it, each behind its own spin lock. One heap behind one lock made the kernel's
+/// parallel paths slower than one thread: a build allocates tens of millions of times, and with
+/// more workers than cores a worker spun while the lock's holder waited for a core. A thread
+/// takes the heap its stack's address picks (its own, as near as eight allow, with no thread
+/// local: a worker's thread locals are themselves allocated before they exist), else the next
+/// one free; a block goes back to the heap whose memory it is, known by its 64 KiB page.
+/// Spins, never waits: the page's main thread may not block (`memory.atomic.wait` traps there),
+/// and a heap is held only for an allocation's few hundred instructions. Plain wasm and native
+/// builds never compile this.
 #[cfg(all(target_family = "wasm", target_feature = "atomics"))]
 mod global {
     use super::Heap;
     use core::alloc::{GlobalAlloc, Layout};
     use core::cell::UnsafeCell;
-    use core::sync::atomic::{AtomicBool, Ordering};
+    use core::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 
-    struct Alloc {
+    const HEAPS: usize = 8;
+    const PAGE: usize = 65536;
+
+    struct Shard {
         held: AtomicBool,
         heap: UnsafeCell<Heap>,
     }
 
-    // every use of `heap` is under `held`
+    struct Alloc {
+        shards: [Shard; HEAPS],
+        /// Each 64 KiB page's heap (the memory's whole 4 GiB): set when a heap grows into it,
+        /// before any block of it is handed out.
+        owner: [AtomicU8; 1 << 16],
+    }
+
+    // every use of a shard's `heap` is under its `held`
     unsafe impl Sync for Alloc {}
 
     #[global_allocator]
     static ALLOC: Alloc = Alloc {
-        held: AtomicBool::new(false),
-        heap: UnsafeCell::new(Heap::new()),
+        shards: [const {
+            Shard {
+                held: AtomicBool::new(false),
+                heap: UnsafeCell::new(Heap::new()),
+            }
+        }; HEAPS],
+        owner: [const { AtomicU8::new(0) }; 1 << 16],
     };
 
-    fn grow(bytes: usize) -> Option<(usize, usize)> {
-        const PAGE: usize = 65536;
+    /// New memory for heap `k`, its pages marked as its own.
+    fn grow(k: usize, bytes: usize) -> Option<(usize, usize)> {
         let pages = bytes.div_ceil(PAGE).max(16);
         let old = core::arch::wasm32::memory_grow(0, pages);
-        (old != usize::MAX).then_some((old * PAGE, pages * PAGE))
+        if old == usize::MAX {
+            return None;
+        }
+        for p in old..old + pages {
+            ALLOC.owner[p].store(k as u8, Ordering::Release);
+        }
+        Some((old * PAGE, pages * PAGE))
     }
 
-    impl Alloc {
-        fn with<T>(&self, f: impl FnOnce(&mut Heap) -> T) -> T {
+    impl Shard {
+        fn try_take(&self) -> bool {
+            self.held
+                .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
+                .is_ok()
+        }
+
+        fn take(&self) {
             while self
                 .held
                 .compare_exchange_weak(false, true, Ordering::Acquire, Ordering::Relaxed)
@@ -444,24 +477,95 @@ mod global {
             {
                 core::hint::spin_loop();
             }
-            let got = f(unsafe { &mut *self.heap.get() });
+        }
+
+        fn give(&self) {
             self.held.store(false, Ordering::Release);
-            got
+        }
+
+        fn heap(&self) -> &mut Heap {
+            // only while held
+            unsafe { &mut *self.heap.get() }
+        }
+    }
+
+    impl Alloc {
+        /// The heap taken for a new block: the thread's own (by its stack) if free, else the
+        /// first free after it; held when returned.
+        fn pick(&self) -> usize {
+            let here = 0u8;
+            // a worker's stack is a MiB of its own: the MiB its frames are in
+            let home = (&here as *const u8 as usize >> 20) % HEAPS;
+            loop {
+                for i in 0..HEAPS {
+                    let k = (home + i) % HEAPS;
+                    if self.shards[k].try_take() {
+                        return k;
+                    }
+                }
+                core::hint::spin_loop();
+            }
+        }
+
+        /// A new block off a heap; out of memory there, off any other with room.
+        fn fresh(
+            &self,
+            f: impl Fn(&mut Heap, &mut dyn FnMut(usize) -> Option<(usize, usize)>) -> *mut u8,
+        ) -> *mut u8 {
+            let k = self.pick();
+            let p = f(self.shards[k].heap(), &mut |b| grow(k, b));
+            self.shards[k].give();
+            if !p.is_null() {
+                return p;
+            }
+            for j in (0..HEAPS).filter(|&j| j != k) {
+                let s = &self.shards[j];
+                s.take();
+                let p = f(s.heap(), &mut |_| None);
+                s.give();
+                if !p.is_null() {
+                    return p;
+                }
+            }
+            core::ptr::null_mut()
+        }
+
+        /// The heap block `p` is of, held.
+        fn owner_of(&self, p: *mut u8) -> &Shard {
+            let s = &self.shards[self.owner[p as usize / PAGE].load(Ordering::Acquire) as usize];
+            s.take();
+            s
         }
     }
 
     unsafe impl GlobalAlloc for Alloc {
         unsafe fn alloc(&self, l: Layout) -> *mut u8 {
-            self.with(|h| unsafe { h.alloc(l.size(), l.align(), &mut grow) })
+            self.fresh(|h, g| unsafe { h.alloc(l.size(), l.align(), &mut |b| g(b)) })
         }
 
         #[inline(never)]
         unsafe fn dealloc(&self, p: *mut u8, l: Layout) {
-            self.with(|h| unsafe { h.dealloc(p, l.size(), l.align()) })
+            let s = self.owner_of(p);
+            unsafe { s.heap().dealloc(p, l.size(), l.align()) };
+            s.give();
         }
 
         unsafe fn realloc(&self, p: *mut u8, l: Layout, new: usize) -> *mut u8 {
-            self.with(|h| unsafe { h.realloc(p, l.size(), l.align(), new, &mut grow) })
+            // in place in its own heap if it can be; else a new block anywhere, and this one freed
+            let s = self.owner_of(p);
+            let q = unsafe { s.heap().realloc(p, l.size(), l.align(), new, &mut |_| None) };
+            s.give();
+            if !q.is_null() {
+                return q;
+            }
+            let q = unsafe { self.alloc(Layout::from_size_align_unchecked(new, l.align())) };
+            if !q.is_null() {
+                unsafe {
+                    core::ptr::copy_nonoverlapping(p, q, l.size().min(new));
+                    self.dealloc(p, l);
+                }
+            }
+            q
         }
     }
 }
