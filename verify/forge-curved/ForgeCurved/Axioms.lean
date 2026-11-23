@@ -153,3 +153,6 @@ import ForgeCurved
 #print axioms ForgeCurved.BodyModel.denote_refines
 #print axioms ForgeCurved.BodyModel.bounds_unique
 #print axioms ForgeCurved.BodyModel.exactOf_isolated
+#print axioms ForgeCurved.G14.kept_iff
+#print axioms ForgeCurved.G14.extra_not_end
+#print axioms ForgeCurved.G14.edge_cut_not_kept
