@@ -1070,14 +1070,110 @@ fn a_ball_over_a_tapered_pocket_builds() {
     assert!(matches!(v, Verdict::Ok), "{v:?}");
 }
 
-/// A revolved cup whose wall is a spline, shelled: the shell stops on Rebuild (an edge); a straight
-/// wall shells. Open: ignored until the shell rebuilds offset spline walls.
+/// A revolved cup whose wall is a spline, shelled. The revolve makes the wall two faces of one
+/// surface; their offsets coincide, so the seam between them is no intersection but the seam moved
+/// with the offset: the section's exact offset curve, turned to the seam's angle.
 #[test]
-#[ignore = "open: the shell's Rebuild on a revolved spline wall"]
 fn a_revolved_spline_cup_shells() {
     use forge_lang::fuzz::{Verdict, judge_built};
     let (v, _) = judge_built(include_str!("kernel_parts/shell_revolved_spline.fg"));
     assert!(matches!(v, Verdict::Ok), "{v:?}");
+}
+
+/// A cup like `shell_revolved_spline.fg`: its wall a spline through `wall` (r, z), top to bottom,
+/// revolved about z and shelled `t` with the top open.
+fn spline_cup(wall: &[(f64, f64)], t: f64) -> String {
+    let n = wall.len();
+    let mut src = String::new();
+    for (k, (r, z)) in wall.iter().enumerate() {
+        src += &format!("param cup.p{k} = ({:?}, {z:?})\n", -r);
+    }
+    let pts: Vec<String> = (0..n).map(|k| format!("p{k}")).collect();
+    let (top, bottom) = (wall[0].1, wall[n - 1].0);
+    src += &format!(
+        "param cup.h = {top:?}
+param cup.f = {:?}
+sketch cup(on: xz) {{
+  l0 = line((0, 0), (0, h))
+  l1 = line((0, h), p0)
+  s2 = spline([{}], closed: false)
+  l3 = line(p{}, (0, 0))
+  ax = line((0, h), (0, 0), construction: true)
+}}
+body = revolve(cup, axis: cup.ax)
+param skin.t = {t:?}
+skin = shell(t, open: body.side(cup.l1))
+",
+        -bottom,
+        pts.join(", "),
+        n - 1
+    );
+    src
+}
+
+const CUP: [(f64, f64); 3] = [(30.0, 60.0), (12.0, 30.0), (20.0, 0.0)];
+const WAVY: [(f64, f64); 5] = [
+    (30.0, 60.0),
+    (22.0, 45.0),
+    (30.0, 30.0),
+    (22.0, 15.0),
+    (30.0, 0.0),
+];
+const ESS: [(f64, f64); 4] = [(30.0, 60.0), (18.0, 40.0), (26.0, 20.0), (16.0, 0.0)];
+
+/// A wall's points, a thickness, and the shelled cup's volume and area.
+type CupCase = (&'static [(f64, f64)], f64, f64, f64);
+
+/// Spline cups shelled over a range of walls, from a thousandth of an inch to all but the thickness
+/// that folds them, each valid and of the volume and area worked out apart (the section's offset
+/// curve integrated about the axis at 30 digits), within the mass's bounds.
+#[test]
+fn spline_cups_shell_over_thickness_and_shape() {
+    use forge_lang::fuzz::{Verdict, judge_built};
+    let cases: [CupCase; 9] = [
+        (&CUP, 0.0254, 216.198410283863, 17029.7522630528),
+        (&CUP, 0.5, 4158.56214467998, 16757.5911114297),
+        (&CUP, 5.0, 33064.6281621307, 14480.1564355208),
+        (&CUP, 11.7, 53164.4361673539, 12057.1887502532),
+        (&WAVY, 0.5, 6852.54405525901, 27539.506350796),
+        (&WAVY, 2.0, 25641.0532814929, 26182.9901104585),
+        (&WAVY, 5.4, 59702.3710213139, 23729.8296165452),
+        (&ESS, 1.0, 10086.7492998474, 20430.292960212),
+        (&ESS, 3.0, 28283.1314584731, 19606.1579806174),
+    ];
+    for (wall, t, volume, area) in cases {
+        let src = spline_cup(wall, t);
+        let (v, _) = judge_built(&src);
+        assert!(matches!(v, Verdict::Ok), "{} points, {t}: {v:?}", wall.len());
+        let b = built(&src);
+        let m = forge_topo::mass::mass(&b.body).expect("a mass");
+        let (dv, da) = ((m.volume - volume).abs(), (m.area - area).abs());
+        assert!(
+            dv <= m.err[0].max(1e-6 * volume) && da <= m.err[1].max(1e-6 * area),
+            "{} points, {t}: volume {} against {volume} (err {}), area {} against {area} (err {})",
+            wall.len(),
+            m.volume,
+            m.err[0],
+            m.area,
+            m.err[1]
+        );
+    }
+}
+
+/// Just past the thickness where the wall's offset folds, the shell is refused there, typed: the
+/// cup's circles close up at 11.7582990712 (its waist), the wavy wall's bump turns back at
+/// 175/32, the S's at 11.3718828313 (worked out apart at 30 digits); just short of it, it shells.
+#[test]
+fn a_spline_wall_too_thick_for_its_curvature_is_refused_where_it_folds() {
+    for (wall, fold) in [
+        (&CUP[..], 11.7582990712012),
+        (&WAVY[..], 175.0 / 32.0),
+        (&ESS[..], 11.3718828313),
+    ] {
+        let past = kernel_util::refusal(&spline_cup(wall, fold * (1.0 + 1e-5)));
+        assert!(past.contains("Folds"), "{} points: {past}", wall.len());
+        built(&spline_cup(wall, fold * (1.0 - 1e-5)));
+    }
 }
 
 /// A plate whose wall is a wavy spline (crossing nowhere) builds, then its face fails to mesh

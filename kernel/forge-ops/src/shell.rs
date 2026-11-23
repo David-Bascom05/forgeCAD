@@ -17,6 +17,12 @@ pub enum ShellError {
     Collapses {
         face: Name,
     },
+    /// The offset of this face folds over itself at `at` (the wall is as thick as the face's
+    /// radius of curvature there, or thicker), or whether it does there cannot be decided.
+    Folds {
+        face: Name,
+        at: forge_math::Point3,
+    },
     /// The walls run through each other here: too thick for the part.
     SelfIntersecting {
         a: Name,
@@ -198,11 +204,10 @@ fn offset_all(body: &Body, thickness: f64, outward: bool, open: &[Name]) -> Resu
     let shift = if outward { thickness } else { -thickness };
     let along = |f: &forge_topo::Face| if f.same_sense { shift } else { -shift };
     // faces whose offsets vanish go, and their neighbours meet instead
-    let gone: Vec<bool> = (0..base.faces.len() as u32)
-        .map(FaceId)
-        .zip(&opened)
-        .map(|(f, &o)| !o && face_offset(&base, f, along(base.face(f))).is_none())
-        .collect();
+    let mut gone = vec![false; base.faces.len()];
+    for f in base.face_ids() {
+        gone[f.index()] = !opened[f.index()] && face_offset(&base, f, along(base.face(f)))?.is_none();
+    }
     let mut moved = if gone.iter().any(|&g| g) {
         collapse(&base, &gone)?
     } else {
@@ -221,7 +226,7 @@ fn offset_all(body: &Body, thickness: f64, outward: bool, open: &[Name]) -> Resu
         .filter(|f| !open_moved[f.index()])
     {
         let face = moved.face(f);
-        let s = face_offset(&moved, f, along(face)).ok_or(ShellError::Collapses { face: face.name })?;
+        let s = face_offset(&moved, f, along(face))?.ok_or(ShellError::Collapses { face: face.name })?;
         moved.faces[f.index()].surface = s;
     }
     // a cone offset towards its apex can close up within the face
@@ -885,9 +890,10 @@ pub fn offset(s: &Surface, d: f64) -> Option<Surface> {
 
 /// Face `f`'s surface moved `d` along its normal; a procedural one is refused only where it would
 /// close up over the stretch of it the face spans (a blend's run-outs past its ends may be tighter).
-fn face_offset(body: &Body, f: FaceId, d: f64) -> Option<Surface> {
+/// Where the surface decides that exactly (`offset_fold`), a fold is an error at its place.
+fn face_offset(body: &Body, f: FaceId, d: f64) -> Result<Option<Surface>, ShellError> {
     let Surface::Procedural(p) = &body.face(f).surface else {
-        return offset(&body.face(f).surface, d);
+        return Ok(offset(&body.face(f).surface, d));
     };
     let dom = p.domain();
     let mut uv = Box2::new(dom.u.interval(), dom.v.interval());
@@ -903,7 +909,18 @@ fn face_offset(body: &Body, f: FaceId, d: f64) -> Option<Surface> {
             uv = Box2::new(su, sv);
         }
     }
-    forge_geom::blend::Offset::surface_over(p, d, p.mesh_radius_over(uv))
+    match p.offset_fold(d, uv) {
+        Some(Some(q)) => Err(ShellError::Folds {
+            face: body.face(f).name,
+            at: p.point(q),
+        }),
+        Some(None) => Ok(forge_geom::blend::Offset::surface_over(p, d, f64::INFINITY)),
+        None => Ok(forge_geom::blend::Offset::surface_over(
+            p,
+            d,
+            p.mesh_radius_over(uv),
+        )),
+    }
 }
 
 #[cfg(test)]
