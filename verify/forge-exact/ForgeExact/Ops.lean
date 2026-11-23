@@ -6,6 +6,7 @@ import ForgeExact.Ops.Shell
 import ForgeExact.Ops.DraftCone
 import ForgeExact.Ops.ChamferCorner
 import ForgeExact.Ops.Rib
+import ForgeExact.Ops.Recarrier
 
 /-!
 # The specification of shell, draft, hole, rib, chamfer and pattern
