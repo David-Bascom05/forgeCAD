@@ -48,8 +48,12 @@ pub fn unify(body: &mut Body) {
         (ruling, a.min(b), a.max(b), q(x.curve.eval(x.range.mid())), x.name)
     };
     let mut keyed: Vec<_> = cands.iter().map(|&e| (at(e), e)).collect();
-    keyed.sort_unstable_by_key(|k| k.0);
-    let cands: Vec<EdgeId> = keyed.into_iter().map(|k| k.1).collect();
+    let cands: Vec<EdgeId> = if keyed.len() > 32 {
+        by_index(&keyed)
+    } else {
+        keyed.sort_unstable_by_key(|k| k.0);
+        keyed.into_iter().map(|k| k.1).collect()
+    };
     let mut faces: Vec<FaceId> = Vec::new();
     // (the face that went, the face it went into)
     let mut merged: Vec<(u32, u32)> = Vec::new();
@@ -824,4 +828,13 @@ fn next(body: &Body, c: CoedgeId) -> CoedgeId {
         .map(|i| l.coedge((k + i) % n))
         .find(|&d| body.edge(body.coedge(d).edge).alive)
         .unwrap_or(c)
+}
+
+/// The items of `keyed` in the order of their keys, ties (alike in every way) in the order given:
+/// the keys are wide, and past a few, moving them costs more than sorting their indices.
+#[inline(never)]
+fn by_index<K: Ord, T: Copy>(keyed: &[(K, T)]) -> Vec<T> {
+    let mut order: Vec<u32> = (0..keyed.len() as u32).collect();
+    order.sort_unstable_by(|&i, &j| keyed[i as usize].0.cmp(&keyed[j as usize].0).then(i.cmp(&j)));
+    order.into_iter().map(|i| keyed[i as usize].1).collect()
 }

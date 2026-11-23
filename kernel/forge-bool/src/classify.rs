@@ -69,22 +69,12 @@ const SIMPLE_MARGIN: f64 = 1e-3;
 impl Simple {
     fn of(body: &Body, f: FaceId) -> Option<Simple> {
         let face = body.face(f);
-        if let Surface::Procedural(pr) = &face.surface
-            && pr.windowed()
-        {
-            // the loops' u span, drawn coarsely (a few points an edge, followed in parameter space
-            // as the full drawing is), grown by a twentieth each way: it holds the face between
-            // the coarse points, and the balls at its ends stand clear of the face
-            let mut u = Interval::EMPTY;
-            for l in forge_topo::uv::face_uv_loops_with(body, f, |_| 4) {
-                l.points.iter().for_each(|p| u.include(p.x));
-            }
-            let m = 0.05 * u.width() + tol::LINEAR;
-            return Some(Simple::Sheet {
-                u: Interval::new(u.lo - m, u.hi + m),
-            });
-        }
-        let [l] = face.loops[..] else { return None };
+        let [l] = face.loops[..] else {
+            return match &face.surface {
+                Surface::Procedural(pr) if pr.windowed() => Simple::sheet(body, f),
+                _ => None,
+            };
+        };
         let seam = |c: forge_topo::CoedgeId| body.partner(c).is_some_and(|o| body.coedge_face(o) == f);
         let full_circle = |c: forge_topo::CoedgeId| {
             let e = body.edge(body.coedge(c).edge);
@@ -178,8 +168,32 @@ impl Simple {
                     convex: w[0].dot(mid[1] - centre) > 0.0,
                 })
             }
+            Surface::Procedural(pr) if pr.windowed() => Simple::sheet(body, f),
             _ => None,
         }
+    }
+
+    /// A windowed surface's face (`Procedural::windowed`): its loops' u span, drawn coarsely
+    /// (four points an edge, followed in parameter space as the full drawing is), grown by a
+    /// twentieth each way, so that it holds the face between the coarse points and the balls at its
+    /// ends stand clear of the face. None for any other face.
+    #[cold]
+    #[inline(never)]
+    fn sheet(body: &Body, f: FaceId) -> Option<Simple> {
+        let Surface::Procedural(pr) = &body.face(f).surface else {
+            return None;
+        };
+        if !pr.windowed() {
+            return None;
+        }
+        let mut u = Interval::EMPTY;
+        for l in forge_topo::uv::face_uv_loops_with(body, f, |_| 4) {
+            l.points.iter().for_each(|p| u.include(p.x));
+        }
+        let m = 0.05 * u.width() + tol::LINEAR;
+        Some(Simple::Sheet {
+            u: Interval::new(u.lo - m, u.hi + m),
+        })
     }
 
     /// Where `p`, on the face's surface, lies; None near the boundary.
@@ -530,8 +544,8 @@ impl<'a> Index<'a> {
     /// The parameters of a point on or near face `f`'s sheet: on a windowed surface, its foot on
     /// the face's own stretch, not on another stretch of the surface nearer it.
     #[inline]
-    fn project_in(&self, f: FaceId, p: Point3) -> Point2 {
-        match &self.body.face(f).surface {
+    fn project_in(&self, f: FaceId, s: &Surface, p: Point3) -> Point2 {
+        match s {
             Surface::Procedural(_) => self.project_in_procedural(f, p),
             s => s.project(p),
         }
@@ -693,7 +707,7 @@ impl<'a> Index<'a> {
                 } else {
                     -e.curve.deriv(t).d1
                 };
-                if let Some(n) = body.face_normal(f, self.project_in(f, q)) {
+                if let Some(n) = body.face_normal(f, self.project_in(f, &face.surface, q)) {
                     let left = n.cross(along);
                     return if left.dot(p - q) > 0.0 {
                         Where::Inside
@@ -729,7 +743,7 @@ impl<'a> Index<'a> {
             return if inside { Where::Inside } else { Where::Outside };
         }
         let drawn = self.drawn(f);
-        let on = self.project_in(f, p);
+        let on = self.project_in(f, &face.surface, p);
         let uv = into_window(body, f, on, drawn);
         // a line in (u, v) sags 1/cos v times as far as an edge's chord: off the poles that is
         // under the sag decided by side above, and a chord cannot be wrong outside its own span
@@ -761,39 +775,62 @@ impl<'a> Index<'a> {
                 return Where::On;
             }
         }
-        // the fixed rays, then as many more spread over the sphere: a ray is a witness only when
-        // it passes clear of every edge and vertex and crosses each face it meets
-        'ray: for d in RAYS.into_iter().chain((0..SPARE_RAYS).map(spare_ray)) {
+        for d in RAYS {
             let dir = Vec3::new(d[0], d[1], d[2])
                 .normalize()
-                .expect("ray directions are nonzero");
-            let line = Line::new(p, dir);
-            let mut crossings = 0usize;
-            for f in self.body.face_ids() {
-                if !ray_hits_box(p, dir.get(), &boxes[f.index()]) {
-                    continue;
-                }
-                match self.line_face(&line, f) {
-                    LineSurface::OnSurface => continue 'ray,
-                    LineSurface::Hits(hits) => {
-                        for h in hits.iter().filter(|h| h.t > tol::LINEAR) {
-                            if h.contact == Contact::Touching {
-                                continue 'ray;
-                            }
-                            match self.point_in_face(f, h.point) {
-                                Where::Inside => crossings += 1,
-                                Where::On => continue 'ray,
-                                Where::Outside => {}
-                            }
+                .expect("fixed ray directions are nonzero");
+            if let Some(w) = self.ray_parity(p, dir, boxes) {
+                return w;
+            }
+        }
+        self.spare_rays(p, boxes)
+    }
+
+    /// The side the ray from p along `dir` gives by its crossings' parity, or None when it is no
+    /// witness: it runs in a face, touches one, or meets a face's boundary (a hit On it).
+    #[inline]
+    fn ray_parity(&self, p: Point3, dir: forge_math::UnitVec3, boxes: &[Box3]) -> Option<Where> {
+        let line = Line::new(p, dir);
+        let mut crossings = 0usize;
+        for f in self.body.face_ids() {
+            if !ray_hits_box(p, dir.get(), &boxes[f.index()]) {
+                continue;
+            }
+            match self.line_face(&line, f) {
+                LineSurface::OnSurface => return None,
+                LineSurface::Hits(hits) => {
+                    for h in hits.iter().filter(|h| h.t > tol::LINEAR) {
+                        if h.contact == Contact::Touching {
+                            return None;
+                        }
+                        match self.point_in_face(f, h.point) {
+                            Where::Inside => crossings += 1,
+                            Where::On => return None,
+                            Where::Outside => {}
                         }
                     }
                 }
             }
-            return if crossings % 2 == 1 {
-                Where::Inside
-            } else {
-                Where::Outside
-            };
+        }
+        Some(if crossings % 2 == 1 {
+            Where::Inside
+        } else {
+            Where::Outside
+        })
+    }
+
+    /// After every fixed ray grazed: as many more spread over the sphere, the first witness's side.
+    #[cold]
+    #[inline(never)]
+    fn spare_rays(&self, p: Point3, boxes: &[Box3]) -> Where {
+        for k in 0..SPARE_RAYS {
+            let d = spare_ray(k);
+            let dir = Vec3::new(d[0], d[1], d[2])
+                .normalize()
+                .expect("spare ray directions are nonzero");
+            if let Some(w) = self.ray_parity(p, dir, boxes) {
+                return w;
+            }
         }
         Where::On
     }
