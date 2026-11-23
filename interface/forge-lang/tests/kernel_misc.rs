@@ -1059,3 +1059,99 @@ fn a_taper_that_collapses_is_refused_cleanly() {
     let (v, _) = judge_built(include_str!("kernel_parts/taper_collapses.fg"));
     assert!(matches!(v, Verdict::Refused(_)), "{v:?}");
 }
+
+/// A ball cut centred on the top face over a 1 deg tapered rounded-rectangle pocket: the boolean
+/// stops on SplitCrossed (the sphere). Open: ignored until the boolean splits the sphere cleanly.
+#[test]
+#[ignore = "open: SplitCrossed on the sphere"]
+fn a_ball_over_a_tapered_pocket_builds() {
+    use forge_lang::fuzz::{Verdict, judge_built};
+    let (v, _) = judge_built(include_str!("kernel_parts/ball_over_tapered_pocket.fg"));
+    assert!(matches!(v, Verdict::Ok), "{v:?}");
+}
+
+/// A revolved cup whose wall is a spline, shelled: the shell stops on Rebuild (an edge); a straight
+/// wall shells. Open: ignored until the shell rebuilds offset spline walls.
+#[test]
+#[ignore = "open: the shell's Rebuild on a revolved spline wall"]
+fn a_revolved_spline_cup_shells() {
+    use forge_lang::fuzz::{Verdict, judge_built};
+    let (v, _) = judge_built(include_str!("kernel_parts/shell_revolved_spline.fg"));
+    assert!(matches!(v, Verdict::Ok), "{v:?}");
+}
+
+/// A plate whose wall is a wavy spline (crossing nowhere) builds, then its face fails to mesh
+/// (ConstraintThroughPoint). Open: ignored until the mesher takes the face.
+#[test]
+#[ignore = "open: ConstraintThroughPoint meshing a wavy spline wall"]
+fn a_wavy_spline_wall_meshes() {
+    use forge_lang::fuzz::{Verdict, judge_built};
+    let (v, _) = judge_built(include_str!("kernel_parts/mesh_wavy_spline.fg"));
+    assert!(matches!(v, Verdict::Ok), "{v:?}");
+}
+
+/// A fillet carried along a tangent chain (a concave arc, a straight side, a top arc) into an end
+/// face a scoop has trimmed: Overflow, where FreeCAD rounds it. Open: ignored until the fillet
+/// builds there.
+#[test]
+#[ignore = "open: Fillet Overflow along a tangent chain into a trimmed face"]
+fn a_fillet_along_a_tangent_chain_past_a_scoop_builds() {
+    use forge_lang::fuzz::{Verdict, judge_built};
+    let (v, _) = judge_built(include_str!("kernel_parts/fillet_tangent_chain_scoop.fg"));
+    assert!(matches!(v, Verdict::Ok), "{v:?}");
+}
+
+/// A drill started on a plane tangent to a round crown, cut up to a bore: NotClosed (a judge fail).
+/// Open: ignored until the cut builds.
+#[test]
+#[ignore = "open: NotClosed drilling from a plane tangent to the crown"]
+fn a_drill_from_a_tangent_plane_to_a_bore_builds() {
+    use forge_lang::fuzz::{Verdict, judge_built};
+    let (v, _) = judge_built(include_str!("kernel_parts/drill_from_tangent_plane.fg"));
+    assert!(matches!(v, Verdict::Ok), "{v:?}");
+}
+
+/// A ring cut whose outer circle is tangent to the block's top and bottom: the two sides it leaves
+/// meet only along lines, a non-manifold result, which the kernel refuses as ZeroThickness at the
+/// tangent lines (the owner's decision, as mainstream mechanical CAD; Onshape builds it).
+#[test]
+fn a_ring_cut_tangent_to_two_faces_is_refused_at_the_tangent_lines() {
+    use forge_lang::fuzz::{Verdict, judge_built};
+    let (v, _) = judge_built(include_str!("kernel_parts/ring_cut_tangent.fg"));
+    let Verdict::Refused(why) = &v else {
+        panic!("{v:?}")
+    };
+    assert!(why.contains("ZeroThickness"), "{why}");
+    // the tangent lines: the outer circle's top and bottom, z = 0 and z = 10
+    assert!(
+        why.contains("z: 0") || why.contains("z: 10") || why.contains("z: 9"),
+        "{why}"
+    );
+}
+
+/// Three fillets on exactly written spline walls that the kernel refuses where Onshape rounds them
+/// (CADFS, fit splines written exactly). Open: ignored until the fillet spec says what each is due
+/// (a round, or a refusal with its reason); each test expects a build.
+#[test]
+#[ignore = "open: fillet NoBlend where spline walls meet (for the fillet spec)"]
+fn a_fillet_where_two_spline_walls_meet_builds() {
+    use forge_lang::fuzz::{Verdict, judge_built};
+    let (v, _) = judge_built(include_str!("kernel_parts/fillet_spline_walls_noblend.fg"));
+    assert!(matches!(v, Verdict::Ok), "{v:?}");
+}
+
+#[test]
+#[ignore = "open: fillet Overflow between a wavy spline wall and a notch (for the fillet spec)"]
+fn a_fillet_on_a_notched_wavy_plate_builds() {
+    use forge_lang::fuzz::{Verdict, judge_built};
+    let (v, _) = judge_built(include_str!("kernel_parts/fillet_wavy_plate_notch.fg"));
+    assert!(matches!(v, Verdict::Ok), "{v:?}");
+}
+
+#[test]
+#[ignore = "open: fillet Overflow on both edges of a narrow crescent (for the fillet spec)"]
+fn a_fillet_on_both_edges_of_a_crescent_builds() {
+    use forge_lang::fuzz::{Verdict, judge_built};
+    let (v, _) = judge_built(include_str!("kernel_parts/fillet_crescent_both_edges.fg"));
+    assert!(matches!(v, Verdict::Ok), "{v:?}");
+}

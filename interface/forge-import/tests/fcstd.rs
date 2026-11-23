@@ -953,6 +953,73 @@ fn with_shapes(d: &str, extra: &[(&str, &str)]) -> Vec<u8> {
 
 /// The cubic B-spline's knots and poles here are written as they are, so the side is exact: its
 /// weights too. The area under a rational curve, by Gauss on many spans.
+/// A periodic B-spline is written as Forge's NURBS: its poles wrapped (the first `degree` again after
+/// the last) and its knots run on periodically to all `poles + degree + 1` of them.
+#[test]
+fn a_periodic_spline_is_written_with_its_poles_wrapped() {
+    let poles = [(10.0, 0.0), (0.0, 10.0), (-10.0, 0.0), (0.0, -10.0)];
+    let pole: String = poles
+        .iter()
+        .map(|p| format!("<Pole X=\"{}\" Y=\"{}\" Z=\"0\" Weight=\"1\"/>", p.0, p.1))
+        .collect();
+    // one period of uniform knots, from 2 to 6: the last is the first one period on
+    let knot: String = (2..=6)
+        .map(|v| format!("<Knot Value=\"{v}\" Mult=\"1\"/>"))
+        .collect();
+    let g = format!(
+        "<GeometryList count=\"1\"><Geometry type=\"Part::GeomBSplineCurve\"><BSplineCurve PolesCount=\"4\" KnotsCount=\"5\" Degree=\"3\" IsPeriodic=\"1\">{pole}{knot}</BSplineCurve><Construction value=\"0\"/></Geometry></GeometryList>"
+    );
+    let d = doc(&[
+        body("Pad", &["Sketch", "Pad"]),
+        sketch("Sketch", place(0.0), g),
+        pad("Pad", "", "Sketch", 5.0, &[]),
+    ]);
+    let bodies = translate(&with_shapes(&d, &[])).expect("reads");
+    assert_eq!(bodies[0].status(), "translated", "{:?}", bodies[0].fail);
+    assert!(!bodies[0].approx);
+    let fg = bodies[0].fg.clone().expect("a part file");
+    // 4 poles and the first 3 again; 4 + 2 * 3 + 1 knots, uniform, the curve's own from knot 3 to 7
+    assert!(fg.contains("degree: sd0, knots: sk0)"), "{fg}");
+    let ks: Vec<String> = (-1..=9).map(|v| format!("ratio({v})")).collect();
+    assert!(
+        fg.contains(&format!("param t0_sk.sk0 = [{}]", ks.join(", "))),
+        "{fg}"
+    );
+    // the closed uniform cubic over the poles: each span's point is the poles' blend by the uniform basis
+    let at = |i: usize, t: f64| {
+        let b = [
+            (1.0 - t).powi(3) / 6.0,
+            (3.0 * t.powi(3) - 6.0 * t * t + 4.0) / 6.0,
+            (-3.0 * t.powi(3) + 3.0 * t * t + 3.0 * t + 1.0) / 6.0,
+            t.powi(3) / 6.0,
+        ];
+        let x: f64 = (0..4).map(|j| b[j] * poles[(i + j) % 4].0).sum();
+        let y: f64 = (0..4).map(|j| b[j] * poles[(i + j) % 4].1).sum();
+        (x, y)
+    };
+    // the area it bounds, half the integral of x dy - y dx, by 3-point Gauss in each of 4 x 100 pieces
+    let (n, h) = (100, 1e-7);
+    let g3 = [
+        (-0.774_596_669_241_483_4, 5.0 / 9.0),
+        (0.0, 8.0 / 9.0),
+        (0.774_596_669_241_483_4, 5.0 / 9.0),
+    ];
+    let mut area = 0.0;
+    for i in 0..4 {
+        for k in 0..n {
+            let (a, b) = (k as f64 / n as f64, (k + 1) as f64 / n as f64);
+            for (z, w) in g3 {
+                let t = (a + b) / 2.0 + z * (b - a) / 2.0;
+                let (p, q, r) = (at(i, t), at(i, t + h), at(i, t - h));
+                let (dx, dy) = ((q.0 - r.0) / (2.0 * h), (q.1 - r.1) / (2.0 * h));
+                area += w * (b - a) / 2.0 * (p.0 * dy - p.1 * dx) / 2.0;
+            }
+        }
+    }
+    let m = built(&fg);
+    near(m.volume, 5.0 * area.abs(), "volume", &fg);
+}
+
 #[test]
 fn a_pad_with_a_spline_side_writes_the_spline_exactly() {
     let poles = [(40.0, 10.0), (28.0, 22.0), (12.0, 22.0), (0.0, 10.0)];
@@ -1259,4 +1326,145 @@ fn a_fillet_outside_a_body_rounds_a_part_extrusion() {
     let fg = b.fg.clone().expect("a part file");
     let m = built(&fg);
     near(m.volume, 24000.0 - (4.0 - PI) * 60.0, "volume", &fg);
+}
+
+/// A pad hollowed by a Thickness 1 thick, inwards, its top face open: a shell whose cavity is the
+/// box less a wall each side and the floor.
+#[test]
+fn a_thickness_inwards_is_a_shell_open_at_its_face() {
+    let top = vec![
+        ((-30.0, -20.0, 10.0), (30.0, -20.0, 10.0)),
+        ((30.0, -20.0, 10.0), (30.0, 20.0, 10.0)),
+        ((30.0, 20.0, 10.0), (-30.0, 20.0, 10.0)),
+        ((-30.0, 20.0, 10.0), (-30.0, -20.0, 10.0)),
+    ];
+    let faces = shapes_brep(&[], &[top]);
+    let d = doc(&[
+        body("Thickness", &["Sketch", "Pad", "Thickness"]),
+        sketch("Sketch", place(0.0), rect()),
+        (
+            "Pad",
+            "PartDesign::Pad",
+            vec![
+                ("BaseFeature", "<Link value=\"\"/>".into()),
+                ("Profile", "<LinkSub value=\"Sketch\"/>".into()),
+                ("Length", "<Float value=\"10\"/>".into()),
+                ("Shape", "<Part file=\"Faces.brp\"/>".into()),
+            ],
+        ),
+        (
+            "Thickness",
+            "PartDesign::Thickness",
+            vec![
+                ("BaseFeature", "<Link value=\"Pad\"/>".into()),
+                (
+                    "Base",
+                    "<LinkSub value=\"Pad\"><Sub value=\"Face1\"/></LinkSub>".into(),
+                ),
+                ("Value", "<Float value=\"1\"/>".into()),
+                ("Reversed", "<Bool value=\"true\"/>".into()),
+                ("Mode", "<Integer value=\"0\"/>".into()),
+                ("Join", "<Integer value=\"0\"/>".into()),
+                ("Shape", "<Part file=\"PadShape.brp\"/>".into()),
+            ],
+        ),
+    ]);
+    let b = translate(&with_shapes(&d, &[("Faces.brp", &faces)]))
+        .expect("reads")
+        .remove(0);
+    assert_eq!(b.status(), "translated", "{:?}", b.fail);
+    let fg = b.fg.expect("a part file");
+    assert!(fg.contains("= shell(t, open: "), "{fg}");
+    let m = built(&fg);
+    near(m.volume, 24000.0 - 58.0 * 38.0 * 9.0, "volume", &fg);
+}
+
+/// A boss patterned three times along a straight edge of the base pad (its front bottom edge, run
+/// from its first point to its last), and mirrored in the pad's right face: the edge's direction
+/// and the face's plane, read from the pad's stored shape.
+#[test]
+fn a_pattern_along_an_edge_and_a_mirror_in_a_face() {
+    let square = geo(&[
+        line((-25.0, -5.0), (-15.0, -5.0), 0),
+        line((-15.0, -5.0), (-15.0, 5.0), 0),
+        line((-15.0, 5.0), (-25.0, 5.0), 0),
+        line((-25.0, 5.0), (-25.0, -5.0), 0),
+    ]);
+    let right = vec![
+        ((30.0, -20.0, 0.0), (30.0, 20.0, 0.0)),
+        ((30.0, 20.0, 0.0), (30.0, 20.0, 10.0)),
+        ((30.0, 20.0, 10.0), (30.0, -20.0, 10.0)),
+        ((30.0, -20.0, 10.0), (30.0, -20.0, 0.0)),
+    ];
+    let pad_shape = shapes_brep(&[((-30.0, -20.0, 0.0), (30.0, -20.0, 0.0))], &[right]);
+    let transform =
+        |name: &'static str, ty: &'static str, base: &str, extra: Vec<(&'static str, String)>| -> Obj {
+            let mut p = vec![
+                ("BaseFeature", format!("<Link value=\"{base}\"/>")),
+                (
+                    "Originals",
+                    "<LinkList count=\"1\"><Link value=\"Pad001\"/></LinkList>".into(),
+                ),
+                ("Shape", "<Part file=\"PadShape.brp\"/>".into()),
+            ];
+            p.extend(extra);
+            (name, ty, p)
+        };
+    let d = doc(&[
+        body(
+            "Mirrored",
+            &[
+                "Sketch",
+                "Pad",
+                "Sketch001",
+                "Pad001",
+                "LinearPattern",
+                "Mirrored",
+            ],
+        ),
+        sketch("Sketch", place(0.0), rect()),
+        (
+            "Pad",
+            "PartDesign::Pad",
+            vec![
+                ("BaseFeature", "<Link value=\"\"/>".into()),
+                ("Profile", "<LinkSub value=\"Sketch\"/>".into()),
+                ("Length", "<Float value=\"10\"/>".into()),
+                ("Shape", "<Part file=\"Base.brp\"/>".into()),
+            ],
+        ),
+        sketch("Sketch001", place(10.0), square),
+        pad("Pad001", "Pad", "Sketch001", 5.0, &[]),
+        transform(
+            "LinearPattern",
+            "PartDesign::LinearPattern",
+            "Pad001",
+            vec![
+                (
+                    "Direction",
+                    "<LinkSub value=\"Pad\"><Sub value=\"Edge1\"/></LinkSub>".into(),
+                ),
+                ("Length", "<Float value=\"20\"/>".into()),
+                ("Occurrences", "<Integer value=\"3\"/>".into()),
+            ],
+        ),
+        transform(
+            "Mirrored",
+            "PartDesign::Mirrored",
+            "LinearPattern",
+            vec![(
+                "MirrorPlane",
+                "<LinkSub value=\"Pad\"><Sub value=\"Face1\"/></LinkSub>".into(),
+            )],
+        ),
+    ]);
+    let b = translate(&with_shapes(&d, &[("Base.brp", &pad_shape)]))
+        .expect("reads")
+        .remove(0);
+    assert_eq!(b.status(), "translated", "{:?}", b.fail);
+    let fg = b.fg.expect("a part file");
+    let m = built(&fg);
+    // the pad, three bosses at x = -20, -10, 0; the mirror in x = 30 puts the original boss at x = 80,
+    // a body of its own, apart: only its 500 more
+    near(m.volume, 24000.0 + 3.0 * 500.0 + 500.0, "volume", &fg);
 }

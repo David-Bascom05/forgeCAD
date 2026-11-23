@@ -32,7 +32,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 SOLID = {"PartDesign::Pad", "PartDesign::Pocket", "PartDesign::Revolution", "PartDesign::Groove", "PartDesign::Fillet", "PartDesign::Chamfer", "PartDesign::Mirrored", "PartDesign::PolarPattern", "PartDesign::LinearPattern", "PartDesign::Hole", "PartDesign::Loft", "PartDesign::Pipe", "PartDesign::AdditiveLoft", "PartDesign::AdditivePipe", "PartDesign::SubtractiveLoft", "PartDesign::SubtractivePipe", "PartDesign::Draft", "PartDesign::Thickness", "PartDesign::MultiTransform", "PartDesign::Scaled", "PartDesign::AdditiveBox", "PartDesign::AdditiveCylinder", "PartDesign::Boolean", "PartDesign::Helix", "PartDesign::AdditiveHelix", "PartDesign::SubtractiveHelix", "PartDesign::FeatureBase", "PartDesign::SubtractiveBox", "PartDesign::SubtractiveCylinder", "PartDesign::AdditiveSphere", "PartDesign::SubtractiveSphere", "PartDesign::AdditiveCone", "PartDesign::SubtractiveCone", "PartDesign::AdditiveTorus", "PartDesign::SubtractiveTorus", "PartDesign::AdditivePrism", "PartDesign::SubtractivePrism", "PartDesign::AdditiveWedge", "PartDesign::SubtractiveWedge", "PartDesign::AdditiveEllipsoid", "PartDesign::SubtractiveEllipsoid", "Part::Revolution", "Part::Extrusion", "Part::Box", "Part::Cylinder", "Part::Cut", "Part::Fuse", "Part::Common", "Part::MultiFuse", "Part::MultiCommon", "Part::Sphere"}
 TRANSFORMS = {"PartDesign::PolarPattern", "PartDesign::LinearPattern", "PartDesign::Mirrored"}
 FLAT = {"Sketcher::SketchObject", "Part::Part2DObjectPython"}  # what a pad's profile can be; only a sketch has rows, the rest a stored shape
-NEEDS = {"PartDesign::Draft", "PartDesign::AdditivePipe", "PartDesign::SubtractivePipe", "PartDesign::FeatureBase", "Part::Cut", "Part::Fuse", "Part::Common", "Part::MultiFuse", "Part::MultiCommon", "Part::Sphere", "PartDesign::Hole", "PartDesign::MultiTransform", "PartDesign::AdditiveBox", "PartDesign::SubtractiveBox", "PartDesign::AdditiveCylinder", "PartDesign::SubtractiveCylinder", "Part::Revolution", "Part::Extrusion", "Part::Box", "Part::Cylinder", "PartDesign::Pad", "PartDesign::Pocket", "PartDesign::Revolution", "PartDesign::Groove", "PartDesign::Fillet", "PartDesign::Chamfer", "PartDesign::Mirrored", "PartDesign::PolarPattern", "PartDesign::LinearPattern"}
+NEEDS = {"PartDesign::Thickness", "PartDesign::Draft", "PartDesign::AdditivePipe", "PartDesign::SubtractivePipe", "PartDesign::FeatureBase", "Part::Cut", "Part::Fuse", "Part::Common", "Part::MultiFuse", "Part::MultiCommon", "Part::Sphere", "PartDesign::Hole", "PartDesign::MultiTransform", "PartDesign::AdditiveBox", "PartDesign::SubtractiveBox", "PartDesign::AdditiveCylinder", "PartDesign::SubtractiveCylinder", "Part::Revolution", "Part::Extrusion", "Part::Box", "Part::Cylinder", "PartDesign::Pad", "PartDesign::Pocket", "PartDesign::Revolution", "PartDesign::Groove", "PartDesign::Fillet", "PartDesign::Chamfer", "PartDesign::Mirrored", "PartDesign::PolarPattern", "PartDesign::LinearPattern"}
 
 
 class Doc:
@@ -170,13 +170,13 @@ def sketch_ents(doc, name):
             ents.append({"kind": "skArc", "id": f"e{k}", "start": pt(a0), "mid": pt((a0 + a1) / 2), "end": pt(a1), "construction": con})
         elif t == "Part::GeomBSplineCurve":
             e = g.find("BSplineCurve")
-            if e.get("IsPeriodic") == "1":
-                raise Unsupported("a periodic spline")
             nb = bspline_exact(e)
             if nb is None:
+                if e.get("IsPeriodic") == "1":
+                    raise Unsupported("a periodic spline")
                 ents.append({"kind": "polyline", "id": f"e{k}", "points": bspline_points(e), "construction": con})
             else:
-                ents.append({"kind": "nurbs", "id": f"e{k}", "points": bspline_points(e), "nurbs": nb, "construction": con})
+                ents.append({"kind": "nurbs", "id": f"e{k}", "points": bspline_points(e, nb), "nurbs": nb, "construction": con})
         elif t == "Part::GeomPoint":
             continue
         elif not con:
@@ -185,27 +185,53 @@ def sketch_ents(doc, name):
 
 
 def bspline_exact(e):
-    """A clamped, non-periodic NURBS as (degree, poles, full knot vector, weights), the form Forge's
-    `spline(.., degree:, knots:, weights:)` takes; None where its ends are not its end poles."""
+    """A NURBS as (degree, poles, full knot vector, weights), the form Forge's `spline(.., degree:, knots:,
+    weights:)` takes. A clamped one as it is; an unclamped one with its own knots (the curve runs from knot
+    `degree` to knot `len(poles)`); a periodic one as its poles wrapped, the first `degree` again after the last,
+    with one period's knots extended periodically to the whole vector. None where the data is not a B-spline."""
     deg = int(e.get("Degree"))
     cp = [(float(p.get("X")), float(p.get("Y"))) for p in e.findall("Pole")]
     ws = [float(p.get("Weight", "1")) for p in e.findall("Pole")]
     ks = [(float(x.get("Value")), int(x.get("Mult"))) for x in e.findall("Knot")]
-    if len(ks) < 2 or ks[0][1] != deg + 1 or ks[-1][1] != deg + 1 or any(w <= 0 for w in ws):
+    if deg < 1 or len(ks) < 2 or any(w <= 0 for w in ws) or any(m < 1 for _, m in ks):
         return None
+    if any(b <= a for (a, _), (b, _) in zip(ks, ks[1:])) or any(m > deg for _, m in ks[1:-1]):
+        return None
+    if e.get("IsPeriodic") == "1":
+        # one period's flat knots: the last knot is the first one period on, so its count is the first's
+        one = [v for v, m in ks[:-1] for _ in range(m)]
+        n, per = len(cp), ks[-1][0] - ks[0][0]
+        if ks[-1][1] != ks[0][1] or len(one) != n or n < deg + 1 or ks[0][1] > deg:
+            return None
+        # the i-th knot: one[] run on by periods both ways, placed so that the curve's domain, knots `deg` to
+        # `deg + n`, is the source's [first knot, last knot] (checked against OCCT's periodic curves)
+        at = lambda i: one[i % n] + per * (i // n)
+        full = [at(i - deg + ks[0][1] - 1) for i in range(n + 2 * deg + 1)]
+        return (deg, cp + cp[:deg], full, ws + ws[:deg])
     full = [v for v, m in ks for _ in range(m)]
-    if len(full) != len(cp) + deg + 1 or any(b < a for a, b in zip(full, full[1:])):
+    if len(full) != len(cp) + deg + 1 or ks[0][1] > deg + 1 or ks[-1][1] > deg + 1:
         return None
     return (deg, cp, full, ws)
 
 
-def bspline_points(e):
-    """A fine polyline along a non-periodic NURBS: the part is then marked approx."""
-    deg = int(e.get("Degree"))
-    cp = [(float(p.get("X")), float(p.get("Y")), float(p.get("Weight", "1"))) for p in e.findall("Pole")]
-    k = []
-    for x in e.findall("Knot"):
-        k += [float(x.get("Value"))] * int(x.get("Mult"))
+def clamped(nb):
+    """Whether a NURBS from bspline_exact runs from its first pole to its last."""
+    deg, _, k, _ = nb
+    return k[: deg + 1] == [k[0]] * (deg + 1) and k[-deg - 1 :] == [k[-1]] * (deg + 1)
+
+
+def bspline_points(e, nb=None):
+    """A fine polyline along a NURBS (the part is then marked approx unless the NURBS is written exactly): along
+    `nb`, bspline_exact's form, where given, else along the data's poles and knots as they are."""
+    if nb is not None:
+        deg, poles, k, ws = nb
+        cp = [(x, y, w) for (x, y), w in zip(poles, ws)]
+    else:
+        deg = int(e.get("Degree"))
+        cp = [(float(p.get("X")), float(p.get("Y")), float(p.get("Weight", "1"))) for p in e.findall("Pole")]
+        k = []
+        for x in e.findall("Knot"):
+            k += [float(x.get("Value"))] * int(x.get("Mult"))
     def at(u):
         s = deg
         while s < len(cp) - 1 and k[s + 1] <= u:
@@ -223,7 +249,10 @@ def bspline_points(e):
     us = []
     for a, b in zip(spans, spans[1:]):
         us += [a + (b - a) * i / 16 for i in range(16)]
-    return [at(u) for u in us] + [at(hi)]
+    ps = [at(u) for u in us] + [at(hi)]
+    if e.get("IsPeriodic") == "1":
+        ps[-1] = ps[0]  # closed exactly, as the arrangement reads a loop
+    return ps
 
 
 def closed_wires(ents):
@@ -541,6 +570,25 @@ class Tr:
         h = common.pop()
         return next(f for f in st["faces"] if f["h"] == h)
 
+    def thickness(self, name):
+        """A hollow: the faces of Base opened, walls Value thick, inward when Reversed (FreeCAD's "inwards"), as
+        `shell(t, open: FACES, out:)`. Only the skin mode."""
+        d = self.doc
+        if d.integer(name, "Mode", 0) != 0:
+            raise Unsupported("a thickness of mode " + str(d.integer(name, "Mode", 0)))
+        base = d.link(name, "Base")
+        data = self.truth.get(base, {}).get("subs", {})
+        st = self.state()
+        faces = []
+        for sub in [x for x in d.subs(name, "Base") if x]:
+            if not sub.startswith("Face") or sub not in data:
+                raise Unresolved("a thickness on " + sub[:4] + " not sampled")
+            faces.append(self.face_of(st, data[sub]))
+        if not faces:
+            raise Unsupported("a thickness with no open face")
+        sel = self.select("faces", {f["name"] for f in faces})
+        return St("shell", size=num(d.flt(name, "Value")), sel=sel, out=not d.boolean(name, "Reversed"))
+
     def draft(self, name):
         """Faces tilted about where they cross a neutral plane, the pull along the plane's outward normal (turned
         by Reversed), as FreeCAD's BRepOffsetAPI_DraftAngle gets them."""
@@ -847,6 +895,16 @@ class Tr:
         if d.types.get(ref) == "PartDesign::Line":
             fr = Frame(d.placement(ref))
             return fr.o, fr.n
+        if d.types.get(ref) in SOLID and s.startswith("Edge"):
+            # a straight edge of a feature's stored shape: from its first sample to its last
+            polys = self.truth.get(ref, {}).get("subs", {}).get(s)
+            if not polys or len(polys) != 1 or not line_or_circle(polys[0]):
+                raise Unsupported("a pattern axis on an edge not sampled or not straight")
+            a, b = polys[0][0], polys[0][-1]
+            u = unit(add(b, a, -1))
+            if any(math.dist(add(a, u, dot(add(q, a, -1), u)), q) > 1e-6 for q in polys[0]):
+                raise Unsupported("a pattern axis on a curved edge")
+            return tuple(a), u
         raise Unsupported("a pattern axis on " + (d.types.get(ref) or "nothing"))
 
     def transform(self, name, t, src):
@@ -874,6 +932,13 @@ class Tr:
         elif d.types.get(ref) == "PartDesign::Plane":
             fr = Frame(d.placement(ref))
             n, o = fr.n, fr.o
+        elif d.types.get(ref) in SOLID and subs and subs[0].startswith("Face"):
+            # a planar face of a feature's stored shape: the plane through its edges' samples
+            polys = self.truth.get(ref, {}).get("subs", {}).get(subs[0])
+            pts = [q for poly in polys or [] for q in poly]
+            n, o = plane_of(pts)
+            if n is None:
+                raise Unsupported("a mirror in a face not sampled or not flat")
         else:
             raise Unsupported("a mirror in " + (d.types.get(ref) or "nothing"))
         return St("pattern", of=list(src), layout=("mirror", vt(n), vt(o)))
@@ -992,6 +1057,8 @@ class Tr:
             ls = self.hole(name)
         elif t == "PartDesign::Draft":
             ls = [self.draft(name)]
+        elif t == "PartDesign::Thickness":
+            ls = [self.thickness(name)]
         elif t in ("PartDesign::AdditivePipe", "PartDesign::SubtractivePipe"):
             ls = self.pipe(name, t == "PartDesign::SubtractivePipe")
         elif t in ("PartDesign::AdditiveBox", "PartDesign::SubtractiveBox", "PartDesign::AdditiveCylinder", "PartDesign::SubtractiveCylinder"):
@@ -1088,6 +1155,26 @@ def helix_turns(ws, o, ax):
         if abs((h - hs[0]) - abs(t - th[0]) * pitch / (2 * math.pi)) > 1e-4 * max(1.0, height):
             raise Unsupported("a pipe along a helix of varying pitch")
     return round(pitch, 9), round(height, 9), turn < 0
+
+
+def plane_of(pts):
+    """The plane through points that are flat (within 1e-7 of it): its unit normal (Newell's, about the centroid)
+    and a point; (None, None) if they are not."""
+    if len(pts) < 3:
+        return None, None
+    c = tuple(sum(p[k] for p in pts) / len(pts) for k in range(3))
+    # the two points farthest apart and the one farthest from their line span it
+    a = max(pts, key=lambda p: math.dist(p, c))
+    b = max(pts, key=lambda p: math.dist(p, a))
+    ab = unit(add(b, a, -1))
+    e = max(pts, key=lambda p: math.dist(add(a, ab, dot(add(p, a, -1), ab)), p))
+    n = (lambda u, v: (u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]))(add(b, a, -1), add(e, a, -1))
+    if math.sqrt(dot(n, n)) < 1e-12:
+        return None, None
+    n = unit(n)
+    if any(abs(dot(add(p, a, -1), n)) > 1e-7 * max(1.0, math.dist(a, b)) for p in pts):
+        return None, None
+    return n, a
 
 
 def contains(ours, poly):
@@ -1294,6 +1381,18 @@ def main():
                     if doc.types.get(sp) in ("PartDesign::ShapeBinder", "Part::Helix"):
                         want["shapes"][sp] = doc.shape_file(sp)
                         want["wires"].append(sp)
+                if doc.types[c] in TRANSFORMS or doc.types[c] == "PartDesign::MultiTransform":
+                    for m in [c] + doc.links(c, "Transformations"):
+                        for k in ("MirrorPlane", "Axis", "Direction"):
+                            o = doc.link(m, k) if m in doc.props else ""
+                            if doc.types.get(o) in SOLID and doc.subs(m, k):
+                                want["shapes"][o] = doc.shape_file(o)
+                                want["subs"].setdefault(o, []).extend(x for x in doc.subs(m, k) if x)
+                if doc.types[c] == "PartDesign::Thickness":
+                    o = doc.link(c, "Base")
+                    if o in doc.props:
+                        want["shapes"][o] = doc.shape_file(o)
+                        want["subs"].setdefault(o, []).extend(x for x in doc.subs(c, "Base") if x)
                 if doc.types[c] == "PartDesign::Draft":
                     for k in ("Base", "NeutralPlane", "PullDirection"):
                         o = doc.link(c, k)
