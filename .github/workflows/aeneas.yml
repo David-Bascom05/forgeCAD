@@ -2,6 +2,12 @@
 # every configured crate afresh and fail if a committed translation differs: the proofs are about
 # the code as it is, and cannot go stale. Second, build the Lean: the float bridge, the
 # translations, the proofs, and the axioms check (only propext, Classical.choice, Quot.sound).
+#
+# The pinned Charon and Aeneas (tools/aeneas/setup.sh, in ~/.cache/forge-aeneas) are built once
+# per pin and patch set and cached; main's runs save them. The Lean projects verify/aeneas/*/lean
+# build at once, one job each, each with its Lake build directories restored from main's latest
+# (Lake rebuilds every module whose sources differ; tools/ci/lake-cache.py) and Mathlib from its
+# own server (`lake exe cache get`).
 name: aeneas
 
 on:
@@ -24,33 +30,64 @@ jobs:
   translation-fresh:
     runs-on: ubuntu-latest
     timeout-minutes: 120
-    env:
-      FORGE_AENEAS: ${{ github.workspace }}/../forge-aeneas
     steps:
       - uses: actions/checkout@v4
+      # setup.sh's default home, ~/.cache/forge-aeneas: an absolute path (a path through `..` is
+      # refused by the cache action, which is why the toolchain was rebuilt on every run). The
+      # Charon build directory (charon-target) is left out: the built binaries are in charon/bin,
+      # and setup.sh rebuilds only when their recorded pin differs.
       - name: toolchain cache (keyed on the pins and the patches)
-        uses: actions/cache@v4
+        id: tools
+        uses: actions/cache/restore@v4
         with:
           path: |
-            ${{ github.workspace }}/../forge-aeneas
+            ~/.cache/forge-aeneas/aeneas
+            ~/.cache/forge-aeneas/charon
+            ~/.cache/forge-aeneas/bin
+            ~/.cache/forge-aeneas/opam
+            ~/.cache/forge-aeneas/charon-toolchain
             ~/.rustup/toolchains/nightly-*
-            ~/.elan
-          key: aeneas-${{ runner.os }}-${{ hashFiles('tools/aeneas/setup.sh', 'tools/aeneas/patches/**') }}
+          key: forge-aeneas-v2-${{ runner.os }}-${{ hashFiles('tools/aeneas/setup.sh', 'tools/aeneas/patches/**') }}
       - name: Charon and Aeneas at the pins (built once, then cached)
         run: tools/aeneas/setup.sh
+      - name: save the toolchain (main only, once per key)
+        if: ${{ steps.tools.outputs.cache-hit != 'true' && github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/.cache/forge-aeneas/aeneas
+            ~/.cache/forge-aeneas/charon
+            ~/.cache/forge-aeneas/bin
+            ~/.cache/forge-aeneas/opam
+            ~/.cache/forge-aeneas/charon-toolchain
+            ~/.rustup/toolchains/nightly-*
+          key: forge-aeneas-v2-${{ runner.os }}-${{ hashFiles('tools/aeneas/setup.sh', 'tools/aeneas/patches/**') }}
       - name: every translation equals a fresh one
         run: tools/aeneas/translate.sh --all --check
 
-  lean:
+  # Every verify/aeneas/*/lean, as the loop over that glob built them one after the other.
+  projects:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    outputs:
+      dirs: ${{ steps.list.outputs.dirs }}
     steps:
       - uses: actions/checkout@v4
-      - name: toolchain cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.elan
-          key: elan-${{ runner.os }}-${{ hashFiles('verify/aeneas/bridge/lean-toolchain') }}
+      - id: list
+        run: |
+          dirs=$(for d in verify/aeneas/*/lean; do printf '%s\n' "$d"; done | python3 -c 'import json,sys; print(json.dumps([l.strip() for l in sys.stdin if l.strip()]))')
+          echo "$dirs"
+          echo "dirs=$dirs" >> "$GITHUB_OUTPUT"
+
+  lean:
+    needs: projects
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        dir: ${{ fromJSON(needs.projects.outputs.dirs) }}
+    steps:
+      - uses: actions/checkout@v4
       - name: elan and the pinned toolchain
         run: |
           if [ ! -x "$HOME/.elan/bin/elan" ]; then
@@ -59,9 +96,29 @@ jobs:
           fi
           echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
           "$HOME/.elan/bin/elan" toolchain install "$(cat verify/aeneas/bridge/lean-toolchain)"
-      - name: the bridge, every translation and its proofs
+          "$HOME/.elan/bin/elan" toolchain install "$(cat ${{ matrix.dir }}/lean-toolchain)"
+      - name: Lake cache key
+        id: lake
         run: |
-          for d in verify/aeneas/*/lean; do
-            echo "== $d"
-            (cd "$d" && lake exe cache get && lake build) || exit 1
-          done
+          name=aeneas-$(basename "$(dirname "${{ matrix.dir }}")")
+          python3 tools/ci/lake-cache.py "$name" "${{ matrix.dir }}"
+      - name: Lake build (restored; Lake rebuilds what changed)
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ steps.lake.outputs.paths }}
+          key: ${{ steps.lake.outputs.key }}
+          restore-keys: |
+            ${{ steps.lake.outputs.prefix }}
+            ${{ steps.lake.outputs.any }}
+      - name: the bridge, the translation and its proofs
+        working-directory: ${{ matrix.dir }}
+        run: |
+          echo "== ${{ matrix.dir }}"
+          lake exe cache get
+          lake build
+      - name: save the Lake build (main only, even when a check failed)
+        if: ${{ always() && steps.lake.outcome == 'success' && github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ steps.lake.outputs.paths }}
+          key: ${{ steps.lake.outputs.key }}
