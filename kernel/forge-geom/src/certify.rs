@@ -1106,58 +1106,6 @@ impl Host {
         Some(Host { form, m, e })
     }
 
-    /// The local coordinates and their u and v derivatives over the box.
-    fn local(&self, u: I, v: I) -> (V, V, V) {
-        let z0 = I::point(0.0);
-        let one = I::point(1.0);
-        let (su, cu) = u.sin_cos();
-        match self.form {
-            Form::Plane { .. } => ([u, v, z0], [one, z0, z0], [z0, one, z0]),
-            Form::Cylinder { r, .. } => ([cu * r, su * r, v], [-(su * r), cu * r, z0], [z0, z0, one]),
-            Form::Cone { r, sin, cos, .. } => {
-                let tan = I::point(sin).div(&I::point(cos));
-                let rho = I::point(r) + v * tan;
-                (
-                    [rho * cu, rho * su, v],
-                    [-(rho * su), rho * cu, z0],
-                    [tan * cu, tan * su, one],
-                )
-            }
-            Form::Sphere { r, .. } => {
-                let (sv, cv) = v.sin_cos();
-                (
-                    [cv * cu * r, cv * su * r, sv * r],
-                    [-(cv * su * r), cv * cu * r, z0],
-                    [-(sv * cu * r), -(sv * su * r), cv * r],
-                )
-            }
-            Form::Torus { big, r, .. } => {
-                let (sv, cv) = v.sin_cos();
-                let w = I::point(big) + cv * r;
-                (
-                    [w * cu, w * su, sv * r],
-                    [-(w * su), w * cu, z0],
-                    [-(sv * cu * r), -(sv * su * r), cv * r],
-                )
-            }
-        }
-    }
-
-    /// The surface's points over the (u, v) box, and P's u and v derivatives there.
-    fn patch(&self, u: I, v: I) -> (V, V, V) {
-        let (l, lu, lv) = self.local(u, v);
-        let o = match self.form {
-            Form::Plane { o, .. } | Form::Sphere { o, .. } | Form::Cylinder { o, .. } => o,
-            Form::Cone { o, .. } | Form::Torus { o, .. } => o,
-        };
-        let p = mat_v(&self.m, self.e, &l);
-        (
-            [p[0] + I::point(o.x), p[1] + I::point(o.y), p[2] + I::point(o.z)],
-            mat_v(&self.m, self.e, &lu),
-            mat_v(&self.m, self.e, &lv),
-        )
-    }
-
     /// A (u, v) box whose image holds every point of the surface in the region.
     fn domain(&self, region: &V) -> Option<(I, I)> {
         let whole = I::new(0.0, TAU_UP);
@@ -1192,11 +1140,422 @@ impl Host {
     }
 }
 
-/// The completeness walk in the host's domain: every (u, v) box either maps outside the region,
-/// carries no zero of the other surface's polynomial (its natural extension met with the mean-value
-/// form in u and v, the cheap test near a tangency), or maps into a step's claim or a site. The box
-/// it could not show, if not.
-fn walk_domain(
+/// A polynomial in (t, v) with interval coefficients, c[i * (dv + 1) + j] of t^i v^j.
+#[derive(Clone, Debug)]
+struct Bp {
+    dt: usize,
+    dv: usize,
+    c: Vec<I>,
+}
+
+impl Bp {
+    fn zero(dt: usize, dv: usize) -> Bp {
+        Bp {
+            dt,
+            dv,
+            c: vec![I::point(0.0); (dt + 1) * (dv + 1)],
+        }
+    }
+    fn at(&self, i: usize, j: usize) -> I {
+        if i <= self.dt && j <= self.dv {
+            self.c[i * (self.dv + 1) + j]
+        } else {
+            I::point(0.0)
+        }
+    }
+    fn of(terms: &[(usize, usize, I)]) -> Bp {
+        let dt = terms.iter().map(|t| t.0).max().unwrap_or(0);
+        let dv = terms.iter().map(|t| t.1).max().unwrap_or(0);
+        let mut p = Bp::zero(dt, dv);
+        for &(i, j, x) in terms {
+            p.c[i * (dv + 1) + j] = p.c[i * (dv + 1) + j] + x;
+        }
+        p
+    }
+    fn add(&self, o: &Bp) -> Bp {
+        let (dt, dv) = (self.dt.max(o.dt), self.dv.max(o.dv));
+        let mut p = Bp::zero(dt, dv);
+        for i in 0..=dt {
+            for j in 0..=dv {
+                p.c[i * (dv + 1) + j] = self.at(i, j) + o.at(i, j);
+            }
+        }
+        p
+    }
+    fn scale(&self, x: I) -> Bp {
+        Bp {
+            dt: self.dt,
+            dv: self.dv,
+            c: self.c.iter().map(|c| *c * x).collect(),
+        }
+    }
+    fn mul(&self, o: &Bp) -> Bp {
+        let mut p = Bp::zero(self.dt + o.dt, self.dv + o.dv);
+        let w = p.dv + 1;
+        for i in 0..=self.dt {
+            for j in 0..=self.dv {
+                let a = self.at(i, j);
+                if a == I::point(0.0) {
+                    continue;
+                }
+                for k in 0..=o.dt {
+                    for l in 0..=o.dv {
+                        let b = o.at(k, l);
+                        if b != I::point(0.0) {
+                            p.c[(i + k) * w + j + l] = p.c[(i + k) * w + j + l] + a * b;
+                        }
+                    }
+                }
+            }
+        }
+        p
+    }
+}
+
+/// The Bernstein coefficients over [t0, t1] x [v0, v1] of a polynomial: t = t0 + (t1 - t0) a,
+/// v = v0 + (v1 - v0) b, each direction shifted, scaled and turned into Bernstein form.
+fn bernstein(p: &Bp, t: I, v: I) -> Coeffs {
+    let (n, m) = (p.dt, p.dv);
+    // univariate power-to-Bernstein on [lo, hi] of coefficients a (ascending)
+    let uni = |a: &[I], lo: f64, hi: f64| -> Vec<I> {
+        let d = a.len() - 1;
+        // shift: p(lo + h x), Horner-like Taylor shift
+        let mut c = a.to_vec();
+        for k in 0..d {
+            for i in (k..d).rev() {
+                c[i] = c[i] + c[i + 1] * lo;
+            }
+        }
+        let h = I::point(hi) - I::point(lo);
+        let mut hp = I::point(1.0);
+        for ci in c.iter_mut() {
+            *ci = *ci * hp;
+            hp = hp * h;
+        }
+        // power to Bernstein: b_k = sum_{i <= k} C(k, i) / C(d, i) a_i
+        let binom =
+            |n: usize, k: usize| -> f64 { (0..k).fold(1.0, |acc, i| acc * (n - i) as f64 / (i + 1) as f64) };
+        (0..=d)
+            .map(|k| {
+                (0..=k).fold(I::point(0.0), |acc, i| {
+                    acc + c[i] * I::point(binom(k, i)).div(&I::point(binom(d, i)))
+                })
+            })
+            .collect()
+    };
+    let mut rows = vec![I::point(0.0); (n + 1) * (m + 1)];
+    // along v for each power of t
+    for i in 0..=n {
+        let a: Vec<I> = (0..=m).map(|j| p.at(i, j)).collect();
+        let b = uni(&a, v.lo, v.hi);
+        for j in 0..=m {
+            rows[i * (m + 1) + j] = b[j];
+        }
+    }
+    // then along t for each Bernstein index of v
+    let mut out = [I::point(0.0); BERN];
+    for j in 0..=m {
+        let a: Vec<I> = (0..=n).map(|i| rows[i * (m + 1) + j]).collect();
+        let b = uni(&a, t.lo, t.hi);
+        for i in 0..=n {
+            out[i * (m + 1) + j] = b[i];
+        }
+    }
+    out
+}
+
+/// The most Bernstein coefficients a chart has: bidegree (8, 8).
+const BERN: usize = 81;
+type Coeffs = [I; BERN];
+
+/// (a + b) / 2, rounded outward: the sum rounded out, then halved exactly.
+fn avg(a: I, b: I) -> I {
+    I {
+        lo: (a.lo + b.lo).next_down() * 0.5,
+        hi: (a.hi + b.hi).next_up() * 0.5,
+    }
+}
+
+/// De Casteljau at the middle, along t (`along_t`) or v: the two halves' coefficients.
+fn halve(c: &Coeffs, n: usize, m: usize, along_t: bool) -> (Coeffs, Coeffs) {
+    let (mut l, mut r) = (*c, *c);
+    let (len, lines) = if along_t { (n, m + 1) } else { (m, n + 1) };
+    let idx = |k: usize, line: usize| {
+        if along_t {
+            k * (m + 1) + line
+        } else {
+            line * (m + 1) + k
+        }
+    };
+    let mut b = [I::point(0.0); 9];
+    debug_assert!(n <= 8 && m <= 8);
+    for line in 0..lines {
+        for (k, bk) in b.iter_mut().enumerate().take(len + 1) {
+            *bk = c[idx(k, line)];
+        }
+        l[idx(0, line)] = b[0];
+        r[idx(len, line)] = b[len];
+        for step in 1..=len {
+            for k in 0..=len - step {
+                b[k] = avg(b[k], b[k + 1]);
+            }
+            l[idx(step, line)] = b[0];
+            r[idx(len - step, line)] = b[len - step];
+        }
+    }
+    (l, r)
+}
+
+/// Whether the coefficients are all of one strict sign (the polynomial has no zero on the box).
+fn one_sign(c: &[I]) -> bool {
+    c.iter().all(|x| x.lo > 0.0) || c.iter().all(|x| x.hi < 0.0)
+}
+
+/// A line host's chart: points P = o + B l(t, v) / w(t) over (t, v), with l and w polynomials.
+struct Chart {
+    /// The other form times w^deg, a polynomial in (t, v) with the same zeros.
+    f: Bp,
+    t: I,
+    v: I,
+    /// The half turns of u's and v's charts (1 or -1: cos and sin negated).
+    turn: f64,
+    turn_v: f64,
+}
+
+impl Host {
+    /// The charts of a line host (plane: one, in (u, v); cylinder and cone: two, t = tan(u/2)
+    /// over [-1, 1] and the half turn), with the other form as a polynomial on each.
+    fn charts(&self, other: &Form, region: &V) -> Option<Vec<Chart>> {
+        let (_, v) = self.domain(region)?;
+        if v.is_empty() {
+            return Some(Vec::new());
+        }
+        let z = I::point(0.0);
+        let one = I::point(1.0);
+        let b: [[I; 3]; 3] =
+            std::array::from_fn(|i| std::array::from_fn(|j| I::point(self.m[i][j]).grow(self.e)));
+        let oh = match self.form {
+            Form::Plane { o, .. } | Form::Cylinder { o, .. } | Form::Cone { o, .. } => o,
+            Form::Sphere { o, .. } | Form::Torus { o, .. } => o,
+        };
+        let of = match *other {
+            Form::Plane { o, .. } | Form::Sphere { o, .. } | Form::Cylinder { o, .. } => o,
+            Form::Cone { o, .. } | Form::Torus { o, .. } => o,
+        };
+        let d = [
+            I::point(oh.x) - I::point(of.x),
+            I::point(oh.y) - I::point(of.y),
+            I::point(oh.z) - I::point(of.z),
+        ];
+        let mut out = Vec::new();
+        let turns: &[(f64, f64)] = match self.form {
+            Form::Plane { .. } => &[(0.0, 0.0)],
+            Form::Cylinder { .. } | Form::Cone { .. } => &[(1.0, 0.0), (-1.0, 0.0)],
+            Form::Sphere { .. } | Form::Torus { .. } => &[(1.0, 1.0), (1.0, -1.0), (-1.0, 1.0), (-1.0, -1.0)],
+        };
+        // cos and sin of a half-angle chart, times its weight 1 + x^2, in the variable at (i, j)
+        let cosw = |turn: f64, in_t: bool| -> Bp {
+            if in_t {
+                Bp::of(&[(0, 0, I::point(turn)), (2, 0, I::point(-turn))])
+            } else {
+                Bp::of(&[(0, 0, I::point(turn)), (0, 2, I::point(-turn))])
+            }
+        };
+        let sinw = |turn: f64, in_t: bool| -> Bp {
+            if in_t {
+                Bp::of(&[(1, 0, I::point(2.0 * turn))])
+            } else {
+                Bp::of(&[(0, 1, I::point(2.0 * turn))])
+            }
+        };
+        for &(turn, turn_v) in turns {
+            // l(t, v) homogenised by w (plane: w = 1, l = (u, v, 0); a line host: w = 1 + t^2;
+            // sphere and torus: w = (1 + t^2)(1 + s^2), s the v chart's variable)
+            let (w, l): (Bp, [Bp; 3]) = match self.form {
+                Form::Plane { .. } => (
+                    Bp::of(&[(0, 0, one)]),
+                    [
+                        Bp::of(&[(1, 0, one)]),
+                        Bp::of(&[(0, 1, one)]),
+                        Bp::of(&[(0, 0, z)]),
+                    ],
+                ),
+                Form::Cylinder { r, .. } => (
+                    Bp::of(&[(0, 0, one), (2, 0, one)]),
+                    [
+                        cosw(turn, true).scale(I::point(r)),
+                        sinw(turn, true).scale(I::point(r)),
+                        Bp::of(&[(0, 1, one), (2, 1, one)]),
+                    ],
+                ),
+                Form::Cone { r, sin, cos, .. } => {
+                    let tan = I::point(sin).div(&I::point(cos));
+                    let rho = Bp::of(&[(0, 0, I::point(r)), (0, 1, tan)]);
+                    (
+                        Bp::of(&[(0, 0, one), (2, 0, one)]),
+                        [
+                            rho.mul(&cosw(turn, true)),
+                            rho.mul(&sinw(turn, true)),
+                            Bp::of(&[(0, 1, one), (2, 1, one)]),
+                        ],
+                    )
+                }
+                Form::Sphere { r, .. } | Form::Torus { r, .. } => {
+                    let big = match self.form {
+                        Form::Torus { big, .. } => big,
+                        _ => 0.0,
+                    };
+                    let (wu, wv) = (
+                        Bp::of(&[(0, 0, one), (2, 0, one)]),
+                        Bp::of(&[(0, 0, one), (0, 2, one)]),
+                    );
+                    // (R + r cos v) w_v = R w_v + r cos_w(v)
+                    let ring = wv
+                        .scale(I::point(big))
+                        .add(&cosw(turn_v, false).scale(I::point(r)));
+                    (
+                        wu.mul(&wv),
+                        [
+                            ring.mul(&cosw(turn, true)),
+                            ring.mul(&sinw(turn, true)),
+                            sinw(turn_v, false).scale(I::point(r)).mul(&wu),
+                        ],
+                    )
+                }
+            };
+            // Q = w (o_host - o_other) + B l, the point relative to the other's origin, times w
+            let q: [Bp; 3] =
+                std::array::from_fn(|i| (0..3).fold(w.scale(d[i]), |acc, k| acc.add(&l[k].scale(b[i][k]))));
+            let dotq = |e: Vec3| {
+                q[0].scale(I::point(e.x))
+                    .add(&q[1].scale(I::point(e.y)))
+                    .add(&q[2].scale(I::point(e.z)))
+            };
+            let sq = |p: &Bp| p.mul(p);
+            let w2 = w.mul(&w);
+            let f = match *other {
+                Form::Plane { z, .. } => dotq(z),
+                Form::Sphere { r, .. } => sq(&q[0])
+                    .add(&sq(&q[1]))
+                    .add(&sq(&q[2]))
+                    .add(&w2.scale(-I::point(r * r).widened())),
+                Form::Cylinder { x, y, r, .. } => sq(&dotq(x))
+                    .add(&sq(&dotq(y)))
+                    .add(&w2.scale(-I::point(r * r).widened())),
+                Form::Cone {
+                    x, y, z, r, sin, cos, ..
+                } => {
+                    let rho2 = sq(&dotq(x)).add(&sq(&dotq(y)));
+                    let lin = w
+                        .scale(I::point(r * cos).widened())
+                        .add(&dotq(z).scale(I::point(sin)));
+                    rho2.scale(I::point(cos * cos).widened())
+                        .add(&sq(&lin).scale(-one))
+                }
+                Form::Torus { x, y, z, big, r, .. } => {
+                    let rho2 = sq(&dotq(x)).add(&sq(&dotq(y)));
+                    let k = I::point(big * big).widened() - I::point(r * r).widened();
+                    let a = rho2.add(&sq(&dotq(z))).add(&w2.scale(k));
+                    sq(&a).add(&w2.mul(&rho2).scale(-(I::point(big * big).widened() * 4.0)))
+                }
+            };
+            let t = match self.form {
+                Form::Plane { .. } => self.domain(region)?.0,
+                _ => I::new(-1.0, 1.0),
+            };
+            let v = match self.form {
+                Form::Sphere { .. } | Form::Torus { .. } => I::new(-1.0, 1.0),
+                _ => v,
+            };
+            out.push(Chart {
+                f,
+                t,
+                v,
+                turn,
+                turn_v,
+            });
+        }
+        Some(out)
+    }
+
+    /// Bounds on how far a chart's image moves per unit of t and of v over the region (for choosing
+    /// which way to split; any positive values are sound).
+    fn chart_rates(&self, region: &V) -> (f64, f64) {
+        let col =
+            |j: usize| (0..3).map(|i| self.m[i][j].abs() + self.e).fold(0.0, f64::max) * 1.7320508075688772;
+        match self.form {
+            Form::Plane { .. } => (col(0), col(1)),
+            // d(cos, sin)/dt is at most 2 in length on [-1, 1]
+            Form::Cylinder { r, .. } => (2.0 * r * col(0).max(col(1)), col(2)),
+            Form::Cone { r, sin, cos, .. } => {
+                let tan = (sin / cos).abs();
+                let v = self.domain(region).map_or(0.0, |(_, v)| mag(v));
+                (
+                    2.0 * (r + v * tan) * col(0).max(col(1)),
+                    col(2) + tan * col(0).max(col(1)),
+                )
+            }
+            Form::Sphere { r, .. } => (
+                2.0 * r * col(0).max(col(1)).max(col(2)),
+                2.0 * r * col(0).max(col(1)).max(col(2)),
+            ),
+            Form::Torus { big, r, .. } => {
+                let c = col(0).max(col(1)).max(col(2));
+                (2.0 * (big + r) * c, 2.0 * r * c)
+            }
+        }
+    }
+
+    /// The points of a chart's (t, v) box.
+    fn chart_box(&self, ch: &Chart, t: I, v: I) -> V {
+        // cos and sin over a half-angle chart's x in [-1, 1]: (1 - x^2)/(1 + x^2) falls with |x|,
+        // 2x/(1 + x^2) rises
+        let half = |x: I, turn: f64| -> (I, I) {
+            let at = |x: f64| -> (I, I) {
+                let x = I::point(x);
+                let w = I::point(1.0) + x.sqr();
+                ((I::point(1.0) - x.sqr()).div(&w), (x * 2.0).div(&w))
+            };
+            let (cl, sl) = at(x.lo);
+            let (ch_, sh) = at(x.hi);
+            let mut c = cl.hull(&ch_);
+            if x.contains_zero() {
+                c.hi = 1.0;
+            }
+            (c * turn, sl.hull(&sh) * turn)
+        };
+        let z0 = I::point(0.0);
+        let (l, o): (V, Point3) = match self.form {
+            Form::Plane { o, .. } => ([t, v, z0], o),
+            Form::Cylinder { o, r, .. } | Form::Cone { o, r, .. } => {
+                let (c, s) = half(t, ch.turn);
+                let rho = match self.form {
+                    Form::Cone { sin, cos, .. } => I::point(r) + v * I::point(sin).div(&I::point(cos)),
+                    _ => I::point(r),
+                };
+                ([c * rho, s * rho, v], o)
+            }
+            Form::Sphere { o, r } | Form::Torus { o, r, .. } => {
+                let big = match self.form {
+                    Form::Torus { big, .. } => big,
+                    _ => 0.0,
+                };
+                let (cu, su) = half(t, ch.turn);
+                let (cv, sv) = half(v, ch.turn_v);
+                let ring = I::point(big) + cv * r;
+                ([cu * ring, su * ring, sv * r], o)
+            }
+        };
+        let p = mat_v(&self.m, self.e, &l);
+        [p[0] + I::point(o.x), p[1] + I::point(o.y), p[2] + I::point(o.z)]
+    }
+}
+
+/// The completeness walk for a line host in Bernstein form: each (t, v) box is gone when its image
+/// misses the region, when its Bernstein coefficients are all of one sign (no zero: the convex hull
+/// property), or when the other surface's Lipschitz or nappe test clears its image; done when its
+/// image lies in a step's claim or a site; else halved by de Casteljau.
+fn walk_bernstein(
     host: &Host,
     other: &Form,
     region: &V,
@@ -1204,7 +1563,7 @@ fn walk_domain(
     sites: &[(V, Point3)],
     budget: &mut usize,
 ) -> Result<(), (V, bool)> {
-    let Some((u0, v0)) = host.domain(region) else {
+    let Some(charts) = host.charts(other, region) else {
         return Err((*region, false));
     };
     let near = |p: &V, from: &[u32]| -> Vec<u32> {
@@ -1213,51 +1572,47 @@ fn walk_domain(
             .filter(|&i| !segs[i as usize].site && meets(&segs[i as usize].x, p).is_some())
             .collect()
     };
-    if u0.is_empty() || v0.is_empty() {
-        return Ok(());
-    }
     let all: Vec<u32> = (0..segs.len() as u32).collect();
-    let first = host.patch(u0, v0);
-    let mut stack = vec![(u0, v0, first, near(region, &all))];
-    while let Some((u, v, (p, pu, pv), cand)) = stack.pop() {
-        if *budget == 0 {
-            return Err((p, true));
+    // how far the image moves per unit of t and of v, bounded above
+    let (rt, rv) = host.chart_rates(region);
+    for ch in &charts {
+        let (n, m) = (ch.f.dt, ch.f.dv);
+        if (n + 1) * (m + 1) > BERN {
+            return Err((*region, false));
         }
-        *budget -= 1;
-        if meets(&p, region).is_none() || other.off_cheap(&p) {
-            continue;
-        }
-        // the other surface over the patch: its polynomial in u and v, by the mean-value form
-        let (um, vm) = (I::point(u.mid()), I::point(v.mid()));
-        let (pc, _, _) = host.patch(um, vm);
-        let (gc, _) = other.eval(&pc);
-        let (gn, grad) = other.eval(&p);
-        let gu = grad[0] * pu[0] + grad[1] * pu[1] + grad[2] * pu[2];
-        let gv = grad[0] * pv[0] + grad[1] * pv[1] + grad[2] * pv[2];
-        let g = meet(gn, gc + gu * (u - um) + gv * (v - vm));
-        if !g.contains_zero() {
-            continue;
-        }
-        if sites.iter().any(|(q, _)| inside(&p, q)) || cand.iter().any(|&i| segs[i as usize].claims(&p)) {
-            continue;
-        }
-        // split across the side whose image is the longer
-        let side = |d: &V, w: f64| w * d.iter().map(|c| mag(*c)).fold(0.0, f64::max);
-        let (lu, lv) = (side(&pu, u.width()), side(&pv, v.width()));
-        if lu.max(lv) <= LEAST {
-            return Err((p, false));
-        }
-        let halves = if lu >= lv {
-            let (a, b) = u.split();
-            [(a, v), (b, v)]
-        } else {
-            let (a, b) = v.split();
-            [(u, a), (u, b)]
-        };
-        for (hu, hv) in halves {
-            let hp = host.patch(hu, hv);
-            let c = near(&hp.0, &cand);
-            stack.push((hu, hv, hp, c));
+        let first = bernstein(&ch.f, ch.t, ch.v);
+        let mut stack = vec![(ch.t, ch.v, first, all.clone())];
+        while let Some((t, v, c, from)) = stack.pop() {
+            if *budget == 0 {
+                return Err((host.chart_box(ch, t, v), true));
+            }
+            *budget -= 1;
+            if one_sign(&c[..(n + 1) * (m + 1)]) {
+                continue;
+            }
+            let p = host.chart_box(ch, t, v);
+            if meets(&p, region).is_none() || other.off_cheap(&p) {
+                continue;
+            }
+            let cand = near(&p, &from);
+            if sites.iter().any(|(q, _)| inside(&p, q)) || cand.iter().any(|&i| segs[i as usize].claims(&p)) {
+                continue;
+            }
+            let (lt, lv) = (rt * t.width(), rv * v.width());
+            if lt.max(lv) <= LEAST {
+                return Err((p, false));
+            }
+            let along_t = lt >= lv;
+            let (cl, cr) = halve(&c, n, m, along_t);
+            if along_t {
+                let (a, b) = t.split();
+                stack.push((a, v, cl, cand.clone()));
+                stack.push((b, v, cr, cand));
+            } else {
+                let (a, b) = v.split();
+                stack.push((t, a, cl, cand.clone()));
+                stack.push((t, b, cr, cand));
+            }
         }
     }
     Ok(())
@@ -1347,7 +1702,7 @@ fn certify_with(
         return Err(out(Why::OutOfScope));
     };
     let other = if k == 0 { fb } else { fa };
-    walk_domain(&host, &other, &of_box(&region), &segs, &sites, &mut budget)
+    walk_bernstein(&host, &other, &of_box(&region), &segs, &sites, &mut budget)
         .map_err(|e| (fail(e, Why::Uncovered), sited))?;
     // no zero twice: segments not neighbours in one chain claim no zero in common
     let mut order: Vec<usize> = (0..segs.len()).collect();
@@ -1709,6 +2064,79 @@ mod tests {
             assert_eq!(chains.as_ref().map(Vec::len), Some(marched.len()), "({x}, {y})");
             assert_eq!(k, Some(Ok(())), "the closed form at ({x}, {y})");
             assert!(m.is_ok(), "the march at ({x}, {y}): {m:?}");
+        }
+    }
+
+    #[test]
+    fn bernstein_charts_match_their_forms() {
+        let torus = Surface::Torus(Torus {
+            frame: Frame::from_z(
+                Point3::new(0.3, -0.2, 0.1),
+                (Vec3::new(0.2, 0.3, 1.0)).normalize().expect("z"),
+            ),
+            major: 4.0,
+            minor: 1.5,
+        });
+        let cone = Surface::Cone(
+            crate::surface::Cone::new(Frame::from_z(Point3::new(0.5, 0.1, -1.0), UnitVec3::X), 2.0, 0.4)
+                .expect("cone"),
+        );
+        let plane = Surface::Plane(crate::surface::Plane {
+            frame: Frame::from_z(
+                Point3::new(0.2, 0.0, 0.3),
+                (Vec3::new(0.3, -0.4, 1.0)).normalize().expect("z"),
+            ),
+        });
+        let sph = Surface::Sphere(Sphere {
+            frame: Frame::from_z(Point3::new(1.0, 2.0, 3.0), UnitVec3::Z),
+            radius: 2.5,
+        });
+        let region = pt(Point3::ORIGIN).map(|i| i.grow(6.0));
+        for host in [
+            cyl(Point3::new(0.1, 0.2, 0.0), Vec3::new(1.0, 2.0, 3.0), 2.0),
+            cone.clone(),
+            plane,
+            torus.clone(),
+            sph.clone(),
+        ] {
+            let h = Host::of(Form::of(&host).expect("host")).expect("chartable");
+            for other in [&torus, &cone, &sph] {
+                let f = Form::of(other).expect("in scope");
+                for ch in h.charts(&f, &region).expect("charts") {
+                    let bern = bernstein(&ch.f, ch.t, ch.v);
+                    let (lo, hi) = bern
+                        .iter()
+                        .fold((f64::MAX, f64::MIN), |(a, b), c| (a.min(c.lo), b.max(c.hi)));
+                    for (a, b) in [(0.1, 0.2), (0.5, 0.9), (0.95, 0.05), (0.3, 0.6)] {
+                        let (t, v) = (ch.t.lo + a * ch.t.width(), ch.v.lo + b * ch.v.width());
+                        let p = h.chart_box(&ch, I::point(t), I::point(v));
+                        let x = Point3::new(p[0].mid(), p[1].mid(), p[2].mid());
+                        let (want, _) = f.eval(&pt(x));
+                        let w = match h.form {
+                            Form::Plane { .. } => 1.0,
+                            Form::Sphere { .. } | Form::Torus { .. } => (1.0 + t * t) * (1.0 + v * v),
+                            _ => 1.0 + t * t,
+                        };
+                        let deg = match f {
+                            Form::Torus { .. } => 4,
+                            _ => 2,
+                        };
+                        // the chart's polynomial at (t, v), by its power form
+                        let mut got = 0.0;
+                        for i in 0..=ch.f.dt {
+                            for j in 0..=ch.f.dv {
+                                got += ch.f.at(i, j).mid() * t.powi(i as i32) * v.powi(j as i32);
+                            }
+                        }
+                        let want = want.mid() * w.powi(deg);
+                        assert!(
+                            (got - want).abs() <= 1e-7 * (1.0 + want.abs()),
+                            "{host:?} / {other:?}: {got} {want}"
+                        );
+                        assert!(lo <= got && got <= hi, "outside the Bernstein hull");
+                    }
+                }
+            }
         }
     }
 }

@@ -439,3 +439,33 @@ curve it excludes almost nothing until U is tiny, and every u-split pays the tri
 count needs u-derivatives of the coefficients (a mean-value form in u for each c_k) or exact
 coefficient polynomials in (cos u, sin u) with a proper range bound, e.g. Bernstein on the
 half-angle tangent. Interval coefficients evaluated at a whole u-interval are not enough.
+
+### 10.3 The completeness walk in Bernstein form (built)
+
+Each host surface becomes one or more half-angle charts: t = tan(u/2), and for the sphere and torus
+also s = tan(v/2), each over [-1, 1] and its half turn. The plane is one chart in (u, v). On a chart,
+the host's points are o + B·l(t, s)/w with l and w polynomials. The other form times w^deg is then a
+polynomial F(t, s), bidegree up to (8, 8) for torus on torus, with the same zeros. Its coefficients
+are interval enclosures built from the exact stored data, and B is the interval inverse of §9.
+
+The walk converts F to Bernstein form on the chart once, then halves boxes by de Casteljau (exact
+halving of outward-rounded sums). A box is gone when:
+- all its Bernstein coefficients are of one strict sign (the convex hull property: no zero);
+- its rational image misses the region;
+- or the other surface's Lipschitz or nappe test clears it.
+It is done when its image is in a step's claim or a site.
+
+No trig and no 3D evaluation of the forms happens per box, and coefficients live in fixed arrays.
+The chart polynomials are tested against the forms at sample points, and the Bernstein hull against
+sampled values (`bernstein_charts_match_their_forms`).
+
+Cold build, feature on (off in brackets), the 2D mean-value walk → Bernstein:
+- guard: 354M → 200M (57M)
+- quadarm: 117M → 92M (50M)
+- manifold: 356M → 316M (249M)
+- frame: 1176M → 796M (440M)
+
+The 300-pair sweep certifies all 300 (certificate 1.17 s), and native = wasm on 150 pairs. Feature
+on: the scoreboard is 0 worse, and every forge-geom, forge-bool, forge-model and forge-lang test
+passes. guard's remaining cost is now about equal parts walk, Krawczyk steps (43M) and the march
+itself (39M).
