@@ -529,3 +529,69 @@ fn close(l: Ledger, outcome: Outcome) -> u64 {
     });
     contradictions
 }
+
+/// The name of a boolean's ending, for the structural-site counts: `Ok`, or the refusal's kind.
+pub fn ending<T>(r: &Result<T, crate::BoolError>) -> &'static str {
+    use crate::boolean::{Lost, Unhandled};
+    match r {
+        Ok(_) => "Ok",
+        Err(crate::BoolError::ZeroThickness { .. }) => "ZeroThickness",
+        Err(crate::BoolError::Unsupported(u)) => match **u {
+            Unhandled::NoClosedForm { .. } => "Unsupported NoClosedForm",
+            Unhandled::OpenCurve { .. } => "Unsupported OpenCurve",
+            Unhandled::SplitThroughSingular { .. } => "Unsupported SplitThroughSingular",
+            Unhandled::UntouchedOnOther { .. } => "Unsupported UntouchedOnOther",
+            Unhandled::ToolVerticesMeet { .. } => "Unsupported ToolVerticesMeet",
+            Unhandled::ProbeOnToolEdge { .. } => "Unsupported ProbeOnToolEdge",
+        },
+        Err(crate::BoolError::Internal(l)) => match **l {
+            Lost::InconsistentClassification { .. } => "Internal InconsistentClassification",
+            Lost::SplitOpen { .. } => "Internal SplitOpen",
+            Lost::SplitCrossed { .. } => "Internal SplitCrossed",
+            Lost::HoleOutside { .. } => "Internal HoleOutside",
+            Lost::EmptyCycle { .. } => "Internal EmptyCycle",
+            Lost::NoInteriorPoint { .. } => "Internal NoInteriorPoint",
+            Lost::NoNormal { .. } => "Internal NoNormal",
+            Lost::DegenerateEdge { .. } => "Internal DegenerateEdge",
+            Lost::MergedRegion { .. } => "Internal MergedRegion",
+            Lost::RetryInvalid => "Internal RetryInvalid",
+            Lost::Uncut { .. } => "Internal Uncut",
+        },
+    }
+}
+
+/// A structural site of today's boolean (research/decide-once/old-path-statements.md §G: the
+/// retry ladder, UNDECIDED, ODD, pinched, strays, n-ary verdict 3, how each entry ended) reached
+/// `n` times: counted beside the rungs, and with FORGE_DECISIONS_SITES set written to stderr as
+/// `decisions site NAME xN [thread] input`.
+pub fn site(name: &'static str, n: u64) {
+    if n == 0 {
+        return;
+    }
+    if std::env::var_os("FORGE_DECISIONS_SITES").is_some() {
+        let thread = std::thread::current().name().unwrap_or("").to_string();
+        eprintln!("decisions site {name} x{n} [{thread}] {}", input_name());
+    }
+    let (fam, name_in) = (family(), input_name());
+    with_stats(|s| {
+        let r = s.rungs.entry(name).or_default();
+        r.outcomes[3] += n;
+        r.families.entry(fam).or_default()[3] += n;
+        if r.inputs.len() < 12 {
+            r.inputs.insert(name_in);
+        }
+    });
+}
+
+/// How one entry of today's boolean ended (`path`: "seq" or "n-ary"), as a site
+/// `end PATH: ENDING`.
+pub fn end<T>(path: &'static str, r: &Result<T, crate::BoolError>) {
+    static NAMES: Mutex<BTreeMap<(&'static str, &'static str), &'static str>> = Mutex::new(BTreeMap::new());
+    let e = ending(r);
+    let name = *NAMES
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .entry((path, e))
+        .or_insert_with(|| Box::leak(format!("end {path}: {e}").into_boxed_str()));
+    site(name, 1);
+}

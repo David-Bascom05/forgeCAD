@@ -23,6 +23,9 @@ decisions = ["forge-bool/decisions"]
 # the decide-once flat-face boolean (forge-bool's `decide_once`): off in every shipped build.
 # `cargo test -p forge-model --test hidden_inputs --features decide_once` reviews its sources too
 decide_once = ["forge-bool/decide_once"]
+# the local-imprint column path selectable at run time (forge-bool's `imprint_column`): off in every
+# shipped build; `cargo test -p forge-model --test imprint --features imprint_column` checks it
+imprint_column = ["forge-bool/imprint_column"]
 
 [dev-dependencies]
 forge-dirs = { path = "../forge-dirs" }
