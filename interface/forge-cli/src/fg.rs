@@ -292,7 +292,7 @@ impl Session {
             .trim_end_matches(')')
             .split_whitespace()
             .collect();
-        let mut origin = HashMap::new();
+        let mut origin = std::collections::BTreeMap::new();
         // a name for several features (a call, a loop) stands for them all: an index of its
         // own, past every feature's, added to the lineage of each face any of them made
         let mut groups: Vec<(String, usize)> = vec![];

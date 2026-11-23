@@ -1,0 +1,87 @@
+# The shipped boolean core (kernel/forge-bool-core) is proven to refine the decide-once core end to end
+# (verify/aeneas/forge-bool-core: end_to_end_proof). This job keeps that true for every change to the
+# crate:
+#   1. the translation check is aeneas.yml's (`tools/aeneas/translate.sh --all --check`): the committed
+#      translation must be exactly what Charon + Aeneas at their pins produce;
+#   2. the proofs: `lake build` of the refinement project, which fails on any broken lemma;
+#   3. the axiom report: every `#print axioms` line must show only propext, Classical.choice and
+#      Quot.sound (no sorryAx), and end_to_end_proof must be among them.
+# A speed change to forge-bool-core therefore cannot silently break the proof: it fails here until the
+# proofs are updated on the re-translation.
+# Lake's build directories are restored from main's latest (Lake rebuilds every module whose sources
+# differ, and replays the messages, `#print axioms` among them, of each module it does not rebuild);
+# main's runs save them (tools/ci/lake-cache.py).
+name: forge-bool-core-proof
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "kernel/forge-bool-core/**"
+      - "verify/aeneas/forge-bool-core/**"
+      - "verify/forge-exact/**"
+      - ".github/workflows/forge-bool-core-proof.yml"
+  pull_request:
+    paths:
+      - "kernel/forge-bool-core/**"
+      - "verify/aeneas/forge-bool-core/**"
+      - "verify/forge-exact/**"
+      - ".github/workflows/forge-bool-core-proof.yml"
+  workflow_dispatch:
+
+# A new push to a pull request cancels that pull request's runs still queued or running for its
+# older commits; pushes to main are never cancelled.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  refinement:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: elan and the pinned Lean
+        run: |
+          if [ ! -x "$HOME/.elan/bin/elan" ]; then
+            curl -sSfL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -o elan-init.sh
+            sh elan-init.sh -y --default-toolchain none
+          fi
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+          "$HOME/.elan/bin/elan" toolchain install "$(cat verify/aeneas/forge-bool-core/lean/lean-toolchain)"
+
+      - name: Lake cache key
+        id: lake
+        run: python3 tools/ci/lake-cache.py forge-bool-core verify/aeneas/forge-bool-core/lean
+      - name: Lake build (restored; Lake rebuilds what changed)
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ steps.lake.outputs.paths }}
+          key: ${{ steps.lake.outputs.key }}
+          restore-keys: |
+            ${{ steps.lake.outputs.prefix }}
+            ${{ steps.lake.outputs.any }}
+
+      - name: 2. the proofs
+        working-directory: verify/aeneas/forge-bool-core/lean
+        run: |
+          lake exe cache get || true
+          lake build 2>&1 | tee build.log
+          grep -q "Build completed successfully" build.log
+
+      - name: 3. the axiom report
+        working-directory: verify/aeneas/forge-bool-core/lean
+        run: |
+          bad=$(grep "depends on axioms" build.log | grep -v -E "\[(propext(, Classical\.choice)?(, Quot\.sound)?|propext, Quot\.sound|)\]" || true)
+          if [ -n "$bad" ]; then echo "::error::non-standard axioms:"; echo "$bad"; exit 1; fi
+          if grep -q "sorryAx\|declaration uses [\`']sorry" build.log; then echo "::error::sorry"; exit 1; fi
+          grep -q "'forge_bool_core.end_to_end_proof' depends on axioms" build.log \
+            || { echo "::error::end_to_end_proof missing from the axiom report"; exit 1; }
+
+      - name: save the Lake build (main only, even when a check failed)
+        if: ${{ always() && steps.lake.outcome == 'success' && github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ steps.lake.outputs.paths }}
+          key: ${{ steps.lake.outputs.key }}

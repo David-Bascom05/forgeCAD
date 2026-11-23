@@ -1003,7 +1003,9 @@ impl Piece {
         // the start is the event itself (s0 was found a hair inside the span)
         let u0 = self.u(0.0);
         let s0 = eq.pick(u0, s0, t.sign, t.count).0;
-        let mut pts = vec![point(u0, s0)];
+        // steps start at 1/64 of the way: room for that many at once, not doubled up from one
+        let mut pts = Vec::with_capacity(64);
+        pts.push(point(u0, s0));
         let (mut sig, mut s, mut ds, mut last): (f64, f64, f64, f64) = (0.0, s0, 0.0, 1.0);
         let mut dsig = 1.0 / 64.0;
         let mut k = 0;

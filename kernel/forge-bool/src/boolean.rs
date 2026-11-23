@@ -452,7 +452,7 @@ pub fn boolean(a: &Body, b: &Body, op: Op, feature: u64) -> R<Body> {
         crate::certify::skipped("the decide-once path");
         return Ok(r);
     }
-    let mut out = a.clone();
+    let mut out = a.clone_roomy();
     boolean_into(&mut out, b, op, feature)?;
     crate::unify::unify(&mut out);
     Ok(out.into_compact())
@@ -808,6 +808,48 @@ struct Scratch {
     /// where the boolean is this one's.
     edge_pieces: [Vec<(u32, u32, u32)>; 2],
     boolean: u32,
+    /// `across` of each coedge (by side and coedge index), current where its stamp is this
+    /// boolean's: a face's edges are trimmed against every face of the other body it meets, and
+    /// the surface across an edge is the same each time
+    across: AcrossMemo,
+}
+
+/// `across` per side and coedge, stamped by the boolean it was worked out in: (stamp, slot in
+/// `surfaces`), small, so the lists grow cheaply with the bodies' arenas.
+#[derive(Default)]
+pub(crate) struct AcrossMemo {
+    stamp: u32,
+    at: [Vec<(u32, u32)>; 2],
+    surfaces: Vec<Surface>,
+    /// `trim`'s cuts by parameter, its room kept from one curve to the next
+    ts: Vec<(f64, usize)>,
+}
+
+impl AcrossMemo {
+    /// A new boolean: what was kept before is stale.
+    fn next(&mut self) {
+        self.stamp = self.stamp.wrapping_add(1);
+        if self.stamp == 0 {
+            self.at = Default::default();
+            self.stamp = 1;
+        }
+        self.surfaces.clear();
+    }
+    /// `across(body, f, c)` for side `k`, worked out once per boolean.
+    fn get(&mut self, k: usize, body: &Body, f: FaceId, c: forge_topo::CoedgeId) -> R<&Surface> {
+        let v = &mut self.at[k];
+        if v.len() <= c.index() {
+            v.resize(body.coedges.len().max(c.index() + 1), (0, 0));
+        }
+        let (at, slot) = v[c.index()];
+        if at == self.stamp {
+            return Ok(&self.surfaces[slot as usize]);
+        }
+        let s = across(body, f, c)?;
+        v[c.index()] = (self.stamp, self.surfaces.len() as u32);
+        self.surfaces.push(s);
+        Ok(&self.surfaces[self.surfaces.len() - 1])
+    }
 }
 
 impl Scratch {
@@ -1083,6 +1125,7 @@ fn plan_once_in(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
     let mut clock = phases_on().then(forge_math::clock::Instant::now);
     let bodies = [a, b];
     let index = [Index::new(a), Index::new(b)];
+    scratch.across.next();
     // new edges and vertices are named by the faces and edges meeting there, never by the
     // feature: the n-ary boolean, meeting them all at once, names them alike
     let root = Name::feature(0);
@@ -1183,6 +1226,7 @@ fn plan_once_in(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
                     &mut segs,
                     &mut imprints,
                     &mut touching,
+                    Some(&mut scratch.across),
                 )?;
             }
         }
@@ -1801,17 +1845,31 @@ fn plan_once_in(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
 
     // pieces of the two bodies' edges with the same ends along the same curve (coincident walls
     // meeting a face at one line) are one edge: B's copy gives way to A's
-    let mut by_ends: Vec<((VKey, VKey), usize)> = pieces
+    let ends = |pc: &Piece| (pc.start.min(pc.end).packed(), pc.start.max(pc.end).packed());
+    // where B has fewer pieces than A, B's pieces' ends sorted first: only A's pieces with the
+    // ends of one of B's can be shared, so only those are sorted (the lookups below find the same)
+    let nb = pieces.iter().filter(|pc| pc.side == Some(1)).count();
+    let na = pieces.iter().filter(|pc| pc.side == Some(0)).count();
+    let mut wanted: Vec<(u64, u64)> = Vec::new();
+    if nb < na {
+        wanted.extend(pieces.iter().filter(|pc| pc.side == Some(1)).map(ends));
+        wanted.sort_unstable();
+        wanted.dedup();
+    }
+    let mut by_ends: Vec<((u64, u64), usize)> = pieces
         .iter()
         .enumerate()
         .filter(|(_, pc)| pc.side == Some(0))
-        .map(|(i, pc)| ((pc.start.min(pc.end), pc.start.max(pc.end)), i))
+        .map(|(i, pc)| (ends(pc), i))
+        .filter(|(k, _)| nb >= na || wanted.binary_search(k).is_ok())
         .collect();
-    by_ends.sort();
+    // (keys packed in VKey's order; the piece index breaks every tie, so unstable is stable)
+    by_ends.sort_unstable();
+    debug_assert!(by_ends.windows(2).all(|w| w[0] < w[1]));
     let mut canon: Vec<(usize, bool)> = (0..pieces.len()).map(|p| (p, false)).collect();
     let mut shared: Vec<usize> = Vec::new();
     for (p, pc) in pieces.iter().enumerate().filter(|(_, pc)| pc.side == Some(1)) {
-        let key = (pc.start.min(pc.end), pc.start.max(pc.end));
+        let key = ends(pc);
         let from = by_ends.partition_point(|x| x.0 < key);
         let mid = pc.curve.eval(pc.range.mid());
         for &(_, a) in by_ends[from..].iter().take_while(|x| x.0 == key) {
@@ -2447,6 +2505,51 @@ pub(crate) fn trim(
     segs: &mut Vec<Seg>,
     imprints: &mut Vec<Imprint>,
     touching: &mut Vec<Touch>,
+    // (the plain boolean's: its two bodies' surfaces across their edges, kept per boolean)
+    mut memo: Option<&mut AcrossMemo>,
+) -> R<()> {
+    // the curve's cuts by parameter: a list kept with the memo and reused
+    let mut ts = memo
+        .as_deref_mut()
+        .map(|m| std::mem::take(&mut m.ts))
+        .unwrap_or_default();
+    ts.clear();
+    let r = trim_in(
+        bodies,
+        index,
+        sides,
+        faces,
+        curve,
+        name,
+        branches,
+        cuts,
+        segs,
+        imprints,
+        touching,
+        memo.as_deref_mut(),
+        &mut ts,
+    );
+    if let Some(m) = memo {
+        m.ts = ts;
+    }
+    r
+}
+
+#[allow(clippy::too_many_arguments)]
+fn trim_in(
+    bodies: [&Body; 2],
+    index: [&Index; 2],
+    sides: [Side; 2],
+    faces: [FaceId; 2],
+    curve: Curve,
+    name: Name,
+    branches: [bool; 2],
+    cuts: &mut Vec<Cut>,
+    segs: &mut Vec<Seg>,
+    imprints: &mut Vec<Imprint>,
+    touching: &mut Vec<Touch>,
+    mut memo: Option<&mut AcrossMemo>,
+    ts: &mut Vec<(f64, usize)>,
 ) -> R<()> {
     let domain = curve.domain();
     let closed = domain.period.is_some();
@@ -2483,7 +2586,6 @@ pub(crate) fn trim(
     };
     let first = cuts.len();
     let first_seg = segs.len();
-    let mut ts: Vec<(f64, usize)> = Vec::new();
     // edges the curve runs along: (side, edge, is a seam)
     let mut along: Vec<(Side, EdgeId, bool)> = Vec::new();
     // springs crossed by the spring against the other surface
@@ -2561,7 +2663,15 @@ pub(crate) fn trim(
                     }
                     continue;
                 }
-                let across = across(body, f, c)?;
+                // (the memo's own copy, borrowed for this edge; without one, worked out here)
+                let own;
+                let across: &Surface = match memo.as_deref_mut() {
+                    Some(m) => m.get(k, body, f, c)?,
+                    None => {
+                        own = across(body, f, c)?;
+                        &own
+                    }
+                };
                 // only hits on the edge count: within its ends' tolerance of its box
                 let near = || {
                     let slack = body
@@ -2576,10 +2686,10 @@ pub(crate) fn trim(
                 let other_surface = &bodies[1 - k].face(faces[1 - k]).surface;
                 let on_spring = matches!(&edge.curve, Curve::Procedural(pc)
                         if pc.0.as_any().is_some_and(|a| a.is::<forge_geom::blend::Spring>()))
-                    && (!matches!(other_surface, Surface::Procedural(_)) || !holds_edge(&across, edge));
+                    && (!matches!(other_surface, Surface::Procedural(_)) || !holds_edge(across, edge));
                 let bends = !on_spring
                     && !matches!(edge.curve, Curve::Line(_) | Curve::Circle(_) | Curve::Ellipse(_))
-                    && !holds_edge(&across, edge);
+                    && !holds_edge(across, edge);
                 doubtful |= bends;
                 let found = if on_spring {
                     fenced.push((k, e));
@@ -2627,16 +2737,13 @@ pub(crate) fn trim(
                     ));
                     CurveSurface::Hits(crossing_on_face(&curve, range, body, f, edge))
                 } else {
-                    with_hairs!(
-                        curve_surface_in(&curve, range, &across, near),
-                        |hairs| log::hairs(
-                            [(bodies[0], faces[0]), (bodies[1], faces[1])],
-                            body,
-                            e,
-                            (&curve, range, &across),
-                            &hairs,
-                        )
-                    )
+                    with_hairs!(curve_surface_in(&curve, range, across, near), |hairs| log::hairs(
+                        [(bodies[0], faces[0]), (bodies[1], faces[1])],
+                        body,
+                        e,
+                        (&curve, range, across),
+                        &hairs,
+                    ))
                 };
                 decided!({
                     let sine = match (&curve, &edge.curve) {
@@ -2803,7 +2910,12 @@ pub(crate) fn trim(
                 };
                 for (h, grazing) in hits.into_iter().flat_map(|h| {
                     let grazing = h.contact != Contact::Crossing;
-                    let near = crossings_near(&curve, range, &across, h);
+                    // a crossing is its own (as crossings_near gives it) without a list; a grazing
+                    // root the crossings found near it
+                    let (one, near) = match grazing {
+                        false => (Some(h), Vec::new()),
+                        true => (None, crossings_near(&curve, range, across, h)),
+                    };
                     decided!(if grazing {
                         let pair = [(bodies[0], faces[0]), (bodies[1], faces[1])];
                         log::contact(pair, body, e, h.point, 0, "curve_surface: a touching root");
@@ -2826,7 +2938,10 @@ pub(crate) fn trim(
                         })
                     };
                     let touch = (grazing && near.is_empty() && (corner() || touch_inside(&h))).then_some(h);
-                    near.into_iter().chain(touch).map(move |x| (x, grazing))
+                    one.into_iter()
+                        .chain(near)
+                        .chain(touch)
+                        .map(move |x| (x, grazing))
                 }) {
                     // off the other face no piece of the curve starts here: cutting the edge would
                     // only split it where nothing meets it (and not its coincident twin). Its box
@@ -2907,7 +3022,7 @@ pub(crate) fn trim(
     // (seams are no boundary: crossing one leaves nothing)
     let odd = |k: usize| {
         let mut at: Vec<Point3> = Vec::with_capacity(ts.len());
-        for &(_, i) in &ts {
+        for &(_, i) in ts.iter() {
             let Some((sd, e)) = cuts[i].on.edge() else {
                 continue;
             };
@@ -4407,6 +4522,8 @@ pub(crate) fn imprint(
         let edge = body.edge(e);
         body.vertex(edge.start).tol.max(body.vertex(edge.end).tol)
     };
+    // each edge's cuts, the edges they cross, and its marks: lists kept from edge to edge
+    let (mut ts, mut crossed, mut marks): (Vec<f64>, Vec<(f64, EdgeId)>, Vec<f64>) = Default::default();
     for &l in &sb.face(src_face).loops {
         for c in sb.lp(l).coedges() {
             let e = sb.coedge(c).edge;
@@ -4419,8 +4536,8 @@ pub(crate) fn imprint(
             }
             let edge = sb.edge(e);
             let (reach, grow) = (sb.edge_box(e), slack(sb, e));
-            let mut ts: Vec<f64> = Vec::new();
-            let mut crossed: Vec<(f64, EdgeId)> = Vec::new();
+            ts.clear();
+            crossed.clear();
             for &l2 in &db.face(dst_face).loops {
                 for c2 in db.lp(l2).coedges() {
                     let e2 = db.coedge(c2).edge;
@@ -4499,7 +4616,8 @@ pub(crate) fn imprint(
                 }
             }
             ts.sort_by(f64::total_cmp);
-            let mut marks = vec![edge.range.lo];
+            marks.clear();
+            marks.push(edge.range.lo);
             marks.extend(
                 ts.iter()
                     .copied()
@@ -5046,7 +5164,7 @@ fn uv_chord(body: &Body, f: FaceId, p: &Piece, forward: bool, at_end: bool) -> O
 fn tied(
     pieces: &[Piece],
     half: &[(usize, bool)],
-    out: &[(VKey, usize)],
+    out: &[(u64, usize)],
     i: usize,
     theta: Vec2,
     (c, j): (Vec2, usize),
@@ -5396,8 +5514,47 @@ pub(crate) fn split_face(
     // (Some(false)): a cycle dropped by its first answer is not drawn but made a region alone
     gone: &dyn Fn((usize, bool)) -> Option<bool>,
 ) -> R<Split> {
-    let mut half: Vec<(usize, bool)> =
-        Vec::with_capacity(boundary.iter().map(|l| l.len()).sum::<usize>() + 2 * new_edges.len());
+    // the lists of the walk are kept per thread and reused; a nested call (redrawing every
+    // cycle) starts from empty ones
+    let mut s = SPLIT.with(|s| s.take());
+    let r = split_face_in(body, f, pieces, boundary, new_edges, outer, gone, &mut s);
+    SPLIT.with(|c| c.replace(s));
+    r
+}
+
+/// The lists `split_face` walks with, reused from one face to the next.
+#[derive(Default)]
+struct SplitScratch {
+    half: Vec<(usize, bool)>,
+    by_start: Vec<(u64, usize)>,
+    dirs: Vec<[std::cell::Cell<Option<Vec2>>; 2]>,
+    used: Vec<bool>,
+    walked: Vec<usize>,
+}
+
+thread_local! {
+    static SPLIT: std::cell::Cell<SplitScratch> = std::cell::Cell::new(SplitScratch::default());
+}
+
+#[allow(clippy::too_many_arguments)]
+fn split_face_in(
+    body: &Body,
+    f: FaceId,
+    pieces: &[Piece],
+    boundary: &[Vec<(usize, bool)>],
+    new_edges: &[usize],
+    outer: bool,
+    gone: &dyn Fn((usize, bool)) -> Option<bool>,
+    s: &mut SplitScratch,
+) -> R<Split> {
+    let SplitScratch {
+        half,
+        by_start,
+        dirs,
+        used,
+        walked,
+    } = s;
+    half.clear();
     half.extend(boundary.iter().flatten().copied());
     for &p in new_edges {
         half.push((p, true));
@@ -5406,11 +5563,17 @@ pub(crate) fn split_face(
     let start_of = |h: (usize, bool)| if h.1 { pieces[h.0].start } else { pieces[h.0].end };
     let end_of = |h: (usize, bool)| if h.1 { pieces[h.0].end } else { pieces[h.0].start };
     // half-edges by start vertex, for finding the ways on from a vertex
-    let mut by_start: Vec<(VKey, usize)> = (0..half.len()).map(|j| (start_of(half[j]), j)).collect();
-    by_start.sort();
+    by_start.clear();
+    by_start.extend((0..half.len()).map(|j| (start_of(half[j]).packed(), j)));
+    // (keys packed in VKey's order; the half-edge index breaks every tie, so unstable is stable)
+    by_start.sort_unstable();
+    debug_assert!(by_start.windows(2).all(|w| w[0] < w[1]));
+    let (half, by_start) = (&*half, &*by_start);
     // each half-edge's direction at its start and at its end, worked out once (a vertex where m
     // ways meet is passed m times)
-    let dirs: Vec<[std::cell::Cell<Option<Vec2>>; 2]> = (0..half.len()).map(|_| Default::default()).collect();
+    dirs.clear();
+    dirs.resize_with(half.len(), Default::default);
+    let dirs = &*dirs;
     let dir = |i: usize, at_end: bool| -> R<Vec2> {
         let c = &dirs[i][at_end as usize];
         if let Some(d) = c.get() {
@@ -5421,7 +5584,7 @@ pub(crate) fn split_face(
         Ok(d)
     };
     let next = |i: usize| -> R<usize> {
-        let v = end_of(half[i]);
+        let v = end_of(half[i]).packed();
         let from = by_start.partition_point(|&(k, _)| k < v);
         let out = &by_start[from..from + by_start[from..].partition_point(|&(k, _)| k == v)];
         // one way on (always so at a pole, where u is undefined): no angles needed
@@ -5435,25 +5598,28 @@ pub(crate) fn split_face(
         let ways = || out.iter().map(|&(_, k)| Ok((dir(k, false)?, k)));
         let back = (half[i].0, !half[i].1);
         let (c, j) = clockwise(theta, |j| half[j] == back, ways())?.unwrap_or((theta, i));
-        if !tied(pieces, &half, out, i, theta, (c, j), ways())? {
+        if !tied(pieces, half, out, i, theta, (c, j), ways())? {
             return Ok(j);
         }
         let mut ways: Vec<(Vec2, usize)> = ways().collect::<R<_>>()?;
-        by_chords(body, f, pieces, &half, i, theta, &mut ways)
+        by_chords(body, f, pieces, half, i, theta, &mut ways)
     };
-    let mut used = vec![false; half.len()];
-    let mut cycles: Vec<Vec<usize>> = Vec::new();
+    used.clear();
+    used.resize(half.len(), false);
+    // the cycles, one after another in `walked`, cycle k ending at `ends[k]`
+    walked.clear();
+    let mut ends: Vec<usize> = Vec::new();
     for s in 0..half.len() {
         if used[s] {
             continue;
         }
-        let mut cyc = Vec::new();
+        let from = walked.len();
         let mut i = s;
         while !used[i] {
             used[i] = true;
-            cyc.push(i);
+            walked.push(i);
             i = next(i)?;
-            if cyc.len() > half.len() {
+            if walked.len() - from > half.len() {
                 return Err(BoolError::lost(Lost::SplitOpen {
                     face: FaceRef::of(body, f),
                 }));
@@ -5473,7 +5639,7 @@ pub(crate) fn split_face(
                     } else {
                         (pc.end, pc.start)
                     };
-                    let mark = if cyc.contains(&k) { "*" } else { " " };
+                    let mark = if walked[from..].contains(&k) { "*" } else { " " };
                     eprintln!(
                         "  {mark}half {k}: piece {p} {a:?} -> {b:?} seg {:?} mid {:?}",
                         pc.seg,
@@ -5485,8 +5651,12 @@ pub(crate) fn split_face(
                 face: FaceRef::of(body, f),
             }));
         }
-        cycles.push(cyc);
+        ends.push(walked.len());
     }
+    let walked = &*walked;
+    let cycles: Vec<&[usize]> = (0..ends.len())
+        .map(|k| &walked[if k == 0 { 0 } else { ends[k - 1] }..ends[k]])
+        .collect();
     let face = body.face(f);
     let nb = boundary.iter().map(|l| l.len()).sum::<usize>();
     let outer_len = if outer {
@@ -5497,13 +5667,13 @@ pub(crate) fn split_face(
     // on a plane, a cycle made only of original boundary is an original loop, untouched:
     // its orientation is known (the first loop is the outer one) and it needs no outline
     let planar = matches!(face.surface, Surface::Plane(_));
-    let untouched = |cyc: &Vec<usize>| planar && cyc.iter().all(|&i| i < nb);
+    let untouched = |cyc: &[usize]| planar && cyc.iter().all(|&i| i < nb);
     if let Surface::Plane(pl) = &face.surface {
         let walks: Vec<Walk> = cycles
             .iter()
             .map(|cyc| cyc.iter().map(|&i| half[i]).collect())
             .collect();
-        let kind = |k: usize| match untouched(&cycles[k]) {
+        let kind = |k: usize| match untouched(cycles[k]) {
             true if cycles[k][0] < outer_len => Some(Cycle::Outer),
             true => Some(Cycle::Hole),
             false => None,
@@ -5554,7 +5724,7 @@ pub(crate) fn split_face(
         }
         let mut pts = pts.unwrap_or_else(|| {
             let mut samples = Vec::new();
-            for &i in cyc {
+            for &i in cyc.iter() {
                 piece_samples(&pieces[half[i].0], half[i].1, &mut samples);
             }
             // pole-aware drawing

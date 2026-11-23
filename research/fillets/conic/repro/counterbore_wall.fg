@@ -1,0 +1,46 @@
+# Refused (Overflow), circular: one 10 mm round on a sloping face's edge of a wall, a counterbored
+# hole square to that face cut first (head 11.75, shaft 7.5), then a slot 15 wide along the hole
+# leaving the wall: the head's pocket reaches past the spring (10 from the edge on the slope).
+# Onshape builds it (as a conic, rho 0.8). From CADFS 00961869, reduced to the five features that
+# refuse and restated to three decimals.
+sketch ref(on: xy) {
+}
+sketch q0(on: offset(ref, 14.975)) {
+  p = pt(0, 8.646)
+}
+sketch q1(on: offset(ref, -0.866)) {
+  p = pt(0, -0.5)
+}
+sketch q2(on: ref) {
+  p = pt(1, 0)
+}
+sketch b1_sk(on: plane(at: q0.p, normal: axis(ref.origin, q1.p), x: axis(ref.origin, q2.p))) {
+  c0 = circle((0, -36.204), 7.5)
+}
+b1 = extrude(b1_sk, 50)
+sketch q3(on: offset(ref, 0.866)) {
+  p = pt(0, 0.5)
+}
+sketch f1_sk(on: plane(at: q0.p, normal: axis(ref.origin, q3.p), x: axis(ref.origin, q2.p))) {
+  c0 = circle((0, 36.204), 11.75)
+}
+f1 = extrude(f1_sk, 25)
+sketch q4(on: ref) {
+  p = pt(0, 1)
+}
+sketch b2_sk(on: plane(at: ref.origin, normal: axis(ref.origin, q2.p), x: axis(ref.origin, q4.p))) {
+  l0 = line((36.656, -40.919), (65.887, 9.711))
+  l1 = line((65.887, 9.711), (0, 47.751))
+  l2 = line((0, 47.751), (0, -40.919))
+  l3 = line((0, -40.919), (36.656, -40.919))
+}
+b2 = extrude(b2_sk, sym(40), new: true)
+f2 = combine(b2, tools: b1, op: "cut")
+sketch f3_sk(on: plane(at: ref.origin, normal: axis(ref.origin, q2.p), x: axis(ref.origin, q4.p))) {
+  l0 = line((20.647, 55.902), (8.942, -50.742))
+  l1 = line((8.942, -50.742), (53.79, -51.125))
+  l2 = line((53.79, -51.125), (102.165, 22.974))
+  l3 = line((102.165, 22.974), (20.647, 55.902))
+}
+f3 = cut(f3_sk, sym(15))
+f4 = fillet(edges(between: (b2.end, b2.side(b2_sk.l1))), 10)

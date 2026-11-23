@@ -114,6 +114,8 @@ fn overlaps_touches_containment_and_fits() {
     assert!(h12.confirmed);
     assert!((h12.volume.unwrap() - 200.0).abs() < 1e-6, "{:?}", h12.volume);
     assert!(find(1, 3).is_none());
+    // face to face: touching, not clear (audit 2 §3.2: the mesh depth gate called it clear)
+    assert!(rep.touching.contains(&pair(1, 3)), "{:?}", rep.touching);
     let h45 = find(4, 5).expect("containment");
     assert!((h45.volume.unwrap() - 1000.0).abs() < 1e-6);
     // the rod is a declared fit: intended contact, reported, not interference

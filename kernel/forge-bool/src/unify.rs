@@ -27,9 +27,12 @@ pub fn unify(body: &mut Body) {
             _ => (0, 0.0),
         })
         .collect();
-    let cands: Vec<EdgeId> = (0..body.edges.len() as u32)
-        .map(EdgeId)
-        .filter(|&e| between_same(body, &keys, e))
+    let cands: Vec<EdgeId> = body
+        .edges
+        .iter()
+        .zip(0u32..)
+        .filter(|&(x, _)| between_same(body, &keys, x))
+        .map(|(_, e)| EdgeId(e))
         .collect();
     // the order edges go in decides which stays as the seam of a face that wraps round: the last
     // one of its ring. Rulings (a line on a cylinder or cone) go last, so the seam kept is one
@@ -278,12 +281,11 @@ where
     (to, members)
 }
 
-/// Whether live edge `e` lies between two faces on one surface, facing the same way (`keys` as
+/// Whether edge `x`, alive, lies between two faces on one surface, facing the same way (`keys` as
 /// `unify` makes them); or has one plane face on both sides: a slit, a spur or a bridge between
 /// two of its loops, which bounds nothing. (One face round a cylinder or cone on both sides is
 /// mostly its seam, which the face needs.)
-fn between_same(body: &Body, keys: &[(u8, f64)], e: EdgeId) -> bool {
-    let x = body.edge(e);
+fn between_same(body: &Body, keys: &[(u8, f64)], x: &forge_topo::Edge) -> bool {
     if !x.alive || x.coedges.len() != 2 {
         return false;
     }
@@ -314,18 +316,23 @@ fn between_same(body: &Body, keys: &[(u8, f64)], e: EdgeId) -> bool {
 /// lies between when it goes, the merged one bearing the surface it keeps: every piece of a run
 /// joined is within the test of the surface the whole keeps, not only of its neighbour. A plane's outward normal is its z or -z; a cylinder's or cone's natural normal points
 /// away from its axis whichever way its frame turns.
+#[inline(always)]
 fn same_surface(body: &Body, a: FaceId, b: FaceId) -> bool {
     let (fa, fb) = (body.face(a), body.face(b));
-    let facing = match (&fa.surface, &fb.surface) {
+    // (`ssi::coincident`'s own arms, called direct)
+    match (&fa.surface, &fb.surface) {
         (Surface::Plane(p), Surface::Plane(q)) => {
             (p.frame.z().dot(q.frame.z()) > 0.0) == (fa.same_sense == fb.same_sense)
+                && forge_geom::intersect::planes_coincident(p, q)
         }
-        (Surface::Cylinder(_), Surface::Cylinder(_)) | (Surface::Cone(_), Surface::Cone(_)) => {
-            fa.same_sense == fb.same_sense
+        (Surface::Cylinder(p), Surface::Cylinder(q)) => {
+            fa.same_sense == fb.same_sense && crate::ssi::cylinders_coincident(p, q)
         }
-        _ => return false,
-    };
-    facing && crate::ssi::coincident(&fa.surface, &fb.surface)
+        (Surface::Cone(_), Surface::Cone(_)) => {
+            fa.same_sense == fb.same_sense && crate::ssi::coincident(&fa.surface, &fb.surface)
+        }
+        _ => false,
+    }
 }
 
 /// Whether a feature split a face on purpose along the edge named `name`.
@@ -420,8 +427,6 @@ struct Work {
     made: Vec<(FaceId, Vec<CoedgeId>)>,
     /// The edges taken out.
     dropped: Vec<EdgeId>,
-    /// Each face that has taken another in.
-    grown: Vec<bool>,
 }
 
 const MADE: u32 = 1 << 31;
@@ -433,7 +438,6 @@ impl Work {
             loops: vec![None; body.loops.len()],
             made: Vec::new(),
             dropped: Vec::new(),
-            grown: vec![false; body.faces.len()],
         }
     }
 
@@ -539,8 +543,10 @@ fn remove_edge(body: &mut Body, w: &mut Work, e: EdgeId) -> Option<(FaceId, Face
         body.dead += 1;
         return Some((fa, fa));
     }
-    // (asked again of the faces now on either side where one is a merge, keeping one surface)
-    if (w.grown[fa.index()] || w.grown[fb.index()]) && !same_surface(body, fa, fb) {
+    // (asked again of the faces now on either side, one of which may be a merge keeping one
+    // surface, unless their surfaces are one set of points)
+    let exact = one_set(&body.face(fa).surface, &body.face(fb).surface);
+    if !exact && !same_surface(body, fa, fb) {
         return None;
     }
     let sb = w.get(body, lb).clone();
@@ -607,8 +613,7 @@ fn remove_edge(body: &mut Body, w: &mut Work, e: EdgeId) -> Option<(FaceId, Face
     // edge of the other must lie on it as `check` asks (`edge_off_face`). The coincidence test
     // bounds a cylinder's axis and radius apart, so two it passes can be further apart than
     // either; and a run of faces each within it of the next is not within it of the one kept.
-    if !one_set(&body.face(fa).surface, &body.face(fb).surface) && !rests_on(body, w, gone, keep, &gone_edges)
-    {
+    if !exact && !rests_on(body, w, gone, keep, &gone_edges) {
         if !rests_on(body, w, keep, gone, &gone_edges) {
             return None;
         }
@@ -640,7 +645,6 @@ fn remove_edge(body: &mut Body, w: &mut Work, e: EdgeId) -> Option<(FaceId, Face
     w.get(body, lg).clear();
     body.faces[gone.index()].alive = false;
     body.dead += 1;
-    w.grown[keep.index()] = true;
     Some((keep, gone))
 }
 
@@ -660,6 +664,29 @@ fn rests_on(body: &Body, w: &mut Work, from: FaceId, onto: FaceId, skip: &[EdgeI
                     (Surface::Plane(p), Curve::Line(_)) => [x.range.lo, x.range.hi]
                         .iter()
                         .all(|&t| p.signed_distance(x.curve.eval(t)).abs() <= x.tol.max(tol::LINEAR)),
+                    // a circle's distance from a plane is d0 + a cos t + b sin t: furthest at an
+                    // end or where its derivative is zero
+                    (Surface::Plane(p), Curve::Circle(c)) => {
+                        let band = x.tol.max(tol::LINEAR);
+                        let n = p.frame.z();
+                        let d0 = p.signed_distance(c.frame.origin);
+                        let (a, b) = (c.radius * n.dot(c.frame.x()), c.radius * n.dot(c.frame.y()));
+                        let at = |t: f64| {
+                            let (s, co) = forge_math::dmath::sin_cos(t);
+                            (d0 + a * co + b * s).abs() <= band
+                        };
+                        let crest = forge_math::dmath::atan2(b, a);
+                        let reach = (a * a + b * b).sqrt();
+                        let tau = std::f64::consts::TAU;
+                        let inside = |t: f64| {
+                            let t = t + tau * ((x.range.lo - t) / tau).ceil();
+                            t <= x.range.hi
+                        };
+                        at(x.range.lo)
+                            && at(x.range.hi)
+                            && (!inside(crest) || (d0 + reach).abs() <= band)
+                            && (!inside(crest + std::f64::consts::PI) || (d0 - reach).abs() <= band)
+                    }
                     _ => forge_topo::check::edge_off_face(body, e, onto).is_none(),
                 }
         })
@@ -807,7 +834,7 @@ fn join(body: &mut Body, c: CoedgeId, n: CoedgeId) -> bool {
     // two traces of where the same two surfaces meet (the pieces two booleans traced apart):
     // one branch through v, whose chains are spliced there
     let traced = match (&x1.curve, &x2.curve) {
-        (Curve::Intersection(a), Curve::Intersection(b)) => !std::sync::Arc::ptr_eq(a, b),
+        (Curve::Intersection(a), Curve::Intersection(b)) => !std::sync::Arc::ptr_eq(a, b) && a != b,
         _ => false,
     };
     // on one line or circle (cheap tests first; the walk round v and the evaluation settle it)

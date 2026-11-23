@@ -1,0 +1,18 @@
+# A post standing on a round bar, its root rounded conic: the root is a curve of no closed form, so
+# the section is carried along it in the ball's frame (the faces' feet, their tangent planes' apex).
+shared R = 20
+shared L = 60
+shared P = 8
+shared H = 30
+param root.r = 2
+param root.rho = ratio(0.5)
+
+sketch end(on: yz) {
+  c = circle((0, 0), R)
+}
+bar = extrude(end.c, sym(L))
+sketch foot(on: xy) {
+  c = circle((0, 0), P)
+}
+post = extrude(foot.c, H)
+root = fillet(edges(between: (bar.side(end.c), post.side(foot.c))), r, conic: rho)

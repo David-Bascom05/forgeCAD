@@ -1,8 +1,10 @@
 [workspace]
 resolver = "3"
-members = ["kernel/*", "interface/*", "verify/*", "verify/forge-exact/fuzz"]
+members = ["kernel/*", "interface/*", "verify/fillet-oracle", "verify/forge-bench", "verify/forge-certify", "verify/forge-coverage", "verify/forge-mass", "verify/forge-mesh-check", "verify/forge-proof", "verify/forge-refold", "verify/forge-sketch-check", "verify/forge-topo-check", "verify/forge-transform", "verify/forge-exact/fuzz"]
 # its own workspace, so wgpu never enters a kernel build or this Cargo.lock
-exclude = ["interface/forge-render", "interface/forge-speech", "verify/forge-exact", "verify/ieee754", "verify/aeneas", "verify/forge-certify", "verify/forge-mesh-files", "verify/sheet"]
+# verify/ holds Lean packages beside the Rust crates: the Rust ones are named above, so a new Lean
+# package needs no entry here (a new Rust crate under verify/ is added to members)
+exclude = ["interface/forge-render", "interface/forge-speech"]
 
 [workspace.package]
 version = "0.1.0"

@@ -20,39 +20,128 @@ pub fn threads() -> usize {
     std::env::var("FORGECAD_THREADS")
         .ok()
         .and_then(|t| t.parse().ok())
-        .unwrap_or_else(|| std::thread::available_parallelism().map_or(1, |n| n.get()))
+        .unwrap_or_else(cores)
         .max(1)
 }
 
-/// `f` of each of `0..n`, in order.
-pub fn map<T: Send>(n: usize, f: impl Fn(usize) -> T + Sync) -> Vec<T> {
-    let threads = threads().min(n);
-    if threads <= 1 {
+/// The cores there are, asked once: `available_parallelism` reads the cgroup's files on Linux
+/// (several system calls), and `threads` is asked at every parallel map.
+fn cores() -> usize {
+    static CORES: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
+    *CORES.get_or_init(|| std::thread::available_parallelism().map_or(1, |n| n.get()))
+}
+
+/// `requested` threads, but no more than [`threads`] gives (the cores there are, or
+/// `FORGECAD_THREADS`), and at least one. Asking for more threads than cores only adds the cost
+/// of starting and switching them: 16 on 4 cores made the n-ary regen of a small part 66% slower
+/// (research/booleans/speedups.md, "Threads").
+pub fn cap(requested: usize) -> usize {
+    requested.min(threads()).max(1)
+}
+
+/// How long the calling thread works alone before [`map_adaptive`] considers helpers.
+pub const HELPERS_AFTER: std::time::Duration = std::time::Duration::from_micros(200);
+
+/// The serial work still left, projected from the items done so far, below which
+/// [`map_adaptive`] never starts helpers. Starting and joining 3 helpers costs about 0.1–0.2 ms on
+/// a 4-core VM, but a new thread costs more than its start: its own allocator arena, cold pages,
+/// and per-thread caches that start empty (`ssi::MET`: a helper searches again what the caller
+/// knows). Measured across the bench parts: at 2 ms jack's n-ary ran 14% slower on 4 threads than
+/// on one; at 5 ms it was faster, and every win was kept (research/booleans/speedups.md,
+/// "Fastest wins").
+pub const HELPERS_FOR: std::time::Duration = std::time::Duration::from_millis(5);
+
+/// The mean cost of an item, measured over the items done, below which [`map_adaptive`] never
+/// starts helpers, however much work is left. Cheap items are bound by memory and the allocator,
+/// so helpers contend more than they help: the small all-planar n-ary regens (coplanar, patterns,
+/// hole-grid) ran 5–23% slower on 4 threads than on one (research/booleans/speedups.md,
+/// "Fastest wins").
+pub const HELPERS_ITEM: std::time::Duration = std::time::Duration::from_micros(20);
+
+/// `f` of each of `0..n`, in order, on up to `threads` threads, each given at least `per` items.
+/// The calling thread starts alone. The others join only once it has worked for
+/// [`HELPERS_AFTER`], the items done cost [`HELPERS_ITEM`] each on average, and the work left,
+/// projected from them, exceeds [`HELPERS_FOR`], so batches too small or too cheap to pay for
+/// threads stay on one. The answers are
+/// collected by item index: they are the same, and in the same order, whatever the thread count
+/// or the scheduling (`par_map_eq`, research/booleans/lean/Speedups.lean).
+pub fn map_adaptive<T: Send>(n: usize, threads: usize, per: usize, f: impl Fn(usize) -> T + Sync) -> Vec<T> {
+    map_adaptive_for(n, threads, per, HELPERS_FOR, f)
+}
+
+/// [`map_adaptive`] with its own threshold of work left, `helpers_for`, for items whose helpers
+/// pay more than their start: items that fill a per-thread cache (a new thread starts it cold,
+/// and recomputes what the caller already has).
+pub fn map_adaptive_for<T: Send>(
+    n: usize,
+    threads: usize,
+    per: usize,
+    helpers_for: std::time::Duration,
+    f: impl Fn(usize) -> T + Sync,
+) -> Vec<T> {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    let threads = threads.min(n / per.max(1));
+    if threads <= 1 || n < 2 {
         return (0..n).map(f).collect();
     }
-    let next = std::sync::atomic::AtomicUsize::new(0);
-    let mut got: Vec<(usize, T)> = scope(|s| {
-        let hs: Vec<_> = (0..threads)
-            .map(|_| {
-                let (f, next) = (&f, &next);
-                s.spawn(move || {
-                    let mut out = Vec::new();
-                    loop {
-                        let i = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                        if i >= n {
-                            return out;
-                        }
-                        out.push((i, f(i)));
-                    }
-                })
-            })
-            .collect();
-        hs.into_iter()
-            .flat_map(|h| h.join().unwrap_or_else(|p| std::panic::resume_unwind(p)))
-            .collect()
-    });
-    got.sort_unstable_by_key(|x| x.0);
-    got.into_iter().map(|x| x.1).collect()
+    let next = AtomicUsize::new(0);
+    let work = || {
+        let mut got = Vec::new();
+        loop {
+            let i = next.fetch_add(1, Ordering::Relaxed);
+            if i >= n {
+                break got;
+            }
+            got.push((i, f(i)));
+        }
+    };
+    scope(|s| {
+        let start = crate::clock::Instant::now();
+        // alone, this thread takes the items in order: its answers go straight into place
+        let mut first: Vec<T> = Vec::with_capacity(n);
+        let mut helpers = Vec::new();
+        while helpers.is_empty() {
+            let i = next.fetch_add(1, Ordering::Relaxed);
+            if i >= n {
+                return first;
+            }
+            first.push(f(i));
+            // asked after every item: items differ widely in cost, so the projection can grow
+            let taken = i + 1;
+            let elapsed = start.elapsed();
+            if taken < n && elapsed > HELPERS_AFTER && elapsed >= HELPERS_ITEM.mul_f64(taken as f64) {
+                // the work left, at the pace so far
+                let left = elapsed.mul_f64((n - taken) as f64 / taken as f64);
+                if left > helpers_for {
+                    // one helper per `helpers_for` of work left: a new thread costs more than its
+                    // start (its own allocator arena, cold pages and caches), so a few ms of
+                    // work pays for one or two, not for every core
+                    let want = (left.as_secs_f64() / helpers_for.as_secs_f64()) as usize;
+                    let k = want.min(threads - 1).min(n - taken).max(1);
+                    helpers = (0..k).map(|_| s.spawn(work)).collect();
+                }
+            }
+        }
+        // with helpers: the rest by index
+        let done = first.len();
+        let mut rest: Vec<Option<T>> = (done..n).map(|_| None).collect();
+        for (i, t) in work() {
+            rest[i - done] = Some(t);
+        }
+        for h in helpers {
+            for (i, t) in h.join().unwrap_or_else(|p| std::panic::resume_unwind(p)) {
+                rest[i - done] = Some(t);
+            }
+        }
+        first.extend(rest.into_iter().map(|t| t.expect("every item done")));
+        first
+    })
+}
+
+/// `f` of each of `0..n`, in order, on up to [`threads`] threads, which join only where the
+/// work pays for them ([`map_adaptive`]).
+pub fn map<T: Send>(n: usize, f: impl Fn(usize) -> T + Sync) -> Vec<T> {
+    map_adaptive(n, threads(), 1, f)
 }
 
 #[cfg(test)]
