@@ -121,7 +121,8 @@ elab "#standard_axioms " ids:ident* : command => do
   IEEE754.Interval.below_round IEEE754.Interval.above_round IEEE754.Interval.crit_counted
   IEEE754.Interval.sin_encloses IEEE754.Interval.cos_encloses
   IEEE754.Interval.ivAdd_encl IEEE754.Interval.ivMul_encl IEEE754.Interval.mul_corners IEEE754.Interval.horner_encl
-  IEEE754.Interval.sign_filter_sound IEEE754.Interval.enclose_encl
+  IEEE754.Interval.sign_filter_sound IEEE754.Interval.enclose_encl IEEE754.Interval.ivMul_corners
+  IEEE754.Interval.ivAdd_sums IEEE754.Interval.horner_encl_chk IEEE754.Interval.sign_filter_chk
   -- div.rs gcd
   IEEE754.Exact.Gcd.tz_or IEEE754.Exact.Gcd.stein_spec IEEE754.Exact.Gcd.gcdU128_spec IEEE754.Exact.Gcd.gcdU128_le
   IEEE754.Exact.Gcd.step_inv IEEE754.Exact.Gcd.step_bounds IEEE754.Exact.Gcd.run_brk IEEE754.Exact.Gcd.mediant
