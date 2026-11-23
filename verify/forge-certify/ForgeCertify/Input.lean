@@ -159,6 +159,26 @@ def keyPlanes (nk : Nat) (fs : List (Plane × Array (Array Nat))) : Array (List 
         if k < nk && !(acc[k]!.contains pl) then acc := acc.set! k (pl :: acc[k]!)
   return acc
 
+/-- A key's exact point: the meet of its snapped planes when three of them are independent
+(`Snap.vertexAt`); when they span only a line or a plane (a vertex on a seam between faces of
+one surface, or one splitting an edge), the kernel's point put on that line or plane exactly.
+Any point on all of them is as good: the theorem holds whatever this returns. -/
+def settle (ps : List Plane) (p : V3) : Option V3 :=
+  let onAll := fun (q : V3) => if ps.all (fun P => P.eval q == 0) then some q else none
+  match Snap.vertexAt ps with
+  | some q => some q
+  | none =>
+    if ps.any (fun a => ps.any fun b => ps.any fun c => (meet3 a b c).isSome) then none
+    else
+      match (ps.flatMap fun a => ps.filterMap fun b =>
+          let d := a.n.cross b.n
+          if d.isZero then none else meet3 a b ⟨d, d.dot p⟩).head? with
+      | some q => onAll q
+      | none =>
+        match ps.head? with
+        | none => none
+        | some a => onAll (p - (a.eval p / a.n.dot a.n) * a.n)
+
 def interpret (l : Rat) (keys : Array V3) (opds : Array ROpd) (res : RRes) :
     Except (String × String) Interp := do
   -- carriers: every operand face, its box the kernel's points of its loops
@@ -197,7 +217,7 @@ def interpret (l : Rat) (keys : Array V3) (opds : Array ROpd) (res : RRes) :
   let mut exact : Array V3 := keys
   for k in [0:keys.size] do
     if kp[k]!.isEmpty then continue
-    match Snap.vertexAt kp[k]! with
+    match settle kp[k]! keys[k]! with
     | none => throw ("scope", s!"vertex {fmtV keys[k]!} is not one point of the planes round it")
     | some p =>
       if (p - keys[k]!).norm2 > l * l then

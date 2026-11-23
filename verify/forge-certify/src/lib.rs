@@ -87,6 +87,21 @@ pub fn op_name(op: Op) -> &'static str {
 /// The certificate as the checker reads it (ForgeCertify/Input.lean), or why the boolean is out of
 /// its scope.
 pub fn dump(rec: &Record, frames: &str) -> Result<String, String> {
+    dump_mutated(rec, frames, &Mutation::None)
+}
+
+/// A wrong result made on purpose from a right one, to see the checker reject it.
+#[derive(Clone, Debug)]
+pub enum Mutation {
+    None,
+    /// The result without its face `k`.
+    DropFace(usize),
+    /// The result claimed for another op.
+    Op(Op),
+}
+
+/// [`dump`] with the result or op changed by `m`.
+pub fn dump_mutated(rec: &Record, frames: &str, m: &Mutation) -> Result<String, String> {
     let Some(res) = &rec.result else {
         return Err("the kernel refused".into());
     };
@@ -125,7 +140,10 @@ pub fn dump(rec: &Record, frames: &str) -> Result<String, String> {
         ));
     }
     let mut rfaces = Vec::new();
-    for f in res.face_ids() {
+    for (k, f) in res.face_ids().enumerate() {
+        if matches!(m, Mutation::DropFace(d) if *d == k) {
+            continue;
+        }
         let (o, n) = plane(res, f)?;
         let src = planes
             .iter()
@@ -145,7 +163,10 @@ pub fn dump(rec: &Record, frames: &str) -> Result<String, String> {
     Ok(format!(
         "{{\"linear\":{},\"op\":\"{}\",\"frames\":\"{frames}\",\"keys\":[{}],\"operands\":[{}],\"result\":{{\"faces\":[{}]}}}}",
         exact(forge_math::tol::LINEAR),
-        op_name(rec.op),
+        op_name(match m {
+            Mutation::Op(o) => *o,
+            _ => rec.op,
+        }),
         ks.join(","),
         operands.join(","),
         rfaces.join(",")

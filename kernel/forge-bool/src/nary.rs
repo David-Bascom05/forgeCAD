@@ -604,6 +604,8 @@ pub fn nary_with(
     root: Name,
 ) -> R<Body> {
     crate::boolean::UNDECIDED.with(|u| u.set(None));
+    #[cfg(feature = "certify")]
+    crate::certify::skipped("the n-ary boolean");
     #[cfg(feature = "decisions")]
     let scope = crate::decisions::scope("n-ary", String::from("plain"));
     let body = nary_body(tools, ops, shapes, batch, threads, root);

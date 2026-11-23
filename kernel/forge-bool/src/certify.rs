@@ -31,6 +31,7 @@ thread_local! {
     static ON: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
     static OPEN: RefCell<Option<Record>> = const { RefCell::new(None) };
     static DONE: RefCell<Vec<Record>> = const { RefCell::new(Vec::new()) };
+    static SKIPPED: RefCell<Vec<&'static str>> = const { RefCell::new(Vec::new()) };
 }
 
 /// Records this thread's booleans from now (`true`) or stops (`false`, the default): with the
@@ -42,6 +43,17 @@ pub fn record(on: bool) {
 /// The booleans this thread recorded since the last call.
 pub fn take() -> Vec<Record> {
     DONE.with(|d| std::mem::take(&mut *d.borrow_mut()))
+}
+
+/// The booleans this thread did since the last call by a path that gives no certificate (named).
+pub fn take_skipped() -> Vec<&'static str> {
+    SKIPPED.with(|d| std::mem::take(&mut *d.borrow_mut()))
+}
+
+pub(crate) fn skipped(path: &'static str) {
+    if ON.with(|c| c.get()) {
+        SKIPPED.with(|d| d.borrow_mut().push(path));
+    }
 }
 
 pub(crate) fn begin(a: &Body, b: &Body, op: Op) {

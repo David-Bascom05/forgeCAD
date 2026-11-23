@@ -33,6 +33,7 @@ no-output (the retry flags, Held-scoped to one boolean; SCRATCH speed; PHASES st
 no-output (certificate sink, feature `certify` only, off in every build: records the plan's pieces when asked, never read by the boolean)  @ forge-bool/src/certify.rs|static|static DONE: RefCell<Vec<Record>> = const { RefCell::new(Vec::new()) };
 no-output (certificate sink, feature `certify` only, off in every build: records the plan's pieces when asked, never read by the boolean)  @ forge-bool/src/certify.rs|static|static ON: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 no-output (certificate sink, feature `certify` only, off in every build: records the plan's pieces when asked, never read by the boolean)  @ forge-bool/src/certify.rs|static|static OPEN: RefCell<Option<Record>> = const { RefCell::new(None) };
+no-output (certificate sink, feature `certify` only, off in every build: records the plan's pieces when asked, never read by the boolean)  @ forge-bool/src/certify.rs|static|static SKIPPED: RefCell<Vec<&'static str>> = const { RefCell::new(Vec::new()) };
 no-output (certificate sink, feature `certify` only, off in every build: records the plan's pieces when asked, never read by the boolean)  @ forge-bool/src/certify.rs|thread_local|thread_local! {
 speed (lazy field or constant table)  @ forge-bool/src/classify.rs|lazy|boxes: std::sync::OnceLock::new(),
 speed (lazy field or constant table)  @ forge-bool/src/classify.rs|lazy|boxes: std::sync::OnceLock<Vec<Box3>>,

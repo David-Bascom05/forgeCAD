@@ -468,6 +468,9 @@ pub fn boolean_into(target: &mut Body, b: &Body, op: Op, _feature: u64) -> R<()>
             crate::certify::finish(r.is_ok().then_some(&*target));
             r?;
         }
+    } else {
+        #[cfg(feature = "certify")]
+        crate::certify::skipped("the local-imprint path");
     }
     #[cfg(debug_assertions)]
     faces_survive(&before, b, op, target);
@@ -566,6 +569,8 @@ fn survivors(a: &Body, b: &Body, op: Op, r: &Body) -> Option<String> {
 /// built only if the general boolean has to run.
 pub fn boolean_unlinked(target: &mut Body, b: forge_topo::Unlinked, op: Op) -> R<()> {
     if imprinted(target, &b, || std::borrow::Cow::Owned(b.clone().into_body()), op) {
+        #[cfg(feature = "certify")]
+        crate::certify::skipped("the local-imprint path");
         return Ok(());
     }
     let first = target.edges.len();
