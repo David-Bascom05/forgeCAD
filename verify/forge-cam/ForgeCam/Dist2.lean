@@ -373,6 +373,59 @@ theorem clearFace_segSeg {Z : Set ℝ} {w : ℝ → ℝ} (a u c v : ℝ × ℝ) 
       (√(segSegLo a u c v)) lower :=
   ⟨(segSeg_D a u c v hu hv).1, (segSeg_D a u c v hu hv).2, hΔ⟩
 
+/-! ### Degenerate segments (points): plunges and drill moves project to points -/
+
+theorem nsq_pos_or_eq_zero (u : ℝ × ℝ) : 0 < nsq u ∨ u = 0 := by
+  rcases (nsq_nonneg u).eq_or_lt with h | h
+  · right
+    simp only [nsq, dot] at h
+    exact Prod.ext (by simp only [Prod.fst_zero]; nlinarith [mul_self_nonneg u.1, mul_self_nonneg u.2])
+      (by simp only [Prod.snd_zero]; nlinarith [mul_self_nonneg u.1, mul_self_nonneg u.2])
+  · exact Or.inl h
+
+theorem pt_zero_dir (a : ℝ × ℝ) (τ : ℝ) : pt a 0 τ = a := by simp [pt]
+
+/-- **slab::dist's low end for two segments is a lower bound, degenerate segments (points)
+included.** -/
+theorem segSegLo_le_all (a u c v : ℝ × ℝ) {τ σ : ℝ} (hτ0 : 0 ≤ τ) (hτ1 : τ ≤ 1)
+    (hσ0 : 0 ≤ σ) (hσ1 : σ ≤ 1) : segSegLo a u c v ≤ F a u c v τ σ := by
+  rcases nsq_pos_or_eq_zero u with hu | rfl <;> rcases nsq_pos_or_eq_zero v with hv | rfl
+  · exact segSegLo_le a u c v hu hv hτ0 hτ1 hσ0 hσ1
+  · -- the second is a point c
+    unfold segSegLo; split_ifs
+    · refine (min_le_right _ _).trans ((min_le_left _ _).trans ?_)
+      have := ptSegSq_le c a u hu hτ0 hτ1
+      rw [F, pt_zero_dir, nsq_comm]; exact this
+    · exact nsq_nonneg _
+  · -- the first is a point a
+    unfold segSegLo; split_ifs
+    · refine (min_le_left _ _).trans ((min_le_left _ _).trans ?_)
+      have := ptSegSq_le a c v hv hσ0 hσ1
+      rw [F, pt_zero_dir]; exact this
+    · exact nsq_nonneg _
+  · -- two points: never apart, the low end is 0
+    unfold segSegLo; split_ifs
+    · exact (min_le_left _ _).trans ((min_le_left _ _).trans (by
+        rw [F, pt_zero_dir, pt_zero_dir]
+        unfold ptSegSq; simp [dot]))
+    · exact nsq_nonneg _
+
+/-- `segSeg_D` for any segments, points included. -/
+theorem segSeg_D_all (a u c v : ℝ × ℝ) :
+    0 ≤ √(segSegLo a u c v) ∧
+      ∀ s ∈ I01, ∀ σ ∈ (fun σ => pt c v σ) '' Set.Icc 0 1,
+        √(segSegLo a u c v) ≤ d2 σ (pt a u s) := by
+  refine ⟨Real.sqrt_nonneg _, ?_⟩
+  rintro s ⟨hs0, hs1⟩ _ ⟨σ, ⟨h0, h1⟩, rfl⟩
+  rw [d2_pt_eq]
+  exact Real.sqrt_le_sqrt (segSegLo_le_all a u c v hs0 hs1 h0 h1)
+
+theorem clearFace_segSeg_all {Z : Set ℝ} {w : ℝ → ℝ} (a u c v : ℝ × ℝ) {Zt H : Set ℝ}
+    {lower : ℝ} (hΔ : ∀ h ∈ H, ∀ z ∈ Zt, lower ≤ sdRZ Z w (√(segSegLo a u c v)) (h - z)) :
+    ClearFace Z w (fun s => pt a u s) Zt ((fun σ => pt c v σ) '' Set.Icc 0 1) H
+      (√(segSegLo a u c v)) lower :=
+  ⟨(segSeg_D_all a u c v).1, (segSeg_D_all a u c v).2, hΔ⟩
+
 /-- The executable form, over ℚ (slab.rs's candidates without the rounding). -/
 def segSegLoQ (a u c v : ℚ × ℚ) : ℚ := segSegLo a u c v
 

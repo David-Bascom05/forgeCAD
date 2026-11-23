@@ -97,6 +97,12 @@ clockwise arc is the counter-clockwise arc with its ends swapped). `clearFace_se
 `arcArc_D` discharge ClearFace (i). The soft jaws' pocket walls over arcs (quarter turns at most)
 are covered.
 
+## L6 and degenerate segments
+
+- The CAM session's L6 harness (2ec3c15, examples/oracle_segseg.rs) against Oracle.lean: 2000
+  cases, 0 outside (run here).
+- `segSegLo_le_all` covers points too (a plunge or drill move projects to one).
+
 ## Still to do when asked
 
 1. `dist_region` (flat faces): the box cutoff and the trim's inside test (`Trim::classify`).

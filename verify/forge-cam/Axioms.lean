@@ -56,3 +56,5 @@ import ForgeCam
 #print axioms ForgeCam.DistArc.clearFace_segArc
 #print axioms ForgeCam.DistArc.arcArcLo_le
 #print axioms ForgeCam.DistArc.arcArc_D
+#print axioms ForgeCam.Dist2.segSegLo_le_all
+#print axioms ForgeCam.Dist2.clearFace_segSeg_all
