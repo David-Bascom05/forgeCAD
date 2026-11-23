@@ -27,12 +27,16 @@ This file is the target of the aeneas session's abstraction function. It maps th
   - each edge's ends are on it.
 * `ValidExact b := WellFormed b ∧ ∃ S, Bounds b S`, and `denoteExact b` is that unique `S`.
 
-**Stored bodies** (the master's ruling).
+**Stored bodies** (the master's ruling, and the coordinator's canonical counterpart).
 * `Refines δ b bs`: `b` has `bs`'s cell structure one-to-one (the same faces, loops, edges, ends and
   vertices, by index, and the same senses), and each entity lies within `δ` of its counterpart:
   regions and curves in two-sided distance, vertices in distance.
-* `ValidSolid δ b := ∃ bs, Refines δ b bs ∧ ValidExact bs`.
-* `⟦b⟧ := denoteExact bs` for a chosen such `bs` (`denote`, `denote_spec`).
+* `exactOf δ b`: the canonical exact counterpart. It has the same carriers and senses, each vertex
+  is the unique exact meet of its carriers in its δ-ball (otherwise `none`, a typed refusal), and
+  each edge and region is the exact meet near the stored one. `exactOf_refines` gives
+  `Refines δ b (exactOf δ b)`.
+* `ValidSolid δ b := ∃ bs, exactOf δ b = some bs ∧ ValidExact bs`, and
+  `⟦b⟧ := denoteExact (exactOf δ b)` (`denote`, `denote_spec`, `denote_refines`).
 
 **The bridge**, for an exact valid body and any arrangement `G` (F5's `FacetData`) whose face set
 contains its faces, with connected rooms:
@@ -239,18 +243,121 @@ structure Refines (δ : ℝ) (b bs : BodyModel E) : Prop where
     WithinH δ b.edges[i].curve (bs.edges[i]'(edges_len ▸ h)).curve
   vert : ∀ i (h : i < b.verts.length), dist b.verts[i] (bs.verts[i]'(verts_len ▸ h)) ≤ δ
 
-/-- **A valid stored body** (the master's ruling): it refines an exact valid solid within `δ`. -/
-def ValidSolid (δ : ℝ) (b : BodyModel E) : Prop := ∃ bs, Refines δ b bs ∧ ValidExact bs
+/-! ## The canonical exact counterpart (`exactOf`)
+
+The code's exact per-question tests decide on one exact body: the faces' exact carriers, each
+vertex the exact meet of its carriers near the f64 vertex, each edge the meet curve between them.
+`exactOf δ b` is that body. It is canonical, with no choice. It is `none` when a vertex's meet is
+not unique in its δ-ball (a tangency), which is a typed refusal ("input vertex undecided"). -/
+
+/-- Face `f` uses an edge ending at vertex `u`. -/
+def IncV (b : BodyModel E) (u : Nat) (f : FaceModel E) : Prop :=
+  ∃ l ∈ f.loops, ∃ c ∈ l, ∃ e, b.edges[c.1]? = some e ∧ ∃ w, e.ends = some (u, w) ∨ e.ends = some (w, u)
+
+/-- Face `f` uses edge `i`. -/
+def IncE (f : FaceModel E) (i : Nat) : Prop := ∃ l ∈ f.loops, ∃ c ∈ l, c.1 = i
+
+/-- The meet of vertex `u`'s carriers in the δ-ball round its stored point `p₀`. -/
+def vertMeet (δ : ℝ) (b : BodyModel E) (u : Nat) (p₀ : E) : Set E :=
+  {p | dist p p₀ ≤ δ ∧ ∀ f ∈ b.faces, IncV b u f → f.carrier p = 0}
 
 open Classical in
-/-- **`⟦b⟧`**: its exact counterpart's solid. -/
-noncomputable def denote (δ : ℝ) (b : BodyModel E) : Set E :=
-  if h : ValidSolid δ b then denoteExact (Classical.choose h) else ∅
+/-- The exact vertex: the meet's one point, if it has exactly one. -/
+noncomputable def exactVert (δ : ℝ) (b : BodyModel E) (u : Nat) (p₀ : E) : Option E :=
+  if h : ∃! p, p ∈ vertMeet δ b u p₀ then some (Classical.choose h.exists) else none
 
-theorem denote_spec {δ : ℝ} {b : BodyModel E} (h : ValidSolid δ b) :
-    ∃ bs, Refines δ b bs ∧ ValidExact bs ∧ denote δ b = denoteExact bs := by
-  refine ⟨Classical.choose h, (Classical.choose_spec h).1, (Classical.choose_spec h).2, ?_⟩
-  unfold denote; rw [dif_pos h]
+/-- The exact edge: its faces' carriers' meet, within δ of the stored curve. -/
+def edgeMeet (δ : ℝ) (b : BodyModel E) (i : Nat) (e : EdgeModel E) : Set E :=
+  {p | (∀ f ∈ b.faces, IncE f i → f.carrier p = 0) ∧ ∃ q ∈ e.curve, dist p q ≤ δ}
+
+/-- The exact edges a face's loops use. -/
+def faceEdges (δ : ℝ) (b : BodyModel E) (f : FaceModel E) : Set E :=
+  ⋃ i, ⋃ (_ : IncE f i), ⋃ e ∈ b.edges[i]?, edgeMeet δ b i e
+
+/-- The exact region: the closure of the components of the carrier's zeros off the exact edges
+that lie within δ of the stored region. -/
+def regionMeet (δ : ℝ) (b : BodyModel E) (f : FaceModel E) : Set E :=
+  let Z := {x | f.carrier x = 0} \ faceEdges δ b f
+  closure {x | x ∈ Z ∧ connectedComponentIn Z x ⊆ Metric.thickening δ f.region}
+
+theorem regionMeet_on (δ : ℝ) (b : BodyModel E) (f : FaceModel E) :
+    ∀ y ∈ regionMeet δ b f, f.carrier y = 0 := by
+  intro y hy
+  have hc : IsClosed {x | f.carrier x = 0} := isClosed_eq f.cont continuous_const
+  unfold regionMeet at hy
+  refine closure_minimal ?_ hc hy
+  intro x hx
+  simp only [Set.mem_setOf_eq, Set.mem_diff] at hx
+  exact hx.1.1
+
+/-- The exact face: the same carrier, sense and loops, the exact region. -/
+def exactFace (δ : ℝ) (b : BodyModel E) (f : FaceModel E) : FaceModel E where
+  carrier := f.carrier
+  region := regionMeet δ b f
+  sense := f.sense
+  loops := f.loops
+  cont := f.cont
+  nd := f.nd
+  on_carrier := regionMeet_on δ b f
+
+open Classical in
+/-- **The canonical exact counterpart.** -/
+noncomputable def exactOf (δ : ℝ) (b : BodyModel E) : Option (BodyModel E) :=
+  if ∀ u (h : u < b.verts.length), (exactVert δ b u b.verts[u]).isSome then
+    some { faces := b.faces.map (exactFace δ b)
+           edges := b.edges.mapIdx fun i e => { curve := edgeMeet δ b i e, ends := e.ends }
+           verts := b.verts.mapIdx fun u p => (exactVert δ b u p).getD p }
+  else none
+
+theorem exactVert_dist {δ : ℝ} {b : BodyModel E} {u : Nat} {p₀ p : E}
+    (h : exactVert δ b u p₀ = some p) : dist p p₀ ≤ δ := by
+  unfold exactVert at h
+  split at h
+  · rename_i hu; cases h; exact (Classical.choose_spec hu.exists).1
+  · cases h
+
+/-- **(i) `exactOf` refines**: when each stored face region and edge curve is within δ of its exact
+one (vertices are, by construction), `b` refines `exactOf δ b` within δ. -/
+theorem exactOf_refines {δ : ℝ} {b bs : BodyModel E} (h : exactOf δ b = some bs)
+    (hface : ∀ f ∈ b.faces, WithinH δ f.region (regionMeet δ b f))
+    (hedge : ∀ i (hi : i < b.edges.length), WithinH δ b.edges[i].curve (edgeMeet δ b i b.edges[i])) :
+    Refines δ b bs := by
+  unfold exactOf at h
+  split at h
+  · rename_i hall
+    cases h
+    refine ⟨by simp, by simp, by simp, fun i hi => ?_, fun i hi => ?_, fun u hu => ?_⟩
+    · simp only [List.getElem_map, exactFace]
+      exact ⟨by simp, by simp, hface _ (List.getElem_mem hi)⟩
+    · simp only [List.getElem_mapIdx]
+      exact ⟨by simp, hedge i hi⟩
+    · simp only [List.getElem_mapIdx]
+      obtain ⟨p, hp⟩ := Option.isSome_iff_exists.mp (hall u hu)
+      rw [hp, Option.getD_some, dist_comm]
+      exact exactVert_dist hp
+  · cases h
+
+/-- **(ii) A valid stored body**: its canonical exact counterpart is a valid solid. -/
+def ValidSolid (δ : ℝ) (b : BodyModel E) : Prop := ∃ bs, exactOf δ b = some bs ∧ ValidExact bs
+
+/-- **(iii) `⟦b⟧`**: the canonical exact counterpart's solid (no choice). -/
+noncomputable def denote (δ : ℝ) (b : BodyModel E) : Set E :=
+  match exactOf δ b with
+  | some bs => denoteExact bs
+  | none => ∅
+
+theorem denote_spec {δ : ℝ} {b bs : BodyModel E} (h : exactOf δ b = some bs) :
+    denote δ b = denoteExact bs := by
+  unfold denote; rw [h]
+
+/-- With a valid counterpart and the δ-closeness of regions and edges, `⟦b⟧` is the solid of an
+exact body that `b` refines. -/
+theorem denote_refines {δ : ℝ} {b : BodyModel E} (hv : ValidSolid δ b)
+    (hface : ∀ f ∈ b.faces, WithinH δ f.region (regionMeet δ b f))
+    (hedge : ∀ i (hi : i < b.edges.length), WithinH δ b.edges[i].curve (edgeMeet δ b i b.edges[i])) :
+    ∃ bs, exactOf δ b = some bs ∧ Refines δ b bs ∧ ValidExact bs ∧ denote δ b = denoteExact bs := by
+  obtain ⟨bs, hb, hvx⟩ := hv
+  exact ⟨bs, hb, exactOf_refines hb hface hedge, hvx, denote_spec hb⟩
 
 /-- `⟦f⟧`. -/
 def denoteFace (f : FaceModel E) : Set E := f.region
