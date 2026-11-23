@@ -20,7 +20,7 @@ standard axioms and no sorry.
 | M, collapse | `collapse` and its loops (since c2a0294) | `collapse` (MetricI) | RefineCollapse |
 | E, core | `core`, `core_k` | `coreMI`, `coreK`; then `IncCoreSpec` and `EndToEndF` | the coordinator |
 
-Size limits added: `LedgerWF2.small` now also has `n_rooms * nb ≤ Usize.max`, which `membership`'s table needs. It always holds on 64-bit targets, since both are below 2^32. It also has `nrowsL edge_facets < U32.max` and `nrowsL vert_edges < U32.max`, so the refusals' `as u32` casts name the right cell. It also has `3 * nfacets ≤ Usize.max`, which the rim sort needs (v1 had it as a hypothesis too). And it has `vert_sectors.sec.len < U32.max`, for `fans`' union-find. `sectors_csr` (the sector rows' bounds) is a new field. `ledger_wf` checks `sectors_csr` already. It does not yet check `sectors_nodup` or the sector count; the Rust session has been asked to add both, so that `ledger_wf ↔ LedgerWF2` can hold.
+Size limits added: `LedgerWF2.small` now also has `n_rooms * nb ≤ Usize.max`, which `membership`'s table needs. It always holds on 64-bit targets, since both are below 2^32. It also has `nrowsL edge_facets < U32.max` and `nrowsL vert_edges < U32.max`, so the refusals' `as u32` casts name the right cell. It also has `3 * nfacets ≤ Usize.max`, which the rim sort needs (v1 had it as a hypothesis too). And it has `vert_sectors.sec.len < U32.max`, for `fans`' union-find. `sectors_csr` (the sector rows' bounds) is a new field. `ledger_wf` checks `sectors_csr` already. It checks `sectors_nodup` and every size limit too, so `ledger_wf ↔ LedgerWF2` holds (`ledger_wf_spec`).
 
 Points to agree within each group:
 - **Lists vs sets.** The Rust orders faces by head, edges by erel root, and verts in listed order,
@@ -33,7 +33,7 @@ Points to agree within each group:
 
 | group | state | file |
 |---|---|---|
-| T | done: `rows_spec`, `row_spec`; `ledger_wf ↔ LedgerWF2` in progress (`csr_ok_spec` done; waits on three size checks in ledger_wf). LedgerWF2 gains `nb_pos`, which ledger_wf checks | RefineIncTables, RefineIncWF |
+| T | done: `rows_spec`, `row_spec`, `csr_ok_spec`, `ledger_wf_spec` (`ledger_wf l ⦃ b => b = true ↔ LedgerWF2 l ⦄`; every check, loop and size limit) | RefineIncTables, RefineIncWF, RefineIncWFProp |
 | S | done: `body_of_spec`, `cls_of_spec`, `split_ok_spec` (`= splitOk`), `split_spec` (`SplitOK`: piece table = `isPieceOf`, `rooms` = `(toLF l).rooms`, `room_pos` inverts it) | RefineIncTables, RefineIncSplit, RefineIncRooms |
 | C | done: `flood_spec`; `membership_spec` (row `i`, position `t` = `(toLF l).memb i (room rooms[t])`, via `memb_bridge` and the generic `head_leastI`); `core_loop0_spec` with `cAll_eq` (= `classifyOk`); `core_loop1_spec` with `keep_eq` (= `keep (ruleL nb r)` room by room) | RefineIncFlood, HeadBridgeI, RefineIncMemb, RefineIncClassify |
 | K | done: `core_k_loop0_spec` (AInv) with `result_eq`, `orient_eq`; `around_e_spec`, `aroundE_len`, edge scan `core_k_loop1_spec` with `edges_find_eq`; `around_v_spec`, `fans_spec`, `bad_vert_spec` (= `badVert`, via the generic `fan_bad`), vert scan `core_k_loop2_spec` | RefineIncAssemble, RefineIncTouch, FanBridgeI, RefineIncFan |

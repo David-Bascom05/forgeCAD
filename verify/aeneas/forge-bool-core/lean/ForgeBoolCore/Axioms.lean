@@ -180,3 +180,4 @@ import ForgeBoolCore.RefineUnify
 #print axioms forge_bool_core.inc.vertOK_iff
 #print axioms forge_bool_core.inc.wf2_iff
 #print axioms forge_bool_core.inc.wf_main
+#print axioms forge_bool_core.inc.ledger_wf_spec
