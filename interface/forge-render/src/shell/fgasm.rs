@@ -3636,9 +3636,9 @@ mod tests {
     #[test]
     fn a_part_opens_to_its_features_and_edits_one_in_place() {
         let dir = std::env::temp_dir().join(format!("fgasm-inplace-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
+        forge_dirs::fs::create_dir_all(&dir).unwrap();
         let part = "shared t = 6\nsketch s(on: xy) {\n  r = rect(center: (0, 0), size: (40, 20))\n}\nplate = extrude(s, t)\n";
-        std::fs::write(dir.join("plate.fg"), part).unwrap();
+        forge_dirs::fs::write(dir.join("plate.fg"), part).unwrap();
         let rows = vec![occ("a", "plate.fg"), occ("b", "plate.fg")];
         // the file as the document writes it, the solve's resolved name on the occurrences
         let insts = vec![
@@ -3675,7 +3675,7 @@ mod tests {
             .expect("the distance, as written");
         d.text = "8".into();
         assert!(ip.write().unwrap());
-        let text = std::fs::read_to_string(dir.join("plate.fg")).unwrap();
+        let text = forge_dirs::fs::read_to_string(dir.join("plate.fg")).unwrap();
         assert!(
             text.contains("param plate.d = 8\nplate = extrude(s, d)"),
             "{text}"
@@ -3694,16 +3694,16 @@ mod tests {
         );
         f.text = "9".into();
         assert!(ip.write().unwrap());
-        let text = std::fs::read_to_string(dir.join("plate.fg")).unwrap();
+        let text = forge_dirs::fs::read_to_string(dir.join("plate.fg")).unwrap();
         assert!(text.contains("shared t = 9"), "{text}");
-        std::fs::remove_dir_all(&dir).ok();
+        forge_dirs::fs::remove_dir_all(&dir).ok();
     }
 
     /// One file holding bodies and components: each in-file component opens to its own tree
     /// read from this file's features, and editing one edits this file (Edit Feature).
     #[test]
     fn in_file_components_open_to_their_trees_and_edit_this_file() {
-        let src = std::fs::read_to_string(concat!(
+        let src = forge_dirs::fs::read_to_string(concat!(
             env!("CARGO_MANIFEST_DIR"),
             "/../../examples/unified/peg_board.fg"
         ))

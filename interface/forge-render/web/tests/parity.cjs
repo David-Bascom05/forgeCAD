@@ -1,0 +1,54 @@
+// The bench parts and the examples built in the page and natively: every measure the same, to
+// the bit (volume and area bits, faces, edges, bodies, problems, whether it built).
+//   node web/tests/parity.cjs OUT [--examples N]   (OUT: web/build.sh's output, served here)
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
+const t = require("./lib.cjs");
+
+(async () => {
+  const app = path.resolve(process.argv[2] ?? "web/out");
+  const k = process.argv.indexOf("--examples");
+  const most = k > 0 ? Number(process.argv[k + 1]) : Infinity;
+  const dir = t.tmpdir("parity");
+  const { url, proc } = await t.serve(dir, app);
+  const b = await t.browser();
+  let bad = 0;
+  let n = 0;
+  try {
+    const p = await t.page(b, `${url}?storage=memory&noapp=1`);
+    await p.waitForFunction(() => window.forgecad?.fc, null, { timeout: 120000 });
+    // the bench parts: natively written to a folder, in the page to its filesystem
+    const benchDir = path.join(dir, "bench");
+    const nat = t.native(["--bench", benchDir]);
+    const pageFiles = await p.evaluate(() => window.forgecad.fc.bench_load("/bench"));
+    const examples = fs.readFileSync(path.join(app, "examples/list.txt"), "utf8").trim().split("\n")
+      .filter((f) => f.endsWith(".fg")).slice(0, most);
+    Object.assign(nat, t.native(examples.map((f) => path.join(t.repo, "examples", f))));
+    const pairs = [
+      ...pageFiles.map((f) => [f, path.join(benchDir, path.basename(f))]),
+      ...examples.map((f) => [`/project/examples/${f}`, path.join(t.repo, "examples", f)]),
+    ];
+    for (const [pf, nf] of pairs) {
+      const got = JSON.parse(await p.evaluate((f) => window.forgecad.fc.build_json(f), pf));
+      t.check(p);
+      const d = t.differs(nat[nf], got);
+      n += 1;
+      if (d.length) {
+        bad += 1;
+        console.log(`not ok - ${nf}: ${d.join(", ")}\n  native ${JSON.stringify(nat[nf])}\n  page   ${JSON.stringify(got)}`);
+      } else {
+        console.log(`ok - ${path.relative(t.repo, nf)}: ${got.ok ? `${got.faces} faces` : "refused alike"}`);
+      }
+    }
+  } finally {
+    await b.close();
+    proc.kill();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+  console.log(`${n - bad} of ${n} the same`);
+  assert.equal(bad, 0);
+})().catch((e) => {
+  console.error(`not ok - ${e.stack ?? e}`);
+  process.exit(1);
+});

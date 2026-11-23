@@ -402,10 +402,10 @@ pub fn load() -> Settings {
     let Some(dir) = config_dir() else {
         return Settings::default();
     };
-    if let Ok(text) = std::fs::read_to_string(dir.join("settings.toml")) {
+    if let Ok(text) = forge_dirs::fs::read_to_string(dir.join("settings.toml")) {
         return Settings::from_toml(&text);
     }
-    let old = std::fs::read_to_string(dir.join("settings")).unwrap_or_default();
+    let old = forge_dirs::fs::read_to_string(dir.join("settings")).unwrap_or_default();
     let mut s = Settings::default();
     for l in old.lines() {
         match l.split_once('=').map(|(k, v)| (k.trim(), v.trim())) {
@@ -420,8 +420,19 @@ pub fn load() -> Settings {
 #[cfg(not(target_arch = "wasm32"))]
 pub fn save(s: &Settings) {
     let Some(dir) = config_dir() else { return };
-    let _ = std::fs::create_dir_all(&dir);
-    let _ = std::fs::write(dir.join("settings.toml"), s.to_toml());
+    let _ = forge_dirs::fs::create_dir_all(&dir);
+    let _ = forge_dirs::fs::write(dir.join("settings.toml"), s.to_toml());
+}
+
+/// In the browser the same TOML, kept in the page's storage.
+#[cfg(target_arch = "wasm32")]
+pub fn load() -> Settings {
+    crate::plat::kv_get("settings.toml").map_or_else(Settings::default, |t| Settings::from_toml(&t))
+}
+
+#[cfg(target_arch = "wasm32")]
+pub fn save(s: &Settings) {
+    crate::plat::kv_set("settings.toml", &s.to_toml());
 }
 
 /// The window's own state.
@@ -1191,16 +1202,13 @@ fn appearance(ui: &mut Ui, t: &Theme, s: &mut Settings, _: &mut Window, places: 
                     .font(sans(13.0)),
             );
             places.push(("settings:image".into(), r.rect));
-            #[cfg(not(target_arch = "wasm32"))]
             {
                 let r = ui.button(egui::RichText::new("Browse...").font(sans(13.0)));
                 places.push(("settings:image:browse".into(), r.rect));
                 if r.clicked()
-                    && let Some(f) = rfd::FileDialog::new()
-                        .add_filter("Image", &["png", "jpg", "jpeg"])
-                        .pick_file()
+                    && let Some(f) = crate::plat::pick_file(None, "Image", &["png", "jpg", "jpeg"])
                 {
-                    s.image = f.to_string_lossy().into_owned();
+                    s.image = f;
                 }
             }
         });

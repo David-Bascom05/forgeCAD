@@ -614,13 +614,10 @@ impl Gui {
         );
         let (tx, rx) = std::sync::mpsc::channel();
         let waker = self.waker.clone();
-        std::thread::Builder::new()
-            .name("markup-names".into())
-            .spawn(move || {
-                let _ = tx.send(occ_names(&src, dir));
-                waker();
-            })
-            .expect("a thread");
+        crate::plat::spawn("markup-names", move || {
+            let _ = tx.send(occ_names(&src, dir));
+            waker();
+        });
         self.markup_occ_rx = Some((key, rx));
     }
 

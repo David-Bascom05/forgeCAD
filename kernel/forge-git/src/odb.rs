@@ -86,7 +86,7 @@ impl Odb {
         let known: std::collections::HashSet<PathBuf> = packs.iter().map(|p| p.path.clone()).collect();
         let mut added = false;
         for d in &self.dirs {
-            let Ok(rd) = std::fs::read_dir(d.join("pack")) else {
+            let Ok(rd) = forge_dirs::fs::read_dir(d.join("pack")) else {
                 continue;
             };
             let mut idx: Vec<PathBuf> = rd
@@ -95,7 +95,9 @@ impl Odb {
                 .collect();
             idx.sort();
             for i in idx {
-                if known.contains(&i.with_extension("pack")) || !i.with_extension("pack").exists() {
+                if known.contains(&i.with_extension("pack"))
+                    || !forge_dirs::fs::exists(i.with_extension("pack"))
+                {
                     continue;
                 }
                 packs.push(Arc::new(Pack::open(&i, self.hash)?));
@@ -117,7 +119,7 @@ impl Odb {
     pub fn read_loose(&self, id: &Oid) -> Result<Option<Object>, Error> {
         for d in &self.dirs {
             let p = Self::loose_path(d, id);
-            let Ok(z) = std::fs::read(&p) else {
+            let Ok(z) = forge_dirs::fs::read(&p) else {
                 continue;
             };
             let cap = z.len().saturating_mul(1100).max(1 << 16);
@@ -147,7 +149,10 @@ impl Odb {
     }
 
     pub fn contains(&self, id: &Oid) -> bool {
-        self.dirs.iter().any(|d| Self::loose_path(d, id).exists()) || self.find_packed(id).is_some()
+        self.dirs
+            .iter()
+            .any(|d| forge_dirs::fs::exists(Self::loose_path(d, id)))
+            || self.find_packed(id).is_some()
     }
 
     fn find_packed(&self, id: &Oid) -> Option<(usize, Arc<Pack>, u64)> {
@@ -236,7 +241,7 @@ impl Odb {
         let z = zlib::deflate_zlib(&raw);
         let path = Self::loose_path(&self.dirs[0], &id);
         let dir = path.parent().expect("fan-out dir");
-        std::fs::create_dir_all(dir)?;
+        forge_dirs::fs::create_dir_all(dir)?;
         fsutil::write_new(&path, &z)?;
         Ok(id)
     }
@@ -244,7 +249,7 @@ impl Odb {
     /// Every loose object id in this repo's own store.
     pub fn loose_ids(&self) -> Vec<Oid> {
         let mut out = vec![];
-        let Ok(rd) = std::fs::read_dir(&self.dirs[0]) else {
+        let Ok(rd) = forge_dirs::fs::read_dir(&self.dirs[0]) else {
             return out;
         };
         for e in rd.flatten() {
@@ -252,7 +257,7 @@ impl Odb {
             if n.len() != 2 || !n.bytes().all(|c| c.is_ascii_hexdigit()) {
                 continue;
             }
-            for f in std::fs::read_dir(e.path()).into_iter().flatten().flatten() {
+            for f in forge_dirs::fs::read_dir(e.path()).into_iter().flatten().flatten() {
                 let rest = f.file_name().to_string_lossy().to_string();
                 if let Some(id) = Oid::from_hex(self.hash, &format!("{n}{rest}")) {
                     out.push(id);
@@ -268,7 +273,7 @@ fn alternates(objects: &Path, dirs: &mut Vec<PathBuf>, depth: usize) {
     if depth > 5 {
         return;
     }
-    let Ok(t) = std::fs::read_to_string(objects.join("info/alternates")) else {
+    let Ok(t) = forge_dirs::fs::read_to_string(objects.join("info/alternates")) else {
         return;
     };
     for line in t.lines() {
@@ -281,7 +286,7 @@ fn alternates(objects: &Path, dirs: &mut Vec<PathBuf>, depth: usize) {
         } else {
             objects.join(l)
         };
-        if p.is_dir() && !dirs.contains(&p) {
+        if forge_dirs::fs::is_dir(&p) && !dirs.contains(&p) {
             dirs.push(p.clone());
             alternates(&p, dirs, depth + 1);
         }

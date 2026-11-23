@@ -368,7 +368,7 @@ fn fit_window(ctx: &egui::Context, t: &Theme, m: &Material, st: &mut FitState) {
                                 .hint_text("path to a CSV"),
                         );
                         if ui.button("Load").clicked() {
-                            match std::fs::read_to_string(st.file.trim()) {
+                            match forge_dirs::fs::read_to_string(st.file.trim()) {
                                 Ok(text) => {
                                     st.points = fit::read_csv(&text);
                                     st.said = format!("{} points read", st.points.len());

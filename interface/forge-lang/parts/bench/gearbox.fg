@@ -1,6 +1,5 @@
 # Two-stage gearbox housing, lower half: cast, split on the shaft plane z = h. Input,
-# intermediate and output shafts run along y in half bores on the split face. Hand port of
-# tools/bench-parts/gearbox.fc.
+# intermediate and output shafts run along y in half bores on the split face.
 
 shared L = 240
 shared W = 130

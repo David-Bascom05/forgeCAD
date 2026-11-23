@@ -464,27 +464,56 @@ pub fn part_info(parts: &[PartMesh]) -> Vec<([f32; 3], f32, Vec<f32>)> {
 }
 
 fn filled(
-    device: &wgpu::Device,
+    (device, queue): (&wgpu::Device, &wgpu::Queue),
     label: &str,
     size: u64,
     usage: wgpu::BufferUsages,
     data: Vec<&[u8]>,
 ) -> wgpu::Buffer {
-    let buffer = device.create_buffer(&wgpu::BufferDescriptor {
-        label: Some(label),
-        size: size.max(16),
-        usage,
-        mapped_at_creation: true,
-    });
-    let mut map = buffer.slice(..).get_mapped_range_mut().expect("just mapped");
-    let mut at = 0;
-    for d in data {
-        map.slice(at..at + d.len()).copy_from_slice(d);
-        at += d.len();
+    // natively mapped at creation; in a browser written through the queue: a buffer mapped at
+    // creation keeps its shared memory there till it is collected (dropping one is a no-op), and
+    // the page runs out of it after a few rebuilds
+    #[cfg(target_arch = "wasm32")]
+    {
+        let buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some(label),
+            size: size.max(16).next_multiple_of(4),
+            usage: usage | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let mut at = 0;
+        for d in data {
+            // write_buffer takes whole words: the last piece padded
+            if d.len() % 4 == 0 {
+                queue.write_buffer(&buffer, at, d);
+            } else {
+                let mut w = d.to_vec();
+                w.resize(d.len().next_multiple_of(4), 0);
+                queue.write_buffer(&buffer, at, &w);
+            }
+            at += d.len() as u64;
+        }
+        buffer
     }
-    drop(map);
-    buffer.unmap();
-    buffer
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let _ = queue;
+        let buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some(label),
+            size: size.max(16),
+            usage,
+            mapped_at_creation: true,
+        });
+        let mut map = buffer.slice(..).get_mapped_range_mut().expect("just mapped");
+        let mut at = 0;
+        for d in data {
+            map.slice(at..at + d.len()).copy_from_slice(d);
+            at += d.len();
+        }
+        drop(map);
+        buffer.unmap();
+        buffer
+    }
 }
 
 /// wgpu's native futures finish without waiting on anything.
@@ -555,7 +584,7 @@ struct Geometry {
     segments: wgpu::Buffer,
 }
 
-fn geometry(device: &wgpu::Device, parts: &[PartMesh]) -> Geometry {
+fn geometry(device: &wgpu::Device, queue: &wgpu::Queue, parts: &[PartMesh]) -> Geometry {
     let (mut vbytes, mut ibytes, mut sbytes) = (0u64, 0u64, 0u64);
     let mut lods = Vec::with_capacity(parts.len());
     for p in parts {
@@ -648,7 +677,7 @@ fn geometry(device: &wgpu::Device, parts: &[PartMesh]) -> Geometry {
         base += l.vertices.len() / VERTEX;
     }
     let vertex_faces = filled(
-        device,
+        (device, queue),
         "vertex faces",
         face_bytes.len() as u64,
         wgpu::BufferUsages::VERTEX,
@@ -664,7 +693,7 @@ fn geometry(device: &wgpu::Device, parts: &[PartMesh]) -> Geometry {
         }
     }
     let line_indices = filled(
-        device,
+        (device, queue),
         "line indices",
         pattern.len() as u64,
         wgpu::BufferUsages::INDEX,
@@ -685,9 +714,15 @@ fn geometry(device: &wgpu::Device, parts: &[PartMesh]) -> Geometry {
                 .collect()
         })
         .collect();
-    let vertices = filled(device, "vertices", vbytes, wgpu::BufferUsages::VERTEX, v);
-    let indices = filled(device, "indices", ibytes, wgpu::BufferUsages::INDEX, i);
-    let segments = filled(device, "segments", sbytes, wgpu::BufferUsages::STORAGE, s);
+    let vertices = filled((device, queue), "vertices", vbytes, wgpu::BufferUsages::VERTEX, v);
+    let indices = filled((device, queue), "indices", ibytes, wgpu::BufferUsages::INDEX, i);
+    let segments = filled(
+        (device, queue),
+        "segments",
+        sbytes,
+        wgpu::BufferUsages::STORAGE,
+        s,
+    );
     Geometry {
         lods,
         edge_lengths,
@@ -1100,10 +1135,10 @@ impl Renderer {
             vertex_faces,
             line_indices,
             segments,
-        } = geometry(&device, parts);
+        } = geometry(&device, &queue, parts);
 
         let placements = filled(
-            &device,
+            (&device, &queue),
             "placements",
             scene.rows_bytes.len() as u64,
             wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
@@ -1114,7 +1149,7 @@ impl Renderer {
             tint_bytes.extend_from_slice(&v.to_le_bytes());
         }
         let tints = filled(
-            &device,
+            (&device, &queue),
             "tints",
             tint_bytes.len() as u64,
             // set_tints rewrites it: a chosen or flagged assembly part
@@ -1471,7 +1506,7 @@ impl Renderer {
     /// New meshes for the parts, the same parts in the same places.
     pub fn set_parts(&mut self, parts: &[PartMesh]) {
         self.geometry += 1;
-        let g = geometry(&self.device, parts);
+        let g = geometry(&self.device, &self.queue, parts);
         let layout = &self.bind_layout;
         let all = |globals| [globals, &self.placements, &g.segments, &self.tints];
         self.binds = bind_all(&self.device, layout, all(&self.globals));

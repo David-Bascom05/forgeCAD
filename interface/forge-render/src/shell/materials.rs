@@ -718,7 +718,7 @@ impl Shell {
             if r.clicked() {
                 let file = PathBuf::from(path.as_str());
                 b.status = if import {
-                    match std::fs::read_to_string(&file)
+                    match forge_dirs::fs::read_to_string(&file)
                         .map_err(|e| e.to_string())
                         .and_then(|s| {
                             forge_material::parse(&s).map_err(|e| format!("line {}: {}", e.line, e.why))

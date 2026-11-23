@@ -28,7 +28,7 @@ code and in the Lean model, and every gate below has run.
   - `suppress_complete` is unchanged.
 
   All of these build with no warnings.
-- Tests: `tests/fc_parity.rs` `suppress_takes_one_statement_of_a_line` (every single
+- Tests: `tests/recorded_parity.rs` `suppress_takes_one_statement_of_a_line` (every single
   statement, and pairs put back in both orders) passes, and so does `suppress_and_unsuppress`.
   `research/forge-lang/diff/core_diff.py` no longer lists `suppress-line` as a known finding,
   and it checks Suppress and Unsuppress on a shared line. `tests/core_diff.rs` passes.
@@ -51,7 +51,7 @@ modelled. This is documented in ASSUMPTIONS.md.
     list.
   - `respell_binder_refused` and `respell_subtoken_refused`: the two old counterexamples, now
     refused.
-- Tests: `fc_parity.rs` `respell_refuses_a_binder_and_a_part_of_a_token` (binder, subtoken,
+- Tests: `recorded_parity.rs` `respell_refuses_a_binder_and_a_part_of_a_token` (binder, subtoken,
   member, argument name, prefix of a read) passes. `core_diff.py` no longer lists
   `respell-binder` as known, and it checks the subtoken case too.
 
@@ -75,7 +75,7 @@ modelled. This is documented in ASSUMPTIONS.md.
   - `run_kernel_names`: a run that passes the check has distinct kernel names.
   - `clash_refused`: the colliding pair is refused.
   - `Axioms.lean` lists the new theorems.
-- Tests: `fc_parity.rs` `a_history_id_clash_is_refused` passes.
+- Tests: `recorded_parity.rs` `a_history_id_clash_is_refused` passes.
 
 **Left.** The callgrind gate. Build the base (6979fa5c) and the fix at equal-length paths,
 then:
@@ -91,7 +91,7 @@ This was started and then stopped for the move; it has not been run.
 - `edit_ops::nearest` ranks by distance first, then puts the part's own names (params,
   features, locals, functions) before built-ins (`BUILTINS`, `shapes::NAMES`), then sorts
   alphabetically.
-- Test: `fc_parity.rs` `a_typo_respells_to_the_parts_name_before_a_builtin` (`tt` with
+- Test: `recorded_parity.rs` `a_typo_respells_to_the_parts_name_before_a_builtin` (`tt` with
   `shared t` gives `t`, not `pt`) passes.
 
 ## Gates

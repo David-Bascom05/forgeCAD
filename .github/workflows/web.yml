@@ -1,0 +1,37 @@
+# The app in a browser (docs/web.md): built for wasm32, then in Chromium with a software WebGPU
+# adapter, end to end on `forgecad web`'s files and every bench part and example against the
+# native build, bit for bit. The Forgejo CI runs the same script (its `web` job).
+name: web
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      CARGO_INCREMENTAL: 0
+    steps:
+      - uses: actions/checkout@v4
+      - name: toolchain (rust-toolchain.toml)
+        run: rustup show
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            . -> target
+            interface/forge-render -> target
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: playwright
+        run: |
+          mkdir -p "$HOME/pw" && cd "$HOME/pw"
+          npm init -y >/dev/null && npm install --no-save playwright@1.63.0
+          npx playwright install --with-deps chromium
+          echo "NODE_PATH=$HOME/pw/node_modules" >> "$GITHUB_ENV"
+      - name: build, end to end, parity
+        run: sh interface/forge-render/web/tests/ci.sh

@@ -920,7 +920,7 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
                 Value::Wired(w) if w.plane().is_some() && w.work_ref().is_some() => Ok(Value::Extent(
                     ExtentV::UpToPlane(w.work_ref().expect("checked").feature, off),
                 )),
-                // a sketch's plane (.fc `to SKETCH`)
+                // a sketch's plane
                 Value::Sketch(s) => Ok(Value::Extent(ExtentV::UpToPlane(s.borrow().idx, off))),
                 Value::Unresolved => Ok(Value::Unresolved),
                 o => Err(Error::WrongType {
@@ -1956,7 +1956,7 @@ fn revolve(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
     let ax = ent_of(axv, a.span("axis"), EntKind::Line)?;
     let mut profiled = profile_of(ev, a.req("profile")?, a.span("profile"));
     // an axis drawn as a plain line (not construction) that is no side of the profile: the
-    // profile without it (as .fc's `axis L`)
+    // profile without it
     if profiled.is_err() && ax.kind == EntKind::Line && !ax.sk.borrow().s.is_construction(ax.id) {
         let _ = ax.sk.borrow_mut().s.set_construction(ax.id, true);
         let again = profile_of(ev, a.req("profile")?, a.span("profile"));
@@ -3463,7 +3463,7 @@ fn selection(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<V
 
 /// The selection filters faces and edges share beyond the first set: radius under or over a
 /// value (`r_below`, `r_above`), touching given faces or edges (`touching`: the faces and edges
-/// that share an edge or a vertex with them, as .fc's `on`), and in a body (`body: F`).
+/// that share an edge or a vertex with them), and in a body (`body: F`).
 struct More {
     below: Option<f64>,
     above: Option<f64>,
