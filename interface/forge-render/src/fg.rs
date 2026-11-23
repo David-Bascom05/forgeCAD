@@ -394,7 +394,7 @@ fn flat_view(s: &forge_lang::sheet::SheetOut, p: &forge_sheet::Pattern) -> crate
             let mut line = vec![];
             for cv in c {
                 match cv {
-                    Curve2::Arc { c, r, start, sweep } => {
+                    Curve2::Arc { c, r, start, sweep, .. } => {
                         let n = ((sweep.abs() / 0.15).ceil() as usize).max(2);
                         for i in 0..=n {
                             let a = start + sweep * i as f64 / n as f64;

@@ -928,6 +928,7 @@ impl SheetNote {
                 W::FoldedClash { .. } => "FoldedClash",
                 W::FlatTouch { .. } => "FlatTouch",
                 W::FoldedTouch { .. } => "FoldedTouch",
+                W::FoldedUndecided { .. } => "FoldedUndecided",
                 W::FormClash { .. } => "FormClash",
             },
             Note::Violation(v) => match v {
@@ -1021,7 +1022,7 @@ impl SheetNote {
                 W::FlatTouch { a, b, at, .. } => {
                     v.extend([("a", n.strip(a)), ("b", n.strip(b)), ("at", p2(at))])
                 }
-                W::FoldedTouch { a, b, at, .. } => {
+                W::FoldedTouch { a, b, at, .. } | W::FoldedUndecided { a, b, at, .. } => {
                     v.extend([("a", n.strip(a)), ("b", n.strip(b)), ("at", p3(at))])
                 }
                 W::ReliefRemnant {
@@ -1376,6 +1377,11 @@ impl SheetNote {
                 n.strip_name(*a),
                 n.strip_name(*b)
             ),
+            Note::Warning(W::FoldedUndecided { a, b, .. }) => format!(
+                "{} and {} meet folded at the limit of touching or passing through, too close to tell: the flat builds",
+                n.strip_name(*a),
+                n.strip_name(*b)
+            ),
             Note::Warning(W::ReliefRemnant { joint, remnant, .. }) => {
                 format!(
                     "a sliver {} wide beside the bend of {}",
@@ -1650,6 +1656,7 @@ fn kernel_kind(e: &SheetError) -> &'static str {
         FlatOverlapUndecided { .. } => "FlatOverlapUndecided",
         FlatTouch { .. } => "FlatTouch",
         FoldedTouch { .. } => "FoldedTouch",
+        FoldedUndecided { .. } => "FoldedUndecided",
         HardwareOffWall { .. } => "HardwareOffWall",
         ReliefExtendUnbuilt { .. } => "ReliefExtendUnbuilt",
         SheetSplit { .. } => "SheetSplit",
@@ -1732,6 +1739,9 @@ fn kernel_text(e: &SheetError) -> String {
         HardwareOffWall { .. } => "the hardware's centre is off its wall (outside it, or in a hole)".into(),
         FlatTouch { .. } => "two strips of the flat pattern touch with no gap: the blank has no width there".into(),
         FoldedTouch { .. } => "folded, two walls touch with no gap (an edge on a face): no valid solid".into(),
+        FoldedUndecided { .. } => {
+            "folded, two strips meet at the limit of touching or passing through: too close to tell".into()
+        }
         ReliefExtendUnbuilt { .. } => "the relief rule asks reliefs to extend for flat collisions: not built yet".into(),
         SheetSplit { .. } => "the cuts part the sheet in two".into(),
         CornerRound { at, radius, limit, .. } => format!(
@@ -1745,6 +1755,7 @@ fn kernel_text(e: &SheetError) -> String {
     }
 }
 
+#[inline(never)]
 fn kernel_data(e: &SheetError, n: &Names) -> Vec<(&'static str, Json)> {
     use SheetError::*;
     let f = |x: f64| Json::Num(x);
@@ -2049,7 +2060,9 @@ fn kernel_data(e: &SheetError, n: &Names) -> Vec<(&'static str, Json)> {
         }
         FlatTouch { a, b, at, .. } => vec![("a", n.strip(*a)), ("b", n.strip(*b)), ("at", p2(*at))],
         HardwareOffWall { wall, at, .. } => vec![("wall", n.strip(Strip::Wall(*wall))), ("at", p2(*at))],
-        FoldedTouch { a, b, at, .. } => vec![("a", n.strip(*a)), ("b", n.strip(*b)), ("at", p3(*at))],
+        FoldedTouch { a, b, at, .. } | FoldedUndecided { a, b, at, .. } => {
+            vec![("a", n.strip(*a)), ("b", n.strip(*b)), ("at", p3(*at))]
+        }
         SheetSplit { a, b, .. } => vec![("a", n.strip(*a)), ("b", n.strip(*b))],
         CornerRound {
             wall,
@@ -2232,7 +2245,10 @@ fn kernel_err(st: &SheetState, span: Span, id: &str, error: SheetError) -> Error
             out.extend(touch_fixes(st, a, b, Map::Flat));
             out
         }
-        SheetError::FoldedTouch { a, b, .. } => touch_fixes(st, a, b, Map::Folded),
+        // moved apart, the pair is decided either way
+        SheetError::FoldedTouch { a, b, .. } | SheetError::FoldedUndecided { a, b, .. } => {
+            touch_fixes(st, a, b, Map::Folded)
+        }
         _ => vec![],
     };
     let (said, more) = match refusal_context(st, &error) {
@@ -3942,6 +3958,8 @@ fn carried(l: &ProfileLoop, from: &Frame, to: &Frame) -> Option<ProfileLoop> {
     Some(ProfileLoop::new(out))
 }
 
+// out of line: the evaluator's dispatch inlines builtins, and a sheet cutout is not hot
+#[inline(never)]
 fn cutout(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
     let id = ev.take_id("cutout", span)?;
     let a = Args::bind(ev, "cutout", &["profile", "wall", "crosses_bend"], args, span)?;
@@ -4610,7 +4628,8 @@ pub fn finish_with(ev: &mut Eval, shop: bool) {
                     | fs::SheetWarning::FlatOverlapUndecided { a, b, .. }
                     | fs::SheetWarning::FoldedClash { a, b, .. }
                     | fs::SheetWarning::FlatTouch { a, b, .. }
-                    | fs::SheetWarning::FoldedTouch { a, b, .. } => (a, b),
+                    | fs::SheetWarning::FoldedTouch { a, b, .. }
+                    | fs::SheetWarning::FoldedUndecided { a, b, .. } => (a, b),
                     _ => continue,
                 };
                 let (id, span) = on.clone().unwrap_or_else(|| owner(a));
@@ -4621,7 +4640,9 @@ pub fn finish_with(ev: &mut Eval, shop: bool) {
                         out.extend(touch_fixes(st, a, b, Map::Flat));
                         out
                     }
-                    fs::SheetWarning::FoldedTouch { .. } => touch_fixes(st, a, b, Map::Folded),
+                    fs::SheetWarning::FoldedTouch { .. } | fs::SheetWarning::FoldedUndecided { .. } => {
+                        touch_fixes(st, a, b, Map::Folded)
+                    }
                     _ => vec![],
                 };
                 notes.push(Warning::Sheet(Box::new(SheetNote {

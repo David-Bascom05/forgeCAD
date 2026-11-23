@@ -496,6 +496,18 @@ times an interval, and the wall is a slab with a polygonal or arc boundary.
 - `touch ↔ ¬clash ∧ measure{p : |d(p)| ≤ LINEAR} > 0`
 - The obligation is that the three verdicts are exhaustive and exclusive, with no band.
 
+**Status (fix-sheet).**
+- Done:
+  - the level caps refuse (FoldedUndecided) instead of passing;
+  - the 100·TOL hem margin is gone (depth across a shared tangent line);
+  - touch is judged against zones too;
+  - C1: the inset is TOL (it was 10·TOL, equal to the limit). Leaves are refined to the limit, so
+    there is no band: a depth past the limit is found or FoldedUndecided.
+- Long-run form, recorded and not built ((a)): measure depth on a's true boundary as the least of
+  the skin depth and the in-plane distance to b's region boundary, for every pair. Add an exact
+  coplanar-overlap test (the flat overlap's area boolean in the shared plane) for coincident faces,
+  whose depth shows only inside a's faces. The inset then goes.
+
 ### 2.6 The remaining sheet items (ranks 10, 11, 12, 15)
 
 **Rank 10: merging pieces in the flat.** `joined` merges pieces using several unrelated

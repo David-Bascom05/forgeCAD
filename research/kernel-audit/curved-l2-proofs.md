@@ -208,3 +208,190 @@ manifolds with boundary (standard real analysis and topology over ℝ; not forma
 assumption B. Next step: formalise 1.1–1.5 in Lean over `Quad`. They are combinatorial and use
 only the proven checkers. 2.1 is algebra. 2.2–2.4 need the IVT-level analysis that
 `Alg.Model` provides.
+
+## 3. Cone apexes (`QRef.apexDecide`)
+
+The executable takes the apex `p` exactly, as the cone quadric's singular point (its matrix's
+null vector). Let `C` be the tangent cone at `p`: the nappe about `a = s·z`, of half-angle
+`α = atan(s/c)`. Let `J` be the smooth surfaces through `p` other than the nappe's own plane,
+with gradients `g_j ≠ 0`.
+
+**Lemma 3.1 (separation).** `C̄ ∖ {0} ⊂ {σ g · d > 0}` iff `σ g·a > 0` and
+`(g·a)²(s² + c²) > s² |g|² |a|²`.
+
+*Proof.* The condition says the angle between `σg` and `a` is below `π/2 − α`: its cosine
+exceeds `sin α = s/√(s² + c²)`, squared. A direction in `C̄` makes an angle at most `α` with `a`,
+so its angle with `σg` is below `π/2`. Conversely, if the angle is at least `π/2 − α`, some
+generator of `C̄` makes an angle at least `π/2` with `σg`. ∎
+
+**Lemma 3.2.** If every `g_j` separates `C`, then on `C ∩ B(p, ε)`, for small `ε`:
+- every `q_j` has the sign `σ_j`;
+- the cone quadric has the sign of its quadratic part at `a`;
+- every quadric not through `p` has its sign at `p`.
+
+So `C` near `p` carries one pattern, `P_C`.
+
+*Proof.* On the compact link of `C̄`, `σ_j g_j·d ≥ c_j |d|` for some `c_j > 0` (Lemma 3.1).
+`q_j(p + d) = g_j·d + O(|d|²)`. The cone quadric is homogeneous of degree 2 about its singular
+point, so its sign at `p + d` is `Q(d)`'s, constant on `C`. Quadrics not through `p` keep their
+sign near `p` (`sign_nbhd`). ∎
+
+**Lemma 3.3.** Suppose `|J| ≤ 3` with independent normals. Then off `C̄`, near `p`, membership is
+`κ` with the cone quadric outside and the `J` signs those of the point's sector. Every one of
+the `2^{|J|}` sectors meets every neighbourhood of `p` off `C̄`.
+
+*Proof.* Independent normals: the surfaces cross transversally at `p`. By the implicit function
+theorem, a neighbourhood of `p` is homeomorphic to the linear model, the arrangement of the
+tangent planes, and every sign vector is realised by an open cone. `C̄` lies inside one sector
+(the separating one, `own`). Removing it leaves every other sector intact, and leaves `own`
+nonempty: `C̄` is a proper closed sub-cone of it. ∎
+
+**Theorem 3.4.** Let `kC = κ(P_C)`, `ownKept = κ(own sector, cone outside)`, and let `anyOther`
+and `allKept` range over the other sectors and over all sectors. The result is non-manifold at
+`p` iff `(kC ∧ ¬ownKept ∧ anyOther) ∨ (¬kC ∧ ownKept ∧ ¬allKept)`.
+
+*Proof.* By 3.2–3.3, near `p` the kept set is `(C if kC) ∪ (the kept sectors, less C̄)`, and its
+link at `p` is a union of spherical regions.
+- `kC` and `ownKept`: `C` lies inside a kept sector and changes nothing.
+- `¬kC` and `¬ownKept`: `C` lies inside a dropped sector and changes nothing.
+
+In both cases the apex adds no non-manifold point. The sectors' own structure at `p` is that of
+the other solids, judged by the other contacts.
+- `kC` and `¬ownKept`: the link is the cap of `C` together with the links of the kept sectors.
+  These are disjoint, since `C̄` lies inside the dropped sector `own`. With another sector kept
+  the link is disconnected, so not a disc: non-manifold. With none kept, the link is the cap
+  alone, a disc (the cone's own apex): manifold.
+- `¬kC` and `ownKept`: the link is the kept sectors' link with an open cap removed from the
+  interior of `own`'s. If every sector is kept, that is a sphere minus a cap, a disc: manifold.
+  Otherwise the kept sectors' link has nonempty boundary, and removing an interior cap leaves a
+  non-disc (an annulus when it was a disc): non-manifold. ∎
+
+**Hypothesis on the nappe.** The nappe's own plane passes through `p`. The analysis fixes its
+sign as the cone's. If another solid also bounds itself by that plane (a cone standing on a cap,
+its nappe plane the cap), the plane's sign varies off `C` and matters there. The apex is then
+undecided.
+
+**Theorem 3.5 (one surface cutting `C`).** Suppose `J = {j}` and `j`'s tangent plane cuts `C`
+transversally: `(g·a)²(s² + c²) < s²|g|²|a|²`. Then the result is non-manifold at `p` iff
+exactly two opposite cells of the cycle `cap₊, cap₋, out₋, out₊` are kept. These are the cone
+region and its outside, on either side of the plane.
+
+*Proof.*
+- **The link.** The link of the arrangement at `p` (in the linear model, by the implicit function
+  theorem, both crossings being transversal) is the sphere. A great circle crosses a small circle
+  (the cap of `C`) at two points.
+- **Cells and arcs.** Four cells: the cap's two halves, and the rest of the two hemispheres, each
+  connected. Each consecutive pair in the cycle shares an arc: the chord in the cap, the
+  small-circle arcs, and the great-circle arc outside the cap.
+- **Vertices.** Round each crossing point the four cells appear in this cyclic order.
+- **The disc criterion.** A union of cells is a disc iff it is nonempty, proper, connected, its
+  complement is connected, and it has no pinch at a vertex. On this cycle that is exactly one
+  contiguous run. Two opposite cells form two pieces meeting at the two vertices. ∎
+
+Anything outside the lemmas' hypotheses is reported undecided, so the verdict is ambiguous:
+- a surface through `p` whose tangent plane cuts `C` when there are several, or tangentially;
+- a singular second surface;
+- more than three surfaces, or dependent normals.
+
+The sampled check (`apexCheck`) is no longer used.
+
+## 4. Curves where three or more surfaces meet, and edges touching surfaces
+
+**Triple curves (`QRef.tripleCurves`, `curveSectors`).** On a plane `a`, two quadrics whose
+restrictions are proportional (one conic) meet along that conic, with `a`. Take a rational point
+`p` of it, found exactly on a rational line in the plane. Let `T` be the surfaces through `p`,
+with gradients `g_j`.
+
+**Theorem 4.1.** Suppose `|T| ≥ 3`, no gradient is zero, and no two are parallel, and all are
+orthogonal to `D = g_0 × g_1` (they share the tangent line `D`). Then near `p` the result is a
+3-manifold with boundary iff the kept sectors of the line arrangement `{g_j · d = 0}`, in the
+normal plane `D⊥`, form one cyclic run (or none, or all).
+
+*Proof.*
+- By the implicit function theorem, the surfaces near `p` are transversal in the normal plane: no
+  two normals are parallel. So a neighbourhood is homeomorphic to `(−ε, ε) × (a neighbourhood of
+  0 in D⊥)`, with the surfaces mapped to the lines `{g_j·d = 0}`.
+- Off the lines, membership is the history on the sector's signs; the other quadrics keep their
+  signs near `p` (`sign_nbhd`).
+- A union of closed sectors of a circle-arrangement is an arc iff it is one cyclic run. Its
+  product with an interval is a disc (the link at `p`) iff it is an arc. Otherwise the link has
+  several pieces.
+- The code orders the `2|T|` rays `± g_j × D` exactly (by the half and the cross product in the
+  basis `g_0`, `D × g_0`). It takes each sector's direction as the sum of its bounding rays, and
+  counts the changes of kept round the cycle: more than two means more than one run. ∎
+
+If two normals are parallel at `p`, the surfaces are tangent there, and the pencil analysis (§2)
+judges it. The triple-curve test stands aside.
+
+**Edges touching surfaces (`QRef.edgeTouches`).** These are detected exactly:
+- on a plane `a`, the curve `a ∩ b` tangent to `c`'s trace at a rational point `p`;
+- found as a rational root of the plane pencil `det(C_b + t C_c)`, whose member's singular point
+  lies on both conics;
+- with the normals of `a`, `b`, `c` pairwise non-parallel, and the history varying across the
+  eight local sign patterns.
+
+The local verdict needs second order along the edge (the edge and the surface part quadratically
+away from `p`), so such a contact is reported undecided, and the verdict is ambiguous. This
+replaces the hint check as the reference's own detection of these contacts.
+
+## 5. Polynomial surfaces (tori): `QRef.Poly`
+
+A history with a torus face takes the polynomial path. Every face is a polynomial `P3`: a torus
+gives its quartic, the other faces their quadrics, and a cone also gives its nappe.
+
+**In Lean (ForgeExact/Poly3):**
+- `escape_one`: restricted to a line, a nonzero polynomial has finitely many roots (`zero_of_roots`).
+- `wall_nowhereDense`, `reg_off_wall`.
+- `about_bound`: the box bound about the box's centre. `eval_about` says `about p c` is `p`
+  expanded about `c`.
+- `in_box`, `out_box`, `empty_of_leaves`.
+
+So the octree's volume enclosure and its `empty` verdict rest on these exactly as §1's rest on the
+quadric ones: §1's argument holds word for word with `Poly3.boxSign` in place of `Quad.boxSign`.
+
+**The manifold check (`QRef.Poly.check`), by hand.** It runs on each undecided leaf `B` of the
+octree. Let `U` be the surfaces whose signs `B` leaves undecided. Every other surface keeps one
+sign on `B` (`boxSign_spec`), so on `B` membership is the history on `U`'s signs alone
+(`reg_off_wall`). The check accepts `B` in three cases; otherwise it splits `B`, within a budget.
+
+- **One surface `f`, a component of `∇f` with a certified sign on `B`.** Then `∇f ≠ 0` on `B`,
+  so `f = 0` is a smooth sheet in `B`. On each side membership is constant, so near every point of
+  `B` the result is empty, everything, or a half-space bounded by the sheet: a manifold.
+- **Two surfaces `f`, `g`, a component of `∇f × ∇g` with a certified sign on `B`.**
+  - The two normals are independent at every point of `B`. So each sheet is smooth, and where they
+    meet, `(f, g)` is a submersion. Near a common point `p` the map `x ↦ (f(x), g(x), t(x))`, with
+    `t` a coordinate along the curve, is a local diffeomorphism. It sends the four sign sectors to
+    the quadrants of the `(f, g)` plane times an interval.
+  - So the result near `p` is (union of kept closed quadrants) × interval. That is a half-space
+    iff the kept quadrants are one run round the cycle `(+,+), (+,−), (−,−), (−,+)`. With four
+    sectors, the only kept sets that are not one run (or none, or all) are the checkerboards
+    `{(+,+), (−,−)}` and `{(+,−), (−,+)}`, which `pairOk` rejects.
+  - Points of `B` on one sheet only are the first case.
+- **Three surfaces, `det(∇f₁, ∇f₂, ∇f₃)` with a certified sign on `B`.**
+  - At a common point the map `(f₁, f₂, f₃)` is a local diffeomorphism, so the result is the cone
+    over the kept closed octants' trace on the link sphere. The eight octants trace the eight
+    triangles of an octahedron.
+  - The cone over a closed region of `S²` is a manifold with boundary at the apex iff the region is
+    empty, all of `S²`, or a closed disc.
+  - A union of triangles is a disc iff three things hold: it is connected through shared edges;
+    its complement is too; and round each of the six vertices, the four triangles there are not a
+    checkerboard. Without a pinch vertex, the region is a compact surface with boundary. When it is
+    connected, its boundary circles correspond to its complement's components, and one circle in
+    `S²` bounds a disc (Schoenflies). That is `octantsOk`.
+  - Points of `B` on two of the three sheets give one of the six vertices' four-cycles, which the
+    same check covers. Points on one sheet give the first case.
+
+A check that accepts every undecided leaf proves the result is a 3-manifold with boundary
+everywhere off the certified boxes. Inside a certified box the result is all or nothing. Every
+point of the wall lies in an undecided leaf, because a box with all signs certified holds no wall
+point. Leaves the budget or the depth cut off report `und`, and the verdict is `ambiguous`.
+
+So on this path:
+- `solid` is proven: a box is certified in, and the result is a manifold.
+- `empty` is proven (`empty_of_leaves`).
+- The path never says `nonmanifold`. A failed check (a tangency, a cone apex, a checkerboard, or
+  four undecided surfaces) is not proof of a bad point.
+
+**What stays unproven in Lean:** the check above, and the executable `norm`, `mul3` and `deriv3`
+that build the gradients and the cross products. A wrong derivative could accept a bad box. The
+signs of those polynomials are taken with the proven `Poly3.boxSign`.

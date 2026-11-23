@@ -267,6 +267,44 @@ struct Chunk {
 
 const RUN: usize = 16;
 
+/// Room an arena is given when it is copied whole (a clone, a compaction): the edit that follows
+/// (a boolean adds tens of entities) then grows it in place. Without it every arena of a copied
+/// body was exactly full, and the edit's first new edge or face copied it all again.
+pub fn room(n: usize) -> usize {
+    n + n / 4 + 8
+}
+
+/// `v` copied into a list with room to grow.
+fn roomy<T: Clone>(v: &[T]) -> Vec<T> {
+    let mut out = Vec::with_capacity(room(v.len()));
+    out.extend_from_slice(v);
+    out
+}
+
+impl Body {
+    /// A clone whose arenas have room to grow (`room`): for a copy an in-place edit comes to next
+    /// (a part's solids, copied for the next feature), so its first new edge or face does not copy
+    /// the arena again.
+    pub fn clone_roomy(&self) -> Body {
+        Body {
+            dead: self.dead,
+            joins: self.joins.clone(),
+            vertices: roomy(&self.vertices),
+            edges: roomy(&self.edges),
+            coedges: roomy(&self.coedges),
+            loops: roomy(&self.loops),
+            faces: roomy(&self.faces),
+            shells: self.shells.clone(),
+            hulls: self.hulls.clone(),
+            split: self.split.clone(),
+            from_file: self.from_file,
+            unplaced: self.unplaced,
+            unverified: self.unverified.clone(),
+            left_out: self.left_out.clone(),
+        }
+    }
+}
+
 impl Body {
     pub fn new() -> Self {
         Self::default()
@@ -675,6 +713,7 @@ impl Body {
     /// Adds `other`'s entities after this body's, renumbered, its shells kept apart.
     /// Room in every arena for `others` all appended, made at once: appending them one by one
     /// then grows nothing (so no copy depends on whether the allocator can grow a block in place).
+    #[inline]
     pub fn reserve_appends<'a>(&mut self, others: impl Iterator<Item = &'a Body>) {
         let mut n = [0usize; 6];
         for o in others {

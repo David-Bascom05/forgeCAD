@@ -9,7 +9,13 @@ self.forge_wake_page = () => self.postMessage("wake");
 self.onmessage = async (e) => {
   if (!Array.isArray(e.data)) return;
   const [module, memory, id] = e.data;
-  await init({ module_or_path: module, memory });
-  threadsOn(() => self.forge_wake_page());
-  worker_run(id);
+  try {
+    await init({ module_or_path: module, memory });
+    threadsOn(() => self.forge_wake_page());
+    worker_run(id);
+  } catch (err) {
+    // the job it was started for waits on: the page must hear of it
+    console.error(`forge worker died: ${err?.stack ?? err}`);
+    throw err;
+  }
 };
