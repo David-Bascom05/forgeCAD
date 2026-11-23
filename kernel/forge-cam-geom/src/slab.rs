@@ -228,8 +228,8 @@ pub fn dist(s: &Sec, t: &Sec) -> Ival {
     debug_assert!(
         [s, t].iter().all(|x| match **x {
             Sec::Arc { c, a, b, ccw, .. } => {
-                let cr = (a[0] - c[0]) * (b[1] - c[1]) - (a[1] - c[1]) * (b[0] - c[0]);
-                if ccw { cr > 0.0 } else { cr < 0.0 }
+                let cr = cross(sub2(a, c), sub2(b, c));
+                if ccw { cr.lo > 0.0 } else { cr.hi < 0.0 }
             }
             Sec::Seg { .. } => true,
         }),
@@ -623,8 +623,9 @@ impl Prism {
                 let (a, b) = (at(f.p.lo), at(f.p.hi));
                 // the closed form's arc candidates hold for arcs strictly under a half turn
                 // (DistArc.lean); a wider wall is left to the general branch and bound
-                let cr = (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
-                if !(if ccw { cr > 0.0 } else { cr < 0.0 }) {
+                // the sign proven (outward-rounded), else not a prism: the guard never errs
+                let cr = cross(sub2(a, [o[0], o[1]]), sub2(b, [o[0], o[1]]));
+                if !(if ccw { cr.lo > 0.0 } else { cr.hi < 0.0 }) {
                     return None;
                 }
                 Some(Prism::Wall {
