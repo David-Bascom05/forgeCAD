@@ -149,4 +149,119 @@ theorem split_loop0_spec (l : Ledger) (ff fac : alloc.vec.Vec U32) (k : Usize)
       exact ⟨htl, ht, hF⟩
   · exact ⟨hk, rfl, hfac, hff⟩
 
+/-! ## Loop 1: each facet's two sides, interned -/
+
+/-- The ledger rebuilt from its fields, as the translation passes it. -/
+theorem ledger_eta (l : Ledger) :
+    ({ nb := l.nb, face_body := l.face_body, face_class := l.face_class, cells := l.cells,
+       pieces := l.pieces, inside := l.inside, edges := l.edges, verts := l.verts } : Ledger) = l := rfl
+
+/-- The side of a covector across its first zero. -/
+def sideL (x : List Sgn) (s : Sgn) : List Sgn := x.set (x.idxOf .Zero) s
+
+/-- `ext` grows from `e0`: every earlier cell keeps its covector. -/
+def Grows (l : Ledger) (e0 e : Ext) : Prop :=
+  (allCells l e0).length ≤ (allCells l e).length ∧
+  ∀ id, id < (allCells l e0).length → covAt l e id = covAt l e0 id
+
+theorem grows_refl (l : Ledger) (e : Ext) : Grows l e e := ⟨Nat.le_refl _, fun _ _ => rfl⟩
+
+theorem grows_trans {l : Ledger} {a b c : Ext} (h1 : Grows l a b) (h2 : Grows l b c) : Grows l a c :=
+  ⟨Nat.le_trans h1.1 h2.1, fun id h => by rw [h2.2 id (by have := h1.1; omega), h1.2 id h]⟩
+
+theorem grows_intern {l : Ledger} {e e' : Ext} (key : List Sgn)
+    (h : allCells l e' = allCells l e ++ (if key ∈ allCells l e then [] else [key])) : Grows l e e' := by
+  refine ⟨by rw [h]; simp, fun id hid => ?_⟩
+  simp only [covAt, h, List.getD_eq_getElem?_getD, List.getElem?_append_left hid]
+
+theorem allCells_grow {l : Ledger} {e e' : Ext} (key : List Sgn)
+    (h : allCells l e' = allCells l e ++ (if key ∈ allCells l e then [] else [key])) :
+    (allCells l e').length ≤ (allCells l e).length + 1 := by
+  rw [h]; split <;> simp
+
+theorem to_vec_sgn_spec (x : Slice Sgn) :
+    alloc.slice.Slice.to_vec Sgn.Insts.CoreCloneClone x ⦃ v => v.val = x.val ⦄ := by
+  have hclone : ∀ y ∈ x.val, Sgn.Insts.CoreCloneClone.clone y = ok y := by intro y _; cases y <;> rfl
+  step as ⟨v, hv⟩
+  rw [hv]; rfl
+
+/-- Loop 1's invariant at `j`: the first `j` facets' sides interned. -/
+def L1Inv (l : Ledger) (e0 : Ext) (F : List U32) (e : Ext) (P M : List U32) (j : Nat) : Prop :=
+  j ≤ F.length ∧ ExtOK l e ∧ Grows l e0 e ∧ (allCells l e).length ≤ (allCells l e0).length + 2 * j ∧
+  P.length = j ∧ M.length = j ∧
+  ∀ k (hk : k < j),
+    P[k]!.val < (allCells l e).length ∧ covAt l e P[k]!.val = sideL (covAt l e0 F[k]!.val) .Pos ∧
+    M[k]!.val < (allCells l e).length ∧ covAt l e M[k]!.val = sideL (covAt l e0 F[k]!.val) .Neg
+
+theorem split_loop1_spec (l : Ledger) (e0 : Ext) (hok : ExtOK l e0) (F : alloc.vec.Vec U32)
+    (hF : ∀ x ∈ F.val, x.val < l.cells.val.length)
+    (hroom : (allCells l e0).length + 2 * F.val.length + 1 < U32.max)
+    (e : Ext) (P M : alloc.vec.Vec U32) (j : Usize) (hinv : L1Inv l e0 F.val e P.val M.val j.val) :
+    split_loop1 l.nb l.face_body l.face_class l.cells l.pieces l.inside l.edges l.verts e F P M j ⦃ r =>
+      L1Inv l e0 F.val r.1 r.2.1.val r.2.2.val F.val.length ⦄ := by
+  unfold split_loop1
+  apply loop.spec_decr_nat
+    (fun (q : Ext × alloc.vec.Vec U32 × alloc.vec.Vec U32 × Usize) => F.val.length - q.2.2.2.val)
+    (fun q => L1Inv l e0 F.val q.1 q.2.1.val q.2.2.1.val q.2.2.2.val)
+  · rintro ⟨e1, P1, M1, i⟩ ⟨hi, hok1, hgr, hlen, hPl, hMl, hPM⟩
+    unfold split_loop1.body
+    simp only at hi hok1 hgr hlen hPl hMl hPM ⊢
+    split
+    · rename_i hlt
+      have hil : i.val < F.val.length := by scalar_tac
+      step as ⟨c, hc⟩
+      have hcF : c ∈ F.val := by rw [hc]; exact List.getElem_mem _
+      have hcl : c.val < l.cells.val.length := hF c hcF
+      have hcl0 : c.val < (allCells l e0).length := by rw [allCells_length]; omega
+      have hcl1 : c.val < (allCells l e1).length := by have := hgr.1; omega
+      step with cov_spec l e1 c hcl1 as ⟨sx, hsx⟩
+      have hsx0 : sx.val = covAt l e0 c.val := by rw [hsx, hgr.2 _ hcl0]
+      step with to_vec_sgn_spec sx as ⟨x, hx⟩
+      have hxd : (alloc.vec.Vec.deref x).val = covAt l e0 c.val := by simp [alloc.vec.Vec.deref, hx, hsx0]
+      step with zero_idx_spec (alloc.vec.Vec.deref x) as ⟨z, hz⟩
+      have hzv : z.val = (covAt l e0 c.val).idxOf .Zero := by
+        rw [hz]; simp only [covOf, ForgeExact.DecideOnce.Cov.zeroIdx, idxOf_map_toS, hxd]
+      step with with_set_spec (alloc.vec.Vec.deref x) z Sgn.Pos as ⟨vp, hvp⟩
+      have hvp' : vp.val = sideL (covAt l e0 c.val) .Pos := by rw [hvp, hxd, hzv]; rfl
+      step with intern_spec l e1 hok1 vp (by omega) as ⟨ip, e2, _, hok2, hall2, hipl, hipc⟩
+      have hg12 := grows_intern vp.val hall2
+      have hl2 := allCells_grow vp.val hall2
+      step as ⟨P2, hP2⟩
+      step with with_set_spec (alloc.vec.Vec.deref x) z Sgn.Neg as ⟨vm, hvm⟩
+      have hvm' : vm.val = sideL (covAt l e0 c.val) .Neg := by rw [hvm, hxd, hzv]; rfl
+      step with intern_spec l e2 hok2 vm (by omega) as ⟨im, e3, _, hok3, hall3, himl, himc⟩
+      have hg23 := grows_intern vm.val hall3
+      have hl3 := allCells_grow vm.val hall3
+      step as ⟨M2, hM2⟩
+      step as ⟨i1, hi1⟩
+      have hFi : F.val[i.val]!.val = c.val := by rw [getElem!_pos F.val i.val hil, hc]
+      refine ⟨⟨by scalar_tac, hok3, grows_trans hgr (grows_trans hg12 hg23), by rw [hi1]; omega,
+        by rw [hP2, hi1]; simp [hPl], by rw [hM2, hi1]; simp [hMl], fun k hk => ?_⟩, by scalar_tac⟩
+      rw [hi1] at hk
+      by_cases hki : k < i.val
+      · obtain ⟨a1, a2, a3, a4⟩ := hPM k hki
+        have hPk : P2.val[k]! = P1.val[k]! := by
+          rw [hP2, getElem!_pos _ k (by simp; omega), getElem!_pos _ k (by omega)]
+          simp [List.getElem_append_left (by omega : k < P1.val.length)]
+        have hMk : M2.val[k]! = M1.val[k]! := by
+          rw [hM2, getElem!_pos _ k (by simp; omega), getElem!_pos _ k (by omega)]
+          simp [List.getElem_append_left (by omega : k < M1.val.length)]
+        rw [hPk, hMk]
+        have g := grows_trans hg12 hg23
+        refine ⟨by have := g.1; omega, by rw [g.2 _ a1]; exact a2, by have := g.1; omega, by rw [g.2 _ a3]; exact a4⟩
+      · have hk' : k = i.val := by omega
+        subst hk'
+        have hPk : P2.val[i.val]! = ip := by
+          rw [hP2, getElem!_pos _ i.val (by simp; omega)]; simp [hPl]
+        have hMk : M2.val[i.val]! = im := by
+          rw [hM2, getElem!_pos _ i.val (by simp; omega)]; simp [hMl]
+        rw [hPk, hMk, hFi]
+        refine ⟨by have := hg23.1; omega, ?_, himl, by rw [himc, hvm']⟩
+        rw [hg23.2 _ hipl, hipc, hvp']
+    · rename_i hge
+      simp only [WP.spec_ok]
+      have : i.val = F.val.length := by scalar_tac
+      rw [← this]; exact ⟨hi, hok1, hgr, hlen, hPl, hMl, hPM⟩
+  · exact hinv
+
 end forge_bool_core
