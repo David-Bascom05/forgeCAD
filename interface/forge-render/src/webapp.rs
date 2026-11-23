@@ -119,6 +119,7 @@ async fn open_host(window: Arc<Window>, first: Option<String>) -> Result<Host, S
     // the chrome blends in sRGB, as on the desktop
     config.format = config.format.remove_srgb_suffix();
     surface.configure(&device, &config);
+    device.set_device_lost_callback(|why, msg| say(&format!("forge-app: the GPU device was lost ({why:?}): {msg}")));
     let scale = window.scale_factor() as f32;
     let mut gui = Gui::new(device, queue, info, config.format, Arc::new(wake), scale);
     gui.load_settings();
