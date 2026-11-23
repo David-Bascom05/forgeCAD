@@ -227,6 +227,10 @@ Workers (each its own cloud session, tag `forgecad-worker`; they report via send
 - CAM-3AXIS    session_01WJtawx5yEFpe6hUFTao6CQ
 - CAM-TURN     session_01WJtawvePKaogMxErDhFCRF
 - CAM-MACHINE  session_01WJtawzvkvyfqNLd7PgZKGf (owns machine-definition format)
+- CAM-UI       session_01WJtawySQLKzpnK7g6t2CVB (Manufacture workspace UI in forge-render, gui_cam*)
+- CAM-SIM      session_01WJtawyn7zd9gKZdPzHRCgQ (toolpath + stock/machine simulation views, gui_camsim*)
+  David: "a full sim that shows the toolpath and Fusion 360 level UI + features for the current scope".
+  #20 decision (David): keep verify/forge-certify in members + certify-off -p test runs in CI/wasm.
   CAM workers started early at David's request: they branch from #16's branch
   (claude/repo-review-mbdrlj-cam-lean) and open PRs only after #15/#16 merge.
 Queue: #31 CI running on 924bc4d0 (contains main db5c0759).
