@@ -100,16 +100,25 @@ seams, and the curved screens S3/S4).
 | G9 | `SCRATCH`, cached `FaceInfo` (`CacheOK b`) | FALLBACK | open | — |
 | G10 | `nary`'s `Batch` and threads; verdict 3 (2,447× on suite + fuzz 1–300 n-ary) goes to the full way (D6, §1a) | FALLBACK | Batch: see H.batch; the full way is D6's | — |
 | G11 | flat `LINEAR`/`RIM` tolerance tests | FLAT-SITES | open | — |
-| G11c | curved `LINEAR`/`RIM` tolerance tests (curved-fallback-rates.md) | CURVED-SITES | open | — |
-| C.coinc | `ssi::coincident`, `same_carrier`: coincident carriers decided exactly | CURVED-SITES | open | — |
+| G11c | curved `LINEAR`/`RIM` tolerance tests: near-misses (1e-9 < \|d\| ≤ limit) over 22 gate runs + fuzz 1–40 seq: 104 on main cb8edf27 (gate 46, fuzz 58), 99 with fix-curved absorbed (the per-site counts below) (curved-fallback-rates.md, "Re-measured"); the 4 not listed below are fuzz27's one 1.9e-7 fact at trim shallow ×2, dedupe, B:2798 | CURVED-SITES | open; per site below; none judged by the exact reference (every stage out of its scope): UNKNOWN | — |
+| C.2830 | `on_edge` at trim's curve ∩ across hit (B:2830): the hit's exact meet is on the edge's branch | CURVED-SITES | branch proven given a separation and η (`branch_of_sep_delta`); 53 near-misses, all "on", nearest other branch ≥ 1.76 mm or none in 10 mm (measured): UNKNOWN | verify/forge-curved OnEdge.lean `branch_of_sep`, `branch_of_sep_delta`, `branch_of_empty` |
+| C.sep | `SepTheorem` per pair kind; 37 of C.2830's 53 are torus–plane square to / through the axis | CURVED-SITES | stated; open pair kinds (16 near-misses): torus–torus 6, plane–torus oblique/spiric 6, torus–sphere 2, torus–cylinder 2 (hard: quartic separation) | OnEdge.lean `SepTheorem` |
+| C.eta | the IEEE bound η of a torus hit (`curve_surface` on torus curves): measured 1e-9 to 2e-7 | CURVED-SITES | open | — |
+| C.range | `ClosestGlobal`, `OnEdgeRange`: on_edge's off answers and its range test | CURVED-SITES | stated | OnEdge.lean |
+| C.2910 | trim's traced-branch end on a rim (B:2910): 14 near-misses (fuzz 3, 9, 11, 15), 4e-8 to 9e-7 | CURVED-SITES | open (C.2830's lemma once the tracer's end error is bounded): UNKNOWN | — |
+| C.slid | trim's `slid`, a grazing root a hair from an edge (B:2819): 7 near-misses (fuzz 3, 9, 11, 27), 1.3e-7 to 8.4e-7, tangent roots | CURVED-SITES | open, hard (exact tangency): UNKNOWN | — |
+| C.place | `place_cuts` "two cuts one vertex": 12 near-misses (mixed 1, fuzz 2, 11, 25, 27), 2.3e-9 to 1.9e-7 | CURVED-SITES | open (a provenance key): UNKNOWN | — |
+| C.pif | `point_in_face` nearest-edge `On` at curved callers (touch_inside's samples B:2845, the closed-curve midpoint B:3315): 9 near-misses (shaft 1, fuzz 20, 30, 40), 0.2–0.9 LINEAR | CURVED-SITES (with FLAT-SITES' `point_in_face_at`) | open: UNKNOWN | — |
+| C.coinc | `ssi::coincident` / `unify::same_surface` `true`: one point set | CURVED-SITES | proven where the exact key holds: 6,864 of 6,900 trues (plane 6,115, cylinder 725, sphere 24); the 36 unkeyed are patterns seq's one-ulp pattern copies (exactly distinct planes): UNKNOWN | verify/forge-curved CarrierKey.lean `plane_key`, `plane_key_axis`, `cyl_key`, `sphere_key`; kernel/forge-bool/src/carrier_key.rs |
 | C.unify | unify's curved decisions | CURVED-SITES | open | — |
-| C.cuts | the `on_edge` / `place_cuts` coincidence sites on curved faces | CURVED-SITES | open | — |
 | C.poles | poles and seams (`sphere_nearest`'s pole rule, periodic seams) | CURVED-SITES | open | — |
 | G12 | the `decide_once` feature becomes the fallback branch | FALLBACK | open | — |
 | G13 | `face_point`'s unchecked inward step | FLAT-SITES | open | — |
 | G14 | trim_in's box-only accept | FLAT-SITES | open | — |
 | G15 | the stretch whose midpoint is exactly on ∂f_k | FLAT-SITES | open | — |
 | M.ct | forge-geom `meet::intersect`, cylinder × torus (`Form::Poly4`): its events from a sampled discriminant, which lost one of two loops on fuzz295 f69 (a wrong `Ok`) | FALLBACK (fix), CURVED-SITES (#7, certified isolation) | interim fix (PR proof/fix-torus-loops): a root-count scan where the discriminant flags double roots; NOT provably complete (a loop narrower than one sample can be lost): UNKNOWN | kernel/forge-geom/src/meet_tests.rs `thin_torus_on_a_wide_cylinder_both_loops` |
+| M.cert | M.ct's events certified: interval cover of (u, s), Krawczyk boxes of one event each (kernel/forge-geom/src/meet_cert.rs, tests and the decision log only) | CURVED-SITES | soundness of the cover proven (`no_event_of_cover`); `IntervalSound`, `CountConstant` stated; on seed 295 it proves the missed events (Missed at host u 1.918, 2.097, 2.149); runtime design open (cost) | verify/forge-curved EventCover.lean |
+| M.cone | `Form::Poly4` with a cone host (90 calls on fuzz 1–40): not covered by the certifier | CURVED-SITES | open | — |
 
 ## A8, the flat fallback
 

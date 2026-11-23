@@ -1230,6 +1230,16 @@ pub fn intersect(a: &Surface, b: &Surface, region: Box3) -> Option<SurfaceSurfac
             events.sort_by(|p, q| p.0.total_cmp(&q.0));
         }
     }
+    // (decision log: the sampled events against the certified ones, curved-sites gap #7)
+    #[cfg(feature = "decisions")]
+    if form == Form::Poly4 && std::env::var_os("FORGE_DECISIONS_DUMP").is_some() {
+        let t = std::time::Instant::now();
+        let v = cert::certify(&eq, &events);
+        eprintln!("poly4-cert {:?} us {}", v, t.elapsed().as_micros());
+        if !matches!(v, cert::Verdict::Certified { .. } | cert::Verdict::NotCovered) {
+            eprintln!("poly4-cert-pair {a:?} | {b:?} | events {events:?}");
+        }
+    }
     // two events polished onto one point: the isolation was off somewhere
     if events.windows(2).any(|w| w[1].0 - w[0].0 <= 1e-9) {
         return None;
@@ -1746,6 +1756,10 @@ pub fn coaxial(a: &Surface, b: &Surface) -> Option<SurfaceSurface> {
         SurfaceSurface::Empty
     })
 }
+
+#[cfg(any(test, feature = "decisions"))]
+#[path = "meet_cert.rs"]
+mod cert;
 
 #[cfg(test)]
 #[path = "meet_tests.rs"]
