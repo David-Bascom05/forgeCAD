@@ -5,15 +5,9 @@
 //! Every coordinate a charstring makes is a sum of its operands, each an integer or a 16.16
 //! fixed-point number, so the outlines come out exact in f64 (multiples of 2^-16).
 
-use crate::{FontError, Seg};
+use crate::{FontError, Seg, cff_core};
 use forge_math::Point2;
 
-/// What one outline may run: operators and operands (subroutine calls included) in all.
-const STEPS: usize = 1 << 16;
-/// Subroutine calls nested this deep are refused (the format's own limit).
-const NESTING: usize = 10;
-/// The operand stack's depth (Type 2's limit is 48; CFF2 allows 513 and is not read).
-const STACK: usize = 48;
 
 /// An INDEX: where each of its objects lies in the data.
 #[derive(Clone, Debug, Default)]
@@ -27,8 +21,14 @@ impl Index {
         self.offs.len().saturating_sub(1)
     }
     fn get<'a>(&self, d: &'a [u8], k: usize) -> Option<&'a [u8]> {
+        let (a, b) = self.range(d, k)?;
+        Some(&d[a..b])
+    }
+    /// Where object k lies in `d`.
+    fn range(&self, d: &[u8], k: usize) -> Option<(usize, usize)> {
         let (a, b) = (*self.offs.get(k)?, *self.offs.get(k + 1)?);
-        d.get(a..b)
+        d.get(a..b)?;
+        Some((a, b))
     }
 }
 
@@ -133,7 +133,7 @@ fn dict(d: &[u8]) -> Result<Vec<(u16, Vec<f64>)>, FontError> {
             }
             _ => return Err(bad),
         }
-        if ops.len() > STACK {
+        if ops.len() > cff_core::STACK {
             return Err(bad);
         }
     }
@@ -259,33 +259,27 @@ impl Cff {
         self.chars.len()
     }
 
-    /// Glyph g's closed contours.
+    /// Glyph g's closed contours (cff_core runs the charstring, in 2^-16 units).
     pub(crate) fn outline(&self, g: u16) -> Result<Vec<Vec<Seg>>, FontError> {
         let g = g as usize;
         let cs = self
             .chars
-            .get(&self.data, g)
+            .range(&self.data, g)
             .ok_or(FontError::Unsupported("glyph id out of range"))?;
         let p = &self.privates[*self.select.get(g).unwrap_or(&0) as usize];
-        let mut m = Machine {
-            cff: self,
-            local: &p.subrs,
-            stack: Vec::with_capacity(STACK),
-            at: (0.0, 0.0),
-            start: None,
-            contour: Vec::new(),
-            out: Vec::new(),
-            stems: 0,
-            width_read: false,
-            steps: STEPS,
-            done: false,
-        };
-        m.run(cs, 0)?;
-        if !m.done {
-            return Err(FontError::Unsupported("a charstring that does not end"));
-        }
-        m.close();
-        Ok(m.out)
+        let out = cff_core::run(&self.data, cs, &self.gsubrs.offs, &p.subrs.offs)?;
+        let pt = |q: cff_core::Pc| Point2::new(q.x as f64 / 65536.0, q.y as f64 / 65536.0);
+        Ok(out
+            .into_iter()
+            .map(|c| {
+                c.into_iter()
+                    .map(|s| match s {
+                        cff_core::SegC::Line(a, b) => Seg::Line(pt(a), pt(b)),
+                        cff_core::SegC::Cubic(a, c1, c2, b) => Seg::Cubic(pt(a), pt(c1), pt(c2), pt(b)),
+                    })
+                    .collect()
+            })
+            .collect())
     }
 }
 
@@ -322,364 +316,4 @@ fn fd_select(d: &[u8], o: usize, glyphs: usize, fds: usize) -> Result<Vec<u8>, F
         return Err(FontError::Unsupported("a CFF FDSelect naming a dict not there"));
     }
     Ok(sel)
-}
-
-fn bias(n: usize) -> i64 {
-    if n < 1240 {
-        107
-    } else if n < 33900 {
-        1131
-    } else {
-        32768
-    }
-}
-
-/// A Type 2 charstring interpreter's state.
-struct Machine<'a> {
-    cff: &'a Cff,
-    local: &'a Index,
-    stack: Vec<f64>,
-    at: (f64, f64),
-    /// The open contour's first point.
-    start: Option<Point2>,
-    contour: Vec<Seg>,
-    out: Vec<Vec<Seg>>,
-    stems: usize,
-    /// Whether the width (an optional first operand) has been read past.
-    width_read: bool,
-    steps: usize,
-    done: bool,
-}
-
-impl Machine<'_> {
-    fn pt(&self) -> Point2 {
-        Point2::new(self.at.0, self.at.1)
-    }
-
-    fn close(&mut self) {
-        if let Some(s) = self.start.take() {
-            let p = self.pt();
-            if p != s {
-                self.contour.push(Seg::Line(p, s));
-            }
-            if !self.contour.is_empty() {
-                self.out.push(std::mem::take(&mut self.contour));
-            }
-        }
-    }
-
-    fn move_to(&mut self, dx: f64, dy: f64) {
-        self.close();
-        self.at = (self.at.0 + dx, self.at.1 + dy);
-        self.start = Some(self.pt());
-    }
-
-    fn line(&mut self, dx: f64, dy: f64) -> Result<(), FontError> {
-        let a = self.pt();
-        self.at = (self.at.0 + dx, self.at.1 + dy);
-        self.open()?;
-        let b = self.pt();
-        if a != b {
-            self.contour.push(Seg::Line(a, b));
-        }
-        Ok(())
-    }
-
-    fn curve(&mut self, d: [f64; 6]) -> Result<(), FontError> {
-        let a = self.pt();
-        let c1 = Point2::new(a.x + d[0], a.y + d[1]);
-        let c2 = Point2::new(c1.x + d[2], c1.y + d[3]);
-        let b = Point2::new(c2.x + d[4], c2.y + d[5]);
-        self.at = (b.x, b.y);
-        self.open()?;
-        if !(a == c1 && c1 == c2 && c2 == b) {
-            self.contour.push(Seg::Cubic(a, c1, c2, b));
-        }
-        Ok(())
-    }
-
-    /// Drawing before any moveto is an error in the format.
-    fn open(&self) -> Result<(), FontError> {
-        if self.start.is_none() {
-            return Err(FontError::Unsupported(
-                "a charstring drawing before its first moveto",
-            ));
-        }
-        Ok(())
-    }
-
-    /// The width, if the stack holds one operand more than `want` (or an odd one for stems).
-    fn width(&mut self, odd: bool, want: usize) {
-        if !self.width_read {
-            self.width_read = true;
-            let extra = if odd {
-                self.stack.len() % 2 == 1
-            } else {
-                self.stack.len() > want
-            };
-            if extra {
-                self.stack.remove(0);
-            }
-        }
-    }
-
-    fn run(&mut self, cs: &[u8], depth: usize) -> Result<(), FontError> {
-        if depth > NESTING {
-            return Err(FontError::Unsupported("charstring subroutines nested too deep"));
-        }
-        let bad = |w: &'static str| FontError::Unsupported(w);
-        let mut o = 0;
-        while o < cs.len() && !self.done {
-            self.steps = self
-                .steps
-                .checked_sub(1)
-                .ok_or(bad("a charstring that runs too long"))?;
-            let b0 = cs[o];
-            o += 1;
-            if b0 >= 32 || b0 == 28 {
-                let v = match b0 {
-                    28 => {
-                        let v = crate::i16_at(cs, o)? as f64;
-                        o += 2;
-                        v
-                    }
-                    32..=246 => b0 as f64 - 139.0,
-                    247..=250 => {
-                        let v = (b0 as f64 - 247.0) * 256.0 + byte(cs, o)? as f64 + 108.0;
-                        o += 1;
-                        v
-                    }
-                    251..=254 => {
-                        let v = -(b0 as f64 - 251.0) * 256.0 - byte(cs, o)? as f64 - 108.0;
-                        o += 1;
-                        v
-                    }
-                    _ => {
-                        // 16.16 fixed
-                        let v = crate::u32_at(cs, o)? as i32 as f64 / 65536.0;
-                        o += 4;
-                        v
-                    }
-                };
-                if self.stack.len() >= STACK {
-                    return Err(bad("a charstring's stack overflows"));
-                }
-                self.stack.push(v);
-                continue;
-            }
-            let s = std::mem::take(&mut self.stack);
-            let need = |n: usize| -> Result<(), FontError> {
-                if s.len() < n {
-                    Err(bad("a charstring operator short of operands"))
-                } else {
-                    Ok(())
-                }
-            };
-            match b0 {
-                // hstem vstem hstemhm vstemhm
-                1 | 3 | 18 | 23 => {
-                    self.stack = s;
-                    self.width(true, 0);
-                    self.stems += self.stack.len() / 2;
-                    self.stack.clear();
-                }
-                // hintmask cntrmask: an implied vstem first, then the mask's bytes
-                19 | 20 => {
-                    self.stack = s;
-                    self.width(true, 0);
-                    self.stems += self.stack.len() / 2;
-                    self.stack.clear();
-                    o += self.stems.div_ceil(8);
-                    if o > cs.len() {
-                        return Err(FontError::Truncated);
-                    }
-                }
-                // rmoveto hmoveto vmoveto
-                21 | 22 | 4 => {
-                    self.stack = s;
-                    self.width(false, if b0 == 21 { 2 } else { 1 });
-                    let s = std::mem::take(&mut self.stack);
-                    match (b0, &s[..]) {
-                        (21, [dx, dy]) => self.move_to(*dx, *dy),
-                        (22, [dx]) => self.move_to(*dx, 0.0),
-                        (4, [dy]) => self.move_to(0.0, *dy),
-                        _ => return Err(bad("a charstring moveto of the wrong operands")),
-                    }
-                }
-                // rlineto
-                5 => {
-                    if s.is_empty() || !s.len().is_multiple_of(2) {
-                        return Err(bad("rlineto of odd operands"));
-                    }
-                    for p in s.chunks(2) {
-                        self.line(p[0], p[1])?;
-                    }
-                }
-                // hlineto vlineto: alternating
-                6 | 7 => {
-                    need(1)?;
-                    let mut h = b0 == 6;
-                    for &v in &s {
-                        if h {
-                            self.line(v, 0.0)?;
-                        } else {
-                            self.line(0.0, v)?;
-                        }
-                        h = !h;
-                    }
-                }
-                // rrcurveto
-                8 => {
-                    if s.is_empty() || !s.len().is_multiple_of(6) {
-                        return Err(bad("rrcurveto of operands not in sixes"));
-                    }
-                    for c in s.chunks(6) {
-                        self.curve([c[0], c[1], c[2], c[3], c[4], c[5]])?;
-                    }
-                }
-                // rcurveline: curves, then a line
-                24 => {
-                    if s.len() < 8 || !(s.len() - 2).is_multiple_of(6) {
-                        return Err(bad("rcurveline of the wrong operands"));
-                    }
-                    let (cs6, l) = s.split_at(s.len() - 2);
-                    for c in cs6.chunks(6) {
-                        self.curve([c[0], c[1], c[2], c[3], c[4], c[5]])?;
-                    }
-                    self.line(l[0], l[1])?;
-                }
-                // rlinecurve: lines, then a curve
-                25 => {
-                    if s.len() < 8 || !(s.len() - 6).is_multiple_of(2) {
-                        return Err(bad("rlinecurve of the wrong operands"));
-                    }
-                    let (ls, c) = s.split_at(s.len() - 6);
-                    for p in ls.chunks(2) {
-                        self.line(p[0], p[1])?;
-                    }
-                    self.curve([c[0], c[1], c[2], c[3], c[4], c[5]])?;
-                }
-                // vvcurveto: dx1? {dya dxb dyb dyc}+
-                26 => {
-                    let (mut dx1, rest) = if s.len() % 4 == 1 {
-                        (s[0], &s[1..])
-                    } else {
-                        (0.0, &s[..])
-                    };
-                    if rest.is_empty() || rest.len() % 4 != 0 {
-                        return Err(bad("vvcurveto of the wrong operands"));
-                    }
-                    for c in rest.chunks(4) {
-                        self.curve([dx1, c[0], c[1], c[2], 0.0, c[3]])?;
-                        dx1 = 0.0;
-                    }
-                }
-                // hhcurveto: dy1? {dxa dxb dyb dxc}+
-                27 => {
-                    let (mut dy1, rest) = if s.len() % 4 == 1 {
-                        (s[0], &s[1..])
-                    } else {
-                        (0.0, &s[..])
-                    };
-                    if rest.is_empty() || rest.len() % 4 != 0 {
-                        return Err(bad("hhcurveto of the wrong operands"));
-                    }
-                    for c in rest.chunks(4) {
-                        self.curve([c[0], dy1, c[1], c[2], c[3], 0.0])?;
-                        dy1 = 0.0;
-                    }
-                }
-                // vhcurveto hvcurveto: alternating, the last with an optional final delta
-                30 | 31 => {
-                    if s.len() < 4 || !(s.len().is_multiple_of(4) || s.len() % 4 == 1) {
-                        return Err(bad("vhcurveto or hvcurveto of the wrong operands"));
-                    }
-                    let mut h = b0 == 31;
-                    let n = s.len() / 4;
-                    for k in 0..n {
-                        let c = &s[4 * k..4 * k + 4];
-                        let last = if k + 1 == n && s.len() % 4 == 1 {
-                            s[s.len() - 1]
-                        } else {
-                            0.0
-                        };
-                        if h {
-                            self.curve([c[0], 0.0, c[1], c[2], last, c[3]])?;
-                        } else {
-                            self.curve([0.0, c[0], c[1], c[2], c[3], last])?;
-                        }
-                        h = !h;
-                    }
-                }
-                // callsubr callgsubr
-                10 | 29 => {
-                    let mut s = s;
-                    let k = s.pop().ok_or(bad("a subroutine call with no number"))?;
-                    let idx = if b0 == 10 { self.local } else { &self.cff.gsubrs };
-                    if k.fract() != 0.0 {
-                        return Err(bad("a subroutine number that is not whole"));
-                    }
-                    let n = k as i64 + bias(idx.len());
-                    let sub = usize::try_from(n)
-                        .ok()
-                        .and_then(|n| idx.get(&self.cff.data, n))
-                        .ok_or(bad("a call to a subroutine not there"))?;
-                    self.stack = s;
-                    self.run(sub, depth + 1)?;
-                }
-                // return
-                11 => {
-                    self.stack = s;
-                    return Ok(());
-                }
-                // endchar
-                14 => {
-                    self.stack = s;
-                    self.width(true, 0);
-                    if self.stack.len() >= 4 {
-                        return Err(bad("an accented glyph built by endchar (seac)"));
-                    }
-                    self.close();
-                    self.done = true;
-                }
-                12 => {
-                    let b1 = byte(cs, o)?;
-                    o += 1;
-                    match (b1, &s[..]) {
-                        // flex
-                        (35, [a, b, c, d, e, f, g, h, i, j, k, l, _fd]) => {
-                            self.curve([*a, *b, *c, *d, *e, *f])?;
-                            self.curve([*g, *h, *i, *j, *k, *l])?;
-                        }
-                        // hflex
-                        (34, [dx1, dx2, dy2, dx3, dx4, dx5, dx6]) => {
-                            self.curve([*dx1, 0.0, *dx2, *dy2, *dx3, 0.0])?;
-                            self.curve([*dx4, 0.0, *dx5, -*dy2, *dx6, 0.0])?;
-                        }
-                        // hflex1
-                        (36, [dx1, dy1, dx2, dy2, dx3, dx4, dx5, dy5, dx6]) => {
-                            self.curve([*dx1, *dy1, *dx2, *dy2, *dx3, 0.0])?;
-                            self.curve([*dx4, 0.0, *dx5, *dy5, *dx6, -(*dy1 + *dy2 + *dy5)])?;
-                        }
-                        // flex1: the last point's other delta returns to the start's line
-                        (37, [d1, d2, d3, d4, d5, d6, d7, d8, d9, d10, d11]) => {
-                            let dx = d1 + d3 + d5 + d7 + d9;
-                            let dy = d2 + d4 + d6 + d8 + d10;
-                            let (ex, ey) = if dx.abs() > dy.abs() {
-                                (*d11, -dy)
-                            } else {
-                                (-dx, *d11)
-                            };
-                            self.curve([*d1, *d2, *d3, *d4, *d5, *d6])?;
-                            self.curve([*d7, *d8, *d9, *d10, ex, ey])?;
-                        }
-                        (34..=37, _) => return Err(bad("a flex of the wrong operands")),
-                        _ => return Err(bad("a deprecated or unknown charstring operator")),
-                    }
-                }
-                _ => return Err(bad("an unknown charstring operator")),
-            }
-        }
-        Ok(())
-    }
 }

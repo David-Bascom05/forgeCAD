@@ -2,6 +2,7 @@
 -- [forge_font]: function definitions
 import Aeneas
 import ForgeFont.Types
+import ForgeFont.FunsExternal
 open Aeneas Aeneas.Std Result ControlFlow Error
 set_option linter.dupNamespace false
 set_option linter.hashCommand false
@@ -17,7 +18,1733 @@ set_option maxHeartbeats 1000000
 /- You can set the `maxRecDepth` value with the `-max-recdepth` CLI option -/
 set_option maxRecDepth 2048
 
+/- You can remove the following line by using the CLI option `-all-computable`: -/
+noncomputable section
+
 namespace forge_font
+
+/-- Trait implementation: [alloc::vec::{impl core::default::Default for alloc::vec::Vec<T>}]
+    Source: '/rustc/library/alloc/src/vec/mod.rs', lines 4413:0-4413:32
+    Name pattern: [core::default::Default<alloc::vec::Vec<@T>>] -/
+@[reducible, rust_trait_impl "core::default::Default<alloc::vec::Vec<@T>>"]
+def alloc.vec.Vec.Insts.CoreDefaultDefault (T : Type _) : core.default.Default
+  (alloc.vec.Vec T) := {
+  default := alloc.vec.Vec.Insts.CoreDefaultDefault.default T
+}
+
+/-- [forge_font::cff_core::STEPS]
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 16:0-16:33
+    Visibility: public -/
+@[global_simps, irreducible]
+def cff_core.STEPS : Result Std.Usize := 1#usize <<< 16#i32
+
+/-- [forge_font::cff_core::NESTING]
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 18:0-18:30
+    Visibility: public -/
+@[global_simps, irreducible] def cff_core.NESTING : Std.Usize := 10#usize
+
+/-- [forge_font::cff_core::STACK]
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 20:0-20:28
+    Visibility: public -/
+@[global_simps, irreducible] def cff_core.STACK : Std.Usize := 48#usize
+
+/-- [forge_font::cff_core::{impl core::cmp::PartialEq<forge_font::cff_core::Pc> for forge_font::cff_core::Pc}::eq]:
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 23:29-23:38
+    Visibility: public -/
+def cff_core.Pc.Insts.CoreCmpPartialEqPc.eq
+  (self : cff_core.Pc) (other : cff_core.Pc) : Result Bool := do
+  if self.x = other.x
+  then ok (self.y = other.y)
+  else ok false
+
+/-- Trait implementation: [forge_font::cff_core::{impl core::cmp::PartialEq<forge_font::cff_core::Pc> for forge_font::cff_core::Pc}]
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 23:29-23:38 -/
+@[reducible]
+impl_def cff_core.Pc.Insts.CoreCmpPartialEqPc : core.cmp.PartialEq cff_core.Pc
+  cff_core.Pc := {
+  eq := cff_core.Pc.Insts.CoreCmpPartialEqPc.eq
+  ne := core.cmp.PartialEq.ne.trait_default
+    cff_core.Pc.Insts.CoreCmpPartialEqPc
+}
+
+/-- [forge_font::cff_core::OK]
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 38:0-38:19 -/
+@[global_simps, irreducible] def cff_core.OK : Std.U8 := 0#u8
+
+/-- [forge_font::cff_core::TRUNCATED]
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 39:0-39:26 -/
+@[global_simps, irreducible] def cff_core.TRUNCATED : Std.U8 := 1#u8
+
+/-- [forge_font::cff_core::TOO_LONG]
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 40:0-40:25 -/
+@[global_simps, irreducible] def cff_core.TOO_LONG : Std.U8 := 2#u8
+
+/-- [forge_font::cff_core::OVERFLOW]
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 41:0-41:25 -/
+@[global_simps, irreducible] def cff_core.OVERFLOW : Std.U8 := 3#u8
+
+/-- [forge_font::cff_core::NO_MOVETO]
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 42:0-42:26 -/
+@[global_simps, irreducible] def cff_core.NO_MOVETO : Std.U8 := 4#u8
+
+/-- [forge_font::cff_core::MOVETO_OPERANDS]
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 43:0-43:32 -/
+@[global_simps, irreducible] def cff_core.MOVETO_OPERANDS : Std.U8 := 5#u8
+
+/-- [forge_font::cff_core::RLINETO]
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 44:0-44:24 -/
+@[global_simps, irreducible] def cff_core.RLINETO : Std.U8 := 6#u8
+
+/-- [forge_font::cff_core::SHORT]
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 45:0-45:22 -/
+@[global_simps, irreducible] def cff_core.SHORT : Std.U8 := 7#u8
+
+/-- [forge_font::cff_core::RRCURVETO]
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 46:0-46:26 -/
+@[global_simps, irreducible] def cff_core.RRCURVETO : Std.U8 := 8#u8
+
+/-- [forge_font::cff_core::RCURVELINE]
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 47:0-47:27 -/
+@[global_simps, irreducible] def cff_core.RCURVELINE : Std.U8 := 9#u8
+
+/-- [forge_font::cff_core::RLINECURVE]
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 48:0-48:28 -/
+@[global_simps, irreducible] def cff_core.RLINECURVE : Std.U8 := 10#u8
+
+/-- [forge_font::cff_core::VVCURVETO]
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 49:0-49:27 -/
+@[global_simps, irreducible] def cff_core.VVCURVETO : Std.U8 := 11#u8
+
+/-- [forge_font::cff_core::HHCURVETO]
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 50:0-50:27 -/
+@[global_simps, irreducible] def cff_core.HHCURVETO : Std.U8 := 12#u8
+
+/-- [forge_font::cff_core::VHCURVETO]
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 51:0-51:27 -/
+@[global_simps, irreducible] def cff_core.VHCURVETO : Std.U8 := 13#u8
+
+/-- [forge_font::cff_core::NO_NUMBER]
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 52:0-52:27 -/
+@[global_simps, irreducible] def cff_core.NO_NUMBER : Std.U8 := 14#u8
+
+/-- [forge_font::cff_core::NOT_WHOLE]
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 53:0-53:27 -/
+@[global_simps, irreducible] def cff_core.NOT_WHOLE : Std.U8 := 15#u8
+
+/-- [forge_font::cff_core::NOT_THERE]
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 54:0-54:27 -/
+@[global_simps, irreducible] def cff_core.NOT_THERE : Std.U8 := 16#u8
+
+/-- [forge_font::cff_core::NESTED]
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 55:0-55:24 -/
+@[global_simps, irreducible] def cff_core.NESTED : Std.U8 := 17#u8
+
+/-- [forge_font::cff_core::SEAC]
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 56:0-56:22 -/
+@[global_simps, irreducible] def cff_core.SEAC : Std.U8 := 18#u8
+
+/-- [forge_font::cff_core::FLEX]
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 57:0-57:22 -/
+@[global_simps, irreducible] def cff_core.FLEX : Std.U8 := 19#u8
+
+/-- [forge_font::cff_core::DEPRECATED]
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 58:0-58:28 -/
+@[global_simps, irreducible] def cff_core.DEPRECATED : Std.U8 := 20#u8
+
+/-- [forge_font::cff_core::UNKNOWN]
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 59:0-59:25 -/
+@[global_simps, irreducible] def cff_core.UNKNOWN : Std.U8 := 21#u8
+
+/-- [forge_font::cff_core::NO_END]
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 60:0-60:24 -/
+@[global_simps, irreducible] def cff_core.NO_END : Std.U8 := 22#u8
+
+/-- [forge_font::FontError::Unsupported]:
+    Source: 'kernel/forge-font/src/lib.rs', lines 64:4-64:29 -/
+def FontError.Unsupported.constructor (s : Str) : Result FontError := do
+  ok (FontError.Unsupported s)
+
+/-- [forge_font::cff_core::fail]:
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 63:0-89:1
+    Visibility: public -/
+def cff_core.fail (c : Std.U8) : Result FontError := do
+  match c with
+  | 1#uscalar => ok FontError.Truncated
+  | 2#uscalar =>
+    FontError.Unsupported.constructor (toStr "a charstring that runs too long")
+  | 3#uscalar =>
+    FontError.Unsupported.constructor (toStr "a charstring\'s stack overflows")
+  | 4#uscalar =>
+    FontError.Unsupported.constructor (toStr
+      "a charstring drawing before its first moveto")
+  | 5#uscalar =>
+    FontError.Unsupported.constructor (toStr
+      "a charstring moveto of the wrong operands")
+  | 6#uscalar =>
+    FontError.Unsupported.constructor (toStr "rlineto of odd operands")
+  | 7#uscalar =>
+    FontError.Unsupported.constructor (toStr
+      "a charstring operator short of operands")
+  | 8#uscalar =>
+    FontError.Unsupported.constructor (toStr
+      "rrcurveto of operands not in sixes")
+  | 9#uscalar =>
+    FontError.Unsupported.constructor (toStr
+      "rcurveline of the wrong operands")
+  | 10#uscalar =>
+    FontError.Unsupported.constructor (toStr
+      "rlinecurve of the wrong operands")
+  | 11#uscalar =>
+    FontError.Unsupported.constructor (toStr "vvcurveto of the wrong operands")
+  | 12#uscalar =>
+    FontError.Unsupported.constructor (toStr "hhcurveto of the wrong operands")
+  | 13#uscalar =>
+    FontError.Unsupported.constructor (toStr
+      "vhcurveto or hvcurveto of the wrong operands")
+  | 14#uscalar =>
+    FontError.Unsupported.constructor (toStr
+      "a subroutine call with no number")
+  | 15#uscalar =>
+    FontError.Unsupported.constructor (toStr
+      "a subroutine number that is not whole")
+  | 16#uscalar =>
+    FontError.Unsupported.constructor (toStr
+      "a call to a subroutine not there")
+  | 17#uscalar =>
+    FontError.Unsupported.constructor (toStr
+      "charstring subroutines nested too deep")
+  | 18#uscalar =>
+    FontError.Unsupported.constructor (toStr
+      "an accented glyph built by endchar (seac)")
+  | 19#uscalar =>
+    FontError.Unsupported.constructor (toStr "a flex of the wrong operands")
+  | 20#uscalar =>
+    FontError.Unsupported.constructor (toStr
+      "a deprecated or unknown charstring operator")
+  | 21#uscalar =>
+    FontError.Unsupported.constructor (toStr "an unknown charstring operator")
+  | _ =>
+    FontError.Unsupported.constructor (toStr "a charstring that does not end")
+
+/-- [forge_font::cff_core::ONE]
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 106:0-106:23 -/
+@[global_simps, irreducible] def cff_core.ONE : Std.I64 := 65536#i64
+
+/-- [forge_font::cff_core::byte_or0]:
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 108:0-110:1 -/
+def cff_core.byte_or0 (d : Slice Std.U8) (o : Std.Usize) : Result Std.U8 := do
+  let i := Slice.len d
+  if o < i
+  then Slice.index_usize d o
+  else ok 0#u8
+
+/-- [forge_font::cff_core::close]:
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 113:0-124:1
+    Visibility: public -/
+def cff_core.close (p : cff_core.Pen) : Result cff_core.Pen := do
+  match p.start with
+  | none => ok p
+  | some s =>
+    let b ←
+      core.cmp.PartialEq.ne.trait_default cff_core.Pc.Insts.CoreCmpPartialEqPc
+        p.at s
+    let v ←
+      if b
+      then alloc.vec.Vec.push p.contour (cff_core.SegC.Line p.at s)
+      else ok p.contour
+    let b1 ← alloc.vec.Vec.is_empty v
+    if b1
+    then ok { p with start := none, contour := v }
+    else
+      let (c, v1) ←
+        core.mem.take (alloc.vec.Vec.Insts.CoreDefaultDefault cff_core.SegC) v
+      let v2 ← alloc.vec.Vec.push p.out c
+      ok { p with start := none, contour := v1, out := v2 }
+
+/-- [forge_font::cff_core::move_to]:
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 126:0-133:1
+    Visibility: public -/
+def cff_core.move_to
+  (p : cff_core.Pen) (dx : Std.I64) (dy : Std.I64) : Result cff_core.Pen := do
+  let p1 ← cff_core.close p
+  let i ← p1.at.x + dx
+  let i1 ← p1.at.y + dy
+  ok
+    {
+      p1
+        with
+        «at» := { x := i, y := i1 }, start := (some { x := i, y := i1 })
+    }
+
+/-- [forge_font::cff_core::line]:
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 135:0-148:1
+    Visibility: public -/
+def cff_core.line
+  (p : cff_core.Pen) (dx : Std.I64) (dy : Std.I64) :
+  Result (Std.U8 × cff_core.Pen)
+  := do
+  let i ← p.at.x + dx
+  let i1 ← p.at.y + dy
+  let b := core.option.Option.is_none p.start
+  if b
+  then ok (cff_core.NO_MOVETO, { p with «at» := { x := i, y := i1 } })
+  else
+    let b1 ←
+      core.cmp.PartialEq.ne.trait_default cff_core.Pc.Insts.CoreCmpPartialEqPc
+        p.at { x := i, y := i1 }
+    if b1
+    then
+      let v ←
+        alloc.vec.Vec.push p.contour (cff_core.SegC.Line p.at
+          { x := i, y := i1 })
+      ok (cff_core.OK, { p with «at» := { x := i, y := i1 }, contour := v })
+    else ok (cff_core.OK, { p with «at» := { x := i, y := i1 } })
+
+/-- [forge_font::cff_core::curve]:
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 151:0-173:1
+    Visibility: public -/
+def cff_core.curve
+  (p : cff_core.Pen) (d0 : Std.I64) (d1 : Std.I64) (d2 : Std.I64)
+  (d3 : Std.I64) (d4 : Std.I64) (d5 : Std.I64) :
+  Result (Std.U8 × cff_core.Pen)
+  := do
+  let i ← p.at.x + d0
+  let i1 ← p.at.y + d1
+  let i2 ← i + d2
+  let i3 ← i1 + d3
+  let i4 ← i2 + d4
+  let i5 ← i3 + d5
+  let b := core.option.Option.is_none p.start
+  if b
+  then ok (cff_core.NO_MOVETO, { p with «at» := { x := i4, y := i5 } })
+  else
+    let b1 ← cff_core.Pc.Insts.CoreCmpPartialEqPc.eq p.at { x := i, y := i1 }
+    if b1
+    then
+      let b2 ←
+        cff_core.Pc.Insts.CoreCmpPartialEqPc.eq { x := i, y := i1 }
+          { x := i2, y := i3 }
+      if b2
+      then
+        let b3 ←
+          cff_core.Pc.Insts.CoreCmpPartialEqPc.eq { x := i2, y := i3 }
+            { x := i4, y := i5 }
+        if b3
+        then ok (cff_core.OK, { p with «at» := { x := i4, y := i5 } })
+        else
+          let v ←
+            alloc.vec.Vec.push p.contour (cff_core.SegC.Cubic p.at
+              { x := i, y := i1 } { x := i2, y := i3 } { x := i4, y := i5 })
+          ok (cff_core.OK,
+            { p with «at» := { x := i4, y := i5 }, contour := v })
+      else
+        let v ←
+          alloc.vec.Vec.push p.contour (cff_core.SegC.Cubic p.at
+            { x := i, y := i1 } { x := i2, y := i3 } { x := i4, y := i5 })
+        ok (cff_core.OK,
+          { p with «at» := { x := i4, y := i5 }, contour := v })
+    else
+      let v ←
+        alloc.vec.Vec.push p.contour (cff_core.SegC.Cubic p.at
+          { x := i, y := i1 } { x := i2, y := i3 } { x := i4, y := i5 })
+      ok (cff_core.OK, { p with «at» := { x := i4, y := i5 }, contour := v })
+
+/-- [forge_font::cff_core::width]:
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 177:0-189:1 -/
+def cff_core.width
+  (s : cff_core.Stack) (read : Bool) (odd : Bool) (want : Std.Usize) :
+  Result (cff_core.Stack × Bool)
+  := do
+  if read
+  then ok (s, read)
+  else
+    if odd
+    then
+      let i := alloc.vec.Vec.len s.v
+      let i1 ← i % 2#usize
+      if i1 = 1#usize
+      then ok ({ s with lo := 1#usize }, true)
+      else ok (s, true)
+    else
+      let i := alloc.vec.Vec.len s.v
+      if i > want
+      then ok ({ s with lo := 1#usize }, true)
+      else ok (s, true)
+
+/-- [forge_font::cff_core::arg]:
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 192:0-194:1 -/
+def cff_core.arg (s : cff_core.Stack) (k : Std.Usize) : Result Std.I64 := do
+  let i ← s.lo + k
+  alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.I64) s.v i
+
+/-- [forge_font::cff_core::lines]: loop body 0:
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 205:8-208:9 -/
+@[rust_loop_body]
+def cff_core.lines_loop0.body
+  (v : alloc.vec.Vec Std.I64) (i : Std.Usize) (n : Std.Usize)
+  (p : cff_core.Pen) (e : Std.U8) (k : Std.Usize) :
+  Result (ControlFlow (cff_core.Pen × Std.U8 × Std.Usize) (Std.U8 ×
+    cff_core.Pen))
+  := do
+  if e = cff_core.OK
+  then
+    let i1 ← k + 1#usize
+    if i1 < n
+    then
+      let i2 ← cff_core.arg { v, lo := i } k
+      let i3 ← cff_core.arg { v, lo := i } i1
+      let (e1, p1) ← cff_core.line p i2 i3
+      let k1 ← k + 2#usize
+      ok (cont (p1, e1, k1))
+    else ok (done (e, p))
+  else ok (done (e, p))
+
+/-- [forge_font::cff_core::lines]: loop 0:
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 205:8-208:9 -/
+@[rust_loop]
+def cff_core.lines_loop0
+  (p : cff_core.Pen) (v : alloc.vec.Vec Std.I64) (i : Std.Usize)
+  (n : Std.Usize) (e : Std.U8) (k : Std.Usize) :
+  Result (Std.U8 × cff_core.Pen)
+  := do
+  loop
+    (fun (p1, e1, k1) => cff_core.lines_loop0.body v i n p1 e1 k1)
+    (p, e, k)
+
+/-- [forge_font::cff_core::lines]: loop body 1:
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 215:8-220:9 -/
+@[rust_loop_body]
+def cff_core.lines_loop1.body
+  (v : alloc.vec.Vec Std.I64) (i : Std.Usize) (n : Std.Usize)
+  (p : cff_core.Pen) (e : Std.U8) (h : Bool) (k : Std.Usize) :
+  Result (ControlFlow (cff_core.Pen × Std.U8 × Bool × Std.Usize) (Std.U8 ×
+    cff_core.Pen))
+  := do
+  if e = cff_core.OK
+  then
+    if k < n
+    then
+      let v1 ← cff_core.arg { v, lo := i } k
+      let (p1, e1) ←
+        if h
+        then do
+             let (e2, p2) ← cff_core.line p v1 0#i64
+             ok (p2, e2)
+        else do
+             let (e2, p2) ← cff_core.line p 0#i64 v1
+             ok (p2, e2)
+      let k1 ← k + 1#usize
+      ok (cont (p1, e1, ¬ h, k1))
+    else ok (done (e, p))
+  else ok (done (e, p))
+
+/-- [forge_font::cff_core::lines]: loop 1:
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 215:8-220:9 -/
+@[rust_loop]
+def cff_core.lines_loop1
+  (p : cff_core.Pen) (v : alloc.vec.Vec Std.I64) (i : Std.Usize)
+  (n : Std.Usize) (e : Std.U8) (h : Bool) (k : Std.Usize) :
+  Result (Std.U8 × cff_core.Pen)
+  := do
+  loop
+    (fun (p1, e1, h1, k1) => cff_core.lines_loop1.body v i n p1 e1 h1 k1)
+    (p, e, h, k)
+
+/-- [forge_font::cff_core::lines]:
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 197:0-223:1 -/
+def cff_core.lines
+  (p : cff_core.Pen) (s : cff_core.Stack) (op : Std.U8) :
+  Result (Std.U8 × cff_core.Pen)
+  := do
+  let i := alloc.vec.Vec.len s.v
+  let n ← i - s.lo
+  if op = 5#u8
+  then
+    let e ←
+      if n = 0#usize
+      then ok cff_core.RLINETO
+      else
+        do
+        let i1 ← n % 2#usize
+        if i1 != 0#usize
+        then ok cff_core.RLINETO
+        else ok cff_core.OK
+    cff_core.lines_loop0 p s.v s.lo n e 0#usize
+  else
+    let e ← if n < 1#usize
+              then ok cff_core.SHORT
+              else ok cff_core.OK
+    cff_core.lines_loop1 p s.v s.lo n e (op = 6#u8) 0#usize
+
+/-- [forge_font::cff_core::sixes]: loop body 0:
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 229:4-233:5 -/
+@[rust_loop_body]
+def cff_core.sixes_loop.body
+  (s : cff_core.Stack) (k0 : Std.Usize) (n6 : Std.Usize) (p : cff_core.Pen)
+  (e : Std.U8) (j : Std.Usize) :
+  Result (ControlFlow (cff_core.Pen × Std.U8 × Std.Usize) (Std.U8 ×
+    cff_core.Pen))
+  := do
+  if e = cff_core.OK
+  then
+    if j < n6
+    then
+      let i ← 6#usize * j
+      let k ← k0 + i
+      let i1 ← cff_core.arg s k
+      let i2 ← k + 1#usize
+      let i3 ← cff_core.arg s i2
+      let i4 ← k + 2#usize
+      let i5 ← cff_core.arg s i4
+      let i6 ← k + 3#usize
+      let i7 ← cff_core.arg s i6
+      let i8 ← k + 4#usize
+      let i9 ← cff_core.arg s i8
+      let i10 ← k + 5#usize
+      let i11 ← cff_core.arg s i10
+      let (e1, p1) ← cff_core.curve p i1 i3 i5 i7 i9 i11
+      let j1 ← j + 1#usize
+      ok (cont (p1, e1, j1))
+    else ok (done (e, p))
+  else ok (done (e, p))
+
+/-- [forge_font::cff_core::sixes]: loop 0:
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 229:4-233:5 -/
+@[rust_loop]
+def cff_core.sixes_loop
+  (p : cff_core.Pen) (s : cff_core.Stack) (k0 : Std.Usize) (n6 : Std.Usize)
+  (e : Std.U8) (j : Std.Usize) :
+  Result (Std.U8 × cff_core.Pen)
+  := do
+  loop
+    (fun (p1, e1, j1) => cff_core.sixes_loop.body s k0 n6 p1 e1 j1)
+    (p, e, j)
+
+/-- [forge_font::cff_core::sixes]:
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 226:0-235:1 -/
+@[reducible]
+def cff_core.sixes
+  (p : cff_core.Pen) (s : cff_core.Stack) (k0 : Std.Usize) (n6 : Std.Usize) :
+  Result (Std.U8 × cff_core.Pen)
+  := do
+  cff_core.sixes_loop p s k0 n6 cff_core.OK 0#usize
+
+/-- [forge_font::cff_core::curves]: loop body 0:
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 260:8-263:9 -/
+@[rust_loop_body]
+def cff_core.curves_loop.body
+  (v : alloc.vec.Vec Std.I64) (i : Std.Usize) (n : Std.Usize)
+  (p : cff_core.Pen) (e : Std.U8) (k : Std.Usize) :
+  Result (ControlFlow (cff_core.Pen × Std.U8 × Std.Usize) (cff_core.Pen ×
+    Std.U8))
+  := do
+  if e = cff_core.OK
+  then
+    let i1 ← k + 6#usize
+    if i1 < n
+    then
+      let i2 ← cff_core.arg { v, lo := i } k
+      let i3 ← k + 1#usize
+      let i4 ← cff_core.arg { v, lo := i } i3
+      let (e1, p1) ← cff_core.line p i2 i4
+      let k1 ← k + 2#usize
+      ok (cont (p1, e1, k1))
+    else ok (done (p, e))
+  else ok (done (p, e))
+
+/-- [forge_font::cff_core::curves]: loop 0:
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 260:8-263:9 -/
+@[rust_loop]
+def cff_core.curves_loop
+  (p : cff_core.Pen) (v : alloc.vec.Vec Std.I64) (i : Std.Usize)
+  (n : Std.Usize) (e : Std.U8) (k : Std.Usize) :
+  Result (cff_core.Pen × Std.U8)
+  := do
+  loop
+    (fun (p1, e1, k1) => cff_core.curves_loop.body v i n p1 e1 k1)
+    (p, e, k)
+
+/-- [forge_font::cff_core::curves]:
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 238:0-269:1 -/
+def cff_core.curves
+  (p : cff_core.Pen) (s : cff_core.Stack) (op : Std.U8) :
+  Result (Std.U8 × cff_core.Pen)
+  := do
+  let i := alloc.vec.Vec.len s.v
+  let n ← i - s.lo
+  if op = 8#u8
+  then
+    if n = 0#usize
+    then ok (cff_core.RRCURVETO, p)
+    else
+      let i1 ← n % 6#usize
+      if i1 != 0#usize
+      then ok (cff_core.RRCURVETO, p)
+      else let i2 ← n / 6#usize
+           cff_core.sixes p s 0#usize i2
+  else
+    if op = 24#u8
+    then
+      if n < 8#usize
+      then ok (cff_core.RCURVELINE, p)
+      else
+        let i1 ← n - 2#usize
+        let i2 ← i1 % 6#usize
+        if i2 != 0#usize
+        then ok (cff_core.RCURVELINE, p)
+        else
+          let i3 ← i1 / 6#usize
+          let (e, p1) ← cff_core.sixes p s 0#usize i3
+          if e != cff_core.OK
+          then ok (e, p1)
+          else
+            let i4 ← cff_core.arg s i1
+            let i5 ← n - 1#usize
+            let i6 ← cff_core.arg s i5
+            cff_core.line p1 i4 i6
+    else
+      if n < 8#usize
+      then ok (cff_core.RLINECURVE, p)
+      else
+        let i1 ← n - 6#usize
+        let i2 ← i1 % 2#usize
+        if i2 != 0#usize
+        then ok (cff_core.RLINECURVE, p)
+        else
+          let (p1, e) ← cff_core.curves_loop p s.v s.lo n cff_core.OK 0#usize
+          if e != cff_core.OK
+          then ok (e, p1)
+          else let i3 ← n - 6#usize
+               cff_core.sixes p1 s i3 1#usize
+
+/-- [forge_font::cff_core::fours]: loop body 0:
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 280:4-285:5 -/
+@[rust_loop_body]
+def cff_core.fours_loop.body
+  (v : alloc.vec.Vec Std.I64) (i : Std.Usize) (op : Std.U8) (n : Std.Usize)
+  (p : cff_core.Pen) (d1 : Std.I64) (e : Std.U8) (k : Std.Usize) :
+  Result (ControlFlow (cff_core.Pen × Std.I64 × Std.U8 × Std.Usize) (Std.U8
+    × cff_core.Pen))
+  := do
+  if e = cff_core.OK
+  then
+    let i1 ← k + 3#usize
+    if i1 < n
+    then
+      let a ← cff_core.arg { v, lo := i } k
+      let i2 ← k + 1#usize
+      let b ← cff_core.arg { v, lo := i } i2
+      let i3 ← k + 2#usize
+      let c ← cff_core.arg { v, lo := i } i3
+      let d ← cff_core.arg { v, lo := i } i1
+      let (p1, e1) ←
+        if op = 26#u8
+        then do
+             let (e2, p2) ← cff_core.curve p d1 a b c 0#i64 d
+             ok (p2, e2)
+        else do
+             let (e2, p2) ← cff_core.curve p a d1 b c d 0#i64
+             ok (p2, e2)
+      let k1 ← k + 4#usize
+      ok (cont (p1, 0#i64, e1, k1))
+    else ok (done (e, p))
+  else ok (done (e, p))
+
+/-- [forge_font::cff_core::fours]: loop 0:
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 280:4-285:5 -/
+@[rust_loop]
+def cff_core.fours_loop
+  (p : cff_core.Pen) (v : alloc.vec.Vec Std.I64) (i : Std.Usize) (op : Std.U8)
+  (n : Std.Usize) (d1 : Std.I64) (e : Std.U8) (k : Std.Usize) :
+  Result (Std.U8 × cff_core.Pen)
+  := do
+  loop
+    (fun (p1, d11, e1, k1) => cff_core.fours_loop.body v i op n p1 d11 e1 k1)
+    (p, d1, e, k)
+
+/-- [forge_font::cff_core::fours]:
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 272:0-287:1 -/
+def cff_core.fours
+  (p : cff_core.Pen) (s : cff_core.Stack) (op : Std.U8) :
+  Result (Std.U8 × cff_core.Pen)
+  := do
+  let i := alloc.vec.Vec.len s.v
+  let n ← i - s.lo
+  let i1 ← n % 4#usize
+  let (d1, k0) ←
+    if i1 = 1#usize
+    then do
+         let i2 ← cff_core.arg s 0#usize
+         ok (i2, 1#usize)
+    else ok (0#i64, 0#usize)
+  let i2 ← n - k0
+  if i2 = 0#usize
+  then
+    if op = 26#u8
+    then ok (cff_core.VVCURVETO, p)
+    else ok (cff_core.HHCURVETO, p)
+  else
+    let i3 ← i2 % 4#usize
+    if i3 != 0#usize
+    then
+      if op = 26#u8
+      then ok (cff_core.VVCURVETO, p)
+      else ok (cff_core.HHCURVETO, p)
+    else cff_core.fours_loop p s.v s.lo op n d1 cff_core.OK k0
+
+/-- [forge_font::cff_core::alternating]: loop body 0:
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 299:4-305:5 -/
+@[rust_loop_body]
+def cff_core.alternating_loop0.body
+  (v : alloc.vec.Vec Std.I64) (i : Std.Usize) (n : Std.Usize) (m : Std.Usize)
+  (p : cff_core.Pen) (h : Bool) (e : Std.U8) (k : Std.Usize) :
+  Result (ControlFlow (cff_core.Pen × Bool × Std.U8 × Std.Usize) (Std.U8 ×
+    cff_core.Pen))
+  := do
+  if e = cff_core.OK
+  then
+    if k < m
+    then
+      let i1 ← 4#usize * k
+      let a ← cff_core.arg { v, lo := i } i1
+      let i2 ← i1 + 1#usize
+      let b ← cff_core.arg { v, lo := i } i2
+      let i3 ← i1 + 2#usize
+      let c ← cff_core.arg { v, lo := i } i3
+      let i4 ← i1 + 3#usize
+      let d ← cff_core.arg { v, lo := i } i4
+      let i5 ← k + 1#usize
+      let last ←
+        if i5 = m
+        then
+          do
+          let i6 ← n % 4#usize
+          if i6 = 1#usize
+          then let i7 ← n - 1#usize
+               cff_core.arg { v, lo := i } i7
+          else ok 0#i64
+        else ok 0#i64
+      let (p1, e1) ←
+        if h
+        then
+          do
+          let (e2, p2) ← cff_core.curve p a 0#i64 b c last d
+          ok (p2, e2)
+        else
+          do
+          let (e2, p2) ← cff_core.curve p 0#i64 a b c d last
+          ok (p2, e2)
+      ok (cont (p1, ¬ h, e1, i5))
+    else ok (done (e, p))
+  else ok (done (e, p))
+
+/-- [forge_font::cff_core::alternating]: loop 0:
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 299:4-305:5 -/
+@[rust_loop]
+def cff_core.alternating_loop0
+  (p : cff_core.Pen) (v : alloc.vec.Vec Std.I64) (i : Std.Usize)
+  (n : Std.Usize) (h : Bool) (m : Std.Usize) (e : Std.U8) (k : Std.Usize) :
+  Result (Std.U8 × cff_core.Pen)
+  := do
+  loop
+    (fun (p1, h1, e1, k1) => cff_core.alternating_loop0.body v i n m p1 h1 e1
+      k1)
+    (p, h, e, k)
+
+/-- [forge_font::cff_core::alternating]: loop body 1:
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 299:4-305:5 -/
+@[rust_loop_body]
+def cff_core.alternating_loop1.body
+  (v : alloc.vec.Vec Std.I64) (i : Std.Usize) (n : Std.Usize) (m : Std.Usize)
+  (p : cff_core.Pen) (h : Bool) (e : Std.U8) (k : Std.Usize) :
+  Result (ControlFlow (cff_core.Pen × Bool × Std.U8 × Std.Usize) (Std.U8 ×
+    cff_core.Pen))
+  := do
+  if e = cff_core.OK
+  then
+    if k < m
+    then
+      let i1 ← 4#usize * k
+      let a ← cff_core.arg { v, lo := i } i1
+      let i2 ← i1 + 1#usize
+      let b ← cff_core.arg { v, lo := i } i2
+      let i3 ← i1 + 2#usize
+      let c ← cff_core.arg { v, lo := i } i3
+      let i4 ← i1 + 3#usize
+      let d ← cff_core.arg { v, lo := i } i4
+      let i5 ← k + 1#usize
+      let last ←
+        if i5 = m
+        then
+          do
+          let i6 ← n % 4#usize
+          if i6 = 1#usize
+          then let i7 ← n - 1#usize
+               cff_core.arg { v, lo := i } i7
+          else ok 0#i64
+        else ok 0#i64
+      let (p1, e1) ←
+        if h
+        then
+          do
+          let (e2, p2) ← cff_core.curve p a 0#i64 b c last d
+          ok (p2, e2)
+        else
+          do
+          let (e2, p2) ← cff_core.curve p 0#i64 a b c d last
+          ok (p2, e2)
+      ok (cont (p1, ¬ h, e1, i5))
+    else ok (done (e, p))
+  else ok (done (e, p))
+
+/-- [forge_font::cff_core::alternating]: loop 1:
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 299:4-305:5 -/
+@[rust_loop]
+def cff_core.alternating_loop1
+  (p : cff_core.Pen) (v : alloc.vec.Vec Std.I64) (i : Std.Usize)
+  (n : Std.Usize) (h : Bool) (m : Std.Usize) (e : Std.U8) (k : Std.Usize) :
+  Result (Std.U8 × cff_core.Pen)
+  := do
+  loop
+    (fun (p1, h1, e1, k1) => cff_core.alternating_loop1.body v i n m p1 h1 e1
+      k1)
+    (p, h, e, k)
+
+/-- [forge_font::cff_core::alternating]:
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 290:0-307:1 -/
+def cff_core.alternating
+  (p : cff_core.Pen) (s : cff_core.Stack) (op : Std.U8) :
+  Result (Std.U8 × cff_core.Pen)
+  := do
+  let i := alloc.vec.Vec.len s.v
+  let n ← i - s.lo
+  if n < 4#usize
+  then ok (cff_core.VHCURVETO, p)
+  else
+    let i1 ← n % 4#usize
+    if i1 = 0#usize
+    then
+      let m ← n / 4#usize
+      cff_core.alternating_loop0 p s.v s.lo n (op = 31#u8) m cff_core.OK
+        0#usize
+    else
+      if i1 = 1#usize
+      then
+        let m ← n / 4#usize
+        cff_core.alternating_loop1 p s.v s.lo n (op = 31#u8) m cff_core.OK
+          0#usize
+      else ok (cff_core.VHCURVETO, p)
+
+/-- [forge_font::cff_core::abs]:
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 309:0-311:1 -/
+def cff_core.abs (v : Std.I64) : Result Std.I64 := do
+  if v < 0#i64
+  then -. v
+  else ok v
+
+/-- [forge_font::cff_core::flex1]:
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 350:0-359:1 -/
+def cff_core.flex1
+  (p : cff_core.Pen) (s : cff_core.Stack) :
+  Result (Std.U8 × cff_core.Pen)
+  := do
+  let i ← cff_core.arg s 0#usize
+  let i1 ← cff_core.arg s 2#usize
+  let i2 ← i + i1
+  let i3 ← cff_core.arg s 4#usize
+  let i4 ← i2 + i3
+  let i5 ← cff_core.arg s 6#usize
+  let i6 ← i4 + i5
+  let i7 ← cff_core.arg s 8#usize
+  let dx ← i6 + i7
+  let i8 ← cff_core.arg s 1#usize
+  let i9 ← cff_core.arg s 3#usize
+  let i10 ← i8 + i9
+  let i11 ← cff_core.arg s 5#usize
+  let i12 ← i10 + i11
+  let i13 ← cff_core.arg s 7#usize
+  let i14 ← i12 + i13
+  let i15 ← cff_core.arg s 9#usize
+  let dy ← i14 + i15
+  let i16 ← cff_core.abs dx
+  let i17 ← cff_core.abs dy
+  let (ex, ey) ←
+    if i16 > i17
+    then do
+         let i18 ← cff_core.arg s 10#usize
+         let i19 ← -. dy
+         ok (i18, i19)
+    else do
+         let i18 ← -. dx
+         let i19 ← cff_core.arg s 10#usize
+         ok (i18, i19)
+  let (e, p1) ← cff_core.curve p i i8 i1 i9 i3 i11
+  if e != cff_core.OK
+  then ok (e, p1)
+  else cff_core.curve p1 i5 i13 i7 i15 ex ey
+
+/-- [forge_font::cff_core::hflex1]:
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 339:0-347:1 -/
+def cff_core.hflex1
+  (p : cff_core.Pen) (s : cff_core.Stack) :
+  Result (Std.U8 × cff_core.Pen)
+  := do
+  let dx1 ← cff_core.arg s 0#usize
+  let dy1 ← cff_core.arg s 1#usize
+  let dx2 ← cff_core.arg s 2#usize
+  let dy2 ← cff_core.arg s 3#usize
+  let dx3 ← cff_core.arg s 4#usize
+  let dx4 ← cff_core.arg s 5#usize
+  let dx5 ← cff_core.arg s 6#usize
+  let dy5 ← cff_core.arg s 7#usize
+  let dx6 ← cff_core.arg s 8#usize
+  let (e, p1) ← cff_core.curve p dx1 dy1 dx2 dy2 dx3 0#i64
+  if e != cff_core.OK
+  then ok (e, p1)
+  else
+    let i ← dy1 + dy2
+    let i1 ← i + dy5
+    let i2 ← -. i1
+    cff_core.curve p1 dx4 0#i64 dx5 dy5 dx6 i2
+
+/-- [forge_font::cff_core::hflex]:
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 329:0-337:1 -/
+def cff_core.hflex
+  (p : cff_core.Pen) (s : cff_core.Stack) :
+  Result (Std.U8 × cff_core.Pen)
+  := do
+  let dx1 ← cff_core.arg s 0#usize
+  let dx2 ← cff_core.arg s 1#usize
+  let dy2 ← cff_core.arg s 2#usize
+  let dx3 ← cff_core.arg s 3#usize
+  let dx4 ← cff_core.arg s 4#usize
+  let dx5 ← cff_core.arg s 5#usize
+  let dx6 ← cff_core.arg s 6#usize
+  let (e, p1) ← cff_core.curve p dx1 0#i64 dx2 dy2 dx3 0#i64
+  if e != cff_core.OK
+  then ok (e, p1)
+  else let i ← -. dy2
+       cff_core.curve p1 dx4 0#i64 dx5 i dx6 0#i64
+
+/-- [forge_font::cff_core::flex]:
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 314:0-327:1 -/
+def cff_core.flex
+  (p : cff_core.Pen) (s : cff_core.Stack) (b1 : Std.U8) :
+  Result (Std.U8 × cff_core.Pen)
+  := do
+  let i := alloc.vec.Vec.len s.v
+  let n ← i - s.lo
+  if b1 = 35#u8
+  then
+    if n = 13#usize
+    then cff_core.sixes p s 0#usize 2#usize
+    else ok (cff_core.FLEX, p)
+  else
+    if b1 = 34#u8
+    then if n = 7#usize
+         then cff_core.hflex p s
+         else ok (cff_core.FLEX, p)
+    else
+      if b1 = 36#u8
+      then if n = 9#usize
+           then cff_core.hflex1 p s
+           else ok (cff_core.FLEX, p)
+      else
+        if b1 = 37#u8
+        then if n = 11#usize
+             then cff_core.flex1 p s
+             else ok (cff_core.FLEX, p)
+        else ok (cff_core.DEPRECATED, p)
+
+/-- [forge_font::cff_core::bias]:
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 362:0-370:1 -/
+def cff_core.bias (n : Std.Usize) : Result Std.I64 := do
+  if n < 1240#usize
+  then ok 107#i64
+  else if n < 33900#usize
+       then ok 1131#i64
+       else ok 32768#i64
+
+/-- [forge_font::cff_core::subr]:
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 374:0-384:1 -/
+def cff_core.subr
+  (d : Slice Std.U8) (offs : Slice Std.Usize) (k : Std.I64) :
+  Result (Option (Std.Usize × Std.Usize))
+  := do
+  let n := Slice.len offs
+  let count ← if n = 0#usize
+                then ok 0#usize
+                else n - 1#usize
+  let i ← cff_core.bias count
+  let i1 ← k + i
+  if i1 < 0#i64
+  then ok none
+  else
+    let i2 ← lift (IScalar.hcast .U64 i1)
+    let i3 ← lift (UScalar.cast .U64 count)
+    if i2 >= i3
+    then ok none
+    else
+      let i4 ← lift (IScalar.hcast .Usize i1)
+      let a ← Slice.index_usize offs i4
+      let i5 ← i4 + 1#usize
+      let b ← Slice.index_usize offs i5
+      if a <= b
+      then let i6 := Slice.len d
+           if b <= i6
+           then ok (some (a, b))
+           else ok none
+      else ok none
+
+/-- [forge_font::cff_core::operand]:
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 396:0-427:1 -/
+def cff_core.operand
+  (d : Slice Std.U8) (o : Std.Usize) (e : Std.Usize) (b0 : Std.U8) :
+  Result (Option (Std.I64 × Std.Usize))
+  := do
+  if b0 = 28#u8
+  then
+    let i ← o + 1#usize
+    if i < e
+    then
+      let i1 ← cff_core.byte_or0 d o
+      let i2 ← lift (UScalar.cast .U16 i1)
+      let i3 ← i2 <<< 8#i32
+      let i4 ← cff_core.byte_or0 d i
+      let i5 ← lift (UScalar.cast .U16 i4)
+      let i6 ← lift (i3 ||| i5)
+      let i7 ← lift (UScalar.hcast .I16 i6)
+      let w ← lift (IScalar.cast .I64 i7)
+      let i8 ← w * cff_core.ONE
+      let i9 ← o + 2#usize
+      ok (some (i8, i9))
+    else ok none
+  else
+    if b0 <= 246#u8
+    then
+      let i ← lift (UScalar.hcast .I64 b0)
+      let i1 ← i - 139#i64
+      let i2 ← i1 * cff_core.ONE
+      ok (some (i2, o))
+    else
+      if b0 <= 250#u8
+      then
+        if o < e
+        then
+          let i ← lift (UScalar.hcast .I64 b0)
+          let i1 ← i - 247#i64
+          let i2 ← i1 * 256#i64
+          let i3 ← cff_core.byte_or0 d o
+          let i4 ← lift (UScalar.hcast .I64 i3)
+          let i5 ← i2 + i4
+          let i6 ← i5 + 108#i64
+          let i7 ← i6 * cff_core.ONE
+          let i8 ← o + 1#usize
+          ok (some (i7, i8))
+        else ok none
+      else
+        if b0 <= 254#u8
+        then
+          if o < e
+          then
+            let i ← lift (UScalar.hcast .I64 b0)
+            let i1 ← i - 251#i64
+            let i2 ← -. i1
+            let i3 ← i2 * 256#i64
+            let i4 ← cff_core.byte_or0 d o
+            let i5 ← lift (UScalar.hcast .I64 i4)
+            let i6 ← i3 - i5
+            let i7 ← i6 - 108#i64
+            let i8 ← i7 * cff_core.ONE
+            let i9 ← o + 1#usize
+            ok (some (i8, i9))
+          else ok none
+        else
+          let i ← o + 3#usize
+          if i < e
+          then
+            let i1 ← cff_core.byte_or0 d o
+            let i2 ← lift (UScalar.cast .U32 i1)
+            let i3 ← i2 <<< 24#i32
+            let i4 ← o + 1#usize
+            let i5 ← cff_core.byte_or0 d i4
+            let i6 ← lift (UScalar.cast .U32 i5)
+            let i7 ← i6 <<< 16#i32
+            let i8 ← lift (i3 ||| i7)
+            let i9 ← o + 2#usize
+            let i10 ← cff_core.byte_or0 d i9
+            let i11 ← lift (UScalar.cast .U32 i10)
+            let i12 ← i11 <<< 8#i32
+            let i13 ← lift (i8 ||| i12)
+            let i14 ← cff_core.byte_or0 d i
+            let i15 ← lift (UScalar.cast .U32 i14)
+            let w ← lift (i13 ||| i15)
+            let i16 ← lift (UScalar.hcast .I32 w)
+            let i17 ← lift (IScalar.cast .I64 i16)
+            let i18 ← o + 4#usize
+            ok (some (i17, i18))
+          else ok none
+
+/-- [forge_font::cff_core::op]:
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 525:0-597:1 -/
+def cff_core.op
+  (d : Slice Std.U8) (f : cff_core.Frame) (p : cff_core.Pen)
+  (s : cff_core.Stack) (stems : Std.Usize) (width_read : Bool) (done1 : Bool)
+  (b0 : Std.U8) :
+  Result (Std.U8 × cff_core.Frame × cff_core.Pen × cff_core.Stack ×
+    Std.Usize × Bool × Bool)
+  := do
+  if b0 = 1#u8
+  then
+    let (s1, width_read1) ← cff_core.width s width_read true 0#usize
+    let i := alloc.vec.Vec.len s1.v
+    let i1 ← i - s1.lo
+    let i2 ← i1 / 2#usize
+    let stems1 ← stems + i2
+    ok (cff_core.OK, f, p, s1, stems1, width_read1, done1)
+  else
+    if b0 = 3#u8
+    then
+      let (s1, width_read1) ← cff_core.width s width_read true 0#usize
+      let i := alloc.vec.Vec.len s1.v
+      let i1 ← i - s1.lo
+      let i2 ← i1 / 2#usize
+      let stems1 ← stems + i2
+      ok (cff_core.OK, f, p, s1, stems1, width_read1, done1)
+    else
+      if b0 = 18#u8
+      then
+        let (s1, width_read1) ← cff_core.width s width_read true 0#usize
+        let i := alloc.vec.Vec.len s1.v
+        let i1 ← i - s1.lo
+        let i2 ← i1 / 2#usize
+        let stems1 ← stems + i2
+        ok (cff_core.OK, f, p, s1, stems1, width_read1, done1)
+      else
+        if b0 = 23#u8
+        then
+          let (s1, width_read1) ← cff_core.width s width_read true 0#usize
+          let i := alloc.vec.Vec.len s1.v
+          let i1 ← i - s1.lo
+          let i2 ← i1 / 2#usize
+          let stems1 ← stems + i2
+          ok (cff_core.OK, f, p, s1, stems1, width_read1, done1)
+        else
+          if b0 = 19#u8
+          then
+            let (s1, width_read1) ← cff_core.width s width_read true 0#usize
+            let i := alloc.vec.Vec.len s1.v
+            let i1 ← i - s1.lo
+            let i2 ← i1 / 2#usize
+            let stems1 ← stems + i2
+            let skip ← core.num.Usize.div_ceil stems1 8#usize
+            let i3 ← f.e - f.o
+            if skip > i3
+            then
+              ok (cff_core.TRUNCATED, { f with o := f.e }, p, s1, stems1,
+                width_read1, done1)
+            else
+              let i4 ← f.o + skip
+              ok (cff_core.OK, { f with o := i4 }, p, s1, stems1, width_read1,
+                done1)
+          else
+            if b0 = 20#u8
+            then
+              let (s1, width_read1) ←
+                cff_core.width s width_read true 0#usize
+              let i := alloc.vec.Vec.len s1.v
+              let i1 ← i - s1.lo
+              let i2 ← i1 / 2#usize
+              let stems1 ← stems + i2
+              let skip ← core.num.Usize.div_ceil stems1 8#usize
+              let i3 ← f.e - f.o
+              if skip > i3
+              then
+                ok (cff_core.TRUNCATED, { f with o := f.e }, p, s1, stems1,
+                  width_read1, done1)
+              else
+                let i4 ← f.o + skip
+                ok (cff_core.OK, { f with o := i4 }, p, s1, stems1,
+                  width_read1, done1)
+            else
+              if b0 = 21#u8
+              then
+                let want ← if b0 = 21#u8
+                             then ok 2#usize
+                             else ok 1#usize
+                let (s1, width_read1) ←
+                  cff_core.width s width_read false want
+                let i := alloc.vec.Vec.len s1.v
+                let i1 ← i - s1.lo
+                if i1 != want
+                then
+                  ok (cff_core.MOVETO_OPERANDS, f, p, s1, stems, width_read1,
+                    done1)
+                else
+                  if b0 = 21#u8
+                  then
+                    let i2 ← cff_core.arg s1 0#usize
+                    let i3 ← cff_core.arg s1 1#usize
+                    let p1 ← cff_core.move_to p i2 i3
+                    ok (cff_core.OK, f, p1, s1, stems, width_read1, done1)
+                  else
+                    if b0 = 22#u8
+                    then
+                      let i2 ← cff_core.arg s1 0#usize
+                      let p1 ← cff_core.move_to p i2 0#i64
+                      ok (cff_core.OK, f, p1, s1, stems, width_read1, done1)
+                    else
+                      let i2 ← cff_core.arg s1 0#usize
+                      let p1 ← cff_core.move_to p 0#i64 i2
+                      ok (cff_core.OK, f, p1, s1, stems, width_read1, done1)
+              else
+                if b0 = 22#u8
+                then
+                  let want ← if b0 = 21#u8
+                               then ok 2#usize
+                               else ok 1#usize
+                  let (s1, width_read1) ←
+                    cff_core.width s width_read false want
+                  let i := alloc.vec.Vec.len s1.v
+                  let i1 ← i - s1.lo
+                  if i1 != want
+                  then
+                    ok (cff_core.MOVETO_OPERANDS, f, p, s1, stems, width_read1,
+                      done1)
+                  else
+                    if b0 = 21#u8
+                    then
+                      let i2 ← cff_core.arg s1 0#usize
+                      let i3 ← cff_core.arg s1 1#usize
+                      let p1 ← cff_core.move_to p i2 i3
+                      ok (cff_core.OK, f, p1, s1, stems, width_read1, done1)
+                    else
+                      if b0 = 22#u8
+                      then
+                        let i2 ← cff_core.arg s1 0#usize
+                        let p1 ← cff_core.move_to p i2 0#i64
+                        ok (cff_core.OK, f, p1, s1, stems, width_read1, done1)
+                      else
+                        let i2 ← cff_core.arg s1 0#usize
+                        let p1 ← cff_core.move_to p 0#i64 i2
+                        ok (cff_core.OK, f, p1, s1, stems, width_read1, done1)
+                else
+                  if b0 = 4#u8
+                  then
+                    let want ← if b0 = 21#u8
+                                 then ok 2#usize
+                                 else ok 1#usize
+                    let (s1, width_read1) ←
+                      cff_core.width s width_read false want
+                    let i := alloc.vec.Vec.len s1.v
+                    let i1 ← i - s1.lo
+                    if i1 != want
+                    then
+                      ok (cff_core.MOVETO_OPERANDS, f, p, s1, stems,
+                        width_read1, done1)
+                    else
+                      if b0 = 21#u8
+                      then
+                        let i2 ← cff_core.arg s1 0#usize
+                        let i3 ← cff_core.arg s1 1#usize
+                        let p1 ← cff_core.move_to p i2 i3
+                        ok (cff_core.OK, f, p1, s1, stems, width_read1, done1)
+                      else
+                        if b0 = 22#u8
+                        then
+                          let i2 ← cff_core.arg s1 0#usize
+                          let p1 ← cff_core.move_to p i2 0#i64
+                          ok (cff_core.OK, f, p1, s1, stems, width_read1,
+                            done1)
+                        else
+                          let i2 ← cff_core.arg s1 0#usize
+                          let p1 ← cff_core.move_to p 0#i64 i2
+                          ok (cff_core.OK, f, p1, s1, stems, width_read1,
+                            done1)
+                  else
+                    if b0 = 5#u8
+                    then
+                      let (i, p1) ← cff_core.lines p s b0
+                      ok (i, f, p1, s, stems, width_read, done1)
+                    else
+                      if b0 = 6#u8
+                      then
+                        let (i, p1) ← cff_core.lines p s b0
+                        ok (i, f, p1, s, stems, width_read, done1)
+                      else
+                        if b0 = 7#u8
+                        then
+                          let (i, p1) ← cff_core.lines p s b0
+                          ok (i, f, p1, s, stems, width_read, done1)
+                        else
+                          if b0 = 8#u8
+                          then
+                            let (i, p1) ← cff_core.curves p s b0
+                            ok (i, f, p1, s, stems, width_read, done1)
+                          else
+                            if b0 = 24#u8
+                            then
+                              let (i, p1) ← cff_core.curves p s b0
+                              ok (i, f, p1, s, stems, width_read, done1)
+                            else
+                              if b0 = 25#u8
+                              then
+                                let (i, p1) ← cff_core.curves p s b0
+                                ok (i, f, p1, s, stems, width_read, done1)
+                              else
+                                if b0 = 26#u8
+                                then
+                                  let (i, p1) ← cff_core.fours p s b0
+                                  ok (i, f, p1, s, stems, width_read, done1)
+                                else
+                                  if b0 = 27#u8
+                                  then
+                                    let (i, p1) ← cff_core.fours p s b0
+                                    ok (i, f, p1, s, stems, width_read, done1)
+                                  else
+                                    if b0 = 30#u8
+                                    then
+                                      let (i, p1) ←
+                                        cff_core.alternating p s b0
+                                      ok (i, f, p1, s, stems, width_read,
+                                        done1)
+                                    else
+                                      if b0 = 31#u8
+                                      then
+                                        let (i, p1) ←
+                                          cff_core.alternating p s b0
+                                        ok (i, f, p1, s, stems, width_read,
+                                          done1)
+                                      else
+                                        if b0 = 14#u8
+                                        then
+                                          let (s1, width_read1) ←
+                                            cff_core.width s width_read true
+                                              0#usize
+                                          let i := alloc.vec.Vec.len s1.v
+                                          let i1 ← i - s1.lo
+                                          if i1 >= 4#usize
+                                          then
+                                            ok (cff_core.SEAC, f, p, s1, stems,
+                                              width_read1, done1)
+                                          else
+                                            let p1 ← cff_core.close p
+                                            ok (cff_core.OK, f, p1, s1, stems,
+                                              width_read1, true)
+                                        else
+                                          if b0 = 12#u8
+                                          then
+                                            if f.o < f.e
+                                            then
+                                              let b1 ←
+                                                cff_core.byte_or0 d f.o
+                                              let i ← f.o + 1#usize
+                                              let (i1, p1) ←
+                                                cff_core.flex p s b1
+                                              ok (i1, { f with o := i }, p1, s,
+                                                stems, width_read, done1)
+                                            else
+                                              ok (cff_core.TRUNCATED, f, p, s,
+                                                stems, width_read, done1)
+                                          else
+                                            ok (cff_core.UNKNOWN, f, p, s,
+                                              stems, width_read, done1)
+
+/-- [forge_font::cff_core::run]: loop body 0:
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 455:4-512:5
+    Visibility: public -/
+@[rust_loop_body]
+def cff_core.run_loop.body
+  (d : Slice Std.U8) (gsubrs : Slice Std.Usize) («local» : Slice Std.Usize)
+  (p : cff_core.Pen) (v : alloc.vec.Vec Std.I64) (f : cff_core.Frame)
+  (frames : alloc.vec.Vec cff_core.Frame) (stems : Std.Usize)
+  (width_read : Bool) (steps : Std.Usize) (done1 : Bool) (left : Bool)
+  (err : Std.U8) :
+  Result (ControlFlow (cff_core.Pen × (alloc.vec.Vec Std.I64) ×
+    cff_core.Frame × (alloc.vec.Vec cff_core.Frame) × Std.Usize × Bool ×
+    Std.Usize × Bool × Bool × Std.U8) (cff_core.Pen × Bool × Std.U8))
+  := do
+  if err = cff_core.OK
+  then
+    if done1
+    then ok (done (p, done1, err))
+    else
+      if left
+      then ok (done (p, done1, err))
+      else
+        if f.o < f.e
+        then
+          if f.o >= f.e
+          then
+            let (o, frames1) ← alloc.vec.Vec.pop alloc.alloc.Global frames
+            let f1 ← lift (core.option.Option.unwrap_or o f)
+            ok (cont (p, v, f1, frames1, stems, width_read, steps, done1, left,
+              err))
+          else
+            if steps = 0#usize
+            then
+              ok (cont (p, v, f, frames, stems, width_read, steps, done1, left,
+                cff_core.TOO_LONG))
+            else
+              let steps1 ← steps - 1#usize
+              let b0 ← cff_core.byte_or0 d f.o
+              let i ← f.o + 1#usize
+              if b0 >= 32#u8
+              then
+                let o ← cff_core.operand d i f.e b0
+                match o with
+                | none =>
+                  ok (cont (p, v, { f with o := i }, frames, stems, width_read,
+                    steps1, done1, left, cff_core.TRUNCATED))
+                | some p1 =>
+                  let (v1, o1) := p1
+                  let i1 := alloc.vec.Vec.len v
+                  if i1 >= cff_core.STACK
+                  then
+                    ok (cont (p, v, { f with o := o1 }, frames, stems,
+                      width_read, steps1, done1, left, cff_core.OVERFLOW))
+                  else
+                    let v2 ← alloc.vec.Vec.push v v1
+                    ok (cont (p, v2, { f with o := o1 }, frames, stems,
+                      width_read, steps1, done1, left, err))
+              else
+                if b0 = 28#u8
+                then
+                  let o ← cff_core.operand d i f.e b0
+                  match o with
+                  | none =>
+                    ok (cont (p, v, { f with o := i }, frames, stems,
+                      width_read, steps1, done1, left, cff_core.TRUNCATED))
+                  | some p1 =>
+                    let (v1, o1) := p1
+                    let i1 := alloc.vec.Vec.len v
+                    if i1 >= cff_core.STACK
+                    then
+                      ok (cont (p, v, { f with o := o1 }, frames, stems,
+                        width_read, steps1, done1, left, cff_core.OVERFLOW))
+                    else
+                      let v2 ← alloc.vec.Vec.push v v1
+                      ok (cont (p, v2, { f with o := o1 }, frames, stems,
+                        width_read, steps1, done1, left, err))
+                else
+                  if b0 = 10#u8
+                  then
+                    let (o, v1) ← alloc.vec.Vec.pop alloc.alloc.Global v
+                    match o with
+                    | none =>
+                      ok (cont (p, v1, { f with o := i }, frames, stems,
+                        width_read, steps1, done1, left, cff_core.NO_NUMBER))
+                    | some k =>
+                      let i1 ← k % cff_core.ONE
+                      if i1 != 0#i64
+                      then
+                        ok (cont (p, v1, { f with o := i }, frames, stems,
+                          width_read, steps1, done1, left, cff_core.NOT_WHOLE))
+                      else
+                        let idx ←
+                          if b0 = 10#u8
+                          then ok «local»
+                          else ok gsubrs
+                        let i2 ← k / cff_core.ONE
+                        let o1 ← cff_core.subr d idx i2
+                        match o1 with
+                        | none =>
+                          ok (cont (p, v1, { f with o := i }, frames, stems,
+                            width_read, steps1, done1, left,
+                            cff_core.NOT_THERE))
+                        | some p1 =>
+                          let (a, b) := p1
+                          let i3 := alloc.vec.Vec.len frames
+                          let i4 ← i3 + 1#usize
+                          if i4 > cff_core.NESTING
+                          then
+                            ok (cont (p, v1, { f with o := i }, frames, stems,
+                              width_read, steps1, done1, left,
+                              cff_core.NESTED))
+                          else
+                            let frames1 ←
+                              alloc.vec.Vec.push frames { f with o := i }
+                            ok (cont (p, v1, { s := a, e := b, o := a },
+                              frames1, stems, width_read, steps1, done1, left,
+                              err))
+                  else
+                    if b0 = 29#u8
+                    then
+                      let (o, v1) ← alloc.vec.Vec.pop alloc.alloc.Global v
+                      match o with
+                      | none =>
+                        ok (cont (p, v1, { f with o := i }, frames, stems,
+                          width_read, steps1, done1, left, cff_core.NO_NUMBER))
+                      | some k =>
+                        let i1 ← k % cff_core.ONE
+                        if i1 != 0#i64
+                        then
+                          ok (cont (p, v1, { f with o := i }, frames, stems,
+                            width_read, steps1, done1, left,
+                            cff_core.NOT_WHOLE))
+                        else
+                          let idx ←
+                            if b0 = 10#u8
+                            then ok «local»
+                            else ok gsubrs
+                          let i2 ← k / cff_core.ONE
+                          let o1 ← cff_core.subr d idx i2
+                          match o1 with
+                          | none =>
+                            ok (cont (p, v1, { f with o := i }, frames, stems,
+                              width_read, steps1, done1, left,
+                              cff_core.NOT_THERE))
+                          | some p1 =>
+                            let (a, b) := p1
+                            let i3 := alloc.vec.Vec.len frames
+                            let i4 ← i3 + 1#usize
+                            if i4 > cff_core.NESTING
+                            then
+                              ok (cont (p, v1, { f with o := i }, frames,
+                                stems, width_read, steps1, done1, left,
+                                cff_core.NESTED))
+                            else
+                              let frames1 ←
+                                alloc.vec.Vec.push frames { f with o := i }
+                              ok (cont (p, v1, { s := a, e := b, o := a },
+                                frames1, stems, width_read, steps1, done1,
+                                left, err))
+                    else
+                      if b0 = 11#u8
+                      then
+                        let (o, frames1) ←
+                          alloc.vec.Vec.pop alloc.alloc.Global frames
+                        match o with
+                        | none =>
+                          ok (cont (p, v, { f with o := i }, frames1, stems,
+                            width_read, steps1, done1, true, err))
+                        | some g =>
+                          ok (cont (p, v, g, frames1, stems, width_read,
+                            steps1, done1, left, err))
+                      else
+                        let (err1, f1, p1, s, stems1, width_read1, done2) ←
+                          cff_core.op d { f with o := i } p
+                            { v, lo := 0#usize } stems width_read done1 b0
+                        let v1 ← alloc.vec.Vec.clear alloc.alloc.Global s.v
+                        ok (cont (p1, v1, f1, frames, stems1, width_read1,
+                          steps1, done2, left, err1))
+        else
+          let b ← alloc.vec.Vec.is_empty frames
+          if b
+          then ok (done (p, done1, err))
+          else
+            if f.o >= f.e
+            then
+              let (o, frames1) ← alloc.vec.Vec.pop alloc.alloc.Global frames
+              let f1 ← lift (core.option.Option.unwrap_or o f)
+              ok (cont (p, v, f1, frames1, stems, width_read, steps, done1,
+                left, err))
+            else
+              if steps = 0#usize
+              then
+                ok (cont (p, v, f, frames, stems, width_read, steps, done1,
+                  left, cff_core.TOO_LONG))
+              else
+                let steps1 ← steps - 1#usize
+                let b0 ← cff_core.byte_or0 d f.o
+                let i ← f.o + 1#usize
+                if b0 >= 32#u8
+                then
+                  let o ← cff_core.operand d i f.e b0
+                  match o with
+                  | none =>
+                    ok (cont (p, v, { f with o := i }, frames, stems,
+                      width_read, steps1, done1, left, cff_core.TRUNCATED))
+                  | some p1 =>
+                    let (v1, o1) := p1
+                    let i1 := alloc.vec.Vec.len v
+                    if i1 >= cff_core.STACK
+                    then
+                      ok (cont (p, v, { f with o := o1 }, frames, stems,
+                        width_read, steps1, done1, left, cff_core.OVERFLOW))
+                    else
+                      let v2 ← alloc.vec.Vec.push v v1
+                      ok (cont (p, v2, { f with o := o1 }, frames, stems,
+                        width_read, steps1, done1, left, err))
+                else
+                  if b0 = 28#u8
+                  then
+                    let o ← cff_core.operand d i f.e b0
+                    match o with
+                    | none =>
+                      ok (cont (p, v, { f with o := i }, frames, stems,
+                        width_read, steps1, done1, left, cff_core.TRUNCATED))
+                    | some p1 =>
+                      let (v1, o1) := p1
+                      let i1 := alloc.vec.Vec.len v
+                      if i1 >= cff_core.STACK
+                      then
+                        ok (cont (p, v, { f with o := o1 }, frames, stems,
+                          width_read, steps1, done1, left, cff_core.OVERFLOW))
+                      else
+                        let v2 ← alloc.vec.Vec.push v v1
+                        ok (cont (p, v2, { f with o := o1 }, frames, stems,
+                          width_read, steps1, done1, left, err))
+                  else
+                    if b0 = 10#u8
+                    then
+                      let (o, v1) ← alloc.vec.Vec.pop alloc.alloc.Global v
+                      match o with
+                      | none =>
+                        ok (cont (p, v1, { f with o := i }, frames, stems,
+                          width_read, steps1, done1, left, cff_core.NO_NUMBER))
+                      | some k =>
+                        let i1 ← k % cff_core.ONE
+                        if i1 != 0#i64
+                        then
+                          ok (cont (p, v1, { f with o := i }, frames, stems,
+                            width_read, steps1, done1, left,
+                            cff_core.NOT_WHOLE))
+                        else
+                          let idx ←
+                            if b0 = 10#u8
+                            then ok «local»
+                            else ok gsubrs
+                          let i2 ← k / cff_core.ONE
+                          let o1 ← cff_core.subr d idx i2
+                          match o1 with
+                          | none =>
+                            ok (cont (p, v1, { f with o := i }, frames, stems,
+                              width_read, steps1, done1, left,
+                              cff_core.NOT_THERE))
+                          | some p1 =>
+                            let (a, b1) := p1
+                            let i3 := alloc.vec.Vec.len frames
+                            let i4 ← i3 + 1#usize
+                            if i4 > cff_core.NESTING
+                            then
+                              ok (cont (p, v1, { f with o := i }, frames,
+                                stems, width_read, steps1, done1, left,
+                                cff_core.NESTED))
+                            else
+                              let frames1 ←
+                                alloc.vec.Vec.push frames { f with o := i }
+                              ok (cont (p, v1, { s := a, e := b1, o := a },
+                                frames1, stems, width_read, steps1, done1,
+                                left, err))
+                    else
+                      if b0 = 29#u8
+                      then
+                        let (o, v1) ← alloc.vec.Vec.pop alloc.alloc.Global v
+                        match o with
+                        | none =>
+                          ok (cont (p, v1, { f with o := i }, frames, stems,
+                            width_read, steps1, done1, left,
+                            cff_core.NO_NUMBER))
+                        | some k =>
+                          let i1 ← k % cff_core.ONE
+                          if i1 != 0#i64
+                          then
+                            ok (cont (p, v1, { f with o := i }, frames, stems,
+                              width_read, steps1, done1, left,
+                              cff_core.NOT_WHOLE))
+                          else
+                            let idx ←
+                              if b0 = 10#u8
+                              then ok «local»
+                              else ok gsubrs
+                            let i2 ← k / cff_core.ONE
+                            let o1 ← cff_core.subr d idx i2
+                            match o1 with
+                            | none =>
+                              ok (cont (p, v1, { f with o := i }, frames,
+                                stems, width_read, steps1, done1, left,
+                                cff_core.NOT_THERE))
+                            | some p1 =>
+                              let (a, b1) := p1
+                              let i3 := alloc.vec.Vec.len frames
+                              let i4 ← i3 + 1#usize
+                              if i4 > cff_core.NESTING
+                              then
+                                ok (cont (p, v1, { f with o := i }, frames,
+                                  stems, width_read, steps1, done1, left,
+                                  cff_core.NESTED))
+                              else
+                                let frames1 ←
+                                  alloc.vec.Vec.push frames { f with o := i }
+                                ok (cont (p, v1, { s := a, e := b1, o := a },
+                                  frames1, stems, width_read, steps1, done1,
+                                  left, err))
+                      else
+                        if b0 = 11#u8
+                        then
+                          let (o, frames1) ←
+                            alloc.vec.Vec.pop alloc.alloc.Global frames
+                          match o with
+                          | none =>
+                            ok (cont (p, v, { f with o := i }, frames1, stems,
+                              width_read, steps1, done1, true, err))
+                          | some g =>
+                            ok (cont (p, v, g, frames1, stems, width_read,
+                              steps1, done1, left, err))
+                        else
+                          let (err1, f1, p1, s, stems1, width_read1, done2) ←
+                            cff_core.op d { f with o := i } p
+                              { v, lo := 0#usize } stems width_read done1 b0
+                          let v1 ← alloc.vec.Vec.clear alloc.alloc.Global s.v
+                          ok (cont (p1, v1, f1, frames, stems1, width_read1,
+                            steps1, done2, left, err1))
+  else ok (done (p, done1, err))
+
+/-- [forge_font::cff_core::run]: loop 0:
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 455:4-512:5
+    Visibility: public -/
+@[rust_loop]
+def cff_core.run_loop
+  (d : Slice Std.U8) (gsubrs : Slice Std.Usize) («local» : Slice Std.Usize)
+  (p : cff_core.Pen) (v : alloc.vec.Vec Std.I64) (f : cff_core.Frame)
+  (frames : alloc.vec.Vec cff_core.Frame) (stems : Std.Usize)
+  (width_read : Bool) (steps : Std.Usize) (done1 : Bool) (left : Bool)
+  (err : Std.U8) :
+  Result (cff_core.Pen × Bool × Std.U8)
+  := do
+  loop
+    (fun (p1, v1, f1, frames1, stems1, width_read1, steps1, done2, left1, err1)
+      => cff_core.run_loop.body d gsubrs «local» p1 v1 f1 frames1 stems1
+      width_read1 steps1 done2 left1 err1)
+    (p, v, f, frames, stems, width_read, steps, done1, left, err)
+
+/-- [forge_font::cff_core::run]:
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 431:0-521:1
+    Visibility: public -/
+def cff_core.run
+  (d : Slice Std.U8) (cs : (Std.Usize × Std.Usize)) (gsubrs : Slice Std.Usize)
+  («local» : Slice Std.Usize) :
+  Result (core.result.Result (alloc.vec.Vec (alloc.vec.Vec cff_core.SegC))
+    FontError)
+  := do
+  let v := alloc.vec.Vec.with_capacity Std.I64 cff_core.STACK
+  let (i, i1) := cs
+  let i2 := Slice.len d
+  let i3 ← if i1 <= i2
+             then ok i1
+             else ok (Slice.len d)
+  let frames := alloc.vec.Vec.with_capacity cff_core.Frame cff_core.NESTING
+  let steps ← cff_core.STEPS
+  let (p, done1, err) ←
+    cff_core.run_loop d gsubrs «local»
+      {
+        «at» := { x := 0#i64, y := 0#i64 },
+        start := none,
+        contour := (alloc.vec.Vec.new cff_core.SegC),
+        out := (alloc.vec.Vec.new (alloc.vec.Vec cff_core.SegC))
+      } v { s := i, e := i3, o := i } frames 0#usize false steps false false
+      cff_core.OK
+  if err != cff_core.OK
+  then let fe ← cff_core.fail err
+       ok (core.result.Result.Err fe)
+  else
+    if done1
+    then let p1 ← cff_core.close p
+         ok (core.result.Result.Ok p1.out)
+    else
+      let fe ← cff_core.fail cff_core.NO_END
+      ok (core.result.Result.Err fe)
 
 /-- [forge_font::glyf_core::{impl core::cmp::PartialEq<forge_font::glyf_core::Pi> for forge_font::glyf_core::Pi}::eq]:
     Source: 'kernel/forge-font/src/glyf_core.rs', lines 13:29-13:38

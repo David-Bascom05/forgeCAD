@@ -5,6 +5,7 @@
 //! (version 1, Type 2 charstrings: `cff`), hmtx, kern and name tables. CFF2 (variable) is refused.
 
 mod cff;
+pub mod cff_core;
 pub mod glyf_core;
 pub mod layout;
 pub mod testing;

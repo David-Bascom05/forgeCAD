@@ -19,6 +19,60 @@ set_option maxRecDepth 2048
 
 namespace forge_font
 
+/-- [forge_font::cff_core::Pc]
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 24:0-27:1
+    Visibility: public -/
+structure cff_core.Pc where
+  x : Std.I64
+  y : Std.I64
+
+/-- [forge_font::cff_core::SegC]
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 31:0-34:1
+    Visibility: public -/
+@[discriminant isize]
+inductive cff_core.SegC where
+| Line : cff_core.Pc → cff_core.Pc → cff_core.SegC
+| Cubic :
+  cff_core.Pc →
+  cff_core.Pc →
+  cff_core.Pc →
+  cff_core.Pc →
+  cff_core.SegC
+
+/-- [forge_font::FontError]
+    Source: 'kernel/forge-font/src/lib.rs', lines 55:0-65:1
+    Visibility: public -/
+@[discriminant isize]
+inductive FontError where
+| Truncated : FontError
+| Missing : Str → FontError
+| Cff : FontError
+| Unsupported : Str → FontError
+
+/-- [forge_font::cff_core::Pen]
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 92:0-98:1
+    Visibility: public -/
+structure cff_core.Pen where
+  «at» : cff_core.Pc
+  start : Option cff_core.Pc
+  contour : alloc.vec.Vec cff_core.SegC
+  out : alloc.vec.Vec (alloc.vec.Vec cff_core.SegC)
+
+/-- [forge_font::cff_core::Stack]
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 101:0-104:1
+    Visibility: public -/
+structure cff_core.Stack where
+  v : alloc.vec.Vec Std.I64
+  lo : Std.Usize
+
+/-- [forge_font::cff_core::Frame]
+    Source: 'kernel/forge-font/src/cff_core.rs', lines 388:0-392:1
+    Visibility: public -/
+structure cff_core.Frame where
+  s : Std.Usize
+  e : Std.Usize
+  o : Std.Usize
+
 /-- [forge_font::glyf_core::Pi]
     Source: 'kernel/forge-font/src/glyf_core.rs', lines 14:0-17:1
     Visibility: public -/
@@ -42,16 +96,6 @@ structure glyf_core.Simple where
   on : alloc.vec.Vec Bool
   xs : alloc.vec.Vec Std.I32
   ys : alloc.vec.Vec Std.I32
-
-/-- [forge_font::FontError]
-    Source: 'kernel/forge-font/src/lib.rs', lines 54:0-64:1
-    Visibility: public -/
-@[discriminant isize]
-inductive FontError where
-| Truncated : FontError
-| Missing : Str → FontError
-| Cff : FontError
-| Unsupported : Str → FontError
 
 /-- [forge_font::glyf_core::Walk]
     Source: 'kernel/forge-font/src/glyf_core.rs', lines 170:0-174:1 -/
