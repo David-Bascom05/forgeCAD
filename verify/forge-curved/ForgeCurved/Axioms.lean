@@ -26,3 +26,10 @@ import ForgeCurved
 #print axioms ForgeCurved.Delineable.local_graphs
 #print axioms ForgeCurved.Delineable.delineable
 #print axioms ForgeCurved.Delineable.delineable_poly
+#print axioms ForgeCurved.faithfulAll_of_local
+#print axioms ForgeCurved.faithfulAll_of_local'
+#print axioms ForgeCurved.transversal_chart
+#print axioms ForgeCurved.localGood'_of_transversal
+#print axioms ForgeCurved.faithfulAll_of_transversal
+#print axioms ForgeCurved.tier0Sound_of_spec
+#print axioms ForgeCurved.qRule_tier0Sound
