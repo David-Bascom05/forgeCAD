@@ -23,6 +23,8 @@ fn hooked() {
 }
 
 #[test]
+// runs on the hook spawner's std threads: WASI (wasip1) starts none
+#[cfg(not(target_os = "wasi"))]
 fn every_closure_runs_and_answers_in_its_own_handle() {
     hooked();
     let xs: Vec<u64> = (0..50).collect();
@@ -34,6 +36,8 @@ fn every_closure_runs_and_answers_in_its_own_handle() {
 }
 
 #[test]
+// runs on the hook spawner's std threads: WASI (wasip1) starts none
+#[cfg(not(target_os = "wasi"))]
 fn borrows_are_never_outlived_by_a_closure_left_unjoined() {
     hooked();
     let mut slots = vec![0u64; 16];
@@ -102,6 +106,8 @@ fn a_joined_panic_is_the_joiners_not_the_scopes() {
 }
 
 #[test]
+// runs on the hook spawner's std threads: WASI (wasip1) starts none
+#[cfg(not(target_os = "wasi"))]
 fn scopes_nest() {
     hooked();
     let total = AtomicUsize::new(0);
