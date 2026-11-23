@@ -45,3 +45,4 @@ import ForgeCurved.QExact
 import ForgeCurved.QPairChart
 import ForgeCurved.QEdgeCross
 import ForgeCurved.QEdgesSub
+import ForgeCurved.QEdgesSup

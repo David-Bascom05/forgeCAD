@@ -103,6 +103,18 @@ theorem edgesOn_complete {qs : List Quadric} {c : Rat} {es : List ESample}
 
 variable [DecidableRel (α := K) (· < ·)]
 
+theorem edgesOn_complete2 {qs : List Quadric} {c : Rat} {es : List ESample}
+    (h : edgesOn qs c = some es) {a b : Quadric} (hab : (a, b) ∈ pairs qs) {y z : K}
+    (ha : Quadric.evK M a (M.q c, y, z) = 0) (hb : Quadric.evK M b (M.q c, y, z) = 0) :
+    ∃ e ∈ es, Denotes M e.y y ∧ e.dOk signFuel = true ∧
+      planePt M e.c e.N e.D y = (M.q c, y, z) := by
+  unfold edgesOn at h
+  simp only [Option.map_eq_some_iff] at h
+  obtain ⟨ls, hls, rfl⟩ := h
+  obtain ⟨r, hr, hrl⟩ := mapM_mem hls (a, b) hab
+  obtain ⟨e, he, hd, hok, -, hpt⟩ := proposeEdgeAny_complete M hr ha hb
+  exact ⟨e, List.mem_flatten.mpr ⟨r, hrl, he⟩, hd, hok, hpt⟩
+
 /-- **Every raw candidate is matched by a separated event.** -/
 theorem pickEvents_cover {raw E : List Num} (h : pickEvents raw = some E) {n : Num}
     (hn : n ∈ raw) {t : K} (ht : Denotes M n t) : ∃ e ∈ E, Denotes M e t := by

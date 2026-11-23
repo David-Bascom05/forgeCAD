@@ -311,6 +311,7 @@ elab "#standard_axioms " ids:ident* : command => do
   ForgeExact.DecideOnce.Curved.samplesAt_located
   ForgeExact.DecideOnce.Curved.planeSamples_edge
   ForgeExact.DecideOnce.Curved.edgesOn_c
+  ForgeExact.DecideOnce.Curved.edgesOn_complete2
   ForgeExact.DecideOnce.Sample.local_exact
   ForgeExact.DecideOnce.Sample.local_correct
   ForgeExact.DecideOnce.Sample.wall_region

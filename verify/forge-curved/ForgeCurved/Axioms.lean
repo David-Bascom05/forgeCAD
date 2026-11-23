@@ -129,3 +129,4 @@ import ForgeCurved
 #print axioms ForgeCurved.edge_slab
 #print axioms ForgeCurved.planes_off
 #print axioms ForgeCurved.nonvert_edge
+#print axioms ForgeCurved.twozero_sampled
