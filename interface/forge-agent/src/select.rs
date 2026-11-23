@@ -4,7 +4,7 @@
 use forge_geom::{Curve, CurveGeom, Surface, SurfaceGeom};
 use forge_math::{Point3, Vec3};
 use forge_topo::{Body, EdgeId, FaceId, Name, VertexId};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Ent {
@@ -29,7 +29,7 @@ pub struct View<'a> {
 /// (split by a later boolean) keeps the origin of the face it overlaps on the same surface.
 /// `copied` names the faces a pattern at `i` copied: their source's lineage, then `i`.
 pub fn lineage(body: &Body, prev: Option<(&Body, &Lineage)>, i: usize, copied: &Lineage) -> Lineage {
-    let mut out = HashMap::with_capacity(body.faces.len());
+    let mut out = BTreeMap::new();
     for f in body.face_ids() {
         let face = body.face(f);
         let o = prev.and_then(|(pb, po)| {
@@ -66,7 +66,7 @@ pub fn copies(
         .face_ids()
         .filter(|&g| po.get(&prev.face(g).name).is_some_and(from))
         .collect();
-    let mut out = HashMap::new();
+    let mut out = BTreeMap::new();
     for f in body.face_ids() {
         let face = body.face(f);
         if po.contains_key(&face.name) {
@@ -92,7 +92,8 @@ pub fn copies(
 }
 
 /// Each face's making feature, then the patterns that copied it (by feature index).
-pub type Lineage = HashMap<Name, Vec<usize>>;
+/// (a BTreeMap: whoever iterates it gets names in order, not a hash's)
+pub type Lineage = BTreeMap<Name, Vec<usize>>;
 
 pub fn name(body: &Body, e: Ent) -> Name {
     match e {
