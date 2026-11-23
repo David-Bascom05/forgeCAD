@@ -2321,12 +2321,7 @@ impl<'a> Strips<'a> {
         for a in 0..ns {
             for b in 0..ns {
                 let loose = self.loose.contains(&(a, b)) || self.loose.contains(&(b, a));
-                if a == b
-                    || joined[a * ns + b]
-                    || loose
-                    || !boxes[a].grow(TOL).overlaps(&boxes[b])
-                    || !matches!(self.strips[b].folded, Geo::Plane(_))
-                {
+                if a == b || joined[a * ns + b] || loose || !boxes[a].grow(TOL).overlaps(&boxes[b]) {
                     continue;
                 }
                 let touched = self
@@ -2359,9 +2354,10 @@ impl<'a> Strips<'a> {
         asked();
         let t = self.t;
         let geo = self.strips[a].folded;
+        let round = matches!(self.strips[b].folded, Geo::Round { .. });
 
         // a curve halved while its box may reach b and its middle is near enough; a piece whose
-        // chord is within TOL / 2 of it is judged by its chord, exactly
+        // chord is within TOL / 2 of it is judged by its chord, exactly (b a wall)
         let search = |box_of: &dyn Fn(Interval) -> forge_math::Box3,
                       point: &dyn Fn(f64) -> Point3,
                       sag: &dyn Fn(Interval) -> f64| {
@@ -2369,6 +2365,35 @@ impl<'a> Strips<'a> {
             while let Some((u, level)) = stack.pop() {
                 let bx = box_of(u).grow(TOL);
                 if !self.may_reach(b, &bx, flat_b, 0.0) {
+                    continue;
+                }
+                if round {
+                    // a zone, in its own developed coordinates (as `inside` measures depth): the
+                    // middle within TOL is a touch; the box is dropped when the middle is farther
+                    // than its size can close, the developed map stretching by `stretch`
+                    let raw = box_of(u);
+                    let size = (raw.x.width().powi(2) + raw.y.width().powi(2) + raw.z.width().powi(2)).sqrt();
+                    let p = point(u.mid());
+                    let (d, r) = self.developed_distance(b, p);
+                    if d <= TOL {
+                        return Ok(Some(p));
+                    }
+                    let stretch = match self.strips[b].folded {
+                        // a step d at radius r turns phi by at most asin(d / r) <= (pi / 2) d / r
+                        Geo::Round { rn, .. } if r - size > 0.0 => {
+                            (dmath::FRAC_PI_2 * rn / (r - size)).max(1.0)
+                        }
+                        _ => f64::INFINITY,
+                    };
+                    if d > TOL + stretch * size {
+                        continue;
+                    }
+                    if level >= 60 {
+                        return Err(p);
+                    }
+                    let m = u.mid();
+                    stack.push((Interval::new(u.lo, m), level + 1));
+                    stack.push((Interval::new(m, u.hi), level + 1));
                     continue;
                 }
                 if sag(u) <= 0.5 * TOL {
@@ -2424,12 +2449,66 @@ impl<'a> Strips<'a> {
                     }
                 }
                 let q = bd.piece.at(0.0);
-                if let Some(p) = self.segment_touch(b, geo.point(q, 0.0), geo.point(q, t), TOL) {
+                let (r0, r1) = (geo.point(q, 0.0), geo.point(q, t));
+                if round {
+                    let at = |v: f64| r0 + (r1 - r0) * v;
+                    if let Some(p) = search(
+                        &|u| forge_math::Box3::from_points([at(u.lo), at(u.hi)]),
+                        &at,
+                        &|_| f64::INFINITY,
+                    )? {
+                        return Ok(Some(p));
+                    }
+                } else if let Some(p) = self.segment_touch(b, r0, r1, TOL) {
                     return Ok(Some(p));
                 }
             }
         }
         Ok(None)
+    }
+
+    /// How far a point is from zone strip `s`'s material in the zone's own developed
+    /// coordinates (u = phi rn along the bend, y along the axis, w through the sheet), as
+    /// `inside` measures depth: 0 inside; and the point's radius from the axis. Angles are taken
+    /// within a half turn of the zone's middle (a zone not past half a turn: a hem's are loose).
+    fn developed_distance(&self, s: usize, p: Point3) -> (f64, f64) {
+        asked();
+        let Geo::Round {
+            axis,
+            rho0,
+            sigma,
+            rn,
+            theta,
+            ..
+        } = self.strips[s].folded
+        else {
+            return (f64::INFINITY, 0.0);
+        };
+        let l = axis.point_to_local(p);
+        let r = (l.x * l.x + l.y * l.y).sqrt();
+        let mid = 0.5 * theta;
+        let mut phi = dmath::atan2(l.y, l.x);
+        while phi < mid - dmath::PI {
+            phi += dmath::TAU;
+        }
+        while phi > mid + dmath::PI {
+            phi -= dmath::TAU;
+        }
+        let q = Point2::new(phi * rn, -sigma * l.z);
+        let w = (r - rho0) * sigma;
+        let dw = (-w).max(w - self.t).max(0.0);
+        let parts = &self.strips[s].region.parts;
+        let dr = if parts.iter().any(|c| crate::region::holds(c, q)) {
+            0.0
+        } else {
+            parts
+                .iter()
+                .flat_map(|c| std::iter::once(&c.outer).chain(&c.holes))
+                .flatten()
+                .map(|b| b.piece.at(b.piece.nearest(q)).distance(q))
+                .fold(f64::INFINITY, f64::min)
+        };
+        ((dw * dw + dr * dr).sqrt(), r)
     }
 
     /// Whether segment p0..p1 may hold a point deeper than `limit` in plane strip `s` (within

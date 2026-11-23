@@ -418,7 +418,6 @@ fn a_hairpin_whose_setback_is_not_known_to_the_tolerance_is_refused() {
 }
 
 #[test]
-#[ignore = "pinned repro: touch against bend zones is not judged yet (step 5's new pairs)"]
 fn a_flange_tip_resting_on_a_bends_outer_skin_is_a_touch() {
     // the base's right flange bends down about the axis x = 96, z = -4 (inside radius 2, outer
     // skin radius 4, t = 2); a chain from the base's narrower left tongue (y in [10, 30]) climbs,
