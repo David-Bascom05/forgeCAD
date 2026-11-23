@@ -31,6 +31,7 @@ import ForgeExact.DecideOnce.RootCover
 import ForgeExact.DecideOnce.QPropose
 import ForgeExact.DecideOnce.QSweep
 import ForgeExact.DecideOnce.QVertPlane
+import ForgeExact.DecideOnce.QVert3
 import ForgeExact.DecideOnce.SampleLocal
 import ForgeExact.JordanLocal
 import ForgeExact.DecideOnce.LocalJordan
