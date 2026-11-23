@@ -347,3 +347,37 @@ curved digest pass, native and wasm.
 
 The gate on this branch's default build, before the `Big` merge against after it: 97 of 97 lines
 lower, none equal or higher.
+
+**Milestone 1l: the reference mirrors dol-curved's L2 at 7ab0596** (events, frames, QSing, QBound,
+the guards).
+- **Events**, in the production module because stage (b) uses them: `is_x_plane`, `sep_with`,
+  `parallel_apart`, `nrm`, `line_of`, `line_ok`, `line_events` and `line_triple`, all checked in
+  `propose_triple_x`'s new order; `spread_e`'s fuel is `400 · len`. `propose_triple_xs` (stage (b))
+  takes the same prefix.
+- **QSample** (reference): `zero_on` and `active_on`; `line_samples` over the active carriers;
+  `edge_sample` with a tag; `plane_samples` with `on_event` (no x-planes in the edges, crossings on
+  event planes tagged `vert`); `line_verts` and `line_triple_s`; `triple_samples` with the
+  parallel and line cases; `rat_events`; `frame_ok`; `samples_at` with the event planes;
+  `Quadric::shear_x`, `in_frame` and `frames()`, six tilted frames first; `samples_of` gated by
+  `frame_ok` and `sing_all`.
+- **QSing**: `grad_q`, `hess_q`, `det_h`, `SingCert` and `sing_ok`, `solve3` (row reduction of
+  `[A | b | I]`), `propose_sing`, `sing_all`.
+- **QBound**: `qadd`, `qscale`, `qsum_l`, `b_centre`, `sphere_r`, `conjs`, `BTerm` (`lits`,
+  `quad`), `lit_q`, `lit_aff`, `BCert`, `cert_ok`, `ldl`, `qmat`, `body_terms`, `propose_cert` (the
+  weight grid), `bound_forms`, `qledger_b`, `nz_q`, `below_b`, `certified`.
+- **Tests:** every Lean `#guard` agrees, including QSample's 27 covectors under the new frames,
+  QLedger's exact covector sets and the unit box (6, 12, 8), QSing's and QBound's. The five QGuards
+  inputs are all certified at R² = 16 with the Lean's counts:
+
+  | input | facets/edges/verts | release time |
+  |---|---|---|
+  | box − cylinder | 28/52/26 | 176 s |
+  | plate with a hole | 28/52/26 | 179 s |
+  | sphere ∩ box | 48/86/36 | 76 s |
+  | cone | 8/12/6 | 41 s |
+  | seamed cylinder | 12/20/10 | 45 s |
+
+  `qguards` is `#[ignore]` (minutes); run it with `--ignored` in release, as the Lean runs its
+  `curved-guards` executable.
+- This branch no longer merges dol-curved's: that branch now carries the decide-once kernel's
+  changes. The Lean is read from it directly.

@@ -100,7 +100,7 @@ pub fn events_of(qs: &[Quadric], fuel: usize) -> Option<Vec<Num>> {
 }
 
 // =============================================================================================
-// QSample.lean: the samples
+// QSample.lean (at 7ab0596): the samples
 // =============================================================================================
 
 /// `Tag`: where a sample came from.
@@ -128,6 +128,17 @@ pub fn y_turn(q: &Quadric, c: &Q) -> Poly {
     } else {
         r.0
     }
+}
+
+/// `zeroOn q c`: `q` vanishes on the whole plane `x = c`.
+pub fn zero_on(q: &Quadric, c: &Q) -> bool {
+    let r = restr(q, c);
+    is_zero_p(&r.0) && is_zero_p(&r.1) && is_zero_p(&r.2)
+}
+
+/// `activeOn qs c`: the carriers not vanishing on the plane `x = c`.
+pub fn active_on(qs: &[Quadric], c: &Q) -> Vec<Quadric> {
+    qs.iter().filter(|q| !zero_on(q, c)).cloned().collect()
 }
 
 fn flatten<T: Clone>(v: Vec<Vec<T>>) -> Vec<T> {
@@ -167,14 +178,15 @@ pub fn edges_on(qs: &[Quadric], c: &Q) -> Option<Vec<ESample>> {
     Some(flatten(out))
 }
 
-/// `lineSamples qs c c'`: the samples of the line `(c, c', t)`.
+/// `lineSamples qs c c'`: the samples of the line `(c, c', t)`, roots of the active carriers.
 pub fn line_samples(qs: &[Quadric], c: &Q, c2: &Q) -> Option<Vec<QS>> {
     let p = V3::new(c.clone(), c2.clone(), Q::zero());
     let d = V3::new(Q::zero(), Q::zero(), Q::one());
+    let act = active_on(qs, c);
     let mut roots: Vec<Vec<Num>> = Vec::new();
     let mut i = 0;
-    while i < qs.len() {
-        roots.push(roots_of(&along_line(&qs[i], &p, &d), ROOT_FUEL)?);
+    while i < act.len() {
+        roots.push(roots_of(&along_line(&act[i], &p, &d), ROOT_FUEL)?);
         i += 1;
     }
     let ez = pick_events(&flatten(roots))?;
@@ -199,22 +211,22 @@ pub fn line_samples(qs: &[Quadric], c: &Q, c2: &Q) -> Option<Vec<QS>> {
     Some(out)
 }
 
-/// `edgeSample`.
-pub fn edge_sample(qs: &[Quadric], e: &ESample) -> Option<QS> {
+/// `edgeSample qs tg e`.
+pub fn edge_sample(qs: &[Quadric], tg: Tag, e: &ESample) -> Option<QS> {
     if iso_ok_n(&e.y) && e.d_ok(SIGN_FUEL) {
-        edge_cov(qs, e, SIGN_FUEL).map(|x| QS {
-            tag: Tag::Edge,
-            cov: x,
-        })
+        edge_cov(qs, e, SIGN_FUEL).map(|x| QS { tag: tg, cov: x })
     } else {
         None
     }
 }
 
-/// `planeSamples qs c`: the samples of the sweep plane `x = c`.
-pub fn plane_samples(qs: &[Quadric], c: &Q) -> Option<Vec<QS>> {
-    let es = edges_on(qs, c)?;
-    let mut ev = turns_on(qs, c)?;
+/// `planeSamples qs onEvent c`: the samples of the plane `x = c`. On an event plane, the
+/// crossings are points of three carriers, tagged `vert`.
+pub fn plane_samples(qs: &[Quadric], on_event: bool, c: &Q) -> Option<Vec<QS>> {
+    let act = active_on(qs, c);
+    let nx: Vec<Quadric> = act.iter().filter(|q| !is_x_plane(q)).cloned().collect();
+    let es = edges_on(&nx, c)?;
+    let mut ev = turns_on(&act, c)?;
     let mut i = 0;
     while i < es.len() {
         ev.push(es[i].y.clone());
@@ -229,9 +241,10 @@ pub fn plane_samples(qs: &[Quadric], c: &Q) -> Option<Vec<QS>> {
         j += 1;
     }
     let mut out = flatten(lines);
+    let tg = if on_event { Tag::Vert } else { Tag::Edge };
     let mut k = 0;
     while k < es.len() {
-        out.push(edge_sample(qs, &es[k])?);
+        out.push(edge_sample(qs, tg, &es[k])?);
         k += 1;
     }
     Some(out)
@@ -265,11 +278,53 @@ pub fn vert_sample(qs: &[Quadric], v: &VSample) -> Option<QS> {
     }
 }
 
+/// `lineVerts qs a b q`: the vertex samples on the line of two planes.
+pub fn line_verts(qs: &[Quadric], a: &Quadric, b: &Quadric, q: &Quadric) -> Option<Vec<QS>> {
+    let l = line_of(a, b);
+    if !line_ok(a, b, &l) {
+        return None;
+    }
+    let ns = roots_of(&along_line(q, &l.0, &l.1), ROOT_FUEL)?;
+    if !ns.iter().all(iso_ok_n) {
+        return None;
+    }
+    let mut out: Vec<QS> = Vec::with_capacity(ns.len());
+    let mut i = 0;
+    while i < ns.len() {
+        out.push(QS {
+            tag: Tag::Vert,
+            cov: cov_on(qs, &l.0, &l.1, &ns[i], SIGN_FUEL)?,
+        });
+        i += 1;
+    }
+    Some(out)
+}
+
+/// `lineTripleS`.
+pub fn line_triple_s(qs: &[Quadric], a: &Quadric, b: &Quadric, c: &Quadric) -> Option<Vec<QS>> {
+    if line_ok(a, b, &line_of(a, b)) {
+        line_verts(qs, a, b, c)
+    } else if line_ok(a, c, &line_of(a, c)) {
+        line_verts(qs, a, c, b)
+    } else if line_ok(b, c, &line_of(b, c)) {
+        line_verts(qs, b, c, a)
+    } else {
+        None
+    }
+}
+
+fn nzc(q: &Quadric) -> bool {
+    is_const_q(q) && !q.c.is_zero()
+}
+
 /// `tripleSamples`: the vertex samples of a triple.
 pub fn triple_samples(qs: &[Quadric], a: &Quadric, b: &Quadric, c: &Quadric) -> Option<Vec<QS>> {
-    let nzc = |q: &Quadric| is_const_q(q) && !q.c.is_zero();
-    if nzc(a) || nzc(b) || nzc(c) {
-        Some(Vec::new())
+    if nzc(a) || nzc(b) || nzc(c) || parallel_apart(a, b) || parallel_apart(a, c) || parallel_apart(b, c) {
+        return Some(Vec::new());
+    }
+    let lt = line_triple_s(qs, a, b, c);
+    if lt.is_some() {
+        lt
     } else if is_plane_q(a) && is_plane_q(b) && is_plane_q(c) {
         let d = det3_q(a, b, c);
         if !d.is_zero() {
@@ -311,6 +366,25 @@ pub fn vert_samples(qs: &[Quadric]) -> Option<Vec<QS>> {
     Some(flatten(out))
 }
 
+/// `ratEvents`: the rational events.
+pub fn rat_events(e: &[Num]) -> Vec<Q> {
+    let mut out: Vec<Q> = Vec::new();
+    let mut i = 0;
+    while i < e.len() {
+        if let Num::Rat(q) = &e[i] {
+            out.push(q.clone());
+        }
+        i += 1;
+    }
+    out
+}
+
+/// `frameOk`: every carrier is a plane with a `z` term, or has `zz ≠ 0`.
+pub fn frame_ok(qs: &[Quadric]) -> bool {
+    qs.iter()
+        .all(|q| (is_plane_q(q) && !q.lz.is_zero()) || !q.zz.is_zero())
+}
+
 /// `samplesAt`: the samples in the frame the carriers are given in.
 pub fn samples_at(qs: &[Quadric]) -> Option<Vec<QS>> {
     let e = events_of(qs, ROOT_FUEL)?;
@@ -318,35 +392,294 @@ pub fn samples_at(qs: &[Quadric]) -> Option<Vec<QS>> {
     let mut out: Vec<Vec<QS>> = Vec::new();
     let mut i = 0;
     while i < ps.len() {
-        out.push(plane_samples(qs, &ps[i])?);
+        out.push(plane_samples(qs, false, &ps[i])?);
         i += 1;
+    }
+    let re = rat_events(&e);
+    let mut k = 0;
+    while k < re.len() {
+        if qs.iter().any(|q| zero_on(q, &re[k])) {
+            out.push(plane_samples(qs, true, &re[k])?);
+        }
+        k += 1;
     }
     let mut all = flatten(out);
     let vs = vert_samples(qs)?;
-    let mut k = 0;
-    while k < vs.len() {
-        all.push(vs[k].clone());
-        k += 1;
+    let mut j = 0;
+    while j < vs.len() {
+        all.push(vs[j].clone());
+        j += 1;
     }
     Some(all)
 }
 
-/// **`samplesOf`**: the samples in the first sheared frame where every step succeeds.
-pub fn samples_of(qs: &[Quadric]) -> Option<Vec<QS>> {
-    let ls = shears();
-    let mut out: Option<Vec<QS>> = None;
-    let mut i = 0;
-    while out.is_none() && i < ls.len() {
-        let mut sq: Vec<Quadric> = Vec::with_capacity(qs.len());
-        let mut j = 0;
-        while j < qs.len() {
-            sq.push(qs[j].shear(&ls[i]));
-            j += 1;
+impl Quadric {
+    /// `Quadric.shearX μ ν`: `q(x + μ y + ν z, y, z)` (`shearX_ev`).
+    pub fn shear_x(&self, mu: &Q, nu: &Q) -> Quadric {
+        let two = Q::from_i64(2);
+        Quadric {
+            xx: self.xx.clone(),
+            yy: self.yy.add(&self.xx.mul(mu).mul(mu)).add(&self.xy.mul(mu)),
+            zz: self.zz.add(&self.xx.mul(nu).mul(nu)).add(&self.xz.mul(nu)),
+            xy: self.xy.add(&two.mul(&self.xx).mul(mu)),
+            xz: self.xz.add(&two.mul(&self.xx).mul(nu)),
+            yz: self
+                .yz
+                .add(&two.mul(&self.xx).mul(mu).mul(nu))
+                .add(&self.xy.mul(nu))
+                .add(&self.xz.mul(mu)),
+            lx: self.lx.clone(),
+            ly: self.ly.add(&self.lx.mul(mu)),
+            lz: self.lz.add(&self.lx.mul(nu)),
+            c: self.c.clone(),
         }
-        out = samples_at(&sq);
+    }
+}
+
+/// `Frame`: `(μ, ν, λ)`.
+pub type Frame = (Q, Q, Q);
+
+/// `inFrame f q = (q.shearX μ ν).shear λ`.
+pub fn in_frame(f: &Frame, q: &Quadric) -> Quadric {
+    q.shear_x(&f.0, &f.1).shear(&f.2)
+}
+
+fn fr(a: (i64, i64), b: (i64, i64), l: i64) -> Frame {
+    (
+        Q::from_i64(a.0).div(&Q::from_i64(a.1)),
+        Q::from_i64(b.0).div(&Q::from_i64(b.1)),
+        Q::from_i64(l),
+    )
+}
+
+/// `frames`: six tilted frames first, then the untilted ones.
+pub fn frames() -> Vec<Frame> {
+    let mut out = vec![
+        fr((1, 3), (1, 5), 1),
+        fr((1, 3), (1, 5), 2),
+        fr((2, 7), (3, 11), 1),
+        fr((2, 7), (3, 11), 3),
+        fr((3, 13), (5, 17), 1),
+        fr((3, 13), (5, 17), 2),
+    ];
+    let ls = shears();
+    let mut i = 0;
+    while i < ls.len() {
+        out.push((Q::zero(), Q::zero(), ls[i].clone()));
         i += 1;
     }
     out
+}
+
+/// **`samplesOf`**: the samples in the first frame that passes `frame_ok` and `sing_all` and
+/// where every step succeeds.
+pub fn samples_of(qs: &[Quadric]) -> Option<Vec<QS>> {
+    let fs = frames();
+    let mut out: Option<Vec<QS>> = None;
+    let mut i = 0;
+    while out.is_none() && i < fs.len() {
+        let fq: Vec<Quadric> = qs.iter().map(|q| in_frame(&fs[i], q)).collect();
+        if frame_ok(&fq) && sing_all(&fq) {
+            out = samples_at(&fq);
+        }
+        i += 1;
+    }
+    out
+}
+
+// =============================================================================================
+// QSing.lean: every carrier's singular zeros lie on other carriers, certified
+// =============================================================================================
+
+/// `gradQ q p`.
+pub fn grad_q(q: &Quadric, p: &V3) -> V3 {
+    let two = Q::from_i64(2);
+    V3::new(
+        two.mul(&q.xx)
+            .mul(&p.x)
+            .add(&q.xy.mul(&p.y))
+            .add(&q.xz.mul(&p.z))
+            .add(&q.lx),
+        q.xy.mul(&p.x)
+            .add(&two.mul(&q.yy).mul(&p.y))
+            .add(&q.yz.mul(&p.z))
+            .add(&q.ly),
+        q.xz.mul(&p.x)
+            .add(&q.yz.mul(&p.y))
+            .add(&two.mul(&q.zz).mul(&p.z))
+            .add(&q.lz),
+    )
+}
+
+/// `hessQ q w`.
+pub fn hess_q(q: &Quadric, w: &V3) -> V3 {
+    let two = Q::from_i64(2);
+    V3::new(
+        two.mul(&q.xx).mul(&w.x).add(&q.xy.mul(&w.y)).add(&q.xz.mul(&w.z)),
+        q.xy.mul(&w.x).add(&two.mul(&q.yy).mul(&w.y)).add(&q.yz.mul(&w.z)),
+        q.xz.mul(&w.x).add(&q.yz.mul(&w.y)).add(&two.mul(&q.zz).mul(&w.z)),
+    )
+}
+
+/// `detH q`.
+pub fn det_h(q: &Quadric) -> Q {
+    let two = Q::from_i64(2);
+    let (a, b, c) = (two.mul(&q.xx), two.mul(&q.yy), two.mul(&q.zz));
+    a.mul(&b.mul(&c).sub(&q.yz.mul(&q.yz)))
+        .sub(&q.xy.mul(&q.xy.mul(&c).sub(&q.yz.mul(&q.xz))))
+        .add(&q.xz.mul(&q.xy.mul(&q.yz).sub(&b.mul(&q.xz))))
+}
+
+/// `SingCert`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum SingCert {
+    Plane,
+    Point(V3),
+    Apex(V3, usize),
+    None_(V3),
+}
+
+/// `SingCert.ok qs j q`.
+pub fn sing_ok(qs: &[Quadric], j: usize, q: &Quadric, c: &SingCert) -> bool {
+    match c {
+        SingCert::Plane => is_plane_q(q) && !(q.lx.is_zero() && q.ly.is_zero() && q.lz.is_zero()),
+        SingCert::Point(p0) => grad_q(q, p0).is_zero() && !q.eval(p0).is_zero(),
+        SingCert::Apex(p0, m) => {
+            grad_q(q, p0).is_zero()
+                && !det_h(q).is_zero()
+                && *m != j
+                && *m < qs.len()
+                && qs[*m].eval(p0).is_zero()
+        }
+        SingCert::None_(w) => {
+            hess_q(q, w).is_zero() && !w.x.mul(&q.lx).add(&w.y.mul(&q.ly)).add(&w.z.mul(&q.lz)).is_zero()
+        }
+    }
+}
+
+/// `solve3 A b`: `A p = b` solved by row reduction of `[A | b | I]` (free variables zero), or a
+/// `y` with `y A = 0` and `y · b ≠ 0`.
+#[allow(clippy::result_large_err)]
+pub fn solve3(a: &[[Q; 3]; 3], b: &[Q; 3]) -> Result<V3, V3> {
+    let mut m: Vec<Vec<Q>> = Vec::with_capacity(3);
+    let mut i = 0;
+    while i < 3 {
+        let mut row: Vec<Q> = vec![a[i][0].clone(), a[i][1].clone(), a[i][2].clone(), b[i].clone()];
+        let mut k = 0;
+        while k < 3 {
+            row.push(if k == i { Q::one() } else { Q::zero() });
+            k += 1;
+        }
+        m.push(row);
+        i += 1;
+    }
+    let mut row = 0;
+    let mut piv: Vec<(usize, usize)> = Vec::new();
+    let mut col = 0;
+    while col < 3 {
+        if row < 3 {
+            let mut k = 0;
+            let mut found: Option<usize> = None;
+            while found.is_none() && k < 3 - row {
+                if !m[row + k][col].is_zero() {
+                    found = Some(k);
+                }
+                k += 1;
+            }
+            if let Some(k) = found {
+                let r = row + k;
+                m.swap(row, r);
+                let pv = m[row][col].clone();
+                let mut t = 0;
+                while t < 7 {
+                    m[row][t] = m[row][t].div(&pv);
+                    t += 1;
+                }
+                let mut i2 = 0;
+                while i2 < 3 {
+                    if i2 != row {
+                        let f = m[i2][col].clone();
+                        let mut t2 = 0;
+                        while t2 < 7 {
+                            let v = m[i2][t2].sub(&f.mul(&m[row][t2]));
+                            m[i2][t2] = v;
+                            t2 += 1;
+                        }
+                    }
+                    i2 += 1;
+                }
+                piv.push((row, col));
+                row += 1;
+            }
+        }
+        col += 1;
+    }
+    let mut i3 = row;
+    let mut bad: Option<V3> = None;
+    while bad.is_none() && i3 < 3 {
+        if !m[i3][3].is_zero() {
+            bad = Some(V3::new(m[i3][4].clone(), m[i3][5].clone(), m[i3][6].clone()));
+        }
+        i3 += 1;
+    }
+    match bad {
+        Some(y) => Err(y),
+        None => {
+            let mut sol = [Q::zero(), Q::zero(), Q::zero()];
+            let mut k = 0;
+            while k < piv.len() {
+                sol[piv[k].1] = m[piv[k].0][3].clone();
+                k += 1;
+            }
+            let [x, y, z] = sol;
+            Ok(V3::new(x, y, z))
+        }
+    }
+}
+
+/// `proposeSing qs j q`.
+pub fn propose_sing(qs: &[Quadric], j: usize, q: &Quadric) -> SingCert {
+    if is_plane_q(q) {
+        return SingCert::Plane;
+    }
+    let two = Q::from_i64(2);
+    let h = [
+        [two.mul(&q.xx), q.xy.clone(), q.xz.clone()],
+        [q.xy.clone(), two.mul(&q.yy), q.yz.clone()],
+        [q.xz.clone(), q.yz.clone(), two.mul(&q.zz)],
+    ];
+    match solve3(&h, &[q.lx.neg(), q.ly.neg(), q.lz.neg()]) {
+        Err(w) => SingCert::None_(w),
+        Ok(p0) => {
+            if !q.eval(&p0).is_zero() {
+                SingCert::Point(p0)
+            } else {
+                let mut m = 0;
+                let mut found: Option<usize> = None;
+                while found.is_none() && m < qs.len() {
+                    if m != j && qs[m].eval(&p0).is_zero() {
+                        found = Some(m);
+                    }
+                    m += 1;
+                }
+                match found {
+                    Some(m) => SingCert::Apex(p0, m),
+                    None => SingCert::Point(p0),
+                }
+            }
+        }
+    }
+}
+
+/// **`singAll`**.
+pub fn sing_all(qs: &[Quadric]) -> bool {
+    let mut ok = true;
+    let mut j = 0;
+    while ok && j < qs.len() {
+        ok = sing_ok(qs, j, &qs[j], &propose_sing(qs, j, &qs[j]));
+        j += 1;
+    }
+    ok
 }
 
 // =============================================================================================
@@ -698,6 +1031,369 @@ pub fn face_cov(qs: &[Quadric], a: Axis, l: &Q, e: &ESample) -> Option<Cov> {
     }
 }
 
+// =============================================================================================
+// QBound.lean: the bounding sphere, certified
+// =============================================================================================
+
+/// `qadd`.
+pub fn qadd(p: &Quadric, q: &Quadric) -> Quadric {
+    Quadric {
+        xx: p.xx.add(&q.xx),
+        yy: p.yy.add(&q.yy),
+        zz: p.zz.add(&q.zz),
+        xy: p.xy.add(&q.xy),
+        xz: p.xz.add(&q.xz),
+        yz: p.yz.add(&q.yz),
+        lx: p.lx.add(&q.lx),
+        ly: p.ly.add(&q.ly),
+        lz: p.lz.add(&q.lz),
+        c: p.c.add(&q.c),
+    }
+}
+
+/// `qscale k q`.
+pub fn qscale(k: &Q, q: &Quadric) -> Quadric {
+    Quadric {
+        xx: k.mul(&q.xx),
+        yy: k.mul(&q.yy),
+        zz: k.mul(&q.zz),
+        xy: k.mul(&q.xy),
+        xz: k.mul(&q.xz),
+        yz: k.mul(&q.yz),
+        lx: k.mul(&q.lx),
+        ly: k.mul(&q.ly),
+        lz: k.mul(&q.lz),
+        c: k.mul(&q.c),
+    }
+}
+
+/// `qsumL`.
+pub fn qsum_l(l: &[Quadric]) -> Quadric {
+    let mut acc = Quadric::default();
+    let mut i = l.len();
+    while i > 0 {
+        i -= 1;
+        acc = qadd(&l[i], &acc);
+    }
+    acc
+}
+
+fn qr(n: i64, d: i64) -> Q {
+    Q::from_i64(n).div(&Q::from_i64(d))
+}
+
+/// `bCentre`.
+pub fn b_centre() -> (Q, Q, Q) {
+    (qr(1, 7), qr(1, 11), qr(1, 13))
+}
+
+/// `sphereR R2`: `|p − c|² − R2`, `c = bCentre`.
+pub fn sphere_r(r2: &Q) -> Quadric {
+    let (a, b, c) = b_centre();
+    let m2 = Q::from_i64(-2);
+    Quadric {
+        xx: Q::one(),
+        yy: Q::one(),
+        zz: Q::one(),
+        lx: m2.mul(&a),
+        ly: m2.mul(&b),
+        lz: m2.mul(&c),
+        c: a.mul(&a).add(&b.mul(&b)).add(&c.mul(&c)).sub(r2),
+        ..Quadric::default()
+    }
+}
+
+/// `conjs`: the top-level conjuncts.
+pub fn conjs(f: &SForm) -> Vec<SForm> {
+    match f {
+        SForm::And(a, b) => {
+            let mut v = conjs(a);
+            v.extend(conjs(b));
+            v
+        }
+        g => vec![g.clone()],
+    }
+}
+
+/// `BTerm`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum BTerm {
+    One(usize, Sgn),
+    Two(usize, usize, Sgn, Sgn),
+}
+
+impl BTerm {
+    /// `BTerm.lits`.
+    pub fn lits(&self) -> Vec<SForm> {
+        match self {
+            BTerm::One(j, s) => vec![SForm::Lit(*j, *s)],
+            BTerm::Two(j, k, sj, sk) => vec![SForm::Lit(*j, *sj), SForm::Lit(*k, *sk)],
+        }
+    }
+    /// `BTerm.quad`.
+    pub fn quad(&self, qs: &[Quadric]) -> Option<Quadric> {
+        match self {
+            BTerm::One(j, s) => lit_q(qs, *j, *s),
+            BTerm::Two(j, k, sj, sk) => {
+                let f = lit_aff(qs, *j, *sj)?;
+                let g = lit_aff(qs, *k, *sk)?;
+                Some(qscale(&Q::from_i64(-1), &aff_mul(&f, &g)))
+            }
+        }
+    }
+}
+
+/// `litQ`.
+pub fn lit_q(qs: &[Quadric], j: usize, s: Sgn) -> Option<Quadric> {
+    if j >= qs.len() {
+        return None;
+    }
+    match s {
+        Sgn::Neg => Some(qs[j].clone()),
+        Sgn::Pos => Some(qscale(&Q::from_i64(-1), &qs[j])),
+        Sgn::Zero => None,
+    }
+}
+
+/// `litAff`.
+pub fn lit_aff(qs: &[Quadric], j: usize, s: Sgn) -> Option<Aff> {
+    if j >= qs.len() || !is_plane_q(&qs[j]) {
+        return None;
+    }
+    let q = &qs[j];
+    match s {
+        Sgn::Neg => Some((q.lx.clone(), q.ly.clone(), q.lz.clone(), q.c.clone())),
+        Sgn::Pos => Some((q.lx.neg(), q.ly.neg(), q.lz.neg(), q.c.neg())),
+        Sgn::Zero => None,
+    }
+}
+
+/// `BCert`.
+#[derive(Clone, Debug)]
+pub struct BCert {
+    pub terms: Vec<(Q, BTerm)>,
+    pub sos: Vec<(Q, Aff)>,
+}
+
+/// **`certOk`**: the body lies strictly inside the bounding sphere.
+pub fn cert_ok(qs: &[Quadric], f: &SForm, r2: &Q, c: &BCert) -> bool {
+    let cs = conjs(f);
+    if !(c.terms.iter().all(|t| t.0.signum() >= 0)
+        && c.terms.iter().any(|t| t.0.signum() > 0)
+        && c.sos.iter().all(|t| t.0.signum() >= 0)
+        && c.terms.iter().all(|t| t.1.lits().iter().all(|g| cs.contains(g))))
+    {
+        return false;
+    }
+    let mut qts: Vec<Quadric> = Vec::with_capacity(c.terms.len());
+    let mut i = 0;
+    while i < c.terms.len() {
+        match c.terms[i].1.quad(qs) {
+            Some(q) => qts.push(qscale(&c.terms[i].0, &q)),
+            None => return false,
+        }
+        i += 1;
+    }
+    let lhs = qsub(&qsum_l(&qts), &sphere_r(r2));
+    let sq: Vec<Quadric> = c.sos.iter().map(|t| qscale(&t.0, &aff_mul(&t.1, &t.1))).collect();
+    lhs == qsum_l(&sq)
+}
+
+/// `ldl A`: `LDLᵀ` of a symmetric 4×4 matrix, the pivots and the unit lower columns.
+pub fn ldl(a: &[[Q; 4]; 4]) -> Option<Vec<(Q, Aff)>> {
+    let n = 4;
+    let mut l: Vec<Vec<Q>> = vec![vec![Q::zero(); n]; n];
+    let mut d: Vec<Q> = vec![Q::zero(); n];
+    let mut i = 0;
+    while i < n {
+        let mut di = a[i][i].clone();
+        let mut k = 0;
+        while k < i {
+            di = di.sub(&l[i][k].mul(&l[i][k]).mul(&d[k]));
+            k += 1;
+        }
+        d[i] = di.clone();
+        l[i][i] = Q::one();
+        let mut j = i + 1;
+        while j < n {
+            let mut v = a[j][i].clone();
+            let mut k2 = 0;
+            while k2 < i {
+                v = v.sub(&l[j][k2].mul(&l[i][k2]).mul(&d[k2]));
+                k2 += 1;
+            }
+            if di.is_zero() {
+                if !v.is_zero() {
+                    return None;
+                }
+                l[j][i] = Q::zero();
+            } else {
+                l[j][i] = v.div(&di);
+            }
+            j += 1;
+        }
+        i += 1;
+    }
+    if d.iter().any(|x| x.signum() < 0) {
+        return None;
+    }
+    let mut out: Vec<(Q, Aff)> = Vec::with_capacity(n);
+    let mut c = 0;
+    while c < n {
+        out.push((
+            d[c].clone(),
+            (l[0][c].clone(), l[1][c].clone(), l[2][c].clone(), l[3][c].clone()),
+        ));
+        c += 1;
+    }
+    Some(out)
+}
+
+/// `qmat q`.
+pub fn qmat(q: &Quadric) -> [[Q; 4]; 4] {
+    let h = qr(1, 2);
+    [
+        [q.xx.clone(), q.xy.mul(&h), q.xz.mul(&h), q.lx.mul(&h)],
+        [q.xy.mul(&h), q.yy.clone(), q.yz.mul(&h), q.ly.mul(&h)],
+        [q.xz.mul(&h), q.yz.mul(&h), q.zz.clone(), q.lz.mul(&h)],
+        [q.lx.mul(&h), q.ly.mul(&h), q.lz.mul(&h), q.c.clone()],
+    ]
+}
+
+/// `bodyTerms`: the non-plane literals, and the pairs of parallel plane literals.
+pub fn body_terms(qs: &[Quadric], f: &SForm) -> Vec<BTerm> {
+    let mut lits: Vec<(usize, Sgn)> = Vec::new();
+    for g in conjs(f) {
+        if let SForm::Lit(j, s) = g
+            && s != Sgn::Zero
+        {
+            lits.push((j, s));
+        }
+    }
+    let mut ones: Vec<BTerm> = Vec::new();
+    let mut pl: Vec<(usize, Sgn)> = Vec::new();
+    for &(j, s) in &lits {
+        if j < qs.len() {
+            if is_plane_q(&qs[j]) {
+                pl.push((j, s));
+            } else {
+                ones.push(BTerm::One(j, s));
+            }
+        }
+    }
+    let mut twos: Vec<BTerm> = Vec::new();
+    let mut i = 0;
+    while i < pl.len() {
+        let mut k = i + 1;
+        while k < pl.len() {
+            let (j, sj) = pl[i];
+            let (kk, sk) = pl[k];
+            if nrm(&qs[j]).cross(&nrm(&qs[kk])).is_zero() {
+                twos.push(BTerm::Two(j, kk, sj, sk));
+            }
+            k += 1;
+        }
+        i += 1;
+    }
+    ones.extend(twos);
+    ones
+}
+
+/// `proposeCert`: weights from the grid, then `ldl`, checked by `cert_ok`.
+pub fn propose_cert(qs: &[Quadric], f: &SForm, r2: &Q) -> Option<BCert> {
+    let ts = body_terms(qs, f);
+    let was = [
+        qr(1, 1),
+        qr(5, 4),
+        qr(3, 2),
+        qr(2, 1),
+        qr(3, 1),
+        qr(4, 1),
+        qr(8, 1),
+    ];
+    let wbs = [
+        qr(1, 1),
+        qr(3, 2),
+        qr(2, 1),
+        qr(4, 1),
+        qr(8, 1),
+        qr(16, 1),
+        qr(32, 1),
+    ];
+    for wa in &was {
+        for wb in &wbs {
+            let terms: Vec<(Q, BTerm)> = ts
+                .iter()
+                .map(|t| {
+                    let w = match t {
+                        BTerm::One(..) => wa.clone(),
+                        BTerm::Two(..) => wb.clone(),
+                    };
+                    (w, t.clone())
+                })
+                .collect();
+            let mut qts: Vec<Quadric> = Vec::new();
+            let mut ok = true;
+            for t in &terms {
+                match t.1.quad(qs) {
+                    Some(q) => qts.push(qscale(&t.0, &q)),
+                    None => ok = false,
+                }
+            }
+            if !ok {
+                continue;
+            }
+            let n = qsub(&qsum_l(&qts), &sphere_r(r2));
+            if let Some(sos) = ldl(&qmat(&n)) {
+                let c = BCert { terms, sos };
+                if cert_ok(qs, f, r2, &c) {
+                    return Some(c);
+                }
+            }
+        }
+    }
+    None
+}
+
+/// `boundForms`: each body conjoined with "inside `B`" (carrier `nc`).
+pub fn bound_forms(nc: usize, forms: &[SForm]) -> Vec<SForm> {
+    forms
+        .iter()
+        .map(|f| SForm::And(Box::new(f.clone()), Box::new(SForm::Lit(nc, Sgn::Neg))))
+        .collect()
+}
+
+/// **`qledgerB`**: the bounded curved ledger.
+pub fn qledger_b(qs: &[Quadric], forms: &[SForm], r2: &Q) -> Option<RefLedger> {
+    let mut certs: Vec<BCert> = Vec::new();
+    for f in forms {
+        certs.push(propose_cert(qs, f, r2)?);
+    }
+    if !forms.iter().zip(certs.iter()).all(|(f, c)| cert_ok(qs, f, r2, c)) {
+        return None;
+    }
+    let mut q2 = qs.to_vec();
+    q2.push(sphere_r(r2));
+    qledger(&q2, &bound_forms(qs.len(), forms))
+}
+
+/// `nzQ`.
+pub fn nz_q(q: &Quadric) -> bool {
+    *q != Quadric::default()
+}
+
+/// `belowB`.
+pub fn below_b(n: usize, f: &SForm) -> bool {
+    f.below(n)
+}
+
+/// **`certified`**.
+pub fn certified(qs: &[Quadric], forms: &[SForm], r2: &Q) -> bool {
+    let mut q2 = qs.to_vec();
+    q2.push(sphere_r(r2));
+    qledger_b(qs, forms, r2).is_some() && q2.iter().all(nz_q) && forms.iter().all(|f| below_b(qs.len(), f))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -757,14 +1453,209 @@ mod tests {
         );
     }
 
-    /// QLedger.lean's #guards: the ball cut by y = 0 and z = 0 has 4 facets, 4 edges, 1 vertex.
+    fn show_cov(x: &Cov) -> String {
+        x.iter()
+            .map(|s| match s {
+                Sgn::Neg => '-',
+                Sgn::Zero => '0',
+                Sgn::Pos => '+',
+            })
+            .collect()
+    }
+    fn same_set(a: &[Cov], b: &[&str]) -> bool {
+        let sa: Vec<String> = a.iter().map(show_cov).collect();
+        sa.len() == b.len() && b.iter().all(|x| sa.iter().any(|y| y == x))
+    }
+    fn plane_q(a: i64, b: i64, c: i64, d: (i64, i64)) -> Quadric {
+        Quadric {
+            lx: qi(a),
+            ly: qi(b),
+            lz: qi(c),
+            c: q(d.0, d.1),
+            ..Quadric::default()
+        }
+    }
+    fn unit_box() -> (Vec<Quadric>, SForm) {
+        let qs = vec![
+            plane_q(1, 0, 0, (0, 1)),
+            plane_q(1, 0, 0, (-1, 1)),
+            plane_q(0, 1, 0, (0, 1)),
+            plane_q(0, 1, 0, (-1, 1)),
+            plane_q(0, 0, 1, (0, 1)),
+            plane_q(0, 0, 1, (-1, 1)),
+        ];
+        (qs, box_f())
+    }
+    fn lit(j: usize, s: Sgn) -> SForm {
+        SForm::Lit(j, s)
+    }
+    fn and(a: SForm, b: SForm) -> SForm {
+        SForm::And(Box::new(a), Box::new(b))
+    }
+    fn box_f() -> SForm {
+        and(
+            lit(0, Sgn::Pos),
+            and(
+                lit(1, Sgn::Neg),
+                and(
+                    lit(2, Sgn::Pos),
+                    and(lit(3, Sgn::Neg), and(lit(4, Sgn::Pos), lit(5, Sgn::Neg))),
+                ),
+            ),
+        )
+    }
+    fn counts(l: &RefLedger) -> (usize, usize, usize) {
+        (l.facets().len(), l.edges.len(), l.verts.len())
+    }
+
+    /// QLedger.lean's #guards: the ball cut by y = 0 and z = 0; the unit box.
     #[test]
     fn qledger_guards() {
         let plane_y0 = quad([0, 0, 0, 0, 0, 0, 0, 1, 0, 0]);
         let l = qledger(&[sphere1(), plane_y0, plane_z()], &[SForm::Lit(0, Sgn::Neg)]).unwrap();
-        assert_eq!(l.facets().len(), 4);
-        assert_eq!(l.edges.len(), 4);
-        assert_eq!(l.verts.len(), 1);
+        assert!(same_set(&l.facets(), &["0-+", "0--", "0++", "0+-"]));
+        assert!(same_set(&l.edges, &["00+", "00-", "0-0", "0+0"]));
+        assert!(same_set(&l.verts, &["000"]));
+        let (b, f) = unit_box();
+        assert_eq!(qledger(&b, &[f]).map(|l| counts(&l)), Some((6, 12, 8)));
+    }
+
+    /// QSing.lean's #guards.
+    #[test]
+    fn qsing_guards() {
+        let cone = quad([1, 1, -1, 0, 0, 0, 0, 0, 0, 0]);
+        let py = quad([0, 0, 0, 0, 0, 0, 0, 1, 0, 0]);
+        assert!(sing_all(&[cone.clone(), py]));
+        assert!(!sing_all(&[cone]));
+        let cyl = Quadric {
+            xx: qi(1),
+            yy: qi(1),
+            c: q(-1, 4),
+            ..Quadric::default()
+        };
+        assert!(sing_all(&[
+            sphere1(),
+            cyl,
+            quad([0, 0, 0, 0, 0, 0, 1, 2, 3, 4]),
+            quad([1, 1, 1, 0, 0, 0, 0, 0, 0, -9])
+        ]));
+    }
+
+    /// QBound.lean's #guards.
+    #[test]
+    fn qbound_guards() {
+        let (b, f) = unit_box();
+        assert!(propose_cert(&b, &f, &qi(4)).is_some());
+        assert!(propose_cert(&[sphere1()], &lit(0, Sgn::Neg), &qi(2)).is_some());
+        assert!(propose_cert(&b, &f, &qi(1)).is_none());
+        let cyl = Quadric {
+            xx: qi(1),
+            yy: qi(1),
+            c: q(-1, 4),
+            ..Quadric::default()
+        };
+        let cap = [cyl, plane_q(0, 0, 1, (1, 1)), plane_q(0, 0, 1, (-1, 1))];
+        let capf = and(lit(0, Sgn::Neg), and(lit(1, Sgn::Pos), lit(2, Sgn::Neg)));
+        assert!(propose_cert(&cap, &capf, &qi(4)).is_some());
+        assert_eq!(
+            qledger_b(&b, &[box_f()], &qi(4)).map(|l| counts(&l)),
+            Some((6, 12, 8))
+        );
+    }
+
+    /// QGuards.lean: the five representative inputs, certified at R² = 16, with their counts.
+    /// Minutes in release (the cone alone ~40 s), as the Lean's `curved-guards` executable is:
+    /// `cargo test --release -p forge-bool --features curved_reference qguards -- --ignored`
+    /// (`QGUARD=cone` and so on runs one).
+    #[test]
+    #[ignore = "minutes; run in release with --ignored"]
+    fn qguards() {
+        let box3 = vec![
+            plane_q(1, 0, 0, (1, 1)),
+            plane_q(1, 0, 0, (-1, 1)),
+            plane_q(0, 1, 0, (1, 1)),
+            plane_q(0, 1, 0, (-1, 1)),
+            plane_q(0, 0, 1, (1, 1)),
+            plane_q(0, 0, 1, (-1, 1)),
+        ];
+        let cyl = Quadric {
+            xx: qi(1),
+            yy: qi(1),
+            c: q(-1, 4),
+            ..Quadric::default()
+        };
+        let seams = vec![plane_q(0, 1, 0, (0, 1)), plane_q(-1, 0, 0, (0, 1))];
+        let cyl_cap = and(lit(6, Sgn::Neg), and(lit(4, Sgn::Pos), lit(5, Sgn::Neg)));
+        let cat = |a: &[Quadric], b: &[Quadric], c: &[Quadric]| -> Vec<Quadric> {
+            let mut v = a.to_vec();
+            v.extend_from_slice(b);
+            v.extend_from_slice(c);
+            v
+        };
+        let box_minus_cyl = (
+            cat(&box3, std::slice::from_ref(&cyl), &seams),
+            vec![box_f(), cyl_cap.clone()],
+        );
+        let plate = vec![
+            plane_q(1, 0, 0, (1, 1)),
+            plane_q(1, 0, 0, (-1, 1)),
+            plane_q(0, 1, 0, (1, 1)),
+            plane_q(0, 1, 0, (-1, 1)),
+            plane_q(0, 0, 1, (0, 1)),
+            plane_q(0, 0, 1, (-1, 4)),
+        ];
+        let plate_hole = (
+            cat(&plate, std::slice::from_ref(&cyl), &seams),
+            vec![box_f(), cyl_cap],
+        );
+        let sphere_box = (
+            cat(
+                &box3,
+                &[Quadric {
+                    xx: qi(1),
+                    yy: qi(1),
+                    zz: qi(1),
+                    c: q(-9, 4),
+                    ..Quadric::default()
+                }],
+                &[plane_q(1, 0, 0, (0, 1))],
+            ),
+            vec![box_f(), lit(6, Sgn::Neg)],
+        );
+        let capped = and(lit(0, Sgn::Neg), and(lit(3, Sgn::Pos), lit(4, Sgn::Neg)));
+        let cone = (
+            cat(
+                &[quad([1, 1, -1, 0, 0, 0, 0, 0, 0, 0])],
+                &seams,
+                &[plane_q(0, 0, 1, (0, 1)), plane_q(0, 0, 1, (-1, 1))],
+            ),
+            vec![capped.clone()],
+        );
+        let seamed_cyl = (
+            cat(
+                &[cyl],
+                &seams,
+                &[plane_q(0, 0, 1, (1, 1)), plane_q(0, 0, 1, (-1, 1))],
+            ),
+            vec![capped],
+        );
+        let r2 = qi(16);
+        let want = [
+            ("box - cylinder", &box_minus_cyl, (28, 52, 26)),
+            ("plate with a hole", &plate_hole, (28, 52, 26)),
+            ("sphere ∩ box", &sphere_box, (48, 86, 36)),
+            ("cone", &cone, (8, 12, 6)),
+            ("seamed cylinder", &seamed_cyl, (12, 20, 10)),
+        ];
+        let only = std::env::var("QGUARD").ok();
+        for (name, (qs, fs), c) in want {
+            if only.as_deref().is_some_and(|o| !name.starts_with(o)) {
+                continue;
+            }
+            assert!(certified(qs, fs, &r2), "{name}: certified");
+            let l = qledger_b(qs, fs, &r2).unwrap();
+            assert_eq!(counts(&l), c, "{name}");
+        }
     }
 
     /// QArc.lean's #guard: the unit circle in z = 0 against the box [−1/2, 3/2] × [−1/2, 1/2]².

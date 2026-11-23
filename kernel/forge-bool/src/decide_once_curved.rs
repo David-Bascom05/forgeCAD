@@ -1876,10 +1876,127 @@ fn nz_const(q: &Quadric) -> bool {
     is_const_q(q) && !q.c.is_zero()
 }
 
+/// `isXPlane`: a plane `x = const`; its zeros all have one `x`, an event.
+pub fn is_x_plane(q: &Quadric) -> bool {
+    is_plane_q(q) && q.ly.is_zero() && q.lz.is_zero() && !q.lx.is_zero()
+}
+
+/// `sepWith a b (α, β)`: `α a + β b` is a nonzero constant.
+pub fn sep_with(a: &Quadric, b: &Quadric, p: &(Q, Q)) -> bool {
+    p.0.mul(&a.lx).add(&p.1.mul(&b.lx)).is_zero()
+        && p.0.mul(&a.ly).add(&p.1.mul(&b.ly)).is_zero()
+        && p.0.mul(&a.lz).add(&p.1.mul(&b.lz)).is_zero()
+        && !p.0.mul(&a.c).add(&p.1.mul(&b.c)).is_zero()
+}
+
+/// `parallelApart`: two parallel, distinct planes, certified by `sep_with`.
+pub fn parallel_apart(a: &Quadric, b: &Quadric) -> bool {
+    is_plane_q(a)
+        && is_plane_q(b)
+        && (sep_with(a, b, &(b.lx.clone(), a.lx.neg()))
+            || sep_with(a, b, &(b.ly.clone(), a.ly.neg()))
+            || sep_with(a, b, &(b.lz.clone(), a.lz.neg())))
+}
+
+/// `nrm a`: a plane's normal.
+pub fn nrm(a: &Quadric) -> V3 {
+    V3::new(a.lx.clone(), a.ly.clone(), a.lz.clone())
+}
+
+/// `lineOf a b`: the line of two planes (untrusted): a point, a direction, the direction's
+/// scale against `n_a × n_b`; normalised to `D.x = 1`, `P.x = 0` when `D.x ≠ 0`.
+pub fn line_of(a: &Quadric, b: &Quadric) -> (V3, V3, Q) {
+    let cc = nrm(a).cross(&nrm(b));
+    let dd = cc.dot(&cc);
+    let u = nrm(b).cross(&cc);
+    let w = cc.cross(&nrm(a));
+    let comp = |ux: &Q, wx: &Q| a.c.neg().mul(ux).sub(&b.c.mul(wx)).div(&dd);
+    let p = V3::new(comp(&u.x, &w.x), comp(&u.y, &w.y), comp(&u.z, &w.z));
+    if !cc.x.is_zero() {
+        let mu = p.x.neg().div(&cc.x);
+        (
+            V3::new(
+                p.x.add(&mu.mul(&cc.x)),
+                p.y.add(&mu.mul(&cc.y)),
+                p.z.add(&mu.mul(&cc.z)),
+            ),
+            V3::new(cc.x.div(&cc.x), cc.y.div(&cc.x), cc.z.div(&cc.x)),
+            Q::one().div(&cc.x),
+        )
+    } else {
+        (p, cc, Q::one())
+    }
+}
+
+/// `lineOk a b L`: both planes, `P` on both, `D = κ (n_a × n_b)`, `κ ≠ 0`, `n_a × n_b ≠ 0`.
+pub fn line_ok(a: &Quadric, b: &Quadric, l: &(V3, V3, Q)) -> bool {
+    let cc = nrm(a).cross(&nrm(b));
+    is_plane_q(a)
+        && is_plane_q(b)
+        && !cc.dot(&cc).is_zero()
+        && !l.2.is_zero()
+        && nrm(a).dot(&l.0).add(&a.c).is_zero()
+        && nrm(b).dot(&l.0).add(&b.c).is_zero()
+        && l.1.x == l.2.mul(&cc.x)
+        && l.1.y == l.2.mul(&cc.y)
+        && l.1.z == l.2.mul(&cc.z)
+}
+
+/// `lineEvents a b q fuel`: the `x`s of the common zeros of two planes and `q`, by their line.
+pub fn line_events(a: &Quadric, b: &Quadric, q: &Quadric, fuel: usize) -> Option<Vec<Num>> {
+    let l = line_of(a, b);
+    if !line_ok(a, b, &l) {
+        None
+    } else if l.1.x.is_zero() {
+        Some(vec![Num::Rat(l.0.x.clone())])
+    } else if l.1.x == Q::one() && l.0.x.is_zero() {
+        roots_of(&along_line(q, &l.0, &l.1), fuel)
+    } else {
+        None
+    }
+}
+
+/// `lineTriple`: two of the three are planes with a line: the line's events.
+pub fn line_triple(a: &Quadric, b: &Quadric, c: &Quadric, fuel: usize) -> Option<Vec<Num>> {
+    if line_ok(a, b, &line_of(a, b)) {
+        line_events(a, b, c, fuel)
+    } else if line_ok(a, c, &line_of(a, c)) {
+        line_events(a, c, b, fuel)
+    } else if line_ok(b, c, &line_of(b, c)) {
+        line_events(b, c, a, fuel)
+    } else {
+        None
+    }
+}
+
+/// The cases `proposeTripleX` decides before the proposers (QSweep.lean at 7ab0596): a nonzero
+/// constant or two parallel planes (no common point), a plane `x = const` (its `x`), and two
+/// planes meeting in a line. `None`: none applies.
+fn triple_x_prefix(a: &Quadric, b: &Quadric, c: &Quadric, fuel: usize) -> Option<Option<Vec<Num>>> {
+    if nz_const(a)
+        || nz_const(b)
+        || nz_const(c)
+        || parallel_apart(a, b)
+        || parallel_apart(a, c)
+        || parallel_apart(b, c)
+    {
+        Some(Some(Vec::new()))
+    } else if is_x_plane(a) {
+        Some(Some(vec![Num::Rat(a.c.neg().div(&a.lx))]))
+    } else if is_x_plane(b) {
+        Some(Some(vec![Num::Rat(b.c.neg().div(&b.lx))]))
+    } else if is_x_plane(c) {
+        Some(Some(vec![Num::Rat(c.c.neg().div(&c.lx))]))
+    } else {
+        let lt = line_triple(a, b, c, fuel);
+        if lt.is_some() { Some(lt) } else { None }
+    }
+}
+
 /// **`proposeTripleX`**: the `x` of every common point of a triple (`proposeTripleX_complete`).
 pub fn propose_triple_x(a: &Quadric, b: &Quadric, c: &Quadric, fuel: usize) -> Option<Vec<Num>> {
-    if nz_const(a) || nz_const(b) || nz_const(c) {
-        Some(Vec::new())
+    if let Some(r) = triple_x_prefix(a, b, c, fuel) {
+        r
     } else if is_plane_q(a) && is_plane_q(b) && is_plane_q(c) {
         let d = det3_q(a, b, c);
         if !d.is_zero() {
@@ -1979,7 +2096,7 @@ pub fn spread_e(l: &[Num]) -> Vec<Num> {
     if l.is_empty() {
         Vec::new()
     } else {
-        separate(400, &l[0], &l[1..])
+        separate(400 * l.len(), &l[0], &l[1..])
     }
 }
 
@@ -2268,8 +2385,8 @@ pub fn vert_xs3(qa: &Quadric, qb: &Quadric, qc: &Quadric, fuel: usize) -> Option
 /// `vert_xs_plane` and `vert_xs3`, which need no per-point representation (a superset of the
 /// `x`s; an extra event only adds a sweep plane). Proposed to dol-curved for QSweep.lean.
 pub fn propose_triple_xs(a: &Quadric, b: &Quadric, c: &Quadric, fuel: usize) -> Option<Vec<Num>> {
-    if nz_const(a) || nz_const(b) || nz_const(c) {
-        Some(Vec::new())
+    if let Some(r) = triple_x_prefix(a, b, c, fuel) {
+        r
     } else if is_plane_q(a) && is_plane_q(b) && is_plane_q(c) {
         let d = det3_q(a, b, c);
         if !d.is_zero() {
