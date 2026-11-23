@@ -98,6 +98,16 @@ def loop_segs(a, lp, flip, fmt):
                 c1, c2 = (m[0] + h * n[0], m[1] + h * n[1]), (m[0] - h * n[0], m[1] - h * n[1])
                 c = c1 if math.dist(c1, c) <= math.dist(c2, c) else c2
             out.append(("arc", q(c), q(s), q(e), d > 0))
+        elif p.kind == "poly" and p.src is not None and p.src[0] == "nurbs":
+            # the whole of a clamped NURBS: its poles, knots and weights, run the loop's way
+            _, deg, poles, knots, weights = p.src
+            if not fwd:
+                poles, weights = poles[::-1], weights[::-1]
+                knots = [knots[0] + knots[-1] - k for k in knots[::-1]]
+            ps = [f(x) for x in poles]
+            ps[0], ps[-1] = s, e
+            ws = None if all(w == 1.0 for w in weights) else [fmt(w) for w in weights]
+            out.append(("nurbs", [q(x) for x in ps], deg, [fmt(k) for k in knots], ws))
         elif p.kind == "poly":
             ps = [f(x) for x in (p.pts if fwd else p.pts[::-1])]
             ps[0], ps[-1] = s, e
@@ -147,6 +157,13 @@ def rows_of(loops):
                 _, c, s, e, ccw = sg
                 cw = "" if ccw else ", cw: true"
                 rows.append(f"a{k} = arc(center: {arc_centre(c, s, e)}, from: {pt2(s)}, to: {pt2(e)}{cw})")
+            elif sg[0] == "nurbs":
+                # ("nurbs", [poles], degree, [knots], [weights] or None)
+                _, ps, deg, ks, ws = sg
+                extra = f", degree: {deg}, knots: [{', '.join(ks)}]"
+                if ws is not None:
+                    extra += f", weights: [{', '.join(ws)}]"
+                rows.append(f"s{k} = spline([{', '.join(pt2(p) for p in ps)}]{extra})")
             elif sg[0] == "spline":
                 # ("spline", [points], slope at start or None, at end or None)
                 _, ps, d0, d1 = sg
@@ -274,6 +291,8 @@ class Prog:
                     more = ", flip: true"
             else:
                 raise ValueError(w)
+            if getattr(st, "taper", None) is not None:
+                more += f", taper: {st.taper}deg"
             if getattr(st, "along", None):
                 # the walls slanted along it, each end square to the normal
                 more += f", along: {self.dir(st.along)}"
@@ -292,6 +311,18 @@ class Prog:
                 ang = {"a": lambda: f", angle: {t[1]}deg", "sym": lambda: f", angle: sym({t[1]}deg)", "two": lambda: f", angle: two({t[1]}deg, {t[2]}deg)"}[t[0]]()
             op = {"cut": ", cut: true", "keep": ", keep: true"}.get(st.op, "")
             self.out.append(f"{i} = revolve({sk}, axis: {sk}.ax{ang}{op}{new}{self.opts(st, made)})")
+            if made:
+                self.cur = i
+        elif k == "coil":
+            # wound about a line of its sketch, rising along it: pitch and height
+            ox, oy, dx, dy = st.axis
+            bx, by = exact(float(ox) + float(dx)), exact(float(oy) + float(dy))
+            rows = rows_of(st.loops) + [f"ax = line(({ox}, {oy}), ({bx}, {by}), construction: true)"]
+            sk = self.sketch(f"{i}_sk", st.frame, rows)
+            made, new = self.solid_op(st)
+            op = {"cut": ", cut: true", "keep": ", keep: true"}.get(st.op, "")
+            left = ", left: true" if st.left else ""
+            self.out.append(f"{i} = coil({sk}, axis: {sk}.ax, pitch: {st.pitch}, height: {st.height}{left}{op}{new}{self.opts(st, made)})")
             if made:
                 self.cur = i
         elif k == "sweep":
@@ -354,7 +385,11 @@ class Prog:
             more = ""
             if k == "chamfer" and getattr(st, "corner", None):
                 more = f', corner: "{st.corner}"'
+            if k == "fillet" and getattr(st, "conic", None) is not None:
+                more = f", conic: ratio({st.conic})"
             self.out.append(f"{i} = {k}({st.sel}, {st.size}{more})")
+        elif k == "draft":
+            self.out.append(f"{i} = draft({st.sel}, angle: {st.angle}deg, neutral: {self.plane(st.plane)})")
         elif k == "shell":
             out = ", out: true" if st.out else ""
             self.out.append(f"{i} = shell({st.size}, open: {st.sel}{out})")

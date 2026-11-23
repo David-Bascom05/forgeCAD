@@ -649,7 +649,172 @@ pub struct Blend {
     pub var: Option<Arc<VarBlend>>,
 }
 
+/// A conic fillet's cross-section at one place along a blend: the rational quadratic from the
+/// ball's foot on `a` through the apex to its foot on `b`, middle weight w = rho / (1 - rho).
+/// The apex is where the faces' tangent planes at the feet meet in the ball's section plane:
+/// c + (ua + ub) / (1 + cos phi), ua and ub from the centre to the feet, phi the angle between
+/// them. With w = cos(phi / 2) this is the ball's arc itself.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ConicSection {
+    pub foot_a: Point3,
+    pub apex: Point3,
+    pub foot_b: Point3,
+    pub w: f64,
+}
+
+impl ConicSection {
+    /// From the ball (centre c) and its feet; None where the feet are opposite or coincide (no
+    /// apex: the faces are parallel there, or tangent).
+    pub fn from_ball(c: Point3, foot_a: Point3, foot_b: Point3, w: f64) -> Option<ConicSection> {
+        let (ua, ub) = (foot_a - c, foot_b - c);
+        let rr = ua.length() * ub.length();
+        if rr <= 0.0 {
+            return None;
+        }
+        let cos = ua.dot(ub) / rr;
+        // the faces turn by less than LINEAR over the radius, or nearly fold back
+        if !(cos > -1.0 + 1e-9 && 1.0 - cos > 1e-12) {
+            return None;
+        }
+        let apex = c + (ua + ub) / (1.0 + cos);
+        Some(ConicSection {
+            foot_a,
+            apex,
+            foot_b,
+            w,
+        })
+    }
+    /// The section as one rational quadratic Bezier piece over [0, 1], foot on a at 0.
+    pub fn spline(&self) -> Option<crate::spline::Spline> {
+        let h = |p: Point3, w: f64| [p.x * w, p.y * w, p.z * w, w];
+        crate::spline::Spline::from_pieces(
+            2,
+            vec![0.0, 1.0],
+            vec![h(self.foot_a, 1.0), h(self.apex, self.w), h(self.foot_b, 1.0)],
+        )
+    }
+    /// p's barycentric coordinates in the triangle (foot on a, apex, foot on b), in its plane. A
+    /// point of the conic lies on the section's arc exactly where all three are at least zero.
+    pub fn barycentric(&self, p: Point3) -> [f64; 3] {
+        let (e1, e2, q) = (
+            self.apex - self.foot_a,
+            self.foot_b - self.foot_a,
+            p - self.foot_a,
+        );
+        let (d11, d12, d22) = (e1.dot(e1), e1.dot(e2), e2.dot(e2));
+        let (q1, q2) = (q.dot(e1), q.dot(e2));
+        let det = d11 * d22 - d12 * d12;
+        let l1 = (d22 * q1 - d12 * q2) / det;
+        let l2 = (d11 * q2 - d12 * q1) / det;
+        [1.0 - l1 - l2, l1, l2]
+    }
+}
+
+/// The middle weight of a conic section of shoulder ratio rho (the section's point on the line
+/// from the chord's middle to the apex lies rho of the way): w = rho / (1 - rho). None outside
+/// (0, 1).
+pub fn conic_weight(rho: f64) -> Option<f64> {
+    (rho > 0.0 && rho < 1.0).then(|| rho / (1.0 - rho))
+}
+
 impl Blend {
+    /// A conic blend's middle weight (`Blend::with_conic`), read off its surface: only a conic
+    /// blend's is a spline wall (its section swept or turned). None for a ball's.
+    pub fn conic_weight(&self) -> Option<f64> {
+        let Surface::Procedural(p) = &self.surface else {
+            return None;
+        };
+        if !p.spline_wall() {
+            return None;
+        }
+        {
+            let (_, _, _, w) = crate::spline::meet::extruded(&self.surface)
+                .map(|e| e.section().control_form())
+                .or_else(|| crate::spline::meet::spun(&self.surface).map(|s| s.section().control_form()))?;
+            // all its weights one (rho 0.5, a parabola): stored as no weights at all
+            Some(w.map_or(1.0, |w| w.get(1).copied().unwrap_or(1.0)))
+        }
+    }
+
+    /// The section at spine parameter t of a conic blend (None for a ball's arc).
+    pub fn conic_section(&self, t: f64) -> Option<ConicSection> {
+        let w = self.conic_weight()?;
+        let c = self.spine.eval(t);
+        let (fa, fb) = self.feet(t);
+        ConicSection::from_ball(c, fa, fb, w)
+    }
+
+    /// The same blend with a conic cross-section of weight w between the ball's feet
+    /// (`ConicSection`): springs, spine and radius stay. Exact where the section is the same all
+    /// along: a line spine gives the conic swept straight (over `along`, the spine's stretch it
+    /// must reach), a circle spine the conic turned about the circle's axis. None for any other
+    /// spine, a variable radius, or a section with no apex.
+    pub fn with_conic(&self, w: f64, along: Interval) -> Option<Blend> {
+        if self.var.is_some() || !(w > 0.0 && w.is_finite()) {
+            return None;
+        }
+        let mut out = self.clone();
+        let t0 = match &self.spine {
+            Curve::Line(_) | Curve::Circle(_) => 0.0,
+            _ => return None,
+        };
+        let (fa, fb) = self.feet(t0);
+        let sec = ConicSection::from_ball(self.spine.eval(t0), fa, fb, w)?;
+        let c0 = self.spine.eval(t0);
+        let section = sec.spline()?;
+        // the natural normal points away from the spine, as the ball's does: at the section's
+        // middle, away from c0
+        let away = |s: &Surface| {
+            let m = section.point(0.5);
+            let uv = s.project(m);
+            s.normal(uv).is_some_and(|n| n.dot(m - c0) > 0.0)
+        };
+        let surface = match &self.spine {
+            Curve::Line(l) => {
+                let x = sec.foot_a - c0;
+                let frame = Frame::from_zx(c0, l.dir, x)?;
+                let local = Arc::new(section.mapped(|p| frame.point_to_local(p)));
+                let s = crate::spline::Extruded::new(frame, local.clone(), along)?.surface();
+                if away(&s) {
+                    s
+                } else {
+                    let flipped = Arc::new(local.reversed());
+                    crate::spline::Extruded::new(frame, flipped, along)?.surface()
+                }
+            }
+            Curve::Circle(k) => {
+                // the section in the frame's xz half plane at angle 0, as (radius, height)
+                let f = &k.frame;
+                let rh = |p: Point3| {
+                    let l = f.point_to_local(p);
+                    Point3::new(l.x, l.z, 0.0)
+                };
+                let local = Arc::new(section.mapped(rh));
+                let s = crate::spline::Spun::new(*f, local.clone())?.surface();
+                if away(&s) {
+                    s
+                } else {
+                    crate::spline::Spun::new(*f, Arc::new(local.reversed()))?.surface()
+                }
+            }
+            _ => return None,
+        };
+        out.surface = surface;
+        Some(out)
+    }
+
+    /// The cross-section at spine parameter t as an edge's curve and range, from the foot on `a`
+    /// to the foot on `b`: the ball's circle (as `section`) or the conic.
+    pub fn section_curve(&self, t: f64) -> Option<(Curve, Interval)> {
+        if let Some(sec) = self.conic_section(t) {
+            let s = sec.spline()?;
+            let d = s.domain();
+            return Some((crate::spline::SplineCurve::curve(Arc::new(s), d), d));
+        }
+        let (circle, angle) = self.section(t)?;
+        Some((Curve::Circle(circle), Interval::new(0.0, angle)))
+    }
+
     /// The blend whose spine passes nearest `near`, or None where the offsets
     /// do not meet there.
     pub fn new(a: &Surface, b: &Surface, da: f64, db: f64, near: Point3, region: Box3) -> Option<Blend> {

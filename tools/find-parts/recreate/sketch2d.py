@@ -196,6 +196,11 @@ def entities(ents):
             pts = [tuple(x) for x in e["points"]]
             p = Piece(e["id"], "poly", pts[0], pts[-1], pts=pts)
             approx = approx or not e.get("construction")
+        elif k == "nurbs":
+            # a clamped NURBS: sampled for the arrangement, written exactly while a piece is the whole of it
+            pts = [tuple(x) for x in e["points"]]
+            p = Piece(e["id"], "poly", pts[0], pts[-1], pts=pts)
+            p.src = ("nurbs",) + tuple(e["nurbs"])
         elif k == "skPoint":
             every[e["id"]] = Piece(e["id"], "point", tuple(e["position"]), tuple(e["position"]))
             continue

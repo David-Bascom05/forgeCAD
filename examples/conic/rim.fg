@@ -1,0 +1,13 @@
+# The top rim of a block rounded conic: four straight blends, each pair cut by the other where
+# they meet beside a sharp vertical edge (a mitre).
+shared L = 40
+shared W = 30
+shared H = 20
+param rim.r = 6
+param rim.rho = ratio(0.7)
+
+sketch plan(on: xy) {
+  outline = rect(corner: (0, 0), size: (L, W))
+}
+base = extrude(plan, H)
+rim = fillet(edges(of: base.end), r, conic: rho)

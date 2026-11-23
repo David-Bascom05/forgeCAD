@@ -1,0 +1,21 @@
+# A boss on a plate, its root and its top rim rounded conic: each section turned about the boss's
+# axis (Pappus: 2 pi times the section's moment about the axis).
+shared P = 60
+shared T = 8
+shared R = 10
+shared H = 12
+param root.r = 3
+param root.rho = ratio(0.5)
+param top.r = 3
+param top.rho = ratio(0.8)
+
+sketch plan(on: xy) {
+  outline = rect(corner: (0, 0), size: (P, P))
+}
+plate = extrude(plan, T)
+sketch pad(on: plate.end) {
+  c = circle((P / 2, P / 2), R)
+}
+boss = extrude(pad.c, H)
+root = fillet(edges(between: (boss.side(pad.c), plate.end)), r, conic: rho)
+top = fillet(edges(between: (boss.side(pad.c), boss.end)), r, conic: rho)
