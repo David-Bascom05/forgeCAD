@@ -160,7 +160,7 @@ Before/after pairs share names in `before/` and `after/`.
 
 | # | item | state |
 |---|---|---|
-| 1 | Empty state | done: `shell/empty.rs`; "No document open" in the browser (`01-empty`). Ribbon tools that need a document: not yet |
+| 1 | Empty state | done: `shell/empty.rs`; "No document open" in the browser (`01-empty`). the ribbon: row 1b |
 | 2 | Spacing | done in every panel that uses `dialog_head` (Measure, Issues, inspect windows, asm dialogs); the global default is left at 0 because the hand-laid chrome depends on it |
 | 3 | One accent | done: `accent` is the primary blue; the ribbon/side tab rules and the active document tab use it; the tool dialog's OK is primary |
 | 4 | Issues rows, build-failed banner | done (`11-error`, `12-error-issues`): `shell/banner.rs` |
@@ -169,9 +169,11 @@ Before/after pairs share names in `before/` and `after/`.
 | 7 | Settings | done: scrim, centred, "Neutral grey" (`08`, `09`) |
 | 8 | Status bar | done: units chip, the issues chip always a chip |
 | 12 | Document tabs | done: sans 12, the accent rule on top of the active tab |
-| 9 | Browser | the change dot has a tooltip; one width and a filter in both: not yet |
+| 9 | Browser | the flag dot has a tooltip. The widths stay apart on purpose: an assembly's rows carry a detail column ("Body base", counts) a part's don't; a filter for a part's browser is a feature, not polish |
 | 11 | Axes through the part | left: the renderer draws what's behind the part dimly on purpose (`Overlay::behind`); a render decision for the owner |
-| 10, 13 | | not yet |
+| 1b | Ribbon with no document | done: tools that need a part are drawn off, their tooltip "open or create a part first"; New, Open, Settings and Thermoform's tab stay on (`tests/no_document.rs`) |
+| 10 | Mode prompt contrast | no change needed: the grey in `before/05` was the bar's fade-in caught mid-way; `after/05` is the settled frame |
+| 13 | Measure's selection colours | no change needed: "Selection 1/2" are the view's amber and green for the first and second selection |
 
 Known, not from this work: `cargo clippy --lib --target wasm32-unknown-unknown` fails at
 `errno` before reaching forge-render, through `zbus-secret-service-keyring-store` (not gated to

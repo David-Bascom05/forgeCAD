@@ -679,12 +679,38 @@ impl Shell {
         }
     }
 
+    /// Nothing open: no part, drawing or DWG.
+    pub(super) fn no_document(&self) -> bool {
+        self.fg.is_none() && self.drawing.is_none() && self.dwgdoc.is_none()
+    }
+
+    /// A tool that does nothing without a document is drawn off then, its tooltip saying why;
+    /// what makes or opens one, Settings, and Thermoform's own tab stay on.
+    fn needs_document(&self, tool: &Tool) -> bool {
+        self.no_document()
+            && tool.action.is_some()
+            && self.tab != super::THERMO_TAB
+            && !matches!(tool.name, "Settings" | "Open" | "New" | "New Sheet Metal")
+    }
+
     pub(super) fn tool_response(
         &mut self,
         ui: &mut Ui,
         tool: &Tool,
         r: Rect,
     ) -> (egui::Color32, egui::Response) {
+        let off;
+        let tool = if self.needs_document(tool) {
+            off = Tool {
+                name: tool.name,
+                icon: tool.icon,
+                action: None,
+                on: false,
+            };
+            &off
+        } else {
+            tool
+        };
         let t = self.theme;
         let sense = if tool.action.is_some() {
             Sense::click()
