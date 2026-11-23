@@ -22,15 +22,18 @@ impl Interval {
             hi: lo.max(hi),
         }
     }
+    #[inline]
     pub fn point(v: f64) -> Self {
         Interval { lo: v, hi: v }
     }
+    #[inline]
     fn out(lo: f64, hi: f64) -> Self {
         Interval {
             lo: lo.next_down(),
             hi: hi.next_up(),
         }
     }
+    #[inline]
     pub fn is_empty(&self) -> bool {
         self.lo > self.hi
     }
@@ -140,27 +143,32 @@ impl Interval {
     }
 }
 
+#[inline]
 fn min4(c: [f64; 4]) -> f64 {
     c[0].min(c[1]).min(c[2]).min(c[3])
 }
+#[inline]
 fn max4(c: [f64; 4]) -> f64 {
     c[0].max(c[1]).max(c[2]).max(c[3])
 }
 
 impl Add for Interval {
     type Output = Interval;
+    #[inline]
     fn add(self, o: Interval) -> Interval {
         Interval::out(self.lo + o.lo, self.hi + o.hi)
     }
 }
 impl Sub for Interval {
     type Output = Interval;
+    #[inline]
     fn sub(self, o: Interval) -> Interval {
         Interval::out(self.lo - o.hi, self.hi - o.lo)
     }
 }
 impl Neg for Interval {
     type Output = Interval;
+    #[inline]
     fn neg(self) -> Interval {
         Interval {
             lo: -self.hi,
@@ -170,6 +178,7 @@ impl Neg for Interval {
 }
 impl Mul for Interval {
     type Output = Interval;
+    #[inline]
     fn mul(self, o: Interval) -> Interval {
         let c = [self.lo * o.lo, self.lo * o.hi, self.hi * o.lo, self.hi * o.hi];
         Interval::out(min4(c), max4(c))
@@ -177,12 +186,14 @@ impl Mul for Interval {
 }
 impl Mul<f64> for Interval {
     type Output = Interval;
+    #[inline]
     fn mul(self, s: f64) -> Interval {
         self * Interval::point(s)
     }
 }
 impl Add<f64> for Interval {
     type Output = Interval;
+    #[inline]
     fn add(self, s: f64) -> Interval {
         self + Interval::point(s)
     }
