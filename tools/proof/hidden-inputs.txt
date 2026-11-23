@@ -362,7 +362,7 @@ speed (a counter, stats only)  @ forge-model/src/lib.rs|thread_local|thread_loca
 no-output (results and errors put back in index order)  @ forge-model/src/lib.rs|threads|let done: Vec<Vec<Built>> = std::thread::scope(|s| {
 no-output (W3: a stop flag; the helper builds tools in item order and the steps take them in order)  @ forge-model/src/lib.rs|atomic|let stop = std::sync::atomic::AtomicBool::new(false);
 speed (W3: the clock decides only which thread builds a tool, never what it is; tools are functions of the history)  @ forge-model/src/lib.rs|clock|let start = std::time::Instant::now();
-speed (W3: the clock decides only which thread builds a tool, never what it is; tools are functions of the history)  @ forge-model/src/lib.rs|clock|let t = std::time::Instant::now();
+speed (W3: the clock decides only which thread builds a tool, never what it is; tools are functions of the history)  @ forge-model/src/lib.rs|clock|let t = (!starts(&h[i])).then(std::time::Instant::now);
 no-output (W3: tools built ahead in item order, taken by the steps in order; errors met at the same step; bits identical at 1, 2, 4, 16 threads)  @ forge-model/src/lib.rs|threads|std::thread::scope(|s| {
 no-output (looked up by key, never iterated)  @ forge-model/src/names.rs|hash-order|let mut built: std::collections::HashMap<(usize, usize), Option<std::sync::Arc<Body>>> =
 no-output (no iteration order reaches an output; audit)  @ forge-model/src/splitface.rs|hash-order|leave: &HashMap<VertexId, Use>,
