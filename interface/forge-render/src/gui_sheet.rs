@@ -255,7 +255,7 @@ impl Gui {
                     .and_then(|p| std::path::Path::new(p).parent().map(|d| d.join(path)))
                     .unwrap_or_else(|| path.to_path_buf())
             };
-            std::fs::write(&out, text).map_err(|e| format!("{}: {e}", out.display()))?;
+            forge_dirs::fs::write(&out, text).map_err(|e| format!("{}: {e}", out.display()))?;
             Ok(out.display().to_string())
         })();
         self.shell.status = match &got {
@@ -272,7 +272,8 @@ impl Gui {
         } else {
             format!("{path}.fg")
         };
-        std::fs::write(&path, new_part_text(&Defaults::default())).map_err(|e| format!("{path}: {e}"))?;
+        forge_dirs::fs::write(&path, new_part_text(&Defaults::default()))
+            .map_err(|e| format!("{path}: {e}"))?;
         self.open(&path);
         self.shell.sheet.env = true;
         self.shell.tab = SHEET_TAB;

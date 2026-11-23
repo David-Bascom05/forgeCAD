@@ -805,7 +805,7 @@ pub fn hole_fits() -> Vec<String> {
 pub fn offer_lists(t: &mut FgTool, dir: Option<&std::path::Path>) {
     let beside = |exts: &[&str]| -> Vec<String> {
         let mut v: Vec<String> = dir
-            .and_then(|d| std::fs::read_dir(d).ok())
+            .and_then(|d| forge_dirs::fs::read_dir(d).ok())
             .into_iter()
             .flatten()
             .filter_map(|e| e.ok()?.file_name().into_string().ok())
