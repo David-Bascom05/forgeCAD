@@ -62,8 +62,9 @@ wall-clock time, and beside it the CPU time (user+sys of every thread) the wait 
 
 ### What a line is
 
-A line is PART, THREADS, OP. THREADS is `t1` (FORGECAD_THREADS=1, pinned to one core) or `tN`
-(every core). The parts are the gate's bench parts. The ops, each the user-facing operation:
+A line is PART, THREADS, OP. THREADS is `t1` (FORGECAD_THREADS=1, pinned to one core), `tN`
+(every core, FORGECAD_THREADS unset: what a user gets), or `tK` with `--threads` (FORGECAD_THREADS=K
+on every core, e.g. `t16` as regen1's nary16). The parts are the gate's bench parts. The ops, each the user-facing operation:
 
 | op | what the user did |
 |---|---|
@@ -73,6 +74,7 @@ A line is PART, THREADS, OP. THREADS is `t1` (FORGECAD_THREADS=1, pinned to one 
 | `mesh` | exported 3MF, each solid checked watertight |
 | `draw` | drew four views (front, top, right, iso): hidden-line removal |
 | `nary` | the kernel's n-ary boolean regen of the part's features, at the process's thread count |
+| `k-NAME kseq`, `k-NAME nary` | the kernel suite part NAME (regen1's parts: coplanar, upto, shaft, mixed, patterns, plate) regenerated alone, sequentially and n-ary at the thread count (`--kparts`) |
 | `cam exec` | the CAM certify go/no-go, a whole process (only where the checkout has `forge-cam-lang`) |
 
 `draw` is measured on the parts whose four views take under about a second (`LAT_DRAW_PARTS` in
@@ -107,30 +109,38 @@ A line is PART, THREADS, OP. THREADS is `t1` (FORGECAD_THREADS=1, pinned to one 
   wider threshold). A warning, not a failure: it marks a change that keeps more cores busy for the
   same wait, or for less.
 
-### How a change passes: the two gates together
+### How a change passes: wall-clock is the gate
 
-The base rule stays: **nothing user-facing gets slower**.
+The owner: "I care about speed. If flat bool can be made faster with the same number of threads I
+don't really care how many instructions it is. If it's just faster because of better threading in
+that algo it should win." And on fairness: "the comparison has to run on equal thread counts. 16
+vs single thread is not fair, unless one algo is inherently limited on taking advantage of multi
+threading." And: "If it's 16 threads vs 1 and 1 is winning still take the 1. Fastest wins."
 
-1. **Single-threaded code** (no new threads, no change to what runs in parallel): the
-   instruction gate is the regression detector, unchanged (`gate.sh`, exact, one instruction).
-   The latency gate needs not run; if it is run, no line may be `REGRESSED`.
-2. **A change that adds or changes threading** is judged by the latency gate, run as
-   `latency.sh --base BASE`:
-   - every `tN` line it targets is `IMPROVED` (wall lower at all cores), and no `tN` line is
-     `REGRESSED`;
-   - no `t1` line is `REGRESSED` (a one-core user waits no longer);
-   - the instruction gate may rise, but only by the threading overhead (spawning, joining,
-     splitting the work), and the change states it: per line the instruction gate's delta, and
-     the `t1` CPU delta from the latency report, which is that overhead in time. A rise in
-     instructions larger than what the `t1` lines show (e.g. a sequential path that also got
-     slower) is a regression of the single-threaded code and fails rule 1.
-   - `cpu+` on `tN` lines is stated with the change (the cores it keeps busy for the time saved).
+The base rule stays: **nothing user-facing gets slower**. A change passes when, from
+`latency.sh --base BASE`:
+
+1. **No line is `REGRESSED`** in wall-clock, at `t1` (head at one thread against base at one
+   thread) and at `tN` (head at all cores against base at all cores). Head and base are only ever
+   compared at the same thread setting, N the same on both sides and printed in the report; never
+   head at N against base at 1. A base whose algorithm is sequential still runs at N threads in
+   the `tN` comparison and simply does not gain: that is the fair case.
+2. **No new `THREADS HURT`**: on head, every line at all cores (the default, what a user gets)
+   is not slower than the same build at one thread, by the same test. Fastest wins: where
+   threads make a line slower, the code stays serial there (an adaptive start, a cutoff). A line
+   that is so on base too is listed `(base too)` and does not fail the change, but is owed a fix.
 3. **Bits**: every result identical to `bits.txt`, native the same as wasm (`wasm.sh`), and no
-   result depends on the thread count: `latency.sh bits` builds every part and regenerates it
-   (seq and n-ary at the thread count, and the drawing's views) at FORGECAD_THREADS=1, 2 and N,
-   and runs the gate's bit suites at each; all must be identical.
+   result depends on the thread count: `latency.sh bits` regenerates every part (seq and n-ary at
+   the thread count, and the drawing's views) at FORGECAD_THREADS=1, 2 and N, and runs the gate's
+   bit suites at each; all must be identical.
 
-A change passes when both gates pass by these rules and bits are identical.
+A change that is faster only through better threading passes. The tN/t1 speed-up per line
+(`record`) is information, never a pass.
+
+**The instruction gate is diagnostic** (`gate.sh`): reported with every change, an early
+warning (it is exact, so it sees a 0.1% single-thread change the wall clock cannot), and the
+place to find *where* a change costs (`phases.sh`); it never fails a change. `cpu+` from the
+latency gate (more CPU burnt for the same or less wait) is a warning, stated with the change.
 
 ### Validation
 

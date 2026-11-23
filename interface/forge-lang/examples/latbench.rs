@@ -10,6 +10,9 @@
 //!                             `nary` (the kernel's n-ary regen at the process's thread count);
 //!                             an op's reps stop once they took LATBENCH_BUDGET s (default 2),
 //!                             and LATBENCH_SKIP=op,.. leaves ops out
+//!   latbench kern NAME [K]    the kernel's suite part NAME (forge_model::suite: coplanar, upto,
+//!                             shaft, mixed, ..): `kseq` (the sequential regen) and `nary` (the
+//!                             n-ary regen at the process's thread count), warm-up then K reps
 //!   latbench exec CMD ARG..   one timed run of a child process (the CAM certify line)
 //!   latbench bits             each part's result hashed, seq and n-ary at the process's thread
 //!                             count (compared across FORGECAD_THREADS=1, 2, N by latency.sh)
@@ -267,6 +270,25 @@ fn main() {
             &args[1],
             args.get(2).map_or(5, |k| k.parse().expect("K")),
         ),
+        Some("kern") => {
+            let name = &args[1];
+            let k = args.get(2).map_or(5, |k| k.parse().expect("K"));
+            let part = forge_model::suite::part(name).expect("a suite part");
+            let ops: [(&str, &dyn Fn() -> bool); 2] = [
+                ("kseq", &|| part.regenerate().is_ok()),
+                ("nary", &|| part.regenerate_nary(forge_math::par::threads()).is_ok()),
+            ];
+            for (op, go) in ops {
+                assert!(timed(name, op, usize::MAX, go), "{name} {op} failed");
+                let t0 = Instant::now();
+                for rep in 1..=k {
+                    timed(name, op, rep, go);
+                    if t0.elapsed() > budget() {
+                        break;
+                    }
+                }
+            }
+        }
         Some("exec") => {
             let (c0, t0) = (children_cpu_ns(), Instant::now());
             let st = std::process::Command::new(&args[1])

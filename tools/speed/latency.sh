@@ -13,7 +13,11 @@
 # opts:  --rounds N   rounds per side (default 12): each a fresh process per part and threads
 #        --reps K     timed reps of each op in a round, after one warm-up rep (default 5)
 #        --parts "a b .."  (default: every parts/bench/*.fg)
-#        --threads "t1 tN" (default both)
+#        --threads "t1 tN" (default both): t1 = FORGECAD_THREADS=1 on one pinned core; tN = every
+#                     core, FORGECAD_THREADS unset (what a user gets); tK = FORGECAD_THREADS=K on
+#                     every core (e.g. t16, the regen1 gate's nary16). Both sides run each alike.
+#        --kparts "a b"  kernel suite parts timed alone (`kern`: kseq, nary), as k-NAME lines
+#                     (default coplanar upto shaft mixed patterns plate)
 #        --heavy      draw every part (default: LAT_DRAW_PARTS, those whose four views take under
 #                     ~1 s at 4 cores; the others take 2 to over 100 s)
 #        --raw FILE   keep the raw samples (default: a temp file, removed)
@@ -43,6 +47,7 @@ out=
 base=
 mode=record
 heavy=
+kparts="coplanar upto shaft mixed patterns plate"
 draw_parts=${LAT_DRAW_PARTS:-"bracket clamp conrod guard heatsink hub insert quadarm"}
 while [ $# -gt 0 ]; do
   case $1 in
@@ -54,6 +59,7 @@ while [ $# -gt 0 ]; do
     --threads) threads=$2; shift ;;
     --raw) raw=$2; shift ;;
     --heavy) heavy=1 ;;
+    --kparts) kparts=$2; shift ;;
     -o) out=$2; shift ;;
     *) echo "latency.sh: unknown argument $1" >&2; exit 64 ;;
   esac
@@ -87,13 +93,11 @@ run() {
   shift 2
   if [ "$side" = head ]; then extra=${HEAD_ENV:-}; else extra=${BASE_ENV:-}; fi
   extra="$extra ${skipenv:-}"
-  if [ "$thr" = t1 ]; then
-    pin="taskset -c $core"
-    tenv=FORGECAD_THREADS=1
-  else
-    pin="taskset -c 0-$((ncpu - 1))"
-    tenv=
-  fi
+  case $thr in
+    t1) pin="taskset -c $core" tenv=FORGECAD_THREADS=1 ;;
+    tN) pin="taskset -c 0-$((ncpu - 1))" tenv= ;;
+    t*) pin="taskset -c 0-$((ncpu - 1))" tenv=FORGECAD_THREADS=${thr#t} ;;
+  esac
   # shellcheck disable=SC2086
   (cd / && env -i PATH=/usr/local/bin:/usr/bin:/bin HOME=/tmp FORGECAD_CACHE=off \
     FORGE_BENCH_PARTS="$work/parts" $tenv $extra $pin "$work/$side/latbench" "$@")
@@ -145,11 +149,14 @@ one() { # one SIDE ROUND PART THREADS: one round's samples, labelled
   if [ -z "$heavy" ] && ! echo " $draw_parts " | grep -q " $3 "; then skipenv=LATBENCH_SKIP=draw; fi
   if [ "$3" = cam ]; then
     run "$1" "$4" exec "$work/$1/cam_gonogo"
+  elif [ "${3#k-}" != "$3" ]; then
+    run "$1" "$4" kern "${3#k-}" "$reps"
   else
     run "$1" "$4" ops "$3" "$reps"
   fi | awk -v s="$1" -v r="$2" -v p="$3" -v t="$4" '{print s, r, p, t, $0}' >> "$samples"
 }
 list="$parts"
+for k in $kparts; do list="$list k-$k"; done
 [ -n "$cam" ] && list="$list cam"
 echo "latency: warm-up pass" >&2
 for p in $list; do for s in $sides; do one "$s" 0 "$p" tN; done; done
@@ -167,7 +174,8 @@ done
 
 report() {
   echo "# latency.sh $mode: head $(git rev-parse --short HEAD)$(git diff --quiet || echo +dirty)${base:+, base $base}"
-  echo "# $(nproc) CPUs ($(grep -m1 'model name' /proc/cpuinfo | sed 's/.*: //')), rounds $rounds, reps $reps, t1 on core $core"
+  echo "# $ncpu CPUs ($(grep -m1 'model name' /proc/cpuinfo | sed 's/.*: //')), rounds $rounds, reps $reps;"\
+    "threads: t1 = 1 on core $core, tN = $ncpu (all cores, FORGECAD_THREADS unset)"
   [ -n "${HEAD_ENV:-}" ] && echo "# HEAD_ENV=$HEAD_ENV"
   [ -n "${BASE_ENV:-}" ] && echo "# BASE_ENV=$BASE_ENV"
   if [ "$mode" = compare ]; then python3 "$dir/latstat.py" compare "$samples"; else python3 "$dir/latstat.py" record "$samples"; fi

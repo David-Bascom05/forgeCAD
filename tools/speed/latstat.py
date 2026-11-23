@@ -14,7 +14,9 @@ with a percentile bootstrap CI (resampling pairs) and a Wilcoxon signed-rank p a
 compare: REGRESSED when the CI of head/base wall lies wholly above 1, its estimate is over
 1 + wall-th, and the signed-rank p is under 1 - conf (both tests agree); IMPROVED the mirror. CPU (user+sys, all threads) is judged the same way against
 cpu-th, and flagged `cpu+` (a warning: more CPU burnt for the same or less wait), not a failure.
-Exit 1 when any line REGRESSED.
+THREADS HURT: on one side, a line whose all-cores rounds are slower than its one-thread rounds
+of the same round (paired, the same test): fastest wins, so the default must not lose to one
+thread. Exit 1 when any line REGRESSED, or THREADS HURT on head but not on base.
 
 record: per line the median over rounds, its bootstrap CI, the CPU median, and per part and op
 the speed-up at all cores (t1 wall / tN wall) and CPU per wall second (the cores kept busy).
@@ -99,6 +101,53 @@ def wilcoxon(d):
     return math.erfc(z / math.sqrt(2))
 
 
+def paired(a, b, rng, conf):
+    """Paired rounds a, b ({round: (wall, cpu)}): the median ratio b/a of wall and of CPU, their
+    bootstrap CIs, the signed-rank p of wall, and the pairs' count."""
+    ks = sorted(set(a) & set(b))
+    if not ks:
+        return None
+    lw = [math.log(b[k][0] / a[k][0]) for k in ks]
+    lc = [math.log(max(b[k][1], 1) / max(a[k][1], 1)) for k in ks]
+    ew, ec = math.exp(statistics.median(lw)), math.exp(statistics.median(lc))
+    wlo, whi = (math.exp(x) for x in boot_median(lw, conf, rng))
+    clo, chi = (math.exp(x) for x in boot_median(lc, conf, rng))
+    return ew, wlo, whi, ec, clo, chi, wilcoxon(lw), len(ks)
+
+
+def slower(t, th, alpha):
+    """A paired test's verdict on wall: 1 slower, -1 faster, 0 neither (CI wholly past 1, the
+    estimate past the threshold, p under alpha)."""
+    ew, wlo, whi, _, _, _, p, _ = t
+    if wlo > 1 and ew > 1 + th and p < alpha:
+        return 1
+    if whi < 1 and ew < 1 - th and p < alpha:
+        return -1
+    return 0
+
+
+def threads_hurt(rounds, side, th, conf, rng):
+    """Lines (part, op) where all cores is slower than one thread on SIDE: {(part, op): test}."""
+    out = {}
+    for (part, thr, op), r in rounds.items():
+        if thr != "tN" or (part, "t1", op) not in rounds:
+            continue
+        one = {k: v for (s, k), v in rounds[(part, "t1", op)].items() if s == side}
+        alln = {k: v for (s, k), v in r.items() if s == side}
+        t = paired(one, alln, rng, conf)
+        if t and slower(t, th, 1 - conf) == 1:
+            out[(part, op)] = t
+    return out
+
+
+def print_hurt(hurt, known=()):
+    for (part, op), t in sorted(hurt.items()):
+        ew, wlo, whi = t[0], t[1], t[2]
+        tag = " (base too)" if (part, op) in known else ""
+        print(f"THREADS HURT: {part} {op}  tN/t1 {(ew - 1) * 100:+.2f}%"
+              f" [{(wlo - 1) * 100:+.2f},{(whi - 1) * 100:+.2f}]%{tag}")
+
+
 def compare(path, wall_th, cpu_th, conf):
     alpha = 1 - conf
     rng = random.Random(1)
@@ -108,27 +157,26 @@ def compare(path, wall_th, cpu_th, conf):
     print(f"# head/base per line: median over paired rounds, {conf:.0%} bootstrap CI, Wilcoxon p")
     print(f"# REGRESSED: wall CI wholly > 1, estimate > {1 + wall_th:.3f} and p < {alpha:.3f};"
           f" cpu+: the same for CPU past {1 + cpu_th:.3f} (warning)")
-    print(f"{'part':9} {'thr':3} {'op':5} {'n':>3} {'base ms':>9} {'head ms':>9}"
+    print(f"{'part':11} {'thr':3} {'op':5} {'n':>3} {'base ms':>9} {'head ms':>9}"
           f" {'wall':>7} {'CI':>17} {'p':>7}  {'cpu':>7} {'CI':>17}  verdict")
     for key in sorted(rounds):
         part, thr, op = key
         r = rounds[key]
-        pairs = sorted(k for s, k in r if s == "base" and ("head", k) in r)
-        if not pairs:
+        base = {k: v for (side, k), v in r.items() if side == "base"}
+        head = {k: v for (side, k), v in r.items() if side == "head"}
+        t = paired(base, head, rng, conf)
+        if not t:
             continue
-        lw = [math.log(r[("head", k)][0] / r[("base", k)][0]) for k in pairs]
-        lc = [math.log(max(r[("head", k)][1], 1) / max(r[("base", k)][1], 1)) for k in pairs]
-        ew, ec = math.exp(statistics.median(lw)), math.exp(statistics.median(lc))
-        wlo, whi = (math.exp(x) for x in boot_median(lw, conf, rng))
-        clo, chi = (math.exp(x) for x in boot_median(lc, conf, rng))
-        p = wilcoxon(lw)
-        bw = statistics.median(r[("base", k)][0] for k in pairs) / 1e6
-        hw = statistics.median(r[("head", k)][0] for k in pairs) / 1e6
+        ew, wlo, whi, ec, clo, chi, p, n = t
+        ks = sorted(set(base) & set(head))
+        bw = statistics.median(base[k][0] for k in ks) / 1e6
+        hw = statistics.median(head[k][0] for k in ks) / 1e6
         v = []
-        if wlo > 1 and ew > 1 + wall_th and p < alpha:
+        w = slower(t, wall_th, alpha)
+        if w == 1:
             v.append("REGRESSED")
             bad += 1
-        elif whi < 1 and ew < 1 - wall_th and p < alpha:
+        elif w == -1:
             v.append("IMPROVED")
         if clo > 1 and ec > 1 + cpu_th:
             v.append("cpu+")
@@ -136,10 +184,21 @@ def compare(path, wall_th, cpu_th, conf):
             v.append("cpu-")
         for x in v:
             counts[x] += 1
-        print(f"{part:9} {thr:3} {op:5} {len(pairs):3} {bw:9.2f} {hw:9.2f}"
+        print(f"{part:11} {thr:3} {op:5} {n:3} {bw:9.2f} {hw:9.2f}"
               f" {(ew - 1) * 100:+6.2f}% [{(wlo - 1) * 100:+6.2f},{(whi - 1) * 100:+6.2f}]%"
               f" {p:7.4f}  {(ec - 1) * 100:+6.2f}% [{(clo - 1) * 100:+6.2f},{(chi - 1) * 100:+6.2f}]%"
               f"  {' '.join(v)}")
+    # fastest wins: on head, all cores must not be slower than one thread; a line that is so on
+    # base too is listed but does not fail this change
+    hb = threads_hurt(rounds, "base", wall_th, conf, rng)
+    hh = threads_hurt(rounds, "head", wall_th, conf, rng)
+    print_hurt(hh, hb)
+    new = [k for k in hh if k not in hb]
+    if new:
+        counts["THREADS HURT (new)"] += len(new)
+        bad += len(new)
+    if hb:
+        counts["threads hurt on base too"] += len([k for k in hh if k in hb])
     print("summary: " + (", ".join(f"{k} {n}" for k, n in sorted(counts.items())) or "no change"))
     return 1 if bad else 0
 
@@ -149,7 +208,7 @@ def record(path):
     rounds = load(path)
     print("# per line: median of rounds (one process each), 95% bootstrap CI, CPU median;")
     print("# speedup = t1 wall / tN wall; busy = CPU / wall at tN (cores kept busy)")
-    print(f"{'part':9} {'thr':3} {'op':5} {'n':>3} {'wall ms':>10} {'CI ms':>21} {'cpu ms':>10}")
+    print(f"{'part':11} {'thr':3} {'op':5} {'n':>3} {'wall ms':>10} {'CI ms':>21} {'cpu ms':>10}")
     med = {}
     for key in sorted(rounds):
         part, thr, op = key
@@ -158,13 +217,18 @@ def record(path):
         c = [x[1] / 1e6 for x in vals]
         lo, hi = boot_median(w, 0.95, rng)
         med[key] = (statistics.median(w), statistics.median(c))
-        print(f"{part:9} {thr:3} {op:5} {len(w):3} {med[key][0]:10.2f}"
+        print(f"{part:11} {thr:3} {op:5} {len(w):3} {med[key][0]:10.2f}"
               f" [{lo:9.2f},{hi:9.2f}] {med[key][1]:10.2f}")
     print()
-    print(f"{'part':9} {'op':5} {'speedup':>8} {'busy':>6}")
+    print(f"{'part':11} {'op':5} {'speedup':>8} {'busy':>6}")
     for (part, thr, op), (w, c) in sorted(med.items()):
         if thr != "t1" and (part, "t1", op) in med:
-            print(f"{part:9} {op:5} {med[(part, 't1', op)][0] / w:8.2f} {c / w:6.2f}")
+            print(f"{part:11} {op:5} {med[(part, 't1', op)][0] / w:8.2f} {c / w:6.2f}")
+    print()
+    side = "head" if any(s == "head" for r in rounds.values() for s, _ in r) else "base"
+    hurt = threads_hurt(rounds, side, 0.01, 0.99, rng)
+    print_hurt(hurt)
+    print(f"threads hurt: {len(hurt)} lines (all cores slower than one thread, paired rounds, 99%)")
     return 0
 
 
