@@ -587,3 +587,18 @@ there refuses). Where it would leave its face over a **sharp** edge, the support
 retry order. It is to be confirmed on all 15 listed fillets before it is adopted. Under it, the
 opposite-rounds repro (the crossed edge is smooth, the roll focal) stays a refusal.
 
+**Correction, the same day** (`research/fillets/spec/cliffcheck.py`: Onshape's blend axes against the
+carried planes and the support faces' line edges):
+- 00196819 is a **cliff**, not a roll. Its blend is tangent to the end face's plane, and its axis is at
+  exactly r (to 1e-4) from the side face's far edge, the rim where the 3.28-thick plate meets the
+  part below. That is rule (a)'s defined result (a P3 event onto a sharp rim), so the kernel's
+  NoBlend there is a gap and the cliff is the fix.
+- 00402272 is tangent to both carried side planes, with every rim at least 2.84 away: no cliff. Its
+  picked edges are the corners of a 2.54-thick plate whose side faces two earlier fillets had already
+  shortened. Here Onshape carried the planes on.
+
+So the candidate "sharp crossed edge, carry the plane on" is refuted by 00196819, and plain (a) does
+not explain 00402272. What decides between the cliff and carrying the plane on (whether the face
+beyond is an earlier round, smooth, or how far the spring runs off) is open. Asked for: 00402272's
+region restated as a small .fg (the census worker offered), and the rest of the 15.
+

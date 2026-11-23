@@ -533,10 +533,24 @@ fn supports(f: &str, k: usize) {
                 "null".to_string()
             }
         };
+        // the support faces' line edges (rims a cliff could rest on): a point and a direction each
+        let mut rims = Vec::new();
+        for &c in &x.coedges {
+            let fid = body.coedge_face(c);
+            for &lp in &body.face(fid).loops {
+                for cc in body.lp(lp).coedges() {
+                    let g = body.edge(body.coedge(cc).edge);
+                    if let Curve::Line(l) = &g.curve {
+                        rims.push(format!("[{},{}]", p(l.origin), v(l.dir.get())));
+                    }
+                }
+            }
+        }
         println!(
-            "{{\"mid\":{},\"dir\":{},\"r\":{r},\"feet_on_body\":{feet_on},\"convex\":{},\"faces\":[{}]}}",
+            "{{\"mid\":{},\"dir\":{},\"r\":{r},\"feet_on_body\":{feet_on},\"rims\":[{}],\"convex\":{},\"faces\":[{}]}}",
             p(d.p),
             v(d.d1),
+            rims.join(","),
             match forge_ops::fillet::fillet_kind(&body, e) {
                 Some(true) => "true",
                 Some(false) => "false",
