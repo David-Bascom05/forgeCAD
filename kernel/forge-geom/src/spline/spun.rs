@@ -36,13 +36,25 @@ impl Spun {
         {
             return None;
         }
+        // each end carried on as far as it stays off the axis' far side (a pole's end not at all,
+        // the other end still, where the wall leaves its rim outward)
+        let whole = ext;
+        let (mut lo, mut hi) = (dom.lo, dom.hi);
         for k in [1.0, 0.5, 0.25, 0.0] {
-            let e = Interval::new(dom.lo - k * (dom.lo - ext.lo), dom.hi + k * (ext.hi - dom.hi));
-            ext = e;
+            let e = Interval::new(dom.lo - k * (dom.lo - whole.lo), dom.hi + k * (whole.hi - dom.hi));
             if !hits(e) {
+                (lo, hi) = (lo.min(e.lo), hi.max(e.hi));
                 break;
             }
+            let (a, b) = (Interval::new(e.lo, dom.lo), Interval::new(dom.hi, e.hi));
+            if lo == dom.lo && !hits(a) {
+                lo = e.lo;
+            }
+            if hi == dom.hi && !hits(b) {
+                hi = e.hi;
+            }
         }
+        ext = Interval::new(lo, hi);
         let (a, b) = c.ends();
         let poles = a.x.abs() <= tol::LINEAR || b.x.abs() <= tol::LINEAR;
         let rmax = c.bbox(dom).x.hi.max(0.0);
@@ -92,6 +104,30 @@ impl Spun {
     }
     pub fn reach(&self) -> Interval {
         self.ext
+    }
+    /// Where a section edge (the section turned to one angle, of the same pieces) lies: the line
+    /// v = t at its angle, read off its end away from the axis, poles or not.
+    pub fn seam_uv(&self, c: &crate::curve::ProcCurve) -> Option<(Point2, Vec2)> {
+        let s = c.as_any()?.downcast_ref::<SplineCurve>()?;
+        if s.c.breaks() != self.c.breaks() {
+            return None;
+        }
+        let (a, b) = s.c.ends();
+        let (qa, _) = self.meridian(a);
+        let (_, ang) = self.meridian(if qa.x > tol::LINEAR { a } else { b });
+        let (sn, cs) = dmath::sin_cos(ang);
+        let f = &self.frame;
+        let (ex, ey, ez) = (f.x().get(), f.y().get(), f.z().get());
+        let radial = ex * cs + ey * sn;
+        let want = self.c.mapped(|q| f.origin + radial * q.x + ez * q.y);
+        (0..s.c.pieces())
+            .all(|i| {
+                let (x, y) = (want.row(i), s.c.row(i));
+                x.iter()
+                    .zip(y)
+                    .all(|(p, q)| (0..4).all(|k| (p[k] - q[k]).abs() <= 1e-11 * (1.0 + p[k].abs())))
+            })
+            .then_some((Point2::new(ang, 0.0), Vec2::new(0.0, 1.0)))
     }
     fn at(&self, uv: Point2) -> SurfDeriv {
         let d = self.c.deriv(uv.y);
@@ -242,27 +278,13 @@ impl Procedural for Spun {
         let (f, g, q) = self.value_from(p, uv.map(|u| u.y));
         Some((f, g, q))
     }
-    /// A section edge at one angle runs straight in v.
+    /// A section edge at one angle runs straight in v (not asked of a wall reaching the axis: there
+    /// its uv loops are drawn round the pole from its samples, `seam_uv` says where the edge lies).
     fn curve_uv(&self, c: &crate::curve::ProcCurve) -> Option<(Point2, Vec2)> {
-        let s = c.as_any()?.downcast_ref::<SplineCurve>()?;
-        if s.c.breaks() != self.c.breaks() || self.poles {
+        if self.poles {
             return None;
         }
-        let (a, _) = s.c.ends();
-        let (_, ang) = self.meridian(a);
-        let (sn, cs) = dmath::sin_cos(ang);
-        let f = &self.frame;
-        let (ex, ey, ez) = (f.x().get(), f.y().get(), f.z().get());
-        let radial = ex * cs + ey * sn;
-        let want = self.c.mapped(|q| f.origin + radial * q.x + ez * q.y);
-        (0..s.c.pieces())
-            .all(|i| {
-                let (x, y) = (want.row(i), s.c.row(i));
-                x.iter()
-                    .zip(y)
-                    .all(|(p, q)| (0..4).all(|k| (p[k] - q[k]).abs() <= 1e-11 * (1.0 + p[k].abs())))
-            })
-            .then_some((Point2::new(ang, 0.0), Vec2::new(0.0, 1.0)))
+        self.seam_uv(c)
     }
     fn bbox(&self, uv: Box2) -> Box3 {
         let b = self.c.bbox(uv.v);

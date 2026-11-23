@@ -75,6 +75,27 @@ impl Poly {
             m: self.m.iter().map(|x| x * k.abs()).collect(),
         }
     }
+    /// Divided by s (`end` 0) or by 1 - s (`end` 1), its coefficient there being 0: the root a
+    /// pole puts there taken out (b_j n / (j + 1) of b_(j+1), or b_j n / (n - j)).
+    fn root_out(&self, end: usize) -> Poly {
+        let n = self.degree();
+        let k = n as f64;
+        let take = |v: &[f64]| -> Vec<f64> {
+            (0..n)
+                .map(|j| {
+                    if end == 0 {
+                        v[j + 1] * k / (j + 1) as f64
+                    } else {
+                        v[j] * k / (n - j) as f64
+                    }
+                })
+                .collect()
+        };
+        Poly {
+            c: take(&self.c),
+            m: take(&self.m),
+        }
+    }
     /// The two halves (de Casteljau, convex combinations: the sizes halve alike and still bound).
     fn halves(&self) -> (Poly, Poly) {
         fn split(c: &[f64]) -> (Vec<f64>, Vec<f64>) {
@@ -121,7 +142,7 @@ impl Forms {
         let (x, y) = (moved(0, o.0), moved(1, o.1));
         let (x1, y1) = (x.hodograph(), y.hodograph());
         let (x2, y2) = (x1.hodograph(), y1.hodograph());
-        let (px, py, r, r2) = if rational {
+        let (px, py, r, weight) = if rational {
             let wt = col(3);
             let w1 = wt.hodograph();
             let w2 = w1.hodograph();
@@ -132,15 +153,28 @@ impl Forms {
             let c = w2.mul(&x.mul(&y1).add(&y.mul(&x1), -1.0));
             let det = a.add(&b, -1.0).add(&c, 1.0);
             let w3 = wt.mul(&wt).mul(&wt);
-            let r2 = py.mul(&wt).scaled(-d);
-            (px, py, det.mul(&w3).scaled(-d), r2)
+            (px, py, det.mul(&w3).scaled(-d), Some(wt))
         } else {
             let det = x1.mul(&y2).add(&y1.mul(&x2), -1.0);
-            let r2 = y1.scaled(-d);
-            (x1, y1, det.scaled(-d), r2)
+            (x1, y1, det.scaled(-d), None)
         };
+        // where the section meets the axis square to it (a pole: x = 0 and y' = 0 there, both
+        // exactly), the circles' test is 0 there over 0: both sides lose their common root, and
+        // what is left is its limit (the section's own bend at the pole, as on a sphere)
+        let (mut x0, mut py_axis) = (x0, py.clone());
+        for end in [0, 1] {
+            let at = |p: &Poly| if end == 0 { p.c[0] } else { p.c[p.degree()] };
+            if x0.degree() > 0 && py_axis.degree() > 0 && at(&x0) == 0.0 && at(&py_axis) == 0.0 {
+                x0 = x0.root_out(end);
+                py_axis = py_axis.root_out(end);
+            }
+        }
         let b = px.mul(&px).add(&py.mul(&py), 1.0);
         let dd = b.mul(&b).mul(&b).add(&r.mul(&r), -1.0);
+        let r2 = match &weight {
+            Some(wt) => py_axis.mul(wt).scaled(-d),
+            None => py_axis.scaled(-d),
+        };
         let d2 = x0.mul(&x0).mul(&b).add(&r2.mul(&r2), -1.0);
         Forms([r, dd, x0, r2, d2])
     }

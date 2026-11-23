@@ -132,7 +132,13 @@ impl Offset {
         let n = b.du.cross(b.dv);
         let len = n.length();
         if len == 0.0 {
-            return b.p;
+            // a pole (du vanishes): moved along the gradient of the base's distance there, its
+            // normal's limit where the pole is smooth (a turned section square to its axis)
+            return self
+                .base
+                .gradient(b.p)
+                .normalize()
+                .map_or(b.p, |n| b.p + n.get() * self.d);
         }
         b.p + (n / len) * self.d
     }
@@ -143,7 +149,17 @@ impl Offset {
         let n = b.du.cross(b.dv);
         let len = n.length();
         if len == 0.0 {
-            return (b.p, b.du, b.dv);
+            // a smooth pole (a turned section square to its axis) is an umbilic: the normal (its
+            // limit, as `place`) turns along dv by the bend there, n_v = -(dvv.n / |dv|^2) dv, and
+            // du stays 0
+            return match self.base.gradient(b.p).normalize() {
+                Some(n) => {
+                    let n = n.get();
+                    let k = b.dvv.dot(n) / b.dv.dot(b.dv);
+                    (b.p + n * self.d, b.du, b.dv * (1.0 - k * self.d))
+                }
+                None => (b.p, b.du, b.dv),
+            };
         }
         let unit = n / len;
         let dn = |m: Vec3| (m - unit * unit.dot(m)) / len;
@@ -282,6 +298,14 @@ impl Procedural for Offset {
     fn mesh_radius(&self) -> f64 {
         (self.base.mesh_radius() + self.d).max(10.0 * tol::MIN_LENGTH)
     }
+    /// The base's: the offset moves along its normal, which bends with it, so it is no smoother
+    /// than the base's curvature where the base is twice differentiable only (a spline's breaks).
+    fn u_kinks(&self, u: Interval) -> Vec<f64> {
+        self.base.u_kinks(u)
+    }
+    fn v_kinks(&self, v: Interval) -> Vec<f64> {
+        self.base.v_kinks(v)
+    }
 }
 
 impl Offset {
@@ -306,6 +330,9 @@ pub struct OffsetLine {
     dir: Vec2,
     /// The curve on the base: its parameter, and the bounds on its speed.
     under: crate::spline::SplineCurve,
+    /// How far the parameter runs: the base's own reach along the line where it is carried on
+    /// past the curve's ends (a turned section's), else the curve's.
+    reach: Interval,
 }
 
 impl std::fmt::Debug for OffsetLine {
@@ -320,7 +347,21 @@ impl OffsetLine {
     pub fn curve(s: &Proc, c: &ProcCurve) -> Option<Curve> {
         let o = s.as_any()?.downcast_ref::<Offset>()?;
         let under = c.as_any()?.downcast_ref::<crate::spline::SplineCurve>()?.clone();
-        let (at, dir) = o.base.curve_uv(c)?;
+        // (a turned spline's seam lies on it at its angle even where the wall reaches the axis)
+        let spun = o
+            .base
+            .as_any()
+            .and_then(|a| a.downcast_ref::<crate::spline::Spun>());
+        let (at, dir, reach) = match spun {
+            Some(s) => {
+                let (at, dir) = s.seam_uv(c)?;
+                (at, dir, s.reach())
+            }
+            None => {
+                let (at, dir) = o.base.curve_uv(c)?;
+                (at, dir, under.dom)
+            }
+        };
         Some(Curve::Procedural(ProcCurve(Arc::new(OffsetLine {
             s: s.clone(),
             off: Offset {
@@ -331,6 +372,7 @@ impl OffsetLine {
             o: at,
             dir,
             under,
+            reach,
         }))))
     }
     /// Where `a` and `b` are one surface offset alike (one surface's two faces, each moved by the
@@ -395,7 +437,11 @@ impl ProceduralCurve for OffsetLine {
         Some((Surface::Procedural(self.s.clone()), self.uv(t), self.dir))
     }
     fn domain(&self) -> Domain1 {
-        self.under.domain()
+        Domain1 {
+            lo: self.reach.lo,
+            hi: self.reach.hi,
+            period: None,
+        }
     }
     /// The base's foot of p, read along the line, then Newton on the curve itself.
     fn closest(&self, p: Point3, range: Interval) -> f64 {
@@ -443,6 +489,7 @@ impl ProceduralCurve for OffsetLine {
                 c: Arc::new(c.c.mapped(|p| f.point_to_world(p))),
                 dom: c.dom,
             },
+            reach: self.reach,
         }))
     }
     fn speed_bound(&self, range: Interval) -> f64 {

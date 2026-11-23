@@ -814,3 +814,32 @@ fn offset_folds_at_its_radius() {
     assert!(arc.offset_fold(-10.0 * (1.0 + 1e-6), dom).is_some());
     assert_eq!(arc.offset_fold(25.0, dom), None);
 }
+
+/// At a pole where the section meets the axis square to it, the circles' test is 0 over 0 there:
+/// with the common root out it decides, both ways, as the section's own bend; a section meeting the
+/// axis at an angle (a point) folds there moved inward (its normal points out: inward is d < 0).
+#[test]
+fn offset_fold_at_a_pole() {
+    let square = Some(Vec3::new(-1.0, 0.0, 0.0));
+    let dome = Spline::through(&pts(&[(30.0, 0.0), (24.0, 20.0), (0.0, 30.0)]), None, square).unwrap();
+    for d in [-10.0, -2.0, -0.0254, 0.0254, 2.0, 10.0] {
+        assert_eq!(dome.offset_fold(d, dome.domain()), None, "{d}");
+    }
+    let point = Spline::through(&pts(&[(30.0, 0.0), (24.0, 20.0), (0.0, 30.0)]), None, None).unwrap();
+    let t = point
+        .offset_fold(-0.0254, point.domain())
+        .expect("folds at the point");
+    // (within a thousandth of the way from the pole)
+    assert!(point.domain().hi - t < 1e-3 * point.domain().width(), "{t}");
+}
+
+/// A turned section is carried on past each end as far as that end stays off the axis' far side:
+/// a pole's end not at all, the other end as the spline is.
+#[test]
+fn a_spun_wall_reaching_the_axis_is_carried_on_at_its_other_end() {
+    let square = Some(Vec3::new(-1.0, 0.0, 0.0));
+    let c = Spline::through(&pts(&[(30.0, 0.0), (30.5, 12.0), (0.0, 30.0)]), None, square).unwrap();
+    let carried = super::extruded::carried(&c).unwrap();
+    let s = Spun::new(Frame::WORLD, Arc::new(c.clone())).unwrap();
+    assert_eq!(s.reach(), Interval::new(carried.lo, c.domain().hi));
+}

@@ -1126,7 +1126,8 @@ type CupCase = (&'static [(f64, f64)], f64, f64, f64);
 
 /// Spline cups shelled over a range of walls, from a thousandth of an inch to all but the thickness
 /// that folds them, each valid and of the volume and area worked out apart (the section's offset
-/// curve integrated about the axis at 30 digits), within the mass's bounds.
+/// curve integrated about the axis at 30 digits), within the mass's bounds (a part in a billion:
+/// the offset's pieces are integrated between the spline's breaks, where it bends no smoother).
 #[test]
 fn spline_cups_shell_over_thickness_and_shape() {
     use forge_lang::fuzz::{Verdict, judge_built};
@@ -1149,7 +1150,7 @@ fn spline_cups_shell_over_thickness_and_shape() {
         let m = forge_topo::mass::mass(&b.body).expect("a mass");
         let (dv, da) = ((m.volume - volume).abs(), (m.area - area).abs());
         assert!(
-            dv <= m.err[0].max(1e-6 * volume) && da <= m.err[1].max(1e-6 * area),
+            dv <= m.err[0].max(1e-9 * volume) && da <= m.err[1].max(1e-9 * area),
             "{} points, {t}: volume {} against {volume} (err {}), area {} against {area} (err {})",
             wall.len(),
             m.volume,
@@ -1157,6 +1158,95 @@ fn spline_cups_shell_over_thickness_and_shape() {
             m.area,
             m.err[1]
         );
+    }
+}
+
+/// A dome like `shell_spline_dome.fg`: its wall a spline from (30, 0) through `mid` to the axis at
+/// (0, 30), square to the axis there (`slope`, else natural: pointed), shelled `t`, open below.
+fn spline_dome(mid: &[(f64, f64)], slope: bool, t: f64) -> String {
+    let mut src = String::from("param cup.h = 30\nparam cup.r = 30\n");
+    for (k, (r, z)) in mid.iter().enumerate() {
+        src += &format!("param cup.m{k} = ({:?}, {z:?})\n", -r);
+    }
+    let pts: Vec<String> = (0..mid.len()).map(|k| format!("m{k}")).collect();
+    let end = if slope { ", end_slope: (1, 0)" } else { "" };
+    src += &format!(
+        "sketch cup(on: xz) {{
+  l0 = line((0, 0), (-r, 0))
+  s1 = spline([(-r, 0), {}, (0, h)], closed: false{end})
+  l2 = line((0, h), (0, 0))
+  ax = line((0, h), (0, 0), construction: true)
+}}
+body = revolve(cup, axis: cup.ax)
+param skin.t = {t:?}
+skin = shell(t, open: body.side(cup.l0))
+",
+        pts.join(", ")
+    );
+    src
+}
+
+/// The dome repro shells: its wall reaches the axis at a pole, square to it.
+#[test]
+fn a_spline_dome_shells() {
+    use forge_lang::fuzz::{Verdict, judge_built};
+    let (v, _) = judge_built(include_str!("kernel_parts/shell_spline_dome.fg"));
+    assert!(matches!(v, Verdict::Ok), "{v:?}");
+}
+
+/// Spline domes square to the axis at their pole shell over walls from a thousandth of an inch to a
+/// third of the dome, three wall shapes (one leaving its rim outward, so its inner wall meets the
+/// opening past the spline's end, where it is carried on), each of the volume and area worked out
+/// apart at 30 digits. The inner wall comes to its own pole on the axis, t below.
+#[test]
+fn spline_domes_shell_over_thickness_and_shape() {
+    use forge_lang::fuzz::{Verdict, judge_built};
+    let one: &'static [(f64, f64)] = &[(24.0, 20.0)];
+    let two: &'static [(f64, f64)] = &[(28.0, 10.0), (18.0, 25.0)];
+    let out: &'static [(f64, f64)] = &[(30.5, 12.0)];
+    let cases: [CupCase; 9] = [
+        (one, 0.0254, 149.071466574067, 11742.7154036175),
+        (one, 0.5, 2889.0868177965, 11650.6731761542),
+        (one, 2.0, 10994.9163243004, 11369.0114162462),
+        (one, 10.0, 41595.3226902384, 10104.0006730117),
+        (two, 0.5, 2807.76009581603, 11325.6838906723),
+        (two, 5.0, 24071.2494603001, 10550.4374884618),
+        (out, 0.0254, 158.589800490136, 12492.5494125431),
+        (out, 2.0, 11719.8180235169, 12119.7117229464),
+        (out, 5.0, 26534.5188043957, 11586.5129653945),
+    ];
+    for (mid, t, volume, area) in cases {
+        let src = spline_dome(mid, true, t);
+        let (v, _) = judge_built(&src);
+        assert!(matches!(v, Verdict::Ok), "{} points, {t}: {v:?}", mid.len());
+        let b = built(&src);
+        let m = forge_topo::mass::mass(&b.body).expect("a mass");
+        let (dv, da) = ((m.volume - volume).abs(), (m.area - area).abs());
+        assert!(
+            dv <= m.err[0].max(1e-9 * volume) && da <= m.err[1].max(1e-9 * area),
+            "{mid:?}, {t}: volume {} against {volume}, area {} against {area}",
+            m.volume,
+            m.area
+        );
+        let pole = b
+            .body
+            .vertices
+            .iter()
+            .filter(|v| v.point.x == 0.0 && v.point.y == 0.0);
+        assert!(
+            pole.clone().any(|v| (v.point.z - (30.0 - t)).abs() <= 1e-12),
+            "{mid:?}, {t}: the inner pole"
+        );
+    }
+}
+
+/// A dome whose wall comes to the axis at an angle (a natural end: a point) is refused at the pole:
+/// moved inward its circles cross the axis there, at any thickness.
+#[test]
+fn a_pointed_spline_dome_is_refused_at_its_pole() {
+    for t in [0.0254, 2.0] {
+        let why = kernel_util::refusal(&spline_dome(&[(24.0, 20.0)], false, t));
+        assert!(why.contains("Folds"), "{t}: {why}");
     }
 }
 
