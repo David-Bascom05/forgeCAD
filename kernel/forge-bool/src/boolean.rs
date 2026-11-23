@@ -2619,6 +2619,14 @@ fn trim_in(
                     && let Some(hits) = plane_meet(pl, &curve, range, &edge.curve)
                 {
                     for h in hits {
+                        #[cfg(feature = "decisions")]
+                        crate::edge_screen::log(
+                            body,
+                            e,
+                            h.point,
+                            crate::edge_screen::Made::OwnCarrier,
+                            "own",
+                        );
                         if let Some((s, tol)) = on_edge(body, e, h.point) {
                             let other = index[1 - k].face_box(faces[1 - k]);
                             if other.grow(tol::LINEAR).contains(h.point)
@@ -2942,6 +2950,14 @@ fn trim_in(
                     // says so cheaply; a grazing crossing, or one within two tolerances of the
                     // box's side (where a face's own boundary lies), is checked exactly
                     let other = index[1 - k].face_box(faces[1 - k]);
+                    #[cfg(feature = "decisions")]
+                    crate::edge_screen::log(
+                        body,
+                        e,
+                        h.point,
+                        crate::edge_screen::Made::Across(&body.face(f).surface, &across),
+                        "across",
+                    );
                     let on = on_edge(body, e, h.point).map(|o| (o, h)).or_else(|| {
                         if !CAREFUL.with(|c| c.get()) || !body.edge_box(e).grow(0.2).contains(h.point) {
                             return None;
@@ -7326,6 +7342,9 @@ pub(crate) mod log {
     /// coincident is recorded only for planes nearly flush (within the band).
     pub(crate) fn coincident(a: &Body, fa: FaceId, b: &Body, fb: FaceId, yes: bool, site: &'static str) {
         let (sa, sb) = (&a.face(fa).surface, &b.face(fb).surface);
+        if yes {
+            crate::carrier_key::log(sa, sb, site);
+        }
         let gap = plane_gap(sa, sb);
         if !yes && !gap.is_some_and(|(sine, off)| sine <= 1e-3 && off <= BAND) {
             return;

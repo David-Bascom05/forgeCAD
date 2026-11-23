@@ -153,3 +153,11 @@ import ForgeCurved
 #print axioms ForgeCurved.BodyModel.denote_refines
 #print axioms ForgeCurved.BodyModel.bounds_unique
 #print axioms ForgeCurved.BodyModel.exactOf_isolated
+#print axioms ForgeCurved.OnEdge.branch_of_sep
+#print axioms ForgeCurved.OnEdge.branch_of_sep_delta
+#print axioms ForgeCurved.OnEdge.branch_of_empty
+#print axioms ForgeCurved.CarrierKey.plane_key
+#print axioms ForgeCurved.CarrierKey.plane_key_axis
+#print axioms ForgeCurved.CarrierKey.cyl_key
+#print axioms ForgeCurved.CarrierKey.sphere_key
+#print axioms ForgeCurved.EventCover.no_event_of_cover
