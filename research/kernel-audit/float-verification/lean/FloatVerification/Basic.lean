@@ -67,7 +67,7 @@ lemma lt_cases {x y : F64} (h : FP.lt x y = true) :
   -- (whether `simp_all` leaves the `if` of two infinities or rewrites it away depends on the simp
   -- set the imports bring; both are closed)
   cases x <;> cases y <;> simp_all [FP.lt, FP.cmp, isNaN] <;> (try split_ifs at h) <;> (try simp_all) <;>
-    (revert h; cases ‹Bool› <;> cases ‹Bool› <;> simp)
+    (revert h; rename_i a b; cases a <;> cases b <;> simp)
 
 lemma lt_finite {x y : F64} (hx : x.isFinite) (hy : y.isFinite) (h : FP.lt x y = true) :
     x.val < y.val := (lt_iff hx hy).mp h
