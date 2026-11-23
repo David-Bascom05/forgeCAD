@@ -132,11 +132,13 @@ pub fn mass_rel(body: &Body, rel: f64) -> Result<MassProps, MassError> {
     } else {
         Box::new((0..ids.len()).map(one))
     };
+    let mut abs = [0.0; NF];
     for (&f, got) in ids.iter().zip(each) {
         let (v, er) = got.map_err(|why| MassError { face: f, why })?;
         for k in 0..NF {
             t[k] += v[k];
             e[k] += er[k];
+            abs[k] += v[k].abs();
         }
         if er[0] > loosest.1 {
             loosest = (f, er[0]);
@@ -149,6 +151,15 @@ pub fn mass_rel(body: &Body, rel: f64) -> Result<MassProps, MassError> {
             });
         }
         faces.push((f, v[10]));
+    }
+    // the face sum's own rounding: within γn Σ|v| of the exact sum of the faces' values, n faces,
+    // γn = nu / (1 - nu), u = 2^-53 (verify/forge-mass/lean/ForgeMass/Rounding.lean `face_sum_err`)
+    let nu = ids.len() as f64 * (0.5 * f64::EPSILON);
+    if nu < 1.0 {
+        let gamma = nu / (1.0 - nu);
+        for k in 0..NF {
+            e[k] += gamma * abs[k];
+        }
     }
     let vol = t[0];
     // shells may overlap (`extrude new`), so their volumes add up past one box round them all: each

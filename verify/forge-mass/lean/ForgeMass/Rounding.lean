@@ -10,8 +10,10 @@ Here it is a hypothesis.
 
 `sum_err`: a running sum of n terms is off by at most ((1 + u)ⁿ − 1) Σ|xᵢ|. This is how far
 `mass_rel`'s face-by-face totals (mass.rs:137–140) can drift from the exact sum of the faces'
-computed values. The kernel's own allowance is 1e-15 of the absolute contributions per piece
-(mass.rs:2277, 2635), about 4.5u: a rule of thumb, not this bound.
+computed values. `face_sum_err` gives it as γₙ Σ|xᵢ|, γₙ = nu/(1 − nu), the term mass.rs now adds
+for its face sum. The allowance inside a face, 1e-15 of the absolute contributions per piece
+(mass.rs, `est` and the polygon sum), is still a rule of thumb: deriving it needs the integrand's
+flops through the f64 bridge.
 -/
 
 noncomputable section
@@ -57,6 +59,42 @@ theorem sum_err (u : ℝ) (hu : 0 ≤ u) (x δ : ℕ → ℝ) (hδ : ∀ i, |δ 
         have : u ≤ (1 + u) ^ (n + 1) - 1 := by
           rw [pow_succ]; nlinarith
         nlinarith
+
+/-- The factor mass.rs adds for its face sum: (1 + u)ⁿ − 1 ≤ γₙ = n u / (1 − n u) while n u < 1. -/
+theorem pow_sub_one_le_gamma (u : ℝ) (hu : 0 ≤ u) (n : ℕ) (hn : n * u < 1) :
+    (1 + u) ^ n - 1 ≤ n * u / (1 - n * u) := by
+  have hpos : 0 < 1 - n * u := by linarith
+  rw [le_div_iff₀ hpos]
+  -- (1 + u)ⁿ (1 − n u) ≤ 1, by induction
+  have key : ∀ m : ℕ, m * u < 1 → (1 + u) ^ m * (1 - m * u) ≤ 1 := by
+    intro m
+    induction m with
+    | zero => intro _; simp
+    | succ m ih =>
+      intro hm
+      have hm' : (m : ℝ) * u < 1 := by
+        have : (m : ℝ) * u ≤ ((m + 1 : ℕ) : ℝ) * u := by
+          apply mul_le_mul_of_nonneg_right _ hu; push_cast; linarith
+        linarith
+      have h := ih hm'
+      have hp : 0 ≤ (1 + u) ^ m := pow_nonneg (by linarith) m
+      push_cast at hm ⊢
+      -- (1+u)^(m+1)(1 − (m+1)u) = (1+u)^m [(1+u)(1 − m u − u)] ≤ (1+u)^m (1 − m u)
+      have : (1 + u) * (1 - (m + 1) * u) ≤ 1 - m * u := by nlinarith [sq_nonneg u, hu]
+      calc (1 + u) ^ (m + 1) * (1 - (m + 1) * u) = (1 + u) ^ m * ((1 + u) * (1 - (m + 1) * u)) := by ring
+        _ ≤ (1 + u) ^ m * (1 - m * u) := mul_le_mul_of_nonneg_left this hp
+        _ ≤ 1 := h
+  have := key n hn
+  nlinarith [this]
+
+/-- So the face sum of `mass_rel` (mass.rs, `t[k] += v[k]` over n faces) is within
+γₙ Σ|vᵢ| of the exact sum of the faces' computed values: the term mass.rs adds to `e[k]`. -/
+theorem face_sum_err (u : ℝ) (hu : 0 ≤ u) (x δ : ℕ → ℝ) (hδ : ∀ i, |δ i| ≤ u) (n : ℕ)
+    (hn : n * u < 1) :
+    |fsum x δ n - ∑ i ∈ Finset.range n, x i| ≤ n * u / (1 - n * u) * ∑ i ∈ Finset.range n, |x i| := by
+  calc _ ≤ ((1 + u) ^ n - 1) * ∑ i ∈ Finset.range n, |x i| := sum_err u hu x δ hδ n
+    _ ≤ _ := mul_le_mul_of_nonneg_right (pow_sub_one_le_gamma u hu n hn)
+        (Finset.sum_nonneg fun i _ => abs_nonneg _)
 
 end ForgeMass
 end

@@ -47,6 +47,9 @@ Euclidean norm of (e₁, e₂, e₃): `centroid_err_understates` is an instance.
 the second-order term `second_moment_bound` found missing, so it is twice `inertia_entry_bound`.
 `centroid_error_within_err` checks the new `err[2]` against closed-form centroids.
 
-**The rounding allowance is a rule of thumb.** Each piece adds `1e-15·|contribution|`
-(mass.rs:2277, 2635), about 4.5u. `sum_err` is what the model gives for the face sum. On the
-tests' bodies the allowance holds, but it is not derived.
+**The rounding allowance: derived for the face sum, still a rule of thumb inside a face.**
+`mass_rel` now adds γₙ Σ|vᵢ| to each total's error, for n faces (`face_sum_err`, from `sum_err` and
+`pow_sub_one_le_gamma` under the standard model of verify/ieee754's `F64.add_rel_err`). Inside a
+face, each piece's `1e-15·|contribution|` (mass.rs, `est` and the polygon sum) is still a rule of
+thumb. Deriving it needs the integrand's flops through the f64 bridge the aeneas session is
+building. On the tests' bodies it holds.

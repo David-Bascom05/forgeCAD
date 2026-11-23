@@ -125,3 +125,6 @@ import ForgeMass.Rounding
 
 /-- info: 'ForgeMass.inertia_entry_bound' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in #print axioms ForgeMass.inertia_entry_bound
+
+/-- info: 'ForgeMass.face_sum_err' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in #print axioms ForgeMass.face_sum_err
