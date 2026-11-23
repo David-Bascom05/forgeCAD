@@ -1228,3 +1228,13 @@ fn a_drill_down_a_lug_hole_builds() {
     let (v, _) = judge_built(include_str!("kernel_parts/drill_coincident_lug_hole.fg"));
     assert!(matches!(v, Verdict::Ok), "{v:?}");
 }
+
+/// A slot-shaped lug extruded into the side of a solid cylinder: the sketch is valid, but the join
+/// builds an invalid body (LoopsCross), a judge fail, where a valid body is due.
+#[test]
+#[ignore = "open: an invalid body (LoopsCross) joining a lug to a cylinder"]
+fn a_lug_joined_to_a_cylinder_builds_valid() {
+    use forge_lang::fuzz::{Verdict, judge_built};
+    let (v, _) = judge_built(include_str!("kernel_parts/lug_join_loops_cross.fg"));
+    assert!(matches!(v, Verdict::Ok), "{v:?}");
+}

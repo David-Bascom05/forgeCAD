@@ -280,6 +280,9 @@ Direction stays unsupported.
 
   Moved 0.3 off the hole, or without the second counterbore, it builds. The test is
   `a_drill_down_a_lug_hole_builds` (ignored, open).
+- **lug_join_loops_cross.fg**, seen while reducing that one. A slot-shaped lug, extruded 15 into the side of a solid
+  cylinder, joins to an invalid body (`LoopsCross`), though its sketch alone extrudes. Extruded 10, or with the second
+  arc of radius 3.5 or 4.5, it builds. The test is `a_lug_joined_to_a_cylinder_builds_valid` (ignored, open).
 - **1833f02f.Body009 → fillet_flush_notch.fg and its twin.** Its fillet builds from the Rust reader's file and is
   refused (`Overflow`) from the Python reader's. The files name the same two edges at the same radius (2.2), and the
   part before the fillet has the same volume in both, to 1.6e-12. They differ only in how the numbers are written:
