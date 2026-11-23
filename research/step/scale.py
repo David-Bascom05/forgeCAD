@@ -278,6 +278,22 @@ def why(d):
     return (k + ": " + " ".join(words[:5])).strip(": ")
 
 
+def agg(sol):
+    """What judge reads of our solids, summed: kept in each row whole, as a row keeps only 50 solids' details."""
+    probs = collections.Counter()
+    for x in sol:
+        probs.update(x.get("problems") or {})
+    warn = next((x["warn"] for x in sol if x.get("warn")), "")
+    bad = [x for x in sol if x.get("vol") is None or x.get("area") is None]
+    return {
+        "n": len(sol), "problems": dict(probs), "warn": warn[:160], "unmeasured": len(bad),
+        "merr": (bad[0].get("merr") or "")[:120] if bad else "",
+        "vol": sum(abs(x["vol"]) for x in sol if x.get("vol") is not None),
+        "area": sum(x["area"] for x in sol if x.get("area") is not None),
+        "mesh": dict(collections.Counter(kind(x.get("mesh") or "none") for x in sol)),
+    }
+
+
 def judge(o, d):
     """The class and the cause of one file, from OCCT's reading o and ours d."""
     if "crash" in d:
@@ -299,27 +315,23 @@ def judge(o, d):
         return "refused", ("refused:" + why(d)) if r else "no-solid"
     if not o.get("valid"):
         return "uncertain", "occt-invalid"
-    probs = collections.Counter()
-    for x in sol:
-        probs.update(x.get("problems") or {})
-    if probs:
-        return "mismatch", "invalid:" + probs.most_common(1)[0][0]
-    if any(x.get("warn") for x in sol):
-        return "mismatch", "warned:" + " ".join(next(x["warn"] for x in sol if x.get("warn")).split()[:4])
-    if any(x.get("vol") is None or x.get("area") is None for x in sol):
-        return "mismatch", "no-mass:" + kind(next(x.get("merr", "") for x in sol if x.get("vol") is None or x.get("area") is None) or "?")
+    a = d.get("agg") or agg(sol)
+    if a["problems"]:
+        return "mismatch", "invalid:" + max(a["problems"], key=a["problems"].get)
+    if a["warn"]:
+        return "mismatch", "warned:" + " ".join(a["warn"].split()[:4])
+    if a["unmeasured"]:
+        return "mismatch", "no-mass:" + kind(a["merr"] or "?")
     if d.get("refusals"):
         return "refused", "refused-some:" + why(d)
-    t, unsure = truth_of(o, len(sol))
+    t, unsure = truth_of(o, a["n"])
     if t is None:
         return "uncertain", unsure
-    vol = sum(abs(x["vol"]) for x in sol)
-    area = sum(x["area"] for x in sol)
-    dv = (vol - t[0]) / t[0] if t[0] else float("inf")
-    da = (area - t[1]) / t[1] if t[1] else float("inf")
+    dv = (a["vol"] - t[0]) / t[0] if t[0] else float("inf")
+    da = (a["area"] - t[1]) / t[1] if t[1] else float("inf")
     if abs(dv) < TOL and abs(da) < TOL:
         return "match", ""
-    if len(sol) != o["solids"] and len(sol) != o["distinct"]:
+    if a["n"] != o["solids"] and a["n"] != o["distinct"]:
         return "mismatch", "off:solid-count"
     return "mismatch", "off:" + ("volume" if abs(dv) >= TOL else "area") + (" 1e-2+" if max(abs(dv), abs(da)) >= 1e-2 else "")
 
@@ -344,6 +356,7 @@ def compact(o, d, cls, cause):
             "solids": [{k: x.get(k) for k in ("faces", "vol", "area", "problems", "first", "warn", "merr", "mesh")}
                        for x in sol[:50]],
             "n": len(sol),
+            "agg": agg(sol),
         }
     return row
 
@@ -463,7 +476,10 @@ def rejudge(r):
     """The class and cause of a stored row under the rule as it is now (the row keeps what judge reads)."""
     if r["cls"] == "fetch-failed":
         return r
-    r["cls"], r["cause"] = judge(r["occt"], r["ours"])
+    u = r["ours"]
+    if "agg" not in u and u.get("n", 0) > len(u.get("solids") or []):
+        return r  # an early row of more than 50 solids: its verdict from the run, which saw them all
+    r["cls"], r["cause"] = judge(r["occt"], u)
     return r
 
 
@@ -494,8 +510,12 @@ def report(cs, ncause):
             print(f"     {m:6d}  {k}")
         mesh = collections.Counter()
         for r in rows:
-            for x in (r.get("ours") or {}).get("solids") or []:
-                mesh[kind(x.get("mesh") or "none") if not (x.get("mesh") or "").startswith("tolerant") else "tolerant"] += 1
+            u = r.get("ours") or {}
+            if "agg" in u:
+                mesh.update(u["agg"]["mesh"])
+            else:
+                for x in u.get("solids") or []:
+                    mesh[kind(x.get("mesh") or "none")] += 1
         print("   mesh (solids):", dict(mesh))
         sysc = collections.defaultdict(collections.Counter)
         for r in rows:
