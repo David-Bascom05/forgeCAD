@@ -5159,7 +5159,16 @@ pub(crate) fn uv_dir(body: &Body, f: FaceId, p: &Piece, forward: bool, at_end: b
 fn pole_frame(s: &Surface, uv: Point2) -> Option<(Vec3, Vec3)> {
     let v = s.domain().v;
     let step = if uv.y > 0.5 * (v.lo + v.hi) { -1e-6 } else { 1e-6 } * (v.hi - v.lo);
-    let n = s.normal(Point2::new(uv.x, uv.y + step))?.get();
+    let off = Point2::new(uv.x, uv.y + step);
+    // (`normal` refuses where |du| is under LINEAR, as it is that hair off the pole of a ball of
+    // radius under about 3 mm: du x dv itself there, which `normal` is elsewhere)
+    let n = s
+        .normal(off)
+        .or_else(|| {
+            let d = s.deriv(off);
+            d.du.cross(d.dv).normalize()
+        })?
+        .get();
     let helper = if n.x.abs() < 0.9 { Vec3::X } else { Vec3::Y };
     let e1 = (helper - n * helper.dot(n)).normalize()?.get();
     Some((e1, n.cross(e1)))
