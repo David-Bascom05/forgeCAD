@@ -224,14 +224,14 @@ pub(crate) fn pieces(steps: &[Step]) -> Vec<Piece> {
     for (j, s) in steps.iter().enumerate() {
         if let Step::Scale { about, k } = *s {
             if j > run {
-                out.push(Piece::Rigid(rigid(&steps[run..j])));
+                out.push(Piece::Rigid(rigid(&steps[run..j]).expect("rigid steps")));
             }
             out.push(Piece::Scale { about, k });
             run = j + 1;
         }
     }
     if run < steps.len() || steps.is_empty() {
-        out.push(Piece::Rigid(rigid(&steps[run..])));
+        out.push(Piece::Rigid(rigid(&steps[run..]).expect("rigid steps")));
     }
     out
 }
@@ -249,8 +249,8 @@ pub(crate) fn step_box(steps: &[Step], b: &Box3) -> Box3 {
     pieces(steps).iter().fold(*b, |b, m| m.bbox(&b))
 }
 
-/// The rigid motion rigid steps make, applied in order.
-fn rigid(steps: &[Step]) -> Frame {
+/// The rigid motion rigid steps make, applied in order; None at a scale.
+fn rigid(steps: &[Step]) -> Option<Frame> {
     let mut m = Frame::WORLD;
     for s in steps {
         let f = match *s {
@@ -263,11 +263,17 @@ fn rigid(steps: &[Step]) -> Frame {
                 None => Frame::WORLD,
             },
             Step::Frame(f) => f,
-            Step::Scale { .. } => unreachable!("a scale is a piece of its own"),
+            Step::Scale { .. } => return None,
         };
         m = f.compose(&m);
     }
-    m
+    Some(m)
+}
+
+/// The rigid motion the steps make, applied in order; None where one of them is a scale (then
+/// `pieces`). A move with no scale takes this, its one motion, as it always did.
+pub(crate) fn motion(steps: &[Step]) -> Option<Motion> {
+    rigid(steps).map(Motion::Rigid)
 }
 
 /// `b` moved by the steps' pieces in order; with `rename` (a copy), every name passed through it
@@ -952,12 +958,10 @@ fn body_feature(
             solids.retain(|s| !bodies.contains(&s.id));
         }
         BodyFeature::Move { steps, copy } => {
-            let ps = pieces(steps);
             let on = targets(&ids(solids), p, i)?;
             let pe = |error: PatternError| RegenError::Pattern { feature: i, error };
-            if let [Piece::Rigid(f)] = ps[..] {
+            if let Some(m) = motion(steps) {
                 // no scale: the one rigid motion, as a move always was
-                let m = Motion::Rigid(f);
                 if *copy {
                     let [k] = on[..] else {
                         return Err(bad(BodyError::NotOne));
@@ -970,6 +974,7 @@ fn body_feature(
                     }
                 }
             } else if *copy {
+                let ps = pieces(steps);
                 let [k] = on[..] else {
                     return Err(bad(BodyError::NotOne));
                 };
@@ -977,6 +982,7 @@ fn body_feature(
                 let body = moved_by(&solids[k].body.compact(), &ps, Some(&salt), i)?;
                 solids.push(Solid { id: i, body });
             } else {
+                let ps = pieces(steps);
                 for k in on {
                     solids[k].body = moved_by(&solids[k].body.compact(), &ps, None, i)?;
                 }

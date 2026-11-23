@@ -260,7 +260,8 @@ pub fn move_body(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) ->
 }
 
 /// `delete(BODIES)`: the bodies those features made removed from the part. A name of one read
-/// after is `Deleted`; the kernel refuses a delete that would leave no body.
+/// after is `Deleted` (the name is unbound); a list or map bound before that holds one reaches the
+/// kernel's NoBody; the kernel refuses a delete that would leave no body.
 pub fn delete(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Value> {
     not_in_sketch(ev, name, span)?;
     let id = ev.take_id(name, span)?;
@@ -281,7 +282,7 @@ pub fn delete(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<
     of.dedup();
     let f = Feature::Body(Box::new(BodyFeature::Delete { bodies: of.clone() }));
     let (idx, hid) = ev.push_feature(&id, name, f, span, vec![])?;
-    ev.deleted.extend(of.into_iter().map(|k| (k, id.clone())));
+    ev.unbind_deleted(&of, &id);
     Ok(feat(id, name, idx, hid, None))
 }
 

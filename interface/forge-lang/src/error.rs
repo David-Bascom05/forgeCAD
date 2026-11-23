@@ -1475,6 +1475,10 @@ fn regen_text(e: &forge_model::RegenError) -> String {
             error: forge_model::BodyError::DeletesAll,
             ..
         } => "the delete would leave the part no body (DeletesAll)".into(),
+        G::Body {
+            error: forge_model::BodyError::NoBody { .. },
+            ..
+        } => "it names a body that is not in the part: deleted, used up, or never made (NoBody)".into(),
         _ => words(e),
     }
 }

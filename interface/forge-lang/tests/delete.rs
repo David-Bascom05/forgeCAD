@@ -44,7 +44,8 @@ fn a_deleted_body_cannot_be_named() {
     let r = common::refused(&format!(
         "{TWO}both = [a, b]\ngone = delete(a)\nm = movebody(of: both, moves: slide(along: X, by: 5))\n"
     ));
-    assert!(r.contains("Deleted"), "{r}");
+    // a list bound before the delete still holds the feature: the kernel's NoBody
+    assert!(r.contains("NoBody"), "{r}");
     // the body left is there to work on
     let m = common::holds(&format!(
         "{TWO}gone = delete(a)\nm = movebody(of: b, moves: slide(along: X, by: 5))\n"

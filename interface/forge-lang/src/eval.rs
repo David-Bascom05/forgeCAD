@@ -279,6 +279,9 @@ struct Ctx {
 /// The names a scope binds. Hashed by FNV-1a, not SipHash: a name is a few bytes, looked up in
 /// every scope out to the top at each use, and no one hostile writes them; nothing iterates a
 /// scope in an order that shows (what does sorts first).
+/// The prefix of a scope key that marks a name a `delete` unbound (no name starts with a space).
+const DELETED: &str = " deleted ";
+
 pub(crate) type Scope = HashMap<String, (Value, Span), std::hash::BuildHasherDefault<NameHasher>>;
 
 /// FNV-1a over a name's bytes (`Scope`).
@@ -361,9 +364,6 @@ pub struct Eval<'s> {
     /// Each kernel name (`history_id`) made so far, and the feature (in `feats`) that made it
     /// first: two ids with one kernel name are refused (HistoryId.lean: `checked_distinct`).
     hids: HashMap<u64, usize, std::hash::BuildHasherDefault<NameHasher>>,
-    /// The bodies `delete` removed: the feature (its place in the history) that made each, and
-    /// the id of the delete. A name read after that is `Deleted`.
-    pub deleted: Vec<(usize, String)>,
     pub errors: Vec<Error>,
     pub warnings: Vec<Warning>,
     ctx: Ctx,
@@ -486,7 +486,6 @@ impl<'s> Eval<'s> {
             feats: vec![],
             ids: HashMap::default(),
             hids: HashMap::default(),
-            deleted: Vec::new(),
             errors: vec![],
             warnings: vec![],
             ctx: Ctx::default(),
@@ -1467,24 +1466,6 @@ impl<'s> Eval<'s> {
         p.read.get_or_init(|| driving(&p.value, &p.key, span)).clone()
     }
 
-    /// A feature value, or one a list or map holds, whose body a `delete` removed: `Deleted`.
-    pub fn not_deleted(&self, v: &Value, span: Span) -> R<()> {
-        match v {
-            Value::Feature(f) => match self.deleted.iter().find(|d| d.0 == f.idx) {
-                Some((_, by)) => Err(crate::feat_error::FeatError::Deleted {
-                    span,
-                    id: f.id.clone(),
-                    by: by.clone(),
-                }
-                .into()),
-                None => Ok(()),
-            },
-            Value::List(xs) => xs.iter().try_for_each(|x| self.not_deleted(x, span)),
-            Value::Map(m) => m.iter().try_for_each(|x| self.not_deleted(&x.1, span)),
-            _ => Ok(()),
-        }
-    }
-
     fn lookup(&mut self, name: &str, span: Span) -> R<Value> {
         // loop variables, arguments and sketch entities first, then this feature's own params,
         // then top-level names, then shared params
@@ -1552,12 +1533,22 @@ impl<'s> Eval<'s> {
             self.rule(self.rules.scoped_params, err)?;
             return Ok(self.param_num((false, k), span));
         }
+        // a name a `delete` unbound: its body is no longer in the part
+        if let Some((Value::Str(by), _)) = self.scopes[0].get(&format!("{DELETED}{name}")) {
+            return Err(crate::feat_error::FeatError::Deleted {
+                span,
+                id: name.into(),
+                by: by.to_string(),
+            }
+            .into());
+        }
         // the nearest name in reach: bound, a param, a function, a built-in
         let here = self.ctx.owner.clone();
         let names = self
             .scopes
             .iter()
             .flat_map(|s| s.keys().map(String::as_str))
+            .filter(|n| !n.starts_with(DELETED))
             .chain(self.shared.iter().map(|p| p.key.name.as_str()))
             .chain(
                 self.locals
@@ -1573,6 +1564,22 @@ impl<'s> Eval<'s> {
             name: name.into(),
             near: crate::edit_ops::nearest(name, names),
         })
+    }
+
+    /// After a `delete`: each top-level name bound to a feature whose body it removed is unbound,
+    /// and marked (under `DELETED`, a key no name can spell) so a read of it is `Deleted`. Nothing
+    /// is added on the way of a name that is bound: a part with no delete reads names as before.
+    pub(crate) fn unbind_deleted(&mut self, bodies: &[usize], by: &str) {
+        let gone: Vec<String> = self.scopes[0]
+            .iter()
+            .filter(|(_, (v, _))| matches!(v, Value::Feature(f) if bodies.contains(&f.idx)))
+            .map(|(n, _)| n.clone())
+            .collect();
+        for n in gone {
+            if let Some((_, span)) = self.scopes[0].remove(&n) {
+                self.scopes[0].insert(format!("{DELETED}{n}"), (Value::Str(by.into()), span));
+            }
+        }
     }
 
     fn out_of_scope(&self, param: ParamKey, span: Span) -> Error {
@@ -1621,13 +1628,7 @@ impl<'s> Eval<'s> {
             })),
             ExprKind::Str(s) => Ok(Value::Str(s.as_str().into())),
             ExprKind::Bool(b) => Ok(Value::Bool(*b)),
-            ExprKind::Name(n) => {
-                let v = self.lookup(n, e.span)?;
-                if !self.deleted.is_empty() {
-                    self.not_deleted(&v, e.span)?;
-                }
-                Ok(v)
-            }
+            ExprKind::Name(n) => self.lookup(n, e.span),
             ExprKind::List(xs) => {
                 let v: Vec<Value> = xs.iter().map(|x| self.expr(x)).collect::<R<_>>()?;
                 Ok(Value::List(Rc::new(v)))
