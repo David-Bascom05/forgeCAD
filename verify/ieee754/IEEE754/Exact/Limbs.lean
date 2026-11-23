@@ -346,4 +346,197 @@ theorem mul_into_spec {a b : ℕ → ℕ} {la lb : ℕ} (ha : Limbs a la) (hb : 
   obtain ⟨e, lim, -, tB⟩ := mulRun_spec ha hb la le_rfl
   exact ⟨e, lim, tB⟩
 
+/-! ## `shl_into` -/
+
+/-- `shl_into`'s carry loop (`bits % 64 = r > 0`), its first `k` steps, writing from limb `w`. -/
+def shlRun (a : ℕ → ℕ) (w r : ℕ) : ℕ → (ℕ → ℕ) × ℕ
+  | 0 => (fun _ => 0, 0)
+  | k + 1 =>
+    let o := shlRun a w r k
+    (Function.update o.1 (w + k) (((a k * 2 ^ r) % B) ||| o.2), a k / 2 ^ (64 - r))
+
+/-- `shl_into(a, bits, out)`: `words = bits / 64` zero limbs, then `a` shifted by `bits % 64`. -/
+def shlInto (a : ℕ → ℕ) (la bits : ℕ) : ℕ → ℕ :=
+  if bits % 64 = 0 then fun m => if bits / 64 ≤ m ∧ m < bits / 64 + la then a (m - bits / 64) else 0
+  else Function.update (shlRun a (bits / 64) (bits % 64) la).1 (bits / 64 + la) (shlRun a (bits / 64) (bits % 64) la).2
+
+/-- One limb shifted by `0 < r < 64`: the low part, or-ed with a carry under `2^r`, is a sum. -/
+lemma shl_limb {x c r : ℕ} (hx : x < B) (hr0 : 0 < r) (hr : r < 64) (hc : c < 2 ^ r) :
+    ((x * 2 ^ r) % B ||| c) = 2 ^ r * (x % 2 ^ (64 - r)) + c ∧
+      ((x * 2 ^ r) % B ||| c) + B * (x / 2 ^ (64 - r)) = x * 2 ^ r + c ∧
+      ((x * 2 ^ r) % B ||| c) < B ∧ x / 2 ^ (64 - r) < 2 ^ r := by
+  have hB : B = 2 ^ r * 2 ^ (64 - r) := by rw [← pow_add, Nat.add_sub_cancel' (by omega)]
+  have hq : 0 < 2 ^ (64 - r) := by positivity
+  have hdm := Nat.div_add_mod x (2 ^ (64 - r))
+  have hm : (x * 2 ^ r) % B = 2 ^ r * (x % 2 ^ (64 - r)) := by
+    rw [hB]
+    conv_lhs => rw [← hdm]
+    rw [show (2 ^ (64 - r) * (x / 2 ^ (64 - r)) + x % 2 ^ (64 - r)) * 2 ^ r =
+      2 ^ r * (x % 2 ^ (64 - r)) + 2 ^ r * 2 ^ (64 - r) * (x / 2 ^ (64 - r)) by ring, Nat.add_mul_mod_self_left]
+    exact Nat.mod_eq_of_lt (by
+      have := Nat.mod_lt x hq
+      calc 2 ^ r * (x % 2 ^ (64 - r)) < 2 ^ r * 2 ^ (64 - r) := Nat.mul_lt_mul_of_pos_left this (by positivity)
+        _ = _ := rfl)
+  have hor : ((x * 2 ^ r) % B ||| c) = 2 ^ r * (x % 2 ^ (64 - r)) + c := by
+    rw [hm, Nat.two_pow_add_eq_or_of_lt hc]
+  refine ⟨hor, ?_, ?_, ?_⟩
+  · rw [hor, hB]
+    conv_rhs => rw [← hdm]
+    ring
+  · rw [hor, hB]
+    have h1 : x % 2 ^ (64 - r) + 1 ≤ 2 ^ (64 - r) := Nat.mod_lt x hq
+    have h2 : 2 ^ r * (x % 2 ^ (64 - r) + 1) ≤ 2 ^ r * 2 ^ (64 - r) := Nat.mul_le_mul_left _ h1
+    rw [Nat.mul_add, Nat.mul_one] at h2
+    omega
+  · rw [Nat.div_lt_iff_lt_mul hq, ← hB]; exact hx
+
+lemma shlRun_spec {a : ℕ → ℕ} {la w r : ℕ} (ha : Limbs a la) (hr0 : 0 < r) (hr : r < 64) :
+    ∀ k ≤ la, valF (shlRun a w r k).1 (w + k) + B ^ (w + k) * (shlRun a w r k).2 = valF a k * 2 ^ r * B ^ w ∧
+      Limbs (shlRun a w r k).1 (w + k) ∧ (∀ m, (m < w ∨ w + k ≤ m) → (shlRun a w r k).1 m = 0) ∧
+      (shlRun a w r k).2 < 2 ^ r := by
+  intro k hk
+  induction k with
+  | zero =>
+    refine ⟨?_, fun i _ => by simp [shlRun], fun m _ => rfl, by simp [shlRun]⟩
+    simp only [shlRun, add_zero, mul_zero, valF]
+    simp
+  | succ k ih =>
+    obtain ⟨e, lim, z, cB⟩ := ih (by omega)
+    obtain ⟨l1, l2, l3, l4⟩ := shl_limb (ha k (by omega)) hr0 hr cB
+    simp only [shlRun]
+    generalize hrr : shlRun a w r k = o at e lim z cB l1 l2 l3 l4
+    refine ⟨?_, ?_, ?_, l4⟩
+    · rw [show w + (k + 1) = (w + k) + 1 by ring, valF_succ, Function.update_self, valF_update_ge le_rfl,
+        valF_succ, pow_succ]
+      zify at e l2 ⊢
+      linear_combination e + (B : ℤ) ^ (w + k) * l2
+    · intro i hi
+      by_cases h : i = w + k
+      · subst h; rw [Function.update_self]; exact l3
+      · rw [Function.update_of_ne h]; exact lim i (by omega)
+    · intro m hm
+      rw [Function.update_of_ne (by omega)]; exact z m (by omega)
+
+lemma valF_shift {a : ℕ → ℕ} {w la : ℕ} :
+    valF (fun m => if w ≤ m ∧ m < w + la then a (m - w) else 0) (w + la) = B ^ w * valF a la := by
+  unfold valF
+  rw [sum_range_add]
+  have h1 : ∑ x ∈ range w, (if w ≤ x ∧ x < w + la then a (x - w) else 0) * B ^ x = 0 :=
+    sum_eq_zero (fun x hx => by simp only [mem_range] at hx; simp [show ¬ w ≤ x by omega])
+  rw [h1, zero_add, mul_sum]
+  exact sum_congr rfl (fun x hx => by
+    simp only [mem_range] at hx
+    simp only [show w ≤ w + x ∧ w + x < w + la from ⟨by omega, by omega⟩, and_self, if_true,
+      show w + x - w = x by omega, pow_add]; ring)
+
+/-- **`shl_into`.** `out` (length `la + bits/64 + 1`) is `a · 2^bits`, every limb below `2^64`. -/
+theorem shl_into_spec {a : ℕ → ℕ} {la bits : ℕ} (ha : Limbs a la) :
+    valF (shlInto a la bits) (bits / 64 + la + 1) = valF a la * 2 ^ bits ∧
+      Limbs (shlInto a la bits) (bits / 64 + la + 1) := by
+  have hbits : 2 ^ bits = B ^ (bits / 64) * 2 ^ (bits % 64) := by
+    rw [B, ← pow_mul, ← pow_add]; congr 1; omega
+  unfold shlInto
+  split_ifs with h0
+  · refine ⟨?_, ?_⟩
+    · rw [valF_succ, valF_shift]
+      simp only [show ¬ (bits / 64 + la < bits / 64 + la) from lt_irrefl _, and_false, if_false, zero_mul, add_zero]
+      rw [hbits, h0, pow_zero, mul_one, mul_comm]
+    · intro i hi
+      dsimp only
+      split_ifs with h
+      · exact ha _ (by omega)
+      · norm_num
+  · obtain ⟨e, lim, z, cB⟩ := shlRun_spec (w := bits / 64) (r := bits % 64) ha (Nat.pos_of_ne_zero h0) (Nat.mod_lt _ (by norm_num)) la le_rfl
+    refine ⟨?_, ?_⟩
+    · rw [valF_succ, Function.update_self, valF_update_ge le_rfl, hbits]
+      zify at e ⊢
+      linear_combination e
+    · intro i hi
+      by_cases h : i = bits / 64 + la
+      · subst h; rw [Function.update_self]
+        exact lt_of_lt_of_le cB (Nat.pow_le_pow_right (by norm_num) (by omega))
+      · rw [Function.update_of_ne h]; exact lim i (by omega)
+
+/-! ## `trimmed` and `cmp_mag` -/
+
+/-- `trimmed`: the length with the zero top limbs dropped. -/
+def trimLen (f : ℕ → ℕ) : ℕ → ℕ
+  | 0 => 0
+  | n + 1 => if f n = 0 then trimLen f n else n + 1
+
+theorem trimLen_spec (f : ℕ → ℕ) (n : ℕ) :
+    trimLen f n ≤ n ∧ valF f (trimLen f n) = valF f n ∧ (trimLen f n = 0 ∨ f (trimLen f n - 1) ≠ 0) := by
+  induction n with
+  | zero => simp [trimLen]
+  | succ n ih =>
+    simp only [trimLen]
+    split_ifs with h
+    · obtain ⟨h1, h2, h3⟩ := ih
+      exact ⟨by omega, by rw [h2, valF_succ, h, zero_mul, add_zero], h3⟩
+    · exact ⟨le_rfl, rfl, Or.inr (by simpa using h)⟩
+
+lemma valF_ge_top {f : ℕ → ℕ} {n : ℕ} (hn : 0 < n) : f (n - 1) * B ^ (n - 1) ≤ valF f n := by
+  obtain ⟨m, rfl⟩ : ∃ m, n = m + 1 := ⟨n - 1, by omega⟩
+  rw [valF_succ]; simp
+
+/-- The top-down scan of `cmp_mag` over `i` limbs. -/
+def cmpTop (a b : ℕ → ℕ) : ℕ → Ordering
+  | 0 => .eq
+  | i + 1 => if a i ≠ b i then compare (a i) (b i) else cmpTop a b i
+
+/-- `cmp_mag(a, b)`: lengths first, then the limbs from the top. -/
+def cmpMag (a : ℕ → ℕ) (la : ℕ) (b : ℕ → ℕ) (lb : ℕ) : Ordering :=
+  if la ≠ lb then compare la lb else cmpTop a b la
+
+lemma compare_add_same (x y c : ℕ) : compare (x + c) (y + c) = compare x y := by
+  rcases lt_trichotomy x y with h | h | h
+  · rw [compare_lt_iff_lt.mpr h, compare_lt_iff_lt.mpr (by omega)]
+  · subst h; rw [compare_eq_iff_eq.mpr rfl, compare_eq_iff_eq.mpr rfl]
+  · rw [compare_gt_iff_gt.mpr h, compare_gt_iff_gt.mpr (by omega)]
+
+lemma cmpTop_spec {a b : ℕ → ℕ} {n : ℕ} (ha : Limbs a n) (hb : Limbs b n) :
+    ∀ i ≤ n, cmpTop a b i = compare (valF a i) (valF b i) := by
+  intro i hi
+  induction i with
+  | zero => simp [cmpTop, valF]
+  | succ i ih =>
+    simp only [cmpTop]
+    have la := valF_lt (fun j hj => ha j (by omega) : Limbs a i)
+    have lb := valF_lt (fun j hj => hb j (by omega) : Limbs b i)
+    rw [valF_succ, valF_succ]
+    split_ifs with h
+    · rcases lt_or_gt_of_ne h with h' | h'
+      · rw [compare_lt_iff_lt.mpr h', compare_lt_iff_lt.mpr]
+        have : (a i + 1) * B ^ i ≤ b i * B ^ i := Nat.mul_le_mul_right _ h'
+        nlinarith
+      · rw [compare_gt_iff_gt.mpr h', compare_gt_iff_gt.mpr]
+        have : (b i + 1) * B ^ i ≤ a i * B ^ i := Nat.mul_le_mul_right _ h'
+        nlinarith
+    · push Not at h
+      rw [ih (by omega), h, compare_add_same]
+
+/-- **`cmp_mag`.** On trimmed limb slices, `cmp_mag` is the order of the magnitudes. -/
+theorem cmp_mag_spec {a b : ℕ → ℕ} {la lb : ℕ} (ha : Limbs a la) (hb : Limbs b lb)
+    (ta : la = 0 ∨ a (la - 1) ≠ 0) (tb : lb = 0 ∨ b (lb - 1) ≠ 0) :
+    cmpMag a la b lb = compare (valF a la) (valF b lb) := by
+  unfold cmpMag
+  split_ifs with h
+  · have key : ∀ {x y : ℕ → ℕ} {lx ly : ℕ}, Limbs x lx → (ly = 0 ∨ y (ly - 1) ≠ 0) → lx < ly →
+        valF x lx < valF y ly := by
+      intro x y lx ly hx ty hl
+      rcases ty with h0 | h0
+      · omega
+      · have h1 := valF_lt hx
+        have h2 := valF_ge_top (f := y) (show 0 < ly by omega)
+        have h3 : B ^ lx ≤ B ^ (ly - 1) := Nat.pow_le_pow_right (by norm_num) (by omega)
+        have h4 : 1 ≤ y (ly - 1) := Nat.one_le_iff_ne_zero.mpr h0
+        have h5 : B ^ (ly - 1) ≤ y (ly - 1) * B ^ (ly - 1) := Nat.le_mul_of_pos_left _ h4
+        omega
+    rcases lt_or_gt_of_ne h with h' | h'
+    · rw [compare_lt_iff_lt.mpr h', compare_lt_iff_lt.mpr (key ha tb h')]
+    · rw [compare_gt_iff_gt.mpr h', compare_gt_iff_gt.mpr (key hb ta h')]
+  · push Not at h
+    subst h
+    exact cmpTop_spec ha hb la le_rfl
+
 end IEEE754.Exact
