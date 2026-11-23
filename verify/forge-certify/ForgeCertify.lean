@@ -6,3 +6,7 @@ import ForgeCertify.Tri3
 import ForgeCertify.PT
 import ForgeCertify.Const
 import ForgeCertify.Tele
+import ForgeCertify.Check
+import ForgeCertify.Input
+import ForgeCertify.Bridge
+import ForgeCertify.Sound

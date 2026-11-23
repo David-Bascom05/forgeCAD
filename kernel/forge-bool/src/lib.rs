@@ -12,6 +12,8 @@ macro_rules! decided {
 }
 
 pub mod boolean;
+#[cfg(feature = "certify")]
+pub mod certify;
 pub mod classify;
 #[cfg(feature = "decisions")]
 pub mod decisions;

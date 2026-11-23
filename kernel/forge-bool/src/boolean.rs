@@ -457,8 +457,17 @@ pub fn boolean_into(target: &mut Body, b: &Body, op: Op, _feature: u64) -> R<()>
     let before = target.clone();
     if !imprinted(target, b, || std::borrow::Cow::Borrowed(b), op) {
         let first = target.edges.len();
-        general(target, b, op)?;
-        refuse_strays(target, first)?;
+        #[cfg(not(feature = "certify"))]
+        {
+            general(target, b, op)?;
+            refuse_strays(target, first)?;
+        }
+        #[cfg(feature = "certify")]
+        {
+            let r = general(target, b, op).and_then(|()| refuse_strays(target, first));
+            crate::certify::finish(r.is_ok().then_some(&*target));
+            r?;
+        }
     }
     #[cfg(debug_assertions)]
     faces_survive(&before, b, op, target);
@@ -560,8 +569,17 @@ pub fn boolean_unlinked(target: &mut Body, b: forge_topo::Unlinked, op: Op) -> R
         return Ok(());
     }
     let first = target.edges.len();
-    general(target, &b.into_body(), op)?;
-    refuse_strays(target, first)
+    #[cfg(not(feature = "certify"))]
+    {
+        general(target, &b.into_body(), op)?;
+        refuse_strays(target, first)
+    }
+    #[cfg(feature = "certify")]
+    {
+        let r = general(target, &b.into_body(), op).and_then(|()| refuse_strays(target, first));
+        crate::certify::finish(r.is_ok().then_some(&*target));
+        r
+    }
 }
 
 /// Whether the local-imprint path did the boolean (the mode lets it run and it covers the tool);
@@ -614,7 +632,11 @@ fn general(target: &mut Body, b: &Body, op: Op) -> R<()> {
     UNDECIDED.with(|u| u.set(None));
     RETRIED.with(|r| r.set(false));
     let mut scratch = SCRATCH.with(|s| s.take());
+    #[cfg(feature = "certify")]
+    crate::certify::begin(target, b, op);
     let plan = plan(target, b, op, &mut scratch)?;
+    #[cfg(feature = "certify")]
+    crate::certify::pieces(target, b, &plan);
     let mut clock = phases_on().then(forge_math::clock::Instant::now);
     let (loops, verts) = (target.loops.len(), target.vertices.len());
     let touched = touched_old(&plan);
