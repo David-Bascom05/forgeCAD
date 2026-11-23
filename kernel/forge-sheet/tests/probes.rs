@@ -337,3 +337,45 @@ fn mold_lines_one_by_the_rule_or_refused() {
         }
     }
 }
+
+/// A plate turned `rot` with a flange, and a slot crossing its bend at a slant: in the folded
+/// body, the worst distance from an edge's own ends to its vertices (where the zone's edges meet
+/// the walls' vertices at the crossings).
+fn slanted_slot_gap(rot: f64) -> f64 {
+    use forge_geom::CurveGeom;
+    let (sn, cs) = dmath::sin_cos(rot);
+    let turn = |x: f64, y: f64| (cs * x - sn * y, sn * x + cs * y);
+    let plate: Vec<(f64, f64)> = [(0.0, 0.0), (60.0, 0.0), (60.0, 40.0), (0.0, 40.0)]
+        .iter()
+        .map(|&(x, y)| turn(x, y))
+        .collect();
+    let (mut s, base) = Sheet::face(FeatureId(1), gauge(), Frame::WORLD, &[poly(&plate)]).unwrap();
+    s.flange(base, 1, dmath::PI / 2.0, 30.0).unwrap();
+    let slot: Vec<(f64, f64)> = [(50.0, 12.0), (75.0, 21.0), (75.0, 25.0), (50.0, 16.0)]
+        .iter()
+        .map(|&(x, y)| turn(x, y))
+        .collect();
+    s.cut(WallId(0), poly(&slot)).unwrap();
+    let b = build_with(&s, Map::Folded).expect("builds");
+    assert!(forge_topo::check::check(&b.body).is_empty());
+    let mut worst: f64 = 0.0;
+    for e in &b.body.edges {
+        let (p, q) = (e.curve.eval(e.range.lo), e.curve.eval(e.range.hi));
+        let (v, w) = (b.body.vertex(e.start).point, b.body.vertex(e.end).point);
+        worst = worst
+            .max(p.distance(v).min(p.distance(w)))
+            .max(q.distance(v).min(q.distance(w)));
+    }
+    worst
+}
+
+#[test]
+fn a_crossing_is_the_walls_in_the_zone_too() {
+    // the slot's crossings of the tangent lines are decided once, in the walls, and carried to
+    // the zone: the zone's edges end on the walls' vertices to the folds' rounding
+    for rot in [0.3, 0.7, 1.1, 2.0] {
+        let gap = slanted_slot_gap(rot);
+        eprintln!("rot {rot}: worst gap {gap:e}");
+        assert!(gap < 1e-12, "{rot}: {gap:e}");
+    }
+}

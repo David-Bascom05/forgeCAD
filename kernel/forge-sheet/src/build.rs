@@ -1972,6 +1972,8 @@ impl<'a> Strips<'a> {
         // the wall's end: the square end of a flange beside a corner under a right angle)
         let mut twin = HashMap::new();
         let mut free = Vec::new();
+        // the wall's points each matched zone stretch takes (loop, index, its start's y, its end's)
+        let mut carry: Vec<(usize, usize, f64, f64)> = Vec::new();
         for (li, l) in loops.iter().enumerate() {
             if l.strip < nw {
                 continue;
@@ -2014,10 +2016,33 @@ impl<'a> Strips<'a> {
                 slot[li][(i + 1) % n] = slot[wl][wi];
                 twin.insert((li, i), (wl, wi));
                 twin.insert((wl, wi), (li, i));
+                // the wall runs it the other way: the zone's start is the wall stretch's end
+                let (wa, wb, _, _) = *list.iter().find(|q| (q.2, q.3) == (wl, wi)).expect("listed");
+                carry.push((li, i, wb, wa));
             }
         }
         for (li, i) in free {
             loops[li].kinds[i] = Kind::Side;
+        }
+        // the crossings carried from the walls (README §6.1, step 5: decided once, in the wall,
+        // whose points the slots already are): a matched zone stretch's ends are the wall's points,
+        // within the tolerance of the zone's own, which go; the zone's lines through them run to
+        // them (an arc or a spline keeps its carrier, its end within the tolerance)
+        for (li, i, y0, y1) in carry {
+            let l = &mut loops[li];
+            let n = l.bounds.len();
+            let x = l.bounds[i].start.x;
+            for (k, y) in [(i, y0), ((i + 1) % n, y1)] {
+                let p = Point2::new(x, y);
+                l.bounds[k].start = p;
+                if let Piece::Line { ref mut a, .. } = l.bounds[k].piece {
+                    *a = p;
+                }
+                let before = (k + n - 1) % n;
+                if let Piece::Line { ref mut b, .. } = l.bounds[before].piece {
+                    *b = p;
+                }
+            }
         }
         // every wall stretch must have found its bend's
         for (&(bi, side), list) in &stretches {
