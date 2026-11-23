@@ -85,6 +85,23 @@ fn conic_segments(width: f64, bend: f64, turn: f64, q: &Quality) -> f64 {
     by_chord.max(by_angle)
 }
 
+/// Whether the triangle `x`, its corners on the sphere of centre `o` and radius `r`, sags past
+/// `chord` at the centre's foot on its plane, the deepest point of the triangle when it lies in
+/// it (cold: only a triangle whose centroid sags near the chord asks).
+#[cold]
+#[inline(never)]
+fn foot_sags(o: forge_math::Point3, r: f64, x: [forge_math::Point3; 3], chord: f64) -> bool {
+    let n = (x[1] - x[0]).cross(x[2] - x[0]);
+    let nn = n.dot(n);
+    if nn <= 0.0 {
+        return false;
+    }
+    let foot = o + n * ((x[0] - o).dot(n) / nn);
+    // in the triangle: on the inner side of each edge (as the normal turns)
+    let side = |a: forge_math::Point3, b: forge_math::Point3| (b - a).cross(foot - a).dot(n) >= 0.0;
+    side(x[0], x[1]) && side(x[1], x[2]) && side(x[2], x[0]) && (foot.distance(o) - r).abs() > chord
+}
+
 /// Whether the surface curves both ways, so a triangle on it sags by its sag along each side.
 fn doubly_curved(s: &Surface) -> bool {
     matches!(s, Surface::Sphere(_) | Surface::Torus(_))
@@ -1675,12 +1692,32 @@ fn mesh_face(
     // (a long triangle on a cone, between rulings at its two ends, can sag in its middle past
     // its sides too)
     let both_ways = doubly_curved(surface) || matches!(surface, Surface::Procedural(_) | Surface::Cone(_));
+    // on a sphere the triangle's deepest point is the centre's foot on its plane when that lies
+    // in it (else an edge's middle, tested with the edges): the centroid is tested first, and
+    // the foot only where the centroid's sag is within what the foot can add to it (with the
+    // edges within the chord, at most 8rc/(9 d) for d the foot's distance from the centre, d at
+    // least √(r² − 8rc/3): research/tessellation-proof)
+    let foot_margin = match surface {
+        Surface::Sphere(sp) if 8.0 * q.chord < 3.0 * sp.radius => {
+            let r = sp.radius;
+            8.0 * r * q.chord / (9.0 * (r * r - 8.0 * r * q.chord / 3.0).sqrt())
+        }
+        _ => f64::INFINITY,
+    };
     let triangle = |v: [u32; 3], p: [Point2; 3]| {
         let m = Point2::new((p[0].x + p[1].x + p[2].x) / 3.0, (p[0].y + p[1].y + p[2].y) / 3.0);
         let grid = v.iter().all(|&k| k >= nb);
         !(grid && (0..3).all(|k| within(p[k], p[(k + 1) % 3]))) && !bounded3(p, grid) && {
             let x = [0, 1, 2].map(|k| pos(v[k], p[k]));
-            off(x[0].lerp(x[1], 0.5).lerp(x[2], 1.0 / 3.0), m)
+            let g = x[0].lerp(x[1], 0.5).lerp(x[2], 1.0 / 3.0);
+            off(g, m)
+                || match surface {
+                    Surface::Sphere(sp) => {
+                        let sag = surface.implicit(g).abs();
+                        sag + foot_margin > q.chord && foot_sags(sp.frame.origin, sp.radius, x, q.chord)
+                    }
+                    _ => false,
+                }
         }
     };
     // what the chord asks of an ideal mesh, asked only of a refinement past the budget its
@@ -2628,6 +2665,37 @@ mod tests {
     /// A circle's chords sag by the tolerance at most, exactly: at any chord over radius (where
     /// the old floor of 1e-4 rad let a huge arc's chords sag past it) and at half the tolerance
     /// on a face curved both ways (where n·√2 gave up to 1.0007 of the half).
+    /// On a sphere the triangle's deepest point is the centre's foot on its plane: a triangle
+    /// whose edges' middles and centroid sag within the chord, its foot past it, asks to be
+    /// split; one whose foot lies outside it does not (its deepest points are its edges' middles).
+    #[test]
+    fn a_spheres_triangle_is_judged_at_its_deepest_point() {
+        use forge_math::{Point3, Vec3};
+        let (o, r) = (Point3::new(0.0, 0.0, 0.0), 10.0);
+        let at = |theta: f64, phi: f64| {
+            Point3::new(
+                r * forge_math::dmath::sin(theta) * forge_math::dmath::cos(phi),
+                r * forge_math::dmath::sin(theta) * forge_math::dmath::sin(phi),
+                r * forge_math::dmath::cos(theta),
+            )
+        };
+        // an acute triangle round the pole, its foot inside, sagging about 0.0225
+        let tri = [at(0.0671, 0.0), at(0.0671, 2.1), at(0.0671, 4.2)];
+        let sag = |p: Point3| r - p.distance(o);
+        let mid = |a: Point3, b: Point3| a.lerp(b, 0.5);
+        let g = tri[0].lerp(tri[1], 0.5).lerp(tri[2], 1.0 / 3.0);
+        let deepest = r - (tri[0] - o).dot(Vec3::new(0.0, 0.0, 1.0));
+        let tested = sag(g).max(sag(mid(tri[0], tri[1]))).max(sag(mid(tri[1], tri[2])));
+        // a chord between what the tests see and the foot's sag
+        let chord = 0.5 * (tested + deepest);
+        assert!(tested < chord && chord < deepest, "{tested} {chord} {deepest}");
+        assert!(foot_sags(o, r, tri, chord));
+        assert!(!foot_sags(o, r, tri, deepest * 1.0001));
+        // an obtuse triangle beside the pole: the foot outside, no say
+        let obtuse = [at(0.05, 0.0), at(0.05, 0.3), at(0.05, 0.6)];
+        assert!(!foot_sags(o, r, obtuse, 1e-9));
+    }
+
     #[test]
     fn arc_chords_hold_the_tolerance_exactly() {
         use forge_geom::curve::Circle;
