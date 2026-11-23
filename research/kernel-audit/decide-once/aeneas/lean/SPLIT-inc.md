@@ -24,3 +24,11 @@ Points to agree within each group:
   then weakens `IncCoreSpec` to a body correspondence.
 - **Union-find heads are least positions**, which is the Lean's `head … xs`, as in v1's UF proofs.
 - **Size limits** come from `LedgerWF2.small` and the Csr bounds.
+
+## Status
+
+| group | state | file |
+|---|---|---|
+| T | done: `rows_spec`, `row_spec` (`ledger_wf`'s equivalence is still to do) | RefineIncTables.lean |
+| S | done: `body_of_spec`, `cls_of_spec`, `split_ok_spec` (`= splitOk`), `split_spec` (`SplitOK`: piece table = `isPieceOf`, `rooms` = `(toLF l).rooms`, `room_pos` inverts it) | RefineIncTables, RefineIncSplit, RefineIncRooms |
+| C, K, U, E | to do | |
