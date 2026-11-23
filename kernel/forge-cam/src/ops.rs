@@ -315,6 +315,35 @@ pub fn certify_fixtured(
     tol: f64,
     clearance: f64,
 ) -> CheckSummary {
+    certify_with(p, tool, part, stages, fixture, fclear, tol, clearance, false)
+}
+
+/// `certify_fixtured`, and with `column` the 3-axis surfacing route for the cutter (and a shank
+/// inside its column) against the part on cuts: the vertical gap of the tool's column
+/// (forge_cam_geom::drop) is tried first, and only what it cannot prove goes to the
+/// branch and bound. A proven gap v ≥ −tol bounds every such body's signed distance by the same
+/// (drop.rs's statement), so the verdict is the check's own.
+#[allow(clippy::too_many_arguments)]
+pub fn certify_with(
+    p: &OpPath,
+    tool: &ToolUse,
+    part: &[Face],
+    stages: &[(usize, Vec<Face>)],
+    fixture: &[Face],
+    fclear: f64,
+    tol: f64,
+    clearance: f64,
+    column: bool,
+) -> CheckSummary {
+    let col = if column {
+        tool.shape
+            .bodies
+            .iter()
+            .find(|b| b.part == Part::Cutter)
+            .and_then(forge_cam_geom::drop::Column::of)
+    } else {
+        None
+    };
     let mut sum = CheckSummary {
         clear: true,
         least: f64::INFINITY,
@@ -434,6 +463,22 @@ pub fn certify_fixtured(
                         let slot = &mut shared[set][fi as usize];
                         if slot.is_none() {
                             touched.push((set, fi as usize));
+                        }
+                        if let Some(col) = &col
+                            && what == "part"
+                            && limit <= 0.0
+                            && *phase != Phase::Rapid
+                            && col.holds_or_is(b)
+                        {
+                            let (g, n) =
+                                forge_cam_geom::drop::gap_move(col, f, m, limit, tol / 4.0, 200_000);
+                            o.cells += n;
+                            if let forge_cam_geom::drop::Gap::Clear { lower } = g {
+                                if b.part == Part::Cutter {
+                                    o.least = o.least.min(lower);
+                                }
+                                continue;
+                            }
                         }
                         let (v, n) = check::certify_shared(b, f, m, limit, tol / 4.0, 200_000, slot);
                         o.cells += n;
