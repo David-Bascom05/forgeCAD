@@ -284,7 +284,7 @@ pub fn drop_query_loops(body: &mut Body, f: FaceId, gone: &[forge_topo::LoopId])
 /// built now would. Its live entries (GONE skipped, as every reader skips them) are a fresh index's,
 /// in order, with their boxes, and its reach is the fresh one's (the bands only prune). The error
 /// names what differs. A face with no kept index, or one shared with a copy, is OK.
-#[cfg(any(debug_assertions, feature = "decisions"))]
+#[cfg(feature = "decisions")]
 pub(crate) fn cache_ok(body: &Body, f: FaceId) -> Result<(), &'static str> {
     let face = body.face(f);
     let Some(q) = face.query.get() else { return Ok(()) };
