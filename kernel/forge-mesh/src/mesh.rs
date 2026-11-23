@@ -10,6 +10,10 @@ pub struct TriMesh {
     /// Each body edge's cut points as vertex indices, start to end (index into the body's edges;
     /// empty where the mesh wasn't made from a whole body).
     pub edges: Vec<Vec<u32>>,
+    /// Faces whose refinement stopped at its cap, drawn as far as it got: their triangles are not
+    /// certified within the chord. Only a file's body, drawn as it is (`tessellate_tolerant`), has
+    /// any; on a body made here an unsettled face is an error (`CdtError::Unsettled`).
+    pub unsettled: Vec<u32>,
 }
 
 impl TriMesh {

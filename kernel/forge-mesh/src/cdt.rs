@@ -863,10 +863,25 @@ pub fn triangulate_within(
     refine: Option<&dyn Refine>,
     tangled: bool,
 ) -> Result<Triangulation, CdtError> {
-    within(points, loops, interior, refine, tangled, ROUNDS)
+    within(points, loops, interior, refine, tangled, ROUNDS, false).map(|t| t.0)
 }
 
-/// `triangulate_within`, refining for at most `rounds` rounds.
+/// `triangulate_within`, but a refinement that does not settle (`CdtError::Unsettled`) gives the
+/// triangulation as far as it got, with `false`: for a file's body, drawn as it is, its caller
+/// to say so (`TriMesh::unsettled`).
+pub fn triangulate_as_far(
+    points: &[Point2],
+    loops: &[Vec<u32>],
+    interior: &[Point2],
+    refine: Option<&dyn Refine>,
+    tangled: bool,
+) -> Result<(Triangulation, bool), CdtError> {
+    within(points, loops, interior, refine, tangled, ROUNDS, true)
+}
+
+/// `triangulate_within`, refining for at most `rounds` rounds; with `as_far`, an unsettled
+/// refinement stops where it is instead of failing. With whether it settled.
+#[inline(never)]
 fn within(
     points: &[Point2],
     loops: &[Vec<u32>],
@@ -874,7 +889,8 @@ fn within(
     refine: Option<&dyn Refine>,
     tangled: bool,
     rounds: usize,
-) -> Result<Triangulation, CdtError> {
+    as_far: bool,
+) -> Result<(Triangulation, bool), CdtError> {
     let n = points.len() as u32;
     for (i, p) in points.iter().enumerate() {
         if !(p.x.is_finite() && p.y.is_finite()) {
@@ -902,10 +918,13 @@ fn within(
         hi = Point2::new(hi.x.max(p.x), hi.y.max(p.y));
     }
     if points.is_empty() {
-        return Ok(Triangulation {
-            points: vec![],
-            triangles: vec![],
-        });
+        return Ok((
+            Triangulation {
+                points: vec![],
+                triangles: vec![],
+            },
+            true,
+        ));
     }
     let size = (hi.x - lo.x).max(hi.y - lo.y).max(f64::MIN_POSITIVE);
     let eps = 1e-12 * size;
@@ -1012,6 +1031,7 @@ fn within(
     for &p in &kept {
         mesh.insert_interior(p, eps)?;
     }
+    let mut settled = true;
     // then the points the caller asks for, round after round, into the same triangulation; each
     // round looks only at the triangles the last one made (each made triangle holds a new point)
     if let Some(refine) = refine {
@@ -1029,9 +1049,12 @@ fn within(
             rounds: rounds as u32,
             points: (mesh.pts.len() as u32).saturating_sub(SUPER),
         };
-        let mut settled = false;
+        settled = false;
         for round in 0..rounds {
             if mesh.pts.len() > budget {
+                if as_far {
+                    break;
+                }
                 return Err(unsettled(round, &mesh));
             }
             if forge_geom::budget::over() {
@@ -1124,7 +1147,7 @@ fn within(
             look.sort_unstable();
             fresh_from = first_new;
         }
-        if !settled {
+        if !settled && !as_far {
             return Err(unsettled(rounds, &mesh));
         }
     }
@@ -1136,10 +1159,13 @@ fn within(
         .filter(|(t, inside)| **inside && t.v.iter().all(|&v| v >= SUPER))
         .map(|(t, _)| t.v.map(|v| v - SUPER))
         .collect();
-    Ok(Triangulation {
-        points: mesh.pts.split_off(SUPER as usize),
-        triangles,
-    })
+    Ok((
+        Triangulation {
+            points: mesh.pts.split_off(SUPER as usize),
+            triangles,
+        },
+        settled,
+    ))
 }
 
 #[cfg(test)]
@@ -1698,7 +1724,7 @@ mod tests {
             Err(CdtError::Unsettled { .. })
         ));
         // past the rounds, with points to spare: an error too, never a mesh that breaks the test
-        let got = within(&sq, &[vec![0, 1, 2, 3]], &[], Some(&Always), false, 3);
+        let got = within(&sq, &[vec![0, 1, 2, 3]], &[], Some(&Always), false, 3, false);
         assert!(
             matches!(got, Err(CdtError::Unsettled { rounds: 3, .. })),
             "{got:?}"
