@@ -222,6 +222,13 @@ fn degenerate(s: &Sec) -> Option<[f64; 2]> {
 
 /// The least distance between two section curves.
 pub fn dist(s: &Sec, t: &Sec) -> Ival {
+    // arcs reach here as pieces of at most a quarter turn (faces are lowered so, trims split so,
+    // moves are cut so): never a whole circle, whose sector (a == b) the candidates do not cover
+    // (proven for cross(a − c, b − c) > 0 only: DistArc.lean)
+    debug_assert!(
+        ![s, t].iter().any(|x| matches!(x, Sec::Arc { a, b, .. } if a == b)),
+        "slab::dist takes arcs of under a half turn"
+    );
     if let Some(q) = degenerate(s) {
         return pt_sec(q, t);
     }
