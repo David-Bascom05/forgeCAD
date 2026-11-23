@@ -480,9 +480,51 @@ impl Nurbs {
             let (b, l, r, leaf) = &t.nodes[n as usize];
             let _ = b;
             if *l == 0 && *r == 0 {
+                // Newton from the span's middle; where that ends further than the nearest of a
+                // grid of degree + 2 points each way, from that point too (a polynomial piece of
+                // degree p turns at most p - 1 times along a line, so its nearest basin holds one
+                // of them; from the middle alone, a point opposite a closed span's middle sat on
+                // the far side, the distance stationary there)
                 let (i, j) = (leaf.0 as usize, leaf.1 as usize);
-                let start = Point2::new(0.5 * (t.us[i].0 + t.us[i].1), 0.5 * (t.vs[j].0 + t.vs[j].1));
-                let found = self.newton(p, start);
+                let ((u0, u1), (v0, v1)) = ((t.us[i].0, t.us[i].1), (t.vs[j].0, t.vs[j].1));
+                let mut found = self.newton(p, Point2::new(0.5 * (u0 + u1), 0.5 * (v0 + v1)));
+                let lin = forge_math::tol::LINEAR;
+                let (nu, nv) = (self.p + 1, self.q + 1);
+                let mut start = (found.0, found.1);
+                // only where Newton's answer is off the surface and not the least distance near
+                // it (a stationary point that is no minimum: a step of a grid cell each way finds
+                // a nearer point); an answer on the surface is the nearest. Most points projected
+                // are an edge's on its own face, or near their answer's basin
+                let (du, dv) = ((u1 - u0) / nu as f64, (v1 - v0) / nv as f64);
+                let near = |uv: Point2| {
+                    let q = Point2::new(uv.x.clamp(u0, u1), uv.y.clamp(v0, v1));
+                    self.point_at(q).distance(p) + lin < found.1.sqrt()
+                };
+                let f = found.0;
+                let on = found.1.sqrt() <= lin
+                    || ![(du, 0.0), (-du, 0.0), (0.0, dv), (0.0, -dv)]
+                        .iter()
+                        .any(|&(a, c)| near(Point2::new(f.x + a, f.y + c)));
+                for a in (0..=nu).filter(|_| !on) {
+                    for c in 0..=nv {
+                        let uv = Point2::new(
+                            u0 + (u1 - u0) * (a as f64 / nu as f64),
+                            v0 + (v1 - v0) * (c as f64 / nv as f64),
+                        );
+                        let d = self.point_at(uv).distance_sq(p);
+                        if d < start.1 {
+                            start = (uv, d);
+                        }
+                    }
+                }
+                // (nearer by more than LINEAR: a tie, as at a closed span's two ends, keeps the
+                // middle's answer)
+                if start.1.sqrt() + lin < found.1.sqrt() {
+                    let again = self.newton(p, start.0);
+                    if again.1.sqrt() + lin < found.1.sqrt() {
+                        found = again;
+                    }
+                }
                 tries += 1;
                 if found.1 < best.1 {
                     best = found;
@@ -681,6 +723,36 @@ mod tests {
         assert!(Procedural::normal(&n, Point2::new(1.5, 0.0)).is_none());
         assert!(Procedural::normal(&n, Point2::new(1.5, 1e-7)).is_none());
         assert!(Procedural::normal(&n, Point2::new(1.5, 0.5)).is_some());
+    }
+
+    /// A band closed round in one span (a Bézier loop, its ends one control point): the point at
+    /// the span's ends, opposite its middle, projects to itself (from the middle alone, Newton
+    /// sat on the far side, the distance stationary there by symmetry).
+    #[test]
+    fn a_closed_spans_seam_projects_to_itself() {
+        let mut pts = Vec::new();
+        for (r, z) in [(2.0, 0.5), (1.5, 0.0)] {
+            for j in 0..7 {
+                let (sn, c) = forge_math::dmath::sin_cos(forge_math::dmath::TAU * (j % 6) as f64 / 6.0);
+                pts.push(Point3::new(r * c, r * sn, z));
+            }
+        }
+        let n = Nurbs::new(
+            (1, 6),
+            (
+                vec![0., 0., 1., 1.],
+                vec![0., 0., 0., 0., 0., 0., 0., 1., 1., 1., 1., 1., 1., 1.],
+            ),
+            (2, 7),
+            &pts,
+            None,
+        )
+        .unwrap();
+        for uv in [(0.0, 0.0), (1.0, 0.0), (0.5, 1.0), (0.3, 0.02)] {
+            let p = Procedural::point(&n, Point2::new(uv.0, uv.1));
+            let q = Procedural::point(&n, Procedural::project(&n, p));
+            assert!(q.distance(p) < 1e-9, "{uv:?}: {p:?} projects to {q:?}");
+        }
     }
 
     /// An extrusion's net reaches far past any part: a box over a little of it is that little.

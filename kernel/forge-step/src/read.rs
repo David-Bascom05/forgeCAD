@@ -645,6 +645,15 @@ impl<'a> Reader<'a> {
                 let half = self.real(id, name, a.get(3))? * self.u.rad;
                 match Cone::new(frame, radius, half) {
                     Some(c) => Ok(Surface::Cone(c)),
+                    // a half angle within a millionth of a radian of a right angle (some files write a flat
+                    // ring so, ABC 00012071: 1.5707956859) is the plane square to the axis through its
+                    // circle, to within that angle times the face's reach; its edges are measured against
+                    // it as any edge is. Such a cone's normal is against its axis
+                    None if radius >= 0.0 && (half - dmath::FRAC_PI_2).abs() <= 1e-6 => {
+                        Ok(Surface::Plane(Plane {
+                            frame: frame.flipped(),
+                        }))
+                    }
                     None => refuse(id, name, format!("radius {radius}, half angle {half}")),
                 }
             }
@@ -1136,8 +1145,15 @@ pub(crate) fn edge_range(c: &Curve, a: Point3, b: Point3, closed: bool) -> (Inte
                 if closed {
                     return (whole, a.distance(e0), false);
                 }
-                let t = |x: Point3| {
-                    if near(x, e0) {
+                // on a curve closed in fact (a closed B-spline), its closing point is both ends: the
+                // edge starts there at lo and ends there at hi, as it runs the way the parameter grows
+                let shut = e0.distance(e1) <= forge_math::tol::LINEAR;
+                let at_seam =
+                    |x: Point3| shut && x.distance(e0).min(x.distance(e1)) <= forge_math::tol::LINEAR;
+                let t = |x: Point3, end: bool| {
+                    if at_seam(x) {
+                        if end { d.hi } else { d.lo }
+                    } else if near(x, e0) {
                         d.lo
                     } else if near(x, e1) {
                         d.hi
@@ -1145,7 +1161,7 @@ pub(crate) fn edge_range(c: &Curve, a: Point3, b: Point3, closed: bool) -> (Inte
                         c.closest(x, whole)
                     }
                 };
-                let (t0, t1) = (t(a), t(b));
+                let (t0, t1) = (t(a, false), t(b, true));
                 let off = c.eval(t0).distance(a).max(c.eval(t1).distance(b));
                 return (Interval::new(t0.min(t1), t0.max(t1)), off, t1 < t0);
             }
