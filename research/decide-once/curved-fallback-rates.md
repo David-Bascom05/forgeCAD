@@ -138,3 +138,54 @@ the master's (B), make their carriers equal by key. Listed by face name
 | 34 | `#735de16f332c484c` | `#6769c5b8bd3d0a01` | (0.329776, 0.944059, -0) | 1.7e-16 | (112.537, 156.472, 12) | 3.6e-15 | 1.7e-16 |
 | 35 | `#c5aeba3281e97406` | `#fffebb800288ec6a` | (-0.160831, -0.986982, 0) | 7.5e-16 | (75.231, 156.084, 12) | 1.6e-14 | 7.8e-16 |
 | 36 | `#e889097946e9e457` | `#65107f5ebb245331` | (0.160831, 0.986982, -0) | 7.5e-16 | (111.603, 154.210, 12) | 5.0e-14 | 7.8e-16 |
+
+## Step 2 (on_edge): agreed statements and conditions (Lean coordinator, master, 2026-11-23)
+
+Every part below comes as a screen, then an exact fallback for that question alone, then a typed
+refusal. Refusals must be 0 on everything that builds today. A question with no exact fallback
+yet stays on today's code path, recorded here as an open guess site.
+
+| part | screen | exact fallback |
+|---|---|---|
+| (a) B:2523, plane_meet on the edge's own carrier | s against range.lo/hi | `on_edge_range_exact`: the exact meet's parameter against exactOf's end vertices |
+| (b) B:2833, curve ∩ across surface: which branch | d ≤ ε_on < sep/2 − rounding, with sep from a separation theorem per pair kind, its case selected on exact data | `on_edge_branch_exact` |
+| (c) the end vertex | dist ≤ ε, the next candidate proven > 2ε away | `on_edge_vertex_exact` |
+
+Pair kinds reaching B:2833, counted over every call: gate parts (11 synthetic, seq and nary1)
+and fuzz seq 1–150.
+
+- **One component, nothing to separate:** plane–plane line; plane–cylinder circle or ellipse;
+  plane–sphere circle; sphere–sphere circle.
+- **Separation theorems:**
+  - plane–cylinder, plane parallel to the axis: 2√(r² − d²); one line at tangency, which goes
+    exact;
+  - cylinder–cylinder, parallel axes: the chord;
+  - plane–cone, hyperbola: 2a;
+  - torus–plane, plane ⟂ axis: 2√(r² − h²). Gate 4,947, fuzz 5,715.
+  - torus–plane, plane through the axis, R > r: 2(R − r). Gate 3,644, fuzz 9,963. A horn or
+    spindle torus is singular, so it goes exact or refuses.
+
+  Each case is selected on exact data. An f64 test is only its screen.
+- **Open guess sites, left on today's path:**
+  - torus–plane spiric: fuzz 1,642;
+  - torus–plane oblique: fuzz 453;
+  - plane–cone through the apex (singular);
+  - every `Curve::Intersection` call that certified_trace's per-leaf boxes don't cover: gate
+    about 2.9k, fuzz about 9.9k.
+
+Before landing, report on the gate parts plus fuzz 1–150:
+(i) calls decided by a screen;
+(ii) calls taking an `on_edge_*_exact` fallback;
+(iii) refusals, which must be 0;
+(iv) calls left on today's path, by pair kind.
+
+**Rules learned on the flat side.** Exact fallbacks go in one `#[cold] #[inline(never)]` helper.
+Adding code to `trim_in` un-inlined `on_edge` there: 9 → 16,291 calls, +0.53% on the gate. So
+measure each step with tools/speed/fndiff.py and watch `on_edge`.
+
+**Also mine (from decide-once Rust's rates):** the 9 point_in_face near-misses, 2e-6 to 9e-6:
+- B:2845, `touch_inside`'s curve.eval samples: shaft seq 1, fuzz20 3, fuzz30 1;
+- B:3315, the whole closed curve's midpoint: fuzz40 4.
+
+Their fix is the exact point on the exact curve (or the foot, for probes), then `point_in_face_at`,
+else a refusal. Each is to be listed with the exact reference's verdict.
