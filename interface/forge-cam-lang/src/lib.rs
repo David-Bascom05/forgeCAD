@@ -2262,26 +2262,11 @@ impl Cam {
                             let zmid = 0.5 * (top + bottom);
                             let sec = forge_cam::section::section(&part.faces, zmid, 1e-5)
                                 .map_err(|e| format!("the part's section at z = {zmid}: {e:?}"))?;
-                            let holes = outer_or_inner(&sec, false)?;
+                            let pockets = pockets_of(&sec)?;
                             let stepover = get_num(a, "stepover", Some(0.4 * d))?;
                             let leave = get_num(a, "leave", Some(0.0))?;
                             let mut paths = vec![];
-                            for l in &holes.loops {
-                                // the hole's inside less the part's section there: the islands
-                                // standing in it (bosses) are kept out of the pocket, exactly
-                                let inside = Region {
-                                    loops: vec![l.clone()],
-                                };
-                                let free = forge_cam_geom::boolean::boolean(
-                                    &inside,
-                                    &sec,
-                                    forge_cam_geom::boolean::Op::Diff,
-                                )
-                                .map_err(|e| format!("the pocket less its islands: {e:?}"))?;
-                                if free.is_empty() {
-                                    continue;
-                                }
-                                let rg = forge_cam_geom::boolean::region_of(&free);
+                            for rg in pockets {
                                 paths.push(
                                     ops::pocket(
                                         &rg,
@@ -2827,6 +2812,52 @@ fn opening(rg: &Region, r: f64) -> Option<Region> {
         });
     }
     out
+}
+
+/// Each hole of a section as a pocket region: the hole's loop reversed (its inside on the
+/// left), with the islands standing in it, the loops it directly holds, reversed as holes. The
+/// section is validated (closed loops whose pieces meet only at shared ends), so one point
+/// strictly inside a loop's first piece is on no other loop, and whether that loop lies inside
+/// another is decided by that point alone (exact ray casting). This is the hole less the section
+/// there, without a boolean of the section against its own loops (all ties: slow).
+fn pockets_of(sec: &Region) -> Result<Vec<Region>, String> {
+    use forge_cam_geom::region;
+    let mut cx = forge_cam_geom::real::Ctx::new();
+    let ex = region::validate(&mut cx, sec).map_err(|e| format!("{e:?}"))?;
+    let n = sec.loops.len();
+    let mut ccw = vec![false; n];
+    let mut rep = Vec::with_capacity(n);
+    for l in 0..n {
+        ccw[l] = region::loop_ccw(&mut cx, &ex, l);
+        let e = ex.elems[ex.loops[l].0];
+        rep.push(forge_cam_geom::arr::rep_point(
+            &mut cx, &e.piece, e.piece.s, e.piece.e,
+        ));
+    }
+    // within[k][l]: loop k lies inside loop l
+    let mut within = vec![vec![false; n]; n];
+    for k in 0..n {
+        for l in 0..n {
+            if k != l {
+                within[k][l] = region::inside_loop(&mut cx, &ex, l, rep[k]);
+            }
+        }
+    }
+    let mut out = vec![];
+    for h in (0..n).filter(|&h| !ccw[h]) {
+        let mut loops = vec![sec.loops[h].reversed()];
+        for k in 0..n {
+            // directly inside h: inside it, and inside nothing that is inside it
+            if within[k][h] && !(0..n).any(|m| m != k && m != h && within[k][m] && within[m][h]) {
+                loops.push(sec.loops[k].reversed());
+            }
+        }
+        out.push(Region { loops });
+    }
+    if out.is_empty() {
+        return Err("no inner boundary (hole) at that height".into());
+    }
+    Ok(out)
 }
 
 /// The section's outer loops alone (outside work), or its islands as pocket boundaries.
