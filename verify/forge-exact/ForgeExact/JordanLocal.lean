@@ -1137,4 +1137,259 @@ theorem move_x' (S : Solid) (hflat : FacesFlat S) (w w' : V3) (hy : w.y = w'.y) 
   unfold containsE
   exact xorL_congr fun f hf => face_x f w w' hy hz (hflat f hf) (hp f hf)
 
+/-! ## Outside the box survives the perturbation -/
+
+/-- A point moving with `δ` as `m0 + δ u + δ² v`. -/
+def pp (m0 u v : V3) (δ : Rat) : V3 :=
+  ⟨m0.x + δ * u.x + δ * δ * v.x, m0.y + δ * u.y + δ * δ * v.y, m0.z + δ * u.z + δ * δ * v.z⟩
+
+/-- The quadratics that keep a moving point on the far side of every vertex, along every axis. -/
+def outPolys (f : Face) (m0 u v : V3) : List (Rat × Rat × Rat) :=
+  (edgesF f).flatMap fun e => [e.1, e.2].flatMap fun x =>
+    axes6.map fun k => (k.dot m0 - k.dot x, k.dot u, k.dot v)
+
+theorem dot_pp (k m0 u v x : V3) (δ : Rat) :
+    k.dot (pp m0 u v δ) - k.dot x = poly (k.dot m0 - k.dot x) (k.dot u) (k.dot v) δ := by
+  simp only [V3.dot, pp, poly]; grind
+
+theorem out_perturb (f : Face) (m0 u v : V3) (δ : Rat) (h0 : 0 < δ)
+    (hb : ∀ t ∈ outPolys f m0 u v, δ ≤ bnd t.1 t.2.1 t.2.2) (hout : OutBox f m0) :
+    OutBox f (pp m0 u v δ) := by
+  obtain ⟨k, hk, hbk⟩ := hout
+  refine ⟨k, hk, fun e he => ?_⟩
+  have one : ∀ x ∈ [e.1, e.2], k.dot x < k.dot m0 → k.dot x < k.dot (pp m0 u v δ) := by
+    intro x hx hlt
+    have hb' := hb (k.dot m0 - k.dot x, k.dot u, k.dot v)
+      (List.mem_flatMap.mpr ⟨e, he, List.mem_flatMap.mpr ⟨x, hx, List.mem_map.mpr ⟨k, hk, rfl⟩⟩⟩)
+    have := (small_pos _ _ _ δ h0 hb').mpr (Or.inl (by grind))
+    rw [← dot_pp] at this; grind
+  exact ⟨one e.1 (by simp) (hbk e he).1, one e.2 (by simp) (hbk e he).2⟩
+
+theorem eval_qd (P : Plane) (q : V3) (δ : Rat) :
+    P.eval (qd q δ) = P.eval q + P.n.y * δ + P.n.z * (δ * δ) := by
+  simp only [Plane.eval, V3.dot, qd]; grind
+
+/-- Where the perturbed segment crosses a plane, as a moving point. -/
+def crossMove (P : Plane) (p q : V3) : V3 × V3 × V3 :=
+  let D := P.eval p - P.eval q
+  let l1 := P.n.y / D
+  let l2 := P.n.z / D
+  (ptv p q (P.eval p / D), ⟨l1 * (q.x - p.x), l1 * (q.y - p.y) + 1, l1 * (q.z - p.z)⟩,
+    ⟨l2 * (q.x - p.x), l2 * (q.y - p.y), l2 * (q.z - p.z) + 1⟩)
+
+theorem crossPt_qd (P : Plane) (p q : V3) (δ : Rat) :
+    crossPt P (qd p δ) (qd q δ) = pp (crossMove P p q).1 (crossMove P p q).2.1 (crossMove P p q).2.2 δ := by
+  have hD : P.eval (qd p δ) - P.eval (qd q δ) = P.eval p - P.eval q := by rw [eval_qd, eval_qd]; grind
+  unfold crossPt crossL crossMove
+  rw [hD, eval_qd]
+  simp only [ptv, pp, qd, Rat.div_def, V3.mk.injEq]
+  refine ⟨?_, ?_, ?_⟩ <;> grind
+
+/-- The plane point over a perturbed point of the plane. -/
+def endMove (P : Plane) (p : V3) : V3 × V3 × V3 := (p, ⟨-(P.n.y / P.n.x), 1, 0⟩, ⟨-(P.n.z / P.n.x), 0, 1⟩)
+
+theorem endMove_on (P : Plane) (hnx : P.n.x ≠ 0) (p : V3) (hp : P.eval p = 0) (δ : Rat) :
+    P.eval (pp (endMove P p).1 (endMove P p).2.1 (endMove P p).2.2 δ) = 0 := by
+  have h1 := Rat.div_mul_cancel (a := P.n.y) hnx
+  have h2 := Rat.div_mul_cancel (a := P.n.z) hnx
+  simp only [Plane.eval, V3.dot, pp, endMove] at hp ⊢
+  generalize P.n.y / P.n.x = A at h1
+  generalize P.n.z / P.n.x = B at h2
+  grind
+
+theorem endMove_yz (P : Plane) (p : V3) (δ : Rat) :
+    (pp (endMove P p).1 (endMove P p).2.1 (endMove P p).2.2 δ).y = (qd p δ).y ∧
+    (pp (endMove P p).1 (endMove P p).2.1 (endMove P p).2.2 δ).z = (qd p δ).z := by
+  simp only [pp, endMove, qd]; constructor <;> grind
+
+/-! ## The perturbation, for a segment crossing planes outside faces -/
+
+/-- The segment `[p, q]` meets the face's plane, if at all, outside the face's box. -/
+def Clear (f : Face) (p q : V3) : Prop :=
+  0 < f.plane.eval p * f.plane.eval q ∨
+  (f.plane.n ≠ ⟨0, 0, 0⟩ ∧ ∀ t : Rat, 0 ≤ t → t ≤ 1 → OutBox f (ptv p q t))
+
+theorem clear_symm {f : Face} {p q : V3} (h : Clear f p q) : Clear f q p := by
+  rcases h with h | ⟨hn, h⟩
+  · exact Or.inl (by rw [Rat.mul_comm]; exact h)
+  · refine Or.inr ⟨hn, fun t h0 h1 => ?_⟩
+    have := h (1 - t) (by grind) (by grind)
+    rwa [← ptv_rev, show 1 - (1 - t) = t by grind] at this
+
+theorem clear_end {f : Face} {p q : V3} (h : Clear f p q) (hp : f.plane.eval p = 0) : OutBox f p := by
+  rcases h with h | ⟨_, h⟩
+  · rw [hp] at h; grind
+  · have := h 0 (by decide) (by decide); rwa [ptv_zero] at this
+
+/-- Every quadratic the local argument needs, for one face and an ordered pair. -/
+def crossPolys (f : Face) (p q : V3) : List (Rat × Rat × Rat) :=
+  outPolys f (crossMove f.plane p q).1 (crossMove f.plane p q).2.1 (crossMove f.plane p q).2.2 ++
+  outPolys f (endMove f.plane p).1 (endMove f.plane p).2.1 (endMove f.plane p).2.2
+
+def localPolys (S : Solid) (p q : V3) : List (Rat × Rat × Rat) :=
+  (facesL S).flatMap fun f => crossPolys f p q ++ crossPolys f q p
+
+theorem side_perturb (P : Plane) (p q : V3) (δ : Rat) (h0 : 0 < δ)
+    (hbp : δ ≤ bnd (P.c - P.n.dot p) (-P.n.y) (-P.n.z)) (hbq : δ ≤ bnd (P.c - P.n.dot q) (-P.n.y) (-P.n.z))
+    (hs : 0 < P.eval p * P.eval q) : 0 < P.eval (qd p δ) * P.eval (qd q δ) := by
+  have hp := plane_perturb P p δ h0 hbp (fun h => by rw [h] at hs; grind)
+  have hq := plane_perturb P q δ h0 hbq (fun h => by rw [h] at hs; grind)
+  have e1 : ∀ x : V3, P.eval x = -(P.c - P.n.dot x) := by intro x; simp only [Plane.eval]; grind
+  rw [e1, e1] at hs ⊢
+  rw [show -(P.c - P.n.dot (qd p δ)) * -(P.c - P.n.dot (qd q δ)) =
+    (P.c - P.n.dot (qd p δ)) * (P.c - P.n.dot (qd q δ)) by grind]
+  rw [show -(P.c - P.n.dot p) * -(P.c - P.n.dot q) = (P.c - P.n.dot p) * (P.c - P.n.dot q) by grind] at hs
+  exact chain_pos hp hq hs
+
+theorem pass_perturb (f : Face) (p q : V3) (δ : Rat) (h0 : 0 < δ)
+    (hbp : δ ≤ bnd (f.plane.c - f.plane.n.dot p) (-f.plane.n.y) (-f.plane.n.z))
+    (hbq : δ ≤ bnd (f.plane.c - f.plane.n.dot q) (-f.plane.n.y) (-f.plane.n.z))
+    (hb : ∀ t ∈ crossPolys f p q, δ ≤ bnd t.1 t.2.1 t.2.2) (hc : Clear f p q) :
+    Pass f (qd p δ) (qd q δ) := by
+  rcases hc with hs | ⟨hn, hout⟩
+  · exact Or.inl (side_perturb f.plane p q δ h0 hbp hbq hs)
+  · by_cases h1 : 0 < f.plane.eval (qd p δ) * f.plane.eval (qd q δ)
+    · exact Or.inl h1
+    · have hD' : f.plane.eval (qd p δ) - f.plane.eval (qd q δ) = f.plane.eval p - f.plane.eval q := by
+        rw [eval_qd, eval_qd]; grind
+      by_cases h2 : f.plane.eval (qd p δ) = f.plane.eval (qd q δ)
+      · refine Or.inr (Or.inl ⟨hn, ?_⟩)
+        rw [← h2] at h1 ⊢
+        have : f.plane.eval (qd p δ) = 0 := by
+          apply Classical.byContradiction; intro h; exact h1 (sq_pos h)
+        exact ⟨this, this⟩
+      · refine Or.inr (Or.inr ⟨h2, by grind, ?_⟩)
+        have hpq : f.plane.eval p ≠ f.plane.eval q := fun h => h2 (by grind)
+        have hs : f.plane.eval p * f.plane.eval q ≤ 0 := by
+          apply Classical.byContradiction; intro h
+          exact h1 (side_perturb f.plane p q δ h0 hbp hbq (by grind))
+        have hl := crossL_facts f.plane p q hpq hs
+        rw [crossPt_qd]
+        apply out_perturb f _ _ _ δ h0 (fun t ht => hb t (List.mem_append_left _ ht))
+        exact hout _ hl.1 hl.2.1
+
+/-- **The reference is the exact parity at the perturbed point**, with the point allowed on a face
+plane outside the face's box. -/
+theorem contains_eq' (S : Solid) (q : V3) (δ : Rat) (h0 : 0 < δ)
+    (hb : ∀ t ∈ solidPolys S q, δ ≤ bnd t.1 t.2.1 t.2.2)
+    (hb' : ∀ f ∈ facesL S, ∀ t ∈ outPolys f (endMove f.plane q).1 (endMove f.plane q).2.1
+      (endMove f.plane q).2.2, δ ≤ bnd t.1 t.2.1 t.2.2)
+    (hflat : FacesFlat S) (hoff : ∀ f ∈ facesL S, f.plane.eval q = 0 → OutBox f q) :
+    S.contains q = containsE S (qd q δ) := by
+  unfold Solid.contains containsE
+  rw [← Array.foldl_toList, fold_count, Nat.zero_add, par_len]
+  apply xorL_congr
+  intro f hf
+  by_cases hq : f.plane.eval q = 0
+  · have hr : f.pierced q = false := by
+      unfold Face.pierced
+      have : f.plane.c - f.plane.n.dot q = 0 := by simp only [Plane.eval] at hq; grind
+      simp only [this]
+      split
+      · rfl
+      · have : sgn (0 : Rat) = 0 := by unfold sgn; simp
+        rw [this]; simp
+    rw [hr]; symm
+    unfold piercedE
+    by_cases hnx : f.plane.n.x = 0
+    · rw [ahead_def, hnx]; simp
+    · have hyz := endMove_yz f.plane q δ
+      rw [chiE_yz f hyz.1.symm hyz.2.symm,
+        chi_out f (hflat f hf) hnx _ (endMove_on f.plane hnx q hq δ)
+          (out_perturb f _ _ _ δ h0 (hb' f hf) (hoff f hf hq))]
+      simp
+  · exact pierced_eq f q δ h0 (fun t ht => hb t (List.mem_flatMap.mpr ⟨f, hf, ht⟩)) hq
+
+/-- **Jordan–Brouwer along a segment that may cross face planes.** For a closed B-rep whose faces
+lie in their planes, the reference's ray-parity membership is the same at the two ends of any
+segment that meets each face's plane, if at all, outside the face's bounding box. -/
+theorem contains_const_local (S : Solid) (hflat : FacesFlat S) (hcl : Closed S) (p q : V3)
+    (hc : ∀ f ∈ facesL S, Clear f p q) :
+    S.contains p = S.contains q := by
+  obtain ⟨δ, h0, hbp, hbq, hbpq, hbl⟩ : ∃ δ : Rat, 0 < δ ∧
+      (∀ t ∈ solidPolys S p, δ ≤ bnd t.1 t.2.1 t.2.2) ∧
+      (∀ t ∈ solidPolys S q, δ ≤ bnd t.1 t.2.1 t.2.2) ∧
+      (∀ t ∈ pairPolys S p q, δ ≤ bnd t.1 t.2.1 t.2.2) ∧
+      (∀ t ∈ localPolys S p q, δ ≤ bnd t.1 t.2.1 t.2.2) :=
+    ⟨bndAll (solidPolys S p ++ solidPolys S q ++ pairPolys S p q ++ localPolys S p q), bndAll_pos _,
+      fun t ht => bndAll_le _ t (List.mem_append_left _ (List.mem_append_left _ (List.mem_append_left _ ht))),
+      fun t ht => bndAll_le _ t (List.mem_append_left _ (List.mem_append_left _ (List.mem_append_right _ ht))),
+      fun t ht => bndAll_le _ t (List.mem_append_left _ (List.mem_append_right _ ht)),
+      fun t ht => bndAll_le _ t (List.mem_append_right _ ht)⟩
+  have hcl1 : ∀ f ∈ facesL S, ∀ t ∈ crossPolys f p q, δ ≤ bnd t.1 t.2.1 t.2.2 := fun f hf t ht =>
+    hbl t (List.mem_flatMap.mpr ⟨f, hf, List.mem_append_left _ ht⟩)
+  have hcl2 : ∀ f ∈ facesL S, ∀ t ∈ crossPolys f q p, δ ≤ bnd t.1 t.2.1 t.2.2 := fun f hf t ht =>
+    hbl t (List.mem_flatMap.mpr ⟨f, hf, List.mem_append_right _ ht⟩)
+  have hplp : ∀ f ∈ facesL S, δ ≤ bnd (f.plane.c - f.plane.n.dot p) (-f.plane.n.y) (-f.plane.n.z) :=
+    fun f hf => hbp (f.plane.c - f.plane.n.dot p, -f.plane.n.y, -f.plane.n.z)
+      (List.mem_flatMap.mpr ⟨f, hf, List.mem_cons_self ..⟩)
+  have hplq : ∀ f ∈ facesL S, δ ≤ bnd (f.plane.c - f.plane.n.dot q) (-f.plane.n.y) (-f.plane.n.z) :=
+    fun f hf => hbq (f.plane.c - f.plane.n.dot q, -f.plane.n.y, -f.plane.n.z)
+      (List.mem_flatMap.mpr ⟨f, hf, List.mem_cons_self ..⟩)
+  rw [contains_eq' S p δ h0 hbp (fun f hf t ht => hcl1 f hf t (List.mem_append_right _ ht)) hflat
+      (fun f hf hp => clear_end (hc f hf) hp),
+    contains_eq' S q δ h0 hbq (fun f hf t ht => hcl2 f hf t (List.mem_append_right _ ht)) hflat
+      (fun f hf hq => clear_end (clear_symm (hc f hf)) hq)]
+  have hpass : ∀ f ∈ facesL S, Pass f (qd p δ) (qd q δ) := fun f hf =>
+    pass_perturb f p q δ h0 (hplp f hf) (hplq f hf) (hcl1 f hf) (hc f hf)
+  have hpass' : ∀ f ∈ facesL S, Pass f (qd q δ) (qd p δ) := fun f hf =>
+    pass_perturb f q p δ h0 (hplq f hf) (hplp f hf) (hcl2 f hf) (clear_symm (hc f hf))
+  -- the facts general position needs, at either end
+  have zP : ∀ f ∈ facesL S, ∀ e ∈ edgesF f,
+      e.1.z ≠ (qd p δ).z ∧ e.2.z ≠ (qd p δ).z ∧ e.1.z ≠ (qd q δ).z ∧ e.2.z ≠ (qd q δ).z := by
+    intro f hf e he
+    exact ⟨(z_perturb p e.1 δ h0 (hbp (e.1.z - p.z, 0, -1) (mem_solidPolys hf he (by simp [edgePolys])))).2,
+      (z_perturb p e.2 δ h0 (hbp (e.2.z - p.z, 0, -1) (mem_solidPolys hf he (by simp [edgePolys])))).2,
+      (z_perturb q e.1 δ h0 (hbq (e.1.z - q.z, 0, -1) (mem_solidPolys hf he (by simp [edgePolys])))).2,
+      (z_perturb q e.2 δ h0 (hbq (e.2.z - q.z, 0, -1) (mem_solidPolys hf he (by simp [edgePolys])))).2⟩
+  have dP : ∀ f ∈ facesL S, ∀ e ∈ edgesF f,
+      ((e.1.z - (qd p δ).z) * (e.2.z - (qd p δ).z) < 0 → d0 (qd p δ) e.1 e.2 ≠ 0) ∧
+      ((e.1.z - (qd q δ).z) * (e.2.z - (qd q δ).z) < 0 → d0 (qd q δ) e.1 e.2 ≠ 0) := by
+    intro f hf e he
+    exact ⟨d0_ne p e.1 e.2 δ h0 (hbp (d0 p e.1 e.2, -(e.2.z - e.1.z), e.2.y - e.1.y)
+        (mem_solidPolys hf he (by simp [edgePolys]))),
+      d0_ne q e.1 e.2 δ h0 (hbq (d0 q e.1 e.2, -(e.2.z - e.1.z), e.2.y - e.1.y)
+        (mem_solidPolys hf he (by simp [edgePolys])))⟩
+  have fP : q.z ≠ p.z → ∀ f ∈ facesL S, ∀ e ∈ edgesF f,
+      Fs (qd p δ) (qd q δ) e.1 ≠ 0 ∧ Fs (qd p δ) (qd q δ) e.2 ≠ 0 := by
+    intro hz f hf e he
+    have hm : e ∈ allEdges S := List.mem_flatMap.mpr ⟨f, hf, he⟩
+    constructor
+    · rw [Fs_qd]
+      exact small_ne _ _ _ δ h0 (hbpq (Fs p q e.1, -(q.z - p.z), q.y - p.y)
+        (List.mem_flatMap.mpr ⟨e, hm, by simp⟩)) (Or.inr (Or.inl (by grind)))
+    · rw [Fs_qd]
+      exact small_ne _ _ _ δ h0 (hbpq (Fs p q e.2, -(q.z - p.z), q.y - p.y)
+        (List.mem_flatMap.mpr ⟨e, hm, by simp⟩)) (Or.inr (Or.inl (by grind)))
+  have hzz : (qd p δ).z < (qd q δ).z ↔ p.z < q.z := by simp only [qd]; grind
+  have hyy : (qd p δ).y < (qd q δ).y ↔ p.y < q.y := by simp only [qd]; grind
+  rcases trich p.z q.z with hz | hz | hz
+  · apply move_rise' S hflat hcl _ _ (hzz.mpr hz) hpass
+    intro f hf e he
+    obtain ⟨a1, b1, a2, b2⟩ := zP f hf e he
+    exact ⟨a1, b1, a2, b2, (fP (by grind) f hf e he).1, (fP (by grind) f hf e he).2,
+      (dP f hf e he).1, (dP f hf e he).2⟩
+  · rcases trich p.y q.y with hy | hy | hy
+    · apply move_level' S hflat hcl _ _ (by simp only [qd]; grind) (hyy.mpr hy) hpass
+      intro f hf e he
+      obtain ⟨a1, b1, _, _⟩ := zP f hf e he
+      refine ⟨a1, b1, fun hs => (dP f hf e he).2 ?_⟩
+      have : (qd q δ).z = (qd p δ).z := by simp only [qd]; grind
+      rw [this]; exact hs
+    · exact move_x' S hflat _ _ (by simp only [qd]; grind) (by simp only [qd]; grind) hpass
+    · symm
+      apply move_level' S hflat hcl _ _ (by simp only [qd]; grind) (by simp only [qd]; grind) hpass'
+      intro f hf e he
+      obtain ⟨_, _, a2, b2⟩ := zP f hf e he
+      refine ⟨a2, b2, fun hs => (dP f hf e he).1 ?_⟩
+      have : (qd p δ).z = (qd q δ).z := by simp only [qd]; grind
+      rw [this]; exact hs
+  · symm
+    apply move_rise' S hflat hcl _ _ (by simp only [qd]; grind) hpass'
+    intro f hf e he
+    obtain ⟨a1, b1, a2, b2⟩ := zP f hf e he
+    have h1 := fP (by grind) f hf e he
+    exact ⟨a2, b2, a1, b1, by rw [Fs_swap]; grind, by rw [Fs_swap]; grind,
+      (dP f hf e he).2, (dP f hf e he).1⟩
+
 end ForgeExact.Jordan
