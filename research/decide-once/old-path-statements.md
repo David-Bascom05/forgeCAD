@@ -40,6 +40,16 @@ proof splits on the branch:
   part-built body. `boolean_into` edits `target` in place, so the in-place entry needs the target
   restored, or the path must only commit on success.
 
+**Size hypothesis `InputSize A B`.** It collects every magnitude bound the screens' IEEE proofs
+assume, as `LedgerWF2.small` did for the core:
+- coordinates and plane distances ≤ about 9e9 at LINEAR (Screen/Coincide `plane_dist_sound`);
+- cylinder measures ≤ 1e8 (`offp_margin`);
+- all values finite (< about 1e150).
+
+Each new screen adds its bound here. The list is reviewed for a single combined bound before the
+theorem is closed. Outside these bounds the boolean refuses (an input out of scope); it never
+answers without a proof.
+
 The same statement covers:
 - `boolean_into` and `boolean_unlinked`, for the target in place;
 - `nary_with`, over n tools with the ops folded left;
