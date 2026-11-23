@@ -237,7 +237,172 @@ fn summary(l: &Ledger, o: Outcome) -> Summary {
 
 fn run(k: i64, boxes: &[BoxN], rule: Rule) -> Summary {
     let l = box_ledger(k, boxes);
-    summary(&l, core(&l, &rule, &MetricLedger::default()))
+    let out = core(&l, &rule, &MetricLedger::default());
+    agrees_v2(&l, &rule, &out);
+    summary(&l, out)
+}
+
+/// CoreInc.lean's `inc`: the plane ledger as an incidence ledger (facets the pieces' cells, rooms
+/// their side cells, an edge's facets those it is a face of, a vert's sectors one per facet with
+/// the two edges between them), each id the v1 cell's position in its list.
+fn inc(l: &Ledger) -> (forge_bool_core::inc::Ledger, Vec<u32>, Vec<u32>) {
+    use forge_bool_core::inc;
+    let le = |x: &[Sgn], y: &[Sgn]| x.iter().zip(y).all(|(&a, &b)| a == Sgn::Zero || a == b);
+    let zero = |x: &[Sgn]| x.iter().position(|&s| s == Sgn::Zero).unwrap();
+    let mut facets: Vec<u32> = Vec::new();
+    for &(c, _) in &l.pieces {
+        if !facets.contains(&c.0) {
+            facets.push(c.0);
+        }
+    }
+    let fpos = |c: u32| facets.iter().position(|&x| x == c).unwrap() as u32;
+    let mut rooms: Vec<Vec<Sgn>> = Vec::new();
+    let room = |x: Vec<Sgn>, rooms: &mut Vec<Vec<Sgn>>| -> u32 {
+        if let Some(i) = rooms.iter().position(|r| *r == x) {
+            return i as u32;
+        }
+        rooms.push(x);
+        rooms.len() as u32 - 1
+    };
+    let mut facet_rooms = Vec::new();
+    for &c in &facets {
+        let x = &l.cells[c as usize];
+        let z = zero(x);
+        let (mut p, mut m) = (x.clone(), x.clone());
+        p[z] = Sgn::Pos;
+        m[z] = Sgn::Neg;
+        let rp = room(p, &mut rooms);
+        let rm = room(m, &mut rooms);
+        facet_rooms.push((rp, rm));
+    }
+    let inside = l
+        .inside
+        .iter()
+        .filter_map(|&(c, b)| {
+            rooms
+                .iter()
+                .position(|r| *r == l.cells[c.0 as usize])
+                .map(|i| (inc::RoomId(i as u32), b))
+        })
+        .collect();
+    let mut ef = inc::Csr {
+        start: vec![0],
+        ids: Vec::new(),
+    };
+    for e in &l.edges {
+        for &c in &facets {
+            if le(&l.cells[e.0 as usize], &l.cells[c as usize]) {
+                ef.ids.push(fpos(c));
+            }
+        }
+        ef.start.push(ef.ids.len() as u32);
+    }
+    let mut ve = inc::Csr {
+        start: vec![0],
+        ids: Vec::new(),
+    };
+    let mut vs = inc::SecCsr {
+        start: vec![0],
+        sec: Vec::new(),
+    };
+    for v in &l.verts {
+        let vc = &l.cells[v.0 as usize];
+        for (k, e) in l.edges.iter().enumerate() {
+            if le(vc, &l.cells[e.0 as usize]) {
+                ve.ids.push(k as u32);
+            }
+        }
+        for &c in &facets {
+            let fc = &l.cells[c as usize];
+            if le(vc, fc) {
+                let bs: Vec<u32> = (0..l.edges.len())
+                    .filter(|&k| {
+                        let ec = &l.cells[l.edges[k].0 as usize];
+                        le(vc, ec) && le(ec, fc)
+                    })
+                    .map(|k| k as u32)
+                    .collect();
+                let (a, b) = (bs[0], *bs.last().unwrap());
+                vs.sec.push(inc::Sector { facet: fpos(c), a, b });
+            }
+        }
+        ve.start.push(ve.ids.len() as u32);
+        vs.start.push(vs.sec.len() as u32);
+    }
+    let v2l = inc::Ledger {
+        nb: l.nb,
+        face_body: l.face_body.clone(),
+        face_class: l.face_class.clone(),
+        n_rooms: rooms.len() as u32,
+        facet_class: facets
+            .iter()
+            .map(|&c| zero(&l.cells[c as usize]) as u32)
+            .collect(),
+        facet_rooms,
+        pieces: l
+            .pieces
+            .iter()
+            .map(|&(c, f)| (inc::FacetId(fpos(c.0)), f))
+            .collect(),
+        inside,
+        edge_facets: ef,
+        vert_edges: ve,
+        vert_sectors: vs,
+    };
+    (
+        v2l,
+        facets,
+        l.edges
+            .iter()
+            .map(|e| e.0)
+            .chain(l.verts.iter().map(|v| v.0))
+            .collect(),
+    )
+}
+
+/// `core L` corresponds to `coreI (inc L)` (CoreInc.lean): the same outcome, the same faces (as
+/// facet cells), edge runs and vertices.
+fn agrees_v2(l: &Ledger, rule: &Rule, out: &Outcome) {
+    use forge_bool_core::inc;
+    let (il, facets, ev) = inc(l);
+    assert!(inc::ledger_wf(&il), "inc L is well formed");
+    let ne = l.edges.len();
+    let o2 = inc::core(&il, rule);
+    match (out, &o2) {
+        (Outcome::Ok(b), inc::Outcome::Ok(b2)) => {
+            assert_eq!(b.faces.len(), b2.faces.len(), "faces");
+            for (f, g) in b.faces.iter().zip(&b2.faces) {
+                let fs: Vec<u32> = f.facets.iter().map(|c| c.0).collect();
+                let gs: Vec<u32> = g.facets.iter().map(|c| facets[c.0 as usize]).collect();
+                assert_eq!(fs, gs, "a face's facets");
+                assert_eq!((f.plane, f.orient), (g.plane, g.orient));
+            }
+            assert_eq!(b.edges.len(), b2.edges.len(), "edge runs");
+            for (e, d) in b.edges.iter().zip(&b2.edges) {
+                let es: Vec<u32> = e.cells.iter().map(|c| c.0).collect();
+                let ds: Vec<u32> = d.cells.iter().map(|c| ev[c.0 as usize]).collect();
+                assert_eq!(es, ds, "an edge run's cells");
+            }
+            let vs: Vec<u32> = b.verts.iter().map(|c| c.0).collect();
+            let ws: Vec<u32> = b2.verts.iter().map(|c| ev[ne + c.0 as usize]).collect();
+            assert_eq!(vs, ws, "verts");
+        }
+        (Outcome::Empty, inc::Outcome::Empty) => {}
+        (Outcome::Refused(Refusal::SplitCrossed), inc::Outcome::Refused(inc::Refusal::SplitCrossed)) => {}
+        (
+            Outcome::Refused(Refusal::InconsistentClassification),
+            inc::Outcome::Refused(inc::Refusal::InconsistentClassification),
+        ) => {}
+        (Outcome::Refused(Refusal::ZeroThickness(c)), inc::Outcome::Refused(r)) => {
+            let at = match r {
+                inc::Refusal::ZeroThicknessEdge(e) => ev[e.0 as usize],
+                inc::Refusal::ZeroThicknessVert(v) => ev[ne + v.0 as usize],
+                other => panic!("v1 refused at a cell, v2 {other:?}"),
+            };
+            assert_eq!(c.0, at, "the refused cell");
+        }
+        (a, b) => panic!("v1 {a:?}, v2 {b:?}"),
+    }
 }
 
 const T: (i64, i64, i64) = (0, 0, 0);
@@ -399,4 +564,47 @@ fn collapse_fills_an_enclosed_void_and_refuses_a_fin() {
         run_m(3, &fin, Rule::Union, (3, 1, 3)),
         Summary::Zero(cov(3, (3, 1, 3)))
     );
+}
+
+/// The v2 ledger's well-formedness check on a hand-made ledger: two boxes' worth is not needed,
+/// one facet between two rooms, one edge, one vert, is enough to exercise each clause.
+#[test]
+fn v2_ledger_wf() {
+    use forge_bool_core::inc::*;
+    let good = Ledger {
+        nb: 1,
+        face_body: vec![BodyId(0)],
+        face_class: vec![0],
+        n_rooms: 2,
+        facet_class: vec![0],
+        facet_rooms: vec![(0, 1)],
+        pieces: vec![(FacetId(0), FaceId(0))],
+        inside: vec![(RoomId(1), BodyId(0))],
+        edge_facets: Csr {
+            start: vec![0, 2],
+            ids: vec![0, 0],
+        },
+        vert_edges: Csr {
+            start: vec![0, 1],
+            ids: vec![0],
+        },
+        vert_sectors: SecCsr {
+            start: vec![0, 1],
+            sec: vec![Sector { facet: 0, a: 0, b: 0 }],
+        },
+    };
+    assert!(ledger_wf(&good));
+    let mut l = good.clone();
+    l.facet_rooms = vec![(1, 1)];
+    assert!(!ledger_wf(&l), "a facet's sides are distinct rooms");
+    let mut l = good.clone();
+    l.edge_facets.ids = vec![0, 0, 0];
+    l.edge_facets.start = vec![0, 3];
+    assert!(!ledger_wf(&l), "a facet at most twice round an edge");
+    let mut l = good.clone();
+    l.pieces.clear();
+    assert!(!ledger_wf(&l), "every facet a piece");
+    let mut l = good;
+    l.vert_sectors.sec[0].b = 5;
+    assert!(!ledger_wf(&l), "a sector's edges at its vert");
 }

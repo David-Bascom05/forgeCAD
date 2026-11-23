@@ -19,6 +19,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod inc;
 mod index;
 mod sort;
 mod union_find;
@@ -468,7 +469,7 @@ fn membership(l: &Ledger, ext: &Ext, s: &Split) -> Vec<Vec<bool>> {
 }
 
 /// The rule at one membership vector.
-fn apply_rule(rule: &Rule, m: &[bool]) -> bool {
+pub(crate) fn apply_rule(rule: &Rule, m: &[bool]) -> bool {
     // the numbers of bodies in and out (the Lean's rules read `m i` past nb as false)
     let mut ins = 0;
     let mut i = 0;

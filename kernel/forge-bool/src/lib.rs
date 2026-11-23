@@ -15,6 +15,8 @@ pub mod boolean;
 pub mod classify;
 #[cfg(feature = "decide_once")]
 pub mod decide_once;
+#[cfg(feature = "decide_once")]
+mod decide_once_row;
 #[cfg(feature = "decisions")]
 pub mod decisions;
 pub mod imprint;

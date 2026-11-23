@@ -450,8 +450,11 @@ impl Builder {
     pub fn into_cache(self) -> Cache {
         // this run's memo entries, and as many of the ones before it as there is room for: an edit
         // taken back finds its work done
+        // (which of the old ones stay: by key, not by a hash's order, so it is the same every run)
         let mut memo = self.memo;
-        for (k, v) in self.cache.memo {
+        let mut old: Vec<(String, Rc<dyn Any>)> = self.cache.memo.into_iter().collect();
+        old.sort_unstable_by(|a, b| a.0.cmp(&b.0));
+        for (k, v) in old {
             if memo.len() >= MEMO_KEPT {
                 break;
             }
