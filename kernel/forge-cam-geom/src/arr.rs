@@ -430,6 +430,74 @@ fn line_circle(cx: &mut Ctx, l: &Piece, c: &Piece, out: &mut Vec<Pt>) {
     out.push(add(cx, p, o2));
 }
 
+/// Sorts points on a full circle into their order round it starting from `pts[0]`, dropping
+/// repeats: the order `sort_along` gives from pts[0], found by the angle from a fixed direction
+/// off every axis (the cyclic order is the same from any reference), then turned to start at
+/// pts[0]'s place. From pts[0] itself, a point opposite it is at a cross product exactly 0 (a
+/// tie: the costliest sign); from the fixed direction two points tie only if one lies on its
+/// line, and opposite points fall in opposite half turns, decided at once.
+pub fn sort_cyclic(cx: &mut Ctx, pc: &Piece, pts: &mut Vec<Pt>) {
+    let (c, ccw) = match pc.curve {
+        Curve::Circle { c, ccw, .. } => (c, ccw),
+        Curve::Line { .. } => unreachable!("sort_cyclic takes a circle"),
+    };
+    if pts.is_empty() {
+        return;
+    }
+    let p0 = pts[0];
+    let m = cx.mark();
+    // 1 and 0.4142135623730951 (≈ tan 22.5°, an f64): no axis, no diagonal
+    let g = Pt {
+        x: cx.lit(1.0),
+        y: cx.lit(0.4142135623730951),
+    };
+    let mut i = 1;
+    while i < pts.len() {
+        let mut j = i;
+        while j > 0 && {
+            let (a, b) = (sub(cx, pts[j], c), sub(cx, pts[j - 1], c));
+            angle_cmp(cx, g, a, b, ccw) == Ordering::Less
+        } {
+            pts.swap(j, j - 1);
+            j -= 1;
+        }
+        i += 1;
+    }
+    let mut out: Vec<Pt> = Vec::with_capacity(pts.len());
+    let mut k = 0;
+    while k < pts.len() {
+        let keep = match out.last() {
+            None => true,
+            Some(&l) => {
+                l != pts[k] && {
+                    let (a, b) = (sub(cx, l, c), sub(cx, pts[k], c));
+                    angle_cmp(cx, g, a, b, ccw) != Ordering::Equal
+                }
+            }
+        };
+        if keep {
+            out.push(pts[k]);
+        }
+        k += 1;
+    }
+    // turned to start where p0 is (the first kept point at its place)
+    let mut start = 0;
+    while start < out.len() {
+        let q = out[start];
+        if q == p0 || {
+            let (a, b) = (sub(cx, q, c), sub(cx, p0, c));
+            angle_cmp(cx, g, a, b, ccw) == Ordering::Equal
+        } {
+            break;
+        }
+        start += 1;
+    }
+    cx.release(m);
+    let n = out.len().max(1);
+    out.rotate_left(start % n);
+    *pts = out;
+}
+
 /// Sorts points on a piece along it (insertion sort, exact comparisons) and drops repeats.
 pub fn sort_along(cx: &mut Ctx, pc: &Piece, pts: &mut Vec<Pt>) {
     let mut i = 1;
@@ -557,6 +625,67 @@ pub fn tangent(cx: &mut Ctx, pc: &Piece, x: Pt) -> Pt {
                 Pt {
                     x: cx.neg(p.x),
                     y: cx.neg(p.y),
+                }
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod cyclic_tests {
+    use super::*;
+
+    /// sort_cyclic gives sort_along's order from pts[0] round a full circle (each start, each
+    /// sense), with opposite points, repeats (equal points of other expressions) and points on
+    /// the axes: points on the circle of radius 5 at the Pythagorean (±3, ±4), (±4, ±3), (±5, 0),
+    /// (0, ±5).
+    #[test]
+    fn the_cyclic_order_is_sort_alongs() {
+        let mut cx = Ctx::new();
+        let xy = [
+            (3.0, 4.0),
+            (-3.0, -4.0),
+            (4.0, -3.0),
+            (5.0, 0.0),
+            (-5.0, 0.0),
+            (0.0, 5.0),
+            (-4.0, 3.0),
+            (0.0, -5.0),
+            (-3.0, 4.0),
+            (3.0, -4.0),
+        ];
+        for ccw in [true, false] {
+            for first in 0..xy.len() {
+                let mut pts: Vec<Pt> = vec![];
+                for k in 0..xy.len() {
+                    let (x, y) = xy[(first + k) % xy.len()];
+                    pts.push(pt(&mut cx, x, y));
+                }
+                // a repeat of the third point, as another expression: ((3x)/3, (3y)/3)
+                let (x, y) = xy[(first + 2) % xy.len()];
+                let three = cx.lit(3.0);
+                let (tx, ty) = (cx.lit(3.0 * x), cx.lit(3.0 * y));
+                let rx = cx.div(tx, three);
+                let ry = cx.div(ty, three);
+                assert!(rx != pts[2].x || x == 0.0);
+                pts.push(Pt { x: rx, y: ry });
+                let c = pt(&mut cx, 0.0, 0.0);
+                let rad = cx.lit(5.0);
+                let rad2 = cx.lit(25.0);
+                let pc = Piece {
+                    curve: Curve::Circle { c, rad, rad2, ccw },
+                    s: pts[0],
+                    e: pts[0],
+                    full: true,
+                    tag: 0,
+                };
+                let mut a = pts.clone();
+                sort_along(&mut cx, &pc, &mut a);
+                let mut b = pts.clone();
+                sort_cyclic(&mut cx, &pc, &mut b);
+                assert_eq!(a.len(), b.len());
+                for (p, q) in a.iter().zip(&b) {
+                    assert!(same(&mut cx, *p, *q), "ccw {ccw} first {first}");
                 }
             }
         }

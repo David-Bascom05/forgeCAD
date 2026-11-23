@@ -368,7 +368,7 @@ pub(crate) fn split(cx: &mut Ctx, pc: &Piece, pts: &mut Vec<Pt>) -> Vec<Piece> {
         let mut base = *pc;
         base.s = pts[0];
         base.e = pts[0];
-        arr::sort_along(cx, &base, pts);
+        arr::sort_cyclic(cx, &base, pts);
         // a point met twice (three curves through one point) splits once
         dedup_same(cx, pts);
         while pts.len() > 1 && arr::same(cx, pts[pts.len() - 1], pts[0]) {
