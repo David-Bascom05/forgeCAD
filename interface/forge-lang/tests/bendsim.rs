@@ -427,3 +427,23 @@ fn findings_in_the_dfm_item_shape() {
     assert_eq!(mf.get("sense").and_then(Json::str), Some("min"));
     assert_eq!(arr(mf, "fixes").len(), 1);
 }
+
+#[test]
+fn an_inch_vendors_full_length_tooling_fits_its_bed() {
+    // SendCutSend's dies are one 44 in piece and its bed 44 in: in mm, equal is not over
+    let src = "shared t = 0.063in\nparam plan.L = 80\nparam plan.W = 50\nparam up.h = 20\n\
+        sketch plan(on: xy) {\n  outline = rect(corner: (0, 0), size: (L, W))\n}\n\
+        base = sheet(plan, t: t, vendor: \"sendcutsend\", material: \"5052-H32 aluminum\")\n\
+        up = flange(base.edge(plan.outline[1]), height: h)\n";
+    let a = ask_src(src, None, None, &Ask::default());
+    assert!(a.ok, "{}", a.text);
+    assert_eq!(a.json.get("feasible"), Some(&Json::Bool(true)), "{}", a.text);
+    let st = &arr(&a.json, "steps")[0];
+    assert!(
+        st.get("die")
+            .and_then(Json::str)
+            .unwrap()
+            .starts_with("sendcutsend/V"),
+        "{st}"
+    );
+}

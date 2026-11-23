@@ -1273,7 +1273,8 @@ impl<'a> StepCtx<'a> {
         let tool_len = pl.unwrap_or(0.0).max(dl.unwrap_or(0.0));
         let pr = &self.tl.press;
         let mut bl = Check::rule(Rule::BedLength, ylen, pr.housing_gap, true);
-        if tool_len > pr.bed_length {
+        // the segments are summed in tenths of a millimetre: equal to the bed is not over it
+        if tool_len > pr.bed_length + 1e-6 {
             bl = Check::rule(Rule::BedLength, tool_len, pr.bed_length, true);
             bl.tool = Some("bed".into());
         }
