@@ -133,9 +133,13 @@ fn refusals_are_typed() {
     let q = quantize(&prog(true), &f).unwrap();
     assert!(round_trip(&q, &f).is_ok());
     assert!(matches!(
-        Dialect::get("heidenhain"),
+        Dialect::get("no-such-control"),
         Err(PostError::UnknownDialect { .. })
     ));
+    // a real control whose manual is not open: refused with the reason
+    for (n, _) in UNAVAILABLE {
+        assert!(matches!(Dialect::get(n), Err(PostError::Unavailable { .. })), "{n}");
+    }
     // a cycle not started over its first hole
     let mut p = prog(false);
     p.recs.retain(|r| !matches!(r, Rec::Rapid(v) if v[0] == 30.0));

@@ -25,9 +25,36 @@ pub const DIALECTS: [(&str, &str); 4] = [
     ("grbl", include_str!("../data/grbl.toml")),
 ];
 
+/// Controls whose dialect we cannot restate: no openly published programming manual gives the
+/// codes a post needs (research/cam/posts/BLOCKED.md). Asking for one is a typed refusal with
+/// the reason, never a guessed dialect.
+pub const UNAVAILABLE: [(&str, &str); 4] = [
+    (
+        "brother",
+        "no open programming manual for Brother CNC-C00/D00 (it ships with the machine); Brother's public FAQs give 19 of 31 codes but not spindle M3/M4/M5, arcs, dwell or the drilling cycles",
+    ),
+    (
+        "mazak-eia",
+        "Mazak's EIA/ISO programming manuals are behind the MPower customer login; no open source gives the codes",
+    ),
+    (
+        "mazak-eia-lathe",
+        "Mazak's EIA/ISO programming manuals are behind the MPower customer login; no open source gives the codes",
+    ),
+    (
+        "okuma-osp",
+        "Okuma OSP programming manuals come through distributors or on the control; no open source gives the codes",
+    ),
+];
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum PostError {
     Dialect(String),
+    /// A real control whose dialect is not available, and why.
+    Unavailable {
+        name: String,
+        reason: String,
+    },
     UnknownDialect {
         name: String,
         known: Vec<String>,
@@ -120,6 +147,12 @@ impl Dialect {
             if n == name {
                 return Dialect::parse(s);
             }
+        }
+        if let Some((_, why)) = UNAVAILABLE.iter().find(|(n, _)| *n == name) {
+            return Err(PostError::Unavailable {
+                name: name.to_string(),
+                reason: why.to_string(),
+            });
         }
         Err(PostError::UnknownDialect {
             name: name.to_string(),
