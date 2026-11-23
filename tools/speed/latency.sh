@@ -18,7 +18,7 @@
 #                     core, FORGECAD_THREADS unset (what a user gets); tK = FORGECAD_THREADS=K on
 #                     every core (e.g. t16, the regen1 gate's nary16). Both sides run each alike.
 #        --kparts "a b"  kernel suite parts timed alone (`kern`: kseq, nary), as k-NAME lines
-#                     (default coplanar upto shaft mixed patterns plate)
+#                     (default coplanar upto shaft mixed patterns plate hole-grid)
 #        --heavy      draw every part (default: LAT_DRAW_PARTS, those whose four views take under
 #                     ~1 s at 4 cores; the others take 2 to over 100 s)
 #        --skip "op,op"  leave those ops out of the bench parts' rounds (e.g. step,mesh,draw,nary)
@@ -58,7 +58,7 @@ mode=record
 head=
 heavy=
 skipops=
-kparts="coplanar upto shaft mixed patterns plate"
+kparts="coplanar upto shaft mixed patterns plate hole-grid"
 draw_parts=${LAT_DRAW_PARTS:-"bracket clamp conrod guard heatsink hub insert quadarm"}
 while [ $# -gt 0 ]; do
   case $1 in
