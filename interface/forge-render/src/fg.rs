@@ -1300,11 +1300,11 @@ fn work_threaded(
     loop {
         let first = match w.next.take() {
             Some(x) => x,
-            // a Web Worker may wait; the page's thread never does
-            None => match jobs.recv_timeout(std::time::Duration::from_millis(100)) {
+            // a Web Worker may wait (the page's thread never does); with no timeout, which reads
+            // std's clock (none in a browser): the session's end drops the sender, ending this
+            None => match jobs.recv() {
                 _ if stop.load(Ordering::SeqCst) => break,
                 Ok(x) => x,
-                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => continue,
                 Err(_) => break,
             },
         };
