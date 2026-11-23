@@ -848,7 +848,9 @@ fn lineage(body: Work<'_>, prev: Option<(Work<'_>, &Lineage)>, i: usize) -> Line
     let mut out = Lineage::with_capacity_and_hasher(body.len(), Default::default());
     for s in body.0 {
         let b = &s.body;
-        let merges = prev.map(|(_, po)| merges(b, |n| po.contains_key(&n))).unwrap_or_default();
+        let merges = prev
+            .map(|(_, po)| merges(b, |n| po.contains_key(&n)))
+            .unwrap_or_default();
         for f in b.face_ids() {
             let face = b.face(f);
             if let Some((_, po)) = prev

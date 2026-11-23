@@ -719,7 +719,12 @@ pub(crate) fn edges_near(body: &Body, f: FaceId, bx: &Box3, out: &mut Vec<forge_
         Some(bands) => {
             let mut near: Vec<u32> = Vec::new();
             bands.near(bx.center(), bx.diagonal() / 2.0, &mut near);
-            out.extend(near.iter().map(|&i| &info.edges[i as usize]).filter(|e| keep(e)).map(|e| e.0));
+            out.extend(
+                near.iter()
+                    .map(|&i| &info.edges[i as usize])
+                    .filter(|e| keep(e))
+                    .map(|e| e.0),
+            );
         }
         None => out.extend(info.edges.iter().filter(|e| keep(e)).map(|e| e.0)),
     }
