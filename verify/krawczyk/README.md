@@ -17,7 +17,7 @@
 - `cos_le_ends`, `ends_le_cos`: the same for cos at kπ.
 - `crit_enclosed`: the kernel's outward enclosure [m·PI, m·PI_UP] holds m·π, so it never misses an extreme.
 
-The endpoint values are dmath's. Against a double-double reference, their error is at most 0.76 ulp, which is measured, not proven (forge-math `trig_within_an_ulp`).
+The endpoint values are dmath's, within an absolute 2^-52 for |x| ≤ 2048. That bound is proven on verify/ieee754's model (`Dmath.sin_err`, `Dmath.cos_err`, IEEE branch), and forge-math's `trig_within_the_contract` measures it against a double-double reference (worst 8.4e-17).
 
 The kernel's test is stronger than the hypotheses. It checks the sup-norm row sums of the interval
 I − C 𝐉, which bound ‖I − C A‖ for every A in 𝐉. And K is computed in outward-rounded intervals,

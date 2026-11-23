@@ -5,7 +5,7 @@ import Mathlib
 
 forge_math::Interval::sin over [a, b] takes the values at a and b, then 1 if a maximum
 (k + 1/2)π with k even may lie inside, and -1 if a minimum (k odd) may. cos does the same with kπ.
-Each bound is then pushed out three floats.
+Each bound is then pushed out by an absolute 2^-52 and rounded outward.
 
 This file proves the rule over ℝ. sin on [a, b] is at most max(sin a, sin b) unless an even
 (k + 1/2)π lies in [a, b], and at least min(sin a, sin b) unless an odd one does. Same for cos at
@@ -15,9 +15,11 @@ maximum is -1, so every value is at most sin a.
 
 The float side has two parts. The kernel's test for a critical point uses an enclosure of
 (k + 1/2)π that contains it, so it never misses one (`crit_enclosed`). The endpoint values are
-dmath's, which are within 0.76 ulp of the true values: measured against a double-double reference
-in forge-math's `trig_within_an_ulp`. That is measured, not proven here. Pushing out three floats
-then encloses them (`Krawczyk.nearest_between`, applied twice over).
+dmath's, within an absolute 2^-52 of the true values for |x| ≤ 2048: verify/ieee754's
+`Dmath.sin_err` and `Dmath.cos_err` (the IEEE branch). forge-math's `trig_within_the_contract`
+also checks this against a double-double reference, measured worst 8.4e-17. Each end is pushed out
+by that absolute 2^-52 and then rounded outward (`Krawczyk.nearest_between`), so it encloses the
+true value. Joining the two needs the IEEE branch merged.
 -/
 
 namespace Krawczyk

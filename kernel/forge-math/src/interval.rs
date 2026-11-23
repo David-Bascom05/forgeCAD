@@ -118,12 +118,14 @@ impl Interval {
     }
     /// The range of sin or cos (`f`, its extremes at (k + `half`) pi, the even k maxima).
     ///
-    /// Each endpoint's value is dmath's, which is within 1 ulp of the true one for |x| <= TRIG_MOST
-    /// (tests::trig_within_an_ulp, against a double-double reference): pushed out `TRIG_ULPS` floats
-    /// it encloses it, near 0 too, where the bound is relative to the value. A point (k + half) pi is
-    /// counted inside when its enclosure [(k + half) PI, (k + half) PI_UP], rounded outward, meets
-    /// the interval: PI < pi < PI_UP, so a point that may be inside is never missed. Past TRIG_MOST,
-    /// or across a whole turn, it is [-1, 1].
+    /// The contract (proven on verify/ieee754's model by the IEEE work, Dmath.sin_err and cos_err):
+    /// for finite |x| <= TRIG_MOST = 2048, dmath's sin and cos are within an absolute TRIG_ERR =
+    /// 2^-52 of the true values. So each end's value, pushed out by TRIG_ERR and then rounded
+    /// outward, encloses the true one; the error is absolute, not relative (dmath is not within a
+    /// few ulps of tiny values: near the zeros, ulps are far below its error). A point (k + half) pi
+    /// is counted inside when its enclosure [(k + half) PI, (k + half) PI_UP], rounded outward,
+    /// meets the interval: PI < pi < PI_UP, so a point that may be inside is never missed. The
+    /// result is clamped to [-1, 1]. Past TRIG_MOST, or across 6 (less than a turn), it is [-1, 1].
     fn trig(&self, f: fn(f64) -> f64, half: f64) -> Interval {
         if self.is_empty() || !(self.lo.is_finite() && self.hi.is_finite()) {
             return self.trig_at(f64::NAN, f64::NAN, half);
@@ -140,11 +142,7 @@ impl Interval {
         if !(a.is_finite() && b.is_finite()) || a.abs().max(b.abs()) > TRIG_MOST || b - a >= 6.0 {
             return WHOLE;
         }
-        let (mut lo, mut hi) = (fa.min(fb), fa.max(fb));
-        for _ in 0..TRIG_ULPS {
-            lo = lo.next_down();
-            hi = hi.next_up();
-        }
+        let (mut lo, mut hi) = ((fa.min(fb) - TRIG_ERR).next_down(), (fa.max(fb) + TRIG_ERR).next_up());
         // the extremes' indices k with (k + half) pi possibly in [a, b]: |k| <= TRIG_MOST / pi + 1,
         // exact as floats, and (k + half) exact too; the width < 6 leaves at most three
         let first = (a / dmath::PI - half).floor() - 1.0;
@@ -172,12 +170,10 @@ impl Interval {
 
 /// The float just above pi (dmath::PI is the one just below).
 const PI_UP: f64 = 3.141_592_653_589_793_6;
-/// dmath::sin and cos are within 1 ulp up to here (their Cody-Waite reduction is exact enough to
-/// about 1e6; tests::trig_within_an_ulp checks up to this).
-const TRIG_MOST: f64 = 65_536.0;
-/// How far each bound is pushed out, in floats: dmath's 1 ulp (measured: 0.76), and two more, the slack
-/// these bounds have always had (so cos bounds, which were sound, are unchanged).
-const TRIG_ULPS: u32 = 3;
+/// dmath::sin and cos's error bound is proven up to here.
+const TRIG_MOST: f64 = 2048.0;
+/// dmath sin and cos's proven absolute error bound for |x| <= TRIG_MOST: 2^-52.
+const TRIG_ERR: f64 = f64::EPSILON;
 
 fn min4(c: [f64; 4]) -> f64 {
     c[0].min(c[1]).min(c[2]).min(c[3])
@@ -477,7 +473,7 @@ mod tests {
     }
 
     #[test]
-    fn trig_within_an_ulp() {
+    fn trig_within_the_contract() {
         // the reference: sin(1) = 0.84147098480789650665250232163030 (0.8414709848078965 + 1.7768450929355360e-18), and sin of the float nearest
         // pi is pi - PI = 1.2246467991473531772260659322750e-16 to 30 digits
         let s1 = dd::sin(1.0);
@@ -485,14 +481,17 @@ mod tests {
         assert!((s1.1 - 1.776_845_092_935_536e-18).abs() < 1e-31, "{s1:?}");
         let sp = dd::sin(dmath::PI);
         assert!((sp.0 - 1.224_646_799_147_353_2e-16).abs() < 1e-31, "{sp:?}");
-        // the bound TRIG_ULPS rests on, measured against the double-double reference
-        let mut worst: f64 = 0.0;
+        // the bound TRIG_ERR is (proven on the IEEE model), measured against the double-double
+        // reference: absolute, and in ulps for the record
+        let (mut worst, mut ulps): (f64, f64) = (0.0, 0.0);
         for x in trig_points() {
-            worst = worst.max(dd::ulps(dmath::sin(x), dd::sin(x)));
-            worst = worst.max(dd::ulps(dmath::cos(x), dd::cos(x)));
+            for (f, v) in [(dmath::sin(x), dd::sin(x)), (dmath::cos(x), dd::cos(x))] {
+                worst = worst.max(dd::add((f, 0.0), (-v.0, -v.1)).0.abs());
+                ulps = ulps.max(dd::ulps(f, v));
+            }
         }
-        println!("dmath sin/cos: at most {worst} ulps off");
-        assert!(worst < 1.0, "dmath is {worst} ulps off");
+        println!("dmath sin/cos: at most {worst:e} off ({ulps} ulps)");
+        assert!(worst <= TRIG_ERR, "dmath is {worst:e} off");
     }
 
     #[test]
