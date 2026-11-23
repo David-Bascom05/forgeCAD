@@ -17,8 +17,9 @@ This file is the target of the aeneas session's abstraction function. It maps th
 * **vertices**: points.
 
 **Exact bodies.**
-* `Bounds b S`: `S` is closed, regular and bounded, `frontier S = Faces b`, and each face is
-  oriented at every point where it is alone. One fact about the faces is included (`seeded`):
+* `Bounds b S`: `S` is closed, regular and bounded; its frontier is on the faces, and every face
+  point outside the vertex-cluster zones is on it; each face is oriented at every point where it
+  is alone. One fact about the faces is included (`seeded`):
   every connected open set off the faces is unbounded or reaches a lone face point.
 * **`bounds_unique`**: `Bounds b S → Bounds b S' → S = S'`.
 * `WellFormed b`:
@@ -30,13 +31,15 @@ This file is the target of the aeneas session's abstraction function. It maps th
 **Stored bodies** (the master's ruling, and the coordinator's canonical counterpart).
 * `Refines δ b bs`: `b` has `bs`'s cell structure one-to-one (the same faces, loops, edges, ends and
   vertices, by index, and the same senses), and each entity lies within `δ` of its counterpart:
-  regions and curves in two-sided distance, vertices in distance.
-* `exactOf δ b`: the canonical exact counterpart. It has the same carriers and senses, each vertex
-  is the unique exact meet of its carriers in its δ-ball, and each edge's meet is connected in its
-  δ-tube (`EdgeIsolated`); otherwise `none`, a typed refusal. Each edge and region is the exact
-  meet near the stored one. `exactOf_refines` gives
-  `Refines δ b (exactOf δ b)`.
-* `ValidSolid δ b := ∃ bs, exactOf δ b = some bs ∧ ValidExact bs`, and
+  regions and curves in two-sided distance, and each f64 vertex is mapped to its cluster.
+* `exactOf δ b`: the canonical exact counterpart, under the master's ruling (option iv, vertex
+  clusters). It keeps the carriers and senses. Each f64 vertex becomes its **cluster**, the meet
+  of its incident carriers in its δ-ball (`vertCore`), which must be nonempty, connected and of
+  diameter at most δ (`ClusterOK`). Otherwise the result is `none`, which happens only for invalid
+  input. Each edge and region is the exact meet near the stored one, cut at the clusters.
+  `exactOf_refines` gives `Refines δ b (exactOf δ b)`, one-to-one up to clusters.
+* `ValidSolid δ b := ∃ bs, exactOf δ b = some bs ∧` (edges isolated, `EdgeIsolated`) `∧
+  ValidExact bs`, and
   `⟦b⟧ := denoteExact (exactOf δ b)` (`denote`, `denote_spec`, `denote_refines`).
 
 **The bridge**, for an exact valid body and any arrangement `G` (F5's `FacetData`) whose face set
@@ -76,9 +79,17 @@ structure BodyModel (E : Type) [NormedAddCommGroup E] where
   faces : List (FaceModel E)
   edges : List (EdgeModel E)
   verts : List E
+  /-- an exact body's vertex clusters: per vertex, the exact meet of its carriers near it (a
+  stored body leaves this empty) -/
+  clusters : List (Set E) := []
+  /-- an exact body's cluster zones: per vertex, the closed δ-ball where micro-faces may lie -/
+  zones : List (Set E) := []
 
 /-- The faces' points. -/
 def Faces (b : BodyModel E) : Set E := ⋃ f ∈ b.faces, f.region
+
+/-- The cluster zones' points. -/
+def Zones (b : BodyModel E) : Set E := ⋃ z ∈ b.zones, z
 
 /-- The carriers' zeros: closed, with empty interior. -/
 def Zeros (b : BodyModel E) : Set E := ⋃ f ∈ b.faces, {x | f.carrier x = 0}
@@ -98,7 +109,11 @@ structure Bounds (b : BodyModel E) (S : Set E) : Prop where
   closed : IsClosed S
   regular : closure (interior S) = S
   bounded : Bornology.IsBounded S
-  frontier_eq : frontier S = Faces b
+  /-- the solid's boundary is on the faces -/
+  frontier_sub : frontier S ⊆ Faces b
+  /-- every face point outside the cluster zones is on the boundary (inside a zone, micro-faces
+  of the near-concurrent carriers need not be) -/
+  faces_sub : Faces b \ Zones b ⊆ frontier S
   oriented : ∀ f ∈ b.faces, ∀ y, Alone b f y → Oriented f.carrier S f.sense y
   seeded : Seeded b
 
@@ -109,8 +124,8 @@ structure WellFormed (b : BodyModel E) : Prop where
     b.faces[i].region ∩ b.faces[j].region ⊆ ⋃ e ∈ b.edges, e.curve
   edge_in_face : ∀ f ∈ b.faces, ∀ l ∈ f.loops, ∀ c ∈ l, ∀ e, b.edges[c.1]? = some e →
     e.curve ⊆ closure f.region
-  ends_on : ∀ e ∈ b.edges, ∀ u v, e.ends = some (u, v) → ∀ p q, b.verts[u]? = some p →
-    b.verts[v]? = some q → p ∈ closure e.curve ∧ q ∈ closure e.curve
+  ends_on : ∀ e ∈ b.edges, ∀ u v, e.ends = some (u, v) → ∀ C D, b.clusters[u]? = some C →
+    b.clusters[v]? = some D → (closure e.curve ∩ C).Nonempty ∧ (closure e.curve ∩ D).Nonempty
 
 /-! ## Uniqueness -/
 
@@ -158,8 +173,8 @@ theorem open_sub_closure_diff {V Z : Set E} (hV : IsOpen V) (hZ : IsClosed Z)
 theorem agree_off_faces {b : BodyModel E} {S S' : Set E} (h : Bounds b S) (h' : Bounds b S')
     {x : E} (hx : x ∉ Faces b) : (x ∈ S ↔ x ∈ S') := by
   obtain ⟨K, hKo, hKc, hxK, hKF, hcase⟩ := h.seeded x hx
-  have hKS := room_class hKc (h.frontier_eq ▸ hKF)
-  have hKS' := room_class hKc (h'.frontier_eq ▸ hKF)
+  have hKS := room_class hKc (hKF.mono_right h.frontier_sub)
+  have hKS' := room_class hKc (hKF.mono_right h'.frontier_sub)
   rcases hcase with hunb | ⟨f, hf, y, hy, hyK⟩
   · -- unbounded: outside both
     have out : ∀ {T : Set E}, Bornology.IsBounded T → (K ⊆ T ∨ Disjoint K T) → x ∉ T := by
@@ -235,6 +250,7 @@ structure Refines (δ : ℝ) (b bs : BodyModel E) : Prop where
   faces_len : b.faces.length = bs.faces.length
   edges_len : b.edges.length = bs.edges.length
   verts_len : b.verts.length = bs.verts.length
+  clusters_len : b.verts.length = bs.clusters.length
   face : ∀ i (h : i < b.faces.length),
     b.faces[i].loops = (bs.faces[i]'(faces_len ▸ h)).loops ∧
     b.faces[i].sense = (bs.faces[i]'(faces_len ▸ h)).sense ∧
@@ -242,14 +258,18 @@ structure Refines (δ : ℝ) (b bs : BodyModel E) : Prop where
   edge : ∀ i (h : i < b.edges.length),
     b.edges[i].ends = (bs.edges[i]'(edges_len ▸ h)).ends ∧
     WithinH δ b.edges[i].curve (bs.edges[i]'(edges_len ▸ h)).curve
-  vert : ∀ i (h : i < b.verts.length), dist b.verts[i] (bs.verts[i]'(verts_len ▸ h)) ≤ δ
+  /-- each f64 vertex ↦ its cluster: nonempty, within δ of it -/
+  vert : ∀ i (h : i < b.verts.length), (bs.clusters[i]'(clusters_len ▸ h)).Nonempty ∧
+    ∀ p ∈ bs.clusters[i]'(clusters_len ▸ h), dist p b.verts[i] ≤ δ
 
-/-! ## The canonical exact counterpart (`exactOf`)
+/-! ## The canonical exact counterpart (`exactOf`), with vertex clusters
 
-The code's exact per-question tests decide on one exact body: the faces' exact carriers, each
-vertex the exact meet of its carriers near the f64 vertex, each edge the meet curve between them.
-`exactOf δ b` is that body. It is canonical, with no choice. It is `none` when a vertex's meet is
-not unique in its δ-ball (a tangency), which is a typed refusal ("input vertex undecided"). -/
+The master's ruling (option iv): the exact body is the exact carriers plus the topology. Around a
+vertex of four or more faces the f64 planes are only nearly concurrent, so the exact vertex is a
+**cluster**: the meet of its incident carriers inside the δ-ball round the f64 vertex, with its
+micro-edges (and the micro-faces they bound). A cluster must be nonempty, connected and of diameter
+at most `δ` (`ClusterOK`). Otherwise `exactOf` is `none`, which happens only for invalid input.
+Edge isolation (`EdgeIsolated`) is a validity condition (`ValidSolid`), not a refusal. -/
 
 /-- Face `f` uses an edge ending at vertex `u`. -/
 def IncV (b : BodyModel E) (u : Nat) (f : FaceModel E) : Prop :=
@@ -258,22 +278,21 @@ def IncV (b : BodyModel E) (u : Nat) (f : FaceModel E) : Prop :=
 /-- Face `f` uses edge `i`. -/
 def IncE (f : FaceModel E) (i : Nat) : Prop := ∃ l ∈ f.loops, ∃ c ∈ l, c.1 = i
 
-/-- The meet of vertex `u`'s carriers in the δ-ball round its stored point `p₀`. -/
-def vertMeet (δ : ℝ) (b : BodyModel E) (u : Nat) (p₀ : E) : Set E :=
-  {p | dist p p₀ ≤ δ ∧ ∀ f ∈ b.faces, IncV b u f → f.carrier p = 0}
+/-- **The vertex cluster**: the points of the δ-ball round `p₀` on two of `u`'s carriers. -/
+def vertCore (δ : ℝ) (b : BodyModel E) (u : Nat) (p₀ : E) : Set E :=
+  {p | dist p p₀ ≤ δ ∧ ∃ f ∈ b.faces, ∃ g ∈ b.faces, f ≠ g ∧ IncV b u f ∧ IncV b u g ∧
+    f.carrier p = 0 ∧ g.carrier p = 0}
 
-open Classical in
-/-- The exact vertex: the meet's one point, if it has exactly one. -/
-noncomputable def exactVert (δ : ℝ) (b : BodyModel E) (u : Nat) (p₀ : E) : Option E :=
-  if h : ∃! p, p ∈ vertMeet δ b u p₀ then some (Classical.choose h.exists) else none
+/-- A good cluster: nonempty, connected, diameter at most `δ`. -/
+def ClusterOK (δ : ℝ) (C : Set E) : Prop :=
+  C.Nonempty ∧ IsPreconnected C ∧ Metric.diam C ≤ δ
 
 /-- The exact edge: its faces' carriers' meet, within δ of the stored curve. -/
 def edgeMeet (δ : ℝ) (b : BodyModel E) (i : Nat) (e : EdgeModel E) : Set E :=
   {p | (∀ f ∈ b.faces, IncE f i → f.carrier p = 0) ∧ ∃ q ∈ e.curve, dist p q ≤ δ}
 
-/-- **The edge is isolated in its tube**: the meet near the stored curve is connected, so no other
-branch of the carriers' meet enters the δ-tube. Otherwise `exactOf` is `none`: the same "input
-undecided" refusal as a non-unique vertex. -/
+/-- **The edge is isolated in its tube**: the meet near the stored curve is connected (a validity
+condition). -/
 def EdgeIsolated (δ : ℝ) (b : BodyModel E) (i : Nat) (e : EdgeModel E) : Prop :=
   IsPreconnected (edgeMeet δ b i e)
 
@@ -281,10 +300,14 @@ def EdgeIsolated (δ : ℝ) (b : BodyModel E) (i : Nat) (e : EdgeModel E) : Prop
 def faceEdges (δ : ℝ) (b : BodyModel E) (f : FaceModel E) : Set E :=
   ⋃ i, ⋃ (_ : IncE f i), ⋃ e ∈ b.edges[i]?, edgeMeet δ b i e
 
-/-- The exact region: the closure of the components of the carrier's zeros off the exact edges
-that lie within δ of the stored region. -/
+/-- All the vertex clusters. -/
+def allCores (δ : ℝ) (b : BodyModel E) : Set E :=
+  ⋃ u, ⋃ p ∈ b.verts[u]?, vertCore δ b u p
+
+/-- The exact region: the closure of the components of the carrier's zeros, off the exact edges
+and the clusters, that lie within δ of the stored region. -/
 def regionMeet (δ : ℝ) (b : BodyModel E) (f : FaceModel E) : Set E :=
-  let Z := {x | f.carrier x = 0} \ faceEdges δ b f
+  let Z := {x | f.carrier x = 0} \ (faceEdges δ b f ∪ allCores δ b)
   closure {x | x ∈ Z ∧ connectedComponentIn Z x ⊆ Metric.thickening δ f.region}
 
 theorem regionMeet_on (δ : ℝ) (b : BodyModel E) (f : FaceModel E) :
@@ -308,24 +331,19 @@ def exactFace (δ : ℝ) (b : BodyModel E) (f : FaceModel E) : FaceModel E where
   on_carrier := regionMeet_on δ b f
 
 open Classical in
-/-- **The canonical exact counterpart.** -/
+/-- **The canonical exact counterpart**: exact faces, edges and vertex clusters (`none` only
+when a cluster is not good: invalid input). -/
 noncomputable def exactOf (δ : ℝ) (b : BodyModel E) : Option (BodyModel E) :=
-  if (∀ u (h : u < b.verts.length), (exactVert δ b u b.verts[u]).isSome) ∧
-      ∀ i (h : i < b.edges.length), EdgeIsolated δ b i b.edges[i] then
+  if ∀ u (h : u < b.verts.length), ClusterOK δ (vertCore δ b u b.verts[u]) then
     some { faces := b.faces.map (exactFace δ b)
            edges := b.edges.mapIdx fun i e => { curve := edgeMeet δ b i e, ends := e.ends }
-           verts := b.verts.mapIdx fun u p => (exactVert δ b u p).getD p }
+           verts := b.verts
+           clusters := b.verts.mapIdx fun u p => vertCore δ b u p
+           zones := b.verts.map fun p => Metric.closedBall p δ }
   else none
 
-theorem exactVert_dist {δ : ℝ} {b : BodyModel E} {u : Nat} {p₀ p : E}
-    (h : exactVert δ b u p₀ = some p) : dist p p₀ ≤ δ := by
-  unfold exactVert at h
-  split at h
-  · rename_i hu; cases h; exact (Classical.choose_spec hu.exists).1
-  · cases h
-
 /-- **(i) `exactOf` refines**: when each stored face region and edge curve is within δ of its exact
-one (vertices are, by construction), `b` refines `exactOf δ b` within δ. -/
+one, `b` refines `exactOf δ b` within δ, up to vertex clusters. -/
 theorem exactOf_refines {δ : ℝ} {b bs : BodyModel E} (h : exactOf δ b = some bs)
     (hface : ∀ f ∈ b.faces, WithinH δ f.region (regionMeet δ b f))
     (hedge : ∀ i (hi : i < b.edges.length), WithinH δ b.edges[i].curve (edgeMeet δ b i b.edges[i])) :
@@ -333,21 +351,21 @@ theorem exactOf_refines {δ : ℝ} {b bs : BodyModel E} (h : exactOf δ b = some
   unfold exactOf at h
   split at h
   · rename_i hall
-    obtain ⟨hall, -⟩ := hall
     cases h
-    refine ⟨by simp, by simp, by simp, fun i hi => ?_, fun i hi => ?_, fun u hu => ?_⟩
+    refine ⟨by simp, by simp, by simp, by simp, fun i hi => ?_, fun i hi => ?_, fun u hu => ?_⟩
     · simp only [List.getElem_map, exactFace]
       exact ⟨by simp, by simp, hface _ (List.getElem_mem hi)⟩
     · simp only [List.getElem_mapIdx]
       exact ⟨by simp, hedge i hi⟩
     · simp only [List.getElem_mapIdx]
-      obtain ⟨p, hp⟩ := Option.isSome_iff_exists.mp (hall u hu)
-      rw [hp, Option.getD_some, dist_comm]
-      exact exactVert_dist hp
+      exact ⟨(hall u hu).1, fun p hp => hp.1⟩
   · cases h
 
-/-- **(ii) A valid stored body**: its canonical exact counterpart is a valid solid. -/
-def ValidSolid (δ : ℝ) (b : BodyModel E) : Prop := ∃ bs, exactOf δ b = some bs ∧ ValidExact bs
+/-- **(ii) A valid stored body**: its canonical exact counterpart exists, its edges are isolated,
+and it is a valid solid. -/
+def ValidSolid (δ : ℝ) (b : BodyModel E) : Prop :=
+  ∃ bs, exactOf δ b = some bs ∧ (∀ i (h : i < b.edges.length), EdgeIsolated δ b i b.edges[i]) ∧
+    ValidExact bs
 
 /-- **(iii) `⟦b⟧`**: the canonical exact counterpart's solid (no choice). -/
 noncomputable def denote (δ : ℝ) (b : BodyModel E) : Set E :=
@@ -355,25 +373,17 @@ noncomputable def denote (δ : ℝ) (b : BodyModel E) : Set E :=
   | some bs => denoteExact bs
   | none => ∅
 
-/-- A counterpart's edges are isolated in their tubes. -/
-theorem exactOf_isolated {δ : ℝ} {b bs : BodyModel E} (h : exactOf δ b = some bs) :
-    ∀ i (hi : i < b.edges.length), EdgeIsolated δ b i b.edges[i] := by
-  unfold exactOf at h
-  split at h
-  · rename_i hall; exact hall.2
-  · cases h
-
 theorem denote_spec {δ : ℝ} {b bs : BodyModel E} (h : exactOf δ b = some bs) :
     denote δ b = denoteExact bs := by
   unfold denote; rw [h]
 
 /-- With a valid counterpart and the δ-closeness of regions and edges, `⟦b⟧` is the solid of an
-exact body that `b` refines. -/
+exact body that `b` refines up to clusters. -/
 theorem denote_refines {δ : ℝ} {b : BodyModel E} (hv : ValidSolid δ b)
     (hface : ∀ f ∈ b.faces, WithinH δ f.region (regionMeet δ b f))
     (hedge : ∀ i (hi : i < b.edges.length), WithinH δ b.edges[i].curve (edgeMeet δ b i b.edges[i])) :
     ∃ bs, exactOf δ b = some bs ∧ Refines δ b bs ∧ ValidExact bs ∧ denote δ b = denoteExact bs := by
-  obtain ⟨bs, hb, hvx⟩ := hv
+  obtain ⟨bs, hb, -, hvx⟩ := hv
   exact ⟨bs, hb, exactOf_refines hb hface hedge, hvx, denote_spec hb⟩
 
 /-- `⟦f⟧`. -/
@@ -388,7 +398,7 @@ theorem room_in_or_out (hd : FacetData G FacesG cf) (hconn : ∀ r, IsPreconnect
     {b : BodyModel E} (hv : ValidExact b) (hsub : Faces b ⊆ FacesG) (r : Nat) :
     G.room r ⊆ denoteExact b ∨ Disjoint (G.room r) (denoteExact b) := by
   have hfr : frontier (denoteExact b) ⊆ FacesG := by
-    rw [(bounds_denoteExact hv).frontier_eq]; exact hsub
+    exact (bounds_denoteExact hv).frontier_sub.trans hsub
   exact room_class (hconn r) ((hd.room_faces r).mono_right hfr)
 
 /-- **The solid is the closure of the rooms inside it**, when the arrangement's faces have empty
@@ -425,8 +435,8 @@ theorem denote_eq_closure_rooms (hd : FacetData G FacesG cf) (hconn : ∀ r, IsP
 theorem f6_hyps {b : BodyModel E} (hv : ValidExact b) (hsub : Faces b ⊆ FacesG) :
     frontier (denoteExact b) ⊆ FacesG ∧
       ∀ φ : Set E, Disjoint φ (Faces b) → Disjoint φ (frontier (denoteExact b)) := by
-  have hfe := (bounds_denoteExact hv).frontier_eq
-  exact ⟨hfe ▸ hsub, fun φ hφ => hfe ▸ hφ⟩
+  have hfe := (bounds_denoteExact hv).frontier_sub
+  exact ⟨hfe.trans hsub, fun φ hφ => hφ.mono_right hfe⟩
 
 /-- **F6's orientation for the solid.** -/
 theorem oriented_denote {b : BodyModel E} (hv : ValidExact b) {f : FaceModel E} (hf : f ∈ b.faces)
