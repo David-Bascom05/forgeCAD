@@ -90,3 +90,16 @@ fn refusals_name_the_check_and_a_fix() {
         cam.errors
     );
 }
+
+#[test]
+fn fillets_and_chamfers_are_lowered_and_a_gouge_into_a_fillet_is_refused() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    let src = "machining\nf = part(\"boss_fillet.fg\", group: \"N\")\nt1 = tool(\"flat-6\", t: 1, stickout: 26, holder: \"bt40-er32\")\nop1 = setup(f, stock: box(margin: (2, 2, 1)), origin: \"top-center\")\nskim = facing(op1, tool: t1, to: 18, step: 1)\nboss = contour(op1, tool: t1, side: \"outside\", from: 18, to: 10.5, step: 4)\nprog = program(op1, post: \"linuxcnc\")\n";
+    let cam = forge_cam_lang::run(src, &dir);
+    assert!(cam.errors.is_empty(), "{:?}", cam.errors);
+    let b = cam.ops.iter().find(|o| o.name == "boss").unwrap();
+    // the contour is made from the section above the fillet: at its foot the tool meets the
+    // fillet (a torus face), a real gouge
+    assert_eq!(b.status, "refused", "{:?}", b.checks);
+    assert!(b.checks.iter().any(|c| c.rule == "gouge"), "{:?}", b.checks);
+}

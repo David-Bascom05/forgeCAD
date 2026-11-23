@@ -46,7 +46,8 @@ pub enum Surf {
     /// A sphere about o, radius r: point = o + r (cos φ (c x + s y) + sin φ ax) with the same
     /// rational map for both angles: p = t (azimuth), q = tan(φ/2) (elevation).
     Sphere { o: V3, x: V3, y: V3, ax: V3, r: f64 },
-    /// A torus: o + (R + r cos φ)(c x + s y) + r sin φ ax; p = t, q = tan(φ/2).
+    /// A torus: o + (R + r cos φ)(c x + s y) + r sin φ ax; p = t, q = tan(ψ/2) with
+    /// φ = φm + ψ, (cm, sm) = (cos φm, sin φm): the tube angle about the face's middle.
     Torus {
         o: V3,
         x: V3,
@@ -54,6 +55,8 @@ pub enum Surf {
         ax: V3,
         big: f64,
         r: f64,
+        cm: f64,
+        sm: f64,
     },
 }
 
@@ -148,9 +151,21 @@ impl Surf {
                     scale3(ax, sf.mul(T::c(r))),
                 )
             }
-            Surf::Torus { o, x, y, ax, big, r } => {
+            Surf::Torus {
+                o,
+                x,
+                y,
+                ax,
+                big,
+                r,
+                cm,
+                sm,
+            } => {
                 let (c, s) = circ(p);
-                let (cf, sf) = circ(q);
+                let (cp, sp) = circ(q);
+                // cos(φm + ψ), sin(φm + ψ)
+                let cf = cp.mul(T::c(cm)).sub(sp.mul(T::c(sm)));
+                let sf = cp.mul(T::c(sm)).add(sp.mul(T::c(cm)));
                 let rad = add3(scale3(x, c), scale3(y, s));
                 let kr = T::c(big).add(cf.mul(T::c(r)));
                 add3(add3(pt3(o), mul3(rad, kr)), scale3(ax, sf.mul(T::c(r))))

@@ -114,6 +114,7 @@ pub struct OpOut {
 
 pub struct ProgramOut {
     pub name: String,
+    pub setups: Vec<usize>,
     pub post: String,
     pub text: Option<String>,
     pub lines: usize,
@@ -355,6 +356,20 @@ pub fn run(src: &str, dir: &Path) -> Cam {
             cam.ok = false;
             cam.errors
                 .push(format!("line {}: {e}", line_of(src, st.span.lo as usize)));
+        }
+    }
+    // an op no program posted has no certificate: its checks run on the posted path only
+    let posted: Vec<usize> = cam
+        .programs
+        .iter()
+        .filter(|p| p.round_trip)
+        .flat_map(|p| p.setups.clone())
+        .collect();
+    for o in &mut cam.ops {
+        if o.status == "built" && !posted.contains(&o.setup) {
+            o.status = "unposted";
+            o.refusal =
+                Some("not certified: no program(..) posts this setup (checks run on the posted path)".into());
         }
     }
     cam.leftover();
@@ -1053,6 +1068,7 @@ impl Cam {
     /// Posts the setups' ops, reads the text back, and certifies the path the text means.
     fn post(&mut self, name: &str, setups: &[usize], post: &str, number: u32) -> ProgramOut {
         let mut po = ProgramOut {
+            setups: setups.to_vec(),
             name: name.into(),
             post: post.into(),
             text: None,
