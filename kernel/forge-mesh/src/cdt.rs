@@ -329,7 +329,8 @@ impl Mesh {
         self.tris.push(self.tris[t as usize]);
         if !self.inside.is_empty() {
             let f = self.inside[t as usize];
-            self.inside.extend([f, f]);
+            self.inside.push(f);
+            self.inside.push(f);
         }
         self.write(
             t,
@@ -378,7 +379,8 @@ impl Mesh {
         self.tris.push(tt);
         if !self.inside.is_empty() {
             let (ft, fu) = (self.inside[t as usize], self.inside[u as usize]);
-            self.inside.extend([ft, fu]);
+            self.inside.push(ft);
+            self.inside.push(fu);
         }
         self.write(
             t,
