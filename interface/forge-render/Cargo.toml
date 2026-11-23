@@ -52,6 +52,8 @@ forge-topo = { path = "../../kernel/forge-topo" }
 forge-mesh = { path = "../../kernel/forge-mesh" }
 forge-geom = { path = "../../kernel/forge-geom" }
 forge-sheet = { path = "../../kernel/forge-sheet" }
+forge-brake = { path = "../../kernel/forge-brake" }
+forge-vendor = { path = "../../kernel/forge-vendor" }
 forge-step = { path = "../../kernel/forge-step" }
 png = "=0.18.1"
 # a background image's file (zune: MIT OR Apache-2.0 OR Zlib), already in the lock

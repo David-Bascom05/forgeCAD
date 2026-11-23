@@ -61,6 +61,9 @@ pub enum Query {
     Unfold,
     /// The weldment's cut list: each group of identical members, and the plates.
     Cutlist,
+    /// Each sheet against its shop or vendor: every violation, measured, with where it is
+    /// (`dfm.rs`).
+    Dfm,
     /// Thin flat runs (a bracket's tabs, a sheet's walls) at most `t` thick, with their holes.
     Tabs {
         of: Option<String>,
@@ -76,7 +79,8 @@ pub struct Request {
 }
 
 pub const HELP: &str = "holes [of OCC] [d D] | section x|y|z=V [of OCC] | section at X Y Z normal NX NY NZ [of OCC] | \
-aligned [HOLE HOLE] [tol T] | gap FACE FACE | interference [OCC OCC] | frame SKETCH|PLANE [of OCC] | faces [of OCC] | tabs [of OCC] [t MAX] | unfold | cutlist; \
+aligned [HOLE HOLE] [tol T] | gap FACE FACE | interference [OCC OCC] | frame SKETCH|PLANE [of OCC] | faces [of OCC] | tabs [of OCC] [t MAX] | unfold | cutlist | dfm | \
+bendsim [tooling T] [vendor V] [sequence S] [sheet NAME] [uts MPA]; \
 any of them `in OCC` for that part's frame. In an assembly a name is OCC/NAME.";
 
 fn num(w: Option<&String>, what: &str) -> Result<f64, String> {
@@ -200,6 +204,7 @@ pub fn parse(text: &str) -> Result<Request, String> {
         "faces" if rest.is_empty() => Query::Faces { of },
         "unfold" if rest.is_empty() => Query::Unfold,
         "cutlist" if rest.is_empty() => Query::Cutlist,
+        "dfm" if rest.is_empty() => Query::Dfm,
         "tabs" if rest.is_empty() => Query::Tabs {
             of,
             t: thick.unwrap_or(10.0),
@@ -313,6 +318,13 @@ pub fn ask_file(path: &Path, root: Option<PathBuf>, text: &str) -> Answer {
 
 /// Runs `src` (a part or an assembly, its files beside `dir`) and answers the query.
 pub fn ask(src: &str, dir: Option<PathBuf>, root: Option<PathBuf>, text: &str) -> Answer {
+    let w = words(text);
+    if w.first().is_some_and(|x| x == "bendsim") {
+        return match crate::bendsim::parse(&w[1..]) {
+            Ok(a) => crate::bendsim::ask_src(src, dir, root, &a),
+            Err(e) => Answer::err(qe("Query", e)),
+        };
+    }
     let req = match parse(text) {
         Ok(r) => r,
         Err(e) => return Answer::err(qe("Query", e)),
@@ -322,6 +334,9 @@ pub fn ask(src: &str, dir: Option<PathBuf>, root: Option<PathBuf>, text: &str) -
     }
     if req.q == Query::Cutlist {
         return cutlist(src, dir, root);
+    }
+    if req.q == Query::Dfm {
+        return crate::dfm::answer(src, dir, root);
     }
     match scene(src, dir, root, &req).and_then(|s| answer(&s, &req)) {
         Ok(a) => a,
@@ -1266,7 +1281,7 @@ fn answer(s: &Scene, req: &Request) -> Result<Answer, QueryError> {
             fields.push(("query", "faces".into()));
             fields.push(("faces", Json::Arr(list)));
         }
-        Query::Unfold | Query::Cutlist => unreachable!("answered before the scene"),
+        Query::Unfold | Query::Cutlist | Query::Dfm => unreachable!("answered before the scene"),
         Query::Tabs { of, t } => {
             let mut list = Vec::new();
             for k in s.filter(of)? {

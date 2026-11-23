@@ -78,6 +78,11 @@ open ForgeLang ForgeLang.Counter
 #print axioms ForgeLang.LL1.Lex.lex_lossless
 #print axioms ForgeLang.LL1.Lex.word_maximal
 #print axioms ForgeLang.LL1.Lex.num_literal
+#print axioms ForgeLang.LL1.LexUnits.inch_literal
+#print axioms ForgeLang.LL1.LexUnits.inch_glued
+#print axioms ForgeLang.LL1.LexUnits.in_keyword_after_number
+#print axioms ForgeLang.LL1.LexUnits.in_keyword_after_tuple
+#print axioms ForgeLang.LL1.LexUnits.inch_num_literal
 #print axioms ForgeLang.LL1.ImplUnifiedDoc.table_choose
 #print axioms ForgeLang.defs_congr_closed
 #print axioms ForgeLang.scoped_occ_closed

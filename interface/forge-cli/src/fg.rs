@@ -434,7 +434,8 @@ impl Session {
             });
         let asks = matches!(
             what,
-            "holes" | "section" | "aligned" | "gap" | "interference" | "frame" | "cutlist"
+            "holes" | "section" | "aligned" | "gap" | "interference" | "frame" | "cutlist" | "bendsim"
+                | "dfm"
         ) || (what == "faces"
             && !of_feature
             && a.words.get(1).map_or(a.at.is_none(), |w| w == "of" || w == "in"));
