@@ -344,7 +344,8 @@ fn slab(
     let mut top_loops: Vec<Vec<(EdgeId, bool)>> = Vec::new();
     let mut bottom_loops: Vec<Vec<(EdgeId, bool)>> = Vec::new();
     let mut uprights: Vec<EdgeId> = Vec::new();
-    let mut made = false;
+    // top edges two walls share: where a loop has closed up to a ridge or a slit
+    let mut shared: Vec<EdgeId> = Vec::new();
     for (li, (l, m)) in p.loops.iter().zip(moved).enumerate() {
         let segs = &l.segments;
         let n = segs.len();
@@ -426,7 +427,7 @@ fn slab(
                 // run along another wall's top edge: that edge, used the other way
                 let used = match top_edges.iter().find(|x| (x.0, x.1) == (tc, ta)) {
                     Some(&(_, _, e, fwd)) => {
-                        made = true;
+                        shared.push(e);
                         (e, !fwd)
                     }
                     None => {
@@ -450,10 +451,15 @@ fn slab(
     for uses in &bottom_loops {
         b.add_loop(bottom, uses);
     }
-    // top edges no two walls share bound a lid
-    if !made && top_loops.iter().any(|l| !l.is_empty()) {
+    // top edges no two walls share bound a lid: the loops that still bound something (a hole
+    // closed to a slit ends under it, an outline closed to a ridge has none)
+    let open: Vec<&Vec<(EdgeId, bool)>> = top_loops
+        .iter()
+        .filter(|l| !l.is_empty() && !l.iter().any(|u| shared.contains(&u.0)))
+        .collect();
+    if !open.is_empty() {
         let top = b.add_face(ShellId(0), Surface::Plane(Plane::new(lid)), true, end);
-        for uses in top_loops.iter().filter(|l| !l.is_empty()) {
+        for uses in open {
             b.add_loop(top, uses);
         }
     }
@@ -795,6 +801,23 @@ mod tests {
             volume(tapered(&plate, 1.5, -a, 7)),
             76.0 + 30.0 + 20.0 + (4.0 / 3.0) * (3.375 - 1.0),
         );
+    }
+
+    /// A slot of a hole tapered out closes to a slit (its ends wiped out, its sides meeting along
+    /// one edge at offset 0.5): it ends there, and the plate goes on over it with its lid.
+    #[test]
+    fn a_hole_that_closes_to_a_slit_ends_under_the_lid() {
+        let plate = profile(vec![
+            lp(&[(0.0, 0.0), (10.0, 0.0), (10.0, 6.0), (0.0, 6.0)], 1),
+            lp(&[(3.0, 2.5), (3.0, 3.5), (7.0, 3.5), (7.0, 2.5)], 11),
+        ]);
+        let a = 30f64.to_radians();
+        let (t, d) = (tan(a), 2.0);
+        // ∫ (10 + 2th)(6 + 2th) dh over the depth, less ∫ (4 - 2th)(1 - 2th) dh to where it closes
+        let q = |c0: f64, c1: f64, c2: f64, h: f64| c0 * h + c1 * h * h / 2.0 + c2 * h * h * h / 3.0;
+        let shut = 0.5 / t;
+        let exact = q(60.0, 32.0 * t, 4.0 * t * t, d) - q(4.0, -10.0 * t, 4.0 * t * t, shut);
+        close(volume(tapered(&plate, d, -a, 7)), exact);
     }
 
     /// A rounded rectangle whose corners close to points on the way (E events, its arcs' radii):
