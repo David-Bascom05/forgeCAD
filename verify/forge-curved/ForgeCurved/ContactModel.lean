@@ -577,12 +577,12 @@ def TangentKind.taken : TangentKind → Bool
 /-- Which of the taken kinds have a local model on this branch: `cylPlaneLine`
 (`cylPlane_localConn`) and, as the seamed reference picture, `cylCylLine`
 (`tangentPair_localConn`; refusal in TangentRefusal.lean), and `coaxialEqualRadii`
-(`coaxial_localConn`, CoaxialContact.lean). `spherePlanePoint` waits on FaceLocal sectors without
-bounding edges. -/
+(`coaxial_localConn`, CoaxialContact.lean). and `spherePlanePoint` (SpherePlane.lean, with edgeless sectors). -/
 def TangentKind.modelled : TangentKind → Bool
   | .cylPlaneLine => true
   | .cylCylLine => true
   | .coaxialEqualRadii => true
+  | .spherePlanePoint => true
   | _ => false
 
 end ForgeCurved

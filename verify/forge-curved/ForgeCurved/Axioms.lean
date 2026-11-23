@@ -72,3 +72,8 @@ import ForgeCurved
 #print axioms ForgeCurved.FaceLocal.room_const_curved
 #print axioms ForgeCurved.FaceLocal.res_eq_reg
 #print axioms ForgeCurved.FaceLocal.res_eq_reg_forge
+#print axioms ForgeCurved.graphCell_preconnected'
+#print axioms ForgeCurved.punctured_preconnected
+#print axioms ForgeCurved.spherePlane_localConn
+#print axioms ForgeCurved.spherePlane_vertLocal
+#print axioms ForgeCurved.spherePlane_bad_iff
