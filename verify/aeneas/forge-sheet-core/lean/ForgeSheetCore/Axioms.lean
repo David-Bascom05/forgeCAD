@@ -53,4 +53,5 @@ elab "#standard_axioms " ids:ident* : command => do
   forge_sheet_core.exp_of_spec forge_sheet_core.exp_diff_spec forge_sheet_core.exp_neg_spec
   forge_sheet_core.exp_add_spec forge_sheet_core.exp_mul_spec forge_sheet_core.exp_sign_spec
   forge_sheet_core.round_mult forge_sheet_core.rel_mult forge_sheet_core.twoSum_good
-  forge_sheet_core.fold_grow_good
+  forge_sheet_core.fold_grow_good forge_sheet_core.twoProduct_good forge_sheet_core.growL_good
+  forge_sheet_core.growMany_good
