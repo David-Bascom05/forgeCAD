@@ -27,4 +27,5 @@ import ForgeExact.DecideOnce.Refines
 import ForgeExact.DecideOnce.Simulation
 import ForgeExact.DecideOnce.RoomConst
 import ForgeExact.DecideOnce.MetricI
+import ForgeExact.DecideOnce.CoverageI
 import ForgeExact.Axioms

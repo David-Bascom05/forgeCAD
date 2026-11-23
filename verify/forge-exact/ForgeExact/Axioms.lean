@@ -8,6 +8,7 @@ import ForgeExact.DecideOnce.CoreInc
 import ForgeExact.DecideOnce.Simulation
 import ForgeExact.DecideOnce.RoomConst
 import ForgeExact.DecideOnce.MetricI
+import ForgeExact.DecideOnce.CoverageI
 import ForgeExact.DecideOnce.Nef
 import ForgeExact.DecideOnce.Rungs
 import ForgeExact.Jordan
@@ -180,3 +181,5 @@ elab "#standard_axioms " ids:ident* : command => do
   ForgeExact.DecideOnce.IncLedger.collapse_subset
   ForgeExact.DecideOnce.IncLedger.collapse_refuse
   ForgeExact.DecideOnce.Refines.collapse_exact_off_thin
+  ForgeExact.DecideOnce.IncLedger.coverageKI
+  ForgeExact.DecideOnce.IncLedger.coverageMI
