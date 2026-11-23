@@ -35,7 +35,7 @@ pub fn serve(path: &Path, tools: AppTools) -> std::io::Result<()> {
                 .duration_since(std::time::UNIX_EPOCH)
                 .map_or(0, |d| d.as_nanos())
         ));
-        std::fs::rename(path, aside)?;
+        forge_dirs::fs::rename(path, aside)?;
     }
     let l = ipc::Listener::bind(path)?;
     std::thread::Builder::new()

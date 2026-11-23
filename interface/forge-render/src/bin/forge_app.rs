@@ -511,7 +511,7 @@ fn run() -> Result<(), String> {
     let mut h = Headless::new(a.size, a.scale)?;
     let base = match &a.settings {
         Some(f) => forge_render::shell::settings::Settings::from_toml(
-            &std::fs::read_to_string(f).map_err(|e| format!("{f}: {e}"))?,
+            &forge_dirs::fs::read_to_string(f).map_err(|e| format!("{f}: {e}"))?,
         ),
         None => Default::default(),
     };
@@ -658,7 +658,7 @@ fn run() -> Result<(), String> {
                 for _ in 0..3 {
                     h.step();
                 }
-                std::fs::write(f, h.ppm()).map_err(|e| e.to_string())?;
+                forge_dirs::fs::write(f, h.ppm()).map_err(|e| e.to_string())?;
                 continue;
             }
             Step::View(yaw, pitch) => {
@@ -841,7 +841,7 @@ fn run() -> Result<(), String> {
         bench(&mut h);
     }
     if let Some(s) = &a.shot {
-        std::fs::write(s, h.ppm()).map_err(|e| e.to_string())?;
+        forge_dirs::fs::write(s, h.ppm()).map_err(|e| e.to_string())?;
     }
     Ok(())
 }

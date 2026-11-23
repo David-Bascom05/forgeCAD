@@ -6,7 +6,9 @@
 #[cfg(target_family = "wasm")]
 use forge_alloc as _;
 
+pub mod clock;
 pub mod dmath;
+pub mod exact;
 pub mod frame;
 pub mod hash;
 pub mod interval;

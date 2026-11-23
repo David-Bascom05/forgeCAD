@@ -105,7 +105,7 @@ impl Gui {
             if !new.is_empty() {
                 list.extend(new.iter().map(|op| (op.json().to_string(), None)));
                 let waker = self.waker.clone();
-                std::thread::spawn(move || {
+                crate::plat::spawn("forge-job", move || {
                     for op in new {
                         let min = forge_lang::edit::apply(&src, &op).ok().and_then(|text| {
                             let opts = forge_lang::Options {
@@ -188,8 +188,8 @@ impl Gui {
             p.thermo.check = false;
             if let Some(f) = file.clone() {
                 let waker = self.waker.clone();
-                std::thread::spawn(move || {
-                    let rows = std::fs::read_to_string(&f).ok().map(|text| {
+                crate::plat::spawn("forge-job", move || {
+                    let rows = forge_dirs::fs::read_to_string(&f).ok().map(|text| {
                         let opts = forge_lang::Options {
                             dir: std::path::Path::new(&f).parent().map(|d| d.to_path_buf()),
                             ..forge_lang::Options::default()
@@ -290,12 +290,13 @@ impl Gui {
                 let file = format!("{stem}-{id}-print.png");
                 let got = (|| {
                     let src = g.print_src.as_ref().ok_or("no forming (walls: false)")?;
-                    let art = rfd::FileDialog::new()
-                        .set_title("The artwork, seen along the pull over the trim's box")
-                        .add_filter("Image", &["png", "ppm"])
-                        .pick_file()
-                        .ok_or("no artwork chosen")?;
-                    let bytes = std::fs::read(&art).map_err(|e| e.to_string())?;
+                    let art = crate::plat::pick_file(
+                        Some("The artwork, seen along the pull over the trim's box"),
+                        "Image",
+                        &["png", "ppm"],
+                    )
+                    .ok_or("no artwork chosen")?;
+                    let bytes = forge_dirs::fs::read(&art).map_err(|e| e.to_string())?;
                     let image = read_image(&bytes).ok_or("not an 8-bit PNG or a binary PPM")?;
                     let p = forge_lang::thermo::print_of(&src.0, &src.1, src.2, &image, 0.5)
                         .ok_or("nothing to print")?;
@@ -311,7 +312,7 @@ impl Gui {
                 (format!("{stem}-{id}-thickness.csv"), Ok(s.into_bytes()))
             }
         };
-        match bytes.and_then(|b| std::fs::write(&file, b).map_err(|e| e.to_string())) {
+        match bytes.and_then(|b| forge_dirs::fs::write(&file, b).map_err(|e| e.to_string())) {
             Ok(()) => format!("Wrote {file}"),
             Err(why) => format!("Not written: {why}"),
         }

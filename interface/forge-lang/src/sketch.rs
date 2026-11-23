@@ -596,6 +596,39 @@ impl Sk {
         (h >> 24) & 0xff_ffff_ffff
     }
 
+    /// A loop that is one closed curve of the sketch (a closed spline or a whole ellipse), which
+    /// a profile hands on cut into pieces (`ProfileLoop::smooth_pieces`: a solid's edge may not
+    /// end where it starts), as that one curve again, one segment under its own id, run the way
+    /// the loop runs. Sheet metal takes it whole: one source, one trim, one curve on the flat.
+    pub fn whole_curve(&self, l: &forge_ops::ProfileLoop) -> Option<forge_ops::ProfileLoop> {
+        const PIECE: u64 = 0xffff << 48;
+        let base = l.segments.first()?.1 & !PIECE;
+        if l.segments.len() < 2
+            || !l
+                .segments
+                .iter()
+                .all(|(g, id)| matches!(g, forge_ops::Segment::Spline(_)) && id & !PIECE == base)
+        {
+            return None;
+        }
+        let e = self.ents.iter().map(|x| x.0).find(|&e| self.seg_id(e) == base)?;
+        let c = self.s.curve(e)?;
+        if !c.closed() {
+            return None;
+        }
+        let whole = forge_ops::Segment::Spline(c.clone());
+        let along: f64 = l.segments.iter().map(|(g, _)| g.area_term()).sum();
+        let c = if (whole.area_term() > 0.0) == (along > 0.0) {
+            c
+        } else {
+            std::sync::Arc::new(c.reversed())
+        };
+        Some(forge_ops::ProfileLoop::new(vec![(
+            forge_ops::Segment::Spline(c),
+            base,
+        )]))
+    }
+
     /// The region whose outside runs through one of `through` (any one if None and there is one).
     /// The sketch's regions, as `forge_sketch::profiles` finds them: those of the solve it came
     /// to while it is still that sketch, worked out once there (a sketch an edit left as it was
@@ -668,6 +701,38 @@ impl Sk {
                     for g in &mut l.segments {
                         let (piece, e) = (g.1 & PIECE, EntityId(g.1 & !PIECE));
                         g.1 = piece | seg_id(e);
+                    }
+                }
+                p
+            })
+            .collect())
+    }
+
+    /// The regions only the entities `ids` bound (a text's glyphs, whatever else the sketch
+    /// draws), their segments named as `profile` names them.
+    pub fn profiles_among(&self, ids: &[EntityId], span: Span) -> R<Vec<Profile>> {
+        let mut keep = ids.to_vec();
+        keep.sort_unstable();
+        let solved = match &self.done.0 {
+            Some(d) if d.out.same_bits(&self.s) => &d.out,
+            _ => &self.s,
+        };
+        let ps =
+            forge_sketch::profiles_among(solved, &|e| keep.binary_search(&e).is_ok()).map_err(|error| {
+                Error::SketchProfile {
+                    span,
+                    sketch: self.id.clone(),
+                    error,
+                }
+            })?;
+        const PIECE: u64 = 0xffff << 48;
+        Ok(ps
+            .into_iter()
+            .map(|mut p| {
+                for l in &mut p.loops {
+                    for g in &mut l.segments {
+                        let (piece, e) = (g.1 & PIECE, EntityId(g.1 & !PIECE));
+                        g.1 = piece | self.seg_id(e);
                     }
                 }
                 p

@@ -41,7 +41,7 @@ pub struct AppHost {
     /// Pictures of a drawing's sheet: the window's view area, taken after this frame's drawn.
     pub(super) window_shots: Vec<std::sync::mpsc::Sender<Reply>>,
     /// Measures asked for: answered when Measure has read them, or said late.
-    measures: Vec<(std::sync::mpsc::Sender<Reply>, std::time::Instant)>,
+    measures: Vec<(std::sync::mpsc::Sender<Reply>, crate::plat::Instant)>,
     /// The agent turned the view itself this turn: a driven joint leaves the camera alone.
     pub view_set: bool,
 }
@@ -142,7 +142,7 @@ impl Gui {
         for c in calls {
             if c.name == "measure" {
                 match self.measure_start(&c.args) {
-                    Ok(()) => self.apps.measures.push((c.reply, std::time::Instant::now())),
+                    Ok(()) => self.apps.measures.push((c.reply, crate::plat::Instant::now())),
                     Err(r) => {
                         let _ = c.reply.send(r);
                     }
@@ -501,7 +501,7 @@ impl Gui {
                 let dir = self
                     .agent_path()
                     .and_then(|p| std::path::Path::new(&p).parent().map(|d| d.to_path_buf()));
-                let want = std::fs::canonicalize(path).ok();
+                let want = forge_dirs::fs::canonicalize(path).ok();
                 match (want, dir) {
                     (Some(w), Some(d))
                         if w.parent() == Some(d.as_path()) && w.extension().is_some_and(|x| x == "fg") =>

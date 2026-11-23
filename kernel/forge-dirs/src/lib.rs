@@ -13,12 +13,55 @@
 
 use std::path::PathBuf;
 
+pub mod fs;
+
+/// This process's id, for names of files made beside others. In a browser page (which has no
+/// process ids: std panics) 1. Under WASI (the wasm test suite: std panics there too) a tag drawn
+/// once from the time of day, so one test binary after another names its scratch files apart.
+pub fn process_id() -> u32 {
+    if BROWSER {
+        1
+    } else if WASI {
+        static TAG: std::sync::OnceLock<u32> = std::sync::OnceLock::new();
+        *TAG.get_or_init(|| {
+            let t = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |d| d.as_nanos());
+            (t ^ (t >> 32) ^ (t >> 64)) as u32
+        })
+    } else {
+        std::process::id()
+    }
+}
+
+/// The folder for scratch files: std's `temp_dir` natively. Under WASI, where std panics, `TMPDIR`
+/// or `/tmp` (what the host preopens); in a browser page `/tmp` in the page's filesystem (`fs`).
+pub fn temp_dir() -> PathBuf {
+    if BROWSER {
+        PathBuf::from("/tmp")
+    } else if WASI {
+        var("TMPDIR").unwrap_or_else(|| PathBuf::from("/tmp"))
+    } else {
+        std::env::temp_dir()
+    }
+}
+
+/// Under WASI: no process ids and no temp folder std can name (the wasm test suite runs here).
+const WASI: bool = cfg!(target_os = "wasi");
+
+/// In a browser page: the user's folder is `/home` in the page's filesystem (`fs`), kept with
+/// the page's storage; there is no cache folder (a result kept is rebuilt instead).
+const BROWSER: bool = cfg!(all(target_arch = "wasm32", target_os = "unknown"));
+
 fn var(k: &str) -> Option<PathBuf> {
     std::env::var_os(k).filter(|v| !v.is_empty()).map(PathBuf::from)
 }
 
 /// The user's home folder: `HOME`, or on Windows `USERPROFILE`.
 pub fn home() -> Option<PathBuf> {
+    if BROWSER {
+        return Some(PathBuf::from("/home"));
+    }
     var("HOME").or_else(|| if cfg!(windows) { var("USERPROFILE") } else { None })
 }
 
@@ -37,6 +80,9 @@ pub fn config() -> Option<PathBuf> {
 
 /// Files that can be rebuilt: build caches, downloaded models.
 pub fn cache() -> Option<PathBuf> {
+    if BROWSER {
+        return None;
+    }
     var("XDG_CACHE_HOME").or_else(|| {
         if cfg!(windows) {
             var("LOCALAPPDATA")

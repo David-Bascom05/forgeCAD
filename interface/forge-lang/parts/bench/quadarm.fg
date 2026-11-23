@@ -1,7 +1,7 @@
-# Quadcopter arm, injection-moulded (tools/bench-parts/quadarm.fc, hand port): a tapered channel
+# Quadcopter arm, injection-moulded: a tapered channel
 # open below with 1.6 walls and cross webs inside, a round pad for a 2306 motor at the tip and a
-# two-screw clamp at the root. The .fc's cosmetic `thread 3 0.5` on the clamp holes (no geometry)
-# waits on lane fg-holes; its patterns are loops here.
+# two-screw clamp at the root. The clamp holes' cosmetic M3x0.5 thread (no geometry)
+# is left out; its patterns are loops here.
 
 shared L = 170
 shared wr = 15

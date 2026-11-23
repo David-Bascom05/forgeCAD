@@ -6,7 +6,7 @@ use crate::Error;
 use crate::hash::{HashKind, Oid};
 use crate::object::Kind;
 use crate::zlib;
-use std::fs::File;
+use forge_dirs::fs::File;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
@@ -41,7 +41,7 @@ fn be32(d: &[u8], i: usize) -> Result<u32, Error> {
 impl Pack {
     /// The pack beside an index `pack-X.idx`.
     pub fn open(idx_path: &Path, hash: HashKind) -> Result<Pack, Error> {
-        let d = std::fs::read(idx_path)?;
+        let d = forge_dirs::fs::read(idx_path)?;
         if d.len() < 8 + 1024 || d[..4] != [0xff, b't', b'O', b'c'] || be32(&d, 4)? != 2 {
             return Err(Error::Corrupt("pack index version"));
         }

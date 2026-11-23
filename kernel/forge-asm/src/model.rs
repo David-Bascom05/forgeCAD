@@ -420,7 +420,7 @@ pub struct FitRule {
     pub min_engagement: Option<MinEngagement>,
 }
 
-/// Declared intended contact between two occurrences (FastCAD's `fit`): a press fit, a bolt in a
+/// Declared intended contact between two occurrences (`fit`): a press fit, a bolt in a
 /// tapped hole. Reported, never an error.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Fit {

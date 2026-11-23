@@ -484,7 +484,7 @@ impl Shell {
                     }
                 });
                 let when = if s.agent { format!("agent · {when}") } else { when };
-                let tg = elided(ui, &when, sans(10.5), t.ink2, 140.0);
+                let tg = elided(ui, &when, sans(11.0), t.ink2, 140.0);
                 let tw = tg.size().x;
                 p.galley(
                     pos2(sr.right() - 8.0 - tw, sr.center().y - tg.size().y / 2.0),
@@ -707,7 +707,7 @@ impl Shell {
                     p.galley(pos2(nx, r.center().y - g.size().y / 2.0), g, t.ink);
                     // the change, as a coloured chip at the right
                     let c = class_colour(d.change, &t);
-                    let cg = ui.fonts_mut(|f| f.layout_no_wrap(d.change.to_string(), sans(10.5), c));
+                    let cg = ui.fonts_mut(|f| f.layout_no_wrap(d.change.to_string(), sans(11.0), c));
                     let cw = cg.size().x + 12.0;
                     let chip =
                         Rect::from_min_size(pos2(r.right() - cw - 4.0, r.center().y - 9.0), vec2(cw, 18.0));
@@ -720,7 +720,7 @@ impl Shell {
                     let room = (chip.left() - nx - name_w - 18.0).max(0.0);
                     let sg = ui.fonts_mut(|f| {
                         let mut job =
-                            egui::text::LayoutJob::simple_singleline(d.summary.clone(), sans(11.5), t.ink2);
+                            egui::text::LayoutJob::simple_singleline(d.summary.clone(), sans(12.0), t.ink2);
                         job.wrap.max_width = room;
                         job.wrap.max_rows = 1;
                         job.wrap.break_anywhere = true;

@@ -7,11 +7,13 @@
 pub mod anchors;
 pub mod asm;
 pub mod bench;
+pub mod bendsim;
 pub mod bodies;
 pub mod build;
 pub mod builtins;
 pub mod compare;
 pub mod deps;
+pub mod dfm;
 pub mod drawing;
 pub mod edit;
 pub mod edit_ops;
@@ -21,12 +23,14 @@ pub mod explode;
 pub mod export;
 pub mod feat_error;
 pub mod fillets;
+pub mod fonts;
 pub mod fuzz;
 pub mod geomemo;
 pub mod harness;
 pub mod holes;
 pub mod kept;
 pub mod media;
+pub mod meshfile;
 pub mod par;
 pub mod patterns;
 pub mod pins;
@@ -39,6 +43,7 @@ pub mod report;
 pub mod shapes;
 pub mod sheet;
 pub mod sketch;
+pub mod sketch_text;
 pub mod stdparts;
 pub mod store;
 pub mod syntax;
@@ -50,15 +55,17 @@ pub mod units;
 pub mod uses;
 pub mod validity;
 pub mod values;
+pub mod vendor;
 pub mod verts;
 pub mod vtools;
+pub mod weld;
 pub mod wired;
 pub mod work;
 
 use build::Cache;
 use error::{Error, Metric, Warning};
 use eval::{Eval, FeatInfo, ParamInfo, Rules, Value};
-use std::time::Instant;
+use forge_math::clock::Instant;
 use syntax::{Cmp, ExprKind, StmtKind};
 
 pub const REFERENCE: &str = include_str!("reference.md");
@@ -265,6 +272,8 @@ pub struct Run {
     pub sheets: Vec<sheet::SheetOut>,
     /// The part's thermoforms as built (`thermo.rs`).
     pub thermos: Vec<thermo::ThermoOut>,
+    /// The part's weldments: members, plates, for the cut list (`weld.rs`).
+    pub welds: weld::Welds,
     /// The threads left unmodelled (`Options::cosmetic_threads`), in the part's frame.
     pub threads: Vec<holes::Cosmetic>,
     /// Where each solid is in `body`: its faces and edges.
@@ -299,7 +308,7 @@ impl Run {
 /// Parses, checks, evaluates and (with `opts.build`) builds `src`, reusing `cache`'s stages
 /// where the history is unchanged. Returns the run and the cache for the next. With
 /// `opts.fit_sizes`, a fillet, chamfer, shell or face fillet the kernel refused, its size driven
-/// by a param, gets the largest value of that param that builds as its fix (.fc's `try:`).
+/// by a param, gets the largest value of that param that builds as its fix.
 pub fn run(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
     let fit = opts.fit_sizes;
     let (mut run, mut cache) = run_once(src, opts.clone(), cache);
@@ -309,7 +318,7 @@ pub fn run(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
     (run, cache)
 }
 
-/// Halvings, then bisection steps, in the search for a size that builds (as .fc's).
+/// Halvings, then bisection steps, in the search for a size that builds.
 const FIT_HALVINGS: i32 = 8;
 const FIT_STEPS: usize = 12;
 
@@ -433,10 +442,20 @@ fn sum_masses(ms: &[forge_topo::mass::MassProps]) -> forge_topo::mass::MassProps
     }
 }
 
-fn run_once(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
+fn run_once(src: &str, opts: Options, mut cache: Cache) -> (Run, Cache) {
     let t0 = Instant::now();
     let mut timings = Timings::default();
-    let prog = syntax::parse(src);
+    // the run before's tree, patched where only a number changed (an edit of one dimension)
+    let prog = match cache.parsed.take() {
+        Some((was, mut prog)) => {
+            if syntax::reparse_number(&was, &mut prog, src) {
+                Ok(prog)
+            } else {
+                syntax::parse(src)
+            }
+        }
+        None => syntax::parse(src),
+    };
     timings.parse_ms = t0.elapsed().as_secs_f64() * 1e3;
     let prog = match prog {
         Ok(p) => p,
@@ -459,6 +478,7 @@ fn run_once(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
                     observed: Default::default(),
                     sheets: vec![],
                     thermos: vec![],
+                    welds: Default::default(),
                     threads: vec![],
                     solids: vec![],
                     stage: 0,
@@ -490,6 +510,7 @@ fn run_once(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
     });
     // a harness file is evaluated where an assembly places it, with the occurrences it is given
     let placed_only = harness::header(&prog).map(|(names, _)| names);
+    let keep_tree = placed_only.is_none();
     let prog = match &placed_only {
         Some(names) => {
             harness::placed_only(&mut ev, prog[0].span, names);
@@ -532,7 +553,7 @@ fn run_once(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
             && !(whole.is_some() && ev.b.stages.last().is_some_and(|st| st.solids.len() == 1));
         let solids = if each { props::solids(&ev) } else { vec![] };
         // every solid's own mass is wanted anyway: the whole is their sum, not worked out again
-        // over the joined body (twice the integrals, where .fc did them once)
+        // over the joined body (that would do the integrals twice)
         // (the joined body still gives the box)
         let boxed = whole;
         let whole = match whole {
@@ -547,7 +568,7 @@ fn run_once(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
             || -> Option<Vec<_>> { each.then(|| solids.iter().map(|x| mass(&x.2).ok()).collect()) };
         // under a budget (spent on this thread), or with one thread to run on, one after another
         let (w, e, o) = if !forge_geom::budget::limited() && forge_math::par::threads() > 1 {
-            std::thread::scope(|s| {
+            forge_math::par::scope(|s| {
                 let w = whole.map(|b| s.spawn(move || mass(b)));
                 let bx = boxed.map(|b| s.spawn(move || tightbox::tight_box(b)));
                 let o: Vec<_> = owed.iter().map(|x| s.spawn(move || mass(&x.2).ok())).collect();
@@ -640,6 +661,7 @@ fn run_once(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
         observed: std::mem::take(&mut ev.observed),
         sheets: sheet::outputs(&ev),
         thermos: std::mem::take(&mut ev.thermos),
+        welds: std::mem::take(&mut ev.welds),
         threads: std::mem::take(&mut ev.threads),
         solids: if built_all {
             ev.b.stages.last().map_or(vec![], |s| s.spans().to_vec())
@@ -678,7 +700,11 @@ fn run_once(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
     run.components = asm::components(&ev);
     run.body_chains = chains;
     asm::keep_comp_caches(&mut ev);
-    (run, ev.b.into_cache())
+    let mut cache = ev.b.into_cache();
+    if keep_tree {
+        cache.parsed = Some((src.to_string(), prog));
+    }
+    (run, cache)
 }
 
 /// Where a run may read files: under the session's root if one is given (`fg serve`, MCP), else
@@ -693,7 +719,7 @@ pub fn fence_for(
     _dir: Option<&std::path::Path>,
     root: Option<&std::path::Path>,
 ) -> Option<std::path::PathBuf> {
-    std::fs::canonicalize(root?).ok()
+    forge_dirs::fs::canonicalize(root?).ok()
 }
 
 /// Whether `file` beside `dir` is outside the fence: as written (whether or not it is there, so
@@ -702,7 +728,7 @@ pub(crate) fn outside(dir: Option<&std::path::Path>, fence: Option<&std::path::P
     let (Some(d), Some(f)) = (dir, fence) else {
         return false;
     };
-    let Ok(d) = std::fs::canonicalize(d) else {
+    let Ok(d) = forge_dirs::fs::canonicalize(d) else {
         return false;
     };
     let mut lexical = std::path::PathBuf::new();
@@ -715,7 +741,7 @@ pub(crate) fn outside(dir: Option<&std::path::Path>, fence: Option<&std::path::P
             c => lexical.push(c),
         }
     }
-    !lexical.starts_with(f) || std::fs::canonicalize(d.join(file)).is_ok_and(|p| !p.starts_with(f))
+    !lexical.starts_with(f) || forge_dirs::fs::canonicalize(d.join(file)).is_ok_and(|p| !p.starts_with(f))
 }
 
 /// A sketch as evaluation left it, for an editor reading the block back.
@@ -765,7 +791,7 @@ pub fn sketch_view(src: &str, id: &str, opts: Options) -> Option<SketchView> {
 }
 
 /// A scoped thread's answer, its panic carried on.
-fn joined<T>(h: std::thread::ScopedJoinHandle<'_, T>) -> T {
+fn joined<T>(h: forge_math::par::ScopedJoinHandle<'_, T>) -> T {
     h.join().unwrap_or_else(|p| std::panic::resume_unwind(p))
 }
 
@@ -853,10 +879,11 @@ fn expect(ev: &mut Eval, s: &syntax::Stmt, m: &Measure) -> Option<ExpectResult> 
         }
         return Some(ExpectResult { metric, measured, ok });
     };
+    let inch = |x: f64, u: syntax::Unit| if u == syntax::Unit::In { x * 25.4 } else { x };
     let lit = |e: &syntax::Expr| match e.kind {
-        ExprKind::Num(x, _) => Some(x),
+        ExprKind::Num(x, u) => Some(inch(x, u)),
         ExprKind::Neg(ref a) => match a.kind {
-            ExprKind::Num(x, _) => Some(-x),
+            ExprKind::Num(x, u) => Some(-inch(x, u)),
             _ => None,
         },
         _ => None,
