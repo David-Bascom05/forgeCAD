@@ -16,6 +16,7 @@ import ForgeBoolCore.RefineAround
 import ForgeBoolCore.RefineTouch
 import ForgeBoolCore.RefineBetween
 import ForgeBoolCore.RefineFan
+import ForgeBoolCore.RefineCollapse
 /-! The refinement lemmas use the standard axioms only. -/
 #print axioms forge_bool_core.zero_idx_spec
 #print axioms forge_bool_core.is_facet_spec
@@ -77,3 +78,5 @@ import ForgeBoolCore.RefineFan
 #print axioms forge_bool_core.fan_classes
 #print axioms forge_bool_core.bad_vert_spec
 #print axioms forge_bool_core.vert_scan_spec
+#print axioms forge_bool_core.collapse_spec_proof
+#print axioms forge_bool_core.K.collapse_eq

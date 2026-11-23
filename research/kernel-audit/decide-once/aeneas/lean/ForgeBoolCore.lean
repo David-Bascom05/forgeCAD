@@ -24,3 +24,4 @@ import ForgeBoolCore.RefineBetween
 import ForgeBoolCore.RefineFan
 import ForgeBoolCore.Axioms
 import ForgeBoolCore.Specs
+import ForgeBoolCore.RefineCollapse
