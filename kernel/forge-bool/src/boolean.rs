@@ -5129,10 +5129,26 @@ fn clockwise(
 pub(crate) fn uv_dir(body: &Body, f: FaceId, p: &Piece, forward: bool, at_end: bool) -> R<Vec2> {
     let t = if forward != at_end { p.range.lo } else { p.range.hi };
     let d = p.curve.deriv(t);
-    let dir = if forward != at_end { d.d1 } else { -d.d1 };
+    let mut dir = if forward != at_end { d.d1 } else { -d.d1 };
     let face = body.face(f);
-    let uv = face.surface.project(d.p);
-    let sd = face.surface.deriv(uv);
+    let mut uv = face.surface.project(d.p);
+    let mut sd = face.surface.deriv(uv);
+    // an end snapped to a ball's pole (the cut placed there within LINEAR: a curve passing a hair
+    // beside it) is at the pole, as the snap decided: its way out is the chord from the pole along
+    // the piece, not its tangent where it passes (square to that chord), and it is told in the
+    // pole's chart with the ways that end there exactly
+    if let Surface::Sphere(s) = &face.surface
+        && sd.du.dot(sd.du) > 1e-18 * sd.dv.dot(sd.dv)
+        && let Some(pole) = [1.0, -1.0]
+            .map(|k| s.frame.origin + s.frame.z() * (k * s.radius))
+            .into_iter()
+            .find(|q| q.distance(d.p) <= tol::LINEAR)
+    {
+        let h = 1e-3 * p.range.width();
+        dir = p.curve.eval(if forward != at_end { t + h } else { t - h }) - pole;
+        uv = face.surface.project(pole);
+        sd = face.surface.deriv(uv);
+    }
     if let Surface::Cone(_) = face.surface
         && sd.du.dot(sd.du) <= 1e-18 * sd.dv.dot(sd.dv)
     {
