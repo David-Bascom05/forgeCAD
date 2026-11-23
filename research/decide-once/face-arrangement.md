@@ -62,6 +62,28 @@ What each table means:
   core is combinatorial. The write gets each facet's boundary loops from the builder, outside the
   core.
 - **Edges and verts** are the 1- and 0-cells round the facets, as now.
+- **No wings (rule W1).** A facet meets each cell in its closure from one side only: one wedge at
+  an edge, one sector at a vert.
+
+  Wings happen in flat inputs too, wherever a solid only touches a face. A wedge touching a plate
+  along a line leaves the plate's piece on both sides of the contact edge. A cone apex touching a
+  plate, or a pinched piece, gives two sectors at one vert.
+
+  The builder must cut such a facet along a seam through the cell. Flat: the line of the slit
+  through the edge, or any line in the facet through the vert. These lines are lines of the
+  reference arrangement, so `Refines` still holds.
+
+  How the builder detects a wing: a facet's boundary loop runs along an edge in both directions,
+  or visits a vert twice.
+
+  Unify re-joins the cut pieces: same class and orient, sharing the seam edge. A seam edge has one
+  face round it, so it is never an output edge.
+
+  The alternative, W2, lists a facet once per wing in a Csr row. It needs wing ids, not facet ids,
+  at verts: a pinched facet listed once at a vert can merge fan classes that the reference keeps
+  apart, and so hide a non-manifold vert. With wing ids, the wings are facets in all but name. So
+  W1 it is, and the core, the interface and the proofs stay as they are. `Refines`' star
+  bijections (e) and (v) are exactly the no-wings condition.
 
 The core reads the tables as follows. This is today's algorithm with lookups in place of
 covector arithmetic.
@@ -115,9 +137,12 @@ instances:
 
 with these properties:
 
-- **(r) rooms.** ρ is onto. Topes with one room have one membership in every body
-  (`memT ps A T i`). `F.inside` is a correct witness table for that membership, through the flood
-  (the same `witness` field as `Exact`, per room).
+- **(r) rooms.** ρ is onto. F's membership of `ρ T`, through its flood and `inside`, equals the
+  reference ledger's `memb i T` for every body. The condition is combinatorial, so the simulation
+  theorem has no geometry in it. Geometry enters only in proving `Refines` for a builder, where
+  `room_const` gives it. The theorem is therefore stated over any reference ledger: the flat
+  `sampleLedger`, or dol-curved's carrier ledger, which is `ExactK` (CorrectK.lean). Curved then
+  instantiates `EndToEndF` with no second simulation proof.
 - **(s) facets.**
   - σ is onto.
   - It keeps the class and the sides: `F.facet_rooms (σ φ) = (ρ φ.plus, ρ φ.minus)`.
@@ -307,6 +332,12 @@ The switch flips to v2 only when all of the following hold:
 3. **Facets with holes.** These are fine for the core. Does the write (F3's stitch) accept loops
    with holes, or should the builder cut such facets to be simply connected? Cutting is allowed
    by (s): fibres stay connected.
-4. **Curved (dol-curved).** The same floor applies to the carrier arrangement. The refinement
+4. **A topological reading over the face ledger itself** (dol-curved (b), for q1). Its rooms are
+   connected by construction and its incidence is explicit. `xNonManifold_iff_top` could be
+   proven over it directly, rather than through `Faithful` on the reference. `Refines` does not
+   give that for free, because it transfers facts from the reference, not to it. It would be a
+   direct L1 for the face ledger. For curved that may be cheaper than Lemma D on the CAD.
+   Flat does not need it: the flat reference is already proven. This is for q1 and the master.
+5. **Curved (dol-curved).** The same floor applies to the carrier arrangement. The refinement
    scheme of §2.2 is geometry-free over the cells, so it should transfer: the curved spec's
    carrier cells are the reference, and its face arrangement a coarsening.
