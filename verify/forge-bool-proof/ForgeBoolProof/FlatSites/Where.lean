@@ -32,11 +32,16 @@ find it (given D1's boxes and the distance filter's completeness).
   1,471 lie exactly on the plane across but not on the face's own plane (points constructed on the
   other face, kind (A) of §1a: their exact key is the meet of the planes, which is on both);
   **36 lie exactly on the face's plane but 1.4e-14 … 8.0e-14 off the edge's line** (patterns seq,
-  pattern copies: their planes are rotated, so the meet is not representable). There the exact
-  test *on the f64 point* would flip `On` to `Inside`/`Outside`; the caller's exact key (the meet
-  of the three planes) is on the edge. So the §1a rule must read the key, not the f64 point;
-  whether today's answer there equals the exact one is open until it does (UNKNOWN, not checked
-  against the exact reference).
+  pattern copies: their planes are rotated, so the meet is not representable). All 36 come from
+  one caller, trim_in's stretch sampler (`inside`'s `at`): the sample is on the new edge's curve,
+  the meet line L of face k's plane and the other face's, and the stretch spans the whole edge
+  (27.24 mm, to 1e-13). **Checked exactly** (dyadic planes, `meet3`): at none of the 36 do the
+  three planes (face k, the face across the edge, the other face) share a line. At 31, L crosses
+  the plane across at one point, 1.4 to 650 mm from the sample; at 5, L is parallel to it and
+  offset. So the exact point a sample stands for is off the edge, and the exact answer there is
+  `Inside` or `Outside`, not today's tolerance `On`. These 36 decisions differ from the exact
+  reading. The exact result would keep a sliver ~1e-14 wide along each edge where today's merges
+  it. Whether that is a wrong result or the intended tolerance model is the owner's call (open).
 
 **Ledger.** 1a.where: proven (this file). 1a.classify: the On branch proven from facts 1–2
 (`classify_on_sound`), fact 1 a GAP (fails on the bench parts frame and volute, above); the ray
