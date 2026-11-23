@@ -2018,6 +2018,8 @@ pub fn reparse_number(old: &str, prog: &mut [Stmt], new: &str) -> bool {
     if new_end as i64 - old_end as i64 != b.len() as i64 - a.len() as i64
         || !trivia(&a[hi..old_end])
         || !trivia(&b[new_hi..new_end])
+        // a comment begun or ended in the change moves what follows it in or out of the text
+        || a[hi..old_end].contains(&b'#') != b[new_hi..new_end].contains(&b'#')
     {
         return false;
     }
