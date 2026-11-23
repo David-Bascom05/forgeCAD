@@ -252,12 +252,11 @@ fn dfm_reports_refusals_and_parts_without_a_shop() {
     );
     // the JSON of a clean part: the vendor's provenance and the rules it was held to
     let r = dfm(&part("sendcutsend", "5052", "0.063in", 40.0));
-    // clean by the vendor's rules (the press brake's findings are its own: brake below)
-    assert!(
-        r.refused.is_empty() && r.sheets[0].items.is_empty(),
-        "{}",
-        r.text()
-    );
+    // clean by the vendor's rules and on its press brake (SendCutSend's [tooling])
+    assert_eq!(r.count(), 0, "{}", r.text());
+    let b = r.sheets[0].brake.as_ref().expect("bent on the vendor's brake");
+    assert!(b.feasible, "{}", r.text());
+    assert!(b.tooling != forge_agent::json::Json::Null);
     let mut s = String::new();
     r.json().write(&mut s);
     assert!(s.contains("\"verify\":\"Verify with the vendor before ordering.\""));
