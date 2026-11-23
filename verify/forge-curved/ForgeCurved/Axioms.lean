@@ -169,3 +169,7 @@ import ForgeCurved
 #print axioms ForgeCurved.G14.kept_iff
 #print axioms ForgeCurved.G14.extra_not_end
 #print axioms ForgeCurved.G14.edge_cut_not_kept
+#print axioms ForgeCurved.PifNear.whole_of_outside
+#print axioms ForgeCurved.PifNear.touch_inside_on_eq_outside
+#print axioms ForgeCurved.PifNear.touch_inside_inside_differs
+#print axioms ForgeCurved.PifNear.touch_inside_on_ne_outside
