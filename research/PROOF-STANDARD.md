@@ -30,6 +30,15 @@ A feature meets the standard when it has all six.
   - a CI check that the translations are current;
   - the per-module survey (research/aeneas/SURVEY.md) that names each module's L4 target.
 
+## No proofs at runtime for what is proven (the owner, 2026-11-23)
+
+"If we have proven all cases of a thing, and you are REALLY SURE, then we should not need to do a proof in runtime."
+
+- Code proven for every input in its stated domain (L3 plus L4) runs with no runtime re-check. Certificate checkers and re-verification of proven results run only in tests, fuzzing, CI and explicit on-demand commands, never on a normal build, edit or render.
+- A precondition the proof relies on is checked in debug builds only (as L5 already says).
+- Runtime work remains where the result depends on the particular input and can't be decided ahead of time: the exact fallback behind a proven float filter, and certifying a traced intersection curve. That is computing the answer, not re-proving it, and it is held to the speed rule like any other code.
+- A runtime check is removed only once the proof covers the shipped code (L4 by Aeneas, or the interim differential test named), not just the algorithm.
+
 ## Features
 
 Each row says who owns it, which levels it has, and what is next. The levels are counted from what
