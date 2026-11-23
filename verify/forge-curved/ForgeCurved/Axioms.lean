@@ -146,3 +146,4 @@ import ForgeCurved
 #print axioms ForgeCurved.Nesting.flip_of_transversal
 #print axioms ForgeCurved.BranchOrder.branch_order
 #print axioms ForgeCurved.Star.star
+#print axioms ForgeCurved.Crossings.crossings_of_cover
