@@ -50,6 +50,8 @@ structure Refines (A : IncLedger α) (B : IncLedger β) (σ : α → β) (τ ν 
   memb_plus : ∀ φ ∈ A.facets, ∀ i, i < A.nb → B.memb i (B.plus (σ φ)) = A.memb i (A.plus φ)
   memb_minus : ∀ φ ∈ A.facets, ∀ i, i < A.nb → B.memb i (B.minus (σ φ)) = A.memb i (A.minus φ)
   /-- (e) edges: a bijection onto the coarse wings, or constant inside a facet or room -/
+  edgesA_nodup : A.edges.Nodup
+  edgesB_nodup : B.edges.Nodup
   edge_mem : ∀ e ∈ A.edges, ∀ E, τ e = some E → E ∈ B.edges
   edge_onto : ∀ E ∈ B.edges, ∃ e ∈ A.edges, τ e = some E
   edge_facets_A : ∀ e ∈ A.edges, ∀ φ ∈ A.edgeFacets e, φ ∈ A.facets
