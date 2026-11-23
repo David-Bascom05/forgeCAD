@@ -23,16 +23,31 @@ pub enum ExtractError {
         b: EntityId,
     },
     Profile(ProfileError),
+    /// Whether the loop through `inner` lies inside the loop through `outer` could not be
+    /// decided with certainty from any point of it (each on, or too near, the other loop).
+    Undecided {
+        inner: EntityId,
+        outer: EntityId,
+    },
 }
 
 /// The regions the sketch's non-construction lines, arcs and circles enclose:
 /// one profile per outer loop, with the loops directly inside it as holes (an
 /// island inside a hole is its own profile). Segment ids are entity ids.
 pub fn profiles(sketch: &Sketch) -> Result<Vec<Profile>, ExtractError> {
+    profiles_among(sketch, |_| true)
+}
+
+/// `profiles` of only the entities `keep` takes (a text's own glyphs, whatever else the sketch
+/// draws round them).
+pub fn profiles_among(
+    sketch: &Sketch,
+    keep: impl Fn(EntityId) -> bool,
+) -> Result<Vec<Profile>, ExtractError> {
     let mut open: Vec<(Segment, EntityId)> = Vec::new();
     let mut loops: Vec<ProfileLoop> = Vec::new();
     for id in sketch.entity_ids() {
-        if sketch.is_construction(id) {
+        if sketch.is_construction(id) || !keep(id) {
             continue;
         }
         match sketch.entity(id) {
@@ -103,12 +118,23 @@ pub fn profiles(sketch: &Sketch) -> Result<Vec<Profile>, ExtractError> {
     }
     check_crossings(&loops)?;
 
-    let polys: Vec<Vec<Point2>> = loops
-        .iter()
-        .map(|l| l.segments.iter().flat_map(|(s, _)| s.samples(16)).collect())
-        .collect();
+    // which loop lies inside which, decided exactly (winding.rs)
     let n = loops.len();
-    let inside = |i: usize, j: usize| i != j && contains(&polys[j], polys[i][polys[i].len() / 2]);
+    let boxes: Vec<(Point2, Point2)> = loops.iter().map(crate::winding::bbox).collect();
+    let mut within = vec![false; n * n];
+    for i in 0..n {
+        for j in 0..n {
+            if i == j {
+                continue;
+            }
+            within[i * n + j] =
+                crate::winding::inside(&loops[i], &loops[j], boxes[j]).ok_or(ExtractError::Undecided {
+                    inner: EntityId(loops[i].segments[0].1),
+                    outer: EntityId(loops[j].segments[0].1),
+                })?;
+        }
+    }
+    let inside = |i: usize, j: usize| within[i * n + j];
     let depth: Vec<usize> = (0..n).map(|i| (0..n).filter(|&j| inside(i, j)).count()).collect();
     let parent: Vec<Option<usize>> = (0..n)
         .map(|i| (0..n).find(|&j| inside(i, j) && depth[j] + 1 == depth[i]))
@@ -184,17 +210,6 @@ fn chain_loops(open: &[(Segment, EntityId)]) -> Result<Vec<ProfileLoop>, Extract
         loops.push(ProfileLoop::new(segs));
     }
     Ok(loops)
-}
-
-fn contains(poly: &[Point2], p: Point2) -> bool {
-    let mut c = false;
-    for i in 0..poly.len() {
-        let (a, b) = (poly[i], poly[(i + 1) % poly.len()]);
-        if (a.y > p.y) != (b.y > p.y) && p.x < a.x + (p.y - a.y) / (b.y - a.y) * (b.x - a.x) {
-            c = !c;
-        }
-    }
-    c
 }
 
 /// A segment as a line piece or a circular piece (full circles sweep 2pi), or a free curve.

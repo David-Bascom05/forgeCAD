@@ -92,7 +92,7 @@ impl TtfFont {
         let os2 = os2_cap(&data);
         let names = names(&data);
         let font = Font::parse(data).map_err(|e| match e {
-            FontError::Cff => "CFF (PostScript) outlines are not read; a TrueType font is needed".to_string(),
+            FontError::Cff => "CFF (PostScript) outlines where TrueType ones are needed".to_string(),
             FontError::Truncated => "the font file ends early".to_string(),
             FontError::Missing(t) => format!("the font has no {t} table"),
             FontError::Unsupported(w) => w.to_string(),
@@ -147,6 +147,24 @@ impl TtfFont {
                             let u = 1.0 - t;
                             let x = u * u * a.x + 2.0 * u * t * c.x + t * t * b.x;
                             let y = u * u * a.y + 2.0 * u * t * c.y + t * t * b.y;
+                            ring.push([x * k, y * k]);
+                        }
+                    }
+                    Seg::Cubic(a, c, d, b) => {
+                        // A cubic strays from its chord by at most 3/4 of its control polygon's
+                        // largest second difference; cut so each piece's is within tol.
+                        let dd = |p: forge_math::Point2, q: forge_math::Point2, r: forge_math::Point2| {
+                            let (ex, ey) = (p.x - 2.0 * q.x + r.x, p.y - 2.0 * q.y + r.y);
+                            (ex * ex + ey * ey).sqrt()
+                        };
+                        let dev = 0.75 * dd(a, c, d).max(dd(c, d, b));
+                        let n = ((dev / tol).sqrt().ceil() as usize).clamp(1, 32);
+                        for j in 1..=n {
+                            let t = j as f64 / n as f64;
+                            let u = 1.0 - t;
+                            let (w0, w1, w2, w3) = (u * u * u, 3.0 * u * u * t, 3.0 * u * t * t, t * t * t);
+                            let x = w0 * a.x + w1 * c.x + w2 * d.x + w3 * b.x;
+                            let y = w0 * a.y + w1 * c.y + w2 * d.y + w3 * b.y;
                             ring.push([x * k, y * k]);
                         }
                     }

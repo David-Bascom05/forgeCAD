@@ -1661,6 +1661,54 @@ pub(crate) fn profile_of(
     }
 }
 
+/// The regions a profile argument names: a sketch's or one loop's (one region, `profile_of`),
+/// or a list of loops of one sketch (a sketch text): every region only they bound.
+pub(crate) fn profiles_of(
+    ev: &Eval,
+    v: Value,
+    span: Span,
+) -> R<(Rc<RefCell<Sk>>, Vec<forge_ops::Profile>, Vec<EntityId>)> {
+    let Value::List(xs) = v else {
+        let (sk, p, segs) = profile_of(ev, v, span)?;
+        return Ok((sk, vec![p], segs));
+    };
+    let mut sk: Option<Rc<RefCell<Sk>>> = None;
+    let mut ids = Vec::new();
+    for x in xs.iter() {
+        match x {
+            Value::Ent(e) if !e.loop_segs.is_empty() => {
+                if let Some(s) = &sk
+                    && !Rc::ptr_eq(s, &e.sk)
+                {
+                    return Err(Error::OtherSketch {
+                        span,
+                        sketch: e.sk.borrow().id.clone(),
+                        here: s.borrow().id.clone(),
+                    });
+                }
+                sk = Some(e.sk.clone());
+                ids.extend(e.loop_segs.iter().copied());
+            }
+            o => {
+                return Err(Error::WrongType {
+                    span,
+                    what: "a profile (a sketch, one of its loops, or a text)",
+                    want: Ty::Sketch,
+                    found: o.ty(),
+                });
+            }
+        }
+    }
+    let sk = sk.ok_or(Error::WrongType {
+        span,
+        what: "a profile (a sketch, one of its loops, or a text)",
+        want: Ty::Sketch,
+        found: Ty::List,
+    })?;
+    let ps = sk.borrow().profiles_among(&ids, span)?;
+    Ok((sk, ps, ids))
+}
+
 pub(crate) fn has_solid(ev: &Eval) -> bool {
     ev.feats.iter().any(|f| {
         (matches!(f.kind, "extrude" | "revolve" | "loft" | "import")
@@ -1683,7 +1731,14 @@ fn extrude(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Val
     if a.poisoned() {
         return Ok(Value::Unresolved);
     }
-    let (sk, profile, segs) = profile_of(ev, a.req("profile")?, a.span("profile"))?;
+    let (sk, mut profiles, segs) = profiles_of(ev, a.req("profile")?, a.span("profile"))?;
+    if profiles.is_empty() {
+        return Err(Error::Regions {
+            span: a.span("profile"),
+            sketch: sk.borrow().id.clone(),
+            count: 0,
+        });
+    }
     if a.opt("taper").is_some() {
         if !matches!(a.req("d")?, Value::Num(_)) {
             return Err(Error::NotWith {
@@ -1702,7 +1757,7 @@ fn extrude(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Val
             }
             .into());
         }
-        let curved = profile.loops.iter().any(|l| {
+        let curved = profiles.iter().flat_map(|p| &p.loops).any(|l| {
             l.segments
                 .iter()
                 .any(|g| matches!(g.0, forge_ops::Segment::Spline(_)))
@@ -1882,7 +1937,22 @@ fn extrude(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Val
         _ if a.flag("new")? || !has_solid(ev) => Combine::New,
         _ => Combine::Add,
     };
-    let f = crate::bodies::wrap_in(ev, &a, Feature::Extrude { profile, extent, op })?;
+    let f = if profiles.len() == 1 {
+        let profile = profiles.pop().expect("one region");
+        Feature::Extrude { profile, extent, op }
+    } else {
+        // several regions (a text's glyphs): each extruded alike, none reaching a face
+        if matches!(extent, Extent::To { .. } | Extent::ToNext { .. }) {
+            return Err(Error::NotWith {
+                span: a.span("d"),
+                func: name,
+                arg: "d",
+                with: "several regions (a text): next and upto end each region on its own face",
+            });
+        }
+        Feature::Regions(Box::new(forge_model::regions::Regions { profiles, extent, op }))
+    };
+    let f = crate::bodies::wrap_in(ev, &a, f)?;
     let (idx, hid) = ev.push_feature(&id, "extrude", f, span, dims)?;
     let axis = single_circle_axis(&sk, &segs);
     Ok(Value::Feature(Rc::new(Feat {

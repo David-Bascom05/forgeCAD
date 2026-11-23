@@ -1,8 +1,11 @@
-//! A TrueType outline reader: glyphs as closed contours of lines and quadratic arcs (exact
-//! parabolas), with advances from hmtx and pair kerning from the kern table. Reads the head,
-//! hhea, maxp, cmap (formats 4 and 12), loca, glyf (simple and composite glyphs), hmtx and kern
-//! tables. CFF outlines (OpenType 'OTTO' fonts) are refused.
+//! A TrueType and OpenType outline reader: glyphs as closed contours of lines, quadratic arcs
+//! (glyf) and cubic Béziers (CFF), exactly as the font holds them, with advances from hmtx, pair
+//! kerning from the kern table, line spacing from hhea and the family and style from name. Reads
+//! the head, hhea, maxp, cmap (formats 4 and 12), loca, glyf (simple and composite glyphs), CFF
+//! (version 1, Type 2 charstrings: `cff`), hmtx, kern and name tables. CFF2 (variable) is refused.
 
+mod cff;
+pub mod layout;
 pub mod testing;
 
 use forge_math::Point2;
@@ -13,17 +16,35 @@ pub enum Seg {
     Line(Point2, Point2),
     /// From the first point to the last, pulled towards the control point between.
     Quad(Point2, Point2, Point2),
+    /// A cubic Bézier: start, two controls, end (CFF outlines).
+    Cubic(Point2, Point2, Point2, Point2),
 }
 
 impl Seg {
     pub fn start(&self) -> Point2 {
         match *self {
-            Seg::Line(a, _) | Seg::Quad(a, _, _) => a,
+            Seg::Line(a, _) | Seg::Quad(a, _, _) | Seg::Cubic(a, ..) => a,
         }
     }
     pub fn end(&self) -> Point2 {
         match *self {
-            Seg::Line(_, b) | Seg::Quad(_, _, b) => b,
+            Seg::Line(_, b) | Seg::Quad(_, _, b) | Seg::Cubic(_, _, _, b) => b,
+        }
+    }
+    /// Its control points, first to last.
+    pub fn points(&self) -> Vec<Point2> {
+        match *self {
+            Seg::Line(a, b) => vec![a, b],
+            Seg::Quad(a, c, b) => vec![a, c, b],
+            Seg::Cubic(a, c, d, b) => vec![a, c, d, b],
+        }
+    }
+    /// The same piece run the other way.
+    pub fn reversed(&self) -> Seg {
+        match *self {
+            Seg::Line(a, b) => Seg::Line(b, a),
+            Seg::Quad(a, c, b) => Seg::Quad(b, c, a),
+            Seg::Cubic(a, c, d, b) => Seg::Cubic(b, d, c, a),
         }
     }
 }
@@ -34,7 +55,8 @@ pub enum FontError {
     Truncated,
     /// A table the reader needs is missing.
     Missing(&'static str),
-    /// CFF (PostScript) outlines: not read yet; a TrueType (glyf) font is needed.
+    /// CFF (PostScript) outlines where only TrueType ones will do (`Font::outline` reads both;
+    /// a user that takes only quadratic arcs says so with this).
     Cff,
     /// Not a TrueType font, or something in it this reader does not follow.
     Unsupported(&'static str),
@@ -45,10 +67,16 @@ pub enum FontError {
 pub struct Font {
     data: Vec<u8>,
     pub units_per_em: f64,
+    /// hhea's ascender, descender (negative below the baseline) and line gap, in font units.
+    pub ascender: f64,
+    pub descender: f64,
+    pub line_gap: f64,
+    /// The family and style the name table gives (the typographic ones where there are),
+    /// empty where it gives none.
+    pub family: String,
+    pub style: String,
     glyphs: usize,
-    long_loca: bool,
-    loca: (usize, usize),
-    glyf: (usize, usize),
+    outlines: Outlines,
     hmtx: (usize, usize),
     metrics: usize,
     /// Character ranges to glyph ids: (first, last, first glyph, or the id array's offset).
@@ -56,6 +84,17 @@ pub struct Font {
     kern: Vec<(u16, u16, i16)>,
     /// What was wrong with the font but left out rather than refused (a malformed kern table).
     pub warnings: Vec<&'static str>,
+}
+
+/// Where the glyphs' outlines are.
+#[derive(Clone, Debug)]
+enum Outlines {
+    Glyf {
+        long_loca: bool,
+        loca: (usize, usize),
+        glyf: (usize, usize),
+    },
+    Cff(Box<cff::Cff>),
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -66,17 +105,17 @@ enum Map {
     Array(usize, i64),
 }
 
-fn u16_at(d: &[u8], o: usize) -> Result<u16, FontError> {
+pub(crate) fn u16_at(d: &[u8], o: usize) -> Result<u16, FontError> {
     d.get(o..o + 2)
         .map(|b| u16::from_be_bytes([b[0], b[1]]))
         .ok_or(FontError::Truncated)
 }
 
-fn i16_at(d: &[u8], o: usize) -> Result<i16, FontError> {
+pub(crate) fn i16_at(d: &[u8], o: usize) -> Result<i16, FontError> {
     u16_at(d, o).map(|v| v as i16)
 }
 
-fn u32_at(d: &[u8], o: usize) -> Result<u32, FontError> {
+pub(crate) fn u32_at(d: &[u8], o: usize) -> Result<u32, FontError> {
     d.get(o..o + 4)
         .map(|b| u32::from_be_bytes([b[0], b[1], b[2], b[3]]))
         .ok_or(FontError::Truncated)
@@ -86,11 +125,11 @@ impl Font {
     pub fn parse(data: Vec<u8>) -> Result<Font, FontError> {
         let d = &data[..];
         let version = u32_at(d, 0)?;
-        if version == u32::from_be_bytes(*b"OTTO") {
-            return Err(FontError::Cff);
-        }
-        if version != 0x0001_0000 && version != u32::from_be_bytes(*b"true") {
-            return Err(FontError::Unsupported("not a TrueType font"));
+        if version != 0x0001_0000
+            && version != u32::from_be_bytes(*b"true")
+            && version != u32::from_be_bytes(*b"OTTO")
+        {
+            return Err(FontError::Unsupported("not a TrueType or OpenType font"));
         }
         let n = u16_at(d, 4)? as usize;
         let mut tables = Vec::with_capacity(n);
@@ -106,21 +145,53 @@ impl Font {
         let find = |t: &[u8; 4]| tables.iter().find(|x| &x.0 == t).map(|x| (x.1, x.2));
         let need =
             |t: &'static str| find(t.as_bytes().try_into().expect("four bytes")).ok_or(FontError::Missing(t));
-        if find(b"glyf").is_none() && (find(b"CFF ").is_some() || find(b"CFF2").is_some()) {
-            return Err(FontError::Cff);
-        }
         let (head, maxp, hhea) = (need("head")?.0, need("maxp")?.0, need("hhea")?.0);
         let units_per_em = u16_at(d, head + 18)? as f64;
         if units_per_em == 0.0 {
             return Err(FontError::Unsupported("zero units per em"));
         }
-        let long_loca = i16_at(d, head + 50)? != 0;
         let glyphs = u16_at(d, maxp + 4)? as usize;
         let metrics = u16_at(d, hhea + 34)? as usize;
-        let (hmtx, loca, glyf) = (need("hmtx")?, need("loca")?, need("glyf")?);
-        if metrics == 0 || hmtx.1 < 4 * metrics || loca.1 < (glyphs + 1) * if long_loca { 4 } else { 2 } {
+        let hmtx = need("hmtx")?;
+        if metrics == 0 || hmtx.1 < 4 * metrics {
             return Err(FontError::Truncated);
         }
+        let outlines = match find(b"glyf") {
+            Some(glyf) => {
+                let long_loca = i16_at(d, head + 50)? != 0;
+                let loca = need("loca")?;
+                if loca.1 < (glyphs + 1) * if long_loca { 4 } else { 2 } {
+                    return Err(FontError::Truncated);
+                }
+                Outlines::Glyf {
+                    long_loca,
+                    loca,
+                    glyf,
+                }
+            }
+            None => match find(b"CFF ") {
+                Some((at, len)) => {
+                    let c = cff::Cff::parse(&d[at..at + len])?;
+                    if c.glyphs() < glyphs {
+                        return Err(FontError::Unsupported("fewer CFF charstrings than glyphs"));
+                    }
+                    Outlines::Cff(Box::new(c))
+                }
+                None if find(b"CFF2").is_some() => {
+                    return Err(FontError::Unsupported("CFF2 (variable) outlines are not read"));
+                }
+                None => return Err(FontError::Missing("glyf")),
+            },
+        };
+        let (ascender, descender, line_gap) = (
+            i16_at(d, hhea + 4)? as f64,
+            i16_at(d, hhea + 6)? as f64,
+            i16_at(d, hhea + 8)? as f64,
+        );
+        let (family, style) = match find(b"name") {
+            Some((at, len)) => read_names(&d[at..at + len]),
+            None => (String::new(), String::new()),
+        };
         let cmap = read_cmap(d, need("cmap")?.0)?;
         let mut warnings = Vec::new();
         let kern = match find(b"kern").map(|(k, len)| read_kern(d, k, len)) {
@@ -134,10 +205,13 @@ impl Font {
         Ok(Font {
             data,
             units_per_em,
+            ascender,
+            descender,
+            line_gap,
+            family,
+            style,
             glyphs,
-            long_loca,
-            loca,
-            glyf,
+            outlines,
             hmtx,
             metrics,
             cmap,
@@ -178,8 +252,24 @@ impl Font {
             .map_or(0.0, |i| self.kern[i].2 as f64)
     }
 
+    /// Whether the outlines are CFF's (cubic) rather than glyf's (quadratic).
+    pub fn is_cff(&self) -> bool {
+        matches!(self.outlines, Outlines::Cff(_))
+    }
+
+    /// The glyphs the font holds.
+    pub fn glyph_count(&self) -> usize {
+        self.glyphs
+    }
+
     /// The glyph's closed contours, in font units.
     pub fn outline(&self, g: u16) -> Result<Vec<Vec<Seg>>, FontError> {
+        if let Outlines::Cff(c) = &self.outlines {
+            if g as usize >= self.glyphs {
+                return Err(FontError::Unsupported("glyph id out of range"));
+            }
+            return c.outline(g);
+        }
         let mut out = Vec::new();
         let mut budget = BUDGET;
         self.outline_into(
@@ -198,18 +288,26 @@ impl Font {
         if g >= self.glyphs {
             return Err(FontError::Unsupported("glyph id out of range"));
         }
+        let Outlines::Glyf {
+            long_loca,
+            loca,
+            glyf,
+        } = self.outlines
+        else {
+            return Err(FontError::Cff);
+        };
         let at = |k: usize| -> Result<usize, FontError> {
-            Ok(if self.long_loca {
-                u32_at(&self.data, self.loca.0 + 4 * k)? as usize
+            Ok(if long_loca {
+                u32_at(&self.data, loca.0 + 4 * k)? as usize
             } else {
-                2 * u16_at(&self.data, self.loca.0 + 2 * k)? as usize
+                2 * u16_at(&self.data, loca.0 + 2 * k)? as usize
             })
         };
         let (a, b) = (at(g)?, at(g + 1)?);
-        if a > b || b > self.glyf.1 {
+        if a > b || b > glyf.1 {
             return Err(FontError::Truncated);
         }
-        Ok((self.glyf.0 + a, self.glyf.0 + b))
+        Ok((glyf.0 + a, glyf.0 + b))
     }
 
     /// Appends glyph g's contours, mapped by the matrix m and the offset.
@@ -408,6 +506,40 @@ fn contour(pts: &[(Point2, bool)]) -> Vec<Seg> {
     out
 }
 
+/// The family and style names: the typographic ones (16, 17) where given, else 1 and 2; Windows
+/// Unicode (UTF-16) records first, then Mac Roman ones read as ASCII. A name that does not read
+/// is left empty: names only pick a font, they shape nothing.
+fn read_names(t: &[u8]) -> (String, String) {
+    let read = |id: u16| -> Option<String> {
+        let n = u16_at(t, 2).ok()? as usize;
+        let strings = u16_at(t, 4).ok()? as usize;
+        let mut mac = None;
+        for k in 0..n.min(4096) {
+            let r = 6 + 12 * k;
+            let (plat, enc, nid) = (u16_at(t, r).ok()?, u16_at(t, r + 2).ok()?, u16_at(t, r + 6).ok()?);
+            if nid != id {
+                continue;
+            }
+            let (len, off) = (u16_at(t, r + 8).ok()? as usize, u16_at(t, r + 10).ok()? as usize);
+            let b = t.get(strings + off..strings + off + len)?;
+            if plat == 3 && (enc == 1 || enc == 10) || plat == 0 {
+                let w: Vec<u16> = b
+                    .chunks_exact(2)
+                    .map(|c| u16::from_be_bytes([c[0], c[1]]))
+                    .collect();
+                return String::from_utf16(&w).ok();
+            }
+            if plat == 1 && enc == 0 && b.is_ascii() {
+                mac.get_or_insert_with(|| String::from_utf8_lossy(b).into_owned());
+            }
+        }
+        mac
+    };
+    let family = read(16).or_else(|| read(1)).unwrap_or_default();
+    let style = read(17).or_else(|| read(2)).unwrap_or_default();
+    (family, style)
+}
+
 fn read_cmap(d: &[u8], at: usize) -> Result<Vec<(u32, u32, Map)>, FontError> {
     let n = u16_at(d, at + 2)? as usize;
     let mut best: Option<(u32, usize)> = None;
@@ -565,7 +697,7 @@ mod tests {
     fn cff_and_junk_are_refused() {
         let mut otto = b"OTTO".to_vec();
         otto.extend([0; 8]);
-        assert_eq!(Font::parse(otto).unwrap_err(), FontError::Cff);
+        assert!(Font::parse(otto).is_err());
         assert_eq!(Font::parse(vec![0, 1]).unwrap_err(), FontError::Truncated);
         assert!(matches!(
             Font::parse(b"wOFF0000000000000000".to_vec()),
@@ -574,6 +706,93 @@ mod tests {
         let mut cut = build(1000, &[('I', TestGlyph::bar(0.0, 0.0, 1.0, 1.0, 2.0))], &[]);
         cut.truncate(cut.len() / 2);
         assert!(Font::parse(cut).is_err());
+    }
+
+    #[test]
+    fn reads_cff_outlines() {
+        use crate::testing::{build_cff, build_cff_raw};
+        // a ring of quadratics, raised to cubics: its controls land on whole units (multiples of 3)
+        let ring = square_ring();
+        let font = Font::parse(build_cff(
+            1000,
+            &[
+                ('I', TestGlyph::bar(100.0, 0.0, 200.0, 700.0, 300.0)),
+                ('O', ring),
+            ],
+        ))
+        .expect("parses");
+        assert!(font.is_cff());
+        let (gi, go) = (font.glyph('I'), font.glyph('O'));
+        assert_eq!(font.advance(gi), 300.0);
+        let bar = font.outline(gi).expect("outline");
+        assert_eq!(bar.len(), 1);
+        assert_eq!(bar[0].len(), 4, "{bar:?}");
+        let o = font.outline(go).expect("outline");
+        assert_eq!(o.len(), 2);
+        for c in &o {
+            assert!(c.iter().all(|s| matches!(s, Seg::Cubic(..))));
+            for k in 0..c.len() {
+                assert_eq!(c[k].end(), c[(k + 1) % c.len()].start());
+            }
+        }
+        let Seg::Cubic(a, c1, _, b) = o[0][0] else {
+            unreachable!("cubic")
+        };
+        assert_eq!((a, c1, b), (p(300.0, 0.0), p(100.0, 0.0), p(0.0, 350.0)));
+        // subroutines (local and global, biased), hints and hintmasks read past, a width first,
+        // the short operators, and a flex
+        let n = |v: i32| (v + 139) as u8;
+        let gsub = vec![n(10), n(0), 5, 11]; // a line 10 along x, then return
+        let lsub = vec![n(0), n(10), 5, 11];
+        let cs = vec![
+            n(50), // width
+            n(0),
+            n(5),
+            n(20),
+            n(5),
+            18, // hstemhm: two stems
+            19,
+            0b1100_0000, // hintmask: a byte for the two
+            n(1),
+            n(1),
+            21, // rmoveto
+            n(-107),
+            29, // callgsubr 0 (bias 107)
+            n(-107),
+            10, // callsubr 0
+            n(-10),
+            6, // hlineto
+            14,
+        ];
+        let f = Font::parse(build_cff_raw(1000, &[('A', cs, 500)], &[gsub], &[lsub])).expect("parses");
+        let c = f.outline(f.glyph('A')).expect("outline");
+        assert_eq!(
+            c,
+            vec![vec![
+                Seg::Line(p(1.0, 1.0), p(11.0, 1.0)),
+                Seg::Line(p(11.0, 1.0), p(11.0, 11.0)),
+                Seg::Line(p(11.0, 11.0), p(1.0, 11.0)),
+                Seg::Line(p(1.0, 11.0), p(1.0, 1.0)),
+            ]]
+        );
+        // seac, calls to nothing, a recursion, drawing before a move: refused, not panicking
+        for bad in [
+            vec![n(0), n(0), n(0), n(65), n(66), 14],
+            vec![n(5), 10, 14],
+            vec![n(5), 5, 14],
+        ] {
+            let f = Font::parse(build_cff_raw(1000, &[('A', bad, 500)], &[], &[])).expect("parses");
+            assert!(f.outline(f.glyph('A')).is_err());
+        }
+        let rec = vec![n(-107), 29, 11];
+        let f = Font::parse(build_cff_raw(
+            1000,
+            &[('A', vec![n(-107), 29, 14], 500)],
+            &[rec],
+            &[],
+        ))
+        .expect("parses");
+        assert!(f.outline(f.glyph('A')).is_err());
     }
 
     /// A font with composites (plain, self-holding, exponentially nested, flattened) and kerning.
