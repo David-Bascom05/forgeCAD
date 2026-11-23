@@ -1941,6 +1941,291 @@ pub fn walk<'s>(stmts: &'s [Stmt], f: &mut dyn FnMut(&'s Stmt)) {
     }
 }
 
+/// `prog`, the tree `parse` gave `old`, made the tree it gives `new`, where the two texts differ
+/// only within one number written plainly (digits, maybe a fraction, maybe a unit, its sign
+/// unchanged) that is an expression of its own, and maybe in the spaces and comment after it on
+/// its line: that number's value set, and every span from its end on moved by the change in
+/// length. False, `prog` untouched, where the change is anything else; `parse` it then. What the
+/// edit of one dimension makes, from a slider or `SetParam`, or a line written out again.
+pub fn reparse_number(old: &str, prog: &mut [Stmt], new: &str) -> bool {
+    let (a, b) = (old.as_bytes(), new.as_bytes());
+    if a == b {
+        return true;
+    }
+    let p = a.iter().zip(b).take_while(|(x, y)| x == y).count();
+    let room = a.len().min(b.len()) - p;
+    let q = a
+        .iter()
+        .rev()
+        .zip(b.iter().rev())
+        .take(room)
+        .take_while(|(x, y)| x == y)
+        .count();
+    // the number expression whose literal the change starts in (or right after)
+    let Some(at) = number_at(prog, p as u32) else {
+        return false;
+    };
+    let (lo, hi) = (at.lo as usize, at.hi as usize);
+    // a plain number's length from `s[at..]`: `-`, digits, a fraction, a unit
+    let lit = |s: &[u8], at: usize| {
+        let mut i = at;
+        if s.get(i) == Some(&b'-') {
+            i += 1;
+        }
+        let d0 = i;
+        while s.get(i).is_some_and(|c| c.is_ascii_digit()) {
+            i += 1;
+        }
+        if i == d0 {
+            return None;
+        }
+        if s.get(i) == Some(&b'.') {
+            let f0 = i + 1;
+            i = f0;
+            while s.get(i).is_some_and(|c| c.is_ascii_digit()) {
+                i += 1;
+            }
+            if i == f0 {
+                return None;
+            }
+        }
+        for u in [&b"mm"[..], &b"deg"[..]] {
+            if s[i..].starts_with(u) {
+                i += u.len();
+                break;
+            }
+        }
+        // nothing after it that a number could run into
+        if s.get(i)
+            .is_some_and(|c| c.is_ascii_alphanumeric() || *c == b'_' || *c == b'.')
+        {
+            return None;
+        }
+        Some(i)
+    };
+    // spaces, and maybe a comment, to the line's end: no token
+    let trivia = |s: &[u8]| {
+        let k = s.iter().position(|c| *c == b'#').unwrap_or(s.len());
+        s[..k].iter().all(|c| matches!(c, b' ' | b'\t' | b'\r')) && !s.contains(&b'\n')
+    };
+    let Some(old_hi) = lit(a, lo) else { return false };
+    let Some(new_hi) = lit(b, lo) else { return false };
+    if old_hi != hi || (a[lo] == b'-') != (b[lo] == b'-') {
+        return false;
+    }
+    // the change ends within the literal, or in the trivia after it
+    let (old_end, new_end) = ((a.len() - q).max(hi), (b.len() - q).max(new_hi));
+    if new_end as i64 - old_end as i64 != b.len() as i64 - a.len() as i64
+        || !trivia(&a[hi..old_end])
+        || !trivia(&b[new_hi..new_end])
+    {
+        return false;
+    }
+    let (v, u) = match lex(&new[lo..new_hi]).as_deref() {
+        Ok(
+            [
+                Tok {
+                    kind: TokKind::Num(v, u),
+                    ..
+                },
+                Tok {
+                    kind: TokKind::Eof, ..
+                },
+            ],
+        ) => (*v, *u),
+        _ => return false,
+    };
+    let (d, d_lit) = (b.len() as i64 - a.len() as i64, new_hi as i64 - hi as i64);
+    let hi32 = hi as u32;
+    // a span's end at the literal's end moves with the literal; anything after it, and a start
+    // there (the next token's), with the whole change (nothing lies in the trivia between)
+    let shift = |s: &mut Span| {
+        let by = |x: u32, end: bool| match x.cmp(&hi32) {
+            std::cmp::Ordering::Less => x,
+            std::cmp::Ordering::Equal if end => (x as i64 + d_lit) as u32,
+            _ => (x as i64 + d) as u32,
+        };
+        s.lo = by(s.lo, false);
+        s.hi = by(s.hi, true);
+    };
+    // (an expression reaches `set` with its span moved already)
+    let moved = Span {
+        lo: at.lo,
+        hi: new_hi as u32,
+    };
+    let mut set = |e: &mut Expr| {
+        if e.span == moved && matches!(e.kind, ExprKind::Num(..)) {
+            e.kind = ExprKind::Num(v, u);
+        }
+    };
+    spans_mut(prog, &mut |s| shift(s), &mut set);
+    true
+}
+
+/// The span of the number expression whose literal holds `at` (or ends there).
+fn number_at(prog: &[Stmt], at: u32) -> Option<Span> {
+    let mut found = None;
+    walk_exprs(prog, &mut |e| {
+        if found.is_none() && matches!(e.kind, ExprKind::Num(..)) && e.span.lo <= at && at <= e.span.hi {
+            found = Some(e.span);
+        }
+    });
+    found
+}
+
+/// Every expression of `stmts`, nested ones too.
+fn walk_exprs<'s>(stmts: &'s [Stmt], f: &mut dyn FnMut(&'s Expr)) {
+    fn expr<'s>(e: &'s Expr, f: &mut dyn FnMut(&'s Expr)) {
+        f(e);
+        match &e.kind {
+            ExprKind::List(xs) | ExprKind::Tuple(xs) => xs.iter().for_each(|x| expr(x, f)),
+            ExprKind::Map(xs) => xs.iter().for_each(|x| expr(&x.1, f)),
+            ExprKind::Comp { item, iter, cond, .. } => {
+                expr(item, f);
+                expr(iter, f);
+                if let Some(c) = cond {
+                    expr(c, f);
+                }
+            }
+            ExprKind::Range { lo, hi, .. } => {
+                expr(lo, f);
+                expr(hi, f);
+            }
+            ExprKind::Bin(_, a, b) | ExprKind::Index(a, b) => {
+                expr(a, f);
+                expr(b, f);
+            }
+            ExprKind::Neg(a) | ExprKind::Not(a) | ExprKind::Attr(a, _) => expr(a, f),
+            ExprKind::Call(c, args) => {
+                expr(c, f);
+                args.iter().for_each(|a| expr(&a.value, f));
+            }
+            ExprKind::If { cond, then, other } => {
+                expr(cond, f);
+                expr(then, f);
+                expr(other, f);
+            }
+            ExprKind::Num(..) | ExprKind::Str(_) | ExprKind::Bool(_) | ExprKind::Name(_) => {}
+        }
+    }
+    walk(stmts, &mut |s| match &s.kind {
+        StmtKind::Shared { value, .. }
+        | StmtKind::Param { value, .. }
+        | StmtKind::Assign { value, .. }
+        | StmtKind::Expr(value)
+        | StmtKind::Return(value) => expr(value, f),
+        StmtKind::Fn { params, .. } => params
+            .iter()
+            .filter_map(|p| p.default.as_ref())
+            .for_each(|d| expr(d, f)),
+        StmtKind::For { iter, .. } => expr(iter, f),
+        StmtKind::If { cond, .. } => expr(cond, f),
+        StmtKind::Block { args, .. } => args.iter().for_each(|a| expr(&a.value, f)),
+        StmtKind::Expect { args, cmp, at, .. } => {
+            args.iter().for_each(|a| expr(a, f));
+            if let Some((_, v, tol)) = cmp {
+                expr(v, f);
+                if let Some((t, _)) = tol {
+                    expr(t, f);
+                }
+            }
+            at.iter().for_each(|(_, v)| expr(v, f));
+        }
+    });
+}
+
+/// Every span of `stmts` handed to `span`, and every expression to `expr` (after its span).
+fn spans_mut(stmts: &mut [Stmt], span: &mut dyn FnMut(&mut Span), ex: &mut dyn FnMut(&mut Expr)) {
+    fn expr(e: &mut Expr, span: &mut dyn FnMut(&mut Span), ex: &mut dyn FnMut(&mut Expr)) {
+        span(&mut e.span);
+        ex(e);
+        match &mut e.kind {
+            ExprKind::List(xs) | ExprKind::Tuple(xs) => xs.iter_mut().for_each(|x| expr(x, span, ex)),
+            ExprKind::Map(xs) => xs.iter_mut().for_each(|x| expr(&mut x.1, span, ex)),
+            ExprKind::Comp { item, iter, cond, .. } => {
+                expr(item, span, ex);
+                expr(iter, span, ex);
+                if let Some(c) = cond {
+                    expr(c, span, ex);
+                }
+            }
+            ExprKind::Range { lo, hi, .. } => {
+                expr(lo, span, ex);
+                expr(hi, span, ex);
+            }
+            ExprKind::Bin(_, a, b) | ExprKind::Index(a, b) => {
+                expr(a, span, ex);
+                expr(b, span, ex);
+            }
+            ExprKind::Neg(a) | ExprKind::Not(a) | ExprKind::Attr(a, _) => expr(a, span, ex),
+            ExprKind::Call(c, args) => {
+                expr(c, span, ex);
+                for a in args {
+                    if let Some((_, s)) = &mut a.name {
+                        span(s);
+                    }
+                    expr(&mut a.value, span, ex);
+                }
+            }
+            ExprKind::If { cond, then, other } => {
+                expr(cond, span, ex);
+                expr(then, span, ex);
+                expr(other, span, ex);
+            }
+            ExprKind::Num(..) | ExprKind::Str(_) | ExprKind::Bool(_) | ExprKind::Name(_) => {}
+        }
+    }
+    for s in stmts {
+        span(&mut s.span);
+        span(&mut s.full);
+        match &mut s.kind {
+            StmtKind::Shared { value, .. }
+            | StmtKind::Param { value, .. }
+            | StmtKind::Assign { value, .. }
+            | StmtKind::Expr(value)
+            | StmtKind::Return(value) => expr(value, span, ex),
+            StmtKind::Fn { params, body, .. } => {
+                for p in params.iter_mut() {
+                    if let Some(d) = &mut p.default {
+                        expr(d, span, ex);
+                    }
+                }
+                spans_mut(std::rc::Rc::make_mut(body).as_mut_slice(), span, ex);
+            }
+            StmtKind::For { iter, body, .. } => {
+                expr(iter, span, ex);
+                spans_mut(body, span, ex);
+            }
+            StmtKind::If { cond, then, other } => {
+                expr(cond, span, ex);
+                spans_mut(then, span, ex);
+                if let Some(o) = other {
+                    spans_mut(o, span, ex);
+                }
+            }
+            StmtKind::Block { args, body, .. } => {
+                for a in args {
+                    if let Some((_, s)) = &mut a.name {
+                        span(s);
+                    }
+                    expr(&mut a.value, span, ex);
+                }
+                spans_mut(body, span, ex);
+            }
+            StmtKind::Expect { args, cmp, at, .. } => {
+                args.iter_mut().for_each(|a| expr(a, span, ex));
+                if let Some((_, v, tol)) = cmp {
+                    expr(v, span, ex);
+                    if let Some((t, _)) = tol {
+                        expr(t, span, ex);
+                    }
+                }
+                at.iter_mut().for_each(|(_, v)| expr(v, span, ex));
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod plain_number_tests {
     /// `plain_number` is `str::parse` to the bit wherever it answers, on numbers of up to 16
