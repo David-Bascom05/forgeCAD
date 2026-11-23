@@ -160,8 +160,14 @@ Per boolean, with T_i triangles per operand and t atoms (t ≈ ΣT_i):
 The kernel's own boolean is O((F_A + F_B) log + pairs) in f64. The checker is quadratic in exact
 rationals: for the fuzz corpus' parts (tens of faces) a few ms; for a 1000-face part with a small
 tool, roughly 10⁵–10⁶ box tests and 10⁴ exact ray tests, ~0.1–1 s, i.e. 100–1000× the kernel's
-boolean. **So it runs in CI and tests, plus an optional app switch** (certify every boolean of a
-part on demand), never always-on. The kernel side costs nothing when the feature is off (cfg'd
+boolean.
+
+**Where it runs** (owner's ruling: what is proven for all cases needs no proof at runtime). The
+decide-once boolean is proven end to end, so re-checking every boolean at runtime would add cost
+and no assurance. The checker runs only in tests, the fuzzers (forge-exact-fuzz, the box family)
+and CI, as an independent cross-check of the proof's assumptions about the shipped code, and in an
+explicit on-demand command (e.g. `forgecad check --certify F`). Never on a normal build, edit or
+render. The checker itself stays Lean-proven. The kernel side costs nothing when the feature is off (cfg'd
 out, proven by the callgrind gate) and, when on, one copy of the plan's pieces per boolean (<10% of
 the boolean). An index on the witness rays (sort by projected box) would make steps 4–5
 O(T log T + hits); left for later, as it changes only speed.
@@ -237,6 +243,14 @@ Mutants (each accepted result sent with its first or last face dropped, or claim
 Cost (`--time`, the checker's process against the kernel's boolean, 3 reps): 1406 booleans checked
 in 3201 s against the kernel's 0.12 s: 2.3 s per boolean on average, per-boolean ratio median 7515×,
 p90 74229×, slowest check 307 s. Far over §5's estimate: the checker is all-pairs in exact
-rationals with no spatial index and runs three frames. CI and an on-demand app switch only, as
-planned; an index on the witness rays and the separation pairs (sort by projected box) is the next
-step for speed, and changes nothing proven.
+rationals with no spatial index and runs three frames. It runs where §5 says (tests, fuzzers, CI,
+an on-demand command), never on the build path.
+
+**Next steps, for resuming** (stopped here by the owner's priorities):
+1. Instrument the n-ary boolean (`nary_with`: its regions as pieces), so its 134 booleans and the
+   n-ary lost-face family are certified instead of counted out of scope.
+2. A spatial index for the checker: sort the witness rays and the separation pairs by projected
+   box, making steps 4–5 O(T log T + hits) instead of all pairs. Speed only: nothing proven
+   changes.
+3. The on-demand command (`forgecad check --certify F`) and a CI job running
+   `certify --suite 150` (and `repros --mutate`).
