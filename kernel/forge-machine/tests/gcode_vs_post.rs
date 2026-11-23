@@ -138,6 +138,27 @@ fn random_program(r: &mut Lcg, dialect: &str) -> Program {
     }
 }
 
+/// The program without what the dialect refuses by design (forge-post's typed refusals are tested
+/// in forge-post): a coolant it has no code for, a dwell whose units no open source gives, a
+/// refused tap, a machine-home retract it cannot write, a work offset past its count.
+fn fit(mut p: Program, d: &Dialect) -> Program {
+    let key = |c: &Coolant| match c {
+        Coolant::Flood => "coolant_flood",
+        Coolant::Mist => "coolant_mist",
+        Coolant::Through => "coolant_through",
+        Coolant::Off => "coolant_off",
+    };
+    p.recs.retain(|r| match r {
+        Rec::Coolant(c) => !d.template(key(c)).is_empty(),
+        Rec::Dwell(_) => !d.template("dwell").is_empty(),
+        Rec::Cycle { kind: CycleKind::Dwell, .. } => !d.template("dwell").is_empty() || d.template("cycle_dwell") != "expand",
+        Rec::Cycle { kind: CycleKind::Tap, .. } => !matches!(d.template("cycle_tap"), "refuse" | ""),
+        Rec::Home => d.has_lines("retract_home"),
+        _ => true,
+    });
+    p
+}
+
 /// Our events in forge-post's Motion vocabulary.
 fn as_motions(evs: &[Ev], c: &Control) -> Vec<Motion> {
     let ix = |l: char| c.letters.iter().position(|x| *x == l).unwrap();
@@ -220,7 +241,7 @@ fn interpreter_agrees_with_forge_post_reader() {
         let def = &forge_machine::library::builtin()[0];
         let c = Control::for_machine(def, src, 1).unwrap();
         for _ in 0..60 {
-            let prog = random_program(&mut r, name);
+            let prog = fit(random_program(&mut r, name), &d);
             let q = forge_post::quantize(&prog, &d).unwrap();
             let text = forge_post::print(&q, &d).unwrap();
             let theirs = forge_post::read(&text, &d).unwrap();
@@ -244,5 +265,5 @@ fn interpreter_agrees_with_forge_post_reader() {
             n += 1;
         }
     }
-    assert_eq!(n, 240);
+    assert_eq!(n, 60 * forge_post::DIALECTS.len());
 }

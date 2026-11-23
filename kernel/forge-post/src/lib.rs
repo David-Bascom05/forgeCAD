@@ -237,6 +237,14 @@ impl Dialect {
     fn s(&self, k: &str) -> &str {
         text(&self.t, k).unwrap_or("")
     }
+    /// A template as the dialect sets it ("" if unset; "refuse" / "expand" for cycles).
+    pub fn template(&self, k: &str) -> &str {
+        self.s(k)
+    }
+    /// Whether the dialect writes a multi-line key (program_open, retract_home, ...).
+    pub fn has_lines(&self, k: &str) -> bool {
+        !self.lines(k).is_empty()
+    }
     /// A coordinate word's digits: `sign = "always"` writes + on non-negative values (X+10).
     fn coord(&self, q: Q) -> String {
         let s = digits(q, self.decimals, self.point);
