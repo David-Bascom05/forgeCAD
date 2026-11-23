@@ -21,6 +21,7 @@ import fgsrc
 
 MM = 10.0  # Fusion is in cm; DeepCAD, from Onshape, in metres (--mm 1000)
 EPS = 1e-6  # endpoint match in mm
+ON = 4e-6  # an arc's joints this near its circle keep the data's centre; further off, it is refit through them
 
 
 class Unsupported(Exception):
@@ -484,7 +485,7 @@ def emit_loop(loop, f, tag):
             c = f(e.c)
             # the joint on the data's circle if it is there: refitting moves a centre further the less
             # an arc turns, and coaxial walls would come out a hair apart
-            on = max(abs(math.dist(p, c) - e.r), abs(math.dist(q, c) - e.r)) < 4e-6
+            on = max(abs(math.dist(p, c) - e.r), abs(math.dist(q, c) - e.r)) < ON
             if not on and d > 1e-9 and abs(abs(sw) - 2 * math.pi) > 1e-6:
                 h2 = e.r * e.r - d * d / 4
                 h = math.sqrt(max(h2, 0.0))
@@ -519,7 +520,8 @@ def emit_loop(loop, f, tag):
         corners.append(p)
     if all(e.kind == "line" for e, _ in loop):
         return [f"{tag} = poly([{', '.join(pt2(c) for c in corners)}])"], ["poly", [list(c) for c in corners]]
-    return [f"{tag}p{i} = pt{pt2(c)}" for i, c in enumerate(corners)] + rows, ["loop", segs]
+    # the joints as finely as the arcs' centres: an arc's ends must lie on its circle to the solver's 1e-10
+    return [f"{tag}p{i} = pt({fine(c[0])}, {fine(c[1])})" for i, c in enumerate(corners)] + rows, ["loop", segs]
 
 
 class Frame:
