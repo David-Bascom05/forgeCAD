@@ -10,8 +10,11 @@
 #   PKG=ForgeMath                  the Lean library (lean/PKG/...)
 #   CHARON_ARGS=(--start-from forge_math::predicates::orient2d --opaque ...)
 #                                  Charon's item selection; the defaults are --preset=aeneas
-# The crate is built as release (`cargo --release`): `#[cfg(debug_assertions)]` checks are not part
-# of the shipped code, so they are not part of the translation either.
+# The crate is built as release (`cargo --release`) with overflow checks on: `#[cfg(debug_assertions)]`
+# checks are not part of the shipped code, so not of the translation either; and integer overflow
+# is a failure, so a theorem that a function returns `ok` also proves the shipped build, which
+# wraps, computes the same. (Plain release would translate integer ops as wrapping, and Aeneas's
+# Lean extraction of a wrapping shift with an `i32` amount does not elaborate.)
 #
 # Opaque items: Aeneas lists them in FunsExternal_Template.lean, which is committed beside the
 # translation. The hand-written lean/PKG/FunsExternal.lean (and the shared float bridge,
@@ -54,6 +57,7 @@ name=${crate//-/_}
 (
   cd "$src"
   PATH=$H/charon/bin:$PATH RUSTUP_TOOLCHAIN=$TC CARGO_TARGET_DIR=$H/target-charon \
+    CARGO_PROFILE_RELEASE_OVERFLOW_CHECKS=true \
     "$CHARON" cargo --preset=aeneas "${CHARON_ARGS[@]}" --dest-file "$work/$name.llbc" -- --release
 ) > "$work/charon.log" 2>&1 || { cat "$work/charon.log" >&2; echo "charon failed on $crate" >&2; exit 1; }
 "$AENEAS" -backend lean -split-files "$work/$name.llbc" -dest "$work/out" > "$work/aeneas.log" 2>&1 \
@@ -69,13 +73,14 @@ mkdir -p "$work/gen"
 for f in Types Funs FunsExternal_Template TypesExternal_Template; do
   [ -f "$work/out/$f.lean" ] || continue
   sed -e '/^module$/d' -e 's/^public import /import /' -e '/^@\[expose\] public section$/d' \
-      -e "s/^import [A-Za-z_]*\.\(Types\|Funs\|FunsExternal\)$/import $PKG.\1/" \
+      -e "s/^import [A-Za-z_]*\.\(Types\|Funs\|FunsExternal\|TypesExternal\)$/import $PKG.\1/" \
       "$work/out/$f.lean" > "$work/gen/$f.lean"
 done
 sed -i 's/^import Aeneas$/import Aeneas\nimport AeneasF64/' "$work/gen/Types.lean"
 
 # The opaque functions Aeneas wants, against what FunsExternal.lean defines.
-opaque_list() { { grep -oE '^(@\[[^]]*\] )?axiom [^ ]+' "$1" || true; } | sed -E 's/^.*axiom //' | sort; }
+# (an axiom's name is on its own line, or on the line after a bare `axiom`)
+opaque_list() { awk '/^(@\[[^]]*\] )?axiom *$/ { getline; print $1; next } /^(@\[[^]]*\] )?axiom / { sub(/^.*axiom /, ""); print $1 }' "$1" | sort; }
 for f in FunsExternal_Template TypesExternal_Template; do
   if [ -f "$work/gen/$f.lean" ]; then opaque_list "$work/gen/$f.lean"; fi
 done | sort > "$work/opaque"
@@ -86,7 +91,7 @@ dest=$dir/lean/$PKG
 missing=0
 while read -r n; do
   [ -n "$n" ] || continue
-  if ! { cat "$dest/FunsExternal.lean" "$dest/TypesExternal.lean" "$root/verify/aeneas/bridge/AeneasF64/Std.lean" 2>/dev/null || true; } \
+  if ! { cat "$dest/FunsExternal.lean" "$dest/TypesExternal.lean" "$root"/verify/aeneas/bridge/AeneasF64/*.lean 2>/dev/null || true; } \
       | awk '$1 == "def" || $1 == "opaque" || $1 == "abbrev" { print $2 }' | grep -qxF "$n"; then
     echo "$crate: opaque $n has no definition (FunsExternal.lean, TypesExternal.lean or the bridge)" >&2
     missing=1

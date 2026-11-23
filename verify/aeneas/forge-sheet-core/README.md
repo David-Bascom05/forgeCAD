@@ -40,7 +40,7 @@ Proven (no `sorry`; `lean/ForgeSheetCore/Axioms.lean` checks the standard axioms
   `ρ sin θ / C = ρ tan(θ/2)`. The `ε / C²` term is the hairpin's ill-conditioning.
 - under them: the least-root union–find (`new_spec`, `find_spec`, `union_spec`), ported from the
   decide-once core's proofs (research/kernel-audit/decide-once/aeneas: the same `union_find.rs`),
-  with the release build's wrapping `+= 1` shown not to wrap.
+  with every `+= 1` (overflow-checked in the canonical translation) shown not to overflow.
 
 All of forge-sheet-core is proven. What remains of region.rs's L4 is the wiring (the fix-sheet
 session: region.rs calls `classes`, `chain` and `owner`, bits identical) and the geometric

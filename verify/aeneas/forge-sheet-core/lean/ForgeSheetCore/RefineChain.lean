@@ -128,14 +128,6 @@ theorem u32_of_lt (e : Usize) (b : Nat) (h : e.val < b) (hb : b ≤ U32.max) (r 
   have : U32.max + 1 = 2 ^ UScalarTy.U32.numBits := by simp [U32.max_eq, UScalarTy.U32_numBits_eq]
   omega
 
-theorem u32_inc (a : U32) (b : Nat) (h : a.val < b) (hb : b ≤ U32.max) :
-    (a.wrapping_add 1#u32).val = a.val + 1 := by
-  rw [U32.wrapping_add_val_eq]; apply Nat.mod_eq_of_lt
-  have h1 : (1#u32 : U32).val = 1 := by simp
-  have hs : UScalar.size .U32 = 2 ^ 32 := by simp [U32.size, U32.numBits]
-  have hm : U32.max = 2 ^ 32 - 1 := by simp [U32.max_eq]
-  rw [h1, hs]; omega
-
 /-- The first block: the first leaving piece. -/
 theorem fo_block (F : List Nat) (nv : Nat) (fo : alloc.vec.Vec U32) (f j : Usize) (c2 : U32)
     (hfo : Holds fo nv (fOut F j.val)) (hc2 : c2.val = nOut F j.val f.val)
@@ -327,7 +319,7 @@ theorem loop0_chain_spec (fr dst : Slice U32) (m : Usize) (hm : m.val = fr.val.l
         have := occ_length_le ((sv fr).take j.val) f.val; simp [nOut] at this ⊢; omega
       step as ⟨i4, hi4⟩
       have hi4v : i4.val = nOut (sv fr) j.val f.val + 1 := by
-        rw [hi4, u32_inc i3 (j.val + 1) (by omega) (by omega), hi3v]
+        rw [hi4, hi3v]
       have htl : t.val < ni.val.length := by rw [holds_len hni]; omega
       step as ⟨i5, hi5⟩
       have hi5v : i5.val = nIn (sv dst) j.val t.val := by
@@ -341,9 +333,9 @@ theorem loop0_chain_spec (fr dst : Slice U32) (m : Usize) (hm : m.val = fr.val.l
         have := occ_length_le ((sv dst).take j.val) t.val; simp [nIn] at this ⊢; omega
       step as ⟨i7, hi7⟩
       have hi7v : i7.val = nIn (sv dst) j.val t.val + 1 := by
-        rw [hi7, u32_inc i6 (j.val + 1) (by omega) (by omega), hi6v]
+        rw [hi7, hi6v]
       step as ⟨j1, hj1⟩
-      have hj1v : j1.val = j.val + 1 := by rw [hj1]; exact usize_inc j m hjl
+      have hj1v : j1.val = j.val + 1 := by omega
       refine ⟨by omega, ⟨?_, ?_, ?_, by rw [hj1v]; exact hfi1, by rw [hj1v]; exact hsi1⟩, by omega⟩
       · rw [hj1v]
         apply holds_set hno f.val i4 (by rw [hno1, hback]; simp)
@@ -491,8 +483,6 @@ theorem loop1_chain_spec (nv : Usize) (hnv : nv.val ≤ U32.max) (no ni fo fi si
         step as ⟨c, hc⟩
         have hav : a.val = NO v.val := by rw [ha]; exact holds_get hno hvl (by omega)
         have hcv : c.val = NI v.val := by rw [hc]; exact holds_get hni hvl (by omega)
-        have hj1 : ∀ v1 : Usize, v1 = v.wrapping_add 1#usize → v1.val = v.val + 1 :=
-          fun v1 e => by rw [e]; exact usize_inc v nv hvl
         split
         · rename_i hne
           have hne' : NO v.val ≠ NI v.val := by
@@ -500,10 +490,10 @@ theorem loop1_chain_spec (nv : Usize) (hnv : nv.val ≤ U32.max) (no ni fo fi si
           apply WP.spec_bind (unchained_block nv.val NO NI FO FI fo fi hfo hfi v hvl hnv a c hav hcv pin)
           rintro ⟨bad1, pin1⟩ ⟨hp, b, hb, hu⟩
           show WP.spec (do
-            let v1 ← lift (Std.Usize.wrapping_add v 1#usize)
+            let v1 ← v + 1#usize
             ok (ControlFlow.cont (bad1, pin1, v1))) _
           step as ⟨v1, hv1⟩
-          have hv1v := hj1 v1 hv1
+          have hv1v : v1.val = v.val + 1 := by omega
           refine ⟨by omega, Or.inr ⟨v.val, hvl, heq, hne', b, hb, hu⟩, ?_⟩
           simp only at hb ⊢; rw [hb, hv1v]; simp [‹bad = none›]; omega
         · rename_i hne
@@ -519,10 +509,10 @@ theorem loop1_chain_spec (nv : Usize) (hnv : nv.val ≤ U32.max) (no ni fo fi si
           apply WP.spec_bind (pinch_block nv.val NO FI SI fi si hfi hsi v hvl hnv a hav bad pin hpl)
           rintro ⟨bad1, pin1⟩ ⟨hb, hp⟩
           show WP.spec (do
-            let v1 ← lift (Std.Usize.wrapping_add v 1#usize)
+            let v1 ← v + 1#usize
             ok (ControlFlow.cont (bad1, pin1, v1))) _
           step as ⟨v1, hv1⟩
-          have hv1v := hj1 v1 hv1
+          have hv1v : v1.val = v.val + 1 := by omega
           simp only at hb hp
           refine ⟨by omega, Or.inl ⟨by rw [hb, ‹bad = none›], ?_, ?_⟩, ?_⟩
           · intro u hu
@@ -810,7 +800,7 @@ theorem walks_spec (fr dst : Slice U32) (m : Usize) (hm : m.val = fr.val.length)
         split
         · rename_i hb1
           step as ⟨j1, hj1⟩
-          have hj1v : j1.val = j.val + 1 := by rw [hj1]; exact usize_inc j m hjl
+          have hj1v : j1.val = j.val + 1 := by omega
           have hin : j.val ∈ cs.flatten := by rw [hb1] at hbv; simpa using hbv.symm
           refine ⟨by omega, ⟨hbd, cs, hpc, hst, hmk, hnd, hlt, hcl, ?_, hcyc⟩, by omega⟩
           intro e he; rw [hj1v] at he
@@ -846,7 +836,7 @@ theorem walks_spec (fr dst : Slice U32) (m : Usize) (hm : m.val = fr.val.length)
             simp only [bne_eq_false_iff_eq]; exact UScalar.eq_of_val_eq ha
           simp only [hane, Bool.false_eq_true, ite_false]
           step as ⟨j1, hj1⟩
-          have hj1v : j1.val = j.val + 1 := by rw [hj1]; exact usize_inc j m hjl
+          have hj1v : j1.val = j.val + 1 := by omega
           have hflat : (cs ++ [path σ j.val k]).flatten = cs.flatten ++ path σ j.val k := by simp
           refine ⟨by omega, ⟨hbd, cs ++ [path σ j.val k], by rw [hflat]; exact hpc1, ?_, by rw [hflat]; exact hmk1,
             ?_, ?_, ?_, ?_, ?_⟩, by omega⟩

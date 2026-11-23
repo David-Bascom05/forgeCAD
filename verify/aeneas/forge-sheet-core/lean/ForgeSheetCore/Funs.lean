@@ -116,7 +116,7 @@ def union_find.Uf.new_loop.body
   then
     let i1 ← lift (UScalar.cast .U32 i)
     let parent1 ← alloc.vec.Vec.push parent i1
-    let i2 ← lift (Std.Usize.wrapping_add i 1#usize)
+    let i2 ← i + 1#usize
     ok (cont (parent1, i2))
   else ok (done parent)
 
@@ -153,7 +153,7 @@ def classes_loop0.body
     let a ← lift (UScalar.cast .Usize i1)
     let b ← lift (UScalar.cast .Usize i2)
     let uf1 ← union_find.Uf.union uf a b
-    let k1 ← lift (Std.Usize.wrapping_add k 1#usize)
+    let k1 ← k + 1#usize
     ok (cont (uf1, k1))
   else ok (done uf)
 
@@ -188,7 +188,7 @@ def classes_loop1.body
         do
         let number2 ← alloc.vec.Vec.push number next
         let class2 ← alloc.vec.Vec.push «class» next
-        let next2 ← lift (Std.U32.wrapping_add next 1#u32)
+        let next2 ← next + 1#u32
         ok (number2, class2, next2)
       else
         do
@@ -198,7 +198,7 @@ def classes_loop1.body
             number2 r
         let class2 ← alloc.vec.Vec.push «class» c
         ok (number2, class2, next)
-    let i1 ← lift (Std.Usize.wrapping_add i 1#usize)
+    let i1 ← i + 1#usize
     ok (cont (uf1, number1, class1, next1, i1))
   else ok (done «class»)
 
@@ -266,7 +266,7 @@ def chain_loop0.body
     let (i3, index_mut_back) ←
       alloc.vec.Vec.index_mut (core.slice.index.SliceIndexUsizeSlice Std.U32)
         n_out f
-    let i4 ← lift (Std.U32.wrapping_add i3 1#u32)
+    let i4 ← i3 + 1#u32
     let i5 ←
       alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32) n_in
         t
@@ -300,8 +300,8 @@ def chain_loop0.body
     let (i6, index_mut_back1) ←
       alloc.vec.Vec.index_mut (core.slice.index.SliceIndexUsizeSlice Std.U32)
         n_in t
-    let i7 ← lift (Std.U32.wrapping_add i6 1#u32)
-    let e1 ← lift (Std.Usize.wrapping_add e 1#usize)
+    let i7 ← i6 + 1#u32
+    let e1 ← e + 1#usize
     let n_in1 := index_mut_back1 i7
     ok (cont (n_out1, n_in1, first_out1, first_in1, second_in1, e1))
   else ok (done (n_out, n_in, first_out, first_in, second_in))
@@ -379,7 +379,7 @@ def chain_loop1.body
               alloc.vec.Vec.push pinches (i2, i3, i4)
             else ok pinches
           ok (bad, v1)
-      let v1 ← lift (Std.Usize.wrapping_add v 1#usize)
+      let v1 ← v + 1#usize
       ok (cont (bad1, pinches1, v1))
     else ok (done (bad, pinches))
   else ok (done (bad, pinches))
@@ -471,7 +471,7 @@ def chain_loop2.body
           start
       if b1
       then
-        let start1 ← lift (Std.Usize.wrapping_add start 1#usize)
+        let start1 ← start + 1#usize
         ok (cont (bad, used, pieces, starts, start1))
       else
         let i := alloc.vec.Vec.len pieces
@@ -487,7 +487,7 @@ def chain_loop2.body
             let i3 ← lift (UScalar.cast .U32 «at»)
             ok (some (ChainError.Unchained i2 i3 1#u32 1#u32))
           else ok bad
-        let start1 ← lift (Std.Usize.wrapping_add start 1#usize)
+        let start1 ← start + 1#usize
         ok (cont (bad1, used1, pieces1, starts1, start1))
     else ok (done (bad, pieces, starts))
   else ok (done (bad, pieces, starts))
@@ -563,15 +563,15 @@ def owner_loop0_loop0.body
         let b ← Slice.index_usize holds p
         if b
         then
-          let i ← lift (Std.Usize.wrapping_mul o k)
-          let i1 ← lift (Std.Usize.wrapping_add i p)
+          let i ← o * k
+          let i1 ← i + p
           let b1 ← Slice.index_usize nest i1
           if b1
           then ok ok1
           else ok false
         else ok ok1
       else ok ok1
-    let p1 ← lift (Std.Usize.wrapping_add p 1#usize)
+    let p1 ← p + 1#usize
     ok (cont (ok2, p1))
   else ok (done ok1)
 
@@ -612,11 +612,10 @@ def owner_loop0.body
                let i ← lift (UScalar.cast .U32 o)
                ok (some i)
           else ok found
-        let o1 ← lift (Std.Usize.wrapping_add o 1#usize)
+        let o1 ← o + 1#usize
         ok (cont (found1, o1))
-      else
-        let o1 ← lift (Std.Usize.wrapping_add o 1#usize)
-        ok (cont (found, o1))
+      else let o1 ← o + 1#usize
+           ok (cont (found, o1))
     else ok (done found)
   else ok (done found)
 
