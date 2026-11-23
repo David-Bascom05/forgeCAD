@@ -40,77 +40,125 @@ fn key(x: f64) -> u64 {
 pub fn near_pairs<L: AsRef<[u32]>, E>(
     pts: &[Point2],
     loops: &[L],
-    mut zero: impl FnMut(u32, u32),
+    zero: impl FnMut(u32, u32),
     mut pair: impl FnMut((u32, u32), (u32, u32)) -> Result<(), E>,
 ) -> Result<(), E> {
-    let total: usize = loops.iter().map(|l| l.as_ref().len()).sum();
-    // each chain's points, in the order of x then y
-    let mut cp: Vec<u32> = Vec::with_capacity(total + loops.len());
-    let mut chains: Vec<Chain> = Vec::new();
-    for lp in loops {
-        let lp = lp.as_ref();
-        let n = lp.len();
+    walk(
+        loops.len(),
+        |i| loops[i].as_ref().len(),
+        |i, k| {
+            let a = loops[i].as_ref()[k];
+            (a, pts[a as usize])
+        },
+        zero,
+        |s, t, _, _| pair(s, t),
+    )
+}
+
+/// `near_pairs` over loops given by their count, each one's length, and its `k`th point (an id,
+/// distinct within its loop, and its place); `pair` also has the chords' ends.
+pub(crate) fn walk<E>(
+    loops: usize,
+    len: impl Fn(usize) -> usize,
+    at: impl Fn(usize, usize) -> (u32, Point2),
+    zero: impl FnMut(u32, u32),
+    pair: impl FnMut((u32, u32), (u32, u32), (Point2, Point2), (Point2, Point2)) -> Result<(), E>,
+) -> Result<(), E> {
+    // the scratch of the last walk on this thread, taken (a walk inside `pair` makes its own)
+    thread_local! {
+        static SCRATCH: std::cell::Cell<Scratch> = const { std::cell::Cell::new(Scratch {
+            cp: Vec::new(), chains: Vec::new(), order: Vec::new()
+        }) };
+    }
+    let mut sc = SCRATCH.with(|s| s.take());
+    let out = walk_in(&mut sc, loops, len, at, zero, pair);
+    sc.cp.clear();
+    sc.chains.clear();
+    sc.order.clear();
+    SCRATCH.with(|s| s.set(sc));
+    out
+}
+
+#[derive(Default)]
+struct Scratch {
+    /// each chain's points (id and place), in the order of x then y
+    cp: Vec<(u32, Point2)>,
+    chains: Vec<Chain>,
+    order: Vec<(u64, u32)>,
+}
+
+fn walk_in<E>(
+    sc: &mut Scratch,
+    loops: usize,
+    len: impl Fn(usize) -> usize,
+    at: impl Fn(usize, usize) -> (u32, Point2),
+    mut zero: impl FnMut(u32, u32),
+    mut pair: impl FnMut((u32, u32), (u32, u32), (Point2, Point2), (Point2, Point2)) -> Result<(), E>,
+) -> Result<(), E> {
+    let Scratch { cp, chains, order } = sc;
+    for i in 0..loops {
+        let n = len(i);
         // (this chain: its first point's place in cp, whether it runs up, its box)
         let mut open: Open = None;
-        let close = |open: &mut Open, cp: &mut Vec<u32>, chains: &mut Vec<Chain>| {
-            if let Some((at, up, x, y)) = open.take() {
-                if !up {
-                    cp[at..].reverse();
-                }
-                chains.push(Chain {
-                    x,
-                    y,
-                    at,
-                    len: cp.len() - at - 1,
-                });
-            }
-        };
+        if n == 0 {
+            continue;
+        }
+        let mut next = at(i, 0);
         for k in 0..n {
-            let (a, b) = (lp[k], lp[(k + 1) % n]);
-            let (p, r) = (pts[a as usize], pts[b as usize]);
+            let (a, p) = next;
+            next = if k + 1 < n { at(i, k + 1) } else { at(i, 0) };
+            let (b, r) = next;
             if p == r {
                 zero(a, b);
                 continue;
             }
             let up = before(p, r);
             match &mut open {
-                Some((_, u, x, y)) if *u == up && cp.last() == Some(&a) => {
+                Some((_, u, x, y)) if *u == up && cp.last().map(|c| c.0) == Some(a) => {
                     *x = (x.0.min(r.x), x.1.max(r.x));
                     *y = (y.0.min(r.y), y.1.max(r.y));
-                    cp.push(b);
+                    cp.push((b, r));
                 }
                 _ => {
-                    close(&mut open, &mut cp, &mut chains);
+                    close(&mut open, cp, chains);
                     open = Some((
                         cp.len(),
                         up,
                         (p.x.min(r.x), p.x.max(r.x)),
                         (p.y.min(r.y), p.y.max(r.y)),
                     ));
-                    cp.push(a);
-                    cp.push(b);
+                    cp.push((a, p));
+                    cp.push((b, r));
                 }
             }
         }
-        close(&mut open, &mut cp, &mut chains);
+        close(&mut open, cp, chains);
     }
-    let mut order: Vec<(u64, u32)> = (0..chains.len())
-        .map(|i| (key(chains[i].x.0), i as u32))
-        .collect();
+    for (i, c) in chains.iter().enumerate() {
+        order.push((key(c.x.0), i as u32));
+    }
     order.sort_unstable();
-    let chord = |c: &Chain, k: usize| (cp[c.at + k], cp[c.at + k + 1]);
+    let cp = &cp[..];
+    // chord k of c: its ids and its ends
+    let chord = |c: &Chain, k: usize| {
+        let (s, t) = (cp[c.at + k], cp[c.at + k + 1]);
+        ((s.0, t.0), (s.1, t.1))
+    };
     // the first chord of `c` whose high end reaches x
     let first = |c: &Chain, x: f64| {
         let (mut l, mut h) = (0, c.len);
         while l < h {
             let m = (l + h) / 2;
-            if pts[cp[c.at + m + 1] as usize].x < x {
+            if cp[c.at + m + 1].1.x < x {
                 l = m + 1;
             } else {
                 h = m;
             }
         }
         l
+    };
+    let meets = |(ls, hs): (Point2, Point2), (lt, ht): (Point2, Point2)| {
+        ls.x <= ht.x && lt.x <= hs.x && ls.y.min(hs.y) <= lt.y.max(ht.y) && lt.y.min(ht.y) <= ls.y.max(hs.y)
     };
     for n in 0..order.len() {
         let ci = &chains[order[n].1 as usize];
@@ -124,18 +172,13 @@ pub fn near_pairs<L: AsRef<[u32]>, E>(
             }
             let (mut p, mut q) = (first(ci, cj.x.0), first(cj, ci.x.0));
             while p < ci.len && q < cj.len {
-                let (s, t) = (chord(ci, p), chord(cj, q));
-                let (ls, hs) = (pts[s.0 as usize], pts[s.1 as usize]);
-                let (lt, ht) = (pts[t.0 as usize], pts[t.1 as usize]);
+                let ((s, sp), (t, tp)) = (chord(ci, p), chord(cj, q));
+                let ((ls, hs), (lt, ht)) = (sp, tp);
                 if ls.x > cj.x.1 || lt.x > ci.x.1 {
                     break;
                 }
-                if ls.x <= ht.x
-                    && lt.x <= hs.x
-                    && ls.y.min(hs.y) <= lt.y.max(ht.y)
-                    && lt.y.min(ht.y) <= ls.y.max(hs.y)
-                {
-                    pair(s, t)?;
+                if meets(sp, tp) {
+                    pair(s, t, sp, tp)?;
                 }
                 if before(hs, ht) {
                     p += 1;
@@ -144,14 +187,9 @@ pub fn near_pairs<L: AsRef<[u32]>, E>(
                 } else {
                     // both end at one place: the next of each starts there, and meets the other
                     if p + 1 < ci.len {
-                        let u = chord(ci, p + 1);
-                        let (lu, hu) = (pts[u.0 as usize], pts[u.1 as usize]);
-                        if lu.x <= ht.x
-                            && lt.x <= hu.x
-                            && lu.y.min(hu.y) <= lt.y.max(ht.y)
-                            && lt.y.min(ht.y) <= lu.y.max(hu.y)
-                        {
-                            pair(u, t)?;
+                        let (u, up) = chord(ci, p + 1);
+                        if meets(up, tp) {
+                            pair(u, t, up, tp)?;
                         }
                     }
                     q += 1;
@@ -160,6 +198,21 @@ pub fn near_pairs<L: AsRef<[u32]>, E>(
         }
     }
     Ok(())
+}
+
+/// Ends the open chain: its points into the order of x then y, and it among the chains.
+fn close(open: &mut Open, cp: &mut [(u32, Point2)], chains: &mut Vec<Chain>) {
+    if let Some((at, up, x, y)) = open.take() {
+        if !up {
+            cp[at..].reverse();
+        }
+        chains.push(Chain {
+            x,
+            y,
+            at,
+            len: cp.len() - at - 1,
+        });
+    }
 }
 
 #[cfg(test)]
