@@ -1127,3 +1127,30 @@ fn a_ring_cut_tangent_to_two_faces_builds() {
     let (v, _) = judge_built(include_str!("kernel_parts/ring_cut_tangent.fg"));
     assert!(matches!(v, Verdict::Ok), "{v:?}");
 }
+
+/// Three fillets on exactly written spline walls that the kernel refuses where Onshape rounds them
+/// (CADFS, fit splines written exactly). Open: ignored until the fillet spec says what each is due
+/// (a round, or a refusal with its reason); each test expects a build.
+#[test]
+#[ignore = "open: fillet NoBlend where spline walls meet (for the fillet spec)"]
+fn a_fillet_where_two_spline_walls_meet_builds() {
+    use forge_lang::fuzz::{Verdict, judge_built};
+    let (v, _) = judge_built(include_str!("kernel_parts/fillet_spline_walls_noblend.fg"));
+    assert!(matches!(v, Verdict::Ok), "{v:?}");
+}
+
+#[test]
+#[ignore = "open: fillet Overflow between a wavy spline wall and a notch (for the fillet spec)"]
+fn a_fillet_on_a_notched_wavy_plate_builds() {
+    use forge_lang::fuzz::{Verdict, judge_built};
+    let (v, _) = judge_built(include_str!("kernel_parts/fillet_wavy_plate_notch.fg"));
+    assert!(matches!(v, Verdict::Ok), "{v:?}");
+}
+
+#[test]
+#[ignore = "open: fillet Overflow on both edges of a narrow crescent (for the fillet spec)"]
+fn a_fillet_on_both_edges_of_a_crescent_builds() {
+    use forge_lang::fuzz::{Verdict, judge_built};
+    let (v, _) = judge_built(include_str!("kernel_parts/fillet_crescent_both_edges.fg"));
+    assert!(matches!(v, Verdict::Ok), "{v:?}");
+}
