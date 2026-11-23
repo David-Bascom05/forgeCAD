@@ -191,3 +191,26 @@ ledger moves to A8, the face ledger (curved-design.md §7). Separators, Tier 1 i
 the reference, which never runs. So the covector-specific parts here (`cov_on`, `edge_cov`,
 `vert_cov`, `classes_of`, `SForm::on_cov`) are paused until the v2 interface is fixed. The exact
 numerics and the certified proposers carry over as the builder's exact fallback.
+
+**Milestone 1d: the vertex proposer, one plane and two quadrics** (drafted in Rust for
+dol-curved's Lean `proposeVert`; untrusted, checked by `bezout3`, `roots_of`, `on_vert`, `d_ok`).
+For a plane `P = n·p − c` with `n.z ≠ 0`, and quadrics `q_a`, `q_b`:
+- substitute `z = Z(x, y) := c/n_z − (n_x/n_z) x − (n_y/n_z) y` (`subst_z`, Horner in `z` over
+  `ℚ[x][y]`). This gives conics `f_a(x, y) = q_a(x, y, Z)` and `f_b`, quadratic in `y` over `ℚ[x]`
+  (trailing zero coefficients trimmed);
+- `elim_of(f_a, f_b)` is QPropose's `elim` on these restrictions, with `y` in place of `z` and `x`
+  in place of `y`. It gives `R(x)`, `N`, `D` (so `y = −N/D`) and `U`, `V` with
+  `U f_a + V f_b = R`;
+- the quotient by `P` (`quot_plane`): `q = K P + f` with `K = k₀ + k₁z`, `k₁ = t₂/n_z` and
+  `k₀ = (t₁ − k₁p₀)/n_z`, where `q = t₀ + t₁z + t₂z²` over `ℚ[x][y]` and `P = p₀ + n_z z`;
+- **the Bezout certificate**: `R = U q_a + V q_b − (U K_a + V K_b) P`, so `A = U`, `B = V` and
+  `C = −(U K_a + V K_b)`, each with `z`-degree ≤ 1;
+- **the representation**: `N_y = N` and `D_y = D`. From `z = [(c − n_x x) D + n_y N] / (n_z D)`,
+  `N_z = −((c − n_x x) D + n_y N)` and `D_z = n_z D`. The quotients `Q_a`, `Q_b`, `Q_c` are
+  `pdiv(homog3 q, R)`, checked by `on_vert`. In closed form, `Q_a = n_z² D² a₂` with `a₂` the
+  `y²` coefficient of `f_a`, and `Q_c = 0`;
+- `n_z = 0 ≠ n_y`: the same with `y` and `z` exchanged (`Quadric::swap_yz`, `tswap_yz` on the
+  cofactors), then mapped back (`N_y ↔ N_z`, `D_y ↔ D_z`). All checks run on the original
+  quadrics;
+- `n = (n_x, 0, 0)` (a plane `x = const`), or `D ≡ 0` (two vertices with one `x`): `None`. The
+  decided shear or rotation rule takes these.
